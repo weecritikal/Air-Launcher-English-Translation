@@ -24,7 +24,8 @@
             @"performance_hud": @NO,
             @"fullscreen_airplay": @YES,
             @"silence_other_audio": @NO,
-            @"silence_with_switch": @NO
+            @"silence_with_switch": @NO,
+            @"allow_microphone": @NO
         }.mutableCopy,
         @"control": @{
             @"default_ctrl": @"default.json",
