@@ -7,7 +7,10 @@
 #import "LauncherProfilesViewController.h"
 //#import "NSFileManager+NRFileManager.h"
 #import "PLProfiles.h"
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunguarded-availability-new"
 #import "UIKit+AFNetworking.h"
+#pragma clang diagnostic pop
 #import "UIKit+hook.h"
 #import "installer/FabricInstallViewController.h"
 #import "installer/ForgeInstallViewController.h"

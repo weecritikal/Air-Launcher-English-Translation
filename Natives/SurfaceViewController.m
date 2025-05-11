@@ -111,7 +111,7 @@ static GameSurfaceView* pojavWindow;
     self.rootView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, self.view.frame.size.width + 30.0, self.view.frame.size.height)];
     [self.view addSubview:self.rootView];
 
-    self.ctrlView = [[ControlLayout alloc] initWithFrame:getSafeArea()];
+    self.ctrlView = [[ControlLayout alloc] initWithFrame:getSafeArea(self.view.frame)];
 
     [self performSelector:@selector(initCategory_Navigation)];
     
@@ -336,7 +336,7 @@ static GameSurfaceView* pojavWindow;
 
     self.shouldHideControlsFromRecording = getPrefFloat(@"control.recording_hide");
     [self.ctrlView hideViewFromCapture:self.shouldHideControlsFromRecording];
-    self.ctrlView.frame = getSafeArea();
+    self.ctrlView.frame = getSafeArea(self.view.frame);
 
     // Update gestures state
     self.slideableHotbar = getPrefBool(@"control.slideable_hotbar");
@@ -503,7 +503,7 @@ static GameSurfaceView* pojavWindow;
         [self viewWillTransitionToSize_Navigation:frame];
 
         // Update custom controls button position
-        self.ctrlView.frame = getSafeArea();
+        self.ctrlView.frame = getSafeArea(self.view.frame);
         [self.ctrlView.subviews makeObjectsPerformSelector:@selector(update)];
 
         // Update game resolution

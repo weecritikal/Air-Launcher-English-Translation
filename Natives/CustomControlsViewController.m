@@ -37,7 +37,6 @@
     [self setNeedsUpdateOfScreenEdgesDeferringSystemGestures];
     [self setNeedsUpdateOfHomeIndicatorAutoHidden];
 
-    CGRect screenBounds = [[UIScreen mainScreen] bounds];
     UIEdgeInsets insets = UIApplication.sharedApplication.windows.firstObject.safeAreaInsets;
 
     UILabel *guideLabel = [[UILabel alloc] initWithFrame:self.view.frame];
@@ -48,7 +47,7 @@
     guideLabel.text = localize(@"custom_controls.hint", nil);
     [self.view addSubview:guideLabel]; 
 
-    self.ctrlView = [[ControlLayout alloc] initWithFrame:getSafeArea()];
+    self.ctrlView = [[ControlLayout alloc] initWithFrame:getSafeArea(self.view.frame)];
     self.ctrlView.layer.borderColor = UIColor.labelColor.CGColor;
     [self.view addSubview:self.ctrlView];
 
@@ -173,7 +172,7 @@
 
 - (void)viewDidLayoutSubviews {
     if (self.navigationBar.hidden) {
-        self.ctrlView.frame = getSafeArea();
+        self.ctrlView.frame = getSafeArea(self.view.frame);
     }
 
     // Update dynamic position for each view
@@ -193,7 +192,7 @@
             self.ctrlView.frame = UIEdgeInsetsInsetRect(self.view.frame, getDefaultSafeArea());
             break;
         case 2:
-            self.ctrlView.frame = getSafeArea();
+            self.ctrlView.frame = getSafeArea(self.view.frame);
             break;
     }
     self.ctrlView.userInteractionEnabled = sender.selectedSegmentIndex == 2;
@@ -345,12 +344,12 @@
 }
 
 - (void)actionMenuSafeAreaCancel {
-    self.ctrlView.frame = getSafeArea();
+    self.ctrlView.frame = getSafeArea(self.view.frame);
     [self actionMenuSafeArea];
 }
 
 - (void)actionMenuSafeAreaDone {
-    setSafeArea(self.ctrlView.frame);
+    setSafeArea(self.view.frame.size, self.ctrlView.frame);
     [self actionMenuSafeArea];
 }
 
