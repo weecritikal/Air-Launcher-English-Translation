@@ -23,16 +23,14 @@ jobs:
           - platform: 8
             platform_name: tvossimulator
     
-    runs-on: MacStadium
+    runs-on: J316sAP
     steps:
       - name: Remove work folders
-        env:
-          password: ${{ secrets.ELLIE_MINI_SECRET }}
         run: |
           echo "before"
           ls -lah ./
-          echo $password | sudo -S rm -rf ./* || true
-          echo $password | sudo -S rm -rf ./.??* || true
+          rm -rf ./* || true
+          rm -rf ./.??* || true
           echo "after"
           ls -lah ./
           
@@ -67,8 +65,8 @@ jobs:
         continue-on-error: true
         run: |
           cd gl4es
-          git config --global user.email "github-actions@users.noreply.github.com"
-          git config --global user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git config user.name "github-actions"
           export PATH=/opt/procursus/bin:$PATH
           wget https://github.com/leetal/ios-cmake/raw/master/ios.toolchain.cmake
           cmake -B build -DCMAKE_TOOLCHAIN_FILE=ios.toolchain.cmake -DDEFAULT_ES=2 \

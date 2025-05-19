@@ -204,6 +204,7 @@ $(error You need to install lld)
 endif
 endif
 
+ifneq ($(filter sysctl,$(shell sysctl -n hw.logicalcpu)),)
 ifneq ($(call METHOD_DEPCHECK,nproc --version),1)
 ifneq ($(call METHOD_DEPCHECK,gnproc --version),1)
 $(warning Unable to determine number of threads, defaulting to 2.)
@@ -213,6 +214,9 @@ JOBS   ?= $(shell gnproc)
 endif
 else
 JOBS   ?= $(shell nproc)
+endif
+else
+JOBS   ?= $(shell sysctl -n hw.logicalcpu)
 endif
 
 ifndef SDKPATH
