@@ -101,8 +101,8 @@ bool init_checkForJailbreak() {
 }
 
 void init_logDeviceAndVer(char *argument) {
-    // PojavLauncher version
-    NSLog(@"[Pre-Init] PojavLauncher INIT!");
+    // Amethyst version
+    NSLog(@"[Pre-Init] Amethyst INIT!");
     NSLog(@"[Pre-Init] Version: %@-%s", NSBundle.mainBundle.infoDictionary[@"CFBundleShortVersionString"], CONFIG_TYPE);
     NSLog(@"[Pre-Init] Commit: %s (%s)", CONFIG_COMMIT, CONFIG_BRANCH);
     
@@ -248,7 +248,7 @@ void init_setupHomeDirectory() {
     
     BOOL isNotSandboxed = [@(getenv("HOME")).lastPathComponent isEqualToString:NSUserName()];
     homeDir = [NSString stringWithFormat:@"%s/Documents%@", getenv("HOME"),
-        isNotSandboxed ? @"/PojavLauncher":@""];
+        isNotSandboxed ? @"/AngelAuraAmethyst":@""];
 
     if (![fm fileExistsAtPath:homeDir] ) {
         [fm createDirectoryAtPath:homeDir withIntermediateDirectories:NO attributes:nil error:&homeError];
@@ -305,7 +305,7 @@ int main(int argc, char *argv[]) {
     init_setupAccounts();
     init_setupCustomControls();
 
-    // If sandbox is disabled, W^X JIT can be enabled by PojavLauncher itself
+    // If sandbox is disabled, W^X JIT can be enabled by Amethyst itself
     if (!isJITEnabled(true) && getEntitlementValue(@"com.apple.private.security.no-sandbox")) {
         NSLog(@"[Pre-init] no-sandbox: YES, trying to enable JIT");
         int pid;

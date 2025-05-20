@@ -9,9 +9,9 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>PojavLauncher</string>
+	<string>Amethyst</string>
 	<key>CFBundleExecutable</key>
-	<string>PojavLauncher</string>
+	<string>AngelAuraAmethyst</string>
 	<key>CFBundleIcons</key>
 	<dict>
 		<key>CFBundleAlternateIcons</key>
@@ -74,11 +74,11 @@
 		</dict>
 	</dict>
 	<key>CFBundleIdentifier</key>
-	<string>net.kdt.pojavlauncher</string>
+	<string>org.angelauramc.amethyst</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>PojavLauncher</string>
+	<string>AngelAuraAmethyst</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
@@ -89,10 +89,10 @@
 	<array>
 		<dict>
 			<key>CFBundleURLName</key>
-			<string>net.kdt.pojavlauncher.urlscheme</string>
+			<string>org.angelauramc.amethyst.urlscheme</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
-				<string>pojavlauncher</string>
+				<string>amethyst</string>
 			</array>
 		</dict>
 	</array>
@@ -126,9 +126,9 @@
 		<string>_altserver._tcp</string>
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>PojavLauncher uses the local network to find and communicate with AltServer and LAN servers.</string>
+	<string>Angel Aura Amethyst uses the local network to find and communicate with AltServer and LAN servers.</string>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>PojavLauncher uses the microphone to enable support for voice chat mods.</string>
+	<string>Angel Aura Amethyst uses the microphone to enable support for voice chat mods.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -157,7 +157,7 @@
 	</dict>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
-	<key>UIBackgroundModes</key>	
+	<key>UIBackgroundModes</key>
 	<array>
 		<string>fetch</string>
 	</array>
