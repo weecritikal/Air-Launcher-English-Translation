@@ -31,7 +31,9 @@ void swizzleUIImageMethod(SEL originalAction, SEL swizzledAction) {
 void init_hookUIKitConstructor(void) {
     swizzle(UIDevice.class, @selector(userInterfaceIdiom), @selector(hook_userInterfaceIdiom));
     swizzle(UIImageView.class, @selector(setImage:), @selector(hook_setImage:));
-    swizzle(UIPointerInteraction.class, @selector(_updateInteractionIsEnabled), @selector(hook__updateInteractionIsEnabled));
+    if(UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPhone) {
+        swizzle(UIPointerInteraction.class, @selector(_updateInteractionIsEnabled), @selector(hook__updateInteractionIsEnabled));
+    }
     
     // Add this line to swizzle the _imageWithSize: method
     swizzleUIImageMethod(NSSelectorFromString(@"_imageWithSize:"), @selector(hook_imageWithSize:));
@@ -211,8 +213,12 @@ void init_hookUIKitConstructor(void) {
 - (void)hook__updateInteractionIsEnabled {
     UIView *view = self.view;
     BOOL enabled = self.enabled; // && view.traitCollection.userInterfaceIdiom == UIUserInterfaceIdiomPad
-    for(id<_UIPointerInteractionDriver> driver in self.drivers) {
-        driver.view = enabled ? view : nil;
+    if([self respondsToSelector:@selector(drivers)]) {
+        for(id<_UIPointerInteractionDriver> driver in self.drivers) {
+            driver.view = enabled ? view : nil;
+        }
+    } else {
+        self.driver.view = enabled ? view : nil;
     }
     // to keep it fast, ivar offset is cached for later direct access
     static ptrdiff_t ivarOff = 0;

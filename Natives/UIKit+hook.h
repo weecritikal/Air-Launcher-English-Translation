@@ -48,6 +48,7 @@ extern NSNotificationName UIPresentationControllerPresentationTransitionWillBegi
 
 @interface UIPointerInteraction(private)
 - (NSArray <id<_UIPointerInteractionDriver>> *)drivers;
+- (id<_UIPointerInteractionDriver>)driver;
 @end
 
 /*
