@@ -79,7 +79,7 @@ Amethyst makes use of **just-in-time compilation**, or JIT, to provide usable sp
 ## Contributors
 Amethyst is amazing, and surprisingly stable, and it wouldn't be this way without the commmunity that helped and contribute to the project! Some notable names:
 
-@crystall1nedev - Project manager, iOS port developer 
+@crystall1nedev - Project manager, iOS port developer  
 @khanhduytran0 - iOS port developer  
 @artdeell  
 @Mathius-Boulay  
