@@ -128,6 +128,11 @@ void init_logDeviceAndVer(char *argument) {
 }
 
 void init_redirectStdio() {
+    if (getenv("LOG_TO_CONSOLE") != NULL) {
+        NSLog(@"[Pre-init] LOG_TO_CONSOLE is set, not logging to latestlog.txt");
+        return;
+    }
+
     NSLog(@"[Pre-init] Starting logging STDIO to latestlog.txt\n");
 
     NSString *home = @(getenv("POJAV_HOME"));

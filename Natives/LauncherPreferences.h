@@ -18,8 +18,8 @@ void resetWarnings();
 BOOL getEntitlementValue(NSString *key);
 
 UIEdgeInsets getDefaultSafeArea();
-CGRect getSafeArea();
-void setSafeArea(CGRect safeArea);
+CGRect getSafeArea(CGRect screenBounds);
+void setSafeArea(CGSize screenSize, CGRect safeArea);
 
 NSString* getSelectedJavaHome(NSString* defaultJRETag, int minVersion);
 

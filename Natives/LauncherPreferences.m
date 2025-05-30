@@ -58,8 +58,7 @@ void resetWarnings() {
 
 #pragma mark Safe area
 
-CGRect getSafeArea() {
-    CGRect screenBounds = UIScreen.mainScreen.bounds;
+CGRect getSafeArea(CGRect screenBounds) {
     UIEdgeInsets safeArea = UIEdgeInsetsFromString(getPrefObject(@"control.control_safe_area"));
     if (screenBounds.size.width < screenBounds.size.height) {
         safeArea = UIEdgeInsetsMake(safeArea.right, safeArea.top, safeArea.left, safeArea.bottom);
@@ -67,8 +66,7 @@ CGRect getSafeArea() {
     return UIEdgeInsetsInsetRect(screenBounds, safeArea);
 }
 
-void setSafeArea(CGRect frame) {
-    CGSize screenSize = UIScreen.mainScreen.bounds.size;
+void setSafeArea(CGSize screenSize, CGRect frame) {
     UIEdgeInsets safeArea;
     // TODO: make safe area consistent across opposite orientations?
     if (screenSize.width < screenSize.height) {
