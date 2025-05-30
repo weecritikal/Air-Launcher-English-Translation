@@ -49,7 +49,7 @@
 			buildConfigurationList = 054957C82986E8DC00EFD4CE /* Build configuration list for PBXLegacyTarget "Angel Aura Amethyst" */;
 			buildPhases = (
 			);
-			buildToolPath = /opt/homebrew/bin/gmake;
+			buildToolPath = /usr/local/bin/gmake;
 			buildWorkingDirectory = "";
 			dependencies = (
 			);
@@ -118,7 +118,9 @@
 		054957C92986E8DC00EFD4CE /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				PROVISIONING = "/Users/evaluna/Library/MobileDevice/Provisioning Profiles/WildcardProvisioning.mobileprovision";
+				PROVISIONING = "";
+				SIGNING_TEAMID = "";
+				TEAMID = "";
 				_COMMENT = "You can change PLATFORM to vtool for non-iOS. PROVISIONING, SIGNING_TEAMID, and TEAMID are used for codesign, they won't work on your machine without edits. PATH, VERBOSE, and RELEASE do not need to be changed.";
 			};
 			name = Debug;
@@ -126,7 +128,9 @@
 		054957CA2986E8DC00EFD4CE /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				PROVISIONING = "/Users/evaluna/Library/MobileDevice/Provisioning Profiles/WildcardProvisioning.mobileprovision";
+				PROVISIONING = "";
+				SIGNING_TEAMID = "";
+				TEAMID = "";
 				_COMMENT = "You can change PLATFORM to vtool for non-iOS. PROVISIONING, SIGNING_TEAMID, and TEAMID are used for codesign, they won't work on your machine without edits. PATH, VERBOSE, and RELEASE do not need to be changed.";
 			};
 			name = Release;
