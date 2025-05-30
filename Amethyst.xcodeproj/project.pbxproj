@@ -94,10 +94,10 @@
 			buildSettings = {
 				PATH = "${PATH}:/opt/procursus/bin:/opt/procursus/sbin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/local/sbin";
 				PLATFORM = 2;
-				PROVISIONING = "/Users/eilionoir/Library/MobileDevice/Provisioning Profiles/WildcardProvisioning.mobileprovision";
+				PROVISIONING = "/Users/evaluna/Library/MobileDevice/Provisioning Profiles/WildcardProvisioning.mobileprovision";
 				RELEASE = 0;
-				SIGNING_TEAMID = H9UFLHHUZ5;
-				TEAMID = FBT742498U;
+				SIGNING_TEAMID = TF9842L8S8;
+				TEAMID = 95J8WZ4TN8;
 				VERBOSE = 1;
 			};
 			name = Debug;
@@ -107,10 +107,10 @@
 			buildSettings = {
 				PATH = "${PATH}:/opt/procursus/bin:/opt/procursus/sbin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/local/sbin";
 				PLATFORM = 2;
-				PROVISIONING = "/Users/eilionoir/Library/MobileDevice/Provisioning Profiles/WildcardProvisioning.mobileprovision";
+				PROVISIONING = "/Users/evaluna/Library/MobileDevice/Provisioning Profiles/WildcardProvisioning.mobileprovision";
 				RELEASE = 1;
-				SIGNING_TEAMID = H9UFLHHUZ5;
-				TEAMID = FBT742498U;
+				SIGNING_TEAMID = TF9842L8S8;
+				TEAMID = 95J8WZ4TN8;
 				VERBOSE = 0;
 			};
 			name = Release;
@@ -118,9 +118,9 @@
 		054957C92986E8DC00EFD4CE /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				PROVISIONING = "";
-				SIGNING_TEAMID = "";
-				TEAMID = "";
+				PROVISIONING = "/Users/evaluna/Library/MobileDevice/Provisioning Profiles/WildcardProvisioning.mobileprovision";
+				SIGNING_TEAMID = TF9842L8S8;
+				TEAMID = 95J8WZ4TN8;
 				_COMMENT = "You can change PLATFORM to vtool for non-iOS. PROVISIONING, SIGNING_TEAMID, and TEAMID are used for codesign, they won't work on your machine without edits. PATH, VERBOSE, and RELEASE do not need to be changed.";
 			};
 			name = Debug;
@@ -128,9 +128,9 @@
 		054957CA2986E8DC00EFD4CE /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				PROVISIONING = "";
-				SIGNING_TEAMID = "";
-				TEAMID = "";
+				PROVISIONING = "/Users/evaluna/Library/MobileDevice/Provisioning Profiles/WildcardProvisioning.mobileprovision";
+				SIGNING_TEAMID = TF9842L8S8;
+				TEAMID = 95J8WZ4TN8;
 				_COMMENT = "You can change PLATFORM to vtool for non-iOS. PROVISIONING, SIGNING_TEAMID, and TEAMID are used for codesign, they won't work on your machine without edits. PATH, VERBOSE, and RELEASE do not need to be changed.";
 			};
 			name = Release;

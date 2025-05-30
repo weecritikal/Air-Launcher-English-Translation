@@ -1,7 +1,31 @@
 {
   "images" : [
     {
-      "filename" : "1024x1024-NoStars.png",
+      "filename" : "1024x1024.png",
+      "idiom" : "universal",
+      "platform" : "ios",
+      "size" : "1024x1024"
+    },
+    {
+      "appearances" : [
+        {
+          "appearance" : "luminosity",
+          "value" : "dark"
+        }
+      ],
+      "filename" : "1024x1024-Transparent.png",
+      "idiom" : "universal",
+      "platform" : "ios",
+      "size" : "1024x1024"
+    },
+    {
+      "appearances" : [
+        {
+          "appearance" : "luminosity",
+          "value" : "tinted"
+        }
+      ],
+      "filename" : "1024x1024-Monochrome-White.png",
       "idiom" : "universal",
       "platform" : "ios",
       "size" : "1024x1024"
