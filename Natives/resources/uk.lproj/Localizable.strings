@@ -28,7 +28,6 @@
 "Move" = "Рухати";
 "Remove" = "Вилучити";
 "Resize" = "Зміна розміру";
-
 "custom_controls.button_edit.name" = "Ім'я";
 "custom_controls.button_edit.size" = "Розмір";
 "custom_controls.button_edit.mapping" = "Кнопки";
@@ -47,7 +46,6 @@
 "custom_controls.control_menu.exit" = "Вийти";
 "custom_controls.control_menu.exit.warn" = "Ви збираєтесь вийти без збережень.";
 "custom_controls.control_menu.save" = "Зберегти";
-"custom_controls.control_menu.save.error.default" = "Ім'я контролера не буде \"за замовчуванням\" бо воно буде перезаписано.";
 "custom_controls.control_menu.save.error.json" = "Помилка JSON";
 "custom_controls.control_menu.save.error.write" = "Помилка збереження";
 "custom_controls.control_menu.load" = "Завантаження";
@@ -64,7 +62,6 @@
 "launcher.mcl.error_download" = "Не вдалося завантажити %@: %@";
 
 "launcher.menu.custom_controls" = "Користувацьке керування";
-"launcher.menu.install_jar" = "Встановити .jar";
 
 "launcher.wait_jit.title" = "Чекаю на JIT";
 "launcher.wait_jit.message" = "Amethyst покладається на компіляцію Just-in-time для Java задля роботи з максимальною швидкістю.";
@@ -135,10 +132,6 @@
 "preference.detail.cosmetica" = "Включає плащі від Cosmetica (раніше Arc). Для більш детальної інформації, будь ласка, відвідайте https://cosmetica.cc. Потребує OptiFine";
 "preference.title.debug_logging" = "Запис помилок";
 "preference.detail.debug_logging" = "Записує внутрішні налаштування і дії на latestlog.txt. Це допомагає розробникам швидше знаходити проблеми, але Minecraft може працювати повільніше, оскільки журнали пишуться часто.";
-"preference.title.jitstreamer_server" = "JitStreamer IP сервер";
-"preference.detail.jitstreamer_server" = "Дозволяє вам змінити на користувацькі IP сервера JitStreamer, наприклад як для екземплярів свого хостингу. Цей параметр може бути у спокої, якщо ви використовуєте стандартні сервери JitStreamer.";
-"preference.title.enable_altkit" = "Увімкнути інтеграцію AltKit";
-"preference.detail.enable_altkit" = "Якщо увімкнено, Amethyst спробує приєднатися до локальних AltServers аби увімкнути JIT.";
 "preference.title.appicon" = "Встановити іконку додатка";
 "preference.detail.appicon" = "Дозволяє обрати різні значки основного екрана для Amethyst.";
 "preference.title.appicon-default" = "Знайоме світле Amethyst";
@@ -161,9 +154,6 @@
 "preference.title.renderer" = "Візуалізатор";
 
 "preference.title.renderer.release.auto" = "Авто";
-"preference.title.renderer.release.gl4es" = "holy gl4es";
-"preference.title.renderer.release.angle" = "ANGLE";
-"preference.title.renderer.release.zink" = "Zink";
 
 "preference.title.renderer.debug.auto" = "Авто: gl4 або ANGLE";
 "preference.title.renderer.debug.gl4es" = "Gl4es 1.1.4 - експортує OpenGL 2.1";
@@ -201,8 +191,6 @@
 "preference.title.gyroscope_sensitivity" = "Налаштування чутливості гіроскопа";
 "preference.detail.gyroscope_sensitivity" = "Налаштуйте чутливість елементів керування гіроскопом";
 
-"preference.title.java_home" = "Використовувати Java 17 для Minecraft < 1.17";
-"preference.detail.java_home" = "Java 8 використовується за замовчуванням для цих версій. Увімкніть цю опцію, щоб примусово використовувати Java 17, проте сумісність не гарантується.";
 "preference.title.java_args" = "Аргументи запуску JVM";
 "preference.placeholder.java_args" = "Вкажіть аргументи...";
 "preference.title.auto_ram" = "Автоматичне виділення ОЗП";
@@ -211,7 +199,6 @@
 "preference.title.allocated_memory" = "Виділення пам'яті (МБ)";
 "preference.detail.allocated_memory" = "Визначає, скільки пам'яті буде виділено для Minecraft";
 "preference.warn.allocated_memory" = "Через обмеження у самій операційній системі, цей параметр може викликати нестабільність в цих і вищих значеннях. Будьте обережні.";
-"preference.title.custom_env" = "Змінні середовища";
 "preference.detail.custom_env" = "Ця опція наразі розробляється. Створіть та відредагуйте custom_env.txt в той час.";
 
 "preference.title.debug_skip_wait_jit" = "Пропустити «Очікування JIT»";
@@ -222,12 +209,8 @@
 "preference.detail.debug_auto_correction" = "Увімкнути автоматичне виправлення при введенні тексту у грі.";
 "preference.title.debug_hide_home_indicator" = "Сховати кнопку \"Додому\"";
 "preference.detail.debug_hide_home_indicator" = "Це вимкне блокування кнопки \"Додому\". Ви повинні використовувати Guided Access, щоб ховати та блокувати кнопку \"Додому\" за один раз.";
-"preference.title.debug_show_layout_bounds" = "Показувати межі об'єктів";
-"preference.detail.debug_show_layout_bounds" = "Показувати межі обрізування, поля і т. д.";
-"preference.title.debug_show_layout_overlap" = "Показати накладання макета";
-"preference.detail.debug_show_layout_overlap" = "Накладання кожного перегляду з прозорим кольором, щоб розкрити огляди, що перекриваються.";
-"controller_configurator.title.type.xbox" = "Xbox";
-"controller_configurator.title.type.playstation" = "PlayStation";
+
+"preference.profile.title.name" = "Ім'я";
 
 "controller_configurator.xbox.title.bumper_left" = "Лівий бампер";
 "controller_configurator.xbox.title.bumper_right" = "Правий бампер";
@@ -235,19 +218,10 @@
 "controller_configurator.xbox.title.trigger_right" = "Правий тригер";
 "controller_configurator.xbox.title.named_back" = "Посібник";
 "controller_configurator.xbox.title.named_start" = "Меню";
-"controller_configurator.xbox.title.named_a" = "A";
-"controller_configurator.xbox.title.named_b" = "B";
-"controller_configurator.xbox.title.named_x" = "X";
-"controller_configurator.xbox.title.named_y" = "Y";
 "controller_configurator.xbox.title.dpad_up" = "Вверх";
 "controller_configurator.xbox.title.dpad_down" = "Вниз";
 "controller_configurator.xbox.title.dpad_left" = "Вліво";
 "controller_configurator.xbox.title.dpad_right" = "Вправо";
-
-"controller_configurator.playstation.title.bumper_left" = "L1";
-"controller_configurator.playstation.title.bumper_right" = "R1";
-"controller_configurator.playstation.title.trigger_left" = "L2";
-"controller_configurator.playstation.title.trigger_right" = "R2";
 "controller_configurator.playstation.title.named_back" = "Обрати";
 "controller_configurator.playstation.title.named_a" = "Хрест";
 "controller_configurator.playstation.title.named_b" = "Коло";
@@ -257,6 +231,4 @@
 "controller_configurator.playstation.title.dpad_down" = "Вниз";
 "controller_configurator.playstation.title.dpad_left" = "Вліво";
 "controller_configurator.playstation.title.dpad_right" = "Вправо";
-"controller_configurator.playstation.title.thumb_left" = "L3";
-"controller_configurator.playstation.title.thumb_right" = "R3";
 "controller_configurator.section.controller_style" = "Тип контролера";
