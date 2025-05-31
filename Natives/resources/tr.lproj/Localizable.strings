@@ -28,7 +28,6 @@
 "Move" = "Taşı";
 "Remove" = "Kaldır";
 "Resize" = "Yeniden boyutlandır";
-
 "custom_controls.button_edit.name" = "İsim";
 "custom_controls.button_edit.size" = "Boyut";
 "custom_controls.button_edit.mapping" = "Atama";
@@ -47,7 +46,6 @@
 "custom_controls.control_menu.exit" = "Çıkış";
 "custom_controls.control_menu.exit.warn" = "Değişiklikleri kaydetmeden çıkmak üzeresiniz.";
 "custom_controls.control_menu.save" = "Kaydet";
-"custom_controls.control_menu.save.error.default" = "Üzerine yazılacağından dolayı kontrol ismi \"default\" olamaz.";
 "custom_controls.control_menu.save.error.json" = "JSON hatası";
 "custom_controls.control_menu.save.error.write" = "Dosyayı kaydederken hata oluştu";
 "custom_controls.control_menu.load" = "Yükle";
@@ -61,7 +59,6 @@
 "init.migrateDir" = "Amethyst veri dosyası artık %@. Önceden varolan bütün verilerin yeni konuma taşındı.";
 
 "launcher.menu.custom_controls" = "Özel kontroller";
-"launcher.menu.install_jar" = ".jar kur";
 
 "launcher.wait_jit.title" = "JIT için bekleniyor";
 "launcher.wait_jit.message" = "Amethyst, Java'nın maksimum performansta çalışması için Just-in-time derlemeye dayanır.";
@@ -121,9 +118,6 @@
 "preference.detail.cosmetica" = "Cosmetica'nın pelerinlerini etkinleştir (önceden Arc). Daha fazla bilgi için lütfen https://cosmetica.cc'yi ziyaret edin. OptiFine gerektirir";
 "preference.title.debug_logging" = "Hata ayıklama kaydı tutma";
 "preference.detail.debug_logging" = "İç seçenekleri ve eylemleri latestlog.txt'ye kaydeder. Bu geliştiricilerin sorunu daha kolay bulmasını sağlar, fakat çok sık kayıt edileceği için Minecraft daha yavaş çalışabilir.";
-"preference.title.jitstreamer_server" = "JitStreamer sunucu IP'si";
-"preference.detail.jitstreamer_server" = "Özel bir Jit Streamer suncu IP'sine geçmenizi sağlar, kendi kendini barındıran kurulumlar için gibi.
-Bu seçenek varsayılan JitStreamer sunucusunu kullanıyorsanız olduğu gibi bırakılabilir.";
 "preference.title.appicon" = "Uygulama simgesini ayarla";
 "preference.detail.appicon" = "Amethyst için farklı Ana Ekran simgeleri arasında seçim yapmanızı sağlar.";
 "preference.title.appicon-default" = "Göze aşina Amethyst açık";
@@ -168,7 +162,6 @@ Bu seçenek varsayılan JitStreamer sunucusunu kullanıyorsanız olduğu gibi b�
 "preference.title.gyroscope_sensitivity" = "Jiroskop kontrolleri hassaslığı";
 "preference.detail.gyroscope_sensitivity" = "Jiroskop kontrollerinin hassaslığını ayarlayın";
 
-"preference.title.java_home" = "Minecraft 1.17 < için Java 17 kullan";
 "preference.title.java_args" = "JVM Başlatıcı değişkenleri";
 "preference.placeholder.java_args" = "Değişkenleri belirt...";
 "preference.title.auto_ram" = "Otomatik BELLEK";
@@ -177,7 +170,6 @@ Bu seçenek varsayılan JitStreamer sunucusunu kullanıyorsanız olduğu gibi b�
 "preference.title.allocated_memory" = "Bellek ayırımı (MB)";
 "preference.detail.allocated_memory" = "Minecraft'a ne kadar bellek verileceğini kontrol eder";
 "preference.warn.allocated_memory" = "İşletim sisteminin kendisindeki kısıtlamalar nedeniyle bu seçenek bunda veya daha yüksek değerlerde dengesizliğe sebep olabilir. Önlem ile devam edin.";
-"preference.title.custom_env" = "Ortam değişkenleri";
 
 "preference.title.debug_skip_wait_jit" = "\"JIT için bekleniliyor\" mesajını atla";
 "preference.detail.debug_skip_wait_jit" = "Bu JIT'siz başlatmanızı sağlamaz, aksine hata ayıklayıcı kontrolünü atlar, çünkü bu kontrol bazı belirli jailbreak'lerde başarısız oluyor.";
@@ -187,8 +179,6 @@ Bu seçenek varsayılan JitStreamer sunucusunu kullanıyorsanız olduğu gibi b�
 "preference.detail.debug_auto_correction" = "Oyunda yazı yazarkenki otomatik düzeltmeyi aktifleştirir.";
 "preference.title.debug_hide_home_indicator" = "Ana göstergeyi gizle";
 "preference.detail.debug_hide_home_indicator" = "Bu, ana gösterge kilitlemeyi devre dışı bırakacaktır. Giriş göstergesini aynı anda gizlemek ve kilitlemek için Kılavuzlu Erişim'i kullanmanız gerekecek.";
-"preference.title.debug_show_layout_bounds" = "Düzen sınırlarını göster";
-"preference.detail.debug_show_layout_bounds" = "Klip sınırlarını, kenar boşluklarını göster";
-"preference.title.debug_show_layout_overlap" = "Düzenin üst üste geçmesini göster";
-"preference.detail.debug_show_layout_overlap" = "Üst üste kalan her yeri görebilmek için her düzeni saydam renkle donat.";
+
+"preference.profile.title.name" = "İsim";
 "controller_configurator.playstation.title.named_back" = "Seç";
