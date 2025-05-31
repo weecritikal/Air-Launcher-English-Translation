@@ -4,7 +4,6 @@
 */
 
 "game.menu.force_close" = "Paksa tutup";
-"game.menu.log_output" = "Log output";
 "game.menu.custom_controls" = "Kawalan custom";
 
 // The play button
@@ -14,7 +13,6 @@
 "Old-alpha" = "Alfa-lama";
 "Edit" = "Sunting";
 "Remove" = "Hapus";
-
 "custom_controls.button_edit.name" = "Nama";
 "custom_controls.button_edit.size" = "Saiz";
 "custom_controls.button_edit.mapping" = "Pemetaan";
@@ -27,7 +25,6 @@
 "custom_controls.control_menu.add_button" = "Tambah butang";
 
 "launcher.menu.custom_controls" = "Kawalan custom";
-"launcher.menu.install_jar" = "Pasang .jar";
 "login.option.select" = "Pilih akaun";
 
 "News" = "Berita";
@@ -48,9 +45,7 @@
 "preference.title.reset_settings" = "Tetapkan semula semua tetapan";
 "preference.title.confirm.reset_settings" = "Ini akan mengalih keluar semua pilihan tersuai anda, termasuk resolusi, saiz butang dan argumen Java.";
 "preference.title.done.reset_settings" = "Semua tetapan lalai telah dipulihkan.";
-
-"preference.title.renderer" = "Renderer";
-"preference.title.java_args" = "JVM Launch arguments";
-"preference.title.auto_ram" = "Auto RAM";
 "preference.detail.auto_ram" = "Membenarkan pelaras RAM automatik";
 "preference.detail.allocated_memory" = "Mengawal berapa banyak memori yang diberikan kepada Minecraft";
+
+"preference.profile.title.name" = "Nama";
