@@ -28,7 +28,6 @@
 "Move" = "Przenieś";
 "Remove" = "Usuń";
 "Resize" = "Zmień rozmiar";
-
 "custom_controls.button_edit.name" = "Nazwa";
 "custom_controls.button_edit.size" = "Rozmiar";
 "custom_controls.button_edit.mapping" = "Mapowanie";
@@ -47,7 +46,6 @@
 "custom_controls.control_menu.exit" = "Wyjdź";
 "custom_controls.control_menu.exit.warn" = "Zamierzasz wyjść bez zapisywania zmian.";
 "custom_controls.control_menu.save" = "Zapisz";
-"custom_controls.control_menu.save.error.default" = "Nazwa kontrolna nie może być \"default\", ponieważ zostanie nadpisana.";
 "custom_controls.control_menu.save.error.json" = "Błąd JSON";
 "custom_controls.control_menu.save.error.write" = "Błąd zapisu pliku";
 "custom_controls.control_menu.load" = "Wczytaj";
@@ -60,7 +58,6 @@
 "init.migrateDir" = "Katalogiem danych Amethyst jest teraz %@. Wszystkie istniejące dane zostały przeniesione do nowej lokalizacji.";
 
 "launcher.menu.custom_controls" = "Sterowanie";
-"launcher.menu.install_jar" = "Zainstaluj .jar";
 
 "launcher.wait_jit.title" = "Czekam na JIT";
 "launcher.wait_jit.message" = "Amethyst opiera się na kompilacji Just-in-time, aby Java działała z maksymalną wydajnością.";
@@ -118,8 +115,6 @@
 "preference.detail.cosmetica" = "Włącz peleryny z Cosmetica (wcześniej Arc). Aby uzyskać więcej informacji, odwiedź stronę https://cosmetica.cc. Wymaga OptiFine";
 "preference.title.debug_logging" = "Rejestr debugowania";
 "preference.detail.debug_logging" = "Rejestruje ustawienia wewnętrzne i działania w lastlog.txt. Pomaga to programistom łatwiej znajdować problemy, ale Minecraft może działać wolniej, ponieważ logi będą zapisywane częściej.";
-"preference.title.jitstreamer_server" = "Adres IP serwera JitStreamer";
-"preference.detail.jitstreamer_server" = "Pozwala na zmianę na niestandardowy adres IP serwera JitStreamer, np. dla instancji hostowanych przez siebie. Ta opcja może pozostać sama jeśli używasz domyślnych serwerów JitStreamer.";
 "preference.title.appicon" = "Ustaw ikonę aplikacji";
 "preference.detail.appicon" = "Pozwala wybrać między różnymi ikonami ekranu głównego dla Amethyst.";
 
@@ -155,7 +150,6 @@
 "preference.title.gyroscope_sensitivity" = "Czułość sterowania żyroskopem";
 "preference.detail.gyroscope_sensitivity" = "Dostosuj czułość sterowania żyroskopem";
 
-"preference.title.java_home" = "Użyj Java 17 dla Minecraft < 1.17";
 "preference.title.java_args" = "Argumenty uruchomienia JVM";
 "preference.placeholder.java_args" = "Określ argumenty...";
 "preference.title.auto_ram" = "Automatyczny RAM";
@@ -164,7 +158,6 @@
 "preference.title.allocated_memory" = "Przydział pamięci (MB)";
 "preference.detail.allocated_memory" = "Kontroluje ilość pamięci przydzielonej Minecraft";
 "preference.warn.allocated_memory" = "Ze względu na ograniczenia samego systemu operacyjnego, ta opcja może powodować niestabilność przy tej i wyższych wartościach. Zachowaj ostrożność.";
-"preference.title.custom_env" = "Zmienne środowiskowe";
 
 "preference.title.debug_skip_wait_jit" = "Pomiń okno dialogowe \"Oczekiwanie na JIT\"";
 "preference.detail.debug_skip_wait_jit" = "To nie pozwala na uruchamianie bez JIT, zamiast tego pomija kontrolę debugera, ponieważ sprawdzenie nie powiodło się na niektórych więzieniach.";
@@ -172,8 +165,6 @@
 "preference.detail.debug_ipad_ui" = "Odblokuj interfejs użytkownika wyłącznie dla iPada (alarm, klawiatura itp.), jeśli jest włączony, lub interfejs iPhone'a, jeśli jest wyłączony.";
 "preference.title.debug_auto_correction" = "Auto-korekta";
 "preference.detail.debug_auto_correction" = "Włącz automatyczną korektę podczas wpisywania tekstu w grze.";
-"preference.title.debug_show_layout_bounds" = "Pokaż granice układu";
-"preference.detail.debug_show_layout_bounds" = "Pokaż granice klipów, marginesy";
-"preference.title.debug_show_layout_overlap" = "Pokaż nakładające się układy";
-"preference.detail.debug_show_layout_overlap" = "Nakładaj każdy widok przezroczystym kolorem, aby odsłonić nakładające się widoki.";
+
+"preference.profile.title.name" = "Nazwa";
 "controller_configurator.playstation.title.named_back" = "Wybierz";
