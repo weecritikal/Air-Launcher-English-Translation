@@ -28,7 +28,6 @@
 "Move" = "移动";
 "Remove" = "移除";
 "Resize" = "调整大小";
-
 "custom_controls.button_edit.name" = "名称";
 "custom_controls.button_edit.size" = "大小";
 "custom_controls.button_edit.mapping" = "映射";
@@ -47,7 +46,6 @@
 "custom_controls.control_menu.exit" = "退出";
 "custom_controls.control_menu.exit.warn" = "您将会退出且不保存任何更改。";
 "custom_controls.control_menu.save" = "保存";
-"custom_controls.control_menu.save.error.default" = "控件名称不能是“default”，因为它是不可更改的。";
 "custom_controls.control_menu.save.error.json" = "JSON 文件错误";
 "custom_controls.control_menu.save.error.write" = "保存按键布局时发生错误";
 "custom_controls.control_menu.load" = "加载";
@@ -64,7 +62,6 @@
 "launcher.mcl.error_download" = "下载 %@ 失败：%@";
 
 "launcher.menu.custom_controls" = "自定义控制按键";
-"launcher.menu.install_jar" = "安装 .jar";
 
 "launcher.wait_jit.title" = "请等待应用获取到JIT(Just-in-time)";
 "launcher.wait_jit.message" = "Amethyst启动器必须要JIT (Just-in-time) 权限才能启动游戏";
@@ -137,10 +134,6 @@
 "preference.detail.cosmetica" = "启用来自 Cosmetica（原 Arc ）的披风。欲了解更多信息，请访问 https://arcapes.com。需要 OptiFine。";
 "preference.title.debug_logging" = "调试日志";
 "preference.detail.debug_logging" = "完整的记录启动器的各种活动事件到latestlog.txt文件内,有助于开发者更容易的发现错误。但Minecraft游戏内FPS可能会降低(频繁的记录日志内容会使得CPU负载变高)";
-"preference.title.jitstreamer_server" = "JitStreamer的服务器地址";
-"preference.detail.jitstreamer_server" = "该选项将自定义获取 JIT 权限地址的 JitStreamer 服务器，若你不知道如何修改请勿修改，当然也可以保持默认地址";
-"preference.title.enable_altkit" = "启用 AltKit 集成";
-"preference.detail.enable_altkit" = "启用时，Amethyst 将尝试连接到本地 AltServers 以启用 JIT。";
 "preference.title.appicon" = "设置应用应用图标风格";
 "preference.detail.appicon" = "允许您为 Amethyst 选择不同的主屏幕图标。";
 "preference.title.appicon-default" = "设置 Amethyst 图标为浅色";
@@ -163,9 +156,6 @@
 "preference.title.renderer" = "渲染器";
 
 "preference.title.renderer.release.auto" = "自动";
-"preference.title.renderer.release.gl4es" = "holy gl4es";
-"preference.title.renderer.release.angle" = "ANGLE";
-"preference.title.renderer.release.zink" = "Zink";
 
 "preference.title.renderer.debug.auto" = "自动：gl4es 或 ANGLE";
 "preference.title.renderer.debug.gl4es" = "gl4es 1.1.4 - OpenGL版本2.1";
@@ -212,8 +202,6 @@
 "preference.title.gyroscope_sensitivity" = "陀螺仪控制灵敏度";
 "preference.detail.gyroscope_sensitivity" = "调整陀螺仪控制的灵敏度";
 
-"preference.title.java_home" = "游戏版本小于 1.17 时仍然使用 Java 17";
-"preference.detail.java_home" = "这些版本默认使用 Java 8。启用此选项可强制使用 Java 17，但不保证兼容性。";
 "preference.title.java_args" = "JVM 启动参数";
 "preference.detail.java_args" = "当启动 Minecraft 时将参数传递到 Java。小心，如果修改不正确，可能会使游戏崩溃。";
 "preference.placeholder.java_args" = "自定义参数...";
@@ -223,7 +211,6 @@
 "preference.title.allocated_memory" = "内存分配 (MB)";
 "preference.detail.allocated_memory" = "控制给 Minecraft 分配多少内存";
 "preference.warn.allocated_memory" = "由于系统的限制,可能会导致游戏不稳定";
-"preference.title.custom_env" = "环境变量";
 "preference.detail.custom_env" = "此选项正在构建中。在此期间创建并编辑 custom_env.txt。";
 
 "preference.title.debug_skip_wait_jit" = "跳过获取\"JIT(Just-in-time)\"请求";
@@ -234,14 +221,10 @@
 "preference.detail.debug_auto_correction" = "在游戏中输入文本时启用自动校正。";
 "preference.title.debug_hide_home_indicator" = "隐藏主屏幕指示键";
 "preference.detail.debug_hide_home_indicator" = "此选项将会禁用主屏幕指示键锁定，你将会需要启用引导式访问来同时隐藏和锁定主屏幕指示键。";
-"preference.title.debug_show_layout_bounds" = "显示边界布局";
-"preference.detail.debug_show_layout_bounds" = "显示剪辑边界、边距";
-"preference.title.debug_show_layout_overlap" = "布局重叠显示";
-"preference.detail.debug_show_layout_overlap" = "用浅黄色覆盖每个视图，颜色越深则重叠越多";
+
+"preference.profile.title.name" = "名称";
 
 "controller_configurator.title.current" = "游戏键盘配置文件";
-"controller_configurator.title.type.xbox" = "Xbox";
-"controller_configurator.title.type.playstation" = "PlayStation";
 
 "controller_configurator.xbox.title.bumper_left" = "左前按钮（LB）";
 "controller_configurator.xbox.title.bumper_right" = "右前按钮（RB）";
@@ -249,21 +232,12 @@
 "controller_configurator.xbox.title.trigger_right" = "右扳机（RT）";
 "controller_configurator.xbox.title.named_back" = "指南";
 "controller_configurator.xbox.title.named_start" = "菜单";
-"controller_configurator.xbox.title.named_a" = "A";
-"controller_configurator.xbox.title.named_b" = "B";
-"controller_configurator.xbox.title.named_x" = "X";
-"controller_configurator.xbox.title.named_y" = "Y";
 "controller_configurator.xbox.title.dpad_up" = "上";
 "controller_configurator.xbox.title.dpad_down" = "下";
 "controller_configurator.xbox.title.dpad_left" = "左";
 "controller_configurator.xbox.title.dpad_right" = "右";
 "controller_configurator.xbox.title.thumb_left" = "左手套装";
 "controller_configurator.xbox.title.thumb_right" = "右拇指单击";
-
-"controller_configurator.playstation.title.bumper_left" = "L1";
-"controller_configurator.playstation.title.bumper_right" = "R1";
-"controller_configurator.playstation.title.trigger_left" = "L2";
-"controller_configurator.playstation.title.trigger_right" = "R2";
 "controller_configurator.playstation.title.named_back" = "选择";
 "controller_configurator.playstation.title.named_start" = "开始";
 "controller_configurator.playstation.title.named_a" = "叉";
@@ -274,8 +248,6 @@
 "controller_configurator.playstation.title.dpad_down" = "下";
 "controller_configurator.playstation.title.dpad_left" = "左";
 "controller_configurator.playstation.title.dpad_right" = "右";
-"controller_configurator.playstation.title.thumb_left" = "L3";
-"controller_configurator.playstation.title.thumb_right" = "R3";
 
 "controller_configurator.section.config_files" = "当前配置文件";
 "controller_configurator.section.game_mappings" = "游戏映射";
