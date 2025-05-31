@@ -301,6 +301,8 @@
 "controller_configurator.xbox.title.dpad_right" = "右";
 "controller_configurator.xbox.title.thumb_left" = "左手套装";
 "controller_configurator.xbox.title.thumb_right" = "右拇指单击";
+
+"controller_configurator.playstation.title.bumper_left" = "L1按钮";
 "controller_configurator.playstation.title.named_back" = "选择";
 "controller_configurator.playstation.title.named_start" = "开始";
 "controller_configurator.playstation.title.named_a" = "叉";
