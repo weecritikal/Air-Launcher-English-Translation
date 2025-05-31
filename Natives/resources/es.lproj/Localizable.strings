@@ -14,11 +14,13 @@
 
 // The play button
 "Play" = "Jugar";
+"Details" = "Detalles";
 
 // Version categories
 "Installed" = "Instalada";
 "Snapshot" = "Snapshots";
 "Releases" = "Versiones lanzadas";
+"Unstable" = "Inestable";
 "Old-beta" = "Betas";
 "Old-alpha" = "Alphas";
 
@@ -28,6 +30,10 @@
 "Move" = "Mover";
 "Remove" = "Eliminar";
 "Resize" = "Cambiar tamaño";
+// Visibility
+"Always" = "Siempre";
+"In game" = "En el juego";
+"In menu" = "En el menú";
 "custom_controls.button_edit.name" = "Nombre";
 "custom_controls.button_edit.size" = "Tamaño";
 "custom_controls.button_edit.mapping" = "Mapeado";
@@ -35,9 +41,11 @@
 "custom_controls.button_edit.toggleable" = "Activable";
 "custom_controls.button_edit.swipeable" = "Deslizable";
 "custom_controls.button_edit.bg_color" = "Color de fondo";
+"custom_controls.button_edit.stroke_width" = "Ancho del trazo (dp)";
 "custom_controls.button_edit.stroke_color" = "Color del trazo";
 "custom_controls.button_edit.corner_radius" = "Radio de las esquinas (%)";
 "custom_controls.button_edit.opacity" = "Opacidad (%)";
+"custom_controls.button_edit.visibility" = "Visibilidad";
 
 "custom_controls.button_menu.add_subbutton" = "Añadir sub-botón";
 "custom_controls.control_menu.discard_changes" = "Descartar cambios";
@@ -51,14 +59,21 @@
 "custom_controls.control_menu.safe_area" = "Área segura";
 "custom_controls.control_menu.add_button" = "Añadir botón";
 "custom_controls.control_menu.add_drawer" = "Añadir Cajón";
+"custom_controls.control_menu.add_joystick" = "Añadir joystick";
+"custom_controls.error.incompatible" = "Esta versión de control (código %d) no está implementada en esta compilación del launcher.";
 "custom_controls.hint" = "Mantenga pulsado en cualquier lugar de la pantalla para más opciones";
 
 "init.migrateDir" = "La carpeta de Amethyst ahora está en %@. Todos tus datos han sido movidos a esa nueva ubicación.";
 
+"launcher.mcl.downloading_file" = "Descargando %@";
+"launcher.mcl.error_download" = "Error al descargar %@: %@";
+
 "launcher.menu.custom_controls" = "Controles personalizados";
+"launcher.menu.execute_jar" = "Ejecutar .jar";
 
 "launcher.wait_jit.title" = "Esperando por JIT";
 "launcher.wait_jit.message" = "Amethyst utiliza la compilación Just-in-time para que Java funcione con el máximo rendimiento.";
+"launcher.wait_jit_trollstore.message" = "Si sigues viendo este mensaje, por favor activa el Esquema de URL en TrollStore.";
 
 "login.error.username.outOfRange" = "El nombre de usuario debe tener al menos 3 caracteres y un máximo de 16 caracteres";
 
@@ -66,10 +81,14 @@
 
 "login.jit.checking" = "Buscando JIT";
 "login.jit.enabled" = "JIT ha sido habilitado";
+"login.jit.fail" = "JIT no pudo ser activado.";
+"login.jit.fail.title" = "JIT no pudo ser activado en tu dispositivo.";
 
 // Login buttons
 "login.menu.sendlogs" = "Envía tus logs";
+"login.option.add" = "Añadir cuenta";
 "login.option.select" = "Seleccione una cuenta";
+"login.option.demo" = "Cuenta de demostración";
 "login.option.microsoft" = "Cuenta de Microsoft";
 "login.option.local" = "Cuenta local";
 "login.warn.message.demomode" = "Como reemplazo del modo offline y el modo local, el modo demo te permitirá iniciar sesión en una cuenta de Microsoft que no tenga el juego para jugar a las trials de Java Edition, introducido en la versión 1.3.1 y versiones nuevas. Versiones anteriores a estas tienen acceso al juego entero, porque el launcher oficial no contiene estas restricciones. Ve a nuestro sitio web para saber más sobre esta transición de el modo offline.";
@@ -89,6 +108,7 @@
 "login.msa.progress.checkMCProfile" = "(5/5) Comprobando el perfil de Minecraft";
 
 "News" = "Noticias";
+"Profiles" = "Perfiles";
 "Settings" = "Ajustes";
 
 "preference.section.general" = "Configuración general";
@@ -125,6 +145,11 @@
 
 "preference.title.renderer" = "Renderizador";
 
+"preference.title.renderer.release.auto" = "Automático";
+"preference.title.renderer.release.gl4es" = "holy gl4es";
+"preference.title.renderer.release.angle" = "ANGLE";
+"preference.title.renderer.release.zink" = "Zink";
+
 "preference.title.renderer.debug.auto" = "Automático: gl4es o ANGLE";
 "preference.title.renderer.debug.gl4es" = "gl4es 1.1.4 - exporta a OpenGL 2.1";
 "preference.title.renderer.debug.angle" = "ANGLE (1.17+) - exporta OpenGL 3.1 (perfil Core, limitado)";
@@ -137,6 +162,9 @@
 
 "preference.title.fullscreen_airplay" = "AirPlay en pantalla completa";
 "preference.detail.fullscreen_airplay" = "Permite presentar la ventana de juego a pantalla completa en la pantalla externa en lugar de reflejar todo en la pantalla interna.";
+"preference.title.allow_microphone" = "Permitir entrada de micrófono";
+"preference.title.default_gamepad_ctrl" = "Configuración del controlador";
+"preference.title.hardware_hide" = "Ocultar controles cuando el hardware está conectado";
 "preference.title.press_duration" = "Duración para pulsado largo (ms)";
 "preference.title.button_scale" = "Escala de botones en pantalla (%)";
 "preference.detail.button_scale" = "Sube de tamaño a los botones si resultan ser muy pequeños, es usualmente necesario para usuarios de iPad.";
@@ -165,3 +193,8 @@
 "preference.detail.debug_auto_correction" = "Activar corrección automática al escribir texto en el juego.";
 
 "preference.profile.title.name" = "Nombre";
+"preference.profile.title.version" = "Versión";
+"preference.profile.title.version_type" = "Tipo de versión";
+"preference.profile.title.default_touch_control" = "Controles táctiles";
+"preference.profile.title.default_gamepad_control" = "Controles del mando";
+"profile.title.create" = "Crear un nuevo perfil";
