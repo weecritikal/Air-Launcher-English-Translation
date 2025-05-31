@@ -18,7 +18,6 @@
 // Version categories
 "Installed" = "Installiert";
 "Snapshot" = "Entwicklungsversionen";
-"Releases" = "Releases";
 "Old-beta" = "Old-Beta";
 "Old-alpha" = "Old-Alpha";
 
@@ -28,8 +27,6 @@
 "Move" = "Verschieben";
 "Remove" = "Entfernen";
 "Resize" = "Größe ändern";
-
-"custom_controls.button_edit.name" = "Name";
 "custom_controls.button_edit.size" = "Größe";
 "custom_controls.button_edit.mapping" = "Zuordnung";
 "custom_controls.button_edit.orientation" = "Ausrichtung";
@@ -47,7 +44,6 @@
 "custom_controls.control_menu.exit" = "Beenden";
 "custom_controls.control_menu.exit.warn" = "Du bist dabei zu beenden ohne Änderungen zu speichern.";
 "custom_controls.control_menu.save" = "Speichern";
-"custom_controls.control_menu.save.error.default" = "Der Name der Steuerung kann nicht „default” sein, da es überschrieben werden würde.";
 "custom_controls.control_menu.save.error.json" = "JSON-Fehler";
 "custom_controls.control_menu.save.error.write" = "Fehler beim Speichern der Datei";
 "custom_controls.control_menu.load" = "Laden";
@@ -64,7 +60,6 @@
 "launcher.mcl.error_download" = "Fehler beim Herunterladen von %@: %@";
 
 "launcher.menu.custom_controls" = "Benutzerdefinierte Steuerung";
-"launcher.menu.install_jar" = ".jar installieren";
 
 "launcher.wait_jit.title" = "Wartet auf JIT";
 "launcher.wait_jit.message" = "Amethyst setzt auf Java's Just-in-time-Kompilierung, um mit maximaler Leistung zu arbeiten.";
@@ -138,10 +133,6 @@ der Minecraft-Version zu wählen. Verringerte Auflösung reduziert die Arbeitsla
 "preference.detail.cosmetica" = "Aktiviert Umhänge von Cosmetica (früher Arc). Für weitere Informationen bitte https://cosmetica.cc besuchen. OptiFine wird benötigt";
 "preference.title.debug_logging" = "Debug-Protokolle";
 "preference.detail.debug_logging" = "Protokolliert interne Einstellungen und Aktionen an latestlog.txt. Dies hilft den Entwicklern Probleme leichter zu finden, kann aber Minecraft langsamer laufen lassen, da die Protokolle öfter geschrieben werden.";
-"preference.title.jitstreamer_server" = "JitStreamer-Server-IP";
-"preference.detail.jitstreamer_server" = "Erlaubt es dir, auf eine benutzerdefinierte JitStreamer-Server-IP zu wechseln, wie zum Beispiel für selbst gehostete Instanzen. Diese Option kann ausgelassen werden, wenn du die Standard-JitStreamer-Server verwendest.";
-"preference.title.enable_altkit" = "AltKit-Integration aktivieren";
-"preference.detail.enable_altkit" = "Wenn aktiviert, versucht Amethyst sich mit lokalen AltServern zu verbinden, um JIT zu aktivieren.";
 "preference.title.appicon" = "App-Icon festlegen";
 "preference.detail.appicon" = "Erlaubt es dir, zwischen verschiedenen Startbildschirm-Icons für Amethyst zu wählen.";
 "preference.title.appicon-default" = "Bekanntes Amethyst-Icon (Hell)";
@@ -161,14 +152,9 @@ der Minecraft-Version zu wählen. Verringerte Auflösung reduziert die Arbeitsla
 "preference.title.confirm.erase_demo_data" = "Dies löscht alle Demo-Spielversionen und Daten, die für Demo-Konten verwendet werden.";
 "preference.title.done.erase_demo_data" = "Alle Demo-Spieldaten wurden gelöscht.";
 
-"preference.title.renderer" = "Renderer";
-
 "preference.title.renderer.release.auto" = "Automatisch";
 "preference.title.renderer.release.gl4es" = "Holy Gl4es";
 "preference.title.renderer.release.angle" = "Angle";
-"preference.title.renderer.release.zink" = "Zink";
-
-"preference.title.renderer.debug.auto" = "Auto: gl4es or ANGLE";
 "preference.title.renderer.debug.gl4es" = "gl4es 1.1.4 - gibt OpenGL 2.1 aus";
 "preference.title.renderer.debug.angle" = "ANGLE (1.17+) - gibt OpenGL 3.2 (Kernprofil, begrenzt) aus";
 "preference.title.renderer.debug.zink" = "Zink (Mesa 21.0) - gibt OpenGL 4.1 aus";
@@ -213,8 +199,6 @@ der Minecraft-Version zu wählen. Verringerte Auflösung reduziert die Arbeitsla
 "preference.title.gyroscope_sensitivity" = "Gyroskop-Steuerungs-Empfindlichkeit";
 "preference.detail.gyroscope_sensitivity" = "Passe die Empfindlichkeit der Gyroskop-Steuerung an";
 
-"preference.title.java_home" = "Nutze Java 17 für Minecraft < 1.17";
-"preference.detail.java_home" = "Java 8 wird standardmäßig für diese Versionen verwendet. Aktivieren Sie diese Option, um die Verwendung von Java 17 zu erzwingen, aber die Kompatibilität ist nicht garantiert.";
 "preference.title.java_args" = "JVM-Start-Argumente";
 "preference.detail.java_args" = "Argumente an Java übergeben, wenn Minecraft gestartet wird. Sei vorsichtig, dies kann den Absturz des Spiels verursachen, wenn es falsch geändert wird.";
 "preference.placeholder.java_args" = "Argumente angeben...";
@@ -224,7 +208,6 @@ der Minecraft-Version zu wählen. Verringerte Auflösung reduziert die Arbeitsla
 "preference.title.allocated_memory" = "RAM-Zuweisung (MB)";
 "preference.detail.allocated_memory" = "Legt fest, wie viel RAM Minecraft gegeben wird";
 "preference.warn.allocated_memory" = "Aufgrund von Einschränkungen des Betriebssystems kann diese Option zu Instabilität bei diesem und höheren Werten führen. Sei vorsichtig.";
-"preference.title.custom_env" = "Umgebungsvariablen";
 "preference.detail.custom_env" = "Diese Option befindet sich in Entwicklung. Erstelle und bearbeite in der Zwischenzeit custom_env.txt.";
 
 "preference.title.debug_skip_wait_jit" = "Überspringe den \"Warten auf JIT\"-Dialog";
@@ -235,14 +218,9 @@ der Minecraft-Version zu wählen. Verringerte Auflösung reduziert die Arbeitsla
 "preference.detail.debug_auto_correction" = "Aktiviere die Auto-Korrektur bei der Eingabe von Text im Spiel.";
 "preference.title.debug_hide_home_indicator" = "Home-Indikator ausblenden";
 "preference.detail.debug_hide_home_indicator" = "Dadurch wird die Sperre des Home-Indikators deaktiviert. Du musst den Guided-Access verwenden, um den Home-Indikator gleichzeitig auszublenden und zu sperren.";
-"preference.title.debug_show_layout_bounds" = "Layoutgrenzen einblenden";
-"preference.detail.debug_show_layout_bounds" = "Zuschnittbegrenzungen, Ränder anzeigen";
-"preference.title.debug_show_layout_overlap" = "Layoutüberlappungen anzeigen";
-"preference.detail.debug_show_layout_overlap" = "Überlagere jede Ansicht mit einer transparenten Farbe, um überlappende Ansichten anzuzeigen.";
 
 "controller_configurator.title.current" = "Gamepads Konfigurationsdatei";
 "controller_configurator.title.type.xbox" = "XBox";
-"controller_configurator.title.type.playstation" = "PlayStation";
 
 "controller_configurator.xbox.title.bumper_left" = "Linker Stoß";
 "controller_configurator.xbox.title.bumper_right" = "Rechter Stoß";
@@ -250,23 +228,13 @@ der Minecraft-Version zu wählen. Verringerte Auflösung reduziert die Arbeitsla
 "controller_configurator.xbox.title.trigger_right" = "Rechter Auslöser";
 "controller_configurator.xbox.title.named_back" = "Anleitung";
 "controller_configurator.xbox.title.named_start" = "Menü";
-"controller_configurator.xbox.title.named_a" = "A";
-"controller_configurator.xbox.title.named_b" = "B";
-"controller_configurator.xbox.title.named_x" = "X";
-"controller_configurator.xbox.title.named_y" = "Y";
 "controller_configurator.xbox.title.dpad_up" = "Hoch";
 "controller_configurator.xbox.title.dpad_down" = "Unten";
 "controller_configurator.xbox.title.dpad_left" = "Links";
 "controller_configurator.xbox.title.dpad_right" = "Rechts";
 "controller_configurator.xbox.title.thumb_left" = "Linksklick";
 "controller_configurator.xbox.title.thumb_right" = "Rechtsklick";
-
-"controller_configurator.playstation.title.bumper_left" = "L1";
-"controller_configurator.playstation.title.bumper_right" = "R1";
-"controller_configurator.playstation.title.trigger_left" = "L2";
-"controller_configurator.playstation.title.trigger_right" = "R2";
 "controller_configurator.playstation.title.named_back" = "Auswählen";
-"controller_configurator.playstation.title.named_start" = "Start";
 "controller_configurator.playstation.title.named_a" = "Kreuz";
 "controller_configurator.playstation.title.named_b" = "Kreis";
 "controller_configurator.playstation.title.named_x" = "Quadrat";
@@ -275,8 +243,6 @@ der Minecraft-Version zu wählen. Verringerte Auflösung reduziert die Arbeitsla
 "controller_configurator.playstation.title.dpad_down" = "Unten";
 "controller_configurator.playstation.title.dpad_left" = "Links";
 "controller_configurator.playstation.title.dpad_right" = "Rechts";
-"controller_configurator.playstation.title.thumb_left" = "L3";
-"controller_configurator.playstation.title.thumb_right" = "R3";
 
 "controller_configurator.section.config_files" = "Aktuelle Konfiguration";
 "controller_configurator.section.game_mappings" = "Spielzuordnung";
