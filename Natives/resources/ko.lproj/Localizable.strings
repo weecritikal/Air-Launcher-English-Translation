@@ -14,15 +14,12 @@
 // Version categories
 "Installed" = "설치됨";
 "Snapshot" = "스냅숏";
-"Old-beta" = "Old-beta";
-"Old-alpha" = "Old-alpha";
 
 // Custom controls
 "Copy" = "복사";
 "Edit" = "수정";
 "Move" = "움직이다";
 "Remove" = "제거";
-
 "custom_controls.button_edit.name" = "이름";
 "custom_controls.button_edit.size" = "크기";
 "custom_controls.button_edit.mapping" = "매핑";
@@ -42,7 +39,6 @@
 "custom_controls.control_menu.add_button" = "버튼 추가";
 
 "launcher.menu.custom_controls" = "사용자 지정 조작";
-"launcher.menu.install_jar" = ".jar 설치";
 
 "launcher.wait_jit.title" = "JIT를 기다리고 있습니다";
 
@@ -78,9 +74,10 @@
 "preference.title.renderer" = "렌더러";
 "preference.title.virtmouse_enable" = "가상 마우스";
 
-"preference.title.java_home" = "마인크래프트 버전 < 1.17 부터 자바 17을 사용하세요";
 "preference.title.java_args" = "JVM 시작 스크립트";
 "preference.title.auto_ram" = "자동 RAM 할당";
 "preference.detail.auto_ram" = "자동 RAM 할당 활성화하기";
 "preference.detail.allocated_memory" = "Minecraft 메모리 할당 조절";
+
+"preference.profile.title.name" = "이름";
 "controller_configurator.playstation.title.named_back" = "선택";
