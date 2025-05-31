@@ -10,24 +10,32 @@
 
 "game.note.airplay" = "Minecraft 正在通过隔空播放（AirPlay）到其他设备显示";
 
-"game.title.exit_code" = "游戏非正常退出，错误代码%d";
+"game.title.exit_code" = "游戏以代码 %d 退出";
 
 // The play button
-"Play" = "启动游戏";
+"Play" = "开始游戏";
+"Details" = "详情";
 
 // Version categories
 "Installed" = "已安装";
 "Snapshot" = "快照";
 "Releases" = "正式版";
-"Old-beta" = "远古 beta 版";
-"Old-alpha" = "远古 alpha 版";
+"Unstable" = "不稳定";
+"Old-beta" = "早期 Beta 版";
+"Old-alpha" = "早期 Alpha 版";
 
 // Custom controls
 "Copy" = "复制";
-"Edit" = "修改";
+"Edit" = "编辑";
 "Move" = "移动";
 "Remove" = "移除";
 "Resize" = "调整大小";
+// Visibility
+"Always" = "始终";
+"In game" = "游戏内";
+"In menu" = "菜单内";
+
+"custom_controls.button_edit.forward_lock" = "前进锁定";
 "custom_controls.button_edit.name" = "名称";
 "custom_controls.button_edit.size" = "大小";
 "custom_controls.button_edit.mapping" = "映射";
@@ -37,34 +45,41 @@
 "custom_controls.button_edit.swipeable" = "可滑动";
 "custom_controls.button_edit.bg_color" = "背景颜色";
 "custom_controls.button_edit.stroke_width" = "边框宽度 (%)";
-"custom_controls.button_edit.stroke_color" = "边框颜色";
+"custom_controls.button_edit.stroke_color" = "描边颜色";
 "custom_controls.button_edit.corner_radius" = "圆角半径 (%)";
-"custom_controls.button_edit.opacity" = "不透明度 (%)：";
+"custom_controls.button_edit.opacity" = "不透明度 (%)";
+"custom_controls.button_edit.visibility" = "可见性";
 
 "custom_controls.button_menu.add_subbutton" = "添加子按钮";
-"custom_controls.control_menu.discard_changes" = "取消更改";
+"custom_controls.control_menu.discard_changes" = "舍弃更改";
 "custom_controls.control_menu.exit" = "退出";
 "custom_controls.control_menu.exit.warn" = "您将会退出且不保存任何更改。";
 "custom_controls.control_menu.save" = "保存";
-"custom_controls.control_menu.save.error.json" = "JSON 文件错误";
+"custom_controls.control_menu.save.error.json" = "JSON 错误";
 "custom_controls.control_menu.save.error.write" = "保存按键布局时发生错误";
 "custom_controls.control_menu.load" = "加载";
-"custom_controls.control_menu.make_default" = "设置游戏默认的按键布局";
+"custom_controls.control_menu.make_default" = "设为默认";
 "custom_controls.control_menu.safe_area" = "安全区域";
 "custom_controls.control_menu.add_button" = "添加按键";
 "custom_controls.control_menu.add_drawer" = "添加组合键";
+"custom_controls.control_menu.add_joystick" = "添加摇杆";
 "custom_controls.error.incompatible" = "此控件版本（代码 %d）在当前启动器版本中尚未实现。";
 "custom_controls.hint" = "长按屏幕上的任意位置以获取更多选项";
 
 "init.migrateDir" = "目前 Amethyst 数据目录为%@。所有的游戏资源已移动到最新目录。";
 
+"java.error.missing_main_class" = "%@ 缺少主类属性。如果这是一个模组，请将其放入所选实例的“mods”文件夹中。";
+"java.error.missing_runtime" = "%@ 需要 Java %d 或更高版本才能运行。请先安装该版本，然后在“管理运行时”中进行指定。";
+
 "launcher.mcl.downloading_file" = "正在下载 %@";
 "launcher.mcl.error_download" = "下载 %@ 失败：%@";
 
 "launcher.menu.custom_controls" = "自定义控制按键";
+"launcher.menu.execute_jar" = "执行 .jar";
 
 "launcher.wait_jit.title" = "请等待应用获取到JIT(Just-in-time)";
 "launcher.wait_jit.message" = "Amethyst启动器必须要JIT (Just-in-time) 权限才能启动游戏";
+"launcher.wait_jit_trollstore.message" = "如果您仍然看到此消息，请在 TrollStore 中启用 URL Scheme。";
 
 "login.error.username.outOfRange" = "用户名必须在 3-16 个字符以内";
 
@@ -75,13 +90,14 @@
 "login.jit.fail" = "无法启用 JIT。";
 "login.jit.fail.title" = "无法在您的设备上启用 JIT。";
 "login.jit.fail.description" = "没有集成可在您的设备上自动启用 JIT，现在需要手动启用。错误已记录到 latestlog.txt。";
+"login.jit.fail.description_unsupported" = "检测到了不受支持的安装方法。请使用受支持的方法重新安装。";
 
 // Login buttons
 "login.menu.sendlogs" = "发送日志文件";
 "login.option.add" = "添加账户";
 "login.option.select" = "选择账户";
 "login.option.demo" = "演示账户";
-"login.option.microsoft" = "微软账户";
+"login.option.microsoft" = "Microsoft 账户";
 "login.option.local" = "本地账户";
 
 "login.warn.title.legacy_device" = "Amethyst 的下一个版本将与此设备不兼容。";
@@ -248,6 +264,8 @@
 "controller_configurator.playstation.title.dpad_down" = "下";
 "controller_configurator.playstation.title.dpad_left" = "左";
 "controller_configurator.playstation.title.dpad_right" = "右";
+"controller_configurator.playstation.title.thumb_left" = "L3";
+"controller_configurator.playstation.title.thumb_right" = "R3";
 
 "controller_configurator.section.config_files" = "当前配置文件";
 "controller_configurator.section.game_mappings" = "游戏映射";
