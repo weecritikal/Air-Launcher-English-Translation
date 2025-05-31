@@ -42,7 +42,7 @@
 "custom_controls.button_edit.orientation" = "Орієнтація";
 "custom_controls.button_edit.toggleable" = "Перемикач";
 "custom_controls.button_edit.mouse_pass" = "Перехід миші";
-"custom_controls.button_edit.swipeable" = "Перегортаємий";
+"custom_controls.button_edit.swipeable" = "Можна перегорнути";
 "custom_controls.button_edit.bg_color" = "Колір фону";
 "custom_controls.button_edit.stroke_width" = "Товщина штриха (%)";
 "custom_controls.button_edit.stroke_color" = "Колір контуру";
