@@ -63,18 +63,23 @@
 "custom_controls.control_menu.add_button" = "Thêm nút";
 "custom_controls.control_menu.add_drawer" = "Thêm ngăn nút";
 "custom_controls.control_menu.add_joystick" = "Thêm núm điều khiển";
-"custom_controls.error.incompatible" = "Phiên bản điều khiển (code %d) không tương thích với bản launcher này.";
+"custom_controls.error.incompatible" = "Phiên bản điều khiển (code %d) không tương thích với bản trình khởi chạy này.";
 "custom_controls.hint" = "Nhấn giữ màn hình để hiện thêm tùy chọn";
 
 "init.migrateDir" = "Đường dẫn dữ liệu của Amethyst hiện là %@. Tất cả dữ liệu của bạn đã được chuyển đến vị trí mới.";
+
+"java.error.missing_main_class" = "%@ thiếu thuộc tính phương thức main. Nếu đây là một bản mod, hãy chuyển vào thư mục *mods* của phân mục bạn chọn.";
+"java.error.missing_runtime" = "%@ yêu cầu Java phiên bản %d trở lên để hoạt động. Vui lòng cài đặt trước, sau đó thiết đặt trong phần quản lý Runtime.";
 
 "launcher.mcl.downloading_file" = "Đang tải xuống %@";
 "launcher.mcl.error_download" = "Không thể tải xuống %@: %@";
 
 "launcher.menu.custom_controls" = "Tùy chỉnh điều khiển";
+"launcher.menu.execute_jar" = "Chạy tệp .jar";
 
 "launcher.wait_jit.title" = "Đang đợi JIT";
 "launcher.wait_jit.message" = "Amethyst tận dụng JIT để tối đa hóa hiệu năng chạy của Java.";
+"launcher.wait_jit_trollstore.message" = "Nếu bạn vẫn nhìn thấy thông báo này, vui lòng bật tính năng URL Scheme trong TrollStore.";
 
 "login.error.username.outOfRange" = "Tên người dùng phải dài tối thiểu 3 kí tự, tối đa 16 kí tự";
 
@@ -85,6 +90,7 @@
 "login.jit.fail" = "Không thể bật JIT.";
 "login.jit.fail.title" = "Không thể bật JIT trên thiết bị của bạn.";
 "login.jit.fail.description" = "Không dùng được phương thức tích hợp nào để tự động bật JIT trên thiết bị, bạn sẽ phải bật theo cách thủ công. Chi tiết lỗi đã được ghi ra tệp latestlog.txt.";
+"login.jit.fail.description_unsupported" = "Chương trình đã được cài đặt theo cách không chuẩn. Vui lòng cài đặt lại theo cách thức được hỗ trợ.";
 
 // Login buttons
 "login.menu.sendlogs" = "Gửi nhật kí";
@@ -120,10 +126,11 @@
 "login.msa.progress.checkMCProfile" = "(5/5) Kiểm tra hồ sơ Minecraft";
 
 "News" = "Thông tin";
-"Settings" = "Thiết lập";
+"Profiles" = "Hồ sơ";
+"Settings" = "Cài đặt";
 
 "preference.section.general" = "Cài đặt chung";
-"preference.section.video" = "Cài đặt hình ảnh";
+"preference.section.video" = "Cài đặt hình ảnh và âm thanh";
 "preference.section.footer.video" = "Trình kết xuất tự động cho phép Amethyst dùng lựa chọn tốt nhất dựa trên phiên bản Minecraft. Giá trị độ phân giải thấp hơn sẽ giảm tải cho GPU, giúp cải thiện hiệu năng.";
 "preference.section.control" = "Tuỳ chỉnh bộ điều khiển";
 "preference.section.debug" = "Cài đặt gỡ lỗi giao diện";
@@ -132,30 +139,30 @@
 "preference.section.java" = "Điều chỉnh Java";
 //"preference.section.footer.java" = "";
 
-"preference.title.confirm" = "Bạn có chắc không?";
+"preference.title.confirm" = "Bạn chắc chắn chứ?";
 
-"preference.title.game_directory" = "Đường dẫn thư mục của trò chơi";
-"preference.title.confirm.delete_game_directory" = "Thư mục %@ sẽ bị xoá vĩnh viễn và không thể phục hồi.";
+"preference.title.game_directory" = "Đường dẫn thư mục trò chơi";
+"preference.title.confirm.delete_game_directory" = "Phân mục %@ sẽ bị xoá vĩnh viễn và không thể phục hồi.";
 "preference.multidir.add_directory" = "Thêm thư mục trò chơi";
 
 "preference.title.check_sha" = "Kiểm tra các tệp sau khi tải";
 "preference.detail.check_sha" = "Cài đặt này buộc trình khởi chạy kiểm tra hàm băm của các tệp nếu khả dụng. Tránh việc tải xuống các tệp bị hỏng.";
 "preference.title.cosmetica" = "Áo choàng Cosmetica";
-"preference.detail.cosmetica" = "Sử dụng áo choàng từ dịch vụ Cosmetica (trước đây là Arc). Để biết thêm thông tin, truy cập https://cosmetica.cc. Yêu cầu có OptiFine";
+"preference.detail.cosmetica" = "Sử dụng áo choàng từ Cosmetica (trước đây gọi là Arc). Để biết thêm thông tin, hãy truy cập https://cosmetica.cc. Yêu cầu sử dụng OptiFine";
 "preference.title.debug_logging" = "Ghi lại thông tin gỡ lỗi";
-"preference.detail.debug_logging" = "Ghi lại những cài đặt và hoạt động vào tệp latestlog.txt. Nó có thể giúp các nhà phát triển phát hiện ra lỗi dễ dàng hơn, nhưng Minecraft có thể chạy chậm hơn vì nhật kí được ghi lại thường xuyên hơn.";
-"preference.title.appicon" = "Thay đổi icon";
-"preference.detail.appicon" = "Cho phép bạn thay đổi icon màn hình chính cho Amethyst.";
-"preference.title.appicon-default" = "Amethyst, chủ đề sáng";
-"preference.title.appicon-dark" = "Amethyst, chủ đề tối";
-"preference.title.appicon-development" = "Phát triển bút chì";
-"preference.title.hidden_sidebar" = "Mặc định ẩn thanh bên";
-"preference.detail.hidden_sidebar" = "Cho phép bạn ẩn thanh bên trên menu chính theo mặc định và khi xoay.";
+"preference.detail.debug_logging" = "Ghi các cài đặt và hoạt động của chương trình ra tệp latestlog.txt. Tính năng này giúp nhà phát triển dễ tìm lỗi hơn, nhưng có thể khiến Minecraft chạy chậm hơn vì ghi nhật kí thường xuyên hơn.";
+"preference.title.appicon" = "Đổi biểu tượng ứng dụng";
+"preference.detail.appicon" = "Cho phép bạn thay đổi biểu tượng của Amethyst trên màn hình chính.";
+"preference.title.appicon-default" = "Amethyst sáng";
+"preference.title.appicon-dark" = "Amethyst tối";
+"preference.title.appicon-development" = "Phác họa bút chì";
+"preference.title.hidden_sidebar" = "Tự động ẩn thanh bên";
+"preference.detail.hidden_sidebar" = "Cho phép thực hiện ẩn thanh bên trong menu chính theo mặc định và khi xoay màn hình.";
 
-"preference.title.reset_warnings" = "Đặt lại tất cả cảnh báo";
-"preference.title.done.reset_warnings" = "Tất cả các cảnh báo đã được đặt lại.";
+"preference.title.reset_warnings" = "Thiết lập lại cảnh báo";
+"preference.title.done.reset_warnings" = "Tất cả cảnh báo đã được thiết lập lại.";
 
-"preference.title.reset_settings" = "Đặt lại tất cả cài đặt";
+"preference.title.reset_settings" = "Thiết lập lại cài đặt";
 "preference.title.confirm.reset_settings" = "Điều này sẽ đặt lại tất cả các tùy chọn của bạn, báo gồm độ phân giải, kích thước nút, và các chỉ số chạy Java.";
 "preference.title.done.reset_settings" = "Tất cả các thiết lập đã được đặt lại.";
 
@@ -182,18 +189,27 @@
 "preference.title.max_framerate" = "Tốc độ Khung Hình tối đa";
 "preference.detail.max_framerate" = "Cho phép bạn giới hạn tốc độ khung hình của trò chơi ở mức 60FPS trên màn hình ProMotion.";
 
+"preference.title.performance_hud" = "Hiện giao diện hiệu suất";
+"preference.detail.performance_hud" = "Khi khả dụng, hiển thị khung thông tin giám sát hiệu suất.";
+
 "preference.title.fullscreen_airplay" = "AirPlay toàn màn hình";
 "preference.detail.fullscreen_airplay" = "Cho phép chiếu toàn màn hình cửa sổ game thay vì chiếu mọi thứ trên màn hình ngoài.";
 "preference.title.silence_other_audio" = "Tạm dừng âm thanh khi trò chơi mở ra";
 "preference.detail.silence_other_audio" = "Bật để cho phép Amethyst tạm dừng âm thanh từ các ứng dụng khác, chẳng hạn như Âm nhạc, khi khởi chạy trò chơi.";
 "preference.title.silence_with_switch" = "Tắt âm thanh bằng công tắc im lặng";
 "preference.detail.silence_with_switch" = "Bật để tắt âm thanh khi Chế độ im lặng được bật. Tai nghe và loa ngoài không bị ảnh hưởng.";
+"preference.title.allow_microphone" = "Cho phép sử dụng micro";
+"preference.detail.allow_microphone" = "Chỉ bật tùy chọn này nếu bạn dùng mod bổ sung tính năng thoại. Bạn sẽ không dùng được cần gạt im lặng và chất lượng âm thanh từ các ứng dụng khác sẽ bị ảnh hưởng.";
 "preference.title.default_gamepad_ctrl" = "Cấu hình bộ điều khiển";
 "preference.title.hardware_hide" = "Ẩn điều khiển khi phần cứng được kết nối";
 "preference.detail.hardware_hide" = "Bật hành vi tự động tắt lớp phủ điều khiển trên màn hình khi chuột hoặc bộ điều khiển trò chơi được kết nối.";
+"preference.title.recording_hide" = "Ẩn nút điều khiển khi ghi màn hình";
+"preference.detail.recording_hide" = "Ẩn các nút điều khiển trong ảnh chụp màn hình và trong video xuất ra khi ghi màn hình, các nút vẫn sẽ hiển thị bình thường trong khi chơi.";
+"preference.title.gesture_mouse" = "Cử chỉ chuột";
 "preference.detail.gesture_mouse" = "Bật các cử chỉ, chẳng hạn như nhấn để đặt khối, giữ để phá khối, cuộn bằng 2";
 "preference.title.gesture_hotbar" = "Cử Chỉ Hotbar";
 "preference.detail.gesture_hotbar" = "Cho phép các cử chỉ, chẳng hạn như chạm vào khe thanh nóng, trao đổi vật phẩm giữa các tay, ném vật phẩm";
+"preference.title.disable_haptics" = "Tắt rung cảm ứng";
 "preference.title.press_duration" = "Độ dài nhấn giữ (ms)";
 "preference.detail.press_duration" = "Khoảng thời gian chạm giữ để phá khối và ném đồ vật.";
 "preference.title.button_scale" = "Độ rộng nút trên màn hình (%)";
@@ -214,15 +230,29 @@
 "preference.title.gyroscope_sensitivity" = "Độ nhạy con quay hồi chuyển";
 "preference.detail.gyroscope_sensitivity" = "Điều chỉnh độ nhạy của điều khiển bằng con quay hồi chuyển";
 
+"preference.title.manage_runtime" = "Quản lý Runtime";
+"preference.title.confirm.delete_runtime" = "%@ sẽ bị xóa bỏ";
+"preference.manage_runtime.header.default" = "Lựa chọn phiên bản Java";
+"preference.manage_runtime.default.1165" = "1.16.5 trở về trước";
+"preference.manage_runtime.default.117" = "1.17 trở đi";
+"preference.manage_runtime.footer.default" = "Các phiên bản Minecraft từ 1.16.5 trở về trước có khả năng chạy được trên bản Java mới hơn, nhưng không đảm bảo tính tương thích với các bản mod. Bạn có thể thêm các Runtime khác vào thư mục \"java_runtimes\". Thay đổi phiên bản Java của phần \"Chạy tệp .jar\" chỉ có tác dụng nếu tệp đó không chạy được trên bản Java mới.";
+"preference.manage_runtime.footer.java8" = "Đây là phiên bản mặc định để chạy Minecraft 1.16.5 trở về trước.";
+"preference.manage_runtime.footer.java17" = "Đây là phiên bản mặc định để chạy Minecraft 1.17 trở đi.";
+"preference.manage_runtime.header.invalid" = "Runtime không hợp lệ";
+
 "preference.title.java_args" = "Các chỉ số chạy JVM";
 "preference.detail.java_args" = "Truyền đối số cho Java khi khởi chạy Minecraft. Hãy cẩn thận, điều này có thể khiến trò chơi bị sập nếu sửa đổi không đúng cách.";
 "preference.placeholder.java_args" = "Nhập các chỉ số...";
+"preference.title.env_variables" = "Biến môi trường";
+"preference.detail.env_variables" = "Đặt biến mối trường tùy chỉnh khi khởi chạy Minecraft. Hãy cẩn thận, hành động này có thể khiến trò chơi thoát đột ngột nếu thực hiện không đúng cách.";
+"preference.placeholder.env_variables" = "Nhập biến...";
 "preference.title.auto_ram" = "RAM tự động";
 "preference.detail.auto_ram" = "Bật tự động điều chỉnh RAM";
 "preference.warn.auto_ram" = "Tắt tùy chọn này trên thiết bị chưa được jailbreak có thể gây ra sự thiếu ổn định. Chú ý khi tiếp tục.";
 "preference.title.allocated_memory" = "Phân bổ bộ nhớ (MB)";
 "preference.detail.allocated_memory" = "Điều chỉnh số lượng bộ nhớ được cung cấp cho Minecraft";
 "preference.warn.allocated_memory" = "Do những giới hạn của hệ điều hành, tùy chọn này có thể gây ra sự cố với mức phân bổ này hoặc cao hơn. Chú ý khi tiếp tục.";
+"preference.title.custom_env" = "Biến môi trường";
 "preference.detail.custom_env" = "Tùy chọn này đang được xây dựng. Trong khi chờ đợi, hãy tạo và chỉnh sửa custom_env.txt.";
 
 "preference.title.debug_skip_wait_jit" = "Bỏ qua thông bảo \"Đang đợi JIT\"";
@@ -235,8 +265,12 @@
 "preference.detail.debug_hide_home_indicator" = "Tùy chọn này sẽ tắt khoá thanh điều hướng. Sử dụng tính năng \"Truy cập được hướng dẫn\" để ẩn và khoá thanh điều hướng cùng lúc.";
 
 "preference.profile.title.name" = "Tên";
+"profile.detail.separate_preference" = "Bật tùy chọn này để tách riêng các thay đổi cho phân mục. Hành động thiết lập lại sẽ đưa về cài đặt chung đã định thay vì cài đặt gốc.";
+"profile.title.install_fabric_quilt" = "Cài đặt Fabric/Quilt";
 
 "controller_configurator.title.current" = "Tập tin cấu hình Gamepad";
+"controller_configurator.title.type.xbox" = "Xbox";
+"controller_configurator.title.type.playstation" = "PlayStation";
 
 "controller_configurator.xbox.title.bumper_left" = "Cản trái";
 "controller_configurator.xbox.title.bumper_right" = "Cản phải";
@@ -244,12 +278,21 @@
 "controller_configurator.xbox.title.trigger_right" = "Đúng ngòi nổ";
 "controller_configurator.xbox.title.named_back" = "Hướng dẫn";
 "controller_configurator.xbox.title.named_start" = "Thực đơn";
+"controller_configurator.xbox.title.named_a" = "A";
+"controller_configurator.xbox.title.named_b" = "B";
+"controller_configurator.xbox.title.named_x" = "X";
+"controller_configurator.xbox.title.named_y" = "Y";
 "controller_configurator.xbox.title.dpad_up" = "Lên";
 "controller_configurator.xbox.title.dpad_down" = "Xuống";
 "controller_configurator.xbox.title.dpad_left" = "Bên trái";
 "controller_configurator.xbox.title.dpad_right" = "Phải";
 "controller_configurator.xbox.title.thumb_left" = "Nhấp chuột trái";
 "controller_configurator.xbox.title.thumb_right" = "Nhấp chuột phải";
+
+"controller_configurator.playstation.title.bumper_left" = "L1";
+"controller_configurator.playstation.title.bumper_right" = "R1";
+"controller_configurator.playstation.title.trigger_left" = "L2";
+"controller_configurator.playstation.title.trigger_right" = "R2";
 "controller_configurator.playstation.title.named_back" = "Chọn";
 "controller_configurator.playstation.title.named_start" = "Bắt đầu";
 "controller_configurator.playstation.title.named_a" = "Đi qua";
