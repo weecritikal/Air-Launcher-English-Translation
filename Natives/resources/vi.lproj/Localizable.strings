@@ -14,10 +14,13 @@
 
 // The play button
 "Play" = "Chơi";
+"Details" = "Chi tiết";
 
 // Version categories
 "Installed" = "Đã cài đặt";
+"Snapshot" = "Snapshot";
 "Releases" = "Các bản phát hành";
+"Unstable" = "Không ổn định";
 "Old-beta" = "Bản Beta cũ";
 "Old-alpha" = "Bản Alpha cũ";
 
@@ -27,6 +30,12 @@
 "Move" = "Di chuyển";
 "Remove" = "Loại bỏ";
 "Resize" = "Thay đổi kích thước";
+// Visibility
+"Always" = "Luôn luôn";
+"In game" = "Trong trò chơi";
+"In menu" = "Trong menu";
+
+"custom_controls.button_edit.forward_lock" = "Khóa tiến về trước";
 "custom_controls.button_edit.name" = "Tên";
 "custom_controls.button_edit.size" = "Kích thước";
 "custom_controls.button_edit.mapping" = "Sơ đồ phím";
@@ -39,6 +48,7 @@
 "custom_controls.button_edit.stroke_color" = "Màu viền phím";
 "custom_controls.button_edit.corner_radius" = "Bán kính góc";
 "custom_controls.button_edit.opacity" = "Độ trong suốt (%)";
+"custom_controls.button_edit.visibility" = "Hiển thị";
 
 "custom_controls.button_menu.add_subbutton" = "Thêm phím phụ";
 "custom_controls.control_menu.discard_changes" = "Hủy bỏ thay đổi";
@@ -52,6 +62,7 @@
 "custom_controls.control_menu.safe_area" = "Vùng an toàn";
 "custom_controls.control_menu.add_button" = "Thêm nút";
 "custom_controls.control_menu.add_drawer" = "Thêm ngăn kéo phím";
+"custom_controls.control_menu.add_joystick" = "Thêm núm điều khiển";
 "custom_controls.error.incompatible" = "Phiên bản điều khiển (code %d) không tương thích với bản launcher này.";
 "custom_controls.hint" = "Nhấn giữ trên màn hình để hiện thêm tùy chọn";
 
