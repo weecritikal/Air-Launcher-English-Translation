@@ -163,39 +163,39 @@
 "preference.title.done.reset_warnings" = "Tất cả cảnh báo đã được thiết lập lại.";
 
 "preference.title.reset_settings" = "Thiết lập lại cài đặt";
-"preference.title.confirm.reset_settings" = "Điều này sẽ đặt lại tất cả các tùy chọn của bạn, báo gồm độ phân giải, kích thước nút, và các chỉ số chạy Java.";
-"preference.title.done.reset_settings" = "Tất cả các thiết lập đã được đặt lại.";
+"preference.title.confirm.reset_settings" = "Hành động này sẽ xóa bỏ tất cả các tùy chỉnh đã tạo, bao gồm độ phân giải, kích thước các nút và đổi số Java.";
+"preference.title.done.reset_settings" = "Tất cả cài đặt đã được khôi phục về mặc định.";
 
-"preference.title.erase_demo_data" = "Xóa dữ liệu trò chơi Demo";
-"preference.title.confirm.erase_demo_data" = "Điều này sẽ xóa tất cả các phiên bản trò chơi Demo và dữ liệu được sử dụng cho tài khoản Demo.";
-"preference.title.done.erase_demo_data" = "Tất cả dữ liệu trò chơi Demo đã bị xóa.";
+"preference.title.erase_demo_data" = "Xóa bỏ dữ liệu chơi thử";
+"preference.title.confirm.erase_demo_data" = "Hành động này sẽ xóa bỏ toàn bộ các phiên bản trò chơi và dữ liệu của tài khoản chơi thử.";
+"preference.title.done.erase_demo_data" = "Tất cả dữ liệu của bản chơi thử đã bị xóa bỏ.";
 
 "preference.title.renderer" = "Trình kết xuất";
 
 "preference.title.renderer.release.auto" = "Tự động";
-"preference.title.renderer.release.gl4es" = "gl4es Thần Thánh";
-"preference.title.renderer.release.angle" = "GÓC";
-"preference.title.renderer.release.zink" = "Kẽm";
+"preference.title.renderer.release.gl4es" = "holy gl4es";
+"preference.title.renderer.release.angle" = "ANGLE";
+"preference.title.renderer.release.zink" = "Zink";
 
 "preference.title.renderer.debug.auto" = "Tự động: gl4es hoặc ANGLE";
-"preference.title.renderer.debug.gl4es" = "gl4es 1.1.4 - xuất ra OpenGL 2.1";
-"preference.title.renderer.debug.angle" = "tinygl4angle (1.17+) - xuất ra OpenGL 3.2 (Core Profile, bị giới hạn)";
+"preference.title.renderer.debug.gl4es" = "holy gl4es - xuất ra OpenGL 2.1";
+"preference.title.renderer.debug.angle" = "ANGLE (1.17+) - xuất ra OpenGL 3.2 (Core Profile, có giới hạn)";
 "preference.title.renderer.debug.zink" = "Zink (Mesa 21.0) - xuất ra OpenGL 4.1";
 
-"preference.detail.renderer" = "Thay đổi kết xuất OpenGL được sử dụng";
+"preference.detail.renderer" = "Thay đổi trình kết xuất OpenGL được sử dụng. Zink hiện bị tạm tắt trên iOS 16 trở đi để sửa lỗi.";
 
 "preference.title.resolution" = "Độ phân giải (%)";
-"preference.detail.resolution" = "Cho phép thay đổi độ phân giải trò chơi.";
-"preference.title.max_framerate" = "Tốc độ Khung Hình tối đa";
-"preference.detail.max_framerate" = "Cho phép bạn giới hạn tốc độ khung hình của trò chơi ở mức 60FPS trên màn hình ProMotion.";
+"preference.detail.resolution" = "Cho phép giảm độ phân giải trò chơi.";
+"preference.title.max_framerate" = "Tốc độ khung hình tối đa";
+"preference.detail.max_framerate" = "Cho phép bạn giới hạn tốc độ khung hình của trò chơi xuống 60 FPS trên màn hình ProMotion.";
 
 "preference.title.performance_hud" = "Hiện giao diện hiệu suất";
 "preference.detail.performance_hud" = "Khi khả dụng, hiển thị khung thông tin giám sát hiệu suất.";
 
 "preference.title.fullscreen_airplay" = "AirPlay toàn màn hình";
-"preference.detail.fullscreen_airplay" = "Cho phép chiếu toàn màn hình cửa sổ game thay vì chiếu mọi thứ trên màn hình ngoài.";
-"preference.title.silence_other_audio" = "Tạm dừng âm thanh khi trò chơi mở ra";
-"preference.detail.silence_other_audio" = "Bật để cho phép Amethyst tạm dừng âm thanh từ các ứng dụng khác, chẳng hạn như Âm nhạc, khi khởi chạy trò chơi.";
+"preference.detail.fullscreen_airplay" = "Cho phép hiển thị toàn bộ cửa sổ trò chơi trên màn hình rời thay vì hiển thị mọi thử trên màn hình đó.";
+"preference.title.silence_other_audio" = "Tạm dừng âm thanh khi mở trò chơi";
+"preference.detail.silence_other_audio" = "Bật để cho phép Amethyst tạm dừng âm thanh từ các ứng dụng khác khi khởi chạy trò chơi, chẳng hạn như từ ứng dụng Nhạc.";
 "preference.title.silence_with_switch" = "Tắt âm thanh bằng công tắc im lặng";
 "preference.detail.silence_with_switch" = "Bật để tắt âm thanh khi Chế độ im lặng được bật. Tai nghe và loa ngoài không bị ảnh hưởng.";
 "preference.title.allow_microphone" = "Cho phép sử dụng micro";
