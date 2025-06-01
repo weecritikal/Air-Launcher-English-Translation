@@ -3,8 +3,8 @@
   StringLocalization
 */
 
-"game.menu.force_close" = "Buộc thoát trò chơi";
-"game.menu.confirm.force_close" = "Bạn có chắc chắn muốn buộc thoát khởi trò chơi?";
+"game.menu.force_close" = "Buộc thoát chương trình";
+"game.menu.confirm.force_close" = "Bạn có chắc chắn muốn buộc thoát khỏi trò chơi?";
 "game.menu.log_output" = "Nhật ký ra ";
 "game.menu.custom_controls" = "Tùy chỉnh điều khiển";
 
@@ -68,8 +68,8 @@
 
 "init.migrateDir" = "Đường dẫn dữ liệu của Amethyst hiện là %@. Tất cả dữ liệu của bạn đã được chuyển đến vị trí mới.";
 
-"launcher.mcl.downloading_file" = "Đang tải xuống%@";
-"launcher.mcl.error_download" = "Failed to download %@: %@";
+"launcher.mcl.downloading_file" = "Đang tải xuống %@";
+"launcher.mcl.error_download" = "Không thể tải xuống %@: %@";
 
 "launcher.menu.custom_controls" = "Tùy chỉnh điều khiển";
 
@@ -92,42 +92,42 @@
 "login.option.select" = "Chọn tài khoản";
 "login.option.demo" = "Tài khoản chơi thử";
 "login.option.microsoft" = "Tài khoản Microsoft";
-"login.option.local" = "Tài khoản nội bộ";
+"login.option.local" = "Tài khoản cục bộ";
 
 "login.warn.title.legacy_device" = "Bản chính thức sắp tới của Amethyst sẽ không tương thích với thiết bị này.";
 "login.warn.message.legacy_device" = "Để chạy bản cập nhật lớn sắp tới, bạn sẽ cần có thiết bị hỗ trợ iOS 14.";
 "login.warn.title.legacy_ios" = "Bản chính thức sắp tới của Amethyst sẽ yêu cầu cập nhật hệ thống.";
 "login.warn.message.legacy_ios" = "Để chạy bản cập nhật lớn sắp tới, thiết bị sẽ phải cập nhật lên iOS 14 trở đi.";
-"login.warn.title.limited_ram" = "Thiết bị này .";
+"login.warn.title.limited_ram" = "Thiết bị này có dung lượng bộ nhớ hạn chế.";
 "login.warn.message.limited_ram" = "Chúng tôi khuyên bạn nên bật tính năng tự phân bổ RAM để đảm bảo trò chơi chạy ổn định và tránh các vấn đề hiệu suất.";
 
-"login.warn.title.demomode" = "Tài khoản của bạn là Demo";
-"login.warn.message.demomode" = "Chế độ chơi thử thay thế cho chế độ ngoại tuyến và nội bộ, chế độ này cho phép bạn đăng nhập vào tài khoản Microsoft chưa mua trò chơi để trải nghiệm bản chơi thử, được thêm vào từ phiên bản 1.3.1. Các phiên bản cũ hơn vẫn có bản đầy đủ, vì trình khởi chạy chính thức không đặt bất kì giới hạn nào. Truy cập trang web của chúng tôi để biết thêm về thay đổi này.";
+"login.warn.title.demomode" = "Tài khoản của bạn chỉ có thể chơi thử";
+"login.warn.message.demomode" = "Chế độ chơi thử hiện đã thay thế cho chế độ ngoại tuyến và cục bộ, chế độ này cho phép bạn đăng nhập vào tài khoản Microsoft chưa mua trò chơi để trải nghiệm bản chơi thử, được thêm vào từ phiên bản 1.3.1. Các phiên bản cũ hơn vẫn có bản đầy đủ, vì trình khởi chạy chính thức không đặt bất kì giới hạn nào. Truy cập trang web của chúng tôi để biết thêm về thay đổi này.";
 
-"login.warn.title.localmode" = "Chế độ ngoại tuyến hiện là chế độ nội bộ.";
-"login.warn.message.localmode" = "Bạn có thể tiếp tục chơi các phiên bản đã cài đặt, nhưng bạn không còn có thể tải xuống Minecraft nếu không có tài khoản trả phí. Sẽ không có hỗ trợ nào được cung cấp cho các sự cố với tài khoản cục bộ hoặc các phương tiện khác để mua Minecraft.";
+"login.warn.title.localmode" = "Chế độ ngoại tuyến hiện là chế độ cục bộ.";
+"login.warn.message.localmode" = "Bạn vẫn có thể tiếp tục chơi các phiên bản đã cài đặt, nhưng để tải Minecraft, bạn sẽ phải có tài khoản trả phí. Chúng tôi sẽ không cung cấp hỗ trợ cho các vấn đề liên quan đến tài khoản cục bộ hoặc các cách tải Minecraft khác.";
 
-"login.msa.error.xsts.noxboxacc" = "Chưa có một hồ sơ Xbox được đăng kí cho tài khoản Microsoft này. Hãy chắc chắn rằng bạn đã tạo một hồ sơ.\nMã lỗi: 2148916233";
+"login.msa.error.xsts.noxboxacc" = "Hồ sơ Xbox chưa được đăng kí cho tài khoản Microsoft này. Hãy xem lại và đảm bảo bạn đã tạo một hồ sơ Xbox.\nMã lỗi: 2148916233";
 "login.msa.error.xsts.noxbox" = "Xbox Live không khả dụng ở quốc gia của bạn.\nMã lỗi: 2148916235";
-"login.msa.error.xsts.krverify" = "Tài khoản của bạn cần được xác nhận bởi bố mẹ của bạn.\nMã lỗi: 2148916236 hoặc 2148916237.";
-"login.msa.error.xsts.underage" = "Tài khoản của bạn cần được liên kết với một tài khoản phụ huynh.\nMã lỗi: 2148916238";
+"login.msa.error.xsts.krverify" = "Tài khoản của bạn cần được xác nhận bởi phụ huynh trước khi tiếp tục.\nMã lỗi: 2148916236 hoặc 2148916237.";
+"login.msa.error.xsts.underage" = "Tài khoản của bạn cần được liên kết với một tài khoản phụ huynh trước khi tiếp tục.\nMã lỗi: 2148916238";
 
-"login.msa.progress.acquireAccessToken" = "(1/5) Đang nhận Khoá truy cập";
-"login.msa.progress.acquireXBLToken" = "(2/5) Đang nhận Khoá Xbox Live";
-"login.msa.progress.acquireXSTS" = "Đang nhận XSTS";
-"login.msa.progress.acquireXboxProfile" = "(3/5) Đang nhận Hồ sơ Xbox";
-"login.msa.progress.acquireMCToken" = "(4/5) Đang nhận Khoá Minecraft";
+"login.msa.progress.acquireAccessToken" = "(1/5) Truy xuất token truy cập";
+"login.msa.progress.acquireXBLToken" = "(2/5) Truy xuất token Xbox Live";
+"login.msa.progress.acquireXSTS" = "Truy xuất XSTS";
+"login.msa.progress.acquireXboxProfile" = "(3/5) Truy xuất hồ sơ Xbox";
+"login.msa.progress.acquireMCToken" = "(4/5) Truy xuất token Minecraft";
 "login.msa.progress.checkMCProfile" = "(5/5) Kiểm tra hồ sơ Minecraft";
 
-"News" = "Tin tức";
+"News" = "Thông tin";
 "Settings" = "Thiết lập";
 
 "preference.section.general" = "Cài đặt chung";
 "preference.section.video" = "Cài đặt hình ảnh";
-"preference.section.footer.video" = "Trình kết xuất tự động cho phép Amethyst chọn tùy chọn tốt nhất dựa trên phiên bản Minecraft. Giảm độ phân giải làm giảm khối lượng công việc GPU để có hiệu suất tốt hơn.";
+"preference.section.footer.video" = "Trình kết xuất tự động cho phép Amethyst dùng lựa chọn tốt nhất dựa trên phiên bản Minecraft. Giá trị độ phân giải thấp hơn sẽ giảm tải cho GPU, giúp cải thiện hiệu năng.";
 "preference.section.control" = "Tuỳ chỉnh bộ điều khiển";
-"preference.section.debug" = "Cài đặt gỡ lỗi UI";
-"preference.section.footer.debug" = "Ngoài gỡ lỗi, những cài đặt này có thể giúp ích cho tùy biến điều khiển. Bạn có thể phải khởi động lại launcher.";
+"preference.section.debug" = "Cài đặt gỡ lỗi giao diện";
+"preference.section.footer.debug" = "Bạn có thể phải khởi động lại chương trình để áp dụng thay đổi.";
 //"preference.section.footer.control" = "";
 "preference.section.java" = "Điều chỉnh Java";
 //"preference.section.footer.java" = "";
@@ -139,7 +139,7 @@
 "preference.multidir.add_directory" = "Thêm thư mục trò chơi";
 
 "preference.title.check_sha" = "Kiểm tra các tệp sau khi tải";
-"preference.detail.check_sha" = "Cài đặt này buộc trình khởi chạy kiểm tra hàm băm của thư viện nếu nó có sẵn. Ngăn chặn tải xuống bị hỏng.";
+"preference.detail.check_sha" = "Cài đặt này buộc trình khởi chạy kiểm tra hàm băm của các tệp nếu khả dụng. Tránh việc tải xuống các tệp bị hỏng.";
 "preference.title.cosmetica" = "Áo choàng Cosmetica";
 "preference.detail.cosmetica" = "Sử dụng áo choàng từ dịch vụ Cosmetica (trước đây là Arc). Để biết thêm thông tin, truy cập https://cosmetica.cc. Yêu cầu có OptiFine";
 "preference.title.debug_logging" = "Ghi lại thông tin gỡ lỗi";
