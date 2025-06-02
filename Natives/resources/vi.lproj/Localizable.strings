@@ -28,7 +28,7 @@
 "Copy" = "Sao chép";
 "Edit" = "Sửa";
 "Move" = "Di chuyển";
-"Remove" = "Loại bỏ";
+"Remove" = "Xóa";
 "Resize" = "Thay đổi kích cỡ";
 // Visibility
 "Always" = "Luôn luôn";
@@ -37,7 +37,7 @@
 
 "custom_controls.button_edit.forward_lock" = "Khóa tiến về trước";
 "custom_controls.button_edit.name" = "Tên";
-"custom_controls.button_edit.size" = "Kích thước";
+"custom_controls.button_edit.size" = "Kích cỡ";
 "custom_controls.button_edit.mapping" = "Sơ đồ phím";
 "custom_controls.button_edit.orientation" = "Hướng";
 "custom_controls.button_edit.toggleable" = "Chuyển đổi";
@@ -103,7 +103,7 @@
 "login.warn.title.legacy_device" = "Bản chính thức sắp tới của Amethyst sẽ không tương thích với thiết bị này.";
 "login.warn.message.legacy_device" = "Để chạy bản cập nhật lớn sắp tới, bạn sẽ cần có thiết bị hỗ trợ iOS 14.";
 "login.warn.title.legacy_ios" = "Bản chính thức sắp tới của Amethyst sẽ yêu cầu cập nhật hệ thống.";
-"login.warn.message.legacy_ios" = "Để chạy bản cập nhật lớn sắp tới, thiết bị sẽ phải cập nhật lên iOS 14 trở đi.";
+"login.warn.message.legacy_ios" = "Để chạy bản cập nhật lớn sắp tới, thiết bị sẽ phải cập nhật lên iOS 14 trở lên.";
 "login.warn.title.limited_ram" = "Thiết bị này có dung lượng bộ nhớ hạn chế.";
 "login.warn.message.limited_ram" = "Chúng tôi khuyên bạn nên bật tính năng tự phân bổ RAM để đảm bảo trò chơi chạy ổn định và tránh các vấn đề hiệu suất.";
 
@@ -163,7 +163,7 @@
 "preference.title.done.reset_warnings" = "Tất cả cảnh báo đã được thiết lập lại.";
 
 "preference.title.reset_settings" = "Thiết lập lại cài đặt";
-"preference.title.confirm.reset_settings" = "Hành động này sẽ xóa bỏ tất cả các tùy chỉnh đã tạo, bao gồm độ phân giải, kích thước các nút và đối số Java.";
+"preference.title.confirm.reset_settings" = "Hành động này sẽ xóa bỏ tất cả các tùy chỉnh đã tạo, bao gồm độ phân giải, kích cỡ các nút và đối số Java.";
 "preference.title.done.reset_settings" = "Tất cả cài đặt đã được khôi phục về mặc định.";
 
 "preference.title.erase_demo_data" = "Xóa dữ liệu chơi thử";
@@ -182,7 +182,7 @@
 "preference.title.renderer.debug.angle" = "ANGLE (1.17+) - xuất ra OpenGL 3.2 (Core Profile, có giới hạn)";
 "preference.title.renderer.debug.zink" = "Zink (Mesa 21.0) - xuất ra OpenGL 4.1";
 
-"preference.detail.renderer" = "Thay đổi trình kết xuất OpenGL được sử dụng. Zink hiện bị tạm tắt trên iOS 16 trở đi để sửa lỗi.";
+"preference.detail.renderer" = "Thay đổi trình kết xuất OpenGL được sử dụng. Zink hiện bị tạm tắt trên iOS 16 trở lên để sửa lỗi.";
 
 "preference.title.resolution" = "Độ phân giải (%)";
 "preference.detail.resolution" = "Cho phép bạn giảm độ phân giải trò chơi.";
@@ -211,7 +211,7 @@
 "preference.detail.gesture_hotbar" = "Bật các cử chỉ thanh nóng, chẳng hạn như chọn ô vật phẩm, đổi tay, ném vật phẩm";
 "preference.title.disable_haptics" = "Tắt rung cảm ứng";
 "preference.title.press_duration" = "Thời lượng nhấn giữ (ms)";
-"preference.detail.press_duration" = "Khoảng thời gian nhấn giữ để phá khối và ném vật phẩm.";
+"preference.detail.press_duration" = "Khoảng thời gian nhấn giữ để phá khối và thả vật phẩm.";
 "preference.title.button_scale" = "Quy mô nút điều khiển (%)";
 "preference.detail.button_scale" = "Tăng giá trị nếu các nút quá nhỏ, hữu dụng cho người dùng iPad.";
 "preference.title.mouse_scale" = "Kích cỡ chuột (%)";
@@ -234,10 +234,10 @@
 "preference.title.confirm.delete_runtime" = "%@ sẽ bị xóa bỏ";
 "preference.manage_runtime.header.default" = "Lựa chọn phiên bản Java";
 "preference.manage_runtime.default.1165" = "1.16.5 trở về trước";
-"preference.manage_runtime.default.117" = "1.17 trở đi";
+"preference.manage_runtime.default.117" = "1.17 trở lên";
 "preference.manage_runtime.footer.default" = "Các phiên bản Minecraft từ 1.16.5 trở về trước có khả năng chạy được trên bản Java mới hơn, nhưng không đảm bảo tính tương thích với các bản mod. Bạn có thể thêm các Runtime khác vào thư mục \"java_runtimes\". Thay đổi phiên bản Java của phần \"Chạy tệp .jar\" chỉ có tác dụng nếu tệp đó không chạy được trên bản Java mới.";
 "preference.manage_runtime.footer.java8" = "Đây là phiên bản mặc định để chạy Minecraft 1.16.5 trở về trước.";
-"preference.manage_runtime.footer.java17" = "Đây là phiên bản mặc định để chạy Minecraft 1.17 trở đi.";
+"preference.manage_runtime.footer.java17" = "Đây là phiên bản mặc định để chạy Minecraft 1.17 trở lên.";
 "preference.manage_runtime.header.invalid" = "Runtime không hợp lệ";
 
 "preference.title.java_args" = "Đối số khởi chạy JVM";
