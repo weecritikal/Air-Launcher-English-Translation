@@ -265,6 +265,7 @@
 "preference.detail.debug_hide_home_indicator" = "Tùy chọn này sẽ tắt khoá thanh điều hướng. Sử dụng tính năng \"Truy cập được hướng dẫn\" để ẩn và khoá thanh điều hướng cùng lúc.";
 
 "preference.profile.title.name" = "Tên";
+"preference.profile.title.loader_type" = "Loại loader";
 "profile.detail.separate_preference" = "Bật tùy chọn này để tách riêng các thay đổi cho phân mục. Hành động thiết lập lại sẽ đưa về cài đặt chung đã định thay vì cài đặt gốc.";
 "profile.title.install_fabric_quilt" = "Cài đặt Fabric/Quilt";
 
