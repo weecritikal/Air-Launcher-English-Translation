@@ -6,7 +6,7 @@
 "game.menu.force_close" = "Buộc thoát ứng dụng";
 "game.menu.confirm.force_close" = "Bạn có chắc chắn muốn buộc thoát khỏi trò chơi?";
 "game.menu.log_output" = "Nhật ký đầu ra";
-"game.menu.custom_controls" = "Tùy chỉnh điều khiển";
+"game.menu.custom_controls" = "Tùy chỉnh bố cục";
 
 "game.note.airplay" = "Minecraft đang được hiển thị trên màn hình AirPlay";
 
@@ -74,7 +74,7 @@
 "launcher.mcl.downloading_file" = "Đang tải xuống %@";
 "launcher.mcl.error_download" = "Không thể tải xuống %@: %@";
 
-"launcher.menu.custom_controls" = "Tùy chỉnh điều khiển";
+"launcher.menu.custom_controls" = "Tùy chỉnh bố cục";
 "launcher.menu.execute_jar" = "Chạy tệp .jar";
 
 "launcher.wait_jit.title" = "Đang đợi JIT";
@@ -132,7 +132,7 @@
 "preference.section.general" = "Cài đặt chung";
 "preference.section.video" = "Cài đặt hình ảnh và âm thanh";
 "preference.section.footer.video" = "Trình kết xuất tự động cho phép Amethyst dùng lựa chọn tốt nhất dựa trên phiên bản Minecraft. Giá trị độ phân giải thấp hơn sẽ giảm tải cho GPU, giúp cải thiện hiệu năng.";
-"preference.section.control" = "Tuỳ chỉnh bộ điều khiển";
+"preference.section.control" = "Tuỳ chỉnh điều khiển";
 "preference.section.debug" = "Cài đặt gỡ lỗi giao diện";
 "preference.section.footer.debug" = "Bạn có thể phải khởi động lại ứng dụng để áp dụng thay đổi.";
 //"preference.section.footer.control" = "";
@@ -146,7 +146,7 @@
 "preference.multidir.add_directory" = "Thêm thư mục trò chơi";
 
 "preference.title.check_sha" = "Kiểm tra các tệp sau khi tải";
-"preference.detail.check_sha" = "Cài đặt này buộc trình khởi chạy kiểm tra hàm băm của các tệp nếu khả dụng. Tránh việc tải xuống các tệp bị hỏng.";
+"preference.detail.check_sha" = "Tùy chọn này buộc trình khởi chạy kiểm tra giá trị hash của các tệp nếu khả dụng. Tránh việc tải xuống các tệp bị hỏng.";
 "preference.title.cosmetica" = "Áo choàng Cosmetica";
 "preference.detail.cosmetica" = "Sử dụng áo choàng từ Cosmetica (trước đây gọi là Arc). Để biết thêm thông tin, hãy truy cập https://cosmetica.cc. Yêu cầu sử dụng OptiFine";
 "preference.title.debug_logging" = "Ghi lại thông tin gỡ lỗi";
@@ -200,9 +200,9 @@
 "preference.detail.silence_with_switch" = "Tắt âm thanh khi bật chế độ im lặng. Không ảnh hưởng đến tai nghe và loa ngoài.";
 "preference.title.allow_microphone" = "Cho phép sử dụng micro";
 "preference.detail.allow_microphone" = "Chỉ bật tùy chọn này nếu sử dụng mod bổ sung tính năng thoại. Bạn sẽ không dùng được nút gạt im lặng và chất lượng âm thanh từ các ứng dụng khác sẽ bị ảnh hưởng.";
-"preference.title.default_gamepad_ctrl" = "Cấu hình bộ điều khiển";
+"preference.title.default_gamepad_ctrl" = "Cấu hình tay cầm";
 "preference.title.hardware_hide" = "Ẩn nút điều khiển khi kết nối thiết bị đầu vào";
-"preference.detail.hardware_hide" = "Tự động tắt lớp hiển thị các nút điều khiển cảm ứng khi kết nối chuột hoặc bộ điều khiển trò chơi.";
+"preference.detail.hardware_hide" = "Tự động tắt lớp hiển thị các nút điều khiển cảm ứng khi kết nối chuột hoặc tay cầm.";
 "preference.title.recording_hide" = "Ẩn nút điều khiển khi ghi màn hình";
 "preference.detail.recording_hide" = "Ẩn các nút điều khiển cảm ứng trong ảnh chụp màn hình và video xuất ra khi ghi màn hình, các nút vẫn sẽ hiển thị bình thường trong khi chơi.";
 "preference.title.gesture_mouse" = "Cử chỉ chuột";
@@ -224,7 +224,7 @@
 "preference.detail.slideable_hotbar" = "Cho phép bạn trượt nhanh qua thanh nóng";
 
 "preference.title.gyroscope_enable" = "Bật con quay hồi chuyển";
-"preference.detail.gyroscope_enable" = "Bật tính năng này sẽ giúp bạn có thể điều khiển bằng cách chuyển động máy";
+"preference.detail.gyroscope_enable" = "Bật tính năng này sẽ cho phép bạn điều khiển trò chơi bằng cách chuyển động máy";
 "preference.title.gyroscope_invert_x_axis" = "Đảo hướng con quay hồi chuyển";
 "preference.detail.gyroscope_invert_x_axis" = "Đảo hướng trái phải, tức trục X của con quay hồi chuyển";
 "preference.title.gyroscope_sensitivity" = "Độ nhạy con quay hồi chuyển";
@@ -281,7 +281,7 @@
 "profile.detail.separate_preference" = "Bật tùy chọn này để tách riêng các thay đổi cho phân mục. Hành động thiết lập lại sẽ đưa về cài đặt chung đã định thay vì cài đặt gốc.";
 "profile.title.install_fabric_quilt" = "Cài đặt Fabric/Quilt";
 
-"controller_configurator.title.current" = "Tập tin cấu hình Gamepad";
+"controller_configurator.title.current" = "Tập tin cấu hình tay cầm";
 "controller_configurator.title.type.xbox" = "Xbox";
 "controller_configurator.title.type.playstation" = "PlayStation";
 
@@ -324,5 +324,5 @@
 "controller_configurator.section.footer.game_mappings" = "Gán phím khi đang trong trò chơi, tức khi chuột bị khóa.";
 "controller_configurator.section.menu_mappings" = "Sơ đồ phím trong menu";
 "controller_configurator.section.footer.menu_mappings" = "Gán phím khi đang trong menu, tức khi chuột được mở khóa, chẳng hạn như trong màn hình chính hoặc trong menu tạm dừng.";
-"controller_configurator.section.controller_style" = "Loại bộ điều khiển";
-"controller_configurator.section.footer.controller_style" = "Hiển thị tên các nút theo loại bộ điều khiển phù hợp trong trình cấu hình này.";
+"controller_configurator.section.controller_style" = "Loại tay cầm";
+"controller_configurator.section.footer.controller_style" = "Hiển thị tên các nút theo loại tay cầm phù hợp trong trình cấu hình này.";
