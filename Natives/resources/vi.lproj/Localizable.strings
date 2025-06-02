@@ -3,7 +3,7 @@
   StringLocalization
 */
 
-"game.menu.force_close" = "Buộc thoát chương trình";
+"game.menu.force_close" = "Buộc thoát ứng dụng";
 "game.menu.confirm.force_close" = "Bạn có chắc chắn muốn buộc thoát khỏi trò chơi?";
 "game.menu.log_output" = "Nhật ký đầu ra";
 "game.menu.custom_controls" = "Tùy chỉnh điều khiển";
@@ -90,7 +90,7 @@
 "login.jit.fail" = "Không thể bật JIT.";
 "login.jit.fail.title" = "Không thể bật JIT trên thiết bị của bạn.";
 "login.jit.fail.description" = "Không dùng được phương thức tích hợp nào để tự động bật JIT trên thiết bị, bạn sẽ phải bật theo cách thủ công. Chi tiết lỗi đã được ghi ra tệp latestlog.txt.";
-"login.jit.fail.description_unsupported" = "Chương trình đã được cài đặt theo cách không chuẩn. Vui lòng cài đặt lại theo cách thức được hỗ trợ.";
+"login.jit.fail.description_unsupported" = "Ứng dụng đã được cài đặt theo cách không chuẩn. Vui lòng cài đặt lại theo cách thức được hỗ trợ.";
 
 // Login buttons
 "login.menu.sendlogs" = "Gửi nhật ký";
@@ -134,7 +134,7 @@
 "preference.section.footer.video" = "Trình kết xuất tự động cho phép Amethyst dùng lựa chọn tốt nhất dựa trên phiên bản Minecraft. Giá trị độ phân giải thấp hơn sẽ giảm tải cho GPU, giúp cải thiện hiệu năng.";
 "preference.section.control" = "Tuỳ chỉnh bộ điều khiển";
 "preference.section.debug" = "Cài đặt gỡ lỗi giao diện";
-"preference.section.footer.debug" = "Bạn có thể phải khởi động lại chương trình để áp dụng thay đổi.";
+"preference.section.footer.debug" = "Bạn có thể phải khởi động lại ứng dụng để áp dụng thay đổi.";
 //"preference.section.footer.control" = "";
 "preference.section.java" = "Tỉnh chỉnh Java";
 //"preference.section.footer.java" = "";
@@ -150,8 +150,8 @@
 "preference.title.cosmetica" = "Áo choàng Cosmetica";
 "preference.detail.cosmetica" = "Sử dụng áo choàng từ Cosmetica (trước đây gọi là Arc). Để biết thêm thông tin, hãy truy cập https://cosmetica.cc. Yêu cầu sử dụng OptiFine";
 "preference.title.debug_logging" = "Ghi lại thông tin gỡ lỗi";
-"preference.detail.debug_logging" = "Ghi các cài đặt và hoạt động của chương trình ra tệp latestlog.txt. Tính năng này giúp nhà phát triển dễ tìm lỗi hơn, nhưng có thể khiến Minecraft chạy chậm hơn vì phải ghi nhật kí thường xuyên.";
-"preference.title.appicon" = "Đổi biểu tượng ứng dụng";
+"preference.detail.debug_logging" = "Ghi các cài đặt và hoạt động chạy ra tệp latestlog.txt. Tính năng này giúp nhà phát triển dễ tìm lỗi hơn, nhưng có thể khiến Minecraft chạy chậm hơn vì phải ghi nhật ký thường xuyên.";
+"preference.title.appicon" = "Đổi biểu tượng";
 "preference.detail.appicon" = "Cho phép bạn thay đổi biểu tượng của Amethyst trên màn hình chính.";
 "preference.title.appicon-default" = "Amethyst sáng";
 "preference.title.appicon-dark" = "Amethyst tối";
@@ -163,10 +163,10 @@
 "preference.title.done.reset_warnings" = "Tất cả cảnh báo đã được thiết lập lại.";
 
 "preference.title.reset_settings" = "Thiết lập lại cài đặt";
-"preference.title.confirm.reset_settings" = "Hành động này sẽ xóa bỏ tất cả các tùy chỉnh đã tạo, bao gồm độ phân giải, kích thước các nút và đổi số Java.";
+"preference.title.confirm.reset_settings" = "Hành động này sẽ xóa bỏ tất cả các tùy chỉnh đã tạo, bao gồm độ phân giải, kích thước các nút và đối số Java.";
 "preference.title.done.reset_settings" = "Tất cả cài đặt đã được khôi phục về mặc định.";
 
-"preference.title.erase_demo_data" = "Xóa bỏ dữ liệu chơi thử";
+"preference.title.erase_demo_data" = "Xóa dữ liệu chơi thử";
 "preference.title.confirm.erase_demo_data" = "Hành động này sẽ xóa bỏ toàn bộ các phiên bản trò chơi và dữ liệu của tài khoản chơi thử.";
 "preference.title.done.erase_demo_data" = "Tất cả dữ liệu của bản chơi thử đã bị xóa bỏ.";
 
@@ -197,11 +197,11 @@
 "preference.title.silence_other_audio" = "Tạm dừng âm thanh khi mở trò chơi";
 "preference.detail.silence_other_audio" = "Bật để cho phép Amethyst tạm dừng âm thanh từ các ứng dụng khác khi khởi chạy trò chơi, chẳng hạn như từ ứng dụng Nhạc.";
 "preference.title.silence_with_switch" = "Tắt tiếng bằng nút gạt im lặng";
-"preference.detail.silence_with_switch" = "Tắt âm thanh khi bật chế độ im lặng. Tai nghe và loa ngoài không bị ảnh hưởng.";
+"preference.detail.silence_with_switch" = "Tắt âm thanh khi bật chế độ im lặng. Không ảnh hưởng đến tai nghe và loa ngoài.";
 "preference.title.allow_microphone" = "Cho phép sử dụng micro";
-"preference.detail.allow_microphone" = "Chỉ bật tùy chọn này nếu bạn dùng mod bổ sung tính năng thoại. Bạn sẽ không dùng được nút gạt im lặng và chất lượng âm thanh từ các ứng dụng khác sẽ bị ảnh hưởng.";
+"preference.detail.allow_microphone" = "Chỉ bật tùy chọn này nếu sử dụng mod bổ sung tính năng thoại. Bạn sẽ không dùng được nút gạt im lặng và chất lượng âm thanh từ các ứng dụng khác sẽ bị ảnh hưởng.";
 "preference.title.default_gamepad_ctrl" = "Cấu hình bộ điều khiển";
-"preference.title.hardware_hide" = "Ẩn điều khiển khi kết nối thiết bị đầu vào";
+"preference.title.hardware_hide" = "Ẩn nút điều khiển khi kết nối thiết bị đầu vào";
 "preference.detail.hardware_hide" = "Tự động tắt lớp hiển thị các nút điều khiển cảm ứng khi kết nối chuột hoặc bộ điều khiển trò chơi.";
 "preference.title.recording_hide" = "Ẩn nút điều khiển khi ghi màn hình";
 "preference.detail.recording_hide" = "Ẩn các nút điều khiển cảm ứng trong ảnh chụp màn hình và video xuất ra khi ghi màn hình, các nút vẫn sẽ hiển thị bình thường trong khi chơi.";
@@ -250,7 +250,7 @@
 "preference.detail.auto_ram" = "Bật tính năng tự động điều chỉnh dung lượng RAM";
 "preference.warn.auto_ram" = "Tắt tùy chọn này trên thiết bị chưa jailbreak có thể gây mất ổn định. Chú ý trước khi tiếp tục.";
 "preference.title.allocated_memory" = "Dung lượng phân bổ (MB)";
-"preference.detail.allocated_memory" = "Kiểm soát dung lượng bộ nhớ cung cấp cho Minecraft";
+"preference.detail.allocated_memory" = "Kiểm soát dung lượng bộ nhớ được cấp phát cho Minecraft";
 "preference.warn.allocated_memory" = "Do các giới hạn của hệ điều hành, tùy chọn này có thể gây mất ổn định ở các giá trị cao hơn. Chú ý trước khi tiếp tục.";
 "preference.title.custom_env" = "Biến môi trường";
 "preference.detail.custom_env" = "Tùy chọn này vẫn đang được hoàn thiện. Vui lòng tạo và sửa tệp custom_env.txt theo cách thủ công.";
@@ -262,7 +262,7 @@
 "preference.title.debug_auto_correction" = "Tự động sửa";
 "preference.detail.debug_auto_correction" = "Cho phép tự động sửa khi nhập văn bản trong game.";
 "preference.title.debug_hide_home_indicator" = "Ẩn thanh home";
-"preference.detail.debug_hide_home_indicator" = "Tùy chọn này sẽ tắt khoá thanh điều hướng. Sử dụng tính năng \"Truy cập được hướng dẫn\" để ẩn đồng thời khoá thanh điều hướng.";
+"preference.detail.debug_hide_home_indicator" = "Tùy chọn này sẽ tắt khoá thanh điều hướng. Sử dụng tính năng \"Truy cập được hướng dẫn\" để đông thời ẩn và khoá thanh điều hướng.";
 
 "preference.profile.title.name" = "Tên";
 "preference.profile.title.loader_type" = "Loại loader";
@@ -321,8 +321,8 @@
 
 "controller_configurator.section.config_files" = "Tập tin cấu hình hiện tại";
 "controller_configurator.section.game_mappings" = "Sơ đồ phím trong trò chơi";
-"controller_configurator.section.footer.game_mappings" = "Ràng buộc khi chuột bị khóa trong trò chơi.";
+"controller_configurator.section.footer.game_mappings" = "Gán phím khi đang trong trò chơi, tức khi chuột bị khóa.";
 "controller_configurator.section.menu_mappings" = "Sơ đồ phím trong menu";
-"controller_configurator.section.footer.menu_mappings" = "Các ràng buộc khi chuột không bị khóa, chẳng hạn như trên màn hình tiêu đề hoặc trong menu tạm dừng.";
-"controller_configurator.section.controller_style" = "Loại Bộ điều khiển";
-"controller_configurator.section.footer.controller_style" = "Hiển thị các tên nút điều khiển khác nhau trong bộ cấu hình này.";
+"controller_configurator.section.footer.menu_mappings" = "Gán phím khi đang trong menu, tức khi chuột được mở khóa, chẳng hạn như trong màn hình chính hoặc trong menu tạm dừng.";
+"controller_configurator.section.controller_style" = "Loại bộ điều khiển";
+"controller_configurator.section.footer.controller_style" = "Hiển thị tên các nút theo loại bộ điều khiển phù hợp trong trình cấu hình này.";
