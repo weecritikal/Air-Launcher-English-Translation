@@ -14,11 +14,13 @@
 
 // The play button
 "Play" = "Oyna";
+"Details" = "Ayrıntılar";
 
 // Version categories
 "Installed" = "Kuruldu";
 "Snapshot" = "Test sürümleri";
 "Releases" = "Sürümler";
+"Unstable" = "Kararsız";
 "Old-beta" = "Eski-beta";
 "Old-alpha" = "Eski-alfa";
 
@@ -28,6 +30,10 @@
 "Move" = "Taşı";
 "Remove" = "Kaldır";
 "Resize" = "Yeniden boyutlandır";
+// Visibility
+"Always" = "Her zaman";
+"In game" = "Oyun içi";
+"In menu" = "Menüde";
 "custom_controls.button_edit.name" = "İsim";
 "custom_controls.button_edit.size" = "Boyut";
 "custom_controls.button_edit.mapping" = "Atama";
@@ -40,6 +46,7 @@
 "custom_controls.button_edit.stroke_color" = "Vurgu rengi";
 "custom_controls.button_edit.corner_radius" = "Köşe yarıçapı (%)";
 "custom_controls.button_edit.opacity" = "Opaklık (%)";
+"custom_controls.button_edit.visibility" = "Görünürlülük";
 
 "custom_controls.button_menu.add_subbutton" = "Yan-düğme ekle";
 "custom_controls.control_menu.discard_changes" = "Değişiklikleri iptal et";
@@ -53,15 +60,22 @@
 "custom_controls.control_menu.safe_area" = "Güvenli alan";
 "custom_controls.control_menu.add_button" = "Düğme ekle";
 "custom_controls.control_menu.add_drawer" = "Çekmece ekle";
+"custom_controls.control_menu.add_joystick" = "Joystick ekle";
 "custom_controls.error.incompatible" = "Bu kontrol sürümü (kod %d) bu başlatıcı sürümünde uygulanmadı.";
 "custom_controls.hint" = "Daha çok seçenek için ekranın herhangi bir yerinde basılı tut";
 
 "init.migrateDir" = "Amethyst veri dosyası artık %@. Önceden varolan bütün verilerin yeni konuma taşındı.";
+"java.error.missing_runtime" = "%@ çalışmak için Java %d ya da daha yeni sürümleri gerektirmektedir. Lütfen önce yükleyip Runtime yönet sekmesinden belirtin.";
+
+"launcher.mcl.downloading_file" = "%@ indiriliyor";
+"launcher.mcl.error_download" = "%@ indirilemedi: %@";
 
 "launcher.menu.custom_controls" = "Özel kontroller";
+"launcher.menu.execute_jar" = "Bir .jar dosyası çalıştır";
 
 "launcher.wait_jit.title" = "JIT için bekleniyor";
 "launcher.wait_jit.message" = "Amethyst, Java'nın maksimum performansta çalışması için Just-in-time derlemeye dayanır.";
+"launcher.wait_jit_trollstore.message" = "Eğer hala bu mesajı görüyorsanız lütfen TrollStore içerisinden URL Scheme açın.";
 
 "login.error.username.outOfRange" = "Kullanıcı adı en az 3 en fazla da 16 karakter olmalıdır";
 
@@ -69,6 +83,8 @@
 
 "login.jit.checking" = "JIT tespit ediliyor";
 "login.jit.enabled" = "JIT etkinleştirildi";
+"login.jit.fail" = "JIT aktif edilemedi.";
+"login.jit.fail.title" = "JIT cihazınızda aktif edilemedi.";
 
 // Login buttons
 "login.menu.sendlogs" = "Kayıt günlüğünüzü gönderin";
