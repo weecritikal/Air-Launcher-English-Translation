@@ -53,6 +53,7 @@
 "custom_controls.button_menu.add_subbutton" = "Algomb hozzáadása";
 "custom_controls.control_menu.discard_changes" = "Változtatások elvetése";
 "custom_controls.control_menu.exit" = "Kilépés";
+"custom_controls.control_menu.exit.warn" = "A változtatások mentése nélkül készülsz kilépni.";
 "custom_controls.control_menu.save" = "Mentés";
 "custom_controls.control_menu.save.error.json" = "JSON hiba";
 "custom_controls.control_menu.save.error.write" = "Mentési hiba";
@@ -63,6 +64,9 @@
 "custom_controls.control_menu.add_drawer" = "Fiók hozzáadása";
 "custom_controls.control_menu.add_joystick" = "Joystick hozzáadása";
 "custom_controls.error.incompatible" = "A vezérlő verziója (%d-as/es kód) még nincs implementálva ebben a launcher buildjében.";
+"custom_controls.hint" = "Nyomdd bárhol a kijelződ hosszan a további beállításért";
+
+"java.error.missing_main_class" = "A(z) %@ hiányzik a fő osztály attribútumból. Hogyha ez egy mod, akkor helyezd át a \"mods\" mappába a kiválaszott példányodba.";
 
 "launcher.mcl.downloading_file" = "%@ letöltése";
 "launcher.mcl.error_download" = "Sikertelen letöltés (%@: %@)";
@@ -77,6 +81,7 @@
 "login.jit.checking" = "JIT ellenőrzése";
 "login.jit.enabled" = "A JIT engedélyezve van";
 "login.jit.fail" = "A JIT nem engedélyezhető.";
+"login.jit.fail.title" = "A JIT nem engedélyezhető az eszközödön.";
 
 // Login buttons
 "login.menu.sendlogs" = "Küldd el a naplót";
@@ -89,7 +94,15 @@
 "login.warn.title.legacy_device" = "A következő \"Ametiszt\" kiadás nem lesz kompatibilis az eszközödön.";
 
 "login.warn.title.demomode" = "A fiókod demó";
+
+"login.warn.title.localmode" = "Az Offline mód mostantól Helyi mód.";
+
+"login.msa.progress.acquireAccessToken" = "(1/5) Hozzáférési token beszerzése";
+"login.msa.progress.acquireXBLToken" = "(2/5) Xbox Live token beszerzése";
 "login.msa.progress.acquireXSTS" = "XSTS beszerzése";
+"login.msa.progress.acquireXboxProfile" = "(3/5) Xbox profil beszerzése";
+"login.msa.progress.acquireMCToken" = "(4/5) Minecraft token beszerzése";
+"login.msa.progress.checkMCProfile" = "(5/5) Minecraft profil ellenőrzése";
 
 "News" = "Hírek";
 "Profiles" = "Profilok";
@@ -108,6 +121,7 @@
 "preference.title.confirm" = "Biztos vagy benne?";
 
 "preference.title.game_directory" = "Játékkönyvtár";
+"preference.title.confirm.delete_game_directory" = "A(z) %@ példány törölve lesz örökre és nem állítható vissza.";
 "preference.multidir.add_directory" = "Játékkönyvtár hozzáadása";
 
 "preference.title.check_sha" = "Fájlok ellenőrzése letöltés után";
@@ -123,6 +137,8 @@
 
 "preference.title.reset_settings" = "Minden beállítás visszaállítása";
 
+"preference.title.erase_demo_data" = "Demó játék adatainak törlése";
+
 "preference.title.renderer" = "Renderelő";
 
 "preference.title.renderer.release.auto" = "Auto";
@@ -132,30 +148,57 @@
 
 "preference.title.renderer.debug.auto" = "Auto.: GL4ES vagy ANGLE";
 "preference.title.renderer.debug.gl4es" = "Holy HL4ES - exportálja a OpenGL 2.1-et";
+"preference.title.renderer.debug.angle" = "ANGLE (1.17+) OpenGL 3.2-t exportálja (Core Profil, korlátozott)";
+"preference.title.renderer.debug.zink" = "Zink (Mesa 21.0) - OpenGL 4.1-t exportálja";
+
+"preference.detail.renderer" = "Váltsd át az OpenGL renderelőt a használatához. a Zink ideiglenesen le van tiltva iOS 16-on és későbbi verziókon a problémák diagnosztizáláshoz.";
 
 "preference.title.resolution" = "Felbontás (%)";
+"preference.detail.resolution" = "Lehetővé teszi a játék felbontásának csökkentését.";
 "preference.title.max_framerate" = "Maximum képfrissítés";
+"preference.detail.max_framerate" = "Lehetővé teszi, hogy 60 FPS-re korlátozd a képfrissítést a ProMotion kijelzőkön.";
+
+"preference.title.performance_hud" = "Teljesítmény HUD mutatása";
+"preference.detail.performance_hud" = "Ha elérhető, mutassa a teljesítményfigyelő átfedést.";
 
 "preference.title.fullscreen_airplay" = "Teljes kijelző AirPlay-en";
+"preference.title.silence_other_audio" = "Audió szünetelése, mikor a játék megnyílik";
+"preference.title.silence_with_switch" = "Audió letiltása Silent Switch-el";
 "preference.title.allow_microphone" = "Mikrofon bemenetének engedélyezése";
 "preference.title.gesture_mouse" = "Egérgesztusok";
 "preference.title.gesture_hotbar" = "Hotbar gesztusok";
 "preference.title.mouse_scale" = "Egér méretezése (%)";
 "preference.title.mouse_speed" = "Egér sebessége (%)";
 "preference.title.virtmouse_enable" = "Virtuális egér";
+"preference.detail.gyroscope_enable" = "Ennek engedélyezésével képes leszel körbenézni a játékban az eszközöd forgatásával";
+"preference.title.gyroscope_invert_x_axis" = "Giroszkóp X-tengelyének megfordítása";
+"preference.detail.gyroscope_invert_x_axis" = "Megfordítja a giroszkóp X-tengelyét";
+"preference.title.gyroscope_sensitivity" = "Giroszkóp érzékenysége";
+"preference.detail.gyroscope_sensitivity" = "Beállítja a giroszkóp érzékenységét";
 
 "preference.title.manage_runtime" = "Runtime-ok kezelése";
 "preference.title.confirm.delete_runtime" = "A(z) %@ törölve lesz";
 "preference.manage_runtime.header.default" = "Preferált Java verzió";
 "preference.manage_runtime.default.1165" = "1.16.5 vagy régebbi";
 "preference.manage_runtime.default.117" = "1.17 vagy újabb";
+"preference.manage_runtime.footer.default" = "A Minecraft 1.16.5-ös és régebbi verzióival futtathatók egy újabb Java verzióval, viszont a modokkal való kompatibilitás nem garantált. Külső futtatókörnyezetek a „java_runtimes” mappába helyezhetők. A „.jar futtatása” Java verziójának módosítása csak akkor lép életbe, ha a telepítő nem vár újabb Java verziót.";
+"preference.manage_runtime.footer.java8" = "Ez az alapértelmezett verzió Minecraft 1.16.5-höz vagy régebbihez.";
 "preference.manage_runtime.header.invalid" = "Érvénytelen runtimeok";
+
+"preference.title.java_args" = "JVM Launch argumentumok";
 "preference.placeholder.java_args" = "Argumentumok megadása...";
 "preference.title.env_variables" = "Környezeti változók";
+"preference.placeholder.env_variables" = "Változók megadása...";
 "preference.title.auto_ram" = "Auto RAM";
+"preference.detail.auto_ram" = "Engedélyezi az automatikus RAM-átállítót";
+"preference.title.allocated_memory" = "Memóriakiosztás (MB)";
+"preference.detail.allocated_memory" = "Kezeli, hogy mennyi memóriát adjon meg a Minecraftnak";
 "preference.title.custom_env" = "Környezeti változók";
+
+"preference.title.debug_skip_wait_jit" = "\"Várakozás JIT-re\" dialógus átugrása";
 "preference.title.debug_ipad_ui" = "iPadOS UI feloldása";
 "preference.title.debug_auto_correction" = "Automatikus javítás";
+"preference.title.debug_hide_home_indicator" = "\"Otthon\" indikátor elrejtése";
 
 "preference.profile.title.name" = "Név";
 "preference.profile.title.loader_type" = "Betöltő tipusa";
@@ -164,6 +207,10 @@
 "preference.profile.title.version_type" = "Verzió típusa";
 "preference.profile.title.default_touch_control" = "Érintésvezérlés";
 "preference.profile.title.default_gamepad_control" = "Irányítás kontrolleren";
+
+"profile.error.name_exists" = "Egy profil ugyanazzal a névvel már létezik. Kérlek, adj meg egy másik nevet.";
+"profile.section.instance" = "Játékpéldányok beállításai";
+"profile.section.profiles" = "Profilok ebben a példányban";
 "profile.title.create" = "Új profil létrehozása";
 "profile.title.install_fabric_quilt" = "Fabric/Quilt telepítése";
 
@@ -209,3 +256,4 @@
 "controller_configurator.section.game_mappings" = "Játék térképezése";
 "controller_configurator.section.menu_mappings" = "Menü leképzések";
 "controller_configurator.section.controller_style" = "Kontroller típusa";
+"controller_configurator.section.footer.controller_style" = "Mutasson különböző kontroller gombok neveit ebben a konfigurátorban.";
