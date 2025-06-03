@@ -66,7 +66,10 @@
 "custom_controls.error.incompatible" = "A vezérlő verziója (%d-as/es kód) még nincs implementálva ebben a launcher buildjében.";
 "custom_controls.hint" = "Nyomdd bárhol a kijelződ hosszan a további beállításért";
 
+"init.migrateDir" = "Az \"Ametiszt\" adatkönyvtára mostantól %@. Az összes létező adat át lett helyezve egy új helyre.";
+
 "java.error.missing_main_class" = "A(z) %@ hiányzik a fő osztály attribútumból. Hogyha ez egy mod, akkor helyezd át a \"mods\" mappába a kiválaszott példányodba.";
+"java.error.missing_runtime" = "A(z) %@ Java %d-t igényel, hogy futhasson. Kérlek, telepítsd azt először, majd adja meg a \"Runtimeok kezelése\" menüben.";
 
 "launcher.mcl.downloading_file" = "%@ letöltése";
 "launcher.mcl.error_download" = "Sikertelen letöltés (%@: %@)";
@@ -75,6 +78,9 @@
 "launcher.menu.execute_jar" = ".jar futtatása";
 
 "launcher.wait_jit.title" = "JIT várakozása";
+"launcher.wait_jit_trollstore.message" = "Hogyha még mindig ezt az üzenetet látod, kérlek, engedélyezd az URL sémát a TrollStore-ban.";
+
+"login.error.username.outOfRange" = "A felhasználónév 3—16 karakter hossúnak kell hogy legyen";
 
 "login.alert.field.username" = "Felhasználónév";
 
@@ -92,6 +98,8 @@
 "login.option.local" = "Helyi fiók";
 
 "login.warn.title.legacy_device" = "A következő \"Ametiszt\" kiadás nem lesz kompatibilis az eszközödön.";
+"login.warn.title.legacy_ios" = "A következő \"Ametiszt\" kiadás egy rendszerfrissítést igényel.";
+"login.warn.title.limited_ram" = "Ez az eszköz korlátozott memóriával rendelkezik.";
 
 "login.warn.title.demomode" = "A fiókod demó";
 
@@ -131,13 +139,16 @@
 "preference.title.appicon-default" = "Ismerős világos-ametiszt";
 "preference.title.appicon-dark" = "Ismerős sötét-ametiszt";
 "preference.title.appicon-development" = "Ceruzafejlesztés";
+"preference.title.hidden_sidebar" = "Oldalsó menü elrejtése alapértelmezettként";
 
 "preference.title.reset_warnings" = "Minden figyelmeztetés visszaállítása";
 "preference.title.done.reset_warnings" = "Minden figyelmeztetés vissza lett állítva.";
 
 "preference.title.reset_settings" = "Minden beállítás visszaállítása";
+"preference.title.done.reset_settings" = "Az összes beállítás vissza lett állítva.";
 
 "preference.title.erase_demo_data" = "Demó játék adatainak törlése";
+"preference.title.done.erase_demo_data" = "Az összes demó játék adatai törölve lettek.";
 
 "preference.title.renderer" = "Renderelő";
 
@@ -165,11 +176,28 @@
 "preference.title.silence_other_audio" = "Audió szünetelése, mikor a játék megnyílik";
 "preference.title.silence_with_switch" = "Audió letiltása Silent Switch-el";
 "preference.title.allow_microphone" = "Mikrofon bemenetének engedélyezése";
+"preference.title.default_gamepad_ctrl" = "Kontroller konfiguráció";
+"preference.title.hardware_hide" = "Irányítások elrejtése, hogyha a hardware csatlakoztatva van";
+"preference.title.recording_hide" = "Elrejti az irányításokat felvétel közben";
+"preference.detail.recording_hide" = "Elrejti az irányítást a képernyőképen, de a felvételen ugyanúgy látható marad a kijelzőn.";
 "preference.title.gesture_mouse" = "Egérgesztusok";
+"preference.detail.gesture_mouse" = "Engedélyezi a gesztusvezérlést, mint pl.: koppints a blokk lehelyezésekor, tartsd nyomva a blokkok széttörésekor, 2 ujjal való görgetés";
 "preference.title.gesture_hotbar" = "Hotbar gesztusok";
+"preference.detail.gesture_hotbar" = "Gesztusvezérlés engedélyezése";
+"preference.title.disable_haptics" = "Kijelzőn megjelenő haptikus jelzések letiltása";
+"preference.title.press_duration" = "Hoszzan nyomva-tartás időhossza (ms)";
+"preference.detail.press_duration" = "Hosszú lenyomás késleltetésének módosítása blokkok széttörésekor és tárgyak eldobásakor.";
+"preference.title.button_scale" = "Gombok mérete (%)";
+"preference.detail.button_scale" = "Felskáláza a gombokat, hogyha túl kicsik.";
 "preference.title.mouse_scale" = "Egér méretezése (%)";
+"preference.detail.mouse_scale" = "Megváltoztatja a virtuális egér méretét";
 "preference.title.mouse_speed" = "Egér sebessége (%)";
+"preference.detail.mouse_speed" = "A virtuális egér sebességét állítja";
 "preference.title.virtmouse_enable" = "Virtuális egér";
+"preference.title.slideable_hotbar" = "Csúsztatható hotbar";
+"preference.detail.slideable_hotbar" = "A hotbar csúsztathatóvá tétele az egérgörgővel";
+
+"preference.title.gyroscope_enable" = "Giroszkópos irányítás engedélyezése";
 "preference.detail.gyroscope_enable" = "Ennek engedélyezésével képes leszel körbenézni a játékban az eszközöd forgatásával";
 "preference.title.gyroscope_invert_x_axis" = "Giroszkóp X-tengelyének megfordítása";
 "preference.detail.gyroscope_invert_x_axis" = "Megfordítja a giroszkóp X-tengelyét";
@@ -183,6 +211,7 @@
 "preference.manage_runtime.default.117" = "1.17 vagy újabb";
 "preference.manage_runtime.footer.default" = "A Minecraft 1.16.5-ös és régebbi verzióival futtathatók egy újabb Java verzióval, viszont a modokkal való kompatibilitás nem garantált. Külső futtatókörnyezetek a „java_runtimes” mappába helyezhetők. A „.jar futtatása” Java verziójának módosítása csak akkor lép életbe, ha a telepítő nem vár újabb Java verziót.";
 "preference.manage_runtime.footer.java8" = "Ez az alapértelmezett verzió Minecraft 1.16.5-höz vagy régebbihez.";
+"preference.manage_runtime.footer.java17" = "Ez az alapértelmezett verzió Minecraft 1.17-hez vagy újabbihoz.";
 "preference.manage_runtime.header.invalid" = "Érvénytelen runtimeok";
 
 "preference.title.java_args" = "JVM Launch argumentumok";
@@ -193,15 +222,19 @@
 "preference.detail.auto_ram" = "Engedélyezi az automatikus RAM-átállítót";
 "preference.title.allocated_memory" = "Memóriakiosztás (MB)";
 "preference.detail.allocated_memory" = "Kezeli, hogy mennyi memóriát adjon meg a Minecraftnak";
+"preference.warn.allocated_memory" = "Korlátozások miatt az operációs rendszerben, ez az opció instabilitást okozhat ezen nagyobb értékben.";
 "preference.title.custom_env" = "Környezeti változók";
+"preference.detail.custom_env" = "Ez az opció munka alatt áll. Hozz létre és szerkeszd a \"custom_env.txt\" fájlt addigis.";
 
 "preference.title.debug_skip_wait_jit" = "\"Várakozás JIT-re\" dialógus átugrása";
+"preference.detail.debug_skip_wait_jit" = "Ez nem engedélyezi számodra, hogy elindítsd JIT nélkükl, inkább átugorja a hibakeresési ellenőrzést, mert ellenőrzési hibákat okoz egyes jailbreak-eknél.";
 "preference.title.debug_ipad_ui" = "iPadOS UI feloldása";
 "preference.title.debug_auto_correction" = "Automatikus javítás";
 "preference.title.debug_hide_home_indicator" = "\"Otthon\" indikátor elrejtése";
 
 "preference.profile.title.name" = "Név";
 "preference.profile.title.loader_type" = "Betöltő tipusa";
+"preference.profile.title.loader_vendor" = "Betöltő eladó";
 "preference.profile.title.loader_version" = "Betöltő verziója";
 "preference.profile.title.version" = "Verzió";
 "preference.profile.title.version_type" = "Verzió típusa";
@@ -212,6 +245,7 @@
 "profile.section.instance" = "Játékpéldányok beállításai";
 "profile.section.profiles" = "Profilok ebben a példányban";
 "profile.title.create" = "Új profil létrehozása";
+"profile.title.separate_preference" = "Beállítások elkülönítése";
 "profile.title.install_fabric_quilt" = "Fabric/Quilt telepítése";
 
 "controller_configurator.title.current" = "Gamepad konfigurációs fájl";
