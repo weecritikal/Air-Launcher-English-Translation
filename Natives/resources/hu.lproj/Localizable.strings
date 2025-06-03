@@ -1,2 +1,173 @@
-// sha check
-// home symlink
+/*
+  Localizable.strings
+  StringLocalization
+*/
+
+"game.menu.force_close" = "Kényszerített bezárás";
+"game.menu.confirm.force_close" = "Biztos, hogy kényszeríted a bezárást?";
+"game.menu.log_output" = "Naplókimenet";
+"game.menu.custom_controls" = "Egyedi kezelőszervek";
+
+"game.note.airplay" = "A Minecraft az AirPlayen tükrözött kijelzőn fog megjelenni";
+
+"game.title.exit_code" = "A játék a %d-as/es hibával kilépett";
+
+// The play button
+"Play" = "Indítás";
+"Details" = "Részletek";
+
+// Version categories
+"Installed" = "Telepítve";
+"Snapshot" = "Snapshot";
+"Releases" = "Kiadások";
+"Unstable" = "Instabil";
+"Old-beta" = "Régi-béta";
+"Old-alpha" = "Régi-alpha";
+
+// Custom controls
+"Copy" = "Másolás";
+"Edit" = "Szerkesztés";
+"Move" = "Áthelyezés";
+"Remove" = "Eltávolítás";
+"Resize" = "Átméretezés";
+// Visibility
+"Always" = "Mindig";
+"In game" = "Játékon belül";
+"In menu" = "Menüben";
+
+"custom_controls.button_edit.forward_lock" = "Előre zár";
+"custom_controls.button_edit.name" = "Név";
+"custom_controls.button_edit.size" = "Méret";
+"custom_controls.button_edit.mapping" = "Leképezés";
+"custom_controls.button_edit.orientation" = "Tájolás";
+"custom_controls.button_edit.toggleable" = "Átkapcsolható";
+"custom_controls.button_edit.mouse_pass" = "Egér áthaladása";
+"custom_controls.button_edit.swipeable" = "Csúsztatható";
+"custom_controls.button_edit.bg_color" = "Háttér színe";
+"custom_controls.button_edit.stroke_width" = "Körvonal szélessége (dp)";
+"custom_controls.button_edit.stroke_color" = "Körvonal színe";
+"custom_controls.button_edit.corner_radius" = "Sarkok átmérője (%)";
+"custom_controls.button_edit.opacity" = "Átlátszatlanság (%)";
+"custom_controls.button_edit.visibility" = "Láthatóság";
+
+"custom_controls.button_menu.add_subbutton" = "Algomb hozzáadása";
+"custom_controls.control_menu.discard_changes" = "Változtatások elvetése";
+"custom_controls.control_menu.exit" = "Kilépés";
+"custom_controls.control_menu.save" = "Mentés";
+"custom_controls.control_menu.save.error.json" = "JSON hiba";
+"custom_controls.control_menu.save.error.write" = "Mentési hiba";
+"custom_controls.control_menu.load" = "Betöltés";
+"custom_controls.control_menu.make_default" = "Beállítás alapértelmezettként";
+"custom_controls.control_menu.safe_area" = "Biztonságos terület";
+"custom_controls.control_menu.add_button" = "Gomb hozzáadása";
+"custom_controls.control_menu.add_drawer" = "Fiók hozzáadása";
+"custom_controls.control_menu.add_joystick" = "Joystick hozzáadása";
+"custom_controls.error.incompatible" = "A vezérlő verziója (%d-as/es kód) még nincs implementálva ebben a launcher buildjében.";
+
+"launcher.mcl.downloading_file" = "%@ letöltése";
+"launcher.mcl.error_download" = "Sikertelen letöltés (%@: %@)";
+
+"launcher.menu.custom_controls" = "Egyedi kezelőszervek";
+"launcher.menu.execute_jar" = ".jar futtatása";
+
+"launcher.wait_jit.title" = "JIT várakozása";
+
+"login.alert.field.username" = "Felhasználónév";
+
+"login.jit.checking" = "JIT ellenőrzése";
+"login.jit.enabled" = "A JIT engedélyezve van";
+"login.jit.fail" = "A JIT nem engedélyezhető.";
+
+// Login buttons
+"login.menu.sendlogs" = "Küldd el a naplót";
+"login.option.add" = "Fiók hozzáadása";
+"login.option.select" = "Fiók kiválasztása";
+"login.option.demo" = "Demó fiók";
+"login.option.microsoft" = "Microsoft fiók";
+"login.option.local" = "Helyi fiók";
+
+"login.warn.title.legacy_device" = "A következő \"Ametiszt\" kiadás nem lesz kompatibilis az eszközödön.";
+
+"login.warn.title.demomode" = "A fiókod demó";
+"Settings" = "Beállítások";
+
+"preference.section.general" = "Általános beállítások";
+"preference.section.video" = "Videó- és audióbeállítások";
+"preference.section.footer.video" = "Auto-renderelő engedélyezi az \"Ametiszt\"-nek, hogy kiválassza a legjobb opciót a Minecraft verzió alapján. A felbontás csökkentése csökkenti a GPU terhelését a jobb teljesítményért.";
+"preference.section.control" = "Irányítás testreszabása";
+"preference.section.debug" = "UI Debugging beállítások";
+"preference.section.footer.debug" = "Újra kell indítanod a launchert ahhoz, hogy érvényesüljenek a beállítások.";
+//"preference.section.footer.control" = "";
+"preference.section.java" = "Java Tweakek";
+//"preference.section.footer.java" = "";
+
+"preference.title.confirm" = "Biztos vagy benne?";
+
+"preference.title.game_directory" = "Játékkönyvtár";
+"preference.multidir.add_directory" = "Játékkönyvtár hozzáadása";
+
+"preference.title.check_sha" = "Fájlok ellenőrzése letöltés után";
+"preference.title.cosmetica" = "Cosmetica köpenyek";
+"preference.title.debug_logging" = "Hibakeresési naplózás";
+"preference.title.appicon" = "App ikonjának beállítása";
+"preference.title.appicon-default" = "Ismerős világos-ametiszt";
+"preference.title.appicon-dark" = "Ismerős sötét-ametiszt";
+"preference.title.appicon-development" = "Ceruzafejlesztés";
+
+"preference.title.reset_warnings" = "Minden figyelmeztetés visszaállítása";
+"preference.title.done.reset_warnings" = "Minden figyelmeztetés vissza lett állítva.";
+
+"preference.title.reset_settings" = "Minden beállítás visszaállítása";
+
+"preference.title.renderer" = "Renderelő";
+
+"preference.title.renderer.release.auto" = "Auto";
+"preference.title.renderer.release.gl4es" = "Holy GL4ES";
+"preference.title.renderer.release.angle" = "ANGLE";
+"preference.title.renderer.release.zink" = "Zink";
+
+"preference.title.renderer.debug.auto" = "Auto.: GL4ES vagy ANGLE";
+"preference.title.renderer.debug.gl4es" = "Holy HL4ES - exportálja a OpenGL 2.1-et";
+
+"preference.title.resolution" = "Felbontás (%)";
+"preference.title.max_framerate" = "Maximum képfrissítés";
+
+"preference.title.fullscreen_airplay" = "Teljes kijelző AirPlay-en";
+"preference.title.gesture_mouse" = "Egérgesztusok";
+"preference.title.mouse_speed" = "Egér sebessége (%)";
+"preference.title.virtmouse_enable" = "Virtuális egér";
+
+"preference.title.manage_runtime" = "Runtime-ok kezelése";
+"preference.title.confirm.delete_runtime" = "A(z) %@ törölve lesz";
+"preference.manage_runtime.header.default" = "Preferált Java verzió";
+"preference.manage_runtime.default.1165" = "1.16.5 vagy régebbi";
+"preference.manage_runtime.default.117" = "1.17 vagy újabb";
+"preference.manage_runtime.header.invalid" = "Érvénytelen runtimeok";
+"preference.placeholder.java_args" = "Argumentumok megadása...";
+"preference.title.env_variables" = "Környezeti változók";
+"preference.title.auto_ram" = "Auto RAM";
+"preference.title.custom_env" = "Környezeti változók";
+"preference.title.debug_ipad_ui" = "iPadOS UI feloldása";
+"preference.title.debug_auto_correction" = "Automatikus javítás";
+
+"preference.profile.title.name" = "Név";
+"preference.profile.title.loader_type" = "Betöltő tipusa";
+"preference.profile.title.version" = "Verzió";
+"preference.profile.title.version_type" = "Verzió típusa";
+"preference.profile.title.default_touch_control" = "Érintésvezérlés";
+"preference.profile.title.default_gamepad_control" = "Irányítás kontrolleren";
+"profile.title.create" = "Új profil létrehozása";
+"controller_configurator.title.type.playstation" = "PlayStation";
+
+"controller_configurator.xbox.title.bumper_left" = "Bal ütköző";
+"controller_configurator.xbox.title.bumper_right" = "Jobb ütköző";
+"controller_configurator.playstation.title.named_a" = "Kereszt";
+"controller_configurator.playstation.title.named_b" = "Kör";
+"controller_configurator.playstation.title.named_x" = "Négyzet";
+"controller_configurator.playstation.title.named_y" = "Háromszög";
+"controller_configurator.playstation.title.thumb_left" = "L3";
+"controller_configurator.playstation.title.thumb_right" = "R3";
+
+"controller_configurator.section.config_files" = "Jelenlegi konfigurációs fájl";
+"controller_configurator.section.game_mappings" = "Játék térképezése";
+"controller_configurator.section.controller_style" = "Kontroller típusa";
