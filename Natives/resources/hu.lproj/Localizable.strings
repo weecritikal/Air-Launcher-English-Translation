@@ -89,6 +89,10 @@
 "login.warn.title.legacy_device" = "A következő \"Ametiszt\" kiadás nem lesz kompatibilis az eszközödön.";
 
 "login.warn.title.demomode" = "A fiókod demó";
+"login.msa.progress.acquireXSTS" = "XSTS beszerzése";
+
+"News" = "Hírek";
+"Profiles" = "Profilok";
 "Settings" = "Beállítások";
 
 "preference.section.general" = "Általános beállítások";
@@ -133,7 +137,10 @@
 "preference.title.max_framerate" = "Maximum képfrissítés";
 
 "preference.title.fullscreen_airplay" = "Teljes kijelző AirPlay-en";
+"preference.title.allow_microphone" = "Mikrofon bemenetének engedélyezése";
 "preference.title.gesture_mouse" = "Egérgesztusok";
+"preference.title.gesture_hotbar" = "Hotbar gesztusok";
+"preference.title.mouse_scale" = "Egér méretezése (%)";
 "preference.title.mouse_speed" = "Egér sebessége (%)";
 "preference.title.virtmouse_enable" = "Virtuális egér";
 
@@ -152,22 +159,53 @@
 
 "preference.profile.title.name" = "Név";
 "preference.profile.title.loader_type" = "Betöltő tipusa";
+"preference.profile.title.loader_version" = "Betöltő verziója";
 "preference.profile.title.version" = "Verzió";
 "preference.profile.title.version_type" = "Verzió típusa";
 "preference.profile.title.default_touch_control" = "Érintésvezérlés";
 "preference.profile.title.default_gamepad_control" = "Irányítás kontrolleren";
 "profile.title.create" = "Új profil létrehozása";
+"profile.title.install_fabric_quilt" = "Fabric/Quilt telepítése";
+
+"controller_configurator.title.current" = "Gamepad konfigurációs fájl";
+"controller_configurator.title.type.xbox" = "Xbox";
 "controller_configurator.title.type.playstation" = "PlayStation";
 
 "controller_configurator.xbox.title.bumper_left" = "Bal ütköző";
 "controller_configurator.xbox.title.bumper_right" = "Jobb ütköző";
+"controller_configurator.xbox.title.trigger_left" = "Bal ravasz";
+"controller_configurator.xbox.title.trigger_right" = "Jobb ravasz";
+"controller_configurator.xbox.title.named_back" = "Útmutató";
+"controller_configurator.xbox.title.named_start" = "Menü";
+"controller_configurator.xbox.title.named_a" = "A";
+"controller_configurator.xbox.title.named_b" = "B";
+"controller_configurator.xbox.title.named_x" = "X";
+"controller_configurator.xbox.title.named_y" = "Y";
+"controller_configurator.xbox.title.dpad_up" = "Fel";
+"controller_configurator.xbox.title.dpad_down" = "Le";
+"controller_configurator.xbox.title.dpad_left" = "Bal";
+"controller_configurator.xbox.title.dpad_right" = "Jobb";
+"controller_configurator.xbox.title.thumb_left" = "Bal botkormány kattintás";
+"controller_configurator.xbox.title.thumb_right" = "Jobb botkormány kattintás";
+
+"controller_configurator.playstation.title.bumper_left" = "L1";
+"controller_configurator.playstation.title.bumper_right" = "R1";
+"controller_configurator.playstation.title.trigger_left" = "L2";
+"controller_configurator.playstation.title.trigger_right" = "R2";
+"controller_configurator.playstation.title.named_back" = "Kiválasztás";
+"controller_configurator.playstation.title.named_start" = "Start";
 "controller_configurator.playstation.title.named_a" = "Kereszt";
 "controller_configurator.playstation.title.named_b" = "Kör";
 "controller_configurator.playstation.title.named_x" = "Négyzet";
 "controller_configurator.playstation.title.named_y" = "Háromszög";
+"controller_configurator.playstation.title.dpad_up" = "Fel";
+"controller_configurator.playstation.title.dpad_down" = "Le";
+"controller_configurator.playstation.title.dpad_left" = "Bal";
+"controller_configurator.playstation.title.dpad_right" = "Jobb";
 "controller_configurator.playstation.title.thumb_left" = "L3";
 "controller_configurator.playstation.title.thumb_right" = "R3";
 
 "controller_configurator.section.config_files" = "Jelenlegi konfigurációs fájl";
 "controller_configurator.section.game_mappings" = "Játék térképezése";
+"controller_configurator.section.menu_mappings" = "Menü leképzések";
 "controller_configurator.section.controller_style" = "Kontroller típusa";
