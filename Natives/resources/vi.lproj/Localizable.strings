@@ -63,7 +63,7 @@
 "custom_controls.control_menu.add_button" = "Thêm nút";
 "custom_controls.control_menu.add_drawer" = "Thêm ngăn nút";
 "custom_controls.control_menu.add_joystick" = "Thêm núm điều khiển";
-"custom_controls.error.incompatible" = "Phiên bản điều khiển (code %d) không tương thích với bản trình khởi chạy này.";
+"custom_controls.error.incompatible" = "Phiên bản điều khiển (mã %d) không tương thích với bản trình khởi chạy này.";
 "custom_controls.hint" = "Nhấn giữ màn hình để hiện thêm tùy chọn";
 
 "init.migrateDir" = "Đường dẫn dữ liệu của Amethyst hiện là %@. Tất cả dữ liệu của bạn đã được chuyển đến vị trí mới.";
@@ -108,7 +108,7 @@
 "login.warn.message.limited_ram" = "Chúng tôi khuyên bạn nên bật tính năng tự phân bổ RAM để đảm bảo trò chơi chạy ổn định và tránh các vấn đề hiệu suất.";
 
 "login.warn.title.demomode" = "Tài khoản của bạn chỉ có thể chơi thử";
-"login.warn.message.demomode" = "Chế độ chơi thử hiện đã thay thế cho chế độ ngoại tuyến và cục bộ, cho phép bạn đăng nhập vào tài khoản Microsoft chưa mua trò chơi để trải nghiệm bản chơi thử và được thêm vào từ phiên bản 1.3.1. Các phiên bản trước đó vẫn có bản đầy đủ, bởi trình khởi chạy chính thức không áp đặt giới hạn đối với các phiên bản này. Truy cập trang web của chúng tôi để biết thêm về thay đổi này.";
+"login.warn.message.demomode" = "Chế độ chơi thử hiện đã thay thế cho chế độ ngoại tuyến và cục bộ, cho phép bạn đăng nhập vào tài khoản Microsoft chưa mua trò chơi để trải nghiệm bản chơi thử và được thêm vào từ phiên bản 1.3.1. Các phiên bản trước vẫn có bản đầy đủ, bởi trình khởi chạy chính thức không áp đặt giới hạn đối với các phiên bản đó. Truy cập trang web của chúng tôi để biết thêm về thay đổi này.";
 
 "login.warn.title.localmode" = "Chế độ ngoại tuyến hiện là chế độ cục bộ.";
 "login.warn.message.localmode" = "Bạn vẫn có thể tiếp tục chơi các phiên bản đã cài đặt, nhưng để tải Minecraft, bạn sẽ phải có tài khoản trả phí. Chúng tôi sẽ không cung cấp hỗ trợ cho các vấn đề liên quan đến tài khoản cục bộ hoặc các cách tải Minecraft khác.";
@@ -233,10 +233,10 @@
 "preference.title.manage_runtime" = "Quản lý Runtime";
 "preference.title.confirm.delete_runtime" = "%@ sẽ bị xóa bỏ";
 "preference.manage_runtime.header.default" = "Lựa chọn phiên bản Java";
-"preference.manage_runtime.default.1165" = "1.16.5 trở về trước";
+"preference.manage_runtime.default.1165" = "1.16.5 trở xuống";
 "preference.manage_runtime.default.117" = "1.17 trở lên";
-"preference.manage_runtime.footer.default" = "Các phiên bản Minecraft từ 1.16.5 trở về trước có khả năng chạy được trên bản Java mới hơn, nhưng không đảm bảo tính tương thích với các bản mod. Bạn có thể thêm các Runtime khác vào thư mục \"java_runtimes\". Thay đổi phiên bản Java của phần \"Chạy tệp .jar\" chỉ có tác dụng nếu tệp đó không chạy được trên bản Java mới.";
-"preference.manage_runtime.footer.java8" = "Đây là phiên bản mặc định để chạy Minecraft 1.16.5 trở về trước.";
+"preference.manage_runtime.footer.default" = "Các phiên bản Minecraft từ 1.16.5 trở xuống vẫn có khả năng chạy được trên bản Java mới hơn, nhưng không đảm bảo tương thích với các bản mod. Bạn có thể thêm các Runtime khác vào thư mục \"java_runtimes\". Thay đổi phiên bản Java của phần \"Chạy tệp .jar\" chỉ có tác dụng nếu tệp đó không chạy được trên bản Java mới.";
+"preference.manage_runtime.footer.java8" = "Đây là phiên bản mặc định để chạy Minecraft 1.16.5 trở xuống.";
 "preference.manage_runtime.footer.java17" = "Đây là phiên bản mặc định để chạy Minecraft 1.17 trở lên.";
 "preference.manage_runtime.header.invalid" = "Runtime không hợp lệ";
 
