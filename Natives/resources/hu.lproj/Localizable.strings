@@ -88,6 +88,7 @@
 "login.jit.enabled" = "A JIT engedélyezve van";
 "login.jit.fail" = "A JIT nem engedélyezhető.";
 "login.jit.fail.title" = "A JIT nem engedélyezhető az eszközödön.";
+"login.jit.fail.description" = "Egy integráció nem használható az automatikus JIT engedélyezéséhez az eszközödön, és engedélyezni kell manuálisan. A hibák fel lettek jegyezve a \"latestlog.txt\" nevű fájlba.";
 
 // Login buttons
 "login.menu.sendlogs" = "Küldd el a naplót";
@@ -104,6 +105,8 @@
 "login.warn.title.demomode" = "A fiókod demó";
 
 "login.warn.title.localmode" = "Az Offline mód mostantól Helyi mód.";
+
+"login.msa.error.xsts.noxboxacc" = "A Microsoft fiókon nincsen regisztrálva egy Xbox profil. Bizonyosodj meg erról, hogy létrehoztál egy Xbox profilt.\nHibakód: 2148916233";
 
 "login.msa.progress.acquireAccessToken" = "(1/5) Hozzáférési token beszerzése";
 "login.msa.progress.acquireXBLToken" = "(2/5) Xbox Live token beszerzése";
@@ -229,6 +232,7 @@
 "preference.title.debug_skip_wait_jit" = "\"Várakozás JIT-re\" dialógus átugrása";
 "preference.detail.debug_skip_wait_jit" = "Ez nem engedélyezi számodra, hogy elindítsd JIT nélkükl, inkább átugorja a hibakeresési ellenőrzést, mert ellenőrzési hibákat okoz egyes jailbreak-eknél.";
 "preference.title.debug_ipad_ui" = "iPadOS UI feloldása";
+"preference.detail.debug_ipad_ui" = "Exklúzív iPad UI feloldása (értesítés, billentyűzet, stb.) ha engedléyezve van, vagy iPhone UI, ha le van tiltva.";
 "preference.title.debug_auto_correction" = "Automatikus javítás";
 "preference.title.debug_hide_home_indicator" = "\"Otthon\" indikátor elrejtése";
 
