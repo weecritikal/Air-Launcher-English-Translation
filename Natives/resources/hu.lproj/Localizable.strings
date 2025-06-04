@@ -148,9 +148,11 @@
 "preference.title.done.reset_warnings" = "Minden figyelmeztetés vissza lett állítva.";
 
 "preference.title.reset_settings" = "Minden beállítás visszaállítása";
+"preference.title.confirm.reset_settings" = "Ez el fogja távolítani az összes egyedi preferenciáidat, mint például a felbontást, a gombok méretét és a Java argumentumait is.";
 "preference.title.done.reset_settings" = "Az összes beállítás vissza lett állítva.";
 
 "preference.title.erase_demo_data" = "Demó játék adatainak törlése";
+"preference.title.confirm.erase_demo_data" = "Ez törölni fogja az összes Demó játék adatait, ami a Demó fiókokhoz használ.";
 "preference.title.done.erase_demo_data" = "Az összes demó játék adatai törölve lettek.";
 
 "preference.title.renderer" = "Renderelő";
@@ -223,6 +225,7 @@
 "preference.placeholder.env_variables" = "Változók megadása...";
 "preference.title.auto_ram" = "Auto RAM";
 "preference.detail.auto_ram" = "Engedélyezi az automatikus RAM-átállítót";
+"preference.warn.auto_ram" = "Ennek az opciónak a letiltásával egy nem-jailbroken eszközön instabilitást okozhat, ha meg lesz változtatva.";
 "preference.title.allocated_memory" = "Memóriakiosztás (MB)";
 "preference.detail.allocated_memory" = "Kezeli, hogy mennyi memóriát adjon meg a Minecraftnak";
 "preference.warn.allocated_memory" = "Korlátozások miatt az operációs rendszerben, ez az opció instabilitást okozhat ezen nagyobb értékben.";
@@ -234,6 +237,7 @@
 "preference.title.debug_ipad_ui" = "iPadOS UI feloldása";
 "preference.detail.debug_ipad_ui" = "Exklúzív iPad UI feloldása (értesítés, billentyűzet, stb.) ha engedléyezve van, vagy iPhone UI, ha le van tiltva.";
 "preference.title.debug_auto_correction" = "Automatikus javítás";
+"preference.detail.debug_auto_correction" = "Helyesírás-ellenőrzés engedélyezése játék közben.";
 "preference.title.debug_hide_home_indicator" = "\"Otthon\" indikátor elrejtése";
 
 "preference.profile.title.name" = "Név";
