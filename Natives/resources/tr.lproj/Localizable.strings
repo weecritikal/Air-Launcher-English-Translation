@@ -102,11 +102,16 @@
 
 "login.warn.title.legacy_device" = "Amethyst'in yeni sürümü bu cihazla uyumlu olmayacak.";
 "login.warn.message.legacy_device" = "Bir sonraki büyük sürümü çalıştırabilmek için iOS 14 çalıştırabilen bir cihaz gereklidir.";
+"login.warn.title.legacy_ios" = "Bir sonraki Amethyst sürümü sistem güncellemesi gerektirecek.";
+"login.warn.message.legacy_ios" = "Bir sonraki büyük sürümü çalıştırabilmek için bu cihazın iOS 14 ya da sonrasını çalıştırması gereklidir.";
+"login.warn.title.limited_ram" = "Bu cihazın sınırlı miktarda hafızası var.";
+"login.warn.message.limited_ram" = "Kararsızlık ve performans sorunlarını önlemek için otomatik RAM ayarının etkin bırakılmasını öneriyoruz.";
 
 "login.warn.title.demomode" = "Hesabınız Demo hesabı";
 "login.warn.message.demomode" = "Çevrimdışı ve yerel mod yerine olan demo modu oyuna sahip olmayan bir Microsoft hesabına giriş yapabilmenizi sağlayacak ve 1.3.1 ve daha yeni sürümlerde tanıtılan Java Edition denemesini oynamanızı sağlayacak. Asıl başlatıcı yeni sürümlerdeki engelleri koymadığı için daha önceki sürümler bütün oyunu kapsıyor. Çevrimdışı modundan olan bu geçiş hakkında daha fazla bilgi öğrenmek için web sitemize bakın.";
 
 "login.warn.title.localmode" = "Çevrimdışı mod artık yerel mod.";
+"login.warn.message.localmode" = "\"Yüklü sürümleri oynamaya devam edebilirsiniz ancak artık ücretli bir hesabınız olmadan Minecraft indiremezsiniz. Yerel hesaplarla veya Minecraft'ı edinmenin diğer yollarıyla ilgili yaşanacak sorunlara destek verilmeyecektir.";
 
 "login.msa.error.xsts.noxboxacc" = "Bu Microsoft hesabı için bir Xbox profili kayıt olmamış. Lütfen bir Xbox profili oluşturduğunuza emin olun.\nHata kodu: 2148916233";
 "login.msa.error.xsts.noxbox" = "Xbox Live şu anlık ülkenizde mevcuz değil.\nHata kodu: 2148916235";
@@ -121,10 +126,12 @@
 "login.msa.progress.checkMCProfile" = "(5/5) Minecraft hesabına bakılıyor";
 
 "News" = "Haberler";
+"Profiles" = "Profiller";
 "Settings" = "Ayarlar";
 
 "preference.section.general" = "Genel Ayarlar";
 "preference.section.video" = "Video Ayarları";
+"preference.section.footer.video" = "Otomatik işleyici, Amethyst’in Minecraft sürümüne göre en uygun seçeneği seçmesini sağlar. Çözünürlüğü düşürmek daha iyi performans için GPU çalışma yükünü azaltır.";
 "preference.section.control" = "Kontrol özelleştirmesi";
 "preference.section.debug" = "UI hata ayıklama seçenekleri";
 "preference.section.footer.debug" = "Hata ayıklamanın yanı sıra, bu seçenekler özel kontrollerde de yardımcı olabilir. Değişikliklerin yürürlüğe girmesi için başlatıcıyı tekrar başlatmanız gerekebilir.";
@@ -148,7 +155,9 @@
 "preference.detail.appicon" = "Amethyst için farklı Ana Ekran simgeleri arasında seçim yapmanızı sağlar.";
 "preference.title.appicon-default" = "Göze aşina Amethyst açık";
 "preference.title.appicon-dark" = "Göze aşina Amethyst karanlık";
+"preference.title.appicon-development" = "Planlanan Geliştirme";
 "preference.title.hidden_sidebar" = "Ana menü kenar çubuğunu varsayılan olarak gizle";
+"preference.detail.hidden_sidebar" = "Ana menüdeki kenar çubuğunu varsayılan olarak ve ekran döndürüldüğünde gizlemenizi sağlar.";
 
 "preference.title.reset_warnings" = "Tüm uyarıları sıfırla";
 "preference.title.done.reset_warnings" = "Tüm uyarılar sıfırlandı.";
@@ -157,7 +166,16 @@
 "preference.title.confirm.reset_settings" = "Bu, çözünürlük, düğme boyutu ve Java değişkenleri dahil tüm özel tercihlerinizi kaldıracaktır.";
 "preference.title.done.reset_settings" = "Varsayılan seçeneklerin hepsi eski haline getirildi.";
 
+"preference.title.erase_demo_data" = "Demo oyun verilerini sil";
+"preference.title.confirm.erase_demo_data" = "Bu bütün Demo oyun sürümlerini ve Demo hesaplar için kullanılan verileri silecek.";
+"preference.title.done.erase_demo_data" = "Bütün Demo oyun verileri silindi.";
+
 "preference.title.renderer" = "İşleyici";
+
+"preference.title.renderer.release.auto" = "Otomatik";
+"preference.title.renderer.release.gl4es" = "holy gl4es";
+"preference.title.renderer.release.angle" = "ANGLE";
+"preference.title.renderer.release.zink" = "Zink";
 
 "preference.title.renderer.debug.auto" = "Oto: gl4es ya da ANGLE";
 "preference.title.renderer.debug.gl4es" = "gl4es 1.1.4 - OpenGL 2.1 çıkarır";
@@ -168,9 +186,30 @@
 
 "preference.title.resolution" = "Çözünürlük (%)";
 "preference.detail.resolution" = "Oyun çözünürlüğünü düşürmenizi sağlar.";
+"preference.title.max_framerate" = "En yüksek kare hızı";
+"preference.detail.max_framerate" = "ProMotion ekranlarda oyun kare hızını 60fps'e sınırlamanızı sağlar.";
+
+"preference.title.performance_hud" = "Performans Gösterge Panelini Aç";
+"preference.detail.performance_hud" = "Mümkün olduğunda performans izleme üst katmanını göster.";
 
 "preference.title.fullscreen_airplay" = "Tam Ekran AirPlay";
 "preference.detail.fullscreen_airplay" = "Ekrandaki herşeyi yansıtmaktansa harici ekranda tam ekran oyun penceresini görüntülemeyi sağlar.";
+"preference.title.silence_other_audio" = "Oyun başlarken sesleri duraklat";
+"preference.detail.silence_other_audio" = "Oyunu başlatırken Amethyst'in Müzik gibi diğer uygulamaların sesini duraklatmasına izin vermek için etkinleştirin.";
+"preference.title.silence_with_switch" = "Sessiz mod tuşu ile sesi duraklat";
+"preference.detail.silence_with_switch" = "Sessiz Mod açıkken sesi kapatmak için etkinleştirin. Kulaklıklar ve harici hoparlörler etkilenmez.";
+"preference.title.allow_microphone" = "Mikrofon girişine izin ver";
+"preference.detail.allow_microphone" = "Bunu yalnızca sesli sohbet modu kullanıyorsanız etkinleştirin. Sessiz mod tuşu seçeneği dikkate alınmayacak ve diğer uygulamaların ses kalitesi etkilenecek.";
+"preference.title.default_gamepad_ctrl" = "Kontrolcü yapılandırması";
+"preference.title.hardware_hide" = "Donanım bağlandığında kontrolleri gizle";
+"preference.detail.hardware_hide" = "Fare veya oyun kontrolcüsü bağlandığında ekrandaki kontrol üst katmanının otomatik olarak devre dışı bırakılma davranışını etkinleştir.";
+"preference.title.recording_hide" = "Kontrolleri ekran kaydedicisinden gizle";
+"preference.detail.recording_hide" = "Kontrolleri ekranda görünür kalırken ekran görüntüsü ve ekran kaydından gizler.";
+"preference.title.gesture_mouse" = "Fare hareketleri";
+"preference.detail.gesture_mouse" = "Blok koymak için tıklamak, blok kırmak için basılı tutmak, 2 parmakla kaydırmak gibi hareketleri etkinleştirir";
+"preference.title.gesture_hotbar" = "Hotbar hareketleri";
+"preference.detail.gesture_hotbar" = "Hotbar yuvasına dokunma, eller arasındaki öğeleri değiştirme, öğeleri fırlatma gibi hareketleri etkinleştirir";
+"preference.title.disable_haptics" = "Ekran titreşimlerini devre dışı bırak";
 "preference.title.press_duration" = "Uzun-basma süresi (ms)";
 "preference.detail.press_duration" = "Blok kırmak ve eşya bırakmak için tetiklenen basma süresi.";
 "preference.title.button_scale" = "Ekran üstü tuş ölçeği (%)";
@@ -185,8 +224,16 @@
 "preference.detail.slideable_hotbar" = "Hotbar'ın fare tekerleğindeki gibi kaydırılabilmesini sağlar";
 
 "preference.title.gyroscope_enable" = "Jiroskop kontrollerini etkinleştir";
+"preference.detail.gyroscope_enable" = "Bunu etkinleştirmek, cihazınızı döndürerek oyunda dönmenizi sağlar";
+"preference.title.gyroscope_invert_x_axis" = "Jiroskop sol ve sağını tersine çevir";
+"preference.detail.gyroscope_invert_x_axis" = "Jiroskop'un X eksenini ters çevirir";
 "preference.title.gyroscope_sensitivity" = "Jiroskop kontrolleri hassaslığı";
 "preference.detail.gyroscope_sensitivity" = "Jiroskop kontrollerinin hassaslığını ayarlayın";
+
+"preference.title.manage_runtime" = "Runtime'ları yönet";
+"preference.title.confirm.delete_runtime" = "%@ silinecek";
+"preference.manage_runtime.header.default" = "Tercih edilen Java sürümü";
+"preference.manage_runtime.default.1165" = "1.16.5 ve öncesi";
 
 "preference.title.java_args" = "JVM Başlatıcı değişkenleri";
 "preference.placeholder.java_args" = "Değişkenleri belirt...";
@@ -208,3 +255,15 @@
 
 "preference.profile.title.name" = "İsim";
 "controller_configurator.playstation.title.named_back" = "Seç";
+"controller_configurator.playstation.title.named_x" = "Kare";
+"controller_configurator.playstation.title.named_y" = "Üçgen";
+"controller_configurator.playstation.title.thumb_left" = "L3";
+"controller_configurator.playstation.title.thumb_right" = "R3";
+
+"controller_configurator.section.config_files" = "Mevcut yapılandırma dosyası";
+"controller_configurator.section.game_mappings" = "Oyun tuş atamaları";
+"controller_configurator.section.footer.game_mappings" = "Fare oyunda kilitliyken yapılan tuş atamaları.";
+"controller_configurator.section.menu_mappings" = "Menü tuş atamaları";
+"controller_configurator.section.footer.menu_mappings" = "Fare kilitli olmadığında yapılan tuş atamaları, örneğin başlatma ekranında veya duraklatma menüsünde.";
+"controller_configurator.section.controller_style" = "Kontrolcü türü";
+"controller_configurator.section.footer.controller_style" = "\"Bu yapılandırıcıda farklı kontrolcü tuş isimlerini göster.";
