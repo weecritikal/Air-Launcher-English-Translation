@@ -48,7 +48,7 @@
 "custom_controls.button_edit.stroke_color" = "Vurgu rengi";
 "custom_controls.button_edit.corner_radius" = "Köşe yarıçapı (%)";
 "custom_controls.button_edit.opacity" = "Opaklık (%)";
-"custom_controls.button_edit.visibility" = "Görünürlülük";
+"custom_controls.button_edit.visibility" = "Görünürlük";
 
 "custom_controls.button_menu.add_subbutton" = "Yan-düğme ekle";
 "custom_controls.control_menu.discard_changes" = "Değişiklikleri iptal et";
@@ -66,7 +66,7 @@
 "custom_controls.error.incompatible" = "Bu kontrol sürümü (kod %d) bu başlatıcı sürümünde uygulanmadı.";
 "custom_controls.hint" = "Daha çok seçenek için ekranın herhangi bir yerinde basılı tut";
 
-"init.migrateDir" = "Amethyst veri dosyası artık %@. Önceden varolan bütün verilerin yeni konuma taşındı.";
+"init.migrateDir" = "Amethyst veri dizini artık %@. Önceden varolan bütün verilerin yeni konuma taşındı.";
 
 "java.error.missing_main_class" = "%@ dosyasında main class niteliği eksik. Bu bir mod ise bunu seçili yapılandırmanın \"mods\" klasörüne koy.";
 "java.error.missing_runtime" = "%@ çalışmak için Java %d ya da daha yeni sürümleri gerektirmektedir. Lütfen önce yükleyip Runtime yönet sekmesinden belirtin.";
@@ -182,7 +182,7 @@
 "preference.title.renderer.debug.angle" = "ANGLE (1.17+) - OpenGL 3.2 dışa aktarır (Çekirdek profili, kısıtlı)";
 "preference.title.renderer.debug.zink" = "Zonk (Mesa 21.0) - OpenGL 4.1 çıkarır";
 
-"preference.detail.renderer" = "Kullanmak için OpenGL işleyici motorunu değiştir";
+"preference.detail.renderer" = "Kullanılacak OpenGL ișleme motorunu değiştirin. iOS 16 ve sonraki sürümlerde sorunları teşhis etmek amacıyla Zink geçici olarak devre dışı bırakılmıştır.";
 
 "preference.title.resolution" = "Çözünürlük (%)";
 "preference.detail.resolution" = "Oyun çözünürlüğünü düşürmenizi sağlar.";
@@ -209,7 +209,7 @@
 "preference.detail.gesture_mouse" = "Blok koymak için tıklamak, blok kırmak için basılı tutmak, 2 parmakla kaydırmak gibi hareketleri etkinleştirir";
 "preference.title.gesture_hotbar" = "Hotbar hareketleri";
 "preference.detail.gesture_hotbar" = "Hotbar yuvasına dokunma, eller arasındaki öğeleri değiştirme, öğeleri bırakma gibi hareketleri etkinleştirir";
-"preference.title.disable_haptics" = "Ekran titreşimlerini devre dışı bırak";
+"preference.title.disable_haptics" = "Ekran-üstü titreşimlerini devre dışı bırak";
 "preference.title.press_duration" = "Uzun-basma süresi (ms)";
 "preference.detail.press_duration" = "Blok kırmak ve eşya bırakmak için tetiklenen basma süresi.";
 "preference.title.button_scale" = "Ekran üstü tuş ölçeği (%)";
@@ -260,9 +260,9 @@
 "preference.title.debug_ipad_ui" = "iPadOS UI'ını aç";
 "preference.detail.debug_ipad_ui" = "iPad'e özel kullanıcı arayüzünü açar (uyarı, klavye vb...) eğer aktifleştirilirse iPhone kullanıcı arayüzü devre dışı bırakılır.";
 "preference.title.debug_auto_correction" = "Otomatik düzeltme";
-"preference.detail.debug_auto_correction" = "Oyunda yazı yazarkenki otomatik düzeltmeyi aktifleştirir.";
-"preference.title.debug_hide_home_indicator" = "Ana göstergeyi gizle";
-"preference.detail.debug_hide_home_indicator" = "Bu, ana gösterge kilitlemeyi devre dışı bırakacaktır. Giriş göstergesini aynı anda gizlemek ve kilitlemek için Kılavuzlu Erişim'i kullanmanız gerekecek.";
+"preference.detail.debug_auto_correction" = "Oyunda yazı yazarkenki otomatik düzeltmeyi etkinleṣtirir.";
+"preference.title.debug_hide_home_indicator" = "Ana ekran göstergesini gizle";
+"preference.detail.debug_hide_home_indicator" = "Bu, ana ekran göstergesini kilitlemeyi devre dışı bırakacaktır. Giriş göstergesini aynı anda gizlemek ve kilitlemek için Kılavuzlu Erişim'i kullanmanız gerekecek.";
 
 "preference.profile.title.name" = "İsim";
 "preference.profile.title.loader_type" = "Yükleyici türü";
