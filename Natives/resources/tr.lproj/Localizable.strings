@@ -75,11 +75,11 @@
 "launcher.mcl.error_download" = "%@ indirilemedi: %@";
 
 "launcher.menu.custom_controls" = "Özel kontroller";
-"launcher.menu.execute_jar" = "Bir .jar dosyası çalıştır";
+"launcher.menu.execute_jar" = ".jar dosyası çalıştır";
 
 "launcher.wait_jit.title" = "JIT için bekleniyor";
 "launcher.wait_jit.message" = "Amethyst, Java'nın maksimum performansta çalışması için Just-in-time derlemeye dayanır.";
-"launcher.wait_jit_trollstore.message" = "Eğer hala bu mesajı görüyorsanız lütfen TrollStore içerisinden URL Scheme açın.";
+"launcher.wait_jit_trollstore.message" = "Eğer hala bu mesajı görüyorsanız lütfen TrollStore içerisinden URL Scheme'i etkinleștirin.";
 
 "login.error.username.outOfRange" = "Kullanıcı adı en az 3 en fazla da 16 karakter olmalıdır";
 
@@ -87,8 +87,8 @@
 
 "login.jit.checking" = "JIT tespit ediliyor";
 "login.jit.enabled" = "JIT etkinleştirildi";
-"login.jit.fail" = "JIT aktif edilemedi.";
-"login.jit.fail.title" = "JIT cihazınızda aktif edilemedi.";
+"login.jit.fail" = "JIT etkinleştirilemedi.";
+"login.jit.fail.title" = "JIT cihazınızda etkinleştirilemedi.";
 "login.jit.fail.description" = "Cihazınızda JIT'yi otomatikmen etkinleştirmek için hiç bir yapılandırma kullanılamadı ve şimdi elle etkinleştirilmesi gerekiyor. Hatalar latestlog.txt dosyasına yazıldı.";
 "login.jit.fail.description_unsupported" = "Desteklenmeyen bir kurulum yöntemi belirlendi. Lütfen desteklenen yöntemlerden birini kullanarak yeniden yükleyin.";
 
@@ -114,11 +114,11 @@
 "login.warn.message.localmode" = "\"Yüklü sürümleri oynamaya devam edebilirsiniz ancak artık ücretli bir hesabınız olmadan Minecraft indiremezsiniz. Yerel hesaplarla veya Minecraft'ı edinmenin diğer yollarıyla ilgili yaşanacak sorunlara destek verilmeyecektir.";
 
 "login.msa.error.xsts.noxboxacc" = "Bu Microsoft hesabı için bir Xbox profili kayıt olmamış. Lütfen bir Xbox profili oluşturduğunuza emin olun.\nHata kodu: 2148916233";
-"login.msa.error.xsts.noxbox" = "Xbox Live şu anlık ülkenizde mevcuz değil.\nHata kodu: 2148916235";
+"login.msa.error.xsts.noxbox" = "Xbox Live şu anlık ülkenizde mevcut değil.\nHata kodu: 2148916235";
 "login.msa.error.xsts.krverify" = "Devam edebilmek için hesabınızın veliniz tarafından onaylanması gerekiyor. \nHata kodu: 2148916236 ya da 2148916237.";
 "login.msa.error.xsts.underage" = "Devam edebilmek için hesabınızın bir veli hesabına bağlı olması gerekiyor.\nHata kodu: 2148916238";
 
-"login.msa.progress.acquireAccessToken" = "(1/5) Access token'ı elde ediniliyor";
+"login.msa.progress.acquireAccessToken" = "(1/5) Access token'ı elde ediliyor";
 "login.msa.progress.acquireXBLToken" = "(2/5) Xbox Live Token'ı elde ediliyor";
 "login.msa.progress.acquireXSTS" = "XSTS elde ediliyor";
 "login.msa.progress.acquireXboxProfile" = "(3/5) Xbox profili elde ediliyor";
@@ -130,11 +130,11 @@
 "Settings" = "Ayarlar";
 
 "preference.section.general" = "Genel Ayarlar";
-"preference.section.video" = "Video Ayarları";
-"preference.section.footer.video" = "Otomatik işleyici, Amethyst’in Minecraft sürümüne göre en uygun seçeneği seçmesini sağlar. Çözünürlüğü düşürmek daha iyi performans için GPU çalışma yükünü azaltır.";
+"preference.section.video" = "Video ve Ses Ayarları";
+"preference.section.footer.video" = "Otomatik işleyici Amethyst’in Minecraft sürümüne göre en uygun seçeneği seçmesini sağlar. Çözünürlüğü düşürmek daha iyi performans için GPU çalışma yükünü azaltır.";
 "preference.section.control" = "Kontrol özelleştirmesi";
 "preference.section.debug" = "UI hata ayıklama seçenekleri";
-"preference.section.footer.debug" = "Hata ayıklamanın yanı sıra, bu seçenekler özel kontrollerde de yardımcı olabilir. Değişikliklerin yürürlüğe girmesi için başlatıcıyı tekrar başlatmanız gerekebilir.";
+"preference.section.footer.debug" = "Değişikliklerin yürürlüğe girmesi için başlatıcıyı tekrar başlatmanız gerekebilir.";
 //"preference.section.footer.control" = "";
 "preference.section.java" = "Java Ayarlamaları";
 //"preference.section.footer.java" = "";
@@ -163,7 +163,7 @@
 "preference.title.done.reset_warnings" = "Tüm uyarılar sıfırlandı.";
 
 "preference.title.reset_settings" = "Tüm ayarları sıfırla";
-"preference.title.confirm.reset_settings" = "Bu, çözünürlük, düğme boyutu ve Java değişkenleri dahil tüm özel tercihlerinizi kaldıracaktır.";
+"preference.title.confirm.reset_settings" = "Bu, çözünürlük, düğme boyutu ve Java argümanları dahil tüm özel tercihlerinizi kaldıracaktır.";
 "preference.title.done.reset_settings" = "Varsayılan seçeneklerin hepsi eski haline getirildi.";
 
 "preference.title.erase_demo_data" = "Demo oyun verilerini sil";
@@ -208,7 +208,7 @@
 "preference.title.gesture_mouse" = "Fare hareketleri";
 "preference.detail.gesture_mouse" = "Blok koymak için tıklamak, blok kırmak için basılı tutmak, 2 parmakla kaydırmak gibi hareketleri etkinleştirir";
 "preference.title.gesture_hotbar" = "Hotbar hareketleri";
-"preference.detail.gesture_hotbar" = "Hotbar yuvasına dokunma, eller arasındaki öğeleri değiştirme, öğeleri fırlatma gibi hareketleri etkinleştirir";
+"preference.detail.gesture_hotbar" = "Hotbar yuvasına dokunma, eller arasındaki öğeleri değiştirme, öğeleri bırakma gibi hareketleri etkinleştirir";
 "preference.title.disable_haptics" = "Ekran titreşimlerini devre dışı bırak";
 "preference.title.press_duration" = "Uzun-basma süresi (ms)";
 "preference.detail.press_duration" = "Blok kırmak ve eşya bırakmak için tetiklenen basma süresi.";
@@ -234,15 +234,26 @@
 "preference.title.confirm.delete_runtime" = "%@ silinecek";
 "preference.manage_runtime.header.default" = "Tercih edilen Java sürümü";
 "preference.manage_runtime.default.1165" = "1.16.5 ve öncesi";
+"preference.manage_runtime.default.117" = "1.17 ve sonrası";
+"preference.manage_runtime.footer.default" = "Minecraft 1.16.5 ve öncesi daha yeni bir Java sürümüyle çalışabilir fakat modlarla uyumluluk garanti edilemez. Harici runtime'lar \"java_runtimes\" klasörüne koyulabilir. \"Bir .jar dosyası çalıștır\" için Java sürümünü değiştirmek sadece yükleyici yeni bir Java sürümü beklemiyorsa çalıșır.";
+"preference.manage_runtime.footer.java8" = "Bu Minecraft 1.16.5 ve öncesi için varsayılan sürümdür.";
+"preference.manage_runtime.footer.java17" = "Bu Minecraft 1.17. ve sonrası için varsayılan sürümdür.";
+"preference.manage_runtime.header.invalid" = "Geçersiz runtime'lar";
 
-"preference.title.java_args" = "JVM Başlatıcı değişkenleri";
-"preference.placeholder.java_args" = "Değişkenleri belirt...";
+"preference.title.java_args" = "JVM Başlatıcı argümanları";
+"preference.detail.java_args" = "Minecraft'ı baṣlatırken Java'ya argüman geçirin. Dikkatli olun, eğer yanlış şekilde ayarlanırsa oyunun çökmesine yol açabilir.";
+"preference.placeholder.java_args" = "Argümanları belirt...";
+"preference.title.env_variables" = "Ortam Değişkenleri";
+"preference.detail.env_variables" = "Minecraft'ı başlatırken özel ortam değişkenleri belirleyin. Dikkatli olun, eğer yanlış şekilde ayarlanırsa oyunun çökmesine yol açabilir.";
+"preference.placeholder.env_variables" = "Değiṣkenleri belirle...";
 "preference.title.auto_ram" = "Otomatik BELLEK";
 "preference.detail.auto_ram" = "Otomatik bellek ayarlayıcısını etkinleştirir";
-"preference.warn.auto_ram" = "Bu seçeneği jailbreak'lenmemiş bir cihazda devre dışı bırakmak dengesizlik oluşturabilir. Önlemle devam edin.";
-"preference.title.allocated_memory" = "Bellek ayırımı (MB)";
+"preference.warn.auto_ram" = "Bu seçeneği jailbreak'lenmemiş bir cihazda devre dışı bırakmak dengesizlik oluşturabilir. Dikkatle devam edin.";
+"preference.title.allocated_memory" = "Bellek tahsisi (MB)";
 "preference.detail.allocated_memory" = "Minecraft'a ne kadar bellek verileceğini kontrol eder";
-"preference.warn.allocated_memory" = "İşletim sisteminin kendisindeki kısıtlamalar nedeniyle bu seçenek bunda veya daha yüksek değerlerde dengesizliğe sebep olabilir. Önlem ile devam edin.";
+"preference.warn.allocated_memory" = "İşletim sisteminin kendisindeki kısıtlamalar nedeniyle bu seçenek bunda veya daha yüksek değerlerde dengesizliğe sebep olabilir. Dikkatle devam edin.";
+"preference.title.custom_env" = "Ortam Değişkenleri";
+"preference.detail.custom_env" = "Bu seçenek yapım aşamasında. Bu sırada custom_env.txt dosyası oluṣturup düzenleyin.";
 
 "preference.title.debug_skip_wait_jit" = "\"JIT için bekleniliyor\" mesajını atla";
 "preference.detail.debug_skip_wait_jit" = "Bu JIT'siz başlatmanızı sağlamaz, aksine hata ayıklayıcı kontrolünü atlar, çünkü bu kontrol bazı belirli jailbreak'lerde başarısız oluyor.";
@@ -254,9 +265,57 @@
 "preference.detail.debug_hide_home_indicator" = "Bu, ana gösterge kilitlemeyi devre dışı bırakacaktır. Giriş göstergesini aynı anda gizlemek ve kilitlemek için Kılavuzlu Erişim'i kullanmanız gerekecek.";
 
 "preference.profile.title.name" = "İsim";
+"preference.profile.title.loader_type" = "Yükleyici türü";
+"preference.profile.title.loader_vendor" = "Yükleyici sağlayıcısı";
+"preference.profile.title.loader_version" = "Yükleyici sürümü";
+"preference.profile.title.version" = "Sürüm";
+"preference.profile.title.version_type" = "Sürüm türü";
+"preference.profile.title.default_touch_control" = "Dokunma kontrolleri";
+"preference.profile.title.default_gamepad_control" = "Gamepad kontrolleri";
+
+"profile.error.name_exists" = "Bu isimde bir profil zaten var. Lütfen baṣka bir isim kullanın.";
+"profile.section.instance" = "Oyun kurulumu seçenekleri";
+"profile.section.profiles" = "Bu kurulumdaki profiller";
+"profile.title.create" = "Yeni profil oluştur";
+"profile.title.separate_preference" = "Ayrı ayarları kullan";
+"profile.detail.separate_preference" = "Ayarlar bölümünde yapılan değişiklikleri ayırmak için bu seçeneği etkinleştirin. Sıfırlama işlemi, varsayılan ayarlara değil, genel ayarlara geri döndürür.";
+"profile.title.install_fabric_quilt" = "Fabric/Quilt yükle";
+
+"controller_configurator.title.current" = "Oyun kumandası yapılandırma dosyası";
+"controller_configurator.title.type.xbox" = "Xbox";
+"controller_configurator.title.type.playstation" = "PlayStation";
+
+"controller_configurator.xbox.title.bumper_left" = "Sol omuz tușu";
+"controller_configurator.xbox.title.bumper_right" = "Sağ omuz tușu";
+"controller_configurator.xbox.title.trigger_left" = "Sol tetik";
+"controller_configurator.xbox.title.trigger_right" = "Sağ tetik";
+"controller_configurator.xbox.title.named_back" = "Rehber";
+"controller_configurator.xbox.title.named_start" = "Menü";
+"controller_configurator.xbox.title.named_a" = "A";
+"controller_configurator.xbox.title.named_b" = "B";
+"controller_configurator.xbox.title.named_x" = "X";
+"controller_configurator.xbox.title.named_y" = "Y";
+"controller_configurator.xbox.title.dpad_up" = "Yukarı";
+"controller_configurator.xbox.title.dpad_down" = "Aşağı";
+"controller_configurator.xbox.title.dpad_left" = "Sol";
+"controller_configurator.xbox.title.dpad_right" = "Sağ";
+"controller_configurator.xbox.title.thumb_left" = "Sol analog çubuk tıklaması";
+"controller_configurator.xbox.title.thumb_right" = "Sağ analog çubuk tıklaması";
+
+"controller_configurator.playstation.title.bumper_left" = "L1";
+"controller_configurator.playstation.title.bumper_right" = "R1";
+"controller_configurator.playstation.title.trigger_left" = "L2";
+"controller_configurator.playstation.title.trigger_right" = "R2";
 "controller_configurator.playstation.title.named_back" = "Seç";
+"controller_configurator.playstation.title.named_start" = "Bașlat";
+"controller_configurator.playstation.title.named_a" = "Çarpı";
+"controller_configurator.playstation.title.named_b" = "Yuvarlak";
 "controller_configurator.playstation.title.named_x" = "Kare";
 "controller_configurator.playstation.title.named_y" = "Üçgen";
+"controller_configurator.playstation.title.dpad_up" = "Yukarı";
+"controller_configurator.playstation.title.dpad_down" = "Aşağı";
+"controller_configurator.playstation.title.dpad_left" = "Sol";
+"controller_configurator.playstation.title.dpad_right" = "Sağ";
 "controller_configurator.playstation.title.thumb_left" = "L3";
 "controller_configurator.playstation.title.thumb_right" = "R3";
 
@@ -266,4 +325,4 @@
 "controller_configurator.section.menu_mappings" = "Menü tuş atamaları";
 "controller_configurator.section.footer.menu_mappings" = "Fare kilitli olmadığında yapılan tuş atamaları, örneğin başlatma ekranında veya duraklatma menüsünde.";
 "controller_configurator.section.controller_style" = "Kontrolcü türü";
-"controller_configurator.section.footer.controller_style" = "\"Bu yapılandırıcıda farklı kontrolcü tuş isimlerini göster.";
+"controller_configurator.section.footer.controller_style" = "Bu yapılandırıcıda farklı kontrolcü tuş isimlerini göster.";
