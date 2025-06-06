@@ -43,7 +43,7 @@
 "custom_controls.button_edit.toggleable" = "Перемикач";
 "custom_controls.button_edit.mouse_pass" = "Перехід миші";
 "custom_controls.button_edit.swipeable" = "Можна перегорнути";
-"custom_controls.button_edit.bg_color" = "Колір фону";
+"custom_controls.button_edit.bg_color" = "Колір тла";
 "custom_controls.button_edit.stroke_width" = "Товщина штриха (%)";
 "custom_controls.button_edit.stroke_color" = "Колір контуру";
 "custom_controls.button_edit.corner_radius" = "Радіус округлення (%)";
@@ -170,7 +170,7 @@
 "preference.title.confirm.erase_demo_data" = "Це знищить всі демо-версії гри та дані, що використовуються для тимчасових облікових записів.";
 "preference.title.done.erase_demo_data" = "Всі дані демонстраційної гри були видалені.";
 
-"preference.title.renderer" = "Візуалізатор";
+"preference.title.renderer" = "Промальовування";
 
 "preference.title.renderer.release.auto" = "Авто";
 "preference.title.renderer.release.gl4es" = "holy gl4es";
