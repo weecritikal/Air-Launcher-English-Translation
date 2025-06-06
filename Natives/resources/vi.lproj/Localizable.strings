@@ -71,8 +71,8 @@
 "java.error.missing_main_class" = "%@ thiếu thuộc tính phương thức main. Nếu đây là một bản mod, hãy chuyển vào thư mục *mods* của phân mục bạn chọn.";
 "java.error.missing_runtime" = "%@ yêu cầu Java phiên bản %d trở lên để hoạt động. Vui lòng cài đặt trước, sau đó thiết đặt trong phần quản lý Runtime.";
 
-"launcher.mcl.downloading_file" = "Đang tải xuống %@";
-"launcher.mcl.error_download" = "Không thể tải xuống %@: %@";
+"launcher.mcl.downloading_file" = "Đang tải %@";
+"launcher.mcl.error_download" = "Không thể tải %@: %@";
 
 "launcher.menu.custom_controls" = "Tùy chỉnh bố cục";
 "launcher.menu.execute_jar" = "Chạy tệp .jar";
@@ -146,7 +146,7 @@
 "preference.multidir.add_directory" = "Thêm thư mục trò chơi";
 
 "preference.title.check_sha" = "Kiểm tra các tệp sau khi tải";
-"preference.detail.check_sha" = "Tùy chọn này buộc trình khởi chạy kiểm tra giá trị hash của các tệp nếu khả dụng. Tránh việc tải xuống các tệp bị hỏng.";
+"preference.detail.check_sha" = "Tùy chọn này buộc trình khởi chạy kiểm tra giá trị hash của các tệp nếu khả dụng. Tránh việc tải các tệp bị hỏng.";
 "preference.title.cosmetica" = "Áo choàng Cosmetica";
 "preference.detail.cosmetica" = "Sử dụng áo choàng từ Cosmetica (trước đây gọi là Arc). Để biết thêm thông tin, hãy truy cập https://cosmetica.cc. Yêu cầu sử dụng OptiFine";
 "preference.title.debug_logging" = "Ghi lại thông tin gỡ lỗi";
