@@ -50,7 +50,7 @@
 "custom_controls.button_edit.opacity" = "Невиразність (%)";
 "custom_controls.button_edit.visibility" = "Видимість";
 
-"custom_controls.button_menu.add_subbutton" = "Додати під-кнопку";
+"custom_controls.button_menu.add_subbutton" = "Додати підкнопку";
 "custom_controls.control_menu.discard_changes" = "Відхилити зміни";
 "custom_controls.control_menu.exit" = "Вийти";
 "custom_controls.control_menu.exit.warn" = "Ви збираєтесь вийти без збережень.";
@@ -63,7 +63,7 @@
 "custom_controls.control_menu.add_button" = "Додати кнопку";
 "custom_controls.control_menu.add_drawer" = "Додати елемент";
 "custom_controls.control_menu.add_joystick" = "Додати джойстик";
-"custom_controls.error.incompatible" = "Ця версія керування (код %d) не реалізована в збірці лаунчера.";
+"custom_controls.error.incompatible" = "Ця версія керування (код %d) не реалізована в збірці запускача.";
 "custom_controls.hint" = "Утримуйте будь-де для додаткових опцій";
 
 "init.migrateDir" = "Каталог даних Amethyst тепер у %@. Усі ваші наявні дані було переміщено в нове місце.";
@@ -108,7 +108,7 @@
 "login.warn.message.limited_ram" = "Ми рекомендуємо не вимикати автоматичну оперативну пам'ять для запобігання проблем з нестабільністю та продуктивністю.";
 
 "login.warn.title.demomode" = "Ваш акаунт демонстраційний";
-"login.warn.message.demomode" = "Як заміна в офлайн та локальний режимах, демо-режим дозволить вам увійти в обліковий запис Microsoft, який не володіє грою та грати в пробну версію Java Видання, введено в 1.3.1 і більш нових версій. Старіші версії містять повну версію гри, оскільки офіційний лаунчер не веде ці обмеження. Відвідайте наш веб-сайт, щоб дізнатися більше про цей перехід з автономного режиму.";
+"login.warn.message.demomode" = "Як заміна в офлайн та локальний режимах, демо-режим дозволить вам увійти в обліковий запис Microsoft, який не володіє грою та грати в пробну версію Java Edition, введено в 1.3.1 і більш нових версій. Старіші версії містять повну версію гри, оскільки офіційний запускач не веде ці обмеження. Відвідайте наш веб-сайт, щоб дізнатися більше про цей перехід з автономного режиму.";
 
 "login.warn.title.localmode" = "Офлайн режим тепер локальний режим.";
 "login.warn.message.localmode" = "Ви можете продовжувати грати у встановлені версії, але ви більше не можете завантажити Minecraft без ліцензованого облікового запису. Підтримка не надаватиметься щодо проблем із локальними обліковими записами чи іншими способами придбання Minecraft.";
@@ -134,7 +134,7 @@
 "preference.section.footer.video" = "Автоматичне промальовування дозволяє Amethyst вибрати найкращий варіант на основі версії Minecraft. Зменшення роздільної здатности зменшує навантаження на ГП для кращої продуктивности.";
 "preference.section.control" = "Налаштування керування";
 "preference.section.debug" = "Налаштування налагодження інтерфейсу";
-"preference.section.footer.debug" = "Окрім налагодження, ці параметри можуть бути корисними для користувацьких елементів керування. Можливо, вам слід перезапустити лаунчер, щоб зміни застосувалися.";
+"preference.section.footer.debug" = "Окрім налагодження, ці параметри можуть бути корисними для користувацьких елементів керування. Можливо, вам слід перезапустити запускач, щоб зміни застосувалися.";
 //"preference.section.footer.control" = "";
 "preference.section.java" = "Оптимізація Java";
 //"preference.section.footer.java" = "";
@@ -146,7 +146,7 @@
 "preference.multidir.add_directory" = "Додати теку гри";
 
 "preference.title.check_sha" = "Перевірити файли після завантаження";
-"preference.detail.check_sha" = "Ця опція змушує лаунчер перевіряти хеш, якщо він доступний. Запобігає використанню пошкоджених файлів.";
+"preference.detail.check_sha" = "Ця опція змушує запускач перевіряти хеш, якщо він доступний. Запобігає використанню пошкоджених файлів.";
 "preference.title.cosmetica" = "Плащі Cosmetica";
 "preference.detail.cosmetica" = "Включає плащі від Cosmetica (раніше Arc). Для більш детальної інформації, будь ласка, відвідайте https://cosmetica.cc. Потребує OptiFine";
 "preference.title.debug_logging" = "Запис помилок";
@@ -182,7 +182,7 @@
 "preference.title.renderer.debug.angle" = "ANGLE (1.17+) - експортує OpenGL 3.2 (Базовий профіль, обмежений)";
 "preference.title.renderer.debug.zink" = "Zink (Mesa 21.0) - експортує OpenGL 4.1";
 
-"preference.detail.renderer" = "Зміни двигун візуалізації OpenGL для використання";
+"preference.detail.renderer" = "Змініть механізм промальовування OpenGL для використання. Zink тимчасово вимкнено в iOS 16 і новіших версіях для діагностики проблем.";
 
 "preference.title.resolution" = "Роздільна здатність відео (%)";
 "preference.detail.resolution" = "Дозволяє вам зменшити роздільну здатність гри.";
