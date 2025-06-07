@@ -14,17 +14,20 @@
 
 // The play button
 "Play" = "プレイ";
+"Details" = "詳細";
 
 // Version categories
 "Installed" = "インストール済み";
 "Snapshot" = "スナップショット";
 "Releases" = "リリース";
+"Unstable" = "不安定";
 "Old-beta" = "Beta 版";
 "Old-alpha" = "Alpha 版";
 
 // Custom controls
 "Copy" = "コピー";
 "Edit" = "編集";
+"Move" = "移動";
 "Remove" = "消去";
 "Resize" = "サイズ調整";
 "custom_controls.button_edit.name" = "名前";
