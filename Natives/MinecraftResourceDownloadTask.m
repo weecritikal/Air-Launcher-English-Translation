@@ -10,6 +10,13 @@
 #import "ios_uikit_bridge.h"
 #import "utils.h"
 
+// ==== BMCLAPI URL CONSTANTS ====
+#define BMCLAPI_MAVEN_URL @"https://bmclapi2.bangbang93.com/maven/"
+#define BMCLAPI_ASSETS_URL @"https://bmclapi2.bangbang93.com/assets/"
+#define BMCLAPI_ASSETS_INDEX_URL @"https://bmclapi2.bangbang93.com/assets/indexes/"
+#define BMCLAPI_GAME_VERSIONS_URL @"https://bmclapi2.bangbang93.com/mc/game/versions/"
+#define BMCLAPI_VERSION_MANIFEST_URL @"https://bmclapi2.bangbang93.com/mc/game/version_manifest_v2.json"
+
 @interface MinecraftResourceDownloadTask ()
 @property AFURLSessionManager* manager;
 @end
@@ -21,7 +28,6 @@
     // TODO: implement background download
     NSURLSessionConfiguration *configuration = [NSURLSessionConfiguration defaultSessionConfiguration];
     configuration.timeoutIntervalForRequest = 86400;
-    //backgroundSessionConfigurationWithIdentifier:@"net.kdt.pojavlauncher.downloadtask"];
     self.manager = [[AFURLSessionManager alloc] initWithSessionConfiguration:configuration];
     self.fileList = [NSMutableArray new];
     self.progressList = [NSMutableArray new];
@@ -91,6 +97,7 @@
     self.textProgress.totalUnitCount = self.progress.totalUnitCount;
 }
 
+// 替换为 BMCLAPI 资源获取
 - (void)downloadVersionMetadata:(NSDictionary *)version success:(void (^)())success {
     // Download base json
     NSString *versionStr = version[@"id"];
@@ -122,7 +129,6 @@
     };
 
     if (!version) {
-        // This is likely local version, check if json exists and has inheritsFrom
         NSMutableDictionary *json = parseJSONFromFile(path);
         if (json[@"NSErrorObject"]) {
             [self finishDownloadWithErrorString:[json[@"NSErrorObject"] localizedDescription]];
@@ -137,7 +143,8 @@
     }
 
     versionStr = version[@"id"];
-    NSString *url = version[@"url"];
+    // 替换为 BMCLAPI 版本 JSON 下载链接
+    NSString *url = [NSString stringWithFormat:@"%@%@/%@.json", BMCLAPI_GAME_VERSIONS_URL, versionStr, versionStr];
     NSString *sha = url.stringByDeletingLastPathComponent.lastPathComponent;
     NSUInteger size = [version[@"size"] unsignedLongLongValue];
 
@@ -147,6 +154,7 @@
 
 #pragma mark - Minecraft installation
 
+// 替换为 BMCLAPI 资源索引
 - (void)downloadAssetMetadataWithSuccess:(void (^)())success {
     NSDictionary *assetIndex = self.metadata[@"assetIndex"];
     if (!assetIndex) {
@@ -155,7 +163,8 @@
     }
     NSString *name = [NSString stringWithFormat:@"assets/indexes/%@.json", assetIndex[@"id"]];
     NSString *path = [@(getenv("POJAV_GAME_DIR")) stringByAppendingPathComponent:name];
-    NSString *url = assetIndex[@"url"];
+    // BMCLAPI 资源索引 URL
+    NSString *url = [NSString stringWithFormat:@"%@%@.json", BMCLAPI_ASSETS_INDEX_URL, assetIndex[@"id"]];
     NSString *sha = url.stringByDeletingLastPathComponent.lastPathComponent;
     NSUInteger size = [assetIndex[@"size"] unsignedLongLongValue];
     NSURLSessionDownloadTask *task = [self createDownloadTask:url size:size sha:sha altName:name toPath:path success:^{
@@ -174,11 +183,16 @@
         if (artifact == nil && [name containsString:@":"]) {
             NSLog(@"[MCDL] Unknown artifact object for %@, attempting to generate one", name);
             artifact = [[NSMutableDictionary alloc] init];
-            NSString *prefix = library[@"url"] == nil ? @"https://libraries.minecraft.net/" : [library[@"url"] stringByReplacingOccurrencesOfString:@"http://" withString:@"https://"];
+            // 统一替换为 BMCLAPI maven
+            NSString *prefix = BMCLAPI_MAVEN_URL;
             NSArray *libParts = [name componentsSeparatedByString:@":"];
             artifact[@"path"] = [NSString stringWithFormat:@"%1$@/%2$@/%3$@/%2$@-%3$@.jar", [libParts[0] stringByReplacingOccurrencesOfString:@"." withString:@"/"], libParts[1], libParts[2]];
             artifact[@"url"] = [NSString stringWithFormat:@"%@%@", prefix, artifact[@"path"]];
             artifact[@"sha1"] = library[@"checksums"][0];
+        } else if (artifact != nil) {
+            // 强制使用 BMCLAPI maven
+            NSString *bmclapiUrl = [NSString stringWithFormat:@"%@%@", BMCLAPI_MAVEN_URL, artifact[@"path"]];
+            artifact[@"url"] = bmclapiUrl;
         }
 
         NSString *path = [NSString stringWithFormat:@"%s/libraries/%@", getenv("POJAV_GAME_DIR"), artifact[@"path"]];
@@ -228,7 +242,8 @@
             continue;
         }
 
-        NSString *url = [NSString stringWithFormat:@"https://resources.download.minecraft.net/%@", pathname];
+        // 替换为 BMCLAPI 资源下载
+        NSString *url = [NSString stringWithFormat:@"%@%@", BMCLAPI_ASSETS_URL, pathname];
         NSURLSessionDownloadTask *task = [self createDownloadTask:url size:size sha:hash altName:name toPath:path success:nil];
         if (task) {
             [tasks addObject:task];
