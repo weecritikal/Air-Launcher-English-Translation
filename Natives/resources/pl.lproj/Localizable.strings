@@ -6,7 +6,7 @@
 "game.menu.force_close" = "Wymuś zamknięcie";
 "game.menu.confirm.force_close" = "Czy na pewno chcesz wymusić zamknięcie?";
 "game.menu.log_output" = "Wyjście danych";
-"game.menu.custom_controls" = "Sterowanie";
+"game.menu.custom_controls" = "Własne sterowanie";
 
 "game.note.airplay" = "Minecraft jest wyświetlany na ekranie lustrzanym AirPlay";
 
@@ -14,11 +14,13 @@
 
 // The play button
 "Play" = "Graj";
+"Details" = "Detale";
 
 // Version categories
 "Installed" = "Zainstalowane";
 "Snapshot" = "Wersja deweloperska";
 "Releases" = "Wydania";
+"Unstable" = "Niestabilne";
 "Old-beta" = "Dawna Beta";
 "Old-alpha" = "Dawna Alpha";
 
@@ -28,6 +30,12 @@
 "Move" = "Przenieś";
 "Remove" = "Usuń";
 "Resize" = "Zmień rozmiar";
+// Visibility
+"Always" = "Zawsze";
+"In game" = "W grze";
+"In menu" = "W menu";
+
+"custom_controls.button_edit.forward_lock" = "Blokada przodu";
 "custom_controls.button_edit.name" = "Nazwa";
 "custom_controls.button_edit.size" = "Rozmiar";
 "custom_controls.button_edit.mapping" = "Mapowanie";
@@ -40,6 +48,7 @@
 "custom_controls.button_edit.stroke_color" = "Kolor obrysu";
 "custom_controls.button_edit.corner_radius" = "Zaokrąglenie narożników (%)";
 "custom_controls.button_edit.opacity" = "Przezroczystość (%)";
+"custom_controls.button_edit.visibility" = "Widoczność";
 
 "custom_controls.button_menu.add_subbutton" = "Dodaj przycisk podrzędny";
 "custom_controls.control_menu.discard_changes" = "Odrzuć zmiany";
@@ -53,14 +62,24 @@
 "custom_controls.control_menu.safe_area" = "Bezpieczna Strefa";
 "custom_controls.control_menu.add_button" = "Dodaj przycisk";
 "custom_controls.control_menu.add_drawer" = "Dodaj listę";
+"custom_controls.control_menu.add_joystick" = "Dodaj gałkę analogową";
+"custom_controls.error.incompatible" = "Ta wersje sterowania (kod %d) nie jest zaimplementowany w tej wersji programu uruchamiającego.";
 "custom_controls.hint" = "Naciśnij i przytrzymaj gdziekolwiek na ekranie, aby uzyskać więcej opcji";
 
 "init.migrateDir" = "Katalogiem danych Amethyst jest teraz %@. Wszystkie istniejące dane zostały przeniesione do nowej lokalizacji.";
 
-"launcher.menu.custom_controls" = "Sterowanie";
+"java.error.missing_main_class" = "W %@ brakuje atrybutu klasy głównej. Jeżeli to jest mod, włóż go do folderu \"mods\" wybranej instancji.";
+"java.error.missing_runtime" = "%@ Wymaga Java w wersji %d lub nowszej, aby działało. Proszę najpierw, ją zainstaluj, a potem zaznacz w menu zarządzania środowiskami uruchomieniowymi.";
+
+"launcher.mcl.downloading_file" = "Pobieranie %@";
+"launcher.mcl.error_download" = "Pobieranie %@: %@ się nie powiodło";
+
+"launcher.menu.custom_controls" = "Własne sterowanie";
+"launcher.menu.execute_jar" = "Uruchom plik .jar";
 
 "launcher.wait_jit.title" = "Czekam na JIT";
 "launcher.wait_jit.message" = "Amethyst opiera się na kompilacji Just-in-time, aby Java działała z maksymalną wydajnością.";
+"launcher.wait_jit_trollstore.message" = "Jeżeli dalej widzisz tę wiadomość, proszę, załącz schemat URL w TrollStore.";
 
 "login.error.username.outOfRange" = "Nazwa użytkownika musi zawierać od 3 do 16 znaków";
 
@@ -68,16 +87,31 @@
 
 "login.jit.checking" = "Sprawdzanie JIT";
 "login.jit.enabled" = "JIT zostało włączone";
+"login.jit.fail" = "Nie udało się załączyć JIT.";
+"login.jit.fail.title" = "Nie udało się załączyć JIT na twoim urządzeniu.";
+"login.jit.fail.description" = "Żadna integracja nie mogła zostać użyta, aby automatycznie załączyć JIT na twoim urządzeniu, a teraz musi zostać ono załączone manualnie. Błędy zostały zapisane w pliku latestlog.txt.";
+"login.jit.fail.description_unsupported" = "Została wykryta niewspierana metoda instalacji. Proszę o instalacje w jeden ze wspieranych sposobów.";
 
 // Login buttons
 "login.menu.sendlogs" = "Prześlij swój rejestr";
 "login.option.add" = "Dodaj konto";
 "login.option.select" = "Wybierz konto";
+"login.option.demo" = "Konto demonstracyjne";
 "login.option.microsoft" = "Konto Microsoft";
 "login.option.local" = "Konto lokalne";
+
+"login.warn.title.legacy_device" = "Następna wersja Ametyst nie będzie kompatybilna z tym urządzeniem.";
+"login.warn.message.legacy_device" = "Aby uruchomić następną wersję, wymagane jest urządzenie zgodne z iOS 14.";
+"login.warn.title.legacy_ios" = "Następna wersja Ametyst będzie wymagać uaktualnienia systemu.";
+"login.warn.message.legacy_ios" = "Aby uruchomić następną wersję, to urządzenie musi mieć zainstalowane iOS 14 lub nowszy.";
+"login.warn.title.limited_ram" = "To urządzenie ma mało dostępnej pamięci operacyjnej.";
+"login.warn.message.limited_ram" = "Rekomendujemy zostawienie ustawienia \"automatyczny RAM\" załączonego, aby zapobiec niestabilności i problemom z wydajnością.";
+
+"login.warn.title.demomode" = "Twoje konto jest w trybie demonstracyjnym";
 "login.warn.message.demomode" = "Jak zamiennik dla trybu offline oraz lokalnego, tryb demo umożliwia logowanie na Konto Microsoft, które nie posiada gry i umożliwia granie w wersję próbną Java Edition wprowadzoną w wersji 1.3.1 oraz nowszych. Starsze wersje zawierają pełną wersję gry, ponieważ oficjalny launcher nie wymusza tych ograniczeń. Sprawdź naszą stronę internetową, aby dowiedzieć się więcej o przejściu z trybu offline.";
 
 "login.warn.title.localmode" = "Tryb offline to teraz Tryb lokalny.";
+"login.warn.message.localmode" = "Możesz kontynuować granie w zainstalowane wersje, ale nie możesz już instalować Minecrafta bez płatnego konta. Wsparcie nie będzie udzielane dla problemów z kontami lokalnymi, lub innymi sposobami pozyskania Minecrafta.";
 
 "login.msa.error.xsts.noxboxacc" = "Profil Xbox nie został zarejestrowany dla tego Konta Microsoft. Upewnij się, że profil Xbox został utworzony.\nKod błędu: 2148916233";
 "login.msa.error.xsts.noxbox" = "Xbox Live nie jest obecnie dostępne w Twoim kraju.\nKod błędu: 2148916235";
@@ -92,10 +126,12 @@
 "login.msa.progress.checkMCProfile" = "(5/5) Sprawdzanie profilu Minecraft";
 
 "News" = "Aktualności";
+"Profiles" = "Profile";
 "Settings" = "Ustawienia";
 
 "preference.section.general" = "Ogólne ustawienia";
 "preference.section.video" = "Ustawienia grafiki";
+"preference.section.footer.video" = "Ustawienie \"automatyczny wybór silnika renderującego\" pozwala Ametystowi wybierać najlepsze opcje na podstawie wersji Minecrafta. Zmniejszenie rozdzielczości zmniejsza wysiłek dla GPU dla lepszej wydajności.";
 "preference.section.control" = "Sterowanie";
 "preference.section.debug" = "Ustawienia debugowania interfejsu";
 "preference.section.footer.debug" = "Poza debugowaniem, te ustawienia mogą być przydatne dp ustawień sterowania. Może być wymagane ponowne uruchomienie programu, aby zmiany zostały wprowadzone.";
@@ -117,6 +153,8 @@
 "preference.detail.debug_logging" = "Rejestruje ustawienia wewnętrzne i działania w lastlog.txt. Pomaga to programistom łatwiej znajdować problemy, ale Minecraft może działać wolniej, ponieważ logi będą zapisywane częściej.";
 "preference.title.appicon" = "Ustaw ikonę aplikacji";
 "preference.detail.appicon" = "Pozwala wybrać między różnymi ikonami ekranu głównego dla Amethyst.";
+"preference.title.hidden_sidebar" = "Ukryj pasek boczny menu głównego";
+"preference.detail.hidden_sidebar" = "Pozwala ci ukryć pasek boczny w menu głównym na początku i przy obrocie.";
 
 "preference.title.reset_warnings" = "Wyzeruj wszystkie ostrzeżenia";
 "preference.title.done.reset_warnings" = "Wszystkie ostrzeżenia zostały wyzerowane.";
@@ -125,14 +163,34 @@
 "preference.title.confirm.reset_settings" = "Spowoduje to usunięcie wszystkich własnych ustawień, w tym rozdzielczości, rozmiar przycisków oraz argumenty Java.";
 "preference.title.done.reset_settings" = "Wszystkie ustawienia zostały wyzerowane.";
 
+"preference.title.erase_demo_data" = "Usuń dane gry demonstracyjnej";
+"preference.title.confirm.erase_demo_data" = "To usunie wszystkie wersje gry demonstracyjnej i dane użyte do kont demonstracyjnych.";
+"preference.title.done.erase_demo_data" = "Wszystkie dane gry demonstracyjnej zostały usunięte.";
+
 "preference.title.renderer" = "Silnik renderujący";
+
+"preference.title.renderer.release.auto" = "automatyczne";
+"preference.title.renderer.release.gl4es" = "Holy gl4es";
+"preference.title.renderer.release.angle" = "ANGLE";
+"preference.title.renderer.release.zink" = "Zink";
+
+"preference.title.renderer.debug.auto" = "Automatycznie: gl4es lub ANGLE";
 "preference.title.renderer.debug.gl4es" = "gl4es 1.1.4 - eksportuje OpenGL 2.1";
+"preference.title.renderer.debug.angle" = "ANGLE (1.17+) - eksportuje OpenGL 3.2 (profil podstawowy, ograniczony)";
 "preference.title.renderer.debug.zink" = "Zink (Mesa 21.0) - eksportuje OpenGL 4.1";
 
 "preference.detail.renderer" = "Zmień używany silnik renderujący OpenGL";
 
 "preference.title.resolution" = "Rozdzielczość (%)";
 "preference.detail.resolution" = "Umożliwia zmniejszenie rozdzielczości gry.";
+"preference.title.max_framerate" = "Maksymalna ilość klatek na sekundę";
+"preference.detail.max_framerate" = "Pozwala ci na limitowanie gry do 60 klatek na sekundę na ekranach ProMotion.";
+
+"preference.title.performance_hud" = "Wyświetl HUD wydajności";
+"preference.detail.performance_hud" = "Gdy dostępne, wyświetl nakładkę monitorującą wydajność.";
+
+"preference.title.fullscreen_airplay" = "Pełnoekranowy AirPlay";
+"preference.detail.fullscreen_airplay" = "Pozwala na prezentowanie pełnoekranowej gry na zewnętrznym ekranie zamiast prezentowania całego ekranu.";
 "preference.title.press_duration" = "Czas długiego naciśnięcia (ms)";
 "preference.detail.press_duration" = "Zmieniaj czas trwania prasy dla niszczenia bloków i upuszczania przedmiotów.";
 "preference.title.button_scale" = "Skala przycisków ekranowych (%)";
@@ -167,4 +225,51 @@
 "preference.detail.debug_auto_correction" = "Włącz automatyczną korektę podczas wpisywania tekstu w grze.";
 
 "preference.profile.title.name" = "Nazwa";
+"profile.detail.separate_preference" = "Załącz tę opcję, aby izolować jakiekolwiek zmiany w ustawieniach. Reset przywróci globalne ustawienia zamiast ustawień podstawowych.";
+"profile.title.install_fabric_quilt" = "Zainstaluj Fabric/Quilt";
+
+"controller_configurator.title.current" = "Plik konfiguracji kontrolera";
+"controller_configurator.title.type.xbox" = "Xbox";
+"controller_configurator.title.type.playstation" = "PlayStation";
+
+"controller_configurator.xbox.title.bumper_left" = "Lewy bumper";
+"controller_configurator.xbox.title.bumper_right" = "Prawy bumper";
+"controller_configurator.xbox.title.trigger_left" = "Lewy spust";
+"controller_configurator.xbox.title.trigger_right" = "Prawy spust";
+"controller_configurator.xbox.title.named_back" = "Wsparcie";
+"controller_configurator.xbox.title.named_start" = "Menu";
+"controller_configurator.xbox.title.named_a" = "A";
+"controller_configurator.xbox.title.named_b" = "B";
+"controller_configurator.xbox.title.named_x" = "X";
+"controller_configurator.xbox.title.named_y" = "Y";
+"controller_configurator.xbox.title.dpad_up" = "góra";
+"controller_configurator.xbox.title.dpad_down" = "dół";
+"controller_configurator.xbox.title.dpad_left" = "lewo";
+"controller_configurator.xbox.title.dpad_right" = "prawo";
+"controller_configurator.xbox.title.thumb_left" = "Kliknięcie lewej gałki analogowej";
+"controller_configurator.xbox.title.thumb_right" = "Kliknięcie prawej gałki analogowej";
+
+"controller_configurator.playstation.title.bumper_left" = "L1";
+"controller_configurator.playstation.title.bumper_right" = "R1";
+"controller_configurator.playstation.title.trigger_left" = "L2";
+"controller_configurator.playstation.title.trigger_right" = "R2";
 "controller_configurator.playstation.title.named_back" = "Wybierz";
+"controller_configurator.playstation.title.named_start" = "Start";
+"controller_configurator.playstation.title.named_a" = "krzyż";
+"controller_configurator.playstation.title.named_b" = "kółko";
+"controller_configurator.playstation.title.named_x" = "kwadrat";
+"controller_configurator.playstation.title.named_y" = "trójkąt";
+"controller_configurator.playstation.title.dpad_up" = "góra";
+"controller_configurator.playstation.title.dpad_down" = "dół";
+"controller_configurator.playstation.title.dpad_left" = "lewo";
+"controller_configurator.playstation.title.dpad_right" = "prawo";
+"controller_configurator.playstation.title.thumb_left" = "L3";
+"controller_configurator.playstation.title.thumb_right" = "R3";
+
+"controller_configurator.section.config_files" = "Aktualny plik konfiguracyjny";
+"controller_configurator.section.game_mappings" = "Przypisania gry";
+"controller_configurator.section.footer.game_mappings" = "Przypisania, gdy myszka jest zablokowana w grze.";
+"controller_configurator.section.menu_mappings" = "Przypisania menu";
+"controller_configurator.section.footer.menu_mappings" = "Przypisania, gdy myszka nie jest zablokowana w grze, na przykład, wtedy gdy jest się na ekranie startowym lub menu pauzy.";
+"controller_configurator.section.controller_style" = "Typ kontrolera";
+"controller_configurator.section.footer.controller_style" = "Pokazuje inne nazwy przycisków kontrolera w konfiguratorze.";
