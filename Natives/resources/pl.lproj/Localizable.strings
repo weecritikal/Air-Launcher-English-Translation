@@ -191,6 +191,22 @@
 
 "preference.title.fullscreen_airplay" = "Pełnoekranowy AirPlay";
 "preference.detail.fullscreen_airplay" = "Pozwala na prezentowanie pełnoekranowej gry na zewnętrznym ekranie zamiast prezentowania całego ekranu.";
+"preference.title.silence_other_audio" = "Pauzuj audio, gdy gra się otworzy";
+"preference.detail.silence_other_audio" = "Załącz, aby zezwolić Ametyst na pauzowanie audio z innych aplikacji, na przykład muzycznych, gdy uruchomi się gra.";
+"preference.title.silence_with_switch" = "Wyłącz audio przyciskiem wyciszenia";
+"preference.detail.silence_with_switch" = "Załącz, aby wyłączyć audio, gdy tryb cichy jest załączony. Słuchawki i zewnętrzne głośniki nie są naruszane przez to ustawienie.";
+"preference.title.allow_microphone" = "Zezwól na wejście mikrofonu";
+"preference.detail.allow_microphone" = "Załącz to tylko wtedy gdy używasz modyfikacji do komunikacji głosowej. Opcja przycisku wyciszenia jest ignorowana, a jakość audio z innych aplikacji zostanie naruszona.";
+"preference.title.default_gamepad_ctrl" = "Konfiguracja kontrolera";
+"preference.title.hardware_hide" = "Chowaj przyciski sterowania, gdy podłączone jest inne urządzenie sterujące";
+"preference.detail.hardware_hide" = "Załącz, aby sterowanie na ekranie zostało automatycznie wyłączone, gdy podłączy się myszkę lub kontroler.";
+"preference.title.recording_hide" = "Ukryj przed programem nagrywającym ekran przyciski sterujące";
+"preference.detail.recording_hide" = "Ukrywa sterowanie w zrzutach ekranu i nagraniach ekranu, zostawiając je widoczne na ekranie.";
+"preference.title.gesture_mouse" = "Gesty myszki";
+"preference.detail.gesture_mouse" = "Załącza gesty jak: dotknij, aby postawić blok, przytrzymaj, aby zniszczyć blok i przewijanie dwoma palcami";
+"preference.title.gesture_hotbar" = "Gesty paska szybkiego wyboru";
+"preference.detail.gesture_hotbar" = "Załącza gesty takie jak: dotknij slot w pasku szybkiego wyboru, zmieniaj przedmioty między rękoma i rzucaj przedmiotami.";
+"preference.title.disable_haptics" = "Wyłącz sprzężenie zwrotne ekranu";
 "preference.title.press_duration" = "Czas długiego naciśnięcia (ms)";
 "preference.detail.press_duration" = "Zmieniaj czas trwania prasy dla niszczenia bloków i upuszczania przedmiotów.";
 "preference.title.button_scale" = "Skala przycisków ekranowych (%)";
@@ -205,17 +221,36 @@
 "preference.detail.slideable_hotbar" = "Spraw, aby pasek skrótów był przesuwany jak kółko myszy";
 
 "preference.title.gyroscope_enable" = "Włącz sterowanie żyroskopem";
+"preference.detail.gyroscope_enable" = "Załączenie tego pozwoli ci obracać się w grze poprzez obracanie urządzeniem";
+"preference.title.gyroscope_invert_x_axis" = "Zamień lewo z prawem w żyroskopie";
+"preference.detail.gyroscope_invert_x_axis" = "Zamienia oś X żyroskopu";
 "preference.title.gyroscope_sensitivity" = "Czułość sterowania żyroskopem";
 "preference.detail.gyroscope_sensitivity" = "Dostosuj czułość sterowania żyroskopem";
 
+"preference.title.manage_runtime" = "Zarządzaj środowiskami uruchomieniowymi";
+"preference.title.confirm.delete_runtime" = "%@ Zostanie dodane";
+"preference.manage_runtime.header.default" = "Preferowana wersja Java";
+"preference.manage_runtime.default.1165" = "1.16.5 i starsze";
+"preference.manage_runtime.default.117" = "1.17 i nowsze";
+"preference.manage_runtime.footer.default" = "Minecraft 1.16.5 i starsze mogą działać na nowszych wersjach Java, jednakże kompatybilność z modami nie jest gwarantowana. Zewnętrzne środowiska uruchomieniowe mogą być dodawane do folderu \"java_runtimes\". Zmiana wersji Java dla opcji \"Uruchom plik .jar\" działa tylko wtedy gdy instalator nie spodziewa się nowszej wersji Javy.";
+"preference.manage_runtime.footer.java8" = "To jest domyślna wersja dla Minecrafta 1.16.5 i starszych.";
+"preference.manage_runtime.footer.java17" = "To jest domyślna wersja dla Minecrafta 1.17 i nowszych.";
+"preference.manage_runtime.header.invalid" = "Nieprawidłowe środowisko uruchomieniowe";
+
 "preference.title.java_args" = "Argumenty uruchomienia JVM";
+"preference.detail.java_args" = "Podawaj argumenty Javie, gdy uruchamiasz Minecrafta. Bądź ostrożny, to może spowodować crashe gry, jeżeli jest zmodyfikowane nieprawidłowo.";
 "preference.placeholder.java_args" = "Określ argumenty...";
+"preference.title.env_variables" = "Zmienne środowiskowe";
+"preference.detail.env_variables" = "Ustaw własne zmienne środowiskowe, gdy uruchamiasz Minecrafta. Bądź ostrożny, to może spowodować crashe gry, jeżeli zostało zmodyfikowane nieprawidłowo.";
+"preference.placeholder.env_variables" = "Podaj zmienne środowiskowe...";
 "preference.title.auto_ram" = "Automatyczny RAM";
 "preference.detail.auto_ram" = "Włącza automatyczny przydział pamięci RAM";
 "preference.warn.auto_ram" = "Wyłączenie tej opcji na urządzeniach bez jailbreak może doprowadzić do niestabilności po dostosowaniu. Zachowaj ostrożność.";
 "preference.title.allocated_memory" = "Przydział pamięci (MB)";
 "preference.detail.allocated_memory" = "Kontroluje ilość pamięci przydzielonej Minecraft";
 "preference.warn.allocated_memory" = "Ze względu na ograniczenia samego systemu operacyjnego, ta opcja może powodować niestabilność przy tej i wyższych wartościach. Zachowaj ostrożność.";
+"preference.title.custom_env" = "Zmienne środowiskowe";
+"preference.detail.custom_env" = "Ta opcja jest w budowie. Stwórz i edytuj custom_env.txt w międzyczasie.";
 
 "preference.title.debug_skip_wait_jit" = "Pomiń okno dialogowe \"Oczekiwanie na JIT\"";
 "preference.detail.debug_skip_wait_jit" = "To nie pozwala na uruchamianie bez JIT, zamiast tego pomija kontrolę debugera, ponieważ sprawdzenie nie powiodło się na niektórych więzieniach.";
@@ -225,6 +260,19 @@
 "preference.detail.debug_auto_correction" = "Włącz automatyczną korektę podczas wpisywania tekstu w grze.";
 
 "preference.profile.title.name" = "Nazwa";
+"preference.profile.title.loader_type" = "Typ wczytywacza";
+"preference.profile.title.loader_vendor" = "Wydawca wczytywacza";
+"preference.profile.title.loader_version" = "Wersja wczytywacza";
+"preference.profile.title.version" = "Wersja";
+"preference.profile.title.version_type" = "Typ wersji";
+"preference.profile.title.default_touch_control" = "Sterowanie dotykowe";
+"preference.profile.title.default_gamepad_control" = "Sterowanie kontrolerem";
+
+"profile.error.name_exists" = "Profil z tą nazwą już istnieje. Użyj innej nazwy.";
+"profile.section.instance" = "Ustawienia instancji gry";
+"profile.section.profiles" = "Profile w tej instancji";
+"profile.title.create" = "Utwórz nowy profil";
+"profile.title.separate_preference" = "Izoluj ustawienia";
 "profile.detail.separate_preference" = "Załącz tę opcję, aby izolować jakiekolwiek zmiany w ustawieniach. Reset przywróci globalne ustawienia zamiast ustawień podstawowych.";
 "profile.title.install_fabric_quilt" = "Zainstaluj Fabric/Quilt";
 
