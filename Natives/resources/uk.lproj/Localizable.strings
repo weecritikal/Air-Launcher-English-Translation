@@ -230,15 +230,15 @@
 "preference.title.gyroscope_sensitivity" = "Налаштування чутливости гіроскопа";
 "preference.detail.gyroscope_sensitivity" = "Налаштуйте чутливість елементів керування гіроскопом";
 
-"preference.title.manage_runtime" = "Керувати runtimes";
+"preference.title.manage_runtime" = "Керувати середовища виконання";
 "preference.title.confirm.delete_runtime" = "%@ буде видалено";
 "preference.manage_runtime.header.default" = "Бажана версія Java";
 "preference.manage_runtime.default.1165" = "1.16.5 і старіші";
-"preference.manage_runtime.default.117" = "1.17і новіші";
-"preference.manage_runtime.footer.default" = "Minecraft 1.16.5 і старіші версії можуть працювати з новішою версією Java, однак сумісність із модами не гарантується. Зовнішні середовища виконання можна розмістити в теці «java_runtimes». Зміна версії Java для «Виконати .jar» набуває чинності, лише якщо встановлювач не очікує новішої версії Java.";
+"preference.manage_runtime.default.117" = "1.17 і новіші";
+"preference.manage_runtime.footer.default" = "Minecraft 1.16.5 і старіші версії можуть працювати з новішою версією Java, однак сумісність із модами не гарантується. Зовнішні середовища виконання можна розмістити в теці «java_runtimes». Зміна версії Java для «Виконати .jar» набуває чинности, лише якщо встановлювач не очікує новішої версії Java.";
 "preference.manage_runtime.footer.java8" = "Це стандартна версія для Minecraft 1.16.5 і старіших версій.";
 "preference.manage_runtime.footer.java17" = "Це стандартна версія для Minecraft 1.17 і новіших версій.";
-"preference.manage_runtime.header.invalid" = "Недійсні runtimes";
+"preference.manage_runtime.header.invalid" = "Недійсні середовища виконання";
 
 "preference.title.java_args" = "Аргументи запуску JVM";
 "preference.detail.java_args" = "Передайте аргументи Java під час запуску Minecraft. Будьте обережні, це може призвести до збою гри, якщо її змінити неправильно.";
