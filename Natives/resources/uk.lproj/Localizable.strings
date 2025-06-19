@@ -230,7 +230,7 @@
 "preference.title.gyroscope_sensitivity" = "Налаштування чутливости гіроскопа";
 "preference.detail.gyroscope_sensitivity" = "Налаштуйте чутливість елементів керування гіроскопом";
 
-"preference.title.manage_runtime" = "Керувати середовища виконання";
+"preference.title.manage_runtime" = "Керувати середовищами виконання";
 "preference.title.confirm.delete_runtime" = "%@ буде видалено";
 "preference.manage_runtime.header.default" = "Бажана версія Java";
 "preference.manage_runtime.default.1165" = "1.16.5 і старіші";
