@@ -18,6 +18,7 @@
 // Version categories
 "Installed" = "Terpasang";
 "Releases" = "Rilis";
+"Unstable" = "Tidak stabil";
 "Old-beta" = "Beta-lama";
 "Old-alpha" = "Alpha-lama";
 
