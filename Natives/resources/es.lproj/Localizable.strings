@@ -176,6 +176,10 @@
 "preference.detail.virtmouse_enable" = "Habilita está opcion para empezar con el ratón virtual encendido";
 "preference.title.slideable_hotbar" = "Hotbar deslizable";
 "preference.detail.slideable_hotbar" = "Permite deslizarse en el hotbar como la rueda del ratón";
+"preference.title.confirm.delete_runtime" = "%@ se eliminará";
+"preference.manage_runtime.header.default" = "Versión de Java preferida";
+"preference.manage_runtime.default.1165" = "1.16.5 y anteriores";
+"preference.manage_runtime.default.117" = "1.17 y más recientes";
 
 "preference.title.java_args" = "JRE Argumentos de lanzamiento";
 "preference.placeholder.java_args" = "Especifica argumentos...";
@@ -198,3 +202,12 @@
 "preference.profile.title.default_touch_control" = "Controles táctiles";
 "preference.profile.title.default_gamepad_control" = "Controles del mando";
 "profile.title.create" = "Crear un nuevo perfil";
+"controller_configurator.title.type.xbox" = "Xbox";
+"controller_configurator.title.type.playstation" = "PlayStation";
+"controller_configurator.xbox.title.named_back" = "Guia";
+"controller_configurator.xbox.title.named_start" = "Menú";
+"controller_configurator.xbox.title.named_a" = "A";
+"controller_configurator.xbox.title.named_b" = "B";
+"controller_configurator.xbox.title.named_x" = "X";
+"controller_configurator.xbox.title.named_y" = "Y";
+"controller_configurator.playstation.title.named_back" = "Seleccionar";
