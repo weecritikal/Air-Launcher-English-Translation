@@ -14,10 +14,13 @@
 
 // The play button
 "Play" = "Maglaro";
+"Details" = "Detalyo";
 
 // Version categories
 "Installed" = "Naka-Install";
+"Snapshot" = "Snapshot";
 "Releases" = "Pagpapalabas";
+"Unstable" = "Hindi-maayos";
 "Old-beta" = "Lumang-beta";
 "Old-alpha" = "Lumang-alpha";
 
@@ -27,6 +30,12 @@
 "Move" = "Ilipat";
 "Remove" = "Tanggalin";
 "Resize" = "Baguhin ang sukat";
+// Visibility
+"Always" = "Palagi";
+"In game" = "Sa laro";
+"In menu" = "Sa menu";
+
+"custom_controls.button_edit.forward_lock" = "Pa-diretsong lock";
 "custom_controls.button_edit.name" = "Pangalan";
 "custom_controls.button_edit.size" = "Sukat";
 "custom_controls.button_edit.mapping" = "Pag mapa";
@@ -37,18 +46,29 @@
 "custom_controls.button_edit.bg_color" = "Kulay ng likuran";
 "custom_controls.button_edit.stroke_width" = "Lapad ng stroke (%)";
 "custom_controls.button_edit.stroke_color" = "Kulay ng stroke";
+"custom_controls.button_edit.corner_radius" = "Pagka-bilog (%)";
 "custom_controls.button_edit.opacity" = "Opacidad (%)";
+"custom_controls.button_edit.visibility" = "Pagkakakita";
 
 "custom_controls.button_menu.add_subbutton" = "Lagyan ng sub-button";
 "custom_controls.control_menu.discard_changes" = "Baliwalain ang mga pagbabago";
 "custom_controls.control_menu.exit" = "Umalis";
 "custom_controls.control_menu.exit.warn" = "Lalabas ka nang hindi nase-save ng mga pagbabago.";
 "custom_controls.control_menu.save" = "I-Save";
+"custom_controls.control_menu.save.error.json" = "Error sa JSON";
+"custom_controls.control_menu.save.error.write" = "Error sa pagtabi ng file";
 "custom_controls.control_menu.load" = "Ikarga";
 "custom_controls.control_menu.make_default" = "Gawing default";
+"custom_controls.control_menu.safe_area" = "Ligtas na area";
 "custom_controls.control_menu.add_button" = "Magdagdag ng pindutan";
+"custom_controls.control_menu.add_drawer" = "Lumagay ng drawer";
+"custom_controls.control_menu.add_joystick" = "Lumagay ng joystick";
+"custom_controls.error.incompatible" = "Itong control version (code %d) ay wala pa sa launcher build na ito.";
+"custom_controls.hint" = "Mag-longpress kahit saan sa screen para sa iba pang options";
 
 "init.migrateDir" = "Ang direktoryo ng data ng Amethyst ay %@ na ngayon. Ang lahat ng iyong umiiral na data ay inilipat sa bagong lokasyon.";
+
+"java.error.missing_main_class" = "Ang %@ ay nawawalan ng main class attribute. Kung ito ay isang mod, pakilagay nito sa iyong “mods” folder.";
 
 "launcher.menu.custom_controls" = "Pasadyang mga kontrol";
 
