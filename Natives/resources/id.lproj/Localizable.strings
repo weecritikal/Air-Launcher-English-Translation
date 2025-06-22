@@ -26,6 +26,8 @@
 "Move" = "Pindah";
 "Remove" = "Hapus";
 "Resize" = "Ubah ukuran";
+// Visibility
+"Always" = "Selalu";
 "custom_controls.button_edit.name" = "Nama";
 "custom_controls.button_edit.size" = "Ukuran";
 "custom_controls.button_edit.orientation" = "Orientasi";
@@ -101,10 +103,12 @@
 "login.msa.progress.checkMCProfile" = "(5/5) Memeriksa profil Minecraft";
 
 "News" = "Berita";
+"Profiles" = "Profil";
 "Settings" = "Pengaturan";
 
 "preference.section.general" = "Peraturan Umum";
 "preference.section.video" = "Peraturan Video";
+"preference.section.footer.video" = "Renderer otomatis memungkinkan Amethyst memilih opsi terbaik berdasarkan versi Minecraft. Menurunkan resolusi akan mengurangi beban GPU untuk kinerja yang lebih baik.";
 "preference.section.control" = "Kustomisasi kontrol";
 "preference.section.debug" = "Peraturan debugging UI";
 "preference.section.footer.debug" = "Selain debugging, peraturan-peraturan ini mungkin berguna untuk kontrol kustom. Anda mungkin butuh mengrestart peluncur agar perubahan berlaku.";
@@ -162,6 +166,7 @@
 "preference.title.gyroscope_enable" = "Hidupkan kontrol giroskop";
 "preference.title.gyroscope_sensitivity" = "Giroskop mengontrol sensitivitas";
 "preference.detail.gyroscope_sensitivity" = "Sesuaikan sensitivitas kontrol giroskop";
+"preference.manage_runtime.footer.default" = "Minecraft 1.16.5 dan versi yang lebih lama mungkin bisa dijalankan dengan versi Java yang lebih baru, namun kompatibilitas dengan mod tidak dijamin. Runtime eksternal dapat diletakkan di folder \"java_runtimes\". Mengganti versi Java untuk \"Execute .jar\" hanya akan berlaku jika installer tidak membutuhkan versi Java yang lebih baru.";
 
 "preference.title.java_args" = "Argumen peluncuran JVM";
 "preference.placeholder.java_args" = "Sebutkan argument...";
@@ -182,4 +187,7 @@
 "preference.detail.debug_hide_home_indicator" = "Ini akan mematikan penguncian indikator rumah. Anda akan butuh menggunakan Akses Dipandu untuk menyembunyikan dan mengunci indikator rumah di waktu bersamaan.";
 
 "preference.profile.title.name" = "Nama";
+"profile.title.create" = "Buat profil baru";
 "controller_configurator.playstation.title.named_back" = "Pilih";
+"controller_configurator.section.controller_style" = "Tipe kontroler";
+"controller_configurator.section.footer.controller_style" = "Tampilkan nama tombol kontroler yang berbeda di pengatur ini.";
