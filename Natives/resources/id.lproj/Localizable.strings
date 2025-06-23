@@ -57,7 +57,7 @@
 "custom_controls.control_menu.save" = "Simpan";
 "custom_controls.control_menu.save.error.json" = "Kesalahan JSON";
 "custom_controls.control_menu.save.error.write" = "Kesalahan saat menyimpan file";
-"custom_controls.control_menu.load" = "Memuat";
+"custom_controls.control_menu.load" = "Muat kontrol";
 "custom_controls.control_menu.make_default" = "Buat default";
 "custom_controls.control_menu.safe_area" = "Area aman";
 "custom_controls.control_menu.add_button" = "Tambah tombol";
@@ -93,7 +93,7 @@
 "login.jit.fail.description_unsupported" = "Metode instalasi yang tidak didukung telah terdeteksi. Silakan instal ulang menggunakan salah satu metode yang didukung.";
 
 // Login buttons
-"login.menu.sendlogs" = "Kirim log-log kamu";
+"login.menu.sendlogs" = "Kirim log.txt kamu";
 "login.option.add" = "Tambah akun";
 "login.option.select" = "Pilih akun";
 "login.option.demo" = "Akun demo";
@@ -242,7 +242,7 @@
 
 "preference.title.java_args" = "Argumen peluncuran JVM";
 "preference.detail.java_args" = "Masukkan argumen ke Java ketika Minecraft akan dijalankan. Hati-hati, jika salah bisa menyebabkan game crash.";
-"preference.placeholder.java_args" = "Sebutkan argument...";
+"preference.placeholder.java_args" = "Sebutkan argumen...";
 "preference.title.env_variables" = "Variabel sistem";
 "preference.detail.env_variables" = "Atur variabel khusus saat membuka Minecraft. Jika salah mengatur, game bisa mengalami crash.";
 "preference.placeholder.env_variables" = "Tentukan variabel...";
