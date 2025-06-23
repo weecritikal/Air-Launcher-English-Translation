@@ -17,6 +17,7 @@
 
 // Version categories
 "Installed" = "Terpasang";
+"Snapshot" = "Snapshot";
 "Releases" = "Rilis";
 "Unstable" = "Tidak stabil";
 "Old-beta" = "Beta-lama";
@@ -53,6 +54,7 @@
 "custom_controls.control_menu.safe_area" = "Area aman";
 "custom_controls.control_menu.add_button" = "Tambah tombol";
 "custom_controls.control_menu.add_drawer" = "Tambah drawer";
+"custom_controls.control_menu.add_joystick" = "Tambahkan joystick";
 "custom_controls.error.incompatible" = "Kontrol versi ini (code %d) tidak diimplementasikan di build peluncur ini.";
 "custom_controls.hint" = "Pencet lama dimanapun di layar untuk opsi tambahan";
 
@@ -170,9 +172,19 @@
 "preference.title.gyroscope_enable" = "Hidupkan kontrol giroskop";
 "preference.title.gyroscope_sensitivity" = "Giroskop mengontrol sensitivitas";
 "preference.detail.gyroscope_sensitivity" = "Sesuaikan sensitivitas kontrol giroskop";
+
+"preference.title.manage_runtime" = "Kelola runtime";
+"preference.title.confirm.delete_runtime" = "%@ Akan di hapus";
+"preference.manage_runtime.header.default" = "Versi Java yang di sarankan";
+"preference.manage_runtime.default.1165" = "1.16.5 dan yang lebih lama";
+"preference.manage_runtime.default.117" = "1.17 dan yang lebih baru";
 "preference.manage_runtime.footer.default" = "Minecraft 1.16.5 dan versi yang lebih lama mungkin bisa dijalankan dengan versi Java yang lebih baru, namun kompatibilitas dengan mod tidak dijamin. Runtime eksternal dapat diletakkan di folder \"java_runtimes\". Mengganti versi Java untuk \"Execute .jar\" hanya akan berlaku jika installer tidak membutuhkan versi Java yang lebih baru.";
+"preference.manage_runtime.footer.java8" = "Ini adalah versi default untuk Minecraft 1.16.5 dan yang lebih lama.";
+"preference.manage_runtime.footer.java17" = "Ini adalah versi default untuk Minecraft 1.17 dan yang lebih baru.";
+"preference.manage_runtime.header.invalid" = "Runtime tidak valid";
 
 "preference.title.java_args" = "Argumen peluncuran JVM";
+"preference.detail.java_args" = "Masukkan argumen ke Java ketika Minecraft akan dijalankan. Hati-hati, jika salah bisa menyebabkan game crash.";
 "preference.placeholder.java_args" = "Sebutkan argument...";
 "preference.title.auto_ram" = "RAM otomatis";
 "preference.detail.auto_ram" = "Mengaktifkan pengatur RAM otomatis";
@@ -191,7 +203,18 @@
 "preference.detail.debug_hide_home_indicator" = "Ini akan mematikan penguncian indikator rumah. Anda akan butuh menggunakan Akses Dipandu untuk menyembunyikan dan mengunci indikator rumah di waktu bersamaan.";
 
 "preference.profile.title.name" = "Nama";
+"preference.profile.title.version" = "Versi";
+"preference.profile.title.version_type" = "Tipe versi";
+
+"profile.error.name_exists" = "Profil dengan nama tersebut sudah ada. Silakan gunakan nama lain.";
 "profile.title.create" = "Buat profil baru";
+
+"controller_configurator.playstation.title.bumper_left" = "L1";
+"controller_configurator.playstation.title.bumper_right" = "R1";
+"controller_configurator.playstation.title.trigger_left" = "L2";
+"controller_configurator.playstation.title.trigger_right" = "R2";
 "controller_configurator.playstation.title.named_back" = "Pilih";
+"controller_configurator.playstation.title.named_start" = "Start";
+"controller_configurator.playstation.title.thumb_right" = "R3";
 "controller_configurator.section.controller_style" = "Tipe kontroler";
 "controller_configurator.section.footer.controller_style" = "Tampilkan nama tombol kontroler yang berbeda di pengatur ini.";
