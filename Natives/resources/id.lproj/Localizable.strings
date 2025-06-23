@@ -8,7 +8,7 @@
 "game.menu.log_output" = "Catatan log";
 "game.menu.custom_controls" = "Kontrol kustom";
 
-"game.note.airplay" = "Minecraft sedang ditunjukkan di layar telah dikaca AirPlay";
+"game.note.airplay" = "Minecraft sedang ditampilkan melalui layar mirror AirPlay";
 
 "game.title.exit_code" = "Permainan keluar dengan kode %d";
 
@@ -186,12 +186,15 @@
 "preference.title.java_args" = "Argumen peluncuran JVM";
 "preference.detail.java_args" = "Masukkan argumen ke Java ketika Minecraft akan dijalankan. Hati-hati, jika salah bisa menyebabkan game crash.";
 "preference.placeholder.java_args" = "Sebutkan argument...";
+"preference.detail.env_variables" = "Atur variabel khusus saat membuka Minecraft. Jika salah mengatur, game bisa mengalami crash.";
+"preference.placeholder.env_variables" = "Tentukan variabel...";
 "preference.title.auto_ram" = "RAM otomatis";
 "preference.detail.auto_ram" = "Mengaktifkan pengatur RAM otomatis";
 "preference.warn.auto_ram" = "Mematikan opsi ini di perangkat tidak dijailbreak bisa berefek membuat permainan tidak stabil jika diubah. Lanjut dengan perhatian.";
 "preference.title.allocated_memory" = "Alokasi memory (MB)";
 "preference.detail.allocated_memory" = "Mengkontrol berapa banyak memori yang diberikan ke Minecraft";
 "preference.warn.allocated_memory" = "Karena limitasi dari operating systemnya, opsi ini bisa membuat permainan tidak stabil dengan isi yang tinggi. Lanjut dengan perhatian.";
+"preference.detail.custom_env" = "Opsi ini masih dalam pengembangan. Selagi menunggu, buat dan edit file custom_env.txt.";
 
 "preference.title.debug_skip_wait_jit" = "Lewati dialog \"Menunggu JIT\"";
 "preference.detail.debug_skip_wait_jit" = "Ini tidak memperbolehkan anda untuk meluncur tanpa JIT, alih-alih ini melewati cek debugger, karena ceknya gagal di jailbreak tertentu.";
@@ -203,18 +206,64 @@
 "preference.detail.debug_hide_home_indicator" = "Ini akan mematikan penguncian indikator rumah. Anda akan butuh menggunakan Akses Dipandu untuk menyembunyikan dan mengunci indikator rumah di waktu bersamaan.";
 
 "preference.profile.title.name" = "Nama";
+"preference.profile.title.loader_type" = "Tipe loader";
+"preference.profile.title.loader_vendor" = "Penyedia loader";
+"preference.profile.title.loader_version" = "Versi loader";
 "preference.profile.title.version" = "Versi";
 "preference.profile.title.version_type" = "Tipe versi";
+"preference.profile.title.default_touch_control" = "Kontrol sentuh";
+"preference.profile.title.default_gamepad_control" = "Kontrol gamepad";
 
 "profile.error.name_exists" = "Profil dengan nama tersebut sudah ada. Silakan gunakan nama lain.";
+"profile.section.instance" = "Pengaturan Instansi Game";
+"profile.section.profiles" = "Opsi dalam instansi ini";
 "profile.title.create" = "Buat profil baru";
+"profile.title.separate_preference" = "Opsi isolasi";
+"profile.detail.separate_preference" = "Aktifkan opsi ini untuk mengisolasi perubahan yang dilakukan di pengaturan. Melakukan Reset akan mengembalikan ke pengaturan global, bukan ke pengaturan awal.";
+"profile.title.install_fabric_quilt" = "Pasang Fabric/Quilt";
+
+"controller_configurator.title.current" = "File untuk mengatur tombol-tombol pada gamepad";
+"controller_configurator.title.type.xbox" = "Xbox";
+"controller_configurator.title.type.playstation" = "PlayStation";
+
+"controller_configurator.xbox.title.bumper_left" = "Tombol atas kiri";
+"controller_configurator.xbox.title.bumper_right" = "Tombol atas kanan";
+"controller_configurator.xbox.title.trigger_left" = "Tombol bawah kiri";
+"controller_configurator.xbox.title.trigger_right" = "Tombol bawah kanan";
+"controller_configurator.xbox.title.named_back" = "Panduan";
+"controller_configurator.xbox.title.named_start" = "Menu";
+"controller_configurator.xbox.title.named_a" = "A";
+"controller_configurator.xbox.title.named_b" = "B";
+"controller_configurator.xbox.title.named_x" = "X";
+"controller_configurator.xbox.title.named_y" = "Y";
+"controller_configurator.xbox.title.dpad_up" = "Atas";
+"controller_configurator.xbox.title.dpad_down" = "Bawah";
+"controller_configurator.xbox.title.dpad_left" = "Kiri";
+"controller_configurator.xbox.title.dpad_right" = "Kanan";
+"controller_configurator.xbox.title.thumb_left" = "Tekan joystick kiri";
+"controller_configurator.xbox.title.thumb_right" = "Tekan joystick kanan";
 
 "controller_configurator.playstation.title.bumper_left" = "L1";
 "controller_configurator.playstation.title.bumper_right" = "R1";
 "controller_configurator.playstation.title.trigger_left" = "L2";
 "controller_configurator.playstation.title.trigger_right" = "R2";
-"controller_configurator.playstation.title.named_back" = "Pilih";
+"controller_configurator.playstation.title.named_back" = "Select";
 "controller_configurator.playstation.title.named_start" = "Start";
+"controller_configurator.playstation.title.named_a" = "✕";
+"controller_configurator.playstation.title.named_b" = "○";
+"controller_configurator.playstation.title.named_x" = "▢";
+"controller_configurator.playstation.title.named_y" = "△";
+"controller_configurator.playstation.title.dpad_up" = "Atas";
+"controller_configurator.playstation.title.dpad_down" = "Bawah";
+"controller_configurator.playstation.title.dpad_left" = "Kiri";
+"controller_configurator.playstation.title.dpad_right" = "Kanan";
+"controller_configurator.playstation.title.thumb_left" = "L3";
 "controller_configurator.playstation.title.thumb_right" = "R3";
+
+"controller_configurator.section.config_files" = "File konfigurasi saat ini";
+"controller_configurator.section.game_mappings" = "Pengaturan kontrol dalam game";
+"controller_configurator.section.footer.game_mappings" = "Tombol yang digunakan saat mouse terkunci di in game.";
+"controller_configurator.section.menu_mappings" = "Pemetaan tombol menu";
+"controller_configurator.section.footer.menu_mappings" = "Pengaturan tombol saat kursor bebas bergerak, seperti di menu utama atau saat game dijeda.";
 "controller_configurator.section.controller_style" = "Tipe kontroler";
 "controller_configurator.section.footer.controller_style" = "Tampilkan nama tombol kontroler yang berbeda di pengatur ini.";
