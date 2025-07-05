@@ -107,6 +107,7 @@
 "login.warn.title.limited_ram" = "To urządzenie ma mało dostępnej pamięci operacyjnej.";
 "login.warn.message.limited_ram" = "Rekomendujemy zostawienie ustawienia \"automatyczny RAM\" załączonego, aby zapobiec niestabilności i problemom z wydajnością.";
 "login.warn.title.ios19_jitdead" = "Amethyst nie jest wspierany na iOS 26 lub nowszym.";
+"login.warn.message.ios19_jitdead" = "Ze względu na zmiany w iOS, które hamują zdolność do włączenia JIT, Amethyst nie może działać w swoim obecnym stanie i wymaga intensywnych badań w celu znalezienia nowej drogi naprzód.\n\nNaciśnięcie OK zamknie aplikację.";
 
 "login.warn.title.demomode" = "Twoje konto jest w trybie demonstracyjnym";
 "login.warn.message.demomode" = "Jak zamiennik dla trybu offline oraz lokalnego, tryb demo umożliwia logowanie na Konto Microsoft, które nie posiada gry i umożliwia granie w wersję próbną Java Edition wprowadzoną w wersji 1.3.1 oraz nowszych. Starsze wersje zawierają pełną wersję gry, ponieważ oficjalny launcher nie wymusza tych ograniczeń. Sprawdź naszą stronę internetową, aby dowiedzieć się więcej o przejściu z trybu offline.";
