@@ -25,13 +25,20 @@
 "custom_controls.control_menu.add_button" = "Tambah butang";
 
 "launcher.menu.custom_controls" = "Kawalan custom";
+"login.jit.fail.description" = "Tiada penyepaduan yang boleh digunakan untuk mendayakan JIT secara automatik pada peranti anda, dan ia kini mesti didayakan secara manual. Ralat telah dilog ke latestlog.txt.";
 "login.option.select" = "Pilih akaun";
+"login.warn.message.ios19_jitdead" = "Disebabkan oleh perubahan dalam iOS yang menghalang keupayaan untuk mendayakan JIT, Amethyst tidak boleh berfungsi dalam keadaan semasa dan memerlukan penyelidikan yang berat untuk mencari laluan baharu ke hadapan.\n\nMenekan OK akan menutup aplikasi.";
+"login.warn.message.demomode" = "Sebagai pengganti kepada mod luar talian dan tempatan, mod demo akan membolehkan anda melog masuk ke akaun Microsoft yang tidak memiliki permainan dan bermain versi percubaan Edisi Java, yang diperkenalkan dalam versi 1.3.1 dan lebih baharu. Versi lama mengandungi permainan penuh, kerana pelancar rasmi tidak meletakkan sekatan ini. Lihat laman sesawang kami untuk mengetahui lebih lanjut tentang peralihan daripada mod luar talian ini.";
+"login.warn.message.localmode" = "Anda boleh terus memainkan versi yang dipasang, tetapi anda tidak lagi boleh memuat turun Minecraft tanpa akaun berbayar. Tiada sokongan akan diberikan untuk isu dengan akaun tempatan, atau cara lain untuk memperoleh Minecraft.";
+
+"login.msa.error.xsts.noxboxacc" = "Profil Xbox tidak didaftarkan untuk akaun Microsoft ini. Sila pastikan anda telah membuat profil Xbox.\nKod ralat: 2148916233";
 
 "News" = "Berita";
 "Settings" = "Tetapan";
 
 "preference.section.general" = "Tetapan Umum";
 "preference.section.video" = "Tetapan Video";
+"preference.section.footer.video" = "Pemaparan automatik membolehkan Amethyst memilih pilihan terbaik berdasarkan versi Minecraft. Menurunkan resolusi akan mengurangkan beban kerja GPU untuk prestasi yang lebih baik.";
 "preference.section.debug" = "Tetapan UI Penyahpepijat";
 "preference.section.footer.debug" = "Selain daripada nyahpepijat, tetapan ini mungkin berguna untuk kawalan tersuai. Anda mungkin perlu memulakan semula pelancar untuk perubahan berkuat kuasa.";
 //"preference.section.footer.java" = "";
@@ -45,6 +52,8 @@
 "preference.title.reset_settings" = "Tetapkan semula semua tetapan";
 "preference.title.confirm.reset_settings" = "Ini akan mengalih keluar semua pilihan tersuai anda, termasuk resolusi, saiz butang dan argumen Java.";
 "preference.title.done.reset_settings" = "Semua tetapan lalai telah dipulihkan.";
+"preference.detail.allow_microphone" = "Dayakan ini hanya jika anda menggunakan mod sembang suara. Pilihan suis senyap akan diabaikan dan kualiti audio daripada aplikasi lain akan terjejas.";
+"preference.manage_runtime.footer.default" = "Minecraft 1.16.5 dan lebih lama mungkin boleh dijalankan dengan versi Java yang lebih baharu, namun keserasian dengan mod tidak dijamin. Masa jalan luaran boleh diletakkan di dalam folder \"java_runtimes\". Menukar versi Java untuk \"Melaksanakan .jar\" hanya berkuat kuasa jika pemasang tidak mengharapkan versi Java yang lebih baharu.";
 "preference.detail.auto_ram" = "Membenarkan pelaras RAM automatik";
 "preference.detail.allocated_memory" = "Mengawal berapa banyak memori yang diberikan kepada Minecraft";
 
