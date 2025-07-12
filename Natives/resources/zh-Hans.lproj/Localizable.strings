@@ -8,21 +8,21 @@
 "game.menu.log_output" = "日志输出";
 "game.menu.custom_controls" = "自定义控制按键";
 
-"game.note.airplay" = "Minecraft 正隔空播放（AirPlay）至其他设备显示";
+"game.note.airplay" = "Minecraft 正在通过隔空播放（AirPlay）到其他设备显示";
 
-"game.title.exit_code" = "游戏以代码 %d 退出";
+"game.title.exit_code" = "游戏非正常退出，错误代码%d";
 
 // The play button
-"Play" = "开始游戏";
-"Details" = "详情";
+"Play" = "启动游戏";
+"Details" = "详细信息";
 
 // Version categories
 "Installed" = "已安装";
 "Snapshot" = "快照";
 "Releases" = "正式版";
 "Unstable" = "不稳定";
-"Old-beta" = "早期 Beta 版";
-"Old-alpha" = "早期 Alpha 版";
+"Old-beta" = "远古 beta 版";
+"Old-alpha" = "远古 alpha 版";
 
 // Custom controls
 "Copy" = "复制";
