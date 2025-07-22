@@ -182,7 +182,7 @@
 "preference.title.renderer.debug.auto" = "Авто: gl4 або ANGLE";
 "preference.title.renderer.debug.gl4es" = "Gl4es 1.1.4 — експортує OpenGL 2.1";
 "preference.title.renderer.debug.angle" = "ANGLE (1.17+) - експортує OpenGL 3.2 (Базовий профіль, обмежений)";
-"preference.title.renderer.debug.zink" = "Zink (Mesa 21.0) - експортує OpenGL 4.1";
+"preference.title.renderer.debug.zink" = "Zink (Mesa 21.0) — експортує OpenGL 4.1";
 
 "preference.detail.renderer" = "Змініть механізм промальовування OpenGL для використання. Zink тимчасово вимкнено в iOS 16 і новіших версіях для діагностики проблем.";
 
@@ -244,7 +244,7 @@
 
 "preference.title.java_args" = "Аргументи запуску JVM";
 "preference.detail.java_args" = "Передайте аргументи Java під час запуску Minecraft. Будьте обережні, це може призвести до збою гри, якщо її змінити неправильно.";
-"preference.placeholder.java_args" = "Вкажіть аргументи...";
+"preference.placeholder.java_args" = "Вкажіть аргументи…";
 "preference.title.env_variables" = "Змінні середовища";
 "preference.detail.env_variables" = "Встановіть власні змінні середовища під час запуску Minecraft. Будьте обережні, це може призвести до збою гри, якщо її змінити неправильно.";
 "preference.placeholder.env_variables" = "Вкажіть змінні…";
