@@ -121,6 +121,7 @@
 "login.msa.progress.checkMCProfile" = "(5/5) Überprüfe Minecraft-Profil";
 
 "News" = "Neuigkeiten";
+"Profiles" = "Profile";
 "Settings" = "Einstellungen";
 
 "preference.section.general" = "Allgemeine Einstellungen";
@@ -165,9 +166,14 @@ der Minecraft-Version zu wählen. Verringerte Auflösung reduziert die Arbeitsla
 "preference.title.confirm.erase_demo_data" = "Dies löscht alle Demo-Spielversionen und Daten, die für Demo-Konten verwendet werden.";
 "preference.title.done.erase_demo_data" = "Alle Demo-Spieldaten wurden gelöscht.";
 
+"preference.title.renderer" = "Renderer";
+
 "preference.title.renderer.release.auto" = "Automatisch";
 "preference.title.renderer.release.gl4es" = "Holy Gl4es";
 "preference.title.renderer.release.angle" = "Angle";
+"preference.title.renderer.release.zink" = "Zink";
+
+"preference.title.renderer.debug.auto" = "Auto: GL4ES oder ANGLE";
 "preference.title.renderer.debug.gl4es" = "gl4es 1.1.4 - gibt OpenGL 2.1 aus";
 "preference.title.renderer.debug.angle" = "ANGLE (1.17+) - gibt OpenGL 3.2 (Kernprofil, begrenzt) aus";
 "preference.title.renderer.debug.zink" = "Zink (Mesa 21.0) - gibt OpenGL 4.1 aus";
