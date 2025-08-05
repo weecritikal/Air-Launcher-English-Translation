@@ -8,6 +8,10 @@
 "game.menu.log_output" = "로그 확인";
 "game.menu.custom_controls" = "사용자 지정 조작";
 
+"game.note.airplay" = "AirPlay로 마인크래프트 화면을 미러링하는 중입니다";
+
+"game.title.exit_code" = "마인크래프트가 종료 코드 %d와(과) 함께 종료했습니다";
+
 // The play button
 "Play" = "시작하기";
 
@@ -53,6 +57,7 @@
 "login.option.select" = "계정 선택";
 "login.option.microsoft" = "Microsoft 계정";
 "login.option.local" = "로컬 계정";
+"login.warn.title.ios19_jitdead" = "Amethyst는 iOS 26 및 이후 버전에서는 사용할 수 없습니다.";
 
 "login.warn.title.demomode" = "당신의 계정은 데모 버전입니다";
 
