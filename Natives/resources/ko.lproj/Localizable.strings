@@ -95,3 +95,4 @@
 
 "preference.profile.title.name" = "이름";
 "controller_configurator.playstation.title.named_back" = "선택";
+"controller_configurator.section.footer.controller_style" = "이 설정 화면에 표시되는 컨트롤러 버튼 이름을 변경합니다.";
