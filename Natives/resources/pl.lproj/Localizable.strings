@@ -5,7 +5,7 @@
 
 "game.menu.force_close" = "Wymuś zamknięcie";
 "game.menu.confirm.force_close" = "Czy na pewno chcesz wymusić zamknięcie?";
-"game.menu.log_output" = "Wyjście danych";
+"game.menu.log_output" = "Dane wyjściowe dziennika";
 "game.menu.custom_controls" = "Własne sterowanie";
 
 "game.note.airplay" = "Minecraft jest wyświetlany na ekranie lustrzanym AirPlay";
@@ -14,15 +14,15 @@
 
 // The play button
 "Play" = "Graj";
-"Details" = "Detale";
+"Details" = "Szczegóły";
 
 // Version categories
 "Installed" = "Zainstalowane";
-"Snapshot" = "Wersja deweloperska";
+"Snapshot" = "Snapshot";
 "Releases" = "Wydania";
 "Unstable" = "Niestabilne";
-"Old-beta" = "Dawna Beta";
-"Old-alpha" = "Dawna Alpha";
+"Old-beta" = "Stara beta";
+"Old-alpha" = "Stara alpha";
 
 // Custom controls
 "Copy" = "Kopiuj";
@@ -40,13 +40,13 @@
 "custom_controls.button_edit.size" = "Rozmiar";
 "custom_controls.button_edit.mapping" = "Mapowanie";
 "custom_controls.button_edit.orientation" = "Orientacja";
-"custom_controls.button_edit.toggleable" = "Aktywowane";
+"custom_controls.button_edit.toggleable" = "Włączalne/wyłączalne";
 "custom_controls.button_edit.mouse_pass" = "Przejście myszy";
 "custom_controls.button_edit.swipeable" = "Przesuwalny";
 "custom_controls.button_edit.bg_color" = "Kolor tła";
 "custom_controls.button_edit.stroke_width" = "Szerokość obrysu (%)";
 "custom_controls.button_edit.stroke_color" = "Kolor obrysu";
-"custom_controls.button_edit.corner_radius" = "Zaokrąglenie narożników (%)";
+"custom_controls.button_edit.corner_radius" = "Zaokrąglenie rogów (%)";
 "custom_controls.button_edit.opacity" = "Przezroczystość (%)";
 "custom_controls.button_edit.visibility" = "Widoczność";
 
@@ -56,30 +56,30 @@
 "custom_controls.control_menu.exit.warn" = "Zamierzasz wyjść bez zapisywania zmian.";
 "custom_controls.control_menu.save" = "Zapisz";
 "custom_controls.control_menu.save.error.json" = "Błąd JSON";
-"custom_controls.control_menu.save.error.write" = "Błąd zapisu pliku";
-"custom_controls.control_menu.load" = "Wczytaj";
+"custom_controls.control_menu.save.error.write" = "Błąd podczas zapisywania pliku";
+"custom_controls.control_menu.load" = "Załaduj";
 "custom_controls.control_menu.make_default" = "Ustaw jako domyślne";
-"custom_controls.control_menu.safe_area" = "Bezpieczna Strefa";
+"custom_controls.control_menu.safe_area" = "Bezpieczny obszar";
 "custom_controls.control_menu.add_button" = "Dodaj przycisk";
-"custom_controls.control_menu.add_drawer" = "Dodaj listę";
-"custom_controls.control_menu.add_joystick" = "Dodaj gałkę analogową";
-"custom_controls.error.incompatible" = "Ta wersje sterowania (kod %d) nie jest zaimplementowany w tej wersji programu uruchamiającego.";
-"custom_controls.hint" = "Naciśnij i przytrzymaj gdziekolwiek na ekranie, aby uzyskać więcej opcji";
+"custom_controls.control_menu.add_drawer" = "Dodaj szufladę";
+"custom_controls.control_menu.add_joystick" = "Dodaj joystick";
+"custom_controls.error.incompatible" = "Ta wersja sterowania (kod %d) nie jest zaimplementowana w tej kompilacji launchera.";
+"custom_controls.hint" = "Naciśnij i przytrzymaj gdziekolwiek na ekranie, aby wyświetlić więcej opcji";
 
-"init.migrateDir" = "Katalogiem danych Amethyst jest teraz %@. Wszystkie istniejące dane zostały przeniesione do nowej lokalizacji.";
+"init.migrateDir" = "Katalog danych Amethyst znajduje się teraz w %@. Wszystkie istniejące dane zostały przeniesione do nowej lokalizacji.";
 
-"java.error.missing_main_class" = "W %@ brakuje atrybutu klasy głównej. Jeżeli to jest mod, włóż go do folderu \"mods\" wybranej instancji.";
-"java.error.missing_runtime" = "%@ Wymaga Java w wersji %d lub nowszej, aby działało. Proszę najpierw, ją zainstaluj, a potem zaznacz w menu zarządzania środowiskami uruchomieniowymi.";
+"java.error.missing_main_class" = "%@ brakuje atrybutu klasy głównej. Jeśli jest to modyfikacja, umieść ją w folderze „mods” wybranej instancji.";
+"java.error.missing_runtime" = "%@ wymaga do działania środowiska Java w wersji %d lub nowszej. Należy je najpierw zainstalować i określić w sekcji „Zarządzaj środowiskami uruchomieniowymi”.";
 
 "launcher.mcl.downloading_file" = "Pobieranie %@";
-"launcher.mcl.error_download" = "Pobieranie %@: %@ się nie powiodło";
+"launcher.mcl.error_download" = "NIe udało się pobrać %@: %@";
 
 "launcher.menu.custom_controls" = "Własne sterowanie";
 "launcher.menu.execute_jar" = "Uruchom plik .jar";
 
-"launcher.wait_jit.title" = "Czekam na JIT";
-"launcher.wait_jit.message" = "Amethyst opiera się na kompilacji Just-in-time, aby Java działała z maksymalną wydajnością.";
-"launcher.wait_jit_trollstore.message" = "Jeżeli dalej widzisz tę wiadomość, proszę, załącz schemat URL w TrollStore.";
+"launcher.wait_jit.title" = "Oczekiwanie na JIT";
+"launcher.wait_jit.message" = "Amethyst opiera się na kompilacji just-in-time (JIT), aby Java działała z maksymalną wydajnością.";
+"launcher.wait_jit_trollstore.message" = "Jeśli nadal widzisz ten komunikat, włącz schemat URL w TrollStore.";
 
 "login.error.username.outOfRange" = "Nazwa użytkownika musi zawierać od 3 do 16 znaków";
 
@@ -87,22 +87,22 @@
 
 "login.jit.checking" = "Sprawdzanie JIT";
 "login.jit.enabled" = "JIT zostało włączone";
-"login.jit.fail" = "Nie udało się załączyć JIT.";
-"login.jit.fail.title" = "Nie udało się załączyć JIT na twoim urządzeniu.";
-"login.jit.fail.description" = "Żadna integracja nie mogła zostać użyta, aby automatycznie załączyć JIT na twoim urządzeniu, a teraz musi zostać ono załączone manualnie. Błędy zostały zapisane w pliku latestlog.txt.";
-"login.jit.fail.description_unsupported" = "Została wykryta niewspierana metoda instalacji. Proszę o instalacje w jeden ze wspieranych sposobów.";
+"login.jit.fail" = "Nie udało się włączyć kompilacji JIT.";
+"login.jit.fail.title" = "Nie udało się włączyć kompilacji JIT na Twoim urządzeniu.";
+"login.jit.fail.description" = "Nie udało się automatycznie włączyć kompilacji JIT na Twoim urządzeniu za pomocą dostępnych integracji — konieczne jest teraz ręczne włączenie. Błędy zostały zapisane w pliku latestlog.txt.";
+"login.jit.fail.description_unsupported" = "Wykryto nieobsługiwaną metodę instalacji. Spróbuj zainstalować ponownie przy użyciu jednej z obsługiwanych metod.";
 
 // Login buttons
-"login.menu.sendlogs" = "Prześlij swój rejestr";
+"login.menu.sendlogs" = "Wyślij swój dziennik";
 "login.option.add" = "Dodaj konto";
 "login.option.select" = "Wybierz konto";
 "login.option.demo" = "Konto demonstracyjne";
 "login.option.microsoft" = "Konto Microsoft";
 "login.option.local" = "Konto lokalne";
 
-"login.warn.title.legacy_device" = "Następna wersja Ametyst nie będzie kompatybilna z tym urządzeniem.";
-"login.warn.message.legacy_device" = "Aby uruchomić następną wersję, wymagane jest urządzenie zgodne z iOS 14.";
-"login.warn.title.legacy_ios" = "Następna wersja Ametyst będzie wymagać uaktualnienia systemu.";
+"login.warn.title.legacy_device" = "Następna wersja Amethyst nie będzie kompatybilna z tym urządzeniem.";
+"login.warn.message.legacy_device" = "Aby uruchomić kolejną dużą aktualizację, wymagane jest urządzenie zgodne z iOS 14.";
+"login.warn.title.legacy_ios" = "Kolejna wersja Amethyst będzie wymagała uaktualnienia systemu.";
 "login.warn.message.legacy_ios" = "Aby uruchomić następną wersję, to urządzenie musi mieć zainstalowane iOS 14 lub nowszy.";
 "login.warn.title.limited_ram" = "To urządzenie ma mało dostępnej pamięci operacyjnej.";
 "login.warn.message.limited_ram" = "Rekomendujemy zostawienie ustawienia \"automatyczny RAM\" załączonego, aby zapobiec niestabilności i problemom z wydajnością.";
