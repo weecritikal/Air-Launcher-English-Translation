@@ -43,11 +43,11 @@ jobs:
           echo "$(brew --prefix)/opt/make/libexec/gnubin" >> $GITHUB_PATH
 
       # ======= 新增：安装 JDK 8 =======
-      - name: Set up JDK 8
+      - name: Set up 17.0.16+8
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '8'
+          java-version: '17.0.16+8'
 
       # 其余与原文件完全一致
       - name: Get gl4es latest commit hash
