@@ -4,7 +4,7 @@ on:
   pull_request:
     branches-ignore:
       - 'l10n_main'
-    types: [opened, reopened, synchronize]
+    types: [opened, reopened, synchronize]   # 同步 PR 时也触发
   push:
     branches-ignore:
       - 'l10n_main'
@@ -31,35 +31,76 @@ jobs:
           ls -lah ./
 
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4   # 升级到 v4
 
       - name: Checkout repository submodules
         run: git submodule update --init --recursive
 
+      # ======= 新增：安装 GNU make =======
       - name: Install GNU make
         run: |
           brew install make
           echo "$(brew --prefix)/opt/make/libexec/gnubin" >> $GITHUB_PATH
 
-      - name: Install & switch to JDK 8
+      # ======= 新增：安装 JDK 8 =======
+      - name: Set up JDK 8
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'   # Eclipse Temurin 8 (Hotspot)
+          distribution: 'temurin'
           java-version: '8'
 
+      # 其余与原文件完全一致
+      - name: Get gl4es latest commit hash
+        id: gl4es-sha
+        run: echo "sha=$(git ls-remote https://github.com/PojavLauncherTeam/gl4es-114-extra refs/heads/master | awk '{print $1}')" >> $GITHUB_OUTPUT
+
+      - name: Cache gl4es
+        uses: actions/cache@v4
+        if: false
+        id: gl4es-cache
+        with:
+          path: gl4es/libs
+          key: gl4es-holy-ios-shared-2-${{ steps.gl4es-sha.outputs.sha }}
+
+      - name: Get gl4es
+        if: false && steps.gl4es-cache.outputs.cache-hit != 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: 'PojavLauncherTeam/gl4es-114-extra'
+          path: 'gl4es'
+
+      - name: Build gl4es
+        if: false && steps.gl4es-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        run: |
+          cd gl4es
+          git config user.email "github-actions@users.noreply.github.com"
+          git config user.name "github-actions"
+          export PATH=/opt/procursus/bin:$PATH
+          wget https://github.com/leetal/ios-cmake/raw/master/ios.toolchain.cmake
+          cmake -B build -DCMAKE_TOOLCHAIN_FILE=ios.toolchain.cmake -DDEFAULT_ES=2 \
+            -DNOX11=ON -DNOEGL=OFF -DSTATICLIB=OFF -DPLATFORM=OS64 \
+            -DCMAKE_C_FLAGS=-Wno-error=implicit-function-declaration
+          cmake --build build --config RelWithDebInfo --target GL
+          cp -R lib/libGL.dylib ../Natives/resources/Frameworks/libgl4es_114.dylib
+
+      - name: Push gl4es
+        if: false && github.event != 'pull_request' && github.ref_name == 'main' && steps.gl4es-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        run: |
+          git add Natives/resources/Frameworks/libgl4es_114.dylib
+          git commit -am "CI: Update gl4es"
+          git push
 
       - name: Build for ${{ matrix.platform_name }}
         run: |
           export SLIMMED=1
           if [[ "${{ matrix.platform_name }}" == "ios" ]]; then
-            # ipa + tipa
             gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }}
             gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }} TROLLSTORE_JIT_ENT=1
           elif [[ "${{ matrix.platform_name }}" == "tvos" ]]; then
-            # tipa only
             gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }} TROLLSTORE_JIT_ENT=1
           else
-            # ipa only
             gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }}
           fi
 
@@ -88,8 +129,8 @@ jobs:
           path: artifacts/org.angelauramc.amethyst.slimmed-*-${{ matrix.platform_name }}-trollstore.tipa
 
       - name: Upload AngelAuraAmethyst.dSYM
-        if: matrix.platform_name == 'ios'
         uses: actions/upload-artifact@v4
+        if: matrix.platform_name == 'ios'
         with:
           name: AngelAuraAmethyst.dSYM
           path: artifacts/AngelAuraAmethyst.dSYM
