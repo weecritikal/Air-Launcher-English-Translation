@@ -21,6 +21,19 @@ jobs:
     
     runs-on: macos-latest
     steps:
+      - name: Install GNU Make
+        run: |
+          brew update
+          brew install make
+
+      - name: Install Java 8 (Temurin) via Homebrew
+        run: |
+          brew install --cask temurin@8
+
+      - name: Install ldid
+        run: |
+          brew install ldid
+          
       - name: Remove work folders
         run: |
           echo "before"
@@ -78,28 +91,6 @@ jobs:
           git add Natives/resources/Frameworks/libgl4es_114.dylib
           git commit -am "CI: Update gl4es"
           git push
-
-      - name: 安装 GNU Make
-        run: |
-          brew install make
-          echo "/opt/homebrew/bin" >> $GITHUB_PATH
-
-      - name: 安装并启用 JDK 8
-        uses: actions/setup-java@v3
-        with:
-          distribution: 'zulu'  # 或 'zulu'
-          java-version: '8'
-
-      - name: 强制替换系统 java/javac 为 JDK 8
-        run: |
-          sudo ln -sf "$JAVA_HOME/bin/java" /usr/local/bin/java
-          sudo ln -sf "$JAVA_HOME/bin/javac" /usr/local/bin/javac
-          echo "/usr/local/bin" >> $GITHUB_PATH  # 确保排在 /usr/bin 前
-          java -version
-          javac -version
-
-
-
 
       - name: Build for ${{ matrix.platform_name }}
         run: |
