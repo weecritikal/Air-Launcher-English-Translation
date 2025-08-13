@@ -87,7 +87,7 @@ jobs:
       - name: 安装并启用 JDK 8
         uses: actions/setup-java@v3
         with:
-          distribution: 'temurin'  # 或 'zulu'
+          distribution: 'zulu'  # 或 'zulu'
           java-version: '8'
 
       - name: 强制替换系统 java/javac 为 JDK 8
