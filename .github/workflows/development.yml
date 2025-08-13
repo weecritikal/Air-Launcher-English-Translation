@@ -41,6 +41,13 @@ jobs:
           brew install make
           echo "$(brew --prefix)/opt/make/libexec/gnubin" >> $GITHUB_PATH
 
+            - name: Install & switch to JDK 8
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'   # Eclipse Temurin 8 (Hotspot)
+          java-version: '8'
+
+
       - name: Build for ${{ matrix.platform_name }}
         run: |
           export SLIMMED=1
