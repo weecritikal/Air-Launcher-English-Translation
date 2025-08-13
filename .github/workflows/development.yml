@@ -43,13 +43,12 @@ jobs:
           echo "$(brew --prefix)/opt/make/libexec/gnubin" >> $GITHUB_PATH
 
       # ======= 新增：安装 JDK 8 =======
-      - name: Install JDK 8
-        run: |
-          brew install openjdk@8
-          # 把 openjdk@8 的 bin 目录放到 PATH 最前面
-          echo "$(brew --prefix)/opt/openjdk@8/bin" >> $GITHUB_PATH
-          # 把 JAVA_HOME 暴露给后续步骤
-          echo "JAVA_HOME=$(brew --prefix)/opt/openjdk@8" >> $GITHUB_ENV
+      - name: Set up Azul JDK 8 (arm64)
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'  # Azul Zulu
+          java-version: '8'
+
 
       # 其余与原文件完全一致
       - name: Get gl4es latest commit hash
