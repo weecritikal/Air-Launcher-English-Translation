@@ -79,6 +79,12 @@ jobs:
           git commit -am "CI: Update gl4es"
           git push
 
+      - name: 安装 GNU Make
+        run: |
+          brew install make
+          echo "/opt/homebrew/bin" >> $GITHUB_PATH
+
+
       - name: Build for ${{ matrix.platform_name }}
         run: |
           export PATH=/opt/homebrew/bin:$PATH
