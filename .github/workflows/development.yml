@@ -84,17 +84,20 @@ jobs:
           brew install make
           echo "/opt/homebrew/bin" >> $GITHUB_PATH
 
-      - name: 安装并强制使用 JDK 8
+      - name: 安装并启用 JDK 8
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'   # 或 'zulu'，都行
+          java-version: '8'
+
+      - name: 把 JDK 8 放到 PATH 最前面
         run: |
-          # 1. 用 Homebrew 装一个 AdoptOpenJDK 8（目录固定）
-          brew install --cask adoptopenjdk8
-
-          # 2. 把它的 bin 目录放到 PATH 最前面
-          echo "/Library/Java/JavaVirtualMachines/adoptopenjdk-8.jdk/Contents/Home/bin" >> $GITHUB_PATH
-
-          # 3. 立即生效（同一个 step 里）
-          export PATH="/Library/Java/JavaVirtualMachines/adoptopenjdk-8.jdk/Contents/Home/bin:$PATH"
+          # 让 Makefile 检测时先找到 1.8
+          echo "$JAVA_HOME/bin" >> $GITHUB_PATH
+          # 在同一个 step 立即生效
+          export PATH="$JAVA_HOME/bin:$PATH"
           java -version
+          javac -version
 
 
 
