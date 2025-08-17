@@ -14,11 +14,13 @@
 
 // The play button
 "Play" = "啟動遊戲";
+"Details" = "詳細資訊";
 
 // Version categories
 "Installed" = "已安裝";
 "Snapshot" = "快照";
 "Releases" = "發行";
+"Unstable" = "不穩定";
 "Old-beta" = "遠古beta版";
 "Old-alpha" = "遠古alpha版";
 
@@ -28,6 +30,12 @@
 "Move" = "移動";
 "Remove" = "移除";
 "Resize" = "調整大小";
+// Visibility
+"Always" = "始終顯示";
+"In game" = "遊戲內";
+"In menu" = "菜單內";
+
+"custom_controls.button_edit.forward_lock" = "前進鎖定";
 "custom_controls.button_edit.name" = "名稱";
 "custom_controls.button_edit.size" = "大小";
 "custom_controls.button_edit.mapping" = "對映";
@@ -40,6 +48,7 @@
 "custom_controls.button_edit.stroke_color" = "邊框顏色";
 "custom_controls.button_edit.corner_radius" = "圓角半徑 (%)";
 "custom_controls.button_edit.opacity" = "不透明度（%）";
+"custom_controls.button_edit.visibility" = "可見性";
 
 "custom_controls.button_menu.add_subbutton" = "添加子按鈕";
 "custom_controls.control_menu.discard_changes" = "放棄變更";
@@ -53,10 +62,17 @@
 "custom_controls.control_menu.safe_area" = "安全區";
 "custom_controls.control_menu.add_button" = "添加按鈕";
 "custom_controls.control_menu.add_drawer" = "增加清單";
+"custom_controls.control_menu.add_joystick" = "添加搖桿";
 "custom_controls.error.incompatible" = "此控制版本（號碼 %d）在這個啟動器構建中沒有實現。";
 "custom_controls.hint" = "長按螢幕上的任何位置以顯示更多選項";
 
 "init.migrateDir" = "Amethyst數據資料夾現為%@。你的所有已有資料已被移動到新位置。";
+
+"java.error.missing_main_class" = "%@ 缺少主類屬性。如果這是一個模組，請將其放入所選實例的「mods」文件夾中。";
+"java.error.missing_runtime" = "%@ 需要 Java %d 或更高版本才能運行。請先安裝該版本，然後在「管理運行時」中進行指定。";
+
+"launcher.mcl.downloading_file" = "正在下載 %@";
+"launcher.mcl.error_download" = "下載 %@ 失敗：%@";
 
 "launcher.menu.custom_controls" = "自訂控制鍵";
 
