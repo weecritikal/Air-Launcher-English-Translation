@@ -18,7 +18,7 @@
 
 // Version categories
 "Installed" = "已安装";
-"Snapshot" = "快照";
+"Snapshot" = "快照版";
 "Releases" = "正式版";
 "Unstable" = "不稳定";
 "Old-beta" = "远古 beta 版";
@@ -31,7 +31,7 @@
 "Remove" = "移除";
 "Resize" = "调整大小";
 // Visibility
-"Always" = "始终";
+"Always" = "始终显示";
 "In game" = "游戏内";
 "In menu" = "菜单内";
 
@@ -40,14 +40,14 @@
 "custom_controls.button_edit.size" = "大小";
 "custom_controls.button_edit.mapping" = "映射";
 "custom_controls.button_edit.orientation" = "方向";
-"custom_controls.button_edit.toggleable" = "切换控制";
+"custom_controls.button_edit.toggleable" = "切换触发";
 "custom_controls.button_edit.mouse_pass" = "鼠标穿透";
-"custom_controls.button_edit.swipeable" = "可滑动";
+"custom_controls.button_edit.swipeable" = "滑动点击";
 "custom_controls.button_edit.bg_color" = "背景颜色";
-"custom_controls.button_edit.stroke_width" = "边框宽度 (%)";
+"custom_controls.button_edit.stroke_width" = "边框宽度（dp）";
 "custom_controls.button_edit.stroke_color" = "描边颜色";
-"custom_controls.button_edit.corner_radius" = "圆角半径 (%)";
-"custom_controls.button_edit.opacity" = "不透明度 (%)";
+"custom_controls.button_edit.corner_radius" = "圆角半径（%）";
+"custom_controls.button_edit.opacity" = "不透明度（%）";
 "custom_controls.button_edit.visibility" = "可见性";
 
 "custom_controls.button_menu.add_subbutton" = "添加子按钮";
@@ -77,8 +77,8 @@
 "launcher.menu.custom_controls" = "自定义控制按键";
 "launcher.menu.execute_jar" = "执行 .jar";
 
-"launcher.wait_jit.title" = "请等待应用获取到 JIT（Just-in-time）";
-"launcher.wait_jit.message" = "Amethyst 启动器需要 JIT（Just-in-time）权限才能启动游戏。";
+"launcher.wait_jit.title" = "请等待应用获取到 JIT 权限";
+"launcher.wait_jit.message" = "Amethyst 启动器需要 JIT（即时编译）权限才能启动游戏。";
 "launcher.wait_jit_trollstore.message" = "如果您仍然看到此消息，请在 TrollStore 中启用 URL Scheme。";
 
 "login.error.username.outOfRange" = "用户名必须在 3 至 16 个字符以内";
@@ -87,9 +87,9 @@
 
 "login.jit.checking" = "检查是否开启 JIT 权限";
 "login.jit.enabled" = "JIT 权限已启用";
-"login.jit.fail" = "无法启用 JIT。";
-"login.jit.fail.title" = "无法在您的设备上启用 JIT。";
-"login.jit.fail.description" = "没有集成可在您的设备上自动启用 JIT，现在需要手动启用。错误已记录到 latestlog.txt。";
+"login.jit.fail" = "无法启用 JIT 权限。";
+"login.jit.fail.title" = "无法在您的设备上启用 JIT 权限。";
+"login.jit.fail.description" = "没有集成可在您的设备上自动启用 JIT 权限，现在需要手动启用。错误已记录到 latestlog.txt。";
 "login.jit.fail.description_unsupported" = "检测到了不受支持的安装方法。请使用受支持的方法重新安装。";
 
 // Login buttons
@@ -97,7 +97,7 @@
 "login.option.add" = "添加账户";
 "login.option.select" = "选择账户";
 "login.option.demo" = "演示账户";
-"login.option.microsoft" = "Microsoft 账户";
+"login.option.microsoft" = "微软账户";
 "login.option.local" = "本地账户";
 
 "login.warn.title.legacy_device" = "Amethyst 的下一个版本将与此设备不兼容。";
@@ -107,17 +107,17 @@
 "login.warn.title.limited_ram" = "该设备的可用内存有限。";
 "login.warn.message.limited_ram" = "我们建议启用“自动分配内存大小”选项，以防止不稳定和性能问题。";
 "login.warn.title.ios19_jitdead" = "Amethyst 不支持 iOS 26 及更高版本。";
-"login.warn.message.ios19_jitdead" = "iOS 的变更使得 JIT 无法被正常开启，而 Amethyst 不能在当前状态下工作。还需要大量研究才能找到这一问题的解决方案。\n\n点按“好”将关闭应用。";
+"login.warn.message.ios19_jitdead" = "由于 iOS 的变更，JIT 权限无法正常开启，而 Amethyst 不能在当前状态下工作。尚需大量研究才能解决此问题。\n\n点击“好”将关闭应用。";
 
 "login.warn.title.demomode" = "您正在使用演示账户";
 "login.warn.message.demomode" = "演示模式作为离线和本地模式的替代，将允许你登录到一个尚未购买游戏的微软账户中游玩 1.3.1 及以上版本的试玩版本。因为官方启动器的一些特性，在较旧版本中会包含完整的游戏内容。详情请参阅我们的网站，了解更多关于离线模式的过渡。";
 
 "login.warn.title.localmode" = "离线模式已更名为本地模式。";
-"login.warn.message.localmode" = "您可以继续游玩已经安装的版本，但是如果没有正版账户，您将无法继续下载其他版本。任何有关本地账户以及如何获取其他 Minecraft 版本的问题将不会得到任何解答。";
+"login.warn.message.localmode" = "您可以继续游玩已经安装的版本，但是如果没有正版账户，您将无法继续下载其他版本。若提出问题有关本地账户，或是如何获取其他 Minecraft 版本，将不会受到支持。";
 
-"login.msa.error.xsts.noxboxacc" = "此 Microsoft 账户未注册 Xbox 档案。请确保您已创建 Xbox 档案。\n错误代码：2148916233";
+"login.msa.error.xsts.noxboxacc" = "此微软账户未注册 Xbox 档案。请确保您已创建 Xbox 档案。\n错误代码：2148916233";
 "login.msa.error.xsts.noxbox" = "Xbox Live 目前在您的国家/地区不可用。\n错误代码：2148916235";
-"login.msa.error.xsts.krverify" = "您的账户必须通过你父母同意方可通过验证。\n错误代码：2148916236 或 2148916237";
+"login.msa.error.xsts.krverify" = "您的账户必须通过你父母同意方可通过验证。\n错误代码：2148916236 或 2148916237。";
 "login.msa.error.xsts.underage" = "您的账户需要绑定家长账户才能进行下一步。\n错误代码：2148916238";
 
 "login.msa.progress.acquireAccessToken" = "(1/5) 正在获取访问令牌";
@@ -150,7 +150,7 @@
 "preference.title.check_sha" = "检查游戏完整性";
 "preference.detail.check_sha" = "此选项将强制启动器在哈希值可用时检查下载文件以防止下载错误。";
 "preference.title.cosmetica" = "Cosmetica 披风";
-"preference.detail.cosmetica" = "启用来自 Cosmetica（前身为 Arc）的披风。更多信息请访问 https://cosmetica.cc。需要 OptiFine";
+"preference.detail.cosmetica" = "启用来自 Cosmetica（前身为 Arc）的披风。欲了解更多信息，请访问 https://cosmetica.cc。需要 OptiFine";
 "preference.title.debug_logging" = "调试日志";
 "preference.detail.debug_logging" = "将内部设置和操作记录到 latestlog.txt。有助于开发者更轻松地发现问题，但由于日志写入频率更高，Minecraft 的运行速度可能会变慢。";
 "preference.title.appicon" = "设置应用图标";
@@ -166,7 +166,7 @@
 
 "preference.title.reset_settings" = "重置所有设置";
 "preference.title.confirm.reset_settings" = "这将移除您的所有自定义首选项，包括分辨率、按钮大小和 Java 参数。";
-"preference.title.done.reset_settings" = "已重置所有设置";
+"preference.title.done.reset_settings" = "已重置所有设置。";
 
 "preference.title.erase_demo_data" = "清除演示游戏数据";
 "preference.title.confirm.erase_demo_data" = "进行此操作将清除演示账户使用的所有演示游戏版本和数据。";
@@ -180,13 +180,13 @@
 "preference.title.renderer.release.zink" = "Zink";
 
 "preference.title.renderer.debug.auto" = "自动：gl4es 或 ANGLE";
-"preference.title.renderer.debug.gl4es" = "holy gl4es - 输出 OpenGL 2.1";
-"preference.title.renderer.debug.angle" = "ANGLE（仅支持1.17+）- exports OpenGL 版本 3.2";
-"preference.title.renderer.debug.zink" = "Zink（Mesa 21.0）- exports OpenGL 版本 4.1";
+"preference.title.renderer.debug.gl4es" = "holy gl4es—输出 OpenGL 2.1";
+"preference.title.renderer.debug.angle" = "ANGLE（仅支持 1.17+）—输出 OpenGL 3.2（核心档案，有限制）";
+"preference.title.renderer.debug.zink" = "Zink（Mesa 21.0）—输出 OpenGL4.1";
 
-"preference.detail.renderer" = "更改使用的 OpenGL 渲染器";
+"preference.detail.renderer" = "更改使用 OpenGL 渲染引擎。Zink 在 iOS 16 上暂时禁用，将在之后诊断问题。";
 
-"preference.title.resolution" = "分辨率 (%)";
+"preference.title.resolution" = "分辨率（%）";
 "preference.detail.resolution" = "允许您降低游戏分辨率。";
 "preference.title.max_framerate" = "最大帧率";
 "preference.detail.max_framerate" = "允许您在 ProMotion 显示器上将游戏帧率限制为 60FPS。";
@@ -206,7 +206,7 @@
 "preference.title.hardware_hide" = "硬件连接时隐藏控制键";
 "preference.detail.hardware_hide" = "启用连接鼠标或游戏手柄时自动禁用屏幕控制叠加层的行为。";
 "preference.title.recording_hide" = "从屏幕录制中隐藏控件";
-"preference.detail.recording_hide" = "隐藏屏幕截图和屏幕录制中的控件，但其仍然在屏幕上可见。";
+"preference.detail.recording_hide" = "在屏幕截图和屏幕录制中，隐藏控件，但其仍然在屏幕上可见。";
 "preference.title.gesture_mouse" = "鼠标手势";
 "preference.detail.gesture_mouse" = "启用手势，例如点击放置方块、按住破坏方块、用两根手指转动视角";
 "preference.title.gesture_hotbar" = "快捷栏手势";
@@ -214,11 +214,11 @@
 "preference.title.disable_haptics" = "禁用屏幕触觉反馈";
 "preference.title.press_duration" = "长按延迟（毫秒）";
 "preference.detail.press_duration" = "修改长按摧毁方块、丢弃物品的触发时长。";
-"preference.title.button_scale" = "屏幕按钮缩放 (%)";
+"preference.title.button_scale" = "屏幕按钮缩放（%）";
 "preference.detail.button_scale" = "如果按钮过小则放大按钮，通常平板用户需要更改此选项。";
-"preference.title.mouse_scale" = "鼠标缩放 (%)";
+"preference.title.mouse_scale" = "鼠标缩放（%）";
 "preference.detail.mouse_scale" = "修改虚拟鼠标的大小";
-"preference.title.mouse_speed" = "鼠标速度 (%)";
+"preference.title.mouse_speed" = "鼠标速度（%）";
 "preference.detail.mouse_speed" = "修改虚拟鼠标的移动速度";
 "preference.title.virtmouse_enable" = "虚拟鼠标";
 "preference.detail.virtmouse_enable" = "启用此选项以在游戏启动时显示虚拟鼠标";
@@ -240,25 +240,25 @@
 "preference.manage_runtime.footer.default" = "Minecraft 1.16.5 及更早版本可以运行较新的 Java 版本，但无法保证与模组的兼容性。外部运行时可以放在“java_runtimes”文件夹中。仅当安装程序不需要较新的 Java 版本时，“执行 .jar”的 Java 版本更改才会生效。";
 "preference.manage_runtime.footer.java8" = "这是 Minecraft 1.16.5 及更早版本的默认版本。";
 "preference.manage_runtime.footer.java17" = "这是 Minecraft 1.17 及更新版本的默认版本。";
-"preference.manage_runtime.header.invalid" = "无效的运行时";
+"preference.manage_runtime.header.invalid" = "运行时无效";
 
 "preference.title.java_args" = "JVM 启动参数";
 "preference.detail.java_args" = "当启动 Minecraft 时将参数传递到 Java。小心，如果修改不正确，可能会使游戏崩溃。";
-"preference.placeholder.java_args" = "自定义参数...";
+"preference.placeholder.java_args" = "自定义参数……";
 "preference.title.env_variables" = "环境变量";
 "preference.detail.env_variables" = "设置启动 Minecraft 时的自定义环境变量。请小心，如果修改不当，会导致游戏崩溃。";
-"preference.placeholder.env_variables" = "指定变量...";
+"preference.placeholder.env_variables" = "指定变量……";
 "preference.title.auto_ram" = "自动设置内存大小";
 "preference.detail.auto_ram" = "启用内存自动调节";
 "preference.warn.auto_ram" = "在未越狱的设备禁用此选项上可能会导致应用不稳定。请谨慎更改此选项。";
-"preference.title.allocated_memory" = "内存分配 (MB)";
+"preference.title.allocated_memory" = "内存分配（MB）";
 "preference.detail.allocated_memory" = "控制给 Minecraft 分配多少内存";
 "preference.warn.allocated_memory" = "由于操作系统本身的限制，此选项在此值及更高值下可能会导致不稳定。请谨慎操作。";
 "preference.title.custom_env" = "环境变量";
 "preference.detail.custom_env" = "此选项正在构建中。请在此期间创建并编辑 custom_env.txt 文件。";
 
-"preference.title.debug_skip_wait_jit" = "跳过“等待 JIT”对话框";
-"preference.detail.debug_skip_wait_jit" = "这并不是让您在没有 JIT 的情况下启动，而是跳过调试器检查，因为在某些越狱设备上会检查失败。";
+"preference.title.debug_skip_wait_jit" = "跳过“请等待应用获取到 JIT 权限”对话框";
+"preference.detail.debug_skip_wait_jit" = "这并不是让您在没有 JIT 权限的情况下启动，而是跳过调试器检查，因为在某些越狱设备上会检查失败。";
 "preference.title.debug_ipad_ui" = "解锁 iPadOS 界面";
 "preference.detail.debug_ipad_ui" = "如果启用，则解锁 iPad 专属界面（警告、键盘等），如果禁用，则解锁 iPhone 界面。";
 "preference.title.debug_auto_correction" = "自动更正";
