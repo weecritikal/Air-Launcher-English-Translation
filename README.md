@@ -1,14 +1,13 @@
 # 我的Angel Aura Amethyst (iOS)重制版
-[![开发构建](https://github.com/AngelAuraMC/Amethyst-iOS/actions/workflows/development.yml/badge.svg?branch=main)](https://github.com/AngelAuraMC/Amethyst-iOS/actions/workflows/development.yml)
-
+[![开发构建](https://github.com/herbrine8403/Amethyst-iOS-MyRemastered/actions/workflows/development.yml/badge.svg?branch=main)](herbrine8403/Amethyst-iOS-MyRemastered/actions/workflows/development.yml)
 
 ## 简介
 我做的Angel Aura Amethyst重制版。
 - 支持根据网络情况自动选择游戏下载源（Mojang和BMCLAPI）。
-- 完整的中文本地化支持，更加易懂。
-- 内置我自己制作的控件布局（仅适用于iPad）。
+- 完整的中文本地化支持，更加易懂。（即将实现）
+- 内置我自己制作的控件布局（仅适用于iPad）。（即将实现）
 - 去除了原版Angel Aura Amethyst的账户限制，可在本地账户或演示账户（Demo Mode）下正常下载游戏。
-- 支持通过 Microsoft 账号、本地账户和第三方验证服务器账户登录游戏。
+- 支持通过 Microsoft 账号、本地账户和第三方验证服务器账户登录游戏。（即将实现）
 - ……还有更多功能等你来探索！
 
 本代码仓库包含 Amethyst 在 iOS 和 iPadOS 平台的移植代码。
@@ -85,11 +84,13 @@ Amethyst 功能强大且稳定性出色，这离不开社区成员的支持与�
 @zhuowei  
 @jkcoxson   
 @Diatrus 
+
 （致敬传奇artDev）
 
 ## 特别感谢
-@LanRhyme - 没有他的GitHub Actions 工作流配置文件提供的思路，就没有这个重制版Amethyst！
-[他的B站主页](https://b23.tv/3rmAFc2) [他的GitHub](https://github.com/LanRhyme) [MC手机端日志分析器（主要项目）](https://github.com/LanRhyme/Web-MinecraftLogAnalyzer)
+[@LanRhyme](https://github.com/LanRhyme) - 没有他的GitHub Actions 工作流配置文件提供的思路，就没有这个重制版Amethyst！
+
+[他的B站主页](https://b23.tv/3rmAFc2)  [MC移动端日志分析器（主要项目）](https://github.com/LanRhyme/Web-MinecraftLogAnalyzer)
 
 ## 第三方组件及其许可证（官方）
 - [Caciocavallo](https://github.com/PojavLauncherTeam/caciocavallo)：[GNU GPLv2 许可证](https://github.com/PojavLauncherTeam/caciocavallo/blob/master/LICENSE)。
