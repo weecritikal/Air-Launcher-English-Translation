@@ -18,7 +18,7 @@ jobs:
             platform_name: ios
     
     # 🔧 修改：固定Runner架构（避免macos-latest的不确定性）
-    runs-on: macos-15-arm64
+    runs-on: macos-15
     steps:
       # 🔧 新增：固定Xcode版本（确保SDK与模拟器运行时兼容）
       - name: Use compatible Xcode version (16.1)
