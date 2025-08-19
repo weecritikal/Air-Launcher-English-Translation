@@ -242,6 +242,7 @@
 
 "profile.error.name_exists" = "Ya existe un perfil con ese nombre. Por favor, utiliza otro nombre.";
 "profile.title.create" = "Crear un nuevo perfil";
+"profile.title.install_fabric_quilt" = "Instalar Fabric/Quilt";
 "controller_configurator.title.type.xbox" = "Xbox";
 "controller_configurator.title.type.playstation" = "PlayStation";
 "controller_configurator.xbox.title.named_back" = "Guia";
