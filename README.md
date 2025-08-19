@@ -1,23 +1,21 @@
-# Angel Aura Amethyst (iOS)
+# 我的Angel Aura Amethyst (iOS)重制版
 [![开发构建](https://github.com/AngelAuraMC/Amethyst-iOS/actions/workflows/development.yml/badge.svg?branch=main)](https://github.com/AngelAuraMC/Amethyst-iOS/actions/workflows/development.yml)
-[![Crowdin](https://badges.crowdin.net/angelauramc/localized.svg)](https://crowdin.com/project/angelauramc)
-[![Discord](https://img.shields.io/discord/724163890803638273.svg?label=&logo=discord&logoColor=ffffff&color=7389D8&labelColor=6A7EC2)](https://discord.gg/5ptqkyZxEy)
-
 
 
 ## 简介
-Amethyst 是一款适用于 Android、iOS 和 iPadOS 的 Minecraft: Java Edition（我的世界：Java 版）启动器，基于 zhuowei 的 [Boardwalk](https://github.com/zhuowei/Boardwalk) 项目开发。
-- 支持绝大多数版本的 Minecraft: Java Edition，从最初的测试版（beta）到最新的快照版（snapshot）均兼容。
-- 支持 Forge、Fabric、OptiFine 和 Quilt 模组加载器，可用于安装受支持的模组以自定义游戏体验。
-- 内置可自定义的屏幕触控控件，同时支持键盘鼠标和游戏手柄操作。
-- 针对已越狱（jailbroken）设备和 TrollStore 设备进行优化，以解锁更强大的功能。
-- 支持通过 Microsoft 账号登录游戏，也支持演示模式（demo mode）。
+我做的Angel Aura Amethyst重制版。
+- 支持根据网络情况自动选择游戏下载源（Mojang和BMCLAPI）。
+- 完整的中文本地化支持，更加易懂。
+- 内置我自己制作的控件布局（仅适用于iPad）。
+- 去除了原版Angel Aura Amethyst的账户限制，可在本地账户或演示账户（Demo Mode）下正常下载游戏。
+- 支持通过 Microsoft 账号、本地账户和第三方验证服务器账户登录游戏。
 - ……还有更多功能等你来探索！
 
-本代码仓库包含 Amethyst 在 iOS 和 iPadOS 平台的移植代码。如需 Android 版本的代码，请前往 [Amethyst-Android](https://github.com/AngelAuraMC/Amethyst-Android)。
+本代码仓库包含 Amethyst 在 iOS 和 iPadOS 平台的移植代码。
+我暂时不准备对Android版本进行重置（毕竟Android被官方优化的很好～）。如需 Android 官方版本的代码，请前往 [Amethyst-Android](https://github.com/AngelAuraMC/Amethyst-Android)。
 
 ## Amethyst 快速上手
-[Amethyst 官方维基](https://wiki.angelauramc.dev/wiki/getting_started/INSTALL.html#ios) 提供了关于安装、设置和游戏体验的详细文档。若你希望快速完成安装，可参考以下基础步骤：
+[Amethyst 官方维基](https://wiki.angelauramc.dev/wiki/getting_started/INSTALL.html#ios) 提供了关于安装、设置和游戏体验的详细文档。或者参考[我的教程视频](https://b23.tv/KyxZr12)。若你希望快速完成安装，可参考以下基础步骤：
 
 ### 设备要求
 最低配置要求：需使用搭载 **iOS 14.0 及以上系统**的以下任一设备：
@@ -27,8 +25,9 @@ Amethyst 是一款适用于 Android、iOS 和 iPadOS 的 Minecraft: Java Edition
 - iPad mini（第 4 代）及后续机型
 - 所有型号的 iPad Pro
 - iPod touch（第 7 代）
+**注意：此改版在iOS 14.0～iOS 14.4.2系统有极为严重的兼容性问题，最好使用iOS 14.5及以上系统。**
 
-推荐配置：建议使用搭载 **iOS 14.0 及以上系统**的以下任一设备：
+推荐配置：建议使用搭载 **iOS 14.5 及以上系统**的以下任一设备：
 - iPhone XS 及后续机型（不包含 iPhone XR 和 iPhone SE（第 2 代））
 - iPad（第 10 代）及后续机型
 - iPad Air（第 4 代）及后续机型
@@ -38,7 +37,7 @@ Amethyst 是一款适用于 Android、iOS 和 iPadOS 的 Minecraft: Java Edition
 推荐机型相比其他支持机型，能提供更流畅、更优质的游戏体验。
 - 支持 iOS 17.x 和 iOS 18.x 系统，但需借助电脑操作。更多详情请查阅 [官方维基](https://wiki.angelauramc.dev/wiki/faq/ios/JIT.html#what-are-the-methods-to-enable-jit)。
 
-### 侧载（sideload）准备工作
+### 侧载（sideload）准备工作（注：以下为官方教程）
 Amethyst 支持多种侧载方式，推荐方案为：若你的 iOS 版本支持，优先安装 [TrollStore](https://github.com/opa334/TrollStore)。通过 TrollStore 安装可实现应用永久签名、自动启用 JIT（即时编译），并提升内存限制。
 
 若你的设备不支持 TrollStore，可选择 [AltStore](https://altstore.io) 或 [SideStore](https://sidestore.io) 作为替代方案：
@@ -75,7 +74,7 @@ Amethyst 需借助 **即时编译（just-in-time compilation，简称 JIT）** �
 （*）需在本地网络中运行 AltServer。
 （#）仅首次设置时需要。
 
-## 贡献者
+## 贡献者（官方）
 Amethyst 功能强大且稳定性出色，这离不开社区成员的支持与贡献！以下是部分主要贡献者：
 
 @crystall1nedev - 项目负责人、iOS 移植开发者  
@@ -85,8 +84,13 @@ Amethyst 功能强大且稳定性出色，这离不开社区成员的支持与�
 @zhuowei  
 @jkcoxson   
 @Diatrus 
+（致敬传奇artDev）
 
-## 第三方组件及其许可证
+## 特别感谢
+@LanRhyme - 没有他的GitHub Actions 工作流配置文件提供的思路，就没有这个重制版Amethyst！
+[他的B站主页](https://b23.tv/3rmAFc2) [他的GitHub](https://github.com/LanRhyme) [MC手机端日志分析器（主要项目）](https://github.com/LanRhyme/Web-MinecraftLogAnalyzer)
+
+## 第三方组件及其许可证（官方）
 - [Caciocavallo](https://github.com/PojavLauncherTeam/caciocavallo)：[GNU GPLv2 许可证](https://github.com/PojavLauncherTeam/caciocavallo/blob/master/LICENSE)。
 - [jsr305](https://code.google.com/p/jsr-305)：[BSD 3-Clause 许可证](http://opensource.org/licenses/BSD-3-Clause)。
 - [Boardwalk](https://github.com/zhuowei/Boardwalk)：[Apache 2.0 许可证](https://github.com/zhuowei/Boardwalk/blob/master/LICENSE) 
