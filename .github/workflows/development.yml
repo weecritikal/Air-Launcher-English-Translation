@@ -1,4 +1,5 @@
 name: Development build
+
 on:
   pull_request:
     branches-ignore:
@@ -8,6 +9,7 @@ on:
     branches-ignore:
       - 'l10n_main'
   workflow_dispatch:
+
 jobs:
   build:
     name: Development build
@@ -17,46 +19,21 @@ jobs:
           - platform: 2
             platform_name: ios
     
-    # 🔧 修改：固定Runner架构（避免macos-latest的不确定性）
     runs-on: macos-15
     steps:
-      # 🔧 新增：固定Xcode版本（确保SDK与模拟器运行时兼容）
-      - name: Use compatible Xcode version (16.1)
-        uses: actions/setup-xcode@v2
-        with:
-          xcode-version: '16.1'  # 匹配历史成功构建的Xcode版本，避免SDK不兼容
-      
-      # 🔧 新增：安装缺失的模拟器运行时（解决actool报错）
-      - name: Install iOS Simulator Runtime (fix SDK mismatch)
-        run: |
-          # 初始化Xcode并自动补全缺失组件（含模拟器运行时）
-          xcodebuild -runFirstLaunch
-          # 打印可用SDK和运行时，用于调试验证
-          echo "=== Available SDKs ==="
-          xcodebuild -showsdks
-          echo "=== Available Simulators ==="
-          xcrun simctl list runtimes
-          # 手动安装匹配的iOS模拟器运行时（根据日志报错调整版本，此处适配iOS 17.x/18.x）
-          xcodebuild -installSDK "com.apple.pkg.iOS_Simulator_SDK_17.4" || true
-          xcodebuild -installSDK "com.apple.pkg.iOS_Simulator_SDK_18.0" || true
-
-      # 原步骤：安装GNU Make（未修改）
       - name: Install GNU Make
         run: |
           brew update
           brew install make
-      
-      # 原步骤：安装Java 8（Temurin）（未修改）
+
       - name: Install Java 8 (Temurin) via Homebrew
         run: |
           brew install --cask temurin@8
-      
-      # 原步骤：安装ldid（未修改）
+
       - name: Install ldid
         run: |
           brew install ldid
-      
-      # 原步骤：清理工作文件夹（未修改）
+          
       - name: Remove work folders
         run: |
           echo "before"
@@ -65,22 +42,18 @@ jobs:
           rm -rf ./.??* || true
           echo "after"
           ls -lah ./
-      
-      # 原步骤：检出代码仓库（未修改）
+          
       - name: Checkout repository
         uses: actions/checkout@main
-      
-      # 原步骤：检出子模块（未修改）
+
       - name: Checkout repository submodules
         run: git submodule update --init --recursive
-      
-      # 原步骤：获取gl4es最新Commit哈希（未修改）
+
       - name: Get gl4es latest commit hash
         id: gl4es-sha
         run: echo "::set-output name=sha::$(echo $(git ls-remote https://github.com/PojavLauncherTeam/gl4es-114-extra refs/heads/master | grep -io '^\S*'))"
         shell: bash
-      
-      # 原步骤：缓存gl4es（未修改，原配置为禁用状态）
+
       - name: Cache gl4es
         uses: actions/cache@main
         if: false # use gl4es 1.1.5
@@ -88,16 +61,14 @@ jobs:
         with:
           path: gl4es/libs
           key: gl4es-holy-ios-shared-2-${{ steps.gl4es-sha.outputs.sha }}
-      
-      # 原步骤：检出gl4es仓库（未修改，原配置为禁用状态）
+
       - name: Get gl4es
         if: false && steps.gl4es-cache.outputs.cache-hit != 'true'
         uses: actions/checkout@main
         with:
           repository: 'PojavLauncherTeam/gl4es-114-extra'
           path: 'gl4es'
-      
-      # 原步骤：构建gl4es（未修改，原配置为禁用状态）
+
       - name: Build gl4es
         if: false && steps.gl4es-cache.outputs.cache-hit != 'true'
         continue-on-error: true
@@ -112,8 +83,7 @@ jobs:
             -DCMAKE_C_FLAGS=-Wno-error=implicit-function-declaration
           cmake --build build --config RelWithDebInfo --target GL
           cp -R lib/libGL.dylib ../Natives/resources/Frameworks/libgl4es_114.dylib
-      
-      # 原步骤：推送gl4es更新（未修改，原配置为禁用状态）
+          
       - name: Push gl4es
         if: false && github.event != 'pull_request' && github.ref_name == 'main' && steps.gl4es-cache.outputs.cache-hit != 'true'
         continue-on-error: true
@@ -121,8 +91,7 @@ jobs:
           git add Natives/resources/Frameworks/libgl4es_114.dylib
           git commit -am "CI: Update gl4es"
           git push
-      
-      # 原步骤：构建目标平台产物（未修改）
+
       - name: Build for ${{ matrix.platform_name }}
         run: |
           export PATH=/opt/homebrew/bin:$PATH
@@ -138,36 +107,31 @@ jobs:
             # Build ipa only for everything else
             gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }}
           fi
-      
-      # 原步骤：上传常规IPA（未修改）
+
       - name: Upload regular ipa
         uses: actions/upload-artifact@main
         with:
           name: org.angelauramc.amethyst-${{ matrix.platform_name }}.ipa
           path: artifacts/org.angelauramc.amethyst-*-${{ matrix.platform_name }}.ipa
-      
-      # 原步骤：上传TrollStore专用TIPA（未修改）
+
       - name: Upload regular tipa
         uses: actions/upload-artifact@main
         with:
           name: org.angelauramc.amethyst-${{ matrix.platform_name }}-trollstore.tipa
           path: artifacts/org.angelauramc.amethyst-*-${{ matrix.platform_name }}-trollstore.tipa
-      
-      # 原步骤：上传精简版IPA（未修改）
+
       - name: Upload slimmed ipa
         uses: actions/upload-artifact@main
         with:
           name: org.angelauramc.amethyst.slimmed-${{ matrix.platform_name }}.ipa
           path: artifacts/org.angelauramc.amethyst.slimmed-*-${{ matrix.platform_name }}.ipa
-      
-      # 原步骤：上传精简版TIPA（未修改）
+
       - name: Upload slimmed tipa
         uses: actions/upload-artifact@main
         with:
           name: org.angelauramc.amethyst.slimmed-${{ matrix.platform_name }}-trollstore.tipa
           path: artifacts/org.angelauramc.amethyst.slimmed-*-${{ matrix.platform_name }}-trollstore.tipa
-      
-      # 原步骤：上传dSYM调试文件（未修改）
+
       - name: Upload PojavLauncher.dSYM
         uses: actions/upload-artifact@main
         if: matrix.platform_name == 'ios'
