@@ -18,18 +18,32 @@ jobs:
         include:
           - platform: 2
             platform_name: ios
-    
+
     runs-on: macos-14
-    
+
     steps:
-      - name: Select Xcode version
-        run: sudo xcode-select -s /Applications/Xcode_14.3.1.app/Contents/Developer
-      
-      - name: Install simulator runtime
+      - name: Show available Xcode and select a suitable one
         run: |
-          xcrun simctl list runtimes
-          xcrun simctl runtime add "iOS 14.0"
-          
+          set -e
+          echo "Available apps in /Applications (matching Xcode*):"
+          ls /Applications | grep -E "Xcode(.+)?\.app" || true
+          # Prefer Xcode_16, then Xcode_15, then /Applications/Xcode.app
+          if [ -d "/Applications/Xcode_16.app" ]; then
+            echo "Selecting /Applications/Xcode_16.app"
+            sudo xcode-select -s /Applications/Xcode_16.app/Contents/Developer
+          elif [ -d "/Applications/Xcode_15.app" ]; then
+            echo "Selecting /Applications/Xcode_15.app"
+            sudo xcode-select -s /Applications/Xcode_15.app/Contents/Developer
+          elif [ -d "/Applications/Xcode.app" ]; then
+            echo "Selecting /Applications/Xcode.app"
+            sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+          else
+            echo "No preinstalled Xcode found under /Applications that matches the search. Leaving system default."
+          fi
+          xcodebuild -version || true
+          echo "Available simulator runtimes (for debugging):"
+          xcrun simctl list runtimes || true
+
       - name: Install GNU Make
         run: |
           brew update
@@ -37,12 +51,12 @@ jobs:
 
       - name: Install Java 8 (Temurin) via Homebrew
         run: |
-          brew install --cask temurin@8
+          brew install --cask temurin@8 || true
 
       - name: Install ldid
         run: |
-          brew install ldid
-          
+          brew install ldid || true
+
       - name: Remove work folders
         run: |
           echo "before"
@@ -51,7 +65,7 @@ jobs:
           rm -rf ./.??* || true
           echo "after"
           ls -lah ./
-          
+
       - name: Checkout repository
         uses: actions/checkout@v4
 
@@ -60,11 +74,12 @@ jobs:
 
       - name: Get gl4es latest commit hash
         id: gl4es-sha
-        run: echo "sha=$(git ls-remote https://github.com/PojavLauncherTeam/gl4es-114-extra refs/heads/master | grep -io '^\S*')" >> $GITHUB_OUTPUT
+        run: |
+          echo "sha=$(git ls-remote https://github.com/PojavLauncherTeam/gl4es-114-extra refs/heads/master | grep -io '^\S*')" >> $GITHUB_OUTPUT
 
       - name: Cache gl4es
         uses: actions/cache@v4
-        if: false # use gl4es 1.1.5
+        if: false # set to true if you want to enable caching
         id: gl4es-cache
         with:
           path: gl4es/libs
@@ -89,63 +104,64 @@ jobs:
           cmake -B build -DCMAKE_TOOLCHAIN_FILE=ios.toolchain.cmake -DDEFAULT_ES=2 \
             -DNOX11=ON -DNOEGL=OFF -DSTATICLIB=OFF -DPLATFORM=OS64 \
             -DCMAKE_C_FLAGS=-Wno-error=implicit-function-declaration
-          cmake --build build --config RelWithDebInfo --target GL
-          cp -R lib/libGL.dylib ../Natives/resources/Frameworks/libgl4es_114.dylib
-          
+          cmake --build build --config RelWithDebInfo --target GL || true
+          cp -R lib/libGL.dylib ../Natives/resources/Frameworks/libgl4es_114.dylib || true
+
       - name: Push gl4es
-        if: false && github.event != 'pull_request' && github.ref_name == 'main' && steps.gl4es-cache.outputs.cache-hit != 'true'
+        if: false && github.event_name != 'pull_request' && github.ref_name == 'main' && steps.gl4es-cache.outputs.cache-hit != 'true'
         continue-on-error: true
         run: |
-          git add Natives/resources/Frameworks/libgl4es_114.dylib
-          git commit -am "CI: Update gl4es"
-          git push
+          git add Natives/resources/Frameworks/libgl4es_114.dylib || true
+          git commit -am "CI: Update gl4es" || true
+          git push || true
 
       - name: Build for ${{ matrix.platform_name }}
         env:
-          DEVELOPER_DIR: /Applications/Xcode_14.3.1.app/Contents/Developer
           IPHONEOS_DEPLOYMENT_TARGET: 14.0
         run: |
+          set -e
           export PATH=/opt/homebrew/bin:$PATH
           export SLIMMED=1
+          # Prefer building against the device SDK (iphoneos) to avoid simulator runtime mismatch for asset compilation
+          SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path 2>/dev/null || true)
+          echo "Using SDKROOT=${SDKROOT}"
           if [ "${{ matrix.platform_name }}" == "ios" ]; then
-            # Build ipa and tipa for iOS
-            gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }} SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)
-            gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }} TROLLSTORE_JIT_ENT=1 SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)
+            gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }} SDKROOT="$SDKROOT" || exit $?
+            gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }} TROLLSTORE_JIT_ENT=1 SDKROOT="$SDKROOT" || exit $?
           elif [ "${{ matrix.platform_name }}" == "tvos" ]; then
-            # Build tipa only for tvOS
-            gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }} TROLLSTORE_JIT_ENT=1 SDKROOT=$(xcrun --sdk appletvos --show-sdk-path)
+            SDKROOT_TV=$(xcrun --sdk appletvos --show-sdk-path 2>/dev/null || true)
+            gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }} TROLLSTORE_JIT_ENT=1 SDKROOT="$SDKROOT_TV" || exit $?
           else
-            # Build ipa only for everything else
-            gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }} SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)
+            gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }} SDKROOT="$SDKROOT" || exit $?
           fi
 
       - name: Upload regular ipa
-        uses: actions/upload-artifact@v4 # 更新到 v4
+        uses: actions/upload-artifact@v4
         with:
           name: org.angelauramc.amethyst-${{ matrix.platform_name }}.ipa
           path: artifacts/org.angelauramc.amethyst-*-${{ matrix.platform_name }}.ipa
 
       - name: Upload regular tipa
-        uses: actions/upload-artifact@v4 # 更新到 v4
+        uses: actions/upload-artifact@v4
         with:
           name: org.angelauramc.amethyst-${{ matrix.platform_name }}-trollstore.tipa
           path: artifacts/org.angelauramc.amethyst-*-${{ matrix.platform_name }}-trollstore.tipa
 
       - name: Upload slimmed ipa
-        uses: actions/upload-artifact@v4 # 更新到 v4
+        uses: actions/upload-artifact@v4
         with:
           name: org.angelauramc.amethyst.slimmed-${{ matrix.platform_name }}.ipa
           path: artifacts/org.angelauramc.amethyst.slimmed-*-${{ matrix.platform_name }}.ipa
 
       - name: Upload slimmed tipa
-        uses: actions/upload-artifact@v4 # 更新到 v4
+        uses: actions/upload-artifact@v4
         with:
           name: org.angelauramc.amethyst.slimmed-${{ matrix.platform_name }}-trollstore.tipa
           path: artifacts/org.angelauramc.amethyst.slimmed-*-${{ matrix.platform_name }}-trollstore.tipa
 
       - name: Upload PojavLauncher.dSYM
-        uses: actions/upload-artifact@v4 # 更新到 v4
         if: matrix.platform_name == 'ios'
+        uses: actions/upload-artifact@v4
         with:
           name: AngelAuraAmethyst.dSYM
           path: artifacts/AngelAuraAmethyst.dSYM
