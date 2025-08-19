@@ -1,5 +1,5 @@
 # 我的Angel Aura Amethyst (iOS)重制版
-[![开发构建](https://github.com/herbrine8403/Amethyst-iOS-MyRemastered/actions/workflows/development.yml/badge.svg?branch=main)](herbrine8403/Amethyst-iOS-MyRemastered/actions/workflows/development.yml)
+[![开发构建](https://github.com/herbrine8403/Amethyst-iOS-MyRemastered/actions/workflows/development.yml/badge.svg?branch=main)](.github/actions/workflows/development.yml)
 
 ## 简介
 我做的Angel Aura Amethyst重制版。
