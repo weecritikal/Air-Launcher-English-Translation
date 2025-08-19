@@ -19,13 +19,13 @@ jobs:
           - platform: 2
             platform_name: ios
     
-    runs-on: macos-14 # 改用较新的 macos 版本
+    runs-on: macos-14
     
     steps:
-      - name: Select Xcode version # 添加 Xcode 选择步骤
+      - name: Select Xcode version
         run: sudo xcode-select -s /Applications/Xcode_14.3.1.app/Contents/Developer
       
-      - name: Install simulator runtime # 添加模拟器运行时安装
+      - name: Install simulator runtime
         run: |
           xcrun simctl list runtimes
           xcrun simctl runtime add "iOS 14.0"
@@ -53,17 +53,17 @@ jobs:
           ls -lah ./
           
       - name: Checkout repository
-        uses: actions/checkout@v4 # 更新到最新版本
+        uses: actions/checkout@v4
 
       - name: Checkout repository submodules
         run: git submodule update --init --recursive
 
       - name: Get gl4es latest commit hash
         id: gl4es-sha
-        run: echo "sha=$(git ls-remote https://github.com/PojavLauncherTeam/gl4es-114-extra refs/heads/master | grep -io '^\S*')" >> $GITHUB_OUTPUT # 修改过时的 set-output
+        run: echo "sha=$(git ls-remote https://github.com/PojavLauncherTeam/gl4es-114-extra refs/heads/master | grep -io '^\S*')" >> $GITHUB_OUTPUT
 
       - name: Cache gl4es
-        uses: actions/cache@v3 # 更新到最新版本
+        uses: actions/cache@v4
         if: false # use gl4es 1.1.5
         id: gl4es-cache
         with:
@@ -72,7 +72,7 @@ jobs:
 
       - name: Get gl4es
         if: false && steps.gl4es-cache.outputs.cache-hit != 'true'
-        uses: actions/checkout@v4 # 更新到最新版本
+        uses: actions/checkout@v4
         with:
           repository: 'PojavLauncherTeam/gl4es-114-extra'
           path: 'gl4es'
@@ -102,48 +102,49 @@ jobs:
 
       - name: Build for ${{ matrix.platform_name }}
         env:
-          DEVELOPER_DIR: /Applications/Xcode_14.3.1.app/Contents/Developer # 添加 Xcode 路径环境变量
+          DEVELOPER_DIR: /Applications/Xcode_14.3.1.app/Contents/Developer
+          IPHONEOS_DEPLOYMENT_TARGET: 14.0
         run: |
           export PATH=/opt/homebrew/bin:$PATH
           export SLIMMED=1
           if [ "${{ matrix.platform_name }}" == "ios" ]; then
             # Build ipa and tipa for iOS
-            gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }}
-            gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }} TROLLSTORE_JIT_ENT=1
+            gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }} SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)
+            gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }} TROLLSTORE_JIT_ENT=1 SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)
           elif [ "${{ matrix.platform_name }}" == "tvos" ]; then
             # Build tipa only for tvOS
-            gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }} TROLLSTORE_JIT_ENT=1
+            gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }} TROLLSTORE_JIT_ENT=1 SDKROOT=$(xcrun --sdk appletvos --show-sdk-path)
           else
             # Build ipa only for everything else
-            gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }}
+            gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }} SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path)
           fi
 
       - name: Upload regular ipa
-        uses: actions/upload-artifact@v3 # 更新到最新版本
+        uses: actions/upload-artifact@v4 # 更新到 v4
         with:
           name: org.angelauramc.amethyst-${{ matrix.platform_name }}.ipa
           path: artifacts/org.angelauramc.amethyst-*-${{ matrix.platform_name }}.ipa
 
       - name: Upload regular tipa
-        uses: actions/upload-artifact@v3 # 更新到最新版本
+        uses: actions/upload-artifact@v4 # 更新到 v4
         with:
           name: org.angelauramc.amethyst-${{ matrix.platform_name }}-trollstore.tipa
           path: artifacts/org.angelauramc.amethyst-*-${{ matrix.platform_name }}-trollstore.tipa
 
       - name: Upload slimmed ipa
-        uses: actions/upload-artifact@v3 # 更新到最新版本
+        uses: actions/upload-artifact@v4 # 更新到 v4
         with:
           name: org.angelauramc.amethyst.slimmed-${{ matrix.platform_name }}.ipa
           path: artifacts/org.angelauramc.amethyst.slimmed-*-${{ matrix.platform_name }}.ipa
 
       - name: Upload slimmed tipa
-        uses: actions/upload-artifact@v3 # 更新到最新版本
+        uses: actions/upload-artifact@v4 # 更新到 v4
         with:
           name: org.angelauramc.amethyst.slimmed-${{ matrix.platform_name }}-trollstore.tipa
           path: artifacts/org.angelauramc.amethyst.slimmed-*-${{ matrix.platform_name }}-trollstore.tipa
 
       - name: Upload PojavLauncher.dSYM
-        uses: actions/upload-artifact@v3 # 更新到最新版本
+        uses: actions/upload-artifact@v4 # 更新到 v4
         if: matrix.platform_name == 'ios'
         with:
           name: AngelAuraAmethyst.dSYM
