@@ -28,7 +28,7 @@ UIEdgeInsets insets;
     CGSize size = CGSizeMake(self.view.frame.size.width, self.view.frame.size.height);
     insets = UIApplication.sharedApplication.windows.firstObject.safeAreaInsets;
     
-    NSURLRequest *request = [NSURLRequest requestWithURL:[NSURL URLWithString:@"https://amethyst.ct.ws/%e6%ac%a2%e8%bf%8e%f0%9f%91%8f"]];
+    NSURLRequest *request = [NSURLRequest requestWithURL:[NSURL URLWithString:@"https://amethyst.ct.ws/welcome"]];
 
     WKWebViewConfiguration *webConfig = [[WKWebViewConfiguration alloc] init];
     webView = [[WKWebView alloc] initWithFrame:self.view.frame configuration:webConfig];
