@@ -44,10 +44,11 @@ jobs:
           echo "Available simulator runtimes (for debugging):"
           xcrun simctl list runtimes || true
 
-      - name: Install GNU Make
+      - name: Install GNU Make GLM
         run: |
           brew update
           brew install make
+          brew install glm || true
 
       - name: Install Java 8 (Temurin) via Homebrew
         run: |
