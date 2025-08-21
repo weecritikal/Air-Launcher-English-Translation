@@ -137,47 +137,28 @@ NSArray* getRendererKeys(BOOL containsDefault) {
     NSMutableArray *array = @[
         @"auto",
         @ RENDERER_NAME_GL4ES,
-        @ RENDERER_NAME_MTL_ANGLE
+        @ RENDERER_NAME_MTL_ANGLE,
+        @ RENDERER_NAME_MOBILEGLUES,
+        @ RENDERER_NAME_VK_ZINK
     ].mutableCopy;
 
     if (containsDefault) {
         [array insertObject:@"(default)" atIndex:0];
     }
-
-#if CONFIG_RELEASE
-    if(@available(iOS 16.0, *)) {
-        // Disabling Zink on iOS 16.0+ to figure out what's wrong with it
-    } else {
-#endif
-        [array addObject:@ RENDERER_NAME_VK_ZINK];
-#if CONFIG_RELEASE
-    }
-#endif
+    
     return array;
 }
 
 NSArray* getRendererNames(BOOL containsDefault) {
     NSMutableArray *array;
 
-#if CONFIG_RELEASE
-    if(@available(iOS 16.0, *)) {
-        // Disabling Zink on iOS 16.0+ to figure out what's wrong with it
-        array = @[
-            localize(@"preference.title.renderer.release.auto", nil),
-            localize(@"preference.title.renderer.release.gl4es", nil),
-            localize(@"preference.title.renderer.release.angle", nil)
-        ].mutableCopy;
-    } else {
-#endif
-        array = @[
-            localize(@"preference.title.renderer.debug.auto", nil),
-            localize(@"preference.title.renderer.debug.gl4es", nil),
-            localize(@"preference.title.renderer.debug.angle", nil),
-            localize(@"preference.title.renderer.debug.zink", nil)
-        ].mutableCopy;
-#if CONFIG_RELEASE
-    }
-#endif
+    array = @[
+        localize(@"preference.title.renderer.debug.auto", nil),
+        localize(@"preference.title.renderer.debug.gl4es", nil),
+        localize(@"preference.title.renderer.debug.angle", nil),
+        localize(@"preference.title.renderer.debug.mg", nil),
+        localize(@"preference.title.renderer.debug.zink", nil)
+    ].mutableCopy;
 
     if (containsDefault) {
         [array insertObject:@"(default)" atIndex:0];

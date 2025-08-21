@@ -29,10 +29,7 @@ void swizzleUIImageMethod(SEL originalAction, SEL swizzledAction) {
 }
 
 void init_hookUIKitConstructor(void) {
-    UIUserInterfaceIdiom idiom = getPrefBool(@"debug.debug_ipad_ui") ? UIUserInterfaceIdiomPad : UIUserInterfaceIdiomPhone;
-    [UIDevice.currentDevice _setActiveUserInterfaceIdiom:idiom];
-    [UIScreen.mainScreen _setUserInterfaceIdiom:idiom];
-    
+    swizzle(UIDevice.class, @selector(userInterfaceIdiom), @selector(hook_userInterfaceIdiom));
     swizzle(UIImageView.class, @selector(setImage:), @selector(hook_setImage:));
     if(UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPhone) {
         swizzle(UIPointerInteraction.class, @selector(_updateInteractionIsEnabled), @selector(hook__updateInteractionIsEnabled));
@@ -59,6 +56,16 @@ void init_hookUIKitConstructor(void) {
 
 - (NSString *)completeOSVersion {
     return [NSString stringWithFormat:@"%@ %@ (%@)", self.systemName, self.systemVersion, self.buildVersion];
+}
+
+- (UIUserInterfaceIdiom)hook_userInterfaceIdiom {
+    if (getPrefBool(@"debug.debug_ipad_ui")) {
+        return UIUserInterfaceIdiomPad;
+    } else if (self.hook_userInterfaceIdiom == UIUserInterfaceIdiomTV) {
+        return self.hook_userInterfaceIdiom;
+    } else {
+        return UIUserInterfaceIdiomPhone;
+    }
 }
 
 @end
