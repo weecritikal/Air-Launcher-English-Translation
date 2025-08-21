@@ -44,10 +44,11 @@ jobs:
           echo "Available simulator runtimes (for debugging):"
           xcrun simctl list runtimes || true
 
-      - name: Install GNU Make
+      - name: Install GNU Make GLM
         run: |
           brew update
           brew install make
+          brew install glm || true
 
       - name: Install Java 8 (Temurin) via Homebrew
         run: |
@@ -119,22 +120,20 @@ jobs:
         env:
           IPHONEOS_DEPLOYMENT_TARGET: 14.0
         run: |
-          set -e
           export PATH=/opt/homebrew/bin:$PATH
           export SLIMMED=1
-          # Prefer building against the device SDK (iphoneos) to avoid simulator runtime mismatch for asset compilation
-          SDKROOT=$(xcrun --sdk iphoneos --show-sdk-path 2>/dev/null || true)
-          echo "Using SDKROOT=${SDKROOT}"
           if [ "${{ matrix.platform_name }}" == "ios" ]; then
-            gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }} SDKROOT="$SDKROOT" || exit $?
-            gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }} TROLLSTORE_JIT_ENT=1 SDKROOT="$SDKROOT" || exit $?
+            # Build ipa and tipa for iOS
+            gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }}
+            gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }} TROLLSTORE_JIT_ENT=1
           elif [ "${{ matrix.platform_name }}" == "tvos" ]; then
-            SDKROOT_TV=$(xcrun --sdk appletvos --show-sdk-path 2>/dev/null || true)
-            gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }} TROLLSTORE_JIT_ENT=1 SDKROOT="$SDKROOT_TV" || exit $?
+            # Build tipa only for tvOS
+            gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }} TROLLSTORE_JIT_ENT=1
           else
-            gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }} SDKROOT="$SDKROOT" || exit $?
+            # Build ipa only for everything else
+            gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }}
           fi
-
+          
       - name: Upload regular ipa
         uses: actions/upload-artifact@v4
         with:
