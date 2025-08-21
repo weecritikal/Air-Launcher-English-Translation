@@ -8,6 +8,9 @@
 @property NSMutableDictionary* metadata;
 @property(nonatomic, copy) void(^handleError)(void);
 
+// 新增方法声明（用于账户检查）
+- (BOOL)checkAccessWithDialog:(BOOL)show;
+
 - (NSURLSessionDownloadTask *)createDownloadTask:(NSString *)url size:(NSUInteger)size sha:(NSString *)sha altName:(NSString *)altName toPath:(NSString *)path;
 - (void)finishDownloadWithErrorString:(NSString *)error;
 
