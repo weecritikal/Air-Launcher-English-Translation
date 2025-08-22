@@ -69,7 +69,7 @@
 "init.migrateDir" = "目前 Amethyst 数据目录为 %@。所有的游戏资源已移动到最新目录。";
 
 "java.error.missing_main_class" = "%@ 缺少主类属性。如果这是一个模组，请将其放入所选实例的“mods”文件夹中。";
-"java.error.missing_runtime" = "%@ 需要 Java %d 或更高版本才能运行。请先安装该版本，然后在“管理运行时”中进行指定。";
+"java.error.missing_runtime" = "%@ 需要 Java %d 或更高版本才能运行。请先安装该版本，然后在“管理运行环境”中进行指定。";
 
 "launcher.mcl.downloading_file" = "正在下载 %@";
 "launcher.mcl.error_download" = "下载 %@ 失败：%@";
@@ -232,15 +232,15 @@
 "preference.title.gyroscope_sensitivity" = "陀螺仪控制灵敏度";
 "preference.detail.gyroscope_sensitivity" = "调整陀螺仪控制的灵敏度";
 
-"preference.title.manage_runtime" = "管理运行时";
+"preference.title.manage_runtime" = "管理运行环境";
 "preference.title.confirm.delete_runtime" = "%@ 将被删除";
 "preference.manage_runtime.header.default" = "首选 Java 版本";
 "preference.manage_runtime.default.1165" = "1.16.5 及以下";
 "preference.manage_runtime.default.117" = "1.17 及以上";
-"preference.manage_runtime.footer.default" = "Minecraft 1.16.5 及更早版本可以运行较新的 Java 版本，但无法保证与模组的兼容性。外部运行时可以放在“java_runtimes”文件夹中。仅当安装程序不需要较新的 Java 版本时，“执行 .jar”的 Java 版本更改才会生效。";
+"preference.manage_runtime.footer.default" = "Minecraft 1.16.5 及更早版本可以运行较新的 Java 版本，但无法保证与模组的兼容性。外部运行环境可以放在“java_runtimes”文件夹中。仅当安装程序不需要较新的 Java 版本时，“执行 .jar”的 Java 版本更改才会生效。";
 "preference.manage_runtime.footer.java8" = "这是 Minecraft 1.16.5 及更早版本的默认版本。";
 "preference.manage_runtime.footer.java17" = "这是 Minecraft 1.17 及更新版本的默认版本。";
-"preference.manage_runtime.header.invalid" = "运行时无效";
+"preference.manage_runtime.header.invalid" = "运行环境无效";
 
 "preference.title.java_args" = "JVM 启动参数";
 "preference.detail.java_args" = "当启动 Minecraft 时将参数传递到 Java。小心，如果修改不正确，可能会使游戏崩溃。";
