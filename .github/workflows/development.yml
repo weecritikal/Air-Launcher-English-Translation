@@ -120,7 +120,7 @@ jobs:
           IPHONEOS_DEPLOYMENT_TARGET: 14.0
         run: |
           export PATH=/opt/homebrew/bin:$PATH
-          export RUNNER=1
+          export SLIMMED=0
           if [ "${{ matrix.platform_name }}" == "ios" ]; then
             # Build ipa and tipa for iOS
             gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }}
