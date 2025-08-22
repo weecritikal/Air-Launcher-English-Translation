@@ -44,11 +44,10 @@ jobs:
           echo "Available simulator runtimes (for debugging):"
           xcrun simctl list runtimes || true
 
-      - name: Install GNU Make GLM
+      - name: Install GNU Make
         run: |
           brew update
           brew install make
-          brew install glm || true
 
       - name: Install Java 8 (Temurin) via Homebrew
         run: |
@@ -121,7 +120,7 @@ jobs:
           IPHONEOS_DEPLOYMENT_TARGET: 14.0
         run: |
           export PATH=/opt/homebrew/bin:$PATH
-          export SLIMMED=1
+          export RUNNER=1
           if [ "${{ matrix.platform_name }}" == "ios" ]; then
             # Build ipa and tipa for iOS
             gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }}
