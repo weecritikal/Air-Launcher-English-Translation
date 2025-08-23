@@ -4,11 +4,11 @@
 */
 
 "game.menu.force_close" = "强制关闭";
-"game.menu.confirm.force_close" = "确认强制关闭？";
+"game.menu.confirm.force_close" = "确定强制关闭？";
 "game.menu.log_output" = "日志输出";
-"game.menu.custom_controls" = "自定义控制按键";
+"game.menu.custom_controls" = "自定义控制键";
 
-"game.note.airplay" = "Minecraft 正在通过隔空播放（AirPlay）到其他设备显示";
+"game.note.airplay" = "Minecraft 正隔空播放（AirPlay）至其他设备显示";
 
 "game.title.exit_code" = "游戏非正常退出，错误代码%d";
 
@@ -44,7 +44,7 @@
 "custom_controls.button_edit.mouse_pass" = "鼠标穿透";
 "custom_controls.button_edit.swipeable" = "滑动点击";
 "custom_controls.button_edit.bg_color" = "背景颜色";
-"custom_controls.button_edit.stroke_width" = "边框宽度（dp）";
+"custom_controls.button_edit.stroke_width" = "描边宽度（dp）";
 "custom_controls.button_edit.stroke_color" = "描边颜色";
 "custom_controls.button_edit.corner_radius" = "圆角半径（%）";
 "custom_controls.button_edit.opacity" = "不透明度（%）";
@@ -56,14 +56,14 @@
 "custom_controls.control_menu.exit.warn" = "您将会退出且不保存任何更改。";
 "custom_controls.control_menu.save" = "保存";
 "custom_controls.control_menu.save.error.json" = "JSON 错误";
-"custom_controls.control_menu.save.error.write" = "保存按键布局时发生错误";
+"custom_controls.control_menu.save.error.write" = "保存文件时出错";
 "custom_controls.control_menu.load" = "加载";
 "custom_controls.control_menu.make_default" = "设为默认";
 "custom_controls.control_menu.safe_area" = "安全区域";
 "custom_controls.control_menu.add_button" = "添加按键";
 "custom_controls.control_menu.add_drawer" = "添加组合键";
 "custom_controls.control_menu.add_joystick" = "添加摇杆";
-"custom_controls.error.incompatible" = "此控件版本（代码 %d）在当前启动器版本中尚未实现。";
+"custom_controls.error.incompatible" = "此控制键版本（代码 %d）在当前启动器构建中尚未实现。";
 "custom_controls.hint" = "长按屏幕上的任意位置以获取更多选项";
 
 "init.migrateDir" = "目前 Amethyst 数据目录为 %@。所有的游戏资源已移动到最新目录。";
@@ -72,20 +72,20 @@
 "java.error.missing_runtime" = "%@ 需要 Java %d 或更高版本才能运行。请先安装该版本，然后在“管理运行环境”中进行指定。";
 
 "launcher.mcl.downloading_file" = "正在下载 %@";
-"launcher.mcl.error_download" = "下载 %@ 失败：%@";
+"launcher.mcl.error_download" = "%@ 下载失败：%@";
 
-"launcher.menu.custom_controls" = "自定义控制按键";
+"launcher.menu.custom_controls" = "自定义控制键";
 "launcher.menu.execute_jar" = "执行 .jar";
 
 "launcher.wait_jit.title" = "请等待应用获取到 JIT 权限";
-"launcher.wait_jit.message" = "Amethyst 启动器需要 JIT（即时编译）权限才能启动游戏。";
+"launcher.wait_jit.message" = "Amethyst 启动器需要 JIT（即时编译）权限，才能以最佳性能表现运行。";
 "launcher.wait_jit_trollstore.message" = "如果您仍然看到此消息，请在 TrollStore 中启用 URL Scheme。";
 
-"login.error.username.outOfRange" = "用户名必须在 3 至 16 个字符以内";
+"login.error.username.outOfRange" = "用户名必须在 3 至 16 个字符之间";
 
 "login.alert.field.username" = "用户名";
 
-"login.jit.checking" = "检查是否开启 JIT 权限";
+"login.jit.checking" = "正在检查是否开启 JIT 权限";
 "login.jit.enabled" = "JIT 权限已启用";
 "login.jit.fail" = "无法启用 JIT 权限。";
 "login.jit.fail.title" = "无法在您的设备上启用 JIT 权限。";
@@ -141,7 +141,7 @@
 "preference.section.java" = "Java 调整";
 //"preference.section.footer.java" = "";
 
-"preference.title.confirm" = "你确定吗？";
+"preference.title.confirm" = "您确定吗？";
 
 "preference.title.game_directory" = "游戏目录";
 "preference.title.confirm.delete_game_directory" = "实例 %@ 将被永久删除，并且无法恢复。";
@@ -159,10 +159,10 @@
 "preference.title.appicon-dark" = "设置 Amethyst 图标为深色";
 "preference.title.appicon-development" = "已封装开发";
 "preference.title.hidden_sidebar" = "默认隐藏主菜单侧边栏";
-"preference.detail.hidden_sidebar" = "允许您在 iOS 14 及更高版本中默认或旋转中隐藏主菜单上的侧边栏。";
+"preference.detail.hidden_sidebar" = "允许您默认或在旋转时隐藏主菜单的侧边栏。";
 
 "preference.title.reset_warnings" = "重置所有警告";
-"preference.title.done.reset_warnings" = "带有“警告”的设置均已重置。";
+"preference.title.done.reset_warnings" = "所有警告均已重置。";
 
 "preference.title.reset_settings" = "重置所有设置";
 "preference.title.confirm.reset_settings" = "这将移除您的所有自定义首选项，包括分辨率、按钮大小和 Java 参数。";
@@ -181,7 +181,7 @@
 
 "preference.title.renderer.debug.auto" = "自动：gl4es 或 ANGLE";
 "preference.title.renderer.debug.gl4es" = "holy gl4es—输出 OpenGL 2.1";
-"preference.title.renderer.debug.angle" = "ANGLE（仅支持 1.17+）—输出 OpenGL 3.2（核心未配置，有限制）";
+"preference.title.renderer.debug.angle" = "ANGLE（仅支持 1.17+）—输出 OpenGL 3.2（核心档案，有限制）";
 "preference.title.renderer.debug.zink" = "Zink（Mesa 21.0）—输出 OpenGL4.1";
 
 "preference.detail.renderer" = "更改使用 OpenGL 渲染引擎。Zink 在 iOS 16 上暂时禁用，将在之后诊断问题。";
@@ -204,9 +204,9 @@
 "preference.detail.allow_microphone" = "仅在使用语音聊天模组时启用此功能。静音开关选项将被忽略，并且其他应用程序的音频质量将受到影响。";
 "preference.title.default_gamepad_ctrl" = "手柄配置";
 "preference.title.hardware_hide" = "硬件连接时隐藏控制键";
-"preference.detail.hardware_hide" = "启用连接鼠标或游戏手柄时自动禁用屏幕控制叠加层的行为。";
-"preference.title.recording_hide" = "从屏幕录制中隐藏控件";
-"preference.detail.recording_hide" = "在屏幕截图和屏幕录制中，隐藏控件，但其仍然在屏幕上可见。";
+"preference.detail.hardware_hide" = "启用后，连接鼠标或手柄后，自动禁用屏幕控制键叠加层。";
+"preference.title.recording_hide" = "从屏幕录制中隐藏控制键";
+"preference.detail.recording_hide" = "在屏幕截图和屏幕录制中，隐藏控制键，但其仍然在屏幕上可见。";
 "preference.title.gesture_mouse" = "鼠标手势";
 "preference.detail.gesture_mouse" = "启用手势，例如点击放置方块、按住破坏方块、用两根手指转动视角";
 "preference.title.gesture_hotbar" = "快捷栏手势";
