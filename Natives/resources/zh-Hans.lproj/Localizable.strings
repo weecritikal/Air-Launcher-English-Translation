@@ -115,7 +115,7 @@
 "login.warn.title.localmode" = "离线模式已更名为本地模式。";
 "login.warn.message.localmode" = "您可以继续游玩已经安装的版本，但是如果没有正版账户，您将无法继续下载其他版本。若提出问题有关本地账户，或是如何获取其他 Minecraft 版本，将不会受到支持。";
 
-"login.msa.error.xsts.noxboxacc" = "此微软账户未注册 Xbox 个人资料。请确保您已创建 Xbox 个人资料。\n错误代码：2148916233";
+"login.msa.error.xsts.noxboxacc" = "此微软账户未注册 Xbox 玩家档案。请确保您已创建 Xbox 玩家档案。\n错误代码：2148916233";
 "login.msa.error.xsts.noxbox" = "Xbox Live 目前在您的国家/地区不可用。\n错误代码：2148916235";
 "login.msa.error.xsts.krverify" = "您的账户必须通过你父母同意方可通过验证。\n错误代码：2148916236 或 2148916237。";
 "login.msa.error.xsts.underage" = "您的账户需要绑定家长账户才能进行下一步。\n错误代码：2148916238";
@@ -123,9 +123,9 @@
 "login.msa.progress.acquireAccessToken" = "(1/5) 正在获取访问令牌";
 "login.msa.progress.acquireXBLToken" = "(2/5) 正在获取 Xbox Live 令牌";
 "login.msa.progress.acquireXSTS" = "正在获取 XSTS";
-"login.msa.progress.acquireXboxProfile" = "(3/5) 正在获取 Xbox 个人资料";
+"login.msa.progress.acquireXboxProfile" = "(3/5) 正在获取 Xbox 玩家档案";
 "login.msa.progress.acquireMCToken" = "(4/5) 正在获取 Minecraft 令牌";
-"login.msa.progress.checkMCProfile" = "(5/5) 正在检查 Minecraft 个人资料";
+"login.msa.progress.checkMCProfile" = "(5/5) 正在检查 Minecraft 玩家档案";
 
 "News" = "新闻";
 "Profiles" = "配置";
