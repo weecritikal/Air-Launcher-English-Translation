@@ -97,7 +97,7 @@
 "login.option.add" = "添加账户";
 "login.option.select" = "选择账户";
 "login.option.demo" = "演示账户";
-"login.option.microsoft" = "微软账户";
+"login.option.microsoft" = "Microsoft 账户";
 "login.option.local" = "本地账户";
 
 "login.warn.title.legacy_device" = "Amethyst 的下一个版本将与此设备不兼容。";
@@ -110,12 +110,12 @@
 "login.warn.message.ios19_jitdead" = "由于 iOS 的变更，JIT 权限无法正常开启，而 Amethyst 不能在当前状态下工作。尚需大量研究才能解决此问题。\n\n点击“好”将关闭应用。";
 
 "login.warn.title.demomode" = "您正在使用演示账户";
-"login.warn.message.demomode" = "演示模式作为离线和本地模式的替代，将允许你登录到一个尚未购买游戏的微软账户中游玩 1.3.1 及以上版本的试玩版本。因为官方启动器的一些特性，在较旧版本中会包含完整的游戏内容。详情请参阅我们的网站，了解更多关于离线模式的过渡。";
+"login.warn.message.demomode" = "演示模式作为离线和本地模式的替代，将允许你登录到一个尚未购买游戏的 Mircosoft 账户中游玩 1.3.1 及以上版本的试玩版本。因为官方启动器的一些特性，在较旧版本中会包含完整的游戏内容。详情请参阅我们的网站，了解更多关于离线模式的过渡。";
 
 "login.warn.title.localmode" = "离线模式已更名为本地模式。";
 "login.warn.message.localmode" = "您可以继续游玩已经安装的版本，但是如果没有正版账户，您将无法继续下载其他版本。若提出问题有关本地账户，或是如何获取其他 Minecraft 版本，将不会受到支持。";
 
-"login.msa.error.xsts.noxboxacc" = "此微软账户未注册 Xbox 玩家档案。请确保您已创建 Xbox 玩家档案。\n错误代码：2148916233";
+"login.msa.error.xsts.noxboxacc" = "此 Microsoft 账户未注册 Xbox 玩家档案。请确保您已创建 Xbox 玩家档案。\n错误代码：2148916233";
 "login.msa.error.xsts.noxbox" = "Xbox Live 目前在您的国家/地区不可用。\n错误代码：2148916235";
 "login.msa.error.xsts.krverify" = "您的账户必须通过你父母同意方可通过验证。\n错误代码：2148916236 或 2148916237。";
 "login.msa.error.xsts.underage" = "您的账户需要绑定家长账户才能进行下一步。\n错误代码：2148916238";
