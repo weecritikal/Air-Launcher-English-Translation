@@ -97,7 +97,7 @@
 "login.option.add" = "新增帳戶";
 "login.option.select" = "選擇帳戶";
 "login.option.demo" = "演示帳戶";
-"login.option.microsoft" = "微軟帳戶";
+"login.option.microsoft" = "Mircosoft 帳戶";
 "login.option.local" = "本地帳戶";
 
 "login.warn.title.legacy_device" = "Amethyst 的下一个版本將與此裝置不兼容。";
@@ -110,12 +110,12 @@
 "login.warn.message.ios19_jitdead" = "由於 iOS 的變更，JIT 權限無法正常開啟，而 Amethyst 不能在當前狀態工作。尚需大量研究才能解決此問題。\n\n點擊「好」將關閉應用。";
 
 "login.warn.title.demomode" = "您正在使用演示帳戶";
-"login.warn.message.demomode" = "演示模式作為離線和本地模式的替代，將允許你登錄到一個尚未購買遊戲的微軟帳戶中遊玩 1.3.1 及以上版本的試玩版本。因為官方啟動器的一些特性，在較舊版本中會包含完整的遊戲內容。詳情請參閱我們的網站，了解更多關於離線模式的過渡。";
+"login.warn.message.demomode" = "演示模式作為離線和本地模式的替代，將允許你登錄到一個尚未購買遊戲的 Microsoft 帳戶中遊玩 1.3.1 及以上版本的試玩版本。因為官方啟動器的一些特性，在較舊版本中會包含完整的遊戲內容。詳情請參閱我們的網站，了解更多關於離線模式的過渡。";
 
 "login.warn.title.localmode" = "離線模式已更名為本地模式。";
 "login.warn.message.localmode" = "你可以繼續遊玩已經安裝的版本，但是如果沒有正版帳戶，您將無法繼續下載其他版本。若提出問題有關本地帳戶，或是如何獲取其他 Minecraft 版本，將不會受到支援。";
 
-"login.msa.error.xsts.noxboxacc" = "此微軟帳戶未註冊 Xbox 用戶檔案。請確保您已創建 Xbox 用戶檔案。\n錯誤代碼：2148916233";
+"login.msa.error.xsts.noxboxacc" = "此 Mircosoft 帳戶未註冊 Xbox 用戶檔案。請確保您已創建 Xbox 用戶檔案。\n錯誤代碼：2148916233";
 "login.msa.error.xsts.noxbox" = "Xbox Live 目前在您的國家/地區不可用。\n錯誤代碼：2148916235";
 "login.msa.error.xsts.krverify" = "您的帳戶必須通過您父母同意方可通過驗證。\n錯誤代碼：2148916236 或 2148916237。";
 "login.msa.error.xsts.underage" = "您的帳戶需要綁定家長帳戶才能進行下一部。\n錯誤代碼：2148916238";
