@@ -201,7 +201,7 @@
 "preference.title.silence_with_switch" = "使用静音开关禁用音频";
 "preference.detail.silence_with_switch" = "启用时，可以使用静音模式禁用音频，耳机和外部扬声器不受此影响。";
 "preference.title.allow_microphone" = "允许麦克风输入";
-"preference.detail.allow_microphone" = "仅在使用语音聊天模组时启用此功能。静音开关选项将被忽略，并且其他应用程序的音频质量将受到影响。";
+"preference.detail.allow_microphone" = "请仅在使用语音聊天模组时启用此功能。静音开关选项将被忽略，并且其他应用的音频质量将受到影响。";
 "preference.title.default_gamepad_ctrl" = "手柄配置";
 "preference.title.hardware_hide" = "硬件连接时隐藏控制键";
 "preference.detail.hardware_hide" = "启用后，连接鼠标或手柄后，自动禁用屏幕控制键叠加层。";
@@ -215,7 +215,7 @@
 "preference.title.press_duration" = "长按延迟（毫秒）";
 "preference.detail.press_duration" = "修改长按摧毁方块、丢弃物品的触发时长。";
 "preference.title.button_scale" = "屏幕按钮缩放（%）";
-"preference.detail.button_scale" = "如果按钮过小则放大按钮，通常平板用户需要更改此选项。";
+"preference.detail.button_scale" = "如果按钮过小则放大按钮，通常 iPad 用户需要更改此选项。";
 "preference.title.mouse_scale" = "鼠标缩放（%）";
 "preference.detail.mouse_scale" = "修改虚拟鼠标的大小";
 "preference.title.mouse_speed" = "鼠标速度（%）";
@@ -243,10 +243,10 @@
 "preference.manage_runtime.header.invalid" = "运行环境无效";
 
 "preference.title.java_args" = "JVM 启动参数";
-"preference.detail.java_args" = "当启动 Minecraft 时将参数传递到 Java。小心，如果修改不正确，可能会使游戏崩溃。";
+"preference.detail.java_args" = "启动 Minecraft 时，将参数传给 Java，请注意，若修改失当，游戏可能崩溃。";
 "preference.placeholder.java_args" = "自定义参数……";
 "preference.title.env_variables" = "环境变量";
-"preference.detail.env_variables" = "设置启动 Minecraft 时的自定义环境变量。请小心，如果修改不当，会导致游戏崩溃。";
+"preference.detail.env_variables" = "设置启动 Minecraft 时的自定义环境变量，请注意，若修改失当，游戏可能崩溃。";
 "preference.placeholder.env_variables" = "指定变量……";
 "preference.title.auto_ram" = "自动设置内存大小";
 "preference.detail.auto_ram" = "启用内存自动调节";
@@ -260,7 +260,7 @@
 "preference.title.debug_skip_wait_jit" = "跳过“请等待应用获取到 JIT 权限”对话框";
 "preference.detail.debug_skip_wait_jit" = "这并不是让您在没有 JIT 权限的情况下启动，而是跳过调试器检查，因为在某些越狱设备上会检查失败。";
 "preference.title.debug_ipad_ui" = "解锁 iPadOS 界面";
-"preference.detail.debug_ipad_ui" = "如果启用，则解锁 iPad 专属界面（警告、键盘等），如果禁用，则解锁 iPhone 界面。";
+"preference.detail.debug_ipad_ui" = "若启用，则解锁 iPad 专属界面（警告、键盘等）；若禁用，则解锁 iPhone 界面。";
 "preference.title.debug_auto_correction" = "自动更正";
 "preference.detail.debug_auto_correction" = "在游戏中输入文本时启用自动更正。";
 "preference.title.debug_hide_home_indicator" = "隐藏主屏幕指示键";
