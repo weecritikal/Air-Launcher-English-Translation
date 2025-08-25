@@ -60,7 +60,7 @@
 "custom_controls.control_menu.load" = "載入";
 "custom_controls.control_menu.make_default" = "設為預設植";
 "custom_controls.control_menu.safe_area" = "安全區域";
-"custom_controls.control_menu.add_button" = "添加按鍵";
+"custom_controls.control_menu.add_button" = "添加按鈕";
 "custom_controls.control_menu.add_drawer" = "添加組合鍵";
 "custom_controls.control_menu.add_joystick" = "添加搖桿";
 "custom_controls.error.incompatible" = "此控制鍵版本（代碼 %d）在當前啟動器構建中尚未實現。";
@@ -101,9 +101,9 @@
 "login.option.local" = "本地帳戶";
 
 "login.warn.title.legacy_device" = "Amethyst 的下一个版本將與此裝置不兼容。";
-"login.warn.message.legacy_device" = "運行下一個主要版本，需要一台能夠運行 iOS 14 的裝置。";
+"login.warn.message.legacy_device" = "執行下一個主要版本，需要一台能夠運行 iOS 14 的裝置。";
 "login.warn.title.legacy_ios" = "Amethyst 的下一個版本將需要系統更新。";
-"login.warn.message.legacy_ios" = "運行下一個主要版本，需要一台能夠運行 iOS 14 或更高版本的裝置。";
+"login.warn.message.legacy_ios" = "執行下一個主要版本，需要一台能夠運行 iOS 14 或更高版本的裝置。";
 "login.warn.title.limited_ram" = "該裝置的可用 RAM 有限。";
 "login.warn.message.limited_ram" = "我們建議啟用「自動分配 RAM 大小」選項，以防止不穩定和效能問題。";
 "login.warn.title.ios19_jitdead" = "Amethyst 不支援 iOS 26 及更高版本。";
@@ -152,7 +152,7 @@
 "preference.title.cosmetica" = "Cosmetica 披風";
 "preference.detail.cosmetica" = "啟用來自 Cosmetica（前身是 Arc）的披風。欲了解更多資訊，請訪問 https://cosmetica.cc。需要 OptiFine";
 "preference.title.debug_logging" = "除錯記錄檔";
-"preference.detail.debug_logging" = "將內部設定和操作記錄到 lateslog.txt。有助於開發者更輕鬆的發現問題，但由於記錄檔寫入頻率更高，Minecraft 的運行速度可能會變慢。";
+"preference.detail.debug_logging" = "將內部設定和操作記錄到 lateslog.txt。有助於開發者更輕鬆的發現問題，但由於記錄檔寫入頻率更高，Minecraft 的執行速度可能會變慢。";
 "preference.title.appicon" = "設定應用圖示";
 "preference.detail.appicon" = "允許您為 Amethyst 選擇不同的主熒幕圖示。";
 "preference.title.appicon-default" = "設定 Amethyst 圖示為淺色";
@@ -165,7 +165,7 @@
 "preference.title.done.reset_warnings" = "所有警告均已重設。";
 
 "preference.title.reset_settings" = "重設所有設定";
-"preference.title.confirm.reset_settings" = "這將移除您的所有自訂偏好設定，包括解析度、按鍵大小和 Java 引數。";
+"preference.title.confirm.reset_settings" = "這將移除您的所有自訂偏好設定，包括解析度、按鈕大小和 Java 引數。";
 "preference.title.done.reset_settings" = "已重設所有設定。";
 
 "preference.title.erase_demo_data" = "清除試玩遊戲數據";
@@ -237,7 +237,7 @@
 "preference.manage_runtime.header.default" = "首選 Java 版本";
 "preference.manage_runtime.default.1165" = "1.16.5 及以下";
 "preference.manage_runtime.default.117" = "1.17 及以上";
-"preference.manage_runtime.footer.default" = "Minecraft 1.16.5 及更早版本可以運行較新的 Java 版本，但無法保證與模組的兼容性。外部執行環境可以放在「java_runtimes」資料夾中。僅當安裝程式不需要較新的 Java 版本時，「執行 .jar」的 Java 版本更改才會生效。";
+"preference.manage_runtime.footer.default" = "Minecraft 1.16.5 及更早版本可以執行較新的 Java 版本，但無法保證與模組的兼容性。外部執行環境可以放在「java_runtimes」資料夾中。僅當安裝程式不需要較新的 Java 版本時，「執行 .jar」的 Java 版本更改才會生效。";
 "preference.manage_runtime.footer.java8" = "這是 Minecraft 1.16.5 及更早版本的預設版本。";
 "preference.manage_runtime.footer.java17" = "這是 Minecraft 1.17 及更新版本的預設版本。";
 "preference.manage_runtime.header.invalid" = "執行環境無效";
