@@ -282,4 +282,38 @@
 "profile.title.separate_preference" = "隔離設定";
 "profile.detail.separate_preference" = "啟用此選項來隔離設定中的任何更改。重設將恢復全域設定，而非預設設定。";
 "profile.title.install_fabric_quilt" = "安裝 Fabric/Quilt";
+
+"controller_configurator.title.current" = "遊戲鍵盤配置檔案";
+"controller_configurator.title.type.xbox" = "Xbox";
+"controller_configurator.title.type.playstation" = "PlayStation";
+
+"controller_configurator.xbox.title.bumper_left" = "左前按鈕（LB）";
+"controller_configurator.xbox.title.bumper_right" = "右前按鈕（RB）";
+"controller_configurator.xbox.title.trigger_left" = "左扳機（LT）";
+"controller_configurator.xbox.title.trigger_right" = "右扳機（RT）";
+"controller_configurator.xbox.title.named_back" = "Guide";
+"controller_configurator.xbox.title.named_start" = "選單";
+"controller_configurator.xbox.title.named_a" = "A";
+"controller_configurator.xbox.title.named_b" = "B";
+"controller_configurator.xbox.title.named_x" = "X";
+"controller_configurator.xbox.title.named_y" = "Y";
+"controller_configurator.xbox.title.dpad_up" = "上";
+"controller_configurator.xbox.title.dpad_down" = "下";
+"controller_configurator.xbox.title.dpad_left" = "左";
+"controller_configurator.xbox.title.dpad_right" = "右";
+"controller_configurator.xbox.title.thumb_left" = "左控制桿單擊";
+"controller_configurator.xbox.title.thumb_right" = "右控製桿單擊";
+
+"controller_configurator.playstation.title.bumper_left" = "L1";
+"controller_configurator.playstation.title.bumper_right" = "R1";
+"controller_configurator.playstation.title.trigger_left" = "L2";
+"controller_configurator.playstation.title.trigger_right" = "R2";
 "controller_configurator.playstation.title.named_back" = "選擇";
+"controller_configurator.playstation.title.named_start" = "开始";
+"controller_configurator.playstation.title.named_a" = "叉";
+"controller_configurator.playstation.title.named_b" = "圓";
+"controller_configurator.playstation.title.named_x" = "方";
+"controller_configurator.playstation.title.dpad_up" = "上";
+"controller_configurator.playstation.title.dpad_down" = "下";
+"controller_configurator.playstation.title.dpad_left" = "左";
+"controller_configurator.playstation.title.dpad_right" = "右";
