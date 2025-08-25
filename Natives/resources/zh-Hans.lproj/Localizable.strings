@@ -60,7 +60,7 @@
 "custom_controls.control_menu.load" = "加载";
 "custom_controls.control_menu.make_default" = "设为默认";
 "custom_controls.control_menu.safe_area" = "安全区域";
-"custom_controls.control_menu.add_button" = "添加按键";
+"custom_controls.control_menu.add_button" = "添加按钮";
 "custom_controls.control_menu.add_drawer" = "添加组合键";
 "custom_controls.control_menu.add_joystick" = "添加摇杆";
 "custom_controls.error.incompatible" = "此控制键版本（代码 %d）在当前启动器构建中尚未实现。";
@@ -110,7 +110,7 @@
 "login.warn.message.ios19_jitdead" = "由于 iOS 的变更，JIT 权限无法正常开启，而 Amethyst 不能在当前状态下工作。尚需大量研究才能解决此问题。\n\n点击“好”将关闭应用。";
 
 "login.warn.title.demomode" = "您正在使用试玩账户";
-"login.warn.message.demomode" = "试玩模式，是离线和本地模式的替代，可以让您登录到尚未购买游戏的 Mircosoft 账户中，并能试玩 Java 版，这一机制在 1.3.1 及以上版本中引入。因为官方处理器没有设限，较旧版本会包含完整的游戏内容。详情请参阅我们的网站，了解更多关于离线模式的过渡。";
+"login.warn.message.demomode" = "试玩模式，是离线和本地模式的替代，可以让您登录到尚未购买游戏的 Mircosoft 账户中，并能试玩 Java 版，这一机制在 1.3.1 及以上版本中引入。因为官方启动器没有设限，较旧版本会包含完整的游戏内容。详情请参阅我们的网站，了解更多关于离线模式的过渡。";
 
 "login.warn.title.localmode" = "离线模式已更名为本地模式。";
 "login.warn.message.localmode" = "您可以继续游玩已经安装的版本，但是如果没有正版账户，您将无法继续下载其他版本。若提出问题有关本地账户，或是如何获取其他 Minecraft 版本，将不会受到支持。";
