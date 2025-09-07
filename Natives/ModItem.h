@@ -20,6 +20,14 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, copy, nullable) NSString *iconURL;
 @property (nonatomic, copy, nullable) NSString *fileSHA1;
 
+// Additional metadata fields used by ModService
+@property (nonatomic, copy, nullable) NSString *version;
+@property (nonatomic, copy, nullable) NSString *homepage;
+@property (nonatomic, copy, nullable) NSString *sources;
+@property (nonatomic, assign) BOOL isFabric;
+@property (nonatomic, assign) BOOL isForge;
+@property (nonatomic, assign) BOOL isNeoForge;
+
 - (instancetype)initWithFilePath:(NSString *)path;
 - (NSString *)basename;
 - (void)refreshDisabledFlag;

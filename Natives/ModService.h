@@ -15,6 +15,8 @@ typedef void(^ModMetadataHandler)(ModItem *item, NSError * _Nullable error);
 
 @interface ModService : NSObject
 
+@property (nonatomic, assign) BOOL onlineSearchEnabled;
+
 + (instancetype)sharedService;
 
 - (void)scanModsForProfile:(NSString *)profileName completion:(ModListHandler)completion;

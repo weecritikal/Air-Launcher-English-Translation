@@ -18,6 +18,8 @@
 #import "ios_uikit_bridge.h"
 #import "utils.h"
 
+#import "ModsManagerViewController.h" // Added: Mods manager integration
+
 typedef NS_ENUM(NSUInteger, LauncherProfilesTableSection) {
     kInstances,
     kProfiles
@@ -26,6 +28,7 @@ typedef NS_ENUM(NSUInteger, LauncherProfilesTableSection) {
 @interface LauncherProfilesViewController () //<UIContextMenuInteractionDelegate>
 
 @property(nonatomic) UIBarButtonItem *createButtonItem;
+@property(nonatomic) UIBarButtonItem *manageModsButton; // Added: button to open Mods manager
 @end
 
 @implementation LauncherProfilesViewController
@@ -77,6 +80,9 @@ typedef NS_ENUM(NSUInteger, LauncherProfilesTableSection) {
     ]];
     self.createButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemAdd menu:createMenu];
 
+    // Create Manage Mods button
+    self.manageModsButton = [[UIBarButtonItem alloc] initWithTitle:@"管理 Mod" style:UIBarButtonItemStylePlain target:self action:@selector(openManageMods)];
+
     self.tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStyleInsetGrouped];
     self.tableView.keyboardDismissMode = UIScrollViewKeyboardDismissModeInteractive;
 }
@@ -84,8 +90,8 @@ typedef NS_ENUM(NSUInteger, LauncherProfilesTableSection) {
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
 
-    // Put navigation buttons back in place
-    self.navigationItem.rightBarButtonItems = @[[sidebarViewController drawAccountButton], self.createButtonItem];
+    // Put navigation buttons back in place, include Manage Mods button
+    self.navigationItem.rightBarButtonItems = @[[sidebarViewController drawAccountButton], self.createButtonItem, self.manageModsButton];
 
     // Pickup changes made in the profile editor and switching instance
     [PLProfiles updateCurrent];
@@ -125,6 +131,19 @@ typedef NS_ENUM(NSUInteger, LauncherProfilesTableSection) {
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
     //nav.navigationBar.prefersLargeTitles = YES;
     [self presentViewController:nav animated:YES completion:nil];
+}
+
+#pragma mark - Manage Mods
+
+- (void)openManageMods {
+    ModsManagerViewController *vc = [ModsManagerViewController new];
+    // pass current profile name if available
+    if (PLProfiles.current.selectedProfileName.length > 0) {
+        vc.profileName = PLProfiles.current.selectedProfileName;
+    } else {
+        vc.profileName = @"default";
+    }
+    [self.navigationController pushViewController:vc animated:YES];
 }
 
 #pragma mark Table view
