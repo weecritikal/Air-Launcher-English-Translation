@@ -66,7 +66,7 @@ Amethyst 的稳定性离不开社区团队的付出，致敬以下主要开发�
 - @crystall1nedev - [项目负责人 & iOS 移植核心]
 - @khanhduytran0 - [iOS 移植核心开发者]
 - @artdeell、@Mathius-Boulay、@zhuowei、@jkcoxson、@Diatrus
-> 特别致敬：传奇开发者 artDev 对项目的奠基贡献
+> 致敬传奇 artDev
 
 
 ## 🙏 特别感谢
