@@ -10,7 +10,7 @@
 - **账户限制解除**：支持本地账户、演示账户（Demo Mode）直接下载游戏，无需登录 Microsoft 账号或 Test 账号
 - **多账户登录**：兼容 Microsoft 账号、本地账号及第三方验证服务器（开发中，即将上线）
 
-> ⚠️ 说明：暂不计划重置 Android 版本（Android 端的改版太多了），如需官方 Android 代码，可前往 [Amethyst-Android](https://github.com/AngelAuraMC/Amethyst-Android)。
+> ⚠️ 说明：暂不计划重置 Android 版本（Android 端的优秀改版太多了），如需官方 Android 代码，可前往 [Amethyst-Android](https://github.com/AngelAuraMC/Amethyst-Android)。
 
 
 ## 🚀 快速上手指南
@@ -36,7 +36,7 @@
 
 ### 📥 安装步骤
 #### 1. 正式版（TrollStore 渠道）
-1. 前往 [Amethyst 官方 Releases](https://github.com/AngelAuraMC/Amethyst-iOS/releases) 下载 IPA 安装包
+1. 前往 [Releases](https://github.com/herbrine8403/Amethyst-iOS-MyRemastered/releases) 下载 TIPA 安装包
 2. 通过系统「分享菜单」，选择用 TrollStore 打开，自动完成安装
 
 #### 2. 正式版（AltStore/SideStore 渠道）
@@ -44,12 +44,12 @@
 
 #### 3. Nightly 测试版（每日构建）
 > 🔴 风险提示：测试版可能包含崩溃、无法启动等严重漏洞，仅用于开发测试！
-1. 前往 [GitHub Actions 标签页](https://github.com/AngelAuraMC/Amethyst-iOS/actions) 下载最新 IPA 测试包
+1. 前往 [GitHub Actions 标签页](https://github.com/herbrine8403/Amethyst-iOS-MyRemastered/actions) 下载最新 IPA 测试包
 2. 在侧载工具（AltStore/SideStore 等）中导入 IPA 完成安装
 
 
 ### ⚡ 启用 JIT（必做！）
-JIT（即时编译）是流畅运行游戏的核心，iOS 需通过以下工具启用，按自身环境选择：
+JIT（Just-In-Time）是流畅运行游戏的核心，iOS 需通过以下工具启用，按自身环境选择：
 
 | 工具         | 需外部设备 | 需 Wi-Fi | 自动启用 | 备注                     |
 |--------------|------------|----------|----------|--------------------------|
@@ -70,7 +70,7 @@ Amethyst 的稳定性离不开社区团队的付出，致敬以下主要开发�
 
 
 ## 🙏 特别感谢
-- **@LanRhyme**：本重制版的 GitHub Actions 工作流配置，完全参考其思路实现！  
+- @LanRhyme - [ShardLauncher iOS作者，提供思路和代码]
   👉 更多作品：[B站主页](https://b23.tv/3rmAFc2) | [MC移动端日志分析器（核心项目）](https://github.com/LanRhyme/Web-MinecraftLogAnalyzer)
 
 
