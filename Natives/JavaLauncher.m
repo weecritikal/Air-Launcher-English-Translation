@@ -226,6 +226,11 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
     margv[++margc] = "-XX:+UnlockExperimentalVMOptions";
     margv[++margc] = "-XX:+DisablePrimordialThreadGuardPages";
 
+    // On iOS 26, use mirror mapped JIT by default
+    if (@available(iOS 26.0, *)) {
+        margv[++margc] = "-XX:+MirrorMappedCodeCache";
+    }
+
     // Disable Forge 1.16.x early progress window
     margv[++margc] = "-Dfml.earlyprogresswindow=false";
 
