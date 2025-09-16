@@ -39,8 +39,8 @@
             @"metadata": @"https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml"
         },
         @"NeoForge": @{
-            @"installer": @"https://maven.neoforged.net/net/neoforged/forge/%1$@/forge-%1$@-installer.jar",
-            @"metadata": @"https://maven.neoforged.net/releases/net/neoforged/forge/maven-metadata.xml"
+            @"installer": @"https://maven.neoforged.net/releases/net/neoforged/neoforge/%1$@/neoforge-%1$@-installer.jar",
+            @"metadata": @"https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml"
         }
     };
     self.visibilityList = [NSMutableArray new];
