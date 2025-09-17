@@ -132,7 +132,23 @@
         cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:@"cell"];
     }
 
-    cell.textLabel.text = self.forgeList[indexPath.section][indexPath.row];
+    UISegmentedControl *segment = (id)self.navigationItem.titleView;
+    NSString *vendor = [segment titleForSegmentAtIndex:segment.selectedSegmentIndex];
+    NSString *rawVersion = self.forgeList[indexPath.section][indexPath.row];
+    if ([vendor isEqualToString:@"NeoForge"]) {
+        NSString *cleanVersion = [rawVersion stringByReplacingOccurrencesOfString:@"-beta" withString:@""];
+        NSArray *components = [cleanVersion componentsSeparatedByString:@"."];
+        if (components.count >= 2) {
+            NSString *major = components[0];
+            NSString *minor = components[1];
+            NSString *gameVersion = [NSString stringWithFormat:@"1.%@.%@", major, minor];
+            cell.textLabel.text = [NSString stringWithFormat:@"%@-%@", gameVersion, rawVersion];
+        } else {
+            cell.textLabel.text = rawVersion;
+        }
+    } else {
+        cell.textLabel.text = rawVersion;
+    }
     return cell;
 }
 
@@ -148,7 +164,8 @@
 
     UISegmentedControl *segment = (id)self.navigationItem.titleView;
     NSString *vendor = [segment titleForSegmentAtIndex:segment.selectedSegmentIndex];
-    NSString *jarURL = [NSString stringWithFormat:self.endpoints[vendor][@"installer"], cell.textLabel.text];
+    NSString *selectedRawVersion = self.forgeList[indexPath.section][indexPath.row];
+    NSString *jarURL = [NSString stringWithFormat:self.endpoints[vendor][@"installer"], selectedRawVersion];
     NSString *outPath = [NSTemporaryDirectory() stringByAppendingPathComponent:@"tmp.jar"];
     NSDebugLog(@"[Forge Installer] Downloading %@", jarURL);
 
@@ -185,24 +202,120 @@
 }
 
 - (void)addVersionToList:(NSString *)version {
-    if (![version containsString:@"-"]) {
+    // Get the current vendor to determine version format
+    UISegmentedControl *segment = (id)self.navigationItem.titleView;
+    NSString *vendor = [segment titleForSegmentAtIndex:segment.selectedSegmentIndex];
+    
+    NSString *gameVersion;
+    if ([vendor isEqualToString:@"Forge"]) {
+        // Forge format: gameVersion-forgeVersion (e.g., "1.20.1-47.1.0")
+        if (![version containsString:@"-"]) {
+            return;
+        }
+        NSRange range = [version rangeOfString:@"-"];
+        gameVersion = [version substringToIndex:range.location];
+    } else if ([vendor isEqualToString:@"NeoForge"]) {
+        // NeoForge format: major.minor.patch-beta (e.g., "20.2.3-beta")
+        NSString *cleanVersion = [version stringByReplacingOccurrencesOfString:@"-beta" withString:@""];
+        NSArray *components = [cleanVersion componentsSeparatedByString:@"."];
+        if (components.count >= 2) {
+            // Convert to full Minecraft version format (e.g., "20.2" -> "1.20.2")
+            NSString *major = components[0];
+            NSString *minor = components[1];
+            gameVersion = [NSString stringWithFormat:@"1.%@.%@", major, minor];
+        } else {
+            gameVersion = version;
+        }
+    } else {
         return;
     }
-    NSRange range = [version rangeOfString:@"-"];
-    NSString *gameVersion = [version substringToIndex:range.location];
-    //NSString *forgeVersion = [version substringFromIndex:range.location + 1];
-    if (![self.versionList containsObject:gameVersion]) {
+    
+    NSInteger gameVersionIndex = [self.versionList indexOfObject:gameVersion];
+    if (gameVersionIndex == NSNotFound) {
         [self.visibilityList addObject:@(NO)];
         [self.versionList addObject:gameVersion];
         [self.forgeList addObject:[NSMutableArray new]];
+        gameVersionIndex = self.versionList.count - 1;
     }
-    [self.forgeList.lastObject addObject:version];
+    [self.forgeList[gameVersionIndex] addObject:version];
 }
 
 #pragma mark NSXMLParser
 
 - (void)parserDidEndDocument:(NSXMLParser *)unused {
         dispatch_async(dispatch_get_main_queue(), ^{
+        // Determine current vendor to apply proper sorting
+        UISegmentedControl *segment = (id)self.navigationItem.titleView;
+        NSString *vendor = [segment titleForSegmentAtIndex:segment.selectedSegmentIndex];
+
+        NSMutableArray<NSNumber *> *indices = [NSMutableArray new];
+        for (NSInteger i = 0; i < self.versionList.count; i++) {
+            [indices addObject:@(i)];
+        }
+        [indices sortUsingComparator:^NSComparisonResult(NSNumber *a, NSNumber *b) {
+            NSString *va = self.versionList[a.integerValue];
+            NSString *vb = self.versionList[b.integerValue];
+            // Expect format "1.minor.patch"
+            NSArray *pa = [va componentsSeparatedByString:@"."];
+            NSArray *pb = [vb componentsSeparatedByString:@"."];
+            NSInteger aMinor = pa.count > 1 ? [pa[1] integerValue] : 0;
+            NSInteger bMinor = pb.count > 1 ? [pb[1] integerValue] : 0;
+            if (aMinor != bMinor) return aMinor < bMinor ? NSOrderedDescending : NSOrderedAscending;
+            NSInteger aPatch = pa.count > 2 ? [pa[2] integerValue] : 0;
+            NSInteger bPatch = pb.count > 2 ? [pb[2] integerValue] : 0;
+            if (aPatch != bPatch) return aPatch < bPatch ? NSOrderedDescending : NSOrderedAscending;
+            return NSOrderedSame;
+        }];
+
+        NSMutableArray *newVisibility = [NSMutableArray new];
+        NSMutableArray *newVersionList = [NSMutableArray new];
+        NSMutableArray *newForgeList = [NSMutableArray new];
+        for (NSNumber *idx in indices) {
+            [newVisibility addObject:self.visibilityList[idx.integerValue]];
+            [newVersionList addObject:self.versionList[idx.integerValue]];
+            [newForgeList addObject:self.forgeList[idx.integerValue]];
+        }
+        self.visibilityList = newVisibility;
+        self.versionList = newVersionList;
+        self.forgeList = newForgeList;
+
+        for (NSMutableArray<NSString *> *versions in self.forgeList) {
+            [versions sortUsingComparator:^NSComparisonResult(NSString *lhs, NSString *rhs) {
+                if ([vendor isEqualToString:@"Forge"]) {
+                    // Format: 1.x.y-A.B.C -> compare A, then B, then C (descending)
+                    NSRange dashL = [lhs rangeOfString:@"-"];
+                    NSRange dashR = [rhs rangeOfString:@"-"];
+                    NSString *lv = dashL.location != NSNotFound ? [lhs substringFromIndex:dashL.location + 1] : lhs;
+                    NSString *rv = dashR.location != NSNotFound ? [rhs substringFromIndex:dashR.location + 1] : rhs;
+                    NSArray *lp = [lv componentsSeparatedByString:@"."];
+                    NSArray *rp = [rv componentsSeparatedByString:@"."];
+                    NSInteger lA = lp.count > 0 ? [lp[0] integerValue] : 0;
+                    NSInteger rA = rp.count > 0 ? [rp[0] integerValue] : 0;
+                    if (lA != rA) return lA < rA ? NSOrderedDescending : NSOrderedAscending;
+                    NSInteger lB = lp.count > 1 ? [lp[1] integerValue] : 0;
+                    NSInteger rB = rp.count > 1 ? [rp[1] integerValue] : 0;
+                    if (lB != rB) return lB < rB ? NSOrderedDescending : NSOrderedAscending;
+                    NSInteger lC = lp.count > 2 ? [lp[2] integerValue] : 0;
+                    NSInteger rC = rp.count > 2 ? [rp[2] integerValue] : 0;
+                    if (lC != rC) return lC < rC ? NSOrderedDescending : NSOrderedAscending;
+                    return NSOrderedSame;
+                } else {
+                    // NeoForge: X.Y.Z[-beta] where X.Y is stream; compare Z (build) descending; release before beta
+                    BOOL lBeta = [lhs containsString:@"-beta"];
+                    BOOL rBeta = [rhs containsString:@"-beta"];
+                    NSString *lClean = [lhs stringByReplacingOccurrencesOfString:@"-beta" withString:@""];
+                    NSString *rClean = [rhs stringByReplacingOccurrencesOfString:@"-beta" withString:@""];
+                    NSArray *lc = [lClean componentsSeparatedByString:@"."];
+                    NSArray *rc = [rClean componentsSeparatedByString:@"."];
+                    NSInteger lBuild = lc.count > 2 ? [lc[2] integerValue] : 0;
+                    NSInteger rBuild = rc.count > 2 ? [rc[2] integerValue] : 0;
+                    if (lBuild != rBuild) return lBuild < rBuild ? NSOrderedDescending : NSOrderedAscending;
+                    if (lBeta != rBeta) return lBeta ? NSOrderedDescending : NSOrderedAscending; // release first
+                    return NSOrderedSame;
+                }
+            }];
+        }
+
         [self switchToReadyState];
         [self.tableView reloadData];
     });
