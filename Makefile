@@ -295,6 +295,21 @@ jre: native
 	cp $(WORKINGDIR)/libawt_xawt.dylib $(OUTPUTDIR)/java_runtimes/java-21-openjdk/lib
 	echo '[Amethyst v$(VERSION)] jre - end'
 
+dep_mg: native
+	echo '[Amethyst v$(VERSION)] dep_mg - start'
+	cd $(SOURCEDIR)/Natives/external/MobileGlues/src/main/cpp; \
+	wget https://github.com/leetal/ios-cmake/raw/master/ios.toolchain.cmake; \
+	cmake -B build \
+		-DCMAKE_TOOLCHAIN_FILE=ios.toolchain.cmake \
+		-DSTATICLIB=OFF \
+		-DMACOS=ON \
+		-DPLATFORM=OS64 \
+		-DCMAKE_C_FLAGS=-Wno-error=implicit-function-declaration; \
+	cmake --build build --config RelWithDebInfo --target mobileglues; \
+	cp $(SOURCEDIR)/Natives/external/MobileGlues/src/main/cpp/build/libmobileglues.dylib $(WORKINGDIR)/libmobileglues.dylib
+	cp $(SOURCEDIR)/Natives/external/MobileGlues/src/main/cpp/libraries/ios/libspirv-cross-c-shared.0.dylib $(WORKINGDIR)/libspirv-cross-c-shared.0.dylib
+	echo '[Amethyst v$(VERSION)] dep_mg - end'
+
 assets:
 	echo '[Amethyst v$(VERSION)] assets - start'
 	if [ '$(IOS)' = '0' ] && [ '$(DETECTPLAT)' = 'Darwin' ]; then \
@@ -310,7 +325,7 @@ assets:
 	fi
 	echo '[Amethyst v$(VERSION)] assets - end'
 
-payload: native java jre assets
+payload: native dep_mg java jre assets
 	echo '[Amethyst v$(VERSION)] payload - start'
 	$(call METHOD_DIRCHECK,$(WORKINGDIR)/AngelAuraAmethyst.app/libs)
 	$(call METHOD_DIRCHECK,$(WORKINGDIR)/AngelAuraAmethyst.app/libs_caciocavallo)
