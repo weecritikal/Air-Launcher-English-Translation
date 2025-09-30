@@ -72,9 +72,9 @@ Amethyst 的稳定性离不开社区团队的付出，致敬以下主要开发�
 
 
 ## 🙏 特别感谢
-- @LanRhyme - [ShardLauncher iOS作者，提供思路和代码]
+- @LanRhyme - [ShardLauncher作者，提供思路和代码]
 
-  👉 更多作品：[B站主页](https://b23.tv/3rmAFc2) | [MC移动端日志分析器](https://github.com/LanRhyme/Web-MinecraftLogAnalyzer) | [ShardLauncher](https://github.com/LanRhyme/ShardLauncher-iOS)
+  👉 更多作品：[B站主页](https://b23.tv/3rmAFc2) | [MC移动端日志分析器](https://github.com/LanRhyme/Web-MinecraftLogAnalyzer) | [ShardLauncher iOS](https://github.com/LanRhyme/ShardLauncher-iOS)
 
 
 ## 📦 第三方组件及许可证
