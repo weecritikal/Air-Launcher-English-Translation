@@ -1,6 +1,8 @@
 # 我的Angel Aura Amethyst (iOS) 重制版
 [![开发构建状态](https://github.com/herbrine8403/Amethyst-iOS-MyRemastered/actions/workflows/development.yml/badge.svg?branch=main)](.github/workflows/development.yml)
 ![总下载量](https://img.shields.io/github/downloads/herbrine8403/Amethyst-iOS-MyRemastered/total?style=flat-square&color=00a82a)
+![发布版本](https://img.shields.io/github/v/release/herbrine8403/Amethyst-iOS-MyRemastered?style=flat-square&color=00a82a)
+
 
 ## 🌟 重制版核心亮点
 基于官方 Amethyst 优化适配，聚焦 iOS/iPadOS 体验升级，核心特性包括：
