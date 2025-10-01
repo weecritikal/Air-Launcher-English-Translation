@@ -51,7 +51,7 @@ static bool gl_init() {
 gl_render_window_t* gl_init_context(gl_render_window_t *share) {
     gl_render_window_t* bundle = calloc(1, sizeof(gl_render_window_t));
 
-    NSString *renderer = NSProcessInfo.processInfo.environment[@"POJAV_RENDERER"];
+    NSString *renderer = NSProcessInfo.processInfo.environment[@"AMETHYST_RENDERER"];
     BOOL angleDesktopGL = [renderer isEqualToString:@ RENDERER_NAME_MTL_ANGLE];
 
     const EGLint attribs[] = {
@@ -61,7 +61,7 @@ gl_render_window_t* gl_init_context(gl_render_window_t *share) {
         EGL_ALPHA_SIZE, 8,
         EGL_DEPTH_SIZE, 24,
         EGL_SURFACE_TYPE, EGL_WINDOW_BIT|EGL_PBUFFER_BIT,
-        EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT,
+        EGL_RENDERABLE_TYPE, angleDesktopGL ? EGL_OPENGL_BIT : EGL_OPENGL_ES3_BIT,
         EGL_NONE
     };
 
@@ -82,8 +82,13 @@ gl_render_window_t* gl_init_context(gl_render_window_t *share) {
     }
 
     EGLBoolean bindResult;
-    NSDebugLog(@"EGLBridge: Binding to desktop OpenGL (regardless of renderer)");
-    bindResult = handle.eglBindAPI(EGL_OPENGL_API);
+    if (angleDesktopGL) {
+        NSDebugLog(@"EGLBridge: Binding to desktop OpenGL");
+        bindResult = handle.eglBindAPI(EGL_OPENGL_API);
+    } else {
+        NSDebugLog(@"EGLBridge: Binding to OpenGL ES");
+        bindResult = handle.eglBindAPI(EGL_OPENGL_ES_API);
+    }
     if (!bindResult) NSDebugLog(@"EGLBridge: bind failed: %p\n", handle.eglGetError());
 
     bundle->surface = handle.eglCreateWindowSurface(g_EglDisplay, bundle->config, (__bridge EGLNativeWindowType)SurfaceViewController.surface.layer, NULL);

@@ -8,3 +8,7 @@
 [submodule "Natives/external/AFNetworking"]
 	path = Natives/external/AFNetworking
 	url = https://github.com/AFNetworking/AFNetworking
+[submodule "Natives/external/MobileGlues"]
+	path = Natives/external/MobileGlues
+	url = https://github.com/MobileGL-Dev/MobileGlues
+    branch = dev
