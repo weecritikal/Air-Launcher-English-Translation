@@ -49,10 +49,7 @@ UIEdgeInsets insets;
         // "This device has a limited amount of memory available."
         [self showWarningAlert:@"limited_ram" hasPreference:YES exitWhenCompleted:NO];
     }
-    
-    if (@available(iOS 26.0, *)) {
-        [self showWarningAlert:@"ios19_jitdead" hasPreference:NO exitWhenCompleted:YES];
-    }
+
 
     self.navigationItem.leftBarButtonItem = self.splitViewController.displayModeButtonItem;
     self.navigationItem.rightBarButtonItem = [sidebarViewController drawAccountButton];
