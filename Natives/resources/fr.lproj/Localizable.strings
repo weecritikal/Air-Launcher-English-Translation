@@ -17,7 +17,6 @@
 
 // Version categories
 "Installed" = "Installés";
-"Snapshot" = "Snapshot";
 "Releases" = "Versions publiques";
 "Old-beta" = "Bêta";
 "Old-alpha" = "Alpha";
@@ -28,11 +27,8 @@
 "Move" = "Déplacer";
 "Remove" = "Supprimer";
 "Resize" = "Redimensionner";
-
 "custom_controls.button_edit.name" = "Nom";
 "custom_controls.button_edit.size" = "Taille";
-"custom_controls.button_edit.mapping" = "Mapping";
-"custom_controls.button_edit.orientation" = "Orientation";
 "custom_controls.button_edit.toggleable" = "Basculable";
 "custom_controls.button_edit.mouse_pass" = "Passage de la souris";
 "custom_controls.button_edit.swipeable" = "Balayable";
@@ -47,7 +43,6 @@
 "custom_controls.control_menu.exit" = "Quitter";
 "custom_controls.control_menu.exit.warn" = "Vous êtes sur le point de quitter sans enregistrer les modifications.";
 "custom_controls.control_menu.save" = "Sauvegarder";
-"custom_controls.control_menu.save.error.default" = "Le nom du contrôle ne peut pas être \"default\" car il sera remplacé.";
 "custom_controls.control_menu.save.error.json" = "Erreur JSON";
 "custom_controls.control_menu.save.error.write" = "Erreur d'enregistrement du fichier";
 "custom_controls.control_menu.load" = "Charger";
@@ -61,7 +56,6 @@
 "init.migrateDir" = "Le répertoire de données Amethyst est maintenant %@. Toutes vos données existantes ont été déplacées vers le nouvel emplacement.";
 
 "launcher.menu.custom_controls" = "Contrôles personnalisés";
-"launcher.menu.install_jar" = "Installer le .jar";
 
 "launcher.wait_jit.title" = "Attente du JIT";
 "launcher.wait_jit.message" = "Amethyst s'appuie sur la compilation Just-in-time pour que Java fonctionne avec des performances maximales.";
@@ -121,8 +115,6 @@
 "preference.detail.cosmetica" = "Activer les capes Cosmetica (anciennement Arc). Pour plus d'informations, veuillez visiter https://cosmetica.cc. Nécessite OptiFine";
 "preference.title.debug_logging" = "Journaux de débogage";
 "preference.detail.debug_logging" = "Journalise les paramètres internes et les actions sur latestlog.txt. Cela aide les développeurs à trouver des problèmes plus facilement, mais Minecraft peut s'exécuter plus lentement puisque les journaux seront écrits plus souvent.";
-"preference.title.jitstreamer_server" = "IP du serveur JitStreamer";
-"preference.detail.jitstreamer_server" = "Vous permet de passer à une adresse IP personnalisée du serveur JitStreamer, par exemple pour les instances auto-hébergées. Cette option peut être laissée si vous utilisez les serveurs JitStreamer par défaut.";
 "preference.title.appicon" = "Définir l'icône de l'app";
 "preference.detail.appicon" = "Vous permet de choisir entre différentes icônes d'écran d'accueil pour Amethyst.";
 "preference.title.appicon-default" = "Amethyst clair familier";
@@ -168,7 +160,6 @@
 "preference.title.gyroscope_sensitivity" = "Sensibilité des contrôles du gyroscope";
 "preference.detail.gyroscope_sensitivity" = "Ajuster la sensibilité des contrôles du gyroscope";
 
-"preference.title.java_home" = "Utiliser Java 17 pour Minecraft < 1.17";
 "preference.title.java_args" = "Arguments de lancement JVM";
 "preference.placeholder.java_args" = "Spécifier les arguments...";
 "preference.title.auto_ram" = "Mémoire RAM automatique";
@@ -177,18 +168,14 @@
 "preference.title.allocated_memory" = "Allocation de la mémoire (MO)";
 "preference.detail.allocated_memory" = "Contrôle la quantité de mémoire donnée à Minecraft";
 "preference.warn.allocated_memory" = "En raison de limitations dans le système d'exploitation lui-même, cette option peut causer de l'instabilité à ce niveau et des valeurs plus élevées. Procédez avec prudence.";
-"preference.title.custom_env" = "Variables d'environnement";
 
 "preference.title.debug_skip_wait_jit" = "Passer l'alerte \"Attente du JIT\"";
 "preference.detail.debug_skip_wait_jit" = "Cela ne vous permet pas de démarrer sans JIT, à la place, cela saute la vérification du débogueur, car la vérification échoue sur certains jailbreaks.";
 "preference.title.debug_ipad_ui" = "Déverrouiller l'interface utilisateur iPadOS";
 "preference.detail.debug_ipad_ui" = "Déverrouille l'interface utilisateur iPad (alerte, clavier, etc.) si activé ou l'interface utilisateur iPhone si désactivé.";
-"preference.title.debug_auto_correction" = "Auto correction";
 "preference.detail.debug_auto_correction" = "Active la correction automatique lorsque vous écrivez dans le jeu.";
 "preference.title.debug_hide_home_indicator" = "Cacher l'indicateur d'accueil";
 "preference.detail.debug_hide_home_indicator" = "Ceci désactivera le verrouillage de l'indicateur d'accueil. Vous devrez utiliser un accès guidé pour masquer et verrouiller l'indicateur d'accueil en même temps.";
-"preference.title.debug_show_layout_bounds" = "Afficher les limites de la mise en page";
-"preference.detail.debug_show_layout_bounds" = "Afficher les limites, les marges de clip";
-"preference.title.debug_show_layout_overlap" = "Afficher le chevauchement de la mise en page";
-"preference.detail.debug_show_layout_overlap" = "Superposez chaque vue avec une couleur transparente pour révéler des vues qui se chevauchent.";
+
+"preference.profile.title.name" = "Nom";
 "controller_configurator.playstation.title.named_back" = "Sélectionner";
