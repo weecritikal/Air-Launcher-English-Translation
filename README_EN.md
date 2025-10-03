@@ -10,6 +10,7 @@ Optimized and adapted based on the official Amethyst, focusing on iOS/iPadOS exp
 - **Complete Chinese Localization**: Fully translated interface, more suitable for Chinese users awa
 - **Account Restrictions Removed**: Supports local accounts and demo accounts (Demo Mode) to directly download games without logging into Microsoft account or Test account
 - **Multi-Account Login**: Compatible with Microsoft accounts, local accounts, and third-party verification servers (under development, coming soon)
+
 **Note: Some features (such as Mod management) do not have an English translation.**
 
 > ⚠️ Note: There are no plans to reset the Android version (there are too many excellent Android modifications), if you need the official Android code, please go to [Amethyst-Android](https://github.com/AngelAuraMC/Amethyst-Android).
