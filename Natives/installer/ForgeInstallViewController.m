@@ -146,6 +146,11 @@
 @property(nonatomic, strong) NSIndexPath *currentDownloadIndexPath;
 @property(atomic, assign) BOOL isDataLoading;
 @property(nonatomic, strong) NSLock *dataLock;
+
+// Performance optimizations
+@property(nonatomic, strong) NSTimer *searchDebounceTimer;
+@property(nonatomic, strong) NSMutableDictionary<NSString *, NSString *> *displayNameCache;
+@property(nonatomic, strong) dispatch_queue_t searchQueue;
 @end
 
 @implementation ForgeInstallViewController
@@ -219,7 +224,15 @@
     self.isDataLoading = NO;
     self.dataLock = [[NSLock alloc] init];
     
+    self.displayNameCache = [NSMutableDictionary new];
+    self.searchQueue = dispatch_queue_create("com.amethyst.forge.search", DISPATCH_QUEUE_SERIAL);
+    
     [self loadMetadataFromVendor:@"Forge"];
+}
+
+- (void)dealloc {
+    [self.searchDebounceTimer invalidate];
+    self.searchDebounceTimer = nil;
 }
 
 - (void)actionCancelDownload {
@@ -246,6 +259,8 @@
 }
 
 - (void)segmentChanged:(UISegmentedControl *)segment {
+    [self.searchDebounceTimer invalidate];
+    self.searchDebounceTimer = nil;
 
     if (self.searchController.isActive) {
         [self.searchController dismissViewControllerAnimated:YES completion:nil];
@@ -271,6 +286,7 @@
     [self.versionList removeAllObjects];
     [self.forgeList removeAllObjects];
     [self.filteredForgeList removeAllObjects];
+    [self.displayNameCache removeAllObjects];
     [self.dataLock unlock];
     
     dispatch_async(dispatch_get_main_queue(), ^{
@@ -313,48 +329,119 @@
 #pragma mark - Search Results Updating
 
 - (void)updateSearchResultsForSearchController:(UISearchController *)searchController {
-
     if (self.isDataLoading) {
         return;
     }
     
     NSString *searchText = searchController.searchBar.text;
+    
+    [self.searchDebounceTimer invalidate];
+    
+    self.searchDebounceTimer = [NSTimer scheduledTimerWithTimeInterval:0.15
+                                                                 target:self
+                                                               selector:@selector(performSearch:)
+                                                               userInfo:searchText
+                                                                repeats:NO];
+}
+
+- (void)performSearch:(NSTimer *)timer {
+    NSString *searchText = timer.userInfo;
     self.searchText = searchText;
     
-    [self.dataLock lock];
-    
     if (searchText.length == 0) {
-
+        [self.dataLock lock];
         [self.filteredForgeList removeAllObjects];
         for (NSMutableArray *forgeVersions in self.forgeList) {
             [self.filteredForgeList addObject:[forgeVersions mutableCopy]];
         }
-    } else {
-
-        [self.filteredForgeList removeAllObjects];
+        [self.dataLock unlock];
         
-        for (NSUInteger i = 0; i < self.forgeList.count; i++) {
-            NSMutableArray *sectionVersions = self.forgeList[i];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self.tableView reloadData];
+        });
+        return;
+    }
+    
+    dispatch_async(self.searchQueue, ^{
+        [self.dataLock lock];
+        
+        NSArray *forgeListSnapshot = [self.forgeList copy];
+        NSString *vendor = [self.currentVendor copy];
+        
+        [self.dataLock unlock];
+        
+        NSMutableArray *newFilteredList = [NSMutableArray new];
+        NSMutableIndexSet *sectionsWithResults = [NSMutableIndexSet new];
+        
+        for (NSUInteger i = 0; i < forgeListSnapshot.count; i++) {
+            NSArray *sectionVersions = forgeListSnapshot[i];
             NSMutableArray *filteredSectionVersions = [NSMutableArray new];
             
             for (NSString *version in sectionVersions) {
-                NSString *displayName = [self getDisplayName:version];
+                NSString *displayName = [self getCachedDisplayName:version forVendor:vendor];
+                
                 if ([displayName localizedCaseInsensitiveContainsString:searchText]) {
                     [filteredSectionVersions addObject:version];
                 }
             }
             
-            [self.filteredForgeList addObject:filteredSectionVersions];
+            [newFilteredList addObject:filteredSectionVersions];
             
-            if (filteredSectionVersions.count > 0 && i < self.visibilityList.count) {
-                self.visibilityList[i] = @YES;
+            if (filteredSectionVersions.count > 0) {
+                [sectionsWithResults addIndex:i];
             }
+        }
+        
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self.dataLock lock];
+            
+            NSArray *oldFilteredList = [self.filteredForgeList copy];
+            
+            [self.filteredForgeList removeAllObjects];
+            [self.filteredForgeList addObjectsFromArray:newFilteredList];
+            
+            [sectionsWithResults enumerateIndexesUsingBlock:^(NSUInteger idx, BOOL *stop) {
+                if (idx < self.visibilityList.count) {
+                    self.visibilityList[idx] = @YES;
+                }
+            }];
+            
+            [self.dataLock unlock];
+            
+            if (![self isFilteredList:oldFilteredList equalTo:newFilteredList]) {
+                [self.tableView reloadData];
+            }
+        });
+    });
+}
+
+- (BOOL)isFilteredList:(NSArray *)list1 equalTo:(NSArray *)list2 {
+    if (list1.count != list2.count) return NO;
+    
+    for (NSUInteger i = 0; i < list1.count; i++) {
+        NSArray *section1 = list1[i];
+        NSArray *section2 = list2[i];
+        if (![section1 isEqualToArray:section2]) {
+            return NO;
         }
     }
     
-    [self.dataLock unlock];
+    return YES;
+}
+
+- (NSString *)getCachedDisplayName:(NSString *)version forVendor:(NSString *)vendor {
+    NSString *cacheKey = [NSString stringWithFormat:@"%@_%@", vendor, version];
     
-    [self.tableView reloadData];
+    NSString *cached = self.displayNameCache[cacheKey];
+    if (cached) {
+        return cached;
+    }
+    
+    // Compute and cache
+    NSString *displayName = [self getDisplayName:version];
+    self.displayNameCache[cacheKey] = displayName;
+    
+    return displayName;
 }
 
 #pragma mark - Version Display Methods
@@ -617,11 +704,11 @@
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForHeaderInSection:(NSInteger)section {
-    return 60.0; // Consistent height
+    return 60.0; 
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
-    return 56.0; // Consistent cell height
+    return 56.0; 
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
@@ -661,10 +748,12 @@
         self.forgeList[indexPath.section][indexPath.row];
     
     version = [version copy];
+    NSString *vendor = [self.currentVendor copy];
     
     [self.dataLock unlock];
     
-    NSString *displayName = [self getDisplayName:version];
+    // Use cached display name for better performance
+    NSString *displayName = [self getCachedDisplayName:version forVendor:vendor];
     cell.versionLabel.text = displayName;
     
     NSString *typeLabel = [self getLabelForVersionType:version];
