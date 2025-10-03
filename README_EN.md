@@ -1,5 +1,6 @@
 # My Angel Aura Amethyst (iOS) Remastered
 [![Development Build Status](https://github.com/herbrine8403/Amethyst-iOS-MyRemastered/actions/workflows/development.yml/badge.svg?branch=main)](.github/workflows/development.yml)
+
 **Note: This ReadMe document is translated by AI, and I don't plan to translate it manually because I don't think this project will be popular abroad.**
 
 ## 🌟 Remastered Core Highlights
