@@ -64,13 +64,6 @@ JIT（Just-In-Time）是流畅运行游戏的核心，iOS 需通过以下工具�
 | 已越狱设备   | ❌         | ❌       | ✅       | 系统级自动支持           |
 
 
-## 捐赠
-
-如果您觉得这个项目对您有帮助，欢迎通过以下二维码进行捐赠支持：
-
-![捐赠二维码](donate.png)
-
-
 ## 👥 核心贡献者（官方）
 Amethyst 的稳定性离不开社区团队的付出，致敬以下主要开发者：
 - @crystall1nedev - [项目负责人 & iOS 移植核心]
@@ -107,3 +100,10 @@ Amethyst 的稳定性离不开社区团队的付出，致敬以下主要开发�
 | UnzipKit               | 解压工具                 | BSD-2                    | [GitHub](https://github.com/abbeycode/UnzipKit)                           |
 | DyldDeNeuralyzer       | 库验证绕过工具           | -                        | [GitHub](https://github.com/xpn/DyldDeNeuralyzer)                         |
 > 额外感谢：[MCHeads](https://mc-heads.net) 提供 Minecraft 头像服务
+
+
+## 捐赠
+
+如果您觉得这个项目对您有帮助，欢迎通过以下二维码进行捐赠支持：
+
+![捐赠二维码](donate.png)
