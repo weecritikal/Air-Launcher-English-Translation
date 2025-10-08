@@ -24,11 +24,7 @@
         
         self.subtitleLabel = [[UILabel alloc] init];
         self.subtitleLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightRegular];
-        if (@available(iOS 13.0, *)) {
-            self.subtitleLabel.textColor = [UIColor secondaryLabelColor];
-        } else {
-            self.subtitleLabel.textColor = [UIColor grayColor];
-        }
+        self.subtitleLabel.textColor = [UIColor secondaryLabelColor];
         self.subtitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
         self.subtitleLabel.numberOfLines = 1;
         self.subtitleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
@@ -160,14 +156,12 @@
     
     if (self.navigationController) {
         self.navigationController.navigationBar.translucent = NO;
-        if (@available(iOS 13.0, *)) {
-            UINavigationBarAppearance *appearance = [[UINavigationBarAppearance alloc] init];
-            [appearance configureWithOpaqueBackground];
-            appearance.backgroundColor = [UIColor systemBackgroundColor];
-            self.navigationController.navigationBar.standardAppearance = appearance;
-            self.navigationController.navigationBar.compactAppearance = appearance;
-            self.navigationController.navigationBar.scrollEdgeAppearance = appearance;
-        }
+        UINavigationBarAppearance *appearance = [[UINavigationBarAppearance alloc] init];
+        [appearance configureWithOpaqueBackground];
+        appearance.backgroundColor = [UIColor systemBackgroundColor];
+        self.navigationController.navigationBar.standardAppearance = appearance;
+        self.navigationController.navigationBar.compactAppearance = appearance;
+        self.navigationController.navigationBar.scrollEdgeAppearance = appearance;
     }
     
     if (@available(iOS 15.0, *)) {
