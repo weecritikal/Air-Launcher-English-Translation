@@ -259,6 +259,9 @@
 "preference.title.custom_env" = "Environment variables";
 "preference.detail.custom_env" = "This option is under construction. Create and edit custom_env.txt in the meantime.";
 
+"preference.title.debug_universal_script_jit" = "Use Universal StikDebug Script";
+"preference.title.debug_always_attached_jit" = "Keep attached to StikDebug";
+"preference.detail.debug_always_attached_jit" = "Enable this if your mods require loading .dylib at runtime. When this is on, StikDebug's PiP should not be closed during gameplay. Requires Universal Script enabled";
 "preference.title.debug_skip_wait_jit" = "Skip \"Waiting for JIT\" dialog";
 "preference.detail.debug_skip_wait_jit" = "This does not allow you to launch without JIT, instead this skips debugger check, because check fails on certain jailbreaks.";
 "preference.title.debug_ipad_ui" = "Unlock iPadOS UI";
