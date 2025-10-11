@@ -211,5 +211,32 @@ void init_bypassDyldLibValidation() {
     //redirectFunction("mmap", mmap, hooked_mmap);
     //redirectFunction("fcntl", fcntl, hooked_fcntl);
     searchAndPatch("dyld_mmap", dyldBase, mmapSig, sizeof(mmapSig), hooked_mmap);
-    searchAndPatch("dyld_fcntl", dyldBase, fcntlSig, sizeof(fcntlSig), hooked___fcntl);
+    bool fcntlPatchSuccess = searchAndPatch("dyld_fcntl", dyldBase, fcntlSig, sizeof(fcntlSig), hooked___fcntl);
+    
+    // https://github.com/LiveContainer/LiveContainer/commit/c978e62
+    // dopamine already hooked it, try to find its hook instead
+    if(!fcntlPatchSuccess) {
+        char* fcntlAddr = 0;
+        // search all syscalls and see if the the instruction before it is a branch instruction
+        for(int i=0; i < 0x80000; i+=4) {
+            if (dyldBase[i] == syscallSig[0] && memcmp(dyldBase+i, syscallSig, 4) == 0) {
+                char* syscallAddr = dyldBase + i;
+                uint32_t* prev = (uint32_t*)(syscallAddr - 4);
+                if(*prev >> 26 == 0x5) {
+                    fcntlAddr = (char*)prev;
+                    break;
+                }
+            }
+        }
+        
+        if(fcntlAddr) {
+            uint32_t* inst = (uint32_t*)fcntlAddr;
+            int32_t offset = ((int32_t)((*inst)<<6))>>4;
+            NSLog(@"[DyldLVBypass] Dopamine hook offset = %x", offset);
+            orig_fcntl = (void*)((char*)fcntlAddr + offset);
+            redirectFunction("dyld_fcntl (Dopamine)", fcntlAddr, hooked___fcntl);
+        } else {
+            NSLog(@"[DyldLVBypass] Dopamine hook not found");
+        }
+    }
 }
