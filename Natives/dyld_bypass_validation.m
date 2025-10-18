@@ -88,13 +88,13 @@ bool redirectFunctionMirrored(char *name, void *patchAddr, void *target) {
     *(void **)((char*)mirrored + 16) = target;
     sys_icache_invalidate((void*)patchAddr, sizeof(patch));
     
-    NSLog(@"[DyldLVBypass] hook %s succeed!", name);
+    NSDebugLog(@"[DyldLVBypass] hook %s succeed!", name);
     
     vm_deallocate(mach_task_self(), mirrored, sizeof(patch));
     return TRUE;
 }
 
-static bool searchAndPatch(char *name, char *base, char *signature, int length, void *target) {
+bool searchAndPatch(char *name, char *base, char *signature, int length, void *target) {
     char *patchAddr = NULL;
     for(int i=0; i < 0x80000; i+=4) {
         if (base[i] == signature[0] && memcmp(base+i, signature, length) == 0) {
@@ -104,11 +104,11 @@ static bool searchAndPatch(char *name, char *base, char *signature, int length, 
     }
     
     if (patchAddr == NULL) {
-        NSLog(@"[DyldLVBypass] hook %s fails line %d", name, __LINE__);
+        NSDebugLog(@"[DyldLVBypass] hook %s fails line %d", name, __LINE__);
         return FALSE;
     }
     
-    NSLog(@"[DyldLVBypass] found %s at %p", name, patchAddr);
+    NSDebugLog(@"[DyldLVBypass] found %s at %p", name, patchAddr);
     return redirectFunction(name, patchAddr, target);
 }
 
