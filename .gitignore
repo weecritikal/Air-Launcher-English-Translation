@@ -12,3 +12,6 @@ project.xcworkspace/
 /depends
 /Natives/config.h
 entitlements.codesign.xml
+
+.iflow/
+gha-creds-*.json

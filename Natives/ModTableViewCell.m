@@ -1,14 +1,12 @@
-//
-//  ModTableViewCell.m
-//  AmethystMods
-//
-//  Created by Copilot on 2025-08-22.
-//  Updated: multi-badge support, original rendering, fixed layout & hit areas.
-//
-
 #import "ModTableViewCell.h"
 #import "ModItem.h"
 #import "ModService.h"
+#import <QuartzCore/QuartzCore.h>
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunguarded-availability-new"
+#import "UIKit+AFNetworking.h"
+#pragma clang diagnostic pop
 
 @interface ModTableViewCell ()
 @property (nonatomic, strong) ModItem *currentMod;
@@ -18,264 +16,264 @@
 
 - (instancetype)initWithStyle:(UITableViewCellStyle)style reuseIdentifier:(NSString *)reuseIdentifier {
     if (self = [super initWithStyle:style reuseIdentifier:reuseIdentifier]) {
-        _modIconView = [[UIImageView alloc] initWithFrame:CGRectZero];
-        _modIconView.layer.cornerRadius = 6;
-        _modIconView.clipsToBounds = YES;
-        _modIconView.contentMode = UIViewContentModeScaleAspectFill;
+        self.selectionStyle = UITableViewCellSelectionStyleNone;
+        self.backgroundColor = [UIColor clearColor]; // Use clear color for custom background view
+        self.contentView.backgroundColor = [UIColor systemBackgroundColor];
+
+        // --- Initialization of UI Elements ---
+        _modIconView = [self createImageViewWithCornerRadius:4];
+        _nameLabel = [self createLabelWithFont:[UIFont boldSystemFontOfSize:13] textColor:[UIColor labelColor] numberOfLines:1];
+
+        // --- NEW: Version Labels ---
+        _modVersionLabel = [self createLabelWithFont:[UIFont systemFontOfSize:10 weight:UIFontWeightMedium] textColor:[UIColor secondaryLabelColor] numberOfLines:1];
+        _gameVersionLabel = [self createLabelWithFont:[UIFont systemFontOfSize:10 weight:UIFontWeightMedium] textColor:[UIColor systemGreenColor] numberOfLines:1];
+
+        _authorLabel = [self createLabelWithFont:[UIFont systemFontOfSize:9] textColor:[UIColor secondaryLabelColor] numberOfLines:1];
+        _descLabel = [self createLabelWithFont:[UIFont systemFontOfSize:9] textColor:[UIColor grayColor] numberOfLines:1];
+        _statsLabel = [self createLabelWithFont:[UIFont systemFontOfSize:9] textColor:[UIColor secondaryLabelColor] numberOfLines:1];
+        _categoryLabel = [self createLabelWithFont:[UIFont systemFontOfSize:9] textColor:[UIColor systemBlueColor] numberOfLines:1];
+
+        _enableSwitch = [[UISwitch alloc] init];
+        _enableSwitch.transform = CGAffineTransformMakeScale(0.75, 0.75); // Scale down for compact view
+        _enableSwitch.translatesAutoresizingMaskIntoConstraints = NO;
+        [_enableSwitch addTarget:self action:@selector(toggleTapped) forControlEvents:UIControlEventValueChanged];
+
+        _downloadButton = [self createButtonWithTitle:@"下载" titleColor:[UIColor whiteColor] action:@selector(downloadTapped)];
+        _downloadButton.backgroundColor = [UIColor systemGreenColor];
+        _downloadButton.layer.cornerRadius = 10;
+        _downloadButton.titleLabel.font = [UIFont boldSystemFontOfSize:10];
+        _downloadButton.contentEdgeInsets = UIEdgeInsetsMake(4, 8, 4, 8);
+
+        _openLinkButton = [self createButtonWithImage:[UIImage systemImageNamed:@"globe"] action:@selector(openLinkTapped)];
+
+        _loaderBadgesStackView = [[UIStackView alloc] init];
+        _loaderBadgesStackView.translatesAutoresizingMaskIntoConstraints = NO;
+        _loaderBadgesStackView.axis = UILayoutConstraintAxisHorizontal;
+        _loaderBadgesStackView.spacing = 4;
+        _loaderBadgesStackView.alignment = UIStackViewAlignmentCenter;
+
+        // Add subviews
+        [self.contentView addSubview:_loaderBadgesStackView];
         [self.contentView addSubview:_modIconView];
-
-        _loaderBadgeView1 = [[UIImageView alloc] initWithFrame:CGRectZero];
-        _loaderBadgeView1.contentMode = UIViewContentModeScaleAspectFit;
-        _loaderBadgeView1.hidden = YES;
-        [self.contentView addSubview:_loaderBadgeView1];
-
-        _loaderBadgeView2 = [[UIImageView alloc] initWithFrame:CGRectZero];
-        _loaderBadgeView2.contentMode = UIViewContentModeScaleAspectFit;
-        _loaderBadgeView2.hidden = YES;
-        [self.contentView addSubview:_loaderBadgeView2];
-
-        _loaderBadgeView3 = [[UIImageView alloc] initWithFrame:CGRectZero];
-        _loaderBadgeView3.contentMode = UIViewContentModeScaleAspectFit;
-        _loaderBadgeView3.hidden = YES;
-        [self.contentView addSubview:_loaderBadgeView3];
-
-        _nameLabel = [[UILabel alloc] initWithFrame:CGRectZero];
-        _nameLabel.font = [UIFont boldSystemFontOfSize:15];
-        _nameLabel.numberOfLines = 1;
         [self.contentView addSubview:_nameLabel];
-
-        _descLabel = [[UILabel alloc] initWithFrame:CGRectZero];
-        _descLabel.font = [UIFont systemFontOfSize:12];
-        _descLabel.textColor = [UIColor darkGrayColor];
-        _descLabel.numberOfLines = 2;
+        [self.contentView addSubview:_modVersionLabel];
+        [self.contentView addSubview:_gameVersionLabel];
+        [self.contentView addSubview:_authorLabel];
         [self.contentView addSubview:_descLabel];
-
-        _toggleButton = [UIButton buttonWithType:UIButtonTypeSystem];
-        _toggleButton.titleLabel.font = [UIFont systemFontOfSize:14];
-        [_toggleButton addTarget:self action:@selector(toggleTapped) forControlEvents:UIControlEventTouchUpInside];
-        _toggleButton.contentEdgeInsets = UIEdgeInsetsMake(4, 8, 4, 8);
-        [self.contentView addSubview:_toggleButton];
-
-        _openLinkButton = [UIButton buttonWithType:UIButtonTypeSystem];
-        _openLinkButton.tintColor = [UIColor systemBlueColor];
-        _openLinkButton.titleLabel.font = [UIFont systemFontOfSize:14];
-        [_openLinkButton addTarget:self action:@selector(openLinkTapped) forControlEvents:UIControlEventTouchUpInside];
-        _openLinkButton.contentEdgeInsets = UIEdgeInsetsMake(6, 6, 6, 6);
-        _openLinkButton.hidden = YES;
-        _openLinkButton.contentHorizontalAlignment = UIControlContentHorizontalAlignmentCenter;
-        _openLinkButton.imageView.contentMode = UIViewContentModeScaleAspectFit;
+        [self.contentView addSubview:_statsLabel];
+        [self.contentView addSubview:_categoryLabel];
+        [self.contentView addSubview:_enableSwitch];
+        [self.contentView addSubview:_downloadButton];
         [self.contentView addSubview:_openLinkButton];
 
-        _deleteButton = [UIButton buttonWithType:UIButtonTypeSystem];
-        [_deleteButton setTitleColor:[UIColor systemRedColor] forState:UIControlStateNormal];
-        _deleteButton.titleLabel.font = [UIFont systemFontOfSize:14];
-        [_deleteButton setTitle:@"删除" forState:UIControlStateNormal];
-        [_deleteButton addTarget:self action:@selector(deleteTapped) forControlEvents:UIControlEventTouchUpInside];
-        _deleteButton.contentEdgeInsets = UIEdgeInsetsMake(4, 8, 4, 8);
-        [self.contentView addSubview:_deleteButton];
-
-        self.selectionStyle = UITableViewCellSelectionStyleNone;
+        [self setupConstraints];
     }
     return self;
 }
 
-- (void)layoutSubviews {
-    [super layoutSubviews];
-    CGFloat padding = 10;
-    CGFloat iconSize = 48;
-    self.modIconView.frame = CGRectMake(padding, padding, iconSize, iconSize);
+#pragma mark - UI Element Factory Methods
 
-    CGFloat x = CGRectGetMaxX(self.modIconView.frame) + 10;
-    CGFloat rightButtonsWidth = 170;
-    CGFloat contentWidth = self.contentView.bounds.size.width - x - padding - rightButtonsWidth;
-
-    // badges: up to three small icons horizontally
-    CGFloat badgeSize = 18;
-    CGFloat badgeY = padding + 2;
-    CGFloat badgeX = x;
-    UIImageView *badges[3] = {self.loaderBadgeView1, self.loaderBadgeView2, self.loaderBadgeView3};
-    for (int i = 0; i < 3; i++) {
-        UIImageView *bv = badges[i];
-        bv.frame = CGRectMake(badgeX, badgeY, badgeSize, badgeSize);
-        badgeX += badgeSize + 6;
-    }
-
-    CGFloat nameX = x;
-    // if first badge visible, shift nameX to after badges area for alignment
-    if (!self.loaderBadgeView1.hidden) {
-        // compute width used by visible badges
-        CGFloat used = 0;
-        for (int i = 0; i < 3; i++) {
-            UIImageView *bv = badges[i];
-            if (!bv.hidden) used += badgeSize + 6;
-        }
-        nameX += used;
-    }
-    self.nameLabel.frame = CGRectMake(nameX, padding, contentWidth - (nameX - x), 20);
-    self.descLabel.frame = CGRectMake(x, CGRectGetMaxY(self.nameLabel.frame) + 4, contentWidth, 36);
-
-    // buttons on right: delete | toggle | openLink
-    CGFloat btnW = 60;
-    CGFloat spacing = 8;
-    CGFloat right = self.contentView.bounds.size.width - padding;
-    self.deleteButton.frame = CGRectMake(right - btnW, 12, btnW, 28);
-    right = CGRectGetMinX(self.deleteButton.frame) - spacing;
-    self.toggleButton.frame = CGRectMake(right - btnW, 12, btnW, 28);
-    right = CGRectGetMinX(self.toggleButton.frame) - spacing;
-    CGFloat openW = 44;
-    self.openLinkButton.frame = CGRectMake(right - openW, 12, openW, 28);
-
-    // Bring interactive controls to front
-    [self.contentView bringSubviewToFront:self.deleteButton];
-    [self.contentView bringSubviewToFront:self.toggleButton];
-    [self.contentView bringSubviewToFront:self.openLinkButton];
+- (UIImageView *)createImageViewWithCornerRadius:(CGFloat)radius {
+    UIImageView *imageView = [[UIImageView alloc] init];
+    imageView.translatesAutoresizingMaskIntoConstraints = NO;
+    imageView.layer.cornerRadius = radius;
+    imageView.clipsToBounds = YES;
+    imageView.contentMode = UIViewContentModeScaleAspectFill;
+    imageView.backgroundColor = [UIColor secondarySystemBackgroundColor];
+    return imageView;
 }
 
-- (void)prepareForReuse {
-    [super prepareForReuse];
-    self.modIconView.image = nil;
-    self.loaderBadgeView1.image = nil; self.loaderBadgeView1.hidden = YES;
-    self.loaderBadgeView2.image = nil; self.loaderBadgeView2.hidden = YES;
-    self.loaderBadgeView3.image = nil; self.loaderBadgeView3.hidden = YES;
-    self.openLinkButton.hidden = YES;
-    [self.openLinkButton setImage:nil forState:UIControlStateNormal];
-    self.nameLabel.attributedText = nil;
-    self.nameLabel.text = nil;
-    self.descLabel.text = nil;
-    self.currentMod = nil;
+- (UILabel *)createLabelWithFont:(UIFont *)font textColor:(UIColor *)color numberOfLines:(NSInteger)lines {
+    UILabel *label = [[UILabel alloc] init];
+    label.translatesAutoresizingMaskIntoConstraints = NO;
+    label.font = font;
+    label.textColor = color;
+    label.numberOfLines = lines;
+    [label setContentCompressionResistancePriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
+    [label setContentHuggingPriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
+    return label;
 }
 
-- (void)configureWithMod:(ModItem *)mod {
+- (UIButton *)createButtonWithAction:(SEL)action {
+    UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
+    button.translatesAutoresizingMaskIntoConstraints = NO;
+    [button addTarget:self action:action forControlEvents:UIControlEventTouchUpInside];
+    return button;
+}
+
+- (UIButton *)createButtonWithTitle:(NSString *)title titleColor:(UIColor *)color action:(SEL)action {
+    UIButton *button = [self createButtonWithAction:action];
+    [button setTitle:title forState:UIControlStateNormal];
+    [button setTitleColor:color forState:UIControlStateNormal];
+    button.titleLabel.font = [UIFont boldSystemFontOfSize:15];
+    return button;
+}
+
+- (UIButton *)createButtonWithImage:(UIImage *)image action:(SEL)action {
+    UIButton *button = [self createButtonWithAction:action];
+    [button setImage:image forState:UIControlStateNormal];
+    return button;
+}
+
+- (UIImageView *)createBadgeImageView:(NSString *)imageName {
+    UIImageView *imageView = [[UIImageView alloc] initWithImage:[UIImage imageNamed:imageName]];
+    imageView.contentMode = UIViewContentModeScaleAspectFit;
+    return imageView;
+}
+
+#pragma mark - Auto Layout Constraints
+
+- (void)setupConstraints {
+    CGFloat padding = 7.0;
+    CGFloat iconSize = 36.0;
+
+    // --- Common Left-aligned Elements ---
+    [NSLayoutConstraint activateConstraints:@[
+        [_modIconView.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:padding],
+        [_modIconView.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor],
+        [_modIconView.widthAnchor constraintEqualToConstant:iconSize],
+        [_modIconView.heightAnchor constraintEqualToConstant:iconSize],
+
+        [_nameLabel.leadingAnchor constraintEqualToAnchor:_modIconView.trailingAnchor constant:8],
+        [_nameLabel.topAnchor constraintEqualToAnchor:_modIconView.topAnchor constant:-2], // Shift up slightly
+
+        // --- NEW: Version Label Constraints ---
+        [_modVersionLabel.leadingAnchor constraintEqualToAnchor:_nameLabel.leadingAnchor],
+        [_modVersionLabel.topAnchor constraintEqualToAnchor:_nameLabel.bottomAnchor constant:2],
+        [_gameVersionLabel.leadingAnchor constraintEqualToAnchor:_modVersionLabel.trailingAnchor constant:5],
+        [_gameVersionLabel.centerYAnchor constraintEqualToAnchor:_modVersionLabel.centerYAnchor],
+
+
+        [_descLabel.leadingAnchor constraintEqualToAnchor:_nameLabel.leadingAnchor],
+        [_descLabel.topAnchor constraintEqualToAnchor:_nameLabel.bottomAnchor constant:1],
+
+        [_authorLabel.leadingAnchor constraintEqualToAnchor:_nameLabel.leadingAnchor],
+        [_authorLabel.topAnchor constraintEqualToAnchor:_nameLabel.bottomAnchor constant:1],
+        [_statsLabel.leadingAnchor constraintEqualToAnchor:_authorLabel.trailingAnchor constant:4],
+        [_statsLabel.centerYAnchor constraintEqualToAnchor:_authorLabel.centerYAnchor],
+
+        // --- Right-aligned Action Buttons (Side-by-side) ---
+        [_downloadButton.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-padding],
+        [_downloadButton.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor],
+        [_enableSwitch.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-padding],
+        [_enableSwitch.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor],
+
+        [_openLinkButton.trailingAnchor constraintEqualToAnchor:_enableSwitch.leadingAnchor constant:-4],
+        [_openLinkButton.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor],
+        [_openLinkButton.widthAnchor constraintEqualToConstant:28],
+        [_openLinkButton.heightAnchor constraintEqualToConstant:28],
+
+        // --- Text Content Trailing Constraints ---
+        [_nameLabel.trailingAnchor constraintEqualToAnchor:_openLinkButton.leadingAnchor constant:-padding],
+        [_modVersionLabel.trailingAnchor constraintLessThanOrEqualToAnchor:_openLinkButton.leadingAnchor constant:-padding],
+        [_descLabel.trailingAnchor constraintEqualToAnchor:_openLinkButton.leadingAnchor constant:-padding],
+        [_statsLabel.trailingAnchor constraintLessThanOrEqualToAnchor:_openLinkButton.leadingAnchor constant:-padding],
+
+        // --- Loader Badges ---
+        [_loaderBadgesStackView.centerYAnchor constraintEqualToAnchor:_nameLabel.centerYAnchor],
+        [_loaderBadgesStackView.heightAnchor constraintEqualToConstant:12],
+        [_loaderBadgesStackView.leadingAnchor constraintGreaterThanOrEqualToAnchor:_nameLabel.trailingAnchor constant:4],
+        [_loaderBadgesStackView.trailingAnchor constraintEqualToAnchor:_openLinkButton.leadingAnchor constant:-4],
+    ]];
+}
+
+#pragma mark - Configuration
+
+- (void)configureWithMod:(ModItem *)mod displayMode:(ModTableViewCellDisplayMode)mode {
     self.currentMod = mod;
 
-    // name + version
-    NSString *name = mod.displayName ?: mod.fileName;
-    NSString *version = mod.version ?: @"";
-    if (version.length > 0) {
-        NSMutableAttributedString *att = [[NSMutableAttributedString alloc] initWithString:name attributes:@{NSFontAttributeName: [UIFont boldSystemFontOfSize:15], NSForegroundColorAttributeName: [UIColor labelColor]}];
-        NSAttributedString *verAttr = [[NSAttributedString alloc] initWithString:[NSString stringWithFormat:@"  %@", version] attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:13], NSForegroundColorAttributeName: [UIColor systemGrayColor]}];
-        [att appendAttributedString:verAttr];
-        self.nameLabel.attributedText = att;
+    _nameLabel.text = mod.displayName ?: mod.fileName;
+
+    if (mod.icon) {
+        _modIconView.image = mod.icon;
+    } else if (mod.iconURL) {
+        [_modIconView setImageWithURL:[NSURL URLWithString:mod.iconURL] placeholderImage:[UIImage systemImageNamed:@"puzzlepiece.extension"]];
     } else {
-        self.nameLabel.text = name;
+        _modIconView.image = [UIImage systemImageNamed:@"puzzlepiece.extension"];
     }
 
-    // description
-    self.descLabel.text = mod.modDescription ?: @"";
-
-    // toggle text
-    NSString *toggleTitle = mod.disabled ? @"启用" : @"禁用";
-    [self.toggleButton setTitle:toggleTitle forState:UIControlStateNormal];
-
-    // mod icon (as before)
-    UIImage *placeholder = [UIImage systemImageNamed:@"cube.box"];
-    self.modIconView.image = placeholder;
-    if (mod.iconURL.length > 0) {
-        NSString *cachePath = [[ModService sharedService] iconCachePathForURL:mod.iconURL];
-        if ([[NSFileManager defaultManager] fileExistsAtPath:cachePath]) {
-            NSData *d = [NSData dataWithContentsOfFile:cachePath];
-            UIImage *img = [UIImage imageWithData:d];
-            if (img) self.modIconView.image = img;
-        } else {
-            NSURL *url = [NSURL URLWithString:mod.iconURL];
-            if (url) {
-                dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
-                    NSData *d = [NSData dataWithContentsOfURL:url];
-                    if (d) {
-                        [d writeToFile:cachePath atomically:YES];
-                        dispatch_async(dispatch_get_main_queue(), ^{
-                            UIImage *img = [UIImage imageWithData:d];
-                            if (img) self.modIconView.image = img;
-                        });
-                    }
-                });
-            }
-        }
-    }
-
-    // loader badges: try to show up to three icons: Fabric, Forge, NeoForge (in that order)
-    NSArray<UIImage *> *badgeImgs = [self loaderIconsForMod:mod traitCollection:self.traitCollection];
-    // assign to available badge views
-    NSArray<UIImageView *> *badgeViews = @[self.loaderBadgeView1, self.loaderBadgeView2, self.loaderBadgeView3];
-    for (NSUInteger i = 0; i < badgeViews.count; i++) {
-        UIImageView *bv = badgeViews[i];
-        if (i < badgeImgs.count && badgeImgs[i]) {
-            UIImage *orig = [badgeImgs[i] imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
-            bv.image = orig;
-            bv.hidden = NO;
-        } else {
-            bv.image = nil;
-            bv.hidden = YES;
-        }
-    }
-
-    // open link button
-    if (mod.homepage.length > 0 || mod.sources.length > 0) {
-        self.openLinkButton.hidden = NO;
-        UIImage *globe = [UIImage systemImageNamed:@"globe"];
-        if (globe) {
-            globe = [globe imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
-            [self.openLinkButton setImage:globe forState:UIControlStateNormal];
-            [self.openLinkButton setTitle:@"" forState:UIControlStateNormal];
-        } else {
-            [self.openLinkButton setTitle:@"🌐" forState:UIControlStateNormal];
-        }
-        self.openLinkButton.userInteractionEnabled = YES;
+    if (mode == ModTableViewCellDisplayModeLocal) {
+        [self configureForLocalMode:mod];
     } else {
-        self.openLinkButton.hidden = YES;
+        [self configureForOnlineMode:mod];
     }
 }
 
-#pragma mark - loader icon loader
+- (void)configureForLocalMode:(ModItem *)mod {
+    // Hide online/unused elements
+    _authorLabel.hidden = YES;
+    _statsLabel.hidden = YES;
+    _categoryLabel.hidden = YES;
+    _downloadButton.hidden = YES;
+    _descLabel.hidden = YES; // Replaced by version labels
 
-- (NSArray<UIImage *> *)loaderIconsForMod:(ModItem *)mod traitCollection:(UITraitCollection *)traits {
-    if (!mod) return @[];
+    // Show local elements
+    _openLinkButton.hidden = NO;
+    _enableSwitch.hidden = NO;
+    _loaderBadgesStackView.hidden = NO;
+    _modVersionLabel.hidden = NO;
+    _gameVersionLabel.hidden = NO;
 
-    NSMutableArray<UIImage *> *out = [NSMutableArray array];
-
-    // Helper to load image by base name (fabric/forge/neoforge)
-    __weak typeof(self) wself = self;
-    UIImage *(^loadImage)(NSString *) = ^UIImage *(NSString *base) {
-        if (!base) return nil;
-        NSString *suffix = @"light";
-        if (@available(iOS 12.0, *)) {
-            if (traits) suffix = (traits.userInterfaceStyle == UIUserInterfaceStyleDark) ? @"dark" : @"light";
-            else suffix = ([UIScreen mainScreen].traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark) ? @"dark":@"light";
-        }
-        NSString *resourceName = [NSString stringWithFormat:@"%@_%@", base, suffix];
-        UIImage *img = nil;
-        NSArray<NSString *> *resourceDirCandidates = @[@"ModLoaderIcons", @"Natives/ModLoaderIcons", @"Natives/ModLoaderIcons/Resources"];
-        for (NSString *dir in resourceDirCandidates) {
-            NSString *filePath = [[[NSBundle mainBundle] resourcePath] stringByAppendingPathComponent:dir];
-            filePath = [filePath stringByAppendingPathComponent:[resourceName stringByAppendingPathExtension:@"png"]];
-            if ([[NSFileManager defaultManager] fileExistsAtPath:filePath]) {
-                img = [UIImage imageWithContentsOfFile:filePath];
-                if (img) break;
-            }
-        }
-        if (!img) {
-            NSString *fileInBundle = [[NSBundle mainBundle] pathForResource:resourceName ofType:@"png"];
-            if (fileInBundle) img = [UIImage imageWithContentsOfFile:fileInBundle];
-        }
-        if (!img) img = [UIImage imageNamed:resourceName];
-        return img;
-    };
-
-    // Always try to add in order Fabric, Forge, NeoForge if the mod supports them
-    if (mod.isFabric) {
-        UIImage *i = loadImage(@"fabric");
-        if (i) [out addObject:i];
-    }
-    if (mod.isForge) {
-        UIImage *i = loadImage(@"forge");
-        if (i) [out addObject:i];
-    }
-    if (mod.isNeoForge) {
-        UIImage *i = loadImage(@"neoforge");
-        if (i) [out addObject:i];
+    // Populate version labels
+    if (mod.version && mod.version.length > 0) {
+        _modVersionLabel.text = [NSString stringWithFormat:@"v%@", mod.version];
+        _modVersionLabel.hidden = NO;
+    } else {
+        _modVersionLabel.text = nil;
+        _modVersionLabel.hidden = YES;
     }
 
-    return out;
+    if (mod.gameVersion && mod.gameVersion.length > 0) {
+        _gameVersionLabel.text = [NSString stringWithFormat:@"MC %@", mod.gameVersion];
+        _gameVersionLabel.hidden = NO;
+    } else {
+        _gameVersionLabel.text = nil;
+        _gameVersionLabel.hidden = YES;
+    }
+
+    // Clear previous badges
+    for (UIView *view in self.loaderBadgesStackView.arrangedSubviews) {
+        [self.loaderBadgesStackView removeArrangedSubview:view];
+        [view removeFromSuperview];
+    }
+
+    // Add new badges
+    if (mod.isFabric) [self.loaderBadgesStackView addArrangedSubview:[self createBadgeImageView:@"fabric_logo"]];
+    if (mod.isForge) [self.loaderBadgesStackView addArrangedSubview:[self createBadgeImageView:@"forge_logo"]];
+    if (mod.isNeoForge) [self.loaderBadgesStackView addArrangedSubview:[self createBadgeImageView:@"neoforge_logo"]];
+
+    [self updateToggleState:mod.disabled];
+}
+
+- (void)configureForOnlineMode:(ModItem *)mod {
+    // Hide local/unused elements
+    _enableSwitch.hidden = YES;
+    _loaderBadgesStackView.hidden = YES;
+    _descLabel.hidden = YES;
+    _modVersionLabel.hidden = YES;
+    _gameVersionLabel.hidden = YES;
+
+    // Show online elements
+    _authorLabel.hidden = NO;
+    _statsLabel.hidden = NO;
+    _downloadButton.hidden = NO;
+    _openLinkButton.hidden = NO;
+
+    _authorLabel.text = [NSString stringWithFormat:@"by %@", mod.author ?: @"Unknown"];
+
+    NSNumberFormatter *formatter = [[NSNumberFormatter alloc] init];
+    formatter.numberStyle = NSNumberFormatterDecimalStyle;
+    NSString *downloadsStr = [formatter stringFromNumber:mod.downloads ?: @0];
+
+    _statsLabel.text = [NSString stringWithFormat:@"%@ downloads", downloadsStr];
+}
+
+
+#pragma mark - State Updates
+
+- (void)updateToggleState:(BOOL)disabled {
+    [_enableSwitch setOn:!disabled animated:YES];
+    self.contentView.alpha = disabled ? 0.6 : 1.0;
 }
 
 #pragma mark - Actions
@@ -286,18 +284,17 @@
     }
 }
 
-- (void)deleteTapped {
-    if ([self.delegate respondsToSelector:@selector(modCellDidTapDelete:)]) {
-        [self.delegate modCellDidTapDelete:self];
+- (void)downloadTapped {
+    if ([self.delegate respondsToSelector:@selector(modCellDidTapDownload:)]) {
+        [self.delegate modCellDidTapDownload:self];
     }
 }
 
 - (void)openLinkTapped {
-    if (!self.currentMod) return;
-    if (!(self.currentMod.homepage.length || self.currentMod.sources.length)) return;
     if ([self.delegate respondsToSelector:@selector(modCellDidTapOpenLink:)]) {
         [self.delegate modCellDidTapOpenLink:self];
     }
 }
 
 @end
+#pragma clang diagnostic pop

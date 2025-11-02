@@ -110,7 +110,8 @@ jstring UIKit_accessClipboard(JNIEnv* env, jint action, jbyteArray copySrc) {
 void UIKit_launchMinecraftSurfaceVC(UIWindow* window, NSDictionary* metadata) {
     // Leave this pref, might be useful later for launching with Quick Actions/Shortcuts/URL Scheme
     //setPreference(@"internal_launch_on_boot", getPreference(@"restart_before_launch"));
-    setPrefObject(@"internal.selected_account", BaseAuthenticator.current.authData[@"username"]);
+    BaseAuthenticator *currentAuth = BaseAuthenticator.current;
+setPrefObject(@"internal.selected_account", currentAuth.authData[@"username"]);
     dispatch_async(dispatch_get_main_queue(), ^{
         tmpRootVC = window.rootViewController;
         [UIView animateWithDuration:0.2 animations:^{

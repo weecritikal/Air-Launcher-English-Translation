@@ -1,0 +1,66 @@
+﻿2025-10-18T13:10:42.2140610Z ##[group]Run set -e
+2025-10-18T13:10:42.2141020Z [36;1mset -e[0m
+2025-10-18T13:10:42.2141410Z [36;1mecho "Available apps in /Applications (matching Xcode*):"[0m
+2025-10-18T13:10:42.2141940Z [36;1mls /Applications | grep -E "Xcode(.+)?\.app" || true[0m
+2025-10-18T13:10:42.2142460Z [36;1m# Prefer Xcode_16, then Xcode_15, then /Applications/Xcode.app[0m
+2025-10-18T13:10:42.2142940Z [36;1mif [ -d "/Applications/Xcode_16.app" ]; then[0m
+2025-10-18T13:10:42.2143380Z [36;1m  echo "Selecting /Applications/Xcode_16.app"[0m
+2025-10-18T13:10:42.2143910Z [36;1m  sudo xcode-select -s /Applications/Xcode_16.app/Contents/Developer[0m
+2025-10-18T13:10:42.2144430Z [36;1melif [ -d "/Applications/Xcode_15.app" ]; then[0m
+2025-10-18T13:10:42.2144870Z [36;1m  echo "Selecting /Applications/Xcode_15.app"[0m
+2025-10-18T13:10:42.2145380Z [36;1m  sudo xcode-select -s /Applications/Xcode_15.app/Contents/Developer[0m
+2025-10-18T13:10:42.2145890Z [36;1melif [ -d "/Applications/Xcode.app" ]; then[0m
+2025-10-18T13:10:42.2146350Z [36;1m  echo "Selecting /Applications/Xcode.app"[0m
+2025-10-18T13:10:42.2146850Z [36;1m  sudo xcode-select -s /Applications/Xcode.app/Contents/Developer[0m
+2025-10-18T13:10:42.2147370Z [36;1melse[0m
+2025-10-18T13:10:42.2147920Z [36;1m  echo "No preinstalled Xcode found under /Applications that matches the search. Leaving system default."[0m
+2025-10-18T13:10:42.2148520Z [36;1mfi[0m
+2025-10-18T13:10:42.2148830Z [36;1mxcodebuild -version || true[0m
+2025-10-18T13:10:42.2150020Z [36;1mecho "Available simulator runtimes (for debugging):"[0m
+2025-10-18T13:10:42.2150530Z [36;1mxcrun simctl list runtimes || true[0m
+2025-10-18T13:10:42.2207130Z shell: /bin/bash -e {0}
+2025-10-18T13:10:42.2207860Z ##[endgroup]
+2025-10-18T13:10:42.2482380Z Available apps in /Applications (matching Xcode*):
+2025-10-18T13:10:42.2516700Z Xcode.app
+2025-10-18T13:10:42.2517420Z Xcode_15.0.1.app
+2025-10-18T13:10:42.2517800Z Xcode_15.0.app
+2025-10-18T13:10:42.2518140Z Xcode_15.1.0.app
+2025-10-18T13:10:42.2518560Z Xcode_15.1.app
+2025-10-18T13:10:42.2518970Z Xcode_15.2.0.app
+2025-10-18T13:10:42.2519270Z Xcode_15.2.app
+2025-10-18T13:10:42.2520100Z Xcode_15.3.0.app
+2025-10-18T13:10:42.2520530Z Xcode_15.3.app
+2025-10-18T13:10:42.2520890Z Xcode_15.4.0.app
+2025-10-18T13:10:42.2521200Z Xcode_15.4.app
+2025-10-18T13:10:42.2521540Z Xcode_16.1.0.app
+2025-10-18T13:10:42.2521910Z Xcode_16.1.app
+2025-10-18T13:10:42.2522270Z Xcode_16.2.0.app
+2025-10-18T13:10:42.2522610Z Xcode_16.2.app
+2025-10-18T13:10:42.2523290Z Selecting /Applications/Xcode.app
+2025-10-18T13:10:43.2163120Z Xcode 15.4
+2025-10-18T13:10:43.2165700Z Build version 15F31d
+2025-10-18T13:10:43.2167310Z Available simulator runtimes (for debugging):
+2025-10-18T13:10:52.2772130Z == Runtimes ==
+2025-10-18T13:10:52.2813800Z iOS 17.0 (17.0.1 - 21A342) - com.apple.CoreSimulator.SimRuntime.iOS-17-0
+2025-10-18T13:10:52.2815630Z iOS 17.2 (17.2 - 21C62) - com.apple.CoreSimulator.SimRuntime.iOS-17-2
+2025-10-18T13:10:52.2816440Z iOS 17.4 (17.4 - 21E213) - com.apple.CoreSimulator.SimRuntime.iOS-17-4
+2025-10-18T13:10:52.2817750Z iOS 17.5 (17.5 - 21F79) - com.apple.CoreSimulator.SimRuntime.iOS-17-5
+2025-10-18T13:10:52.2818560Z iOS 18.1 (18.1 - 22B81) - com.apple.CoreSimulator.SimRuntime.iOS-18-1
+2025-10-18T13:10:52.2819140Z iOS 18.2 (18.2 - 22C150) - com.apple.CoreSimulator.SimRuntime.iOS-18-2
+2025-10-18T13:10:52.2820020Z tvOS 17.0 (17.0 - 21J353) - com.apple.CoreSimulator.SimRuntime.tvOS-17-0
+2025-10-18T13:10:52.2820760Z tvOS 17.2 (17.2 - 21K364) - com.apple.CoreSimulator.SimRuntime.tvOS-17-2
+2025-10-18T13:10:52.2821770Z tvOS 17.4 (17.4 - 21L224) - com.apple.CoreSimulator.SimRuntime.tvOS-17-4
+2025-10-18T13:10:52.2822310Z tvOS 17.5 (17.5 - 21L569) - com.apple.CoreSimulator.SimRuntime.tvOS-17-5
+2025-10-18T13:10:52.2823010Z tvOS 18.1 (18.1 - 22J578) - com.apple.CoreSimulator.SimRuntime.tvOS-18-1
+2025-10-18T13:10:52.2823940Z tvOS 18.2 (18.2 - 22K154) - com.apple.CoreSimulator.SimRuntime.tvOS-18-2
+2025-10-18T13:10:52.2824550Z watchOS 10.0 (10.0 - 21R355) - com.apple.CoreSimulator.SimRuntime.watchOS-10-0
+2025-10-18T13:10:52.2825890Z watchOS 10.2 (10.2 - 21S364) - com.apple.CoreSimulator.SimRuntime.watchOS-10-2
+2025-10-18T13:10:52.2826560Z watchOS 10.4 (10.4 - 21T214) - com.apple.CoreSimulator.SimRuntime.watchOS-10-4
+2025-10-18T13:10:52.2827390Z watchOS 10.5 (10.5 - 21T575) - com.apple.CoreSimulator.SimRuntime.watchOS-10-5
+2025-10-18T13:10:52.2827990Z watchOS 11.1 (11.1 - 22R581) - com.apple.CoreSimulator.SimRuntime.watchOS-11-1
+2025-10-18T13:10:52.2828500Z watchOS 11.2 (11.2 - 22S99) - com.apple.CoreSimulator.SimRuntime.watchOS-11-2
+2025-10-18T13:10:52.2829210Z visionOS 1.0 (1.0 - 21N305) - com.apple.CoreSimulator.SimRuntime.xrOS-1-0
+2025-10-18T13:10:52.2829810Z visionOS 1.1 (1.1 - 21O209) - com.apple.CoreSimulator.SimRuntime.xrOS-1-1
+2025-10-18T13:10:52.2830440Z visionOS 1.2 (1.2 - 21O5565d) - com.apple.CoreSimulator.SimRuntime.xrOS-1-2
+2025-10-18T13:10:52.2831100Z visionOS 2.1 (2.1 - 22N580) - com.apple.CoreSimulator.SimRuntime.xrOS-2-1
+2025-10-18T13:10:52.2831690Z visionOS 2.2 (2.2 - 22N840) - com.apple.CoreSimulator.SimRuntime.xrOS-2-2

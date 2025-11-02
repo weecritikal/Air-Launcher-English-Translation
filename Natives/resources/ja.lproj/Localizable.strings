@@ -14,22 +14,21 @@
 
 // The play button
 "Play" = "プレイ";
-"Details" = "詳細";
 
 // Version categories
 "Installed" = "インストール済み";
 "Snapshot" = "スナップショット";
 "Releases" = "リリース";
-"Unstable" = "不安定";
 "Old-beta" = "Beta 版";
 "Old-alpha" = "Alpha 版";
 
 // Custom controls
 "Copy" = "コピー";
 "Edit" = "編集";
-"Move" = "移動";
+"Move" = "Move";
 "Remove" = "消去";
 "Resize" = "サイズ調整";
+
 "custom_controls.button_edit.name" = "名前";
 "custom_controls.button_edit.size" = "サイズ";
 "custom_controls.button_edit.mapping" = "割り当て";
@@ -48,6 +47,7 @@
 "custom_controls.control_menu.exit" = "閉じる";
 "custom_controls.control_menu.exit.warn" = "変更を保存せずに終了しようとしています。";
 "custom_controls.control_menu.save" = "保存";
+"custom_controls.control_menu.save.error.default" = "コントロール名は上書きされるため、\"default\"にはできません。";
 "custom_controls.control_menu.save.error.json" = "JSON エラー";
 "custom_controls.control_menu.save.error.write" = "ファイルの保存中にエラーが発生しました";
 "custom_controls.control_menu.load" = "読み込む";
@@ -61,6 +61,7 @@
 "init.migrateDir" = "Amethystのディレクトリが %@になりました。既存のすべてのデータが新しい場所に移動されました。";
 
 "launcher.menu.custom_controls" = "カスタムコントロール";
+"launcher.menu.install_jar" = ".jarをインストール";
 
 "launcher.wait_jit.title" = "JITを待っています";
 "launcher.wait_jit.message" = "Amethystは、Javaが最大限のパフォーマンスで動作するようにJust-in-timeコンパイルに依存しています。";
@@ -119,6 +120,8 @@
 "preference.detail.cosmetica" = "Cosmetica (以前はArc) からケープを有効にします。詳細については、https://cosmetica.ccを参照してください。OptiFine が必要です。";
 "preference.title.debug_logging" = "デバッグログ";
 "preference.detail.debug_logging" = "内部設定とアクションをlatestlog.txtに記録します。 これにより、開発者は問題を簡単に見つけることができますが、ログがより頻繁に書き込まれるため、Minecraft の動作が遅くなる可能性があります。";
+"preference.title.jitstreamer_server" = "JitStreamer サーバー IP";
+"preference.detail.jitstreamer_server" = "自己ホストインスタンスなどのカスタムJitStreamerサーバーIPに変更できます。 デフォルトのJitStreamerサーバーを使用している場合は、このオプションを残すことができます。";
 "preference.title.appicon" = "アプリアイコンを設定";
 "preference.detail.appicon" = "Amethystの異なるホーム画面アイコンから選択できます。";
 "preference.title.appicon-default" = "おなじみのAmethyst ライトテーマ";
@@ -136,6 +139,7 @@
 
 "preference.title.renderer.debug.auto" = "自動: gl4es または angle";
 "preference.title.renderer.debug.angle" = "ANGLE (1.17+) - エクスポートOpenGL 3.2 (Core Profile, limited)";
+"preference.title.renderer.debug.zink" = "Zink (Mesa 21.0) - exports OpenGL 4.1";
 
 "preference.title.resolution" = "解像度 (%)";
 "preference.detail.resolution" = "ゲームの解像度を下げることができます。";
@@ -159,6 +163,7 @@
 "preference.title.gyroscope_sensitivity" = "ジャイロコントロールの感度";
 "preference.detail.gyroscope_sensitivity" = "ジャイロコントロールの感度の調整";
 
+"preference.title.java_home" = "Java 17 for Minecraft < 1.17 を使用";
 "preference.title.java_args" = "JVM 起動引数";
 "preference.placeholder.java_args" = "引数の指定...";
 "preference.title.auto_ram" = "自動RAM調整";
@@ -167,6 +172,7 @@
 "preference.title.allocated_memory" = "メモリ割り当て (MB)";
 "preference.detail.allocated_memory" = "Minecraftに与えられるメモリの量を制御します";
 "preference.warn.allocated_memory" = "オペレーティングシステム自体に制限があるため、このオプションは不安定な場合があり、値が大きい場合がありますのでご注意ください。";
+"preference.title.custom_env" = "環境変数";
 
 "preference.title.debug_skip_wait_jit" = "「JIT待機中」ダイアログをスキップ";
 "preference.detail.debug_skip_wait_jit" = "これは、JITなしで起動することはできません。代わりに、特定の脱獄時にチェックが失敗するため、デバッガのチェックをスキップします。";
@@ -176,6 +182,8 @@
 "preference.detail.debug_auto_correction" = "ゲーム内でテキストを入力するときに自動修正を有効にします。";
 "preference.title.debug_hide_home_indicator" = "詳細バーを非表示";
 "preference.detail.debug_hide_home_indicator" = "詳細バーのロックを無効にします。ガイド付きアクセスを使用してホームインジケーターを非表示にしてロックする必要があります。";
-
-"preference.profile.title.name" = "名前";
+"preference.title.debug_show_layout_bounds" = "レイアウト境界を表示";
+"preference.detail.debug_show_layout_bounds" = "クリップの境界線、余白を表示";
+"preference.title.debug_show_layout_overlap" = "レイアウト重複を表示";
+"preference.detail.debug_show_layout_overlap" = "透明な色ですべてのビューをオーバーレイし、重複するビューを表示します。";
 "controller_configurator.playstation.title.named_back" = "選択...";

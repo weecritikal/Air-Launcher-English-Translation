@@ -15,6 +15,8 @@
 #import "JavaLauncher.h"
 #import "LauncherPreferences.h"
 #import "PLProfiles.h"
+#import "authenticator/BaseAuthenticator.h"
+#import "authenticator/ThirdPartyAuthenticator.h"
 
 #define fm NSFileManager.defaultManager
 
@@ -220,6 +222,23 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
     margv[++margc] = [NSString stringWithFormat:@"-javaagent:%@/patchjna_agent.jar=", librariesPath].UTF8String;
     if(getPrefBool(@"general.cosmetica")) {
         margv[++margc] = [NSString stringWithFormat:@"-javaagent:%@/arc_dns_injector.jar=23.95.137.176", librariesPath].UTF8String;
+    }
+
+    // 添加authlib-injector参数以支持第三方认证账户的皮肤显示
+    if ([username length] > 0 && [BaseAuthenticator.current isKindOfClass:[ThirdPartyAuthenticator class]]) {
+        BaseAuthenticator *currentAuth = BaseAuthenticator.current;
+        if (currentAuth.authData[@"authserver"] != nil) {
+            NSLog(@"[JavaLauncher] Adding authlib-injector arguments for third party account");
+            NSArray *authlibArgs = [(ThirdPartyAuthenticator *)currentAuth getJvmArgsForAuthlib];
+            if (authlibArgs.count > 0) {
+                for (NSString *arg in authlibArgs) {
+                    margv[++margc] = arg.UTF8String;
+                    NSLog(@"[JavaLauncher] Added authlib-injector arg: %s", arg.UTF8String);
+                }
+            } else {
+                NSLog(@"[JavaLauncher] Warning: No authlib-injector arguments available");
+            }
+        }
     }
 
     // Workaround random stack guard allocation crashes

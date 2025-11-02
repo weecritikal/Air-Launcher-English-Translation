@@ -30,6 +30,13 @@
 					<string>AppIcon-Development60x60</string>
 				</array>
 			</dict>
+			<key>CustomIcon</key>
+			<dict>
+				<key>CFBundleIconFiles</key>
+				<array>
+					<string>CustomIcon</string>
+				</array>
+			</dict>
 		</dict>
 		<key>CFBundlePrimaryIcon</key>
 		<dict>
@@ -59,6 +66,13 @@
 				<array>
 					<string>AppIcon-Development60x60</string>
 					<string>AppIcon-Development76x76</string>
+				</array>
+			</dict>
+			<key>CustomIcon</key>
+			<dict>
+				<key>CFBundleIconFiles</key>
+				<array>
+					<string>CustomIcon</string>
 				</array>
 			</dict>
 		</dict>

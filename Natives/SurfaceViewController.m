@@ -433,8 +433,9 @@ static GameSurfaceView* pojavWindow;
         if (minVersion == 0) {
             minVersion = [self.metadata[@"javaVersion"][@"version"] intValue];
         }
+        BaseAuthenticator *currentAuth = BaseAuthenticator.current;
         launchJVM(
-            BaseAuthenticator.current.authData[@"username"],
+            currentAuth.authData[@"username"],
             self.metadata,
             windowWidth, windowHeight,
             minVersion

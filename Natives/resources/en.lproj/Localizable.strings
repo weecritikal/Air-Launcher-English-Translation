@@ -82,8 +82,16 @@
 "launcher.wait_jit_trollstore.message" = "If you still see this message, please enable URL Scheme in TrollStore.";
 
 "login.error.username.outOfRange" = "Username must be at least 3 characters and a maximum of 16 characters";
+"login.error.fields.empty" = "Please fill in all fields";
+"login.error.invalid_credentials" = "Invalid username or password";
+"login.error.token_missing" = "Access token or client token is missing";
+"login.error.token_expired" = "Authentication token has expired, please log in again";
+"login.error.invalid_response" = "Invalid server response";
 
 "login.alert.field.username" = "Username";
+"login.alert.field.password" = "Password";
+"login.alert.field.server" = "Server Address";
+"login.error.invalid_server" = "Invalid server address";
 
 "login.jit.checking" = "Checking for JIT";
 "login.jit.enabled" = "JIT has been enabled";
@@ -99,6 +107,7 @@
 "login.option.demo" = "Demo account";
 "login.option.microsoft" = "Microsoft account";
 "login.option.local" = "Local account";
+"login.option.3rdparty" = "Third-party account";
 
 "login.warn.title.legacy_device" = "The next release of Amethyst will not be compatible with this device.";
 "login.warn.message.legacy_device" = "To run the next major release, a device capable of running iOS 14 is required.";
@@ -126,6 +135,13 @@
 "login.msa.progress.acquireXboxProfile" = "(3/5) Acquiring the Xbox profile";
 "login.msa.progress.acquireMCToken" = "(4/5) Acquiring the Minecraft token";
 "login.msa.progress.checkMCProfile" = "(5/5) Checking the Minecraft profile";
+
+"login.3rdparty.progress.auth" = "Authenticating with third-party server";
+"login.3rdparty.progress.refresh" = "Refreshing third-party authentication";
+"login.3rdparty.2fa.title" = "Two-Factor Authentication";
+"login.3rdparty.2fa.message" = "Please enter your two-factor authentication code";
+"login.3rdparty.2fa.code" = "Authentication code";
+"login.3rdparty.2fa.empty" = "Authentication code cannot be empty";
 
 "News" = "News";
 "Profiles" = "Profiles";
@@ -330,3 +346,8 @@
 "controller_configurator.section.footer.menu_mappings" = "Bindings when the mouse is not locked, such as on the title screen or in the pause menu.";
 "controller_configurator.section.controller_style" = "Controller type";
 "controller_configurator.section.footer.controller_style" = "Show different controller button names in this configurator.";
+
+"preference.title.appicon-custom" = "Custom";
+"preference.title.custom_appicon" = "Custom App Icon";
+"preference.detail.custom_appicon" = "Select a custom image to use as the app icon";
+"提示" = "Notice";

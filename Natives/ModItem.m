@@ -1,10 +1,3 @@
-//
-//  ModItem.m
-//  AmethystMods
-//
-//  Created by Copilot on 2025-08-22.
-//
-
 #import "ModItem.h"
 
 @implementation ModItem
@@ -16,26 +9,48 @@
         [self refreshDisabledFlag];
         NSString *name = [_fileName copy];
 
-        // handle ".disabled" suffix (may be ".jar.disabled" or ".disabled")
         if ([name hasSuffix:@".disabled"]) {
             name = [name substringToIndex:name.length - [@".disabled" length]];
         }
-        // remove .jar extension if present
         if ([name hasSuffix:@".jar"]) {
             name = [name stringByDeletingPathExtension];
         }
-        // fallback displayName
         _displayName = name.length ? name : _fileName;
-        // ensure defaults for metadata
-        _modDescription = _modDescription ?: @"";
-        _iconURL = _iconURL ?: @"";
-        _fileSHA1 = _fileSHA1 ?: nil;
-        _version = _version ?: nil;
-        _homepage = _homepage ?: nil;
-        _sources = _sources ?: nil;
-        _isFabric = NO;
-        _isForge = NO;
-        _isNeoForge = NO;
+    }
+    return self;
+}
+
+- (instancetype)initWithOnlineData:(NSDictionary *)data {
+    if (self = [super init]) {
+        // Data from Modrinth or CurseForge search results
+        _onlineID = data[@"id"] ? [data[@"id"] description] : nil; // Ensure string
+        _displayName = data[@"title"] ?: @"";
+        _modDescription = data[@"description"] ?: @"";
+        _iconURL = data[@"imageUrl"] ?: @"";
+        _author = data[@"author"] ?: @"";
+
+        // Ensure numbers are handled correctly
+        id downloadsValue = data[@"downloads"];
+        if ([downloadsValue isKindOfClass:[NSNumber class]]) {
+            _downloads = downloadsValue;
+        } else if ([downloadsValue respondsToSelector:@selector(longLongValue)]) {
+            _downloads = @([downloadsValue longLongValue]);
+        }
+
+        id likesValue = data[@"likes"];
+        if ([likesValue isKindOfClass:[NSNumber class]]) {
+            _likes = likesValue;
+        } else if ([likesValue respondsToSelector:@selector(longLongValue)]) {
+            _likes = @([likesValue longLongValue]);
+        }
+
+        // Handle dates and categories
+        _lastUpdated = data[@"lastUpdated"] ?: @"";
+        _categories = data[@"categories"] ?: @[];
+
+        // These will be nil until a version is selected for download
+        _filePath = nil;
+        _fileName = nil;
     }
     return self;
 }
@@ -49,7 +64,6 @@
     if ([name hasSuffix:@".disabled"]) {
         name = [name substringToIndex:name.length - [@".disabled" length]];
     }
-    // strip .jar if still present
     if ([name hasSuffix:@".jar"]) name = [name stringByDeletingPathExtension];
     return name;
 }

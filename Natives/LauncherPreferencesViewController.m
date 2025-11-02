@@ -14,6 +14,9 @@
 #import "ios_uikit_bridge.h"
 #import "utils.h"
 
+#import "ImageCropperViewController.h"
+#import "CustomIconManager.h"
+
 @interface LauncherPreferencesViewController()
 @property(nonatomic) NSArray<NSString*> *rendererKeys, *rendererList;
 @end
@@ -28,6 +31,129 @@
 
 - (NSString *)imageName {
     return @"MenuSettings";
+}
+
+- (void)openImagePicker {
+    // 检查是否已经显示了图片选择器
+    for (UIWindow *window in UIApplication.sharedApplication.windows) {
+        for (UIWindowScene *scene in UIApplication.sharedApplication.connectedScenes) {
+            if ([scene isKindOfClass:[UIWindowScene class]]) {
+                for (UIWindow *window in scene.windows) {
+                    for (UIView *view in window.subviews) {
+                        if ([view isKindOfClass:[UIAlertController class]] || 
+                            [view isKindOfClass:[UIImagePickerController class]]) {
+                            // 如果已经显示了相关控制器，直接返回
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    UIImagePickerController *imagePicker = [[UIImagePickerController alloc] init];
+    imagePicker.sourceType = UIImagePickerControllerSourceTypePhotoLibrary;
+    imagePicker.delegate = self;
+    
+    // 延迟显示图片选择器，避免与UIAlertController冲突
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self presentViewController:imagePicker animated:YES completion:nil];
+    });
+}
+
+#pragma mark - UIImagePickerControllerDelegate
+
+- (void)imagePickerController:(UIImagePickerController *)picker didFinishPickingMediaWithInfo:(NSDictionary<UIImagePickerControllerInfoKey,id> *)info {
+    [picker dismissViewControllerAnimated:YES completion:^{
+        // 在图片选择器完全关闭后再处理图片
+        dispatch_async(dispatch_get_main_queue(), ^{
+            UIImage *selectedImage = info[UIImagePickerControllerOriginalImage];
+            if (!selectedImage) {
+                [self showCustomIconError:@"无法获取选中的图片"];
+                return;
+            }
+            
+            // 显示处理中的提示
+            [self showProcessingIndicator];
+            
+            // 检查图片是否为正方形
+            if (selectedImage.size.width != selectedImage.size.height) {
+                // 如果不是正方形，打开裁剪界面
+                ImageCropperViewController *cropperVC = [[ImageCropperViewController alloc] initWithImage:selectedImage];
+                __weak typeof(self) weakSelf = self;
+                cropperVC.completionHandler = ^(UIImage * _Nullable croppedImage) {
+                    if (croppedImage) {
+                        // 保存裁剪后的图片
+                        [[CustomIconManager sharedManager] saveCustomIcon:croppedImage withCompletion:^(BOOL success, NSError * _Nullable error) {
+                            dispatch_async(dispatch_get_main_queue(), ^{
+                                if (success) {
+                                    [weakSelf showSuccessMessage:@"图片已保存，您可以在应用图标设置中选择自定义图标"];
+                                    // 更新应用图标选择器的显示
+                                    [weakSelf.tableView reloadData];
+                                } else {
+                                    NSString *errorMessage = error.localizedDescription ?: @"保存自定义图标失败";
+                                    [weakSelf showCustomIconError:errorMessage];
+                                }
+                            });
+                        }];
+                    } else {
+                        dispatch_async(dispatch_get_main_queue(), ^{
+                            [weakSelf showCustomIconError:@"图片裁剪已取消"];
+                        });
+                    }
+                };
+                [weakSelf.navigationController pushViewController:cropperVC animated:YES];
+            } else {
+                // 如果是正方形，直接保存
+                [[CustomIconManager sharedManager] saveCustomIcon:selectedImage withCompletion:^(BOOL success, NSError * _Nullable error) {
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        if (success) {
+                            [self showSuccessMessage:@"图片已保存，您可以在应用图标设置中选择自定义图标"];
+                            // 更新应用图标选择器的显示
+                            [self.tableView reloadData];
+                        } else {
+                            NSString *errorMessage = error.localizedDescription ?: @"保存自定义图标失败";
+                            [self showCustomIconError:errorMessage];
+                        }
+                    });
+                }];
+            }
+        });
+    }];
+}
+
+- (void)imagePickerControllerDidCancel:(UIImagePickerController *)picker {
+    [picker dismissViewControllerAnimated:YES completion:^{
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self showCustomIconError:@"图片选择已取消"];
+        });
+    }];
+}
+
+#pragma mark - Custom Icon Helper Methods
+
+- (void)showProcessingIndicator {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"处理中" message:@"正在处理您选择的图片..." preferredStyle:UIAlertControllerStyleAlert];
+    [self presentViewController:alert animated:YES completion:nil];
+    
+    // 2秒后自动关闭提示
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        [alert dismissViewControllerAnimated:YES completion:nil];
+    });
+}
+
+- (void)showSuccessMessage:(NSString *)message {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"成功" message:message preferredStyle:UIAlertControllerStyleAlert];
+    UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil];
+    [alert addAction:okAction];
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)showCustomIconError:(NSString *)errorMessage {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"错误" message:errorMessage preferredStyle:UIAlertControllerStyleAlert];
+    UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil];
+    [alert addAction:okAction];
+    [self presentViewController:alert animated:YES completion:nil];
 }
 
 - (void)viewDidLoad
@@ -87,6 +213,33 @@
               @"action": ^void(NSString *iconName) {
                   if ([iconName isEqualToString:@"AppIcon-Light"]) {
                       iconName = nil;
+                      [[CustomIconManager sharedManager] removeCustomIcon];
+                  } else if ([iconName isEqualToString:@"CustomIcon"]) {
+                      // 检查自定义图标是否存在
+                      if (![[CustomIconManager sharedManager] hasCustomIcon]) {
+                          dispatch_async(dispatch_get_main_queue(), ^{
+                              UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"提示" message:@"请先设置自定义应用图标：设置 > 自定义应用图标" preferredStyle:UIAlertControllerStyleAlert];
+                              UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil];
+                              [alert addAction:okAction];
+                              [self presentViewController:alert animated:YES completion:nil];
+                          });
+                          // 重置选择为默认图标
+                          dispatch_async(dispatch_get_main_queue(), ^{
+                              [self.tableView reloadData];
+                          });
+                          return;
+                      }
+                      
+                      // 设置自定义图标
+                      [[CustomIconManager sharedManager] setCustomIconWithCompletion:^(BOOL success, NSError * _Nullable error) {
+                          if (!success) {
+                              dispatch_async(dispatch_get_main_queue(), ^{
+                                  NSLog(@"Error in appicon: %@", error);
+                                  showDialog(localize(@"Error", nil), error.localizedDescription);
+                              });
+                          }
+                      }];
+                      return;
                   }
                   [UIApplication.sharedApplication setAlternateIconName:iconName completionHandler:^(NSError * _Nullable error) {
                       if (error == nil) return;
@@ -96,10 +249,24 @@
               },
               @"pickKeys": @[
                   @"AppIcon-Light",
+                  @"CustomIcon"
               ],
               @"pickList": @[
-                  localize(@"preference.title.appicon-default", nil)
+                  localize(@"preference.title.appicon-default", nil),
+                  localize(@"preference.title.appicon-custom", nil)
               ]
+            },
+            @{@"key": @"custom_appicon",
+              @"hasDetail": @YES,
+              @"icon": @"photo",
+              @"type": self.typeButton,
+              @"enableCondition": ^BOOL(){
+                  return UIApplication.sharedApplication.supportsAlternateIcons;
+              },
+              @"action": ^void(){
+                  // 打开图片选择器
+                  [self openImagePicker];
+              }
             },
             @{@"key": @"hidden_sidebar",
               @"hasDetail": @YES,

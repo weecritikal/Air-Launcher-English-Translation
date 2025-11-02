@@ -1,9 +1,6 @@
 # 我的Angel Aura Amethyst (iOS) 重制版
 [![开发构建状态](https://github.com/herbrine8403/Amethyst-iOS-MyRemastered/actions/workflows/development.yml/badge.svg?branch=main)](.github/workflows/development.yml)
-![总下载量](https://img.shields.io/github/downloads/herbrine8403/Amethyst-iOS-MyRemastered/total?style=flat-square&color=00a82a)
-![发布版本](https://img.shields.io/github/v/release/herbrine8403/Amethyst-iOS-MyRemastered?style=flat-square&color=00a82a)
 
-[English](README_EN.md) | **中文** |
 
 ## 🌟 重制版核心亮点
 基于官方 Amethyst 优化适配，聚焦 iOS/iPadOS 体验升级，核心特性包括：
@@ -73,9 +70,9 @@ Amethyst 的稳定性离不开社区团队的付出，致敬以下主要开发�
 
 
 ## 🙏 特别感谢
-- @LanRhyme - [ShardLauncher作者，提供思路和代码]
+- @LanRhyme - [ShardLauncher iOS作者，提供思路和代码]
 
-  👉 更多作品：[B站主页](https://b23.tv/3rmAFc2) | [MC移动端日志分析器](https://github.com/LanRhyme/Web-MinecraftLogAnalyzer) | [ShardLauncher iOS](https://github.com/LanRhyme/ShardLauncher-iOS)
+  👉 更多作品：[B站主页](https://b23.tv/3rmAFc2) | [MC移动端日志分析器](https://github.com/LanRhyme/Web-MinecraftLogAnalyzer) | [ShardLauncher](https://github.com/LanRhyme/ShardLauncher-iOS)
 
 
 ## 📦 第三方组件及许可证
@@ -100,10 +97,3 @@ Amethyst 的稳定性离不开社区团队的付出，致敬以下主要开发�
 | UnzipKit               | 解压工具                 | BSD-2                    | [GitHub](https://github.com/abbeycode/UnzipKit)                           |
 | DyldDeNeuralyzer       | 库验证绕过工具           | -                        | [GitHub](https://github.com/xpn/DyldDeNeuralyzer)                         |
 > 额外感谢：[MCHeads](https://mc-heads.net) 提供 Minecraft 头像服务
-
-
-## 捐赠
-
-如果您觉得这个项目对您有帮助，欢迎通过以下二维码进行捐赠支持：
-
-![捐赠二维码](donate.png)

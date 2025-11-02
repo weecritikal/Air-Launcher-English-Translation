@@ -12,6 +12,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 typedef void(^ModListHandler)(NSArray<ModItem *> *mods);
 typedef void(^ModMetadataHandler)(ModItem *item, NSError * _Nullable error);
+typedef void(^ModDownloadHandler)(NSError * _Nullable error); // Added for download completion
 
 @interface ModService : NSObject
 
@@ -19,11 +20,17 @@ typedef void(^ModMetadataHandler)(ModItem *item, NSError * _Nullable error);
 
 + (instancetype)sharedService;
 
+// --- Local Mod Management ---
 - (void)scanModsForProfile:(NSString *)profileName completion:(ModListHandler)completion;
 - (void)fetchMetadataForMod:(ModItem *)mod completion:(ModMetadataHandler)completion;
-- (NSString *)iconCachePathForURL:(NSString *)urlString;
 - (BOOL)toggleEnableForMod:(ModItem *)mod error:(NSError **)error;
 - (BOOL)deleteMod:(ModItem *)mod error:(NSError **)error;
+
+// --- Online Mod Downloading ---
+- (void)downloadMod:(ModItem *)mod toProfile:(NSString *)profileName completion:(ModDownloadHandler)completion;
+
+// --- Utility ---
+- (NSString *)iconCachePathForURL:(NSString *)urlString;
 
 @end
 

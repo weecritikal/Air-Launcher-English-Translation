@@ -1,0 +1,25 @@
+﻿2025-10-18T13:11:49.9232000Z ##[group]Run git submodule update --init --recursive
+2025-10-18T13:11:49.9232610Z [36;1mgit submodule update --init --recursive[0m
+2025-10-18T13:11:49.9283990Z shell: /bin/bash -e {0}
+2025-10-18T13:11:49.9284180Z ##[endgroup]
+2025-10-18T13:11:50.0068710Z Submodule 'Natives/external/AFNetworking' (https://github.com/AFNetworking/AFNetworking) registered for path 'Natives/external/AFNetworking'
+2025-10-18T13:11:50.0073740Z Submodule 'Natives/external/DBNumberedSlider' (https://github.com/khanhduytran0/DBNumberedSlider) registered for path 'Natives/external/DBNumberedSlider'
+2025-10-18T13:11:50.0079390Z Submodule 'Natives/external/MobileGlues' (https://github.com/MobileGL-Dev/MobileGlues) registered for path 'Natives/external/MobileGlues'
+2025-10-18T13:11:50.0084290Z Submodule 'Natives/external/fishhook' (https://github.com/khanhduytran0/fishhook) registered for path 'Natives/external/fishhook'
+2025-10-18T13:11:50.0176030Z Cloning into '/Users/runner/work/Amethyst-iOS-MyRemastered/Amethyst-iOS-MyRemastered/Natives/external/AFNetworking'...
+2025-10-18T13:11:51.3963470Z Cloning into '/Users/runner/work/Amethyst-iOS-MyRemastered/Amethyst-iOS-MyRemastered/Natives/external/DBNumberedSlider'...
+2025-10-18T13:11:52.0406910Z Cloning into '/Users/runner/work/Amethyst-iOS-MyRemastered/Amethyst-iOS-MyRemastered/Natives/external/MobileGlues'...
+2025-10-18T13:11:55.7945070Z Cloning into '/Users/runner/work/Amethyst-iOS-MyRemastered/Amethyst-iOS-MyRemastered/Natives/external/fishhook'...
+2025-10-18T13:11:56.4951110Z Submodule path 'Natives/external/AFNetworking': checked out '4eaec5b586ddd897ebeda896e332a62a9fdab818'
+2025-10-18T13:11:56.5227840Z Submodule path 'Natives/external/DBNumberedSlider': checked out '4eddc68b5f92247f8afc0f6114d1b92b338749f4'
+2025-10-18T13:11:56.8951290Z Submodule path 'Natives/external/MobileGlues': checked out 'c2bcd17430d4fe4b8cfb0b3f59441047188b178b'
+2025-10-18T13:11:56.9000190Z Submodule 'src/main/cpp/3rdparty/glm' (https://github.com/g-truc/glm.git) registered for path 'Natives/external/MobileGlues/src/main/cpp/3rdparty/glm'
+2025-10-18T13:11:56.9005280Z Submodule 'src/main/cpp/3rdparty/perfetto' (https://android.googlesource.com/platform/external/perfetto) registered for path 'Natives/external/MobileGlues/src/main/cpp/3rdparty/perfetto'
+2025-10-18T13:11:56.9033810Z Submodule 'src/main/cpp/3rdparty/xxhash' (https://github.com/stbrumme/xxhash.git) registered for path 'Natives/external/MobileGlues/src/main/cpp/3rdparty/xxhash'
+2025-10-18T13:11:56.9089350Z Cloning into '/Users/runner/work/Amethyst-iOS-MyRemastered/Amethyst-iOS-MyRemastered/Natives/external/MobileGlues/src/main/cpp/3rdparty/glm'...
+2025-10-18T13:12:00.5423780Z Cloning into '/Users/runner/work/Amethyst-iOS-MyRemastered/Amethyst-iOS-MyRemastered/Natives/external/MobileGlues/src/main/cpp/3rdparty/perfetto'...
+2025-10-18T13:12:11.6982340Z Cloning into '/Users/runner/work/Amethyst-iOS-MyRemastered/Amethyst-iOS-MyRemastered/Natives/external/MobileGlues/src/main/cpp/3rdparty/xxhash'...
+2025-10-18T13:12:12.5016290Z Submodule path 'Natives/external/MobileGlues/src/main/cpp/3rdparty/glm': checked out '2d4c4b4dd31fde06cfffad7915c2b3006402322f'
+2025-10-18T13:12:13.9270110Z Submodule path 'Natives/external/MobileGlues/src/main/cpp/3rdparty/perfetto': checked out '33a4fd07897a9a648664926ea27769278a19ff13'
+2025-10-18T13:12:13.9626500Z Submodule path 'Natives/external/MobileGlues/src/main/cpp/3rdparty/xxhash': checked out 'c2866db364b6ea3a11933e62235ddc166ba18565'
+2025-10-18T13:12:13.9989160Z Submodule path 'Natives/external/fishhook': checked out '27bedb2ab670cc51d7be06d538b249564b47cfbf'

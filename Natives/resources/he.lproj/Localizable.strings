@@ -4,75 +4,35 @@
 */
 
 "game.menu.force_close" = "כפה כיבוי";
-"game.menu.confirm.force_close" = "האם את/ה בטוח/ה שאת/ה רוצה לסגור בכוח?";
 "game.menu.log_output" = "לוג פלט";
 "game.menu.custom_controls" = "פקדים מותאמים אישית";
 
-"game.title.exit_code" = "המשחק נסגר עם קוד %d";
-
 // The play button
 "Play" = "הפעל";
-
-// Version categories
-"Installed" = "מותקן";
 "Snapshot" = "סנאפשוט";
-"Unstable" = "לא יציב";
 "Old-beta" = "בטא: גרסה ישנה";
 "Old-alpha" = "אלפא: גרסה ישנה";
 "Edit" = "ערוך";
 "Remove" = "הסר";
-// Visibility
-"Always" = "תמיד";
-"In game" = "במשחק";
-"In menu" = "בתפריט";
+
 "custom_controls.button_edit.name" = "שם";
 "custom_controls.button_edit.size" = "גודל";
 "custom_controls.button_edit.mapping" = "מיפוי";
 "custom_controls.button_edit.orientation" = "כיוון";
 "custom_controls.button_edit.toggleable" = "מתג";
-"custom_controls.button_edit.mouse_pass" = "מעבר עכבר";
 "custom_controls.button_edit.swipeable" = "ניתן להחלקה";
 "custom_controls.button_edit.bg_color" = "צבע הרקע";
 "custom_controls.button_edit.stroke_color" = "צבע קו המתאר";
 
 "custom_controls.button_menu.add_subbutton" = "הוסף תת-כפתור";
-"custom_controls.control_menu.discard_changes" = "בטל/י שינויים";
 "custom_controls.control_menu.exit" = "צא";
 "custom_controls.control_menu.save" = "שמור";
-"custom_controls.control_menu.save.error.json" = "שגיאת JSON";
-"custom_controls.control_menu.save.error.write" = "שגיאה בשמירת הקובץ";
 "custom_controls.control_menu.load" = "טען";
 "custom_controls.control_menu.add_button" = "הוסף כפתור";
-"custom_controls.hint" = "לחיצה ארוכה בכל מקום על המסך לקבלת אפשרויות נוספות";
-"java.error.missing_runtime" = "%@ דורש Java %d או גרסה מתקדמת יותר כדי לפעול. אנא התקנ/י אותו תחילה וציינ/י אותו בניהול Java Runtime.";
-
-"launcher.mcl.downloading_file" = "Downloading %@";
-"launcher.mcl.error_download" = "הורדת %@ נכשלה: %@";
 
 "launcher.menu.custom_controls" = "פקדים מותאמים אישית";
-"launcher.menu.execute_jar" = "הפעל/י .jar";
-
-"launcher.wait_jit.title" = "מחכה ל-JIT";
-"launcher.wait_jit.message" = "Amethyst מסתמך על קומפילציה של Just-in-time כדי ש-Java תעבוד בביצועים מקסימליים.";
-"launcher.wait_jit_trollstore.message" = "אם אתה עדיין רואה הודעה זו, אנא הפעל/י את סכמת ה-URL ב-TrollStore.";
-
-"login.error.username.outOfRange" = "שם המשתמש חייב להיות באורך של לפחות 3 תווים ומקסימום 16 תווים";
-
-"login.alert.field.username" = "שם משתמש";
-
-"login.jit.checking" = "בדיקת JIT";
-"login.jit.enabled" = "JIT הופעל";
-"login.jit.fail" = "לא ניתן היה להפעיל את JIT.";
-"login.jit.fail.title" = "לא ניתן היה להפעיל את JIT במכשיר שלך.";
-"login.jit.fail.description" = "לא ניתן היה להשתמש באינטגרציות כדי להפעיל JIT באופן אוטומטי במכשיר שלך, וכעת יש להפעיל אותו באופן ידני. שגיאות נרשמו בקובץ latestlog.txt.";
-"login.jit.fail.description_unsupported" = "זוהתה שיטת התקנה שאינה נתמכת. אנא התקן מחדש באמצעות אחת מהשיטות הנתמכות.";
-
-// Login buttons
-"login.menu.sendlogs" = "שלח/י חוגים שלכ/ה";
-"login.option.add" = "הוספ/י חשבון";
+"launcher.menu.install_jar" = "התקנת .jar";
 "login.option.select" = "בחר חשבון";
-"login.option.demo" = "חשבון דמו";
-"login.option.microsoft" = "חשבון מיקרוסופט";
 
 "News" = "חדשות";
 "Settings" = "הגדרות";
@@ -83,10 +43,7 @@
 "preference.title.game_directory" = "תיקיית המשחק";
 
 "preference.title.renderer" = "רינדור";
-
 "preference.title.java_args" = "פרמטרים להפעלת JVM";
 "preference.title.auto_ram" = "זיכרון אוטומטי";
 "preference.detail.auto_ram" = "מפעיל התאמת RAM אוטומטית";
 "preference.detail.allocated_memory" = "שולט בכמות הזיכרון הניתנת ל- Minecraft";
-
-"preference.profile.title.name" = "שם";

@@ -1,101 +1,145 @@
-//
-// ModsManagerViewController.m
-// AmethystMods
-//
-// Created by Copilot (adjusted) on 2025-08-22.
-// Revised: add profileName handling and robust UI/data updates.
-//
-
 #import "ModsManagerViewController.h"
 #import "ModTableViewCell.h"
 #import "ModService.h"
 #import "ModItem.h"
+#import "installer/modpack/ModrinthAPI.h"
 
-@interface ModsManagerViewController () <UITableViewDataSource, UITableViewDelegate, ModTableViewCellDelegate>
+@interface ModsManagerViewController () <UITableViewDataSource, UITableViewDelegate, ModTableViewCellDelegate, UISearchBarDelegate, ModVersionViewControllerDelegate>
 
+// ... (all existing properties are the same)
+@property (nonatomic, strong) UISegmentedControl *modeSwitcher;
+@property (nonatomic, strong) UISearchBar *searchBar;
 @property (nonatomic, strong) UITableView *tableView;
-@property (nonatomic, strong) NSMutableArray<ModItem *> *mods;
 @property (nonatomic, strong) UIActivityIndicatorView *activityIndicator;
 @property (nonatomic, strong) UILabel *emptyLabel;
+@property (nonatomic, strong) UIBarButtonItem *refreshButton;
+@property (nonatomic, strong) NSMutableArray<ModItem *> *localMods;
+@property (nonatomic, strong) NSMutableArray<ModItem *> *filteredLocalMods;
 
 @end
 
 @implementation ModsManagerViewController
 
+// ... (viewDidLoad, setupUI, modeChanged, updateUIForCurrentMode, updateNavigationButtons are the same)
+
 - (void)viewDidLoad {
     [super viewDidLoad];
-
     self.title = @"管理 Mod";
     self.view.backgroundColor = [UIColor systemBackgroundColor];
+    self.currentMode = ModsManagerModeLocal;
+    self.localMods = [NSMutableArray array];
+    self.filteredLocalMods = [NSMutableArray array];
+    self.onlineSearchResults = [NSMutableArray array];
+    [self setupUI];
+    [self refreshLocalModsList];
+}
 
-    // Table view
+- (void)setupUI {
+    self.modeSwitcher = [[UISegmentedControl alloc] initWithItems:@[@"本地 Mod", @"在线搜索 (Modrinth)"]];
+    self.modeSwitcher.translatesAutoresizingMaskIntoConstraints = NO;
+    self.modeSwitcher.selectedSegmentIndex = 0;
+    [self.modeSwitcher addTarget:self action:@selector(modeChanged:) forControlEvents:UIControlEventValueChanged];
+    [self.view addSubview:self.modeSwitcher];
+    self.searchBar = [[UISearchBar alloc] initWithFrame:CGRectZero];
+    self.searchBar.translatesAutoresizingMaskIntoConstraints = NO;
+    self.searchBar.delegate = self;
+    self.searchBar.placeholder = @"搜索本地 Mod...";
+    [self.view addSubview:self.searchBar];
     self.tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
     self.tableView.translatesAutoresizingMaskIntoConstraints = NO;
     [self.tableView registerClass:[ModTableViewCell class] forCellReuseIdentifier:@"ModCell"];
     self.tableView.dataSource = self;
     self.tableView.delegate = self;
-    self.tableView.rowHeight = 76;
+    self.tableView.rowHeight = 50;
     self.tableView.tableFooterView = [UIView new];
     [self.view addSubview:self.tableView];
-
-    // Refresh control
     UIRefreshControl *rc = [UIRefreshControl new];
-    [rc addTarget:self action:@selector(refreshList) forControlEvents:UIControlEventValueChanged];
+    [rc addTarget:self action:@selector(handleRefresh:) forControlEvents:UIControlEventValueChanged];
     self.tableView.refreshControl = rc;
-
-    // Activity indicator
     self.activityIndicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleLarge];
     self.activityIndicator.translatesAutoresizingMaskIntoConstraints = NO;
     self.activityIndicator.hidesWhenStopped = YES;
     [self.view addSubview:self.activityIndicator];
-
-    // Empty label
     self.emptyLabel = [[UILabel alloc] initWithFrame:CGRectZero];
     self.emptyLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.emptyLabel.text = @"未发现 Mod";
     self.emptyLabel.textAlignment = NSTextAlignmentCenter;
     self.emptyLabel.textColor = [UIColor secondaryLabelColor];
     self.emptyLabel.hidden = YES;
     [self.view addSubview:self.emptyLabel];
-
-    // Navigation item
-    UIBarButtonItem *refresh = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemRefresh target:self action:@selector(refreshList)];
-    self.navigationItem.rightBarButtonItem = refresh;
-
-    // Setup constraints
+    self.refreshButton = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemRefresh target:self action:@selector(handleRefresh:)];
+    [self updateNavigationButtons];
     [NSLayoutConstraint activateConstraints:@[
-        [self.tableView.topAnchor constraintEqualToAnchor:self.view.topAnchor],
-        [self.tableView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
+        [self.modeSwitcher.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:8],
+        [self.modeSwitcher.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:16],
+        [self.modeSwitcher.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-16],
+        [self.searchBar.topAnchor constraintEqualToAnchor:self.modeSwitcher.bottomAnchor constant:8],
+        [self.searchBar.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.searchBar.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.tableView.topAnchor constraintEqualToAnchor:self.searchBar.bottomAnchor],
+        [self.tableView.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor],
         [self.tableView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.tableView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-
-        [self.activityIndicator.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
-        [self.activityIndicator.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor],
-
-        [self.emptyLabel.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
-        [self.emptyLabel.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor],
-        [self.emptyLabel.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.view.leadingAnchor constant:20],
-        [self.emptyLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.view.trailingAnchor constant:-20]
+        [self.activityIndicator.centerXAnchor constraintEqualToAnchor:self.tableView.centerXAnchor],
+        [self.activityIndicator.centerYAnchor constraintEqualToAnchor:self.tableView.centerYAnchor],
+        [self.emptyLabel.centerXAnchor constraintEqualToAnchor:self.tableView.centerXAnchor],
+        [self.emptyLabel.centerYAnchor constraintEqualToAnchor:self.tableView.centerYAnchor]
     ]];
-
-    // Initialize data
-    self.mods = [NSMutableArray array];
-
-    // Initial load
-    [self refreshList];
 }
 
-- (void)viewWillAppear:(BOOL)animated {
-    [super viewWillAppear:animated];
-    // Refresh list when view appears to pick up external changes
-    [self refreshList];
+- (void)modeChanged:(UISegmentedControl *)sender {
+    self.currentMode = (ModsManagerMode)sender.selectedSegmentIndex;
+    [self.searchBar resignFirstResponder];
+    self.searchBar.text = @"";
+    [self.onlineSearchResults removeAllObjects];
+    [self filterLocalMods];
+    [self.tableView reloadData];
+    [self updateUIForCurrentMode];
 }
 
-#pragma mark - Loading
+- (void)updateUIForCurrentMode {
+    if (self.currentMode == ModsManagerModeLocal) {
+        self.searchBar.placeholder = @"搜索本地 Mod...";
+        self.emptyLabel.text = @"未发现 Mod";
+        self.emptyLabel.hidden = self.localMods.count > 0;
+    } else {
+        self.searchBar.placeholder = @"在线搜索 Modrinth...";
+        self.emptyLabel.text = @"输入关键词进行在线搜索";
+        self.emptyLabel.hidden = self.onlineSearchResults.count > 0;
+    }
+    // Re-enable pull-to-refresh for all modes
+    self.tableView.refreshControl.enabled = YES;
+    [self updateNavigationButtons];
+    [self.tableView reloadData];
+}
+
+- (void)updateNavigationButtons {
+    if (self.currentMode == ModsManagerModeLocal) {
+        self.navigationItem.rightBarButtonItems = @[self.refreshButton];
+    } else {
+        self.navigationItem.rightBarButtonItems = nil;
+    }
+}
+
+#pragma mark - Data Loading
+
+- (void)handleRefresh:(id)sender {
+    if (self.currentMode == ModsManagerModeLocal) {
+        [self refreshLocalModsList];
+    } else {
+        // For online mode, only refresh if there's text, otherwise it's pointless.
+        if (self.searchBar.text.length > 0) {
+            [self performOnlineSearch];
+        } else {
+            // If no text, just end the refreshing indicator.
+            [self.tableView.refreshControl endRefreshing];
+        }
+    }
+}
 
 - (void)setLoading:(BOOL)loading {
     dispatch_async(dispatch_get_main_queue(), ^{
         if (loading) {
+            self.emptyLabel.hidden = YES;
             [self.activityIndicator startAnimating];
         } else {
             [self.activityIndicator stopAnimating];
@@ -104,175 +148,299 @@
     });
 }
 
-- (void)refreshList {
+- (void)refreshLocalModsList {
+    if (self.currentMode != ModsManagerModeLocal) return;
+
     [self setLoading:YES];
-    __weak typeof(self) weakSelf = self;
     NSString *profile = self.profileName ?: @"default";
     [[ModService sharedService] scanModsForProfile:profile completion:^(NSArray<ModItem *> *mods) {
-        __strong typeof(weakSelf) strongSelf = weakSelf;
-        if (!strongSelf) return;
-
-        // Update UI on main
         dispatch_async(dispatch_get_main_queue(), ^{
-            [strongSelf.mods removeAllObjects];
-            if (mods.count > 0) {
-                [strongSelf.mods addObjectsFromArray:mods];
-                strongSelf.emptyLabel.hidden = YES;
-            } else {
-                strongSelf.emptyLabel.hidden = NO;
-            }
-            [strongSelf.tableView reloadData];
-            [strongSelf setLoading:NO];
+            [self.localMods removeAllObjects];
+            [self.localMods addObjectsFromArray:mods];
+            [self filterLocalMods];
+            [self setLoading:NO];
         });
-
-        // Fetch metadata for each mod to fill details asynchronously
-        for (ModItem *m in mods) {
-            [[ModService sharedService] fetchMetadataForMod:m completion:^(ModItem *item, NSError * _Nullable error) {
-                __strong typeof(weakSelf) ss = weakSelf;
-                if (!ss) return;
-                NSUInteger idx = [ss.mods indexOfObjectPassingTest:^BOOL(ModItem * _Nonnull obj, NSUInteger idx, BOOL * _Nonnull stop) {
-                    return [obj.filePath isEqualToString:item.filePath];
-                }];
-                if (idx != NSNotFound) {
-                    dispatch_async(dispatch_get_main_queue(), ^{
-                        if (idx < ss.mods.count) {
-                            ModItem *stored = ss.mods[idx];
-                            stored.displayName = item.displayName ?: stored.displayName;
-                            stored.modDescription = item.modDescription ?: stored.modDescription;
-                            stored.iconURL = item.iconURL ?: stored.iconURL;
-                            stored.fileSHA1 = item.fileSHA1 ?: stored.fileSHA1;
-                            stored.version = item.version ?: stored.version;
-                            stored.homepage = item.homepage ?: stored.homepage;
-                            stored.isFabric = item.isFabric;
-                            stored.isForge = item.isForge;
-                            stored.isNeoForge = item.isNeoForge;
-                            [ss.tableView reloadRowsAtIndexPaths:@[[NSIndexPath indexPathForRow:idx inSection:0]] withRowAnimation:UITableViewRowAnimationNone];
-                        }
-                    });
-                }
-            }];
-        }
     }];
 }
 
-#pragma mark - UITableView DataSource
+- (void)performOnlineSearch {
+    NSString *searchText = self.searchBar.text;
+    if (searchText.length == 0) return;
 
+    [self setLoading:YES];
+    [self.onlineSearchResults removeAllObjects];
+    [self.tableView reloadData];
+
+    NSDictionary *filters = @{@"name": searchText};
+
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+        NSMutableArray *modrinthResults = [[ModrinthAPI sharedInstance] searchModWithFilters:filters previousPageResult:nil];
+
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (modrinthResults) {
+                [self.onlineSearchResults addObjectsFromArray:modrinthResults];
+            }
+            [self setLoading:NO];
+            self.emptyLabel.hidden = self.onlineSearchResults.count > 0;
+            if (self.onlineSearchResults.count == 0) {
+                self.emptyLabel.text = @"未找到在线结果";
+            }
+            [self.tableView reloadData];
+        });
+    });
+}
+
+
+#pragma mark - UISearchBarDelegate
+// ... (search bar delegate methods are the same)
+- (void)searchBar:(UISearchBar *)searchBar textDidChange:(NSString *)searchText {
+    if (self.currentMode == ModsManagerModeLocal) {
+        [self filterLocalMods];
+    }
+}
+
+- (void)searchBarSearchButtonClicked:(UISearchBar *)searchBar {
+    [searchBar resignFirstResponder];
+    if (self.currentMode == ModsManagerModeOnline) {
+        [self performOnlineSearch];
+    }
+}
+
+- (void)searchBarCancelButtonClicked:(UISearchBar *)searchBar {
+    searchBar.text = @"";
+    [searchBar resignFirstResponder];
+    if (self.currentMode == ModsManagerModeLocal) {
+        [self filterLocalMods];
+    } else {
+        [self.onlineSearchResults removeAllObjects];
+        [self.tableView reloadData];
+        [self updateUIForCurrentMode];
+    }
+}
+
+- (void)filterLocalMods {
+    [self.filteredLocalMods removeAllObjects];
+    if (self.searchBar.text.length == 0) {
+        [self.filteredLocalMods addObjectsFromArray:self.localMods];
+    } else {
+        NSString *searchText = [self.searchBar.text lowercaseString];
+        for (ModItem *mod in self.localMods) {
+            if ([mod.displayName.lowercaseString containsString:searchText] ||
+                [mod.fileName.lowercaseString containsString:searchText]) {
+                [self.filteredLocalMods addObject:mod];
+            }
+        }
+    }
+    self.emptyLabel.hidden = self.filteredLocalMods.count > 0;
+    if (!self.emptyLabel.hidden) {
+        self.emptyLabel.text = @"未找到本地 Mod";
+    }
+    [self.tableView reloadData];
+}
+
+#pragma mark - UITableView DataSource & Delegate
+// ... (UITableView methods are the same)
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    return (NSInteger)self.mods.count;
+    return self.currentMode == ModsManagerModeLocal ? self.filteredLocalMods.count : self.onlineSearchResults.count;
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     ModTableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"ModCell" forIndexPath:indexPath];
-    ModItem *m = nil;
-    if ((NSUInteger)indexPath.row < self.mods.count) {
-        m = self.mods[indexPath.row];
-    }
     cell.delegate = self;
-    if (m) {
-        [cell configureWithMod:m];
+
+    if (self.currentMode == ModsManagerModeLocal) {
+        ModItem *mod = self.filteredLocalMods[indexPath.row];
+        [cell configureWithMod:mod displayMode:ModTableViewCellDisplayModeLocal];
     } else {
-        // Defensive: create an empty placeholder ModItem if out-of-range
-        [cell configureWithMod:[[ModItem alloc] initWithFilePath:@""]];
+        NSDictionary *modData = self.onlineSearchResults[indexPath.row];
+        ModItem *modItem = [[ModItem alloc] initWithOnlineData:modData];
+        [cell configureWithMod:modItem displayMode:ModTableViewCellDisplayModeOnline];
     }
+
     return cell;
 }
 
-#pragma mark - ModTableViewCellDelegate
+- (UISwipeActionsConfiguration *)tableView:(UITableView *)tableView trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
+    if (self.currentMode != ModsManagerModeLocal) {
+        return nil;
+    }
+
+    UIContextualAction *deleteAction = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleDestructive title:@"删除" handler:^(UIContextualAction * _Nonnull action, __kindof UIView * _Nonnull sourceView, void (^ _Nonnull completionHandler)(BOOL)) {
+
+        ModItem *modToDelete = self.filteredLocalMods[indexPath.row];
+
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"确认删除" message:[NSString stringWithFormat:@"确定要删除 %@ 吗？\n此操作无法撤销。", modToDelete.displayName] preferredStyle:UIAlertControllerStyleAlert];
+
+        [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:^(UIAlertAction * _Nonnull action) {
+            completionHandler(NO);
+        }]];
+
+        [alert addAction:[UIAlertAction actionWithTitle:@"删除" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
+            NSError *error = nil;
+            [[ModService sharedService] deleteMod:modToDelete error:&error];
+
+            if (error) {
+                NSLog(@"[ModsManager] Error deleting mod: %@", error);
+                // Optionally show an alert to the user
+                completionHandler(NO);
+            } else {
+                // Remove from data source
+                NSInteger indexInFullList = [self.localMods indexOfObject:modToDelete];
+                if (indexInFullList != NSNotFound) {
+                    [self.localMods removeObjectAtIndex:indexInFullList];
+                }
+                [self.filteredLocalMods removeObjectAtIndex:indexPath.row];
+
+                // Perform the table view update
+                [tableView deleteRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationAutomatic];
+
+                completionHandler(YES);
+            }
+        }]];
+
+        [self presentViewController:alert animated:YES completion:nil];
+    }];
+
+    deleteAction.backgroundColor = [UIColor systemRedColor];
+
+    UISwipeActionsConfiguration *configuration = [UISwipeActionsConfiguration configurationWithActions:@[deleteAction]];
+    configuration.performsFirstActionWithFullSwipe = YES; // Allow full swipe to delete
+
+    return configuration;
+}
+
+
+#pragma mark - ModTableViewCellDelegate (Download Implementation)
+
+- (void)modCellDidTapDownload:(UITableViewCell *)cell {
+    NSIndexPath *indexPath = [self.tableView indexPathForCell:cell];
+    if (!indexPath || self.currentMode != ModsManagerModeOnline) return;
+
+    NSDictionary *modData = self.onlineSearchResults[indexPath.row];
+    ModItem *modItem = [[ModItem alloc] initWithOnlineData:modData];
+    
+    ModVersionViewController *versionVC = [[ModVersionViewController alloc] init];
+    versionVC.modItem = modItem;
+    versionVC.delegate = self;
+    
+    [self.navigationController pushViewController:versionVC animated:YES];
+}
+
+#pragma mark - ModVersionViewControllerDelegate
+
+- (void)modVersionViewController:(ModVersionViewController *)viewController didSelectVersion:(ModVersion *)version {
+    ModItem *itemToDownload = viewController.modItem;
+    
+    // Find the primary file to download
+    NSDictionary *primaryFile = version.primaryFile;
+    if (!primaryFile || ![primaryFile[@"url"] isKindOfClass:[NSString class]]) {
+        [self showSimpleAlertWithTitle:@"错误" message:@"未找到有效的下载链接。"];
+        return;
+    }
+
+    itemToDownload.selectedVersionDownloadURL = primaryFile[@"url"];
+    itemToDownload.fileName = primaryFile[@"filename"];
+
+    [self startDownloadForItem:itemToDownload];
+}
+
+- (void)startDownloadForItem:(ModItem *)item {
+    // Show a temporary "downloading" alert
+    UIAlertController *downloadingAlert = [UIAlertController alertControllerWithTitle:@"正在下载"
+                                                                              message:[NSString stringWithFormat:@"%@...", item.displayName]
+                                                                       preferredStyle:UIAlertControllerStyleAlert];
+
+    UIActivityIndicatorView *indicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
+    indicator.translatesAutoresizingMaskIntoConstraints = NO;
+    [downloadingAlert.view addSubview:indicator];
+    [NSLayoutConstraint activateConstraints:@[
+        [indicator.centerXAnchor constraintEqualToAnchor:downloadingAlert.view.centerXAnchor],
+        [indicator.centerYAnchor constraintEqualToAnchor:downloadingAlert.view.centerYAnchor constant:20]
+    ]];
+    [indicator startAnimating];
+
+    [self presentViewController:downloadingAlert animated:YES completion:nil];
+
+    [[ModService sharedService] downloadMod:item toProfile:self.profileName completion:^(NSError * _Nullable error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            // First, dismiss the "downloading" alert
+            [downloadingAlert dismissViewControllerAnimated:YES completion:^{
+                // Then, show the result alert
+                if (error) {
+                    [self showSimpleAlertWithTitle:@"下载失败" message:error.localizedDescription];
+                } else {
+                    UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"下载成功"
+                                                                                          message:[NSString stringWithFormat:@"%@ 已成功安装。", item.displayName]
+                                                                                   preferredStyle:UIAlertControllerStyleAlert];
+                    [successAlert addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+                        // After user acknowledges, switch to local mods and refresh
+                        [self.modeSwitcher setSelectedSegmentIndex:0];
+                        [self modeChanged:self.modeSwitcher];
+                        [self refreshLocalModsList];
+                    }]];
+                    [self presentViewController:successAlert animated:YES completion:nil];
+                }
+            }];
+        });
+    }];
+}
+
+- (void)showSimpleAlertWithTitle:(NSString *)title message:(NSString *)message {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:message preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleDefault handler:nil]];
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    if (self.currentMode == ModsManagerModeOnline) {
+        // Handle online search item selection if necessary (e.g., show details)
+        [tableView deselectRowAtIndexPath:indexPath animated:YES];
+    }
+}
 
 - (void)modCellDidTapToggle:(UITableViewCell *)cell {
-    NSIndexPath *ip = [self.tableView indexPathForCell:cell];
-    if (!ip || (NSUInteger)ip.row >= self.mods.count) return;
-    ModItem *mod = self.mods[ip.row];
-    NSString *title = mod.disabled ? @"启用 Mod" : @"禁用 Mod";
-    NSString *message = mod.disabled ? @"确定启用此 Mod 吗？" : @"确定禁用此 Mod 吗？";
-    UIAlertController *ac = [UIAlertController alertControllerWithTitle:title message:message preferredStyle:UIAlertControllerStyleAlert];
-    [ac addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
-    __weak typeof(self) weakSelf = self;
-    [ac addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
-        __strong typeof(weakSelf) strongSelf = weakSelf;
-        if (!strongSelf) return;
-        NSError *err = nil;
-        BOOL ok = [[ModService sharedService] toggleEnableForMod:mod error:&err];
-        if (!ok) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                UIAlertController *errAc = [UIAlertController alertControllerWithTitle:@"错误" message:err.localizedDescription ?: @"操作失败" preferredStyle:UIAlertControllerStyleAlert];
-                [errAc addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
-                [strongSelf presentViewController:errAc animated:YES completion:nil];
-            });
-        } else {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                [strongSelf refreshList];
-            });
+    NSIndexPath *indexPath = [self.tableView indexPathForCell:cell];
+    if (!indexPath || self.currentMode != ModsManagerModeLocal) return;
+
+    ModItem *mod = self.filteredLocalMods[indexPath.row];
+
+    NSError *error = nil;
+    BOOL success = [[ModService sharedService] toggleEnableForMod:mod error:&error];
+
+    if (!success) {
+        NSLog(@"[ModsManager] Error toggling mod: %@", error);
+        // Optionally show an alert to the user
+        // Revert the switch state if the operation failed
+        [(ModTableViewCell *)cell updateToggleState:mod.disabled];
+    } else {
+        // The service already changed the mod's state, so we just update the UI
+        [(ModTableViewCell *)cell updateToggleState:mod.disabled];
+    }
+}
+
+- (void)modCellDidTapOpenLink:(UITableViewCell *)cell {
+    NSIndexPath *indexPath = [self.tableView indexPathForCell:cell];
+    if (!indexPath) return;
+
+    ModItem *modItem = nil;
+    if (self.currentMode == ModsManagerModeLocal) {
+        modItem = self.filteredLocalMods[indexPath.row];
+    } else {
+        NSDictionary *modData = self.onlineSearchResults[indexPath.row];
+        modItem = [[ModItem alloc] initWithOnlineData:modData];
+    }
+
+    if (modItem.onlineID && modItem.onlineID.length > 0) {
+        NSString *urlString = [NSString stringWithFormat:@"https://modrinth.com/mod/%@", modItem.onlineID];
+        NSURL *url = [NSURL URLWithString:urlString];
+        if (url) {
+            [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:nil];
         }
-    }]];
-    [self presentViewController:ac animated:YES completion:nil];
-}
-
-- (void)modCellDidTapDelete:(UITableViewCell *)cell {
-    NSIndexPath *ip = [self.tableView indexPathForCell:cell];
-    if (!ip || (NSUInteger)ip.row >= self.mods.count) return;
-    ModItem *mod = self.mods[ip.row];
-    UIAlertController *ac = [UIAlertController alertControllerWithTitle:@"删除 Mod" message:@"确认删除此 Mod 文件吗？此操作不可撤销。" preferredStyle:UIAlertControllerStyleAlert];
-    [ac addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
-    __weak typeof(self) weakSelf = self;
-    [ac addAction:[UIAlertAction actionWithTitle:@"删除" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
-        __strong typeof(weakSelf) strongSelf = weakSelf;
-        if (!strongSelf) return;
-        NSError *err = nil;
-        BOOL ok = [[ModService sharedService] deleteMod:mod error:&err];
-        if (!ok) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                UIAlertController *errAc = [UIAlertController alertControllerWithTitle:@"错误" message:err.localizedDescription ?: @"删除失败" preferredStyle:UIAlertControllerStyleAlert];
-                [errAc addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
-                [strongSelf presentViewController:errAc animated:YES completion:nil];
-            });
-        } else {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                if ((NSUInteger)ip.row < strongSelf.mods.count) {
-                    [strongSelf.mods removeObjectAtIndex:ip.row];
-                    [strongSelf.tableView deleteRowsAtIndexPaths:@[ip] withRowAnimation:UITableViewRowAnimationAutomatic];
-                    strongSelf.emptyLabel.hidden = (strongSelf.mods.count != 0);
-                } else {
-                    [strongSelf refreshList];
-                }
-            });
-        }
-    }]];
-    [self presentViewController:ac animated:YES completion:nil];
-}
-
-#pragma mark - Table editing
-
-- (BOOL)tableView:(UITableView *)tableView canEditRowAtIndexPath:(NSIndexPath *)indexPath {
-    return YES;
-}
-
-- (void)tableView:(UITableView *)tableView commitEditingStyle:(UITableViewCellEditingStyle)editingStyle forRowAtIndexPath:(NSIndexPath *)indexPath {
-    if (editingStyle == UITableViewCellEditingStyleDelete) {
-        if ((NSUInteger)indexPath.row >= self.mods.count) return;
-        ModItem *m = self.mods[indexPath.row];
-        __weak typeof(self) weakSelf = self;
-        dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-            NSError *err = nil;
-            BOOL ok = [[ModService sharedService] deleteMod:m error:&err];
-            __strong typeof(weakSelf) strongSelf = weakSelf;
-            dispatch_async(dispatch_get_main_queue(), ^{
-                if (!strongSelf) return;
-                if (!ok) {
-                    UIAlertController *ac = [UIAlertController alertControllerWithTitle:@"错误" message:err.localizedDescription ?: @"删除失败" preferredStyle:UIAlertControllerStyleAlert];
-                    [ac addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
-                    [strongSelf presentViewController:ac animated:YES completion:nil];
-                } else {
-                    if ((NSUInteger)indexPath.row < strongSelf.mods.count) {
-                        [strongSelf.mods removeObjectAtIndex:indexPath.row];
-                        [strongSelf.tableView deleteRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationAutomatic];
-                        strongSelf.emptyLabel.hidden = (strongSelf.mods.count != 0);
-                    } else {
-                        [strongSelf refreshList];
-                    }
-                }
-            });
-        });
+    } else {
+        // Optionally, inform the user that there's no link available
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"链接不可用" message:@"该 Mod 没有可用的在线链接。" preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleDefault handler:nil]];
+        [self presentViewController:alert animated:YES completion:nil];
     }
 }
 

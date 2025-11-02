@@ -84,8 +84,16 @@
 "launcher.wait_jit_trollstore.message" = "如果仍然看到此消息，请在 TrollStore 中启用 URL Scheme。";
 
 "login.error.username.outOfRange" = "用户名必须在 3-16 个字符以内";
+"login.error.fields.empty" = "请填写所有字段";
+"login.error.invalid_credentials" = "用户名或密码错误";
+"login.error.token_missing" = "访问令牌或客户端令牌缺失";
+"login.error.token_expired" = "认证令牌已过期，请重新登录";
+"login.error.invalid_response" = "服务器响应无效";
 
 "login.alert.field.username" = "用户名";
+"login.alert.field.password" = "密码";
+"login.alert.field.server" = "服务器地址";
+"login.error.invalid_server" = "服务器地址无效";
 
 "login.jit.checking" = "检查是否开启 JIT 权限";
 "login.jit.enabled" = "JIT 权限已启用";
@@ -101,6 +109,7 @@
 "login.option.demo" = "演示账户";
 "login.option.microsoft" = "微软账户";
 "login.option.local" = "本地账户";
+"login.option.3rdparty" = "第三方账户";
 
 "login.warn.title.legacy_device" = "Amethyst 的下一个版本将与此设备不兼容。";
 "login.warn.message.legacy_device" = "运行下一个主要版本，需要一台能够运行 iOS 14 的设备。";
@@ -128,6 +137,13 @@
 "login.msa.progress.acquireXboxProfile" = "(3/5) 获取 Xbox 配置文件";
 "login.msa.progress.acquireMCToken" = "(4/5) 请求 Minecraft 令牌";
 "login.msa.progress.checkMCProfile" = "(5/5) 检查 Minecraft 配置文件";
+
+"login.3rdparty.progress.auth" = "正在通过第三方服务器进行认证";
+"login.3rdparty.progress.refresh" = "正在刷新第三方认证";
+"login.3rdparty.2fa.title" = "两步验证";
+"login.3rdparty.2fa.message" = "请输入您的两步验证代码";
+"login.3rdparty.2fa.code" = "验证码";
+"login.3rdparty.2fa.empty" = "验证码不能为空";
 
 "News" = "新闻";
 "Profiles" = "配置文件";
@@ -338,3 +354,8 @@
 "controller_configurator.section.footer.menu_mappings" = "当鼠标未被锁定时，如在标题屏幕或暂停菜单中时绑定。";
 "controller_configurator.section.controller_style" = "手柄类型";
 "controller_configurator.section.footer.controller_style" = "在此配置器中显示不同的手柄按钮名称。";
+
+"preference.title.appicon-custom" = "自定义";
+"preference.title.custom_appicon" = "自定义应用图标";
+"preference.detail.custom_appicon" = "选择一张自定义图片作为应用图标";
+"提示" = "提示";

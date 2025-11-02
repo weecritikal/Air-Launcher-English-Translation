@@ -109,6 +109,7 @@ add_executable(AngelAuraAmethyst
   authenticator/BaseAuthenticator.m
   authenticator/LocalAuthenticator.m
   authenticator/MicrosoftAuthenticator.m
+  authenticator/ThirdPartyAuthenticator.m
 
   ctxbridges/gl_bridge.m
   ctxbridges/osm_bridge.m
@@ -132,7 +133,6 @@ add_executable(AngelAuraAmethyst
   installer/FabricUtils.m
   installer/modpack/ModpackUtils.m
   installer/modpack/ModpackAPI.m
-  installer/modpack/CurseForgeAPI.m
   installer/modpack/ModrinthAPI.m
 
   input/ControllerInput.m
@@ -179,11 +179,19 @@ add_executable(AngelAuraAmethyst
   utils.m
 
   # Mod-related sources (ensure implementations are compiled and linked)
+  MarqueeLabel.m
   ModItem.m
   ModService.m
   ModTableViewCell.m
   ModTableViewController.m
   ModsManagerViewController.m
+  ModVersion.m
+  ModVersionViewController.m
+  ModVersionTableViewCell.m
+
+  # Custom icon management sources
+  CustomIconManager.m
+  ImageCropperViewController.m
 )
 
 # Add ModLoaderIcons PNG files into the app bundle Resources/ModLoaderIcons so they are available at runtime.
@@ -261,7 +269,6 @@ target_link_libraries(AngelAuraAmethyst
   "-framework UniformTypeIdentifiers"
   "-framework UnzipKit"
   "-framework WebKit"
-  "-lc++"
   "-weak_framework SafariServices"
 )
 set_target_properties(AngelAuraAmethyst PROPERTIES

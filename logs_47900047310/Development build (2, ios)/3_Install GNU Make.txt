@@ -1,0 +1,57 @@
+﻿2025-10-18T13:10:52.3093020Z ##[group]Run brew update
+2025-10-18T13:10:52.3094000Z [36;1mbrew update[0m
+2025-10-18T13:10:52.3095080Z [36;1mbrew install make[0m
+2025-10-18T13:10:52.3427740Z shell: /bin/bash -e {0}
+2025-10-18T13:10:52.3429110Z ##[endgroup]
+2025-10-18T13:10:55.0545610Z [34m==>[0m [1mUpdating Homebrew...[0m
+2025-10-18T13:11:08.6359950Z To restore the stashed changes to /opt/homebrew/Library/Taps/homebrew/homebrew-core, run:
+2025-10-18T13:11:08.6372680Z   cd /opt/homebrew/Library/Taps/homebrew/homebrew-core && git stash pop
+2025-10-18T13:11:10.1128770Z [34m==>[0m [1mHomebrew's analytics have entirely moved to our InfluxDB instance in the EU.[0m
+2025-10-18T13:11:10.1204380Z We gather less data than before and have destroyed all Google Analytics data:
+2025-10-18T13:11:10.1205890Z   [4mhttps://docs.brew.sh/Analytics[24m[0m
+2025-10-18T13:11:10.1211400Z Please reconsider re-enabling analytics to help our volunteer maintainers with:
+2025-10-18T13:11:10.1214990Z   brew analytics on
+2025-10-18T13:11:10.1485910Z [34m==>[0m [1mHomebrew is run entirely by unpaid volunteers. Please consider donating:[0m
+2025-10-18T13:11:10.1516110Z   [4mhttps://github.com/Homebrew/brew#donations[24m
+2025-10-18T13:11:10.1528200Z 
+2025-10-18T13:11:11.4006740Z Updated 4 taps (hashicorp/tap, aws/tap, homebrew/core and homebrew/cask).
+2025-10-18T13:11:11.4023000Z [34m==>[0m [1mNew Formulae[0m
+2025-10-18T13:11:11.8869260Z clippy: Copy files from your terminal that actually paste into GUI apps
+2025-10-18T13:11:11.9077250Z [34m==>[0m [1mNew Casks[0m
+2025-10-18T13:11:12.0933540Z backdrop: Live wallpaper app
+2025-10-18T13:11:12.0970900Z codex: OpenAI's coding agent that runs in your terminal
+2025-10-18T13:11:12.0981790Z emdash: UI for running multiple coding agents in parallel
+2025-10-18T13:11:12.0984380Z launchos: Launchpad alternative
+2025-10-18T13:11:12.1002530Z liquibase-community: Library for database change tracking
+2025-10-18T13:11:12.1018770Z liquibase-secure: Database change management tool
+2025-10-18T13:11:12.1019430Z macpacker: Archive manager
+2025-10-18T13:11:12.1019840Z nook: Minimal browser with a sidebar-first design
+2025-10-18T13:11:12.1020120Z proxygen-app: HTTP proxy tool
+2025-10-18T13:11:12.1021350Z strawberry: AI-powered web browser
+2025-10-18T13:11:12.5342500Z [34m==>[0m [1mOutdated Formulae[0m
+2025-10-18T13:11:12.5343530Z aws-sam-cli
+2025-10-18T13:11:12.5377580Z azure-cli
+2025-10-18T13:11:12.5391730Z cryptography
+2025-10-18T13:11:12.5412700Z gh
+2025-10-18T13:11:12.5427200Z git
+2025-10-18T13:11:12.5443480Z git-lfs
+2025-10-18T13:11:12.5458910Z libngtcp2
+2025-10-18T13:11:12.5461270Z python@3.13
+2025-10-18T13:11:12.5463490Z swiftformat
+2025-10-18T13:11:12.5498590Z 
+2025-10-18T13:11:12.5506860Z You have [1m9[0m outdated formulae installed.
+2025-10-18T13:11:12.5507490Z You can upgrade them with [1mbrew upgrade[0m
+2025-10-18T13:11:12.5508360Z or list them with [1mbrew outdated[0m.
+2025-10-18T13:11:14.2152750Z [32m==>[0m [1mFetching downloads for: [32mmake[39m[0m
+2025-10-18T13:11:14.2162000Z [34m==>[0m [1mDownloading https://ghcr.io/v2/homebrew/core/make/manifests/4.4.1-1[0m
+2025-10-18T13:11:14.6418400Z [32m==>[0m [1mFetching [32mmake[39m[0m
+2025-10-18T13:11:14.6430570Z [34m==>[0m [1mDownloading https://ghcr.io/v2/homebrew/core/make/blobs/sha256:94377dc5a364da305c75fd7aa923a42897993de9edd1eb074428e13c3f2aaf93[0m
+2025-10-18T13:11:15.0262980Z [34m==>[0m [1mPouring make--4.4.1.arm64_sonoma.bottle.1.tar.gz[0m
+2025-10-18T13:11:15.1420690Z [34m==>[0m [1mCaveats[0m
+2025-10-18T13:11:15.1421430Z GNU "make" has been installed as "gmake".
+2025-10-18T13:11:15.1421910Z If you need to use it as "make", you can add a "gnubin" directory
+2025-10-18T13:11:15.1422450Z to your PATH from your bashrc like:
+2025-10-18T13:11:15.1422830Z 
+2025-10-18T13:11:15.1423020Z     PATH="/opt/homebrew/opt/make/libexec/gnubin:$PATH"
+2025-10-18T13:11:15.1424150Z [34m==>[0m [1mSummary[0m
+2025-10-18T13:11:15.1431550Z 🍺  /opt/homebrew/Cellar/make/4.4.1: 17 files, 1.3MB

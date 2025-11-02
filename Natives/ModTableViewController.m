@@ -11,9 +11,11 @@
 #import "ModService.h"
 #import "ModTableViewCell.h"
 
-@interface ModTableViewController () <ModTableViewCellDelegate>
+@interface ModTableViewController () <ModTableViewCellDelegate, UISearchBarDelegate>
 @property (nonatomic, strong) NSArray<ModItem *> *mods;
+@property (nonatomic, strong) NSArray<ModItem *> *filteredMods; // 用于存储搜索结果
 @property (nonatomic, strong) UISwitch *onlineSearchSwitch;
+@property (nonatomic, strong) UISearchBar *searchBar; // 搜索栏
 @end
 
 @implementation ModTableViewController
@@ -47,6 +49,19 @@
     // Put refresh as rightmost, switch container to its left
     self.navigationItem.rightBarButtonItems = @[refresh, switchContainerItem];
 
+    // 创建搜索栏
+    self.searchBar = [[UISearchBar alloc] initWithFrame:CGRectMake(0, 0, self.view.frame.size.width, 44)];
+    self.searchBar.placeholder = @"搜索 Mod...";
+    self.searchBar.delegate = self;
+    self.searchBar.barStyle = UIBarStyleDefault;
+    self.searchBar.searchBarStyle = UISearchBarStyleMinimal;
+    
+    // 将搜索栏添加到tableView的header中
+    self.tableView.tableHeaderView = self.searchBar;
+    
+    // 初始化filteredMods
+    self.filteredMods = @[];
+    
     // Ensure switch reflects current state when view appears
     [self refreshTapped];
 }
@@ -64,6 +79,12 @@
 - (void)refreshTapped {
     [[ModService sharedService] scanModsForProfile:self.profileName completion:^(NSArray<ModItem *> *mods) {
         self.mods = mods ?: @[];
+        // 如果没有进行搜索，则显示所有Mod；否则显示搜索结果
+        if (self.searchBar.text.length == 0) {
+            self.filteredMods = self.mods;
+        } else {
+            [self filterModsForSearchText:self.searchBar.text];
+        }
         [self.tableView reloadData];
 
         for (NSInteger i = 0; i < self.mods.count; i++) {
@@ -85,19 +106,49 @@
     }];
 }
 
+#pragma mark - UISearchBarDelegate
+
+- (void)searchBar:(UISearchBar *)searchBar textDidChange:(NSString *)searchText {
+    [self filterModsForSearchText:searchText];
+}
+
+- (void)searchBarSearchButtonClicked:(UISearchBar *)searchBar {
+    [searchBar resignFirstResponder];
+}
+
+- (void)searchBarCancelButtonClicked:(UISearchBar *)searchBar {
+    searchBar.text = @"";
+    [self filterModsForSearchText:@""];
+    [searchBar resignFirstResponder];
+}
+
+- (void)filterModsForSearchText:(NSString *)searchText {
+    if (searchText.length == 0) {
+        // 如果搜索文本为空，则显示所有Mod
+        self.filteredMods = self.mods;
+    } else {
+        // 根据搜索文本过滤Mod
+        NSPredicate *predicate = [NSPredicate predicateWithFormat:@"displayName CONTAINS[cd] %@ OR modDescription CONTAINS[cd] %@", searchText, searchText];
+        self.filteredMods = [self.mods filteredArrayUsingPredicate:predicate];
+    }
+    
+    // 更新表格视图
+    [self.tableView reloadData];
+}
+
 #pragma mark - Table view data source
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
     return 1;
 }
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    return self.mods.count;
+    return self.filteredMods.count;
 }
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     ModTableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"ModCell" forIndexPath:indexPath];
-    ModItem *m = self.mods[indexPath.row];
+    ModItem *m = self.filteredMods[indexPath.row];
     cell.delegate = self;
-    [cell configureWithMod:m];
+    [cell configureWithMod:m displayMode:ModTableViewCellDisplayModeLocal];
     return cell;
 }
 
@@ -106,7 +157,7 @@
 - (void)modCellDidTapToggle:(UITableViewCell *)cell {
     NSIndexPath *ip = [self.tableView indexPathForCell:cell];
     if (!ip) return;
-    ModItem *m = self.mods[ip.row];
+    ModItem *m = self.filteredMods[ip.row];
     NSError *err = nil;
     BOOL ok = [[ModService sharedService] toggleEnableForMod:m error:&err];
     if (!ok) {
@@ -121,15 +172,24 @@
 - (void)modCellDidTapDelete:(UITableViewCell *)cell {
     NSIndexPath *ip = [self.tableView indexPathForCell:cell];
     if (!ip) return;
-    ModItem *m = self.mods[ip.row];
+    ModItem *m = self.filteredMods[ip.row];
     UIAlertController *ac = [UIAlertController alertControllerWithTitle:@"确认删除" message:m.displayName preferredStyle:UIAlertControllerStyleAlert];
     [ac addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
     [ac addAction:[UIAlertAction actionWithTitle:@"删除" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
         NSError *err = nil;
         if ([[ModService sharedService] deleteMod:m error:&err]) {
-            NSMutableArray *new = [self.mods mutableCopy];
-            [new removeObjectAtIndex:ip.row];
-            self.mods = [new copy];
+            // 从filteredMods和mods中移除
+            NSMutableArray *newFiltered = [self.filteredMods mutableCopy];
+            [newFiltered removeObjectAtIndex:ip.row];
+            self.filteredMods = [newFiltered copy];
+            
+            NSMutableArray *newMods = [self.mods mutableCopy];
+            NSUInteger originalIndex = [newMods indexOfObject:m];
+            if (originalIndex != NSNotFound) {
+                [newMods removeObjectAtIndex:originalIndex];
+            }
+            self.mods = [newMods copy];
+            
             [self.tableView deleteRowsAtIndexPaths:@[ip] withRowAnimation:UITableViewRowAnimationAutomatic];
         } else {
             UIAlertController *errAc = [UIAlertController alertControllerWithTitle:@"删除失败" message:err.localizedDescription preferredStyle:UIAlertControllerStyleAlert];
@@ -143,7 +203,7 @@
 - (void)modCellDidTapOpenLink:(UITableViewCell *)cell {
     NSIndexPath *ip = [self.tableView indexPathForCell:cell];
     if (!ip) return;
-    ModItem *m = self.mods[ip.row];
+    ModItem *m = self.filteredMods[ip.row];
     NSString *urlStr = m.homepage.length ? m.homepage : (m.sources.length ? m.sources : nil);
     if (!urlStr) return;
     NSURL *u = [NSURL URLWithString:urlStr];

@@ -8,22 +8,21 @@
 "game.menu.log_output" = "로그 확인";
 "game.menu.custom_controls" = "사용자 지정 조작";
 
-"game.note.airplay" = "AirPlay로 마인크래프트 화면을 미러링하는 중입니다";
-
-"game.title.exit_code" = "마인크래프트가 종료 코드 %d와(과) 함께 종료했습니다";
-
 // The play button
 "Play" = "시작하기";
 
 // Version categories
 "Installed" = "설치됨";
 "Snapshot" = "스냅숏";
+"Old-beta" = "Old-beta";
+"Old-alpha" = "Old-alpha";
 
 // Custom controls
 "Copy" = "복사";
 "Edit" = "수정";
 "Move" = "움직이다";
 "Remove" = "제거";
+
 "custom_controls.button_edit.name" = "이름";
 "custom_controls.button_edit.size" = "크기";
 "custom_controls.button_edit.mapping" = "매핑";
@@ -36,7 +35,6 @@
 "custom_controls.button_menu.add_subbutton" = "부속 버튼 추가";
 "custom_controls.control_menu.exit" = "나가기";
 "custom_controls.control_menu.save" = "저장";
-"custom_controls.control_menu.save.error.json" = "JSON 오류";
 "custom_controls.control_menu.save.error.write" = "파일 저장중 오류 발생";
 "custom_controls.control_menu.load" = "불러오기";
 "custom_controls.control_menu.make_default" = "기본값으로 설정";
@@ -44,15 +42,14 @@
 "custom_controls.control_menu.add_button" = "버튼 추가";
 
 "launcher.menu.custom_controls" = "사용자 지정 조작";
+"launcher.menu.install_jar" = ".jar 설치";
 
 "launcher.wait_jit.title" = "JIT를 기다리고 있습니다";
-"launcher.wait_jit.message" = "Amethyst는 최고의 성능을 내기 위해 JIT 컴파일 기술을 활용합니다.";
 
 "login.alert.field.username" = "사용자명";
 
 "login.jit.checking" = "JIT를 확인하고 있습니다";
 "login.jit.enabled" = "JIT가 활성화 되었습니다";
-"login.jit.fail.description_unsupported" = "지원하지 않는 설치 방식이 확인되었습니다. 올바른 방법으로 다시 설치해 주세요.";
 
 // Login buttons
 "login.menu.sendlogs" = "로그 보내기";
@@ -61,15 +58,10 @@
 "login.option.microsoft" = "Microsoft 계정";
 "login.option.local" = "로컬 계정";
 
-"login.warn.title.legacy_device" = "Amethyst의 다음 버전은 이 기기와 호환되지 않습니다.";
-"login.warn.title.ios19_jitdead" = "Amethyst는 iOS 26 및 이후 버전에서는 사용할 수 없습니다.";
-"login.warn.message.ios19_jitdead" = "iOS의 JIT 활성화 제한 문제로 인해 Amethyst가 현재 버전에서는 작동하지 않습니다. 이 문제를 해결할 새로운 방법을 연구하고 있습니다.\n\n'확인'을 누르면 앱이 종료됩니다.";
-
 "login.warn.title.demomode" = "당신의 계정은 데모 버전입니다";
 
 "News" = "소식";
 "Settings" = "설정";
-"preference.section.footer.video" = "자동 렌더러는 마인크래프트 버전에 따라 최적의 옵션을 자동으로 선택합니다. 해상도를 낮추면 GPU 부하가 줄어들어 성능이 향상됩니다.";
 "preference.section.control" = "사용자 지정 조작";
 //"preference.section.footer.control" = "";
 "preference.section.java" = "Java 기능";
@@ -84,15 +76,11 @@
 "preference.title.reset_settings" = "모든 설정 초기화";
 
 "preference.title.renderer" = "렌더러";
-
-"preference.detail.renderer" = "사용할 OpenGL 렌더링 엔진을 변경합니다. Zink는 iOS 16 및 이후 버전에서 문제 진단을 위해 일시적으로 비활성화되었습니다.";
 "preference.title.virtmouse_enable" = "가상 마우스";
 
+"preference.title.java_home" = "마인크래프트 버전 < 1.17 부터 자바 17을 사용하세요";
 "preference.title.java_args" = "JVM 시작 스크립트";
 "preference.title.auto_ram" = "자동 RAM 할당";
 "preference.detail.auto_ram" = "자동 RAM 할당 활성화하기";
 "preference.detail.allocated_memory" = "Minecraft 메모리 할당 조절";
-
-"preference.profile.title.name" = "이름";
 "controller_configurator.playstation.title.named_back" = "선택";
-"controller_configurator.section.footer.controller_style" = "이 설정 화면에 표시되는 컨트롤러 버튼 이름을 변경합니다.";

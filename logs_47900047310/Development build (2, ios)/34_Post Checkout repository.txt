@@ -1,0 +1,27 @@
+﻿2025-10-18T13:13:45.1977790Z Post job cleanup.
+2025-10-18T13:13:45.4632080Z [command]/opt/homebrew/bin/git version
+2025-10-18T13:13:45.4859030Z git version 2.50.1
+2025-10-18T13:13:45.4909520Z Copying '/Users/runner/.gitconfig' to '/Users/runner/work/_temp/8bb392b1-b569-4f7a-8374-908bb9414358/.gitconfig'
+2025-10-18T13:13:45.4917740Z Temporarily overriding HOME='/Users/runner/work/_temp/8bb392b1-b569-4f7a-8374-908bb9414358' before making global git config changes
+2025-10-18T13:13:45.4918500Z Adding repository directory to the temporary git global config as a safe directory
+2025-10-18T13:13:45.4923020Z [command]/opt/homebrew/bin/git config --global --add safe.directory /Users/runner/work/Amethyst-iOS-MyRemastered/Amethyst-iOS-MyRemastered
+2025-10-18T13:13:45.5017120Z [command]/opt/homebrew/bin/git config --local --name-only --get-regexp core\.sshCommand
+2025-10-18T13:13:45.5065340Z [command]/opt/homebrew/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2025-10-18T13:13:45.5748340Z Entering 'Natives/external/AFNetworking'
+2025-10-18T13:13:45.5908250Z Entering 'Natives/external/DBNumberedSlider'
+2025-10-18T13:13:45.6067520Z Entering 'Natives/external/MobileGlues'
+2025-10-18T13:13:45.6238160Z Entering 'Natives/external/MobileGlues/src/main/cpp/3rdparty/glm'
+2025-10-18T13:13:45.6404220Z Entering 'Natives/external/MobileGlues/src/main/cpp/3rdparty/perfetto'
+2025-10-18T13:13:45.6609150Z Entering 'Natives/external/MobileGlues/src/main/cpp/3rdparty/xxhash'
+2025-10-18T13:13:45.6799760Z Entering 'Natives/external/fishhook'
+2025-10-18T13:13:45.6915650Z [command]/opt/homebrew/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2025-10-18T13:13:45.6955250Z http.https://github.com/.extraheader
+2025-10-18T13:13:45.6962810Z [command]/opt/homebrew/bin/git config --local --unset-all http.https://github.com/.extraheader
+2025-10-18T13:13:45.7015940Z [command]/opt/homebrew/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2025-10-18T13:13:45.7542770Z Entering 'Natives/external/AFNetworking'
+2025-10-18T13:13:45.7682140Z Entering 'Natives/external/DBNumberedSlider'
+2025-10-18T13:13:45.7814250Z Entering 'Natives/external/MobileGlues'
+2025-10-18T13:13:45.7980670Z Entering 'Natives/external/MobileGlues/src/main/cpp/3rdparty/glm'
+2025-10-18T13:13:45.8097950Z Entering 'Natives/external/MobileGlues/src/main/cpp/3rdparty/perfetto'
+2025-10-18T13:13:45.8264730Z Entering 'Natives/external/MobileGlues/src/main/cpp/3rdparty/xxhash'
+2025-10-18T13:13:45.8407490Z Entering 'Natives/external/fishhook'

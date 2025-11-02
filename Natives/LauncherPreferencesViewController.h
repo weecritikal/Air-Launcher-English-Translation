@@ -1,6 +1,6 @@
 #import <UIKit/UIKit.h>
 #import "PLPrefTableViewController.h"
 
-@interface LauncherPreferencesViewController : PLPrefTableViewController
+@interface LauncherPreferencesViewController : PLPrefTableViewController <UIImagePickerControllerDelegate, UINavigationControllerDelegate>
 
 @end

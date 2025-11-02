@@ -1,0 +1,19 @@
+﻿2025-10-18T13:11:42.8701140Z ##[group]Run brew install ldid || true
+2025-10-18T13:11:42.8701480Z [36;1mbrew install ldid || true[0m
+2025-10-18T13:11:42.8891110Z shell: /bin/bash -e {0}
+2025-10-18T13:11:42.8891330Z ##[endgroup]
+2025-10-18T13:11:44.2210340Z [32m==>[0m [1mFetching downloads for: [32mldid[39m[0m
+2025-10-18T13:11:44.2256080Z [34m==>[0m [1mDownloading https://ghcr.io/v2/homebrew/core/ldid/manifests/2.1.5_1[0m
+2025-10-18T13:11:44.6476460Z [32m==>[0m [1mFetching dependencies for ldid: [32mlibplist[39m[0m
+2025-10-18T13:11:44.6478870Z [34m==>[0m [1mDownloading https://ghcr.io/v2/homebrew/core/libplist/manifests/2.7.0[0m
+2025-10-18T13:11:44.9785380Z [32m==>[0m [1mFetching [32mlibplist[39m[0m
+2025-10-18T13:11:44.9821830Z [34m==>[0m [1mDownloading https://ghcr.io/v2/homebrew/core/libplist/blobs/sha256:06036e6de87c0a8bfc917d72f2af3f63ea6eb557391035782ca8bddb5506c342[0m
+2025-10-18T13:11:45.3690760Z [32m==>[0m [1mFetching [32mldid[39m[0m
+2025-10-18T13:11:45.3715950Z [34m==>[0m [1mDownloading https://ghcr.io/v2/homebrew/core/ldid/blobs/sha256:e3c26343041639b82e88edf54d3af9f579876f800b7aeada94d36c807e441c27[0m
+2025-10-18T13:11:45.7627130Z [32m==>[0m [1mInstalling ldid dependency: [32mlibplist[39m[0m
+2025-10-18T13:11:45.7634070Z [34m==>[0m [1mDownloading https://ghcr.io/v2/homebrew/core/libplist/manifests/2.7.0[0m
+2025-10-18T13:11:45.7649680Z Already downloaded: /Users/runner/Library/Caches/Homebrew/downloads/e0496924f58628f0bb8aae0a1177d8f8f003e2e9f9f949939fd2399aced47c4d--libplist-2.7.0.bottle_manifest.json
+2025-10-18T13:11:45.7727930Z [34m==>[0m [1mPouring libplist--2.7.0.arm64_sonoma.bottle.tar.gz[0m
+2025-10-18T13:11:46.0326630Z 🍺  /opt/homebrew/Cellar/libplist/2.7.0: 32 files, 646.5KB
+2025-10-18T13:11:46.0349910Z [34m==>[0m [1mPouring ldid--2.1.5_1.arm64_sonoma.bottle.tar.gz[0m
+2025-10-18T13:11:46.1360350Z 🍺  /opt/homebrew/Cellar/ldid/2.1.5_1: 6 files, 286.1KB
