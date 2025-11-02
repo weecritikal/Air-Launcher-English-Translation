@@ -189,11 +189,11 @@
     if ([vendor isEqualToString:@"OptiFine"]) {
         // OptiFine download URL format
         NSString *versionText = cell.textLabel.text;
-        NSArray *components = [versionText componentsSeparatedByString:"_"];
+        NSArray *components = [versionText componentsSeparatedByString:@"_"];
         if (components.count >= 2) {
             NSString *mcVersion = components[0];
             NSString *ofVersion = components[1];
-            jarURL = [NSString stringWithFormat:@"https://optifine.net/download.php?f=OptiFine_%%251$s_%%252$s.jar", mcVersion, ofVersion];
+            jarURL = [NSString stringWithFormat:@"https://optifine.net/download.php?f=OptiFine_%@_%@.jar", mcVersion, ofVersion];
         }
     } else {
         // Forge/NeoForge download URL
