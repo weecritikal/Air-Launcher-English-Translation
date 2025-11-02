@@ -44,7 +44,18 @@ jobs:
           echo "Available simulator runtimes (for debugging):"
           xcrun simctl list runtimes || true
 
+      - name: Cache Homebrew packages
+        id: brew-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            /opt/homebrew/bin/make
+            /opt/homebrew/bin/gmake
+            /opt/homebrew/bin/ldid
+          key: brew-tools-${{ runner.os }}-${{ hashFiles('**/development.yml') }}
+
       - name: Install GNU Make
+        if: steps.brew-cache.outputs.cache-hit != 'true'
         run: |
           brew update
           brew install make
@@ -54,6 +65,7 @@ jobs:
           brew install --cask temurin@8 || true
 
       - name: Install ldid
+        if: steps.brew-cache.outputs.cache-hit != 'true'
         run: |
           brew install ldid || true
 
