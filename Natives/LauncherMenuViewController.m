@@ -130,7 +130,16 @@
     
     [self updateAccountInfo];
     
-    NSIndexPath *indexPath = [NSIndexPath indexPathForRow:0 inSection:0];
+    NSUInteger initialIndex = 0;
+    UIViewController *currentRoot = contentNavigationController.viewControllers.firstObject;
+    for (NSUInteger i = 0; i < self.options.count; i++) {
+        LauncherMenuCustomItem *opt = self.options[i];
+        if (opt.vcArray.count > 0 && [currentRoot isKindOfClass:[opt.vcArray[0] class]]) {
+            initialIndex = i;
+            break;
+        }
+    }
+    NSIndexPath *indexPath = [NSIndexPath indexPathForRow:initialIndex inSection:0];
     [self.tableView selectRowAtIndexPath:indexPath animated:YES scrollPosition:UITableViewScrollPositionNone];
     [self tableView:self.tableView didSelectRowAtIndexPath:indexPath];
     
@@ -229,6 +238,7 @@
     } else {
         if(self.isInitialVc) {
             self.isInitialVc = NO;
+            self.lastSelectedIndex = indexPath.row;
         } else {
             self.options[self.lastSelectedIndex].vcArray = contentNavigationController.viewControllers;
             [contentNavigationController setViewControllers:selected.vcArray animated:NO];
