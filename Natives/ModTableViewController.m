@@ -24,7 +24,7 @@
     [super viewDidLoad];
     self.title = @"Mods";
     [self.tableView registerClass:[ModTableViewCell class] forCellReuseIdentifier:@"ModCell"];
-    self.tableView.rowHeight = 76;
+    self.tableView.rowHeight = 96;
 
     // Create a container for label + switch and make it compact but wide enough
     UIView *container = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 140, 32)];
