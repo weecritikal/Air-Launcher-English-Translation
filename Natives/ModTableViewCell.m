@@ -32,7 +32,7 @@
         _gameVersionLabel = [self createLabelWithFont:[UIFont systemFontOfSize:10 weight:UIFontWeightMedium] textColor:[UIColor systemGreenColor] numberOfLines:1];
 
         _authorLabel = [self createLabelWithFont:[UIFont systemFontOfSize:9] textColor:[UIColor secondaryLabelColor] numberOfLines:1];
-        _descLabel = [self createLabelWithFont:[UIFont systemFontOfSize:9] textColor:[UIColor grayColor] numberOfLines:2];
+        _descLabel = [self createLabelWithFont:[UIFont systemFontOfSize:9] textColor:[UIColor secondaryLabelColor] numberOfLines:2];
         _statsLabel = [self createLabelWithFont:[UIFont systemFontOfSize:9] textColor:[UIColor secondaryLabelColor] numberOfLines:1];
         _categoryLabel = [self createLabelWithFont:[UIFont systemFontOfSize:9] textColor:[UIColor systemBlueColor] numberOfLines:1];
 
@@ -120,9 +120,46 @@
 }
 
 - (UIImageView *)createBadgeImageView:(NSString *)imageName {
-    UIImageView *imageView = [[UIImageView alloc] initWithImage:[UIImage imageNamed:imageName]];
+    UIImage *image = [self loadImageWithName:imageName];
+    UIImageView *imageView = [[UIImageView alloc] initWithImage:image];
     imageView.contentMode = UIViewContentModeScaleAspectFit;
     return imageView;
+}
+
+- (UIImage *)loadImageWithName:(NSString *)imageName {
+    NSBundle *bundle = [NSBundle mainBundle];
+    NSString *resourcePath = [bundle resourcePath];
+    
+    // Check if dark mode is active
+    BOOL isDarkMode = self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark;
+    
+    // Try to load appropriate theme version first
+    NSString *theme = isDarkMode ? @"dark" : @"light";
+    NSString *imagePath = [resourcePath stringByAppendingPathComponent:[NSString stringWithFormat:@"ModLoaderIcons/%@_%@.png", imageName, theme]];
+    
+    UIImage *image = [UIImage imageWithContentsOfFile:imagePath];
+    if (!image) {
+        // Fallback to opposite theme if preferred theme doesn't exist
+        theme = isDarkMode ? @"light" : @"dark";
+        imagePath = [resourcePath stringByAppendingPathComponent:[NSString stringWithFormat:@"ModLoaderIcons/%@_%@.png", imageName, theme]];
+        image = [UIImage imageWithContentsOfFile:imagePath];
+    }
+    
+    return image;
+}
+
+#pragma mark - UIAppearance & Trait Collection
+
+- (void)traitCollectionDidChange:(UITraitCollection *)previousTraitCollection {
+    [super traitCollectionDidChange:previousTraitCollection];
+    
+    // Reload loader icons when interface style changes
+    if ([self.traitCollection hasDifferentColorAppearanceComparedToTraitCollection:previousTraitCollection]) {
+        // Simply reload the current cell configuration to update icons
+        if (self.currentMod) {
+            [self configureForLocalMode:self.currentMod];
+        }
+    }
 }
 
 #pragma mark - Auto Layout Constraints
@@ -247,22 +284,22 @@
     }
 
     // Add new badges
-    if (mod.isFabric) [self.loaderBadgesStackView addArrangedSubview:[self createBadgeImageView:@"fabric_logo"]];
-    if (mod.isForge) [self.loaderBadgesStackView addArrangedSubview:[self createBadgeImageView:@"forge_logo"]];
-    if (mod.isNeoForge) [self.loaderBadgesStackView addArrangedSubview:[self createBadgeImageView:@"neoforge_logo"]];
+    if (mod.isFabric) [self.loaderBadgesStackView addArrangedSubview:[self createBadgeImageView:@"fabric"]];
+    if (mod.isForge) [self.loaderBadgesStackView addArrangedSubview:[self createBadgeImageView:@"forge"]];
+    if (mod.isNeoForge) [self.loaderBadgesStackView addArrangedSubview:[self createBadgeImageView:@"neoforge"]];
 
     [self updateToggleState:mod.disabled];
 
     NSString *loaderName = nil;
     if (mod.isFabric) {
-        loaderName = @"fabric_logo";
+        loaderName = @"fabric";
     } else if (mod.isForge) {
-        loaderName = @"forge_logo";
+        loaderName = @"forge";
     } else if (mod.isNeoForge) {
-        loaderName = @"neoforge_logo";
+        loaderName = @"neoforge";
     }
     if (loaderName) {
-        _loaderIconView.image = [UIImage imageNamed:loaderName];
+        _loaderIconView.image = [self loadImageWithName:loaderName];
         _loaderIconView.hidden = NO;
     } else {
         _loaderIconView.image = nil;
