@@ -10,6 +10,7 @@
 
 @interface ModTableViewCell ()
 @property (nonatomic, strong) ModItem *currentMod;
+@property (nonatomic, strong) UIImageView *loaderIconView;
 @end
 
 @implementation ModTableViewCell
@@ -24,12 +25,14 @@
         _modIconView = [self createImageViewWithCornerRadius:4];
         _nameLabel = [self createLabelWithFont:[UIFont boldSystemFontOfSize:13] textColor:[UIColor labelColor] numberOfLines:1];
 
+        _loaderIconView = [self createImageViewWithCornerRadius:0];
+
         // --- NEW: Version Labels ---
         _modVersionLabel = [self createLabelWithFont:[UIFont systemFontOfSize:10 weight:UIFontWeightMedium] textColor:[UIColor secondaryLabelColor] numberOfLines:1];
         _gameVersionLabel = [self createLabelWithFont:[UIFont systemFontOfSize:10 weight:UIFontWeightMedium] textColor:[UIColor systemGreenColor] numberOfLines:1];
 
         _authorLabel = [self createLabelWithFont:[UIFont systemFontOfSize:9] textColor:[UIColor secondaryLabelColor] numberOfLines:1];
-        _descLabel = [self createLabelWithFont:[UIFont systemFontOfSize:9] textColor:[UIColor grayColor] numberOfLines:1];
+        _descLabel = [self createLabelWithFont:[UIFont systemFontOfSize:9] textColor:[UIColor grayColor] numberOfLines:2];
         _statsLabel = [self createLabelWithFont:[UIFont systemFontOfSize:9] textColor:[UIColor secondaryLabelColor] numberOfLines:1];
         _categoryLabel = [self createLabelWithFont:[UIFont systemFontOfSize:9] textColor:[UIColor systemBlueColor] numberOfLines:1];
 
@@ -55,6 +58,7 @@
         // Add subviews
         [self.contentView addSubview:_loaderBadgesStackView];
         [self.contentView addSubview:_modIconView];
+        [self.contentView addSubview:_loaderIconView];
         [self.contentView addSubview:_nameLabel];
         [self.contentView addSubview:_modVersionLabel];
         [self.contentView addSubview:_gameVersionLabel];
@@ -134,7 +138,12 @@
         [_modIconView.widthAnchor constraintEqualToConstant:iconSize],
         [_modIconView.heightAnchor constraintEqualToConstant:iconSize],
 
-        [_nameLabel.leadingAnchor constraintEqualToAnchor:_modIconView.trailingAnchor constant:8],
+        [_loaderIconView.leadingAnchor constraintEqualToAnchor:_modIconView.trailingAnchor constant:8],
+        [_loaderIconView.centerYAnchor constraintEqualToAnchor:_nameLabel.centerYAnchor],
+        [_loaderIconView.widthAnchor constraintEqualToConstant:16.0],
+        [_loaderIconView.heightAnchor constraintEqualToConstant:16.0],
+
+        [_nameLabel.leadingAnchor constraintEqualToAnchor:_loaderIconView.trailingAnchor constant:6],
         [_nameLabel.topAnchor constraintEqualToAnchor:_modIconView.topAnchor constant:-2], // Shift up slightly
 
         // --- NEW: Version Label Constraints ---
@@ -145,7 +154,7 @@
 
 
         [_descLabel.leadingAnchor constraintEqualToAnchor:_nameLabel.leadingAnchor],
-        [_descLabel.topAnchor constraintEqualToAnchor:_nameLabel.bottomAnchor constant:1],
+        [_descLabel.topAnchor constraintEqualToAnchor:_modVersionLabel.bottomAnchor constant:2],
 
         [_authorLabel.leadingAnchor constraintEqualToAnchor:_nameLabel.leadingAnchor],
         [_authorLabel.topAnchor constraintEqualToAnchor:_nameLabel.bottomAnchor constant:1],
@@ -205,7 +214,7 @@
     _statsLabel.hidden = YES;
     _categoryLabel.hidden = YES;
     _downloadButton.hidden = YES;
-    _descLabel.hidden = YES; // Replaced by version labels
+    _descLabel.hidden = NO;
 
     // Show local elements
     _openLinkButton.hidden = NO;
@@ -243,6 +252,30 @@
     if (mod.isNeoForge) [self.loaderBadgesStackView addArrangedSubview:[self createBadgeImageView:@"neoforge_logo"]];
 
     [self updateToggleState:mod.disabled];
+
+    NSString *loaderName = nil;
+    if (mod.isFabric) {
+        loaderName = @"fabric_logo";
+    } else if (mod.isForge) {
+        loaderName = @"forge_logo";
+    } else if (mod.isNeoForge) {
+        loaderName = @"neoforge_logo";
+    }
+    if (loaderName) {
+        _loaderIconView.image = [UIImage imageNamed:loaderName];
+        _loaderIconView.hidden = NO;
+    } else {
+        _loaderIconView.image = nil;
+        _loaderIconView.hidden = YES;
+    }
+
+    if (mod.modDescription && mod.modDescription.length > 0) {
+        _descLabel.text = mod.modDescription;
+        _descLabel.hidden = NO;
+    } else {
+        _descLabel.text = nil;
+        _descLabel.hidden = YES;
+    }
 }
 
 - (void)configureForOnlineMode:(ModItem *)mod {
