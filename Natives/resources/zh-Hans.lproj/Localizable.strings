@@ -247,6 +247,12 @@
 "preference.title.slideable_hotbar" = "可滑动快捷栏";
 "preference.detail.slideable_hotbar" = "使快捷栏像鼠标滚轮一样可滑动";
 
+// Custom mouse pointer
+"preference.title.custom_mouse_pointer" = "自定义鼠标指针";
+"preference.detail.custom_mouse_pointer" = "从照片库选择图片作为虚拟鼠标指针";
+"preference.title.reset_mouse_pointer" = "恢复默认鼠标指针";
+"preference.detail.reset_mouse_pointer" = "删除自定义指针图片并恢复默认样式";
+
 "preference.title.gyroscope_enable" = "启用陀螺仪控制";
 "preference.detail.gyroscope_enable" = "启用此功能会允许您通过转动设备来在游戏中转动视角";
 "preference.title.gyroscope_invert_x_axis" = "左右反转陀螺仪";
