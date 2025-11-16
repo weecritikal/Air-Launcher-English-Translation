@@ -429,6 +429,17 @@
                     [self openMousePointerPicker];
                 }
             },
+            @{@"key": @"reset_mouse_pointer",
+                @"icon": @"arrow.counterclockwise",
+                @"type": self.typeButton,
+                @"enableCondition": whenNotInGame,
+                @"action": ^void(){
+                    NSString *path = [NSString stringWithFormat:@"%s/controlmap/mouse_pointer.png", getenv("POJAV_HOME")];
+                    [NSFileManager.defaultManager removeItemAtPath:path error:nil];
+                    [NSNotificationCenter.defaultCenter postNotificationName:@"MousePointerUpdated" object:nil];
+                    [self showSuccessMessage:@"鼠标指针已恢复默认"];
+                }
+            },
             @{@"key": @"hardware_hide",
                 @"icon": @"eye.slash",
                 @"hasDetail": @YES,
