@@ -181,9 +181,13 @@ static GameSurfaceView* pojavWindow;
     self.mousePointerView = [[UIImageView alloc] initWithFrame:virtualMouseFrame];
     self.mousePointerView.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleRightMargin |UIViewAutoresizingFlexibleBottomMargin;
     self.mousePointerView.hidden = !virtualMouseEnabled;
-    self.mousePointerView.image = [UIImage imageNamed:@"MousePointer"];
+    [self reloadMousePointerImage];
     self.mousePointerView.userInteractionEnabled = NO;
     [self.touchView addSubview:self.mousePointerView];
+
+    [[NSNotificationCenter defaultCenter] addObserverForName:@"MousePointerUpdated" object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification * _Nonnull note) {
+        [self reloadMousePointerImage];
+    }];
 
     self.inputTextField = [[TrackedTextField alloc] initWithFrame:CGRectMake(0, -32.0, self.view.frame.size.width, 30.0)];
     self.inputTextField.backgroundColor = UIColor.secondarySystemBackgroundColor;
@@ -271,6 +275,16 @@ static GameSurfaceView* pojavWindow;
     }
 
     [self launchMinecraft];
+}
+
+- (void)reloadMousePointerImage {
+    NSString *path = [NSString stringWithFormat:@"%s/controlmap/mouse_pointer.png", getenv("POJAV_HOME")];
+    UIImage *img = [UIImage imageWithContentsOfFile:path];
+    if (img) {
+        self.mousePointerView.image = img;
+    } else {
+        self.mousePointerView.image = [UIImage imageNamed:@"MousePointer"];
+    }
 }
 
 - (void)viewDidAppear:(BOOL)animated {

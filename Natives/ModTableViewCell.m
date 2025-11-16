@@ -323,6 +323,10 @@
     _modVersionLabel.hidden = YES;
     _gameVersionLabel.hidden = YES;
 
+    // Ensure loader icon is not shown on download (online) list
+    _loaderIconView.image = nil;
+    _loaderIconView.hidden = YES;
+
     // Show online elements
     _authorLabel.hidden = NO;
     _statsLabel.hidden = NO;

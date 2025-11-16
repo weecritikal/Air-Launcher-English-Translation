@@ -19,6 +19,7 @@
 
 @interface LauncherPreferencesViewController()
 @property(nonatomic) NSArray<NSString*> *rendererKeys, *rendererList;
+@property(nonatomic) BOOL pickingMousePointer;
 @end
 
 @implementation LauncherPreferencesViewController
@@ -61,6 +62,16 @@
     });
 }
 
+- (void)openMousePointerPicker {
+    self.pickingMousePointer = YES;
+    UIImagePickerController *imagePicker = [[UIImagePickerController alloc] init];
+    imagePicker.sourceType = UIImagePickerControllerSourceTypePhotoLibrary;
+    imagePicker.delegate = self;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self presentViewController:imagePicker animated:YES completion:nil];
+    });
+}
+
 #pragma mark - UIImagePickerControllerDelegate
 
 - (void)imagePickerController:(UIImagePickerController *)picker didFinishPickingMediaWithInfo:(NSDictionary<UIImagePickerControllerInfoKey,id> *)info {
@@ -72,7 +83,20 @@
                 [self showCustomIconError:@"无法获取选中的图片"];
                 return;
             }
-            
+            if (self.pickingMousePointer) {
+                self.pickingMousePointer = NO;
+                NSString *path = [NSString stringWithFormat:@"%s/controlmap/mouse_pointer.png", getenv("POJAV_HOME")];
+                NSData *pngData = UIImagePNGRepresentation(selectedImage);
+                [NSFileManager.defaultManager createDirectoryAtPath:[path stringByDeletingLastPathComponent] withIntermediateDirectories:YES attributes:nil error:nil];
+                BOOL ok = [pngData writeToFile:path atomically:YES];
+                if (ok) {
+                    [NSNotificationCenter.defaultCenter postNotificationName:@"MousePointerUpdated" object:nil];
+                    [self showSuccessMessage:@"鼠标指针已更新"];
+                } else {
+                    [self showCustomIconError:@"保存鼠标指针失败"];
+                }
+                return;
+            }
             // 显示处理中的提示
             [self showProcessingIndicator];
             
@@ -125,7 +149,11 @@
 - (void)imagePickerControllerDidCancel:(UIImagePickerController *)picker {
     [picker dismissViewControllerAnimated:YES completion:^{
         dispatch_async(dispatch_get_main_queue(), ^{
-            [self showCustomIconError:@"图片选择已取消"];
+            if (self.pickingMousePointer) {
+                self.pickingMousePointer = NO;
+            } else {
+                [self showCustomIconError:@"图片选择已取消"];
+            }
         });
     }];
 }
@@ -208,7 +236,7 @@
               @"icon": @"paintbrush",
               @"type": self.typePickField,
               @"enableCondition": ^BOOL(){
-                  return UIApplication.sharedApplication.supportsAlternateIcons;
+                  return NO;
               },
               @"action": ^void(NSString *iconName) {
                   if ([iconName isEqualToString:@"AppIcon-Light"]) {
@@ -261,7 +289,7 @@
               @"icon": @"photo",
               @"type": self.typeButton,
               @"enableCondition": ^BOOL(){
-                  return UIApplication.sharedApplication.supportsAlternateIcons;
+                  return NO;
               },
               @"action": ^void(){
                   // 打开图片选择器
@@ -392,6 +420,14 @@
                 @"enableCondition": whenNotInGame,
                 @"canDismissWithSwipe": @NO,
                 @"class": LauncherPrefContCfgViewController.class
+            },
+            @{@"key": @"custom_mouse_pointer",
+                @"icon": @"cursorarrow",
+                @"type": self.typeButton,
+                @"enableCondition": whenNotInGame,
+                @"action": ^void(){
+                    [self openMousePointerPicker];
+                }
             },
             @{@"key": @"hardware_hide",
                 @"icon": @"eye.slash",
