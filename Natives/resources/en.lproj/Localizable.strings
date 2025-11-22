@@ -76,6 +76,7 @@
 
 "launcher.menu.custom_controls" = "Custom controls";
 "launcher.menu.execute_jar" = "Execute .jar";
+"launcher.menu.import_modpack" = "Import modpack";
 
 "launcher.wait_jit.title" = "Waiting for JIT";
 "launcher.wait_jit.message" = "Amethyst relies on Just-in-time compilation for Java to work at maximum performance.";
