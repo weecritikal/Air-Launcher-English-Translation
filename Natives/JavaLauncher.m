@@ -224,12 +224,13 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
     init_loadDefaultEnv();
     init_loadCustomEnv();
 
-    BOOL launchJar = NO;
-    NSString *gameDir;
-    NSString *defaultJRETag;
-    if ([launchTarget isKindOfClass:NSDictionary.class]) {
-        // Get preferred Java version from current profile
-        int preferredJavaVersion = [PLProfiles resolveKeyForCurrentProfile:@"javaVersion"].intValue;
+    BOOL launchJar = NO;
+    NSString *gameDir;
+    NSString *defaultJRETag;
+    int preferredJavaVersion; // Declare outside the block to make it available throughout the scope
+    if ([launchTarget isKindOfClass:NSDictionary.class]) {
+        // Get preferred Java version from current profile
+        preferredJavaVersion = [PLProfiles resolveKeyForCurrentProfile:@"javaVersion"].intValue;
         if (preferredJavaVersion > 0) {
             if (minVersion > preferredJavaVersion) {
                 NSLog(@"[JavaLauncher] Profile's preferred Java version (%d) does not meet the minimum version (%d), dropping request", preferredJavaVersion, minVersion);
@@ -268,7 +269,7 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
         
         // If the calculated required version is higher than the minVersion, use it
         // Only adjust if user hasn't explicitly selected a higher version
-        int preferredJavaVersion = [PLProfiles resolveKeyForCurrentProfile:@"javaVersion"].intValue;
+        // preferredJavaVersion already contains the value from earlier assignment
         if (requiredJavaVersion > minVersion && preferredJavaVersion <= 0) {
             // Only auto-adjust if user hasn't made an explicit Java version choice
             minVersion = requiredJavaVersion;
