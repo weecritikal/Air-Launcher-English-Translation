@@ -16,6 +16,7 @@
             @"check_sha": @YES,
             @"cosmetica": @YES,
             @"debug_logging": @(!CONFIG_RELEASE),
+            @"news_url": @"https://amethyst.ct.ws/welcome",
         }.mutableCopy,
         @"video": @{ // Video & Audio
             @"renderer": @"auto",
