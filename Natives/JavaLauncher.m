@@ -20,8 +20,115 @@
 
 #define fm NSFileManager.defaultManager
 
-extern char **environ;
-
+extern char **environ;
+
+// Parse version string into components for comparison
+NSArray* parseVersionString(NSString *version) {
+    // Handle snapshot versions like "21w19a" by splitting on non-numeric characters
+    if ([version rangeOfString:@"w"].location != NSNotFound) {
+        // Split on 'w' to get year and week parts
+        NSArray *parts = [version componentsSeparatedByString:@"w"];
+        if (parts.count == 2) {
+            // Return as [year, week + suffix (like 'a' or 'b')]
+            NSString *weekPart = parts[1];
+            // Extract numeric part of week and any suffix
+            NSCharacterSet *nonDigits = [[NSCharacterSet decimalDigitCharacterSet] invertedSet];
+            NSRange range = [weekPart rangeOfCharacterFromSet:nonDigits];
+            if (range.location != NSNotFound) {
+                NSString *weekNum = [weekPart substringToIndex:range.location];
+                NSString *suffix = [weekPart substringFromIndex:range.location];
+                return @[@([parts[0] integerValue]), @([weekNum integerValue]), suffix];
+            } else {
+                return @[@([parts[0] integerValue]), @([weekPart integerValue])];
+            }
+        }
+    } else if ([version rangeOfString:@"-pre"].location != NSNotFound) {
+        // Handle pre-release versions like "1.18-pre2"
+        NSArray *parts = [version componentsSeparatedByString:@"-pre"];
+        if (parts.count == 2) {
+            NSArray *mainParts = [parts[0] componentsSeparatedByString:@"."];
+            NSMutableArray *result = [NSMutableArray arrayWithArray:mainParts];
+            [result addObject:@(-1)]; // pre-release indicator
+            [result addObject:@([parts[1] integerValue])]; // pre-release number
+            return [result copy];
+        }
+    } else if ([version rangeOfString:@"-rc"].location != NSNotFound) {
+        // Handle release candidate versions like "1.17-rc1"
+        NSArray *parts = [version componentsSeparatedByString:@"-rc"];
+        if (parts.count == 2) {
+            NSArray *mainParts = [parts[0] componentsSeparatedByString:@"."];
+            NSMutableArray *result = [NSMutableArray arrayWithArray:mainParts];
+            [result addObject:@(-2)]; // rc indicator
+            [result addObject:@([parts[1] integerValue])]; // rc number
+            return [result copy];
+        }
+    } else {
+        // Handle regular version like "1.17.1"
+        return [version componentsSeparatedByString:@"."];
+    }
+    return @[];
+}
+
+// Compare Minecraft versions - returns true if version1 is greater than or equal to version2
+BOOL minecraftVersionIsGreaterOrEqualTo(NSString *version1, NSString *version2) {
+    NSArray *ver1Parts = parseVersionString(version1);
+    NSArray *ver2Parts = parseVersionString(version2);
+    
+    if (ver1Parts.count == 0 || ver2Parts.count == 0) {
+        return NO; // Can't compare invalid versions
+    }
+    
+    // Compare each component numerically
+    NSInteger maxCount = MAX(ver1Parts.count, ver2Parts.count);
+    for (NSInteger i = 0; i < maxCount; i++) {
+        NSInteger val1 = 0, val2 = 0;
+        NSString *str1 = (i < ver1Parts.count) ? ver1Parts[i] : @"0";
+        NSString *str2 = (i < ver2Parts.count) ? ver2Parts[i] : @"0";
+        
+        // Handle string values (like suffixes in snapshots) by using a special ordering
+        if ([str1 isKindOfClass:[NSString class]] && ![str1 isKindOfClass:[NSNumber class]]) {
+            if ([str1 rangeOfString:@"w"].location != NSNotFound || [str1 rangeOfString:@"-pre"].location != NSNotFound || [str1 rangeOfString:@"-rc"].location != NSNotFound) {
+                // This is handled in parseVersionString, so str1 should be numeric here
+                val1 = [str1 integerValue];
+            } else {
+                // For string suffixes like 'a', 'b', etc., convert to numeric values for comparison
+                if ([str1 isEqualToString:@"a"]) val1 = 1;
+                else if ([str1 isEqualToString:@"b"]) val1 = 2;
+                else val1 = [str1 integerValue];
+            }
+        } else {
+            val1 = [str1 integerValue];
+        }
+        
+        if ([str2 isKindOfClass:[NSString class]] && ![str2 isKindOfClass:[NSNumber class]]) {
+            if ([str2 rangeOfString:@"w"].location != NSNotFound || [str2 rangeOfString:@"-pre"].location != NSNotFound || [str2 rangeOfString:@"-rc"].location != NSNotFound) {
+                val2 = [str2 integerValue];
+            } else {
+                // For string suffixes like 'a', 'b', etc., convert to numeric values for comparison
+                if ([str2 isEqualToString:@"a"]) val2 = 1;
+                else if ([str2 isEqualToString:@"b"]) val2 = 2;
+                else val2 = [str2 integerValue];
+            }
+        } else {
+            val2 = [str2 integerValue];
+        }
+        
+        if (val1 > val2) return YES;
+        if (val1 < val2) return NO;
+    }
+    
+    return YES; // Equal versions
+}
+
+// Check if a version is a snapshot version and is greater than or equal to a specific comparator
+BOOL isSnapshotVersionGreaterOrEqualTo(NSString *version, NSString *comparator) {
+    // Check if this is a snapshot version (contains 'w' or 'pre' or 'rc')
+    if ([version rangeOfString:@"w"].location != NSNotFound || [version rangeOfString:@"-pre"].location != NSNotFound || [version rangeOfString:@"-rc"].location != NSNotFound) {
+        return minecraftVersionIsGreaterOrEqualTo(version, comparator);
+    }
+    return NO;
+}
+
 BOOL validateVirtualMemorySpace(int size) {
     size <<= 20; // convert to MB
     void *map = mmap(0, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
@@ -131,6 +238,40 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
                 minVersion = preferredJavaVersion;
             }
         }
+        
+        // Apply Minecraft version-specific Java requirements
+        NSString *minecraftVersion = launchTarget[@"id"];
+        int requiredJavaVersion = minVersion;
+        
+        // Check Minecraft version and set appropriate Java version requirement
+        if (minecraftVersion) {
+            // From 1.12 (17w13a) onwards, Java 8 is minimum requirement
+            if (minecraftVersionIsGreaterOrEqualTo(minecraftVersion, @"1.12") || isSnapshotVersionGreaterOrEqualTo(minecraftVersion, @"17w13a")) {
+                requiredJavaVersion = MAX(requiredJavaVersion, 8);
+            }
+            
+            // From 1.17 (21w19a) onwards, Java 16 is minimum requirement
+            if (minecraftVersionIsGreaterOrEqualTo(minecraftVersion, @"1.17") || isSnapshotVersionGreaterOrEqualTo(minecraftVersion, @"21w19a")) {
+                requiredJavaVersion = MAX(requiredJavaVersion, 16);
+            }
+            
+            // From 1.18 (1.18-pre2) onwards, Java 17 is minimum requirement
+            if (minecraftVersionIsGreaterOrEqualTo(minecraftVersion, @"1.18") || isSnapshotVersionGreaterOrEqualTo(minecraftVersion, @"1.18-pre2")) {
+                requiredJavaVersion = MAX(requiredJavaVersion, 17);
+            }
+            
+            // From 1.20.5 (24w14a) onwards, Java 21 is minimum requirement
+            if (minecraftVersionIsGreaterOrEqualTo(minecraftVersion, @"1.20.5") || isSnapshotVersionGreaterOrEqualTo(minecraftVersion, @"24w14a")) {
+                requiredJavaVersion = MAX(requiredJavaVersion, 21);
+            }
+        }
+        
+        // If the calculated required version is higher than the minVersion, use it
+        if (requiredJavaVersion > minVersion) {
+            minVersion = requiredJavaVersion;
+            NSLog(@"[JavaLauncher] Adjusted Java version requirement for Minecraft %@ to Java %d", minecraftVersion, minVersion);
+        }
+        
         if (minVersion <= 8) {
             defaultJRETag = @"1_16_5_older";
         } else {
