@@ -247,7 +247,7 @@
             NSInteger totalExpectedDownloads = 0;
             
             // Count libraries
-            for (NSDictionary *library in self.metadata[@"libraries]) {
+            for (NSDictionary *library in self.metadata[@"libraries"]) {
                 NSString *name = library[@"name"];
                 NSMutableDictionary *artifact = library[@"downloads"][@"artifact"];
                 if (artifact == nil && [name containsString:@":"]) {
