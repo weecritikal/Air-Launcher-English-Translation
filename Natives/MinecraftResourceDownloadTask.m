@@ -384,12 +384,17 @@
                 }
             }
             
-            // If no downloads were needed, remove the metadata directly
-            if (totalExpectedDownloads == 0) {
-                [self.metadata removeObjectForKey:@"assetIndexObj"];
-            }
-        }];
-    }];
+            // If no downloads were needed, remove the metadata directly
+            if (totalExpectedDownloads == 0) {
+                [self.metadata removeObjectForKey:@"assetIndexObj"];
+            }
+            
+            // If this is part of a modpack installation and we have a completion callback, execute it
+            if (self.modpackDownloadCompletion) {
+                self.modpackDownloadCompletion();
+            }
+        }];
+    }];
 }
 
 #pragma mark - Modpack installation

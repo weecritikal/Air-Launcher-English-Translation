@@ -3,10 +3,11 @@
 @class ModpackAPI;
 
 @interface MinecraftResourceDownloadTask : NSObject
-@property NSProgress *progress, *textProgress;
-@property NSMutableArray *fileList, *progressList;
-@property NSMutableDictionary* metadata;
-@property(nonatomic, copy) void(^handleError)(void);
+@property NSProgress *progress, *textProgress;
+@property NSMutableArray *fileList, *progressList;
+@property NSMutableDictionary* metadata;
+@property(nonatomic, copy) void(^handleError)(void);
+@property(nonatomic, copy) void(^modpackDownloadCompletion)(void);
 
 // 新增方法声明（用于账户检查）
 - (BOOL)checkAccessWithDialog:(BOOL)show;
