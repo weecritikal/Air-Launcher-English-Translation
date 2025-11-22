@@ -67,6 +67,11 @@ typedef NS_ENUM(NSUInteger, LauncherProfilesTableSection) {
             actionWithTitle:@"Modpack" image:nil
             identifier:@"modpack" handler:^(UIAction *action) {
                 [self actionCreateModpackProfile];
+            }],
+        [UIAction
+            actionWithTitle:localize(@"launcher.menu.import_modpack", nil) image:nil
+            identifier:@"import_modpack" handler:^(UIAction *action) {
+                [(LauncherNavigationController *)self.navigationController performSelector:@selector(enterModpackImporter)];
             }]
     ]];
     self.createButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemAdd menu:createMenu];

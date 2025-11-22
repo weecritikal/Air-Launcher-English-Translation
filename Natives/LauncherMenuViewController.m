@@ -78,12 +78,7 @@
         [contentNavigationController performSelector:@selector(enterModInstaller)];
     }]];
     
-    [self.options addObject:
-     (id)[LauncherMenuCustomItem
-          title:localize(@"launcher.menu.import_modpack", nil)
-          imageName:@"MenuInstallJar" action:^{
-        [contentNavigationController performSelector:@selector(enterModpackImporter)];
-    }]];
+    
     
     // TODO: Finish log-uploading service integration
     [self.options addObject:
