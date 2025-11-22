@@ -279,21 +279,19 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
         }
 
                 // Setup AMETHYST_RENDERER
-        NSString *renderer = [PLProfiles resolveKeyForCurrentProfile:@"renderer"];
-        NSString *minecraftVersion = launchTarget[@"id"];
-        
-        // Apply Minecraft version-specific renderer requirements
-        if (minecraftVersion) {
-            // From Minecraft 1.21.5 onwards, only MobileGlues renderer works properly
-            if (minecraftVersionIsGreaterOrEqualTo(minecraftVersion, @"1.21.5") || isSnapshotVersionGreaterOrEqualTo(minecraftVersion, @"24w35a")) {
-                // Force MobileGlues renderer for Minecraft 1.21.5+
-                renderer = @ RENDERER_NAME_MOBILEGLUES;
-                NSLog(@"[JavaLauncher] Forcing MobileGlues renderer for Minecraft %@ (1.21.5+)", minecraftVersion);
-            }
-        }
-        
-        NSLog(@"[JavaLauncher] RENDERER is set to %@
-", renderer);
+        NSString *renderer = [PLProfiles resolveKeyForCurrentProfile:@"renderer"];
+        
+        // Apply Minecraft version-specific renderer requirements
+        if (minecraftVersion) {
+            // From Minecraft 1.21.5 onwards, only MobileGlues renderer works properly
+            if (minecraftVersionIsGreaterOrEqualTo(minecraftVersion, @"1.21.5") || isSnapshotVersionGreaterOrEqualTo(minecraftVersion, @"24w35a")) {
+                // Force MobileGlues renderer for Minecraft 1.21.5+
+                renderer = @ RENDERER_NAME_MOBILEGLUES;
+                NSLog(@"[JavaLauncher] Forcing MobileGlues renderer for Minecraft %@ (1.21.5+)", minecraftVersion);
+            }
+        }
+        
+        NSLog(@"[JavaLauncher] RENDERER is set to %@\n", renderer);
         setenv("AMETHYST_RENDERER", renderer.UTF8String, 1);
         // Setup gameDir
         gameDir = [NSString stringWithFormat:@"%s/instances/%@/%@",
