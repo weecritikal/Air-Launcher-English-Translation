@@ -239,37 +239,50 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
             }
         }
         
-        // Apply Minecraft version-specific Java requirements
-        NSString *minecraftVersion = launchTarget[@"id"];
-        int requiredJavaVersion = minVersion;
-        
-        // Check Minecraft version and set appropriate Java version requirement
-        if (minecraftVersion) {
-            // From 1.12 (17w13a) onwards, Java 8 is minimum requirement
-            if (minecraftVersionIsGreaterOrEqualTo(minecraftVersion, @"1.12") || isSnapshotVersionGreaterOrEqualTo(minecraftVersion, @"17w13a")) {
-                requiredJavaVersion = MAX(requiredJavaVersion, 8);
-            }
-            
-            // From 1.17 (21w19a) onwards, Java 16 is minimum requirement
-            if (minecraftVersionIsGreaterOrEqualTo(minecraftVersion, @"1.17") || isSnapshotVersionGreaterOrEqualTo(minecraftVersion, @"21w19a")) {
-                requiredJavaVersion = MAX(requiredJavaVersion, 16);
-            }
-            
-            // From 1.18 (1.18-pre2) onwards, Java 17 is minimum requirement
-            if (minecraftVersionIsGreaterOrEqualTo(minecraftVersion, @"1.18") || isSnapshotVersionGreaterOrEqualTo(minecraftVersion, @"1.18-pre2")) {
-                requiredJavaVersion = MAX(requiredJavaVersion, 17);
-            }
-            
-            // From 1.20.5 (24w14a) onwards, Java 21 is minimum requirement
-            if (minecraftVersionIsGreaterOrEqualTo(minecraftVersion, @"1.20.5") || isSnapshotVersionGreaterOrEqualTo(minecraftVersion, @"24w14a")) {
-                requiredJavaVersion = MAX(requiredJavaVersion, 21);
-            }
-        }
-        
-        // If the calculated required version is higher than the minVersion, use it
-        if (requiredJavaVersion > minVersion) {
-            minVersion = requiredJavaVersion;
-            NSLog(@"[JavaLauncher] Adjusted Java version requirement for Minecraft %@ to Java %d", minecraftVersion, minVersion);
+        // Apply Minecraft version-specific Java requirements
+        NSString *minecraftVersion = launchTarget[@"id"];
+        int requiredJavaVersion = minVersion;
+        
+        // Check Minecraft version and set appropriate Java version requirement
+        if (minecraftVersion) {
+            // From 1.12 (17w13a) onwards, Java 8 is minimum requirement
+            if (minecraftVersionIsGreaterOrEqualTo(minecraftVersion, @"1.12") || isSnapshotVersionGreaterOrEqualTo(minecraftVersion, @"17w13a")) {
+                requiredJavaVersion = MAX(requiredJavaVersion, 8);
+            }
+            
+            // From 1.17 (21w19a) onwards, Java 16 is minimum requirement
+            if (minecraftVersionIsGreaterOrEqualTo(minecraftVersion, @"1.17") || isSnapshotVersionGreaterOrEqualTo(minecraftVersion, @"21w19a")) {
+                requiredJavaVersion = MAX(requiredJavaVersion, 16);
+            }
+            
+            // From 1.18 (1.18-pre2) onwards, Java 17 is minimum requirement
+            if (minecraftVersionIsGreaterOrEqualTo(minecraftVersion, @"1.18") || isSnapshotVersionGreaterOrEqualTo(minecraftVersion, @"1.18-pre2")) {
+                requiredJavaVersion = MAX(requiredJavaVersion, 17);
+            }
+            
+            // From 1.20.5 (24w14a) onwards, Java 21 is minimum requirement
+            if (minecraftVersionIsGreaterOrEqualTo(minecraftVersion, @"1.20.5") || isSnapshotVersionGreaterOrEqualTo(minecraftVersion, @"24w14a")) {
+                requiredJavaVersion = MAX(requiredJavaVersion, 21);
+            }
+        }
+        
+        // If the calculated required version is higher than the minVersion, use it
+        // Only adjust if user hasn't explicitly selected a higher version
+        int preferredJavaVersion = [PLProfiles resolveKeyForCurrentProfile:@"javaVersion"].intValue;
+        if (requiredJavaVersion > minVersion && preferredJavaVersion <= 0) {
+            // Only auto-adjust if user hasn't made an explicit Java version choice
+            minVersion = requiredJavaVersion;
+            NSLog(@"[JavaLauncher] Auto-adjusted Java version requirement for Minecraft %@ to Java %d", minecraftVersion, minVersion);
+        } else if (requiredJavaVersion > minVersion && preferredJavaVersion > 0) {
+            // If user has made an explicit choice but it's too low for this MC version, warn them
+            if (preferredJavaVersion < requiredJavaVersion) {
+                minVersion = requiredJavaVersion;
+                NSLog(@"[JavaLauncher] Adjusted Java version requirement for Minecraft %@ from user's setting (Java %d) to required Java %d", minecraftVersion, preferredJavaVersion, minVersion);
+            } else {
+                // User has selected a sufficient version, keep their choice
+                minVersion = preferredJavaVersion;
+                NSLog(@"[JavaLauncher] Using user's selected Java version %d for Minecraft %@", minVersion, minecraftVersion);
+            }
         }
         
         if (minVersion <= 8) {
