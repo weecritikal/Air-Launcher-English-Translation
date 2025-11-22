@@ -25,7 +25,7 @@
 
 ### 构建环境要求
 
-*   macOS 或 Linux 系统 (用于交叉编译)。
+*   必须在 macOS 上构建。
 *   Xcode command line tools。
 *   CMake, ldid, wget, JDK 8。
 *   对于 iOS 14.5 及以上版本，推荐使用 TrollStore 进行安装以获得最佳体验。

@@ -147,6 +147,10 @@
 "login.3rdparty.2fa.empty" = "验证码不能为空";
 
 "News" = "新闻";
+"preference.title.news_url" = "新闻网址";
+"preference.detail.news_url" = "设置新闻页面的网址";
+"preference.title.reset_news_url" = "恢复默认新闻网址";
+"preference.detail.reset_news_url" = "将新闻网址重置为默认值";
 "Profiles" = "配置文件";
 "Settings" = "设置";
 

@@ -145,6 +145,10 @@
 "login.3rdparty.2fa.empty" = "Authentication code cannot be empty";
 
 "News" = "News";
+"preference.title.news_url" = "News URL";
+"preference.detail.news_url" = "Set the URL for the news page";
+"preference.title.reset_news_url" = "Reset news URL to default";
+"preference.detail.reset_news_url" = "Reset the news URL to its default value";
 "Profiles" = "Profiles";
 "Settings" = "Settings";
 

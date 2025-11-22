@@ -302,6 +302,21 @@
               @"type": self.typeSwitch,
               @"enableCondition": whenNotInGame
             },
+            @{@"key": @"news_url",
+              @"hasDetail": @YES,
+              @"icon": @"link",
+              @"type": self.typeTextField,
+              @"placeholder": @"https://amethyst.ct.ws/welcome",
+              @"enableCondition": whenNotInGame
+            },
+            @{@"key": @"reset_news_url",
+              @"icon": @"arrow.counterclockwise",
+              @"type": self.typeButton,
+              @"enableCondition": whenNotInGame,
+              @"action": ^void(){
+                  setPrefObject(@"general.news_url", nil);
+              }
+            },
             @{@"key": @"reset_warnings",
               @"icon": @"exclamationmark.triangle",
               @"type": self.typeButton,
