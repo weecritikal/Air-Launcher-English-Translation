@@ -78,6 +78,8 @@
         [contentNavigationController performSelector:@selector(enterModInstaller)];
     }]];
     
+    
+    
     // TODO: Finish log-uploading service integration
     [self.options addObject:
      (id)[LauncherMenuCustomItem
@@ -130,7 +132,16 @@
     
     [self updateAccountInfo];
     
-    NSIndexPath *indexPath = [NSIndexPath indexPathForRow:0 inSection:0];
+    NSUInteger initialIndex = 0;
+    UIViewController *currentRoot = contentNavigationController.viewControllers.firstObject;
+    for (NSUInteger i = 0; i < self.options.count; i++) {
+        LauncherMenuCustomItem *opt = self.options[i];
+        if (opt.vcArray.count > 0 && [currentRoot isKindOfClass:[opt.vcArray[0] class]]) {
+            initialIndex = i;
+            break;
+        }
+    }
+    NSIndexPath *indexPath = [NSIndexPath indexPathForRow:initialIndex inSection:0];
     [self.tableView selectRowAtIndexPath:indexPath animated:YES scrollPosition:UITableViewScrollPositionNone];
     [self tableView:self.tableView didSelectRowAtIndexPath:indexPath];
     
@@ -229,6 +240,7 @@
     } else {
         if(self.isInitialVc) {
             self.isInitialVc = NO;
+            self.lastSelectedIndex = indexPath.row;
         } else {
             self.options[self.lastSelectedIndex].vcArray = contentNavigationController.viewControllers;
             [contentNavigationController setViewControllers:selected.vcArray animated:NO];
@@ -250,7 +262,8 @@
         }
     };
     vc.whenItemSelected = ^void() {
-        setPrefObject(@"internal.selected_account", BaseAuthenticator.current.authData[@"username"]);
+        BaseAuthenticator *currentAuth = BaseAuthenticator.current;
+        setPrefObject(@"internal.selected_account", currentAuth.authData[@"username"]);
         [self updateAccountInfo];
         if (sender != self.accountButton) {
             // Called from the play button, so call back to continue
@@ -269,7 +282,8 @@
 }
 
 - (void)updateAccountInfo {
-    NSDictionary *selected = BaseAuthenticator.current.authData;
+    BaseAuthenticator *currentAuth = BaseAuthenticator.current;
+    NSDictionary *selected = currentAuth.authData;
     CGSize size = CGSizeMake(contentNavigationController.view.frame.size.width, contentNavigationController.view.frame.size.height);
     
     if (selected == nil) {
