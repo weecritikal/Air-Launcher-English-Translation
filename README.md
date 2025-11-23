@@ -19,7 +19,7 @@
 - **自动选择JVM**：将根据游戏版本自动选择 JVM 版本，包括 Java21
 - **自定义图标**：（开发中，即将上线）
 
-> ⚠️ 说明：暂不计划重置 Android 版本（Android 端的优秀改版太多了,例如ZL、FCL），如需官方 Android 代码，可前往 [Amethyst-Android](https://github.com/AngelAuraMC/Amethyst-Android)。
+> ⚠️ 说明：暂不计划重置 Android 版本（Android 端的优秀启动器太多了,例如ZL、FCL），如需官方 Android 代码，可前往 [Amethyst-Android](https://github.com/AngelAuraMC/Amethyst-Android)。
 
 
 ## 🚀 快速上手指南
