@@ -52,7 +52,7 @@ UIEdgeInsets insets;
     }
 
     if (@available(iOS 26.0, *)) {
-        [self showWarningAlert:@"ios19_jitdead" hasPreference:NO exitWhenCompleted:YES];
+        [self showWarningAlert:@"ios19_jitdead" hasPreference:NO exitWhenCompleted:NO];
     }
 
     self.navigationItem.leftBarButtonItem = self.splitViewController.displayModeButtonItem;
