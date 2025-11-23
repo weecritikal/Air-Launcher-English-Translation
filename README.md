@@ -91,11 +91,13 @@ JIT（Just-In-Time）是流畅运行游戏的核心，iOS 需通过以下工具�
 | AltKit                 | AltStore 适配支持        | -                        | [GitHub](https://github.com/rileytestut/AltKit)                           |
 | UnzipKit               | 解压工具                 | BSD-2                    | [GitHub](https://github.com/abbeycode/UnzipKit)                           |
 | DyldDeNeuralyzer       | 库验证绕过工具           | -                        | [GitHub](https://github.com/xpn/DyldDeNeuralyzer)                         |
-> 额外感谢：[MCHeads](https://mc-heads.net) 提供 Minecraft 头像服务
+| MobileGlues            | 第三方渲染器             | LGPL-2.1                 | [GitHub](https://github.com/MobileGL-Dev/MobileGlues)                     |
+| authlib-injector       | 第三方认证登录支持       | AGPL-3.0                 | [GitHub](https://github.com/yushijinhun/authlib-injector)                 |
+> 额外感谢：<br> [MCHeads](https://mc-heads.net) 提供 Minecraft 头像服务; <br> [Modrinth](https://modrinth.com) 提供 Mod 下载服务；<br> [BMCLAPI](https://bmclapidoc.bangbang93.com) 提供 Minecraft 下载服务。
 
 
 ## 捐赠
 
 如果您觉得这个项目对您有帮助，欢迎通过以下二维码进行捐赠支持：
 
-![捐赠二维码](donate.png)
+<img src="/donate.png" width="400" height="400" />
