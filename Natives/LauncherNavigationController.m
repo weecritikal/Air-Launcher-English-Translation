@@ -207,7 +207,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 
 - (void)enterModpackImporter {
     UIDocumentPickerViewController *documentPicker = [[UIDocumentPickerViewController alloc]
-        initForOpeningContentTypes:@[[UTType typeWithMIMEType:@"application/zip"]]
+        initForOpeningContentTypes:@[[UTType typeWithMIMEType:@"application/zip"], [UTType typeWithFilenameExtension:@"mrpack"]]
         asCopy:YES];
     documentPicker.delegate = self;
     documentPicker.modalPresentationStyle = UIModalPresentationFormSheet;
