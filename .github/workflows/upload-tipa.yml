@@ -1,0 +1,74 @@
+name: Upload .tipa to FTP
+
+on:
+  workflow_dispatch:
+
+jobs:
+  upload-tipa:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get latest workflow run
+        id: latest_run
+        run: |
+          # Get the latest workflow run ID
+          LATEST_RUN_ID=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/runs?per_page=1" | \
+            jq -r '.workflow_runs[0].id')
+          
+          echo "Latest run ID: $LATEST_RUN_ID"
+          echo "latest_run_id=$LATEST_RUN_ID" >> $GITHUB_ENV
+
+      - name: Get workflow run artifacts
+        id: get_artifacts
+        run: |
+          # Get artifacts from the latest run
+          curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ env.latest_run_id }}/artifacts" | \
+            jq -r '.artifacts[] | select(.name | test("\\.tipa$")) | .id' > tipa_ids.txt
+          
+          # Get the first .tipa artifact ID
+          TIPA_ID=$(head -n 1 tipa_ids.txt)
+          if [ -z "$TIPA_ID" ]; then
+            echo "No .tipa artifact found in run ${{ env.latest_run_id }}"
+            exit 1
+          fi
+          
+          echo "tipa_artifact_id=$TIPA_ID" >> $GITHUB_ENV
+          
+      - name: Download artifact
+        run: |
+          # Download the .tipa artifact
+          curl -s -L -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            -o artifact.zip \
+            "https://api.github.com/repos/${{ github.repository }}/actions/artifacts/${{ env.tipa_artifact_id }}/zip"
+          
+          # Extract the .tipa file
+          unzip artifact.zip
+          
+          # Find the .tipa file
+          TIPA_FILE=$(find . -name "*.tipa" -type f | head -n 1)
+          if [ -z "$TIPA_FILE" ]; then
+            echo "No .tipa file found in the downloaded artifact"
+            exit 1
+          fi
+          
+          echo "tipa_file=$TIPA_FILE" >> $GITHUB_ENV
+          echo "Found .tipa file: $TIPA_FILE"
+
+      - name: Upload to FTP
+        run: |
+          # Install lftp
+          sudo apt-get update
+          sudo apt-get install -y lftp
+          
+          # Upload the .tipa file to FTP server
+          lftp -c "set ftp:list-options -a; 
+                   open ftp://$${FTP_USERNAME}:$${FTP_PASSWORD}@ftpupload.net; 
+                   mkdir -p /htdocs/file; 
+                   cd /htdocs/file; 
+                   put '${{ env.tipa_file }}' '${{ env.tipa_file }}'; 
+                   bye" 
+        env:
+          FTP_USERNAME: if0_39971160
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
