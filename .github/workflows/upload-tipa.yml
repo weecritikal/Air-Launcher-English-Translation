@@ -76,7 +76,6 @@ jobs:
           # Upload the .tipa file to FTP server
           lftp -c "set ftp:list-options -a; 
                    open ftp://${FTP_USERNAME}:${FTP_PASSWORD}@ftpupload.net; 
-                   mkdir -p /htdocs/file; 
                    cd /htdocs/file; 
                    put '${{ env.tipa_file }}' '${{ env.tipa_file }}'; 
                    bye" 
