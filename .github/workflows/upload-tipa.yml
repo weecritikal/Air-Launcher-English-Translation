@@ -83,13 +83,17 @@ jobs:
             exit 1
           fi
           
+          # Get the original filename
+          ORIGINAL_FILENAME=$(basename "$TIPA_FILE")
+          echo "Original filename: $ORIGINAL_FILENAME"
+          
           # Upload the .tipa file to FTP server with its original filename
-          echo "Uploading $TIPA_FILE to FTP..."
+          echo "Uploading $TIPA_FILE to FTP with original name: $ORIGINAL_FILENAME"
           lftp -c "set ftp:ssl-protect-data true; 
-                   set ftp:list-options -a; 
                    open ftp://${FTP_USERNAME}:${FTP_PASSWORD}@ftpupload.net; 
                    cd /htdocs/file; 
-                   put '$TIPA_FILE' -o '$(basename "$TIPA_FILE")'; 
+                   put '$TIPA_FILE' -o '$ORIGINAL_FILENAME'; 
+                   echo 'File upload completed';
                    ls -la /htdocs/file; 
                    bye" 
         env:
