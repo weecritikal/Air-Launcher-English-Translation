@@ -2,34 +2,45 @@ name: Upload .tipa to FTP
 
 on:
   workflow_dispatch:
+    inputs:
+      workflow_run_number:
+        description: 'Workflow run number to download from (e.g. 19702930669)'
+        required: true
+        type: string
 
 jobs:
   upload-tipa:
     runs-on: ubuntu-latest
     steps:
-      - name: Get latest workflow run
-        id: latest_run
+      - name: Get specified workflow run
+        id: specified_run
         run: |
-          # Get the latest workflow run ID
-          LATEST_RUN_ID=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/runs?per_page=1" | \
-            jq -r '.workflow_runs[0].id')
+          # Get the specified workflow run by run number
+          RUN_ID=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/runs?per_page=100" | \
+            jq -r --arg RUN_NUMBER "${{ inputs.workflow_run_number }}" \
+            '.workflow_runs[] | select(.run_number == ($RUN_NUMBER | tonumber)) | .id' | head -n 1)
           
-          echo "Latest run ID: $LATEST_RUN_ID"
-          echo "latest_run_id=$LATEST_RUN_ID" >> $GITHUB_ENV
+          if [ -z "$RUN_ID" ]; then
+            echo "No workflow run found with number ${{ inputs.workflow_run_number }}"
+            exit 1
+          fi
+          
+          echo "Found run ID: $RUN_ID"
+          echo "target_run_id=$RUN_ID" >> $GITHUB_ENV
 
       - name: Get workflow run artifacts
         id: get_artifacts
         run: |
-          # Get artifacts from the latest run
+          # Get artifacts from the specified run
           curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ env.latest_run_id }}/artifacts" | \
+            "https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ env.target_run_id }}/artifacts" | \
             jq -r '.artifacts[] | select(.name | test("\\.tipa$")) | .id' > tipa_ids.txt
           
           # Get the first .tipa artifact ID
           TIPA_ID=$(head -n 1 tipa_ids.txt)
           if [ -z "$TIPA_ID" ]; then
-            echo "No .tipa artifact found in run ${{ env.latest_run_id }}"
+            echo "No .tipa artifact found in run ${{ env.target_run_id }}"
             exit 1
           fi
           
@@ -64,7 +75,7 @@ jobs:
           
           # Upload the .tipa file to FTP server
           lftp -c "set ftp:list-options -a; 
-                   open ftp://$${FTP_USERNAME}:$${FTP_PASSWORD}@ftpupload.net; 
+                   open ftp://${FTP_USERNAME}:${FTP_PASSWORD}@ftpupload.net; 
                    mkdir -p /htdocs/file; 
                    cd /htdocs/file; 
                    put '${{ env.tipa_file }}' '${{ env.tipa_file }}'; 
