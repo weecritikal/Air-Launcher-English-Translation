@@ -73,11 +73,20 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y lftp
           
+          # Check if the .tipa file exists
+          echo "Checking for .tipa file..."
+          ls -la
+          find . -name "*.tipa" -type f
+          
           # Upload the .tipa file to FTP server
-          lftp -c "set ftp:list-options -a; 
+          echo "Uploading file to FTP..."
+          lftp -c "set ftp:ssl-protect-data true; 
+                   set ftp:list-options -a; 
                    open ftp://${FTP_USERNAME}:${FTP_PASSWORD}@ftpupload.net; 
                    cd /htdocs/file; 
-                   put '${{ env.tipa_file }}' '${{ env.tipa_file }}'; 
+                   lcd .; 
+                   mput *.tipa; 
+                   ls -la /htdocs/file; 
                    bye" 
         env:
           FTP_USERNAME: if0_39971160
