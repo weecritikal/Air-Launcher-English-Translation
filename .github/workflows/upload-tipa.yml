@@ -73,19 +73,23 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y lftp
           
-          # Check if the .tipa file exists
+          # Check if the .tipa file exists and get its exact name
           echo "Checking for .tipa file..."
-          ls -la
-          find . -name "*.tipa" -type f
+          TIPA_FILE=$(find . -name "*.tipa" -type f | head -n 1)
+          echo "Found .tipa file: $TIPA_FILE"
           
-          # Upload the .tipa file to FTP server
-          echo "Uploading file to FTP..."
+          if [ -z "$TIPA_FILE" ]; then
+            echo "Error: No .tipa file found!"
+            exit 1
+          fi
+          
+          # Upload the .tipa file to FTP server with its original filename
+          echo "Uploading $TIPA_FILE to FTP..."
           lftp -c "set ftp:ssl-protect-data true; 
                    set ftp:list-options -a; 
                    open ftp://${FTP_USERNAME}:${FTP_PASSWORD}@ftpupload.net; 
                    cd /htdocs/file; 
-                   lcd .; 
-                   mput *.tipa; 
+                   put '$TIPA_FILE' -o '$(basename "$TIPA_FILE")'; 
                    ls -la /htdocs/file; 
                    bye" 
         env:
