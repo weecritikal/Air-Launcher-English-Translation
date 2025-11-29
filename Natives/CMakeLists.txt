@@ -134,6 +134,7 @@ add_executable(AngelAuraAmethyst
   installer/modpack/ModpackUtils.m
   installer/modpack/ModpackAPI.m
   installer/modpack/ModrinthAPI.m
+  installer/modpack/ModpackConfiguration.m
 
   input/ControllerInput.m
   input/GyroInput.m

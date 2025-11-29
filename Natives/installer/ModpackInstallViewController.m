@@ -38,7 +38,72 @@
         @"name": @" "
         // mcVersion
     }.mutableCopy;
+    
+    // 添加导入本地文件按钮
+    self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] 
+        initWithBarButtonSystemItem:UIBarButtonSystemItemAdd 
+        target:self 
+        action:@selector(importLocalModpack)];
+    
     [self updateSearchResults];
+}
+
+- (void)importLocalModpack {
+    UIDocumentPickerViewController *documentPicker = [[UIDocumentPickerViewController alloc] 
+        initWithDocumentTypes:@[@"public.zip-archive", @"com.sun.zip-archive"] 
+        inMode:UIDocumentPickerModeImport];
+    documentPicker.delegate = self;
+    documentPicker.allowsMultipleSelection = NO;
+    [self presentViewController:documentPicker animated:YES completion:nil];
+}
+
+#pragma mark - UIDocumentPickerDelegate
+
+- (void)documentPicker:(UIDocumentPickerViewController *)controller didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls {
+    if (urls.count == 0) return;
+    
+    NSURL *url = urls.firstObject;
+    NSString *fileName = url.lastPathComponent.lowercaseString;
+    
+    // 检查文件类型
+    if (![fileName hasSuffix:@".zip"] && ![fileName hasSuffix:@".mrpack"]) {
+        showDialog(localize(@"Error", nil), localize(@"Unsupported file format. Please select a .zip or .mrpack file.", nil));
+        return;
+    }
+    
+    // 创建下载任务
+    MinecraftResourceDownloadTask *downloader = [[MinecraftResourceDownloadTask alloc] init];
+    
+    // 复制文件到临时目录
+    NSString *tempPath = [NSTemporaryDirectory() stringByAppendingPathComponent:fileName];
+    NSError *error;
+    [[NSFileManager defaultManager] copyItemAtURL:url toURL:[NSURL fileURLWithPath:tempPath] error:&error];
+    
+    if (error) {
+        showDialog(localize(@"Error", nil), [NSString stringWithFormat:@"Failed to copy file: %@", error.localizedDescription]);
+        return;
+    }
+    
+    // 创建整合包详情
+    NSString *name = [fileName stringByDeletingPathExtension];
+    NSDictionary *modDetail = @{
+        @"title": name,
+        @"versionUrls": @[@"file://localhost" + tempPath],
+        @"versionSizes": @[@0],
+        @"versionHashes": @[@""],
+        @"apiSource": @(1)
+    };
+    
+    // 开始安装
+    [downloader downloadModpackFromAPI:self.modrinth detail:modDetail atIndex:0];
+    
+    // 显示进度
+    LauncherNavigationController *navController = (LauncherNavigationController *)self.navigationController;
+    [navController showDownloadProgress:downloader];
+}
+
+- (void)documentPickerWasCancelled:(UIDocumentPickerViewController *)controller {
+    // 用户取消选择
 }
 
 - (void)loadSearchResultsWithPrevList:(BOOL)prevList {

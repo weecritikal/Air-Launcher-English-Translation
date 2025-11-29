@@ -20,8 +20,13 @@
     self = [super init];
     // TODO: implement background download
     NSURLSessionConfiguration *configuration = [NSURLSessionConfiguration defaultSessionConfiguration];
-    configuration.timeoutIntervalForRequest = 86400;
-    //backgroundSessionConfigurationWithIdentifier:@"net.kdt.pojavlauncher.downloadtask"];
+    configuration.timeoutIntervalForRequest = 60; // 60秒超时
+    configuration.timeoutIntervalForResource = 300; // 5分钟资源超时
+    configuration.requestCachePolicy = NSURLRequestUseProtocolCachePolicy;
+    configuration.networkServiceType = NSURLNetworkServiceTypeDefault;
+    // 增加重试次数
+    configuration.HTTPMaximumConnectionsPerHost = 3;
+    //backgroundSessionConfigurationWithIdentifier:@"net.kdt.pojavlauncher.downloadtask";
     self.manager = [[AFURLSessionManager alloc] initWithSessionConfiguration:configuration];
     self.fileList = [NSMutableArray new];
     self.progressList = [NSMutableArray new];
@@ -30,6 +35,10 @@
 
 // Add file to the queue
 - (NSURLSessionDownloadTask *)createDownloadTask:(NSString *)url size:(NSUInteger)size sha:(NSString *)sha altName:(NSString *)altName toPath:(NSString *)path success:(void (^)())success {
+    return [self createDownloadTask:url size:size sha:sha altName:altName toPath:path success:success retryCount:0];
+}
+
+- (NSURLSessionDownloadTask *)createDownloadTask:(NSString *)url size:(NSUInteger)size sha:(NSString *)sha altName:(NSString *)altName toPath:(NSString *)path success:(void (^)())success retryCount:(NSInteger)retryCount {
     BOOL fileExists = [NSFileManager.defaultManager fileExistsAtPath:path];
     // logSuccess?
     if (fileExists && [self checkSHA:sha forFile:path altName:altName]) {
@@ -40,30 +49,90 @@
     }
 
     NSString *name = altName ?: path.lastPathComponent;
-    NSURLRequest *request = [NSURLRequest requestWithURL:[NSURL URLWithString:url]];
+    
+    // 创建可变请求以支持重试
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:url]];
+    request.cachePolicy = NSURLRequestUseProtocolCachePolicy;
+    
+    // 设置请求头以支持断点续传
+    if (fileExists && !sha) {
+        // 如果没有SHA校验，尝试断点续传
+        unsigned long long fileSize = [[[NSFileManager defaultManager] attributesOfItemAtPath:path error:nil] fileSize];
+        [request setValue:[NSString stringWithFormat:@"bytes=%llu-", fileSize] forHTTPHeaderField:@"Range"];
+    }
+    
     __block NSProgress *progress;
     __block NSURLSessionDownloadTask *task = [self.manager downloadTaskWithRequest:request progress:nil
     destination:^NSURL * _Nonnull(NSURL * _Nonnull targetPath, NSURLResponse * _Nonnull response) {
-        NSLog(@"[MCDL] Downloading %@", name);
+        NSLog(@"[MCDL] Downloading %@ (attempt %ld)", name, (long)(retryCount + 1));
         progress = [self.manager downloadProgressForTask:task];
         if (!size && task) {
             [self addDownloadTaskToProgress:task size:response.expectedContentLength];
             [self.fileList addObject:name];
         }
         [NSFileManager.defaultManager createDirectoryAtPath:path.stringByDeletingLastPathComponent withIntermediateDirectories:YES attributes:nil error:nil];
+        
+        // 处理断点续传
+        if ([response isKindOfClass:[NSHTTPURLResponse class]]) {
+            NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
+            if (httpResponse.statusCode == 206) { // Partial Content
+                // 断点续传，追加到现有文件
+                NSFileHandle *fileHandle = [NSFileHandle fileHandleForWritingAtPath:path];
+                if (fileHandle) {
+                    [fileHandle seekToEndOfFile];
+                    return [NSURL fileURLWithPath:path];
+                }
+            }
+        }
+        
+        // 正常下载或断点续传失败，删除旧文件
         [NSFileManager.defaultManager removeItemAtPath:path error:nil];
         return [NSURL fileURLWithPath:path];
     } completionHandler:^(NSURLResponse * _Nonnull response, NSURL * _Nullable filePath, NSError * _Nullable error) {
         if (self.progress.cancelled) {
             // Ignore any further errors
-        } else if (error != nil) {
-            [self finishDownloadWithError:error file:name];
-        } else if (![self checkSHA:sha forFile:path altName:altName]) {
-            [self finishDownloadWithErrorString:[NSString stringWithFormat:@"Failed to verify file %@: SHA1 mismatch", path.lastPathComponent]];
-        } else {
-            progress.totalUnitCount = progress.completedUnitCount;
-            if (success) success();
+            return;
         }
+        
+        // 检查网络错误
+        if (error != nil) {
+            NSLog(@"[MCDL] Download error for %@: %@", name, error.localizedDescription);
+            
+            // 网络错误重试逻辑
+            if (retryCount < 3 && (error.code == NSURLErrorNetworkConnectionLost || 
+                                   error.code == NSURLErrorTimedOut ||
+                                   error.code == NSURLErrorNotConnectedToInternet)) {
+                NSLog(@"[MCDL] Retrying download for %@ (attempt %ld)", name, (long)(retryCount + 2));
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                    [self createDownloadTask:url size:size sha:sha altName:altName toPath:path success:success retryCount:retryCount + 1];
+                });
+                return;
+            }
+            
+            [self finishDownloadWithError:error file:name];
+            return;
+        }
+        
+        // 验证文件
+        if (![self checkSHA:sha forFile:path altName:altName]) {
+            // SHA校验失败，尝试重试
+            if (retryCount < 2) {
+                NSLog(@"[MCDL] SHA mismatch for %@, retrying (attempt %ld)", name, (long)(retryCount + 2));
+                [NSFileManager.defaultManager removeItemAtPath:path error:nil];
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                    [self createDownloadTask:url size:size sha:sha altName:altName toPath:path success:success retryCount:retryCount + 1];
+                });
+                return;
+            }
+            [self finishDownloadWithErrorString:[NSString stringWithFormat:@"Failed to verify file %@: SHA1 mismatch", path.lastPathComponent]];
+            return;
+        }
+        
+        // 下载成功
+        if (progress) {
+            progress.totalUnitCount = progress.completedUnitCount;
+        }
+        if (success) success();
     }];
 
     if (size && task) {
@@ -384,17 +453,17 @@
                 }
             }
             
-            // If no downloads were needed, remove the metadata directly
-            if (totalExpectedDownloads == 0) {
-                [self.metadata removeObjectForKey:@"assetIndexObj"];
-            }
-            
-            // If this is part of a modpack installation and we have a completion callback, execute it
-            if (self.modpackDownloadCompletion) {
-                self.modpackDownloadCompletion();
-            }
-        }];
-    }];
+            // If no downloads were needed, remove the metadata directly
+            if (totalExpectedDownloads == 0) {
+                [self.metadata removeObjectForKey:@"assetIndexObj"];
+            }
+            
+            // If this is part of a modpack installation and we have a completion callback, execute it
+            if (self.modpackDownloadCompletion) {
+                self.modpackDownloadCompletion();
+            }
+        }];
+    }];
 }
 
 #pragma mark - Modpack installation
