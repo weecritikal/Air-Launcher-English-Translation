@@ -2,6 +2,8 @@
 
 NSMutableArray<NSDictionary *> *localVersionList, *remoteVersionList;
 
+@class MinecraftResourceDownloadTask;
+
 @interface LauncherNavigationController : UINavigationController
 
 @property(nonatomic) UIProgressView *progressViewMain, *progressViewSub;
