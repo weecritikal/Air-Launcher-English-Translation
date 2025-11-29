@@ -11,11 +11,11 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface ModpackFileInformation : NSObject
 @property (nonatomic, strong) NSString *path;
-@property (nonatomic, strong) NSString *hash;
+@property (nonatomic, strong) NSString *fileHash;
 @property (nonatomic, strong) NSString *downloadURL;
 @property (nonatomic, assign) NSUInteger fileSize;
 
-- (instancetype)initWithPath:(NSString *)path hash:(NSString *)hash downloadURL:(NSString *)downloadURL fileSize:(NSUInteger)fileSize;
+- (instancetype)initWithPath:(NSString *)path fileHash:(NSString *)fileHash downloadURL:(NSString *)downloadURL fileSize:(NSUInteger)fileSize;
 - (BOOL)validate;
 @end
 
@@ -24,7 +24,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, strong) NSString *version;
 @property (nonatomic, strong) NSString *gameVersion;
 @property (nonatomic, strong, nullable) NSString *author;
-@property (nonatomic, strong, nullable) NSString *description;
+@property (nonatomic, strong, nullable) NSString *packDescription;
 @property (nonatomic, strong) NSArray<ModpackFileInformation *> *files;
 @property (nonatomic, strong) NSDictionary *dependencies;
 

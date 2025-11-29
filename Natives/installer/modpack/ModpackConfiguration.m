@@ -9,11 +9,11 @@
 
 @implementation ModpackFileInformation
 
-- (instancetype)initWithPath:(NSString *)path hash:(NSString *)hash downloadURL:(NSString *)downloadURL fileSize:(NSUInteger)fileSize {
+- (instancetype)initWithPath:(NSString *)path fileHash:(NSString *)fileHash downloadURL:(NSString *)downloadURL fileSize:(NSUInteger)fileSize {
     self = [super init];
     if (self) {
         _path = path;
-        _hash = hash;
+        _fileHash = fileHash;
         _downloadURL = downloadURL;
         _fileSize = fileSize;
     }
@@ -25,7 +25,7 @@
         NSLog(@"[ModpackConfiguration] File path is empty");
         return NO;
     }
-    if (!_hash || _hash.length == 0) {
+    if (!_fileHash || _fileHash.length == 0) {
         NSLog(@"[ModpackConfiguration] File hash is empty for path: %@", _path);
         return NO;
     }
@@ -36,7 +36,7 @@
     self = [super init];
     if (self) {
         _path = dict[@"path"];
-        _hash = dict[@"hashes"][@"sha1"];
+        _fileHash = dict[@"hashes"][@"sha1"];
         _downloadURL = dict[@"downloads"][0];
         _fileSize = [dict[@"fileSize"] unsignedIntegerValue];
     }
@@ -68,15 +68,15 @@
     if (self.author) {
         dict[@"author"] = self.author;
     }
-    if (self.description) {
-        dict[@"description"] = self.description;
+    if (self.packDescription) {
+        dict[@"description"] = self.packDescription;
     }
     
     NSMutableArray *filesArray = [NSMutableArray array];
     for (ModpackFileInformation *fileInfo in self.files) {
         NSDictionary *fileDict = @{
             @"path": fileInfo.path,
-            @"hashes": @{@"sha1": fileInfo.hash},
+            @"hashes": @{@"sha1": fileInfo.fileHash},
             @"downloads": @[fileInfo.downloadURL],
             @"fileSize": @(fileInfo.fileSize)
         };
@@ -111,7 +111,7 @@
         _version = dict[@"version"];
         _gameVersion = dict[@"gameVersion"];
         _author = dict[@"author"];
-        _description = dict[@"description"];
+        _packDescription = dict[@"description"];
         _dependencies = dict[@"dependencies"];
         
         NSArray *filesArray = dict[@"files"];

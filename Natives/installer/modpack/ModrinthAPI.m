@@ -2,6 +2,7 @@
 #import "ModrinthAPI.h"
 #import "ModpackConfiguration.h"
 #import "PLProfiles.h"
+#import <CommonCrypto/CommonDigest.h>
 
 @implementation ModrinthAPI
 
@@ -165,16 +166,6 @@
         [downloader finishDownloadWithErrorString:[NSString stringWithFormat:@"Failed to open modpack package: %@", error.localizedDescription]];
         return;
     }
-    NSError *error;
-    
-    // 检查是否为 .mrpack 文件（Modrinth 格式）
-    BOOL isMrpack = [[packagePath lowercaseString] hasSuffix:@".mrpack"];
-    
-    UZKArchive *archive = [[UZKArchive alloc] initWithPath:packagePath error:&error];
-    if (error) {
-        [downloader finishDownloadWithErrorString:[NSString stringWithFormat:@"Failed to open modpack package: %@", error.localizedDescription]];
-        return;
-    }
 
     NSData *indexData;
     if (isMrpack) {
@@ -246,7 +237,7 @@
         
         // 检查文件是否已存在且校验通过
         if ([NSFileManager.defaultManager fileExistsAtPath:path]) {
-            if ([self verifyFileHash:path expectedHash:fileInfo.hash]) {
+            if ([self verifyFileHash:path expectedHash:fileInfo.fileHash]) {
                 completedSize += fileInfo.fileSize;
                 downloader.progress.completedUnitCount = completedSize;
                 downloader.textProgress.completedUnitCount = completedSize;
@@ -261,7 +252,7 @@
         void (^attemptDownload)(void) = ^{
             task = [downloader createDownloadTask:fileInfo.downloadURL 
                                            size:fileInfo.fileSize 
-                                            sha:fileInfo.hash 
+                                            sha:fileInfo.fileHash 
                                         altName:nil 
                                           toPath:path 
                                         success:^{
@@ -287,12 +278,12 @@
     // 提取覆盖文件
     [ModpackUtils archive:archive extractDirectory:@"overrides" toPath:destPath error:&error];
     if (error) {
-        NSLog(@"[ModrinthAPI] Warning: Failed to extract overrides: %@", error.localizedDescription];
+        NSLog(@"[ModrinthAPI] Warning: Failed to extract overrides: %@", error.localizedDescription);
     }
 
     [ModpackUtils archive:archive extractDirectory:@"client-overrides" toPath:destPath error:&error];
     if (error) {
-        NSLog(@"[rinthAPI] Warning: Failed to extract client-overrides: %@", error.localizedDescription]);
+        NSLog(@"[ModrinthAPI] Warning: Failed to extract client-overrides: %@", error.localizedDescription);
     }
 
     // 删除临时包文件
@@ -371,10 +362,12 @@
         @"modpackAuthor": config.author ?: @"",
         @"gameVersion": config.gameVersion
     };
-    [NSJSONSerialization writeJSONObject:profileInfo 
-                                    toFile:profileInfoPath 
-                                     options:NSJSONWritingPrettyPrinted 
-                                       error:nil];
+    NSData *jsonData = [NSJSONSerialization dataWithJSONObject:profileInfo 
+                                                          options:NSJSONWritingPrettyPrinted 
+                                                            error:nil];
+    if (jsonData) {
+        [jsonData writeToFile:profileInfoPath atomically:YES];
+    }
 }
 
 @end
