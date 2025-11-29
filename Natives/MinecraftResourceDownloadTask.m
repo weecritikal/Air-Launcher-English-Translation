@@ -503,9 +503,34 @@
 }
 
 - (void)finishDownloadWithErrorString:(NSString *)error {
-    [self.progress cancel];
-    [self.manager invalidateSessionCancelingTasks:YES resetSession:YES];
-    showDialog(localize(@"Error", nil), error);
+    // 如果没有错误，说明下载成功完成
+    if (!error) {
+        // 检查是否是modpack安装且有完成回调
+        if (self.modpackDownloadCompletion) {
+            // 不取消进度，而是完成进度
+            self.progress.completedUnitCount = self.progress.totalUnitCount;
+            self.textProgress.completedUnitCount = self.textProgress.totalUnitCount;
+            
+            // 执行modpack完成回调
+            self.modpackDownloadCompletion();
+            
+            // 短暂延迟后清理资源
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                [self.manager invalidateSessionCancelingTasks:YES resetSession:YES];
+            });
+        } else {
+            // 正常下载完成，启动游戏
+            self.progress.completedUnitCount = self.progress.totalUnitCount;
+            self.textProgress.completedUnitCount = self.textProgress.totalUnitCount;
+            
+            [self.manager invalidateSessionCancelingTasks:YES resetSession:YES];
+        }
+    } else {
+        // 有错误，显示错误信息
+        [self.progress cancel];
+        [self.manager invalidateSessionCancelingTasks:YES resetSession:YES];
+        showDialog(localize(@"Error", nil), error);
+    }
     self.handleError();
 }
 

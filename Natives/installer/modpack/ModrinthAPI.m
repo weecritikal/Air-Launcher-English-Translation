@@ -228,9 +228,19 @@
     downloader.progress.totalUnitCount = totalSize;
     downloader.textProgress.totalUnitCount = totalSize;
     
+    // 计算总文件大小（修复进度条问题）
+    NSUInteger totalSize = 0;
+    for (ModpackFileInformation *fileInfo in config.files) {
+        totalSize += fileInfo.fileSize;
+    }
+    downloader.progress.totalUnitCount = totalSize;
+    downloader.textProgress.totalUnitCount = totalSize;
+    
     // 下载文件（添加重试机制）
     __block NSUInteger completedSize = 0;
     __block NSMutableArray *failedDownloads = [NSMutableArray array];
+    __block NSInteger totalFiles = config.files.count;
+    __block NSInteger downloadedFiles = 0;
     
     for (ModpackFileInformation *fileInfo in config.files) {
         NSString *path = [destPath stringByAppendingPathComponent:fileInfo.path];
@@ -239,8 +249,14 @@
         if ([NSFileManager.defaultManager fileExistsAtPath:path]) {
             if ([self verifyFileHash:path expectedHash:fileInfo.fileHash]) {
                 completedSize += fileInfo.fileSize;
+                downloadedFiles++;
                 downloader.progress.completedUnitCount = completedSize;
                 downloader.textProgress.completedUnitCount = completedSize;
+                
+                // 检查是否所有文件都已下载完成
+                if (downloadedFiles == totalFiles) {
+                    [downloader performSelector:@selector(finishDownloadWithErrorString:) withObject:nil afterDelay:0.1];
+                }
                 continue;
             }
         }
@@ -257,8 +273,14 @@
                                           toPath:path 
                                         success:^{
                                             completedSize += fileInfo.fileSize;
+                                            downloadedFiles++;
                                             downloader.progress.completedUnitCount = completedSize;
                                             downloader.textProgress.completedUnitCount = completedSize;
+                                            
+                                            // 检查是否所有文件都已下载完成
+                                            if (downloadedFiles == totalFiles) {
+                                                [downloader performSelector:@selector(finishDownloadWithErrorString:) withObject:nil afterDelay:0.1];
+                                            }
                                         }];
             
             if (task) {
@@ -273,6 +295,11 @@
         };
         
         attemptDownload();
+    }
+    
+    // 如果没有需要下载的文件，直接完成
+    if (totalFiles == 0) {
+        [downloader performSelector:@selector(finishDownloadWithErrorString:) withObject:nil afterDelay:0.1];
     }
 
     // 提取覆盖文件
@@ -312,6 +339,11 @@
     } else {
         // 直接创建配置文件
         [self createProfileForModpack:config destPath:destPath depInfo:depInfo];
+        
+        // 确保在没有依赖的情况下也调用完成回调
+        if (downloader.modpackDownloadCompletion) {
+            downloader.modpackDownloadCompletion();
+        }
     }
 }
 
