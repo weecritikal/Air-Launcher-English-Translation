@@ -195,7 +195,7 @@
                                                                    version:indexDict[@"versionId"] 
                                                               gameVersion:indexDict[@"gameVersion"]];
     config.author = indexDict[@"author"];
-    config.description = indexDict[@"summary"];
+    config.packDescription = indexDict[@"summary"];
     config.dependencies = indexDict[@"dependencies"];
     
     // 解析文件列表

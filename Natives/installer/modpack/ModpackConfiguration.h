@@ -16,6 +16,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, assign) NSUInteger fileSize;
 
 - (instancetype)initWithPath:(NSString *)path fileHash:(NSString *)fileHash downloadURL:(NSString *)downloadURL fileSize:(NSUInteger)fileSize;
+- (instancetype)initWithDictionary:(NSDictionary *)dict;
 - (BOOL)validate;
 @end
 
