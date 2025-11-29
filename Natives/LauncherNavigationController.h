@@ -12,5 +12,6 @@ NSMutableArray<NSDictionary *> *localVersionList, *remoteVersionList;
 - (void)enterModpackImporter;
 - (void)fetchLocalVersionList;
 - (void)setInteractionEnabled:(BOOL)enable forDownloading:(BOOL)downloading;
+- (void)showDownloadProgress:(MinecraftResourceDownloadTask *)downloader;
 
 @end

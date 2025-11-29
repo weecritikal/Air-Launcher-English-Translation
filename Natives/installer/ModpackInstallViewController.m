@@ -5,6 +5,7 @@
 #import "UIKit+hook.h"
 #import "WFWorkflowProgressView.h"
 #import "modpack/ModrinthAPI.h"
+#import "MinecraftResourceDownloadTask.h"
 #import "config.h"
 #import "ios_uikit_bridge.h"
 #import "utils.h"
@@ -14,7 +15,7 @@
 #define kCurseForgeClassIDModpack 4471
 #define kCurseForgeClassIDMod 6
 
-@interface ModpackInstallViewController()<UIContextMenuInteractionDelegate>
+@interface ModpackInstallViewController()<UIContextMenuInteractionDelegate, UIDocumentPickerDelegate>
 @property(nonatomic) UISearchController *searchController;
 @property(nonatomic) UIMenu *currentMenu;
 @property(nonatomic) NSMutableArray *list;
@@ -50,8 +51,8 @@
 
 - (void)importLocalModpack {
     UIDocumentPickerViewController *documentPicker = [[UIDocumentPickerViewController alloc] 
-        initWithDocumentTypes:@[@"public.zip-archive", @"com.sun.zip-archive"] 
-        inMode:UIDocumentPickerModeImport];
+        initForOpeningContentTypes:@[@"public.zip-archive", @"com.sun.zip-archive"] 
+        asCopy:YES];
     documentPicker.delegate = self;
     documentPicker.allowsMultipleSelection = NO;
     [self presentViewController:documentPicker animated:YES completion:nil];
@@ -88,7 +89,7 @@
     NSString *name = [fileName stringByDeletingPathExtension];
     NSDictionary *modDetail = @{
         @"title": name,
-        @"versionUrls": @[@"file://localhost" + tempPath],
+        @"versionUrls": @[[@"file://localhost" stringByAppendingString:tempPath]],
         @"versionSizes": @[@0],
         @"versionHashes": @[@""],
         @"apiSource": @(1)
