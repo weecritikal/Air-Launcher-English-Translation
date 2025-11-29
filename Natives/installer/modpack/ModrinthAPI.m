@@ -350,17 +350,18 @@
                            [iconData base64EncodedStringWithOptions:0]];
     }
     
-    PLProfiles.current.profiles[config.name] = profile.mutableCopy;
-    PLProfiles.current.selectedProfileName = config.name;
+    NSString *modpackName = config.name ?: @"Unknown Modpack";
+    PLProfiles.current.profiles[modpackName] = profile.mutableCopy;
+    PLProfiles.current.selectedProfileName = modpackName;
     
     // 保存配置文件信息
     NSString *profileInfoPath = [NSString stringWithFormat:@"%s/custom_gamedir/%@/profile.json", 
                                 getenv("POJAV_GAME_DIR"), destPath.lastPathComponent];
     NSDictionary *profileInfo = @{
-        @"modpackName": config.name,
-        @"modpackVersion": config.version,
-        @"modpackAuthor": config.author ?: @"",
-        @"gameVersion": config.gameVersion
+        @"modpackName": config.name ?: @"Unknown Modpack",
+        @"modpackVersion": config.version ?: @"Unknown Version",
+        @"modpackAuthor": config.author ?: @"Unknown Author",
+        @"gameVersion": config.gameVersion ?: @"Unknown Game Version"
     };
     NSData *jsonData = [NSJSONSerialization dataWithJSONObject:profileInfo 
                                                           options:NSJSONWritingPrettyPrinted 
