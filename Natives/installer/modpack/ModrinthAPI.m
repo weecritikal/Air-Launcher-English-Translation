@@ -228,14 +228,6 @@
     downloader.progress.totalUnitCount = totalSize;
     downloader.textProgress.totalUnitCount = totalSize;
     
-    // 计算总文件大小（修复进度条问题）
-    NSUInteger totalSize = 0;
-    for (ModpackFileInformation *fileInfo in config.files) {
-        totalSize += fileInfo.fileSize;
-    }
-    downloader.progress.totalUnitCount = totalSize;
-    downloader.textProgress.totalUnitCount = totalSize;
-    
     // 下载文件（添加重试机制）
     __block NSUInteger completedSize = 0;
     __block NSMutableArray *failedDownloads = [NSMutableArray array];
