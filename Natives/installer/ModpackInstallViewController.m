@@ -51,8 +51,8 @@
 
 - (void)importLocalModpack {
     UIDocumentPickerViewController *documentPicker = [[UIDocumentPickerViewController alloc] 
-        initForOpeningContentTypes:@[@"public.zip-archive", @"com.sun.zip-archive"] 
-        asCopy:YES];
+        initWithDocumentTypes:@[@"public.zip-archive", @"com.sun.zip-archive"] 
+        inMode:UIDocumentPickerModeImport];
     documentPicker.delegate = self;
     documentPicker.allowsMultipleSelection = NO;
     [self presentViewController:documentPicker animated:YES completion:nil];
