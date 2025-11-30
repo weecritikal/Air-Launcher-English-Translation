@@ -71,6 +71,10 @@ public class PojavLauncher {
         MCOptionUtils.setDefault("particles", "1");
         MCOptionUtils.setDefault("renderDistance", "2");
         MCOptionUtils.setDefault("simulationDistance", "5");
+        
+        // Set language to Chinese on first launch
+        MCOptionUtils.setDefault("lang", "zh_cn");
+        
         MCOptionUtils.save();
 
         // Setup Forge splash.properties
