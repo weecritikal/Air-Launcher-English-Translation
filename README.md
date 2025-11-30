@@ -1,6 +1,8 @@
-# 我的Angel Aura Amethyst (iOS) 重制版
+# Amethyst (iOS) 重制版 
+###### 注：以后可能会改名
+
 [![开发构建状态](https://github.com/herbrine8403/Amethyst-iOS-MyRemastered/actions/workflows/development.yml/badge.svg?branch=main)](.github/workflows/development.yml)
-![总下载量](https://img.shields.io/github/downloads/herbrine8403/Amethyst-iOS-MyRemastered/total?style=flat-square&color=00a82a)
+[![总下载量](https://img.shields.io/github/downloads/herbrine8403/Amethyst-iOS-MyRemastered/total?label=Downloads&style=flat)](https://github.com/herbrine8403/Amethyst-iOS-MyRemastered/releases)
 <a href="https://github.com/herbrine8403/Amethyst-iOS-MyRemastered/releases/"><img src="https://img.shields.io/github/v/release/herbrine8403/Amethyst-iOS-MyRemastered?style=flat"></a>
 <a href="https://raw.githubusercontent.com/herbrine8403/Amethyst-iOS-MyRemastered/main/LICENSE"><img src="https://img.shields.io/github/license/herbrine8403/Amethyst-iOS-MyRemastered?style=flat"></a>
 
@@ -105,7 +107,6 @@ JIT（Just-In-Time）是流畅运行游戏的核心，iOS 需通过以下工具�
 
 ## 捐赠
 
-本人是初中生，平时很少有时间更新启动器，并且我没有mac，每次构建后都必须在实体机上测试，甚至麻烦
 如果您觉得这个项目对您有帮助，欢迎通过以下二维码进行捐赠支持，为我回回血：
 
 <img src="/donate.png" width="400" height="400" />
