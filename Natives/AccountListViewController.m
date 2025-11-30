@@ -69,6 +69,18 @@
         // Remove the prefix "Demo."
         cell.textLabel.text = [selected[@"username"] substringFromIndex:5];
         cell.detailTextLabel.text = localize(@"login.option.demo", nil);
+    } else if (selected[@"clientToken"] != nil) {
+        // This is a third-party account
+        NSString *serverURL = selected[@"authserver"] ?: @"https://authserver.ely.by";
+        if ([serverURL rangeOfString:@"ely.by"].location != NSNotFound) {
+            cell.detailTextLabel.text = @"Ely.by";
+        } else if ([serverURL rangeOfString:@"mcskin.com.cn"].location != NSNotFound) {
+            cell.detailTextLabel.text = @"Redstone皮肤站";
+        } else {
+            // Extract server name from URL
+            NSURL *url = [NSURL URLWithString:serverURL];
+            cell.detailTextLabel.text = url.host ?: localize(@"login.option.3rdparty", nil);
+        }
     } else if (selected[@"xboxGamertag"] == nil) {
         cell.detailTextLabel.text = localize(@"login.option.local", nil);
     } else {
