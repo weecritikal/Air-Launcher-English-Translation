@@ -200,7 +200,8 @@ void init_setupAccounts() {
 void init_setupCustomControls() {
     NSString *controlPath = [@(getenv("POJAV_HOME")) stringByAppendingPathComponent:@"controlmap"];
     [fm createDirectoryAtPath:controlPath withIntermediateDirectories:NO attributes:nil error:nil];
-    generateAndSaveBuiltinControls();
+    generateAndSaveDefaultControl();
+    generateAndSaveCustomControl();
     NSString *gamepadControlPath = [controlPath stringByAppendingPathComponent:@"gamepads"];
     [fm createDirectoryAtPath:gamepadControlPath withIntermediateDirectories:NO attributes:nil error:nil];
     generateAndSaveDefaultControlForGamepad();

@@ -13,7 +13,7 @@ BOOL convertLayoutIfNecessary(NSMutableDictionary* dict);
 void generateAndSaveDefaultControl();
 void generateAndSaveCustomControl();
 void generateAndSaveDefaultControlForGamepad();
-void generateAndSaveBuiltinControls();
+void generateAndSaveCustomControl();
 void loadControlObject(UIView* targetView, NSMutableDictionary* controlDictionary);
 
 void initKeycodeTable(NSMutableArray* keyCodeMap, NSMutableArray* keyValueMap);
