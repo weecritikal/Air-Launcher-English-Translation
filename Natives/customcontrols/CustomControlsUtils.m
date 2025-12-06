@@ -398,6 +398,26 @@ void generateAndSaveDefaultControlForGamepad() {
     [os close];
 }
 
+void generateAndSaveCustomControl() {
+    NSString *customPath = [NSString stringWithFormat:@"%s/controlmap/custom.json", getenv("POJAV_HOME")];
+    if ([NSFileManager.defaultManager fileExistsAtPath:customPath]) {
+        return;
+    }
+    
+    // Get path to the built-in custom control layout
+    NSString *builtinCustomPath = [[NSBundle mainBundle] pathForResource:@"custom" ofType:@"json" inDirectory:@"controlmap"];
+    if (builtinCustomPath && [NSFileManager.defaultManager fileExistsAtPath:builtinCustomPath]) {
+        // Copy the built-in custom layout to the user's controlmap directory
+        NSError *error = nil;
+        [NSFileManager.defaultManager copyItemAtPath:builtinCustomPath toPath:customPath error:&error];
+        if (error) {
+            NSLog(@"Failed to copy built-in custom control layout: %@", error.localizedDescription);
+        }
+    } else {
+        NSLog(@"Built-in custom control layout not found");
+    }
+}
+
 void loadControlObject(UIView* targetView, NSMutableDictionary* controlDictionary) {
     NSMutableString *errorString = [[NSMutableString alloc] init];
 
