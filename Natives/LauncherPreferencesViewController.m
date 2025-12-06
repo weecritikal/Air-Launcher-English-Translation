@@ -652,7 +652,7 @@
 
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
     if (section == 0) { // Add to general section
-        return [NSString stringWithFormat:@"Angel Aura Amethyst %@\n%@ on %@ (%s)\nPID: %d",
+        return [NSString stringWithFormat:@"Amethyst iOS Remastered %@\n%@ on %@ (%s)\nPID: %d",
             NSBundle.mainBundle.infoDictionary[@"CFBundleShortVersionString"],
             UIDevice.currentDevice.completeOSVersion, [HostManager GetModelName], getenv("POJAV_DETECTEDINST"), getpid()];
     }
