@@ -313,6 +313,9 @@
         subtitle = localize(@"login.option.demo", nil);
         setenv("DEMO_LOCK", "1", 1);
         setenv("POJAV_GAME_DIR", [NSString stringWithFormat:@"%s/.demo", getenv("POJAV_HOME")].UTF8String, 1);
+    } else if (selected[@"clientToken"] != nil) {
+        // This is a third-party account
+        subtitle = localize(@"login.option.3rdparty", nil);
     } else if (selected[@"xboxGamertag"] == nil) {
         subtitle = localize(@"login.option.local", nil);
     } else {
