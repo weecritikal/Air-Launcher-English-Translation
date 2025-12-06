@@ -335,27 +335,6 @@ void generateAndSaveDefaultControl() {
 */
 }
 
-void generateAndSaveCustomControl() {
-    NSString *customPath = [NSString stringWithFormat:@"%s/controlmap/custom.json", getenv("POJAV_HOME")];
-    if ([NSFileManager.defaultManager fileExistsAtPath:customPath]) {
-        return;
-    }
-
-    // Load the custom layout from embedded JSON
-    NSString *jsonPath = [[NSBundle mainBundle] pathForResource:@"custom_layout" ofType:@"json"];
-    NSData *jsonData = [NSData dataWithContentsOfFile:jsonPath];
-    if (jsonData) {
-        NSError *error;
-        NSMutableDictionary *dict = [NSJSONSerialization JSONObjectWithData:jsonData options:NSJSONReadingMutableContainers error:&error];
-        if (!error && dict) {
-            NSOutputStream *os = [[NSOutputStream alloc] initToFileAtPath:customPath append:NO];
-            [os open];
-            [NSJSONSerialization writeJSONObject:dict toStream:os options:NSJSONWritingPrettyPrinted error:nil];
-            [os close];
-        }
-    }
-}
-
 void generateAndSaveDefaultControlForGamepad() {
     NSString *gamepadPath = [NSString stringWithFormat:@"%s/controlmap/gamepads/default.json", getenv("POJAV_HOME")];
     if ([NSFileManager.defaultManager fileExistsAtPath:gamepadPath]) {
