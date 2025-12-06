@@ -73,24 +73,7 @@
 
 ## 其他信息
 
-1.此设备的系统版本是Android 14，无Root权限，通过Termux进入终端并运行iFlow CLI。
-2.在每次更改完源代码后，需要将更改提交到GitHub远程分支以构建项目进行测试。
-3.如果在提交到GitHub过程中出现网络问题，请提醒用户关闭网络代理。
-4.此项目使用Xcode 15.4，iPhoneOS 17.5 SDK构建，且最低系统支持为iOS14.0。
-5.可以通过以下脚本在终端中获取GitHub Actions的构建日志：
-  ```bash
-  # 设置GitHub Token环境变量（请替换YOUR_GITHUB_TOKEN为实际的token）
-  export GITHUB_TOKEN="YOUR_GITHUB_TOKEN"
-  
-  # 获取特定运行的作业列表
-  curl -H "Authorization: token $GITHUB_TOKEN" \
-       -H "Accept: application/vnd.github.v3+json" \
-       https://api.github.com/repos/herbrine8403/Amethyst-iOS-MyRemastered/actions/runs/RUN_ID/jobs
-  
-  # 获取特定作业的日志
-  curl -H "Authorization: token $GITHUB_TOKEN" \
-       -H "Accept: application/vnd.github.v3+json" \
-       https://api.github.com/repos/herbrine8403/Amethyst-iOS-MyRemastered/actions/jobs/JOB_ID/logs
-  ```
-  其中RUN_ID和JOB_ID需要替换为实际的运行ID和作业ID，可以在GitHub Actions页面找到。
-  注意：YOUR_GITHUB_TOKEN需要替换为实际的GitHub Personal Access Token，该token需要有访问仓库的权限。
+1.在每次更改完源代码后，需要将更改提交到GitHub远程分支以构建项目进行测试。
+2.如果在提交到GitHub过程中出现网络问题，请提醒用户关闭网络代理。
+3.此项目使用Xcode 15.4，iPhoneOS 17.5 SDK构建，且最低系统支持为iOS14.0。
+4. Git 提交时请使用 herbrine8403 用户名和 herbrine8403@users.noreply.github.com 邮箱，以保持与 GitHub 默认设置一致。
