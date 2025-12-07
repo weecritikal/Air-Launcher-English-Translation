@@ -208,17 +208,56 @@ static NSError* createError(NSString *message, NSInteger code) {
                 ];
             }
             
-            // Set avatar URL based on server
+            // 尝试使用Yggdrasil API获取头像
             NSString *serverURL = self.authData[@"authserver"] ?: @"https://authserver.ely.by";
-            if ([serverURL rangeOfString:@"ely.by"].location != NSNotFound) {
-                self.authData[@"profilePicURL"] = [NSString stringWithFormat:@"https://skin.ely.by/helm/%@/120", self.authData[@"profileId"]];
-            } else if ([serverURL rangeOfString:@"mcskin.com.cn"].location != NSNotFound) {
-                // Redstone skin station uses different format
-                self.authData[@"profilePicURL"] = [NSString stringWithFormat:@"https://mcskin.com.cn/skin/%@.png", self.authData[@"profileId"]];
-            } else {
-                // For other servers, try to construct a generic URL or use a default
-                self.authData[@"profilePicURL"] = [NSString stringWithFormat:@"https://crafatar.com/avatars/%@?overlay", self.authData[@"profileId"]];
+            // 确保serverURL以斜杠结尾
+            if (![serverURL hasSuffix:@"/"]) {
+                serverURL = [serverURL stringByAppendingString:@"/"];
             }
+            
+            AFHTTPSessionManager *manager = AFHTTPSessionManager.manager;
+            manager.requestSerializer = AFJSONRequestSerializer.serializer;
+            NSString *profileURL = [NSString stringWithFormat:@"%@sessionserver/session/minecraft/profile/%@", serverURL, self.authData[@"profileId"]];
+            
+            // 保存当前的authData，以便在异步回调中使用
+            __block NSMutableDictionary *localAuthData = [self.authData mutableCopy];
+            __weak typeof(self) weakSelf = self;
+            
+            [manager GET:profileURL parameters:nil headers:nil progress:nil success:^(NSURLSessionDataTask *task, NSDictionary *response) {
+                if (response[@"properties"] && [response[@"properties"] isKindOfClass:[NSArray class]]) {
+                    NSArray *properties = response[@"properties"];
+                    for (NSDictionary *property in properties) {
+                        if ([property[@"name"] isEqualToString:@"textures"]) {
+                            // 解析皮肤数据
+                            NSString *textures = property[@"value"];
+                            NSData *decodedData = [[NSData alloc] initWithBase64EncodedString:textures options:0];
+                            if (decodedData) {
+                                NSError *error = nil;
+                                NSDictionary *texturesDict = [NSJSONSerialization JSONObjectWithData:decodedData options:kNilOptions error:&error];
+                                if (texturesDict && !error) {
+                                    // 获取皮肤URL
+                                    NSString *skinURL = texturesDict[@"textures"][@"SKIN"][@"url"];
+                                    if (skinURL) {
+                                        // 设置头像URL为皮肤URL的头盔版本
+                                        NSString *headURL = [skinURL stringByReplacingOccurrencesOfString:@".png" withString:@"/helm.png"];
+                                        weakSelf.authData[@"profilePicURL"] = headURL;
+                                        return;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // 如果Yggdrasil API失败，使用Minecraft Headshot API作为回退
+                weakSelf.authData[@"profilePicURL"] = [NSString stringWithFormat:@"http://api.rms.net.cn/head/%@", weakSelf.authData[@"username"]];
+            } failure:^(NSURLSessionDataTask *task, NSError *error) {
+                // 如果请求失败，使用Minecraft Headshot API作为回退
+                weakSelf.authData[@"profilePicURL"] = [NSString stringWithFormat:@"http://api.rms.net.cn/head/%@", weakSelf.authData[@"username"]];
+            }];
+            
+            // 设置默认头像，避免UI显示问题
+            self.authData[@"profilePicURL"] = [NSString stringWithFormat:@"http://api.rms.net.cn/head/%@", self.authData[@"username"]];
             
             // Token expiration time (24 hours)
             self.authData[@"expiresAt"] = @((long)[NSDate.date timeIntervalSince1970] + 86400);
@@ -443,17 +482,56 @@ static NSError* createError(NSString *message, NSInteger code) {
                         self.authData[@"profileId"] = uuid;
                     }
                     
-                    // Update avatar URL based on server
+                    // 尝试使用Yggdrasil API获取头像
                     NSString *serverURL = self.authData[@"authserver"] ?: @"https://authserver.ely.by";
-                    if ([serverURL rangeOfString:@"ely.by"].location != NSNotFound) {
-                        self.authData[@"profilePicURL"] = [NSString stringWithFormat:@"https://skin.ely.by/helm/%@/120", self.authData[@"profileId"]];
-                    } else if ([serverURL rangeOfString:@"mcskin.com.cn"].location != NSNotFound) {
-                        // Redstone skin station uses different format
-                        self.authData[@"profilePicURL"] = [NSString stringWithFormat:@"https://mcskin.com.cn/skin/%@.png", self.authData[@"profileId"]];
-                    } else {
-                        // For other servers, try to construct a generic URL or use a default
-                        self.authData[@"profilePicURL"] = [NSString stringWithFormat:@"https://crafatar.com/avatars/%@?overlay", self.authData[@"profileId"]];
+                    // 确保serverURL以斜杠结尾
+                    if (![serverURL hasSuffix:@"/"]) {
+                        serverURL = [serverURL stringByAppendingString:@"/"];
                     }
+                    
+                    AFHTTPSessionManager *manager = AFHTTPSessionManager.manager;
+                    manager.requestSerializer = AFJSONRequestSerializer.serializer;
+                    NSString *profileURL = [NSString stringWithFormat:@"%@sessionserver/session/minecraft/profile/%@", serverURL, self.authData[@"profileId"]];
+                    
+                    // 保存当前的authData，以便在异步回调中使用
+                    __block NSMutableDictionary *localAuthData = [self.authData mutableCopy];
+                    __weak typeof(self) weakSelf = self;
+                    
+                    [manager GET:profileURL parameters:nil headers:nil progress:nil success:^(NSURLSessionDataTask *task, NSDictionary *response) {
+                        if (response[@"properties"] && [response[@"properties"] isKindOfClass:[NSArray class]]) {
+                            NSArray *properties = response[@"properties"];
+                            for (NSDictionary *property in properties) {
+                                if ([property[@"name"] isEqualToString:@"textures"]) {
+                                    // 解析皮肤数据
+                                    NSString *textures = property[@"value"];
+                                    NSData *decodedData = [[NSData alloc] initWithBase64EncodedString:textures options:0];
+                                    if (decodedData) {
+                                        NSError *error = nil;
+                                        NSDictionary *texturesDict = [NSJSONSerialization JSONObjectWithData:decodedData options:kNilOptions error:&error];
+                                        if (texturesDict && !error) {
+                                            // 获取皮肤URL
+                                            NSString *skinURL = texturesDict[@"textures"][@"SKIN"][@"url"];
+                                            if (skinURL) {
+                                                // 设置头像URL为皮肤URL的头盔版本
+                                                NSString *headURL = [skinURL stringByReplacingOccurrencesOfString:@".png" withString:@"/helm.png"];
+                                                weakSelf.authData[@"profilePicURL"] = headURL;
+                                                return;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        
+                        // 如果Yggdrasil API失败，使用Minecraft Headshot API作为回退
+                        weakSelf.authData[@"profilePicURL"] = [NSString stringWithFormat:@"http://api.rms.net.cn/head/%@", weakSelf.authData[@"username"]];
+                    } failure:^(NSURLSessionDataTask *task, NSError *error) {
+                        // 如果请求失败，使用Minecraft Headshot API作为回退
+                        weakSelf.authData[@"profilePicURL"] = [NSString stringWithFormat:@"http://api.rms.net.cn/head/%@", weakSelf.authData[@"username"]];
+                    }];
+                    
+                    // 设置默认头像，避免UI显示问题
+                    self.authData[@"profilePicURL"] = [NSString stringWithFormat:@"http://api.rms.net.cn/head/%@", self.authData[@"username"]];
                 }
                 
                 // Token expiration time (24 hours)
