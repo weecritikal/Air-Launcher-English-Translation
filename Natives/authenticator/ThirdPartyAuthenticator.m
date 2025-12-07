@@ -250,14 +250,14 @@ static NSError* createError(NSString *message, NSInteger code) {
                 }
                 
                 // 如果Yggdrasil API失败，使用Minecraft Headshot API作为回退
-                weakSelf.authData[@"profilePicURL"] = [NSString stringWithFormat:@"http://api.rms.net.cn/head/%@", weakSelf.authData[@"username"]];
+                weakSelf.authData[@"profilePicURL"] = [NSString stringWithFormat:@"https://api.rms.net.cn/head/%@", weakSelf.authData[@"username"]];
             } failure:^(NSURLSessionDataTask *task, NSError *error) {
                 // 如果请求失败，使用Minecraft Headshot API作为回退
-                weakSelf.authData[@"profilePicURL"] = [NSString stringWithFormat:@"http://api.rms.net.cn/head/%@", weakSelf.authData[@"username"]];
+                weakSelf.authData[@"profilePicURL"] = [NSString stringWithFormat:@"https://api.rms.net.cn/head/%@", weakSelf.authData[@"username"]];
             }];
             
             // 设置默认头像，避免UI显示问题
-            self.authData[@"profilePicURL"] = [NSString stringWithFormat:@"http://api.rms.net.cn/head/%@", self.authData[@"username"]];
+            self.authData[@"profilePicURL"] = [NSString stringWithFormat:@"https://api.rms.net.cn/head/%@", self.authData[@"username"]];
             
             // Token expiration time (24 hours)
             self.authData[@"expiresAt"] = @((long)[NSDate.date timeIntervalSince1970] + 86400);
@@ -524,14 +524,14 @@ static NSError* createError(NSString *message, NSInteger code) {
                         }
                         
                         // 如果Yggdrasil API失败，使用Minecraft Headshot API作为回退
-                        weakSelf.authData[@"profilePicURL"] = [NSString stringWithFormat:@"http://api.rms.net.cn/head/%@", weakSelf.authData[@"username"]];
+                        weakSelf.authData[@"profilePicURL"] = [NSString stringWithFormat:@"https://api.rms.net.cn/head/%@", weakSelf.authData[@"username"]];
                     } failure:^(NSURLSessionDataTask *task, NSError *error) {
                         // 如果请求失败，使用Minecraft Headshot API作为回退
-                        weakSelf.authData[@"profilePicURL"] = [NSString stringWithFormat:@"http://api.rms.net.cn/head/%@", weakSelf.authData[@"username"]];
+                        weakSelf.authData[@"profilePicURL"] = [NSString stringWithFormat:@"https://api.rms.net.cn/head/%@", weakSelf.authData[@"username"]];
                     }];
                     
                     // 设置默认头像，避免UI显示问题
-                    self.authData[@"profilePicURL"] = [NSString stringWithFormat:@"http://api.rms.net.cn/head/%@", self.authData[@"username"]];
+                    self.authData[@"profilePicURL"] = [NSString stringWithFormat:@"https://api.rms.net.cn/head/%@", self.authData[@"username"]];
                 }
                 
                 // Token expiration time (24 hours)
