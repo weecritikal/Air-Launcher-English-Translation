@@ -1,7 +1,13 @@
 name: Development build
 
 on:
-  # 修改点 1: 仅保留手动触发，删除了 push 和 pull_request
+  pull_request:
+    branches-ignore:
+      - 'l10n_main'
+    types: [opened, reopened]
+  push:
+    branches-ignore:
+      - 'l10n_main'
   workflow_dispatch:
 
 jobs:
