@@ -138,7 +138,10 @@ static GameSurfaceView* pojavWindow;
 @implementation SurfaceViewController
 
 - (instancetype)initWithMetadata:(NSDictionary *)metadata {
-    self.metadata = metadata;
+    self = [super init];
+    if (self) {
+        self.metadata = metadata;
+    }
     return self;
 }
 
