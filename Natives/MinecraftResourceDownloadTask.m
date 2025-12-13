@@ -20,8 +20,7 @@
     self = [super init];
     // TODO: implement background download
     NSURLSessionConfiguration *configuration = [NSURLSessionConfiguration defaultSessionConfiguration];
-    configuration.timeoutIntervalForRequest = 300; // 5 minutes
-    configuration.timeoutIntervalForResource = 300; // 5 minutes
+    configuration.timeoutIntervalForRequest = 86400;
     //backgroundSessionConfigurationWithIdentifier:@"net.kdt.pojavlauncher.downloadtask"];
     self.manager = [[AFURLSessionManager alloc] initWithSessionConfiguration:configuration];
     self.fileList = [NSMutableArray new];
@@ -244,41 +243,11 @@
     [self prepareForDownload];
     [self downloadVersionMetadata:version success:^{
         [self downloadAssetMetadataWithSuccess:^{
-            // Count total expected downloads before starting
-            NSInteger totalExpectedDownloads = 0;
-            
-            // Count libraries
-            for (NSDictionary *library in self.metadata[@"libraries"]) {
-                NSString *name = library[@"name"];
-                NSMutableDictionary *artifact = library[@"downloads"][@"artifact"];
-                if (artifact == nil && [name containsString:@":"]) {
-                    NSString *prefix = library[@"url"] == nil ? @"https://libraries.minecraft.net/" : [library[@"url"] stringByReplacingOccurrencesOfString:@"http://" withString:@"https://"];
-                    NSArray *libParts = [name componentsSeparatedByString:@":"];
-                    artifact = [[NSMutableDictionary alloc] init];
-                    artifact[@"path"] = [NSString stringWithFormat:@"%1$@/%2$@/%3$@/%2$@-%3$@.jar", [libParts[0] stringByReplacingOccurrencesOfString:@"." withString:@"/"], libParts[1], libParts[2]];
-                    artifact[@"url"] = [NSString stringWithFormat:@"%@%@", prefix, artifact[@"path"]];
-                    artifact[@"sha1"] = library[@"checksums"][0];
-                }
-                
-                if (![library[@"skip"] boolValue]) {
-                    totalExpectedDownloads++;
-                }
-            }
-            
-            // Count assets
-            NSDictionary *assets = self.metadata[@"assetIndexObj"];
-            if (assets) {
-                for (NSString *name in assets[@"objects"]) {
-                    if (![name hasSuffix:@"/minecraft.icns"]) {
-                        totalExpectedDownloads++;
-                    }
-                }
-            }
-            
+            NSArray *libTasks = [self downloadClientLibraries];
+            NSArray *assetTasks = [self downloadClientAssets];
             // Drop the 1 byte we set initially
             self.progress.totalUnitCount--;
             self.textProgress.totalUnitCount--;
-            
             if (self.progress.totalUnitCount == 0) {
                 // We have nothing to download, invoke completion observer
                 self.progress.totalUnitCount = 1;
@@ -287,122 +256,9 @@
                 self.textProgress.completedUnitCount = 1;
                 return;
             }
-            
-            // Track completed downloads
-            __block NSInteger completedDownloads = 0;
-            
-            // Download libraries
-            for (NSDictionary *library in self.metadata[@"libraries"]) {
-                NSString *name = library[@"name"];
-
-                NSMutableDictionary *artifact = library[@"downloads"][@"artifact"];
-                if (artifact == nil && [name containsString:@":"]) {
-                    NSLog(@"[MCDL] Unknown artifact object for %@, attempting to generate one", name);
-                    artifact = [[NSMutableDictionary alloc] init];
-                    NSString *prefix = library[@"url"] == nil ? @"https://libraries.minecraft.net/" : [library[@"url"] stringByReplacingOccurrencesOfString:@"http://" withString:@"https://"];
-                    NSArray *libParts = [name componentsSeparatedByString:@":"];
-                    artifact[@"path"] = [NSString stringWithFormat:@"%1$@/%2$@/%3$@/%2$@-%3$@.jar", [libParts[0] stringByReplacingOccurrencesOfString:@"." withString:@"/"], libParts[1], libParts[2]];
-                    artifact[@"url"] = [NSString stringWithFormat:@"%@%@", prefix, artifact[@"path"]];
-                    artifact[@"sha1"] = library[@"checksums"][0];
-                }
-
-                NSString *path = [NSString stringWithFormat:@"%s/libraries/%@", getenv("POJAV_GAME_DIR"), artifact[@"path"]];
-                NSString *sha = artifact[@"sha1"];
-                NSUInteger size = [artifact[@"size"] unsignedLongLongValue];
-                NSString *url = artifact[@"url"];
-                if ([library[@"skip"] boolValue]) {
-                    NSLog(@"[MDCL] Skipped library %@", name);
-                    continue;
-                }
-
-                NSURLSessionDownloadTask *task = [self createDownloadTask:url size:size sha:sha altName:name toPath:path success:^{
-                    @synchronized(self) {
-                        completedDownloads++;
-                        if (completedDownloads >= totalExpectedDownloads) {
-                            [self.metadata removeObjectForKey:@"assetIndexObj"];
-                            // Execute modpack download completion if it exists
-                            if (self.modpackDownloadCompletion) {
-                                self.modpackDownloadCompletion();
-                            }
-                        }
-                    }
-                }];
-                if (task) {
-                    [task resume];
-                } else if (!self.progress.cancelled) {
-                    @synchronized(self) {
-                        completedDownloads++;
-                        if (completedDownloads >= totalExpectedDownloads) {
-                            [self.metadata removeObjectForKey:@"assetIndexObj"];
-                            // Execute modpack download completion if it exists
-                            if (self.modpackDownloadCompletion) {
-                                self.modpackDownloadCompletion();
-                            }
-                        }
-                    }
-                } else {
-                    return; // cancelled
-                }
-            }
-            
-            // Download assets
-            if (assets) {
-                for (NSString *name in assets[@"objects"]) {
-                    NSDictionary *object = assets[@"objects"][name];
-                    NSString *hash = object[@"hash"];
-                    NSString *pathname = [NSString stringWithFormat:@"%@/%@", [hash substringToIndex:2], hash];
-                    NSUInteger size = [object[@"size"] unsignedLongLongValue];
-
-                    NSString *path;
-                    if ([assets[@"map_to_resources"] boolValue]) {
-                        path = [NSString stringWithFormat:@"%s/resources/%@", getenv("POJAV_GAME_DIR"), name];
-                    } else {
-                        path = [NSString stringWithFormat:@"%s/assets/objects/%@", getenv("POJAV_GAME_DIR"), pathname];
-                    }
-
-                    /* Special case for 1.19+
-                     * Since 1.19-pre1, setting the window icon on macOS invokes ObjC.
-                     * However, if an IOException occurs, it won't try to set.
-                     * We skip downloading the icon file to workaround this. */
-                    if ([name hasSuffix:@"/minecraft.icns"]) {
-                        [NSFileManager.defaultManager removeItemAtPath:path error:nil];
-                        continue;
-                    }
-
-                    NSString *url = [NSString stringWithFormat:@"https://resources.download.minecraft.net/%@", pathname];
-                    NSURLSessionDownloadTask *task = [self createDownloadTask:url size:size sha:hash altName:name toPath:path success:^{
-                        @synchronized(self) {
-                            completedDownloads++;
-                            if (completedDownloads >= totalExpectedDownloads) {
-                                [self.metadata removeObjectForKey:@"assetIndexObj"];
-                            }
-                        }
-                    }];
-                    if (task) {
-                        [task resume];
-                    } else if (!self.progress.cancelled) {
-                        @synchronized(self) {
-                            completedDownloads++;
-                            if (completedDownloads >= totalExpectedDownloads) {
-                                [self.metadata removeObjectForKey:@"assetIndexObj"];
-                            }
-                        }
-                    } else {
-                        return; // cancelled
-                    }
-                }
-            }
-            
-            // If no downloads were needed, remove the metadata directly
-            if (totalExpectedDownloads == 0) {
-                [self.metadata removeObjectForKey:@"assetIndexObj"];
-                // Execute modpack download completion if it exists
-                if (self.modpackDownloadCompletion) {
-                    self.modpackDownloadCompletion();
-                }
-            }
-            
-            
+            [libTasks makeObjectsPerformSelector:@selector(resume)];
+            [assetTasks makeObjectsPerformSelector:@selector(resume)];
+            [self.metadata removeObjectForKey:@"assetIndexObj"];
         }];
     }];
 }
@@ -456,10 +312,17 @@
     [self finishDownloadWithErrorString:errorStr];
 }
 
-// 关键修改：移除本地账户下载限制和提示
+// Check if the account has permission to download
 - (BOOL)checkAccessWithDialog:(BOOL)show {
-    // 无条件允许所有下载请求
-    return YES;
+    // for now
+    BOOL accessible = [BaseAuthenticator.current.authData[@"username"] hasPrefix:@"Demo."] || BaseAuthenticator.current.authData[@"xboxGamertag"] != nil;
+    if (!accessible) {
+        [self.progress cancel];
+        if (show) {
+            [self finishDownloadWithErrorString:@"Minecraft can't be legally installed when logged in with a local account. Please switch to an online account to continue."];
+        }
+    }
+    return accessible;
 }
 
 // Check SHA of the file

@@ -26,7 +26,6 @@
 static void *ProgressObserverContext = &ProgressObserverContext;
 
 @interface LauncherNavigationController () <UIDocumentPickerDelegate, UIPickerViewDataSource, PLPickerViewDelegate, UIPopoverPresentationControllerDelegate> {
-    BOOL _isModpackImportPicker;
 }
 
 @property(nonatomic) MinecraftResourceDownloadTask* task;
@@ -205,16 +204,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     [self presentViewController:documentPicker animated:YES completion:nil];
 }
 
-- (void)enterModpackImporter {
-    UIDocumentPickerViewController *documentPicker = [[UIDocumentPickerViewController alloc]
-        initForOpeningContentTypes:@[[UTType typeWithMIMEType:@"application/zip"], [UTType typeWithFilenameExtension:@"mrpack"]]
-        asCopy:YES];
-    documentPicker.delegate = self;
-    documentPicker.modalPresentationStyle = UIModalPresentationFormSheet;
-    // Set a flag to distinguish between modpack import and other document picks
-    _isModpackImportPicker = YES;
-    [self presentViewController:documentPicker animated:YES completion:nil];
-}
+
 
 - (void)enterModInstallerWithPath:(NSString *)path hitEnterAfterWindowShown:(BOOL)hitEnter {
     JavaGUIViewController *vc = [[JavaGUIViewController alloc] init];
@@ -231,56 +221,8 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 }
 
 - (void)documentPicker:(UIDocumentPickerViewController *)controller didPickDocumentAtURL:(NSURL *)url {
-    if (_isModpackImportPicker) {
-        // Handle modpack import
-        [self importModpackFromURL:url];
-        _isModpackImportPicker = NO; // Reset the flag
-    } else {
-        // Handle normal jar file import
-        [self enterModInstallerWithPath:url.path hitEnterAfterWindowShown:NO];
-    }
-}
-
-- (void)importModpackFromURL:(NSURL *)url {
-    // Get the path of the selected modpack zip file
-    NSString *packagePath = url.path;
-    
-    // Extract the modpack name from the zip file name (without .zip extension)
-    NSString *modpackName = url.lastPathComponent.stringByDeletingPathExtension;
-    modpackName = [[modpackName lowercaseString] stringByReplacingOccurrencesOfString:@" " withString:@"_"];
-    
-    // Create the destination path
-    NSString *destPath = [NSString stringWithFormat:@"%s/custom_gamedir/%@", getenv("POJAV_GAME_DIR"), modpackName];
-    
-    // Create and prepare the download task
-    self.task = [MinecraftResourceDownloadTask new];
-    [self.task prepareForDownload];
-    
-    // Set up error handling
-    __weak LauncherNavigationController *weakSelf = self;
-    self.task.handleError = ^{
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [weakSelf setInteractionEnabled:YES forDownloading:YES];
-            weakSelf.task = nil;
-            weakSelf.progressVC = nil;
-        });
-    };
-    
-    // Call the existing modpack processing functionality
-    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        ModrinthAPI *modrinthAPI = [ModrinthAPI sharedInstance];
-        [modrinthAPI downloader:self.task submitDownloadTasksFromPackage:packagePath toPath:destPath];
-        
-        // Update UI on the main thread
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [self setInteractionEnabled:NO forDownloading:YES];
-            self.progressViewMain.observedProgress = self.task.progress;
-            [self.task.progress addObserver:self
-                                forKeyPath:@"fractionCompleted"
-                                   options:NSKeyValueObservingOptionInitial
-                                   context:ProgressObserverContext];
-        });
-    });
+    // Handle normal jar file import
+    [self enterModInstallerWithPath:url.path hitEnterAfterWindowShown:NO];
 }
 
 - (void)setInteractionEnabled:(BOOL)enabled forDownloading:(BOOL)downloading {
