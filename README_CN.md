@@ -6,7 +6,7 @@
 <a href="https://github.com/herbrine8403/Amethyst-iOS-MyRemastered/releases/"><img src="https://img.shields.io/github/v/release/herbrine8403/Amethyst-iOS-MyRemastered?style=flat"></a>
 <a href="https://raw.githubusercontent.com/herbrine8403/Amethyst-iOS-MyRemastered/main/LICENSE"><img src="https://img.shields.io/github/license/herbrine8403/Amethyst-iOS-MyRemastered?style=flat"></a>
 
-[English](README_EN.md) | **中文** 
+[English](README.md) | **中文** 
 
 ## 🌟 重制版核心亮点
 基于官方 Amethyst 优化适配，聚焦 iOS/iPadOS 体验升级，核心特性包括：
