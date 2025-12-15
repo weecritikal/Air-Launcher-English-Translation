@@ -20,6 +20,7 @@ Optimized and adapted based on the official Amethyst, focusing on iOS/iPadOS exp
 - **Custom News URL**: Can freely change the news page URL
 - **Auto-select Renderer**: When renderer is set to Auto, it will automatically select the appropriate renderer, including MobileGlues
 - **Auto-select JVM**: Automatically selects JVM version based on game version, including Java21
+- **TouchController Support**: Communicates with TouchController Mod via UDP local proxy, providing touchscreen control support for iOS users
 - **Custom Icons**: (In development, coming soon)
 
 > ⚠️ Note: There are no plans to reset the Android version (there are too many excellent Android launchers, such as ZL, FCL), if you need the official Android code, please go to [Amethyst-Android](https://github.com/AngelAuraMC/Amethyst-Android).

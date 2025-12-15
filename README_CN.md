@@ -20,6 +20,7 @@
 - **更改新闻页面网址**：可自由更改新闻页面的网址
 - **自动选择渲染器**：渲染器切换为 Auto 后将自动选择合适的渲染器，包括 MobileGlues
 - **自动选择JVM**：将根据游戏版本自动选择 JVM 版本，包括 Java21
+- **支持TouchController**：通过 UDP 本地代理实现与 TouchController Mod 的通信，为 iOS 用户提供触屏控制支持
 - **自定义图标**：（开发中，即将上线）
 
 > ⚠️ 说明：暂不计划重置 Android 版本（Android 端的优秀启动器太多了,例如ZL、FCL），如需官方 Android 代码，可前往 [Amethyst-Android](https://github.com/AngelAuraMC/Amethyst-Android)。
