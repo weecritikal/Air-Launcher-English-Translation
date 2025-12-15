@@ -312,18 +312,10 @@
     [self finishDownloadWithErrorString:errorStr];
 }
 
-// Check if the account has permission to download
+// 关键修改：移除本地账户下载限制和提示
 - (BOOL)checkAccessWithDialog:(BOOL)show {
-    // for now
-    BaseAuthenticator *currentAuth = [BaseAuthenticator current];
-    BOOL accessible = [currentAuth.authData[@"username"] hasPrefix:@"Demo."] || currentAuth.authData[@"xboxGamertag"] != nil;
-    if (!accessible) {
-        [self.progress cancel];
-        if (show) {
-            [self finishDownloadWithErrorString:@"Minecraft can't be legally installed when logged in with a local account. Please switch to an online account to continue."];
-        }
-    }
-    return accessible;
+    // 无条件允许所有下载请求
+    return YES;
 }
 
 // Check SHA of the file
@@ -373,3 +365,4 @@
 }
 
 @end
+
