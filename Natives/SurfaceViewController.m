@@ -225,6 +225,9 @@ static GameSurfaceView* pojavWindow;
     self.longPressGesture.allowedTouchTypes = @[@(UITouchTypeDirect)];
     self.longPressGesture.cancelsTouchesInView = NO;
     self.longPressGesture.delegate = self;
+    // 设置手势依赖关系：只有当单击和双击手势失败时，长按手势才会被识别
+    [self.longPressGesture requireGestureRecognizerToFail:self.tapGesture];
+    [self.longPressGesture requireGestureRecognizerToFail:self.doubleTapGesture];
     [self.touchView addGestureRecognizer:self.longPressGesture];
 
     self.longPressTwoGesture = [[UILongPressGestureRecognizer alloc]initWithTarget:self action:@selector(keyboardGesture:)];
