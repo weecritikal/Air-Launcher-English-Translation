@@ -229,7 +229,7 @@
             continue;
         }
 
-        // 使用BMCLAPI作为assets下载源
+        // 使用BMCLAPI作为assets下载源 - 格式与Mojang一致
         NSString *url = [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/assets/%@", pathname];
         NSURLSessionDownloadTask *task = [self createDownloadTask:url size:size sha:hash altName:name toPath:path success:nil];
         if (task) {
@@ -302,8 +302,11 @@
 }
 
 - (void)finishDownloadWithErrorString:(NSString *)error {
-    [self.progress cancel];
-    [self.manager invalidateSessionCancelingTasks:YES resetSession:YES];
+    // Instead of canceling all tasks, just report the error
+    // Keep the session running for other in-progress downloads
+
+    // Optionally, you could only cancel the specific failing task instead of all tasks
+
     showDialog(localize(@"Error", nil), error);
     self.handleError();
 }
