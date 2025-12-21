@@ -226,37 +226,7 @@
         });
     };
     
-    // --- 定义 helper：修改环境变量的 Block ---
-    void (^toggleTouchEnvVar)(BOOL) = ^(BOOL enable) {
-        NSString *envKey = @"java.env_variables";
-        NSString *targetEnv = @"TOUCH_CONTROLLER_PROXY=12450";
-        NSString *currentEnv = getPrefObject(envKey);
-        if (![currentEnv isKindOfClass:[NSString class]]) currentEnv = @"";
-        
-        NSMutableArray *parts = [[currentEnv componentsSeparatedByCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]] mutableCopy];
-        if (!parts) parts = [NSMutableArray array];
-        [parts filterUsingPredicate:[NSPredicate predicateWithFormat:@"length > 0"]];
-        
-        NSMutableArray *newParts = [NSMutableArray array];
-        for (NSString *part in parts) {
-            if (![part containsString:@"TOUCH_CONTROLLER_PROXY="]) {
-                [newParts addObject:part];
-            }
-        }
-        
-        if (enable) {
-            [newParts addObject:targetEnv];
-        }
-        
-        NSString *finalEnv = [newParts componentsJoinedByString:@" "];
-        setPrefObject(envKey, finalEnv);
-        setPrefBool(@"control.mod_touch_udp", enable); // 同步保存偏好布尔值
-        
-        dispatch_async(dispatch_get_main_queue(), ^{
-             [weakSelf showSuccessMessage:enable ? @"UDP 协议已开启 (环境变量已添加)" : @"UDP 协议已关闭 (环境变量已移除)"];
-             [weakSelf.tableView reloadData]; // 刷新列表以更新 slideable_hotbar 状态
-        });
-    };
+    
     // -----------------------------------------------------------
 
     self.prefContents = @[
@@ -498,50 +468,28 @@
               @"hasDetail": @YES,
               @"type": self.typeSwitch,
               @"requestReload": @YES,
-              @"action": showTouchInfoAlert 
-            },
-            
-            // --- [重构] TouchController UDP 协议控制 ---
-            // 采用按钮+弹窗模式，彻底解决开关状态不同步问题
-            @{@"key": @"mod_touch_udp",
-              @"icon": @"antenna.radiowaves.left.and.right",
-              @"hasDetail": @YES,
-              @"type": self.typeButton, // 改为按钮类型，点击触发事件
-              @"enableCondition": whenNotInGame,
-              
-              @"action": ^void() {
-                  // 1. 读取当前状态 (通过检查环境变量字符串)
-                  NSString *currentEnv = getPrefObject(@"java.env_variables");
-                  BOOL isOn = [currentEnv isKindOfClass:[NSString class]] && [currentEnv containsString:@"TOUCH_CONTROLLER_PROXY=12450"];
-                  
-                  // 2. 构建弹窗
-                  NSString *title = localize(@"preference.title.mod_touch_udp", nil);
-                  // 构建状态提示信息
-                  NSString *statusMsg = isOn ? @"✅ 当前状态: 已开启 (ON)" : @"❌ 当前状态: 已关闭 (OFF)";
-                  NSString *msg = [NSString stringWithFormat:@"%@\n\n此选项直接修改环境变量。\n开启此功能需要在启动游戏前设置。游戏运行中无法更改。", statusMsg];
-                  
-                  UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:msg preferredStyle:UIAlertControllerStyleAlert];
-                  
-                  // 3. 根据当前状态添加操作按钮
-                  if (!isOn) {
-                      [alert addAction:[UIAlertAction actionWithTitle:@"开启 UDP 协议 (Enable)" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-                          toggleTouchEnvVar(YES); // 开启逻辑
-                      }]];
+              @"action": ^void(BOOL enabled) {
+                  if (enabled) {
+                      // 启用时设置UDP协议环境变量
+                      NSString *currentEnv = getPrefObject(@"java.env_variables");
+                      if ([currentEnv isKindOfClass:[NSString class]]) {
+                          if (![currentEnv containsString:@"TOUCH_CONTROLLER_PROXY=12450"]) {
+                              NSString *newEnv = [currentEnv stringByAppendingString:@" TOUCH_CONTROLLER_PROXY=12450"];
+                              setPrefObject(@"java.env_variables", newEnv);
+                          }
+                      } else {
+                          setPrefObject(@"java.env_variables", @"TOUCH_CONTROLLER_PROXY=12450");
+                      }
                   } else {
-                      [alert addAction:[UIAlertAction actionWithTitle:@"关闭 UDP 协议 (Disable)" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
-                          toggleTouchEnvVar(NO); // 关闭逻辑
-                      }]];
+                      // 禁用时移除UDP协议环境变量
+                      NSString *currentEnv = getPrefObject(@"java.env_variables");
+                      if ([currentEnv isKindOfClass:[NSString class]]) {
+                          NSString *newEnv = [currentEnv stringByReplacingOccurrencesOfString:@" TOUCH_CONTROLLER_PROXY=12450" withString:@""];
+                          setPrefObject(@"java.env_variables", newEnv);
+                      }
                   }
-                  
-                  // 4. 其他按钮
-                  [alert addAction:[UIAlertAction actionWithTitle:@"查看说明" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-                       showTouchInfoAlert(YES);
-                  }]];
-                  
-                  [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
-                  
-                  [weakSelf presentViewController:alert animated:YES completion:nil];
-              }
+                  showTouchInfoAlert(enabled);
+              } 
             },
             // ------------------------------------------
 

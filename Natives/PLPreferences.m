@@ -48,7 +48,7 @@
             @"gyroscope_enable": @NO,
             @"gyroscope_invert_x_axis": @NO,
             @"gyroscope_sensitivity": @(100),
-            @"mod_touch_enable": @YES
+            @"mod_touch_enable": @NO
         }.mutableCopy,
         @"java": @{
             @"java_homes": @{
