@@ -13,7 +13,7 @@
 - **Mod管理**：复刻其他启动器的Mod管理功能，支持查看Mod基本信息，一键禁用/删除Mod
 - **导入整合包**：支持导入 ZIP 格式的整合包
 - **更改鼠标指针**：支持在设置界面自定义虚拟鼠标指针的皮肤
-- **智能下载源切换**：自动识别网络环境，在 Mojang 官方源与 BMCLAPI 之间择优选择，下载更稳定
+- **多下载源支持**：可在设置中手动更改下载源，支持 Mojang 官方源与 BMCLAPI 镜像源，下载更快速
 - **完整中文本地化**：界面完整汉化，更适合中国宝宝体质 awa
 - **账户限制解除**：支持本地账户、演示账户（Demo Mode）和第三方账户直接下载游戏，无需登录 Microsoft 账号或 Test 账号
 - **多账户登录**：兼容 Microsoft 账号、本地账号及第三方认证账户
@@ -23,7 +23,7 @@
 - **支持TouchController**：通过 UDP 本地代理实现与 TouchController Mod 的通信，为 iOS 用户提供触屏控制支持
 - **自定义图标**：（开发中，即将上线）
 
-> ⚠️ 说明：暂不计划重置 Android 版本（Android 端的优秀启动器太多了,例如ZL、FCL），如需官方 Android 代码，可前往 [Amethyst-Android](https://github.com/AngelAuraMC/Amethyst-Android)。
+> ⚠️ 说明：暂不计划重置 Android 版本（Android 端的优秀启动器太多了,例如Zalith Launcher、Fold Craft Launcher、还未完工的ShardLauncher），如需官方 Android 版，可前往 [Amethyst-Android](https://github.com/AngelAuraMC/Amethyst-Android)。
 
 
 ## 🚀 快速上手指南
@@ -76,8 +76,8 @@ JIT（Just-In-Time）是流畅运行游戏的核心，iOS 需通过以下工具�
 
 
 ## 🙏 贡献者
-- @LanRhyme - ShardLauncher作者，更改News代码以允许iOS 26用户使用启动器
-- @WeiErLiTeo - 为启动器添加Mod下载功能
+- @LanRhyme - ShardLauncher作者，允许iOS 26用户使用启动器、更改日志内容
+- @WeiErLiTeo - 为启动器添加Mod下载功能、优化了TouchController支持、添加双指长按打开键盘功能
 
 
 ## 📦 第三方组件及许可证
