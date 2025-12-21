@@ -502,6 +502,7 @@
             },
             @{@"key": @"custom_mouse_pointer",
                 @"icon": @"cursorarrow",
+                @"hasDetail": @YES,
                 @"type": self.typeButton,
                 @"enableCondition": whenNotInGame,
                 @"action": ^void(){
@@ -510,6 +511,7 @@
             },
             @{@"key": @"reset_mouse_pointer",
                 @"icon": @"arrow.counterclockwise",
+                @"hasDetail": @YES,
                 @"type": self.typeButton,
                 @"enableCondition": whenNotInGame,
                 @"action": ^void(){
@@ -591,7 +593,7 @@
             },
             @{@"key": @"disable_haptics",
                 @"icon": @"wave.3.left",
-                @"hasDetail": @NO,
+                @"hasDetail": @YES,
                 @"type": self.typeSwitch,
             },
             @{@"key": @"slideable_hotbar",

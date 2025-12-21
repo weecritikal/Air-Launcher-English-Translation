@@ -173,6 +173,7 @@
 "preference.title.cosmetica" = "Cosmetica Capes";
 "preference.detail.cosmetica" = "Enable capes from Cosmetica (previously Arc). For more information please visit https://cosmetica.cc. Requires OptiFine";
 "preference.title.download_source" = "Download Source";
+"preference.detail.download_source" = "Choose the download source for game resources. BMCLAPI mirror provides faster download speeds in China.";
 "preference.title.download_source-official" = "Official Source";
 "preference.title.download_source-bmclapi" = "BMCLAPI Mirror";
 "preference.title.debug_logging" = "Debug logging";
@@ -238,10 +239,15 @@
 "preference.title.gesture_hotbar" = "Hotbar gestures";
 "preference.detail.gesture_hotbar" = "Enables gestures, such as touch the hotbar slot, swap items between hand, throw items";
 "preference.title.disable_haptics" = "Disable on-screen haptics";
+"preference.detail.disable_haptics" = "Disable haptic feedback (vibration) effects in the game to save battery.";
 "preference.title.press_duration" = "Long-press duration (ms)";
 "preference.detail.press_duration" = "Trigger press duration for destroying blocks and dropping items.";
 "preference.title.button_scale" = "On-screen button scale (%)";
 "preference.detail.button_scale" = "Upscale them if buttons are too small, usually needed for iPad users.";
+"preference.title.custom_mouse_pointer" = "Custom Mouse Pointer";
+"preference.detail.custom_mouse_pointer" = "Select a custom image as the in-game mouse pointer appearance.";
+"preference.title.reset_mouse_pointer" = "Reset Mouse Pointer";
+"preference.detail.reset_mouse_pointer" = "Reset the mouse pointer to its default appearance.";
 "preference.title.mouse_scale" = "Mouse scaling (%)";
 "preference.detail.mouse_scale" = "Change the size of the virtual mouse";
 "preference.title.mouse_speed" = "Mouse speed (%)";

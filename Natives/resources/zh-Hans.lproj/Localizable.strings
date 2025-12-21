@@ -175,6 +175,7 @@
 "preference.title.cosmetica" = "Cosmetica 披风";
 "preference.detail.cosmetica" = "启用来自 Cosmetica（原 Arc ）的披风。欲了解更多信息，请访问 https://arcapes.com。需要 OptiFine。";
 "preference.title.download_source" = "下载源";
+"preference.detail.download_source" = "选择游戏资源下载源。BMCLAPI镜像源提供更快的国内下载速度。";
 "preference.title.download_source-official" = "官方源";
 "preference.title.download_source-bmclapi" = "BMCLAPI镜像源";
 "preference.title.debug_logging" = "调试日志";
@@ -242,6 +243,7 @@
 "preference.title.gesture_hotbar" = "快捷栏手势";
 "preference.detail.gesture_hotbar" = "启用手势，例如点击快捷栏物品槽、双手交换物品、丢弃物品";
 "preference.title.disable_haptics" = "禁用屏幕触觉反馈";
+"preference.detail.disable_haptics" = "关闭游戏中的触觉反馈（震动）效果，可节省电量。";
 "preference.title.press_duration" = "长按延迟（毫秒）";
 "preference.detail.press_duration" = "修改长按摧毁方块、丢弃物品的触发时长。";
 "preference.title.button_scale" = "屏幕按钮缩放 (%)";
@@ -257,9 +259,9 @@
 
 // Custom mouse pointer
 "preference.title.custom_mouse_pointer" = "自定义鼠标指针";
-"preference.detail.custom_mouse_pointer" = "从照片库选择图片作为虚拟鼠标指针";
+"preference.detail.custom_mouse_pointer" = "选择自定义图片作为游戏内鼠标指针外观。";
 "preference.title.reset_mouse_pointer" = "恢复默认鼠标指针";
-"preference.detail.reset_mouse_pointer" = "删除自定义指针图片并恢复默认样式";
+"preference.detail.reset_mouse_pointer" = "将鼠标指针恢复为默认外观。";
 
 "preference.title.gyroscope_enable" = "启用陀螺仪控制";
 "preference.detail.gyroscope_enable" = "启用此功能会允许您通过转动设备来在游戏中转动视角";
