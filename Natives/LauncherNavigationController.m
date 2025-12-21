@@ -152,7 +152,16 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     ].mutableCopy;
 
     AFHTTPSessionManager *manager = [AFHTTPSessionManager manager];
-    [manager GET:@"https://piston-meta.mojang.com/mc/game/version_manifest_v2.json" parameters:nil headers:nil progress:^(NSProgress * _Nonnull progress) {
+    NSString *downloadSource = getPrefObject(@"general.download_source");
+    NSString *versionManifestURL;
+    
+    if ([downloadSource isEqualToString:@"bmclapi"]) {
+        versionManifestURL = @"https://bmclapi2.bangbang93.com/mc/game/version_manifest_v2.json";
+    } else {
+        versionManifestURL = @"https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
+    }
+    
+    [manager GET:versionManifestURL parameters:nil headers:nil progress:^(NSProgress * _Nonnull progress) {
         self.progressViewMain.progress = progress.fractionCompleted;
     } success:^(NSURLSessionTask *task, NSDictionary *responseObject) {
         [remoteVersionList addObjectsFromArray:responseObject[@"versions"]];

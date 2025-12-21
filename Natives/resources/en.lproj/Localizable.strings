@@ -172,6 +172,9 @@
 "preference.detail.check_sha" = "This option forces launcher to check the file hash if it's available. Prevents broken downloads.";
 "preference.title.cosmetica" = "Cosmetica Capes";
 "preference.detail.cosmetica" = "Enable capes from Cosmetica (previously Arc). For more information please visit https://cosmetica.cc. Requires OptiFine";
+"preference.title.download_source" = "Download Source";
+"preference.title.download_source-official" = "Official Source";
+"preference.title.download_source-bmclapi" = "BMCLAPI Mirror";
 "preference.title.debug_logging" = "Debug logging";
 "preference.detail.debug_logging" = "Logs internal settings and actions to latestlog.txt. This helps the developers find issues easier, but Minecraft may run slower as the logs will be written to more often.";
 "preference.title.appicon" = "Set app icon";

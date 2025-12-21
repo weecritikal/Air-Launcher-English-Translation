@@ -17,6 +17,7 @@
             @"cosmetica": @YES,
             @"debug_logging": @(!CONFIG_RELEASE),
             @"news_url": @"https://amethyst.ct.ws/welcome",
+            @"download_source": @"bmclapi",
         }.mutableCopy,
         @"video": @{ // Video & Audio
             @"renderer": @"auto",

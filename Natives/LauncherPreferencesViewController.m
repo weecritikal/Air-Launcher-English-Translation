@@ -269,6 +269,20 @@
               @"type": self.typeSwitch,
               @"enableCondition": whenNotInGame
             },
+            @{@"key": @"download_source",
+              @"hasDetail": @YES,
+              @"icon": @"arrow.down.circle",
+              @"type": self.typePickField,
+              @"enableCondition": whenNotInGame,
+              @"pickKeys": @[
+                  @"official",
+                  @"bmclapi"
+              ],
+              @"pickList": @[
+                  localize(@"preference.title.download_source-official", nil),
+                  localize(@"preference.title.download_source-bmclapi", nil)
+              ]
+            },
             @{@"key": @"cosmetica",
               @"hasDetail": @YES,
               @"icon": @"eyeglasses",

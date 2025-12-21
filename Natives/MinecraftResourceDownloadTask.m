@@ -28,6 +28,75 @@
     return self;
 }
 
+// 根据配置选择下载源并替换URL
+- (NSString *)replaceURLWithDownloadSource:(NSString *)originalURL {
+    if (!originalURL) return originalURL;
+    
+    NSString *downloadSource = getPrefObject(@"general.download_source");
+    if (!downloadSource || [downloadSource isEqualToString:@"official"]) {
+        return originalURL;
+    }
+    
+    // BMCLAPI镜像源
+    if ([downloadSource isEqualToString:@"bmclapi"]) {
+        // 版本清单和版本JSON
+        if ([originalURL containsString:@"launchermeta.mojang.com"] || 
+            [originalURL containsString:@"launcher.mojang.com"]) {
+            return [originalURL stringByReplacingOccurrencesOfString:@"https://launchermeta.mojang.com" 
+                                                           withString:@"https://bmclapi2.bangbang93.com"];
+        }
+        
+        // Assets资源
+        if ([originalURL containsString:@"resources.download.minecraft.net"]) {
+            return [originalURL stringByReplacingOccurrencesOfString:@"http://resources.download.minecraft.net" 
+                                                           withString:@"https://bmclapi2.bangbang93.com/assets"];
+        }
+        
+        // Libraries库文件
+        if ([originalURL containsString:@"libraries.minecraft.net"]) {
+            return [originalURL stringByReplacingOccurrencesOfString:@"https://libraries.minecraft.net" 
+                                                           withString:@"https://bmclapi2.bangbang93.com/maven"];
+        }
+        
+        // Forge
+        if ([originalURL containsString:@"files.minecraftforge.net"]) {
+            return [originalURL stringByReplacingOccurrencesOfString:@"https://files.minecraftforge.net" 
+                                                           withString:@"https://bmclapi2.bangbang93.com"];
+        }
+        
+        // Fabric
+        if ([originalURL containsString:@"meta.fabricmc.net"]) {
+            return [originalURL stringByReplacingOccurrencesOfString:@"https://meta.fabricmc.net" 
+                                                           withString:@"https://bmclapi2.bangbang93.com/fabric-meta"];
+        }
+        
+        if ([originalURL containsString:@"maven.fabricmc.net"]) {
+            return [originalURL stringByReplacingOccurrencesOfString:@"https://maven.fabricmc.net" 
+                                                           withString:@"https://bmclapi2.bangbang93.com/maven"];
+        }
+        
+        // NeoForge
+        if ([originalURL containsString:@"maven.neoforged.net"]) {
+            return [originalURL stringByReplacingOccurrencesOfString:@"https://maven.neoforged.net" 
+                                                           withString:@"https://bmclapi2.bangbang93.com/maven"];
+        }
+        
+        // authlib-injector
+        if ([originalURL containsString:@"authlib-injector.yushi.moe"]) {
+            return [originalURL stringByReplacingOccurrencesOfString:@"https://authlib-injector.yushi.moe" 
+                                                           withString:@"https://bmclapi2.bangbang93.com/mirrors/authlib-injector"];
+        }
+        
+        // Mojang Java运行时
+        if ([originalURL containsString:@"launchermeta.mojang.com/v1/products/java-runtime"]) {
+            return [originalURL stringByReplacingOccurrencesOfString:@"https://launchermeta.mojang.com" 
+                                                           withString:@"https://bmclapi2.bangbang93.com"];
+        }
+    }
+    
+    return originalURL;
+}
+
 // Add file to the queue
 - (NSURLSessionDownloadTask *)createDownloadTask:(NSString *)url size:(NSUInteger)size sha:(NSString *)sha altName:(NSString *)altName toPath:(NSString *)path success:(void (^)())success {
     BOOL fileExists = [NSFileManager.defaultManager fileExistsAtPath:path];
@@ -40,7 +109,9 @@
     }
 
     NSString *name = altName ?: path.lastPathComponent;
-    NSURLRequest *request = [NSURLRequest requestWithURL:[NSURL URLWithString:url]];
+    // 根据配置选择下载源并替换URL
+    NSString *replacedURL = [self replaceURLWithDownloadSource:url];
+    NSURLRequest *request = [NSURLRequest requestWithURL:[NSURL URLWithString:replacedURL]];
     __block NSProgress *progress;
     __block NSURLSessionDownloadTask *task = [self.manager downloadTaskWithRequest:request progress:nil
     destination:^NSURL * _Nonnull(NSURL * _Nonnull targetPath, NSURLResponse * _Nonnull response) {
