@@ -5,6 +5,7 @@
 [![总下载量](https://img.shields.io/github/downloads/herbrine8403/Amethyst-iOS-MyRemastered/total?label=Downloads&style=flat)](https://github.com/herbrine8403/Amethyst-iOS-MyRemastered/releases)
 <a href="https://github.com/herbrine8403/Amethyst-iOS-MyRemastered/releases/"><img src="https://img.shields.io/github/v/release/herbrine8403/Amethyst-iOS-MyRemastered?style=flat"></a>
 <a href="https://raw.githubusercontent.com/herbrine8403/Amethyst-iOS-MyRemastered/main/LICENSE"><img src="https://img.shields.io/github/license/herbrine8403/Amethyst-iOS-MyRemastered?style=flat"></a>
+![最后提交](https://img.shields.io/github/last-commit/herbrine8403/Amethyst-iOS-MyRemastered?color=c78aff&label=last%20commit&style=flat)
 
 [English](README.md) | **中文** 
 
