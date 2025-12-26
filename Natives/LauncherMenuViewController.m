@@ -111,7 +111,7 @@
         [self.options addObject:(id)[LauncherMenuCustomItem
                                      title:@"Technoblade never dies!"
                                      imageName:@"" action:^{
-            openLink(self, [NSURL URLWithString:@"https://youtu.be/DPMluEVUqS0"]);
+            openLink(self, [NSURL URLWithString:@"https://www.bilibili.com/video/BV1RG411s7fw"]);
         }]];
     }
     
