@@ -145,6 +145,114 @@
     [self.tableView selectRowAtIndexPath:indexPath animated:YES scrollPosition:UITableViewScrollPositionNone];
     [self tableView:self.tableView didSelectRowAtIndexPath:indexPath];
     
+    // 获取当前应用版本
+    NSString *currentVersion = [[[NSBundle mainBundle] infoDictionary] objectForKey:@"CFBundleShortVersionString"];
+    
+    // 创建公告栏
+    UILabel *announcementLabel = [[UILabel alloc] init];
+    announcementLabel.textAlignment = NSTextAlignmentCenter;
+    // 使用系统灰色并添加透明度以实现半透明效果
+    announcementLabel.backgroundColor = [[UIColor grayColor] colorWithAlphaComponent:0.5];
+    announcementLabel.textColor = [UIColor labelColor]; // 使用系统标签颜色，自动适配深色模式
+    announcementLabel.font = [UIFont systemFontOfSize:14];
+    announcementLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    announcementLabel.numberOfLines = 0; // 允许多行文本
+    
+    // 将公告栏添加到视图中
+    [self.view addSubview:announcementLabel];
+    
+    // 检查当前版本是否包含"Preview"字样
+    if ([currentVersion rangeOfString:@"Preview" options:NSCaseInsensitiveSearch].location != NSNotFound) {
+        announcementLabel.text = localize(@"announcement.preview_version", @"欢迎使用Amethyst iOS Remastered测试版！");
+    } else {
+        // 尝试获取GitHub最新的Release版本号
+        NSURL *url = [NSURL URLWithString:@"https://api.github.com/repos/herbrine8403/Amethyst-iOS-MyRemastered/releases/latest"];
+        NSURLRequest *request = [NSURLRequest requestWithURL:url];
+        
+        NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+            if (error) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    announcementLabel.text = localize(@"announcement.latest_version", @"欢迎使用Amethyst iOS Remastered！当前已是最新正式版。");
+                });
+                return;
+            }
+            
+            NSError *jsonError;
+            NSDictionary *jsonResponse = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
+            
+            if (jsonError || !jsonResponse) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    announcementLabel.text = localize(@"announcement.latest_version", @"欢迎使用Amethyst iOS Remastered！当前已是最新正式版。");
+                });
+                return;
+            }
+            
+            NSString *latestVersion = jsonResponse[@"tag_name"];
+            if (!latestVersion) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    announcementLabel.text = localize(@"announcement.latest_version", @"欢迎使用Amethyst iOS Remastered！当前已是最新正式版。");
+                });
+                return;
+            }
+            
+            // 移除标签前缀（如 "v"）
+            if ([latestVersion hasPrefix:@"v"]) {
+                latestVersion = [latestVersion substringFromIndex:1];
+            }
+            
+            dispatch_async(dispatch_get_main_queue(), ^{
+                NSComparisonResult versionComparison = [self compareVersion:currentVersion withVersion:latestVersion];
+                
+                if (versionComparison == NSOrderedAscending) {
+                    // 当前版本小于最新版本
+                    NSString *localizedText = localize(@"announcement.new_version_available", @"发现新版本：%@");
+                    announcementLabel.text = [NSString stringWithFormat:@"%@", localizedText];
+                    // 将 %@ 替换为实际版本号
+                    announcementLabel.text = [NSString stringWithFormat:localizedText, latestVersion];
+                    
+                    // 创建下载按钮
+                    UIButton *downloadButton = [UIButton buttonWithType:UIButtonTypeSystem];
+                    [downloadButton setTitle:localize(@"announcement.download_button", @"前往下载") forState:UIControlStateNormal];
+                    downloadButton.backgroundColor = [UIColor systemBlueColor];
+                    [downloadButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+                    downloadButton.titleLabel.font = [UIFont systemFontOfSize:14];
+                    downloadButton.layer.cornerRadius = 6;
+                    downloadButton.translatesAutoresizingMaskIntoConstraints = NO;
+                    
+                    [downloadButton addTarget:self action:@selector(downloadLatestVersion:) forControlEvents:UIControlEventTouchUpInside];
+                    
+                    [self.view addSubview:downloadButton];
+                    
+                    // 设置下载按钮约束
+                    [NSLayoutConstraint activateConstraints:@[
+                        [downloadButton.topAnchor constraintEqualToAnchor:announcementLabel.bottomAnchor constant:5],
+                        [downloadButton.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+                        [downloadButton.widthAnchor constraintEqualToConstant:100],
+                        [downloadButton.heightAnchor constraintEqualToConstant:30]
+                    ]];
+                    
+                    // 更新公告栏的约束以适应按钮
+                    [NSLayoutConstraint activateConstraints:@[
+                        [announcementLabel.heightAnchor constraintEqualToConstant:60] // 增加高度以适应可能的多行文本
+                    ]];
+                } else {
+                    // 当前版本大于或等于最新版本
+                    announcementLabel.text = localize(@"announcement.latest_version", @"欢迎使用Amethyst iOS Remastered！当前已是最新正式版。");
+                }
+            });
+        }];
+        
+        [task resume];
+    }
+    
+    // 设置公告栏约束
+    [NSLayoutConstraint activateConstraints:@[
+        [announcementLabel.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:10],
+        [announcementLabel.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:20],
+        [announcementLabel.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-20],
+        [announcementLabel.heightAnchor constraintEqualToConstant:30]
+    ]];
+    
     if (getEntitlementValue(@"get-task-allow")) {
         [self displayProgress:localize(@"login.jit.checking", nil)];
         if (isJITEnabled(false)) {
@@ -383,6 +491,45 @@
             [connection disconnect];
         }];
     }];
+}
+
+// 版本比较方法
+- (NSComparisonResult)compareVersion:(NSString *)version1 withVersion:(NSString *)version2 {
+    NSArray *v1Components = [version1 componentsSeparatedByString:@"."];
+    NSArray *v2Components = [version2 componentsSeparatedByString:@"."];
+    
+    NSInteger maxComponents = MAX(v1Components.count, v2Components.count);
+    
+    for (NSInteger i = 0; i < maxComponents; i++) {
+        NSInteger v1 = 0;
+        NSInteger v2 = 0;
+        
+        if (i < v1Components.count) {
+            v1 = [v1Components[i] integerValue];
+        }
+        
+        if (i < v2Components.count) {
+            v2 = [v2Components[i] integerValue];
+        }
+        
+        if (v1 < v2) {
+            return NSOrderedAscending;
+        } else if (v1 > v2) {
+            return NSOrderedDescending;
+        }
+    }
+    
+    return NSOrderedSame;
+}
+
+// 下载最新版本
+- (void)downloadLatestVersion:(UIButton *)sender {
+    NSString *urlString = @"https://github.com/herbrine8403/Amethyst-iOS-MyRemastered/releases/latest";
+    NSURL *url = [NSURL URLWithString:urlString];
+    
+    if ([[UIApplication sharedApplication] canOpenURL:url]) {
+        [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:nil];
+    }
 }
 
 @end
