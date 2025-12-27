@@ -417,9 +417,12 @@
         invokeAction();
     }
 
-    UIView *view = [self.tableView cellForRowAtIndexPath:indexPath];
-    NSString *title = localize(([NSString stringWithFormat:@"preference.title.done.%@", key]), nil);
-    [self showAlertOnView:view title:title message:nil];
+    // 对于typeButton类型的操作，不显示done提示
+    if (item[@"type"] != self.typeButton) {
+        UIView *view = [self.tableView cellForRowAtIndexPath:indexPath];
+        NSString *title = localize(([NSString stringWithFormat:@"preference.title.done.%@", key]), nil);
+        [self showAlertOnView:view title:title message:nil];
+    }
 }
 
 #pragma mark UITextField

@@ -16,6 +16,8 @@
             @"check_sha": @YES,
             @"cosmetica": @YES,
             @"debug_logging": @(!CONFIG_RELEASE),
+            @"news_url": @"https://amethyst.ct.ws/welcome",
+            @"download_source": @"bmclapi",
         }.mutableCopy,
         @"video": @{ // Video & Audio
             @"renderer": @"auto",
@@ -45,7 +47,8 @@
             @"virtmouse_enable": @NO,
             @"gyroscope_enable": @NO,
             @"gyroscope_invert_x_axis": @NO,
-            @"gyroscope_sensitivity": @(100)
+            @"gyroscope_sensitivity": @(100),
+            @"mod_touch_enable": @NO
         }.mutableCopy,
         @"java": @{
             @"java_homes": @{

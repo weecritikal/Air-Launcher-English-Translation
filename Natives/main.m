@@ -102,7 +102,8 @@ bool init_checkForJailbreak() {
 
 void init_logDeviceAndVer(char *argument) {
     // Amethyst version
-    NSLog(@"[Pre-Init] Amethyst INIT!");
+    NSLog(@"[Pre-Init] Amethyst(herbrine8403 Remastered) INIT!");
+    NSLog(@"[Pre-Init] https://github.com/herbrine8403/Amethyst-iOS-MyRemastered");
     NSLog(@"[Pre-Init] Version: %@-%s", NSBundle.mainBundle.infoDictionary[@"CFBundleShortVersionString"], CONFIG_TYPE);
     NSLog(@"[Pre-Init] Commit: %s (%s)", CONFIG_COMMIT, CONFIG_BRANCH);
     
@@ -200,6 +201,7 @@ void init_setupCustomControls() {
     NSString *controlPath = [@(getenv("POJAV_HOME")) stringByAppendingPathComponent:@"controlmap"];
     [fm createDirectoryAtPath:controlPath withIntermediateDirectories:NO attributes:nil error:nil];
     generateAndSaveDefaultControl();
+    generateAndSaveCustomControl();
     NSString *gamepadControlPath = [controlPath stringByAppendingPathComponent:@"gamepads"];
     [fm createDirectoryAtPath:gamepadControlPath withIntermediateDirectories:NO attributes:nil error:nil];
     generateAndSaveDefaultControlForGamepad();

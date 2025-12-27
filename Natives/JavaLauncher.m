@@ -122,6 +122,14 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
     init_loadDefaultEnv();
     init_loadCustomEnv();
 
+    // --- [新增] TouchController UDP 协议环境变量 ---
+    // 检查是否启用了 UDP 协议开关
+    if (getPrefBool(@"control.mod_touch_udp")) {
+        setenv("TOUCH_CONTROLLER_PROXY", "12450", 1);
+        NSLog(@"[JavaLauncher] Enabled TOUCH_CONTROLLER_PROXY=12450");
+    }
+    // ------------------------------------------
+  
     BOOL launchJar = NO;
     NSString *gameDir;
     NSString *defaultJRETag;
@@ -142,10 +150,10 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
             defaultJRETag = @"1_17_newer";
         }
 
-        // Setup POJAV_RENDERER
+        // Setup AMETHYST_RENDERER
         NSString *renderer = [PLProfiles resolveKeyForCurrentProfile:@"renderer"];
         NSLog(@"[JavaLauncher] RENDERER is set to %@\n", renderer);
-        setenv("POJAV_RENDERER", renderer.UTF8String, 1);
+        setenv("AMETHYST_RENDERER", renderer.UTF8String, 1);
         // Setup gameDir
         gameDir = [NSString stringWithFormat:@"%s/instances/%@/%@",
             getenv("POJAV_HOME"), getPrefObject(@"general.game_directory"),
@@ -214,7 +222,7 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
     margv[++margc] = "-Dlog4j2.formatMsgNoLookups=true";
 
     // Preset OpenGL libname
-    const char *glLibName = getenv("POJAV_RENDERER");
+    const char *glLibName = getenv("AMETHYST_RENDERER");
     if (glLibName) {
         if (!strcmp(glLibName, "auto")) {
             // workaround only applies to 1.20.2+
@@ -223,6 +231,23 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
         margv[++margc] = [NSString stringWithFormat:@"-Dorg.lwjgl.opengl.libname=%s", glLibName].UTF8String;
     }
 
+      // 添加authlib-injector参数以支持第三方认证账户的皮肤显示
+    if ([username length] > 0 && [BaseAuthenticator.current isKindOfClass:[ThirdPartyAuthenticator class]]) {
+        BaseAuthenticator *currentAuth = BaseAuthenticator.current;
+        if (currentAuth.authData[@"authserver"] != nil) {
+            NSLog(@"[JavaLauncher] Adding authlib-injector arguments for third party account");
+            NSArray *authlibArgs = [(ThirdPartyAuthenticator *)currentAuth getJvmArgsForAuthlib];
+            if (authlibArgs.count > 0) {
+                for (NSString *arg in authlibArgs) {
+                    margv[++margc] = arg.UTF8String;
+                    NSLog(@"[JavaLauncher] Added authlib-injector arg: %s", arg.UTF8String);
+                }     
+            } else {
+                NSLog(@"[JavaLauncher] Warning: No authlib-injector arguments available");
+            }
+        }
+    }
+  
     NSString *librariesPath = [NSString stringWithFormat:@"%@/libs", NSBundle.mainBundle.bundlePath];
     margv[++margc] = [NSString stringWithFormat:@"-javaagent:%@/patchjna_agent.jar=", librariesPath].UTF8String;
     if(getPrefBool(@"general.cosmetica")) {

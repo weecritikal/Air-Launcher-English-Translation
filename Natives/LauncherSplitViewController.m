@@ -1,6 +1,7 @@
 #import "LauncherSplitViewController.h"
 #import "LauncherMenuViewController.h"
 #import "LauncherNewsViewController.h"
+#import "LauncherProfilesViewController.h"
 #import "LauncherNavigationController.h"
 #import "LauncherPreferences.h"
 #import "utils.h"

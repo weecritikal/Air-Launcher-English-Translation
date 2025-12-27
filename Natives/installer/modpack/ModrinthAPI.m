@@ -4,6 +4,15 @@
 
 @implementation ModrinthAPI
 
++ (instancetype)sharedInstance {
+    static ModrinthAPI *sharedInstance = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        sharedInstance = [[self alloc] init];
+    });
+    return sharedInstance;
+}
+
 - (instancetype)init {
     return [super initWithURL:@"https://api.modrinth.com/v2"];
 }
@@ -74,6 +83,70 @@
     item[@"versionDetailsLoaded"] = @(YES);
 }
 
+- (void)getVersionsForModWithID:(NSString *)modID completion:(void (^)(NSArray<ModVersion *> * _Nullable versions, NSError * _Nullable error))completion {
+    NSString *urlString = [NSString stringWithFormat:@"%@/project/%@/version", self.baseURL, modID];
+    NSURL *url = [NSURL URLWithString:urlString];
+
+    if (!url) {
+        if (completion) {
+            NSError *error = [NSError errorWithDomain:@"ModrinthAPIError" code:-1 userInfo:@{NSLocalizedDescriptionKey: @"Invalid URL"}];
+            completion(nil, error);
+        }
+        return;
+    }
+
+    NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithURL:url completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
+        if (error) {
+            if (completion) {
+                completion(nil, error);
+            }
+            return;
+        }
+
+        if (!data) {
+            if (completion) {
+                NSError *dataError = [NSError errorWithDomain:@"ModrinthAPIError" code:-2 userInfo:@{NSLocalizedDescriptionKey: @"No data received"}];
+                completion(nil, dataError);
+            }
+            return;
+        }
+
+        NSError *jsonError = nil;
+        id jsonResult = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
+
+        if (jsonError) {
+            if (completion) {
+                completion(nil, jsonError);
+            }
+            return;
+        }
+
+        if (![jsonResult isKindOfClass:[NSArray class]]) {
+            if (completion) {
+                NSError *formatError = [NSError errorWithDomain:@"ModrinthAPIError" code:-3 userInfo:@{NSLocalizedDescriptionKey: @"Unexpected JSON format"}];
+                completion(nil, formatError);
+            }
+            return;
+        }
+
+        NSMutableArray<ModVersion *> *versions = [NSMutableArray array];
+        for (NSDictionary *versionDict in jsonResult) {
+            if ([versionDict isKindOfClass:[NSDictionary class]]) {
+                ModVersion *version = [[ModVersion alloc] initWithDictionary:versionDict];
+                if (version) {
+                    [versions addObject:version];
+                }
+            }
+        }
+
+        if (completion) {
+            completion([versions copy], nil);
+        }
+    }];
+
+    [task resume];
+}
+
 - (void)downloader:(MinecraftResourceDownloadTask *)downloader submitDownloadTasksFromPackage:(NSString *)packagePath toPath:(NSString *)destPath {
     NSError *error;
     UZKArchive *archive = [[UZKArchive alloc] initWithPath:packagePath error:&error];
@@ -130,23 +203,42 @@
     // Download dependency client json (if available)
     NSDictionary<NSString *, NSString *> *depInfo = [ModpackUtils infoForDependencies:indexDict[@"dependencies"]];
     if (depInfo[@"json"]) {
+        // Set up completion callback to create profile after all dependencies are downloaded
+        downloader.modpackDownloadCompletion = ^{
+            // Create profile after all dependencies are downloaded
+            NSString *tmpIconPath = [NSTemporaryDirectory() stringByAppendingPathComponent:@"icon.png"];
+            PLProfiles.current.profiles[indexDict[@"name"]] = @{
+                @"gameDir": [NSString stringWithFormat:@"./custom_gamedir/%@", destPath.lastPathComponent],
+                @"name": indexDict[@"name"],
+                @"lastVersionId": depInfo[@"id"] ?: @"",
+                @"icon": [NSString stringWithFormat:@"data:image/png;base64,%@",
+                    [[NSData dataWithContentsOfFile:tmpIconPath]
+                    base64EncodedStringWithOptions:0]]
+            }.mutableCopy;
+            PLProfiles.current.selectedProfileName = indexDict[@"name"];
+        };
         NSString *jsonPath = [NSString stringWithFormat:@"%1$s/versions/%2$@/%2$@.json", getenv("POJAV_GAME_DIR"), depInfo[@"id"]];
-        NSURLSessionDownloadTask *task = [downloader createDownloadTask:depInfo[@"json"] size:0 sha:nil altName:nil toPath:jsonPath];
+        NSURLSessionDownloadTask *task = [downloader createDownloadTask:depInfo[@"json"] size:0 sha:nil altName:nil toPath:jsonPath success:^{
+            // Now download the rest of the game files
+            NSDictionary *version = @{@"id": depInfo[@"id"]};
+            [downloader downloadVersion:version];
+        }];
         [task resume];
+    } else {
+        // If no dependencies to download, create the profile immediately
+        // Create profile
+        NSString *tmpIconPath = [NSTemporaryDirectory() stringByAppendingPathComponent:@"icon.png"];
+        PLProfiles.current.profiles[indexDict[@"name"]] = @{
+            @"gameDir": [NSString stringWithFormat:@"./custom_gamedir/%@", destPath.lastPathComponent],
+            @"name": indexDict[@"name"],
+            @"lastVersionId": depInfo[@"id"] ?: @"",
+            @"icon": [NSString stringWithFormat:@"data:image/png;base64,%@",
+                [[NSData dataWithContentsOfFile:tmpIconPath]
+                base64EncodedStringWithOptions:0]]
+        }.mutableCopy;
+        PLProfiles.current.selectedProfileName = indexDict[@"name"];
     }
     // TODO: automation for Forge
-
-    // Create profile
-    NSString *tmpIconPath = [NSTemporaryDirectory() stringByAppendingPathComponent:@"icon.png"];
-    PLProfiles.current.profiles[indexDict[@"name"]] = @{
-        @"gameDir": [NSString stringWithFormat:@"./custom_gamedir/%@", destPath.lastPathComponent],
-        @"name": indexDict[@"name"],
-        @"lastVersionId": depInfo[@"id"],
-        @"icon": [NSString stringWithFormat:@"data:image/png;base64,%@",
-            [[NSData dataWithContentsOfFile:tmpIconPath]
-            base64EncodedStringWithOptions:0]]
-    }.mutableCopy;
-    PLProfiles.current.selectedProfileName = indexDict[@"name"];
 }
 
 @end

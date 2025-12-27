@@ -1,0 +1,153 @@
+name: Development build
+
+on:
+  pull_request:
+    branches-ignore:
+      - 'l10n_main'
+    types: [opened, reopened]
+  push:
+    branches-ignore:
+      - 'l10n_main'
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Development build
+    strategy:
+      matrix:
+        include:
+          - platform: 2
+            platform_name: ios
+
+    runs-on: macos-14
+
+    steps:
+      - name: Show available Xcode and select a suitable one
+        run: |
+          set -e
+          echo "Available apps in /Applications (matching Xcode*):"
+          ls /Applications | grep -E "Xcode(.+)?\.app" || true
+          # Prefer Xcode_16, then Xcode_15, then /Applications/Xcode.app
+          if [ -d "/Applications/Xcode_16.app" ]; then
+            echo "Selecting /Applications/Xcode_16.app"
+            sudo xcode-select -s /Applications/Xcode_16.app/Contents/Developer
+          elif [ -d "/Applications/Xcode_15.app" ]; then
+            echo "Selecting /Applications/Xcode_15.app"
+            sudo xcode-select -s /Applications/Xcode_15.app/Contents/Developer
+          elif [ -d "/Applications/Xcode.app" ]; then
+            echo "Selecting /Applications/Xcode.app"
+            sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+          else
+            echo "No preinstalled Xcode found under /Applications that matches the search. Leaving system default."
+          fi
+          xcodebuild -version || true
+          echo "Available simulator runtimes (for debugging):"
+          xcrun simctl list runtimes || true
+
+      - name: Install GNU Make
+        run: |
+          brew update
+          brew install make
+
+      - name: Install Java 8 (Temurin) via Homebrew
+        run: |
+          brew install --cask temurin@8 || true
+
+      - name: Install ldid
+        run: |
+          brew install ldid || true
+
+      - name: Remove work folders
+        run: |
+          echo "before"
+          ls -lah ./
+          rm -rf ./* || true
+          rm -rf ./.??* || true
+          echo "after"
+          ls -lah ./
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Checkout repository submodules
+        run: git submodule update --init --recursive
+
+      - name: Get gl4es latest commit hash
+        id: gl4es-sha
+        run: |
+          echo "sha=$(git ls-remote https://github.com/PojavLauncherTeam/gl4es-114-extra refs/heads/master | grep -io '^\S*')" >> $GITHUB_OUTPUT
+
+      - name: Cache gl4es
+        uses: actions/cache@v4
+        if: false # set to true if you want to enable caching
+        id: gl4es-cache
+        with:
+          path: gl4es/libs
+          key: gl4es-holy-ios-shared-2-${{ steps.gl4es-sha.outputs.sha }}
+
+      - name: Get gl4es
+        if: false && steps.gl4es-cache.outputs.cache-hit != 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: 'PojavLauncherTeam/gl4es-114-extra'
+          path: 'gl4es'
+
+      - name: Build gl4es
+        if: false && steps.gl4es-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        run: |
+          cd gl4es
+          git config user.email "github-actions@users.noreply.github.com"
+          git config user.name "github-actions"
+          export PATH=/opt/procursus/bin:$PATH
+          wget https://github.com/leetal/ios-cmake/raw/master/ios.toolchain.cmake
+          cmake -B build -DCMAKE_TOOLCHAIN_FILE=ios.toolchain.cmake -DDEFAULT_ES=2 \
+            -DNOX11=ON -DNOEGL=OFF -DSTATICLIB=OFF -DPLATFORM=OS64 \
+            -DCMAKE_C_FLAGS=-Wno-error=implicit-function-declaration
+          cmake --build build --config RelWithDebInfo --target GL || true
+          cp -R lib/libGL.dylib ../Natives/resources/Frameworks/libgl4es_114.dylib || true
+
+      - name: Push gl4es
+        if: false && github.event_name != 'pull_request' && github.ref_name == 'main' && steps.gl4es-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        run: |
+          git add Natives/resources/Frameworks/libgl4es_114.dylib || true
+          git commit -am "CI: Update gl4es" || true
+          git push || true
+
+      - name: Build for ${{ matrix.platform_name }}
+        env:
+          IPHONEOS_DEPLOYMENT_TARGET: 14.0
+        run: |
+          export PATH=/opt/homebrew/bin:$PATH
+          export SLIMMED=0
+          if [ "${{ matrix.platform_name }}" == "ios" ]; then
+            # Build ipa and tipa for iOS
+            gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }}
+            gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }} TROLLSTORE_JIT_ENT=1
+          elif [ "${{ matrix.platform_name }}" == "tvos" ]; then
+            # Build tipa only for tvOS
+            gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }} TROLLSTORE_JIT_ENT=1
+          else
+            # Build ipa only for everything else
+            gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }}
+          fi
+          
+      - name: Upload regular ipa
+        uses: actions/upload-artifact@v4
+        with:
+          name: org.angelauramc.amethyst-${{ matrix.platform_name }}.ipa
+          path: artifacts/org.angelauramc.amethyst-*-${{ matrix.platform_name }}.ipa
+
+      - name: Upload regular tipa
+        uses: actions/upload-artifact@v4
+        with:
+          name: org.angelauramc.amethyst-${{ matrix.platform_name }}-trollstore.tipa
+          path: artifacts/org.angelauramc.amethyst-*-${{ matrix.platform_name }}-trollstore.tipa
+
+      - name: Upload PojavLauncher.dSYM
+        if: matrix.platform_name == 'ios'
+        uses: actions/upload-artifact@v4
+        with:
+          name: AngelAuraAmethyst.dSYM
+          path: artifacts/AngelAuraAmethyst.dSYM

@@ -5,7 +5,6 @@
 #import "LauncherPrefManageJREViewController.h"
 #import "LauncherProfileEditorViewController.h"
 #import "LauncherProfilesViewController.h"
-//#import "NSFileManager+NRFileManager.h"
 #import "PLProfiles.h"
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunguarded-availability-new"
@@ -17,14 +16,14 @@
 #import "installer/ModpackInstallViewController.h"
 #import "ios_uikit_bridge.h"
 #import "utils.h"
+#import "ModsManagerViewController.h"
 
 typedef NS_ENUM(NSUInteger, LauncherProfilesTableSection) {
     kInstances,
     kProfiles
 };
 
-@interface LauncherProfilesViewController () //<UIContextMenuInteractionDelegate>
-
+@interface LauncherProfilesViewController ()
 @property(nonatomic) UIBarButtonItem *createButtonItem;
 @end
 
@@ -54,11 +53,6 @@ typedef NS_ENUM(NSUInteger, LauncherProfilesTableSection) {
                     @"name": @"",
                     @"lastVersionId": @"latest-release"}];
             }],
-#if 0 // TODO
-        [UIAction
-            actionWithTitle:@"OptiFine" image:nil
-            identifier:@"optifine" handler:createHandler],
-#endif
         [UIAction
             actionWithTitle:@"Fabric/Quilt" image:nil
             identifier:@"fabric_or_quilt" handler:^(UIAction *action) {
@@ -73,7 +67,8 @@ typedef NS_ENUM(NSUInteger, LauncherProfilesTableSection) {
             actionWithTitle:@"Modpack" image:nil
             identifier:@"modpack" handler:^(UIAction *action) {
                 [self actionCreateModpackProfile];
-            }]
+            }],
+        
     ]];
     self.createButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemAdd menu:createMenu];
 
@@ -84,10 +79,8 @@ typedef NS_ENUM(NSUInteger, LauncherProfilesTableSection) {
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
 
-    // Put navigation buttons back in place
     self.navigationItem.rightBarButtonItems = @[[sidebarViewController drawAccountButton], self.createButtonItem];
 
-    // Pickup changes made in the profile editor and switching instance
     [PLProfiles updateCurrent];
     [self.tableView reloadData];
     [self.navigationController performSelector:@selector(reloadProfileList)];
@@ -123,8 +116,19 @@ typedef NS_ENUM(NSUInteger, LauncherProfilesTableSection) {
 
 - (void)presentNavigatedViewController:(UIViewController *)vc {
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
-    //nav.navigationBar.prefersLargeTitles = YES;
     [self presentViewController:nav animated:YES completion:nil];
+}
+
+#pragma mark - Manage Mods
+
+- (void)openManageMods {
+    ModsManagerViewController *vc = [ModsManagerViewController new];
+    if (PLProfiles.current.selectedProfileName.length > 0) {
+        vc.profileName = PLProfiles.current.selectedProfileName;
+    } else {
+        vc.profileName = @"default";
+    }
+    [self.navigationController pushViewController:vc animated:YES];
 }
 
 #pragma mark Table view
@@ -143,7 +147,7 @@ typedef NS_ENUM(NSUInteger, LauncherProfilesTableSection) {
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     switch (section) {
-        case 0: return 2;
+        case 0: return 3; // Increased to 3 to accommodate "Manage Mods"
         case 1: return [PLProfiles.current.profiles count];
     }
     return 0;
@@ -155,7 +159,7 @@ typedef NS_ENUM(NSUInteger, LauncherProfilesTableSection) {
         cell.imageView.image = [UIImage systemImageNamed:@"folder"];
         cell.textLabel.text = localize(@"preference.title.game_directory", nil);
         cell.detailTextLabel.text = getenv("DEMO_LOCK") ? @".demo" : getPrefObject(@"general.game_directory");
-    } else {
+    } else if (row == 1) {
         NSString *imageName;
         if (@available(iOS 15.0, *)) {
             imageName = @"folder.badge.gearshape";
@@ -169,16 +173,18 @@ typedef NS_ENUM(NSUInteger, LauncherProfilesTableSection) {
         [view setOn:getPrefBool(@"internal.isolated") animated:NO];
         [view addTarget:self action:@selector(actionTogglePrefIsolation:) forControlEvents:UIControlEventValueChanged];
         cell.accessoryView = view;
+    } else if (row == 2) {
+        cell.imageView.image = [UIImage systemImageNamed:@"puzzlepiece.extension"];
+        cell.textLabel.text = @"管理 Mod";
+        cell.detailTextLabel.text = nil;
     }
 }
 
 - (void)setupProfileCell:(UITableViewCell *) cell atRow:(NSInteger)row {
     NSMutableDictionary *profile = PLProfiles.current.profiles.allValues[row];
-
     cell.textLabel.text = profile[@"name"];
     cell.detailTextLabel.text = profile[@"lastVersionId"];
     cell.imageView.layer.magnificationFilter = kCAFilterNearest;
-
     UIImage *fallbackImage = [[UIImage imageNamed:@"DefaultProfile"] _imageWithSize:CGSizeMake(40, 40)];
     [cell.imageView setImageWithURL:[NSURL URLWithString:profile[@"icon"]] placeholderImage:fallbackImage];
 }
@@ -218,6 +224,8 @@ typedef NS_ENUM(NSUInteger, LauncherProfilesTableSection) {
     if (indexPath.section == kInstances) {
         if (indexPath.row == 0) {
             [self.navigationController pushViewController:[LauncherPrefGameDirViewController new] animated:YES];
+        } else if (indexPath.row == 2) {
+            [self openManageMods];
         }
         return;
     }
@@ -233,7 +241,6 @@ typedef NS_ENUM(NSUInteger, LauncherProfilesTableSection) {
 
     UITableViewCell *cell = [self.tableView cellForRowAtIndexPath:indexPath];
     NSString *title = localize(@"preference.title.confirm", nil);
-    // reusing the delete runtime message
     NSString *message = [NSString stringWithFormat:localize(@"preference.title.confirm.delete_runtime", nil), cell.textLabel.text];
     UIAlertController *confirmAlert = [UIAlertController alertControllerWithTitle:title message:message preferredStyle:UIAlertControllerStyleActionSheet];
     confirmAlert.popoverPresentationController.sourceView = cell;
@@ -241,7 +248,6 @@ typedef NS_ENUM(NSUInteger, LauncherProfilesTableSection) {
     UIAlertAction *ok = [UIAlertAction actionWithTitle:localize(@"OK", nil) style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
         [PLProfiles.current.profiles removeObjectForKey:cell.textLabel.text];
         if ([PLProfiles.current.selectedProfileName isEqualToString:cell.textLabel.text]) {
-            // The one being deleted is the selected one, switch to the random one now
             PLProfiles.current.selectedProfileName = PLProfiles.current.profiles.allKeys[0];
             [self.navigationController performSelector:@selector(reloadProfileList)];
         } else {

@@ -14,11 +14,13 @@
 
 // The play button
 "Play" = "启动游戏";
+"Details" = "详情";
 
 // Version categories
 "Installed" = "已安装";
 "Snapshot" = "快照";
 "Releases" = "正式版";
+"Unstable" = "不稳定";
 "Old-beta" = "远古 beta 版";
 "Old-alpha" = "远古 alpha 版";
 
@@ -28,7 +30,12 @@
 "Move" = "移动";
 "Remove" = "移除";
 "Resize" = "调整大小";
+// Visibility
+"Always" = "始终";
+"In game" = "游戏中";
+"In menu" = "菜单中";
 
+"custom_controls.button_edit.forward_lock" = "前进锁定";
 "custom_controls.button_edit.name" = "名称";
 "custom_controls.button_edit.size" = "大小";
 "custom_controls.button_edit.mapping" = "映射";
@@ -41,6 +48,7 @@
 "custom_controls.button_edit.stroke_color" = "边框颜色";
 "custom_controls.button_edit.corner_radius" = "圆角半径 (%)";
 "custom_controls.button_edit.opacity" = "不透明度 (%)：";
+"custom_controls.button_edit.visibility" = "可见性";
 
 "custom_controls.button_menu.add_subbutton" = "添加子按钮";
 "custom_controls.control_menu.discard_changes" = "取消更改";
@@ -55,29 +63,45 @@
 "custom_controls.control_menu.safe_area" = "安全区域";
 "custom_controls.control_menu.add_button" = "添加按键";
 "custom_controls.control_menu.add_drawer" = "添加组合键";
+"custom_controls.control_menu.add_joystick" = "添加摇杆";
 "custom_controls.error.incompatible" = "此控件版本（代码 %d）在当前启动器版本中尚未实现。";
 "custom_controls.hint" = "长按屏幕上的任意位置以获取更多选项";
 
 "init.migrateDir" = "目前 Amethyst 数据目录为%@。所有的游戏资源已移动到最新目录。";
+
+"java.error.missing_main_class" = "%@ 缺少 main class 属性。如果这是一个 mod，请将其放入所选实例的 “mods” 文件夹。";
+"java.error.missing_runtime" = "%@ 需要 Java %d 或更高版本才能运行。请先安装并在 管理运行时 中指定。";
 
 "launcher.mcl.downloading_file" = "正在下载 %@";
 "launcher.mcl.error_download" = "下载 %@ 失败：%@";
 
 "launcher.menu.custom_controls" = "自定义控制按键";
 "launcher.menu.install_jar" = "安装 .jar";
+"launcher.menu.execute_jar" = "执行 .jar";
+"launcher.menu.import_modpack" = "导入整合包";
 
 "launcher.wait_jit.title" = "请等待应用获取到JIT(Just-in-time)";
 "launcher.wait_jit.message" = "Amethyst启动器必须要JIT (Just-in-time) 权限才能启动游戏";
+"launcher.wait_jit_trollstore.message" = "如果仍然看到此消息，请在 TrollStore 中启用 URL Scheme。";
 
 "login.error.username.outOfRange" = "用户名必须在 3-16 个字符以内";
+"login.error.fields.empty" = "请填写所有字段";
+"login.error.invalid_credentials" = "用户名或密码错误";
+"login.error.token_missing" = "访问令牌或客户端令牌缺失";
+"login.error.token_expired" = "认证令牌已过期，请重新登录";
+"login.error.invalid_response" = "服务器响应无效";
 
 "login.alert.field.username" = "用户名";
+"login.alert.field.password" = "密码";
+"login.alert.field.server" = "服务器地址";
+"login.error.invalid_server" = "服务器地址无效";
 
 "login.jit.checking" = "检查是否开启 JIT 权限";
 "login.jit.enabled" = "JIT 权限已启用";
 "login.jit.fail" = "无法启用 JIT。";
 "login.jit.fail.title" = "无法在您的设备上启用 JIT。";
 "login.jit.fail.description" = "没有集成可在您的设备上自动启用 JIT，现在需要手动启用。错误已记录到 latestlog.txt。";
+"login.jit.fail.description_unsupported" = "检测到不受支持的安装方法。请使用受支持的方法重新安装。";
 
 // Login buttons
 "login.menu.sendlogs" = "发送日志文件";
@@ -86,6 +110,7 @@
 "login.option.demo" = "演示账户";
 "login.option.microsoft" = "微软账户";
 "login.option.local" = "本地账户";
+"login.option.3rdparty" = "第三方账户";
 
 "login.warn.title.legacy_device" = "Amethyst 的下一个版本将与此设备不兼容。";
 "login.warn.message.legacy_device" = "运行下一个主要版本，需要一台能够运行 iOS 14 的设备。";
@@ -93,12 +118,14 @@
 "login.warn.message.legacy_ios" = "运行下一个主要版本，需要一台能够运行 iOS 14 或更高版本的设备。";
 "login.warn.title.limited_ram" = "该设备的可用内存有限。";
 "login.warn.message.limited_ram" = "我们建议启用自动分配内存大小，以防止不稳定和性能问题。";
+"login.warn.title.ios19_jitdead" = "此改版对 iOS 26 的兼容性较差。";
+"login.warn.message.ios19_jitdead" = "此改版并未适配 iOS 26 ,您仍可使用此改版,但很可能出现不可预测的错误。";
 
 "login.warn.title.demomode" = "您现在是演示账户";
 "login.warn.message.demomode" = "演示模式作为离线和本地模式的替代，将允许你登录到一个尚未购买游戏的微软账户中游玩 1.3.1 及更新版本的试玩版本。因为官方启动器的一些特性，在较旧版本中会包含完整的游戏。详情请参阅我们的网站，了解更多关于离线模式的过渡。";
 
-"login.warn.title.localmode" = "离线模式现在是本地模式了。";
-"login.warn.message.localmode" = "您可以继续游玩已经安装的版本，但是如果没有正版账户，您将无法再下载其他版本。任何有关本地账户以及如何获取其他 Minecraft 版本的问题将不会得到任何解答。";
+"login.warn.title.localmode" = "关于离线模式";
+"login.warn.message.localmode" = "任何有关本地账户以及如何获取其他 Minecraft 版本的问题将不会得到任何解答。";
 
 "login.msa.error.xsts.noxboxacc" = "此微软账户没有注册 Xbox 账户。请确认您已注册了 Xbox 账户。\n错误代码：2148916233";
 "login.msa.error.xsts.noxbox" = "Xbox Live 目前在您的国家/地区不可用。\n错误代码：2148916235";
@@ -112,12 +139,24 @@
 "login.msa.progress.acquireMCToken" = "(4/5) 请求 Minecraft 令牌";
 "login.msa.progress.checkMCProfile" = "(5/5) 检查 Minecraft 配置文件";
 
+"login.3rdparty.progress.auth" = "正在通过第三方服务器进行认证";
+"login.3rdparty.progress.refresh" = "正在刷新第三方认证";
+"login.3rdparty.2fa.title" = "两步验证";
+"login.3rdparty.2fa.message" = "请输入您的两步验证代码";
+"login.3rdparty.2fa.code" = "验证码";
+"login.3rdparty.2fa.empty" = "验证码不能为空";
+
 "News" = "新闻";
+"preference.title.news_url" = "新闻网址";
+"preference.detail.news_url" = "设置新闻页面的网址";
+"preference.title.reset_news_url" = "恢复默认新闻网址";
+"preference.detail.reset_news_url" = "将新闻网址重置为默认值";
+"Profiles" = "实例管理";
 "Settings" = "设置";
 
-"preference.section.general" = "启动器基础设置";
+"preference.section.general" = "启动器设置";
 "preference.section.video" = "视频设置";
-"preference.section.footer.video" = "自动渲染器允许 Amethyst 选择基于 Minecraft 版本的最佳选项。减少分辨率降低GPU 工作量以提高性能。";
+"preference.section.footer.video" = "自动渲染器允许 Amethyst 选择基于 Minecraft 版本的最佳选项。减少分辨率降低 GPU 工作量以提高性能。";
 "preference.section.control" = "自定义控制键";
 "preference.section.debug" = "UI设置";
 "preference.section.footer.debug" = "除了调试外，这些设置可能对自定义控件有用。您可能需要重新启动启动器才能使更改生效。";
@@ -135,14 +174,18 @@
 "preference.detail.check_sha" = "此选项将强制启动器在哈希值可用时检查下载文件以防止下载错误。";
 "preference.title.cosmetica" = "Cosmetica 披风";
 "preference.detail.cosmetica" = "启用来自 Cosmetica（原 Arc ）的披风。欲了解更多信息，请访问 https://arcapes.com。需要 OptiFine。";
+"preference.title.download_source" = "下载源";
+"preference.detail.download_source" = "选择游戏资源下载源。BMCLAPI镜像源提供更快的国内下载速度。";
+"preference.title.download_source-official" = "官方源";
+"preference.title.download_source-bmclapi" = "BMCLAPI镜像源";
 "preference.title.debug_logging" = "调试日志";
 "preference.detail.debug_logging" = "完整的记录启动器的各种活动事件到latestlog.txt文件内,有助于开发者更容易的发现错误。但Minecraft游戏内FPS可能会降低(频繁的记录日志内容会使得CPU负载变高)";
 "preference.title.jitstreamer_server" = "JitStreamer的服务器地址";
 "preference.detail.jitstreamer_server" = "该选项将自定义获取 JIT 权限地址的 JitStreamer 服务器，若你不知道如何修改请勿修改，当然也可以保持默认地址";
 "preference.title.enable_altkit" = "启用 AltKit 集成";
 "preference.detail.enable_altkit" = "启用时，Amethyst 将尝试连接到本地 AltServers 以启用 JIT。";
-"preference.title.appicon" = "设置应用应用图标风格";
-"preference.detail.appicon" = "允许您为 Amethyst 选择不同的主屏幕图标。";
+"preference.title.appicon" = "设置应用图标";
+"preference.detail.appicon" = "自定义图标目前不可用,会在接下来的版本中恢复此功能.";
 "preference.title.appicon-default" = "设置 Amethyst 图标为浅色";
 "preference.title.appicon-dark" = "设置 Amethyst 图标为深色";
 "preference.title.appicon-development" = "已封装开发";
@@ -167,7 +210,7 @@
 "preference.title.renderer.release.angle" = "ANGLE";
 "preference.title.renderer.release.zink" = "Zink";
 
-"preference.title.renderer.debug.auto" = "自动：gl4es 或 ANGLE";
+"preference.title.renderer.debug.auto" = "自动：gl4es、ANGLE或MobileGlues";
 "preference.title.renderer.debug.gl4es" = "gl4es 1.1.4 - OpenGL版本2.1";
 "preference.title.renderer.debug.angle" = "ANGLE（仅支持1.17+）- exports OpenGL 版本 3.2";
 "preference.title.renderer.debug.zink" = "Zink（Mesa 21.0）- exports OpenGL 版本 4.1";
@@ -175,9 +218,12 @@
 "preference.detail.renderer" = "更改使用的 OpenGL 渲染器";
 
 "preference.title.resolution" = "分辨率缩放 (%)";
-"preference.detail.resolution" = "降低分辨率可能会提升FPS。默认分辨率为屏幕的分辨率";
+"preference.detail.resolution" = "降低分辨率可能会提升FPS。默认分辨率为屏幕的分辨率，此功能可能不适用于新版 Minecraft。";
 "preference.title.max_framerate" = "最大帧率";
 "preference.detail.max_framerate" = "允许您在 ProMotion 显示器上将游戏帧率限制为 60FPS。";
+
+"preference.title.performance_hud" = "显示性能 HUD";
+"preference.detail.performance_hud" = "当可用时显示性能监控覆盖层。";
 
 "preference.title.fullscreen_airplay" = "全屏 AirPlay";
 "preference.detail.fullscreen_airplay" = "允许在外部显示器上全屏显示游戏，而不是直接镜像显示。";
@@ -185,13 +231,19 @@
 "preference.detail.silence_other_audio" = "启用后将允许 Amethyst 在启动游戏时暂停其他应用的音频。";
 "preference.title.silence_with_switch" = "使用静音开关禁用音频";
 "preference.detail.silence_with_switch" = "启用时，可以使用静音模式禁用音频，耳机和外部扬声器不受此影响。";
+"preference.title.allow_microphone" = "允许麦克风输入";
+"preference.detail.allow_microphone" = "仅当你使用语音聊天 mod 时启用此项。静音开关将被忽略，并且会影响其他应用的音频质量。";
 "preference.title.default_gamepad_ctrl" = "手柄配置";
 "preference.title.hardware_hide" = "硬件连接时隐藏控制键";
 "preference.detail.hardware_hide" = "启用连接鼠标或游戏控制器时自动禁用屏幕控制叠加的行为。";
+"preference.title.recording_hide" = "从屏幕录制中隐藏控制";
+"preference.detail.recording_hide" = "在截图和屏幕录制时隐藏控制，但它们仍然在屏幕上可见。";
 "preference.title.gesture_mouse" = "鼠标手势";
 "preference.detail.gesture_mouse" = "启用手势，例如点击放置方块、按住破坏方块、用两根手指转动视角";
 "preference.title.gesture_hotbar" = "快捷栏手势";
 "preference.detail.gesture_hotbar" = "启用手势，例如点击快捷栏物品槽、双手交换物品、丢弃物品";
+"preference.title.disable_haptics" = "禁用屏幕触觉反馈";
+"preference.detail.disable_haptics" = "关闭游戏中的触觉反馈（震动）效果，可节省电量。";
 "preference.title.press_duration" = "长按延迟（毫秒）";
 "preference.detail.press_duration" = "修改长按摧毁方块、丢弃物品的触发时长。";
 "preference.title.button_scale" = "屏幕按钮缩放 (%)";
@@ -205,6 +257,12 @@
 "preference.title.slideable_hotbar" = "可滑动快捷栏";
 "preference.detail.slideable_hotbar" = "使快捷栏像鼠标滚轮一样可滑动";
 
+// Custom mouse pointer
+"preference.title.custom_mouse_pointer" = "自定义鼠标指针";
+"preference.detail.custom_mouse_pointer" = "选择自定义图片作为游戏内鼠标指针外观。";
+"preference.title.reset_mouse_pointer" = "恢复默认鼠标指针";
+"preference.detail.reset_mouse_pointer" = "将鼠标指针恢复为默认外观。";
+
 "preference.title.gyroscope_enable" = "启用陀螺仪控制";
 "preference.detail.gyroscope_enable" = "启用此功能会允许您通过转动设备来在游戏中转动视角";
 "preference.title.gyroscope_invert_x_axis" = "左右反转陀螺仪";
@@ -212,11 +270,22 @@
 "preference.title.gyroscope_sensitivity" = "陀螺仪控制灵敏度";
 "preference.detail.gyroscope_sensitivity" = "调整陀螺仪控制的灵敏度";
 
-"preference.title.java_home" = "游戏版本小于 1.17 时仍然使用 Java 17";
-"preference.detail.java_home" = "这些版本默认使用 Java 8。启用此选项可强制使用 Java 17，但不保证兼容性。";
+"preference.title.manage_runtime" = "管理 Java";
+"preference.title.confirm.delete_runtime" = "%@ 将被删除";
+"preference.manage_runtime.header.default" = "首选 Java 版本";
+"preference.manage_runtime.default.1165" = "1.16.5 及更早版本";
+"preference.manage_runtime.default.117" = "1.17 及更高版本";
+"preference.manage_runtime.footer.default" = "Minecraft 1.16.5 和更早版本可能运行更新的 Java 版本，但与 mod 的兼容性不能保证。外部运行时可放在 “java_runtimes” 文件夹。更改 “Execute .jar” 的 Java 版本仅在安装程序无需新版 Java 时生效。";
+"preference.manage_runtime.footer.java8" = "这是 Minecraft 1.16.5 及更早版本的默认版本。";
+"preference.manage_runtime.footer.java17" = "这是 Minecraft 1.17 及更高版本的默认版本。";
+"preference.manage_runtime.header.invalid" = "无效的运行时";
+
 "preference.title.java_args" = "JVM 启动参数";
 "preference.detail.java_args" = "当启动 Minecraft 时将参数传递到 Java。小心，如果修改不正确，可能会使游戏崩溃。";
 "preference.placeholder.java_args" = "自定义参数...";
+"preference.title.env_variables" = "环境变量";
+"preference.detail.env_variables" = "在启动 Minecraft 时设置自定义环境变量。小心，这可能会使游戏崩溃。";
+"preference.placeholder.env_variables" = "指定变量...";
 "preference.title.auto_ram" = "自动设置内存大小";
 "preference.detail.auto_ram" = "启用内存自动调节";
 "preference.warn.auto_ram" = "在未越狱的设备禁用此选项上可能会导致应用不稳定。请谨慎更改此选项。";
@@ -238,6 +307,23 @@
 "preference.detail.debug_show_layout_bounds" = "显示剪辑边界、边距";
 "preference.title.debug_show_layout_overlap" = "布局重叠显示";
 "preference.detail.debug_show_layout_overlap" = "用浅黄色覆盖每个视图，颜色越深则重叠越多";
+
+"preference.profile.title.name" = "名称";
+"preference.profile.title.loader_type" = "加载器类型";
+"preference.profile.title.loader_vendor" = "加载器供应商";
+"preference.profile.title.loader_version" = "加载器版本";
+"preference.profile.title.version" = "版本";
+"preference.profile.title.version_type" = "版本类型";
+"preference.profile.title.default_touch_control" = "触摸控制";
+"preference.profile.title.default_gamepad_control" = "手柄控制";
+
+"profile.error.name_exists" = "已有同名配置文件。请使用其他名称。";
+"profile.section.instance" = "游戏实例设置";
+"profile.section.profiles" = "此实例中的配置文件";
+"profile.title.create" = "创建新配置文件";
+"profile.title.separate_preference" = "隔离设置";
+"profile.detail.separate_preference" = "启用此选项以隔离在设置中所做的更改。重置会恢复为全局设置而不是默认设置。";
+"profile.title.install_fabric_quilt" = "安装 Fabric/Quilt";
 
 "controller_configurator.title.current" = "游戏键盘配置文件";
 "controller_configurator.title.type.xbox" = "Xbox";
@@ -284,3 +370,21 @@
 "controller_configurator.section.footer.menu_mappings" = "当鼠标未被锁定时，如在标题屏幕或暂停菜单中时绑定。";
 "controller_configurator.section.controller_style" = "手柄类型";
 "controller_configurator.section.footer.controller_style" = "在此配置器中显示不同的手柄按钮名称。";
+
+"preference.title.appicon-custom" = "自定义";
+"preference.title.custom_appicon" = "自定义应用图标";
+"preference.detail.custom_appicon" = "选择一张自定义图片作为应用图标";
+
+"preference.title.mod_touch_enable" = "启用 TouchController 支持";
+"preference.detail.mod_touch_enable" = "启用 TouchController 模组支持。注意：开启此项将禁用“可滑动快捷栏”。";
+
+
+
+"preference.popup.touch_info.title" = "TouchController 适配说明";
+"preference.popup.touch_info.message" = "本功能是基于 TouchController 模组的非官方 iOS 移植版本。\n\n原项目信息：https://github.com/TouchController/TouchController \n感谢原作者开源 (GPLv3)。\n\n技术说明：\n由于原模组不支持 iOS，本功能通过本地 UDP 协议 (Localhost) 在启动器与游戏进程间建立通信桥接。此连接仅用于设备内部传输触控数据，绝不会连接互联网，请放心使用。";
+
+"preference.title.two_finger_keyboard" = "双指呼出键盘";
+"preference.detail.two_finger_keyboard" = "在游戏中双指长按屏幕呼出键盘。";
+
+"提示" = "提示";
+"spdt" = "我是个飞机!!!!!!";

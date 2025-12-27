@@ -30,6 +30,13 @@
 					<string>AppIcon-Development60x60</string>
 				</array>
 			</dict>
+			<key>CustomIcon</key>
+			<dict>
+				<key>CFBundleIconFiles</key>
+				<array>
+					<string>CustomIcon</string>
+				</array>
+			</dict>
 		</dict>
 		<key>CFBundlePrimaryIcon</key>
 		<dict>
@@ -61,6 +68,13 @@
 					<string>AppIcon-Development76x76</string>
 				</array>
 			</dict>
+			<key>CustomIcon</key>
+			<dict>
+				<key>CFBundleIconFiles</key>
+				<array>
+					<string>CustomIcon</string>
+				</array>
+			</dict>
 		</dict>
 		<key>CFBundlePrimaryIcon</key>
 		<dict>
@@ -82,7 +96,7 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0</string>
+	<string>Preview 4.0.0</string>
 	<key>CFBundleSignature</key>
 	<string>????</string>
 	<key>CFBundleURLTypes</key>
@@ -97,7 +111,7 @@
 		</dict>
 	</array>
 	<key>CFBundleVersion</key>
-	<string>1.0</string>
+	<string>Preview 4.0.0</string>
 	<key>GCSupportedGameControllers</key>
 	<array>
 		<dict>
@@ -201,5 +215,10 @@
 	<true/>
 	<key>UIWhitePointAdaptivityStyle</key>
 	<string>UIWhitePointAdaptivityStyleGame</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
 </dict>
 </plist>

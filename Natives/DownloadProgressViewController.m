@@ -106,7 +106,7 @@ static void *TotalProgressObserverContext = &TotalProgressObserverContext;
         context:CellProgressObserverContext];
 
     WFWorkflowProgressView *progressView = (id)cell.accessoryView;
-    if (lastProgress.finished) {
+    if (lastProgress && lastProgress.finished) {
         [progressView reset];
     }
     progressView.fractionCompleted = progress.fractionCompleted;

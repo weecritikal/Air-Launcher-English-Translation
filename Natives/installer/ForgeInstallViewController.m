@@ -207,6 +207,9 @@
         @"NeoForge": @{
             @"installer": @"https://maven.neoforged.net/releases/net/neoforged/neoforge/%1$@/neoforge-%1$@-installer.jar",
             @"metadata": @"https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml"
+        },
+        @"OptiFine": @{
+            @"metadata": @"https://raw.githubusercontent.com/huanghongxun/HMCL/master/hmclweb/optifine/version_manifest.json"
         }
     };
     

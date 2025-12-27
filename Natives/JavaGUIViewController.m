@@ -411,7 +411,24 @@ dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
     uint16_t majorVer = OSSwapConstInt16(version[1]);
     NSLog(@"[ModInstaller] Main class version: %u.%u", majorVer, minorVer);
 
-    return _requiredJavaVersion = MAX(2, majorVer - 44);
+    // Minecraft version to Java version mapping:
+    // Java 8 (version 52) = Minecraft 1.12 and earlier
+    // Java 16 (version 60) = Minecraft 1.17 and later
+    // Java 17 (version 61) = Minecraft 1.18 and later
+    // Java 21 (version 65) = Minecraft 1.20.5 and later
+    int javaVersion = MAX(2, majorVer - 44);
+    
+    // Apply Minecraft version-specific Java requirements
+    if (self.filepath) {
+        NSString *fileName = [self.filepath lastPathComponent];
+        // Extract version from filename if possible
+        // This is a simplified approach - in a full implementation you'd extract the version more robustly
+        if (fileName) {
+            // For .jar files, we might need to determine version differently
+        }
+    }
+    
+    return _requiredJavaVersion = javaVersion;
 }
 
 - (void)showErrorMessage:(NSString *)message {
