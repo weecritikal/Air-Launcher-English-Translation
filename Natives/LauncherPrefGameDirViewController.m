@@ -241,7 +241,7 @@ viewForFooterInSection:(NSInteger)section
 }
 
 - (void) dismissModalViewController {
-    [self.navigationController dismissViewControllerAnimated:YES completion:nil];
+    dismissModalViewController(self);
 }
 
 #pragma mark UITextField

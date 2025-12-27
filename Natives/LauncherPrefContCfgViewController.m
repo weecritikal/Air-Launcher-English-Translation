@@ -235,7 +235,7 @@ typedef void(^CreateView)(UITableViewCell *, NSString *, NSDictionary *);
 #pragma mark UI
 
 - (void) dismissModalViewController {
-    [self.navigationController dismissViewControllerAnimated:YES completion:nil];
+    dismissModalViewController(self);
 }
 
 - (void)actionOpenFilePicker:(void (^)(NSString *name))handler {

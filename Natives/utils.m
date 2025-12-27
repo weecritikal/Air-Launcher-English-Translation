@@ -196,3 +196,7 @@ BOOL DeviceRequiresTXMWorkaround(void) {
     }
     return NO;
 }
+
+void dismissModalViewController(UIViewController *viewController) {
+    [viewController.navigationController dismissViewControllerAnimated:YES completion:nil];
+}

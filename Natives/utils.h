@@ -91,6 +91,7 @@ CGFloat dpToPx(CGFloat dp);
 CGFloat pxToDp(CGFloat px);
 void setButtonPointerInteraction(UIButton *button);
 void _CGDataProviderReleaseBytePointerCallback(void *info,const void *pointer);
+void dismissModalViewController(UIViewController *viewController);
 
 jboolean attachThread(bool isAndroid, JNIEnv** secondJNIEnvPtr);
 
