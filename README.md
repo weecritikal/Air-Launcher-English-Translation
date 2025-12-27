@@ -5,6 +5,7 @@
 [![Total Downloads](https://img.shields.io/github/downloads/herbrine8403/Amethyst-iOS-MyRemastered/total?label=Downloads&style=flat)](https://github.com/herbrine8403/Amethyst-iOS-MyRemastered/releases)
 <a href="https://github.com/herbrine8403/Amethyst-iOS-MyRemastered/releases/"><img src="https://img.shields.io/github/v/release/herbrine8403/Amethyst-iOS-MyRemastered?style=flat"></a>
 <a href="https://raw.githubusercontent.com/herbrine8403/Amethyst-iOS-MyRemastered/main/LICENSE"><img src="https://img.shields.io/github/license/herbrine8403/Amethyst-iOS-MyRemastered?style=flat"></a>
+![Last Commit](https://img.shields.io/github/last-commit/herbrine8403/Amethyst-iOS-MyRemastered?color=c78aff&label=last%20commit&style=flat)
 
 **English** | [中文](README_CN.md)
 
@@ -13,7 +14,7 @@ Optimized and adapted based on the official Amethyst, focusing on iOS/iPadOS exp
 - **Mod Management**: Recreated Mod management functionality from other launchers, supporting viewing basic Mod information, one-click disabling/deleting Mods
 - **Modpack Import**: Supports importing ZIP format modpacks
 - **Custom Mouse Pointer**: Support for customizing virtual mouse pointer skins in settings
-- **Smart Download Source Switching**: Automatically identifies network environment and optimally selects between Mojang official source and BMCLAPI for more stable downloads
+- **Smart Download Source Switching**: Supports manually changing download sources in settings, supporting Mojang official source and BMCLAPI mirror source for faster downloads
 - **Complete Chinese Localization**: Fully translated interface, more suitable for Chinese users awa
 - **Account Restrictions Removed**: Supports local accounts, demo accounts (Demo Mode) and third-party accounts to directly download games without logging into Microsoft account or Test account
 - **Multi-Account Login**: Compatible with Microsoft accounts, local accounts, and third-party authentication accounts
@@ -23,7 +24,7 @@ Optimized and adapted based on the official Amethyst, focusing on iOS/iPadOS exp
 - **TouchController Support**: Communicates with TouchController Mod via UDP local proxy, providing touchscreen control support for iOS users
 - **Custom Icons**: (In development, coming soon)
 
-> ⚠️ Note: There are no plans to reset the Android version (there are too many excellent Android launchers, such as ZL, FCL), if you need the official Android code, please go to [Amethyst-Android](https://github.com/AngelAuraMC/Amethyst-Android).
+> ⚠️ Note: There are no plans to reset the Android version (there are too many excellent Android launchers, such as Zalith Launcher, Fold Craft Launcher, and the unfinished ShardLauncher), if you need the official Android code, please go to [Amethyst-Android](https://github.com/AngelAuraMC/Amethyst-Android).
 
 
 ## 🚀 Quick Start Guide
@@ -75,9 +76,9 @@ JIT (Just-In-Time) is crucial for smooth game operation. iOS needs to enable it 
 | Jailbroken Device | ❌ | ❌ | ✅ | System-level automatic support |
 
 
-## � Contributors
-- @LanRhyme - ShardLauncher author, modified News code to allow iOS 26 users to use the launcher
-- @WeiErLiTeo - Added Mod download functionality to the launcher
+## 🙏 Contributors
+- @LanRhyme - ShardLauncher author, allows iOS 26 users to use the launcher, changed log content
+- @WeiErLiTeo - Added Mod download functionality to the launcher, optimized TouchController support, added two-finger long press to open keyboard function
 
 
 ## 📦 Third-Party Components and Licenses
