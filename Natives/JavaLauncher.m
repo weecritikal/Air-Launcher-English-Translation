@@ -8,8 +8,13 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
-
+#include <mach/mach.h>
 #include "utils.h"
+
+// god knows why Copilot was trying to add this.
+#import "authenticator/BaseAuthenticator.h"
+#import "authenticator/ThirdPartyAuthenticator.h"
+// 鬼知道为什么copilot要把这玩意加里头……
 
 #import "ios_uikit_bridge.h"
 #import "JavaLauncher.h"
