@@ -388,3 +388,9 @@
 
 "提示" = "提示";
 "spdt" = "我是个飞机!!!!!!";
+
+// Announcement messages
+"announcement.preview_version" = "欢迎使用Amethyst iOS Remastered测试版！";
+"announcement.latest_version" = "欢迎使用Amethyst iOS Remastered！当前已是最新正式版。";
+"announcement.new_version_available" = "发现新版本：%@";
+"announcement.download_button" = "前往下载";

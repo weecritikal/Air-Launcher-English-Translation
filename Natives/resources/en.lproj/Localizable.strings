@@ -365,3 +365,9 @@
 "preference.title.custom_appicon" = "Custom App Icon";
 "preference.detail.custom_appicon" = "Select a custom image to use as the app icon";
 "提示" = "Notice";
+
+// Announcement messages
+"announcement.preview_version" = "Welcome to Amethyst iOS Remastered Preview Version!";
+"announcement.latest_version" = "Welcome to Amethyst iOS Remastered! This is the latest stable version.";
+"announcement.new_version_available" = "New version available: %@";
+"announcement.download_button" = "Download Now";
