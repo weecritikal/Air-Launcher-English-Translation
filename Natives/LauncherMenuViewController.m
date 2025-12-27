@@ -43,6 +43,7 @@
 @property(nonatomic) NSMutableArray<LauncherMenuCustomItem*> *options;
 @property(nonatomic) UILabel *statusLabel;
 @property(nonatomic) int lastSelectedIndex;
+@property(nonatomic, weak) NSLayoutConstraint *announcementContainerHeightConstraint;
 @end
 
 @implementation LauncherMenuViewController
@@ -228,9 +229,22 @@
         [announcementLabel.bottomAnchor constraintEqualToAnchor:announcementContainer.bottomAnchor constant:-12]
     ]];
     
-    // 将公告容器设置为表格头部视图
-    announcementContainer.frame = CGRectMake(0, 0, self.tableView.frame.size.width, 60);
-    self.tableView.tableHeaderView = announcementContainer;
+    // 将公告容器添加到视图，放在导航栏下方、表格视图上方
+    [self.view addSubview:announcementContainer];
+    
+    // 设置公告容器约束
+    NSLayoutConstraint *heightConstraint = [announcementContainer.heightAnchor constraintEqualToConstant:60];
+    self.announcementContainerHeightConstraint = heightConstraint;
+    
+    [NSLayoutConstraint activateConstraints:@[
+        [announcementContainer.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:8],
+        [announcementContainer.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:16],
+        [announcementContainer.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-16],
+        heightConstraint
+    ]];
+    
+    // 调整表格视图的顶部约束，为公告栏留出空间
+    self.tableView.contentInset = UIEdgeInsetsMake(76, 0, 0, 0); // 60高度 + 8上边距 + 8间距
     
     // 检查当前版本是否包含"Preview"字样
     if ([currentVersion rangeOfString:@"Preview" options:NSCaseInsensitiveSearch].location != NSNotFound) {
@@ -368,6 +382,17 @@
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
     [self restoreHighlightedSelection];
+}
+
+- (void)viewDidLayoutSubviews {
+    [super viewDidLayoutSubviews];
+    
+    // 确保表格视图的contentInset正确设置
+    // 这个方法的调用时机在视图布局完成后，可以安全地获取视图的实际尺寸
+    if (self.tableView.contentInset.top < 60) {
+        // 如果contentInset未正确设置，重新设置默认值
+        self.tableView.contentInset = UIEdgeInsetsMake(76, 0, 0, 0);
+    }
 }
 
 - (UIBarButtonItem *)drawAccountButton {
@@ -624,38 +649,52 @@
 
 // 调整公告栏容器高度（仅标签）
 - (void)adjustAnnouncementContainerHeight:(UIView *)container forLabel:(UILabel *)label {
-    // 计算标签所需高度
-    CGFloat maxWidth = container.frame.size.width - 62; // 容器宽度 - 左边距(15+20+12) - 右边距(15)
+    // 计算标签所需高度 - 使用视图的实际宽度
+    CGFloat maxWidth = self.view.frame.size.width - 64; // 视图宽度 - 左边距(16+20+12) - 右边距(16)
     CGSize labelSize = [label sizeThatFits:CGSizeMake(maxWidth, CGFLOAT_MAX)];
     CGFloat labelHeight = labelSize.height;
     
     // 计算容器高度：标签高度 + 上下边距(各12)
     CGFloat containerHeight = MAX(60, labelHeight + 24);
     
-    CGRect frame = container.frame;
-    frame.size.height = containerHeight;
-    container.frame = frame;
+    // 更新容器高度约束
+    if (self.announcementContainerHeightConstraint) {
+        self.announcementContainerHeightConstraint.constant = containerHeight;
+    }
     
-    // 更新表格头部视图
-    self.tableView.tableHeaderView = container;
+    // 更新表格视图的contentInset
+    CGFloat topInset = containerHeight + 24; // 容器高度 + 上边距(8) + 下间距(8+8)
+    self.tableView.contentInset = UIEdgeInsetsMake(topInset, 0, 0, 0);
+    
+    // 强制布局更新
+    [UIView animateWithDuration:0.3 animations:^{
+        [container.superview layoutIfNeeded];
+    }];
 }
 
 // 调整公告栏容器高度（带按钮）
 - (void)adjustAnnouncementContainerHeight:(UIView *)container forLabel:(UILabel *)label withButton:(UIButton *)button {
-    // 计算标签所需高度
-    CGFloat maxWidth = container.frame.size.width - 62; // 容器宽度 - 左边距(15+20+12) - 右边距(15)
+    // 计算标签所需高度 - 使用视图的实际宽度
+    CGFloat maxWidth = self.view.frame.size.width - 64; // 视图宽度 - 左边距(16+20+12) - 右边距(16)
     CGSize labelSize = [label sizeThatFits:CGSizeMake(maxWidth, CGFLOAT_MAX)];
     CGFloat labelHeight = labelSize.height;
     
     // 计算容器高度：标签高度 + 标签上边距(12) + 标签按钮间距(8) + 按钮高度(30) + 按钮下边距(12)
     CGFloat containerHeight = MAX(80, labelHeight + 12 + 8 + 30 + 12);
     
-    CGRect frame = container.frame;
-    frame.size.height = containerHeight;
-    container.frame = frame;
+    // 更新容器高度约束
+    if (self.announcementContainerHeightConstraint) {
+        self.announcementContainerHeightConstraint.constant = containerHeight;
+    }
     
-    // 更新表格头部视图
-    self.tableView.tableHeaderView = container;
+    // 更新表格视图的contentInset
+    CGFloat topInset = containerHeight + 24; // 容器高度 + 上边距(8) + 下间距(8+8)
+    self.tableView.contentInset = UIEdgeInsetsMake(topInset, 0, 0, 0);
+    
+    // 强制布局更新
+    [UIView animateWithDuration:0.3 animations:^{
+        [container.superview layoutIfNeeded];
+    }];
 }
 
 @end
