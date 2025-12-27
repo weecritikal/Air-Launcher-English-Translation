@@ -152,6 +152,10 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     ].mutableCopy;
 
     AFHTTPSessionManager *manager = [AFHTTPSessionManager manager];
+    // 配置响应序列化器以接受application/octet-stream
+    AFJSONResponseSerializer *serializer = [AFJSONResponseSerializer serializer];
+    [serializer setAcceptableContentTypes:[NSSet setWithObjects:@"application/json", @"text/json", @"text/javascript", @"application/octet-stream", nil]];
+    manager.responseSerializer = serializer;
     NSString *downloadSource = getPrefObject(@"general.download_source");
     NSString *versionManifestURL;
     
