@@ -44,6 +44,9 @@
 @property(nonatomic) UILabel *statusLabel;
 @property(nonatomic) int lastSelectedIndex;
 @property(nonatomic, weak) NSLayoutConstraint *announcementContainerHeightConstraint;
+@property(nonatomic, weak) UIView *announcementContainer;
+@property(nonatomic, weak) UILabel *announcementLabel;
+@property(nonatomic, weak) UIButton *downloadButton;
 @end
 
 @implementation LauncherMenuViewController
@@ -243,6 +246,10 @@
         heightConstraint
     ]];
     
+    // 存储公告栏引用
+    self.announcementContainer = announcementContainer;
+    self.announcementLabel = announcementLabel;
+    
     // 调整表格视图的顶部约束，为公告栏留出空间
     self.tableView.contentInset = UIEdgeInsetsMake(76, 0, 0, 0); // 60高度 + 8上边距 + 8间距
     
@@ -335,6 +342,9 @@
                     
                     [announcementContainer addSubview:downloadButton];
                     
+                    // 存储下载按钮引用
+                    self.downloadButton = downloadButton;
+                    
                     // 设置下载按钮约束
                     [NSLayoutConstraint activateConstraints:@[
                         [downloadButton.topAnchor constraintEqualToAnchor:announcementLabel.bottomAnchor constant:8],
@@ -392,6 +402,25 @@
     if (self.tableView.contentInset.top < 60) {
         // 如果contentInset未正确设置，重新设置默认值
         self.tableView.contentInset = UIEdgeInsetsMake(76, 0, 0, 0);
+    }
+    
+    // 重新计算公告栏高度，适应侧边栏宽度变化
+    // 侧边栏宽度可能会在横竖屏切换、iPad分屏模式下变化
+    if (self.announcementContainer && self.announcementLabel) {
+        // 检查当前宽度是否与之前不同
+        static CGFloat previousWidth = 0;
+        CGFloat currentWidth = self.announcementContainer.frame.size.width;
+        
+        if (fabs(currentWidth - previousWidth) > 1.0 && currentWidth > 50) {
+            previousWidth = currentWidth;
+            
+            // 重新调整高度
+            if (self.downloadButton) {
+                [self adjustAnnouncementContainerHeight:self.announcementContainer forLabel:self.announcementLabel withButton:self.downloadButton];
+            } else {
+                [self adjustAnnouncementContainerHeight:self.announcementContainer forLabel:self.announcementLabel];
+            }
+        }
     }
 }
 
