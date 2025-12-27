@@ -238,8 +238,8 @@
     
     [NSLayoutConstraint activateConstraints:@[
         [announcementContainer.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:8],
-        [announcementContainer.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:16],
-        [announcementContainer.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-16],
+        [announcementContainer.leadingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.leadingAnchor constant:16],
+        [announcementContainer.trailingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.trailingAnchor constant:-16],
         heightConstraint
     ]];
     
@@ -649,8 +649,26 @@
 
 // 调整公告栏容器高度（仅标签）
 - (void)adjustAnnouncementContainerHeight:(UIView *)container forLabel:(UILabel *)label {
-    // 计算标签所需高度 - 使用视图的实际宽度
-    CGFloat maxWidth = self.view.frame.size.width - 64; // 视图宽度 - 左边距(16+20+12) - 右边距(16)
+    // 计算标签所需高度 - 使用容器的实际宽度
+    // 容器内部边距：图标左边距(15) + 图标宽度(20) + 标签到图标间距(12) + 标签右边距(15) = 62
+    
+    // 确保容器已布局，获取准确宽度
+    if (container.frame.size.width <= 50) {
+        // 容器宽度异常小，可能是尚未布局，强制更新布局
+        [container.superview layoutIfNeeded];
+    }
+    
+    CGFloat containerWidth = container.frame.size.width;
+    CGFloat maxWidth = containerWidth - 62;
+    
+    // 确保最小宽度，避免计算错误
+    if (maxWidth <= 0) {
+        maxWidth = self.view.frame.size.width - 94; // 备用计算：屏幕宽度 - 所有边距
+    }
+    if (maxWidth <= 0) {
+        maxWidth = 200; // 绝对最小值
+    }
+    
     CGSize labelSize = [label sizeThatFits:CGSizeMake(maxWidth, CGFLOAT_MAX)];
     CGFloat labelHeight = labelSize.height;
     
@@ -674,8 +692,26 @@
 
 // 调整公告栏容器高度（带按钮）
 - (void)adjustAnnouncementContainerHeight:(UIView *)container forLabel:(UILabel *)label withButton:(UIButton *)button {
-    // 计算标签所需高度 - 使用视图的实际宽度
-    CGFloat maxWidth = self.view.frame.size.width - 64; // 视图宽度 - 左边距(16+20+12) - 右边距(16)
+    // 计算标签所需高度 - 使用容器的实际宽度
+    // 容器内部边距：图标左边距(15) + 图标宽度(20) + 标签到图标间距(12) + 标签右边距(15) = 62
+    
+    // 确保容器已布局，获取准确宽度
+    if (container.frame.size.width <= 50) {
+        // 容器宽度异常小，可能是尚未布局，强制更新布局
+        [container.superview layoutIfNeeded];
+    }
+    
+    CGFloat containerWidth = container.frame.size.width;
+    CGFloat maxWidth = containerWidth - 62;
+    
+    // 确保最小宽度，避免计算错误
+    if (maxWidth <= 0) {
+        maxWidth = self.view.frame.size.width - 94; // 备用计算：屏幕宽度 - 所有边距
+    }
+    if (maxWidth <= 0) {
+        maxWidth = 200; // 绝对最小值
+    }
+    
     CGSize labelSize = [label sizeThatFits:CGSizeMake(maxWidth, CGFLOAT_MAX)];
     CGFloat labelHeight = labelSize.height;
     
