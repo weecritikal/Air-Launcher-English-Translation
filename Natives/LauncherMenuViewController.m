@@ -154,7 +154,7 @@
     
     // 创建公告栏
     UILabel *announcementLabel = [[UILabel alloc] init];
-    announcementLabel.textAlignment = NSTextAlignmentCenter;
+    announcementLabel.textAlignment = NSTextAlignmentLeft;
     announcementLabel.textColor = [UIColor labelColor]; // 使用系统标签颜色，自动适配深色模式
     announcementLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
     announcementLabel.translatesAutoresizingMaskIntoConstraints = NO;
@@ -714,9 +714,7 @@
     self.tableView.contentInset = UIEdgeInsetsMake(topInset, 0, 0, 0);
     
     // 强制布局更新
-    [UIView animateWithDuration:0.3 animations:^{
-        [container.superview layoutIfNeeded];
-    }];
+    [container.superview layoutIfNeeded];
 }
 
 // 调整公告栏容器高度（带按钮）
@@ -757,9 +755,7 @@
     self.tableView.contentInset = UIEdgeInsetsMake(topInset, 0, 0, 0);
     
     // 强制布局更新
-    [UIView animateWithDuration:0.3 animations:^{
-        [container.superview layoutIfNeeded];
-    }];
+    [container.superview layoutIfNeeded];
 }
 
 @end
