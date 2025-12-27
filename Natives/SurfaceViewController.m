@@ -273,8 +273,8 @@ static GameSurfaceView* pojavWindow;
     self.mouseConnectCallback = [[NSNotificationCenter defaultCenter] addObserverForName:GCMouseDidConnectNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
         GCMouse* mouse = note.object;
         [self registerMouseCallbacks:mouse];
-        self.mousePointerView.hidden = isGrabbing || !virtualMouseEnabled;        [self setNeedsUpdateOfPrefersPointerLocked];
-        if (getPrefBool(@"control.hardware_hide")) { self.ctrlView.hidden = YES; }
+        self.mousePointerView.hidden = isGrabbing || !virtualMouseEnabled;
+        [self setNeedsUpdateOfPrefersPointerLocked];
     }];
     self.mouseDisconnectCallback = [[NSNotificationCenter defaultCenter] addObserverForName:GCMouseDidDisconnectNotification object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification *note) {
         GCMouse* mouse = note.object;
@@ -706,6 +706,10 @@ static GameSurfaceView* pojavWindow;
     mouse.mouseInput.scroll.yAxis.valueChangedHandler = ^(GCControllerAxisInput * _Nonnull axis, float value) {
         CallbackBridge_nativeSendScroll(-value, -value);
     };
+
+    if (getPrefBool(@"control.hardware_hide")) {
+        self.ctrlView.hidden = YES;
+    }
 }
 
 - (void)surfaceOnClick:(UITapGestureRecognizer *)sender {

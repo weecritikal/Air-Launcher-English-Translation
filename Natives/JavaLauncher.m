@@ -8,128 +8,24 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
-
+#include <mach/mach.h>
 #include "utils.h"
+
+// god knows why Copilot was trying to add this.
+#import "authenticator/BaseAuthenticator.h"
+#import "authenticator/ThirdPartyAuthenticator.h"
+// 鬼知道为什么copilot要把这玩意加里头……
 
 #import "ios_uikit_bridge.h"
 #import "JavaLauncher.h"
 #import "LauncherPreferences.h"
 #import "PLProfiles.h"
-#import "authenticator/BaseAuthenticator.h"
-#import "authenticator/ThirdPartyAuthenticator.h"
 
 #define fm NSFileManager.defaultManager
 
-extern char **environ;
-
-// Parse version string into components for comparison
-NSArray* parseVersionString(NSString *version) {
-    // Handle snapshot versions like "21w19a" by splitting on non-numeric characters
-    if ([version rangeOfString:@"w"].location != NSNotFound) {
-        // Split on 'w' to get year and week parts
-        NSArray *parts = [version componentsSeparatedByString:@"w"];
-        if (parts.count == 2) {
-            // Return as [year, week + suffix (like 'a' or 'b')]
-            NSString *weekPart = parts[1];
-            // Extract numeric part of week and any suffix
-            NSCharacterSet *nonDigits = [[NSCharacterSet decimalDigitCharacterSet] invertedSet];
-            NSRange range = [weekPart rangeOfCharacterFromSet:nonDigits];
-            if (range.location != NSNotFound) {
-                NSString *weekNum = [weekPart substringToIndex:range.location];
-                NSString *suffix = [weekPart substringFromIndex:range.location];
-                return @[@([parts[0] integerValue]), @([weekNum integerValue]), suffix];
-            } else {
-                return @[@([parts[0] integerValue]), @([weekPart integerValue])];
-            }
-        }
-    } else if ([version rangeOfString:@"-pre"].location != NSNotFound) {
-        // Handle pre-release versions like "1.18-pre2"
-        NSArray *parts = [version componentsSeparatedByString:@"-pre"];
-        if (parts.count == 2) {
-            NSArray *mainParts = [parts[0] componentsSeparatedByString:@"."];
-            NSMutableArray *result = [NSMutableArray arrayWithArray:mainParts];
-            [result addObject:@(-1)]; // pre-release indicator
-            [result addObject:@([parts[1] integerValue])]; // pre-release number
-            return [result copy];
-        }
-    } else if ([version rangeOfString:@"-rc"].location != NSNotFound) {
-        // Handle release candidate versions like "1.17-rc1"
-        NSArray *parts = [version componentsSeparatedByString:@"-rc"];
-        if (parts.count == 2) {
-            NSArray *mainParts = [parts[0] componentsSeparatedByString:@"."];
-            NSMutableArray *result = [NSMutableArray arrayWithArray:mainParts];
-            [result addObject:@(-2)]; // rc indicator
-            [result addObject:@([parts[1] integerValue])]; // rc number
-            return [result copy];
-        }
-    } else {
-        // Handle regular version like "1.17.1"
-        return [version componentsSeparatedByString:@"."];
-    }
-    return @[];
-}
-
-// Compare Minecraft versions - returns true if version1 is greater than or equal to version2
-BOOL minecraftVersionIsGreaterOrEqualTo(NSString *version1, NSString *version2) {
-    NSArray *ver1Parts = parseVersionString(version1);
-    NSArray *ver2Parts = parseVersionString(version2);
-    
-    if (ver1Parts.count == 0 || ver2Parts.count == 0) {
-        return NO; // Can't compare invalid versions
-    }
-    
-    // Compare each component numerically
-    NSInteger maxCount = MAX(ver1Parts.count, ver2Parts.count);
-    for (NSInteger i = 0; i < maxCount; i++) {
-        NSInteger val1 = 0, val2 = 0;
-        NSString *str1 = (i < ver1Parts.count) ? ver1Parts[i] : @"0";
-        NSString *str2 = (i < ver2Parts.count) ? ver2Parts[i] : @"0";
-        
-        // Handle string values (like suffixes in snapshots) by using a special ordering
-        if ([str1 isKindOfClass:[NSString class]] && ![str1 isKindOfClass:[NSNumber class]]) {
-            if ([str1 rangeOfString:@"w"].location != NSNotFound || [str1 rangeOfString:@"-pre"].location != NSNotFound || [str1 rangeOfString:@"-rc"].location != NSNotFound) {
-                // This is handled in parseVersionString, so str1 should be numeric here
-                val1 = [str1 integerValue];
-            } else {
-                // For string suffixes like 'a', 'b', etc., convert to numeric values for comparison
-                if ([str1 isEqualToString:@"a"]) val1 = 1;
-                else if ([str1 isEqualToString:@"b"]) val1 = 2;
-                else val1 = [str1 integerValue];
-            }
-        } else {
-            val1 = [str1 integerValue];
-        }
-        
-        if ([str2 isKindOfClass:[NSString class]] && ![str2 isKindOfClass:[NSNumber class]]) {
-            if ([str2 rangeOfString:@"w"].location != NSNotFound || [str2 rangeOfString:@"-pre"].location != NSNotFound || [str2 rangeOfString:@"-rc"].location != NSNotFound) {
-                val2 = [str2 integerValue];
-            } else {
-                // For string suffixes like 'a', 'b', etc., convert to numeric values for comparison
-                if ([str2 isEqualToString:@"a"]) val2 = 1;
-                else if ([str2 isEqualToString:@"b"]) val2 = 2;
-                else val2 = [str2 integerValue];
-            }
-        } else {
-            val2 = [str2 integerValue];
-        }
-        
-        if (val1 > val2) return YES;
-        if (val1 < val2) return NO;
-    }
-    
-    return YES; // Equal versions
-}
-
-// Check if a version is a snapshot version and is greater than or equal to a specific comparator
-BOOL isSnapshotVersionGreaterOrEqualTo(NSString *version, NSString *comparator) {
-    // Check if this is a snapshot version (contains 'w' or 'pre' or 'rc')
-    if ([version rangeOfString:@"w"].location != NSNotFound || [version rangeOfString:@"-pre"].location != NSNotFound || [version rangeOfString:@"-rc"].location != NSNotFound) {
-        return minecraftVersionIsGreaterOrEqualTo(version, comparator);
-    }
-    return NO;
-}
-
-BOOL validateVirtualMemorySpace(int size) {
+extern char **environ;
+
+BOOL validateVirtualMemorySpace(size_t size) {
     size <<= 20; // convert to MB
     void *map = mmap(0, size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
     // check if process successfully maps and unmaps a contiguous range
@@ -209,21 +105,28 @@ void init_loadCustomJvmFlags(int* argc, const char** argv) {
 int launchJVM(NSString *username, id launchTarget, int width, int height, int minVersion) {
     NSLog(@"[JavaLauncher] Beginning JVM launch");
 
-    if ([NSFileManager.defaultManager fileExistsAtPath:[NSBundle.mainBundle.bundlePath stringByAppendingPathComponent:@"LCAppInfo.plist"]]) {
+    BOOL jit26UniversalScript = getPrefBool(@"debug.debug_universal_script_jit");
+    BOOL jit26AlwaysAttached = getPrefBool(@"debug.debug_always_attached_jit");
+    if(jit26UniversalScript) {
+        JIT26SendJITScript([NSString stringWithContentsOfFile:[NSBundle.mainBundle pathForResource:@"JIT26Script" ofType:@"js"]]);
+        JIT26SetDetachAfterFirstBr(!jit26AlwaysAttached);
+        // make sure we don't get stuck in EXC_BAD_ACCESS
+        task_set_exception_ports(mach_task_self(), EXC_MASK_BAD_ACCESS, 0, EXCEPTION_DEFAULT, MACHINE_THREAD_STATE);
+    }
+
+    if ([NSFileManager.defaultManager fileExistsAtPath:[NSBundle.mainBundle.bundlePath stringByAppendingPathComponent:@"LCAppInfo.plist"]] && !@available(iOS 26.0, *)) {
         NSDebugLog(@"[JavaLauncher] Running in LiveContainer, skipping dyld patch");
+    } else if(!@available(iOS 26.0, *) || jit26AlwaysAttached) {
+        // Activate Library Validation bypass for external runtime and dylibs (JNA, etc)
+        init_bypassDyldLibValidation();
     } else {
-        if(@available(iOS 19.0, *)) {
-            // Disable Library Validation bypass for iOS 26 because of stricter JIT
-        } else {
-            // Activate Library Validation bypass for external runtime and dylibs (JNA, etc)
-            init_bypassDyldLibValidation();
-        }
+        // Disable Library Validation bypass for iOS 26 TXM because of stricter JIT
     }
 
 
     init_loadDefaultEnv();
     init_loadCustomEnv();
-    
+
     // --- [新增] TouchController UDP 协议环境变量 ---
     // 检查是否启用了 UDP 协议开关
     if (getPrefBool(@"control.mod_touch_udp")) {
@@ -231,14 +134,13 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
         NSLog(@"[JavaLauncher] Enabled TOUCH_CONTROLLER_PROXY=12450");
     }
     // ------------------------------------------
-
-    BOOL launchJar = NO;
-    NSString *gameDir;
-    NSString *defaultJRETag;
-    int preferredJavaVersion; // Declare outside the block to make it available throughout the scope
-    if ([launchTarget isKindOfClass:NSDictionary.class]) {
-        // Get preferred Java version from current profile
-        preferredJavaVersion = [PLProfiles resolveKeyForCurrentProfile:@"javaVersion"].intValue;
+  
+    BOOL launchJar = NO;
+    NSString *gameDir;
+    NSString *defaultJRETag;
+    if ([launchTarget isKindOfClass:NSDictionary.class]) {
+        // Get preferred Java version from current profile
+        int preferredJavaVersion = [PLProfiles resolveKeyForCurrentProfile:@"javaVersion"].intValue;
         if (preferredJavaVersion > 0) {
             if (minVersion > preferredJavaVersion) {
                 NSLog(@"[JavaLauncher] Profile's preferred Java version (%d) does not meet the minimum version (%d), dropping request", preferredJavaVersion, minVersion);
@@ -247,73 +149,15 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
                 minVersion = preferredJavaVersion;
             }
         }
-        
-        // Apply Minecraft version-specific Java requirements
-        NSString *minecraftVersion = launchTarget[@"id"];
-        int requiredJavaVersion = minVersion;
-        
-        // Check Minecraft version and set appropriate Java version requirement
-        if (minecraftVersion) {
-            // From 1.12 (17w13a) onwards, Java 8 is minimum requirement
-            if (minecraftVersionIsGreaterOrEqualTo(minecraftVersion, @"1.12") || isSnapshotVersionGreaterOrEqualTo(minecraftVersion, @"17w13a")) {
-                requiredJavaVersion = MAX(requiredJavaVersion, 8);
-            }
-            
-            // From 1.17 (21w19a) onwards, Java 16 is minimum requirement
-            if (minecraftVersionIsGreaterOrEqualTo(minecraftVersion, @"1.17") || isSnapshotVersionGreaterOrEqualTo(minecraftVersion, @"21w19a")) {
-                requiredJavaVersion = MAX(requiredJavaVersion, 16);
-            }
-            
-            // From 1.18 (1.18-pre2) onwards, Java 17 is minimum requirement
-            if (minecraftVersionIsGreaterOrEqualTo(minecraftVersion, @"1.18") || isSnapshotVersionGreaterOrEqualTo(minecraftVersion, @"1.18-pre2")) {
-                requiredJavaVersion = MAX(requiredJavaVersion, 17);
-            }
-            
-            // From 1.20.5 (24w14a) onwards, Java 21 is minimum requirement
-            if (minecraftVersionIsGreaterOrEqualTo(minecraftVersion, @"1.20.5") || isSnapshotVersionGreaterOrEqualTo(minecraftVersion, @"24w14a")) {
-                requiredJavaVersion = MAX(requiredJavaVersion, 21);
-            }
-        }
-        
-        // If the calculated required version is higher than the minVersion, use it
-        // Only adjust if user hasn't explicitly selected a higher version
-        // preferredJavaVersion already contains the value from earlier assignment
-        if (requiredJavaVersion > minVersion && preferredJavaVersion <= 0) {
-            // Only auto-adjust if user hasn't made an explicit Java version choice
-            minVersion = requiredJavaVersion;
-            NSLog(@"[JavaLauncher] Auto-adjusted Java version requirement for Minecraft %@ to Java %d", minecraftVersion, minVersion);
-        } else if (requiredJavaVersion > minVersion && preferredJavaVersion > 0) {
-            // If user has made an explicit choice but it's too low for this MC version, warn them
-            if (preferredJavaVersion < requiredJavaVersion) {
-                minVersion = requiredJavaVersion;
-                NSLog(@"[JavaLauncher] Adjusted Java version requirement for Minecraft %@ from user's setting (Java %d) to required Java %d", minecraftVersion, preferredJavaVersion, minVersion);
-            } else {
-                // User has selected a sufficient version, keep their choice
-                minVersion = preferredJavaVersion;
-                NSLog(@"[JavaLauncher] Using user's selected Java version %d for Minecraft %@", minVersion, minecraftVersion);
-            }
-        }
-        
         if (minVersion <= 8) {
             defaultJRETag = @"1_16_5_older";
         } else {
             defaultJRETag = @"1_17_newer";
         }
 
-                // Setup AMETHYST_RENDERER
+        // Setup AMETHYST_RENDERER
         NSString *renderer = [PLProfiles resolveKeyForCurrentProfile:@"renderer"];
-        
-        // Apply Minecraft version-specific renderer requirements
-        if (minecraftVersion) {
-            // From Minecraft 1.21.5 onwards, only MobileGlues renderer works properly
-            if (minecraftVersionIsGreaterOrEqualTo(minecraftVersion, @"1.21.5") || isSnapshotVersionGreaterOrEqualTo(minecraftVersion, @"24w35a")) {
-                // Force MobileGlues renderer for Minecraft 1.21.5+
-                renderer = @ RENDERER_NAME_MOBILEGLUES;
-                NSLog(@"[JavaLauncher] Forcing MobileGlues renderer for Minecraft %@ (1.21.5+)", minecraftVersion);
-            }
-        }
-        
-        NSLog(@"[JavaLauncher] RENDERER is set to %@\n", renderer);
+        NSLog(@"[JavaLauncher] RENDERER is set to %@\n", renderer);
         setenv("AMETHYST_RENDERER", renderer.UTF8String, 1);
         // Setup gameDir
         gameDir = [NSString stringWithFormat:@"%s/instances/%@/%@",
@@ -392,13 +236,7 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
         margv[++margc] = [NSString stringWithFormat:@"-Dorg.lwjgl.opengl.libname=%s", glLibName].UTF8String;
     }
 
-    NSString *librariesPath = [NSString stringWithFormat:@"%@/libs", NSBundle.mainBundle.bundlePath];
-    margv[++margc] = [NSString stringWithFormat:@"-javaagent:%@/patchjna_agent.jar=", librariesPath].UTF8String;
-    if(getPrefBool(@"general.cosmetica")) {
-        margv[++margc] = [NSString stringWithFormat:@"-javaagent:%@/arc_dns_injector.jar=23.95.137.176", librariesPath].UTF8String;
-    }
-
-    // 添加authlib-injector参数以支持第三方认证账户的皮肤显示
+      // 添加authlib-injector参数以支持第三方认证账户的皮肤显示
     if ([username length] > 0 && [BaseAuthenticator.current isKindOfClass:[ThirdPartyAuthenticator class]]) {
         BaseAuthenticator *currentAuth = BaseAuthenticator.current;
         if (currentAuth.authData[@"authserver"] != nil) {
@@ -408,16 +246,27 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
                 for (NSString *arg in authlibArgs) {
                     margv[++margc] = arg.UTF8String;
                     NSLog(@"[JavaLauncher] Added authlib-injector arg: %s", arg.UTF8String);
-                }
+                }     
             } else {
                 NSLog(@"[JavaLauncher] Warning: No authlib-injector arguments available");
             }
         }
     }
+  
+    NSString *librariesPath = [NSString stringWithFormat:@"%@/libs", NSBundle.mainBundle.bundlePath];
+    margv[++margc] = [NSString stringWithFormat:@"-javaagent:%@/patchjna_agent.jar=", librariesPath].UTF8String;
+    if(getPrefBool(@"general.cosmetica")) {
+        margv[++margc] = [NSString stringWithFormat:@"-javaagent:%@/arc_dns_injector.jar=23.95.137.176", librariesPath].UTF8String;
+    }
 
     // Workaround random stack guard allocation crashes
     margv[++margc] = "-XX:+UnlockExperimentalVMOptions";
     margv[++margc] = "-XX:+DisablePrimordialThreadGuardPages";
+
+    // On iOS 26, use mirror mapped JIT by default
+    if (@available(iOS 26.0, *)) {
+        margv[++margc] = "-XX:+MirrorMappedCodeCache";
+    }
 
     // Disable Forge 1.16.x early progress window
     margv[++margc] = "-Dfml.earlyprogresswindow=false";
