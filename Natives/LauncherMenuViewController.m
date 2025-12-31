@@ -224,9 +224,9 @@
         [infoIcon.heightAnchor constraintEqualToConstant:20]
     ]];
     
-    // 设置公告标签约束（在图标右侧，垂直居中）
+    // 设置公告标签约束（在图标右侧，顶部对齐）
     [NSLayoutConstraint activateConstraints:@[
-        [announcementLabel.centerYAnchor constraintEqualToAnchor:announcementContainer.centerYAnchor],
+        [announcementLabel.topAnchor constraintEqualToAnchor:announcementContainer.topAnchor constant:12],
         [announcementLabel.leadingAnchor constraintEqualToAnchor:infoIcon.trailingAnchor constant:12],
         [announcementLabel.trailingAnchor constraintEqualToAnchor:announcementContainer.trailingAnchor constant:-15]
     ]];
@@ -599,8 +599,8 @@
     CGSize labelSize = [label sizeThatFits:CGSizeMake(maxWidth, CGFLOAT_MAX)];
     CGFloat labelHeight = labelSize.height;
     
-    // 计算容器高度：图标高度(20) + 上下边距(各12) = 44，但要确保能容纳标签
-    // 侧边栏中，标签垂直居中，所以容器高度应该是 max(44, labelHeight + 24)
+    // 计算容器高度：标签高度 + 上下边距(各12) = 24，但要确保能容纳标签
+    // 侧边栏中，标签顶部对齐，所以容器高度应该是 max(44, labelHeight + 24)
     CGFloat containerHeight = MAX(44, labelHeight + 24);
     
     // 更新容器高度约束
@@ -645,8 +645,8 @@
     CGSize labelSize = [label sizeThatFits:CGSizeMake(maxWidth, CGFLOAT_MAX)];
     CGFloat labelHeight = labelSize.height;
     
-    // 计算容器高度：标签高度 + 标签上下边距(各12) + 标签按钮间距(8) + 按钮高度(30) + 按钮下边距(10)
-    CGFloat containerHeight = MAX(72, labelHeight + 12 + 12 + 8 + 30 + 10);
+    // 计算容器高度：标签高度 + 标签上边距(12) + 标签按钮间距(8) + 按钮高度(30) + 按钮下边距(10)
+    CGFloat containerHeight = MAX(72, labelHeight + 12 + 8 + 30 + 10);
     
     // 更新容器高度约束
     if (self.announcementContainerHeightConstraint) {
