@@ -782,6 +782,10 @@
                 NSString *localizedText = localize(@"announcement.new_version_available", @"发现新版本：%@");
                 announcementLabel.text = [NSString stringWithFormat:localizedText, latestVersion];
                 
+                // 强制更新标签布局，确保文本正确显示
+                [announcementLabel setNeedsLayout];
+                [announcementLabel layoutIfNeeded];
+                
                 // 创建下载按钮
                 UIButton *downloadButton = [UIButton buttonWithType:UIButtonTypeSystem];
                 [downloadButton setTitle:localize(@"announcement.download_button", @"前往下载") forState:UIControlStateNormal];
@@ -837,6 +841,11 @@
             } else {
                 // 当前版本大于或等于最新版本
                 announcementLabel.text = localize(@"announcement.latest_version", @"欢迎使用Amethyst iOS Remastered！当前已是最新正式版。");
+                
+                // 强制更新标签布局，确保文本正确显示
+                [announcementLabel setNeedsLayout];
+                [announcementLabel layoutIfNeeded];
+                
                 [self adjustAnnouncementContainerHeight:announcementContainer forLabel:announcementLabel];
             }
         });
