@@ -216,20 +216,19 @@
     // 添加公告标签到容器
     [announcementContainer addSubview:announcementLabel];
     
-    // 设置图标约束
+    // 设置图标约束 - 固定在顶部
     [NSLayoutConstraint activateConstraints:@[
         [infoIcon.leadingAnchor constraintEqualToAnchor:announcementContainer.leadingAnchor constant:15],
-        [infoIcon.centerYAnchor constraintEqualToAnchor:announcementContainer.centerYAnchor],
+        [infoIcon.topAnchor constraintEqualToAnchor:announcementContainer.topAnchor constant:12],
         [infoIcon.widthAnchor constraintEqualToConstant:20],
         [infoIcon.heightAnchor constraintEqualToConstant:20]
     ]];
     
-    // 设置公告标签约束（在图标右侧）
+    // 设置公告标签约束（在图标右侧，垂直居中）
     [NSLayoutConstraint activateConstraints:@[
-        [announcementLabel.topAnchor constraintEqualToAnchor:announcementContainer.topAnchor constant:12],
+        [announcementLabel.centerYAnchor constraintEqualToAnchor:announcementContainer.centerYAnchor],
         [announcementLabel.leadingAnchor constraintEqualToAnchor:infoIcon.trailingAnchor constant:12],
-        [announcementLabel.trailingAnchor constraintEqualToAnchor:announcementContainer.trailingAnchor constant:-15],
-        [announcementLabel.bottomAnchor constraintEqualToAnchor:announcementContainer.bottomAnchor constant:-12]
+        [announcementLabel.trailingAnchor constraintEqualToAnchor:announcementContainer.trailingAnchor constant:-15]
     ]];
     
     // 将公告容器添加到视图，放在导航栏下方、表格视图上方
@@ -251,120 +250,15 @@
     self.announcementLabel = announcementLabel;
     
     // 调整表格视图的顶部约束，为公告栏留出空间
-    self.tableView.contentInset = UIEdgeInsetsMake(76, 0, 0, 0); // 60高度 + 8上边距 + 8间距
+    // 初始设置为 60（容器高度）+ 16（上下间距）= 76
+    self.tableView.contentInset = UIEdgeInsetsMake(76, 0, 0, 0);
     
     // 检查当前版本是否包含"Preview"字样
     if ([currentVersion rangeOfString:@"Preview" options:NSCaseInsensitiveSearch].location != NSNotFound) {
         announcementLabel.text = localize(@"announcement.preview_version", @"欢迎使用Amethyst iOS Remastered测试版！");
     } else {
         // 尝试获取GitHub最新的Release版本号
-        NSURL *url = [NSURL URLWithString:@"https://api.github.com/repos/herbrine8403/Amethyst-iOS-MyRemastered/releases/latest"];
-        NSURLRequest *request = [NSURLRequest requestWithURL:url];
-        
-        NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
-            if (error) {
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    announcementLabel.text = localize(@"announcement.latest_version", @"欢迎使用Amethyst iOS Remastered！当前已是最新正式版。");
-                    // 调整容器高度
-                    [self adjustAnnouncementContainerHeight:announcementContainer forLabel:announcementLabel];
-                });
-                return;
-            }
-            
-            NSError *jsonError;
-            NSDictionary *jsonResponse = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
-            
-            if (jsonError || !jsonResponse) {
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    announcementLabel.text = localize(@"announcement.latest_version", @"欢迎使用Amethyst iOS Remastered！当前已是最新正式版。");
-                    [self adjustAnnouncementContainerHeight:announcementContainer forLabel:announcementLabel];
-                });
-                return;
-            }
-            
-            NSString *latestVersion = jsonResponse[@"tag_name"];
-            if (!latestVersion) {
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    announcementLabel.text = localize(@"announcement.latest_version", @"欢迎使用Amethyst iOS Remastered！当前已是最新正式版。");
-                    [self adjustAnnouncementContainerHeight:announcementContainer forLabel:announcementLabel];
-                });
-                return;
-            }
-            
-            // 移除标签前缀（如 "v"）
-            if ([latestVersion hasPrefix:@"v"]) {
-                latestVersion = [latestVersion substringFromIndex:1];
-            }
-            
-            dispatch_async(dispatch_get_main_queue(), ^{
-                NSComparisonResult versionComparison = [self compareVersion:currentVersion withVersion:latestVersion];
-                
-                if (versionComparison == NSOrderedAscending) {
-                    // 当前版本小于最新版本
-                    NSString *localizedText = localize(@"announcement.new_version_available", @"发现新版本：%@");
-                    announcementLabel.text = [NSString stringWithFormat:localizedText, latestVersion];
-                    
-                    // 创建下载按钮
-                    UIButton *downloadButton = [UIButton buttonWithType:UIButtonTypeSystem];
-                    [downloadButton setTitle:localize(@"announcement.download_button", @"前往下载") forState:UIControlStateNormal];
-                    
-                    // 设置按钮样式 - 支持iOS14.0
-                    if (@available(iOS 13.0, *)) {
-                        downloadButton.backgroundColor = [UIColor systemBlueColor];
-                    } else {
-                        downloadButton.backgroundColor = [UIColor colorWithRed:0/255.0 green:122/255.0 blue:255/255.0 alpha:1.0];
-                    }
-                    
-                    [downloadButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-                    downloadButton.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
-                    downloadButton.layer.cornerRadius = 8;
-                    downloadButton.translatesAutoresizingMaskIntoConstraints = NO;
-                    
-                    // 添加按钮阴影
-                    downloadButton.layer.shadowColor = [UIColor blackColor].CGColor;
-                    downloadButton.layer.shadowOffset = CGSizeMake(0, 2);
-                    downloadButton.layer.shadowRadius = 4;
-                    downloadButton.layer.shadowOpacity = 0.2;
-                    
-                    // 添加按钮点击效果
-                    downloadButton.layer.masksToBounds = NO;
-                    
-                    // 添加下载图标
-                    if (@available(iOS 13.0, *)) {
-                        UIImage *downloadImage = [UIImage systemImageNamed:@"arrow.down.circle.fill"];
-                        [downloadButton setImage:downloadImage forState:UIControlStateNormal];
-                        downloadButton.imageEdgeInsets = UIEdgeInsetsMake(0, -8, 0, 0);
-                        downloadButton.titleEdgeInsets = UIEdgeInsetsMake(0, 8, 0, 0);
-                        downloadButton.tintColor = [UIColor whiteColor];
-                    }
-                    
-                    [downloadButton addTarget:self action:@selector(downloadLatestVersion:) forControlEvents:UIControlEventTouchUpInside];
-                    
-                    [announcementContainer addSubview:downloadButton];
-                    
-                    // 存储下载按钮引用
-                    self.downloadButton = downloadButton;
-                    
-                    // 设置下载按钮约束
-                    [NSLayoutConstraint activateConstraints:@[
-                        [downloadButton.topAnchor constraintEqualToAnchor:announcementLabel.bottomAnchor constant:8],
-                        [downloadButton.centerXAnchor constraintEqualToAnchor:announcementContainer.centerXAnchor],
-                        [downloadButton.widthAnchor constraintEqualToConstant:100],
-                        [downloadButton.heightAnchor constraintEqualToConstant:30],
-                        [downloadButton.bottomAnchor constraintEqualToAnchor:announcementContainer.bottomAnchor constant:-10]
-                    ]];
-                    
-                    // 调整容器高度以适应按钮
-                    [self adjustAnnouncementContainerHeight:announcementContainer forLabel:announcementLabel withButton:downloadButton];
-                } else {
-                    // 当前版本大于或等于最新版本
-                    announcementLabel.text = localize(@"announcement.latest_version", @"欢迎使用Amethyst iOS Remastered！当前已是最新正式版。");
-                    [self adjustAnnouncementContainerHeight:announcementContainer forLabel:announcementLabel];
-                }
-            });
-        }];
-        
-        [task resume];
+        [self checkForUpdateWithCurrentVersion:currentVersion announcementLabel:announcementLabel announcementContainer:announcementContainer retryCount:0];
     }
     
     if (getEntitlementValue(@"get-task-allow")) {
@@ -399,7 +293,7 @@
     
     // 确保表格视图的contentInset正确设置
     // 这个方法的调用时机在视图布局完成后，可以安全地获取视图的实际尺寸
-    if (self.tableView.contentInset.top < 60) {
+    if (self.tableView.contentInset.top < 70) {
         // 如果contentInset未正确设置，重新设置默认值
         self.tableView.contentInset = UIEdgeInsetsMake(76, 0, 0, 0);
     }
@@ -701,8 +595,9 @@
     CGSize labelSize = [label sizeThatFits:CGSizeMake(maxWidth, CGFLOAT_MAX)];
     CGFloat labelHeight = labelSize.height;
     
-    // 计算容器高度：标签高度 + 上下边距(各12)
-    CGFloat containerHeight = MAX(60, labelHeight + 24);
+    // 计算容器高度：图标高度(20) + 上下边距(各12) = 44，但要确保能容纳标签
+    // 侧边栏中，标签垂直居中，所以容器高度应该是 max(44, labelHeight + 24)
+    CGFloat containerHeight = MAX(44, labelHeight + 24);
     
     // 更新容器高度约束
     if (self.announcementContainerHeightConstraint) {
@@ -710,7 +605,7 @@
     }
     
     // 更新表格视图的contentInset
-    CGFloat topInset = containerHeight + 24; // 容器高度 + 上边距(8) + 下间距(8+8)
+    CGFloat topInset = containerHeight + 16; // 容器高度 + 上下间距(各8)
     self.tableView.contentInset = UIEdgeInsetsMake(topInset, 0, 0, 0);
     
     // 强制布局更新
@@ -742,8 +637,8 @@
     CGSize labelSize = [label sizeThatFits:CGSizeMake(maxWidth, CGFLOAT_MAX)];
     CGFloat labelHeight = labelSize.height;
     
-    // 计算容器高度：标签高度 + 标签上边距(12) + 标签按钮间距(8) + 按钮高度(30) + 按钮下边距(12)
-    CGFloat containerHeight = MAX(80, labelHeight + 12 + 8 + 30 + 12);
+    // 计算容器高度：标签高度 + 标签上下边距(各12) + 标签按钮间距(8) + 按钮高度(30) + 按钮下边距(10)
+    CGFloat containerHeight = MAX(72, labelHeight + 12 + 12 + 8 + 30 + 10);
     
     // 更新容器高度约束
     if (self.announcementContainerHeightConstraint) {
@@ -751,11 +646,195 @@
     }
     
     // 更新表格视图的contentInset
-    CGFloat topInset = containerHeight + 24; // 容器高度 + 上边距(8) + 下间距(8+8)
+    CGFloat topInset = containerHeight + 16; // 容器高度 + 上下间距(各8)
     self.tableView.contentInset = UIEdgeInsetsMake(topInset, 0, 0, 0);
     
     // 强制布局更新
     [container.superview layoutIfNeeded];
+}
+
+// 检查更新（使用 HTML 解析，避免 GitHub API 速率限制）
+- (void)checkForUpdateWithCurrentVersion:(NSString *)currentVersion
+                        announcementLabel:(UILabel *)announcementLabel
+                      announcementContainer:(UIView *)announcementContainer
+                                retryCount:(NSInteger)retryCount {
+    // 最大重试次数为 2 次
+    NSInteger maxRetries = 2;
+    
+    // 使用 GitHub Releases 页面 URL（不受 API 速率限制）
+    NSURL *url = [NSURL URLWithString:@"https://github.com/herbrine8403/Amethyst-iOS-MyRemastered/releases/latest"];
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+    request.timeoutInterval = 15.0; // 15秒超时
+    
+    NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        // 检查网络错误
+        if (error) {
+            NSLog(@"[UpdateCheck] 网络请求失败: %@", error.localizedDescription);
+            
+            // 如果还有重试机会，延迟后重试
+            if (retryCount < maxRetries) {
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * (retryCount + 1) * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                    [self checkForUpdateWithCurrentVersion:currentVersion
+                                          announcementLabel:announcementLabel
+                                        announcementContainer:announcementContainer
+                                                  retryCount:retryCount + 1];
+                });
+                return;
+            }
+            
+            // 重试次数用尽，显示默认消息
+            dispatch_async(dispatch_get_main_queue(), ^{
+                announcementLabel.text = localize(@"announcement.latest_version", @"欢迎使用Amethyst iOS Remastered！当前已是最新正式版。");
+                [self adjustAnnouncementContainerHeight:announcementContainer forLabel:announcementLabel];
+            });
+            return;
+        }
+        
+        // 检查 HTTP 状态码
+        NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
+        NSInteger statusCode = httpResponse.statusCode;
+        
+        if (statusCode != 200) {
+            NSLog(@"[UpdateCheck] HTTP 状态码错误: %ld", (long)statusCode);
+            
+            // 如果还有重试机会，重试
+            if (retryCount < maxRetries) {
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * (retryCount + 1) * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                    [self checkForUpdateWithCurrentVersion:currentVersion
+                                          announcementLabel:announcementLabel
+                                        announcementContainer:announcementContainer
+                                                  retryCount:retryCount + 1];
+                });
+                return;
+            }
+            
+            dispatch_async(dispatch_get_main_queue(), ^{
+                announcementLabel.text = localize(@"announcement.latest_version", @"欢迎使用Amethyst iOS Remastered！当前已是最新正式版。");
+                [self adjustAnnouncementContainerHeight:announcementContainer forLabel:announcementLabel];
+            });
+            return;
+        }
+        
+        // 将 HTML 数据转换为字符串
+        NSString *htmlString = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+        
+        if (!htmlString || htmlString.length == 0) {
+            NSLog(@"[UpdateCheck] HTML 内容为空");
+            
+            // 如果还有重试机会，重试
+            if (retryCount < maxRetries) {
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * (retryCount + 1) * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                    [self checkForUpdateWithCurrentVersion:currentVersion
+                                          announcementLabel:announcementLabel
+                                        announcementContainer:announcementContainer
+                                                  retryCount:retryCount + 1];
+                });
+                return;
+            }
+            
+            dispatch_async(dispatch_get_main_queue(), ^{
+                announcementLabel.text = localize(@"announcement.latest_version", @"欢迎使用Amethyst iOS Remastered！当前已是最新正式版。");
+                [self adjustAnnouncementContainerHeight:announcementContainer forLabel:announcementLabel];
+            });
+            return;
+        }
+        
+        // 从 HTML 中提取版本号
+        // 匹配模式：/herbrine8403/Amethyst-iOS-MyRemastered/releases/tag/VERSION"
+        NSString *pattern = @"/herbrine8403/Amethyst-iOS-MyRemastered/releases/tag/([^\"]+)\"";
+        NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:pattern options:0 error:nil];
+        NSTextCheckingResult *match = [regex firstMatchInString:htmlString options:0 range:NSMakeRange(0, htmlString.length)];
+        
+        NSString *latestVersion = nil;
+        if (match && match.numberOfRanges > 1) {
+            latestVersion = [htmlString substringWithRange:[match rangeAtIndex:1]];
+        }
+        
+        if (!latestVersion) {
+            NSLog(@"[UpdateCheck] 未从 HTML 中提取到版本号");
+            dispatch_async(dispatch_get_main_queue(), ^{
+                announcementLabel.text = localize(@"announcement.latest_version", @"欢迎使用Amethyst iOS Remastered！当前已是最新正式版。");
+                [self adjustAnnouncementContainerHeight:announcementContainer forLabel:announcementLabel];
+            });
+            return;
+        }
+        
+        // 移除标签前缀（如 "v"）
+        if ([latestVersion hasPrefix:@"v"]) {
+            latestVersion = [latestVersion substringFromIndex:1];
+        }
+        
+        NSLog(@"[UpdateCheck] 当前版本: %@, 最新版本: %@", currentVersion, latestVersion);
+        
+        dispatch_async(dispatch_get_main_queue(), ^{
+            NSComparisonResult versionComparison = [self compareVersion:currentVersion withVersion:latestVersion];
+            
+            if (versionComparison == NSOrderedAscending) {
+                // 当前版本小于最新版本
+                NSString *localizedText = localize(@"announcement.new_version_available", @"发现新版本：%@");
+                announcementLabel.text = [NSString stringWithFormat:localizedText, latestVersion];
+                
+                // 创建下载按钮
+                UIButton *downloadButton = [UIButton buttonWithType:UIButtonTypeSystem];
+                [downloadButton setTitle:localize(@"announcement.download_button", @"前往下载") forState:UIControlStateNormal];
+                
+                // 设置按钮样式 - 支持iOS14.0
+                if (@available(iOS 13.0, *)) {
+                    downloadButton.backgroundColor = [UIColor systemBlueColor];
+                } else {
+                    downloadButton.backgroundColor = [UIColor colorWithRed:0/255.0 green:122/255.0 blue:255/255.0 alpha:1.0];
+                }
+                
+                [downloadButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+                downloadButton.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
+                downloadButton.layer.cornerRadius = 8;
+                downloadButton.translatesAutoresizingMaskIntoConstraints = NO;
+                
+                // 添加按钮阴影
+                downloadButton.layer.shadowColor = [UIColor blackColor].CGColor;
+                downloadButton.layer.shadowOffset = CGSizeMake(0, 2);
+                downloadButton.layer.shadowRadius = 4;
+                downloadButton.layer.shadowOpacity = 0.2;
+                
+                // 添加按钮点击效果
+                downloadButton.layer.masksToBounds = NO;
+                
+                // 添加下载图标
+                if (@available(iOS 13.0, *)) {
+                    UIImage *downloadImage = [UIImage systemImageNamed:@"arrow.down.circle.fill"];
+                    [downloadButton setImage:downloadImage forState:UIControlStateNormal];
+                    downloadButton.imageEdgeInsets = UIEdgeInsetsMake(0, -8, 0, 0);
+                    downloadButton.titleEdgeInsets = UIEdgeInsetsMake(0, 8, 0, 0);
+                    downloadButton.tintColor = [UIColor whiteColor];
+                }
+                
+                [downloadButton addTarget:self action:@selector(downloadLatestVersion:) forControlEvents:UIControlEventTouchUpInside];
+                
+                [announcementContainer addSubview:downloadButton];
+                
+                // 存储下载按钮引用
+                self.downloadButton = downloadButton;
+                
+                // 设置下载按钮约束
+                [NSLayoutConstraint activateConstraints:@[
+                    [downloadButton.topAnchor constraintEqualToAnchor:announcementLabel.bottomAnchor constant:8],
+                    [downloadButton.centerXAnchor constraintEqualToAnchor:announcementContainer.centerXAnchor],
+                    [downloadButton.widthAnchor constraintEqualToConstant:100],
+                    [downloadButton.heightAnchor constraintEqualToConstant:30],
+                    [downloadButton.bottomAnchor constraintEqualToAnchor:announcementContainer.bottomAnchor constant:-10]
+                ]];
+                
+                // 调整容器高度以适应按钮
+                [self adjustAnnouncementContainerHeight:announcementContainer forLabel:announcementLabel withButton:downloadButton];
+            } else {
+                // 当前版本大于或等于最新版本
+                announcementLabel.text = localize(@"announcement.latest_version", @"欢迎使用Amethyst iOS Remastered！当前已是最新正式版。");
+                [self adjustAnnouncementContainerHeight:announcementContainer forLabel:announcementLabel];
+            }
+        });
+    }];
+    
+    [task resume];
 }
 
 @end
