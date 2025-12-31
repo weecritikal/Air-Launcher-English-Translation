@@ -592,6 +592,10 @@
         maxWidth = 200; // 绝对最小值
     }
     
+    // 强制更新标签布局，确保 sizeThatFits 能正确计算
+    [label setNeedsLayout];
+    [label layoutIfNeeded];
+    
     CGSize labelSize = [label sizeThatFits:CGSizeMake(maxWidth, CGFLOAT_MAX)];
     CGFloat labelHeight = labelSize.height;
     
@@ -633,6 +637,10 @@
     if (maxWidth <= 0) {
         maxWidth = 200; // 绝对最小值
     }
+    
+    // 强制更新标签布局，确保 sizeThatFits 能正确计算
+    [label setNeedsLayout];
+    [label layoutIfNeeded];
     
     CGSize labelSize = [label sizeThatFits:CGSizeMake(maxWidth, CGFLOAT_MAX)];
     CGFloat labelHeight = labelSize.height;
