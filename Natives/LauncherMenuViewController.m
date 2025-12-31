@@ -218,7 +218,7 @@
     
     // 设置图标约束 - 固定在顶部
     [NSLayoutConstraint activateConstraints:@[
-        [infoIcon.leadingAnchor constraintEqualToAnchor:announcementContainer.leadingAnchor constant:15],
+        [infoIcon.leadingAnchor constraintEqualToAnchor:announcementContainer.leadingAnchor constant:8],
         [infoIcon.topAnchor constraintEqualToAnchor:announcementContainer.topAnchor constant:12],
         [infoIcon.widthAnchor constraintEqualToConstant:20],
         [infoIcon.heightAnchor constraintEqualToConstant:20]
@@ -227,21 +227,21 @@
     // 设置公告标签约束（在图标右侧，顶部对齐）
     [NSLayoutConstraint activateConstraints:@[
         [announcementLabel.topAnchor constraintEqualToAnchor:announcementContainer.topAnchor constant:12],
-        [announcementLabel.leadingAnchor constraintEqualToAnchor:infoIcon.trailingAnchor constant:12],
-        [announcementLabel.trailingAnchor constraintEqualToAnchor:announcementContainer.trailingAnchor constant:-15]
+        [announcementLabel.leadingAnchor constraintEqualToAnchor:infoIcon.trailingAnchor constant:8],
+        [announcementLabel.trailingAnchor constraintEqualToAnchor:announcementContainer.trailingAnchor constant:-8]
     ]];
     
     // 将公告容器添加到视图，放在导航栏下方、表格视图上方
     [self.view addSubview:announcementContainer];
     
-    // 设置公告容器约束
+    // 设置公告容器约束 - 适应侧边栏布局
     NSLayoutConstraint *heightConstraint = [announcementContainer.heightAnchor constraintEqualToConstant:60];
     self.announcementContainerHeightConstraint = heightConstraint;
     
     [NSLayoutConstraint activateConstraints:@[
         [announcementContainer.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:8],
-        [announcementContainer.leadingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.leadingAnchor constant:16],
-        [announcementContainer.trailingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.trailingAnchor constant:-16],
+        [announcementContainer.leadingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.leadingAnchor constant:8],
+        [announcementContainer.trailingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.trailingAnchor constant:-8],
         heightConstraint
     ]];
     
@@ -830,8 +830,8 @@
                 // 设置下载按钮约束
                 [NSLayoutConstraint activateConstraints:@[
                     [downloadButton.topAnchor constraintEqualToAnchor:announcementLabel.bottomAnchor constant:8],
-                    [downloadButton.centerXAnchor constraintEqualToAnchor:announcementContainer.centerXAnchor],
-                    [downloadButton.widthAnchor constraintEqualToConstant:100],
+                    [downloadButton.leadingAnchor constraintEqualToAnchor:announcementContainer.leadingAnchor constant:8],
+                    [downloadButton.trailingAnchor constraintEqualToAnchor:announcementContainer.trailingAnchor constant:-8],
                     [downloadButton.heightAnchor constraintEqualToConstant:30],
                     [downloadButton.bottomAnchor constraintEqualToAnchor:announcementContainer.bottomAnchor constant:-10]
                 ]];
