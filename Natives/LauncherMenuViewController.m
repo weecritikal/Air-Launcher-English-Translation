@@ -119,6 +119,17 @@
         }]];
     }
     
+    // 零雾05_Fogg05彩蛋 - 每年12月27日、28日、29日显示
+    if([date isEqualToString:@"12-27"] || [date isEqualToString:@"12-28"] || [date isEqualToString:@"12-29"]) {
+        [self.options addObject:(id)[LauncherMenuCustomItem
+                                     title:@"致那个为方块上色的人"
+                                     imageName:@"" action:^{
+            NSString *urlString = @"https://wiki.easecation.net/零雾05_Fogg05";
+            NSString *encodedUrlString = [urlString stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLPathAllowedCharacterSet]];
+            openLink(self, [NSURL URLWithString:encodedUrlString]);
+        }]];
+    }
+    
     self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
     
     self.navigationController.toolbarHidden = NO;
