@@ -342,6 +342,18 @@ payload: native dep_mg java jre assets
 	cp $(SOURCEDIR)/JavaApp/build/*.jar $(WORKINGDIR)/AngelAuraAmethyst.app/libs/ || exit 1
 	cp -R $(SOURCEDIR)/JavaApp/libs/caciocavallo/* $(WORKINGDIR)/AngelAuraAmethyst.app/libs_caciocavallo || exit 1
 	cp -R $(SOURCEDIR)/JavaApp/libs/caciocavallo17/* $(WORKINGDIR)/AngelAuraAmethyst.app/libs_caciocavallo17 || exit 1
+	# Copy TouchController static library if available
+	if [ -f "$(SOURCEDIR)/TouchController/libproxy_server_ios.a" ]; then \
+		mkdir -p $(WORKINGDIR)/AngelAuraAmethyst.app/Frameworks; \
+		cp $(SOURCEDIR)/TouchController/libproxy_server_ios.a $(WORKINGDIR)/AngelAuraAmethyst.app/Frameworks/ || exit 1; \
+		echo '[Amethyst v$(VERSION)] Copied TouchController device library'; \
+	elif [ -f "$(SOURCEDIR)/TouchController/libproxy_server_ios_simulator.a" ]; then \
+		mkdir -p $(WORKINGDIR)/AngelAuraAmethyst.app/Frameworks; \
+		cp $(SOURCEDIR)/TouchController/libproxy_server_ios_simulator.a $(WORKINGDIR)/AngelAuraAmethyst.app/Frameworks/ || exit 1; \
+		echo '[Amethyst v$(VERSION)] Copied TouchController simulator library'; \
+	else \
+		echo '[Amethyst v$(VERSION)] TouchController library not found, skipping'; \
+	fi
 	$(call METHOD_DIRCHECK,$(OUTPUTDIR)/Payload)
 	cp -R $(WORKINGDIR)/AngelAuraAmethyst.app $(OUTPUTDIR)/Payload
 	if [ '$(SLIMMED_ONLY)' != '1' ]; then \

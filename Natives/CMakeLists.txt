@@ -46,6 +46,21 @@ target_link_libraries(awt_xawt
   awt_headless
 )
 
+# TouchController iOS static library
+# Links to libproxy_server_ios.a (device) or libproxy_server_ios_simulator.a (simulator)
+# Provides JNI interface for touch control communication between Minecraft mod and launcher
+set(TOUCHCONTROLLER_LIB_DIR "${CMAKE_CURRENT_LIST_DIR}/TouchController")
+if(EXISTS "${TOUCHCONTROLLER_LIB_DIR}/libproxy_server_ios.a")
+  message(STATUS "Found TouchController device library")
+  set(TOUCHCONTROLLER_LIB "${TOUCHCONTROLLER_LIB_DIR}/libproxy_server_ios.a")
+elseif(EXISTS "${TOUCHCONTROLLER_LIB_DIR}/libproxy_server_ios_simulator.a")
+  message(STATUS "Found TouchController simulator library")
+  set(TOUCHCONTROLLER_LIB "${TOUCHCONTROLLER_LIB_DIR}/libproxy_server_ios_simulator.a")
+else()
+  message(STATUS "TouchController library not found, TouchController support will be disabled")
+  set(TOUCHCONTROLLER_LIB "")
+endif()
+
 set(CMAKE_FRAMEWORK_PATH "${CMAKE_CURRENT_LIST_DIR}/resources/Frameworks")
 
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -rpath @executable_path/Frameworks -rpath @loader_path/Frameworks")
@@ -187,6 +202,9 @@ add_executable(AngelAuraAmethyst
   # Custom icon management sources
   CustomIconManager.m
   ImageCropperViewController.m
+
+  # TouchController bridge
+  TouchControllerBridge.m
 )
 
 # Add ModLoaderIcons PNG files into the app bundle Resources/ModLoaderIcons so they are available at runtime.
@@ -265,6 +283,7 @@ target_link_libraries(AngelAuraAmethyst
   "-framework UnzipKit"
   "-framework WebKit"
   "-weak_framework SafariServices"
+  ${TOUCHCONTROLLER_LIB}
 )
 set_target_properties(AngelAuraAmethyst PROPERTIES
   MACOSX_BUNDLE TRUE
