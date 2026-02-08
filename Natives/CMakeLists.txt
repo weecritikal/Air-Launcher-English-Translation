@@ -203,8 +203,9 @@ add_executable(AngelAuraAmethyst
   CustomIconManager.m
   ImageCropperViewController.m
 
-  # TouchController bridge
+  # TouchController bridge and preferences
   TouchControllerBridge.m
+  TouchControllerPreferencesViewController.m
 )
 
 # Add ModLoaderIcons PNG files into the app bundle Resources/ModLoaderIcons so they are available at runtime.

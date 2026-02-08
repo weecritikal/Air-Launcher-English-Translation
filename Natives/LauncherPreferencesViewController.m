@@ -462,34 +462,14 @@
             // Control settings
             @{@"icon": @"gamecontroller"},
             
-            // --- [修改] TouchController 模组支持开关 ---
+            // --- [修改] TouchController 模组支持 ---
             @{@"key": @"mod_touch_enable",
               @"icon": @"hand.point.up.left", // SF Symbols 图标
               @"hasDetail": @YES,
-              @"type": self.typeSwitch,
-              @"requestReload": @YES,
-              @"action": ^void(BOOL enabled) {
-                  if (enabled) {
-                      // 启用时设置UDP协议环境变量
-                      NSString *currentEnv = getPrefObject(@"java.env_variables");
-                      if ([currentEnv isKindOfClass:[NSString class]]) {
-                          if (![currentEnv containsString:@"TOUCH_CONTROLLER_PROXY=12450"]) {
-                              NSString *newEnv = [currentEnv stringByAppendingString:@" TOUCH_CONTROLLER_PROXY=12450"];
-                              setPrefObject(@"java.env_variables", newEnv);
-                          }
-                      } else {
-                          setPrefObject(@"java.env_variables", @"TOUCH_CONTROLLER_PROXY=12450");
-                      }
-                  } else {
-                      // 禁用时移除UDP协议环境变量
-                      NSString *currentEnv = getPrefObject(@"java.env_variables");
-                      if ([currentEnv isKindOfClass:[NSString class]]) {
-                          NSString *newEnv = [currentEnv stringByReplacingOccurrencesOfString:@" TOUCH_CONTROLLER_PROXY=12450" withString:@""];
-                          setPrefObject(@"java.env_variables", newEnv);
-                      }
-                  }
-                  showTouchInfoAlert(enabled);
-              } 
+              @"type": self.typeChildPane,
+              @"enableCondition": whenNotInGame,
+              @"canDismissWithSwipe": @NO,
+              @"class": NSClassFromString(@"TouchControllerPreferencesViewController")
             },
             // ------------------------------------------
 
