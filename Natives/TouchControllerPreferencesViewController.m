@@ -27,30 +27,79 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.title = localize(@"TouchController", @"preference.touchcontroller.title");
+    
+    // 配置设置内容
+    self.prefContents = @[
+        @[
+            @{@"icon": @"gamecontroller"},
+            @{@"key": @"mod_touch_mode",
+              @"icon": @"antenna.radiowaves.left.and.right",
+              @"hasDetail": @YES,
+              @"type": self.typeChildPane,
+              @"canDismissWithSwipe": @NO
+            },
+            @{@"key": @"mod_touch_about",
+              @"icon": @"info.circle",
+              @"type": self.typeButton,
+              @"canDismissWithSwipe": @NO,
+              @"action": ^void(){
+                  [self showInfoAlert];
+              }
+            }
+        ]
+    ];
+}
+
+- (void)initViewCreation {
+    __weak typeof(self) weakSelf = self;
+    
+    // 通信方式选择
+    self.typeChildPane = ^void(UITableViewCell *cell, NSString *section, NSString *key, NSDictionary *item) {
+        cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+        cell.selectionStyle = UITableViewCellSelectionStyleGray;
+        NSInteger mode = [weakSelf.getPreference(section, key) integerValue];
+        switch (mode) {
+            case TouchControllerCommModeUDP:
+                cell.detailTextLabel.text = localize(@"UDP Protocol", @"preference.touchcontroller.mode.udp");
+                break;
+            case TouchControllerCommModeStaticLib:
+                cell.detailTextLabel.text = localize(@"Static Library", @"preference.touchcontroller.mode.staticlib");
+                break;
+            default:
+                cell.detailTextLabel.text = localize(@"Disabled", @"preference.touchcontroller.mode.disabled");
+                break;
+        }
+    };
+    
+    // 按钮类型
+    self.typeButton = ^void(UITableViewCell *cell, NSString *section, NSString *key, NSDictionary *item) {
+        cell.selectionStyle = UITableViewCellSelectionStyleGray;
+        cell.textLabel.textColor = weakSelf.view.tintColor;
+    };
 }
 
 - (void)updateTouchControllerSetting:(TouchControllerCommMode)mode {
     switch (mode) {
         case TouchControllerCommModeDisabled:
             // 禁用 TouchController
-            setPrefObject(@"control.mod_touch_enable", @NO);
-            setPrefObject(@"control.mod_touch_mode", @0);
+            [self setPreference:@"control" key:@"mod_touch_enable" value:@NO];
+            [self setPreference:@"control" key:@"mod_touch_mode" value:@0];
             [self removeUDPEnvironmentVariable];
             NSLog(@"[TouchController] Disabled");
             break;
 
         case TouchControllerCommModeUDP:
             // 启用 UDP 模式
-            setPrefObject(@"control.mod_touch_enable", @YES);
-            setPrefObject(@"control.mod_touch_mode", @1);
+            [self setPreference:@"control" key:@"mod_touch_enable" value:@YES];
+            [self setPreference:@"control" key:@"mod_touch_mode" value:@1];
             [self setUDPEnvironmentVariable];
             NSLog(@"[TouchController] Enabled with UDP mode");
             break;
 
         case TouchControllerCommModeStaticLib:
             // 启用静态库模式
-            setPrefObject(@"control.mod_touch_enable", @YES);
-            setPrefObject(@"control.mod_touch_mode", @2);
+            [self setPreference:@"control" key:@"mod_touch_enable" value:@YES];
+            [self setPreference:@"control" key:@"mod_touch_mode" value:@2];
             [self removeUDPEnvironmentVariable];
             NSLog(@"[TouchController] Enabled with Static Library mode");
             break;
@@ -77,27 +126,15 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
     }
 }
 
-- (NSString *)getCurrentModeTitle {
-    NSInteger mode = [getPrefObject(@"control.mod_touch_mode") integerValue];
-    switch (mode) {
-        case TouchControllerCommModeUDP:
-            return localize(@"UDP Protocol", @"preference.touchcontroller.mode.udp");
-        case TouchControllerCommModeStaticLib:
-            return localize(@"Static Library", @"preference.touchcontroller.mode.staticlib");
-        default:
-            return localize(@"Disabled", @"preference.touchcontroller.mode.disabled");
-    }
-}
-
 - (void)showModeSelectionAlert {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:localize(@"Select Communication Mode", @"preference.touchcontroller.select_mode.title")
                                                                    message:nil
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
 
     // 获取当前模式
-    NSInteger currentMode = [getPrefObject(@"control.mod_touch_mode") integerValue];
+    NSInteger currentMode = [self.getPreference(@"control", @"mod_touch_mode") integerValue];
     if (currentMode == 0) currentMode = TouchControllerCommModeDisabled;
-    if (![getPrefObject(@"control.mod_touch_enable") boolValue]) currentMode = TouchControllerCommModeDisabled;
+    if (![self.getPreference(@"control", @"mod_touch_enable") boolValue]) currentMode = TouchControllerCommModeDisabled;
 
     // 禁用选项
     UIAlertAction *disableAction = [UIAlertAction actionWithTitle:localize(@"Disabled", @"preference.touchcontroller.mode.disabled")
@@ -195,54 +232,9 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
         [[UIApplication sharedApplication] openURL:[NSURL URLWithString:@"https://github.com/TouchController/TouchController"]
                                             options:@{}
                                   completionHandler:nil];
-}]];
+    }]];
 
     [self presentViewController:infoAlert animated:YES completion:nil];
-}
-
-#pragma mark - Table View Data Source
-
-- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
-    return 2;
-}
-
-- (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
-    switch (section) {
-        case 0:
-            return localize(@"Communication Mode", @"preference.touchcontroller.section.mode");
-        case 1:
-            return localize(@"Information", @"preference.touchcontroller.section.info");
-        default:
-            return @"";
-    }
-}
-
-- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    switch (section) {
-        case 0:
-            return 1;
-        case 1:
-            return 1;
-        default:
-            return 0;
-    }
-}
-
-- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"Cell" forIndexPath:indexPath];
-
-    if (indexPath.section == 0) {
-        // 通信方式选择
-        cell.textLabel.text = localize(@"Communication Mode", @"preference.touchcontroller.mode.title");
-        cell.detailTextLabel.text = [self getCurrentModeTitle];
-        cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
-    } else if (indexPath.section == 1) {
-        // 信息
-        cell.textLabel.text = localize(@"About TouchController", @"preference.touchcontroller.about");
-        cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
-    }
-
-    return cell;
 }
 
 #pragma mark - Table View Delegate
@@ -250,9 +242,10 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
 
-    if (indexPath.section == 0 && indexPath.row == 0) {
+    NSString *key = self.prefContents[indexPath.section][indexPath.row][@"key"];
+    if ([key isEqualToString:@"mod_touch_mode"]) {
         [self showModeSelectionAlert];
-    } else if (indexPath.section == 1 && indexPath.row == 0) {
+    } else if ([key isEqualToString:@"mod_touch_about"]) {
         [self showInfoAlert];
     }
 }
