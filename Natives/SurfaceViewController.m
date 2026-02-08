@@ -963,7 +963,7 @@ static GameSurfaceView* pojavWindow;
     
     [super touchesBegan:touches withEvent:event];
 
-    if (getPrefBool(@"control.mod_touch_enable")) {
+    if (getPrefBool(@"control.mod_touch_enable") && [getPrefObject(@"control.mod_touch_mode") integerValue] == 1) {
         
         for (UITouch *touch in touches) {
             if (touch.view != self.surfaceView) continue;
@@ -998,7 +998,7 @@ static GameSurfaceView* pojavWindow;
 
 - (void)touchesMoved:(NSSet *)touches withEvent:(UIEvent *)event
 {
-    if (getPrefBool(@"control.mod_touch_enable")) {
+    if (getPrefBool(@"control.mod_touch_enable") && [getPrefObject(@"control.mod_touch_mode") integerValue] == 1) {
         for (UITouch *touch in touches) {
             if (touch.view != self.surfaceView) continue;
 
@@ -1031,7 +1031,7 @@ static GameSurfaceView* pojavWindow;
 
 - (void)touchesEnded:(NSSet *)touches withEvent:(UIEvent *)event
 {
-    if (getPrefBool(@"control.mod_touch_enable")) {
+    if (getPrefBool(@"control.mod_touch_enable") && [getPrefObject(@"control.mod_touch_mode") integerValue] == 1) {
         for (UITouch *touch in touches) {
             // Send Type 2 (Remove Pointer) for ANY touch ending
             [self.touchSender sendType:2 id:[self getFingerId:touch] x:0 y:0];
@@ -1045,7 +1045,7 @@ static GameSurfaceView* pojavWindow;
 
 - (void)touchesCancelled:(NSSet *)touches withEvent:(UIEvent *)event
 {
-    if (getPrefBool(@"control.mod_touch_enable")) {
+    if (getPrefBool(@"control.mod_touch_enable") && [getPrefObject(@"control.mod_touch_mode") integerValue] == 1) {
         for (UITouch *touch in touches) {
              [self.touchSender sendType:2 id:[self getFingerId:touch] x:0 y:0];
         }
