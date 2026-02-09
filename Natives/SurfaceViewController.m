@@ -17,6 +17,7 @@
 #import "PLProfiles.h"
 #import "SurfaceViewController.h"
 #import "TrackedTextField.h"
+#import "TouchControllerBridge.h"
 #import "UIKit+hook.h"
 #import "ios_uikit_bridge.h"
 
@@ -97,7 +98,61 @@
     sendto(_sock, &packet, length, 0, (struct sockaddr *)&_target, sizeof(_target));
 }
 @end
-// --- [END] TouchController Mod Support ---
+
+// --- [START] TouchController Static Library Support ---
+// ProxyMessage 类型定义 (参考 TouchController-iOSTest)
+#define PROXY_MESSAGE_TYPE_ADD_POINTER 1
+#define PROXY_MESSAGE_TYPE_REMOVE_POINTER 2
+#define PROXY_MESSAGE_TYPE_CLEAR_POINTER 3
+
+// 编码 ProxyMessage: AddPointerMessage (type=1, index=int32, x=float, y=float)
+- (NSData *)encodeAddPointerMessage:(int32_t)index x:(float)x y:(float)y {
+    NSMutableData *data = [NSMutableData dataWithCapacity:16];
+    int32_t type = htonl(PROXY_MESSAGE_TYPE_ADD_POINTER);
+    int32_t indexBE = htonl(index);
+    
+    // 将 float 转换为网络字节序
+    union { float f; uint32_t i; } ux, uy;
+    ux.f = x;
+    uy.f = y;
+    uint32_t xBE = htonl(ux.i);
+    uint32_t yBE = htonl(uy.i);
+    
+    [data appendBytes:&type length:4];
+    [data appendBytes:&indexBE length:4];
+    [data appendBytes:&xBE length:4];
+    [data appendBytes:&yBE length:4];
+    
+    return data;
+}
+
+// 编码 ProxyMessage: RemovePointerMessage (type=2, index=int32)
+- (NSData *)encodeRemovePointerMessage:(int32_t)index {
+    NSMutableData *data = [NSMutableData dataWithCapacity:8];
+    int32_t type = htonl(PROXY_MESSAGE_TYPE_REMOVE_POINTER);
+    int32_t indexBE = htonl(index);
+    
+    [data appendBytes:&type length:4];
+    [data appendBytes:&indexBE length:4];
+    
+    return data;
+}
+
+// 发送 ProxyMessage 到 TouchController 静态库
+- (void)sendTouchControllerProxyMessage:(int32_t)index x:(float)x y:(float)y isRemove:(BOOL)isRemove {
+    NSData *messageData;
+    
+    if (isRemove) {
+        messageData = [self encodeRemovePointerMessage:index];
+    } else {
+        messageData = [self encodeAddPointerMessage:index x:x y:y];
+    }
+    
+    if (self.touchControllerTransportHandle >= 0 && messageData) {
+        [TouchControllerBridge sendToTransport:self.touchControllerTransportHandle data:messageData];
+    }
+}
+// --- [END] TouchController Static Library Support ---
 
 int memorystatus_control(uint32_t command, int32_t pid, uint32_t flags, void *buffer, size_t buffersize);
 #define MEMORYSTATUS_CMD_SET_JETSAM_TASK_LIMIT        6
@@ -132,6 +187,7 @@ static GameSurfaceView* pojavWindow;
 @property(nonatomic) UIImpactFeedbackGenerator *mediumHaptic;
 
 @property(nonatomic, strong) TouchSender *touchSender;
+@property(nonatomic) long long touchControllerTransportHandle;
 
 @end
 
@@ -314,6 +370,24 @@ static GameSurfaceView* pojavWindow;
     }
     
     self.touchSender = [[TouchSender alloc] init];
+
+    // 初始化 TouchController 静态库 Transport
+    if (getPrefBool(@"control.mod_touch_enable")) {
+        NSInteger mode = [getPrefObject(@"control.mod_touch_mode") integerValue];
+        if (mode == 2 && [TouchControllerBridge isTouchControllerAvailable]) {
+            // 静态库模式：创建 Transport
+            self.touchControllerTransportHandle = [TouchControllerBridge createTransportWithName:@"/tmp/touchcontroller.sock"];
+            if (self.touchControllerTransportHandle < 0) {
+                NSLog(@"[TouchController] Failed to create transport for static library mode");
+            } else {
+                NSLog(@"[TouchController] Transport created successfully (handle: %lld)", self.touchControllerTransportHandle);
+            }
+        } else {
+            self.touchControllerTransportHandle = -1;
+        }
+    } else {
+        self.touchControllerTransportHandle = -1;
+    }
 
     [self launchMinecraft];
 }
@@ -960,27 +1034,40 @@ static GameSurfaceView* pojavWindow;
 
 - (void)touchesBegan:(NSSet *)touches withEvent:(UIEvent *)event
 {
-    
+
     [super touchesBegan:touches withEvent:event];
 
-    if (getPrefBool(@"control.mod_touch_enable") && [getPrefObject(@"control.mod_touch_mode") integerValue] == 1) {
-        
-        for (UITouch *touch in touches) {
-            if (touch.view != self.surfaceView) continue;
-            
-            CGPoint p = [touch locationInView:self.surfaceView];
-            float x = p.x / self.surfaceView.frame.size.width;
-            float y = p.y / self.surfaceView.frame.size.height;
-            // Send Type 1 (Add Pointer)
-            [self.touchSender sendType:1 id:[self getFingerId:touch] x:x y:y];
+    if (getPrefBool(@"control.mod_touch_enable")) {
+        NSInteger mode = [getPrefObject(@"control.mod_touch_mode") integerValue];
+
+        if (mode == 1) {  // UDP 模式
+            for (UITouch *touch in touches) {
+                if (touch.view != self.surfaceView) continue;
+
+                CGPoint p = [touch locationInView:self.surfaceView];
+                float x = p.x / self.surfaceView.frame.size.width;
+                float y = p.y / self.surfaceView.frame.size.height;
+                // Send Type 1 (Add Pointer)
+                [self.touchSender sendType:1 id:[self getFingerId:touch] x:x y:y];
+            }
+        } else if (mode == 2) {  // 静态库模式
+            for (UITouch *touch in touches) {
+                if (touch.view != self.surfaceView) continue;
+
+                CGPoint p = [touch locationInView:self.surfaceView];
+                float x = p.x / self.surfaceView.frame.size.width;
+                float y = p.y / self.surfaceView.frame.size.height;
+                // Send ProxyMessage: AddPointerMessage
+                [self sendTouchControllerProxyMessage:[self getFingerId:touch] x:x y:y isRemove:NO];
+            }
         }
-        
+
         if (isGrabbing == JNI_TRUE) return;
     }
 
-    
+
     for (UITouch *touch in touches) {
-        if (touch.type == UITouchTypeIndirectPointer) continue; 
+        if (touch.type == UITouchTypeIndirectPointer) continue;
         CGPoint locationInView = [touch locationInView:self.rootView];
         CGFloat screenScale = [[UIScreen mainScreen] scale];
         currentHotbarSlot = self.enableHotbarGestures ?
@@ -998,16 +1085,31 @@ static GameSurfaceView* pojavWindow;
 
 - (void)touchesMoved:(NSSet *)touches withEvent:(UIEvent *)event
 {
-    if (getPrefBool(@"control.mod_touch_enable") && [getPrefObject(@"control.mod_touch_mode") integerValue] == 1) {
-        for (UITouch *touch in touches) {
-            if (touch.view != self.surfaceView) continue;
+    if (getPrefBool(@"control.mod_touch_enable")) {
+        NSInteger mode = [getPrefObject(@"control.mod_touch_mode") integerValue];
 
-            CGPoint p = [touch locationInView:self.surfaceView];
-            float x = p.x / self.surfaceView.frame.size.width;
-            float y = p.y / self.surfaceView.frame.size.height;
-            // Send Type 1 (Move Pointer)
-            [self.touchSender sendType:1 id:[self getFingerId:touch] x:x y:y];
+        if (mode == 1) {  // UDP 模式
+            for (UITouch *touch in touches) {
+                if (touch.view != self.surfaceView) continue;
+
+                CGPoint p = [touch locationInView:self.surfaceView];
+                float x = p.x / self.surfaceView.frame.size.width;
+                float y = p.y / self.surfaceView.frame.size.height;
+                // Send Type 1 (Move Pointer)
+                [self.touchSender sendType:1 id:[self getFingerId:touch] x:x y:y];
+            }
+        } else if (mode == 2) {  // 静态库模式
+            for (UITouch *touch in touches) {
+                if (touch.view != self.surfaceView) continue;
+
+                CGPoint p = [touch locationInView:self.surfaceView];
+                float x = p.x / self.surfaceView.frame.size.width;
+                float y = p.y / self.surfaceView.frame.size.height;
+                // Send ProxyMessage: AddPointerMessage (Move is also Add with new position)
+                [self sendTouchControllerProxyMessage:[self getFingerId:touch] x:x y:y isRemove:NO];
+            }
         }
+
         if (isGrabbing == JNI_TRUE) return;
     }
 
@@ -1019,7 +1121,7 @@ static GameSurfaceView* pojavWindow;
                 CGPoint point = [touch locationInView:self.rootView];
                 [self sendTouchPoint:point withEvent:ACTION_MOVE];
             }
-            continue; 
+            continue;
         }
         if (self.hotbarTouch != touch && [self isTouchInactive:self.primaryTouch]) {
             self.primaryTouch = touch;
@@ -1031,24 +1133,43 @@ static GameSurfaceView* pojavWindow;
 
 - (void)touchesEnded:(NSSet *)touches withEvent:(UIEvent *)event
 {
-    if (getPrefBool(@"control.mod_touch_enable") && [getPrefObject(@"control.mod_touch_mode") integerValue] == 1) {
-        for (UITouch *touch in touches) {
-            // Send Type 2 (Remove Pointer) for ANY touch ending
-            [self.touchSender sendType:2 id:[self getFingerId:touch] x:0 y:0];
+    if (getPrefBool(@"control.mod_touch_enable")) {
+        NSInteger mode = [getPrefObject(@"control.mod_touch_mode") integerValue];
+
+        if (mode == 1) {  // UDP 模式
+            for (UITouch *touch in touches) {
+                // Send Type 2 (Remove Pointer) for ANY touch ending
+                [self.touchSender sendType:2 id:[self getFingerId:touch] x:0 y:0];
+            }
+        } else if (mode == 2) {  // 静态库模式
+            for (UITouch *touch in touches) {
+                // Send ProxyMessage: RemovePointerMessage
+                [self sendTouchControllerProxyMessage:[self getFingerId:touch] x:0 y:0 isRemove:YES];
+            }
         }
+
         if (isGrabbing == JNI_TRUE) return;
     }
-    
+
     [super touchesEnded:touches withEvent:event];
     [self touchesEndedGlobal:touches withEvent:event];
 }
 
 - (void)touchesCancelled:(NSSet *)touches withEvent:(UIEvent *)event
 {
-    if (getPrefBool(@"control.mod_touch_enable") && [getPrefObject(@"control.mod_touch_mode") integerValue] == 1) {
-        for (UITouch *touch in touches) {
-             [self.touchSender sendType:2 id:[self getFingerId:touch] x:0 y:0];
+    if (getPrefBool(@"control.mod_touch_enable")) {
+        NSInteger mode = [getPrefObject(@"control.mod_touch_mode") integerValue];
+
+        if (mode == 1) {  // UDP 模式
+            for (UITouch *touch in touches) {
+                [self.touchSender sendType:2 id:[self getFingerId:touch] x:0 y:0];
+            }
+        } else if (mode == 2) {  // 静态库模式
+            for (UITouch *touch in touches) {
+                [self sendTouchControllerProxyMessage:[self getFingerId:touch] x:0 y:0 isRemove:YES];
+            }
         }
+
         if (isGrabbing == JNI_TRUE) return;
     }
 
