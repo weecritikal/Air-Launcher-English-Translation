@@ -31,19 +31,18 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
     // 配置设置内容
     self.prefContents = @[
         @[
-            @{@"icon": @"gamecontroller"},
             @{@"key": @"mod_touch_mode",
               @"icon": @"antenna.radiowaves.left.and.right",
               @"hasDetail": @YES,
               @"type": self.typeChildPane,
               @"canDismissWithSwipe": @NO,
-              @"name": localize(@"Communication Mode", @"preference.touchcontroller.mode.title")
+              @"title": localize(@"Communication Mode", @"preference.touchcontroller.mode.title")
             },
             @{@"key": @"mod_touch_vibrate_enable",
               @"icon": @"waveform.path",
               @"type": self.typeSwitch,
               @"canDismissWithSwipe": @NO,
-              @"name": localize(@"Enable Vibration", @"preference.touchcontroller.vibrate.enable")
+              @"title": localize(@"Enable Vibration", @"preference.touchcontroller.vibrate.enable")
             },
             @{@"key": @"mod_touch_vibrate_intensity",
               @"icon": @"speaker.wave.2",
@@ -53,13 +52,13 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
               @"min": @1,
               @"max": @3,
               @"step": @1,
-              @"name": localize(@"Vibration Intensity", @"preference.touchcontroller.vibrate.intensity")
+              @"title": localize(@"Vibration Intensity", @"preference.touchcontroller.vibrate.intensity")
             },
             @{@"key": @"mod_touch_moveview_enable",
               @"icon": @"arrow.triangle.2.circlepath",
               @"type": self.typeSwitch,
               @"canDismissWithSwipe": @NO,
-              @"name": localize(@"Enable Move View", @"preference.touchcontroller.moveview.enable")
+              @"title": localize(@"Enable Move View", @"preference.touchcontroller.moveview.enable")
             },
             @{@"key": @"mod_touch_about",
               @"icon": @"info.circle",
@@ -68,7 +67,7 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
               @"action": ^void(){
                   [self showInfoAlert];
               },
-              @"name": localize(@"About TouchController", @"preference.touchcontroller.about")
+              @"title": localize(@"About TouchController", @"preference.touchcontroller.about")
             }
         ]
     ];
@@ -81,7 +80,7 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
     self.typeChildPane = ^void(UITableViewCell *cell, NSString *section, NSString *key, NSDictionary *item) {
         cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
         cell.selectionStyle = UITableViewCellSelectionStyleGray;
-        cell.textLabel.text = item[@"name"];
+        cell.textLabel.text = item[@"title"];
         NSInteger mode = [weakSelf.getPreference(section, key) integerValue];
         switch (mode) {
             case TouchControllerCommModeUDP:
@@ -99,14 +98,14 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
     // 按钮类型
     self.typeButton = ^void(UITableViewCell *cell, NSString *section, NSString *key, NSDictionary *item) {
         cell.selectionStyle = UITableViewCellSelectionStyleGray;
-        cell.textLabel.text = item[@"name"];
+        cell.textLabel.text = item[@"title"];
         cell.textLabel.textColor = weakSelf.view.tintColor;
     };
 
     // 滑块类型（震动强度）
     self.typeSlider = ^void(UITableViewCell *cell, NSString *section, NSString *key, NSDictionary *item) {
         cell.selectionStyle = UITableViewCellSelectionStyleNone;
-        cell.textLabel.text = item[@"name"];
+        cell.textLabel.text = item[@"title"];
 
         // 创建滑块
         UISlider *slider = [[UISlider alloc] initWithFrame:CGRectMake(0, 0, 200, 30)];
