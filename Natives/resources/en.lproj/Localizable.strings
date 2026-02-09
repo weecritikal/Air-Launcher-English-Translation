@@ -374,3 +374,28 @@
 "announcement.latest_version" = "Welcome to Amethyst iOS Remastered! This is the latest stable version.";
 "announcement.new_version_available" = "New version available: %@";
 "announcement.download_button" = "Download Now";
+
+// TouchController Preferences
+"preference.touchcontroller.title" = "TouchController";
+"preference.touchcontroller.section.mode" = "Communication Mode";
+"preference.touchcontroller.section.info" = "Information";
+"preference.touchcontroller.mode.title" = "Communication Mode";
+"preference.touchcontroller.select_mode.title" = "Select Communication Mode";
+"preference.touchcontroller.mode.disabled" = "Disabled";
+"preference.touchcontroller.mode.udp" = "UDP Protocol";
+"preference.touchcontroller.mode.staticlib" = "Static Library";
+"preference.touchcontroller.udp.title" = "UDP Protocol Mode";
+"preference.touchcontroller.udp.message" = "TouchController will communicate via UDP port 12450. This mode is compatible with most servers and provides stable network communication.";
+"preference.touchcontroller.staticlib.title" = "Static Library Mode";
+"preference.touchcontroller.staticlib.message" = "TouchController will use native static library for high-performance local communication via Unix Domain Socket. This mode provides better performance but requires the static library to be linked.";
+"preference.touchcontroller.about" = "About TouchController";
+"preference.touchcontroller.about.title" = "About TouchController";
+"preference.touchcontroller.about.message" = "TouchController is a Minecraft mod that adds touch controls to Java Edition. This launcher supports two communication modes:\n\n• UDP Protocol: Network-based communication\n• Static Library: High-performance local communication\n\nVisit GitHub for more information.";
+"preference.touchcontroller.ok" = "OK";
+"preference.touchcontroller.cancel" = "Cancel";
+"preference.touchcontroller.vibrate.enable" = "Enable Vibration";
+"preference.touchcontroller.vibrate.intensity" = "Vibration Intensity";
+"preference.touchcontroller.vibrate.intensity.light" = "Light";
+"preference.touchcontroller.vibrate.intensity.medium" = "Medium";
+"preference.touchcontroller.vibrate.intensity.heavy" = "Heavy";
+"preference.touchcontroller.moveview.enable" = "Enable Move View";

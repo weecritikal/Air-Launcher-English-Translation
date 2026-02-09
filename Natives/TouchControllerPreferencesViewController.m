@@ -27,7 +27,7 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.title = localize(@"TouchController", @"preference.touchcontroller.title");
-    
+
     // 配置设置内容
     self.prefContents = @[
         @[
@@ -36,7 +36,30 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
               @"icon": @"antenna.radiowaves.left.and.right",
               @"hasDetail": @YES,
               @"type": self.typeChildPane,
-              @"canDismissWithSwipe": @NO
+              @"canDismissWithSwipe": @NO,
+              @"name": localize(@"Communication Mode", @"preference.touchcontroller.mode.title")
+            },
+            @{@"key": @"mod_touch_vibrate_enable",
+              @"icon": @"waveform.path",
+              @"type": self.typeSwitch,
+              @"canDismissWithSwipe": @NO,
+              @"name": localize(@"Enable Vibration", @"preference.touchcontroller.vibrate.enable")
+            },
+            @{@"key": @"mod_touch_vibrate_intensity",
+              @"icon": @"speaker.wave.2",
+              @"type": self.typeSlider,
+              @"hasDetail": @YES,
+              @"canDismissWithSwipe": @NO,
+              @"min": @1,
+              @"max": @3,
+              @"step": @1,
+              @"name": localize(@"Vibration Intensity", @"preference.touchcontroller.vibrate.intensity")
+            },
+            @{@"key": @"mod_touch_moveview_enable",
+              @"icon": @"arrow.triangle.2.circlepath",
+              @"type": self.typeSwitch,
+              @"canDismissWithSwipe": @NO,
+              @"name": localize(@"Enable Move View", @"preference.touchcontroller.moveview.enable")
             },
             @{@"key": @"mod_touch_about",
               @"icon": @"info.circle",
@@ -44,7 +67,8 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
               @"canDismissWithSwipe": @NO,
               @"action": ^void(){
                   [self showInfoAlert];
-              }
+              },
+              @"name": localize(@"About TouchController", @"preference.touchcontroller.about")
             }
         ]
     ];
@@ -52,11 +76,12 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
 
 - (void)initViewCreation {
     __weak typeof(self) weakSelf = self;
-    
+
     // 通信方式选择
     self.typeChildPane = ^void(UITableViewCell *cell, NSString *section, NSString *key, NSDictionary *item) {
         cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
         cell.selectionStyle = UITableViewCellSelectionStyleGray;
+        cell.textLabel.text = item[@"name"];
         NSInteger mode = [weakSelf.getPreference(section, key) integerValue];
         switch (mode) {
             case TouchControllerCommModeUDP:
@@ -70,12 +95,80 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
                 break;
         }
     };
-    
+
     // 按钮类型
     self.typeButton = ^void(UITableViewCell *cell, NSString *section, NSString *key, NSDictionary *item) {
         cell.selectionStyle = UITableViewCellSelectionStyleGray;
+        cell.textLabel.text = item[@"name"];
         cell.textLabel.textColor = weakSelf.view.tintColor;
     };
+
+    // 滑块类型（震动强度）
+    self.typeSlider = ^void(UITableViewCell *cell, NSString *section, NSString *key, NSDictionary *item) {
+        cell.selectionStyle = UITableViewCellSelectionStyleNone;
+        cell.textLabel.text = item[@"name"];
+
+        // 创建滑块
+        UISlider *slider = [[UISlider alloc] initWithFrame:CGRectMake(0, 0, 200, 30)];
+        NSInteger value = [weakSelf.getPreference(section, key) integerValue];
+        if (value < 1) value = 1;
+        if (value > 3) value = 3;
+        slider.value = value;
+        slider.minimumValue = [item[@"min"] floatValue];
+        slider.maximumValue = [item[@"max"] floatValue];
+        slider.continuous = YES;
+
+        // 设置详细文本
+        switch (value) {
+            case 1:
+                cell.detailTextLabel.text = localize(@"Light", @"preference.touchcontroller.vibrate.intensity.light");
+                break;
+            case 2:
+                cell.detailTextLabel.text = localize(@"Medium", @"preference.touchcontroller.vibrate.intensity.medium");
+                break;
+            case 3:
+                cell.detailTextLabel.text = localize(@"Heavy", @"preference.touchcontroller.vibrate.intensity.heavy");
+                break;
+            default:
+                cell.detailTextLabel.text = localize(@"Medium", @"preference.touchcontroller.vibrate.intensity.medium");
+                break;
+        }
+
+        // 滑块变化处理
+        [slider addTarget:weakSelf action:@selector(sliderValueChanged:) forControlEvents:UIControlEventValueChanged];
+
+        // 将滑块添加到附件视图
+        cell.accessoryView = slider;
+    };
+}
+
+// 滑块值变化处理
+- (void)sliderValueChanged:(UISlider *)slider {
+    NSInteger value = (NSInteger)round(slider.value);
+    self.setPreference(@"control", @"mod_touch_vibrate_intensity", @(value));
+
+    // 更新详细文本
+    UITableViewCell *cell = (UITableViewCell *)slider.superview;
+    while (cell && ![cell isKindOfClass:[UITableViewCell class]]) {
+        cell = (UITableViewCell *)cell.superview;
+    }
+
+    if (cell) {
+        switch (value) {
+            case 1:
+                cell.detailTextLabel.text = localize(@"Light", @"preference.touchcontroller.vibrate.intensity.light");
+                break;
+            case 2:
+                cell.detailTextLabel.text = localize(@"Medium", @"preference.touchcontroller.vibrate.intensity.medium");
+                break;
+            case 3:
+                cell.detailTextLabel.text = localize(@"Heavy", @"preference.touchcontroller.vibrate.intensity.heavy");
+                break;
+            default:
+                cell.detailTextLabel.text = localize(@"Medium", @"preference.touchcontroller.vibrate.intensity.medium");
+                break;
+        }
+    }
 }
 
 - (void)updateTouchControllerSetting:(TouchControllerCommMode)mode {

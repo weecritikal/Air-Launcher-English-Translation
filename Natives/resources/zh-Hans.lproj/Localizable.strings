@@ -411,3 +411,9 @@
 "preference.touchcontroller.about.message" = "TouchController 是一个为 Minecraft Java 版添加触摸控制的模组。本启动器支持两种通信模式：\n\n• UDP 协议：基于网络的通信\n• 静态库：高性能本地通信\n\n访问 GitHub 获取更多信息。";
 "preference.touchcontroller.ok" = "确定";
 "preference.touchcontroller.cancel" = "取消";
+"preference.touchcontroller.vibrate.enable" = "启用震动反馈";
+"preference.touchcontroller.vibrate.intensity" = "震动强度";
+"preference.touchcontroller.vibrate.intensity.light" = "轻度";
+"preference.touchcontroller.vibrate.intensity.medium" = "中度";
+"preference.touchcontroller.vibrate.intensity.heavy" = "重度";
+"preference.touchcontroller.moveview.enable" = "启用移动视角";

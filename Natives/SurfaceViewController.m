@@ -104,6 +104,15 @@
 #define PROXY_MESSAGE_TYPE_ADD_POINTER 1
 #define PROXY_MESSAGE_TYPE_REMOVE_POINTER 2
 #define PROXY_MESSAGE_TYPE_CLEAR_POINTER 3
+#define PROXY_MESSAGE_TYPE_VIBRATE 4
+#define PROXY_MESSAGE_TYPE_INPUT_STATUS 7
+#define PROXY_MESSAGE_TYPE_INPUT_CURSOR 9
+#define PROXY_MESSAGE_TYPE_INPUT_AREA 11
+#define PROXY_MESSAGE_TYPE_MOVE_VIEW 12
+
+// Vibrate 类型
+#define VIBRATE_KIND_BLOCK_BROKEN 0
+
 // --- [END] TouchController Static Library Support ---
 
 int memorystatus_control(uint32_t command, int32_t pid, uint32_t flags, void *buffer, size_t buffersize);
@@ -150,6 +159,32 @@ static GameSurfaceView* pojavWindow;
 @implementation SurfaceViewController
 
 #pragma mark - TouchController Static Library Support
+
+// 启动 TouchController 消息接收循环
+- (void)startTouchControllerMessageLoop {
+    // 创建定时器，每 16ms (60fps) 检查一次消息
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        while (self.touchControllerTransportHandle >= 0 && !self.isViewDismissed) {
+            @autoreleasepool {
+                NSMutableData *buffer = [NSMutableData dataWithLength:256];
+                int result = [TouchControllerBridge receiveFromTransport:self.touchControllerTransportHandle buffer:buffer];
+
+                if (result > 0) {
+                    [buffer setLength:result];
+                    [self processTouchControllerMessage:buffer];
+                }
+
+                // 休眠 16ms
+                usleep(16000);
+            }
+        }
+    });
+}
+
+// 检查视图是否已关闭
+- (BOOL)isViewDismissed {
+    return !self.view.window || self.isBeingDismissed;
+}
 
 // 编码 ProxyMessage: AddPointerMessage (type=1, index=int32, x=float, y=float)
 - (NSData *)encodeAddPointerMessage:(int32_t)index x:(float)x y:(float)y {
@@ -349,6 +384,142 @@ static GameSurfaceView* pojavWindow;
 
     NSData *messageData = [self encodeInputAreaMessageWithRect:rect];
     [TouchControllerBridge sendToTransport:self.touchControllerTransportHandle data:messageData];
+}
+
+#pragma mark - TouchController Vibration Support
+
+// 编码 VibrateMessage (type=4)
+- (NSData *)encodeVibrateMessageWithKind:(int32_t)kind {
+    NSMutableData *data = [NSMutableData dataWithCapacity:8];
+    int32_t type = htonl(PROXY_MESSAGE_TYPE_VIBRATE);
+    int32_t kindBE = htonl(kind);
+
+    [data appendBytes:&type length:4];
+    [data appendBytes:&kindBE length:4];
+
+    return data;
+}
+
+// 触发震动反馈
+- (void)triggerVibrationWithKind:(int32_t)kind {
+    // 检查震动是否启用
+    if (!getPrefBool(@"control.mod_touch_vibrate_enable")) {
+        return;
+    }
+
+    // 获取震动强度设置
+    NSInteger intensity = [getPrefObject(@"control.mod_touch_vibrate_intensity") integerValue];
+    if (intensity < 1) intensity = 1;
+    if (intensity > 3) intensity = 3;
+
+    // 使用 UIImpactFeedbackGenerator 触发震动
+    UIImpactFeedbackGenerator *feedbackGenerator;
+    switch (intensity) {
+        case 1: // 轻度震动
+            feedbackGenerator = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleLight];
+            break;
+        case 2: // 中度震动
+            feedbackGenerator = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleMedium];
+            break;
+        case 3: // 重度震动
+            feedbackGenerator = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleHeavy];
+            break;
+        default:
+            feedbackGenerator = [[UIImpactFeedbackGenerator alloc] initWithStyle:UIImpactFeedbackStyleMedium];
+            break;
+    }
+
+    [feedbackGenerator impactOccurred];
+
+    // 同时发送 VibrateMessage 到 TouchController
+    if (self.touchControllerTransportHandle >= 0) {
+        NSData *messageData = [self encodeVibrateMessageWithKind:kind];
+        [TouchControllerBridge sendToTransport:self.touchControllerTransportHandle data:messageData];
+    }
+}
+
+#pragma mark - TouchController MoveView Support
+
+// 编码 MoveViewMessage (type=12)
+- (NSData *)encodeMoveViewMessageWithScreenBased:(BOOL)screenBased
+                                     deltaPitch:(float)deltaPitch
+                                      deltaYaw:(float)deltaYaw {
+    NSMutableData *data = [NSMutableData dataWithCapacity:13];
+    int32_t type = htonl(PROXY_MESSAGE_TYPE_MOVE_VIEW);
+    uint8_t screenBasedByte = screenBased ? 1 : 0;
+
+    // 将 float 转换为网络字节序
+    union { float f; uint32_t i; } up, uy;
+    up.f = deltaPitch;
+    uy.f = deltaYaw;
+    uint32_t pitchBE = htonl(up.i);
+    uint32_t yawBE = htonl(uy.i);
+
+    [data appendBytes:&type length:4];
+    [data appendBytes:&screenBasedByte length:1];
+    [data appendBytes:&pitchBE length:4];
+    [data appendBytes:&yawBE length:4];
+
+    return data;
+}
+
+// 发送移动视角消息
+- (void)sendMoveViewWithDeltaPitch:(float)deltaPitch deltaYaw:(float)deltaYaw {
+    if (self.touchControllerTransportHandle >= 0) {
+        NSData *messageData = [self encodeMoveViewMessageWithScreenBased:YES
+                                                              deltaPitch:deltaPitch
+                                                               deltaYaw:deltaYaw];
+        [TouchControllerBridge sendToTransport:self.touchControllerTransportHandle data:messageData];
+    }
+}
+
+#pragma mark - TouchController Message Receiver
+
+// 处理从 TouchController 接收到的消息
+- (void)processTouchControllerMessage:(NSData *)messageData {
+    if (messageData.length < 4) {
+        NSLog(@"[TouchController] Message too short: %lu bytes", (unsigned long)messageData.length);
+        return;
+    }
+
+    int32_t type;
+    [messageData getBytes:&type length:4];
+    type = ntohl(type);
+
+    switch (type) {
+        case PROXY_MESSAGE_TYPE_VIBRATE: {
+            if (messageData.length >= 8) {
+                int32_t kind;
+                [messageData getBytes:&kind range:NSMakeRange(4, 4)];
+                kind = ntohl(kind);
+                [self triggerVibrationWithKind:kind];
+            }
+            break;
+        }
+        case PROXY_MESSAGE_TYPE_MOVE_VIEW: {
+            if (messageData.length >= 13) {
+                uint8_t screenBasedByte;
+                int32_t pitchBE, yawBE;
+                [messageData getBytes:&screenBasedByte range:NSMakeRange(4, 1)];
+                [messageData getBytes:&pitchBE range:NSMakeRange(5, 4)];
+                [messageData getBytes:&yawBE range:NSMakeRange(9, 4)];
+
+                BOOL screenBased = (screenBasedByte != 0);
+                union { uint32_t i; float f; } up, uy;
+                up.i = ntohl(pitchBE);
+                uy.i = ntohl(yawBE);
+
+                // MoveView 消息通常是从客户端发送到服务端的
+                // 这里我们记录日志，实际应用可能需要特殊处理
+                NSLog(@"[TouchController] Received MoveView: screenBased=%d, pitch=%.2f, yaw=%.2f",
+                      screenBased, up.f, uy.f);
+            }
+            break;
+        }
+        default:
+            NSLog(@"[TouchController] Unknown message type: %d", type);
+            break;
+    }
 }
 
 // 初始化文本输入字段
@@ -606,6 +777,9 @@ static GameSurfaceView* pojavWindow;
         self.touchControllerTextInputEnabled = YES;
         [self setupTouchControllerTextInput];
         NSLog(@"[TouchController] Text input support initialized");
+
+        // 启动消息接收定时器
+        [self startTouchControllerMessageLoop];
     }
 
     [self launchMinecraft];
