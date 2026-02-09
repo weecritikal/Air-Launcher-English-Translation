@@ -27,6 +27,10 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.title = localize(@"TouchController", @"preference.touchcontroller.title");
+}
+
+- (void)initViewCreation {
+    __weak typeof(self) weakSelf = self;
 
     // 配置设置内容
     self.prefContents = @[
@@ -65,16 +69,12 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
               @"type": self.typeButton,
               @"canDismissWithSwipe": @NO,
               @"action": ^void(){
-                  [self showInfoAlert];
+                  [weakSelf showInfoAlert];
               },
               @"title": localize(@"About TouchController", @"preference.touchcontroller.about") ?: @"About TouchController"
             }
         ]
     ];
-}
-
-- (void)initViewCreation {
-    __weak typeof(self) weakSelf = self;
 
     // 通信方式选择
     self.typeChildPane = ^void(UITableViewCell *cell, NSString *section, NSString *key, NSDictionary *item) {
