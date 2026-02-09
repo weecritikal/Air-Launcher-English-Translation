@@ -82,24 +82,24 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
     switch (mode) {
         case TouchControllerCommModeDisabled:
             // 禁用 TouchController
-            [self setPreference:@"control" key:@"mod_touch_enable" value:@NO];
-            [self setPreference:@"control" key:@"mod_touch_mode" value:@0];
+            self.setPreference(@"control", @"mod_touch_enable", @NO);
+            self.setPreference(@"control", @"mod_touch_mode", @0);
             [self removeUDPEnvironmentVariable];
             NSLog(@"[TouchController] Disabled");
             break;
 
         case TouchControllerCommModeUDP:
             // 启用 UDP 模式
-            [self setPreference:@"control" key:@"mod_touch_enable" value:@YES];
-            [self setPreference:@"control" key:@"mod_touch_mode" value:@1];
+            self.setPreference(@"control", @"mod_touch_enable", @YES);
+            self.setPreference(@"control", @"mod_touch_mode", @1);
             [self setUDPEnvironmentVariable];
             NSLog(@"[TouchController] Enabled with UDP mode");
             break;
 
         case TouchControllerCommModeStaticLib:
             // 启用静态库模式
-            [self setPreference:@"control" key:@"mod_touch_enable" value:@YES];
-            [self setPreference:@"control" key:@"mod_touch_mode" value:@2];
+            self.setPreference(@"control", @"mod_touch_enable", @YES);
+            self.setPreference(@"control", @"mod_touch_mode", @2);
             [self removeUDPEnvironmentVariable];
             NSLog(@"[TouchController] Enabled with Static Library mode");
             break;
