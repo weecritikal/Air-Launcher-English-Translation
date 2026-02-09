@@ -32,50 +32,6 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
 - (void)initViewCreation {
     __weak typeof(self) weakSelf = self;
 
-    // 配置设置内容
-    self.prefContents = @[
-        @[
-            @{@"key": @"mod_touch_mode",
-              @"icon": @"antenna.radiowaves.left.and.right",
-              @"hasDetail": @YES,
-              @"type": self.typeChildPane,
-              @"canDismissWithSwipe": @NO,
-              @"title": localize(@"Communication Mode", @"preference.touchcontroller.mode.title") ?: @"Communication Mode"
-            },
-            @{@"key": @"mod_touch_vibrate_enable",
-              @"icon": @"waveform.path",
-              @"type": self.typeSwitch,
-              @"canDismissWithSwipe": @NO,
-              @"title": localize(@"Enable Vibration", @"preference.touchcontroller.vibrate.enable") ?: @"Enable Vibration"
-            },
-            @{@"key": @"mod_touch_vibrate_intensity",
-              @"icon": @"speaker.wave.2",
-              @"type": self.typeSlider,
-              @"hasDetail": @YES,
-              @"canDismissWithSwipe": @NO,
-              @"min": @1,
-              @"max": @3,
-              @"step": @1,
-              @"title": localize(@"Vibration Intensity", @"preference.touchcontroller.vibrate.intensity") ?: @"Vibration Intensity"
-            },
-            @{@"key": @"mod_touch_moveview_enable",
-              @"icon": @"arrow.triangle.2.circlepath",
-              @"type": self.typeSwitch,
-              @"canDismissWithSwipe": @NO,
-              @"title": localize(@"Enable Move View", @"preference.touchcontroller.moveview.enable") ?: @"Enable Move View"
-            },
-            @{@"key": @"mod_touch_about",
-              @"icon": @"info.circle",
-              @"type": self.typeButton,
-              @"canDismissWithSwipe": @NO,
-              @"action": ^void(){
-                  [weakSelf showInfoAlert];
-              },
-              @"title": localize(@"About TouchController", @"preference.touchcontroller.about") ?: @"About TouchController"
-            }
-        ]
-    ];
-
     // 通信方式选择
     self.typeChildPane = ^void(UITableViewCell *cell, NSString *section, NSString *key, NSDictionary *item) {
         cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
@@ -139,6 +95,63 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
         // 将滑块添加到附件视图
         cell.accessoryView = slider;
     };
+
+    // 开关类型
+    self.typeSwitch = ^void(UITableViewCell *cell, NSString *section, NSString *key, NSDictionary *item) {
+        UISwitch *view = [[UISwitch alloc] init];
+        NSArray *customSwitchValue = item[@"customSwitchValue"];
+        if (customSwitchValue == nil) {
+            [view setOn:[weakSelf.getPreference(section, key) boolValue] animated:NO];
+        } else {
+            [view setOn:[weakSelf.getPreference(section, key) isEqualToString:customSwitchValue[1]] animated:NO];
+        }
+        [view addTarget:weakSelf action:@selector(switchChanged:) forControlEvents:UIControlEventValueChanged];
+        cell.accessoryView = view;
+    };
+
+    // 配置设置内容
+    self.prefContents = @[
+        @[
+            @{@"key": @"mod_touch_mode",
+              @"icon": @"antenna.radiowaves.left.and.right",
+              @"hasDetail": @YES,
+              @"type": self.typeChildPane,
+              @"canDismissWithSwipe": @NO,
+              @"title": localize(@"Communication Mode", @"preference.touchcontroller.mode.title") ?: @"Communication Mode"
+            },
+            @{@"key": @"mod_touch_vibrate_enable",
+              @"icon": @"waveform.path",
+              @"type": self.typeSwitch,
+              @"canDismissWithSwipe": @NO,
+              @"title": localize(@"Enable Vibration", @"preference.touchcontroller.vibrate.enable") ?: @"Enable Vibration"
+            },
+            @{@"key": @"mod_touch_vibrate_intensity",
+              @"icon": @"speaker.wave.2",
+              @"type": self.typeSlider,
+              @"hasDetail": @YES,
+              @"canDismissWithSwipe": @NO,
+              @"min": @1,
+              @"max": @3,
+              @"step": @1,
+              @"title": localize(@"Vibration Intensity", @"preference.touchcontroller.vibrate.intensity") ?: @"Vibration Intensity"
+            },
+            @{@"key": @"mod_touch_moveview_enable",
+              @"icon": @"arrow.triangle.2.circlepath",
+              @"type": self.typeSwitch,
+              @"canDismissWithSwipe": @NO,
+              @"title": localize(@"Enable Move View", @"preference.touchcontroller.moveview.enable") ?: @"Enable Move View"
+            },
+            @{@"key": @"mod_touch_about",
+              @"icon": @"info.circle",
+              @"type": self.typeButton,
+              @"canDismissWithSwipe": @NO,
+              @"action": ^void(){
+                  [weakSelf showInfoAlert];
+              },
+              @"title": localize(@"About TouchController", @"preference.touchcontroller.about") ?: @"About TouchController"
+            }
+        ]
+    ];
 }
 
 // 滑块值变化处理
