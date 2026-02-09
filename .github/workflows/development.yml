@@ -19,7 +19,7 @@ jobs:
           - platform: 2
             platform_name: ios
 
-    runs-on: macos-latest
+    runs-on: macos-14
 
     steps:
       - name: Show available Xcode and select a suitable one
