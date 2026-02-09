@@ -104,54 +104,6 @@
 #define PROXY_MESSAGE_TYPE_ADD_POINTER 1
 #define PROXY_MESSAGE_TYPE_REMOVE_POINTER 2
 #define PROXY_MESSAGE_TYPE_CLEAR_POINTER 3
-
-// 编码 ProxyMessage: AddPointerMessage (type=1, index=int32, x=float, y=float)
-- (NSData *)encodeAddPointerMessage:(int32_t)index x:(float)x y:(float)y {
-    NSMutableData *data = [NSMutableData dataWithCapacity:16];
-    int32_t type = htonl(PROXY_MESSAGE_TYPE_ADD_POINTER);
-    int32_t indexBE = htonl(index);
-    
-    // 将 float 转换为网络字节序
-    union { float f; uint32_t i; } ux, uy;
-    ux.f = x;
-    uy.f = y;
-    uint32_t xBE = htonl(ux.i);
-    uint32_t yBE = htonl(uy.i);
-    
-    [data appendBytes:&type length:4];
-    [data appendBytes:&indexBE length:4];
-    [data appendBytes:&xBE length:4];
-    [data appendBytes:&yBE length:4];
-    
-    return data;
-}
-
-// 编码 ProxyMessage: RemovePointerMessage (type=2, index=int32)
-- (NSData *)encodeRemovePointerMessage:(int32_t)index {
-    NSMutableData *data = [NSMutableData dataWithCapacity:8];
-    int32_t type = htonl(PROXY_MESSAGE_TYPE_REMOVE_POINTER);
-    int32_t indexBE = htonl(index);
-    
-    [data appendBytes:&type length:4];
-    [data appendBytes:&indexBE length:4];
-    
-    return data;
-}
-
-// 发送 ProxyMessage 到 TouchController 静态库
-- (void)sendTouchControllerProxyMessage:(int32_t)index x:(float)x y:(float)y isRemove:(BOOL)isRemove {
-    NSData *messageData;
-    
-    if (isRemove) {
-        messageData = [self encodeRemovePointerMessage:index];
-    } else {
-        messageData = [self encodeAddPointerMessage:index x:x y:y];
-    }
-    
-    if (self.touchControllerTransportHandle >= 0 && messageData) {
-        [TouchControllerBridge sendToTransport:self.touchControllerTransportHandle data:messageData];
-    }
-}
 // --- [END] TouchController Static Library Support ---
 
 int memorystatus_control(uint32_t command, int32_t pid, uint32_t flags, void *buffer, size_t buffersize);
@@ -192,6 +144,58 @@ static GameSurfaceView* pojavWindow;
 @end
 
 @implementation SurfaceViewController
+
+#pragma mark - TouchController Static Library Support
+
+// 编码 ProxyMessage: AddPointerMessage (type=1, index=int32, x=float, y=float)
+- (NSData *)encodeAddPointerMessage:(int32_t)index x:(float)x y:(float)y {
+    NSMutableData *data = [NSMutableData dataWithCapacity:16];
+    int32_t type = htonl(PROXY_MESSAGE_TYPE_ADD_POINTER);
+    int32_t indexBE = htonl(index);
+
+    // 将 float 转换为网络字节序
+    union { float f; uint32_t i; } ux, uy;
+    ux.f = x;
+    uy.f = y;
+    uint32_t xBE = htonl(ux.i);
+    uint32_t yBE = htonl(uy.i);
+
+    [data appendBytes:&type length:4];
+    [data appendBytes:&indexBE length:4];
+    [data appendBytes:&xBE length:4];
+    [data appendBytes:&yBE length:4];
+
+    return data;
+}
+
+// 编码 ProxyMessage: RemovePointerMessage (type=2, index=int32)
+- (NSData *)encodeRemovePointerMessage:(int32_t)index {
+    NSMutableData *data = [NSMutableData dataWithCapacity:8];
+    int32_t type = htonl(PROXY_MESSAGE_TYPE_REMOVE_POINTER);
+    int32_t indexBE = htonl(index);
+
+    [data appendBytes:&type length:4];
+    [data appendBytes:&indexBE length:4];
+
+    return data;
+}
+
+// 发送 ProxyMessage 到 TouchController 静态库
+- (void)sendTouchControllerProxyMessage:(int32_t)index x:(float)x y:(float)y isRemove:(BOOL)isRemove {
+    NSData *messageData;
+
+    if (isRemove) {
+        messageData = [self encodeRemovePointerMessage:index];
+    } else {
+        messageData = [self encodeAddPointerMessage:index x:x y:y];
+    }
+
+    if (self.touchControllerTransportHandle >= 0 && messageData) {
+        [TouchControllerBridge sendToTransport:self.touchControllerTransportHandle data:messageData];
+    }
+}
+
+#pragma mark - Initialization
 
 - (instancetype)initWithMetadata:(NSDictionary *)metadata {
     self = [super init];
