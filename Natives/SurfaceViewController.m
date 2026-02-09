@@ -141,6 +141,10 @@ static GameSurfaceView* pojavWindow;
 @property(nonatomic, strong) TouchSender *touchSender;
 @property(nonatomic) long long touchControllerTransportHandle;
 
+// TouchController Text Input Support
+@property(nonatomic, strong) UITextField *touchControllerTextField;
+@property(nonatomic) BOOL touchControllerTextInputEnabled;
+
 @end
 
 @implementation SurfaceViewController
@@ -193,6 +197,210 @@ static GameSurfaceView* pojavWindow;
     if (self.touchControllerTransportHandle >= 0 && messageData) {
         [TouchControllerBridge sendToTransport:self.touchControllerTransportHandle data:messageData];
     }
+}
+
+#pragma mark - TouchController Text Input Support
+
+// 编码 InputStatusMessage (type=7)
+- (NSData *)encodeInputStatusMessageWithText:(NSString *)text
+                              compositionStart:(int)compositionStart
+                              compositionLength:(int)compositionLength
+                              selectionStart:(int)selectionStart
+                              selectionLength:(int)selectionLength
+                              selectionLeft:(BOOL)selectionLeft {
+    if (!text) {
+        // 无数据，只发送 type + 0
+        int32_t type = htonl(7);
+        NSMutableData *data = [NSMutableData dataWithCapacity:1];
+        [data appendBytes:&type length:4];
+        uint8_t hasData = 0;
+        [data appendBytes:&hasData length:1];
+        return data;
+    }
+
+    // 将 UTF-16 转换为 UTF-8
+    NSData *textData = [text dataUsingEncoding:NSUTF8StringEncoding];
+    const char *textBytes = (const char *)[textData bytes];
+    int textLength = (int)[textData length];
+
+    // 计算 UTF-8 位置
+    NSString *prefix = [text substringToIndex:compositionStart];
+    NSData *prefixData = [prefix dataUsingEncoding:NSUTF8StringEncoding];
+    int compositionStartUtf8 = (int)[prefixData length];
+
+    NSString *compSegment = [text substringWithRange:NSMakeRange(compositionStart, compositionLength)];
+    NSData *compData = [compSegment dataUsingEncoding:NSUTF8StringEncoding];
+    int compositionLengthUtf8 = (int)[compData length];
+
+    NSString *selPrefix = [text substringToIndex:selectionStart];
+    NSData *selPrefixData = [selPrefix dataUsingEncoding:NSUTF8StringEncoding];
+    int selectionStartUtf8 = (int)[selPrefixData length];
+
+    NSString *selSegment = [text substringWithRange:NSMakeRange(selectionStart, selectionLength)];
+    NSData *selData = [selSegment dataUsingEncoding:NSUTF8StringEncoding];
+    int selectionLengthUtf8 = (int)[selData length];
+
+    // 编码消息
+    NSMutableData *data = [NSMutableData dataWithCapacity:5 + textLength + 17];
+    int32_t type = htonl(7);
+    [data appendBytes:&type length:4];
+
+    uint8_t hasDataFlag = 1;
+    [data appendBytes:&hasDataFlag length:1];
+
+    int32_t textLengthBE = htonl(textLength);
+    [data appendBytes:&textLengthBE length:4];
+    [data appendBytes:textBytes length:textLength];
+
+    int32_t compStartBE = htonl(compositionStartUtf8);
+    int32_t compLenBE = htonl(compositionLengthUtf8);
+    [data appendBytes:&compStartBE length:4];
+    [data appendBytes:&compLenBE length:4];
+
+    int32_t selStartBE = htonl(selectionStartUtf8);
+    int32_t selLenBE = htonl(selectionLengthUtf8);
+    [data appendBytes:&selStartBE length:4];
+    [data appendBytes:&selLenBE length:4];
+
+    uint8_t selectionLeftFlag = selectionLeft ? 1 : 0;
+    [data appendBytes:&selectionLeftFlag length:1];
+
+    return data;
+}
+
+// 编码 InputCursorMessage (type=9)
+- (NSData *)encodeInputCursorMessageWithRect:(CGRect)rect {
+    NSMutableData *data = [NSMutableData dataWithCapacity:17];
+    int32_t type = htonl(9);
+    [data appendBytes:&type length:4];
+
+    uint8_t hasData = 1;
+    [data appendBytes:&hasData length:1];
+
+    union { float f; uint32_t i; } left, top, width, height;
+    left.f = rect.origin.x;
+    top.f = rect.origin.y;
+    width.f = rect.size.width;
+    height.f = rect.size.height;
+
+    [data appendBytes:&htonl(left.i) length:4];
+    [data appendBytes:&htonl(top.i) length:4];
+    [data appendBytes:&htonl(width.i) length:4];
+    [data appendBytes:&htonl(height.i) length:4];
+
+    return data;
+}
+
+// 编码 InputAreaMessage (type=11)
+- (NSData *)encodeInputAreaMessageWithRect:(CGRect)rect {
+    NSMutableData *data = [NSMutableData dataWithCapacity:17];
+    int32_t type = htonl(11);
+    [data appendBytes:&type length:4];
+
+    uint8_t hasData = 1;
+    [data appendBytes:&hasData length:1];
+
+    union { float f; uint32_t i; } left, top, width, height;
+    left.f = rect.origin.x;
+    top.f = rect.origin.y;
+    width.f = rect.size.width;
+    height.f = rect.size.height;
+
+    [data appendBytes:&htonl(left.i) length:4];
+    [data appendBytes:&htonl(top.i) length:4];
+    [data appendBytes:&htonl(width.i) length:4];
+    [data appendBytes:&htonl(height.i) length:4];
+
+    return data;
+}
+
+// 发送文本输入状态到 TouchController
+- (void)sendTextInputStatus {
+    if (self.touchControllerTransportHandle < 0) return;
+
+    NSString *text = self.touchControllerTextField.text ?: @"";
+    UITextRange *selectedRange = self.touchControllerTextField.selectedTextRange;
+    NSInteger selectionStart = [self.touchControllerTextField offsetFromPosition:self.touchControllerTextField.beginningOfDocument
+                                                                  toPosition:selectedRange.start];
+    NSInteger selectionLength = [self.touchControllerTextField offsetFromPosition:selectedRange.start
+                                                                    toPosition:selectedRange.end];
+
+    NSData *messageData = [self encodeInputStatusMessageWithText:text
+                                              compositionStart:0
+                                              compositionLength:0
+                                              selectionStart:(int)selectionStart
+                                              selectionLength:(int)selectionLength
+                                              selectionLeft:NO];
+
+    [TouchControllerBridge sendToTransport:self.touchControllerTransportHandle data:messageData];
+}
+
+// 发送光标位置信息
+- (void)sendInputCursorWithRect:(CGRect)rect {
+    if (self.touchControllerTransportHandle < 0) return;
+
+    NSData *messageData = [self encodeInputCursorMessageWithRect:rect];
+    [TouchControllerBridge sendToTransport:self.touchControllerTransportHandle data:messageData];
+}
+
+// 发送输入区域信息
+- (void)sendInputAreaWithRect:(CGRect)rect {
+    if (self.touchControllerTransportHandle < 0) return;
+
+    NSData *messageData = [self encodeInputAreaMessageWithRect:rect];
+    [TouchControllerBridge sendToTransport:self.touchControllerTransportHandle data:messageData];
+}
+
+// 初始化文本输入字段
+- (void)setupTouchControllerTextInput {
+    if (!self.touchControllerTextField) {
+        self.touchControllerTextField = [[UITextField alloc] initWithFrame:CGRectZero];
+        self.touchControllerTextField.hidden = YES;
+        self.touchControllerTextField.autocapitalizationType = UITextAutocapitalizationTypeNone;
+        self.touchControllerTextField.autocorrectionType = UITextAutocorrectionTypeNo;
+        self.touchControllerTextField.keyboardType = UIKeyboardTypeDefault;
+        [self.view addSubview:self.touchControllerTextField];
+
+        // 添加文本变化监听
+        [self.touchControllerTextField addTarget:self
+                                          action:@selector(textFieldDidChange:)
+                                forControlEvents:UIControlEventEditingChanged];
+    }
+}
+
+// 处理文本变化
+- (void)textFieldDidChange:(UITextField *)textField {
+    [self sendTextInputStatus];
+}
+
+// 显示文本输入界面
+- (void)showTouchControllerTextInput {
+    if (!self.touchControllerTextInputEnabled) return;
+
+    [self setupTouchControllerTextInput];
+    self.touchControllerTextField.hidden = NO;
+    [self.touchControllerTextField becomeFirstResponder];
+
+    // 发送输入区域信息
+    [self sendInputAreaWithRect:self.touchControllerTextField.frame];
+
+    // 发送初始文本状态
+    [self sendTextInputStatus];
+}
+
+// 隐藏文本输入界面
+- (void)hideTouchControllerTextInput {
+    [self.touchControllerTextField resignFirstResponder];
+    self.touchControllerTextField.hidden = YES;
+
+    // 发送空状态以关闭输入
+    NSData *messageData = [self encodeInputStatusMessageWithText:nil
+                                              compositionStart:0
+                                              compositionLength:0
+                                              selectionStart:0
+                                              selectionLength:0
+                                              selectionLeft:NO];
+    [TouchControllerBridge sendToTransport:self.touchControllerTransportHandle data:messageData];
 }
 
 #pragma mark - Initialization
@@ -391,6 +599,13 @@ static GameSurfaceView* pojavWindow;
         }
     } else {
         self.touchControllerTransportHandle = -1;
+    }
+
+    // 初始化 TouchController 文本输入支持
+    if (self.touchControllerTransportHandle >= 0) {
+        self.touchControllerTextInputEnabled = YES;
+        [self setupTouchControllerTextInput];
+        NSLog(@"[TouchController] Text input support initialized");
     }
 
     [self launchMinecraft];
