@@ -172,7 +172,14 @@
     self.typeChildPane = ^void(UITableViewCell *cell, NSString *section, NSString *key, NSDictionary *item) {
         cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
         cell.selectionStyle = UITableViewCellSelectionStyleGray;
-        cell.detailTextLabel.text = weakSelf.getPreference(section, key);
+        id value = weakSelf.getPreference(section, key);
+        if ([value isKindOfClass:[NSString class]]) {
+            cell.detailTextLabel.text = value;
+        } else if ([value isKindOfClass:[NSNumber class]]) {
+            cell.detailTextLabel.text = [value boolValue] ? @"YES" : @"NO";
+        } else {
+            cell.detailTextLabel.text = [value description];
+        }
     };
 
     self.typeTextField = ^void(UITableViewCell *cell, NSString *section, NSString *key, NSDictionary *item) {
@@ -198,7 +205,14 @@
     self.typePickField = ^void(UITableViewCell *cell, NSString *section, NSString *key, NSDictionary *item) {
         cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
         cell.selectionStyle = UITableViewCellSelectionStyleGray;
-        cell.detailTextLabel.text = weakSelf.getPreference(section, key);
+        id value = weakSelf.getPreference(section, key);
+        if ([value isKindOfClass:[NSString class]]) {
+            cell.detailTextLabel.text = value;
+        } else if ([value isKindOfClass:[NSNumber class]]) {
+            cell.detailTextLabel.text = [value boolValue] ? @"YES" : @"NO";
+        } else {
+            cell.detailTextLabel.text = [value description];
+        }
     };
 
     self.typeSlider = ^void(UITableViewCell *cell, NSString *section, NSString *key, NSDictionary *item) {
