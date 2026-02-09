@@ -318,10 +318,15 @@ static GameSurfaceView* pojavWindow;
     width.f = rect.size.width;
     height.f = rect.size.height;
 
-    [data appendBytes:&htonl(left.i) length:4];
-    [data appendBytes:&htonl(top.i) length:4];
-    [data appendBytes:&htonl(width.i) length:4];
-    [data appendBytes:&htonl(height.i) length:4];
+    uint32_t leftBE = htonl(left.i);
+    uint32_t topBE = htonl(top.i);
+    uint32_t widthBE = htonl(width.i);
+    uint32_t heightBE = htonl(height.i);
+
+    [data appendBytes:&leftBE length:4];
+    [data appendBytes:&topBE length:4];
+    [data appendBytes:&widthBE length:4];
+    [data appendBytes:&heightBE length:4];
 
     return data;
 }
@@ -341,10 +346,15 @@ static GameSurfaceView* pojavWindow;
     width.f = rect.size.width;
     height.f = rect.size.height;
 
-    [data appendBytes:&htonl(left.i) length:4];
-    [data appendBytes:&htonl(top.i) length:4];
-    [data appendBytes:&htonl(width.i) length:4];
-    [data appendBytes:&htonl(height.i) length:4];
+    uint32_t leftBE = htonl(left.i);
+    uint32_t topBE = htonl(top.i);
+    uint32_t widthBE = htonl(width.i);
+    uint32_t heightBE = htonl(height.i);
+
+    [data appendBytes:&leftBE length:4];
+    [data appendBytes:&topBE length:4];
+    [data appendBytes:&widthBE length:4];
+    [data appendBytes:&heightBE length:4];
 
     return data;
 }
