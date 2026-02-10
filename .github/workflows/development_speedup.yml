@@ -1,0 +1,232 @@
+name: Development build (SpeedUp)
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+on:
+  pull_request:
+    branches-ignore:
+      - 'l10n_main'
+    types: [opened, reopened]
+  push:
+    branches-ignore:
+      - 'l10n_main'
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Development build
+    strategy:
+      matrix:
+        include:
+          - platform: 2
+            platform_name: ios
+
+    runs-on: macos-14
+
+    steps:
+      - name: Show available Xcode and select a suitable one
+        run: |
+          set -e
+          echo "Available apps in /Applications (matching Xcode*):"
+          ls /Applications | grep -E "Xcode(.+)?\.app" || true
+          # Prefer Xcode_16, then Xcode_15, then /Applications/Xcode.app
+          if [ -d "/Applications/Xcode_16.app" ]; then
+            echo "Selecting /Applications/Xcode_16.app"
+            sudo xcode-select -s /Applications/Xcode_16.app/Contents/Developer
+          elif [ -d "/Applications/Xcode_15.app" ]; then
+            echo "Selecting /Applications/Xcode_15.app"
+            sudo xcode-select -s /Applications/Xcode_15.app/Contents/Developer
+          elif [ -d "/Applications/Xcode.app" ]; then
+            echo "Selecting /Applications/Xcode.app"
+            sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+          else
+            echo "No preinstalled Xcode found under /Applications that matches the search. Leaving system default."
+          fi
+          xcodebuild -version || true
+          echo "Available simulator runtimes (for debugging):"
+          xcrun simctl list runtimes || true
+
+      # Checkout early and include submodules (single step)
+      - name: Checkout repository (with submodules)
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+          fetch-depth: 0
+
+      # Cache ccache to speed up native compilation across runs
+      - name: Restore ccache
+        uses: actions/cache@v4
+        id: ccache
+        with:
+          path: |
+            ~/.ccache
+          key: ccache-${{ runner.os }}-${{ matrix.platform_name }}-${{ hashFiles('**/Makefile', '**/*.c', '**/*.m', '**/*.mm', '**/*.cpp', '**/*.h') }}
+          restore-keys: |
+            ccache-${{ runner.os }}-${{ matrix.platform_name }}-
+
+      # Cache build output / artifacts to reuse previously built objects when possible
+      - name: Restore build cache
+        uses: actions/cache@v4
+        id: build-cache
+        with:
+          path: |
+            build
+            artifacts
+          key: build-${{ runner.os }}-${{ matrix.platform_name }}-${{ hashFiles('**/Makefile', '**/*.mk') }}
+          restore-keys: |
+            build-${{ runner.os }}-${{ matrix.platform_name }}-
+
+      # Cache gl4es libs (keep your original key approach but enabled)
+      - name: Get gl4es latest commit hash
+        id: gl4es-sha
+        run: |
+          echo "sha=$(git ls-remote https://github.com/AngleAuraMC/gl4es-114-extra refs/heads/master | grep -io '^\S*')" >> $GITHUB_OUTPUT
+
+      - name: Restore gl4es cache
+        uses: actions/cache@v4
+        id: gl4es-cache
+        with:
+          path: gl4es/libs
+          key: gl4es-holy-ios-shared-2-${{ steps.gl4es-sha.outputs.sha }}
+          restore-keys: |
+            gl4es-holy-ios-shared-2-
+
+      # Combined install step (brew + ccache + ldid). ���用 actions/setup-java 替代 brew install temurin
+      - name: Install tools (brew: make, ldid, ccache) and setup Java
+        run: |
+          set -e
+          brew update
+          # Install core tools; tolerate existing installation
+          brew install make ldid ccache || true
+          # Ensure ccache in PATH (arm mac runners vs intel)
+          if [ -d "/opt/homebrew/opt/ccache/libexec" ]; then
+            echo "Using /opt/homebrew ccache"
+            export PATH="/opt/homebrew/opt/ccache/libexec:$PATH"
+          elif [ -d "/usr/local/opt/ccache/libexec" ]; then
+            echo "Using /usr/local ccache"
+            export PATH="/usr/local/opt/ccache/libexec:$PATH"
+          fi
+          ccache --max-size=5G || true
+        shell: bash
+
+      - name: Setup Java 8 (Temurin)
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '8'
+
+      - name: Checkout repository submodules (fallback if any submodule wasn't fetched)
+        if: steps.checkout.outcome != 'success' || false
+        run: git submodule update --init --recursive
+
+      - name: Get gl4es
+        if: steps.gl4es-cache.outputs.cache-hit != 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: 'AngleAuraMC/gl4es-114-extra'
+          path: 'gl4es'
+          fetch-depth: 1
+
+      - name: Build gl4es
+        if: steps.gl4es-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        run: |
+          cd gl4es
+          git config user.email "github-actions@users.noreply.github.com"
+          git config user.name "github-actions"
+          # keep PATH adjustments you need
+          export PATH=/opt/procursus/bin:$PATH || true
+          wget https://github.com/leetal/ios-cmake/raw/master/ios.toolchain.cmake
+          cmake -B build -DCMAKE_TOOLCHAIN_FILE=ios.toolchain.cmake -DDEFAULT_ES=2 \
+            -DNOX11=ON -DNOEGL=OFF -DSTATICLIB=OFF -DPLATFORM=OS64 \
+            -DCMAKE_C_FLAGS=-Wno-error=implicit-function-declaration
+          cmake --build build --config RelWithDebInfo --target GL || true
+          cp -R lib/libGL.dylib ../Natives/resources/Frameworks/libgl4es_114.dylib || true
+
+      - name: Push gl4es
+        if: github.event_name != 'pull_request' && github.ref_name == 'main' && steps.gl4es-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        run: |
+          git add Natives/resources/Frameworks/libgl4es_114.dylib || true
+          git commit -am "CI: Update gl4es" || true
+          git push || true
+
+      - name: Build for ${{ matrix.platform_name }}
+        env:
+          IPHONEOS_DEPLOYMENT_TARGET: 14.0
+          # Ensure ccache is used by wrappers (PATH already adjusted above)
+          CC: clang
+          CXX: clang++
+        run: |
+          set -o pipefail
+          export PATH=/opt/homebrew/bin:$PATH
+          export SLIMMED=0
+          # Ensure ccache wrapper is first in PATH (mac runner differences handled earlier)
+          if command -v ccache >/dev/null 2>&1; then
+            echo "ccache detected: $(ccache --version | head -n 1)"
+            # If ccache libexec wrapper exists, put it in PATH so 'clang' is wrapped by ccache
+            if [ -d "/opt/homebrew/opt/ccache/libexec" ]; then
+              export PATH="/opt/homebrew/opt/ccache/libexec:$PATH"
+            elif [ -d "/usr/local/opt/ccache/libexec" ]; then
+              export PATH="/usr/local/opt/ccache/libexec:$PATH"
+            fi
+            export CC="clang"
+            export CXX="clang++"
+          fi
+
+          # 初始化日志文件
+          touch build.log
+
+          if [ "${{ matrix.platform_name }}" == "ios" ]; then
+            # Build ipa and tipa for iOS (Redirect stderr/stdout to build.log)
+            echo "--- Building Standard IPA ---" | tee -a build.log
+            gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }} 2>&1 | tee -a build.log
+
+            echo "--- Building TrollStore IPA ---" | tee -a build.log
+            gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }} TROLLSTORE_JIT_ENT=1 2>&1 | tee -a build.log
+
+          elif [ "${{ matrix.platform_name }}" == "tvos" ]; then
+            # Build tipa only for tvOS
+            echo "--- Building tvOS IPA ---" | tee -a build.log
+            gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }} TROLLSTORE_JIT_ENT=1 2>&1 | tee -a build.log
+
+          else
+            # Build ipa only for everything else
+            echo "--- Building Generic IPA ---" | tee -a build.log
+            gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }} 2>&1 | tee -a build.log
+          fi
+
+      - name: 🔍 Extract Critical Build Errors
+        if: failure()
+        run: |
+          echo "::group::Critical Errors Found"
+          if [ -f build.log ]; then
+            echo "Searching for errors in build log..."
+            grep -i -E -C 5 "(error:|undefined symbol|ld: symbol\(s\) not found)" build.log || echo "No standard error patterns found. Please check the full log above."
+          else
+            echo "Build log file not found."
+          fi
+          echo "::endgroup::"
+
+      - name: Upload regular ipa
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: org.angelauramc.amethyst-${{ matrix.platform_name }}.ipa
+          path: artifacts/org.angelauramc.amethyst-*-${{ matrix.platform_name }}.ipa
+
+      - name: Upload regular tipa
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: org.angelauramc.amethyst-${{ matrix.platform_name }}-trollstore.tipa
+          path: artifacts/org.angelauramc.amethyst-*-${{ matrix.platform_name }}-trollstore.tipa
+
+      - name: Upload PojavLauncher.dSYM
+        if: matrix.platform_name == 'ios' && success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: AngelAuraAmethyst.dSYM
+          path: artifacts/AngelAuraAmethyst.dSYM
