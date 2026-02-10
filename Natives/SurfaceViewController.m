@@ -31,6 +31,8 @@
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <fcntl.h>
+#include <errno.h>
+#include <string.h>
 
 #define TC_MOD_PORT 12450
 
@@ -50,6 +52,12 @@
         if (_sock < 0) {
             NSLog(@"[TouchController] Error: Failed to create socket");
         } else {
+            // Increase send buffer size to reduce packet loss
+            int sendBufSize = 256 * 1024; // 256KB
+            if (setsockopt(_sock, SOL_SOCKET, SO_SNDBUF, &sendBufSize, sizeof(sendBufSize)) < 0) {
+                NSLog(@"[TouchController] Warning: Failed to set send buffer size: %s", strerror(errno));
+            }
+
             // Non-blocking mode
             int flags = fcntl(_sock, F_GETFL, 0);
             fcntl(_sock, F_SETFL, flags | O_NONBLOCK);
@@ -95,7 +103,37 @@
     
     size_t length = (type == 2) ? 8 : 16;
 
-    sendto(_sock, &packet, length, 0, (struct sockaddr *)&_target, sizeof(_target));
+    // 重试机制：对于移除指针数据包（type==2）增加重试次数，确保可靠发送
+    int maxRetries = (type == 2) ? 5 : 2;
+    int retry;
+    ssize_t sent = -1;
+
+    for (retry = 0; retry < maxRetries; retry++) {
+        sent = sendto(_sock, &packet, length, 0, (struct sockaddr *)&_target, sizeof(_target));
+        if (sent == length) {
+            // 发送成功
+            break;
+        } else if (sent < 0) {
+            int err = errno;
+            if (err == EAGAIN || err == EWOULDBLOCK) {
+                // 缓冲区满，短暂休眠后重试
+                usleep(1000); // 1毫秒
+                continue;
+            } else {
+                // 其他错误，记录并退出重试
+                NSLog(@"[TouchController] Error: sendto failed: %s (type=%d, id=%d)", strerror(err), type, fingerId);
+                break;
+            }
+        } else {
+            // 部分发送（理论上不会发生），记录并重试
+            NSLog(@"[TouchController] Warning: partial send: %zd of %zu bytes", sent, length);
+            usleep(1000);
+        }
+    }
+
+    if (sent != length) {
+        NSLog(@"[TouchController] Error: failed to send packet after %d retries (type=%d, id=%d)", maxRetries, type, fingerId);
+    }
 }
 @end
 
