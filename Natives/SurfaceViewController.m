@@ -1610,8 +1610,6 @@ static GameSurfaceView* pojavWindow;
         [TouchControllerBridge destroyTransport:self.touchControllerTransportHandle];
         self.touchControllerTransportHandle = -1;
     }
-    
-    [super dealloc];
 }
 
 @end
