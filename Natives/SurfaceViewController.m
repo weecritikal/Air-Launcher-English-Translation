@@ -69,12 +69,6 @@
 }
 
 - (void)dealloc {
-    // 清理 TouchController 资源
-    if (self.touchControllerTransportHandle >= 0) {
-        [TouchControllerBridge destroyTransport:self.touchControllerTransportHandle];
-        self.touchControllerTransportHandle = -1;
-    }
-    
     if (_sock >= 0) close(_sock);
 }
 
@@ -1608,6 +1602,16 @@ static GameSurfaceView* pojavWindow;
 
 + (GameSurfaceView *)surface {
     return pojavWindow;
+}
+
+- (void)dealloc {
+    // 清理 TouchController 资源
+    if (self.touchControllerTransportHandle >= 0) {
+        [TouchControllerBridge destroyTransport:self.touchControllerTransportHandle];
+        self.touchControllerTransportHandle = -1;
+    }
+    
+    [super dealloc];
 }
 
 @end
