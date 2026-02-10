@@ -107,29 +107,6 @@ jobs:
           distribution: 'temurin'
           java-version: '11.0.15+10'
 
-      - name: Get gl4es (checkout upstream) if cache miss
-        if: steps.gl4es-cache.outputs.cache-hit != 'true'
-        uses: actions/checkout@v4
-        with:
-          repository: 'AngleAuraMC/gl4es-114-extra'
-          path: 'gl4es'
-          fetch-depth: 1
-
-      - name: Build gl4es (only if cache miss)
-        if: steps.gl4es-cache.outputs.cache-hit != 'true'
-        continue-on-error: true
-        run: |
-          cd gl4es
-          git config user.email "github-actions@users.noreply.github.com"
-          git config user.name "github-actions"
-          export PATH=/opt/procursus/bin:$PATH || true
-          wget https://github.com/leetal/ios-cmake/raw/master/ios.toolchain.cmake
-          cmake -B build -DCMAKE_TOOLCHAIN_FILE=ios.toolchain.cmake -DDEFAULT_ES=2 \
-            -DNOX11=ON -DNOEGL=OFF -DSTATICLIB=OFF -DPLATFORM=OS64 \
-            -DCMAKE_C_FLAGS=-Wno-error=implicit-function-declaration
-          cmake --build build --config RelWithDebInfo --target GL || true
-          cp -R lib/libGL.dylib ../Natives/resources/Frameworks/libgl4es_114.dylib || true
-
       - name: Build for ${{ matrix.platform_name }}
         env:
           IPHONEOS_DEPLOYMENT_TARGET: 14.0
