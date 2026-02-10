@@ -79,19 +79,17 @@ jobs:
           restore-keys: |
             build-${{ runner.os }}-${{ matrix.platform_name }}-
 
-            - name: Restore gl4es cache
+      - name: Restore gl4es cache
+        uses: actions/cache@v4
+        id: gl4es-cache
+        with:
+          path: gl4es/libs
+          key: gl4es-holy-ios-shared-2-${{ steps.gl4es-sha.outputs.sha }}
+          restore-keys: |
+            gl4es-holy-ios-shared-2-
 
-              uses: actions/cache@v4
-
-              id: gl4es-cache
-
-              with:
-
-                path: gl4es/libs
-
-                key: gl4es-holy-ios-shared-2-${{ steps.gl4es-sha.outputs.sha }}
-
-                restore-keys: gl4es-holy-ios-shared-2-
+      - name: Install tools
+        id: install-tools
         run: |
           set -e
           brew update
