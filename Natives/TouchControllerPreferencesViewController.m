@@ -125,6 +125,9 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
         cell.accessoryView = view;
     };
 
+    // 设置偏好设置部分
+    self.prefSections = @[@"control"];
+
     // 配置设置内容
     self.prefContents = @[
         @[
