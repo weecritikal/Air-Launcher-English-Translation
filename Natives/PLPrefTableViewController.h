@@ -18,5 +18,6 @@ typedef void (^SetPreferenceBlock)(NSString *, NSString *, id);
 @property(nonatomic) BOOL prefDetailVisible;
 
 - (UIBarButtonItem *)drawHelpButton;
+- (void)initViewCreation;
 
 @end
