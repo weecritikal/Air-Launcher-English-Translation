@@ -1,4 +1,4 @@
-name: Development build
+name: Development build (SpeedUp)
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -31,7 +31,6 @@ jobs:
           set -e
           echo "Available apps in /Applications (matching Xcode*):"
           ls /Applications | grep -E "Xcode(.+)?\.app" || true
-          # Prefer Xcode_16, then Xcode_15, then /Applications/Xcode.app
           if [ -d "/Applications/Xcode_16.app" ]; then
             echo "Selecting /Applications/Xcode_16.app"
             sudo xcode-select -s /Applications/Xcode_16.app/Contents/Developer
@@ -42,10 +41,9 @@ jobs:
             echo "Selecting /Applications/Xcode.app"
             sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
           else
-            echo "No preinstalled Xcode found under /Applications that matches the search. Leaving system default."
+            echo "No matching Xcode found under /Applications. Leaving system default."
           fi
           xcodebuild -version || true
-          echo "Available simulator runtimes (for debugging):"
           xcrun simctl list runtimes || true
 
       - name: Checkout repository (with submodules)
@@ -54,6 +52,11 @@ jobs:
         with:
           submodules: true
           fetch-depth: 0
+
+      - name: Get gl4es latest commit hash
+        id: gl4es-sha
+        run: |
+          echo "sha=$(git ls-remote https://github.com/AngleAuraMC/gl4es-114-extra refs/heads/master | grep -io '^\S*')" >> $GITHUB_OUTPUT
 
       - name: Restore ccache
         uses: actions/cache@v4
@@ -76,11 +79,6 @@ jobs:
           restore-keys: |
             build-${{ runner.os }}-${{ matrix.platform_name }}-
 
-      - name: Get gl4es latest commit hash
-        id: gl4es-sha
-        run: |
-          echo "sha=$(git ls-remote https://github.com/AngleAuraMC/gl4es-114-extra refs/heads/master | grep -io '^\S*')" >> $GITHUB_OUTPUT
-
       - name: Restore gl4es cache
         uses: actions/cache@v4
         id: gl4es-cache
@@ -90,7 +88,7 @@ jobs:
           restore-keys: |
             gl4es-holy-ios-shared-2-
 
-      - name: Install tools (brew: make, ldid, ccache) and setup Java
+      - name: Install tools (brew: make, ldid, ccache) and configure ccache
         run: |
           set -e
           brew update
@@ -109,7 +107,7 @@ jobs:
           distribution: temurin
           java-version: '8'
 
-      - name: Get gl4es
+      - name: Get gl4es (checkout upstream) if cache miss
         if: steps.gl4es-cache.outputs.cache-hit != 'true'
         uses: actions/checkout@v4
         with:
@@ -117,7 +115,7 @@ jobs:
           path: 'gl4es'
           fetch-depth: 1
 
-      - name: Build gl4es
+      - name: Build gl4es (only if cache miss)
         if: steps.gl4es-cache.outputs.cache-hit != 'true'
         continue-on-error: true
         run: |
@@ -132,14 +130,6 @@ jobs:
           cmake --build build --config RelWithDebInfo --target GL || true
           cp -R lib/libGL.dylib ../Natives/resources/Frameworks/libgl4es_114.dylib || true
 
-      - name: Push gl4es
-        if: github.event_name != 'pull_request' && github.ref_name == 'main' && steps.gl4es-cache.outputs.cache-hit != 'true'
-        continue-on-error: true
-        run: |
-          git add Natives/resources/Frameworks/libgl4es_114.dylib || true
-          git commit -am "CI: Update gl4es" || true
-          git push || true
-
       - name: Build for ${{ matrix.platform_name }}
         env:
           IPHONEOS_DEPLOYMENT_TARGET: 14.0
@@ -149,6 +139,7 @@ jobs:
           set -o pipefail
           export PATH=/opt/homebrew/bin:$PATH
           export SLIMMED=0
+          # Ensure ccache wrapper is first if present
           if command -v ccache >/dev/null 2>&1; then
             if [ -d "/opt/homebrew/opt/ccache/libexec" ]; then
               export PATH="/opt/homebrew/opt/ccache/libexec:$PATH"
