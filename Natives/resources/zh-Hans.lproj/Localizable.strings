@@ -120,15 +120,15 @@
 "login.warn.message.limited_ram" = "我们建议启用自动分配内存大小，以防止不稳定和性能问题。";
 
 "login.warn.title.demomode" = "您现在是演示账户";
-"login.warn.message.demomode" = "演示模式作为离线和本地模式的替代，将允许你登录到一个尚未购买游戏的微软账户中游玩 1.3.1 及更新版本的试玩版本。因为官方启动器的一些特性，在较旧版本中会包含完整的游戏。详情请参阅我们的网站，了解更多关于离线模式的过渡。";
+"login.warn.message.demomode" = "演示模式作为离线和本地模式的替代，将允许你登录到一个尚未购买游戏的微软账户中游玩 1.3.1 及更新版本的试玩版本。因为官方启动器的一些特性，在较旧版本中会包含完整的游戏。详情请参阅 AngleAuraMC 官网，了解更多关于离线模式的过渡。";
 
 "login.warn.title.localmode" = "关于离线模式";
-"login.warn.message.localmode" = "任何有关本地账户以及如何获取其他 Minecraft 版本的问题将不会得到任何解答。";
+"login.warn.message.localmode" = "该改版启动器支持离线模式并使用其下载游戏。\n您仍可使用离线账户游玩，但是尽量要支持正版。\n可前往 https://minecraft.net 购买正版 Minecraft。";
 
 "login.msa.error.xsts.noxboxacc" = "此微软账户没有注册 Xbox 账户。请确认您已注册了 Xbox 账户。\n错误代码：2148916233";
-"login.msa.error.xsts.noxbox" = "Xbox Live 目前在您的国家/地区不可用。\n错误代码：2148916235";
-"login.msa.error.xsts.krverify" = "您的账户必须通过你父母同意方可通过验证。\n错误代码：2148916236 或 2148916237";
-"login.msa.error.xsts.underage" = "您的账户需要绑定家长账户才能进行下一步。\n错误代码：2148916238";
+"login.msa.error.xsts.noxbox" = "Xbox Live 目前在您的国家/地区不可用，可能是 Microsoft 封锁了您的地区，请尝试使用加速器。\n错误代码：2148916235";
+"login.msa.error.xsts.krverify" = "您的账户必须通过你父母同意方可通过验证。(盲猜注册时填错生日日期了 awa)\n错误代码：2148916236 或 2148916237";
+"login.msa.error.xsts.underage" = "您的账户需要绑定家长账户才能进行下一步。(盲猜注册时填错生日日期了 awa)\n错误代码：2148916238";
 
 "login.msa.progress.acquireAccessToken" = "(1/6) 请求访问令牌";
 "login.msa.progress.acquireXBLToken" = "(2/6) 请求 Xbox Live 令牌";
@@ -137,10 +137,10 @@
 "login.msa.progress.acquireMCToken" = "(5/6) 请求 Minecraft 令牌";
 "login.msa.progress.checkMCProfile" = "(6/6) 检查 Minecraft 配置文件";
 
-"login.3rdparty.progress.auth" = "(1/1)正在通过第三方服务器进行认证";
-"login.3rdparty.progress.refresh" = "(1/1)正在刷新第三方认证";
-"login.3rdparty.2fa.title" = "两步验证";
-"login.3rdparty.2fa.message" = "请输入您的两步验证代码";
+"login.3rdparty.progress.auth" = "(1/2)正在通过第三方服务器进行认证";
+"login.3rdparty.progress.refresh" = "(2/2)正在刷新第三方认证";
+"login.3rdparty.2fa.title" = "二次验证";
+"login.3rdparty.2fa.message" = "请输入您的二次验证码";
 "login.3rdparty.2fa.code" = "验证码";
 "login.3rdparty.2fa.empty" = "验证码不能为空";
 
@@ -162,7 +162,7 @@
 "preference.section.java" = "Java 调整";
 //"preference.section.footer.java" = "";
 
-"preference.title.confirm" = "确认？";
+"preference.title.confirm" = "确认吗？";
 
 "preference.title.game_directory" = "游戏目录";
 "preference.title.confirm.delete_game_directory" = "目录 %@ 将被永久删除，并且无法恢复。";
@@ -170,7 +170,7 @@
 
 "preference.title.check_sha" = "检查游戏完整性";
 "preference.detail.check_sha" = "此选项将强制启动器在哈希值可用时检查下载文件以防止下载错误。";
-"preference.title.cosmetica" = "Cosmetica 披风";
+"preference.title.cosmetica" = "启用 Cosmetica 披风";
 "preference.detail.cosmetica" = "启用来自 Cosmetica（原 Arc ）的披风。欲了解更多信息，请访问 https://arcapes.com。需要 OptiFine。";
 "preference.title.download_source" = "下载源";
 "preference.detail.download_source" = "选择游戏资源下载源。BMCLAPI镜像源提供更快的国内下载速度。";
@@ -179,11 +179,11 @@
 "preference.title.debug_logging" = "调试日志";
 "preference.detail.debug_logging" = "完整的记录启动器的各种活动事件到latestlog.txt文件内,有助于开发者更容易的发现错误。但Minecraft游戏内FPS可能会降低(频繁的记录日志内容会使得CPU负载变高)";
 "preference.title.jitstreamer_server" = "JitStreamer的服务器地址";
-"preference.detail.jitstreamer_server" = "该选项将自定义获取 JIT 权限地址的 JitStreamer 服务器，若你不知道如何修改请勿修改，当然也可以保持默认地址";
-"preference.title.enable_altkit" = "启用 AltKit 集成";
+"preference.detail.jitstreamer_server" = "该选项将自定义获取 JIT 权限地址的 JitStreamer 服务器。能用就别动！";
+"preference.title.enable_altkit" = "使用 AltKit 启用 JIT";
 "preference.detail.enable_altkit" = "启用时，Amethyst 将尝试连接到本地 AltServers 以启用 JIT。";
 "preference.title.appicon" = "设置应用图标";
-"preference.detail.appicon" = "自定义图标目前不可用,会在接下来的版本中恢复此功能.";
+"preference.detail.appicon" = "自定义图标目前不可用,会在接下来的版本中恢复此功能。";
 "preference.title.appicon-default" = "设置 Amethyst 图标为浅色";
 "preference.title.appicon-dark" = "设置 Amethyst 图标为深色";
 "preference.title.appicon-development" = "已封装开发";
@@ -208,20 +208,20 @@
 "preference.title.renderer.release.angle" = "ANGLE";
 "preference.title.renderer.release.zink" = "Zink";
 
-"preference.title.renderer.debug.auto" = "自动：gl4es、ANGLE或MobileGlues";
-"preference.title.renderer.debug.gl4es" = "gl4es 1.1.4 - OpenGL版本2.1";
-"preference.title.renderer.debug.angle" = "ANGLE（仅支持1.17+）- exports OpenGL 版本 3.2";
-"preference.title.renderer.debug.zink" = "Zink（Mesa 21.0）- exports OpenGL 版本 4.1";
+"preference.title.renderer.debug.auto" = "自动：gl4es或MobileGlues";
+"preference.title.renderer.debug.gl4es" = "holy gl4es 1.1.4 - OpenGL版本2.1";
+"preference.title.renderer.debug.angle" = "ANGLE（仅支持1.17+）- OpenGL 版本 3.2";
+"preference.title.renderer.debug.zink" = "Zink（Mesa 21.0）- OpenGL 版本 4.1";
 
 "preference.detail.renderer" = "更改使用的 OpenGL 渲染器";
 
 "preference.title.resolution" = "分辨率缩放 (%)";
-"preference.detail.resolution" = "降低分辨率可能会提升FPS。默认分辨率为屏幕的分辨率，此功能可能不适用于新版 Minecraft。";
+"preference.detail.resolution" = "降低分辨率会影响游戏内 UI 大小，也可能会提升FPS。默认分辨率为屏幕的分辨率，此功能可能不适用于新版 Minecraft。";
 "preference.title.max_framerate" = "最大帧率";
 "preference.detail.max_framerate" = "允许您在 ProMotion 显示器上将游戏帧率限制为 60FPS。";
 
 "preference.title.performance_hud" = "显示性能 HUD";
-"preference.detail.performance_hud" = "当可用时显示性能监控覆盖层。";
+"preference.detail.performance_hud" = "当可用时显示性能监控覆盖层。该功能仅支持 iOS 16 及以上系统和 Angle 渲染器。";
 
 "preference.title.fullscreen_airplay" = "全屏 AirPlay";
 "preference.detail.fullscreen_airplay" = "允许在外部显示器上全屏显示游戏，而不是直接镜像显示。";
@@ -230,7 +230,7 @@
 "preference.title.silence_with_switch" = "使用静音开关禁用音频";
 "preference.detail.silence_with_switch" = "启用时，可以使用静音模式禁用音频，耳机和外部扬声器不受此影响。";
 "preference.title.allow_microphone" = "允许麦克风输入";
-"preference.detail.allow_microphone" = "仅当你使用语音聊天 mod 时启用此项。静音开关将被忽略，并且会影响其他应用的音频质量。";
+"preference.detail.allow_microphone" = "仅当您使用 VoiceChat Mod 时启用此项。静音开关将被忽略，并且会影响其他应用的音频质量。";
 "preference.title.default_gamepad_ctrl" = "手柄配置";
 "preference.title.hardware_hide" = "硬件连接时隐藏控制键";
 "preference.detail.hardware_hide" = "启用连接鼠标或游戏控制器时自动禁用屏幕控制叠加的行为。";
@@ -391,10 +391,7 @@
 "announcement.new_version_available" = "发现新版本：%@";
 "announcement.download_button" = "前往下载";
 
-"spdt" = "我是个飞机!!!!!!";
-
-// TouchController Preferences
-"preference.touchcontroller.title" = "TouchController";
+"preference.touchcontroller.title" = "TouchController 管理界面";
 "preference.touchcontroller.section.mode" = "通信方式";
 "preference.touchcontroller.section.info" = "信息";
 "preference.touchcontroller.mode.title" = "通信方式";
@@ -403,9 +400,9 @@
 "preference.touchcontroller.mode.udp" = "UDP 协议";
 "preference.touchcontroller.mode.staticlib" = "静态库";
 "preference.touchcontroller.udp.title" = "UDP 协议模式";
-"preference.touchcontroller.udp.message" = "TouchController 将通过 UDP 端口 12450 进行通信。此模式兼容性较好，提供稳定的网络通信。";
+"preference.touchcontroller.udp.message" = "TouchController 将通过 UDP 端口 12450 进行通信。此模式兼容性较好，提供稳定的网络通信。\n该通信方式由WeiErLiTeo制作。";
 "preference.touchcontroller.staticlib.title" = "静态库模式";
-"preference.touchcontroller.staticlib.message" = "TouchController 将使用原生静态库进行高性能本地通信（Unix Domain Socket）。此模式性能更好，但需要静态库支持。";
+"preference.touchcontroller.staticlib.message" = "TouchController 将使用原生静态库进行高性能本地通信（Unix Domain Socket）。此模式性能更好，但需要静态库支持。\n该通信方式由Mod作者fifth_light与启动器作者制作。";
 "preference.touchcontroller.about" = "关于 TouchController";
 "preference.touchcontroller.about.title" = "关于 TouchController";
 "preference.touchcontroller.about.message" = "TouchController 是一个为 Minecraft Java 版添加触摸控制的模组。本启动器支持两种通信模式：\n\n• UDP 协议：基于网络的通信\n• 静态库：高性能本地通信\n\n访问 GitHub 获取更多信息。";
@@ -417,3 +414,5 @@
 "preference.touchcontroller.vibrate.intensity.medium" = "中度";
 "preference.touchcontroller.vibrate.intensity.heavy" = "重度";
 "preference.touchcontroller.moveview.enable" = "启用移动视角";
+
+"spdt" = "我是个飞机!!!!!!";
