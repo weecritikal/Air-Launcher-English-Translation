@@ -32,6 +32,19 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
 - (void)initViewCreation {
     __weak typeof(self) weakSelf = self;
 
+    // 设置偏好获取和保存块
+    self.getPreference = ^id(NSString *section, NSString *key){
+        NSString *keyFull = [NSString stringWithFormat:@"%@.%@", section, key];
+        return getPrefObject(keyFull);
+    };
+    self.setPreference = ^(NSString *section, NSString *key, id value){
+        NSString *keyFull = [NSString stringWithFormat:@"%@.%@", section, key];
+        setPrefObject(keyFull, value);
+    };
+
+    // 调用父类初始化
+    [super initViewCreation];
+
     // 通信方式选择
     self.typeChildPane = ^void(UITableViewCell *cell, NSString *section, NSString *key, NSDictionary *item) {
         cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
