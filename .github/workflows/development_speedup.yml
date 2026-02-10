@@ -101,11 +101,11 @@ jobs:
           fi
           ccache --max-size=5G || true
 
-      - name: Setup Java 8 (Temurin)
-        uses: actions/setup-java@v3
+      - name: Setup Java 11 (Temurin)
+        uses: actions/setup-java@v5
         with:
           distribution: 'temurin'
-          java-version: '8'
+          java-version: '11.0.15+10'
 
       - name: Get gl4es (checkout upstream) if cache miss
         if: steps.gl4es-cache.outputs.cache-hit != 'true'
