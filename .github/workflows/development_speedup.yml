@@ -1,4 +1,4 @@
-name: Development build (SpeedUp)
+name: Development build
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -48,14 +48,13 @@ jobs:
           echo "Available simulator runtimes (for debugging):"
           xcrun simctl list runtimes || true
 
-      # Checkout early and include submodules (single step)
       - name: Checkout repository (with submodules)
+        id: checkout
         uses: actions/checkout@v4
         with:
           submodules: true
           fetch-depth: 0
 
-      # Cache ccache to speed up native compilation across runs
       - name: Restore ccache
         uses: actions/cache@v4
         id: ccache
@@ -66,7 +65,6 @@ jobs:
           restore-keys: |
             ccache-${{ runner.os }}-${{ matrix.platform_name }}-
 
-      # Cache build output / artifacts to reuse previously built objects when possible
       - name: Restore build cache
         uses: actions/cache@v4
         id: build-cache
@@ -78,7 +76,6 @@ jobs:
           restore-keys: |
             build-${{ runner.os }}-${{ matrix.platform_name }}-
 
-      # Cache gl4es libs (keep your original key approach but enabled)
       - name: Get gl4es latest commit hash
         id: gl4es-sha
         run: |
@@ -93,19 +90,14 @@ jobs:
           restore-keys: |
             gl4es-holy-ios-shared-2-
 
-      # Combined install step (brew + ccache + ldid). ���用 actions/setup-java 替代 brew install temurin
       - name: Install tools (brew: make, ldid, ccache) and setup Java
         run: |
           set -e
           brew update
-          # Install core tools; tolerate existing installation
           brew install make ldid ccache || true
-          # Ensure ccache in PATH (arm mac runners vs intel)
           if [ -d "/opt/homebrew/opt/ccache/libexec" ]; then
-            echo "Using /opt/homebrew ccache"
             export PATH="/opt/homebrew/opt/ccache/libexec:$PATH"
           elif [ -d "/usr/local/opt/ccache/libexec" ]; then
-            echo "Using /usr/local ccache"
             export PATH="/usr/local/opt/ccache/libexec:$PATH"
           fi
           ccache --max-size=5G || true
@@ -116,10 +108,6 @@ jobs:
         with:
           distribution: temurin
           java-version: '8'
-
-      - name: Checkout repository submodules (fallback if any submodule wasn't fetched)
-        if: steps.checkout.outcome != 'success' || false
-        run: git submodule update --init --recursive
 
       - name: Get gl4es
         if: steps.gl4es-cache.outputs.cache-hit != 'true'
@@ -136,7 +124,6 @@ jobs:
           cd gl4es
           git config user.email "github-actions@users.noreply.github.com"
           git config user.name "github-actions"
-          # keep PATH adjustments you need
           export PATH=/opt/procursus/bin:$PATH || true
           wget https://github.com/leetal/ios-cmake/raw/master/ios.toolchain.cmake
           cmake -B build -DCMAKE_TOOLCHAIN_FILE=ios.toolchain.cmake -DDEFAULT_ES=2 \
@@ -156,17 +143,13 @@ jobs:
       - name: Build for ${{ matrix.platform_name }}
         env:
           IPHONEOS_DEPLOYMENT_TARGET: 14.0
-          # Ensure ccache is used by wrappers (PATH already adjusted above)
           CC: clang
           CXX: clang++
         run: |
           set -o pipefail
           export PATH=/opt/homebrew/bin:$PATH
           export SLIMMED=0
-          # Ensure ccache wrapper is first in PATH (mac runner differences handled earlier)
           if command -v ccache >/dev/null 2>&1; then
-            echo "ccache detected: $(ccache --version | head -n 1)"
-            # If ccache libexec wrapper exists, put it in PATH so 'clang' is wrapped by ccache
             if [ -d "/opt/homebrew/opt/ccache/libexec" ]; then
               export PATH="/opt/homebrew/opt/ccache/libexec:$PATH"
             elif [ -d "/usr/local/opt/ccache/libexec" ]; then
@@ -176,11 +159,9 @@ jobs:
             export CXX="clang++"
           fi
 
-          # 初始化日志文件
           touch build.log
 
           if [ "${{ matrix.platform_name }}" == "ios" ]; then
-            # Build ipa and tipa for iOS (Redirect stderr/stdout to build.log)
             echo "--- Building Standard IPA ---" | tee -a build.log
             gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }} 2>&1 | tee -a build.log
 
@@ -188,17 +169,15 @@ jobs:
             gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }} TROLLSTORE_JIT_ENT=1 2>&1 | tee -a build.log
 
           elif [ "${{ matrix.platform_name }}" == "tvos" ]; then
-            # Build tipa only for tvOS
             echo "--- Building tvOS IPA ---" | tee -a build.log
             gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }} TROLLSTORE_JIT_ENT=1 2>&1 | tee -a build.log
 
           else
-            # Build ipa only for everything else
             echo "--- Building Generic IPA ---" | tee -a build.log
             gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }} 2>&1 | tee -a build.log
           fi
 
-      - name: 🔍 Extract Critical Build Errors
+      - name: Extract Critical Build Errors
         if: failure()
         run: |
           echo "::group::Critical Errors Found"
