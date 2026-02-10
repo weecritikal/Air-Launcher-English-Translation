@@ -105,8 +105,6 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '8'
-          distribution: temurin
-          java-version: '8'
 
       - name: Get gl4es (checkout upstream) if cache miss
         if: steps.gl4es-cache.outputs.cache-hit != 'true'
