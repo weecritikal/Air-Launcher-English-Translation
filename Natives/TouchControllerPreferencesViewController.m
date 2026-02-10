@@ -26,7 +26,10 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.title = localize(@"TouchController", @"preference.touchcontroller.title");
+    self.title = localize(@"preference.touchcontroller.title", nil);
+    
+    // 添加关闭按钮
+    self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemClose target:self action:@selector(actionClose)];
 }
 
 - (void)initViewCreation {
@@ -53,13 +56,13 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
         NSInteger mode = [weakSelf.getPreference(section, key) integerValue];
         switch (mode) {
             case TouchControllerCommModeUDP:
-                cell.detailTextLabel.text = localize(@"UDP Protocol", @"preference.touchcontroller.mode.udp") ?: @"UDP Protocol";
+                cell.detailTextLabel.text = localize(@"preference.touchcontroller.mode.udp", nil) ?: @"UDP Protocol";
                 break;
             case TouchControllerCommModeStaticLib:
-                cell.detailTextLabel.text = localize(@"Static Library", @"preference.touchcontroller.mode.staticlib") ?: @"Static Library";
+                cell.detailTextLabel.text = localize(@"preference.touchcontroller.mode.staticlib", nil) ?: @"Static Library";
                 break;
             default:
-                cell.detailTextLabel.text = localize(@"Disabled", @"preference.touchcontroller.mode.disabled") ?: @"Disabled";
+                cell.detailTextLabel.text = localize(@"preference.touchcontroller.mode.disabled", nil) ?: @"Disabled";
                 break;
         }
     };
@@ -89,16 +92,16 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
         // 设置详细文本
         switch (value) {
             case 1:
-                cell.detailTextLabel.text = localize(@"Light", @"preference.touchcontroller.vibrate.intensity.light") ?: @"Light";
+                cell.detailTextLabel.text = localize(@"preference.touchcontroller.vibrate.intensity.light", nil) ?: @"Light";
                 break;
             case 2:
-                cell.detailTextLabel.text = localize(@"Medium", @"preference.touchcontroller.vibrate.intensity.medium") ?: @"Medium";
+                cell.detailTextLabel.text = localize(@"preference.touchcontroller.vibrate.intensity.medium", nil) ?: @"Medium";
                 break;
             case 3:
-                cell.detailTextLabel.text = localize(@"Heavy", @"preference.touchcontroller.vibrate.intensity.heavy") ?: @"Heavy";
+                cell.detailTextLabel.text = localize(@"preference.touchcontroller.vibrate.intensity.heavy", nil) ?: @"Heavy";
                 break;
             default:
-                cell.detailTextLabel.text = localize(@"Medium", @"preference.touchcontroller.vibrate.intensity.medium") ?: @"Medium";
+                cell.detailTextLabel.text = localize(@"preference.touchcontroller.vibrate.intensity.medium", nil) ?: @"Medium";
                 break;
         }
 
@@ -130,13 +133,13 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
               @"hasDetail": @YES,
               @"type": self.typeChildPane,
               @"canDismissWithSwipe": @NO,
-              @"title": localize(@"Communication Mode", @"preference.touchcontroller.mode.title") ?: @"Communication Mode"
+              @"title": localize(@"preference.touchcontroller.mode.title", nil) ?: @"Communication Mode"
             },
             @{@"key": @"mod_touch_vibrate_enable",
               @"icon": @"waveform.path",
               @"type": self.typeSwitch,
               @"canDismissWithSwipe": @NO,
-              @"title": localize(@"Enable Vibration", @"preference.touchcontroller.vibrate.enable") ?: @"Enable Vibration"
+              @"title": localize(@"preference.touchcontroller.vibrate.enable", nil) ?: @"Enable Vibration"
             },
             @{@"key": @"mod_touch_vibrate_intensity",
               @"icon": @"speaker.wave.2",
@@ -146,13 +149,13 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
               @"min": @1,
               @"max": @3,
               @"step": @1,
-              @"title": localize(@"Vibration Intensity", @"preference.touchcontroller.vibrate.intensity") ?: @"Vibration Intensity"
+              @"title": localize(@"preference.touchcontroller.vibrate.intensity", nil) ?: @"Vibration Intensity"
             },
             @{@"key": @"mod_touch_moveview_enable",
               @"icon": @"arrow.triangle.2.circlepath",
               @"type": self.typeSwitch,
               @"canDismissWithSwipe": @NO,
-              @"title": localize(@"Enable Move View", @"preference.touchcontroller.moveview.enable") ?: @"Enable Move View"
+              @"title": localize(@"preference.touchcontroller.moveview.enable", nil) ?: @"Enable Move View"
             },
             @{@"key": @"mod_touch_about",
               @"icon": @"info.circle",
@@ -161,7 +164,7 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
               @"action": ^void(){
                   [weakSelf showInfoAlert];
               },
-              @"title": localize(@"About TouchController", @"preference.touchcontroller.about") ?: @"About TouchController"
+              @"title": localize(@"preference.touchcontroller.about", nil) ?: @"About TouchController"
             }
         ]
     ];
@@ -181,16 +184,16 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
     if (cell) {
         switch (value) {
             case 1:
-                cell.detailTextLabel.text = localize(@"Light", @"preference.touchcontroller.vibrate.intensity.light") ?: @"Light";
+                cell.detailTextLabel.text = localize(@"preference.touchcontroller.vibrate.intensity.light", nil) ?: @"Light";
                 break;
             case 2:
-                cell.detailTextLabel.text = localize(@"Medium", @"preference.touchcontroller.vibrate.intensity.medium") ?: @"Medium";
+                cell.detailTextLabel.text = localize(@"preference.touchcontroller.vibrate.intensity.medium", nil) ?: @"Medium";
                 break;
             case 3:
-                cell.detailTextLabel.text = localize(@"Heavy", @"preference.touchcontroller.vibrate.intensity.heavy") ?: @"Heavy";
+                cell.detailTextLabel.text = localize(@"preference.touchcontroller.vibrate.intensity.heavy", nil) ?: @"Heavy";
                 break;
             default:
-                cell.detailTextLabel.text = localize(@"Medium", @"preference.touchcontroller.vibrate.intensity.medium") ?: @"Medium";
+                cell.detailTextLabel.text = localize(@"preference.touchcontroller.vibrate.intensity.medium", nil) ?: @"Medium";
                 break;
         }
     }
@@ -245,7 +248,7 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
 }
 
 - (void)showModeSelectionAlert {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:localize(@"Select Communication Mode", @"preference.touchcontroller.select_mode.title") ?: @"Select Communication Mode"
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:localize(@"preference.touchcontroller.select_mode.title", nil) ?: @"Select Communication Mode"
                                                                    message:nil
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
 
@@ -255,7 +258,7 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
     if (![self.getPreference(@"control", @"mod_touch_enable") boolValue]) currentMode = TouchControllerCommModeDisabled;
 
     // 禁用选项
-    UIAlertAction *disableAction = [UIAlertAction actionWithTitle:localize(@"Disabled", @"preference.touchcontroller.mode.disabled") ?: @"Disabled"
+    UIAlertAction *disableAction = [UIAlertAction actionWithTitle:localize(@"preference.touchcontroller.mode.disabled", nil) ?: @"Disabled"
                                                              style:UIAlertActionStyleDestructive
                                                            handler:^(UIAlertAction * _Nonnull action) {
         [self updateTouchControllerSetting:TouchControllerCommModeDisabled];
@@ -267,7 +270,7 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
     [alert addAction:disableAction];
 
     // UDP 模式选项
-    UIAlertAction *udpAction = [UIAlertAction actionWithTitle:localize(@"UDP Protocol", @"preference.touchcontroller.mode.udp") ?: @"UDP Protocol"
+    UIAlertAction *udpAction = [UIAlertAction actionWithTitle:localize(@"preference.touchcontroller.mode.udp", nil) ?: @"UDP Protocol"
                                                          style:UIAlertActionStyleDefault
                                                        handler:^(UIAlertAction * _Nonnull action) {
         [self updateTouchControllerSetting:TouchControllerCommModeUDP];
@@ -280,7 +283,7 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
     [alert addAction:udpAction];
 
     // 静态库模式选项
-    UIAlertAction *staticLibAction = [UIAlertAction actionWithTitle:localize(@"Static Library", @"preference.touchcontroller.mode.staticlib") ?: @"Static Library"
+    UIAlertAction *staticLibAction = [UIAlertAction actionWithTitle:localize(@"preference.touchcontroller.mode.staticlib", nil) ?: @"Static Library"
                                                                 style:UIAlertActionStyleDefault
                                                               handler:^(UIAlertAction * _Nonnull action) {
         [self updateTouchControllerSetting:TouchControllerCommModeStaticLib];
@@ -293,7 +296,7 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
     [alert addAction:staticLibAction];
 
     // 取消按钮
-    [alert addAction:[UIAlertAction actionWithTitle:localize(@"Cancel", @"preference.touchcontroller.cancel") ?: @"Cancel"
+    [alert addAction:[UIAlertAction actionWithTitle:localize(@"preference.touchcontroller.cancel", nil) ?: @"Cancel"
                                               style:UIAlertActionStyleCancel
                                             handler:nil]];
 
@@ -311,13 +314,13 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
 
     switch (mode) {
         case TouchControllerCommModeUDP:
-            title = localize(@"UDP Protocol Mode", @"preference.touchcontroller.udp.title") ?: @"UDP Protocol Mode";
-            message = localize(@"TouchController will communicate via UDP port 12450. This mode is compatible with most servers and provides stable network communication.", @"preference.touchcontroller.udp.message") ?: @"TouchController will communicate via UDP port 12450. This mode is compatible with most servers and provides stable network communication.";
+            title = localize(@"preference.touchcontroller.udp.title", nil) ?: @"UDP Protocol Mode";
+            message = localize(@"preference.touchcontroller.udp.message", nil) ?: @"TouchController will communicate via UDP port 12450. This mode is compatible with most servers and provides stable network communication.";
             break;
 
         case TouchControllerCommModeStaticLib:
-            title = localize(@"Static Library Mode", @"preference.touchcontroller.staticlib.title") ?: @"Static Library Mode";
-            message = localize(@"TouchController will use native static library for high-performance local communication via Unix Domain Socket. This mode provides better performance but requires the static library to be linked.", @"preference.touchcontroller.staticlib.message") ?: @"TouchController will use native static library for high-performance local communication via Unix Domain Socket. This mode provides better performance but requires the static library to be linked.";
+            title = localize(@"preference.touchcontroller.staticlib.title", nil) ?: @"Static Library Mode";
+            message = localize(@"preference.touchcontroller.staticlib.message", nil) ?: @"TouchController will use native static library for high-performance local communication via Unix Domain Socket. This mode provides better performance but requires the static library to be linked.";
             break;
 
         default:
@@ -328,7 +331,7 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
                                                                          message:message
                                                                   preferredStyle:UIAlertControllerStyleAlert];
 
-    [infoAlert addAction:[UIAlertAction actionWithTitle:localize(@"OK", @"preference.touchcontroller.ok") ?: @"OK"
+    [infoAlert addAction:[UIAlertAction actionWithTitle:localize(@"preference.touchcontroller.ok", nil) ?: @"OK"
                                                    style:UIAlertActionStyleDefault
                                                  handler:nil]];
 
@@ -336,11 +339,11 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
 }
 
 - (void)showInfoAlert {
-    UIAlertController *infoAlert = [UIAlertController alertControllerWithTitle:localize(@"About TouchController", @"preference.touchcontroller.about.title") ?: @"About TouchController"
-                                                                         message:localize(@"TouchController is a Minecraft mod that adds touch controls to Java Edition. This launcher supports two communication modes:\n\n• UDP Protocol: Network-based communication\n• Static Library: High-performance local communication\n\nVisit GitHub for more information.", @"preference.touchcontroller.about.message") ?: @"TouchController is a Minecraft mod that adds touch controls to Java Edition. This launcher supports two communication modes:\n\n• UDP Protocol: Network-based communication\n• Static Library: High-performance local communication\n\nVisit GitHub for more information."
+    UIAlertController *infoAlert = [UIAlertController alertControllerWithTitle:localize(@"preference.touchcontroller.about.title", nil) ?: @"About TouchController"
+                                                                         message:localize(@"preference.touchcontroller.about.message", nil) ?: @"TouchController is a Minecraft mod that adds touch controls to Java Edition. This launcher supports two communication modes:\n\n• UDP Protocol: Network-based communication\n• Static Library: High-performance local communication\n\nVisit GitHub for more information."
                                                                   preferredStyle:UIAlertControllerStyleAlert];
 
-    [infoAlert addAction:[UIAlertAction actionWithTitle:localize(@"OK", @"preference.touchcontroller.ok") ?: @"OK"
+    [infoAlert addAction:[UIAlertAction actionWithTitle:localize(@"preference.touchcontroller.ok", nil) ?: @"OK"
                                                    style:UIAlertActionStyleDefault
                                                  handler:nil]];
 
@@ -366,6 +369,12 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
     } else if ([key isEqualToString:@"mod_touch_about"]) {
         [self showInfoAlert];
     }
+}
+
+#pragma mark - Close Button Action
+
+- (void)actionClose {
+    [self.navigationController dismissViewControllerAnimated:YES completion:nil];
 }
 
 @end
