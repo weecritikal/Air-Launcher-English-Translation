@@ -162,16 +162,16 @@ static GameSurfaceView* pojavWindow;
 
 // 启动 TouchController 消息接收循环
 - (void)startTouchControllerMessageLoop {
-    // 创建定时器，每 16ms (60fps) 检查一次消息
+    __weak typeof(self) weakSelf = self;
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        while (self.touchControllerTransportHandle >= 0 && !self.isViewDismissed) {
+        while (weakSelf.touchControllerTransportHandle >= 0 && ![weakSelf isViewDismissed]) {
             @autoreleasepool {
                 NSMutableData *buffer = [NSMutableData dataWithLength:256];
-                int result = [TouchControllerBridge receiveFromTransport:self.touchControllerTransportHandle buffer:buffer];
+                int result = [TouchControllerBridge receiveFromTransport:weakSelf.touchControllerTransportHandle buffer:buffer];
 
                 if (result > 0) {
                     [buffer setLength:result];
-                    [self processTouchControllerMessage:buffer];
+                    [weakSelf processTouchControllerMessage:buffer];
                 }
 
                 // 休眠 16ms
@@ -502,7 +502,13 @@ static GameSurfaceView* pojavWindow;
                 int32_t kind;
                 [messageData getBytes:&kind range:NSMakeRange(4, 4)];
                 kind = ntohl(kind);
-                [self triggerVibrationWithKind:kind];
+                
+                // 使用 dispatch_async 确保在主线程中调用
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    if (self.view && !self.isBeingDismissed) {
+                        [self triggerVibrationWithKind:kind];
+                    }
+                });
             }
             break;
         }

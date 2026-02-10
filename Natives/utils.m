@@ -180,7 +180,7 @@ void JIT26SendJITScript(NSString* script) {
     BreakSendJITScript((char*)script.UTF8String, script.length);
 }
 BOOL DeviceRequiresTXMWorkaround(void) {
-    if (@available(iOS 26.0, *)) {
+    if (@available(iOS 16.0, *)) {
         DIR *d = opendir("/private/preboot");
         if(!d) return NO;
         struct dirent *dir;
