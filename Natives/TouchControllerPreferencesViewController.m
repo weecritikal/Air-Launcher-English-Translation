@@ -35,6 +35,9 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
 - (void)initViewCreation {
     __weak typeof(self) weakSelf = self;
 
+    // 确保所有选项都可见
+    self.prefSectionsVisible = YES;
+
     // 设置偏好获取和保存块
     self.getPreference = ^id(NSString *section, NSString *key){
         NSString *keyFull = [NSString stringWithFormat:@"%@.%@", section, key];
