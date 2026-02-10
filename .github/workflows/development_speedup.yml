@@ -103,6 +103,8 @@ jobs:
       - name: Setup Java 8 (Temurin)
         uses: actions/setup-java@v4
         with:
+          distribution: 'temurin'
+          java-version: '8'
           distribution: temurin
           java-version: '8'
 
