@@ -1476,12 +1476,37 @@ static GameSurfaceView* pojavWindow;
 #pragma mark - Input: On-screen touch events (TouchController Mod Integration)
 
 static int32_t s_fingerIdCounter = 0;
+static NSMutableDictionary *s_touchToFingerIdMap = nil;
 
 - (int32_t)getFingerId:(UITouch *)touch {
-    // Use an incrementing counter for unique finger IDs
-    // This ensures each touch gets a unique ID across the session
+    // Lazy initialize the map
+    if (!s_touchToFingerIdMap) {
+        s_touchToFingerIdMap = [NSMutableDictionary dictionary];
+    }
+    
+    // Check if we already have a finger ID for this touch
+    NSNumber *fingerIdNum = [s_touchToFingerIdMap objectForKey:touch];
+    if (fingerIdNum) {
+        return [fingerIdNum intValue];
+    }
+    
+    // Generate a new unique finger ID
     s_fingerIdCounter = (s_fingerIdCounter + 1) % 100000;
-    return s_fingerIdCounter;
+    int32_t newFingerId = s_fingerIdCounter;
+    
+    // Store the mapping
+    [s_touchToFingerIdMap setObject:@(newFingerId) forKey:touch];
+    
+    return newFingerId;
+}
+
+// Clear the touch to finger ID map when touches end
+- (void)clearTouchToFingerIdMapForTouches:(NSSet *)touches {
+    if (!s_touchToFingerIdMap) return;
+    
+    for (UITouch *touch in touches) {
+        [s_touchToFingerIdMap removeObjectForKey:touch];
+    }
 }
 
 - (void)touchesBegan:(NSSet *)touches withEvent:(UIEvent *)event
@@ -1601,6 +1626,9 @@ static int32_t s_fingerIdCounter = 0;
             }
         }
 
+        // Clear the touch to finger ID map for ended touches
+        [self clearTouchToFingerIdMapForTouches:touches];
+
         if (isGrabbing == JNI_TRUE) return;
     }
 
@@ -1624,6 +1652,9 @@ static int32_t s_fingerIdCounter = 0;
                 [self sendTouchControllerProxyMessage:[self getFingerId:touch] x:0 y:0 isRemove:YES];
             }
         }
+
+        // Clear the touch to finger ID map for cancelled touches
+        [self clearTouchToFingerIdMapForTouches:touches];
 
         if (isGrabbing == JNI_TRUE) return;
     }
