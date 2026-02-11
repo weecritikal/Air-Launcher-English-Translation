@@ -1478,9 +1478,10 @@ static GameSurfaceView* pojavWindow;
 static int32_t s_fingerIdCounter = 0;
 
 - (int32_t)getFingerId:(UITouch *)touch {
-    // Use a unique identifier based on touch pointer identifier
-    // This ensures each touch gets a unique ID even if touch objects are reused
-    return (int32_t)(touch.pointerIdentifier % 100000);
+    // Use an incrementing counter for unique finger IDs
+    // This ensures each touch gets a unique ID across the session
+    s_fingerIdCounter = (s_fingerIdCounter + 1) % 100000;
+    return s_fingerIdCounter;
 }
 
 - (void)touchesBegan:(NSSet *)touches withEvent:(UIEvent *)event
