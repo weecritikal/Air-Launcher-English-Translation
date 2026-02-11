@@ -1158,7 +1158,7 @@ static GameSurfaceView* pojavWindow;
     }
 
     if (touchEvent == self.primaryTouch) {
-        if ([self isTouchInactive:self.primaryTouch]) return; 
+        if ([self isTouchInactive:self.primaryTouch] && event != ACTION_UP) return; 
         if (event == ACTION_MOVE && isGrabbing) {
             event = ACTION_MOVE_MOTION;
             CGPoint prevLocationInView = [touchEvent previousLocationInView:self.rootView];
