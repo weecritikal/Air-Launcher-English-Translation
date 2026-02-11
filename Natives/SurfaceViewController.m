@@ -1475,8 +1475,12 @@ static GameSurfaceView* pojavWindow;
 
 #pragma mark - Input: On-screen touch events (TouchController Mod Integration)
 
+static int32_t s_fingerIdCounter = 0;
+
 - (int32_t)getFingerId:(UITouch *)touch {
-    return (int32_t)((long)touch % 100000);
+    // Use a unique identifier based on touch pointer identifier
+    // This ensures each touch gets a unique ID even if touch objects are reused
+    return (int32_t)(touch.pointerIdentifier % 100000);
 }
 
 - (void)touchesBegan:(NSSet *)touches withEvent:(UIEvent *)event
