@@ -1526,7 +1526,6 @@ static GameSurfaceView* pojavWindow;
             self.primaryTouch = touch;
         }
         [self sendTouchEvent:touch withUIEvent:event withEvent:ACTION_DOWN];
-        break;
     }
 }
 
@@ -1585,11 +1584,13 @@ static GameSurfaceView* pojavWindow;
 
         if (mode == 1) {  // UDP 模式
             for (UITouch *touch in touches) {
-                // Send Type 2 (Remove Pointer) for ANY touch ending
+                if (touch.view != self.surfaceView) continue;
+                // Send Type 2 (Remove Pointer) for surfaceView touch ending
                 [self.touchSender sendType:2 id:[self getFingerId:touch] x:0 y:0];
             }
         } else if (mode == 2) {  // 静态库模式
             for (UITouch *touch in touches) {
+                if (touch.view != self.surfaceView) continue;
                 // Send ProxyMessage: RemovePointerMessage
                 [self sendTouchControllerProxyMessage:[self getFingerId:touch] x:0 y:0 isRemove:YES];
             }
@@ -1609,10 +1610,12 @@ static GameSurfaceView* pojavWindow;
 
         if (mode == 1) {  // UDP 模式
             for (UITouch *touch in touches) {
+                if (touch.view != self.surfaceView) continue;
                 [self.touchSender sendType:2 id:[self getFingerId:touch] x:0 y:0];
             }
         } else if (mode == 2) {  // 静态库模式
             for (UITouch *touch in touches) {
+                if (touch.view != self.surfaceView) continue;
                 [self sendTouchControllerProxyMessage:[self getFingerId:touch] x:0 y:0 isRemove:YES];
             }
         }
