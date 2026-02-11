@@ -1484,8 +1484,11 @@ static NSMutableDictionary *s_touchToFingerIdMap = nil;
         s_touchToFingerIdMap = [NSMutableDictionary dictionary];
     }
     
+    // Use touch pointer address as key (UITouch doesn't support NSCopying)
+    NSString *touchKey = [NSString stringWithFormat:@"%p", touch];
+    
     // Check if we already have a finger ID for this touch
-    NSNumber *fingerIdNum = [s_touchToFingerIdMap objectForKey:touch];
+    NSNumber *fingerIdNum = [s_touchToFingerIdMap objectForKey:touchKey];
     if (fingerIdNum) {
         return [fingerIdNum intValue];
     }
@@ -1495,7 +1498,7 @@ static NSMutableDictionary *s_touchToFingerIdMap = nil;
     int32_t newFingerId = s_fingerIdCounter;
     
     // Store the mapping
-    [s_touchToFingerIdMap setObject:@(newFingerId) forKey:touch];
+    [s_touchToFingerIdMap setObject:@(newFingerId) forKey:touchKey];
     
     return newFingerId;
 }
@@ -1505,7 +1508,8 @@ static NSMutableDictionary *s_touchToFingerIdMap = nil;
     if (!s_touchToFingerIdMap) return;
     
     for (UITouch *touch in touches) {
-        [s_touchToFingerIdMap removeObjectForKey:touch];
+        NSString *touchKey = [NSString stringWithFormat:@"%p", touch];
+        [s_touchToFingerIdMap removeObjectForKey:touchKey];
     }
 }
 
