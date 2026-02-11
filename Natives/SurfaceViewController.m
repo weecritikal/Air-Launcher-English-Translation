@@ -103,8 +103,8 @@
     
     size_t length = (type == 2) ? 8 : 16;
 
-    // 重试机制：对于移除指针数据包（type==2）增加重试次数，确保可靠发送
-    int maxRetries = (type == 2) ? 5 : 2;
+    // 优化重试机制：减少重试次数，避免不必要的延迟
+    int maxRetries = (type == 2) ? 2 : 1;
     int retry;
     ssize_t sent = -1;
 
@@ -117,7 +117,7 @@
             int err = errno;
             if (err == EAGAIN || err == EWOULDBLOCK) {
                 // 缓冲区满，短暂休眠后重试
-                usleep(1000); // 1毫秒
+                usleep(500); // 减少休眠时间到0.5毫秒
                 continue;
             } else {
                 // 其他错误，记录并退出重试
@@ -127,7 +127,7 @@
         } else {
             // 部分发送（理论上不会发生），记录并重试
             NSLog(@"[TouchController] Warning: partial send: %zd of %zu bytes", sent, length);
-            usleep(1000);
+            usleep(500); // 减少休眠时间到0.5毫秒
         }
     }
 
@@ -1510,6 +1510,13 @@ static NSMutableDictionary *s_touchToFingerIdMap = nil;
     for (UITouch *touch in touches) {
         NSString *touchKey = [NSString stringWithFormat:@"%p", touch];
         [s_touchToFingerIdMap removeObjectForKey:touchKey];
+    }
+}
+
+// Clear all touch to finger ID mappings
+- (void)clearAllTouchToFingerIdMappings {
+    if (s_touchToFingerIdMap) {
+        [s_touchToFingerIdMap removeAllObjects];
     }
 }
 
