@@ -8,6 +8,8 @@
 #import "LauncherPreferences.h"
 #import "LauncherPreferencesViewController.h"
 #import "LauncherProfilesViewController.h"
+#import "ModsManagerViewController.h"
+#import "ShadersManagerViewController.h"
 #import "PLProfiles.h"
 #import "UIButton+AFNetworking.h"
 #import "UIImageView+AFNetworking.h"
@@ -81,9 +83,31 @@
           imageName:@"MenuInstallJar" action:^{
         [contentNavigationController performSelector:@selector(enterModInstaller)];
     }]];
-    
-    
-    
+
+    // Mod Manager entry
+    [self.options addObject:
+     (id)[LauncherMenuCustomItem
+          title:@"Manage Mods"
+          imageName:@"puzzlepiece.extension" action:^{
+        ModsManagerViewController *modsVC = [[ModsManagerViewController alloc] init];
+        modsVC.profileName = PLProfiles.current.selectedProfileName;
+        UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:modsVC];
+        nav.modalPresentationStyle = UIModalPresentationFormSheet;
+        [self presentViewController:nav animated:YES completion:nil];
+    }]];
+
+    // Shader Manager entry
+    [self.options addObject:
+     (id)[LauncherMenuCustomItem
+          title:@"Manage Shaders"
+          imageName:@"photo" action:^{
+        ShadersManagerViewController *shadersVC = [[ShadersManagerViewController alloc] init];
+        shadersVC.profileName = PLProfiles.current.selectedProfileName;
+        UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:shadersVC];
+        nav.modalPresentationStyle = UIModalPresentationFormSheet;
+        [self presentViewController:nav animated:YES completion:nil];
+    }]];
+
     // TODO: Finish log-uploading service integration
     [self.options addObject:
      (id)[LauncherMenuCustomItem
@@ -119,12 +143,12 @@
         }]];
     }
     
-    // 零雾05_Fogg05彩蛋 - 每年12月27日、28日、29日显示
+    // Fogg05 Easter Egg - Display on Dec 27, 28, 29
     if([date isEqualToString:@"12-27"] || [date isEqualToString:@"12-28"] || [date isEqualToString:@"12-29"]) {
         [self.options addObject:(id)[LauncherMenuCustomItem
-                                     title:@"致那个为方块上色的人"
+                                     title:@"To the one who colored the blocks"
                                      imageName:@"" action:^{
-            NSString *urlString = @"https://wiki.easecation.net/零雾05_Fogg05";
+            NSString *urlString = @"https://wiki.easecation.net/é¶é¾05_Fogg05";
             NSString *encodedUrlString = [urlString stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLPathAllowedCharacterSet]];
             openLink(self, [NSURL URLWithString:encodedUrlString]);
         }]];
@@ -160,22 +184,22 @@
     [self.tableView selectRowAtIndexPath:indexPath animated:YES scrollPosition:UITableViewScrollPositionNone];
     [self tableView:self.tableView didSelectRowAtIndexPath:indexPath];
     
-    // 获取当前应用版本
+    // Get current app version
     NSString *currentVersion = [[[NSBundle mainBundle] infoDictionary] objectForKey:@"CFBundleShortVersionString"];
     
-    // 创建公告栏
+    // Create announcement banner
     UILabel *announcementLabel = [[UILabel alloc] init];
     announcementLabel.textAlignment = NSTextAlignmentLeft;
-    announcementLabel.textColor = [UIColor labelColor]; // 使用系统标签颜色，自动适配深色模式
+    announcementLabel.textColor = [UIColor labelColor]; // Use system label color for dark mode support
     announcementLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
     announcementLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    announcementLabel.numberOfLines = 0; // 允许多行文本
+    announcementLabel.numberOfLines = 0; // Allow multi-line text
     
-    // 创建公告栏容器视图
+    // Create announcement container view
     UIView *announcementContainer = [[UIView alloc] init];
     announcementContainer.translatesAutoresizingMaskIntoConstraints = NO;
     
-    // 设置容器样式 - 支持iOS14.0的兼容方式
+    // Set container style - compatible with iOS 14.0
     if (@available(iOS 13.0, *)) {
         announcementContainer.backgroundColor = [[UIColor systemBackgroundColor] colorWithAlphaComponent:0.95];
     } else {
@@ -185,7 +209,7 @@
     announcementContainer.layer.cornerRadius = 12;
     announcementContainer.layer.masksToBounds = YES;
     
-    // 添加边框
+    // Add border
     announcementContainer.layer.borderWidth = 1.0;
     if (@available(iOS 13.0, *)) {
         announcementContainer.layer.borderColor = [[UIColor separatorColor] colorWithAlphaComponent:0.3].CGColor;
@@ -193,25 +217,25 @@
         announcementContainer.layer.borderColor = [[UIColor lightGrayColor] colorWithAlphaComponent:0.3].CGColor;
     }
     
-    // 添加阴影效果
+    // Add shadow effect
     announcementContainer.layer.shadowColor = [UIColor blackColor].CGColor;
     announcementContainer.layer.shadowOffset = CGSizeMake(0, 2);
     announcementContainer.layer.shadowRadius = 4;
     announcementContainer.layer.shadowOpacity = 0.1;
     
-    // 添加信息图标
+    // Add info icon
     UIImageView *infoIcon = [[UIImageView alloc] init];
     infoIcon.translatesAutoresizingMaskIntoConstraints = NO;
     
-    // 使用系统图标，兼容iOS14.0
+    // Use system icon, compatible with iOS 14.0
     if (@available(iOS 13.0, *)) {
         infoIcon.image = [UIImage systemImageNamed:@"info.circle.fill"];
         infoIcon.tintColor = [UIColor systemBlueColor];
     } else {
-        // iOS14以下使用自定义图标或文字
+        // Fallback for iOS below 13
         infoIcon.image = [UIImage imageNamed:@"MenuInfo"];
         if (!infoIcon.image) {
-            // 如果没有图片资源，创建一个简单的圆形
+            // Create a simple circle if no image asset
             UIGraphicsBeginImageContextWithOptions(CGSizeMake(20, 20), NO, 0.0);
             CGContextRef context = UIGraphicsGetCurrentContext();
             [[UIColor blueColor] setFill];
@@ -224,10 +248,10 @@
     
     [announcementContainer addSubview:infoIcon];
     
-    // 添加公告标签到容器
+    // Add announcement label to container
     [announcementContainer addSubview:announcementLabel];
     
-    // 设置图标约束 - 固定在顶部
+    // Set icon constraints - fixed at top
     [NSLayoutConstraint activateConstraints:@[
         [infoIcon.leadingAnchor constraintEqualToAnchor:announcementContainer.leadingAnchor constant:8],
         [infoIcon.topAnchor constraintEqualToAnchor:announcementContainer.topAnchor constant:12],
@@ -235,17 +259,17 @@
         [infoIcon.heightAnchor constraintEqualToConstant:20]
     ]];
     
-    // 设置公告标签约束（在图标右侧，顶部对齐）
+    // Set announcement label constraints (right of icon, top aligned)
     [NSLayoutConstraint activateConstraints:@[
         [announcementLabel.topAnchor constraintEqualToAnchor:announcementContainer.topAnchor constant:12],
         [announcementLabel.leadingAnchor constraintEqualToAnchor:infoIcon.trailingAnchor constant:8],
         [announcementLabel.trailingAnchor constraintEqualToAnchor:announcementContainer.trailingAnchor constant:-8]
     ]];
     
-    // 将公告容器添加到视图，放在导航栏下方、表格视图上方
+    // Add announcement container to view, below navigation bar, above table view
     [self.view addSubview:announcementContainer];
     
-    // 设置公告容器约束 - 适应侧边栏布局
+    // Set announcement container constraints - adapt to sidebar layout
     NSLayoutConstraint *heightConstraint = [announcementContainer.heightAnchor constraintEqualToConstant:60];
     self.announcementContainerHeightConstraint = heightConstraint;
     
@@ -256,19 +280,19 @@
         heightConstraint
     ]];
     
-    // 存储公告栏引用
+    // Store announcement banner reference
     self.announcementContainer = announcementContainer;
     self.announcementLabel = announcementLabel;
     
-    // 调整表格视图的顶部约束，为公告栏留出空间
-    // 初始设置为 60（容器高度）+ 16（上下间距）= 76
+    // Adjust table view top inset to make room for announcement banner
+    // Initial setting: 60 (container height) + 16 (top/bottom margin) = 76
     self.tableView.contentInset = UIEdgeInsetsMake(76, 0, 0, 0);
     
-    // 检查当前版本是否包含"Preview"字样
+    // Check if current version contains "Preview"
     if ([currentVersion rangeOfString:@"Preview" options:NSCaseInsensitiveSearch].location != NSNotFound) {
-        announcementLabel.text = localize(@"announcement.preview_version", @"欢迎使用Amethyst iOS Remastered测试版！");
+        announcementLabel.text = localize(@"announcement.preview_version", @"Welcome to Amethyst iOS Remastered Preview!");
     } else {
-        // 尝试获取GitHub最新的Release版本号
+        // Try to get latest GitHub Release version
         [self checkForUpdateWithCurrentVersion:currentVersion announcementLabel:announcementLabel announcementContainer:announcementContainer retryCount:0];
     }
     
@@ -302,24 +326,19 @@
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
     
-    // 确保表格视图的contentInset正确设置
-    // 这个方法的调用时机在视图布局完成后，可以安全地获取视图的实际尺寸
+    // Ensure table view contentInset is correctly set
     if (self.tableView.contentInset.top < 70) {
-        // 如果contentInset未正确设置，重新设置默认值
         self.tableView.contentInset = UIEdgeInsetsMake(76, 0, 0, 0);
     }
     
-    // 重新计算公告栏高度，适应侧边栏宽度变化
-    // 侧边栏宽度可能会在横竖屏切换、iPad分屏模式下变化
+    // Recalculate announcement banner height for sidebar width changes
     if (self.announcementContainer && self.announcementLabel) {
-        // 检查当前宽度是否与之前不同
         static CGFloat previousWidth = 0;
         CGFloat currentWidth = self.announcementContainer.frame.size.width;
         
         if (fabs(currentWidth - previousWidth) > 1.0 && currentWidth > 50) {
             previousWidth = currentWidth;
             
-            // 重新调整高度
             if (self.downloadButton) {
                 [self adjustAnnouncementContainerHeight:self.announcementContainer forLabel:self.announcementLabel withButton:self.downloadButton];
             } else {
@@ -542,7 +561,7 @@
     }];
 }
 
-// 版本比较方法
+// Version comparison method
 - (NSComparisonResult)compareVersion:(NSString *)version1 withVersion:(NSString *)version2 {
     NSArray *v1Components = [version1 componentsSeparatedByString:@"."];
     NSArray *v2Components = [version2 componentsSeparatedByString:@"."];
@@ -571,7 +590,7 @@
     return NSOrderedSame;
 }
 
-// 下载最新版本
+// Download latest version
 - (void)downloadLatestVersion:(UIButton *)sender {
     NSString *urlString = @"https://github.com/herbrine8403/Amethyst-iOS-MyRemastered/releases/latest";
     NSURL *url = [NSURL URLWithString:urlString];
@@ -581,116 +600,81 @@
     }
 }
 
-// 调整公告栏容器高度（仅标签）
+// Adjust announcement container height (label only)
 - (void)adjustAnnouncementContainerHeight:(UIView *)container forLabel:(UILabel *)label {
-    // 计算标签所需高度 - 使用容器的实际宽度
-    // 容器内部边距：图标左边距(15) + 图标宽度(20) + 标签到图标间距(12) + 标签右边距(15) = 62
-    
-    // 确保容器已布局，获取准确宽度
-    if (container.frame.size.width <= 50) {
-        // 容器宽度异常小，可能是尚未布局，强制更新布局
-        [container.superview layoutIfNeeded];
-    }
-    
     CGFloat containerWidth = container.frame.size.width;
     CGFloat maxWidth = containerWidth - 62;
     
-    // 确保最小宽度，避免计算错误
     if (maxWidth <= 0) {
-        maxWidth = self.view.frame.size.width - 94; // 备用计算：屏幕宽度 - 所有边距
+        maxWidth = self.view.frame.size.width - 94;
     }
     if (maxWidth <= 0) {
-        maxWidth = 200; // 绝对最小值
+        maxWidth = 200;
     }
     
-    // 强制更新标签布局，确保 sizeThatFits 能正确计算
     [label setNeedsLayout];
     [label layoutIfNeeded];
     
     CGSize labelSize = [label sizeThatFits:CGSizeMake(maxWidth, CGFLOAT_MAX)];
     CGFloat labelHeight = labelSize.height;
     
-    // 计算容器高度：标签高度 + 上下边距(各12) = 24，但要确保能容纳标签
-    // 侧边栏中，标签顶部对齐，所以容器高度应该是 max(44, labelHeight + 24)
     CGFloat containerHeight = MAX(44, labelHeight + 24);
     
-    // 更新容器高度约束
     if (self.announcementContainerHeightConstraint) {
         self.announcementContainerHeightConstraint.constant = containerHeight;
     }
     
-    // 更新表格视图的contentInset
-    CGFloat topInset = containerHeight + 16; // 容器高度 + 上下间距(各8)
+    CGFloat topInset = containerHeight + 16;
     self.tableView.contentInset = UIEdgeInsetsMake(topInset, 0, 0, 0);
     
-    // 强制布局更新
     [container.superview layoutIfNeeded];
 }
 
-// 调整公告栏容器高度（带按钮）
+// Adjust announcement container height (with button)
 - (void)adjustAnnouncementContainerHeight:(UIView *)container forLabel:(UILabel *)label withButton:(UIButton *)button {
-    // 计算标签所需高度 - 使用容器的实际宽度
-    // 容器内部边距：图标左边距(15) + 图标宽度(20) + 标签到图标间距(12) + 标签右边距(15) = 62
-    
-    // 确保容器已布局，获取准确宽度
-    if (container.frame.size.width <= 50) {
-        // 容器宽度异常小，可能是尚未布局，强制更新布局
-        [container.superview layoutIfNeeded];
-    }
-    
     CGFloat containerWidth = container.frame.size.width;
     CGFloat maxWidth = containerWidth - 62;
     
-    // 确保最小宽度，避免计算错误
     if (maxWidth <= 0) {
-        maxWidth = self.view.frame.size.width - 94; // 备用计算：屏幕宽度 - 所有边距
+        maxWidth = self.view.frame.size.width - 94;
     }
     if (maxWidth <= 0) {
-        maxWidth = 200; // 绝对最小值
+        maxWidth = 200;
     }
     
-    // 强制更新标签布局，确保 sizeThatFits 能正确计算
     [label setNeedsLayout];
     [label layoutIfNeeded];
     
     CGSize labelSize = [label sizeThatFits:CGSizeMake(maxWidth, CGFLOAT_MAX)];
     CGFloat labelHeight = labelSize.height;
     
-    // 计算容器高度：标签高度 + 标签上边距(12) + 标签按钮间距(8) + 按钮高度(30) + 按钮下边距(10)
     CGFloat containerHeight = MAX(72, labelHeight + 12 + 8 + 30 + 10);
     
-    // 更新容器高度约束
     if (self.announcementContainerHeightConstraint) {
         self.announcementContainerHeightConstraint.constant = containerHeight;
     }
     
-    // 更新表格视图的contentInset
-    CGFloat topInset = containerHeight + 16; // 容器高度 + 上下间距(各8)
+    CGFloat topInset = containerHeight + 16;
     self.tableView.contentInset = UIEdgeInsetsMake(topInset, 0, 0, 0);
     
-    // 强制布局更新
     [container.superview layoutIfNeeded];
 }
 
-// 检查更新（使用 HTML 解析，避免 GitHub API 速率限制）
+// Check for updates (using HTML parsing to avoid GitHub API rate limits)
 - (void)checkForUpdateWithCurrentVersion:(NSString *)currentVersion
                         announcementLabel:(UILabel *)announcementLabel
                       announcementContainer:(UIView *)announcementContainer
                                 retryCount:(NSInteger)retryCount {
-    // 最大重试次数为 2 次
     NSInteger maxRetries = 2;
     
-    // 使用 GitHub Releases 页面 URL（不受 API 速率限制）
     NSURL *url = [NSURL URLWithString:@"https://github.com/herbrine8403/Amethyst-iOS-MyRemastered/releases/latest"];
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
-    request.timeoutInterval = 15.0; // 15秒超时
+    request.timeoutInterval = 15.0;
     
     NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
-        // 检查网络错误
         if (error) {
-            NSLog(@"[UpdateCheck] 网络请求失败: %@", error.localizedDescription);
+            NSLog(@"[UpdateCheck] Network request failed: %@", error.localizedDescription);
             
-            // 如果还有重试机会，延迟后重试
             if (retryCount < maxRetries) {
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * (retryCount + 1) * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                     [self checkForUpdateWithCurrentVersion:currentVersion
@@ -701,22 +685,19 @@
                 return;
             }
             
-            // 重试次数用尽，显示默认消息
             dispatch_async(dispatch_get_main_queue(), ^{
-                announcementLabel.text = localize(@"announcement.latest_version", @"欢迎使用Amethyst iOS Remastered！当前已是最新正式版。");
+                announcementLabel.text = localize(@"announcement.latest_version", @"Welcome to Amethyst iOS Remastered! Current version is up to date.");
                 [self adjustAnnouncementContainerHeight:announcementContainer forLabel:announcementLabel];
             });
             return;
         }
         
-        // 检查 HTTP 状态码
         NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
         NSInteger statusCode = httpResponse.statusCode;
         
         if (statusCode != 200) {
-            NSLog(@"[UpdateCheck] HTTP 状态码错误: %ld", (long)statusCode);
+            NSLog(@"[UpdateCheck] HTTP status code error: %ld", (long)statusCode);
             
-            // 如果还有重试机会，重试
             if (retryCount < maxRetries) {
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * (retryCount + 1) * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                     [self checkForUpdateWithCurrentVersion:currentVersion
@@ -728,19 +709,17 @@
             }
             
             dispatch_async(dispatch_get_main_queue(), ^{
-                announcementLabel.text = localize(@"announcement.latest_version", @"欢迎使用Amethyst iOS Remastered！当前已是最新正式版。");
+                announcementLabel.text = localize(@"announcement.latest_version", @"Welcome to Amethyst iOS Remastered! Current version is up to date.");
                 [self adjustAnnouncementContainerHeight:announcementContainer forLabel:announcementLabel];
             });
             return;
         }
         
-        // 将 HTML 数据转换为字符串
         NSString *htmlString = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
         
         if (!htmlString || htmlString.length == 0) {
-            NSLog(@"[UpdateCheck] HTML 内容为空");
+            NSLog(@"[UpdateCheck] HTML content is empty");
             
-            // 如果还有重试机会，重试
             if (retryCount < maxRetries) {
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * (retryCount + 1) * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                     [self checkForUpdateWithCurrentVersion:currentVersion
@@ -752,14 +731,12 @@
             }
             
             dispatch_async(dispatch_get_main_queue(), ^{
-                announcementLabel.text = localize(@"announcement.latest_version", @"欢迎使用Amethyst iOS Remastered！当前已是最新正式版。");
+                announcementLabel.text = localize(@"announcement.latest_version", @"Welcome to Amethyst iOS Remastered! Current version is up to date.");
                 [self adjustAnnouncementContainerHeight:announcementContainer forLabel:announcementLabel];
             });
             return;
         }
         
-        // 从 HTML 中提取版本号
-        // 匹配模式：/herbrine8403/Amethyst-iOS-MyRemastered/releases/tag/VERSION"
         NSString *pattern = @"/herbrine8403/Amethyst-iOS-MyRemastered/releases/tag/([^\"]+)\"";
         NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:pattern options:0 error:nil];
         NSTextCheckingResult *match = [regex firstMatchInString:htmlString options:0 range:NSMakeRange(0, htmlString.length)];
@@ -770,38 +747,33 @@
         }
         
         if (!latestVersion) {
-            NSLog(@"[UpdateCheck] 未从 HTML 中提取到版本号");
+            NSLog(@"[UpdateCheck] Could not extract version from HTML");
             dispatch_async(dispatch_get_main_queue(), ^{
-                announcementLabel.text = localize(@"announcement.latest_version", @"欢迎使用Amethyst iOS Remastered！当前已是最新正式版。");
+                announcementLabel.text = localize(@"announcement.latest_version", @"Welcome to Amethyst iOS Remastered! Current version is up to date.");
                 [self adjustAnnouncementContainerHeight:announcementContainer forLabel:announcementLabel];
             });
             return;
         }
         
-        // 移除标签前缀（如 "v"）
         if ([latestVersion hasPrefix:@"v"]) {
             latestVersion = [latestVersion substringFromIndex:1];
         }
         
-        NSLog(@"[UpdateCheck] 当前版本: %@, 最新版本: %@", currentVersion, latestVersion);
+        NSLog(@"[UpdateCheck] Current version: %@, Latest version: %@", currentVersion, latestVersion);
         
         dispatch_async(dispatch_get_main_queue(), ^{
             NSComparisonResult versionComparison = [self compareVersion:currentVersion withVersion:latestVersion];
             
             if (versionComparison == NSOrderedAscending) {
-                // 当前版本小于最新版本
-                NSString *localizedText = localize(@"announcement.new_version_available", @"发现新版本：%@");
+                NSString *localizedText = localize(@"announcement.new_version_available", @"New version available: %@");
                 announcementLabel.text = [NSString stringWithFormat:localizedText, latestVersion];
                 
-                // 强制更新标签布局，确保文本正确显示
                 [announcementLabel setNeedsLayout];
                 [announcementLabel layoutIfNeeded];
                 
-                // 创建下载按钮
                 UIButton *downloadButton = [UIButton buttonWithType:UIButtonTypeSystem];
-                [downloadButton setTitle:localize(@"announcement.download_button", @"前往下载") forState:UIControlStateNormal];
+                [downloadButton setTitle:localize(@"announcement.download_button", @"Go to Download") forState:UIControlStateNormal];
                 
-                // 设置按钮样式 - 支持iOS14.0
                 if (@available(iOS 13.0, *)) {
                     downloadButton.backgroundColor = [UIColor systemBlueColor];
                 } else {
@@ -813,16 +785,13 @@
                 downloadButton.layer.cornerRadius = 8;
                 downloadButton.translatesAutoresizingMaskIntoConstraints = NO;
                 
-                // 添加按钮阴影
                 downloadButton.layer.shadowColor = [UIColor blackColor].CGColor;
                 downloadButton.layer.shadowOffset = CGSizeMake(0, 2);
                 downloadButton.layer.shadowRadius = 4;
                 downloadButton.layer.shadowOpacity = 0.2;
                 
-                // 添加按钮点击效果
                 downloadButton.layer.masksToBounds = NO;
                 
-                // 添加下载图标
                 if (@available(iOS 13.0, *)) {
                     UIImage *downloadImage = [UIImage systemImageNamed:@"arrow.down.circle.fill"];
                     [downloadButton setImage:downloadImage forState:UIControlStateNormal];
@@ -835,10 +804,8 @@
                 
                 [announcementContainer addSubview:downloadButton];
                 
-                // 存储下载按钮引用
                 self.downloadButton = downloadButton;
                 
-                // 设置下载按钮约束
                 [NSLayoutConstraint activateConstraints:@[
                     [downloadButton.topAnchor constraintEqualToAnchor:announcementLabel.bottomAnchor constant:8],
                     [downloadButton.leadingAnchor constraintEqualToAnchor:announcementContainer.leadingAnchor constant:8],
@@ -847,13 +814,10 @@
                     [downloadButton.bottomAnchor constraintEqualToAnchor:announcementContainer.bottomAnchor constant:-10]
                 ]];
                 
-                // 调整容器高度以适应按钮
                 [self adjustAnnouncementContainerHeight:announcementContainer forLabel:announcementLabel withButton:downloadButton];
             } else {
-                // 当前版本大于或等于最新版本
-                announcementLabel.text = localize(@"announcement.latest_version", @"欢迎使用Amethyst iOS Remastered！当前已是最新正式版。");
+                announcementLabel.text = localize(@"announcement.latest_version", @"Welcome to Amethyst iOS Remastered! Current version is up to date.");
                 
-                // 强制更新标签布局，确保文本正确显示
                 [announcementLabel setNeedsLayout];
                 [announcementLabel layoutIfNeeded];
                 
