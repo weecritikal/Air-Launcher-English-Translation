@@ -24,7 +24,7 @@
     [facetString appendString:@"["];
     [facetString appendFormat:@"[\"project_type:%@\"]", searchFilters[@"isModpack"].boolValue ? @"modpack" : @"mod"];
     if (searchFilters[@"mcVersion"].length > 0) {
-        [facetString appendFormat:@",[\"versions:%@\"]", searchFilters[@"mcVersion"]];
+        [facetString appendFormat:@", [\"versions:%@\"]", searchFilters[@"mcVersion"]];
     }
     [facetString appendString:@"]"];
 
@@ -147,6 +147,129 @@
     [task resume];
 }
 
+#pragma mark - Shader Search
+
+- (void)searchShaderWithFilters:(NSDictionary *)filters completion:(void (^)(NSArray * _Nullable results, NSError * _Nullable error))completion {
+    NSString *query = filters[@"name"] ?: @"";
+    if (query.length == 0) {
+        if (completion) completion(@[], nil);
+        return;
+    }
+
+    // Modrinth project type: shader
+    NSString *encodedQuery = [query stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
+    NSString *urlString = [NSString stringWithFormat:@"%@/search?query=%@&limit=50&offset=0&facets=[[%%22project_type:shader%%22]]", self.baseURL, encodedQuery];
+
+    NSURL *url = [NSURL URLWithString:urlString];
+    if (!url) {
+        if (completion) completion(nil, [NSError errorWithDomain:@"ModrinthAPIError" code:2 userInfo:@{NSLocalizedDescriptionKey: @"Invalid URL"}]);
+        return;
+    }
+
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+    [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
+    [request setValue:@"Amethyst-iOS/1.0" forHTTPHeaderField:@"User-Agent"];
+
+    NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithRequest:request completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
+        if (error) {
+            if (completion) completion(nil, error);
+            return;
+        }
+
+        if (!data) {
+            if (completion) completion(nil, [NSError errorWithDomain:@"ModrinthAPIError" code:3 userInfo:@{NSLocalizedDescriptionKey: @"No data received"}]);
+            return;
+        }
+
+        NSError *jsonError = nil;
+        NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
+
+        if (jsonError || ![json isKindOfClass:[NSDictionary class]]) {
+            if (completion) completion(nil, jsonError ?: [NSError errorWithDomain:@"ModrinthAPIError" code:4 userInfo:@{NSLocalizedDescriptionKey: @"Invalid JSON response"}]);
+            return;
+        }
+
+        NSArray *hits = json[@"hits"];
+        if (![hits isKindOfClass:[NSArray class]]) {
+            if (completion) completion(@[], nil);
+            return;
+        }
+
+        NSMutableArray *results = [NSMutableArray array];
+        for (NSDictionary *item in hits) {
+            if (![item isKindOfClass:[NSDictionary class]]) continue;
+
+            NSMutableDictionary *shaderData = [NSMutableDictionary dictionary];
+            shaderData[@"id"] = item[@"project_id"] ?: item[@"slug"] ?: @"";
+            shaderData[@"title"] = item[@"title"] ?: @"Unknown";
+            shaderData[@"description"] = item[@"description"] ?: @"";
+            shaderData[@"author"] = item[@"author"] ?: @"Unknown";
+            shaderData[@"downloads"] = item[@"downloads"] ?: @0;
+            shaderData[@"likes"] = item[@"follows"] ?: @0;
+            shaderData[@"imageUrl"] = item[@"icon_url"] ?: @"";
+            shaderData[@"categories"] = item[@"categories"] ?: @[];
+            shaderData[@"lastUpdated"] = item[@"date_modified"] ?: @"";
+
+            [results addObject:shaderData];
+        }
+
+        if (completion) completion(results, nil);
+    }];
+
+    [task resume];
+}
+
+- (void)getVersionsForShaderWithID:(NSString *)shaderID completion:(void (^)(NSArray<ShaderVersion *> * _Nullable versions, NSError * _Nullable error))completion {
+    if (!shaderID || shaderID.length == 0) {
+        if (completion) completion(nil, [NSError errorWithDomain:@"ModrinthAPIError" code:1 userInfo:@{NSLocalizedDescriptionKey: @"Invalid shader ID"}]);
+        return;
+    }
+
+    NSString *urlString = [NSString stringWithFormat:@"%@/project/%@/version", self.baseURL, shaderID];
+    NSURL *url = [NSURL URLWithString:urlString];
+
+    if (!url) {
+        if (completion) completion(nil, [NSError errorWithDomain:@"ModrinthAPIError" code:2 userInfo:@{NSLocalizedDescriptionKey: @"Invalid URL"}]);
+        return;
+    }
+
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+    [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
+    [request setValue:@"Amethyst-iOS/1.0" forHTTPHeaderField:@"User-Agent"];
+
+    NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithRequest:request completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
+        if (error) {
+            if (completion) completion(nil, error);
+            return;
+        }
+
+        if (!data) {
+            if (completion) completion(nil, [NSError errorWithDomain:@"ModrinthAPIError" code:3 userInfo:@{NSLocalizedDescriptionKey: @"No data received"}]);
+            return;
+        }
+
+        NSError *jsonError = nil;
+        NSArray *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
+
+        if (jsonError || ![json isKindOfClass:[NSArray class]]) {
+            if (completion) completion(nil, jsonError ?: [NSError errorWithDomain:@"ModrinthAPIError" code:4 userInfo:@{NSLocalizedDescriptionKey: @"Invalid JSON response"}]);
+            return;
+        }
+
+        NSMutableArray<ShaderVersion *> *versions = [NSMutableArray array];
+        for (NSDictionary *dict in json) {
+            ShaderVersion *version = [[ShaderVersion alloc] initWithDictionary:dict];
+            if (version) {
+                [versions addObject:version];
+            }
+        }
+
+        if (completion) completion(versions, nil);
+    }];
+
+    [task resume];
+}
+
 - (void)downloader:(MinecraftResourceDownloadTask *)downloader submitDownloadTasksFromPackage:(NSString *)packagePath toPath:(NSString *)destPath {
     NSError *error;
     UZKArchive *archive = [[UZKArchive alloc] initWithPath:packagePath error:&error];
@@ -164,12 +287,6 @@
 
     downloader.progress.totalUnitCount = [indexDict[@"files"] count];
     for (NSDictionary *indexFile in indexDict[@"files"]) {
-/*
-        if ([indexFile[@"downloads"] count] > 1) {
-            [downloader finishDownloadWithErrorString:[NSString stringWithFormat:@"Unhandled multiple files download %@", indexFile[@"downloads"]]];
-            return;
-        }
-*/
         NSString *url = [indexFile[@"downloads"] firstObject];
         NSString *sha = indexFile[@"hashes"][@"sha1"];
         NSString *path = [destPath stringByAppendingPathComponent:indexFile[@"path"]];
