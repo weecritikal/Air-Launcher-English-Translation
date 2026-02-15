@@ -1,5 +1,5 @@
 #import "ModVersionViewController.h"
-#import "ModrinthAPI.h"
+#import "installer/modpack/ModrinthAPI.h"
 #import "ModVersion.h"
 #import "ModVersionTableViewCell.h"
 
