@@ -190,6 +190,7 @@ add_executable(AngelAuraAmethyst
 
   # Mod-related sources (ensure implementations are compiled and linked)
   MarqueeLabel.m
+  ModrinthAPI.m
   ModItem.m
   ModService.m
   ModTableViewCell.m
@@ -198,6 +199,15 @@ add_executable(AngelAuraAmethyst
   ModVersion.m
   ModVersionViewController.m
   ModVersionTableViewCell.m
+
+  # Shader-related sources (newly added for shader pack management)
+  ShaderItem.m
+  ShaderService.m
+  ShaderTableViewCell.m
+  ShaderVersion.m
+  ShaderVersionTableViewCell.m
+  ShaderVersionViewController.m
+  ShadersManagerViewController.m
 
   # Custom icon management sources
   CustomIconManager.m
@@ -257,7 +267,7 @@ if(MINIZIP_ENABLED AND EXISTS "${MINIZIP_DIR}")
   endif()
 else()
   if(EXISTS "${MINIZIP_DIR}")
-    message(STATUS "minizip folder found but MINIZIP_ENABLED is OFF — skipping compilation.")
+    message(STATUS "minizip folder found but MINIZIP_ENABLED is OFF â skipping compilation.")
   else()
     message(STATUS "minizip folder not found, skipping minizip compilation.")
   endif()
