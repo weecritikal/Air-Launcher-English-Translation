@@ -6,7 +6,7 @@
 //
 
 #import "ShaderVersionViewController.h"
-#import "ModrinthAPI.h"
+#import "installer/modpack/ModrinthAPI.h"
 #import "ShaderVersion.h"
 #import "ShaderVersionTableViewCell.h"
 
