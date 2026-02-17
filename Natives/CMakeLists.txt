@@ -199,7 +199,7 @@ add_executable(AngelAuraAmethyst
   ModVersionViewController.m
   ModVersionTableViewCell.m
 
-  # Shader-related sources (newly added for shader pack management)
+  # Shader-related sources
   ShaderItem.m
   ShaderService.m
   ShaderTableViewCell.m
@@ -207,6 +207,10 @@ add_executable(AngelAuraAmethyst
   ShaderVersionTableViewCell.m
   ShaderVersionViewController.m
   ShadersManagerViewController.m
+
+  # Modpack import sources
+  ModpackImportViewController.m
+  ModpackImportService.m
 
   # Custom icon management sources
   CustomIconManager.m
