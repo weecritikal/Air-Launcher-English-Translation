@@ -10,6 +10,7 @@
 #import "LauncherProfilesViewController.h"
 #import "ModsManagerViewController.h"
 #import "ShadersManagerViewController.h"
+#import "ModpackImportViewController.h"
 #import "PLProfiles.h"
 #import "UIButton+AFNetworking.h"
 #import "UIImageView+AFNetworking.h"
@@ -108,6 +109,18 @@
         [self presentViewController:nav animated:YES completion:nil];
     }]];
 
+    // Modpack Import entry
+    [self.options addObject:
+     (id)[LauncherMenuCustomItem
+          title:@"Import Modpack"
+          imageName:@"archivebox" action:^{
+        ModpackImportViewController *modpackVC = [[ModpackImportViewController alloc] init];
+        modpackVC.profileName = PLProfiles.current.selectedProfileName;
+        UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:modpackVC];
+        nav.modalPresentationStyle = UIModalPresentationFormSheet;
+        [self presentViewController:nav animated:YES completion:nil];
+    }]];
+
     // TODO: Finish log-uploading service integration
     [self.options addObject:
      (id)[LauncherMenuCustomItem
@@ -190,10 +203,10 @@
     // Create announcement banner
     UILabel *announcementLabel = [[UILabel alloc] init];
     announcementLabel.textAlignment = NSTextAlignmentLeft;
-    announcementLabel.textColor = [UIColor labelColor]; // Use system label color for dark mode support
+    announcementLabel.textColor = [UIColor labelColor];
     announcementLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
     announcementLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    announcementLabel.numberOfLines = 0; // Allow multi-line text
+    announcementLabel.numberOfLines = 0;
     
     // Create announcement container view
     UIView *announcementContainer = [[UIView alloc] init];
