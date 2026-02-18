@@ -225,7 +225,11 @@
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"ModpackCell" forIndexPath:indexPath];
+    // 修复：使用 UITableViewCellStyleSubtitle 样式以显示 detailTextLabel
+    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"ModpackCell"];
+    if (!cell) {
+        cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:@"ModpackCell"];
+    }
     
     NSDictionary *modpack = self.importedModpacks[indexPath.row];
     
