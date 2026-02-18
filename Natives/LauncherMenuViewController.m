@@ -17,7 +17,6 @@
 #import "UIKit+hook.h"
 #import "ios_uikit_bridge.h"
 #import "utils.h"
-
 #include <dlfcn.h>
 
 @implementation LauncherMenuCustomItem
@@ -58,7 +57,6 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    
     self.isInitialVc = YES;
     
     UIImageView *titleView = [[UIImageView alloc] initWithImage:[UIImage imageNamed:@"AppLogo"]];
@@ -71,108 +69,112 @@
         [LauncherMenuCustomItem vcClass:LauncherProfilesViewController.class],
         [LauncherMenuCustomItem vcClass:LauncherPreferencesViewController.class],
     ].mutableCopy;
+    
     if (realUIIdiom != UIUserInterfaceIdiomTV) {
         [self.options addObject:(id)[LauncherMenuCustomItem
-                                     title:localize(@"launcher.menu.custom_controls", nil)
-                                     imageName:@"MenuCustomControls" action:^{
-            [contentNavigationController performSelector:@selector(enterCustomControls)];
-        }]];
+            title:localize(@"launcher.menu.custom_controls", nil)
+            imageName:@"MenuCustomControls" action:^{
+                [contentNavigationController performSelector:@selector(enterCustomControls)];
+            }]];
     }
+    
     [self.options addObject:
-     (id)[LauncherMenuCustomItem
-          title:localize(@"launcher.menu.execute_jar", nil)
-          imageName:@"MenuInstallJar" action:^{
-        [contentNavigationController performSelector:@selector(enterModInstaller)];
-    }]];
-
+        (id)[LauncherMenuCustomItem
+            title:localize(@"launcher.menu.execute_jar", nil)
+            imageName:@"MenuInstallJar" action:^{
+                [contentNavigationController performSelector:@selector(enterModInstaller)];
+            }]];
+    
     // Mod Manager entry
     [self.options addObject:
-     (id)[LauncherMenuCustomItem
-          title:@"Manage Mods"
-          imageName:@"puzzlepiece.extension" action:^{
-        ModsManagerViewController *modsVC = [[ModsManagerViewController alloc] init];
-        modsVC.profileName = PLProfiles.current.selectedProfileName;
-        UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:modsVC];
-        nav.modalPresentationStyle = UIModalPresentationFormSheet;
-        [self presentViewController:nav animated:YES completion:nil];
-    }]];
-
+        (id)[LauncherMenuCustomItem
+            title:@"Manage Mods"
+            imageName:@"puzzlepiece.extension" action:^{
+                ModsManagerViewController *modsVC = [[ModsManagerViewController alloc] init];
+                modsVC.profileName = PLProfiles.current.selectedProfileName;
+                UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:modsVC];
+                nav.modalPresentationStyle = UIModalPresentationFormSheet;
+                [self presentViewController:nav animated:YES completion:nil];
+            }]];
+    
     // Shader Manager entry
     [self.options addObject:
-     (id)[LauncherMenuCustomItem
-          title:@"Manage Shaders"
-          imageName:@"photo" action:^{
-        ShadersManagerViewController *shadersVC = [[ShadersManagerViewController alloc] init];
-        shadersVC.profileName = PLProfiles.current.selectedProfileName;
-        UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:shadersVC];
-        nav.modalPresentationStyle = UIModalPresentationFormSheet;
-        [self presentViewController:nav animated:YES completion:nil];
-    }]];
-
+        (id)[LauncherMenuCustomItem
+            title:@"Manage Shaders"
+            imageName:@"photo" action:^{
+                ShadersManagerViewController *shadersVC = [[ShadersManagerViewController alloc] init];
+                shadersVC.profileName = PLProfiles.current.selectedProfileName;
+                UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:shadersVC];
+                nav.modalPresentationStyle = UIModalPresentationFormSheet;
+                [self presentViewController:nav animated:YES completion:nil];
+            }]];
+    
     // Modpack Import entry
     [self.options addObject:
-     (id)[LauncherMenuCustomItem
-          title:@"Import Modpack"
-          imageName:@"archivebox" action:^{
-        ModpackImportViewController *modpackVC = [[ModpackImportViewController alloc] init];
-        modpackVC.profileName = PLProfiles.current.selectedProfileName;
-        UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:modpackVC];
-        nav.modalPresentationStyle = UIModalPresentationFormSheet;
-        [self presentViewController:nav animated:YES completion:nil];
-    }]];
-
+        (id)[LauncherMenuCustomItem
+            title:@"Import Modpack"
+            imageName:@"archivebox" action:^{
+                ModpackImportViewController *modpackVC = [[ModpackImportViewController alloc] init];
+                modpackVC.profileName = PLProfiles.current.selectedProfileName;
+                UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:modpackVC];
+                nav.modalPresentationStyle = UIModalPresentationFormSheet;
+                [self presentViewController:nav animated:YES completion:nil];
+            }]];
+    
     // TODO: Finish log-uploading service integration
     [self.options addObject:
-     (id)[LauncherMenuCustomItem
-          title:localize(@"login.menu.sendlogs", nil)
-          imageName:@"square.and.arrow.up" action:^{
-        NSString *latestlogPath = [NSString stringWithFormat:@"file://%s/latestlog.old.txt", getenv("POJAV_HOME")];
-        NSLog(@"Path is %@", latestlogPath);
-        UIActivityViewController *activityVC;
-        if (realUIIdiom != UIUserInterfaceIdiomTV) {
-            activityVC = [[UIActivityViewController alloc]
-                          initWithActivityItems:@[[NSURL URLWithString:latestlogPath]]
-                          applicationActivities:nil];
-        } else {
-            dlopen("/System/Library/PrivateFrameworks/SharingUI.framework/SharingUI", RTLD_GLOBAL);
-            activityVC =
-            [[NSClassFromString(@"SFAirDropSharingViewControllerTV") alloc]
-             performSelector:@selector(initWithSharingItems:)
-             withObject:@[[NSURL URLWithString:latestlogPath]]];
-        }
-        activityVC.popoverPresentationController.sourceView = titleView;
-        activityVC.popoverPresentationController.sourceRect = titleView.bounds;
-        [self presentViewController:activityVC animated:YES completion:nil];
-    }]];
+        (id)[LauncherMenuCustomItem
+            title:localize(@"login.menu.sendlogs", nil)
+            imageName:@"square.and.arrow.up" action:^{
+                NSString *latestlogPath = [NSString stringWithFormat:@"file://%s/latestlog.old.txt", getenv("POJAV_HOME")];
+                NSLog(@"Path is %@", latestlogPath);
+                UIActivityViewController *activityVC;
+                if (realUIIdiom != UIUserInterfaceIdiomTV) {
+                    activityVC = [[UIActivityViewController alloc]
+                        initWithActivityItems:@[[NSURL URLWithString:latestlogPath]]
+                        applicationActivities:nil];
+                } else {
+                    dlopen("/System/Library/PrivateFrameworks/SharingUI.framework/SharingUI", RTLD_GLOBAL);
+                    activityVC =
+                        [[NSClassFromString(@"SFAirDropSharingViewControllerTV") alloc]
+                            performSelector:@selector(initWithSharingItems:)
+                            withObject:@[[NSURL URLWithString:latestlogPath]]];
+                }
+                activityVC.popoverPresentationController.sourceView = titleView;
+                activityVC.popoverPresentationController.sourceRect = titleView.bounds;
+                [self presentViewController:activityVC animated:YES completion:nil];
+            }]];
     
     NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
     dateFormatter.dateFormat = @"MM-dd";
-    NSString* date = [dateFormatter stringFromDate:NSDate.date];
+    NSString *date = [dateFormatter stringFromDate:NSDate.date];
+    
     if([date isEqualToString:@"06-29"] || [date isEqualToString:@"06-30"] || [date isEqualToString:@"07-01"]) {
         [self.options addObject:(id)[LauncherMenuCustomItem
-                                     title:@"Technoblade never dies!"
-                                     imageName:@"" action:^{
-            openLink(self, [NSURL URLWithString:@"https://www.bilibili.com/video/BV1RG411s7fw"]);
-        }]];
+            title:@"Technoblade never dies!"
+            imageName:@"" action:^{
+                openLink(self, [NSURL URLWithString:@"https://www.bilibili.com/video/BV1RG411s7fw"]);
+            }]];
     }
     
     // Fogg05 Easter Egg - Display on Dec 27, 28, 29
     if([date isEqualToString:@"12-27"] || [date isEqualToString:@"12-28"] || [date isEqualToString:@"12-29"]) {
         [self.options addObject:(id)[LauncherMenuCustomItem
-                                     title:@"To the one who colored the blocks"
-                                     imageName:@"" action:^{
-            NSString *urlString = @"https://wiki.easecation.net/é¶é¾05_Fogg05";
-            NSString *encodedUrlString = [urlString stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLPathAllowedCharacterSet]];
-            openLink(self, [NSURL URLWithString:encodedUrlString]);
-        }]];
+            title:@"To the one who colored the blocks"
+            imageName:@"" action:^{
+                NSString *urlString = @"https://wiki.easecation.net/零雾05_Fogg05";
+                NSString *encodedUrlString = [urlString stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLPathAllowedCharacterSet]];
+                openLink(self, [NSURL URLWithString:encodedUrlString]);
+            }]];
     }
     
     self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
-    
     self.navigationController.toolbarHidden = NO;
+    
     UIActivityIndicatorViewStyle indicatorStyle = UIActivityIndicatorViewStyleMedium;
     UIActivityIndicatorView *toolbarIndicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:indicatorStyle];
     [toolbarIndicator startAnimating];
+    
     self.toolbarItems = @[
         [[UIBarButtonItem alloc] initWithCustomView:toolbarIndicator],
         [[UIBarButtonItem alloc] init]
@@ -181,7 +183,6 @@
     
     // Setup the account button
     self.accountBtnItem = [self drawAccountButton];
-    
     [self updateAccountInfo];
     
     NSUInteger initialIndex = 0;
@@ -193,6 +194,7 @@
             break;
         }
     }
+    
     NSIndexPath *indexPath = [NSIndexPath indexPathForRow:initialIndex inSection:0];
     [self.tableView selectRowAtIndexPath:indexPath animated:YES scrollPosition:UITableViewScrollPositionNone];
     [self tableView:self.tableView didSelectRowAtIndexPath:indexPath];
@@ -258,7 +260,6 @@
             infoIcon.image = circleImage;
         }
     }
-    
     [announcementContainer addSubview:infoIcon];
     
     // Add announcement label to container
@@ -285,7 +286,6 @@
     // Set announcement container constraints - adapt to sidebar layout
     NSLayoutConstraint *heightConstraint = [announcementContainer.heightAnchor constraintEqualToConstant:60];
     self.announcementContainerHeightConstraint = heightConstraint;
-    
     [NSLayoutConstraint activateConstraints:@[
         [announcementContainer.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:8],
         [announcementContainer.leadingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.leadingAnchor constant:8],
@@ -319,6 +319,7 @@
             [self enableJITWithAltKit];
         }
     }
+    
     // DISABLED: JIT installation check popup for enterprise certificate testing
     // The popup that shows "Unsupported installation method" has been removed
     // to allow testing with enterprise certificates
@@ -359,15 +360,14 @@
         self.accountButton = [UIButton buttonWithType:UIButtonTypeCustom];
         [self.accountButton addTarget:self action:@selector(selectAccount:) forControlEvents:UIControlEventPrimaryActionTriggered];
         self.accountButton.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeft;
-
+        
         self.accountButton.titleEdgeInsets = UIEdgeInsetsMake(0, 4, 0, -4);
         self.accountButton.imageView.contentMode = UIViewContentModeScaleAspectFit;
         self.accountButton.titleLabel.lineBreakMode = NSLineBreakByWordWrapping;
+        
         self.accountBtnItem = [[UIBarButtonItem alloc] initWithCustomView:self.accountButton];
     }
-
     [self updateAccountInfo];
-    
     return self.accountBtnItem;
 }
 
@@ -377,45 +377,50 @@
     [self.tableView selectRowAtIndexPath:indexPath animated:NO scrollPosition:UITableViewScrollPositionNone];
 }
 
-- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section
-{
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     return self.options.count;
 }
 
-- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath
-{
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"cell"];
     if (cell == nil) {
         cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:@"cell"];
     }
-
+    
     cell.textLabel.text = [self.options[indexPath.row] title];
     
-    UIImage *origImage = [UIImage systemImageNamed:[self.options[indexPath.row]
-        performSelector:@selector(imageName)]];
+    UIImage *origImage = [UIImage systemImageNamed:[self.options[indexPath.row] performSelector:@selector(imageName)]];
     if (origImage) {
-        UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:CGSizeMake(40, 40)];
-        UIImage *image = [renderer imageWithActions:^(UIGraphicsImageRendererContext*_Nonnull myContext) {
-            CGFloat scaleFactor = 40/origImage.size.height;
-            [origImage drawInRect:CGRectMake(20 - origImage.size.width*scaleFactor/2, 0, origImage.size.width*scaleFactor, 40)];
-        }];
+        UIImage *image;
+        if (@available(iOS 10.0, *)) {
+            UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:CGSizeMake(40, 40)];
+            image = [renderer imageWithActions:^(UIGraphicsImageRendererContext * _Nonnull myContext) {
+                CGFloat scaleFactor = 40.0 / origImage.size.height;
+                [origImage drawInRect:CGRectMake(20.0 - (origImage.size.width * scaleFactor / 2.0), 0, origImage.size.width * scaleFactor, 40.0)];
+            }];
+        } else {
+            // Fallback for older iOS versions
+            UIGraphicsBeginImageContextWithOptions(CGSizeMake(40, 40), NO, 0.0);
+            CGFloat scaleFactor = 40.0 / origImage.size.height;
+            [origImage drawInRect:CGRectMake(20.0 - (origImage.size.width * scaleFactor / 2.0), 0, origImage.size.width * scaleFactor, 40.0)];
+            image = UIGraphicsGetImageFromCurrentImageContext();
+            UIGraphicsEndImageContext();
+        }
         cell.imageView.image = [image imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
     }
     
     if (cell.imageView.image == nil) {
         cell.imageView.layer.magnificationFilter = kCAFilterNearest;
         cell.imageView.layer.minificationFilter = kCAFilterNearest;
-        cell.imageView.image = [UIImage imageNamed:[self.options[indexPath.row]
-            performSelector:@selector(imageName)]];
+        cell.imageView.image = [UIImage imageNamed:[self.options[indexPath.row] performSelector:@selector(imageName)]];
         cell.imageView.image = [cell.imageView.image _imageWithSize:CGSizeMake(40, 40)];
     }
+    
     return cell;
 }
 
-- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath
-{
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     LauncherMenuCustomItem *selected = self.options[indexPath.row];
-    
     if (selected.action != nil) {
         [self restoreHighlightedSelection];
         ((LauncherMenuCustomItem *)selected).action();
@@ -436,13 +441,15 @@
 
 - (void)selectAccount:(UIButton *)sender {
     AccountListViewController *vc = [[AccountListViewController alloc] init];
-    vc.whenDelete = ^void(NSString* name) {
+    
+    vc.whenDelete = ^void(NSString *name) {
         if ([name isEqualToString:getPrefObject(@"internal.selected_account")]) {
             BaseAuthenticator.current = nil;
             setPrefObject(@"internal.selected_account", @"");
             [self updateAccountInfo];
         }
     };
+    
     vc.whenItemSelected = ^void() {
         BaseAuthenticator *currentAuth = BaseAuthenticator.current;
         setPrefObject(@"internal.selected_account", currentAuth.authData[@"username"]);
@@ -452,20 +459,23 @@
             [sender sendActionsForControlEvents:UIControlEventPrimaryActionTriggered];
         }
     };
+    
     vc.modalPresentationStyle = UIModalPresentationPopover;
     vc.preferredContentSize = CGSizeMake(350, 250);
-
+    
     UIPopoverPresentationController *popoverController = vc.popoverPresentationController;
     popoverController.sourceView = sender;
     popoverController.sourceRect = sender.bounds;
     popoverController.permittedArrowDirections = UIPopoverArrowDirectionAny;
     popoverController.delegate = vc;
+    
     [self presentViewController:vc animated:YES completion:nil];
 }
 
 - (void)updateAccountInfo {
     BaseAuthenticator *currentAuth = BaseAuthenticator.current;
     NSDictionary *selected = currentAuth.authData;
+    
     CGSize size = CGSizeMake(contentNavigationController.view.frame.size.width, contentNavigationController.view.frame.size.height);
     
     if (selected == nil) {
@@ -478,18 +488,18 @@
         [self.accountButton sizeToFit];
         return;
     }
-
+    
     // Remove the prefix "Demo." if there is
     BOOL isDemo = [selected[@"username"] hasPrefix:@"Demo."];
-    NSMutableAttributedString *title = [[NSMutableAttributedString alloc] initWithString:[selected[@"username"] substringFromIndex:(isDemo?5:0)]];
-
+    NSMutableAttributedString *title = [[NSMutableAttributedString alloc] initWithString:[selected[@"username"] substringFromIndex:(isDemo ? 5 : 0)]];
+    
     // Check if we're switching between demo and full mode
-    BOOL shouldUpdateProfiles = (getenv("DEMO_LOCK")!=NULL) != isDemo;
-
+    BOOL shouldUpdateProfiles = (getenv("DEMO_LOCK") != NULL) != isDemo;
+    
     // Reset states
     unsetenv("DEMO_LOCK");
     setenv("POJAV_GAME_DIR", [NSString stringWithFormat:@"%s/Library/Application Support/minecraft", getenv("POJAV_HOME")].UTF8String, 1);
-
+    
     id subtitle;
     if (isDemo) {
         subtitle = localize(@"login.option.demo", nil);
@@ -504,7 +514,7 @@
         // Display the Xbox gamertag for online accounts
         subtitle = selected[@"xboxGamertag"];
     }
-
+    
     subtitle = [[NSAttributedString alloc] initWithString:subtitle attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12]}];
     [title appendAttributedString:[[NSAttributedString alloc] initWithString:@"\n" attributes:nil]];
     [title appendAttributedString:subtitle];
@@ -521,13 +531,13 @@
     [self.accountButton setImageForState:UIControlStateNormal withURL:url placeholderImage:placeholder];
     [self.accountButton.imageView setImageWithURL:url placeholderImage:placeholder];
     [self.accountButton sizeToFit];
-
+    
     // Update profiles and local version list if needed
     if (shouldUpdateProfiles) {
         [contentNavigationController fetchLocalVersionList];
         [contentNavigationController performSelector:@selector(reloadProfileList)];
     }
-
+    
     // Update tableView whenever we have
     UITableViewController *tableVC = contentNavigationController.viewControllers.lastObject;
     if ([tableVC isKindOfClass:UITableViewController.class]) {
@@ -550,7 +560,9 @@
             NSLog(@"[AltKit] Could not auto-connect to server. %@", error.localizedRecoverySuggestion);
             [self displayProgress:localize(@"login.jit.fail", nil)];
             [self displayProgress:nil];
+            return;
         }
+        
         [connection enableUnsignedCodeExecutionWithCompletionHandler:^(BOOL success, NSError *error) {
             if (success) {
                 NSLog(@"[AltKit] Successfully enabled JIT compilation!");
@@ -600,7 +612,6 @@
 - (void)downloadLatestVersion:(UIButton *)sender {
     NSString *urlString = @"https://github.com/herbrine8403/Amethyst-iOS-MyRemastered/releases/latest";
     NSURL *url = [NSURL URLWithString:urlString];
-    
     if ([[UIApplication sharedApplication] canOpenURL:url]) {
         [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:nil];
     }
@@ -623,7 +634,6 @@
     
     CGSize labelSize = [label sizeThatFits:CGSizeMake(maxWidth, CGFLOAT_MAX)];
     CGFloat labelHeight = labelSize.height;
-    
     CGFloat containerHeight = MAX(44, labelHeight + 24);
     
     if (self.announcementContainerHeightConstraint) {
@@ -653,7 +663,6 @@
     
     CGSize labelSize = [label sizeThatFits:CGSizeMake(maxWidth, CGFLOAT_MAX)];
     CGFloat labelHeight = labelSize.height;
-    
     CGFloat containerHeight = MAX(72, labelHeight + 12 + 8 + 30 + 10);
     
     if (self.announcementContainerHeightConstraint) {
@@ -668,12 +677,13 @@
 
 // Check for updates (using HTML parsing to avoid GitHub API rate limits)
 - (void)checkForUpdateWithCurrentVersion:(NSString *)currentVersion
-                        announcementLabel:(UILabel *)announcementLabel
-                      announcementContainer:(UIView *)announcementContainer
-                                retryCount:(NSInteger)retryCount {
-    NSInteger maxRetries = 2;
+                       announcementLabel:(UILabel *)announcementLabel
+                     announcementContainer:(UIView *)announcementContainer
+                              retryCount:(NSInteger)retryCount {
     
+    NSInteger maxRetries = 2;
     NSURL *url = [NSURL URLWithString:@"https://github.com/herbrine8403/Amethyst-iOS-MyRemastered/releases/latest"];
+    
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
     request.timeoutInterval = 15.0;
     
@@ -684,9 +694,9 @@
             if (retryCount < maxRetries) {
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * (retryCount + 1) * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                     [self checkForUpdateWithCurrentVersion:currentVersion
-                                          announcementLabel:announcementLabel
-                                        announcementContainer:announcementContainer
-                                                  retryCount:retryCount + 1];
+                                       announcementLabel:announcementLabel
+                                     announcementContainer:announcementContainer
+                                              retryCount:retryCount + 1];
                 });
                 return;
             }
@@ -707,9 +717,9 @@
             if (retryCount < maxRetries) {
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * (retryCount + 1) * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                     [self checkForUpdateWithCurrentVersion:currentVersion
-                                          announcementLabel:announcementLabel
-                                        announcementContainer:announcementContainer
-                                                  retryCount:retryCount + 1];
+                                       announcementLabel:announcementLabel
+                                     announcementContainer:announcementContainer
+                                              retryCount:retryCount + 1];
                 });
                 return;
             }
@@ -729,9 +739,9 @@
             if (retryCount < maxRetries) {
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * (retryCount + 1) * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                     [self checkForUpdateWithCurrentVersion:currentVersion
-                                          announcementLabel:announcementLabel
-                                        announcementContainer:announcementContainer
-                                                  retryCount:retryCount + 1];
+                                       announcementLabel:announcementLabel
+                                     announcementContainer:announcementContainer
+                                              retryCount:retryCount + 1];
                 });
                 return;
             }
