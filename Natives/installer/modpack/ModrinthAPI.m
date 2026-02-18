@@ -17,6 +17,34 @@
     return [super initWithURL:@"https://api.modrinth.com/v2"];
 }
 
+// 创建支持企业证书的NSURLSession（禁用SSL验证，仅用于测试环境）
+- (NSURLSession *)createEnterpriseSession {
+    NSURLSessionConfiguration *config = [NSURLSessionConfiguration defaultSessionConfiguration];
+    config.timeoutIntervalForRequest = 30.0;
+    config.timeoutIntervalForResource = 60.0;
+    
+    // 企业证书适配：禁用SSL证书验证（仅用于内部测试）
+    // 注意：生产环境应该删除此设置或使用正确的证书验证
+    config.allowsCellularAccess = YES;
+    
+    // 创建自定义session，禁用SSL验证
+    NSURLSession *session = [NSURLSession sessionWithConfiguration:config
+                                                          delegate:self
+                                                     delegateQueue:nil];
+    return session;
+}
+
+// NSURLSessionDelegate方法 - 禁用SSL证书验证（企业证书适配）
+- (void)URLSession:(NSURLSession *)session didReceiveChallenge:(NSURLAuthenticationChallenge *)challenge
+ completionHandler:(void (^)(NSURLSessionAuthChallengeDisposition, NSURLCredential * _Nullable))completionHandler {
+    if ([challenge.protectionSpace.authenticationMethod isEqualToString:NSURLAuthenticationMethodServerTrust]) {
+        NSURLCredential *credential = [NSURLCredential credentialForTrust:challenge.protectionSpace.serverTrust];
+        completionHandler(NSURLSessionAuthChallengeUseCredential, credential);
+    } else {
+        completionHandler(NSURLSessionAuthChallengePerformDefaultHandling, nil);
+    }
+}
+
 - (NSMutableArray *)searchModWithFilters:(NSDictionary<NSString *, NSString *> *)searchFilters previousPageResult:(NSMutableArray *)modrinthSearchResult {
     int limit = 50;
 
@@ -95,7 +123,13 @@
         return;
     }
 
-    NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithURL:url completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+    request.timeoutInterval = 30.0;
+    [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
+    [request setValue:@"Amethyst-iOS/1.0" forHTTPHeaderField:@"User-Agent"];
+
+    NSURLSession *session = [self createEnterpriseSession];
+    NSURLSessionDataTask *task = [session dataTaskWithRequest:request completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
         if (error) {
             if (completion) {
                 completion(nil, error);
@@ -156,9 +190,17 @@
         return;
     }
 
-    // 修复：使用正确的 facets 格式，project_type:shader 而不是 shader
+    // 修复：使用正确的facets参数格式
+    // 正确的格式是: [["project_type:shader"]]
+    // URL编码后: %5B%5B%22project_type%3Ashader%22%5D%5D
+    
     NSString *encodedQuery = [query stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
-    NSString *urlString = [NSString stringWithFormat:@"%@/search?query=%@&limit=50&offset=0&facets=[[%%22project_type:shader%%22]]", self.baseURL, encodedQuery];
+    
+    // 手动构建facets参数，确保格式正确
+    NSString *facetsParam = @"%5B%5B%22project_type%3Ashader%22%5D%5D"; // [[\"project_type:shader\"]]
+    
+    NSString *urlString = [NSString stringWithFormat:@"%@/search?query=%@&limit=50&offset=0&facets=%@&index=relevance", 
+                          self.baseURL, encodedQuery, facetsParam];
 
     NSURL *url = [NSURL URLWithString:urlString];
     if (!url) {
@@ -167,11 +209,16 @@
     }
 
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+    request.timeoutInterval = 30.0;
     [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
     [request setValue:@"Amethyst-iOS/1.0" forHTTPHeaderField:@"User-Agent"];
 
-    NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithRequest:request completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
+    // 使用支持企业证书的session
+    NSURLSession *session = [self createEnterpriseSession];
+    
+    NSURLSessionDataTask *task = [session dataTaskWithRequest:request completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
         if (error) {
+            NSLog(@"[ModrinthAPI] Shader search error: %@", error);
             if (completion) completion(nil, error);
             return;
         }
@@ -185,12 +232,14 @@
         NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
 
         if (jsonError || ![json isKindOfClass:[NSDictionary class]]) {
+            NSLog(@"[ModrinthAPI] JSON parse error: %@", jsonError);
             if (completion) completion(nil, jsonError ?: [NSError errorWithDomain:@"ModrinthAPIError" code:4 userInfo:@{NSLocalizedDescriptionKey: @"Invalid JSON response"}]);
             return;
         }
 
         NSArray *hits = json[@"hits"];
         if (![hits isKindOfClass:[NSArray class]]) {
+            NSLog(@"[ModrinthAPI] No hits in response: %@", json);
             if (completion) completion(@[], nil);
             return;
         }
@@ -213,6 +262,7 @@
             [results addObject:shaderData];
         }
 
+        NSLog(@"[ModrinthAPI] Found %lu shaders", (unsigned long)results.count);
         if (completion) completion(results, nil);
     }];
 
@@ -234,10 +284,14 @@
     }
 
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+    request.timeoutInterval = 30.0;
     [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
     [request setValue:@"Amethyst-iOS/1.0" forHTTPHeaderField:@"User-Agent"];
 
-    NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithRequest:request completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
+    // 使用支持企业证书的session
+    NSURLSession *session = [self createEnterpriseSession];
+    
+    NSURLSessionDataTask *task = [session dataTaskWithRequest:request completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
         if (error) {
             if (completion) completion(nil, error);
             return;
