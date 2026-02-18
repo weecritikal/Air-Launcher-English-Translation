@@ -42,8 +42,8 @@
 }
 
 - (void)setupFilterControls {
-    self.gameVersionFilterButton = [self createFilterButtonWithTitle:@"Game Version: Loading..."];
-    self.loaderFilterButton = [self createFilterButtonWithTitle:@"Loader: Loading..."];
+    self.gameVersionFilterButton = [self createFilterButtonWithTitle:@"游戏版本: 加载中..."];
+    self.loaderFilterButton = [self createFilterButtonWithTitle:@"加载器: 加载中..."];
 
     UIStackView *filterStackView = [[UIStackView alloc] initWithArrangedSubviews:@[self.gameVersionFilterButton, self.loaderFilterButton]];
     filterStackView.translatesAutoresizingMaskIntoConstraints = NO;
@@ -107,8 +107,8 @@
             [self.activityIndicator stopAnimating];
             if (error) {
                 NSLog(@"[ShaderVersionVC] Error fetching versions: %@", error);
-                UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Error" message:@"Unable to fetch version information" preferredStyle:UIAlertControllerStyleAlert];
-                [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+                UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"错误" message:@"无法获取版本信息" preferredStyle:UIAlertControllerStyleAlert];
+                [alert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
                 [self presentViewController:alert animated:YES completion:nil];
                 return;
             }
@@ -120,8 +120,8 @@
 }
 
 - (void)processFilters {
-    NSMutableSet<NSString *> *gameVersions = [NSMutableSet setWithObject:@"All"];
-    NSMutableSet<NSString *> *loaders = [NSMutableSet setWithObject:@"All"];
+    NSMutableSet<NSString *> *gameVersions = [NSMutableSet setWithObject:@"全部"];
+    NSMutableSet<NSString *> *loaders = [NSMutableSet setWithObject:@"全部"];
 
     for (ShaderVersion *version in self.allVersions) {
         for (NSString *gameVersion in version.gameVersions) {
@@ -134,8 +134,8 @@
 
     // Sort game versions with semantic versioning
     self.availableGameVersions = [[gameVersions allObjects] sortedArrayUsingComparator:^NSComparisonResult(NSString *obj1, NSString *obj2) {
-        if ([obj1 isEqualToString:@"All"]) return NSOrderedAscending;
-        if ([obj2 isEqualToString:@"All"]) return NSOrderedDescending;
+        if ([obj1 isEqualToString:@"全部"]) return NSOrderedAscending;
+        if ([obj2 isEqualToString:@"全部"]) return NSOrderedDescending;
         return [obj2 compare:obj1 options:NSNumericSearch];
     }];
 
@@ -161,8 +161,8 @@
         }
         [gameVersionActions addObject:action];
     }
-    self.gameVersionFilterButton.menu = [UIMenu menuWithTitle:@"Select Game Version" children:gameVersionActions];
-    [self.gameVersionFilterButton setTitle:[NSString stringWithFormat:@"Game Version: %@", self.selectedGameVersion] forState:UIControlStateNormal];
+    self.gameVersionFilterButton.menu = [UIMenu menuWithTitle:@"选择游戏版本" children:gameVersionActions];
+    [self.gameVersionFilterButton setTitle:[NSString stringWithFormat:@"游戏版本: %@", self.selectedGameVersion] forState:UIControlStateNormal];
 
     // Loader Button Menu
     NSMutableArray<UIAction *> *loaderActions = [NSMutableArray array];
@@ -177,8 +177,8 @@
         }
         [loaderActions addObject:action];
     }
-    self.loaderFilterButton.menu = [UIMenu menuWithTitle:@"Select Loader" children:loaderActions];
-    [self.loaderFilterButton setTitle:[NSString stringWithFormat:@"Loader: %@", self.selectedLoader] forState:UIControlStateNormal];
+    self.loaderFilterButton.menu = [UIMenu menuWithTitle:@"选择加载器" children:loaderActions];
+    [self.loaderFilterButton setTitle:[NSString stringWithFormat:@"加载器: %@", self.selectedLoader] forState:UIControlStateNormal];
 }
 
 - (void)filterChanged {
@@ -187,8 +187,8 @@
 
 - (void)filterAndReload {
     NSPredicate *predicate = [NSPredicate predicateWithBlock:^BOOL(ShaderVersion *evaluatedObject, NSDictionary *bindings) {
-        BOOL gameVersionMatch = [self.selectedGameVersion isEqualToString:@"All"] || [evaluatedObject.gameVersions containsObject:self.selectedGameVersion];
-        BOOL loaderMatch = [self.selectedLoader isEqualToString:@"All"] || [evaluatedObject.loaders containsObject:self.selectedLoader.lowercaseString];
+        BOOL gameVersionMatch = [self.selectedGameVersion isEqualToString:@"全部"] || [evaluatedObject.gameVersions containsObject:self.selectedGameVersion];
+        BOOL loaderMatch = [self.selectedLoader isEqualToString:@"全部"] || [evaluatedObject.loaders containsObject:self.selectedLoader.lowercaseString];
         return gameVersionMatch && loaderMatch;
     }];
 
