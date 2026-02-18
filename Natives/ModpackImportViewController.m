@@ -19,6 +19,7 @@
 @property (nonatomic, strong) UIButton *importButton;
 @property (nonatomic, strong) NSMutableArray<NSDictionary *> *importedModpacks;
 @property (nonatomic, strong) ModpackImportService *importService;
+@property (nonatomic, strong) NSDictionary *currentImportingModpack; // 当前正在导入的整合包
 
 @end
 
@@ -151,12 +152,15 @@
             [self.activityIndicator stopAnimating];
             
             if (error) {
-                [self showAlertWithTitle:@"导入失败" message:error.localizedDescription];
+                [self showAlertWithTitle:@"解析失败" message:error.localizedDescription];
                 return;
             }
             
             if (modpackInfo) {
+                self.currentImportingModpack = modpackInfo;
                 [self showModpackImportConfirmation:modpackInfo];
+            } else {
+                [self showAlertWithTitle:@"解析失败" message:@"无法解析整合包文件"];
             }
         });
     });
@@ -187,10 +191,22 @@
                                                                    message:message
                                                             preferredStyle:UIAlertControllerStyleAlert];
     
-    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
-    [alert addAction:[UIAlertAction actionWithTitle:@"导入" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:^(UIAlertAction * _Nonnull action) {
+        self.currentImportingModpack = nil;
+    }];
+    
+    UIAlertAction *importAction = [UIAlertAction actionWithTitle:@"导入" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         [self startModpackImport:modpackInfo];
-    }]];
+    }];
+    
+    [alert addAction:cancelAction];
+    [alert addAction:importAction];
+    
+    // iPad适配
+    if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
+        alert.popoverPresentationController.sourceView = self.view;
+        alert.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(self.view.bounds), CGRectGetMidY(self.view.bounds), 0, 0);
+    }
     
     [self presentViewController:alert animated:YES completion:nil];
 }
@@ -204,6 +220,7 @@
         
         dispatch_async(dispatch_get_main_queue(), ^{
             [self.activityIndicator stopAnimating];
+            self.currentImportingModpack = nil;
             
             if (success) {
                 [self showAlertWithTitle:@"导入成功" 
@@ -212,7 +229,8 @@
                     [self loadImportedModpacks];
                 }];
             } else {
-                [self showAlertWithTitle:@"导入失败" message:error.localizedDescription];
+                NSString *errorMsg = error ? error.localizedDescription : @"未知错误";
+                [self showAlertWithTitle:@"导入失败" message:errorMsg];
             }
         });
     });
@@ -225,7 +243,7 @@
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-    // 修复：使用 UITableViewCellStyleSubtitle 样式以显示 detailTextLabel
+    // 修复：使用UITableViewCellStyleSubtitle样式创建单元格
     UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"ModpackCell"];
     if (!cell) {
         cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:@"ModpackCell"];
@@ -261,17 +279,21 @@
                                                                   preferredStyle:UIAlertControllerStyleActionSheet];
     
     // 启动选项
-    [actionSheet addAction:[UIAlertAction actionWithTitle:@"启动整合包" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+    UIAlertAction *launchAction = [UIAlertAction actionWithTitle:@"启动整合包" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         [self launchModpack:modpack];
-    }]];
+    }];
     
     // 删除选项
-    [actionSheet addAction:[UIAlertAction actionWithTitle:@"删除" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
+    UIAlertAction *deleteAction = [UIAlertAction actionWithTitle:@"删除" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
         [self deleteModpack:modpack];
-    }]];
+    }];
     
     // 取消
-    [actionSheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil];
+    
+    [actionSheet addAction:launchAction];
+    [actionSheet addAction:deleteAction];
+    [actionSheet addAction:cancelAction];
     
     // iPad 适配
     if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
@@ -298,17 +320,29 @@
                                                                      message:[NSString stringWithFormat:@"删除整合包 '%@'？此操作无法撤销。", modpack[@"name"]]
                                                               preferredStyle:UIAlertControllerStyleAlert];
     
-    [confirm addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
-    [confirm addAction:[UIAlertAction actionWithTitle:@"删除" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
-        NSError *error = nil;
-        BOOL success = [self.importService deleteModpack:modpack error:&error];
+    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil];
+    
+    UIAlertAction *confirmDeleteAction = [UIAlertAction actionWithTitle:@"删除" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
+        [self.activityIndicator startAnimating];
         
-        if (success) {
-            [self loadImportedModpacks];
-        } else {
-            [self showAlertWithTitle:@"删除失败" message:error.localizedDescription];
-        }
-    }]];
+        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+            NSError *error = nil;
+            BOOL success = [self.importService deleteModpack:modpack error:&error];
+            
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [self.activityIndicator stopAnimating];
+                
+                if (success) {
+                    [self loadImportedModpacks];
+                } else {
+                    [self showAlertWithTitle:@"删除失败" message:error.localizedDescription];
+                }
+            });
+        });
+    }];
+    
+    [confirm addAction:cancelAction];
+    [confirm addAction:confirmDeleteAction];
     
     [self presentViewController:confirm animated:YES completion:nil];
 }
@@ -323,9 +357,19 @@
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:title
                                                                    message:message
                                                             preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+    
+    UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         if (completion) completion();
-    }]];
+    }];
+    
+    [alert addAction:okAction];
+    
+    // iPad适配
+    if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
+        alert.popoverPresentationController.sourceView = self.view;
+        alert.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(self.view.bounds), CGRectGetMidY(self.view.bounds), 0, 0);
+    }
+    
     [self presentViewController:alert animated:YES completion:nil];
 }
 
