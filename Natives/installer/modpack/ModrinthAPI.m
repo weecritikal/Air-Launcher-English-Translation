@@ -156,7 +156,7 @@
         return;
     }
 
-    // Modrinth project type: shader
+    // 修复：使用正确的 facets 格式，project_type:shader 而不是 shader
     NSString *encodedQuery = [query stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
     NSString *urlString = [NSString stringWithFormat:@"%@/search?query=%@&limit=50&offset=0&facets=[[%%22project_type:shader%%22]]", self.baseURL, encodedQuery];
 
