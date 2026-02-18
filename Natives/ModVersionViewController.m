@@ -35,8 +35,8 @@
 }
 
 - (void)setupFilterControls {
-    self.gameVersionFilterButton = [self createFilterButtonWithTitle:@"æ¸¸æçæ¬: å è½½ä¸­..."];
-    self.loaderFilterButton = [self createFilterButtonWithTitle:@"å è½½å¨: å è½½ä¸­..."];
+    self.gameVersionFilterButton = [self createFilterButtonWithTitle:@"游戏版本: 加载中..."];
+    self.loaderFilterButton = [self createFilterButtonWithTitle:@"加载器: 加载中..."];
 
     UIStackView *filterStackView = [[UIStackView alloc] initWithArrangedSubviews:@[self.gameVersionFilterButton, self.loaderFilterButton]];
     filterStackView.translatesAutoresizingMaskIntoConstraints = NO;
@@ -112,8 +112,8 @@
 }
 
 - (void)processFilters {
-    NSMutableSet<NSString *> *gameVersions = [NSMutableSet setWithObject:@"å¨é¨"];
-    NSMutableSet<NSString *> *loaders = [NSMutableSet setWithObject:@"å¨é¨"];
+    NSMutableSet<NSString *> *gameVersions = [NSMutableSet setWithObject:@"全部"];
+    NSMutableSet<NSString *> *loaders = [NSMutableSet setWithObject:@"全部"];
 
     for (ModVersion *version in self.allVersions) {
         for (NSString *gameVersion in version.gameVersions) {
@@ -126,8 +126,8 @@
 
     // Sort game versions with semantic versioning
     self.availableGameVersions = [[gameVersions allObjects] sortedArrayUsingComparator:^NSComparisonResult(NSString *obj1, NSString *obj2) {
-        if ([obj1 isEqualToString:@"å¨é¨"]) return NSOrderedAscending;
-        if ([obj2 isEqualToString:@"å¨é¨"]) return NSOrderedDescending;
+        if ([obj1 isEqualToString:@"全部"]) return NSOrderedAscending;
+        if ([obj2 isEqualToString:@"全部"]) return NSOrderedDescending;
         return [obj2 compare:obj1 options:NSNumericSearch];
     }];
 
@@ -153,8 +153,8 @@
         }
         [gameVersionActions addObject:action];
     }
-    self.gameVersionFilterButton.menu = [UIMenu menuWithTitle:@"éæ©æ¸¸æçæ¬" children:gameVersionActions];
-    [self.gameVersionFilterButton setTitle:[NSString stringWithFormat:@"æ¸¸æçæ¬: %@", self.selectedGameVersion] forState:UIControlStateNormal];
+    self.gameVersionFilterButton.menu = [UIMenu menuWithTitle:@"选择游戏版本" children:gameVersionActions];
+    [self.gameVersionFilterButton setTitle:[NSString stringWithFormat:@"游戏版本: %@", self.selectedGameVersion] forState:UIControlStateNormal];
 
     // Loader Button Menu
     NSMutableArray<UIAction *> *loaderActions = [NSMutableArray array];
@@ -169,8 +169,8 @@
         }
         [loaderActions addObject:action];
     }
-    self.loaderFilterButton.menu = [UIMenu menuWithTitle:@"éæ©å è½½å¨" children:loaderActions];
-    [self.loaderFilterButton setTitle:[NSString stringWithFormat:@"å è½½å¨: %@", self.selectedLoader] forState:UIControlStateNormal];
+    self.loaderFilterButton.menu = [UIMenu menuWithTitle:@"选择加载器" children:loaderActions];
+    [self.loaderFilterButton setTitle:[NSString stringWithFormat:@"加载器: %@", self.selectedLoader] forState:UIControlStateNormal];
 }
 
 - (void)filterChanged {
@@ -180,8 +180,8 @@
 
 - (void)filterAndReload {
     NSPredicate *predicate = [NSPredicate predicateWithBlock:^BOOL(ModVersion *evaluatedObject, NSDictionary *bindings) {
-        BOOL gameVersionMatch = [self.selectedGameVersion isEqualToString:@"å¨é¨"] || [evaluatedObject.gameVersions containsObject:self.selectedGameVersion];
-        BOOL loaderMatch = [self.selectedLoader isEqualToString:@"å¨é¨"] || [evaluatedObject.loaders containsObject:self.selectedLoader.lowercaseString];
+        BOOL gameVersionMatch = [self.selectedGameVersion isEqualToString:@"全部"] || [evaluatedObject.gameVersions containsObject:self.selectedGameVersion];
+        BOOL loaderMatch = [self.selectedLoader isEqualToString:@"全部"] || [evaluatedObject.loaders containsObject:self.selectedLoader.lowercaseString];
         return gameVersionMatch && loaderMatch;
     }];
 
