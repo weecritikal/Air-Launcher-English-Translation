@@ -177,8 +177,13 @@
 
 - (void)performOnlineSearch {
     NSString *searchText = self.searchBar.text;
-    if (searchText.length == 0) return;
+    if (searchText.length == 0) {
+        self.emptyLabel.text = @"请输入搜索关键词";
+        self.emptyLabel.hidden = NO;
+        return;
+    }
 
+    NSLog(@"[ShadersManager] 开始搜索光影: %@", searchText);
     [self setLoading:YES];
     [self.onlineSearchResults removeAllObjects];
     [self.tableView reloadData];
@@ -187,6 +192,16 @@
 
     [[ModrinthAPI sharedInstance] searchShaderWithFilters:filters completion:^(NSArray * _Nullable results, NSError * _Nullable error) {
         dispatch_async(dispatch_get_main_queue(), ^{
+            if (error) {
+                NSLog(@"[ShadersManager] 搜索错误: %@", error);
+                [self setLoading:NO];
+                self.emptyLabel.text = [NSString stringWithFormat:@"搜索失败: %@", error.localizedDescription];
+                self.emptyLabel.hidden = NO;
+                return;
+            }
+            
+            NSLog(@"[ShadersManager] 搜索结果: %lu 个光影", (unsigned long)results.count);
+            
             if (results) {
                 [self.onlineSearchResults addObjectsFromArray:results];
             }
