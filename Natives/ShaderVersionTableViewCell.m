@@ -95,13 +95,13 @@
         displayFormatter.timeStyle = NSDateFormatterNoStyle;
         self.datePublishedLabel.text = [displayFormatter stringFromDate:date];
     } else {
-        self.datePublishedLabel.text = @"Unknown Date";
+        self.datePublishedLabel.text = @"未知日期";
     }
 
     if (version.primaryFile) {
         self.fileSizeLabel.text = [NSByteCountFormatter stringFromByteCount:[version.primaryFile[@"size"] longValue] countStyle:NSByteCountFormatterCountStyleFile];
     } else {
-        self.fileSizeLabel.text = @"Unknown Size";
+        self.fileSizeLabel.text = @"未知大小";
     }
 
     self.gameVersionsLabel.text = [version.gameVersions componentsJoinedByString:@", "];
