@@ -309,6 +309,7 @@
         [self checkForUpdateWithCurrentVersion:currentVersion announcementLabel:announcementLabel announcementContainer:announcementContainer retryCount:0];
     }
     
+    // JIT check - only for supported installations
     if (getEntitlementValue(@"get-task-allow")) {
         [self displayProgress:localize(@"login.jit.checking", nil)];
         if (isJITEnabled(false)) {
@@ -317,18 +318,10 @@
         } else {
             [self enableJITWithAltKit];
         }
-    } else if (!NSProcessInfo.processInfo.macCatalystApp && !getenv("SIMULATOR_DEVICE_NAME")) {
-        [self displayProgress:localize(@"login.jit.fail", nil)];
-        [self displayProgress:nil];
-        UIAlertController* alert = [UIAlertController alertControllerWithTitle:localize(@"login.jit.fail.title", nil)
-            message:localize(@"login.jit.fail.description_unsupported", nil)
-            preferredStyle:UIAlertControllerStyleAlert];
-        UIAlertAction* okAction = [UIAlertAction actionWithTitle:localize(@"OK", nil) style:UIAlertActionStyleDefault handler:^(id action){
-            exit(-1);
-        }];
-        [alert addAction:okAction];
-        [self presentViewController:alert animated:YES completion:nil];
     }
+    // DISABLED: JIT installation check popup for enterprise certificate testing
+    // The popup that shows "Unsupported installation method" has been removed
+    // to allow testing with enterprise certificates
 }
 
 - (void)viewWillAppear:(BOOL)animated {
