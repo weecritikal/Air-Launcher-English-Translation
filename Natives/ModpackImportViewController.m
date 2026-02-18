@@ -9,6 +9,7 @@
 #import "ModpackImportService.h"
 #import "PLProfiles.h"
 #import "UnzipKit.h"
+#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
 @interface ModpackImportViewController () <UITableViewDataSource, UITableViewDelegate, UIDocumentPickerDelegate>
 
