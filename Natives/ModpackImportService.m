@@ -6,7 +6,7 @@
 //
 
 #import "ModpackImportService.h"
-#import "ModpackUtils.h"
+#import "installer/modpack/ModpackUtils.h"
 #import "PLProfiles.h"
 #import "UnzipKit.h"
 
@@ -376,49 +376,6 @@ static NSString * const kModpacksDirectory = @"modpacks";
     }
     
     // 从保存的列表中移除
-    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    NSMutableArray *modpacks = [[self getImportedModpacks] mutableCopy];
-    
-    NSUInteger index = [modpacks indexOfObjectPassingTest:^BOOL(NSDictionary *obj, NSUInteger idx, BOOL *stop) {
-        return [obj[@"id"] isEqualToString:modpackInfo[@"id"]];
-    }];
-    
-    if (index != NSNotFound) {
-        [modpacks removeObjectAtIndex:index];
-        [defaults setObject:modpacks forKey:kImportedModpacksKey];
-        [defaults synchronize];
-    }
-    
-    return YES;
-}
-
-@end
-dpacks = [[self getImportedModpacks] mutableCopy];
-    [modpacks addObject:modpackInfo];
-    [defaults setObject:modpacks forKey:kImportedModpacksKey];
-    [defaults synchronize];
-}
-
-#pragma mark - Delete Modpack
-
-- (BOOL)deleteModpack:(NSDictionary *)modpackInfo error:(NSError **)error {
-    NSString *modpackDir = modpackInfo[@"modpackDir"];
-    NSString *profileName = modpackInfo[@"profileName"];
-    
-    // Remove modpack directory
-    if (modpackDir && [[NSFileManager defaultManager] fileExistsAtPath:modpackDir]) {
-        if (![[NSFileManager defaultManager] removeItemAtPath:modpackDir error:error]) {
-            return NO;
-        }
-    }
-    
-    // Remove profile
-    if (profileName) {
-        [PLProfiles.current.profiles removeObjectForKey:profileName];
-        [PLProfiles.current saveProfiles];
-    }
-    
-    // Remove from saved list
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     NSMutableArray *modpacks = [[self getImportedModpacks] mutableCopy];
     
