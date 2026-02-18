@@ -2,7 +2,7 @@
 //  ModpackImportService.m
 //  Amethyst
 //
-//  整合包导入服务实现
+//  Modpack import service implementation
 //
 
 #import "ModpackImportService.h"
@@ -31,7 +31,7 @@ static NSString * const kModpacksDirectory = @"modpacks";
     NSString *documentsPath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
     self.modpacksDirectory = [documentsPath stringByAppendingPathComponent:kModpacksDirectory];
     
-    // 如果目录不存在则创建
+    // Create directory if it doesn't exist
     if (![[NSFileManager defaultManager] fileExistsAtPath:self.modpacksDirectory]) {
         [[NSFileManager defaultManager] createDirectoryAtPath:self.modpacksDirectory
                                   withIntermediateDirectories:YES
@@ -40,7 +40,7 @@ static NSString * const kModpacksDirectory = @"modpacks";
     }
 }
 
-#pragma mark - 解析整合包
+#pragma mark - Parse Modpack
 
 - (nullable NSDictionary *)parseModpackAtURL:(NSURL *)fileURL error:(NSError **)error {
     NSString *filePath = fileURL.path;
@@ -50,40 +50,40 @@ static NSString * const kModpacksDirectory = @"modpacks";
         if (error) {
             *error = [NSError errorWithDomain:@"ModpackImportError"
                                          code:1001
-                                     userInfo:@{NSLocalizedDescriptionKey: @"文件不存在"}];
+                                     userInfo:@{NSLocalizedDescriptionKey: @"File does not exist"}];
         }
         return nil;
     }
     
-    // 打开压缩包
+    // Open archive
     NSError *archiveError = nil;
     UZKArchive *archive = [[UZKArchive alloc] initWithPath:filePath error:&archiveError];
     if (archiveError || !archive) {
         if (error) {
             *error = [NSError errorWithDomain:@"ModpackImportError"
                                          code:1002
-                                     userInfo:@{NSLocalizedDescriptionKey: @"无法打开压缩包"}];
+                                     userInfo:@{NSLocalizedDescriptionKey: @"Cannot open archive"}];
         }
         return nil;
     }
     
-    // 尝试解析 modrinth.index.json (Modrinth 格式)
+    // Try parsing modrinth.index.json (Modrinth format)
     NSData *indexData = [archive extractDataFromFile:@"modrinth.index.json" error:&archiveError];
     if (indexData) {
         return [self parseModrinthModpack:archive indexData:indexData filePath:filePath error:error];
     }
     
-    // 尝试解析 manifest.json (CurseForge/通用格式)
+    // Try parsing manifest.json (CurseForge/Generic format)
     NSData *manifestData = [archive extractDataFromFile:@"manifest.json" error:&archiveError];
     if (manifestData) {
         return [self parseManifestModpack:archive manifestData:manifestData filePath:filePath error:error];
     }
     
-    // 如果两种格式都没找到
+    // Neither format found
     if (error) {
         *error = [NSError errorWithDomain:@"ModpackImportError"
                                      code:1003
-                                 userInfo:@{NSLocalizedDescriptionKey: @"无效的整合包格式。缺少 modrinth.index.json 或 manifest.json"}];
+                                 userInfo:@{NSLocalizedDescriptionKey: @"Invalid modpack format. Missing modrinth.index.json or manifest.json"}];
     }
     return nil;
 }
@@ -96,12 +96,12 @@ static NSString * const kModpacksDirectory = @"modpacks";
         if (error) {
             *error = [NSError errorWithDomain:@"ModpackImportError"
                                          code:1004
-                                     userInfo:@{NSLocalizedDescriptionKey: @"无法解析 modrinth.index.json"}];
+                                     userInfo:@{NSLocalizedDescriptionKey: @"Cannot parse modrinth.index.json"}];
         }
         return nil;
     }
     
-    // 提取依赖信息
+    // Extract dependency info
     NSDictionary *dependencies = indexDict[@"dependencies"];
     NSString *minecraftVersion = dependencies[@"minecraft"];
     NSString *loader = nil;
@@ -121,8 +121,8 @@ static NSString * const kModpacksDirectory = @"modpacks";
         loaderVersion = dependencies[@"neoforge"];
     }
     
-    // 获取版本信息
-    NSString *name = indexDict[@"name"] ?: @"未知整合包";
+    // Get version info
+    NSString *name = indexDict[@"name"] ?: @"Unknown Modpack";
     NSString *version = indexDict[@"versionId"] ?: @"1.0.0";
     NSString *modpackId = [NSString stringWithFormat:@"modpack_%@", [[NSUUID UUID] UUIDString]];
     
@@ -131,7 +131,7 @@ static NSString * const kModpacksDirectory = @"modpacks";
         @"name": name,
         @"version": version,
         @"minecraftVersion": minecraftVersion ?: @"unknown",
-        @"loader": loader ?: @"未知",
+        @"loader": loader ?: @"Unknown",
         @"loaderVersion": loaderVersion ?: @"",
         @"filePath": filePath,
         @"format": @"modrinth",
@@ -148,16 +148,16 @@ static NSString * const kModpacksDirectory = @"modpacks";
         if (error) {
             *error = [NSError errorWithDomain:@"ModpackImportError"
                                          code:1005
-                                     userInfo:@{NSLocalizedDescriptionKey: @"无法解析 manifest.json"}];
+                                     userInfo:@{NSLocalizedDescriptionKey: @"Cannot parse manifest.json"}];
         }
         return nil;
     }
     
-    // 提取 Minecraft 版本
+    // Extract Minecraft version
     NSDictionary *minecraft = manifestDict[@"minecraft"];
     NSString *minecraftVersion = minecraft[@"version"];
     
-    // 提取模组加载器信息
+    // Extract mod loader info
     NSArray *modLoaders = minecraft[@"modLoaders"];
     NSString *loader = nil;
     NSString *loaderVersion = nil;
@@ -178,7 +178,7 @@ static NSString * const kModpacksDirectory = @"modpacks";
         }
     }
     
-    NSString *name = manifestDict[@"name"] ?: @"未知整合包";
+    NSString *name = manifestDict[@"name"] ?: @"Unknown Modpack";
     NSString *version = manifestDict[@"version"] ?: @"1.0.0";
     NSString *modpackId = [NSString stringWithFormat:@"modpack_%@", [[NSUUID UUID] UUIDString]];
     
@@ -187,7 +187,7 @@ static NSString * const kModpacksDirectory = @"modpacks";
         @"name": name,
         @"version": version,
         @"minecraftVersion": minecraftVersion ?: @"unknown",
-        @"loader": loader ?: @"未知",
+        @"loader": loader ?: @"Unknown",
         @"loaderVersion": loaderVersion ?: @"",
         @"filePath": filePath,
         @"format": @"curseforge",
@@ -195,7 +195,7 @@ static NSString * const kModpacksDirectory = @"modpacks";
     };
 }
 
-#pragma mark - 导入整合包
+#pragma mark - Import Modpack
 
 - (BOOL)importModpack:(NSDictionary *)modpackInfo error:(NSError **)error {
     NSString *filePath = modpackInfo[@"filePath"];
@@ -205,12 +205,12 @@ static NSString * const kModpacksDirectory = @"modpacks";
         if (error) {
             *error = [NSError errorWithDomain:@"ModpackImportError"
                                          code:2001
-                                     userInfo:@{NSLocalizedDescriptionKey: @"整合包文件不存在"}];
+                                     userInfo:@{NSLocalizedDescriptionKey: @"Modpack file does not exist"}];
         }
         return NO;
     }
     
-    // 为此整合包创建唯一目录
+    // Create unique directory for this modpack
     NSString *modpackId = modpackInfo[@"id"];
     NSString *modpackDir = [self.modpacksDirectory stringByAppendingPathComponent:modpackId];
     
@@ -221,31 +221,31 @@ static NSString * const kModpacksDirectory = @"modpacks";
         return NO;
     }
     
-    // 复制原始文件
+    // Copy original file
     NSString *destFilePath = [modpackDir stringByAppendingPathComponent:[filePath lastPathComponent]];
     if (![[NSFileManager defaultManager] copyItemAtPath:filePath toPath:destFilePath error:error]) {
         return NO;
     }
     
-    // 解压整合包
+    // Extract modpack
     NSError *extractError = nil;
     BOOL extractSuccess = [self extractModpack:destFilePath toDirectory:modpackDir format:format error:&extractError];
     
     if (!extractSuccess) {
-        // 失败时清理
+        // Cleanup on failure
         [[NSFileManager defaultManager] removeItemAtPath:modpackDir error:nil];
         if (error) *error = extractError;
         return NO;
     }
     
-    // 创建游戏配置文件
+    // Create game profile
     NSString *profileName = [self createProfileForModpack:modpackInfo modpackDir:modpackDir error:error];
     if (!profileName) {
         [[NSFileManager defaultManager] removeItemAtPath:modpackDir error:nil];
         return NO;
     }
     
-    // 保存到已导入整合包列表
+    // Save to imported modpacks list
     NSMutableDictionary *savedModpack = [modpackInfo mutableCopy];
     savedModpack[@"modpackDir"] = modpackDir;
     savedModpack[@"profileName"] = profileName;
@@ -265,19 +265,19 @@ static NSString * const kModpacksDirectory = @"modpacks";
         if (error) {
             *error = [NSError errorWithDomain:@"ModpackImportError"
                                          code:3001
-                                     userInfo:@{NSLocalizedDescriptionKey: @"无法打开整合包压缩包"}];
+                                     userInfo:@{NSLocalizedDescriptionKey: @"Cannot open modpack archive"}];
         }
         return NO;
     }
     
-    // 解压所有文件
+    // Extract all files
     BOOL success = [archive extractFilesTo:destDir overwrite:YES error:&archiveError];
     
     if (!success || archiveError) {
         if (error) {
             *error = [NSError errorWithDomain:@"ModpackImportError"
                                          code:3002
-                                     userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"无法解压整合包: %@", archiveError.localizedDescription]}];
+                                     userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Cannot extract modpack: %@", archiveError.localizedDescription]}];
         }
         return NO;
     }
@@ -291,10 +291,10 @@ static NSString * const kModpacksDirectory = @"modpacks";
     NSString *loader = modpackInfo[@"loader"];
     NSString *loaderVersion = modpackInfo[@"loaderVersion"];
     
-    // 生成唯一的配置文件名称
+    // Generate unique profile name
     NSString *profileName = [NSString stringWithFormat:@"modpack_%@", [[NSUUID UUID] UUIDString]];
     
-    // 根据加载器确定版本 ID
+    // Determine version ID based on loader
     NSString *versionId = nil;
     
     if ([loader isEqualToString:@"Forge"]) {
@@ -307,14 +307,14 @@ static NSString * const kModpacksDirectory = @"modpacks";
         versionId = minecraftVersion;
     }
     
-    // 在整合包文件夹内创建游戏目录
+    // Create game directory inside modpack folder
     NSString *gameDir = [modpackDir stringByAppendingPathComponent:@"minecraft"];
     [[NSFileManager defaultManager] createDirectoryAtPath:gameDir
                               withIntermediateDirectories:YES
                                                attributes:nil
                                                     error:nil];
     
-    // 创建配置文件
+    // Create profile
     NSMutableDictionary *profile = [@{
         @"name": name,
         @"lastVersionId": versionId ?: @"",
@@ -323,7 +323,7 @@ static NSString * const kModpacksDirectory = @"modpacks";
         @"type": @"modpack"
     } mutableCopy];
     
-    // 如果有图标则添加
+    // Add icon if available
     NSString *iconPath = [modpackDir stringByAppendingPathComponent:@"icon.png"];
     if ([[NSFileManager defaultManager] fileExistsAtPath:iconPath]) {
         NSData *iconData = [NSData dataWithContentsOfFile:iconPath];
@@ -333,14 +333,14 @@ static NSString * const kModpacksDirectory = @"modpacks";
         }
     }
     
-    // 保存配置文件
+    // Save profile
     PLProfiles.current.profiles[profileName] = profile;
-    [PLProfiles.current saveProfiles];
+    [PLProfiles.current save];  // FIXED: was saveProfiles
     
     return profileName;
 }
 
-#pragma mark - 获取已导入的整合包
+#pragma mark - Get Imported Modpacks
 
 - (NSArray<NSDictionary *> *)getImportedModpacks {
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
@@ -356,26 +356,26 @@ static NSString * const kModpacksDirectory = @"modpacks";
     [defaults synchronize];
 }
 
-#pragma mark - 删除整合包
+#pragma mark - Delete Modpack
 
 - (BOOL)deleteModpack:(NSDictionary *)modpackInfo error:(NSError **)error {
     NSString *modpackDir = modpackInfo[@"modpackDir"];
     NSString *profileName = modpackInfo[@"profileName"];
     
-    // 删除整合包目录
+    // Delete modpack directory
     if (modpackDir && [[NSFileManager defaultManager] fileExistsAtPath:modpackDir]) {
         if (![[NSFileManager defaultManager] removeItemAtPath:modpackDir error:error]) {
             return NO;
         }
     }
     
-    // 删除配置文件
+    // Delete profile
     if (profileName) {
         [PLProfiles.current.profiles removeObjectForKey:profileName];
-        [PLProfiles.current saveProfiles];
+        [PLProfiles.current save];  // FIXED: was saveProfiles
     }
     
-    // 从保存的列表中移除
+    // Remove from saved list
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     NSMutableArray *modpacks = [[self getImportedModpacks] mutableCopy];
     
