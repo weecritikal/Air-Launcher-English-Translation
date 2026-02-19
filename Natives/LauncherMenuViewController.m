@@ -88,7 +88,7 @@
     // Mod Manager entry
     [self.options addObject:
         (id)[LauncherMenuCustomItem
-            title:@"Manage Mods"
+            title:@"管理模组"
             imageName:@"puzzlepiece.extension" action:^{
                 ModsManagerViewController *modsVC = [[ModsManagerViewController alloc] init];
                 modsVC.profileName = PLProfiles.current.selectedProfileName;
@@ -100,7 +100,7 @@
     // Shader Manager entry
     [self.options addObject:
         (id)[LauncherMenuCustomItem
-            title:@"Manage Shaders"
+            title:@"管理光影"
             imageName:@"photo" action:^{
                 ShadersManagerViewController *shadersVC = [[ShadersManagerViewController alloc] init];
                 shadersVC.profileName = PLProfiles.current.selectedProfileName;
@@ -112,7 +112,7 @@
     // Modpack Import entry
     [self.options addObject:
         (id)[LauncherMenuCustomItem
-            title:@"Import Modpack"
+            title:@"导入整合包"
             imageName:@"archivebox" action:^{
                 ModpackImportViewController *modpackVC = [[ModpackImportViewController alloc] init];
                 modpackVC.profileName = PLProfiles.current.selectedProfileName;
