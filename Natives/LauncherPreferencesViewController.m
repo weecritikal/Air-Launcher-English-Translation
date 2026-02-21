@@ -16,6 +16,7 @@
 
 #import "ImageCropperViewController.h"
 #import "CustomIconManager.h"
+#import "BackgroundSettingsViewController.h"
 
 @interface LauncherPreferencesViewController()
 @property(nonatomic) NSArray<NSString*> *rendererKeys, *rendererList;
@@ -326,6 +327,18 @@
               },
               @"action": ^void(){
                   [self openImagePicker];
+              }
+            },
+            @{@"key": @"launcher_background",
+              @"hasDetail": @YES,
+              @"icon": @"photo.fill.on.rectangle.fill",
+              @"type": self.typeButton,
+              @"enableCondition": whenNotInGame,
+              @"action": ^void(){
+                  BackgroundSettingsViewController *bgVC = [[BackgroundSettingsViewController alloc] init];
+                  UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:bgVC];
+                  nav.modalPresentationStyle = UIModalPresentationFormSheet;
+                  [self presentViewController:nav animated:YES completion:nil];
               }
             },
             @{@"key": @"hidden_sidebar",
