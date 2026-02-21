@@ -274,7 +274,7 @@ if(MINIZIP_ENABLED AND EXISTS "${MINIZIP_DIR}")
   endif()
 else()
   if(EXISTS "${MINIZIP_DIR}")
-    message(STATUS "minizip folder found but MINIZIP_ENABLED is OFF Ã¢ÂÂ skipping compilation.")
+    message(STATUS "minizip folder found but MINIZIP_ENABLED is OFF — skipping compilation.")
   else()
     message(STATUS "minizip folder not found, skipping minizip compilation.")
   endif()
@@ -292,6 +292,7 @@ target_link_libraries(AngelAuraAmethyst
   "-framework CoreFoundation"
   "-framework CoreGraphics"
   "-framework CoreImage"
+  "-framework CoreMedia"
   "-framework CoreMotion"
   "-framework GameController"
   "-framework IOKit"
