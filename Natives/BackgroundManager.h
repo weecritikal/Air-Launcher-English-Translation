@@ -2,7 +2,7 @@
 //  BackgroundManager.h
 //  Amethyst
 //
-//  Background wallpaper manager - supports images and videos
+//  Background wallpaper manager - Global support for all view controllers
 //
 
 #import <UIKit/UIKit.h>
@@ -25,7 +25,15 @@ typedef NS_ENUM(NSInteger, BackgroundType) {
 @property (nonatomic, readonly) BackgroundType currentType;
 @property (nonatomic, readonly, nullable) NSString *currentBackgroundPath;
 
-// Apply background to a view
+// Global background container
+@property (nonatomic, strong, readonly, nullable) UIView *globalBackgroundContainer;
+
+// Apply background globally
+- (void)applyBackgroundToWindow:(UIWindow *)window;
+- (void)applyBackgroundToSplitViewController:(UISplitViewController *)splitVC;
+- (void)removeGlobalBackground;
+
+// Legacy compatibility
 - (void)applyBackgroundToView:(UIView *)view;
 - (void)removeBackgroundFromView:(UIView *)view;
 
@@ -45,6 +53,13 @@ typedef NS_ENUM(NSInteger, BackgroundType) {
 // Pause/Resume video (for app lifecycle)
 - (void)pauseVideo;
 - (void)resumeVideo;
+
+// Update background frame (call on rotation)
+- (void)updateBackgroundFrame;
+
+// Make view controllers transparent (for global background visibility)
+- (void)makeViewControllerTransparent:(UIViewController *)viewController;
+- (void)makeSplitViewControllerTransparent:(UISplitViewController *)splitVC;
 
 @end
 
