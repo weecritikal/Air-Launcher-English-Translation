@@ -5,6 +5,7 @@
 #import "LauncherNavigationController.h"
 #import "LauncherPreferences.h"
 #import "utils.h"
+#import "BackgroundManager.h"
 
 extern NSMutableDictionary *prefDict;
 
@@ -31,6 +32,41 @@ extern NSMutableDictionary *prefDict;
     [self changeDisplayModeForSize:self.view.frame.size];
     
     self.maximumPrimaryColumnWidth = self.view.bounds.size.width * 0.95;
+    
+    // Apply background wallpaper
+    [self applyBackground];
+    
+    // Listen for background change notifications
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(backgroundChanged:)
+                                                 name:@"BackgroundChanged"
+                                               object:nil];
+}
+
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
+- (void)applyBackground {
+    [[BackgroundManager sharedManager] applyBackgroundToView:self.view];
+}
+
+- (void)backgroundChanged:(NSNotification *)notification {
+    // Remove existing background and reapply
+    [[BackgroundManager sharedManager] removeBackgroundFromView:self.view];
+    [self applyBackground];
+}
+
+- (void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+    // Resume video background if needed
+    [[BackgroundManager sharedManager] resumeVideo];
+}
+
+- (void)viewWillDisappear:(BOOL)animated {
+    [super viewWillDisappear:animated];
+    // Pause video background to save resources
+    [[BackgroundManager sharedManager] pauseVideo];
 }
 
 - (void)splitViewController:(UISplitViewController *)svc willChangeToDisplayMode:(UISplitViewControllerDisplayMode)displayMode {
