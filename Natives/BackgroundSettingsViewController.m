@@ -79,17 +79,17 @@
     if (preview) {
         self.previewImageView.image = preview;
         // Hide placeholder
-        UIView *placeholder = [self.previewImageView viewWithTag:100];
+        UILabel *placeholder = (UILabel *)[self.previewImageView viewWithTag:100];
         placeholder.hidden = YES;
     } else if ([manager hasVideoBackground]) {
         // Show video icon for video background
         self.previewImageView.image = nil;
-        UIView *placeholder = [self.previewImageView viewWithTag:100];
+        UILabel *placeholder = (UILabel *)[self.previewImageView viewWithTag:100];
         placeholder.hidden = NO;
         placeholder.text = @"🎬 视频背景";
     } else {
         self.previewImageView.image = nil;
-        UIView *placeholder = [self.previewImageView viewWithTag:100];
+        UILabel *placeholder = (UILabel *)[self.previewImageView viewWithTag:100];
         placeholder.hidden = NO;
         placeholder.text = @"无背景（使用默认）";
     }
