@@ -20,7 +20,15 @@
     [super viewDidLoad];
     
     self.title = @"启动器背景";
-    self.view.backgroundColor = [UIColor systemBackgroundColor];
+    
+    // Set transparent background if global background is active
+    if ([[BackgroundManager sharedManager] hasBackground]) {
+        self.view.backgroundColor = [UIColor clearColor];
+        self.tableView.backgroundColor = [UIColor clearColor];
+        self.tableView.backgroundView = nil;
+    } else {
+        self.view.backgroundColor = [UIColor systemBackgroundColor];
+    }
     
     // Setup table view
     self.tableView.separatorStyle = UITableViewCellSeparatorStyleSingleLine;
@@ -42,11 +50,24 @@
     [super viewWillAppear:animated];
     [self updatePreview];
     [self.tableView reloadData];
+    
+    // Maintain transparency
+    if ([[BackgroundManager sharedManager] hasBackground]) {
+        self.view.backgroundColor = [UIColor clearColor];
+        self.tableView.backgroundColor = [UIColor clearColor];
+        self.tableView.backgroundView = nil;
+    }
 }
 
 - (void)setupPreviewHeader {
     UIView *headerView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, self.view.bounds.size.width, 200)];
-    headerView.backgroundColor = [UIColor secondarySystemBackgroundColor];
+    
+    // Transparent header if background is active
+    if ([[BackgroundManager sharedManager] hasBackground]) {
+        headerView.backgroundColor = [UIColor clearColor];
+    } else {
+        headerView.backgroundColor = [UIColor secondarySystemBackgroundColor];
+    }
     
     // Preview image view
     self.previewImageView = [[UIImageView alloc] initWithFrame:CGRectMake(16, 16, headerView.bounds.size.width - 32, 168)];
@@ -78,11 +99,9 @@
     
     if (preview) {
         self.previewImageView.image = preview;
-        // Hide placeholder
         UILabel *placeholder = (UILabel *)[self.previewImageView viewWithTag:100];
         placeholder.hidden = YES;
     } else if ([manager hasVideoBackground]) {
-        // Show video icon for video background
         self.previewImageView.image = nil;
         UILabel *placeholder = (UILabel *)[self.previewImageView viewWithTag:100];
         placeholder.hidden = NO;
@@ -131,21 +150,26 @@
     NSString *title = self.sections[indexPath.section][indexPath.row];
     cell.textLabel.text = title;
     
+    // Set cell background for transparency
+    if ([[BackgroundManager sharedManager] hasBackground]) {
+        cell.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.7];
+        cell.textLabel.textColor = [UIColor whiteColor];
+    } else {
+        cell.backgroundColor = [UIColor secondarySystemBackgroundColor];
+        cell.textLabel.textColor = [UIColor labelColor];
+    }
+    
     BackgroundManager *manager = [BackgroundManager sharedManager];
     
     if (indexPath.section == 1) {
-        // Background type section
         if (indexPath.row == 0) {
-            // Image background
             cell.imageView.image = [UIImage systemImageNamed:@"photo"];
             cell.accessoryType = [manager hasImageBackground] ? UITableViewCellAccessoryCheckmark : UITableViewCellAccessoryNone;
         } else if (indexPath.row == 1) {
-            // Video background
             cell.imageView.image = [UIImage systemImageNamed:@"film"];
             cell.accessoryType = [manager hasVideoBackground] ? UITableViewCellAccessoryCheckmark : UITableViewCellAccessoryNone;
         }
     } else if (indexPath.section == 2) {
-        // Clear background
         cell.imageView.image = [UIImage systemImageNamed:@"xmark.circle"];
         cell.textLabel.textColor = [UIColor systemRedColor];
         cell.accessoryType = UITableViewCellAccessoryNone;
@@ -161,14 +185,11 @@
     
     if (indexPath.section == 1) {
         if (indexPath.row == 0) {
-            // Select image background
             [self selectImageBackground];
         } else if (indexPath.row == 1) {
-            // Select video background
             [self selectVideoBackground];
         }
     } else if (indexPath.section == 2) {
-        // Clear background
         [self clearBackground];
     }
 }
@@ -180,26 +201,22 @@
                                                                    message:nil
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
     
-    // Photo library
     [alert addAction:[UIAlertAction actionWithTitle:@"相册"
                                               style:UIAlertActionStyleDefault
                                             handler:^(UIAlertAction * _Nonnull action) {
         [self openPhotoLibraryForImage];
     }]];
     
-    // Files
     [alert addAction:[UIAlertAction actionWithTitle:@"文件"
                                               style:UIAlertActionStyleDefault
                                             handler:^(UIAlertAction * _Nonnull action) {
         [self openDocumentPickerForImage];
     }]];
     
-    // Cancel
     [alert addAction:[UIAlertAction actionWithTitle:@"取消"
                                               style:UIAlertActionStyleCancel
                                             handler:nil]];
     
-    // iPad support
     if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
         UITableViewCell *cell = [self.tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:0 inSection:1]];
         alert.popoverPresentationController.sourceView = cell;
@@ -214,26 +231,22 @@
                                                                    message:nil
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
     
-    // Photo library
     [alert addAction:[UIAlertAction actionWithTitle:@"相册"
                                               style:UIAlertActionStyleDefault
                                             handler:^(UIAlertAction * _Nonnull action) {
         [self openPhotoLibraryForVideo];
     }]];
     
-    // Files
     [alert addAction:[UIAlertAction actionWithTitle:@"文件"
                                               style:UIAlertActionStyleDefault
                                             handler:^(UIAlertAction * _Nonnull action) {
         [self openDocumentPickerForVideo];
     }]];
     
-    // Cancel
     [alert addAction:[UIAlertAction actionWithTitle:@"取消"
                                               style:UIAlertActionStyleCancel
                                             handler:nil]];
     
-    // iPad support
     if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
         UITableViewCell *cell = [self.tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:1 inSection:1]];
         alert.popoverPresentationController.sourceView = cell;
@@ -259,7 +272,10 @@
         [self updatePreview];
         [self.tableView reloadData];
         
-        // Post notification to update main view
+        // Restore default background color
+        self.view.backgroundColor = [UIColor systemBackgroundColor];
+        self.tableView.backgroundColor = [UIColor systemBackgroundColor];
+        
         [[NSNotificationCenter defaultCenter] postNotificationName:@"BackgroundChanged" object:nil];
     }]];
     
@@ -318,13 +334,11 @@
     NSString *mediaType = info[UIImagePickerControllerMediaType];
     
     if ([mediaType isEqualToString:@"public.image"]) {
-        // Image selected
         UIImage *image = info[UIImagePickerControllerOriginalImage];
         [picker dismissViewControllerAnimated:YES completion:^{
             [self processSelectedImage:image];
         }];
     } else if ([mediaType isEqualToString:@"public.movie"]) {
-        // Video selected
         NSURL *videoURL = info[UIImagePickerControllerMediaURL];
         [picker dismissViewControllerAnimated:YES completion:^{
             [self processSelectedVideo:videoURL];
@@ -345,13 +359,9 @@
     NSString *extension = url.pathExtension.lowercaseString;
     
     if ([@[@"jpg", @"jpeg", @"png", @"heic"] containsObject:extension]) {
-        // Image file
         UIImage *image = [UIImage imageWithContentsOfFile:url.path];
-        if (image) {
-            [self processSelectedImage:image];
-        }
+        if (image) [self processSelectedImage:image];
     } else if ([@[@"mp4", @"mov", @"m4v"] containsObject:extension]) {
-        // Video file
         [self processSelectedVideo:url];
     }
 }
@@ -365,7 +375,6 @@
 - (void)processSelectedImage:(UIImage *)image {
     if (!image) return;
     
-    // Show processing indicator
     UIAlertController *processingAlert = [UIAlertController alertControllerWithTitle:@"处理中"
                                                                              message:@"正在设置背景..."
                                                                       preferredStyle:UIAlertControllerStyleAlert];
@@ -377,10 +386,13 @@
                 [self updatePreview];
                 [self.tableView reloadData];
                 
-                // Post notification to update main view
+                // Apply transparency
+                self.view.backgroundColor = [UIColor clearColor];
+                self.tableView.backgroundColor = [UIColor clearColor];
+                self.tableView.backgroundView = nil;
+                
                 [[NSNotificationCenter defaultCenter] postNotificationName:@"BackgroundChanged" object:nil];
                 
-                // Show success
                 UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"成功"
                                                                                       message:@"图片背景已设置"
                                                                                preferredStyle:UIAlertControllerStyleAlert];
@@ -400,7 +412,6 @@
 - (void)processSelectedVideo:(NSURL *)videoURL {
     if (!videoURL) return;
     
-    // Show processing indicator
     UIAlertController *processingAlert = [UIAlertController alertControllerWithTitle:@"处理中"
                                                                              message:@"正在设置视频背景..."
                                                                       preferredStyle:UIAlertControllerStyleAlert];
@@ -412,10 +423,13 @@
                 [self updatePreview];
                 [self.tableView reloadData];
                 
-                // Post notification to update main view
+                // Apply transparency
+                self.view.backgroundColor = [UIColor clearColor];
+                self.tableView.backgroundColor = [UIColor clearColor];
+                self.tableView.backgroundView = nil;
+                
                 [[NSNotificationCenter defaultCenter] postNotificationName:@"BackgroundChanged" object:nil];
                 
-                // Show success
                 UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"成功"
                                                                                       message:@"视频背景已设置"
                                                                                preferredStyle:UIAlertControllerStyleAlert];
