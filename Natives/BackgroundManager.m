@@ -2,7 +2,7 @@
 //  BackgroundManager.m
 //  Amethyst
 //
-//  Background wallpaper manager implementation
+//  Background wallpaper manager implementation - Global Version
 //
 
 #import "BackgroundManager.h"
@@ -11,6 +11,10 @@
 static NSString * const kBackgroundTypeKey = @"background_type";
 static NSString * const kBackgroundPathKey = @"background_path";
 static NSString * const kBackgroundsFolder = @"backgrounds";
+static const NSInteger kGlobalBackgroundTag = 99999;
+static const NSInteger kBackgroundImageTag = 99998;
+static const NSInteger kBackgroundBlurTag = 99997;
+static const NSInteger kBackgroundDimTag = 99996;
 
 @interface BackgroundManager ()
 @property (nonatomic, strong) AVPlayer *videoPlayer;
@@ -18,6 +22,9 @@ static NSString * const kBackgroundsFolder = @"backgrounds";
 @property (nonatomic, weak) UIView *currentBackgroundView;
 @property (nonatomic, readwrite) BackgroundType currentType;
 @property (nonatomic, readwrite, nullable) NSString *currentBackgroundPath;
+@property (nonatomic, weak) UIWindow *currentWindow;
+@property (nonatomic, weak) UISplitViewController *currentSplitVC;
+@property (nonatomic, strong, readwrite, nullable) UIView *globalBackgroundContainer;
 @end
 
 @implementation BackgroundManager
@@ -41,7 +48,7 @@ static NSString * const kBackgroundsFolder = @"backgrounds";
 }
 
 - (void)setupNotifications {
-    // Handle app lifecycle for video background
+    // App lifecycle
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(appDidEnterBackground)
                                                  name:UIApplicationDidEnterBackgroundNotification
@@ -52,10 +59,22 @@ static NSString * const kBackgroundsFolder = @"backgrounds";
                                                  name:UIApplicationWillEnterForegroundNotification
                                                object:nil];
     
-    // Handle video loop
+    // Video loop
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(playerItemDidReachEnd:)
                                                  name:AVPlayerItemDidPlayToEndTimeNotification
+                                               object:nil];
+    
+    // Orientation changes
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(handleOrientationChange)
+                                                 name:UIApplicationDidChangeStatusBarOrientationNotification
+                                               object:nil];
+    
+    // Window size changes (iPad multitasking, rotation)
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(updateBackgroundFrame)
+                                                 name:UIApplicationWillChangeStatusBarFrameNotification
                                                object:nil];
 }
 
@@ -100,122 +119,316 @@ static NSString * const kBackgroundsFolder = @"backgrounds";
     [defaults synchronize];
 }
 
-#pragma mark - Apply Background
+#pragma mark - Global Background Application
 
-- (void)applyBackgroundToView:(UIView *)view {
-    if (!view) return;
+- (void)applyBackgroundToWindow:(UIWindow *)window {
+    if (!window || self.currentType == BackgroundTypeNone) {
+        [self removeGlobalBackground];
+        return;
+    }
     
-    // Remove existing background
-    [self removeBackgroundFromView:view];
+    self.currentWindow = window;
+    self.currentSplitVC = nil;
     
-    self.currentBackgroundView = view;
+    // Remove existing
+    [self removeGlobalBackground];
     
+    // Create container
+    UIView *container = [[UIView alloc] initWithFrame:window.bounds];
+    container.tag = kGlobalBackgroundTag;
+    container.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    container.backgroundColor = [UIColor clearColor];
+    
+    // Insert at index 0 (behind everything)
+    [window insertSubview:container atIndex:0];
+    self.globalBackgroundContainer = container;
+    
+    // Apply content
     switch (self.currentType) {
         case BackgroundTypeImage:
-            [self applyImageBackgroundToView:view];
+            [self applyImageBackgroundToContainer:container];
             break;
         case BackgroundTypeVideo:
-            [self applyVideoBackgroundToView:view];
+            [self applyVideoBackgroundToContainer:container];
             break;
         default:
             break;
     }
 }
 
-- (void)removeBackgroundFromView:(UIView *)view {
-    // Remove image background
-    UIView *existingImageView = [view viewWithTag:9998];
-    if (existingImageView) {
-        [existingImageView removeFromSuperview];
+- (void)applyBackgroundToSplitViewController:(UISplitViewController *)splitVC {
+    if (!splitVC || !splitVC.view || self.currentType == BackgroundTypeNone) {
+        [self removeGlobalBackground];
+        return;
     }
     
-    // Remove video background
-    UIView *existingVideoView = [view viewWithTag:9999];
-    if (existingVideoView) {
-        [existingVideoView removeFromSuperview];
+    self.currentSplitVC = splitVC;
+    self.currentWindow = nil;
+    
+    // Remove existing
+    [self removeGlobalBackground];
+    
+    // Create container that covers entire split view
+    UIView *container = [[UIView alloc] initWithFrame:splitVC.view.bounds];
+    container.tag = kGlobalBackgroundTag;
+    container.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    container.backgroundColor = [UIColor clearColor];
+    
+    // Insert at the very bottom
+    [splitVC.view insertSubview:container atIndex:0];
+    self.globalBackgroundContainer = container;
+    
+    // Apply content
+    switch (self.currentType) {
+        case BackgroundTypeImage:
+            [self applyImageBackgroundToContainer:container];
+            break;
+        case BackgroundTypeVideo:
+            [self applyVideoBackgroundToContainer:container];
+            break;
+        default:
+            break;
     }
     
-    [self cleanupVideoPlayer];
+    // Make all child controllers transparent
+    [self makeSplitViewControllerTransparent:splitVC];
 }
 
-- (void)applyImageBackgroundToView:(UIView *)view {
+- (void)removeGlobalBackground {
+    // Remove from window
+    if (self.currentWindow) {
+        UIView *existing = [self.currentWindow viewWithTag:kGlobalBackgroundTag];
+        if (existing) [existing removeFromSuperview];
+    }
+    
+    // Remove from split VC
+    if (self.currentSplitVC && self.currentSplitVC.view) {
+        UIView *existing = [self.currentSplitVC.view viewWithTag:kGlobalBackgroundTag];
+        if (existing) [existing removeFromSuperview];
+    }
+    
+    // Cleanup
+    [self cleanupVideoPlayer];
+    self.globalBackgroundContainer = nil;
+    self.currentWindow = nil;
+    self.currentSplitVC = nil;
+}
+
+- (void)updateBackgroundFrame {
+    if (!self.globalBackgroundContainer) return;
+    
+    UIView *parent = self.globalBackgroundContainer.superview;
+    if (!parent) return;
+    
+    // Update container frame
+    self.globalBackgroundContainer.frame = parent.bounds;
+    
+    // Update image view
+    UIView *imageView = [self.globalBackgroundContainer viewWithTag:kBackgroundImageTag];
+    if (imageView) imageView.frame = self.globalBackgroundContainer.bounds;
+    
+    // Update blur view
+    UIView *blurView = [self.globalBackgroundContainer viewWithTag:kBackgroundBlurTag];
+    if (blurView) blurView.frame = self.globalBackgroundContainer.bounds;
+    
+    // Update dim view
+    UIView *dimView = [self.globalBackgroundContainer viewWithTag:kBackgroundDimTag];
+    if (dimView) dimView.frame = self.globalBackgroundContainer.bounds;
+    
+    // Update video layer
+    if (self.videoPlayerLayer) self.videoPlayerLayer.frame = self.globalBackgroundContainer.bounds;
+}
+
+- (void)handleOrientationChange {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self updateBackgroundFrame];
+    });
+}
+
+#pragma mark - Background Content Application
+
+- (void)applyImageBackgroundToContainer:(UIView *)container {
     if (!self.currentBackgroundPath) return;
     
     UIImage *image = [UIImage imageWithContentsOfFile:self.currentBackgroundPath];
     if (!image) return;
     
+    // Remove existing
+    UIView *existing = [container viewWithTag:kBackgroundImageTag];
+    if (existing) [existing removeFromSuperview];
+    
+    // Image view
     UIImageView *imageView = [[UIImageView alloc] initWithImage:image];
-    imageView.tag = 9998;
+    imageView.tag = kBackgroundImageTag;
     imageView.contentMode = UIViewContentModeScaleAspectFill;
     imageView.clipsToBounds = YES;
-    imageView.translatesAutoresizingMaskIntoConstraints = NO;
     imageView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    imageView.frame = container.bounds;
     
-    // Add blur effect for better readability
-    UIBlurEffect *blurEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleDark];
-    UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:blurEffect];
-    blurView.alpha = 0.3;
-    blurView.translatesAutoresizingMaskIntoConstraints = NO;
-    blurView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    [container addSubview:imageView];
     
-    [view insertSubview:imageView atIndex:0];
-    [imageView addSubview:blurView];
-    
-    // Set frame
-    imageView.frame = view.bounds;
-    blurView.frame = imageView.bounds;
+    // Add blur effect for UI readability
+    [self addBlurEffectToContainer:container];
 }
 
-- (void)applyVideoBackgroundToView:(UIView *)view {
+- (void)applyVideoBackgroundToContainer:(UIView *)container {
     if (!self.currentBackgroundPath) return;
     
     NSURL *videoURL = [NSURL fileURLWithPath:self.currentBackgroundPath];
     if (![[NSFileManager defaultManager] fileExistsAtPath:self.currentBackgroundPath]) return;
     
+    [self cleanupVideoPlayer];
+    
     // Create player
     self.videoPlayer = [AVPlayer playerWithURL:videoURL];
     self.videoPlayer.actionAtItemEnd = AVPlayerActionAtItemEndNone;
+    self.videoPlayer.muted = YES; // Mute to avoid interrupting other audio
     
     // Create player layer
     self.videoPlayerLayer = [AVPlayerLayer playerLayerWithPlayer:self.videoPlayer];
     self.videoPlayerLayer.videoGravity = AVLayerVideoGravityResizeAspectFill;
-    self.videoPlayerLayer.frame = view.bounds;
+    self.videoPlayerLayer.frame = container.bounds;
     
-    // Create container view
-    UIView *videoContainer = [[UIView alloc] initWithFrame:view.bounds];
-    videoContainer.tag = 9999;
-    videoContainer.translatesAutoresizingMaskIntoConstraints = NO;
-    videoContainer.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    [videoContainer.layer addSublayer:self.videoPlayerLayer];
+    // Insert at bottom
+    [container.layer insertSublayer:self.videoPlayerLayer atIndex:0];
     
-    // Add blur effect for better readability
-    UIBlurEffect *blurEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleDark];
-    UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:blurEffect];
-    blurView.alpha = 0.3;
-    blurView.translatesAutoresizingMaskIntoConstraints = NO;
-    blurView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    [videoContainer addSubview:blurView];
-    
-    [view insertSubview:videoContainer atIndex:0];
+    // Add blur effect
+    [self addBlurEffectToContainer:container];
     
     // Start playing
     [self.videoPlayer play];
-    
-    // Update layer frame when view layout changes
-    [videoContainer layoutIfNeeded];
-    self.videoPlayerLayer.frame = videoContainer.bounds;
-    blurView.frame = videoContainer.bounds;
 }
+
+- (void)addBlurEffectToContainer:(UIView *)container {
+    // Remove existing blur
+    UIView *existingBlur = [container viewWithTag:kBackgroundBlurTag];
+    if (existingBlur) [existingBlur removeFromSuperview];
+    
+    UIView *existingDim = [container viewWithTag:kBackgroundDimTag];
+    if (existingDim) [existingDim removeFromSuperview];
+    
+    // Add dark blur effect
+    UIBlurEffect *blurEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleDark];
+    UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:blurEffect];
+    blurView.tag = kBackgroundBlurTag;
+    blurView.alpha = 0.35; // Adjust for readability
+    blurView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    blurView.frame = container.bounds;
+    
+    [container addSubview:blurView];
+    
+    // Add additional dimming view for better contrast
+    UIView *dimView = [[UIView alloc] initWithFrame:container.bounds];
+    dimView.tag = kBackgroundDimTag;
+    dimView.backgroundColor = [UIColor blackColor];
+    dimView.alpha = 0.2; // Additional dimming
+    dimView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    
+    [container addSubview:dimView];
+}
+
+#pragma mark - Transparency Helpers
+
+- (void)makeViewControllerTransparent:(UIViewController *)viewController {
+    if (!viewController) return;
+    
+    // Main view
+    viewController.view.backgroundColor = [UIColor clearColor];
+    
+    // Navigation controller
+    if ([viewController isKindOfClass:[UINavigationController class]]) {
+        UINavigationController *nav = (UINavigationController *)viewController;
+        nav.view.backgroundColor = [UIColor clearColor];
+        nav.navigationBar.translucent = YES;
+        
+        // Make all view controllers in stack transparent
+        for (UIViewController *vc in nav.viewControllers) {
+            [self makeViewControllerTransparent:vc];
+        }
+    }
+    
+    // Table view controller
+    if ([viewController isKindOfClass:[UITableViewController class]]) {
+        UITableViewController *tableVC = (UITableViewController *)viewController;
+        tableVC.tableView.backgroundColor = [UIColor clearColor];
+        tableVC.tableView.backgroundView = nil;
+        
+        // Make cells have semi-transparent background for readability
+        tableVC.tableView.separatorEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleDark];
+    }
+    
+    // Collection view controller
+    if ([viewController isKindOfClass:[UICollectionViewController class]]) {
+        UICollectionViewController *collectionVC = (UICollectionViewController *)viewController;
+        collectionVC.collectionView.backgroundColor = [UIColor clearColor];
+    }
+    
+    // Child view controllers
+    for (UIViewController *childVC in viewController.childViewControllers) {
+        [self makeViewControllerTransparent:childVC];
+    }
+}
+
+- (void)makeSplitViewControllerTransparent:(UISplitViewController *)splitVC {
+    if (!splitVC) return;
+    
+    // Make split view itself transparent
+    splitVC.view.backgroundColor = [UIColor clearColor];
+    
+    // Make all view controllers transparent
+    for (UIViewController *vc in splitVC.viewControllers) {
+        if ([vc isKindOfClass:[UINavigationController class]]) {
+            UINavigationController *nav = (UINavigationController *)vc;
+            
+            // Navigation controller setup
+            nav.view.backgroundColor = [UIColor clearColor];
+            nav.navigationBar.translucent = YES;
+            nav.toolbar.translucent = YES;
+            
+            // Make all view controllers in stack transparent
+            for (UIViewController *childVC in nav.viewControllers) {
+                [self makeViewControllerTransparent:childVC];
+            }
+        } else {
+            [self makeViewControllerTransparent:vc];
+        }
+    }
+}
+
+#pragma mark - Legacy Methods
+
+- (void)applyBackgroundToView:(UIView *)view {
+    // Find the view controller or window
+    UIResponder *responder = view;
+    while (responder) {
+        if ([responder isKindOfClass:[UISplitViewController class]]) {
+            [self applyBackgroundToSplitViewController:(UISplitViewController *)responder];
+            return;
+        }
+        if ([responder isKindOfClass:[UIWindow class]]) {
+            [self applyBackgroundToWindow:(UIWindow *)responder];
+            return;
+        }
+        responder = responder.nextResponder;
+    }
+}
+
+- (void)removeBackgroundFromView:(UIView *)view {
+    [self removeGlobalBackground];
+}
+
+#pragma mark - Video Management
 
 - (void)cleanupVideoPlayer {
     if (self.videoPlayer) {
         [self.videoPlayer pause];
         self.videoPlayer = nil;
     }
-    self.videoPlayerLayer = nil;
+    if (self.videoPlayerLayer) {
+        [self.videoPlayerLayer removeFromSuperlayer];
+        self.videoPlayerLayer = nil;
+    }
 }
-
-#pragma mark - Video Loop
 
 - (void)playerItemDidReachEnd:(NSNotification *)notification {
     AVPlayerItem *playerItem = notification.object;
@@ -233,9 +446,7 @@ static NSString * const kBackgroundsFolder = @"backgrounds";
 }
 
 - (void)pauseVideo {
-    if (self.videoPlayer) {
-        [self.videoPlayer pause];
-    }
+    if (self.videoPlayer) [self.videoPlayer pause];
 }
 
 - (void)resumeVideo {
@@ -249,26 +460,23 @@ static NSString * const kBackgroundsFolder = @"backgrounds";
 - (void)setImageBackground:(UIImage *)image completion:(void (^)(BOOL success, NSError * _Nullable error))completion {
     if (!image) {
         if (completion) {
-            completion(NO, [NSError errorWithDomain:@"BackgroundManager" code:1 userInfo:@{NSLocalizedDescriptionKey: @"å¾çä¸ºç©º"}]);
+            completion(NO, [NSError errorWithDomain:@"BackgroundManager" code:1 userInfo:@{NSLocalizedDescriptionKey: @"图片为空"}]);
         }
         return;
     }
     
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-        // Clear existing background
-        [self clearBackground];
+        // Clear existing
+        [self clearBackgroundInternal];
         
         // Save image
         NSString *fileName = [NSString stringWithFormat:@"background_image_%ld.jpg", (long)[[NSDate date] timeIntervalSince1970]];
         NSString *filePath = [[self backgroundsFolderPath] stringByAppendingPathComponent:fileName];
         
-        // Compress and save
-        NSData *imageData = UIImageJPEGRepresentation(image, 0.8);
+        NSData *imageData = UIImageJPEGRepresentation(image, 0.85);
         if (!imageData) {
             dispatch_async(dispatch_get_main_queue(), ^{
-                if (completion) {
-                    completion(NO, [NSError errorWithDomain:@"BackgroundManager" code:2 userInfo:@{NSLocalizedDescriptionKey: @"å¾çåç¼©å¤±è´¥"}]);
-                }
+                if (completion) completion(NO, [NSError errorWithDomain:@"BackgroundManager" code:2 userInfo:@{NSLocalizedDescriptionKey: @"图片压缩失败"}]);
             });
             return;
         }
@@ -281,15 +489,18 @@ static NSString * const kBackgroundsFolder = @"backgrounds";
             [self saveBackgroundSettings];
             
             dispatch_async(dispatch_get_main_queue(), ^{
-                if (completion) {
-                    completion(YES, nil);
+                // Reapply if needed
+                if (self.currentSplitVC) {
+                    [self applyBackgroundToSplitViewController:self.currentSplitVC];
+                } else if (self.currentWindow) {
+                    [self applyBackgroundToWindow:self.currentWindow];
                 }
+                
+                if (completion) completion(YES, nil);
             });
         } else {
             dispatch_async(dispatch_get_main_queue(), ^{
-                if (completion) {
-                    completion(NO, [NSError errorWithDomain:@"BackgroundManager" code:3 userInfo:@{NSLocalizedDescriptionKey: @"ä¿å­å¾çå¤±è´¥"}]);
-                }
+                if (completion) completion(NO, [NSError errorWithDomain:@"BackgroundManager" code:3 userInfo:@{NSLocalizedDescriptionKey: @"保存图片失败"}]);
             });
         }
     });
@@ -298,16 +509,16 @@ static NSString * const kBackgroundsFolder = @"backgrounds";
 - (void)setVideoBackgroundWithURL:(NSURL *)videoURL completion:(void (^)(BOOL success, NSError * _Nullable error))completion {
     if (!videoURL || ![[NSFileManager defaultManager] fileExistsAtPath:videoURL.path]) {
         if (completion) {
-            completion(NO, [NSError errorWithDomain:@"BackgroundManager" code:4 userInfo:@{NSLocalizedDescriptionKey: @"è§é¢æä»¶ä¸å­å¨"}]);
+            completion(NO, [NSError errorWithDomain:@"BackgroundManager" code:4 userInfo:@{NSLocalizedDescriptionKey: @"视频文件不存在"}]);
         }
         return;
     }
     
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-        // Clear existing background
-        [self clearBackground];
+        // Clear existing
+        [self clearBackgroundInternal];
         
-        // Copy video to backgrounds folder
+        // Copy video
         NSString *fileName = [NSString stringWithFormat:@"background_video_%ld.mp4", (long)[[NSDate date] timeIntervalSince1970]];
         NSString *filePath = [[self backgroundsFolderPath] stringByAppendingPathComponent:fileName];
         
@@ -320,33 +531,38 @@ static NSString * const kBackgroundsFolder = @"backgrounds";
             [self saveBackgroundSettings];
             
             dispatch_async(dispatch_get_main_queue(), ^{
-                if (completion) {
-                    completion(YES, nil);
+                // Reapply if needed
+                if (self.currentSplitVC) {
+                    [self applyBackgroundToSplitViewController:self.currentSplitVC];
+                } else if (self.currentWindow) {
+                    [self applyBackgroundToWindow:self.currentWindow];
                 }
+                
+                if (completion) completion(YES, nil);
             });
         } else {
             dispatch_async(dispatch_get_main_queue(), ^{
-                if (completion) {
-                    completion(NO, copyError ?: [NSError errorWithDomain:@"BackgroundManager" code:5 userInfo:@{NSLocalizedDescriptionKey: @"å¤å¶è§é¢å¤±è´¥"}]);
-                }
+                if (completion) completion(NO, copyError ?: [NSError errorWithDomain:@"BackgroundManager" code:5 userInfo:@{NSLocalizedDescriptionKey: @"复制视频失败"}]);
             });
         }
     });
 }
 
 - (void)clearBackground {
-    // Stop video
+    [self clearBackgroundInternal];
+    [self removeGlobalBackground];
+    [self saveBackgroundSettings];
+}
+
+- (void)clearBackgroundInternal {
     [self cleanupVideoPlayer];
     
-    // Remove old files
     if (self.currentBackgroundPath) {
         [[NSFileManager defaultManager] removeItemAtPath:self.currentBackgroundPath error:nil];
     }
     
-    // Clear settings
     self.currentType = BackgroundTypeNone;
     self.currentBackgroundPath = nil;
-    [self saveBackgroundSettings];
 }
 
 #pragma mark - Check Background
