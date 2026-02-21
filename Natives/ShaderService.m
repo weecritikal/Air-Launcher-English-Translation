@@ -2,7 +2,7 @@
 //  ShaderService.m
 //  Amethyst
 //
-//  Shader service implementation
+//  Shader service implementation - Fixed version
 //
 
 #import "ShaderService.h"
@@ -31,7 +31,9 @@
 - (instancetype)init {
     if (self = [super init]) {
         _onlineSearchEnabled = NO;
-        NSURLSessionConfiguration *config = [NSURLSessionConfiguration backgroundSessionConfigurationWithIdentifier:@"com.amethyst.shaderdownloader"];
+        NSURLSessionConfiguration *config = [NSURLSessionConfiguration defaultSessionConfiguration];
+        config.timeoutIntervalForRequest = 60.0;
+        config.timeoutIntervalForResource = 300.0;
         _downloadSession = [NSURLSession sessionWithConfiguration:config delegate:self delegateQueue:nil];
         _downloadCompletionHandlers = [NSMutableDictionary dictionary];
         _downloadDestinationPaths = [NSMutableDictionary dictionary];
@@ -194,69 +196,178 @@
     return [[NSFileManager defaultManager] removeItemAtPath:shader.filePath error:error];
 }
 
-#pragma mark - Online Shader Downloading
+#pragma mark - Online Shader Downloading (FIXED)
 
 - (void)downloadShader:(ShaderItem *)shader toProfile:(NSString *)profileName completion:(ShaderDownloadHandler)completion {
-    NSString *shadersFolder = [self existingShadersFolderForProfile:profileName];
-    if (!shadersFolder) {
-        // Try to create shaderpacks folder
-        NSString *profile = profileName.length ? profileName : @"default";
-        NSString *gameDir = nil;
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+        NSFileManager *fm = [NSFileManager defaultManager];
+        NSString *shadersFolder = [self existingShadersFolderForProfile:profileName];
         
-        @try {
-            NSDictionary *profiles = PLProfiles.current.profiles;
-            NSDictionary *prof = profiles[profile];
-            if ([prof isKindOfClass:[NSDictionary class]]) {
-                gameDir = prof[@"gameDir"];
-            }
-        } @catch (NSException *ex) { }
-        
-        if (!gameDir) {
-            const char *gameDirC = getenv("POJAV_GAME_DIR");
-            if (gameDirC) {
-                gameDir = [NSString stringWithUTF8String:gameDirC];
-            }
-        }
-        
-        if (gameDir) {
-            shadersFolder = [gameDir stringByAppendingPathComponent:@"shaderpacks"];
-            NSError *dirError = nil;
-            [[NSFileManager defaultManager] createDirectoryAtPath:shadersFolder withIntermediateDirectories:YES attributes:nil error:&dirError];
-            if (dirError) {
-                if (completion) {
-                    NSError *error = [NSError errorWithDomain:@"ShaderServiceError" code:1 userInfo:@{NSLocalizedDescriptionKey:@"Cannot create shaderpacks folder."}];
-                    completion(error);
+        // If shaderpacks folder doesn't exist, create it
+        if (!shadersFolder) {
+            NSString *gameDir = nil;
+            NSString *profile = profileName.length ? profileName : @"default";
+            
+            // Try to get game directory from profile
+            @try {
+                NSDictionary *profiles = PLProfiles.current.profiles;
+                NSDictionary *prof = profiles[profile];
+                if ([prof isKindOfClass:[NSDictionary class]]) {
+                    gameDir = prof[@"gameDir"];
                 }
+            } @catch (NSException *ex) { }
+            
+            // Fallback to environment variable
+            if (!gameDir) {
+                const char *gameDirC = getenv("POJAV_GAME_DIR");
+                if (gameDirC) {
+                    gameDir = [NSString stringWithUTF8String:gameDirC];
+                }
+            }
+            
+            if (gameDir) {
+                shadersFolder = [gameDir stringByAppendingPathComponent:@"shaderpacks"];
+                NSError *dirError = nil;
+                BOOL created = [fm createDirectoryAtPath:shadersFolder 
+                             withIntermediateDirectories:YES 
+                                              attributes:nil 
+                                                   error:&dirError];
+                if (!created || dirError) {
+                    NSLog(@"[ShaderService] Failed to create shaderpacks folder: %@", dirError);
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        if (completion) {
+                            NSError *error = [NSError errorWithDomain:@"ShaderServiceError" 
+                                                                 code:1 
+                                                             userInfo:@{NSLocalizedDescriptionKey: @"æ æ³åå»ºåå½±æä»¶å¤¹ï¼è¯·æ£æ¥å­å¨æé"}];
+                            completion(error);
+                        }
+                    });
+                    return;
+                }
+            } else {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    if (completion) {
+                        NSError *error = [NSError errorWithDomain:@"ShaderServiceError" 
+                                                             code:1 
+                                                         userInfo:@{NSLocalizedDescriptionKey: @"æ æ³æ¾å°æ¸¸æç®å½"}];
+                        completion(error);
+                    }
+                });
                 return;
             }
-        } else {
-            if (completion) {
-                NSError *error = [NSError errorWithDomain:@"ShaderServiceError" code:1 userInfo:@{NSLocalizedDescriptionKey:@"Cannot find shaderpacks folder."}];
-                completion(error);
-            }
+        }
+        
+        // Validate download URL
+        NSURL *url = [NSURL URLWithString:shader.selectedVersionDownloadURL];
+        if (!url) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (completion) {
+                    NSError *error = [NSError errorWithDomain:@"ShaderServiceError" 
+                                                         code:2 
+                                                     userInfo:@{NSLocalizedDescriptionKey: @"æ æçä¸è½½é¾æ¥"}];
+                    completion(error);
+                }
+            });
             return;
         }
-    }
-
-    NSURL *url = [NSURL URLWithString:shader.selectedVersionDownloadURL];
-    if (!url) {
-        if (completion) {
-            NSError *error = [NSError errorWithDomain:@"ShaderServiceError" code:2 userInfo:@{NSLocalizedDescriptionKey:@"Invalid download URL."}];
-            completion(error);
+        
+        // Ensure filename is valid
+        NSString *fileName = shader.fileName;
+        if (!fileName || fileName.length == 0) {
+            fileName = [url lastPathComponent];
         }
-        return;
-    }
-
-    NSString *destinationPath = [shadersFolder stringByAppendingPathComponent:shader.fileName];
-
-    NSURLSessionDownloadTask *task = [self.downloadSession downloadTaskWithURL:url];
-    self.downloadCompletionHandlers[task] = completion;
-    self.downloadDestinationPaths[task] = destinationPath;
-
-    [task resume];
+        if (!fileName || fileName.length == 0) {
+            fileName = @"shader.zip";
+        }
+        
+        // Ensure filename has .zip extension
+        if (![fileName.lowercaseString hasSuffix:@".zip"]) {
+            fileName = [fileName stringByAppendingString:@".zip"];
+        }
+        
+        NSString *destinationPath = [shadersFolder stringByAppendingPathComponent:fileName];
+        
+        NSLog(@"[ShaderService] Downloading shader from %@ to %@", url, destinationPath);
+        
+        // Use data task instead of download task for better control
+        NSURLSession *session = [NSURLSession sharedSession];
+        NSURLSessionDataTask *task = [session dataTaskWithURL:url completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
+            if (error) {
+                NSLog(@"[ShaderService] Download error: %@", error);
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    if (completion) {
+                        NSError *wrappedError = [NSError errorWithDomain:@"ShaderServiceError" 
+                                                                    code:3 
+                                                                userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"ä¸è½½å¤±è´¥: %@", error.localizedDescription]}];
+                        completion(wrappedError);
+                    }
+                });
+                return;
+            }
+            
+            if (!data || data.length == 0) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    if (completion) {
+                        NSError *emptyError = [NSError errorWithDomain:@"ShaderServiceError" 
+                                                                  code:4 
+                                                              userInfo:@{NSLocalizedDescriptionKey: @"ä¸è½½æ°æ®ä¸ºç©º"}];
+                        completion(emptyError);
+                    }
+                });
+                return;
+            }
+            
+            // Check HTTP status
+            if ([response isKindOfClass:[NSHTTPURLResponse class]]) {
+                NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
+                if (httpResponse.statusCode != 200) {
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        if (completion) {
+                            NSError *httpError = [NSError errorWithDomain:@"ShaderServiceError" 
+                                                                     code:5 
+                                                                 userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"æå¡å¨è¿åéè¯¯: %ld", (long)httpResponse.statusCode]}];
+                            completion(httpError);
+                        }
+                    });
+                    return;
+                }
+            }
+            
+            // Remove existing file if any
+            if ([fm fileExistsAtPath:destinationPath]) {
+                [fm removeItemAtPath:destinationPath error:nil];
+            }
+            
+            // Write data to file
+            NSError *writeError = nil;
+            BOOL written = [data writeToFile:destinationPath options:NSDataWritingAtomic error:&writeError];
+            
+            if (!written || writeError) {
+                NSLog(@"[ShaderService] Failed to write file: %@", writeError);
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    if (completion) {
+                        NSError *fileError = [NSError errorWithDomain:@"ShaderServiceError" 
+                                                                 code:6 
+                                                             userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"æ æ³åå»ºæä»¶: %@", writeError ? writeError.localizedDescription : @"æªç¥éè¯¯"]}];
+                        completion(fileError);
+                    }
+                });
+                return;
+            }
+            
+            NSLog(@"[ShaderService] Shader downloaded successfully to %@", destinationPath);
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (completion) {
+                    completion(nil); // Success
+                }
+            });
+        }];
+        
+        [task resume];
+    });
 }
 
-#pragma mark - NSURLSessionDownloadDelegate
+#pragma mark - NSURLSessionDownloadDelegate (Legacy support)
 
 - (void)URLSession:(NSURLSession *)session downloadTask:(NSURLSessionDownloadTask *)downloadTask didFinishDownloadingToURL:(NSURL *)location {
     ShaderDownloadHandler handler = self.downloadCompletionHandlers[downloadTask];
