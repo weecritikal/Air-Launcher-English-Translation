@@ -216,6 +216,10 @@ add_executable(AngelAuraAmethyst
   CustomIconManager.m
   ImageCropperViewController.m
 
+  # Background wallpaper sources
+  BackgroundManager.m
+  BackgroundSettingsViewController.m
+
   # TouchController bridge and preferences
   TouchControllerBridge.m
   TouchControllerPreferencesViewController.m
@@ -270,7 +274,7 @@ if(MINIZIP_ENABLED AND EXISTS "${MINIZIP_DIR}")
   endif()
 else()
   if(EXISTS "${MINIZIP_DIR}")
-    message(STATUS "minizip folder found but MINIZIP_ENABLED is OFF â skipping compilation.")
+    message(STATUS "minizip folder found but MINIZIP_ENABLED is OFF Ã¢ÂÂ skipping compilation.")
   else()
     message(STATUS "minizip folder not found, skipping minizip compilation.")
   endif()
