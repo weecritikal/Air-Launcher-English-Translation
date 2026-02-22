@@ -17,6 +17,7 @@
 #import "ios_uikit_bridge.h"
 #import "utils.h"
 #import "ModsManagerViewController.h"
+#import "ShadersManagerViewController.h"
 
 typedef NS_ENUM(NSUInteger, LauncherProfilesTableSection) {
     kInstances,
@@ -131,6 +132,18 @@ typedef NS_ENUM(NSUInteger, LauncherProfilesTableSection) {
     [self.navigationController pushViewController:vc animated:YES];
 }
 
+#pragma mark - Manage Shaders
+
+- (void)openManageShaders {
+    ShadersManagerViewController *vc = [ShadersManagerViewController new];
+    if (PLProfiles.current.selectedProfileName.length > 0) {
+        vc.profileName = PLProfiles.current.selectedProfileName;
+    } else {
+        vc.profileName = @"default";
+    }
+    [self.navigationController pushViewController:vc animated:YES];
+}
+
 #pragma mark Table view
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
@@ -147,7 +160,7 @@ typedef NS_ENUM(NSUInteger, LauncherProfilesTableSection) {
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     switch (section) {
-        case 0: return 3; // Increased to 3 to accommodate "Manage Mods"
+        case 0: return 4; // Game Dir, Separate Pref, Manage Mods, Manage Shaders
         case 1: return [PLProfiles.current.profiles count];
     }
     return 0;
@@ -175,7 +188,11 @@ typedef NS_ENUM(NSUInteger, LauncherProfilesTableSection) {
         cell.accessoryView = view;
     } else if (row == 2) {
         cell.imageView.image = [UIImage systemImageNamed:@"puzzlepiece.extension"];
-        cell.textLabel.text = @"管理 Mod";
+        cell.textLabel.text = @"ç®¡çæ¨¡ç»";
+        cell.detailTextLabel.text = nil;
+    } else if (row == 3) {
+        cell.imageView.image = [UIImage systemImageNamed:@"photo"];
+        cell.textLabel.text = @"ç®¡çåå½±";
         cell.detailTextLabel.text = nil;
     }
 }
@@ -226,6 +243,8 @@ typedef NS_ENUM(NSUInteger, LauncherProfilesTableSection) {
             [self.navigationController pushViewController:[LauncherPrefGameDirViewController new] animated:YES];
         } else if (indexPath.row == 2) {
             [self openManageMods];
+        } else if (indexPath.row == 3) {
+            [self openManageShaders];
         }
         return;
     }
