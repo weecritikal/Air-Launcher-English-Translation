@@ -86,7 +86,7 @@
     // Modpack Import entry
     [self.options addObject:
         (id)[LauncherMenuCustomItem
-            title:@"å¯¼å¥æ´åå"
+            title:@"导入整合包"
             imageName:@"archivebox" action:^{
                 ModpackImportViewController *modpackVC = [[ModpackImportViewController alloc] init];
                 modpackVC.profileName = PLProfiles.current.selectedProfileName;
