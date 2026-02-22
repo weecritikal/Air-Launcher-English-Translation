@@ -1000,11 +1000,11 @@ static GameSurfaceView* pojavWindow;
         // Validate window dimensions
         if (windowWidth <= 0 || windowHeight <= 0) {
             NSLog(@"[SurfaceViewController] Error: invalid window size %dx%d", windowWidth, windowHeight);
-            // Use default dimensions
             windowWidth = 1280;
             windowHeight = 720;
         }
         
+        // Get Java version
         int minVersion = [self.metadata[@"javaVersion"][@"majorVersion"] intValue];
         if (minVersion == 0) {
             minVersion = [self.metadata[@"javaVersion"][@"version"] intValue];
@@ -1023,20 +1023,17 @@ static GameSurfaceView* pojavWindow;
             return;
         }
         
+        // Validate username
         NSString *username = currentAuth.authData[@"username"];
         if (!username || username.length == 0) {
-            username = @"Player"; // Fallback username
+            username = @"Player";
         }
         
         NSLog(@"[SurfaceViewController] Launching Minecraft with username: %@, version: %d, size: %dx%d", 
               username, minVersion, windowWidth, windowHeight);
         
-        launchJVM(
-            username,
-            self.metadata,
-            windowWidth, windowHeight,
-            minVersion
-        );
+        // Launch JVM
+        launchJVM(username, self.metadata, windowWidth, windowHeight, minVersion);
     });
 }
 
