@@ -188,11 +188,11 @@ typedef NS_ENUM(NSUInteger, LauncherProfilesTableSection) {
         cell.accessoryView = view;
     } else if (row == 2) {
         cell.imageView.image = [UIImage systemImageNamed:@"puzzlepiece.extension"];
-        cell.textLabel.text = @"ç®¡çæ¨¡ç»";
+        cell.textLabel.text = @"管理模组";
         cell.detailTextLabel.text = nil;
     } else if (row == 3) {
         cell.imageView.image = [UIImage systemImageNamed:@"photo"];
-        cell.textLabel.text = @"ç®¡çåå½±";
+        cell.textLabel.text = @"管理光影";
         cell.detailTextLabel.text = nil;
     }
 }
