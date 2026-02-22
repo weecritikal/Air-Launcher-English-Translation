@@ -38,7 +38,11 @@ extern NSMutableDictionary *prefDict;
     self.preferredSplitBehavior = UISplitViewControllerSplitBehaviorTile;
     self.minimumPrimaryColumnWidth = 70;  // Sidebar width
     self.maximumPrimaryColumnWidth = 70;
-    self.primaryColumnWidth = 70;
+    
+    // primaryColumnWidth is only writable on iOS 16+
+    if (@available(iOS 16.0, *)) {
+        self.primaryColumnWidth = 70;
+    }
     
     // Apply global background
     [[BackgroundManager sharedManager] applyBackgroundToSplitViewController:self];
