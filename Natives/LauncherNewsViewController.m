@@ -13,7 +13,7 @@ UIEdgeInsets insets;
 
 - (id)init {
     self = [super init];
-    self.title = localize(@"News", nil);
+    self.title = @"主页";
     return self;
 }
 
@@ -25,9 +25,13 @@ UIEdgeInsets insets;
 {
     [super viewDidLoad];
     
+    // FCL Style: Transparent background
+    self.view.backgroundColor = [UIColor clearColor];
+    
     CGSize size = CGSizeMake(self.view.frame.size.width, self.view.frame.size.height);
     insets = UIApplication.sharedApplication.windows.firstObject.safeAreaInsets;
     
+    // FCL Style: Use FCL welcome page or custom news URL
     NSString *newsURL = getPrefObject(@"general.news_url") ?: @"https://amethyst.ct.ws/welcome";
     NSURLRequest *request = [NSURLRequest requestWithURL:[NSURL URLWithString:newsURL]];
 
@@ -37,23 +41,35 @@ UIEdgeInsets insets;
     webView.translatesAutoresizingMaskIntoConstraints = NO;
     webView.navigationDelegate = self;
     webView.opaque = NO;
+    webView.backgroundColor = [UIColor clearColor];
+    webView.scrollView.backgroundColor = [UIColor clearColor];
+    
     [self adjustWebViewForSize:size];
     webView.scrollView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
+    
+    // Disable zoom
     NSString *javascript = @"var meta = document.createElement('meta');meta.setAttribute('name', 'viewport');meta.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no');document.getElementsByTagName('head')[0].appendChild(meta);";
     WKUserScript *nozoom = [[WKUserScript alloc] initWithSource:javascript injectionTime:WKUserScriptInjectionTimeAtDocumentEnd forMainFrameOnly:YES];
     [webView.configuration.userContentController addUserScript:nozoom];
     [webView.scrollView setShowsHorizontalScrollIndicator:NO];
     [webView loadRequest:request];
     [self.view addSubview:webView];
-
+    
+    // Setup constraints
+    [NSLayoutConstraint activateConstraints:@[
+        [webView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [webView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [webView.topAnchor constraintEqualToAnchor:self.view.topAnchor],
+        [webView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor]
+    ]];
+    
+    // Memory warning
     if(!isJailbroken && getPrefBool(@"warnings.limited_ram_warn") && (roundf(NSProcessInfo.processInfo.physicalMemory / 0x1000000) < 3900)) {
-        // "This device has a limited amount of memory available."
         [self showWarningAlert:@"limited_ram" hasPreference:YES exitWhenCompleted:NO];
     }
-
-    self.navigationItem.leftBarButtonItem = self.splitViewController.displayModeButtonItem;
-    self.navigationItem.rightBarButtonItem = [sidebarViewController drawAccountButton];
-    self.navigationItem.leftItemsSupplementBackButton = true;
+    
+    // FCL Style: Hide navigation bar in split view
+    self.navigationController.navigationBarHidden = YES;
 }
 
 -(void)showWarningAlert:(NSString *)key hasPreference:(BOOL)isPreferenced exitWhenCompleted:(BOOL)shouldExit {
@@ -95,12 +111,8 @@ UIEdgeInsets insets;
 }
 
 - (void)adjustWebViewForSize:(CGSize)size {
-    BOOL isPortrait = size.height > size.width;
-    if (isPortrait) {
-        webView.scrollView.contentInset = UIEdgeInsetsMake(self.navigationController.navigationBar.frame.size.height + insets.top, 0, self.navigationController.navigationBar.frame.size.height + insets.bottom, 0);
-    } else {
-        webView.scrollView.contentInset = UIEdgeInsetsMake(self.navigationController.navigationBar.frame.size.height, 0, self.navigationController.navigationBar.frame.size.height, 0);
-    }
+    // FCL Style: Always landscape, no extra insets needed
+    webView.scrollView.contentInset = UIEdgeInsetsZero;
 }
 
 - (void)webView:(WKWebView *)webView 
