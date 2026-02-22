@@ -26,15 +26,10 @@ extern dispatch_group_t fatalExitGroup;
     }
 }
 
-#pragma mark - Orientation Support (iOS 15 and earlier)
+#pragma mark - Orientation Support
 
 - (UIInterfaceOrientationMask)application:(UIApplication *)application supportedInterfaceOrientationsForWindow:(UIWindow *)window {
     // Force landscape only
-    return UIInterfaceOrientationMaskLandscape;
-}
-
-@end
-ly
     return UIInterfaceOrientationMaskLandscape;
 }
 
