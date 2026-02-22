@@ -26,16 +26,21 @@ extern NSMutableDictionary *prefDict;
 
     self.delegate = self;
 
+    // FCL Style: MenuViewController as master, NavigationController as detail
     UINavigationController *masterVc = [[UINavigationController alloc] initWithRootViewController:[[LauncherMenuViewController alloc] init]];
     LauncherNavigationController *detailVc = [[LauncherNavigationController alloc] initWithRootViewController:[[LauncherNewsViewController alloc] init]];
     detailVc.toolbarHidden = NO;
 
     self.viewControllers = @[masterVc, detailVc];
-    [self changeDisplayModeForSize:self.view.frame.size];
     
-    self.maximumPrimaryColumnWidth = self.view.bounds.size.width * 0.95;
+    // FCL Style: Fixed sidebar width
+    self.preferredDisplayMode = UISplitViewControllerDisplayModeOneBesideSecondary;
+    self.preferredSplitBehavior = UISplitViewControllerSplitBehaviorTile;
+    self.minimumPrimaryColumnWidth = 70;  // Sidebar width
+    self.maximumPrimaryColumnWidth = 70;
+    self.primaryColumnWidth = 70;
     
-    // Apply global background to this split view controller
+    // Apply global background
     [[BackgroundManager sharedManager] applyBackgroundToSplitViewController:self];
     
     // Listen for background change notifications
@@ -93,7 +98,9 @@ extern NSMutableDictionary *prefDict;
 
 - (void)viewWillTransitionToSize:(CGSize)size withTransitionCoordinator:(id<UIViewControllerTransitionCoordinator>)coordinator {
     [super viewWillTransitionToSize:size withTransitionCoordinator:coordinator];
-    [self changeDisplayModeForSize:size];
+    
+    // FCL Style: Always landscape, fixed sidebar
+    self.preferredDisplayMode = UISplitViewControllerDisplayModeOneBesideSecondary;
     
     // Update background frame on rotation
     [coordinator animateAlongsideTransition:^(id<UIViewControllerTransitionCoordinatorContext> context) {
@@ -102,31 +109,26 @@ extern NSMutableDictionary *prefDict;
 }
 
 - (void)splitViewController:(UISplitViewController *)svc willChangeToDisplayMode:(UISplitViewControllerDisplayMode)displayMode {
-    if (self.preferredDisplayMode != displayMode && self.displayMode != UISplitViewControllerDisplayModeSecondaryOnly) {
+    // Keep FCL style layout
+    if (displayMode != UISplitViewControllerDisplayModeOneBesideSecondary) {
         dispatch_async(dispatch_get_main_queue(), ^{
-            self.preferredDisplayMode = UISplitViewControllerDisplayModeSecondaryOnly;
+            self.preferredDisplayMode = UISplitViewControllerDisplayModeOneBesideSecondary;
         });
     }
 }
 
-- (void)changeDisplayModeForSize:(CGSize)size {
-    BOOL isPortrait = size.height > size.width;
-    if (self.preferredDisplayMode == 0 || self.displayMode != UISplitViewControllerDisplayModeSecondaryOnly) {
-        if(!getPrefBool(@"general.hidden_sidebar")) {
-            self.preferredDisplayMode = isPortrait ?
-                UISplitViewControllerDisplayModeOneOverSecondary :
-                UISplitViewControllerDisplayModeOneBesideSecondary;
-        } else {
-            self.preferredDisplayMode = UISplitViewControllerDisplayModeSecondaryOnly;
-        }
-    }
-    self.preferredSplitBehavior = isPortrait ?
-        UISplitViewControllerSplitBehaviorOverlay :
-        UISplitViewControllerSplitBehaviorTile;
-}
-
 - (void)dismissViewController {
     [self dismissViewControllerAnimated:YES completion:nil];
+}
+
+#pragma mark - Orientation Support
+
+- (BOOL)shouldAutorotate {
+    return YES;
+}
+
+- (UIInterfaceOrientationMask)supportedInterfaceOrientations {
+    return UIInterfaceOrientationMaskLandscape;
 }
 
 @end
