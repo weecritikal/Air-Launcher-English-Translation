@@ -8,8 +8,6 @@
 #import "LauncherPreferences.h"
 #import "LauncherPreferencesViewController.h"
 #import "LauncherProfilesViewController.h"
-#import "ModsManagerViewController.h"
-#import "ShadersManagerViewController.h"
 #import "ModpackImportViewController.h"
 #import "PLProfiles.h"
 #import "UIButton+AFNetworking.h"
