@@ -85,34 +85,10 @@
                 [contentNavigationController performSelector:@selector(enterModInstaller)];
             }]];
     
-    // Mod Manager entry
-    [self.options addObject:
-        (id)[LauncherMenuCustomItem
-            title:@"管理模组"
-            imageName:@"puzzlepiece.extension" action:^{
-                ModsManagerViewController *modsVC = [[ModsManagerViewController alloc] init];
-                modsVC.profileName = PLProfiles.current.selectedProfileName;
-                UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:modsVC];
-                nav.modalPresentationStyle = UIModalPresentationFormSheet;
-                [self presentViewController:nav animated:YES completion:nil];
-            }]];
-    
-    // Shader Manager entry
-    [self.options addObject:
-        (id)[LauncherMenuCustomItem
-            title:@"管理光影"
-            imageName:@"photo" action:^{
-                ShadersManagerViewController *shadersVC = [[ShadersManagerViewController alloc] init];
-                shadersVC.profileName = PLProfiles.current.selectedProfileName;
-                UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:shadersVC];
-                nav.modalPresentationStyle = UIModalPresentationFormSheet;
-                [self presentViewController:nav animated:YES completion:nil];
-            }]];
-    
     // Modpack Import entry
     [self.options addObject:
         (id)[LauncherMenuCustomItem
-            title:@"导入整合包"
+            title:@"å¯¼å¥æ´åå"
             imageName:@"archivebox" action:^{
                 ModpackImportViewController *modpackVC = [[ModpackImportViewController alloc] init];
                 modpackVC.profileName = PLProfiles.current.selectedProfileName;
@@ -162,7 +138,7 @@
         [self.options addObject:(id)[LauncherMenuCustomItem
             title:@"To the one who colored the blocks"
             imageName:@"" action:^{
-                NSString *urlString = @"https://wiki.easecation.net/零雾05_Fogg05";
+                NSString *urlString = @"https://wiki.easecation.net/é¶é¾05_Fogg05";
                 NSString *encodedUrlString = [urlString stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLPathAllowedCharacterSet]];
                 openLink(self, [NSURL URLWithString:encodedUrlString]);
             }]];
