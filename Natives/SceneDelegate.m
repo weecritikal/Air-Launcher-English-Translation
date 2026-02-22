@@ -1,11 +1,11 @@
 #import "SceneDelegate.h"
 #import "ios_uikit_bridge.h"
 #import "utils.h"
+#import "LauncherSplitViewController.h"
 
 extern UIWindow *mainWindow;
 
 @interface SceneDelegate ()
-
 @end
 
 @implementation SceneDelegate
@@ -25,8 +25,22 @@ extern UIWindow *mainWindow;
     self.window = [[UIWindow alloc] initWithWindowScene:windowScene];
     self.window.frame = windowScene.coordinateSpace.bounds;
     mainWindow = self.window;
-    launchInitialViewController(self.window);
+    
+    // Use FCL-style split view controller
+    [self setupFCLInterface];
+    
     [self.window makeKeyAndVisible];
+}
+
+- (void)setupFCLInterface {
+    // Create FCL-style split view controller
+    LauncherSplitViewController *splitVC = [[LauncherSplitViewController alloc] init];
+    
+    // Configure split view for FCL style
+    splitVC.preferredDisplayMode = UISplitViewControllerDisplayModeOneBesideSecondary;
+    splitVC.preferredSplitBehavior = UISplitViewControllerSplitBehaviorTile;
+    
+    self.window.rootViewController = splitVC;
 }
 
 - (void)sceneDidDisconnect:(UIScene *)scene {
