@@ -2,7 +2,7 @@
 //  BackgroundManager.m
 //  Amethyst
 //
-//  Background wallpaper manager implementation - Global Version
+//  Background wallpaper manager implementation - Global Version with Transparency
 //
 
 #import "BackgroundManager.h"
@@ -327,37 +327,31 @@ static const NSInteger kBackgroundDimTag = 99996;
     [container addSubview:dimView];
 }
 
-#pragma mark - Transparency Helpers
+#pragma mark - Transparency Helpers (FIXED for Semi-Transparent UI)
 
 - (void)makeViewControllerTransparent:(UIViewController *)viewController {
     if (!viewController) return;
     
-    // Main view
+    // Main view - make it semi-transparent with blur
     viewController.view.backgroundColor = [UIColor clearColor];
     
-    // Navigation controller
-    if ([viewController isKindOfClass:[UINavigationController class]]) {
-        UINavigationController *nav = (UINavigationController *)viewController;
-        nav.view.backgroundColor = [UIColor clearColor];
-        nav.navigationBar.translucent = YES;
-        
-        // Make all view controllers in stack transparent
-        for (UIViewController *vc in nav.viewControllers) {
-            [self makeViewControllerTransparent:vc];
-        }
-    }
-    
-    // Table view controller
+    // For UITableViewController
     if ([viewController isKindOfClass:[UITableViewController class]]) {
         UITableViewController *tableVC = (UITableViewController *)viewController;
         tableVC.tableView.backgroundColor = [UIColor clearColor];
         tableVC.tableView.backgroundView = nil;
         
-        // Make cells have semi-transparent background for readability
-        tableVC.tableView.separatorEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleDark];
+        // Make cells semi-transparent
+        tableVC.tableView.separatorStyle = UITableViewCellSeparatorStyleSingleLine;
+        
+        // Apply to all visible cells
+        for (UITableViewCell *cell in tableVC.tableView.visibleCells) {
+            cell.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.7];
+            cell.contentView.backgroundColor = [UIColor clearColor];
+        }
     }
     
-    // Collection view controller
+    // For UICollectionViewController
     if ([viewController isKindOfClass:[UICollectionViewController class]]) {
         UICollectionViewController *collectionVC = (UICollectionViewController *)viewController;
         collectionVC.collectionView.backgroundColor = [UIColor clearColor];
@@ -380,10 +374,18 @@ static const NSInteger kBackgroundDimTag = 99996;
         if ([vc isKindOfClass:[UINavigationController class]]) {
             UINavigationController *nav = (UINavigationController *)vc;
             
-            // Navigation controller setup
+            // Navigation controller setup - make it semi-transparent
             nav.view.backgroundColor = [UIColor clearColor];
             nav.navigationBar.translucent = YES;
             nav.toolbar.translucent = YES;
+            
+            // Set navigation bar to semi-transparent
+            nav.navigationBar.barTintColor = [UIColor colorWithWhite:0.1 alpha:0.7];
+            nav.navigationBar.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.7];
+            
+            // Set toolbar to semi-transparent
+            nav.toolbar.barTintColor = [UIColor colorWithWhite:0.1 alpha:0.7];
+            nav.toolbar.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.7];
             
             // Make all view controllers in stack transparent
             for (UIViewController *childVC in nav.viewControllers) {
@@ -460,7 +462,7 @@ static const NSInteger kBackgroundDimTag = 99996;
 - (void)setImageBackground:(UIImage *)image completion:(void (^)(BOOL success, NSError * _Nullable error))completion {
     if (!image) {
         if (completion) {
-            completion(NO, [NSError errorWithDomain:@"BackgroundManager" code:1 userInfo:@{NSLocalizedDescriptionKey: @"图片为空"}]);
+            completion(NO, [NSError errorWithDomain:@"BackgroundManager" code:1 userInfo:@{NSLocalizedDescriptionKey: @"å¾çä¸ºç©º"}]);
         }
         return;
     }
@@ -476,7 +478,7 @@ static const NSInteger kBackgroundDimTag = 99996;
         NSData *imageData = UIImageJPEGRepresentation(image, 0.85);
         if (!imageData) {
             dispatch_async(dispatch_get_main_queue(), ^{
-                if (completion) completion(NO, [NSError errorWithDomain:@"BackgroundManager" code:2 userInfo:@{NSLocalizedDescriptionKey: @"图片压缩失败"}]);
+                if (completion) completion(NO, [NSError errorWithDomain:@"BackgroundManager" code:2 userInfo:@{NSLocalizedDescriptionKey: @"å¾çåç¼©å¤±è´¥"}]);
             });
             return;
         }
@@ -500,7 +502,7 @@ static const NSInteger kBackgroundDimTag = 99996;
             });
         } else {
             dispatch_async(dispatch_get_main_queue(), ^{
-                if (completion) completion(NO, [NSError errorWithDomain:@"BackgroundManager" code:3 userInfo:@{NSLocalizedDescriptionKey: @"保存图片失败"}]);
+                if (completion) completion(NO, [NSError errorWithDomain:@"BackgroundManager" code:3 userInfo:@{NSLocalizedDescriptionKey: @"ä¿å­å¾çå¤±è´¥"}]);
             });
         }
     });
@@ -509,7 +511,7 @@ static const NSInteger kBackgroundDimTag = 99996;
 - (void)setVideoBackgroundWithURL:(NSURL *)videoURL completion:(void (^)(BOOL success, NSError * _Nullable error))completion {
     if (!videoURL || ![[NSFileManager defaultManager] fileExistsAtPath:videoURL.path]) {
         if (completion) {
-            completion(NO, [NSError errorWithDomain:@"BackgroundManager" code:4 userInfo:@{NSLocalizedDescriptionKey: @"视频文件不存在"}]);
+            completion(NO, [NSError errorWithDomain:@"BackgroundManager" code:4 userInfo:@{NSLocalizedDescriptionKey: @"è§é¢æä»¶ä¸å­å¨"}]);
         }
         return;
     }
@@ -542,7 +544,7 @@ static const NSInteger kBackgroundDimTag = 99996;
             });
         } else {
             dispatch_async(dispatch_get_main_queue(), ^{
-                if (completion) completion(NO, copyError ?: [NSError errorWithDomain:@"BackgroundManager" code:5 userInfo:@{NSLocalizedDescriptionKey: @"复制视频失败"}]);
+                if (completion) completion(NO, copyError ?: [NSError errorWithDomain:@"BackgroundManager" code:5 userInfo:@{NSLocalizedDescriptionKey: @"å¤å¶è§é¢å¤±è´¥"}]);
             });
         }
     });
