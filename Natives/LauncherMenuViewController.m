@@ -12,6 +12,7 @@
 #import "ShadersManagerViewController.h"
 #import "ModpackImportViewController.h"
 #import "PLProfiles.h"
+#import "SurfaceViewController.h"
 #import "UIButton+AFNetworking.h"
 #import "UIImageView+AFNetworking.h"
 #import "UIKit+hook.h"
