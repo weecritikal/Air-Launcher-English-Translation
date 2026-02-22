@@ -16,10 +16,10 @@ extern NSMutableDictionary *prefDict;
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    
+
     // Set transparent background to show global background
     self.view.backgroundColor = [UIColor clearColor];
-    
+
     if ([getPrefObject(@"control.control_safe_area") length] == 0) {
         setPrefObject(@"control.control_safe_area", NSStringFromUIEdgeInsets(getDefaultSafeArea()));
     }
@@ -32,27 +32,34 @@ extern NSMutableDictionary *prefDict;
     detailVc.toolbarHidden = NO;
 
     self.viewControllers = @[masterVc, detailVc];
-    
+
     // FCL Style: Fixed sidebar width
     self.preferredDisplayMode = UISplitViewControllerDisplayModeOneBesideSecondary;
     self.preferredSplitBehavior = UISplitViewControllerSplitBehaviorTile;
     self.minimumPrimaryColumnWidth = 70;  // Sidebar width
     self.maximumPrimaryColumnWidth = 70;
-    
+
     // primaryColumnWidth is only writable on iOS 16+
+    // Use performSelector to avoid compiler readonly check on iOS < 16
     if (@available(iOS 16.0, *)) {
-        self.primaryColumnWidth = 70;
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Warc-performSelector-leaks"
+        SEL setPrimaryColumnWidthSel = NSSelectorFromString(@"setPrimaryColumnWidth:");
+        if ([self respondsToSelector:setPrimaryColumnWidthSel]) {
+            [self performSelector:setPrimaryColumnWidthSel withObject:@(70)];
+        }
+#pragma clang diagnostic pop
     }
-    
+
     // Apply global background
     [[BackgroundManager sharedManager] applyBackgroundToSplitViewController:self];
-    
+
     // Listen for background change notifications
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(backgroundChanged:)
                                                  name:@"BackgroundChanged"
                                                object:nil];
-                                             
+
     // Listen for navigation changes to ensure transparency
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(navigationControllerDidShow:)
@@ -84,10 +91,10 @@ extern NSMutableDictionary *prefDict;
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
-    
+
     // Resume video background
     [[BackgroundManager sharedManager] resumeVideo];
-    
+
     // Ensure transparency
     if ([[BackgroundManager sharedManager] hasBackground]) {
         [[BackgroundManager sharedManager] makeSplitViewControllerTransparent:self];
@@ -102,10 +109,10 @@ extern NSMutableDictionary *prefDict;
 
 - (void)viewWillTransitionToSize:(CGSize)size withTransitionCoordinator:(id<UIViewControllerTransitionCoordinator>)coordinator {
     [super viewWillTransitionToSize:size withTransitionCoordinator:coordinator];
-    
+
     // FCL Style: Always landscape, fixed sidebar
     self.preferredDisplayMode = UISplitViewControllerDisplayModeOneBesideSecondary;
-    
+
     // Update background frame on rotation
     [coordinator animateAlongsideTransition:^(id<UIViewControllerTransitionCoordinatorContext> context) {
         [[BackgroundManager sharedManager] updateBackgroundFrame];
