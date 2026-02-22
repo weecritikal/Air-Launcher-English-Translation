@@ -5,6 +5,7 @@
 extern UIWindow *mainWindow;
 
 @interface SceneDelegate ()
+
 @end
 
 @implementation SceneDelegate
@@ -29,7 +30,7 @@ extern UIWindow *mainWindow;
 }
 
 - (void)sceneDidDisconnect:(UIScene *)scene {
-    // Called when the scene is being released by the system.
+    // Called as the scene is being released by the system.
 }
 
 - (void)sceneDidBecomeActive:(UIScene *)scene {
