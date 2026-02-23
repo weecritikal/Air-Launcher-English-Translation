@@ -52,22 +52,22 @@ static const CGFloat kRightPanelWidth = 220.0;  // 右侧面板宽度
 #pragma mark - Setup
 
 - (void)setupContainers {
-    // 左侧边栏容器
+    // 左侧边栏容器 - 半透明
     self.sidebarContainer = [[UIView alloc] init];
     self.sidebarContainer.translatesAutoresizingMaskIntoConstraints = NO;
-    self.sidebarContainer.backgroundColor = [UIColor colorWithWhite:0.08 alpha:0.95];
+    self.sidebarContainer.backgroundColor = [UIColor colorWithWhite:0.08 alpha:0.7];
     [self.view addSubview:self.sidebarContainer];
     
-    // 中间内容容器
+    // 中间内容容器 - 完全透明
     self.contentContainer = [[UIView alloc] init];
     self.contentContainer.translatesAutoresizingMaskIntoConstraints = NO;
     self.contentContainer.backgroundColor = [UIColor clearColor];
     [self.view addSubview:self.contentContainer];
     
-    // 右侧面板容器
+    // 右侧面板容器 - 半透明
     self.rightPanelContainer = [[UIView alloc] init];
     self.rightPanelContainer.translatesAutoresizingMaskIntoConstraints = NO;
-    self.rightPanelContainer.backgroundColor = [UIColor colorWithWhite:0.08 alpha:0.95];
+    self.rightPanelContainer.backgroundColor = [UIColor colorWithWhite:0.08 alpha:0.7];
     [self.view addSubview:self.rightPanelContainer];
     
     // 设置约束
