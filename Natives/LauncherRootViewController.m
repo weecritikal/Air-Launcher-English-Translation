@@ -2,6 +2,7 @@
 #import "LauncherMenuViewController.h"
 #import "LauncherNewsViewController.h"
 #import "LauncherRightPanelViewController.h"
+#import "LauncherProfilesViewController.h"
 #import "BackgroundManager.h"
 
 // 布局常量
@@ -123,6 +124,53 @@ static const CGFloat kRightPanelWidth = 220.0;  // 右侧面板宽度
     ]];
     [rightPanelVC didMoveToParentViewController:self];
     _rightPanelViewController = rightPanelVC;
+    
+    // 注册通知监听
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(showHomePage)
+                                                 name:@"ShowHomePage"
+                                               object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(showDownloadPage)
+                                                 name:@"ShowDownloadPage"
+                                               object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(executeJarFile:)
+                                                 name:@"ExecuteJarFile"
+                                               object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(backgroundChanged)
+                                                 name:@"BackgroundChanged"
+                                               object:nil];
+}
+
+- (void)showHomePage {
+    LauncherNewsViewController *newsVC = [[LauncherNewsViewController alloc] init];
+    [self setContentViewController:newsVC animated:YES];
+}
+
+- (void)showDownloadPage {
+    // 显示版本下载页面
+    LauncherProfilesViewController *profilesVC = [[LauncherProfilesViewController alloc] init];
+    [self setContentViewController:profilesVC animated:YES];
+}
+
+- (void)executeJarFile:(NSNotification *)notification {
+    NSURL *jarURL = notification.object;
+    if (jarURL) {
+        // 调用LauncherNavigationController的enterModInstaller方法
+        // 这里需要通过通知或其他方式传递给LauncherNavigationController
+        [[NSNotificationCenter defaultCenter] postNotificationName:@"EnterModInstaller" object:jarURL];
+    }
+}
+
+- (void)backgroundChanged {
+    // 重新应用背景
+    [[BackgroundManager sharedManager] applyBackgroundToView:self.view];
+}
+
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
 #pragma mark - Content Switching
