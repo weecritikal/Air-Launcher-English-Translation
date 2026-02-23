@@ -14,11 +14,12 @@
     [super viewDidLoad];
     
     self.title = @"管理版本";
-    self.view.backgroundColor = [UIColor systemBackgroundColor];
+    self.view.backgroundColor = [UIColor clearColor];
     
     // 设置表格
     self.tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStyleInsetGrouped];
     self.tableView.keyboardDismissMode = UIScrollViewKeyboardDismissModeInteractive;
+    self.tableView.backgroundColor = [UIColor clearColor];
     
     // 加载版本列表
     [self loadVersionList];
@@ -36,13 +37,14 @@
 
 - (void)loadVersionList {
     // 从PLProfiles获取所有版本
+    NSMutableDictionary *profiles = PLProfiles.current.profiles;
     NSMutableArray *versions = [NSMutableArray array];
-    for (NSString *key in PLProfiles.current.profiles.allKeys) {
+    for (NSString *key in profiles.allKeys) {
         [versions addObject:key];
     }
     // 排序
     self.versionList = [versions sortedArrayUsingComparator:^NSComparisonResult(NSString *obj1, NSString *obj2) {
-        return [obj2 compare:obj1]; // 降序，最新的在前面
+        return [obj2 compare:obj1];
     }];
 }
 
@@ -61,6 +63,7 @@
     UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:cellIdentifier];
     if (!cell) {
         cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:cellIdentifier];
+        cell.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.7];
     }
     
     NSString *versionName = self.versionList[indexPath.row];
@@ -131,7 +134,6 @@
 - (void)selectVersion:(NSString *)versionName {
     // 设置当前选中的版本
     PLProfiles.current.selectedProfileName = versionName;
-    [PLProfiles.current saveProfile:PLProfiles.current.profiles[versionName] withName:versionName];
     
     self.selectedVersion = versionName;
     [self.tableView reloadData];
@@ -155,14 +157,16 @@
     
     [alert addAction:[UIAlertAction actionWithTitle:@"删除" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
         // 删除版本
-        NSMutableDictionary *profiles = [PLProfiles.current.profiles mutableCopy];
+        NSMutableDictionary *profiles = PLProfiles.current.profiles;
         [profiles removeObjectForKey:versionName];
-        PLProfiles.current.profiles = profiles;
         
         // 如果删除的是当前选中的版本，清空选择
         if ([PLProfiles.current.selectedProfileName isEqualToString:versionName]) {
-            PLProfiles.current.selectedProfileName = nil;
+            PLProfiles.current.selectedProfileName = profiles.allKeys.firstObject;
         }
+        
+        // 保存更改
+        [PLProfiles.current save];
         
         // 删除版本文件夹
         NSString *gameDir = [NSString stringWithFormat:@"%s/instances/%@", getenv("POJAV_HOME"), versionName];
