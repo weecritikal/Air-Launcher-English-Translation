@@ -150,9 +150,11 @@ static const CGFloat kRightPanelWidth = 220.0;  // 右侧面板宽度
 }
 
 - (void)showDownloadPage {
-    // 显示版本下载页面
+    // 显示版本下载页面 - 使用导航控制器包装
     LauncherProfilesViewController *profilesVC = [[LauncherProfilesViewController alloc] init];
-    [self setContentViewController:profilesVC animated:YES];
+    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:profilesVC];
+    nav.modalPresentationStyle = UIModalPresentationFormSheet;
+    [self presentViewController:nav animated:YES completion:nil];
 }
 
 - (void)executeJarFile:(NSNotification *)notification {
