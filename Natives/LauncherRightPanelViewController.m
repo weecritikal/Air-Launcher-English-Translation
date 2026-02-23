@@ -30,12 +30,22 @@
     [self setupUI];
     [self updateAccountInfo];
     [self updateVersionInfo];
+    
+    // 监听账户信息更新通知
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(updateAccountInfo)
+                                                 name:@"UpdateAccountInfo"
+                                               object:nil];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
     [self updateAccountInfo];
     [self updateVersionInfo];
+}
+
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
 #pragma mark - UI Setup
