@@ -162,6 +162,8 @@ add_executable(AngelAuraAmethyst
   LauncherNewsViewController.m
   LauncherRootViewController.m
   LauncherRightPanelViewController.m
+  VersionManagerViewController.m
+  ProfileSettingsViewController.m
   LauncherPreferences.m
   LauncherPreferencesViewController.m
   LauncherPrefContCfgViewController.m
