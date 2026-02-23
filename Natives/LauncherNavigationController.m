@@ -473,7 +473,8 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
-    [sidebarViewController updateAccountInfo];
+    // 发送通知更新账户信息
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"UpdateAccountInfo" object:nil];
 }
 
 @end
