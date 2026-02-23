@@ -5,10 +5,10 @@
 #import "SurfaceViewController.h"
 #import "PLProfiles.h"
 #import "utils.h"
+#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
-@interface LauncherRightPanelViewController ()
+@interface LauncherRightPanelViewController () <UIDocumentPickerDelegate>
 
-@property(nonatomic, strong) UISegmentedControl *rendererSwitcher;
 @property(nonatomic, strong) UIImageView *avatarImageView;
 @property(nonatomic, strong) UILabel *usernameLabel;
 @property(nonatomic, strong) UILabel *versionLabel;
@@ -51,13 +51,6 @@
 #pragma mark - UI Setup
 
 - (void)setupUI {
-    // 渲染器切换器 (Pojav/Boat)
-    self.rendererSwitcher = [[UISegmentedControl alloc] initWithItems:@[@"Pojav", @"Boat"]];
-    self.rendererSwitcher.translatesAutoresizingMaskIntoConstraints = NO;
-    self.rendererSwitcher.selectedSegmentIndex = 0;
-    self.rendererSwitcher.backgroundColor = [UIColor colorWithWhite:0.2 alpha:1.0];
-    [self.view addSubview:self.rendererSwitcher];
-    
     // 头像
     self.avatarImageView = [[UIImageView alloc] init];
     self.avatarImageView.translatesAutoresizingMaskIntoConstraints = NO;
@@ -123,13 +116,8 @@
     
     // 约束
     [NSLayoutConstraint activateConstraints:@[
-        // 渲染器切换器
-        [self.rendererSwitcher.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:20],
-        [self.rendererSwitcher.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:16],
-        [self.rendererSwitcher.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-16],
-        
         // 头像
-        [self.avatarImageView.topAnchor constraintEqualToAnchor:self.rendererSwitcher.bottomAnchor constant:30],
+        [self.avatarImageView.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:30],
         [self.avatarImageView.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
         [self.avatarImageView.widthAnchor constraintEqualToConstant:80],
         [self.avatarImageView.heightAnchor constraintEqualToConstant:80],
@@ -184,12 +172,24 @@
 }
 
 - (void)executeJar {
-    // 执行JAR功能
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"提示"
-                                                                   message:@"功能开发中"
-                                                            preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
-    [self presentViewController:alert animated:YES completion:nil];
+    // 执行JAR功能 - 打开文件选择器选择JAR文件
+    UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc] initForOpeningContentTypes:@[[UTType typeWithIdentifier:@"com.sun.java-archive"]]];
+    picker.delegate = self;
+    picker.allowsMultipleSelection = NO;
+    [self presentViewController:picker animated:YES completion:nil];
+}
+
+#pragma mark - UIDocumentPickerDelegate
+
+- (void)documentPicker:(UIDocumentPickerViewController *)controller didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls {
+    if (urls.count > 0) {
+        NSURL *jarURL = urls[0];
+        // 调用LauncherNavigationController的enterModInstaller方法
+        [[NSNotificationCenter defaultCenter] postNotificationName:@"ExecuteJarFile" object:jarURL];
+    }
+}
+
+- (void)documentPickerWasCancelled:(UIDocumentPickerViewController *)controller {
 }
 
 - (void)launchGame {
