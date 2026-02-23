@@ -1,25 +1,13 @@
 #import <UIKit/UIKit.h>
 
-#define sidebarNavController ((UINavigationController *)self.splitViewController.viewControllers[0])
-#define sidebarViewController ((LauncherMenuViewController *)sidebarNavController.viewControllers[0])
-
-@interface LauncherMenuCustomItem : NSObject
-@property(nonatomic) NSString *title, *imageName;
-@property(nonatomic, copy) void (^action)(void);
-@property(nonatomic) NSArray<UIViewController *> *vcArray;
-@end
+// FCL风格左侧边栏 - 功能菜单
 
 @interface LauncherMenuViewController : UIViewController
 
-@property NSString* listPath;
-@property(nonatomic) UIButton *accountButton;
-@property(nonatomic) UIBarButtonItem *accountBtnItem;
-@property(nonatomic) BOOL isInitialVc;
+// 菜单项点击回调
+@property(nonatomic, copy) void (^onMenuItemSelected)(NSInteger index, NSString *title);
 
-- (void)restoreHighlightedSelection;
-- (void)selectAccount:(UIButton *)sender;
+// 刷新账户信息
 - (void)updateAccountInfo;
-- (void)updateVersionInfo;
-- (UIBarButtonItem *)drawAccountButton;
 
 @end
