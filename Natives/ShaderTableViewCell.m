@@ -45,7 +45,7 @@
         _enableSwitch.translatesAutoresizingMaskIntoConstraints = NO;
         [_enableSwitch addTarget:self action:@selector(toggleTapped) forControlEvents:UIControlEventValueChanged];
 
-        _downloadButton = [self createButtonWithTitle:@"下载" titleColor:[UIColor whiteColor] action:@selector(downloadTapped)];
+        _downloadButton = [self createButtonWithTitle:@"Download" titleColor:[UIColor whiteColor] action:@selector(downloadTapped)];
         _downloadButton.backgroundColor = [UIColor systemGreenColor];
         _downloadButton.layer.cornerRadius = 10;
         _downloadButton.titleLabel.font = [UIFont boldSystemFontOfSize:10];
@@ -196,7 +196,7 @@
 
     // Show local elements
     _openLinkButton.hidden = NO;
-    _enableSwitch.hidden = NO;
+    _enableSwitch.hidden = YES; // 禁用光影切换功能
     _shaderVersionLabel.hidden = NO;
     _gameVersionLabel.hidden = NO;
 
@@ -247,7 +247,7 @@
     formatter.numberStyle = NSNumberFormatterDecimalStyle;
     NSString *downloadsStr = [formatter stringFromNumber:shader.downloads ?: @0];
 
-    _statsLabel.text = [NSString stringWithFormat:@"%@ 下载", downloadsStr];
+    _statsLabel.text = [NSString stringWithFormat:@"%@ downloads", downloadsStr];
 }
 
 #pragma mark - State Updates
@@ -278,4 +278,3 @@
 }
 
 @end
-#pragma clang diagnostic pop
