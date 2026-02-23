@@ -21,11 +21,12 @@
     [super viewDidLoad];
     
     self.title = [NSString stringWithFormat:@"%@ 设置", self.profileName ?: @"版本"];
-    self.view.backgroundColor = [UIColor systemBackgroundColor];
+    self.view.backgroundColor = [UIColor clearColor];
     
     // 设置表格
     self.tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStyleInsetGrouped];
     self.tableView.keyboardDismissMode = UIScrollViewKeyboardDismissModeInteractive;
+    self.tableView.backgroundColor = [UIColor clearColor];
     
     // 计算最大内存
     [self calculateMaxMemory];
@@ -52,7 +53,7 @@
 
 - (void)loadSettings {
     // 加载当前版本的设置
-    NSDictionary *profile = PLProfiles.current.profiles[self.profileName];
+    NSMutableDictionary *profile = PLProfiles.current.profiles[self.profileName];
     
     // 渲染器
     self.selectedRenderer = profile[@"renderer"] ?: @"auto";
@@ -81,7 +82,8 @@
 }
 
 - (void)saveSettings {
-    NSMutableDictionary *profile = [PLProfiles.current.profiles[self.profileName] mutableCopy];
+    NSMutableDictionary *profiles = PLProfiles.current.profiles;
+    NSMutableDictionary *profile = [profiles[self.profileName] mutableCopy];
     if (!profile) {
         profile = [NSMutableDictionary dictionary];
     }
@@ -90,7 +92,8 @@
     profile[@"javaVersion"] = self.selectedJavaVersion;
     profile[@"allocatedMemory"] = @(self.allocatedMemory);
     
-    [PLProfiles.current saveProfile:profile withName:self.profileName];
+    profiles[self.profileName] = profile;
+    [PLProfiles.current save];
 }
 
 #pragma mark - Table View Data Source
@@ -117,6 +120,7 @@
     UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:cellIdentifier];
     if (!cell) {
         cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:cellIdentifier];
+        cell.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.7];
     }
     
     NSString *title = self.sections[indexPath.section][indexPath.row];
