@@ -158,8 +158,17 @@
 }
 
 - (UIImage *)defaultSkinImage {
-    // 返回默认皮肤（Steve）
-    // 这里可以使用一个默认的皮肤图片，或者从资源加载
+    // 返回默认史蒂夫皮肤
+    // 使用 Crafatar 的默认 Steve 皮肤
+    NSString *steveSkinURL = @"https://crafatar.com/renders/body/8667ba71b85a4004af54457a9734eed7?overlay";
+    NSData *imageData = [NSData dataWithContentsOfURL:[NSURL URLWithString:steveSkinURL]];
+    if (imageData) {
+        UIImage *steveSkin = [UIImage imageWithData:imageData];
+        if (steveSkin) {
+            return steveSkin;
+        }
+    }
+    // 如果下载失败，返回系统图标
     return [UIImage systemImageNamed:@"person.fill"];
 }
 
