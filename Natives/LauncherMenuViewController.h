@@ -9,7 +9,7 @@
 @property(nonatomic) NSArray<UIViewController *> *vcArray;
 @end
 
-@interface LauncherMenuViewController : UITableViewController
+@interface LauncherMenuViewController : UIViewController
 
 @property NSString* listPath;
 @property(nonatomic) UIButton *accountButton;
@@ -19,6 +19,7 @@
 - (void)restoreHighlightedSelection;
 - (void)selectAccount:(UIButton *)sender;
 - (void)updateAccountInfo;
+- (void)updateVersionInfo;
 - (UIBarButtonItem *)drawAccountButton;
 
 @end
