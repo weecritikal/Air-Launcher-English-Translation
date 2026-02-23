@@ -177,13 +177,8 @@
 
 - (void)performOnlineSearch {
     NSString *searchText = self.searchBar.text;
-    if (searchText.length == 0) {
-        self.emptyLabel.text = @"请输入搜索关键词";
-        self.emptyLabel.hidden = NO;
-        return;
-    }
+    if (searchText.length == 0) return;
 
-    NSLog(@"[ShadersManager] 开始搜索光影: %@", searchText);
     [self setLoading:YES];
     [self.onlineSearchResults removeAllObjects];
     [self.tableView reloadData];
@@ -192,16 +187,6 @@
 
     [[ModrinthAPI sharedInstance] searchShaderWithFilters:filters completion:^(NSArray * _Nullable results, NSError * _Nullable error) {
         dispatch_async(dispatch_get_main_queue(), ^{
-            if (error) {
-                NSLog(@"[ShadersManager] 搜索错误: %@", error);
-                [self setLoading:NO];
-                self.emptyLabel.text = [NSString stringWithFormat:@"搜索失败: %@", error.localizedDescription];
-                self.emptyLabel.hidden = NO;
-                return;
-            }
-            
-            NSLog(@"[ShadersManager] 搜索结果: %lu 个光影", (unsigned long)results.count);
-            
             if (results) {
                 [self.onlineSearchResults addObjectsFromArray:results];
             }
@@ -414,21 +399,9 @@
     }
 }
 
+// 禁用光影切换功能 - 光影管理只用于查看和删除
 - (void)shaderCellDidTapToggle:(UITableViewCell *)cell {
-    NSIndexPath *indexPath = [self.tableView indexPathForCell:cell];
-    if (!indexPath || self.currentMode != ShadersManagerModeLocal) return;
-
-    ShaderItem *shader = self.filteredLocalShaders[indexPath.row];
-
-    NSError *error = nil;
-    BOOL success = [[ShaderService sharedService] toggleEnableForShader:shader error:&error];
-
-    if (!success) {
-        NSLog(@"[ShadersManager] Error toggling shader: %@", error);
-        [(ShaderTableViewCell *)cell updateToggleState:shader.disabled];
-    } else {
-        [(ShaderTableViewCell *)cell updateToggleState:shader.disabled];
-    }
+    // 功能已禁用
 }
 
 - (void)shaderCellDidTapOpenLink:(UITableViewCell *)cell {
