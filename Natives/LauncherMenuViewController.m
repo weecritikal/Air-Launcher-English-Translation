@@ -1,7 +1,7 @@
 #import "LauncherMenuViewController.h"
 #import "LauncherPreferencesViewController.h"
-#import "ModsManagerViewController.h"
-#import "ShadersManagerViewController.h"
+#import "VersionManagerViewController.h"
+#import "ProfileSettingsViewController.h"
 #import "PLProfiles.h"
 #import "utils.h"
 
@@ -149,12 +149,12 @@
             [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowDownloadPage" object:nil];
             break;
             
-        case 2: // 模组
-            [self showModsManager];
+        case 2: // 版本管理
+            [self showVersionManager];
             break;
             
-        case 3: // 光影
-            [self showShadersManager];
+        case 3: // 当前版本设置
+            [self showCurrentVersionSettings];
             break;
             
         case 4: // 设置
@@ -163,17 +163,26 @@
     }
 }
 
-- (void)showModsManager {
-    ModsManagerViewController *vc = [[ModsManagerViewController alloc] init];
-    vc.profileName = PLProfiles.current.selectedProfileName ?: @"default";
+- (void)showVersionManager {
+    VersionManagerViewController *vc = [[VersionManagerViewController alloc] init];
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
     nav.modalPresentationStyle = UIModalPresentationFormSheet;
     [self presentViewController:nav animated:YES completion:nil];
 }
 
-- (void)showShadersManager {
-    ShadersManagerViewController *vc = [[ShadersManagerViewController alloc] init];
-    vc.profileName = PLProfiles.current.selectedProfileName ?: @"default";
+- (void)showCurrentVersionSettings {
+    NSString *currentProfile = PLProfiles.current.selectedProfileName;
+    if (!currentProfile) {
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"提示"
+                                                                       message:@"请先选择一个版本"
+                                                                preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
+        [self presentViewController:alert animated:YES completion:nil];
+        return;
+    }
+    
+    ProfileSettingsViewController *vc = [[ProfileSettingsViewController alloc] init];
+    vc.profileName = currentProfile;
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
     nav.modalPresentationStyle = UIModalPresentationFormSheet;
     [self presentViewController:nav animated:YES completion:nil];
