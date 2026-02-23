@@ -153,26 +153,14 @@
 
 - (void)setupContentArea {
     // Content container (middle area)
+    // Note: The actual content is managed by LauncherSplitViewController's detail view controller
+    // This container just reserves the space in the layout
     self.contentContainer = [[UIView alloc] init];
     self.contentContainer.translatesAutoresizingMaskIntoConstraints = NO;
     self.contentContainer.backgroundColor = [UIColor clearColor];
     [self.view addSubview:self.contentContainer];
     
-    // Add News view controller as child
-    LauncherNewsViewController *newsVC = [[LauncherNewsViewController alloc] init];
-    [self addChildViewController:newsVC];
-    newsVC.view.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.contentContainer addSubview:newsVC.view];
-    [newsVC didMoveToParentViewController:self];
-    
-    [NSLayoutConstraint activateConstraints:@[
-        [newsVC.view.leadingAnchor constraintEqualToAnchor:self.contentContainer.leadingAnchor],
-        [newsVC.view.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor],
-        [newsVC.view.topAnchor constraintEqualToAnchor:self.contentContainer.topAnchor],
-        [newsVC.view.bottomAnchor constraintEqualToAnchor:self.contentContainer.bottomAnchor]
-    ]];
-    
-    // Content constraints
+    // Content constraints - just reserve the space
     [NSLayoutConstraint activateConstraints:@[
         [self.contentContainer.leadingAnchor constraintEqualToAnchor:self.sidebarView.trailingAnchor],
         [self.contentContainer.topAnchor constraintEqualToAnchor:self.view.topAnchor],
