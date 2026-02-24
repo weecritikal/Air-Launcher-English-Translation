@@ -193,6 +193,9 @@ add_executable(AngelAuraAmethyst
   ios_uikit_bridge.m
   utils.m
 
+  # Version card cell (shared between DownloadViewController and LauncherProfilesViewController)
+  VersionCardCell.m
+
   # Mod-related sources (ensure implementations are compiled and linked)
   MarqueeLabel.m
   ModItem.m
@@ -281,7 +284,7 @@ if(MINIZIP_ENABLED AND EXISTS "${MINIZIP_DIR}")
   endif()
 else()
   if(EXISTS "${MINIZIP_DIR}")
-    message(STATUS "minizip folder found but MINIZIP_ENABLED is OFF â skipping compilation.")
+    message(STATUS "minizip folder found but MINIZIP_ENABLED is OFF — skipping compilation.")
   else()
     message(STATUS "minizip folder not found, skipping minizip compilation.")
   endif()
