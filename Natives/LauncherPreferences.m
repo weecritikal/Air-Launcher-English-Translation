@@ -48,6 +48,9 @@ void setPrefFloat(NSString *key, float value) {
 void setPrefInt(NSString *key, NSInteger value) {
     setPrefObject(key, @(value));
 }
+void setPrefString(NSString *key, NSString *value) {  // 新增
+    setPrefObject(key, value);
+}
 
 void resetWarnings() {
     for (int i = 0; i < pref.globalPref[@"warnings"].count; i++) {

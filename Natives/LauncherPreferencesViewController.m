@@ -16,6 +16,8 @@
 
 #import "ImageCropperViewController.h"
 #import "CustomIconManager.h"
+#import "BackgroundSettingsViewController.h"
+#import "BackgroundManager.h"
 
 @interface LauncherPreferencesViewController()
 @property(nonatomic) NSArray<NSString*> *rendererKeys, *rendererList;
@@ -326,6 +328,18 @@
               },
               @"action": ^void(){
                   [self openImagePicker];
+              }
+            },
+            @{@"key": @"launcher_background",
+              @"hasDetail": @YES,
+              @"icon": @"photo.fill.on.rectangle.fill",
+              @"type": self.typeButton,
+              @"enableCondition": whenNotInGame,
+              @"action": ^void(){
+                  BackgroundSettingsViewController *bgVC = [[BackgroundSettingsViewController alloc] init];
+                  UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:bgVC];
+                  nav.modalPresentationStyle = UIModalPresentationFormSheet;
+                  [self presentViewController:nav animated:YES completion:nil];
               }
             },
             @{@"key": @"hidden_sidebar",
@@ -743,6 +757,18 @@
     ];
 
     [super viewDidLoad];
+    
+    // Apply transparent background if global background is active
+    if ([[BackgroundManager sharedManager] hasBackground]) {
+        self.view.backgroundColor = [UIColor clearColor];
+        self.tableView.backgroundColor = [UIColor clearColor];
+        self.tableView.backgroundView = nil;
+        
+        // Make separator visible on background
+        self.tableView.separatorEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleDark];
+        self.tableView.separatorColor = [UIColor colorWithWhite:1.0 alpha:0.2];
+    }
+    
     if (self.navigationController == nil) {
         self.tableView.alpha = 0.9;
     }
@@ -751,6 +777,20 @@
         closeButton.frame = CGRectOffset(closeButton.frame, 10, 10);
         [closeButton addTarget:self action:@selector(actionClose) forControlEvents:UIControlEventTouchUpInside];
         [self.view addSubview:closeButton];
+    }
+}
+
+- (void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+    
+    // Re-apply transparency when appearing (in case background was just set)
+    if ([[BackgroundManager sharedManager] hasBackground]) {
+        self.view.backgroundColor = [UIColor clearColor];
+        self.tableView.backgroundColor = [UIColor clearColor];
+        self.tableView.backgroundView = nil;
+        
+        // Refresh cells to apply background styling
+        [self.tableView reloadData];
     }
 }
 
@@ -765,13 +805,96 @@
     [self dismissViewControllerAnimated:YES completion:nil];
 }
 
-#pragma mark UITableView
+#pragma mark - UITableView Data Source Override
+
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+    UITableViewCell *cell = [super tableView:tableView cellForRowAtIndexPath:indexPath];
+    
+    // Apply background styling if global background is active
+    if ([[BackgroundManager sharedManager] hasBackground]) {
+        // Set semi-transparent dark background for cells
+        cell.backgroundColor = [UIColor colorWithWhite:0.12 alpha:0.75];
+        
+        // Set white text for better visibility on dark background
+        cell.textLabel.textColor = [UIColor whiteColor];
+        cell.textLabel.shadowColor = [UIColor blackColor];
+        cell.textLabel.shadowOffset = CGSizeMake(0, 1);
+        
+        // Detail text light gray
+        cell.detailTextLabel.textColor = [UIColor colorWithWhite:0.8 alpha:1.0];
+        cell.detailTextLabel.shadowColor = [UIColor blackColor];
+        cell.detailTextLabel.shadowOffset = CGSizeMake(0, 1);
+        
+        // Tint color for icons and accessories
+        cell.tintColor = [UIColor systemBlueColor];
+        
+        // Handle specific cell types
+        NSArray *subviews = cell.contentView.subviews;
+        for (UIView *subview in subviews) {
+            // Style sliders
+            if ([subview isKindOfClass:[UISlider class]]) {
+                UISlider *slider = (UISlider *)subview;
+                slider.tintColor = [UIColor systemBlueColor];
+                slider.thumbTintColor = [UIColor whiteColor];
+            }
+            
+            // Style switches
+            if ([subview isKindOfClass:[UISwitch class]]) {
+                UISwitch *switchControl = (UISwitch *)subview;
+                switchControl.onTintColor = [UIColor systemBlueColor];
+            }
+            
+            // Style text fields
+            if ([subview isKindOfClass:[UITextField class]]) {
+                UITextField *textField = (UITextField *)subview;
+                textField.textColor = [UIColor whiteColor];
+                textField.backgroundColor = [UIColor colorWithWhite:0.2 alpha:0.6];
+                textField.layer.cornerRadius = 6;
+            }
+            
+            // Style labels
+            if ([subview isKindOfClass:[UILabel class]]) {
+                UILabel *label = (UILabel *)subview;
+                label.textColor = [UIColor whiteColor];
+                label.shadowColor = [UIColor blackColor];
+                label.shadowOffset = CGSizeMake(0, 1);
+            }
+        }
+        
+        // Style the picker label if exists
+        if (cell.accessoryView && [cell.accessoryView isKindOfClass:[UILabel class]]) {
+            UILabel *pickerLabel = (UILabel *)cell.accessoryView;
+            pickerLabel.textColor = [UIColor colorWithWhite:0.8 alpha:1.0];
+        }
+    } else {
+        // Reset to default when no background
+        cell.backgroundColor = [UIColor secondarySystemBackgroundColor];
+        cell.textLabel.textColor = [UIColor labelColor];
+        cell.textLabel.shadowColor = nil;
+        cell.textLabel.shadowOffset = CGSizeZero;
+        cell.detailTextLabel.textColor = [UIColor secondaryLabelColor];
+        cell.detailTextLabel.shadowColor = nil;
+        cell.detailTextLabel.shadowOffset = CGSizeZero;
+    }
+    
+    return cell;
+}
+
+#pragma mark - UITableView Delegate
 
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
     if (section == 0) { // Add to general section
-        return [NSString stringWithFormat:@"Amethyst iOS Remastered %@\n%@ on %@ (%s)\nPID: %d",
+        NSString *versionString = [NSString stringWithFormat:@"Amethyst iOS Remastered %@\n%@ on %@ (%s)\nPID: %d",
             NSBundle.mainBundle.infoDictionary[@"CFBundleShortVersionString"],
             UIDevice.currentDevice.completeOSVersion, [HostManager GetModelName], getenv("POJAV_DETECTEDINST"), getpid()];
+        
+        // Style footer for background if needed
+        if ([[BackgroundManager sharedManager] hasBackground]) {
+            // Footer text is handled by the table view, but we can ensure visibility
+            // by making sure the section has appropriate styling
+        }
+        
+        return versionString;
     }
 
     NSString *footer = NSLocalizedStringWithDefaultValue(([NSString stringWithFormat:@"preference.section.footer.%@", self.prefSections[section]]), @"Localizable", NSBundle.mainBundle, @" ", nil);
@@ -779,6 +902,34 @@
         return nil;
     }
     return footer;
+}
+
+- (void)tableView:(UITableView *)tableView willDisplayHeaderView:(UIView *)view forSection:(NSInteger)section {
+    // Style section headers for background visibility
+    if ([[BackgroundManager sharedManager] hasBackground]) {
+        if ([view isKindOfClass:[UITableViewHeaderFooterView class]]) {
+            UITableViewHeaderFooterView *header = (UITableViewHeaderFooterView *)view;
+            header.textLabel.textColor = [UIColor whiteColor];
+            header.textLabel.shadowColor = [UIColor blackColor];
+            header.textLabel.shadowOffset = CGSizeMake(0, 1);
+            header.backgroundView = [[UIView alloc] init];
+            header.backgroundView.backgroundColor = [UIColor clearColor];
+        }
+    }
+}
+
+- (void)tableView:(UITableView *)tableView willDisplayFooterView:(UIView *)view forSection:(NSInteger)section {
+    // Style section footers for background visibility
+    if ([[BackgroundManager sharedManager] hasBackground]) {
+        if ([view isKindOfClass:[UITableViewHeaderFooterView class]]) {
+            UITableViewHeaderFooterView *footer = (UITableViewHeaderFooterView *)view;
+            footer.textLabel.textColor = [UIColor colorWithWhite:0.8 alpha:1.0];
+            footer.textLabel.shadowColor = [UIColor blackColor];
+            footer.textLabel.shadowOffset = CGSizeMake(0, 1);
+            footer.backgroundView = [[UIView alloc] init];
+            footer.backgroundView.backgroundColor = [UIColor clearColor];
+        }
+    }
 }
 
 @end

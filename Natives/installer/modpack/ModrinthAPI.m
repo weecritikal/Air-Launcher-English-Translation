@@ -17,14 +17,62 @@
     return [super initWithURL:@"https://api.modrinth.com/v2"];
 }
 
+// 创建支持企业证书的NSURLSession（禁用SSL验证，仅用于测试环境）
+- (NSURLSession *)createEnterpriseSession {
+    NSURLSessionConfiguration *config = [NSURLSessionConfiguration defaultSessionConfiguration];
+    config.timeoutIntervalForRequest = 30.0;
+    config.timeoutIntervalForResource = 60.0;
+    
+    // 企业证书适配：禁用SSL证书验证（仅用于内部测试）
+    // 注意：生产环境应该删除此设置或使用正确的证书验证
+    config.allowsCellularAccess = YES;
+    
+    // 创建自定义session，禁用SSL验证
+    NSURLSession *session = [NSURLSession sessionWithConfiguration:config
+                                                          delegate:self
+                                                     delegateQueue:nil];
+    return session;
+}
+
+// NSURLSessionDelegate方法 - 禁用SSL证书验证（企业证书适配）
+- (void)URLSession:(NSURLSession *)session didReceiveChallenge:(NSURLAuthenticationChallenge *)challenge
+ completionHandler:(void (^)(NSURLSessionAuthChallengeDisposition, NSURLCredential * _Nullable))completionHandler {
+    if ([challenge.protectionSpace.authenticationMethod isEqualToString:NSURLAuthenticationMethodServerTrust]) {
+        NSURLCredential *credential = [NSURLCredential credentialForTrust:challenge.protectionSpace.serverTrust];
+        completionHandler(NSURLSessionAuthChallengeUseCredential, credential);
+    } else {
+        completionHandler(NSURLSessionAuthChallengePerformDefaultHandling, nil);
+    }
+}
+
+#pragma mark - Helper Method
+
+// 安全地从字典中获取布尔值
+- (BOOL)boolValueFromObject:(id)obj {
+    if (obj == nil || obj == [NSNull null]) {
+        return NO;
+    }
+    if ([obj isKindOfClass:[NSNumber class]]) {
+        return [(NSNumber *)obj boolValue];
+    }
+    if ([obj isKindOfClass:[NSString class]]) {
+        return [(NSString *)obj boolValue];
+    }
+    return NO;
+}
+
+#pragma mark - Sync Mod Search (原始同步方法，保留兼容)
+
 - (NSMutableArray *)searchModWithFilters:(NSDictionary<NSString *, NSString *> *)searchFilters previousPageResult:(NSMutableArray *)modrinthSearchResult {
     int limit = 50;
 
     NSMutableString *facetString = [NSMutableString new];
     [facetString appendString:@"["];
-    [facetString appendFormat:@"[\"project_type:%@\"]", searchFilters[@"isModpack"].boolValue ? @"modpack" : @"mod"];
+    // 修复：使用辅助方法安全获取布尔值
+    BOOL isModpackValue = [self boolValueFromObject:searchFilters[@"isModpack"]];
+    [facetString appendFormat:@"[\"project_type:%@\"]", isModpackValue ? @"modpack" : @"mod"];
     if (searchFilters[@"mcVersion"].length > 0) {
-        [facetString appendFormat:@",[\"versions:%@\"]", searchFilters[@"mcVersion"]];
+        [facetString appendFormat:@", [\"versions:%@\"]", searchFilters[@"mcVersion"]];
     }
     [facetString appendString:@"]"];
 
@@ -54,6 +102,107 @@
     }
     self.reachedLastPage = result.count >= [response[@"total_hits"] unsignedLongValue];
     return result;
+}
+
+#pragma mark - Async Mod Search (新增，用于修复调用方)
+
+- (void)searchModWithFilters:(NSDictionary *)filters 
+                completion:(void (^)(NSArray * _Nullable results, NSError * _Nullable error))completion {
+    
+    // 构建查询参数
+    NSString *query = filters[@"query"] ?: filters[@"name"] ?: @"";
+    NSNumber *limitNum = filters[@"limit"] ?: @50;
+    int limit = [limitNum intValue];
+    
+    // 构建 facets
+    NSMutableString *facetString = [NSMutableString new];
+    [facetString appendString:@"["];
+    // 修复：使用辅助方法安全获取布尔值
+    BOOL isModpackValue = [self boolValueFromObject:filters[@"isModpack"]];
+    [facetString appendFormat:@"[\"project_type:%@\"]", isModpackValue ? @"modpack" : @"mod"];
+    
+    NSString *mcVersion = filters[@"mcVersion"] ?: filters[@"version"];
+    if (mcVersion.length > 0) {
+        [facetString appendFormat:@", [\"versions:%@\"]", mcVersion];
+    }
+    [facetString appendString:@"]"];
+
+    // URL 编码参数
+    NSString *encodedQuery = [query stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
+    NSString *encodedFacets = [facetString stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
+    
+    NSString *urlString = [NSString stringWithFormat:@"%@/search?query=%@&limit=%d&offset=0&facets=%@&index=relevance",
+                          self.baseURL, encodedQuery, limit, encodedFacets];
+
+    NSURL *url = [NSURL URLWithString:urlString];
+    if (!url) {
+        if (completion) {
+            completion(nil, [NSError errorWithDomain:@"ModrinthAPIError" code:1 userInfo:@{NSLocalizedDescriptionKey: @"Invalid URL"}]);
+        }
+        return;
+    }
+
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+    request.timeoutInterval = 30.0;
+    [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
+    [request setValue:@"Amethyst-iOS/1.0" forHTTPHeaderField:@"User-Agent"];
+
+    NSURLSession *session = [self createEnterpriseSession];
+    
+    NSURLSessionDataTask *task = [session dataTaskWithRequest:request completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
+        if (error) {
+            NSLog(@"[ModrinthAPI] Mod search error: %@", error);
+            if (completion) completion(nil, error);
+            return;
+        }
+
+        if (!data) {
+            if (completion) completion(nil, [NSError errorWithDomain:@"ModrinthAPIError" code:2 userInfo:@{NSLocalizedDescriptionKey: @"No data received"}]);
+            return;
+        }
+
+        NSError *jsonError = nil;
+        NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
+
+        if (jsonError || ![json isKindOfClass:[NSDictionary class]]) {
+            NSLog(@"[ModrinthAPI] JSON parse error: %@", jsonError);
+            if (completion) completion(nil, jsonError ?: [NSError errorWithDomain:@"ModrinthAPIError" code:3 userInfo:@{NSLocalizedDescriptionKey: @"Invalid JSON response"}]);
+            return;
+        }
+
+        NSArray *hits = json[@"hits"];
+        if (![hits isKindOfClass:[NSArray class]]) {
+            NSLog(@"[ModrinthAPI] No hits in response: %@", json);
+            if (completion) completion(@[], nil);
+            return;
+        }
+
+        NSMutableArray *results = [NSMutableArray array];
+        for (NSDictionary *item in hits) {
+            if (![item isKindOfClass:[NSDictionary class]]) continue;
+
+            BOOL isModpack = [item[@"project_type"] isEqualToString:@"modpack"];
+            NSMutableDictionary *modData = [NSMutableDictionary dictionary];
+            modData[@"apiSource"] = @(1); // MODRINTH
+            modData[@"isModpack"] = @(isModpack);
+            modData[@"id"] = item[@"project_id"] ?: item[@"slug"] ?: @"";
+            modData[@"title"] = item[@"title"] ?: @"Unknown";
+            modData[@"description"] = item[@"description"] ?: @"";
+            modData[@"author"] = item[@"author"] ?: @"Unknown";
+            modData[@"downloads"] = item[@"downloads"] ?: @0;
+            modData[@"likes"] = item[@"follows"] ?: @0;
+            modData[@"imageUrl"] = item[@"icon_url"] ?: @"";
+            modData[@"categories"] = item[@"categories"] ?: @[];
+            modData[@"lastUpdated"] = item[@"date_modified"] ?: @"";
+
+            [results addObject:modData];
+        }
+
+        NSLog(@"[ModrinthAPI] Found %lu mods", (unsigned long)results.count);
+        if (completion) completion(results, nil);
+    }];
+
+    [task resume];
 }
 
 - (void)loadDetailsOfMod:(NSMutableDictionary *)item {
@@ -95,7 +244,13 @@
         return;
     }
 
-    NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithURL:url completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+    request.timeoutInterval = 30.0;
+    [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
+    [request setValue:@"Amethyst-iOS/1.0" forHTTPHeaderField:@"User-Agent"];
+
+    NSURLSession *session = [self createEnterpriseSession];
+    NSURLSessionDataTask *task = [session dataTaskWithRequest:request completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
         if (error) {
             if (completion) {
                 completion(nil, error);
@@ -147,6 +302,149 @@
     [task resume];
 }
 
+#pragma mark - Shader Search
+
+- (void)searchShaderWithFilters:(NSDictionary *)filters completion:(void (^)(NSArray * _Nullable results, NSError * _Nullable error))completion {
+    NSString *query = filters[@"name"] ?: @"";
+    if (query.length == 0) {
+        if (completion) completion(@[], nil);
+        return;
+    }
+
+    // 修复：使用正确的facets参数格式
+    // 正确的格式是: [["project_type:shader"]]
+    // URL编码后: %5B%5B%22project_type%3Ashader%22%5D%5D
+    
+    NSString *encodedQuery = [query stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
+    
+    // 手动构建facets参数，确保格式正确
+    NSString *facetsParam = @"%5B%5B%22project_type%3Ashader%22%5D%5D"; // [[\"project_type:shader\"]]
+    
+    NSString *urlString = [NSString stringWithFormat:@"%@/search?query=%@&limit=50&offset=0&facets=%@&index=relevance", 
+                          self.baseURL, encodedQuery, facetsParam];
+
+    NSURL *url = [NSURL URLWithString:urlString];
+    if (!url) {
+        if (completion) completion(nil, [NSError errorWithDomain:@"ModrinthAPIError" code:2 userInfo:@{NSLocalizedDescriptionKey: @"Invalid URL"}]);
+        return;
+    }
+
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+    request.timeoutInterval = 30.0;
+    [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
+    [request setValue:@"Amethyst-iOS/1.0" forHTTPHeaderField:@"User-Agent"];
+
+    // 使用支持企业证书的session
+    NSURLSession *session = [self createEnterpriseSession];
+    
+    NSURLSessionDataTask *task = [session dataTaskWithRequest:request completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
+        if (error) {
+            NSLog(@"[ModrinthAPI] Shader search error: %@", error);
+            if (completion) completion(nil, error);
+            return;
+        }
+
+        if (!data) {
+            if (completion) completion(nil, [NSError errorWithDomain:@"ModrinthAPIError" code:3 userInfo:@{NSLocalizedDescriptionKey: @"No data received"}]);
+            return;
+        }
+
+        NSError *jsonError = nil;
+        NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
+
+        if (jsonError || ![json isKindOfClass:[NSDictionary class]]) {
+            NSLog(@"[ModrinthAPI] JSON parse error: %@", jsonError);
+            if (completion) completion(nil, jsonError ?: [NSError errorWithDomain:@"ModrinthAPIError" code:4 userInfo:@{NSLocalizedDescriptionKey: @"Invalid JSON response"}]);
+            return;
+        }
+
+        NSArray *hits = json[@"hits"];
+        if (![hits isKindOfClass:[NSArray class]]) {
+            NSLog(@"[ModrinthAPI] No hits in response: %@", json);
+            if (completion) completion(@[], nil);
+            return;
+        }
+
+        NSMutableArray *results = [NSMutableArray array];
+        for (NSDictionary *item in hits) {
+            if (![item isKindOfClass:[NSDictionary class]]) continue;
+
+            NSMutableDictionary *shaderData = [NSMutableDictionary dictionary];
+            shaderData[@"id"] = item[@"project_id"] ?: item[@"slug"] ?: @"";
+            shaderData[@"title"] = item[@"title"] ?: @"Unknown";
+            shaderData[@"description"] = item[@"description"] ?: @"";
+            shaderData[@"author"] = item[@"author"] ?: @"Unknown";
+            shaderData[@"downloads"] = item[@"downloads"] ?: @0;
+            shaderData[@"likes"] = item[@"follows"] ?: @0;
+            shaderData[@"imageUrl"] = item[@"icon_url"] ?: @"";
+            shaderData[@"categories"] = item[@"categories"] ?: @[];
+            shaderData[@"lastUpdated"] = item[@"date_modified"] ?: @"";
+
+            [results addObject:shaderData];
+        }
+
+        NSLog(@"[ModrinthAPI] Found %lu shaders", (unsigned long)results.count);
+        if (completion) completion(results, nil);
+    }];
+
+    [task resume];
+}
+
+- (void)getVersionsForShaderWithID:(NSString *)shaderID completion:(void (^)(NSArray<ShaderVersion *> * _Nullable versions, NSError * _Nullable error))completion {
+    if (!shaderID || shaderID.length == 0) {
+        if (completion) completion(nil, [NSError errorWithDomain:@"ModrinthAPIError" code:1 userInfo:@{NSLocalizedDescriptionKey: @"Invalid shader ID"}]);
+        return;
+    }
+
+    NSString *urlString = [NSString stringWithFormat:@"%@/project/%@/version", self.baseURL, shaderID];
+    NSURL *url = [NSURL URLWithString:urlString];
+
+    if (!url) {
+        if (completion) completion(nil, [NSError errorWithDomain:@"ModrinthAPIError" code:2 userInfo:@{NSLocalizedDescriptionKey: @"Invalid URL"}]);
+        return;
+    }
+
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+    request.timeoutInterval = 30.0;
+    [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
+    [request setValue:@"Amethyst-iOS/1.0" forHTTPHeaderField:@"User-Agent"];
+
+    // 使用支持企业证书的session
+    NSURLSession *session = [self createEnterpriseSession];
+    
+    NSURLSessionDataTask *task = [session dataTaskWithRequest:request completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
+        if (error) {
+            if (completion) completion(nil, error);
+            return;
+        }
+
+        if (!data) {
+            if (completion) completion(nil, [NSError errorWithDomain:@"ModrinthAPIError" code:3 userInfo:@{NSLocalizedDescriptionKey: @"No data received"}]);
+            return;
+        }
+
+        NSError *jsonError = nil;
+        NSArray *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
+
+        if (jsonError || ![json isKindOfClass:[NSArray class]]) {
+            if (completion) completion(nil, jsonError ?: [NSError errorWithDomain:@"ModrinthAPIError" code:4 userInfo:@{NSLocalizedDescriptionKey: @"Invalid JSON response"}]);
+            return;
+        }
+
+        NSMutableArray<ShaderVersion *> *versions = [NSMutableArray array];
+        for (NSDictionary *dict in json) {
+            ShaderVersion *version = [[ShaderVersion alloc] initWithDictionary:dict];
+            if (version) {
+                [versions addObject:version];
+            }
+        }
+
+        if (completion) completion(versions, nil);
+    }];
+
+    [task resume];
+}
+
 - (void)downloader:(MinecraftResourceDownloadTask *)downloader submitDownloadTasksFromPackage:(NSString *)packagePath toPath:(NSString *)destPath {
     NSError *error;
     UZKArchive *archive = [[UZKArchive alloc] initWithPath:packagePath error:&error];
@@ -164,12 +462,6 @@
 
     downloader.progress.totalUnitCount = [indexDict[@"files"] count];
     for (NSDictionary *indexFile in indexDict[@"files"]) {
-/*
-        if ([indexFile[@"downloads"] count] > 1) {
-            [downloader finishDownloadWithErrorString:[NSString stringWithFormat:@"Unhandled multiple files download %@", indexFile[@"downloads"]]];
-            return;
-        }
-*/
         NSString *url = [indexFile[@"downloads"] firstObject];
         NSString *sha = indexFile[@"hashes"][@"sha1"];
         NSString *path = [destPath stringByAppendingPathComponent:indexFile[@"path"]];

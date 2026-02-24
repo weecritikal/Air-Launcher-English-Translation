@@ -19,4 +19,7 @@
 - (void)setSelectedProfileName:(NSString *)name;
 - (void)save;
 
+// 新增：修复构建错误 - 添加缺失的方法声明
+- (void)saveProfile:(NSMutableDictionary<NSString *, NSString *> *)profile withName:(NSString *)name;
+
 @end

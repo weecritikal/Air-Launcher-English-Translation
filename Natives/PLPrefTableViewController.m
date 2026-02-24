@@ -10,6 +10,8 @@
 
 #import "ios_uikit_bridge.h"
 #import "utils.h"
+#import "authenticator/BaseAuthenticator.h"
+#import "AccountListViewController.h"
 
 @interface PLPrefTableViewController()<UIContextMenuInteractionDelegate>{}
 @property(nonatomic) UIMenu* currentMenu;
@@ -42,6 +44,57 @@
     }
 }
 
+- (UIBarButtonItem *)drawAccountButton {
+    BaseAuthenticator *currentAuth = BaseAuthenticator.current;
+    UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
+    button.frame = CGRectMake(0, 0, 40, 40);
+    button.layer.cornerRadius = 20;
+    button.layer.masksToBounds = YES;
+    button.backgroundColor = [UIColor colorWithWhite:0.2 alpha:1.0];
+    
+    if (currentAuth && currentAuth.authData) {
+        NSString *username = currentAuth.authData[@"username"];
+        if (username) {
+            if ([username hasPrefix:@"Demo."]) {
+                username = [username substringFromIndex:5];
+            }
+        }
+        [button setTitle:username ?: @"?" forState:UIControlStateNormal];
+        
+        // 加载头像
+        NSString *avatarURL = currentAuth.authData[@"profilePicURL"];
+        if (avatarURL) {
+            avatarURL = [avatarURL stringByReplacingOccurrencesOfString:@"\\/" withString:@"/"];
+            dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+                NSData *imageData = [NSData dataWithContentsOfURL:[NSURL URLWithString:avatarURL]];
+                if (imageData) {
+                    UIImage *image = [UIImage imageWithData:imageData];
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        [button setImage:image forState:UIControlStateNormal];
+                        [button setTitle:@"" forState:UIControlStateNormal];
+                    });
+                }
+            });
+        }
+    } else {
+        [button setImage:[UIImage systemImageNamed:@"person.circle"] forState:UIControlStateNormal];
+        button.tintColor = [UIColor systemGrayColor];
+    }
+    
+    [button addTarget:self action:@selector(selectAccount:) forControlEvents:UIControlEventTouchUpInside];
+    return [[UIBarButtonItem alloc] initWithCustomView:button];
+}
+
+- (void)selectAccount:(UIButton *)sender {
+    AccountListViewController *vc = [[AccountListViewController alloc] init];
+    vc.whenItemSelected = ^void() {
+        [self viewWillAppear:NO];
+    };
+    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
+    nav.modalPresentationStyle = UIModalPresentationFormSheet;
+    [self presentViewController:nav animated:YES completion:nil];
+}
+
 - (UIBarButtonItem *)drawHelpButton {
     if (!self.helpBtn) {
         self.helpBtn = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"questionmark.circle"] style:UIBarButtonItemStyleDone target:self action:@selector(toggleDetailVisibility)];
@@ -54,7 +107,7 @@
 
     // Put navigation buttons back in place if we're first of the navigation controller
     if (self.hasDetail && self.navigationController) {
-        self.navigationItem.rightBarButtonItems = @[[sidebarViewController drawAccountButton], [self drawHelpButton]];
+        self.navigationItem.rightBarButtonItems = @[[self drawAccountButton], [self drawHelpButton]];
     }
 
     // Scan for child pane cells and reload them

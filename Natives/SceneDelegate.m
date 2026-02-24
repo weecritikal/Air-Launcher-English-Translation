@@ -1,57 +1,64 @@
 #import "SceneDelegate.h"
 #import "ios_uikit_bridge.h"
 #import "utils.h"
+#import "LauncherRootViewController.h"
+#import "BackgroundManager.h"
 
 extern UIWindow *mainWindow;
 
 @interface SceneDelegate ()
-
 @end
 
 @implementation SceneDelegate
 
-
 - (void)scene:(UIScene *)scene willConnectToSession:(UISceneSession *)session options:(UISceneConnectionOptions *)connectionOptions {
     UIWindowScene *windowScene = (UIWindowScene *)scene;
+    
+    // 强制横屏 (iOS 16+)
+    if (@available(iOS 16.0, *)) {
+        UIWindowSceneGeometryPreferencesIOS *geometryPreferences = [[UIWindowSceneGeometryPreferencesIOS alloc] init];
+        geometryPreferences.interfaceOrientations = UIInterfaceOrientationMaskLandscape;
+        [windowScene requestGeometryUpdateWithPreferences:geometryPreferences errorHandler:^(NSError *error) {
+            NSLog(@"[SceneDelegate] Failed to update geometry: %@", error);
+        }];
+    }
+    
     self.window = [[UIWindow alloc] initWithWindowScene:windowScene];
     self.window.frame = windowScene.coordinateSpace.bounds;
     mainWindow = self.window;
-    launchInitialViewController(self.window);
+    
+    // 使用 FCL 风格根视图控制器（三栏布局）
+    LauncherRootViewController *rootVC = [[LauncherRootViewController alloc] init];
+    self.window.rootViewController = rootVC;
+    
     [self.window makeKeyAndVisible];
+    
+    // 应用背景
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        [[BackgroundManager sharedManager] applyBackgroundToWindow:self.window];
+    });
 }
-
 
 - (void)sceneDidDisconnect:(UIScene *)scene {
-    // Called as the scene is being released by the system.
-    // This occurs shortly after the scene enters the background, or when its session is discarded.
-    // Release any resources associated with this scene that can be re-created the next time the scene connects.
-    // The scene may re-connect later, as its session was not neccessarily discarded (see `application:didDiscardSceneSessions` instead).
 }
-
 
 - (void)sceneDidBecomeActive:(UIScene *)scene {
-    // Called when the scene has moved from an inactive state to an active state.
-    // Use this method to restart any tasks that were paused (or not yet started) when the scene was inactive.
 }
-
 
 - (void)sceneWillResignActive:(UIScene *)scene {
-    // Called when the scene will move from an active state to an inactive state.
-    // This may occur due to temporary interruptions (ex. an incoming phone call).
 }
-
 
 - (void)sceneWillEnterForeground:(UIScene *)scene {
-    // Called as the scene transitions from the background to the foreground.
-    // Use this method to undo the changes made on entering the background.
 }
 
-
 - (void)sceneDidEnterBackground:(UIScene *)scene {
-    // Called as the scene transitions from the foreground to the background.
-    // Use this method to save data, release shared resources, and store enough scene-specific state information
-    // to restore the scene back to its current state.
     CallbackBridge_pauseGameIfNeed();
+}
+
+#pragma mark - Orientation Support (iOS 16+)
+
+- (UIInterfaceOrientationMask)scene:(UIScene *)scene supportedInterfaceOrientationsForWindowScene:(UIWindowScene *)windowScene API_AVAILABLE(ios(16.0)) {
+    return UIInterfaceOrientationMaskLandscape;
 }
 
 @end

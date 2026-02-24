@@ -1,10 +1,17 @@
-#import "ModsManagerViewController.h"
-#import "ModTableViewCell.h"
-#import "ModService.h"
-#import "ModItem.h"
+//
+//  ShadersManagerViewController.m
+//  Amethyst
+//
+//  Shader manager implementation - mirrors ModsManagerViewController
+//
+
+#import "ShadersManagerViewController.h"
+#import "ShaderTableViewCell.h"
+#import "ShaderService.h"
+#import "ShaderItem.h"
 #import "installer/modpack/ModrinthAPI.h"
 
-@interface ModsManagerViewController () <UITableViewDataSource, UITableViewDelegate, ModTableViewCellDelegate, UISearchBarDelegate, ModVersionViewControllerDelegate>
+@interface ShadersManagerViewController () <UITableViewDataSource, UITableViewDelegate, ShaderTableViewCellDelegate, UISearchBarDelegate, ShaderVersionViewControllerDelegate>
 
 @property (nonatomic, strong) UISegmentedControl *modeSwitcher;
 @property (nonatomic, strong) UISearchBar *searchBar;
@@ -12,27 +19,27 @@
 @property (nonatomic, strong) UIActivityIndicatorView *activityIndicator;
 @property (nonatomic, strong) UILabel *emptyLabel;
 @property (nonatomic, strong) UIBarButtonItem *refreshButton;
-@property (nonatomic, strong) NSMutableArray<ModItem *> *localMods;
-@property (nonatomic, strong) NSMutableArray<ModItem *> *filteredLocalMods;
+@property (nonatomic, strong) NSMutableArray<ShaderItem *> *localShaders;
+@property (nonatomic, strong) NSMutableArray<ShaderItem *> *filteredLocalShaders;
 
 @end
 
-@implementation ModsManagerViewController
+@implementation ShadersManagerViewController
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.title = @"管理 Mod";
+    self.title = @"管理光影";
     self.view.backgroundColor = [UIColor systemBackgroundColor];
-    self.currentMode = ModsManagerModeLocal;
-    self.localMods = [NSMutableArray array];
-    self.filteredLocalMods = [NSMutableArray array];
+    self.currentMode = ShadersManagerModeLocal;
+    self.localShaders = [NSMutableArray array];
+    self.filteredLocalShaders = [NSMutableArray array];
     self.onlineSearchResults = [NSMutableArray array];
     [self setupUI];
-    [self refreshLocalModsList];
+    [self refreshLocalShadersList];
 }
 
 - (void)setupUI {
-    self.modeSwitcher = [[UISegmentedControl alloc] initWithItems:@[@"本地 Mod", @"在线搜索 (Modrinth)"]];
+    self.modeSwitcher = [[UISegmentedControl alloc] initWithItems:@[@"本地光影", @"在线搜索 (Modrinth)"]];
     self.modeSwitcher.translatesAutoresizingMaskIntoConstraints = NO;
     self.modeSwitcher.selectedSegmentIndex = 0;
     [self.modeSwitcher addTarget:self action:@selector(modeChanged:) forControlEvents:UIControlEventValueChanged];
@@ -41,15 +48,15 @@
     self.searchBar = [[UISearchBar alloc] initWithFrame:CGRectZero];
     self.searchBar.translatesAutoresizingMaskIntoConstraints = NO;
     self.searchBar.delegate = self;
-    self.searchBar.placeholder = @"搜索本地 Mod...";
+    self.searchBar.placeholder = @"搜索本地光影...";
     [self.view addSubview:self.searchBar];
 
     self.tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
     self.tableView.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.tableView registerClass:[ModTableViewCell class] forCellReuseIdentifier:@"ModCell"];
+    [self.tableView registerClass:[ShaderTableViewCell class] forCellReuseIdentifier:@"ShaderCell"];
     self.tableView.dataSource = self;
     self.tableView.delegate = self;
-    self.tableView.rowHeight = 50;
+    self.tableView.rowHeight = 80;
     self.tableView.tableFooterView = [UIView new];
     [self.view addSubview:self.tableView];
 
@@ -95,33 +102,32 @@
 }
 
 - (void)modeChanged:(UISegmentedControl *)sender {
-    self.currentMode = (ModsManagerMode)sender.selectedSegmentIndex;
+    self.currentMode = (ShadersManagerMode)sender.selectedSegmentIndex;
     [self.searchBar resignFirstResponder];
     self.searchBar.text = @"";
     [self.onlineSearchResults removeAllObjects];
-    [self filterLocalMods];
+    [self filterLocalShaders];
     [self.tableView reloadData];
     [self updateUIForCurrentMode];
 }
 
 - (void)updateUIForCurrentMode {
-    if (self.currentMode == ModsManagerModeLocal) {
-        self.searchBar.placeholder = @"搜索本地 Mod...";
-        self.emptyLabel.text = @"未发现 Mod";
-        self.emptyLabel.hidden = self.localMods.count > 0;
+    if (self.currentMode == ShadersManagerModeLocal) {
+        self.searchBar.placeholder = @"搜索本地光影...";
+        self.emptyLabel.text = @"未发现光影";
+        self.emptyLabel.hidden = self.localShaders.count > 0;
     } else {
         self.searchBar.placeholder = @"在线搜索 Modrinth...";
         self.emptyLabel.text = @"输入关键词进行在线搜索";
         self.emptyLabel.hidden = self.onlineSearchResults.count > 0;
     }
-    // Re-enable pull-to-refresh for all modes
     self.tableView.refreshControl.enabled = YES;
     [self updateNavigationButtons];
     [self.tableView reloadData];
 }
 
 - (void)updateNavigationButtons {
-    if (self.currentMode == ModsManagerModeLocal) {
+    if (self.currentMode == ShadersManagerModeLocal) {
         self.navigationItem.rightBarButtonItems = @[self.refreshButton];
     } else {
         self.navigationItem.rightBarButtonItems = nil;
@@ -131,14 +137,12 @@
 #pragma mark - Data Loading
 
 - (void)handleRefresh:(id)sender {
-    if (self.currentMode == ModsManagerModeLocal) {
-        [self refreshLocalModsList];
+    if (self.currentMode == ShadersManagerModeLocal) {
+        [self refreshLocalShadersList];
     } else {
-        // For online mode, only refresh if there's text, otherwise it's pointless.
         if (self.searchBar.text.length > 0) {
             [self performOnlineSearch];
         } else {
-            // If no text, just end the refreshing indicator.
             [self.tableView.refreshControl endRefreshing];
         }
     }
@@ -156,16 +160,16 @@
     });
 }
 
-- (void)refreshLocalModsList {
-    if (self.currentMode != ModsManagerModeLocal) return;
+- (void)refreshLocalShadersList {
+    if (self.currentMode != ShadersManagerModeLocal) return;
 
     [self setLoading:YES];
     NSString *profile = self.profileName ?: @"default";
-    [[ModService sharedService] scanModsForProfile:profile completion:^(NSArray<ModItem *> *mods) {
+    [[ShaderService sharedService] scanShadersForProfile:profile completion:^(NSArray<ShaderItem *> *shaders) {
         dispatch_async(dispatch_get_main_queue(), ^{
-            [self.localMods removeAllObjects];
-            [self.localMods addObjectsFromArray:mods];
-            [self filterLocalMods];
+            [self.localShaders removeAllObjects];
+            [self.localShaders addObjectsFromArray:shaders];
+            [self filterLocalShaders];
             [self setLoading:NO];
         });
     }];
@@ -181,12 +185,10 @@
 
     NSDictionary *filters = @{@"name": searchText};
 
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-        NSMutableArray *modrinthResults = [[ModrinthAPI sharedInstance] searchModWithFilters:filters previousPageResult:nil];
-
+    [[ModrinthAPI sharedInstance] searchShaderWithFilters:filters completion:^(NSArray * _Nullable results, NSError * _Nullable error) {
         dispatch_async(dispatch_get_main_queue(), ^{
-            if (modrinthResults) {
-                [self.onlineSearchResults addObjectsFromArray:modrinthResults];
+            if (results) {
+                [self.onlineSearchResults addObjectsFromArray:results];
             }
             [self setLoading:NO];
             self.emptyLabel.hidden = self.onlineSearchResults.count > 0;
@@ -195,20 +197,20 @@
             }
             [self.tableView reloadData];
         });
-    });
+    }];
 }
 
 #pragma mark - UISearchBarDelegate
 
 - (void)searchBar:(UISearchBar *)searchBar textDidChange:(NSString *)searchText {
-    if (self.currentMode == ModsManagerModeLocal) {
-        [self filterLocalMods];
+    if (self.currentMode == ShadersManagerModeLocal) {
+        [self filterLocalShaders];
     }
 }
 
 - (void)searchBarSearchButtonClicked:(UISearchBar *)searchBar {
     [searchBar resignFirstResponder];
-    if (self.currentMode == ModsManagerModeOnline) {
+    if (self.currentMode == ShadersManagerModeOnline) {
         [self performOnlineSearch];
     }
 }
@@ -216,8 +218,8 @@
 - (void)searchBarCancelButtonClicked:(UISearchBar *)searchBar {
     searchBar.text = @"";
     [searchBar resignFirstResponder];
-    if (self.currentMode == ModsManagerModeLocal) {
-        [self filterLocalMods];
+    if (self.currentMode == ShadersManagerModeLocal) {
+        [self filterLocalShaders];
     } else {
         [self.onlineSearchResults removeAllObjects];
         [self.tableView reloadData];
@@ -225,22 +227,22 @@
     }
 }
 
-- (void)filterLocalMods {
-    [self.filteredLocalMods removeAllObjects];
+- (void)filterLocalShaders {
+    [self.filteredLocalShaders removeAllObjects];
     if (self.searchBar.text.length == 0) {
-        [self.filteredLocalMods addObjectsFromArray:self.localMods];
+        [self.filteredLocalShaders addObjectsFromArray:self.localShaders];
     } else {
         NSString *searchText = [self.searchBar.text lowercaseString];
-        for (ModItem *mod in self.localMods) {
-            if ([mod.displayName.lowercaseString containsString:searchText] ||
-                [mod.fileName.lowercaseString containsString:searchText]) {
-                [self.filteredLocalMods addObject:mod];
+        for (ShaderItem *shader in self.localShaders) {
+            if ([shader.displayName.lowercaseString containsString:searchText] ||
+                [shader.fileName.lowercaseString containsString:searchText]) {
+                [self.filteredLocalShaders addObject:shader];
             }
         }
     }
-    self.emptyLabel.hidden = self.filteredLocalMods.count > 0;
+    self.emptyLabel.hidden = self.filteredLocalShaders.count > 0;
     if (!self.emptyLabel.hidden) {
-        self.emptyLabel.text = @"未找到本地 Mod";
+        self.emptyLabel.text = @"未找到本地光影";
     }
     [self.tableView reloadData];
 }
@@ -248,35 +250,35 @@
 #pragma mark - UITableView DataSource & Delegate
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    return self.currentMode == ModsManagerModeLocal ? self.filteredLocalMods.count : self.onlineSearchResults.count;
+    return self.currentMode == ShadersManagerModeLocal ? self.filteredLocalShaders.count : self.onlineSearchResults.count;
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-    ModTableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"ModCell" forIndexPath:indexPath];
+    ShaderTableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"ShaderCell" forIndexPath:indexPath];
     cell.delegate = self;
 
-    if (self.currentMode == ModsManagerModeLocal) {
-        ModItem *mod = self.filteredLocalMods[indexPath.row];
-        [cell configureWithMod:mod displayMode:ModTableViewCellDisplayModeLocal];
+    if (self.currentMode == ShadersManagerModeLocal) {
+        ShaderItem *shader = self.filteredLocalShaders[indexPath.row];
+        [cell configureWithShader:shader displayMode:ShaderTableViewCellDisplayModeLocal];
     } else {
-        NSDictionary *modData = self.onlineSearchResults[indexPath.row];
-        ModItem *modItem = [[ModItem alloc] initWithOnlineData:modData];
-        [cell configureWithMod:modItem displayMode:ModTableViewCellDisplayModeOnline];
+        NSDictionary *shaderData = self.onlineSearchResults[indexPath.row];
+        ShaderItem *shaderItem = [[ShaderItem alloc] initWithOnlineData:shaderData];
+        [cell configureWithShader:shaderItem displayMode:ShaderTableViewCellDisplayModeOnline];
     }
 
     return cell;
 }
 
 - (UISwipeActionsConfiguration *)tableView:(UITableView *)tableView trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
-    if (self.currentMode != ModsManagerModeLocal) {
+    if (self.currentMode != ShadersManagerModeLocal) {
         return nil;
     }
 
     UIContextualAction *deleteAction = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleDestructive title:@"删除" handler:^(UIContextualAction * _Nonnull action, __kindof UIView * _Nonnull sourceView, void (^ _Nonnull completionHandler)(BOOL)) {
 
-        ModItem *modToDelete = self.filteredLocalMods[indexPath.row];
+        ShaderItem *shaderToDelete = self.filteredLocalShaders[indexPath.row];
 
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"确认删除" message:[NSString stringWithFormat:@"确定要删除 %@ 吗？\n此操作无法撤销。", modToDelete.displayName] preferredStyle:UIAlertControllerStyleAlert];
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"确认删除" message:[NSString stringWithFormat:@"确定要删除 %@ 吗？\n此操作无法撤销。", shaderToDelete.displayName] preferredStyle:UIAlertControllerStyleAlert];
 
         [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:^(UIAlertAction * _Nonnull action) {
             completionHandler(NO);
@@ -284,21 +286,18 @@
 
         [alert addAction:[UIAlertAction actionWithTitle:@"删除" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
             NSError *error = nil;
-            [[ModService sharedService] deleteMod:modToDelete error:&error];
+            [[ShaderService sharedService] deleteShader:shaderToDelete error:&error];
 
             if (error) {
-                NSLog(@"[ModsManager] Error deleting mod: %@", error);
-                // Optionally show an alert to the user
+                NSLog(@"[ShadersManager] Error deleting shader: %@", error);
                 completionHandler(NO);
             } else {
-                // Remove from data source
-                NSInteger indexInFullList = [self.localMods indexOfObject:modToDelete];
+                NSInteger indexInFullList = [self.localShaders indexOfObject:shaderToDelete];
                 if (indexInFullList != NSNotFound) {
-                    [self.localMods removeObjectAtIndex:indexInFullList];
+                    [self.localShaders removeObjectAtIndex:indexInFullList];
                 }
-                [self.filteredLocalMods removeObjectAtIndex:indexPath.row];
+                [self.filteredLocalShaders removeObjectAtIndex:indexPath.row];
 
-                // Perform the table view update
                 [tableView deleteRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationAutomatic];
 
                 completionHandler(YES);
@@ -311,32 +310,32 @@
     deleteAction.backgroundColor = [UIColor systemRedColor];
 
     UISwipeActionsConfiguration *configuration = [UISwipeActionsConfiguration configurationWithActions:@[deleteAction]];
-    configuration.performsFirstActionWithFullSwipe = YES; // Allow full swipe to delete
+    configuration.performsFirstActionWithFullSwipe = YES;
 
     return configuration;
 }
 
-#pragma mark - ModTableViewCellDelegate (Download Implementation)
+#pragma mark - ShaderTableViewCellDelegate (Download Implementation)
 
-- (void)modCellDidTapDownload:(UITableViewCell *)cell {
+- (void)shaderCellDidTapDownload:(UITableViewCell *)cell {
     NSIndexPath *indexPath = [self.tableView indexPathForCell:cell];
-    if (!indexPath || self.currentMode != ModsManagerModeOnline) return;
+    if (!indexPath || self.currentMode != ShadersManagerModeOnline) return;
 
-    NSDictionary *modData = self.onlineSearchResults[indexPath.row];
-    ModItem *modItem = [[ModItem alloc] initWithOnlineData:modData];
-    
-    ModVersionViewController *versionVC = [[ModVersionViewController alloc] init];
-    versionVC.modItem = modItem;
+    NSDictionary *shaderData = self.onlineSearchResults[indexPath.row];
+    ShaderItem *shaderItem = [[ShaderItem alloc] initWithOnlineData:shaderData];
+
+    ShaderVersionViewController *versionVC = [[ShaderVersionViewController alloc] init];
+    versionVC.shaderItem = shaderItem;
     versionVC.delegate = self;
-    
+
     [self.navigationController pushViewController:versionVC animated:YES];
 }
 
-#pragma mark - ModVersionViewControllerDelegate
+#pragma mark - ShaderVersionViewControllerDelegate
 
-- (void)modVersionViewController:(ModVersionViewController *)viewController didSelectVersion:(ModVersion *)version {
-    ModItem *itemToDownload = viewController.modItem;
-    
+- (void)shaderVersionViewController:(ShaderVersionViewController *)viewController didSelectVersion:(ShaderVersion *)version {
+    ShaderItem *itemToDownload = viewController.shaderItem;
+
     // Find the primary file to download
     NSDictionary *primaryFile = version.primaryFile;
     if (!primaryFile || ![primaryFile[@"url"] isKindOfClass:[NSString class]]) {
@@ -350,7 +349,7 @@
     [self startDownloadForItem:itemToDownload];
 }
 
-- (void)startDownloadForItem:(ModItem *)item {
+- (void)startDownloadForItem:(ShaderItem *)item {
     // Show a temporary "downloading" alert
     UIAlertController *downloadingAlert = [UIAlertController alertControllerWithTitle:@"正在下载"
                                                                               message:[NSString stringWithFormat:@"%@...", item.displayName]
@@ -367,11 +366,9 @@
 
     [self presentViewController:downloadingAlert animated:YES completion:nil];
 
-    [[ModService sharedService] downloadMod:item toProfile:self.profileName completion:^(NSError * _Nullable error) {
+    [[ShaderService sharedService] downloadShader:item toProfile:self.profileName completion:^(NSError * _Nullable error) {
         dispatch_async(dispatch_get_main_queue(), ^{
-            // First, dismiss the "downloading" alert
             [downloadingAlert dismissViewControllerAnimated:YES completion:^{
-                // Then, show the result alert
                 if (error) {
                     [self showSimpleAlertWithTitle:@"下载失败" message:error.localizedDescription];
                 } else {
@@ -379,10 +376,9 @@
                                                                                           message:[NSString stringWithFormat:@"%@ 已成功安装。", item.displayName]
                                                                                    preferredStyle:UIAlertControllerStyleAlert];
                     [successAlert addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-                        // After user acknowledges, switch to local mods and refresh
                         [self.modeSwitcher setSelectedSegmentIndex:0];
                         [self modeChanged:self.modeSwitcher];
-                        [self refreshLocalModsList];
+                        [self refreshLocalShadersList];
                     }]];
                     [self presentViewController:successAlert animated:YES completion:nil];
                 }
@@ -398,53 +394,36 @@
 }
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
-    if (self.currentMode == ModsManagerModeOnline) {
-        // Handle online search item selection if necessary (e.g., show details)
+    if (self.currentMode == ShadersManagerModeOnline) {
         [tableView deselectRowAtIndexPath:indexPath animated:YES];
     }
 }
 
-- (void)modCellDidTapToggle:(UITableViewCell *)cell {
-    NSIndexPath *indexPath = [self.tableView indexPathForCell:cell];
-    if (!indexPath || self.currentMode != ModsManagerModeLocal) return;
-
-    ModItem *mod = self.filteredLocalMods[indexPath.row];
-
-    NSError *error = nil;
-    BOOL success = [[ModService sharedService] toggleEnableForMod:mod error:&error];
-
-    if (!success) {
-        NSLog(@"[ModsManager] Error toggling mod: %@", error);
-        // Optionally show an alert to the user
-        // Revert the switch state if the operation failed
-        [(ModTableViewCell *)cell updateToggleState:mod.disabled];
-    } else {
-        // The service already changed the mod's state, so we just update the UI
-        [(ModTableViewCell *)cell updateToggleState:mod.disabled];
-    }
+// 禁用光影切换功能 - 光影管理只用于查看和删除
+- (void)shaderCellDidTapToggle:(UITableViewCell *)cell {
+    // 功能已禁用
 }
 
-- (void)modCellDidTapOpenLink:(UITableViewCell *)cell {
+- (void)shaderCellDidTapOpenLink:(UITableViewCell *)cell {
     NSIndexPath *indexPath = [self.tableView indexPathForCell:cell];
     if (!indexPath) return;
 
-    ModItem *modItem = nil;
-    if (self.currentMode == ModsManagerModeLocal) {
-        modItem = self.filteredLocalMods[indexPath.row];
+    ShaderItem *shaderItem = nil;
+    if (self.currentMode == ShadersManagerModeLocal) {
+        shaderItem = self.filteredLocalShaders[indexPath.row];
     } else {
-        NSDictionary *modData = self.onlineSearchResults[indexPath.row];
-        modItem = [[ModItem alloc] initWithOnlineData:modData];
+        NSDictionary *shaderData = self.onlineSearchResults[indexPath.row];
+        shaderItem = [[ShaderItem alloc] initWithOnlineData:shaderData];
     }
 
-    if (modItem.onlineID && modItem.onlineID.length > 0) {
-        NSString *urlString = [NSString stringWithFormat:@"https://modrinth.com/mod/%@", modItem.onlineID];
+    if (shaderItem.onlineID && shaderItem.onlineID.length > 0) {
+        NSString *urlString = [NSString stringWithFormat:@"https://modrinth.com/shader/%@", shaderItem.onlineID];
         NSURL *url = [NSURL URLWithString:urlString];
         if (url) {
             [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:nil];
         }
     } else {
-        // Optionally, inform the user that there's no link available
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"链接不可用" message:@"该 Mod 没有可用的在线链接。" preferredStyle:UIAlertControllerStyleAlert];
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"链接不可用" message:@"该光影没有可用的在线链接。" preferredStyle:UIAlertControllerStyleAlert];
         [alert addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleDefault handler:nil]];
         [self presentViewController:alert animated:YES completion:nil];
     }

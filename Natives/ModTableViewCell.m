@@ -339,7 +339,7 @@
     formatter.numberStyle = NSNumberFormatterDecimalStyle;
     NSString *downloadsStr = [formatter stringFromNumber:mod.downloads ?: @0];
 
-    _statsLabel.text = [NSString stringWithFormat:@"%@ downloads", downloadsStr];
+    _statsLabel.text = [NSString stringWithFormat:@"%@ 下载", downloadsStr];
 }
 
 

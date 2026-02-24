@@ -1,868 +1,207 @@
-#import "authenticator/BaseAuthenticator.h"
-#import "AccountListViewController.h"
-#import "AFNetworking.h"
-#import "ALTServerConnection.h"
-#import "LauncherNavigationController.h"
 #import "LauncherMenuViewController.h"
-#import "LauncherNewsViewController.h"
-#import "LauncherPreferences.h"
 #import "LauncherPreferencesViewController.h"
-#import "LauncherProfilesViewController.h"
+#import "VersionManagerViewController.h"
+#import "ProfileSettingsViewController.h"
 #import "PLProfiles.h"
-#import "UIButton+AFNetworking.h"
-#import "UIImageView+AFNetworking.h"
-#import "UIKit+hook.h"
-#import "ios_uikit_bridge.h"
 #import "utils.h"
 
-#include <dlfcn.h>
+@interface LauncherMenuViewController ()
 
-@implementation LauncherMenuCustomItem
+@property(nonatomic, strong) UIView *sidebarView;
+@property(nonatomic, strong) NSArray<NSDictionary *> *menuItems;
+@property(nonatomic, assign) NSInteger selectedIndex;
 
-+ (LauncherMenuCustomItem *)title:(NSString *)title imageName:(NSString *)imageName action:(id)action {
-    LauncherMenuCustomItem *item = [[LauncherMenuCustomItem alloc] init];
-    item.title = title;
-    item.imageName = imageName;
-    item.action = action;
-    return item;
-}
-
-+ (LauncherMenuCustomItem *)vcClass:(Class)class {
-    id vc = [class new];
-    LauncherMenuCustomItem *item = [[LauncherMenuCustomItem alloc] init];
-    item.title = [vc title];
-    item.imageName = [vc imageName];
-    // View controllers are put into an array to keep its state
-    item.vcArray = @[vc];
-    return item;
-}
-
-@end
-
-@interface LauncherMenuViewController()
-@property(nonatomic) NSMutableArray<LauncherMenuCustomItem*> *options;
-@property(nonatomic) UILabel *statusLabel;
-@property(nonatomic) int lastSelectedIndex;
-@property(nonatomic, weak) NSLayoutConstraint *announcementContainerHeightConstraint;
-@property(nonatomic, weak) UIView *announcementContainer;
-@property(nonatomic, weak) UILabel *announcementLabel;
-@property(nonatomic, weak) UIButton *downloadButton;
 @end
 
 @implementation LauncherMenuViewController
 
-#define contentNavigationController ((LauncherNavigationController *)self.splitViewController.viewControllers[1])
+#pragma mark - Lifecycle
 
 - (void)viewDidLoad {
     [super viewDidLoad];
     
-    self.isInitialVc = YES;
+    self.view.backgroundColor = [UIColor clearColor];
     
-    UIImageView *titleView = [[UIImageView alloc] initWithImage:[UIImage imageNamed:@"AppLogo"]];
-    [titleView setContentMode:UIViewContentModeScaleAspectFit];
-    self.navigationItem.titleView = titleView;
-    [titleView sizeToFit];
-    
-    self.options = @[
-        [LauncherMenuCustomItem vcClass:LauncherNewsViewController.class],
-        [LauncherMenuCustomItem vcClass:LauncherProfilesViewController.class],
-        [LauncherMenuCustomItem vcClass:LauncherPreferencesViewController.class],
-    ].mutableCopy;
-    if (realUIIdiom != UIUserInterfaceIdiomTV) {
-        [self.options addObject:(id)[LauncherMenuCustomItem
-                                     title:localize(@"launcher.menu.custom_controls", nil)
-                                     imageName:@"MenuCustomControls" action:^{
-            [contentNavigationController performSelector:@selector(enterCustomControls)];
-        }]];
-    }
-    [self.options addObject:
-     (id)[LauncherMenuCustomItem
-          title:localize(@"launcher.menu.execute_jar", nil)
-          imageName:@"MenuInstallJar" action:^{
-        [contentNavigationController performSelector:@selector(enterModInstaller)];
-    }]];
-    
-    
-    
-    // TODO: Finish log-uploading service integration
-    [self.options addObject:
-     (id)[LauncherMenuCustomItem
-          title:localize(@"login.menu.sendlogs", nil)
-          imageName:@"square.and.arrow.up" action:^{
-        NSString *latestlogPath = [NSString stringWithFormat:@"file://%s/latestlog.old.txt", getenv("POJAV_HOME")];
-        NSLog(@"Path is %@", latestlogPath);
-        UIActivityViewController *activityVC;
-        if (realUIIdiom != UIUserInterfaceIdiomTV) {
-            activityVC = [[UIActivityViewController alloc]
-                          initWithActivityItems:@[[NSURL URLWithString:latestlogPath]]
-                          applicationActivities:nil];
-        } else {
-            dlopen("/System/Library/PrivateFrameworks/SharingUI.framework/SharingUI", RTLD_GLOBAL);
-            activityVC =
-            [[NSClassFromString(@"SFAirDropSharingViewControllerTV") alloc]
-             performSelector:@selector(initWithSharingItems:)
-             withObject:@[[NSURL URLWithString:latestlogPath]]];
-        }
-        activityVC.popoverPresentationController.sourceView = titleView;
-        activityVC.popoverPresentationController.sourceRect = titleView.bounds;
-        [self presentViewController:activityVC animated:YES completion:nil];
-    }]];
-    
-    NSDateFormatter *dateFormatter = [[NSDateFormatter alloc] init];
-    dateFormatter.dateFormat = @"MM-dd";
-    NSString* date = [dateFormatter stringFromDate:NSDate.date];
-    if([date isEqualToString:@"06-29"] || [date isEqualToString:@"06-30"] || [date isEqualToString:@"07-01"]) {
-        [self.options addObject:(id)[LauncherMenuCustomItem
-                                     title:@"Technoblade never dies!"
-                                     imageName:@"" action:^{
-            openLink(self, [NSURL URLWithString:@"https://www.bilibili.com/video/BV1RG411s7fw"]);
-        }]];
-    }
-    
-    // 零雾05_Fogg05彩蛋 - 每年12月27日、28日、29日显示
-    if([date isEqualToString:@"12-27"] || [date isEqualToString:@"12-28"] || [date isEqualToString:@"12-29"]) {
-        [self.options addObject:(id)[LauncherMenuCustomItem
-                                     title:@"致那个为方块上色的人"
-                                     imageName:@"" action:^{
-            NSString *urlString = @"https://wiki.easecation.net/零雾05_Fogg05";
-            NSString *encodedUrlString = [urlString stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLPathAllowedCharacterSet]];
-            openLink(self, [NSURL URLWithString:encodedUrlString]);
-        }]];
-    }
-    
-    self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
-    
-    self.navigationController.toolbarHidden = NO;
-    UIActivityIndicatorViewStyle indicatorStyle = UIActivityIndicatorViewStyleMedium;
-    UIActivityIndicatorView *toolbarIndicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:indicatorStyle];
-    [toolbarIndicator startAnimating];
-    self.toolbarItems = @[
-        [[UIBarButtonItem alloc] initWithCustomView:toolbarIndicator],
-        [[UIBarButtonItem alloc] init]
+    // 菜单项配置
+    self.menuItems = @[
+        @{@"icon": @"house.fill", @"title": @" ", @"index": @0},
+        @{@"icon": @"arrow.down.circle.fill", @"title": @" ", @"index": @1},
+        @{@"icon": @"puzzlepiece.fill", @"title": @" ", @"index": @2},
+        @{@"icon": @"paintbrush.fill", @"title": @" ", @"index": @3},
+        @{@"icon": @"gearshape.fill", @"title": @" ", @"index": @4}
     ];
-    self.toolbarItems[1].tintColor = UIColor.labelColor;
     
-    // Setup the account button
-    self.accountBtnItem = [self drawAccountButton];
+    self.selectedIndex = 0;
     
-    [self updateAccountInfo];
-    
-    NSUInteger initialIndex = 0;
-    UIViewController *currentRoot = contentNavigationController.viewControllers.firstObject;
-    for (NSUInteger i = 0; i < self.options.count; i++) {
-        LauncherMenuCustomItem *opt = self.options[i];
-        if (opt.vcArray.count > 0 && [currentRoot isKindOfClass:[opt.vcArray[0] class]]) {
-            initialIndex = i;
-            break;
-        }
-    }
-    NSIndexPath *indexPath = [NSIndexPath indexPathForRow:initialIndex inSection:0];
-    [self.tableView selectRowAtIndexPath:indexPath animated:YES scrollPosition:UITableViewScrollPositionNone];
-    [self tableView:self.tableView didSelectRowAtIndexPath:indexPath];
-    
-    // 获取当前应用版本
-    NSString *currentVersion = [[[NSBundle mainBundle] infoDictionary] objectForKey:@"CFBundleShortVersionString"];
-    
-    // 创建公告栏
-    UILabel *announcementLabel = [[UILabel alloc] init];
-    announcementLabel.textAlignment = NSTextAlignmentLeft;
-    announcementLabel.textColor = [UIColor labelColor]; // 使用系统标签颜色，自动适配深色模式
-    announcementLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
-    announcementLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    announcementLabel.numberOfLines = 0; // 允许多行文本
-    
-    // 创建公告栏容器视图
-    UIView *announcementContainer = [[UIView alloc] init];
-    announcementContainer.translatesAutoresizingMaskIntoConstraints = NO;
-    
-    // 设置容器样式 - 支持iOS14.0的兼容方式
-    if (@available(iOS 13.0, *)) {
-        announcementContainer.backgroundColor = [[UIColor systemBackgroundColor] colorWithAlphaComponent:0.95];
-    } else {
-        announcementContainer.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.95];
-    }
-    
-    announcementContainer.layer.cornerRadius = 12;
-    announcementContainer.layer.masksToBounds = YES;
-    
-    // 添加边框
-    announcementContainer.layer.borderWidth = 1.0;
-    if (@available(iOS 13.0, *)) {
-        announcementContainer.layer.borderColor = [[UIColor separatorColor] colorWithAlphaComponent:0.3].CGColor;
-    } else {
-        announcementContainer.layer.borderColor = [[UIColor lightGrayColor] colorWithAlphaComponent:0.3].CGColor;
-    }
-    
-    // 添加阴影效果
-    announcementContainer.layer.shadowColor = [UIColor blackColor].CGColor;
-    announcementContainer.layer.shadowOffset = CGSizeMake(0, 2);
-    announcementContainer.layer.shadowRadius = 4;
-    announcementContainer.layer.shadowOpacity = 0.1;
-    
-    // 添加信息图标
-    UIImageView *infoIcon = [[UIImageView alloc] init];
-    infoIcon.translatesAutoresizingMaskIntoConstraints = NO;
-    
-    // 使用系统图标，兼容iOS14.0
-    if (@available(iOS 13.0, *)) {
-        infoIcon.image = [UIImage systemImageNamed:@"info.circle.fill"];
-        infoIcon.tintColor = [UIColor systemBlueColor];
-    } else {
-        // iOS14以下使用自定义图标或文字
-        infoIcon.image = [UIImage imageNamed:@"MenuInfo"];
-        if (!infoIcon.image) {
-            // 如果没有图片资源，创建一个简单的圆形
-            UIGraphicsBeginImageContextWithOptions(CGSizeMake(20, 20), NO, 0.0);
-            CGContextRef context = UIGraphicsGetCurrentContext();
-            [[UIColor blueColor] setFill];
-            CGContextFillEllipseInRect(context, CGRectMake(0, 0, 20, 20));
-            UIImage *circleImage = UIGraphicsGetImageFromCurrentImageContext();
-            UIGraphicsEndImageContext();
-            infoIcon.image = circleImage;
-        }
-    }
-    
-    [announcementContainer addSubview:infoIcon];
-    
-    // 添加公告标签到容器
-    [announcementContainer addSubview:announcementLabel];
-    
-    // 设置图标约束 - 固定在顶部
-    [NSLayoutConstraint activateConstraints:@[
-        [infoIcon.leadingAnchor constraintEqualToAnchor:announcementContainer.leadingAnchor constant:8],
-        [infoIcon.topAnchor constraintEqualToAnchor:announcementContainer.topAnchor constant:12],
-        [infoIcon.widthAnchor constraintEqualToConstant:20],
-        [infoIcon.heightAnchor constraintEqualToConstant:20]
-    ]];
-    
-    // 设置公告标签约束（在图标右侧，顶部对齐）
-    [NSLayoutConstraint activateConstraints:@[
-        [announcementLabel.topAnchor constraintEqualToAnchor:announcementContainer.topAnchor constant:12],
-        [announcementLabel.leadingAnchor constraintEqualToAnchor:infoIcon.trailingAnchor constant:8],
-        [announcementLabel.trailingAnchor constraintEqualToAnchor:announcementContainer.trailingAnchor constant:-8]
-    ]];
-    
-    // 将公告容器添加到视图，放在导航栏下方、表格视图上方
-    [self.view addSubview:announcementContainer];
-    
-    // 设置公告容器约束 - 适应侧边栏布局
-    NSLayoutConstraint *heightConstraint = [announcementContainer.heightAnchor constraintEqualToConstant:60];
-    self.announcementContainerHeightConstraint = heightConstraint;
-    
-    [NSLayoutConstraint activateConstraints:@[
-        [announcementContainer.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:8],
-        [announcementContainer.leadingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.leadingAnchor constant:8],
-        [announcementContainer.trailingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.trailingAnchor constant:-8],
-        heightConstraint
-    ]];
-    
-    // 存储公告栏引用
-    self.announcementContainer = announcementContainer;
-    self.announcementLabel = announcementLabel;
-    
-    // 调整表格视图的顶部约束，为公告栏留出空间
-    // 初始设置为 60（容器高度）+ 16（上下间距）= 76
-    self.tableView.contentInset = UIEdgeInsetsMake(76, 0, 0, 0);
-    
-    // 检查当前版本是否包含"Preview"字样
-    if ([currentVersion rangeOfString:@"Preview" options:NSCaseInsensitiveSearch].location != NSNotFound) {
-        announcementLabel.text = localize(@"announcement.preview_version", @"欢迎使用Amethyst iOS Remastered测试版！");
-    } else {
-        // 尝试获取GitHub最新的Release版本号
-        [self checkForUpdateWithCurrentVersion:currentVersion announcementLabel:announcementLabel announcementContainer:announcementContainer retryCount:0];
-    }
-    
-    if (getEntitlementValue(@"get-task-allow")) {
-        [self displayProgress:localize(@"login.jit.checking", nil)];
-        if (isJITEnabled(false)) {
-            [self displayProgress:localize(@"login.jit.enabled", nil)];
-            [self displayProgress:nil];
-        } else {
-            [self enableJITWithAltKit];
-        }
-    } else if (!NSProcessInfo.processInfo.macCatalystApp && !getenv("SIMULATOR_DEVICE_NAME")) {
-        [self displayProgress:localize(@"login.jit.fail", nil)];
-        [self displayProgress:nil];
-        UIAlertController* alert = [UIAlertController alertControllerWithTitle:localize(@"login.jit.fail.title", nil)
-            message:localize(@"login.jit.fail.description_unsupported", nil)
-            preferredStyle:UIAlertControllerStyleAlert];
-        UIAlertAction* okAction = [UIAlertAction actionWithTitle:localize(@"OK", nil) style:UIAlertActionStyleDefault handler:^(id action){
-            exit(-1);
-        }];
-        [alert addAction:okAction];
-        [self presentViewController:alert animated:YES completion:nil];
-    }
+    [self setupSidebar];
 }
 
-- (void)viewWillAppear:(BOOL)animated {
-    [super viewWillAppear:animated];
-    [self restoreHighlightedSelection];
-}
+#pragma mark - UI Setup
 
-- (void)viewDidLayoutSubviews {
-    [super viewDidLayoutSubviews];
+- (void)setupSidebar {
+    self.sidebarView = [[UIView alloc] init];
+    self.sidebarView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.sidebarView.backgroundColor = [UIColor clearColor];
+    [self.view addSubview:self.sidebarView];
     
-    // 确保表格视图的contentInset正确设置
-    // 这个方法的调用时机在视图布局完成后，可以安全地获取视图的实际尺寸
-    if (self.tableView.contentInset.top < 70) {
-        // 如果contentInset未正确设置，重新设置默认值
-        self.tableView.contentInset = UIEdgeInsetsMake(76, 0, 0, 0);
-    }
+    [NSLayoutConstraint activateConstraints:@[
+        [self.sidebarView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.sidebarView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.sidebarView.topAnchor constraintEqualToAnchor:self.view.topAnchor],
+        [self.sidebarView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor]
+    ]];
     
-    // 重新计算公告栏高度，适应侧边栏宽度变化
-    // 侧边栏宽度可能会在横竖屏切换、iPad分屏模式下变化
-    if (self.announcementContainer && self.announcementLabel) {
-        // 检查当前宽度是否与之前不同
-        static CGFloat previousWidth = 0;
-        CGFloat currentWidth = self.announcementContainer.frame.size.width;
+    // 创建菜单按钮
+    CGFloat buttonSize = 50;
+    CGFloat spacing = 15;
+    CGFloat startY = 60;
+    
+    for (NSInteger i = 0; i < self.menuItems.count; i++) {
+        NSDictionary *item = self.menuItems[i];
+        UIButton *btn = [self createMenuButtonWithItem:item index:i];
+        [self.sidebarView addSubview:btn];
         
-        if (fabs(currentWidth - previousWidth) > 1.0 && currentWidth > 50) {
-            previousWidth = currentWidth;
+        [NSLayoutConstraint activateConstraints:@[
+            [btn.topAnchor constraintEqualToAnchor:self.sidebarView.topAnchor constant:startY + i * (buttonSize + spacing)],
+            [btn.centerXAnchor constraintEqualToAnchor:self.sidebarView.centerXAnchor],
+            [btn.widthAnchor constraintEqualToConstant:buttonSize],
+            [btn.heightAnchor constraintEqualToConstant:buttonSize]
+        ]];
+    }
+}
+
+- (UIButton *)createMenuButtonWithItem:(NSDictionary *)item index:(NSInteger)index {
+    UIButton *btn = [UIButton buttonWithType:UIButtonTypeSystem];
+    btn.translatesAutoresizingMaskIntoConstraints = NO;
+    btn.tag = index;
+    
+    // 设置图标
+    UIImage *icon = [UIImage systemImageNamed:item[@"icon"]];
+    [btn setImage:icon forState:UIControlStateNormal];
+    
+    // 设置颜色 - 选中项高亮
+    if (index == self.selectedIndex) {
+        btn.tintColor = [UIColor colorWithRed:0.26 green:0.63 blue:0.96 alpha:1.0];
+    } else {
+        btn.tintColor = [UIColor systemGrayColor];
+    }
+    
+    // 设置标题（在图标下方）
+    btn.titleLabel.font = [UIFont systemFontOfSize:10];
+    [btn setTitle:item[@"title"] forState:UIControlStateNormal];
+    [btn setTitleColor:(index == self.selectedIndex) ? [UIColor colorWithRed:0.26 green:0.63 blue:0.96 alpha:1.0] : [UIColor systemGrayColor] forState:UIControlStateNormal];
+    
+    // 垂直布局：图标在上，文字在下
+    btn.contentHorizontalAlignment = UIControlContentHorizontalAlignmentCenter;
+    btn.contentVerticalAlignment = UIControlContentVerticalAlignmentCenter;
+    btn.titleEdgeInsets = UIEdgeInsetsMake(30, -30, 0, 0);
+    btn.imageEdgeInsets = UIEdgeInsetsMake(-10, 0, 0, 0);
+    
+    [btn addTarget:self action:@selector(menuButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
+    
+    return btn;
+}
+
+#pragma mark - Actions
+
+- (void)menuButtonTapped:(UIButton *)sender {
+    NSInteger index = sender.tag;
+    
+    // 更新选中状态
+    self.selectedIndex = index;
+    [self updateButtonColors];
+    
+    // 回调
+    NSString *title = self.menuItems[index][@"title"];
+    if (self.onMenuItemSelected) {
+        self.onMenuItemSelected(index, title);
+    }
+    
+    // 处理导航
+    [self handleMenuSelection:index];
+}
+
+- (void)updateButtonColors {
+    for (UIView *view in self.sidebarView.subviews) {
+        if ([view isKindOfClass:[UIButton class]]) {
+            UIButton *btn = (UIButton *)view;
+            NSInteger index = btn.tag;
             
-            // 重新调整高度
-            if (self.downloadButton) {
-                [self adjustAnnouncementContainerHeight:self.announcementContainer forLabel:self.announcementLabel withButton:self.downloadButton];
+            if (index == self.selectedIndex) {
+                btn.tintColor = [UIColor colorWithRed:0.26 green:0.63 blue:0.96 alpha:1.0];
+                [btn setTitleColor:[UIColor colorWithRed:0.26 green:0.63 blue:0.96 alpha:1.0] forState:UIControlStateNormal];
             } else {
-                [self adjustAnnouncementContainerHeight:self.announcementContainer forLabel:self.announcementLabel];
+                btn.tintColor = [UIColor systemGrayColor];
+                [btn setTitleColor:[UIColor systemGrayColor] forState:UIControlStateNormal];
             }
         }
     }
 }
 
-- (UIBarButtonItem *)drawAccountButton {
-    if (!self.accountBtnItem) {
-        self.accountButton = [UIButton buttonWithType:UIButtonTypeCustom];
-        [self.accountButton addTarget:self action:@selector(selectAccount:) forControlEvents:UIControlEventPrimaryActionTriggered];
-        self.accountButton.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeft;
-
-        self.accountButton.titleEdgeInsets = UIEdgeInsetsMake(0, 4, 0, -4);
-        self.accountButton.imageView.contentMode = UIViewContentModeScaleAspectFit;
-        self.accountButton.titleLabel.lineBreakMode = NSLineBreakByWordWrapping;
-        self.accountBtnItem = [[UIBarButtonItem alloc] initWithCustomView:self.accountButton];
-    }
-
-    [self updateAccountInfo];
-    
-    return self.accountBtnItem;
-}
-
-- (void)restoreHighlightedSelection {
-    // Restore the selected row when the view appears again
-    NSIndexPath *indexPath = [NSIndexPath indexPathForRow:self.lastSelectedIndex inSection:0];
-    [self.tableView selectRowAtIndexPath:indexPath animated:NO scrollPosition:UITableViewScrollPositionNone];
-}
-
-- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section
-{
-    return self.options.count;
-}
-
-- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath
-{
-    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"cell"];
-    if (cell == nil) {
-        cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:@"cell"];
-    }
-
-    cell.textLabel.text = [self.options[indexPath.row] title];
-    
-    UIImage *origImage = [UIImage systemImageNamed:[self.options[indexPath.row]
-        performSelector:@selector(imageName)]];
-    if (origImage) {
-        UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:CGSizeMake(40, 40)];
-        UIImage *image = [renderer imageWithActions:^(UIGraphicsImageRendererContext*_Nonnull myContext) {
-            CGFloat scaleFactor = 40/origImage.size.height;
-            [origImage drawInRect:CGRectMake(20 - origImage.size.width*scaleFactor/2, 0, origImage.size.width*scaleFactor, 40)];
-        }];
-        cell.imageView.image = [image imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
-    }
-    
-    if (cell.imageView.image == nil) {
-        cell.imageView.layer.magnificationFilter = kCAFilterNearest;
-        cell.imageView.layer.minificationFilter = kCAFilterNearest;
-        cell.imageView.image = [UIImage imageNamed:[self.options[indexPath.row]
-            performSelector:@selector(imageName)]];
-        cell.imageView.image = [cell.imageView.image _imageWithSize:CGSizeMake(40, 40)];
-    }
-    return cell;
-}
-
-- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath
-{
-    LauncherMenuCustomItem *selected = self.options[indexPath.row];
-    
-    if (selected.action != nil) {
-        [self restoreHighlightedSelection];
-        ((LauncherMenuCustomItem *)selected).action();
-    } else {
-        if(self.isInitialVc) {
-            self.isInitialVc = NO;
-            self.lastSelectedIndex = indexPath.row;
-        } else {
-            self.options[self.lastSelectedIndex].vcArray = contentNavigationController.viewControllers;
-            [contentNavigationController setViewControllers:selected.vcArray animated:NO];
-            self.lastSelectedIndex = indexPath.row;
-        }
-        selected.vcArray[0].navigationItem.rightBarButtonItem = self.accountBtnItem;
-        selected.vcArray[0].navigationItem.leftBarButtonItem = self.splitViewController.displayModeButtonItem;
-        selected.vcArray[0].navigationItem.leftItemsSupplementBackButton = true;
+- (void)handleMenuSelection:(NSInteger)index {
+    switch (index) {
+        case 0: // 主页
+            // 通知父控制器切换到新闻页
+            [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowHomePage" object:nil];
+            break;
+            
+        case 1: // 下载
+            [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowDownloadPage" object:nil];
+            break;
+            
+        case 2: // 版本管理
+            [self showVersionManager];
+            break;
+            
+        case 3: // 当前版本设置
+            [self showCurrentVersionSettings];
+            break;
+            
+        case 4: // 设置
+            [self showSettings];
+            break;
     }
 }
 
-- (void)selectAccount:(UIButton *)sender {
-    AccountListViewController *vc = [[AccountListViewController alloc] init];
-    vc.whenDelete = ^void(NSString* name) {
-        if ([name isEqualToString:getPrefObject(@"internal.selected_account")]) {
-            BaseAuthenticator.current = nil;
-            setPrefObject(@"internal.selected_account", @"");
-            [self updateAccountInfo];
-        }
-    };
-    vc.whenItemSelected = ^void() {
-        BaseAuthenticator *currentAuth = BaseAuthenticator.current;
-        setPrefObject(@"internal.selected_account", currentAuth.authData[@"username"]);
-        [self updateAccountInfo];
-        if (sender != self.accountButton) {
-            // Called from the play button, so call back to continue
-            [sender sendActionsForControlEvents:UIControlEventPrimaryActionTriggered];
-        }
-    };
-    vc.modalPresentationStyle = UIModalPresentationPopover;
-    vc.preferredContentSize = CGSizeMake(350, 250);
-
-    UIPopoverPresentationController *popoverController = vc.popoverPresentationController;
-    popoverController.sourceView = sender;
-    popoverController.sourceRect = sender.bounds;
-    popoverController.permittedArrowDirections = UIPopoverArrowDirectionAny;
-    popoverController.delegate = vc;
-    [self presentViewController:vc animated:YES completion:nil];
+- (void)showVersionManager {
+    // 发送通知让 LauncherRootViewController 在中间内容区显示
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowVersionManager" object:nil];
 }
 
-- (void)updateAccountInfo {
-    BaseAuthenticator *currentAuth = BaseAuthenticator.current;
-    NSDictionary *selected = currentAuth.authData;
-    CGSize size = CGSizeMake(contentNavigationController.view.frame.size.width, contentNavigationController.view.frame.size.height);
-    
-    if (selected == nil) {
-        if((size.width / 3) > 200) {
-            [self.accountButton setAttributedTitle:[[NSAttributedString alloc] initWithString:localize(@"login.option.select", nil)] forState:UIControlStateNormal];
-        } else {
-            [self.accountButton setAttributedTitle:(NSAttributedString *)@"" forState:UIControlStateNormal];
-        }
-        [self.accountButton setImage:[UIImage imageNamed:@"DefaultAccount"] forState:UIControlStateNormal];
-        [self.accountButton sizeToFit];
+- (void)showCurrentVersionSettings {
+    NSString *currentProfile = PLProfiles.current.selectedProfileName;
+    if (!currentProfile) {
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"提示"
+                                                                       message:@"请先选择一个版本"
+                                                                preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
+        [self presentViewController:alert animated:YES completion:nil];
         return;
     }
-
-    // Remove the prefix "Demo." if there is
-    BOOL isDemo = [selected[@"username"] hasPrefix:@"Demo."];
-    NSMutableAttributedString *title = [[NSMutableAttributedString alloc] initWithString:[selected[@"username"] substringFromIndex:(isDemo?5:0)]];
-
-    // Check if we're switching between demo and full mode
-    BOOL shouldUpdateProfiles = (getenv("DEMO_LOCK")!=NULL) != isDemo;
-
-    // Reset states
-    unsetenv("DEMO_LOCK");
-    setenv("POJAV_GAME_DIR", [NSString stringWithFormat:@"%s/Library/Application Support/minecraft", getenv("POJAV_HOME")].UTF8String, 1);
-
-    id subtitle;
-    if (isDemo) {
-        subtitle = localize(@"login.option.demo", nil);
-        setenv("DEMO_LOCK", "1", 1);
-        setenv("POJAV_GAME_DIR", [NSString stringWithFormat:@"%s/.demo", getenv("POJAV_HOME")].UTF8String, 1);
-    } else if (selected[@"clientToken"] != nil) {
-        // This is a third-party account
-        subtitle = localize(@"login.option.3rdparty", nil);
-    } else if (selected[@"xboxGamertag"] == nil) {
-        subtitle = localize(@"login.option.local", nil);
-    } else {
-        // Display the Xbox gamertag for online accounts
-        subtitle = selected[@"xboxGamertag"];
-    }
-
-    subtitle = [[NSAttributedString alloc] initWithString:subtitle attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:12]}];
-    [title appendAttributedString:[[NSAttributedString alloc] initWithString:@"\n" attributes:nil]];
-    [title appendAttributedString:subtitle];
     
-    if((size.width / 3) > 200) {
-        [self.accountButton setAttributedTitle:title forState:UIControlStateNormal];
-    } else {
-        [self.accountButton setAttributedTitle:(NSAttributedString *)@"" forState:UIControlStateNormal];
-    }
-    
-    // TODO: Add caching mechanism for profile pictures
-    NSURL *url = [NSURL URLWithString:[selected[@"profilePicURL"] stringByReplacingOccurrencesOfString:@"\\/" withString:@"/"]];
-    UIImage *placeholder = [UIImage imageNamed:@"DefaultAccount"];
-    [self.accountButton setImageForState:UIControlStateNormal withURL:url placeholderImage:placeholder];
-    [self.accountButton.imageView setImageWithURL:url placeholderImage:placeholder];
-    [self.accountButton sizeToFit];
-
-    // Update profiles and local version list if needed
-    if (shouldUpdateProfiles) {
-        [contentNavigationController fetchLocalVersionList];
-        [contentNavigationController performSelector:@selector(reloadProfileList)];
-    }
-
-    // Update tableView whenever we have
-    UITableViewController *tableVC = contentNavigationController.viewControllers.lastObject;
-    if ([tableVC isKindOfClass:UITableViewController.class]) {
-        [tableVC.tableView reloadData];
-    }
+    // 发送通知让 LauncherRootViewController 在中间内容区显示
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowProfileSettings" object:currentProfile];
 }
 
-- (void)displayProgress:(NSString *)status {
-    if (status == nil) {
-        [(UIActivityIndicatorView *)self.toolbarItems[0].customView stopAnimating];
-    } else {
-        self.toolbarItems[1].title = status;
-    }
+- (void)showSettings {
+    // 发送通知让 LauncherRootViewController 在中间内容区显示
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowSettings" object:nil];
 }
 
-- (void)enableJITWithAltKit {
-    [ALTServerManager.sharedManager startDiscovering];
-    [ALTServerManager.sharedManager autoconnectWithCompletionHandler:^(ALTServerConnection *connection, NSError *error) {
-        if (error) {
-            NSLog(@"[AltKit] Could not auto-connect to server. %@", error.localizedRecoverySuggestion);
-            [self displayProgress:localize(@"login.jit.fail", nil)];
-            [self displayProgress:nil];
-        }
-        [connection enableUnsignedCodeExecutionWithCompletionHandler:^(BOOL success, NSError *error) {
-            if (success) {
-                NSLog(@"[AltKit] Successfully enabled JIT compilation!");
-                [ALTServerManager.sharedManager stopDiscovering];
-                [self displayProgress:localize(@"login.jit.enabled", nil)];
-                [self displayProgress:nil];
-            } else {
-                NSLog(@"[AltKit] Error enabling JIT: %@", error.localizedRecoverySuggestion);
-                [self displayProgress:localize(@"login.jit.fail", nil)];
-                [self displayProgress:nil];
-            }
-            [connection disconnect];
-        }];
-    }];
+#pragma mark - Data Updates
+
+- (void)updateAccountInfo {
+    // 账户信息在右侧面板显示，这里不需要处理
 }
 
-// 版本比较方法
-- (NSComparisonResult)compareVersion:(NSString *)version1 withVersion:(NSString *)version2 {
-    NSArray *v1Components = [version1 componentsSeparatedByString:@"."];
-    NSArray *v2Components = [version2 componentsSeparatedByString:@"."];
-    
-    NSInteger maxComponents = MAX(v1Components.count, v2Components.count);
-    
-    for (NSInteger i = 0; i < maxComponents; i++) {
-        NSInteger v1 = 0;
-        NSInteger v2 = 0;
-        
-        if (i < v1Components.count) {
-            v1 = [v1Components[i] integerValue];
-        }
-        
-        if (i < v2Components.count) {
-            v2 = [v2Components[i] integerValue];
-        }
-        
-        if (v1 < v2) {
-            return NSOrderedAscending;
-        } else if (v1 > v2) {
-            return NSOrderedDescending;
-        }
-    }
-    
-    return NSOrderedSame;
+#pragma mark - Orientation
+
+- (BOOL)shouldAutorotate {
+    return YES;
 }
 
-// 下载最新版本
-- (void)downloadLatestVersion:(UIButton *)sender {
-    NSString *urlString = @"https://github.com/herbrine8403/Amethyst-iOS-MyRemastered/releases/latest";
-    NSURL *url = [NSURL URLWithString:urlString];
-    
-    if ([[UIApplication sharedApplication] canOpenURL:url]) {
-        [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:nil];
-    }
-}
-
-// 调整公告栏容器高度（仅标签）
-- (void)adjustAnnouncementContainerHeight:(UIView *)container forLabel:(UILabel *)label {
-    // 计算标签所需高度 - 使用容器的实际宽度
-    // 容器内部边距：图标左边距(15) + 图标宽度(20) + 标签到图标间距(12) + 标签右边距(15) = 62
-    
-    // 确保容器已布局，获取准确宽度
-    if (container.frame.size.width <= 50) {
-        // 容器宽度异常小，可能是尚未布局，强制更新布局
-        [container.superview layoutIfNeeded];
-    }
-    
-    CGFloat containerWidth = container.frame.size.width;
-    CGFloat maxWidth = containerWidth - 62;
-    
-    // 确保最小宽度，避免计算错误
-    if (maxWidth <= 0) {
-        maxWidth = self.view.frame.size.width - 94; // 备用计算：屏幕宽度 - 所有边距
-    }
-    if (maxWidth <= 0) {
-        maxWidth = 200; // 绝对最小值
-    }
-    
-    // 强制更新标签布局，确保 sizeThatFits 能正确计算
-    [label setNeedsLayout];
-    [label layoutIfNeeded];
-    
-    CGSize labelSize = [label sizeThatFits:CGSizeMake(maxWidth, CGFLOAT_MAX)];
-    CGFloat labelHeight = labelSize.height;
-    
-    // 计算容器高度：标签高度 + 上下边距(各12) = 24，但要确保能容纳标签
-    // 侧边栏中，标签顶部对齐，所以容器高度应该是 max(44, labelHeight + 24)
-    CGFloat containerHeight = MAX(44, labelHeight + 24);
-    
-    // 更新容器高度约束
-    if (self.announcementContainerHeightConstraint) {
-        self.announcementContainerHeightConstraint.constant = containerHeight;
-    }
-    
-    // 更新表格视图的contentInset
-    CGFloat topInset = containerHeight + 16; // 容器高度 + 上下间距(各8)
-    self.tableView.contentInset = UIEdgeInsetsMake(topInset, 0, 0, 0);
-    
-    // 强制布局更新
-    [container.superview layoutIfNeeded];
-}
-
-// 调整公告栏容器高度（带按钮）
-- (void)adjustAnnouncementContainerHeight:(UIView *)container forLabel:(UILabel *)label withButton:(UIButton *)button {
-    // 计算标签所需高度 - 使用容器的实际宽度
-    // 容器内部边距：图标左边距(15) + 图标宽度(20) + 标签到图标间距(12) + 标签右边距(15) = 62
-    
-    // 确保容器已布局，获取准确宽度
-    if (container.frame.size.width <= 50) {
-        // 容器宽度异常小，可能是尚未布局，强制更新布局
-        [container.superview layoutIfNeeded];
-    }
-    
-    CGFloat containerWidth = container.frame.size.width;
-    CGFloat maxWidth = containerWidth - 62;
-    
-    // 确保最小宽度，避免计算错误
-    if (maxWidth <= 0) {
-        maxWidth = self.view.frame.size.width - 94; // 备用计算：屏幕宽度 - 所有边距
-    }
-    if (maxWidth <= 0) {
-        maxWidth = 200; // 绝对最小值
-    }
-    
-    // 强制更新标签布局，确保 sizeThatFits 能正确计算
-    [label setNeedsLayout];
-    [label layoutIfNeeded];
-    
-    CGSize labelSize = [label sizeThatFits:CGSizeMake(maxWidth, CGFLOAT_MAX)];
-    CGFloat labelHeight = labelSize.height;
-    
-    // 计算容器高度：标签高度 + 标签上边距(12) + 标签按钮间距(8) + 按钮高度(30) + 按钮下边距(10)
-    CGFloat containerHeight = MAX(72, labelHeight + 12 + 8 + 30 + 10);
-    
-    // 更新容器高度约束
-    if (self.announcementContainerHeightConstraint) {
-        self.announcementContainerHeightConstraint.constant = containerHeight;
-    }
-    
-    // 更新表格视图的contentInset
-    CGFloat topInset = containerHeight + 16; // 容器高度 + 上下间距(各8)
-    self.tableView.contentInset = UIEdgeInsetsMake(topInset, 0, 0, 0);
-    
-    // 强制布局更新
-    [container.superview layoutIfNeeded];
-}
-
-// 检查更新（使用 HTML 解析，避免 GitHub API 速率限制）
-- (void)checkForUpdateWithCurrentVersion:(NSString *)currentVersion
-                        announcementLabel:(UILabel *)announcementLabel
-                      announcementContainer:(UIView *)announcementContainer
-                                retryCount:(NSInteger)retryCount {
-    // 最大重试次数为 2 次
-    NSInteger maxRetries = 2;
-    
-    // 使用 GitHub Releases 页面 URL（不受 API 速率限制）
-    NSURL *url = [NSURL URLWithString:@"https://github.com/herbrine8403/Amethyst-iOS-MyRemastered/releases/latest"];
-    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
-    request.timeoutInterval = 15.0; // 15秒超时
-    
-    NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
-        // 检查网络错误
-        if (error) {
-            NSLog(@"[UpdateCheck] 网络请求失败: %@", error.localizedDescription);
-            
-            // 如果还有重试机会，延迟后重试
-            if (retryCount < maxRetries) {
-                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * (retryCount + 1) * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                    [self checkForUpdateWithCurrentVersion:currentVersion
-                                          announcementLabel:announcementLabel
-                                        announcementContainer:announcementContainer
-                                                  retryCount:retryCount + 1];
-                });
-                return;
-            }
-            
-            // 重试次数用尽，显示默认消息
-            dispatch_async(dispatch_get_main_queue(), ^{
-                announcementLabel.text = localize(@"announcement.latest_version", @"欢迎使用Amethyst iOS Remastered！当前已是最新正式版。");
-                [self adjustAnnouncementContainerHeight:announcementContainer forLabel:announcementLabel];
-            });
-            return;
-        }
-        
-        // 检查 HTTP 状态码
-        NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
-        NSInteger statusCode = httpResponse.statusCode;
-        
-        if (statusCode != 200) {
-            NSLog(@"[UpdateCheck] HTTP 状态码错误: %ld", (long)statusCode);
-            
-            // 如果还有重试机会，重试
-            if (retryCount < maxRetries) {
-                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * (retryCount + 1) * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                    [self checkForUpdateWithCurrentVersion:currentVersion
-                                          announcementLabel:announcementLabel
-                                        announcementContainer:announcementContainer
-                                                  retryCount:retryCount + 1];
-                });
-                return;
-            }
-            
-            dispatch_async(dispatch_get_main_queue(), ^{
-                announcementLabel.text = localize(@"announcement.latest_version", @"欢迎使用Amethyst iOS Remastered！当前已是最新正式版。");
-                [self adjustAnnouncementContainerHeight:announcementContainer forLabel:announcementLabel];
-            });
-            return;
-        }
-        
-        // 将 HTML 数据转换为字符串
-        NSString *htmlString = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
-        
-        if (!htmlString || htmlString.length == 0) {
-            NSLog(@"[UpdateCheck] HTML 内容为空");
-            
-            // 如果还有重试机会，重试
-            if (retryCount < maxRetries) {
-                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * (retryCount + 1) * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                    [self checkForUpdateWithCurrentVersion:currentVersion
-                                          announcementLabel:announcementLabel
-                                        announcementContainer:announcementContainer
-                                                  retryCount:retryCount + 1];
-                });
-                return;
-            }
-            
-            dispatch_async(dispatch_get_main_queue(), ^{
-                announcementLabel.text = localize(@"announcement.latest_version", @"欢迎使用Amethyst iOS Remastered！当前已是最新正式版。");
-                [self adjustAnnouncementContainerHeight:announcementContainer forLabel:announcementLabel];
-            });
-            return;
-        }
-        
-        // 从 HTML 中提取版本号
-        // 匹配模式：/herbrine8403/Amethyst-iOS-MyRemastered/releases/tag/VERSION"
-        NSString *pattern = @"/herbrine8403/Amethyst-iOS-MyRemastered/releases/tag/([^\"]+)\"";
-        NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:pattern options:0 error:nil];
-        NSTextCheckingResult *match = [regex firstMatchInString:htmlString options:0 range:NSMakeRange(0, htmlString.length)];
-        
-        NSString *latestVersion = nil;
-        if (match && match.numberOfRanges > 1) {
-            latestVersion = [htmlString substringWithRange:[match rangeAtIndex:1]];
-        }
-        
-        if (!latestVersion) {
-            NSLog(@"[UpdateCheck] 未从 HTML 中提取到版本号");
-            dispatch_async(dispatch_get_main_queue(), ^{
-                announcementLabel.text = localize(@"announcement.latest_version", @"欢迎使用Amethyst iOS Remastered！当前已是最新正式版。");
-                [self adjustAnnouncementContainerHeight:announcementContainer forLabel:announcementLabel];
-            });
-            return;
-        }
-        
-        // 移除标签前缀（如 "v"）
-        if ([latestVersion hasPrefix:@"v"]) {
-            latestVersion = [latestVersion substringFromIndex:1];
-        }
-        
-        NSLog(@"[UpdateCheck] 当前版本: %@, 最新版本: %@", currentVersion, latestVersion);
-        
-        dispatch_async(dispatch_get_main_queue(), ^{
-            NSComparisonResult versionComparison = [self compareVersion:currentVersion withVersion:latestVersion];
-            
-            if (versionComparison == NSOrderedAscending) {
-                // 当前版本小于最新版本
-                NSString *localizedText = localize(@"announcement.new_version_available", @"发现新版本：%@");
-                announcementLabel.text = [NSString stringWithFormat:localizedText, latestVersion];
-                
-                // 强制更新标签布局，确保文本正确显示
-                [announcementLabel setNeedsLayout];
-                [announcementLabel layoutIfNeeded];
-                
-                // 创建下载按钮
-                UIButton *downloadButton = [UIButton buttonWithType:UIButtonTypeSystem];
-                [downloadButton setTitle:localize(@"announcement.download_button", @"前往下载") forState:UIControlStateNormal];
-                
-                // 设置按钮样式 - 支持iOS14.0
-                if (@available(iOS 13.0, *)) {
-                    downloadButton.backgroundColor = [UIColor systemBlueColor];
-                } else {
-                    downloadButton.backgroundColor = [UIColor colorWithRed:0/255.0 green:122/255.0 blue:255/255.0 alpha:1.0];
-                }
-                
-                [downloadButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-                downloadButton.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
-                downloadButton.layer.cornerRadius = 8;
-                downloadButton.translatesAutoresizingMaskIntoConstraints = NO;
-                
-                // 添加按钮阴影
-                downloadButton.layer.shadowColor = [UIColor blackColor].CGColor;
-                downloadButton.layer.shadowOffset = CGSizeMake(0, 2);
-                downloadButton.layer.shadowRadius = 4;
-                downloadButton.layer.shadowOpacity = 0.2;
-                
-                // 添加按钮点击效果
-                downloadButton.layer.masksToBounds = NO;
-                
-                // 添加下载图标
-                if (@available(iOS 13.0, *)) {
-                    UIImage *downloadImage = [UIImage systemImageNamed:@"arrow.down.circle.fill"];
-                    [downloadButton setImage:downloadImage forState:UIControlStateNormal];
-                    downloadButton.imageEdgeInsets = UIEdgeInsetsMake(0, -8, 0, 0);
-                    downloadButton.titleEdgeInsets = UIEdgeInsetsMake(0, 8, 0, 0);
-                    downloadButton.tintColor = [UIColor whiteColor];
-                }
-                
-                [downloadButton addTarget:self action:@selector(downloadLatestVersion:) forControlEvents:UIControlEventTouchUpInside];
-                
-                [announcementContainer addSubview:downloadButton];
-                
-                // 存储下载按钮引用
-                self.downloadButton = downloadButton;
-                
-                // 设置下载按钮约束
-                [NSLayoutConstraint activateConstraints:@[
-                    [downloadButton.topAnchor constraintEqualToAnchor:announcementLabel.bottomAnchor constant:8],
-                    [downloadButton.leadingAnchor constraintEqualToAnchor:announcementContainer.leadingAnchor constant:8],
-                    [downloadButton.trailingAnchor constraintEqualToAnchor:announcementContainer.trailingAnchor constant:-8],
-                    [downloadButton.heightAnchor constraintEqualToConstant:30],
-                    [downloadButton.bottomAnchor constraintEqualToAnchor:announcementContainer.bottomAnchor constant:-10]
-                ]];
-                
-                // 调整容器高度以适应按钮
-                [self adjustAnnouncementContainerHeight:announcementContainer forLabel:announcementLabel withButton:downloadButton];
-            } else {
-                // 当前版本大于或等于最新版本
-                announcementLabel.text = localize(@"announcement.latest_version", @"欢迎使用Amethyst iOS Remastered！当前已是最新正式版。");
-                
-                // 强制更新标签布局，确保文本正确显示
-                [announcementLabel setNeedsLayout];
-                [announcementLabel layoutIfNeeded];
-                
-                [self adjustAnnouncementContainerHeight:announcementContainer forLabel:announcementLabel];
-            }
-        });
-    }];
-    
-    [task resume];
+- (UIInterfaceOrientationMask)supportedInterfaceOrientations {
+    return UIInterfaceOrientationMaskLandscape;
 }
 
 @end
