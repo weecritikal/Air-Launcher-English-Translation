@@ -3,83 +3,7 @@
 #import "ModService.h"
 #import "ShaderService.h"
 #import "PLProfiles.h"
-
-// 版本卡片Cell
-@interface VersionCardCell : UICollectionViewCell
-@property (nonatomic, strong) UIImageView *iconImageView;
-@property (nonatomic, strong) UILabel *versionLabel;
-@property (nonatomic, strong) UILabel *dateLabel;
-@property (nonatomic, strong) UILabel *typeLabel;
-@end
-
-@implementation VersionCardCell
-
-- (instancetype)initWithFrame:(CGRect)frame {
-    self = [super initWithFrame:frame];
-    if (self) {
-        self.backgroundColor = [UIColor colorWithWhite:0.15 alpha:0.8];
-        self.layer.cornerRadius = 12;
-        self.layer.masksToBounds = YES;
-        
-        // 图标
-        self.iconImageView = [[UIImageView alloc] init];
-        self.iconImageView.translatesAutoresizingMaskIntoConstraints = NO;
-        self.iconImageView.contentMode = UIViewContentModeScaleAspectFit;
-        self.iconImageView.image = [UIImage systemImageNamed:@"cube.fill"];
-        self.iconImageView.tintColor = [UIColor systemGreenColor];
-        [self.contentView addSubview:self.iconImageView];
-        
-        // 版本号
-        self.versionLabel = [[UILabel alloc] init];
-        self.versionLabel.translatesAutoresizingMaskIntoConstraints = NO;
-        self.versionLabel.font = [UIFont boldSystemFontOfSize:14];
-        self.versionLabel.textAlignment = NSTextAlignmentCenter;
-        self.versionLabel.textColor = [UIColor labelColor];
-        [self.contentView addSubview:self.versionLabel];
-        
-        // 日期
-        self.dateLabel = [[UILabel alloc] init];
-        self.dateLabel.translatesAutoresizingMaskIntoConstraints = NO;
-        self.dateLabel.font = [UIFont systemFontOfSize:10];
-        self.dateLabel.textColor = [UIColor secondaryLabelColor];
-        self.dateLabel.textAlignment = NSTextAlignmentCenter;
-        [self.contentView addSubview:self.dateLabel];
-        
-        // 类型标签
-        self.typeLabel = [[UILabel alloc] init];
-        self.typeLabel.translatesAutoresizingMaskIntoConstraints = NO;
-        self.typeLabel.font = [UIFont systemFontOfSize:9];
-        self.typeLabel.textColor = [UIColor whiteColor];
-        self.typeLabel.backgroundColor = [UIColor systemBlueColor];
-        self.typeLabel.textAlignment = NSTextAlignmentCenter;
-        self.typeLabel.layer.cornerRadius = 4;
-        self.typeLabel.layer.masksToBounds = YES;
-        [self.contentView addSubview:self.typeLabel];
-        
-        [NSLayoutConstraint activateConstraints:@[
-            [self.iconImageView.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:10],
-            [self.iconImageView.centerXAnchor constraintEqualToAnchor:self.contentView.centerXAnchor],
-            [self.iconImageView.widthAnchor constraintEqualToConstant:40],
-            [self.iconImageView.heightAnchor constraintEqualToConstant:40],
-            
-            [self.versionLabel.topAnchor constraintEqualToAnchor:self.iconImageView.bottomAnchor constant:6],
-            [self.versionLabel.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:4],
-            [self.versionLabel.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-4],
-            
-            [self.dateLabel.topAnchor constraintEqualToAnchor:self.versionLabel.bottomAnchor constant:2],
-            [self.dateLabel.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:4],
-            [self.dateLabel.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-4],
-            
-            [self.typeLabel.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-6],
-            [self.typeLabel.centerXAnchor constraintEqualToAnchor:self.contentView.centerXAnchor],
-            [self.typeLabel.widthAnchor constraintEqualToConstant:45],
-            [self.typeLabel.heightAnchor constraintEqualToConstant:16]
-        ]];
-    }
-    return self;
-}
-
-@end
+#import "VersionCardCell.h"  // 新增：导入独立的 VersionCardCell
 
 // 模组/光影 Cell
 @interface ModShaderCell : UITableViewCell
@@ -416,19 +340,11 @@
     NSString *releaseTime = version[@"releaseTime"];
     NSString *versionType = version[@"type"];
     
-    cell.versionLabel.text = versionId;
-    cell.dateLabel.text = [self formatDate:releaseTime];
+    // 格式化日期
+    NSString *formattedDate = [self formatDate:releaseTime];
     
-    if ([versionType isEqualToString:@"release"]) {
-        cell.typeLabel.text = @"正式版";
-        cell.typeLabel.backgroundColor = [UIColor systemGreenColor];
-    } else if ([versionType isEqualToString:@"snapshot"]) {
-        cell.typeLabel.text = @"测试版";
-        cell.typeLabel.backgroundColor = [UIColor systemOrangeColor];
-    } else {
-        cell.typeLabel.text = @"远古版";
-        cell.typeLabel.backgroundColor = [UIColor systemPurpleColor];
-    }
+    // 使用新的配置方法
+    [cell configureWithVersionId:versionId date:formattedDate type:versionType];
     
     return cell;
 }
