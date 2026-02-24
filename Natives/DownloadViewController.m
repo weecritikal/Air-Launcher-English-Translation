@@ -396,9 +396,8 @@
     profile[@"type"] = @"custom";
     profile[@"created"] = [NSDate date].description;
     
-    // 保存到PLProfiles
-    PLProfiles.current.profiles[versionId] = profile;
-    [PLProfiles.current save];
+    // 使用 saveProfile:withName: 方法保存配置，避免直接操作不可变字典
+    [PLProfiles.current saveProfile:profile withName:versionId];
     PLProfiles.current.selectedProfileName = versionId;
     
     // 显示下载中
