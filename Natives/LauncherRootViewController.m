@@ -2,7 +2,10 @@
 #import "LauncherMenuViewController.h"
 #import "LauncherNewsViewController.h"
 #import "LauncherRightPanelViewController.h"
-#import "LauncherProfilesViewController.h"
+#import "DownloadViewController.h"
+#import "VersionManagerViewController.h"
+#import "ProfileSettingsViewController.h"
+#import "LauncherPreferencesViewController.h"
 #import "BackgroundManager.h"
 
 // 布局常量
@@ -135,6 +138,18 @@ static const CGFloat kRightPanelWidth = 220.0;  // 右侧面板宽度
                                                  name:@"ShowDownloadPage"
                                                object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(showVersionManager)
+                                                 name:@"ShowVersionManager"
+                                               object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(showProfileSettings:)
+                                                 name:@"ShowProfileSettings"
+                                               object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(showSettings)
+                                                 name:@"ShowSettings"
+                                               object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(executeJarFile:)
                                                  name:@"ExecuteJarFile"
                                                object:nil];
@@ -150,11 +165,29 @@ static const CGFloat kRightPanelWidth = 220.0;  // 右侧面板宽度
 }
 
 - (void)showDownloadPage {
-    // 显示版本下载页面 - 使用导航控制器包装
-    LauncherProfilesViewController *profilesVC = [[LauncherProfilesViewController alloc] init];
-    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:profilesVC];
-    nav.modalPresentationStyle = UIModalPresentationFormSheet;
-    [self presentViewController:nav animated:YES completion:nil];
+    // 在中间内容区显示下载页面
+    DownloadViewController *downloadVC = [[DownloadViewController alloc] init];
+    [self setContentViewController:downloadVC animated:YES];
+}
+
+- (void)showVersionManager {
+    // 在中间内容区显示版本管理页面
+    VersionManagerViewController *vc = [[VersionManagerViewController alloc] init];
+    [self setContentViewController:vc animated:YES];
+}
+
+- (void)showProfileSettings:(NSNotification *)notification {
+    // 在中间内容区显示版本设置页面
+    NSString *profileName = notification.object;
+    ProfileSettingsViewController *vc = [[ProfileSettingsViewController alloc] init];
+    vc.profileName = profileName;
+    [self setContentViewController:vc animated:YES];
+}
+
+- (void)showSettings {
+    // 在中间内容区显示设置页面
+    LauncherPreferencesViewController *vc = [[LauncherPreferencesViewController alloc] init];
+    [self setContentViewController:vc animated:YES];
 }
 
 - (void)executeJarFile:(NSNotification *)notification {
