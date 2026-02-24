@@ -8,6 +8,10 @@
 #import "utils.h"
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
+// 添加 C 函数声明 - 这些函数在 LauncherPreferences.m 或其他地方定义
+extern void setPrefString(NSString *key, NSString *value);
+extern void setPrefInt(NSString *key, int value);
+
 @interface LauncherRightPanelViewController () <UIDocumentPickerDelegate>
 
 @property(nonatomic, strong) UIImageView *avatarImageView;
