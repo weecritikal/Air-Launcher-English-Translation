@@ -45,6 +45,8 @@
     }
 }
 
+#pragma mark - Sync Mod Search (原始同步方法，保留兼容)
+
 - (NSMutableArray *)searchModWithFilters:(NSDictionary<NSString *, NSString *> *)searchFilters previousPageResult:(NSMutableArray *)modrinthSearchResult {
     int limit = 50;
 
@@ -82,6 +84,105 @@
     }
     self.reachedLastPage = result.count >= [response[@"total_hits"] unsignedLongValue];
     return result;
+}
+
+#pragma mark - Async Mod Search (新增，用于修复调用方)
+
+- (void)searchModWithFilters:(NSDictionary *)filters 
+                completion:(void (^)(NSArray * _Nullable results, NSError * _Nullable error))completion {
+    
+    // 构建查询参数
+    NSString *query = filters[@"query"] ?: filters[@"name"] ?: @"";
+    NSNumber *limitNum = filters[@"limit"] ?: @50;
+    int limit = [limitNum intValue];
+    
+    // 构建 facets
+    NSMutableString *facetString = [NSMutableString new];
+    [facetString appendString:@"["];
+    [facetString appendFormat:@"[\"project_type:%@\"]", filters[@"isModpack"].boolValue ? @"modpack" : @"mod"];
+    
+    NSString *mcVersion = filters[@"mcVersion"] ?: filters[@"version"];
+    if (mcVersion.length > 0) {
+        [facetString appendFormat:@", [\"versions:%@\"]", mcVersion];
+    }
+    [facetString appendString:@"]"];
+
+    // URL 编码参数
+    NSString *encodedQuery = [query stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
+    NSString *encodedFacets = [facetString stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
+    
+    NSString *urlString = [NSString stringWithFormat:@"%@/search?query=%@&limit=%d&offset=0&facets=%@&index=relevance",
+                          self.baseURL, encodedQuery, limit, encodedFacets];
+
+    NSURL *url = [NSURL URLWithString:urlString];
+    if (!url) {
+        if (completion) {
+            completion(nil, [NSError errorWithDomain:@"ModrinthAPIError" code:1 userInfo:@{NSLocalizedDescriptionKey: @"Invalid URL"}]);
+        }
+        return;
+    }
+
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+    request.timeoutInterval = 30.0;
+    [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
+    [request setValue:@"Amethyst-iOS/1.0" forHTTPHeaderField:@"User-Agent"];
+
+    NSURLSession *session = [self createEnterpriseSession];
+    
+    NSURLSessionDataTask *task = [session dataTaskWithRequest:request completionHandler:^(NSData * _Nullable data, NSURLResponse * _Nullable response, NSError * _Nullable error) {
+        if (error) {
+            NSLog(@"[ModrinthAPI] Mod search error: %@", error);
+            if (completion) completion(nil, error);
+            return;
+        }
+
+        if (!data) {
+            if (completion) completion(nil, [NSError errorWithDomain:@"ModrinthAPIError" code:2 userInfo:@{NSLocalizedDescriptionKey: @"No data received"}]);
+            return;
+        }
+
+        NSError *jsonError = nil;
+        NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
+
+        if (jsonError || ![json isKindOfClass:[NSDictionary class]]) {
+            NSLog(@"[ModrinthAPI] JSON parse error: %@", jsonError);
+            if (completion) completion(nil, jsonError ?: [NSError errorWithDomain:@"ModrinthAPIError" code:3 userInfo:@{NSLocalizedDescriptionKey: @"Invalid JSON response"}]);
+            return;
+        }
+
+        NSArray *hits = json[@"hits"];
+        if (![hits isKindOfClass:[NSArray class]]) {
+            NSLog(@"[ModrinthAPI] No hits in response: %@", json);
+            if (completion) completion(@[], nil);
+            return;
+        }
+
+        NSMutableArray *results = [NSMutableArray array];
+        for (NSDictionary *item in hits) {
+            if (![item isKindOfClass:[NSDictionary class]]) continue;
+
+            BOOL isModpack = [item[@"project_type"] isEqualToString:@"modpack"];
+            NSMutableDictionary *modData = [NSMutableDictionary dictionary];
+            modData[@"apiSource"] = @(1); // MODRINTH
+            modData[@"isModpack"] = @(isModpack);
+            modData[@"id"] = item[@"project_id"] ?: item[@"slug"] ?: @"";
+            modData[@"title"] = item[@"title"] ?: @"Unknown";
+            modData[@"description"] = item[@"description"] ?: @"";
+            modData[@"author"] = item[@"author"] ?: @"Unknown";
+            modData[@"downloads"] = item[@"downloads"] ?: @0;
+            modData[@"likes"] = item[@"follows"] ?: @0;
+            modData[@"imageUrl"] = item[@"icon_url"] ?: @"";
+            modData[@"categories"] = item[@"categories"] ?: @[];
+            modData[@"lastUpdated"] = item[@"date_modified"] ?: @"";
+
+            [results addObject:modData];
+        }
+
+        NSLog(@"[ModrinthAPI] Found %lu mods", (unsigned long)results.count);
+        if (completion) completion(results, nil);
+    }];
+
+    [task resume];
 }
 
 - (void)loadDetailsOfMod:(NSMutableDictionary *)item {
