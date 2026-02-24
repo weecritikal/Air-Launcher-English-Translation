@@ -3,6 +3,7 @@
 #import "ModService.h"
 #import "ShaderService.h"
 #import "PLProfiles.h"
+#import "LauncherPreferences.h"
 #import "VersionCardCell.h"  // 新增：导入独立的 VersionCardCell
 #import "MinecraftResourceDownloadTask.h"
 #import "DownloadProgressViewController.h"
@@ -514,8 +515,7 @@
     self.downloadTask = [MinecraftResourceDownloadTask new];
     self.downloadTask.maxRetryCount = 3; // 设置最大重试次数
     
-    // 重试回调
-    __weak DownloadViewController *weakSelf = self;
+    // 重试回调（使用上面已定义的 weakSelf）
     self.downloadTask.retryCallback = ^(NSInteger retryCount, NSInteger maxRetryCount) {
         dispatch_async(dispatch_get_main_queue(), ^{
             if (weakSelf.downloadingAlert) {
