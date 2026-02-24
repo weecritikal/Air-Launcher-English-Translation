@@ -12,6 +12,7 @@ void setPrefObject(NSString *key, id value);
 void setPrefBool(NSString *key, BOOL value);
 void setPrefFloat(NSString *key, float value);
 void setPrefInt(NSString *key, NSInteger value);
+void setPrefString(NSString *key, NSString *value);  // 新增
 
 void resetWarnings();
 
