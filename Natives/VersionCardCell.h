@@ -4,17 +4,16 @@
 
 #import <UIKit/UIKit.h>
 
-@interface VersionCardCell : UITableViewCell
+@interface VersionCardCell : UICollectionViewCell
 
 @property (nonatomic, strong) UIImageView *iconImageView;
+@property (nonatomic, strong) UILabel *versionLabel;
 @property (nonatomic, strong) UILabel *dateLabel;
 @property (nonatomic, strong) UILabel *typeLabel;
-@property (nonatomic, strong) UILabel *versionLabel;
 
-- (void)configureWithIcon:(UIImage *)icon
-                     date:(NSString *)date
-                     type:(NSString *)type
-                  version:(NSString *)version;
+- (void)configureWithVersionId:(NSString *)versionId
+                          date:(NSString *)date
+                          type:(NSString *)type;
 
 @end
 
