@@ -145,7 +145,43 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     }
 }
 
+#pragma mark - Version List Cache
+
+static NSString * const kVersionListCacheKey = @"internal.version_list_cache";
+static NSString * const kVersionListCacheTimeKey = @"internal.version_list_cache_time";
+static NSString * const kVersionListLatestKey = @"internal.version_list_latest";
+static const NSTimeInterval kCacheValidDuration = 3600; // 1小时缓存有效期
+
++ (BOOL)isVersionListCacheValid {
+    NSNumber *cacheTime = getPrefObject(kVersionListCacheTimeKey);
+    if (!cacheTime) return NO;
+    
+    NSTimeInterval now = [[NSDate date] timeIntervalSince1970];
+    NSTimeInterval cached = [cacheTime doubleValue];
+    
+    return (now - cached) < kCacheValidDuration;
+}
+
++ (void)invalidateVersionListCache {
+    setPrefObject(kVersionListCacheTimeKey, nil);
+}
+
++ (NSArray *)getCachedVersionList {
+    return getPrefObject(kVersionListCacheKey);
+}
+
 - (void)fetchRemoteVersionList {
+    [self fetchRemoteVersionListForce:NO];
+}
+
+- (void)fetchRemoteVersionListForce:(BOOL)force {
+    // 检查缓存是否有效
+    if (!force && [LauncherNavigationController isVersionListCacheValid] && remoteVersionList.count > 2) {
+        NSDebugLog(@"[VersionList] Using cached version list");
+        self.buttonInstall.enabled = YES;
+        return;
+    }
+    
     self.buttonInstall.enabled = NO;
     remoteVersionList = @[
         @{@"id": @"latest-release", @"type": @"release"},
@@ -166,16 +202,31 @@ static void *ProgressObserverContext = &ProgressObserverContext;
         versionManifestURL = @"https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
     }
     
+    __weak LauncherNavigationController *weakSelf = self;
     [manager GET:versionManifestURL parameters:nil headers:nil progress:^(NSProgress * _Nonnull progress) {
-        self.progressViewMain.progress = progress.fractionCompleted;
+        weakSelf.progressViewMain.progress = progress.fractionCompleted;
     } success:^(NSURLSessionTask *task, NSDictionary *responseObject) {
         [remoteVersionList addObjectsFromArray:responseObject[@"versions"]];
         NSDebugLog(@"[VersionList] Got %d versions", remoteVersionList.count);
+        
+        // 缓存版本列表
+        setPrefObject(kVersionListCacheKey, responseObject[@"versions"]);
+        setPrefObject(kVersionListLatestKey, responseObject[@"latest"]);
+        setPrefObject(kVersionListCacheTimeKey, @([[NSDate date] timeIntervalSince1970]));
+        
         setPrefObject(@"internal.latest_version", responseObject[@"latest"]);
-        self.buttonInstall.enabled = YES;
+        weakSelf.buttonInstall.enabled = YES;
     } failure:^(NSURLSessionTask *operation, NSError *error) {
         NSDebugLog(@"[VersionList] Warning: Unable to fetch version list: %@", error.localizedDescription);
-        self.buttonInstall.enabled = YES;
+        
+        // 尝试使用缓存
+        NSArray *cachedVersions = [LauncherNavigationController getCachedVersionList];
+        if (cachedVersions) {
+            [remoteVersionList addObjectsFromArray:cachedVersions];
+            NSDebugLog(@"[VersionList] Using cached version list as fallback");
+        }
+        
+        weakSelf.buttonInstall.enabled = YES;
     }];
 }
 

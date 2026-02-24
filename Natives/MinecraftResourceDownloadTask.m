@@ -99,6 +99,10 @@
 
 // Add file to the queue
 - (NSURLSessionDownloadTask *)createDownloadTask:(NSString *)url size:(NSUInteger)size sha:(NSString *)sha altName:(NSString *)altName toPath:(NSString *)path success:(void (^)())success {
+    return [self createDownloadTask:url size:size sha:sha altName:altName toPath:path retryCount:0 success:success];
+}
+
+- (NSURLSessionDownloadTask *)createDownloadTask:(NSString *)url size:(NSUInteger)size sha:(NSString *)sha altName:(NSString *)altName toPath:(NSString *)path retryCount:(NSInteger)retryCount success:(void (^)())success {
     BOOL fileExists = [NSFileManager.defaultManager fileExistsAtPath:path];
     // logSuccess?
     if (fileExists && [self checkSHA:sha forFile:path altName:altName]) {
@@ -113,6 +117,7 @@
     NSString *replacedURL = [self replaceURLWithDownloadSource:url];
     NSURLRequest *request = [NSURLRequest requestWithURL:[NSURL URLWithString:replacedURL]];
     __block NSProgress *progress;
+    __weak MinecraftResourceDownloadTask *weakSelf = self;
     __block NSURLSessionDownloadTask *task = [self.manager downloadTaskWithRequest:request progress:nil
     destination:^NSURL * _Nonnull(NSURL * _Nonnull targetPath, NSURLResponse * _Nonnull response) {
         NSLog(@"[MCDL] Downloading %@", name);
@@ -128,9 +133,47 @@
         if (self.progress.cancelled) {
             // Ignore any further errors
         } else if (error != nil) {
-            [self finishDownloadWithError:error file:name];
+            // 重试机制
+            NSInteger maxRetry = weakSelf.maxRetryCount > 0 ? weakSelf.maxRetryCount : 3;
+            if (retryCount < maxRetry) {
+                NSInteger nextRetry = retryCount + 1;
+                NSLog(@"[MCDL] Retrying %@ (attempt %ld/%ld)", name, (long)nextRetry, (long)maxRetry);
+                
+                if (weakSelf.retryCallback) {
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        weakSelf.retryCallback(nextRetry, maxRetry);
+                    });
+                }
+                
+                // 延迟重试
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                    NSURLSessionDownloadTask *retryTask = [weakSelf createDownloadTask:url size:size sha:sha altName:altName toPath:path retryCount:nextRetry success:success];
+                    if (retryTask) {
+                        [retryTask resume];
+                    }
+                });
+            } else {
+                [weakSelf finishDownloadWithError:error file:name];
+            }
         } else if (![self checkSHA:sha forFile:path altName:altName]) {
-            [self finishDownloadWithErrorString:[NSString stringWithFormat:@"Failed to verify file %@: SHA1 mismatch", path.lastPathComponent]];
+            // SHA1 校验失败也尝试重试
+            NSInteger maxRetry = weakSelf.maxRetryCount > 0 ? weakSelf.maxRetryCount : 3;
+            if (retryCount < maxRetry) {
+                NSInteger nextRetry = retryCount + 1;
+                NSLog(@"[MCDL] SHA1 mismatch, retrying %@ (attempt %ld/%ld)", name, (long)nextRetry, (long)maxRetry);
+                
+                // 删除损坏的文件
+                [NSFileManager.defaultManager removeItemAtPath:path error:nil];
+                
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                    NSURLSessionDownloadTask *retryTask = [weakSelf createDownloadTask:url size:size sha:sha altName:altName toPath:path retryCount:nextRetry success:success];
+                    if (retryTask) {
+                        [retryTask resume];
+                    }
+                });
+            } else {
+                [weakSelf finishDownloadWithErrorString:[NSString stringWithFormat:@"Failed to verify file %@: SHA1 mismatch", path.lastPathComponent]];
+            }
         } else {
             progress.totalUnitCount = progress.completedUnitCount;
             if (success) success();

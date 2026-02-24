@@ -225,8 +225,17 @@ extern void setPrefInt(NSString *key, NSInteger value);
             return;
         }
         
-        // 从Mojang API获取版本详情
-        NSURL *url = [NSURL URLWithString:@"https://launchermeta.mojang.com/mc/game/version_manifest.json"];
+        // 根据配置选择下载源
+        NSString *downloadSource = getPrefObject(@"general.download_source");
+        NSString *versionManifestURL;
+        
+        if ([downloadSource isEqualToString:@"bmclapi"]) {
+            versionManifestURL = @"https://bmclapi2.bangbang93.com/mc/game/version_manifest_v2.json";
+        } else {
+            versionManifestURL = @"https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
+        }
+        
+        NSURL *url = [NSURL URLWithString:versionManifestURL];
         NSData *data = [NSData dataWithContentsOfURL:url];
         if (!data) {
             dispatch_async(dispatch_get_main_queue(), ^{

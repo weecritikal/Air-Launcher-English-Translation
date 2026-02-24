@@ -206,8 +206,17 @@
     self.statusLabel.text = @"正在检测 Minecraft 版本...";
     [self.loadingIndicator startAnimating];
     
-    // 从 Mojang API 获取版本列表
-    NSURL *url = [NSURL URLWithString:@"https://launchermeta.mojang.com/mc/game/version_manifest.json"];
+    // 根据配置选择下载源
+    NSString *downloadSource = getPrefObject(@"general.download_source");
+    NSString *versionManifestURL;
+    
+    if ([downloadSource isEqualToString:@"bmclapi"]) {
+        versionManifestURL = @"https://bmclapi2.bangbang93.com/mc/game/version_manifest_v2.json";
+    } else {
+        versionManifestURL = @"https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
+    }
+    
+    NSURL *url = [NSURL URLWithString:versionManifestURL];
     NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         dispatch_async(dispatch_get_main_queue(), ^{
             [self.loadingIndicator stopAnimating];

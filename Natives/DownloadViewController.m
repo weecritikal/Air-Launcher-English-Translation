@@ -4,6 +4,12 @@
 #import "ShaderService.h"
 #import "PLProfiles.h"
 #import "VersionCardCell.h"  // 新增：导入独立的 VersionCardCell
+#import "MinecraftResourceDownloadTask.h"
+#import "DownloadProgressViewController.h"
+
+#include <sys/time.h>
+#include <SystemConfiguration/SystemConfiguration.h>
+#include <netinet/in.h>
 
 // 模组/光影 Cell
 @interface ModShaderCell : UITableViewCell
@@ -96,6 +102,11 @@
 @property (nonatomic, strong) NSArray *filteredVersions;
 @property (nonatomic, strong) NSMutableArray *modList;
 @property (nonatomic, strong) NSMutableArray *shaderList;
+
+// 下载任务相关
+@property (nonatomic, strong) MinecraftResourceDownloadTask *downloadTask;
+@property (nonatomic, strong) DownloadProgressViewController *progressVC;
+@property (nonatomic, strong) UIAlertController *downloadingAlert;
 
 @end
 
@@ -248,7 +259,17 @@
 - (void)loadVersionList {
     [self.loadingIndicator startAnimating];
     
-    NSURL *url = [NSURL URLWithString:@"https://launchermeta.mojang.com/mc/game/version_manifest.json"];
+    // 根据配置选择下载源
+    NSString *downloadSource = getPrefObject(@"general.download_source");
+    NSString *versionManifestURL;
+    
+    if ([downloadSource isEqualToString:@"bmclapi"]) {
+        versionManifestURL = @"https://bmclapi2.bangbang93.com/mc/game/version_manifest_v2.json";
+    } else {
+        versionManifestURL = @"https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
+    }
+    
+    NSURL *url = [NSURL URLWithString:versionManifestURL];
     NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         dispatch_async(dispatch_get_main_queue(), ^{
             [self.loadingIndicator stopAnimating];
@@ -356,6 +377,34 @@
     return dateString;
 }
 
+- (BOOL)isNetworkAvailable {
+    // 使用 Reachability 检测网络状态
+    struct sockaddr_in zeroAddress;
+    bzero(&zeroAddress, sizeof(zeroAddress));
+    zeroAddress.sin_len = sizeof(zeroAddress);
+    zeroAddress.sin_family = AF_INET;
+    
+    SCNetworkReachabilityRef reachability = SCNetworkReachabilityCreateWithAddress(kCFAllocatorDefault, (const struct sockaddr *)&zeroAddress);
+    
+    if (reachability == NULL) {
+        return NO;
+    }
+    
+    SCNetworkReachabilityFlags flags;
+    BOOL success = SCNetworkReachabilityGetFlags(reachability, &flags);
+    CFRelease(reachability);
+    
+    if (!success) {
+        return NO;
+    }
+    
+    BOOL isReachable = ((flags & kSCNetworkReachabilityFlagsReachable) != 0);
+    BOOL needsConnection = ((flags & kSCNetworkReachabilityFlagsConnectionRequired) != 0);
+    BOOL isNetworkReachable = (isReachable && !needsConnection);
+    
+    return isNetworkReachable;
+}
+
 - (void)collectionView:(UICollectionView *)collectionView didSelectItemAtIndexPath:(NSIndexPath *)indexPath {
     NSDictionary *version = self.filteredVersions[indexPath.row];
     [self showVersionDownloadDialog:version];
@@ -363,9 +412,22 @@
 
 - (void)showVersionDownloadDialog:(NSDictionary *)version {
     NSString *versionId = version[@"id"];
+    NSString *versionType = version[@"type"];
+    
+    // 格式化版本类型显示
+    NSString *typeDisplay = @"";
+    if ([versionType isEqualToString:@"release"]) {
+        typeDisplay = @"正式版";
+    } else if ([versionType isEqualToString:@"snapshot"]) {
+        typeDisplay = @"测试版";
+    } else if ([versionType isEqualToString:@"old_alpha"]) {
+        typeDisplay = @"远古Alpha版";
+    } else if ([versionType isEqualToString:@"old_beta"]) {
+        typeDisplay = @"远古Beta版";
+    }
     
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:versionId
-                                                                   message:@"选择操作"
+                                                                   message:[NSString stringWithFormat:@"类型: %@", typeDisplay]
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
     
     [alert addAction:[UIAlertAction actionWithTitle:@"下载此版本"
@@ -387,6 +449,16 @@
 }
 
 - (void)downloadVersion:(NSDictionary *)version {
+    // 检查网络状态
+    if (![self isNetworkAvailable]) {
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"网络不可用"
+                                                                       message:@"请检查您的网络连接后重试"
+                                                                preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
+        [self presentViewController:alert animated:YES completion:nil];
+        return;
+    }
+    
     NSString *versionId = version[@"id"];
     
     // 创建版本配置
@@ -400,21 +472,195 @@
     [PLProfiles.current saveProfile:profile withName:versionId];
     PLProfiles.current.selectedProfileName = versionId;
     
-    // 显示下载中
-    UIAlertController *progressAlert = [UIAlertController alertControllerWithTitle:@"下载中"
-                                                                           message:[NSString stringWithFormat:@"正在下载 %@...", versionId]
-                                                                    preferredStyle:UIAlertControllerStyleAlert];
-    [self presentViewController:progressAlert animated:YES completion:nil];
+    // 显示下载进度对话框
+    self.downloadingAlert = [UIAlertController alertControllerWithTitle:@"下载中"
+                                                                message:@"正在准备下载..."
+                                                         preferredStyle:UIAlertControllerStyleAlert];
     
-    // 模拟下载完成
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        [progressAlert dismissViewControllerAnimated:YES completion:^{
+    __weak DownloadViewController *weakSelf = self;
+    
+    // 查看详情按钮
+    UIAlertAction *detailsAction = [UIAlertAction actionWithTitle:@"查看详情"
+                                                            style:UIAlertActionStyleDefault
+                                                          handler:^(UIAlertAction * _Nonnull action) {
+        if (weakSelf.downloadTask) {
+            weakSelf.progressVC = [[DownloadProgressViewController alloc] initWithTask:weakSelf.downloadTask];
+            UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:weakSelf.progressVC];
+            nav.modalPresentationStyle = UIModalPresentationFormSheet;
+            [weakSelf presentViewController:nav animated:YES completion:nil];
+        }
+    }];
+    [self.downloadingAlert addAction:detailsAction];
+    
+    // 取消按钮
+    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"取消"
+                                                           style:UIAlertActionStyleDestructive
+                                                         handler:^(UIAlertAction * _Nonnull action) {
+        if (weakSelf.downloadTask) {
+            [weakSelf.downloadTask.progress cancel];
+            weakSelf.downloadTask = nil;
+        }
+        weakSelf.view.userInteractionEnabled = YES;
+        [weakSelf.loadingIndicator stopAnimating];
+    }];
+    [self.downloadingAlert addAction:cancelAction];
+    
+    [self presentViewController:self.downloadingAlert animated:YES completion:nil];
+    
+    // 显示加载指示器
+    [self.loadingIndicator startAnimating];
+    
+    // 创建真正的下载任务
+    self.downloadTask = [MinecraftResourceDownloadTask new];
+    self.downloadTask.maxRetryCount = 3; // 设置最大重试次数
+    
+    // 重试回调
+    __weak DownloadViewController *weakSelf = self;
+    self.downloadTask.retryCallback = ^(NSInteger retryCount, NSInteger maxRetryCount) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (weakSelf.downloadingAlert) {
+                weakSelf.downloadingAlert.message = [NSString stringWithFormat:@"下载失败，正在重试 (%ld/%ld)...", (long)retryCount, (long)maxRetryCount];
+            }
+        });
+    };
+    
+    self.downloadTask.handleError = ^{
+        dispatch_async(dispatch_get_main_queue(), ^{
+            weakSelf.view.userInteractionEnabled = YES;
+            [weakSelf.loadingIndicator stopAnimating];
+            weakSelf.downloadTask = nil;
+            weakSelf.progressVC = nil;
+            weakSelf.downloadingAlert = nil;
+            
+            UIAlertController *errorAlert = [UIAlertController alertControllerWithTitle:@"下载失败"
+                                                                                message:@"版本下载失败，请检查网络连接后重试"
+                                                                         preferredStyle:UIAlertControllerStyleAlert];
+            [errorAlert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
+            [weakSelf presentViewController:errorAlert animated:YES completion:nil];
+        });
+    };
+    
+    // 在后台线程执行下载
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        [self.downloadTask downloadVersion:version];
+        
+        dispatch_async(dispatch_get_main_queue(), ^{
+            // 监听下载进度
+            [self.downloadTask.progress addObserver:self
+                                         forKeyPath:@"fractionCompleted"
+                                            options:NSKeyValueObservingOptionInitial
+                                            context:(void *)@"DownloadProgressContext"];
+        });
+    });
+}
+
+- (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary *)change context:(void *)context {
+    if (![(__bridge NSString *)context isEqualToString:@"DownloadProgressContext"]) {
+        [super observeValueForKeyPath:keyPath ofObject:object change:change context:context];
+        return;
+    }
+    
+    NSProgress *progress = self.downloadTask.progress;
+    NSProgress *textProgress = self.downloadTask.textProgress;
+    
+    // 更新文本进度
+    NSInteger completedUnitCount = progress.totalUnitCount * progress.fractionCompleted;
+    textProgress.completedUnitCount = completedUnitCount;
+    
+    // 计算下载速度和剩余时间
+    static CGFloat lastMsTime = 0;
+    static NSUInteger lastSecTime = 0;
+    static NSInteger lastCompletedUnitCount = 0;
+    
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    
+    if (lastSecTime < tv.tv_sec) {
+        CGFloat currentTime = tv.tv_sec + tv.tv_usec / 1000000.0;
+        if (lastMsTime > 0) {
+            NSInteger throughput = (completedUnitCount - lastCompletedUnitCount) / (currentTime - lastMsTime);
+            textProgress.throughput = @(throughput);
+            if (throughput > 0) {
+                NSInteger remaining = (progress.totalUnitCount - completedUnitCount) / throughput;
+                textProgress.estimatedTimeRemaining = @(remaining);
+            }
+        }
+        lastCompletedUnitCount = completedUnitCount;
+        lastSecTime = tv.tv_sec;
+        lastMsTime = currentTime;
+    }
+    
+    dispatch_async(dispatch_get_main_queue(), ^{
+        // 更新进度显示
+        if (self.progressVC) {
+            // 如果已经显示了进度详情，不需要更新 alert
+        } else if (self.downloadingAlert) {
+            // 更新 alert 的消息，显示详细进度
+            NSString *progressText = textProgress.localizedAdditionalDescription;
+            if (!progressText || progressText.length == 0) {
+                progressText = [NSString stringWithFormat:@"%.1f%%", progress.fractionCompleted * 100];
+            }
+            
+            // 格式化下载速度
+            NSString *speedText = @"";
+            if (textProgress.throughput) {
+                NSInteger speed = [textProgress.throughput integerValue];
+                if (speed > 1024 * 1024) {
+                    speedText = [NSString stringWithFormat:@" • %.1f MB/s", speed / (1024.0 * 1024.0)];
+                } else if (speed > 1024) {
+                    speedText = [NSString stringWithFormat:@" • %.1f KB/s", speed / 1024.0];
+                } else if (speed > 0) {
+                    speedText = [NSString stringWithFormat:@" • %ld B/s", (long)speed];
+                }
+            }
+            
+            // 格式化剩余时间
+            NSString *etaText = @"";
+            if (textProgress.estimatedTimeRemaining) {
+                NSInteger eta = [textProgress.estimatedTimeRemaining integerValue];
+                if (eta > 3600) {
+                    etaText = [NSString stringWithFormat:@" • 剩余 %ld小时%ld分", (long)(eta / 3600), (long)((eta % 3600) / 60)];
+                } else if (eta > 60) {
+                    etaText = [NSString stringWithFormat:@" • 剩余 %ld分%ld秒", (long)(eta / 60), (long)(eta % 60)];
+                } else if (eta > 0) {
+                    etaText = [NSString stringWithFormat:@" • 剩余 %ld秒", (long)eta];
+                }
+            }
+            
+            self.downloadingAlert.message = [NSString stringWithFormat:@"正在下载...\n%@%@%@", progressText, speedText, etaText];
+        }
+        
+        // 检查是否完成
+        if (progress.finished) {
+            [self.downloadTask.progress removeObserver:self forKeyPath:@"fractionCompleted"];
+            
+            // 重置静态变量
+            lastMsTime = 0;
+            lastSecTime = 0;
+            lastCompletedUnitCount = 0;
+            
+            self.view.userInteractionEnabled = YES;
+            [self.loadingIndicator stopAnimating];
+            
+            if (self.downloadingAlert) {
+                [self dismissViewControllerAnimated:YES completion:nil];
+                self.downloadingAlert = nil;
+            }
+            
+            if (self.progressVC) {
+                [self.progressVC dismissViewControllerAnimated:YES completion:nil];
+                self.progressVC = nil;
+            }
+            
+            // 显示下载完成提示
             UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"下载完成"
-                                                                                  message:[NSString stringWithFormat:@"%@ 下载完成", versionId]
+                                                                                  message:[NSString stringWithFormat:@"%@ 下载完成", self.downloadTask.metadata[@"id"] ?: @"版本"]
                                                                            preferredStyle:UIAlertControllerStyleAlert];
             [successAlert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
             [self presentViewController:successAlert animated:YES completion:nil];
-        }];
+            
+            self.downloadTask = nil;
+        }
     });
 }
 
