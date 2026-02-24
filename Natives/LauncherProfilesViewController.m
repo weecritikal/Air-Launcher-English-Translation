@@ -6,6 +6,7 @@
 #import "LauncherProfileEditorViewController.h"
 #import "LauncherProfilesViewController.h"
 #import "PLProfiles.h"
+#import "VersionCardCell.h"  // 新增：导入独立的 VersionCardCell
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunguarded-availability-new"
 #import "UIKit+AFNetworking.h"
@@ -28,81 +29,6 @@ typedef NS_ENUM(NSInteger, VersionType) {
     VersionTypeOld,
     VersionTypeAll
 };
-
-// 版本卡片Cell
-@interface VersionCardCell : UICollectionViewCell
-@property (nonatomic, strong) UIImageView *iconImageView;
-@property (nonatomic, strong) UILabel *versionLabel;
-@property (nonatomic, strong) UILabel *dateLabel;
-@property (nonatomic, strong) UILabel *typeLabel;
-@end
-
-@implementation VersionCardCell
-
-- (instancetype)initWithFrame:(CGRect)frame {
-    self = [super initWithFrame:frame];
-    if (self) {
-        self.backgroundColor = [UIColor secondarySystemBackgroundColor];
-        self.layer.cornerRadius = 12;
-        self.layer.masksToBounds = YES;
-        
-        // 图标
-        self.iconImageView = [[UIImageView alloc] init];
-        self.iconImageView.translatesAutoresizingMaskIntoConstraints = NO;
-        self.iconImageView.contentMode = UIViewContentModeScaleAspectFit;
-        self.iconImageView.image = [UIImage imageNamed:@"DefaultProfile"] ?: [UIImage systemImageNamed:@"cube.fill"];
-        [self.contentView addSubview:self.iconImageView];
-        
-        // 版本号
-        self.versionLabel = [[UILabel alloc] init];
-        self.versionLabel.translatesAutoresizingMaskIntoConstraints = NO;
-        self.versionLabel.font = [UIFont boldSystemFontOfSize:16];
-        self.versionLabel.textAlignment = NSTextAlignmentCenter;
-        [self.contentView addSubview:self.versionLabel];
-        
-        // 日期
-        self.dateLabel = [[UILabel alloc] init];
-        self.dateLabel.translatesAutoresizingMaskIntoConstraints = NO;
-        self.dateLabel.font = [UIFont systemFontOfSize:11];
-        self.dateLabel.textColor = [UIColor secondaryLabelColor];
-        self.dateLabel.textAlignment = NSTextAlignmentCenter;
-        [self.contentView addSubview:self.dateLabel];
-        
-        // 类型标签
-        self.typeLabel = [[UILabel alloc] init];
-        self.typeLabel.translatesAutoresizingMaskIntoConstraints = NO;
-        self.typeLabel.font = [UIFont systemFontOfSize:10];
-        self.typeLabel.textColor = [UIColor whiteColor];
-        self.typeLabel.backgroundColor = [UIColor systemBlueColor];
-        self.typeLabel.textAlignment = NSTextAlignmentCenter;
-        self.typeLabel.layer.cornerRadius = 4;
-        self.typeLabel.layer.masksToBounds = YES;
-        [self.contentView addSubview:self.typeLabel];
-        
-        [NSLayoutConstraint activateConstraints:@[
-            [self.iconImageView.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:12],
-            [self.iconImageView.centerXAnchor constraintEqualToAnchor:self.contentView.centerXAnchor],
-            [self.iconImageView.widthAnchor constraintEqualToConstant:50],
-            [self.iconImageView.heightAnchor constraintEqualToConstant:50],
-            
-            [self.versionLabel.topAnchor constraintEqualToAnchor:self.iconImageView.bottomAnchor constant:8],
-            [self.versionLabel.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:8],
-            [self.versionLabel.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-8],
-            
-            [self.dateLabel.topAnchor constraintEqualToAnchor:self.versionLabel.bottomAnchor constant:4],
-            [self.dateLabel.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:8],
-            [self.dateLabel.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-8],
-            
-            [self.typeLabel.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-8],
-            [self.typeLabel.centerXAnchor constraintEqualToAnchor:self.contentView.centerXAnchor],
-            [self.typeLabel.widthAnchor constraintEqualToConstant:50],
-            [self.typeLabel.heightAnchor constraintEqualToConstant:18]
-        ]];
-    }
-    return self;
-}
-
-@end
 
 @interface LauncherProfilesViewController () <UICollectionViewDataSource, UICollectionViewDelegate>
 @property(nonatomic) UIBarButtonItem *createButtonItem;
@@ -292,23 +218,14 @@ typedef NS_ENUM(NSInteger, VersionType) {
     
     NSDictionary *version = self.filteredVersions[indexPath.row];
     NSString *versionId = version[@"id"];
-    NSString *type = version[@"releaseTime"];
+    NSString *releaseTime = version[@"releaseTime"];
     NSString *versionType = version[@"type"];
     
-    cell.versionLabel.text = versionId;
-    cell.dateLabel.text = [self formatDate:type];
+    // 格式化日期
+    NSString *formattedDate = [self formatDate:releaseTime];
     
-    // 设置类型标签
-    if ([versionType isEqualToString:@"release"]) {
-        cell.typeLabel.text = @"正式版";
-        cell.typeLabel.backgroundColor = [UIColor systemGreenColor];
-    } else if ([versionType isEqualToString:@"snapshot"]) {
-        cell.typeLabel.text = @"测试版";
-        cell.typeLabel.backgroundColor = [UIColor systemOrangeColor];
-    } else {
-        cell.typeLabel.text = @"远古版";
-        cell.typeLabel.backgroundColor = [UIColor systemPurpleColor];
-    }
+    // 使用新的配置方法
+    [cell configureWithVersionId:versionId date:formattedDate type:versionType];
     
     return cell;
 }
