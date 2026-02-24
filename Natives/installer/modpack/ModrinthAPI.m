@@ -45,6 +45,22 @@
     }
 }
 
+#pragma mark - Helper Method
+
+// 安全地从字典中获取布尔值
+- (BOOL)boolValueFromObject:(id)obj {
+    if (obj == nil || obj == [NSNull null]) {
+        return NO;
+    }
+    if ([obj isKindOfClass:[NSNumber class]]) {
+        return [(NSNumber *)obj boolValue];
+    }
+    if ([obj isKindOfClass:[NSString class]]) {
+        return [(NSString *)obj boolValue];
+    }
+    return NO;
+}
+
 #pragma mark - Sync Mod Search (原始同步方法，保留兼容)
 
 - (NSMutableArray *)searchModWithFilters:(NSDictionary<NSString *, NSString *> *)searchFilters previousPageResult:(NSMutableArray *)modrinthSearchResult {
@@ -52,7 +68,9 @@
 
     NSMutableString *facetString = [NSMutableString new];
     [facetString appendString:@"["];
-    [facetString appendFormat:@"[\"project_type:%@\"]", searchFilters[@"isModpack"].boolValue ? @"modpack" : @"mod"];
+    // 修复：使用辅助方法安全获取布尔值
+    BOOL isModpackValue = [self boolValueFromObject:searchFilters[@"isModpack"]];
+    [facetString appendFormat:@"[\"project_type:%@\"]", isModpackValue ? @"modpack" : @"mod"];
     if (searchFilters[@"mcVersion"].length > 0) {
         [facetString appendFormat:@", [\"versions:%@\"]", searchFilters[@"mcVersion"]];
     }
@@ -99,7 +117,9 @@
     // 构建 facets
     NSMutableString *facetString = [NSMutableString new];
     [facetString appendString:@"["];
-    [facetString appendFormat:@"[\"project_type:%@\"]", filters[@"isModpack"].boolValue ? @"modpack" : @"mod"];
+    // 修复：使用辅助方法安全获取布尔值
+    BOOL isModpackValue = [self boolValueFromObject:filters[@"isModpack"]];
+    [facetString appendFormat:@"[\"project_type:%@\"]", isModpackValue ? @"modpack" : @"mod"];
     
     NSString *mcVersion = filters[@"mcVersion"] ?: filters[@"version"];
     if (mcVersion.length > 0) {
