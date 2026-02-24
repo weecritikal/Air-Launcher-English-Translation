@@ -106,3 +106,7 @@ JIT (Just-In-Time) is crucial for smooth game operation. iOS needs to enable it 
 | MobileGlues | Third-party renderer | LGPL-2.1 | [GitHub](https://github.com/MobileGL-Dev/MobileGlues) |
 | authlib-injector | Third-party authentication support | AGPL-3.0 | [GitHub](https://github.com/yushijinhun/authlib-injector) |
 > Additional thanks: <br> [MCHeads](https://mc-heads.net) for providing Minecraft avatar services; <br> [Modrinth](https://modrinth.com) for providing Mod download services; <br> [BMCLAPI](https://bmclapidoc.bangbang93.com) for providing Minecraft download services.
+
+## Sponsor
+
+If you find this project helpful, you are welcome to support me through [Ko-Fi](https://ko-fi.com/herbrine8403)!
