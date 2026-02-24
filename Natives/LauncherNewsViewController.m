@@ -2,6 +2,7 @@
 #import "authenticator/BaseAuthenticator.h"
 #import "LauncherPreferences.h"
 #import "utils.h"
+#import "ios_uikit_bridge.h"
 
 @interface LauncherNewsViewController ()
 
@@ -9,6 +10,8 @@
 @property(nonatomic, strong) UILabel *welcomeLabel;
 @property(nonatomic, strong) UILabel *versionLabel;
 @property(nonatomic, strong) UIView *skinContainer;
+@property(nonatomic, strong) UILabel *statusLabel;
+@property(nonatomic, strong) UIActivityIndicatorView *loadingIndicator;
 
 @end
 
@@ -32,17 +35,13 @@
     
     [self setupUI];
     [self updateSkinDisplay];
+    [self checkMinecraftVersions];
     
     // 监听账户变化通知
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(updateSkinDisplay)
                                                  name:@"AccountChanged"
                                                object:nil];
-    
-    // Memory warning
-    if(!isJailbroken && getPrefBool(@"warnings.limited_ram_warn") && (roundf(NSProcessInfo.processInfo.physicalMemory / 0x1000000) < 3900)) {
-        [self showWarningAlert:@"limited_ram" hasPreference:YES exitWhenCompleted:NO];
-    }
     
     // FCL Style: Hide navigation bar in split view
     self.navigationController.navigationBarHidden = YES;
@@ -84,6 +83,21 @@
     self.skinImageView.backgroundColor = [UIColor clearColor];
     [self.skinContainer addSubview:self.skinImageView];
     
+    // 状态标签
+    self.statusLabel = [[UILabel alloc] init];
+    self.statusLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.statusLabel.font = [UIFont systemFontOfSize:12];
+    self.statusLabel.textColor = [UIColor secondaryLabelColor];
+    self.statusLabel.textAlignment = NSTextAlignmentCenter;
+    self.statusLabel.numberOfLines = 0;
+    [self.view addSubview:self.statusLabel];
+    
+    // 加载指示器
+    self.loadingIndicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
+    self.loadingIndicator.translatesAutoresizingMaskIntoConstraints = NO;
+    self.loadingIndicator.color = [UIColor whiteColor];
+    [self.view addSubview:self.loadingIndicator];
+    
     // 约束
     [NSLayoutConstraint activateConstraints:@[
         // 欢迎标签
@@ -95,16 +109,25 @@
         [self.versionLabel.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
         
         // 皮肤容器
-        [self.skinContainer.topAnchor constraintEqualToAnchor:self.versionLabel.bottomAnchor constant:30],
+        [self.skinContainer.topAnchor constraintEqualToAnchor:self.versionLabel.bottomAnchor constant:20],
         [self.skinContainer.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.skinContainer.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [self.skinContainer.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-20],
+        [self.skinContainer.heightAnchor constraintEqualToConstant:250],
         
         // 皮肤图片
         [self.skinImageView.centerXAnchor constraintEqualToAnchor:self.skinContainer.centerXAnchor],
         [self.skinImageView.centerYAnchor constraintEqualToAnchor:self.skinContainer.centerYAnchor],
-        [self.skinImageView.widthAnchor constraintEqualToConstant:200],
-        [self.skinImageView.heightAnchor constraintEqualToConstant:400]
+        [self.skinImageView.widthAnchor constraintEqualToConstant:150],
+        [self.skinImageView.heightAnchor constraintEqualToConstant:250],
+        
+        // 状态标签
+        [self.statusLabel.topAnchor constraintEqualToAnchor:self.skinContainer.bottomAnchor constant:20],
+        [self.statusLabel.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:20],
+        [self.statusLabel.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-20],
+        
+        // 加载指示器
+        [self.loadingIndicator.topAnchor constraintEqualToAnchor:self.statusLabel.bottomAnchor constant:10],
+        [self.loadingIndicator.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor]
     ]];
 }
 
@@ -126,11 +149,11 @@
             [self loadSkinForUUID:uuid];
         } else {
             // 显示默认皮肤
-            self.skinImageView.image = [self defaultSkinImage];
+            [self loadDefaultSkin];
         }
     } else {
         self.welcomeLabel.text = @"欢迎";
-        self.skinImageView.image = [self defaultSkinImage];
+        [self loadDefaultSkin];
     }
 }
 
@@ -146,56 +169,67 @@
                 if (skinImage) {
                     self.skinImageView.image = skinImage;
                 } else {
-                    self.skinImageView.image = [self defaultSkinImage];
+                    [self loadDefaultSkin];
                 }
             });
         } else {
             dispatch_async(dispatch_get_main_queue(), ^{
-                self.skinImageView.image = [self defaultSkinImage];
+                [self loadDefaultSkin];
             });
         }
     });
 }
 
-- (UIImage *)defaultSkinImage {
+- (void)loadDefaultSkin {
     // 返回默认史蒂夫皮肤
-    // 使用 Crafatar 的默认 Steve 皮肤
     NSString *steveSkinURL = @"https://crafatar.com/renders/body/8667ba71b85a4004af54457a9734eed7?overlay";
-    NSData *imageData = [NSData dataWithContentsOfURL:[NSURL URLWithString:steveSkinURL]];
-    if (imageData) {
-        UIImage *steveSkin = [UIImage imageWithData:imageData];
-        if (steveSkin) {
-            return steveSkin;
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        NSData *imageData = [NSData dataWithContentsOfURL:[NSURL URLWithString:steveSkinURL]];
+        if (imageData) {
+            UIImage *steveSkin = [UIImage imageWithData:imageData];
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (steveSkin) {
+                    self.skinImageView.image = steveSkin;
+                } else {
+                    self.skinImageView.image = [UIImage systemImageNamed:@"person.fill"];
+                }
+            });
+        } else {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                self.skinImageView.image = [UIImage systemImageNamed:@"person.fill"];
+            });
         }
-    }
-    // 如果下载失败，返回系统图标
-    return [UIImage systemImageNamed:@"person.fill"];
+    });
 }
 
-- (void)showWarningAlert:(NSString *)key hasPreference:(BOOL)isPreferenced exitWhenCompleted:(BOOL)shouldExit {
-    UIAlertController *warning = [UIAlertController
-                                      alertControllerWithTitle:localize([NSString stringWithFormat:@"login.warn.title.%@", key], nil)
-                                      message:localize([NSString stringWithFormat:@"login.warn.message.%@", key], nil)
-                                      preferredStyle:UIAlertControllerStyleAlert];
+- (void)checkMinecraftVersions {
+    self.statusLabel.text = @"正在检测 Minecraft 版本...";
+    [self.loadingIndicator startAnimating];
     
-    UIAlertAction *action;
-    if(isPreferenced) {
-        action = [UIAlertAction actionWithTitle:localize(@"OK", nil) style:UIAlertActionStyleDestructive handler:^(UIAlertAction * action) {
-            setPrefBool([NSString stringWithFormat:@"warnings.%@_warn", key], NO);
-        }];
-    } else if(shouldExit) {
-        action = [UIAlertAction actionWithTitle:localize(@"OK", nil) style:UIAlertActionStyleDestructive handler:^(UIAlertAction * action) {
-            [UIApplication.sharedApplication performSelector:@selector(suspend)];
-            usleep(100*1000);
-            exit(0);
-        }];
-    } else {
-        action = [UIAlertAction actionWithTitle:localize(@"OK", nil) style:UIAlertActionStyleCancel handler:nil];
-    }
-    warning.popoverPresentationController.sourceView = self.view;
-    warning.popoverPresentationController.sourceRect = self.view.bounds;
-    [warning addAction:action];
-    [self presentViewController:warning animated:YES completion:nil];
+    // 从 Mojang API 获取版本列表
+    NSURL *url = [NSURL URLWithString:@"https://launchermeta.mojang.com/mc/game/version_manifest.json"];
+    NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self.loadingIndicator stopAnimating];
+            
+            if (data && !error) {
+                NSError *jsonError;
+                NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
+                if (json) {
+                    NSDictionary *latest = json[@"latest"];
+                    NSString *releaseVersion = latest[@"release"];
+                    NSString *snapshotVersion = latest[@"snapshot"];
+                    
+                    self.statusLabel.text = [NSString stringWithFormat:@"最新正式版: %@\n最新测试版: %@", releaseVersion, snapshotVersion];
+                } else {
+                    self.statusLabel.text = @"版本检测失败";
+                }
+            } else {
+                self.statusLabel.text = @"无法连接到版本服务器";
+            }
+        });
+    }];
+    [task resume];
 }
 
 #pragma mark - Orientation
