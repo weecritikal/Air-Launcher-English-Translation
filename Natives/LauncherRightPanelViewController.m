@@ -4,6 +4,7 @@
 #import "AccountListViewController.h"
 #import "SurfaceViewController.h"
 #import "PLProfiles.h"
+#import "LauncherPreferences.h"
 #import "utils.h"
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
@@ -205,9 +206,124 @@
         return;
     }
     
-    SurfaceViewController *gameVC = [[SurfaceViewController alloc] init];
-    gameVC.modalPresentationStyle = UIModalPresentationFullScreen;
-    [self presentViewController:gameVC animated:YES completion:nil];
+    // 加载版本元数据
+    [self loadVersionMetadataAndLaunch:selectedProfile];
+}
+
+- (void)loadVersionMetadataAndLaunch:(NSString *)profileName {
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        // 获取版本元数据
+        NSString *versionId = PLProfiles.current.profiles[profileName][@"lastVersionId"];
+        if (!versionId) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [self showAlert:@"无法获取版本信息"];
+            });
+            return;
+        }
+        
+        // 从Mojang API获取版本详情
+        NSURL *url = [NSURL URLWithString:@"https://launchermeta.mojang.com/mc/game/version_manifest.json"];
+        NSData *data = [NSData dataWithContentsOfURL:url];
+        if (!data) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [self showAlert:@"无法连接到版本服务器"];
+            });
+            return;
+        }
+        
+        NSError *error;
+        NSDictionary *manifest = [NSJSONSerialization JSONObjectWithData:data options:0 error:&error];
+        if (!manifest) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [self showAlert:@"版本数据解析失败"];
+            });
+            return;
+        }
+        
+        // 查找版本URL
+        NSString *versionUrl = nil;
+        for (NSDictionary *version in manifest[@"versions"]) {
+            if ([version[@"id"] isEqualToString:versionId]) {
+                versionUrl = version[@"url"];
+                break;
+            }
+        }
+        
+        if (!versionUrl) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [self showAlert:@"找不到版本信息"];
+            });
+            return;
+        }
+        
+        // 获取版本详情
+        NSData *versionData = [NSData dataWithContentsOfURL:[NSURL URLWithString:versionUrl]];
+        if (!versionData) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [self showAlert:@"无法获取版本详情"];
+            });
+            return;
+        }
+        
+        NSDictionary *versionInfo = [NSJSONSerialization JSONObjectWithData:versionData options:0 error:&error];
+        if (!versionInfo) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [self showAlert:@"版本详情解析失败"];
+            });
+            return;
+        }
+        
+        // 构建metadata
+        NSMutableDictionary *metadata = [NSMutableDictionary dictionary];
+        metadata[@"id"] = versionId;
+        metadata[@"type"] = versionInfo[@"type"];
+        metadata[@"mainClass"] = versionInfo[@"mainClass"];
+        metadata[@"arguments"] = versionInfo[@"arguments"];
+        metadata[@"assetIndex"] = versionInfo[@"assetIndex"];
+        metadata[@"downloads"] = versionInfo[@"downloads"];
+        metadata[@"libraries"] = versionInfo[@"libraries"];
+        metadata[@"logging"] = versionInfo[@"logging"];
+        metadata[@"minecraftArguments"] = versionInfo[@"minecraftArguments"];
+        metadata[@"releaseTime"] = versionInfo[@"releaseTime"];
+        metadata[@"time"] = versionInfo[@"time"];
+        
+        // 设置Java版本
+        NSDictionary *javaVersion = versionInfo[@"javaVersion"];
+        if (javaVersion) {
+            metadata[@"javaVersion"] = javaVersion;
+        } else {
+            // 默认Java 8
+            metadata[@"javaVersion"] = @{@"majorVersion": @8, @"version": @"1.8"};
+        }
+        
+        // 获取版本特定设置
+        NSDictionary *profile = PLProfiles.current.profiles[profileName];
+        
+        // 应用渲染器设置
+        NSString *renderer = profile[@"renderer"] ?: @"auto";
+        if (![renderer isEqualToString:@"auto"]) {
+            setPrefString(@"video.renderer", renderer);
+        }
+        
+        // 应用Java版本设置
+        NSString *javaVer = profile[@"javaVersion"] ?: @"auto";
+        if (![javaVer isEqualToString:@"auto"]) {
+            setPrefString(@"java.java_version", javaVer);
+        }
+        
+        // 应用内存设置
+        NSInteger allocatedMemory = [profile[@"allocatedMemory"] integerValue];
+        if (allocatedMemory > 0) {
+            setPrefInt(@"general.ram_allocation", (int)allocatedMemory);
+        }
+        
+        dispatch_async(dispatch_get_main_queue(), ^{
+            // 启动游戏
+            SurfaceViewController *gameVC = [[SurfaceViewController alloc] initWithMetadata:metadata];
+            gameVC.modalPresentationStyle = UIModalPresentationFullScreen;
+            [self presentViewController:gameVC animated:YES completion:nil];
+        });
+    });
 }
 
 - (void)showAlert:(NSString *)message {
