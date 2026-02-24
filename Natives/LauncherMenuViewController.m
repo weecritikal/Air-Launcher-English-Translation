@@ -164,10 +164,8 @@
 }
 
 - (void)showVersionManager {
-    VersionManagerViewController *vc = [[VersionManagerViewController alloc] init];
-    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
-    nav.modalPresentationStyle = UIModalPresentationFormSheet;
-    [self presentViewController:nav animated:YES completion:nil];
+    // 发送通知让 LauncherRootViewController 在中间内容区显示
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowVersionManager" object:nil];
 }
 
 - (void)showCurrentVersionSettings {
@@ -181,18 +179,13 @@
         return;
     }
     
-    ProfileSettingsViewController *vc = [[ProfileSettingsViewController alloc] init];
-    vc.profileName = currentProfile;
-    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
-    nav.modalPresentationStyle = UIModalPresentationFormSheet;
-    [self presentViewController:nav animated:YES completion:nil];
+    // 发送通知让 LauncherRootViewController 在中间内容区显示
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowProfileSettings" object:currentProfile];
 }
 
 - (void)showSettings {
-    LauncherPreferencesViewController *vc = [[LauncherPreferencesViewController alloc] init];
-    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
-    nav.modalPresentationStyle = UIModalPresentationFullScreen;
-    [self presentViewController:nav animated:YES completion:nil];
+    // 发送通知让 LauncherRootViewController 在中间内容区显示
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowSettings" object:nil];
 }
 
 #pragma mark - Data Updates
