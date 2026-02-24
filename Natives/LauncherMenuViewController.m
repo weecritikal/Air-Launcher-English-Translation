@@ -24,11 +24,11 @@
     
     // 菜单项配置
     self.menuItems = @[
-        @{@"icon": @"house.fill", @"title": @"主页", @"index": @0},
-        @{@"icon": @"arrow.down.circle.fill", @"title": @"下载", @"index": @1},
-        @{@"icon": @"puzzlepiece.fill", @"title": @"模组", @"index": @2},
-        @{@"icon": @"paintbrush.fill", @"title": @"光影", @"index": @3},
-        @{@"icon": @"gearshape.fill", @"title": @"设置", @"index": @4}
+        @{@"icon": @"house.fill", @"title": @" ", @"index": @0},
+        @{@"icon": @"arrow.down.circle.fill", @"title": @" ", @"index": @1},
+        @{@"icon": @"puzzlepiece.fill", @"title": @" ", @"index": @2},
+        @{@"icon": @"paintbrush.fill", @"title": @" ", @"index": @3},
+        @{@"icon": @"gearshape.fill", @"title": @" ", @"index": @4}
     ];
     
     self.selectedIndex = 0;
