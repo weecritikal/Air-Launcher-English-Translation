@@ -2,6 +2,7 @@
 #import "ios_uikit_bridge.h"
 #import "utils.h"
 #import "LauncherRootViewController.h"
+#import "BackgroundManager.h"
 
 extern UIWindow *mainWindow;
 
@@ -31,6 +32,11 @@ extern UIWindow *mainWindow;
     self.window.rootViewController = rootVC;
     
     [self.window makeKeyAndVisible];
+    
+    // 应用背景
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        [[BackgroundManager sharedManager] applyBackgroundToWindow:self.window];
+    });
 }
 
 - (void)sceneDidDisconnect:(UIScene *)scene {
