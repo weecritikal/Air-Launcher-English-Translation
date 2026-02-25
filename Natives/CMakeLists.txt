@@ -196,6 +196,9 @@ add_executable(AngelAuraAmethyst
   # Version card cell (shared between DownloadViewController and LauncherProfilesViewController)
   VersionCardCell.m
 
+  # Card style setting cell
+  PLCardSettingCell.m
+
   # Mod-related sources (ensure implementations are compiled and linked)
   MarqueeLabel.m
   ModItem.m

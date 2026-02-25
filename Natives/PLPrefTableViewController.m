@@ -6,6 +6,7 @@
 #import "LauncherMenuViewController.h"
 #import "LauncherPreferences.h"
 #import "PLPrefTableViewController.h"
+#import "PLCardSettingCell.h"
 #import "UIKit+hook.h"
 
 #import "ios_uikit_bridge.h"
