@@ -16,6 +16,7 @@
 @interface PLPrefTableViewController()<UIContextMenuInteractionDelegate>{}
 @property(nonatomic) UIMenu* currentMenu;
 @property(nonatomic) UIBarButtonItem *helpBtn;
+@property(nonatomic) UIView *cardHeaderView;
 
 @end
 
@@ -24,6 +25,8 @@
 - (id)init {
     self = [super init];
     [self initViewCreation];
+    // 从偏好设置加载布局模式
+    _layoutMode = (PLSettingsLayoutMode)[[NSUserDefaults standardUserDefaults] integerForKey:@"settings_layout_mode"];
     return self;
 }
 
@@ -31,8 +34,9 @@
 {
     [super viewDidLoad];
 
-    self.tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStyleInsetGrouped];
-    self.tableView.keyboardDismissMode = UIScrollViewKeyboardDismissModeInteractive;
+    [self setupTableView];
+    [self setupLayoutSwitcher];
+    
     if (self.prefSections) {
         self.prefSectionsVisibility = [[NSMutableArray<NSNumber *> alloc] initWithCapacity:self.prefSections.count];
         for (int i = 0; i < self.prefSections.count; i++) {
@@ -42,6 +46,72 @@
         // Display one singe section if prefSection is unspecified
         self.prefSectionsVisibility = (id)@[@YES];
     }
+}
+
+- (void)setupTableView {
+    UITableViewStyle style = (self.layoutMode == PLSettingsLayoutModeCard) ? 
+        UITableViewStylePlain : UITableViewStyleInsetGrouped;
+    self.tableView = [[UITableView alloc] initWithFrame:CGRectZero style:style];
+    self.tableView.keyboardDismissMode = UIScrollViewKeyboardDismissModeInteractive;
+    
+    // 卡片式布局的特殊配置
+    if (self.layoutMode == PLSettingsLayoutModeCard) {
+        self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
+        self.tableView.backgroundColor = [UIColor systemBackgroundColor];
+        self.tableView.contentInset = UIEdgeInsetsMake(8, 12, 12, 12);
+        // 注册自定义卡片Cell
+        [self.tableView registerClass:[PLCardSettingCell class] forCellReuseIdentifier:@"CardCell"];
+    }
+}
+
+- (void)setupLayoutSwitcher {
+    self.layoutSwitcher = [[UISegmentedControl alloc] initWithItems:@[@"列表", @"卡片"]];
+    self.layoutSwitcher.selectedSegmentIndex = self.layoutMode;
+    self.layoutSwitcher.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.layoutSwitcher addTarget:self action:@selector(layoutModeChanged:) forControlEvents:UIControlEventValueChanged];
+    
+    // 创建卡片头部视图
+    self.cardHeaderView = [[UIView alloc] init];
+    self.cardHeaderView.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.cardHeaderView addSubview:self.layoutSwitcher];
+    
+    [NSLayoutConstraint activateConstraints:@[
+        [self.layoutSwitcher.topAnchor constraintEqualToAnchor:self.cardHeaderView.topAnchor constant:8],
+        [self.layoutSwitcher.centerXAnchor constraintEqualToAnchor:self.cardHeaderView.centerXAnchor],
+        [self.layoutSwitcher.bottomAnchor constraintEqualToAnchor:self.cardHeaderView.bottomAnchor constant:-8]
+    ]];
+}
+
+- (void)layoutModeChanged:(UISegmentedControl *)sender {
+    PLSettingsLayoutMode newMode = (PLSettingsLayoutMode)sender.selectedSegmentIndex;
+    if (newMode != self.layoutMode) {
+        [self switchToLayoutMode:newMode];
+    }
+}
+
+- (void)switchToLayoutMode:(PLSettingsLayoutMode)mode {
+    self.layoutMode = mode;
+    [self saveLayoutPreference];
+    
+    // 重新创建tableView
+    [self setupTableView];
+    
+    // 如果有卡片头部视图，设置为tableHeaderView
+    if (mode == PLSettingsLayoutModeCard) {
+        CGFloat headerWidth = self.view.bounds.size.width - 24;
+        self.cardHeaderView.frame = CGRectMake(0, 0, headerWidth, 50);
+        self.tableView.tableHeaderView = self.cardHeaderView;
+    } else {
+        self.tableView.tableHeaderView = nil;
+    }
+    
+    [self.view addSubview:self.tableView];
+    [self.tableView reloadData];
+}
+
+- (void)saveLayoutPreference {
+    [[NSUserDefaults standardUserDefaults] setInteger:self.layoutMode forKey:@"settings_layout_mode"];
+    [[NSUserDefaults standardUserDefaults] synchronize];
 }
 
 - (UIBarButtonItem *)drawAccountButton {
@@ -109,6 +179,13 @@
     if (self.hasDetail && self.navigationController) {
         self.navigationItem.rightBarButtonItems = @[[self drawAccountButton], [self drawHelpButton]];
     }
+    
+    // 卡片式布局时设置tableHeaderView
+    if (self.layoutMode == PLSettingsLayoutModeCard && self.cardHeaderView) {
+        CGFloat headerWidth = self.view.bounds.size.width - 24;
+        self.cardHeaderView.frame = CGRectMake(0, 0, headerWidth, 50);
+        self.tableView.tableHeaderView = self.cardHeaderView;
+    }
 
     // Scan for child pane cells and reload them
     // FIXME: any cheaper operations?
@@ -139,13 +216,23 @@
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     if (self.prefSectionsVisibility[section].boolValue) {
-        return self.prefContents[section].count;
+        NSInteger count = self.prefContents[section].count;
+        // 卡片式布局不显示section标题行
+        if (self.layoutMode == PLSettingsLayoutModeCard && self.prefSections) {
+            count = count; // 保持原样，卡片模式下第一行也是设置项
+        }
+        return count;
     }
     return 1;
 }
 
 - (UITableViewCell *)tableView:(nonnull UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     NSDictionary *item = self.prefContents[indexPath.section][indexPath.row];
+    
+    // 卡片式布局
+    if (self.layoutMode == PLSettingsLayoutModeCard) {
+        return [self cardCellForRowAtIndexPath:indexPath item:item];
+    }
 
     NSString *cellID;
     UITableViewCellStyle cellStyle;
@@ -208,6 +295,98 @@
     cell.textLabel.enabled = cell.detailTextLabel.enabled = cell.userInteractionEnabled;
     [(id)cell.accessoryView setEnabled:cell.userInteractionEnabled];
 
+    return cell;
+}
+
+// 卡片式布局的Cell配置
+- (PLCardSettingCell *)cardCellForRowAtIndexPath:(NSIndexPath *)indexPath item:(NSDictionary *)item {
+    PLCardSettingCell *cell = [self.tableView dequeueReusableCellWithIdentifier:@"CardCell"];
+    if (!cell) {
+        cell = [[PLCardSettingCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:@"CardCell"];
+    }
+    
+    NSString *key = item[@"key"];
+    NSString *section = self.prefSections[indexPath.section];
+    
+    // 设置标题和图标
+    NSString *title = localize((item[@"title"] ? item[@"title"] :
+        [NSString stringWithFormat:@"preference.title.%@", key]), nil);
+    
+    NSString *subtitle = nil;
+    if ([item[@"hasDetail"] boolValue] && self.prefDetailVisible) {
+        subtitle = localize(([NSString stringWithFormat:@"preference.detail.%@", key]), nil);
+    }
+    
+    BOOL destructive = [item[@"destructive"] boolValue];
+    [cell configureWithTitle:title subtitle:subtitle icon:item[@"icon"] detail:nil destructive:destructive];
+    
+    // 计算卡片位置
+    NSInteger rowCount = self.prefContents[indexPath.section].count;
+    NSInteger position = 3; // single
+    if (rowCount > 1) {
+        if (indexPath.row == 0) position = 0; // top
+        else if (indexPath.row == rowCount - 1) position = 2; // bottom
+        else position = 1; // middle
+    }
+    [cell setCardPosition:position];
+    
+    // 配置附件视图
+    if (item[@"type"] == self.typeSwitch) {
+        UISwitch *sw = [[UISwitch alloc] init];
+        NSArray *customSwitchValue = item[@"customSwitchValue"];
+        if (customSwitchValue == nil) {
+            [sw setOn:[self.getPreference(section, key) boolValue] animated:NO];
+        } else {
+            [sw setOn:[self.getPreference(section, key) isEqualToString:customSwitchValue[1]] animated:NO];
+        }
+        [sw addTarget:self action:@selector(switchChanged:) forControlEvents:UIControlEventValueChanged];
+        objc_setAssociatedObject(sw, @"section", section, OBJC_ASSOCIATION_ASSIGN);
+        objc_setAssociatedObject(sw, @"key", key, OBJC_ASSOCIATION_ASSIGN);
+        objc_setAssociatedObject(sw, @"item", item, OBJC_ASSOCIATION_ASSIGN);
+        [cell setAccessoryView:sw];
+    } else if (item[@"type"] == self.typeSlider) {
+        DBNumberedSlider *slider = [[DBNumberedSlider alloc] initWithFrame:CGRectMake(0, 0, 120, 30)];
+        slider.minimumValue = [item[@"min"] intValue];
+        slider.maximumValue = [item[@"max"] intValue];
+        slider.value = [self.getPreference(section, key) intValue];
+        slider.continuous = YES;
+        [slider addTarget:self action:@selector(sliderMoved:) forControlEvents:UIControlEventValueChanged];
+        objc_setAssociatedObject(slider, @"section", section, OBJC_ASSOCIATION_ASSIGN);
+        objc_setAssociatedObject(slider, @"key", key, OBJC_ASSOCIATION_ASSIGN);
+        objc_setAssociatedObject(slider, @"item", item, OBJC_ASSOCIATION_ASSIGN);
+        [cell setAccessoryView:slider];
+    } else if (item[@"type"] == self.typePickField || item[@"type"] == self.typeChildPane) {
+        // 显示当前值
+        id value = self.getPreference(section, key);
+        NSString *detailText = nil;
+        if ([value isKindOfClass:[NSString class]]) {
+            detailText = value;
+        } else if ([value isKindOfClass:[NSNumber class]]) {
+            detailText = [value boolValue] ? @"ON" : @"OFF";
+        } else if (value) {
+            detailText = [value description];
+        }
+        cell.detailLabel.text = detailText;
+        cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+    } else if (item[@"type"] == self.typeTextField) {
+        UITextField *textField = [[UITextField alloc] initWithFrame:CGRectMake(0, 0, 120, 30)];
+        textField.textAlignment = NSTextAlignmentRight;
+        textField.text = self.getPreference(section, key);
+        textField.delegate = self;
+        textField.returnKeyType = UIReturnKeyDone;
+        objc_setAssociatedObject(textField, @"section", section, OBJC_ASSOCIATION_ASSIGN);
+        objc_setAssociatedObject(textField, @"key", key, OBJC_ASSOCIATION_ASSIGN);
+        objc_setAssociatedObject(textField, @"item", item, OBJC_ASSOCIATION_ASSIGN);
+        [cell setAccessoryView:textField];
+    } else if (item[@"type"] == self.typeButton) {
+        cell.selectionStyle = UITableViewCellSelectionStyleGray;
+    }
+    
+    // 检查启用条件
+    BOOL(^checkEnable)(void) = item[@"enableCondition"];
+    cell.userInteractionEnabled = !checkEnable || checkEnable();
+    cell.contentView.alpha = cell.userInteractionEnabled ? 1.0 : 0.5;
+    
     return cell;
 }
 
@@ -357,10 +536,14 @@
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:NO];
-    if (indexPath.row == 0 && self.prefSections) {
-        self.prefSectionsVisibility[indexPath.section] = @(![self.prefSectionsVisibility[indexPath.section] boolValue]);
-        [tableView reloadSections:[NSIndexSet indexSetWithIndex:indexPath.section] withRowAnimation:UITableViewRowAnimationFade];
-        return;
+    
+    // 卡片式布局没有section标题行，不需要处理折叠
+    if (self.layoutMode == PLSettingsLayoutModeClassic) {
+        if (indexPath.row == 0 && self.prefSections) {
+            self.prefSectionsVisibility[indexPath.section] = @(![self.prefSectionsVisibility[indexPath.section] boolValue]);
+            [tableView reloadSections:[NSIndexSet indexSetWithIndex:indexPath.section] withRowAnimation:UITableViewRowAnimationFade];
+            return;
+        }
     }
 
     NSDictionary *item = self.prefContents[indexPath.section][indexPath.row];
@@ -500,6 +683,231 @@
     NSString *key = objc_getAssociatedObject(sender, @"key");
 
     self.setPreference(section, key, sender.text);
+}
+
+@end
+
+#pragma mark - Card Setting Cell
+
+// 卡片式设置Cell - 参考ZalithLauncher2的卡片设计
+@interface PLCardSettingCell : UITableViewCell
+@property (nonatomic, strong) UIView *cardContainer;
+@property (nonatomic, strong) UILabel *titleLabel;
+@property (nonatomic, strong) UILabel *subtitleLabel;
+@property (nonatomic, strong) UILabel *detailLabel;
+@property (nonatomic, strong) UIImageView *iconView;
+@property (nonatomic, strong) UIView *accessoryContainer;
+@property (nonatomic, strong) UIView *topSeparator;
+@property (nonatomic, strong) UIView *bottomSeparator;
+@end
+
+@implementation PLCardSettingCell
+
+- (instancetype)initWithStyle:(UITableViewCellStyle)style reuseIdentifier:(NSString *)reuseIdentifier {
+    self = [super initWithStyle:style reuseIdentifier:reuseIdentifier];
+    if (self) {
+        self.selectionStyle = UITableViewCellSelectionStyleNone;
+        self.backgroundColor = [UIColor clearColor];
+        
+        // 卡片容器
+        _cardContainer = [[UIView alloc] init];
+        _cardContainer.translatesAutoresizingMaskIntoConstraints = NO;
+        _cardContainer.backgroundColor = [UIColor secondarySystemGroupedBackgroundColor];
+        _cardContainer.layer.cornerRadius = 14;
+        _cardContainer.layer.masksToBounds = NO;
+        // 添加阴影效果
+        _cardContainer.layer.shadowColor = [UIColor blackColor].CGColor;
+        _cardContainer.layer.shadowOffset = CGSizeMake(0, 1);
+        _cardContainer.layer.shadowOpacity = 0.1;
+        _cardContainer.layer.shadowRadius = 3;
+        [self.contentView addSubview:_cardContainer];
+        
+        // 图标
+        _iconView = [[UIImageView alloc] init];
+        _iconView.translatesAutoresizingMaskIntoConstraints = NO;
+        _iconView.contentMode = UIViewContentModeScaleAspectFit;
+        _iconView.tintColor = [UIColor systemBlueColor];
+        [_cardContainer addSubview:_iconView];
+        
+        // 标题
+        _titleLabel = [[UILabel alloc] init];
+        _titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+        _titleLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightMedium];
+        _titleLabel.textColor = [UIColor labelColor];
+        _titleLabel.numberOfLines = 0;
+        [_cardContainer addSubview:_titleLabel];
+        
+        // 副标题
+        _subtitleLabel = [[UILabel alloc] init];
+        _subtitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+        _subtitleLabel.font = [UIFont systemFontOfSize:12];
+        _subtitleLabel.textColor = [UIColor secondaryLabelColor];
+        _subtitleLabel.numberOfLines = 2;
+        _subtitleLabel.hidden = YES;
+        [_cardContainer addSubview:_subtitleLabel];
+        
+        // 详情标签（用于显示值）
+        _detailLabel = [[UILabel alloc] init];
+        _detailLabel.translatesAutoresizingMaskIntoConstraints = NO;
+        _detailLabel.font = [UIFont systemFontOfSize:14];
+        _detailLabel.textColor = [UIColor secondaryLabelColor];
+        _detailLabel.textAlignment = NSTextAlignmentRight;
+        [_cardContainer addSubview:_detailLabel];
+        
+        // 附件容器
+        _accessoryContainer = [[UIView alloc] init];
+        _accessoryContainer.translatesAutoresizingMaskIntoConstraints = NO;
+        [_cardContainer addSubview:_accessoryContainer];
+        
+        // 顶部分隔线（用于分组内的中间项）
+        _topSeparator = [[UIView alloc] init];
+        _topSeparator.translatesAutoresizingMaskIntoConstraints = NO;
+        _topSeparator.backgroundColor = [UIColor separatorColor];
+        _topSeparator.hidden = YES;
+        [_cardContainer addSubview:_topSeparator];
+        
+        // 底部分隔线
+        _bottomSeparator = [[UIView alloc] init];
+        _bottomSeparator.translatesAutoresizingMaskIntoConstraints = NO;
+        _bottomSeparator.backgroundColor = [UIColor separatorColor];
+        _bottomSeparator.hidden = YES;
+        [_cardContainer addSubview:_bottomSeparator];
+        
+        // 布局约束
+        [NSLayoutConstraint activateConstraints:@[
+            // 卡片容器
+            [_cardContainer.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:4],
+            [_cardContainer.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor],
+            [_cardContainer.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor],
+            [_cardContainer.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-4],
+            
+            // 图标
+            [_iconView.leadingAnchor constraintEqualToAnchor:_cardContainer.leadingAnchor constant:16],
+            [_iconView.centerYAnchor constraintEqualToAnchor:_cardContainer.centerYAnchor],
+            [_iconView.widthAnchor constraintEqualToConstant:28],
+            [_iconView.heightAnchor constraintEqualToConstant:28],
+            
+            // 标题
+            [_titleLabel.leadingAnchor constraintEqualToAnchor:_iconView.trailingAnchor constant:12],
+            [_titleLabel.topAnchor constraintEqualToAnchor:_cardContainer.topAnchor constant:12],
+            [_titleLabel.trailingAnchor constraintLessThanOrEqualToAnchor:_detailLabel.leadingAnchor constant:-8],
+            [_titleLabel.trailingAnchor constraintLessThanOrEqualToAnchor:_accessoryContainer.leadingAnchor constant:-8],
+            
+            // 副标题
+            [_subtitleLabel.leadingAnchor constraintEqualToAnchor:_titleLabel.leadingAnchor],
+            [_subtitleLabel.topAnchor constraintEqualToAnchor:_titleLabel.bottomAnchor constant:2],
+            [_subtitleLabel.trailingAnchor constraintEqualToAnchor:_titleLabel.trailingAnchor],
+            
+            // 详情标签
+            [_detailLabel.trailingAnchor constraintEqualToAnchor:_cardContainer.trailingAnchor constant:-16],
+            [_detailLabel.centerYAnchor constraintEqualToAnchor:_titleLabel.centerYAnchor],
+            [_detailLabel.widthAnchor constraintLessThanOrEqualToConstant:120],
+            
+            // 附件容器
+            [_accessoryContainer.trailingAnchor constraintEqualToAnchor:_cardContainer.trailingAnchor constant:-16],
+            [_accessoryContainer.centerYAnchor constraintEqualToAnchor:_cardContainer.centerYAnchor],
+            [_accessoryContainer.widthAnchor constraintLessThanOrEqualToConstant:150],
+            
+            // 顶部分隔线
+            [_topSeparator.topAnchor constraintEqualToAnchor:_cardContainer.topAnchor],
+            [_topSeparator.leadingAnchor constraintEqualToAnchor:_cardContainer.leadingAnchor constant:16],
+            [_topSeparator.trailingAnchor constraintEqualToAnchor:_cardContainer.trailingAnchor],
+            [_topSeparator.heightAnchor constraintEqualToConstant:0.5],
+            
+            // 底部分隔线
+            [_bottomSeparator.bottomAnchor constraintEqualToAnchor:_cardContainer.bottomAnchor],
+            [_bottomSeparator.leadingAnchor constraintEqualToAnchor:_cardContainer.leadingAnchor constant:16],
+            [_bottomSeparator.trailingAnchor constraintEqualToAnchor:_cardContainer.trailingAnchor],
+            [_bottomSeparator.heightAnchor constraintEqualToConstant:0.5],
+        ]];
+    }
+    return self;
+}
+
+- (void)prepareForReuse {
+    [super prepareForReuse];
+    self.titleLabel.text = nil;
+    self.subtitleLabel.text = nil;
+    self.detailLabel.text = nil;
+    self.iconView.image = nil;
+    self.topSeparator.hidden = YES;
+    self.bottomSeparator.hidden = YES;
+    self.accessoryContainer.hidden = YES;
+    for (UIView *view in self.accessoryContainer.subviews) {
+        [view removeFromSuperview];
+    }
+}
+
+- (void)configureWithTitle:(NSString *)title subtitle:(NSString *)subtitle icon:(NSString *)iconName detail:(NSString *)detail destructive:(BOOL)destructive {
+    self.titleLabel.text = title;
+    self.titleLabel.textColor = destructive ? [UIColor systemRedColor] : [UIColor labelColor];
+    
+    if (subtitle.length > 0) {
+        self.subtitleLabel.text = subtitle;
+        self.subtitleLabel.hidden = NO;
+    } else {
+        self.subtitleLabel.hidden = YES;
+    }
+    
+    if (iconName.length > 0) {
+        UIImage *icon = [UIImage systemImageNamed:iconName];
+        self.iconView.image = icon;
+        self.iconView.tintColor = destructive ? [UIColor systemRedColor] : [UIColor systemBlueColor];
+        self.iconView.hidden = NO;
+    } else {
+        self.iconView.hidden = YES;
+    }
+    
+    if (detail.length > 0) {
+        self.detailLabel.text = detail;
+        self.detailLabel.hidden = NO;
+    } else {
+        self.detailLabel.hidden = YES;
+    }
+}
+
+- (void)setAccessoryView:(UIView *)view {
+    for (UIView *subview in self.accessoryContainer.subviews) {
+        [subview removeFromSuperview];
+    }
+    if (view) {
+        view.translatesAutoresizingMaskIntoConstraints = NO;
+        [self.accessoryContainer addSubview:view];
+        [NSLayoutConstraint activateConstraints:@[
+            [view.topAnchor constraintEqualToAnchor:self.accessoryContainer.topAnchor],
+            [view.bottomAnchor constraintEqualToAnchor:self.accessoryContainer.bottomAnchor],
+            [view.leadingAnchor constraintEqualToAnchor:self.accessoryContainer.leadingAnchor],
+            [view.trailingAnchor constraintEqualToAnchor:self.accessoryContainer.trailingAnchor]
+        ]];
+        self.accessoryContainer.hidden = NO;
+    } else {
+        self.accessoryContainer.hidden = YES;
+    }
+}
+
+- (void)setCardPosition:(NSInteger)position {
+    // position: 0=top, 1=middle, 2=bottom, 3=single
+    switch (position) {
+        case 0: // Top
+            self.cardContainer.layer.cornerRadius = 14;
+            self.cardContainer.layer.maskedCorners = kCALayerMinXMinYCorner | kCALayerMaxXMinYCorner;
+            self.bottomSeparator.hidden = NO;
+            break;
+        case 1: // Middle
+            self.cardContainer.layer.cornerRadius = 0;
+            self.topSeparator.hidden = NO;
+            self.bottomSeparator.hidden = NO;
+            break;
+        case 2: // Bottom
+            self.cardContainer.layer.cornerRadius = 14;
+            self.cardContainer.layer.maskedCorners = kCALayerMinXMaxYCorner | kCALayerMaxXMaxYCorner;
+            self.topSeparator.hidden = NO;
+            break;
+        default: // Single
+            self.cardContainer.layer.cornerRadius = 14;
+            self.cardContainer.layer.maskedCorners = kCALayerMinXMinYCorner | kCALayerMaxXMinYCorner | kCALayerMinXMaxYCorner | kCALayerMaxXMaxYCorner;
+            break;
+    }
 }
 
 @end
