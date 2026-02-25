@@ -10,6 +10,9 @@
 #import "ModItem.h"
 #import "ModVersionViewController.h"
 #import "ModVersion.h"
+#import "ShaderItem.h"
+#import "ShaderVersionViewController.h"
+#import "ShaderVersion.h"
 
 #include <sys/time.h>
 #include <SystemConfiguration/SystemConfiguration.h>
@@ -93,7 +96,7 @@
 
 @end
 
-@interface DownloadViewController () <UICollectionViewDataSource, UICollectionViewDelegate, UITableViewDataSource, UITableViewDelegate, ModVersionViewControllerDelegate>
+@interface DownloadViewController () <UICollectionViewDataSource, UICollectionViewDelegate, UITableViewDataSource, UITableViewDelegate, ModVersionViewControllerDelegate, ShaderVersionViewControllerDelegate>
 
 @property (nonatomic, strong) UISegmentedControl *tabSegment;
 @property (nonatomic, strong) UISegmentedControl *versionFilterSegment;
@@ -824,25 +827,78 @@
 - (void)downloadShader:(UIButton *)sender {
     NSInteger index = sender.tag;
     NSDictionary *shader = self.shaderList[index];
-    NSString *shaderName = shader[@"title"] ?: shader[@"slug"];
     
-    // 确保shaderpacks文件夹存在
-    NSString *profileName = PLProfiles.current.selectedProfileName ?: @"default";
-    NSString *shadersPath = [NSString stringWithFormat:@"%s/instances/%@/shaderpacks", getenv("POJAV_HOME"), profileName];
+    // 创建ShaderItem用于版本选择
+    ShaderItem *shaderItem = [[ShaderItem alloc] initWithOnlineData:shader];
     
-    NSFileManager *fm = [NSFileManager defaultManager];
-    if (![fm fileExistsAtPath:shadersPath]) {
-        [fm createDirectoryAtPath:shadersPath withIntermediateDirectories:YES attributes:nil error:nil];
+    // 显示版本选择页面
+    ShaderVersionViewController *versionVC = [[ShaderVersionViewController alloc] init];
+    versionVC.shaderItem = shaderItem;
+    versionVC.delegate = self;
+    
+    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:versionVC];
+    nav.modalPresentationStyle = UIModalPresentationFormSheet;
+    [self presentViewController:nav animated:YES completion:nil];
+}
+
+#pragma mark - ShaderVersionViewControllerDelegate
+
+- (void)shaderVersionViewController:(ShaderVersionViewController *)viewController didSelectVersion:(ShaderVersion *)version {
+    ShaderItem *itemToDownload = viewController.shaderItem;
+    
+    // 获取下载信息
+    NSDictionary *primaryFile = version.primaryFile;
+    if (!primaryFile || ![primaryFile[@"url"] isKindOfClass:[NSString class]]) {
+        [self showSimpleAlertWithTitle:@"错误" message:@"未找到有效的下载链接。"];
+        return;
     }
     
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"下载光影"
-                                                                   message:[NSString stringWithFormat:@"开始下载 %@...", shaderName]
-                                                            preferredStyle:UIAlertControllerStyleAlert];
-    [self presentViewController:alert animated:YES completion:nil];
+    // 设置下载URL和文件名
+    itemToDownload.selectedVersionDownloadURL = primaryFile[@"url"];
+    itemToDownload.fileName = primaryFile[@"filename"] ?: [NSString stringWithFormat:@"%@.zip", itemToDownload.displayName];
     
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        [alert dismissViewControllerAnimated:YES completion:nil];
-    });
+    // 关闭版本选择页面
+    [viewController dismissViewControllerAnimated:YES completion:^{
+        // 开始下载
+        [self startDownloadForShaderItem:itemToDownload];
+    }];
+}
+
+- (void)startDownloadForShaderItem:(ShaderItem *)item {
+    // 显示下载提示
+    UIAlertController *downloadingAlert = [UIAlertController alertControllerWithTitle:@"正在下载"
+                                                                              message:[NSString stringWithFormat:@"%@...", item.displayName]
+                                                                       preferredStyle:UIAlertControllerStyleAlert];
+    
+    UIActivityIndicatorView *indicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
+    indicator.translatesAutoresizingMaskIntoConstraints = NO;
+    [downloadingAlert.view addSubview:indicator];
+    [NSLayoutConstraint activateConstraints:@[
+        [indicator.centerXAnchor constraintEqualToAnchor:downloadingAlert.view.centerXAnchor],
+        [indicator.centerYAnchor constraintEqualToAnchor:downloadingAlert.view.centerYAnchor constant:20]
+    ]];
+    [indicator startAnimating];
+    
+    [self presentViewController:downloadingAlert animated:YES completion:nil];
+    
+    // 获取当前配置文件的名称
+    NSString *profileName = PLProfiles.current.selectedProfileName ?: @"default";
+    
+    [[ShaderService sharedService] downloadShader:item toProfile:profileName completion:^(NSError * _Nullable error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [downloadingAlert dismissViewControllerAnimated:YES completion:^{
+                if (error) {
+                    [self showSimpleAlertWithTitle:@"下载失败" message:error.localizedDescription];
+                } else {
+                    UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"下载成功"
+                                                                                          message:[NSString stringWithFormat:@"%@ 已成功安装到 shaderpacks 文件夹。", item.displayName]
+                                                                                   preferredStyle:UIAlertControllerStyleAlert];
+                    [successAlert addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleDefault handler:nil]];
+                    [self presentViewController:successAlert animated:YES completion:nil];
+                }
+            }];
+        });
+    }];
 }
 
 #pragma mark - Orientation
