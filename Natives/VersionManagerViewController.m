@@ -327,7 +327,7 @@
             
             NSCollectionLayoutSize *headerSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0]
                                                                              heightDimension:[NSCollectionLayoutDimension absoluteDimension:44]];
-            NSCollectionLayoutBoundarySupplementaryItem *header = [NSCollectionLayoutBoundarySupplementaryItem layoutBoundarySupplementaryItemWithSize:headerSize elementKind:UICollectionElementKindSectionHeader alignment:NSRectAlignmentTop];
+            NSCollectionLayoutBoundarySupplementaryItem *header = [NSCollectionLayoutBoundarySupplementaryItem boundarySupplementaryItemWithLayoutSize:headerSize elementKind:UICollectionElementKindSectionHeader alignment:NSRectAlignmentTop];
             section.boundarySupplementaryItems = @[header];
             return section;
         }
