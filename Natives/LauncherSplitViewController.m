@@ -68,6 +68,12 @@ extern NSMutableDictionary *prefDict;
                                                  name:@"BackgroundChanged"
                                                object:nil];
 
+    // Listen for UI effect change notifications
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(uiEffectChanged:)
+                                                 name:@"BackgroundUIEffectChanged"
+                                               object:nil];
+
     // Listen for navigation changes to ensure transparency
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(navigationControllerDidShow:)
@@ -106,6 +112,11 @@ extern NSMutableDictionary *prefDict;
             self.view.backgroundColor = [UIColor blackColor];
         }
     }
+}
+
+- (void)uiEffectChanged:(NSNotification *)notification {
+    // Refresh UI effect when settings changed
+    [[BackgroundManager sharedManager] refreshUIEffect];
 }
 
 - (void)viewWillAppear:(BOOL)animated {

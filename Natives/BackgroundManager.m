@@ -10,6 +10,8 @@
 
 static NSString * const kBackgroundTypeKey = @"background_type";
 static NSString * const kBackgroundPathKey = @"background_path";
+static NSString * const kBackgroundUIEffectKey = @"background_ui_effect";
+static NSString * const kBackgroundUIOpacityKey = @"background_ui_opacity";
 static NSString * const kBackgroundsFolder = @"backgrounds";
 static const NSInteger kGlobalBackgroundTag = 99999;
 static const NSInteger kBackgroundImageTag = 99998;
@@ -43,6 +45,7 @@ static const NSInteger kDefaultBackgroundTag = 99995;
     self = [super init];
     if (self) {
         [self loadSavedBackground];
+        [self loadUISettings];
         [self setupNotifications];
     }
     return self;
@@ -118,6 +121,36 @@ static const NSInteger kDefaultBackgroundTag = 99995;
     [defaults setInteger:self.currentType forKey:kBackgroundTypeKey];
     [defaults setObject:self.currentBackgroundPath forKey:kBackgroundPathKey];
     [defaults synchronize];
+}
+
+- (void)loadUISettings {
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    _uiEffect = [defaults integerForKey:kBackgroundUIEffectKey];
+    if (_uiEffect < BackgroundUIEffectTranslucent || _uiEffect > BackgroundUIEffectBlur) {
+        _uiEffect = BackgroundUIEffectBlur; // 默认毛玻璃效果
+    }
+    
+    _uiOpacity = [defaults floatForKey:kBackgroundUIOpacityKey];
+    if (_uiOpacity < 0.1 || _uiOpacity > 1.0) {
+        _uiOpacity = 0.7; // 默认透明度
+    }
+}
+
+- (void)saveUISettings {
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    [defaults setInteger:self.uiEffect forKey:kBackgroundUIEffectKey];
+    [defaults setFloat:self.uiOpacity forKey:kBackgroundUIOpacityKey];
+    [defaults synchronize];
+}
+
+- (void)setUiEffect:(BackgroundUIEffect)uiEffect {
+    _uiEffect = uiEffect;
+    [self saveUISettings];
+}
+
+- (void)setUiOpacity:(CGFloat)uiOpacity {
+    _uiOpacity = MAX(0.1, MIN(1.0, uiOpacity));
+    [self saveUISettings];
 }
 
 #pragma mark - Global Background Application
@@ -376,13 +409,19 @@ static const NSInteger kDefaultBackgroundTag = 99995;
     [container addSubview:dimView];
 }
 
-#pragma mark - Transparency Helpers (FIXED for Semi-Transparent UI)
+#pragma mark - Transparency Helpers with UI Effect Support
 
 - (void)makeViewControllerTransparent:(UIViewController *)viewController {
     if (!viewController) return;
     
-    // Main view - make it semi-transparent with blur
-    viewController.view.backgroundColor = [UIColor clearColor];
+    // Main view - apply effect based on settings
+    if (self.uiEffect == BackgroundUIEffectBlur) {
+        // 毛玻璃效果 - clear background, let blur show through
+        viewController.view.backgroundColor = [UIColor clearColor];
+    } else {
+        // 半透明效果 - semi-transparent dark background
+        viewController.view.backgroundColor = [UIColor colorWithWhite:0 alpha:1.0 - self.uiOpacity];
+    }
     
     // For UITableViewController
     if ([viewController isKindOfClass:[UITableViewController class]]) {
@@ -390,13 +429,12 @@ static const NSInteger kDefaultBackgroundTag = 99995;
         tableVC.tableView.backgroundColor = [UIColor clearColor];
         tableVC.tableView.backgroundView = nil;
         
-        // Make cells semi-transparent
+        // Make cells semi-transparent or with blur effect
         tableVC.tableView.separatorStyle = UITableViewCellSeparatorStyleSingleLine;
         
         // Apply to all visible cells
         for (UITableViewCell *cell in tableVC.tableView.visibleCells) {
-            cell.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.7];
-            cell.contentView.backgroundColor = [UIColor clearColor];
+            [self applyEffectToCell:cell];
         }
     }
     
@@ -412,6 +450,35 @@ static const NSInteger kDefaultBackgroundTag = 99995;
     }
 }
 
+- (void)applyEffectToCell:(UITableViewCell *)cell {
+    if (self.uiEffect == BackgroundUIEffectBlur) {
+        // 毛玻璃效果 - use UIBlurEffect on cell background
+        if (@available(iOS 13.0, *)) {
+            UIBlurEffect *blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterialDark];
+            UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:blur];
+            blurView.frame = cell.bounds;
+            blurView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+            
+            // Remove old background views
+            for (UIView *subview in cell.contentView.superview.subviews) {
+                if ([subview isKindOfClass:[UIVisualEffectView class]] && subview != blurView) {
+                    [subview removeFromSuperview];
+                }
+            }
+            
+            cell.backgroundView = blurView;
+        } else {
+            cell.backgroundColor = [UIColor colorWithWhite:0.1 alpha:self.uiOpacity];
+        }
+        cell.contentView.backgroundColor = [UIColor clearColor];
+    } else {
+        // 半透明效果 - simple semi-transparent background
+        cell.backgroundColor = [UIColor colorWithWhite:0.1 alpha:self.uiOpacity];
+        cell.contentView.backgroundColor = [UIColor clearColor];
+        cell.backgroundView = nil;
+    }
+}
+
 - (void)makeSplitViewControllerTransparent:(UISplitViewController *)splitVC {
     if (!splitVC) return;
     
@@ -423,18 +490,14 @@ static const NSInteger kDefaultBackgroundTag = 99995;
         if ([vc isKindOfClass:[UINavigationController class]]) {
             UINavigationController *nav = (UINavigationController *)vc;
             
-            // Navigation controller setup - make it semi-transparent
+            // Navigation controller setup
             nav.view.backgroundColor = [UIColor clearColor];
             nav.navigationBar.translucent = YES;
             nav.toolbar.translucent = YES;
             
-            // Set navigation bar to semi-transparent
-            nav.navigationBar.barTintColor = [UIColor colorWithWhite:0.1 alpha:0.7];
-            nav.navigationBar.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.7];
-            
-            // Set toolbar to semi-transparent
-            nav.toolbar.barTintColor = [UIColor colorWithWhite:0.1 alpha:0.7];
-            nav.toolbar.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.7];
+            // Apply effect to navigation bar
+            [self applyEffectToNavigationBar:nav.navigationBar];
+            [self applyEffectToToolbar:nav.toolbar];
             
             // Make all view controllers in stack transparent
             for (UIViewController *childVC in nav.viewControllers) {
@@ -443,6 +506,82 @@ static const NSInteger kDefaultBackgroundTag = 99995;
         } else {
             [self makeViewControllerTransparent:vc];
         }
+    }
+}
+
+- (void)applyEffectToNavigationBar:(UINavigationBar *)navigationBar {
+    if (self.uiEffect == BackgroundUIEffectBlur) {
+        // 毛玻璃效果
+        if (@available(iOS 13.0, *)) {
+            UINavigationBarAppearance *appearance = [[UINavigationBarAppearance alloc] init];
+            [appearance configureWithTransparentBackground];
+            appearance.backgroundColor = [UIColor clearColor];
+            
+            UIBlurEffect *blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterialDark];
+            appearance.backgroundEffect = blur;
+            
+            navigationBar.standardAppearance = appearance;
+            navigationBar.scrollEdgeAppearance = appearance;
+            navigationBar.compactAppearance = appearance;
+        }
+        navigationBar.barTintColor = [UIColor clearColor];
+        navigationBar.backgroundColor = [UIColor clearColor];
+    } else {
+        // 半透明效果
+        navigationBar.barTintColor = [UIColor colorWithWhite:0.1 alpha:self.uiOpacity];
+        navigationBar.backgroundColor = [UIColor colorWithWhite:0.1 alpha:self.uiOpacity];
+        
+        if (@available(iOS 13.0, *)) {
+            UINavigationBarAppearance *appearance = [[UINavigationBarAppearance alloc] init];
+            [appearance configureWithTransparentBackground];
+            appearance.backgroundColor = [UIColor colorWithWhite:0.1 alpha:self.uiOpacity];
+            appearance.backgroundEffect = nil;
+            
+            navigationBar.standardAppearance = appearance;
+            navigationBar.scrollEdgeAppearance = appearance;
+            navigationBar.compactAppearance = appearance;
+        }
+    }
+}
+
+- (void)applyEffectToToolbar:(UIToolbar *)toolbar {
+    if (self.uiEffect == BackgroundUIEffectBlur) {
+        // 毛玻璃效果
+        if (@available(iOS 13.0, *)) {
+            UIToolbarAppearance *appearance = [[UIToolbarAppearance alloc] init];
+            [appearance configureWithTransparentBackground];
+            appearance.backgroundColor = [UIColor clearColor];
+            
+            UIBlurEffect *blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterialDark];
+            appearance.backgroundEffect = blur;
+            
+            toolbar.standardAppearance = appearance;
+            toolbar.scrollEdgeAppearance = appearance;
+            toolbar.compactAppearance = appearance;
+        }
+        toolbar.barTintColor = [UIColor clearColor];
+        toolbar.backgroundColor = [UIColor clearColor];
+    } else {
+        // 半透明效果
+        toolbar.barTintColor = [UIColor colorWithWhite:0.1 alpha:self.uiOpacity];
+        toolbar.backgroundColor = [UIColor colorWithWhite:0.1 alpha:self.uiOpacity];
+        
+        if (@available(iOS 13.0, *)) {
+            UIToolbarAppearance *appearance = [[UIToolbarAppearance alloc] init];
+            [appearance configureWithTransparentBackground];
+            appearance.backgroundColor = [UIColor colorWithWhite:0.1 alpha:self.uiOpacity];
+            appearance.backgroundEffect = nil;
+            
+            toolbar.standardAppearance = appearance;
+            toolbar.scrollEdgeAppearance = appearance;
+            toolbar.compactAppearance = appearance;
+        }
+    }
+}
+
+- (void)refreshUIEffect {
+    if (self.currentSplitVC && self.currentType != BackgroundTypeNone) {
+        [self makeSplitViewControllerTransparent:self.currentSplitVC];
     }
 }
 
@@ -511,7 +650,7 @@ static const NSInteger kDefaultBackgroundTag = 99995;
 - (void)setImageBackground:(UIImage *)image completion:(void (^)(BOOL success, NSError * _Nullable error))completion {
     if (!image) {
         if (completion) {
-            completion(NO, [NSError errorWithDomain:@"BackgroundManager" code:1 userInfo:@{NSLocalizedDescriptionKey: @"å¾çä¸ºç©º"}]);
+            completion(NO, [NSError errorWithDomain:@"BackgroundManager" code:1 userInfo:@{NSLocalizedDescriptionKey: @"图片为空"}]);
         }
         return;
     }
@@ -527,7 +666,7 @@ static const NSInteger kDefaultBackgroundTag = 99995;
         NSData *imageData = UIImageJPEGRepresentation(image, 0.85);
         if (!imageData) {
             dispatch_async(dispatch_get_main_queue(), ^{
-                if (completion) completion(NO, [NSError errorWithDomain:@"BackgroundManager" code:2 userInfo:@{NSLocalizedDescriptionKey: @"å¾çåç¼©å¤±è´¥"}]);
+                if (completion) completion(NO, [NSError errorWithDomain:@"BackgroundManager" code:2 userInfo:@{NSLocalizedDescriptionKey: @"图片压缩失败"}]);
             });
             return;
         }
@@ -551,7 +690,7 @@ static const NSInteger kDefaultBackgroundTag = 99995;
             });
         } else {
             dispatch_async(dispatch_get_main_queue(), ^{
-                if (completion) completion(NO, [NSError errorWithDomain:@"BackgroundManager" code:3 userInfo:@{NSLocalizedDescriptionKey: @"ä¿å­å¾çå¤±è´¥"}]);
+                if (completion) completion(NO, [NSError errorWithDomain:@"BackgroundManager" code:3 userInfo:@{NSLocalizedDescriptionKey: @"保存图片失败"}]);
             });
         }
     });
@@ -560,7 +699,7 @@ static const NSInteger kDefaultBackgroundTag = 99995;
 - (void)setVideoBackgroundWithURL:(NSURL *)videoURL completion:(void (^)(BOOL success, NSError * _Nullable error))completion {
     if (!videoURL || ![[NSFileManager defaultManager] fileExistsAtPath:videoURL.path]) {
         if (completion) {
-            completion(NO, [NSError errorWithDomain:@"BackgroundManager" code:4 userInfo:@{NSLocalizedDescriptionKey: @"è§é¢æä»¶ä¸å­å¨"}]);
+            completion(NO, [NSError errorWithDomain:@"BackgroundManager" code:4 userInfo:@{NSLocalizedDescriptionKey: @"视频文件不存在"}]);
         }
         return;
     }
@@ -593,7 +732,7 @@ static const NSInteger kDefaultBackgroundTag = 99995;
             });
         } else {
             dispatch_async(dispatch_get_main_queue(), ^{
-                if (completion) completion(NO, copyError ?: [NSError errorWithDomain:@"BackgroundManager" code:5 userInfo:@{NSLocalizedDescriptionKey: @"å¤å¶è§é¢å¤±è´¥"}]);
+                if (completion) completion(NO, copyError ?: [NSError errorWithDomain:@"BackgroundManager" code:5 userInfo:@{NSLocalizedDescriptionKey: @"复制视频失败"}]);
             });
         }
     });

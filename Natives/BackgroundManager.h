@@ -17,6 +17,11 @@ typedef NS_ENUM(NSInteger, BackgroundType) {
     BackgroundTypeVideo
 };
 
+typedef NS_ENUM(NSInteger, BackgroundUIEffect) {
+    BackgroundUIEffectTranslucent = 0,  // 半透明
+    BackgroundUIEffectBlur              // 毛玻璃效果
+};
+
 @interface BackgroundManager : NSObject
 
 + (instancetype)sharedManager;
@@ -24,6 +29,10 @@ typedef NS_ENUM(NSInteger, BackgroundType) {
 // Background type
 @property (nonatomic, readonly) BackgroundType currentType;
 @property (nonatomic, readonly, nullable) NSString *currentBackgroundPath;
+
+// UI effect settings (for custom background)
+@property (nonatomic, assign) BackgroundUIEffect uiEffect;
+@property (nonatomic, assign) CGFloat uiOpacity;  // 0.0 ~ 1.0
 
 // Global background container
 @property (nonatomic, strong, readonly, nullable) UIView *globalBackgroundContainer;
@@ -60,6 +69,9 @@ typedef NS_ENUM(NSInteger, BackgroundType) {
 // Make view controllers transparent (for global background visibility)
 - (void)makeViewControllerTransparent:(UIViewController *)viewController;
 - (void)makeSplitViewControllerTransparent:(UISplitViewController *)splitVC;
+
+// Apply UI effect settings to current split view controller
+- (void)refreshUIEffect;
 
 @end
 

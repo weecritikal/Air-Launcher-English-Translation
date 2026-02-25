@@ -9,9 +9,11 @@
 #import "BackgroundManager.h"
 #import "ImageCropperViewController.h"
 
-@interface BackgroundSettingsViewController ()
+@interface BackgroundSettingsViewController () <UISliderAccessibilityDelegate>
 @property (nonatomic, strong) NSArray<NSArray *> *sections;
 @property (nonatomic, strong) UIImageView *previewImageView;
+@property (nonatomic, strong) UISlider *opacitySlider;
+@property (nonatomic, weak) UILabel *opacityValueLabel;
 @end
 
 @implementation BackgroundSettingsViewController
@@ -105,7 +107,7 @@
         self.previewImageView.image = nil;
         UILabel *placeholder = (UILabel *)[self.previewImageView viewWithTag:100];
         placeholder.hidden = NO;
-        placeholder.text = @"🎬 视频背景";
+        placeholder.text = @"视频背景";
     } else {
         self.previewImageView.image = nil;
         UILabel *placeholder = (UILabel *)[self.previewImageView viewWithTag:100];
@@ -115,10 +117,12 @@
 }
 
 - (void)setupSections {
+    // Sections: [UI效果设置], [选择背景类型], [图片背景, 视频背景], [恢复默认背景, 清除背景]
     self.sections = @[
+        @[@"UI效果", @"透明度"],
         @[@"选择背景类型"],
         @[@"图片背景", @"视频背景"],
-        @[@"清除背景"]
+        @[@"恢复默认背景", @"清除背景"]
     ];
 }
 
@@ -133,15 +137,92 @@
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
+    // 如果没有自定义背景，隐藏UI效果设置部分
+    if (section == 0 && ![[BackgroundManager sharedManager] hasBackground]) {
+        return 0;
+    }
     return [self.sections[section] count];
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
+    if (section == 0 && ![[BackgroundManager sharedManager] hasBackground]) {
+        return nil;
+    }
     return self.sections[section][0];
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     static NSString *cellIdentifier = @"BackgroundCell";
+    static NSString *sliderCellIdentifier = @"SliderCell";
+    
+    BackgroundManager *manager = [BackgroundManager sharedManager];
+    BOOL hasBackground = [manager hasBackground];
+    
+    // UI效果设置部分
+    if (indexPath.section == 0 && hasBackground) {
+        if (indexPath.row == 0) {
+            // UI效果选择
+            UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:cellIdentifier];
+            if (!cell) {
+                cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:cellIdentifier];
+            }
+            
+            cell.textLabel.text = @"UI效果";
+            
+            NSString *effectName = manager.uiEffect == BackgroundUIEffectBlur ? @"毛玻璃" : @"半透明";
+            cell.detailTextLabel.text = effectName;
+            cell.imageView.image = [UIImage systemImageNamed:@"rectangle.split.3x3"];
+            cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+            
+            [self styleCell:cell hasBackground:hasBackground];
+            return cell;
+            
+        } else if (indexPath.row == 1) {
+            // 透明度滑块
+            UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:sliderCellIdentifier];
+            if (!cell) {
+                cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:sliderCellIdentifier];
+                cell.selectionStyle = UITableViewCellSelectionStyleNone;
+                
+                // 创建滑块
+                UISlider *slider = [[UISlider alloc] initWithFrame:CGRectMake(16, 0, cell.bounds.size.width - 120, 30)];
+                slider.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+                slider.minimumValue = 0.1f;
+                slider.maximumValue = 1.0f;
+                slider.tag = 200;
+                [slider addTarget:self action:@selector(opacitySliderChanged:) forControlEvents:UIControlEventValueChanged];
+                
+                // 创建数值标签
+                UILabel *valueLabel = [[UILabel alloc] initWithFrame:CGRectMake(cell.bounds.size.width - 80, 0, 60, 30)];
+                valueLabel.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin;
+                valueLabel.textAlignment = NSTextAlignmentRight;
+                valueLabel.tag = 201;
+                valueLabel.font = [UIFont monospacedDigitSystemFontOfSize:14 weight:UIFontWeightRegular];
+                
+                [cell.contentView addSubview:slider];
+                [cell.contentView addSubview:valueLabel];
+                
+                cell.contentView.layoutMargins = UIEdgeInsetsMake(8, 16, 8, 16);
+            }
+            
+            [self styleCell:cell hasBackground:hasBackground];
+            
+            UISlider *slider = [cell.contentView viewWithTag:200];
+            slider.value = manager.uiOpacity;
+            
+            UILabel *valueLabel = [cell.contentView viewWithTag:201];
+            valueLabel.text = [NSString stringWithFormat:@"%.0f%%", manager.uiOpacity * 100];
+            valueLabel.textColor = hasBackground ? [UIColor whiteColor] : [UIColor labelColor];
+            self.opacityValueLabel = valueLabel;
+            
+            cell.textLabel.text = nil;
+            cell.imageView.image = [UIImage systemImageNamed:@"slider.horizontal.3"];
+            
+            return cell;
+        }
+    }
+    
+    // 其他部分
     UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:cellIdentifier];
     if (!cell) {
         cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:cellIdentifier];
@@ -149,19 +230,16 @@
     
     NSString *title = self.sections[indexPath.section][indexPath.row];
     cell.textLabel.text = title;
+    cell.detailTextLabel.text = nil;
     
-    // Set cell background for transparency
-    if ([[BackgroundManager sharedManager] hasBackground]) {
-        cell.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.7];
-        cell.textLabel.textColor = [UIColor whiteColor];
-    } else {
-        cell.backgroundColor = [UIColor secondarySystemBackgroundColor];
-        cell.textLabel.textColor = [UIColor labelColor];
-    }
-    
-    BackgroundManager *manager = [BackgroundManager sharedManager];
+    [self styleCell:cell hasBackground:hasBackground];
     
     if (indexPath.section == 1) {
+        // 选择背景类型标题
+        cell.textLabel.textColor = [UIColor secondaryLabelColor];
+        cell.imageView.image = nil;
+        cell.accessoryType = UITableViewCellAccessoryNone;
+    } else if (indexPath.section == 2) {
         if (indexPath.row == 0) {
             cell.imageView.image = [UIImage systemImageNamed:@"photo"];
             cell.accessoryType = [manager hasImageBackground] ? UITableViewCellAccessoryCheckmark : UITableViewCellAccessoryNone;
@@ -169,13 +247,43 @@
             cell.imageView.image = [UIImage systemImageNamed:@"film"];
             cell.accessoryType = [manager hasVideoBackground] ? UITableViewCellAccessoryCheckmark : UITableViewCellAccessoryNone;
         }
-    } else if (indexPath.section == 2) {
-        cell.imageView.image = [UIImage systemImageNamed:@"xmark.circle"];
-        cell.textLabel.textColor = [UIColor systemRedColor];
-        cell.accessoryType = UITableViewCellAccessoryNone;
+    } else if (indexPath.section == 3) {
+        if (indexPath.row == 0) {
+            // 恢复默认背景
+            cell.imageView.image = [UIImage systemImageNamed:@"arrow.counterclockwise"];
+            cell.textLabel.textColor = [UIColor systemBlueColor];
+            cell.accessoryType = UITableViewCellAccessoryNone;
+        } else if (indexPath.row == 1) {
+            // 清除背景
+            cell.imageView.image = [UIImage systemImageNamed:@"xmark.circle"];
+            cell.textLabel.textColor = [UIColor systemRedColor];
+            cell.accessoryType = UITableViewCellAccessoryNone;
+        }
     }
     
     return cell;
+}
+
+- (void)styleCell:(UITableViewCell *)cell hasBackground:(BOOL)hasBackground {
+    if (hasBackground) {
+        cell.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.7];
+        cell.textLabel.textColor = [UIColor whiteColor];
+    } else {
+        cell.backgroundColor = [UIColor secondarySystemBackgroundColor];
+        cell.textLabel.textColor = [UIColor labelColor];
+    }
+}
+
+#pragma mark - Slider Actions
+
+- (void)opacitySliderChanged:(UISlider *)slider {
+    CGFloat value = slider.value;
+    [BackgroundManager sharedManager].uiOpacity = value;
+    
+    self.opacityValueLabel.text = [NSString stringWithFormat:@"%.0f%%", value * 100];
+    
+    // 实时刷新UI效果
+    [[BackgroundManager sharedManager] refreshUIEffect];
 }
 
 #pragma mark - Table View Delegate
@@ -183,15 +291,68 @@
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
     
-    if (indexPath.section == 1) {
+    BackgroundManager *manager = [BackgroundManager sharedManager];
+    BOOL hasBackground = [manager hasBackground];
+    
+    // UI效果设置部分
+    if (indexPath.section == 0 && hasBackground) {
+        if (indexPath.row == 0) {
+            [self showUIEffectPicker];
+        }
+        return;
+    }
+    
+    if (indexPath.section == 2) {
         if (indexPath.row == 0) {
             [self selectImageBackground];
         } else if (indexPath.row == 1) {
             [self selectVideoBackground];
         }
-    } else if (indexPath.section == 2) {
-        [self clearBackground];
+    } else if (indexPath.section == 3) {
+        if (indexPath.row == 0) {
+            [self restoreDefaultBackground];
+        } else if (indexPath.row == 1) {
+            [self clearBackground];
+        }
     }
+}
+
+- (void)showUIEffectPicker {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"选择UI效果"
+                                                                   message:nil
+                                                            preferredStyle:UIAlertControllerStyleActionSheet];
+    
+    BackgroundManager *manager = [BackgroundManager sharedManager];
+    
+    [alert addAction:[UIAlertAction actionWithTitle:@"毛玻璃效果"
+                                              style:manager.uiEffect == BackgroundUIEffectBlur ? UIAlertActionStyleDefault : UIAlertActionStyleDefault
+                                            handler:^(UIAlertAction * _Nonnull action) {
+        manager.uiEffect = BackgroundUIEffectBlur;
+        [manager refreshUIEffect];
+        [self.tableView reloadData];
+        [[NSNotificationCenter defaultCenter] postNotificationName:@"BackgroundUIEffectChanged" object:nil];
+    }]];
+    
+    [alert addAction:[UIAlertAction actionWithTitle:@"半透明效果"
+                                              style:manager.uiEffect == BackgroundUIEffectTranslucent ? UIAlertActionStyleDefault : UIAlertActionStyleDefault
+                                            handler:^(UIAlertAction * _Nonnull action) {
+        manager.uiEffect = BackgroundUIEffectTranslucent;
+        [manager refreshUIEffect];
+        [self.tableView reloadData];
+        [[NSNotificationCenter defaultCenter] postNotificationName:@"BackgroundUIEffectChanged" object:nil];
+    }]];
+    
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消"
+                                              style:UIAlertActionStyleCancel
+                                            handler:nil]];
+    
+    if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
+        UITableViewCell *cell = [self.tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:0 inSection:0]];
+        alert.popoverPresentationController.sourceView = cell ?: self.view;
+        alert.popoverPresentationController.sourceRect = cell ? cell.bounds : self.view.bounds;
+    }
+    
+    [self presentViewController:alert animated:YES completion:nil];
 }
 
 #pragma mark - Background Selection
@@ -218,7 +379,7 @@
                                             handler:nil]];
     
     if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
-        UITableViewCell *cell = [self.tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:0 inSection:1]];
+        UITableViewCell *cell = [self.tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:0 inSection:2]];
         alert.popoverPresentationController.sourceView = cell;
         alert.popoverPresentationController.sourceRect = cell.bounds;
     }
@@ -248,10 +409,44 @@
                                             handler:nil]];
     
     if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
-        UITableViewCell *cell = [self.tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:1 inSection:1]];
+        UITableViewCell *cell = [self.tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:1 inSection:2]];
         alert.popoverPresentationController.sourceView = cell;
         alert.popoverPresentationController.sourceRect = cell.bounds;
     }
+    
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)restoreDefaultBackground {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"恢复默认背景"
+                                                                   message:@"确定要恢复默认背景设置吗？这将清除自定义背景并重置UI效果设置。"
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消"
+                                              style:UIAlertActionStyleCancel
+                                            handler:nil]];
+    
+    [alert addAction:[UIAlertAction actionWithTitle:@"恢复"
+                                              style:UIAlertActionStyleDestructive
+                                            handler:^(UIAlertAction * _Nonnull action) {
+        // 清除背景
+        [[BackgroundManager sharedManager] clearBackground];
+        
+        // 重置UI效果设置
+        BackgroundManager *manager = [BackgroundManager sharedManager];
+        manager.uiEffect = BackgroundUIEffectBlur;
+        manager.uiOpacity = 0.7;
+        
+        [self updatePreview];
+        [self.tableView reloadData];
+        
+        // 恢复默认背景色
+        self.view.backgroundColor = [UIColor systemBackgroundColor];
+        self.tableView.backgroundColor = [UIColor systemBackgroundColor];
+        self.tableView.backgroundView = nil;
+        
+        [[NSNotificationCenter defaultCenter] postNotificationName:@"BackgroundChanged" object:nil];
+    }]];
     
     [self presentViewController:alert animated:YES completion:nil];
 }
