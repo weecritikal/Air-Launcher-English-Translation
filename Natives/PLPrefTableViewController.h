@@ -1,5 +1,10 @@
 #import <UIKit/UIKit.h>
 
+typedef NS_ENUM(NSInteger, PLSettingsLayoutMode) {
+    PLSettingsLayoutModeClassic = 0,
+    PLSettingsLayoutModeCard = 1
+};
+
 typedef void(^CreateView)(UITableViewCell *, NSString *,NSString *, NSDictionary *);
 typedef id (^GetPreferenceBlock)(NSString *, NSString *);
 typedef void (^SetPreferenceBlock)(NSString *, NSString *, id);
@@ -17,6 +22,10 @@ typedef void (^SetPreferenceBlock)(NSString *, NSString *, id);
 @property(nonatomic) NSArray<NSArray<NSDictionary*>*>* prefContents;
 @property(nonatomic) BOOL prefDetailVisible;
 
+// 布局模式
+@property(nonatomic) PLSettingsLayoutMode layoutMode;
+// 布局切换器
+@property(nonatomic) UISegmentedControl *layoutSwitcher;
 // 控制是否显示列表/卡片布局切换器，默认为 NO
 @property(nonatomic) BOOL showLayoutSwitcher;
 
