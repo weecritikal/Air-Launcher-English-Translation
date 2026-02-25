@@ -1,7 +1,7 @@
 #import "LauncherMenuViewController.h"
 #import "LauncherPreferencesViewController.h"
 #import "VersionManagerViewController.h"
-#import "ProfileSettingsViewController.h"
+#import "LauncherProfileEditorViewController.h"
 #import "PLProfiles.h"
 #import "utils.h"
 
@@ -180,7 +180,7 @@
     }
     
     // 发送通知让 LauncherRootViewController 在中间内容区显示
-    [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowProfileSettings" object:currentProfile];
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowProfileEditor" object:currentProfile];
 }
 
 - (void)showSettings {

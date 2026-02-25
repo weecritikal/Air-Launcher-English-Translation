@@ -87,6 +87,9 @@ static PLProfiles* current;
 - (void)setSelectedProfileName:(NSString *)name {
     self.profileDict[@"selectedProfile"] = (id)name;
     [self save];
+    
+    // 发送版本切换通知
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"SelectedProfileChanged" object:name];
 }
 
 - (void)save {

@@ -4,9 +4,10 @@
 #import "LauncherRightPanelViewController.h"
 #import "DownloadViewController.h"
 #import "VersionManagerViewController.h"
-#import "ProfileSettingsViewController.h"
+#import "LauncherProfileEditorViewController.h"
 #import "LauncherPreferencesViewController.h"
 #import "BackgroundManager.h"
+#import "PLProfiles.h"
 
 // 布局常量
 static const CGFloat kSidebarWidth = 70.0;      // 左侧边栏宽度
@@ -20,6 +21,9 @@ static const CGFloat kRightPanelWidth = 220.0;  // 右侧面板宽度
 
 @property(nonatomic, strong) NSLayoutConstraint *contentLeadingConstraint;
 @property(nonatomic, strong) NSLayoutConstraint *contentTrailingConstraint;
+
+@property(nonatomic, assign) BOOL isShowingProfileEditor;
+@property(nonatomic, strong) LauncherProfileEditorViewController *profileEditorVC;
 
 @end
 
@@ -142,8 +146,8 @@ static const CGFloat kRightPanelWidth = 220.0;  // 右侧面板宽度
                                                  name:@"ShowVersionManager"
                                                object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self
-                                             selector:@selector(showProfileSettings:)
-                                                 name:@"ShowProfileSettings"
+                                             selector:@selector(showProfileEditor:)
+                                                 name:@"ShowProfileEditor"
                                                object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(showSettings)
@@ -156,6 +160,11 @@ static const CGFloat kRightPanelWidth = 220.0;  // 右侧面板宽度
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(backgroundChanged)
                                                  name:@"BackgroundChanged"
+                                               object:nil];
+    // 监听版本切换，重新加载编辑器
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(reloadProfileEditorIfNeeded)
+                                                 name:@"SelectedProfileChanged"
                                                object:nil];
 }
 
@@ -176,12 +185,34 @@ static const CGFloat kRightPanelWidth = 220.0;  // 右侧面板宽度
     [self setContentViewController:vc animated:YES];
 }
 
-- (void)showProfileSettings:(NSNotification *)notification {
-    // 在中间内容区显示版本设置页面
+- (void)showProfileEditor:(NSNotification *)notification {
+    // 在中间内容区显示版本编辑器页面
     NSString *profileName = notification.object;
-    ProfileSettingsViewController *vc = [[ProfileSettingsViewController alloc] init];
-    vc.profileName = profileName;
-    [self setContentViewController:vc animated:YES];
+    
+    LauncherProfileEditorViewController *vc = [[LauncherProfileEditorViewController alloc] init];
+    vc.profile = [PLProfiles.current.profiles[profileName] mutableCopy];
+    if (!vc.profile) {
+        vc.profile = [NSMutableDictionary dictionary];
+        vc.profile[@"name"] = profileName;
+    }
+    
+    // 包装在导航控制器中
+    UINavigationController *navVC = [[UINavigationController alloc] initWithRootViewController:vc];
+    navVC.navigationBar.prefersLargeTitles = NO;
+    
+    self.profileEditorVC = vc;
+    self.isShowingProfileEditor = YES;
+    [self setContentViewController:navVC animated:YES];
+}
+
+- (void)reloadProfileEditorIfNeeded {
+    // 如果当前正在显示编辑器页面，重新加载
+    if (self.isShowingProfileEditor) {
+        NSString *currentProfile = PLProfiles.current.selectedProfileName;
+        if (currentProfile) {
+            [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowProfileEditor" object:currentProfile];
+        }
+    }
 }
 
 - (void)showSettings {
@@ -212,6 +243,13 @@ static const CGFloat kRightPanelWidth = 220.0;  // 右侧面板宽度
 
 - (void)setContentViewController:(UIViewController *)viewController animated:(BOOL)animated {
     if (!viewController) return;
+    
+    // 检查是否切换到非编辑器页面
+    if (![viewController isKindOfClass:[UINavigationController class]] ||
+        ![((UINavigationController *)viewController).topViewController isKindOfClass:[LauncherProfileEditorViewController class]]) {
+        self.isShowingProfileEditor = NO;
+        self.profileEditorVC = nil;
+    }
     
     UIViewController *oldVC = _contentViewController;
     

@@ -76,14 +76,16 @@
     self.layoutSwitcher.translatesAutoresizingMaskIntoConstraints = NO;
     [self.layoutSwitcher addTarget:self action:@selector(layoutModeChanged:) forControlEvents:UIControlEventValueChanged];
     
-    // 创建卡片头部视图
+    // 创建头部视图
     self.cardHeaderView = [[UIView alloc] init];
-    self.cardHeaderView.translatesAutoresizingMaskIntoConstraints = NO;
+    // 注意：作为 tableHeaderView 需要用 frame 布局，不能用 Auto Layout
     [self.cardHeaderView addSubview:self.layoutSwitcher];
     
+    // 设置 layoutSwitcher 的宽度和居中
     [NSLayoutConstraint activateConstraints:@[
         [self.layoutSwitcher.topAnchor constraintEqualToAnchor:self.cardHeaderView.topAnchor constant:8],
         [self.layoutSwitcher.centerXAnchor constraintEqualToAnchor:self.cardHeaderView.centerXAnchor],
+        [self.layoutSwitcher.widthAnchor constraintEqualToConstant:200],
         [self.layoutSwitcher.bottomAnchor constraintEqualToAnchor:self.cardHeaderView.bottomAnchor constant:-8]
     ]];
 }
@@ -99,8 +101,12 @@
     self.layoutMode = mode;
     [self saveLayoutPreference];
     
+    // 移除旧的 tableView
+    [self.tableView removeFromSuperview];
+    
     // 重新创建tableView
     [self setupTableView];
+    self.tableView.translatesAutoresizingMaskIntoConstraints = NO;
     
     // 设置头部视图（包含布局切换器），两种模式都显示
     CGFloat headerWidth = self.view.bounds.size.width - 24;
@@ -108,6 +114,15 @@
     self.tableView.tableHeaderView = self.cardHeaderView;
     
     [self.view addSubview:self.tableView];
+    
+    // 设置 tableView 约束
+    [NSLayoutConstraint activateConstraints:@[
+        [self.tableView.topAnchor constraintEqualToAnchor:self.view.topAnchor],
+        [self.tableView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.tableView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.tableView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor]
+    ]];
+    
     [self.tableView reloadData];
 }
 
@@ -182,8 +197,8 @@
         self.navigationItem.rightBarButtonItems = @[[self drawAccountButton], [self drawHelpButton]];
     }
     
-    // 卡片式布局时设置tableHeaderView
-    if (self.layoutMode == PLSettingsLayoutModeCard && self.cardHeaderView) {
+    // 两种布局模式都显示布局切换器
+    if (self.cardHeaderView) {
         CGFloat headerWidth = self.view.bounds.size.width - 24;
         self.cardHeaderView.frame = CGRectMake(0, 0, headerWidth, 50);
         self.tableView.tableHeaderView = self.cardHeaderView;
