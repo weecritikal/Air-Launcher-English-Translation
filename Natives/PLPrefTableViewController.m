@@ -97,14 +97,10 @@
     // 重新创建tableView
     [self setupTableView];
     
-    // 如果有卡片头部视图，设置为tableHeaderView
-    if (mode == PLSettingsLayoutModeCard) {
-        CGFloat headerWidth = self.view.bounds.size.width - 24;
-        self.cardHeaderView.frame = CGRectMake(0, 0, headerWidth, 50);
-        self.tableView.tableHeaderView = self.cardHeaderView;
-    } else {
-        self.tableView.tableHeaderView = nil;
-    }
+    // 设置头部视图（包含布局切换器），两种模式都显示
+    CGFloat headerWidth = self.view.bounds.size.width - 24;
+    self.cardHeaderView.frame = CGRectMake(0, 0, headerWidth, 50);
+    self.tableView.tableHeaderView = self.cardHeaderView;
     
     [self.view addSubview:self.tableView];
     [self.tableView reloadData];
