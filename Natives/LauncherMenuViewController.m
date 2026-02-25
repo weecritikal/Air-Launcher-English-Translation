@@ -1,197 +1,470 @@
-#import "LauncherMenuViewController.h"
-#import "LauncherPreferencesViewController.h"
-#import "VersionManagerViewController.h"
-#import "ProfileSettingsViewController.h"
-#import "PLProfiles.h"
+#import "LauncherNewsViewController.h"
+#import "authenticator/BaseAuthenticator.h"
+#import "LauncherPreferences.h"
 #import "utils.h"
+#import "ios_uikit_bridge.h"
+#import <QuartzCore/QuartzCore.h>
 
-@interface LauncherMenuViewController ()
+// MARK: - Modern Tile Base Cell
 
-@property(nonatomic, strong) UIView *sidebarView;
-@property(nonatomic, strong) NSArray<NSDictionary *> *menuItems;
-@property(nonatomic, assign) NSInteger selectedIndex;
+@interface NewsBaseCell : UICollectionViewCell
+@property (nonatomic, strong) UIVisualEffectView *blurView;
+@property (nonatomic, strong) UIView *contentContainer;
+
+- (void)setupViews;
+@end
+
+@implementation NewsBaseCell
+
+- (instancetype)initWithFrame:(CGRect)frame {
+    self = [super initWithFrame:frame];
+    if (self) {
+        [self setupViews];
+    }
+    return self;
+}
+
+- (void)setupViews {
+    // 磁贴阴影
+    self.layer.shadowColor = [UIColor blackColor].CGColor;
+    self.layer.shadowOffset = CGSizeMake(0, 4);
+    self.layer.shadowOpacity = 0.1;
+    self.layer.shadowRadius = 8;
+    self.layer.masksToBounds = NO;
+    
+    // 模糊背景容器
+    UIBlurEffect *blurEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial];
+    self.blurView = [[UIVisualEffectView alloc] initWithEffect:blurEffect];
+    self.blurView.frame = self.contentView.bounds;
+    self.blurView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    self.blurView.layer.cornerRadius = 16;
+    self.blurView.layer.masksToBounds = YES;
+    // 边框增加质感
+    self.blurView.layer.borderWidth = 0.5;
+    self.blurView.layer.borderColor = [UIColor separatorColor].CGColor;
+    
+    [self.contentView addSubview:self.blurView];
+    
+    // 内容容器
+    self.contentContainer = [[UIView alloc] initWithFrame:self.contentView.bounds];
+    self.contentContainer.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    [self.contentView addSubview:self.contentContainer];
+}
+
+// 非线性按压动画
+- (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
+    [super touchesBegan:touches withEvent:event];
+    [UIView animateWithDuration:0.4 delay:0 usingSpringWithDamping:0.5 initialSpringVelocity:0.5 options:UIViewAnimationOptionAllowUserInteraction animations:^{
+        self.transform = CGAffineTransformMakeScale(0.96, 0.96);
+    } completion:nil];
+}
+
+- (void)touchesEnded:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
+    [super touchesEnded:touches withEvent:event];
+    [UIView animateWithDuration:0.4 delay:0 usingSpringWithDamping:0.5 initialSpringVelocity:0.5 options:UIViewAnimationOptionAllowUserInteraction animations:^{
+        self.transform = CGAffineTransformIdentity;
+    } completion:nil];
+}
+
+- (void)touchesCancelled:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
+    [super touchesCancelled:touches withEvent:event];
+    [UIView animateWithDuration:0.4 delay:0 usingSpringWithDamping:0.5 initialSpringVelocity:0.5 options:UIViewAnimationOptionAllowUserInteraction animations:^{
+        self.transform = CGAffineTransformIdentity;
+    } completion:nil];
+}
 
 @end
 
-@implementation LauncherMenuViewController
+// MARK: - Skin Profile Cell
 
-#pragma mark - Lifecycle
+@interface SkinProfileCell : NewsBaseCell
+@property (nonatomic, strong) UIImageView *skinImageView;
+@property (nonatomic, strong) UILabel *welcomeLabel;
+@property (nonatomic, strong) UILabel *subLabel;
+@end
+
+@implementation SkinProfileCell
+
+- (void)setupViews {
+    [super setupViews];
+    
+    // 皮肤预览
+    self.skinImageView = [[UIImageView alloc] init];
+    self.skinImageView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.skinImageView.contentMode = UIViewContentModeScaleAspectFit;
+    // 增加一点阴影让皮肤立体
+    self.skinImageView.layer.shadowColor = [UIColor blackColor].CGColor;
+    self.skinImageView.layer.shadowOffset = CGSizeMake(0, 2);
+    self.skinImageView.layer.shadowOpacity = 0.3;
+    self.skinImageView.layer.shadowRadius = 4;
+    
+    [self.contentContainer addSubview:self.skinImageView];
+    
+    // 欢迎文本
+    self.welcomeLabel = [[UILabel alloc] init];
+    self.welcomeLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.welcomeLabel.font = [UIFont systemFontOfSize:22 weight:UIFontWeightBold]; // 使用 boldSystemFont 的现代替代
+    self.welcomeLabel.textColor = [UIColor labelColor];
+    self.welcomeLabel.numberOfLines = 1;
+    [self.contentContainer addSubview:self.welcomeLabel];
+    
+    // 副标题
+    self.subLabel = [[UILabel alloc] init];
+    self.subLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.subLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline];
+    self.subLabel.textColor = [UIColor secondaryLabelColor];
+    self.subLabel.text = @"准备就绪";
+    [self.contentContainer addSubview:self.subLabel];
+    
+    // 布局约束
+    [NSLayoutConstraint activateConstraints:@[
+        [self.skinImageView.centerYAnchor constraintEqualToAnchor:self.contentContainer.centerYAnchor],
+        [self.skinImageView.leadingAnchor constraintEqualToAnchor:self.contentContainer.leadingAnchor constant:20],
+        [self.skinImageView.heightAnchor constraintEqualToAnchor:self.contentContainer.heightAnchor multiplier:0.8],
+        [self.skinImageView.widthAnchor constraintEqualToAnchor:self.skinImageView.heightAnchor multiplier:0.6], // 皮肤比例
+        
+        [self.welcomeLabel.leadingAnchor constraintEqualToAnchor:self.skinImageView.trailingAnchor constant:20],
+        [self.welcomeLabel.topAnchor constraintEqualToAnchor:self.skinImageView.topAnchor constant:10],
+        [self.welcomeLabel.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-20],
+        
+        [self.subLabel.leadingAnchor constraintEqualToAnchor:self.welcomeLabel.leadingAnchor],
+        [self.subLabel.topAnchor constraintEqualToAnchor:self.welcomeLabel.bottomAnchor constant:4],
+        [self.subLabel.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-20]
+    ]];
+}
+
+@end
+
+// MARK: - Info Tile Cell
+
+@interface InfoTileCell : NewsBaseCell
+@property (nonatomic, strong) UILabel *titleLabel;
+@property (nonatomic, strong) UILabel *valueLabel;
+@property (nonatomic, strong) UIImageView *iconView;
+@end
+
+@implementation InfoTileCell
+
+- (void)setupViews {
+    [super setupViews];
+    
+    self.iconView = [[UIImageView alloc] init];
+    self.iconView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.iconView.contentMode = UIViewContentModeScaleAspectFit;
+    self.iconView.tintColor = [UIColor systemBlueColor];
+    [self.contentContainer addSubview:self.iconView];
+    
+    self.titleLabel = [[UILabel alloc] init];
+    self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.titleLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleCaption1];
+    self.titleLabel.textColor = [UIColor secondaryLabelColor];
+    [self.contentContainer addSubview:self.titleLabel];
+    
+    self.valueLabel = [[UILabel alloc] init];
+    self.valueLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.valueLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
+    self.valueLabel.textColor = [UIColor labelColor];
+    self.valueLabel.numberOfLines = 0;
+    [self.contentContainer addSubview:self.valueLabel];
+    
+    [NSLayoutConstraint activateConstraints:@[
+        [self.iconView.topAnchor constraintEqualToAnchor:self.contentContainer.topAnchor constant:16],
+        [self.iconView.leadingAnchor constraintEqualToAnchor:self.contentContainer.leadingAnchor constant:16],
+        [self.iconView.widthAnchor constraintEqualToConstant:24],
+        [self.iconView.heightAnchor constraintEqualToConstant:24],
+        
+        [self.titleLabel.centerYAnchor constraintEqualToAnchor:self.iconView.centerYAnchor],
+        [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.iconView.trailingAnchor constant:8],
+        [self.titleLabel.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-16],
+        
+        [self.valueLabel.topAnchor constraintEqualToAnchor:self.iconView.bottomAnchor constant:8],
+        [self.valueLabel.leadingAnchor constraintEqualToAnchor:self.contentContainer.leadingAnchor constant:16],
+        [self.valueLabel.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-16],
+        [self.valueLabel.bottomAnchor constraintLessThanOrEqualToAnchor:self.contentContainer.bottomAnchor constant:-16]
+    ]];
+}
+
+@end
+
+// MARK: - View Controller
+
+@interface LauncherNewsViewController () <UICollectionViewDataSource, UICollectionViewDelegate>
+
+@property (nonatomic, strong) UICollectionView *collectionView;
+@property (nonatomic, strong) NSString *latestRelease;
+@property (nonatomic, strong) NSString *latestSnapshot;
+@property (nonatomic, strong) NSString *currentUsername;
+@property (nonatomic, strong) UIImage *currentSkin;
+@property (nonatomic, assign) BOOL isLoadingVersions;
+
+@end
+
+@implementation LauncherNewsViewController
+
+- (id)init {
+    self = [super init];
+    if (self) {
+        self.title = @"主页";
+        self.latestRelease = @"检测中...";
+        self.latestSnapshot = @"检测中...";
+        self.isLoadingVersions = YES;
+    }
+    return self;
+}
+
+- (NSString *)imageName {
+    return @"MenuNews";
+}
 
 - (void)viewDidLoad {
     [super viewDidLoad];
     
     self.view.backgroundColor = [UIColor clearColor];
+    self.navigationController.navigationBarHidden = YES;
     
-    // 菜单项配置
-    self.menuItems = @[
-        @{@"icon": @"house.fill", @"title": @" ", @"index": @0},
-        @{@"icon": @"arrow.down.circle.fill", @"title": @" ", @"index": @1},
-        @{@"icon": @"puzzlepiece.fill", @"title": @" ", @"index": @2},
-        @{@"icon": @"paintbrush.fill", @"title": @" ", @"index": @3},
-        @{@"icon": @"gearshape.fill", @"title": @" ", @"index": @4}
-    ];
+    [self setupCollectionView];
+    [self updateSkinDisplay];
+    [self checkMinecraftVersions];
     
-    self.selectedIndex = 0;
-    
-    [self setupSidebar];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(updateSkinDisplay)
+                                                 name:@"AccountChanged"
+                                               object:nil];
 }
 
-#pragma mark - UI Setup
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
 
-- (void)setupSidebar {
-    self.sidebarView = [[UIView alloc] init];
-    self.sidebarView.translatesAutoresizingMaskIntoConstraints = NO;
-    self.sidebarView.backgroundColor = [UIColor clearColor];
-    [self.view addSubview:self.sidebarView];
+- (void)setupCollectionView {
+    UICollectionViewLayout *layout = [self createLayout];
+    self.collectionView = [[UICollectionView alloc] initWithFrame:self.view.bounds collectionViewLayout:layout];
+    self.collectionView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    self.collectionView.backgroundColor = [UIColor clearColor];
+    self.collectionView.dataSource = self;
+    self.collectionView.delegate = self;
     
-    [NSLayoutConstraint activateConstraints:@[
-        [self.sidebarView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
-        [self.sidebarView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [self.sidebarView.topAnchor constraintEqualToAnchor:self.view.topAnchor],
-        [self.sidebarView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor]
-    ]];
+    [self.collectionView registerClass:[SkinProfileCell class] forCellWithReuseIdentifier:@"SkinCell"];
+    [self.collectionView registerClass:[InfoTileCell class] forCellWithReuseIdentifier:@"InfoCell"];
     
-    // 创建菜单按钮
-    CGFloat buttonSize = 50;
-    CGFloat spacing = 15;
-    CGFloat startY = 60;
-    
-    for (NSInteger i = 0; i < self.menuItems.count; i++) {
-        NSDictionary *item = self.menuItems[i];
-        UIButton *btn = [self createMenuButtonWithItem:item index:i];
-        [self.sidebarView addSubview:btn];
+    [self.view addSubview:self.collectionView];
+}
+
+- (UICollectionViewLayout *)createLayout {
+    // 现代 Compositional Layout
+    return [[UICollectionViewCompositionalLayout alloc] initWithSectionProvider:^NSCollectionLayoutSection * _Nullable(NSInteger sectionIndex, id<NSCollectionLayoutEnvironment> _Nonnull layoutEnvironment) {
         
-        [NSLayoutConstraint activateConstraints:@[
-            [btn.topAnchor constraintEqualToAnchor:self.sidebarView.topAnchor constant:startY + i * (buttonSize + spacing)],
-            [btn.centerXAnchor constraintEqualToAnchor:self.sidebarView.centerXAnchor],
-            [btn.widthAnchor constraintEqualToConstant:buttonSize],
-            [btn.heightAnchor constraintEqualToConstant:buttonSize]
-        ]];
-    }
-}
-
-- (UIButton *)createMenuButtonWithItem:(NSDictionary *)item index:(NSInteger)index {
-    UIButton *btn = [UIButton buttonWithType:UIButtonTypeSystem];
-    btn.translatesAutoresizingMaskIntoConstraints = NO;
-    btn.tag = index;
-    
-    // 设置图标
-    UIImage *icon = [UIImage systemImageNamed:item[@"icon"]];
-    [btn setImage:icon forState:UIControlStateNormal];
-    
-    // 设置颜色 - 选中项高亮
-    if (index == self.selectedIndex) {
-        btn.tintColor = [UIColor colorWithRed:0.26 green:0.63 blue:0.96 alpha:1.0];
-    } else {
-        btn.tintColor = [UIColor systemGrayColor];
-    }
-    
-    // 设置标题（在图标下方）
-    btn.titleLabel.font = [UIFont systemFontOfSize:10];
-    [btn setTitle:item[@"title"] forState:UIControlStateNormal];
-    [btn setTitleColor:(index == self.selectedIndex) ? [UIColor colorWithRed:0.26 green:0.63 blue:0.96 alpha:1.0] : [UIColor systemGrayColor] forState:UIControlStateNormal];
-    
-    // 垂直布局：图标在上，文字在下
-    btn.contentHorizontalAlignment = UIControlContentHorizontalAlignmentCenter;
-    btn.contentVerticalAlignment = UIControlContentVerticalAlignmentCenter;
-    btn.titleEdgeInsets = UIEdgeInsetsMake(30, -30, 0, 0);
-    btn.imageEdgeInsets = UIEdgeInsetsMake(-10, 0, 0, 0);
-    
-    [btn addTarget:self action:@selector(menuButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
-    
-    return btn;
-}
-
-#pragma mark - Actions
-
-- (void)menuButtonTapped:(UIButton *)sender {
-    NSInteger index = sender.tag;
-    
-    // 更新选中状态
-    self.selectedIndex = index;
-    [self updateButtonColors];
-    
-    // 回调
-    NSString *title = self.menuItems[index][@"title"];
-    if (self.onMenuItemSelected) {
-        self.onMenuItemSelected(index, title);
-    }
-    
-    // 处理导航
-    [self handleMenuSelection:index];
-}
-
-- (void)updateButtonColors {
-    for (UIView *view in self.sidebarView.subviews) {
-        if ([view isKindOfClass:[UIButton class]]) {
-            UIButton *btn = (UIButton *)view;
-            NSInteger index = btn.tag;
+        CGFloat width = layoutEnvironment.container.contentSize.width;
+        BOOL isiPad = width > 600; // 简单判断
+        
+        NSCollectionLayoutSection *section;
+        
+        if (sectionIndex == 0) {
+            // 用户资料 - 大横幅
+            NSCollectionLayoutSize *itemSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0]
+                                                                              heightDimension:[NSCollectionLayoutDimension fractionalHeightDimension:1.0]];
+            NSCollectionLayoutItem *item = [NSCollectionLayoutItem itemWithLayoutSize:itemSize];
             
-            if (index == self.selectedIndex) {
-                btn.tintColor = [UIColor colorWithRed:0.26 green:0.63 blue:0.96 alpha:1.0];
-                [btn setTitleColor:[UIColor colorWithRed:0.26 green:0.63 blue:0.96 alpha:1.0] forState:UIControlStateNormal];
-            } else {
-                btn.tintColor = [UIColor systemGrayColor];
-                [btn setTitleColor:[UIColor systemGrayColor] forState:UIControlStateNormal];
+            NSCollectionLayoutSize *groupSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0]
+                                                                               heightDimension:[NSCollectionLayoutDimension absoluteDimension:160]]; // 固定高度
+            NSCollectionLayoutGroup *group = [NSCollectionLayoutGroup horizontalGroupWithLayoutSize:groupSize subitems:@[item]];
+            
+            section = [NSCollectionLayoutSection sectionWithGroup:group];
+            section.contentInsets = NSDirectionalEdgeInsetsMake(20, 20, 10, 20);
+            
+        } else {
+            // 版本信息 - 磁贴网格
+            NSCollectionLayoutSize *itemSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:isiPad ? 0.5 : 1.0]
+                                                                              heightDimension:[NSCollectionLayoutDimension fractionalHeightDimension:1.0]];
+            NSCollectionLayoutItem *item = [NSCollectionLayoutItem itemWithLayoutSize:itemSize];
+            item.contentInsets = NSDirectionalEdgeInsetsMake(0, isiPad ? 10 : 0, 0, isiPad ? 10 : 0);
+            
+            NSCollectionLayoutSize *groupSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0]
+                                                                               heightDimension:[NSCollectionLayoutDimension absoluteDimension:110]];
+            
+            NSCollectionLayoutGroup *group = [NSCollectionLayoutGroup horizontalGroupWithLayoutSize:groupSize subitems:@[item]];
+            if (!isiPad) {
+                group.interItemSpacing = [NSCollectionLayoutSpacing fixedSpacing:10];
             }
+            
+            section = [NSCollectionLayoutSection sectionWithGroup:group];
+            section.contentInsets = NSDirectionalEdgeInsetsMake(10, 20, 20, 20);
+            section.interGroupSpacing = 10;
         }
+        
+        return section;
+    }];
+}
+
+#pragma mark - UICollectionViewDataSource
+
+- (NSInteger)numberOfSectionsInCollectionView:(UICollectionView *)collectionView {
+    return 2;
+}
+
+- (NSInteger)collectionView:(UICollectionView *)collectionView numberOfItemsInSection:(NSInteger)section {
+    if (section == 0) return 1; // Skin
+    return 2; // Release & Snapshot
+}
+
+- (UICollectionViewCell *)collectionView:(UICollectionView *)collectionView cellForItemAtIndexPath:(NSIndexPath *)indexPath {
+    if (indexPath.section == 0) {
+        SkinProfileCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"SkinCell" forIndexPath:indexPath];
+        
+        cell.welcomeLabel.text = self.currentUsername ? [NSString stringWithFormat:@"欢迎回来, %@", self.currentUsername] : @"欢迎";
+        cell.skinImageView.image = self.currentSkin ?: [UIImage systemImageNamed:@"person.fill"];
+        cell.subLabel.text = @"准备好开始游戏了吗？";
+        
+        return cell;
+    } else {
+        InfoTileCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"InfoCell" forIndexPath:indexPath];
+        
+        if (indexPath.item == 0) {
+            cell.titleLabel.text = @"最新正式版";
+            cell.valueLabel.text = self.latestRelease;
+            cell.iconView.image = [UIImage systemImageNamed:@"cube.box.fill"];
+            cell.iconView.tintColor = [UIColor systemGreenColor];
+        } else {
+            cell.titleLabel.text = @"最新快照";
+            cell.valueLabel.text = self.latestSnapshot;
+            cell.iconView.image = [UIImage systemImageNamed:@"ant.fill"]; // 或者是 hammer.fill
+            cell.iconView.tintColor = [UIColor systemOrangeColor];
+        }
+        
+        return cell;
     }
 }
 
-- (void)handleMenuSelection:(NSInteger)index {
-    switch (index) {
-        case 0: // 主页
-            // 通知父控制器切换到新闻页
-            [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowHomePage" object:nil];
-            break;
-            
-        case 1: // 下载
-            [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowDownloadPage" object:nil];
-            break;
-            
-        case 2: // 版本管理
-            [self showVersionManager];
-            break;
-            
-        case 3: // 当前版本设置
-            [self showCurrentVersionSettings];
-            break;
-            
-        case 4: // 设置
-            [self showSettings];
-            break;
+- (void)collectionView:(UICollectionView *)collectionView didSelectItemAtIndexPath:(NSIndexPath *)indexPath {
+    // 点击反馈，可以在这里添加跳转逻辑
+    [collectionView deselectItemAtIndexPath:indexPath animated:YES];
+    
+    // 如果是版本信息，可以尝试刷新
+    if (indexPath.section == 1) {
+        [self checkMinecraftVersions];
     }
 }
 
-- (void)showVersionManager {
-    // 发送通知让 LauncherRootViewController 在中间内容区显示
-    [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowVersionManager" object:nil];
-}
+#pragma mark - Logic
 
-- (void)showCurrentVersionSettings {
-    NSString *currentProfile = PLProfiles.current.selectedProfileName;
-    if (!currentProfile) {
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"提示"
-                                                                       message:@"请先选择一个版本"
-                                                                preferredStyle:UIAlertControllerStyleAlert];
-        [alert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
-        [self presentViewController:alert animated:YES completion:nil];
-        return;
+- (void)updateSkinDisplay {
+    BaseAuthenticator *currentAuth = BaseAuthenticator.current;
+    
+    if (currentAuth && currentAuth.authData) {
+        NSString *username = currentAuth.authData[@"username"];
+        if (username) {
+            if ([username hasPrefix:@"Demo."]) {
+                username = [username substringFromIndex:5];
+            }
+            self.currentUsername = username;
+        } else {
+            self.currentUsername = @"玩家";
+        }
+        
+        NSString *uuid = currentAuth.authData[@"uuid"];
+        if (uuid) {
+            [self loadSkinForUUID:uuid];
+        } else {
+            [self loadDefaultSkin];
+        }
+    } else {
+        self.currentUsername = @"未登录";
+        [self loadDefaultSkin];
     }
     
-    // 发送通知让 LauncherRootViewController 在中间内容区显示
-    [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowProfileSettings" object:currentProfile];
+    [self.collectionView reloadData];
 }
 
-- (void)showSettings {
-    // 发送通知让 LauncherRootViewController 在中间内容区显示
-    [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowSettings" object:nil];
+- (void)loadSkinForUUID:(NSString *)uuid {
+    NSString *skinURL = [NSString stringWithFormat:@"https://crafatar.com/renders/body/%@?overlay", uuid];
+    
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        NSData *imageData = [NSData dataWithContentsOfURL:[NSURL URLWithString:skinURL]];
+        UIImage *skinImage = nil;
+        if (imageData) {
+            skinImage = [UIImage imageWithData:imageData];
+        }
+        
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (skinImage) {
+                self.currentSkin = skinImage;
+            } else {
+                [self loadDefaultSkin]; // Fallback inside async
+                return;
+            }
+            [self.collectionView reloadItemsAtIndexPaths:@[[NSIndexPath indexPathForItem:0 inSection:0]]];
+        });
+    });
 }
 
-#pragma mark - Data Updates
+- (void)loadDefaultSkin {
+    NSString *steveSkinURL = @"https://crafatar.com/renders/body/8667ba71b85a4004af54457a9734eed7?overlay";
+    
+    // 如果当前已经是默认皮肤，避免重复加载 (简单判断 image 是否为空)
+    if (self.currentSkin != nil && [self.currentUsername isEqualToString:@"未登录"]) {
+         // Maybe check logic, but re-loading is safer
+    }
+    
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        NSData *imageData = [NSData dataWithContentsOfURL:[NSURL URLWithString:steveSkinURL]];
+        UIImage *steveSkin = nil;
+        if (imageData) {
+            steveSkin = [UIImage imageWithData:imageData];
+        }
+        
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (steveSkin) {
+                self.currentSkin = steveSkin;
+            } else {
+                self.currentSkin = [UIImage systemImageNamed:@"person.fill"];
+            }
+            [self.collectionView reloadItemsAtIndexPaths:@[[NSIndexPath indexPathForItem:0 inSection:0]]];
+        });
+    });
+}
 
-- (void)updateAccountInfo {
-    // 账户信息在右侧面板显示，这里不需要处理
+- (void)checkMinecraftVersions {
+    if (self.isLoadingVersions) {
+        // Already loading or initial state
+    }
+    self.isLoadingVersions = YES;
+    self.latestRelease = @"检测中...";
+    self.latestSnapshot = @"检测中...";
+    [self.collectionView reloadSections:[NSIndexSet indexSetWithIndex:1]];
+    
+    NSString *downloadSource = getPrefObject(@"general.download_source");
+    NSString *versionManifestURL;
+    
+    if ([downloadSource isEqualToString:@"bmclapi"]) {
+        versionManifestURL = @"https://bmclapi2.bangbang93.com/mc/game/version_manifest_v2.json";
+    } else {
+        versionManifestURL = @"https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
+    }
+    
+    NSURL *url = [NSURL URLWithString:versionManifestURL];
+    NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            self.isLoadingVersions = NO;
+            
+            if (data && !error) {
+                NSError *jsonError;
+                NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
+                if (json) {
+                    NSDictionary *latest = json[@"latest"];
+                    self.latestRelease = latest[@"release"] ?: @"未知";
+                    self.latestSnapshot = latest[@"snapshot"] ?: @"未知";
+                } else {
+                    self.latestRelease = @"检测失败";
+                    self.latestSnapshot = @"检测失败";
+                }
+            } else {
+                self.latestRelease = @"网络错误";
+                self.latestSnapshot = @"网络错误";
+            }
+            [self.collectionView reloadSections:[NSIndexSet indexSetWithIndex:1]];
+        });
+    }];
+    [task resume];
 }
 
 #pragma mark - Orientation
