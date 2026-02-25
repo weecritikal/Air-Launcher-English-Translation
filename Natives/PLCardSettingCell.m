@@ -193,7 +193,7 @@ static const CGFloat kIconSize = 28.0;
     _cardContentView.layer.mask = maskLayer;
 }
 
-- (void)setAccessoryView:(UIView *)view {
+- (void)setCustomAccessoryView:(UIView *)view {
     // 清除旧的附件视图
     for (UIView *subview in _accessoryContainerView.subviews) {
         [subview removeFromSuperview];

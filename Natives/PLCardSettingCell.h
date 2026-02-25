@@ -32,7 +32,8 @@ typedef NS_ENUM(NSInteger, PLCardPosition) {
 
 - (void)setCardPosition:(PLCardPosition)position;
 
-- (void)setAccessoryView:(UIView *)view;
+// 设置自定义附件视图（注意：这是一个自定义方法，不是父类的 accessoryView 属性）
+- (void)setCustomAccessoryView:(nullable UIView *)view;
 
 @end
 
