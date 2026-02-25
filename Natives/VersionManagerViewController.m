@@ -4,6 +4,7 @@
 #import "ModsManagerViewController.h"
 #import "ShadersManagerViewController.h"
 #import "LauncherPrefGameDirViewController.h"
+#import "LauncherPreferences.h"
 #import "utils.h"
 #import <QuartzCore/QuartzCore.h>
 
@@ -297,7 +298,8 @@
         BOOL isiPad = width > 700;
         
         if (sectionIndex == 0) {
-            NSInteger columnCount = isiPad ? 6 : 3;
+            // Quick actions section - 5 items total
+            NSInteger columnCount = isiPad ? 5 : 3;
             NSCollectionLayoutSize *itemSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0 / columnCount]
                                                                               heightDimension:[NSCollectionLayoutDimension absoluteDimension:100]];
             NSCollectionLayoutItem *item = [NSCollectionLayoutItem itemWithLayoutSize:itemSize];
@@ -312,19 +314,19 @@
             return section;
         } else {
             NSCollectionLayoutSize *itemSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:isiPad ? 0.5 : 1.0]
-                                                                              heightDimension:[NSCollectionLayoutDimension absoluteDimension:70)];
+                                                                              heightDimension:[NSCollectionLayoutDimension absoluteDimension:70]];
             NSCollectionLayoutItem *item = [NSCollectionLayoutItem itemWithLayoutSize:itemSize];
             item.contentInsets = NSDirectionalEdgeInsetsMake(4, 8, 4, 8);
             
             NSCollectionLayoutSize *groupSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0]
-                                                                               heightDimension:[NSCollectionLayoutDimension absoluteDimension:70)];
+                                                                               heightDimension:[NSCollectionLayoutDimension absoluteDimension:70]];
             NSCollectionLayoutGroup *group = [NSCollectionLayoutGroup horizontalGroupWithLayoutSize:groupSize subitems:@[item]];
             
             NSCollectionLayoutSection *section = [NSCollectionLayoutSection sectionWithGroup:group];
             section.contentInsets = NSDirectionalEdgeInsetsMake(0, 14, 20, 14);
             
             NSCollectionLayoutSize *headerSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0]
-                                                                             heightDimension:[NSCollectionLayoutDimension absoluteDimension:44)];
+                                                                             heightDimension:[NSCollectionLayoutDimension absoluteDimension:44]];
             NSCollectionLayoutBoundarySupplementaryItem *header = [NSCollectionLayoutBoundarySupplementaryItem layoutBoundarySupplementaryItemWithSize:headerSize elementKind:UICollectionElementKindSectionHeader alignment:NSRectAlignmentTop];
             section.boundarySupplementaryItems = @[header];
             return section;
@@ -353,7 +355,7 @@
 }
 
 - (NSInteger)collectionView:(UICollectionView *)collectionView numberOfItemsInSection:(NSInteger)section {
-    if (section == 0) return 3;
+    if (section == 0) return 5;
     return self.profileList.count;
 }
 
@@ -369,7 +371,13 @@
                 [cell configureWithIcon:@"puzzlepiece.extension.fill" title:@"Mod 管理" subtitle:@"管理已安装的 Mod" color:[UIColor systemOrangeColor]];
                 break;
             case 2:
+                [cell configureWithIcon:@"arrow.down.circle.fill" title:@"Mod 下载" subtitle:@"从 Modrinth 下载 Mod" color:[UIColor systemGreenColor]];
+                break;
+            case 3:
                 [cell configureWithIcon:@"paintbrush.fill" title:@"光影管理" subtitle:@"管理光影包" color:[UIColor systemPurpleColor]];
+                break;
+            case 4:
+                [cell configureWithIcon:@"arrow.down.circle.fill" title:@"光影下载" subtitle:@"从 Modrinth 下载光影" color:[UIColor systemPinkColor]];
                 break;
         }
         return cell;
@@ -404,7 +412,9 @@
         switch (indexPath.item) {
             case 0: [self openGameDirectory]; break;
             case 1: [self openModsManager]; break;
-            case 2: [self openShadersManager]; break;
+            case 2: [self openModsDownload]; break;
+            case 3: [self openShadersManager]; break;
+            case 4: [self openShadersDownload]; break;
         }
     } else {
         [self showProfileActions:self.profileList[indexPath.item]];
@@ -427,6 +437,7 @@
     }
     ModsManagerViewController *vc = [[ModsManagerViewController alloc] init];
     vc.profileName = self.selectedProfile;
+    vc.initialMode = ModsManagerModeLocal;
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
     nav.modalPresentationStyle = UIModalPresentationFormSheet;
     [self presentViewController:nav animated:YES completion:nil];
@@ -439,6 +450,33 @@
     }
     ShadersManagerViewController *vc = [[ShadersManagerViewController alloc] init];
     vc.profileName = self.selectedProfile;
+    vc.initialMode = ShadersManagerModeLocal;
+    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
+    nav.modalPresentationStyle = UIModalPresentationFormSheet;
+    [self presentViewController:nav animated:YES completion:nil];
+}
+
+- (void)openShadersDownload {
+    if (!self.selectedProfile) {
+        [self showAlert:@"请先选择一个版本"];
+        return;
+    }
+    ShadersManagerViewController *vc = [[ShadersManagerViewController alloc] init];
+    vc.profileName = self.selectedProfile;
+    vc.initialMode = ShadersManagerModeOnline;
+    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
+    nav.modalPresentationStyle = UIModalPresentationFormSheet;
+    [self presentViewController:nav animated:YES completion:nil];
+}
+
+- (void)openModsDownload {
+    if (!self.selectedProfile) {
+        [self showAlert:@"请先选择一个版本"];
+        return;
+    }
+    ModsManagerViewController *vc = [[ModsManagerViewController alloc] init];
+    vc.profileName = self.selectedProfile;
+    vc.initialMode = ModsManagerModeOnline;
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
     nav.modalPresentationStyle = UIModalPresentationFormSheet;
     [self presentViewController:nav animated:YES completion:nil];

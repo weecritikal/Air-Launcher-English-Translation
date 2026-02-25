@@ -13,6 +13,9 @@ typedef NS_ENUM(NSInteger, ModsManagerMode) {
 
 @property (nonatomic, copy, nullable) NSString *profileName;
 
+// Initial mode - set before presenting to start in online mode
+@property (nonatomic, assign) ModsManagerMode initialMode;
+
 // Properties for online search
 @property (nonatomic, assign) ModsManagerMode currentMode;
 @property (nonatomic, strong) NSMutableArray *onlineSearchResults;

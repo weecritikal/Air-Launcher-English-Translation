@@ -30,18 +30,21 @@
     [super viewDidLoad];
     self.title = @"管理光影";
     self.view.backgroundColor = [UIColor systemBackgroundColor];
-    self.currentMode = ShadersManagerModeLocal;
+    self.currentMode = self.initialMode; // Use initialMode if set
     self.localShaders = [NSMutableArray array];
     self.filteredLocalShaders = [NSMutableArray array];
     self.onlineSearchResults = [NSMutableArray array];
     [self setupUI];
-    [self refreshLocalShadersList];
+    [self updateUIForCurrentMode]; // Update UI based on current mode
+    if (self.currentMode == ShadersManagerModeLocal) {
+        [self refreshLocalShadersList];
+    }
 }
 
 - (void)setupUI {
     self.modeSwitcher = [[UISegmentedControl alloc] initWithItems:@[@"本地光影", @"在线搜索 (Modrinth)"]];
     self.modeSwitcher.translatesAutoresizingMaskIntoConstraints = NO;
-    self.modeSwitcher.selectedSegmentIndex = 0;
+    self.modeSwitcher.selectedSegmentIndex = self.currentMode; // Set based on initial mode
     [self.modeSwitcher addTarget:self action:@selector(modeChanged:) forControlEvents:UIControlEventValueChanged];
     [self.view addSubview:self.modeSwitcher];
 

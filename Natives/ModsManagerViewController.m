@@ -23,18 +23,21 @@
     [super viewDidLoad];
     self.title = @"管理 Mod";
     self.view.backgroundColor = [UIColor systemBackgroundColor];
-    self.currentMode = ModsManagerModeLocal;
+    self.currentMode = self.initialMode; // Use initialMode if set
     self.localMods = [NSMutableArray array];
     self.filteredLocalMods = [NSMutableArray array];
     self.onlineSearchResults = [NSMutableArray array];
     [self setupUI];
-    [self refreshLocalModsList];
+    [self updateUIForCurrentMode]; // Update UI based on current mode
+    if (self.currentMode == ModsManagerModeLocal) {
+        [self refreshLocalModsList];
+    }
 }
 
 - (void)setupUI {
     self.modeSwitcher = [[UISegmentedControl alloc] initWithItems:@[@"本地 Mod", @"在线搜索 (Modrinth)"]];
     self.modeSwitcher.translatesAutoresizingMaskIntoConstraints = NO;
-    self.modeSwitcher.selectedSegmentIndex = 0;
+    self.modeSwitcher.selectedSegmentIndex = self.currentMode; // Set based on initial mode
     [self.modeSwitcher addTarget:self action:@selector(modeChanged:) forControlEvents:UIControlEventValueChanged];
     [self.view addSubview:self.modeSwitcher];
 

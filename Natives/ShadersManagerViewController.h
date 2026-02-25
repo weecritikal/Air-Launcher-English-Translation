@@ -19,6 +19,9 @@ typedef NS_ENUM(NSInteger, ShadersManagerMode) {
 
 @property (nonatomic, copy, nullable) NSString *profileName;
 
+// Initial mode - set before presenting to start in online mode
+@property (nonatomic, assign) ShadersManagerMode initialMode;
+
 // Properties for online search
 @property (nonatomic, assign) ShadersManagerMode currentMode;
 @property (nonatomic, strong) NSMutableArray *onlineSearchResults;
