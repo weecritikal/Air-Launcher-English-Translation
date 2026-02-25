@@ -77,6 +77,9 @@ static BaseAuthenticator *current = nil;
 
     if (error != nil) {
         showDialog(@"Error while saving file", error.localizedDescription);
+    } else {
+        // 保存选中的账户，确保重启后能恢复登录状态
+        setPrefObject(@"internal.selected_account", self.authData[@"username"]);
     }
     return error == nil;
 }
