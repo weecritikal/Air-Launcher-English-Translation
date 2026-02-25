@@ -12,6 +12,7 @@ NSMutableArray<NSDictionary *> *localVersionList, *remoteVersionList;
 
 - (void)fetchLocalVersionList;
 - (void)fetchRemoteVersionListForce:(BOOL)force;
+- (void)reloadProfileList;
 - (void)setInteractionEnabled:(BOOL)enable forDownloading:(BOOL)downloading;
 
 @end
