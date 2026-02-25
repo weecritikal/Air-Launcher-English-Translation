@@ -121,11 +121,19 @@
 }
 
 - (void)updateNavigationButtons {
+    UIBarButtonItem *closeButton = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone target:self action:@selector(closeTapped)];
+    
     if (self.currentMode == ModsManagerModeLocal) {
         self.navigationItem.rightBarButtonItems = @[self.refreshButton];
+        self.navigationItem.leftBarButtonItem = closeButton;
     } else {
         self.navigationItem.rightBarButtonItems = nil;
+        self.navigationItem.leftBarButtonItem = closeButton;
     }
+}
+
+- (void)closeTapped {
+    [self dismissViewControllerAnimated:YES completion:nil];
 }
 
 #pragma mark - Data Loading
