@@ -15,6 +15,7 @@ static const NSInteger kGlobalBackgroundTag = 99999;
 static const NSInteger kBackgroundImageTag = 99998;
 static const NSInteger kBackgroundBlurTag = 99997;
 static const NSInteger kBackgroundDimTag = 99996;
+static const NSInteger kDefaultBackgroundTag = 99995;
 
 @interface BackgroundManager ()
 @property (nonatomic, strong) AVPlayer *videoPlayer;
@@ -122,7 +123,7 @@ static const NSInteger kBackgroundDimTag = 99996;
 #pragma mark - Global Background Application
 
 - (void)applyBackgroundToWindow:(UIWindow *)window {
-    if (!window || self.currentType == BackgroundTypeNone) {
+    if (!window) {
         [self removeGlobalBackground];
         return;
     }
@@ -133,7 +134,18 @@ static const NSInteger kBackgroundDimTag = 99996;
     // Remove existing
     [self removeGlobalBackground];
     
-    // Create container
+    // For default background, just set the window's background color
+    // No need for container
+    if (self.currentType == BackgroundTypeNone) {
+        if (@available(iOS 13.0, *)) {
+            window.backgroundColor = [UIColor systemBackgroundColor];
+        } else {
+            window.backgroundColor = [UIColor blackColor];
+        }
+        return;
+    }
+    
+    // Create container (for custom backgrounds)
     UIView *container = [[UIView alloc] initWithFrame:window.bounds];
     container.tag = kGlobalBackgroundTag;
     container.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
@@ -157,7 +169,7 @@ static const NSInteger kBackgroundDimTag = 99996;
 }
 
 - (void)applyBackgroundToSplitViewController:(UISplitViewController *)splitVC {
-    if (!splitVC || !splitVC.view || self.currentType == BackgroundTypeNone) {
+    if (!splitVC || !splitVC.view) {
         [self removeGlobalBackground];
         return;
     }
@@ -168,7 +180,18 @@ static const NSInteger kBackgroundDimTag = 99996;
     // Remove existing
     [self removeGlobalBackground];
     
-    // Create container that covers entire split view
+    // For default background, just set the view's background color
+    // No need for container or transparency
+    if (self.currentType == BackgroundTypeNone) {
+        if (@available(iOS 13.0, *)) {
+            splitVC.view.backgroundColor = [UIColor systemBackgroundColor];
+        } else {
+            splitVC.view.backgroundColor = [UIColor blackColor];
+        }
+        return;
+    }
+    
+    // Create container that covers entire split view (for custom backgrounds)
     UIView *container = [[UIView alloc] initWithFrame:splitVC.view.bounds];
     container.tag = kGlobalBackgroundTag;
     container.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
@@ -190,7 +213,7 @@ static const NSInteger kBackgroundDimTag = 99996;
             break;
     }
     
-    // Make all child controllers transparent
+    // Make all child controllers transparent (only for custom backgrounds)
     [self makeSplitViewControllerTransparent:splitVC];
 }
 
@@ -223,6 +246,10 @@ static const NSInteger kBackgroundDimTag = 99996;
     // Update container frame
     self.globalBackgroundContainer.frame = parent.bounds;
     
+    // Update default background view
+    UIView *defaultBg = [self.globalBackgroundContainer viewWithTag:kDefaultBackgroundTag];
+    if (defaultBg) defaultBg.frame = self.globalBackgroundContainer.bounds;
+    
     // Update image view
     UIView *imageView = [self.globalBackgroundContainer viewWithTag:kBackgroundImageTag];
     if (imageView) imageView.frame = self.globalBackgroundContainer.bounds;
@@ -246,6 +273,28 @@ static const NSInteger kBackgroundDimTag = 99996;
 }
 
 #pragma mark - Background Content Application
+
+- (void)applyDefaultBackgroundToContainer:(UIView *)container {
+    // Remove existing default background
+    UIView *existing = [container viewWithTag:kDefaultBackgroundTag];
+    if (existing) [existing removeFromSuperview];
+    
+    // Create default background view that adapts to system appearance
+    UIView *defaultBackgroundView = [[UIView alloc] initWithFrame:container.bounds];
+    defaultBackgroundView.tag = kDefaultBackgroundTag;
+    defaultBackgroundView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    
+    // Use system background color that adapts to light/dark mode
+    // In dark mode: black, In light mode: system background color
+    if (@available(iOS 13.0, *)) {
+        defaultBackgroundView.backgroundColor = [UIColor systemBackgroundColor];
+    } else {
+        // Fallback for iOS < 13
+        defaultBackgroundView.backgroundColor = [UIColor blackColor];
+    }
+    
+    [container addSubview:defaultBackgroundView];
+}
 
 - (void)applyImageBackgroundToContainer:(UIView *)container {
     if (!self.currentBackgroundPath) return;

@@ -17,8 +17,16 @@ extern NSMutableDictionary *prefDict;
 - (void)viewDidLoad {
     [super viewDidLoad];
 
-    // Set transparent background to show global background
-    self.view.backgroundColor = [UIColor clearColor];
+    // Set background color based on whether custom background exists
+    if ([[BackgroundManager sharedManager] hasBackground]) {
+        self.view.backgroundColor = [UIColor clearColor];
+    } else {
+        if (@available(iOS 13.0, *)) {
+            self.view.backgroundColor = [UIColor systemBackgroundColor];
+        } else {
+            self.view.backgroundColor = [UIColor blackColor];
+        }
+    }
 
     if ([getPrefObject(@"control.control_safe_area") length] == 0) {
         setPrefObject(@"control.control_safe_area", NSStringFromUIEdgeInsets(getDefaultSafeArea()));
@@ -51,7 +59,7 @@ extern NSMutableDictionary *prefDict;
 #pragma clang diagnostic pop
     }
 
-    // Apply global background
+    // Apply global background (now also handles default background)
     [[BackgroundManager sharedManager] applyBackgroundToSplitViewController:self];
 
     // Listen for background change notifications
@@ -72,7 +80,7 @@ extern NSMutableDictionary *prefDict;
 }
 
 - (void)navigationControllerDidShow:(NSNotification *)notification {
-    // Ensure transparency is maintained when navigating
+    // Ensure transparency is maintained when navigating (only for custom backgrounds)
     if ([[BackgroundManager sharedManager] hasBackground]) {
         dispatch_async(dispatch_get_main_queue(), ^{
             [[BackgroundManager sharedManager] makeSplitViewControllerTransparent:self];
@@ -87,6 +95,17 @@ extern NSMutableDictionary *prefDict;
 - (void)backgroundChanged:(NSNotification *)notification {
     // Reapply background when changed
     [[BackgroundManager sharedManager] applyBackgroundToSplitViewController:self];
+    
+    // Update view background color based on current state
+    if ([[BackgroundManager sharedManager] hasBackground]) {
+        self.view.backgroundColor = [UIColor clearColor];
+    } else {
+        if (@available(iOS 13.0, *)) {
+            self.view.backgroundColor = [UIColor systemBackgroundColor];
+        } else {
+            self.view.backgroundColor = [UIColor blackColor];
+        }
+    }
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -95,7 +114,7 @@ extern NSMutableDictionary *prefDict;
     // Resume video background
     [[BackgroundManager sharedManager] resumeVideo];
 
-    // Ensure transparency
+    // Ensure transparency only for custom backgrounds
     if ([[BackgroundManager sharedManager] hasBackground]) {
         [[BackgroundManager sharedManager] makeSplitViewControllerTransparent:self];
     }
