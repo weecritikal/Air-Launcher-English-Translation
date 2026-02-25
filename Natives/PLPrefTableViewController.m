@@ -38,6 +38,11 @@
     [self setupTableView];
     [self setupLayoutSwitcher];
     
+    // 设置头部视图（包含布局切换器）
+    CGFloat headerWidth = self.view.bounds.size.width - 24;
+    self.cardHeaderView.frame = CGRectMake(0, 0, headerWidth, 50);
+    self.tableView.tableHeaderView = self.cardHeaderView;
+    
     if (self.prefSections) {
         self.prefSectionsVisibility = [[NSMutableArray<NSNumber *> alloc] initWithCapacity:self.prefSections.count];
         for (int i = 0; i < self.prefSections.count; i++) {
