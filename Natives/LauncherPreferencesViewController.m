@@ -205,8 +205,10 @@
     self.rendererKeys = getRendererKeys(NO);
     self.rendererList = getRendererNames(NO);
     
+    // 检查是否在游戏中：如果当前可见视图控制器是 SurfaceViewController，则在游戏中
     BOOL(^whenNotInGame)() = ^BOOL(){
-        return self.navigationController != nil;
+        UIViewController *visibleVC = currentVC();
+        return ![visibleVC isKindOfClass:NSClassFromString(@"SurfaceViewController")];
     };
 
     // --- 定义弹窗显示的 Block，防止循环引用使用 weakSelf ---
@@ -274,9 +276,7 @@
               @"hasDetail": @YES,
               @"icon": @"paintbrush",
               @"type": self.typePickField,
-              @"enableCondition": ^BOOL(){
-                  return NO;
-              },
+              @"enableCondition": whenNotInGame,
               @"action": ^void(NSString *iconName) {
                   if ([iconName isEqualToString:@"AppIcon-Light"]) {
                       iconName = nil;
