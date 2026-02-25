@@ -219,7 +219,7 @@ static const CGFloat kIconSize = 28.0;
     _detailLabel.text = nil;
     _iconImageView.image = nil;
     _iconImageView.hidden = NO;
-    _accessoryType = UITableViewCellAccessoryNone;
+    self.accessoryType = UITableViewCellAccessoryNone;
     
     // 清除附件视图
     for (UIView *subview in _accessoryContainerView.subviews) {
