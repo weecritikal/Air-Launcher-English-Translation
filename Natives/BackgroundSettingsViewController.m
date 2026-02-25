@@ -9,7 +9,7 @@
 #import "BackgroundManager.h"
 #import "ImageCropperViewController.h"
 
-@interface BackgroundSettingsViewController () <UISliderAccessibilityDelegate>
+@interface BackgroundSettingsViewController ()
 @property (nonatomic, strong) NSArray<NSArray *> *sections;
 @property (nonatomic, strong) UIImageView *previewImageView;
 @property (nonatomic, strong) UISlider *opacitySlider;
