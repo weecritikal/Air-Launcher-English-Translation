@@ -7,6 +7,9 @@
 #import "VersionCardCell.h"  // 新增：导入独立的 VersionCardCell
 #import "MinecraftResourceDownloadTask.h"
 #import "DownloadProgressViewController.h"
+#import "ModItem.h"
+#import "ModVersionViewController.h"
+#import "ModVersion.h"
 
 #include <sys/time.h>
 #include <SystemConfiguration/SystemConfiguration.h>
@@ -90,7 +93,7 @@
 
 @end
 
-@interface DownloadViewController () <UICollectionViewDataSource, UICollectionViewDelegate, UITableViewDataSource, UITableViewDelegate>
+@interface DownloadViewController () <UICollectionViewDataSource, UICollectionViewDelegate, UITableViewDataSource, UITableViewDelegate, ModVersionViewControllerDelegate>
 
 @property (nonatomic, strong) UISegmentedControl *tabSegment;
 @property (nonatomic, strong) UISegmentedControl *versionFilterSegment;
@@ -738,25 +741,84 @@
 - (void)downloadMod:(UIButton *)sender {
     NSInteger index = sender.tag;
     NSDictionary *mod = self.modList[index];
-    NSString *modName = mod[@"title"] ?: mod[@"slug"];
     
-    // 确保mods文件夹存在
-    NSString *profileName = PLProfiles.current.selectedProfileName ?: @"default";
-    NSString *modsPath = [NSString stringWithFormat:@"%s/instances/%@/mods", getenv("POJAV_HOME"), profileName];
+    // 创建ModItem用于版本选择
+    ModItem *modItem = [[ModItem alloc] initWithOnlineData:mod];
     
-    NSFileManager *fm = [NSFileManager defaultManager];
-    if (![fm fileExistsAtPath:modsPath]) {
-        [fm createDirectoryAtPath:modsPath withIntermediateDirectories:YES attributes:nil error:nil];
+    // 显示版本选择页面
+    ModVersionViewController *versionVC = [[ModVersionViewController alloc] init];
+    versionVC.modItem = modItem;
+    versionVC.delegate = self;
+    
+    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:versionVC];
+    nav.modalPresentationStyle = UIModalPresentationFormSheet;
+    [self presentViewController:nav animated:YES completion:nil];
+}
+
+#pragma mark - ModVersionViewControllerDelegate
+
+- (void)modVersionViewController:(ModVersionViewController *)viewController didSelectVersion:(ModVersion *)version {
+    ModItem *itemToDownload = viewController.modItem;
+    
+    // 获取下载信息
+    NSDictionary *primaryFile = version.primaryFile;
+    if (!primaryFile || ![primaryFile[@"url"] isKindOfClass:[NSString class]]) {
+        [self showSimpleAlertWithTitle:@"错误" message:@"未找到有效的下载链接。"];
+        return;
     }
     
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"下载模组"
-                                                                   message:[NSString stringWithFormat:@"开始下载 %@...", modName]
-                                                            preferredStyle:UIAlertControllerStyleAlert];
-    [self presentViewController:alert animated:YES completion:nil];
+    // 设置下载URL和文件名
+    itemToDownload.selectedVersionDownloadURL = primaryFile[@"url"];
+    itemToDownload.fileName = primaryFile[@"filename"] ?: [NSString stringWithFormat:@"%@.jar", itemToDownload.displayName];
     
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        [alert dismissViewControllerAnimated:YES completion:nil];
-    });
+    // 关闭版本选择页面
+    [viewController dismissViewControllerAnimated:YES completion:^{
+        // 开始下载
+        [self startDownloadForModItem:itemToDownload];
+    }];
+}
+
+- (void)startDownloadForModItem:(ModItem *)item {
+    // 显示下载提示
+    UIAlertController *downloadingAlert = [UIAlertController alertControllerWithTitle:@"正在下载"
+                                                                              message:[NSString stringWithFormat:@"%@...", item.displayName]
+                                                                       preferredStyle:UIAlertControllerStyleAlert];
+    
+    UIActivityIndicatorView *indicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
+    indicator.translatesAutoresizingMaskIntoConstraints = NO;
+    [downloadingAlert.view addSubview:indicator];
+    [NSLayoutConstraint activateConstraints:@[
+        [indicator.centerXAnchor constraintEqualToAnchor:downloadingAlert.view.centerXAnchor],
+        [indicator.centerYAnchor constraintEqualToAnchor:downloadingAlert.view.centerYAnchor constant:20]
+    ]];
+    [indicator startAnimating];
+    
+    [self presentViewController:downloadingAlert animated:YES completion:nil];
+    
+    // 获取当前配置文件的名称
+    NSString *profileName = PLProfiles.current.selectedProfileName ?: @"default";
+    
+    [[ModService sharedService] downloadMod:item toProfile:profileName completion:^(NSError * _Nullable error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [downloadingAlert dismissViewControllerAnimated:YES completion:^{
+                if (error) {
+                    [self showSimpleAlertWithTitle:@"下载失败" message:error.localizedDescription];
+                } else {
+                    UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"下载成功"
+                                                                                          message:[NSString stringWithFormat:@"%@ 已成功安装到 mods 文件夹。", item.displayName]
+                                                                                   preferredStyle:UIAlertControllerStyleAlert];
+                    [successAlert addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleDefault handler:nil]];
+                    [self presentViewController:successAlert animated:YES completion:nil];
+                }
+            }];
+        });
+    }];
+}
+
+- (void)showSimpleAlertWithTitle:(NSString *)title message:(NSString *)message {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:message preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleDefault handler:nil]];
+    [self presentViewController:alert animated:YES completion:nil];
 }
 
 - (void)downloadShader:(UIButton *)sender {
