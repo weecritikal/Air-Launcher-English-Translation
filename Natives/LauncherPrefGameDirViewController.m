@@ -47,7 +47,7 @@
     [NSFileManager.defaultManager createSymbolicLinkAtPath:lasmPath withDestinationPath:multidirPath error:nil];
     [NSFileManager.defaultManager changeCurrentDirectoryPath:lasmPath];
     toggleIsolatedPref(NO);
-    [self.navigationController performSelector:@selector(reloadProfileList)];
+    [(LauncherNavigationController *)self.navigationController reloadProfileList];
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section

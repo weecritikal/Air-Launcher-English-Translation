@@ -36,12 +36,16 @@
     [super viewDidLoad];
 
     [self setupTableView];
-    [self setupLayoutSwitcher];
     
-    // 设置头部视图（包含布局切换器）
-    CGFloat headerWidth = self.view.bounds.size.width - 24;
-    self.cardHeaderView.frame = CGRectMake(0, 0, headerWidth, 50);
-    self.tableView.tableHeaderView = self.cardHeaderView;
+    // 只有在 showLayoutSwitcher 为 YES 时才设置布局切换器
+    if (self.showLayoutSwitcher) {
+        [self setupLayoutSwitcher];
+        
+        // 设置头部视图（包含布局切换器）
+        CGFloat headerWidth = self.view.bounds.size.width - 24;
+        self.cardHeaderView.frame = CGRectMake(0, 0, headerWidth, 50);
+        self.tableView.tableHeaderView = self.cardHeaderView;
+    }
     
     if (self.prefSections) {
         self.prefSectionsVisibility = [[NSMutableArray<NSNumber *> alloc] initWithCapacity:self.prefSections.count];
@@ -63,8 +67,8 @@
     // 卡片式布局的特殊配置
     if (self.layoutMode == PLSettingsLayoutModeCard) {
         self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
-        self.tableView.backgroundColor = [UIColor systemBackgroundColor];
-        self.tableView.contentInset = UIEdgeInsetsMake(8, 12, 12, 12);
+        self.tableView.backgroundColor = [UIColor clearColor];
+        self.tableView.contentInset = UIEdgeInsetsMake(16, 16, 24, 16);
         // 注册自定义卡片Cell
         [self.tableView registerClass:[PLCardSettingCell class] forCellReuseIdentifier:@"CardCell"];
     }
@@ -78,15 +82,30 @@
     
     // 创建头部视图
     self.cardHeaderView = [[UIView alloc] init];
-    // 注意：作为 tableHeaderView 需要用 frame 布局，不能用 Auto Layout
-    [self.cardHeaderView addSubview:self.layoutSwitcher];
     
-    // 设置 layoutSwitcher 的宽度和居中
+    // 添加模糊背景
+    UIBlurEffect *blurEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial];
+    UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:blurEffect];
+    blurView.layer.cornerRadius = 12;
+    blurView.layer.masksToBounds = YES;
+    blurView.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.cardHeaderView addSubview:blurView];
+    
+    // 将 layoutSwitcher 添加到 blurView 的 contentView
+    [blurView.contentView addSubview:self.layoutSwitcher];
+    
+    // 设置约束
     [NSLayoutConstraint activateConstraints:@[
-        [self.layoutSwitcher.topAnchor constraintEqualToAnchor:self.cardHeaderView.topAnchor constant:8],
-        [self.layoutSwitcher.centerXAnchor constraintEqualToAnchor:self.cardHeaderView.centerXAnchor],
-        [self.layoutSwitcher.widthAnchor constraintEqualToConstant:200],
-        [self.layoutSwitcher.bottomAnchor constraintEqualToAnchor:self.cardHeaderView.bottomAnchor constant:-8]
+        [blurView.topAnchor constraintEqualToAnchor:self.cardHeaderView.topAnchor constant:8],
+        [blurView.centerXAnchor constraintEqualToAnchor:self.cardHeaderView.centerXAnchor],
+        [blurView.widthAnchor constraintEqualToConstant:200],
+        [blurView.heightAnchor constraintEqualToConstant:36],
+        [blurView.bottomAnchor constraintEqualToAnchor:self.cardHeaderView.bottomAnchor constant:-8],
+        
+        [self.layoutSwitcher.topAnchor constraintEqualToAnchor:blurView.contentView.topAnchor],
+        [self.layoutSwitcher.leadingAnchor constraintEqualToAnchor:blurView.contentView.leadingAnchor],
+        [self.layoutSwitcher.trailingAnchor constraintEqualToAnchor:blurView.contentView.trailingAnchor],
+        [self.layoutSwitcher.bottomAnchor constraintEqualToAnchor:blurView.contentView.bottomAnchor]
     ]];
 }
 
@@ -101,6 +120,9 @@
     self.layoutMode = mode;
     [self saveLayoutPreference];
     
+    // 先将 cardHeaderView 从旧的 tableHeaderView 中移除，避免 "Can't add self as subview" 错误
+    self.tableView.tableHeaderView = nil;
+    
     // 移除旧的 tableView
     [self.tableView removeFromSuperview];
     
@@ -109,8 +131,8 @@
     self.tableView.translatesAutoresizingMaskIntoConstraints = NO;
     
     // 设置头部视图（包含布局切换器），两种模式都显示
-    CGFloat headerWidth = self.view.bounds.size.width - 24;
-    self.cardHeaderView.frame = CGRectMake(0, 0, headerWidth, 50);
+    CGFloat headerWidth = self.view.bounds.size.width - 32;
+    self.cardHeaderView.frame = CGRectMake(0, 0, headerWidth, 52);
     self.tableView.tableHeaderView = self.cardHeaderView;
     
     [self.view addSubview:self.tableView];
@@ -197,10 +219,10 @@
         self.navigationItem.rightBarButtonItems = @[[self drawAccountButton], [self drawHelpButton]];
     }
     
-    // 两种布局模式都显示布局切换器
-    if (self.cardHeaderView) {
-        CGFloat headerWidth = self.view.bounds.size.width - 24;
-        self.cardHeaderView.frame = CGRectMake(0, 0, headerWidth, 50);
+    // 只有在 showLayoutSwitcher 为 YES 时才设置头部视图
+    if (self.showLayoutSwitcher && self.cardHeaderView) {
+        CGFloat headerWidth = self.view.bounds.size.width - 32;
+        self.cardHeaderView.frame = CGRectMake(0, 0, headerWidth, 52);
         self.tableView.tableHeaderView = self.cardHeaderView;
     }
 
@@ -241,6 +263,36 @@
         return count;
     }
     return 1;
+}
+
+- (CGFloat)tableView:(UITableView *)tableView heightForHeaderInSection:(NSInteger)section {
+    if (self.layoutMode == PLSettingsLayoutModeCard && self.prefSections) {
+        return 40;
+    }
+    return UITableViewAutomaticDimension;
+}
+
+- (UIView *)tableView:(UITableView *)tableView viewForHeaderInSection:(NSInteger)section {
+    if (self.layoutMode == PLSettingsLayoutModeCard && self.prefSections) {
+        UIView *headerView = [[UIView alloc] init];
+        headerView.backgroundColor = [UIColor clearColor];
+        
+        UILabel *titleLabel = [[UILabel alloc] init];
+        titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+        NSString *key = self.prefSections[section];
+        titleLabel.text = localize(([NSString stringWithFormat:@"preference.section.%@", key]), nil);
+        titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
+        titleLabel.textColor = [UIColor secondaryLabelColor];
+        [headerView addSubview:titleLabel];
+        
+        [NSLayoutConstraint activateConstraints:@[
+            [titleLabel.leadingAnchor constraintEqualToAnchor:headerView.leadingAnchor constant:4],
+            [titleLabel.centerYAnchor constraintEqualToAnchor:headerView.centerYAnchor]
+        ]];
+        
+        return headerView;
+    }
+    return nil;
 }
 
 - (UITableViewCell *)tableView:(nonnull UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {

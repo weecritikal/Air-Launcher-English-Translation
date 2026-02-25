@@ -6,8 +6,11 @@
 #import "VersionManagerViewController.h"
 #import "LauncherProfileEditorViewController.h"
 #import "LauncherPreferencesViewController.h"
+#import "LauncherNavigationController.h"
+#import "LauncherPreferences.h"
 #import "BackgroundManager.h"
 #import "PLProfiles.h"
+#import "utils.h"
 
 // 布局常量
 static const CGFloat kSidebarWidth = 70.0;      // 左侧边栏宽度
@@ -36,6 +39,9 @@ static const CGFloat kRightPanelWidth = 220.0;  // 右侧面板宽度
     
     self.view.backgroundColor = [UIColor clearColor];
     
+    // 初始化版本列表（必须在其他视图控制器之前）
+    [self initializeVersionLists];
+    
     // 创建三个容器视图
     [self setupContainers];
     
@@ -44,6 +50,70 @@ static const CGFloat kRightPanelWidth = 220.0;  // 右侧面板宽度
     
     // 应用背景
     [[BackgroundManager sharedManager] applyBackgroundToView:self.view];
+}
+
+- (void)initializeVersionLists {
+    // 初始化本地版本列表
+    if (!localVersionList) {
+        localVersionList = [NSMutableArray new];
+    }
+    [localVersionList removeAllObjects];
+    
+    NSFileManager *fileManager = [NSFileManager defaultManager];
+    NSString *versionPath = [NSString stringWithFormat:@"%s/versions/", getenv("POJAV_GAME_DIR")];
+    NSArray *list = [fileManager contentsOfDirectoryAtPath:versionPath error:nil];
+    for (NSString *versionId in list) {
+        NSString *localPath = [NSString stringWithFormat:@"%s/versions/%@", getenv("POJAV_GAME_DIR"), versionId];
+        BOOL isDirectory;
+        if ([fileManager fileExistsAtPath:localPath isDirectory:&isDirectory] && isDirectory) {
+            [localVersionList addObject:@{
+                @"id": versionId,
+                @"type": @"custom"
+            }];
+        }
+    }
+    
+    // 初始化远程版本列表
+    if (!remoteVersionList) {
+        remoteVersionList = [NSMutableArray new];
+    }
+    [remoteVersionList removeAllObjects];
+    [remoteVersionList addObjectsFromArray:@[
+        @{@"id": @"latest-release", @"type": @"release"},
+        @{@"id": @"latest-snapshot", @"type": @"snapshot"}
+    ]];
+    
+    // 异步获取远程版本列表
+    [self fetchRemoteVersionList];
+}
+
+- (void)fetchRemoteVersionList {
+    NSString *downloadSource = getPrefObject(@"general.download_source");
+    NSString *versionManifestURL;
+    
+    if ([downloadSource isEqualToString:@"bmclapi"]) {
+        versionManifestURL = @"https://bmclapi2.bangbang93.com/mc/game/version_manifest_v2.json";
+    } else {
+        versionManifestURL = @"https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
+    }
+    
+    NSURL *url = [NSURL URLWithString:versionManifestURL];
+    NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        if (data && !error) {
+            NSError *jsonError;
+            NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
+            if (json && json[@"versions"]) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [remoteVersionList addObjectsFromArray:json[@"versions"]];
+                    setPrefObject(@"internal.latest_version", json[@"latest"]);
+                    NSDebugLog(@"[LauncherRootVC] Loaded %d remote versions", remoteVersionList.count);
+                });
+            }
+        } else {
+            NSDebugLog(@"[LauncherRootVC] Failed to fetch version list: %@", error.localizedDescription);
+        }
+    }];
+    [task resume];
 }
 
 - (void)viewWillAppear:(BOOL)animated {

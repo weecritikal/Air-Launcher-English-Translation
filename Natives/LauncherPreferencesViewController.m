@@ -29,6 +29,8 @@
 - (id)init {
     self = [super init];
     self.title = localize(@"Settings", nil);
+    // 只有 Preference 界面显示布局切换器
+    self.showLayoutSwitcher = YES;
     return self;
 }
 
