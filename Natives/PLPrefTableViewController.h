@@ -9,7 +9,7 @@ typedef void(^CreateView)(UITableViewCell *, NSString *,NSString *, NSDictionary
 typedef id (^GetPreferenceBlock)(NSString *, NSString *);
 typedef void (^SetPreferenceBlock)(NSString *, NSString *, id);
 
-@interface PLPrefTableViewController : UITableViewController<UITextFieldDelegate>
+@interface PLPrefTableViewController : UIViewController<UITextFieldDelegate, UICollectionViewDataSource, UICollectionViewDelegate>
 
 @property(nonatomic) CreateView typeButton, typeChildPane, typePickField, typeTextField, typeSlider, typeSwitch;
 
@@ -28,6 +28,9 @@ typedef void (^SetPreferenceBlock)(NSString *, NSString *, id);
 @property(nonatomic) UISegmentedControl *layoutSwitcher;
 // 控制是否显示列表/卡片布局切换器，默认为 NO
 @property(nonatomic) BOOL showLayoutSwitcher;
+
+// 当前使用的列表视图（UITableView 或 UICollectionView）
+@property(nonatomic, readonly) UIScrollView *scrollView;
 
 - (UIBarButtonItem *)drawHelpButton;
 - (void)initViewCreation;
