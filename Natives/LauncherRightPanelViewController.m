@@ -9,6 +9,7 @@
 #import "MinecraftResourceDownloadTask.h"
 #import "DownloadProgressViewController.h"
 #import "ALTServerConnection.h"
+#import "ios_uikit_bridge.h"
 #import "utils.h"
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
