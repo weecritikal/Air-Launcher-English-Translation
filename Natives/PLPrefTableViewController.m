@@ -331,7 +331,7 @@
     _collectionView.delegate = self;
     
     [_collectionView registerClass:[PLModernCardCell class] forCellWithReuseIdentifier:@"CardCell"];
-    [_collectionView registerClass:[PLCardSectionHeaderView class] forSupplementaryViewOfKind:UICollectionView.elementKindSectionHeader withReuseIdentifier:@"SectionHeader"];
+    [_collectionView registerClass:[PLCardSectionHeaderView class] forSupplementaryViewOfKind:UICollectionElementKindSectionHeader withReuseIdentifier:@"SectionHeader"];
     
     [self.view addSubview:_collectionView];
 }
@@ -361,7 +361,7 @@
         NSCollectionLayoutSize *headerSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0]
                                                                            heightDimension:[NSCollectionLayoutDimension absoluteDimension:40]];
         NSCollectionLayoutBoundarySupplementaryItem *header = [NSCollectionLayoutBoundarySupplementaryItem boundarySupplementaryItemWithLayoutSize:headerSize
-                                                                                                                                         elementKind:UICollectionView.elementKindSectionHeader
+                                                                                                                                         elementKind:UICollectionElementKindSectionHeader
                                                                                                                                            alignment:NSRectAlignmentTop];
         section.boundarySupplementaryItems = @[header];
         
@@ -729,7 +729,7 @@
 }
 
 - (UICollectionReusableView *)collectionView:(UICollectionView *)collectionView viewForSupplementaryElementOfKind:(NSString *)elementKind atIndexPath:(NSIndexPath *)indexPath {
-    if ([elementKind isEqualToString:UICollectionView.elementKindSectionHeader]) {
+    if ([elementKind isEqualToString:UICollectionElementKindSectionHeader]) {
         PLCardSectionHeaderView *header = [collectionView dequeueReusableSupplementaryViewOfKind:elementKind withReuseIdentifier:@"SectionHeader" forIndexPath:indexPath];
         
         if (self.prefSections && indexPath.section < self.prefSections.count) {
@@ -897,7 +897,7 @@
         [view addTarget:view action:@selector(resignFirstResponder) forControlEvents:UIControlEventEditingDidEndOnExit];
         view.adjustsFontSizeToFitWidth = YES;
         view.autocorrectionType = UITextAutocorrectionTypeNo;
-        view.autocapitalizationType = UITextCapitilizationTypeNone;
+        view.autocapitalizationType = UITextAutocapitalizationTypeNone;
         view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleLeftMargin;
         view.delegate = weakSelf;
         view.returnKeyType = UIReturnKeyDone;

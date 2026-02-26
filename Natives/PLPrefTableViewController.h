@@ -9,7 +9,7 @@ typedef void(^CreateView)(UITableViewCell *, NSString *,NSString *, NSDictionary
 typedef id (^GetPreferenceBlock)(NSString *, NSString *);
 typedef void (^SetPreferenceBlock)(NSString *, NSString *, id);
 
-@interface PLPrefTableViewController : UIViewController<UITextFieldDelegate, UICollectionViewDataSource, UICollectionViewDelegate>
+@interface PLPrefTableViewController : UIViewController<UITextFieldDelegate, UICollectionViewDataSource, UICollectionViewDelegate, UITableViewDataSource, UITableViewDelegate>
 
 @property(nonatomic) CreateView typeButton, typeChildPane, typePickField, typeTextField, typeSlider, typeSwitch;
 
