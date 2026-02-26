@@ -280,8 +280,7 @@
     
     self.view.backgroundColor = [UIColor clearColor];
     
-    [self setupMainView];
-    
+    // 先初始化 prefSectionsVisibility，避免 UICollectionView dataSource 方法访问时崩溃
     if (self.prefSections) {
         self.prefSectionsVisibility = [[NSMutableArray<NSNumber *> alloc] initWithCapacity:self.prefSections.count];
         for (int i = 0; i < self.prefSections.count; i++) {
@@ -290,6 +289,8 @@
     } else {
         self.prefSectionsVisibility = (id)@[@YES];
     }
+    
+    [self setupMainView];
 }
 
 - (void)setupMainView {
@@ -528,13 +529,22 @@
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    if (self.prefSectionsVisibility[section].boolValue) {
+    if (section < self.prefSectionsVisibility.count && 
+        self.prefSectionsVisibility[section].boolValue &&
+        self.prefContents && section < self.prefContents.count) {
         return self.prefContents[section].count;
     }
     return 1;
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+    // 安全检查
+    if (!self.prefContents || indexPath.section >= self.prefContents.count ||
+        indexPath.row >= self.prefContents[indexPath.section].count) {
+        UITableViewCell *emptyCell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:@"EmptyCell"];
+        return emptyCell;
+    }
+    
     NSDictionary *item = self.prefContents[indexPath.section][indexPath.row];
     
     NSString *cellID;
@@ -610,8 +620,16 @@
     [tableView deselectRowAtIndexPath:indexPath animated:NO];
     
     if (indexPath.row == 0 && self.prefSections) {
-        self.prefSectionsVisibility[indexPath.section] = @(![self.prefSectionsVisibility[indexPath.section] boolValue]);
-        [tableView reloadSections:[NSIndexSet indexSetWithIndex:indexPath.section] withRowAnimation:UITableViewRowAnimationFade];
+        if (indexPath.section < self.prefSectionsVisibility.count) {
+            self.prefSectionsVisibility[indexPath.section] = @(![self.prefSectionsVisibility[indexPath.section] boolValue]);
+            [tableView reloadSections:[NSIndexSet indexSetWithIndex:indexPath.section] withRowAnimation:UITableViewRowAnimationFade];
+        }
+        return;
+    }
+
+    // 安全检查
+    if (!self.prefContents || indexPath.section >= self.prefContents.count ||
+        indexPath.row >= self.prefContents[indexPath.section].count) {
         return;
     }
 
@@ -645,7 +663,9 @@
 }
 
 - (NSInteger)collectionView:(UICollectionView *)collectionView numberOfItemsInSection:(NSInteger)section {
-    if (self.prefSectionsVisibility[section].boolValue) {
+    if (section < self.prefSectionsVisibility.count && 
+        self.prefSectionsVisibility[section].boolValue &&
+        self.prefContents && section < self.prefContents.count) {
         return self.prefContents[section].count;
     }
     return 0;
@@ -654,9 +674,15 @@
 - (UICollectionViewCell *)collectionView:(UICollectionView *)collectionView cellForItemAtIndexPath:(NSIndexPath *)indexPath {
     PLModernCardCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"CardCell" forIndexPath:indexPath];
     
+    // 安全检查
+    if (!self.prefContents || indexPath.section >= self.prefContents.count ||
+        indexPath.row >= self.prefContents[indexPath.section].count) {
+        return cell;
+    }
+    
     NSDictionary *item = self.prefContents[indexPath.section][indexPath.row];
     NSString *key = item[@"key"];
-    NSString *section = self.prefSections[indexPath.section];
+    NSString *section = self.prefSections ? self.prefSections[indexPath.section] : @"";
     
     NSString *title = localize((item[@"title"] ? item[@"title"] :
         [NSString stringWithFormat:@"preference.title.%@", key]), nil);
