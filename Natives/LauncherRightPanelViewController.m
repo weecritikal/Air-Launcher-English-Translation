@@ -42,6 +42,11 @@ extern void setPrefInt(NSString *key, NSInteger value);
                                              selector:@selector(updateAccountInfo)
                                                  name:@"UpdateAccountInfo"
                                                object:nil];
+    // 监听版本/配置切换通知
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(updateVersionInfo)
+                                                 name:@"SelectedProfileChanged"
+                                               object:nil];
 }
 
 - (void)viewWillAppear:(BOOL)animated {

@@ -236,6 +236,18 @@ static const CGFloat kRightPanelWidth = 220.0;  // 右侧面板宽度
                                              selector:@selector(reloadProfileEditorIfNeeded)
                                                  name:@"SelectedProfileChanged"
                                                object:nil];
+    // 监听游戏目录切换，重新加载版本列表
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(reloadVersionLists)
+                                                 name:@"ReloadProfileList"
+                                               object:nil];
+}
+
+- (void)reloadVersionLists {
+    // 重新加载版本列表
+    [self initializeVersionLists];
+    // 通知右侧面板刷新版本显示
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"SelectedProfileChanged" object:nil];
 }
 
 - (void)showHomePage {
