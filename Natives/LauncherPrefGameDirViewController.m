@@ -48,8 +48,13 @@
     [NSFileManager.defaultManager changeCurrentDirectoryPath:lasmPath];
     toggleIsolatedPref(NO);
     
-    // 发送通知刷新配置文件列表
-    [[NSNotificationCenter defaultCenter] postNotificationName:@"ReloadProfileList" object:nil];
+    // 尝试直接调用 reloadProfileList，如果 navigationController 响应该选择器
+    if ([self.navigationController respondsToSelector:@selector(reloadProfileList)]) {
+        [self.navigationController performSelector:@selector(reloadProfileList)];
+    } else {
+        // 否则发送通知
+        [[NSNotificationCenter defaultCenter] postNotificationName:@"ReloadProfileList" object:nil];
+    }
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section
