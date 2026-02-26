@@ -355,7 +355,7 @@
 }
 
 - (NSInteger)collectionView:(UICollectionView *)collectionView numberOfItemsInSection:(NSInteger)section {
-    if (section == 0) return 5;
+    if (section == 0) return 3;
     return self.profileList.count;
 }
 
@@ -371,13 +371,7 @@
                 [cell configureWithIcon:@"puzzlepiece.extension.fill" title:@"Mod 管理" subtitle:@"管理已安装的 Mod" color:[UIColor systemOrangeColor]];
                 break;
             case 2:
-                [cell configureWithIcon:@"arrow.down.circle.fill" title:@"Mod 下载" subtitle:@"从 Modrinth 下载 Mod" color:[UIColor systemGreenColor]];
-                break;
-            case 3:
                 [cell configureWithIcon:@"paintbrush.fill" title:@"光影管理" subtitle:@"管理光影包" color:[UIColor systemPurpleColor]];
-                break;
-            case 4:
-                [cell configureWithIcon:@"arrow.down.circle.fill" title:@"光影下载" subtitle:@"从 Modrinth 下载光影" color:[UIColor systemPinkColor]];
                 break;
         }
         return cell;
@@ -412,9 +406,7 @@
         switch (indexPath.item) {
             case 0: [self openGameDirectory]; break;
             case 1: [self openModsManager]; break;
-            case 2: [self openModsDownload]; break;
-            case 3: [self openShadersManager]; break;
-            case 4: [self openShadersDownload]; break;
+            case 2: [self openShadersManager]; break;
         }
     } else {
         [self showProfileActions:self.profileList[indexPath.item]];
@@ -451,32 +443,6 @@
     ShadersManagerViewController *vc = [[ShadersManagerViewController alloc] init];
     vc.profileName = self.selectedProfile;
     vc.initialMode = ShadersManagerModeLocal;
-    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
-    nav.modalPresentationStyle = UIModalPresentationFormSheet;
-    [self presentViewController:nav animated:YES completion:nil];
-}
-
-- (void)openShadersDownload {
-    if (!self.selectedProfile) {
-        [self showAlert:@"请先选择一个版本"];
-        return;
-    }
-    ShadersManagerViewController *vc = [[ShadersManagerViewController alloc] init];
-    vc.profileName = self.selectedProfile;
-    vc.initialMode = ShadersManagerModeOnline;
-    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
-    nav.modalPresentationStyle = UIModalPresentationFormSheet;
-    [self presentViewController:nav animated:YES completion:nil];
-}
-
-- (void)openModsDownload {
-    if (!self.selectedProfile) {
-        [self showAlert:@"请先选择一个版本"];
-        return;
-    }
-    ModsManagerViewController *vc = [[ModsManagerViewController alloc] init];
-    vc.profileName = self.selectedProfile;
-    vc.initialMode = ModsManagerModeOnline;
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
     nav.modalPresentationStyle = UIModalPresentationFormSheet;
     [self presentViewController:nav animated:YES completion:nil];

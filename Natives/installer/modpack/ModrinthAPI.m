@@ -113,6 +113,8 @@
     NSString *query = filters[@"query"] ?: filters[@"name"] ?: @"";
     NSNumber *limitNum = filters[@"limit"] ?: @50;
     int limit = [limitNum intValue];
+    NSNumber *offsetNum = filters[@"offset"] ?: @0;
+    int offset = [offsetNum intValue];
     
     // 构建 facets
     NSMutableString *facetString = [NSMutableString new];
@@ -125,14 +127,23 @@
     if (mcVersion.length > 0) {
         [facetString appendFormat:@", [\"versions:%@\"]", mcVersion];
     }
+    
+    // 添加模组加载器过滤
+    NSString *modLoader = filters[@"modloader"] ?: filters[@"modLoader"];
+    if (modLoader.length > 0) {
+        [facetString appendFormat:@", [\"categories:%@\"]", modLoader];
+    }
     [facetString appendString:@"]"];
 
     // URL 编码参数
     NSString *encodedQuery = [query stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
     NSString *encodedFacets = [facetString stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
     
-    NSString *urlString = [NSString stringWithFormat:@"%@/search?query=%@&limit=%d&offset=0&facets=%@&index=relevance",
-                          self.baseURL, encodedQuery, limit, encodedFacets];
+    // 使用 follows 作为排序依据来获取热门模组（空查询时）
+    NSString *index = query.length > 0 ? @"relevance" : @"follows";
+    
+    NSString *urlString = [NSString stringWithFormat:@"%@/search?query=%@&limit=%d&offset=%d&facets=%@&index=%@",
+                          self.baseURL, encodedQuery, limit, offset, encodedFacets, index];
 
     NSURL *url = [NSURL URLWithString:urlString];
     if (!url) {
@@ -305,12 +316,13 @@
 #pragma mark - Shader Search
 
 - (void)searchShaderWithFilters:(NSDictionary *)filters completion:(void (^)(NSArray * _Nullable results, NSError * _Nullable error))completion {
-    NSString *query = filters[@"name"] ?: @"";
-    if (query.length == 0) {
-        if (completion) completion(@[], nil);
-        return;
-    }
-
+    NSString *query = filters[@"name"] ?: filters[@"query"] ?: @"";
+    NSNumber *limitNum = filters[@"limit"] ?: @50;
+    int limit = [limitNum intValue];
+    NSNumber *offsetNum = filters[@"offset"] ?: @0;
+    int offset = [offsetNum intValue];
+    
+    // 允许空查询以加载热门光影
     // 修复：使用正确的facets参数格式
     // 正确的格式是: [["project_type:shader"]]
     // URL编码后: %5B%5B%22project_type%3Ashader%22%5D%5D
@@ -320,8 +332,11 @@
     // 手动构建facets参数，确保格式正确
     NSString *facetsParam = @"%5B%5B%22project_type%3Ashader%22%5D%5D"; // [[\"project_type:shader\"]]
     
-    NSString *urlString = [NSString stringWithFormat:@"%@/search?query=%@&limit=50&offset=0&facets=%@&index=relevance", 
-                          self.baseURL, encodedQuery, facetsParam];
+    // 使用 follows 作为排序依据来获取热门光影（空查询时）
+    NSString *index = query.length > 0 ? @"relevance" : @"follows";
+    
+    NSString *urlString = [NSString stringWithFormat:@"%@/search?query=%@&limit=%d&offset=%d&facets=%@&index=%@", 
+                          self.baseURL, encodedQuery, limit, offset, facetsParam, index];
 
     NSURL *url = [NSURL URLWithString:urlString];
     if (!url) {
