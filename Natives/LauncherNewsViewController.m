@@ -186,6 +186,63 @@
 
 @end
 
+// MARK: - Announcement Cell
+
+@interface AnnouncementCell : NewsBaseCell
+@property (nonatomic, strong) UIImageView *iconView;
+@property (nonatomic, strong) UILabel *messageLabel;
+@property (nonatomic, strong) UIButton *downloadButton;
+@end
+
+@implementation AnnouncementCell
+
+- (void)setupViews {
+    [super setupViews];
+    
+    self.iconView = [[UIImageView alloc] init];
+    self.iconView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.iconView.contentMode = UIViewContentModeScaleAspectFit;
+    if (@available(iOS 13.0, *)) {
+        self.iconView.image = [UIImage systemImageNamed:@"info.circle.fill"];
+        self.iconView.tintColor = [UIColor systemBlueColor];
+    }
+    [self.contentContainer addSubview:self.iconView];
+    
+    self.messageLabel = [[UILabel alloc] init];
+    self.messageLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.messageLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline];
+    self.messageLabel.textColor = [UIColor labelColor];
+    self.messageLabel.numberOfLines = 0;
+    [self.contentContainer addSubview:self.messageLabel];
+    
+    self.downloadButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    self.downloadButton.translatesAutoresizingMaskIntoConstraints = NO;
+    self.downloadButton.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
+    self.downloadButton.layer.cornerRadius = 8;
+    self.downloadButton.clipsToBounds = YES;
+    self.downloadButton.hidden = YES;
+    [self.contentContainer addSubview:self.downloadButton];
+    
+    [NSLayoutConstraint activateConstraints:@[
+        [self.iconView.topAnchor constraintEqualToAnchor:self.contentContainer.topAnchor constant:16],
+        [self.iconView.leadingAnchor constraintEqualToAnchor:self.contentContainer.leadingAnchor constant:16],
+        [self.iconView.widthAnchor constraintEqualToConstant:20],
+        [self.iconView.heightAnchor constraintEqualToConstant:20],
+        
+        [self.messageLabel.topAnchor constraintEqualToAnchor:self.contentContainer.topAnchor constant:16],
+        [self.messageLabel.leadingAnchor constraintEqualToAnchor:self.iconView.trailingAnchor constant:8],
+        [self.messageLabel.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-16],
+        
+        [self.downloadButton.topAnchor constraintEqualToAnchor:self.messageLabel.bottomAnchor constant:12],
+        [self.downloadButton.leadingAnchor constraintEqualToAnchor:self.contentContainer.leadingAnchor constant:16],
+        [self.downloadButton.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-16],
+        [self.downloadButton.heightAnchor constraintEqualToConstant:32],
+        [self.downloadButton.bottomAnchor constraintEqualToAnchor:self.contentContainer.bottomAnchor constant:-16]
+    ]];
+}
+
+@end
+
 // MARK: - View Controller
 
 @interface LauncherNewsViewController () <UICollectionViewDataSource, UICollectionViewDelegate>
@@ -196,6 +253,11 @@
 @property (nonatomic, strong) NSString *currentUsername;
 @property (nonatomic, strong) UIImage *currentSkin;
 @property (nonatomic, assign) BOOL isLoadingVersions;
+
+// 更新检测相关
+@property (nonatomic, strong) NSString *announcementText;
+@property (nonatomic, assign) BOOL hasUpdate;
+@property (nonatomic, strong) NSString *latestVersion;
 
 @end
 
@@ -208,6 +270,8 @@
         self.latestRelease = @"检测中...";
         self.latestSnapshot = @"检测中...";
         self.isLoadingVersions = YES;
+        self.announcementText = @"正在检查更新...";
+        self.hasUpdate = NO;
     }
     return self;
 }
@@ -225,6 +289,7 @@
     [self setupCollectionView];
     [self updateSkinDisplay];
     [self checkMinecraftVersions];
+    [self checkForUpdate];
     
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(updateSkinDisplay)
@@ -246,6 +311,7 @@
     
     [self.collectionView registerClass:[SkinProfileCell class] forCellWithReuseIdentifier:@"SkinCell"];
     [self.collectionView registerClass:[InfoTileCell class] forCellWithReuseIdentifier:@"InfoCell"];
+    [self.collectionView registerClass:[AnnouncementCell class] forCellWithReuseIdentifier:@"AnnouncementCell"];
     
     [self.view addSubview:self.collectionView];
 }
@@ -272,7 +338,7 @@
             section = [NSCollectionLayoutSection sectionWithGroup:group];
             section.contentInsets = NSDirectionalEdgeInsetsMake(20, 20, 10, 20);
             
-        } else {
+        } else if (sectionIndex == 1) {
             // 版本信息 - 磁贴网格
             NSCollectionLayoutSize *itemSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:isiPad ? 0.5 : 1.0]
                                                                               heightDimension:[NSCollectionLayoutDimension fractionalHeightDimension:1.0]];
@@ -288,8 +354,20 @@
             }
             
             section = [NSCollectionLayoutSection sectionWithGroup:group];
-            section.contentInsets = NSDirectionalEdgeInsetsMake(10, 20, 20, 20);
+            section.contentInsets = NSDirectionalEdgeInsetsMake(10, 20, 10, 20);
             section.interGroupSpacing = 10;
+        } else {
+            // 公告栏
+            NSCollectionLayoutSize *itemSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0]
+                                                                              heightDimension:[NSCollectionLayoutDimension estimatedDimension:80]];
+            NSCollectionLayoutItem *item = [NSCollectionLayoutItem itemWithLayoutSize:itemSize];
+            
+            NSCollectionLayoutSize *groupSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0]
+                                                                               heightDimension:[NSCollectionLayoutDimension estimatedDimension:80]];
+            NSCollectionLayoutGroup *group = [NSCollectionLayoutGroup horizontalGroupWithLayoutSize:groupSize subitems:@[item]];
+            
+            section = [NSCollectionLayoutSection sectionWithGroup:group];
+            section.contentInsets = NSDirectionalEdgeInsetsMake(10, 20, 20, 20);
         }
         
         return section;
@@ -299,12 +377,13 @@
 #pragma mark - UICollectionViewDataSource
 
 - (NSInteger)numberOfSectionsInCollectionView:(UICollectionView *)collectionView {
-    return 2;
+    return 3; // Skin, Version Info, Announcement
 }
 
 - (NSInteger)collectionView:(UICollectionView *)collectionView numberOfItemsInSection:(NSInteger)section {
     if (section == 0) return 1; // Skin
-    return 2; // Release & Snapshot
+    if (section == 1) return 2; // Release & Snapshot
+    return 1; // Announcement
 }
 
 - (UICollectionViewCell *)collectionView:(UICollectionView *)collectionView cellForItemAtIndexPath:(NSIndexPath *)indexPath {
@@ -316,7 +395,7 @@
         cell.subLabel.text = @"准备好开始游戏了吗？";
         
         return cell;
-    } else {
+    } else if (indexPath.section == 1) {
         InfoTileCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"InfoCell" forIndexPath:indexPath];
         
         if (indexPath.item == 0) {
@@ -329,6 +408,23 @@
             cell.valueLabel.text = self.latestSnapshot;
             cell.iconView.image = [UIImage systemImageNamed:@"ant.fill"]; // 或者是 hammer.fill
             cell.iconView.tintColor = [UIColor systemOrangeColor];
+        }
+        
+        return cell;
+    } else {
+        AnnouncementCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"AnnouncementCell" forIndexPath:indexPath];
+        
+        cell.messageLabel.text = self.announcementText;
+        
+        if (self.hasUpdate) {
+            cell.downloadButton.hidden = NO;
+            [cell.downloadButton setTitle:@"前往下载" forState:UIControlStateNormal];
+            cell.downloadButton.backgroundColor = [UIColor systemBlueColor];
+            [cell.downloadButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+            [cell.downloadButton removeTarget:nil action:nil forControlEvents:UIControlEventAllEvents];
+            [cell.downloadButton addTarget:self action:@selector(downloadLatestVersion) forControlEvents:UIControlEventTouchUpInside];
+        } else {
+            cell.downloadButton.hidden = YES;
         }
         
         return cell;
@@ -465,6 +561,126 @@
         });
     }];
     [task resume];
+}
+
+#pragma mark - Update Check
+
+- (void)checkForUpdate {
+    NSString *currentVersion = [[[NSBundle mainBundle] infoDictionary] objectForKey:@"CFBundleShortVersionString"];
+    
+    // 检查是否是预览版
+    if ([currentVersion rangeOfString:@"Preview" options:NSCaseInsensitiveSearch].location != NSNotFound) {
+        self.announcementText = @"欢迎使用 Amethyst iOS Remastered 测试版！";
+        self.hasUpdate = NO;
+        [self.collectionView reloadSections:[NSIndexSet indexSetWithIndex:2]];
+        return;
+    }
+    
+    NSURL *url = [NSURL URLWithString:@"https://github.com/herbrine8403/Amethyst-iOS-MyRemastered/releases/latest"];
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+    [request setHTTPMethod:@"GET"];
+    
+    NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        if (error || ((NSHTTPURLResponse *)response).statusCode != 200 || !data) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                self.announcementText = @"欢迎使用 Amethyst iOS Remastered！";
+                self.hasUpdate = NO;
+                [self.collectionView reloadSections:[NSIndexSet indexSetWithIndex:2]];
+            });
+            return;
+        }
+        
+        NSString *htmlString = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+        NSString *latestVersion = [self extractVersionFromHTML:htmlString];
+        
+        if (!latestVersion) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                self.announcementText = @"欢迎使用 Amethyst iOS Remastered！";
+                self.hasUpdate = NO;
+                [self.collectionView reloadSections:[NSIndexSet indexSetWithIndex:2]];
+            });
+            return;
+        }
+        
+        if ([latestVersion hasPrefix:@"v"]) {
+            latestVersion = [latestVersion substringFromIndex:1];
+        }
+        
+        dispatch_async(dispatch_get_main_queue(), ^{
+            NSComparisonResult versionComparison = [self compareVersion:currentVersion withVersion:latestVersion];
+            
+            if (versionComparison == NSOrderedAscending) {
+                self.announcementText = [NSString stringWithFormat:@"发现新版本：v%@", latestVersion];
+                self.latestVersion = latestVersion;
+                self.hasUpdate = YES;
+            } else {
+                self.announcementText = @"欢迎使用 Amethyst iOS Remastered！当前已是最新版本。";
+                self.hasUpdate = NO;
+            }
+            [self.collectionView reloadSections:[NSIndexSet indexSetWithIndex:2]];
+        });
+    }];
+    
+    [task resume];
+}
+
+- (NSString *)extractVersionFromHTML:(NSString *)html {
+    // 从 HTML 中提取版本号
+    NSRange titleRange = [html rangeOfString:@"<title>"];
+    if (titleRange.location == NSNotFound) return nil;
+    
+    NSString *afterTitle = [html substringFromIndex:NSMaxRange(titleRange)];
+    NSRange endTitleRange = [afterTitle rangeOfString:@"</title>"];
+    if (endTitleRange.location == NSNotFound) return nil;
+    
+    NSString *titleContent = [afterTitle substringToIndex:endTitleRange.location];
+    
+    // 格式通常是 "Release v1.2.3 · herbrine8403/Amethyst-iOS-MyRemastered"
+    NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@"v([0-9]+\\.[0-9]+\\.[0-9]+)" options:0 error:nil];
+    NSTextCheckingResult *match = [regex firstMatchInString:titleContent options:0 range:NSMakeRange(0, titleContent.length)];
+    
+    if (match) {
+        return [titleContent substringWithRange:[match rangeAtIndex:1]];
+    }
+    
+    return nil;
+}
+
+- (NSComparisonResult)compareVersion:(NSString *)version1 withVersion:(NSString *)version2 {
+    NSArray *v1Components = [version1 componentsSeparatedByString:@"."];
+    NSArray *v2Components = [version2 componentsSeparatedByString:@"."];
+    
+    NSInteger maxComponents = MAX(v1Components.count, v2Components.count);
+    
+    for (NSInteger i = 0; i < maxComponents; i++) {
+        NSInteger v1 = 0;
+        NSInteger v2 = 0;
+        
+        if (i < v1Components.count) {
+            v1 = [v1Components[i] integerValue];
+        }
+        
+        if (i < v2Components.count) {
+            v2 = [v2Components[i] integerValue];
+        }
+        
+        if (v1 < v2) {
+            return NSOrderedAscending;
+        } else if (v1 > v2) {
+            return NSOrderedDescending;
+        }
+    }
+    
+    return NSOrderedSame;
+}
+
+- (void)downloadLatestVersion {
+    NSString *urlString = @"https://github.com/herbrine8403/Amethyst-iOS-MyRemastered/releases/latest";
+    NSURL *url = [NSURL URLWithString:urlString];
+    
+    if ([[UIApplication sharedApplication] canOpenURL:url]) {
+        [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:nil];
+    }
 }
 
 #pragma mark - Orientation
