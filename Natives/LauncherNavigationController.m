@@ -64,6 +64,12 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 
     [self reloadProfileList];
 
+    // 监听配置文件列表刷新通知
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(reloadProfileList)
+                                                 name:@"ReloadProfileList"
+                                               object:nil];
+
     UIBarButtonItem *versionFlexibleSpace = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace target:self action:nil];
     UIBarButtonItem *versionDoneButton = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone target:self action:@selector(versionClosePicker)];
     versionPickToolbar.items = @[versionFlexibleSpace, versionDoneButton];
@@ -199,6 +205,10 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     }
     [self.versionPickerView selectRow:self.profileSelectedAt inComponent:0 animated:NO];
     [self pickerView:self.versionPickerView didSelectRow:self.profileSelectedAt inComponent:0];
+}
+
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
 #pragma mark - Options

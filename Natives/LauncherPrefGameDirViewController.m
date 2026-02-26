@@ -47,7 +47,9 @@
     [NSFileManager.defaultManager createSymbolicLinkAtPath:lasmPath withDestinationPath:multidirPath error:nil];
     [NSFileManager.defaultManager changeCurrentDirectoryPath:lasmPath];
     toggleIsolatedPref(NO);
-    [(LauncherNavigationController *)self.navigationController reloadProfileList];
+    
+    // 发送通知刷新配置文件列表
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"ReloadProfileList" object:nil];
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section
