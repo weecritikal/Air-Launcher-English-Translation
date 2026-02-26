@@ -41,4 +41,7 @@ typedef void (^SetPreferenceBlock)(NSString *, NSString *, id);
 - (UIBarButtonItem *)drawHelpButton;
 - (void)initViewCreation;
 
+// 供子类调用：获取指定 indexPath 的 cell（列表模式）
+- (UITableViewCell *)cellForIndexPath:(NSIndexPath *)indexPath;
+
 @end

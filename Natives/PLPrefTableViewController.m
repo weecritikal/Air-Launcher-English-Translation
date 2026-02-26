@@ -598,6 +598,14 @@
     return cell;
 }
 
+// 供子类调用
+- (UITableViewCell *)cellForIndexPath:(NSIndexPath *)indexPath {
+    if (_tableView) {
+        return [self tableView:_tableView cellForRowAtIndexPath:indexPath];
+    }
+    return nil;
+}
+
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:NO];
     

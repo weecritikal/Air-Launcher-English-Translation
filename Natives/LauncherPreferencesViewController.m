@@ -810,7 +810,7 @@
 #pragma mark - UITableView Data Source Override
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-    UITableViewCell *cell = [super tableView:tableView cellForRowAtIndexPath:indexPath];
+    UITableViewCell *cell = [self cellForIndexPath:indexPath];
     
     // Apply background styling if global background is active
     if ([[BackgroundManager sharedManager] hasBackground]) {
