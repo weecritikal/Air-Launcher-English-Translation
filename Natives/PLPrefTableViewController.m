@@ -268,6 +268,8 @@
     [self initViewCreation];
     // 从偏好设置加载布局模式
     _layoutMode = (PLSettingsLayoutMode)[[NSUserDefaults standardUserDefaults] integerForKey:@"settings_layout_mode"];
+    // 默认展开所有 section
+    _prefSectionsVisible = YES;
     return self;
 }
 
