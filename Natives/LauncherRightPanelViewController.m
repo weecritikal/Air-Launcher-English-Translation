@@ -3,6 +3,7 @@
 #import "LauncherProfilesViewController.h"
 #import "AccountListViewController.h"
 #import "SurfaceViewController.h"
+#import "CustomControlsViewController.h"
 #import "PLProfiles.h"
 #import "LauncherPreferences.h"
 #import "MinecraftResourceUtils.h"
@@ -216,10 +217,15 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 }
 
 - (void)showVersionManager {
-    LauncherProfilesViewController *vc = [[LauncherProfilesViewController alloc] init];
-    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
-    nav.modalPresentationStyle = UIModalPresentationFormSheet;
-    [self presentViewController:nav animated:YES completion:nil];
+    CustomControlsViewController *vc = [[CustomControlsViewController alloc] init];
+    vc.modalPresentationStyle = UIModalPresentationOverFullScreen;
+    vc.setDefaultCtrl = ^(NSString *name){
+        setPrefObject(@"control.default_ctrl", name);
+    };
+    vc.getDefaultCtrl = ^{
+        return getPrefObject(@"control.default_ctrl");
+    };
+    [self presentViewController:vc animated:YES completion:nil];
 }
 
 - (void)executeJar {
