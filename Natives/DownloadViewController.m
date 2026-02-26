@@ -276,6 +276,7 @@
 - (void)setupTagsStack {
     self.tagsStack = [[UIStackView alloc] init];
     self.tagsStack.translatesAutoresizingMaskIntoConstraints = NO;
+}
 
 - (void)setupDownloadButton {
     self.downloadButton = [UIButton buttonWithType:UIButtonTypeSystem];
