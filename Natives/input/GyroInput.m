@@ -62,8 +62,10 @@ static CMMotionManager* cmInstance;
         lastYValue = cmInstance.deviceMotion.rotationRate.y / (M_PI*90) * windowHeight * factor;
     }
 
-    SurfaceViewController *vc = (id)UIWindow.mainWindow.rootViewController;
-    [vc sendTouchPoint:CGPointMake(lastXValue, lastYValue) withEvent:ACTION_MOVE_MOTION];
+    SurfaceViewController *vc = [SurfaceViewController currentInstance];
+    if (vc) {
+        [vc sendTouchPoint:CGPointMake(lastXValue, lastYValue) withEvent:ACTION_MOVE_MOTION];
+    }
 
     lastFrameTime = frameTime;
 }

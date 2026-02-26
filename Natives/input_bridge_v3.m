@@ -395,8 +395,10 @@ JNIEXPORT void JNICALL Java_org_lwjgl_glfw_CallbackBridge_nativeSetGrabbing(JNIE
     isGrabbing = grabbing;
 
     dispatch_async(dispatch_get_main_queue(), ^{
-        SurfaceViewController *vc = ((SurfaceViewController *)UIWindow.mainWindow.rootViewController);
-        [vc updateGrabState];
+        SurfaceViewController *vc = [SurfaceViewController currentInstance];
+        if (vc) {
+            [vc updateGrabState];
+        }
     });
 }
 

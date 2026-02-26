@@ -1720,7 +1720,21 @@ static NSMutableDictionary *s_touchToFingerIdMap = nil;
 }
 
 + (BOOL)isRunning {
-    return [UIWindow.mainWindow.rootViewController isKindOfClass:SurfaceViewController.class];
+    return [self currentInstance] != nil;
+}
+
++ (instancetype)currentInstance {
+    UIViewController *rootVC = UIWindow.mainWindow.rootViewController;
+    // 情况1：rootViewController 就是 SurfaceViewController
+    if ([rootVC isKindOfClass:[SurfaceViewController class]]) {
+        return (SurfaceViewController *)rootVC;
+    }
+    // 情况2：SurfaceViewController 以模态方式呈现
+    UIViewController *presentedVC = rootVC.presentedViewController;
+    if ([presentedVC isKindOfClass:[SurfaceViewController class]]) {
+        return (SurfaceViewController *)presentedVC;
+    }
+    return nil;
 }
 
 + (GameSurfaceView *)surface {

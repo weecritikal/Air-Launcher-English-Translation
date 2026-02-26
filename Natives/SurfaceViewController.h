@@ -28,6 +28,9 @@ CGPoint lastVirtualMousePoint;
 
 + (GameSurfaceView *)surface;
 + (BOOL)isRunning;
+// 获取当前显示的 SurfaceViewController 实例
+// 支持作为 rootViewController 或以模态方式呈现两种情况
++ (instancetype)currentInstance;
 
 // LogView category
 @property(nonatomic) PLLogOutputView* logOutputView;
