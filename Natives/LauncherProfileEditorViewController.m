@@ -168,6 +168,27 @@
     ];
 
     [super viewDidLoad];
+    
+    // 监听版本列表刷新通知
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(reloadVersionList)
+                                                 name:@"ReloadProfileList"
+                                               object:nil];
+}
+
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
+- (void)reloadVersionList {
+    // 清除当前版本列表缓存，下次打开选择器时会重新加载
+    self.versionList = nil;
+    self.versionSelectedAt = -1;
+    
+    // 如果版本选择器正在显示，立即刷新
+    if (self.versionPickerView && self.versionPickerView.window) {
+        [self changeVersionType:nil];
+    }
 }
 
 - (void)actionClose {
