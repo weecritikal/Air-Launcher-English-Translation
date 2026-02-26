@@ -233,23 +233,32 @@ extern void setPrefInt(NSString *key, NSInteger value);
             versionId = getPrefObject(@"internal.latest_version.snapshot");
         }
         
+        // 如果 still nil, use the original value
+        if (!versionId) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [self showAlert:@"无法解析版本号，请确保版本已下载"];
+            });
+            return;
+        }
+        
         // 先尝试从本地读取版本 JSON
         NSString *localVersionPath = [NSString stringWithFormat:@"%s/versions/%@/%@.json", getenv("POJAV_GAME_DIR"), versionId, versionId];
         NSFileManager *fm = [NSFileManager defaultManager];
         NSMutableDictionary *versionInfo = nil;
+        NSError *jsonError = nil;
         
         if ([fm fileExistsAtPath:localVersionPath]) {
             NSData *localData = [NSData dataWithContentsOfFile:localVersionPath];
             if (localData) {
-                NSError *error;
-                versionInfo = [NSJSONSerialization JSONObjectWithData:localData options:NSJSONReadingMutableContainers error:&error];
-                if (versionInfo && versionInfo[@"NSErrorObject"]) {
+                versionInfo = [NSJSONSerialization JSONObjectWithData:localData options:NSJSONReadingMutableContainers error:&jsonError];
+                if (jsonError || !versionInfo) {
+                    NSLog(@"[LauncherRightPanel] Failed to parse local version JSON: %@", jsonError.localizedDescription);
                     versionInfo = nil;
                 }
             }
         }
         
-        // 如果本地没有，从远程获取
+        // 如果本地没有版本JSON，才尝试从网络获取
         if (!versionInfo) {
             NSString *downloadSource = getPrefObject(@"general.download_source");
             NSString *versionManifestURL;
@@ -264,7 +273,7 @@ extern void setPrefInt(NSString *key, NSInteger value);
             NSData *data = [NSData dataWithContentsOfURL:url];
             if (!data) {
                 dispatch_async(dispatch_get_main_queue(), ^{
-                    [self showAlert:@"无法连接到版本服务器"];
+                    [self showAlert:@"无法连接到版本服务器，请检查网络或确保版本已下载"];
                 });
                 return;
             }
@@ -321,7 +330,7 @@ extern void setPrefInt(NSString *key, NSInteger value);
             if (inheritsData) {
                 NSError *error;
                 NSMutableDictionary *inheritsInfo = [NSJSONSerialization JSONObjectWithData:inheritsData options:NSJSONReadingMutableContainers error:&error];
-                if (inheritsInfo && !inheritsInfo[@"NSErrorObject"]) {
+                if (inheritsInfo && !error) {
                     // 合并版本信息
                     [MinecraftResourceUtils processVersion:versionInfo inheritsFrom:inheritsInfo];
                     versionInfo = inheritsInfo;
