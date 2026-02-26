@@ -187,11 +187,11 @@
     }
 
     [PLProfiles.current save];
+    
+    // 发送通知刷新配置文件列表
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"SelectedProfileChanged" object:self.profile[@"name"]];
+    
     [self actionClose];
-
-    // Call LauncherProfilesViewController's viewWillAppear
-    UINavigationController *navVC = (id) ((UISplitViewController *)self.presentingViewController).viewControllers[1];
-    [navVC.viewControllers[0] viewWillAppear:NO];
 }
 
 - (BOOL)isPickFieldAtSection:(NSString *)section key:(NSString *)key {

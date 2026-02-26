@@ -5,6 +5,7 @@
 #import "SurfaceViewController.h"
 #import "PLProfiles.h"
 #import "LauncherPreferences.h"
+#import "MinecraftResourceUtils.h"
 #import "utils.h"
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
@@ -225,65 +226,107 @@ extern void setPrefInt(NSString *key, NSInteger value);
             return;
         }
         
-        // 根据配置选择下载源
-        NSString *downloadSource = getPrefObject(@"general.download_source");
-        NSString *versionManifestURL;
-        
-        if ([downloadSource isEqualToString:@"bmclapi"]) {
-            versionManifestURL = @"https://bmclapi2.bangbang93.com/mc/game/version_manifest_v2.json";
-        } else {
-            versionManifestURL = @"https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
+        // 处理 latest-release 和 latest-snapshot
+        if ([versionId isEqualToString:@"latest-release"]) {
+            versionId = getPrefObject(@"internal.latest_version.release");
+        } else if ([versionId isEqualToString:@"latest-snapshot"]) {
+            versionId = getPrefObject(@"internal.latest_version.snapshot");
         }
         
-        NSURL *url = [NSURL URLWithString:versionManifestURL];
-        NSData *data = [NSData dataWithContentsOfURL:url];
-        if (!data) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                [self showAlert:@"无法连接到版本服务器"];
-            });
-            return;
-        }
+        // 先尝试从本地读取版本 JSON
+        NSString *localVersionPath = [NSString stringWithFormat:@"%s/versions/%@/%@.json", getenv("POJAV_GAME_DIR"), versionId, versionId];
+        NSFileManager *fm = [NSFileManager defaultManager];
+        NSDictionary *versionInfo = nil;
         
-        NSError *error;
-        NSDictionary *manifest = [NSJSONSerialization JSONObjectWithData:data options:0 error:&error];
-        if (!manifest) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                [self showAlert:@"版本数据解析失败"];
-            });
-            return;
-        }
-        
-        // 查找版本URL
-        NSString *versionUrl = nil;
-        for (NSDictionary *version in manifest[@"versions"]) {
-            if ([version[@"id"] isEqualToString:versionId]) {
-                versionUrl = version[@"url"];
-                break;
+        if ([fm fileExistsAtPath:localVersionPath]) {
+            NSData *localData = [NSData dataWithContentsOfFile:localVersionPath];
+            if (localData) {
+                NSError *error;
+                versionInfo = [NSJSONSerialization JSONObjectWithData:localData options:0 error:&error];
+                if (versionInfo && versionInfo[@"NSErrorObject"]) {
+                    versionInfo = nil;
+                }
             }
         }
         
-        if (!versionUrl) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                [self showAlert:@"找不到版本信息"];
-            });
-            return;
+        // 如果本地没有，从远程获取
+        if (!versionInfo) {
+            NSString *downloadSource = getPrefObject(@"general.download_source");
+            NSString *versionManifestURL;
+            
+            if ([downloadSource isEqualToString:@"bmclapi"]) {
+                versionManifestURL = @"https://bmclapi2.bangbang93.com/mc/game/version_manifest_v2.json";
+            } else {
+                versionManifestURL = @"https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
+            }
+            
+            NSURL *url = [NSURL URLWithString:versionManifestURL];
+            NSData *data = [NSData dataWithContentsOfURL:url];
+            if (!data) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [self showAlert:@"无法连接到版本服务器"];
+                });
+                return;
+            }
+            
+            NSError *error;
+            NSDictionary *manifest = [NSJSONSerialization JSONObjectWithData:data options:0 error:&error];
+            if (!manifest) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [self showAlert:@"版本数据解析失败"];
+                });
+                return;
+            }
+            
+            // 查找版本URL
+            NSString *versionUrl = nil;
+            for (NSDictionary *version in manifest[@"versions"]) {
+                if ([version[@"id"] isEqualToString:versionId]) {
+                    versionUrl = version[@"url"];
+                    break;
+                }
+            }
+            
+            if (!versionUrl) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [self showAlert:@"找不到版本信息，请确保版本已安装或网络正常"];
+                });
+                return;
+            }
+            
+            // 获取版本详情
+            NSData *versionData = [NSData dataWithContentsOfURL:[NSURL URLWithString:versionUrl]];
+            if (!versionData) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [self showAlert:@"无法获取版本详情"];
+                });
+                return;
+            }
+            
+            versionInfo = [NSJSONSerialization JSONObjectWithData:versionData options:0 error:&error];
         }
         
-        // 获取版本详情
-        NSData *versionData = [NSData dataWithContentsOfURL:[NSURL URLWithString:versionUrl]];
-        if (!versionData) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                [self showAlert:@"无法获取版本详情"];
-            });
-            return;
-        }
-        
-        NSDictionary *versionInfo = [NSJSONSerialization JSONObjectWithData:versionData options:0 error:&error];
         if (!versionInfo) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 [self showAlert:@"版本详情解析失败"];
             });
             return;
+        }
+        
+        // 处理 inheritsFrom
+        if (versionInfo[@"inheritsFrom"]) {
+            NSString *inheritsFrom = versionInfo[@"inheritsFrom"];
+            NSString *inheritsPath = [NSString stringWithFormat:@"%s/versions/%@/%@.json", getenv("POJAV_GAME_DIR"), inheritsFrom, inheritsFrom];
+            NSData *inheritsData = [NSData dataWithContentsOfFile:inheritsPath];
+            if (inheritsData) {
+                NSError *error;
+                NSMutableDictionary *inheritsInfo = [NSJSONSerialization JSONObjectWithData:inheritsData options:0 error:&error];
+                if (inheritsInfo && !inheritsInfo[@"NSErrorObject"]) {
+                    // 合并版本信息
+                    [MinecraftResourceUtils processVersion:versionInfo inheritsFrom:inheritsInfo];
+                    versionInfo = inheritsInfo;
+                }
+            }
         }
         
         // 构建metadata
