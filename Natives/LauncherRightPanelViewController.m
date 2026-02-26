@@ -135,10 +135,10 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     [self.launchButton addTarget:self action:@selector(launchButtonTapped) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.launchButton];
     
-    // 管理版本按钮
+    // 编辑控件按钮
     self.manageVersionBtn = [UIButton buttonWithType:UIButtonTypeSystem];
     self.manageVersionBtn.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.manageVersionBtn setTitle:@"管理版本" forState:UIControlStateNormal];
+    [self.manageVersionBtn setTitle:@"编辑控件" forState:UIControlStateNormal];
     [self.manageVersionBtn setTitleColor:[UIColor labelColor] forState:UIControlStateNormal];
     self.manageVersionBtn.backgroundColor = [UIColor colorWithWhite:0.2 alpha:1.0];
     self.manageVersionBtn.layer.cornerRadius = 8;
