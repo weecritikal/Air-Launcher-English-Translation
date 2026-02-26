@@ -255,7 +255,15 @@
     
     self.descLabel = [[UILabel alloc] init];
     self.descLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.descLabelUILabel *)createLabelWithFont:(UIFont *)font color:(UIColor *)color lines:(NSInteger)lines {
+    self.descLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightRegular];
+    self.descLabel.textColor = [UIColor secondaryLabelColor];
+    self.descLabel.numberOfLines = 2;
+    [self.contentView addSubview:self.descLabel];
+}
+
+#pragma mark - Helper Methods
+
+- (UILabel *)createLabelWithFont:(UIFont *)font color:(UIColor *)color lines:(NSInteger)lines {
     UILabel *label = [[UILabel alloc] init];
     label.translatesAutoresizingMaskIntoConstraints = NO;
     label.font = font;
@@ -268,11 +276,6 @@
 - (void)setupTagsStack {
     self.tagsStack = [[UIStackView alloc] init];
     self.tagsStack.translatesAutoresizingMaskIntoConstraints = NO;
-    self.tagsStack.axis = UILayoutConstraintAxisHorizontal;
-    self.tagsStack.spacing = 6;
-    self.tagsStack.distribution = UIStackViewDistributionFill;
-    [self.contentContainer addSubview:self.tagsStack];
-}
 
 - (void)setupDownloadButton {
     self.downloadButton = [UIButton buttonWithType:UIButtonTypeSystem];
