@@ -257,6 +257,11 @@
                                              selector:@selector(profileChanged)
                                                  name:@"SelectedProfileChanged"
                                                object:nil];
+    
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(profileChanged)
+                                                 name:@"ReloadProfileList"
+                                               object:nil];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
