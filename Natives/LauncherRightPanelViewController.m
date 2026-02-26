@@ -236,13 +236,13 @@ extern void setPrefInt(NSString *key, NSInteger value);
         // 先尝试从本地读取版本 JSON
         NSString *localVersionPath = [NSString stringWithFormat:@"%s/versions/%@/%@.json", getenv("POJAV_GAME_DIR"), versionId, versionId];
         NSFileManager *fm = [NSFileManager defaultManager];
-        NSDictionary *versionInfo = nil;
+        NSMutableDictionary *versionInfo = nil;
         
         if ([fm fileExistsAtPath:localVersionPath]) {
             NSData *localData = [NSData dataWithContentsOfFile:localVersionPath];
             if (localData) {
                 NSError *error;
-                versionInfo = [NSJSONSerialization JSONObjectWithData:localData options:0 error:&error];
+                versionInfo = [NSJSONSerialization JSONObjectWithData:localData options:NSJSONReadingMutableContainers error:&error];
                 if (versionInfo && versionInfo[@"NSErrorObject"]) {
                     versionInfo = nil;
                 }
@@ -320,7 +320,7 @@ extern void setPrefInt(NSString *key, NSInteger value);
             NSData *inheritsData = [NSData dataWithContentsOfFile:inheritsPath];
             if (inheritsData) {
                 NSError *error;
-                NSMutableDictionary *inheritsInfo = [NSJSONSerialization JSONObjectWithData:inheritsData options:0 error:&error];
+                NSMutableDictionary *inheritsInfo = [NSJSONSerialization JSONObjectWithData:inheritsData options:NSJSONReadingMutableContainers error:&error];
                 if (inheritsInfo && !inheritsInfo[@"NSErrorObject"]) {
                     // 合并版本信息
                     [MinecraftResourceUtils processVersion:versionInfo inheritsFrom:inheritsInfo];
