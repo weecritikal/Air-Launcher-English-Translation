@@ -13,8 +13,8 @@
 #import "ShaderItem.h"
 #import "ShaderVersionViewController.h"
 #import "ShaderVersion.h"
-#import "FabricInstallViewController.h"
-#import "ForgeInstallViewController.h"
+#import "installer/FabricInstallViewController.h"
+#import "installer/ForgeInstallViewController.h"
 #import <QuartzCore/QuartzCore.h>
 #include <sys/time.h>
 #include <SystemConfiguration/SystemConfiguration.h>
