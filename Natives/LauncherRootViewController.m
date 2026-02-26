@@ -300,7 +300,10 @@ static const CGFloat kRightPanelWidth = 220.0;  // 右侧面板宽度
 - (void)showSettings {
     // 在中间内容区显示设置页面
     LauncherPreferencesViewController *vc = [[LauncherPreferencesViewController alloc] init];
-    [self setContentViewController:vc animated:YES];
+    // 包装在导航控制器中，使其子页面能够正常导航
+    UINavigationController *navVC = [[UINavigationController alloc] initWithRootViewController:vc];
+    navVC.navigationBar.prefersLargeTitles = YES;
+    [self setContentViewController:navVC animated:YES];
 }
 
 - (void)executeJarFile:(NSNotification *)notification {
