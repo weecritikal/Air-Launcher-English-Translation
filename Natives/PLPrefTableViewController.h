@@ -32,6 +32,12 @@ typedef void (^SetPreferenceBlock)(NSString *, NSString *, id);
 // 当前使用的列表视图（UITableView 或 UICollectionView）
 @property(nonatomic, readonly) UIScrollView *scrollView;
 
+// 列表视图（供子类使用，如 FabricInstallViewController）
+@property(nonatomic, readonly) UITableView *tableView;
+
+// 卡片视图
+@property(nonatomic, readonly) UICollectionView *collectionView;
+
 - (UIBarButtonItem *)drawHelpButton;
 - (void)initViewCreation;
 
