@@ -816,25 +816,41 @@
 }
 
 - (void)showModLoaderPicker {
-    UIAlertController *alert = [UIAlertController alertController:title:@"模组加载器"
+
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"模组加载器"
+
                                                                    message:nil
+
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
+
     
-    NSDictionary *loaders = @{
-        @"全部": nil,
-        @"Fabric": @"fabric",
-        @"Forge": @"forge",
-        @"Quilt": @"quilt",
-        @"NeoForge": @"neoforge"
-    };
+
+    NSArray *loaderNames = @[@"全部", @"Fabric", @"Forge", @"Quilt", @"NeoForge"];
+
+    NSArray *loaderValues = @[[NSNull null], @"fabric", @"forge", @"quilt", @"neoforge"];
+
     
-    for (NSString *title in loaders) {
-        [alert addAction:[UIAlertAction actionWithTitle:title
+
+    for (NSInteger i = 0; i < loaderNames.count; i++) {
+
+        NSString *name = loaderNames[i];
+
+        id value = loaderValues[i];
+
+        
+
+        [alert addAction:[UIAlertAction actionWithTitle:name
+
                                                   style:UIAlertActionStyleDefault
+
                                                 handler:^(UIAlertAction * _Nonnull action) {
-            self.currentModLoader = loaders[title];
+
+            self.currentModLoader = (value == [NSNull null]) ? nil : value;
+
             [self reloadCurrentList];
+
         }]];
+
     }
     
     [alert addAction:[UIAlertAction actionWithTitle:@"取消"
