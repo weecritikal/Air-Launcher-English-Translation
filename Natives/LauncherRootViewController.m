@@ -241,6 +241,42 @@ static const CGFloat kRightPanelWidth = 220.0;  // 右侧面板宽度
                                              selector:@selector(reloadVersionLists)
                                                  name:@"ReloadProfileList"
                                                object:nil];
+    // 监听查找版本请求
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(findVersionInRemoteList:)
+                                                 name:@"FindVersionInRemoteList"
+                                               object:nil];
+}
+
+- (void)findVersionInRemoteList:(NSNotification *)notification {
+    NSDictionary *userInfo = notification.userInfo;
+    NSString *versionId = userInfo[@"versionId"];
+    void (^callback)(NSDictionary *) = userInfo[@"callback"];
+    
+    if (!versionId || !callback) {
+        return;
+    }
+    
+    // 在远程版本列表中查找
+    NSDictionary *versionObject = nil;
+    for (NSDictionary *version in remoteVersionList) {
+        if ([version[@"id"] isEqualToString:versionId]) {
+            versionObject = version;
+            break;
+        }
+    }
+    
+    // 如果在远程列表中找不到，检查是否是本地版本
+    if (!versionObject) {
+        for (NSDictionary *version in localVersionList) {
+            if ([version[@"id"] isEqualToString:versionId]) {
+                versionObject = version;
+                break;
+            }
+        }
+    }
+    
+    callback(versionObject);
 }
 
 - (void)reloadVersionLists {

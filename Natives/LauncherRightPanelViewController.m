@@ -6,12 +6,19 @@
 #import "PLProfiles.h"
 #import "LauncherPreferences.h"
 #import "MinecraftResourceUtils.h"
+#import "MinecraftResourceDownloadTask.h"
+#import "DownloadProgressViewController.h"
+#import "ALTServerConnection.h"
 #import "utils.h"
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
+
+#include <sys/time.h>
 
 // 添加 C 函数声明 - 这些函数在 LauncherPreferences.m 或其他地方定义
 extern void setPrefString(NSString *key, NSString *value);
 extern void setPrefInt(NSString *key, NSInteger value);
+
+static void *ProgressObserverContext = &ProgressObserverContext;
 
 @interface LauncherRightPanelViewController () <UIDocumentPickerDelegate>
 
@@ -21,6 +28,12 @@ extern void setPrefInt(NSString *key, NSInteger value);
 @property(nonatomic, strong) UIButton *launchButton;
 @property(nonatomic, strong) UIButton *manageVersionBtn;
 @property(nonatomic, strong) UIButton *executeJarBtn;
+
+// 下载相关属性
+@property(nonatomic, strong) MinecraftResourceDownloadTask *task;
+@property(nonatomic, strong) DownloadProgressViewController *progressVC;
+@property(nonatomic, strong) UIProgressView *progressView;
+@property(nonatomic, strong) UILabel *progressLabel;
 
 @end
 
@@ -93,6 +106,22 @@ extern void setPrefInt(NSString *key, NSInteger value);
     self.versionLabel.text = @"未选择版本";
     [self.view addSubview:self.versionLabel];
     
+    // 进度标签
+    self.progressLabel = [[UILabel alloc] init];
+    self.progressLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.progressLabel.font = [UIFont systemFontOfSize:12];
+    self.progressLabel.textColor = [UIColor secondaryLabelColor];
+    self.progressLabel.textAlignment = NSTextAlignmentCenter;
+    self.progressLabel.text = @"";
+    self.progressLabel.hidden = YES;
+    [self.view addSubview:self.progressLabel];
+    
+    // 进度条
+    self.progressView = [[UIProgressView alloc] initWithProgressViewStyle:UIProgressViewStyleDefault];
+    self.progressView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.progressView.hidden = YES;
+    [self.view addSubview:self.progressView];
+    
     // 启动游戏按钮
     self.launchButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.launchButton.translatesAutoresizingMaskIntoConstraints = NO;
@@ -102,7 +131,7 @@ extern void setPrefInt(NSString *key, NSInteger value);
     self.launchButton.backgroundColor = [UIColor colorWithRed:0.26 green:0.63 blue:0.96 alpha:1.0];
     self.launchButton.layer.cornerRadius = 12;
     self.launchButton.layer.masksToBounds = YES;
-    [self.launchButton addTarget:self action:@selector(launchGame) forControlEvents:UIControlEventTouchUpInside];
+    [self.launchButton addTarget:self action:@selector(launchButtonTapped) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.launchButton];
     
     // 管理版本按钮
@@ -142,6 +171,16 @@ extern void setPrefInt(NSString *key, NSInteger value);
         [self.versionLabel.topAnchor constraintEqualToAnchor:self.usernameLabel.bottomAnchor constant:4],
         [self.versionLabel.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:16],
         [self.versionLabel.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-16],
+        
+        // 进度标签
+        [self.progressLabel.topAnchor constraintEqualToAnchor:self.versionLabel.bottomAnchor constant:8],
+        [self.progressLabel.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:16],
+        [self.progressLabel.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-16],
+        
+        // 进度条
+        [self.progressView.topAnchor constraintEqualToAnchor:self.progressLabel.bottomAnchor constant:4],
+        [self.progressView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:16],
+        [self.progressView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-16],
         
         // 执行JAR按钮 (最底部)
         [self.executeJarBtn.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-20],
@@ -203,6 +242,22 @@ extern void setPrefInt(NSString *key, NSInteger value);
 - (void)documentPickerWasCancelled:(UIDocumentPickerViewController *)controller {
 }
 
+#pragma mark - Launch Game
+
+- (void)launchButtonTapped {
+    if (self.task) {
+        // 正在下载，显示详情
+        if (!self.progressVC) {
+            self.progressVC = [[DownloadProgressViewController alloc] initWithTask:self.task];
+        }
+        UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:self.progressVC];
+        nav.modalPresentationStyle = UIModalPresentationFormSheet;
+        [self presentViewController:nav animated:YES completion:nil];
+    } else {
+        [self launchGame];
+    }
+}
+
 - (void)launchGame {
     BaseAuthenticator *currentAuth = BaseAuthenticator.current;
     if (!currentAuth) {
@@ -216,182 +271,183 @@ extern void setPrefInt(NSString *key, NSInteger value);
         return;
     }
     
-    // 加载版本元数据
-    [self loadVersionMetadataAndLaunch:selectedProfile];
+    NSString *versionId = PLProfiles.current.profiles[selectedProfile][@"lastVersionId"];
+    if (!versionId) {
+        [self showAlert:@"无法获取版本信息"];
+        return;
+    }
+    
+    // 设置UI为下载状态
+    [self setInteractionEnabled:NO];
+    
+    // 查找版本对象
+    NSDictionary *versionObject = nil;
+    
+    // 从远程版本列表中查找（通过 LauncherRootViewController 的 remoteVersionList）
+    // 由于 remoteVersionList 在 LauncherRootViewController 中，我们需要通过其他方式获取
+    // 这里使用通知来请求版本信息
+    NSMutableDictionary *userInfo = [NSMutableDictionary dictionary];
+    userInfo[@"versionId"] = versionId;
+    userInfo[@"callback"] = ^(NSDictionary *version) {
+        if (version) {
+            [self startDownloadWithVersion:version profileName:selectedProfile];
+        } else {
+            // 如果在远程列表中找不到，可能是本地版本
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [self setInteractionEnabled:YES];
+                [self showAlert:@"找不到版本信息，请检查版本是否正确"];
+            });
+        }
+    };
+    
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"FindVersionInRemoteList" object:nil userInfo:userInfo];
 }
 
-- (void)loadVersionMetadataAndLaunch:(NSString *)profileName {
+- (void)startDownloadWithVersion:(NSDictionary *)versionObject profileName:(NSString *)profileName {
+    self.task = [MinecraftResourceDownloadTask new];
+    
+    __weak LauncherRightPanelViewController *weakSelf = self;
+    
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        // 获取版本元数据
-        NSString *versionId = PLProfiles.current.profiles[profileName][@"lastVersionId"];
-        if (!versionId) {
+        weakSelf.task.handleError = ^{
             dispatch_async(dispatch_get_main_queue(), ^{
-                [self showAlert:@"无法获取版本信息"];
+                [weakSelf setInteractionEnabled:YES];
+                weakSelf.task = nil;
+                weakSelf.progressVC = nil;
             });
-            return;
-        }
+        };
         
-        // 处理 latest-release 和 latest-snapshot
-        if ([versionId isEqualToString:@"latest-release"]) {
-            versionId = getPrefObject(@"internal.latest_version.release");
-        } else if ([versionId isEqualToString:@"latest-snapshot"]) {
-            versionId = getPrefObject(@"internal.latest_version.snapshot");
-        }
-        
-        // 如果 still nil, use the original value
-        if (!versionId) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                [self showAlert:@"无法解析版本号，请确保版本已下载"];
-            });
-            return;
-        }
-        
-        // 先尝试从本地读取版本 JSON
-        NSString *localVersionPath = [NSString stringWithFormat:@"%s/versions/%@/%@.json", getenv("POJAV_GAME_DIR"), versionId, versionId];
-        NSFileManager *fm = [NSFileManager defaultManager];
-        NSMutableDictionary *versionInfo = nil;
-        NSError *jsonError = nil;
-        
-        if ([fm fileExistsAtPath:localVersionPath]) {
-            NSData *localData = [NSData dataWithContentsOfFile:localVersionPath];
-            if (localData) {
-                versionInfo = [NSJSONSerialization JSONObjectWithData:localData options:NSJSONReadingMutableContainers error:&jsonError];
-                if (jsonError || !versionInfo) {
-                    NSLog(@"[LauncherRightPanel] Failed to parse local version JSON: %@", jsonError.localizedDescription);
-                    versionInfo = nil;
-                }
-            }
-        }
-        
-        // 如果本地没有版本JSON，才尝试从网络获取
-        if (!versionInfo) {
-            NSString *downloadSource = getPrefObject(@"general.download_source");
-            NSString *versionManifestURL;
-            
-            if ([downloadSource isEqualToString:@"bmclapi"]) {
-                versionManifestURL = @"https://bmclapi2.bangbang93.com/mc/game/version_manifest_v2.json";
-            } else {
-                versionManifestURL = @"https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
-            }
-            
-            NSURL *url = [NSURL URLWithString:versionManifestURL];
-            NSData *data = [NSData dataWithContentsOfURL:url];
-            if (!data) {
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    [self showAlert:@"无法连接到版本服务器，请检查网络或确保版本已下载"];
-                });
-                return;
-            }
-            
-            NSError *error;
-            NSDictionary *manifest = [NSJSONSerialization JSONObjectWithData:data options:0 error:&error];
-            if (!manifest) {
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    [self showAlert:@"版本数据解析失败"];
-                });
-                return;
-            }
-            
-            // 查找版本URL
-            NSString *versionUrl = nil;
-            for (NSDictionary *version in manifest[@"versions"]) {
-                if ([version[@"id"] isEqualToString:versionId]) {
-                    versionUrl = version[@"url"];
-                    break;
-                }
-            }
-            
-            if (!versionUrl) {
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    [self showAlert:@"找不到版本信息，请确保版本已安装或网络正常"];
-                });
-                return;
-            }
-            
-            // 获取版本详情
-            NSData *versionData = [NSData dataWithContentsOfURL:[NSURL URLWithString:versionUrl]];
-            if (!versionData) {
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    [self showAlert:@"无法获取版本详情"];
-                });
-                return;
-            }
-            
-            versionInfo = [NSJSONSerialization JSONObjectWithData:versionData options:0 error:&error];
-        }
-        
-        if (!versionInfo) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                [self showAlert:@"版本详情解析失败"];
-            });
-            return;
-        }
-        
-        // 处理 inheritsFrom
-        if (versionInfo[@"inheritsFrom"]) {
-            NSString *inheritsFrom = versionInfo[@"inheritsFrom"];
-            NSString *inheritsPath = [NSString stringWithFormat:@"%s/versions/%@/%@.json", getenv("POJAV_GAME_DIR"), inheritsFrom, inheritsFrom];
-            NSData *inheritsData = [NSData dataWithContentsOfFile:inheritsPath];
-            if (inheritsData) {
-                NSError *error;
-                NSMutableDictionary *inheritsInfo = [NSJSONSerialization JSONObjectWithData:inheritsData options:NSJSONReadingMutableContainers error:&error];
-                if (inheritsInfo && !error) {
-                    // 合并版本信息
-                    [MinecraftResourceUtils processVersion:versionInfo inheritsFrom:inheritsInfo];
-                    versionInfo = inheritsInfo;
-                }
-            }
-        }
-        
-        // 构建metadata
-        NSMutableDictionary *metadata = [NSMutableDictionary dictionary];
-        metadata[@"id"] = versionId;
-        metadata[@"type"] = versionInfo[@"type"];
-        metadata[@"mainClass"] = versionInfo[@"mainClass"];
-        metadata[@"arguments"] = versionInfo[@"arguments"];
-        metadata[@"assetIndex"] = versionInfo[@"assetIndex"];
-        metadata[@"downloads"] = versionInfo[@"downloads"];
-        metadata[@"libraries"] = versionInfo[@"libraries"];
-        metadata[@"logging"] = versionInfo[@"logging"];
-        metadata[@"minecraftArguments"] = versionInfo[@"minecraftArguments"];
-        metadata[@"releaseTime"] = versionInfo[@"releaseTime"];
-        metadata[@"time"] = versionInfo[@"time"];
-        
-        // 设置Java版本
-        NSDictionary *javaVersion = versionInfo[@"javaVersion"];
-        if (javaVersion) {
-            metadata[@"javaVersion"] = javaVersion;
-        } else {
-            // 默认Java 8
-            metadata[@"javaVersion"] = @{@"majorVersion": @8, @"version": @"1.8"};
-        }
-        
-        // 获取版本特定设置
-        NSDictionary *profile = PLProfiles.current.profiles[profileName];
-        
-        // 应用渲染器设置
-        NSString *renderer = profile[@"renderer"] ?: @"auto";
-        if (![renderer isEqualToString:@"auto"]) {
-            setPrefString(@"video.renderer", renderer);
-        }
-        
-        // 应用Java版本设置
-        NSString *javaVer = profile[@"javaVersion"] ?: @"auto";
-        if (![javaVer isEqualToString:@"auto"]) {
-            setPrefString(@"java.java_version", javaVer);
-        }
-        
-        // 应用内存设置
-        NSInteger allocatedMemory = [profile[@"allocatedMemory"] integerValue];
-        if (allocatedMemory > 0) {
-            setPrefInt(@"general.ram_allocation", (int)allocatedMemory);
-        }
+        [weakSelf.task downloadVersion:versionObject];
         
         dispatch_async(dispatch_get_main_queue(), ^{
-            // 启动游戏
-            SurfaceViewController *gameVC = [[SurfaceViewController alloc] initWithMetadata:metadata];
-            gameVC.modalPresentationStyle = UIModalPresentationFullScreen;
-            [self presentViewController:gameVC animated:YES completion:nil];
+            weakSelf.progressView.observedProgress = weakSelf.task.progress;
+            [weakSelf.task.progress addObserver:weakSelf
+                                    forKeyPath:@"fractionCompleted"
+                                       options:NSKeyValueObservingOptionInitial
+                                       context:ProgressObserverContext];
+        });
+    });
+}
+
+- (void)setInteractionEnabled:(BOOL)enabled {
+    self.launchButton.enabled = enabled;
+    self.manageVersionBtn.enabled = enabled;
+    self.executeJarBtn.enabled = enabled;
+    
+    if (enabled) {
+        [self.launchButton setTitle:@"启动游戏" forState:UIControlStateNormal];
+        self.progressView.hidden = YES;
+        self.progressLabel.hidden = YES;
+        self.progressLabel.text = @"";
+    } else {
+        [self.launchButton setTitle:@"下载中..." forState:UIControlStateNormal];
+        self.progressView.hidden = NO;
+        self.progressLabel.hidden = NO;
+        self.progressLabel.text = @"正在准备...";
+    }
+    
+    UIApplication.sharedApplication.idleTimerDisabled = !enabled;
+}
+
+- (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary *)change context:(void *)context {
+    if (context != ProgressObserverContext) {
+        [super observeValueForKeyPath:keyPath ofObject:object change:change context:context];
+        return;
+    }
+    
+    // 计算下载速度和剩余时间
+    static CGFloat lastMsTime;
+    static NSUInteger lastSecTime, lastCompletedUnitCount;
+    NSProgress *progress = self.task.textProgress;
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    NSInteger completedUnitCount = self.task.progress.totalUnitCount * self.task.progress.fractionCompleted;
+    progress.completedUnitCount = completedUnitCount;
+    if (lastSecTime < tv.tv_sec) {
+        CGFloat currentTime = tv.tv_sec + tv.tv_usec / 1000000.0;
+        NSInteger throughput = (completedUnitCount - lastCompletedUnitCount) / (currentTime - lastMsTime);
+        progress.throughput = @(throughput);
+        progress.estimatedTimeRemaining = @((progress.totalUnitCount - completedUnitCount) / throughput);
+        lastCompletedUnitCount = completedUnitCount;
+        lastSecTime = tv.tv_sec;
+        lastMsTime = currentTime;
+    }
+    
+    dispatch_async(dispatch_get_main_queue(), ^{
+        self.progressLabel.text = progress.localizedAdditionalDescription;
+        
+        if (!progress.finished) return;
+        
+        [self.progressVC dismissViewControllerAnimated:NO completion:nil];
+        
+        self.progressView.observedProgress = nil;
+        
+        if (self.task.metadata) {
+            // 应用配置特定的设置
+            NSString *profileName = PLProfiles.current.selectedProfileName;
+            NSDictionary *profile = PLProfiles.current.profiles[profileName];
+            
+            if (profile) {
+                // 应用渲染器设置
+                NSString *renderer = profile[@"renderer"] ?: @"auto";
+                if (![renderer isEqualToString:@"auto"]) {
+                    setPrefString(@"video.renderer", renderer);
+                }
+                
+                // 应用Java版本设置
+                NSString *javaVer = profile[@"javaVersion"] ?: @"auto";
+                if (![javaVer isEqualToString:@"auto"]) {
+                    setPrefString(@"java.java_version", javaVer);
+                }
+                
+                // 应用内存设置
+                NSInteger allocatedMemory = [profile[@"allocatedMemory"] integerValue];
+                if (allocatedMemory > 0) {
+                    setPrefInt(@"general.ram_allocation", (int)allocatedMemory);
+                }
+            }
+            
+            [self invokeAfterJITEnabled:^{
+                UIKit_launchMinecraftSurfaceVC(self.view.window, self.task.metadata);
+            }];
+        } else {
+            self.task = nil;
+            [self setInteractionEnabled:YES];
+            // 通知刷新版本列表
+            [[NSNotificationCenter defaultCenter] postNotificationName:@"ReloadProfileList" object:nil];
+        }
+    });
+}
+
+- (void)invokeAfterJITEnabled:(void(^)(void))handler {
+    BOOL hasTrollStoreJIT = getEntitlementValue(@"com.apple.private.local.sandboxed-jit");
+    
+    if (isJITEnabled(false)) {
+        [ALTServerManager.sharedManager stopDiscovering];
+        handler();
+        return;
+    } else if (hasTrollStoreJIT) {
+        NSURL *jitURL = [NSURL URLWithString:[NSString stringWithFormat:@"apple-magnifier://enable-jit?bundle-id=%@", NSBundle.mainBundle.bundleIdentifier]];
+        [UIApplication.sharedApplication openURL:jitURL options:@{} completionHandler:nil];
+    } else if (getPrefBool(@"debug.debug_skip_wait_jit")) {
+        NSLog(@"Debug option skipped waiting for JIT. Java might not work.");
+        handler();
+        return;
+    }
+    
+    self.progressLabel.text = @"等待 JIT...";
+    
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"等待 JIT"
+                                                                   message:hasTrollStoreJIT ? @"正在通过 TrollStore 启用 JIT..." : @"请通过 AltServer 启用 JIT"
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    [self presentViewController:alert animated:YES completion:nil];
+    
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        while (!isJITEnabled(false)) {
+            usleep(1000 * 200);
+        }
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [alert dismissViewControllerAnimated:YES completion:handler];
         });
     });
 }
