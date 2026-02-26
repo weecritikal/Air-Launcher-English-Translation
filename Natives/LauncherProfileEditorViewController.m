@@ -27,6 +27,26 @@
     self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemClose target:self action:@selector(actionClose)];
     self.navigationController.modalInPresentation = YES;
     self.prefSectionsVisible = YES;
+    
+    // 设置半透明背景
+    self.view.backgroundColor = [UIColor colorWithWhite:0.08 alpha:0.7];
+    if (@available(iOS 13.0, *)) {
+        self.tableView.backgroundColor = [UIColor clearColor];
+    } else {
+        self.tableView.backgroundColor = [UIColor colorWithWhite:0.08 alpha:0.7];
+    }
+    
+    // 设置导航栏半透明样式
+    if (@available(iOS 13.0, *)) {
+        UINavigationBarAppearance *appearance = [[UINavigationBarAppearance alloc] init];
+        [appearance configureWithOpaqueBackground];
+        appearance.backgroundColor = [UIColor colorWithWhite:0.08 alpha:0.9];
+        appearance.titleTextAttributes = @{NSForegroundColorAttributeName: [UIColor labelColor]};
+        self.navigationController.navigationBar.standardAppearance = appearance;
+        self.navigationController.navigationBar.scrollEdgeAppearance = appearance;
+    }
+    self.navigationController.navigationBar.barTintColor = [UIColor colorWithWhite:0.08 alpha:0.9];
+    self.navigationController.navigationBar.tintColor = [UIColor systemBlueColor];
 
     // Setup preference getter and setter
     __weak LauncherProfileEditorViewController *weakSelf = self;
