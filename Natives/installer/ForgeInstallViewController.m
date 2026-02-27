@@ -177,10 +177,11 @@
     [self.tableView registerClass:[MinecraftVersionHeaderView class] forHeaderFooterViewReuseIdentifier:@"MinecraftVersionHeader"];
     
     UISegmentedControl *segment = [[UISegmentedControl alloc] initWithItems:@[@"Forge", @"NeoForge"]];
-    segment.selectedSegmentIndex = 0;
+    // Use isNeoForge property to set initial selection
+    segment.selectedSegmentIndex = self.isNeoForge ? 1 : 0;
     [segment addTarget:self action:@selector(segmentChanged:) forControlEvents:UIControlEventValueChanged];
     self.navigationItem.titleView = segment;
-    self.currentVendor = @"Forge";
+    self.currentVendor = self.isNeoForge ? @"NeoForge" : @"Forge";
 
     self.searchController = [[UISearchController alloc] initWithSearchResultsController:nil];
     self.searchController.searchResultsUpdater = (id<UISearchResultsUpdating>)self;
@@ -252,6 +253,10 @@
 }
 
 - (void)actionClose {
+    // If there's a completion handler, call it with cancelled status
+    if (self.completionHandler) {
+        self.completionHandler(NO, nil, nil);
+    }
     [self.navigationController dismissViewControllerAnimated:YES completion:nil];
 }
 
@@ -831,25 +836,54 @@
                     showDialog(localize(@"Error", nil), error.localizedDescription);
                 }
                 [self switchToReadyState];
+                if (self.completionHandler) {
+                    self.completionHandler(NO, nil, error);
+                }
                 return;
             }
             
-            showDialog(@"Download Complete", 
-                      [NSString stringWithFormat:@"%@ installer will now run. After installation completes, you will need to restart the app.", self.currentVendor]);
+            // Generate profile name
+            NSString *profileName = [NSString stringWithFormat:@"%@-%@", self.currentVendor, versionString];
             
-            LauncherNavigationController *navVC = (id)((UISplitViewController *)self.presentingViewController).viewControllers[1];
-            
-            // Dismiss search controller first if it's active, then dismiss main view controller
-            if (self.searchController.isActive) {
-                [self.searchController dismissViewControllerAnimated:NO completion:^{
+            if (self.completionHandler) {
+                // New mode: callback to caller (DownloadViewController)
+                // Note: Forge installer runs separately, we callback after download
+                showDialog(@"Download Complete",
+                          [NSString stringWithFormat:@"%@ installer downloaded. Installation will proceed in background.", self.currentVendor]);
+                self.completionHandler(YES, profileName, nil);
+                
+                LauncherNavigationController *navVC = (id)((UISplitViewController *)self.presentingViewController).viewControllers[1];
+                
+                if (self.searchController.isActive) {
+                    [self.searchController dismissViewControllerAnimated:NO completion:^{
+                        [self dismissViewControllerAnimated:YES completion:^{
+                            [navVC enterModInstallerWithPath:outPath hitEnterAfterWindowShown:YES];
+                        }];
+                    }];
+                } else {
                     [self dismissViewControllerAnimated:YES completion:^{
                         [navVC enterModInstallerWithPath:outPath hitEnterAfterWindowShown:YES];
                     }];
-                }];
+                }
             } else {
-                [self dismissViewControllerAnimated:YES completion:^{
-                    [navVC enterModInstallerWithPath:outPath hitEnterAfterWindowShown:YES];
-                }];
+                // Legacy mode: show dialog and run installer
+                showDialog(@"Download Complete", 
+                          [NSString stringWithFormat:@"%@ installer will now run. After installation completes, you will need to restart the app.", self.currentVendor]);
+                
+                LauncherNavigationController *navVC = (id)((UISplitViewController *)self.presentingViewController).viewControllers[1];
+                
+                // Dismiss search controller first if it's active, then dismiss main view controller
+                if (self.searchController.isActive) {
+                    [self.searchController dismissViewControllerAnimated:NO completion:^{
+                        [self dismissViewControllerAnimated:YES completion:^{
+                            [navVC enterModInstallerWithPath:outPath hitEnterAfterWindowShown:YES];
+                        }];
+                    }];
+                } else {
+                    [self dismissViewControllerAnimated:YES completion:^{
+                        [navVC enterModInstallerWithPath:outPath hitEnterAfterWindowShown:YES];
+                    }];
+                }
             }
         });
     }];
