@@ -1148,7 +1148,7 @@
     } else if (index == 2) {
         self.searchBar.placeholder = @"搜索光影...";
         if (self.shaderList.count == 0) {
-            [self.loadShaderList];
+            [self loadShaderList];
         }
     }
 }
@@ -1903,16 +1903,91 @@
 }
 
 - (void)downloadOptiFine:(NSString *)gameVersion completion:(void (^)(BOOL success, NSError *error))completion {
-    // OptiFine下载逻辑
-    // 这里简化处理，实际应该解析OptiFine的版本列表
+    // OptiFine 下载逻辑 - 改为实际下载
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        // 模拟下载过程
-        [NSThread sleepForTimeInterval:1.0];
+        // 构建 OptiFine 下载 URL（使用 BMCLAPI 镜像）
+        NSString *optiFineVersion = [self mapGameVersionToOptiFine:gameVersion];
+        if (!optiFineVersion) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (completion) completion(NO, [NSError errorWithDomain:@"DownloadError" code:1 userInfo:@{NSLocalizedDescriptionKey: @"不支持的 OptiFine 版本"}]);
+            });
+            return;
+        }
+        
+        // 使用 BMCLAPI 下载 OptiFine
+        NSString *downloadURL = [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/optifine/%@/%@/OptiFine_%@_%@.jar",
+                                gameVersion, optiFineVersion, gameVersion, optiFineVersion];
+        
+        NSURL *url = [NSURL URLWithString:downloadURL];
+        NSData *data = [NSData dataWithContentsOfURL:url];
+        
+        if (!data) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (completion) completion(NO, [NSError errorWithDomain:@"DownloadError" code:2 userInfo:@{NSLocalizedDescriptionKey: @"下载 OptiFine 失败"}]);
+            });
+            return;
+        }
+        
+        // 确保 mods 文件夹存在
+        NSString *profileName = PLProfiles.current.selectedProfileName ?: @"default";
+        NSString *gameDir = [NSString stringWithFormat:@"%s/%@", getenv("POJAV_GAME_DIR"), profileName];
+        NSString *modsDir = [gameDir stringByAppendingPathComponent:@"mods"];
+        
+        [[NSFileManager defaultManager] createDirectoryAtPath:modsDir
+                                  withIntermediateDirectories:YES
+                                                   attributes:nil
+                                                        error:nil];
+        
+        // 保存 OptiFine 到 mods 文件夹
+        NSString *filename = [NSString stringWithFormat:@"OptiFine_%@_%@.jar", gameVersion, optiFineVersion];
+        NSString *savePath = [modsDir stringByAppendingPathComponent:filename];
+        
+        NSError *saveError;
+        BOOL success = [data writeToFile:savePath options:NSDataWritingAtomic error:&saveError];
+        
         dispatch_async(dispatch_get_main_queue(), ^{
-            // 实际项目中这里应该下载OptiFine并放入mods文件夹
-            if (completion) completion(YES, nil);
+            if (completion) completion(success, saveError);
         });
     });
+}
+
+// 辅助方法：映射游戏版本到 OptiFine 版本
+- (NSString *)mapGameVersionToOptiFine:(NSString *)gameVersion {
+    // OptiFine 版本映射表
+    NSDictionary *versionMap = @{
+        @"1.21.4": @"HD_U_J3",
+        @"1.21.3": @"HD_U_J2",
+        @"1.21.1": @"HD_U_J1",
+        @"1.21": @"HD_U_I9",
+        @"1.20.4": @"HD_U_I7",
+        @"1.20.2": @"HD_U_I6",
+        @"1.20.1": @"HD_U_I6",
+        @"1.20": @"HD_U_I5",
+        @"1.19.4": @"HD_U_I4",
+        @"1.19.3": @"HD_U_I3",
+        @"1.19.2": @"HD_U_H9",
+        @"1.18.2": @"HD_U_H7",
+        @"1.17.1": @"HD_U_H1",
+        @"1.16.5": @"HD_U_G8",
+        @"1.16.4": @"HD_U_G7",
+        @"1.15.2": @"HD_U_G6",
+        @"1.14.4": @"HD_U_G5",
+        @"1.12.2": @"HD_U_G5",
+        @"1.8.9": @"HD_U_L5",
+    };
+    
+    // 精确匹配
+    NSString *optiFineVersion = versionMap[gameVersion];
+    if (optiFineVersion) return optiFineVersion;
+    
+    // 前缀匹配
+    for (NSString *key in versionMap) {
+        if ([gameVersion hasPrefix:key]) {
+            return versionMap[key];
+        }
+    }
+    
+    return nil;
 }
 
 #pragma mark - NeoForge Installation
@@ -2252,7 +2327,7 @@
                 } else if (eta > 60) {
                     etaText = [NSString stringWithFormat:@" • 剩余 %ld分%ld秒", (long)(eta / 60), (long)(eta % 60)];
                 } else if (eta > 0) {
-                    etaText = NSString stringWithFormat:@" • 剩余 %ld秒", (long)eta];
+                    etaText = [NSString stringWithFormat:@" • 剩余 %ld秒", (long)eta];
                 }
             }
             
