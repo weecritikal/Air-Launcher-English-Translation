@@ -77,6 +77,7 @@ JIT (Just-In-Time) is crucial for smooth game operation. iOS needs to enable it 
 
 
 ## 🙏 Contributors
+- @yitenchen123 - Deeply reconstruct UI interface, add a brand-new modern UI
 - @LanRhyme - ShardLauncher author, allows iOS 26 users to use the launcher, changed log content
 - @WeiErLiTeo - Added Mod download functionality to the launcher, optimized TouchController support, added two-finger long press to open keyboard function
 - @Li2548 - Synchronized upstream changes
