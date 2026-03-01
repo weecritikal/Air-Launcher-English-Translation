@@ -445,7 +445,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     self.progressLabel.text = @"等待 JIT...";
     
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"等待 JIT"
-                                                                   message:hasTrollStoreJIT ? @"正在通过 TrollStore 启用 JIT..." : @"请通过 AltServer 启用 JIT"
+                                                                   message:hasTrollStoreJIT ? @"正在通过 TrollStore 启用 JIT..." : @"请启用 JIT"
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [self presentViewController:alert animated:YES completion:nil];
     
