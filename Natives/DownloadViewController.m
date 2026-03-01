@@ -357,7 +357,7 @@
 
 @end
 
-#pragma mark - Loader Selection View Controller (Embedded)
+#pragma mark - Loader Selection View Controller (Fullscreen Modal)
 
 @interface LoaderSelectionViewController : UIViewController <UITableViewDataSource, UITableViewDelegate>
 @property (nonatomic, copy) void (^completion)(NSString *loader, BOOL installFabricAPI, BOOL installOptiFine, NSString *loaderVersion);
@@ -376,6 +376,7 @@
 @property (nonatomic, strong) UITableView *versionTableView;
 @property (nonatomic, strong) NSString *selectedLoaderVersion;
 @property (nonatomic, strong) UIActivityIndicatorView *loadingIndicator;
+@property (nonatomic, strong) UIVisualEffectView *backgroundBlurView;
 @end
 
 @implementation LoaderSelectionViewController
@@ -384,25 +385,139 @@
     [super viewDidLoad];
     
     self.title = @"选择安装方式";
-    self.view.backgroundColor = [UIColor systemBackgroundColor];
     
-    // 根据最后两张图片的图标设置
-    self.loaders = @[
-        @{@"id": @"vanilla", @"name": @"原版 (Vanilla)", @"desc": @"纯净 Minecraft，不包含任何模组加载器", @"icon": @"cube.fill", @"color": [UIColor systemGrayColor]},
-        @{@"id": @"fabric", @"name": @"Fabric", @"desc": @"轻量级模组加载器，适合小型模组", @"icon": @"bolt.fill", @"color": [UIColor systemOrangeColor]},
-        @{@"id": @"forge", @"name": @"Forge", @"desc": @"经典模组加载器，模组生态丰富", @"icon": @"hammer.fill", @"color": [UIColor systemRedColor]},
-        @{@"id": @"neoforge", @"name": @"NeoForge", @"desc": @"Forge 的分支，现代架构", @"icon": @"hammer.fill", @"color": [UIColor systemBrownColor]},
-        @{@"id": @"quilt", @"name": @"Quilt", @"desc": @"基于 Fabric 的新一代加载器", @"icon": @"bolt.fill", @"color": [UIColor systemPurpleColor]}
-    ];
+    // 设置半透明背景
+    self.view.backgroundColor = [UIColor clearColor];
     
-    [self setupTableView];
+    // 添加背景模糊效果
+    UIBlurEffect *blurEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial];
+    self.backgroundBlurView = [[UIVisualEffectView alloc] initWithEffect:blurEffect];
+    self.backgroundBlurView.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.view addSubview:self.backgroundBlurView];
+    
+    [NSLayoutConstraint activateConstraints:@[
+        [self.backgroundBlurView.topAnchor constraintEqualToAnchor:self.view.topAnchor],
+        [self.backgroundBlurView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.backgroundBlurView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.backgroundBlurView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor]
+    ]];
+    
+    // 设置导航栏
+    [self setupNavigation];
+    
+    // 根据游戏版本设置加载器列表和兼容性
+    [self setupLoadersForVersion];
+    
+    [self setupLoaderTableView];
     [self setupOptionsContainer];
     [self setupVersionTableView];
     [self setupInstallButton];
-    [self setupNavigation];
 }
 
-- (void)setupTableView {
+- (void)setupLoadersForVersion {
+    // 判断各加载器兼容性
+    BOOL fabricCompatible = [self isFabricCompatible];
+    BOOL quiltCompatible = [self isQuiltCompatible];
+    BOOL forgeCompatible = [self isForgeCompatible];
+    BOOL neoForgeCompatible = [self isNeoForgeCompatible];
+    
+    self.loaders = @[
+        @{@"id": @"vanilla", @"name": @"原版 (Vanilla)", @"desc": @"纯净 Minecraft，不包含任何模组加载器", @"icon": @"cube.fill", @"color": [UIColor systemGrayColor], @"compatible": @YES},
+        @{@"id": @"fabric", @"name": @"Fabric", @"desc": @"轻量级模组加载器，适合小型模组", @"icon": @"bolt.fill", @"color": [UIColor systemOrangeColor], @"compatible": @(fabricCompatible)},
+        @{@"id": @"forge", @"name": @"Forge", @"desc": @"经典模组加载器，模组生态丰富", @"icon": @"hammer.fill", @"color": [UIColor systemRedColor], @"compatible": @(forgeCompatible)},
+        @{@"id": @"neoforge", @"name": @"NeoForge", @"desc": @"Forge 的分支，现代架构", @"icon": @"hammer.fill", @"color": [UIColor systemBrownColor], @"compatible": @(neoForgeCompatible)},
+        @{@"id": @"quilt", @"name": @"Quilt", @"desc": @"基于 Fabric 的新一代加载器", @"icon": @"bolt.fill", @"color": [UIColor systemPurpleColor], @"compatible": @(quiltCompatible)}
+    ];
+}
+
+- (BOOL)isFabricCompatible {
+    // Fabric 支持 1.14 及以上版本（根据视频，1.21.11 显示不兼容，可能是数据问题）
+    if (!self.gameVersion) return YES;
+    
+    // 解析版本号
+    NSArray *components = [self.gameVersion componentsSeparatedByString:@"."];
+    if (components.count < 2) return YES;
+    
+    NSInteger major = [components[0] integerValue];
+    NSInteger minor = [components[1] integerValue];
+    
+    // 1.14 及以上支持
+    if (major > 1) return YES;
+    if (major == 1 && minor >= 14) return YES;
+    
+    return NO;
+}
+
+- (BOOL)isQuiltCompatible {
+    // Quilt 支持 1.18 及以上版本
+    if (!self.gameVersion) return YES;
+    
+    NSArray *components = [self.gameVersion componentsSeparatedByString:@"."];
+    if (components.count < 2) return YES;
+    
+    NSInteger major = [components[0] integerValue];
+    NSInteger minor = [components[1] integerValue];
+    
+    if (major > 1) return YES;
+    if (major == 1 && minor >= 18) return YES;
+    
+    return NO;
+}
+
+- (BOOL)isForgeCompatible {
+    // Forge 支持大多数版本，但 1.21.4+ 可能有问题
+    if (!self.gameVersion) return YES;
+    
+    NSArray *components = [self.gameVersion componentsSeparatedByString:@"."];
+    if (components.count < 2) return YES;
+    
+    NSInteger major = [components[0] integerValue];
+    NSInteger minor = [components[1] integerValue];
+    NSInteger patch = (components.count > 2) ? [components[2] integerValue] : 0;
+    
+    // 1.21.4+ 暂不支持
+    if (major == 1 && minor == 21 && patch >= 4) return NO;
+    if (major == 1 && minor > 21) return NO;
+    if (major > 1) return NO;
+    
+    return YES;
+}
+
+- (BOOL)isNeoForgeCompatible {
+    // NeoForge 只支持 1.20.1 及以上
+    if (!self.gameVersion) return NO;
+    
+    NSArray *components = [self.gameVersion componentsSeparatedByString:@"."];
+    if (components.count < 2) return NO;
+    
+    NSInteger major = [components[0] integerValue];
+    NSInteger minor = [components[1] integerValue];
+    NSInteger patch = (components.count > 2) ? [components[2] integerValue] : 0;
+    
+    if (major > 1) return YES;
+    if (major == 1 && minor > 20) return YES;
+    if (major == 1 && minor == 20 && patch >= 1) return YES;
+    
+    return NO;
+}
+
+- (void)setupNavigation {
+    // 添加返回按钮
+    self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"chevron.left"] 
+                                                                              style:UIBarButtonItemStylePlain 
+                                                                             target:self 
+                                                                             action:@selector(backButtonTapped)];
+    self.navigationItem.leftBarButtonItem.tintColor = [UIColor labelColor];
+}
+
+- (void)backButtonTapped {
+    if (self.cancelled) {
+        self.cancelled();
+    }
+    [self dismissViewControllerAnimated:YES completion:nil];
+}
+
+- (void)setupLoaderTableView {
     self.tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
     self.tableView.translatesAutoresizingMaskIntoConstraints = NO;
     self.tableView.backgroundColor = [UIColor clearColor];
@@ -417,17 +532,21 @@
         [self.tableView.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor],
         [self.tableView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.tableView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [self.tableView.heightAnchor constraintEqualToConstant:380] // 5个加载器的高度
+        [self.tableView.heightAnchor constraintEqualToConstant:380]
     ]];
 }
 
 - (void)setupOptionsContainer {
     self.optionsContainer = [[UIView alloc] init];
     self.optionsContainer.translatesAutoresizingMaskIntoConstraints = NO;
-    self.optionsContainer.backgroundColor = [UIColor secondarySystemBackgroundColor];
-    self.optionsContainer.layer.cornerRadius = 12;
-    self.optionsContainer.hidden = YES;
-    [self.view addSubview:self.optionsContainer];
+    
+    // 使用半透明背景
+    UIBlurEffect *blurEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial];
+    UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:blurEffect];
+    blurView.translatesAutoresizingMaskIntoConstraints = NO;
+    blurView.layer.cornerRadius = 12;
+    blurView.layer.masksToBounds = YES;
+    [self.optionsContainer addSubview:blurView];
     
     self.fabricAPILabel = [[UILabel alloc] init];
     self.fabricAPILabel.translatesAutoresizingMaskIntoConstraints = NO;
@@ -435,13 +554,13 @@
     self.fabricAPILabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightMedium];
     self.fabricAPILabel.textColor = [UIColor labelColor];
     self.fabricAPILabel.hidden = YES;
-    [self.optionsContainer addSubview:self.fabricAPILabel];
+    [blurView.contentView addSubview:self.fabricAPILabel];
     
     self.fabricAPISwitch = [[UISwitch alloc] init];
     self.fabricAPISwitch.translatesAutoresizingMaskIntoConstraints = NO;
     self.fabricAPISwitch.on = YES;
     self.fabricAPISwitch.hidden = YES;
-    [self.optionsContainer addSubview:self.fabricAPISwitch];
+    [blurView.contentView addSubview:self.fabricAPISwitch];
     
     self.optiFineLabel = [[UILabel alloc] init];
     self.optiFineLabel.translatesAutoresizingMaskIntoConstraints = NO;
@@ -449,13 +568,16 @@
     self.optiFineLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightMedium];
     self.optiFineLabel.textColor = [UIColor labelColor];
     self.optiFineLabel.hidden = YES;
-    [self.optionsContainer addSubview:self.optiFineLabel];
+    [blurView.contentView addSubview:self.optiFineLabel];
     
     self.optiFineSwitch = [[UISwitch alloc] init];
     self.optiFineSwitch.translatesAutoresizingMaskIntoConstraints = NO;
     self.optiFineSwitch.on = NO;
     self.optiFineSwitch.hidden = YES;
-    [self.optionsContainer addSubview:self.optiFineSwitch];
+    [blurView.contentView addSubview:self.optiFineSwitch];
+    
+    self.optionsContainer.hidden = YES;
+    [self.view addSubview:self.optionsContainer];
     
     [NSLayoutConstraint activateConstraints:@[
         [self.optionsContainer.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:16],
@@ -463,17 +585,22 @@
         [self.optionsContainer.topAnchor constraintEqualToAnchor:self.tableView.bottomAnchor constant:8],
         [self.optionsContainer.heightAnchor constraintEqualToConstant:50],
         
-        [self.fabricAPILabel.leadingAnchor constraintEqualToAnchor:self.optionsContainer.leadingAnchor constant:16],
-        [self.fabricAPILabel.centerYAnchor constraintEqualToAnchor:self.optionsContainer.centerYAnchor],
+        [blurView.topAnchor constraintEqualToAnchor:self.optionsContainer.topAnchor],
+        [blurView.leadingAnchor constraintEqualToAnchor:self.optionsContainer.leadingAnchor],
+        [blurView.trailingAnchor constraintEqualToAnchor:self.optionsContainer.trailingAnchor],
+        [blurView.bottomAnchor constraintEqualToAnchor:self.optionsContainer.bottomAnchor],
         
-        [self.fabricAPISwitch.trailingAnchor constraintEqualToAnchor:self.optionsContainer.trailingAnchor constant:-16],
-        [self.fabricAPISwitch.centerYAnchor constraintEqualToAnchor:self.optionsContainer.centerYAnchor],
+        [self.fabricAPILabel.leadingAnchor constraintEqualToAnchor:blurView.contentView.leadingAnchor constant:16],
+        [self.fabricAPILabel.centerYAnchor constraintEqualToAnchor:blurView.contentView.centerYAnchor],
         
-        [self.optiFineLabel.leadingAnchor constraintEqualToAnchor:self.optionsContainer.leadingAnchor constant:16],
-        [self.optiFineLabel.centerYAnchor constraintEqualToAnchor:self.optionsContainer.centerYAnchor],
+        [self.fabricAPISwitch.trailingAnchor constraintEqualToAnchor:blurView.contentView.trailingAnchor constant:-16],
+        [self.fabricAPISwitch.centerYAnchor constraintEqualToAnchor:blurView.contentView.centerYAnchor],
         
-        [self.optiFineSwitch.trailingAnchor constraintEqualToAnchor:self.optionsContainer.trailingAnchor constant:-16],
-        [self.optiFineSwitch.centerYAnchor constraintEqualToAnchor:self.optionsContainer.centerYAnchor]
+        [self.optiFineLabel.leadingAnchor constraintEqualToAnchor:blurView.contentView.leadingAnchor constant:16],
+        [self.optiFineLabel.centerYAnchor constraintEqualToAnchor:blurView.contentView.centerYAnchor],
+        
+        [self.optiFineSwitch.trailingAnchor constraintEqualToAnchor:blurView.contentView.trailingAnchor constant:-16],
+        [self.optiFineSwitch.centerYAnchor constraintEqualToAnchor:blurView.contentView.centerYAnchor]
     ]];
 }
 
@@ -522,16 +649,6 @@
         [self.installButton.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-20],
         [self.installButton.heightAnchor constraintEqualToConstant:50]
     ]];
-}
-
-- (void)setupNavigation {
-    self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithTitle:@"取消" style:UIBarButtonItemStylePlain target:self action:@selector(cancel)];
-}
-
-- (void)cancel {
-    if (self.cancelled) {
-        self.cancelled();
-    }
 }
 
 - (void)installButtonTapped {
@@ -613,7 +730,6 @@
 
 - (void)loadForgeVersions {
     // Forge版本需要从maven-metadata.xml解析，这里简化处理
-    // 实际项目中应该解析XML获取版本列表
     dispatch_async(dispatch_get_main_queue(), ^{
         [self.loadingIndicator stopAnimating];
         // 显示常用Forge版本或提示用户
@@ -659,26 +775,9 @@
         cell.nameLabel.text = loader[@"name"];
         cell.descLabel.text = loader[@"desc"];
         
-        // 使用自定义图标而不是系统图标
+        // 使用自定义图标
         NSString *iconName = loader[@"icon"];
-        UIImage *iconImage = nil;
-        
-        if ([loader[@"id"] isEqualToString:@"vanilla"]) {
-            // 原版使用立方体图标
-            iconImage = [UIImage systemImageNamed:@"cube.fill"];
-        } else if ([loader[@"id"] isEqualToString:@"fabric"]) {
-            // Fabric使用闪电图标（黄色）
-            iconImage = [UIImage systemImageNamed:@"bolt.fill"];
-        } else if ([loader[@"id"] isEqualToString:@"forge"]) {
-            // Forge使用锤子图标（红色）
-            iconImage = [UIImage systemImageNamed:@"hammer.fill"];
-        } else if ([loader[@"id"] isEqualToString:@"neoforge"]) {
-            // NeoForge使用锤子图标（棕色）
-            iconImage = [UIImage systemImageNamed:@"hammer.fill"];
-        } else if ([loader[@"id"] isEqualToString:@"quilt"]) {
-            // Quilt使用闪电图标（紫色）
-            iconImage = [UIImage systemImageNamed:@"bolt.fill"];
-        }
+        UIImage *iconImage = [UIImage systemImageNamed:iconName];
         
         cell.iconView.image = iconImage;
         cell.iconView.tintColor = loader[@"color"];
@@ -692,8 +791,9 @@
             cell.accessoryType = UITableViewCellAccessoryNone;
         }
         
-        BOOL incompatible = [self isLoaderIncompatible:loader[@"id"]];
-        [cell setIncompatible:incompatible];
+        // 使用预计算的兼容性
+        BOOL compatible = [loader[@"compatible"] boolValue];
+        [cell setIncompatible:!compatible];
         
         return cell;
     } else {
@@ -701,6 +801,7 @@
         NSString *version = self.loaderVersions[indexPath.row];
         cell.textLabel.text = version;
         cell.textLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightMedium];
+        cell.backgroundColor = [UIColor clearColor];
         
         if ([self.selectedLoaderVersion isEqualToString:version]) {
             cell.accessoryType = UITableViewCellAccessoryCheckmark;
@@ -713,44 +814,6 @@
     }
 }
 
-- (BOOL)isLoaderIncompatible:(NSString *)loaderId {
-    if (!self.gameVersion || [loaderId isEqualToString:@"vanilla"]) {
-        return NO;
-    }
-    
-    if ([loaderId isEqualToString:@"fabric"] || [loaderId isEqualToString:@"quilt"]) {
-        // Fabric/Quilt 不支持1.8及以下版本
-        NSArray *oldVersions = @[@"1.8", @"1.7", @"1.6", @"1.5", @"1.4", @"1.3", @"1.2", @"1.1", @"1.0"];
-        for (NSString *oldVer in oldVersions) {
-            if ([self.gameVersion hasPrefix:oldVer]) {
-                return YES;
-            }
-        }
-    }
-    
-    if ([loaderId isEqualToString:@"neoforge"]) {
-        // NeoForge 只支持1.20.1及以上
-        NSArray *supportedVersions = @[@"1.20.1", @"1.20.2", @"1.20.3", @"1.20.4", @"1.20.5", @"1.20.6", @"1.21", @"1.21.1", @"1.21.2", @"1.21.3", @"1.21.4"];
-        BOOL supported = NO;
-        for (NSString *v in supportedVersions) {
-            if ([self.gameVersion hasPrefix:v]) {
-                supported = YES;
-                break;
-            }
-        }
-        return !supported;
-    }
-    
-    if ([loaderId isEqualToString:@"forge"]) {
-        // Forge 1.21.4+ 可能不兼容
-        if ([self.gameVersion hasPrefix:@"1.21.4"] || [self.gameVersion hasPrefix:@"1.21.5"]) {
-            return YES;
-        }
-    }
-    
-    return NO;
-}
-
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     if (tableView == self.tableView) {
         [tableView deselectRowAtIndexPath:indexPath animated:YES];
@@ -758,7 +821,9 @@
         NSDictionary *loader = self.loaders[indexPath.row];
         NSString *loaderId = loader[@"id"];
         
-        if ([self isLoaderIncompatible:loaderId]) {
+        // 检查兼容性
+        BOOL compatible = [loader[@"compatible"] boolValue];
+        if (!compatible) {
             return;
         }
         
@@ -854,10 +919,6 @@
 @property (nonatomic, strong) DownloadProgressViewController *progressVC;
 @property (nonatomic, strong) UIAlertController *downloadingAlert;
 
-// 嵌入式Loader选择器
-@property (nonatomic, strong) LoaderSelectionViewController *loaderSelectionVC;
-@property (nonatomic, strong) UIView *loaderContainerView;
-
 @end
 
 @implementation DownloadViewController
@@ -890,83 +951,6 @@
     [self setupShaderTableView];
     [self setupLoadingIndicator];
     [self setupEmptyLabel];
-    [self setupLoaderContainer];
-}
-
-- (void)setupLoaderContainer {
-    // 创建Loader选择器容器（初始隐藏）
-    self.loaderContainerView = [[UIView alloc] init];
-    self.loaderContainerView.translatesAutoresizingMaskIntoConstraints = NO;
-    self.loaderContainerView.backgroundColor = [UIColor systemBackgroundColor];
-    self.loaderContainerView.layer.cornerRadius = 16;
-    self.loaderContainerView.layer.masksToBounds = YES;
-    self.loaderContainerView.hidden = YES;
-    [self.view addSubview:self.loaderContainerView];
-    
-    [NSLayoutConstraint activateConstraints:@[
-        [self.loaderContainerView.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
-        [self.loaderContainerView.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor],
-        [self.loaderContainerView.widthAnchor constraintEqualToAnchor:self.view.widthAnchor multiplier:0.9],
-        [self.loaderContainerView.heightAnchor constraintEqualToAnchor:self.view.heightAnchor multiplier:0.8]
-    ]];
-}
-
-- (void)showLoaderSelectionForVersion:(NSDictionary *)version {
-    // 移除旧的
-    if (self.loaderSelectionVC) {
-        [self.loaderSelectionVC willMoveToParentViewController:nil];
-        [self.loaderSelectionVC.view removeFromSuperview];
-        [self.loaderSelectionVC removeFromParentViewController];
-    }
-    
-    // 创建新的LoaderSelectionViewController
-    self.loaderSelectionVC = [[LoaderSelectionViewController alloc] init];
-    self.loaderSelectionVC.gameVersion = version[@"id"];
-    
-    __weak typeof(self) weakSelf = self;
-    self.loaderSelectionVC.completion = ^(NSString *loaderType, BOOL installFabricAPI, BOOL installOptiFine, NSString *loaderVersion) {
-        __strong typeof(weakSelf) strongSelf = weakSelf;
-        if (!strongSelf) return;
-        
-        // 隐藏容器
-        strongSelf.loaderContainerView.hidden = YES;
-        strongSelf.tabSegment.userInteractionEnabled = YES;
-        strongSelf.versionCollectionView.userInteractionEnabled = YES;
-        
-        [strongSelf proceedWithVersion:version loaderType:loaderType installFabricAPI:installFabricAPI installOptiFine:installOptiFine loaderVersion:loaderVersion];
-    };
-    
-    self.loaderSelectionVC.cancelled = ^{
-        __strong typeof(weakSelf) strongSelf = weakSelf;
-        if (!strongSelf) return;
-        strongSelf.loaderContainerView.hidden = YES;
-        strongSelf.tabSegment.userInteractionEnabled = YES;
-        strongSelf.versionCollectionView.userInteractionEnabled = YES;
-    };
-    
-    // 添加到容器
-    [self addChildViewController:self.loaderSelectionVC];
-    [self.loaderContainerView addSubview:self.loaderSelectionVC.view];
-    self.loaderSelectionVC.view.translatesAutoresizingMaskIntoConstraints = NO;
-    
-    [NSLayoutConstraint activateConstraints:@[
-        [self.loaderSelectionVC.view.topAnchor constraintEqualToAnchor:self.loaderContainerView.topAnchor],
-        [self.loaderSelectionVC.view.leadingAnchor constraintEqualToAnchor:self.loaderContainerView.leadingAnchor],
-        [self.loaderSelectionVC.view.trailingAnchor constraintEqualToAnchor:self.loaderContainerView.trailingAnchor],
-        [self.loaderSelectionVC.view.bottomAnchor constraintEqualToAnchor:self.loaderContainerView.bottomAnchor]
-    ]];
-    
-    [self.loaderSelectionVC didMoveToParentViewController:self];
-    
-    // 显示容器
-    self.loaderContainerView.hidden = NO;
-    self.loaderContainerView.alpha = 0;
-    self.tabSegment.userInteractionEnabled = NO;
-    self.versionCollectionView.userInteractionEnabled = NO;
-    
-    [UIView animateWithDuration:0.3 animations:^{
-        self.loaderContainerView.alpha = 1;
-    }];
 }
 
 - (void)setupTabSegment {
@@ -1560,6 +1544,36 @@
     [self showLoaderSelectionForVersion:version];
 }
 
+#pragma mark - Loader Selection (Fullscreen Modal)
+
+- (void)showLoaderSelectionForVersion:(NSDictionary *)version {
+    LoaderSelectionViewController *loaderVC = [[LoaderSelectionViewController alloc] init];
+    loaderVC.gameVersion = version[@"id"];
+    
+    __weak typeof(self) weakSelf = self;
+    loaderVC.completion = ^(NSString *loaderType, BOOL installFabricAPI, BOOL installOptiFine, NSString *loaderVersion) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+        
+        [strongSelf dismissViewControllerAnimated:YES completion:^{
+            [strongSelf proceedWithVersion:version loaderType:loaderType installFabricAPI:installFabricAPI installOptiFine:installOptiFine loaderVersion:loaderVersion];
+        }];
+    };
+    
+    loaderVC.cancelled = ^{
+        // 用户取消，不做任何操作，自动 dismiss
+    };
+    
+    // 使用全屏模态展示
+    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:loaderVC];
+    nav.modalPresentationStyle = UIModalPresentationFullScreen;
+    
+    // 设置半透明背景效果
+    nav.view.backgroundColor = [UIColor clearColor];
+    
+    [self presentViewController:nav animated:YES completion:nil];
+}
+
 #pragma mark - Installation
 
 - (void)proceedWithVersion:(NSDictionary *)version loaderType:(NSString *)loaderType installFabricAPI:(BOOL)installFabricAPI installOptiFine:(BOOL)installOptiFine loaderVersion:(NSString *)loaderVersion {
@@ -1903,7 +1917,7 @@
 }
 
 - (void)downloadOptiFine:(NSString *)gameVersion completion:(void (^)(BOOL success, NSError *error))completion {
-    // OptiFine 下载逻辑 - 改为实际下载
+    // OptiFine 下载逻辑
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         // 构建 OptiFine 下载 URL（使用 BMCLAPI 镜像）
         NSString *optiFineVersion = [self mapGameVersionToOptiFine:gameVersion];
@@ -2038,6 +2052,7 @@
         cell.textLabel.text = @"加载更多...";
         cell.textLabel.textAlignment = NSTextAlignmentCenter;
         cell.textLabel.textColor = [UIColor secondaryLabelColor];
+        cell.backgroundColor = [UIColor clearColor];
         return cell;
     }
     
@@ -2046,6 +2061,7 @@
         cell.textLabel.text = @"加载更多...";
         cell.textLabel.textAlignment = NSTextAlignmentCenter;
         cell.textLabel.textColor = [UIColor secondaryLabelColor];
+        cell.backgroundColor = [UIColor clearColor];
         return cell;
     }
     
