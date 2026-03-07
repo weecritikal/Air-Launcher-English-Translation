@@ -5,16 +5,13 @@
 #import "utils.h"
 
 @interface PLCrashView ()
-@property (nonatomic, strong) UIView *containerView;
-@property (nonatomic, strong) UIView *errorCardView;
-@property (nonatomic, strong) UIView *infoCardView;
-@property (nonatomic, strong) UIView *logContainerView;
+@property (nonatomic, strong) UIView *leftPanel;
+@property (nonatomic, strong) UIView *rightPanel;
+@property (nonatomic, strong) UIView *logPanel;
 @property (nonatomic, strong) UITextView *logTextView;
-@property (nonatomic, strong) UILabel *titleLabel;
-@property (nonatomic, strong) UILabel *subtitleLabel;
-@property (nonatomic, strong) UIImageView *iconView;
-@property (nonatomic, strong) UIButton *logToggleBtn;
-@property (nonatomic, strong) UIStackView *buttonStackView;
+@property (nonatomic, strong) UILabel *logPlaceholderLabel;
+@property (nonatomic, strong) UIView *errorCardView;
+@property (nonatomic, strong) UIView *logDetailContainer;
 @property (nonatomic, assign) int exitCode;
 @property (nonatomic, assign) BOOL logExpanded;
 @property (nonatomic, copy) NSString *customTitle;
@@ -24,6 +21,7 @@
 @implementation PLCrashView
 
 static PLCrashView *currentCrashView = nil;
+static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amethyst-iOS-MyRemastered/issues";
 
 #pragma mark - Public Methods
 
@@ -82,7 +80,7 @@ static PLCrashView *currentCrashView = nil;
 #pragma mark - UI Setup
 
 - (void)setupUI {
-    self.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.85];
+    self.backgroundColor = [UIColor clearColor];
     self.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     
     // 毛玻璃背景
@@ -92,177 +90,195 @@ static PLCrashView *currentCrashView = nil;
     blurView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     [self addSubview:blurView];
     
-    // 容器视图
-    CGFloat containerWidth = MIN(self.bounds.size.width - 32, 420);
-    _containerView = [[UIView alloc] initWithFrame:CGRectMake((self.bounds.size.width - containerWidth) / 2, 60, containerWidth, self.bounds.size.height - 120)];
-    _containerView.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleRightMargin | UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleBottomMargin;
-    [self addSubview:_containerView];
+    // 深色蒙层增强毛玻璃效果
+    UIView *overlayView = [[UIView alloc] initWithFrame:self.bounds];
+    overlayView.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.5];
+    overlayView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    [self addSubview:overlayView];
     
-    [self setupErrorCard];
-    [self setupInfoCard];
-    [self setupLogContainer];
-    [self setupButtons];
+    // 创建左右分栏容器
+    CGFloat leftWidth = self.bounds.size.width * 0.58;
+    CGFloat rightWidth = self.bounds.size.width - leftWidth;
+    CGFloat topPadding = 60;
+    CGFloat bottomPadding = 40;
+    CGFloat sidePadding = 16;
+    
+    // 左侧面板
+    _leftPanel = [[UIView alloc] initWithFrame:CGRectMake(0, topPadding, leftWidth, self.bounds.size.height - topPadding - bottomPadding)];
+    _leftPanel.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    [self addSubview:_leftPanel];
+    
+    // 右侧面板
+    _rightPanel = [[UIView alloc] initWithFrame:CGRectMake(leftWidth, topPadding, rightWidth, self.bounds.size.height - topPadding - bottomPadding)];
+    _rightPanel.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    [self addSubview:_rightPanel];
+    
+    [self setupLeftPanel];
+    [self setupRightPanel];
 }
 
-- (void)setupErrorCard {
-    // 错误卡片 - 渐变背景
-    _errorCardView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, _containerView.bounds.size.width, 120)];
-    _errorCardView.layer.cornerRadius = 16;
-    _errorCardView.layer.masksToBounds = YES;
-    [_containerView addSubview:_errorCardView];
+- (void)setupLeftPanel {
+    CGFloat panelWidth = _leftPanel.bounds.size.width;
+    CGFloat panelHeight = _leftPanel.bounds.size.height;
     
-    // 创建渐变背景
-    CAGradientLayer *gradientLayer = [CAGradientLayer layer];
-    gradientLayer.frame = _errorCardView.bounds;
-    gradientLayer.colors = @[
-        (id)[UIColor colorWithRed:0.8 green:0.2 blue:0.2 alpha:1.0].CGColor,
-        (id)[UIColor colorWithRed:0.9 green:0.4 blue:0.1 alpha:1.0].CGColor
-    ];
-    gradientLayer.startPoint = CGPointMake(0, 0);
-    gradientLayer.endPoint = CGPointMake(1, 1);
-    [_errorCardView.layer insertSublayer:gradientLayer atIndex:0];
+    // 顶部标签条 "崩溃界面"
+    UIView *labelBar = [[UIView alloc] initWithFrame:CGRectMake(sidePadding, 0, panelWidth - sidePadding * 2, 36)];
+    labelBar.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.15];
+    labelBar.layer.cornerRadius = 8;
+    [_leftPanel addSubview:labelBar];
     
-    // 图标
-    _iconView = [[UIImageView alloc] initWithFrame:CGRectMake(_containerView.bounds.size.width / 2 - 25, 15, 50, 50)];
-    if (@available(iOS 13.0, *)) {
-        UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:40 weight:UIImageSymbolWeightMedium];
-        _iconView.image = [UIImage systemImageNamed:@"exclamationmark.triangle.fill" withConfiguration:config];
-    }
-    _iconView.tintColor = [UIColor whiteColor];
-    _iconView.contentMode = UIViewContentModeScaleAspectFit;
-    [_errorCardView addSubview:_iconView];
+    UILabel *labelBarText = [[UILabel alloc] initWithFrame:CGRectMake(12, 0, labelBar.bounds.size.width - 24, 36)];
+    labelBarText.text = localize(@"crash.interface_title", nil);
+    labelBarText.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
+    labelBarText.textColor = [UIColor whiteColor];
+    labelBarText.textAlignment = NSTextAlignmentLeft;
+    [labelBar addSubview:labelBarText];
     
-    // 标题
-    _titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(16, 72, _containerView.bounds.size.width - 32, 24)];
-    _titleLabel.text = localize(@"crash.title", nil);
-    _titleLabel.font = [UIFont boldSystemFontOfSize:18];
-    _titleLabel.textColor = [UIColor whiteColor];
-    _titleLabel.textAlignment = NSTextAlignmentCenter;
-    [_errorCardView addSubview:_titleLabel];
-    
-    // 副标题
-    _subtitleLabel = [[UILabel alloc] initWithFrame:CGRectMake(16, 96, _containerView.bounds.size.width - 32, 20)];
-    _subtitleLabel.text = localize(@"crash.subtitle", nil);
-    _subtitleLabel.font = [UIFont systemFontOfSize:14];
-    _subtitleLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.9];
-    _subtitleLabel.textAlignment = NSTextAlignmentCenter;
-    [_errorCardView addSubview:_subtitleLabel];
-}
-
-- (void)setupInfoCard {
-    CGFloat topOffset = 136;
-    
-    _infoCardView = [[UIView alloc] initWithFrame:CGRectMake(0, topOffset, _containerView.bounds.size.width, 120)];
-    _infoCardView.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.08];
-    _infoCardView.layer.cornerRadius = 16;
-    [_containerView addSubview:_infoCardView];
-    
-    // 退出代码行
-    UILabel *codeTitle = [self createInfoLabel:CGRectMake(16, 16, 80, 20) text:localize(@"crash.exit_code", nil) font:[UIFont systemFontOfSize:13] color:[[UIColor whiteColor] colorWithAlphaComponent:0.6]];
-    UILabel *codeValue = [self createInfoLabel:CGRectMake(100, 16, _containerView.bounds.size.width - 116, 20) text:[NSString stringWithFormat:@"%d", _exitCode] font:[UIFont boldSystemFontOfSize:13] color:[UIColor whiteColor]];
-    
-    [_infoCardView addSubview:codeTitle];
-    [_infoCardView addSubview:codeValue];
-    
-    // 原因
-    UILabel *reasonTitle = [self createInfoLabel:CGRectMake(16, 48, _containerView.bounds.size.width - 32, 20) text:localize(@"crash.reason", nil) font:[UIFont systemFontOfSize:13] color:[[UIColor whiteColor] colorWithAlphaComponent:0.6]];
-    UILabel *reasonValue = [self createInfoLabel:CGRectMake(16, 72, _containerView.bounds.size.width - 32, 40) text:[self getReasonForExitCode:_exitCode] font:[UIFont systemFontOfSize:13] color:[UIColor whiteColor]];
-    reasonValue.numberOfLines = 2;
-    
-    [_infoCardView addSubview:reasonTitle];
-    [_infoCardView addSubview:reasonValue];
-}
-
-- (void)setupLogContainer {
-    CGFloat topOffset = 268;
-    CGFloat logHeight = 120;
-    
-    _logContainerView = [[UIView alloc] initWithFrame:CGRectMake(0, topOffset, _containerView.bounds.size.width, logHeight + 44)];
-    _logContainerView.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.05];
-    _logContainerView.layer.cornerRadius = 16;
-    _logContainerView.layer.masksToBounds = YES;
-    [_containerView addSubview:_logContainerView];
-    
-    // 日志展开按钮
-    _logToggleBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-    _logToggleBtn.frame = CGRectMake(0, 0, _containerView.bounds.size.width, 44);
-    [_logToggleBtn setTitle:localize(@"crash.view_log", nil) forState:UIControlStateNormal];
-    [_logToggleBtn setImage:[UIImage systemImageNamed:@"chevron.down"] forState:UIControlStateNormal];
-    _logToggleBtn.tintColor = [UIColor whiteColor];
-    _logToggleBtn.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeft;
-    _logToggleBtn.contentEdgeInsets = UIEdgeInsetsMake(0, 16, 0, 0);
-    _logToggleBtn.titleEdgeInsets = UIEdgeInsetsMake(0, 8, 0, 0);
-    _logToggleBtn.imageEdgeInsets = UIEdgeInsetsMake(0, _containerView.bounds.size.width - 44, 0, 0);
-    [_logToggleBtn addTarget:self action:@selector(toggleLogView) forControlEvents:UIControlEventTouchUpInside];
-    [_logContainerView addSubview:_logToggleBtn];
-    
-    // 分隔线
-    UIView *separator = [[UIView alloc] initWithFrame:CGRectMake(0, 43.5, _containerView.bounds.size.width, 0.5)];
-    separator.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.1];
-    [_logContainerView addSubview:separator];
+    // 日志面板（黑色背景）
+    CGFloat logTop = 48;
+    CGFloat logHeight = panelHeight - logTop;
+    _logPanel = [[UIView alloc] initWithFrame:CGRectMake(sidePadding, logTop, panelWidth - sidePadding * 2, logHeight)];
+    _logPanel.backgroundColor = [UIColor colorWithWhite:0.08 alpha:1.0];
+    _logPanel.layer.cornerRadius = 12;
+    _logPanel.layer.masksToBounds = YES;
+    [_leftPanel addSubview:_logPanel];
     
     // 日志文本视图
-    _logTextView = [[UITextView alloc] initWithFrame:CGRectMake(8, 44, _containerView.bounds.size.width - 16, logHeight)];
+    _logTextView = [[UITextView alloc] initWithFrame:CGRectMake(8, 8, _logPanel.bounds.size.width - 16, _logPanel.bounds.size.height - 16)];
     _logTextView.backgroundColor = [UIColor clearColor];
-    _logTextView.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.8];
+    _logTextView.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.85];
     _logTextView.font = [UIFont fontWithName:@"Menlo" size:11];
     _logTextView.editable = NO;
     _logTextView.showsVerticalScrollIndicator = YES;
     _logTextView.indicatorStyle = UIScrollViewIndicatorStyleWhite;
-    [_logContainerView addSubview:_logTextView];
+    _logTextView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    [_logPanel addSubview:_logTextView];
+    
+    // 占位符标签 "日志信息"（日志为空时显示）
+    _logPlaceholderLabel = [[UILabel alloc] initWithFrame:_logPanel.bounds];
+    _logPlaceholderLabel.text = localize(@"crash.log_info", nil);
+    _logPlaceholderLabel.font = [UIFont systemFontOfSize:48 weight:UIFontWeightBold];
+    _logPlaceholderLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.15];
+    _logPlaceholderLabel.textAlignment = NSTextAlignmentCenter;
+    _logPlaceholderLabel.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    [_logPanel addSubview:_logPlaceholderLabel];
     
     // 加载日志内容
     [self loadLogContent];
-    
-    _logExpanded = YES;
 }
 
-- (void)setupButtons {
-    CGFloat topOffset = _containerView.bounds.size.height - 180;
+- (void)setupRightPanel {
+    CGFloat panelWidth = _rightPanel.bounds.size.width;
+    CGFloat panelHeight = _rightPanel.bounds.size.height;
+    CGFloat sidePadding = 12;
+    CGFloat cardSpacing = 12;
     
-    _buttonStackView = [[UIStackView alloc] initWithFrame:CGRectMake(0, topOffset, _containerView.bounds.size.width, 160)];
-    _buttonStackView.axis = UILayoutConstraintAxisVertical;
-    _buttonStackView.spacing = 12;
-    _buttonStackView.distribution = UIStackViewDistributionFill;
-    [_containerView addSubview:_buttonStackView];
+    // 红色错误提示卡片
+    _errorCardView = [[UIView alloc] initWithFrame:CGRectMake(sidePadding, 0, panelWidth - sidePadding * 2, 140)];
+    _errorCardView.backgroundColor = [UIColor colorWithRed:1.0 green:0.278 blue:0.318 alpha:1.0]; // #FF4757
+    _errorCardView.layer.cornerRadius = 12;
+    [_rightPanel addSubview:_errorCardView];
+    
+    // 感叹号图标
+    UIImageView *iconView = [[UIImageView alloc] initWithFrame:CGRectMake(_errorCardView.bounds.size.width / 2 - 20, 16, 40, 40)];
+    if (@available(iOS 13.0, *)) {
+        UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:32 weight:UIImageSymbolWeightSemibold];
+        iconView.image = [UIImage systemImageNamed:@"exclamationmark.triangle.fill" withConfiguration:config];
+    }
+    iconView.tintColor = [UIColor whiteColor];
+    iconView.contentMode = UIViewContentModeScaleAspectFit;
+    [_errorCardView addSubview:iconView];
+    
+    // 错误标题
+    UILabel *errorTitle = [[UILabel alloc] initWithFrame:CGRectMake(16, 62, _errorCardView.bounds.size.width - 32, 24)];
+    errorTitle.text = localize(@"crash.error_title", nil);
+    errorTitle.font = [UIFont boldSystemFontOfSize:15];
+    errorTitle.textColor = [UIColor whiteColor];
+    errorTitle.textAlignment = NSTextAlignmentCenter;
+    [_errorCardView addSubview:errorTitle];
+    
+    // 错误代码
+    UILabel *errorCode = [[UILabel alloc] initWithFrame:CGRectMake(16, 90, _errorCardView.bounds.size.width - 32, 20)];
+    errorCode.text = [NSString stringWithFormat:@"%@%d", localize(@"crash.error_code", nil), _exitCode];
+    errorCode.font = [UIFont systemFontOfSize:13];
+    errorCode.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.9];
+    errorCode.textAlignment = NSTextAlignmentCenter;
+    [_errorCardView addSubview:errorCode];
+    
+    // 可能原因
+    UILabel *reasonLabel = [[UILabel alloc] initWithFrame:CGRectMake(16, 112, _errorCardView.bounds.size.width - 32, 20)];
+    reasonLabel.text = [NSString stringWithFormat:@"%@%@", localize(@"crash.possible_reason", nil), localize(@"crash.debug_reference", nil)];
+    reasonLabel.font = [UIFont systemFontOfSize:12];
+    reasonLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.75];
+    reasonLabel.textAlignment = NSTextAlignmentCenter;
+    reasonLabel.adjustsFontSizeToFitWidth = YES;
+    [_errorCardView addSubview:reasonLabel];
     
     // 分享日志按钮
-    UIButton *shareBtn = [self createButtonWithTitle:localize(@"crash.share_log", nil) icon:@"square.and.arrow.up" action:@selector(shareLog)];
-    [_buttonStackView addArrangedSubview:shareBtn];
+    CGFloat shareBtnTop = 156;
+    UIButton *shareBtn = [self createPrimaryButton:CGRectMake(sidePadding, shareBtnTop, panelWidth - sidePadding * 2, 48)
+                                             title:localize(@"crash.share_log", nil)
+                                              icon:@"square.and.arrow.up"
+                                            action:@selector(shareLog)];
+    [_rightPanel addSubview:shareBtn];
     
-    // 查看完整日志按钮
-    UIButton *fullLogBtn = [self createButtonWithTitle:localize(@"crash.full_log", nil) icon:@"doc.text" action:@selector(showFullLog)];
-    [_buttonStackView addArrangedSubview:fullLogBtn];
+    // 卡片容器（GitHub Issues 和 AI 解决问题）
+    CGFloat cardsTop = shareBtnTop + 48 + cardSpacing;
+    CGFloat cardWidth = (panelWidth - sidePadding * 3) / 2;
+    CGFloat cardHeight = 80;
     
-    // 返回启动器按钮
-    UIButton *returnBtn = [self createButtonWithTitle:localize(@"crash.return_launcher", nil) icon:@"house" action:@selector(dismissAndReturnToLauncher) primary:YES];
-    [_buttonStackView addArrangedSubview:returnBtn];
+    // GitHub Issues 卡片
+    UIView *githubCard = [self createActionCard:CGRectMake(sidePadding, cardsTop, cardWidth, cardHeight)
+                                          title:localize(@"crash.github_issue", nil)
+                                      iconName:@"link"
+                                     iconColor:[UIColor colorWithRed:0.3 green:0.5 blue:0.9 alpha:1.0]
+                                        action:@selector(openGitHubIssues)];
+    [_rightPanel addSubview:githubCard];
+    
+    // AI 解决问题卡片
+    UIView *aiCard = [self createActionCard:CGRectMake(sidePadding * 2 + cardWidth, cardsTop, cardWidth, cardHeight)
+                                      title:localize(@"crash.ai_solve", nil)
+                                  iconName:@"cpu"
+                                 iconColor:[UIColor colorWithRed:0.6 green:0.4 blue:0.9 alpha:1.0]
+                                    action:@selector(useAIToSolve)];
+    [_rightPanel addSubview:aiCard];
+    
+    // 实验性标签
+    UILabel *experimentalLabel = [[UILabel alloc] initWithFrame:CGRectMake(aiCard.frame.origin.x + 8, aiCard.frame.origin.y + 60, cardWidth - 16, 16)];
+    experimentalLabel.text = [NSString stringWithFormat:@"(%@)", localize(@"crash.experimental", nil)];
+    experimentalLabel.font = [UIFont systemFontOfSize:10];
+    experimentalLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.5];
+    experimentalLabel.textAlignment = NSTextAlignmentRight;
+    [_rightPanel addSubview:experimentalLabel];
+    
+    // 退出启动器按钮
+    CGFloat exitBtnTop = cardsTop + cardHeight + cardSpacing + 20;
+    UIButton *exitBtn = [self createSecondaryButton:CGRectMake(sidePadding, exitBtnTop, panelWidth - sidePadding * 2, 48)
+                                              title:localize(@"crash.return_launcher", nil)
+                                               icon:@"rectangle.portrait.and.arrow.right"
+                                             action:@selector(dismissAndReturnToLauncher)];
+    [_rightPanel addSubview:exitBtn];
+    
+    // 查看完整日志按钮（小按钮）
+    CGFloat fullLogBtnTop = exitBtnTop + 48 + 8;
+    UIButton *fullLogBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+    fullLogBtn.frame = CGRectMake(sidePadding, fullLogBtnTop, panelWidth - sidePadding * 2, 32);
+    [fullLogBtn setTitle:localize(@"crash.view_log", nil) forState:UIControlStateNormal];
+    fullLogBtn.titleLabel.font = [UIFont systemFontOfSize:13];
+    fullLogBtn.tintColor = [[UIColor whiteColor] colorWithAlphaComponent:0.6];
+    [fullLogBtn addTarget:self action:@selector(showFullLog) forControlEvents:UIControlEventTouchUpInside];
+    [_rightPanel addSubview:fullLogBtn];
 }
 
 #pragma mark - Helper Methods
 
-- (UILabel *)createInfoLabel:(CGRect)frame text:(NSString *)text font:(UIFont *)font color:(UIColor *)color {
-    UILabel *label = [[UILabel alloc] initWithFrame:frame];
-    label.text = text;
-    label.font = font;
-    label.textColor = color;
-    label.lineBreakMode = NSLineBreakByTruncatingTail;
-    return label;
-}
-
-- (UIButton *)createButtonWithTitle:(NSString *)title icon:(NSString *)icon action:(SEL)action primary:(BOOL)primary {
+- (UIButton *)createPrimaryButton:(CGRect)frame title:(NSString *)title icon:(NSString *)icon action:(SEL)action {
     UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
-    button.frame = CGRectMake(0, 0, _containerView.bounds.size.width, 44);
+    button.frame = frame;
+    button.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.15];
+    button.layer.cornerRadius = 10;
     
-    if (primary) {
-        button.backgroundColor = [UIColor colorWithRed:0.26 green:0.63 blue:0.96 alpha:1.0];
-        [button setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    } else {
-        button.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.1];
-        [button setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    }
-    
-    button.layer.cornerRadius = 12;
+    [button setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     button.titleLabel.font = [UIFont boldSystemFontOfSize:15];
     
     if (@available(iOS 13.0, *)) {
@@ -279,45 +295,74 @@ static PLCrashView *currentCrashView = nil;
     return button;
 }
 
-- (UIButton *)createButtonWithTitle:(NSString *)title icon:(NSString *)icon action:(SEL)action {
-    return [self createButtonWithTitle:title icon:icon action:action primary:NO];
-}
-
-- (NSString *)getReasonForExitCode:(int)code {
-    if (_customReason) {
-        return _customReason;
+- (UIButton *)createSecondaryButton:(CGRect)frame title:(NSString *)title icon:(NSString *)icon action:(SEL)action {
+    UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
+    button.frame = frame;
+    button.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.1];
+    button.layer.cornerRadius = 10;
+    
+    [button setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    button.titleLabel.font = [UIFont systemFontOfSize:15];
+    
+    if (@available(iOS 13.0, *)) {
+        UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:15 weight:UIFontWeightRegular];
+        UIImage *iconImage = [UIImage systemImageNamed:icon withConfiguration:config];
+        [button setImage:iconImage forState:UIControlStateNormal];
     }
     
-    switch (code) {
-        case 0:
-            return localize(@"crash.reason.normal", nil);
-        case 1:
-            return localize(@"crash.reason.java_exception", nil);
-        case 137:
-            return localize(@"crash.reason.memory", nil);
-        case 139:
-            return localize(@"crash.reason.segmentation", nil);
-        case 134:
-            return localize(@"crash.reason.abort", nil);
-        case 143:
-            return localize(@"crash.reason.terminated", nil);
-        default:
-            return [NSString stringWithFormat:localize(@"crash.reason.unknown", nil), code];
+    button.titleEdgeInsets = UIEdgeInsetsMake(0, 8, 0, 0);
+    button.imageEdgeInsets = UIEdgeInsetsMake(0, -8, 0, 0);
+    [button setTitle:title forState:UIControlStateNormal];
+    [button addTarget:self action:action forControlEvents:UIControlEventTouchUpInside];
+    
+    return button;
+}
+
+- (UIView *)createActionCard:(CGRect)frame title:(NSString *)title iconName:(NSString *)iconName iconColor:(UIColor *)iconColor action:(SEL)action {
+    UIView *card = [[UIView alloc] initWithFrame:frame];
+    card.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.08];
+    card.layer.cornerRadius = 12;
+    
+    // 添加点击手势
+    UITapGestureRecognizer *tapGesture = [[UITapGestureRecognizer alloc] initWithTarget:self action:action];
+    [card addGestureRecognizer:tapGesture];
+    
+    // 图标
+    UIImageView *iconView = [[UIImageView alloc] initWithFrame:CGRectMake((card.bounds.size.width - 28) / 2, 14, 28, 28)];
+    if (@available(iOS 13.0, *)) {
+        UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:20 weight:UIImageSymbolWeightMedium];
+        iconView.image = [UIImage systemImageNamed:iconName withConfiguration:config];
     }
+    iconView.tintColor = iconColor;
+    iconView.contentMode = UIViewContentModeScaleAspectFit;
+    [card addSubview:iconView];
+    
+    // 标题
+    UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(8, 46, card.bounds.size.width - 16, 24)];
+    titleLabel.text = title;
+    titleLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
+    titleLabel.textColor = [UIColor whiteColor];
+    titleLabel.textAlignment = NSTextAlignmentCenter;
+    titleLabel.numberOfLines = 2;
+    titleLabel.adjustsFontSizeToFitWidth = YES;
+    [card addSubview:titleLabel];
+    
+    return card;
 }
 
 - (void)loadLogContent {
     NSString *latestlogPath = [NSString stringWithFormat:@"%s/latestlog.txt", getenv("POJAV_HOME")];
     NSString *logContent = [NSString stringWithContentsOfFile:latestlogPath encoding:NSUTF8StringEncoding error:nil];
     
-    if (!logContent) {
-        _logTextView.text = localize(@"crash.log_unavailable", nil);
+    if (!logContent || logContent.length == 0) {
+        _logTextView.text = nil;
+        _logPlaceholderLabel.hidden = NO;
         return;
     }
     
-    // 获取最后100行
+    // 获取最后150行
     NSArray *lines = [logContent componentsSeparatedByCharactersInSet:[NSCharacterSet newlineCharacterSet]];
-    NSInteger startIndex = MAX(0, (NSInteger)lines.count - 100);
+    NSInteger startIndex = MAX(0, (NSInteger)lines.count - 150);
     NSMutableArray *lastLines = [NSMutableArray array];
     for (NSInteger i = startIndex; i < (NSInteger)lines.count; i++) {
         NSString *line = lines[i];
@@ -327,26 +372,15 @@ static PLCrashView *currentCrashView = nil;
     }
     
     _logTextView.text = [lastLines componentsJoinedByString:@"\n"];
+    _logPlaceholderLabel.hidden = _logTextView.text.length > 0;
     
     // 滚动到底部
     dispatch_async(dispatch_get_main_queue(), ^{
-        [_logTextView scrollRangeToVisible:NSMakeRange(_logTextView.text.length, 0)];
+        [self.logTextView scrollRangeToVisible:NSMakeRange(self.logTextView.text.length, 0)];
     });
 }
 
 #pragma mark - Actions
-
-- (void)toggleLogView {
-    _logExpanded = !_logExpanded;
-    
-    NSString *imageName = _logExpanded ? @"chevron.up" : @"chevron.down";
-    [_logToggleBtn setImage:[UIImage systemImageNamed:imageName] forState:UIControlStateNormal];
-    
-    [UIView animateWithDuration:0.25 animations:^{
-        self.logContainerView.frame = CGRectMake(0, 268, self.containerView.bounds.size.width, self.logExpanded ? 164 : 44);
-        self.logTextView.hidden = !self.logExpanded;
-    }];
-}
 
 - (void)shareLog {
     NSString *latestlogPath = [NSString stringWithFormat:@"file://%s/latestlog.txt", getenv("POJAV_HOME")];
@@ -368,6 +402,28 @@ static PLCrashView *currentCrashView = nil;
     if ([SurfaceViewController currentInstance]) {
         [[SurfaceViewController currentInstance].logOutputView actionToggleLogOutput];
     }
+}
+
+- (void)openGitHubIssues {
+    NSURL *url = [NSURL URLWithString:kGitHubIssuesURL];
+    if ([[UIApplication sharedApplication] canOpenURL:url]) {
+        [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:nil];
+    }
+}
+
+- (void)useAIToSolve {
+    // TODO: 实现 AI 解决问题功能
+    // 目前先显示提示
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:localize(@"crash.ai_solve", nil)
+                                                                   message:localize(@"crash.experimental", nil)
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+    
+    UIViewController *presentingVC = [self nextViewController];
+    if (!presentingVC) {
+        presentingVC = currentVC();
+    }
+    [presentingVC presentViewController:alert animated:YES completion:nil];
 }
 
 - (void)dismissAndReturnToLauncher {
@@ -400,10 +456,90 @@ static PLCrashView *currentCrashView = nil;
 - (void)layoutSubviews {
     [super layoutSubviews];
     
-    // 更新渐变层 frame
-    for (CALayer *layer in _errorCardView.layer.sublayers) {
-        if ([layer isKindOfClass:[CAGradientLayer class]]) {
-            layer.frame = _errorCardView.bounds;
+    // 重新计算布局
+    CGFloat leftWidth = self.bounds.size.width * 0.58;
+    CGFloat rightWidth = self.bounds.size.width - leftWidth;
+    CGFloat topPadding = 60;
+    CGFloat bottomPadding = 40;
+    
+    _leftPanel.frame = CGRectMake(0, topPadding, leftWidth, self.bounds.size.height - topPadding - bottomPadding);
+    _rightPanel.frame = CGRectMake(leftWidth, topPadding, rightWidth, self.bounds.size.height - topPadding - bottomPadding);
+    
+    // 更新左侧面板内部布局
+    CGFloat panelWidth = _leftPanel.bounds.size.width;
+    CGFloat panelHeight = _leftPanel.bounds.size.height;
+    CGFloat sidePadding = 16;
+    
+    // 更新标签条
+    UIView *labelBar = _leftPanel.subviews.firstObject;
+    labelBar.frame = CGRectMake(sidePadding, 0, panelWidth - sidePadding * 2, 36);
+    
+    // 更新日志面板
+    CGFloat logTop = 48;
+    _logPanel.frame = CGRectMake(sidePadding, logTop, panelWidth - sidePadding * 2, panelHeight - logTop);
+    _logTextView.frame = CGRectMake(8, 8, _logPanel.bounds.size.width - 16, _logPanel.bounds.size.height - 16);
+    _logPlaceholderLabel.frame = _logPanel.bounds;
+    
+    // 更新右侧面板内部布局
+    CGFloat rightPanelWidth = _rightPanel.bounds.size.width;
+    CGFloat rightSidePadding = 12;
+    CGFloat cardSpacing = 12;
+    
+    // 更新错误卡片
+    _errorCardView.frame = CGRectMake(rightSidePadding, 0, rightPanelWidth - rightSidePadding * 2, 140);
+    
+    // 更新错误卡片内部元素
+    for (UIView *subview in _errorCardView.subviews) {
+        if ([subview isKindOfClass:[UIImageView class]]) {
+            subview.center = CGPointMake(_errorCardView.bounds.size.width / 2, 36);
+        } else if ([subview isKindOfClass:[UILabel class]]) {
+            UILabel *label = (UILabel *)subview;
+            label.frame = CGRectMake(16, label.frame.origin.y, _errorCardView.bounds.size.width - 32, label.frame.height);
+        }
+    }
+    
+    // 更新按钮和卡片位置
+    NSMutableArray *subviews = [NSMutableArray arrayWithArray:_rightPanel.subviews];
+    [subviews removeObject:_errorCardView];
+    
+    CGFloat currentY = 156;
+    CGFloat cardWidth = (rightPanelWidth - rightSidePadding * 3) / 2;
+    
+    for (UIView *view in subviews) {
+        if ([view isKindOfClass:[UIButton class]]) {
+            UIButton *btn = (UIButton *)view;
+            NSString *title = btn.currentTitle;
+            
+            if ([title containsString:localize(@"crash.share_log", nil)]) {
+                btn.frame = CGRectMake(rightSidePadding, currentY, rightPanelWidth - rightSidePadding * 2, 48);
+                currentY += 48 + cardSpacing;
+            } else if ([title containsString:localize(@"crash.return_launcher", nil)]) {
+                currentY += 20; // 添加间距
+                btn.frame = CGRectMake(rightSidePadding, currentY, rightPanelWidth - rightSidePadding * 2, 48);
+                currentY += 48 + 8;
+            } else {
+                // 查看日志详情小按钮
+                btn.frame = CGRectMake(rightSidePadding, currentY, rightPanelWidth - rightSidePadding * 2, 32);
+            }
+        } else {
+            // 卡片视图
+            if (view.frame.origin.x < rightPanelWidth / 2) {
+                // GitHub 卡片
+                view.frame = CGRectMake(rightSidePadding, currentY, cardWidth, 80);
+            } else {
+                // AI 卡片
+                view.frame = CGRectMake(rightSidePadding * 2 + cardWidth, currentY, cardWidth, 80);
+            }
+            
+            // 更新卡片内部图标位置
+            for (UIView *cardSubview in view.subviews) {
+                if ([cardSubview isKindOfClass:[UIImageView class]]) {
+                    cardSubview.center = CGPointMake(view.bounds.size.width / 2, 28);
+                } else if ([cardSubview isKindOfClass:[UILabel class]]) {
+                    UILabel *label = (UILabel *)cardSubview;
+                    label.frame = CGRectMake(8, 46, view.bounds.size.width - 16, 24);
+                }
+            }
         }
     }
 }
