@@ -120,6 +120,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
 - (void)setupLeftPanel {
     CGFloat panelWidth = _leftPanel.bounds.size.width;
     CGFloat panelHeight = _leftPanel.bounds.size.height;
+    CGFloat sidePadding = 16;
     
     // 顶部标签条 "崩溃界面"
     UIView *labelBar = [[UIView alloc] initWithFrame:CGRectMake(sidePadding, 0, panelWidth - sidePadding * 2, 36)];
@@ -494,7 +495,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
             subview.center = CGPointMake(_errorCardView.bounds.size.width / 2, 36);
         } else if ([subview isKindOfClass:[UILabel class]]) {
             UILabel *label = (UILabel *)subview;
-            label.frame = CGRectMake(16, label.frame.origin.y, _errorCardView.bounds.size.width - 32, label.frame.height);
+            label.frame = CGRectMake(16, label.frame.origin.y, _errorCardView.bounds.size.width - 32, label.frame.size.height);
         }
     }
     
