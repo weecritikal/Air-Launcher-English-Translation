@@ -58,10 +58,6 @@ static PLCrashView *currentCrashView = nil;
         }
         
         if (!keyWindow) {
-            keyWindow = [UIApplication sharedApplication].keyWindow;
-        }
-        
-        if (!keyWindow) {
             return;
         }
         
@@ -324,8 +320,9 @@ static PLCrashView *currentCrashView = nil;
     NSInteger startIndex = MAX(0, (NSInteger)lines.count - 100);
     NSMutableArray *lastLines = [NSMutableArray array];
     for (NSInteger i = startIndex; i < (NSInteger)lines.count; i++) {
-        if (lines[i].length > 0) {
-            [lastLines addObject:lines[i]];
+        NSString *line = lines[i];
+        if (line.length > 0) {
+            [lastLines addObject:line];
         }
     }
     
