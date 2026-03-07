@@ -1,4 +1,5 @@
 #import "PLLogOutputView.h"
+#import "PLCrashView.h"
 #import "SurfaceViewController.h"
 #import "utils.h"
 
@@ -139,6 +140,14 @@ static PLLogOutputView* current;
     }];
 }
 
+/// 返回启动器主界面
+- (void)dismissAndReturnToLauncher {
+    if (fatalErrorOccurred && fatalExitGroup != nil) {
+        [UIApplication.sharedApplication performSelector:@selector(suspend)];
+        dispatch_group_leave(fatalExitGroup);
+    }
+}
+
 + (void)_appendToLog:(NSString *)line {
     if (line.length == 0) {
         return;
@@ -171,6 +180,16 @@ static PLLogOutputView* current;
 
 + (void)handleExitCode:(int)code {
     if (!current) return;
+    
+    // 如果有错误，显示新的崩溃界面
+    if (code != 0) {
+        fatalErrorOccurred = YES;
+        canAppendToLog = NO;
+        [PLCrashView showWithExitCode:code];
+        return;
+    }
+    
+    // 退出代码为0时的降级处理（正常退出）
     dispatch_async(dispatch_get_main_queue(), ^(void){
         if (current.hidden) {
             [current actionToggleLogOutput];

@@ -399,3 +399,22 @@
 "preference.touchcontroller.vibrate.intensity.medium" = "Medium";
 "preference.touchcontroller.vibrate.intensity.heavy" = "Heavy";
 "preference.touchcontroller.moveview.enable" = "Enable Move View";
+
+// Crash View
+"crash.title" = "Game Exited Unexpectedly";
+"crash.subtitle" = "An error was detected and the game process has terminated";
+"crash.exit_code" = "Exit Code";
+"crash.reason" = "Possible Reason";
+"crash.reason.normal" = "Game exited normally";
+"crash.reason.java_exception" = "Java VM encountered an uncaught exception";
+"crash.reason.memory" = "Out of memory, process terminated by system (OOM)";
+"crash.reason.segmentation" = "Segmentation fault, possible JNI or native library issue";
+"crash.reason.abort" = "Program aborted (abort)";
+"crash.reason.terminated" = "Process terminated by external signal";
+"crash.reason.unknown" = "Unknown error (code: %d)";
+"crash.suggestion" = "Suggested Action";
+"crash.view_log" = "📄 View Log Details";
+"crash.share_log" = "📤 Share Log File";
+"crash.full_log" = "📋 View Full Log";
+"crash.return_launcher" = "← Return to Launcher";
+"crash.log_unavailable" = "Unable to read log file";

@@ -416,3 +416,22 @@
 "preference.touchcontroller.moveview.enable" = "启用移动视角";
 
 "spdt" = "我是个飞机!!!!!!";
+
+// Crash View
+"crash.title" = "游戏意外退出";
+"crash.subtitle" = "检测到错误，游戏进程已终止";
+"crash.exit_code" = "退出代码";
+"crash.reason" = "可能原因";
+"crash.reason.normal" = "游戏正常退出";
+"crash.reason.java_exception" = "Java 虚拟机遇到未捕获的异常";
+"crash.reason.memory" = "内存不足，进程被系统终止 (OOM)";
+"crash.reason.segmentation" = "段错误，可能是 JNI 调用或原生库问题";
+"crash.reason.abort" = "程序异常终止 (abort)";
+"crash.reason.terminated" = "进程被外部信号终止";
+"crash.reason.unknown" = "未知错误 (代码: %d)";
+"crash.suggestion" = "建议操作";
+"crash.view_log" = "📄 查看日志详情";
+"crash.share_log" = "📤 分享日志文件";
+"crash.full_log" = "📋 查看完整日志";
+"crash.return_launcher" = "← 返回启动器";
+"crash.log_unavailable" = "无法读取日志文件";
