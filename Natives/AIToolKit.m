@@ -8,6 +8,7 @@
 // 必须首先导入 Foundation，避免其他头文件中的宏定义与 Objective-C 关键字冲突
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
+#import <mach/mach.h>
 
 // 取消可能存在的 interface 宏定义，避免与 Objective-C 的 @interface 关键字冲突
 #ifdef interface
@@ -1081,18 +1082,23 @@
     NSProcessInfo *processInfo = [NSProcessInfo processInfo];
     UIDevice *device = [UIDevice currentDevice];
     
-    // availableMemory 只在 iOS 15+ 可用，使用 KVC 避免编译时检查问题
+    // 使用 Mach API 获取可用内存（iOS 兼容方式）
     NSUInteger availableMemMB = 0;
-    if (@available(iOS 15.0, *)) {
-        // 使用 KVC 方式访问 availableMemory 属性
-        NSNumber *availableMem = [processInfo valueForKey:@"availableMemory"];
-        if (availableMem) {
-            availableMemMB = (NSUInteger)([availableMem unsignedLongLongValue] / 1024 / 1024);
-        } else {
-            availableMemMB = (NSUInteger)(processInfo.physicalMemory / 1024 / 1024 / 2);
-        }
+    mach_port_t host = mach_host_self();
+    vm_size_t pageSize;
+    host_page_size(host, &pageSize);
+    
+    vm_statistics64_data_t vmStats;
+    mach_msg_type_number_t count = HOST_VM_INFO64_COUNT;
+    kern_return_t result = host_statistics64(host, HOST_VM_INFO64, (host_info64_t)&vmStats, &count);
+    
+    if (result == KERN_SUCCESS) {
+        // 计算可用内存：空闲页 + 非活跃页
+        uint64_t freePages = vmStats.free_count + vmStats.inactive_count;
+        uint64_t availableBytes = freePages * pageSize;
+        availableMemMB = (NSUInteger)(availableBytes / 1024 / 1024);
     } else {
-        // 在 iOS 15 以下，使用物理内存的一半作为估计值
+        // 如果获取失败，使用物理内存的一半作为估计值
         availableMemMB = (NSUInteger)(processInfo.physicalMemory / 1024 / 1024 / 2);
     }
     
