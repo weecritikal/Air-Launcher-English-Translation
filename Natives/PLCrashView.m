@@ -505,43 +505,90 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     
     CGFloat currentY = 156;
     CGFloat cardWidth = (rightPanelWidth - rightSidePadding * 3) / 2;
+    CGFloat cardHeight = 80;
+    
+    // 找出各个视图的引用
+    UIButton *shareBtn = nil;
+    UIView *githubCard = nil;
+    UIView *aiCard = nil;
+    UILabel *experimentalLabel = nil;
+    UIButton *exitBtn = nil;
+    UIButton *fullLogBtn = nil;
     
     for (UIView *view in subviews) {
         if ([view isKindOfClass:[UIButton class]]) {
             UIButton *btn = (UIButton *)view;
             NSString *title = btn.currentTitle;
-            
             if ([title containsString:localize(@"crash.share_log", nil)]) {
-                btn.frame = CGRectMake(rightSidePadding, currentY, rightPanelWidth - rightSidePadding * 2, 48);
-                currentY += 48 + cardSpacing;
+                shareBtn = btn;
             } else if ([title containsString:localize(@"crash.return_launcher", nil)]) {
-                currentY += 20; // 添加间距
-                btn.frame = CGRectMake(rightSidePadding, currentY, rightPanelWidth - rightSidePadding * 2, 48);
-                currentY += 48 + 8;
+                exitBtn = btn;
             } else {
-                // 查看日志详情小按钮
-                btn.frame = CGRectMake(rightSidePadding, currentY, rightPanelWidth - rightSidePadding * 2, 32);
+                fullLogBtn = btn;
             }
+        } else if ([view isKindOfClass:[UILabel class]]) {
+            experimentalLabel = (UILabel *)view;
         } else {
-            // 卡片视图
+            // 卡片视图 - 根据 x 位置判断
             if (view.frame.origin.x < rightPanelWidth / 2) {
-                // GitHub 卡片
-                view.frame = CGRectMake(rightSidePadding, currentY, cardWidth, 80);
+                githubCard = view;
             } else {
-                // AI 卡片
-                view.frame = CGRectMake(rightSidePadding * 2 + cardWidth, currentY, cardWidth, 80);
-            }
-            
-            // 更新卡片内部图标位置
-            for (UIView *cardSubview in view.subviews) {
-                if ([cardSubview isKindOfClass:[UIImageView class]]) {
-                    cardSubview.center = CGPointMake(view.bounds.size.width / 2, 28);
-                } else if ([cardSubview isKindOfClass:[UILabel class]]) {
-                    UILabel *label = (UILabel *)cardSubview;
-                    label.frame = CGRectMake(8, 46, view.bounds.size.width - 16, 24);
-                }
+                aiCard = view;
             }
         }
+    }
+    
+    // 分享日志按钮
+    if (shareBtn) {
+        shareBtn.frame = CGRectMake(rightSidePadding, currentY, rightPanelWidth - rightSidePadding * 2, 48);
+        currentY += 48 + cardSpacing;
+    }
+    
+    // GitHub 和 AI 卡片（同一行）
+    if (githubCard) {
+        githubCard.frame = CGRectMake(rightSidePadding, currentY, cardWidth, cardHeight);
+        // 更新卡片内部图标位置
+        for (UIView *cardSubview in githubCard.subviews) {
+            if ([cardSubview isKindOfClass:[UIImageView class]]) {
+                cardSubview.center = CGPointMake(githubCard.bounds.size.width / 2, 28);
+            } else if ([cardSubview isKindOfClass:[UILabel class]]) {
+                UILabel *label = (UILabel *)cardSubview;
+                label.frame = CGRectMake(8, 46, githubCard.bounds.size.width - 16, 24);
+            }
+        }
+    }
+    
+    if (aiCard) {
+        aiCard.frame = CGRectMake(rightSidePadding * 2 + cardWidth, currentY, cardWidth, cardHeight);
+        // 更新卡片内部图标位置
+        for (UIView *cardSubview in aiCard.subviews) {
+            if ([cardSubview isKindOfClass:[UIImageView class]]) {
+                cardSubview.center = CGPointMake(aiCard.bounds.size.width / 2, 28);
+            } else if ([cardSubview isKindOfClass:[UILabel class]]) {
+                UILabel *label = (UILabel *)cardSubview;
+                label.frame = CGRectMake(8, 46, aiCard.bounds.size.width - 16, 24);
+            }
+        }
+    }
+    
+    currentY += cardHeight + cardSpacing;
+    
+    // 实验性标签
+    if (experimentalLabel) {
+        experimentalLabel.frame = CGRectMake(rightSidePadding * 2 + cardWidth + 8, currentY - cardSpacing - 16, cardWidth - 16, 16);
+    }
+    
+    currentY += 20; // 添加间距
+    
+    // 退出启动器按钮
+    if (exitBtn) {
+        exitBtn.frame = CGRectMake(rightSidePadding, currentY, rightPanelWidth - rightSidePadding * 2, 48);
+        currentY += 48 + 8;
+    }
+    
+    // 查看完整日志按钮
+    if (fullLogBtn) {
+        fullLogBtn.frame = CGRectMake(rightSidePadding, currentY, rightPanelWidth - rightSidePadding * 2, 32);
     }
 }
 
