@@ -5,6 +5,9 @@
 //  AI 崩溃修复界面控制器实现
 //
 
+// 必须首先导入 Foundation/UIKit，避免其他头文件中的宏定义与 Objective-C 关键字冲突
+#import <Foundation/Foundation.h>
+#import <UIKit/UIKit.h>
 #import "AIFixViewController.h"
 #import "AIFixService.h"
 #import "AIConfigService.h"

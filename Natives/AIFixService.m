@@ -5,6 +5,7 @@
 //  AI 崩溃修复核心服务实现
 //
 
+#import <Foundation/Foundation.h>
 #import "AIFixService.h"
 #import "utils.h"
 
@@ -344,8 +345,8 @@ static NSString *const kOpenAIChatEndpoint = @"/chat/completions";
         
         for (AIFileModification *mod in self.modifications) {
             [report appendFormat:@"- **%@**: %@\n", mod.operationType, mod.filePath];
-            if (mod.description) {
-                [report appendFormat:@"  - 说明: %@\n", mod.description];
+            if (mod.modificationDescription) {
+                [report appendFormat:@"  - 说明: %@\n", mod.modificationDescription];
             }
         }
         
@@ -422,7 +423,7 @@ static NSString *const kOpenAIChatEndpoint = @"/chat/completions";
     } else if ([toolName isEqualToString:@"toggle_mod"]) {
         mod.filePath = parameters[@"mod_path"];
         mod.operationType = @"modify";
-        mod.description = parameters[@"enable"] ? @"启用 Mod" : @"禁用 Mod";
+        mod.modificationDescription = parameters[@"enable"] ? @"启用 Mod" : @"禁用 Mod";
     } else if ([toolName isEqualToString:@"delete_mod"]) {
         mod.filePath = parameters[@"mod_path"];
         mod.operationType = @"delete";

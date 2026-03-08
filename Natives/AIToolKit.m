@@ -5,13 +5,14 @@
 //  AI 修复功能的工具集合实现
 //
 
+// 必须首先导入 Foundation，避免其他头文件中的宏定义与 Objective-C 关键字冲突
+#import <Foundation/Foundation.h>
+#import <UIKit/UIKit.h>
 #import "AIToolKit.h"
 #import "ModService.h"
 #import "ModItem.h"
 #import "LauncherPreferences.h"
 #import "PLProfiles.h"
-#import <Foundation/Foundation.h>
-#import <UIKit/UIKit.h>
 
 #pragma mark - AIToolRequest
 
@@ -1074,10 +1075,16 @@
     NSProcessInfo *processInfo = [NSProcessInfo processInfo];
     UIDevice *device = [UIDevice currentDevice];
     
-    // availableMemory 只在 iOS 15+ 可用，使用条件编译
+    // availableMemory 只在 iOS 15+ 可用，使用 KVC 避免编译时检查问题
     NSUInteger availableMemMB = 0;
     if (@available(iOS 15.0, *)) {
-        availableMemMB = (NSUInteger)(processInfo.availableMemory / 1024 / 1024);
+        // 使用 KVC 方式访问 availableMemory 属性
+        NSNumber *availableMem = [processInfo valueForKey:@"availableMemory"];
+        if (availableMem) {
+            availableMemMB = (NSUInteger)([availableMem unsignedLongLongValue] / 1024 / 1024);
+        } else {
+            availableMemMB = (NSUInteger)(processInfo.physicalMemory / 1024 / 1024 / 2);
+        }
     } else {
         // 在 iOS 15 以下，使用物理内存的一半作为估计值
         availableMemMB = (NSUInteger)(processInfo.physicalMemory / 1024 / 1024 / 2);

@@ -63,7 +63,7 @@ typedef NS_ENUM(NSInteger, AISessionState) {
 @property (nonatomic, strong, nullable) NSData *originalContent; // 原始内容（用于恢复）
 @property (nonatomic, copy, nullable) NSString *originalPath; // 原路径（用于重命名）
 @property (nonatomic, strong) NSDate *timestamp;
-@property (nonatomic, copy, nullable) NSString *description;
+@property (nonatomic, copy, nullable) NSString *modificationDescription; // 修改说明
 
 @end
 
