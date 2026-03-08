@@ -1171,13 +1171,55 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     // 设置描述
     _modDescLabel.text = description ?: @"暂无描述";
     
-    // 设置状态
+    // 设置状态 - 使用 SF Symbols 图标替代 Emoji
     if (willEnable) {
-        _modStatusLabels.text = @"🟢 将启用此 Mod";
-        _modStatusLabels.textColor = [UIColor colorWithRed:0.4 green:0.8 blue:0.4 alpha:1.0];
+        // 使用 checkmark.circle.fill SF Symbol 作为启用图标
+        if (@available(iOS 13.0, *)) {
+            UIImage *icon = [UIImage systemImageNamed:@"checkmark.circle.fill"];
+            if (icon) {
+                NSTextAttachment *attachment = [[NSTextAttachment alloc] init];
+                attachment.image = [icon imageWithTintColor:[UIColor colorWithRed:0.4 green:0.8 blue:0.4 alpha:1.0]];
+                attachment.bounds = CGRectMake(0, -2, 14, 14);
+                NSAttributedString *iconString = [NSAttributedString attributedStringWithAttachment:attachment];
+                NSMutableAttributedString *attrString = [[NSMutableAttributedString alloc] init];
+                [attrString appendAttributedString:iconString];
+                [attrString appendAttributedString:[[NSAttributedString alloc] initWithString:@" 将启用此 Mod" attributes:@{
+                    NSForegroundColorAttributeName: [UIColor colorWithRed:0.4 green:0.8 blue:0.4 alpha:1.0],
+                    NSFontAttributeName: [UIFont systemFontOfSize:10]
+                }]];
+                _modStatusLabels.attributedText = attrString;
+            } else {
+                _modStatusLabels.text = @"将启用此 Mod";
+                _modStatusLabels.textColor = [UIColor colorWithRed:0.4 green:0.8 blue:0.4 alpha:1.0];
+            }
+        } else {
+            _modStatusLabels.text = @"将启用此 Mod";
+            _modStatusLabels.textColor = [UIColor colorWithRed:0.4 green:0.8 blue:0.4 alpha:1.0];
+        }
     } else {
-        _modStatusLabels.text = @"🔴 将禁用此 Mod";
-        _modStatusLabels.textColor = [UIColor colorWithRed:0.8 green:0.4 blue:0.4 alpha:1.0];
+        // 使用 xmark.circle.fill SF Symbol 作为禁用图标
+        if (@available(iOS 13.0, *)) {
+            UIImage *icon = [UIImage systemImageNamed:@"xmark.circle.fill"];
+            if (icon) {
+                NSTextAttachment *attachment = [[NSTextAttachment alloc] init];
+                attachment.image = [icon imageWithTintColor:[UIColor colorWithRed:0.8 green:0.4 blue:0.4 alpha:1.0]];
+                attachment.bounds = CGRectMake(0, -2, 14, 14);
+                NSAttributedString *iconString = [NSAttributedString attributedStringWithAttachment:attachment];
+                NSMutableAttributedString *attrString = [[NSMutableAttributedString alloc] init];
+                [attrString appendAttributedString:iconString];
+                [attrString appendAttributedString:[[NSAttributedString alloc] initWithString:@" 将禁用此 Mod" attributes:@{
+                    NSForegroundColorAttributeName: [UIColor colorWithRed:0.8 green:0.4 blue:0.4 alpha:1.0],
+                    NSFontAttributeName: [UIFont systemFontOfSize:10]
+                }]];
+                _modStatusLabels.attributedText = attrString;
+            } else {
+                _modStatusLabels.text = @"将禁用此 Mod";
+                _modStatusLabels.textColor = [UIColor colorWithRed:0.8 green:0.4 blue:0.4 alpha:1.0];
+            }
+        } else {
+            _modStatusLabels.text = @"将禁用此 Mod";
+            _modStatusLabels.textColor = [UIColor colorWithRed:0.8 green:0.4 blue:0.4 alpha:1.0];
+        }
     }
     
     // 加载图标
