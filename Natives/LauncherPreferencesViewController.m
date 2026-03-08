@@ -570,7 +570,7 @@
                       title = @"双指呼出键盘";
                   }
                   
-                  NSString *statusMsg = isOn ? @"✅ 当前状态: 已开启 (ON)" : @"❌ 当前状态: 已关闭 (OFF)";
+                  NSString *statusMsg = isOn ? @"[✓] 当前状态: 已开启 (ON)" : @"[✗] 当前状态: 已关闭 (OFF)";
                   NSString *msg = [NSString stringWithFormat:@"%@\n\n开启后，在游戏中双指同时长按屏幕可呼出键盘。\n此功能由WeiErLiTeo制作。", statusMsg];
                   
                   UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:msg preferredStyle:UIAlertControllerStyleAlert];
