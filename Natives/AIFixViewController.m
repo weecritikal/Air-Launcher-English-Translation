@@ -21,6 +21,9 @@
 #import "utils.h"
 #import "PLCrashView.h"
 #import "SurfaceViewController.h"
+#import "ModService.h"
+#import "ModItem.h"
+#import "PLProfiles.h"
 
 // 消息气泡类型
 typedef NS_ENUM(NSInteger, MessageBubbleType) {
@@ -50,6 +53,20 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
 @property (nonatomic, strong) UIButton *rejectButton;
 @property (nonatomic, copy) void(^onApprove)(void);
 @property (nonatomic, copy) void(^onReject)(void);
+
+// Mod 预览相关
+@property (nonatomic, strong) UIView *modPreviewContainer;
+@property (nonatomic, strong) UIImageView *modIconView;
+@property (nonatomic, strong) UILabel *modNameLabel;
+@property (nonatomic, strong) UILabel *modDescLabel;
+@property (nonatomic, strong) UILabel *modStatusLabels;
+@end
+
+// SVG 图标助手
+@interface AIFixSVGIconHelper : NSObject
++ (UIImage *)svgImageNamed:(NSString *)name withColor:(UIColor *)color size:(CGSize)size;
++ (UIImage *)svgImageFromData:(NSData *)data withColor:(UIColor *)color size:(CGSize)size;
++ (UIImageView *)iconViewForTool:(NSString *)toolName size:(CGFloat)size;
 @end
 
 @interface AIFixViewController () <AIFixServiceDelegate, UITextViewDelegate>
@@ -675,15 +692,28 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     
     // 创建工具请求卡片
     ToolRequestCardView *card = [[ToolRequestCardView alloc] init];
-    card.frame = CGRectMake(0, 0, _toolsStackView.bounds.size.width, 140);
+    card.frame = CGRectMake(0, 0, _toolsStackView.bounds.size.width, 160);
     
     card.toolNameLabel.text = request.toolDisplayName;
     card.descriptionLabel.text = request.reason;
+    
+    // 更新工具图标
+    UIImageView *newIcon = [AIFixSVGIconHelper iconViewForTool:request.toolName size:28];
+    newIcon.frame = card.iconView.frame;
+    [card replaceIconWithNewIcon:newIcon];
     
     NSError *jsonError;
     NSData *jsonData = [NSJSONSerialization dataWithJSONObject:request.parameters options:NSJSONWritingPrettyPrinted error:&jsonError];
     if (jsonData) {
         card.parametersTextView.text = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
+    }
+    
+    // 如果是 toggle_mod 请求，显示 Mod 预览
+    if ([request.toolName isEqualToString:@"toggle_mod"]) {
+        NSString *modPath = request.parameters[@"mod_path"];
+        BOOL willEnable = [request.parameters[@"enable"] boolValue];
+        
+        [self loadModPreviewForCard:card modPath:modPath willEnable:willEnable];
     }
     
     __weak typeof(self) weakSelf = self;
@@ -704,6 +734,37 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
         weakSelf.toolsCardView.alpha = 1;
         weakSelf.toolsCardView.transform = CGAffineTransformIdentity;
     } completion:nil];
+}
+
+- (void)loadModPreviewForCard:(ToolRequestCardView *)card modPath:(NSString *)modPath willEnable:(BOOL)willEnable {
+    if (!modPath) return;
+    
+    // 获取当前配置的游戏目录
+    NSString *gameDir = [PLProfiles resolveKeyForCurrentProfile:@"gameDir"];
+    if (!gameDir) {
+        gameDir = [NSString stringWithFormat:@"%s/game", getenv("POJAV_HOME")];
+    }
+    
+    // 加载 Mod 元数据
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        ModItem *modItem = [[ModItem alloc] initWithFilePath:modPath];
+        
+        // 尝试从缓存加载图标
+        NSString *iconCachePath = [[ModService sharedService] iconCachePathForURL:@""];
+        NSString *modIconPath = [iconCachePath stringByAppendingPathComponent:modItem.basename];
+        
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [card showModPreviewWithName:modItem.displayName
+                                 iconPath:[NSFileManager.defaultManager fileExistsAtPath:modIconPath] ? modIconPath : nil
+                              description:modItem.modDescription
+                             willEnable:willEnable];
+            
+            // 调整卡片高度以适应 Mod 预览
+            CGRect frame = card.frame;
+            frame.size.height = 220;
+            card.frame = frame;
+        });
+    });
 }
 
 - (void)respondToToolRequest:(BOOL)approved {
@@ -942,14 +1003,9 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     self.backgroundColor = [UIColor colorWithWhite:0.2 alpha:0.9];
     self.layer.cornerRadius = 10;
     
-    // 图标
-    _iconView = [[UIImageView alloc] initWithFrame:CGRectMake(12, 12, 28, 28)];
-    if (@available(iOS 13.0, *)) {
-        UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:18 weight:UIImageSymbolWeightMedium];
-        _iconView.image = [UIImage systemImageNamed:@"wrench.and.screwdriver" withConfiguration:config];
-    }
-    _iconView.tintColor = [UIColor colorWithRed:0.6 green:0.4 blue:0.9 alpha:1.0];
-    _iconView.contentMode = UIViewContentModeScaleAspectFit;
+    // 图标 - 使用 SVG 图标助手
+    _iconView = [AIFixSVGIconHelper iconViewForTool:@"" size:28];
+    _iconView.frame = CGRectMake(12, 12, 28, 28);
     [self addSubview:_iconView];
     
     // 工具名称
@@ -966,7 +1022,7 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     [self addSubview:_descriptionLabel];
     
     // 参数显示
-    _parametersTextView = [[UITextView alloc] initWithFrame:CGRectMake(12, 64, self.bounds.size.width - 24, 32)];
+    _parametersTextView = [[UITextView alloc] initWithFrame:CGRectMake(12, 64, self.bounds.size.width - 24, 48)];
     _parametersTextView.backgroundColor = [UIColor colorWithWhite:0.1 alpha:1.0];
     _parametersTextView.layer.cornerRadius = 6;
     _parametersTextView.font = [UIFont fontWithName:@"Menlo" size:10];
@@ -975,9 +1031,18 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     _parametersTextView.scrollEnabled = YES;
     [self addSubview:_parametersTextView];
     
-    // 同意按钮
+    // 同意按钮 - 添加图标
     _approveButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    _approveButton.frame = CGRectMake(12, 100, (self.bounds.size.width - 32) / 2, 32);
+    _approveButton.frame = CGRectMake(12, 120, (self.bounds.size.width - 32) / 2, 32);
+    
+    // 使用 SF Symbol 图标
+    if (@available(iOS 13.0, *)) {
+        UIImage *checkIcon = [UIImage systemImageNamed:@"checkmark.circle.fill"];
+        [_approveButton setImage:checkIcon forState:UIControlStateNormal];
+        _approveButton.titleEdgeInsets = UIEdgeInsetsMake(0, 4, 0, 0);
+        _approveButton.imageEdgeInsets = UIEdgeInsetsMake(0, -4, 0, 0);
+    }
+    
     [_approveButton setTitle:localize(@"ai.fix.approve", @"同意") forState:UIControlStateNormal];
     _approveButton.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
     _approveButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.7 blue:0.4 alpha:1.0];
@@ -986,9 +1051,18 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     [_approveButton addTarget:self action:@selector(approveTapped) forControlEvents:UIControlEventTouchUpInside];
     [self addSubview:_approveButton];
     
-    // 拒绝按钮
+    // 拒绝按钮 - 添加图标
     _rejectButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    _rejectButton.frame = CGRectMake(self.bounds.size.width / 2 + 4, 100, (self.bounds.size.width - 32) / 2, 32);
+    _rejectButton.frame = CGRectMake(self.bounds.size.width / 2 + 4, 120, (self.bounds.size.width - 32) / 2, 32);
+    
+    // 使用 SF Symbol 图标
+    if (@available(iOS 13.0, *)) {
+        UIImage *xIcon = [UIImage systemImageNamed:@"xmark.circle.fill"];
+        [_rejectButton setImage:xIcon forState:UIControlStateNormal];
+        _rejectButton.titleEdgeInsets = UIEdgeInsetsMake(0, 4, 0, 0);
+        _rejectButton.imageEdgeInsets = UIEdgeInsetsMake(0, -4, 0, 0);
+    }
+    
     [_rejectButton setTitle:localize(@"ai.fix.reject", @"拒绝") forState:UIControlStateNormal];
     _rejectButton.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
     _rejectButton.backgroundColor = [UIColor colorWithRed:0.7 green:0.2 blue:0.2 alpha:1.0];
@@ -1013,11 +1087,210 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
 - (void)layoutSubviews {
     [super layoutSubviews];
     
-    _toolNameLabel.frame = CGRectMake(48, 12, self.bounds.size.width - 60, 24);
-    _descriptionLabel.frame = CGRectMake(12, 40, self.bounds.size.width - 24, 20);
-    _parametersTextView.frame = CGRectMake(12, 64, self.bounds.size.width - 24, 32);
-    _approveButton.frame = CGRectMake(12, 100, (self.bounds.size.width - 32) / 2, 32);
-    _rejectButton.frame = CGRectMake(self.bounds.size.width / 2 + 4, 100, (self.bounds.size.width - 32) / 2, 32);
+    CGFloat yOffset = 12;
+    
+    // 如果有 Mod 预览，调整布局
+    if (_modPreviewContainer && !_modPreviewContainer.hidden) {
+        _modPreviewContainer.frame = CGRectMake(12, yOffset, self.bounds.size.width - 24, 70);
+        yOffset += 78;
+    }
+    
+    _iconView.frame = CGRectMake(12, yOffset, 28, 28);
+    _toolNameLabel.frame = CGRectMake(48, yOffset, self.bounds.size.width - 60, 24);
+    yOffset += 28;
+    
+    _descriptionLabel.frame = CGRectMake(12, yOffset, self.bounds.size.width - 24, 20);
+    yOffset += 24;
+    
+    _parametersTextView.frame = CGRectMake(12, yOffset, self.bounds.size.width - 24, 48);
+    yOffset += 52;
+    
+    _approveButton.frame = CGRectMake(12, yOffset, (self.bounds.size.width - 32) / 2, 32);
+    _rejectButton.frame = CGRectMake(self.bounds.size.width / 2 + 4, yOffset, (self.bounds.size.width - 32) / 2, 32);
+}
+
+#pragma mark - Mod 预览
+
+- (void)setupModPreview {
+    // Mod 预览容器
+    _modPreviewContainer = [[UIView alloc] init];
+    _modPreviewContainer.backgroundColor = [UIColor colorWithWhite:0.15 alpha:1.0];
+    _modPreviewContainer.layer.cornerRadius = 8;
+    _modPreviewContainer.hidden = YES;
+    [self addSubview:_modPreviewContainer];
+    
+    // Mod 图标
+    _modIconView = [[UIImageView alloc] initWithFrame:CGRectMake(12, 10, 50, 50)];
+    _modIconView.backgroundColor = [UIColor colorWithWhite:0.25 alpha:1.0];
+    _modIconView.layer.cornerRadius = 10;
+    _modIconView.clipsToBounds = YES;
+    _modIconView.contentMode = UIViewContentModeScaleAspectFill;
+    [_modPreviewContainer addSubview:_modIconView];
+    
+    // Mod 名称
+    _modNameLabel = [[UILabel alloc] initWithFrame:CGRectMake(72, 10, _modPreviewContainer.bounds.size.width - 84, 22)];
+    _modNameLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
+    _modNameLabel.textColor = [UIColor whiteColor];
+    [_modPreviewContainer addSubview:_modNameLabel];
+    
+    // Mod 描述
+    _modDescLabel = [[UILabel alloc] initWithFrame:CGRectMake(72, 32, _modPreviewContainer.bounds.size.width - 84, 18)];
+    _modDescLabel.font = [UIFont systemFontOfSize:11];
+    _modDescLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.7];
+    _modDescLabel.numberOfLines = 2;
+    [_modPreviewContainer addSubview:_modDescLabel];
+    
+    // 状态标签
+    _modStatusLabels = [[UILabel alloc] initWithFrame:CGRectMake(72, 52, _modPreviewContainer.bounds.size.width - 84, 16)];
+    _modStatusLabels.font = [UIFont systemFontOfSize:10];
+    _modStatusLabels.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.5];
+    [_modPreviewContainer addSubview:_modStatusLabels];
+}
+
+- (void)showModPreviewWithName:(NSString *)modName 
+                       iconPath:(NSString *)iconPath 
+                    description:(NSString *)description 
+                       willEnable:(BOOL)willEnable {
+    if (!_modPreviewContainer) {
+        [self setupModPreview];
+    }
+    
+    _modPreviewContainer.hidden = NO;
+    
+    // 设置 Mod 名称
+    _modNameLabel.text = modName ?: @"Unknown Mod";
+    
+    // 设置描述
+    _modDescLabel.text = description ?: @"暂无描述";
+    
+    // 设置状态
+    if (willEnable) {
+        _modStatusLabels.text = @"🟢 将启用此 Mod";
+        _modStatusLabels.textColor = [UIColor colorWithRed:0.4 green:0.8 blue:0.4 alpha:1.0];
+    } else {
+        _modStatusLabels.text = @"🔴 将禁用此 Mod";
+        _modStatusLabels.textColor = [UIColor colorWithRed:0.8 green:0.4 blue:0.4 alpha:1.0];
+    }
+    
+    // 加载图标
+    if (iconPath.length > 0) {
+        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+            UIImage *icon = [UIImage imageWithContentsOfFile:iconPath];
+            dispatch_async(dispatch_get_main_queue(), ^{
+                self.modIconView.image = icon ?: [AIFixSVGIconHelper svgImageNamed:@"cube" 
+                                                                          withColor:[UIColor colorWithWhite:0.5 alpha:1.0] 
+                                                                              size:CGSizeMake(50, 50)];
+            });
+        });
+    } else {
+        // 使用默认 SVG 图标
+        _modIconView.image = [AIFixSVGIconHelper svgImageNamed:@"cube" 
+                                                     withColor:[UIColor colorWithWhite:0.5 alpha:1.0] 
+                                                         size:CGSizeMake(50, 50)];
+    }
+    
+    // 调整卡片高度
+    [self setNeedsLayout];
+}
+
+- (void)hideModPreview {
+    _modPreviewContainer.hidden = YES;
+    [self setNeedsLayout];
+}
+
+- (void)replaceIconWithNewIcon:(UIImageView *)newIcon {
+    [_iconView removeFromSuperview];
+    _iconView = newIcon;
+    [self addSubview:_iconView];
+}
+
+@end
+
+#pragma mark - AIFixSVGIconHelper
+
+@implementation AIFixSVGIconHelper
+
++ (UIImage *)svgImageNamed:(NSString *)name withColor:(UIColor *)color size:(CGSize)size {
+    // 使用 SF Symbols 作为 SVG 替代方案（iOS 13+）
+    if (@available(iOS 13.0, *)) {
+        UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:size.width weight:UIImageSymbolWeightMedium scale:UIImageSymbolScaleLarge];
+        UIImage *image = [UIImage systemImageNamed:name withConfiguration:config];
+        if (image && color) {
+            return [image imageWithTintColor:color renderingMode:UIImageRenderingModeAlwaysOriginal];
+        }
+        return image;
+    }
+    
+    // iOS 13 以下回退方案：生成简单图形
+    return [self fallbackImageWithColor:color size:size];
+}
+
++ (UIImage *)svgImageFromData:(NSData *)data withColor:(UIColor *)color size:(CGSize)size {
+    // 简化实现：使用 Core Graphics 绘制
+    UIGraphicsBeginImageContextWithOptions(size, NO, 0.0);
+    CGContextRef context = UIGraphicsGetCurrentContext();
+    
+    [color setFill];
+    CGContextFillEllipseInRect(context, CGRectMake(0, 0, size.width, size.height));
+    
+    UIImage *image = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+    
+    return image;
+}
+
++ (UIImageView *)iconViewForTool:(NSString *)toolName size:(CGFloat)size {
+    UIImageView *imageView = [[UIImageView alloc] initWithFrame:CGRectMake(0, 0, size, size)];
+    imageView.contentMode = UIViewContentModeScaleAspectFit;
+    imageView.tintColor = [UIColor colorWithRed:0.6 green:0.4 blue:0.9 alpha:1.0];
+    
+    NSString *iconName;
+    UIColor *iconColor;
+    
+    if ([toolName containsString:@"toggle_mod"] || [toolName containsString:@"Mod"]) {
+        iconName = @"cube.box";
+        iconColor = [UIColor colorWithRed:0.4 green:0.7 blue:0.4 alpha:1.0];
+    } else if ([toolName containsString:@"delete_mod"]) {
+        iconName = @"trash";
+        iconColor = [UIColor colorWithRed:0.8 green:0.3 blue:0.3 alpha:1.0];
+    } else if ([toolName containsString:@"read_file"]) {
+        iconName = @"doc.text";
+        iconColor = [UIColor colorWithRed:0.3 green:0.6 blue:0.9 alpha:1.0];
+    } else if ([toolName containsString:@"write_file"] || [toolName containsString:@"append_file"]) {
+        iconName = @"pencil.and.outline";
+        iconColor = [UIColor colorWithRed:0.9 green:0.6 blue:0.3 alpha:1.0];
+    } else if ([toolName containsString:@"setting"]) {
+        iconName = @"gearshape";
+        iconColor = [UIColor colorWithRed:0.6 green:0.4 blue:0.9 alpha:1.0];
+    } else if ([toolName containsString:@"profile"]) {
+        iconName = @"person.crop.circle";
+        iconColor = [UIColor colorWithRed:0.4 green:0.6 blue:0.8 alpha:1.0];
+    } else if ([toolName containsString:@"log"]) {
+        iconName = @"list.bullet.rectangle";
+        iconColor = [UIColor colorWithRed:0.5 green:0.5 blue:0.5 alpha:1.0];
+    } else if ([toolName containsString:@"crash"]) {
+        iconName = @"exclamationmark.triangle";
+        iconColor = [UIColor colorWithRed:0.9 green:0.5 blue:0.3 alpha:1.0];
+    } else {
+        iconName = @"wrench.and.screwdriver";
+        iconColor = [UIColor colorWithRed:0.6 green:0.4 blue:0.9 alpha:1.0];
+    }
+    
+    imageView.image = [self svgImageNamed:iconName withColor:iconColor size:CGSizeMake(size, size)];
+    return imageView;
+}
+
++ (UIImage *)fallbackImageWithColor:(UIColor *)color size:(CGSize)size {
+    UIGraphicsBeginImageContextWithOptions(size, NO, 0.0);
+    CGContextRef context = UIGraphicsGetCurrentContext();
+    
+    CGContextSetFillColorWithColor(context, color.CGColor);
+    CGContextFillEllipseInRect(context, CGRectMake(size.width * 0.1, size.height * 0.1, size.width * 0.8, size.height * 0.8));
+    
+    UIImage *image = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+    
+    return [image imageWithRenderingMode:UIImageRenderingModeAlwaysOriginal];
 }
 
 @end

@@ -1,0 +1,1034 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 崩溃修复 - Angel Aura Amethyst</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #1a1a2e;
+            --bg-secondary: #16213e;
+            --bg-card: rgba(255, 255, 255, 0.08);
+            --bg-input: rgba(255, 255, 255, 0.05);
+            --accent-blue: #4a9eff;
+            --accent-green: #4ade80;
+            --accent-red: #f87171;
+            --accent-orange: #fb923c;
+            --accent-purple: #a78bfa;
+            --text-primary: #ffffff;
+            --text-secondary: rgba(255, 255, 255, 0.7);
+            --text-muted: rgba(255, 255, 255, 0.4);
+            --border-color: rgba(255, 255, 255, 0.1);
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #0f0f1a 0%, #1a1a2e 50%, #16213e 100%);
+            min-height: 100vh;
+            color: var(--text-primary);
+            overflow: hidden;
+        }
+
+        .container {
+            display: flex;
+            height: 100vh;
+            padding: 16px;
+            gap: 16px;
+        }
+
+        /* 左侧面板 - 对话窗口 */
+        .left-panel {
+            flex: 0 0 60%;
+            display: flex;
+            flex-direction: column;
+            background: var(--bg-card);
+            border-radius: 16px;
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+        }
+
+        .panel-header {
+            padding: 16px 20px;
+            background: rgba(255, 255, 255, 0.05);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .panel-title {
+            font-size: 16px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .panel-title .icon {
+            width: 24px;
+            height: 24px;
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+        }
+
+        .status-badge {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 12px;
+            background: rgba(74, 158, 255, 0.15);
+            border-radius: 20px;
+            font-size: 12px;
+            color: var(--accent-blue);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--accent-blue);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(0.8); }
+        }
+
+        /* 对话区域 */
+        .conversation-area {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .conversation-area::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .conversation-area::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .conversation-area::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 3px;
+        }
+
+        /* 消息气泡 */
+        .message-bubble {
+            max-width: 85%;
+            padding: 12px 16px;
+            border-radius: 16px;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .message-bubble.ai {
+            align-self: flex-start;
+            background: linear-gradient(135deg, rgba(74, 158, 255, 0.2), rgba(167, 139, 250, 0.2));
+            border: 1px solid rgba(74, 158, 255, 0.3);
+        }
+
+        .message-bubble.user {
+            align-self: flex-end;
+            background: linear-gradient(135deg, rgba(74, 222, 128, 0.2), rgba(34, 197, 94, 0.2));
+            border: 1px solid rgba(74, 222, 128, 0.3);
+        }
+
+        .message-bubble.system {
+            align-self: center;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-color);
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .message-bubble.tool-result {
+            align-self: flex-start;
+            background: rgba(251, 146, 60, 0.1);
+            border: 1px solid rgba(251, 146, 60, 0.3);
+        }
+
+        .message-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .message-header .avatar {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+        }
+
+        .message-bubble.ai .avatar {
+            background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+        }
+
+        .message-bubble.user .avatar {
+            background: linear-gradient(135deg, var(--accent-green), #22c55e);
+        }
+
+        .message-bubble.tool-result .avatar {
+            background: var(--accent-orange);
+        }
+
+        .message-content {
+            font-size: 14px;
+            line-height: 1.6;
+            color: var(--text-primary);
+        }
+
+        .message-content code {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 12px;
+        }
+
+        .message-content pre {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 12px;
+            border-radius: 8px;
+            margin-top: 8px;
+            overflow-x: auto;
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 12px;
+            line-height: 1.5;
+        }
+
+        /* 工具请求卡片 */
+        .tool-request-card {
+            background: linear-gradient(135deg, rgba(251, 146, 60, 0.15), rgba(249, 115, 22, 0.15));
+            border: 1px solid rgba(251, 146, 60, 0.4);
+            border-radius: 12px;
+            padding: 16px;
+            margin: 8px 0;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        .tool-request-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .tool-icon {
+            width: 32px;
+            height: 32px;
+            background: var(--accent-orange);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+        }
+
+        .tool-name {
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .tool-description {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+        }
+
+        .tool-parameters {
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+            padding: 12px;
+            font-family: 'SF Mono', Monaco, monospace;
+            font-size: 11px;
+            margin-bottom: 12px;
+            max-height: 120px;
+            overflow-y: auto;
+        }
+
+        .tool-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .btn {
+            padding: 8px 16px;
+            border-radius: 8px;
+            border: none;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-approve {
+            background: var(--accent-green);
+            color: white;
+        }
+
+        .btn-approve:hover {
+            background: #22c55e;
+            transform: translateY(-1px);
+        }
+
+        .btn-reject {
+            background: var(--accent-red);
+            color: white;
+        }
+
+        .btn-reject:hover {
+            background: #ef4444;
+            transform: translateY(-1px);
+        }
+
+        /* 输入区域 */
+        .input-area {
+            padding: 16px;
+            background: rgba(0, 0, 0, 0.2);
+            border-top: 1px solid var(--border-color);
+        }
+
+        .input-container {
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+        }
+
+        .input-wrapper {
+            flex: 1;
+            background: var(--bg-input);
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+        }
+
+        .input-wrapper textarea {
+            flex: 1;
+            background: transparent;
+            border: none;
+            outline: none;
+            color: var(--text-primary);
+            font-size: 14px;
+            resize: none;
+            min-height: 24px;
+            max-height: 100px;
+            font-family: inherit;
+        }
+
+        .input-wrapper textarea::placeholder {
+            color: var(--text-muted);
+        }
+
+        .btn-send {
+            padding: 12px 24px;
+            background: linear-gradient(135deg, var(--accent-blue), #3b82f6);
+            color: white;
+            border-radius: 12px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.2s ease;
+        }
+
+        .btn-send:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 20px rgba(74, 158, 255, 0.4);
+        }
+
+        .btn-stop {
+            padding: 12px 24px;
+            background: var(--accent-red);
+            color: white;
+            border-radius: 12px;
+            font-weight: 600;
+            display: none;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn-stop.active {
+            display: flex;
+        }
+
+        /* 右侧面板 */
+        .right-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .config-card {
+            background: var(--bg-card);
+            border-radius: 16px;
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+        }
+
+        .card-header {
+            padding: 16px 20px;
+            background: rgba(255, 255, 255, 0.03);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .card-title {
+            font-size: 14px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .card-body {
+            padding: 16px 20px;
+        }
+
+        .config-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background: rgba(74, 222, 128, 0.1);
+            border-radius: 8px;
+            font-size: 12px;
+            color: var(--accent-green);
+        }
+
+        .config-field {
+            margin-bottom: 12px;
+        }
+
+        .config-label {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
+            display: block;
+        }
+
+        .config-input {
+            width: 100%;
+            padding: 10px 14px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 13px;
+            outline: none;
+            transition: border-color 0.2s ease;
+        }
+
+        .config-input:focus {
+            border-color: var(--accent-blue);
+        }
+
+        .btn-save {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, var(--accent-purple), #8b5cf6);
+            color: white;
+            border-radius: 10px;
+            font-weight: 600;
+            margin-top: 8px;
+        }
+
+        /* 工具列表 */
+        .tools-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .tool-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 8px;
+            font-size: 13px;
+            transition: background 0.2s ease;
+        }
+
+        .tool-item:hover {
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        .tool-item-icon {
+            width: 28px;
+            height: 28px;
+            background: linear-gradient(135deg, rgba(74, 158, 255, 0.3), rgba(167, 139, 250, 0.3));
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+        }
+
+        .tool-item-info {
+            flex: 1;
+        }
+
+        .tool-item-name {
+            font-weight: 500;
+        }
+
+        .tool-item-desc {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .tool-badge {
+            padding: 2px 8px;
+            background: rgba(251, 146, 60, 0.2);
+            border-radius: 10px;
+            font-size: 10px;
+            color: var(--accent-orange);
+        }
+
+        /* Mod 预览样式 */
+        .mod-preview {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            margin-bottom: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .mod-preview-icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        .mod-preview-icon img {
+            width: 36px;
+            height: 36px;
+            object-fit: contain;
+        }
+
+        .mod-preview-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .mod-preview-name {
+            font-weight: 600;
+            font-size: 14px;
+            color: var(--text-primary);
+            margin-bottom: 2px;
+        }
+
+        .mod-preview-desc {
+            font-size: 11px;
+            color: var(--text-secondary);
+            margin-bottom: 4px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .mod-preview-status {
+            font-size: 11px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .mod-preview-status.enable {
+            color: var(--accent-green);
+        }
+
+        .mod-preview-status.disable {
+            color: var(--accent-red);
+        }
+
+        /* 修改记录 */
+        .modifications-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .mod-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            background: rgba(74, 222, 128, 0.05);
+            border-radius: 8px;
+            border: 1px solid rgba(74, 222, 128, 0.2);
+            font-size: 12px;
+        }
+
+        .mod-icon {
+            width: 24px;
+            height: 24px;
+            background: var(--accent-green);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+        }
+
+        .mod-info {
+            flex: 1;
+        }
+
+        .mod-file {
+            font-weight: 500;
+            color: var(--text-primary);
+        }
+
+        .mod-type {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        /* 打字动画 */
+        .typing-indicator {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 8px 12px;
+            background: rgba(74, 158, 255, 0.1);
+            border-radius: 12px;
+            width: fit-content;
+        }
+
+        .typing-dot {
+            width: 6px;
+            height: 6px;
+            background: var(--accent-blue);
+            border-radius: 50%;
+            animation: typing 1.4s infinite;
+        }
+
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes typing {
+            0%, 60%, 100% { transform: translateY(0); }
+            30% { transform: translateY(-4px); }
+        }
+
+        /* 响应式 */
+        @media (max-width: 900px) {
+            .container {
+                flex-direction: column;
+            }
+            .left-panel {
+                flex: 1;
+            }
+            .right-panel {
+                flex: 0 0 auto;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 左侧面板 - 对话窗口 -->
+        <div class="left-panel">
+            <div class="panel-header">
+                <div class="panel-title">
+                    <div class="icon">🤖</div>
+                    <span>AI 崩溃修复助手</span>
+                </div>
+                <div class="status-badge">
+                    <div class="status-dot"></div>
+                    <span>正在分析</span>
+                </div>
+            </div>
+            
+            <div class="conversation-area" id="conversation">
+                <!-- 系统消息 -->
+                <div class="message-bubble system">
+                    📋 已加载崩溃日志: latestlog.txt (2,847 行)
+                </div>
+
+                <!-- AI 消息 -->
+                <div class="message-bubble ai">
+                    <div class="message-header">
+                        <div class="avatar">🤖</div>
+                        <span>AI 助手</span>
+                    </div>
+                    <div class="message-content">
+                        我已分析您的崩溃日志，发现问题可能与以下原因相关：
+                        <pre>java.lang.OutOfMemoryError: Java heap space
+    at java.util.Arrays.copyOf(Arrays.java:3332)
+    at net.minecraft.client.renderer.texture.TextureMap.func_174945_a(TextureMap.java:228)</pre>
+                        <br>
+                        主要问题：<strong>Java 堆内存不足</strong>。建议解决方案：
+                        <br>1. 增加 Java 堆内存分配
+                        <br>2. 降低渲染距离
+                        <br>3. 关闭光影/资源包
+                    </div>
+                </div>
+
+                <!-- 用户消息 -->
+                <div class="message-bubble user">
+                    <div class="message-header">
+                        <div class="avatar">👤</div>
+                        <span>您</span>
+                    </div>
+                    <div class="message-content">
+                        帮我自动修复这个问题
+                    </div>
+                </div>
+
+                <!-- AI 请求工具调用 -->
+                <div class="message-bubble ai">
+                    <div class="message-header">
+                        <div class="avatar">🤖</div>
+                        <span>AI 助手</span>
+                    </div>
+                    <div class="message-content">
+                        好的，我需要修改启动器的内存设置。请确认以下操作：
+                    </div>
+                </div>
+
+                <!-- 工具请求卡片 -->
+                <div class="tool-request-card">
+                    <div class="tool-request-header">
+                        <div class="tool-icon">⚙️</div>
+                        <div>
+                            <div class="tool-name">toggle_mod</div>
+                            <div class="tool-description">启用/禁用 Mod</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Mod 预览 -->
+                    <div class="mod-preview" id="modPreview">
+                        <div class="mod-preview-icon">
+                            <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%234a9eff'%3E%3Cpath d='M21 16.5c0 .38-.21.71-.53.88l-7.9 4.44c-.16.12-.36.18-.57.18-.21 0-.41-.06-.57-.18l-7.9-4.44A.991.991 0 013 16.5v-9c0-.38.21-.71.53-.88l7.9-4.44c.16-.12.36-.18.57-.18.21 0 .41.06.57.18l7.9 4.44c.32.17.53.5.53.88v9zM12 4.15L6.04 7.5 12 10.85l5.96-3.35L12 4.15z'/%3E%3C/svg%3E" alt="Mod Icon">
+                        </div>
+                        <div class="mod-preview-info">
+                            <div class="mod-preview-name">Sodium</div>
+                            <div class="mod-preview-desc">现代渲染引擎和客户端优化模组</div>
+                            <div class="mod-preview-status" id="modStatus">🟢 将启用此 Mod</div>
+                        </div>
+                    </div>
+                    
+                    <div class="tool-parameters">
+{
+    "mod_path": "/path/to/mods/sodium.jar",
+    "enable": true,
+    "reason": "启用 Sodium 以优化渲染性能"
+}</div>
+                    <div class="tool-actions">
+                        <button class="btn btn-approve" onclick="approveTool()">✓ 同意执行</button>
+                        <button class="btn btn-reject" onclick="rejectTool()">✗ 拒绝</button>
+                    </div>
+                </div>
+
+                <!-- 工具执行结果 -->
+                <div class="message-bubble tool-result">
+                    <div class="message-header">
+                        <div class="avatar">🔧</div>
+                        <span>工具执行结果</span>
+                    </div>
+                    <div class="message-content">
+                        <code>update_setting</code> 执行成功<br>
+                        <code>memory_alloc</code> 已更新为 <code>4096</code> MB
+                    </div>
+                </div>
+
+                <!-- 打字指示器 -->
+                <div class="typing-indicator" id="typing">
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                </div>
+            </div>
+            
+            <div class="input-area">
+                <div class="input-container">
+                    <div class="input-wrapper">
+                        <textarea id="userInput" placeholder="输入您的问题或指令..." rows="1"></textarea>
+                    </div>
+                    <button class="btn btn-send" onclick="sendMessage()">
+                        <span>发送</span>
+                        <span>→</span>
+                    </button>
+                    <button class="btn btn-stop" id="stopBtn">
+                        <span>停止</span>
+                        <span>■</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右侧面板 -->
+        <div class="right-panel">
+            <!-- API 配置卡片 -->
+            <div class="config-card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <span>🔑</span>
+                        API 配置
+                    </div>
+                    <div class="config-status">
+                        <span>●</span>
+                        <span>已连接</span>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="config-field">
+                        <label class="config-label">API 端点</label>
+                        <input type="text" class="config-input" value="https://api.openai.com/v1" placeholder="输入 API 端点">
+                    </div>
+                    <div class="config-field">
+                        <label class="config-label">模型名称</label>
+                        <input type="text" class="config-input" value="gpt-4o" placeholder="输入模型名称">
+                    </div>
+                    <div class="config-field">
+                        <label class="config-label">API 密钥</label>
+                        <input type="password" class="config-input" value="sk-•••••••••••••••" placeholder="输入 API 密钥">
+                    </div>
+                    <button class="btn btn-save">保存配置</button>
+                </div>
+            </div>
+
+            <!-- 可用工具卡片 -->
+            <div class="config-card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <span>🛠️</span>
+                        可用工具
+                    </div>
+                    <span class="tool-badge">12 个</span>
+                </div>
+                <div class="card-body">
+                    <div class="tools-list">
+                        <div class="tool-item">
+                            <div class="tool-item-icon">📄</div>
+                            <div class="tool-item-info">
+                                <div class="tool-item-name">read_file</div>
+                                <div class="tool-item-desc">读取文件内容</div>
+                            </div>
+                            <span class="tool-badge">只读</span>
+                        </div>
+                        <div class="tool-item">
+                            <div class="tool-item-icon">📝</div>
+                            <div class="tool-item-info">
+                                <div class="tool-item-name">write_file</div>
+                                <div class="tool-item-desc">写入文件内容</div>
+                            </div>
+                            <span class="tool-badge">写入</span>
+                        </div>
+                        <div class="tool-item">
+                            <div class="tool-item-icon">📦</div>
+                            <div class="tool-item-info">
+                                <div class="tool-item-name">get_mod_list</div>
+                                <div class="tool-item-desc">获取 Mod 列表</div>
+                            </div>
+                            <span class="tool-badge">只读</span>
+                        </div>
+                        <div class="tool-item">
+                            <div class="tool-item-icon">🔄</div>
+                            <div class="tool-item-info">
+                                <div class="tool-item-name">toggle_mod</div>
+                                <div class="tool-item-desc">启用/禁用 Mod</div>
+                            </div>
+                            <span class="tool-badge">写入</span>
+                        </div>
+                        <div class="tool-item">
+                            <div class="tool-item-icon">⚙️</div>
+                            <div class="tool-item-info">
+                                <div class="tool-item-name">update_setting</div>
+                                <div class="tool-item-desc">更新启动器设置</div>
+                            </div>
+                            <span class="tool-badge">写入</span>
+                        </div>
+                        <div class="tool-item">
+                            <div class="tool-item-icon">🔍</div>
+                            <div class="tool-item-info">
+                                <div class="tool-item-name">search_log</div>
+                                <div class="tool-item-desc">搜索日志内容</div>
+                            </div>
+                            <span class="tool-badge">只读</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 修改记录卡片 -->
+            <div class="config-card">
+                <div class="card-header">
+                    <div class="card-title">
+                        <span>📝</span>
+                        修改记录
+                    </div>
+                    <span class="tool-badge">1 项</span>
+                </div>
+                <div class="card-body">
+                    <div class="modifications-list">
+                        <div class="mod-item">
+                            <div class="mod-icon">✓</div>
+                            <div class="mod-info">
+                                <div class="mod-file">launcher_preferences.json</div>
+                                <div class="mod-type">修改 · memory_alloc: 4096</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function sendMessage() {
+            const input = document.getElementById('userInput');
+            const text = input.value.trim();
+            if (!text) return;
+
+            const conversation = document.getElementById('conversation');
+            const typing = document.getElementById('typing');
+
+            // 添加用户消息
+            const userMsg = document.createElement('div');
+            userMsg.className = 'message-bubble user';
+            userMsg.innerHTML = `
+                <div class="message-header">
+                    <div class="avatar">👤</div>
+                    <span>您</span>
+                </div>
+                <div class="message-content">${text}</div>
+            `;
+            conversation.insertBefore(userMsg, typing);
+
+            input.value = '';
+            conversation.scrollTop = conversation.scrollHeight;
+        }
+
+        function approveTool() {
+            const conversation = document.getElementById('conversation');
+            const typing = document.getElementById('typing');
+
+            // 添加成功结果
+            const result = document.createElement('div');
+            result.className = 'message-bubble tool-result';
+            result.innerHTML = `
+                <div class="message-header">
+                    <div class="avatar">✓</div>
+                    <span>工具执行成功</span>
+                </div>
+                <div class="message-content">
+                    <code>update_setting</code> 执行成功<br>
+                    内存设置已更新，建议重启游戏以应用更改。
+                </div>
+            `;
+            conversation.insertBefore(result, typing);
+
+            // AI 回复
+            setTimeout(() => {
+                const aiMsg = document.createElement('div');
+                aiMsg.className = 'message-bubble ai';
+                aiMsg.innerHTML = `
+                    <div class="message-header">
+                        <div class="avatar">🤖</div>
+                        <span>AI 助手</span>
+                    </div>
+                    <div class="message-content">
+                        ✅ 修复已完成！我已将 Java 堆内存从 2GB 增加到 4GB。<br><br>
+                        建议：<br>
+                        • 如果问题仍然存在，可以尝试降低渲染距离<br>
+                        • 关闭高分辨率资源包<br>
+                        • 检查是否有内存泄漏的 Mod<br><br>
+                        现在可以重新启动游戏测试了。
+                    </div>
+                `;
+                conversation.insertBefore(aiMsg, typing);
+                conversation.scrollTop = conversation.scrollHeight;
+            }, 1500);
+        }
+
+        function rejectTool() {
+            const conversation = document.getElementById('conversation');
+            const typing = document.getElementById('typing');
+
+            const aiMsg = document.createElement('div');
+            aiMsg.className = 'message-bubble ai';
+            aiMsg.innerHTML = `
+                <div class="message-header">
+                    <div class="avatar">🤖</div>
+                    <span>AI 助手</span>
+                </div>
+                <div class="message-content">
+                    了解，操作已取消。您也可以手动在设置中调整内存分配：<br><br>
+                    设置 → 游戏设置 → 内存分配<br><br>
+                    还需要其他帮助吗？
+                </div>
+            `;
+            conversation.insertBefore(aiMsg, typing);
+        }
+
+        // 自动调整输入框高度
+        document.getElementById('userInput').addEventListener('input', function() {
+            this.style.height = 'auto';
+            this.style.height = Math.min(this.scrollHeight, 100) + 'px';
+        });
+
+        // 回车发送
+        document.getElementById('userInput').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+    </script>
+</body>
+</html>
