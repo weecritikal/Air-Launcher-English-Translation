@@ -181,21 +181,26 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     // 背景
     [self setupBackground];
     
-    // 左右分栏
-    CGFloat leftWidth = self.view.bounds.size.width * 0.6;
-    CGFloat rightWidth = self.view.bounds.size.width - leftWidth;
+    // 左右分栏 - 居中布局
+    CGFloat maxContentWidth = 1200; // 最大内容宽度
+    CGFloat contentWidth = MIN(self.view.bounds.size.width - 32, maxContentWidth);
+    CGFloat leftWidth = contentWidth * 0.6;
+    CGFloat rightWidth = contentWidth - leftWidth;
     CGFloat topPadding = 60;
     CGFloat bottomPadding = 40;
     CGFloat sidePadding = 16;
     
+    // 计算起始位置使内容居中
+    CGFloat startX = (self.view.bounds.size.width - contentWidth) / 2;
+    
     // 左侧面板 - 对话窗口
-    _leftPanel = [[UIView alloc] initWithFrame:CGRectMake(0, topPadding, leftWidth, self.view.bounds.size.height - topPadding - bottomPadding)];
-    _leftPanel.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    _leftPanel = [[UIView alloc] initWithFrame:CGRectMake(startX, topPadding, leftWidth, self.view.bounds.size.height - topPadding - bottomPadding)];
+    _leftPanel.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleRightMargin | UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleBottomMargin | UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     [self.view addSubview:_leftPanel];
     
     // 右侧面板 - 配置与工具
-    _rightPanel = [[UIView alloc] initWithFrame:CGRectMake(leftWidth, topPadding, rightWidth, self.view.bounds.size.height - topPadding - bottomPadding)];
-    _rightPanel.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    _rightPanel = [[UIView alloc] initWithFrame:CGRectMake(startX + leftWidth, topPadding, rightWidth, self.view.bounds.size.height - topPadding - bottomPadding)];
+    _rightPanel.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleRightMargin | UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleBottomMargin | UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     [self.view addSubview:_rightPanel];
     
     [self setupLeftPanel];
