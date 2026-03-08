@@ -6,6 +6,12 @@
 //
 
 #import <Foundation/Foundation.h>
+
+// 取消可能存在的 interface 宏定义，避免与 Objective-C 的 @interface 关键字冲突
+#ifdef interface
+#undef interface
+#endif
+
 #import "AIFixService.h"
 #import "utils.h"
 

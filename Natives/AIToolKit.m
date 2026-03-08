@@ -8,6 +8,12 @@
 // 必须首先导入 Foundation，避免其他头文件中的宏定义与 Objective-C 关键字冲突
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
+
+// 取消可能存在的 interface 宏定义，避免与 Objective-C 的 @interface 关键字冲突
+#ifdef interface
+#undef interface
+#endif
+
 #import "AIToolKit.h"
 #import "ModService.h"
 #import "ModItem.h"
