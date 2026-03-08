@@ -12,6 +12,12 @@
 @property (nonatomic, strong) UILabel *logPlaceholderLabel;
 @property (nonatomic, strong) UIView *errorCardView;
 @property (nonatomic, strong) UIView *logDetailContainer;
+@property (nonatomic, strong) UIView *githubCard;
+@property (nonatomic, strong) UIView *aiCard;
+@property (nonatomic, strong) UILabel *experimentalLabel;
+@property (nonatomic, strong) UIButton *shareButton;
+@property (nonatomic, strong) UIButton *exitButton;
+@property (nonatomic, strong) UIButton *fullLogButton;
 @property (nonatomic, assign) int exitCode;
 @property (nonatomic, assign) BOOL logExpanded;
 @property (nonatomic, copy) NSString *customTitle;
@@ -217,11 +223,11 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     
     // 分享日志按钮
     CGFloat shareBtnTop = 156;
-    UIButton *shareBtn = [self createPrimaryButton:CGRectMake(sidePadding, shareBtnTop, panelWidth - sidePadding * 2, 48)
+    _shareButton = [self createPrimaryButton:CGRectMake(sidePadding, shareBtnTop, panelWidth - sidePadding * 2, 48)
                                              title:localize(@"crash.share_log", nil)
                                               icon:@"square.and.arrow.up"
                                             action:@selector(shareLog)];
-    [_rightPanel addSubview:shareBtn];
+    [_rightPanel addSubview:_shareButton];
     
     // 卡片容器（GitHub Issues 和 AI 解决问题）
     CGFloat cardsTop = shareBtnTop + 48 + cardSpacing;
@@ -229,46 +235,46 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     CGFloat cardHeight = 80;
     
     // GitHub Issues 卡片
-    UIView *githubCard = [self createActionCard:CGRectMake(sidePadding, cardsTop, cardWidth, cardHeight)
+    _githubCard = [self createActionCard:CGRectMake(sidePadding, cardsTop, cardWidth, cardHeight)
                                           title:localize(@"crash.github_issue", nil)
                                       iconName:@"link"
                                      iconColor:[UIColor colorWithRed:0.3 green:0.5 blue:0.9 alpha:1.0]
                                         action:@selector(openGitHubIssues)];
-    [_rightPanel addSubview:githubCard];
+    [_rightPanel addSubview:_githubCard];
     
     // AI 解决问题卡片
-    UIView *aiCard = [self createActionCard:CGRectMake(sidePadding * 2 + cardWidth, cardsTop, cardWidth, cardHeight)
+    _aiCard = [self createActionCard:CGRectMake(sidePadding * 2 + cardWidth, cardsTop, cardWidth, cardHeight)
                                       title:localize(@"crash.ai_solve", nil)
                                   iconName:@"cpu"
                                  iconColor:[UIColor colorWithRed:0.6 green:0.4 blue:0.9 alpha:1.0]
                                     action:@selector(useAIToSolve)];
-    [_rightPanel addSubview:aiCard];
+    [_rightPanel addSubview:_aiCard];
     
     // 实验性标签
-    UILabel *experimentalLabel = [[UILabel alloc] initWithFrame:CGRectMake(aiCard.frame.origin.x + 8, aiCard.frame.origin.y + 60, cardWidth - 16, 16)];
-    experimentalLabel.text = [NSString stringWithFormat:@"(%@)", localize(@"crash.experimental", nil)];
-    experimentalLabel.font = [UIFont systemFontOfSize:10];
-    experimentalLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.5];
-    experimentalLabel.textAlignment = NSTextAlignmentRight;
-    [_rightPanel addSubview:experimentalLabel];
+    _experimentalLabel = [[UILabel alloc] initWithFrame:CGRectMake(_aiCard.frame.origin.x + 8, _aiCard.frame.origin.y + 60, cardWidth - 16, 16)];
+    _experimentalLabel.text = [NSString stringWithFormat:@"(%@)", localize(@"crash.experimental", nil)];
+    _experimentalLabel.font = [UIFont systemFontOfSize:10];
+    _experimentalLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.5];
+    _experimentalLabel.textAlignment = NSTextAlignmentRight;
+    [_rightPanel addSubview:_experimentalLabel];
     
     // 退出启动器按钮
     CGFloat exitBtnTop = cardsTop + cardHeight + cardSpacing + 20;
-    UIButton *exitBtn = [self createSecondaryButton:CGRectMake(sidePadding, exitBtnTop, panelWidth - sidePadding * 2, 48)
+    _exitButton = [self createSecondaryButton:CGRectMake(sidePadding, exitBtnTop, panelWidth - sidePadding * 2, 48)
                                               title:localize(@"crash.return_launcher", nil)
                                                icon:@"rectangle.portrait.and.arrow.right"
                                              action:@selector(dismissAndReturnToLauncher)];
-    [_rightPanel addSubview:exitBtn];
+    [_rightPanel addSubview:_exitButton];
     
     // 查看完整日志按钮（小按钮）
     CGFloat fullLogBtnTop = exitBtnTop + 48 + 8;
-    UIButton *fullLogBtn = [UIButton buttonWithType:UIButtonTypeSystem];
-    fullLogBtn.frame = CGRectMake(sidePadding, fullLogBtnTop, panelWidth - sidePadding * 2, 32);
-    [fullLogBtn setTitle:localize(@"crash.view_log", nil) forState:UIControlStateNormal];
-    fullLogBtn.titleLabel.font = [UIFont systemFontOfSize:13];
-    fullLogBtn.tintColor = [[UIColor whiteColor] colorWithAlphaComponent:0.6];
-    [fullLogBtn addTarget:self action:@selector(showFullLog) forControlEvents:UIControlEventTouchUpInside];
-    [_rightPanel addSubview:fullLogBtn];
+    _fullLogButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    _fullLogButton.frame = CGRectMake(sidePadding, fullLogBtnTop, panelWidth - sidePadding * 2, 32);
+    [_fullLogButton setTitle:localize(@"crash.view_log", nil) forState:UIControlStateNormal];
+    _fullLogButton.titleLabel.font = [UIFont systemFontOfSize:13];
+    _fullLogButton.tintColor = [[UIColor whiteColor] colorWithAlphaComponent:0.6];
+    [_fullLogButton addTarget:self action:@selector(showFullLog) forControlEvents:UIControlEventTouchUpInside];
+    [_rightPanel addSubview:_fullLogButton];
 }
 
 #pragma mark - Helper Methods
@@ -500,73 +506,40 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     }
     
     // 更新按钮和卡片位置
-    NSMutableArray *subviews = [NSMutableArray arrayWithArray:_rightPanel.subviews];
-    [subviews removeObject:_errorCardView];
-    
     CGFloat currentY = 156;
     CGFloat cardWidth = (rightPanelWidth - rightSidePadding * 3) / 2;
     CGFloat cardHeight = 80;
     
-    // 找出各个视图的引用
-    UIButton *shareBtn = nil;
-    UIView *githubCard = nil;
-    UIView *aiCard = nil;
-    UILabel *experimentalLabel = nil;
-    UIButton *exitBtn = nil;
-    UIButton *fullLogBtn = nil;
-    
-    for (UIView *view in subviews) {
-        if ([view isKindOfClass:[UIButton class]]) {
-            UIButton *btn = (UIButton *)view;
-            NSString *title = btn.currentTitle;
-            if ([title containsString:localize(@"crash.share_log", nil)]) {
-                shareBtn = btn;
-            } else if ([title containsString:localize(@"crash.return_launcher", nil)]) {
-                exitBtn = btn;
-            } else {
-                fullLogBtn = btn;
-            }
-        } else if ([view isKindOfClass:[UILabel class]]) {
-            experimentalLabel = (UILabel *)view;
-        } else {
-            // 卡片视图 - 根据 x 位置判断
-            if (view.frame.origin.x < rightPanelWidth / 2) {
-                githubCard = view;
-            } else {
-                aiCard = view;
-            }
-        }
-    }
-    
     // 分享日志按钮
-    if (shareBtn) {
-        shareBtn.frame = CGRectMake(rightSidePadding, currentY, rightPanelWidth - rightSidePadding * 2, 48);
+    if (_shareButton) {
+        _shareButton.frame = CGRectMake(rightSidePadding, currentY, rightPanelWidth - rightSidePadding * 2, 48);
         currentY += 48 + cardSpacing;
     }
     
-    // GitHub 和 AI 卡片（同一行）
-    if (githubCard) {
-        githubCard.frame = CGRectMake(rightSidePadding, currentY, cardWidth, cardHeight);
+    // GitHub 卡片
+    if (_githubCard) {
+        _githubCard.frame = CGRectMake(rightSidePadding, currentY, cardWidth, cardHeight);
         // 更新卡片内部图标位置
-        for (UIView *cardSubview in githubCard.subviews) {
+        for (UIView *cardSubview in _githubCard.subviews) {
             if ([cardSubview isKindOfClass:[UIImageView class]]) {
-                cardSubview.center = CGPointMake(githubCard.bounds.size.width / 2, 28);
+                cardSubview.center = CGPointMake(_githubCard.bounds.size.width / 2, 28);
             } else if ([cardSubview isKindOfClass:[UILabel class]]) {
                 UILabel *label = (UILabel *)cardSubview;
-                label.frame = CGRectMake(8, 46, githubCard.bounds.size.width - 16, 24);
+                label.frame = CGRectMake(8, 46, _githubCard.bounds.size.width - 16, 24);
             }
         }
     }
     
-    if (aiCard) {
-        aiCard.frame = CGRectMake(rightSidePadding * 2 + cardWidth, currentY, cardWidth, cardHeight);
+    // AI 卡片
+    if (_aiCard) {
+        _aiCard.frame = CGRectMake(rightSidePadding * 2 + cardWidth, currentY, cardWidth, cardHeight);
         // 更新卡片内部图标位置
-        for (UIView *cardSubview in aiCard.subviews) {
+        for (UIView *cardSubview in _aiCard.subviews) {
             if ([cardSubview isKindOfClass:[UIImageView class]]) {
-                cardSubview.center = CGPointMake(aiCard.bounds.size.width / 2, 28);
+                cardSubview.center = CGPointMake(_aiCard.bounds.size.width / 2, 28);
             } else if ([cardSubview isKindOfClass:[UILabel class]]) {
                 UILabel *label = (UILabel *)cardSubview;
-                label.frame = CGRectMake(8, 46, aiCard.bounds.size.width - 16, 24);
+                label.frame = CGRectMake(8, 46, _aiCard.bounds.size.width - 16, 24);
             }
         }
     }
@@ -574,21 +547,21 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     currentY += cardHeight + cardSpacing;
     
     // 实验性标签
-    if (experimentalLabel) {
-        experimentalLabel.frame = CGRectMake(rightSidePadding * 2 + cardWidth + 8, currentY - cardSpacing - 16, cardWidth - 16, 16);
+    if (_experimentalLabel) {
+        _experimentalLabel.frame = CGRectMake(rightSidePadding * 2 + cardWidth + 8, currentY - cardSpacing - 16, cardWidth - 16, 16);
     }
     
     currentY += 20; // 添加间距
     
     // 退出启动器按钮
-    if (exitBtn) {
-        exitBtn.frame = CGRectMake(rightSidePadding, currentY, rightPanelWidth - rightSidePadding * 2, 48);
+    if (_exitButton) {
+        _exitButton.frame = CGRectMake(rightSidePadding, currentY, rightPanelWidth - rightSidePadding * 2, 48);
         currentY += 48 + 8;
     }
     
     // 查看完整日志按钮
-    if (fullLogBtn) {
-        fullLogBtn.frame = CGRectMake(rightSidePadding, currentY, rightPanelWidth - rightSidePadding * 2, 32);
+    if (_fullLogButton) {
+        _fullLogButton.frame = CGRectMake(rightSidePadding, currentY, rightPanelWidth - rightSidePadding * 2, 32);
     }
 }
 
