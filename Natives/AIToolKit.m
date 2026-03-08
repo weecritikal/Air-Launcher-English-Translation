@@ -81,8 +81,8 @@
     
     if (!launcherRoot) return NO;
     
-    NSString *standardizedPath = [path standardizedPath];
-    NSString *standardizedRoot = [launcherRoot standardizedPath];
+    NSString *standardizedPath = [path stringByStandardizingPath];
+    NSString *standardizedRoot = [launcherRoot stringByStandardizingPath];
     
     // 检查路径是否以启动器目录开头
     if ([standardizedPath hasPrefix:standardizedRoot]) {
@@ -90,7 +90,7 @@
     }
     
     // 也检查游戏目录
-    if (gameDir && [standardizedPath hasPrefix:[gameDir standardizedPath]]) {
+    if (gameDir && [standardizedPath hasPrefix:[gameDir stringByStandardizingPath]]) {
         return YES;
     }
     

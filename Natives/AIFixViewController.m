@@ -553,7 +553,8 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
 #pragma mark - 消息处理
 
 - (void)sendMessage {
-    NSString *text = [_inputTextView.text trimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+    NSString *rawText = _inputTextView.text ?: @"";
+    NSString *text = [rawText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
     if (text.length == 0) return;
     
     // 清空输入框
