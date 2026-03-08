@@ -60,6 +60,14 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
 @property (nonatomic, strong) UILabel *modNameLabel;
 @property (nonatomic, strong) UILabel *modDescLabel;
 @property (nonatomic, strong) UILabel *modStatusLabels;
+
+// Mod 预览方法
+- (void)showModPreviewWithName:(NSString *)modName 
+                       iconPath:(NSString *)iconPath 
+                    description:(NSString *)description 
+                   willEnable:(BOOL)willEnable;
+- (void)hideModPreview;
+- (void)replaceIconWithNewIcon:(UIImageView *)newIcon;
 @end
 
 // SVG 图标助手
