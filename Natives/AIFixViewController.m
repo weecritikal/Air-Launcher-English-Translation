@@ -223,7 +223,7 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     _conversationStackView.layoutMarginsRelativeArrangement = YES;
     [_conversationScrollView addSubview:_conversationStackView];
     
-    [_conversationStackView.translatesAutoresizingMaskIntoConstraints = NO];
+    _conversationStackView.translatesAutoresizingMaskIntoConstraints = NO;
     [_conversationStackView.topAnchor constraintEqualToAnchor:_conversationScrollView.topAnchor].active = YES;
     [_conversationStackView.leadingAnchor constraintEqualToAnchor:_conversationScrollView.leadingAnchor].active = YES;
     [_conversationStackView.trailingAnchor constraintEqualToAnchor:_conversationScrollView.trailingAnchor].active = YES;
@@ -544,7 +544,7 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
 #pragma mark - 消息处理
 
 - (void)sendMessage {
-    NSString *text = _inputTextView.text.trimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+    NSString *text = [_inputTextView.text trimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
     if (text.length == 0) return;
     
     // 清空输入框

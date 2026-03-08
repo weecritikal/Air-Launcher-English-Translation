@@ -10,6 +10,7 @@
 #import "ModItem.h"
 #import "LauncherPreferences.h"
 #import "PLProfiles.h"
+#import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 
 #pragma mark - AIToolRequest
@@ -959,6 +960,14 @@
     NSDictionary *profiles = PLProfiles.current.profiles;
     NSMutableArray *profileList = [NSMutableArray array];
     
+    NSString *currentSelectedName = nil;
+    id selectedProfile = PLProfiles.current.selectedProfile;
+    if ([selectedProfile isKindOfClass:[NSString class]]) {
+        currentSelectedName = selectedProfile;
+    } else if ([selectedProfile isKindOfClass:[NSDictionary class]]) {
+        currentSelectedName = ((NSDictionary *)selectedProfile)[@"name"];
+    }
+    
     for (NSString *name in profiles) {
         NSDictionary *profile = profiles[name];
         if ([profile isKindOfClass:[NSDictionary class]]) {
@@ -967,7 +976,7 @@
                 @"gameDir": profile[@"gameDir"] ?: @"",
                 @"lastVersionId": profile[@"lastVersionId"] ?: @"未知",
                 @"javaArgs": profile[@"javaArgs"] ?: @"",
-                @"selected": @([name isEqualToString:PLProfiles.current.selectedProfile])
+                @"selected": @([name isEqualToString:currentSelectedName])
             }];
         }
     }
@@ -1065,6 +1074,15 @@
     NSProcessInfo *processInfo = [NSProcessInfo processInfo];
     UIDevice *device = [UIDevice currentDevice];
     
+    // availableMemory 只在 iOS 15+ 可用，使用条件编译
+    NSUInteger availableMemMB = 0;
+    if (@available(iOS 15.0, *)) {
+        availableMemMB = (NSUInteger)(processInfo.availableMemory / 1024 / 1024);
+    } else {
+        // 在 iOS 15 以下，使用物理内存的一半作为估计值
+        availableMemMB = (NSUInteger)(processInfo.physicalMemory / 1024 / 1024 / 2);
+    }
+    
     NSDictionary *systemInfo = @{
         @"deviceModel": device.model ?: @"未知",
         @"deviceName": device.name ?: @"未知",
@@ -1072,7 +1090,7 @@
         @"systemVersion": device.systemVersion ?: @"未知",
         @"processorCount": @(processInfo.processorCount),
         @"physicalMemoryMB": @((NSUInteger)(processInfo.physicalMemory / 1024 / 1024)),
-        @"availableMemoryMB": @((NSUInteger)(processInfo.availableMemory / 1024 / 1024)),
+        @"availableMemoryMB": @(availableMemMB),
         @"appVersion": [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"未知",
         @"appBuild": [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleVersion"] ?: @"未知",
         @"launcherHome": [AIToolKit launcherRootDirectory] ?: @"未知",
