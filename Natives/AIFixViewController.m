@@ -177,32 +177,37 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
 - (void)setupUI {
     self.view.frame = [UIScreen mainScreen].bounds;
     self.view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    
+
     // 背景
     [self setupBackground];
-    
-    // 左右分栏 - 居中布局
-    CGFloat maxContentWidth = 1200; // 最大内容宽度
+
+    // 使用容器视图实现居中布局
+    CGFloat maxContentWidth = 1200;
     CGFloat contentWidth = MIN(self.view.bounds.size.width - 32, maxContentWidth);
     CGFloat leftWidth = contentWidth * 0.6;
     CGFloat rightWidth = contentWidth - leftWidth;
     CGFloat topPadding = 60;
     CGFloat bottomPadding = 40;
-    CGFloat sidePadding = 16;
-    
+
+    // 内容容器 - 水平居中
+    UIView *contentContainer = [[UIView alloc] initWithFrame:CGRectMake(0, topPadding, self.view.bounds.size.width, self.view.bounds.size.height - topPadding - bottomPadding)];
+    contentContainer.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight | UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleBottomMargin;
+    contentContainer.clipsToBounds = NO;
+    [self.view addSubview:contentContainer];
+
     // 计算起始位置使内容居中
     CGFloat startX = (self.view.bounds.size.width - contentWidth) / 2;
-    
+
     // 左侧面板 - 对话窗口
-    _leftPanel = [[UIView alloc] initWithFrame:CGRectMake(startX, topPadding, leftWidth, self.view.bounds.size.height - topPadding - bottomPadding)];
-    _leftPanel.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleRightMargin | UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleBottomMargin | UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    [self.view addSubview:_leftPanel];
-    
+    _leftPanel = [[UIView alloc] initWithFrame:CGRectMake(startX, 0, leftWidth, contentContainer.bounds.size.height)];
+    _leftPanel.autoresizingMask = UIViewAutoresizingFlexibleHeight;
+    [contentContainer addSubview:_leftPanel];
+
     // 右侧面板 - 配置与工具
-    _rightPanel = [[UIView alloc] initWithFrame:CGRectMake(startX + leftWidth, topPadding, rightWidth, self.view.bounds.size.height - topPadding - bottomPadding)];
-    _rightPanel.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleRightMargin | UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleBottomMargin | UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    [self.view addSubview:_rightPanel];
-    
+    _rightPanel = [[UIView alloc] initWithFrame:CGRectMake(startX + leftWidth, 0, rightWidth, contentContainer.bounds.size.height)];
+    _rightPanel.autoresizingMask = UIViewAutoresizingFlexibleHeight;
+    [contentContainer addSubview:_rightPanel];
+
     [self setupLeftPanel];
     [self setupRightPanel];
     [self setupStatusBar];

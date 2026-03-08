@@ -626,13 +626,22 @@
         NSString *itemPath = [path stringByAppendingPathComponent:item];
         NSDictionary *attributes = [fm attributesOfItemAtPath:itemPath error:nil];
         BOOL isDir = [attributes[NSFileType] isEqualToString:NSFileTypeDirectory];
-        
+
+        // 将 NSDate 转换为 ISO 8601 字符串以便 JSON 序列化
+        NSDate *modDate = attributes[NSFileModificationDate];
+        NSString *modDateString = @"未知";
+        if (modDate) {
+            NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
+            formatter.dateFormat = @"yyyy-MM-dd HH:mm:ss";
+            modDateString = [formatter stringFromDate:modDate];
+        }
+
         [items addObject:@{
             @"name": item,
             @"path": itemPath,
             @"isDirectory": @(isDir),
             @"size": attributes[NSFileSize] ?: @0,
-            @"modificationDate": attributes[NSFileModificationDate] ?: [NSDate date]
+            @"modificationDate": modDateString
         }];
     }
     
@@ -1286,14 +1295,23 @@
     }
     
     BOOL isDirectory = [attributes[NSFileType] isEqualToString:NSFileTypeDirectory];
-    
+
+    // 将 NSDate 转换为字符串以便 JSON 序列化
+    NSDateFormatter *formatter = [[NSDateFormatter alloc] init];
+    formatter.dateFormat = @"yyyy-MM-dd HH:mm:ss";
+
+    NSDate *creationDate = attributes[NSFileCreationDate];
+    NSDate *modDate = attributes[NSFileModificationDate];
+    NSString *creationDateString = creationDate ? [formatter stringFromDate:creationDate] : @"未知";
+    NSString *modDateString = modDate ? [formatter stringFromDate:modDate] : @"未知";
+
     NSDictionary *info = @{
         @"path": path,
         @"name": [path lastPathComponent],
         @"isDirectory": @(isDirectory),
         @"size": attributes[NSFileSize] ?: @0,
-        @"creationDate": attributes[NSFileCreationDate] ?: [NSNull null],
-        @"modificationDate": attributes[NSFileModificationDate] ?: [NSNull null],
+        @"creationDate": creationDateString,
+        @"modificationDate": modDateString,
         @"extension": [path pathExtension] ?: @"",
         @"permissions": attributes[NSFilePosixPermissions] ?: @0
     };
