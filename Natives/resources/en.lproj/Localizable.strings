@@ -428,3 +428,43 @@
 "crash.ai_solve" = "Use AI to Solve";
 "crash.ai_solve_experimental" = "Use AI to Solve";
 "crash.experimental" = "Experimental";
+
+// AI Fix Feature
+"ai.fix.conversation" = "Conversation";
+"ai.fix.input_placeholder" = "Type something...";
+"ai.fix.send" = "Send";
+"ai.fix.stop" = "Stop";
+"ai.fix.exit" = "Exit Launcher";
+"ai.fix.model_config" = "Model Configuration";
+"ai.fix.model_name" = "Model Name";
+"ai.fix.save" = "Save";
+"ai.fix.running" = "Running";
+"ai.fix.configured" = "Configured";
+"ai.fix.not_configured" = "Not Configured";
+"ai.fix.config_saved" = "Configuration Saved";
+"ai.fix.tool_requests" = "Tool Requests";
+"ai.fix.ready" = "Ready";
+"ai.fix.thinking" = "AI is thinking...";
+"ai.fix.waiting_confirm" = "Waiting for Confirmation";
+"ai.fix.executing" = "Executing Tool...";
+"ai.fix.completed" = "Completed";
+"ai.fix.error" = "Error";
+"ai.fix.stopped" = "Stopped";
+"ai.fix.approve" = "Approve";
+"ai.fix.reject" = "Reject";
+"ai.fix.experimental_title" = "Experimental Feature";
+"ai.fix.experimental_message" = "The AI crash fix feature is experimental and may be unstable. Please ensure you have made backups before using it. Continue?";
+"ai.fix.continue" = "Continue";
+"ai.fix.cancel" = "Cancel";
+"ai.fix.please_configure" = "Please complete the API configuration and click \"Save\" button first.";
+"ai.fix.settings_mode" = "You are in AI fix settings mode. After configuration, click the send button to start the conversation.";
+"ai.fix.starting" = "Starting AI fix process...";
+"ai.fix.start_failed" = "Start Failed";
+"ai.fix.stopped_by_user" = "Fix stopped by user";
+"ai.fix.tool_success" = "%@ executed successfully";
+"ai.fix.tool_failed" = "Execution failed";
+"ai.fix.modifications" = "Modified %lu file(s)";
+"ai.fix.restart_hint" = "Please restart the game to verify the fix. If the issue persists, you can continue the conversation or submit an issue on GitHub.";
+
+"preference.title.ai_crash_fix" = "AI Crash Fix";
+"preference.detail.ai_crash_fix" = "Configure and use AI assistant to automatically diagnose and fix game crash issues";

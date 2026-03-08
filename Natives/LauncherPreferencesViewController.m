@@ -18,6 +18,7 @@
 #import "CustomIconManager.h"
 #import "BackgroundSettingsViewController.h"
 #import "BackgroundManager.h"
+#import "AIFixViewController.h"
 
 @interface LauncherPreferencesViewController()
 @property(nonatomic) NSArray<NSString*> *rendererKeys, *rendererList;
@@ -381,6 +382,31 @@
               @"action": ^void(){
                   loadPreferences(YES);
                   [self.tableView reloadData];
+              }
+            },
+            @{@"key": @"ai_crash_fix",
+              @"hasDetail": @YES,
+              @"icon": @"cpu",
+              @"type": self.typeButton,
+              @"enableCondition": whenNotInGame,
+              @"action": ^void(){
+                  AIFixViewController *aiFixVC = [[AIFixViewController alloc] initForSettings];
+                  aiFixVC.modalPresentationStyle = UIModalPresentationOverFullScreen;
+                  
+                  aiFixVC.view.alpha = 0;
+                  aiFixVC.view.transform = CGAffineTransformMakeScale(0.9, 0.9);
+                  
+                  [self presentViewController:aiFixVC animated:NO completion:^{
+                      [UIView animateWithDuration:0.4 
+                                            delay:0 
+                           usingSpringWithDamping:0.8 
+                            initialSpringVelocity:0.5 
+                                          options:UIViewAnimationOptionCurveEaseOut 
+                                       animations:^{
+                          aiFixVC.view.alpha = 1;
+                          aiFixVC.view.transform = CGAffineTransformIdentity;
+                      } completion:nil];
+                  }];
               }
             },
             @{@"key": @"erase_demo_data",

@@ -3,6 +3,7 @@
 #import "SurfaceViewController.h"
 #import "ios_uikit_bridge.h"
 #import "utils.h"
+#import "AIFixViewController.h"
 
 @interface PLCrashView ()
 @property (nonatomic, strong) UIView *leftPanel;
@@ -419,18 +420,35 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
 }
 
 - (void)useAIToSolve {
-    // TODO: 实现 AI 解决问题功能
-    // 目前先显示提示
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:localize(@"crash.ai_solve", nil)
-                                                                   message:localize(@"crash.experimental", nil)
-                                                            preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
-    
+    // 获取当前视图控制器
     UIViewController *presentingVC = [self nextViewController];
     if (!presentingVC) {
         presentingVC = currentVC();
     }
-    [presentingVC presentViewController:alert animated:YES completion:nil];
+    
+    // 获取崩溃日志路径
+    NSString *logPath = [NSString stringWithFormat:@"%s/latestlog.txt", getenv("POJAV_HOME")];
+    
+    // 创建 AI 修复界面
+    AIFixViewController *aiFixVC = [[AIFixViewController alloc] initWithLogPath:logPath];
+    aiFixVC.modalPresentationStyle = UIModalPresentationOverFullScreen;
+    
+    // 非线性动画展示
+    aiFixVC.view.alpha = 0;
+    aiFixVC.view.transform = CGAffineTransformMakeScale(0.9, 0.9);
+    
+    [presentingVC presentViewController:aiFixVC animated:NO completion:^{
+        // 使用弹性动画
+        [UIView animateWithDuration:0.4 
+                              delay:0 
+             usingSpringWithDamping:0.8 
+              initialSpringVelocity:0.5 
+                            options:UIViewAnimationOptionCurveEaseOut 
+                         animations:^{
+            aiFixVC.view.alpha = 1;
+            aiFixVC.view.transform = CGAffineTransformIdentity;
+        } completion:nil];
+    }];
 }
 
 - (void)dismissAndReturnToLauncher {
