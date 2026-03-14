@@ -357,9 +357,9 @@
 
 @end
 
-#pragma mark - Loader Selection View Controller (Form Sheet with Translucent Background)
+#pragma mark - Loader Selection View Controller (Full Screen Translucent)
 
-@interface LoaderSelectionViewController : UIViewController <UITableViewDataSource, UITableViewDelegate>
+@interface LoaderSelectionViewController () <UITableViewDataSource, UITableViewDelegate, NSXMLParserDelegate>
 @property (nonatomic, copy) void (^completion)(NSString *loader, BOOL installFabricAPI, BOOL installOptiFine, NSString *loaderVersion);
 @property (nonatomic, copy) void (^cancelled)(void);
 @property (nonatomic, strong) NSArray *loaders;
@@ -377,6 +377,11 @@
 @property (nonatomic, strong) NSString *selectedLoaderVersion;
 @property (nonatomic, strong) UIActivityIndicatorView *loadingIndicator;
 @property (nonatomic, strong) UIVisualEffectView *backgroundBlurView;
+
+// For XML parsing
+@property (nonatomic, strong) NSMutableArray *forgeVersionList;
+@property (nonatomic, assign) BOOL isParsingForge;
+@property (nonatomic, strong) NSMutableString *currentVersionValue;
 @end
 
 @implementation LoaderSelectionViewController
@@ -649,7 +654,7 @@
     [self presentViewController:alert animated:YES completion:nil];
 }
 
-#pragma mark - Load Versions
+#pragma mark - Load Versions (Real Network)
 
 - (void)loadVersionsForLoader:(NSString *)loaderId {
     self.loaderVersions = nil;
@@ -661,9 +666,9 @@
     if ([loaderId isEqualToString:@"fabric"] || [loaderId isEqualToString:@"quilt"]) {
         [self loadFabricVersions:loaderId];
     } else if ([loaderId isEqualToString:@"forge"]) {
-        [self loadForgeVersions];
+        [self loadForgeVersionsReal];
     } else if ([loaderId isEqualToString:@"neoforge"]) {
-        [self loadNeoForgeVersions];
+        [self loadNeoForgeVersionsReal];
     }
 }
 
@@ -706,30 +711,129 @@
     [task resume];
 }
 
-- (void)loadForgeVersions {
+- (void)loadForgeVersionsReal {
+    NSString *urlString = @"https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml";
+    NSURL *url = [NSURL URLWithString:urlString];
+    
+    self.forgeVersionList = [NSMutableArray array];
+    self.isParsingForge = YES;
+    
+    NSXMLParser *parser = [[NSXMLParser alloc] initWithContentsOfURL:url];
+    parser.delegate = self;
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        [parser parse];
+    });
+}
+
+- (void)loadNeoForgeVersionsReal {
+    NSString *urlString = @"https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml";
+    NSURL *url = [NSURL URLWithString:urlString];
+    
+    self.forgeVersionList = [NSMutableArray array];
+    self.isParsingForge = NO;
+    NSXMLParser *parser = [[NSXMLParser alloc] initWithContentsOfURL:url];
+    parser.delegate = self;
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        [parser parse];
+    });
+}
+
+#pragma mark - NSXMLParserDelegate (Forge/NeoForge)
+
+- (void)parser:(NSXMLParser *)parser didStartElement:(NSString *)elementName namespaceURI:(NSString *)namespaceURI qualifiedName:(NSString *)qName attributes:(NSDictionary *)attributeDict {
+    if ([elementName isEqualToString:@"version"]) {
+        self.currentVersionValue = [NSMutableString new];
+    }
+}
+
+- (void)parser:(NSXMLParser *)parser foundCharacters:(NSString *)string {
+    [self.currentVersionValue appendString:string];
+}
+
+- (void)parser:(NSXMLParser *)parser didEndElement:(NSString *)elementName namespaceURI:(NSString *)namespaceURI qualifiedName:(NSString *)qName {
+    if ([elementName isEqualToString:@"version"]) {
+        NSString *version = [self.currentVersionValue stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        if (version.length > 0) {
+            if (self.isParsingForge) {
+                // Forge 版本格式：游戏版本-加载器版本
+                NSString *prefix = [self.gameVersion stringByAppendingString:@"-"];
+                if ([version hasPrefix:prefix]) {
+                    [self.forgeVersionList addObject:version];
+                }
+            } else {
+                // NeoForge 需要提取游戏版本
+                NSString *mcVersion = [self extractMinecraftVersionFromNeoForgeVersion:version];
+                if ([mcVersion isEqualToString:self.gameVersion]) {
+                    [self.forgeVersionList addObject:version];
+                }
+            }
+        }
+    }
+}
+
+- (void)parserDidEndDocument:(NSXMLParser *)parser {
     dispatch_async(dispatch_get_main_queue(), ^{
         [self.loadingIndicator stopAnimating];
-        self.loaderVersions = @[@"47.2.0", @"47.1.3", @"47.1.0", @"47.0.35", @"47.0.19"];
+        
+        [self.forgeVersionList sortUsingComparator:^NSComparisonResult(NSString *v1, NSString *v2) {
+            return [v2 compare:v1 options:NSNumericSearch];
+        }];
+        
+        self.loaderVersions = self.forgeVersionList;
         [self.versionTableView reloadData];
         
         if (self.loaderVersions.count > 0 && !self.selectedLoaderVersion) {
-            self.selectedLoaderVersion = self.loaderVersions[0];
+            self.selectedLoaderVersion = self.loaderVersions.firstObject;
             [self.versionTableView reloadData];
         }
     });
 }
 
-- (void)loadNeoForgeVersions {
+- (void)parser:(NSXMLParser *)parser parseErrorOccurred:(NSError *)parseError {
     dispatch_async(dispatch_get_main_queue(), ^{
         [self.loadingIndicator stopAnimating];
-        self.loaderVersions = @[@"20.4.237", @"20.4.200", @"20.4.167", @"20.4.100", @"20.4.0"];
+        self.loaderVersions = @[];
         [self.versionTableView reloadData];
-        
-        if (self.loaderVersions.count > 0 && !self.selectedLoaderVersion) {
-            self.selectedLoaderVersion = self.loaderVersions[0];
-            [self.versionTableView reloadData];
-        }
+        NSLog(@"Parse error: %@", parseError);
     });
+}
+
+// 从 NeoForge 版本号中提取 Minecraft 版本（简化版，与 ForgeInstallViewController 中一致）
+- (NSString *)extractMinecraftVersionFromNeoForgeVersion:(NSString *)version {
+    NSString *cleanVersion = version;
+    NSRange hyphenRange = [version rangeOfString:@"-"];
+    if (hyphenRange.location != NSNotFound) {
+        cleanVersion = [version substringToIndex:hyphenRange.location];
+    }
+    
+    NSRegularExpression *snapshotRegex = [NSRegularExpression regularExpressionWithPattern:@"(\\d{2}w\\d{2}[a-z]*)" options:NSRegularExpressionCaseInsensitive error:nil];
+    NSTextCheckingResult *snapshotMatch = [snapshotRegex firstMatchInString:cleanVersion options:0 range:NSMakeRange(0, cleanVersion.length)];
+    if (snapshotMatch) {
+        return [cleanVersion substringWithRange:snapshotMatch.range];
+    }
+    
+    NSArray *components = [cleanVersion componentsSeparatedByString:@"."];
+    if (components.count >= 2) {
+        NSString *majorComponent = components[0];
+        NSString *minorComponent = components[1];
+        if ([self isNumeric:majorComponent] && [self isNumeric:minorComponent]) {
+            return [NSString stringWithFormat:@"1.%@.%@", majorComponent, minorComponent];
+        }
+    }
+    
+    NSRegularExpression *versionRegex = [NSRegularExpression regularExpressionWithPattern:@"(\\d+\\.\\d+)" options:0 error:nil];
+    NSTextCheckingResult *match = [versionRegex firstMatchInString:version options:0 range:NSMakeRange(0, version.length)];
+    if (match) {
+        return [NSString stringWithFormat:@"1.%@", [version substringWithRange:match.range]];
+    }
+    
+    return @"Unknown";
+}
+
+- (BOOL)isNumeric:(NSString *)string {
+    if (!string || string.length == 0) return NO;
+    NSCharacterSet *nonNumbers = [[NSCharacterSet decimalDigitCharacterSet] invertedSet];
+    return [string rangeOfCharacterFromSet:nonNumbers].location == NSNotFound;
 }
 
 #pragma mark - TableView
@@ -1514,7 +1618,7 @@
     [self showLoaderSelectionForVersion:version];
 }
 
-#pragma mark - Loader Selection (Form Sheet with Translucent Background)
+#pragma mark - Loader Selection (Full Screen Translucent)
 
 - (void)showLoaderSelectionForVersion:(NSDictionary *)version {
     LoaderSelectionViewController *loaderVC = [[LoaderSelectionViewController alloc] init];
@@ -1525,7 +1629,6 @@
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
         
-        // 先dismiss，再执行安装
         [strongSelf dismissViewControllerAnimated:YES completion:^{
             [strongSelf proceedWithVersion:version loaderType:loaderType installFabricAPI:installFabricAPI installOptiFine:installOptiFine loaderVersion:loaderVersion];
         }];
@@ -1536,8 +1639,8 @@
     };
     
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:loaderVC];
-    nav.modalPresentationStyle = UIModalPresentationFormSheet;
-    nav.preferredContentSize = CGSizeMake(540, 620);
+    nav.modalPresentationStyle = UIModalPresentationOverFullScreen;
+    nav.modalTransitionStyle = UIModalTransitionStyleCrossDissolve;
     
     [self presentViewController:nav animated:YES completion:nil];
 }
@@ -1850,15 +1953,8 @@
             return;
         }
         
-        NSString *profileName = PLProfiles.current.selectedProfileName ?: @"default";
-        NSString *gameDir = [NSString stringWithFormat:@"%s/%@", getenv("POJAV_GAME_DIR"), profileName];
-        NSString *modsDir = [gameDir stringByAppendingPathComponent:@"mods"];
-        
-        [[NSFileManager defaultManager] createDirectoryAtPath:modsDir
-                                  withIntermediateDirectories:YES
-                                                   attributes:nil
-                                                        error:nil];
-        
+        // 保存到当前实例的 mods 文件夹
+        NSString *modsDir = [self currentInstanceModsPath];
         NSString *filename = [NSString stringWithFormat:@"OptiFine_%@_%@.jar", gameVersion, optiFineVersion];
         NSString *savePath = [modsDir stringByAppendingPathComponent:filename];
         
@@ -1948,15 +2044,7 @@
         return;
     }
     
-    NSString *profileName = PLProfiles.current.selectedProfileName ?: @"default";
-    NSString *gameDir = [NSString stringWithFormat:@"%s/%@", getenv("POJAV_GAME_DIR"), profileName];
-    NSString *modsDir = [gameDir stringByAppendingPathComponent:@"mods"];
-    
-    [[NSFileManager defaultManager] createDirectoryAtPath:modsDir
-                              withIntermediateDirectories:YES
-                                               attributes:nil
-                                                    error:nil];
-    
+    NSString *modsDir = [self currentInstanceModsPath];
     NSString *savePath = [modsDir stringByAppendingPathComponent:filename];
     
     NSURL *url = [NSURL URLWithString:downloadURL];
@@ -2330,6 +2418,18 @@
 
 - (UIInterfaceOrientationMask)supportedInterfaceOrientations {
     return UIInterfaceOrientationMaskLandscape;
+}
+
+#pragma mark - Helper Methods
+
+- (NSString *)currentInstanceModsPath {
+    NSString *instanceName = PLProfiles.current.selectedProfileName;
+    if (!instanceName) instanceName = @"default";
+    NSString *gameDir = [NSString stringWithUTF8String:getenv("POJAV_GAME_DIR")];
+    NSString *instanceDir = [gameDir stringByAppendingPathComponent:instanceName];
+    NSString *modsDir = [instanceDir stringByAppendingPathComponent:@"mods"];
+    [[NSFileManager defaultManager] createDirectoryAtPath:modsDir withIntermediateDirectories:YES attributes:nil error:nil];
+    return modsDir;
 }
 
 @end
