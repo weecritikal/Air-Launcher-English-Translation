@@ -96,7 +96,6 @@
               @"title": @"preference.profile.title.loader_type",
               @"type": typePickSegment,
               @"pickList": @[localize(@"Release", nil), @"Unstable"],
-              //localize(@"Unstable", nil)
               @"action": ^(int type) {
                   [weakSelf changeLoaderTypeTo:type];
               }
@@ -267,7 +266,12 @@
         
         NSString *downloadUrl = primaryFile[@"url"];
         NSString *fileName = primaryFile[@"filename"];
-        NSString *modsPath = [NSString stringWithFormat:@"%1$s/mods", getenv("POJAV_GAME_DIR")];
+        
+        // 获取当前实例的 mods 文件夹路径
+        NSString *instanceName = PLProfiles.current.selectedProfileName ?: @"default";
+        NSString *gameDir = [NSString stringWithUTF8String:getenv("POJAV_GAME_DIR")];
+        NSString *instanceDir = [gameDir stringByAppendingPathComponent:instanceName];
+        NSString *modsPath = [instanceDir stringByAppendingPathComponent:@"mods"];
         
         // Ensure mods directory exists
         [[NSFileManager defaultManager] createDirectoryAtPath:modsPath withIntermediateDirectories:YES attributes:nil error:nil];
