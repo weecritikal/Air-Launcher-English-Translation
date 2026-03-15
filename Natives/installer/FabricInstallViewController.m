@@ -10,6 +10,9 @@
 #import "utils.h"
 #include <objc/runtime.h>
 
+// 添加外部全局变量声明
+extern NSMutableArray *localVersionList;
+
 @interface FabricInstallViewController()
 @property(nonatomic) NSDictionary *endpoints;
 @property(nonatomic) NSMutableDictionary *localKVO;
@@ -44,7 +47,7 @@
     self.localKVO = @{
         @"gameVersion": initialGameVersion,
         @"loaderVendor": @"Fabric",
-        @"loaderVersion": @"0.14.22"
+        @"loaderVersion": @"" // 初始为空，等待网络获取后填充
     }.mutableCopy;
     self.getPreference = ^id(NSString *section, NSString *key){
         return weakSelf.localKVO[key];
@@ -132,12 +135,12 @@
     AFHTTPSessionManager *manager = [AFHTTPSessionManager manager];
     NSDictionary *endpoint = self.endpoints[self.localKVO[@"loaderVendor"]];
     [manager GET:endpoint[@"game"] parameters:nil headers:nil progress:nil  success:^(NSURLSessionTask *task, NSArray *response) {
-        NSDebugLog(@"[%@ Installer] Got %d game versions", self.localKVO[@"loaderVendor"], response.count);
+        NSDebugLog(@"[%@ Installer] Got %d game versions", self.localKVO[@"loaderVendor"], (int)response.count);
         self.versionMetadata = response;
         [self changeVersionTypeTo:[self.localKVO[@"gameType_index"] intValue]];
     } failure:errorCallback];
     [manager GET:endpoint[@"loader"] parameters:nil headers:nil progress:nil success:^(NSURLSessionTask *task, NSArray *response) {
-        NSDebugLog(@"[%@ Installer] Got %d loader versions", self.localKVO[@"loaderVendor"], response.count);
+        NSDebugLog(@"[%@ Installer] Got %d loader versions", self.localKVO[@"loaderVendor"], (int)response.count);
         self.loaderMetadata = response;
         [self changeLoaderTypeTo:[self.localKVO[@"loaderType_index"] intValue]];
     } failure:errorCallback];
@@ -169,7 +172,7 @@
         strongSelf.isInstalling = NO;
         sender.enabled = YES;
 
-        NSString *jsonPath = [NSString stringWithFormat:@"%1$s/versions/%2$@/%2$@.json", getenv("POJAV_GAME_DIR"), response[@"id"]];
+        NSString *jsonPath = [NSString stringWithFormat:@"%s/versions/%@/%@.json", getenv("POJAV_GAME_DIR"), response[@"id"], response[@"id"]];
         [NSFileManager.defaultManager createDirectoryAtPath:jsonPath.stringByDeletingLastPathComponent withIntermediateDirectories:YES attributes:nil error:nil];
         NSError *error = saveJSONToFile(response, jsonPath);
         if (error) {
@@ -236,7 +239,6 @@
 
 - (void)installFabricAPIWithCompletion:(void (^)(BOOL success, NSError *error))completion {
     NSString *gameVersion = self.localKVO[@"gameVersion"];
-    NSString *fabricVersion = self.localKVO[@"loaderVersion"];
     
     // Fabric API download URL from Modrinth
     NSString *apiUrl = [NSString stringWithFormat:@"https://api.modrinth.com/v2/project/fabric-api/version?game_versions=[\"%@\"]&loaders=[\"fabric\"]", gameVersion];
@@ -311,6 +313,10 @@
         }
         [list addObject:version[@"version"]];
     }
+    // 按版本号降序排序（新版本在前）
+    [list sortUsingComparator:^NSComparisonResult(NSString *v1, NSString *v2) {
+        return [v2 compare:v1 options:NSNumericSearch];
+    }];
     self.localKVO[key] = list.firstObject;
     [self.tableView reloadRowsAtIndexPaths:@[[NSIndexPath indexPathForRow:row inSection:0]] withRowAnimation:UITableViewRowAnimationNone];
 }
