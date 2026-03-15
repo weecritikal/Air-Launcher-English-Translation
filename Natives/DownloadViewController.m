@@ -359,6 +359,11 @@
 
 #pragma mark - Loader Selection View Controller (Full Screen Translucent)
 
+// 先声明主接口
+@interface LoaderSelectionViewController : UIViewController
+@end
+
+// 再添加类扩展
 @interface LoaderSelectionViewController () <UITableViewDataSource, UITableViewDelegate, NSXMLParserDelegate>
 @property (nonatomic, copy) void (^completion)(NSString *loader, BOOL installFabricAPI, BOOL installOptiFine, NSString *loaderVersion);
 @property (nonatomic, copy) void (^cancelled)(void);
