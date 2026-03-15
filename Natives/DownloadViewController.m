@@ -357,16 +357,15 @@
 
 @end
 
-#pragma mark - Loader Selection View Controller (Full Screen Translucent)
+#pragma mark - Loader Selection View Controller (居中卡片式)
 
-// 先声明主接口
 @interface LoaderSelectionViewController : UIViewController
-@end
-
-// 再添加类扩展
-@interface LoaderSelectionViewController () <UITableViewDataSource, UITableViewDelegate, NSXMLParserDelegate>
 @property (nonatomic, copy) void (^completion)(NSString *loader, BOOL installFabricAPI, BOOL installOptiFine, NSString *loaderVersion);
 @property (nonatomic, copy) void (^cancelled)(void);
+@property (nonatomic, strong) NSString *gameVersion;
+@end
+
+@interface LoaderSelectionViewController () <UITableViewDataSource, UITableViewDelegate, NSXMLParserDelegate>
 @property (nonatomic, strong) NSArray *loaders;
 @property (nonatomic, strong) UITableView *tableView;
 @property (nonatomic, strong) UIView *optionsContainer;
@@ -376,7 +375,6 @@
 @property (nonatomic, strong) UILabel *optiFineLabel;
 @property (nonatomic, strong) UIButton *installButton;
 @property (nonatomic, strong) NSString *selectedLoader;
-@property (nonatomic, strong) NSString *gameVersion;
 @property (nonatomic, strong) NSArray *loaderVersions;
 @property (nonatomic, strong) UITableView *versionTableView;
 @property (nonatomic, strong) NSString *selectedLoaderVersion;
@@ -396,6 +394,9 @@
     
     self.title = @"选择安装方式";
     self.view.backgroundColor = [UIColor clearColor];
+    
+    // 设置 preferredContentSize 使界面居中显示（FormSheet）
+    self.preferredContentSize = CGSizeMake(540, 620);
     
     UIBlurEffect *blurEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial];
     self.backgroundBlurView = [[UIVisualEffectView alloc] initWithEffect:blurEffect];
@@ -426,8 +427,8 @@
     self.loaders = @[
         @{@"id": @"vanilla", @"name": @"原版 (Vanilla)", @"desc": @"纯净 Minecraft，不包含任何模组加载器", @"icon": @"cube.fill", @"color": [UIColor systemGrayColor], @"compatible": @YES},
         @{@"id": @"fabric", @"name": @"Fabric", @"desc": @"轻量级模组加载器，适合小型模组", @"icon": @"bolt.fill", @"color": [UIColor systemOrangeColor], @"compatible": @(fabricCompatible)},
-        @{@"id": @"forge", @"name": @"Forge", @"desc": @"经典模组加载器，模组生态丰富", @"icon": @"hammer.fill", @"color": [UIColor systemRedColor], @"compatible": @(forgeCompatible)},
-        @{@"id": @"neoforge", @"name": @"NeoForge", @"desc": @"Forge 的分支，现代架构", @"icon": @"hammer.fill", @"color": [UIColor systemBrownColor], @"compatible": @(neoForgeCompatible)},
+        @{@"id": @"forge", @"name": @"Forge", @"desc": @"经典模组加载器，模组生态丰富（支持 1.1+）", @"icon": @"hammer.fill", @"color": [UIColor systemRedColor], @"compatible": @(forgeCompatible)},
+        @{@"id": @"neoforge", @"name": @"NeoForge", @"desc": @"Forge 的分支，支持 1.20.1+", @"icon": @"hammer.fill", @"color": [UIColor systemBrownColor], @"compatible": @(neoForgeCompatible)},
         @{@"id": @"quilt", @"name": @"Quilt", @"desc": @"基于 Fabric 的新一代加载器", @"icon": @"bolt.fill", @"color": [UIColor systemPurpleColor], @"compatible": @(quiltCompatible)}
     ];
 }
@@ -438,6 +439,7 @@
     if (components.count < 2) return YES;
     NSInteger major = [components[0] integerValue];
     NSInteger minor = [components[1] integerValue];
+    // Fabric supports 1.14 and above
     if (major > 1) return YES;
     if (major == 1 && minor >= 14) return YES;
     return NO;
@@ -449,6 +451,7 @@
     if (components.count < 2) return YES;
     NSInteger major = [components[0] integerValue];
     NSInteger minor = [components[1] integerValue];
+    // Quilt supports 1.18 and above
     if (major > 1) return YES;
     if (major == 1 && minor >= 18) return YES;
     return NO;
@@ -460,11 +463,10 @@
     if (components.count < 2) return YES;
     NSInteger major = [components[0] integerValue];
     NSInteger minor = [components[1] integerValue];
-    NSInteger patch = (components.count > 2) ? [components[2] integerValue] : 0;
-    if (major == 1 && minor == 21 && patch >= 4) return NO;
-    if (major == 1 && minor > 21) return NO;
-    if (major > 1) return NO;
-    return YES;
+    // Forge supports versions 1.1 and above
+    if (major == 1 && minor >= 1) return YES;
+    if (major > 1) return YES; // future major versions
+    return NO;
 }
 
 - (BOOL)isNeoForgeCompatible {
@@ -474,9 +476,10 @@
     NSInteger major = [components[0] integerValue];
     NSInteger minor = [components[1] integerValue];
     NSInteger patch = (components.count > 2) ? [components[2] integerValue] : 0;
+    // NeoForge supports 1.20.1 and above
     if (major > 1) return YES;
-    if (major == 1 && minor > 20) return YES;
     if (major == 1 && minor == 20 && patch >= 1) return YES;
+    if (major == 1 && minor > 20) return YES;
     return NO;
 }
 
@@ -507,10 +510,10 @@
     [self.backgroundBlurView.contentView addSubview:self.tableView];
     
     [NSLayoutConstraint activateConstraints:@[
-        [self.tableView.topAnchor constraintEqualToAnchor:self.backgroundBlurView.contentView.safeAreaLayoutGuide.topAnchor],
-        [self.tableView.leadingAnchor constraintEqualToAnchor:self.backgroundBlurView.contentView.leadingAnchor],
-        [self.tableView.trailingAnchor constraintEqualToAnchor:self.backgroundBlurView.contentView.trailingAnchor],
-        [self.tableView.heightAnchor constraintEqualToConstant:380]
+        [self.tableView.topAnchor constraintEqualToAnchor:self.backgroundBlurView.contentView.safeAreaLayoutGuide.topAnchor constant:8],
+        [self.tableView.leadingAnchor constraintEqualToAnchor:self.backgroundBlurView.contentView.leadingAnchor constant:16],
+        [self.tableView.trailingAnchor constraintEqualToAnchor:self.backgroundBlurView.contentView.trailingAnchor constant:-16],
+        [self.tableView.heightAnchor constraintEqualToConstant:320]
     ]];
 }
 
@@ -591,7 +594,7 @@
         [self.versionTableView.topAnchor constraintEqualToAnchor:self.optionsContainer.bottomAnchor constant:8],
         [self.versionTableView.leadingAnchor constraintEqualToAnchor:self.backgroundBlurView.contentView.leadingAnchor constant:16],
         [self.versionTableView.trailingAnchor constraintEqualToAnchor:self.backgroundBlurView.contentView.trailingAnchor constant:-16],
-        [self.versionTableView.bottomAnchor constraintEqualToAnchor:self.backgroundBlurView.contentView.safeAreaLayoutGuide.bottomAnchor constant:-70],
+        [self.versionTableView.bottomAnchor constraintEqualToAnchor:self.installButton.topAnchor constant:-16],
         
         [self.loadingIndicator.centerXAnchor constraintEqualToAnchor:self.versionTableView.centerXAnchor],
         [self.loadingIndicator.centerYAnchor constraintEqualToAnchor:self.versionTableView.centerYAnchor]
@@ -612,7 +615,7 @@
     [NSLayoutConstraint activateConstraints:@[
         [self.installButton.leadingAnchor constraintEqualToAnchor:self.backgroundBlurView.contentView.leadingAnchor constant:16],
         [self.installButton.trailingAnchor constraintEqualToAnchor:self.backgroundBlurView.contentView.trailingAnchor constant:-16],
-        [self.installButton.bottomAnchor constraintEqualToAnchor:self.backgroundBlurView.contentView.safeAreaLayoutGuide.bottomAnchor constant:-20],
+        [self.installButton.bottomAnchor constraintEqualToAnchor:self.backgroundBlurView.contentView.bottomAnchor constant:-20],
         [self.installButton.heightAnchor constraintEqualToConstant:50]
     ]];
 }
@@ -626,6 +629,10 @@
     BOOL needsVersion = ![self.selectedLoader isEqualToString:@"vanilla"];
     
     if (needsVersion) {
+        if (self.loaderVersions == nil) {
+            [self showAlert:@"正在加载版本列表" message:@"请稍后再试"];
+            return;
+        }
         if (self.loaderVersions.count == 0) {
             NSString *loaderName = @"";
             for (NSDictionary *loader in self.loaders) {
@@ -662,7 +669,7 @@
 #pragma mark - Load Versions (Real Network)
 
 - (void)loadVersionsForLoader:(NSString *)loaderId {
-    self.loaderVersions = nil;
+    self.loaderVersions = nil; // 标记正在加载
     self.selectedLoaderVersion = nil;
     [self.versionTableView reloadData];
     self.versionTableView.hidden = NO;
@@ -759,17 +766,18 @@
     if ([elementName isEqualToString:@"version"]) {
         NSString *version = [self.currentVersionValue stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
         if (version.length > 0) {
-            if (self.isParsingForge) {
-                // Forge 版本格式：游戏版本-加载器版本
-                NSString *prefix = [self.gameVersion stringByAppendingString:@"-"];
-                if ([version hasPrefix:prefix]) {
-                    [self.forgeVersionList addObject:version];
-                }
-            } else {
-                // NeoForge 需要提取游戏版本
-                NSString *mcVersion = [self extractMinecraftVersionFromNeoForgeVersion:version];
-                if ([mcVersion isEqualToString:self.gameVersion]) {
-                    [self.forgeVersionList addObject:version];
+            // 修复：添加同步锁，防止多线程修改数组
+            @synchronized (self) {
+                if (self.isParsingForge) {
+                    NSString *prefix = [self.gameVersion stringByAppendingString:@"-"];
+                    if ([version hasPrefix:prefix]) {
+                        [self.forgeVersionList addObject:version];
+                    }
+                } else {
+                    NSString *mcVersion = [self extractMinecraftVersionFromNeoForgeVersion:version];
+                    if ([mcVersion isEqualToString:self.gameVersion]) {
+                        [self.forgeVersionList addObject:version];
+                    }
                 }
             }
         }
@@ -803,7 +811,7 @@
     });
 }
 
-// 从 NeoForge 版本号中提取 Minecraft 版本（简化版，与 ForgeInstallViewController 中一致）
+// 从 NeoForge 版本号中提取 Minecraft 版本（与 ForgeInstallViewController 一致）
 - (NSString *)extractMinecraftVersionFromNeoForgeVersion:(NSString *)version {
     NSString *cleanVersion = version;
     NSRange hyphenRange = [version rangeOfString:@"-"];
@@ -998,9 +1006,20 @@
 @property (nonatomic, strong) DownloadProgressViewController *progressVC;
 @property (nonatomic, strong) UIAlertController *downloadingAlert;
 
+// KVO 观察标志
+@property (nonatomic, assign) BOOL isObservingProgress;
+
 @end
 
 @implementation DownloadViewController
+
+// 修复：添加 dealloc 方法
+- (void)dealloc {
+    if (self.isObservingProgress) {
+        [self.downloadTask.progress removeObserver:self forKeyPath:@"fractionCompleted"];
+        self.isObservingProgress = NO;
+    }
+}
 
 - (void)viewDidLoad {
     [super viewDidLoad];
@@ -1015,6 +1034,7 @@
     self.hasMoreMods = YES;
     self.hasMoreShaders = YES;
     self.currentSortField = @"follows";
+    self.isObservingProgress = NO;
     
     [self setupUI];
     [self switchToTab:0];
@@ -1433,7 +1453,7 @@
     
     [alert addAction:[UIAlertAction actionWithTitle:@"取消"
                                               style:UIAlertActionStyleCancel
-                                              handler:nil]];
+                                            handler:nil]];
     
     if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
         alert.popoverPresentationController.sourceView = self.filterButton;
@@ -1623,7 +1643,7 @@
     [self showLoaderSelectionForVersion:version];
 }
 
-#pragma mark - Loader Selection (Full Screen Translucent)
+#pragma mark - Loader Selection (居中卡片)
 
 - (void)showLoaderSelectionForVersion:(NSDictionary *)version {
     LoaderSelectionViewController *loaderVC = [[LoaderSelectionViewController alloc] init];
@@ -1644,8 +1664,8 @@
     };
     
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:loaderVC];
-    nav.modalPresentationStyle = UIModalPresentationOverFullScreen;
-    nav.modalTransitionStyle = UIModalTransitionStyleCrossDissolve;
+    nav.modalPresentationStyle = UIModalPresentationFormSheet; // 改为居中卡片
+    nav.modalTransitionStyle = UIModalTransitionStyleCoverVertical;
     
     [self presentViewController:nav animated:YES completion:nil];
 }
@@ -1715,11 +1735,17 @@
                                                            style:UIAlertActionStyleDestructive
                                                          handler:^(UIAlertAction * _Nonnull action) {
         if (weakSelf.downloadTask) {
+            if (weakSelf.isObservingProgress) {
+                [weakSelf.downloadTask.progress removeObserver:weakSelf forKeyPath:@"fractionCompleted"];
+                weakSelf.isObservingProgress = NO;
+            }
             [weakSelf.downloadTask.progress cancel];
             weakSelf.downloadTask = nil;
         }
         weakSelf.view.userInteractionEnabled = YES;
         [weakSelf.loadingIndicator stopAnimating];
+        [weakSelf.downloadingAlert dismissViewControllerAnimated:YES completion:nil];
+        weakSelf.downloadingAlert = nil;
     }];
     [self.downloadingAlert addAction:cancelAction];
     
@@ -1739,6 +1765,10 @@
     
     self.downloadTask.handleError = ^{
         dispatch_async(dispatch_get_main_queue(), ^{
+            if (weakSelf.isObservingProgress) {
+                [weakSelf.downloadTask.progress removeObserver:weakSelf forKeyPath:@"fractionCompleted"];
+                weakSelf.isObservingProgress = NO;
+            }
             weakSelf.view.userInteractionEnabled = YES;
             [weakSelf.loadingIndicator stopAnimating];
             weakSelf.downloadTask = nil;
@@ -1753,10 +1783,16 @@
         [self.downloadTask downloadVersion:version];
         
         dispatch_async(dispatch_get_main_queue(), ^{
+            // 修复：先移除可能存在的旧观察者
+            if (self.isObservingProgress) {
+                [self.downloadTask.progress removeObserver:self forKeyPath:@"fractionCompleted"];
+                self.isObservingProgress = NO;
+            }
             [self.downloadTask.progress addObserver:self
                                          forKeyPath:@"fractionCompleted"
                                             options:NSKeyValueObservingOptionInitial
                                             context:(void *)@"DownloadProgressContext"];
+            self.isObservingProgress = YES;
         });
     });
 }
@@ -1906,24 +1942,36 @@
     forgeVC.gameVersion = gameVersion;
     
     __weak typeof(self) weakSelf = self;
-    void (^completion)(BOOL, NSString *, NSError *) = ^(BOOL success, NSString *profileName, NSError *error) {
+    void (^completion)(BOOL, NSString *, NSString *, NSError *) = ^(BOOL success, NSString *profileName, NSString *filePath, NSError *error) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
         
         if (success) {
-            if (installOptiFine) {
-                [strongSelf downloadOptiFine:gameVersion completion:^(BOOL optiSuccess, NSError *optiError) {
-                    dispatch_async(dispatch_get_main_queue(), ^{
-                        if (optiSuccess) {
-                            [strongSelf showSuccessMessage:[NSString stringWithFormat:@"Forge 安装成功\nOptiFine 已自动安装\n配置文件: %@", profileName]];
-                        } else {
-                            [strongSelf showSuccessMessage:[NSString stringWithFormat:@"Forge 安装成功\nOptiFine 安装失败: %@\n配置文件: %@", optiError.localizedDescription, profileName]];
-                        }
-                    });
-                }];
-            } else {
-                [strongSelf showSuccessMessage:[NSString stringWithFormat:@"Forge 安装成功\n配置文件: %@", profileName]];
-            }
+            // 显示成功消息，然后跳转到安装器
+            UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"下载完成"
+                                                                            message:@"即将运行安装器..."
+                                                                     preferredStyle:UIAlertControllerStyleAlert];
+            [strongSelf presentViewController:alert animated:YES completion:nil];
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                [alert dismissViewControllerAnimated:YES completion:nil];
+                // 获取navVC并跳转
+                LauncherNavigationController *navVC = (id)((UISplitViewController *)strongSelf.presentingViewController).viewControllers[1];
+                [navVC enterModInstallerWithPath:filePath hitEnterAfterWindowShown:YES];
+                
+                if (installOptiFine) {
+                    [strongSelf downloadOptiFine:gameVersion completion:^(BOOL optiSuccess, NSError *optiError) {
+                        dispatch_async(dispatch_get_main_queue(), ^{
+                            if (optiSuccess) {
+                                [strongSelf showSuccessMessage:[NSString stringWithFormat:@"Forge 安装成功\nOptiFine 已自动安装\n配置文件: %@", profileName]];
+                            } else {
+                                [strongSelf showSuccessMessage:[NSString stringWithFormat:@"Forge 安装成功\nOptiFine 安装失败: %@\n配置文件: %@", optiError.localizedDescription, profileName]];
+                            }
+                        });
+                    }];
+                } else {
+                    [strongSelf showSuccessMessage:[NSString stringWithFormat:@"Forge 安装成功\n配置文件: %@", profileName]];
+                }
+            });
         } else {
             [strongSelf showError:error.localizedDescription ?: @"Forge 安装失败"];
         }
@@ -2015,12 +2063,21 @@
     neoForgeVC.isNeoForge = YES;
     
     __weak typeof(self) weakSelf = self;
-    void (^completion)(BOOL, NSString *, NSError *) = ^(BOOL success, NSString *profileName, NSError *error) {
+    void (^completion)(BOOL, NSString *, NSString *, NSError *) = ^(BOOL success, NSString *profileName, NSString *filePath, NSError *error) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
         
         if (success) {
-            [strongSelf showSuccessMessage:[NSString stringWithFormat:@"NeoForge 安装成功\n配置文件: %@", profileName]];
+            UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"下载完成"
+                                                                            message:@"即将运行安装器..."
+                                                                     preferredStyle:UIAlertControllerStyleAlert];
+            [strongSelf presentViewController:alert animated:YES completion:nil];
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                [alert dismissViewControllerAnimated:YES completion:nil];
+                LauncherNavigationController *navVC = (id)((UISplitViewController *)strongSelf.presentingViewController).viewControllers[1];
+                [navVC enterModInstallerWithPath:filePath hitEnterAfterWindowShown:YES];
+                [strongSelf showSuccessMessage:[NSString stringWithFormat:@"NeoForge 安装成功\n配置文件: %@", profileName]];
+            });
         } else {
             [strongSelf showError:error.localizedDescription ?: @"NeoForge 安装失败"];
         }
@@ -2322,6 +2379,8 @@
     
     NSProgress *progress = self.downloadTask.progress;
     NSProgress *textProgress = self.downloadTask.textProgress;
+    // 修复：添加空指针保护
+    if (!textProgress) return;
     
     NSInteger completedUnitCount = progress.totalUnitCount * progress.fractionCompleted;
     textProgress.completedUnitCount = completedUnitCount;
@@ -2385,7 +2444,10 @@
         }
         
         if (progress.finished) {
-            [self.downloadTask.progress removeObserver:self forKeyPath:@"fractionCompleted"];
+            if (self.isObservingProgress) {
+                [self.downloadTask.progress removeObserver:self forKeyPath:@"fractionCompleted"];
+                self.isObservingProgress = NO;
+            }
             
             lastMsTime = 0;
             lastSecTime = 0;
