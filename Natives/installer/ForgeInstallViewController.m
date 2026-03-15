@@ -207,9 +207,6 @@
         @"NeoForge": @{
             @"installer": @"https://maven.neoforged.net/releases/net/neoforged/neoforge/%1$@/neoforge-%1$@-installer.jar",
             @"metadata": @"https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml"
-        },
-        @"OptiFine": @{
-            @"metadata": @"https://raw.githubusercontent.com/huanghongxun/HMCL/master/hmclweb/optifine/version_manifest.json"
         }
     };
     
@@ -250,7 +247,7 @@
 
 - (void)actionClose {
     if (self.completionHandler) {
-        self.completionHandler(NO, nil, nil);
+        self.completionHandler(NO, nil, nil, nil);
     }
     [self.navigationController dismissViewControllerAnimated:YES completion:nil];
 }
@@ -729,49 +726,19 @@
                 }
                 [self switchToReadyState];
                 if (self.completionHandler) {
-                    self.completionHandler(NO, nil, error);
+                    self.completionHandler(NO, nil, nil, error);
                 }
                 return;
             }
             
             NSString *profileName = [NSString stringWithFormat:@"%@-%@", self.currentVendor, versionString];
             
+            // 调用completionHandler并传递文件路径，由调用者处理跳转
             if (self.completionHandler) {
-                showDialog(@"Download Complete",
-                          [NSString stringWithFormat:@"%@ installer downloaded. Installation will proceed in background.", self.currentVendor]);
-                self.completionHandler(YES, profileName, nil);
-                
-                LauncherNavigationController *navVC = (id)((UISplitViewController *)self.presentingViewController).viewControllers[1];
-                
-                if (self.searchController.isActive) {
-                    [self.searchController dismissViewControllerAnimated:NO completion:^{
-                        [self dismissViewControllerAnimated:YES completion:^{
-                            [navVC enterModInstallerWithPath:outPath hitEnterAfterWindowShown:YES];
-                        }];
-                    }];
-                } else {
-                    [self dismissViewControllerAnimated:YES completion:^{
-                        [navVC enterModInstallerWithPath:outPath hitEnterAfterWindowShown:YES];
-                    }];
-                }
-            } else {
-                showDialog(@"Download Complete", 
-                          [NSString stringWithFormat:@"%@ installer will now run. After installation completes, you will need to restart the app.", self.currentVendor]);
-                
-                LauncherNavigationController *navVC = (id)((UISplitViewController *)self.presentingViewController).viewControllers[1];
-                
-                if (self.searchController.isActive) {
-                    [self.searchController dismissViewControllerAnimated:NO completion:^{
-                        [self dismissViewControllerAnimated:YES completion:^{
-                            [navVC enterModInstallerWithPath:outPath hitEnterAfterWindowShown:YES];
-                        }];
-                    }];
-                } else {
-                    [self dismissViewControllerAnimated:YES completion:^{
-                        [navVC enterModInstallerWithPath:outPath hitEnterAfterWindowShown:YES];
-                    }];
-                }
+                self.completionHandler(YES, profileName, outPath, nil);
             }
+            
+            [self switchToReadyState];
         });
     }];
     
@@ -924,9 +891,13 @@
         NSMutableArray *newVersionList = [NSMutableArray new];
         NSMutableArray *newForgeList = [NSMutableArray new];
         for (NSNumber *idx in indices) {
-            [newVisibility addObject:self.visibilityList[idx.integerValue]];
-            [newVersionList addObject:self.versionList[idx.integerValue]];
-            [newForgeList addObject:self.forgeList[idx.integerValue]];
+            // 修复：防止越界
+            NSInteger index = idx.integerValue;
+            if (index < self.visibilityList.count && index < self.versionList.count && index < self.forgeList.count) {
+                [newVisibility addObject:self.visibilityList[index]];
+                [newVersionList addObject:self.versionList[index]];
+                [newForgeList addObject:self.forgeList[index]];
+            }
         }
         self.visibilityList = newVisibility;
         self.versionList = newVersionList;
