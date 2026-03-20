@@ -247,7 +247,7 @@
 
 - (void)actionClose {
     if (self.completionHandler) {
-        self.completionHandler(NO, nil, nil, nil);
+        self.completionHandler(NO, nil, nil);   // 修复：参数从4个改为3个
     }
     [self.navigationController dismissViewControllerAnimated:YES completion:nil];
 }
@@ -726,16 +726,15 @@
                 }
                 [self switchToReadyState];
                 if (self.completionHandler) {
-                    self.completionHandler(NO, nil, nil, error);
+                    self.completionHandler(NO, nil, error);   // 修复：参数从4个改为3个
                 }
                 return;
             }
             
             NSString *profileName = [NSString stringWithFormat:@"%@-%@", self.currentVendor, versionString];
             
-            // 调用completionHandler并传递文件路径，由调用者处理跳转
             if (self.completionHandler) {
-                self.completionHandler(YES, profileName, outPath, nil);
+                self.completionHandler(YES, profileName, outPath);   // 修复：参数从4个改为3个
             }
             
             [self switchToReadyState];
