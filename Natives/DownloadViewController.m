@@ -15,6 +15,7 @@
 #import "ShaderVersion.h"
 #import "installer/FabricInstallViewController.h"
 #import "installer/ForgeInstallViewController.h"
+#import "LauncherNavigationController.h"   // 新增导入
 #import <QuartzCore/QuartzCore.h>
 
 #include <sys/time.h>
@@ -1942,11 +1943,13 @@
     forgeVC.gameVersion = gameVersion;
     
     __weak typeof(self) weakSelf = self;
-    void (^completion)(BOOL, NSString *, NSString *, NSError *) = ^(BOOL success, NSString *profileName, NSString *filePath, NSError *error) {
+    // 修复：改为 3 参数 block
+    void (^completion)(BOOL, NSString *, id) = ^(BOOL success, NSString *profileName, id resultOrError) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
         
         if (success) {
+            NSString *filePath = (NSString *)resultOrError;
             // 显示成功消息，然后跳转到安装器
             UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"下载完成"
                                                                             message:@"即将运行安装器..."
@@ -1973,6 +1976,7 @@
                 }
             });
         } else {
+            NSError *error = (NSError *)resultOrError;
             [strongSelf showError:error.localizedDescription ?: @"Forge 安装失败"];
         }
     };
@@ -2063,11 +2067,13 @@
     neoForgeVC.isNeoForge = YES;
     
     __weak typeof(self) weakSelf = self;
-    void (^completion)(BOOL, NSString *, NSString *, NSError *) = ^(BOOL success, NSString *profileName, NSString *filePath, NSError *error) {
+    // 修复：改为 3 参数 block
+    void (^completion)(BOOL, NSString *, id) = ^(BOOL success, NSString *profileName, id resultOrError) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
         
         if (success) {
+            NSString *filePath = (NSString *)resultOrError;
             UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"下载完成"
                                                                             message:@"即将运行安装器..."
                                                                      preferredStyle:UIAlertControllerStyleAlert];
@@ -2079,6 +2085,7 @@
                 [strongSelf showSuccessMessage:[NSString stringWithFormat:@"NeoForge 安装成功\n配置文件: %@", profileName]];
             });
         } else {
+            NSError *error = (NSError *)resultOrError;
             [strongSelf showError:error.localizedDescription ?: @"NeoForge 安装失败"];
         }
     };
