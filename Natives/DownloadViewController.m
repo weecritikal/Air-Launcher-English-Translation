@@ -1,3 +1,6 @@
+// DownloadViewController.m
+// 修复版本：添加 LoaderSelectionViewController 基类声明，调整初始化顺序，增加空数据提示，修复网络任务取消等
+
 #import "DownloadViewController.h"
 #import "installer/modpack/ModrinthAPI.h"
 #import "ModService.h"
@@ -360,6 +363,13 @@
 
 #pragma mark - Loader Selection View Controller (居中卡片式)
 
+// 修复：添加基类声明，确保编译器识别
+@interface LoaderSelectionViewController : UIViewController
+@property (nonatomic, copy) void (^completion)(NSString *loader, BOOL installFabricAPI, BOOL installOptiFine, NSString *loaderVersion);
+@property (nonatomic, copy) void (^cancelled)(void);
+@property (nonatomic, strong) NSString *gameVersion;
+@end
+
 @interface LoaderSelectionViewController () <UITableViewDataSource, UITableViewDelegate, NSXMLParserDelegate>
 @property (nonatomic, strong) NSArray *loaders;
 @property (nonatomic, strong) UITableView *tableView;
@@ -375,7 +385,7 @@
 @property (nonatomic, strong) NSString *selectedLoaderVersion;
 @property (nonatomic, strong) UIActivityIndicatorView *loadingIndicator;
 @property (nonatomic, strong) UIVisualEffectView *backgroundBlurView;
-@property (nonatomic, strong) UILabel *emptyVersionsLabel;  // 新增空数据提示
+@property (nonatomic, strong) UILabel *emptyVersionsLabel;
 
 // For XML parsing
 @property (nonatomic, strong) NSMutableArray *forgeVersionList;
@@ -389,7 +399,6 @@
 @implementation LoaderSelectionViewController
 
 - (void)dealloc {
-    // 取消正在进行的网络任务，防止野指针
     if (self.currentVersionTask) {
         [self.currentVersionTask cancel];
         self.currentVersionTask = nil;
@@ -401,8 +410,6 @@
     
     self.title = @"选择安装方式";
     self.view.backgroundColor = [UIColor clearColor];
-    
-    // 设置 preferredContentSize 使界面居中显示（FormSheet）
     self.preferredContentSize = CGSizeMake(540, 620);
     
     UIBlurEffect *blurEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial];
@@ -446,7 +453,6 @@
     if (components.count < 2) return YES;
     NSInteger major = [components[0] integerValue];
     NSInteger minor = [components[1] integerValue];
-    // Fabric supports 1.14 and above
     if (major > 1) return YES;
     if (major == 1 && minor >= 14) return YES;
     return NO;
@@ -458,7 +464,6 @@
     if (components.count < 2) return YES;
     NSInteger major = [components[0] integerValue];
     NSInteger minor = [components[1] integerValue];
-    // Quilt supports 1.18 and above
     if (major > 1) return YES;
     if (major == 1 && minor >= 18) return YES;
     return NO;
@@ -470,9 +475,8 @@
     if (components.count < 2) return YES;
     NSInteger major = [components[0] integerValue];
     NSInteger minor = [components[1] integerValue];
-    // Forge supports versions 1.1 and above
     if (major == 1 && minor >= 1) return YES;
-    if (major > 1) return YES; // future major versions
+    if (major > 1) return YES;
     return NO;
 }
 
@@ -483,7 +487,6 @@
     NSInteger major = [components[0] integerValue];
     NSInteger minor = [components[1] integerValue];
     NSInteger patch = (components.count > 2) ? [components[2] integerValue] : 0;
-    // NeoForge supports 1.20.1 and above
     if (major > 1) return YES;
     if (major == 1 && minor == 20 && patch >= 1) return YES;
     if (major == 1 && minor > 20) return YES;
@@ -491,9 +494,9 @@
 }
 
 - (void)setupNavigation {
-    self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"chevron.left"] 
-                                                                              style:UIBarButtonItemStylePlain 
-                                                                             target:self 
+    self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"chevron.left"]
+                                                                              style:UIBarButtonItemStylePlain
+                                                                             target:self
                                                                              action:@selector(backButtonTapped)];
     self.navigationItem.leftBarButtonItem.tintColor = [UIColor labelColor];
 }
@@ -516,7 +519,8 @@
     [self.tableView registerClass:[LoaderCell class] forCellReuseIdentifier:@"LoaderCell"];
     [self.backgroundBlurView.contentView addSubview:self.tableView];
     
-    UILayoutGuide *safeGuide = nil;
+    // iOS 11+ 兼容 safeAreaLayoutGuide
+    UILayoutGuide *safeGuide;
     if (@available(iOS 11.0, *)) {
         safeGuide = self.backgroundBlurView.contentView.safeAreaLayoutGuide;
     } else {
@@ -667,7 +671,7 @@
                     break;
                 }
             }
-            [self showAlert:[NSString stringWithFormat:@"%@ 暂无可用的版本", loaderName] 
+            [self showAlert:[NSString stringWithFormat:@"%@ 暂无可用的版本", loaderName]
                     message:[NSString stringWithFormat:@"当前选择的 Minecraft %@ 没有可用的 %@ 版本", self.gameVersion, loaderName]];
             return;
         }
@@ -695,14 +699,13 @@
 #pragma mark - Load Versions (Real Network)
 
 - (void)loadVersionsForLoader:(NSString *)loaderId {
-    self.loaderVersions = nil; // 标记正在加载
+    self.loaderVersions = nil;
     self.selectedLoaderVersion = nil;
     [self.versionTableView reloadData];
     self.versionTableView.hidden = NO;
     self.emptyVersionsLabel.hidden = YES;
     [self.loadingIndicator startAnimating];
     
-    // 取消之前的任务
     if (self.currentVersionTask) {
         [self.currentVersionTask cancel];
         self.currentVersionTask = nil;
@@ -1076,7 +1079,6 @@
 @property (nonatomic, strong) DownloadProgressViewController *progressVC;
 @property (nonatomic, strong) UIAlertController *downloadingAlert;
 
-// KVO 观察标志
 @property (nonatomic, assign) BOOL isObservingProgress;
 
 @end
@@ -1088,7 +1090,6 @@
         [self.downloadTask.progress removeObserver:self forKeyPath:@"fractionCompleted"];
         self.isObservingProgress = NO;
     }
-    // 取消下载任务
     if (self.downloadTask) {
         [self.downloadTask.progress cancel];
         self.downloadTask = nil;
@@ -1378,7 +1379,6 @@
     self.filteredVersions = filtered;
     [self.versionCollectionView reloadData];
     
-    // 空数据提示
     self.emptyLabel.hidden = (self.filteredVersions.count > 0);
     if (self.filteredVersions.count == 0) {
         self.emptyLabel.text = @"暂无版本";
@@ -2074,7 +2074,6 @@
             [strongSelf presentViewController:alert animated:YES completion:nil];
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                 [alert dismissViewControllerAnimated:YES completion:nil];
-                // 获取导航控制器并跳转，增加类型安全
                 UIViewController *presenting = strongSelf.presentingViewController;
                 if ([presenting isKindOfClass:[UISplitViewController class]]) {
                     UISplitViewController *splitVC = (UISplitViewController *)presenting;
@@ -2136,7 +2135,6 @@
             return;
         }
         
-        // 保存到当前实例的 mods 文件夹
         NSString *modsDir = [self currentInstanceModsPath];
         NSString *filename = [NSString stringWithFormat:@"OptiFine_%@_%@.jar", gameVersion, optiFineVersion];
         NSString *savePath = [modsDir stringByAppendingPathComponent:filename];
