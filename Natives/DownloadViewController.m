@@ -1,6 +1,3 @@
-// DownloadViewController.m
-// 修复版本：添加 LoaderSelectionViewController 基类声明，调整初始化顺序，增加空数据提示，修复网络任务取消等
-
 #import "DownloadViewController.h"
 #import "installer/modpack/ModrinthAPI.h"
 #import "ModService.h"
