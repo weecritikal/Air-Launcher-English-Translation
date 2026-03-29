@@ -19,7 +19,8 @@
 @property (nonatomic, strong) UIButton *importButton;
 @property (nonatomic, strong) NSMutableArray<NSDictionary *> *importedModpacks;
 @property (nonatomic, strong) ModpackImportService *importService;
-@property (nonatomic, strong) NSDictionary *currentImportingModpack; // 当前正在导入的整合包
+@property (nonatomic, strong) NSDictionary *currentImportingModpack;
+@property (nonatomic, strong) UIVisualEffectView *backgroundBlurView;
 
 @end
 
@@ -28,7 +29,18 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.title = @"导入整合包";
-    self.view.backgroundColor = [UIColor systemBackgroundColor];
+    
+    // 设置毛玻璃背景
+    UIBlurEffect *blurEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial];
+    self.backgroundBlurView = [[UIVisualEffectView alloc] initWithEffect:blurEffect];
+    self.backgroundBlurView.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.view addSubview:self.backgroundBlurView];
+    [NSLayoutConstraint activateConstraints:@[
+        [self.backgroundBlurView.topAnchor constraintEqualToAnchor:self.view.topAnchor],
+        [self.backgroundBlurView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.backgroundBlurView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.backgroundBlurView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor]
+    ]];
     
     self.importService = [[ModpackImportService alloc] init];
     self.importedModpacks = [NSMutableArray array];
@@ -48,22 +60,24 @@
     self.importButton.layer.cornerRadius = 10;
     self.importButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
     [self.importButton addTarget:self action:@selector(selectModpackFile) forControlEvents:UIControlEventTouchUpInside];
-    [self.view addSubview:self.importButton];
+    [self.backgroundBlurView.contentView addSubview:self.importButton];
     
     // 已导入整合包列表
     self.tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
     self.tableView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.tableView.backgroundColor = [UIColor clearColor];
     self.tableView.dataSource = self;
     self.tableView.delegate = self;
     [self.tableView registerClass:[UITableViewCell class] forCellReuseIdentifier:@"ModpackCell"];
     self.tableView.rowHeight = 80;
-    [self.view addSubview:self.tableView];
+    self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
+    [self.backgroundBlurView.contentView addSubview:self.tableView];
     
     // 加载指示器
     self.activityIndicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleLarge];
     self.activityIndicator.translatesAutoresizingMaskIntoConstraints = NO;
     self.activityIndicator.hidesWhenStopped = YES;
-    [self.view addSubview:self.activityIndicator];
+    [self.backgroundBlurView.contentView addSubview:self.activityIndicator];
     
     // 空列表提示
     self.emptyLabel = [[UILabel alloc] init];
@@ -72,25 +86,25 @@
     self.emptyLabel.textColor = [UIColor secondaryLabelColor];
     self.emptyLabel.text = @"还没有导入的整合包\n点击上方按钮导入";
     self.emptyLabel.numberOfLines = 0;
-    [self.view addSubview:self.emptyLabel];
+    [self.backgroundBlurView.contentView addSubview:self.emptyLabel];
     
     // 设置约束
     [NSLayoutConstraint activateConstraints:@[
-        [self.importButton.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:16],
-        [self.importButton.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:16],
-        [self.importButton.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-16],
+        [self.importButton.topAnchor constraintEqualToAnchor:self.backgroundBlurView.contentView.safeAreaLayoutGuide.topAnchor constant:16],
+        [self.importButton.leadingAnchor constraintEqualToAnchor:self.backgroundBlurView.contentView.leadingAnchor constant:16],
+        [self.importButton.trailingAnchor constraintEqualToAnchor:self.backgroundBlurView.contentView.trailingAnchor constant:-16],
         [self.importButton.heightAnchor constraintEqualToConstant:50],
         
         [self.tableView.topAnchor constraintEqualToAnchor:self.importButton.bottomAnchor constant:16],
-        [self.tableView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
-        [self.tableView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [self.tableView.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor],
+        [self.tableView.leadingAnchor constraintEqualToAnchor:self.backgroundBlurView.contentView.leadingAnchor],
+        [self.tableView.trailingAnchor constraintEqualToAnchor:self.backgroundBlurView.contentView.trailingAnchor],
+        [self.tableView.bottomAnchor constraintEqualToAnchor:self.backgroundBlurView.contentView.safeAreaLayoutGuide.bottomAnchor],
         
-        [self.activityIndicator.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
-        [self.activityIndicator.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor],
+        [self.activityIndicator.centerXAnchor constraintEqualToAnchor:self.backgroundBlurView.contentView.centerXAnchor],
+        [self.activityIndicator.centerYAnchor constraintEqualToAnchor:self.backgroundBlurView.contentView.centerYAnchor],
         
-        [self.emptyLabel.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
-        [self.emptyLabel.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor]
+        [self.emptyLabel.centerXAnchor constraintEqualToAnchor:self.backgroundBlurView.contentView.centerXAnchor],
+        [self.emptyLabel.centerYAnchor constraintEqualToAnchor:self.backgroundBlurView.contentView.centerYAnchor]
     ]];
 }
 
@@ -108,12 +122,10 @@
 #pragma mark - 文件选择
 
 - (void)selectModpackFile {
-    // 支持 .mrpack 和 .zip 文件
     NSArray<UTType *> *contentTypes = @[
         [UTType typeWithFilenameExtension:@"mrpack"],
         [UTType typeWithFilenameExtension:@"zip"]
     ];
-    
     UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc] initForOpeningContentTypes:contentTypes];
     picker.delegate = self;
     picker.allowsMultipleSelection = NO;
@@ -124,38 +136,28 @@
 
 - (void)documentPicker:(UIDocumentPickerViewController *)controller didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls {
     if (urls.count == 0) return;
-    
     NSURL *fileURL = urls.firstObject;
     NSString *fileExtension = fileURL.pathExtension.lowercaseString;
-    
     if (![fileExtension isEqualToString:@"mrpack"] && ![fileExtension isEqualToString:@"zip"]) {
         [self showAlertWithTitle:@"无效的文件" message:@"请选择 .mrpack 或 .zip 文件"];
         return;
     }
-    
-    // 开始安全范围的资源访问
     BOOL accessGranted = [fileURL startAccessingSecurityScopedResource];
     if (!accessGranted) {
         [self showAlertWithTitle:@"访问被拒绝" message:@"无法访问选中的文件"];
         return;
     }
-    
     [self.activityIndicator startAnimating];
-    
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         NSError *error = nil;
         NSDictionary *modpackInfo = [self.importService parseModpackAtURL:fileURL error:&error];
-        
         [fileURL stopAccessingSecurityScopedResource];
-        
         dispatch_async(dispatch_get_main_queue(), ^{
             [self.activityIndicator stopAnimating];
-            
             if (error) {
                 [self showAlertWithTitle:@"解析失败" message:error.localizedDescription];
                 return;
             }
-            
             if (modpackInfo) {
                 self.currentImportingModpack = modpackInfo;
                 [self showModpackImportConfirmation:modpackInfo];
@@ -166,9 +168,7 @@
     });
 }
 
-- (void)documentPickerWasCancelled:(UIDocumentPickerViewController *)controller {
-    // 用户取消
-}
+- (void)documentPickerWasCancelled:(UIDocumentPickerViewController *)controller {}
 
 #pragma mark - 导入确认
 
@@ -178,54 +178,31 @@
     NSString *mcVersion = modpackInfo[@"minecraftVersion"] ?: @"未知";
     NSString *loader = modpackInfo[@"loader"] ?: @"未知";
     NSString *loaderVersion = modpackInfo[@"loaderVersion"] ?: @"";
-    
-    NSString *message = [NSString stringWithFormat:
-        @"名称: %@\n"
-        @"版本: %@\n"
-        @"Minecraft: %@\n"
-        @"加载器: %@ %@\n\n"
-        @"是否导入此整合包？",
-        name, version, mcVersion, loader, loaderVersion];
-    
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"导入整合包"
-                                                                   message:message
-                                                            preferredStyle:UIAlertControllerStyleAlert];
-    
-    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:^(UIAlertAction * _Nonnull action) {
+    NSString *message = [NSString stringWithFormat:@"名称: %@\n版本: %@\nMinecraft: %@\n加载器: %@ %@\n\n是否导入此整合包？", name, version, mcVersion, loader, loaderVersion];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"导入整合包" message:message preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:^(UIAlertAction * _Nonnull action) {
         self.currentImportingModpack = nil;
-    }];
-    
-    UIAlertAction *importAction = [UIAlertAction actionWithTitle:@"导入" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+    }]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"导入" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         [self startModpackImport:modpackInfo];
-    }];
-    
-    [alert addAction:cancelAction];
-    [alert addAction:importAction];
-    
-    // iPad适配
+    }]];
     if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
         alert.popoverPresentationController.sourceView = self.view;
         alert.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(self.view.bounds), CGRectGetMidY(self.view.bounds), 0, 0);
     }
-    
     [self presentViewController:alert animated:YES completion:nil];
 }
 
 - (void)startModpackImport:(NSDictionary *)modpackInfo {
     [self.activityIndicator startAnimating];
-    
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         NSError *error = nil;
         BOOL success = [self.importService importModpack:modpackInfo error:&error];
-        
         dispatch_async(dispatch_get_main_queue(), ^{
             [self.activityIndicator stopAnimating];
             self.currentImportingModpack = nil;
-            
             if (success) {
-                [self showAlertWithTitle:@"导入成功" 
-                                 message:[NSString stringWithFormat:@"整合包 '%@' 已成功导入。", modpackInfo[@"name"]]
-                              completion:^{
+                [self showAlertWithTitle:@"导入成功" message:[NSString stringWithFormat:@"整合包 '%@' 已成功导入。", modpackInfo[@"name"]] completion:^{
                     [self loadImportedModpacks];
                 }];
             } else {
@@ -243,24 +220,29 @@
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-    // 修复：使用UITableViewCellStyleSubtitle样式创建单元格
-    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"ModpackCell"];
-    if (!cell) {
-        cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:@"ModpackCell"];
-    }
-    
+    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"ModpackCell" forIndexPath:indexPath];
     NSDictionary *modpack = self.importedModpacks[indexPath.row];
-    
-    // 配置单元格
     NSString *name = modpack[@"name"] ?: @"未知";
     NSString *mcVersion = modpack[@"minecraftVersion"] ?: @"未知";
     NSString *loader = modpack[@"loader"] ?: @"未知";
-    
     cell.textLabel.text = name;
     cell.detailTextLabel.text = [NSString stringWithFormat:@"Minecraft %@ - %@", mcVersion, loader];
     cell.imageView.image = [UIImage systemImageNamed:@"archivebox"];
     cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
-    
+    cell.backgroundColor = [UIColor clearColor];
+    // 添加卡片背景
+    UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial]];
+    blurView.translatesAutoresizingMaskIntoConstraints = NO;
+    blurView.layer.cornerRadius = 12;
+    blurView.layer.masksToBounds = YES;
+    [cell.contentView insertSubview:blurView atIndex:0];
+    [NSLayoutConstraint activateConstraints:@[
+        [blurView.topAnchor constraintEqualToAnchor:cell.contentView.topAnchor constant:4],
+        [blurView.leadingAnchor constraintEqualToAnchor:cell.contentView.leadingAnchor constant:12],
+        [blurView.trailingAnchor constraintEqualToAnchor:cell.contentView.trailingAnchor constant:-12],
+        [blurView.bottomAnchor constraintEqualToAnchor:cell.contentView.bottomAnchor constant:-4]
+    ]];
+    cell.backgroundView = nil;
     return cell;
 }
 
@@ -268,44 +250,27 @@
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
-    
     NSDictionary *modpack = self.importedModpacks[indexPath.row];
     [self showModpackOptions:modpack];
 }
 
 - (void)showModpackOptions:(NSDictionary *)modpack {
-    UIAlertController *actionSheet = [UIAlertController alertControllerWithTitle:modpack[@"name"]
-                                                                         message:nil
-                                                                  preferredStyle:UIAlertControllerStyleActionSheet];
-    
-    // 启动选项
-    UIAlertAction *launchAction = [UIAlertAction actionWithTitle:@"启动整合包" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+    UIAlertController *actionSheet = [UIAlertController alertControllerWithTitle:modpack[@"name"] message:nil preferredStyle:UIAlertControllerStyleActionSheet];
+    [actionSheet addAction:[UIAlertAction actionWithTitle:@"启动整合包" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         [self launchModpack:modpack];
-    }];
-    
-    // 删除选项
-    UIAlertAction *deleteAction = [UIAlertAction actionWithTitle:@"删除" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
+    }]];
+    [actionSheet addAction:[UIAlertAction actionWithTitle:@"删除" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
         [self deleteModpack:modpack];
-    }];
-    
-    // 取消
-    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil];
-    
-    [actionSheet addAction:launchAction];
-    [actionSheet addAction:deleteAction];
-    [actionSheet addAction:cancelAction];
-    
-    // iPad 适配
+    }]];
+    [actionSheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
     if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
         actionSheet.popoverPresentationController.sourceView = self.view;
         actionSheet.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(self.view.bounds), CGRectGetMidY(self.view.bounds), 0, 0);
     }
-    
     [self presentViewController:actionSheet animated:YES completion:nil];
 }
 
 - (void)launchModpack:(NSDictionary *)modpack {
-    // 切换到整合包配置文件
     NSString *profileName = modpack[@"profileName"];
     if (profileName && PLProfiles.current.profiles[profileName]) {
         PLProfiles.current.selectedProfileName = profileName;
@@ -316,22 +281,15 @@
 }
 
 - (void)deleteModpack:(NSDictionary *)modpack {
-    UIAlertController *confirm = [UIAlertController alertControllerWithTitle:@"确认删除"
-                                                                     message:[NSString stringWithFormat:@"删除整合包 '%@'？此操作无法撤销。", modpack[@"name"]]
-                                                              preferredStyle:UIAlertControllerStyleAlert];
-    
-    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil];
-    
-    UIAlertAction *confirmDeleteAction = [UIAlertAction actionWithTitle:@"删除" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
+    UIAlertController *confirm = [UIAlertController alertControllerWithTitle:@"确认删除" message:[NSString stringWithFormat:@"删除整合包 '%@'？此操作无法撤销。", modpack[@"name"]] preferredStyle:UIAlertControllerStyleAlert];
+    [confirm addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [confirm addAction:[UIAlertAction actionWithTitle:@"删除" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
         [self.activityIndicator startAnimating];
-        
         dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
             NSError *error = nil;
             BOOL success = [self.importService deleteModpack:modpack error:&error];
-            
             dispatch_async(dispatch_get_main_queue(), ^{
                 [self.activityIndicator stopAnimating];
-                
                 if (success) {
                     [self loadImportedModpacks];
                 } else {
@@ -339,11 +297,7 @@
                 }
             });
         });
-    }];
-    
-    [confirm addAction:cancelAction];
-    [confirm addAction:confirmDeleteAction];
-    
+    }]];
     [self presentViewController:confirm animated:YES completion:nil];
 }
 
@@ -354,22 +308,14 @@
 }
 
 - (void)showAlertWithTitle:(NSString *)title message:(NSString *)message completion:(void (^ _Nullable)(void))completion {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:title
-                                                                   message:message
-                                                            preferredStyle:UIAlertControllerStyleAlert];
-    
-    UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:message preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         if (completion) completion();
-    }];
-    
-    [alert addAction:okAction];
-    
-    // iPad适配
+    }]];
     if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
         alert.popoverPresentationController.sourceView = self.view;
         alert.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(self.view.bounds), CGRectGetMidY(self.view.bounds), 0, 0);
     }
-    
     [self presentViewController:alert animated:YES completion:nil];
 }
 
