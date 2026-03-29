@@ -1,5 +1,5 @@
 #import "ModpackInstallViewController.h"
-#import "ModrinthAPI.h"
+#import "modpack/ModrinthAPI.h"
 #import "MinecraftResourceDownloadTask.h"
 #import "PLProfiles.h"
 #import "UIKit+AFNetworking.h"
