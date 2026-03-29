@@ -1,14 +1,13 @@
-#import "AFNetworking.h"
-#import "LauncherNavigationController.h"
 #import "ModpackInstallViewController.h"
+#import "ModrinthAPI.h"
+#import "MinecraftResourceDownloadTask.h"
+#import "PLProfiles.h"
 #import "UIKit+AFNetworking.h"
-#import "UIKit+hook.h"
 #import "WFWorkflowProgressView.h"
-#import "modpack/ModrinthAPI.h"
 #import "config.h"
 #import "ios_uikit_bridge.h"
 #import "utils.h"
-#include <dlfcn.h>
+#import <dlfcn.h>
 
 #define kCurseForgeGameIDMinecraft 432
 #define kCurseForgeClassIDModpack 4471
@@ -20,14 +19,27 @@
 @property(nonatomic) NSMutableArray *list;
 @property(nonatomic) NSMutableDictionary *filters;
 @property ModrinthAPI *modrinth;
+// 新增毛玻璃背景
+@property(nonatomic, strong) UIVisualEffectView *backgroundBlurView;
 @end
 
 @implementation ModpackInstallViewController
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-
-    //NSString *curseforgeAPIKey = CONFIG_CURSEFORGE_API_KEY;
+    
+    // 设置毛玻璃背景
+    UIBlurEffect *blurEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial];
+    self.backgroundBlurView = [[UIVisualEffectView alloc] initWithEffect:blurEffect];
+    self.backgroundBlurView.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.view addSubview:self.backgroundBlurView];
+    [NSLayoutConstraint activateConstraints:@[
+        [self.backgroundBlurView.topAnchor constraintEqualToAnchor:self.view.topAnchor],
+        [self.backgroundBlurView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.backgroundBlurView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.backgroundBlurView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor]
+    ]];
+    
     self.searchController = [[UISearchController alloc] initWithSearchResultsController:nil];
     self.searchController.searchResultsUpdater = self;
     self.searchController.obscuresBackgroundDuringPresentation = NO;
@@ -36,9 +48,21 @@
     self.filters = @{
         @"isModpack": @(YES),
         @"name": @" "
-        // mcVersion
     }.mutableCopy;
     [self updateSearchResults];
+    
+    // 设置表格样式
+    self.tableView.backgroundColor = [UIColor clearColor];
+    self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
+}
+
+// 重写 tableView 的 getter 以修改背景（避免重复代码）
+- (UITableView *)tableView {
+    UITableView *tv = [super tableView];
+    if (!tv) {
+        tv = [super tableView];
+    }
+    return tv;
 }
 
 - (void)loadSearchResultsWithPrevList:(BOOL)prevList {
@@ -119,18 +143,42 @@
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"cell"];
+    // 使用自定义卡片式单元格（ModernAssetCell 需要提前定义，若没有则回退）
+    static NSString *cellIdentifier = @"ModpackCell";
+    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:cellIdentifier];
     if (!cell) {
-        cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:@"cell"];
-        cell.imageView.contentMode = UIViewContentModeScaleToFill;
-        cell.imageView.clipsToBounds = YES;
+        // 尝试使用 ModernAssetCell（如果存在）
+        Class modernCellClass = NSClassFromString(@"ModernAssetCell");
+        if (modernCellClass) {
+            cell = [[modernCellClass alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:cellIdentifier];
+        } else {
+            cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:cellIdentifier];
+        }
+        cell.backgroundColor = [UIColor clearColor];
+        cell.contentView.backgroundColor = [UIColor clearColor];
+        // 添加毛玻璃效果卡片
+        UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial]];
+        blurView.translatesAutoresizingMaskIntoConstraints = NO;
+        blurView.layer.cornerRadius = 12;
+        blurView.layer.masksToBounds = YES;
+        [cell.contentView insertSubview:blurView atIndex:0];
+        [NSLayoutConstraint activateConstraints:@[
+            [blurView.topAnchor constraintEqualToAnchor:cell.contentView.topAnchor constant:4],
+            [blurView.leadingAnchor constraintEqualToAnchor:cell.contentView.leadingAnchor constant:12],
+            [blurView.trailingAnchor constraintEqualToAnchor:cell.contentView.trailingAnchor constant:-12],
+            [blurView.bottomAnchor constraintEqualToAnchor:cell.contentView.bottomAnchor constant:-4]
+        ]];
+        cell.backgroundView = nil;
     }
 
     NSDictionary *item = self.list[indexPath.row];
     cell.textLabel.text = item[@"title"];
     cell.detailTextLabel.text = item[@"description"];
+    cell.detailTextLabel.numberOfLines = 2;
     UIImage *fallbackImage = [UIImage imageNamed:@"DefaultProfile"];
     [cell.imageView setImageWithURL:[NSURL URLWithString:item[@"imageUrl"]] placeholderImage:fallbackImage];
+    cell.imageView.layer.cornerRadius = 8;
+    cell.imageView.clipsToBounds = YES;
 
     if (!self.modrinth.reachedLastPage && indexPath.row == self.list.count-1) {
         [self loadSearchResultsWithPrevList:YES];
@@ -175,7 +223,7 @@
     }
     [tableView deselectRowAtIndexPath:indexPath animated:NO];
     [self switchToLoadingState];
-dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         [self.modrinth loadDetailsOfMod:self.list[indexPath.row]];
         dispatch_async(dispatch_get_main_queue(), ^{
             [self switchToReadyState];
