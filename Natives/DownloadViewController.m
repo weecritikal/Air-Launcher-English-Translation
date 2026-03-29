@@ -16,6 +16,8 @@
 #import "installer/FabricInstallViewController.h"
 #import "installer/ForgeInstallViewController.h"
 #import "LauncherNavigationController.h"
+#import "installer/ModpackInstallViewController.h"
+#import "ModpackImportViewController.h"
 #import <QuartzCore/QuartzCore.h>
 
 #include <sys/time.h>
@@ -360,7 +362,6 @@
 
 #pragma mark - Loader Selection View Controller (居中卡片式)
 
-// 修复：添加基类声明，确保编译器识别
 @interface LoaderSelectionViewController : UIViewController
 @property (nonatomic, copy) void (^completion)(NSString *loader, BOOL installFabricAPI, BOOL installOptiFine, NSString *loaderVersion);
 @property (nonatomic, copy) void (^cancelled)(void);
@@ -425,8 +426,8 @@
     [self setupLoadersForVersion];
     [self setupLoaderTableView];
     [self setupOptionsContainer];
-    [self setupInstallButton];      // 先创建 installButton
-    [self setupVersionTableView];    // 再创建 versionTableView，此时 installButton 已存在
+    [self setupInstallButton];
+    [self setupVersionTableView];
 }
 
 - (void)setupLoadersForVersion {
@@ -516,7 +517,6 @@
     [self.tableView registerClass:[LoaderCell class] forCellReuseIdentifier:@"LoaderCell"];
     [self.backgroundBlurView.contentView addSubview:self.tableView];
     
-    // iOS 11+ 兼容 safeAreaLayoutGuide
     UILayoutGuide *safeGuide;
     if (@available(iOS 11.0, *)) {
         safeGuide = self.backgroundBlurView.contentView.safeAreaLayoutGuide;
@@ -1078,6 +1078,14 @@
 
 @property (nonatomic, assign) BOOL isObservingProgress;
 
+// 整合包相关属性
+@property (nonatomic, strong) UITableView *modpackTableView;
+@property (nonatomic, strong) NSMutableArray *modpackList;
+@property (nonatomic, assign) NSInteger currentModpackOffset;
+@property (nonatomic, assign) BOOL hasMoreModpacks;
+@property (nonatomic, assign) BOOL isLoadingModpacks;
+@property (nonatomic, strong) NSString *modpackSearchQuery;
+
 @end
 
 @implementation DownloadViewController
@@ -1101,10 +1109,13 @@
     
     self.modList = [NSMutableArray array];
     self.shaderList = [NSMutableArray array];
+    self.modpackList = [NSMutableArray array]; // 新增
     self.currentModOffset = 0;
     self.currentShaderOffset = 0;
+    self.currentModpackOffset = 0;
     self.hasMoreMods = YES;
     self.hasMoreShaders = YES;
+    self.hasMoreModpacks = YES;
     self.currentSortField = @"follows";
     self.isObservingProgress = NO;
     
@@ -1120,12 +1131,13 @@
     [self setupVersionCollectionView];
     [self setupModTableView];
     [self setupShaderTableView];
+    [self setupModpackTableView]; // 新增
     [self setupLoadingIndicator];
     [self setupEmptyLabel];
 }
 
 - (void)setupTabSegment {
-    self.tabSegment = [[UISegmentedControl alloc] initWithItems:@[@"版本下载", @"模组下载", @"光影下载"]];
+    self.tabSegment = [[UISegmentedControl alloc] initWithItems:@[@"版本下载", @"模组下载", @"光影下载", @"整合包"]];
     self.tabSegment.translatesAutoresizingMaskIntoConstraints = NO;
     self.tabSegment.selectedSegmentIndex = 0;
     [self.tabSegment addTarget:self action:@selector(tabChanged:) forControlEvents:UIControlEventValueChanged];
@@ -1252,6 +1264,30 @@
     ]];
 }
 
+- (void)setupModpackTableView {
+    self.modpackTableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
+    self.modpackTableView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.modpackTableView.backgroundColor = [UIColor clearColor];
+    self.modpackTableView.dataSource = self;
+    self.modpackTableView.delegate = self;
+    self.modpackTableView.rowHeight = 100;
+    self.modpackTableView.separatorStyle = UITableViewCellSeparatorStyleNone;
+    [self.modpackTableView registerClass:[ModernAssetCell class] forCellReuseIdentifier:@"ModpackCell"];
+    self.modpackTableView.hidden = YES;
+    [self.view addSubview:self.modpackTableView];
+    
+    UIRefreshControl *refreshControl = [[UIRefreshControl alloc] init];
+    [refreshControl addTarget:self action:@selector(refreshModpackList) forControlEvents:UIControlEventValueChanged];
+    self.modpackTableView.refreshControl = refreshControl;
+    
+    [NSLayoutConstraint activateConstraints:@[
+        [self.modpackTableView.topAnchor constraintEqualToAnchor:self.searchBar.bottomAnchor constant:8],
+        [self.modpackTableView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.modpackTableView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.modpackTableView.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor]
+    ]];
+}
+
 - (void)setupLoadingIndicator {
     self.loadingIndicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleLarge];
     self.loadingIndicator.translatesAutoresizingMaskIntoConstraints = NO;
@@ -1294,6 +1330,7 @@
     self.filterButton.hidden = (index == 0);
     self.modTableView.hidden = (index != 1);
     self.shaderTableView.hidden = (index != 2);
+    self.modpackTableView.hidden = (index != 3);
     
     if (index == 1) {
         self.searchBar.placeholder = @"搜索模组...";
@@ -1304,6 +1341,11 @@
         self.searchBar.placeholder = @"搜索光影...";
         if (self.shaderList.count == 0) {
             [self loadShaderList];
+        }
+    } else if (index == 3) {
+        self.searchBar.placeholder = @"搜索整合包...";
+        if (self.modpackList.count == 0) {
+            [self loadModpackList];
         }
     }
 }
@@ -1525,40 +1567,126 @@
     [self loadShaderList];
 }
 
+#pragma mark - Modpack Search & Loading
+
+- (void)refreshModpackList {
+    self.currentModpackOffset = 0;
+    self.hasMoreModpacks = YES;
+    [self.modpackList removeAllObjects];
+    [self loadModpackList];
+}
+
+- (void)loadModpackList {
+    if (self.isLoadingModpacks) return;
+    self.isLoadingModpacks = YES;
+    
+    if (self.currentModpackOffset == 0) {
+        [self.loadingIndicator startAnimating];
+    }
+    
+    NSMutableDictionary *filters = [NSMutableDictionary dictionary];
+    filters[@"isModpack"] = @YES;
+    filters[@"limit"] = @30;
+    filters[@"offset"] = @(self.currentModpackOffset);
+    if (self.modpackSearchQuery.length > 0) {
+        filters[@"query"] = self.modpackSearchQuery;
+    }
+    if (self.currentGameVersion.length > 0) {
+        filters[@"version"] = self.currentGameVersion;
+    }
+    
+    __weak typeof(self) weakSelf = self;
+    [[ModrinthAPI sharedInstance] searchModWithFilters:filters completion:^(NSArray * _Nullable results, NSError * _Nullable error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) return;
+            [strongSelf.loadingIndicator stopAnimating];
+            [strongSelf.modpackTableView.refreshControl endRefreshing];
+            strongSelf.isLoadingModpacks = NO;
+            
+            if (results) {
+                if (strongSelf.currentModpackOffset == 0) {
+                    [strongSelf.modpackList removeAllObjects];
+                }
+                [strongSelf.modpackList addObjectsFromArray:results];
+                strongSelf.hasMoreModpacks = (results.count >= 30);
+                strongSelf.currentModpackOffset += results.count;
+                
+                [strongSelf.modpackTableView reloadData];
+                strongSelf.emptyLabel.hidden = (strongSelf.modpackList.count > 0);
+                if (strongSelf.modpackList.count == 0) {
+                    strongSelf.emptyLabel.text = @"暂无整合包";
+                    strongSelf.emptyLabel.hidden = NO;
+                }
+            } else if (error) {
+                [strongSelf showError:error.localizedDescription];
+            }
+        });
+    }];
+}
+
+- (void)searchModpacks:(NSString *)query {
+    self.modpackSearchQuery = query;
+    self.currentModpackOffset = 0;
+    self.hasMoreModpacks = YES;
+    [self.modpackList removeAllObjects];
+    [self.modpackTableView reloadData];
+    [self loadModpackList];
+}
+
 #pragma mark - Filter Options
 
 - (void)showFilterOptions {
     NSInteger tabIndex = self.tabSegment.selectedSegmentIndex;
     
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"筛选选项"
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"选项"
                                                                    message:nil
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
     
-    [alert addAction:[UIAlertAction actionWithTitle:@"选择游戏版本"
-                                              style:UIAlertActionStyleDefault
-                                            handler:^(UIAlertAction * _Nonnull action) {
-        [self showGameVersionPicker];
-    }]];
-    
-    [alert addAction:[UIAlertAction actionWithTitle:@"排序方式"
-                                              style:UIAlertActionStyleDefault
-                                            handler:^(UIAlertAction * _Nonnull action) {
-        [self showSortOptions];
-    }]];
-    
-    if (tabIndex == 1) {
-        [alert addAction:[UIAlertAction actionWithTitle:@"模组加载器"
+    if (tabIndex == 1 || tabIndex == 2) {
+        [alert addAction:[UIAlertAction actionWithTitle:@"选择游戏版本"
                                                   style:UIAlertActionStyleDefault
                                                 handler:^(UIAlertAction * _Nonnull action) {
-            [self showModLoaderPicker];
+            [self showGameVersionPicker];
+        }]];
+        
+        [alert addAction:[UIAlertAction actionWithTitle:@"排序方式"
+                                                  style:UIAlertActionStyleDefault
+                                                handler:^(UIAlertAction * _Nonnull action) {
+            [self showSortOptions];
+        }]];
+        
+        if (tabIndex == 1) {
+            [alert addAction:[UIAlertAction actionWithTitle:@"模组加载器"
+                                                      style:UIAlertActionStyleDefault
+                                                    handler:^(UIAlertAction * _Nonnull action) {
+                [self showModLoaderPicker];
+            }]];
+        }
+        
+        [alert addAction:[UIAlertAction actionWithTitle:@"重置筛选"
+                                                  style:UIAlertActionStyleDestructive
+                                                handler:^(UIAlertAction * _Nonnull action) {
+            [self resetFilters];
+        }]];
+    } else if (tabIndex == 3) {
+        [alert addAction:[UIAlertAction actionWithTitle:@"导入本地整合包"
+                                                  style:UIAlertActionStyleDefault
+                                                handler:^(UIAlertAction * _Nonnull action) {
+            [self openImportModpackView];
+        }]];
+        [alert addAction:[UIAlertAction actionWithTitle:@"选择游戏版本"
+                                                  style:UIAlertActionStyleDefault
+                                                handler:^(UIAlertAction * _Nonnull action) {
+            [self showGameVersionPicker];
+        }]];
+        [alert addAction:[UIAlertAction actionWithTitle:@"重置筛选"
+                                                  style:UIAlertActionStyleDestructive
+                                                handler:^(UIAlertAction * _Nonnull action) {
+            self.currentGameVersion = nil;
+            [self refreshModpackList];
         }]];
     }
-    
-    [alert addAction:[UIAlertAction actionWithTitle:@"重置筛选"
-                                              style:UIAlertActionStyleDestructive
-                                            handler:^(UIAlertAction * _Nonnull action) {
-        [self resetFilters];
-    }]];
     
     [alert addAction:[UIAlertAction actionWithTitle:@"取消"
                                               style:UIAlertActionStyleCancel
@@ -1689,6 +1817,10 @@
         self.currentShaderOffset = 0;
         [self.shaderList removeAllObjects];
         [self loadShaderList];
+    } else if (tabIndex == 3) {
+        self.currentModpackOffset = 0;
+        [self.modpackList removeAllObjects];
+        [self loadModpackList];
     }
 }
 
@@ -1710,12 +1842,15 @@
         [self searchMods:searchBar.text];
     } else if (tabIndex == 2) {
         [self searchShaders:searchBar.text];
+    } else if (tabIndex == 3) {
+        [self searchModpacks:searchBar.text];
     }
 }
 
 - (void)searchBarCancelButtonClicked:(UISearchBar *)searchBar {
     searchBar.text = nil;
     self.currentSearchQuery = nil;
+    self.modpackSearchQuery = nil;
     [searchBar resignFirstResponder];
     [self reloadCurrentList];
 }
@@ -2261,6 +2396,99 @@
     [downloadTask resume];
 }
 
+#pragma mark - Modpack Installation
+
+- (void)openImportModpackView {
+    ModpackImportViewController *importVC = [[ModpackImportViewController alloc] init];
+    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:importVC];
+    nav.modalPresentationStyle = UIModalPresentationFormSheet;
+    [self presentViewController:nav animated:YES completion:nil];
+}
+
+- (void)installModpack:(UIButton *)sender {
+    NSIndexPath *indexPath = [NSIndexPath indexPathForRow:sender.tag inSection:0];
+    [self installModpackAtIndexPath:indexPath];
+}
+
+- (void)installModpackAtIndexPath:(NSIndexPath *)indexPath {
+    NSDictionary *modpack = self.modpackList[indexPath.row];
+    [[ModrinthAPI sharedInstance] getVersionsForModWithID:modpack[@"id"] completion:^(NSArray<ModVersion *> * _Nullable versions, NSError * _Nullable error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (error || versions.count == 0) {
+                [self showError:@"获取整合包版本失败"];
+                return;
+            }
+            [self showModpackVersionSelection:versions modpack:modpack];
+        });
+    }];
+}
+
+- (void)showModpackVersionSelection:(NSArray<ModVersion *> *)versions modpack:(NSDictionary *)modpack {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"选择整合包版本" message:nil preferredStyle:UIAlertControllerStyleActionSheet];
+    for (ModVersion *ver in versions) {
+        NSString *title = ver.name;
+        if (ver.gameVersions.count > 0) {
+            title = [NSString stringWithFormat:@"%@ - %@", ver.name, ver.gameVersions.firstObject];
+        }
+        [alert addAction:[UIAlertAction actionWithTitle:title style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+            [self startModpackInstallation:ver modpack:modpack];
+        }]];
+    }
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
+        alert.popoverPresentationController.sourceView = self.view;
+        alert.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(self.view.bounds), CGRectGetMidY(self.view.bounds), 0, 0);
+    }
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)startModpackInstallation:(ModVersion *)version modpack:(NSDictionary *)modpack {
+    NSString *downloadURL = version.primaryFile[@"url"];
+    if (!downloadURL) {
+        [self showError:@"无效的下载链接"];
+        return;
+    }
+    
+    UIAlertController *progressAlert = [UIAlertController alertControllerWithTitle:@"正在下载整合包" message:@"0%" preferredStyle:UIAlertControllerStyleAlert];
+    [self presentViewController:progressAlert animated:YES completion:nil];
+    
+    NSURLSessionDownloadTask *task = [[NSURLSession sharedSession] downloadTaskWithURL:[NSURL URLWithString:downloadURL] completionHandler:^(NSURL *location, NSURLResponse *response, NSError *error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [progressAlert dismissViewControllerAnimated:YES completion:^{
+                if (error) {
+                    [self showError:error.localizedDescription];
+                    return;
+                }
+                NSString *tempPath = [NSTemporaryDirectory() stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.mrpack", modpack[@"id"]]];
+                [[NSFileManager defaultManager] removeItemAtPath:tempPath error:nil];
+                [[NSFileManager defaultManager] moveItemAtPath:location.path toPath:tempPath error:nil];
+                [self installModpackFromFile:tempPath modpack:modpack];
+            }];
+        });
+    }];
+    [task resume];
+}
+
+- (void)installModpackFromFile:(NSString *)filePath modpack:(NSDictionary *)modpack {
+    MinecraftResourceDownloadTask *downloader = [[MinecraftResourceDownloadTask alloc] init];
+    NSString *destPath = [NSString stringWithFormat:@"%s/custom_gamedir/%@", getenv("POJAV_GAME_DIR"), modpack[@"id"]];
+    [[NSFileManager defaultManager] createDirectoryAtPath:destPath withIntermediateDirectories:YES attributes:nil error:nil];
+    [[ModrinthAPI sharedInstance] downloader:downloader submitDownloadTasksFromPackage:filePath toPath:destPath];
+    
+    self.progressVC = [[DownloadProgressViewController alloc] initWithTask:downloader];
+    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:self.progressVC];
+    nav.modalPresentationStyle = UIModalPresentationFormSheet;
+    [self presentViewController:nav animated:YES completion:nil];
+    
+    __weak typeof(self) weakSelf = self;
+    downloader.modpackDownloadCompletion = ^{
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [weakSelf.progressVC dismissViewControllerAnimated:YES completion:nil];
+            [weakSelf showSuccessMessage:[NSString stringWithFormat:@"整合包 %@ 安装完成", modpack[@"title"]]];
+        });
+    };
+}
+
 #pragma mark - UITableView DataSource
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
@@ -2268,6 +2496,8 @@
         return self.modList.count + (self.hasMoreMods ? 1 : 0);
     } else if (tableView == self.shaderTableView) {
         return self.shaderList.count + (self.hasMoreShaders ? 1 : 0);
+    } else if (tableView == self.modpackTableView) {
+        return self.modpackList.count + (self.hasMoreModpacks ? 1 : 0);
     }
     return 0;
 }
@@ -2291,6 +2521,15 @@
         return cell;
     }
     
+    if (tableView == self.modpackTableView && indexPath.row == self.modpackList.count && self.hasMoreModpacks) {
+        UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:@"LoadingCell"];
+        cell.textLabel.text = @"加载更多...";
+        cell.textLabel.textAlignment = NSTextAlignmentCenter;
+        cell.textLabel.textColor = [UIColor secondaryLabelColor];
+        cell.backgroundColor = [UIColor clearColor];
+        return cell;
+    }
+    
     ModernAssetCell *cell;
     if (tableView == self.modTableView) {
         cell = [tableView dequeueReusableCellWithIdentifier:@"ModCell" forIndexPath:indexPath];
@@ -2298,11 +2537,17 @@
         [cell configureWithMod:mod];
         [cell.downloadButton addTarget:self action:@selector(downloadMod:) forControlEvents:UIControlEventTouchUpInside];
         cell.downloadButton.tag = indexPath.row;
-    } else {
+    } else if (tableView == self.shaderTableView) {
         cell = [tableView dequeueReusableCellWithIdentifier:@"ShaderCell" forIndexPath:indexPath];
         NSDictionary *shader = self.shaderList[indexPath.row];
         [cell configureWithShader:shader];
         [cell.downloadButton addTarget:self action:@selector(downloadShader:) forControlEvents:UIControlEventTouchUpInside];
+        cell.downloadButton.tag = indexPath.row;
+    } else {
+        cell = [tableView dequeueReusableCellWithIdentifier:@"ModpackCell" forIndexPath:indexPath];
+        NSDictionary *modpack = self.modpackList[indexPath.row];
+        [cell configureWithMod:modpack];
+        [cell.downloadButton addTarget:self action:@selector(installModpack:) forControlEvents:UIControlEventTouchUpInside];
         cell.downloadButton.tag = indexPath.row;
     }
     return cell;
@@ -2316,25 +2561,33 @@
     if (tableView == self.shaderTableView && indexPath.row == self.shaderList.count - 5 && self.hasMoreShaders && !self.isLoadingMore) {
         [self loadShaderList];
     }
+    
+    if (tableView == self.modpackTableView && indexPath.row == self.modpackList.count - 5 && self.hasMoreModpacks && !self.isLoadingModpacks) {
+        [self loadModpackList];
+    }
 }
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
     
-    if (tableView == self.modTableView && indexPath.row == self.modList.count && self.hasMoreMods) {
-        [self loadModList];
-        return;
-    }
-    
-    if (tableView == self.shaderTableView && indexPath.row == self.shaderList.count && self.hasMoreShaders) {
-        [self loadShaderList];
-        return;
-    }
-    
     if (tableView == self.modTableView) {
+        if (indexPath.row == self.modList.count && self.hasMoreMods) {
+            [self loadModList];
+            return;
+        }
         [self downloadModAtIndexPath:indexPath];
-    } else {
+    } else if (tableView == self.shaderTableView) {
+        if (indexPath.row == self.shaderList.count && self.hasMoreShaders) {
+            [self loadShaderList];
+            return;
+        }
         [self downloadShaderAtIndexPath:indexPath];
+    } else if (tableView == self.modpackTableView) {
+        if (indexPath.row == self.modpackList.count && self.hasMoreModpacks) {
+            [self loadModpackList];
+            return;
+        }
+        [self installModpackAtIndexPath:indexPath];
     }
 }
 
