@@ -125,12 +125,7 @@
     }];
 }
 
-- (_UIContextMenuStyle *)_contextMenuInteraction:(UIContextMenuInteraction *)interaction styleForMenuWithConfiguration:(UIContextMenuConfiguration *)configuration
-{
-    _UIContextMenuStyle *style = [_UIContextMenuStyle defaultStyle];
-    style.preferredLayout = 3; // _UIContextMenuLayoutCompactMenu
-    return style;
-}
+// 修复：移除私有 _UIContextMenuStyle 方法，因为不需要自定义样式，系统默认样式即可
 
 #pragma mark UITableViewDataSource
 
@@ -143,7 +138,7 @@
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-    // 使用自定义卡片式单元格（ModernAssetCell 需要提前定义，若没有则回退）
+    // 使用自定义卡片式单元格（ModernAssetCell 如果存在，否则回退）
     static NSString *cellIdentifier = @"ModpackCell";
     UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:cellIdentifier];
     if (!cell) {
@@ -204,7 +199,21 @@
             handler:^(UIAction *action) {
             [self actionClose];
             NSString *tmpIconPath = [NSTemporaryDirectory() stringByAppendingPathComponent:@"icon.png"];
-                [UIImagePNGRepresentation([cell.imageView.image _imageWithSize:CGSizeMake(40, 40)]) writeToFile:tmpIconPath atomically:YES];
+            
+            // 修复：替换私有方法 _imageWithSize: 为公开缩放实现
+            UIImage *originalImage = cell.imageView.image;
+            if (originalImage) {
+                CGSize targetSize = CGSizeMake(40, 40);
+                UIGraphicsBeginImageContextWithOptions(targetSize, NO, 0.0);
+                [originalImage drawInRect:CGRectMake(0, 0, targetSize.width, targetSize.height)];
+                UIImage *scaledImage = UIGraphicsGetImageFromCurrentImageContext();
+                UIGraphicsEndImageContext();
+                [UIImagePNGRepresentation(scaledImage) writeToFile:tmpIconPath atomically:YES];
+            } else {
+                // 如果没有图片，写入空数据或忽略
+                [[NSData data] writeToFile:tmpIconPath atomically:YES];
+            }
+            
             [self.modrinth installModpackFromDetail:self.list[indexPath.row] atIndex:i];
         }]];
     }];
@@ -212,7 +221,7 @@
     self.currentMenu = [UIMenu menuWithTitle:@"" children:menuItems];
     UIContextMenuInteraction *interaction = [[UIContextMenuInteraction alloc] initWithDelegate:self];
     cell.detailTextLabel.interactions = @[interaction];
-    [interaction _presentMenuAtLocation:CGPointZero];
+    // 修复：移除私有方法 _presentMenuAtLocation:，系统会在用户交互时自动显示菜单
 }
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
