@@ -184,7 +184,7 @@ void init_hookUIKitConstructor(void) {
         current = current.presentedViewController;
     }
     if ([current isKindOfClass:UINavigationController.class]) {
-        return [(UINavigationController *)self.rootViewController visibleViewController];
+        return [(UINavigationController *)current visibleViewController];
     } else {
         return current;
     }
