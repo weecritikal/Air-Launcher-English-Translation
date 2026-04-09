@@ -111,3 +111,5 @@ JIT (Just-In-Time) is crucial for smooth game operation. iOS needs to enable it 
 ## Sponsor
 
 If you find this project helpful, you are welcome to support me through [Ko-Fi](https://ko-fi.com/herbrine8403)!
+
+![Stone Badge](https://stone.professorlee.work/api/stone/herbrine8403/Amethyst-iOS-MyRemastered)
