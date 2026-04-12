@@ -22,24 +22,9 @@ jobs:
     runs-on: macos-14
 
     steps:
-      - name: Show available Xcode and select a suitable one
+      - name: Select Xcode 15.4
         run: |
-          set -e
-          echo "Available apps in /Applications (matching Xcode*):"
-          ls /Applications | grep -E "Xcode(.+)?\.app" || true
-          # Prefer Xcode_16, then Xcode_15, then /Applications/Xcode.app
-          if [ -d "/Applications/Xcode_16.app" ]; then
-            echo "Selecting /Applications/Xcode_16.app"
-            sudo xcode-select -s /Applications/Xcode_16.app/Contents/Developer
-          elif [ -d "/Applications/Xcode_15.app" ]; then
-            echo "Selecting /Applications/Xcode_15.app"
-            sudo xcode-select -s /Applications/Xcode_15.app/Contents/Developer
-          elif [ -d "/Applications/Xcode.app" ]; then
-            echo "Selecting /Applications/Xcode.app"
-            sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
-          else
-            echo "No preinstalled Xcode found under /Applications that matches the search. Leaving system default."
-          fi
+          sudo xcode-select -s /Applications/Xcode_15.app/Contents/Developer
           xcodebuild -version || true
           echo "Available simulator runtimes (for debugging):"
           xcrun simctl list runtimes || true
