@@ -1,60 +1,355 @@
 #import "LauncherNewsViewController.h"
+#import "HomeCustomizeViewController.h"
 #import "authenticator/BaseAuthenticator.h"
 #import "LauncherPreferences.h"
+#import "ModsManagerViewController.h"
+#import "ShadersManagerViewController.h"
+#import "ModpackImportViewController.h"
+#import "BackgroundSettingsViewController.h"
+#import "BackgroundManager.h"
+#import "PLProfiles.h"
 #import "utils.h"
 #import "ios_uikit_bridge.h"
 #import <QuartzCore/QuartzCore.h>
 
-// MARK: - Modern Tile Base Cell
+// MARK: - Shortcut Action Constants
 
-@interface NewsBaseCell : UICollectionViewCell
-@property (nonatomic, strong) UIVisualEffectView *blurView;
-@property (nonatomic, strong) UIView *contentContainer;
+NSString * const kShortcutActionMods       = @"mods";
+NSString * const kShortcutActionShaders    = @"shaders";
+NSString * const kShortcutActionModpack    = @"modpack";
+NSString * const kShortcutActionBackground = @"background";
+NSString * const kShortcutActionVersions   = @"versions";
 
-- (void)setupViews;
-@end
+// MARK: - Color Helpers
 
-@implementation NewsBaseCell
+static UIColor *colorFromHex(NSString *hex) {
+    hex = [hex stringByReplacingOccurrencesOfString:@"#" withString:@""];
+    unsigned int rgb = 0;
+    [[NSScanner scannerWithString:hex] scanHexInt:&rgb];
+    return [UIColor colorWithRed:((rgb >> 16) & 0xFF) / 255.0
+                           green:((rgb >> 8) & 0xFF) / 255.0
+                            blue:(rgb & 0xFF) / 255.0
+                           alpha:1.0];
+}
 
-- (instancetype)initWithFrame:(CGRect)frame {
-    self = [super initWithFrame:frame];
+// MARK: - HomeTileConfig Implementation
+
+@implementation HomeTileConfig
+
++ (BOOL)supportsSecureCoding { return YES; }
+
+- (instancetype)initWithCoder:(NSCoder *)coder {
+    self = [super init];
     if (self) {
-        [self setupViews];
+        _tileId = [coder decodeObjectOfClass:[NSString class] forKey:@"tileId"];
+        _tileType = [coder decodeIntegerForKey:@"tileType"];
+        _tileSize = [coder decodeIntegerForKey:@"tileSize"];
+        _visible = [coder decodeBoolForKey:@"visible"];
+        _customTitle = [coder decodeObjectOfClass:[NSString class] forKey:@"customTitle"];
+        _iconName = [coder decodeObjectOfClass:[NSString class] forKey:@"iconName"];
+        _accentColorHex = [coder decodeObjectOfClass:[NSString class] forKey:@"accentColorHex"];
+        _shortcutAction = [coder decodeObjectOfClass:[NSString class] forKey:@"shortcutAction"];
     }
     return self;
 }
 
-- (void)setupViews {
-    // 磁贴阴影
+- (void)encodeWithCoder:(NSCoder *)coder {
+    [coder encodeObject:_tileId forKey:@"tileId"];
+    [coder encodeInteger:_tileType forKey:@"tileType"];
+    [coder encodeInteger:_tileSize forKey:@"tileSize"];
+    [coder encodeBool:_visible forKey:@"visible"];
+    [coder encodeObject:_customTitle forKey:@"customTitle"];
+    [coder encodeObject:_iconName forKey:@"iconName"];
+    [coder encodeObject:_accentColorHex forKey:@"accentColorHex"];
+    [coder encodeObject:_shortcutAction forKey:@"shortcutAction"];
+}
+
+- (NSDictionary *)toDictionary {
+    NSMutableDictionary *dict = [NSMutableDictionary dictionary];
+    if (_tileId) dict[@"tileId"] = _tileId;
+    dict[@"tileType"] = @(_tileType);
+    dict[@"tileSize"] = @(_tileSize);
+    dict[@"visible"] = @(_visible);
+    if (_customTitle) dict[@"customTitle"] = _customTitle;
+    if (_iconName) dict[@"iconName"] = _iconName;
+    if (_accentColorHex) dict[@"accentColorHex"] = _accentColorHex;
+    if (_shortcutAction) dict[@"shortcutAction"] = _shortcutAction;
+    return dict;
+}
+
++ (instancetype)fromDictionary:(NSDictionary *)dict {
+    HomeTileConfig *config = [[HomeTileConfig alloc] init];
+    config.tileId = dict[@"tileId"];
+    config.tileType = [dict[@"tileType"] integerValue];
+    config.tileSize = [dict[@"tileSize"] integerValue];
+    config.visible = [dict[@"visible"] boolValue];
+    config.customTitle = dict[@"customTitle"];
+    config.iconName = dict[@"iconName"];
+    config.accentColorHex = dict[@"accentColorHex"];
+    config.shortcutAction = dict[@"shortcutAction"];
+    return config;
+}
+
+- (UIColor *)accentColor {
+    if (_accentColorHex) return colorFromHex(_accentColorHex);
+    // 默认颜色基于磁贴类型
+    switch (_tileType) {
+        case HomeTileTypeProfile:        return colorFromHex(@"#8B5CF6");
+        case HomeTileTypeAnnouncement:   return colorFromHex(@"#3B82F6");
+        case HomeTileTypeVersionRelease: return colorFromHex(@"#10B981");
+        case HomeTileTypeVersionSnapshot:return colorFromHex(@"#F59E0B");
+        case HomeTileTypeNews:           return colorFromHex(@"#EF4444");
+        case HomeTileTypeShortcut:       return colorFromHex(@"#14B8A6");
+        default:                         return [UIColor systemBlueColor];
+    }
+}
+
++ (NSArray<HomeTileConfig *> *)defaultTileConfigs {
+    NSMutableArray *tiles = [NSMutableArray array];
+    
+    // 0. 用户资料 (全宽)
+    HomeTileConfig *profile = [[HomeTileConfig alloc] init];
+    profile.tileId = @"profile";
+    profile.tileType = HomeTileTypeProfile;
+    profile.tileSize = HomeTileSizeFull;
+    profile.visible = YES;
+    profile.iconName = @"person.crop.circle.fill";
+    profile.accentColorHex = @"#8B5CF6";
+    [tiles addObject:profile];
+    
+    // 1. 公告 (全宽) — 位于版本信息之前
+    HomeTileConfig *announcement = [[HomeTileConfig alloc] init];
+    announcement.tileId = @"announcement";
+    announcement.tileType = HomeTileTypeAnnouncement;
+    announcement.tileSize = HomeTileSizeFull;
+    announcement.visible = YES;
+    announcement.iconName = @"megaphone.fill";
+    announcement.accentColorHex = @"#3B82F6";
+    [tiles addObject:announcement];
+    
+    // 2. 最新正式版 (半宽)
+    HomeTileConfig *release = [[HomeTileConfig alloc] init];
+    release.tileId = @"latest_release";
+    release.tileType = HomeTileTypeVersionRelease;
+    release.tileSize = HomeTileSizeCompact;
+    release.visible = YES;
+    release.iconName = @"cube.box.fill";
+    release.accentColorHex = @"#10B981";
+    [tiles addObject:release];
+    
+    // 3. 最新快照 (半宽)
+    HomeTileConfig *snapshot = [[HomeTileConfig alloc] init];
+    snapshot.tileId = @"latest_snapshot";
+    snapshot.tileType = HomeTileTypeVersionSnapshot;
+    snapshot.tileSize = HomeTileSizeCompact;
+    snapshot.visible = YES;
+    snapshot.iconName = @"ant.fill";
+    snapshot.accentColorHex = @"#F59E0B";
+    [tiles addObject:snapshot];
+    
+    // 4. 新闻 (全宽)
+    HomeTileConfig *news = [[HomeTileConfig alloc] init];
+    news.tileId = @"news";
+    news.tileType = HomeTileTypeNews;
+    news.tileSize = HomeTileSizeFull;
+    news.visible = YES;
+    news.iconName = @"newspaper.fill";
+    news.accentColorHex = @"#EF4444";
+    [tiles addObject:news];
+    
+    // 5. 快捷入口: Mod管理 (半宽)
+    HomeTileConfig *mods = [[HomeTileConfig alloc] init];
+    mods.tileId = @"shortcut_mods";
+    mods.tileType = HomeTileTypeShortcut;
+    mods.tileSize = HomeTileSizeCompact;
+    mods.visible = YES;
+    mods.customTitle = @"Mod 管理";
+    mods.iconName = @"puzzlepiece.extension.fill";
+    mods.shortcutAction = kShortcutActionMods;
+    mods.accentColorHex = @"#14B8A6";
+    [tiles addObject:mods];
+    
+    // 6. 快捷入口: 光影管理 (半宽)
+    HomeTileConfig *shaders = [[HomeTileConfig alloc] init];
+    shaders.tileId = @"shortcut_shaders";
+    shaders.tileType = HomeTileTypeShortcut;
+    shaders.tileSize = HomeTileSizeCompact;
+    shaders.visible = YES;
+    shaders.customTitle = @"光影管理";
+    shaders.iconName = @"sun.max.fill";
+    shaders.shortcutAction = kShortcutActionShaders;
+    shaders.accentColorHex = @"#F97316";
+    [tiles addObject:shaders];
+    
+    // 7. 快捷入口: 整合包 (半宽)
+    HomeTileConfig *modpack = [[HomeTileConfig alloc] init];
+    modpack.tileId = @"shortcut_modpack";
+    modpack.tileType = HomeTileTypeShortcut;
+    modpack.tileSize = HomeTileSizeCompact;
+    modpack.visible = YES;
+    modpack.customTitle = @"整合包导入";
+    modpack.iconName = @"shippingbox.fill";
+    modpack.shortcutAction = kShortcutActionModpack;
+    modpack.accentColorHex = @"#8B5CF6";
+    [tiles addObject:modpack];
+    
+    // 8. 快捷入口: 壁纸设置 (半宽)
+    HomeTileConfig *bg = [[HomeTileConfig alloc] init];
+    bg.tileId = @"shortcut_bg";
+    bg.tileType = HomeTileTypeShortcut;
+    bg.tileSize = HomeTileSizeCompact;
+    bg.visible = YES;
+    bg.customTitle = @"壁纸设置";
+    bg.iconName = @"photo.fill.on.rectangle.fill";
+    bg.shortcutAction = kShortcutActionBackground;
+    bg.accentColorHex = @"#EC4899";
+    [tiles addObject:bg];
+    
+    return tiles;
+}
+
++ (NSArray<HomeTileConfig *> *)loadSavedConfigs {
+    NSArray *savedArray = [[NSUserDefaults standardUserDefaults] objectForKey:@"home_tiles_config"];
+    if (!savedArray || ![savedArray isKindOfClass:[NSArray class]]) {
+        return [self defaultTileConfigs];
+    }
+    
+    NSMutableArray *configs = [NSMutableArray array];
+    for (NSDictionary *dict in savedArray) {
+        if ([dict isKindOfClass:[NSDictionary class]]) {
+            [configs addObject:[self fromDictionary:dict]];
+        }
+    }
+    return configs.count > 0 ? configs : [self defaultTileConfigs];
+}
+
++ (void)saveConfigs:(NSArray<HomeTileConfig *> *)configs {
+    NSMutableArray *arr = [NSMutableArray array];
+    for (HomeTileConfig *c in configs) {
+        [arr addObject:[c toDictionary]];
+    }
+    [[NSUserDefaults standardUserDefaults] setObject:arr forKey:@"home_tiles_config"];
+    [[NSUserDefaults standardUserDefaults] synchronize];
+}
+
+@end
+
+// MARK: - Festival Detection
+
+static NSString *festivalGreeting(void) {
+    NSDate *now = [NSDate date];
+    NSCalendar *gregorian = [NSCalendar calendarWithIdentifier:NSCalendarIdentifierGregorian];
+    NSDateComponents *solar = [gregorian components:(NSCalendarUnitMonth | NSCalendarUnitDay) fromDate:now];
+    NSInteger month = solar.month;
+    NSInteger day = solar.day;
+    
+    // 公历节日
+    if (month == 1  && day == 1)  return @"元旦快乐！🎊";
+    if (month == 4  && (day >= 4 && day <= 6)) return @"清明节安康！🌿";
+    if (month == 5  && day == 1)  return @"劳动节快乐！💪";
+    if (month == 6  && day == 1)  return @"六一儿童节快乐！🎈";
+    if (month == 9  && day == 10) return @"教师节快乐！🌹";
+    if (month == 10 && (day >= 1 && day <= 7)) return @"国庆节快乐！🇨🇳";
+    if (month == 12 && day == 24) return @"平安夜快乐！🌟";
+    if (month == 12 && day == 25) return @"圣诞节快乐！🎄";
+    
+    // 农历节日 (使用中国日历)
+    NSCalendar *chineseCalendar = [[NSCalendar alloc] initWithCalendarIdentifier:NSCalendarIdentifierChinese];
+    NSDateComponents *lunar = [chineseCalendar components:(NSCalendarUnitMonth | NSCalendarUnitDay) fromDate:now];
+    NSInteger lunarMonth = lunar.month;
+    NSInteger lunarDay = lunar.day;
+    
+    if (lunarMonth == 1  && lunarDay == 1)  return @"新春快乐！🎆";
+    if (lunarMonth == 1  && lunarDay == 2)  return @"新春快乐！🧨";
+    if (lunarMonth == 1  && lunarDay == 3)  return @"新春快乐！🎇";
+    if (lunarMonth == 1  && lunarDay == 15) return @"元宵节快乐！🏮";
+    if (lunarMonth == 5  && lunarDay == 5)  return @"端午节安康！🐲";
+    if (lunarMonth == 7  && lunarDay == 7)  return @"七夕节快乐！💕";
+    if (lunarMonth == 8  && lunarDay == 15) return @"中秋节快乐！🌕";
+    if (lunarMonth == 9  && lunarDay == 9)  return @"重阳节安康！🏔️";
+    if (lunarMonth == 12 && (lunarDay == 29 || lunarDay == 30)) return @"除夕夜快乐！🎇";
+    
+    // 非节日 - 按时段随机问候
+    NSInteger hour = [gregorian component:NSCalendarUnitHour fromDate:now];
+    if (hour < 6)       return @"夜深了，注意休息哦 🌙";
+    if (hour < 12)      return @"早上好！美好的一天开始了 ☀️";
+    if (hour < 14)      return @"中午好！记得吃午饭哦 🍚";
+    if (hour < 18)      return @"下午好！今天也要加油哦 💪";
+    return @"晚上好！放松一下吧 🌃";
+}
+
+// MARK: - HomeTileBaseCell
+
+@interface HomeTileBaseCell : UICollectionViewCell
+@property (nonatomic, strong) UIVisualEffectView *blurView;
+@property (nonatomic, strong) UIView *contentContainer;
+@property (nonatomic, strong) CAGradientLayer *accentBar;
+- (void)setupBaseViews;
+- (void)setAccentColor:(UIColor *)color;
+@end
+
+@implementation HomeTileBaseCell
+
+- (instancetype)initWithFrame:(CGRect)frame {
+    self = [super initWithFrame:frame];
+    if (self) {
+        [self setupBaseViews];
+    }
+    return self;
+}
+
+- (void)setupBaseViews {
+    // 阴影
     self.layer.shadowColor = [UIColor blackColor].CGColor;
     self.layer.shadowOffset = CGSizeMake(0, 4);
-    self.layer.shadowOpacity = 0.1;
-    self.layer.shadowRadius = 8;
+    self.layer.shadowOpacity = 0.15;
+    self.layer.shadowRadius = 10;
     self.layer.masksToBounds = NO;
     
-    // 模糊背景容器
-    UIBlurEffect *blurEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial];
-    self.blurView = [[UIVisualEffectView alloc] initWithEffect:blurEffect];
+    // 毛玻璃背景
+    UIBlurEffect *blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial];
+    self.blurView = [[UIVisualEffectView alloc] initWithEffect:blur];
     self.blurView.frame = self.contentView.bounds;
     self.blurView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     self.blurView.layer.cornerRadius = 16;
     self.blurView.layer.masksToBounds = YES;
-    // 边框增加质感
+    self.blurView.layer.cornerCurve = kCACornerCurveContinuous;
     self.blurView.layer.borderWidth = 0.5;
-    self.blurView.layer.borderColor = [UIColor separatorColor].CGColor;
-    
+    self.blurView.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.15].CGColor;
     [self.contentView addSubview:self.blurView];
+    
+    // 渐变装饰条
+    self.accentBar = [CAGradientLayer layer];
+    self.accentBar.frame = CGRectMake(0, 0, self.contentView.bounds.size.width, 3);
+    self.accentBar.startPoint = CGPointMake(0, 0.5);
+    self.accentBar.endPoint = CGPointMake(1, 0.5);
+    self.accentBar.cornerRadius = 1.5;
+    [self.blurView.layer addSublayer:self.accentBar];
     
     // 内容容器
     self.contentContainer = [[UIView alloc] initWithFrame:self.contentView.bounds];
     self.contentContainer.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    self.contentContainer.backgroundColor = [UIColor clearColor];
     [self.contentView addSubview:self.contentContainer];
 }
 
-// 非线性按压动画
+- (void)setAccentColor:(UIColor *)color {
+    CGFloat h, s, b, a;
+    [color getHue:&h saturation:&s brightness:&b alpha:&a];
+    UIColor *lighter = [UIColor colorWithHue:h saturation:s * 0.7 brightness:MIN(b * 1.3, 1.0) alpha:a];
+    self.accentBar.colors = @[(id)color.CGColor, (id)lighter.CGColor];
+}
+
+- (void)layoutSubviews {
+    [super layoutSubviews];
+    self.accentBar.frame = CGRectMake(0, 0, self.blurView.bounds.size.width, 3);
+    self.layer.shadowPath = [UIBezierPath bezierPathWithRoundedRect:self.contentView.bounds cornerRadius:16].CGPath;
+}
+
+// 弹簧按压动画
 - (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
     [super touchesBegan:touches withEvent:event];
-    [UIView animateWithDuration:0.4 delay:0 usingSpringWithDamping:0.5 initialSpringVelocity:0.5 options:UIViewAnimationOptionAllowUserInteraction animations:^{
+    [UIView animateWithDuration:0.35 delay:0 usingSpringWithDamping:0.6 initialSpringVelocity:0.8 options:UIViewAnimationOptionAllowUserInteraction animations:^{
         self.transform = CGAffineTransformMakeScale(0.96, 0.96);
     } completion:nil];
 }
@@ -75,186 +370,343 @@
 
 @end
 
-// MARK: - Skin Profile Cell
+// MARK: - HomeProfileTileCell
 
-@interface SkinProfileCell : NewsBaseCell
+@interface HomeProfileTileCell : HomeTileBaseCell
 @property (nonatomic, strong) UIImageView *skinImageView;
+@property (nonatomic, strong) UIImageView *avatarImageView;
 @property (nonatomic, strong) UILabel *welcomeLabel;
-@property (nonatomic, strong) UILabel *subLabel;
+@property (nonatomic, strong) UILabel *greetingLabel;
 @end
 
-@implementation SkinProfileCell
+@implementation HomeProfileTileCell
 
-- (void)setupViews {
-    [super setupViews];
+- (void)setupBaseViews {
+    [super setupBaseViews];
     
-    // 皮肤预览
+    // 皮肤全身预览
     self.skinImageView = [[UIImageView alloc] init];
     self.skinImageView.translatesAutoresizingMaskIntoConstraints = NO;
     self.skinImageView.contentMode = UIViewContentModeScaleAspectFit;
-    // 增加一点阴影让皮肤立体
     self.skinImageView.layer.shadowColor = [UIColor blackColor].CGColor;
-    self.skinImageView.layer.shadowOffset = CGSizeMake(0, 2);
-    self.skinImageView.layer.shadowOpacity = 0.3;
-    self.skinImageView.layer.shadowRadius = 4;
-    
+    self.skinImageView.layer.shadowOffset = CGSizeMake(2, 4);
+    self.skinImageView.layer.shadowOpacity = 0.35;
+    self.skinImageView.layer.shadowRadius = 6;
     [self.contentContainer addSubview:self.skinImageView];
+    
+    // 头像 (圆形)
+    self.avatarImageView = [[UIImageView alloc] init];
+    self.avatarImageView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.avatarImageView.contentMode = UIViewContentModeScaleAspectFill;
+    self.avatarImageView.layer.cornerRadius = 26;
+    self.avatarImageView.layer.masksToBounds = YES;
+    self.avatarImageView.layer.borderWidth = 2.5;
+    self.avatarImageView.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.35].CGColor;
+    self.avatarImageView.backgroundColor = [UIColor colorWithWhite:0.15 alpha:1.0];
+    self.avatarImageView.image = [UIImage systemImageNamed:@"person.circle.fill"];
+    self.avatarImageView.tintColor = [UIColor systemGrayColor];
+    [self.contentContainer addSubview:self.avatarImageView];
     
     // 欢迎文本
     self.welcomeLabel = [[UILabel alloc] init];
     self.welcomeLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.welcomeLabel.font = [UIFont systemFontOfSize:22 weight:UIFontWeightBold]; // 使用 boldSystemFont 的现代替代
+    self.welcomeLabel.font = [UIFont systemFontOfSize:21 weight:UIFontWeightBold];
     self.welcomeLabel.textColor = [UIColor labelColor];
     self.welcomeLabel.numberOfLines = 1;
+    self.welcomeLabel.adjustsFontSizeToFitWidth = YES;
+    self.welcomeLabel.minimumScaleFactor = 0.7;
     [self.contentContainer addSubview:self.welcomeLabel];
     
-    // 副标题
-    self.subLabel = [[UILabel alloc] init];
-    self.subLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.subLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline];
-    self.subLabel.textColor = [UIColor secondaryLabelColor];
-    self.subLabel.text = @"准备就绪";
-    [self.contentContainer addSubview:self.subLabel];
+    // 节日/时段问候
+    self.greetingLabel = [[UILabel alloc] init];
+    self.greetingLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.greetingLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
+    self.greetingLabel.textColor = [UIColor secondaryLabelColor];
+    self.greetingLabel.numberOfLines = 1;
+    [self.contentContainer addSubview:self.greetingLabel];
     
-    // 布局约束
     [NSLayoutConstraint activateConstraints:@[
-        [self.skinImageView.centerYAnchor constraintEqualToAnchor:self.contentContainer.centerYAnchor],
-        [self.skinImageView.leadingAnchor constraintEqualToAnchor:self.contentContainer.leadingAnchor constant:20],
-        [self.skinImageView.heightAnchor constraintEqualToAnchor:self.contentContainer.heightAnchor multiplier:0.8],
-        [self.skinImageView.widthAnchor constraintEqualToAnchor:self.skinImageView.heightAnchor multiplier:0.6], // 皮肤比例
+        // 皮肤预览 (左侧)
+        [self.skinImageView.leadingAnchor constraintEqualToAnchor:self.contentContainer.leadingAnchor constant:18],
+        [self.skinImageView.topAnchor constraintEqualToAnchor:self.contentContainer.topAnchor constant:10],
+        [self.skinImageView.bottomAnchor constraintEqualToAnchor:self.contentContainer.bottomAnchor constant:-8],
+        [self.skinImageView.widthAnchor constraintEqualToAnchor:self.skinImageView.heightAnchor multiplier:0.55],
         
-        [self.welcomeLabel.leadingAnchor constraintEqualToAnchor:self.skinImageView.trailingAnchor constant:20],
-        [self.welcomeLabel.topAnchor constraintEqualToAnchor:self.skinImageView.topAnchor constant:10],
-        [self.welcomeLabel.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-20],
+        // 头像 (皮肤右侧)
+        [self.avatarImageView.leadingAnchor constraintEqualToAnchor:self.skinImageView.trailingAnchor constant:18],
+        [self.avatarImageView.centerYAnchor constraintEqualToAnchor:self.contentContainer.centerYAnchor constant:-14],
+        [self.avatarImageView.widthAnchor constraintEqualToConstant:52],
+        [self.avatarImageView.heightAnchor constraintEqualToConstant:52],
         
-        [self.subLabel.leadingAnchor constraintEqualToAnchor:self.welcomeLabel.leadingAnchor],
-        [self.subLabel.topAnchor constraintEqualToAnchor:self.welcomeLabel.bottomAnchor constant:4],
-        [self.subLabel.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-20]
+        // 欢迎文本
+        [self.welcomeLabel.leadingAnchor constraintEqualToAnchor:self.avatarImageView.trailingAnchor constant:14],
+        [self.welcomeLabel.centerYAnchor constraintEqualToAnchor:self.avatarImageView.centerYAnchor constant:-10],
+        [self.welcomeLabel.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-18],
+        
+        // 问候语
+        [self.greetingLabel.leadingAnchor constraintEqualToAnchor:self.welcomeLabel.leadingAnchor],
+        [self.greetingLabel.topAnchor constraintEqualToAnchor:self.welcomeLabel.bottomAnchor constant:4],
+        [self.greetingLabel.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-18],
     ]];
 }
 
 @end
 
-// MARK: - Info Tile Cell
+// MARK: - HomeInfoTileCell
 
-@interface InfoTileCell : NewsBaseCell
+@interface HomeInfoTileCell : HomeTileBaseCell
+@property (nonatomic, strong) UIImageView *iconView;
 @property (nonatomic, strong) UILabel *titleLabel;
 @property (nonatomic, strong) UILabel *valueLabel;
-@property (nonatomic, strong) UIImageView *iconView;
 @end
 
-@implementation InfoTileCell
+@implementation HomeInfoTileCell
 
-- (void)setupViews {
-    [super setupViews];
+- (void)setupBaseViews {
+    [super setupBaseViews];
     
     self.iconView = [[UIImageView alloc] init];
     self.iconView.translatesAutoresizingMaskIntoConstraints = NO;
     self.iconView.contentMode = UIViewContentModeScaleAspectFit;
-    self.iconView.tintColor = [UIColor systemBlueColor];
+    self.iconView.tintColor = [UIColor systemGreenColor];
     [self.contentContainer addSubview:self.iconView];
     
     self.titleLabel = [[UILabel alloc] init];
     self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.titleLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleCaption1];
-    self.titleLabel.textColor = [UIColor secondaryLabelColor];
+    self.titleLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
+    self.titleLabel.textColor = [UIColor tertiaryLabelColor];
+    self.titleLabel.textAlignment = NSTextAlignmentLeft;
     [self.contentContainer addSubview:self.titleLabel];
     
     self.valueLabel = [[UILabel alloc] init];
     self.valueLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.valueLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
+    self.valueLabel.font = [UIFont systemFontOfSize:18 weight:UIFontWeightBold];
     self.valueLabel.textColor = [UIColor labelColor];
-    self.valueLabel.numberOfLines = 0;
+    self.valueLabel.numberOfLines = 2;
+    self.valueLabel.adjustsFontSizeToFitWidth = YES;
+    self.valueLabel.minimumScaleFactor = 0.6;
     [self.contentContainer addSubview:self.valueLabel];
     
     [NSLayoutConstraint activateConstraints:@[
-        [self.iconView.topAnchor constraintEqualToAnchor:self.contentContainer.topAnchor constant:16],
+        [self.iconView.topAnchor constraintEqualToAnchor:self.contentContainer.topAnchor constant:18],
         [self.iconView.leadingAnchor constraintEqualToAnchor:self.contentContainer.leadingAnchor constant:16],
-        [self.iconView.widthAnchor constraintEqualToConstant:24],
-        [self.iconView.heightAnchor constraintEqualToConstant:24],
+        [self.iconView.widthAnchor constraintEqualToConstant:26],
+        [self.iconView.heightAnchor constraintEqualToConstant:26],
         
         [self.titleLabel.centerYAnchor constraintEqualToAnchor:self.iconView.centerYAnchor],
         [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.iconView.trailingAnchor constant:8],
         [self.titleLabel.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-16],
         
-        [self.valueLabel.topAnchor constraintEqualToAnchor:self.iconView.bottomAnchor constant:8],
+        [self.valueLabel.topAnchor constraintEqualToAnchor:self.iconView.bottomAnchor constant:10],
         [self.valueLabel.leadingAnchor constraintEqualToAnchor:self.contentContainer.leadingAnchor constant:16],
         [self.valueLabel.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-16],
-        [self.valueLabel.bottomAnchor constraintLessThanOrEqualToAnchor:self.contentContainer.bottomAnchor constant:-16]
     ]];
 }
 
 @end
 
-// MARK: - Announcement Cell
+// MARK: - HomeAnnouncementTileCell
 
-@interface AnnouncementCell : NewsBaseCell
+@interface HomeAnnouncementTileCell : HomeTileBaseCell
 @property (nonatomic, strong) UIImageView *iconView;
 @property (nonatomic, strong) UILabel *messageLabel;
-@property (nonatomic, strong) UIButton *downloadButton;
+@property (nonatomic, strong) UIButton *actionButton;
 @end
 
-@implementation AnnouncementCell
+@implementation HomeAnnouncementTileCell
 
-- (void)setupViews {
-    [super setupViews];
+- (void)setupBaseViews {
+    [super setupBaseViews];
     
     self.iconView = [[UIImageView alloc] init];
     self.iconView.translatesAutoresizingMaskIntoConstraints = NO;
     self.iconView.contentMode = UIViewContentModeScaleAspectFit;
-    if (@available(iOS 13.0, *)) {
-        self.iconView.image = [UIImage systemImageNamed:@"info.circle.fill"];
-        self.iconView.tintColor = [UIColor systemBlueColor];
-    }
+    self.iconView.image = [UIImage systemImageNamed:@"megaphone.fill"];
+    self.iconView.tintColor = colorFromHex(@"#3B82F6");
     [self.contentContainer addSubview:self.iconView];
     
     self.messageLabel = [[UILabel alloc] init];
     self.messageLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.messageLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleSubheadline];
+    self.messageLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
     self.messageLabel.textColor = [UIColor labelColor];
     self.messageLabel.numberOfLines = 0;
     [self.contentContainer addSubview:self.messageLabel];
     
-    self.downloadButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    self.downloadButton.translatesAutoresizingMaskIntoConstraints = NO;
-    self.downloadButton.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
-    self.downloadButton.layer.cornerRadius = 8;
-    self.downloadButton.clipsToBounds = YES;
-    self.downloadButton.hidden = YES;
-    [self.contentContainer addSubview:self.downloadButton];
+    self.actionButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    self.actionButton.translatesAutoresizingMaskIntoConstraints = NO;
+    self.actionButton.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
+    self.actionButton.layer.cornerRadius = 8;
+    self.actionButton.layer.cornerCurve = kCACornerCurveContinuous;
+    self.actionButton.clipsToBounds = YES;
+    self.actionButton.hidden = YES;
+    [self.contentContainer addSubview:self.actionButton];
     
     [NSLayoutConstraint activateConstraints:@[
         [self.iconView.topAnchor constraintEqualToAnchor:self.contentContainer.topAnchor constant:16],
         [self.iconView.leadingAnchor constraintEqualToAnchor:self.contentContainer.leadingAnchor constant:16],
-        [self.iconView.widthAnchor constraintEqualToConstant:20],
-        [self.iconView.heightAnchor constraintEqualToConstant:20],
+        [self.iconView.widthAnchor constraintEqualToConstant:22],
+        [self.iconView.heightAnchor constraintEqualToConstant:22],
         
         [self.messageLabel.topAnchor constraintEqualToAnchor:self.contentContainer.topAnchor constant:16],
-        [self.messageLabel.leadingAnchor constraintEqualToAnchor:self.iconView.trailingAnchor constant:8],
+        [self.messageLabel.leadingAnchor constraintEqualToAnchor:self.iconView.trailingAnchor constant:10],
         [self.messageLabel.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-16],
         
-        [self.downloadButton.topAnchor constraintEqualToAnchor:self.messageLabel.bottomAnchor constant:12],
-        [self.downloadButton.leadingAnchor constraintEqualToAnchor:self.contentContainer.leadingAnchor constant:16],
-        [self.downloadButton.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-16],
-        [self.downloadButton.heightAnchor constraintEqualToConstant:32],
-        [self.downloadButton.bottomAnchor constraintEqualToAnchor:self.contentContainer.bottomAnchor constant:-16]
+        [self.actionButton.topAnchor constraintEqualToAnchor:self.messageLabel.bottomAnchor constant:10],
+        [self.actionButton.leadingAnchor constraintEqualToAnchor:self.contentContainer.leadingAnchor constant:16],
+        [self.actionButton.widthAnchor constraintEqualToConstant:100],
+        [self.actionButton.heightAnchor constraintEqualToConstant:30],
     ]];
 }
 
 @end
 
-// MARK: - View Controller
+// MARK: - HomeNewsTileCell
+
+@interface HomeNewsTileCell : HomeTileBaseCell
+@property (nonatomic, strong) UIImageView *thumbnailView;
+@property (nonatomic, strong) UILabel *titleLabel;
+@property (nonatomic, strong) UILabel *summaryLabel;
+@property (nonatomic, strong) UILabel *placeholderLabel;
+@end
+
+@implementation HomeNewsTileCell
+
+- (void)setupBaseViews {
+    [super setupBaseViews];
+    
+    // 左侧缩略图占位
+    self.thumbnailView = [[UIImageView alloc] init];
+    self.thumbnailView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.thumbnailView.contentMode = UIViewContentModeScaleAspectFill;
+    self.thumbnailView.clipsToBounds = YES;
+    self.thumbnailView.layer.cornerRadius = 10;
+    self.thumbnailView.layer.cornerCurve = kCACornerCurveContinuous;
+    self.thumbnailView.backgroundColor = [UIColor colorWithWhite:0.15 alpha:1.0];
+    self.thumbnailView.image = [UIImage systemImageNamed:@"newspaper.fill"];
+    self.thumbnailView.tintColor = [UIColor colorWithWhite:0.4 alpha:1.0];
+    [self.contentContainer addSubview:self.thumbnailView];
+    
+    // 标题
+    self.titleLabel = [[UILabel alloc] init];
+    self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
+    self.titleLabel.textColor = [UIColor labelColor];
+    self.titleLabel.numberOfLines = 2;
+    [self.contentContainer addSubview:self.titleLabel];
+    
+    // 摘要
+    self.summaryLabel = [[UILabel alloc] init];
+    self.summaryLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.summaryLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightRegular];
+    self.summaryLabel.textColor = [UIColor tertiaryLabelColor];
+    self.summaryLabel.numberOfLines = 2;
+    [self.contentContainer addSubview:self.summaryLabel];
+    
+    // 占位提示
+    self.placeholderLabel = [[UILabel alloc] init];
+    self.placeholderLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.placeholderLabel.font = [UIFont systemFontOfSize:11 weight:UIFontWeightMedium];
+    self.placeholderLabel.textColor = [UIColor quaternaryLabelColor];
+    self.placeholderLabel.text = @"即将推出";
+    [self.contentContainer addSubview:self.placeholderLabel];
+    
+    [NSLayoutConstraint activateConstraints:@[
+        [self.thumbnailView.leadingAnchor constraintEqualToAnchor:self.contentContainer.leadingAnchor constant:14],
+        [self.thumbnailView.centerYAnchor constraintEqualToAnchor:self.contentContainer.centerYAnchor],
+        [self.thumbnailView.widthAnchor constraintEqualToConstant:80],
+        [self.thumbnailView.heightAnchor constraintEqualToConstant:60],
+        
+        [self.titleLabel.topAnchor constraintEqualToAnchor:self.thumbnailView.topAnchor],
+        [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.thumbnailView.trailingAnchor constant:14],
+        [self.titleLabel.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-14],
+        
+        [self.summaryLabel.topAnchor constraintEqualToAnchor:self.titleLabel.bottomAnchor constant:4],
+        [self.summaryLabel.leadingAnchor constraintEqualToAnchor:self.titleLabel.leadingAnchor],
+        [self.summaryLabel.trailingAnchor constraintEqualToAnchor:self.titleLabel.trailingAnchor],
+        
+        [self.placeholderLabel.bottomAnchor constraintEqualToAnchor:self.thumbnailView.bottomAnchor],
+        [self.placeholderLabel.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-14],
+    ]];
+}
+
+@end
+
+// MARK: - HomeShortcutTileCell
+
+@interface HomeShortcutTileCell : HomeTileBaseCell
+@property (nonatomic, strong) UIImageView *iconView;
+@property (nonatomic, strong) UILabel *titleLabel;
+@property (nonatomic, strong) UIImageView *chevronView;
+@end
+
+@implementation HomeShortcutTileCell
+
+- (void)setupBaseViews {
+    [super setupBaseViews];
+    
+    self.iconView = [[UIImageView alloc] init];
+    self.iconView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.iconView.contentMode = UIViewContentModeScaleAspectFit;
+    self.iconView.tintColor = [UIColor systemTealColor];
+    [self.contentContainer addSubview:self.iconView];
+    
+    self.titleLabel = [[UILabel alloc] init];
+    self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
+    self.titleLabel.textColor = [UIColor labelColor];
+    self.titleLabel.numberOfLines = 1;
+    self.titleLabel.adjustsFontSizeToFitWidth = YES;
+    self.titleLabel.minimumScaleFactor = 0.7;
+    [self.contentContainer addSubview:self.titleLabel];
+    
+    self.chevronView = [[UIImageView alloc] init];
+    self.chevronView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.chevronView.contentMode = UIViewContentModeScaleAspectFit;
+    self.chevronView.image = [UIImage systemImageNamed:@"chevron.right"];
+    self.chevronView.tintColor = [UIColor tertiaryLabelColor];
+    [self.contentContainer addSubview:self.chevronView];
+    
+    [NSLayoutConstraint activateConstraints:@[
+        [self.iconView.centerYAnchor constraintEqualToAnchor:self.contentContainer.centerYAnchor],
+        [self.iconView.leadingAnchor constraintEqualToAnchor:self.contentContainer.leadingAnchor constant:16],
+        [self.iconView.widthAnchor constraintEqualToConstant:28],
+        [self.iconView.heightAnchor constraintEqualToConstant:28],
+        
+        [self.titleLabel.centerYAnchor constraintEqualToAnchor:self.contentContainer.centerYAnchor],
+        [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.iconView.trailingAnchor constant:12],
+        [self.titleLabel.trailingAnchor constraintEqualToAnchor:self.chevronView.leadingAnchor constant:-8],
+        
+        [self.chevronView.centerYAnchor constraintEqualToAnchor:self.contentContainer.centerYAnchor],
+        [self.chevronView.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-14],
+        [self.chevronView.widthAnchor constraintEqualToConstant:12],
+        [self.chevronView.heightAnchor constraintEqualToConstant:16],
+    ]];
+}
+
+@end
+
+// MARK: - LauncherNewsViewController
 
 @interface LauncherNewsViewController () <UICollectionViewDataSource, UICollectionViewDelegate>
 
 @property (nonatomic, strong) UICollectionView *collectionView;
+@property (nonatomic, strong) UIView *headerView;
+@property (nonatomic, strong) UILabel *headerTitleLabel;
+@property (nonatomic, strong) UIButton *customizeButton;
+
+// 磁贴配置
+@property (nonatomic, strong) NSMutableArray<HomeTileConfig *> *allTileConfigs;
+@property (nonatomic, strong) NSArray<NSArray<HomeTileConfig *> *> *displaySections;
+
+// 数据
 @property (nonatomic, strong) NSString *latestRelease;
 @property (nonatomic, strong) NSString *latestSnapshot;
 @property (nonatomic, strong) NSString *currentUsername;
 @property (nonatomic, strong) UIImage *currentSkin;
+@property (nonatomic, strong) UIImage *currentAvatar;
 @property (nonatomic, assign) BOOL isLoadingVersions;
 
-// 更新检测相关
+// 公告/更新检测
 @property (nonatomic, strong) NSString *announcementText;
 @property (nonatomic, assign) BOOL hasUpdate;
 @property (nonatomic, strong) NSString *latestVersion;
@@ -286,6 +738,11 @@
     self.view.backgroundColor = [UIColor clearColor];
     self.navigationController.navigationBarHidden = YES;
     
+    // 加载磁贴配置
+    self.allTileConfigs = [[HomeTileConfig loadSavedConfigs] mutableCopy];
+    [self rebuildDisplaySections];
+    
+    [self setupHeader];
     [self setupCollectionView];
     [self updateSkinDisplay];
     [self checkMinecraftVersions];
@@ -295,159 +752,358 @@
                                              selector:@selector(updateSkinDisplay)
                                                  name:@"AccountChanged"
                                                object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(updateSkinDisplay)
+                                                 name:@"UpdateAccountInfo"
+                                               object:nil];
 }
 
 - (void)dealloc {
     [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
+// MARK: - Build Display Sections
+
+- (void)rebuildDisplaySections {
+    NSMutableArray *sections = [NSMutableArray array];
+    NSMutableArray *currentCompactGroup = nil;
+    
+    for (HomeTileConfig *tile in self.allTileConfigs) {
+        if (!tile.visible) continue;
+        
+        if (tile.tileSize == HomeTileSizeCompact) {
+            if (!currentCompactGroup) {
+                currentCompactGroup = [NSMutableArray array];
+            }
+            [currentCompactGroup addObject:tile];
+            if (currentCompactGroup.count >= 2) {
+                [sections addObject:[currentCompactGroup copy]];
+                currentCompactGroup = nil;
+            }
+        } else {
+            if (currentCompactGroup.count > 0) {
+                [sections addObject:[currentCompactGroup copy]];
+                currentCompactGroup = nil;
+            }
+            [sections addObject:@[tile]];
+        }
+    }
+    if (currentCompactGroup.count > 0) {
+        [sections addObject:[currentCompactGroup copy]];
+    }
+    
+    self.displaySections = sections;
+}
+
+// MARK: - Header Setup
+
+- (void)setupHeader {
+    self.headerView = [[UIView alloc] init];
+    self.headerView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.headerView.backgroundColor = [UIColor clearColor];
+    [self.view addSubview:self.headerView];
+    
+    self.headerTitleLabel = [[UILabel alloc] init];
+    self.headerTitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.headerTitleLabel.text = @"主页";
+    self.headerTitleLabel.font = [UIFont systemFontOfSize:26 weight:UIFontWeightBold];
+    self.headerTitleLabel.textColor = [UIColor labelColor];
+    [self.headerView addSubview:self.headerTitleLabel];
+    
+    self.customizeButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    self.customizeButton.translatesAutoresizingMaskIntoConstraints = NO;
+    UIImage *gearIcon = [UIImage systemImageNamed:@"slider.horizontal.3"];
+    [self.customizeButton setImage:gearIcon forState:UIControlStateNormal];
+    [self.customizeButton setTitle:@" 自定义" forState:UIControlStateNormal];
+    self.customizeButton.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
+    self.customizeButton.tintColor = [UIColor secondaryLabelColor];
+    [self.customizeButton addTarget:self action:@selector(openCustomize) forControlEvents:UIControlEventTouchUpInside];
+    [self.headerView addSubview:self.customizeButton];
+    
+    [NSLayoutConstraint activateConstraints:@[
+        [self.headerView.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor],
+        [self.headerView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.headerView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.headerView.heightAnchor constraintEqualToConstant:44],
+        
+        [self.headerTitleLabel.leadingAnchor constraintEqualToAnchor:self.headerView.leadingAnchor constant:20],
+        [self.headerTitleLabel.centerYAnchor constraintEqualToAnchor:self.headerView.centerYAnchor],
+        
+        [self.customizeButton.trailingAnchor constraintEqualToAnchor:self.headerView.trailingAnchor constant:-20],
+        [self.customizeButton.centerYAnchor constraintEqualToAnchor:self.headerView.centerYAnchor],
+    ]];
+}
+
+// MARK: - Collection View Setup
+
 - (void)setupCollectionView {
     UICollectionViewLayout *layout = [self createLayout];
-    self.collectionView = [[UICollectionView alloc] initWithFrame:self.view.bounds collectionViewLayout:layout];
-    self.collectionView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    self.collectionView = [[UICollectionView alloc] initWithFrame:CGRectZero collectionViewLayout:layout];
+    self.collectionView.translatesAutoresizingMaskIntoConstraints = NO;
     self.collectionView.backgroundColor = [UIColor clearColor];
     self.collectionView.dataSource = self;
     self.collectionView.delegate = self;
+    self.collectionView.showsVerticalScrollIndicator = NO;
+    self.collectionView.contentInset = UIEdgeInsetsMake(0, 0, 20, 0);
     
-    [self.collectionView registerClass:[SkinProfileCell class] forCellWithReuseIdentifier:@"SkinCell"];
-    [self.collectionView registerClass:[InfoTileCell class] forCellWithReuseIdentifier:@"InfoCell"];
-    [self.collectionView registerClass:[AnnouncementCell class] forCellWithReuseIdentifier:@"AnnouncementCell"];
+    [self.collectionView registerClass:[HomeProfileTileCell class]      forCellWithReuseIdentifier:@"ProfileCell"];
+    [self.collectionView registerClass:[HomeInfoTileCell class]         forCellWithReuseIdentifier:@"InfoCell"];
+    [self.collectionView registerClass:[HomeAnnouncementTileCell class] forCellWithReuseIdentifier:@"AnnouncementCell"];
+    [self.collectionView registerClass:[HomeNewsTileCell class]         forCellWithReuseIdentifier:@"NewsCell"];
+    [self.collectionView registerClass:[HomeShortcutTileCell class]     forCellWithReuseIdentifier:@"ShortcutCell"];
     
     [self.view addSubview:self.collectionView];
+    
+    [NSLayoutConstraint activateConstraints:@[
+        [self.collectionView.topAnchor constraintEqualToAnchor:self.headerView.bottomAnchor],
+        [self.collectionView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.collectionView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.collectionView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
+    ]];
 }
 
-- (UICollectionViewLayout *)createLayout {
-    // 现代 Compositional Layout
-    return [[UICollectionViewCompositionalLayout alloc] initWithSectionProvider:^NSCollectionLayoutSection * _Nullable(NSInteger sectionIndex, id<NSCollectionLayoutEnvironment> _Nonnull layoutEnvironment) {
-        
-        CGFloat width = layoutEnvironment.container.contentSize.width;
-        BOOL isiPad = width > 600; // 简单判断
-        
-        NSCollectionLayoutSection *section;
-        
-        if (sectionIndex == 0) {
-            // 用户资料 - 大横幅
-            NSCollectionLayoutSize *itemSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0]
-                                                                              heightDimension:[NSCollectionLayoutDimension fractionalHeightDimension:1.0]];
-            NSCollectionLayoutItem *item = [NSCollectionLayoutItem itemWithLayoutSize:itemSize];
-            
-            NSCollectionLayoutSize *groupSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0]
-                                                                               heightDimension:[NSCollectionLayoutDimension absoluteDimension:160]]; // 固定高度
-            NSCollectionLayoutGroup *group = [NSCollectionLayoutGroup horizontalGroupWithLayoutSize:groupSize subitems:@[item]];
-            
-            section = [NSCollectionLayoutSection sectionWithGroup:group];
-            section.contentInsets = NSDirectionalEdgeInsetsMake(20, 20, 10, 20);
-            
-        } else if (sectionIndex == 1) {
-            // 版本信息 - 磁贴网格
-            NSCollectionLayoutSize *itemSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:isiPad ? 0.5 : 1.0]
-                                                                              heightDimension:[NSCollectionLayoutDimension fractionalHeightDimension:1.0]];
-            NSCollectionLayoutItem *item = [NSCollectionLayoutItem itemWithLayoutSize:itemSize];
-            item.contentInsets = NSDirectionalEdgeInsetsMake(0, isiPad ? 10 : 0, 0, isiPad ? 10 : 0);
-            
-            NSCollectionLayoutSize *groupSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0]
-                                                                               heightDimension:[NSCollectionLayoutDimension absoluteDimension:110]];
-            
-            NSCollectionLayoutGroup *group = [NSCollectionLayoutGroup horizontalGroupWithLayoutSize:groupSize subitems:@[item]];
-            if (!isiPad) {
-                group.interItemSpacing = [NSCollectionLayoutSpacing fixedSpacing:10];
-            }
-            
-            section = [NSCollectionLayoutSection sectionWithGroup:group];
-            section.contentInsets = NSDirectionalEdgeInsetsMake(10, 20, 10, 20);
-            section.interGroupSpacing = 10;
-        } else {
-            // 公告栏
-            NSCollectionLayoutSize *itemSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0]
-                                                                              heightDimension:[NSCollectionLayoutDimension estimatedDimension:80]];
-            NSCollectionLayoutItem *item = [NSCollectionLayoutItem itemWithLayoutSize:itemSize];
-            
-            NSCollectionLayoutSize *groupSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0]
-                                                                               heightDimension:[NSCollectionLayoutDimension estimatedDimension:80]];
-            NSCollectionLayoutGroup *group = [NSCollectionLayoutGroup horizontalGroupWithLayoutSize:groupSize subitems:@[item]];
-            
-            section = [NSCollectionLayoutSection sectionWithGroup:group];
-            section.contentInsets = NSDirectionalEdgeInsetsMake(10, 20, 20, 20);
-        }
-        
-        return section;
-    }];
-}
-
-#pragma mark - UICollectionViewDataSource
-
-- (NSInteger)numberOfSectionsInCollectionView:(UICollectionView *)collectionView {
-    return 3; // Skin, Version Info, Announcement
-}
-
-- (NSInteger)collectionView:(UICollectionView *)collectionView numberOfItemsInSection:(NSInteger)section {
-    if (section == 0) return 1; // Skin
-    if (section == 1) return 2; // Release & Snapshot
-    return 1; // Announcement
-}
-
-- (UICollectionViewCell *)collectionView:(UICollectionView *)collectionView cellForItemAtIndexPath:(NSIndexPath *)indexPath {
-    if (indexPath.section == 0) {
-        SkinProfileCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"SkinCell" forIndexPath:indexPath];
-        
-        cell.welcomeLabel.text = @"欢迎回来";
-        cell.skinImageView.image = self.currentSkin ?: [UIImage systemImageNamed:@"person.fill"];
-        cell.subLabel.text = @"准备好开始游戏了吗？";
-        
-        return cell;
-    } else if (indexPath.section == 1) {
-        InfoTileCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"InfoCell" forIndexPath:indexPath];
-        
-        if (indexPath.item == 0) {
-            cell.titleLabel.text = @"最新正式版";
-            cell.valueLabel.text = self.latestRelease;
-            cell.iconView.image = [UIImage systemImageNamed:@"cube.box.fill"];
-            cell.iconView.tintColor = [UIColor systemGreenColor];
-        } else {
-            cell.titleLabel.text = @"最新快照";
-            cell.valueLabel.text = self.latestSnapshot;
-            cell.iconView.image = [UIImage systemImageNamed:@"ant.fill"]; // 或者是 hammer.fill
-            cell.iconView.tintColor = [UIColor systemOrangeColor];
-        }
-        
-        return cell;
-    } else {
-        AnnouncementCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"AnnouncementCell" forIndexPath:indexPath];
-        
-        cell.messageLabel.text = self.announcementText;
-        
-        if (self.hasUpdate) {
-            cell.downloadButton.hidden = NO;
-            [cell.downloadButton setTitle:@"前往下载" forState:UIControlStateNormal];
-            cell.downloadButton.backgroundColor = [UIColor systemBlueColor];
-            [cell.downloadButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-            [cell.downloadButton removeTarget:nil action:nil forControlEvents:UIControlEventAllEvents];
-            [cell.downloadButton addTarget:self action:@selector(downloadLatestVersion) forControlEvents:UIControlEventTouchUpInside];
-        } else {
-            cell.downloadButton.hidden = YES;
-        }
-        
-        return cell;
+- (CGFloat)heightForTileConfig:(HomeTileConfig *)config {
+    switch (config.tileType) {
+        case HomeTileTypeProfile:
+            return config.tileSize == HomeTileSizeFull ? 170 : 140;
+        case HomeTileTypeAnnouncement:
+            return 90;
+        case HomeTileTypeVersionRelease:
+        case HomeTileTypeVersionSnapshot:
+            return 100;
+        case HomeTileTypeNews:
+            return config.tileSize == HomeTileSizeFull ? 120 : 100;
+        case HomeTileTypeShortcut:
+            return 76;
+        default:
+            return 100;
     }
 }
 
+- (UICollectionViewLayout *)createLayout {
+    __weak typeof(self) weakSelf = self;
+    
+    return [[UICollectionViewCompositionalLayout alloc] initWithSectionProvider:^NSCollectionLayoutSection * _Nullable(NSInteger sectionIndex, id<NSCollectionLayoutEnvironment> env) {
+        
+        if (sectionIndex >= weakSelf.displaySections.count) return nil;
+        
+        NSArray *sectionTiles = weakSelf.displaySections[sectionIndex];
+        HomeTileConfig *firstTile = sectionTiles.firstObject;
+        BOOL isCompact = (firstTile.tileSize == HomeTileSizeCompact);
+        CGFloat height = [weakSelf heightForTileConfig:firstTile];
+        
+        if (isCompact && sectionTiles.count >= 2) {
+            // 双列紧凑布局
+            NSCollectionLayoutSize *itemSize = [NSCollectionLayoutSize
+                sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:0.5]
+                heightDimension:[NSCollectionLayoutDimension fractionalHeightDimension:1.0]];
+            NSCollectionLayoutItem *item = [NSCollectionLayoutItem itemWithLayoutSize:itemSize];
+            item.contentInsets = NSDirectionalEdgeInsetsMake(0, 5, 0, 5);
+            
+            NSCollectionLayoutSize *groupSize = [NSCollectionLayoutSize
+                sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0]
+                heightDimension:[NSCollectionLayoutDimension absoluteDimension:height]];
+            NSCollectionLayoutGroup *group = [NSCollectionLayoutGroup horizontalGroupWithLayoutSize:groupSize subitems:@[item]];
+            
+            NSCollectionLayoutSection *section = [NSCollectionLayoutSection sectionWithGroup:group];
+            section.contentInsets = NSDirectionalEdgeInsetsMake(5, 15, 5, 15);
+            section.interGroupSpacing = 10;
+            return section;
+            
+        } else {
+            // 全宽 / 单个紧凑磁贴
+            CGFloat wFrac = isCompact ? 0.5 : 1.0;
+            NSCollectionLayoutSize *itemSize = [NSCollectionLayoutSize
+                sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:wFrac]
+                heightDimension:[NSCollectionLayoutDimension fractionalHeightDimension:1.0]];
+            NSCollectionLayoutItem *item = [NSCollectionLayoutItem itemWithLayoutSize:itemSize];
+            item.contentInsets = NSDirectionalEdgeInsetsMake(0, 5, 0, 5);
+            
+            NSCollectionLayoutSize *groupSize = [NSCollectionLayoutSize
+                sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0]
+                heightDimension:[NSCollectionLayoutDimension absoluteDimension:height]];
+            NSCollectionLayoutGroup *group = [NSCollectionLayoutGroup horizontalGroupWithLayoutSize:groupSize subitems:@[item]];
+            
+            NSCollectionLayoutSection *section = [NSCollectionLayoutSection sectionWithGroup:group];
+            section.contentInsets = NSDirectionalEdgeInsetsMake(5, 15, 5, 15);
+            return section;
+        }
+    }];
+}
+
+// MARK: - UICollectionView DataSource
+
+- (NSInteger)numberOfSectionsInCollectionView:(UICollectionView *)collectionView {
+    return self.displaySections.count;
+}
+
+- (NSInteger)collectionView:(UICollectionView *)collectionView numberOfItemsInSection:(NSInteger)section {
+    return self.displaySections[section].count;
+}
+
+- (UICollectionViewCell *)collectionView:(UICollectionView *)collectionView cellForItemAtIndexPath:(NSIndexPath *)indexPath {
+    HomeTileConfig *config = self.displaySections[indexPath.section][indexPath.item];
+    
+    switch (config.tileType) {
+        case HomeTileTypeProfile: {
+            HomeProfileTileCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"ProfileCell" forIndexPath:indexPath];
+            [cell setAccentColor:[config accentColor]];
+            
+            NSString *name = self.currentUsername ?: @"玩家";
+            cell.welcomeLabel.text = [NSString stringWithFormat:@"欢迎回来, %@!", name];
+            cell.greetingLabel.text = festivalGreeting();
+            cell.skinImageView.image = self.currentSkin ?: [UIImage systemImageNamed:@"person.fill"];
+            if (self.currentAvatar) {
+                cell.avatarImageView.image = self.currentAvatar;
+            } else {
+                cell.avatarImageView.image = [UIImage systemImageNamed:@"person.circle.fill"];
+                cell.avatarImageView.tintColor = [UIColor systemGrayColor];
+            }
+            return cell;
+        }
+            
+        case HomeTileTypeVersionRelease: {
+            HomeInfoTileCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"InfoCell" forIndexPath:indexPath];
+            [cell setAccentColor:[config accentColor]];
+            cell.titleLabel.text = config.customTitle ?: @"最新正式版";
+            cell.valueLabel.text = self.latestRelease;
+            cell.iconView.image = [UIImage systemImageNamed:config.iconName ?: @"cube.box.fill"];
+            cell.iconView.tintColor = [config accentColor];
+            return cell;
+        }
+            
+        case HomeTileTypeVersionSnapshot: {
+            HomeInfoTileCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"InfoCell" forIndexPath:indexPath];
+            [cell setAccentColor:[config accentColor]];
+            cell.titleLabel.text = config.customTitle ?: @"最新快照";
+            cell.valueLabel.text = self.latestSnapshot;
+            cell.iconView.image = [UIImage systemImageNamed:config.iconName ?: @"ant.fill"];
+            cell.iconView.tintColor = [config accentColor];
+            return cell;
+        }
+            
+        case HomeTileTypeAnnouncement: {
+            HomeAnnouncementTileCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"AnnouncementCell" forIndexPath:indexPath];
+            [cell setAccentColor:[config accentColor]];
+            cell.messageLabel.text = self.announcementText;
+            
+            if (self.hasUpdate) {
+                cell.actionButton.hidden = NO;
+                [cell.actionButton setTitle:@"前往下载" forState:UIControlStateNormal];
+                cell.actionButton.backgroundColor = colorFromHex(@"#3B82F6");
+                [cell.actionButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+                [cell.actionButton removeTarget:nil action:nil forControlEvents:UIControlEventAllEvents];
+                [cell.actionButton addTarget:self action:@selector(downloadLatestVersion) forControlEvents:UIControlEventTouchUpInside];
+            } else {
+                cell.actionButton.hidden = YES;
+            }
+            return cell;
+        }
+            
+        case HomeTileTypeNews: {
+            HomeNewsTileCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"NewsCell" forIndexPath:indexPath];
+            [cell setAccentColor:[config accentColor]];
+            cell.titleLabel.text = @"Minecraft 新闻";
+            cell.summaryLabel.text = @"敬请期待新闻功能上线...";
+            cell.placeholderLabel.text = @"即将推出 ✨";
+            return cell;
+        }
+            
+        case HomeTileTypeShortcut: {
+            HomeShortcutTileCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"ShortcutCell" forIndexPath:indexPath];
+            [cell setAccentColor:[config accentColor]];
+            cell.titleLabel.text = config.customTitle ?: @"快捷入口";
+            cell.iconView.image = [UIImage systemImageNamed:config.iconName ?: @"arrow.right.circle.fill"];
+            cell.iconView.tintColor = [config accentColor];
+            return cell;
+        }
+    }
+    
+    // Fallback
+    return [collectionView dequeueReusableCellWithReuseIdentifier:@"InfoCell" forIndexPath:indexPath];
+}
+
+// MARK: - UICollectionView Delegate
+
 - (void)collectionView:(UICollectionView *)collectionView didSelectItemAtIndexPath:(NSIndexPath *)indexPath {
-    // 点击反馈，可以在这里添加跳转逻辑
     [collectionView deselectItemAtIndexPath:indexPath animated:YES];
     
-    // 如果是版本信息，可以尝试刷新
-    if (indexPath.section == 1) {
+    HomeTileConfig *config = self.displaySections[indexPath.section][indexPath.item];
+    
+    if (config.tileType == HomeTileTypeShortcut) {
+        [self handleShortcutAction:config.shortcutAction];
+    } else if (config.tileType == HomeTileTypeVersionRelease || config.tileType == HomeTileTypeVersionSnapshot) {
         [self checkMinecraftVersions];
     }
 }
 
-#pragma mark - Logic
+// MARK: - Shortcut Actions
+
+- (void)handleShortcutAction:(NSString *)action {
+    if ([action isEqualToString:kShortcutActionMods]) {
+        ModsManagerViewController *vc = [[ModsManagerViewController alloc] init];
+        UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
+        nav.modalPresentationStyle = UIModalPresentationFormSheet;
+        [self presentViewController:nav animated:YES completion:nil];
+        
+    } else if ([action isEqualToString:kShortcutActionShaders]) {
+        ShadersManagerViewController *vc = [[ShadersManagerViewController alloc] init];
+        UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
+        nav.modalPresentationStyle = UIModalPresentationFormSheet;
+        [self presentViewController:nav animated:YES completion:nil];
+        
+    } else if ([action isEqualToString:kShortcutActionModpack]) {
+        ModpackImportViewController *vc = [[ModpackImportViewController alloc] init];
+        UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
+        nav.modalPresentationStyle = UIModalPresentationFormSheet;
+        [self presentViewController:nav animated:YES completion:nil];
+        
+    } else if ([action isEqualToString:kShortcutActionBackground]) {
+        BackgroundSettingsViewController *vc = [[BackgroundSettingsViewController alloc] init];
+        UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
+        nav.modalPresentationStyle = UIModalPresentationFormSheet;
+        [self presentViewController:nav animated:YES completion:nil];
+        
+    } else if ([action isEqualToString:kShortcutActionVersions]) {
+        [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowVersionManager" object:nil];
+    }
+}
+
+// MARK: - Customize
+
+- (void)openCustomize {
+    HomeCustomizeViewController *customVC = [[HomeCustomizeViewController alloc] init];
+    customVC.tileConfigs = [self.allTileConfigs copy];
+    
+    __weak typeof(self) weakSelf = self;
+    customVC.onConfigsChanged = ^(NSArray<HomeTileConfig *> *newConfigs) {
+        weakSelf.allTileConfigs = [newConfigs mutableCopy];
+        [HomeTileConfig saveConfigs:newConfigs];
+        [weakSelf rebuildDisplaySections];
+        
+        // 重建布局并刷新
+        weakSelf.collectionView.collectionViewLayout = [weakSelf createLayout];
+        [weakSelf.collectionView reloadData];
+    };
+    
+    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:customVC];
+    nav.modalPresentationStyle = UIModalPresentationFormSheet;
+    
+    // 毛玻璃背景
+    if ([[BackgroundManager sharedManager] hasBackground]) {
+        nav.view.backgroundColor = [UIColor clearColor];
+    }
+    
+    [self presentViewController:nav animated:YES completion:nil];
+}
+
+// MARK: - Data Loading
 
 - (void)updateSkinDisplay {
-    BaseAuthenticator *currentAuth = BaseAuthenticator.current;
+    BaseAuthenticator *auth = BaseAuthenticator.current;
     
-    if (currentAuth && currentAuth.authData) {
-        NSString *username = currentAuth.authData[@"username"];
+    if (auth && auth.authData) {
+        NSString *username = auth.authData[@"username"];
         if (username) {
             if ([username hasPrefix:@"Demo."]) {
                 username = [username substringFromIndex:5];
@@ -457,7 +1113,24 @@
             self.currentUsername = @"玩家";
         }
         
-        NSString *uuid = currentAuth.authData[@"uuid"];
+        // 加载头像 (与右侧面板相同来源)
+        NSString *avatarURL = auth.authData[@"profilePicURL"];
+        if (avatarURL) {
+            avatarURL = [avatarURL stringByReplacingOccurrencesOfString:@"\\/" withString:@"/"];
+            dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+                NSData *data = [NSData dataWithContentsOfURL:[NSURL URLWithString:avatarURL]];
+                if (data) {
+                    UIImage *img = [UIImage imageWithData:data];
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        self.currentAvatar = img;
+                        [self reloadProfileSection];
+                    });
+                }
+            });
+        }
+        
+        // 加载皮肤全身图 (原有API)
+        NSString *uuid = auth.authData[@"uuid"];
         if (uuid) {
             [self loadSkinForUUID:uuid];
         } else {
@@ -465,30 +1138,28 @@
         }
     } else {
         self.currentUsername = @"未登录";
+        self.currentAvatar = nil;
         [self loadDefaultSkin];
     }
     
-    [self.collectionView reloadData];
+    [self reloadProfileSection];
 }
 
 - (void)loadSkinForUUID:(NSString *)uuid {
     NSString *skinURL = [NSString stringWithFormat:@"http://111.170.35.224:3000/renders/body/%@?overlay", uuid];
     
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        NSData *imageData = [NSData dataWithContentsOfURL:[NSURL URLWithString:skinURL]];
-        UIImage *skinImage = nil;
-        if (imageData) {
-            skinImage = [UIImage imageWithData:imageData];
-        }
+        NSData *data = [NSData dataWithContentsOfURL:[NSURL URLWithString:skinURL]];
+        UIImage *skin = data ? [UIImage imageWithData:data] : nil;
         
         dispatch_async(dispatch_get_main_queue(), ^{
-            if (skinImage) {
-                self.currentSkin = skinImage;
+            if (skin) {
+                self.currentSkin = skin;
             } else {
-                [self loadDefaultSkin]; // Fallback inside async
+                [self loadDefaultSkin];
                 return;
             }
-            [self.collectionView reloadItemsAtIndexPaths:@[[NSIndexPath indexPathForItem:0 inSection:0]]];
+            [self reloadProfileSection];
         });
     });
 }
@@ -496,55 +1167,48 @@
 - (void)loadDefaultSkin {
     NSString *steveSkinURL = @"http://111.170.35.224:3000/renders/body/8667ba71b85a4004af54457a9734eed7?overlay";
     
-    // 如果当前已经是默认皮肤，避免重复加载 (简单判断 image 是否为空)
-    if (self.currentSkin != nil && [self.currentUsername isEqualToString:@"未登录"]) {
-         // Maybe check logic, but re-loading is safer
-    }
-    
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        NSData *imageData = [NSData dataWithContentsOfURL:[NSURL URLWithString:steveSkinURL]];
-        UIImage *steveSkin = nil;
-        if (imageData) {
-            steveSkin = [UIImage imageWithData:imageData];
-        }
+        NSData *data = [NSData dataWithContentsOfURL:[NSURL URLWithString:steveSkinURL]];
+        UIImage *steve = data ? [UIImage imageWithData:data] : nil;
         
         dispatch_async(dispatch_get_main_queue(), ^{
-            if (steveSkin) {
-                self.currentSkin = steveSkin;
-            } else {
-                self.currentSkin = [UIImage systemImageNamed:@"person.fill"];
-            }
-            [self.collectionView reloadItemsAtIndexPaths:@[[NSIndexPath indexPathForItem:0 inSection:0]]];
+            self.currentSkin = steve ?: [UIImage systemImageNamed:@"person.fill"];
+            [self reloadProfileSection];
         });
     });
 }
 
-- (void)checkMinecraftVersions {
-    if (self.isLoadingVersions) {
-        // Already loading or initial state
+- (void)reloadProfileSection {
+    // 找到 Profile 类型的 section 并刷新
+    for (NSInteger s = 0; s < self.displaySections.count; s++) {
+        for (HomeTileConfig *tile in self.displaySections[s]) {
+            if (tile.tileType == HomeTileTypeProfile) {
+                [self.collectionView reloadSections:[NSIndexSet indexSetWithIndex:s]];
+                return;
+            }
+        }
     }
+}
+
+- (void)checkMinecraftVersions {
     self.isLoadingVersions = YES;
     self.latestRelease = @"检测中...";
     self.latestSnapshot = @"检测中...";
-    [self.collectionView reloadSections:[NSIndexSet indexSetWithIndex:1]];
+    [self reloadVersionSections];
     
     NSString *downloadSource = getPrefObject(@"general.download_source");
-    NSString *versionManifestURL;
-    
+    NSString *url;
     if ([downloadSource isEqualToString:@"bmclapi"]) {
-        versionManifestURL = @"https://bmclapi2.bangbang93.com/mc/game/version_manifest_v2.json";
+        url = @"https://bmclapi2.bangbang93.com/mc/game/version_manifest_v2.json";
     } else {
-        versionManifestURL = @"https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
+        url = @"https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
     }
     
-    NSURL *url = [NSURL URLWithString:versionManifestURL];
-    NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+    NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithURL:[NSURL URLWithString:url] completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         dispatch_async(dispatch_get_main_queue(), ^{
             self.isLoadingVersions = NO;
-            
             if (data && !error) {
-                NSError *jsonError;
-                NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
+                NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
                 if (json) {
                     NSDictionary *latest = json[@"latest"];
                     self.latestRelease = latest[@"release"] ?: @"未知";
@@ -557,22 +1221,32 @@
                 self.latestRelease = @"网络错误";
                 self.latestSnapshot = @"网络错误";
             }
-            [self.collectionView reloadSections:[NSIndexSet indexSetWithIndex:1]];
+            [self reloadVersionSections];
         });
     }];
     [task resume];
 }
 
-#pragma mark - Update Check
+- (void)reloadVersionSections {
+    for (NSInteger s = 0; s < self.displaySections.count; s++) {
+        for (HomeTileConfig *tile in self.displaySections[s]) {
+            if (tile.tileType == HomeTileTypeVersionRelease || tile.tileType == HomeTileTypeVersionSnapshot) {
+                [self.collectionView reloadSections:[NSIndexSet indexSetWithIndex:s]];
+                return;
+            }
+        }
+    }
+}
+
+// MARK: - Update Check
 
 - (void)checkForUpdate {
     NSString *currentVersion = [[[NSBundle mainBundle] infoDictionary] objectForKey:@"CFBundleShortVersionString"];
     
-    // 检查是否是预览版
     if ([currentVersion rangeOfString:@"Preview" options:NSCaseInsensitiveSearch].location != NSNotFound) {
         self.announcementText = @"欢迎使用 Amethyst iOS Remastered 测试版！";
         self.hasUpdate = NO;
-        [self.collectionView reloadSections:[NSIndexSet indexSetWithIndex:2]];
+        [self reloadAnnouncementSection];
         return;
     }
     
@@ -585,47 +1259,55 @@
             dispatch_async(dispatch_get_main_queue(), ^{
                 self.announcementText = @"欢迎使用 Amethyst iOS Remastered！";
                 self.hasUpdate = NO;
-                [self.collectionView reloadSections:[NSIndexSet indexSetWithIndex:2]];
+                [self reloadAnnouncementSection];
             });
             return;
         }
         
-        NSString *htmlString = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
-        NSString *latestVersion = [self extractVersionFromHTML:htmlString];
+        NSString *html = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+        NSString *latestVer = [self extractVersionFromHTML:html];
         
-        if (!latestVersion) {
+        if (!latestVer) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 self.announcementText = @"欢迎使用 Amethyst iOS Remastered！";
                 self.hasUpdate = NO;
-                [self.collectionView reloadSections:[NSIndexSet indexSetWithIndex:2]];
+                [self reloadAnnouncementSection];
             });
             return;
         }
         
-        if ([latestVersion hasPrefix:@"v"]) {
-            latestVersion = [latestVersion substringFromIndex:1];
+        if ([latestVer hasPrefix:@"v"]) {
+            latestVer = [latestVer substringFromIndex:1];
         }
         
         dispatch_async(dispatch_get_main_queue(), ^{
-            NSComparisonResult versionComparison = [self compareVersion:currentVersion withVersion:latestVersion];
-            
-            if (versionComparison == NSOrderedAscending) {
-                self.announcementText = [NSString stringWithFormat:@"发现新版本：v%@", latestVersion];
-                self.latestVersion = latestVersion;
+            NSComparisonResult cmp = [self compareVersion:currentVersion withVersion:latestVer];
+            if (cmp == NSOrderedAscending) {
+                self.announcementText = [NSString stringWithFormat:@"发现新版本：v%@", latestVer];
+                self.latestVersion = latestVer;
                 self.hasUpdate = YES;
             } else {
                 self.announcementText = @"欢迎使用 Amethyst iOS Remastered！当前已是最新版本。";
                 self.hasUpdate = NO;
             }
-            [self.collectionView reloadSections:[NSIndexSet indexSetWithIndex:2]];
+            [self reloadAnnouncementSection];
         });
     }];
-    
     [task resume];
 }
 
+- (void)reloadAnnouncementSection {
+    for (NSInteger s = 0; s < self.displaySections.count; s++) {
+        for (HomeTileConfig *tile in self.displaySections[s]) {
+            if (tile.tileType == HomeTileTypeAnnouncement) {
+                [self.collectionView reloadSections:[NSIndexSet indexSetWithIndex:s]];
+                return;
+            }
+        }
+    }
+}
+
 - (NSString *)extractVersionFromHTML:(NSString *)html {
-    // 从 HTML 中提取版本号
     NSRange titleRange = [html rangeOfString:@"<title>"];
     if (titleRange.location == NSNotFound) return nil;
     
@@ -635,55 +1317,49 @@
     
     NSString *titleContent = [afterTitle substringToIndex:endTitleRange.location];
     
-    // 格式通常是 "Release v1.2.3 · herbrine8403/Amethyst-iOS-MyRemastered"
     NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@"v([0-9]+\\.[0-9]+\\.[0-9]+)" options:0 error:nil];
     NSTextCheckingResult *match = [regex firstMatchInString:titleContent options:0 range:NSMakeRange(0, titleContent.length)];
     
     if (match) {
         return [titleContent substringWithRange:[match rangeAtIndex:1]];
     }
-    
     return nil;
 }
 
-- (NSComparisonResult)compareVersion:(NSString *)version1 withVersion:(NSString *)version2 {
-    NSArray *v1Components = [version1 componentsSeparatedByString:@"."];
-    NSArray *v2Components = [version2 componentsSeparatedByString:@"."];
+- (NSComparisonResult)compareVersion:(NSString *)v1 withVersion:(NSString *)v2 {
+    NSArray *c1 = [v1 componentsSeparatedByString:@"."];
+    NSArray *c2 = [v2 componentsSeparatedByString:@"."];
+    NSInteger max = MAX(c1.count, c2.count);
     
-    NSInteger maxComponents = MAX(v1Components.count, v2Components.count);
-    
-    for (NSInteger i = 0; i < maxComponents; i++) {
-        NSInteger v1 = 0;
-        NSInteger v2 = 0;
-        
-        if (i < v1Components.count) {
-            v1 = [v1Components[i] integerValue];
-        }
-        
-        if (i < v2Components.count) {
-            v2 = [v2Components[i] integerValue];
-        }
-        
-        if (v1 < v2) {
-            return NSOrderedAscending;
-        } else if (v1 > v2) {
-            return NSOrderedDescending;
-        }
+    for (NSInteger i = 0; i < max; i++) {
+        NSInteger n1 = (i < c1.count) ? [c1[i] integerValue] : 0;
+        NSInteger n2 = (i < c2.count) ? [c2[i] integerValue] : 0;
+        if (n1 < n2) return NSOrderedAscending;
+        if (n1 > n2) return NSOrderedDescending;
     }
-    
     return NSOrderedSame;
 }
 
 - (void)downloadLatestVersion {
     NSString *urlString = @"https://github.com/herbrine8403/Amethyst-iOS-MyRemastered/releases/latest";
     NSURL *url = [NSURL URLWithString:urlString];
-    
     if ([[UIApplication sharedApplication] canOpenURL:url]) {
         [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:nil];
     }
 }
 
-#pragma mark - Orientation
+// MARK: - Cell Fade-In Animation
+
+- (void)collectionView:(UICollectionView *)collectionView willDisplayCell:(UICollectionViewCell *)cell forItemAtIndexPath:(NSIndexPath *)indexPath {
+    cell.alpha = 0;
+    cell.transform = CGAffineTransformMakeTranslation(0, 12);
+    [UIView animateWithDuration:0.35 delay:indexPath.section * 0.04 usingSpringWithDamping:0.85 initialSpringVelocity:0.3 options:UIViewAnimationOptionAllowUserInteraction animations:^{
+        cell.alpha = 1;
+        cell.transform = CGAffineTransformIdentity;
+    } completion:nil];
+}
+
+// MARK: - Orientation
 
 - (BOOL)shouldAutorotate {
     return YES;
