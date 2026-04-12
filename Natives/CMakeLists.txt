@@ -265,38 +265,6 @@ if("${CMAKE_HOST_SYSTEM_NAME}" MATCHES "Linux|^GNU$|Android")
   target_sources(AngelAuraAmethyst PUBLIC non_darwin_utils.m)
 endif()
 
-# Option to enable minizip; default OFF to avoid build failures if zlib-ng is not present.
-option(MINIZIP_ENABLED "Enable building bundled minizip (requires zlib/zlib-ng)" OFF)
-
-# Optionally add minizip sources only if the directory exists AND MINIZIP_ENABLED is ON.
-set(MINIZIP_DIR "${CMAKE_CURRENT_LIST_DIR}/minizip")
-if(MINIZIP_ENABLED AND EXISTS "${MINIZIP_DIR}")
-  file(GLOB MINIZIP_SRCS
-    "${MINIZIP_DIR}/*.c"
-    "${MINIZIP_DIR}/*.m"
-    "${MINIZIP_DIR}/*.cpp"
-    "${MINIZIP_DIR}/*.cc"
-  )
-  if(MINIZIP_SRCS)
-    message(STATUS "Found minizip sources: ${MINIZIP_SRCS}")
-    target_sources(AngelAuraAmethyst PRIVATE ${MINIZIP_SRCS})
-    target_include_directories(AngelAuraAmethyst PRIVATE "${MINIZIP_DIR}")
-    # Link zlib if available - on macOS the library is 'z'
-    find_library(ZLIB_LIB z)
-    if(ZLIB_LIB)
-      target_link_libraries(AngelAuraAmethyst PUBLIC ${ZLIB_LIB})
-    endif()
-  else()
-    message(STATUS "minizip folder exists but no source files found.")
-  endif()
-else()
-  if(EXISTS "${MINIZIP_DIR}")
-    message(STATUS "minizip folder found but MINIZIP_ENABLED is OFF — skipping compilation.")
-  else()
-    message(STATUS "minizip folder not found, skipping minizip compilation.")
-  endif()
-endif()
-
 target_link_libraries(AngelAuraAmethyst
   PUBLIC AFNetworking
   lzma
