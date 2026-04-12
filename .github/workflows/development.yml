@@ -55,97 +55,29 @@ jobs:
       - name: Checkout repository submodules
         run: git submodule update --init --recursive
 
-      - name: Get gl4es latest commit hash
-        id: gl4es-sha
-        run: |
-          echo "sha=$(git ls-remote https://github.com/AngleAuraMC/gl4es-114-extra refs/heads/master | grep -io '^\S*')" >> $GITHUB_OUTPUT
-
-      - name: Cache gl4es
-        uses: actions/cache@v4
-        if: false # set to true if you want to enable caching
-        id: gl4es-cache
-        with:
-          path: gl4es/libs
-          key: gl4es-holy-ios-shared-2-${{ steps.gl4es-sha.outputs.sha }}
-
-      - name: Get gl4es
-        if: false && steps.gl4es-cache.outputs.cache-hit != 'true'
-        uses: actions/checkout@v4
-        with:
-          repository: 'AngleAuraMC/gl4es-114-extra'
-          path: 'gl4es'
-
-      - name: Build gl4es
-        if: false && steps.gl4es-cache.outputs.cache-hit != 'true'
-        continue-on-error: true
-        run: |
-          cd gl4es
-          git config user.email "github-actions@users.noreply.github.com"
-          git config user.name "github-actions"
-          export PATH=/opt/procursus/bin:$PATH
-          wget https://github.com/leetal/ios-cmake/raw/master/ios.toolchain.cmake
-          cmake -B build -DCMAKE_TOOLCHAIN_FILE=ios.toolchain.cmake -DDEFAULT_ES=2 \
-            -DNOX11=ON -DNOEGL=OFF -DSTATICLIB=OFF -DPLATFORM=OS64 \
-            -DCMAKE_C_FLAGS=-Wno-error=implicit-function-declaration
-          cmake --build build --config RelWithDebInfo --target GL || true
-          cp -R lib/libGL.dylib ../Natives/resources/Frameworks/libgl4es_114.dylib || true
-
-      - name: Push gl4es
-        if: false && github.event_name != 'pull_request' && github.ref_name == 'main' && steps.gl4es-cache.outputs.cache-hit != 'true'
-        continue-on-error: true
-        run: |
-          git add Natives/resources/Frameworks/libgl4es_114.dylib || true
-          git commit -am "CI: Update gl4es" || true
-          git push || true
-
       - name: Build for ${{ matrix.platform_name }}
         env:
           IPHONEOS_DEPLOYMENT_TARGET: 14.0
-        # 修改点 2: 开启 pipefail 确保错误能被捕获，并使用 tee 将日志同时输出到屏幕和文件
         run: |
           set -o pipefail
           export PATH=/opt/homebrew/bin:$PATH
           export SLIMMED=0
-          
-          # 初始化日志文件
-          touch build.log
-          
+
           if [ "${{ matrix.platform_name }}" == "ios" ]; then
-            # Build ipa and tipa for iOS (Redirect stderr/stdout to build.log)
-            echo "--- Building Standard IPA ---" | tee -a build.log
-            gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }} 2>&1 | tee -a build.log
-            
-            echo "--- Building TrollStore IPA ---" | tee -a build.log
-            gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }} TROLLSTORE_JIT_ENT=1 2>&1 | tee -a build.log
-          
+            gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }}
+
+            gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }} TROLLSTORE_JIT_ENT=1
+
           elif [ "${{ matrix.platform_name }}" == "tvos" ]; then
-            # Build tipa only for tvOS
-            echo "--- Building tvOS IPA ---" | tee -a build.log
-            gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }} TROLLSTORE_JIT_ENT=1 2>&1 | tee -a build.log
-          
+            gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }} TROLLSTORE_JIT_ENT=1
+
           else
-            # Build ipa only for everything else
-            echo "--- Building Generic IPA ---" | tee -a build.log
-            gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }} 2>&1 | tee -a build.log
+            gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }}
           fi
 
-      # 修改点 3: 新增步骤，仅在失败时运行，提取 build.log 中的错误信息
-      - name: 🔍 Extract Critical Build Errors
-        if: failure()
-        run: |
-          echo "::group::Critical Errors Found"
-          if [ -f build.log ]; then
-            echo "Searching for errors in build log..."
-            # 搜索 "error:" 或 "undefined symbol" (不区分大小写)，并显示前后 5 行上下文
-            grep -i -E -C 5 "(error:|undefined symbol|ld: symbol\(s\) not found)" build.log || echo "No standard error patterns found. Please check the full log above."
-          else
-            echo "Build log file not found."
-          fi
-          echo "::endgroup::"
-          
       - name: Upload regular ipa
         uses: actions/upload-artifact@v4
-        if: success() # 只有成功时才上传
+        if: success()
         with:
           name: org.angelauramc.amethyst-${{ matrix.platform_name }}.ipa
           path: artifacts/org.angelauramc.amethyst-*-${{ matrix.platform_name }}.ipa
