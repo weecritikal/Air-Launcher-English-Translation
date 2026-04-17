@@ -48,7 +48,7 @@
 + (instancetype)successWithData:(id)data message:(NSString *)message {
     AIToolResult *result = [[AIToolResult alloc] init];
     result.success = YES;
-    result.data = data;
+    result.data = data ?: @{};
     result.message = message;
     return result;
 }
@@ -80,18 +80,17 @@
     NSString *launcherRoot = [self launcherRootDirectory];
     NSString *gameDir = [self gameDirectory];
     
-    if (!launcherRoot) return NO;
+    if (!launcherRoot || path.length == 0) return NO;
     
     NSString *standardizedPath = [path stringByStandardizingPath];
     NSString *standardizedRoot = [launcherRoot stringByStandardizingPath];
+    NSString *standardizedGameDir = [gameDir stringByStandardizingPath];
     
-    // 检查路径是否以启动器目录开头
-    if ([standardizedPath hasPrefix:standardizedRoot]) {
+    if ([standardizedPath isEqualToString:standardizedRoot] || [standardizedPath hasPrefix:[standardizedRoot stringByAppendingString:@"/"]]) {
         return YES;
     }
     
-    // 也检查游戏目录
-    if (gameDir && [standardizedPath hasPrefix:[gameDir stringByStandardizingPath]]) {
+    if (standardizedGameDir.length > 0 && ([standardizedPath isEqualToString:standardizedGameDir] || [standardizedPath hasPrefix:[standardizedGameDir stringByAppendingString:@"/"]])) {
         return YES;
     }
     
@@ -456,7 +455,6 @@
 + (AIToolResult *)executeToolWithName:(NSString *)toolName 
                            parameters:(NSDictionary *)parameters 
                                 error:(NSError **)error {
-    // 检查路径安全性（对于涉及路径的工具）
     NSArray *pathTools = @[@"read_file", @"list_directory", @"write_file", @"append_file", 
                            @"rename_file", @"delete_file", @"create_directory", @"get_file_info", @"copy_file"];
     
@@ -464,24 +462,20 @@
         NSString *path = parameters[@"path"] ?: parameters[@"old_path"] ?: parameters[@"source_path"];
         if (path && ![self isPathWithinLauncherDirectory:path]) {
             NSString *errorMsg = [NSString stringWithFormat:@"路径 '%@' 不在启动器目录内，操作已被拒绝", path];
-            if (error) {
-                *error = [NSError errorWithDomain:@"AIToolKitError" code:403 userInfo:@{NSLocalizedDescriptionKey: errorMsg}];
-            }
-            return [AIToolResult failureWithError:*error];
+            NSError *pathError = [NSError errorWithDomain:@"AIToolKitError" code:403 userInfo:@{NSLocalizedDescriptionKey: errorMsg}];
+            if (error) *error = pathError;
+            return [AIToolResult failureWithError:pathError];
         }
         
-        // 检查 rename_file 和 copy_file 的目标路径
         NSString *destPath = parameters[@"new_path"] ?: parameters[@"destination_path"];
         if (destPath && ![self isPathWithinLauncherDirectory:destPath]) {
             NSString *errorMsg = [NSString stringWithFormat:@"目标路径 '%@' 不在启动器目录内，操作已被拒绝", destPath];
-            if (error) {
-                *error = [NSError errorWithDomain:@"AIToolKitError" code:403 userInfo:@{NSLocalizedDescriptionKey: errorMsg}];
-            }
-            return [AIToolResult failureWithError:*error];
+            NSError *destError = [NSError errorWithDomain:@"AIToolKitError" code:403 userInfo:@{NSLocalizedDescriptionKey: errorMsg}];
+            if (error) *error = destError;
+            return [AIToolResult failureWithError:destError];
         }
     }
     
-    // 路由到具体的工具执行器
     if ([toolName isEqualToString:@"read_file"]) {
         return [AIToolReadFile executeWithParameters:parameters];
     } else if ([toolName isEqualToString:@"list_directory"]) {
@@ -901,34 +895,44 @@
         return [AIToolResult failureWithError:error];
     }
     
-    // 检查当前状态
     NSString *disabledPath = [modPath stringByAppendingString:@".disabled"];
     BOOL currentlyDisabled = [fm fileExistsAtPath:disabledPath] || [modPath hasSuffix:@".disabled"];
+    NSString *targetPath = nil;
     
-    if (enable && currentlyDisabled) {
-        // 启用: 移除 .disabled 后缀
-        NSString *newPath = [modPath stringByDeletingPathExtension];
-        if ([modPath hasSuffix:@".jar.disabled"]) {
-            newPath = [modPath substringToIndex:modPath.length - 9]; // 移除 ".disabled"
+    if (enable) {
+        if (!currentlyDisabled) {
+            return [AIToolResult successWithData:@{ @"mod_path": modPath, @"enabled": @YES } message:@"Mod 状态未改变"];
         }
-        NSError *moveError;
-        [fm moveItemAtPath:modPath toPath:newPath error:&moveError];
-        if (moveError) {
-            return [AIToolResult failureWithError:moveError];
+        if ([modPath hasSuffix:@".disabled"]) {
+            targetPath = [modPath substringToIndex:modPath.length - @".disabled".length];
+        } else {
+            targetPath = [modPath stringByDeletingPathExtension];
         }
-        return [AIToolResult successWithData:@{@"mod_path": modPath, @"enabled": @YES} message:@"Mod 已启用"];
-    } else if (!enable && !currentlyDisabled) {
-        // 禁用: 添加 .disabled 后缀
-        NSString *newPath = [modPath stringByAppendingString:@".disabled"];
-        NSError *moveError;
-        [fm moveItemAtPath:modPath toPath:newPath error:&moveError];
-        if (moveError) {
-            return [AIToolResult failureWithError:moveError];
+        if ([fm fileExistsAtPath:targetPath]) {
+            NSError *error = [NSError errorWithDomain:@"AIToolKitError" code:4 userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"目标文件已存在: %@", targetPath]}];
+            return [AIToolResult failureWithError:error];
         }
-        return [AIToolResult successWithData:@{@"mod_path": modPath, @"enabled": @NO} message:@"Mod 已禁用"];
+        NSError *moveError = nil;
+        if (![fm moveItemAtPath:modPath toPath:targetPath error:&moveError]) {
+            return [AIToolResult failureWithError:moveError ?: [NSError errorWithDomain:@"AIToolKitError" code:4 userInfo:@{NSLocalizedDescriptionKey: @"启用 Mod 失败"}]];
+        }
+        return [AIToolResult successWithData:@{ @"mod_path": targetPath, @"enabled": @YES } message:@"Mod 已启用"];
     }
     
-    return [AIToolResult successWithData:nil message:@"Mod 状态未改变"];
+    if (currentlyDisabled) {
+        return [AIToolResult successWithData:@{ @"mod_path": modPath, @"enabled": @NO } message:@"Mod 状态未改变"];
+    }
+    
+    targetPath = [modPath stringByAppendingString:@".disabled"];
+    if ([fm fileExistsAtPath:targetPath]) {
+        NSError *error = [NSError errorWithDomain:@"AIToolKitError" code:5 userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"目标文件已存在: %@", targetPath]}];
+        return [AIToolResult failureWithError:error];
+    }
+    NSError *moveError = nil;
+    if (![fm moveItemAtPath:modPath toPath:targetPath error:&moveError]) {
+        return [AIToolResult failureWithError:moveError ?: [NSError errorWithDomain:@"AIToolKitError" code:5 userInfo:@{NSLocalizedDescriptionKey: @"禁用 Mod 失败"}]];
+    }
+    return [AIToolResult successWithData:@{ @"mod_path": targetPath, @"enabled": @NO } message:@"Mod 已禁用"];
 }
 
 @end

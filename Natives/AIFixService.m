@@ -174,13 +174,14 @@ static NSString *const kOpenAIChatEndpoint = @"/chat/completions";
 - (NSString *)buildInitialContextWithLogPath:(NSString *)logPath {
     NSMutableString *context = [NSMutableString string];
     
-    // 添加崩溃日志
+    [context appendString:@"## 任务目标\n\n"];
+    [context appendString:@"你需要先分析崩溃原因，输出诊断结论与修复计划，再按步骤执行。\n\n"];
+    
     [context appendString:@"## 崩溃日志\n\n"];
     [context appendFormat:@"日志文件路径: %@\n\n", logPath];
     
     NSString *logContent = [NSString stringWithContentsOfFile:logPath encoding:NSUTF8StringEncoding error:nil];
     if (logContent) {
-        // 限制日志长度
         if (logContent.length > 50000) {
             logContent = [NSString stringWithFormat:@"[日志过长，已截取最后50000字符]\n\n%@", [logContent substringFromIndex:logContent.length - 50000]];
         }
@@ -191,7 +192,6 @@ static NSString *const kOpenAIChatEndpoint = @"/chat/completions";
         [context appendString:@"无法读取日志文件。\n\n"];
     }
     
-    // 添加项目文档信息
     NSString *iflowPath = [[NSBundle mainBundle] pathForResource:@"IFLOW" ofType:@"md"];
     if (!iflowPath) {
         iflowPath = [NSString stringWithFormat:@"%s/IFLOW.md", getenv("POJAV_HOME")];
@@ -207,14 +207,19 @@ static NSString *const kOpenAIChatEndpoint = @"/chat/completions";
         }
     }
     
-    // 添加启动器目录信息
     [context appendString:@"## 启动器目录信息\n\n"];
     [context appendFormat:@"启动器根目录: %s\n", getenv("POJAV_HOME")];
     [context appendFormat:@"游戏目录: %s\n\n", getenv("POJAV_GAME_DIR")];
     
-    // 添加提示
+    [context appendString:@"## 执行规则\n\n"];
+    [context appendString:@"1. 先给出诊断和计划\n"];
+    [context appendString:@"2. 每次只执行一个修复步骤\n"];
+    [context appendString:@"3. 涉及写入、删除、重命名、Mod 开关、设置修改等操作时，必须等待用户确认\n"];
+    [context appendString:@"4. 只读工具可以直接执行\n"];
+    [context appendString:@"5. 不要尝试进行最终游戏验证，因为验证将由用户手动完成\n\n"];
+    
     [context appendString:@"---\n\n"];
-    [context appendString:@"请根据以上信息分析崩溃原因并提供修复方案。在执行任何操作前，请先解释你的分析和计划。\n"];
+    [context appendString:@"请根据以上信息分析崩溃原因并提供修复方案。先解释分析，再逐步提出行动。\n"];
     
     return [context copy];
 }
@@ -237,7 +242,6 @@ static NSString *const kOpenAIChatEndpoint = @"/chat/completions";
     self.pendingToolRequest = nil;
     
     if (approved) {
-        // 执行工具
         self.state = AISessionStateExecutingTool;
         
         NSError *error;
@@ -249,33 +253,28 @@ static NSString *const kOpenAIChatEndpoint = @"/chat/completions";
         request.result = result.data;
         request.error = error;
         
-        // 记录修改
         if (result.success && ![AIToolKit toolIsReadOnlyOperation:request.toolName]) {
             [self recordModificationForTool:request.toolName parameters:request.parameters];
         }
         
-        // 通知代理
         dispatch_async(dispatch_get_main_queue(), ^{
             if ([self.delegate respondsToSelector:@selector(aiService:didCompleteToolRequest:withResult:)]) {
                 [self.delegate aiService:self didCompleteToolRequest:request withResult:result];
             }
         });
         
-        // 将结果发送给 AI
         NSString *resultContent;
         if (result.success) {
             NSData *jsonData = [NSJSONSerialization dataWithJSONObject:result.data ?: @{} options:0 error:nil];
-            resultContent = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
+            resultContent = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding] ?: @"{}";
         } else {
-            resultContent = [NSString stringWithFormat:@"工具执行失败: %@", error.localizedDescription];
+            resultContent = [NSString stringWithFormat:@"工具执行失败: %@", error.localizedDescription ?: @"未知错误"];
         }
         
         [_mutableMessages addObject:[AIMessage toolResponseMessage:resultContent toolCallId:request.requestId]];
         [self sendChatRequest];
     } else {
-        // 用户拒绝
         request.status = AIToolRequestStatusRejected;
-        
         [_mutableMessages addObject:[AIMessage toolResponseMessage:@"用户拒绝了此操作，请尝试其他方案。" toolCallId:request.requestId]];
         [self sendChatRequest];
     }
@@ -406,40 +405,40 @@ static NSString *const kOpenAIChatEndpoint = @"/chat/completions";
     if ([toolName isEqualToString:@"write_file"] || [toolName isEqualToString:@"append_file"]) {
         mod.filePath = parameters[@"path"];
         mod.operationType = @"modify";
-        
-        // 备份原内容
-        NSString *original = [NSString stringWithContentsOfFile:mod.filePath encoding:NSUTF8StringEncoding error:nil];
-        if (original) {
-            mod.originalContent = [original dataUsingEncoding:NSUTF8StringEncoding];
-        }
+        mod.modificationDescription = [toolName isEqualToString:@"write_file"] ? @"覆盖写入文件" : @"追加内容到文件";
     } else if ([toolName isEqualToString:@"rename_file"]) {
         mod.filePath = parameters[@"new_path"];
         mod.originalPath = parameters[@"old_path"];
         mod.operationType = @"rename";
+        mod.modificationDescription = @"文件重命名或移动";
     } else if ([toolName isEqualToString:@"delete_file"]) {
         mod.filePath = parameters[@"path"];
         mod.operationType = @"delete";
-        
-        // 备份原内容
+        mod.modificationDescription = @"删除文件";
         NSData *original = [NSData dataWithContentsOfFile:mod.filePath];
         mod.originalContent = original;
     } else if ([toolName isEqualToString:@"create_directory"]) {
         mod.filePath = parameters[@"path"];
         mod.operationType = @"create";
+        mod.modificationDescription = @"创建目录";
     } else if ([toolName isEqualToString:@"toggle_mod"]) {
         mod.filePath = parameters[@"mod_path"];
         mod.operationType = @"modify";
-        mod.modificationDescription = parameters[@"enable"] ? @"启用 Mod" : @"禁用 Mod";
+        mod.modificationDescription = [parameters[@"enable"] boolValue] ? @"启用 Mod" : @"禁用 Mod";
+        NSData *original = [NSData dataWithContentsOfFile:mod.filePath];
+        mod.originalContent = original;
     } else if ([toolName isEqualToString:@"delete_mod"]) {
         mod.filePath = parameters[@"mod_path"];
         mod.operationType = @"delete";
-        
-        // 备份原文件
+        mod.modificationDescription = @"删除 Mod";
         NSData *original = [NSData dataWithContentsOfFile:mod.filePath];
         mod.originalContent = original;
     } else if ([toolName isEqualToString:@"copy_file"]) {
         mod.filePath = parameters[@"destination_path"];
         mod.operationType = @"create";
+        mod.modificationDescription = [NSString stringWithFormat:@"复制自 %@", parameters[@"source_path"] ?: @"未知来源"];
+    } else {
+        return;
     }
     
     if (mod.filePath) {
@@ -461,20 +460,29 @@ static NSString *const kOpenAIChatEndpoint = @"/chat/completions";
     self.state = AISessionStateThinking;
     
     AIConfigService *config = [AIConfigService sharedService];
-    
-    // 构建请求
-    NSString *urlString = [config.apiBaseURL stringByAppendingString:kOpenAIChatEndpoint];
+    NSString *base = [config.apiBaseURL stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    if (base.length == 0) {
+        [self handleError:[NSError errorWithDomain:@"AIFixServiceError" code:2 userInfo:@{NSLocalizedDescriptionKey: @"API Base URL 未配置"}]];
+        return;
+    }
+    if ([base hasSuffix:@"/"]) {
+        base = [base substringToIndex:base.length - 1];
+    }
+    NSString *urlString = [base stringByAppendingString:kOpenAIChatEndpoint];
     NSURL *url = [NSURL URLWithString:urlString];
+    if (!url) {
+        [self handleError:[NSError errorWithDomain:@"AIFixServiceError" code:3 userInfo:@{NSLocalizedDescriptionKey: @"API 地址无效"}]];
+        return;
+    }
     
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
     request.HTTPMethod = @"POST";
     [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
-    [request setValue:[NSString stringWithFormat:@"Bearer %@", config.apiKey] forHTTPHeaderField:@"Authorization"];
+    [request setValue:[NSString stringWithFormat:@"Bearer %@", config.apiKey ?: @""] forHTTPHeaderField:@"Authorization"];
     
-    // 构建消息数组
     NSMutableArray *messagesArray = [NSMutableArray array];
     for (AIMessage *msg in self.messages) {
-        NSDictionary *msgDict;
+        NSDictionary *msgDict = nil;
         switch (msg.role) {
             case AIMessageRoleSystem:
                 msgDict = @{@"role": @"system", @"content": msg.content ?: @""};
@@ -483,40 +491,28 @@ static NSString *const kOpenAIChatEndpoint = @"/chat/completions";
                 msgDict = @{@"role": @"user", @"content": msg.content ?: @""};
                 break;
             case AIMessageRoleAssistant:
-                if (msg.toolCall) {
-                    msgDict = @{
-                        @"role": @"assistant",
-                        @"content": msg.content ?: @"",
-                        @"tool_calls": @[msg.toolCall]
-                    };
-                } else {
-                    msgDict = @{@"role": @"assistant", @"content": msg.content ?: @""};
-                }
+                msgDict = msg.toolCall ? @{ @"role": @"assistant", @"content": msg.content ?: @"", @"tool_calls": @[msg.toolCall] } : @{ @"role": @"assistant", @"content": msg.content ?: @"" };
                 break;
             case AIMessageRoleTool:
-                msgDict = @{
-                    @"role": @"tool",
-                    @"tool_call_id": msg.toolCallId ?: @"",
-                    @"content": msg.content ?: @""
-                };
+                msgDict = @{@"role": @"tool", @"tool_call_id": msg.toolCallId ?: @"", @"content": msg.content ?: @""};
                 break;
         }
-        [messagesArray addObject:msgDict];
+        if (msgDict) {
+            [messagesArray addObject:msgDict];
+        }
     }
     
-    // 构建请求体
-    NSMutableDictionary *requestBody = @{
-        @"model": config.modelName,
+    NSDictionary *requestBody = @{
+        @"model": config.modelName ?: @"",
         @"messages": messagesArray,
         @"tools": [AIToolKit toolsJSONSchema],
         @"tool_choice": @"auto",
         @"max_tokens": @4096,
-        @"temperature": @0.7
-    }.mutableCopy;
+        @"temperature": @0.4
+    };
     
     NSError *jsonError;
     NSData *jsonData = [NSJSONSerialization dataWithJSONObject:requestBody options:0 error:&jsonError];
-    
     if (jsonError) {
         [self handleError:jsonError];
         return;
@@ -524,11 +520,9 @@ static NSString *const kOpenAIChatEndpoint = @"/chat/completions";
     
     request.HTTPBody = jsonData;
     
-    // 发送请求
     _currentTask = [self.session dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         if (error) {
             if (error.code == NSURLErrorCancelled) {
-                // 请求被取消，不报错
                 return;
             }
             [self handleError:error];
@@ -538,18 +532,15 @@ static NSString *const kOpenAIChatEndpoint = @"/chat/completions";
         NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
         if (httpResponse.statusCode >= 400) {
             NSString *errorBody = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
-            NSError *httpError = [NSError errorWithDomain:@"AIFixServiceError" 
-                                                     code:httpResponse.statusCode 
-                                                 userInfo:@{NSLocalizedDescriptionKey: errorBody ?: @"HTTP Error"}];
+            NSError *httpError = [NSError errorWithDomain:@"AIFixServiceError" code:httpResponse.statusCode userInfo:@{NSLocalizedDescriptionKey: errorBody ?: @"HTTP Error"}];
             [self handleError:httpError];
             return;
         }
         
         NSError *parseError;
         NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:&parseError];
-        
-        if (parseError) {
-            [self handleError:parseError];
+        if (parseError || ![json isKindOfClass:[NSDictionary class]]) {
+            [self handleError:parseError ?: [NSError errorWithDomain:@"AIFixServiceError" code:4 userInfo:@{NSLocalizedDescriptionKey: @"响应解析失败"}]];
             return;
         }
         
@@ -562,30 +553,30 @@ static NSString *const kOpenAIChatEndpoint = @"/chat/completions";
 - (void)processAIResponse:(NSDictionary *)json {
     NSArray *choices = json[@"choices"];
     if (choices.count == 0) {
-        NSError *error = [NSError errorWithDomain:@"AIFixServiceError" code:100 userInfo:@{NSLocalizedDescriptionKey: @"AI 未返回任何响应"}];
-        [self handleError:error];
+        [self handleError:[NSError errorWithDomain:@"AIFixServiceError" code:100 userInfo:@{NSLocalizedDescriptionKey: @"AI 未返回任何响应"}]];
         return;
     }
     
     NSDictionary *choice = choices.firstObject;
     NSDictionary *message = choice[@"message"];
+    if (![message isKindOfClass:[NSDictionary class]]) {
+        [self handleError:[NSError errorWithDomain:@"AIFixServiceError" code:101 userInfo:@{NSLocalizedDescriptionKey: @"AI 响应结构无效"}]];
+        return;
+    }
     
     NSString *content = message[@"content"] ?: @"";
     NSArray *toolCalls = message[@"tool_calls"];
     
-    // 添加 AI 消息到历史
     AIMessage *assistantMsg = [[AIMessage alloc] init];
     assistantMsg.role = AIMessageRoleAssistant;
     assistantMsg.content = content;
     
-    // 通知代理收到消息
     dispatch_async(dispatch_get_main_queue(), ^{
         if ([self.delegate respondsToSelector:@selector(aiService:didReceiveMessage:)]) {
             [self.delegate aiService:self didReceiveMessage:assistantMsg];
         }
     });
     
-    // 检查是否有工具调用
     if (toolCalls.count > 0) {
         NSDictionary *toolCall = toolCalls.firstObject;
         NSString *toolCallId = toolCall[@"id"];
@@ -593,36 +584,38 @@ static NSString *const kOpenAIChatEndpoint = @"/chat/completions";
         NSString *toolName = function[@"name"];
         NSString *argumentsString = function[@"arguments"];
         
-        // 解析参数
         NSError *parseError;
-        NSDictionary *parameters = [NSJSONSerialization JSONObjectWithData:[argumentsString dataUsingEncoding:NSUTF8StringEncoding] options:0 error:&parseError];
-        
-        if (parseError) {
-            parameters = @{};
+        NSDictionary *parameters = @{};
+        if (argumentsString.length > 0) {
+            id parsed = [NSJSONSerialization JSONObjectWithData:[argumentsString dataUsingEncoding:NSUTF8StringEncoding] options:0 error:&parseError];
+            if (![parsed isKindOfClass:[NSDictionary class]]) {
+                parseError = parseError ?: [NSError errorWithDomain:@"AIFixServiceError" code:102 userInfo:@{NSLocalizedDescriptionKey: @"工具参数解析失败"}];
+            } else {
+                parameters = parsed;
+            }
         }
         
-        // 记录工具调用
+        if (parseError) {
+            [self handleError:parseError];
+            return;
+        }
+        
         assistantMsg.toolCall = toolCall;
         assistantMsg.toolCallId = toolCallId;
-        
         [_mutableMessages addObject:assistantMsg];
         
-        // 检查是否需要用户确认
-        if ([AIToolKit toolRequiresUserConfirmation:toolName]) {
-            // 创建工具请求并等待用户确认
-            AIToolRequest *request = [AIToolRequest requestWithToolName:toolName
-                                                            displayName:[AIToolKit availableToolsInfo].firstObject[@"display"]
-                                                             parameters:parameters
-                                                                 reason:content];
-            
-            // 从工具列表中获取显示名称
-            for (NSDictionary *toolInfo in [AIToolKit availableToolsInfo]) {
-                if ([toolInfo[@"name"] isEqualToString:toolName]) {
-                    request.toolDisplayName = toolInfo[@"display"];
-                    break;
-                }
+        NSArray *toolInfos = [AIToolKit availableToolsInfo];
+        NSString *displayName = toolName;
+        for (NSDictionary *toolInfo in toolInfos) {
+            if ([toolInfo[@"name"] isEqualToString:toolName]) {
+                displayName = toolInfo[@"display"] ?: toolName;
+                break;
             }
-            
+        }
+        
+        if ([AIToolKit toolRequiresUserConfirmation:toolName]) {
+            AIToolRequest *request = [AIToolRequest requestWithToolName:toolName displayName:displayName parameters:parameters reason:content.length > 0 ? content : [NSString stringWithFormat:@"请求执行 %@", displayName]];
+            request.requestId = toolCallId ?: request.requestId;
             self.pendingToolRequest = request;
             self.state = AISessionStateWaitingTool;
             
@@ -632,28 +625,25 @@ static NSString *const kOpenAIChatEndpoint = @"/chat/completions";
                 }
             });
         } else {
-            // 自动执行只读工具
             self.state = AISessionStateExecutingTool;
             
             NSError *error;
             AIToolResult *result = [AIToolKit executeToolWithName:toolName parameters:parameters error:&error];
             
-            NSString *resultContent;
+            NSString *resultContent = nil;
             if (result.success) {
                 NSData *jsonData = [NSJSONSerialization dataWithJSONObject:result.data ?: @{} options:NSJSONWritingPrettyPrinted error:nil];
-                resultContent = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
+                resultContent = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding] ?: @"{}";
             } else {
                 resultContent = [NSString stringWithFormat:@"工具执行失败: %@", error.localizedDescription];
             }
             
-            [_mutableMessages addObject:[AIMessage toolResponseMessage:resultContent toolCallId:toolCallId]];
+            [_mutableMessages addObject:[AIMessage toolResponseMessage:resultContent toolCallId:toolCallId ?: @""]];
             [self sendChatRequest];
         }
     } else {
-        // 没有工具调用，添加消息并继续
         [_mutableMessages addObject:assistantMsg];
         
-        // 检查是否完成
         NSString *finishReason = choice[@"finish_reason"];
         if ([finishReason isEqualToString:@"stop"] || content.length == 0) {
             self.state = AISessionStateCompleted;
@@ -665,7 +655,6 @@ static NSString *const kOpenAIChatEndpoint = @"/chat/completions";
                 }
             });
         } else {
-            // 继续对话
             [self sendChatRequest];
         }
     }

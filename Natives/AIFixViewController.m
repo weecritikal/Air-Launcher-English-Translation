@@ -25,6 +25,16 @@
 #import "ModItem.h"
 #import "PLProfiles.h"
 
+static UIColor *AFHexColor(NSString *hex) {
+    hex = [hex stringByReplacingOccurrencesOfString:@"#" withString:@""];
+    unsigned int rgb = 0;
+    [[NSScanner scannerWithString:hex] scanHexInt:&rgb];
+    return [UIColor colorWithRed:((rgb >> 16) & 0xFF) / 255.0
+                           green:((rgb >> 8) & 0xFF) / 255.0
+                            blue:(rgb & 0xFF) / 255.0
+                           alpha:1.0];
+}
+
 // 消息气泡类型
 typedef NS_ENUM(NSInteger, MessageBubbleType) {
     MessageBubbleTypeAI,        // AI 消息
@@ -41,6 +51,18 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
 @property (nonatomic, assign) MessageBubbleType bubbleType;
 @property (nonatomic, assign) BOOL isSuccess;
 @property (nonatomic, copy, nullable) NSString *messageId;
+@end
+
+@interface AIDashboardTileView : UIControl
+@property (nonatomic, strong) UIVisualEffectView *blurView;
+@property (nonatomic, strong) UIView *contentContainer;
+@property (nonatomic, strong) CAGradientLayer *accentLayer;
+@property (nonatomic, strong) UIImageView *iconView;
+@property (nonatomic, strong) UILabel *titleLabel;
+@property (nonatomic, strong) UILabel *valueLabel;
+@property (nonatomic, strong) UILabel *subtitleLabel;
+@property (nonatomic, assign) BOOL compactLayout;
+- (void)configureWithTitle:(NSString *)title value:(NSString *)value subtitle:(NSString *)subtitle icon:(NSString *)iconName accent:(UIColor *)accent compact:(BOOL)compact;
 @end
 
 // 工具请求卡片视图
@@ -102,11 +124,21 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
 @property (nonatomic, strong) UIView *toolsCardView;
 @property (nonatomic, strong) UILabel *toolsTitleLabel;
 @property (nonatomic, strong) UIStackView *toolsStackView;
+@property (nonatomic, strong) UIView *historyCardView;
+@property (nonatomic, strong) UILabel *historyTitleLabel;
+@property (nonatomic, strong) UIStackView *historyStackView;
+@property (nonatomic, strong) UIView *riskCardView;
+@property (nonatomic, strong) UILabel *riskTitleLabel;
+@property (nonatomic, strong) UIStackView *riskStackView;
 
 // 状态视图
 @property (nonatomic, strong) UIView *statusBarView;
 @property (nonatomic, strong) UILabel *statusLabel;
 @property (nonatomic, strong) UIActivityIndicatorView *activityIndicator;
+@property (nonatomic, strong) UIView *diagnosticStripView;
+@property (nonatomic, strong) UILabel *diagnosticTitleLabel;
+@property (nonatomic, strong) UILabel *diagnosticSubtitleLabel;
+@property (nonatomic, strong) UIStackView *diagnosticTileStack;
 
 // 工具请求卡片
 @property (nonatomic, strong) ToolRequestCardView *toolRequestCard;
@@ -232,32 +264,141 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     CGFloat panelWidth = _leftPanel.bounds.size.width;
     CGFloat panelHeight = _leftPanel.bounds.size.height;
     CGFloat sidePadding = 16;
-    
-    // 标题栏
-    UIView *titleBar = [[UIView alloc] initWithFrame:CGRectMake(sidePadding, 0, panelWidth - sidePadding * 2, 44)];
-    titleBar.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.1];
-    titleBar.layer.cornerRadius = 10;
-    [_leftPanel addSubview:titleBar];
-    
-    UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(16, 0, titleBar.bounds.size.width - 32, 44)];
-    titleLabel.text = localize(@"ai.fix.conversation", @"对话窗口");
-    titleLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
-    titleLabel.textColor = [UIColor whiteColor];
-    [titleBar addSubview:titleLabel];
-    
-    // 对话滚动视图
-    CGFloat scrollViewTop = 56;
-    CGFloat inputHeight = 120;
-    
-    _conversationScrollView = [[UIScrollView alloc] initWithFrame:CGRectMake(sidePadding, scrollViewTop, panelWidth - sidePadding * 2, panelHeight - scrollViewTop - inputHeight - 16)];
-    _conversationScrollView.backgroundColor = [UIColor colorWithWhite:0.1 alpha:1.0];
-    _conversationScrollView.layer.cornerRadius = 12;
+    CGFloat topSpacing = 8;
+    CGFloat toolHeight = 86;
+    CGFloat inputHeight = 128;
+    CGFloat sectionGap = 12;
+
+    _diagnosticStripView = [[UIView alloc] initWithFrame:CGRectMake(sidePadding, 0, panelWidth - sidePadding * 2, 70)];
+    _diagnosticStripView.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.07];
+    _diagnosticStripView.layer.cornerRadius = 18;
+    _diagnosticStripView.layer.cornerCurve = kCACornerCurveContinuous;
+    _diagnosticStripView.layer.borderWidth = 0.5;
+    _diagnosticStripView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.12].CGColor;
+    [_leftPanel addSubview:_diagnosticStripView];
+
+    _diagnosticTitleLabel = [[UILabel alloc] initWithFrame:CGRectMake(16, 12, _diagnosticStripView.bounds.size.width - 32, 22)];
+    _diagnosticTitleLabel.font = [UIFont systemFontOfSize:18 weight:UIFontWeightBold];
+    _diagnosticTitleLabel.textColor = [UIColor whiteColor];
+    _diagnosticTitleLabel.text = localize(@"ai.fix.dash_title", @"AI 修复诊断工作台");
+    [_diagnosticStripView addSubview:_diagnosticTitleLabel];
+
+    _diagnosticSubtitleLabel = [[UILabel alloc] initWithFrame:CGRectMake(16, 36, _diagnosticStripView.bounds.size.width - 32, 18)];
+    _diagnosticSubtitleLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
+    _diagnosticSubtitleLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.62];
+    _diagnosticSubtitleLabel.text = localize(@"ai.fix.dash_subtitle", @"先分析，再修复，所有高风险操作都将等待确认");
+    [_diagnosticStripView addSubview:_diagnosticSubtitleLabel];
+
+    CGFloat tileTop = CGRectGetMaxY(_diagnosticStripView.frame) + topSpacing;
+    _diagnosticTileStack = [[UIStackView alloc] initWithFrame:CGRectMake(sidePadding, tileTop, panelWidth - sidePadding * 2, toolHeight)];
+    _diagnosticTileStack.axis = UILayoutConstraintAxisHorizontal;
+    _diagnosticTileStack.spacing = 10;
+    _diagnosticTileStack.distribution = UIStackViewDistributionFillEqually;
+    [_leftPanel addSubview:_diagnosticTileStack];
+
+    NSArray *tiles = @[
+        @{@"title": localize(@"ai.fix.tile.analyze", @"分析"), @"value": localize(@"ai.fix.tile.analyze_value", @"日志与配置"), @"subtitle": localize(@"ai.fix.tile.analyze_sub", @"读取崩溃日志"), @"icon": @"doc.text.magnifyingglass", @"accent": AFHexColor(@"#3B82F6")},
+        @{@"title": localize(@"ai.fix.tile.plan", @"计划"), @"value": localize(@"ai.fix.tile.plan_value", @"逐步修复"), @"subtitle": localize(@"ai.fix.tile.plan_sub", @"生成最小风险方案"), @"icon": @"list.bullet.clipboard", @"accent": AFHexColor(@"#8B5CF6")},
+        @{@"title": localize(@"ai.fix.tile.safe", @"安全"), @"value": localize(@"ai.fix.tile.safe_value", @"人工确认"), @"subtitle": localize(@"ai.fix.tile.safe_sub", @"危险操作需确认"), @"icon": @"shield.lefthalf.filled", @"accent": AFHexColor(@"#10B981")}
+    ];
+    for (NSDictionary *info in tiles) {
+        AIDashboardTileView *tile = [[AIDashboardTileView alloc] init];
+        [tile configureWithTitle:info[@"title"] value:info[@"value"] subtitle:info[@"subtitle"] icon:info[@"icon"] accent:info[@"accent"] compact:YES];
+        [_diagnosticTileStack addArrangedSubview:tile];
+    }
+
+    CGFloat historyTop = CGRectGetMaxY(_diagnosticTileStack.frame) + sectionGap;
+    CGFloat historyHeight = 88;
+    _historyCardView = [[UIView alloc] initWithFrame:CGRectMake(sidePadding, historyTop, panelWidth - sidePadding * 2, historyHeight)];
+    _historyCardView.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.07];
+    _historyCardView.layer.cornerRadius = 18;
+    _historyCardView.layer.cornerCurve = kCACornerCurveContinuous;
+    _historyCardView.layer.borderWidth = 0.5;
+    _historyCardView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.12].CGColor;
+    [_leftPanel addSubview:_historyCardView];
+
+    _historyTitleLabel = [[UILabel alloc] initWithFrame:CGRectMake(16, 10, _historyCardView.bounds.size.width - 32, 18)];
+    _historyTitleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
+    _historyTitleLabel.textColor = [UIColor whiteColor];
+    _historyTitleLabel.text = localize(@"ai.fix.history.title", @"修复历史");
+    [_historyCardView addSubview:_historyTitleLabel];
+
+    _historyStackView = [[UIStackView alloc] initWithFrame:CGRectMake(16, 32, _historyCardView.bounds.size.width - 32, 44)];
+    _historyStackView.axis = UILayoutConstraintAxisHorizontal;
+    _historyStackView.spacing = 8;
+    _historyStackView.distribution = UIStackViewDistributionFillEqually;
+    [_historyCardView addSubview:_historyStackView];
+
+    NSArray *historyInfos = @[
+        @{@"title": localize(@"ai.fix.history.sessions", @"会话"), @"value": localize(@"ai.fix.history.sessions_value", @"自动记录"), @"subtitle": localize(@"ai.fix.history.sessions_sub", @"每次修复可回看"), @"icon": @"clock.arrow.circlepath", @"accent": AFHexColor(@"#F59E0B")},
+        @{@"title": localize(@"ai.fix.history.rollback", @"回滚"), @"value": localize(@"ai.fix.history.rollback_value", @"一键撤销"), @"subtitle": localize(@"ai.fix.history.rollback_sub", @"保留修改痕迹"), @"icon": @"arrow.uturn.backward.circle.fill", @"accent": AFHexColor(@"#8B5CF6")}
+    ];
+    for (NSDictionary *info in historyInfos) {
+        AIDashboardTileView *tile = [[AIDashboardTileView alloc] init];
+        [tile configureWithTitle:info[@"title"] value:info[@"value"] subtitle:info[@"subtitle"] icon:info[@"icon"] accent:info[@"accent"] compact:YES];
+        [_historyStackView addArrangedSubview:tile];
+    }
+
+    CGFloat riskTop = CGRectGetMaxY(_historyCardView.frame) + sectionGap;
+    CGFloat riskHeight = 116;
+    _riskCardView = [[UIView alloc] initWithFrame:CGRectMake(sidePadding, riskTop, panelWidth - sidePadding * 2, riskHeight)];
+    _riskCardView.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.07];
+    _riskCardView.layer.cornerRadius = 18;
+    _riskCardView.layer.cornerCurve = kCACornerCurveContinuous;
+    _riskCardView.layer.borderWidth = 0.5;
+    _riskCardView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.12].CGColor;
+    [_leftPanel addSubview:_riskCardView];
+
+    _riskTitleLabel = [[UILabel alloc] initWithFrame:CGRectMake(16, 10, _riskCardView.bounds.size.width - 32, 18)];
+    _riskTitleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
+    _riskTitleLabel.textColor = [UIColor whiteColor];
+    _riskTitleLabel.text = localize(@"ai.fix.risk.title", @"风险提示");
+    [_riskCardView addSubview:_riskTitleLabel];
+
+    _riskStackView = [[UIStackView alloc] initWithFrame:CGRectMake(16, 34, _riskCardView.bounds.size.width - 32, 70)];
+    _riskStackView.axis = UILayoutConstraintAxisVertical;
+    _riskStackView.spacing = 6;
+    _riskStackView.alignment = UIStackViewAlignmentFill;
+    [_riskCardView addSubview:_riskStackView];
+
+    NSArray *riskItems = @[
+        @{@"title": localize(@"ai.fix.risk.backup", @"修改前已备份"), @"subtitle": localize(@"ai.fix.risk.backup_sub", @"关键文件会尽量保留恢复依据")},
+        @{@"title": localize(@"ai.fix.risk.confirm", @"高风险操作需确认"), @"subtitle": localize(@"ai.fix.risk.confirm_sub", @"删除、重命名、Mod 操作不会静默执行")},
+        @{@"title": localize(@"ai.fix.risk.verify", @"修复后需手动验证"), @"subtitle": localize(@"ai.fix.risk.verify_sub", @"请重新启动游戏确认实际效果")}
+    ];
+    for (NSDictionary *item in riskItems) {
+        UIView *row = [[UIView alloc] initWithFrame:CGRectZero];
+        row.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.18];
+        row.layer.cornerRadius = 10;
+        row.layer.cornerCurve = kCACornerCurveContinuous;
+        UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(10, 6, _riskStackView.bounds.size.width - 20, 16)];
+        title.font = [UIFont systemFontOfSize:12 weight:UIFontWeightSemibold];
+        title.textColor = [UIColor whiteColor];
+        title.text = item[@"title"];
+        [row addSubview:title];
+        UILabel *sub = [[UILabel alloc] initWithFrame:CGRectMake(10, 20, _riskStackView.bounds.size.width - 20, 14)];
+        sub.font = [UIFont systemFontOfSize:10 weight:UIFontWeightMedium];
+        sub.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.58];
+        sub.text = item[@"subtitle"];
+        [row addSubview:sub];
+        row.frame = CGRectMake(0, 0, _riskStackView.bounds.size.width, 30);
+        [_riskStackView addArrangedSubview:row];
+    }
+
+    CGFloat scrollViewTop = CGRectGetMaxY(_riskCardView.frame) + sectionGap;
+    CGFloat inputTop = panelHeight - inputHeight;
+    CGFloat scrollBottom = inputTop - 12;
+    _conversationScrollView = [[UIScrollView alloc] initWithFrame:CGRectMake(sidePadding, scrollViewTop, panelWidth - sidePadding * 2, scrollBottom - scrollViewTop)];
+    _conversationScrollView.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.05];
+    _conversationScrollView.layer.cornerRadius = 18;
+    _conversationScrollView.layer.cornerCurve = kCACornerCurveContinuous;
+    _conversationScrollView.layer.borderWidth = 0.5;
+    _conversationScrollView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.12].CGColor;
     _conversationScrollView.showsVerticalScrollIndicator = YES;
     _conversationScrollView.indicatorStyle = UIScrollViewIndicatorStyleWhite;
     _conversationScrollView.alwaysBounceVertical = YES;
     [_leftPanel addSubview:_conversationScrollView];
-    
-    // 对话内容栈视图
+
     _conversationStackView = [[UIStackView alloc] init];
     _conversationStackView.axis = UILayoutConstraintAxisVertical;
     _conversationStackView.spacing = 12;
@@ -266,22 +407,28 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     _conversationStackView.layoutMargins = UIEdgeInsetsMake(12, 12, 12, 12);
     _conversationStackView.layoutMarginsRelativeArrangement = YES;
     [_conversationScrollView addSubview:_conversationStackView];
-    
+
     _conversationStackView.translatesAutoresizingMaskIntoConstraints = NO;
     [_conversationStackView.topAnchor constraintEqualToAnchor:_conversationScrollView.topAnchor].active = YES;
     [_conversationStackView.leadingAnchor constraintEqualToAnchor:_conversationScrollView.leadingAnchor].active = YES;
     [_conversationStackView.trailingAnchor constraintEqualToAnchor:_conversationScrollView.trailingAnchor].active = YES;
     [_conversationStackView.widthAnchor constraintEqualToAnchor:_conversationScrollView.widthAnchor constant:-24].active = YES;
-    
-    // 输入容器
-    CGFloat inputTop = panelHeight - inputHeight;
-    _inputContainerView = [[UIView alloc] initWithFrame:CGRectMake(sidePadding, inputTop, panelWidth - sidePadding * 2, inputHeight - 8)];
-    _inputContainerView.backgroundColor = [UIColor colorWithWhite:0.15 alpha:1.0];
-    _inputContainerView.layer.cornerRadius = 12;
+
+    _inputContainerView = [[UIView alloc] initWithFrame:CGRectMake(sidePadding, inputTop, panelWidth - sidePadding * 2, inputHeight)];
+    _inputContainerView.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.08];
+    _inputContainerView.layer.cornerRadius = 18;
+    _inputContainerView.layer.cornerCurve = kCACornerCurveContinuous;
+    _inputContainerView.layer.borderWidth = 0.5;
+    _inputContainerView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.12].CGColor;
     [_leftPanel addSubview:_inputContainerView];
-    
-    // 输入文本视图
-    _inputTextView = [[UITextView alloc] initWithFrame:CGRectMake(12, 8, _inputContainerView.bounds.size.width - 24, _inputContainerView.bounds.size.height - 48)];
+
+    UILabel *inputTitle = [[UILabel alloc] initWithFrame:CGRectMake(16, 10, 180, 18)];
+    inputTitle.text = localize(@"ai.fix.input_title", @"指令与补充信息");
+    inputTitle.font = [UIFont systemFontOfSize:12 weight:UIFontWeightSemibold];
+    inputTitle.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.7];
+    [_inputContainerView addSubview:inputTitle];
+
+    _inputTextView = [[UITextView alloc] initWithFrame:CGRectMake(12, 30, _inputContainerView.bounds.size.width - 24, 56)];
     _inputTextView.backgroundColor = [UIColor clearColor];
     _inputTextView.textColor = [UIColor whiteColor];
     _inputTextView.font = [UIFont systemFontOfSize:15];
@@ -289,33 +436,30 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     _inputTextView.textContainerInset = UIEdgeInsetsZero;
     _inputTextView.textContainer.lineFragmentPadding = 0;
     [_inputContainerView addSubview:_inputTextView];
-    
-    // 占位符
-    UILabel *placeholder = [[UILabel alloc] initWithFrame:CGRectMake(12, 8, 200, 24)];
-    placeholder.text = localize(@"ai.fix.input_placeholder", @"说点什么...");
+
+    UILabel *placeholder = [[UILabel alloc] initWithFrame:CGRectMake(12, 30, 260, 24)];
+    placeholder.text = localize(@"ai.fix.input_placeholder", @"描述现象、补充信息或直接开始对话...");
     placeholder.font = [UIFont systemFontOfSize:15];
-    placeholder.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.4];
+    placeholder.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.35];
     placeholder.tag = 999;
     [_inputContainerView addSubview:placeholder];
-    
-    // 停止按钮
+
     _stopButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    _stopButton.frame = CGRectMake(_inputContainerView.bounds.size.width - 160, _inputContainerView.bounds.size.height - 36, 70, 28);
+    _stopButton.frame = CGRectMake(_inputContainerView.bounds.size.width - 162, _inputContainerView.bounds.size.height - 36, 72, 28);
     [_stopButton setTitle:localize(@"ai.fix.stop", @"停止") forState:UIControlStateNormal];
     _stopButton.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
-    _stopButton.backgroundColor = [UIColor colorWithRed:0.8 green:0.2 blue:0.2 alpha:1.0];
+    _stopButton.backgroundColor = AFHexColor(@"#DC2626");
     _stopButton.layer.cornerRadius = 14;
     _stopButton.tintColor = [UIColor whiteColor];
     _stopButton.hidden = YES;
     [_stopButton addTarget:self action:@selector(stopFix) forControlEvents:UIControlEventTouchUpInside];
     [_inputContainerView addSubview:_stopButton];
-    
-    // 发送按钮
+
     _sendButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    _sendButton.frame = CGRectMake(_inputContainerView.bounds.size.width - 80, _inputContainerView.bounds.size.height - 36, 70, 28);
+    _sendButton.frame = CGRectMake(_inputContainerView.bounds.size.width - 80, _inputContainerView.bounds.size.height - 36, 68, 28);
     [_sendButton setTitle:localize(@"ai.fix.send", @"发送") forState:UIControlStateNormal];
     _sendButton.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
-    _sendButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.6 blue:1.0 alpha:1.0];
+    _sendButton.backgroundColor = AFHexColor(@"#2563EB");
     _sendButton.layer.cornerRadius = 14;
     _sendButton.tintColor = [UIColor whiteColor];
     [_sendButton addTarget:self action:@selector(sendMessage) forControlEvents:UIControlEventTouchUpInside];
@@ -326,32 +470,34 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     CGFloat panelWidth = _rightPanel.bounds.size.width;
     CGFloat panelHeight = _rightPanel.bounds.size.height;
     CGFloat sidePadding = 12;
-    CGFloat cardSpacing = 12;
-    
-    // 配置卡片
-    _configCardView = [[UIView alloc] initWithFrame:CGRectMake(sidePadding, 0, panelWidth - sidePadding * 2, 200)];
-    _configCardView.backgroundColor = [UIColor colorWithWhite:0.15 alpha:1.0];
-    _configCardView.layer.cornerRadius = 12;
+    CGFloat top = 0;
+
+    _configCardView = [[UIView alloc] initWithFrame:CGRectMake(sidePadding, top, panelWidth - sidePadding * 2, 206)];
+    _configCardView.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.08];
+    _configCardView.layer.cornerRadius = 18;
+    _configCardView.layer.cornerCurve = kCACornerCurveContinuous;
+    _configCardView.layer.borderWidth = 0.5;
+    _configCardView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.12].CGColor;
     [_rightPanel addSubview:_configCardView];
-    
     [self setupConfigCard];
-    
-    // 工具请求卡片（初始隐藏）
-    _toolsCardView = [[UIView alloc] initWithFrame:CGRectMake(sidePadding, 220, panelWidth - sidePadding * 2, 200)];
-    _toolsCardView.backgroundColor = [UIColor colorWithWhite:0.15 alpha:1.0];
-    _toolsCardView.layer.cornerRadius = 12;
+
+    _toolsCardView = [[UIView alloc] initWithFrame:CGRectMake(sidePadding, 218, panelWidth - sidePadding * 2, 220)];
+    _toolsCardView.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.08];
+    _toolsCardView.layer.cornerRadius = 18;
+    _toolsCardView.layer.cornerCurve = kCACornerCurveContinuous;
+    _toolsCardView.layer.borderWidth = 0.5;
+    _toolsCardView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.12].CGColor;
     _toolsCardView.hidden = YES;
     [_rightPanel addSubview:_toolsCardView];
-    
     [self setupToolsCard];
-    
-    // 退出按钮
+
     _exitButton = [UIButton buttonWithType:UIButtonTypeSystem];
     _exitButton.frame = CGRectMake(sidePadding, panelHeight - 48, panelWidth - sidePadding * 2, 44);
     [_exitButton setTitle:localize(@"ai.fix.exit", @"退出启动器") forState:UIControlStateNormal];
-    _exitButton.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightMedium];
+    _exitButton.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
     _exitButton.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.1];
-    _exitButton.layer.cornerRadius = 10;
+    _exitButton.layer.cornerRadius = 14;
+    _exitButton.layer.cornerCurve = kCACornerCurveContinuous;
     _exitButton.tintColor = [UIColor whiteColor];
     [_exitButton addTarget:self action:@selector(exitLauncher) forControlEvents:UIControlEventTouchUpInside];
     [_rightPanel addSubview:_exitButton];
@@ -359,44 +505,41 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
 
 - (void)setupConfigCard {
     CGFloat cardWidth = _configCardView.bounds.size.width;
-    CGFloat cardHeight = _configCardView.bounds.size.height;
-    
-    // 标题
+
     UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(16, 12, cardWidth - 32, 24)];
     titleLabel.text = localize(@"ai.fix.model_config", @"模型配置");
     titleLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
     titleLabel.textColor = [UIColor whiteColor];
     [_configCardView addSubview:titleLabel];
-    
-    // API Base URL
-    _apiBaseURLField = [self createTextField:CGRectMake(16, 44, cardWidth - 32, 36)
-                                       placeholder:@"API Base URL"];
+
+    UILabel *subtitleLabel = [[UILabel alloc] initWithFrame:CGRectMake(16, 34, cardWidth - 32, 18)];
+    subtitleLabel.text = localize(@"ai.fix.config_subtitle", @"可对接兼容 OpenAI 的 API 服务");
+    subtitleLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
+    subtitleLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.55];
+    [_configCardView addSubview:subtitleLabel];
+
+    _apiBaseURLField = [self createTextField:CGRectMake(16, 58, cardWidth - 32, 32) placeholder:@"API Base URL"];
     [_configCardView addSubview:_apiBaseURLField];
-    
-    // 模型名
-    _modelNameField = [self createTextField:CGRectMake(16, 84, cardWidth - 32, 36)
-                                 placeholder:localize(@"ai.fix.model_name", @"模型名")];
+
+    _modelNameField = [self createTextField:CGRectMake(16, 94, cardWidth - 32, 32) placeholder:localize(@"ai.fix.model_name", @"模型名")];
     [_configCardView addSubview:_modelNameField];
-    
-    // API Key
-    _apiKeyField = [self createTextField:CGRectMake(16, 124, cardWidth - 32, 36)
-                                  placeholder:@"API Key"];
+
+    _apiKeyField = [self createTextField:CGRectMake(16, 130, cardWidth - 32, 32) placeholder:@"API Key"];
     _apiKeyField.secureTextEntry = YES;
     [_configCardView addSubview:_apiKeyField];
-    
-    // 配置状态标签
-    _configStatusLabel = [[UILabel alloc] initWithFrame:CGRectMake(16, 168, cardWidth - 100, 24)];
+
+    _configStatusLabel = [[UILabel alloc] initWithFrame:CGRectMake(16, 170, cardWidth - 100, 18)];
     _configStatusLabel.font = [UIFont systemFontOfSize:12];
     _configStatusLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.6];
     [_configCardView addSubview:_configStatusLabel];
-    
-    // 保存配置按钮
+
     _saveConfigButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    _saveConfigButton.frame = CGRectMake(cardWidth - 80, 164, 64, 28);
+    _saveConfigButton.frame = CGRectMake(cardWidth - 82, 162, 66, 32);
     [_saveConfigButton setTitle:localize(@"ai.fix.save", @"保存") forState:UIControlStateNormal];
-    _saveConfigButton.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightMedium];
-    _saveConfigButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.8 blue:0.4 alpha:1.0];
-    _saveConfigButton.layer.cornerRadius = 14;
+    _saveConfigButton.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
+    _saveConfigButton.backgroundColor = AFHexColor(@"#2563EB");
+    _saveConfigButton.layer.cornerRadius = 16;
+    _saveConfigButton.layer.cornerCurve = kCACornerCurveContinuous;
     _saveConfigButton.tintColor = [UIColor whiteColor];
     [_saveConfigButton addTarget:self action:@selector(saveConfig) forControlEvents:UIControlEventTouchUpInside];
     [_configCardView addSubview:_saveConfigButton];
@@ -404,38 +547,43 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
 
 - (void)setupToolsCard {
     CGFloat cardWidth = _toolsCardView.bounds.size.width;
-    
-    // 标题
+
     _toolsTitleLabel = [[UILabel alloc] initWithFrame:CGRectMake(16, 12, cardWidth - 32, 24)];
     _toolsTitleLabel.text = localize(@"ai.fix.tool_requests", @"工具请求");
     _toolsTitleLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
     _toolsTitleLabel.textColor = [UIColor whiteColor];
     [_toolsCardView addSubview:_toolsTitleLabel];
-    
-    // 工具列表
-    _toolsStackView = [[UIStackView alloc] initWithFrame:CGRectMake(16, 44, cardWidth - 32, 140)];
+
+    UILabel *subtitle = [[UILabel alloc] initWithFrame:CGRectMake(16, 34, cardWidth - 32, 18)];
+    subtitle.text = localize(@"ai.fix.tool_subtitle", @"高风险操作会在这里等待您的确认");
+    subtitle.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
+    subtitle.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.55];
+    [_toolsCardView addSubview:subtitle];
+
+    _toolsStackView = [[UIStackView alloc] initWithFrame:CGRectMake(16, 56, cardWidth - 32, 154)];
     _toolsStackView.axis = UILayoutConstraintAxisVertical;
-    _toolsStackView.spacing = 8;
+    _toolsStackView.spacing = 10;
     _toolsStackView.alignment = UIStackViewAlignmentFill;
     [_toolsCardView addSubview:_toolsStackView];
 }
 
 - (void)setupStatusBar {
     CGFloat barWidth = _leftPanel.bounds.size.width - 32;
-    
-    _statusBarView = [[UIView alloc] initWithFrame:CGRectMake(16, _leftPanel.bounds.size.height - 32, barWidth, 24)];
-    _statusBarView.backgroundColor = [UIColor colorWithWhite:0.2 alpha:0.9];
-    _statusBarView.layer.cornerRadius = 12;
+
+    _statusBarView = [[UIView alloc] initWithFrame:CGRectMake(16, _leftPanel.bounds.size.height - 34, barWidth, 26)];
+    _statusBarView.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.08];
+    _statusBarView.layer.cornerRadius = 13;
+    _statusBarView.layer.cornerCurve = kCACornerCurveContinuous;
     [_leftPanel addSubview:_statusBarView];
-    
+
     _activityIndicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
     _activityIndicator.color = [UIColor whiteColor];
-    _activityIndicator.frame = CGRectMake(8, 2, 20, 20);
+    _activityIndicator.frame = CGRectMake(8, 3, 20, 20);
     [_statusBarView addSubview:_activityIndicator];
-    
-    _statusLabel = [[UILabel alloc] initWithFrame:CGRectMake(32, 0, barWidth - 40, 24)];
-    _statusLabel.font = [UIFont systemFontOfSize:12];
-    _statusLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.8];
+
+    _statusLabel = [[UILabel alloc] initWithFrame:CGRectMake(32, 0, barWidth - 40, 26)];
+    _statusLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
+    _statusLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.82];
     _statusLabel.text = localize(@"ai.fix.ready", @"准备就绪");
     [_statusBarView addSubview:_statusLabel];
 }
@@ -642,42 +790,41 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     MessageBubbleView *bubble = [[MessageBubbleView alloc] init];
     bubble.bubbleType = type;
     bubble.isSuccess = YES;
-    
-    // 设置背景色
+
     switch (type) {
         case MessageBubbleTypeAI:
-            bubble.backgroundColor = [UIColor colorWithRed:0.2 green:0.3 blue:0.5 alpha:0.8];
+            bubble.backgroundColor = [[UIColor colorWithRed:0.18 green:0.28 blue:0.44 alpha:1.0] colorWithAlphaComponent:0.88];
             break;
         case MessageBubbleTypeUser:
-            bubble.backgroundColor = [UIColor colorWithRed:0.2 green:0.5 blue:0.3 alpha:0.8];
+            bubble.backgroundColor = [[UIColor colorWithRed:0.16 green:0.44 blue:0.30 alpha:1.0] colorWithAlphaComponent:0.88];
             break;
         case MessageBubbleTypeSystem:
-            bubble.backgroundColor = [UIColor colorWithWhite:0.25 alpha:0.8];
+            bubble.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.12];
             break;
         case MessageBubbleTypeToolResult:
-            bubble.backgroundColor = bubble.isSuccess ? [UIColor colorWithRed:0.2 green:0.5 blue:0.3 alpha:0.8] : [UIColor colorWithRed:0.5 green:0.2 blue:0.2 alpha:0.8];
+            bubble.backgroundColor = [[UIColor colorWithRed:0.20 green:0.42 blue:0.26 alpha:1.0] colorWithAlphaComponent:0.88];
             break;
     }
-    
-    bubble.layer.cornerRadius = 10;
-    
-    // 内容标签
-    CGFloat maxWidth = _conversationScrollView.bounds.size.width - 48;
+
+    bubble.layer.cornerRadius = 16;
+    bubble.layer.cornerCurve = kCACornerCurveContinuous;
+
+    CGFloat maxWidth = _conversationScrollView.bounds.size.width - 56;
     CGSize textSize = [content boundingRectWithSize:CGSizeMake(maxWidth, CGFLOAT_MAX)
                                              options:NSStringDrawingUsesLineFragmentOrigin
                                           attributes:@{NSFontAttributeName: [UIFont systemFontOfSize:14]}
                                              context:nil].size;
-    
-    bubble.contentLabel = [[UILabel alloc] initWithFrame:CGRectMake(12, 8, textSize.width + 8, textSize.height + 8)];
+
+    bubble.contentLabel = [[UILabel alloc] initWithFrame:CGRectMake(14, 12, textSize.width + 4, textSize.height + 4)];
     bubble.contentLabel.text = content;
     bubble.contentLabel.font = [UIFont systemFontOfSize:14];
     bubble.contentLabel.textColor = [UIColor whiteColor];
     bubble.contentLabel.numberOfLines = 0;
     bubble.contentLabel.lineBreakMode = NSLineBreakByWordWrapping;
     [bubble addSubview:bubble.contentLabel];
-    
-    bubble.frame = CGRectMake(0, 0, textSize.width + 32, textSize.height + 16);
-    
+
+    bubble.frame = CGRectMake(0, 0, MIN(textSize.width + 36, maxWidth), textSize.height + 24);
+
     return bubble;
 }
 
@@ -701,39 +848,34 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
 
 - (void)showToolRequest:(AIToolRequest *)request {
     _toolsCardView.hidden = NO;
-    
-    // 清空旧内容
-    for (UIView *view in _toolsStackView.arrangedSubviews) {
+
+    for (UIView *view in _toolsStackView.arrangedSubviews.copy) {
         [view removeFromSuperview];
     }
-    [_toolsStackView removeArrangedSubview:_toolsStackView.arrangedSubviews.firstObject];
-    
-    // 创建工具请求卡片
+
     ToolRequestCardView *card = [[ToolRequestCardView alloc] init];
-    card.frame = CGRectMake(0, 0, _toolsStackView.bounds.size.width, 160);
-    
+    card.frame = CGRectMake(0, 0, _toolsStackView.bounds.size.width, 180);
+    card.backgroundColor = [UIColor clearColor];
+
     card.toolNameLabel.text = request.toolDisplayName;
     card.descriptionLabel.text = request.reason;
-    
-    // 更新工具图标
+
     UIImageView *newIcon = [AIFixSVGIconHelper iconViewForTool:request.toolName size:28];
     newIcon.frame = card.iconView.frame;
     [card replaceIconWithNewIcon:newIcon];
-    
+
     NSError *jsonError;
     NSData *jsonData = [NSJSONSerialization dataWithJSONObject:request.parameters options:NSJSONWritingPrettyPrinted error:&jsonError];
     if (jsonData) {
         card.parametersTextView.text = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
     }
-    
-    // 如果是 toggle_mod 请求，显示 Mod 预览
+
     if ([request.toolName isEqualToString:@"toggle_mod"]) {
         NSString *modPath = request.parameters[@"mod_path"];
         BOOL willEnable = [request.parameters[@"enable"] boolValue];
-        
         [self loadModPreviewForCard:card modPath:modPath willEnable:willEnable];
     }
-    
+
     __weak typeof(self) weakSelf = self;
     card.onApprove = ^{
         [weakSelf respondToToolRequest:YES];
@@ -741,14 +883,13 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     card.onReject = ^{
         [weakSelf respondToToolRequest:NO];
     };
-    
+
     [_toolsStackView addArrangedSubview:card];
-    
-    // 显示动画
+    [_toolsCardView layoutIfNeeded];
     _toolsCardView.alpha = 0;
-    _toolsCardView.transform = CGAffineTransformMakeScale(0.9, 0.9);
-    
-    [UIView animateWithDuration:0.3 delay:0 usingSpringWithDamping:0.8 initialSpringVelocity:0.5 options:UIViewAnimationOptionCurveEaseOut animations:^{
+    _toolsCardView.transform = CGAffineTransformMakeScale(0.96, 0.96);
+
+    [UIView animateWithDuration:0.28 delay:0 usingSpringWithDamping:0.82 initialSpringVelocity:0.4 options:UIViewAnimationOptionCurveEaseOut animations:^{
         weakSelf.toolsCardView.alpha = 1;
         weakSelf.toolsCardView.transform = CGAffineTransformIdentity;
     } completion:nil];
@@ -787,12 +928,11 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
 
 - (void)respondToToolRequest:(BOOL)approved {
     [[AIFixService sharedService] respondToToolRequest:approved];
-    
-    // 隐藏工具请求卡片
+
     __weak typeof(self) weakSelf = self;
-    [UIView animateWithDuration:0.2 animations:^{
+    [UIView animateWithDuration:0.22 animations:^{
         weakSelf.toolsCardView.alpha = 0;
-        weakSelf.toolsCardView.transform = CGAffineTransformMakeScale(0.9, 0.9);
+        weakSelf.toolsCardView.transform = CGAffineTransformMakeScale(0.96, 0.96);
     } completion:^(BOOL finished) {
         weakSelf.toolsCardView.hidden = YES;
     }];
@@ -841,8 +981,8 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
 
 - (void)aiServiceDidCompleteFix:(AIFixService *)service {
     dispatch_async(dispatch_get_main_queue(), ^{
-        // 生成修复报告
         NSString *report = [service generateFixReport];
+        (void)report;
         
         [self addSystemMessage:localize(@"ai.fix.completed", @"修复完成！")];
         
@@ -850,17 +990,66 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
             [self addSystemMessage:[NSString stringWithFormat:localize(@"ai.fix.modifications", @"共修改了 %lu 个文件"), (unsigned long)service.modifications.count]];
         }
         
-        [self addSystemMessage:localize(@"ai.fix.restart_hint", @"请重新启动游戏验证修复效果。如果问题仍未解决，可以继续对话或前往 GitHub 提交 Issue。")];
+        [self addSystemMessage:localize(@"ai.fix.restart_hint", @"修复流程已结束。请手动重新启动游戏进行验证：1) 关闭当前游戏实例；2) 返回启动器并重新进入对应配置；3) 正常启动游戏并复现原场景；4) 若问题仍存在，可继续反馈日志或使用撤销修改。")];
         
         [_activityIndicator stopAnimating];
+        [self refreshHistoryAndRiskInfo];
     });
+}
+
+- (void)refreshHistoryAndRiskInfo {
+    NSUInteger modificationCount = [AIFixService sharedService].modifications.count;
+    NSUInteger messageCount = [AIFixService sharedService].messages.count;
+
+    for (UIView *view in _historyStackView.arrangedSubviews.copy) {
+        [view removeFromSuperview];
+    }
+    for (UIView *view in _riskStackView.arrangedSubviews.copy) {
+        [view removeFromSuperview];
+    }
+
+    NSArray *historyInfos = @[
+        @{@"title": localize(@"ai.fix.history.sessions", @"会话记录"), @"value": [NSString stringWithFormat:@"%lu", (unsigned long)messageCount], @"subtitle": localize(@"ai.fix.history.sessions_sub", @"消息与工具调用会被保留"), @"icon": @"clock.arrow.circlepath", @"accent": AFHexColor(@"#F59E0B")},
+        @{@"title": localize(@"ai.fix.history.rollback", @"可回滚项"), @"value": [NSString stringWithFormat:@"%lu", (unsigned long)modificationCount], @"subtitle": localize(@"ai.fix.history.rollback_sub", @"修复完成后可撤销最近修改"), @"icon": @"arrow.uturn.backward.circle.fill", @"accent": AFHexColor(@"#8B5CF6")}
+    ];
+    for (NSDictionary *info in historyInfos) {
+        AIDashboardTileView *tile = [[AIDashboardTileView alloc] init];
+        [tile configureWithTitle:info[@"title"] value:info[@"value"] subtitle:info[@"subtitle"] icon:info[@"icon"] accent:info[@"accent"] compact:YES];
+        [_historyStackView addArrangedSubview:tile];
+    }
+
+    NSArray *riskItems = @[
+        @{@"title": localize(@"ai.fix.risk.backup", @"修改前已备份"), @"subtitle": localize(@"ai.fix.risk.backup_sub", @"写入、删除与 Mod 改动会尽量保留恢复信息")},
+        @{@"title": localize(@"ai.fix.risk.confirm", @"高风险操作需确认"), @"subtitle": localize(@"ai.fix.risk.confirm_sub", @"删除、重命名、Mod 启停不会静默执行")},
+        @{@"title": localize(@"ai.fix.risk.verify", @"修复后需手动验证"), @"subtitle": localize(@"ai.fix.risk.verify_sub", @"请启动游戏并观察原崩溃是否消失")}
+    ];
+    for (NSDictionary *item in riskItems) {
+        UIView *row = [[UIView alloc] initWithFrame:CGRectZero];
+        row.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.18];
+        row.layer.cornerRadius = 10;
+        row.layer.cornerCurve = kCACornerCurveContinuous;
+        UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(10, 5, _riskStackView.bounds.size.width - 20, 14)];
+        title.font = [UIFont systemFontOfSize:12 weight:UIFontWeightSemibold];
+        title.textColor = [UIColor whiteColor];
+        title.text = item[@"title"];
+        [row addSubview:title];
+        UILabel *sub = [[UILabel alloc] initWithFrame:CGRectMake(10, 19, _riskStackView.bounds.size.width - 20, 12)];
+        sub.font = [UIFont systemFontOfSize:10 weight:UIFontWeightMedium];
+        sub.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.58];
+        sub.text = item[@"subtitle"];
+        [row addSubview:sub];
+        row.frame = CGRectMake(0, 0, _riskStackView.bounds.size.width, 30);
+        [_riskStackView addArrangedSubview:row];
+    }
 }
 
 #pragma mark - 状态更新
 
 - (void)updateStatusForState:(AISessionState)state {
     NSString *statusText;
-    
+    NSString *subtitle = localize(@"ai.fix.ready_subtitle", @"等待输入或开始自动分析");
+    UIColor *accent = AFHexColor(@"#3B82F6");
+
     switch (state) {
         case AISessionStateIdle:
             statusText = localize(@"ai.fix.ready", @"准备就绪");
@@ -870,43 +1059,57 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
             break;
         case AISessionStateThinking:
             statusText = localize(@"ai.fix.thinking", @"AI 思考中...");
+            subtitle = localize(@"ai.fix.thinking_subtitle", @"正在分析日志、配置与环境信息");
+            accent = AFHexColor(@"#8B5CF6");
             [_activityIndicator startAnimating];
             _stopButton.hidden = NO;
             _sendButton.hidden = YES;
             break;
         case AISessionStateWaitingTool:
             statusText = localize(@"ai.fix.waiting_confirm", @"等待确认");
+            subtitle = localize(@"ai.fix.waiting_subtitle", @"当前操作需要您确认后才会执行");
+            accent = AFHexColor(@"#F59E0B");
             [_activityIndicator stopAnimating];
             _stopButton.hidden = NO;
             _sendButton.hidden = YES;
             break;
         case AISessionStateExecutingTool:
             statusText = localize(@"ai.fix.executing", @"执行工具中...");
+            subtitle = localize(@"ai.fix.executing_subtitle", @"正在执行受控修复步骤");
+            accent = AFHexColor(@"#10B981");
             [_activityIndicator startAnimating];
             _stopButton.hidden = NO;
             _sendButton.hidden = YES;
             break;
         case AISessionStateCompleted:
             statusText = localize(@"ai.fix.completed", @"已完成");
+            subtitle = localize(@"ai.fix.completed_subtitle", @"请重新启动游戏验证修复结果");
+            accent = AFHexColor(@"#22C55E");
             [_activityIndicator stopAnimating];
             _stopButton.hidden = YES;
             _sendButton.hidden = NO;
             break;
         case AISessionStateError:
             statusText = localize(@"ai.fix.error", @"出错");
+            subtitle = localize(@"ai.fix.error_subtitle", @"可以导出报告或回滚最近修改");
+            accent = AFHexColor(@"#EF4444");
             [_activityIndicator stopAnimating];
             _stopButton.hidden = YES;
             _sendButton.hidden = NO;
             break;
         case AISessionStateStopped:
             statusText = localize(@"ai.fix.stopped", @"已停止");
+            subtitle = localize(@"ai.fix.stopped_subtitle", @"会话已终止，您可以重新开始");
+            accent = AFHexColor(@"#64748B");
             [_activityIndicator stopAnimating];
             _stopButton.hidden = YES;
             _sendButton.hidden = NO;
             break;
     }
-    
+
     _statusLabel.text = statusText;
+    _diagnosticSubtitleLabel.text = subtitle;
+    _diagnosticStripView.backgroundColor = [accent colorWithAlphaComponent:0.12];
 }
 
 #pragma mark - UITextViewDelegate
@@ -991,6 +1194,108 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
 #pragma mark - MessageBubbleView
 
 @implementation MessageBubbleView
+@end
+
+#pragma mark - AIDashboardTileView
+
+@implementation AIDashboardTileView
+
+- (instancetype)init {
+    self = [super initWithFrame:CGRectZero];
+    if (self) {
+        self.translatesAutoresizingMaskIntoConstraints = NO;
+        self.layer.cornerRadius = 18;
+        self.layer.cornerCurve = kCACornerCurveContinuous;
+        self.clipsToBounds = NO;
+
+        _blurView = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterialDark]];
+        _blurView.translatesAutoresizingMaskIntoConstraints = NO;
+        _blurView.layer.cornerRadius = 18;
+        _blurView.layer.cornerCurve = kCACornerCurveContinuous;
+        _blurView.layer.masksToBounds = YES;
+        [self addSubview:_blurView];
+
+        _contentContainer = [[UIView alloc] init];
+        _contentContainer.translatesAutoresizingMaskIntoConstraints = NO;
+        [_blurView.contentView addSubview:_contentContainer];
+
+        _accentLayer = [CAGradientLayer layer];
+        _accentLayer.startPoint = CGPointMake(0, 0.5);
+        _accentLayer.endPoint = CGPointMake(1, 0.5);
+        [_blurView.contentView.layer addSublayer:_accentLayer];
+
+        _iconView = [[UIImageView alloc] init];
+        _iconView.translatesAutoresizingMaskIntoConstraints = NO;
+        _iconView.contentMode = UIViewContentModeScaleAspectFit;
+        [_contentContainer addSubview:_iconView];
+
+        _titleLabel = [[UILabel alloc] init];
+        _titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+        _titleLabel.font = [UIFont systemFontOfSize:11 weight:UIFontWeightSemibold];
+        _titleLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.6];
+        [_contentContainer addSubview:_titleLabel];
+
+        _valueLabel = [[UILabel alloc] init];
+        _valueLabel.translatesAutoresizingMaskIntoConstraints = NO;
+        _valueLabel.font = [UIFont systemFontOfSize:18 weight:UIFontWeightBold];
+        _valueLabel.textColor = [UIColor whiteColor];
+        _valueLabel.numberOfLines = 1;
+        [_contentContainer addSubview:_valueLabel];
+
+        _subtitleLabel = [[UILabel alloc] init];
+        _subtitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+        _subtitleLabel.font = [UIFont systemFontOfSize:11 weight:UIFontWeightMedium];
+        _subtitleLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.65];
+        _subtitleLabel.numberOfLines = 2;
+        [_contentContainer addSubview:_subtitleLabel];
+
+        [NSLayoutConstraint activateConstraints:@[
+            [_blurView.topAnchor constraintEqualToAnchor:self.topAnchor],
+            [_blurView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
+            [_blurView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
+            [_blurView.bottomAnchor constraintEqualToAnchor:self.bottomAnchor],
+
+            [_contentContainer.topAnchor constraintEqualToAnchor:_blurView.contentView.topAnchor constant:12],
+            [_contentContainer.leadingAnchor constraintEqualToAnchor:_blurView.contentView.leadingAnchor constant:12],
+            [_contentContainer.trailingAnchor constraintEqualToAnchor:_blurView.contentView.trailingAnchor constant:-12],
+            [_contentContainer.bottomAnchor constraintEqualToAnchor:_blurView.contentView.bottomAnchor constant:-12],
+
+            [_iconView.topAnchor constraintEqualToAnchor:_contentContainer.topAnchor],
+            [_iconView.leadingAnchor constraintEqualToAnchor:_contentContainer.leadingAnchor],
+            [_iconView.widthAnchor constraintEqualToConstant:18],
+            [_iconView.heightAnchor constraintEqualToConstant:18],
+
+            [_titleLabel.centerYAnchor constraintEqualToAnchor:_iconView.centerYAnchor],
+            [_titleLabel.leadingAnchor constraintEqualToAnchor:_iconView.trailingAnchor constant:8],
+            [_titleLabel.trailingAnchor constraintEqualToAnchor:_contentContainer.trailingAnchor],
+
+            [_valueLabel.topAnchor constraintEqualToAnchor:_iconView.bottomAnchor constant:8],
+            [_valueLabel.leadingAnchor constraintEqualToAnchor:_contentContainer.leadingAnchor],
+            [_valueLabel.trailingAnchor constraintEqualToAnchor:_contentContainer.trailingAnchor],
+
+            [_subtitleLabel.topAnchor constraintEqualToAnchor:_valueLabel.bottomAnchor constant:4],
+            [_subtitleLabel.leadingAnchor constraintEqualToAnchor:_contentContainer.leadingAnchor],
+            [_subtitleLabel.trailingAnchor constraintEqualToAnchor:_contentContainer.trailingAnchor],
+        ]];
+    }
+    return self;
+}
+
+- (void)configureWithTitle:(NSString *)title value:(NSString *)value subtitle:(NSString *)subtitle icon:(NSString *)iconName accent:(UIColor *)accent compact:(BOOL)compact {
+    self.compactLayout = compact;
+    _titleLabel.text = title;
+    _valueLabel.text = value;
+    _subtitleLabel.text = subtitle;
+    _iconView.image = [UIImage systemImageNamed:iconName];
+    _iconView.tintColor = accent;
+    _accentLayer.colors = @[(id)accent.CGColor, (id)[accent colorWithAlphaComponent:0.35].CGColor];
+}
+
+- (void)layoutSubviews {
+    [super layoutSubviews];
+    _accentLayer.frame = CGRectMake(0, 0, self.bounds.size.width, 2);
+}
+
 @end
 
 #pragma mark - ToolRequestCardView
