@@ -103,6 +103,7 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
 
 // UI 组件
 @property (nonatomic, strong) UIView *backgroundView;
+@property (nonatomic, strong) UIView *mainContentView;
 @property (nonatomic, strong) UIView *leftPanel;
 @property (nonatomic, strong) UIView *rightPanel;
 @property (nonatomic, strong) UIScrollView *conversationScrollView;
@@ -204,6 +205,7 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
 
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
+    [self layoutMainPanelsIfNeeded];
     [self scrollToBottomAnimated:NO];
 }
 
@@ -215,30 +217,20 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
 
     [self setupBackground];
 
-    CGFloat maxContentWidth = 1200;
-    CGFloat contentWidth = MIN(self.view.bounds.size.width - 32, maxContentWidth);
-    CGFloat leftWidth = contentWidth * 0.6;
-    CGFloat rightWidth = contentWidth - leftWidth;
-    CGFloat topPadding = 40;
-    CGFloat bottomPadding = 24;
+    _mainContentView = [[UIView alloc] initWithFrame:CGRectZero];
+    _mainContentView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    [self.view addSubview:_mainContentView];
 
-    UIView *contentContainer = [[UIView alloc] initWithFrame:CGRectMake(0, topPadding, self.view.bounds.size.width, self.view.bounds.size.height - topPadding - bottomPadding)];
-    contentContainer.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    [self.view addSubview:contentContainer];
+    _leftPanel = [[UIView alloc] initWithFrame:CGRectZero];
+    [_mainContentView addSubview:_leftPanel];
 
-    CGFloat startX = MAX((self.view.bounds.size.width - contentWidth) / 2.0, 16.0);
-
-    _leftPanel = [[UIView alloc] initWithFrame:CGRectMake(startX, 0, leftWidth, contentContainer.bounds.size.height)];
-    _leftPanel.autoresizingMask = UIViewAutoresizingFlexibleHeight;
-    [contentContainer addSubview:_leftPanel];
-
-    _rightPanel = [[UIView alloc] initWithFrame:CGRectMake(startX + leftWidth, 0, rightWidth, contentContainer.bounds.size.height)];
-    _rightPanel.autoresizingMask = UIViewAutoresizingFlexibleHeight;
-    [contentContainer addSubview:_rightPanel];
+    _rightPanel = [[UIView alloc] initWithFrame:CGRectZero];
+    [_mainContentView addSubview:_rightPanel];
 
     [self setupLeftPanel];
     [self setupRightPanel];
     [self setupStatusBar];
+    [self layoutMainPanelsIfNeeded];
 }
 
 - (void)setupBackground {
@@ -254,6 +246,35 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     _backgroundView.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.6];
     _backgroundView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     [self.view addSubview:_backgroundView];
+}
+
+- (void)layoutMainPanelsIfNeeded {
+    CGFloat viewWidth = self.view.bounds.size.width;
+    CGFloat viewHeight = self.view.bounds.size.height;
+    if (viewWidth <= 0 || viewHeight <= 0 || !_mainContentView) return;
+
+    CGFloat maxContentWidth = 1200;
+    CGFloat contentWidth = MIN(viewWidth - 32, maxContentWidth);
+    CGFloat topPadding = 40;
+    CGFloat bottomPadding = 24;
+    CGFloat contentHeight = MAX(viewHeight - topPadding - bottomPadding, 320);
+    CGFloat startX = floor((viewWidth - contentWidth) / 2.0);
+    CGFloat leftWidth = floor(contentWidth * 0.6);
+    CGFloat rightWidth = contentWidth - leftWidth;
+
+    _mainContentView.frame = CGRectMake(startX, topPadding, contentWidth, contentHeight);
+    _leftPanel.frame = CGRectMake(0, 0, leftWidth, contentHeight);
+    _rightPanel.frame = CGRectMake(leftWidth, 0, rightWidth, contentHeight);
+    _leftScrollView.frame = CGRectMake(0, 0, leftWidth, MAX(contentHeight - 18, 0));
+    _rightScrollView.frame = CGRectMake(0, 0, rightWidth, MAX(contentHeight - 18, 0));
+    _leftContentView.frame = CGRectMake(0, 0, leftWidth, MAX(contentHeight * 1.25, 720));
+    _rightContentView.frame = CGRectMake(0, 0, rightWidth, MAX(contentHeight * 1.35, 560));
+    _leftScrollView.contentSize = _leftContentView.bounds.size;
+    _rightScrollView.contentSize = _rightContentView.bounds.size;
+
+    CGFloat statusHeight = 26;
+    _statusBarView.frame = CGRectMake(16, contentHeight - statusHeight, leftWidth - 32, statusHeight);
+    _statusLabel.frame = CGRectMake(32, 0, _statusBarView.bounds.size.width - 40, statusHeight);
 }
 
 - (void)setupLeftPanel {
