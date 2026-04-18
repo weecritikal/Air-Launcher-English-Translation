@@ -139,6 +139,11 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
 @property (nonatomic, strong) UILabel *diagnosticTitleLabel;
 @property (nonatomic, strong) UILabel *diagnosticSubtitleLabel;
 @property (nonatomic, strong) UIStackView *diagnosticTileStack;
+@property (nonatomic, strong) UIButton *startFixButton;
+@property (nonatomic, strong) UIScrollView *leftScrollView;
+@property (nonatomic, strong) UIScrollView *rightScrollView;
+@property (nonatomic, strong) UIView *leftContentView;
+@property (nonatomic, strong) UIView *rightContentView;
 
 // 工具请求卡片
 @property (nonatomic, strong) ToolRequestCardView *toolRequestCard;
@@ -190,12 +195,10 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     
     [self setupUI];
     [self loadConfig];
+    [self refreshHistoryAndRiskInfo];
     
-    // 显示实验性功能警告
     if (![AIConfigService sharedService].hasShownExperimentalWarning) {
         [self showExperimentalWarning];
-    } else {
-        [self checkAndStartAutoFix];
     }
 }
 
@@ -210,32 +213,25 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     self.view.frame = [UIScreen mainScreen].bounds;
     self.view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
 
-    // 背景
     [self setupBackground];
 
-    // 使用容器视图实现居中布局
     CGFloat maxContentWidth = 1200;
     CGFloat contentWidth = MIN(self.view.bounds.size.width - 32, maxContentWidth);
     CGFloat leftWidth = contentWidth * 0.6;
     CGFloat rightWidth = contentWidth - leftWidth;
-    CGFloat topPadding = 60;
-    CGFloat bottomPadding = 40;
+    CGFloat topPadding = 40;
+    CGFloat bottomPadding = 24;
 
-    // 内容容器 - 水平居中
     UIView *contentContainer = [[UIView alloc] initWithFrame:CGRectMake(0, topPadding, self.view.bounds.size.width, self.view.bounds.size.height - topPadding - bottomPadding)];
-    contentContainer.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight | UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleBottomMargin;
-    contentContainer.clipsToBounds = NO;
+    contentContainer.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     [self.view addSubview:contentContainer];
 
-    // 计算起始位置使内容居中
-    CGFloat startX = (self.view.bounds.size.width - contentWidth) / 2;
+    CGFloat startX = MAX((self.view.bounds.size.width - contentWidth) / 2.0, 16.0);
 
-    // 左侧面板 - 对话窗口
     _leftPanel = [[UIView alloc] initWithFrame:CGRectMake(startX, 0, leftWidth, contentContainer.bounds.size.height)];
     _leftPanel.autoresizingMask = UIViewAutoresizingFlexibleHeight;
     [contentContainer addSubview:_leftPanel];
 
-    // 右侧面板 - 配置与工具
     _rightPanel = [[UIView alloc] initWithFrame:CGRectMake(startX + leftWidth, 0, rightWidth, contentContainer.bounds.size.height)];
     _rightPanel.autoresizingMask = UIViewAutoresizingFlexibleHeight;
     [contentContainer addSubview:_rightPanel];
@@ -269,13 +265,24 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     CGFloat inputHeight = 128;
     CGFloat sectionGap = 12;
 
+    _leftScrollView = [[UIScrollView alloc] initWithFrame:CGRectMake(0, 0, panelWidth, panelHeight - 18)];
+    _leftScrollView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    _leftScrollView.showsVerticalScrollIndicator = YES;
+    _leftScrollView.indicatorStyle = UIScrollViewIndicatorStyleWhite;
+    _leftScrollView.alwaysBounceVertical = YES;
+    [_leftPanel addSubview:_leftScrollView];
+
+    _leftContentView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, panelWidth, panelHeight * 1.25)];
+    [_leftScrollView addSubview:_leftContentView];
+
     _diagnosticStripView = [[UIView alloc] initWithFrame:CGRectMake(sidePadding, 0, panelWidth - sidePadding * 2, 70)];
     _diagnosticStripView.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.07];
     _diagnosticStripView.layer.cornerRadius = 18;
     _diagnosticStripView.layer.cornerCurve = kCACornerCurveContinuous;
     _diagnosticStripView.layer.borderWidth = 0.5;
     _diagnosticStripView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.12].CGColor;
-    [_leftPanel addSubview:_diagnosticStripView];
+    _diagnosticStripView.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    [_leftContentView addSubview:_diagnosticStripView];
 
     _diagnosticTitleLabel = [[UILabel alloc] initWithFrame:CGRectMake(16, 12, _diagnosticStripView.bounds.size.width - 32, 22)];
     _diagnosticTitleLabel.font = [UIFont systemFontOfSize:18 weight:UIFontWeightBold];
@@ -294,7 +301,8 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     _diagnosticTileStack.axis = UILayoutConstraintAxisHorizontal;
     _diagnosticTileStack.spacing = 10;
     _diagnosticTileStack.distribution = UIStackViewDistributionFillEqually;
-    [_leftPanel addSubview:_diagnosticTileStack];
+    _diagnosticTileStack.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    [_leftContentView addSubview:_diagnosticTileStack];
 
     NSArray *tiles = @[
         @{@"title": localize(@"ai.fix.tile.analyze", @"分析"), @"value": localize(@"ai.fix.tile.analyze_value", @"日志与配置"), @"subtitle": localize(@"ai.fix.tile.analyze_sub", @"读取崩溃日志"), @"icon": @"doc.text.magnifyingglass", @"accent": AFHexColor(@"#3B82F6")},
@@ -315,7 +323,7 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     _historyCardView.layer.cornerCurve = kCACornerCurveContinuous;
     _historyCardView.layer.borderWidth = 0.5;
     _historyCardView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.12].CGColor;
-    [_leftPanel addSubview:_historyCardView];
+    [_leftContentView addSubview:_historyCardView];
 
     _historyTitleLabel = [[UILabel alloc] initWithFrame:CGRectMake(16, 10, _historyCardView.bounds.size.width - 32, 18)];
     _historyTitleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
@@ -347,7 +355,7 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     _riskCardView.layer.cornerCurve = kCACornerCurveContinuous;
     _riskCardView.layer.borderWidth = 0.5;
     _riskCardView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.12].CGColor;
-    [_leftPanel addSubview:_riskCardView];
+    [_leftContentView addSubview:_riskCardView];
 
     _riskTitleLabel = [[UILabel alloc] initWithFrame:CGRectMake(16, 10, _riskCardView.bounds.size.width - 32, 18)];
     _riskTitleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
@@ -397,7 +405,7 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     _conversationScrollView.showsVerticalScrollIndicator = YES;
     _conversationScrollView.indicatorStyle = UIScrollViewIndicatorStyleWhite;
     _conversationScrollView.alwaysBounceVertical = YES;
-    [_leftPanel addSubview:_conversationScrollView];
+    [_leftContentView addSubview:_conversationScrollView];
 
     _conversationStackView = [[UIStackView alloc] init];
     _conversationStackView.axis = UILayoutConstraintAxisVertical;
@@ -420,7 +428,7 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     _inputContainerView.layer.cornerCurve = kCACornerCurveContinuous;
     _inputContainerView.layer.borderWidth = 0.5;
     _inputContainerView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.12].CGColor;
-    [_leftPanel addSubview:_inputContainerView];
+    [_leftContentView addSubview:_inputContainerView];
 
     UILabel *inputTitle = [[UILabel alloc] initWithFrame:CGRectMake(16, 10, 180, 18)];
     inputTitle.text = localize(@"ai.fix.input_title", @"指令与补充信息");
@@ -472,13 +480,23 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     CGFloat sidePadding = 12;
     CGFloat top = 0;
 
+    _rightScrollView = [[UIScrollView alloc] initWithFrame:CGRectMake(0, 0, panelWidth, panelHeight - 18)];
+    _rightScrollView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    _rightScrollView.showsVerticalScrollIndicator = YES;
+    _rightScrollView.indicatorStyle = UIScrollViewIndicatorStyleWhite;
+    _rightScrollView.alwaysBounceVertical = YES;
+    [_rightPanel addSubview:_rightScrollView];
+
+    _rightContentView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, panelWidth, panelHeight * 1.35)];
+    [_rightScrollView addSubview:_rightContentView];
+
     _configCardView = [[UIView alloc] initWithFrame:CGRectMake(sidePadding, top, panelWidth - sidePadding * 2, 206)];
     _configCardView.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.08];
     _configCardView.layer.cornerRadius = 18;
     _configCardView.layer.cornerCurve = kCACornerCurveContinuous;
     _configCardView.layer.borderWidth = 0.5;
     _configCardView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.12].CGColor;
-    [_rightPanel addSubview:_configCardView];
+    [_rightContentView addSubview:_configCardView];
     [self setupConfigCard];
 
     _toolsCardView = [[UIView alloc] initWithFrame:CGRectMake(sidePadding, 218, panelWidth - sidePadding * 2, 220)];
@@ -488,7 +506,7 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     _toolsCardView.layer.borderWidth = 0.5;
     _toolsCardView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.12].CGColor;
     _toolsCardView.hidden = YES;
-    [_rightPanel addSubview:_toolsCardView];
+    [_rightContentView addSubview:_toolsCardView];
     [self setupToolsCard];
 
     _exitButton = [UIButton buttonWithType:UIButtonTypeSystem];
@@ -500,7 +518,7 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     _exitButton.layer.cornerCurve = kCACornerCurveContinuous;
     _exitButton.tintColor = [UIColor whiteColor];
     [_exitButton addTarget:self action:@selector(exitLauncher) forControlEvents:UIControlEventTouchUpInside];
-    [_rightPanel addSubview:_exitButton];
+    [_rightContentView addSubview:_exitButton];
 }
 
 - (void)setupConfigCard {
@@ -517,6 +535,17 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     subtitleLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
     subtitleLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.55];
     [_configCardView addSubview:subtitleLabel];
+
+    _startFixButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    _startFixButton.frame = CGRectMake(16, 166, 108, 32);
+    [_startFixButton setTitle:localize(@"ai.fix.start_fix", @"开始修复") forState:UIControlStateNormal];
+    _startFixButton.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
+    _startFixButton.backgroundColor = AFHexColor(@"#10B981");
+    _startFixButton.layer.cornerRadius = 16;
+    _startFixButton.layer.cornerCurve = kCACornerCurveContinuous;
+    _startFixButton.tintColor = [UIColor whiteColor];
+    [_startFixButton addTarget:self action:@selector(startFixManually) forControlEvents:UIControlEventTouchUpInside];
+    [_configCardView addSubview:_startFixButton];
 
     _apiBaseURLField = [self createTextField:CGRectMake(16, 58, cardWidth - 32, 32) placeholder:@"API Base URL"];
     [_configCardView addSubview:_apiBaseURLField];
@@ -621,11 +650,8 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     
     [config saveConfig];
     [self updateConfigStatus];
-    
-    // 显示保存成功提示
     [self showTransientMessage:localize(@"ai.fix.config_saved", @"配置已保存")];
     
-    // 检查是否可以开始自动修复
     if (!_hasStarted && config.isConfigured && !_isFromSettings) {
         [self checkAndStartAutoFix];
     }
@@ -676,59 +702,39 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
 
 - (void)checkAndStartAutoFix {
     AIConfigService *config = [AIConfigService sharedService];
-    
     if (!config.isConfigured) {
-        // 未配置，显示提示
-        [self addSystemMessage:localize(@"ai.fix.please_configure", @"请先完成 API 配置后点击\"保存\"按钮。")];
+        [self addSystemMessage:localize(@"ai.fix.please_configure", @"请先完成 API 配置后点击“保存”按钮。")];
         return;
     }
-    
     if (_isFromSettings) {
-        // 从设置进入，等待用户手动开始
-        [self addSystemMessage:localize(@"ai.fix.settings_mode", @"您已进入 AI 修复设置界面。配置完成后，点击发送按钮开始对话。")];
+        [self addSystemMessage:localize(@"ai.fix.settings_mode", @"您已进入 AI 修复设置界面。请点击“开始修复”按钮启动诊断，或直接发送补充信息。")];
         return;
     }
-    
-    // 自动开始修复
     [self startAutoFix];
 }
 
 - (void)startAutoFix {
     if (_hasStarted) return;
     _hasStarted = YES;
-    
-    // 禁用配置编辑
     _apiBaseURLField.enabled = NO;
     _modelNameField.enabled = NO;
     _apiKeyField.enabled = NO;
     _saveConfigButton.enabled = NO;
+    _startFixButton.enabled = NO;
     [_saveConfigButton setTitle:localize(@"ai.fix.running", @"运行中") forState:UIControlStateNormal];
-    
     [self updateConfigStatus];
-    
-    // 设置代理
     [AIFixService sharedService].delegate = self;
-    
-    // 获取日志路径
-    NSString *logPath = _logPath;
-    if (!logPath) {
-        logPath = [NSString stringWithFormat:@"%s/latestlog.txt", getenv("POJAV_HOME")];
-    }
-    
-    // 添加开始消息
+    NSString *logPath = _logPath ?: [NSString stringWithFormat:@"%s/latestlog.txt", getenv("POJAV_HOME")];
     [self addSystemMessage:localize(@"ai.fix.starting", @"正在启动 AI 修复流程...")];
-    
-    // 开始修复
     NSError *error;
     if (![[AIFixService sharedService] startFixWithLogPath:logPath error:&error]) {
         [self addSystemMessage:[NSString stringWithFormat:@"%@: %@", localize(@"ai.fix.start_failed", @"启动失败"), error.localizedDescription]];
         _hasStarted = NO;
-        
-        // 恢复配置编辑
         _apiBaseURLField.enabled = YES;
         _modelNameField.enabled = YES;
         _apiKeyField.enabled = YES;
         _saveConfigButton.enabled = YES;
+        _startFixButton.enabled = YES;
         [_saveConfigButton setTitle:localize(@"ai.fix.save", @"保存") forState:UIControlStateNormal];
     }
 }
@@ -740,28 +746,14 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     NSString *text = [rawText stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
     if (text.length == 0) return;
     
-    // 清空输入框
     _inputTextView.text = nil;
     [self updatePlaceholderVisibility];
     
-    // 如果未开始，先开始修复
     if (!_hasStarted && [AIConfigService sharedService].isConfigured) {
-        _hasStarted = YES;
-        
-        // 禁用配置编辑
-        _apiBaseURLField.enabled = NO;
-        _modelNameField.enabled = NO;
-        _apiKeyField.enabled = NO;
-        _saveConfigButton.enabled = NO;
-        [_saveConfigButton setTitle:localize(@"ai.fix.running", @"运行中") forState:UIControlStateNormal];
-        
-        [AIFixService sharedService].delegate = self;
+        [self startAutoFix];
     }
     
-    // 添加用户消息
     [self addUserMessage:text];
-    
-    // 发送给 AI
     [[AIFixService sharedService] sendUserMessage:text];
 }
 
@@ -998,6 +990,7 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
 }
 
 - (void)refreshHistoryAndRiskInfo {
+    if (!_historyStackView || !_riskStackView) return;
     NSUInteger modificationCount = [AIFixService sharedService].modifications.count;
     NSUInteger messageCount = [AIFixService sharedService].messages.count;
 
