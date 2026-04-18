@@ -239,9 +239,6 @@ help:
 	echo '    make assets                         Compiles Assets.xcassets'
 	echo '    make payload                        Makes Payload/AngelAuraAmethyst.app'
 	echo '    make package                        Builds ipa of Angel Aura Amethyst'
-	echo '    make package-regular                Builds regular ipa only'
-	echo '    make package-trollstore             Builds TrollStore tipa only'
-	echo '    make package-all                    Builds both regular and TrollStore versions'
 	echo '    make deploy                         Copies files to local iDevice'
 	echo '    make dsym                           Generate debug symbol files'
 	echo '    make clean                          Cleans build directories'
@@ -377,44 +374,6 @@ payload: native dep_mg java jre assets
 	fi
 	echo '[Amethyst v$(VERSION)] payload - end'
 
-deployAuraAmethyst.app/ || exit 1
-	cp $(WORKINGDIR)/*.dylib $(WORKINGDIR)/AngelAuraAmethyst.app/Frameworks/ || exit 1
-	cp -R $(SOURCEDIR)/JavaApp/libs/others/* $(WORKINGDIR)/AngelAuraAmethyst.app/libs/ || exit 1
-	cp $(SOURCEDIR)/JavaApp/build/*.jar $(WORKINGDIR)/AngelAuraAmethyst.app/libs/ || exit 1
-	cp -R $(SOURCEDIR)/JavaApp/libs/caciocavallo/* $(WORKINGDIR)/AngelAuraAmethyst.app/libs_caciocavallo || exit 1
-	cp -R $(SOURCEDIR)/JavaApp/libs/caciocavallo17/* $(WORKINGDIR)/AngelAuraAmethyst.app/libs_caciocavallo17 || exit 1
-	# Copy TouchController static library if available
-	if [ -f "$(SOURCEDIR)/TouchController/libproxy_server_ios.a" ]; then \
-		mkdir -p $(WORKINGDIR)/AngelAuraAmethyst.app/Frameworks; \
-		cp $(SOURCEDIR)/TouchController/libproxy_server_ios.a $(WORKINGDIR)/AngelAuraAmethyst.app/Frameworks/ || exit 1; \
-		echo '[Amethyst v$(VERSION)] Copied TouchController device library'; \
-	elif [ -f "$(SOURCEDIR)/TouchController/libproxy_server_ios_simulator.a" ]; then \
-		mkdir -p $(WORKINGDIR)/AngelAuraAmethyst.app/Frameworks; \
-		cp $(SOURCEDIR)/TouchController/libproxy_server_ios_simulator.a $(WORKINGDIR)/AngelAuraAmethyst.app/Frameworks/ || exit 1; \
-		echo '[Amethyst v$(VERSION)] Copied TouchController simulator library'; \
-	else \
-		echo '[Amethyst v$(VERSION)] TouchController library not found, skipping'; \
-	fi
-	$(call METHOD_DIRCHECK,$(OUTPUTDIR)/Payload)
-	cp -R $(WORKINGDIR)/AngelAuraAmethyst.app $(OUTPUTDIR)/Payload
-	if [ '$(SLIMMED_ONLY)' != '1' ]; then \
-		cp -R $(OUTPUTDIR)/java_runtimes $(OUTPUTDIR)/Payload/AngelAuraAmethyst.app; \
-	fi
-	ldid -S $(OUTPUTDIR)/Payload/AngelAuraAmethyst.app; \
-	if [ '$(TROLLSTORE_JIT_ENT)' == '1' ]; then \
-		ldid -S$(SOURCEDIR)/entitlements.trollstore.xml $(OUTPUTDIR)/Payload/AngelAuraAmethyst.app/AngelAuraAmethyst; \
-	elif [ '$(PLATFORM)' == '6' ]; then \
-		ldid -S$(SOURCEDIR)/entitlements.codesign.xml $(OUTPUTDIR)/Payload/AngelAuraAmethyst.app/AngelAuraAmethyst; \
-	else \
-		ldid -S$(SOURCEDIR)/entitlements.sideload.xml $(OUTPUTDIR)/Payload/AngelAuraAmethyst.app/AngelAuraAmethyst; \
-	fi
-	chmod -R 755 $(OUTPUTDIR)/Payload
-	if [ '$(PLATFORM)' != '2' ]; then \
-		$(call METHOD_MACHO,$(OUTPUTDIR)/Payload/AngelAuraAmethyst.app,$(call METHOD_CHANGE_PLAT,$(PLATFORM),$$file)); \
-		$(call METHOD_MACHO,$(OUTPUTDIR)/java_runtimes,$(call METHOD_CHANGE_PLAT,$(PLATFORM),$$file)); \
-	fi
-	echo '[Amethyst v$(VERSION)] payload - end'
-
 deploy:
 	echo '[Amethyst v$(VERSION)] deploy - start'
 	cd $(OUTPUTDIR); \
@@ -442,7 +401,6 @@ deploy:
 	fi
 	echo '[Amethyst v$(VERSION)] deploy - end'
 
-# 修复：添加新的 package target，支持同时构建两个版本
 package: payload
 	echo '[Amethyst v$(VERSION)] package - start'
 	if [ '$(TEAMID)' != '-1' ] && [ '$(SIGNING_TEAMID)' != '-1' ] && [ -f '$(PROVISIONING)' ] && [ '$(DETECTPLAT)' = 'Darwin' ]; then \
@@ -457,38 +415,6 @@ package: payload
 	zip --symlinks -r $(OUTPUTDIR)/java_runtimes.zip java_runtimes; \
 	echo '[Amethyst v$(VERSION)] package - end'
 
-# 新增：仅构建普通版本（不带 TrollStore JIT 权限）
-package-regular: payload
-	echo '[Amethyst v$(VERSION)] package-regular - start'
-	cd $(OUTPUTDIR); \
-	TROLLSTORE_JIT_ENT=0 $(call METHOD_PACKAGE); \
-	echo '[Amethyst v$(VERSION)] package-regular - end'
-
-# 新增：仅构建 TrollStore 版本（带 JIT 权限）
-package-trollstore: payload
-	echo '[Amethyst v$(VERSION)] package-trollstore - start'
-	cd $(OUTPUTDIR); \
-	TROLLSTORE_JIT_ENT=1 $(call METHOD_PACKAGE); \
-	echo '[Amethyst v$(VERSION)] package-trollstore - end'
-
-# 新增：同时构建普通版和 TrollStore 版（避免覆盖）
-package-all: payload
-	echo '[Amethyst v$(VERSION)] package-all - start'
-	if [ '$(TEAMID)' != '-1' ] && [ '$(SIGNING_TEAMID)' != '-1' ] && [ -f '$(PROVISIONING)' ] && [ '$(DETECTPLAT)' = 'Darwin' ]; then \
-		printf '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n	<key>application-identifier</key>\n	<string>$(TEAMID).org.angelauramc.amethyst</string>\n	<key>com.apple.developer.team-identifier</key>\n	<string>$(TEAMID)</string>\n	<key>get-task-allow</key>\n	<true/>\n	<key>keychain-access-groups</key>\n	<array>\n	<string>$(TEAMID).*</string>\n	<string>com.apple.token</string>\n	</array>\n</dict>\n</plist>' > entitlements.codesign.xml; \
-		$(MAKE) codesign; \
-		rm -rf entitlements.codesign.xml; \
-	else \
-		echo 'Skipped codesigning. If not intentional, check your variables.'; \
-	fi
-	cd $(OUTPUTDIR); \
-	echo 'Building regular version...'; \
-	TROLLSTORE_JIT_ENT=0 $(call METHOD_PACKAGE); \
-	echo 'Building TrollStore version...'; \
-	TROLLSTORE_JIT_ENT=1 $(call METHOD_PACKAGE); \
-	zip --symlinks -r $(OUTPUTDIR)/java_runtimes.zip java_runtimes; \
-	echo '[Amethyst v$(VERSION)] package-all - end'
-	
 dsym: payload
 	echo '[Amethyst v$(VERSION)] dsym - start'
 	dsymutil --arch arm64 $(OUTPUTDIR)/Payload/AngelAuraAmethyst.app/AngelAuraAmethyst; \
@@ -500,4 +426,14 @@ codesign:
 	echo '[Amethyst v$(VERSION)] codesign - start'
 	cp '$(PROVISIONING)' $(OUTPUTDIR)/Payload/AngelAuraAmethyst.app/embedded.mobileprovision
 	$(call METHOD_MACHO,$(OUTPUTDIR)/Payload/AngelAuraAmethyst.app,$(call METHOD_CODESIGN,$(SIGNING_TEAMID),$$file))
-	$(call METHOD_MACHO
+	$(call METHOD_MACHO,$(OUTPUTDIR)/java_runtimes,$(call METHOD_CODESIGN,$(SIGNING_TEAMID),$$file))
+	echo '[Amethyst v$(VERSION)] codesign - end'
+
+clean:
+	echo '[Amethyst v$(VERSION)] clean - start'
+	rm -rf $(WORKINGDIR)
+	rm -rf JavaApp/build
+	rm -rf $(OUTPUTDIR)
+	echo '[Amethyst v$(VERSION)] clean - end'
+
+.PHONY: all clean check native java jre package dsym deploy help
