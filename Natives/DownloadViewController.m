@@ -2189,6 +2189,77 @@
 
 #pragma mark - Forge Installation
 
+- (LauncherNavigationController *)activeLauncherNavigationController {
+    UISplitViewController *splitVC = self.splitViewController;
+    if (!splitVC && [self.presentingViewController isKindOfClass:[UISplitViewController class]]) {
+        splitVC = (UISplitViewController *)self.presentingViewController;
+    }
+    if (splitVC.viewControllers.count > 1) {
+        UIViewController *candidate = splitVC.viewControllers[1];
+        if ([candidate isKindOfClass:[LauncherNavigationController class]]) {
+            return (LauncherNavigationController *)candidate;
+        }
+        if ([candidate isKindOfClass:[UINavigationController class]]) {
+            for (UIViewController *vc in ((UINavigationController *)candidate).viewControllers) {
+                if ([vc isKindOfClass:[LauncherNavigationController class]]) {
+                    return (LauncherNavigationController *)vc;
+                }
+            }
+        }
+    }
+    if ([self.navigationController isKindOfClass:[LauncherNavigationController class]]) {
+        return (LauncherNavigationController *)self.navigationController;
+    }
+    return nil;
+}
+
+- (void)handleInstallerDownloadResultWithVendorName:(NSString *)vendorName
+                                        gameVersion:(NSString *)gameVersion
+                                        profileName:(NSString *)profileName
+                                    resultOrError:(id)resultOrError
+                                     installAction:(void (^)(void))installAction {
+    if ([resultOrError isKindOfClass:[NSError class]]) {
+        NSError *error = (NSError *)resultOrError;
+        if ([error.domain isEqualToString:ForgeInstallerFlowErrorDomain] && error.code == ForgeInstallerFlowErrorCodeCancelled) {
+            return;
+        }
+        [self showError:error.localizedDescription ?: [NSString stringWithFormat:@"%@ 安装失败", vendorName]];
+        return;
+    }
+    
+    NSString *filePath = [resultOrError isKindOfClass:[NSString class]] ? (NSString *)resultOrError : nil;
+    if (filePath.length == 0) {
+        [self showError:[NSString stringWithFormat:@"%@ 安装器下载结果无效", vendorName]];
+        return;
+    }
+    
+    LauncherNavigationController *navVC = [self activeLauncherNavigationController];
+    if (!navVC) {
+        NSError *openError = [NSError errorWithDomain:ForgeInstallerFlowErrorDomain
+                                                 code:ForgeInstallerFlowErrorCodeFailedToOpenInstaller
+                                             userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"无法启动 %@ 安装器，请检查当前界面结构", vendorName]}];
+        [self showError:openError.localizedDescription];
+        return;
+    }
+    
+    NSString *message = [NSString stringWithFormat:@"%@ 安装器已下载，正在启动。安装完成后请按提示操作。", vendorName];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"下载完成"
+                                                                    message:message
+                                                             preferredStyle:UIAlertControllerStyleAlert];
+    [self presentViewController:alert animated:YES completion:nil];
+    
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        [alert dismissViewControllerAnimated:YES completion:nil];
+        [navVC enterModInstallerWithPath:filePath hitEnterAfterWindowShown:YES];
+        
+        if (installAction) {
+            installAction();
+        } else {
+            [self showSuccessMessage:[NSString stringWithFormat:@"%@ 安装器已启动\n配置文件: %@", vendorName, profileName ?: gameVersion]];
+        }
+    });
+}
+
 - (void)installForge:(NSString *)gameVersion installOptiFine:(BOOL)installOptiFine {
     ForgeInstallViewController *forgeVC = [[ForgeInstallViewController alloc] init];
     forgeVC.gameVersion = gameVersion;
@@ -2198,43 +2269,34 @@
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
         
-        if (success) {
-            NSString *filePath = (NSString *)resultOrError;
-            UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"下载完成"
-                                                                            message:@"即将运行安装器..."
-                                                                     preferredStyle:UIAlertControllerStyleAlert];
-            [strongSelf presentViewController:alert animated:YES completion:nil];
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                [alert dismissViewControllerAnimated:YES completion:nil];
-                UIViewController *presenting = strongSelf.presentingViewController;
-                if ([presenting isKindOfClass:[UISplitViewController class]]) {
-                    UISplitViewController *splitVC = (UISplitViewController *)presenting;
-                    if (splitVC.viewControllers.count > 1) {
-                        UIViewController *navVC = splitVC.viewControllers[1];
-                        if ([navVC isKindOfClass:[LauncherNavigationController class]]) {
-                            [(LauncherNavigationController *)navVC enterModInstallerWithPath:filePath hitEnterAfterWindowShown:YES];
-                        }
-                    }
-                }
-                
-                if (installOptiFine) {
-                    [strongSelf downloadOptiFine:gameVersion completion:^(BOOL optiSuccess, NSError *optiError) {
-                        dispatch_async(dispatch_get_main_queue(), ^{
-                            if (optiSuccess) {
-                                [strongSelf showSuccessMessage:[NSString stringWithFormat:@"Forge 安装成功\nOptiFine 已自动安装\n配置文件: %@", profileName]];
-                            } else {
-                                [strongSelf showSuccessMessage:[NSString stringWithFormat:@"Forge 安装成功\nOptiFine 安装失败: %@\n配置文件: %@", optiError.localizedDescription, profileName]];
-                            }
-                        });
-                    }];
-                } else {
-                    [strongSelf showSuccessMessage:[NSString stringWithFormat:@"Forge 安装成功\n配置文件: %@", profileName]];
-                }
-            });
-        } else {
-            NSError *error = (NSError *)resultOrError;
-            [strongSelf showError:error.localizedDescription ?: @"Forge 安装失败"];
+        if (!success) {
+            [strongSelf handleInstallerDownloadResultWithVendorName:@"Forge"
+                                                        gameVersion:gameVersion
+                                                        profileName:profileName
+                                                      resultOrError:resultOrError
+                                                       installAction:nil];
+            return;
         }
+        
+        [strongSelf handleInstallerDownloadResultWithVendorName:@"Forge"
+                                                    gameVersion:gameVersion
+                                                    profileName:profileName
+                                                  resultOrError:resultOrError
+                                                   installAction:^{
+            if (installOptiFine) {
+                [strongSelf downloadOptiFine:gameVersion completion:^(BOOL optiSuccess, NSError *optiError) {
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        if (optiSuccess) {
+                            [strongSelf showSuccessMessage:[NSString stringWithFormat:@"Forge 安装器已启动\nOptiFine 已自动安装\n配置文件: %@", profileName ?: gameVersion]];
+                        } else {
+                            [strongSelf showSuccessMessage:[NSString stringWithFormat:@"Forge 安装器已启动\nOptiFine 安装失败: %@\n配置文件: %@", optiError.localizedDescription ?: @"未知错误", profileName ?: gameVersion]];
+                        }
+                    });
+                }];
+            } else {
+                [strongSelf showSuccessMessage:[NSString stringWithFormat:@"Forge 安装器已启动\n配置文件: %@", profileName ?: gameVersion]];
+            }
+        }];
     };
     forgeVC.completionHandler = completion;
     
@@ -2327,30 +2389,13 @@
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
         
-        if (success) {
-            NSString *filePath = (NSString *)resultOrError;
-            UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"下载完成"
-                                                                            message:@"即将运行安装器..."
-                                                                     preferredStyle:UIAlertControllerStyleAlert];
-            [strongSelf presentViewController:alert animated:YES completion:nil];
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                [alert dismissViewControllerAnimated:YES completion:nil];
-                UIViewController *presenting = strongSelf.presentingViewController;
-                if ([presenting isKindOfClass:[UISplitViewController class]]) {
-                    UISplitViewController *splitVC = (UISplitViewController *)presenting;
-                    if (splitVC.viewControllers.count > 1) {
-                        UIViewController *navVC = splitVC.viewControllers[1];
-                        if ([navVC isKindOfClass:[LauncherNavigationController class]]) {
-                            [(LauncherNavigationController *)navVC enterModInstallerWithPath:filePath hitEnterAfterWindowShown:YES];
-                        }
-                    }
-                }
-                [strongSelf showSuccessMessage:[NSString stringWithFormat:@"NeoForge 安装成功\n配置文件: %@", profileName]];
-            });
-        } else {
-            NSError *error = (NSError *)resultOrError;
-            [strongSelf showError:error.localizedDescription ?: @"NeoForge 安装失败"];
-        }
+        [strongSelf handleInstallerDownloadResultWithVendorName:@"NeoForge"
+                                                    gameVersion:gameVersion
+                                                    profileName:profileName
+                                                  resultOrError:resultOrError
+                                                   installAction:(success ? ^{
+            [strongSelf showSuccessMessage:[NSString stringWithFormat:@"NeoForge 安装器已启动\n配置文件: %@", profileName ?: gameVersion]];
+        } : nil)];
     };
     neoForgeVC.completionHandler = completion;
     

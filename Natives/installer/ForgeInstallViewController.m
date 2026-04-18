@@ -6,6 +6,8 @@
 #import "utils.h"
 #include <dlfcn.h>
 
+NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain";
+
 @interface ForgeVersionCell : UITableViewCell
 @property (nonatomic, strong) UILabel *versionLabel;
 @property (nonatomic, strong) UILabel *subtitleLabel;
@@ -221,7 +223,7 @@
     self.displayNameCache = [NSMutableDictionary new];
     self.searchQueue = dispatch_queue_create("com.amethyst.forge.search", DISPATCH_QUEUE_SERIAL);
     
-    [self loadMetadataFromVendor:@"Forge"];
+    [self loadMetadataFromVendor:self.currentVendor];
 }
 
 - (void)dealloc {
@@ -247,7 +249,10 @@
 
 - (void)actionClose {
     if (self.completionHandler) {
-        self.completionHandler(NO, nil, nil);   // 修复：参数从4个改为3个
+        NSError *cancelError = [NSError errorWithDomain:ForgeInstallerFlowErrorDomain
+                                                   code:ForgeInstallerFlowErrorCodeCancelled
+                                               userInfo:@{NSLocalizedDescriptionKey: @"用户已取消安装流程"}];
+        self.completionHandler(NO, nil, cancelError);
     }
     [self.navigationController dismissViewControllerAnimated:YES completion:nil];
 }
@@ -726,7 +731,7 @@
                 }
                 [self switchToReadyState];
                 if (self.completionHandler) {
-                    self.completionHandler(NO, nil, error);   // 修复：参数从4个改为3个
+                    self.completionHandler(NO, nil, error);
                 }
                 return;
             }
@@ -734,7 +739,7 @@
             NSString *profileName = [NSString stringWithFormat:@"%@-%@", self.currentVendor, versionString];
             
             if (self.completionHandler) {
-                self.completionHandler(YES, profileName, outPath);   // 修复：参数从4个改为3个
+                self.completionHandler(YES, profileName, outPath);
             }
             
             [self switchToReadyState];
