@@ -2249,14 +2249,23 @@
     [self presentViewController:alert animated:YES completion:nil];
     
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        [alert dismissViewControllerAnimated:YES completion:nil];
-        [navVC enterModInstallerWithPath:filePath hitEnterAfterWindowShown:YES];
-        
-        if (installAction) {
-            installAction();
-        } else {
-            [self showSuccessMessage:[NSString stringWithFormat:@"%@ 安装器已启动\n配置文件: %@", vendorName, profileName ?: gameVersion]];
-        }
+        [alert dismissViewControllerAnimated:YES completion:^{
+            void (^launchInstaller)(void) = ^{
+                [navVC enterModInstallerWithPath:filePath hitEnterAfterWindowShown:YES];
+                
+                if (installAction) {
+                    installAction();
+                } else {
+                    [self showSuccessMessage:[NSString stringWithFormat:@"%@ 安装器已启动\n配置文件: %@", vendorName, profileName ?: gameVersion]];
+                }
+            };
+            
+            if (self.presentedViewController) {
+                [self dismissViewControllerAnimated:YES completion:launchInstaller];
+            } else {
+                launchInstaller();
+            }
+        }];
     });
 }
 
