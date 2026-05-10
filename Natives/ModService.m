@@ -2,9 +2,7 @@
 //  ModService.m
 //  AmethystMods
 //
-//  Created by Copilot on 2025-08-22.
-//  Revised: detect multiple loaders, choose metadata by priority (Fabric > Forge > NeoForge),
-//  add defensive parsing for neoforge & toml, avoid crashes.
+//  修改：增加文件修改时间缓存，大幅提升扫描速度
 //
 
 #import "ModService.h"
@@ -15,18 +13,21 @@
 #import "UnzipKit.h"
 
 @interface ModService () <NSURLSessionDownloadDelegate>
-- (NSDictionary<NSString *, NSString *> *)parseFirstModsTableFromTomlString:(NSString *)s;
 @property (nonatomic, strong) NSURLSession *downloadSession;
 @property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, ModDownloadHandler> *downloadCompletionHandlers;
 @property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, NSString *> *downloadDestinationPaths;
+
+// 缓存
+@property (nonatomic, strong) NSMutableDictionary<NSString *, ModItem *> *metadataCache;
+@property (nonatomic, strong) NSMutableDictionary<NSString *, NSDate *> *checkpointTimes;
+@property (nonatomic, strong) dispatch_queue_t cacheQueue;
 @end
 
 @implementation ModService
 
+// ---------- TOML 解析（未修改）----------
 - (nullable id)parseTomlValue:(NSString *)valPart inLines:(NSArray<NSString *> *)lines atIndex:(NSUInteger *)i {
     NSString *trimmedVal = [valPart stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
-
-    // Check for multiline strings
     NSString *delimiter = nil;
     if ([trimmedVal hasPrefix:@"'''"]) delimiter = @"'''";
     else if ([trimmedVal hasPrefix:@"\"\"\""]) delimiter = @"\"\"\"";
@@ -54,55 +55,45 @@
         }
     }
 
-    // For single-line strings, remove surrounding quotes
-    if (([trimmedVal hasPrefix:@"\""] && [trimmedVal hasSuffix:@"\""]) || ([trimmedVal hasPrefix:@"'"] && [trimmedVal hasSuffix:@"'"])) {
+    if (([trimmedVal hasPrefix:@"\""] && [trimmedVal hasSuffix:@"\""]) ||
+        ([trimmedVal hasPrefix:@"'"] && [trimmedVal hasSuffix:@"'"])) {
         if (trimmedVal.length > 1) {
             return [trimmedVal substringWithRange:NSMakeRange(1, trimmedVal.length - 2)];
         }
         return @"";
     }
-
-    // Handle other types if necessary (booleans, numbers, arrays etc.)
-    // For now, we assume everything else is a simple string.
     return trimmedVal;
 }
 
 - (NSDictionary<NSString *, id> *)parseTomlString:(NSString *)s {
     if (!s) return nil;
-
     NSMutableDictionary<NSString *, id> *root = [NSMutableDictionary dictionary];
     NSMutableDictionary *currentTable = root;
     NSString *currentTableName = nil;
-
     NSArray<NSString *> *lines = [s componentsSeparatedByCharactersInSet:[NSCharacterSet newlineCharacterSet]];
     for (NSUInteger i = 0; i < lines.count; i++) {
         NSString *line = lines[i];
         NSString *trimmed = [line stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+        if ([trimmed hasPrefix:@"#"] || trimmed.length == 0) continue;
 
-        if ([trimmed hasPrefix:@"#"] || trimmed.length == 0) continue; // Skip comments and empty lines
-
-        // Check for table headers
-        if ([trimmed hasPrefix:@"[["] && [trimmed hasSuffix:@"]]"]) { // Array of Tables
+        if ([trimmed hasPrefix:@"[["] && [trimmed hasSuffix:@"]]"]) {
             currentTableName = [trimmed substringWithRange:NSMakeRange(2, trimmed.length - 4)];
             NSMutableArray *array = root[currentTableName] ?: [NSMutableArray array];
             root[currentTableName] = array;
-
             currentTable = [NSMutableDictionary dictionary];
             [array addObject:currentTable];
             continue;
-        } else if ([trimmed hasPrefix:@"["] && [trimmed hasSuffix:@"]"]) { // Table
+        } else if ([trimmed hasPrefix:@"["] && [trimmed hasSuffix:@"]"]) {
             currentTableName = [trimmed substringWithRange:NSMakeRange(1, trimmed.length - 2)];
             currentTable = [NSMutableDictionary dictionary];
             root[currentTableName] = currentTable;
             continue;
         }
 
-        // Parse key-value pairs
         NSRange eqRange = [trimmed rangeOfString:@"="];
         if (eqRange.location != NSNotFound) {
             NSString *key = [[trimmed substringToIndex:eqRange.location] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
             NSString *valPart = [trimmed substringFromIndex:NSMaxRange(eqRange)];
-
             id value = [self parseTomlValue:valPart inLines:lines atIndex:&i];
             if (value) {
                 currentTable[key] = value;
@@ -112,7 +103,7 @@
     return root;
 }
 
-
+// ---------- 初始化 ----------
 + (instancetype)sharedService {
     static ModService *s;
     static dispatch_once_t onceToken;
@@ -129,13 +120,16 @@
         _downloadSession = [NSURLSession sessionWithConfiguration:config delegate:self delegateQueue:nil];
         _downloadCompletionHandlers = [NSMutableDictionary dictionary];
         _downloadDestinationPaths = [NSMutableDictionary dictionary];
+
+        // 初始化缓存
+        _metadataCache = [NSMutableDictionary dictionary];
+        _checkpointTimes = [NSMutableDictionary dictionary];
+        _cacheQueue = dispatch_queue_create("com.amethyst.modcache", DISPATCH_QUEUE_CONCURRENT);
     }
     return self;
 }
 
-
-#pragma mark - Helpers (sha1/icon cache/readdata etc.) unchanged (omitted here for brevity)
-// ... (All helper methods from the previous version of the file remain here) ...
+// ---------- 辅助方法 ----------
 - (nullable NSString *)sha1ForFileAtPath:(NSString *)path {
     NSData *d = [NSData dataWithContentsOfFile:path];
     if (!d) return nil;
@@ -174,12 +168,9 @@
     return data;
 }
 
-#pragma mark - Mods folder detection & scan (conservative)
 - (nullable NSString *)existingModsFolderForProfile:(NSString *)profileName {
-    // ... same implementation as before ...
     NSString *profile = profileName.length ? profileName : @"default";
     NSFileManager *fm = [NSFileManager defaultManager];
-
     @try {
         NSDictionary *profiles = PLProfiles.current.profiles;
         NSDictionary *prof = profiles[profile];
@@ -207,6 +198,47 @@
     return nil;
 }
 
+// ---------- 缓存方法 ----------
+- (BOOL)needsRescanForPath:(NSString *)path {
+    __block BOOL needs = YES;
+    dispatch_sync(self.cacheQueue, ^{
+        NSDate *lastScan = self.checkpointTimes[path];
+        if (lastScan) {
+            NSDictionary *attrs = [[NSFileManager defaultManager] attributesOfItemAtPath:path error:nil];
+            NSDate *modifyDate = attrs[NSFileModificationDate];
+            if (modifyDate && [modifyDate isEqualToDate:lastScan]) {
+                needs = NO;
+            }
+        }
+    });
+    return needs;
+}
+
+- (void)updateCheckpointForPath:(NSString *)path {
+    dispatch_barrier_async(self.cacheQueue, ^{
+        NSDictionary *attrs = [[NSFileManager defaultManager] attributesOfItemAtPath:path error:nil];
+        NSDate *modifyDate = attrs[NSFileModificationDate];
+        if (modifyDate) {
+            self.checkpointTimes[path] = modifyDate;
+        }
+    });
+}
+
+- (nullable ModItem *)cachedModForPath:(NSString *)path {
+    __block ModItem *item = nil;
+    dispatch_sync(self.cacheQueue, ^{
+        item = self.metadataCache[path];
+    });
+    return item;
+}
+
+- (void)cacheModItem:(ModItem *)item forPath:(NSString *)path {
+    dispatch_barrier_async(self.cacheQueue, ^{
+        self.metadataCache[path] = item;
+    });
+}
+
+// ---------- 扫描模组（核心优化）----------
 - (void)scanModsForProfile:(NSString *)profileName completion:(ModListHandler)completion {
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         NSString *modsFolder = [self existingModsFolderForProfile:profileName];
@@ -214,7 +246,7 @@
 
         if (!modsFolder) {
             if (completion) {
-                completion(items);
+                dispatch_async(dispatch_get_main_queue(), ^{ completion(items); });
             }
             return;
         }
@@ -225,36 +257,46 @@
         for (NSString *fileName in contents) {
             if ([fileName.lowercaseString hasSuffix:@".jar"] || [fileName.lowercaseString hasSuffix:@".jar.disabled"]) {
                 NSString *fullPath = [modsFolder stringByAppendingPathComponent:fileName];
+
+                // 检查缓存
+                if (![self needsRescanForPath:fullPath]) {
+                    ModItem *cached = [self cachedModForPath:fullPath];
+                    if (cached) {
+                        [items addObject:cached];
+                        continue;
+                    }
+                }
+
                 ModItem *mod = [[ModItem alloc] initWithFilePath:fullPath];
                 [items addObject:mod];
 
                 dispatch_group_enter(group);
                 [self fetchMetadataForMod:mod completion:^(ModItem *populatedMod, NSError *error) {
+                    if (!error) {
+                        [self cacheModItem:populatedMod forPath:fullPath];
+                        [self updateCheckpointForPath:fullPath];
+                    }
                     dispatch_group_leave(group);
                 }];
             }
         }
 
         dispatch_group_notify(group, dispatch_get_main_queue(), ^{
-            // Sort after all metadata has been fetched
             [items sortUsingComparator:^NSComparisonResult(ModItem *obj1, ModItem *obj2) {
                 NSString *name1 = obj1.displayName ?: obj1.fileName;
                 NSString *name2 = obj2.displayName ?: obj2.fileName;
                 return [name1 localizedCaseInsensitiveCompare:name2];
             }];
-
-            if (completion) {
-                completion(items);
-            }
+            if (completion) completion(items);
         });
     });
 }
 
-#pragma mark - Metadata fetch
+// ---------- 元数据获取（原逻辑，仅被上面调用）----------
 - (void)fetchMetadataForMod:(ModItem *)mod completion:(ModMetadataHandler)completion {
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         @try {
-            // --- Priority 1: Fabric ---
+            // Fabric
             NSData *fabricData = [self readFileFromJar:mod.filePath entryName:@"fabric.mod.json"];
             if (fabricData) {
                 NSDictionary *json = [NSJSONSerialization JSONObjectWithData:fabricData options:0 error:nil];
@@ -266,7 +308,6 @@
                     mod.modDescription = json[@"description"];
                     mod.author = [json[@"authors"] componentsJoinedByString:@", "];
 
-                    // Extract game version
                     NSDictionary *deps = json[@"depends"];
                     if ([deps isKindOfClass:[NSDictionary class]] && [deps[@"minecraft"] isKindOfClass:[NSString class]]) {
                         mod.gameVersion = deps[@"minecraft"];
@@ -282,7 +323,7 @@
                 }
             }
 
-            // --- Priority 2: Forge / NeoForge ---
+            // Forge / NeoForge
             NSData *tomlData = [self readFileFromJar:mod.filePath entryName:@"META-INF/mods.toml"];
             if (tomlData) {
                 mod.isForge = YES;
@@ -294,8 +335,6 @@
             if (tomlData) {
                 NSString *tomlString = [[NSString alloc] initWithData:tomlData encoding:NSUTF8StringEncoding];
                 NSDictionary<NSString *, id> *toml = [self parseTomlString:tomlString];
-
-                // Find first item in [[mods]] array
                 NSArray *mods = toml[@"mods"];
                 if ([mods isKindOfClass:[NSArray class]] && mods.count > 0) {
                     NSDictionary *modInfo = mods.firstObject;
@@ -306,9 +345,6 @@
                         mod.modDescription = modInfo[@"description"];
                         mod.author = modInfo[@"authors"];
 
-                        // Find Minecraft dependency
-                        // The key for dependencies can be complex, e.g., [[dependencies.modid]]
-                        // Or a single [[dependencies]] table. We will check for 'dependencies' key first.
                         NSArray *deps = nil;
                         for (NSString *key in toml) {
                             if ([key hasPrefix:@"dependencies"]) {
@@ -316,7 +352,6 @@
                                 break;
                             }
                         }
-
                         if ([deps isKindOfClass:[NSArray class]]) {
                             for (NSDictionary *depInfo in deps) {
                                 if ([depInfo isKindOfClass:[NSDictionary class]] && [depInfo[@"modId"] isEqualToString:@"minecraft"]) {
@@ -337,53 +372,43 @@
                 }
             }
         } @catch (NSException *exception) {
-            NSLog(@"[ModService] CRITICAL: Exception while parsing mod metadata for %@: %@", mod.fileName, exception);
+            NSLog(@"[ModService] CRITICAL: Exception while parsing %@: %@", mod.fileName, exception);
         }
-
-        // --- Fallback: No metadata found or error occurred ---
         if (completion) completion(mod, nil);
     });
 }
 
-#pragma mark - File operations
+// ---------- 文件操作（启用/禁用、删除）----------
 - (BOOL)toggleEnableForMod:(ModItem *)mod error:(NSError **)error {
     NSFileManager *fileManager = [NSFileManager defaultManager];
     NSString *currentPath = mod.filePath;
     NSString *newPath;
 
     if (mod.disabled) {
-        // Enable the mod: remove .disabled suffix
         if ([currentPath.lowercaseString hasSuffix:@".jar.disabled"]) {
             newPath = [currentPath substringToIndex:currentPath.length - 9];
         } else {
-            // Should not happen, but handle gracefully
             if (error) *error = [NSError errorWithDomain:@"ModServiceError" code:101 userInfo:@{NSLocalizedDescriptionKey:@"文件状态不一致，无法启用。"}];
             return NO;
         }
     } else {
-        // Disable the mod: add .disabled suffix
         newPath = [currentPath stringByAppendingString:@".disabled"];
     }
 
     BOOL success = [fileManager moveItemAtPath:currentPath toPath:newPath error:error];
     if (success) {
-        // IMPORTANT: Update the model object to reflect the change
         mod.filePath = newPath;
         mod.fileName = [newPath lastPathComponent];
-        [mod refreshDisabledFlag]; // This will set `disabled` property correctly
+        [mod refreshDisabledFlag];
     }
-
     return success;
 }
 
 - (BOOL)deleteMod:(ModItem *)mod error:(NSError **)error {
-    // ... same implementation as before ...
     return [[NSFileManager defaultManager] removeItemAtPath:mod.filePath error:error];
 }
 
-
-#pragma mark - Online Mod Downloading
-
+// ---------- 下载（未改动）----------
 - (void)downloadMod:(ModItem *)mod toProfile:(NSString *)profileName completion:(ModDownloadHandler)completion {
     NSString *modsFolder = [self existingModsFolderForProfile:profileName];
     if (!modsFolder) {
@@ -404,11 +429,9 @@
     }
 
     NSString *destinationPath = [modsFolder stringByAppendingPathComponent:mod.fileName];
-
     NSURLSessionDownloadTask *task = [self.downloadSession downloadTaskWithURL:url];
     self.downloadCompletionHandlers[task] = completion;
     self.downloadDestinationPaths[task] = destinationPath;
-
     [task resume];
 }
 
@@ -421,28 +444,21 @@
     [self.downloadCompletionHandlers removeObjectForKey:downloadTask];
     [self.downloadDestinationPaths removeObjectForKey:downloadTask];
 
-    if (!handler || !destinationPath) {
-        return;
-    }
+    if (!handler || !destinationPath) return;
 
     NSFileManager *fm = [NSFileManager defaultManager];
     NSError *moveError = nil;
-
-    // Ensure the destination directory exists
     NSString *dir = [destinationPath stringByDeletingLastPathComponent];
     if (![fm fileExistsAtPath:dir]) {
         [fm createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:nil error:nil];
     }
-
-    // If a file already exists, remove it
     if ([fm fileExistsAtPath:destinationPath]) {
         [fm removeItemAtPath:destinationPath error:nil];
     }
-
     if (![fm moveItemAtURL:location toURL:[NSURL fileURLWithPath:destinationPath] error:&moveError]) {
         handler(moveError);
     } else {
-        handler(nil); // Success
+        handler(nil);
     }
 }
 
