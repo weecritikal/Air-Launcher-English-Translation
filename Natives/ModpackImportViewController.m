@@ -2,7 +2,7 @@
 //  ModpackImportViewController.m
 //  Amethyst
 //
-//  整合包导入功能实现 - 支持 .zip 和 .mrpack 格式
+//  修改：增加异常捕获，彻底防止闪退
 //
 
 #import "ModpackImportViewController.h"
@@ -12,7 +12,6 @@
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
 @interface ModpackImportViewController () <UITableViewDataSource, UITableViewDelegate, UIDocumentPickerDelegate>
-
 @property (nonatomic, strong) UITableView *tableView;
 @property (nonatomic, strong) UIActivityIndicatorView *activityIndicator;
 @property (nonatomic, strong) UILabel *emptyLabel;
@@ -21,7 +20,6 @@
 @property (nonatomic, strong) ModpackImportService *importService;
 @property (nonatomic, strong) NSDictionary *currentImportingModpack;
 @property (nonatomic, strong) UIVisualEffectView *backgroundBlurView;
-
 @end
 
 @implementation ModpackImportViewController
@@ -29,8 +27,7 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.title = @"导入整合包";
-    
-    // 设置毛玻璃背景
+
     UIBlurEffect *blurEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial];
     self.backgroundBlurView = [[UIVisualEffectView alloc] initWithEffect:blurEffect];
     self.backgroundBlurView.translatesAutoresizingMaskIntoConstraints = NO;
@@ -41,16 +38,14 @@
         [self.backgroundBlurView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [self.backgroundBlurView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor]
     ]];
-    
+
     self.importService = [[ModpackImportService alloc] init];
     self.importedModpacks = [NSMutableArray array];
-    
     [self setupUI];
     [self loadImportedModpacks];
 }
 
 - (void)setupUI {
-    // 导入按钮
     self.importButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.importButton.translatesAutoresizingMaskIntoConstraints = NO;
     [self.importButton setTitle:@"选择整合包文件" forState:UIControlStateNormal];
@@ -61,8 +56,7 @@
     self.importButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
     [self.importButton addTarget:self action:@selector(selectModpackFile) forControlEvents:UIControlEventTouchUpInside];
     [self.backgroundBlurView.contentView addSubview:self.importButton];
-    
-    // 已导入整合包列表
+
     self.tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
     self.tableView.translatesAutoresizingMaskIntoConstraints = NO;
     self.tableView.backgroundColor = [UIColor clearColor];
@@ -72,14 +66,12 @@
     self.tableView.rowHeight = 80;
     self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
     [self.backgroundBlurView.contentView addSubview:self.tableView];
-    
-    // 加载指示器
+
     self.activityIndicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleLarge];
     self.activityIndicator.translatesAutoresizingMaskIntoConstraints = NO;
     self.activityIndicator.hidesWhenStopped = YES;
     [self.backgroundBlurView.contentView addSubview:self.activityIndicator];
-    
-    // 空列表提示
+
     self.emptyLabel = [[UILabel alloc] init];
     self.emptyLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.emptyLabel.textAlignment = NSTextAlignmentCenter;
@@ -87,22 +79,21 @@
     self.emptyLabel.text = @"还没有导入的整合包\n点击上方按钮导入";
     self.emptyLabel.numberOfLines = 0;
     [self.backgroundBlurView.contentView addSubview:self.emptyLabel];
-    
-    // 设置约束
+
     [NSLayoutConstraint activateConstraints:@[
         [self.importButton.topAnchor constraintEqualToAnchor:self.backgroundBlurView.contentView.safeAreaLayoutGuide.topAnchor constant:16],
         [self.importButton.leadingAnchor constraintEqualToAnchor:self.backgroundBlurView.contentView.leadingAnchor constant:16],
         [self.importButton.trailingAnchor constraintEqualToAnchor:self.backgroundBlurView.contentView.trailingAnchor constant:-16],
         [self.importButton.heightAnchor constraintEqualToConstant:50],
-        
+
         [self.tableView.topAnchor constraintEqualToAnchor:self.importButton.bottomAnchor constant:16],
         [self.tableView.leadingAnchor constraintEqualToAnchor:self.backgroundBlurView.contentView.leadingAnchor],
         [self.tableView.trailingAnchor constraintEqualToAnchor:self.backgroundBlurView.contentView.trailingAnchor],
         [self.tableView.bottomAnchor constraintEqualToAnchor:self.backgroundBlurView.contentView.safeAreaLayoutGuide.bottomAnchor],
-        
+
         [self.activityIndicator.centerXAnchor constraintEqualToAnchor:self.backgroundBlurView.contentView.centerXAnchor],
         [self.activityIndicator.centerYAnchor constraintEqualToAnchor:self.backgroundBlurView.contentView.centerYAnchor],
-        
+
         [self.emptyLabel.centerXAnchor constraintEqualToAnchor:self.backgroundBlurView.contentView.centerXAnchor],
         [self.emptyLabel.centerYAnchor constraintEqualToAnchor:self.backgroundBlurView.contentView.centerYAnchor]
     ]];
@@ -112,7 +103,6 @@
     NSArray *modpacks = [self.importService getImportedModpacks];
     [self.importedModpacks removeAllObjects];
     [self.importedModpacks addObjectsFromArray:modpacks];
-    
     dispatch_async(dispatch_get_main_queue(), ^{
         self.emptyLabel.hidden = self.importedModpacks.count > 0;
         [self.tableView reloadData];
@@ -138,32 +128,42 @@
     if (urls.count == 0) return;
     NSURL *fileURL = urls.firstObject;
     NSString *fileExtension = fileURL.pathExtension.lowercaseString;
+
     if (![fileExtension isEqualToString:@"mrpack"] && ![fileExtension isEqualToString:@"zip"]) {
         [self showAlertWithTitle:@"无效的文件" message:@"请选择 .mrpack 或 .zip 文件"];
         return;
     }
+
     BOOL accessGranted = [fileURL startAccessingSecurityScopedResource];
     if (!accessGranted) {
         [self showAlertWithTitle:@"访问被拒绝" message:@"无法访问选中的文件"];
         return;
     }
+
     [self.activityIndicator startAnimating];
+
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         NSError *error = nil;
-        NSDictionary *modpackInfo = [self.importService parseModpackAtURL:fileURL error:&error];
+        NSDictionary *modpackInfo = nil;
+
+        @try {
+            modpackInfo = [self.importService parseModpackAtURL:fileURL error:&error];
+        } @catch (NSException *exception) {
+            error = [NSError errorWithDomain:@"ModpackImportError" code:9999
+                                    userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"解析异常: %@", exception.reason]}];
+        }
+
         [fileURL stopAccessingSecurityScopedResource];
+
         dispatch_async(dispatch_get_main_queue(), ^{
             [self.activityIndicator stopAnimating];
-            if (error) {
-                [self showAlertWithTitle:@"解析失败" message:error.localizedDescription];
+
+            if (error || !modpackInfo) {
+                [self showAlertWithTitle:@"解析失败" message:error.localizedDescription ?: @"无法解析整合包文件"];
                 return;
             }
-            if (modpackInfo) {
-                self.currentImportingModpack = modpackInfo;
-                [self showModpackImportConfirmation:modpackInfo];
-            } else {
-                [self showAlertWithTitle:@"解析失败" message:@"无法解析整合包文件"];
-            }
+            self.currentImportingModpack = modpackInfo;
+            [self showModpackImportConfirmation:modpackInfo];
         });
     });
 }
@@ -178,7 +178,10 @@
     NSString *mcVersion = modpackInfo[@"minecraftVersion"] ?: @"未知";
     NSString *loader = modpackInfo[@"loader"] ?: @"未知";
     NSString *loaderVersion = modpackInfo[@"loaderVersion"] ?: @"";
-    NSString *message = [NSString stringWithFormat:@"名称: %@\n版本: %@\nMinecraft: %@\n加载器: %@ %@\n\n是否导入此整合包？", name, version, mcVersion, loader, loaderVersion];
+
+    NSString *message = [NSString stringWithFormat:@"名称: %@\n版本: %@\nMinecraft: %@\n加载器: %@ %@\n\n是否导入此整合包？",
+                         name, version, mcVersion, loader, loaderVersion];
+
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"导入整合包" message:message preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:^(UIAlertAction * _Nonnull action) {
         self.currentImportingModpack = nil;
@@ -186,6 +189,7 @@
     [alert addAction:[UIAlertAction actionWithTitle:@"导入" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         [self startModpackImport:modpackInfo];
     }]];
+
     if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
         alert.popoverPresentationController.sourceView = self.view;
         alert.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(self.view.bounds), CGRectGetMidY(self.view.bounds), 0, 0);
@@ -195,19 +199,28 @@
 
 - (void)startModpackImport:(NSDictionary *)modpackInfo {
     [self.activityIndicator startAnimating];
+
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         NSError *error = nil;
-        BOOL success = [self.importService importModpack:modpackInfo error:&error];
+        BOOL success = NO;
+
+        @try {
+            success = [self.importService importModpack:modpackInfo error:&error];
+        } @catch (NSException *exception) {
+            error = [NSError errorWithDomain:@"ModpackImportError" code:9998
+                                    userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"导入异常: %@", exception.reason]}];
+        }
+
         dispatch_async(dispatch_get_main_queue(), ^{
             [self.activityIndicator stopAnimating];
             self.currentImportingModpack = nil;
+
             if (success) {
                 [self showAlertWithTitle:@"导入成功" message:[NSString stringWithFormat:@"整合包 '%@' 已成功导入。", modpackInfo[@"name"]] completion:^{
                     [self loadImportedModpacks];
                 }];
             } else {
-                NSString *errorMsg = error ? error.localizedDescription : @"未知错误";
-                [self showAlertWithTitle:@"导入失败" message:errorMsg];
+                [self showAlertWithTitle:@"导入失败" message:error.localizedDescription ?: @"未知错误"];
             }
         });
     });
@@ -225,12 +238,20 @@
     NSString *name = modpack[@"name"] ?: @"未知";
     NSString *mcVersion = modpack[@"minecraftVersion"] ?: @"未知";
     NSString *loader = modpack[@"loader"] ?: @"未知";
+
     cell.textLabel.text = name;
     cell.detailTextLabel.text = [NSString stringWithFormat:@"Minecraft %@ - %@", mcVersion, loader];
     cell.imageView.image = [UIImage systemImageNamed:@"archivebox"];
     cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
     cell.backgroundColor = [UIColor clearColor];
-    // 添加卡片背景
+
+    // 移除旧的卡片背景（如果有）
+    for (UIView *subview in cell.contentView.subviews) {
+        if ([subview isKindOfClass:[UIVisualEffectView class]]) {
+            [subview removeFromSuperview];
+        }
+    }
+
     UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial]];
     blurView.translatesAutoresizingMaskIntoConstraints = NO;
     blurView.layer.cornerRadius = 12;
@@ -263,6 +284,7 @@
         [self deleteModpack:modpack];
     }]];
     [actionSheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+
     if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
         actionSheet.popoverPresentationController.sourceView = self.view;
         actionSheet.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(self.view.bounds), CGRectGetMidY(self.view.bounds), 0, 0);
