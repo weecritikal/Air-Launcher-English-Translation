@@ -135,7 +135,7 @@ static PLProfiles* current;
     }
 }
 
-- (void)saveProfile:(NSMutableDictionary<<NSString *, NSString *> *)profile withName:(NSString *)name {
+- (void)saveProfile:(NSMutableDictionary<NSString *, NSString *> *)profile withName:(NSString *)name {
     if (!self.profileDict[@"profiles"]) {
         self.profileDict[@"profiles"] = [NSMutableDictionary dictionary];
     }
