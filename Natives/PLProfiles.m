@@ -1,3 +1,10 @@
+//
+//  PLProfiles.m
+//  Amethyst
+//
+//  Profile manager with JSON-safe save
+//
+
 #import "LauncherPreferences.h"
 #import "PLProfiles.h"
 #import "utils.h"
@@ -35,7 +42,6 @@ static PLProfiles* current;
 + (id)profile:(NSMutableDictionary *)profile resolveKey:(id)key {
     NSString *value = profile[key];
     if (value.length > 0) {
-        //NSDebugLog(@"[PLProfiles] Applying %@: \"%@\"", key, value);
         return value;
     }
 
@@ -88,25 +94,52 @@ static PLProfiles* current;
     self.profileDict[@"selectedProfile"] = (id)name;
     [self save];
     
-    // 发送版本切换通知
     [[NSNotificationCenter defaultCenter] postNotificationName:@"SelectedProfileChanged" object:name];
 }
 
-- (void)save {
-    saveJSONToFile(self.profileDict, self.profilePath);
+/// 递归清理 NSDate 等非法 JSON 类型，确保保存不崩溃
+- (id)jsonSanitizedObject:(id)obj {
+    if ([obj isKindOfClass:[NSDate class]]) {
+        static NSDateFormatter *formatter = nil;
+        static dispatch_once_t onceToken;
+        dispatch_once(&onceToken, ^{
+            formatter = [[NSDateFormatter alloc] init];
+            formatter.locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
+            formatter.timeZone = [NSTimeZone timeZoneWithAbbreviation:@"UTC"];
+            formatter.dateFormat = @"yyyy-MM-dd'T'HH:mm:ss'Z'";
+        });
+        return [formatter stringFromDate:obj];
+    } else if ([obj isKindOfClass:[NSDictionary class]]) {
+        NSMutableDictionary *clean = [NSMutableDictionary dictionaryWithCapacity:[obj count]];
+        [obj enumerateKeysAndObjectsUsingBlock:^(id key, id val, BOOL *stop) {
+            id safeKey = [key isKindOfClass:[NSDate class]] ? [self jsonSanitizedObject:key] : key;
+            clean[safeKey] = [self jsonSanitizedObject:val];
+        }];
+        return clean;
+    } else if ([obj isKindOfClass:[NSArray class]]) {
+        NSMutableArray *clean = [NSMutableArray arrayWithCapacity:[obj count]];
+        for (id item in obj) {
+            [clean addObject:[self jsonSanitizedObject:item]];
+        }
+        return clean;
+    }
+    return obj;
 }
 
-// 新增：修复构建错误 - 实现缺失的 saveProfile:withName: 方法
-- (void)saveProfile:(NSMutableDictionary<NSString *, NSString *> *)profile withName:(NSString *)name {
-    // 确保 profiles 字典存在
+- (void)save {
+    id sanitized = [self jsonSanitizedObject:self.profileDict];
+    if ([NSJSONSerialization isValidJSONObject:sanitized]) {
+        saveJSONToFile(sanitized, self.profilePath);
+    } else {
+        NSLog(@"[PLProfiles] save failed: profileDict still contains invalid JSON types after sanitization");
+    }
+}
+
+- (void)saveProfile:(NSMutableDictionary<<NSString *, NSString *> *)profile withName:(NSString *)name {
     if (!self.profileDict[@"profiles"]) {
         self.profileDict[@"profiles"] = [NSMutableDictionary dictionary];
     }
-    
-    // 将配置文件保存到指定名称
     self.profileDict[@"profiles"][name] = profile;
-    
-    // 保存整个配置文件
     [self save];
 }
 
