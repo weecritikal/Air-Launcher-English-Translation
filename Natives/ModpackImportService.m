@@ -31,7 +31,6 @@ static NSString * const kModpacksDirectory = @"modpacks";
     NSString *documentsPath = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) firstObject];
     self.modpacksDirectory = [documentsPath stringByAppendingPathComponent:kModpacksDirectory];
     
-    // Create directory if it doesn't exist
     NSFileManager *fm = [NSFileManager defaultManager];
     if (![fm fileExistsAtPath:self.modpacksDirectory]) {
         NSError *error = nil;
@@ -43,6 +42,21 @@ static NSString * const kModpacksDirectory = @"modpacks";
             NSLog(@"[ModpackImportService] Failed to create directory: %@", error);
         }
     }
+}
+
+#pragma mark - Helpers
+
+/// 将 NSDate 转为 ISO8601 字符串，确保 JSON 序列化安全
+- (NSString *)iso8601StringFromDate:(NSDate *)date {
+    static NSDateFormatter *formatter = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        formatter = [[NSDateFormatter alloc] init];
+        formatter.locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
+        formatter.timeZone = [NSTimeZone timeZoneWithAbbreviation:@"UTC"];
+        formatter.dateFormat = @"yyyy-MM-dd'T'HH:mm:ss'Z'";
+    });
+    return [formatter stringFromDate:date];
 }
 
 #pragma mark - Parse Modpack
@@ -61,7 +75,6 @@ static NSString * const kModpacksDirectory = @"modpacks";
         return nil;
     }
     
-    // Open archive
     NSError *archiveError = nil;
     UZKArchive *archive = [[UZKArchive alloc] initWithPath:filePath error:&archiveError];
     if (archiveError || !archive) {
@@ -73,19 +86,16 @@ static NSString * const kModpacksDirectory = @"modpacks";
         return nil;
     }
     
-    // Try parsing modrinth.index.json (Modrinth format)
     NSData *indexData = [archive extractDataFromFile:@"modrinth.index.json" error:&archiveError];
     if (indexData) {
         return [self parseModrinthModpack:archive indexData:indexData filePath:filePath error:error];
     }
     
-    // Try parsing manifest.json (CurseForge/Generic format)
     NSData *manifestData = [archive extractDataFromFile:@"manifest.json" error:&archiveError];
     if (manifestData) {
         return [self parseManifestModpack:archive manifestData:manifestData filePath:filePath error:error];
     }
     
-    // Neither format found
     if (error) {
         *error = [NSError errorWithDomain:@"ModpackImportError"
                                      code:1003
@@ -107,7 +117,6 @@ static NSString * const kModpacksDirectory = @"modpacks";
         return nil;
     }
     
-    // Extract dependency info
     NSDictionary *dependencies = indexDict[@"dependencies"];
     NSString *minecraftVersion = dependencies[@"minecraft"];
     NSString *loader = nil;
@@ -127,7 +136,6 @@ static NSString * const kModpacksDirectory = @"modpacks";
         loaderVersion = dependencies[@"neoforge"];
     }
     
-    // Get version info
     NSString *name = indexDict[@"name"] ?: @"未知整合包";
     NSString *version = indexDict[@"versionId"] ?: @"1.0.0";
     NSString *modpackId = [NSString stringWithFormat:@"modpack_%@", [[NSUUID UUID] UUIDString]];
@@ -159,11 +167,9 @@ static NSString * const kModpacksDirectory = @"modpacks";
         return nil;
     }
     
-    // Extract Minecraft version
     NSDictionary *minecraft = manifestDict[@"minecraft"];
     NSString *minecraftVersion = minecraft[@"version"];
     
-    // Extract mod loader info
     NSArray *modLoaders = minecraft[@"modLoaders"];
     NSString *loader = nil;
     NSString *loaderVersion = nil;
@@ -217,7 +223,6 @@ static NSString * const kModpacksDirectory = @"modpacks";
         return NO;
     }
     
-    // Create unique directory for this modpack
     NSString *modpackId = modpackInfo[@"id"];
     NSString *modpackDir = [self.modpacksDirectory stringByAppendingPathComponent:modpackId];
     
@@ -230,42 +235,36 @@ static NSString * const kModpacksDirectory = @"modpacks";
         return NO;
     }
     
-    // Copy original file
     NSString *destFilePath = [modpackDir stringByAppendingPathComponent:[filePath lastPathComponent]];
     if ([fm fileExistsAtPath:destFilePath]) {
         [fm removeItemAtPath:destFilePath error:nil];
     }
     
     if (![fm copyItemAtPath:filePath toPath:destFilePath error:&dirError]) {
-        // Cleanup on failure
         [fm removeItemAtPath:modpackDir error:nil];
         if (error) *error = dirError;
         return NO;
     }
     
-    // Extract modpack
     NSError *extractError = nil;
     BOOL extractSuccess = [self extractModpack:destFilePath toDirectory:modpackDir format:format error:&extractError];
     
     if (!extractSuccess) {
-        // Cleanup on failure
         [fm removeItemAtPath:modpackDir error:nil];
         if (error) *error = extractError;
         return NO;
     }
     
-    // Create game profile
     NSString *profileName = [self createProfileForModpack:modpackInfo modpackDir:modpackDir error:error];
     if (!profileName) {
         [fm removeItemAtPath:modpackDir error:nil];
         return NO;
     }
     
-    // Save to imported modpacks list
     NSMutableDictionary *savedModpack = [modpackInfo mutableCopy];
     savedModpack[@"modpackDir"] = modpackDir;
     savedModpack[@"profileName"] = profileName;
-    savedModpack[@"importDate"] = [NSDate date];
+    savedModpack[@"importDate"] = [self iso8601StringFromDate:[NSDate date]];  // ✅ 修复：转为字符串
     savedModpack[@"filePath"] = destFilePath;
     
     [self saveImportedModpack:savedModpack];
@@ -286,7 +285,6 @@ static NSString * const kModpacksDirectory = @"modpacks";
         return NO;
     }
     
-    // Extract all files
     BOOL success = [archive extractFilesTo:destDir overwrite:YES error:&archiveError];
     
     if (!success || archiveError) {
@@ -307,12 +305,9 @@ static NSString * const kModpacksDirectory = @"modpacks";
     NSString *loader = modpackInfo[@"loader"];
     NSString *loaderVersion = modpackInfo[@"loaderVersion"];
     
-    // Generate unique profile name
     NSString *profileName = [NSString stringWithFormat:@"modpack_%@", [[NSUUID UUID] UUIDString]];
     
-    // Determine version ID based on loader
     NSString *versionId = nil;
-    
     if ([loader isEqualToString:@"Forge"]) {
         versionId = [NSString stringWithFormat:@"%@-forge-%@", minecraftVersion, loaderVersion];
     } else if ([loader isEqualToString:@"Fabric"]) {
@@ -323,7 +318,6 @@ static NSString * const kModpacksDirectory = @"modpacks";
         versionId = minecraftVersion;
     }
     
-    // Create game directory inside modpack folder
     NSString *gameDir = [modpackDir stringByAppendingPathComponent:@"minecraft"];
     NSFileManager *fm = [NSFileManager defaultManager];
     NSError *dirError = nil;
@@ -336,16 +330,14 @@ static NSString * const kModpacksDirectory = @"modpacks";
         return nil;
     }
     
-    // Create profile
     NSMutableDictionary *profile = [@{
         @"name": name,
         @"lastVersionId": versionId ?: @"",
         @"gameDir": gameDir,
-        @"created": [NSDate date],
+        @"created": [self iso8601StringFromDate:[NSDate date]],  // ✅ 修复：转为字符串
         @"type": @"modpack"
     } mutableCopy];
     
-    // Add icon if available
     NSString *iconPath = [modpackDir stringByAppendingPathComponent:@"icon.png"];
     if ([fm fileExistsAtPath:iconPath]) {
         NSData *iconData = [NSData dataWithContentsOfFile:iconPath];
@@ -355,7 +347,6 @@ static NSString * const kModpacksDirectory = @"modpacks";
         }
     }
     
-    // Save profile
     PLProfiles.current.profiles[profileName] = profile;
     [PLProfiles.current save];
     
@@ -364,7 +355,7 @@ static NSString * const kModpacksDirectory = @"modpacks";
 
 #pragma mark - Get Imported Modpacks
 
-- (NSArray<NSDictionary *> *)getImportedModpacks {
+- (NSArray<<NSDictionary *> *)getImportedModpacks {
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     NSArray *modpacks = [defaults objectForKey:kImportedModpacksKey];
     return modpacks ?: @[];
@@ -385,20 +376,17 @@ static NSString * const kModpacksDirectory = @"modpacks";
     NSString *profileName = modpackInfo[@"profileName"];
     NSFileManager *fm = [NSFileManager defaultManager];
     
-    // Delete modpack directory
     if (modpackDir && [fm fileExistsAtPath:modpackDir]) {
         if (![fm removeItemAtPath:modpackDir error:error]) {
             return NO;
         }
     }
     
-    // Delete profile
     if (profileName) {
         [PLProfiles.current.profiles removeObjectForKey:profileName];
         [PLProfiles.current save];
     }
     
-    // Remove from saved list
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     NSMutableArray *modpacks = [[self getImportedModpacks] mutableCopy];
     
