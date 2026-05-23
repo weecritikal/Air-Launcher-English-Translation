@@ -264,7 +264,7 @@ static NSString * const kModpacksDirectory = @"modpacks";
     NSMutableDictionary *savedModpack = [modpackInfo mutableCopy];
     savedModpack[@"modpackDir"] = modpackDir;
     savedModpack[@"profileName"] = profileName;
-    savedModpack[@"importDate"] = [self iso8601StringFromDate:[NSDate date]];  // ✅ 修复：转为字符串
+    savedModpack[@"importDate"] = [self iso8601StringFromDate:[NSDate date]];
     savedModpack[@"filePath"] = destFilePath;
     
     [self saveImportedModpack:savedModpack];
@@ -334,7 +334,7 @@ static NSString * const kModpacksDirectory = @"modpacks";
         @"name": name,
         @"lastVersionId": versionId ?: @"",
         @"gameDir": gameDir,
-        @"created": [self iso8601StringFromDate:[NSDate date]],  // ✅ 修复：转为字符串
+        @"created": [self iso8601StringFromDate:[NSDate date]],
         @"type": @"modpack"
     } mutableCopy];
     
@@ -355,7 +355,7 @@ static NSString * const kModpacksDirectory = @"modpacks";
 
 #pragma mark - Get Imported Modpacks
 
-- (NSArray<<NSDictionary *> *)getImportedModpacks {
+- (NSArray<NSDictionary *> *)getImportedModpacks {
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     NSArray *modpacks = [defaults objectForKey:kImportedModpacksKey];
     return modpacks ?: @[];
