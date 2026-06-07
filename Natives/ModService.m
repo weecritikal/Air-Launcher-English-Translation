@@ -3,6 +3,7 @@
 //  AmethystMods
 //
 //  修改：增加文件修改时间缓存，大幅提升扫描速度
+//  修改：将下载会话改为默认配置，解决后台会话限速导致的下载缓慢问题
 //
 
 #import "ModService.h"
@@ -116,7 +117,17 @@
 - (instancetype)init {
     if (self = [super init]) {
         _onlineSearchEnabled = NO;
-        NSURLSessionConfiguration *config = [NSURLSessionConfiguration backgroundSessionConfigurationWithIdentifier:@"com.amethyst.moddownloader"];
+        
+        // 修复：使用 defaultSessionConfiguration 替代 backgroundSessionConfiguration
+        // 后台会话会对下载进行限速，导致用户主动下载模组时速度很慢
+        // 默认会话无带宽限制，适合前台下载任务
+        NSURLSessionConfiguration *config = [NSURLSessionConfiguration defaultSessionConfiguration];
+        config.timeoutIntervalForRequest = 120.0;
+        config.timeoutIntervalForResource = 300.0;
+        config.allowsCellularAccess = YES;
+        // 提高并发连接数限制（默认4，设为6可提升速度）
+        config.HTTPMaximumConnectionsPerHost = 6;
+        
         _downloadSession = [NSURLSession sessionWithConfiguration:config delegate:self delegateQueue:nil];
         _downloadCompletionHandlers = [NSMutableDictionary dictionary];
         _downloadDestinationPaths = [NSMutableDictionary dictionary];
@@ -408,7 +419,7 @@
     return [[NSFileManager defaultManager] removeItemAtPath:mod.filePath error:error];
 }
 
-// ---------- 下载（未改动）----------
+// ---------- 下载（关键修复已应用：使用 defaultSessionConfiguration）----------
 - (void)downloadMod:(ModItem *)mod toProfile:(NSString *)profileName completion:(ModDownloadHandler)completion {
     NSString *modsFolder = [self existingModsFolderForProfile:profileName];
     if (!modsFolder) {
