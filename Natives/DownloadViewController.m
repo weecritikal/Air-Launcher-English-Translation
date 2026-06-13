@@ -2224,7 +2224,7 @@
         }
     }
     if (!keyWindow) {
-        keyWindow = [UIApplication sharedApplication].keyWindow;
+        keyWindow = [[UIApplication sharedApplication] windows].firstObject;
     }
 
     UIViewController *rootVC = keyWindow.rootViewController;
@@ -2330,6 +2330,7 @@
     forgeVC.gameVersion = gameVersion;
 
     __weak typeof(self) weakSelf = self;
+    __weak ForgeInstallViewController *weakForgeVC = forgeVC;
     void (^completion)(BOOL, NSString *, id) = ^(BOOL success, NSString *profileName, id resultOrError) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
@@ -2344,7 +2345,8 @@
         }
 
         // Check which scheme was selected (0 = original, 1 = direct)
-        NSInteger selectedScheme = forgeVC.selectedScheme;
+        __strong ForgeInstallViewController *strongForgeVC = weakForgeVC;
+        NSInteger selectedScheme = strongForgeVC ? strongForgeVC.selectedScheme : 0;
         NSString *filePath = [resultOrError isKindOfClass:[NSString class]] ? (NSString *)resultOrError : nil;
 
         if (selectedScheme == 1 && filePath.length > 0) {
