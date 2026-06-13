@@ -149,6 +149,10 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
 @property(nonatomic, strong) NSTimer *searchDebounceTimer;
 @property(nonatomic, strong) NSMutableDictionary<NSString *, NSString *> *displayNameCache;
 @property(nonatomic, strong) dispatch_queue_t searchQueue;
+
+// Scheme selection
+@property(nonatomic, copy) NSString *selectedVersionString;
+@property(nonatomic, assign) NSInteger selectedScheme;
 @end
 
 @implementation ForgeInstallViewController
@@ -690,20 +694,46 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
         return;
     }
     
-    NSString *versionString = self.searchController.isActive ? 
-        self.filteredForgeList[indexPath.section][indexPath.row] : 
+    NSString *versionString = self.searchController.isActive ?
+        self.filteredForgeList[indexPath.section][indexPath.row] :
         self.forgeList[indexPath.section][indexPath.row];
     versionString = [versionString copy];
     [self.dataLock unlock];
-    
+
+    self.selectedVersionString = versionString;
+
+    ForgeInstallSchemeViewController *schemeVC = [[ForgeInstallSchemeViewController alloc] init];
+    schemeVC.delegate = self;
+    schemeVC.modalPresentationStyle = UIModalPresentationOverFullScreen;
+    [self presentViewController:schemeVC animated:YES completion:nil];
+}
+
+#pragma mark - ForgeInstallSchemeViewControllerDelegate
+
+- (void)schemeViewController:(ForgeInstallSchemeViewController *)controller didSelectScheme:(NSInteger)scheme {
+    if (scheme == 0) {
+        [self startDownloadWithScheme:0];
+    } else if (scheme == 1) {
+        [self startDownloadWithScheme:1];
+    }
+}
+
+- (void)startDownloadWithScheme:(NSInteger)scheme {
+    NSString *versionString = self.selectedVersionString;
+    if (!versionString) return;
+
+    self.selectedScheme = scheme;
+    NSIndexPath *indexPath = [self indexPathForVersionString:versionString];
     self.currentDownloadIndexPath = indexPath;
-    tableView.allowsSelection = NO;
+    self.tableView.allowsSelection = NO;
     [self switchToLoadingState];
     self.progressView.fractionCompleted = 0;
 
-    ForgeVersionCell *cell = (ForgeVersionCell *)[tableView cellForRowAtIndexPath:indexPath];
-    cell.accessoryView = self.progressView;
-    cell.accessoryType = UITableViewCellAccessoryNone;
+    if (indexPath) {
+        ForgeVersionCell *cell = (ForgeVersionCell *)[self.tableView cellForRowAtIndexPath:indexPath];
+        cell.accessoryView = self.progressView;
+        cell.accessoryType = UITableViewCellAccessoryNone;
+    }
 
     NSString *jarURL = [NSString stringWithFormat:self.endpoints[self.currentVendor][@"installer"], versionString];
     NSString *outPath = [NSTemporaryDirectory() stringByAppendingPathComponent:@"tmp.jar"];
@@ -720,10 +750,12 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
         return [NSURL fileURLWithPath:outPath];
     } completionHandler:^(NSURLResponse *response, NSURL *filePath, NSError *error) {
         dispatch_async(dispatch_get_main_queue(), ^{
-            tableView.allowsSelection = YES;
-            [self resetCellAppearance:indexPath];
+            self.tableView.allowsSelection = YES;
+            if (self.currentDownloadIndexPath) {
+                [self resetCellAppearance:self.currentDownloadIndexPath];
+            }
             self.currentDownloadIndexPath = nil;
-            
+
             if (error) {
                 if (error.code != NSURLErrorCancelled) {
                     NSDebugLog(@"Error: %@", error);
@@ -735,20 +767,35 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
                 }
                 return;
             }
-            
+
             NSString *profileName = [NSString stringWithFormat:@"%@-%@", self.currentVendor, versionString];
-            
+
             if (self.completionHandler) {
                 self.completionHandler(YES, profileName, outPath);
             }
-            
+
             [self switchToReadyState];
         });
     }];
-    
+
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         [downloadTask resume];
     });
+}
+
+- (NSIndexPath *)indexPathForVersionString:(NSString *)versionString {
+    [self.dataLock lock];
+    for (NSUInteger section = 0; section < self.forgeList.count; section++) {
+        NSArray *versions = self.forgeList[section];
+        for (NSUInteger row = 0; row < versions.count; row++) {
+            if ([versions[row] isEqualToString:versionString]) {
+                [self.dataLock unlock];
+                return [NSIndexPath indexPathForRow:row inSection:section];
+            }
+        }
+    }
+    [self.dataLock unlock];
+    return nil;
 }
 
 - (void)addVersionToList:(NSString *)version {
