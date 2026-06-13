@@ -15,6 +15,7 @@
 #import "ShaderVersion.h"
 #import "installer/FabricInstallViewController.h"
 #import "installer/ForgeInstallViewController.h"
+#import "installer/ForgeDirectInstaller.h"
 #import "LauncherNavigationController.h"
 #import "installer/ModpackInstallViewController.h"
 #import "ModpackImportViewController.h"
@@ -2190,6 +2191,7 @@
 #pragma mark - Forge Installation
 
 - (LauncherNavigationController *)activeLauncherNavigationController {
+    // First try the existing logic
     UISplitViewController *splitVC = self.splitViewController;
     if (!splitVC && [self.presentingViewController isKindOfClass:[UISplitViewController class]]) {
         splitVC = (UISplitViewController *)self.presentingViewController;
@@ -2209,6 +2211,60 @@
     }
     if ([self.navigationController isKindOfClass:[LauncherNavigationController class]]) {
         return (LauncherNavigationController *)self.navigationController;
+    }
+
+    // Fallback: traverse from key window root view controller
+    UIWindow *keyWindow = nil;
+    if (@available(iOS 13.0, *)) {
+        for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) {
+            if (scene.activationState == UISceneActivationStateForegroundActive) {
+                keyWindow = scene.windows.firstObject;
+                break;
+            }
+        }
+    }
+    if (!keyWindow) {
+        keyWindow = [UIApplication sharedApplication].keyWindow;
+    }
+
+    UIViewController *rootVC = keyWindow.rootViewController;
+    if (rootVC) {
+        LauncherNavigationController *found = [self findLauncherNavigationControllerIn:rootVC];
+        if (found) return found;
+    }
+
+    return nil;
+}
+
+- (LauncherNavigationController *)findLauncherNavigationControllerIn:(UIViewController *)vc {
+    if ([vc isKindOfClass:[LauncherNavigationController class]]) {
+        return (LauncherNavigationController *)vc;
+    }
+    if ([vc isKindOfClass:[UINavigationController class]]) {
+        for (UIViewController *child in ((UINavigationController *)vc).viewControllers) {
+            LauncherNavigationController *found = [self findLauncherNavigationControllerIn:child];
+            if (found) return found;
+        }
+    }
+    if ([vc isKindOfClass:[UISplitViewController class]]) {
+        for (UIViewController *child in ((UISplitViewController *)vc).viewControllers) {
+            LauncherNavigationController *found = [self findLauncherNavigationControllerIn:child];
+            if (found) return found;
+        }
+    }
+    if ([vc isKindOfClass:[UITabBarController class]]) {
+        for (UIViewController *child in ((UITabBarController *)vc).viewControllers) {
+            LauncherNavigationController *found = [self findLauncherNavigationControllerIn:child];
+            if (found) return found;
+        }
+    }
+    if (vc.presentedViewController) {
+        LauncherNavigationController *found = [self findLauncherNavigationControllerIn:vc.presentedViewController];
+        if (found) return found;
+    }
+    for (UIViewController *child in vc.childViewControllers) {
+        LauncherNavigationController *found = [self findLauncherNavigationControllerIn:child];
+        if (found) return found;
     }
     return nil;
 }
@@ -2272,12 +2328,12 @@
 - (void)installForge:(NSString *)gameVersion installOptiFine:(BOOL)installOptiFine {
     ForgeInstallViewController *forgeVC = [[ForgeInstallViewController alloc] init];
     forgeVC.gameVersion = gameVersion;
-    
+
     __weak typeof(self) weakSelf = self;
     void (^completion)(BOOL, NSString *, id) = ^(BOOL success, NSString *profileName, id resultOrError) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
-        
+
         if (!success) {
             [strongSelf handleInstallerDownloadResultWithVendorName:@"Forge"
                                                         gameVersion:gameVersion
@@ -2286,7 +2342,30 @@
                                                        installAction:nil];
             return;
         }
-        
+
+        // Check which scheme was selected (0 = original, 1 = direct)
+        NSInteger selectedScheme = forgeVC.selectedScheme;
+        NSString *filePath = [resultOrError isKindOfClass:[NSString class]] ? (NSString *)resultOrError : nil;
+
+        if (selectedScheme == 1 && filePath.length > 0) {
+            // Direct install scheme
+            dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+                NSError *directError = nil;
+                BOOL installed = [ForgeDirectInstaller installForgeFromInstaller:filePath
+                                                                       versionId:profileName
+                                                                           error:&directError];
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    if (installed) {
+                        [strongSelf showSuccessMessage:[NSString stringWithFormat:@"Forge 直装成功\n配置文件: %@", profileName ?: gameVersion]];
+                    } else {
+                        [strongSelf showError:[NSString stringWithFormat:@"Forge 直装失败: %@", directError.localizedDescription ?: @"未知错误"]];
+                    }
+                });
+            });
+            return;
+        }
+
+        // Original scheme (run installer)
         [strongSelf handleInstallerDownloadResultWithVendorName:@"Forge"
                                                     gameVersion:gameVersion
                                                     profileName:profileName
@@ -2308,7 +2387,7 @@
         }];
     };
     forgeVC.completionHandler = completion;
-    
+
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:forgeVC];
     nav.modalPresentationStyle = UIModalPresentationFormSheet;
     [self presentViewController:nav animated:YES completion:nil];
