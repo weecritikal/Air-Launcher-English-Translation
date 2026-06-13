@@ -199,7 +199,6 @@
             if ([self.delegate respondsToSelector:@selector(schemeViewController:didSelectScheme:)]) {
                 [self.delegate schemeViewController:self didSelectScheme:scheme];
             }
-            [self dismissViewControllerAnimated:YES completion:nil];
         }];
     }];
 }
