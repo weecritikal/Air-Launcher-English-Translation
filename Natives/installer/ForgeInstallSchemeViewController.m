@@ -196,9 +196,11 @@
         [UIView animateWithDuration:0.1 animations:^{
             card.transform = CGAffineTransformIdentity;
         } completion:^(BOOL finished) {
-            if ([self.delegate respondsToSelector:@selector(schemeViewController:didSelectScheme:)]) {
-                [self.delegate schemeViewController:self didSelectScheme:scheme];
-            }
+            [self dismissViewControllerAnimated:YES completion:^{
+                if ([self.delegate respondsToSelector:@selector(schemeViewController:didSelectScheme:)]) {
+                    [self.delegate schemeViewController:self didSelectScheme:scheme];
+                }
+            }];
         }];
     }];
 }

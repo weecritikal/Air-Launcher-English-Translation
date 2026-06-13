@@ -841,7 +841,6 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
         
         if (![self.forgeList[sectionIndex] containsObject:version]) {
             [self.forgeList[sectionIndex] addObject:version];
-            NSLog(@"[ForgeInstall] Added NeoForge %@ to %@ section", version, minecraftVersion);
         }
     } else {
         if (![version containsString:@"-"]) {
@@ -888,7 +887,6 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
         
         if (![self.forgeList[sectionIndex] containsObject:version]) {
             [self.forgeList[sectionIndex] addObject:version];
-            NSLog(@"[ForgeInstall] Added Forge %@ to %@ section", version, minecraftVersion);
         }
     }
     

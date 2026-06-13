@@ -166,8 +166,10 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
 
     // Extract universal jar
     NSDictionary *installDict = installProfile[@"install"];
-    NSString *filePath = installDict[@"filePath"];
-    NSString *mavenPath = installDict[@"path"];
+    id filePathObj = installDict[@"filePath"];
+    id mavenPathObj = installDict[@"path"];
+    NSString *filePath = [filePathObj isKindOfClass:[NSString class]] ? filePathObj : nil;
+    NSString *mavenPath = [mavenPathObj isKindOfClass:[NSString class]] ? mavenPathObj : nil;
 
     if (filePath.length > 0) {
         NSString *destPath;
@@ -222,6 +224,20 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
 
     versionJson[@"id"] = versionId;
 
+    // Merge libraries from install_profile into versionJson
+    NSArray *profileLibraries = installProfile[@"libraries"];
+    if ([profileLibraries isKindOfClass:[NSArray class]] && profileLibraries.count > 0) {
+        NSMutableArray *mergedLibraries = [NSMutableArray array];
+
+        NSArray *versionLibraries = versionJson[@"libraries"];
+        if ([versionLibraries isKindOfClass:[NSArray class]]) {
+            [mergedLibraries addObjectsFromArray:versionLibraries];
+        }
+
+        [mergedLibraries addObjectsFromArray:profileLibraries];
+        versionJson[@"libraries"] = mergedLibraries;
+    }
+
     // Write version JSON
     NSString *versionDir = [gameDir stringByAppendingPathComponent:[NSString stringWithFormat:@"versions/%@", versionId]];
     NSString *versionJsonPath = [versionDir stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.json", versionId]];
@@ -255,7 +271,8 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
             if ([downloads isKindOfClass:[NSDictionary class]]) {
                 NSDictionary *artifact = downloads[@"artifact"];
                 if ([artifact isKindOfClass:[NSDictionary class]]) {
-                    NSString *artifactPath = artifact[@"path"];
+                    id artifactPathObj = artifact[@"path"];
+                    NSString *artifactPath = [artifactPathObj isKindOfClass:[NSString class]] ? artifactPathObj : nil;
                     if (artifactPath.length > 0) {
                         relativePath = artifactPath;
                     }
@@ -263,7 +280,8 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
             }
 
             if (!relativePath) {
-                NSString *name = library[@"name"];
+                id nameObj = library[@"name"];
+                NSString *name = [nameObj isKindOfClass:[NSString class]] ? nameObj : nil;
                 if (name.length > 0) {
                     relativePath = [self mavenNameToPath:name];
                 }
