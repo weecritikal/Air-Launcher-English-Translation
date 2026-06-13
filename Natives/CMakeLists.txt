@@ -139,6 +139,8 @@ add_executable(AngelAuraAmethyst
 
   installer/FabricInstallViewController.m
   installer/ForgeInstallViewController.m
+  installer/ForgeInstallSchemeViewController.m
+  installer/ForgeDirectInstaller.m
   installer/ModpackInstallViewController.m
   installer/FabricUtils.m
   installer/modpack/ModpackUtils.m
