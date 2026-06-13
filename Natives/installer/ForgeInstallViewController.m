@@ -152,7 +152,6 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
 
 // Scheme selection
 @property(nonatomic, copy) NSString *selectedVersionString;
-@property(nonatomic, assign) NSInteger selectedScheme;
 @end
 
 @implementation ForgeInstallViewController
