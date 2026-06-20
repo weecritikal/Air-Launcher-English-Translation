@@ -20,6 +20,9 @@
 #import "installer/ModpackInstallViewController.h"
 #import "ModpackImportViewController.h"
 #import <QuartzCore/QuartzCore.h>
+#import "JavaGUIViewController.h"
+#import "utils.h"
+#import "ALTServerConnection.h"
 
 #include <sys/time.h>
 #include <SystemConfiguration/SystemConfiguration.h>
@@ -2269,6 +2272,53 @@
     return nil;
 }
 
+#pragma mark - Mod Installer (Fallback when LauncherNavigationController is not available)
+
+- (void)launchModInstallerWithPath:(NSString *)path hitEnterAfterWindowShown:(BOOL)hitEnter {
+    JavaGUIViewController *vc = [[JavaGUIViewController alloc] init];
+    vc.filepath = path;
+    vc.hitEnterAfterWindowShown = hitEnter;
+    if (!vc.requiredJavaVersion) {
+        return;
+    }
+    [self invokeAfterJITEnabled:^{
+        vc.modalPresentationStyle = UIModalPresentationFullScreen;
+        NSLog(@"[ModInstaller] launching %@", vc.filepath);
+        [self presentViewController:vc animated:YES completion:nil];
+    }];
+}
+
+- (void)invokeAfterJITEnabled:(void(^)(void))handler {
+    BOOL hasTrollStoreJIT = getEntitlementValue(@"com.apple.private.local.sandboxed-jit");
+    
+    if (isJITEnabled(false)) {
+        [ALTServerManager.sharedManager stopDiscovering];
+        handler();
+        return;
+    } else if (hasTrollStoreJIT) {
+        NSURL *jitURL = [NSURL URLWithString:[NSString stringWithFormat:@"apple-magnifier://enable-jit?bundle-id=%@", NSBundle.mainBundle.bundleIdentifier]];
+        [UIApplication.sharedApplication openURL:jitURL options:@{} completionHandler:nil];
+    } else if (getPrefBool(@"debug.debug_skip_wait_jit")) {
+        NSLog(@"Debug option skipped waiting for JIT. Java might not work.");
+        handler();
+        return;
+    }
+    
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:localize(@"launcher.wait_jit.title", nil)
+                                                                   message:hasTrollStoreJIT ? localize(@"launcher.wait_jit_trollstore.message", nil) : localize(@"launcher.wait_jit.message", nil)
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    [self presentViewController:alert animated:YES completion:nil];
+    
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        while (!isJITEnabled(false)) {
+            usleep(1000 * 200);
+        }
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [alert dismissViewControllerAnimated:YES completion:handler];
+        });
+    });
+}
+
 - (void)handleInstallerDownloadResultWithVendorName:(NSString *)vendorName
                                         gameVersion:(NSString *)gameVersion
                                         profileName:(NSString *)profileName
@@ -2290,18 +2340,15 @@
     }
     
     LauncherNavigationController *navVC = [self activeLauncherNavigationController];
-    if (!navVC) {
-        NSError *openError = [NSError errorWithDomain:ForgeInstallerFlowErrorDomain
-                                                 code:ForgeInstallerFlowErrorCodeFailedToOpenInstaller
-                                             userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"无法启动 %@ 安装器，请检查当前界面结构", vendorName]}];
-        [self showError:openError.localizedDescription];
-        return;
-    }
     
     NSString *message = [NSString stringWithFormat:@"%@ 安装器已下载，正在启动。安装完成后请按提示操作。", vendorName];
     
     void (^launchInstaller)(void) = ^{
-        [navVC enterModInstallerWithPath:filePath hitEnterAfterWindowShown:YES];
+        if (navVC) {
+            [navVC enterModInstallerWithPath:filePath hitEnterAfterWindowShown:YES];
+        } else {
+            [self launchModInstallerWithPath:filePath hitEnterAfterWindowShown:YES];
+        }
         
         if (installAction) {
             installAction();
