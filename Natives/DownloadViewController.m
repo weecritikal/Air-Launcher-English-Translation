@@ -2401,17 +2401,77 @@
 
         if (selectedScheme == 1 && filePath.length > 0) {
             // Direct install scheme
+            NSLog(@"[ForgeDirect] DownloadViewController: starting direct install with progress UI");
+
+            // 创建进度 alert（在主线程创建并显示），含进度条和阶段文案
+            UIAlertController *progressAlert = [UIAlertController alertControllerWithTitle:@"Forge 直装中"
+                                                                                  message:@"准备中..."
+                                                                           preferredStyle:UIAlertControllerStyleAlert];
+
+            // 通过 KVC 获取 contentViewController，添加 UIProgressView 进度条
+            UIViewController *contentVC = [progressAlert valueForKey:@"contentViewController"];
+            UIProgressView *progressBar = nil;
+            UILabel *stageLabel = nil;
+            if (contentVC) {
+                UIView *containerView = contentVC.view;
+                progressBar = [[UIProgressView alloc] initWithProgressViewStyle:UIProgressViewStyleDefault];
+                progressBar.progress = 0.0;
+                progressBar.translatesAutoresizingMaskIntoConstraints = NO;
+                [containerView addSubview:progressBar];
+
+                stageLabel = [[UILabel alloc] init];
+                stageLabel.text = @"准备中...";
+                stageLabel.textAlignment = NSTextAlignmentCenter;
+                stageLabel.font = [UIFont systemFontOfSize:13];
+                stageLabel.numberOfLines = 0;
+                stageLabel.translatesAutoresizingMaskIntoConstraints = NO;
+                [containerView addSubview:stageLabel];
+
+                [NSLayoutConstraint activateConstraints:@[
+                    [stageLabel.topAnchor constraintEqualToAnchor:containerView.topAnchor constant:8],
+                    [stageLabel.leadingAnchor constraintEqualToAnchor:containerView.leadingAnchor constant:12],
+                    [stageLabel.trailingAnchor constraintEqualToAnchor:containerView.trailingAnchor constant:-12],
+                    [progressBar.topAnchor constraintEqualToAnchor:stageLabel.bottomAnchor constant:8],
+                    [progressBar.leadingAnchor constraintEqualToAnchor:containerView.leadingAnchor constant:12],
+                    [progressBar.trailingAnchor constraintEqualToAnchor:containerView.trailingAnchor constant:-12],
+                    [progressBar.bottomAnchor constraintEqualToAnchor:containerView.bottomAnchor constant:-8]
+                ]];
+            }
+
+            __block UIProgressView *blockProgressBar = progressBar;
+            __block UILabel *blockStageLabel = stageLabel;
+
+            [strongSelf presentViewController:progressAlert animated:YES completion:nil];
+
             dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
                 NSError *directError = nil;
                 BOOL installed = [ForgeDirectInstaller installForgeFromInstaller:filePath
                                                                        versionId:profileName
+                                                                         progress:^(double progress, NSString *stageMessage) {
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        // 更新进度条和阶段文案
+                        NSString *message = [NSString stringWithFormat:@"%@ - %.0f%%", stageMessage ?: @"", progress * 100];
+                        progressAlert.message = message;
+                        if (blockStageLabel) {
+                            blockStageLabel.text = message;
+                        }
+                        if (blockProgressBar) {
+                            [blockProgressBar setProgress:(float)progress animated:YES];
+                        }
+                    });
+                }
                                                                            error:&directError];
+
                 dispatch_async(dispatch_get_main_queue(), ^{
-                    if (installed) {
-                        [strongSelf showSuccessMessage:[NSString stringWithFormat:@"Forge 直装成功\n配置文件: %@", profileName ?: gameVersion]];
-                    } else {
-                        [strongSelf showError:[NSString stringWithFormat:@"Forge 直装失败: %@", directError.localizedDescription ?: @"未知错误"]];
-                    }
+                    [progressAlert dismissViewControllerAnimated:YES completion:^{
+                        __strong typeof(weakSelf) strongSelf2 = weakSelf;
+                        if (!strongSelf2) return;
+                        if (installed) {
+                            [strongSelf2 showSuccessMessage:[NSString stringWithFormat:@"Forge 直装成功\n配置文件: %@", profileName ?: gameVersion]];
+                        } else {
+                            [strongSelf2 showError:[NSString stringWithFormat:@"Forge 直装失败: %@", directError.localizedDescription ?: @"未知错误"]];
+                        }
+                    }];
                 });
             });
             return;
