@@ -23,13 +23,16 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
 + (BOOL)installForgeFromInstaller:(NSString *)installerPath
                         versionId:(NSString *)versionId
                             error:(NSError **)error {
+    NSLog(@"[ForgeDirect] Starting installation: %@", versionId);
     if (error) {
         *error = nil;
     }
 
     // Step 1 & 2: Open jar as ZIP and read install_profile.json
+    NSLog(@"[ForgeDirect] Reading install_profile.json");
     NSData *profileData = [self dataFromZip:installerPath entry:@"install_profile.json" error:error];
     if (!profileData) {
+        NSLog(@"[ForgeDirect] Failed to read install_profile.json");
         if (error && !*error) {
             *error = [NSError errorWithDomain:ForgeDirectInstallerErrorDomain
                                          code:ForgeDirectInstallerErrorMissingProfile
@@ -39,6 +42,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
     }
 
     // Step 3: Parse install_profile.json
+    NSLog(@"[ForgeDirect] Parsing install_profile.json");
     NSError *jsonError = nil;
     NSMutableDictionary *installProfile = [NSJSONSerialization JSONObjectWithData:profileData
                                                                           options:NSJSONReadingMutableContainers
@@ -55,6 +59,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
     // Step 4: Determine format
     BOOL isNewFormat = (installProfile[@"spec"] != nil);
     BOOL isOldFormat = (installProfile[@"install"] != nil && installProfile[@"versionInfo"] != nil);
+    NSLog(@"[ForgeDirect] Format detection: new=%d, old=%d", isNewFormat, isOldFormat);
 
     if (!isNewFormat && !isOldFormat) {
         if (error) {
@@ -66,15 +71,18 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
     }
 
     NSString *gameDir = [self gameDirectory];
+    NSLog(@"[ForgeDirect] Game directory: %@", gameDir);
 
     BOOL success = NO;
     if (isOldFormat) {
+        NSLog(@"[ForgeDirect] Using old format installer");
         success = [self installOldFormat:installProfile
                            installerPath:installerPath
                                versionId:versionId
                                 gameDir:gameDir
                                   error:error];
     } else {
+        NSLog(@"[ForgeDirect] Using new format installer");
         success = [self installNewFormat:installProfile
                            installerPath:installerPath
                                versionId:versionId
@@ -83,12 +91,21 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
     }
 
     if (!success) {
+        NSLog(@"[ForgeDirect] Installation failed");
         return NO;
     }
 
-    // Step 7: Register version in launcher_profiles.json
-    [self registerVersion:versionId];
+    // Step 7: Register version in launcher_profiles.json (must run on main thread)
+    NSLog(@"[ForgeDirect] Registering version on main thread");
+    if ([NSThread isMainThread]) {
+        [self registerVersion:versionId];
+    } else {
+        dispatch_sync(dispatch_get_main_queue(), ^{
+            [self registerVersion:versionId];
+        });
+    }
 
+    NSLog(@"[ForgeDirect] Installation completed successfully");
     return YES;
 }
 
@@ -117,12 +134,15 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
 }
 
 + (void)registerVersion:(NSString *)versionId {
+    NSLog(@"[ForgeDirect] registerVersion called: %@", versionId);
     PLProfiles *profiles = [PLProfiles current];
+    NSLog(@"[ForgeDirect] PLProfiles current: %@", profiles ? @"ok" : @"nil");
     NSMutableDictionary *profileDict = [NSMutableDictionary dictionary];
     profileDict[@"name"] = versionId;
     profileDict[@"lastVersionId"] = versionId;
     profileDict[@"gameDir"] = @".";
     [profiles saveProfile:profileDict withName:versionId];
+    NSLog(@"[ForgeDirect] Profile saved");
 }
 
 #pragma mark - Old format (Forge 1.12.2-)
@@ -132,6 +152,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
                versionId:(NSString *)versionId
                 gameDir:(NSString *)gameDir
                   error:(NSError **)error {
+    NSLog(@"[ForgeDirect] installOldFormat started");
     NSDictionary *versionInfo = installProfile[@"versionInfo"];
     if (![versionInfo isKindOfClass:[NSDictionary class]]) {
         if (error) {
@@ -148,6 +169,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
     // Write version JSON
     NSString *versionDir = [gameDir stringByAppendingPathComponent:[NSString stringWithFormat:@"versions/%@", versionId]];
     NSString *versionJsonPath = [versionDir stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.json", versionId]];
+    NSLog(@"[ForgeDirect] Writing version JSON to: %@", versionJsonPath);
 
     [[NSFileManager defaultManager] createDirectoryAtPath:versionDir
                               withIntermediateDirectories:YES
@@ -165,6 +187,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
     }
 
     // Extract universal jar
+    NSLog(@"[ForgeDirect] Extracting universal jar");
     NSDictionary *installDict = installProfile[@"install"];
     id filePathObj = installDict[@"filePath"];
     id mavenPathObj = installDict[@"path"];
@@ -184,6 +207,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
         }
     }
 
+    NSLog(@"[ForgeDirect] installOldFormat completed");
     return YES;
 }
 
@@ -194,11 +218,13 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
                versionId:(NSString *)versionId
                 gameDir:(NSString *)gameDir
                   error:(NSError **)error {
+    NSLog(@"[ForgeDirect] installNewFormat started");
     // Read version.json
     NSString *versionJsonEntry = installProfile[@"json"];
     if (!versionJsonEntry || ![versionJsonEntry isKindOfClass:[NSString class]]) {
         versionJsonEntry = @"version.json";
     }
+    NSLog(@"[ForgeDirect] Reading version.json entry: %@", versionJsonEntry);
 
     NSData *versionData = [self dataFromZip:installerPath entry:versionJsonEntry error:error];
     if (!versionData) {
@@ -241,6 +267,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
     // Write version JSON
     NSString *versionDir = [gameDir stringByAppendingPathComponent:[NSString stringWithFormat:@"versions/%@", versionId]];
     NSString *versionJsonPath = [versionDir stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.json", versionId]];
+    NSLog(@"[ForgeDirect] Writing version JSON to: %@", versionJsonPath);
 
     [[NSFileManager defaultManager] createDirectoryAtPath:versionDir
                               withIntermediateDirectories:YES
@@ -259,6 +286,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
 
     // Extract libraries
     NSArray *libraries = installProfile[@"libraries"];
+    NSLog(@"[ForgeDirect] Extracting libraries, count: %lu", (unsigned long)libraries.count);
     if ([libraries isKindOfClass:[NSArray class]]) {
         for (NSDictionary *library in libraries) {
             if (![library isKindOfClass:[NSDictionary class]]) {
@@ -302,6 +330,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
     }
 
     // Extract main path jar if present
+    NSLog(@"[ForgeDirect] Extracting main path jar");
     NSString *mainPath = installProfile[@"path"];
     if ([mainPath isKindOfClass:[NSString class]] && mainPath.length > 0) {
         NSString *relativePath = [self mavenPathToRelativePath:mainPath];
@@ -315,6 +344,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
         }
     }
 
+    NSLog(@"[ForgeDirect] installNewFormat completed");
     return YES;
 }
 
