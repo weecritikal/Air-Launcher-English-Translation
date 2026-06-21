@@ -775,30 +775,76 @@
 }
 
 - (void)loadNeoForgeVersionsReal {
-    NSString *urlString = @"https://maven.neoforged.net/releases/net/neoforged/neoforge/maven-metadata.xml";
-    NSURL *url = [NSURL URLWithString:urlString];
+    NSString *neoUrlString = @"https://maven.neoforged.net/api/maven/versions/releases/net/neoforged/neoforge";
+    NSString *legacyUrlString = @"https://maven.neoforged.net/api/maven/versions/releases/net/neoforged/forge";
     
-    self.forgeVersionList = [NSMutableArray array];
-    self.isParsingForge = NO;
+    NSMutableArray *allVersions = [NSMutableArray array];
+    dispatch_group_t group = dispatch_group_create();
     
     __weak typeof(self) weakSelf = self;
-    self.currentVersionTask = [[NSURLSession sharedSession] dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
-        if (error) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                __strong typeof(weakSelf) strongSelf = weakSelf;
-                if (!strongSelf) return;
-                [strongSelf.loadingIndicator stopAnimating];
-                strongSelf.loaderVersions = @[];
-                [strongSelf.versionTableView reloadData];
-                strongSelf.emptyVersionsLabel.hidden = NO;
-            });
-            return;
+    
+    dispatch_group_enter(group);
+    NSURLSessionDataTask *neoTask = [[NSURLSession sharedSession] dataTaskWithURL:[NSURL URLWithString:neoUrlString] completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        if (!error && data) {
+            NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+            if (json && [json isKindOfClass:[NSDictionary class]]) {
+                NSArray *versions = json[@"versions"];
+                if (versions && [versions isKindOfClass:[NSArray class]]) {
+                    @synchronized (allVersions) {
+                        [allVersions addObjectsFromArray:versions];
+                    }
+                }
+            }
         }
-        NSXMLParser *parser = [[NSXMLParser alloc] initWithData:data];
-        parser.delegate = weakSelf;
-        [parser parse];
+        dispatch_group_leave(group);
     }];
-    [self.currentVersionTask resume];
+    [neoTask resume];
+    
+    dispatch_group_enter(group);
+    NSURLSessionDataTask *legacyTask = [[NSURLSession sharedSession] dataTaskWithURL:[NSURL URLWithString:legacyUrlString] completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        if (!error && data) {
+            NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+            if (json && [json isKindOfClass:[NSDictionary class]]) {
+                NSArray *versions = json[@"versions"];
+                if (versions && [versions isKindOfClass:[NSArray class]]) {
+                    @synchronized (allVersions) {
+                        [allVersions addObjectsFromArray:versions];
+                    }
+                }
+            }
+        }
+        dispatch_group_leave(group);
+    }];
+    [legacyTask resume];
+    
+    dispatch_group_notify(group, dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+        
+        NSMutableArray *filteredVersions = [NSMutableArray array];
+        for (NSString *version in allVersions) {
+            NSString *mcVersion = [strongSelf extractMinecraftVersionFromNeoForgeVersion:version];
+            if ([mcVersion isEqualToString:strongSelf.gameVersion]) {
+                [filteredVersions addObject:version];
+            }
+        }
+        
+        [filteredVersions sortUsingComparator:^NSComparisonResult(NSString *v1, NSString *v2) {
+            return [v2 compare:v1 options:NSNumericSearch];
+        }];
+        
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [strongSelf.loadingIndicator stopAnimating];
+            strongSelf.loaderVersions = filteredVersions;
+            [strongSelf.versionTableView reloadData];
+            strongSelf.emptyVersionsLabel.hidden = (filteredVersions.count > 0);
+            
+            if (filteredVersions.count > 0 && !strongSelf.selectedLoaderVersion) {
+                strongSelf.selectedLoaderVersion = filteredVersions.firstObject;
+                [strongSelf.versionTableView reloadData];
+            }
+        });
+    });
 }
 
 #pragma mark - NSXMLParserDelegate (Forge/NeoForge)
@@ -814,20 +860,17 @@
 }
 
 - (void)parser:(NSXMLParser *)parser didEndElement:(NSString *)elementName namespaceURI:(NSString *)namespaceURI qualifiedName:(NSString *)qName {
+    if (!self.isParsingForge) {
+        return;
+    }
+    
     if ([elementName isEqualToString:@"version"]) {
         NSString *version = [self.currentVersionValue stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
         if (version.length > 0) {
             @synchronized (self) {
-                if (self.isParsingForge) {
-                    NSString *prefix = [self.gameVersion stringByAppendingString:@"-"];
-                    if ([version hasPrefix:prefix]) {
-                        [self.forgeVersionList addObject:version];
-                    }
-                } else {
-                    NSString *mcVersion = [self extractMinecraftVersionFromNeoForgeVersion:version];
-                    if ([mcVersion isEqualToString:self.gameVersion]) {
-                        [self.forgeVersionList addObject:version];
-                    }
+                NSString *prefix = [self.gameVersion stringByAppendingString:@"-"];
+                if ([version hasPrefix:prefix]) {
+                    [self.forgeVersionList addObject:version];
                 }
             }
         }
@@ -864,29 +907,61 @@
 }
 
 - (NSString *)extractMinecraftVersionFromNeoForgeVersion:(NSString *)version {
+    // 1.20.1 特殊版本：1.20.1-47.1.3 → 1.20.1
+    if ([version containsString:@"1.20.1"]) {
+        return @"1.20.1";
+    }
+    
+    // 0.x 开头特殊版本：0.25w14craftmine.3 → 25w14craftmine
+    if ([version hasPrefix:@"0."]) {
+        NSString *part = [version substringFromIndex:2];
+        NSRange hyphenRange = [part rangeOfString:@"-"];
+        if (hyphenRange.location != NSNotFound) {
+            part = [part substringToIndex:hyphenRange.location];
+        }
+        NSRange lastDot = [part rangeOfString:@"." options:NSBackwardsSearch];
+        if (lastDot.location != NSNotFound) {
+            part = [part substringToIndex:lastDot.location];
+        }
+        return part;
+    }
+    
+    // 其他版本：提取第一段数字部分（如 "20.2.88" 或 "20.2.88-beta" 中的 "20.2.88"）
     NSString *cleanVersion = version;
     NSRange hyphenRange = [version rangeOfString:@"-"];
     if (hyphenRange.location != NSNotFound) {
         cleanVersion = [version substringToIndex:hyphenRange.location];
     }
     
-    NSRegularExpression *snapshotRegex = [NSRegularExpression regularExpressionWithPattern:@"(\\d{2}w\\d{2}[a-z]*)" options:NSRegularExpressionCaseInsensitive error:nil];
-    NSTextCheckingResult *snapshotMatch = [snapshotRegex firstMatchInString:cleanVersion options:0 range:NSMakeRange(0, cleanVersion.length)];
-    if (snapshotMatch) {
-        return [cleanVersion substringWithRange:snapshotMatch.range];
-    }
-    
     NSArray *components = [cleanVersion componentsSeparatedByString:@"."];
     if (components.count >= 2) {
-        NSString *majorComponent = components[0];
-        NSString *minorComponent = components[1];
-        if ([self isNumeric:majorComponent] && [self isNumeric:minorComponent]) {
-            return [NSString stringWithFormat:@"1.%@.%@", majorComponent, minorComponent];
+        NSString *major = components[0];
+        NSString *minor = components[1];
+        
+        // 检查是否为数字
+        NSCharacterSet *nonNumbers = [[NSCharacterSet decimalDigitCharacterSet] invertedSet];
+        BOOL majorIsNum = [major rangeOfCharacterFromSet:nonNumbers].location == NSNotFound;
+        BOOL minorIsNum = [minor rangeOfCharacterFromSet:nonNumbers].location == NSNotFound;
+        
+        if (majorIsNum && minorIsNum) {
+            NSInteger majorVal = [major integerValue];
+            if (majorVal >= 26) {
+                // 新格式：26.1.0.0 → 26.1.0
+                if (components.count >= 3) {
+                    return [NSString stringWithFormat:@"%@.%@.%@", major, minor, components[2]];
+                } else {
+                    return [NSString stringWithFormat:@"%@.%@", major, minor];
+                }
+            } else {
+                // 旧格式：20.2.88 → 1.20.2
+                return [NSString stringWithFormat:@"1.%@.%@", major, minor];
+            }
         }
     }
     
-    NSRegularExpression *versionRegex = [NSRegularExpression regularExpressionWithPattern:@"(\\d+\\.\\d+)" options:0 error:nil];
-    NSTextCheckingResult *match = [versionRegex firstMatchInString:version options:0 range:NSMakeRange(0, version.length)];
+    // 兜底：正则匹配 \d+\.\d+
+    NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@"(\\d+\\.\\d+)" options:0 error:nil];
+    NSTextCheckingResult *match = [regex firstMatchInString:version options:0 range:NSMakeRange(0, version.length)];
     if (match) {
         return [NSString stringWithFormat:@"1.%@", [version substringWithRange:match.range]];
     }
