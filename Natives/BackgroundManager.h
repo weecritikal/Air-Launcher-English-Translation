@@ -74,6 +74,7 @@ typedef NS_ENUM(NSInteger, BackgroundUIEffect) {
 // Apply UI effect to any UIView (blur or translucent based on settings)
 - (void)applyEffectToView:(UIView *)view;
 - (void)applyEffectToCollectionViewCell:(UICollectionViewCell *)cell;
+- (void)applyEffectToCell:(UITableViewCell *)cell;
 
 // Apply UI effect settings to current split view controller
 - (void)refreshUIEffect;

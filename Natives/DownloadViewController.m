@@ -3156,7 +3156,7 @@
 
 - (void)handleBackgroundUIEffectChanged:(NSNotification *)notification {
     dispatch_async(dispatch_get_main_queue(), ^{
-        [self.tableView reloadData];
+        [self.versionCollectionView reloadData];
     });
 }
 
