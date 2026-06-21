@@ -132,7 +132,7 @@ static const CGFloat kRightPanelWidth = 220.0;  // 右侧面板宽度
     // 左侧边栏容器 - 半透明
     self.sidebarContainer = [[UIView alloc] init];
     self.sidebarContainer.translatesAutoresizingMaskIntoConstraints = NO;
-    self.sidebarContainer.backgroundColor = [UIColor colorWithWhite:0.08 alpha:0.7];
+    [[BackgroundManager sharedManager] applyEffectToView:self.sidebarContainer];
     [self.view addSubview:self.sidebarContainer];
     
     // 中间内容容器 - 完全透明
@@ -144,7 +144,7 @@ static const CGFloat kRightPanelWidth = 220.0;  // 右侧面板宽度
     // 右侧面板容器 - 半透明
     self.rightPanelContainer = [[UIView alloc] init];
     self.rightPanelContainer.translatesAutoresizingMaskIntoConstraints = NO;
-    self.rightPanelContainer.backgroundColor = [UIColor colorWithWhite:0.08 alpha:0.7];
+    [[BackgroundManager sharedManager] applyEffectToView:self.rightPanelContainer];
     [self.view addSubview:self.rightPanelContainer];
     
     // 设置约束
@@ -230,6 +230,10 @@ static const CGFloat kRightPanelWidth = 220.0;  // 右侧面板宽度
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(backgroundChanged)
                                                  name:@"BackgroundChanged"
+                                               object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(uiEffectChanged:)
+                                                 name:@"BackgroundUIEffectChanged"
                                                object:nil];
     // 监听版本切换，重新加载编辑器
     [[NSNotificationCenter defaultCenter] addObserver:self
@@ -354,6 +358,12 @@ static const CGFloat kRightPanelWidth = 220.0;  // 右侧面板宽度
 - (void)backgroundChanged {
     // 重新应用背景
     [[BackgroundManager sharedManager] applyBackgroundToView:self.view];
+}
+
+- (void)uiEffectChanged:(NSNotification *)notification {
+    // 重新应用毛玻璃/半透明效果到容器视图
+    [[BackgroundManager sharedManager] applyEffectToView:self.sidebarContainer];
+    [[BackgroundManager sharedManager] applyEffectToView:self.rightPanelContainer];
 }
 
 - (void)dealloc {

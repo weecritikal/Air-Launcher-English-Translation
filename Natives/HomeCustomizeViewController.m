@@ -28,7 +28,6 @@ static UIColor *hexColor(NSString *hex) {
 // MARK: - Customization Tile Cell
 
 @interface CustomizeTileCell : UITableViewCell
-@property (nonatomic, strong) UIVisualEffectView *blurBg;
 @property (nonatomic, strong) UIView *accentStrip;
 @property (nonatomic, strong) UIImageView *tileIconView;
 @property (nonatomic, strong) UILabel *tileTitleLabel;
@@ -46,43 +45,32 @@ static UIColor *hexColor(NSString *hex) {
         self.contentView.backgroundColor = [UIColor clearColor];
         self.selectionStyle = UITableViewCellSelectionStyleNone;
         
-        // 毛玻璃背景
-        UIBlurEffect *blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial];
-        self.blurBg = [[UIVisualEffectView alloc] initWithEffect:blur];
-        self.blurBg.translatesAutoresizingMaskIntoConstraints = NO;
-        self.blurBg.layer.cornerRadius = 14;
-        self.blurBg.layer.masksToBounds = YES;
-        self.blurBg.layer.cornerCurve = kCACornerCurveContinuous;
-        self.blurBg.layer.borderWidth = 0.5;
-        self.blurBg.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.12].CGColor;
-        [self.contentView addSubview:self.blurBg];
-        
         // 左侧装饰条
         self.accentStrip = [[UIView alloc] init];
         self.accentStrip.translatesAutoresizingMaskIntoConstraints = NO;
         self.accentStrip.layer.cornerRadius = 2;
-        [self.blurBg.contentView addSubview:self.accentStrip];
+        [self.contentView addSubview:self.accentStrip];
         
         // 图标
         self.tileIconView = [[UIImageView alloc] init];
         self.tileIconView.translatesAutoresizingMaskIntoConstraints = NO;
         self.tileIconView.contentMode = UIViewContentModeScaleAspectFit;
         self.tileIconView.tintColor = [UIColor labelColor];
-        [self.blurBg.contentView addSubview:self.tileIconView];
+        [self.contentView addSubview:self.tileIconView];
         
         // 标题
         self.tileTitleLabel = [[UILabel alloc] init];
         self.tileTitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
         self.tileTitleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
         self.tileTitleLabel.textColor = [UIColor labelColor];
-        [self.blurBg.contentView addSubview:self.tileTitleLabel];
+        [self.contentView addSubview:self.tileTitleLabel];
         
         // 详情（类型+大小）
         self.tileDetailLabel = [[UILabel alloc] init];
         self.tileDetailLabel.translatesAutoresizingMaskIntoConstraints = NO;
         self.tileDetailLabel.font = [UIFont systemFontOfSize:11 weight:UIFontWeightMedium];
         self.tileDetailLabel.textColor = [UIColor tertiaryLabelColor];
-        [self.blurBg.contentView addSubview:self.tileDetailLabel];
+        [self.contentView addSubview:self.tileDetailLabel];
         
         // 尺寸标签
         self.sizeLabel = [[UILabel alloc] init];
@@ -93,47 +81,44 @@ static UIColor *hexColor(NSString *hex) {
         self.sizeLabel.layer.cornerRadius = 4;
         self.sizeLabel.layer.masksToBounds = YES;
         self.sizeLabel.backgroundColor = [UIColor colorWithWhite:0.2 alpha:0.5];
-        [self.blurBg.contentView addSubview:self.sizeLabel];
+        [self.contentView addSubview:self.sizeLabel];
         
         // 可见性开关
         self.visibilitySwitch = [[UISwitch alloc] init];
         self.visibilitySwitch.translatesAutoresizingMaskIntoConstraints = NO;
         self.visibilitySwitch.transform = CGAffineTransformMakeScale(0.7, 0.7);
         self.visibilitySwitch.onTintColor = hexColor(@"#8B5CF6");
-        [self.blurBg.contentView addSubview:self.visibilitySwitch];
+        [self.contentView addSubview:self.visibilitySwitch];
         
         [NSLayoutConstraint activateConstraints:@[
-            [self.blurBg.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:4],
-            [self.blurBg.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-4],
-            [self.blurBg.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:16],
-            [self.blurBg.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-16],
-            
-            [self.accentStrip.leadingAnchor constraintEqualToAnchor:self.blurBg.contentView.leadingAnchor constant:0],
-            [self.accentStrip.topAnchor constraintEqualToAnchor:self.blurBg.contentView.topAnchor constant:8],
-            [self.accentStrip.bottomAnchor constraintEqualToAnchor:self.blurBg.contentView.bottomAnchor constant:-8],
+            [self.accentStrip.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:16],
+            [self.accentStrip.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:12],
+            [self.accentStrip.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-12],
             [self.accentStrip.widthAnchor constraintEqualToConstant:4],
             
             [self.tileIconView.leadingAnchor constraintEqualToAnchor:self.accentStrip.trailingAnchor constant:12],
-            [self.tileIconView.centerYAnchor constraintEqualToAnchor:self.blurBg.contentView.centerYAnchor],
+            [self.tileIconView.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor],
             [self.tileIconView.widthAnchor constraintEqualToConstant:26],
             [self.tileIconView.heightAnchor constraintEqualToConstant:26],
             
             [self.tileTitleLabel.leadingAnchor constraintEqualToAnchor:self.tileIconView.trailingAnchor constant:12],
-            [self.tileTitleLabel.topAnchor constraintEqualToAnchor:self.blurBg.contentView.topAnchor constant:12],
+            [self.tileTitleLabel.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:16],
             [self.tileTitleLabel.trailingAnchor constraintEqualToAnchor:self.sizeLabel.leadingAnchor constant:-8],
             
             [self.tileDetailLabel.leadingAnchor constraintEqualToAnchor:self.tileTitleLabel.leadingAnchor],
             [self.tileDetailLabel.topAnchor constraintEqualToAnchor:self.tileTitleLabel.bottomAnchor constant:2],
             [self.tileDetailLabel.trailingAnchor constraintEqualToAnchor:self.tileTitleLabel.trailingAnchor],
             
-            [self.sizeLabel.centerYAnchor constraintEqualToAnchor:self.blurBg.contentView.centerYAnchor],
+            [self.sizeLabel.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor],
             [self.sizeLabel.widthAnchor constraintEqualToConstant:40],
             [self.sizeLabel.heightAnchor constraintEqualToConstant:18],
             [self.sizeLabel.trailingAnchor constraintEqualToAnchor:self.visibilitySwitch.leadingAnchor constant:-6],
             
-            [self.visibilitySwitch.centerYAnchor constraintEqualToAnchor:self.blurBg.contentView.centerYAnchor],
-            [self.visibilitySwitch.trailingAnchor constraintEqualToAnchor:self.blurBg.contentView.trailingAnchor constant:-12],
+            [self.visibilitySwitch.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor],
+            [self.visibilitySwitch.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-28],
         ]];
+        
+        [[BackgroundManager sharedManager] applyEffectToView:self.contentView];
     }
     return self;
 }
@@ -234,6 +219,15 @@ static UIColor *hexColor(NSString *hex) {
     }
     
     [self setupTableView];
+    
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(handleBackgroundUIEffectChanged:)
+                                                 name:@"BackgroundUIEffectChanged"
+                                               object:nil];
+}
+
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self name:@"BackgroundUIEffectChanged" object:nil];
 }
 
 - (void)setupTableView {
@@ -515,6 +509,12 @@ static UIColor *hexColor(NSString *hex) {
 
 - (UIInterfaceOrientationMask)supportedInterfaceOrientations {
     return UIInterfaceOrientationMaskLandscape;
+}
+
+- (void)handleBackgroundUIEffectChanged:(NSNotification *)notification {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self.tableView reloadData];
+    });
 }
 
 @end

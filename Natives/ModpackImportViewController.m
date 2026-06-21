@@ -6,6 +6,7 @@
 //
 
 #import "ModpackImportViewController.h"
+#import "BackgroundManager.h"
 #import "ModpackImportService.h"
 #import "PLProfiles.h"
 #import "UnzipKit.h"
@@ -19,7 +20,6 @@
 @property (nonatomic, strong) NSMutableArray<NSDictionary *> *importedModpacks;
 @property (nonatomic, strong) ModpackImportService *importService;
 @property (nonatomic, strong) NSDictionary *currentImportingModpack;
-@property (nonatomic, strong) UIVisualEffectView *backgroundBlurView;
 @end
 
 @implementation ModpackImportViewController
@@ -28,21 +28,21 @@
     [super viewDidLoad];
     self.title = @"导入整合包";
 
-    UIBlurEffect *blurEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial];
-    self.backgroundBlurView = [[UIVisualEffectView alloc] initWithEffect:blurEffect];
-    self.backgroundBlurView.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.view addSubview:self.backgroundBlurView];
-    [NSLayoutConstraint activateConstraints:@[
-        [self.backgroundBlurView.topAnchor constraintEqualToAnchor:self.view.topAnchor],
-        [self.backgroundBlurView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
-        [self.backgroundBlurView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [self.backgroundBlurView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor]
-    ]];
+    [[BackgroundManager sharedManager] applyEffectToView:self.view];
 
     self.importService = [[ModpackImportService alloc] init];
     self.importedModpacks = [NSMutableArray array];
     [self setupUI];
     [self loadImportedModpacks];
+    
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(handleBackgroundUIEffectChanged:)
+                                                 name:@"BackgroundUIEffectChanged"
+                                               object:nil];
+}
+
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self name:@"BackgroundUIEffectChanged" object:nil];
 }
 
 - (void)setupUI {
@@ -55,7 +55,7 @@
     self.importButton.layer.cornerRadius = 10;
     self.importButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
     [self.importButton addTarget:self action:@selector(selectModpackFile) forControlEvents:UIControlEventTouchUpInside];
-    [self.backgroundBlurView.contentView addSubview:self.importButton];
+    [self.view addSubview:self.importButton];
 
     self.tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
     self.tableView.translatesAutoresizingMaskIntoConstraints = NO;
@@ -65,12 +65,12 @@
     [self.tableView registerClass:[UITableViewCell class] forCellReuseIdentifier:@"ModpackCell"];
     self.tableView.rowHeight = 80;
     self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
-    [self.backgroundBlurView.contentView addSubview:self.tableView];
+    [self.view addSubview:self.tableView];
 
     self.activityIndicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleLarge];
     self.activityIndicator.translatesAutoresizingMaskIntoConstraints = NO;
     self.activityIndicator.hidesWhenStopped = YES;
-    [self.backgroundBlurView.contentView addSubview:self.activityIndicator];
+    [self.view addSubview:self.activityIndicator];
 
     self.emptyLabel = [[UILabel alloc] init];
     self.emptyLabel.translatesAutoresizingMaskIntoConstraints = NO;
@@ -78,24 +78,24 @@
     self.emptyLabel.textColor = [UIColor secondaryLabelColor];
     self.emptyLabel.text = @"还没有导入的整合包\n点击上方按钮导入";
     self.emptyLabel.numberOfLines = 0;
-    [self.backgroundBlurView.contentView addSubview:self.emptyLabel];
+    [self.view addSubview:self.emptyLabel];
 
     [NSLayoutConstraint activateConstraints:@[
-        [self.importButton.topAnchor constraintEqualToAnchor:self.backgroundBlurView.contentView.safeAreaLayoutGuide.topAnchor constant:16],
-        [self.importButton.leadingAnchor constraintEqualToAnchor:self.backgroundBlurView.contentView.leadingAnchor constant:16],
-        [self.importButton.trailingAnchor constraintEqualToAnchor:self.backgroundBlurView.contentView.trailingAnchor constant:-16],
+        [self.importButton.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:16],
+        [self.importButton.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:16],
+        [self.importButton.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-16],
         [self.importButton.heightAnchor constraintEqualToConstant:50],
 
         [self.tableView.topAnchor constraintEqualToAnchor:self.importButton.bottomAnchor constant:16],
-        [self.tableView.leadingAnchor constraintEqualToAnchor:self.backgroundBlurView.contentView.leadingAnchor],
-        [self.tableView.trailingAnchor constraintEqualToAnchor:self.backgroundBlurView.contentView.trailingAnchor],
-        [self.tableView.bottomAnchor constraintEqualToAnchor:self.backgroundBlurView.contentView.safeAreaLayoutGuide.bottomAnchor],
+        [self.tableView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.tableView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.tableView.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor],
 
-        [self.activityIndicator.centerXAnchor constraintEqualToAnchor:self.backgroundBlurView.contentView.centerXAnchor],
-        [self.activityIndicator.centerYAnchor constraintEqualToAnchor:self.backgroundBlurView.contentView.centerYAnchor],
+        [self.activityIndicator.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+        [self.activityIndicator.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor],
 
-        [self.emptyLabel.centerXAnchor constraintEqualToAnchor:self.backgroundBlurView.contentView.centerXAnchor],
-        [self.emptyLabel.centerYAnchor constraintEqualToAnchor:self.backgroundBlurView.contentView.centerYAnchor]
+        [self.emptyLabel.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+        [self.emptyLabel.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor]
     ]];
 }
 
@@ -339,6 +339,13 @@
         alert.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(self.view.bounds), CGRectGetMidY(self.view.bounds), 0, 0);
     }
     [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)handleBackgroundUIEffectChanged:(NSNotification *)notification {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [[BackgroundManager sharedManager] applyEffectToView:self.view];
+        [self.tableView reloadData];
+    });
 }
 
 @end

@@ -804,6 +804,15 @@
         [closeButton addTarget:self action:@selector(actionClose) forControlEvents:UIControlEventTouchUpInside];
         [self.view addSubview:closeButton];
     }
+    
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(handleBackgroundUIEffectChanged:)
+                                                 name:@"BackgroundUIEffectChanged"
+                                               object:nil];
+}
+
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self name:@"BackgroundUIEffectChanged" object:nil];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -831,6 +840,12 @@
     [self dismissViewControllerAnimated:YES completion:nil];
 }
 
+- (void)handleBackgroundUIEffectChanged:(NSNotification *)notification {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self.tableView reloadData];
+    });
+}
+
 #pragma mark - UITableView Data Source Override
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
@@ -839,7 +854,7 @@
     // Apply background styling if global background is active
     if ([[BackgroundManager sharedManager] hasBackground]) {
         // Set semi-transparent dark background for cells
-        cell.backgroundColor = [UIColor colorWithWhite:0.12 alpha:0.75];
+        [[BackgroundManager sharedManager] applyEffectToCell:cell];
         
         // Set white text for better visibility on dark background
         cell.textLabel.textColor = [UIColor whiteColor];

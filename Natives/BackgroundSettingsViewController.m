@@ -119,7 +119,7 @@
 - (void)setupSections {
     // Sections: [UI效果设置], [选择背景类型], [图片背景, 视频背景], [恢复默认背景, 清除背景]
     self.sections = @[
-        @[@"UI效果", @"透明度"],
+        @[@"UI效果", @"透明度", @"模糊程度"],
         @[@"选择背景类型"],
         @[@"图片背景", @"视频背景"],
         @[@"恢复默认背景", @"清除背景"]
@@ -154,6 +154,7 @@
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     static NSString *cellIdentifier = @"BackgroundCell";
     static NSString *sliderCellIdentifier = @"SliderCell";
+    static NSString *blurSliderCellIdentifier = @"BlurSliderCell";
     
     BackgroundManager *manager = [BackgroundManager sharedManager];
     BOOL hasBackground = [manager hasBackground];
@@ -219,8 +220,49 @@
             cell.imageView.image = [UIImage systemImageNamed:@"slider.horizontal.3"];
             
             return cell;
+            
+        } else if (indexPath.row == 2) {
+            // 模糊程度滑块
+            UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:blurSliderCellIdentifier];
+            if (!cell) {
+                cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:blurSliderCellIdentifier];
+                cell.selectionStyle = UITableViewCellSelectionStyleNone;
+                
+                // 创建滑块
+                UISlider *slider = [[UISlider alloc] initWithFrame:CGRectMake(16, 0, cell.bounds.size.width - 120, 30)];
+                slider.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+                slider.minimumValue = 0.0f;
+                slider.maximumValue = 1.0f;
+                slider.tag = 300;
+                [slider addTarget:self action:@selector(blurIntensitySliderChanged:) forControlEvents:UIControlEventValueChanged];
+                
+                // 创建数值标签
+                UILabel *valueLabel = [[UILabel alloc] initWithFrame:CGRectMake(cell.bounds.size.width - 80, 0, 60, 30)];
+                valueLabel.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin;
+                valueLabel.textAlignment = NSTextAlignmentRight;
+                valueLabel.tag = 301;
+                valueLabel.font = [UIFont monospacedDigitSystemFontOfSize:14 weight:UIFontWeightRegular];
+                
+                [cell.contentView addSubview:slider];
+                [cell.contentView addSubview:valueLabel];
+                
+                cell.contentView.layoutMargins = UIEdgeInsetsMake(8, 16, 8, 16);
+            }
+            
+            [self styleCell:cell hasBackground:hasBackground];
+            
+            UISlider *slider = [cell.contentView viewWithTag:300];
+            slider.value = manager.blurIntensity;
+            
+            UILabel *valueLabel = [cell.contentView viewWithTag:301];
+            valueLabel.text = [NSString stringWithFormat:@"%.0f%%", manager.blurIntensity * 100];
+            valueLabel.textColor = hasBackground ? [UIColor whiteColor] : [UIColor labelColor];
+            
+            cell.textLabel.text = nil;
+            cell.imageView.image = [UIImage systemImageNamed:@"slider.horizontal.3"];
+            
+            return cell;
         }
-    }
     
     // 其他部分
     UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:cellIdentifier];
@@ -266,7 +308,7 @@
 
 - (void)styleCell:(UITableViewCell *)cell hasBackground:(BOOL)hasBackground {
     if (hasBackground) {
-        cell.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.7];
+        [[BackgroundManager sharedManager] applyEffectToCell:cell];
         cell.textLabel.textColor = [UIColor whiteColor];
     } else {
         cell.backgroundColor = [UIColor secondarySystemBackgroundColor];
@@ -281,6 +323,21 @@
     [BackgroundManager sharedManager].uiOpacity = value;
     
     self.opacityValueLabel.text = [NSString stringWithFormat:@"%.0f%%", value * 100];
+    
+    // 实时刷新UI效果
+    [[BackgroundManager sharedManager] refreshUIEffect];
+}
+
+- (void)blurIntensitySliderChanged:(UISlider *)slider {
+    CGFloat value = slider.value;
+    [BackgroundManager sharedManager].blurIntensity = value;
+    
+    // 更新标签显示
+    UITableViewCell *cell = (UITableViewCell *)slider.superview.superview;
+    if ([cell isKindOfClass:[UITableViewCell class]]) {
+        UILabel *valueLabel = [cell.contentView viewWithTag:301];
+        valueLabel.text = [NSString stringWithFormat:@"%.0f%%", value * 100];
+    }
     
     // 实时刷新UI效果
     [[BackgroundManager sharedManager] refreshUIEffect];

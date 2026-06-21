@@ -33,6 +33,7 @@ typedef NS_ENUM(NSInteger, BackgroundUIEffect) {
 // UI effect settings (for custom background)
 @property (nonatomic, assign) BackgroundUIEffect uiEffect;
 @property (nonatomic, assign) CGFloat uiOpacity;  // 0.0 ~ 1.0
+@property (nonatomic, assign) CGFloat blurIntensity; // 0.0 ~ 1.0, 背景模糊程度
 
 // Global background container
 @property (nonatomic, strong, readonly, nullable) UIView *globalBackgroundContainer;
@@ -69,6 +70,10 @@ typedef NS_ENUM(NSInteger, BackgroundUIEffect) {
 // Make view controllers transparent (for global background visibility)
 - (void)makeViewControllerTransparent:(UIViewController *)viewController;
 - (void)makeSplitViewControllerTransparent:(UISplitViewController *)splitVC;
+
+// Apply UI effect to any UIView (blur or translucent based on settings)
+- (void)applyEffectToView:(UIView *)view;
+- (void)applyEffectToCollectionViewCell:(UICollectionViewCell *)cell;
 
 // Apply UI effect settings to current split view controller
 - (void)refreshUIEffect;

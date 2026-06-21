@@ -1,4 +1,5 @@
 #import "DownloadViewController.h"
+#import "BackgroundManager.h"
 #import "installer/modpack/ModrinthAPI.h"
 #import "ModService.h"
 #import "ShaderService.h"
@@ -31,7 +32,6 @@
 #pragma mark - Modern Asset Cell
 
 @interface ModernAssetCell : UITableViewCell
-@property (nonatomic, strong) UIVisualEffectView *blurView;
 @property (nonatomic, strong) UIView *contentContainer;
 @property (nonatomic, strong) UIImageView *iconView;
 @property (nonatomic, strong) UILabel *titleLabel;
@@ -49,18 +49,9 @@
         self.selectionStyle = UITableViewCellSelectionStyleNone;
         self.backgroundColor = [UIColor clearColor];
         
-        UIBlurEffect *blurEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial];
-        self.blurView = [[UIVisualEffectView alloc] initWithEffect:blurEffect];
-        self.blurView.translatesAutoresizingMaskIntoConstraints = NO;
-        self.blurView.layer.cornerRadius = 16;
-        self.blurView.layer.masksToBounds = YES;
-        self.blurView.layer.borderWidth = 0.5;
-        self.blurView.layer.borderColor = [UIColor separatorColor].CGColor;
-        [self.contentView addSubview:self.blurView];
-        
         self.contentContainer = [[UIView alloc] init];
         self.contentContainer.translatesAutoresizingMaskIntoConstraints = NO;
-        [self.blurView.contentView addSubview:self.contentContainer];
+        [self.contentView addSubview:self.contentContainer];
         
         self.iconView = [[UIImageView alloc] init];
         self.iconView.translatesAutoresizingMaskIntoConstraints = NO;
@@ -105,15 +96,10 @@
         [self.contentContainer addSubview:self.downloadButton];
         
         [NSLayoutConstraint activateConstraints:@[
-            [self.blurView.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:4],
-            [self.blurView.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:12],
-            [self.blurView.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-12],
-            [self.blurView.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-4],
-            
-            [self.contentContainer.topAnchor constraintEqualToAnchor:self.blurView.contentView.topAnchor constant:12],
-            [self.contentContainer.leadingAnchor constraintEqualToAnchor:self.blurView.contentView.leadingAnchor constant:12],
-            [self.contentContainer.trailingAnchor constraintEqualToAnchor:self.blurView.contentView.trailingAnchor constant:-12],
-            [self.contentContainer.bottomAnchor constraintEqualToAnchor:self.blurView.contentView.bottomAnchor constant:-12],
+            [self.contentContainer.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:16],
+            [self.contentContainer.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:24],
+            [self.contentContainer.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-24],
+            [self.contentContainer.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-16],
             
             [self.iconView.leadingAnchor constraintEqualToAnchor:self.contentContainer.leadingAnchor],
             [self.iconView.centerYAnchor constraintEqualToAnchor:self.contentContainer.centerYAnchor],
@@ -141,6 +127,8 @@
             [self.downloadButton.widthAnchor constraintEqualToConstant:40],
             [self.downloadButton.heightAnchor constraintEqualToConstant:40]
         ]];
+        
+        [[BackgroundManager sharedManager] applyEffectToView:self.contentView];
     }
     return self;
 }
@@ -386,7 +374,6 @@
 @property (nonatomic, strong) UITableView *versionTableView;
 @property (nonatomic, strong) NSString *selectedLoaderVersion;
 @property (nonatomic, strong) UIActivityIndicatorView *loadingIndicator;
-@property (nonatomic, strong) UIVisualEffectView *backgroundBlurView;
 @property (nonatomic, strong) UILabel *emptyVersionsLabel;
 
 // For XML parsing
@@ -414,17 +401,7 @@
     self.view.backgroundColor = [UIColor clearColor];
     self.preferredContentSize = CGSizeMake(540, 620);
     
-    UIBlurEffect *blurEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial];
-    self.backgroundBlurView = [[UIVisualEffectView alloc] initWithEffect:blurEffect];
-    self.backgroundBlurView.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.view addSubview:self.backgroundBlurView];
-    
-    [NSLayoutConstraint activateConstraints:@[
-        [self.backgroundBlurView.topAnchor constraintEqualToAnchor:self.view.topAnchor],
-        [self.backgroundBlurView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
-        [self.backgroundBlurView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [self.backgroundBlurView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor]
-    ]];
+    [[BackgroundManager sharedManager] applyEffectToView:self.view];
     
     [self setupNavigation];
     [self setupLoadersForVersion];
@@ -519,19 +496,19 @@
     self.tableView.rowHeight = 76;
     self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
     [self.tableView registerClass:[LoaderCell class] forCellReuseIdentifier:@"LoaderCell"];
-    [self.backgroundBlurView.contentView addSubview:self.tableView];
+    [self.view addSubview:self.tableView];
     
     UILayoutGuide *safeGuide;
     if (@available(iOS 11.0, *)) {
-        safeGuide = self.backgroundBlurView.contentView.safeAreaLayoutGuide;
+        safeGuide = self.view.safeAreaLayoutGuide;
     } else {
-        safeGuide = self.backgroundBlurView.contentView.layoutMarginsGuide;
+        safeGuide = self.view.layoutMarginsGuide;
     }
     
     [NSLayoutConstraint activateConstraints:@[
         [self.tableView.topAnchor constraintEqualToAnchor:safeGuide.topAnchor constant:8],
-        [self.tableView.leadingAnchor constraintEqualToAnchor:self.backgroundBlurView.contentView.leadingAnchor constant:16],
-        [self.tableView.trailingAnchor constraintEqualToAnchor:self.backgroundBlurView.contentView.trailingAnchor constant:-16],
+        [self.tableView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:16],
+        [self.tableView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-16],
         [self.tableView.heightAnchor constraintEqualToConstant:320]
     ]];
 }
@@ -570,11 +547,11 @@
     [self.optionsContainer addSubview:self.optiFineSwitch];
     
     self.optionsContainer.hidden = YES;
-    [self.backgroundBlurView.contentView addSubview:self.optionsContainer];
+    [self.view addSubview:self.optionsContainer];
     
     [NSLayoutConstraint activateConstraints:@[
-        [self.optionsContainer.leadingAnchor constraintEqualToAnchor:self.backgroundBlurView.contentView.leadingAnchor constant:16],
-        [self.optionsContainer.trailingAnchor constraintEqualToAnchor:self.backgroundBlurView.contentView.trailingAnchor constant:-16],
+        [self.optionsContainer.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:16],
+        [self.optionsContainer.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-16],
         [self.optionsContainer.topAnchor constraintEqualToAnchor:self.tableView.bottomAnchor constant:8],
         [self.optionsContainer.heightAnchor constraintEqualToConstant:50],
         
@@ -602,12 +579,12 @@
     self.versionTableView.separatorStyle = UITableViewCellSeparatorStyleSingleLine;
     self.versionTableView.hidden = YES;
     [self.versionTableView registerClass:[UITableViewCell class] forCellReuseIdentifier:@"VersionCell"];
-    [self.backgroundBlurView.contentView addSubview:self.versionTableView];
+    [self.view addSubview:self.versionTableView];
     
     self.loadingIndicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
     self.loadingIndicator.translatesAutoresizingMaskIntoConstraints = NO;
     self.loadingIndicator.hidesWhenStopped = YES;
-    [self.backgroundBlurView.contentView addSubview:self.loadingIndicator];
+    [self.view addSubview:self.loadingIndicator];
     
     self.emptyVersionsLabel = [[UILabel alloc] init];
     self.emptyVersionsLabel.translatesAutoresizingMaskIntoConstraints = NO;
@@ -616,12 +593,12 @@
     self.emptyVersionsLabel.textColor = [UIColor secondaryLabelColor];
     self.emptyVersionsLabel.font = [UIFont systemFontOfSize:14];
     self.emptyVersionsLabel.hidden = YES;
-    [self.backgroundBlurView.contentView addSubview:self.emptyVersionsLabel];
+    [self.view addSubview:self.emptyVersionsLabel];
     
     [NSLayoutConstraint activateConstraints:@[
         [self.versionTableView.topAnchor constraintEqualToAnchor:self.optionsContainer.bottomAnchor constant:8],
-        [self.versionTableView.leadingAnchor constraintEqualToAnchor:self.backgroundBlurView.contentView.leadingAnchor constant:16],
-        [self.versionTableView.trailingAnchor constraintEqualToAnchor:self.backgroundBlurView.contentView.trailingAnchor constant:-16],
+        [self.versionTableView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:16],
+        [self.versionTableView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-16],
         [self.versionTableView.bottomAnchor constraintEqualToAnchor:self.installButton.topAnchor constant:-16],
         
         [self.loadingIndicator.centerXAnchor constraintEqualToAnchor:self.versionTableView.centerXAnchor],
@@ -641,12 +618,12 @@
     [self.installButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     self.installButton.layer.cornerRadius = 10;
     [self.installButton addTarget:self action:@selector(installButtonTapped) forControlEvents:UIControlEventTouchUpInside];
-    [self.backgroundBlurView.contentView addSubview:self.installButton];
+    [self.view addSubview:self.installButton];
     
     [NSLayoutConstraint activateConstraints:@[
-        [self.installButton.leadingAnchor constraintEqualToAnchor:self.backgroundBlurView.contentView.leadingAnchor constant:16],
-        [self.installButton.trailingAnchor constraintEqualToAnchor:self.backgroundBlurView.contentView.trailingAnchor constant:-16],
-        [self.installButton.bottomAnchor constraintEqualToAnchor:self.backgroundBlurView.contentView.bottomAnchor constant:-20],
+        [self.installButton.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:16],
+        [self.installButton.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-16],
+        [self.installButton.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor constant:-20],
         [self.installButton.heightAnchor constraintEqualToConstant:50]
     ]];
 }
@@ -1103,6 +1080,7 @@
         [self.downloadTask.progress cancel];
         self.downloadTask = nil;
     }
+    [[NSNotificationCenter defaultCenter] removeObserver:self name:@"BackgroundUIEffectChanged" object:nil];
 }
 
 - (void)viewDidLoad {
@@ -1126,6 +1104,11 @@
     [self setupUI];
     [self switchToTab:0];
     [self loadVersionList];
+    
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(handleBackgroundUIEffectChanged:)
+                                                 name:@"BackgroundUIEffectChanged"
+                                               object:nil];
 }
 
 - (void)setupUI {
@@ -3169,6 +3152,12 @@
 
     [[NSFileManager defaultManager] createDirectoryAtPath:modsDir withIntermediateDirectories:YES attributes:nil error:nil];
     return modsDir;
+}
+
+- (void)handleBackgroundUIEffectChanged:(NSNotification *)notification {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self.tableView reloadData];
+    });
 }
 
 @end

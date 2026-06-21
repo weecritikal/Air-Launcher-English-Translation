@@ -1,4 +1,5 @@
 #import "CustomControlsViewController.h"
+#import "BackgroundManager.h"
 #import "DBNumberedSlider.h"
 #import "FileListViewController.h"
 #import "LauncherPreferences.h"
@@ -31,8 +32,13 @@
 {
     [super viewDidLoad];
     [self.undoManager removeAllActions];
-    self.view.backgroundColor = [UIColor colorWithWhite:0.2 alpha:0.5];
+    [[BackgroundManager sharedManager] applyEffectToView:self.view];
     isControlModifiable = YES;
+    
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(handleBackgroundUIEffectChanged:)
+                                                 name:@"BackgroundUIEffectChanged"
+                                               object:nil];
 
     [self setNeedsUpdateOfScreenEdgesDeferringSystemGestures];
     [self setNeedsUpdateOfHomeIndicatorAutoHidden];
@@ -101,6 +107,10 @@
     if (isInGame) {
         [self.presentingViewController performSelector:@selector(loadCustomControls)];
     }
+}
+
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self name:@"BackgroundUIEffectChanged" object:nil];
 }
 
 - (BOOL)gestureRecognizer:(UIGestureRecognizer *)sender shouldReceiveTouch:(UITouch *)touch {
@@ -586,6 +596,12 @@
     return UIModalPresentationNone;
 }
 
+- (void)handleBackgroundUIEffectChanged:(NSNotification *)notification {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [[BackgroundManager sharedManager] applyEffectToView:self.view];
+    });
+}
+
 @end
 
 #define TAG_SLIDER_STROKEWIDTH 10
@@ -642,9 +658,8 @@ CGFloat currentY;
     CGFloat tempW = MIN(self.view.frame.size.width * 0.75, shortest);
     CGFloat tempH = MIN(self.view.frame.size.height * 0.6, shortest);
 
-    UIBlurEffectStyle blurStyle = UIBlurEffectStyleSystemMaterial;
     UIVisualEffectView *blurView;
-    blurView = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:blurStyle]];
+    blurView = [[UIVisualEffectView alloc] init];
     blurView.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleRightMargin | UIViewAutoresizingFlexibleBottomMargin;
     blurView.frame = CGRectMake(
         (self.view.frame.size.width - MAX(tempW, tempH))/2,
@@ -653,6 +668,7 @@ CGFloat currentY;
     blurView.layer.cornerRadius = 10.0;
     blurView.clipsToBounds = YES;
     [self.view addSubview:blurView];
+    [[BackgroundManager sharedManager] applyEffectToView:blurView];
 
     UIBarButtonItem *btnFlexibleSpace = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace target:self action:nil];
 

@@ -1,4 +1,5 @@
 #import "ModpackInstallViewController.h"
+#import "BackgroundManager.h"
 #import "modpack/ModrinthAPI.h"
 #import "MinecraftResourceDownloadTask.h"
 #import "PLProfiles.h"
@@ -19,8 +20,6 @@
 @property(nonatomic) NSMutableArray *list;
 @property(nonatomic) NSMutableDictionary *filters;
 @property ModrinthAPI *modrinth;
-// 新增毛玻璃背景
-@property(nonatomic, strong) UIVisualEffectView *backgroundBlurView;
 @end
 
 @implementation ModpackInstallViewController
@@ -28,17 +27,7 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     
-    // 设置毛玻璃背景
-    UIBlurEffect *blurEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial];
-    self.backgroundBlurView = [[UIVisualEffectView alloc] initWithEffect:blurEffect];
-    self.backgroundBlurView.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.view addSubview:self.backgroundBlurView];
-    [NSLayoutConstraint activateConstraints:@[
-        [self.backgroundBlurView.topAnchor constraintEqualToAnchor:self.view.topAnchor],
-        [self.backgroundBlurView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
-        [self.backgroundBlurView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [self.backgroundBlurView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor]
-    ]];
+    [[BackgroundManager sharedManager] applyEffectToView:self.view];
     
     self.searchController = [[UISearchController alloc] initWithSearchResultsController:nil];
     self.searchController.searchResultsUpdater = self;
@@ -54,6 +43,15 @@
     // 设置表格样式
     self.tableView.backgroundColor = [UIColor clearColor];
     self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
+    
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(handleBackgroundUIEffectChanged:)
+                                                 name:@"BackgroundUIEffectChanged"
+                                               object:nil];
+}
+
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self name:@"BackgroundUIEffectChanged" object:nil];
 }
 
 // 重写 tableView 的 getter 以修改背景（避免重复代码）
@@ -242,6 +240,13 @@
                 showDialog(localize(@"Error", nil), self.modrinth.lastError.localizedDescription);
             }
         });
+    });
+}
+
+- (void)handleBackgroundUIEffectChanged:(NSNotification *)notification {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [[BackgroundManager sharedManager] applyEffectToView:self.view];
+        [self.tableView reloadData];
     });
 }
 

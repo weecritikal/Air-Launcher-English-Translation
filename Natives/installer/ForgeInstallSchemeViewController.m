@@ -1,8 +1,8 @@
 #import "ForgeInstallSchemeViewController.h"
+#import "BackgroundManager.h"
 
 @interface ForgeInstallSchemeViewController ()
 
-@property (nonatomic, strong) UIVisualEffectView *backgroundView;
 @property (nonatomic, strong) UIView *contentContainer;
 @property (nonatomic, strong) UILabel *titleLabel;
 @property (nonatomic, strong) UIStackView *stackView;
@@ -17,22 +17,23 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
 
-    self.view.backgroundColor = [UIColor colorWithWhite:0 alpha:0.4];
+    [[BackgroundManager sharedManager] applyEffectToView:self.view];
 
-    [self setupBackgroundView];
     [self setupContentContainer];
     [self setupTitleLabel];
     [self setupCloseButton];
     [self setupStackView];
     [self setupCards];
     [self setupConstraints];
+    
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(handleBackgroundUIEffectChanged:)
+                                                 name:@"BackgroundUIEffectChanged"
+                                               object:nil];
 }
 
-- (void)setupBackgroundView {
-    UIBlurEffect *blurEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterialDark];
-    self.backgroundView = [[UIVisualEffectView alloc] initWithEffect:blurEffect];
-    self.backgroundView.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.view addSubview:self.backgroundView];
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self name:@"BackgroundUIEffectChanged" object:nil];
 }
 
 - (void)setupContentContainer {
@@ -148,13 +149,6 @@
 
 - (void)setupConstraints {
     [NSLayoutConstraint activateConstraints:@[
-        [self.backgroundView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
-        [self.backgroundView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [self.backgroundView.topAnchor constraintEqualToAnchor:self.view.topAnchor],
-        [self.backgroundView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor]
-    ]];
-
-    [NSLayoutConstraint activateConstraints:@[
         [self.contentContainer.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:24],
         [self.contentContainer.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-24],
         [self.contentContainer.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor]
@@ -207,6 +201,12 @@
 
 - (void)actionClose:(UIButton *)sender {
     [self dismissViewControllerAnimated:YES completion:nil];
+}
+
+- (void)handleBackgroundUIEffectChanged:(NSNotification *)notification {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [[BackgroundManager sharedManager] applyEffectToView:self.view];
+    });
 }
 
 @end

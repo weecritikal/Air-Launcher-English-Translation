@@ -1,4 +1,5 @@
 #import "VersionManagerViewController.h"
+#import "BackgroundManager.h"
 #import "PLProfiles.h"
 #import "LauncherProfileEditorViewController.h"
 #import "ModsManagerViewController.h"
@@ -11,7 +12,6 @@
 #pragma mark - Modern Tile Base Cell
 
 @interface VMTileBaseCell : UICollectionViewCell
-@property (nonatomic, strong) UIVisualEffectView *blurView;
 @property (nonatomic, strong) UIView *contentContainer;
 - (void)setupViews;
 @end
@@ -33,19 +33,11 @@
     self.layer.shadowRadius = 8;
     self.layer.masksToBounds = NO;
     
-    UIBlurEffect *blurEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial];
-    self.blurView = [[UIVisualEffectView alloc] initWithEffect:blurEffect];
-    self.blurView.frame = self.contentView.bounds;
-    self.blurView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    self.blurView.layer.cornerRadius = 16;
-    self.blurView.layer.masksToBounds = YES;
-    self.blurView.layer.borderWidth = 0.5;
-    self.blurView.layer.borderColor = [UIColor separatorColor].CGColor;
-    [self.contentView addSubview:self.blurView];
-    
     self.contentContainer = [[UIView alloc] initWithFrame:self.contentView.bounds];
     self.contentContainer.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     [self.contentView addSubview:self.contentContainer];
+    
+    [[BackgroundManager sharedManager] applyEffectToCollectionViewCell:self];
 }
 
 - (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
@@ -199,11 +191,11 @@
     self.selectedBadge.hidden = !isSelected;
     
     if (isSelected) {
-        self.blurView.layer.borderColor = [UIColor systemGreenColor].CGColor;
-        self.blurView.layer.borderWidth = 1.5;
+        self.contentView.layer.borderColor = [UIColor systemGreenColor].CGColor;
+        self.contentView.layer.borderWidth = 1.5;
     } else {
-        self.blurView.layer.borderColor = [UIColor separatorColor].CGColor;
-        self.blurView.layer.borderWidth = 0.5;
+        self.contentView.layer.borderColor = [UIColor separatorColor].CGColor;
+        self.contentView.layer.borderWidth = 0.5;
     }
 }
 
@@ -262,6 +254,11 @@
                                              selector:@selector(profileChanged)
                                                  name:@"ReloadProfileList"
                                                object:nil];
+    
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(handleBackgroundUIEffectChanged:)
+                                                 name:@"BackgroundUIEffectChanged"
+                                               object:nil];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -277,6 +274,12 @@
 - (void)profileChanged {
     [self loadProfiles];
     [self.collectionView reloadData];
+}
+
+- (void)handleBackgroundUIEffectChanged:(NSNotification *)notification {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self.collectionView reloadData];
+    });
 }
 
 #pragma mark - Setup

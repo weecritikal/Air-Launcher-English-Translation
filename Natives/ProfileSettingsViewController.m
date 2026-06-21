@@ -4,6 +4,7 @@
 #import "PLProfiles.h"
 #import "LauncherPreferences.h"
 #import "utils.h"
+#import "BackgroundManager.h"
 
 @interface ProfileSettingsViewController ()
 
@@ -36,6 +37,15 @@
     
     // 设置分区
     [self setupSections];
+    
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(handleBackgroundUIEffectChanged:)
+                                                 name:@"BackgroundUIEffectChanged"
+                                               object:nil];
+}
+
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self name:@"BackgroundUIEffectChanged" object:nil];
 }
 
 - (void)calculateMaxMemory {
@@ -120,7 +130,7 @@
     UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:cellIdentifier];
     if (!cell) {
         cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:cellIdentifier];
-        cell.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.7];
+        [[BackgroundManager sharedManager] applyEffectToCell:cell];
     }
     
     NSString *title = self.sections[indexPath.section][indexPath.row];
@@ -356,6 +366,12 @@
 
 - (UIInterfaceOrientationMask)supportedInterfaceOrientations {
     return UIInterfaceOrientationMaskLandscape;
+}
+
+- (void)handleBackgroundUIEffectChanged:(NSNotification *)notification {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self.tableView reloadData];
+    });
 }
 
 @end

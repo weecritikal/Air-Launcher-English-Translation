@@ -281,7 +281,6 @@ static NSString *festivalGreeting(void) {
 // MARK: - HomeTileBaseCell
 
 @interface HomeTileBaseCell : UICollectionViewCell
-@property (nonatomic, strong) UIVisualEffectView *blurView;
 @property (nonatomic, strong) UIView *contentContainer;
 @property (nonatomic, strong) CAGradientLayer *accentBar;
 - (void)setupBaseViews;
@@ -294,8 +293,20 @@ static NSString *festivalGreeting(void) {
     self = [super initWithFrame:frame];
     if (self) {
         [self setupBaseViews];
+        [[NSNotificationCenter defaultCenter] addObserver:self
+                                                 selector:@selector(handleBackgroundUIEffectChanged)
+                                                     name:@"BackgroundUIEffectChanged"
+                                                   object:nil];
     }
     return self;
+}
+
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
+- (void)handleBackgroundUIEffectChanged {
+    [[BackgroundManager sharedManager] applyEffectToCollectionViewCell:self];
 }
 
 - (void)setupBaseViews {
@@ -306,31 +317,21 @@ static NSString *festivalGreeting(void) {
     self.layer.shadowRadius = 10;
     self.layer.masksToBounds = NO;
     
-    // 毛玻璃背景
-    UIBlurEffect *blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial];
-    self.blurView = [[UIVisualEffectView alloc] initWithEffect:blur];
-    self.blurView.frame = self.contentView.bounds;
-    self.blurView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    self.blurView.layer.cornerRadius = 16;
-    self.blurView.layer.masksToBounds = YES;
-    self.blurView.layer.cornerCurve = kCACornerCurveContinuous;
-    self.blurView.layer.borderWidth = 0.5;
-    self.blurView.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.15].CGColor;
-    [self.contentView addSubview:self.blurView];
-    
     // 渐变装饰条
     self.accentBar = [CAGradientLayer layer];
     self.accentBar.frame = CGRectMake(0, 0, self.contentView.bounds.size.width, 3);
     self.accentBar.startPoint = CGPointMake(0, 0.5);
     self.accentBar.endPoint = CGPointMake(1, 0.5);
     self.accentBar.cornerRadius = 1.5;
-    [self.blurView.layer addSublayer:self.accentBar];
+    [self.contentView.layer addSublayer:self.accentBar];
     
     // 内容容器
     self.contentContainer = [[UIView alloc] initWithFrame:self.contentView.bounds];
     self.contentContainer.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     self.contentContainer.backgroundColor = [UIColor clearColor];
     [self.contentView addSubview:self.contentContainer];
+    
+    [[BackgroundManager sharedManager] applyEffectToCollectionViewCell:self];
 }
 
 - (void)setAccentColor:(UIColor *)color {
@@ -342,7 +343,7 @@ static NSString *festivalGreeting(void) {
 
 - (void)layoutSubviews {
     [super layoutSubviews];
-    self.accentBar.frame = CGRectMake(0, 0, self.blurView.bounds.size.width, 3);
+    self.accentBar.frame = CGRectMake(0, 0, self.contentView.bounds.size.width, 3);
     self.layer.shadowPath = [UIBezierPath bezierPathWithRoundedRect:self.contentView.bounds cornerRadius:16].CGPath;
 }
 

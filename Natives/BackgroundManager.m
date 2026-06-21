@@ -12,6 +12,7 @@ static NSString * const kBackgroundTypeKey = @"background_type";
 static NSString * const kBackgroundPathKey = @"background_path";
 static NSString * const kBackgroundUIEffectKey = @"background_ui_effect";
 static NSString * const kBackgroundUIOpacityKey = @"background_ui_opacity";
+static NSString * const kBackgroundBlurIntensityKey = @"background_blur_intensity";
 static NSString * const kBackgroundsFolder = @"backgrounds";
 static const NSInteger kGlobalBackgroundTag = 99999;
 static const NSInteger kBackgroundImageTag = 99998;
@@ -134,12 +135,18 @@ static const NSInteger kDefaultBackgroundTag = 99995;
     if (_uiOpacity < 0.1 || _uiOpacity > 1.0) {
         _uiOpacity = 0.7; // 默认透明度
     }
+    
+    _blurIntensity = [defaults floatForKey:kBackgroundBlurIntensityKey];
+    if (_blurIntensity < 0.0 || _blurIntensity > 1.0) {
+        _blurIntensity = 0.7; // 默认模糊程度
+    }
 }
 
 - (void)saveUISettings {
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     [defaults setInteger:self.uiEffect forKey:kBackgroundUIEffectKey];
     [defaults setFloat:self.uiOpacity forKey:kBackgroundUIOpacityKey];
+    [defaults setFloat:self.blurIntensity forKey:kBackgroundBlurIntensityKey];
     [defaults synchronize];
 }
 
@@ -150,6 +157,11 @@ static const NSInteger kDefaultBackgroundTag = 99995;
 
 - (void)setUiOpacity:(CGFloat)uiOpacity {
     _uiOpacity = MAX(0.1, MIN(1.0, uiOpacity));
+    [self saveUISettings];
+}
+
+- (void)setBlurIntensity:(CGFloat)blurIntensity {
+    _blurIntensity = MAX(0.0, MIN(1.0, blurIntensity));
     [self saveUISettings];
 }
 
@@ -389,11 +401,11 @@ static const NSInteger kDefaultBackgroundTag = 99995;
     UIView *existingDim = [container viewWithTag:kBackgroundDimTag];
     if (existingDim) [existingDim removeFromSuperview];
     
-    // Add dark blur effect
+    // Add dark blur effect with adjustable intensity
     UIBlurEffect *blurEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleDark];
     UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:blurEffect];
     blurView.tag = kBackgroundBlurTag;
-    blurView.alpha = 0.35; // Adjust for readability
+    blurView.alpha = self.blurIntensity * 0.5; // max 0.5 for readability
     blurView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     blurView.frame = container.bounds;
     
@@ -403,7 +415,7 @@ static const NSInteger kDefaultBackgroundTag = 99995;
     UIView *dimView = [[UIView alloc] initWithFrame:container.bounds];
     dimView.tag = kBackgroundDimTag;
     dimView.backgroundColor = [UIColor blackColor];
-    dimView.alpha = 0.2; // Additional dimming
+    dimView.alpha = self.blurIntensity * 0.3; // max 0.3 for dimming
     dimView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     
     [container addSubview:dimView];
@@ -582,6 +594,83 @@ static const NSInteger kDefaultBackgroundTag = 99995;
 - (void)refreshUIEffect {
     if (self.currentSplitVC && self.currentType != BackgroundTypeNone) {
         [self makeSplitViewControllerTransparent:self.currentSplitVC];
+    }
+    
+    // Re-apply blur intensity to background container
+    if (self.globalBackgroundContainer) {
+        [self addBlurEffectToContainer:self.globalBackgroundContainer];
+    }
+    
+    // Post notification for other views to refresh
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"BackgroundUIEffectChanged" object:nil];
+}
+
+#pragma mark - Unified View Effect Application
+
+- (void)applyEffectToView:(UIView *)view {
+    if (!view) return;
+    
+    if (self.uiEffect == BackgroundUIEffectBlur) {
+        // 毛玻璃效果 - 创建 UIVisualEffectView 作为子视图
+        // 先移除已有的 blur view
+        for (UIView *subview in view.subviews) {
+            if ([subview isKindOfClass:[UIVisualEffectView class]] && subview.tag == kBackgroundBlurTag) {
+                [subview removeFromSuperview];
+            }
+        }
+        
+        UIBlurEffect *blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterialDark];
+        UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:blur];
+        blurView.tag = kBackgroundBlurTag;
+        blurView.frame = view.bounds;
+        blurView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+        blurView.layer.cornerRadius = view.layer.cornerRadius;
+        blurView.layer.masksToBounds = YES;
+        
+        [view insertSubview:blurView atIndex:0];
+        view.backgroundColor = [UIColor clearColor];
+    } else {
+        // 半透明效果 - 移除 blur view，使用半透明背景
+        for (UIView *subview in view.subviews) {
+            if ([subview isKindOfClass:[UIVisualEffectView class]] && subview.tag == kBackgroundBlurTag) {
+                [subview removeFromSuperview];
+            }
+        }
+        view.backgroundColor = [UIColor colorWithWhite:0.08 alpha:self.uiOpacity];
+    }
+}
+
+- (void)applyEffectToCollectionViewCell:(UICollectionViewCell *)cell {
+    if (!cell) return;
+    
+    if (self.uiEffect == BackgroundUIEffectBlur) {
+        // 毛玻璃效果
+        for (UIView *subview in cell.contentView.subviews) {
+            if ([subview isKindOfClass:[UIVisualEffectView class]] && subview.tag == kBackgroundBlurTag) {
+                [subview removeFromSuperview];
+            }
+        }
+        
+        UIBlurEffect *blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterialDark];
+        UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:blur];
+        blurView.tag = kBackgroundBlurTag;
+        blurView.frame = cell.contentView.bounds;
+        blurView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+        blurView.layer.cornerRadius = cell.contentView.layer.cornerRadius;
+        blurView.layer.masksToBounds = YES;
+        
+        [cell.contentView insertSubview:blurView atIndex:0];
+        cell.backgroundColor = [UIColor clearColor];
+        cell.contentView.backgroundColor = [UIColor clearColor];
+    } else {
+        // 半透明效果
+        for (UIView *subview in cell.contentView.subviews) {
+            if ([subview isKindOfClass:[UIVisualEffectView class]] && subview.tag == kBackgroundBlurTag) {
+                [subview removeFromSuperview];
+            }
+        }
+        cell.backgroundColor = [UIColor colorWithWhite:0.1 alpha:self.uiOpacity];
+        cell.contentView.backgroundColor = [UIColor clearColor];
     }
 }
 
