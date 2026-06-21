@@ -76,6 +76,10 @@ typedef NS_ENUM(NSInteger, BackgroundUIEffect) {
 - (void)applyEffectToCollectionViewCell:(UICollectionViewCell *)cell;
 - (void)applyEffectToCell:(UITableViewCell *)cell;
 
+// Apply UI effect to navigation bar and toolbar
+- (void)applyEffectToNavigationBar:(UINavigationBar *)navigationBar;
+- (void)applyEffectToToolbar:(UIToolbar *)toolbar;
+
 // Apply UI effect settings to current split view controller
 - (void)refreshUIEffect;
 
