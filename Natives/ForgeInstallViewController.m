@@ -296,66 +296,123 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
     
     if ([vendor isEqualToString:@"NeoForge"]) {
         dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-            dispatch_group_t group = dispatch_group_create();
-            NSMutableArray *allVersions = [NSMutableArray new];
-            NSLock *versionsLock = [[NSLock alloc] init];
-            __block NSError *fetchError = nil;
-            
-            NSURL *neoURL = [NSURL URLWithString:@"https://maven.neoforged.net/api/maven/versions/releases/net/neoforged/neoforge"];
-            dispatch_group_enter(group);
-            NSURLSessionDataTask *neoTask = [[NSURLSession sharedSession] dataTaskWithURL:neoURL completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
-                if (error) {
-                    fetchError = error;
-                } else if (data) {
-                    NSError *jsonError = nil;
-                    NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
-                    if (json && [json[@"versions"] isKindOfClass:[NSArray class]]) {
-                        [versionsLock lock];
-                        [allVersions addObjectsFromArray:json[@"versions"]];
-                        [versionsLock unlock];
+            NSString *downloadSource = getPrefObject(@"general.download_source");
+            BOOL useBMCLAPI = [downloadSource isEqualToString:@"bmclapi"];
+
+            // 内部方法：从指定源获取版本列表
+            void (^fetchFromSource)(BOOL) = ^(BOOL useBMCL) {
+                NSString *neoURLString = useBMCL ?
+                    @"https://bmclapi2.bangbang93.com/neoforge/meta/api/maven/details/releases/net/neoforged/neoforge" :
+                    @"https://maven.neoforged.net/api/maven/versions/releases/net/neoforged/neoforge";
+                NSString *legacyURLString = useBMCL ?
+                    @"https://bmclapi2.bangbang93.com/neoforge/meta/api/maven/details/releases/net/neoforged/forge" :
+                    @"https://maven.neoforged.net/api/maven/versions/releases/net/neoforged/forge";
+
+                dispatch_group_t group = dispatch_group_create();
+                NSMutableArray *allVersions = [NSMutableArray new];
+                NSLock *versionsLock = [[NSLock alloc] init];
+
+                dispatch_group_enter(group);
+                NSURL *neoURL = [NSURL URLWithString:neoURLString];
+                NSURLSessionDataTask *neoTask = [[NSURLSession sharedSession] dataTaskWithURL:neoURL completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+                    if (!error && data) {
+                        NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+                        if (json) {
+                            if (useBMCL) {
+                                // BMCLAPI: {"files": [{"name": "20.2.88", "type": "DIRECTORY"}, ...]}
+                                NSArray *files = json[@"files"];
+                                if ([files isKindOfClass:[NSArray class]]) {
+                                    [versionsLock lock];
+                                    for (NSDictionary *file in files) {
+                                        if (![file isKindOfClass:[NSDictionary class]]) continue;
+                                        NSString *type = file[@"type"];
+                                        NSString *name = file[@"name"];
+                                        if ([type isEqualToString:@"DIRECTORY"] && name && ![name.lowercaseString containsString:@"maven"]) {
+                                            [allVersions addObject:name];
+                                        }
+                                    }
+                                    [versionsLock unlock];
+                                }
+                            } else {
+                                // 官方: {"versions": ["1.20.1-47.1.3", ...]}
+                                NSArray *versions = json[@"versions"];
+                                if ([versions isKindOfClass:[NSArray class]]) {
+                                    [versionsLock lock];
+                                    [allVersions addObjectsFromArray:versions];
+                                    [versionsLock unlock];
+                                }
+                            }
+                        }
+                    } else {
+                        NSLog(@"[NeoForge] Fetch %@ failed: %@", useBMCL ? @"BMCLAPI" : @"official", error.localizedDescription ?: @"no data");
+                    }
+                    dispatch_group_leave(group);
+                }];
+                [neoTask resume];
+
+                dispatch_group_enter(group);
+                NSURL *legacyURL = [NSURL URLWithString:legacyURLString];
+                NSURLSessionDataTask *legacyTask = [[NSURLSession sharedSession] dataTaskWithURL:legacyURL completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+                    if (!error && data) {
+                        NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+                        if (json) {
+                            if (useBMCL) {
+                                NSArray *files = json[@"files"];
+                                if ([files isKindOfClass:[NSArray class]]) {
+                                    [versionsLock lock];
+                                    for (NSDictionary *file in files) {
+                                        if (![file isKindOfClass:[NSDictionary class]]) continue;
+                                        NSString *type = file[@"type"];
+                                        NSString *name = file[@"name"];
+                                        if ([type isEqualToString:@"DIRECTORY"] && name && ![name.lowercaseString containsString:@"maven"]) {
+                                            [allVersions addObject:name];
+                                        }
+                                    }
+                                    [versionsLock unlock];
+                                }
+                            } else {
+                                NSArray *versions = json[@"versions"];
+                                if ([versions isKindOfClass:[NSArray class]]) {
+                                    [versionsLock lock];
+                                    [allVersions addObjectsFromArray:versions];
+                                    [versionsLock unlock];
+                                }
+                            }
+                        }
+                    } else {
+                        NSLog(@"[NeoForge] Fetch legacy %@ failed: %@", useBMCL ? @"BMCLAPI" : @"official", error.localizedDescription ?: @"no data");
+                    }
+                    dispatch_group_leave(group);
+                }];
+                [legacyTask resume];
+
+                dispatch_group_wait(group, DISPATCH_TIME_FOREVER);
+
+                if (allVersions.count > 0) {
+                    for (NSString *version in allVersions) {
+                        [self addVersionToList:version];
+                    }
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        [self finalizeVersionList];
+                    });
+                } else {
+                    // 当前源失败，尝试另一个源
+                    if (useBMCL == useBMCLAPI) {
+                        NSLog(@"[NeoForge] Primary source (%@) failed, falling back to %@", useBMCLAPI ? @"BMCLAPI" : @"official", useBMCLAPI ? @"official" : @"BMCLAPI");
+                        fetchFromSource(!useBMCLAPI);
+                    } else {
+                        // 两个源都失败了
+                        dispatch_async(dispatch_get_main_queue(), ^{
+                            self.isDataLoading = NO;
+                            [self.refreshControl endRefreshing];
+                            showDialog(localize(@"Error", nil), @"无法获取 NeoForge 版本列表，请检查网络连接");
+                            [self actionClose];
+                        });
                     }
                 }
-                dispatch_group_leave(group);
-            }];
-            [neoTask resume];
-            
-            NSURL *legacyURL = [NSURL URLWithString:@"https://maven.neoforged.net/api/maven/versions/releases/net/neoforged/forge"];
-            dispatch_group_enter(group);
-            NSURLSessionDataTask *legacyTask = [[NSURLSession sharedSession] dataTaskWithURL:legacyURL completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
-                if (error) {
-                    if (!fetchError) fetchError = error;
-                } else if (data) {
-                    NSError *jsonError = nil;
-                    NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
-                    if (json && [json[@"versions"] isKindOfClass:[NSArray class]]) {
-                        [versionsLock lock];
-                        [allVersions addObjectsFromArray:json[@"versions"]];
-                        [versionsLock unlock];
-                    }
-                }
-                dispatch_group_leave(group);
-            }];
-            [legacyTask resume];
-            
-            dispatch_group_wait(group, DISPATCH_TIME_FOREVER);
-            
-            if (fetchError && allVersions.count == 0) {
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    self.isDataLoading = NO;
-                    [self.refreshControl endRefreshing];
-                    showDialog(localize(@"Error", nil), fetchError.localizedDescription);
-                    [self actionClose];
-                });
-                return;
-            }
-            
-            for (NSString *version in allVersions) {
-                [self addVersionToList:version];
-            }
-            
-            dispatch_async(dispatch_get_main_queue(), ^{
-                [self finalizeVersionList];
-            });
+            };
+
+            fetchFromSource(useBMCLAPI);
         });
     } else {
         dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
@@ -825,8 +882,20 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
     }
 
     NSString *jarURL;
+    NSString *downloadSource = getPrefObject(@"general.download_source");
+    BOOL useBMCLAPI = [downloadSource isEqualToString:@"bmclapi"];
     if ([self.currentVendor isEqualToString:@"NeoForge"] && [versionString containsString:@"1.20.1"]) {
-        jarURL = [NSString stringWithFormat:@"https://maven.neoforged.net/releases/net/neoforged/forge/%@/forge-%@-installer.jar", versionString, versionString];
+        if (useBMCLAPI) {
+            jarURL = [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/maven/net/neoforged/forge/%@/forge-%@-installer.jar", versionString, versionString];
+        } else {
+            jarURL = [NSString stringWithFormat:@"https://maven.neoforged.net/releases/net/neoforged/forge/%@/forge-%@-installer.jar", versionString, versionString];
+        }
+    } else if ([self.currentVendor isEqualToString:@"NeoForge"]) {
+        if (useBMCLAPI) {
+            jarURL = [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/maven/net/neoforged/neoforge/%@/neoforge-%@-installer.jar", versionString, versionString];
+        } else {
+            jarURL = [NSString stringWithFormat:self.endpoints[self.currentVendor][@"installer"], versionString];
+        }
     } else {
         jarURL = [NSString stringWithFormat:self.endpoints[self.currentVendor][@"installer"], versionString];
     }
