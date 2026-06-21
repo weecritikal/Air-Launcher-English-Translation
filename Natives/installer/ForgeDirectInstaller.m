@@ -8,11 +8,7 @@
 #import "ForgeDirectInstaller.h"
 #import "PLProfiles.h"
 #import "utils.h"
-
-#import "SSZipArchive.h"
-#include "minizip/mz_compat.h"
-#include "minizip/mz_zip.h"
-#include "minizip/mz_os.h"
+#import "external/UnzipKit/UZKArchive.h"
 
 NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDomain";
 
@@ -459,84 +455,60 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
     return YES;
 }
 
-#pragma mark - ZIP / minizip helpers
+#pragma mark - ZIP / UnzipKit helpers
 
 + (NSData *)dataFromZip:(NSString *)zipPath entry:(NSString *)entryPath error:(NSError **)error {
     if (error) {
         *error = nil;
     }
 
-    zipFile zip = unzOpen(zipPath.fileSystemRepresentation);
-    if (zip == NULL) {
+    NSError *openError = nil;
+    UZKArchive *archive = [[UZKArchive alloc] initWithPath:zipPath error:&openError];
+    if (!archive || openError) {
+        NSLog(@"[ForgeDirect] Failed to open archive: %@", openError.localizedDescription ?: @"unknown");
         if (error) {
             *error = [NSError errorWithDomain:ForgeDirectInstallerErrorDomain
                                          code:ForgeDirectInstallerErrorInvalidArchive
-                                     userInfo:@{NSLocalizedDescriptionKey: @"Failed to open installer archive"}];
+                                     userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Failed to open installer archive: %@", openError.localizedDescription ?: @"unknown"]}];
         }
         return nil;
     }
 
-    int ret = unzGoToFirstFile(zip);
-    NSData *result = nil;
-
-    while (ret == UNZ_OK) {
-        unz_file_info fileInfo = {};
-        char fileName[PATH_MAX];
-        ret = unzGetCurrentFileInfo(zip, &fileInfo, fileName, sizeof(fileName), NULL, 0, NULL, 0);
-        if (ret != UNZ_OK) {
-            break;
+    NSError *extractError = nil;
+    NSData *result = [archive extractDataFromFile:entryPath error:&extractError];
+    if (!result) {
+        NSLog(@"[ForgeDirect] Failed to extract entry '%@': %@", entryPath, extractError.localizedDescription ?: @"unknown");
+        if (error) {
+            *error = [NSError errorWithDomain:ForgeDirectInstallerErrorDomain
+                                         code:ForgeDirectInstallerErrorExtractionFailed
+                                     userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Failed to extract %@: %@", entryPath, extractError.localizedDescription ?: @"not found"]}];
         }
-
-        NSString *currentName = @(fileName);
-        if ([currentName isEqualToString:entryPath]) {
-            ret = unzOpenCurrentFile(zip);
-            if (ret != UNZ_OK) {
-                break;
-            }
-
-            NSMutableData *data = [NSMutableData dataWithLength:(NSUInteger)fileInfo.uncompressed_size];
-            int read = unzReadCurrentFile(zip, data.mutableBytes, (unsigned int)fileInfo.uncompressed_size);
-            unzCloseCurrentFile(zip);
-
-            if (read == fileInfo.uncompressed_size) {
-                result = data;
-            }
-            break;
-        }
-
-        ret = unzGoToNextFile(zip);
+        return nil;
     }
 
-    unzClose(zip);
+    NSLog(@"[ForgeDirect] Extracted entry '%@' (%lu bytes)", entryPath, (unsigned long)result.length);
     return result;
 }
 
 + (BOOL)entryExists:(NSString *)zipPath entry:(NSString *)entryPath {
-    zipFile zip = unzOpen(zipPath.fileSystemRepresentation);
-    if (zip == NULL) {
+    NSError *openError = nil;
+    UZKArchive *archive = [[UZKArchive alloc] initWithPath:zipPath error:&openError];
+    if (!archive || openError) {
         return NO;
     }
 
-    int ret = unzGoToFirstFile(zip);
-    BOOL found = NO;
-
-    while (ret == UNZ_OK) {
-        char fileName[PATH_MAX];
-        ret = unzGetCurrentFileInfo(zip, NULL, fileName, sizeof(fileName), NULL, 0, NULL, 0);
-        if (ret != UNZ_OK) {
-            break;
-        }
-
-        if ([@(fileName) isEqualToString:entryPath]) {
-            found = YES;
-            break;
-        }
-
-        ret = unzGoToNextFile(zip);
+    NSError *listError = nil;
+    NSArray<NSString *> *filenames = [archive listFilenames:&listError];
+    if (!filenames || listError) {
+        return NO;
     }
 
-    unzClose(zip);
-    return found;
+    for (NSString *name in filenames) {
+        if ([name isEqualToString:entryPath]) {
+            return YES;
+        }
+    }
+    return NO;
 }
 
 + (BOOL)extractFile:(NSString *)zipPath entry:(NSString *)entryPath to:(NSString *)destPath error:(NSError **)error {
@@ -555,13 +527,24 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
     }
 
     NSString *destDir = [destPath stringByDeletingLastPathComponent];
+    NSError *dirError = nil;
     [[NSFileManager defaultManager] createDirectoryAtPath:destDir
                               withIntermediateDirectories:YES
                                                attributes:nil
-                                                    error:nil];
+                                                    error:&dirError];
+    if (dirError) {
+        NSLog(@"[ForgeDirect] Failed to create directory '%@': %@", destDir, dirError.localizedDescription);
+        if (error) {
+            *error = [NSError errorWithDomain:ForgeDirectInstallerErrorDomain
+                                         code:ForgeDirectInstallerErrorWriteFailed
+                                     userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Failed to create directory %@: %@", destDir, dirError.localizedDescription]}];
+        }
+        return NO;
+    }
 
     BOOL written = [data writeToFile:destPath options:NSDataWritingAtomic error:error];
     if (!written) {
+        NSLog(@"[ForgeDirect] Failed to write file '%@'", destPath);
         if (error && !*error) {
             *error = [NSError errorWithDomain:ForgeDirectInstallerErrorDomain
                                          code:ForgeDirectInstallerErrorWriteFailed
@@ -570,6 +553,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
         return NO;
     }
 
+    NSLog(@"[ForgeDirect] Written file '%@' (%lu bytes)", destPath, (unsigned long)data.length);
     return YES;
 }
 
