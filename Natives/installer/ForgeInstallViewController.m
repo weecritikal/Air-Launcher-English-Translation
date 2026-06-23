@@ -931,7 +931,12 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
             NSString *profileName = [NSString stringWithFormat:@"%@-%@", self.currentVendor, versionString];
 
             if (self.completionHandler) {
-                self.completionHandler(YES, profileName, outPath);
+                // 将安装方案和文件路径一起打包，避免外部依赖 weak 引用的生命周期
+                NSDictionary *result = @{
+                    @"filePath": outPath,
+                    @"selectedScheme": @(self.selectedScheme)
+                };
+                self.completionHandler(YES, profileName, result);
             }
 
             [self switchToReadyState];

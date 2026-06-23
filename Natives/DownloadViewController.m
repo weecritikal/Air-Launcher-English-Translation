@@ -2269,7 +2269,12 @@
         return;
     }
     
-    NSString *filePath = [resultOrError isKindOfClass:[NSString class]] ? (NSString *)resultOrError : nil;
+    NSString *filePath = nil;
+    if ([resultOrError isKindOfClass:[NSDictionary class]]) {
+        filePath = ((NSDictionary *)resultOrError)[@"filePath"];
+    } else if ([resultOrError isKindOfClass:[NSString class]]) {
+        filePath = (NSString *)resultOrError;
+    }
     if (filePath.length == 0) {
         [self showError:[NSString stringWithFormat:@"%@ 安装器下载结果无效", vendorName]];
         return;
@@ -2316,7 +2321,6 @@
     forgeVC.gameVersion = gameVersion;
 
     __weak typeof(self) weakSelf = self;
-    __weak ForgeInstallViewController *weakForgeVC = forgeVC;
     void (^completion)(BOOL, NSString *, id) = ^(BOOL success, NSString *profileName, id resultOrError) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
@@ -2330,10 +2334,16 @@
             return;
         }
 
-        // Check which scheme was selected (0 = original, 1 = direct)
-        __strong ForgeInstallViewController *strongForgeVC = weakForgeVC;
-        NSInteger selectedScheme = strongForgeVC ? strongForgeVC.selectedScheme : 0;
-        NSString *filePath = [resultOrError isKindOfClass:[NSString class]] ? (NSString *)resultOrError : nil;
+        // 解析 ForgeInstallViewController 打包的回调结果
+        NSInteger selectedScheme = 0;
+        NSString *filePath = nil;
+        if ([resultOrError isKindOfClass:[NSDictionary class]]) {
+            NSDictionary *result = (NSDictionary *)resultOrError;
+            filePath = result[@"filePath"];
+            selectedScheme = [result[@"selectedScheme"] integerValue];
+        } else if ([resultOrError isKindOfClass:[NSString class]]) {
+            filePath = (NSString *)resultOrError;
+        }
 
         if (selectedScheme == 1 && filePath.length > 0) {
             // Direct install scheme
