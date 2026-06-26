@@ -17,6 +17,7 @@
 #import "installer/FabricInstallViewController.h"
 #import "installer/ForgeInstallViewController.h"
 #import "installer/ForgeDirectInstaller.h"
+#import "installer/NeoForgeDirectInstaller.h"
 #import "installer/NeoForgeVersionFetcher.h"
 #import "LauncherNavigationController.h"
 #import "installer/ModpackInstallViewController.h"
@@ -2529,22 +2530,118 @@
     ForgeInstallViewController *neoForgeVC = [[ForgeInstallViewController alloc] init];
     neoForgeVC.gameVersion = gameVersion;
     neoForgeVC.isNeoForge = YES;
-    
+
     __weak typeof(self) weakSelf = self;
     void (^completion)(BOOL, NSString *, id) = ^(BOOL success, NSString *profileName, id resultOrError) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
-        
+
+        if (!success) {
+            [strongSelf handleInstallerDownloadResultWithVendorName:@"NeoForge"
+                                                        gameVersion:gameVersion
+                                                        profileName:profileName
+                                                      resultOrError:resultOrError
+                                                       installAction:nil];
+            return;
+        }
+
+        // 解析 ForgeInstallViewController 打包的回调结果
+        NSInteger selectedScheme = 0;
+        NSString *filePath = nil;
+        if ([resultOrError isKindOfClass:[NSDictionary class]]) {
+            NSDictionary *result = (NSDictionary *)resultOrError;
+            filePath = result[@"filePath"];
+            selectedScheme = [result[@"selectedScheme"] integerValue];
+        } else if ([resultOrError isKindOfClass:[NSString class]]) {
+            filePath = (NSString *)resultOrError;
+        }
+
+        if (selectedScheme == 1 && filePath.length > 0) {
+            // 直装方案
+            NSLog(@"[NeoForgeDirect] DownloadViewController: starting direct install with progress UI");
+
+            UIAlertController *progressAlert = [UIAlertController alertControllerWithTitle:@"NeoForge 直装中"
+                                                                                  message:@"准备中..."
+                                                                           preferredStyle:UIAlertControllerStyleAlert];
+
+            UIViewController *contentVC = [progressAlert valueForKey:@"contentViewController"];
+            UIProgressView *progressBar = nil;
+            UILabel *stageLabel = nil;
+            if (contentVC) {
+                UIView *containerView = contentVC.view;
+                progressBar = [[UIProgressView alloc] initWithProgressViewStyle:UIProgressViewStyleDefault];
+                progressBar.progress = 0.0;
+                progressBar.translatesAutoresizingMaskIntoConstraints = NO;
+                [containerView addSubview:progressBar];
+
+                stageLabel = [[UILabel alloc] init];
+                stageLabel.text = @"准备中...";
+                stageLabel.textAlignment = NSTextAlignmentCenter;
+                stageLabel.font = [UIFont systemFontOfSize:13];
+                stageLabel.numberOfLines = 0;
+                stageLabel.translatesAutoresizingMaskIntoConstraints = NO;
+                [containerView addSubview:stageLabel];
+
+                [NSLayoutConstraint activateConstraints:@[
+                    [stageLabel.topAnchor constraintEqualToAnchor:containerView.topAnchor constant:8],
+                    [stageLabel.leadingAnchor constraintEqualToAnchor:containerView.leadingAnchor constant:12],
+                    [stageLabel.trailingAnchor constraintEqualToAnchor:containerView.trailingAnchor constant:-12],
+                    [progressBar.topAnchor constraintEqualToAnchor:stageLabel.bottomAnchor constant:8],
+                    [progressBar.leadingAnchor constraintEqualToAnchor:containerView.leadingAnchor constant:12],
+                    [progressBar.trailingAnchor constraintEqualToAnchor:containerView.trailingAnchor constant:-12],
+                    [progressBar.bottomAnchor constraintEqualToAnchor:containerView.bottomAnchor constant:-8]
+                ]];
+            }
+
+            __block UIProgressView *blockProgressBar = progressBar;
+            __block UILabel *blockStageLabel = stageLabel;
+
+            [strongSelf presentViewController:progressAlert animated:YES completion:nil];
+
+            dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+                NSError *directError = nil;
+                BOOL installed = [NeoForgeDirectInstaller installNeoForgeFromInstaller:filePath
+                                                                               versionId:profileName
+                                                                                progress:^(double progress, NSString *stageMessage) {
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        NSString *message = [NSString stringWithFormat:@"%@ - %.0f%%", stageMessage ?: @"", progress * 100];
+                        progressAlert.message = message;
+                        if (blockStageLabel) {
+                            blockStageLabel.text = message;
+                        }
+                        if (blockProgressBar) {
+                            [blockProgressBar setProgress:(float)progress animated:YES];
+                        }
+                    });
+                }
+                                                                                   error:&directError];
+
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [progressAlert dismissViewControllerAnimated:YES completion:^{
+                        __strong typeof(weakSelf) strongSelf2 = weakSelf;
+                        if (!strongSelf2) return;
+                        if (installed) {
+                            [strongSelf2 showSuccessMessage:[NSString stringWithFormat:@"NeoForge 直装成功\n配置文件: %@", profileName ?: gameVersion]];
+                        } else {
+                            [strongSelf2 showError:[NSString stringWithFormat:@"NeoForge 直装失败: %@", directError.localizedDescription ?: @"未知错误"]];
+                        }
+                    }];
+                });
+            });
+            return;
+        }
+
+        // 原版方案（运行安装器）
         [strongSelf handleInstallerDownloadResultWithVendorName:@"NeoForge"
                                                     gameVersion:gameVersion
                                                     profileName:profileName
                                                   resultOrError:resultOrError
-                                                   installAction:(success ? ^{
+                                                   installAction:^{
             [strongSelf showSuccessMessage:[NSString stringWithFormat:@"NeoForge 安装器已启动\n配置文件: %@", profileName ?: gameVersion]];
-        } : nil)];
+        }];
     };
     neoForgeVC.completionHandler = completion;
-    
+
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:neoForgeVC];
     nav.modalPresentationStyle = UIModalPresentationFormSheet;
     [self presentViewController:nav animated:YES completion:nil];
