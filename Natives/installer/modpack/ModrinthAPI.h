@@ -5,14 +5,14 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-@interface ModrinthAPI : ModpackAPI <NSURLSessionDelegate>
+@interface ModrinthAPI : ModpackAPI
 + (instancetype)sharedInstance;
 
-// 现有的同步方法（保留用于兼容）
+// 同步方法
 - (NSMutableArray *)searchModWithFilters:(NSDictionary<NSString *, NSString *> *)searchFilters 
                       previousPageResult:(NSMutableArray *)modrinthSearchResult;
 
-// 新增：异步搜索方法（修复 DownloadViewController 的调用）
+// 异步方法（推荐）
 - (void)searchModWithFilters:(NSDictionary *)filters 
                   completion:(void (^)(NSArray * _Nullable results, NSError * _Nullable error))completion;
 
@@ -24,6 +24,14 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (void)getVersionsForShaderWithID:(NSString *)shaderID 
                         completion:(void (^)(NSArray<ShaderVersion *> * _Nullable versions, NSError * _Nullable error))completion;
+
+// 工具方法（供下载器调用）
+- (NSString *)downloadURLForFile:(NSDictionary *)file;
+- (BOOL)file:(NSDictionary *)file matchesProjectType:(NSString *)projectType;
+- (NSMutableDictionary *)projectForFileHash:(NSString *)sha1 projectType:(NSString *)projectType;
+
+@property (nonatomic, assign) BOOL reachedLastPage;
+@property (nonatomic, strong, nullable) NSError *lastError;
 
 @end
 
