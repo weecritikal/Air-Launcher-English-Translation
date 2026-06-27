@@ -30,7 +30,9 @@ static NSString *CFKCompiledAPIKey(void) {
     if (compiledKey.length >= 2 && [compiledKey hasPrefix:@"\""] && [compiledKey hasSuffix:@"\""]) {
         compiledKey = [compiledKey substringWithRange:NSMakeRange(1, compiledKey.length - 2)];
     }
-    if ([compiledKey isEqualToString:@"nil"] || compiledKey.length == 0) {
+    // 宏未定义时预处理器字符串化后得到宏名本身 "CONFIG_CURSEFORGE_API_KEY"
+    if ([compiledKey isEqualToString:@"nil"] || compiledKey.length == 0 ||
+        [compiledKey isEqualToString:@"CONFIG_CURSEFORGE_API_KEY"]) {
         return @"";
     }
     return compiledKey;
