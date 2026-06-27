@@ -1,6 +1,7 @@
 #import "ModUpdateService.h"
-#import "ModrinthAPI.h"
-#import "CurseForgeAPI.h"
+#import "installer/modpack/ModrinthAPI.h"
+#import "installer/modpack/CurseForgeAPI.h"
+#import "MurmurHash2.h"
 
 #pragma mark - ModUpdateResult 实现
 
@@ -138,13 +139,18 @@
         }
     });
 
-    // CurseForge 反查：使用 mod.filePath（内部使用 MurmurHash2，同步方法）
+    // CurseForge 反查：计算文件 MurmurHash2 指纹后反查（同步方法）
     dispatch_async(self.lookupQueue, ^{
         @autoreleasepool {
             NSMutableDictionary *r = nil;
             if (mod.filePath.length > 0) {
                 @try {
-                    r = [[CurseForgeAPI sharedInstance] projectForFileHash:mod.filePath projectType:projectType];
+                    NSError *hashError = nil;
+                    uint32_t hash = [MurmurHash2 hashOfFile:mod.filePath error:&hashError];
+                    if (hash != 0 && !hashError) {
+                        NSString *hashStr = [NSString stringWithFormat:@"%lu", (unsigned long)hash];
+                        r = [[CurseForgeAPI sharedInstance] projectForFileHash:hashStr projectType:projectType];
+                    }
                 } @catch (NSException *exception) {
                     r = nil;
                 }
