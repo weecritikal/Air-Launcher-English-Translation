@@ -1,7 +1,6 @@
 #import <Foundation/Foundation.h>
 #import "ModpackAPI.h"
 #import "ModVersion.h"
-#import "ShaderVersion.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -26,10 +25,6 @@ NS_ASSUME_NONNULL_BEGIN
 /// 异步获取某个项目的所有版本
 - (void)getVersionsForModWithID:(NSString *)modID
                      completion:(void (^)(NSArray<ModVersion *> * _Nullable versions, NSError * _Nullable error))completion;
-
-/// 异步获取某个光影项目的所有版本（CurseForge 的 mod/shader 共用 mods/{id}/files 端点）
-- (void)getVersionsForShaderWithID:(NSString *)shaderID
-                        completion:(void (^)(NSArray<ShaderVersion *> * _Nullable versions, NSError * _Nullable error))completion;
 
 // ========== 异步详情加载 ==========
 /// 异步加载项目详情（不阻塞调用线程）
@@ -58,6 +53,11 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)downloader:(MinecraftResourceDownloadTask *)downloader
 submitDownloadTasksFromPackage:(NSString *)packagePath
             toPath:(NSString *)destPath;
+
+/// 当前是否最后一页（分页）
+@property (nonatomic, assign) BOOL reachedLastPage;
+/// 最后一次错误
+@property (nonatomic, strong, nullable) NSError *lastError;
 
 @end
 

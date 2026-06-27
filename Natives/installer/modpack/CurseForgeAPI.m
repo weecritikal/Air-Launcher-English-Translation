@@ -46,23 +46,14 @@ static const NSInteger kCurseForgeCategoryIDServerUtility = 435;
     // 1. 运行时偏好（优先级最高）
     NSString *runtimeKey = [PLPreferences curseForgeAPIKey];
     if ([runtimeKey isKindOfClass:NSString.class] && runtimeKey.length > 0) return runtimeKey;
-    // 2. 编译时宏（config.h 中未配置时定义为 nil 标识符）
-    //    用 #define 字符串化后比较，避免 @nil 非法
-#define AAA_STR_INNER(x) #x
-#define AAA_STR(x) AAA_STR_INNER(x)
-    NSString *compiledKey = [NSString stringWithUTF8String:AAA_STR(CONFIG_CURSEFORGE_API_KEY)];
-#undef AAA_STR
-#undef AAA_STR_INNER
-    // 去除字符串字面量两端的引号（如果宏定义为 "key"，字符串化后为 "\"key\""）
-    if (compiledKey.length >= 2 && [compiledKey hasPrefix:@"\""] && [compiledKey hasSuffix:@"\""]) {
-        compiledKey = [compiledKey substringWithRange:NSMakeRange(1, compiledKey.length - 2)];
+    // 2. 编译时宏
+    NSString *compiledKey = @CONFIG_CURSEFORGE_API_KEY;
+    if ([compiledKey isKindOfClass:NSString.class] && ![compiledKey isEqualToString:@"nil"] && compiledKey.length > 0) {
+        return compiledKey;
     }
-    if ([compiledKey isEqualToString:@"nil"] || compiledKey.length == 0) {
-        // 3. Info.plist
-        NSString *infoPlistKey = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CurseForgeAPIKey"];
-        return [infoPlistKey isKindOfClass:NSString.class] ? infoPlistKey : @"";
-    }
-    return compiledKey;
+    // 3. Info.plist
+    NSString *infoPlistKey = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CurseForgeAPIKey"];
+    return [infoPlistKey isKindOfClass:NSString.class] ? infoPlistKey : @"";
 }
 
 - (NSDictionary *)headers {
@@ -483,42 +474,6 @@ static const NSInteger kCurseForgeCategoryIDServerUtility = 435;
     }];
 }
 
-- (void)getVersionsForShaderWithID:(NSString *)shaderID
-                        completion:(void (^)(NSArray<ShaderVersion *> * _Nullable, NSError * _Nullable))completion {
-    if (shaderID.length == 0) {
-        if (completion) completion(nil, [NSError errorWithDomain:@"CurseForgeAPI" code:1 userInfo:@{NSLocalizedDescriptionKey: @"Invalid shader ID"}]);
-        return;
-    }
-
-    // CurseForge 的 mod/shader/resourcepack/datapack 共用 mods/{id}/files 端点
-    NSString *urlStr = [NSString stringWithFormat:@"%@/mods/%@/files", self.baseURL, shaderID];
-    NSURL *url = [NSURL URLWithString:urlStr];
-    if (!url) {
-        if (completion) completion(nil, [NSError errorWithDomain:@"CurseForgeAPI" code:2 userInfo:@{NSLocalizedDescriptionKey: @"Invalid URL"}]);
-        return;
-    }
-    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
-    [request setValue:[self apiKey] forHTTPHeaderField:@"x-api-key"];
-
-    NSURLSessionDataTask *task = [self.session dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
-        if (error) {
-            if (completion) dispatch_async(dispatch_get_main_queue(), ^{ completion(nil, error); });
-            return;
-        }
-        NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
-        NSArray *files = [json isKindOfClass:NSDictionary.class] ? json[@"data"] : nil;
-        if (![files isKindOfClass:NSArray.class]) files = @[];
-        NSMutableArray<ShaderVersion *> *versions = [NSMutableArray array];
-        for (NSDictionary *file in files) {
-            if (![file isKindOfClass:NSDictionary.class]) continue;
-            ShaderVersion *sv = [[ShaderVersion alloc] initWithDictionary:file];
-            if (sv) [versions addObject:sv];
-        }
-        if (completion) dispatch_async(dispatch_get_main_queue(), ^{ completion(versions, nil); });
-    }];
-    [task resume];
-}
-
 #pragma mark - 整合包下载支持
 
 - (NSDictionary *)modpackDependencyInfoFromManifest:(NSDictionary *)manifest {
@@ -694,7 +649,7 @@ submitDownloadTasksFromPackage:(NSString *)packagePath
     request.HTTPMethod = @"POST";
     [request setValue:[self apiKey] forHTTPHeaderField:@"x-api-key"];
     [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
-    NSDictionary *body = @{@"fingerprints": @[ @([murmurHash longLongValue]) ]};
+    NSDictionary *body = @{@"fingerprints": @[[murmurHash longLongValue]]};
     NSError *jsonError = nil;
     NSData *bodyData = [NSJSONSerialization dataWithJSONObject:body options:0 error:&jsonError];
     if (jsonError) return nil;
