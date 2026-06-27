@@ -17,7 +17,7 @@
 
 #import "CurseForgeAPIKeyViewController.h"
 #import "PLPreferences.h"
-#import "CurseForgeAPI.h"
+#import "modpack/CurseForgeAPI.h"
 #import "config.h"
 
 /// 安全获取编译时 CurseForge API Key（避免 @nil 非法表达式）
