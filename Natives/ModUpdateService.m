@@ -217,8 +217,8 @@
 
     // 2. 全部版本按 datePublished 降序排序（最新在前）
     NSArray<ModVersion *> *sortedAll = [versions sortedArrayUsingComparator:^NSComparisonResult(ModVersion *_Nonnull v1, ModVersion *_Nonnull v2) {
-        NSDate *d1 = v1.publishDate ?: [self parseISO8601:v1.datePublished];
-        NSDate *d2 = v2.publishDate ?: [self parseISO8601:v2.datePublished];
+        NSDate *d1 = [self parseISO8601:v1.datePublished];
+        NSDate *d2 = [self parseISO8601:v2.datePublished];
         if (!d1 && !d2) return NSOrderedSame;
         if (!d1) return NSOrderedAscending;
         if (!d2) return NSOrderedDescending;
@@ -226,7 +226,7 @@
     }];
 
     // 3. 计算当前版本的发布日期（用于严格大于比较）
-    NSDate *currentDate = currentVersion.publishDate;
+    NSDate *currentDate = [self parseISO8601:currentVersion.datePublished];
     if (!currentDate && currentVersion.datePublished.length > 0) {
         currentDate = [self parseISO8601:currentVersion.datePublished];
     }
@@ -238,7 +238,7 @@
     NSMutableArray<ModVersion *> *candidates = [NSMutableArray array];
     for (ModVersion *v in sortedAll) {
         // 5.1 必须能解析出发布日期
-        NSDate *vDate = v.publishDate ?: [self parseISO8601:v.datePublished];
+        NSDate *vDate = [self parseISO8601:v.datePublished];
         if (!vDate) continue;
 
         // 5.2 必须严格大于当前版本日期（当前版本日期未知时跳过该过滤）
@@ -339,8 +339,8 @@
 
     // 策略 6：兜底，返回降序排序后的第一个（最新版本）
     NSArray<ModVersion *> *sorted = [versions sortedArrayUsingComparator:^NSComparisonResult(ModVersion *_Nonnull v1, ModVersion *_Nonnull v2) {
-        NSDate *d1 = v1.publishDate ?: [self parseISO8601:v1.datePublished];
-        NSDate *d2 = v2.publishDate ?: [self parseISO8601:v2.datePublished];
+        NSDate *d1 = [self parseISO8601:v1.datePublished];
+        NSDate *d2 = [self parseISO8601:v2.datePublished];
         if (!d1 && !d2) return NSOrderedSame;
         if (!d1) return NSOrderedAscending;
         if (!d2) return NSOrderedDescending;
