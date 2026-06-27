@@ -13,8 +13,6 @@ NS_ASSUME_NONNULL_BEGIN
 // --- Properties for Online Mods ---
 @property (nonatomic, copy, nullable) NSString *onlineID;
 @property (nonatomic, copy, nullable) NSString *author;
-// 资源来源 API（1=Modrinth, 2=CurseForge），用于选择正确的版本查询接口
-@property (nonatomic, strong, nullable) NSNumber *apiSource;
 @property (nonatomic, strong, nullable) NSNumber *downloads;
 @property (nonatomic, strong, nullable) NSNumber *likes;
 @property (nonatomic, copy, nullable) NSString *lastUpdated;

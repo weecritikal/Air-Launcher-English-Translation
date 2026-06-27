@@ -19,7 +19,7 @@
 #import "BackgroundSettingsViewController.h"
 #import "BackgroundManager.h"
 #import "AIFixViewController.h"
-#import "installer/CurseForgeAPIKeyViewController.h"
+#import "CurseForgeAPIKeyViewController.h"
 
 @interface LauncherPreferencesViewController()
 @property(nonatomic) NSArray<NSString*> *rendererKeys, *rendererList;

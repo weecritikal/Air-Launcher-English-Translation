@@ -1,6 +1,5 @@
 #import "ModVersionViewController.h"
 #import "installer/modpack/ModrinthAPI.h"
-#import "installer/modpack/CurseForgeAPI.h"
 #import "ModVersion.h"
 #import "ModVersionTableViewCell.h"
 
@@ -97,14 +96,7 @@
 
 - (void)fetchVersions {
     [self.activityIndicator startAnimating];
-
-    // 根据资源来源选择正确的 API（参考 FCL 实现）
-    // apiSource: 1=Modrinth, 2=CurseForge
-    BOOL useCurseForge = [self.modItem.apiSource integerValue] == 2;
-    id api = useCurseForge ? [CurseForgeAPI sharedInstance] : [ModrinthAPI sharedInstance];
-    NSString *modID = self.modItem.onlineID;
-
-    [api getVersionsForModWithID:modID completion:^(NSArray<ModVersion *> * _Nullable versions, NSError * _Nullable error) {
+    [[ModrinthAPI sharedInstance] getVersionsForModWithID:self.modItem.onlineID completion:^(NSArray<ModVersion *> * _Nullable versions, NSError * _Nullable error) {
         dispatch_async(dispatch_get_main_queue(), ^{
             [self.activityIndicator stopAnimating];
             if (error) {
