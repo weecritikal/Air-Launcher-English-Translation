@@ -20,6 +20,22 @@
 #import "CurseForgeAPI.h"
 #import "config.h"
 
+/// 安全获取编译时 CurseForge API Key（避免 @nil 非法表达式）
+static NSString *CFKCompiledAPIKey(void) {
+#define AAA_STR_INNER(x) #x
+#define AAA_STR(x) AAA_STR_INNER(x)
+    NSString *compiledKey = [NSString stringWithUTF8String:AAA_STR(CONFIG_CURSEFORGE_API_KEY)];
+#undef AAA_STR
+#undef AAA_STR_INNER
+    if (compiledKey.length >= 2 && [compiledKey hasPrefix:@"\""] && [compiledKey hasSuffix:@"\""]) {
+        compiledKey = [compiledKey substringWithRange:NSMakeRange(1, compiledKey.length - 2)];
+    }
+    if ([compiledKey isEqualToString:@"nil"] || compiledKey.length == 0) {
+        return @"";
+    }
+    return compiledKey;
+}
+
 /// Material Design 3 主色调（CurseForge 橙色调，与品牌呼应）
 static UIColor *CFKMD3PrimaryColor(void) {
     return [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull traitCollection) {
@@ -472,10 +488,7 @@ static UIColor *CFKErrorColor(void) {
 - (void)loadInitialValue {
     // 优先级：运行时偏好 -> 编译时宏 -> Info.plist
     NSString *runtimeKey = [PLPreferences curseForgeAPIKey];
-    NSString *compiledKey = @CONFIG_CURSEFORGE_API_KEY;
-    if ([compiledKey isEqualToString:@"nil"]) {
-        compiledKey = @"";
-    }
+    NSString *compiledKey = CFKCompiledAPIKey();
     NSString *infoPlistKey = [NSBundle.mainBundle.infoDictionary[@"CurseForgeAPIKey"] isKindOfClass:NSString.class]
         ? NSBundle.mainBundle.infoDictionary[@"CurseForgeAPIKey"]
         : @"";
@@ -513,10 +526,7 @@ static UIColor *CFKErrorColor(void) {
 - (void)clearButtonTapped {
     [PLPreferences setCurseForgeAPIKey:nil];
     // 清空后回显到编译时默认值，便于用户参考
-    NSString *compiledKey = @CONFIG_CURSEFORGE_API_KEY;
-    if ([compiledKey isEqualToString:@"nil"]) {
-        compiledKey = @"";
-    }
+    NSString *compiledKey = CFKCompiledAPIKey();
     _apiKeyTextField.text = compiledKey.length > 0 ? compiledKey : @"";
     [self loadInitialValue];
     [self setStatusText:@"已清除运行时 Key" success:YES];
