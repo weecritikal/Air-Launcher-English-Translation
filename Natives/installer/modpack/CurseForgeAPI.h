@@ -26,6 +26,11 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)getVersionsForModWithID:(NSString *)modID
                      completion:(void (^)(NSArray<ModVersion *> * _Nullable versions, NSError * _Nullable error))completion;
 
+// ========== 异步详情加载 ==========
+/// 异步加载项目详情（不阻塞调用线程）
+- (void)loadDetailsOfMod:(NSMutableDictionary *)item
+              completion:(void (^)(NSError * _Nullable error))completion;
+
 // ========== 下载工具方法 ==========
 /// 获取文件的直接下载链接（CurseForge 需要二次请求）
 - (NSString *)downloadURLForFile:(NSDictionary *)file;
@@ -36,8 +41,12 @@ NS_ASSUME_NONNULL_BEGIN
 /// 获取项目类型对应的推荐文件后缀（jar/zip）
 - (NSArray<NSString *> *)preferredFileExtensionsForProjectType:(NSString *)projectType;
 
-/// 根据文件哈希反查项目（用于本地关联）
-- (NSMutableDictionary *)projectForFileHash:(NSString *)sha1 projectType:(NSString *)projectType;
+// ========== 指纹反查 ==========
+/// 通过 MurmurHash2 文件指纹反查 CurseForge 项目（单个）
+- (nullable NSMutableDictionary *)projectForFileHash:(NSString *)murmurHash projectType:(NSString *)projectType;
+
+/// 批量指纹反查（用于批量更新检查）
+- (NSArray<NSMutableDictionary *> *)fileFingerprints:(NSArray<NSNumber *> *)fingerprints;
 
 // ========== 整合包处理 ==========
 /// 解析 CurseForge 整合包（manifest.json），批量提交下载任务

@@ -2,6 +2,7 @@
 #import "AFNetworking.h"
 #import "MinecraftResourceDownloadTask.h"
 #import "PLProfiles.h"
+#import "PLPreferences.h"
 #import "config.h"
 #import "ModpackUtils.h"
 #import "UZKArchive.h"
@@ -42,11 +43,17 @@ static const NSInteger kCurseForgeCategoryIDServerUtility = 435;
 #pragma mark - API Key 和 Headers
 
 - (NSString *)apiKey {
-    NSString *key = @CONFIG_CURSEFORGE_API_KEY;
-    if (key.length == 0) {
-        key = NSBundle.mainBundle.infoDictionary[@"CurseForgeAPIKey"];
+    // 1. 运行时偏好（优先级最高）
+    NSString *runtimeKey = [PLPreferences curseForgeAPIKey];
+    if ([runtimeKey isKindOfClass:NSString.class] && runtimeKey.length > 0) return runtimeKey;
+    // 2. 编译时宏
+    NSString *compiledKey = @CONFIG_CURSEFORGE_API_KEY;
+    if ([compiledKey isKindOfClass:NSString.class] && ![compiledKey isEqualToString:@"nil"] && compiledKey.length > 0) {
+        return compiledKey;
     }
-    return [key isKindOfClass:NSString.class] ? key : @"";
+    // 3. Info.plist
+    NSString *infoPlistKey = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CurseForgeAPIKey"];
+    return [infoPlistKey isKindOfClass:NSString.class] ? infoPlistKey : @"";
 }
 
 - (NSDictionary *)headers {
@@ -455,43 +462,16 @@ static const NSInteger kCurseForgeCategoryIDServerUtility = 435;
         if (completion) completion(nil, [NSError errorWithDomain:@"CurseForgeAPI" code:1 userInfo:@{NSLocalizedDescriptionKey: @"Invalid mod ID"}]);
         return;
     }
-    
-    // CurseForge 的版本获取实际上就是 files 接口，我们直接复用同步逻辑并异步返回
-    // 这里为了演示，先调用同步方法（注意它内部可能会阻塞），然后通过回调返回
-    // 更好的做法是重构 loadDetailsOfMod 为异步，但为了快速提供，我们使用同步+后台线程
-    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        NSMutableDictionary *item = [@{@"id": modID, @"projectType": @"mod"} mutableCopy];
-        [self loadDetailsOfMod:item];
-        if (self.lastError) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                if (completion) completion(nil, self.lastError);
-            });
+
+    // 直接异步调用 loadDetailsOfMod:completion:，避免阻塞调用线程
+    NSMutableDictionary *item = [@{@"id": modID, @"projectType": @"mod"} mutableCopy];
+    [self loadDetailsOfMod:item completion:^(NSError * _Nullable error) {
+        if (error) {
+            if (completion) completion(nil, error);
             return;
         }
-        // 将版本信息转换为 ModVersion 对象（假设 ModVersion 有 initWithDictionary:）
-        NSArray *versionNames = item[@"versionNames"];
-        NSArray *versionUrls = item[@"versionUrls"];
-        NSArray *mcVersions = item[@"mcVersionNames"];
-        NSArray *sizes = item[@"versionSizes"];
-        NSArray *hashes = item[@"versionHashes"];
-        NSMutableArray<ModVersion *> *versions = [NSMutableArray array];
-        for (NSUInteger i = 0; i < versionNames.count; i++) {
-            // 如果 ModVersion 类存在，可在此构造；否则返回字典数组
-            // 这里简单返回字典，实际可转为 ModVersion
-            NSDictionary *dict = @{
-                @"name": versionNames[i] ?: @"",
-                @"downloadUrl": versionUrls[i] ?: @"",
-                @"mcVersion": mcVersions[i] ?: @"",
-                @"size": sizes[i] ?: @0,
-                @"sha1": hashes[i] ?: @""
-            };
-            ModVersion *version = [[ModVersion alloc] initWithDictionary:dict];
-            if (version) [versions addObject:version];
-        }
-        dispatch_async(dispatch_get_main_queue(), ^{
-            if (completion) completion(versions, nil);
-        });
-    });
+        if (completion) completion(item[@"versions"], nil);
+    }];
 }
 
 #pragma mark - 整合包下载支持
@@ -660,9 +640,122 @@ submitDownloadTasksFromPackage:(NSString *)packagePath
     PLProfiles.current.selectedProfileName = profileName;
 }
 
-- (NSMutableDictionary *)projectForFileHash:(NSString *)sha1 projectType:(NSString *)projectType {
-    // CurseForge 不直接支持通过文件哈希搜索，这里留空或返回 nil
-    return nil;
+- (NSMutableDictionary *)projectForFileHash:(NSString *)murmurHash projectType:(NSString *)projectType {
+    if (!murmurHash || murmurHash.length == 0) return nil;
+    NSString *urlStr = [NSString stringWithFormat:@"%@/fingerprints", self.baseURL];
+    NSURL *url = [NSURL URLWithString:urlStr];
+    if (!url) return nil;
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+    request.HTTPMethod = @"POST";
+    [request setValue:[self apiKey] forHTTPHeaderField:@"x-api-key"];
+    [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
+    NSDictionary *body = @{@"fingerprints": @[[murmurHash longLongValue]]};
+    NSError *jsonError = nil;
+    NSData *bodyData = [NSJSONSerialization dataWithJSONObject:body options:0 error:&jsonError];
+    if (jsonError) return nil;
+    request.HTTPBody = bodyData;
+
+    __block NSMutableDictionary *result = nil;
+    dispatch_semaphore_t sem = dispatch_semaphore_create(0);
+    NSURLSessionDataTask *task = [self.session dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        if (!error && data) {
+            NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+            NSArray *exactMatches = [json isKindOfClass:NSDictionary.class] ? json[@"data"][@"exactMatches"] : nil;
+            if ([exactMatches isKindOfClass:NSArray.class] && exactMatches.count > 0) {
+                NSDictionary *match = exactMatches[0];
+                result = [NSMutableDictionary dictionary];
+                result[@"id"] = [match[@"id"] stringValue];
+                result[@"fileId"] = [match[@"file"][@"id"] stringValue];
+                result[@"name"] = match[@"name"];
+            }
+        }
+        dispatch_semaphore_signal(sem);
+    }];
+    [task resume];
+    dispatch_semaphore_wait(sem, dispatch_time(DISPATCH_TIME_NOW, 15 * NSEC_PER_SEC));
+    return result;
+}
+
+#pragma mark - 批量指纹反查
+
+- (NSArray<NSMutableDictionary *> *)fileFingerprints:(NSArray<NSNumber *> *)fingerprints {
+    if (!fingerprints || fingerprints.count == 0) return @[];
+    NSString *urlStr = [NSString stringWithFormat:@"%@/fingerprints", self.baseURL];
+    NSURL *url = [NSURL URLWithString:urlStr];
+    if (!url) return @[];
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+    request.HTTPMethod = @"POST";
+    [request setValue:[self apiKey] forHTTPHeaderField:@"x-api-key"];
+    [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
+    NSDictionary *body = @{@"fingerprints": fingerprints};
+    NSError *bodyError = nil;
+    NSData *bodyData = [NSJSONSerialization dataWithJSONObject:body options:0 error:&bodyError];
+    if (bodyError) return @[];
+    request.HTTPBody = bodyData;
+
+    __block NSMutableArray *results = [NSMutableArray array];
+    dispatch_semaphore_t sem = dispatch_semaphore_create(0);
+    NSURLSessionDataTask *task = [self.session dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        if (!error && data) {
+            NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+            NSArray *exactMatches = [json isKindOfClass:NSDictionary.class] ? json[@"data"][@"exactMatches"] : nil;
+            if ([exactMatches isKindOfClass:NSArray.class]) {
+                for (NSDictionary *match in exactMatches) {
+                    if (![match isKindOfClass:NSDictionary.class]) continue;
+                    NSMutableDictionary *item = [NSMutableDictionary dictionary];
+                    item[@"id"] = [match[@"id"] stringValue];
+                    item[@"fileId"] = [match[@"file"][@"id"] stringValue];
+                    item[@"name"] = match[@"name"];
+                    [results addObject:item];
+                }
+            }
+        }
+        dispatch_semaphore_signal(sem);
+    }];
+    [task resume];
+    dispatch_semaphore_wait(sem, dispatch_time(DISPATCH_TIME_NOW, 15 * NSEC_PER_SEC));
+    return results;
+}
+
+#pragma mark - 异步详情加载
+
+- (void)loadDetailsOfMod:(NSMutableDictionary *)item completion:(void (^)(NSError * _Nullable error))completion {
+    NSString *modID = [item[@"id"] description];
+    if (modID.length == 0) {
+        if (completion) dispatch_async(dispatch_get_main_queue(), ^{
+            completion([NSError errorWithDomain:@"CurseForgeAPI" code:1 userInfo:@{NSLocalizedDescriptionKey: @"Invalid mod ID"}]);
+        });
+        return;
+    }
+    NSString *urlStr = [NSString stringWithFormat:@"%@/mods/%@/files", self.baseURL, modID];
+    NSURL *url = [NSURL URLWithString:urlStr];
+    if (!url) {
+        if (completion) dispatch_async(dispatch_get_main_queue(), ^{
+            completion([NSError errorWithDomain:@"CurseForgeAPI" code:2 userInfo:@{NSLocalizedDescriptionKey: @"Invalid URL"}]);
+        });
+        return;
+    }
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+    [request setValue:[self apiKey] forHTTPHeaderField:@"x-api-key"];
+
+    NSURLSessionDataTask *task = [self.session dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        if (error) {
+            if (completion) dispatch_async(dispatch_get_main_queue(), ^{ completion(error); });
+            return;
+        }
+        NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+        NSArray *files = [json isKindOfClass:NSDictionary.class] ? json[@"data"] : nil;
+        if (![files isKindOfClass:NSArray.class]) files = @[];
+        NSMutableArray *versions = [NSMutableArray array];
+        for (NSDictionary *file in files) {
+            if (![file isKindOfClass:NSDictionary.class]) continue;
+            ModVersion *mv = [[ModVersion alloc] initWithDictionary:file];
+            if (mv) [versions addObject:mv];
+        }
+        item[@"versions"] = versions;
+        if (completion) dispatch_async(dispatch_get_main_queue(), ^{ completion(nil); });
+    }];
+    [task resume];
 }
 
 @end

@@ -1,5 +1,6 @@
 #import "installer/FabricUtils.h"
 #import "ModpackUtils.h"
+#import "LauncherPreferences.h"
 
 @implementation ModpackUtils
 
@@ -42,6 +43,15 @@
     } else if (dependency[@"quilt-loader"]) {
         info[@"id"] = [NSString stringWithFormat:@"quilt-loader-%@-%@", dependency[@"quilt-loader"], minecraftVersion];
         info[@"json"] = [NSString stringWithFormat:FabricUtils.endpoints[@"Quilt"][@"json"], minecraftVersion, dependency[@"quilt-loader"]];
+    } else if (dependency[@"neoforge"]) {
+        NSString *neoforgeVer = dependency[@"neoforge"];
+        info[@"id"] = [NSString stringWithFormat:@"%@-neoforge-%@", minecraftVersion, neoforgeVer];
+        NSString *downloadSource = getPrefObject(@"general.download_source");
+        if ([downloadSource isEqualToString:@"bmclapi"]) {
+            info[@"json"] = [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/maven/neoforged/releases/net/neoforged/neoforge/%@/neoforge-%@.json", neoforgeVer, neoforgeVer];
+        } else {
+            info[@"json"] = [NSString stringWithFormat:@"https://maven.neoforged.net/releases/net/neoforged/neoforge/%@/neoforge-%@.json", neoforgeVer, neoforgeVer];
+        }
     }
     return info;
 }
