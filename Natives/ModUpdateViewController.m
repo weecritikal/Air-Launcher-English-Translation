@@ -87,6 +87,10 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
 @property (nonatomic, assign) NSInteger downloadCompleted;
 @property (nonatomic, assign) NSInteger downloadTotal;
 
+// 阶段 1：检查更新进度跟踪
+@property (nonatomic, assign) NSInteger checkCompleted;
+@property (nonatomic, assign) NSInteger checkTotal;
+
 // 阶段 4/5：结果统计
 @property (nonatomic, assign) NSInteger successCount;
 @property (nonatomic, assign) NSInteger failureCount;
@@ -187,10 +191,10 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
         [self.scrollView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [self.scrollView.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor],
 
-        [self.bentoStack.topAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.topAnchor constant:12)],
-        [self.bentoStack.leadingAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.leadingAnchor constant:16)],
-        [self.bentoStack.trailingAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.trailingAnchor constant:-16)],
-        [self.bentoStack.bottomAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.bottomAnchor constant:-12)],
+        [self.bentoStack.topAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.topAnchor constant:12],
+        [self.bentoStack.leadingAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.leadingAnchor constant:16],
+        [self.bentoStack.trailingAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.trailingAnchor constant:-16],
+        [self.bentoStack.bottomAnchor constraintEqualToAnchor:self.scrollView.contentLayoutGuide.bottomAnchor constant:-12],
 
         [self.bentoStack.widthAnchor constraintEqualToAnchor:self.scrollView.frameLayoutGuide.widthAnchor constant:-32],
     ]];
@@ -303,7 +307,9 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
     self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
     self.tableView.estimatedRowHeight = 64;
     self.tableView.rowHeight = UITableViewAutomaticDimension;
-    self.tableView.sectionHeaderTopPadding = 0;
+    if (@available(iOS 15.0, *)) {
+        self.tableView.sectionHeaderTopPadding = 0;
+    }
     [self.tableView registerClass:[UITableViewCell class] forCellReuseIdentifier:@"PlainCell"];
     [self.contentCard addSubview:self.tableView];
 
@@ -323,10 +329,10 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
     [NSLayoutConstraint activateConstraints:@[
         [self.contentCard.heightAnchor constraintGreaterThanOrEqualToConstant:240],
 
-        [self.tableView.topAnchor constraintEqualToAnchor:self.contentCard.topAnchor constant:8)],
+        [self.tableView.topAnchor constraintEqualToAnchor:self.contentCard.topAnchor constant:8],
         [self.tableView.leadingAnchor constraintEqualToAnchor:self.contentCard.leadingAnchor],
         [self.tableView.trailingAnchor constraintEqualToAnchor:self.contentCard.trailingAnchor],
-        [self.tableView.bottomAnchor constraintEqualToAnchor:self.contentCard.bottomAnchor constant:-8)],
+        [self.tableView.bottomAnchor constraintEqualToAnchor:self.contentCard.bottomAnchor constant:-8],
 
         [self.emptyStateView.topAnchor constraintEqualToAnchor:self.contentCard.topAnchor],
         [self.emptyStateView.leadingAnchor constraintEqualToAnchor:self.contentCard.leadingAnchor],
@@ -335,8 +341,8 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
 
         [self.emptyLabel.centerXAnchor constraintEqualToAnchor:self.emptyStateView.centerXAnchor],
         [self.emptyLabel.centerYAnchor constraintEqualToAnchor:self.emptyStateView.centerYAnchor],
-        [self.emptyLabel.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.emptyStateView.leadingAnchor constant:24)],
-        [self.emptyLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.emptyStateView.trailingAnchor constant:-24)],
+        [self.emptyLabel.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.emptyStateView.leadingAnchor constant:24],
+        [self.emptyLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.emptyStateView.trailingAnchor constant:-24],
     ]];
 }
 
@@ -356,16 +362,16 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
     [NSLayoutConstraint activateConstraints:@[
         [self.actionCard.heightAnchor constraintGreaterThanOrEqualToConstant:60],
 
-        [self.primaryButton.topAnchor constraintEqualToAnchor:self.actionCard.topAnchor constant:12)],
-        [self.primaryButton.leadingAnchor constraintEqualToAnchor:self.actionCard.leadingAnchor constant:16)],
-        [self.primaryButton.trailingAnchor constraintEqualToAnchor:self.actionCard.trailingAnchor constant:-16)],
+        [self.primaryButton.topAnchor constraintEqualToAnchor:self.actionCard.topAnchor constant:12],
+        [self.primaryButton.leadingAnchor constraintEqualToAnchor:self.actionCard.leadingAnchor constant:16],
+        [self.primaryButton.trailingAnchor constraintEqualToAnchor:self.actionCard.trailingAnchor constant:-16],
         [self.primaryButton.heightAnchor constraintEqualToConstant:46],
 
-        [self.secondaryButton.topAnchor constraintEqualToAnchor:self.primaryButton.bottomAnchor constant:10)],
-        [self.secondaryButton.leadingAnchor constraintEqualToAnchor:self.actionCard.leadingAnchor constant:16)],
-        [self.secondaryButton.trailingAnchor constraintEqualToAnchor:self.actionCard.trailingAnchor constant:-16)],
+        [self.secondaryButton.topAnchor constraintEqualToAnchor:self.primaryButton.bottomAnchor constant:10],
+        [self.secondaryButton.leadingAnchor constraintEqualToAnchor:self.actionCard.leadingAnchor constant:16],
+        [self.secondaryButton.trailingAnchor constraintEqualToAnchor:self.actionCard.trailingAnchor constant:-16],
         [self.secondaryButton.heightAnchor constraintEqualToConstant:44],
-        [self.secondaryButton.bottomAnchor constraintEqualToAnchor:self.actionCard.bottomAnchor constant:-12)],
+        [self.secondaryButton.bottomAnchor constraintEqualToAnchor:self.actionCard.bottomAnchor constant:-12],
     ]];
 }
 
@@ -685,7 +691,7 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
 
     // 创建 NSURLSession（由本控制器作为 delegate）
     NSURLSessionConfiguration *config = [NSURLSessionConfiguration defaultSessionConfiguration];
-    config.maxConcurrentConnectionsPerHost = 16;
+    config.HTTPMaximumConnectionsPerHost = 16;
     config.timeoutIntervalForRequest = 60;
     self.session = [NSURLSession sessionWithConfiguration:config delegate:self delegateQueue:nil];
 
