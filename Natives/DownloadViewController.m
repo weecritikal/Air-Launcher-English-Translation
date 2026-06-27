@@ -43,7 +43,20 @@
 @property (nonatomic, strong) UILabel *metaLabel;
 @property (nonatomic, strong) UIStackView *tagsStack;
 @property (nonatomic, strong) UIButton *downloadButton;
+// 图标异步加载防串号：记录当前 cell 正在加载的图标 URL
+@property (nonatomic, copy, nullable) NSString *currentIconURL;
 @end
+
+/// 资源图标内存缓存（避免 cell 复用时重复下载，参考 FCL/ZL2 简单实现）
+static NSCache<NSString *, UIImage *> *DVCIconCache(void) {
+    static NSCache<NSString *, UIImage *> *cache = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        cache = [[NSCache alloc] init];
+        cache.countLimit = 80; // 最多缓存 80 个图标
+    });
+    return cache;
+}
 
 @implementation ModernAssetCell
 
@@ -158,16 +171,39 @@
     
     NSString *iconUrl = mod[@"imageUrl"] ?: mod[@"icon_url"];
     if (iconUrl.length > 0) {
+        // 记录当前正在加载的 URL，防止 cell 复用后旧请求覆盖新图片
+        self.currentIconURL = iconUrl;
+        // 先设置占位图，避免复用时残留旧图标
+        self.iconView.image = [UIImage systemImageNamed:@"puzzlepiece.fill"];
+        self.iconView.tintColor = [UIColor systemGray3Color];
+        self.iconView.contentMode = UIViewContentModeScaleAspectFit;
+
+        // 命中缓存则直接使用
+        UIImage *cached = [DVCIconCache() objectForKey:iconUrl];
+        if (cached) {
+            self.iconView.image = cached;
+            self.iconView.tintColor = nil;
+            self.iconView.contentMode = UIViewContentModeScaleAspectFill;
+            return;
+        }
+
+        NSString *loadUrl = iconUrl;
         dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-            NSData *data = [NSData dataWithContentsOfURL:[NSURL URLWithString:iconUrl]];
-            if (data) {
-                UIImage *image = [UIImage imageWithData:data];
-                dispatch_async(dispatch_get_main_queue(), ^{
+            NSData *data = [NSData dataWithContentsOfURL:[NSURL URLWithString:loadUrl]];
+            UIImage *image = data ? [UIImage imageWithData:data] : nil;
+            dispatch_async(dispatch_get_main_queue(), ^{
+                // cell 复用检查：URL 不匹配则丢弃结果
+                if (![self.currentIconURL isEqualToString:loadUrl]) return;
+                if (image) {
+                    [DVCIconCache() setObject:image forKey:loadUrl];
                     self.iconView.image = image;
-                });
-            }
+                    self.iconView.tintColor = nil;
+                    self.iconView.contentMode = UIViewContentModeScaleAspectFill;
+                }
+            });
         });
     } else {
+        self.currentIconURL = nil;
         self.iconView.image = [UIImage systemImageNamed:@"puzzlepiece.fill"];
         self.iconView.tintColor = [UIColor systemOrangeColor];
         self.iconView.contentMode = UIViewContentModeScaleAspectFit;
@@ -205,16 +241,39 @@
     
     NSString *iconUrl = shader[@"imageUrl"] ?: shader[@"icon_url"];
     if (iconUrl.length > 0) {
+        // 记录当前正在加载的 URL，防止 cell 复用后旧请求覆盖新图片
+        self.currentIconURL = iconUrl;
+        // 先设置占位图，避免复用时残留旧图标
+        self.iconView.image = [UIImage systemImageNamed:@"paintbrush.fill"];
+        self.iconView.tintColor = [UIColor systemGray3Color];
+        self.iconView.contentMode = UIViewContentModeScaleAspectFit;
+
+        // 命中缓存则直接使用
+        UIImage *cached = [DVCIconCache() objectForKey:iconUrl];
+        if (cached) {
+            self.iconView.image = cached;
+            self.iconView.tintColor = nil;
+            self.iconView.contentMode = UIViewContentModeScaleAspectFill;
+            return;
+        }
+
+        NSString *loadUrl = iconUrl;
         dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-            NSData *data = [NSData dataWithContentsOfURL:[NSURL URLWithString:iconUrl]];
-            if (data) {
-                UIImage *image = [UIImage imageWithData:data];
-                dispatch_async(dispatch_get_main_queue(), ^{
+            NSData *data = [NSData dataWithContentsOfURL:[NSURL URLWithString:loadUrl]];
+            UIImage *image = data ? [UIImage imageWithData:data] : nil;
+            dispatch_async(dispatch_get_main_queue(), ^{
+                // cell 复用检查：URL 不匹配则丢弃结果
+                if (![self.currentIconURL isEqualToString:loadUrl]) return;
+                if (image) {
+                    [DVCIconCache() setObject:image forKey:loadUrl];
                     self.iconView.image = image;
-                });
-            }
+                    self.iconView.tintColor = nil;
+                    self.iconView.contentMode = UIViewContentModeScaleAspectFill;
+                }
+            });
         });
     } else {
+        self.currentIconURL = nil;
         self.iconView.image = [UIImage systemImageNamed:@"paintbrush.fill"];
         self.iconView.tintColor = [UIColor systemPurpleColor];
         self.iconView.contentMode = UIViewContentModeScaleAspectFit;
@@ -1614,6 +1673,8 @@
     self.currentModOffset = 0;
     self.hasMoreMods = YES;
     [self.modList removeAllObjects];
+    // 必须立即刷新表格，否则 tableView 仍会尝试渲染已清空的数据源导致越界崩溃
+    [self.modTableView reloadData];
     [self loadModList];
 }
 
@@ -1688,6 +1749,7 @@
     self.currentShaderOffset = 0;
     self.hasMoreShaders = YES;
     [self.shaderList removeAllObjects];
+    [self.shaderTableView reloadData];
     [self loadShaderList];
 }
 
@@ -1757,6 +1819,7 @@
     self.currentModpackOffset = 0;
     self.hasMoreModpacks = YES;
     [self.modpackList removeAllObjects];
+    [self.modpackTableView reloadData];
     [self loadModpackList];
 }
 
@@ -1825,6 +1888,7 @@
     self.currentResourcepackOffset = 0;
     self.hasMoreResourcepacks = YES;
     [self.resourcepackList removeAllObjects];
+    [self.resourcepackTableView reloadData];
     [self loadResourcePackList];
 }
 
@@ -1894,6 +1958,7 @@
     self.currentDatapackOffset = 0;
     self.hasMoreDatapacks = YES;
     [self.datapackList removeAllObjects];
+    [self.datapackTableView reloadData];
     [self loadDataPackList];
 }
 
@@ -3243,30 +3308,46 @@
 
     ModernAssetCell *cell;
     if (tableView == self.modTableView) {
+        // 边界保护：数据源可能在异步刷新中被清空
+        if (indexPath.row >= self.modList.count) {
+            return [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:@"EmptyCell"];
+        }
         cell = [tableView dequeueReusableCellWithIdentifier:@"ModCell" forIndexPath:indexPath];
         NSDictionary *mod = self.modList[indexPath.row];
         [cell configureWithMod:mod];
         [cell.downloadButton addTarget:self action:@selector(downloadMod:) forControlEvents:UIControlEventTouchUpInside];
         cell.downloadButton.tag = indexPath.row;
     } else if (tableView == self.shaderTableView) {
+        if (indexPath.row >= self.shaderList.count) {
+            return [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:@"EmptyCell"];
+        }
         cell = [tableView dequeueReusableCellWithIdentifier:@"ShaderCell" forIndexPath:indexPath];
         NSDictionary *shader = self.shaderList[indexPath.row];
         [cell configureWithShader:shader];
         [cell.downloadButton addTarget:self action:@selector(downloadShader:) forControlEvents:UIControlEventTouchUpInside];
         cell.downloadButton.tag = indexPath.row;
     } else if (tableView == self.resourcepackTableView) {
+        if (indexPath.row >= self.resourcepackList.count) {
+            return [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:@"EmptyCell"];
+        }
         cell = [tableView dequeueReusableCellWithIdentifier:@"ResourcepackCell" forIndexPath:indexPath];
         NSDictionary *resourcepack = self.resourcepackList[indexPath.row];
         [cell configureWithMod:resourcepack];
         [cell.downloadButton addTarget:self action:@selector(downloadResourcepack:) forControlEvents:UIControlEventTouchUpInside];
         cell.downloadButton.tag = indexPath.row;
     } else if (tableView == self.datapackTableView) {
+        if (indexPath.row >= self.datapackList.count) {
+            return [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:@"EmptyCell"];
+        }
         cell = [tableView dequeueReusableCellWithIdentifier:@"DatapackCell" forIndexPath:indexPath];
         NSDictionary *datapack = self.datapackList[indexPath.row];
         [cell configureWithMod:datapack];
         [cell.downloadButton addTarget:self action:@selector(downloadDatapack:) forControlEvents:UIControlEventTouchUpInside];
         cell.downloadButton.tag = indexPath.row;
     } else {
+        if (indexPath.row >= self.modpackList.count) {
+            return [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:@"EmptyCell"];
+        }
         cell = [tableView dequeueReusableCellWithIdentifier:@"ModpackCell" forIndexPath:indexPath];
         NSDictionary *modpack = self.modpackList[indexPath.row];
         [cell configureWithMod:modpack];

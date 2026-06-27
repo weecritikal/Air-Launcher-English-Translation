@@ -26,6 +26,16 @@ NSString *const PREF_MOD_UPDATE_KEEP_OLD = @"general.mod_update_keep_old";
             @"debug_logging": @(!CONFIG_RELEASE),
             @"news_url": @"https://amethyst.ct.ws/welcome",
             @"download_source": @"bmclapi",
+            // 下载源（按资源类型独立持久化）
+            @"download_source_mod": @"modrinth",
+            @"download_source_shader": @"modrinth",
+            @"download_source_resourcepack": @"modrinth",
+            @"download_source_datapack": @"modrinth",
+            @"download_source_modpack": @"modrinth",
+            // CurseForge API Key（运行时配置，空字符串表示未设置）
+            @"curseforge_api_key": @"",
+            // Mod 更新时是否保留旧文件
+            @"mod_update_keep_old": @YES,
         }.mutableCopy,
         @"video": @{ // Video & Audio
             @"renderer": @"auto",
