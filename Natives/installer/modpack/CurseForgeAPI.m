@@ -483,6 +483,42 @@ static const NSInteger kCurseForgeCategoryIDServerUtility = 435;
     }];
 }
 
+- (void)getVersionsForShaderWithID:(NSString *)shaderID
+                        completion:(void (^)(NSArray<ShaderVersion *> * _Nullable, NSError * _Nullable))completion {
+    if (shaderID.length == 0) {
+        if (completion) completion(nil, [NSError errorWithDomain:@"CurseForgeAPI" code:1 userInfo:@{NSLocalizedDescriptionKey: @"Invalid shader ID"}]);
+        return;
+    }
+
+    // CurseForge 的 mod/shader/resourcepack/datapack 共用 mods/{id}/files 端点
+    NSString *urlStr = [NSString stringWithFormat:@"%@/mods/%@/files", self.baseURL, shaderID];
+    NSURL *url = [NSURL URLWithString:urlStr];
+    if (!url) {
+        if (completion) completion(nil, [NSError errorWithDomain:@"CurseForgeAPI" code:2 userInfo:@{NSLocalizedDescriptionKey: @"Invalid URL"}]);
+        return;
+    }
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+    [request setValue:[self apiKey] forHTTPHeaderField:@"x-api-key"];
+
+    NSURLSessionDataTask *task = [self.session dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        if (error) {
+            if (completion) dispatch_async(dispatch_get_main_queue(), ^{ completion(nil, error); });
+            return;
+        }
+        NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+        NSArray *files = [json isKindOfClass:NSDictionary.class] ? json[@"data"] : nil;
+        if (![files isKindOfClass:NSArray.class]) files = @[];
+        NSMutableArray<ShaderVersion *> *versions = [NSMutableArray array];
+        for (NSDictionary *file in files) {
+            if (![file isKindOfClass:NSDictionary.class]) continue;
+            ShaderVersion *sv = [[ShaderVersion alloc] initWithDictionary:file];
+            if (sv) [versions addObject:sv];
+        }
+        if (completion) dispatch_async(dispatch_get_main_queue(), ^{ completion(versions, nil); });
+    }];
+    [task resume];
+}
+
 #pragma mark - 整合包下载支持
 
 - (NSDictionary *)modpackDependencyInfoFromManifest:(NSDictionary *)manifest {
