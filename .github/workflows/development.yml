@@ -58,6 +58,7 @@ jobs:
       - name: Build for ${{ matrix.platform_name }}
         env:
           IPHONEOS_DEPLOYMENT_TARGET: 14.0
+          CONFIG_CURSEFORGE_API_KEY: ${{ secrets.CONFIG_CURSEFORGE_API_KEY }}
         run: |
           set -o pipefail
           export PATH=/opt/homebrew/bin:$PATH
