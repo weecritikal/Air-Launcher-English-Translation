@@ -46,16 +46,23 @@ static const NSInteger kCurseForgeCategoryIDServerUtility = 435;
     // 1. 运行时偏好（优先级最高）
     NSString *runtimeKey = [PLPreferences curseForgeAPIKey];
     if ([runtimeKey isKindOfClass:NSString.class] && runtimeKey.length > 0) return runtimeKey;
-    // 2. 编译时宏
-#ifdef CONFIG_CURSEFORGE_API_KEY
-    NSString *compiledKey = @CONFIG_CURSEFORGE_API_KEY;
-    if ([compiledKey isKindOfClass:NSString.class] && ![compiledKey isEqualToString:@"nil"] && compiledKey.length > 0) {
-        return compiledKey;
+    // 2. 编译时宏（config.h 中未配置时定义为 nil 标识符）
+    //    用 #define 字符串化后比较，避免 @nil 非法
+#define AAA_STR_INNER(x) #x
+#define AAA_STR(x) AAA_STR_INNER(x)
+    NSString *compiledKey = [NSString stringWithUTF8String:AAA_STR(CONFIG_CURSEFORGE_API_KEY)];
+#undef AAA_STR
+#undef AAA_STR_INNER
+    // 去除字符串字面量两端的引号（如果宏定义为 "key"，字符串化后为 "\"key\""）
+    if (compiledKey.length >= 2 && [compiledKey hasPrefix:@"\""] && [compiledKey hasSuffix:@"\""]) {
+        compiledKey = [compiledKey substringWithRange:NSMakeRange(1, compiledKey.length - 2)];
     }
-#endif
-    // 3. Info.plist
-    NSString *infoPlistKey = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CurseForgeAPIKey"];
-    return [infoPlistKey isKindOfClass:NSString.class] ? infoPlistKey : @"";
+    if ([compiledKey isEqualToString:@"nil"] || compiledKey.length == 0) {
+        // 3. Info.plist
+        NSString *infoPlistKey = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CurseForgeAPIKey"];
+        return [infoPlistKey isKindOfClass:NSString.class] ? infoPlistKey : @"";
+    }
+    return compiledKey;
 }
 
 - (NSDictionary *)headers {
