@@ -17,6 +17,7 @@
 @property (nonatomic, strong) NSURLSession *downloadSession;
 @property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, ModDownloadHandler> *downloadCompletionHandlers;
 @property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, NSString *> *downloadDestinationPaths;
+@property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, void(^)(NSProgress *)> *downloadProgressHandlers;
 
 // 缓存
 @property (nonatomic, strong) NSMutableDictionary<NSString *, ModItem *> *metadataCache;
@@ -131,6 +132,7 @@
         _downloadSession = [NSURLSession sessionWithConfiguration:config delegate:self delegateQueue:nil];
         _downloadCompletionHandlers = [NSMutableDictionary dictionary];
         _downloadDestinationPaths = [NSMutableDictionary dictionary];
+        _downloadProgressHandlers = [NSMutableDictionary dictionary];
 
         // 初始化缓存
         _metadataCache = [NSMutableDictionary dictionary];
@@ -446,6 +448,39 @@
     [task resume];
 }
 
+// ---------- 带进度回调的下载 ----------
+- (void)downloadMod:(ModItem *)mod
+          toProfile:(NSString *)profileName
+            progress:(void (^)(NSProgress *downloadProgress))progress
+          completion:(ModDownloadHandler)completion {
+    NSString *modsFolder = [self existingModsFolderForProfile:profileName];
+    if (!modsFolder) {
+        if (completion) {
+            NSError *error = [NSError errorWithDomain:@"ModServiceError" code:1 userInfo:@{NSLocalizedDescriptionKey:@"无法找到 Mods 文件夹。"}];
+            dispatch_async(dispatch_get_main_queue(), ^{ completion(error); });
+        }
+        return;
+    }
+
+    NSURL *url = [NSURL URLWithString:mod.selectedVersionDownloadURL];
+    if (!url) {
+        if (completion) {
+            NSError *error = [NSError errorWithDomain:@"ModServiceError" code:2 userInfo:@{NSLocalizedDescriptionKey:@"无效的下载链接。"}];
+            dispatch_async(dispatch_get_main_queue(), ^{ completion(error); });
+        }
+        return;
+    }
+
+    NSString *destinationPath = [modsFolder stringByAppendingPathComponent:mod.fileName];
+    NSURLSessionDownloadTask *task = [self.downloadSession downloadTaskWithURL:url];
+    self.downloadCompletionHandlers[task] = completion;
+    self.downloadDestinationPaths[task] = destinationPath;
+    if (progress) {
+        self.downloadProgressHandlers[task] = progress;
+    }
+    [task resume];
+}
+
 #pragma mark - NSURLSessionDownloadDelegate
 
 - (void)URLSession:(NSURLSession *)session downloadTask:(NSURLSessionDownloadTask *)downloadTask didFinishDownloadingToURL:(NSURL *)location {
@@ -454,6 +489,7 @@
 
     [self.downloadCompletionHandlers removeObjectForKey:downloadTask];
     [self.downloadDestinationPaths removeObjectForKey:downloadTask];
+    [self.downloadProgressHandlers removeObjectForKey:downloadTask];
 
     if (!handler || !destinationPath) return;
 
@@ -480,8 +516,25 @@
             handler(error);
             [self.downloadCompletionHandlers removeObjectForKey:task];
             [self.downloadDestinationPaths removeObjectForKey:task];
+            [self.downloadProgressHandlers removeObjectForKey:task];
         }
     }
+}
+
+- (void)URLSession:(NSURLSession *)session
+      downloadTask:(NSURLSessionDownloadTask *)downloadTask
+      didWriteData:(int64_t)bytesWritten
+ totalBytesWritten:(int64_t)totalBytesWritten
+totalBytesExpectedToWrite:(int64_t)totalBytesExpectedToWrite {
+    void(^progress)(NSProgress *) = self.downloadProgressHandlers[downloadTask];
+    if (!progress) return;
+
+    NSProgress *downloadProgress = [NSProgress progressWithTotalUnitCount:totalBytesExpectedToWrite];
+    downloadProgress.completedUnitCount = totalBytesWritten;
+
+    dispatch_async(dispatch_get_main_queue(), ^{
+        progress(downloadProgress);
+    });
 }
 
 @end

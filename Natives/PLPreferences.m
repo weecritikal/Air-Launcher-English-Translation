@@ -4,6 +4,14 @@
 #import "config.h"
 #import "utils.h"
 
+NSString *const PREF_DOWNLOAD_SOURCE_MOD = @"general.download_source_mod";
+NSString *const PREF_DOWNLOAD_SOURCE_SHADER = @"general.download_source_shader";
+NSString *const PREF_DOWNLOAD_SOURCE_RESOURCEPACK = @"general.download_source_resourcepack";
+NSString *const PREF_DOWNLOAD_SOURCE_DATAPACK = @"general.download_source_datapack";
+NSString *const PREF_DOWNLOAD_SOURCE_MODPACK = @"general.download_source_modpack";
+NSString *const PREF_CURSEFORGE_API_KEY = @"general.curseforge_api_key";
+NSString *const PREF_MOD_UPDATE_KEEP_OLD = @"general.mod_update_keep_old";
+
 @interface PLPreferences()
 @end
 
@@ -266,6 +274,50 @@
 
 - (void)saveInstancePref {
     [self.instancePref writeToFile:self.instancePath atomically:YES];
+}
+
+// 下载源管理（按类型独立持久化）
++ (NSString *)currentDownloadSourceForType:(NSString *)type {
+    NSString *key = [self downloadSourceKeyForType:type];
+    NSString *source = getPrefObject(key);
+    return source ?: @"modrinth";
+}
+
++ (void)setDownloadSource:(NSString *)source forType:(NSString *)type {
+    NSString *key = [self downloadSourceKeyForType:type];
+    setPrefObject(key, source);
+}
+
++ (NSString *)downloadSourceKeyForType:(NSString *)type {
+    if ([type isEqualToString:@"mod"]) return PREF_DOWNLOAD_SOURCE_MOD;
+    if ([type isEqualToString:@"shader"]) return PREF_DOWNLOAD_SOURCE_SHADER;
+    if ([type isEqualToString:@"resourcepack"]) return PREF_DOWNLOAD_SOURCE_RESOURCEPACK;
+    if ([type isEqualToString:@"datapack"]) return PREF_DOWNLOAD_SOURCE_DATAPACK;
+    if ([type isEqualToString:@"modpack"]) return PREF_DOWNLOAD_SOURCE_MODPACK;
+    return PREF_DOWNLOAD_SOURCE_MOD;
+}
+
+// CurseForge API Key（运行时配置，覆盖编译时默认值）
++ (NSString *)curseForgeAPIKey {
+    return getPrefObject(PREF_CURSEFORGE_API_KEY);
+}
+
++ (void)setCurseForgeAPIKey:(NSString *)key {
+    if (key && key.length > 0) {
+        setPrefObject(PREF_CURSEFORGE_API_KEY, key);
+    } else {
+        setPrefObject(PREF_CURSEFORGE_API_KEY, nil);
+    }
+}
+
+// Mod 更新旧文件保留（默认 YES）
++ (BOOL)modUpdateKeepOld {
+    NSNumber *value = getPrefObject(PREF_MOD_UPDATE_KEEP_OLD);
+    return value ? value.boolValue : YES;
+}
+
++ (void)setModUpdateKeepOld:(BOOL)keepOld {
+    setPrefObject(PREF_MOD_UPDATE_KEEP_OLD, @(keepOld));
 }
 
 @end

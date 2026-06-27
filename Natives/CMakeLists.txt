@@ -146,6 +146,7 @@ add_executable(AngelAuraAmethyst
   installer/FabricUtils.m
   installer/NeoForgeVersionFetcher.m
   installer/modpack/ModpackUtils.m
+  installer/modpack/ModpackConfiguration.m
   installer/modpack/ModpackAPI.m
   installer/modpack/ModrinthAPI.m
 	installer/modpack/CurseForgeAPI.m
@@ -226,6 +227,20 @@ add_executable(AngelAuraAmethyst
   # Modpack import sources
   ModpackImportViewController.m
   ModpackImportService.m
+
+  # CurseForge MurmurHash2 fingerprint tool
+  MurmurHash2.m
+
+  # Resource Pack and Data Pack services
+  ResourcePackService.m
+  DataPackService.m
+
+  # CurseForge API Key settings page
+  installer/CurseForgeAPIKeyViewController.m
+
+  # Mod update service (dual-source SHA1/MurmurHash2 reverse lookup)
+  ModUpdateService.m
+  ModUpdateViewController.m
 
   # Custom icon management sources
   CustomIconManager.m

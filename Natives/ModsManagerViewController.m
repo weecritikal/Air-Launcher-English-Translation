@@ -3,6 +3,8 @@
 #import "ModService.h"
 #import "ModItem.h"
 #import "installer/modpack/ModrinthAPI.h"
+#import "ModUpdateViewController.h"
+#import "PLProfiles.h"
 
 @interface ModsManagerViewController () <UITableViewDataSource, UITableViewDelegate, ModTableViewCellDelegate, UISearchBarDelegate, ModVersionViewControllerDelegate>
 
@@ -12,6 +14,7 @@
 @property (nonatomic, strong) UIActivityIndicatorView *activityIndicator;
 @property (nonatomic, strong) UILabel *emptyLabel;
 @property (nonatomic, strong) UIBarButtonItem *refreshButton;
+@property (nonatomic, strong) UIBarButtonItem *checkUpdateButton;
 @property (nonatomic, strong) NSMutableArray<ModItem *> *localMods;
 @property (nonatomic, strong) NSMutableArray<ModItem *> *filteredLocalMods;
 
@@ -73,6 +76,11 @@
     [self.view addSubview:self.emptyLabel];
 
     self.refreshButton = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemRefresh target:self action:@selector(handleRefresh:)];
+
+    UIImage *checkImage = [UIImage systemImageNamed:@"arrow.triangle.2.circlepath"];
+    self.checkUpdateButton = [[UIBarButtonItem alloc] initWithImage:checkImage style:UIBarButtonItemStylePlain target:self action:@selector(checkForUpdates)];
+    self.checkUpdateButton.accessibilityLabel = @"检查更新";
+
     [self updateNavigationButtons];
 
     [NSLayoutConstraint activateConstraints:@[
@@ -125,9 +133,10 @@
 
 - (void)updateNavigationButtons {
     UIBarButtonItem *closeButton = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone target:self action:@selector(closeTapped)];
-    
+
     if (self.currentMode == ModsManagerModeLocal) {
-        self.navigationItem.rightBarButtonItems = @[self.refreshButton];
+        // rightBarButtonItems 从右到左显示，checkUpdateButton 放在最右侧
+        self.navigationItem.rightBarButtonItems = @[self.refreshButton, self.checkUpdateButton];
         self.navigationItem.leftBarButtonItem = closeButton;
     } else {
         self.navigationItem.rightBarButtonItems = nil;
@@ -137,6 +146,51 @@
 
 - (void)closeTapped {
     [self dismissViewControllerAnimated:YES completion:nil];
+}
+
+#pragma mark - Check for Updates
+
+- (void)checkForUpdates {
+    // 获取当前 profile 的本地 Mod 列表
+    NSMutableArray<ModItem *> *mods = [self.localMods mutableCopy];
+    if (mods.count == 0) {
+        [self showSimpleAlertWithTitle:@"提示" message:@"当前没有本地 Mod，无法检查更新。"];
+        return;
+    }
+
+    // 从当前 profile 的 lastVersionId 解析 gameVersion 和 loader
+    NSString *lastVersionId = PLProfiles.current.selectedProfile[@"lastVersionId"];
+    if (!lastVersionId || lastVersionId.length == 0) {
+        [self showSimpleAlertWithTitle:@"提示" message:@"无法获取当前版本信息。"];
+        return;
+    }
+
+    NSString *gameVersion = nil;
+    NSString *loader = nil;
+    NSArray<NSString *> *loaders = @[@"forge", @"fabric", @"neoforge", @"quilt"];
+    for (NSString *name in loaders) {
+        NSString *delimiter = [NSString stringWithFormat:@"-%@-", name];
+        NSRange range = [lastVersionId rangeOfString:delimiter];
+        if (range.location != NSNotFound) {
+            gameVersion = [lastVersionId substringToIndex:range.location];
+            loader = name;
+            break;
+        }
+    }
+    if (!gameVersion) {
+        // 纯 <mc> 格式，无 loader
+        gameVersion = lastVersionId;
+        loader = nil;
+    }
+
+    [self presentModUpdateViewControllerWithMods:mods gameVersion:gameVersion loader:loader];
+}
+
+- (void)presentModUpdateViewControllerWithMods:(NSArray *)mods gameVersion:(NSString *)gameVersion loader:(NSString *)loader {
+    ModUpdateViewController *vc = [[ModUpdateViewController alloc] initWithMods:mods gameVersion:gameVersion loader:loader projectType:@"mod"];
+    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
+    nav.modalPresentationStyle = UIModalPresentationFullScreen;
+    [self presentViewController:nav animated:YES completion:nil];
 }
 
 #pragma mark - Data Loading

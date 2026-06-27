@@ -29,6 +29,12 @@ typedef void(^ShaderDownloadHandler)(NSError * _Nullable error);
 // --- Online Shader Downloading ---
 - (void)downloadShader:(ShaderItem *)shader toProfile:(NSString *)profileName completion:(ShaderDownloadHandler)completion;
 
+/// 下载光影包并上报进度
+- (void)downloadShader:(ShaderItem *)shader
+             toProfile:(NSString *)profileName
+              progress:(void (^)(NSProgress *downloadProgress))progress
+            completion:(ShaderDownloadHandler)completion;
+
 // --- Utility ---
 - (NSString *)iconCachePathForURL:(NSString *)urlString;
 

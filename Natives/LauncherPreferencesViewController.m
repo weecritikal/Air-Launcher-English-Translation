@@ -19,6 +19,7 @@
 #import "BackgroundSettingsViewController.h"
 #import "BackgroundManager.h"
 #import "AIFixViewController.h"
+#import "CurseForgeAPIKeyViewController.h"
 
 @interface LauncherPreferencesViewController()
 @property(nonatomic) NSArray<NSString*> *rendererKeys, *rendererList;
@@ -257,6 +258,18 @@
                   localize(@"preference.title.download_source-official", nil),
                   localize(@"preference.title.download_source-bmclapi", nil)
               ]
+            },
+            @{@"key": @"curseforge_api_key",
+              @"hasDetail": @YES,
+              @"icon": @"key.fill",
+              @"type": self.typeButton,
+              @"enableCondition": whenNotInGame,
+              @"action": ^void(){
+                  CurseForgeAPIKeyViewController *vc = [[CurseForgeAPIKeyViewController alloc] init];
+                  UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
+                  nav.modalPresentationStyle = UIModalPresentationFormSheet;
+                  [self presentViewController:nav animated:YES completion:nil];
+              }
             },
             @{@"key": @"cosmetica",
               @"hasDetail": @YES,
@@ -809,10 +822,16 @@
                                              selector:@selector(handleBackgroundUIEffectChanged:)
                                                  name:@"BackgroundUIEffectChanged"
                                                object:nil];
+
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(openCurseForgeAPIKeySettings)
+                                                 name:@"OpenCurseForgeAPIKeySettings"
+                                               object:nil];
 }
 
 - (void)dealloc {
     [[NSNotificationCenter defaultCenter] removeObserver:self name:@"BackgroundUIEffectChanged" object:nil];
+    [[NSNotificationCenter defaultCenter] removeObserver:self name:@"OpenCurseForgeAPIKeySettings" object:nil];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -843,6 +862,48 @@
 - (void)handleBackgroundUIEffectChanged:(NSNotification *)notification {
     dispatch_async(dispatch_get_main_queue(), ^{
         [self.tableView reloadData];
+    });
+}
+
+#pragma mark - CurseForge API Key Settings
+
+- (void)openCurseForgeAPIKeySettings {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        // 通过 UIScene 获取顶层 VC（不使用 keyWindow）
+        UIViewController *topVC = nil;
+        for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
+            if ([scene isKindOfClass:[UIWindowScene class]] && scene.activationState == UISceneActivationStateForegroundActive) {
+                UIWindowScene *windowScene = (UIWindowScene *)scene;
+                topVC = windowScene.windows.firstObject.rootViewController;
+                if (topVC) {
+                    break;
+                }
+            }
+        }
+        if (!topVC) {
+            // 退而求其次：取任意一个 UIWindowScene
+            for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
+                if ([scene isKindOfClass:[UIWindowScene class]]) {
+                    UIWindowScene *windowScene = (UIWindowScene *)scene;
+                    topVC = windowScene.windows.firstObject.rootViewController;
+                    if (topVC) {
+                        break;
+                    }
+                }
+            }
+        }
+        if (!topVC) {
+            return;
+        }
+
+        while (topVC.presentedViewController) {
+            topVC = topVC.presentedViewController;
+        }
+
+        CurseForgeAPIKeyViewController *vc = [[CurseForgeAPIKeyViewController alloc] init];
+        UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
+        nav.modalPresentationStyle = UIModalPresentationFormSheet;
+        [topVC presentViewController:nav animated:YES completion:nil];
     });
 }
 

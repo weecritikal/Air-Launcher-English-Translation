@@ -1,6 +1,8 @@
 #import "DownloadViewController.h"
 #import "BackgroundManager.h"
 #import "installer/modpack/ModrinthAPI.h"
+#import "installer/modpack/CurseForgeAPI.h"
+#import "PLPreferences.h"
 #import "ModService.h"
 #import "ShaderService.h"
 #import "PLProfiles.h"
@@ -1021,6 +1023,31 @@
 @property (nonatomic, assign) BOOL isLoadingModpacks;
 @property (nonatomic, strong) NSString *modpackSearchQuery;
 
+// 资源包相关属性
+@property (nonatomic, strong) UITableView *resourcepackTableView;
+@property (nonatomic, strong) NSMutableArray *resourcepackList;
+@property (nonatomic, assign) NSInteger currentResourcepackOffset;
+@property (nonatomic, assign) BOOL hasMoreResourcepacks;
+@property (nonatomic, assign) BOOL isLoadingResourcepacks;
+@property (nonatomic, strong) NSString *resourcepackSearchQuery;
+
+// 数据包相关属性
+@property (nonatomic, strong) UITableView *datapackTableView;
+@property (nonatomic, strong) NSMutableArray *datapackList;
+@property (nonatomic, assign) NSInteger currentDatapackOffset;
+@property (nonatomic, assign) BOOL hasMoreDatapacks;
+@property (nonatomic, assign) BOOL isLoadingDatapacks;
+@property (nonatomic, strong) NSString *datapackSearchQuery;
+
+// 源切换 UI（Modrinth 绿色 M / CurseForge 橙色 C）
+@property (nonatomic, strong) UIView *sourceSwitchContainer;
+@property (nonatomic, strong) UIButton *modrinthSourceButton;
+@property (nonatomic, strong) UIButton *curseforgeSourceButton;
+@property (nonatomic, strong) NSLayoutConstraint *sourceSwitchHeightConstraint;
+
+// 当前待下载资源类型（mod/resourcepack/datapack），用于版本选择回调中决定下载目录
+@property (nonatomic, copy) NSString *pendingDownloadType;
+
 @end
 
 @implementation DownloadViewController
@@ -1046,12 +1073,18 @@
     self.modList = [NSMutableArray array];
     self.shaderList = [NSMutableArray array];
     self.modpackList = [NSMutableArray array]; // 新增
+    self.resourcepackList = [NSMutableArray array];
+    self.datapackList = [NSMutableArray array];
     self.currentModOffset = 0;
     self.currentShaderOffset = 0;
     self.currentModpackOffset = 0;
+    self.currentResourcepackOffset = 0;
+    self.currentDatapackOffset = 0;
     self.hasMoreMods = YES;
     self.hasMoreShaders = YES;
     self.hasMoreModpacks = YES;
+    self.hasMoreResourcepacks = YES;
+    self.hasMoreDatapacks = YES;
     self.currentSortField = @"follows";
     self.isObservingProgress = NO;
     
@@ -1069,16 +1102,19 @@
     [self setupTabSegment];
     [self setupVersionFilterSegment];
     [self setupSearchBar];
+    [self setupSourceSwitch];
     [self setupVersionCollectionView];
     [self setupModTableView];
     [self setupShaderTableView];
     [self setupModpackTableView]; // 新增
+    [self setupResourcepackTableView];
+    [self setupDatapackTableView];
     [self setupLoadingIndicator];
     [self setupEmptyLabel];
 }
 
 - (void)setupTabSegment {
-    self.tabSegment = [[UISegmentedControl alloc] initWithItems:@[@"版本下载", @"模组下载", @"光影下载", @"整合包"]];
+    self.tabSegment = [[UISegmentedControl alloc] initWithItems:@[@"版本下载", @"模组下载", @"光影下载", @"资源包", @"数据包", @"整合包"]];
     self.tabSegment.translatesAutoresizingMaskIntoConstraints = NO;
     self.tabSegment.selectedSegmentIndex = 0;
     [self.tabSegment addTarget:self action:@selector(tabChanged:) forControlEvents:UIControlEventValueChanged];
@@ -1174,7 +1210,7 @@
     self.modTableView.refreshControl = refreshControl;
     
     [NSLayoutConstraint activateConstraints:@[
-        [self.modTableView.topAnchor constraintEqualToAnchor:self.searchBar.bottomAnchor constant:8],
+        [self.modTableView.topAnchor constraintEqualToAnchor:self.sourceSwitchContainer.bottomAnchor constant:4],
         [self.modTableView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.modTableView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [self.modTableView.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor]
@@ -1198,7 +1234,7 @@
     self.shaderTableView.refreshControl = refreshControl;
     
     [NSLayoutConstraint activateConstraints:@[
-        [self.shaderTableView.topAnchor constraintEqualToAnchor:self.searchBar.bottomAnchor constant:8],
+        [self.shaderTableView.topAnchor constraintEqualToAnchor:self.sourceSwitchContainer.bottomAnchor constant:4],
         [self.shaderTableView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.shaderTableView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [self.shaderTableView.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor]
@@ -1216,17 +1252,114 @@
     [self.modpackTableView registerClass:[ModernAssetCell class] forCellReuseIdentifier:@"ModpackCell"];
     self.modpackTableView.hidden = YES;
     [self.view addSubview:self.modpackTableView];
-    
+
     UIRefreshControl *refreshControl = [[UIRefreshControl alloc] init];
     [refreshControl addTarget:self action:@selector(refreshModpackList) forControlEvents:UIControlEventValueChanged];
     self.modpackTableView.refreshControl = refreshControl;
-    
+
     [NSLayoutConstraint activateConstraints:@[
-        [self.modpackTableView.topAnchor constraintEqualToAnchor:self.searchBar.bottomAnchor constant:8],
+        [self.modpackTableView.topAnchor constraintEqualToAnchor:self.sourceSwitchContainer.bottomAnchor constant:4],
         [self.modpackTableView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.modpackTableView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [self.modpackTableView.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor]
     ]];
+}
+
+- (void)setupResourcepackTableView {
+    self.resourcepackTableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
+    self.resourcepackTableView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.resourcepackTableView.backgroundColor = [UIColor clearColor];
+    self.resourcepackTableView.dataSource = self;
+    self.resourcepackTableView.delegate = self;
+    self.resourcepackTableView.rowHeight = 100;
+    self.resourcepackTableView.separatorStyle = UITableViewCellSeparatorStyleNone;
+    [self.resourcepackTableView registerClass:[ModernAssetCell class] forCellReuseIdentifier:@"ResourcepackCell"];
+    self.resourcepackTableView.hidden = YES;
+    [self.view addSubview:self.resourcepackTableView];
+
+    UIRefreshControl *refreshControl = [[UIRefreshControl alloc] init];
+    [refreshControl addTarget:self action:@selector(refreshResourcepackList) forControlEvents:UIControlEventValueChanged];
+    self.resourcepackTableView.refreshControl = refreshControl;
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.resourcepackTableView.topAnchor constraintEqualToAnchor:self.sourceSwitchContainer.bottomAnchor constant:4],
+        [self.resourcepackTableView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.resourcepackTableView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.resourcepackTableView.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor]
+    ]];
+}
+
+- (void)setupDatapackTableView {
+    self.datapackTableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
+    self.datapackTableView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.datapackTableView.backgroundColor = [UIColor clearColor];
+    self.datapackTableView.dataSource = self;
+    self.datapackTableView.delegate = self;
+    self.datapackTableView.rowHeight = 100;
+    self.datapackTableView.separatorStyle = UITableViewCellSeparatorStyleNone;
+    [self.datapackTableView registerClass:[ModernAssetCell class] forCellReuseIdentifier:@"DatapackCell"];
+    self.datapackTableView.hidden = YES;
+    [self.view addSubview:self.datapackTableView];
+
+    UIRefreshControl *refreshControl = [[UIRefreshControl alloc] init];
+    [refreshControl addTarget:self action:@selector(refreshDatapackList) forControlEvents:UIControlEventValueChanged];
+    self.datapackTableView.refreshControl = refreshControl;
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.datapackTableView.topAnchor constraintEqualToAnchor:self.sourceSwitchContainer.bottomAnchor constant:4],
+        [self.datapackTableView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.datapackTableView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.datapackTableView.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor]
+    ]];
+}
+
+- (void)setupSourceSwitch {
+    self.sourceSwitchContainer = [[UIView alloc] init];
+    self.sourceSwitchContainer.translatesAutoresizingMaskIntoConstraints = NO;
+    self.sourceSwitchContainer.hidden = YES;
+    [self.view addSubview:self.sourceSwitchContainer];
+
+    self.modrinthSourceButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    self.modrinthSourceButton.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.modrinthSourceButton setTitle:@"M" forState:UIControlStateNormal];
+    self.modrinthSourceButton.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightBold];
+    self.modrinthSourceButton.tintColor = [UIColor whiteColor];
+    self.modrinthSourceButton.backgroundColor = [UIColor systemGreenColor];
+    self.modrinthSourceButton.layer.cornerRadius = 14;
+    self.modrinthSourceButton.layer.masksToBounds = YES;
+    [self.modrinthSourceButton addTarget:self action:@selector(modrinthSourceButtonClicked:) forControlEvents:UIControlEventTouchUpInside];
+    [self.sourceSwitchContainer addSubview:self.modrinthSourceButton];
+
+    self.curseforgeSourceButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    self.curseforgeSourceButton.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.curseforgeSourceButton setTitle:@"C" forState:UIControlStateNormal];
+    self.curseforgeSourceButton.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightBold];
+    self.curseforgeSourceButton.tintColor = [UIColor whiteColor];
+    self.curseforgeSourceButton.backgroundColor = [UIColor systemOrangeColor];
+    self.curseforgeSourceButton.layer.cornerRadius = 14;
+    self.curseforgeSourceButton.layer.masksToBounds = YES;
+    [self.curseforgeSourceButton addTarget:self action:@selector(curseforgeSourceButtonClicked:) forControlEvents:UIControlEventTouchUpInside];
+    [self.sourceSwitchContainer addSubview:self.curseforgeSourceButton];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.sourceSwitchContainer.topAnchor constraintEqualToAnchor:self.searchBar.bottomAnchor constant:4],
+        [self.sourceSwitchContainer.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:16],
+
+        [self.modrinthSourceButton.leadingAnchor constraintEqualToAnchor:self.sourceSwitchContainer.leadingAnchor],
+        [self.modrinthSourceButton.topAnchor constraintEqualToAnchor:self.sourceSwitchContainer.topAnchor],
+        [self.modrinthSourceButton.heightAnchor constraintEqualToConstant:28],
+        [self.modrinthSourceButton.widthAnchor constraintEqualToConstant:44],
+
+        [self.curseforgeSourceButton.leadingAnchor constraintEqualToAnchor:self.modrinthSourceButton.trailingAnchor constant:8],
+        [self.curseforgeSourceButton.topAnchor constraintEqualToAnchor:self.sourceSwitchContainer.topAnchor],
+        [self.curseforgeSourceButton.heightAnchor constraintEqualToConstant:28],
+        [self.curseforgeSourceButton.widthAnchor constraintEqualToConstant:44],
+        [self.curseforgeSourceButton.trailingAnchor constraintEqualToAnchor:self.sourceSwitchContainer.trailingAnchor]
+    ]];
+
+    // 动态高度约束（隐藏时为 0，显示时为 28）
+    self.sourceSwitchHeightConstraint = [self.sourceSwitchContainer.heightAnchor constraintEqualToConstant:0];
+    self.sourceSwitchHeightConstraint.active = YES;
 }
 
 - (void)setupLoadingIndicator {
@@ -1271,24 +1404,131 @@
     self.filterButton.hidden = (index == 0);
     self.modTableView.hidden = (index != 1);
     self.shaderTableView.hidden = (index != 2);
-    self.modpackTableView.hidden = (index != 3);
-    
+    self.resourcepackTableView.hidden = (index != 3);
+    self.datapackTableView.hidden = (index != 4);
+    self.modpackTableView.hidden = (index != 5);
+
+    // 源切换仅在非版本 tab 显示
+    BOOL showSourceSwitch = (index != 0);
+    self.sourceSwitchContainer.hidden = !showSourceSwitch;
+    self.sourceSwitchHeightConstraint.constant = showSourceSwitch ? 28 : 0;
+
     if (index == 1) {
         self.searchBar.placeholder = @"搜索模组...";
+        [self updateSourceSwitchButtonsForType:@"mod"];
         if (self.modList.count == 0) {
             [self loadModList];
         }
     } else if (index == 2) {
         self.searchBar.placeholder = @"搜索光影...";
+        [self updateSourceSwitchButtonsForType:@"shader"];
         if (self.shaderList.count == 0) {
             [self loadShaderList];
         }
     } else if (index == 3) {
+        self.searchBar.placeholder = @"搜索资源包...";
+        [self updateSourceSwitchButtonsForType:@"resourcepack"];
+        if (self.resourcepackList.count == 0) {
+            [self loadResourcePackList];
+        }
+    } else if (index == 4) {
+        self.searchBar.placeholder = @"搜索数据包...";
+        [self updateSourceSwitchButtonsForType:@"datapack"];
+        if (self.datapackList.count == 0) {
+            [self loadDataPackList];
+        }
+    } else if (index == 5) {
         self.searchBar.placeholder = @"搜索整合包...";
+        [self updateSourceSwitchButtonsForType:@"modpack"];
         if (self.modpackList.count == 0) {
             [self loadModpackList];
         }
     }
+}
+
+#pragma mark - Source Switch
+
+- (void)updateSourceSwitchButtonsForType:(NSString *)type {
+    NSString *currentSource = [PLPreferences currentDownloadSourceForType:type];
+    BOOL isModrinth = [currentSource isEqualToString:@"modrinth"];
+
+    self.modrinthSourceButton.alpha = isModrinth ? 1.0 : 0.4;
+    self.curseforgeSourceButton.alpha = isModrinth ? 0.4 : 1.0;
+    self.modrinthSourceButton.tag = [self tagForType:type];
+    self.curseforgeSourceButton.tag = [self tagForType:type];
+}
+
+- (NSInteger)tagForType:(NSString *)type {
+    if ([type isEqualToString:@"mod"]) return 1;
+    if ([type isEqualToString:@"shader"]) return 2;
+    if ([type isEqualToString:@"resourcepack"]) return 3;
+    if ([type isEqualToString:@"datapack"]) return 4;
+    if ([type isEqualToString:@"modpack"]) return 5;
+    return 0;
+}
+
+- (NSString *)typeForTag:(NSInteger)tag {
+    switch (tag) {
+        case 1: return @"mod";
+        case 2: return @"shader";
+        case 3: return @"resourcepack";
+        case 4: return @"datapack";
+        case 5: return @"modpack";
+        default: return @"mod";
+    }
+}
+
+- (NSString *)currentTabType {
+    NSInteger index = self.tabSegment.selectedSegmentIndex;
+    switch (index) {
+        case 1: return @"mod";
+        case 2: return @"shader";
+        case 3: return @"resourcepack";
+        case 4: return @"datapack";
+        case 5: return @"modpack";
+        default: return @"mod";
+    }
+}
+
+- (void)modrinthSourceButtonClicked:(UIButton *)sender {
+    NSString *type = [self typeForTag:sender.tag];
+    NSString *currentSource = [PLPreferences currentDownloadSourceForType:type];
+    if ([currentSource isEqualToString:@"modrinth"]) return;
+
+    [PLPreferences setDownloadSource:@"modrinth" forType:type];
+    [self updateSourceSwitchButtonsForType:type];
+    [self reloadCurrentList];
+}
+
+- (void)curseforgeSourceButtonClicked:(UIButton *)sender {
+    NSString *type = [self typeForTag:sender.tag];
+    NSString *currentSource = [PLPreferences currentDownloadSourceForType:type];
+    if ([currentSource isEqualToString:@"curseforge"]) return;
+
+    // API Key 未配置时弹出引导提示
+    if (![PLPreferences curseForgeAPIKey] && ![[NSBundle mainBundle] objectForInfoDictionaryKey:@"CurseForgeAPIKey"]) {
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"需要 CurseForge API Key"
+                                                                       message:@"检测到未配置 CurseForge API Key，是否前往设置？"
+                                                                preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:@"前往设置" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+            [[NSNotificationCenter defaultCenter] postNotificationName:@"OpenCurseForgeAPIKeySettings" object:nil];
+        }]];
+        [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+        [self presentViewController:alert animated:YES completion:nil];
+        return;
+    }
+
+    [PLPreferences setDownloadSource:@"curseforge" forType:type];
+    [self updateSourceSwitchButtonsForType:type];
+    [self reloadCurrentList];
+}
+
+- (id)currentAPIForTabType:(NSString *)type {
+    NSString *source = [PLPreferences currentDownloadSourceForType:type];
+    if ([source isEqualToString:@"curseforge"]) {
+        return [CurseForgeAPI sharedInstance];
+    }
+    return [ModrinthAPI sharedInstance];
 }
 
 #pragma mark - Data Loading
@@ -1403,7 +1643,8 @@
     }
     
     __weak typeof(self) weakSelf = self;
-    [[ModrinthAPI sharedInstance] searchModWithFilters:filters completion:^(NSArray * _Nullable results, NSError * _Nullable error) {
+    id api = [self currentAPIForTabType:@"mod"];
+    [api searchModWithFilters:filters completion:^(NSArray * _Nullable results, NSError * _Nullable error) {
         dispatch_async(dispatch_get_main_queue(), ^{
             __strong typeof(weakSelf) strongSelf = weakSelf;
             if (!strongSelf) return;
@@ -1461,16 +1702,18 @@
     NSMutableDictionary *filters = [NSMutableDictionary dictionary];
     filters[@"limit"] = @30;
     filters[@"offset"] = @(self.currentShaderOffset);
-    
+    filters[@"projectType"] = @"shader";
+
     if (self.currentSearchQuery.length > 0) {
         filters[@"query"] = self.currentSearchQuery;
     }
     if (self.currentGameVersion.length > 0) {
         filters[@"version"] = self.currentGameVersion;
     }
-    
+
     __weak typeof(self) weakSelf = self;
-    [[ModrinthAPI sharedInstance] searchShaderWithFilters:filters completion:^(NSArray * _Nullable results, NSError * _Nullable error) {
+    id api = [self currentAPIForTabType:@"shader"];
+    [api searchModWithFilters:filters completion:^(NSArray * _Nullable results, NSError * _Nullable error) {
         dispatch_async(dispatch_get_main_queue(), ^{
             __strong typeof(weakSelf) strongSelf = weakSelf;
             if (!strongSelf) return;
@@ -1537,7 +1780,8 @@
     }
     
     __weak typeof(self) weakSelf = self;
-    [[ModrinthAPI sharedInstance] searchModWithFilters:filters completion:^(NSArray * _Nullable results, NSError * _Nullable error) {
+    id api = [self currentAPIForTabType:@"modpack"];
+    [api searchModWithFilters:filters completion:^(NSArray * _Nullable results, NSError * _Nullable error) {
         dispatch_async(dispatch_get_main_queue(), ^{
             __strong typeof(weakSelf) strongSelf = weakSelf;
             if (!strongSelf) return;
@@ -1575,28 +1819,166 @@
     [self loadModpackList];
 }
 
+#pragma mark - Resourcepack Search & Loading
+
+- (void)refreshResourcepackList {
+    self.currentResourcepackOffset = 0;
+    self.hasMoreResourcepacks = YES;
+    [self.resourcepackList removeAllObjects];
+    [self loadResourcePackList];
+}
+
+- (void)loadResourcePackList {
+    if (self.isLoadingResourcepacks) return;
+    self.isLoadingResourcepacks = YES;
+
+    if (self.currentResourcepackOffset == 0) {
+        [self.loadingIndicator startAnimating];
+    }
+
+    NSMutableDictionary *filters = [NSMutableDictionary dictionary];
+    filters[@"limit"] = @30;
+    filters[@"offset"] = @(self.currentResourcepackOffset);
+    filters[@"projectType"] = @"resourcepack";
+
+    if (self.resourcepackSearchQuery.length > 0) {
+        filters[@"query"] = self.resourcepackSearchQuery;
+    }
+    if (self.currentGameVersion.length > 0) {
+        filters[@"version"] = self.currentGameVersion;
+    }
+
+    __weak typeof(self) weakSelf = self;
+    id api = [self currentAPIForTabType:@"resourcepack"];
+    [api searchModWithFilters:filters completion:^(NSArray * _Nullable results, NSError * _Nullable error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) return;
+            [strongSelf.loadingIndicator stopAnimating];
+            [strongSelf.resourcepackTableView.refreshControl endRefreshing];
+            strongSelf.isLoadingResourcepacks = NO;
+
+            if (results) {
+                if (strongSelf.currentResourcepackOffset == 0) {
+                    [strongSelf.resourcepackList removeAllObjects];
+                }
+                [strongSelf.resourcepackList addObjectsFromArray:results];
+                strongSelf.hasMoreResourcepacks = (results.count >= 30);
+                strongSelf.currentResourcepackOffset += results.count;
+
+                [strongSelf.resourcepackTableView reloadData];
+                strongSelf.emptyLabel.hidden = (strongSelf.resourcepackList.count > 0);
+                if (strongSelf.resourcepackList.count == 0) {
+                    strongSelf.emptyLabel.text = @"暂无资源包";
+                    strongSelf.emptyLabel.hidden = NO;
+                }
+            } else if (error) {
+                [strongSelf showError:error.localizedDescription];
+            }
+        });
+    }];
+}
+
+- (void)searchResourcepacks:(NSString *)query {
+    self.resourcepackSearchQuery = query;
+    self.currentResourcepackOffset = 0;
+    self.hasMoreResourcepacks = YES;
+    [self.resourcepackList removeAllObjects];
+    [self.resourcepackTableView reloadData];
+    [self loadResourcePackList];
+}
+
+#pragma mark - Datapack Search & Loading
+
+- (void)refreshDatapackList {
+    self.currentDatapackOffset = 0;
+    self.hasMoreDatapacks = YES;
+    [self.datapackList removeAllObjects];
+    [self loadDataPackList];
+}
+
+- (void)loadDataPackList {
+    if (self.isLoadingDatapacks) return;
+    self.isLoadingDatapacks = YES;
+
+    if (self.currentDatapackOffset == 0) {
+        [self.loadingIndicator startAnimating];
+    }
+
+    NSMutableDictionary *filters = [NSMutableDictionary dictionary];
+    filters[@"limit"] = @30;
+    filters[@"offset"] = @(self.currentDatapackOffset);
+    filters[@"projectType"] = @"datapack";
+
+    if (self.datapackSearchQuery.length > 0) {
+        filters[@"query"] = self.datapackSearchQuery;
+    }
+    if (self.currentGameVersion.length > 0) {
+        filters[@"version"] = self.currentGameVersion;
+    }
+
+    __weak typeof(self) weakSelf = self;
+    id api = [self currentAPIForTabType:@"datapack"];
+    [api searchModWithFilters:filters completion:^(NSArray * _Nullable results, NSError * _Nullable error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) return;
+            [strongSelf.loadingIndicator stopAnimating];
+            [strongSelf.datapackTableView.refreshControl endRefreshing];
+            strongSelf.isLoadingDatapacks = NO;
+
+            if (results) {
+                if (strongSelf.currentDatapackOffset == 0) {
+                    [strongSelf.datapackList removeAllObjects];
+                }
+                [strongSelf.datapackList addObjectsFromArray:results];
+                strongSelf.hasMoreDatapacks = (results.count >= 30);
+                strongSelf.currentDatapackOffset += results.count;
+
+                [strongSelf.datapackTableView reloadData];
+                strongSelf.emptyLabel.hidden = (strongSelf.datapackList.count > 0);
+                if (strongSelf.datapackList.count == 0) {
+                    strongSelf.emptyLabel.text = @"暂无数据包";
+                    strongSelf.emptyLabel.hidden = NO;
+                }
+            } else if (error) {
+                [strongSelf showError:error.localizedDescription];
+            }
+        });
+    }];
+}
+
+- (void)searchDatapacks:(NSString *)query {
+    self.datapackSearchQuery = query;
+    self.currentDatapackOffset = 0;
+    self.hasMoreDatapacks = YES;
+    [self.datapackList removeAllObjects];
+    [self.datapackTableView reloadData];
+    [self loadDataPackList];
+}
+
 #pragma mark - Filter Options
 
 - (void)showFilterOptions {
     NSInteger tabIndex = self.tabSegment.selectedSegmentIndex;
-    
+
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"选项"
                                                                    message:nil
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
-    
-    if (tabIndex == 1 || tabIndex == 2) {
+
+    if (tabIndex == 1 || tabIndex == 2 || tabIndex == 3 || tabIndex == 4) {
         [alert addAction:[UIAlertAction actionWithTitle:@"选择游戏版本"
                                                   style:UIAlertActionStyleDefault
                                                 handler:^(UIAlertAction * _Nonnull action) {
             [self showGameVersionPicker];
         }]];
-        
+
         [alert addAction:[UIAlertAction actionWithTitle:@"排序方式"
                                                   style:UIAlertActionStyleDefault
                                                 handler:^(UIAlertAction * _Nonnull action) {
             [self showSortOptions];
         }]];
-        
+
         if (tabIndex == 1) {
             [alert addAction:[UIAlertAction actionWithTitle:@"模组加载器"
                                                       style:UIAlertActionStyleDefault
@@ -1604,13 +1986,13 @@
                 [self showModLoaderPicker];
             }]];
         }
-        
+
         [alert addAction:[UIAlertAction actionWithTitle:@"重置筛选"
                                                   style:UIAlertActionStyleDestructive
                                                 handler:^(UIAlertAction * _Nonnull action) {
             [self resetFilters];
         }]];
-    } else if (tabIndex == 3) {
+    } else if (tabIndex == 5) {
         [alert addAction:[UIAlertAction actionWithTitle:@"导入本地整合包"
                                                   style:UIAlertActionStyleDefault
                                                 handler:^(UIAlertAction * _Nonnull action) {
@@ -1744,6 +2126,8 @@
     self.currentModLoader = nil;
     self.currentSortField = @"follows";
     self.currentSearchQuery = nil;
+    self.resourcepackSearchQuery = nil;
+    self.datapackSearchQuery = nil;
     self.searchBar.text = nil;
     [self reloadCurrentList];
 }
@@ -1759,6 +2143,14 @@
         [self.shaderList removeAllObjects];
         [self loadShaderList];
     } else if (tabIndex == 3) {
+        self.currentResourcepackOffset = 0;
+        [self.resourcepackList removeAllObjects];
+        [self loadResourcePackList];
+    } else if (tabIndex == 4) {
+        self.currentDatapackOffset = 0;
+        [self.datapackList removeAllObjects];
+        [self loadDataPackList];
+    } else if (tabIndex == 5) {
         self.currentModpackOffset = 0;
         [self.modpackList removeAllObjects];
         [self loadModpackList];
@@ -1777,13 +2169,17 @@
 
 - (void)searchBarSearchButtonClicked:(UISearchBar *)searchBar {
     [searchBar resignFirstResponder];
-    
+
     NSInteger tabIndex = self.tabSegment.selectedSegmentIndex;
     if (tabIndex == 1) {
         [self searchMods:searchBar.text];
     } else if (tabIndex == 2) {
         [self searchShaders:searchBar.text];
     } else if (tabIndex == 3) {
+        [self searchResourcepacks:searchBar.text];
+    } else if (tabIndex == 4) {
+        [self searchDatapacks:searchBar.text];
+    } else if (tabIndex == 5) {
         [self searchModpacks:searchBar.text];
     }
 }
@@ -1792,6 +2188,8 @@
     searchBar.text = nil;
     self.currentSearchQuery = nil;
     self.modpackSearchQuery = nil;
+    self.resourcepackSearchQuery = nil;
+    self.datapackSearchQuery = nil;
     [searchBar resignFirstResponder];
     [self reloadCurrentList];
 }
@@ -2080,7 +2478,8 @@
     filters[@"version"] = gameVersion;
     
     __weak typeof(self) weakSelf = self;
-    [[ModrinthAPI sharedInstance] searchModWithFilters:filters completion:^(NSArray *results, NSError *error) {
+    id api = [self currentAPIForTabType:@"mod"];
+    [api searchModWithFilters:filters completion:^(NSArray *results, NSError *error) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) {
             if (completion) completion(NO, [NSError errorWithDomain:@"AppError" code:-1 userInfo:nil]);
@@ -2105,7 +2504,7 @@
             return;
         }
         
-        [[ModrinthAPI sharedInstance] getVersionsForModWithID:fabricAPI[@"id"] completion:^(NSArray<ModVersion *> *versions, NSError *versionError) {
+        [api getVersionsForModWithID:fabricAPI[@"id"] completion:^(NSArray<ModVersion *> *versions, NSError *versionError) {
             if (versionError || versions.count == 0) {
                 if (completion) completion(NO, versionError ?: [NSError errorWithDomain:@"DownloadError" code:3 userInfo:@{NSLocalizedDescriptionKey: @"获取 Fabric API 版本失败"}]);
                 return;
@@ -2700,7 +3099,8 @@
 
 - (void)installModpackAtIndexPath:(NSIndexPath *)indexPath {
     NSDictionary *modpack = self.modpackList[indexPath.row];
-    [[ModrinthAPI sharedInstance] getVersionsForModWithID:modpack[@"id"] completion:^(NSArray<ModVersion *> * _Nullable versions, NSError * _Nullable error) {
+    id api = [self currentAPIForTabType:@"modpack"];
+    [api getVersionsForModWithID:modpack[@"id"] completion:^(NSArray<ModVersion *> * _Nullable versions, NSError * _Nullable error) {
         dispatch_async(dispatch_get_main_queue(), ^{
             if (error || versions.count == 0) {
                 [self showError:@"获取整合包版本失败"];
@@ -2761,7 +3161,8 @@
     MinecraftResourceDownloadTask *downloader = [[MinecraftResourceDownloadTask alloc] init];
     NSString *destPath = [NSString stringWithFormat:@"%s/custom_gamedir/%@", getenv("POJAV_GAME_DIR"), modpack[@"id"]];
     [[NSFileManager defaultManager] createDirectoryAtPath:destPath withIntermediateDirectories:YES attributes:nil error:nil];
-    [[ModrinthAPI sharedInstance] downloader:downloader submitDownloadTasksFromPackage:filePath toPath:destPath];
+    id api = [self currentAPIForTabType:@"modpack"];
+    [api downloader:downloader submitDownloadTasksFromPackage:filePath toPath:destPath];
     
     self.progressVC = [[DownloadProgressViewController alloc] initWithTask:downloader];
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:self.progressVC];
@@ -2786,6 +3187,10 @@
         return self.shaderList.count + (self.hasMoreShaders ? 1 : 0);
     } else if (tableView == self.modpackTableView) {
         return self.modpackList.count + (self.hasMoreModpacks ? 1 : 0);
+    } else if (tableView == self.resourcepackTableView) {
+        return self.resourcepackList.count + (self.hasMoreResourcepacks ? 1 : 0);
+    } else if (tableView == self.datapackTableView) {
+        return self.datapackList.count + (self.hasMoreDatapacks ? 1 : 0);
     }
     return 0;
 }
@@ -2799,7 +3204,7 @@
         cell.backgroundColor = [UIColor clearColor];
         return cell;
     }
-    
+
     if (tableView == self.shaderTableView && indexPath.row == self.shaderList.count && self.hasMoreShaders) {
         UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:@"LoadingCell"];
         cell.textLabel.text = @"加载更多...";
@@ -2808,7 +3213,7 @@
         cell.backgroundColor = [UIColor clearColor];
         return cell;
     }
-    
+
     if (tableView == self.modpackTableView && indexPath.row == self.modpackList.count && self.hasMoreModpacks) {
         UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:@"LoadingCell"];
         cell.textLabel.text = @"加载更多...";
@@ -2817,7 +3222,25 @@
         cell.backgroundColor = [UIColor clearColor];
         return cell;
     }
-    
+
+    if (tableView == self.resourcepackTableView && indexPath.row == self.resourcepackList.count && self.hasMoreResourcepacks) {
+        UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:@"LoadingCell"];
+        cell.textLabel.text = @"加载更多...";
+        cell.textLabel.textAlignment = NSTextAlignmentCenter;
+        cell.textLabel.textColor = [UIColor secondaryLabelColor];
+        cell.backgroundColor = [UIColor clearColor];
+        return cell;
+    }
+
+    if (tableView == self.datapackTableView && indexPath.row == self.datapackList.count && self.hasMoreDatapacks) {
+        UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:@"LoadingCell"];
+        cell.textLabel.text = @"加载更多...";
+        cell.textLabel.textAlignment = NSTextAlignmentCenter;
+        cell.textLabel.textColor = [UIColor secondaryLabelColor];
+        cell.backgroundColor = [UIColor clearColor];
+        return cell;
+    }
+
     ModernAssetCell *cell;
     if (tableView == self.modTableView) {
         cell = [tableView dequeueReusableCellWithIdentifier:@"ModCell" forIndexPath:indexPath];
@@ -2830,6 +3253,18 @@
         NSDictionary *shader = self.shaderList[indexPath.row];
         [cell configureWithShader:shader];
         [cell.downloadButton addTarget:self action:@selector(downloadShader:) forControlEvents:UIControlEventTouchUpInside];
+        cell.downloadButton.tag = indexPath.row;
+    } else if (tableView == self.resourcepackTableView) {
+        cell = [tableView dequeueReusableCellWithIdentifier:@"ResourcepackCell" forIndexPath:indexPath];
+        NSDictionary *resourcepack = self.resourcepackList[indexPath.row];
+        [cell configureWithMod:resourcepack];
+        [cell.downloadButton addTarget:self action:@selector(downloadResourcepack:) forControlEvents:UIControlEventTouchUpInside];
+        cell.downloadButton.tag = indexPath.row;
+    } else if (tableView == self.datapackTableView) {
+        cell = [tableView dequeueReusableCellWithIdentifier:@"DatapackCell" forIndexPath:indexPath];
+        NSDictionary *datapack = self.datapackList[indexPath.row];
+        [cell configureWithMod:datapack];
+        [cell.downloadButton addTarget:self action:@selector(downloadDatapack:) forControlEvents:UIControlEventTouchUpInside];
         cell.downloadButton.tag = indexPath.row;
     } else {
         cell = [tableView dequeueReusableCellWithIdentifier:@"ModpackCell" forIndexPath:indexPath];
@@ -2845,19 +3280,27 @@
     if (tableView == self.modTableView && indexPath.row == self.modList.count - 5 && self.hasMoreMods && !self.isLoadingMore) {
         [self loadModList];
     }
-    
+
     if (tableView == self.shaderTableView && indexPath.row == self.shaderList.count - 5 && self.hasMoreShaders && !self.isLoadingMore) {
         [self loadShaderList];
     }
-    
+
     if (tableView == self.modpackTableView && indexPath.row == self.modpackList.count - 5 && self.hasMoreModpacks && !self.isLoadingModpacks) {
         [self loadModpackList];
+    }
+
+    if (tableView == self.resourcepackTableView && indexPath.row == self.resourcepackList.count - 5 && self.hasMoreResourcepacks && !self.isLoadingResourcepacks) {
+        [self loadResourcePackList];
+    }
+
+    if (tableView == self.datapackTableView && indexPath.row == self.datapackList.count - 5 && self.hasMoreDatapacks && !self.isLoadingDatapacks) {
+        [self loadDataPackList];
     }
 }
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
-    
+
     if (tableView == self.modTableView) {
         if (indexPath.row == self.modList.count && self.hasMoreMods) {
             [self loadModList];
@@ -2870,6 +3313,18 @@
             return;
         }
         [self downloadShaderAtIndexPath:indexPath];
+    } else if (tableView == self.resourcepackTableView) {
+        if (indexPath.row == self.resourcepackList.count && self.hasMoreResourcepacks) {
+            [self loadResourcePackList];
+            return;
+        }
+        [self downloadResourcepackAtIndexPath:indexPath];
+    } else if (tableView == self.datapackTableView) {
+        if (indexPath.row == self.datapackList.count && self.hasMoreDatapacks) {
+            [self loadDataPackList];
+            return;
+        }
+        [self downloadDatapackAtIndexPath:indexPath];
     } else if (tableView == self.modpackTableView) {
         if (indexPath.row == self.modpackList.count && self.hasMoreModpacks) {
             [self loadModpackList];
@@ -2888,14 +3343,14 @@
 
 - (void)downloadModAtIndexPath:(NSIndexPath *)indexPath {
     if (indexPath.row >= self.modList.count) return;
-    
+
     NSDictionary *mod = self.modList[indexPath.row];
     ModItem *modItem = [[ModItem alloc] initWithOnlineData:mod];
-    
+
     ModVersionViewController *versionVC = [[ModVersionViewController alloc] init];
     versionVC.modItem = modItem;
     versionVC.delegate = self;
-    
+
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:versionVC];
     nav.modalPresentationStyle = UIModalPresentationFormSheet;
     [self presentViewController:nav animated:YES completion:nil];
@@ -2908,14 +3363,58 @@
 
 - (void)downloadShaderAtIndexPath:(NSIndexPath *)indexPath {
     if (indexPath.row >= self.shaderList.count) return;
-    
+
     NSDictionary *shader = self.shaderList[indexPath.row];
     ShaderItem *shaderItem = [[ShaderItem alloc] initWithOnlineData:shader];
-    
+
     ShaderVersionViewController *versionVC = [[ShaderVersionViewController alloc] init];
     versionVC.shaderItem = shaderItem;
     versionVC.delegate = self;
-    
+
+    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:versionVC];
+    nav.modalPresentationStyle = UIModalPresentationFormSheet;
+    [self presentViewController:nav animated:YES completion:nil];
+}
+
+- (void)downloadResourcepack:(UIButton *)sender {
+    NSIndexPath *indexPath = [NSIndexPath indexPathForRow:sender.tag inSection:0];
+    [self downloadResourcepackAtIndexPath:indexPath];
+}
+
+- (void)downloadResourcepackAtIndexPath:(NSIndexPath *)indexPath {
+    if (indexPath.row >= self.resourcepackList.count) return;
+
+    NSDictionary *resourcepack = self.resourcepackList[indexPath.row];
+    ModItem *modItem = [[ModItem alloc] initWithOnlineData:resourcepack];
+
+    self.pendingDownloadType = @"resourcepack";
+
+    ModVersionViewController *versionVC = [[ModVersionViewController alloc] init];
+    versionVC.modItem = modItem;
+    versionVC.delegate = self;
+
+    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:versionVC];
+    nav.modalPresentationStyle = UIModalPresentationFormSheet;
+    [self presentViewController:nav animated:YES completion:nil];
+}
+
+- (void)downloadDatapack:(UIButton *)sender {
+    NSIndexPath *indexPath = [NSIndexPath indexPathForRow:sender.tag inSection:0];
+    [self downloadDatapackAtIndexPath:indexPath];
+}
+
+- (void)downloadDatapackAtIndexPath:(NSIndexPath *)indexPath {
+    if (indexPath.row >= self.datapackList.count) return;
+
+    NSDictionary *datapack = self.datapackList[indexPath.row];
+    ModItem *modItem = [[ModItem alloc] initWithOnlineData:datapack];
+
+    self.pendingDownloadType = @"datapack";
+
+    ModVersionViewController *versionVC = [[ModVersionViewController alloc] init];
+    versionVC.modItem = modItem;
+    versionVC.delegate = self;
+
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:versionVC];
     nav.modalPresentationStyle = UIModalPresentationFormSheet;
     [self presentViewController:nav animated:YES completion:nil];
@@ -2925,18 +3424,25 @@
 
 - (void)modVersionViewController:(ModVersionViewController *)viewController didSelectVersion:(ModVersion *)version {
     ModItem *itemToDownload = viewController.modItem;
-    
+
     NSDictionary *primaryFile = version.primaryFile;
     if (!primaryFile || ![primaryFile[@"url"] isKindOfClass:[NSString class]]) {
         [self showError:@"未找到有效的下载链接"];
         return;
     }
-    
+
     itemToDownload.selectedVersionDownloadURL = primaryFile[@"url"];
     itemToDownload.fileName = primaryFile[@"filename"] ?: [NSString stringWithFormat:@"%@.jar", itemToDownload.displayName];
-    
+
+    NSString *downloadType = self.pendingDownloadType ?: @"mod";
+    self.pendingDownloadType = nil;
+
     [viewController dismissViewControllerAnimated:YES completion:^{
-        [self startDownloadForModItem:itemToDownload];
+        if ([downloadType isEqualToString:@"resourcepack"] || [downloadType isEqualToString:@"datapack"]) {
+            [self startDownloadForAssetItem:itemToDownload type:downloadType];
+        } else {
+            [self startDownloadForModItem:itemToDownload];
+        }
     }];
 }
 
@@ -2944,7 +3450,7 @@
     UIAlertController *downloadingAlert = [UIAlertController alertControllerWithTitle:@"正在下载"
                                                                               message:item.displayName
                                                                        preferredStyle:UIAlertControllerStyleAlert];
-    
+
     UIActivityIndicatorView *indicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
     indicator.translatesAutoresizingMaskIntoConstraints = NO;
     [downloadingAlert.view addSubview:indicator];
@@ -2953,11 +3459,11 @@
         [indicator.centerYAnchor constraintEqualToAnchor:downloadingAlert.view.centerYAnchor constant:20]
     ]];
     [indicator startAnimating];
-    
+
     [self presentViewController:downloadingAlert animated:YES completion:nil];
-    
+
     NSString *profileName = PLProfiles.current.selectedProfileName ?: @"default";
-    
+
     __weak typeof(self) weakSelf = self;
     [[ModService sharedService] downloadMod:item toProfile:profileName completion:^(NSError * _Nullable error) {
         dispatch_async(dispatch_get_main_queue(), ^{
@@ -2976,6 +3482,89 @@
             }];
         });
     }];
+}
+
+- (void)startDownloadForAssetItem:(ModItem *)item type:(NSString *)type {
+    UIAlertController *downloadingAlert = [UIAlertController alertControllerWithTitle:@"正在下载"
+                                                                              message:item.displayName
+                                                                       preferredStyle:UIAlertControllerStyleAlert];
+
+    UIActivityIndicatorView *indicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
+    indicator.translatesAutoresizingMaskIntoConstraints = NO;
+    [downloadingAlert.view addSubview:indicator];
+    [NSLayoutConstraint activateConstraints:@[
+        [indicator.centerXAnchor constraintEqualToAnchor:downloadingAlert.view.centerXAnchor],
+        [indicator.centerYAnchor constraintEqualToAnchor:downloadingAlert.view.centerYAnchor constant:20]
+    ]];
+    [indicator startAnimating];
+
+    [self presentViewController:downloadingAlert animated:YES completion:nil];
+
+    // 目标目录：resourcepacks / datapacks
+    NSString *folderName = [type isEqualToString:@"datapack"] ? @"datapacks" : @"resourcepacks";
+    NSString *baseDir;
+    const char *env = getenv("POJAV_GAME_DIR");
+    if (env) {
+        baseDir = [NSString stringWithUTF8String:env];
+    } else {
+        baseDir = NSHomeDirectory();
+    }
+
+    NSString *profileName = PLProfiles.current.selectedProfileName;
+    if (profileName.length > 0) {
+        NSDictionary *profiles = PLProfiles.current.profiles;
+        NSDictionary *prof = profiles[profileName];
+        if ([prof isKindOfClass:[NSDictionary class]]) {
+            NSString *gameDir = prof[@"gameDir"];
+            if ([gameDir isKindOfClass:[NSString class]] && gameDir.length > 0 && ![gameDir isEqualToString:@"."]) {
+                if ([gameDir isAbsolutePath]) {
+                    baseDir = gameDir;
+                } else {
+                    baseDir = [baseDir stringByAppendingPathComponent:gameDir];
+                }
+            }
+        }
+    }
+
+    NSString *destDir = [baseDir stringByAppendingPathComponent:folderName];
+    [[NSFileManager defaultManager] createDirectoryAtPath:destDir withIntermediateDirectories:YES attributes:nil error:nil];
+    NSString *destPath = [destDir stringByAppendingPathComponent:item.fileName ?: [NSString stringWithFormat:@"%@.zip", item.displayName]];
+
+    NSURL *url = [NSURL URLWithString:item.selectedVersionDownloadURL];
+    if (!url) {
+        __weak typeof(self) weakSelf = self;
+        [downloadingAlert dismissViewControllerAnimated:YES completion:^{
+            [weakSelf showError:@"无效的下载链接"];
+        }];
+        return;
+    }
+
+    __weak typeof(self) weakSelf = self;
+    NSURLSessionDownloadTask *task = [[NSURLSession sharedSession] downloadTaskWithURL:url completionHandler:^(NSURL *location, NSURLResponse *response, NSError *error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) return;
+            [downloadingAlert dismissViewControllerAnimated:YES completion:^{
+                if (error) {
+                    [strongSelf showError:error.localizedDescription];
+                    return;
+                }
+                [[NSFileManager defaultManager] removeItemAtPath:destPath error:nil];
+                NSError *moveError = nil;
+                [[NSFileManager defaultManager] moveItemAtPath:location.path toPath:destPath error:&moveError];
+                if (moveError) {
+                    [strongSelf showError:moveError.localizedDescription];
+                } else {
+                    UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"下载成功"
+                                                                                          message:[NSString stringWithFormat:@"%@ 已安装到 %@", item.displayName, folderName]
+                                                                                   preferredStyle:UIAlertControllerStyleAlert];
+                    [successAlert addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleDefault handler:nil]];
+                    [strongSelf presentViewController:successAlert animated:YES completion:nil];
+                }
+            }];
+        });
+    }];
+    [task resume];
 }
 
 #pragma mark - ShaderVersionViewControllerDelegate

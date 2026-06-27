@@ -16,6 +16,7 @@
 @property (nonatomic, strong) NSURLSession *downloadSession;
 @property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, ShaderDownloadHandler> *downloadCompletionHandlers;
 @property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, NSString *> *downloadDestinationPaths;
+@property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, void(^)(NSProgress *)> *downloadProgressHandlers;
 @end
 
 @implementation ShaderService
@@ -43,6 +44,7 @@
         _downloadSession = [NSURLSession sessionWithConfiguration:config delegate:self delegateQueue:nil];
         _downloadCompletionHandlers = [NSMutableDictionary dictionary];
         _downloadDestinationPaths = [NSMutableDictionary dictionary];
+        _downloadProgressHandlers = [NSMutableDictionary dictionary];
     }
     return self;
 }
@@ -279,8 +281,102 @@
     self.downloadCompletionHandlers[task] = completion;
     self.downloadDestinationPaths[task] = destinationPath;
     [task resume];
-    
+
     NSLog(@"[ShaderService] Starting download task for shader: %@ -> %@", url, destinationPath);
+}
+
+#pragma mark - Online Shader Downloading with progress
+
+- (void)downloadShader:(ShaderItem *)shader
+             toProfile:(NSString *)profileName
+              progress:(void (^)(NSProgress *downloadProgress))progress
+            completion:(ShaderDownloadHandler)completion {
+    // Ensure shaderpacks folder exists
+    NSString *shadersFolder = [self existingShadersFolderForProfile:profileName];
+    NSFileManager *fm = [NSFileManager defaultManager];
+
+    if (!shadersFolder) {
+        NSString *gameDir = nil;
+        NSString *profile = profileName.length ? profileName : @"default";
+
+        @try {
+            NSDictionary *profiles = PLProfiles.current.profiles;
+            NSDictionary *prof = profiles[profile];
+            if ([prof isKindOfClass:[NSDictionary class]]) {
+                gameDir = prof[@"gameDir"];
+            }
+        } @catch (NSException *ex) { }
+
+        if (!gameDir) {
+            const char *gameDirC = getenv("POJAV_GAME_DIR");
+            if (gameDirC) {
+                gameDir = [NSString stringWithUTF8String:gameDirC];
+            }
+        }
+
+        if (gameDir) {
+            shadersFolder = [gameDir stringByAppendingPathComponent:@"shaderpacks"];
+            NSError *dirError = nil;
+            BOOL created = [fm createDirectoryAtPath:shadersFolder
+                         withIntermediateDirectories:YES
+                                          attributes:nil
+                                               error:&dirError];
+            if (!created || dirError) {
+                if (completion) {
+                    NSError *error = [NSError errorWithDomain:@"ShaderServiceError"
+                                                         code:1
+                                                     userInfo:@{NSLocalizedDescriptionKey: @"Failed to create shaderpacks folder, please check storage permissions."}];
+                    dispatch_async(dispatch_get_main_queue(), ^{ completion(error); });
+                }
+                return;
+            }
+        } else {
+            if (completion) {
+                NSError *error = [NSError errorWithDomain:@"ShaderServiceError"
+                                                     code:1
+                                                 userInfo:@{NSLocalizedDescriptionKey: @"Cannot find game directory."}];
+                dispatch_async(dispatch_get_main_queue(), ^{ completion(error); });
+            }
+            return;
+        }
+    }
+
+    // Validate URL
+    NSURL *url = [NSURL URLWithString:shader.selectedVersionDownloadURL];
+    if (!url) {
+        if (completion) {
+            NSError *error = [NSError errorWithDomain:@"ShaderServiceError"
+                                                 code:2
+                                             userInfo:@{NSLocalizedDescriptionKey: @"Invalid download link."}];
+            dispatch_async(dispatch_get_main_queue(), ^{ completion(error); });
+        }
+        return;
+    }
+
+    // Ensure filename is valid
+    NSString *fileName = shader.fileName;
+    if (!fileName || fileName.length == 0) {
+        fileName = [url lastPathComponent];
+    }
+    if (!fileName || fileName.length == 0) {
+        fileName = @"shaderpack.zip";
+    }
+    if (![fileName.lowercaseString hasSuffix:@".zip"]) {
+        fileName = [fileName stringByAppendingString:@".zip"];
+    }
+
+    NSString *destinationPath = [shadersFolder stringByAppendingPathComponent:fileName];
+
+    // Create download task with the session (default configuration, no background throttling)
+    NSURLSessionDownloadTask *task = [self.downloadSession downloadTaskWithURL:url];
+    self.downloadCompletionHandlers[task] = completion;
+    self.downloadDestinationPaths[task] = destinationPath;
+    if (progress) {
+        self.downloadProgressHandlers[task] = progress;
+    }
+    [task resume];
+
+    NSLog(@"[ShaderService] Starting download task (with progress) for shader: %@ -> %@", url, destinationPath);
 }
 
 #pragma mark - NSURLSessionDownloadDelegate
@@ -288,10 +384,11 @@
 - (void)URLSession:(NSURLSession *)session downloadTask:(NSURLSessionDownloadTask *)downloadTask didFinishDownloadingToURL:(NSURL *)location {
     ShaderDownloadHandler handler = self.downloadCompletionHandlers[downloadTask];
     NSString *destinationPath = self.downloadDestinationPaths[downloadTask];
-    
+
     [self.downloadCompletionHandlers removeObjectForKey:downloadTask];
     [self.downloadDestinationPaths removeObjectForKey:downloadTask];
-    
+    [self.downloadProgressHandlers removeObjectForKey:downloadTask];
+
     if (!handler || !destinationPath) {
         return;
     }
@@ -319,8 +416,25 @@
             handler(error);
             [self.downloadCompletionHandlers removeObjectForKey:task];
             [self.downloadDestinationPaths removeObjectForKey:task];
+            [self.downloadProgressHandlers removeObjectForKey:task];
         }
     }
+}
+
+- (void)URLSession:(NSURLSession *)session
+      downloadTask:(NSURLSessionDownloadTask *)downloadTask
+      didWriteData:(int64_t)bytesWritten
+ totalBytesWritten:(int64_t)totalBytesWritten
+totalBytesExpectedToWrite:(int64_t)totalBytesExpectedToWrite {
+    void(^progress)(NSProgress *) = self.downloadProgressHandlers[downloadTask];
+    if (!progress) return;
+
+    NSProgress *downloadProgress = [NSProgress progressWithTotalUnitCount:totalBytesExpectedToWrite];
+    downloadProgress.completedUnitCount = totalBytesWritten;
+
+    dispatch_async(dispatch_get_main_queue(), ^{
+        progress(downloadProgress);
+    });
 }
 
 @end

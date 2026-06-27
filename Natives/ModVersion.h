@@ -11,6 +11,15 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, copy, readonly) NSArray<NSString *> *loaders;
 @property (nonatomic, copy, readonly, nullable) NSDictionary *primaryFile; // The first file in the files array
 
+// 资源来源 API（1=Modrinth, 2=CurseForge）
+@property (nonatomic, assign) NSInteger apiSource;
+// 文件大小（字节）
+@property (nonatomic, strong, nullable) NSNumber *fileSize;
+// CurseForge file ID
+@property (nonatomic, copy, nullable) NSString *fileId;
+// CurseForge project ID
+@property (nonatomic, copy, nullable) NSString *projectId;
+
 - (nullable instancetype)initWithDictionary:(NSDictionary *)dictionary;
 
 @end
