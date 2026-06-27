@@ -47,10 +47,12 @@ static const NSInteger kCurseForgeCategoryIDServerUtility = 435;
     NSString *runtimeKey = [PLPreferences curseForgeAPIKey];
     if ([runtimeKey isKindOfClass:NSString.class] && runtimeKey.length > 0) return runtimeKey;
     // 2. 编译时宏
+#ifdef CONFIG_CURSEFORGE_API_KEY
     NSString *compiledKey = @CONFIG_CURSEFORGE_API_KEY;
     if ([compiledKey isKindOfClass:NSString.class] && ![compiledKey isEqualToString:@"nil"] && compiledKey.length > 0) {
         return compiledKey;
     }
+#endif
     // 3. Info.plist
     NSString *infoPlistKey = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CurseForgeAPIKey"];
     return [infoPlistKey isKindOfClass:NSString.class] ? infoPlistKey : @"";
@@ -649,7 +651,7 @@ submitDownloadTasksFromPackage:(NSString *)packagePath
     request.HTTPMethod = @"POST";
     [request setValue:[self apiKey] forHTTPHeaderField:@"x-api-key"];
     [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
-    NSDictionary *body = @{@"fingerprints": @[[murmurHash longLongValue]]};
+    NSDictionary *body = @{@"fingerprints": @[ @([murmurHash longLongValue]) ]};
     NSError *jsonError = nil;
     NSData *bodyData = [NSJSONSerialization dataWithJSONObject:body options:0 error:&jsonError];
     if (jsonError) return nil;
