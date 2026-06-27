@@ -1,6 +1,6 @@
 #import "ModUpdateService.h"
-#import "ModrinthAPI.h"
-#import "CurseForgeAPI.h"
+#import "installer/modpack/ModrinthAPI.h"
+#import "installer/modpack/CurseForgeAPI.h"
 
 #pragma mark - ModUpdateResult 实现
 
