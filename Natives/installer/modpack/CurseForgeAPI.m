@@ -649,7 +649,7 @@ submitDownloadTasksFromPackage:(NSString *)packagePath
     request.HTTPMethod = @"POST";
     [request setValue:[self apiKey] forHTTPHeaderField:@"x-api-key"];
     [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
-    NSDictionary *body = @{@"fingerprints": @[[murmurHash longLongValue]]};
+    NSDictionary *body = @{@"fingerprints": @[@([murmurHash longLongValue])]};
     NSError *jsonError = nil;
     NSData *bodyData = [NSJSONSerialization dataWithJSONObject:body options:0 error:&jsonError];
     if (jsonError) return nil;

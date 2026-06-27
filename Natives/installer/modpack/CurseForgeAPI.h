@@ -54,11 +54,6 @@ NS_ASSUME_NONNULL_BEGIN
 submitDownloadTasksFromPackage:(NSString *)packagePath
             toPath:(NSString *)destPath;
 
-/// 当前是否最后一页（分页）
-@property (nonatomic, assign) BOOL reachedLastPage;
-/// 最后一次错误
-@property (nonatomic, strong, nullable) NSError *lastError;
-
 @end
 
 NS_ASSUME_NONNULL_END
