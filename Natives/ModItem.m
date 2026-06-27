@@ -28,6 +28,15 @@
         _modDescription = data[@"description"] ?: @"";
         _iconURL = data[@"imageUrl"] ?: @"";
         _author = data[@"author"] ?: @"";
+        // 资源来源（1=Modrinth, 2=CurseForge），搜索结果中携带该字段
+        id apiSourceValue = data[@"apiSource"];
+        if ([apiSourceValue isKindOfClass:[NSNumber class]]) {
+            _apiSource = apiSourceValue;
+        } else if ([apiSourceValue respondsToSelector:@selector(integerValue)]) {
+            _apiSource = @([apiSourceValue integerValue]);
+        } else {
+            _apiSource = @(1); // 默认 Modrinth
+        }
 
         // Ensure numbers are handled correctly
         id downloadsValue = data[@"downloads"];

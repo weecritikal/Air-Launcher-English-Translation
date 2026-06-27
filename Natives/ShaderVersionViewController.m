@@ -7,6 +7,7 @@
 
 #import "ShaderVersionViewController.h"
 #import "installer/modpack/ModrinthAPI.h"
+#import "installer/modpack/CurseForgeAPI.h"
 #import "ShaderVersion.h"
 #import "ShaderVersionTableViewCell.h"
 
@@ -102,7 +103,14 @@
 
 - (void)fetchVersions {
     [self.activityIndicator startAnimating];
-    [[ModrinthAPI sharedInstance] getVersionsForShaderWithID:self.shaderItem.onlineID completion:^(NSArray<ShaderVersion *> * _Nullable versions, NSError * _Nullable error) {
+
+    // 根据资源来源选择正确的 API（参考 FCL 实现）
+    // apiSource: 1=Modrinth, 2=CurseForge
+    BOOL useCurseForge = [self.shaderItem.apiSource integerValue] == 2;
+    id api = useCurseForge ? [CurseForgeAPI sharedInstance] : [ModrinthAPI sharedInstance];
+    NSString *shaderID = self.shaderItem.onlineID;
+
+    [api getVersionsForShaderWithID:shaderID completion:^(NSArray<ShaderVersion *> * _Nullable versions, NSError * _Nullable error) {
         dispatch_async(dispatch_get_main_queue(), ^{
             [self.activityIndicator stopAnimating];
             if (error) {
