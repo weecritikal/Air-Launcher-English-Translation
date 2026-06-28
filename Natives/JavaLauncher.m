@@ -54,6 +54,9 @@ void init_loadDefaultEnv() {
 
     // Runs JVM in a separate thread
     setenv("HACK_IGNORE_START_ON_FIRST_THREAD", "1", 1);
+
+    // Force MoltenVK to use immediate present mode (uncapped fps)
+    setenv("MVK_CONFIG_PRESENT_MODE_IMMEDIATE", "1", 1);
 }
 
 void init_loadCustomEnv() {
@@ -258,6 +261,11 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
     if (glLibName) {
         if (!strcmp(glLibName, "auto")) {
             // workaround only applies to 1.20.2+
+            glLibName = RENDERER_NAME_MTL_ANGLE;
+        }
+        if (strcmp(glLibName, RENDERER_NAME_VULKAN) == 0) {
+            // Vulkan mode: set vulkan libname and fallback opengl libname for LWJGL startup probing
+            margv[++margc] = [NSString stringWithFormat:@"-Dorg.lwjgl.vulkan.libname=%s", RENDERER_NAME_VULKAN].UTF8String;
             glLibName = RENDERER_NAME_MTL_ANGLE;
         }
         margv[++margc] = [NSString stringWithFormat:@"-Dorg.lwjgl.opengl.libname=%s", glLibName].UTF8String;
