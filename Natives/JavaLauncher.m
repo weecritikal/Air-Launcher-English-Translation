@@ -223,7 +223,27 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
     }
     margv[++margc] = "-Xms128M";
     margv[++margc] = [NSString stringWithFormat:@"-Xmx%dM", allocmem].UTF8String;
-    margv[++margc] = [NSString stringWithFormat:@"-Djava.library.path=%@/Frameworks", NSBundle.mainBundle.bundlePath].UTF8String;
+    // Detect LWJGL version early to set correct library path
+    BOOL useLWJGL33 = NO;
+    if ([launchTarget isKindOfClass:NSDictionary.class]) {
+        NSArray *libraries = launchTarget[@"libraries"];
+        for (NSDictionary *lib in libraries) {
+            NSString *name = lib[@"name"];
+            if (name && [name hasPrefix:@"org.lwjgl:lwjgl:"]) {
+                NSString *ver = [[name componentsSeparatedByString:@":"] lastObject];
+                NSArray *parts = [ver componentsSeparatedByString:@"."];
+                if (parts.count >= 2 && [[parts objectAtIndex:1] intValue] < 4) {
+                    useLWJGL33 = YES;
+                }
+                break;
+            }
+        }
+    }
+    NSString *frameworksPath = [NSString stringWithFormat:@"%@/Frameworks", NSBundle.mainBundle.bundlePath];
+    NSString *lwjglFrameworksPath = useLWJGL33
+        ? [frameworksPath stringByAppendingPathComponent:@"lwjgl33"]
+        : frameworksPath;
+    margv[++margc] = [NSString stringWithFormat:@"-Djava.library.path=%@:%@", lwjglFrameworksPath, frameworksPath].UTF8String;
     margv[++margc] = [NSString stringWithFormat:@"-Duser.dir=%@", gameDir].UTF8String;
     margv[++margc] = [NSString stringWithFormat:@"-Duser.home=%s", getenv("POJAV_HOME")].UTF8String;
     margv[++margc] = [NSString stringWithFormat:@"-Duser.timezone=%@", NSTimeZone.localTimeZone.name].UTF8String;
@@ -264,6 +284,9 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
     margv[++margc] = [NSString stringWithFormat:@"-javaagent:%@/patchjna_agent.jar=", librariesPath].UTF8String;
     if(getPrefBool(@"general.cosmetica")) {
         margv[++margc] = [NSString stringWithFormat:@"-javaagent:%@/arc_dns_injector.jar=23.95.137.176", librariesPath].UTF8String;
+    }
+    if(getPrefBool(@"video.fix_simple_voice_chat_mod")) {
+        margv[++margc] = [NSString stringWithFormat:@"-javaagent:%@/patchsvc.jar=", librariesPath].UTF8String;
     }
 
     // Workaround random stack guard allocation crashes
@@ -359,7 +382,21 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
     init_loadCustomJvmFlags(&margc, (const char **)margv);
     NSLog(@"[Init] Found JLI lib");
 
-    NSString *classpath = [NSString stringWithFormat:@"%@/*", librariesPath];
+    // Pick correct LWJGL jar based on earlier version detection
+    NSString *lwjglJar = useLWJGL33
+        ? [NSString stringWithFormat:@"%@/lwjgl33.jar", librariesPath]
+        : [NSString stringWithFormat:@"%@/lwjgl.jar", librariesPath];
+    NSLog(@"[JavaLauncher] Using LWJGL %@ jar", useLWJGL33 ? @"3.3.x" : @"3.4.x");
+    NSMutableString *classpathBuilder = [NSMutableString string];
+    NSArray *libFiles = [fm contentsOfDirectoryAtPath:librariesPath error:nil];
+    for (NSString *libFile in libFiles) {
+        if ([libFile hasSuffix:@".jar"] &&
+            ![libFile hasPrefix:@"lwjgl"] ) {
+            [classpathBuilder appendFormat:@"%@/%@:", librariesPath, libFile];
+        }
+    }
+    [classpathBuilder appendString:lwjglJar];
+    NSString *classpath = classpathBuilder;
     if (launchJar) {
         classpath = [classpath stringByAppendingFormat:@":%@", launchTarget];
     }

@@ -160,7 +160,8 @@ NSArray* getRendererNames(BOOL containsDefault) {
         localize(@"preference.title.renderer.debug.gl4es", nil),
         localize(@"preference.title.renderer.debug.angle", nil),
         localize(@"preference.title.renderer.debug.mg", nil),
-        localize(@"preference.title.renderer.debug.zink", nil)
+        localize(@"preference.title.renderer.debug.zink", nil),
+        localize(@"preference.title.renderer.debug.vulkan", nil)
     ].mutableCopy;
 
     if (containsDefault) {

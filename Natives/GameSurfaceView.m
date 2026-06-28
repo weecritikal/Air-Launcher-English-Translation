@@ -17,8 +17,12 @@
 }
 
 + (Class)layerClass {
-    if ([[PLProfiles resolveKeyForCurrentProfile:@"renderer"] hasPrefix:@"libOSMesa"]) {
+    NSString *renderer = [PLProfiles resolveKeyForCurrentProfile:@"renderer"];
+    if ([renderer hasPrefix:@"libOSMesa"]) {
         return CALayer.class;
+    } else if ([renderer isEqualToString:@ RENDERER_NAME_VULKAN]) {
+        // MoltenVK needs a CAMetalLayer-backed surface directly.
+        return CAMetalLayer.class;
     } else {
         return CAMetalLayer.class;
     }

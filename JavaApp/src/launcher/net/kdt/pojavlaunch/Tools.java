@@ -53,6 +53,21 @@ public final class Tools {
     public static final String OBSOLETE_RESOURCES_PATH=DIR_GAME_NEW + "/resources";
 
     public static void launchMinecraft(MinecraftAccount profile, final JMinecraftVersionList.Version versionInfo) throws Throwable {
+        // --- BEGIN AMETHYST UPSTREAM LWJGL 3.4.1 COMPLIANCE OVERRIDE ---
+        // Programmatically configure modern allocator and turn off native libffi checks
+        System.setProperty("org.lwjgl.system.libffi.enabled", "false");
+        System.setProperty("org.lwjgl.system.libffi.initialize", "false"); // Prevents NoSuchFieldError in LibFFI <clinit>
+        System.setProperty("org.lwjgl.system.Allocator", "Custom");
+
+        // FIX FOR LWJGL / SPVC LINKING FAILURE ON iOS:
+        // Force lookups for libspirv-cross.dylib to match your native compiled binary name
+        System.setProperty("org.lwjgl.util.spvc.libname", "libspirv-cross-c-shared.0.dylib");
+
+        // FIX FOR LWJGL / OPENAL LINKING FAILURE ON iOS:
+        // Force lookup for libopenal.dylib directly to match your flat native library path
+        System.setProperty("org.lwjgl.openal.libname", "libopenal.dylib");
+        // --- END AMETHYST UPSTREAM LWJGL 3.4.1 COMPLIANCE OVERRIDE ---
+
         String[] launchArgs = getMinecraftArgs(profile, versionInfo);
         // System.out.println("Minecraft Args: " + Arrays.toString(launchArgs));
 

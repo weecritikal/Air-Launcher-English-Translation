@@ -65,8 +65,15 @@ int pojavInitOpenGL() {
     } else if ([renderer hasPrefix:@"libOSMesa"]) {
         setenv("GALLIUM_DRIVER","zink",1);
         set_osm_bridge_tbl();
+    } else if ([renderer isEqualToString:@ RENDERER_NAME_VULKAN]) {
+        set_vk_bridge_tbl();
+        // Vulkan mode still may trigger LWJGL OpenGL probing during startup.
+        // Ensure a valid iOS OpenGL shim is available for that probe path.
+        JNI_LWJGL_changeRenderer(RENDERER_NAME_MTL_ANGLE);
     }
-    JNI_LWJGL_changeRenderer(renderer.UTF8String);
+    if (strcmp(renderer.UTF8String, RENDERER_NAME_VULKAN) != 0) {
+        JNI_LWJGL_changeRenderer(renderer.UTF8String);
+    }
     // Preload renderer library
     dlopen([NSString stringWithFormat:@"@rpath/%@", renderer].UTF8String, RTLD_GLOBAL);
 
@@ -94,23 +101,25 @@ void pojavSetWindowHint(int hint, int value) {
 }
 
 void pojavSwapBuffers() {
+    if (!br_swap_buffers) return;
     br_swap_buffers();
 }
 
 void pojavMakeCurrent(basic_render_window_t* window) {
+    if (!br_make_current) return;
     br_make_current(window);
 }
 
 void* pojavCreateContext(basic_render_window_t* contextSrc) {
-    if (clientAPI == GLFW_NO_API) {
-        // Game has selected Vulkan API to render
-        return (__bridge void *)SurfaceViewController.surface.layer;
-    }
-
     static BOOL inited = NO;
     if (!inited) {
         inited = YES;
         pojavInitOpenGL();
+    }
+
+    if (clientAPI == GLFW_NO_API) {
+        // Game has selected Vulkan API to render
+        return (__bridge void *)SurfaceViewController.surface.layer;
     }
 
     return br_init_context(contextSrc);
