@@ -1,6 +1,14 @@
 cmake_minimum_required(VERSION 3.6)
 project(AngelAuraAmethyst)
 
+# 从环境变量读取 CurseForge API Key
+# 不能通过 Makefile 的 -D 参数传递，因为 Make 会对环境变量值进行递归展开，
+# 导致 bcrypt 哈希格式（$2a$10$...）中的 $2、$1、$Q 被 Make 解释为变量引用并替换为空，
+# 最终生成损坏的 Key（如 a06bVFEP... 而非 $2a$10$Q6bVFEP...）
+if(DEFINED ENV{CONFIG_CURSEFORGE_API_KEY})
+    set(CONFIG_CURSEFORGE_API_KEY "$ENV{CONFIG_CURSEFORGE_API_KEY}")
+endif()
+
 configure_file(${CMAKE_CURRENT_LIST_DIR}/config.h.in ${CMAKE_CURRENT_LIST_DIR}/config.h)
 
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -target arm64-apple-ios -mcpu=apple-a8 -fcommon -fobjc-arc -ObjC -F'${CMAKE_OSX_SYSROOT}/System/Cryptexes/OS/System/Library/Frameworks'")
