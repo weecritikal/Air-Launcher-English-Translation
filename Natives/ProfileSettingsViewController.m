@@ -299,7 +299,15 @@
         [self saveSettings];
         [self.tableView reloadData];
     }]];
-    
+
+    [alert addAction:[UIAlertAction actionWithTitle:@"Java 25"
+                                              style:UIAlertActionStyleDefault
+                                            handler:^(UIAlertAction * _Nonnull action) {
+        self.selectedJavaVersion = @"java25";
+        [self saveSettings];
+        [self.tableView reloadData];
+    }]];
+
     [alert addAction:[UIAlertAction actionWithTitle:@"取消"
                                               style:UIAlertActionStyleCancel
                                             handler:nil]];
