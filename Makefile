@@ -349,6 +349,9 @@ dep_mobilegl:
 	ln -sfn $(MOBILEGL_SOURCE_DIR)/3rdparty/DiligentCore/ThirdParty/SPIRV-Headers $(MOBILEGL_SOURCE_DIR)/3rdparty/glslang/External/spirv-headers
 	mkdir -p $(MOBILEGL_SOURCE_DIR)/3rdparty/DiligentCore/ThirdParty/SPIRV-Tools/external
 	ln -sfn $(MOBILEGL_SOURCE_DIR)/3rdparty/DiligentCore/ThirdParty/SPIRV-Headers $(MOBILEGL_SOURCE_DIR)/3rdparty/DiligentCore/ThirdParty/SPIRV-Tools/external/spirv-headers
+	sed -i.bak '/struct Range1D {/a\
+\t    Range1D() = default;\
+\t    Range1D(SizeT s, SizeT e) : start(s), end(e) {}' $(MOBILEGL_SOURCE_DIR)/MobileGL/MG_Util/Types.h
 	mkdir -p $(WORKINGDIR)/mobilegl
 	cd $(WORKINGDIR)/mobilegl && cmake \
 		-DCMAKE_BUILD_TYPE=$(CMAKE_BUILD_TYPE) \
