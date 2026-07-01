@@ -345,6 +345,7 @@ dep_mobilegl:
 		echo 'MobileGL source directory not found: $(MOBILEGL_SOURCE_DIR)'; \
 		exit 1; \
 	fi
+	sed -i.bak 's/set(ENABLE_OPT[[:space:]]*ON[[:space:]]*CACHE/set(ENABLE_OPT                 OFF CACHE/' $(MOBILEGL_SOURCE_DIR)/CMakeLists.txt
 	mkdir -p $(WORKINGDIR)/mobilegl
 	cd $(WORKINGDIR)/mobilegl && cmake \
 		-DCMAKE_BUILD_TYPE=$(CMAKE_BUILD_TYPE) \
