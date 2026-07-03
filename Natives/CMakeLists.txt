@@ -169,6 +169,8 @@ add_executable(AngelAuraAmethyst
   ThirdPartyLoginViewController.m
   GameMenuOverlayView.m
   InlineMessageView.m
+  DownloadTaskItem.m
+  DownloadTaskManager.m
   AppDelegate.m
   CustomControlsViewController.m
   CustomControlsViewController+UndoManager.m
