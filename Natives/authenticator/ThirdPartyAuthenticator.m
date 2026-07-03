@@ -3,8 +3,9 @@
 #import "../ios_uikit_bridge.h"
 #import "../utils.h"
 
-// URL for downloading authlib-injector
-#define AUTHLIB_INJECTOR_URL @"https://bmclapi2.bangbang93.com/mirrors/authlib-injector/artifact/54/authlib-injector-1.2.6.jar"
+// authlib-injector 下载源：BMCLAPI 镜像优先，失败后回退到 GitHub 官方源
+#define AUTHLIB_INJECTOR_URL_BMCL  @"https://bmclapi2.bangbang93.com/mirrors/authlib-injector/artifact/54/authlib-injector-1.2.6.jar"
+#define AUTHLIB_INJECTOR_URL_GITHUB @"https://github.com/yushijinhun/authlib-injector/releases/download/v1.2.6/authlib-injector-1.2.6.jar"
 #define AUTHLIB_INJECTOR_FILE @"authlib-injector.jar"
 
 // Helper function to create NSError
@@ -27,30 +28,49 @@ static NSError* createError(NSString *message, NSInteger code) {
 }
 
 - (void)downloadAuthlibInjector:(void (^)(BOOL success, NSError *error))completion {
+    [self downloadAuthlibInjectorFromURL:AUTHLIB_INJECTOR_URL_BMCL attempt:1 completion:completion];
+}
+
+/// 逐个尝试下载源：BMCLAPI 失败后回退到 GitHub 官方源
+- (void)downloadAuthlibInjectorFromURL:(NSString *)urlString
+                               attempt:(NSInteger)attempt
+                            completion:(void (^)(BOOL success, NSError *error))completion {
     NSString *dirPath = [NSString stringWithFormat:@"%s/authlib-injector", getenv("POJAV_HOME")];
     NSString *filePath = [self getAuthlibInjectorPath];
-    
+
     // Create directory if it doesn't exist
-    NSError *error;
-    [[NSFileManager defaultManager] createDirectoryAtPath:dirPath withIntermediateDirectories:YES attributes:nil error:&error];
-    if (error) {
-        completion(NO, error);
+    NSError *dirError;
+    [[NSFileManager defaultManager] createDirectoryAtPath:dirPath withIntermediateDirectories:YES attributes:nil error:&dirError];
+    if (dirError) {
+        completion(NO, dirError);
         return;
     }
-    
-    // Download authlib-injector file
+
     NSURLSessionConfiguration *configuration = [NSURLSessionConfiguration defaultSessionConfiguration];
+    configuration.timeoutIntervalForRequest = 30;
+    configuration.timeoutIntervalForResource = 120;
     AFURLSessionManager *manager = [[AFURLSessionManager alloc] initWithSessionConfiguration:configuration];
-    
-    NSURL *URL = [NSURL URLWithString:AUTHLIB_INJECTOR_URL];
-    NSURLRequest *request = [NSURLRequest requestWithURL:URL];
-    
+
+    NSURL *URL = [NSURL URLWithString:urlString];
+    // 使用 NSMutableURLRequest 以允许重定向跟随（GitHub releases 会 302 跳转）
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:URL];
+    request.HTTPShouldUsePipelining = YES;
+
+    NSLog(@"[ThirdPartyAuthenticator] 尝试下载 authlib-injector (第%ld源): %@", (long)attempt, urlString);
+
     NSURLSessionDownloadTask *downloadTask = [manager downloadTaskWithRequest:request progress:nil destination:^NSURL *(NSURL *targetPath, NSURLResponse *response) {
         return [NSURL fileURLWithPath:filePath];
     } completionHandler:^(NSURLResponse *response, NSURL *filePath, NSError *error) {
         if (error) {
-            completion(NO, error);
+            NSLog(@"[ThirdPartyAuthenticator] 下载失败 (第%ld源): %@", (long)attempt, error.localizedDescription);
+            // BMCLAPI 失败后尝试 GitHub 官方源
+            if (attempt == 1) {
+                [self downloadAuthlibInjectorFromURL:AUTHLIB_INJECTOR_URL_GITHUB attempt:2 completion:completion];
+            } else {
+                completion(NO, error);
+            }
         } else {
+            NSLog(@"[ThirdPartyAuthenticator] 下载成功 (第%ld源)", (long)attempt);
             completion(YES, nil);
         }
     }];
@@ -61,7 +81,7 @@ static NSError* createError(NSString *message, NSInteger code) {
     if ([self isAuthlibInjectorDownloaded]) {
         completion(YES, nil);
     } else {
-        NSLog(@"[ThirdPartyAuthenticator] Downloading authlib-injector from %@", AUTHLIB_INJECTOR_URL);
+        NSLog(@"[ThirdPartyAuthenticator] Downloading authlib-injector (BMCLAPI 优先，失败回退 GitHub)");
         [self downloadAuthlibInjector:^(BOOL success, NSError *error) {
             if (!success) {
                 NSLog(@"[ThirdPartyAuthenticator] Failed to download authlib-injector: %@", error.localizedDescription);
@@ -182,23 +202,43 @@ static NSError* createError(NSString *message, NSInteger code) {
                 return;
             }
             
-            if (!response[@"accessToken"] || !response[@"clientToken"] || !response[@"selectedProfile"]) {
+            if (!response[@"accessToken"] || !response[@"clientToken"]) {
                 NSError *error = createError(localize(@"login.error.invalid_response", @"Invalid server response"), 1004);
                 callback(error, NO);
                 return;
             }
-            
+
+            // Yggdrasil 规范：当用户有且仅有一个角色时返回 selectedProfile；
+            // 有多个角色时只返回 availableProfiles；无角色时两者都缺失。
+            // 这里做兜底：优先用 selectedProfile，否则从 availableProfiles 取第一个。
+            NSDictionary *selectedProfile = response[@"selectedProfile"];
+            if (!selectedProfile) {
+                NSArray *availableProfiles = response[@"availableProfiles"];
+                if ([availableProfiles isKindOfClass:[NSArray class]] && availableProfiles.count > 0) {
+                    selectedProfile = availableProfiles[0];
+                    NSLog(@"[ThirdPartyAuthenticator] selectedProfile 缺失，从 availableProfiles 选取: %@", selectedProfile[@"name"]);
+                }
+            }
+
+            if (!selectedProfile) {
+                // 有 token 但无任何角色：账户未创建游戏角色
+                NSString *errMsg = @"该账户尚未创建游戏角色，请先在皮肤站创建角色后再登录";
+                NSError *error = createError(errMsg, 1019);
+                callback(error, NO);
+                return;
+            }
+
             self.authData[@"accessToken"] = response[@"accessToken"];
             self.authData[@"clientToken"] = response[@"clientToken"];
-            self.authData[@"username"] = response[@"selectedProfile"][@"name"];
-            self.authData[@"uuid"] = response[@"selectedProfile"][@"id"];
-            self.authData[@"profileId"] = response[@"selectedProfile"][@"id"];
-            
+            self.authData[@"username"] = selectedProfile[@"name"];
+            self.authData[@"uuid"] = selectedProfile[@"id"];
+            self.authData[@"profileId"] = selectedProfile[@"id"];
+
             // Save information for authlib-injector
         self.authData[@"authserver"] = self.authData[@"authserver"] ?: @"https://authserver.ely.by";
-            
+
             // Format UUID with hyphens
-            NSString *uuid = response[@"selectedProfile"][@"id"];
+            NSString *uuid = selectedProfile[@"id"];
             if (uuid.length == 32) { // If UUID without hyphens
                 self.authData[@"profileId"] = [NSString stringWithFormat:@"%@-%@-%@-%@-%@",
                     [uuid substringWithRange:NSMakeRange(0, 8)],
