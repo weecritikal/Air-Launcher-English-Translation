@@ -24,6 +24,7 @@
 #import "LauncherNavigationController.h"
 #import "installer/ModpackInstallViewController.h"
 #import "ModpackImportViewController.h"
+#import "installer/CurseForgeAPIKeyViewController.h"
 #import <QuartzCore/QuartzCore.h>
 #import "JavaGUIViewController.h"
 #import "utils.h"
@@ -1039,11 +1040,15 @@
 @property (nonatomic, assign) BOOL isLoadingDatapacks;
 @property (nonatomic, strong) NSString *datapackSearchQuery;
 
-// 源切换 UI（Modrinth 绿色 M / CurseForge 橙色 C）
+// 源切换 UI（仿 FCL 安卓风格的圆角胶囊切换器：Modrinth 绿 / CurseForge 橙）
 @property (nonatomic, strong) UIView *sourceSwitchContainer;
+@property (nonatomic, strong) UIView *sourceSwitchTrack;        // 圆角胶囊背景轨道
+@property (nonatomic, strong) UIView *sourceSwitchSlider;       // 选中项的彩色滑块
 @property (nonatomic, strong) UIButton *modrinthSourceButton;
 @property (nonatomic, strong) UIButton *curseforgeSourceButton;
 @property (nonatomic, strong) NSLayoutConstraint *sourceSwitchHeightConstraint;
+@property (nonatomic, strong) NSLayoutConstraint *sliderLeftPosConstraint;   // 滑块贴左（Modrinth）
+@property (nonatomic, strong) NSLayoutConstraint *sliderRightPosConstraint;  // 滑块贴右（CurseForge）
 
 // 当前待下载资源类型（mod/resourcepack/datapack），用于版本选择回调中决定下载目录
 @property (nonatomic, copy) NSString *pendingDownloadType;
@@ -1066,10 +1071,18 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    
+
     self.title = @"下载";
     self.view.backgroundColor = [UIColor clearColor];
-    
+
+    // 导航栏右侧：CurseForge API Key 配置入口，避免用户在 Modrinth 模式下找不到配置路径
+    UIBarButtonItem *apiKeyItem = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"key.fill"]
+                                                                     style:UIBarButtonItemStylePlain
+                                                                    target:self
+                                                                    action:@selector(openCurseForgeAPIKeySettings)];
+    apiKeyItem.tintColor = [UIColor labelColor];
+    self.navigationItem.rightBarButtonItem = apiKeyItem;
+
     self.modList = [NSMutableArray array];
     self.shaderList = [NSMutableArray array];
     self.modpackList = [NSMutableArray array]; // 新增
@@ -1114,12 +1127,13 @@
 }
 
 - (void)setupTabSegment {
-    self.tabSegment = [[UISegmentedControl alloc] initWithItems:@[@"版本下载", @"模组下载", @"光影下载", @"资源包", @"数据包", @"整合包"]];
+    // 精简标签文字，避免 6 段在窄屏上拥挤截断
+    self.tabSegment = [[UISegmentedControl alloc] initWithItems:@[@"版本", @"模组", @"光影", @"资源包", @"数据包", @"整合包"]];
     self.tabSegment.translatesAutoresizingMaskIntoConstraints = NO;
     self.tabSegment.selectedSegmentIndex = 0;
     [self.tabSegment addTarget:self action:@selector(tabChanged:) forControlEvents:UIControlEventValueChanged];
     [self.view addSubview:self.tabSegment];
-    
+
     [NSLayoutConstraint activateConstraints:@[
         [self.tabSegment.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:8],
         [self.tabSegment.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:16],
@@ -1314,50 +1328,84 @@
 }
 
 - (void)setupSourceSwitch {
+    // 仿 FCL 安卓风格：居中的圆角胶囊切换器，带彩色滑块与品牌色
     self.sourceSwitchContainer = [[UIView alloc] init];
     self.sourceSwitchContainer.translatesAutoresizingMaskIntoConstraints = NO;
     self.sourceSwitchContainer.hidden = YES;
     [self.view addSubview:self.sourceSwitchContainer];
 
+    // 圆角胶囊背景轨道
+    self.sourceSwitchTrack = [[UIView alloc] init];
+    self.sourceSwitchTrack.translatesAutoresizingMaskIntoConstraints = NO;
+    self.sourceSwitchTrack.backgroundColor = [UIColor tertiarySystemFillColor];
+    self.sourceSwitchTrack.layer.cornerRadius = 16;
+    self.sourceSwitchTrack.layer.masksToBounds = YES;
+    [self.sourceSwitchContainer addSubview:self.sourceSwitchTrack];
+
+    // 选中项滑块（初始为 Modrinth 绿）
+    self.sourceSwitchSlider = [[UIView alloc] init];
+    self.sourceSwitchSlider.translatesAutoresizingMaskIntoConstraints = NO;
+    self.sourceSwitchSlider.backgroundColor = [UIColor systemGreenColor];
+    self.sourceSwitchSlider.layer.cornerRadius = 14;
+    // 阴影提升层次感
+    self.sourceSwitchSlider.layer.shadowColor = [UIColor blackColor].CGColor;
+    self.sourceSwitchSlider.layer.shadowOpacity = 0.15;
+    self.sourceSwitchSlider.layer.shadowOffset = CGSizeMake(0, 1);
+    self.sourceSwitchSlider.layer.shadowRadius = 3;
+    [self.sourceSwitchTrack addSubview:self.sourceSwitchSlider];
+
+    // Modrinth 按钮
     self.modrinthSourceButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.modrinthSourceButton.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.modrinthSourceButton setTitle:@"M" forState:UIControlStateNormal];
-    self.modrinthSourceButton.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightBold];
-    self.modrinthSourceButton.tintColor = [UIColor whiteColor];
-    self.modrinthSourceButton.backgroundColor = [UIColor systemGreenColor];
-    self.modrinthSourceButton.layer.cornerRadius = 14;
-    self.modrinthSourceButton.layer.masksToBounds = YES;
+    [self.modrinthSourceButton setTitle:@"Modrinth" forState:UIControlStateNormal];
+    self.modrinthSourceButton.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
     [self.modrinthSourceButton addTarget:self action:@selector(modrinthSourceButtonClicked:) forControlEvents:UIControlEventTouchUpInside];
-    [self.sourceSwitchContainer addSubview:self.modrinthSourceButton];
+    [self.sourceSwitchTrack addSubview:self.modrinthSourceButton];
 
+    // CurseForge 按钮
     self.curseforgeSourceButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.curseforgeSourceButton.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.curseforgeSourceButton setTitle:@"C" forState:UIControlStateNormal];
-    self.curseforgeSourceButton.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightBold];
-    self.curseforgeSourceButton.tintColor = [UIColor whiteColor];
-    self.curseforgeSourceButton.backgroundColor = [UIColor systemOrangeColor];
-    self.curseforgeSourceButton.layer.cornerRadius = 14;
-    self.curseforgeSourceButton.layer.masksToBounds = YES;
+    [self.curseforgeSourceButton setTitle:@"CurseForge" forState:UIControlStateNormal];
+    self.curseforgeSourceButton.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
     [self.curseforgeSourceButton addTarget:self action:@selector(curseforgeSourceButtonClicked:) forControlEvents:UIControlEventTouchUpInside];
-    [self.sourceSwitchContainer addSubview:self.curseforgeSourceButton];
+    [self.sourceSwitchTrack addSubview:self.curseforgeSourceButton];
+
+    // 容器约束：居中、固定宽度、固定高度
+    self.sliderLeftPosConstraint = [self.sourceSwitchSlider.leadingAnchor constraintEqualToAnchor:self.sourceSwitchTrack.leadingAnchor constant:2];
+    self.sliderRightPosConstraint = [self.sourceSwitchSlider.trailingAnchor constraintEqualToAnchor:self.sourceSwitchTrack.trailingAnchor constant:-2];
+    self.sliderRightPosConstraint.active = NO; // 初始 Modrinth 在左
 
     [NSLayoutConstraint activateConstraints:@[
-        [self.sourceSwitchContainer.topAnchor constraintEqualToAnchor:self.searchBar.bottomAnchor constant:4],
-        [self.sourceSwitchContainer.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:16],
+        [self.sourceSwitchContainer.topAnchor constraintEqualToAnchor:self.searchBar.bottomAnchor constant:6],
+        [self.sourceSwitchContainer.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+        [self.sourceSwitchContainer.widthAnchor constraintEqualToConstant:220],
+        [self.sourceSwitchContainer.heightAnchor constraintEqualToConstant:36],
 
-        [self.modrinthSourceButton.leadingAnchor constraintEqualToAnchor:self.sourceSwitchContainer.leadingAnchor],
-        [self.modrinthSourceButton.topAnchor constraintEqualToAnchor:self.sourceSwitchContainer.topAnchor],
-        [self.modrinthSourceButton.heightAnchor constraintEqualToConstant:28],
-        [self.modrinthSourceButton.widthAnchor constraintEqualToConstant:44],
+        // 轨道铺满容器
+        [self.sourceSwitchTrack.topAnchor constraintEqualToAnchor:self.sourceSwitchContainer.topAnchor],
+        [self.sourceSwitchTrack.leadingAnchor constraintEqualToAnchor:self.sourceSwitchContainer.leadingAnchor],
+        [self.sourceSwitchTrack.trailingAnchor constraintEqualToAnchor:self.sourceSwitchContainer.trailingAnchor],
+        [self.sourceSwitchTrack.bottomAnchor constraintEqualToAnchor:self.sourceSwitchContainer.bottomAnchor],
 
-        [self.curseforgeSourceButton.leadingAnchor constraintEqualToAnchor:self.modrinthSourceButton.trailingAnchor constant:8],
-        [self.curseforgeSourceButton.topAnchor constraintEqualToAnchor:self.sourceSwitchContainer.topAnchor],
-        [self.curseforgeSourceButton.heightAnchor constraintEqualToConstant:28],
-        [self.curseforgeSourceButton.widthAnchor constraintEqualToConstant:44],
-        [self.curseforgeSourceButton.trailingAnchor constraintEqualToAnchor:self.sourceSwitchContainer.trailingAnchor]
+        // 滑块高度/宽度（宽度 = 轨道一半 - 2pt 边距），位置由 left/right 约束二选一定位
+        [self.sourceSwitchSlider.topAnchor constraintEqualToAnchor:self.sourceSwitchTrack.topAnchor constant:2],
+        [self.sourceSwitchSlider.bottomAnchor constraintEqualToAnchor:self.sourceSwitchTrack.bottomAnchor constant:-2],
+        [self.sourceSwitchSlider.widthAnchor constraintEqualToAnchor:self.sourceSwitchTrack.widthAnchor multiplier:0.5 constant:-2],
+        self.sliderLeftPosConstraint,
+
+        // 两个按钮各占一半
+        [self.modrinthSourceButton.topAnchor constraintEqualToAnchor:self.sourceSwitchTrack.topAnchor],
+        [self.modrinthSourceButton.bottomAnchor constraintEqualToAnchor:self.sourceSwitchTrack.bottomAnchor],
+        [self.modrinthSourceButton.leadingAnchor constraintEqualToAnchor:self.sourceSwitchTrack.leadingAnchor],
+        [self.modrinthSourceButton.widthAnchor constraintEqualToAnchor:self.sourceSwitchTrack.widthAnchor multiplier:0.5],
+
+        [self.curseforgeSourceButton.topAnchor constraintEqualToAnchor:self.sourceSwitchTrack.topAnchor],
+        [self.curseforgeSourceButton.bottomAnchor constraintEqualToAnchor:self.sourceSwitchTrack.bottomAnchor],
+        [self.curseforgeSourceButton.trailingAnchor constraintEqualToAnchor:self.sourceSwitchTrack.trailingAnchor],
+        [self.curseforgeSourceButton.widthAnchor constraintEqualToAnchor:self.sourceSwitchTrack.widthAnchor multiplier:0.5]
     ]];
 
-    // 动态高度约束（隐藏时为 0，显示时为 28）
+    // 动态高度约束（隐藏时为 0，显示时为 36）
     self.sourceSwitchHeightConstraint = [self.sourceSwitchContainer.heightAnchor constraintEqualToConstant:0];
     self.sourceSwitchHeightConstraint.active = YES;
 }
@@ -1398,20 +1446,26 @@
 }
 
 - (void)switchToTab:(NSInteger)index {
-    self.versionFilterSegment.hidden = (index != 0);
-    self.versionCollectionView.hidden = (index != 0);
-    self.searchBar.hidden = (index == 0);
-    self.filterButton.hidden = (index == 0);
-    self.modTableView.hidden = (index != 1);
-    self.shaderTableView.hidden = (index != 2);
-    self.resourcepackTableView.hidden = (index != 3);
-    self.datapackTableView.hidden = (index != 4);
-    self.modpackTableView.hidden = (index != 5);
+    // 列表切换使用淡入淡出，避免生硬的瞬间 hidden 切换
+    [UIView transitionWithView:self.view duration:0.2 options:UIViewAnimationOptionTransitionCrossDissolve animations:^{
+        self.versionFilterSegment.hidden = (index != 0);
+        self.versionCollectionView.hidden = (index != 0);
+        self.searchBar.hidden = (index == 0);
+        self.filterButton.hidden = (index == 0);
+        self.modTableView.hidden = (index != 1);
+        self.shaderTableView.hidden = (index != 2);
+        self.resourcepackTableView.hidden = (index != 3);
+        self.datapackTableView.hidden = (index != 4);
+        self.modpackTableView.hidden = (index != 5);
+    } completion:nil];
 
     // 源切换仅在非版本 tab 显示
     BOOL showSourceSwitch = (index != 0);
     self.sourceSwitchContainer.hidden = !showSourceSwitch;
-    self.sourceSwitchHeightConstraint.constant = showSourceSwitch ? 28 : 0;
+    self.sourceSwitchHeightConstraint.constant = showSourceSwitch ? 36 : 0;
+    [UIView animateWithDuration:0.2 animations:^{
+        [self.view layoutIfNeeded];
+    }];
 
     if (index == 1) {
         self.searchBar.placeholder = @"搜索模组...";
@@ -1452,8 +1506,20 @@
     NSString *currentSource = [PLPreferences currentDownloadSourceForType:type];
     BOOL isModrinth = [currentSource isEqualToString:@"modrinth"];
 
-    self.modrinthSourceButton.alpha = isModrinth ? 1.0 : 0.4;
-    self.curseforgeSourceButton.alpha = isModrinth ? 0.4 : 1.0;
+    // 选中项文字白色，未选中项使用 labelColor
+    [self.modrinthSourceButton setTitleColor:isModrinth ? [UIColor whiteColor] : [UIColor labelColor] forState:UIControlStateNormal];
+    [self.curseforgeSourceButton setTitleColor:isModrinth ? [UIColor labelColor] : [UIColor whiteColor] forState:UIControlStateNormal];
+
+    // 滑块位置：通过激活 left/right 约束二选一切换，配合颜色动画
+    self.sliderLeftPosConstraint.active = isModrinth;
+    self.sliderRightPosConstraint.active = !isModrinth;
+    UIColor *sliderColor = isModrinth ? [UIColor systemGreenColor] : [UIColor systemOrangeColor];
+
+    [UIView animateWithDuration:0.25 delay:0 options:UIViewAnimationOptionCurveEaseInOut animations:^{
+        self.sourceSwitchSlider.backgroundColor = sliderColor;
+        [self.sourceSwitchTrack layoutIfNeeded];
+    } completion:nil];
+
     self.modrinthSourceButton.tag = [self tagForType:type];
     self.curseforgeSourceButton.tag = [self tagForType:type];
 }
@@ -1505,13 +1571,13 @@
     NSString *currentSource = [PLPreferences currentDownloadSourceForType:type];
     if ([currentSource isEqualToString:@"curseforge"]) return;
 
-    // API Key 未配置时弹出引导提示
+    // API Key 未配置时弹出引导提示，直接调用本 VC 的入口（不再走通知绕路）
     if (![PLPreferences curseForgeAPIKey] && ![[NSBundle mainBundle] objectForInfoDictionaryKey:@"CurseForgeAPIKey"]) {
         UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"需要 CurseForge API Key"
                                                                        message:@"检测到未配置 CurseForge API Key，是否前往设置？"
                                                                 preferredStyle:UIAlertControllerStyleAlert];
         [alert addAction:[UIAlertAction actionWithTitle:@"前往设置" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-            [[NSNotificationCenter defaultCenter] postNotificationName:@"OpenCurseForgeAPIKeySettings" object:nil];
+            [self openCurseForgeAPIKeySettings];
         }]];
         [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
         [self presentViewController:alert animated:YES completion:nil];
@@ -1529,6 +1595,14 @@
         return [CurseForgeAPI sharedInstance];
     }
     return [ModrinthAPI sharedInstance];
+}
+
+// 导航栏 API Key 入口：直接 push 配置页，不再走 alert 通知绕路
+- (void)openCurseForgeAPIKeySettings {
+    CurseForgeAPIKeyViewController *vc = [[CurseForgeAPIKeyViewController alloc] init];
+    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
+    nav.modalPresentationStyle = UIModalPresentationFormSheet;
+    [self presentViewController:nav animated:YES completion:nil];
 }
 
 #pragma mark - Data Loading
@@ -2135,27 +2209,44 @@
 
 - (void)reloadCurrentList {
     NSInteger tabIndex = self.tabSegment.selectedSegmentIndex;
+    // 切换 API 源时对当前列表做淡出→加载→淡入，避免瞬间清空的生硬感
+    UITableView *targetTable = nil;
     if (tabIndex == 1) {
+        targetTable = self.modTableView;
         self.currentModOffset = 0;
         [self.modList removeAllObjects];
-        [self loadModList];
     } else if (tabIndex == 2) {
+        targetTable = self.shaderTableView;
         self.currentShaderOffset = 0;
         [self.shaderList removeAllObjects];
-        [self loadShaderList];
     } else if (tabIndex == 3) {
+        targetTable = self.resourcepackTableView;
         self.currentResourcepackOffset = 0;
         [self.resourcepackList removeAllObjects];
-        [self loadResourcePackList];
     } else if (tabIndex == 4) {
+        targetTable = self.datapackTableView;
         self.currentDatapackOffset = 0;
         [self.datapackList removeAllObjects];
-        [self loadDataPackList];
     } else if (tabIndex == 5) {
+        targetTable = self.modpackTableView;
         self.currentModpackOffset = 0;
         [self.modpackList removeAllObjects];
-        [self loadModpackList];
     }
+
+    [UIView animateWithDuration:0.15 animations:^{
+        targetTable.alpha = 0;
+    } completion:^(BOOL finished) {
+        switch (tabIndex) {
+            case 1: [self loadModList]; break;
+            case 2: [self loadShaderList]; break;
+            case 3: [self loadResourcePackList]; break;
+            case 4: [self loadDataPackList]; break;
+            case 5: [self loadModpackList]; break;
+        }
+        [UIView animateWithDuration:0.2 animations:^{
+            targetTable.alpha = 1;
+        }];
+    }];
 }
 
 - (void)showError:(NSString *)message {
