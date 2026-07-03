@@ -402,13 +402,11 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    
+
     self.title = @"选择安装方式";
-    self.view.backgroundColor = [UIColor clearColor];
-    self.preferredContentSize = CGSizeMake(540, 620);
-    
-    [[BackgroundManager sharedManager] applyEffectToView:self.view];
-    
+    // 已 push 到导航栈，使用系统背景色保持与中间内容区其他页面一致
+    self.view.backgroundColor = [UIColor systemGroupedBackgroundColor];
+
     [self setupNavigation];
     [self setupLoadersForVersion];
     [self setupLoaderTableView];
@@ -488,9 +486,13 @@
 
 - (void)backButtonTapped {
     if (self.cancelled) {
+        // cancelled 回调会调用 popViewControllerAnimated
         self.cancelled();
+    } else if (self.navigationController.viewControllers.count > 1) {
+        [self.navigationController popViewControllerAnimated:YES];
+    } else {
+        [self dismissViewControllerAnimated:YES completion:nil];
     }
-    [self dismissViewControllerAnimated:YES completion:nil];
 }
 
 - (void)setupLoaderTableView {
@@ -982,6 +984,159 @@
 
 @end
 
+#pragma mark - Installer Progress View Controller (FCL 风格进度展示)
+
+@interface InstallerProgressViewController : UIViewController
+// 进度 0.0~1.0；<0 表示不确定模式（仅显示转圈，用于无法测算进度的网络请求阶段）
+@property (nonatomic, assign) double progress;
+@property (nonatomic, copy, nullable) NSString *stageMessage;
+@property (nonatomic, copy, nullable) NSString *titleText;
+@property (nonatomic, copy, nullable) void (^cancelHandler)(void);
+@end
+
+@interface InstallerProgressViewController ()
+@property (nonatomic, strong) UIView *cardView;
+@property (nonatomic, strong) UILabel *titleLabel;
+@property (nonatomic, strong) UILabel *percentLabel;
+@property (nonatomic, strong) UIProgressView *progressBar;
+@property (nonatomic, strong) UILabel *stageLabel;
+@property (nonatomic, strong) UIActivityIndicatorView *indeterminateIndicator;
+@end
+
+@implementation InstallerProgressViewController
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    self.view.backgroundColor = [UIColor systemGroupedBackgroundColor];
+
+    // 取消按钮（替代返回按钮，避免误以为已完成）
+    self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemCancel
+                                                                                          target:self
+                                                                                          action:@selector(cancelTapped)];
+    self.navigationItem.hidesBackButton = YES;
+
+    [self setupUI];
+    [self updateUI];
+}
+
+- (void)setupUI {
+    self.cardView = [[UIView alloc] init];
+    self.cardView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.cardView.backgroundColor = [UIColor secondarySystemGroupedBackgroundColor];
+    self.cardView.layer.cornerRadius = 18;
+    self.cardView.layer.masksToBounds = YES;
+    [self.view addSubview:self.cardView];
+
+    self.titleLabel = [[UILabel alloc] init];
+    self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.titleLabel.font = [UIFont systemFontOfSize:20 weight:UIFontWeightBold];
+    self.titleLabel.textAlignment = NSTextAlignmentCenter;
+    self.titleLabel.text = @"正在安装";
+    [self.cardView addSubview:self.titleLabel];
+
+    self.percentLabel = [[UILabel alloc] init];
+    self.percentLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.percentLabel.font = [UIFont systemFontOfSize:36 weight:UIFontWeightHeavy];
+    self.percentLabel.textAlignment = NSTextAlignmentCenter;
+    self.percentLabel.textColor = [UIColor systemBlueColor];
+    self.percentLabel.text = @"0%";
+    [self.cardView addSubview:self.percentLabel];
+
+    self.indeterminateIndicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleLarge];
+    self.indeterminateIndicator.translatesAutoresizingMaskIntoConstraints = NO;
+    self.indeterminateIndicator.hidesWhenStopped = YES;
+    self.indeterminateIndicator.hidden = YES;
+    [self.cardView addSubview:self.indeterminateIndicator];
+
+    self.progressBar = [[UIProgressView alloc] initWithProgressViewStyle:UIProgressViewStyleDefault];
+    self.progressBar.translatesAutoresizingMaskIntoConstraints = NO;
+    self.progressBar.progress = 0.0;
+    self.progressBar.progressTintColor = [UIColor systemBlueColor];
+    [self.cardView addSubview:self.progressBar];
+
+    self.stageLabel = [[UILabel alloc] init];
+    self.stageLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.stageLabel.font = [UIFont systemFontOfSize:14];
+    self.stageLabel.textAlignment = NSTextAlignmentCenter;
+    self.stageLabel.textColor = [UIColor secondaryLabelColor];
+    self.stageLabel.numberOfLines = 0;
+    self.stageLabel.text = @"准备中...";
+    [self.cardView addSubview:self.stageLabel];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.cardView.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor],
+        [self.cardView.leadingAnchor constraintEqualToAnchor:self.view.layoutMarginsGuide.leadingAnchor],
+        [self.cardView.trailingAnchor constraintEqualToAnchor:self.view.layoutMarginsGuide.trailingAnchor],
+
+        [self.titleLabel.topAnchor constraintEqualToAnchor:self.cardView.topAnchor constant:24],
+        [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.cardView.leadingAnchor constant:16],
+        [self.titleLabel.trailingAnchor constraintEqualToAnchor:self.cardView.trailingAnchor constant:-16],
+
+        [self.percentLabel.topAnchor constraintEqualToAnchor:self.titleLabel.bottomAnchor constant:20],
+        [self.percentLabel.leadingAnchor constraintEqualToAnchor:self.cardView.leadingAnchor constant:16],
+        [self.percentLabel.trailingAnchor constraintEqualToAnchor:self.cardView.trailingAnchor constant:-16],
+
+        [self.indeterminateIndicator.topAnchor constraintEqualToAnchor:self.titleLabel.bottomAnchor constant:20],
+        [self.indeterminateIndicator.centerXAnchor constraintEqualToAnchor:self.cardView.centerXAnchor],
+
+        [self.progressBar.topAnchor constraintEqualToAnchor:self.percentLabel.bottomAnchor constant:16],
+        [self.progressBar.leadingAnchor constraintEqualToAnchor:self.cardView.leadingAnchor constant:16],
+        [self.progressBar.trailingAnchor constraintEqualToAnchor:self.cardView.trailingAnchor constant:-16],
+        [self.progressBar.heightAnchor constraintEqualToConstant:8],
+
+        [self.stageLabel.topAnchor constraintEqualToAnchor:self.progressBar.bottomAnchor constant:12],
+        [self.stageLabel.leadingAnchor constraintEqualToAnchor:self.cardView.leadingAnchor constant:16],
+        [self.stageLabel.trailingAnchor constraintEqualToAnchor:self.cardView.trailingAnchor constant:-16],
+        [self.stageLabel.bottomAnchor constraintEqualToAnchor:self.cardView.bottomAnchor constant:-24]
+    ]];
+}
+
+- (void)setTitleText:(NSString *)titleText {
+    _titleText = [titleText copy];
+    self.titleLabel.text = titleText ?: @"正在安装";
+    self.title = titleText ?: @"正在安装";
+}
+
+- (void)setStageMessage:(NSString *)stageMessage {
+    _stageMessage = [stageMessage copy];
+    [self updateUI];
+}
+
+- (void)setProgress:(double)progress {
+    _progress = progress;
+    [self updateUI];
+}
+
+- (void)updateUI {
+    if (self.progress < 0) {
+        // 不确定模式：隐藏进度条与百分比，只显示转圈
+        self.progressBar.hidden = YES;
+        self.percentLabel.hidden = YES;
+        self.indeterminateIndicator.hidden = NO;
+        [self.indeterminateIndicator startAnimating];
+    } else {
+        self.progressBar.hidden = NO;
+        self.percentLabel.hidden = NO;
+        self.indeterminateIndicator.hidden = YES;
+        [self.indeterminateIndicator stopAnimating];
+        double clamped = MAX(0.0, MIN(1.0, self.progress));
+        NSInteger percent = (NSInteger)(clamped * 100);
+        self.percentLabel.text = [NSString stringWithFormat:@"%ld%%", (long)percent];
+        [self.progressBar setProgress:(float)clamped animated:YES];
+    }
+    self.stageLabel.text = self.stageMessage ?: @"";
+}
+
+- (void)cancelTapped {
+    if (self.cancelHandler) {
+        self.cancelHandler();
+    } else {
+        [self.navigationController popViewControllerAnimated:YES];
+    }
+}
+
+@end
+
 #pragma mark - DownloadViewController
 
 @interface DownloadViewController () <UICollectionViewDataSource, UICollectionViewDelegate, UITableViewDataSource, UITableViewDelegate, UISearchBarDelegate, ModVersionViewControllerDelegate, ShaderVersionViewControllerDelegate>
@@ -1061,6 +1216,9 @@
 
 // 当前待下载资源类型（mod/resourcepack/datapack），用于版本选择回调中决定下载目录
 @property (nonatomic, copy) NSString *pendingDownloadType;
+
+// 模组加载器安装进度 VC（FCL 风格进度展示，替代转圈 alert）
+@property (nonatomic, strong) InstallerProgressViewController *installerProgressVC;
 
 @end
 
@@ -2442,31 +2600,33 @@
     [self showLoaderSelectionForVersion:version];
 }
 
-#pragma mark - Loader Selection (居中卡片)
+#pragma mark - Loader Selection (push 到中间内容区)
 
 - (void)showLoaderSelectionForVersion:(NSDictionary *)version {
     LoaderSelectionViewController *loaderVC = [[LoaderSelectionViewController alloc] init];
     loaderVC.gameVersion = version[@"id"];
-    
+
     __weak typeof(self) weakSelf = self;
     loaderVC.completion = ^(NSString *loaderType, BOOL installFabricAPI, BOOL installOptiFine, NSString *loaderVersion) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
-        
-        [strongSelf dismissViewControllerAnimated:YES completion:^{
+
+        // 先 pop 加载器选择页，再启动安装流程（与 FCL 安卓在中间内容区切换一致）
+        [strongSelf.navigationController popViewControllerAnimated:YES];
+        dispatch_async(dispatch_get_main_queue(), ^{
             [strongSelf proceedWithVersion:version loaderType:loaderType installFabricAPI:installFabricAPI installOptiFine:installOptiFine loaderVersion:loaderVersion];
-        }];
+        });
     };
-    
+
     loaderVC.cancelled = ^{
-        // 用户取消
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (strongSelf) {
+            [strongSelf.navigationController popViewControllerAnimated:YES];
+        }
     };
-    
-    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:loaderVC];
-    nav.modalPresentationStyle = UIModalPresentationFormSheet;
-    nav.modalTransitionStyle = UIModalTransitionStyleCoverVertical;
-    
-    [self presentViewController:nav animated:YES completion:nil];
+
+    // 已在 DownloadVC 的导航栈中，直接 push，不再用 FormSheet 弹窗
+    [self.navigationController pushViewController:loaderVC animated:YES];
 }
 
 #pragma mark - Installation
@@ -2598,94 +2758,131 @@
 #pragma mark - Fabric Installation
 
 - (void)installFabric:(NSString *)gameVersion loaderVersion:(NSString *)loaderVersion installAPI:(BOOL)installAPI {
-    UIAlertController *downloadingAlert = [UIAlertController alertControllerWithTitle:@"正在安装 Fabric"
-                                                                              message:[NSString stringWithFormat:@"游戏版本: %@\n加载器版本: %@", gameVersion, loaderVersion]
-                                                                       preferredStyle:UIAlertControllerStyleAlert];
-    
-    UIActivityIndicatorView *indicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
-    indicator.translatesAutoresizingMaskIntoConstraints = NO;
-    [downloadingAlert.view addSubview:indicator];
-    [NSLayoutConstraint activateConstraints:@[
-        [indicator.centerXAnchor constraintEqualToAnchor:downloadingAlert.view.centerXAnchor],
-        [indicator.centerYAnchor constraintEqualToAnchor:downloadingAlert.view.centerYAnchor constant:40]
-    ]];
-    [indicator startAnimating];
-    
-    [self presentViewController:downloadingAlert animated:YES completion:nil];
-    
+    // FCL 风格进度展示：push 一个进度 VC，替代转圈 alert
+    InstallerProgressViewController *progressVC = [[InstallerProgressViewController alloc] init];
+    progressVC.titleText = @"正在安装 Fabric";
+    progressVC.progress = -1; // 不确定模式，正在拉取 profile JSON
+    progressVC.stageMessage = [NSString stringWithFormat:@"正在获取 Fabric profile...\n游戏版本: %@  加载器: %@", gameVersion, loaderVersion];
+    self.installerProgressVC = progressVC;
+
+    __weak typeof(self) weakSelf = self;
+    __block NSURLSessionDataTask *dataTask = nil;
+    progressVC.cancelHandler = ^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (dataTask) [dataTask cancel];
+        if (strongSelf) {
+            [strongSelf.navigationController popViewControllerAnimated:YES];
+            strongSelf.installerProgressVC = nil;
+        }
+    };
+
+    [self.navigationController pushViewController:progressVC animated:YES];
+
     NSString *urlString = [NSString stringWithFormat:@"https://meta.fabricmc.net/v2/versions/loader/%@/%@/profile/json", gameVersion, loaderVersion];
     NSURL *url = [NSURL URLWithString:urlString];
-    
-    __weak typeof(self) weakSelf = self;
-    NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+
+    // Fabric profile JSON 较小，使用 dataTask；进度通过阶段驱动（无法精确测算）
+    dataTask = [[NSURLSession sharedSession] dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         dispatch_async(dispatch_get_main_queue(), ^{
             __strong typeof(weakSelf) strongSelf = weakSelf;
             if (!strongSelf) return;
-            if (!data || error) {
-                [downloadingAlert dismissViewControllerAnimated:YES completion:^{
-                    [strongSelf showError:[NSString stringWithFormat:@"Fabric 安装失败: %@", error.localizedDescription ?: @"网络错误"]];
-                }];
+
+            if (error || !data) {
+                [strongSelf finishInstallerProgressWithError:[NSString stringWithFormat:@"Fabric 安装失败: %@", error.localizedDescription ?: @"网络错误"]];
                 return;
             }
-            
+
+            // 解析 JSON
+            strongSelf.installerProgressVC.progress = 0.5;
+            strongSelf.installerProgressVC.stageMessage = @"正在解析 Fabric 配置...";
+
             NSError *jsonError;
             NSDictionary *profileJson = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
-            
             if (!profileJson || jsonError) {
-                [downloadingAlert dismissViewControllerAnimated:YES completion:^{
-                    [strongSelf showError:@"解析 Fabric 配置失败"];
-                }];
+                [strongSelf finishInstallerProgressWithError:@"解析 Fabric 配置失败"];
                 return;
             }
-            
+
+            // 写入版本 JSON
+            strongSelf.installerProgressVC.progress = 0.7;
+            strongSelf.installerProgressVC.stageMessage = @"正在写入版本文件...";
+
             NSString *versionId = profileJson[@"id"];
             NSString *jsonPath = [NSString stringWithFormat:@"%s/versions/%@/%@.json", getenv("POJAV_GAME_DIR"), versionId, versionId];
-            
             [[NSFileManager defaultManager] createDirectoryAtPath:[jsonPath stringByDeletingLastPathComponent]
                                       withIntermediateDirectories:YES
                                                        attributes:nil
                                                             error:nil];
-            
+
             NSError *saveError;
             NSData *jsonData = [NSJSONSerialization dataWithJSONObject:profileJson options:NSJSONWritingPrettyPrinted error:&saveError];
             [jsonData writeToFile:jsonPath options:NSDataWritingAtomic error:&saveError];
-            
             if (saveError) {
-                [downloadingAlert dismissViewControllerAnimated:YES completion:^{
-                    [strongSelf showError:[NSString stringWithFormat:@"保存配置失败: %@", saveError.localizedDescription]];
-                }];
+                [strongSelf finishInstallerProgressWithError:[NSString stringWithFormat:@"保存配置失败: %@", saveError.localizedDescription]];
                 return;
             }
-            
+
+            // 注册 profile
+            strongSelf.installerProgressVC.progress = 0.85;
+            strongSelf.installerProgressVC.stageMessage = @"正在注册配置...";
+
             NSMutableDictionary *profile = [NSMutableDictionary dictionary];
             profile[@"name"] = versionId;
             profile[@"lastVersionId"] = versionId;
             profile[@"type"] = @"custom";
             profile[@"created"] = [NSDate date].description;
-            
             [PLProfiles.current saveProfile:profile withName:versionId];
             PLProfiles.current.selectedProfileName = versionId;
-            
+
             if (installAPI) {
+                strongSelf.installerProgressVC.progress = 0.9;
+                strongSelf.installerProgressVC.stageMessage = @"正在下载 Fabric API...";
                 [strongSelf downloadFabricAPI:gameVersion completion:^(BOOL success, NSError *apiError) {
                     dispatch_async(dispatch_get_main_queue(), ^{
-                        [downloadingAlert dismissViewControllerAnimated:YES completion:^{
-                            if (success) {
-                                [strongSelf showSuccessMessage:[NSString stringWithFormat:@"Fabric %@ 安装成功\nFabric API 已自动安装", loaderVersion]];
-                            } else {
-                                [strongSelf showSuccessMessage:[NSString stringWithFormat:@"Fabric %@ 安装成功\nFabric API 安装失败: %@", loaderVersion, apiError.localizedDescription]];
-                            }
-                        }];
+                        __strong typeof(weakSelf) strongSelf2 = weakSelf;
+                        if (!strongSelf2) return;
+                        if (success) {
+                            [strongSelf2 finishInstallerProgressWithSuccess:[NSString stringWithFormat:@"Fabric %@ 安装成功\nFabric API 已自动安装", loaderVersion]];
+                        } else {
+                            [strongSelf2 finishInstallerProgressWithSuccess:[NSString stringWithFormat:@"Fabric %@ 安装成功\nFabric API 安装失败: %@", loaderVersion, apiError.localizedDescription ?: @"未知错误"]];
+                        }
                     });
                 }];
             } else {
-                [downloadingAlert dismissViewControllerAnimated:YES completion:^{
-                    [strongSelf showSuccessMessage:[NSString stringWithFormat:@"Fabric %@ 安装成功", loaderVersion]];
-                }];
+                [strongSelf finishInstallerProgressWithSuccess:[NSString stringWithFormat:@"Fabric %@ 安装成功", loaderVersion]];
             }
         });
     }];
-    [task resume];
+    [dataTask resume];
+}
+
+// 安装进度 VC 完成时的统一处理：进度满 → 短暂展示 → pop 并显示成功提示
+- (void)finishInstallerProgressWithSuccess:(NSString *)message {
+    if (!self.installerProgressVC) return;
+    self.installerProgressVC.progress = 1.0;
+    self.installerProgressVC.stageMessage = @"安装完成";
+    __weak typeof(self) weakSelf = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+        [strongSelf.navigationController popViewControllerAnimated:YES];
+        strongSelf.installerProgressVC = nil;
+        [strongSelf showSuccessMessage:message];
+    });
+}
+
+// 安装进度 VC 失败时的统一处理：显示错误 → pop
+- (void)finishInstallerProgressWithError:(NSString *)errorMessage {
+    __weak typeof(self) weakSelf = self;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+        if (strongSelf.installerProgressVC) {
+            [strongSelf.navigationController popViewControllerAnimated:YES];
+            strongSelf.installerProgressVC = nil;
+        }
+        [strongSelf showError:errorMessage];
+    });
 }
 
 - (void)downloadFabricAPI:(NSString *)gameVersion completion:(void (^)(BOOL success, NSError *error))completion {
@@ -2941,7 +3138,13 @@
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
 
+        // 先 pop 掉 ForgeInstallViewController，让后续进度页面在中间内容区显示
+        if (strongSelf.navigationController.topViewController != strongSelf) {
+            [strongSelf.navigationController popViewControllerAnimated:YES];
+        }
+
         if (!success) {
+            // 用户取消或失败，无需再 pop（已 pop）；走原 handleInstallerDownloadResultWithVendorName 流程
             [strongSelf handleInstallerDownloadResultWithVendorName:@"Forge"
                                                         gameVersion:gameVersion
                                                         profileName:profileName
@@ -2962,48 +3165,14 @@
         }
 
         if (selectedScheme == 1 && filePath.length > 0) {
-            // Direct install scheme
+            // 直装方案：push 进度 VC，由 ForgeDirectInstaller 的 progress 回调驱动
             NSLog(@"[ForgeDirect] DownloadViewController: starting direct install with progress UI");
-
-            // 创建进度 alert（在主线程创建并显示），含进度条和阶段文案
-            UIAlertController *progressAlert = [UIAlertController alertControllerWithTitle:@"Forge 直装中"
-                                                                                  message:@"准备中..."
-                                                                           preferredStyle:UIAlertControllerStyleAlert];
-
-            // 通过 KVC 获取 contentViewController，添加 UIProgressView 进度条
-            UIViewController *contentVC = [progressAlert valueForKey:@"contentViewController"];
-            UIProgressView *progressBar = nil;
-            UILabel *stageLabel = nil;
-            if (contentVC) {
-                UIView *containerView = contentVC.view;
-                progressBar = [[UIProgressView alloc] initWithProgressViewStyle:UIProgressViewStyleDefault];
-                progressBar.progress = 0.0;
-                progressBar.translatesAutoresizingMaskIntoConstraints = NO;
-                [containerView addSubview:progressBar];
-
-                stageLabel = [[UILabel alloc] init];
-                stageLabel.text = @"准备中...";
-                stageLabel.textAlignment = NSTextAlignmentCenter;
-                stageLabel.font = [UIFont systemFontOfSize:13];
-                stageLabel.numberOfLines = 0;
-                stageLabel.translatesAutoresizingMaskIntoConstraints = NO;
-                [containerView addSubview:stageLabel];
-
-                [NSLayoutConstraint activateConstraints:@[
-                    [stageLabel.topAnchor constraintEqualToAnchor:containerView.topAnchor constant:8],
-                    [stageLabel.leadingAnchor constraintEqualToAnchor:containerView.leadingAnchor constant:12],
-                    [stageLabel.trailingAnchor constraintEqualToAnchor:containerView.trailingAnchor constant:-12],
-                    [progressBar.topAnchor constraintEqualToAnchor:stageLabel.bottomAnchor constant:8],
-                    [progressBar.leadingAnchor constraintEqualToAnchor:containerView.leadingAnchor constant:12],
-                    [progressBar.trailingAnchor constraintEqualToAnchor:containerView.trailingAnchor constant:-12],
-                    [progressBar.bottomAnchor constraintEqualToAnchor:containerView.bottomAnchor constant:-8]
-                ]];
-            }
-
-            __block UIProgressView *blockProgressBar = progressBar;
-            __block UILabel *blockStageLabel = stageLabel;
-
-            [strongSelf presentViewController:progressAlert animated:YES completion:nil];
+            InstallerProgressViewController *progressVC = [[InstallerProgressViewController alloc] init];
+            progressVC.titleText = @"Forge 直装中";
+            progressVC.progress = 0.0;
+            progressVC.stageMessage = @"准备中...";
+            strongSelf.installerProgressVC = progressVC;
+            [strongSelf.navigationController pushViewController:progressVC animated:YES];
 
             dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
                 NSError *directError = nil;
@@ -3011,35 +3180,29 @@
                                                                        versionId:profileName
                                                                          progress:^(double progress, NSString *stageMessage) {
                     dispatch_async(dispatch_get_main_queue(), ^{
-                        // 更新进度条和阶段文案
-                        NSString *message = [NSString stringWithFormat:@"%@ - %.0f%%", stageMessage ?: @"", progress * 100];
-                        progressAlert.message = message;
-                        if (blockStageLabel) {
-                            blockStageLabel.text = message;
-                        }
-                        if (blockProgressBar) {
-                            [blockProgressBar setProgress:(float)progress animated:YES];
-                        }
+                        __strong typeof(weakSelf) strongSelf2 = weakSelf;
+                        if (!strongSelf2 || !strongSelf2.installerProgressVC) return;
+                        strongSelf2.installerProgressVC.progress = progress;
+                        NSString *stage = stageMessage ?: @"";
+                        strongSelf2.installerProgressVC.stageMessage = [NSString stringWithFormat:@"%@ - %.0f%%", stage, progress * 100];
                     });
                 }
                                                                            error:&directError];
 
                 dispatch_async(dispatch_get_main_queue(), ^{
-                    [progressAlert dismissViewControllerAnimated:YES completion:^{
-                        __strong typeof(weakSelf) strongSelf2 = weakSelf;
-                        if (!strongSelf2) return;
-                        if (installed) {
-                            [strongSelf2 showSuccessMessage:[NSString stringWithFormat:@"Forge 直装成功\n配置文件: %@", profileName ?: gameVersion]];
-                        } else {
-                            [strongSelf2 showError:[NSString stringWithFormat:@"Forge 直装失败: %@", directError.localizedDescription ?: @"未知错误"]];
-                        }
-                    }];
+                    __strong typeof(weakSelf) strongSelf2 = weakSelf;
+                    if (!strongSelf2) return;
+                    if (installed) {
+                        [strongSelf2 finishInstallerProgressWithSuccess:[NSString stringWithFormat:@"Forge 直装成功\n配置文件: %@", profileName ?: gameVersion]];
+                    } else {
+                        [strongSelf2 finishInstallerProgressWithError:[NSString stringWithFormat:@"Forge 直装失败: %@", directError.localizedDescription ?: @"未知错误"]];
+                    }
                 });
             });
             return;
         }
 
-        // Original scheme (run installer)
+        // 原版方案（运行安装器）：进入 AWT 安装器 GUI 流程
         [strongSelf handleInstallerDownloadResultWithVendorName:@"Forge"
                                                     gameVersion:gameVersion
                                                     profileName:profileName
@@ -3062,9 +3225,8 @@
     };
     forgeVC.completionHandler = completion;
 
-    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:forgeVC];
-    nav.modalPresentationStyle = UIModalPresentationFormSheet;
-    [self presentViewController:nav animated:YES completion:nil];
+    // 直接 push 到中间内容区，不再用 FormSheet 弹窗
+    [self.navigationController pushViewController:forgeVC animated:YES];
 }
 
 - (void)downloadOptiFine:(NSString *)gameVersion completion:(void (^)(BOOL success, NSError *error))completion {
@@ -3151,6 +3313,11 @@
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
 
+        // 先 pop 掉 NeoForge 安装器选择页，让后续进度页面在中间内容区显示
+        if (strongSelf.navigationController.topViewController != strongSelf) {
+            [strongSelf.navigationController popViewControllerAnimated:YES];
+        }
+
         if (!success) {
             [strongSelf handleInstallerDownloadResultWithVendorName:@"NeoForge"
                                                         gameVersion:gameVersion
@@ -3172,46 +3339,14 @@
         }
 
         if (selectedScheme == 1 && filePath.length > 0) {
-            // 直装方案
+            // 直装方案：push 进度 VC，由 NeoForgeDirectInstaller 的 progress 回调驱动
             NSLog(@"[NeoForgeDirect] DownloadViewController: starting direct install with progress UI");
-
-            UIAlertController *progressAlert = [UIAlertController alertControllerWithTitle:@"NeoForge 直装中"
-                                                                                  message:@"准备中..."
-                                                                           preferredStyle:UIAlertControllerStyleAlert];
-
-            UIViewController *contentVC = [progressAlert valueForKey:@"contentViewController"];
-            UIProgressView *progressBar = nil;
-            UILabel *stageLabel = nil;
-            if (contentVC) {
-                UIView *containerView = contentVC.view;
-                progressBar = [[UIProgressView alloc] initWithProgressViewStyle:UIProgressViewStyleDefault];
-                progressBar.progress = 0.0;
-                progressBar.translatesAutoresizingMaskIntoConstraints = NO;
-                [containerView addSubview:progressBar];
-
-                stageLabel = [[UILabel alloc] init];
-                stageLabel.text = @"准备中...";
-                stageLabel.textAlignment = NSTextAlignmentCenter;
-                stageLabel.font = [UIFont systemFontOfSize:13];
-                stageLabel.numberOfLines = 0;
-                stageLabel.translatesAutoresizingMaskIntoConstraints = NO;
-                [containerView addSubview:stageLabel];
-
-                [NSLayoutConstraint activateConstraints:@[
-                    [stageLabel.topAnchor constraintEqualToAnchor:containerView.topAnchor constant:8],
-                    [stageLabel.leadingAnchor constraintEqualToAnchor:containerView.leadingAnchor constant:12],
-                    [stageLabel.trailingAnchor constraintEqualToAnchor:containerView.trailingAnchor constant:-12],
-                    [progressBar.topAnchor constraintEqualToAnchor:stageLabel.bottomAnchor constant:8],
-                    [progressBar.leadingAnchor constraintEqualToAnchor:containerView.leadingAnchor constant:12],
-                    [progressBar.trailingAnchor constraintEqualToAnchor:containerView.trailingAnchor constant:-12],
-                    [progressBar.bottomAnchor constraintEqualToAnchor:containerView.bottomAnchor constant:-8]
-                ]];
-            }
-
-            __block UIProgressView *blockProgressBar = progressBar;
-            __block UILabel *blockStageLabel = stageLabel;
-
-            [strongSelf presentViewController:progressAlert animated:YES completion:nil];
+            InstallerProgressViewController *progressVC = [[InstallerProgressViewController alloc] init];
+            progressVC.titleText = @"NeoForge 直装中";
+            progressVC.progress = 0.0;
+            progressVC.stageMessage = @"准备中...";
+            strongSelf.installerProgressVC = progressVC;
+            [strongSelf.navigationController pushViewController:progressVC animated:YES];
 
             dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
                 NSError *directError = nil;
@@ -3219,28 +3354,23 @@
                                                                                versionId:profileName
                                                                                 progress:^(double progress, NSString *stageMessage) {
                     dispatch_async(dispatch_get_main_queue(), ^{
-                        NSString *message = [NSString stringWithFormat:@"%@ - %.0f%%", stageMessage ?: @"", progress * 100];
-                        progressAlert.message = message;
-                        if (blockStageLabel) {
-                            blockStageLabel.text = message;
-                        }
-                        if (blockProgressBar) {
-                            [blockProgressBar setProgress:(float)progress animated:YES];
-                        }
+                        __strong typeof(weakSelf) strongSelf2 = weakSelf;
+                        if (!strongSelf2 || !strongSelf2.installerProgressVC) return;
+                        strongSelf2.installerProgressVC.progress = progress;
+                        NSString *stage = stageMessage ?: @"";
+                        strongSelf2.installerProgressVC.stageMessage = [NSString stringWithFormat:@"%@ - %.0f%%", stage, progress * 100];
                     });
                 }
                                                                                    error:&directError];
 
                 dispatch_async(dispatch_get_main_queue(), ^{
-                    [progressAlert dismissViewControllerAnimated:YES completion:^{
-                        __strong typeof(weakSelf) strongSelf2 = weakSelf;
-                        if (!strongSelf2) return;
-                        if (installed) {
-                            [strongSelf2 showSuccessMessage:[NSString stringWithFormat:@"NeoForge 直装成功\n配置文件: %@", profileName ?: gameVersion]];
-                        } else {
-                            [strongSelf2 showError:[NSString stringWithFormat:@"NeoForge 直装失败: %@", directError.localizedDescription ?: @"未知错误"]];
-                        }
-                    }];
+                    __strong typeof(weakSelf) strongSelf2 = weakSelf;
+                    if (!strongSelf2) return;
+                    if (installed) {
+                        [strongSelf2 finishInstallerProgressWithSuccess:[NSString stringWithFormat:@"NeoForge 直装成功\n配置文件: %@", profileName ?: gameVersion]];
+                    } else {
+                        [strongSelf2 finishInstallerProgressWithError:[NSString stringWithFormat:@"NeoForge 直装失败: %@", directError.localizedDescription ?: @"未知错误"]];
+                    }
                 });
             });
             return;
@@ -3257,9 +3387,8 @@
     };
     neoForgeVC.completionHandler = completion;
 
-    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:neoForgeVC];
-    nav.modalPresentationStyle = UIModalPresentationFormSheet;
-    [self presentViewController:nav animated:YES completion:nil];
+    // 直接 push 到中间内容区，不再用 FormSheet 弹窗
+    [self.navigationController pushViewController:neoForgeVC animated:YES];
 }
 
 - (void)showSuccessMessage:(NSString *)message {

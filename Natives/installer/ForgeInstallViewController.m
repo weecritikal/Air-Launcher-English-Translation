@@ -258,7 +258,12 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
                                                userInfo:@{NSLocalizedDescriptionKey: @"用户已取消安装流程"}];
         self.completionHandler(NO, nil, cancelError);
     }
-    [self.navigationController dismissViewControllerAnimated:YES completion:nil];
+    // 兼容两种呈现方式：push 到中间内容区时用 pop，模态呈现时用 dismiss
+    if (self.navigationController.viewControllers.count > 1) {
+        [self.navigationController popViewControllerAnimated:YES];
+    } else {
+        [self.navigationController dismissViewControllerAnimated:YES completion:nil];
+    }
 }
 
 - (void)segmentChanged:(UISegmentedControl *)segment {
