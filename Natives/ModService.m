@@ -211,6 +211,57 @@
     return nil;
 }
 
+/// 获取当前 profile 的 mods 目录，不存在时自动创建
+- (nullable NSString *)ensureModsFolderForProfile:(NSString *)profileName error:(NSError **)error {
+    NSString *profile = profileName.length ? profileName : @"default";
+    NSFileManager *fm = [NSFileManager defaultManager];
+    NSString *modsPath = nil;
+
+    @try {
+        NSDictionary *profiles = PLProfiles.current.profiles;
+        NSDictionary *prof = profiles[profile];
+        if ([prof isKindOfClass:[NSDictionary class]]) {
+            NSString *gameDir = prof[@"gameDir"];
+            if ([gameDir isKindOfClass:[NSString class]] && gameDir.length > 0) {
+                modsPath = [gameDir stringByAppendingPathComponent:@"mods"];
+            }
+        }
+    } @catch (NSException *ex) { }
+
+    if (!modsPath) {
+        const char *gameDirC = getenv("POJAV_GAME_DIR");
+        if (gameDirC) {
+            NSString *gameDir = [NSString stringWithUTF8String:gameDirC];
+            modsPath = [gameDir stringByAppendingPathComponent:@"mods"];
+        }
+    }
+
+    if (!modsPath) {
+        if (error) {
+            *error = [NSError errorWithDomain:@"ModService" code:1 userInfo:@{NSLocalizedDescriptionKey: @"无法确定游戏目录"}];
+        }
+        return nil;
+    }
+
+    BOOL isDir = NO;
+    if (![fm fileExistsAtPath:modsPath isDirectory:&isDir]) {
+        // 目录不存在，创建
+        NSError *createError = nil;
+        [fm createDirectoryAtPath:modsPath withIntermediateDirectories:YES attributes:nil error:&createError];
+        if (createError) {
+            if (error) *error = createError;
+            return nil;
+        }
+        NSLog(@"[ModService] 已创建 mods 目录: %@", modsPath);
+    } else if (!isDir) {
+        if (error) {
+            *error = [NSError errorWithDomain:@"ModService" code:2 userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"%@ 不是目录", modsPath]}];
+        }
+        return nil;
+    }
+    return modsPath;
+}
+
 // ---------- 缓存方法 ----------
 - (BOOL)needsRescanForPath:(NSString *)path {
     __block BOOL needs = YES;

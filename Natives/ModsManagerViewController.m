@@ -6,7 +6,7 @@
 #import "ModUpdateViewController.h"
 #import "PLProfiles.h"
 
-@interface ModsManagerViewController () <UITableViewDataSource, UITableViewDelegate, ModTableViewCellDelegate, UISearchBarDelegate, ModVersionViewControllerDelegate>
+@interface ModsManagerViewController () <UITableViewDataSource, UITableViewDelegate, ModTableViewCellDelegate, UISearchBarDelegate, ModVersionViewControllerDelegate, UIDocumentPickerDelegate>
 
 @property (nonatomic, strong) UISegmentedControl *modeSwitcher;
 @property (nonatomic, strong) UISearchBar *searchBar;
@@ -15,6 +15,7 @@
 @property (nonatomic, strong) UILabel *emptyLabel;
 @property (nonatomic, strong) UIBarButtonItem *refreshButton;
 @property (nonatomic, strong) UIBarButtonItem *checkUpdateButton;
+@property (nonatomic, strong) UIBarButtonItem *importButton;
 @property (nonatomic, strong) NSMutableArray<ModItem *> *localMods;
 @property (nonatomic, strong) NSMutableArray<ModItem *> *filteredLocalMods;
 
@@ -81,6 +82,10 @@
     self.checkUpdateButton = [[UIBarButtonItem alloc] initWithImage:checkImage style:UIBarButtonItemStylePlain target:self action:@selector(checkForUpdates)];
     self.checkUpdateButton.accessibilityLabel = @"检查更新";
 
+    UIImage *importImage = [UIImage systemImageNamed:@"square.and.arrow.down"] ?: [UIImage systemImageNamed:@"plus"];
+    self.importButton = [[UIBarButtonItem alloc] initWithImage:importImage style:UIBarButtonItemStylePlain target:self action:@selector(importModTapped)];
+    self.importButton.accessibilityLabel = @"导入 Mod";
+
     [self updateNavigationButtons];
 
     [NSLayoutConstraint activateConstraints:@[
@@ -135,8 +140,8 @@
     UIBarButtonItem *closeButton = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone target:self action:@selector(closeTapped)];
 
     if (self.currentMode == ModsManagerModeLocal) {
-        // rightBarButtonItems 从右到左显示，checkUpdateButton 放在最右侧
-        self.navigationItem.rightBarButtonItems = @[self.refreshButton, self.checkUpdateButton];
+        // rightBarButtonItems 从右到左显示：导入、刷新、检查更新
+        self.navigationItem.rightBarButtonItems = @[self.importButton, self.refreshButton, self.checkUpdateButton];
         self.navigationItem.leftBarButtonItem = closeButton;
     } else {
         self.navigationItem.rightBarButtonItems = nil;
@@ -147,6 +152,78 @@
 - (void)closeTapped {
     [self dismissViewControllerAnimated:YES completion:nil];
 }
+
+#pragma mark - Import Mod
+
+- (void)importModTapped {
+    // 确保目录存在
+    NSError *dirError = nil;
+    NSString *modsDir = [[ModService sharedService] ensureModsFolderForProfile:nil error:&dirError];
+    if (!modsDir) {
+        [self showSimpleAlertWithTitle:@"无法导入" message:dirError.localizedDescription ?: @"无法确定 mods 目录"];
+        return;
+    }
+
+    // 弹出文件选择器，允许 jar（Forge/NeoForge/Fabric/Quilt 都用 jar）
+    UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc] initWithDocumentTypes:@[@"com.sun.java.jar", @"public.item"] inMode:UIDocumentPickerModeImport];
+    picker.allowsMultipleSelection = YES;
+    picker.delegate = self;
+    picker.title = @"选择 Mod 文件";
+    [self presentViewController:picker animated:YES completion:nil];
+}
+
+- (void)documentPicker:(UIDocumentPickerViewController *)controller didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls {
+    if (urls.count == 0) return;
+
+    NSError *dirError = nil;
+    NSString *modsDir = [[ModService sharedService] ensureModsFolderForProfile:nil error:&dirError];
+    if (!modsDir) {
+        [self showSimpleAlertWithTitle:@"导入失败" message:dirError.localizedDescription ?: @"无法确定 mods 目录"];
+        return;
+    }
+
+    NSFileManager *fm = [NSFileManager defaultManager];
+    NSInteger successCount = 0;
+    NSMutableArray<NSString *> *failedFiles = [NSMutableArray array];
+
+    for (NSURL *url in urls) {
+        // 开始访问安全资源
+        BOOL accessing = [url startAccessingSecurityScopedResource];
+        @try {
+            NSString *fileName = url.lastPathComponent;
+            NSString *destPath = [modsDir stringByAppendingPathComponent:fileName];
+
+            // 同名文件处理
+            if ([fm fileExistsAtPath:destPath]) {
+                NSString *baseName = [fileName stringByDeletingPathExtension];
+                NSString *ext = [fileName pathExtension];
+                destPath = [modsDir stringByAppendingPathComponent:[NSString stringWithFormat:@"%@_copy.%@", baseName, ext]];
+            }
+
+            NSError *copyError = nil;
+            [fm copyItemAtPath:url.path toPath:destPath error:&copyError];
+            if (copyError) {
+                [failedFiles addObject:[NSString stringWithFormat:@"%@: %@", fileName, copyError.localizedDescription]];
+            } else {
+                successCount++;
+            }
+        } @finally {
+            if (accessing) [url stopAccessingSecurityScopedResource];
+        }
+    }
+
+    // 刷新列表
+    [self refreshLocalModsList];
+
+    if (failedFiles.count > 0) {
+        [self showSimpleAlertWithTitle:[NSString stringWithFormat:@"导入完成（%ld 成功，%ld 失败）", (long)successCount, (long)failedFiles.count]
+                               message:[failedFiles componentsJoinedByString:@"\n"]];
+    } else {
+        NSLog(@"[ModsManager] 成功导入 %ld 个 Mod", (long)successCount);
+    }
+}
+
+
 
 #pragma mark - Check for Updates
 

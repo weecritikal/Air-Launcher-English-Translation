@@ -2,6 +2,7 @@
 #import "BackgroundManager.h"
 #import "DownloadTaskManager.h"
 #import "DownloadTaskItem.h"
+#import "InlineMessageView.h"
 #import "installer/modpack/ModrinthAPI.h"
 #import "installer/modpack/CurseForgeAPI.h"
 #import "PLPreferences.h"
@@ -702,9 +703,11 @@
 }
 
 - (void)showAlert:(NSString *)title message:(NSString *)message {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:message preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
-    [self presentViewController:alert animated:YES completion:nil];
+    // 在内容区显示提示，替代弹窗
+    [InlineMessageView showInViewController:self
+                                       title:title
+                                    message:message
+                                       type:InlineMessageTypeInfo];
 }
 
 #pragma mark - Load Versions (Real Network)
@@ -1195,7 +1198,7 @@
 
 @property (nonatomic, strong) MinecraftResourceDownloadTask *downloadTask;
 @property (nonatomic, strong) DownloadProgressViewController *progressVC;
-@property (nonatomic, strong) UIAlertController *downloadingAlert;
+@property (nonatomic, strong) InlineMessageView *downloadingAlert;
 
 @property (nonatomic, assign) BOOL isObservingProgress;
 
@@ -1836,16 +1839,17 @@
     NSString *currentSource = [PLPreferences currentDownloadSourceForType:type];
     if ([currentSource isEqualToString:@"curseforge"]) return;
 
-    // API Key 未配置时弹出引导提示（与实际请求保持一致的三层 fallback 判断）
+    // API Key 未配置时在内容区显示提示（替代弹窗）
     if (![CurseForgeAPI isAPIKeyConfigured]) {
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"需要 CurseForge API Key"
-                                                                       message:@"检测到未配置 CurseForge API Key，是否前往设置？"
-                                                                preferredStyle:UIAlertControllerStyleAlert];
-        [alert addAction:[UIAlertAction actionWithTitle:@"前往设置" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        InlineMessageView *msgView = [InlineMessageView showInViewController:self
+                                                                       title:@"需要 CurseForge API Key"
+                                                                    message:@"检测到未配置 CurseForge API Key，点击前往设置"
+                                                                       type:InlineMessageTypeInfo];
+        // 2 秒后自动跳转设置页
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [msgView dismiss];
             [self openCurseForgeAPIKeySettings];
-        }]];
-        [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
-        [self presentViewController:alert animated:YES completion:nil];
+        });
         return;
     }
 
@@ -2624,11 +2628,11 @@
 }
 
 - (void)showError:(NSString *)message {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"错误"
-                                                                   message:message
-                                                            preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
-    [self presentViewController:alert animated:YES completion:nil];
+    // 在内容区显示错误，替代弹窗
+    [InlineMessageView showInViewController:self
+                                       title:@"错误"
+                                    message:message
+                                       type:InlineMessageTypeError];
 }
 
 #pragma mark - UISearchBarDelegate
@@ -2768,42 +2772,42 @@
 
 - (void)startVersionDownload:(NSDictionary *)version {
     __weak DownloadViewController *weakSelf = self;
-    
-    self.downloadingAlert = [UIAlertController alertControllerWithTitle:@"下载中"
-                                                                message:@"正在准备下载..."
-                                                         preferredStyle:UIAlertControllerStyleAlert];
-    
-    UIAlertAction *detailsAction = [UIAlertAction actionWithTitle:@"查看详情"
-                                                            style:UIAlertActionStyleDefault
-                                                          handler:^(UIAlertAction * _Nonnull action) {
-        if (weakSelf.downloadTask) {
-            weakSelf.progressVC = [[DownloadProgressViewController alloc] initWithTask:weakSelf.downloadTask];
-            UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:weakSelf.progressVC];
+
+    // 在内容区显示下载状态，替代弹窗（点击查看详情，关闭按钮取消）
+    self.downloadingAlert = [InlineMessageView showInViewController:self
+                                                              title:@"下载中"
+                                                           message:@"正在准备下载..."
+                                                              type:InlineMessageTypeLoading
+                                                  showsCloseButton:YES];
+    // 点击消息体打开详情视图
+    self.downloadingAlert.onTap = ^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+        if (strongSelf.downloadTask) {
+            strongSelf.progressVC = [[DownloadProgressViewController alloc] initWithTask:strongSelf.downloadTask];
+            UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:strongSelf.progressVC];
             nav.modalPresentationStyle = UIModalPresentationFormSheet;
-            [weakSelf presentViewController:nav animated:YES completion:nil];
+            [strongSelf presentViewController:nav animated:YES completion:nil];
         }
-    }];
-    [self.downloadingAlert addAction:detailsAction];
-    
-    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"取消"
-                                                           style:UIAlertActionStyleDestructive
-                                                         handler:^(UIAlertAction * _Nonnull action) {
-        if (weakSelf.downloadTask) {
-            if (weakSelf.isObservingProgress) {
-                [weakSelf.downloadTask.progress removeObserver:weakSelf forKeyPath:@"fractionCompleted"];
-                weakSelf.isObservingProgress = NO;
+    };
+    // 点击关闭按钮取消下载
+    self.downloadingAlert.onClose = ^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+        if (strongSelf.downloadTask) {
+            if (strongSelf.isObservingProgress) {
+                [strongSelf.downloadTask.progress removeObserver:strongSelf forKeyPath:@"fractionCompleted"];
+                strongSelf.isObservingProgress = NO;
             }
-            [weakSelf.downloadTask.progress cancel];
-            weakSelf.downloadTask = nil;
+            [strongSelf.downloadTask.progress cancel];
+            strongSelf.downloadTask = nil;
         }
-        weakSelf.view.userInteractionEnabled = YES;
-        [weakSelf.loadingIndicator stopAnimating];
-        [weakSelf.downloadingAlert dismissViewControllerAnimated:YES completion:nil];
-        weakSelf.downloadingAlert = nil;
-    }];
-    [self.downloadingAlert addAction:cancelAction];
-    
-    [self presentViewController:self.downloadingAlert animated:YES completion:nil];
+        strongSelf.view.userInteractionEnabled = YES;
+        [strongSelf.loadingIndicator stopAnimating];
+        [strongSelf.downloadingAlert dismiss];
+        strongSelf.downloadingAlert = nil;
+    };
+
     [self.loadingIndicator startAnimating];
     
     self.downloadTask = [MinecraftResourceDownloadTask new];
@@ -2812,11 +2816,11 @@
     self.downloadTask.retryCallback = ^(NSInteger retryCount, NSInteger maxRetryCount) {
         dispatch_async(dispatch_get_main_queue(), ^{
             if (weakSelf.downloadingAlert) {
-                weakSelf.downloadingAlert.message = [NSString stringWithFormat:@"下载失败，正在重试 (%ld/%ld)...", (long)retryCount, (long)maxRetryCount];
+                [weakSelf.downloadingAlert updateMessage:[NSString stringWithFormat:@"下载失败，正在重试 (%ld/%ld)...", (long)retryCount, (long)maxRetryCount]];
             }
         });
     };
-    
+
     self.downloadTask.handleError = ^{
         dispatch_async(dispatch_get_main_queue(), ^{
             if (weakSelf.isObservingProgress) {
@@ -2825,10 +2829,12 @@
             }
             weakSelf.view.userInteractionEnabled = YES;
             [weakSelf.loadingIndicator stopAnimating];
+            // 关闭下载中提示
+            [weakSelf.downloadingAlert dismiss];
+            weakSelf.downloadingAlert = nil;
             weakSelf.downloadTask = nil;
             weakSelf.progressVC = nil;
-            weakSelf.downloadingAlert = nil;
-            
+
             [weakSelf showError:@"版本下载失败，请检查网络连接"];
         });
     };
@@ -3191,17 +3197,19 @@
         return;
     }
     
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:localize(@"launcher.wait_jit.title", nil)
-                                                                   message:hasTrollStoreJIT ? localize(@"launcher.wait_jit_trollstore.message", nil) : localize(@"launcher.wait_jit.message", nil)
-                                                            preferredStyle:UIAlertControllerStyleAlert];
-    [self presentViewController:alert animated:YES completion:nil];
-    
+    // 在内容区显示 JIT 等待提示，替代弹窗
+    InlineMessageView *jitAlert = [InlineMessageView showInViewController:self
+                                                                    title:localize(@"launcher.wait_jit.title", nil)
+                                                                 message:hasTrollStoreJIT ? localize(@"launcher.wait_jit_trollstore.message", nil) : localize(@"launcher.wait_jit.message", nil)
+                                                                    type:InlineMessageTypeLoading];
+
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         while (!isJITEnabled(false)) {
             usleep(1000 * 200);
         }
         dispatch_async(dispatch_get_main_queue(), ^{
-            [alert dismissViewControllerAnimated:YES completion:handler];
+            [jitAlert dismiss];
+            if (handler) handler();
         });
     });
 }
@@ -3250,16 +3258,18 @@
     };
     
     void (^showAlertAndLaunch)(void) = ^{
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"下载完成"
-                                                                        message:message
-                                                                 preferredStyle:UIAlertControllerStyleAlert];
-        [self presentViewController:alert animated:YES completion:nil];
-        
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            [alert dismissViewControllerAnimated:YES completion:launchInstaller];
+        // 在内容区显示下载完成提示，替代弹窗
+        InlineMessageView *msgView = [InlineMessageView showInViewController:self
+                                                                       title:@"下载完成"
+                                                                    message:message
+                                                                       type:InlineMessageTypeSuccess];
+
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [msgView dismiss];
+            if (launchInstaller) launchInstaller();
         });
     };
-    
+
     if (self.presentedViewController) {
         [self dismissViewControllerAnimated:YES completion:showAlertAndLaunch];
     } else {
@@ -3621,9 +3631,11 @@
 }
 
 - (void)showSuccessMessage:(NSString *)message {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"安装成功" message:message preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
-    [self presentViewController:alert animated:YES completion:nil];
+    // 在内容区显示成功提示，替代弹窗
+    [InlineMessageView showInViewController:self
+                                       title:@"安装成功"
+                                    message:message
+                                       type:InlineMessageTypeSuccess];
 }
 
 #pragma mark - Mod Download Helper (Shared)
@@ -4477,24 +4489,24 @@
                 }
             }
             
-            self.downloadingAlert.message = [NSString stringWithFormat:@"正在下载...\n%@%@%@", progressText, speedText, etaText];
+            [self.downloadingAlert updateMessage:[NSString stringWithFormat:@"正在下载...\n%@%@%@", progressText, speedText, etaText]];
         }
-        
+
         if (progress.finished) {
             if (self.isObservingProgress) {
                 [self.downloadTask.progress removeObserver:self forKeyPath:@"fractionCompleted"];
                 self.isObservingProgress = NO;
             }
-            
+
             lastMsTime = 0;
             lastSecTime = 0;
             lastCompletedUnitCount = 0;
-            
+
             self.view.userInteractionEnabled = YES;
             [self.loadingIndicator stopAnimating];
-            
+
             if (self.downloadingAlert) {
-                [self dismissViewControllerAnimated:YES completion:nil];
+                [self.downloadingAlert dismiss];
                 self.downloadingAlert = nil;
             }
             
@@ -4503,11 +4515,11 @@
                 self.progressVC = nil;
             }
             
-            UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"下载完成"
-                                                                                  message:[NSString stringWithFormat:@"%@ 下载完成", self.downloadTask.metadata[@"id"] ?: @"版本"]
-                                                                           preferredStyle:UIAlertControllerStyleAlert];
-            [successAlert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
-            [self presentViewController:successAlert animated:YES completion:nil];
+            // 在内容区显示下载完成提示，替代弹窗
+            [InlineMessageView showInViewController:self
+                                               title:@"下载完成"
+                                            message:[NSString stringWithFormat:@"%@ 下载完成", self.downloadTask.metadata[@"id"] ?: @"版本"]
+                                               type:InlineMessageTypeSuccess];
             
             self.downloadTask = nil;
         }

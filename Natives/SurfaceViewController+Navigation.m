@@ -3,31 +3,33 @@
 #import "LauncherPreferencesViewController.h"
 #import "PLProfiles.h"
 #import "SurfaceViewController.h"
+#import "GameMenuOverlayView.h"
 #import "utils.h"
 
 @implementation SurfaceViewController(Navigation)
 
 static UIView *menuSwipeView;
 - (void)initCategory_Navigation {
+    // 保留旧的边缘滑动条带引用以兼容现有代码，但隐藏交互（被悬浮按钮替代）
     UIPanGestureRecognizer *menuPanGesture = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handleRightEdge:)];
     menuPanGesture.delegate = self;
 
     UIView *menuSwipeLineView = [[UIView alloc] initWithFrame:CGRectMake(11.0, self.view.frame.size.height/2 - 100.0, 8.0, 200.0)];
     menuSwipeLineView.autoresizingMask = UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleBottomMargin;
-    menuSwipeLineView.backgroundColor = UIColor.whiteColor;
+    menuSwipeLineView.backgroundColor = [UIColor clearColor];
     menuSwipeLineView.layer.cornerRadius = 4;
     menuSwipeLineView.userInteractionEnabled = NO;
 
-    UIView *menuSwipeView = [[UIView alloc] initWithFrame:CGRectMake(self.view.frame.size.width, 0, 30.0, self.view.frame.size.height)];
+    menuSwipeView = [[UIView alloc] initWithFrame:CGRectMake(self.view.frame.size.width, 0, 30.0, self.view.frame.size.height)];
     menuSwipeView.autoresizingMask = UIViewAutoresizingFlexibleHeight | UIViewAutoresizingFlexibleLeftMargin;
-    menuSwipeView.backgroundColor = [UIColor colorWithRed:0 green:0 blue:0 alpha:0.1];
-    [menuSwipeView addGestureRecognizer:menuPanGesture];
+    menuSwipeView.backgroundColor = [UIColor clearColor];
+    menuSwipeView.userInteractionEnabled = NO; // 禁用旧条带，由悬浮按钮取代
     [menuSwipeView addSubview:menuSwipeLineView];
     [self.rootView addSubview:menuSwipeView];
 
     self.menuArray = @[@"game.menu.force_close", @"game.menu.log_output", @"game.menu.custom_controls", @"Settings"];
 
-    self.menuView = [[UITableView alloc] initWithFrame:CGRectMake(self.view.frame.size.width + 30.0, 0, 
+    self.menuView = [[UITableView alloc] initWithFrame:CGRectMake(self.view.frame.size.width + 30.0, 0,
         self.view.frame.size.width * 0.3 - 36.0 * 0.7, self.view.frame.size.height)];
 
     //menuView.backgroundColor = [UIColor colorWithRed:240.0/255.0 green:240.0/255.0 blue:240.0/255.0 alpha:1];
@@ -38,6 +40,26 @@ static UIView *menuSwipeView;
     self.menuView.scrollEnabled = NO;
     self.menuView.separatorInset = UIEdgeInsetsZero;
     [self.view addSubview:self.menuView];
+
+    // FCL/ZL2 风格悬浮按钮 + FPS/内存显示
+    GameMenuOverlayView *overlay = [[GameMenuOverlayView alloc] initWithParentView:self.view];
+    __weak typeof(self) weakSelf = self;
+    overlay.onMenuButtonTapped = ^{
+        [weakSelf toggleMenu];
+    };
+    self.gameMenuOverlay = overlay;
+}
+
+/// 切换菜单显示状态（悬浮按钮点击触发）
+- (void)toggleMenu {
+    if (self.menuView.hidden) {
+        // 打开菜单
+        self.menuView.hidden = NO;
+        [self animateMenuScale:0.7 duration:0.3];
+    } else {
+        // 关闭菜单
+        [self animateMenuScale:1.0 duration:0.3];
+    }
 }
 
 - (void)setupCategory_Navigation {

@@ -113,6 +113,56 @@
     return nil;
 }
 
+/// 获取当前 profile 的 shaderpacks 目录，不存在时自动创建
+- (nullable NSString *)ensureShadersFolderForProfile:(NSString *)profileName error:(NSError **)error {
+    NSString *profile = profileName.length ? profileName : @"default";
+    NSFileManager *fm = [NSFileManager defaultManager];
+    NSString *shadersPath = nil;
+
+    @try {
+        NSDictionary *profiles = PLProfiles.current.profiles;
+        NSDictionary *prof = profiles[profile];
+        if ([prof isKindOfClass:[NSDictionary class]]) {
+            NSString *gameDir = prof[@"gameDir"];
+            if ([gameDir isKindOfClass:[NSString class]] && gameDir.length > 0) {
+                shadersPath = [gameDir stringByAppendingPathComponent:@"shaderpacks"];
+            }
+        }
+    } @catch (NSException *ex) { }
+
+    if (!shadersPath) {
+        const char *gameDirC = getenv("POJAV_GAME_DIR");
+        if (gameDirC) {
+            NSString *gameDir = [NSString stringWithUTF8String:gameDirC];
+            shadersPath = [gameDir stringByAppendingPathComponent:@"shaderpacks"];
+        }
+    }
+
+    if (!shadersPath) {
+        if (error) {
+            *error = [NSError errorWithDomain:@"ShaderService" code:1 userInfo:@{NSLocalizedDescriptionKey: @"无法确定游戏目录"}];
+        }
+        return nil;
+    }
+
+    BOOL isDir = NO;
+    if (![fm fileExistsAtPath:shadersPath isDirectory:&isDir]) {
+        NSError *createError = nil;
+        [fm createDirectoryAtPath:shadersPath withIntermediateDirectories:YES attributes:nil error:&createError];
+        if (createError) {
+            if (error) *error = createError;
+            return nil;
+        }
+        NSLog(@"[ShaderService] 已创建 shaderpacks 目录: %@", shadersPath);
+    } else if (!isDir) {
+        if (error) {
+            *error = [NSError errorWithDomain:@"ShaderService" code:2 userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"%@ 不是目录", shadersPath]}];
+        }
+        return nil;
+    }
+    return shadersPath;
+}
+
 - (void)scanShadersForProfile:(NSString *)profileName completion:(ShaderListHandler)completion {
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         NSString *shadersFolder = [self existingShadersFolderForProfile:profileName];

@@ -16,6 +16,7 @@
 #import "MinecraftResourceUtils.h"
 #import "PLProfiles.h"
 #import "SurfaceViewController.h"
+#import "GameMenuOverlayView.h"
 #import "TrackedTextField.h"
 #import "TouchControllerBridge.h"
 #import "UIKit+hook.h"
@@ -25,6 +26,8 @@
 #include "utils.h"
 
 #include <dlfcn.h>
+#include <mach/mach.h>
+#include <mach/task_info.h>
 
 // --- [START] TouchController Mod Support ---
 #include <arpa/inet.h>
@@ -161,6 +164,12 @@ static GameSurfaceView* pojavWindow;
 
 @interface SurfaceViewController ()<UITextFieldDelegate, UIGestureRecognizerDelegate> {
 }
+
+// FPS/内存监控相关（参照 FCL DraggableTextView 与 ZL2 的低频采样策略）
+@property(nonatomic) volatile int64_t frameCounter;       // CADisplayLink 每帧累加
+@property(nonatomic) volatile int64_t lastFrameCounter;   // 上次采样时的帧数
+@property(nonatomic) NSTimer *statsTimer;                 // 低频定时器，500ms 一次
+@property(nonatomic) CADisplayLink *statsDisplayLink;     // 渲染循环引用（用于失效）
 
 @property(nonatomic) NSDictionary* metadata;
 @property(nonatomic) TrackedTextField *inputTextField;
@@ -656,9 +665,14 @@ static GameSurfaceView* pojavWindow;
         [self setNeedsUpdateOfHomeIndicatorAutoHidden];
     }
 
+    // 渲染循环 tick：除了原有的 Gyro/Controller 输入，还累加帧计数器用于 FPS 计算。
+    // 仅对 int64_t 自增，开销极低，不影响游戏帧数（参照 FCL 在游戏循环中累加 FPS 计数）。
+    __weak typeof(self) weakSelf = self;
     id tickInput = ^{
         [GyroInput tick];
         [ControllerInput tick];
+        // 原子自增帧数（OSAtomicIncrement64 在 arm64 上是单条指令）
+        weakSelf.frameCounter++;
     };
     CADisplayLink *displayLink = [CADisplayLink displayLinkWithTarget:tickInput selector:@selector(invoke)];
     if (@available(iOS 15.0, tvOS 15.0, *)) {
@@ -669,6 +683,18 @@ static GameSurfaceView* pojavWindow;
         }
     }
     [displayLink addToRunLoop:NSRunLoop.currentRunLoop forMode:NSRunLoopCommonModes];
+    self.statsDisplayLink = displayLink;
+
+    // 低频采样定时器：每 500ms 计算一次 FPS 和内存占用，避免每帧更新 UI
+    // 参照 ZL2 的低频刷新策略，确保完全不影响游戏帧数
+    self.lastFrameCounter = 0;
+    self.frameCounter = 0;
+    self.statsTimer = [NSTimer scheduledTimerWithTimeInterval:0.5
+                                                      target:self
+                                                    selector:@selector(updateGameStats)
+                                                    userInfo:nil
+                                                     repeats:YES];
+    [[NSRunLoop currentRunLoop] addTimer:self.statsTimer forMode:NSRunLoopCommonModes];
 
     CGFloat screenScale = UIScreen.mainScreen.scale;
     [self updateSavedResolution];
@@ -1744,7 +1770,44 @@ static NSMutableDictionary *s_touchToFingerIdMap = nil;
     return pojavWindow;
 }
 
+#pragma mark - FPS/内存监控（参照 FCL DraggableTextView 与 ZL2 GameScreen.kt）
+
+- (void)updateGameStats {
+    // 1. 计算 FPS：当前帧数 - 上次帧数 = 0.5 秒内的帧数，×2 得到每秒帧数
+    int64_t current = self.frameCounter;
+    int64_t delta = current - self.lastFrameCounter;
+    self.lastFrameCounter = current;
+    NSInteger fps = (NSInteger)(delta * 2);  // 0.5s 采样间隔，乘 2 得到每秒
+
+    // 2. 获取内存占用（resident_size_bytes）
+    // 使用 mach_task_basic_info，比 task_basic_info 更准确（参照 ZL2 DebugUtils.kt）
+    double memoryMB = [self currentResidentMemoryMB];
+
+    // 3. 更新 UI（GameMenuOverlayView 内部会 dispatch 到主线程）
+    if ([self.gameMenuOverlay isKindOfClass:[GameMenuOverlayView class]]) {
+        [(GameMenuOverlayView *)self.gameMenuOverlay updateFPS:fps memoryUsageMB:memoryMB];
+    }
+}
+
+- (double)currentResidentMemoryMB {
+    mach_task_basic_info_data_t info;
+    mach_msg_type_number_t count = MACH_TASK_BASIC_INFO_COUNT;
+    kern_return_t kr = task_info(mach_task_self(), MACH_TASK_BASIC_INFO,
+                                 (task_info_t)&info, &count);
+    if (kr != KERN_SUCCESS) {
+        return 0.0;
+    }
+    // resident_size 单位是字节
+    return (double)info.resident_size / (1024.0 * 1024.0);
+}
+
 - (void)dealloc {
+    // 停止 FPS/内存采样定时器与渲染循环
+    [self.statsTimer invalidate];
+    self.statsTimer = nil;
+    [self.statsDisplayLink invalidate];
+    self.statsDisplayLink = nil;
+
     // æ¸ç TouchController èµæº
     if (self.touchControllerTransportHandle >= 0) {
         [TouchControllerBridge destroyTransport:self.touchControllerTransportHandle];

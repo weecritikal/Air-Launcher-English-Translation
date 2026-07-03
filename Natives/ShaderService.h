@@ -38,6 +38,9 @@ typedef void(^ShaderDownloadHandler)(NSError * _Nullable error);
 // --- Utility ---
 - (NSString *)iconCachePathForURL:(NSString *)urlString;
 
+/// 获取当前 profile 的 shaderpacks 目录，不存在时自动创建
+- (nullable NSString *)ensureShadersFolderForProfile:(NSString *)profileName error:(NSError **)error;
+
 @end
 
 NS_ASSUME_NONNULL_END

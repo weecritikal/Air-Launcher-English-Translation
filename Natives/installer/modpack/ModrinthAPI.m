@@ -90,7 +90,7 @@
 - (void)loadDetailsOfMod:(NSMutableDictionary *)item {
     NSArray *response = [self getEndpoint:[NSString stringWithFormat:@"project/%@/version", item[@"id"]] params:nil];
     if (!response) return;
-    
+
     NSMutableArray<NSString *> *names = [NSMutableArray new];
     NSMutableArray<NSString *> *mcNames = [NSMutableArray new];
     NSMutableArray<NSString *> *urls = [NSMutableArray new];
@@ -98,12 +98,12 @@
     NSMutableArray<NSString *> *sizes = [NSMutableArray new];
     NSMutableArray<NSString *> *fileNames = [NSMutableArray new];
     NSMutableArray<NSString *> *fileTypes = [NSMutableArray new];
-    
+
     for (NSDictionary *version in response) {
         NSArray *files = version[@"files"];
         if (![files isKindOfClass:[NSArray class]] || files.count == 0) continue;
         NSDictionary *file = files.firstObject;
-        
+
         [names addObject:version[@"name"] ?: @"Unknown"];
         NSArray *gameVersions = version[@"game_versions"];
         [mcNames addObject:[gameVersions isKindOfClass:[NSArray class]] ? gameVersions.firstObject : @""];
@@ -114,7 +114,7 @@
         [fileNames addObject:file[@"filename"] ?: @""];
         [fileTypes addObject:version[@"version_type"] ?: @""];
     }
-    
+
     item[@"versionNames"] = names;
     item[@"mcVersionNames"] = mcNames;
     item[@"versionSizes"] = sizes;
@@ -123,6 +123,93 @@
     item[@"versionFileNames"] = fileNames;
     item[@"versionFileTypes"] = fileTypes;
     item[@"versionDetailsLoaded"] = @(YES);
+}
+
+/// 异步加载整合包版本详情，避免 dispatch_group_wait 同步阻塞主线程/卡 UI
+- (void)loadDetailsOfModAsync:(NSMutableDictionary *)item
+                   completion:(void (^)(BOOL success, NSError * _Nullable error))completion {
+    NSString *modID = item[@"id"];
+    if (!modID || modID.length == 0) {
+        if (completion) completion(NO, [NSError errorWithDomain:@"ModrinthAPIError" code:1
+                                                       userInfo:@{NSLocalizedDescriptionKey: @"缺少 mod ID"}]);
+        return;
+    }
+
+    NSString *urlString = [NSString stringWithFormat:@"%@/project/%@/version", self.baseURL, modID];
+    NSURL *url = [NSURL URLWithString:urlString];
+    if (!url) {
+        if (completion) completion(NO, [NSError errorWithDomain:@"ModrinthAPIError" code:2
+                                                       userInfo:@{NSLocalizedDescriptionKey: @"无效的 URL"}]);
+        return;
+    }
+
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+    request.timeoutInterval = 30.0;
+    [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
+    [request setValue:@"Amethyst-iOS/1.0" forHTTPHeaderField:@"User-Agent"];
+
+    NSURLSession *session = [NSURLSession sharedSession];
+    NSURLSessionDataTask *task = [session dataTaskWithRequest:request
+                                           completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        if (error) {
+            self.lastError = error;
+            if (completion) completion(NO, error);
+            return;
+        }
+        if (!data) {
+            NSError *err = [NSError errorWithDomain:@"ModrinthAPIError" code:3
+                                           userInfo:@{NSLocalizedDescriptionKey: @"无数据返回"}];
+            self.lastError = err;
+            if (completion) completion(NO, err);
+            return;
+        }
+
+        NSError *jsonError = nil;
+        id jsonResult = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
+        if (jsonError || ![jsonResult isKindOfClass:[NSArray class]]) {
+            NSError *err = jsonError ?: [NSError errorWithDomain:@"ModrinthAPIError" code:4
+                                                       userInfo:@{NSLocalizedDescriptionKey: @"JSON 解析失败"}];
+            self.lastError = err;
+            if (completion) completion(NO, err);
+            return;
+        }
+
+        NSMutableArray<NSString *> *names = [NSMutableArray new];
+        NSMutableArray<NSString *> *mcNames = [NSMutableArray new];
+        NSMutableArray<NSString *> *urls = [NSMutableArray new];
+        NSMutableArray<NSString *> *hashes = [NSMutableArray new];
+        NSMutableArray<NSString *> *sizes = [NSMutableArray new];
+        NSMutableArray<NSString *> *fileNames = [NSMutableArray new];
+        NSMutableArray<NSString *> *fileTypes = [NSMutableArray new];
+
+        for (NSDictionary *version in jsonResult) {
+            NSArray *files = version[@"files"];
+            if (![files isKindOfClass:[NSArray class]] || files.count == 0) continue;
+            NSDictionary *file = files.firstObject;
+
+            [names addObject:version[@"name"] ?: @"Unknown"];
+            NSArray *gameVersions = version[@"game_versions"];
+            [mcNames addObject:[gameVersions isKindOfClass:[NSArray class]] ? gameVersions.firstObject : @""];
+            [urls addObject:file[@"url"] ?: @""];
+            NSDictionary *hashesMap = file[@"hashes"];
+            [hashes addObject:hashesMap[@"sha1"] ?: @""];
+            [sizes addObject:file[@"size"] ?: @0];
+            [fileNames addObject:file[@"filename"] ?: @""];
+            [fileTypes addObject:version[@"version_type"] ?: @""];
+        }
+
+        item[@"versionNames"] = names;
+        item[@"mcVersionNames"] = mcNames;
+        item[@"versionSizes"] = sizes;
+        item[@"versionUrls"] = urls;
+        item[@"versionHashes"] = hashes;
+        item[@"versionFileNames"] = fileNames;
+        item[@"versionFileTypes"] = fileTypes;
+        item[@"versionDetailsLoaded"] = @(YES);
+
+        if (completion) completion(YES, nil);
+    }];
+    [task resume];
 }
 
 #pragma mark - 补充：ModpackAPI 协议方法（支持所有下载）
