@@ -1042,29 +1042,21 @@ static NSString *festivalGreeting(void) {
 
 - (void)handleShortcutAction:(NSString *)action {
     if ([action isEqualToString:kShortcutActionMods]) {
-        ModsManagerViewController *vc = [[ModsManagerViewController alloc] init];
-        UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
-        nav.modalPresentationStyle = UIModalPresentationFormSheet;
-        [self presentViewController:nav animated:YES completion:nil];
-        
+        // 切到中间内容区版本管理页并直接展开模组管理（参照 FCL 安卓，不再 FormSheet 弹窗）
+        [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowModsManager" object:nil];
+
     } else if ([action isEqualToString:kShortcutActionShaders]) {
-        ShadersManagerViewController *vc = [[ShadersManagerViewController alloc] init];
-        UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
-        nav.modalPresentationStyle = UIModalPresentationFormSheet;
-        [self presentViewController:nav animated:YES completion:nil];
-        
+        [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowShadersManager" object:nil];
+
     } else if ([action isEqualToString:kShortcutActionModpack]) {
-        ModpackImportViewController *vc = [[ModpackImportViewController alloc] init];
-        UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
-        nav.modalPresentationStyle = UIModalPresentationFormSheet;
-        [self presentViewController:nav animated:YES completion:nil];
-        
+        [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowModpackImport" object:nil];
+
     } else if ([action isEqualToString:kShortcutActionBackground]) {
         BackgroundSettingsViewController *vc = [[BackgroundSettingsViewController alloc] init];
         UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
         nav.modalPresentationStyle = UIModalPresentationFormSheet;
         [self presentViewController:nav animated:YES completion:nil];
-        
+
     } else if ([action isEqualToString:kShortcutActionVersions]) {
         [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowVersionManager" object:nil];
     }

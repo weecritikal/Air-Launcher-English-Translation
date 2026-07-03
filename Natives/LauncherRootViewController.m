@@ -11,6 +11,10 @@
 #import "BackgroundManager.h"
 #import "PLProfiles.h"
 #import "utils.h"
+#import "ModsManagerViewController.h"
+#import "ShadersManagerViewController.h"
+#import "ModpackImportViewController.h"
+#import "LauncherPrefGameDirViewController.h"
 
 // 布局常量
 static const CGFloat kSidebarWidth = 70.0;      // 左侧边栏宽度
@@ -223,6 +227,23 @@ static const CGFloat kRightPanelWidth = 220.0;  // 右侧面板宽度
                                              selector:@selector(showSettings)
                                                  name:@"ShowSettings"
                                                object:nil];
+    // 首页快捷瓷砖触发：切到对应内容区子页面（不再 FormSheet 弹窗）
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(showModsManager)
+                                                 name:@"ShowModsManager"
+                                               object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(showShadersManager)
+                                                 name:@"ShowShadersManager"
+                                               object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(showModpackImport)
+                                                 name:@"ShowModpackImport"
+                                               object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(showGameDirectory)
+                                                 name:@"ShowGameDirectory"
+                                               object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(backgroundChanged)
                                                  name:@"BackgroundChanged"
@@ -300,9 +321,11 @@ static const CGFloat kRightPanelWidth = 220.0;  // 右侧面板宽度
 }
 
 - (void)showVersionManager {
-    // 在中间内容区显示版本管理页面
+    // 在中间内容区显示版本管理页面，包在 NavigationController 中以便子流程（模组/光影/游戏目录管理）push
     VersionManagerViewController *vc = [[VersionManagerViewController alloc] init];
-    [self setContentViewController:vc animated:YES];
+    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
+    nav.navigationBar.prefersLargeTitles = NO;
+    [self setContentViewController:nav animated:YES];
 }
 
 - (void)showProfileEditor:(NSNotification *)notification {
@@ -342,6 +365,48 @@ static const CGFloat kRightPanelWidth = 220.0;  // 右侧面板宽度
     UINavigationController *navVC = [[UINavigationController alloc] initWithRootViewController:vc];
     navVC.navigationBar.prefersLargeTitles = YES;
     [self setContentViewController:navVC animated:YES];
+}
+
+#pragma mark - 首页快捷入口 (替换原 FormSheet 弹窗)
+
+- (void)showModsManager {
+    // 切到版本管理页并直接 push 模组管理
+    VersionManagerViewController *vm = [[VersionManagerViewController alloc] init];
+    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vm];
+    nav.navigationBar.prefersLargeTitles = NO;
+    [self setContentViewController:nav animated:YES];
+    ModsManagerViewController *m = [[ModsManagerViewController alloc] init];
+    m.initialMode = ModsManagerModeLocal;
+    [nav pushViewController:m animated:NO];
+}
+
+- (void)showShadersManager {
+    VersionManagerViewController *vm = [[VersionManagerViewController alloc] init];
+    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vm];
+    nav.navigationBar.prefersLargeTitles = NO;
+    [self setContentViewController:nav animated:YES];
+    ShadersManagerViewController *s = [[ShadersManagerViewController alloc] init];
+    s.initialMode = ShadersManagerModeLocal;
+    [nav pushViewController:s animated:NO];
+}
+
+- (void)showGameDirectory {
+    VersionManagerViewController *vm = [[VersionManagerViewController alloc] init];
+    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vm];
+    nav.navigationBar.prefersLargeTitles = NO;
+    [self setContentViewController:nav animated:YES];
+    LauncherPrefGameDirViewController *g = [[LauncherPrefGameDirViewController alloc] init];
+    [nav pushViewController:g animated:NO];
+}
+
+- (void)showModpackImport {
+    // 切到下载页并直接 push 整合包导入界面
+    DownloadViewController *d = [[DownloadViewController alloc] init];
+    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:d];
+    nav.navigationBar.prefersLargeTitles = NO;
+    [self setContentViewController:nav animated:YES];
+    ModpackImportViewController *m = [[ModpackImportViewController alloc] init];
+    [nav pushViewController:m animated:NO];
 }
 
 - (void)backgroundChanged {

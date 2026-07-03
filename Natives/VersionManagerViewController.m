@@ -425,9 +425,7 @@
 
 - (void)openGameDirectory {
     LauncherPrefGameDirViewController *vc = [[LauncherPrefGameDirViewController alloc] init];
-    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
-    nav.modalPresentationStyle = UIModalPresentationFormSheet;
-    [self presentViewController:nav animated:YES completion:nil];
+    [self.navigationController pushViewController:vc animated:YES];
 }
 
 - (void)openModsManager {
@@ -438,9 +436,7 @@
     ModsManagerViewController *vc = [[ModsManagerViewController alloc] init];
     vc.profileName = self.selectedProfile;
     vc.initialMode = ModsManagerModeLocal;
-    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
-    nav.modalPresentationStyle = UIModalPresentationFormSheet;
-    [self presentViewController:nav animated:YES completion:nil];
+    [self.navigationController pushViewController:vc animated:YES];
 }
 
 - (void)openShadersManager {
@@ -451,9 +447,7 @@
     ShadersManagerViewController *vc = [[ShadersManagerViewController alloc] init];
     vc.profileName = self.selectedProfile;
     vc.initialMode = ShadersManagerModeLocal;
-    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
-    nav.modalPresentationStyle = UIModalPresentationFormSheet;
-    [self presentViewController:nav animated:YES completion:nil];
+    [self.navigationController pushViewController:vc animated:YES];
 }
 
 - (void)showProfileActions:(NSString *)profileName {
