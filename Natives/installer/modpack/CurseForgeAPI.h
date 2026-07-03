@@ -13,6 +13,10 @@ extern NSString *const CurseForgeResponseSnippetKey;
 
 + (instancetype)sharedInstance;
 
+/// 判断 CurseForge API Key 是否已配置（运行时偏好 + 编译时宏 + Info.plist 三层 fallback）
+/// 用于 UI 门控判断，与实际请求时的 apiKey getter 保持一致
++ (BOOL)isAPIKeyConfigured;
+
 // ========== 同步方法（兼容旧代码，注意会阻塞线程） ==========
 /// 搜索项目（同步，内部使用 dispatch_group_wait，建议在后台队列调用）
 - (NSMutableArray *)searchModWithFilters:(NSDictionary<NSString *, NSString *> *)searchFilters

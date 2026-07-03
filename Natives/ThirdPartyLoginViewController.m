@@ -333,62 +333,75 @@
 
     [self setLoginInProgress:YES];
 
-    ThirdPartyAuthenticator *auth = [[ThirdPartyAuthenticator alloc] initWithInput:username];
-    auth.authData[@"password"] = password;
-    if (serverURL) {
-        auth.authData[@"authserver"] = serverURL;
-    }
+    // 参照 authlib-injector 启动器技术规范：登录前先解析 ALI，将简写地址解析为完整 API Root
+    // 同时预取服务器元数据，用于启动时传 -Dauthlibinjector.yggdrasil.prefetched
+    [self showError:@"正在解析服务器地址..."];
+    self.errorLabel.textColor = [UIColor secondaryLabelColor];
 
     __weak typeof(self) weakSelf = self;
-    id callback = ^(id status, BOOL success) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            __strong typeof(weakSelf) strongSelf = weakSelf;
-            if (!strongSelf) return;
+    [ThirdPartyAuthenticator resolveAuthserverURL:serverURL completion:^(NSString *resolvedURL, NSString *metadata) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
 
-            // 状态码为 0 的"进度"消息（如正在下载 authlib-injector）不算最终结果
-            if (success && [status isKindOfClass:[NSError class]] &&
-                [(NSError *)status code] == 0) {
-                // 显示进度文案到按钮下方
-                NSString *msg = [(NSError *)status localizedDescription];
-                if (msg.length > 0) {
-                    [strongSelf.errorLabel setText:msg];
-                    strongSelf.errorLabel.textColor = [UIColor secondaryLabelColor];
-                    strongSelf.errorLabel.hidden = NO;
+        [strongSelf hideError];
+
+        ThirdPartyAuthenticator *auth = [[ThirdPartyAuthenticator alloc] initWithInput:username];
+        auth.authData[@"password"] = password;
+        auth.authData[@"authserver"] = resolvedURL;
+        // 缓存元数据，供 getJvmArgsForAuthlib 使用
+        if (metadata.length > 0) {
+            auth.authData[@"prefetchedMetadata"] = metadata;
+        }
+
+        id callback = ^(id status, BOOL success) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                __strong typeof(weakSelf) sSelf = weakSelf;
+                if (!sSelf) return;
+
+                // 状态码为 0 的"进度"消息（如正在下载 authlib-injector）不算最终结果
+                if (success && [status isKindOfClass:[NSError class]] &&
+                    [(NSError *)status code] == 0) {
+                    NSString *msg = [(NSError *)status localizedDescription];
+                    if (msg.length > 0) {
+                        [sSelf.errorLabel setText:msg];
+                        sSelf.errorLabel.textColor = [UIColor secondaryLabelColor];
+                        sSelf.errorLabel.hidden = NO;
+                    }
+                    return;
                 }
-                return;
-            }
 
-            [strongSelf setLoginInProgress:NO];
+                [sSelf setLoginInProgress:NO];
 
-            if (success && (status == nil ||
-                            ([status isKindOfClass:[NSString class]] && [status isEqualToString:@"DEMO"]))) {
-                if ([status isKindOfClass:[NSString class]] && [status isEqualToString:@"DEMO"]) {
-                    showDialog(localize(@"login.warn.title.demomode", nil),
-                               localize(@"login.warn.message.demomode", nil));
+                if (success && (status == nil ||
+                                ([status isKindOfClass:[NSString class]] && [status isEqualToString:@"DEMO"]))) {
+                    if ([status isKindOfClass:[NSString class]] && [status isEqualToString:@"DEMO"]) {
+                        showDialog(localize(@"login.warn.title.demomode", nil),
+                                   localize(@"login.warn.message.demomode", nil));
+                    }
+                    if (sSelf.onLoginComplete) {
+                        sSelf.onLoginComplete(YES, nil);
+                    }
+                    return;
                 }
-                if (strongSelf.onLoginComplete) {
-                    strongSelf.onLoginComplete(YES, nil);
+
+                // 失败
+                NSString *errMsg;
+                if ([status isKindOfClass:[NSError class]]) {
+                    errMsg = [(NSError *)status localizedDescription];
+                } else if ([status isKindOfClass:[NSString class]]) {
+                    errMsg = status;
+                } else {
+                    errMsg = @"登录失败，请重试";
                 }
-                return;
-            }
+                [sSelf showError:errMsg];
+                if (sSelf.onLoginComplete) {
+                    sSelf.onLoginComplete(NO, errMsg);
+                }
+            });
+        };
 
-            // 失败
-            NSString *errMsg;
-            if ([status isKindOfClass:[NSError class]]) {
-                errMsg = [(NSError *)status localizedDescription];
-            } else if ([status isKindOfClass:[NSString class]]) {
-                errMsg = status;
-            } else {
-                errMsg = @"登录失败，请重试";
-            }
-            [strongSelf showError:errMsg];
-            if (strongSelf.onLoginComplete) {
-                strongSelf.onLoginComplete(NO, errMsg);
-            }
-        });
-    };
-
-    [auth loginWithCallback:callback];
+        [auth loginWithCallback:callback];
+    }];
 }
 
 - (void)setLoginInProgress:(BOOL)inProgress {

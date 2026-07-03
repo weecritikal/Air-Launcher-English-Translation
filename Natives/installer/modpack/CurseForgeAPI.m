@@ -119,6 +119,23 @@ static NSString *CFACompiledAPIKey(void) {
     };
 }
 
++ (BOOL)isAPIKeyConfigured {
+    // 与 apiKey getter 保持一致的三层 fallback，避免 UI 门控与实际请求判断不一致
+    NSString *runtimeKey = [PLPreferences curseForgeAPIKey];
+    if ([runtimeKey isKindOfClass:NSString.class] && runtimeKey.length > 0) {
+        return YES;
+    }
+    NSString *compiledKey = CFACompiledAPIKey();
+    if (compiledKey.length > 0) {
+        return YES;
+    }
+    NSString *infoPlistKey = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CurseForgeAPIKey"];
+    if ([infoPlistKey isKindOfClass:NSString.class] && infoPlistKey.length > 0) {
+        return YES;
+    }
+    return NO;
+}
+
 - (NSError *)missingAPIKeyError {
     return [NSError errorWithDomain:@"CurseForgeAPI"
                                code:401

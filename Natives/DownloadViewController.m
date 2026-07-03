@@ -1836,8 +1836,8 @@
     NSString *currentSource = [PLPreferences currentDownloadSourceForType:type];
     if ([currentSource isEqualToString:@"curseforge"]) return;
 
-    // API Key 未配置时弹出引导提示，直接调用本 VC 的入口（不再走通知绕路）
-    if (![PLPreferences curseForgeAPIKey] && ![[NSBundle mainBundle] objectForInfoDictionaryKey:@"CurseForgeAPIKey"]) {
+    // API Key 未配置时弹出引导提示（与实际请求保持一致的三层 fallback 判断）
+    if (![CurseForgeAPI isAPIKeyConfigured]) {
         UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"需要 CurseForge API Key"
                                                                        message:@"检测到未配置 CurseForge API Key，是否前往设置？"
                                                                 preferredStyle:UIAlertControllerStyleAlert];
@@ -2319,9 +2319,8 @@
         [self.loadingIndicator startAnimating];
     }
 
-    // 世界 tab 强制 CurseForge，但需 API Key；缺失时给出明确入口提示
-    NSString *cfKey = [PLPreferences curseForgeAPIKey];
-    if (![cfKey isKindOfClass:[NSString class]] || cfKey.length == 0) {
+    // 世界 tab 强制 CurseForge，但需 API Key（与实际请求一致的三层 fallback 判断）；缺失时给出明确入口提示
+    if (![CurseForgeAPI isAPIKeyConfigured]) {
         [self.loadingIndicator stopAnimating];
         [self.worldTableView.refreshControl endRefreshing];
         self.isLoadingWorlds = NO;
