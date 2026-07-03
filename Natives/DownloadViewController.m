@@ -3541,7 +3541,8 @@
             [[NSFileManager defaultManager] moveItemAtPath:location.path toPath:tempPath error:nil];
 
             // 复用 ModpackImportService 完成解析和导入
-            [progressVC setProgress:0.1 stageMessage:@"正在解析整合包..."];
+            progressVC.progress = 0.1;
+            progressVC.stageMessage = @"正在解析整合包...";
             ModpackImportService *importService = [[ModpackImportService alloc] init];
             dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
                 NSError *parseError = nil;
@@ -3566,7 +3567,8 @@
                 BOOL success = [importService importModpack:mutableInfo
                                                    progress:^(double p, NSString *stage) {
                     dispatch_async(dispatch_get_main_queue(), ^{
-                        [progressVC setProgress:p stageMessage:stage];
+                        progressVC.progress = p;
+                        progressVC.stageMessage = stage;
                     });
                 } error:&importError];
 
@@ -3575,7 +3577,8 @@
 
                 dispatch_async(dispatch_get_main_queue(), ^{
                     if (success) {
-                        [progressVC setProgress:1.0 stageMessage:@"安装完成"];
+                        progressVC.progress = 1.0;
+                        progressVC.stageMessage = @"安装完成";
                         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                             [self.navigationController popViewControllerAnimated:YES];
                             NSString *loader = mutableInfo[@"loader"];
@@ -3620,12 +3623,14 @@
         BOOL success = [importService importModpack:modpackInfo
                                            progress:^(double p, NSString *stage) {
             dispatch_async(dispatch_get_main_queue(), ^{
-                [progressVC setProgress:p stageMessage:stage];
+                progressVC.progress = p;
+                progressVC.stageMessage = stage;
             });
         } error:&importError];
         dispatch_async(dispatch_get_main_queue(), ^{
             if (success) {
-                [progressVC setProgress:1.0 stageMessage:@"导入完成"];
+                progressVC.progress = 1.0;
+                progressVC.stageMessage = @"导入完成";
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                     [self.navigationController popViewControllerAnimated:YES];
                     [self showSuccessMessage:[NSString stringWithFormat:@"整合包 %@ 导入完成", modpackInfo[@"name"]]];
