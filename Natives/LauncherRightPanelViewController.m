@@ -4,6 +4,7 @@
 #import "AccountListViewController.h"
 #import "SurfaceViewController.h"
 #import "CustomControlsViewController.h"
+#import "JavaGUIViewController.h"
 #import "PLProfiles.h"
 #import "LauncherPreferences.h"
 #import "MinecraftResourceUtils.h"
@@ -230,7 +231,10 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 
 - (void)executeJar {
     // 执行JAR功能 - 打开文件选择器选择JAR文件
-    UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc] initForOpeningContentTypes:@[[UTType typeWithIdentifier:@"com.sun.java-archive"]]];
+    // 使用 asCopy:YES 保证文件被复制到应用沙盒，避免安全作用域 URL 导致 UZKArchive 读取失败
+    UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc]
+        initForOpeningContentTypes:@[[UTType typeWithMIMEType:@"application/java-archive"]]
+        asCopy:YES];
     picker.delegate = self;
     picker.allowsMultipleSelection = NO;
     [self presentViewController:picker animated:YES completion:nil];
@@ -239,14 +243,27 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 #pragma mark - UIDocumentPickerDelegate
 
 - (void)documentPicker:(UIDocumentPickerViewController *)controller didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls {
-    if (urls.count > 0) {
-        NSURL *jarURL = urls[0];
-        // 调用LauncherNavigationController的enterModInstaller方法
-        [[NSNotificationCenter defaultCenter] postNotificationName:@"ExecuteJarFile" object:jarURL];
-    }
+    if (urls.count == 0) return;
+    NSURL *jarURL = urls[0];
+    [self enterModInstallerWithPath:jarURL.path hitEnterAfterWindowShown:NO];
 }
 
 - (void)documentPickerWasCancelled:(UIDocumentPickerViewController *)controller {
+}
+
+- (void)enterModInstallerWithPath:(NSString *)path hitEnterAfterWindowShown:(BOOL)hitEnter {
+    JavaGUIViewController *vc = [[JavaGUIViewController alloc] init];
+    vc.filepath = path;
+    vc.hitEnterAfterWindowShown = hitEnter;
+    // requiredJavaVersion 会读取 JAR 的 MANIFEST.MF 解析主类，失败时已自行弹出错误提示
+    if (!vc.requiredJavaVersion) {
+        return;
+    }
+    [self invokeAfterJITEnabled:^{
+        vc.modalPresentationStyle = UIModalPresentationFullScreen;
+        NSLog(@"[ModInstaller] launching %@", vc.filepath);
+        [self presentViewController:vc animated:YES completion:nil];
+    }];
 }
 
 #pragma mark - Launch Game

@@ -224,10 +224,6 @@ static const CGFloat kRightPanelWidth = 220.0;  // 右侧面板宽度
                                                  name:@"ShowSettings"
                                                object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self
-                                             selector:@selector(executeJarFile:)
-                                                 name:@"ExecuteJarFile"
-                                               object:nil];
-    [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(backgroundChanged)
                                                  name:@"BackgroundChanged"
                                                object:nil];
@@ -344,15 +340,6 @@ static const CGFloat kRightPanelWidth = 220.0;  // 右侧面板宽度
     UINavigationController *navVC = [[UINavigationController alloc] initWithRootViewController:vc];
     navVC.navigationBar.prefersLargeTitles = YES;
     [self setContentViewController:navVC animated:YES];
-}
-
-- (void)executeJarFile:(NSNotification *)notification {
-    NSURL *jarURL = notification.object;
-    if (jarURL) {
-        // 调用LauncherNavigationController的enterModInstaller方法
-        // 这里需要通过通知或其他方式传递给LauncherNavigationController
-        [[NSNotificationCenter defaultCenter] postNotificationName:@"EnterModInstaller" object:jarURL];
-    }
 }
 
 - (void)backgroundChanged {
