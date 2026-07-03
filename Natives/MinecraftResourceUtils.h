@@ -14,4 +14,9 @@
 + (NSObject *)findVersion:(NSString *)version inList:(NSArray *)list;
 + (NSObject *)findNearestVersion:(NSObject *)version expectedType:(int)type;
 
+// 评估 Mojang 版本 JSON 中的 OS 规则（iOS 视作 osx）
++ (BOOL)evaluateRules:(NSArray *)rules;
+// 将规则化的 JVM 参数项展开为字符串数组
++ (NSArray<NSString *> *)flattenJvmArg:(id)arg;
+
 @end

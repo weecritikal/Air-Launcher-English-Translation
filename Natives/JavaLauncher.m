@@ -123,7 +123,15 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
         // Activate Library Validation bypass for external runtime and dylibs (JNA, etc)
         init_bypassDyldLibValidation();
     } else {
-        // Disable Library Validation bypass for iOS 26 TXM because of stricter JIT
+        // iOS 26 上 JIT 更严格，默认不启用 dyld 验证 bypass。
+        // 但 MobileGlues / libjnidispatch / JNA 等外部 dylib 若未同团队签名会加载失败，
+        // 此处仍尝试 bypass 以保证渲染器与依赖加载，失败则忽略（TXM 模式下可由 entitlement 兜底）。
+        @try {
+            init_bypassDyldLibValidation();
+            NSLog(@"[JavaLauncher] iOS 26: dyld library validation bypass attempted for external dylibs");
+        } @catch (NSException *exception) {
+            NSLog(@"[JavaLauncher] iOS 26: dyld bypass skipped (%@)", exception.reason);
+        }
     }
 
 
@@ -273,8 +281,23 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
     const char *glLibName = getenv("AMETHYST_RENDERER");
     if (glLibName) {
         if (!strcmp(glLibName, "auto")) {
-            // workaround only applies to 1.20.2+
-            glLibName = RENDERER_NAME_MTL_ANGLE;
+            // 自动选择渲染器：基于 MC 所需 Java 版本推断。
+            // README 宣传 "Auto 自动选择合适的渲染器（含 MobileGlues）"，原代码无版本判断永远选 ANGLE。
+            // - Java 8 (MC 1.16.5-) 走 gl4es，对旧版 GL 兼容性最佳
+            // - Java 17 (MC 1.17-1.20.4) 走 ANGLE（GL 3.2 Core）
+            // - Java 21+ (MC 1.20.5+/26.x) 优先走 MobileGlues（GL 4.x），缺失则回退 ANGLE
+            NSString *mobilegluesPath = [NSString stringWithFormat:@"%@/Frameworks/%s",
+                NSBundle.mainBundle.bundlePath, RENDERER_NAME_MOBILEGLUES];
+            if (minVersion >= 21 && [NSFileManager.defaultManager fileExistsAtPath:mobilegluesPath]) {
+                glLibName = RENDERER_NAME_MOBILEGLUES;
+            } else if (minVersion >= 17) {
+                glLibName = RENDERER_NAME_MTL_ANGLE;
+            } else {
+                glLibName = RENDERER_NAME_GL4ES;
+            }
+            // 同步更新环境变量，使 egl_bridge 选用对应桥接
+            setenv("AMETHYST_RENDERER", glLibName, 1);
+            NSLog(@"[JavaLauncher] Auto renderer resolved to %s (minJava=%d)", glLibName, minVersion);
         }
         if (strcmp(glLibName, RENDERER_NAME_VULKAN) == 0) {
             // Vulkan mode: set vulkan libname and fallback opengl libname for LWJGL startup probing

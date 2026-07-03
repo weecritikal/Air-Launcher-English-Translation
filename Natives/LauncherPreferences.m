@@ -108,14 +108,18 @@ NSString* getSelectedJavaHome(NSString* defaultJRETag, int minVersion) {
     if (minVersion > selectedVer.intValue) {
         NSArray *sortedVersions = [pref.allKeys valueForKeyPath:@"self.integerValue"];
         sortedVersions = [sortedVersions sortedArrayUsingSelector:@selector(compare:)];
+        BOOL found = NO;
         for (NSNumber *version in sortedVersions) {
             if (version.intValue >= minVersion) {
                 selectedVer = version.stringValue;
+                found = YES;
                 break;
             }
         }
-        if (!selectedVer) {
-            NSLog(@"Error: requested Java >= %d was not installed!", minVersion);
+        // 修复：原代码在找不到满足 minVersion 的 runtime 时 selectedVer 仍为初始值（如 "17"），
+        // 导致 if (!selectedVer) 永远为假，静默降级到 Java 17 启动 26.x 等新版本时必然崩溃。
+        if (!found) {
+            NSLog(@"Error: requested Java >= %d was not installed! (available: %@)", minVersion, sortedVersions);
             return nil;
         }
     }
