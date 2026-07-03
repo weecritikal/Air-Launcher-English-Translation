@@ -157,6 +157,9 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
 // 动画
 @property (nonatomic, strong) NSMutableArray<NSLayoutConstraint *> *dynamicConstraints;
 
+// 紧凑布局下重新计算左栏内会话滚动视图与输入框的 frame
+- (void)relayoutLeftPanelContents;
+
 @end
 
 @implementation AIFixViewController
@@ -253,28 +256,77 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     CGFloat viewHeight = self.view.bounds.size.height;
     if (viewWidth <= 0 || viewHeight <= 0 || !_mainContentView) return;
 
-    CGFloat maxContentWidth = 1200;
-    CGFloat contentWidth = MIN(viewWidth - 32, maxContentWidth);
-    CGFloat topPadding = 40;
-    CGFloat bottomPadding = 24;
-    CGFloat contentHeight = MAX(viewHeight - topPadding - bottomPadding, 320);
+    // 适配 iPhone 窄屏：宽度不足时使用单栏布局，并收紧边距与最大宽度
+    BOOL isCompact = viewWidth < 700;
+    CGFloat horizontalPadding = isCompact ? 12 : 16;
+    CGFloat maxContentWidth = isCompact ? (viewWidth - horizontalPadding * 2) : 1200;
+    CGFloat contentWidth = MIN(viewWidth - horizontalPadding * 2, maxContentWidth);
+    CGFloat topPadding = isCompact ? 16 : 40;
+    CGFloat bottomPadding = isCompact ? 16 : 24;
+    CGFloat contentHeight = MAX(viewHeight - topPadding - bottomPadding, 300);
     CGFloat startX = floor((viewWidth - contentWidth) / 2.0);
-    CGFloat leftWidth = floor(contentWidth * 0.6);
-    CGFloat rightWidth = contentWidth - leftWidth;
 
     _mainContentView.frame = CGRectMake(startX, topPadding, contentWidth, contentHeight);
-    _leftPanel.frame = CGRectMake(0, 0, leftWidth, contentHeight);
-    _rightPanel.frame = CGRectMake(leftWidth, 0, rightWidth, contentHeight);
-    _leftScrollView.frame = CGRectMake(0, 0, leftWidth, MAX(contentHeight - 18, 0));
-    _rightScrollView.frame = CGRectMake(0, 0, rightWidth, MAX(contentHeight - 18, 0));
-    _leftContentView.frame = CGRectMake(0, 0, leftWidth, MAX(contentHeight * 1.25, 720));
-    _rightContentView.frame = CGRectMake(0, 0, rightWidth, MAX(contentHeight * 1.35, 560));
+
+    CGFloat leftWidth, rightWidth, panelHeight;
+    if (isCompact) {
+        // 紧凑布局：双栏上下堆叠，左栏（诊断/会话）占 58%，右栏（配置/历史）占 42%
+        leftWidth = contentWidth;
+        rightWidth = contentWidth;
+        CGFloat gap = 8;
+        leftWidth = contentWidth;
+        panelHeight = floor((contentHeight - gap) * 0.58);
+        CGFloat rightHeight = contentHeight - gap - panelHeight;
+        _leftPanel.frame = CGRectMake(0, 0, leftWidth, panelHeight);
+        _rightPanel.frame = CGRectMake(0, panelHeight + gap, rightWidth, rightHeight);
+        _leftScrollView.frame = CGRectMake(0, 0, leftWidth, MAX(panelHeight - 18, 0));
+        _rightScrollView.frame = CGRectMake(0, 0, rightWidth, MAX(rightHeight - 18, 0));
+        _leftContentView.frame = CGRectMake(0, 0, leftWidth, MAX(panelHeight * 1.25, 560));
+        _rightContentView.frame = CGRectMake(0, 0, rightWidth, MAX(rightHeight * 1.35, 420));
+    } else {
+        leftWidth = floor(contentWidth * 0.6);
+        rightWidth = contentWidth - leftWidth;
+        panelHeight = contentHeight;
+        _leftPanel.frame = CGRectMake(0, 0, leftWidth, panelHeight);
+        _rightPanel.frame = CGRectMake(leftWidth, 0, rightWidth, panelHeight);
+        _leftScrollView.frame = CGRectMake(0, 0, leftWidth, MAX(panelHeight - 18, 0));
+        _rightScrollView.frame = CGRectMake(0, 0, rightWidth, MAX(panelHeight - 18, 0));
+        _leftContentView.frame = CGRectMake(0, 0, leftWidth, MAX(panelHeight * 1.25, 720));
+        _rightContentView.frame = CGRectMake(0, 0, rightWidth, MAX(panelHeight * 1.35, 560));
+    }
     _leftScrollView.contentSize = _leftContentView.bounds.size;
     _rightScrollView.contentSize = _rightContentView.bounds.size;
 
     CGFloat statusHeight = 26;
-    _statusBarView.frame = CGRectMake(16, contentHeight - statusHeight, leftWidth - 32, statusHeight);
+    _statusBarView.frame = CGRectMake(16, panelHeight - statusHeight, leftWidth - 32, statusHeight);
     _statusLabel.frame = CGRectMake(32, 0, _statusBarView.bounds.size.width - 40, statusHeight);
+
+    // 紧凑布局下，会话滚动视图需要基于实际左栏高度重新布局，避免被挤压为 0
+    [self relayoutLeftPanelContents];
+}
+
+// 重新计算左栏内会话滚动视图与输入框的 frame，避免在尺寸变化后被挤压或重叠。
+// setupLeftPanel 中这两个视图基于初始 panelHeight 一次性写死，布局变化时不会更新。
+- (void)relayoutLeftPanelContents {
+    if (!_conversationScrollView || !_inputContainerView || !_riskCardView || !_leftContentView) return;
+    CGFloat panelWidth = _leftContentView.bounds.size.width;
+    CGFloat panelHeight = _leftContentView.bounds.size.height;
+    if (panelWidth <= 0 || panelHeight <= 0) return;
+    CGFloat sidePadding = 16;
+    CGFloat sectionGap = 12;
+    CGFloat inputHeight = 128;
+
+    // inputTop 锚定到面板底部，会话区填充 riskCardView 底部到 inputTop 之间
+    CGFloat inputTop = panelHeight - inputHeight;
+    CGFloat scrollViewTop = CGRectGetMaxY(_riskCardView.frame) + sectionGap;
+    CGFloat scrollBottom = inputTop - sectionGap;
+    if (scrollBottom > scrollViewTop) {
+        _conversationScrollView.frame = CGRectMake(sidePadding, scrollViewTop, panelWidth - sidePadding * 2, scrollBottom - scrollViewTop);
+    } else {
+        // 高度不足时，至少给会话区保留一个最小可见高度，避免完全不可见
+        _conversationScrollView.frame = CGRectMake(sidePadding, scrollViewTop, panelWidth - sidePadding * 2, 60);
+    }
+    _inputContainerView.frame = CGRectMake(sidePadding, inputTop, panelWidth - sidePadding * 2, inputHeight);
 }
 
 - (void)setupLeftPanel {
