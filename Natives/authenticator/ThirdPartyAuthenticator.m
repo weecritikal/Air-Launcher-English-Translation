@@ -136,7 +136,8 @@ static NSError* createError(NSString *message, NSInteger code) {
         @"agent": @{@"name": @"Minecraft", @"version": @1},
         @"username": username,
         @"password": passwordWithToken,
-        @"clientToken": [[NSUUID UUID] UUIDString]
+        @"clientToken": [[NSUUID UUID] UUIDString],
+        @"requestUser": @YES
     };
     
     AFHTTPSessionManager *manager = AFHTTPSessionManager.manager;
@@ -180,6 +181,142 @@ static NSError* createError(NSString *message, NSInteger code) {
 }
 
 // Helper method to send authentication request
+/// 多角色场景：调用 refresh 把选定角色绑定到 token
+/// 参照 HMCL YggdrasilService.refresh：请求体含 accessToken/clientToken/selectedProfile/requestUser
+- (void)refreshToBindProfile:(NSDictionary *)profileToSelect
+                  accessToken:(NSString *)accessToken
+                  clientToken:(NSString *)clientToken
+                     callback:(Callback)callback {
+    NSString *serverURL = self.authData[@"authserver"] ?: @"https://authserver.ely.by";
+    if (![serverURL hasSuffix:@"/"]) {
+        serverURL = [serverURL stringByAppendingString:@"/"];
+    }
+    NSString *refreshURL = [self buildRefreshURLForServer:serverURL];
+
+    NSDictionary *data = @{
+        @"accessToken": accessToken,
+        @"clientToken": clientToken,
+        @"selectedProfile": @{
+            @"id": profileToSelect[@"id"],
+            @"name": profileToSelect[@"name"]
+        },
+        @"requestUser": @YES
+    };
+
+    AFHTTPSessionManager *manager = AFHTTPSessionManager.manager;
+    manager.requestSerializer = AFJSONRequestSerializer.serializer;
+
+    NSLog(@"[ThirdPartyAuthenticator] refresh 绑定角色请求: %@", refreshURL);
+
+    __weak typeof(self) weakSelf = self;
+    [manager POST:refreshURL parameters:data headers:nil progress:nil success:^(NSURLSessionDataTask *task, NSDictionary *response) {
+        @try {
+            if (![response isKindOfClass:[NSDictionary class]] ||
+                !response[@"accessToken"] || !response[@"clientToken"] ||
+                !response[@"selectedProfile"]) {
+                NSError *error = createError(@"绑定角色失败：服务器返回缺少 selectedProfile", 1020);
+                callback(error, NO);
+                return;
+            }
+
+            NSDictionary *boundProfile = response[@"selectedProfile"];
+            // 校验绑定的角色与请求选择的角色一致
+            if (![boundProfile[@"id"] isEqualToString:profileToSelect[@"id"]]) {
+                NSError *error = createError(@"绑定角色失败：服务器返回的角色与请求不一致", 1021);
+                callback(error, NO);
+                return;
+            }
+
+            weakSelf.authData[@"accessToken"] = response[@"accessToken"];
+            weakSelf.authData[@"clientToken"] = response[@"clientToken"];
+            weakSelf.authData[@"username"] = boundProfile[@"name"];
+            weakSelf.authData[@"uuid"] = boundProfile[@"id"];
+            weakSelf.authData[@"profileId"] = boundProfile[@"id"];
+
+            // 格式化 UUID（补连字符）
+            NSString *uuid = boundProfile[@"id"];
+            if (uuid.length == 32) {
+                weakSelf.authData[@"profileId"] = [NSString stringWithFormat:@"%@-%@-%@-%@-%@",
+                    [uuid substringWithRange:NSMakeRange(0, 8)],
+                    [uuid substringWithRange:NSMakeRange(8, 4)],
+                    [uuid substringWithRange:NSMakeRange(12, 4)],
+                    [uuid substringWithRange:NSMakeRange(16, 4)],
+                    [uuid substringWithRange:NSMakeRange(20, 12)]
+                ];
+            }
+
+            // 异步获取头像（与单角色路径一致）
+            [weakSelf fetchProfileTextureWithCallback:callback];
+        } @catch (NSException *exception) {
+            NSError *error = createError([NSString stringWithFormat:@"解析 refresh 响应异常: %@", exception.reason], 1022);
+            callback(error, NO);
+        }
+    } failure:^(NSURLSessionDataTask *task, NSError *error) {
+        NSString *errMsg = [self parseErrorMessageFromError:error];
+        NSError *callbackError = createError(errMsg ?: @"绑定角色失败", 1023);
+        callback(callbackError, NO);
+    }];
+}
+
+/// 异步获取角色纹理并设置头像 URL，完成后触发 callback
+- (void)fetchProfileTextureWithCallback:(Callback)callback {
+    NSString *serverURL = self.authData[@"authserver"] ?: @"https://authserver.ely.by";
+    if (![serverURL hasSuffix:@"/"]) {
+        serverURL = [serverURL stringByAppendingString:@"/"];
+    }
+
+    AFHTTPSessionManager *manager = AFHTTPSessionManager.manager;
+    manager.requestSerializer = AFJSONRequestSerializer.serializer;
+    NSString *profileURL = [NSString stringWithFormat:@"%@sessionserver/session/minecraft/profile/%@", serverURL, self.authData[@"profileId"]];
+
+    __weak typeof(self) weakSelf = self;
+    [manager GET:profileURL parameters:nil headers:nil progress:nil success:^(NSURLSessionDataTask *task, NSDictionary *response) {
+        if (response[@"properties"] && [response[@"properties"] isKindOfClass:[NSArray class]]) {
+            NSArray *properties = response[@"properties"];
+            for (NSDictionary *property in properties) {
+                if ([property[@"name"] isEqualToString:@"textures"]) {
+                    NSString *textures = property[@"value"];
+                    NSData *decodedData = [[NSData alloc] initWithBase64EncodedString:textures options:0];
+                    if (decodedData) {
+                        NSError *error = nil;
+                        NSDictionary *texturesDict = [NSJSONSerialization JSONObjectWithData:decodedData options:kNilOptions error:&error];
+                        if (texturesDict && !error) {
+                            NSString *skinURL = texturesDict[@"textures"][@"SKIN"][@"url"];
+                            if (skinURL) {
+                                NSString *headURL = [skinURL stringByReplacingOccurrencesOfString:@".png" withString:@"/helm.png"];
+                                weakSelf.authData[@"profilePicURL"] = headURL;
+                                [weakSelf saveChanges];
+                                callback(nil, YES);
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        weakSelf.authData[@"profilePicURL"] = [NSString stringWithFormat:@"https://mc-heads.net/avatar/%@/100", weakSelf.authData[@"username"]];
+        [weakSelf saveChanges];
+        callback(nil, YES);
+    } failure:^(NSURLSessionDataTask *task, NSError *error) {
+        weakSelf.authData[@"profilePicURL"] = [NSString stringWithFormat:@"https://mc-heads.net/avatar/%@/100", weakSelf.authData[@"username"]];
+        [weakSelf saveChanges];
+        callback(nil, YES);
+    }];
+}
+
+/// 从 AFNetworking 错误中解析 Yggdrasil 服务器返回的 errorMessage
+- (NSString *)parseErrorMessageFromError:(NSError *)error {
+    NSData *data = error.userInfo[AFNetworkingOperationFailingURLResponseDataErrorKey];
+    if (data) {
+        NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:kNilOptions error:nil];
+        if (json) {
+            NSString *msg = json[@"errorMessage"] ?: json[@"error"];
+            if (msg.length > 0) return msg;
+        }
+    }
+    return error.localizedDescription;
+}
+
 - (void)sendAuthenticateRequest:(NSDictionary *)data manager:(AFHTTPSessionManager *)manager callback:(Callback)callback {
     // Get server URL from authData or use default Ely.by server
     NSString *serverURL = self.authData[@"authserver"] ?: @"https://authserver.ely.by";
@@ -210,14 +347,26 @@ static NSError* createError(NSString *message, NSInteger code) {
 
             // Yggdrasil 规范：当用户有且仅有一个角色时返回 selectedProfile；
             // 有多个角色时只返回 availableProfiles；无角色时两者都缺失。
-            // 这里做兜底：优先用 selectedProfile，否则从 availableProfiles 取第一个。
+            // 参照 HMCL：多角色场景下需要调用 refresh 把选定角色绑定到 token，
+            // 否则 token 处于"无 profile"状态，游戏 join server 会失败。
             NSDictionary *selectedProfile = response[@"selectedProfile"];
-            if (!selectedProfile) {
-                NSArray *availableProfiles = response[@"availableProfiles"];
-                if ([availableProfiles isKindOfClass:[NSArray class]] && availableProfiles.count > 0) {
-                    selectedProfile = availableProfiles[0];
-                    NSLog(@"[ThirdPartyAuthenticator] selectedProfile 缺失，从 availableProfiles 选取: %@", selectedProfile[@"name"]);
-                }
+            NSArray *availableProfiles = response[@"availableProfiles"];
+            if (![availableProfiles isKindOfClass:[NSArray class]]) {
+                availableProfiles = @[];
+            }
+
+            if (!selectedProfile && availableProfiles.count > 0) {
+                // 多角色场景：先保存 token，再 refresh 绑定第一个角色
+                // （HMCL 这里会弹出角色选择器；移动端简化为选第一个）
+                NSString *accessToken = response[@"accessToken"];
+                NSString *clientToken = response[@"clientToken"];
+                NSDictionary *profileToSelect = availableProfiles[0];
+                NSLog(@"[ThirdPartyAuthenticator] 多角色场景，refresh 绑定角色: %@", profileToSelect[@"name"]);
+                [self refreshToBindProfile:profileToSelect
+                                accessToken:accessToken
+                                clientToken:clientToken
+                                   callback:callback];
+                return;
             }
 
             if (!selectedProfile) {
@@ -453,7 +602,8 @@ static NSError* createError(NSString *message, NSInteger code) {
             @"agent": @{@"name": @"Minecraft", @"version": @1},
             @"username": username,
             @"password": password,
-            @"clientToken": [[NSUUID UUID] UUIDString]
+            @"clientToken": [[NSUUID UUID] UUIDString],
+            @"requestUser": @YES
         };
         
         AFHTTPSessionManager *manager = AFHTTPSessionManager.manager;
@@ -484,7 +634,8 @@ static NSError* createError(NSString *message, NSInteger code) {
         
         NSDictionary *data = @{
             @"accessToken": accessToken,
-            @"clientToken": clientToken
+            @"clientToken": clientToken,
+            @"requestUser": @YES
         };
         
         AFHTTPSessionManager *manager = AFHTTPSessionManager.manager;

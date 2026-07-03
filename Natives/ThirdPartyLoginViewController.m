@@ -159,7 +159,7 @@
         self.headerIcon.image = [UIImage systemImageNamed:@"globe"];
         self.headerIcon.tintColor = [UIColor systemOrangeColor];
         self.headerTitle.text = @"自定义第三方登录";
-        self.headerSubtitle.text = @"支持任意 Yggdrasil 兼容的 authlib-injector 服务器（如 Blessing Skin、ely.by 等）";
+        self.headerSubtitle.text = @"支持任意 Yggdrasil 兼容的 authlib-injector 服务器（如 LittleSkin、Blessing Skin 等），需填写 API 根地址";
     }
 
     [self.headerCard addSubview:self.headerIcon];
@@ -261,12 +261,12 @@
     UITextField *field = nil;
     self.serverCard = [self buildInputCardWithIcon:@"link"
                                        accentColor:[UIColor systemBlueColor]
-                                        placeholder:@"服务器地址（如 https://authserver.ely.by）"
+                                        placeholder:@"API 地址（如 https://littleskin.cn/api/yggdrasil）"
                                           isSecure:NO
                                       keyboardType:UIKeyboardTypeURL
                                        returnField:&field];
     self.serverField = field;
-    self.serverField.text = @"https://authserver.ely.by";
+    self.serverField.text = @"https://littleskin.cn/api/yggdrasil";
     self.serverField.returnKeyType = UIReturnKeyGo;
 }
 
