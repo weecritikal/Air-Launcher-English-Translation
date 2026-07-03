@@ -33,7 +33,11 @@
 - (NSMutableArray *)searchModWithFilters:(NSDictionary<NSString *, NSString *> *)searchFilters
                      previousPageResult:(NSMutableArray *)modrinthSearchResult {
     int limit = 50;
-    NSString *projectType = searchFilters[@"projectType"] ?: @"mod";
+    NSString *projectType = searchFilters[@"projectType"];
+    if (projectType.length == 0) {
+        // 防御性回退：未指定 projectType 但声明 isModpack 时按整合包搜索，避免误搜 Mod
+        projectType = searchFilters[@"isModpack"].boolValue ? @"modpack" : @"mod";
+    }
     
     NSMutableString *facetString = [NSMutableString new];
     [facetString appendString:@"["];
@@ -164,7 +168,11 @@
 
 - (void)searchModWithFilters:(NSDictionary *)filters
                   completion:(void (^)(NSArray * _Nullable results, NSError * _Nullable error))completion {
-    NSString *projectType = filters[@"projectType"] ?: @"mod";
+    NSString *projectType = filters[@"projectType"];
+    if (projectType.length == 0) {
+        // 防御性回退：未指定 projectType 但声明 isModpack 时按整合包搜索，避免误搜 Mod
+        projectType = filters[@"isModpack"].boolValue ? @"modpack" : @"mod";
+    }
     NSString *query = filters[@"query"] ?: filters[@"name"] ?: @"";
     NSNumber *limitNum = filters[@"limit"] ?: @50;
     int limit = [limitNum intValue];

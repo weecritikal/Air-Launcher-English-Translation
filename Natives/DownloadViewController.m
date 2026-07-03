@@ -1770,6 +1770,7 @@
     
     NSMutableDictionary *filters = [NSMutableDictionary dictionary];
     filters[@"isModpack"] = @YES;
+    filters[@"projectType"] = @"modpack";
     filters[@"limit"] = @30;
     filters[@"offset"] = @(self.currentModpackOffset);
     if (self.modpackSearchQuery.length > 0) {

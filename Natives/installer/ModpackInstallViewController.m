@@ -36,6 +36,7 @@
     self.modrinth = [ModrinthAPI new];
     self.filters = @{
         @"isModpack": @(YES),
+        @"projectType": @"modpack",
         @"name": @" "
     }.mutableCopy;
     [self updateSearchResults];

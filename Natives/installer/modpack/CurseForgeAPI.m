@@ -561,7 +561,11 @@ static NSString *CFACompiledAPIKey(void) {
 
 - (void)searchModWithFilters:(NSDictionary *)filters
                   completion:(void (^)(NSArray * _Nullable, NSError * _Nullable))completion {
-    NSString *projectType = filters[@"projectType"] ?: @"mod";
+    NSString *projectType = filters[@"projectType"];
+    if (projectType.length == 0) {
+        // 防御性回退：与同步版本一致，未指定 projectType 但声明 isModpack 时按整合包搜索
+        projectType = filters[@"isModpack"].boolValue ? @"modpack" : @"mod";
+    }
     NSString *query = filters[@"query"] ?: filters[@"name"] ?: @"";
     NSNumber *limitNum = filters[@"limit"] ?: @50;
     int limit = [limitNum intValue];
