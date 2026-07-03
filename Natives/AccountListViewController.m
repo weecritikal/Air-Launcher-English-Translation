@@ -163,6 +163,10 @@
         [self actionLoginThirdParty:sender];
     }];
     [picker addAction:actionThirdParty];
+    UIAlertAction *actionLittleSkin = [UIAlertAction actionWithTitle:localize(@"login.option.littleskin", @"LittleSkin") style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        [self actionLoginLittleSkin:sender];
+    }];
+    [picker addAction:actionLittleSkin];
     UIAlertAction *actionLocal = [UIAlertAction actionWithTitle:localize(@"login.option.local", nil) style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         [self actionLoginLocal:sender];
     }];
@@ -293,6 +297,79 @@
             }
         };
         
+        [auth loginWithCallback:callback];
+    }]];
+    [controller addAction:[UIAlertAction actionWithTitle:localize(@"Cancel", nil) style:UIAlertActionStyleCancel handler:nil]];
+    [self presentViewController:controller animated:YES completion:nil];
+}
+
+- (void)actionLoginLittleSkin:(UIView *)sender {
+    // LittleSkin 是国内常用的 authlib-injector 皮肤站，端点固定为 https://littleskin.cn/api/yggdrasil
+    // 复用 ThirdPartyAuthenticator 的标准 Yggdrasil 流程，仅预设 authserver，简化用户输入
+    UIAlertController *controller = [UIAlertController alertControllerWithTitle:localize(@"login.option.littleskin", @"LittleSkin")
+                                                                         message:localize(@"login.option.littleskin.desc", @"使用 LittleSkin 账户登录（需先在 littleskin.cn 注册）")
+                                                                  preferredStyle:UIAlertControllerStyleAlert];
+    [controller addTextFieldWithConfigurationHandler:^(UITextField *textField) {
+        textField.placeholder = localize(@"login.alert.field.username", nil);
+        textField.clearButtonMode = UITextFieldViewModeWhileEditing;
+        textField.borderStyle = UITextBorderStyleRoundedRect;
+        textField.autocapitalizationType = UITextAutocapitalizationTypeNone;
+        textField.autocorrectionType = UITextAutocorrectionTypeNo;
+    }];
+    [controller addTextFieldWithConfigurationHandler:^(UITextField *textField) {
+        textField.placeholder = localize(@"login.alert.field.password", nil);
+        textField.clearButtonMode = UITextFieldViewModeWhileEditing;
+        textField.borderStyle = UITextBorderStyleRoundedRect;
+        textField.secureTextEntry = YES;
+    }];
+    [controller addAction:[UIAlertAction actionWithTitle:localize(@"OK", nil) style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+        NSArray *textFields = controller.textFields;
+        UITextField *usernameField = textFields[0];
+        UITextField *passwordField = textFields[1];
+
+        if (usernameField.text.length == 0 || passwordField.text.length == 0) {
+            controller.message = localize(@"login.error.fields.empty", nil);
+            [self presentViewController:controller animated:YES completion:nil];
+            return;
+        }
+
+        self.modalInPresentation = YES;
+        self.tableView.userInteractionEnabled = NO;
+
+        UITableViewCell *cell = nil;
+        if ([sender isKindOfClass:[UITableViewCell class]]) {
+            cell = (UITableViewCell *)sender;
+            [self addActivityIndicatorTo:cell];
+        }
+
+        ThirdPartyAuthenticator *auth = [[ThirdPartyAuthenticator alloc] initWithInput:usernameField.text];
+        auth.authData[@"password"] = passwordField.text;
+        // LittleSkin 标准 Yggdrasil 端点
+        auth.authData[@"authserver"] = @"https://littleskin.cn/api/yggdrasil";
+
+        id callback = ^(id status, BOOL success) {
+            if (cell) {
+                [self callbackMicrosoftAuth:status success:success forCell:cell];
+            } else {
+                if (!success && status != nil) {
+                    self.modalInPresentation = NO;
+                    self.tableView.userInteractionEnabled = YES;
+                    if ([status isKindOfClass:[NSError class]]) {
+                        NSLog(@"[LittleSkin] Error: %@", [status localizedDescription]);
+                        showDialog(localize(@"Error", nil), [status localizedDescription]);
+                    } else {
+                        showDialog(localize(@"Error", nil), status);
+                    }
+                } else if (success) {
+                    if ([status isKindOfClass:[NSString class]] && [status isEqualToString:@"DEMO"]) {
+                        showDialog(localize(@"login.warn.title.demomode", nil), localize(@"login.warn.message.demomode", nil));
+                    }
+                    self.whenItemSelected();
+                    [self dismissViewControllerAnimated:YES completion:nil];
+                }
+            }
+        };
+
         [auth loginWithCallback:callback];
     }]];
     [controller addAction:[UIAlertAction actionWithTitle:localize(@"Cancel", nil) style:UIAlertActionStyleCancel handler:nil]];
