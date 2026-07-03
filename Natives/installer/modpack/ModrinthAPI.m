@@ -38,15 +38,21 @@
         // 防御性回退：未指定 projectType 但声明 isModpack 时按整合包搜索，避免误搜 Mod
         projectType = [searchFilters[@"isModpack"] boolValue] ? @"modpack" : @"mod";
     }
-    
+
+    // 修复 #50: 必须把 loader（categories facet）传给 Modrinth API，否则筛选 neoforge/fabric 不生效
+    // Modrinth 的 loader 类别：fabric / quilt / forge / neoforge / liteloader / rift 等
     NSMutableString *facetString = [NSMutableString new];
     [facetString appendString:@"["];
     [facetString appendFormat:@"[\"project_type:%@\"]", projectType];
     if (searchFilters[@"mcVersion"].length > 0) {
         [facetString appendFormat:@", [\"versions:%@\"]", searchFilters[@"mcVersion"]];
     }
+    NSString *loader = searchFilters[@"loader"] ?: searchFilters[@"categories"];
+    if (loader.length > 0) {
+        [facetString appendFormat:@", [\"categories:%@\"]", loader];
+    }
     [facetString appendString:@"]"];
-    
+
     NSDictionary *params = @{
         @"facets": facetString,
         @"query": [searchFilters[@"name"] stringByReplacingOccurrencesOfString:@" " withString:@"+"] ?: @"",
@@ -186,6 +192,11 @@
     NSString *mcVersion = filters[@"mcVersion"] ?: filters[@"version"];
     if (mcVersion.length > 0) {
         [facetString appendFormat:@", [\"versions:%@\"]", mcVersion];
+    }
+    // 修复 #50: 必须把 loader（categories facet）传给 Modrinth API，否则筛选 neoforge/fabric 不生效
+    NSString *loader = filters[@"loader"] ?: filters[@"categories"];
+    if (loader.length > 0) {
+        [facetString appendFormat:@", [\"categories:%@\"]", loader];
     }
     [facetString appendString:@"]"];
     

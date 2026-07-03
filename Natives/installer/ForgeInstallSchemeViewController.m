@@ -71,20 +71,23 @@
 }
 
 - (void)setupCards {
-    self.originalCard = [self createCardWithTitle:@"原版方案"
-                                         subtitle:@"运行 Forge 安装器 (AWT GUI)"
-                                             icon:@"gearshape"
-                                            color:[UIColor systemBlueColor]
-                                           scheme:0];
-
-    self.directCard = [self createCardWithTitle:@"直装方案"
+    // 直装方案放首位并标注"推荐"：在 iOS 上无需 JIT、无需 AWT、无子进程限制
+    self.directCard = [self createCardWithTitle:@"直装方案（推荐）"
                                        subtitle:@"直接解析安装，无需启动安装器"
-                                           icon:@"bolt"
+                                           icon:@"bolt.fill"
                                           color:[UIColor systemGreenColor]
                                          scheme:1];
 
-    [self.stackView addArrangedSubview:self.originalCard];
+    // 原版方案降级为"高级选项"：依赖 AWT GUI + JIT + 子进程，iOS 上多数场景不可用
+    // 仅保留作为某些边缘版本（极老 Forge / 第三方 jar 安装器）的兜底
+    self.originalCard = [self createCardWithTitle:@"原版方案（高级）"
+                                         subtitle:@"运行 Forge 安装器 (AWT GUI)，需 JIT"
+                                             icon:@"gearshape"
+                                            color:[UIColor systemGrayColor]
+                                           scheme:0];
+
     [self.stackView addArrangedSubview:self.directCard];
+    [self.stackView addArrangedSubview:self.originalCard];
 }
 
 - (UIView *)createCardWithTitle:(NSString *)title

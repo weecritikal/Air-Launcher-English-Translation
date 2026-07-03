@@ -244,7 +244,21 @@
     [self.onlineSearchResults removeAllObjects];
     [self.tableView reloadData];
 
-    NSDictionary *filters = @{@"name": searchText};
+    // 修复 #50/#51: 自动从当前 profile 解析 gameVersion 和 loader，传给 Modrinth API
+    // 这样筛选 neoforge/fabric 等加载器才会真正生效，且搜索结果会优先匹配当前版本
+    NSString *gameVersion = nil;
+    NSString *loader = nil;
+    [self resolveCurrentGameVersion:&gameVersion loader:&loader];
+
+    NSMutableDictionary *filters = [NSMutableDictionary dictionary];
+    filters[@"name"] = searchText;
+    filters[@"projectType"] = @"mod";
+    if (gameVersion.length > 0) {
+        filters[@"mcVersion"] = gameVersion;
+    }
+    if (loader.length > 0) {
+        filters[@"loader"] = loader;
+    }
 
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         NSMutableArray *modrinthResults = [[ModrinthAPI sharedInstance] searchModWithFilters:filters previousPageResult:nil];
@@ -261,6 +275,30 @@
             [self.tableView reloadData];
         });
     });
+}
+
+// 从当前选中 profile 的 lastVersionId 解析 gameVersion 和 loader
+// lastVersionId 格式举例：1.20.1-forge-47.3.0 / 1.20.1-fabric-0.16.0 / 1.20.1-neoforge-47.1.0 / 1.20.1（原版）
+- (void)resolveCurrentGameVersion:(NSString **)outGameVersion loader:(NSString **)outLoader {
+    if (outGameVersion) *outGameVersion = nil;
+    if (outLoader) *outLoader = nil;
+
+    NSDictionary *selectedProfile = PLProfiles.current.selectedProfile;
+    NSString *lastVersionId = selectedProfile[@"lastVersionId"];
+    if (![lastVersionId isKindOfClass:[NSString class]] || lastVersionId.length == 0) return;
+
+    NSArray<NSString *> *loaders = @[@"forge", @"fabric", @"neoforge", @"quilt"];
+    for (NSString *name in loaders) {
+        NSString *delimiter = [NSString stringWithFormat:@"-%@-", name];
+        NSRange range = [lastVersionId rangeOfString:delimiter];
+        if (range.location != NSNotFound) {
+            if (outGameVersion) *outGameVersion = [lastVersionId substringToIndex:range.location];
+            if (outLoader) *outLoader = name;
+            return;
+        }
+    }
+    // 纯 <mc> 格式，无 loader
+    if (outGameVersion) *outGameVersion = lastVersionId;
 }
 
 #pragma mark - UISearchBarDelegate

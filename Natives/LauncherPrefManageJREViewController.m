@@ -43,12 +43,45 @@ static WFWorkflowProgressView* currentProgressView;
 @implementation LauncherPrefManageJREViewController
 
 + (LauncherPrefManageJREViewController *)currentInstance {
-    UISplitViewController *splitVC = (id)currentVC();
-    LauncherNavigationController *nav = (id)splitVC.viewControllers[1];
-    if (![nav.topViewController isKindOfClass:LauncherPrefManageJREViewController.class]) {
+    // 修复 #41: currentVC() 不一定是 UISplitViewController（在设置子页面里它会返回
+    // 当前可见 VC 本身），直接强转并访问 viewControllers 会触发
+    // "unrecognized selector viewControllers" 崩溃。这里做严格类型校验。
+    UIViewController *current = currentVC();
+    if (!current) return nil;
+
+    // 常见路径：当前 VC 是 LauncherPrefManageJREViewController 自身（在导航栈顶）
+    if ([current isKindOfClass:LauncherPrefManageJREViewController.class]) {
+        return (LauncherPrefManageJREViewController *)current;
+    }
+
+    // 走 splitVC 路径：先尝试从 current 往上找 splitVC
+    UISplitViewController *splitVC = nil;
+    if ([current isKindOfClass:UISplitViewController.class]) {
+        splitVC = (UISplitViewController *)current;
+    } else if ([current.navigationController isKindOfClass:LauncherNavigationController.class]]) {
+        // current 的 navigationController 是 LauncherNavigationController
+        // LauncherNavigationController 的 presenting/splitViewController 才是 splitVC
+        splitVC = current.navigationController.splitViewController;
+    } else {
+        splitVC = current.splitViewController;
+    }
+    if (![splitVC isKindOfClass:UISplitViewController.class] || splitVC.viewControllers.count < 2) {
         return nil;
     }
-    return (id)nav.topViewController;
+    UIViewController *secondary = splitVC.viewControllers[1];
+    LauncherNavigationController *nav = nil;
+    if ([secondary isKindOfClass:LauncherNavigationController.class]]) {
+        nav = (LauncherNavigationController *)secondary;
+    } else if ([secondary isKindOfClass:UINavigationController.class]]) {
+        UIViewController *top = ((UINavigationController *)secondary).topViewController;
+        if ([top isKindOfClass:LauncherPrefManageJREViewController.class]) {
+            return (LauncherPrefManageJREViewController *)top;
+        }
+    }
+    if (!nav || ![nav.topViewController isKindOfClass:LauncherPrefManageJREViewController.class]) {
+        return nil;
+    }
+    return (LauncherPrefManageJREViewController *)nav.topViewController;
 }
 
 - (void)viewDidLoad
@@ -79,9 +112,32 @@ static WFWorkflowProgressView* currentProgressView;
 }
 
 + (void)actionCancelImportRuntime {
-    UISplitViewController *splitVC = (id)currentVC();
-    LauncherNavigationController *nav = (id)splitVC.viewControllers[1];
-    [nav.progressViewMain.observedProgress cancel];
+    // 修复 #41: 同 currentInstance 的类型校验问题，避免 currentVC() 不是 splitVC 时崩溃
+    LauncherPrefManageJREViewController *instance = [self currentInstance];
+    if (instance) {
+        LauncherNavigationController *nav = (LauncherNavigationController *)instance.navigationController;
+        if ([nav isKindOfClass:LauncherNavigationController.class] && nav.progressViewMain.observedProgress) {
+            [nav.progressViewMain.observedProgress cancel];
+        }
+        return;
+    }
+    // 兜底：尝试走 splitVC 路径
+    UIViewController *current = currentVC();
+    UISplitViewController *splitVC = nil;
+    if ([current isKindOfClass:UISplitViewController.class]) {
+        splitVC = (UISplitViewController *)current;
+    } else {
+        splitVC = current.splitViewController;
+    }
+    if ([splitVC isKindOfClass:UISplitViewController.class] && splitVC.viewControllers.count >= 2) {
+        UIViewController *secondary = splitVC.viewControllers[1];
+        if ([secondary isKindOfClass:LauncherNavigationController.class]) {
+            LauncherNavigationController *nav = (LauncherNavigationController *)secondary;
+            if (nav.progressViewMain.observedProgress) {
+                [nav.progressViewMain.observedProgress cancel];
+            }
+        }
+    }
 }
 
 - (void)actionImportRuntime {
