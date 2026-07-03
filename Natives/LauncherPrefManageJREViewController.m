@@ -58,7 +58,7 @@ static WFWorkflowProgressView* currentProgressView;
     UISplitViewController *splitVC = nil;
     if ([current isKindOfClass:UISplitViewController.class]) {
         splitVC = (UISplitViewController *)current;
-    } else if ([current.navigationController isKindOfClass:LauncherNavigationController.class]]) {
+    } else if ([current.navigationController isKindOfClass:LauncherNavigationController.class]) {
         // current 的 navigationController 是 LauncherNavigationController
         // LauncherNavigationController 的 presenting/splitViewController 才是 splitVC
         splitVC = current.navigationController.splitViewController;
