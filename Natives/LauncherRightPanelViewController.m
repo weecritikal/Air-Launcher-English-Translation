@@ -255,15 +255,37 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     JavaGUIViewController *vc = [[JavaGUIViewController alloc] init];
     vc.filepath = path;
     vc.hitEnterAfterWindowShown = hitEnter;
-    // requiredJavaVersion 会读取 JAR 的 MANIFEST.MF 解析主类，失败时已自行弹出错误提示
-    if (!vc.requiredJavaVersion) {
+    // requiredJavaVersion 会读取 JAR 的 MANIFEST.MF 解析主类
+    int javaVersion = vc.requiredJavaVersion;
+    if (!javaVersion) {
+        // JAR 解析失败：vc 还没 present，showDialog 不会显示，这里在 self 上弹明确提示
+        [self showAlert:@"无法执行 JAR"
+                  message:[NSString stringWithFormat:@"无法解析 JAR 文件：%@\n\n可能原因：\n• 文件不是有效的 Java 归档\n• 缺少 META-INF/MANIFEST.MF\n• 缺少 Main-Class 属性\n• 文件损坏", path.lastPathComponent ?: @""]];
         return;
     }
+
+    // 预检 execute_jar 标签的 JRE 是否已配置，避免 present 后才发现没 JRE 导致黑屏
+    NSString *javaHome = getSelectedJavaHome(@"execute_jar", javaVersion);
+    if (!javaHome) {
+        [self showAlert:@"缺少 Java 运行时"
+                  message:[NSString stringWithFormat:@"执行 JAR 需要 Java %d 或更高版本，但未配置对应的运行时。\n\n请到「设置 → 管理运行时」中为「执行 Jar」标签分配一个 Java %d+ 的运行时。", javaVersion, javaVersion]];
+        return;
+    }
+
     [self invokeAfterJITEnabled:^{
         vc.modalPresentationStyle = UIModalPresentationFullScreen;
-        NSLog(@"[ModInstaller] launching %@", vc.filepath);
+        NSLog(@"[ModInstaller] launching %@ (Java %d, home=%@)", vc.filepath, javaVersion, javaHome);
         [self presentViewController:vc animated:YES completion:nil];
     }];
+}
+
+/// 显示简单的提示弹窗
+- (void)showAlert:(NSString *)title message:(NSString *)message {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:title
+                                                                    message:message
+                                                             preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleDefault handler:nil]];
+    [self presentViewController:alert animated:YES completion:nil];
 }
 
 #pragma mark - Launch Game

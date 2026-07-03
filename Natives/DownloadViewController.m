@@ -64,8 +64,10 @@
         self.iconView.translatesAutoresizingMaskIntoConstraints = NO;
         self.iconView.layer.cornerRadius = 12;
         self.iconView.clipsToBounds = YES;
-        self.iconView.backgroundColor = [UIColor secondarySystemBackgroundColor];
-        self.iconView.contentMode = UIViewContentModeScaleAspectFill;
+        // 移除灰色背景：加载失败时由占位 SF Symbol 兜底，不再显示灰色方块
+        self.iconView.backgroundColor = [UIColor clearColor];
+        self.iconView.contentMode = UIViewContentModeScaleAspectFit;
+        self.iconView.tintColor = [UIColor systemOrangeColor];
         [self.contentContainer addSubview:self.iconView];
         
         self.titleLabel = [[UILabel alloc] init];
@@ -140,10 +142,18 @@
     return self;
 }
 
+- (void)prepareForReuse {
+    [super prepareForReuse];
+    // 重置图标状态，避免复用时旧图残留导致显示成方块
+    self.iconView.image = nil;
+    self.iconView.tintColor = [UIColor systemOrangeColor];
+    self.iconView.contentMode = UIViewContentModeScaleAspectFit;
+}
+
 - (void)configureWithMod:(NSDictionary *)mod {
     self.titleLabel.text = mod[@"title"] ?: mod[@"slug"] ?: @"Unknown";
     self.descLabel.text = mod[@"description"] ?: @"";
-    
+
     NSString *author = mod[@"author"] ?: @"Unknown";
     NSNumber *downloads = mod[@"downloads"];
     NSString *downloadsStr = @"";
@@ -158,24 +168,29 @@
         }
     }
     self.metaLabel.text = [NSString stringWithFormat:@"%@ • %@ 下载", author, downloadsStr];
-    
+
+    // 先设置默认占位图标，避免异步加载期间显示成灰色方块
+    self.iconView.image = [UIImage systemImageNamed:@"puzzlepiece.fill"];
+    self.iconView.tintColor = [UIColor systemOrangeColor];
+    self.iconView.contentMode = UIViewContentModeScaleAspectFit;
+
     NSString *iconUrl = mod[@"imageUrl"] ?: mod[@"icon_url"];
     if (iconUrl.length > 0) {
         dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-            NSData *data = [NSData dataWithContentsOfURL:[NSURL URLWithString:iconUrl]];
-            if (data) {
-                UIImage *image = [UIImage imageWithData:data];
-                dispatch_async(dispatch_get_main_queue(), ^{
+            NSData *data = [NSData dataWithContentsOfURL:[NSURL URLWithString:iconUrl]
+                                                  options:NSDataReadingUncached
+                                                    error:nil];
+            UIImage *image = data ? [UIImage imageWithData:data] : nil;
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (image) {
+                    self.iconView.contentMode = UIViewContentModeScaleAspectFill;
                     self.iconView.image = image;
-                });
-            }
+                }
+                // 加载失败时保留默认占位图标 puzzlepiece.fill，不再显示灰色方块
+            });
         });
-    } else {
-        self.iconView.image = [UIImage systemImageNamed:@"puzzlepiece.fill"];
-        self.iconView.tintColor = [UIColor systemOrangeColor];
-        self.iconView.contentMode = UIViewContentModeScaleAspectFit;
     }
-    
+
     [self.tagsStack.arrangedSubviews makeObjectsPerformSelector:@selector(removeFromSuperview)];
     NSArray *categories = mod[@"categories"] ?: @[];
     for (NSInteger i = 0; i < MIN(3, categories.count); i++) {
@@ -190,7 +205,7 @@
 - (void)configureWithShader:(NSDictionary *)shader {
     self.titleLabel.text = shader[@"title"] ?: shader[@"slug"] ?: @"Unknown";
     self.descLabel.text = shader[@"description"] ?: @"";
-    
+
     NSString *author = shader[@"author"] ?: @"Unknown";
     NSNumber *downloads = shader[@"downloads"];
     NSString *downloadsStr = @"";
@@ -205,24 +220,29 @@
         }
     }
     self.metaLabel.text = [NSString stringWithFormat:@"%@ • %@ 下载", author, downloadsStr];
-    
+
+    // 先设置默认占位图标，避免异步加载期间显示成灰色方块
+    self.iconView.image = [UIImage systemImageNamed:@"paintbrush.fill"];
+    self.iconView.tintColor = [UIColor systemPurpleColor];
+    self.iconView.contentMode = UIViewContentModeScaleAspectFit;
+
     NSString *iconUrl = shader[@"imageUrl"] ?: shader[@"icon_url"];
     if (iconUrl.length > 0) {
         dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-            NSData *data = [NSData dataWithContentsOfURL:[NSURL URLWithString:iconUrl]];
-            if (data) {
-                UIImage *image = [UIImage imageWithData:data];
-                dispatch_async(dispatch_get_main_queue(), ^{
+            NSData *data = [NSData dataWithContentsOfURL:[NSURL URLWithString:iconUrl]
+                                                  options:NSDataReadingUncached
+                                                    error:nil];
+            UIImage *image = data ? [UIImage imageWithData:data] : nil;
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (image) {
+                    self.iconView.contentMode = UIViewContentModeScaleAspectFill;
                     self.iconView.image = image;
-                });
-            }
+                }
+                // 加载失败时保留默认占位图标 paintbrush.fill，不再显示灰色方块
+            });
         });
-    } else {
-        self.iconView.image = [UIImage systemImageNamed:@"paintbrush.fill"];
-        self.iconView.tintColor = [UIColor systemPurpleColor];
-        self.iconView.contentMode = UIViewContentModeScaleAspectFit;
     }
-    
+
     [self.tagsStack.arrangedSubviews makeObjectsPerformSelector:@selector(removeFromSuperview)];
     NSArray *categories = shader[@"categories"] ?: @[];
     for (NSInteger i = 0; i < MIN(3, categories.count); i++) {
@@ -1348,7 +1368,11 @@
     // 整合包 tab 专用"导入本地整合包"按钮（参照 FCL 安卓在整合包列表上方提供显眼导入入口）
     self.importModpackButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.importModpackButton.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.importModpackButton setImage:[UIImage systemImageNamed:@"square.and.arrow.down.on.square"] forState:UIControlStateNormal];
+    // square.and.arrow.down.on.square 是 iOS 14+ 符号，加 fallback 避免显示成方块
+    UIImage *importIcon = [UIImage systemImageNamed:@"square.and.arrow.down.on.square"]
+                          ?: [UIImage systemImageNamed:@"square.and.arrow.down"]
+                          ?: [UIImage systemImageNamed:@"tray.and.arrow.down"];
+    [self.importModpackButton setImage:importIcon forState:UIControlStateNormal];
     [self.importModpackButton setTitle:@"导入" forState:UIControlStateNormal];
     self.importModpackButton.tintColor = [UIColor whiteColor];
     self.importModpackButton.backgroundColor = [UIColor systemPurpleColor];

@@ -38,6 +38,20 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
                         versionId:(NSString *)versionId
                           progress:(void (^)(double progress, NSString *stageMessage))progress
                             error:(NSError **)error {
+    return [self installForgeFromInstaller:installerPath
+                                  versionId:versionId
+                              customGameDir:nil
+                        skipRegisterVersion:NO
+                                   progress:progress
+                                     error:error];
+}
+
++ (BOOL)installForgeFromInstaller:(NSString *)installerPath
+                        versionId:(NSString *)versionId
+                    customGameDir:(nullable NSString *)customGameDir
+              skipRegisterVersion:(BOOL)skipRegisterVersion
+                         progress:(void (^)(double progress, NSString *stageMessage))progress
+                            error:(NSError **)error {
     void (^reportProgress)(double, NSString *) = ^(double p, NSString *msg) {
         NSLog(@"[ForgeDirect] Progress: %.2f - %@", p, msg);
         if (progress) {
@@ -99,7 +113,8 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
             return NO;
         }
 
-        NSString *gameDir = [self gameDirectory];
+        // 整合包导入时使用自定义 gameDir；否则使用默认 POJAV_GAME_DIR
+        NSString *gameDir = customGameDir.length > 0 ? customGameDir : [self gameDirectory];
         NSString *librariesDir = [gameDir stringByAppendingPathComponent:@"libraries"];
         NSLog(@"[ForgeDirect] Game directory: %@", gameDir);
         NSLog(@"[ForgeDirect] Libraries directory: %@", librariesDir);
@@ -138,16 +153,19 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
         }
 
         // Step 7: Register version in launcher_profiles.json (must run on main thread)
-        NSLog(@"[ForgeDirect] Registering version on main thread");
-        reportProgress(0.95, @"正在注册版本");
-        if ([NSThread isMainThread]) {
-            [self registerVersion:versionId];
-        } else {
-            dispatch_sync(dispatch_get_main_queue(), ^{
+        // 整合包导入时跳过（由 ModpackImportService.createProfileForModpack 统一注册）
+        if (!skipRegisterVersion) {
+            NSLog(@"[ForgeDirect] Registering version on main thread");
+            reportProgress(0.95, @"正在注册版本");
+            if ([NSThread isMainThread]) {
                 [self registerVersion:versionId];
-            });
+            } else {
+                dispatch_sync(dispatch_get_main_queue(), ^{
+                    [self registerVersion:versionId];
+                });
+            }
+            NSLog(@"[ForgeDirect] Version registered successfully");
         }
-        NSLog(@"[ForgeDirect] Version registered successfully");
 
         NSLog(@"[ForgeDirect] Installation completed successfully");
         reportProgress(1.0, @"安装完成");
@@ -209,10 +227,36 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
     profileDict[@"gameDir"] = @".";
     profileDict[@"type"] = @"custom";
     profileDict[@"created"] = [NSDate date].description;
+    // 推断 Java 版本：Forge 1.20.5+ 需 Java 21，1.18+ 需 Java 17，1.17 需 Java 16，其他 Java 8
+    // versionId 形如 "1.20.1-forge-47.3.0" 或 "Forge-1.20.1-47.3.0"，提取 MC 版本
+    NSInteger javaMajor = [self inferJavaMajorVersionFromVersionId:versionId];
+    profileDict[@"javaVersion"] = @{@"component": @"java-runtime", @"majorVersion": @(javaMajor)};
     [profiles saveProfile:profileDict withName:versionId];
     // 与 Fabric / Vanilla 安装路径保持一致：自动选中新建的 profile，避免用户回到主界面仍启动旧版本
     profiles.selectedProfileName = versionId;
-    NSLog(@"[ForgeDirect] Profile saved and selected");
+    NSLog(@"[ForgeDirect] Profile saved and selected (javaVersion=%ld)", (long)javaMajor);
+}
+
+/// 从 versionId 中推断所需 Java 主版本号
+/// versionId 形如 "1.20.1-forge-47.3.0"、"Forge-1.20.1-47.3.0"、"1.18.2-forge-40.2.0"
++ (NSInteger)inferJavaMajorVersionFromVersionId:(NSString *)versionId {
+    // 提取 1.x.x 格式的 MC 版本
+    NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@"1\\.(\\d+)(?:\\.(\\d+))?"
+                                                                           options:0
+                                                                             error:nil];
+    NSTextCheckingResult *match = [regex firstMatchInString:versionId options:0 range:NSMakeRange(0, versionId.length)];
+    if (!match || match.numberOfRanges < 2) return 8;
+    NSString *minorStr = [versionId substringWithRange:[match rangeAtIndex:1]];
+    NSInteger minor = [minorStr integerValue];
+    NSString *patchStr = match.numberOfRanges >= 3 && [match rangeAtIndex:2].location != NSNotFound
+                        ? [versionId substringWithRange:[match rangeAtIndex:2]]
+                        : @"0";
+    NSInteger patch = [patchStr integerValue];
+    if (minor >= 21) return 21;                  // 1.21+
+    if (minor >= 20 && patch >= 5) return 21;    // 1.20.5+
+    if (minor >= 18) return 17;                  // 1.18+
+    if (minor >= 17) return 16;                  // 1.17
+    return 8;                                     // 1.16.5 及以下
 }
 
 #pragma mark - Old format (Forge 1.12.2-)
@@ -581,8 +625,20 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
             downloaded++;
             NSLog(@"[ForgeDirect] Downloaded library: %@", name);
         } else {
+            // 主源失败：尝试 fallback 源（BMCLAPI ↔ 官方源）
+            NSLog(@"[ForgeDirect] Primary source failed for %@, trying fallback: %@", name, downloadError.localizedDescription ?: @"unknown");
+            NSString *fallbackURL = [self buildFallbackURLForLibrary:name relativePath:relativePath];
+            if (fallbackURL && ![fallbackURL isEqualToString:url]) {
+                NSError *fallbackError = nil;
+                if ([self downloadFileFromURL:fallbackURL toPath:destPath error:&fallbackError]) {
+                    downloaded++;
+                    NSLog(@"[ForgeDirect] Downloaded library via fallback: %@", name);
+                    continue;
+                }
+                NSLog(@"[ForgeDirect] Fallback also failed for %@: %@", name, fallbackError.localizedDescription ?: @"unknown");
+            }
             failed++;
-            NSLog(@"[ForgeDirect] Failed to download library %@: %@", name, downloadError.localizedDescription ?: @"unknown");
+            NSLog(@"[ForgeDirect] Failed to download library %@ (both sources failed)", name);
             // 不中断流程，部分库可能不重要或可由游戏启动时再次下载
         }
     }
@@ -592,6 +648,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
 }
 
 // 为 library 构建 maven URL
+// 优化路由：根据 groupId 精确匹配到正确的 maven 仓库，避免 404
 + (NSString *)buildMavenURLForLibrary:(NSString *)name relativePath:(NSString *)relativePath {
     NSString *downloadSource = getPrefObject(@"general.download_source");
     BOOL useBMCLAPI = [downloadSource isEqualToString:@"bmclapi"];
@@ -612,11 +669,76 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
         return [NSString stringWithFormat:@"https://maven.neoforged.net/releases/%@", relativePath];
     }
 
-    // 其他库（Mojang、lwjgl 等）走 libraries.minecraft.net（BMCLAPI 镜像）
+    // SpongePowered (mixin、asm 等) 走 repo.spongepowered.org
+    if ([name hasPrefix:@"org.spongepowered:"]) {
+        if (useBMCLAPI) {
+            return [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/maven/%@", relativePath];
+        }
+        return [NSString stringWithFormat:@"https://repo.spongepowered.org/repository/maven-public/%@", relativePath];
+    }
+
+    // oceanlabs (mcp_config、mcp_mappings 等) 走 maven.minecraftforge.net（Forge 镜像了这些）
+    if ([name hasPrefix:@"de.oceanlabs.mcp:"]) {
+        if (useBMCLAPI) {
+            return [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/maven/%@", relativePath];
+        }
+        return [NSString stringWithFormat:@"https://maven.minecraftforge.net/%@", relativePath];
+    }
+
+    // asm (ow2 asm) 走 maven.minecraftforge.net（Forge 镜像了 asm）
+    if ([name hasPrefix:@"org.ow2.asm:"]) {
+        if (useBMCLAPI) {
+            return [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/maven/%@", relativePath];
+        }
+        return [NSString stringWithFormat:@"https://maven.minecraftforge.net/%@", relativePath];
+    }
+
+    // MojoHaus (bootstraplauncher、installertools 等) 优先走 maven.minecraftforge.net
+    if ([name hasPrefix:@"net.minecraftforge.installertools:"] ||
+        [name hasPrefix:@"net.minecraftforge.bootstraplauncher:"]) {
+        if (useBMCLAPI) {
+            return [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/maven/%@", relativePath];
+        }
+        return [NSString stringWithFormat:@"https://maven.minecraftforge.net/%@", relativePath];
+    }
+
+    // JitPack (部分 modlauncher 依赖)
+    if ([name hasPrefix:@"com.machinezoo.noexception:"] ||
+        [name hasPrefix:@"org.codehaus.mojo:"]) {
+        if (useBMCLAPI) {
+            return [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/maven/%@", relativePath];
+        }
+        return [NSString stringWithFormat:@"https://maven.minecraftforge.net/%@", relativePath];
+    }
+
+    // 其他库（Mojang、lwjgl、gson 等）走 libraries.minecraft.net（BMCLAPI 镜像）
     if (useBMCLAPI) {
         return [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/maven/%@", relativePath];
     }
     return [NSString stringWithFormat:@"https://libraries.minecraft.net/%@", relativePath];
+}
+
+/// 构建 fallback URL（当主源失败时切换到 BMCLAPI 镜像，或反之）
++ (NSString *)buildFallbackURLForLibrary:(NSString *)name relativePath:(NSString *)relativePath {
+    NSString *downloadSource = getPrefObject(@"general.download_source");
+    BOOL useBMCLAPI = [downloadSource isEqualToString:@"bmclapi"];
+
+    // 主源是 BMCLAPI 时，fallback 到官方源；主源是官方源时，fallback 到 BMCLAPI
+    if (useBMCLAPI) {
+        // 从 BMCLAPI 失败，尝试官方源
+        if ([name hasPrefix:@"net.minecraftforge:"] || [name hasPrefix:@"de.oceanlabs.mcp:"] || [name hasPrefix:@"org.ow2.asm:"]) {
+            return [NSString stringWithFormat:@"https://maven.minecraftforge.net/%@", relativePath];
+        }
+        if ([name hasPrefix:@"net.neoforged:"] || [name hasPrefix:@"net.neoforged."] || [name hasPrefix:@"cpw.mods:"]) {
+            return [NSString stringWithFormat:@"https://maven.neoforged.net/releases/%@", relativePath];
+        }
+        if ([name hasPrefix:@"org.spongepowered:"]) {
+            return [NSString stringWithFormat:@"https://repo.spongepowered.org/repository/maven-public/%@", relativePath];
+        }
+        return [NSString stringWithFormat:@"https://libraries.minecraft.net/%@", relativePath];
+    }
+    // 从官方源失败，尝试 BMCLAPI 镜像
+    return [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/maven/%@", relativePath];
 }
 
 // 下载预打补丁的 PATCHED artifact
@@ -675,21 +797,41 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
     NSLog(@"[ForgeDirect] Downloading patched artifact from: %@", url);
     NSError *downloadError = nil;
     if (![self downloadFileFromURL:url toPath:destPath error:&downloadError]) {
-        if (error) {
-            *error = [NSError errorWithDomain:ForgeDirectInstallerErrorDomain
-                                         code:ForgeDirectInstallerErrorExtractionFailed
-                                     userInfo:@{
-                                         NSLocalizedDescriptionKey: [NSString stringWithFormat:@"下载预打补丁核心 jar 失败: %@\nURL: %@\n错误: %@",
-                                             jarName, url, downloadError.localizedDescription ?: @"未知错误"]
-                                     }];
+        // 主源失败：尝试 fallback 源（BMCLAPI ↔ 官方源）
+        NSString *fallbackURL;
+        if (useBMCLAPI) {
+            // 从 BMCLAPI 失败，尝试官方源
+            if ([groupId hasPrefix:@"net.neoforged"]) {
+                fallbackURL = [NSString stringWithFormat:@"https://maven.neoforged.net/releases/%@", relativePath];
+            } else {
+                fallbackURL = [NSString stringWithFormat:@"https://maven.minecraftforge.net/%@", relativePath];
+            }
+        } else {
+            // 从官方源失败，尝试 BMCLAPI
+            fallbackURL = [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/maven/%@", relativePath];
         }
-        return NO;
+        NSLog(@"[ForgeDirect] Primary source failed, trying fallback: %@", fallbackURL);
+        NSError *fallbackError = nil;
+        if (![self downloadFileFromURL:fallbackURL toPath:destPath error:&fallbackError]) {
+            if (error) {
+                *error = [NSError errorWithDomain:ForgeDirectInstallerErrorDomain
+                                             code:ForgeDirectInstallerErrorExtractionFailed
+                                         userInfo:@{
+                                             NSLocalizedDescriptionKey: [NSString stringWithFormat:@"下载预打补丁核心 jar 失败: %@\n主源 URL: %@\n错误: %@\n备用 URL: %@\n备用错误: %@",
+                                                 jarName, url, downloadError.localizedDescription ?: @"未知错误",
+                                                 fallbackURL, fallbackError.localizedDescription ?: @"未知错误"]
+                                         }];
+            }
+            return NO;
+        }
+        NSLog(@"[ForgeDirect] Patched artifact downloaded via fallback: %@", destPath);
+        return YES;
     }
     NSLog(@"[ForgeDirect] Patched artifact downloaded: %@", destPath);
     return YES;
 }
 
-// 同步下载文件到指定路径
+// 同步下载文件到指定路径（带 60 秒超时）
 + (BOOL)downloadFileFromURL:(NSString *)urlString toPath:(NSString *)destPath error:(NSError **)error {
     if (error) *error = nil;
 
@@ -719,18 +861,55 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
         return NO;
     }
 
-    // 同步下载
-    NSData *data = [NSData dataWithContentsOfURL:url options:NSDataReadingMapped error:error];
-    if (!data) {
+    // 用 NSURLSession 同步下载，带 60 秒超时（避免弱网下 dataWithContentsOfURL 挂死）
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+    request.timeoutInterval = 60.0;
+    request.cachePolicy = NSURLRequestReloadIgnoringLocalCacheData;
+
+    __block NSData *resultData = nil;
+    __block NSError *resultError = nil;
+    dispatch_semaphore_t semaphore = dispatch_semaphore_create(0);
+
+    NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithRequest:request
+                                                                     completionHandler:^(NSData *data, NSURLResponse *response, NSError *taskError) {
+        if (taskError) {
+            resultError = taskError;
+        } else if ([response isKindOfClass:[NSHTTPURLResponse class]]) {
+            NSInteger statusCode = [(NSHTTPURLResponse *)response statusCode];
+            if (statusCode >= 400) {
+                resultError = [NSError errorWithDomain:ForgeDirectInstallerErrorDomain
+                                                   code:statusCode
+                                               userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"HTTP %ld: %@", (long)statusCode, urlString]}];
+            } else {
+                resultData = data;
+            }
+        } else {
+            resultData = data;
+        }
+        dispatch_semaphore_signal(semaphore);
+    }];
+    [task resume];
+    dispatch_semaphore_wait(semaphore, dispatch_time(DISPATCH_TIME_NOW, 70 * NSEC_PER_SEC));
+
+    if (resultError) {
+        if (error) *error = resultError;
+        return NO;
+    }
+    if (!resultData || resultData.length == 0) {
+        if (error) {
+            *error = [NSError errorWithDomain:ForgeDirectInstallerErrorDomain
+                                         code:ForgeDirectInstallerErrorWriteFailed
+                                     userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Empty response: %@", urlString]}];
+        }
         return NO;
     }
 
-    BOOL written = [data writeToFile:destPath options:NSDataWritingAtomic error:error];
+    BOOL written = [resultData writeToFile:destPath options:NSDataWritingAtomic error:error];
     if (!written) {
         return NO;
     }
 
-    NSLog(@"[ForgeDirect] Downloaded %@ (%lu bytes) -> %@", urlString.lastPathComponent ?: urlString, (unsigned long)data.length, destPath);
+    NSLog(@"[ForgeDirect] Downloaded %@ (%lu bytes) -> %@", urlString.lastPathComponent ?: urlString, (unsigned long)resultData.length, destPath);
     return YES;
 }
 

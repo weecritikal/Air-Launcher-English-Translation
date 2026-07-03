@@ -9,14 +9,18 @@
 //  2. 解压 overrides/client-overrides 到 gameDir (而非 modpackDir 根目录)
 //  3. 下载 manifest/files 列出的所有 mod 到 gameDir/mods
 //  4. 对 Fabric/Quilt 整合包自动拉取 loader profile json 写入版本目录
-//  5. gameDir 使用相对路径 (./custom_gamedir/<id>) 与启动器 POJAV_GAME_DIR 对齐
-//  6. 写完整 profile (含 gameDir、lastVersionId、icon)
+//  5. 对 Forge/NeoForge 整合包下载 installer.jar 并调用直装器写入 modpack gameDir
+//  6. gameDir 使用相对路径 (./custom_gamedir/<id>) 与启动器 POJAV_GAME_DIR 对齐
+//  7. 写完整 profile (含 gameDir、lastVersionId、icon)
 //
 
 #import "ModpackImportService.h"
 #import "installer/FabricUtils.h"
 #import "installer/modpack/ModpackUtils.h"
+#import "installer/ForgeDirectInstaller.h"
+#import "installer/NeoForgeDirectInstaller.h"
 #import "PLProfiles.h"
+#import "PLPreferences.h"
 #import "UnzipKit.h"
 
 static NSString * const kImportedModpacksKey = @"ImportedModpacks";
@@ -556,22 +560,134 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
         return [jsonData writeToFile:versionJsonPath options:NSDataWritingAtomic error:error];
     }
 
-    // Forge/NeoForge: 写最小占位 JSON，引导用户后续安装
-    // 占位 JSON 包含 _comment_ 字段提示用户需要手动安装加载器
-    NSDictionary *placeholderJSON = @{
-        @"_comment_": [NSString stringWithFormat:@"此整合包需要 %@ %@ 加载器。请通过下载界面手动安装。", loader, loaderVersion],
-        @"id": versionId,
-        @"inheritsFrom": minecraftVersion,
-        @"type": @"release",
-        @"mainClass": @"net.minecraft.client.main.Main"
-    };
-    NSError *jsonError = nil;
-    NSData *jsonData = [NSJSONSerialization dataWithJSONObject:placeholderJSON options:NSJSONWritingPrettyPrinted error:&jsonError];
-    if (jsonError) {
-        if (error) *error = jsonError;
+    // Forge/NeoForge: 下载 installer.jar 并调用直装器写入 modpack 的 gameDir
+    // 直装器会写完整的 version.json（含正确的 mainClass、arguments、libraries）+ 下载 Forge 库
+    // 这样整合包启动时能正确加载 Forge，不再因占位 JSON 缺库/缺参数而崩溃
+    NSString *installerURL = [self buildInstallerURLForLoader:loader
+                                               loaderVersion:loaderVersion
+                                              minecraftVersion:minecraftVersion];
+    if (!installerURL) {
+        if (error) {
+            *error = [NSError errorWithDomain:@"ModpackImportError"
+                                         code:4003
+                                     userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"无法构造 %@ installer URL", loader]}];
+        }
         return NO;
     }
-    return [jsonData writeToFile:versionJsonPath options:NSDataWritingAtomic error:error];
+
+    // 下载 installer.jar 到临时目录
+    NSString *tmpInstallerPath = [NSTemporaryDirectory() stringByAppendingPathComponent:
+                                  [NSString stringWithFormat:@"%@-installer.jar", versionId]];
+    NSError *dlError = nil;
+    if (![self downloadFileFromURL:installerURL toPath:tmpInstallerPath]) {
+        // installer.jar 下载失败：回退到写占位 JSON（至少让 profile 不崩，用户可手动装）
+        NSLog(@"[ModpackImport] %@ installer.jar 下载失败，回退到占位 JSON: %@", loader, installerURL);
+        NSInteger javaMajor = [self javaMajorVersionForMC:minecraftVersion];
+        NSDictionary *placeholderJSON = @{
+            @"_comment_": [NSString stringWithFormat:@"此整合包需要 %@ %@ 加载器，自动安装失败。请通过下载界面手动安装。", loader, loaderVersion],
+            @"id": versionId,
+            @"inheritsFrom": minecraftVersion,
+            @"type": @"release",
+            @"mainClass": @"net.minecraft.client.main.Main",
+            @"javaVersion": @{@"component": @"java-runtime", @"majorVersion": @(javaMajor)}
+        };
+        NSData *jsonData = [NSJSONSerialization dataWithJSONObject:placeholderJSON options:NSJSONWritingPrettyPrinted error:nil];
+        return [jsonData writeToFile:versionJsonPath options:NSDataWritingAtomic error:error];
+    }
+
+    NSLog(@"[ModpackImport] %@ installer.jar 下载完成: %@", loader, tmpInstallerPath);
+
+    // 调用直装器，写入 modpack 的 gameDirAbsolute（不注册 profile，由 createProfileForModpack 统一注册）
+    NSError *installError = nil;
+    BOOL installSuccess = NO;
+    if ([loader isEqualToString:@"NeoForge"]) {
+        installSuccess = [NeoForgeDirectInstaller installNeoForgeFromInstaller:tmpInstallerPath
+                                                                     versionId:versionId
+                                                                 customGameDir:gameDirAbsolute
+                                                           skipRegisterVersion:YES
+                                                                      progress:nil
+                                                                         error:&installError];
+    } else {
+        // Forge
+        installSuccess = [ForgeDirectInstaller installForgeFromInstaller:tmpInstallerPath
+                                                               versionId:versionId
+                                                           customGameDir:gameDirAbsolute
+                                                     skipRegisterVersion:YES
+                                                                progress:nil
+                                                                   error:&installError];
+    }
+
+    // 清理临时 installer.jar
+    [[NSFileManager defaultManager] removeItemAtPath:tmpInstallerPath error:nil];
+
+    if (!installSuccess) {
+        NSLog(@"[ModpackImport] %@ 直装失败，回退到占位 JSON: %@", loader, installError.localizedDescription);
+        // 直装失败：写占位 JSON 兜底（用户可手动装）
+        NSDictionary *placeholderJSON = @{
+            @"_comment_": [NSString stringWithFormat:@"此整合包需要 %@ %@ 加载器，自动安装失败：%@。请通过下载界面手动安装。", loader, loaderVersion, installError.localizedDescription ?: @"未知错误"],
+            @"id": versionId,
+            @"inheritsFrom": minecraftVersion,
+            @"type": @"release",
+            @"mainClass": @"net.minecraft.client.main.Main"
+        };
+        NSData *jsonData = [NSJSONSerialization dataWithJSONObject:placeholderJSON options:NSJSONWritingPrettyPrinted error:nil];
+        return [jsonData writeToFile:versionJsonPath options:NSDataWritingAtomic error:error];
+    }
+
+    NSLog(@"[ModpackImport] %@ 直装成功，version.json 已写入: %@", loader, versionJsonPath);
+    return YES;
+}
+
+/// 根据 loader 类型构造 installer.jar 下载 URL
+/// Forge: https://maven.minecraftforge.net/net/minecraftforge/forge/<mc>-<loader>/forge-<mc>-<loader>-installer.jar
+/// NeoForge 1.20.1: https://maven.neoforged.net/releases/net/neoforged/forge/<loader>/forge-<loader>-installer.jar
+/// NeoForge 其他: https://maven.neoforged.net/releases/net/neoforged/neoforge/<loader>/neoforge-<loader>-installer.jar
+/// BMCLAPI 镜像优先（若用户选了 bmclapi 源）
+- (nullable NSString *)buildInstallerURLForLoader:(NSString *)loader
+                                    loaderVersion:(NSString *)loaderVersion
+                                   minecraftVersion:(NSString *)minecraftVersion {
+    NSString *downloadSource = [PLPreferences currentDownloadSourceForType:@"forge"];
+    BOOL useBMCLAPI = [downloadSource isEqualToString:@"bmclapi"];
+
+    if ([loader isEqualToString:@"Forge"]) {
+        // Forge versionString = "<mc>-<loaderVersion>"，例如 "1.20.1-47.3.0"
+        NSString *versionString = [NSString stringWithFormat:@"%@-%@", minecraftVersion, loaderVersion];
+        if (useBMCLAPI) {
+            return [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/maven/net/minecraftforge/forge/%@/forge-%@-installer.jar", versionString, versionString];
+        }
+        return [NSString stringWithFormat:@"https://maven.minecraftforge.net/net/minecraftforge/forge/%@/forge-%@-installer.jar", versionString, versionString];
+    }
+
+    if ([loader isEqualToString:@"NeoForge"]) {
+        // NeoForge 1.20.1 早期版本 artifactId 是 net.neoforged:forge，之后是 net.neoforged:neoforge
+        // loaderVersion 例如 "47.1.0"（1.20.1）或 "20.6.119-beta"（1.20.6+）
+        BOOL isLegacyForgeArtifact = [minecraftVersion isEqualToString:@"1.20.1"];
+        if (isLegacyForgeArtifact) {
+            if (useBMCLAPI) {
+                return [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/maven/net/neoforged/forge/%@/forge-%@-installer.jar", loaderVersion, loaderVersion];
+            }
+            return [NSString stringWithFormat:@"https://maven.neoforged.net/releases/net/neoforged/forge/%@/forge-%@-installer.jar", loaderVersion, loaderVersion];
+        }
+        if (useBMCLAPI) {
+            return [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/maven/net/neoforged/neoforge/%@/neoforge-%@-installer.jar", loaderVersion, loaderVersion];
+        }
+        return [NSString stringWithFormat:@"https://maven.neoforged.net/releases/net/neoforged/neoforge/%@/neoforge-%@-installer.jar", loaderVersion, loaderVersion];
+    }
+
+    return nil;
+}
+
+/// 根据 MC 版本推断所需 Java 主版本号
+/// 1.20.5+ → 21, 1.18+ → 17, 1.17 → 16, 1.16.5- → 8
+- (NSInteger)javaMajorVersionForMC:(NSString *)mcVersion {
+    NSArray *parts = [mcVersion componentsSeparatedByString:@"."];
+    if (parts.count < 2) return 8;
+    NSInteger major = [parts[1] integerValue];
+    if (major >= 21) return 21;       // 1.21+
+    if (major >= 20 && parts.count >= 3 && [parts[2] integerValue] >= 5) return 21; // 1.20.5+
+    if (major >= 18) return 17;       // 1.18+
+    if (major >= 17) return 16;       // 1.17
+    return 8;                          // 1.16.5 及以下
 }
 
 - (nullable NSString *)createProfileForModpack:(NSDictionary *)modpackInfo

@@ -241,6 +241,8 @@ static NSError* createError(NSString *message, NSInteger code) {
                                         // 设置头像URL为皮肤URL的头盔版本
                                         NSString *headURL = [skinURL stringByReplacingOccurrencesOfString:@".png" withString:@"/helm.png"];
                                         weakSelf.authData[@"profilePicURL"] = headURL;
+                                        // 异步更新头像后再次保存，避免账户列表读到失效的占位 URL
+                                        [weakSelf saveChanges];
                                         return;
                                     }
                                 }
@@ -248,20 +250,22 @@ static NSError* createError(NSString *message, NSInteger code) {
                         }
                     }
                 }
-                
-                // 如果Yggdrasil API失败，使用Minecraft Headshot API作为回退
-                weakSelf.authData[@"profilePicURL"] = [NSString stringWithFormat:@"https://api.rms.net.cn/head/%@", weakSelf.authData[@"username"]];
+
+                // 如果Yggdrasil API失败，使用 mc-heads.net 头像服务作为回退
+                weakSelf.authData[@"profilePicURL"] = [NSString stringWithFormat:@"https://mc-heads.net/avatar/%@/100", weakSelf.authData[@"username"]];
+                [weakSelf saveChanges];
             } failure:^(NSURLSessionDataTask *task, NSError *error) {
-                // 如果请求失败，使用Minecraft Headshot API作为回退
-                weakSelf.authData[@"profilePicURL"] = [NSString stringWithFormat:@"https://api.rms.net.cn/head/%@", weakSelf.authData[@"username"]];
+                // 如果请求失败，使用 mc-heads.net 头像服务作为回退
+                weakSelf.authData[@"profilePicURL"] = [NSString stringWithFormat:@"https://mc-heads.net/avatar/%@/100", weakSelf.authData[@"username"]];
+                [weakSelf saveChanges];
             }];
-            
-            // 设置默认头像，避免UI显示问题
-            self.authData[@"profilePicURL"] = [NSString stringWithFormat:@"https://api.rms.net.cn/head/%@", self.authData[@"username"]];
-            
+
+            // 设置默认头像，避免UI显示问题（异步获取真实皮肤URL后会覆盖并再次保存）
+            self.authData[@"profilePicURL"] = [NSString stringWithFormat:@"https://mc-heads.net/avatar/%@/100", self.authData[@"username"]];
+
             // Token expiration time (24 hours)
             self.authData[@"expiresAt"] = @((long)[NSDate.date timeIntervalSince1970] + 86400);
-            
+
             // Save changes
             callback(nil, [self saveChanges]);
         } @catch (NSException *exception) {
@@ -515,6 +519,8 @@ static NSError* createError(NSString *message, NSInteger code) {
                                                 // 设置头像URL为皮肤URL的头盔版本
                                                 NSString *headURL = [skinURL stringByReplacingOccurrencesOfString:@".png" withString:@"/helm.png"];
                                                 weakSelf.authData[@"profilePicURL"] = headURL;
+                                                // 异步更新头像后再次保存，避免账户列表读到失效的占位 URL
+                                                [weakSelf saveChanges];
                                                 return;
                                             }
                                         }
@@ -522,16 +528,18 @@ static NSError* createError(NSString *message, NSInteger code) {
                                 }
                             }
                         }
-                        
-                        // 如果Yggdrasil API失败，使用Minecraft Headshot API作为回退
-                        weakSelf.authData[@"profilePicURL"] = [NSString stringWithFormat:@"https://api.rms.net.cn/head/%@", weakSelf.authData[@"username"]];
+
+                        // 如果Yggdrasil API失败，使用 mc-heads.net 头像服务作为回退
+                        weakSelf.authData[@"profilePicURL"] = [NSString stringWithFormat:@"https://mc-heads.net/avatar/%@/100", weakSelf.authData[@"username"]];
+                        [weakSelf saveChanges];
                     } failure:^(NSURLSessionDataTask *task, NSError *error) {
-                        // 如果请求失败，使用Minecraft Headshot API作为回退
-                        weakSelf.authData[@"profilePicURL"] = [NSString stringWithFormat:@"https://api.rms.net.cn/head/%@", weakSelf.authData[@"username"]];
+                        // 如果请求失败，使用 mc-heads.net 头像服务作为回退
+                        weakSelf.authData[@"profilePicURL"] = [NSString stringWithFormat:@"https://mc-heads.net/avatar/%@/100", weakSelf.authData[@"username"]];
+                        [weakSelf saveChanges];
                     }];
-                    
-                    // 设置默认头像，避免UI显示问题
-                    self.authData[@"profilePicURL"] = [NSString stringWithFormat:@"https://api.rms.net.cn/head/%@", self.authData[@"username"]];
+
+                    // 设置默认头像，避免UI显示问题（异步获取真实皮肤URL后会覆盖并再次保存）
+                    self.authData[@"profilePicURL"] = [NSString stringWithFormat:@"https://mc-heads.net/avatar/%@/100", self.authData[@"username"]];
                 }
                 
                 // Token expiration time (24 hours)

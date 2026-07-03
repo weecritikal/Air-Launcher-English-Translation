@@ -3,6 +3,8 @@
 #import "authenticator/BaseAuthenticator.h"
 #import "authenticator/ThirdPartyAuthenticator.h"
 #import "AccountListViewController.h"
+#import "AccountLoginViewController.h"
+#import "ThirdPartyLoginViewController.h"
 #import "AFNetworking.h"
 #import "LauncherPreferences.h"
 #import "UIImageView+AFNetworking.h"
@@ -154,30 +156,29 @@
 }
 
 - (void)actionAddAccount:(UITableViewCell *)sender {
-    UIAlertController *picker = [UIAlertController alertControllerWithTitle:nil message:nil preferredStyle:UIAlertControllerStyleActionSheet];
-    UIAlertAction *actionMicrosoft = [UIAlertAction actionWithTitle:localize(@"login.option.microsoft", nil) style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-        [self actionLoginMicrosoft:sender];
-    }];
-    [picker addAction:actionMicrosoft];
-    UIAlertAction *actionThirdParty = [UIAlertAction actionWithTitle:localize(@"login.option.3rdparty", nil) style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-        [self actionLoginThirdParty:sender];
-    }];
-    [picker addAction:actionThirdParty];
-    UIAlertAction *actionLittleSkin = [UIAlertAction actionWithTitle:localize(@"login.option.littleskin", @"LittleSkin") style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-        [self actionLoginLittleSkin:sender];
-    }];
-    [picker addAction:actionLittleSkin];
-    UIAlertAction *actionLocal = [UIAlertAction actionWithTitle:localize(@"login.option.local", nil) style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-        [self actionLoginLocal:sender];
-    }];
-    [picker addAction:actionLocal];
-    UIAlertAction *cancel = [UIAlertAction actionWithTitle:localize(@"Cancel", nil) style:UIAlertActionStyleCancel handler:nil];
-    [picker addAction:cancel];
-
-    picker.popoverPresentationController.sourceView = sender;
-    picker.popoverPresentationController.sourceRect = sender.bounds;
-
-    [self presentViewController:picker animated:YES completion:nil];
+    // 参照 FCL：push 卡片式登录方式选择页（替代原来的 ActionSheet）
+    AccountLoginViewController *loginVC = [[AccountLoginViewController alloc] init];
+    loginVC.onSelectLoginType = ^(AccountLoginType type) {
+        // 选完登录方式后 pop 回账户列表，再触发对应登录流程
+        [self.navigationController popViewControllerAnimated:YES];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            switch (type) {
+                case AccountLoginTypeMicrosoft:
+                    [self actionLoginMicrosoft:sender];
+                    break;
+                case AccountLoginTypeLittleSkin:
+                    [self actionLoginLittleSkin:sender];
+                    break;
+                case AccountLoginTypeThirdParty:
+                    [self actionLoginThirdParty:sender];
+                    break;
+                case AccountLoginTypeLocal:
+                    [self actionLoginLocal:sender];
+                    break;
+            }
+        });
+    };
+    [self.navigationController pushViewController:loginVC animated:YES];
 }
 
 - (void)actionLoginLocal:(UIView *)sender {
@@ -216,164 +217,32 @@
 }
 
 - (void)actionLoginThirdParty:(UIView *)sender {
-    UIAlertController *controller = [UIAlertController alertControllerWithTitle:localize(@"Sign in", nil) message:localize(@"login.option.3rdparty", nil) preferredStyle:UIAlertControllerStyleAlert];
-    [controller addTextFieldWithConfigurationHandler:^(UITextField *textField) {
-        textField.placeholder = localize(@"login.alert.field.username", nil);
-        textField.clearButtonMode = UITextFieldViewModeWhileEditing;
-        textField.borderStyle = UITextBorderStyleRoundedRect;
-    }];
-    [controller addTextFieldWithConfigurationHandler:^(UITextField *textField) {
-        textField.placeholder = localize(@"login.alert.field.password", nil);
-        textField.clearButtonMode = UITextFieldViewModeWhileEditing;
-        textField.borderStyle = UITextBorderStyleRoundedRect;
-        textField.secureTextEntry = YES;
-    }];
-    [controller addTextFieldWithConfigurationHandler:^(UITextField *textField) {
-        textField.placeholder = localize(@"login.alert.field.server", nil);
-        textField.clearButtonMode = UITextFieldViewModeWhileEditing;
-        textField.borderStyle = UITextBorderStyleRoundedRect;
-        textField.text = @"https://authserver.ely.by"; // Default server
-    }];
-    [controller addAction:[UIAlertAction actionWithTitle:localize(@"OK", nil) style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
-        NSArray *textFields = controller.textFields;
-        UITextField *usernameField = textFields[0];
-        UITextField *passwordField = textFields[1];
-        UITextField *serverField = textFields[2];
-        
-        if (usernameField.text.length == 0 || passwordField.text.length == 0) {
-            controller.message = localize(@"login.error.fields.empty", nil);
-            [self presentViewController:controller animated:YES completion:nil];
-            return;
+    // 参照 FCL：push 卡片式第三方登录表单页（替代原 UIAlertController 三字段输入）
+    ThirdPartyLoginViewController *vc = [[ThirdPartyLoginViewController alloc] init];
+    vc.mode = ThirdPartyLoginModeCustom;
+    __weak typeof(self) weakSelf = self;
+    vc.onLoginComplete = ^(BOOL success, NSString *errorMessage) {
+        if (success) {
+            [weakSelf.navigationController popViewControllerAnimated:YES];
+            weakSelf.whenItemSelected();
         }
-        
-        // Validate server URL
-        if (serverField.text.length > 0) {
-            NSURL *url = [NSURL URLWithString:serverField.text];
-            if (!url || !url.scheme || !url.host) {
-                controller.message = localize(@"login.error.invalid_server", nil);
-                [self presentViewController:controller animated:YES completion:nil];
-                return;
-            }
-        }
-        
-        self.modalInPresentation = YES;
-        self.tableView.userInteractionEnabled = NO;
-        
-        // Check if sender is a table view cell
-        UITableViewCell *cell = nil;
-        if ([sender isKindOfClass:[UITableViewCell class]]) {
-            cell = (UITableViewCell *)sender;
-            [self addActivityIndicatorTo:cell];
-        }
-        
-        ThirdPartyAuthenticator *auth = [[ThirdPartyAuthenticator alloc] initWithInput:usernameField.text];
-        auth.authData[@"password"] = passwordField.text;
-        if (serverField.text.length > 0) {
-            auth.authData[@"authserver"] = serverField.text;
-        }
-        
-        id callback = ^(id status, BOOL success) {
-            if (cell) {
-                [self callbackMicrosoftAuth:status success:success forCell:cell];
-            } else {
-                // Обработка для случая, когда sender не ячейка таблицы
-                if (!success && status != nil) {
-                    self.modalInPresentation = NO;
-                    self.tableView.userInteractionEnabled = YES;
-                    
-                    if ([status isKindOfClass:[NSError class]]) {
-                        NSLog(@"[ThirdParty] Error: %@", [status localizedDescription]);
-                        showDialog(localize(@"Error", nil), [status localizedDescription]);
-                    } else {
-                        showDialog(localize(@"Error", nil), status);
-                    }
-                } else if (success) {
-                    if ([status isKindOfClass:[NSString class]] && [status isEqualToString:@"DEMO"]) {
-                        showDialog(localize(@"login.warn.title.demomode", nil), localize(@"login.warn.message.demomode", nil));
-                    }
-                    self.whenItemSelected();
-                    [self dismissViewControllerAnimated:YES completion:nil];
-                }
-            }
-        };
-        
-        [auth loginWithCallback:callback];
-    }]];
-    [controller addAction:[UIAlertAction actionWithTitle:localize(@"Cancel", nil) style:UIAlertActionStyleCancel handler:nil]];
-    [self presentViewController:controller animated:YES completion:nil];
+    };
+    [self.navigationController pushViewController:vc animated:YES];
 }
 
 - (void)actionLoginLittleSkin:(UIView *)sender {
-    // LittleSkin 是国内常用的 authlib-injector 皮肤站，端点固定为 https://littleskin.cn/api/yggdrasil
-    // 复用 ThirdPartyAuthenticator 的标准 Yggdrasil 流程，仅预设 authserver，简化用户输入
-    UIAlertController *controller = [UIAlertController alertControllerWithTitle:localize(@"login.option.littleskin", @"LittleSkin")
-                                                                         message:localize(@"login.option.littleskin.desc", @"使用 LittleSkin 账户登录（需先在 littleskin.cn 注册）")
-                                                                  preferredStyle:UIAlertControllerStyleAlert];
-    [controller addTextFieldWithConfigurationHandler:^(UITextField *textField) {
-        textField.placeholder = localize(@"login.alert.field.username", nil);
-        textField.clearButtonMode = UITextFieldViewModeWhileEditing;
-        textField.borderStyle = UITextBorderStyleRoundedRect;
-        textField.autocapitalizationType = UITextAutocapitalizationTypeNone;
-        textField.autocorrectionType = UITextAutocorrectionTypeNo;
-    }];
-    [controller addTextFieldWithConfigurationHandler:^(UITextField *textField) {
-        textField.placeholder = localize(@"login.alert.field.password", nil);
-        textField.clearButtonMode = UITextFieldViewModeWhileEditing;
-        textField.borderStyle = UITextBorderStyleRoundedRect;
-        textField.secureTextEntry = YES;
-    }];
-    [controller addAction:[UIAlertAction actionWithTitle:localize(@"OK", nil) style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
-        NSArray *textFields = controller.textFields;
-        UITextField *usernameField = textFields[0];
-        UITextField *passwordField = textFields[1];
-
-        if (usernameField.text.length == 0 || passwordField.text.length == 0) {
-            controller.message = localize(@"login.error.fields.empty", nil);
-            [self presentViewController:controller animated:YES completion:nil];
-            return;
+    // 参照 FCL：push 卡片式 LittleSkin 登录表单页（替代原 UIAlertController 双字段输入）
+    // LittleSkin 端点固定为 https://littleskin.cn/api/yggdrasil，由 VC 内部预设
+    ThirdPartyLoginViewController *vc = [[ThirdPartyLoginViewController alloc] init];
+    vc.mode = ThirdPartyLoginModeLittleSkin;
+    __weak typeof(self) weakSelf = self;
+    vc.onLoginComplete = ^(BOOL success, NSString *errorMessage) {
+        if (success) {
+            [weakSelf.navigationController popViewControllerAnimated:YES];
+            weakSelf.whenItemSelected();
         }
-
-        self.modalInPresentation = YES;
-        self.tableView.userInteractionEnabled = NO;
-
-        UITableViewCell *cell = nil;
-        if ([sender isKindOfClass:[UITableViewCell class]]) {
-            cell = (UITableViewCell *)sender;
-            [self addActivityIndicatorTo:cell];
-        }
-
-        ThirdPartyAuthenticator *auth = [[ThirdPartyAuthenticator alloc] initWithInput:usernameField.text];
-        auth.authData[@"password"] = passwordField.text;
-        // LittleSkin 标准 Yggdrasil 端点
-        auth.authData[@"authserver"] = @"https://littleskin.cn/api/yggdrasil";
-
-        id callback = ^(id status, BOOL success) {
-            if (cell) {
-                [self callbackMicrosoftAuth:status success:success forCell:cell];
-            } else {
-                if (!success && status != nil) {
-                    self.modalInPresentation = NO;
-                    self.tableView.userInteractionEnabled = YES;
-                    if ([status isKindOfClass:[NSError class]]) {
-                        NSLog(@"[LittleSkin] Error: %@", [status localizedDescription]);
-                        showDialog(localize(@"Error", nil), [status localizedDescription]);
-                    } else {
-                        showDialog(localize(@"Error", nil), status);
-                    }
-                } else if (success) {
-                    if ([status isKindOfClass:[NSString class]] && [status isEqualToString:@"DEMO"]) {
-                        showDialog(localize(@"login.warn.title.demomode", nil), localize(@"login.warn.message.demomode", nil));
-                    }
-                    self.whenItemSelected();
-                    [self dismissViewControllerAnimated:YES completion:nil];
-                }
-            }
-        };
-
-        [auth loginWithCallback:callback];
-    }]];
-    [controller addAction:[UIAlertAction actionWithTitle:localize(@"Cancel", nil) style:UIAlertActionStyleCancel handler:nil]];
-    [self presentViewController:controller animated:YES completion:nil];
+    };
+    [self.navigationController pushViewController:vc animated:YES];
 }
 
 - (void)actionLoginMicrosoft:(UITableViewCell *)sender {
