@@ -1,10 +1,14 @@
 #import "DownloadViewController.h"
 #import "BackgroundManager.h"
+#import "DownloadTaskManager.h"
+#import "DownloadTaskItem.h"
 #import "installer/modpack/ModrinthAPI.h"
 #import "installer/modpack/CurseForgeAPI.h"
 #import "PLPreferences.h"
 #import "ModService.h"
 #import "ShaderService.h"
+#import "ResourcePackService.h"
+#import "DataPackService.h"
 #import "PLProfiles.h"
 #import "LauncherPreferences.h"
 #import "VersionCardCell.h"
@@ -2873,16 +2877,45 @@
     NSString *urlString = [NSString stringWithFormat:@"https://meta.fabricmc.net/v2/versions/loader/%@/%@/profile/json", gameVersion, loaderVersion];
     NSURL *url = [NSURL URLWithString:urlString];
 
+    // 注册到统一下载任务管理器
+    NSString *source = getPrefObject(@"general.download_source") ?: @"official";
+    NSString *fabricTaskName = [NSString stringWithFormat:@"fabric-%@-%@", gameVersion, loaderVersion];
+    DownloadTaskItem *fabricTaskItem = [[DownloadTaskManager sharedManager]
+        registerTaskWithResourceType:DownloadTaskResourceTypeModloader
+                        resourceName:fabricTaskName
+                         displayName:[NSString stringWithFormat:@"Fabric %@ (%@)", loaderVersion, gameVersion]
+                      downloadSource:source
+                             rawTask:nil
+                      supportsResume:YES
+                             iconURL:nil];
+    __block NSString *fabricTaskId = fabricTaskItem.taskId;
+
     // Fabric profile JSON 较小，使用 dataTask；进度通过阶段驱动（无法精确测算）
     dataTask = [[NSURLSession sharedSession] dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         dispatch_async(dispatch_get_main_queue(), ^{
             __strong typeof(weakSelf) strongSelf = weakSelf;
             if (!strongSelf) return;
 
-            if (error || !data) {
+            if (error) {
+                if (error.code == NSURLErrorCancelled) {
+                    [[DownloadTaskManager sharedManager] setTaskWithId:fabricTaskId completedWithError:nil];
+                    [[DownloadTaskManager sharedManager] setTaskWithId:fabricTaskId state:DownloadTaskStateCancelled];
+                } else {
+                    NSError *err = [NSError errorWithDomain:@"FabricInstall" code:error.code userInfo:@{NSLocalizedDescriptionKey: error.localizedDescription ?: @"网络错误"}];
+                    [[DownloadTaskManager sharedManager] setTaskWithId:fabricTaskId completedWithError:err];
+                }
                 [strongSelf finishInstallerProgressWithError:[NSString stringWithFormat:@"Fabric 安装失败: %@", error.localizedDescription ?: @"网络错误"]];
                 return;
             }
+
+            if (!data) {
+                NSError *err = [NSError errorWithDomain:@"FabricInstall" code:2 userInfo:@{NSLocalizedDescriptionKey: @"返回数据为空"}];
+                [[DownloadTaskManager sharedManager] setTaskWithId:fabricTaskId completedWithError:err];
+                [strongSelf finishInstallerProgressWithError:@"Fabric 安装失败: 返回数据为空"];
+                return;
+            }
+
+            [[DownloadTaskManager sharedManager] updateTaskWithId:fabricTaskId progress:0.5 totalBytes:-1 downloadedBytes:0];
 
             // 解析 JSON
             strongSelf.installerProgressVC.progress = 0.5;
@@ -2891,9 +2924,13 @@
             NSError *jsonError;
             NSDictionary *profileJson = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
             if (!profileJson || jsonError) {
+                NSError *err = [NSError errorWithDomain:@"FabricInstall" code:3 userInfo:@{NSLocalizedDescriptionKey: jsonError.localizedDescription ?: @"解析失败"}];
+                [[DownloadTaskManager sharedManager] setTaskWithId:fabricTaskId completedWithError:err];
                 [strongSelf finishInstallerProgressWithError:@"解析 Fabric 配置失败"];
                 return;
             }
+
+            [[DownloadTaskManager sharedManager] updateTaskWithId:fabricTaskId progress:0.7 totalBytes:-1 downloadedBytes:0];
 
             // 写入版本 JSON
             strongSelf.installerProgressVC.progress = 0.7;
@@ -2910,9 +2947,13 @@
             NSData *jsonData = [NSJSONSerialization dataWithJSONObject:profileJson options:NSJSONWritingPrettyPrinted error:&saveError];
             [jsonData writeToFile:jsonPath options:NSDataWritingAtomic error:&saveError];
             if (saveError) {
+                NSError *err = [NSError errorWithDomain:@"FabricInstall" code:4 userInfo:@{NSLocalizedDescriptionKey: saveError.localizedDescription}];
+                [[DownloadTaskManager sharedManager] setTaskWithId:fabricTaskId completedWithError:err];
                 [strongSelf finishInstallerProgressWithError:[NSString stringWithFormat:@"保存配置失败: %@", saveError.localizedDescription]];
                 return;
             }
+
+            [[DownloadTaskManager sharedManager] updateTaskWithId:fabricTaskId progress:0.85 totalBytes:-1 downloadedBytes:0];
 
             // 注册 profile
             strongSelf.installerProgressVC.progress = 0.85;
@@ -2934,17 +2975,23 @@
                         __strong typeof(weakSelf) strongSelf2 = weakSelf;
                         if (!strongSelf2) return;
                         if (success) {
+                            [[DownloadTaskManager sharedManager] setTaskWithId:fabricTaskId completedWithError:nil];
                             [strongSelf2 finishInstallerProgressWithSuccess:[NSString stringWithFormat:@"Fabric %@ 安装成功\nFabric API 已自动安装", loaderVersion]];
                         } else {
+                            NSError *err = [NSError errorWithDomain:@"FabricInstall" code:5 userInfo:@{NSLocalizedDescriptionKey: apiError.localizedDescription ?: @"Fabric API 下载失败"}];
+                            [[DownloadTaskManager sharedManager] setTaskWithId:fabricTaskId completedWithError:err];
                             [strongSelf2 finishInstallerProgressWithSuccess:[NSString stringWithFormat:@"Fabric %@ 安装成功\nFabric API 安装失败: %@", loaderVersion, apiError.localizedDescription ?: @"未知错误"]];
                         }
                     });
                 }];
             } else {
+                [[DownloadTaskManager sharedManager] setTaskWithId:fabricTaskId completedWithError:nil];
                 [strongSelf finishInstallerProgressWithSuccess:[NSString stringWithFormat:@"Fabric %@ 安装成功", loaderVersion]];
             }
         });
     }];
+    fabricTaskItem.rawTask = dataTask;
+    [[DownloadTaskManager sharedManager] setTaskWithId:fabricTaskId state:DownloadTaskStateDownloading];
     [dataTask resume];
 }
 
@@ -3671,9 +3718,17 @@
     progressVC.stageMessage = @"正在下载整合包文件...";
     [self.navigationController pushViewController:progressVC animated:YES];
 
-    NSURLSessionDownloadTask *task = [[NSURLSession sharedSession] downloadTaskWithURL:[NSURL URLWithString:downloadURL] completionHandler:^(NSURL *location, NSURLResponse *response, NSError *error) {
+    NSURL *url = [NSURL URLWithString:downloadURL];
+    NSString *downloadSource = getPrefObject(@"general.download_source") ?: @"official";
+    __block DownloadTaskItem *taskItem = nil;
+    NSURLSessionDownloadTask *task = [[NSURLSession sharedSession] downloadTaskWithURL:url completionHandler:^(NSURL *location, NSURLResponse *response, NSError *error) {
         dispatch_async(dispatch_get_main_queue(), ^{
             if (error) {
+                if (error.code == NSURLErrorCancelled) {
+                    [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId state:DownloadTaskStateCancelled];
+                } else {
+                    [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId completedWithError:error];
+                }
                 [self.navigationController popViewControllerAnimated:YES];
                 [self showError:error.localizedDescription];
                 return;
@@ -3681,7 +3736,16 @@
             // 移动到临时文件
             NSString *tempPath = [NSTemporaryDirectory() stringByAppendingPathComponent:[NSString stringWithFormat:@"%@_%@.mrpack", modpack[@"id"] ?: @"modpack", [[NSUUID UUID] UUIDString]]];
             [[NSFileManager defaultManager] removeItemAtPath:tempPath error:nil];
-            [[NSFileManager defaultManager] moveItemAtPath:location.path toPath:tempPath error:nil];
+            NSError *moveError = nil;
+            [[NSFileManager defaultManager] moveItemAtPath:location.path toPath:tempPath error:&moveError];
+            if (moveError) {
+                [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId completedWithError:moveError];
+                [self.navigationController popViewControllerAnimated:YES];
+                [self showError:moveError.localizedDescription];
+                return;
+            }
+
+            [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId completedWithError:nil];
 
             // 复用 ModpackImportService 完成解析和导入
             progressVC.progress = 0.1;
@@ -3739,6 +3803,17 @@
             });
         });
     }];
+
+    taskItem = [[DownloadTaskManager sharedManager]
+        registerTaskWithResourceType:DownloadTaskResourceTypeModpack
+                        resourceName:modpack[@"title"] ?: @"modpack"
+                         displayName:modpack[@"title"] ?: @"整合包"
+                      downloadSource:downloadSource
+                             rawTask:task
+                      supportsResume:YES
+                             iconURL:modpack[@"imageUrl"]];
+    [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId state:DownloadTaskStateDownloading];
+
     [task resume];
 }
 
@@ -4127,74 +4202,65 @@
 }
 
 - (void)startDownloadForAssetItem:(ModItem *)item type:(NSString *)type {
-    // FCL 风格：push 进度页（不确定模式），替代 alert 转圈
+    // FCL 风格：push 进度页，替代 alert 转圈
     InstallerProgressViewController *progressVC = [[InstallerProgressViewController alloc] init];
     progressVC.titleText = [NSString stringWithFormat:@"正在下载 %@", item.displayName ?: @""];
     progressVC.progress = -1;
     progressVC.stageMessage = [NSString stringWithFormat:@"正在下载%@...", [type isEqualToString:@"datapack"] ? @"数据包" : @"资源包"];
     [self.navigationController pushViewController:progressVC animated:YES];
 
-    // 目标目录：resourcepacks / datapacks
-    NSString *folderName = [type isEqualToString:@"datapack"] ? @"datapacks" : @"resourcepacks";
-    NSString *baseDir;
-    const char *env = getenv("POJAV_GAME_DIR");
-    if (env) {
-        baseDir = [NSString stringWithUTF8String:env];
-    } else {
-        baseDir = NSHomeDirectory();
-    }
-
-    NSString *profileName = PLProfiles.current.selectedProfileName;
-    if (profileName.length > 0) {
-        NSDictionary *profiles = PLProfiles.current.profiles;
-        NSDictionary *prof = profiles[profileName];
-        if ([prof isKindOfClass:[NSDictionary class]]) {
-            NSString *gameDir = prof[@"gameDir"];
-            if ([gameDir isKindOfClass:[NSString class]] && gameDir.length > 0 && ![gameDir isEqualToString:@"."]) {
-                if ([gameDir isAbsolutePath]) {
-                    baseDir = gameDir;
-                } else {
-                    baseDir = [baseDir stringByAppendingPathComponent:gameDir];
-                }
-            }
-        }
-    }
-
-    NSString *destDir = [baseDir stringByAppendingPathComponent:folderName];
-    [[NSFileManager defaultManager] createDirectoryAtPath:destDir withIntermediateDirectories:YES attributes:nil error:nil];
-    NSString *destPath = [destDir stringByAppendingPathComponent:item.fileName ?: [NSString stringWithFormat:@"%@.zip", item.displayName]];
-
-    NSURL *url = [NSURL URLWithString:item.selectedVersionDownloadURL];
-    if (!url) {
-        __weak typeof(self) weakSelf = self;
-        [self.navigationController popViewControllerAnimated:YES];
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            [weakSelf showError:@"无效的下载链接"];
-        });
-        return;
-    }
+    // 使用 ShaderItem 作为资源包/数据包的数据载体（与 Service 约定一致）
+    ShaderItem *assetItem = [[ShaderItem alloc] init];
+    assetItem.displayName = item.displayName;
+    assetItem.fileName = item.fileName;
+    assetItem.selectedVersionDownloadURL = item.selectedVersionDownloadURL;
+    assetItem.iconURL = item.iconURL;
 
     __weak typeof(self) weakSelf = self;
-    NSURLSessionDownloadTask *task = [[NSURLSession sharedSession] downloadTaskWithURL:url completionHandler:^(NSURL *location, NSURLResponse *response, NSError *error) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            __strong typeof(weakSelf) strongSelf = weakSelf;
-            if (!strongSelf) return;
-            [strongSelf.navigationController popViewControllerAnimated:YES];
-            if (error) {
-                [strongSelf showError:error.localizedDescription];
-                return;
-            }
-            [[NSFileManager defaultManager] removeItemAtPath:destPath error:nil];
-            NSError *moveError = nil;
-            [[NSFileManager defaultManager] moveItemAtPath:location.path toPath:destPath error:&moveError];
-            if (moveError) {
-                [strongSelf showError:moveError.localizedDescription];
-            } else {
-                [strongSelf showSuccessMessage:[NSString stringWithFormat:@"%@ 已安装到 %@", item.displayName, folderName]];
-            }
-        });
-    }];
-    [task resume];
+    __weak InstallerProgressViewController *weakProgressVC = progressVC;
+    if ([type isEqualToString:@"datapack"]) {
+        [[DataPackService sharedService] downloadDataPack:assetItem
+                                                toProfile:PLProfiles.current
+                                                 progress:^(NSProgress * _Nullable downloadProgress) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (downloadProgress && weakProgressVC) {
+                    weakProgressVC.progress = downloadProgress.fractionCompleted;
+                }
+            });
+        } completion:^(BOOL success, NSError * _Nullable error) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                __strong typeof(weakSelf) strongSelf = weakSelf;
+                if (!strongSelf) return;
+                [strongSelf.navigationController popViewControllerAnimated:YES];
+                if (success && !error) {
+                    [strongSelf showSuccessMessage:[NSString stringWithFormat:@"%@ 已安装到 datapacks", item.displayName]];
+                } else {
+                    [strongSelf showError:error.localizedDescription ?: @"数据包下载失败"];
+                }
+            });
+        }];
+    } else {
+        [[ResourcePackService sharedService] downloadResourcePack:assetItem
+                                                        toProfile:PLProfiles.current
+                                                         progress:^(NSProgress * _Nullable downloadProgress) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (downloadProgress && weakProgressVC) {
+                    weakProgressVC.progress = downloadProgress.fractionCompleted;
+                }
+            });
+        } completion:^(BOOL success, NSError * _Nullable error) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                __strong typeof(weakSelf) strongSelf = weakSelf;
+                if (!strongSelf) return;
+                [strongSelf.navigationController popViewControllerAnimated:YES];
+                if (success && !error) {
+                    [strongSelf showSuccessMessage:[NSString stringWithFormat:@"%@ 已安装到 resourcepacks", item.displayName]];
+                } else {
+                    [strongSelf showError:error.localizedDescription ?: @"资源包下载失败"];
+                }
+            });
+        }];
+    }
 }
 
 // 下载世界存档并解压到 saves 目录（仿 FCL 安卓世界下载行为）

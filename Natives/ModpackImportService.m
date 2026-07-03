@@ -22,12 +22,26 @@
 #import "PLProfiles.h"
 #import "PLPreferences.h"
 #import "UnzipKit.h"
+#import "DownloadTaskManager.h"
+#import "DownloadTaskItem.h"
+#import "LauncherPreferences.h"
 
 static NSString * const kImportedModpacksKey = @"ImportedModpacks";
 
-@interface ModpackImportService ()
+@interface ModpackImportService () <NSURLSessionDownloadDelegate>
 /// 整合包工作区根目录: <POJAV_GAME_DIR>/custom_gamedir
 @property (nonatomic, strong) NSString *customGameDir;
+/// 用于下载 mod 文件、加载器 installer/profile json 的会话
+@property (nonatomic, strong) NSURLSession *downloadSession;
+/// task -> { success, location, error }
+@property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, NSMutableDictionary *> *downloadResults;
+/// task -> dispatch_semaphore_t，用于同步等待单个下载完成
+@property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, dispatch_semaphore_t> *downloadSemaphores;
+/// task -> DownloadTaskItem.taskId
+@property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, NSString *> *downloadTaskIds;
+/// task -> { lastTime, lastBytes }
+@property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, NSMutableDictionary *> *downloadProgressSnapshots;
+@property (nonatomic, strong) NSLock *downloadLock;
 @end
 
 @implementation ModpackImportService
@@ -43,6 +57,18 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
         if (![fm fileExistsAtPath:self.customGameDir]) {
             [fm createDirectoryAtPath:self.customGameDir withIntermediateDirectories:YES attributes:nil error:nil];
         }
+
+        NSURLSessionConfiguration *config = [NSURLSessionConfiguration defaultSessionConfiguration];
+        config.timeoutIntervalForRequest = 120.0;
+        config.timeoutIntervalForResource = 300.0;
+        config.allowsCellularAccess = YES;
+        config.HTTPMaximumConnectionsPerHost = 6;
+        _downloadSession = [NSURLSession sessionWithConfiguration:config delegate:self delegateQueue:nil];
+        _downloadResults = [NSMutableDictionary dictionary];
+        _downloadSemaphores = [NSMutableDictionary dictionary];
+        _downloadTaskIds = [NSMutableDictionary dictionary];
+        _downloadProgressSnapshots = [NSMutableDictionary dictionary];
+        _downloadLock = [[NSLock alloc] init];
     }
     return self;
 }
@@ -439,6 +465,8 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
 
     NSUInteger total = files.count;
     NSUInteger successCount = 0;
+    NSString *downloadSource = getPrefObject(@"general.download_source") ?: @"official";
+    NSString *iconURL = modpackInfo[@"iconBase64"];
 
     if ([format isEqualToString:@"modrinth"]) {
         // Modrinth: 直接下载
@@ -454,14 +482,30 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
             // 这里只处理 mods/ 开头的 (避免重复下载 overrides)
             if (![relPath hasPrefix:@"mods/"]) continue;
 
-            NSString *destPath = [modsDir stringByAppendingPathComponent:relPath.lastPathComponent];
-            if ([self downloadFileFromURL:url toPath:destPath]) {
+            NSString *fileName = relPath.lastPathComponent;
+            NSString *destPath = [modsDir stringByAppendingPathComponent:fileName];
+
+            NSURLSessionDownloadTask *task = [self.downloadSession downloadTaskWithURL:[NSURL URLWithString:url]];
+            DownloadTaskItem *taskItem = [[DownloadTaskManager sharedManager]
+                registerTaskWithResourceType:DownloadTaskResourceTypeMod
+                                resourceName:fileName
+                                 displayName:fileName
+                              downloadSource:downloadSource
+                                     rawTask:task
+                              supportsResume:YES
+                                     iconURL:iconURL];
+            [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId state:DownloadTaskStateDownloading];
+
+            NSError *dlError = nil;
+            if ([self downloadFileFromURL:url toPath:destPath taskId:taskItem.taskId task:task error:&dlError]) {
                 successCount++;
+            } else {
+                NSLog(@"[ModpackImport] mod 下载失败 %@: %@", fileName, dlError.localizedDescription);
             }
 
             if (progress) {
                 double p = 0.15 + 0.70 * ((double)(i + 1) / (double)total);
-                if (progress) progress(p, [NSString stringWithFormat:@"下载 mod %lu/%lu: %@", (unsigned long)(i+1), (unsigned long)total, relPath.lastPathComponent]);
+                progress(p, [NSString stringWithFormat:@"下载 mod %lu/%lu: %@", (unsigned long)(i+1), (unsigned long)total, fileName]);
             }
         }
     } else if ([format isEqualToString:@"curseforge"]) {
@@ -476,14 +520,30 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
             NSString *downloadURL = [self fetchCurseForgeFileURL:projectID.longLongValue fileID:fileID.longLongValue];
             if (!downloadURL) continue;
 
-            NSString *destPath = [modsDir stringByAppendingPathComponent:[NSString stringWithFormat:@"%@-%@.jar", projectID, fileID]];
-            if ([self downloadFileFromURL:downloadURL toPath:destPath]) {
+            NSString *fileName = [NSString stringWithFormat:@"%@-%@.jar", projectID, fileID];
+            NSString *destPath = [modsDir stringByAppendingPathComponent:fileName];
+
+            NSURLSessionDownloadTask *task = [self.downloadSession downloadTaskWithURL:[NSURL URLWithString:downloadURL]];
+            DownloadTaskItem *taskItem = [[DownloadTaskManager sharedManager]
+                registerTaskWithResourceType:DownloadTaskResourceTypeMod
+                                resourceName:fileName
+                                 displayName:fileName
+                              downloadSource:downloadSource
+                                     rawTask:task
+                              supportsResume:YES
+                                     iconURL:iconURL];
+            [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId state:DownloadTaskStateDownloading];
+
+            NSError *dlError = nil;
+            if ([self downloadFileFromURL:downloadURL toPath:destPath taskId:taskItem.taskId task:task error:&dlError]) {
                 successCount++;
+            } else {
+                NSLog(@"[ModpackImport] mod 下载失败 %@: %@", fileName, dlError.localizedDescription);
             }
 
             if (progress) {
                 double p = 0.15 + 0.70 * ((double)(i + 1) / (double)total);
-                if (progress) progress(p, [NSString stringWithFormat:@"下载 mod %lu/%lu (CurseForge)", (unsigned long)(i+1), (unsigned long)total]);
+                progress(p, [NSString stringWithFormat:@"下载 mod %lu/%lu (CurseForge)", (unsigned long)(i+1), (unsigned long)total]);
             }
         }
     }
@@ -492,18 +552,176 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
     return YES;
 }
 
-/// 简单的同步文件下载
-- (BOOL)downloadFileFromURL:(NSString *)urlString toPath:(NSString *)destPath {
+/// 同步下载单个文件，并关联到已注册的 DownloadTaskItem(taskId)。
+/// 如果传入 existingTask，则直接使用该任务；否则内部创建新的下载任务。
+/// 返回 YES 表示文件已成功保存到 destPath；NO 表示下载或保存失败。
+- (BOOL)downloadFileFromURL:(NSString *)urlString
+                     toPath:(NSString *)destPath
+                     taskId:(nullable NSString *)taskId
+                       task:(nullable NSURLSessionDownloadTask *)existingTask
+                      error:(NSError **)outError {
     NSURL *url = [NSURL URLWithString:urlString];
-    if (!url) return NO;
-
-    NSError *error = nil;
-    NSData *data = [NSData dataWithContentsOfURL:url options:NSDataReadingUncached error:&error];
-    if (!data || error) {
-        NSLog(@"[ModpackImport] 下载失败 %@: %@", urlString, error.localizedDescription);
+    if (!url) {
+        NSError *invalidURLError = [NSError errorWithDomain:@"ModpackImportError"
+                                                       code:5001
+                                                   userInfo:@{NSLocalizedDescriptionKey: @"无效的下载链接"}];
+        if (outError) *outError = invalidURLError;
+        if (taskId) [[DownloadTaskManager sharedManager] setTaskWithId:taskId completedWithError:invalidURLError];
         return NO;
     }
-    return [data writeToFile:destPath options:NSDataWritingAtomic error:&error];
+
+    NSURLSessionDownloadTask *task = existingTask ?: [self.downloadSession downloadTaskWithURL:url];
+    NSMutableDictionary *result = [NSMutableDictionary dictionary];
+    dispatch_semaphore_t sema = dispatch_semaphore_create(0);
+
+    [self.downloadLock lock];
+    self.downloadResults[task] = result;
+    self.downloadSemaphores[task] = sema;
+    if (taskId) self.downloadTaskIds[task] = taskId;
+    [self.downloadLock unlock];
+
+    [task resume];
+    dispatch_semaphore_wait(sema, DISPATCH_TIME_FOREVER);
+
+    [self.downloadLock lock];
+    [self.downloadResults removeObjectForKey:task];
+    [self.downloadSemaphores removeObjectForKey:task];
+    [self.downloadTaskIds removeObjectForKey:task];
+    [self.downloadProgressSnapshots removeObjectForKey:task];
+    [self.downloadLock unlock];
+
+    BOOL success = [result[@"success"] boolValue];
+    NSError *downloadError = result[@"error"];
+    NSURL *location = result[@"location"];
+
+    if (!success) {
+        if (outError) *outError = downloadError;
+        return NO;
+    }
+    if (!location) {
+        NSError *noLocationError = [NSError errorWithDomain:@"ModpackImportError"
+                                                       code:5002
+                                                   userInfo:@{NSLocalizedDescriptionKey: @"下载完成但缺少临时文件"}];
+        if (outError) *outError = noLocationError;
+        if (taskId) [[DownloadTaskManager sharedManager] setTaskWithId:taskId completedWithError:noLocationError];
+        return NO;
+    }
+
+    NSFileManager *fm = [NSFileManager defaultManager];
+    NSString *dir = [destPath stringByDeletingLastPathComponent];
+    if (![fm fileExistsAtPath:dir]) {
+        [fm createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:nil error:nil];
+    }
+    if ([fm fileExistsAtPath:destPath]) {
+        [fm removeItemAtPath:destPath error:nil];
+    }
+
+    NSError *moveError = nil;
+    if (![fm moveItemAtURL:location toURL:[NSURL fileURLWithPath:destPath] error:&moveError]) {
+        if (outError) *outError = moveError;
+        if (taskId) [[DownloadTaskManager sharedManager] setTaskWithId:taskId completedWithError:moveError];
+        return NO;
+    }
+
+    if (taskId) [[DownloadTaskManager sharedManager] setTaskWithId:taskId completedWithError:nil];
+    return YES;
+}
+
+#pragma mark - NSURLSessionDownloadDelegate
+
+- (void)URLSession:(NSURLSession *)session
+      downloadTask:(NSURLSessionDownloadTask *)downloadTask
+      didWriteData:(int64_t)bytesWritten
+ totalBytesWritten:(int64_t)totalBytesWritten
+totalBytesExpectedToWrite:(int64_t)totalBytesExpectedToWrite {
+    [self.downloadLock lock];
+    NSString *taskId = self.downloadTaskIds[downloadTask];
+    NSMutableDictionary *snapshot = self.downloadProgressSnapshots[downloadTask];
+    [self.downloadLock unlock];
+
+    if (!taskId) return;
+
+    double fraction = totalBytesExpectedToWrite > 0 ? (double)totalBytesWritten / (double)totalBytesExpectedToWrite : -1.0;
+    NSTimeInterval now = [NSDate date].timeIntervalSince1970;
+    double speed = 0.0;
+    NSTimeInterval eta = 0.0;
+
+    if (snapshot) {
+        NSTimeInterval lastTime = [snapshot[@"lastTime"] doubleValue];
+        int64_t lastBytes = [snapshot[@"lastBytes"] longLongValue];
+        if (lastTime > 0 && now > lastTime) {
+            speed = (double)(totalBytesWritten - lastBytes) / (now - lastTime);
+            if (speed > 0 && totalBytesExpectedToWrite > totalBytesWritten) {
+                eta = (double)(totalBytesExpectedToWrite - totalBytesWritten) / speed;
+            }
+        }
+    } else {
+        snapshot = [NSMutableDictionary dictionary];
+        [self.downloadLock lock];
+        self.downloadProgressSnapshots[downloadTask] = snapshot;
+        [self.downloadLock unlock];
+    }
+    snapshot[@"lastTime"] = @(now);
+    snapshot[@"lastBytes"] = @(totalBytesWritten);
+
+    [[DownloadTaskManager sharedManager] updateTaskWithId:taskId
+                                                 progress:fraction
+                                               totalBytes:totalBytesExpectedToWrite
+                                          downloadedBytes:totalBytesWritten];
+    [[DownloadTaskManager sharedManager] updateTaskWithId:taskId
+                                                    speed:speed
+                                   estimatedTimeRemaining:eta];
+}
+
+- (void)URLSession:(NSURLSession *)session
+      downloadTask:(NSURLSessionDownloadTask *)downloadTask
+didFinishDownloadingToURL:(NSURL *)location {
+    [self.downloadLock lock];
+    NSMutableDictionary *result = self.downloadResults[downloadTask];
+    [self.downloadLock unlock];
+    if (result) {
+        result[@"location"] = location;
+        result[@"success"] = @YES;
+    }
+}
+
+- (void)URLSession:(NSURLSession *)session task:(NSURLSessionTask *)task didCompleteWithError:(NSError *)error {
+    [self.downloadLock lock];
+    NSMutableDictionary *result = self.downloadResults[task];
+    dispatch_semaphore_t sema = self.downloadSemaphores[task];
+    NSString *taskId = self.downloadTaskIds[task];
+    BOOL alreadySuccessful = [result[@"success"] boolValue];
+    [self.downloadLock unlock];
+
+    if (taskId) {
+        if (error) {
+            if (error.code == NSURLErrorCancelled) {
+                [[DownloadTaskManager sharedManager] setTaskWithId:taskId state:DownloadTaskStateCancelled];
+            } else {
+                [[DownloadTaskManager sharedManager] setTaskWithId:taskId completedWithError:error];
+            }
+        } else if (!alreadySuccessful) {
+            // 没有文件数据但流程结束，标记为失败
+            NSError *unknownError = [NSError errorWithDomain:@"ModpackImportError"
+                                                        code:5003
+                                                    userInfo:@{NSLocalizedDescriptionKey: @"下载未完成"}];
+            [[DownloadTaskManager sharedManager] setTaskWithId:taskId completedWithError:unknownError];
+        }
+    }
+
+    if (result) {
+        if (error && !alreadySuccessful) {
+            result[@"success"] = @NO;
+            result[@"error"] = error;
+        } else if (!alreadySuccessful) {
+            result[@"success"] = @NO;
+            result[@"error"] = [NSError errorWithDomain:@"ModpackImportError"
+                                                     code:5003
+                                                 userInfo:@{NSLocalizedDescriptionKey: @"下载未完成"}];
+        }
+    }
+
+    if (sema) dispatch_semaphore_signal(sema);
 }
 
 /// 通过 CurseForge API 获取 mod 文件的下载链接
@@ -532,6 +750,7 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
         return NO;
     }
 
+    NSString *downloadSource = getPrefObject(@"general.download_source") ?: @"official";
     NSString *versionDir = [gameDirAbsolute stringByAppendingPathComponent:[NSString stringWithFormat:@"versions/%@", versionId]];
     NSString *versionJsonPath = [versionDir stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.json", versionId]];
     NSFileManager *fm = [NSFileManager defaultManager];
@@ -551,13 +770,25 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
         }
         NSString *jsonURL = [NSString stringWithFormat:jsonURLTemplate, minecraftVersion, loaderVersion];
         NSURL *url = [NSURL URLWithString:jsonURL];
+
+        NSString *displayName = [NSString stringWithFormat:@"%@ %@ profile", loader, loaderVersion];
+        NSURLSessionDownloadTask *task = [self.downloadSession downloadTaskWithURL:url];
+        DownloadTaskItem *taskItem = [[DownloadTaskManager sharedManager]
+            registerTaskWithResourceType:DownloadTaskResourceTypeModloader
+                            resourceName:versionId
+                             displayName:displayName
+                          downloadSource:downloadSource
+                                 rawTask:task
+                          supportsResume:YES
+                                 iconURL:nil];
+        [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId state:DownloadTaskStateDownloading];
+
         NSError *dlError = nil;
-        NSData *jsonData = [NSData dataWithContentsOfURL:url options:NSDataReadingUncached error:&dlError];
-        if (!jsonData || dlError) {
+        if (![self downloadFileFromURL:jsonURL toPath:versionJsonPath taskId:taskItem.taskId task:task error:&dlError]) {
             if (error) *error = dlError;
             return NO;
         }
-        return [jsonData writeToFile:versionJsonPath options:NSDataWritingAtomic error:error];
+        return YES;
     }
 
     // Forge/NeoForge: 下载 installer.jar 并调用直装器写入 modpack 的 gameDir
@@ -578,8 +809,21 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
     // 下载 installer.jar 到临时目录
     NSString *tmpInstallerPath = [NSTemporaryDirectory() stringByAppendingPathComponent:
                                   [NSString stringWithFormat:@"%@-installer.jar", versionId]];
+
+    NSString *installerDisplayName = [NSString stringWithFormat:@"%@ %@ installer", loader, loaderVersion];
+    NSURLSessionDownloadTask *installerTask = [self.downloadSession downloadTaskWithURL:[NSURL URLWithString:installerURL]];
+    DownloadTaskItem *installerItem = [[DownloadTaskManager sharedManager]
+        registerTaskWithResourceType:DownloadTaskResourceTypeModloader
+                        resourceName:versionId
+                         displayName:installerDisplayName
+                      downloadSource:downloadSource
+                             rawTask:installerTask
+                      supportsResume:YES
+                             iconURL:nil];
+    [[DownloadTaskManager sharedManager] setTaskWithId:installerItem.taskId state:DownloadTaskStateDownloading];
+
     NSError *dlError = nil;
-    if (![self downloadFileFromURL:installerURL toPath:tmpInstallerPath]) {
+    if (![self downloadFileFromURL:installerURL toPath:tmpInstallerPath taskId:installerItem.taskId task:installerTask error:&dlError]) {
         // installer.jar 下载失败：回退到写占位 JSON（至少让 profile 不崩，用户可手动装）
         NSLog(@"[ModpackImport] %@ installer.jar 下载失败，回退到占位 JSON: %@", loader, installerURL);
         NSInteger javaMajor = [self javaMajorVersionForMC:minecraftVersion];
@@ -622,6 +866,7 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
 
     if (!installSuccess) {
         NSLog(@"[ModpackImport] %@ 直装失败，回退到占位 JSON: %@", loader, installError.localizedDescription);
+        [[DownloadTaskManager sharedManager] setTaskWithId:installerItem.taskId completedWithError:installError];
         // 直装失败：写占位 JSON 兜底（用户可手动装）
         NSDictionary *placeholderJSON = @{
             @"_comment_": [NSString stringWithFormat:@"此整合包需要 %@ %@ 加载器，自动安装失败：%@。请通过下载界面手动安装。", loader, loaderVersion, installError.localizedDescription ?: @"未知错误"],
