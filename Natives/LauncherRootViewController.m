@@ -292,9 +292,11 @@ static const CGFloat kRightPanelWidth = 220.0;  // 右侧面板宽度
 }
 
 - (void)showDownloadPage {
-    // 在中间内容区显示下载页面
+    // 在中间内容区显示下载页面，包在 NavigationController 中以便子流程（版本选择/安装器）push 显示
     DownloadViewController *downloadVC = [[DownloadViewController alloc] init];
-    [self setContentViewController:downloadVC animated:YES];
+    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:downloadVC];
+    nav.navigationBar.prefersLargeTitles = NO;
+    [self setContentViewController:nav animated:YES];
 }
 
 - (void)showVersionManager {

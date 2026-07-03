@@ -12,6 +12,7 @@ static const NSInteger kCurseForgeGameIDMinecraft = 432;
 static const NSInteger kCurseForgeClassIDBukkitPlugins = 5;
 static const NSInteger kCurseForgeClassIDMods = 6;
 static const NSInteger kCurseForgeClassIDResourcePacks = 12;
+static const NSInteger kCurseForgeClassIDWorlds = 17;
 static const NSInteger kCurseForgeClassIDModpacks = 4471;
 static const NSInteger kCurseForgeClassIDShaders = 6552;
 static const NSInteger kCurseForgeClassIDDataPacks = 6945;
@@ -320,6 +321,9 @@ static NSString *CFACompiledAPIKey(void) {
     if ([projectType isEqualToString:@"resourcepack"]) {
         return @(kCurseForgeClassIDResourcePacks);
     }
+    if ([projectType isEqualToString:@"world"]) {
+        return @(kCurseForgeClassIDWorlds);
+    }
     return @(kCurseForgeClassIDMods);
 }
 
@@ -327,7 +331,8 @@ static NSString *CFACompiledAPIKey(void) {
     if ([projectType isEqualToString:@"shader"] ||
         [projectType isEqualToString:@"resourcepack"] ||
         [projectType isEqualToString:@"datapack"] ||
-        [projectType isEqualToString:@"modpack"]) {
+        [projectType isEqualToString:@"modpack"] ||
+        [projectType isEqualToString:@"world"]) {
         return @[@"zip"];
     }
     return @[@"jar"];

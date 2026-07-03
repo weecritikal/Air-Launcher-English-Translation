@@ -25,6 +25,7 @@
 #import "installer/ModpackInstallViewController.h"
 #import "ModpackImportViewController.h"
 #import "installer/CurseForgeAPIKeyViewController.h"
+#import "UZKArchive.h"
 #import <QuartzCore/QuartzCore.h>
 #import "JavaGUIViewController.h"
 #import "utils.h"
@@ -1040,6 +1041,14 @@
 @property (nonatomic, assign) BOOL isLoadingDatapacks;
 @property (nonatomic, strong) NSString *datapackSearchQuery;
 
+// 世界相关属性（仿 FCL 安卓新增世界下载分类）
+@property (nonatomic, strong) UITableView *worldTableView;
+@property (nonatomic, strong) NSMutableArray *worldList;
+@property (nonatomic, assign) NSInteger currentWorldOffset;
+@property (nonatomic, assign) BOOL hasMoreWorlds;
+@property (nonatomic, assign) BOOL isLoadingWorlds;
+@property (nonatomic, strong) NSString *worldSearchQuery;
+
 // 源切换 UI（仿 FCL 安卓风格的圆角胶囊切换器：Modrinth 绿 / CurseForge 橙）
 @property (nonatomic, strong) UIView *sourceSwitchContainer;
 @property (nonatomic, strong) UIView *sourceSwitchTrack;        // 圆角胶囊背景轨道
@@ -1088,23 +1097,26 @@
     self.modpackList = [NSMutableArray array]; // 新增
     self.resourcepackList = [NSMutableArray array];
     self.datapackList = [NSMutableArray array];
+    self.worldList = [NSMutableArray array];
     self.currentModOffset = 0;
     self.currentShaderOffset = 0;
     self.currentModpackOffset = 0;
     self.currentResourcepackOffset = 0;
     self.currentDatapackOffset = 0;
+    self.currentWorldOffset = 0;
     self.hasMoreMods = YES;
     self.hasMoreShaders = YES;
     self.hasMoreModpacks = YES;
     self.hasMoreResourcepacks = YES;
     self.hasMoreDatapacks = YES;
+    self.hasMoreWorlds = YES;
     self.currentSortField = @"follows";
     self.isObservingProgress = NO;
-    
+
     [self setupUI];
     [self switchToTab:0];
     [self loadVersionList];
-    
+
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(handleBackgroundUIEffectChanged:)
                                                  name:@"BackgroundUIEffectChanged"
@@ -1122,13 +1134,14 @@
     [self setupModpackTableView]; // 新增
     [self setupResourcepackTableView];
     [self setupDatapackTableView];
+    [self setupWorldTableView];
     [self setupLoadingIndicator];
     [self setupEmptyLabel];
 }
 
 - (void)setupTabSegment {
-    // 精简标签文字，避免 6 段在窄屏上拥挤截断
-    self.tabSegment = [[UISegmentedControl alloc] initWithItems:@[@"版本", @"模组", @"光影", @"资源包", @"数据包", @"整合包"]];
+    // 精简标签文字，避免在窄屏上拥挤截断
+    self.tabSegment = [[UISegmentedControl alloc] initWithItems:@[@"版本", @"模组", @"光影", @"资源包", @"数据包", @"整合包", @"世界"]];
     self.tabSegment.translatesAutoresizingMaskIntoConstraints = NO;
     self.tabSegment.selectedSegmentIndex = 0;
     [self.tabSegment addTarget:self action:@selector(tabChanged:) forControlEvents:UIControlEventValueChanged];
@@ -1327,6 +1340,30 @@
     ]];
 }
 
+- (void)setupWorldTableView {
+    self.worldTableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
+    self.worldTableView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.worldTableView.backgroundColor = [UIColor clearColor];
+    self.worldTableView.dataSource = self;
+    self.worldTableView.delegate = self;
+    self.worldTableView.rowHeight = 100;
+    self.worldTableView.separatorStyle = UITableViewCellSeparatorStyleNone;
+    [self.worldTableView registerClass:[ModernAssetCell class] forCellReuseIdentifier:@"WorldCell"];
+    self.worldTableView.hidden = YES;
+    [self.view addSubview:self.worldTableView];
+
+    UIRefreshControl *refreshControl = [[UIRefreshControl alloc] init];
+    [refreshControl addTarget:self action:@selector(refreshWorldList) forControlEvents:UIControlEventValueChanged];
+    self.worldTableView.refreshControl = refreshControl;
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.worldTableView.topAnchor constraintEqualToAnchor:self.sourceSwitchContainer.bottomAnchor constant:4],
+        [self.worldTableView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.worldTableView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.worldTableView.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor]
+    ]];
+}
+
 - (void)setupSourceSwitch {
     // 仿 FCL 安卓风格：居中的圆角胶囊切换器，带彩色滑块与品牌色
     self.sourceSwitchContainer = [[UIView alloc] init];
@@ -1457,6 +1494,7 @@
         self.resourcepackTableView.hidden = (index != 3);
         self.datapackTableView.hidden = (index != 4);
         self.modpackTableView.hidden = (index != 5);
+        self.worldTableView.hidden = (index != 6);
     } completion:nil];
 
     // 源切换仅在非版本 tab 显示
@@ -1497,6 +1535,12 @@
         if (self.modpackList.count == 0) {
             [self loadModpackList];
         }
+    } else if (index == 6) {
+        self.searchBar.placeholder = @"搜索世界...";
+        [self updateSourceSwitchButtonsForType:@"world"];
+        if (self.worldList.count == 0) {
+            [self loadWorldList];
+        }
     }
 }
 
@@ -1530,6 +1574,7 @@
     if ([type isEqualToString:@"resourcepack"]) return 3;
     if ([type isEqualToString:@"datapack"]) return 4;
     if ([type isEqualToString:@"modpack"]) return 5;
+    if ([type isEqualToString:@"world"]) return 6;
     return 0;
 }
 
@@ -1540,6 +1585,7 @@
         case 3: return @"resourcepack";
         case 4: return @"datapack";
         case 5: return @"modpack";
+        case 6: return @"world";
         default: return @"mod";
     }
 }
@@ -1552,6 +1598,7 @@
         case 3: return @"resourcepack";
         case 4: return @"datapack";
         case 5: return @"modpack";
+        case 6: return @"world";
         default: return @"mod";
     }
 }
@@ -2032,6 +2079,75 @@
     [self loadDataPackList];
 }
 
+#pragma mark - World 加载
+
+- (void)refreshWorldList {
+    self.currentWorldOffset = 0;
+    self.hasMoreWorlds = YES;
+    [self.worldList removeAllObjects];
+    [self loadWorldList];
+}
+
+- (void)loadWorldList {
+    if (self.isLoadingWorlds) return;
+    self.isLoadingWorlds = YES;
+
+    if (self.currentWorldOffset == 0) {
+        [self.loadingIndicator startAnimating];
+    }
+
+    NSMutableDictionary *filters = [NSMutableDictionary dictionary];
+    filters[@"limit"] = @30;
+    filters[@"offset"] = @(self.currentWorldOffset);
+    filters[@"projectType"] = @"world";
+
+    if (self.worldSearchQuery.length > 0) {
+        filters[@"query"] = self.worldSearchQuery;
+    }
+    if (self.currentGameVersion.length > 0) {
+        filters[@"version"] = self.currentGameVersion;
+    }
+
+    __weak typeof(self) weakSelf = self;
+    id api = [self currentAPIForTabType:@"world"];
+    [api searchModWithFilters:filters completion:^(NSArray * _Nullable results, NSError * _Nullable error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) return;
+            [strongSelf.loadingIndicator stopAnimating];
+            [strongSelf.worldTableView.refreshControl endRefreshing];
+            strongSelf.isLoadingWorlds = NO;
+
+            if (results) {
+                if (strongSelf.currentWorldOffset == 0) {
+                    [strongSelf.worldList removeAllObjects];
+                }
+                [strongSelf.worldList addObjectsFromArray:results];
+                strongSelf.hasMoreWorlds = (results.count >= 30);
+                strongSelf.currentWorldOffset += results.count;
+
+                [strongSelf.worldTableView reloadData];
+                strongSelf.emptyLabel.hidden = (strongSelf.worldList.count > 0);
+                if (strongSelf.worldList.count == 0) {
+                    strongSelf.emptyLabel.text = @"暂无世界";
+                    strongSelf.emptyLabel.hidden = NO;
+                }
+            } else if (error) {
+                [strongSelf showError:error.localizedDescription];
+            }
+        });
+    }];
+}
+
+- (void)searchWorlds:(NSString *)query {
+    self.worldSearchQuery = query;
+    self.currentWorldOffset = 0;
+    self.hasMoreWorlds = YES;
+    [self.worldList removeAllObjects];
+    [self.worldTableView reloadData];
+    [self loadWorldList];
+}
+
 #pragma mark - Filter Options
 
 - (void)showFilterOptions {
@@ -2231,6 +2347,10 @@
         targetTable = self.modpackTableView;
         self.currentModpackOffset = 0;
         [self.modpackList removeAllObjects];
+    } else if (tabIndex == 6) {
+        targetTable = self.worldTableView;
+        self.currentWorldOffset = 0;
+        [self.worldList removeAllObjects];
     }
 
     [UIView animateWithDuration:0.15 animations:^{
@@ -2242,6 +2362,7 @@
             case 3: [self loadResourcePackList]; break;
             case 4: [self loadDataPackList]; break;
             case 5: [self loadModpackList]; break;
+            case 6: [self loadWorldList]; break;
         }
         [UIView animateWithDuration:0.2 animations:^{
             targetTable.alpha = 1;
@@ -2273,6 +2394,8 @@
         [self searchDatapacks:searchBar.text];
     } else if (tabIndex == 5) {
         [self searchModpacks:searchBar.text];
+    } else if (tabIndex == 6) {
+        [self searchWorlds:searchBar.text];
     }
 }
 
@@ -2282,6 +2405,7 @@
     self.modpackSearchQuery = nil;
     self.resourcepackSearchQuery = nil;
     self.datapackSearchQuery = nil;
+    self.worldSearchQuery = nil;
     [searchBar resignFirstResponder];
     [self reloadCurrentList];
 }
@@ -3283,6 +3407,8 @@
         return self.resourcepackList.count + (self.hasMoreResourcepacks ? 1 : 0);
     } else if (tableView == self.datapackTableView) {
         return self.datapackList.count + (self.hasMoreDatapacks ? 1 : 0);
+    } else if (tableView == self.worldTableView) {
+        return self.worldList.count + (self.hasMoreWorlds ? 1 : 0);
     }
     return 0;
 }
@@ -3333,6 +3459,15 @@
         return cell;
     }
 
+    if (tableView == self.worldTableView && indexPath.row == self.worldList.count && self.hasMoreWorlds) {
+        UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:@"LoadingCell"];
+        cell.textLabel.text = @"加载更多...";
+        cell.textLabel.textAlignment = NSTextAlignmentCenter;
+        cell.textLabel.textColor = [UIColor secondaryLabelColor];
+        cell.backgroundColor = [UIColor clearColor];
+        return cell;
+    }
+
     ModernAssetCell *cell;
     if (tableView == self.modTableView) {
         cell = [tableView dequeueReusableCellWithIdentifier:@"ModCell" forIndexPath:indexPath];
@@ -3357,6 +3492,12 @@
         NSDictionary *datapack = self.datapackList[indexPath.row];
         [cell configureWithMod:datapack];
         [cell.downloadButton addTarget:self action:@selector(downloadDatapack:) forControlEvents:UIControlEventTouchUpInside];
+        cell.downloadButton.tag = indexPath.row;
+    } else if (tableView == self.worldTableView) {
+        cell = [tableView dequeueReusableCellWithIdentifier:@"WorldCell" forIndexPath:indexPath];
+        NSDictionary *world = self.worldList[indexPath.row];
+        [cell configureWithMod:world];
+        [cell.downloadButton addTarget:self action:@selector(downloadWorld:) forControlEvents:UIControlEventTouchUpInside];
         cell.downloadButton.tag = indexPath.row;
     } else {
         cell = [tableView dequeueReusableCellWithIdentifier:@"ModpackCell" forIndexPath:indexPath];
@@ -3388,6 +3529,10 @@
     if (tableView == self.datapackTableView && indexPath.row == self.datapackList.count - 5 && self.hasMoreDatapacks && !self.isLoadingDatapacks) {
         [self loadDataPackList];
     }
+
+    if (tableView == self.worldTableView && indexPath.row == self.worldList.count - 5 && self.hasMoreWorlds && !self.isLoadingWorlds) {
+        [self loadWorldList];
+    }
 }
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
@@ -3417,6 +3562,12 @@
             return;
         }
         [self downloadDatapackAtIndexPath:indexPath];
+    } else if (tableView == self.worldTableView) {
+        if (indexPath.row == self.worldList.count && self.hasMoreWorlds) {
+            [self loadWorldList];
+            return;
+        }
+        [self downloadWorldAtIndexPath:indexPath];
     } else if (tableView == self.modpackTableView) {
         if (indexPath.row == self.modpackList.count && self.hasMoreModpacks) {
             [self loadModpackList];
@@ -3442,10 +3593,10 @@
     ModVersionViewController *versionVC = [[ModVersionViewController alloc] init];
     versionVC.modItem = modItem;
     versionVC.delegate = self;
+    versionVC.title = modItem.displayName;
 
-    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:versionVC];
-    nav.modalPresentationStyle = UIModalPresentationFormSheet;
-    [self presentViewController:nav animated:YES completion:nil];
+    // 在中间内容区 push 显示，而非弹窗盖在下载列表之上（与 FCL 安卓一致）
+    [self.navigationController pushViewController:versionVC animated:YES];
 }
 
 - (void)downloadShader:(UIButton *)sender {
@@ -3462,10 +3613,9 @@
     ShaderVersionViewController *versionVC = [[ShaderVersionViewController alloc] init];
     versionVC.shaderItem = shaderItem;
     versionVC.delegate = self;
+    versionVC.title = shaderItem.displayName;
 
-    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:versionVC];
-    nav.modalPresentationStyle = UIModalPresentationFormSheet;
-    [self presentViewController:nav animated:YES completion:nil];
+    [self.navigationController pushViewController:versionVC animated:YES];
 }
 
 - (void)downloadResourcepack:(UIButton *)sender {
@@ -3484,10 +3634,9 @@
     ModVersionViewController *versionVC = [[ModVersionViewController alloc] init];
     versionVC.modItem = modItem;
     versionVC.delegate = self;
+    versionVC.title = modItem.displayName;
 
-    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:versionVC];
-    nav.modalPresentationStyle = UIModalPresentationFormSheet;
-    [self presentViewController:nav animated:YES completion:nil];
+    [self.navigationController pushViewController:versionVC animated:YES];
 }
 
 - (void)downloadDatapack:(UIButton *)sender {
@@ -3506,10 +3655,30 @@
     ModVersionViewController *versionVC = [[ModVersionViewController alloc] init];
     versionVC.modItem = modItem;
     versionVC.delegate = self;
+    versionVC.title = modItem.displayName;
 
-    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:versionVC];
-    nav.modalPresentationStyle = UIModalPresentationFormSheet;
-    [self presentViewController:nav animated:YES completion:nil];
+    [self.navigationController pushViewController:versionVC animated:YES];
+}
+
+- (void)downloadWorld:(UIButton *)sender {
+    NSIndexPath *indexPath = [NSIndexPath indexPathForRow:sender.tag inSection:0];
+    [self downloadWorldAtIndexPath:indexPath];
+}
+
+- (void)downloadWorldAtIndexPath:(NSIndexPath *)indexPath {
+    if (indexPath.row >= self.worldList.count) return;
+
+    NSDictionary *world = self.worldList[indexPath.row];
+    ModItem *modItem = [[ModItem alloc] initWithOnlineData:world];
+
+    self.pendingDownloadType = @"world";
+
+    ModVersionViewController *versionVC = [[ModVersionViewController alloc] init];
+    versionVC.modItem = modItem;
+    versionVC.delegate = self;
+    versionVC.title = modItem.displayName;
+
+    [self.navigationController pushViewController:versionVC animated:YES];
 }
 
 #pragma mark - ModVersionViewControllerDelegate
@@ -3529,13 +3698,15 @@
     NSString *downloadType = self.pendingDownloadType ?: @"mod";
     self.pendingDownloadType = nil;
 
-    [viewController dismissViewControllerAnimated:YES completion:^{
-        if ([downloadType isEqualToString:@"resourcepack"] || [downloadType isEqualToString:@"datapack"]) {
-            [self startDownloadForAssetItem:itemToDownload type:downloadType];
-        } else {
-            [self startDownloadForModItem:itemToDownload];
-        }
-    }];
+    // 子页面已 push 到导航栈，选完版本后 pop 回下载列表
+    [self.navigationController popViewControllerAnimated:YES];
+    if ([downloadType isEqualToString:@"resourcepack"] || [downloadType isEqualToString:@"datapack"]) {
+        [self startDownloadForAssetItem:itemToDownload type:downloadType];
+    } else if ([downloadType isEqualToString:@"world"]) {
+        [self startDownloadForWorldItem:itemToDownload];
+    } else {
+        [self startDownloadForModItem:itemToDownload];
+    }
 }
 
 - (void)startDownloadForModItem:(ModItem *)item {
@@ -3659,6 +3830,103 @@
     [task resume];
 }
 
+// 下载世界存档并解压到 saves 目录（仿 FCL 安卓世界下载行为）
+- (void)startDownloadForWorldItem:(ModItem *)item {
+    UIAlertController *downloadingAlert = [UIAlertController alertControllerWithTitle:@"正在下载"
+                                                                              message:item.displayName
+                                                                       preferredStyle:UIAlertControllerStyleAlert];
+
+    UIActivityIndicatorView *indicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
+    indicator.translatesAutoresizingMaskIntoConstraints = NO;
+    [downloadingAlert.view addSubview:indicator];
+    [NSLayoutConstraint activateConstraints:@[
+        [indicator.centerXAnchor constraintEqualToAnchor:downloadingAlert.view.centerXAnchor],
+        [indicator.centerYAnchor constraintEqualToAnchor:downloadingAlert.view.centerYAnchor constant:20]
+    ]];
+    [indicator startAnimating];
+
+    [self presentViewController:downloadingAlert animated:YES completion:nil];
+
+    // 目标目录：saves
+    NSString *baseDir;
+    const char *env = getenv("POJAV_GAME_DIR");
+    if (env) {
+        baseDir = [NSString stringWithUTF8String:env];
+    } else {
+        baseDir = NSHomeDirectory();
+    }
+
+    NSString *profileName = PLProfiles.current.selectedProfileName;
+    if (profileName.length > 0) {
+        NSDictionary *profiles = PLProfiles.current.profiles;
+        NSDictionary *prof = profiles[profileName];
+        if ([prof isKindOfClass:[NSDictionary class]]) {
+            NSString *gameDir = prof[@"gameDir"];
+            if ([gameDir isKindOfClass:[NSString class]] && gameDir.length > 0 && ![gameDir isEqualToString:@"."]) {
+                if ([gameDir isAbsolutePath]) {
+                    baseDir = gameDir;
+                } else {
+                    baseDir = [baseDir stringByAppendingPathComponent:gameDir];
+                }
+            }
+        }
+    }
+
+    NSString *savesDir = [baseDir stringByAppendingPathComponent:@"saves"];
+    [[NSFileManager defaultManager] createDirectoryAtPath:savesDir withIntermediateDirectories:YES attributes:nil error:nil];
+
+    NSURL *url = [NSURL URLWithString:item.selectedVersionDownloadURL];
+    if (!url) {
+        __weak typeof(self) weakSelf = self;
+        [downloadingAlert dismissViewControllerAnimated:YES completion:^{
+            [weakSelf showError:@"无效的下载链接"];
+        }];
+        return;
+    }
+
+    __weak typeof(self) weakSelf = self;
+    NSURLSessionDownloadTask *task = [[NSURLSession sharedSession] downloadTaskWithURL:url completionHandler:^(NSURL *location, NSURLResponse *response, NSError *error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) return;
+            [downloadingAlert dismissViewControllerAnimated:YES completion:^{
+                if (error) {
+                    [strongSelf showError:error.localizedDescription];
+                    return;
+                }
+                // 世界存档为 zip，先下载到临时文件再解压到 saves 目录
+                NSString *tempZip = [NSTemporaryDirectory() stringByAppendingPathComponent:[NSString stringWithFormat:@"world_%@.zip", @(arc4random())]];
+                NSError *moveError = nil;
+                [[NSFileManager defaultManager] moveItemAtPath:location.path toPath:tempZip error:&moveError];
+                if (moveError) {
+                    [strongSelf showError:moveError.localizedDescription];
+                    return;
+                }
+                // 解压 zip 到 saves 目录
+                NSError *unzipError = nil;
+                UZKArchive *archive = [[UZKArchive alloc] initWithPath:tempZip error:&unzipError];
+                if (unzipError) {
+                    [strongSelf showError:unzipError.localizedDescription];
+                    [[NSFileManager defaultManager] removeItemAtPath:tempZip error:nil];
+                    return;
+                }
+                BOOL extracted = [archive extractFilesTo:savesDir overwrite:NO error:&unzipError];
+                [[NSFileManager defaultManager] removeItemAtPath:tempZip error:nil];
+                if (!extracted || unzipError) {
+                    [strongSelf showError:unzipError.localizedDescription ?: @"解压失败"];
+                } else {
+                    UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"下载成功"
+                                                                                          message:[NSString stringWithFormat:@"%@ 已解压到 saves 目录", item.displayName]
+                                                                                   preferredStyle:UIAlertControllerStyleAlert];
+                    [successAlert addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleDefault handler:nil]];
+                    [strongSelf presentViewController:successAlert animated:YES completion:nil];
+                }
+            }];
+        });
+    }];
+    [task resume];
+}
+
 #pragma mark - ShaderVersionViewControllerDelegate
 
 - (void)shaderVersionViewController:(ShaderVersionViewController *)viewController didSelectVersion:(ShaderVersion *)version {
@@ -3672,10 +3940,10 @@
     
     itemToDownload.selectedVersionDownloadURL = primaryFile[@"url"];
     itemToDownload.fileName = primaryFile[@"filename"] ?: [NSString stringWithFormat:@"%@.zip", itemToDownload.displayName];
-    
-    [viewController dismissViewControllerAnimated:YES completion:^{
-        [self startDownloadForShaderItem:itemToDownload];
-    }];
+
+    // 子页面已 push 到导航栈，选完版本后 pop 回下载列表
+    [self.navigationController popViewControllerAnimated:YES];
+    [self startDownloadForShaderItem:itemToDownload];
 }
 
 - (void)startDownloadForShaderItem:(ShaderItem *)item {

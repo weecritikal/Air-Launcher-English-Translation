@@ -143,7 +143,8 @@
     if ([projectType isEqualToString:@"shader"] ||
         [projectType isEqualToString:@"resourcepack"] ||
         [projectType isEqualToString:@"datapack"] ||
-        [projectType isEqualToString:@"modpack"]) {
+        [projectType isEqualToString:@"modpack"] ||
+        [projectType isEqualToString:@"world"]) {
         return @[@"zip"];
     }
     return @[@"jar"];
