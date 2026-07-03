@@ -70,9 +70,9 @@ static WFWorkflowProgressView* currentProgressView;
     }
     UIViewController *secondary = splitVC.viewControllers[1];
     LauncherNavigationController *nav = nil;
-    if ([secondary isKindOfClass:LauncherNavigationController.class]]) {
+    if ([secondary isKindOfClass:LauncherNavigationController.class]) {
         nav = (LauncherNavigationController *)secondary;
-    } else if ([secondary isKindOfClass:UINavigationController.class]]) {
+    } else if ([secondary isKindOfClass:UINavigationController.class]) {
         UIViewController *top = ((UINavigationController *)secondary).topViewController;
         if ([top isKindOfClass:LauncherPrefManageJREViewController.class]) {
             return (LauncherPrefManageJREViewController *)top;
