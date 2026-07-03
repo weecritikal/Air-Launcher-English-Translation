@@ -226,8 +226,27 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
     
     self.displayNameCache = [NSMutableDictionary new];
     self.searchQueue = dispatch_queue_create("com.amethyst.forge.search", DISPATCH_QUEUE_SERIAL);
-    
-    [self loadMetadataFromVendor:self.currentVendor];
+
+    if (self.presetVersionString.length > 0) {
+        // 由上游（LoaderSelectionViewController）已选好版本，跳过版本列表加载，直接进入方案选择
+        self.selectedVersionString = self.presetVersionString;
+        // 切换到就绪状态，避免列表显示 Loading...
+        self.isDataLoading = NO;
+        [self.tableView reloadData];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self presentSchemeSelection];
+        });
+    } else {
+        [self loadMetadataFromVendor:self.currentVendor];
+    }
+}
+
+- (void)presentSchemeSelection {
+    if (!self.selectedVersionString) return;
+    ForgeInstallSchemeViewController *schemeVC = [[ForgeInstallSchemeViewController alloc] init];
+    schemeVC.delegate = self;
+    schemeVC.modalPresentationStyle = UIModalPresentationOverFullScreen;
+    [self presentViewController:schemeVC animated:YES completion:nil];
 }
 
 - (void)dealloc {

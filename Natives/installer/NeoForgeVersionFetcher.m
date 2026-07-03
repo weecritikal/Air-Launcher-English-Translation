@@ -48,11 +48,21 @@
 
 + (NSString *)installerURLForVersion:(NSString *)version {
     if (!version || version.length == 0) return nil;
+    NSString *downloadSource = getPrefObject(@"general.download_source");
+    BOOL useBMCLAPI = [downloadSource isEqualToString:@"bmclapi"];
     // Legacy 1.20.1 versions use the old forge coordinates.
     if ([version containsString:@"1.20.1"] || [version hasPrefix:@"47."]) {
-        return [NSString stringWithFormat:@"https://maven.neoforged.net/net/neoforged/forge/%@/forge-%@-installer.jar", version, version];
+        if (useBMCLAPI) {
+            return [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/maven/net/neoforged/forge/%@/forge-%@-installer.jar", version, version];
+        }
+        // 官方 maven 路径必须包含 /releases/，否则 404
+        return [NSString stringWithFormat:@"https://maven.neoforged.net/releases/net/neoforged/forge/%@/forge-%@-installer.jar", version, version];
     }
-    return [NSString stringWithFormat:@"https://maven.neoforged.net/net/neoforged/neoforge/%@/neoforge-%@-installer.jar", version, version];
+    if (useBMCLAPI) {
+        return [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/maven/net/neoforged/neoforge/%@/neoforge-%@-installer.jar", version, version];
+    }
+    // 官方 maven 路径必须包含 /releases/，否则 404
+    return [NSString stringWithFormat:@"https://maven.neoforged.net/releases/net/neoforged/neoforge/%@/neoforge-%@-installer.jar", version, version];
 }
 
 #pragma mark - Internal

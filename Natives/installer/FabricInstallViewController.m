@@ -182,13 +182,23 @@ extern NSMutableArray *localVersionList;
             }
             return;
         }
-        
+
         [localVersionList addObject:@{
             @"id": response[@"id"],
             @"type": @"custom"}];
-        
+
         strongSelf.installedProfileName = response[@"id"];
-        
+
+        // 关键：在拉取 Fabric API 之前先注册并选中新 profile，
+        // 否则 installFabricAPIWithCompletion 会读到旧 profile 的 gameDir，把 Fabric API 放到错误目录
+        NSMutableDictionary *profile = [NSMutableDictionary dictionary];
+        profile[@"name"] = response[@"id"];
+        profile[@"lastVersionId"] = response[@"id"];
+        profile[@"type"] = @"custom";
+        profile[@"created"] = [NSDate date].description;
+        [PLProfiles.current saveProfile:profile withName:response[@"id"]];
+        PLProfiles.current.selectedProfileName = response[@"id"];
+
         // If Fabric API installation is requested
         if (strongSelf.shouldInstallAPI && [strongSelf.localKVO[@"loaderVendor"] isEqualToString:@"Fabric"]) {
             [strongSelf installFabricAPIWithCompletion:^(BOOL success, NSError *apiError) {
@@ -220,9 +230,9 @@ extern NSMutableArray *localVersionList;
         }
         return;
     }
-    
+
     if (self.completionHandler) {
-        // New mode: callback to caller (DownloadViewController)
+        // New mode: profile 已在 actionDone: 中注册并选中，直接回调调用方
         self.completionHandler(YES, profileId, nil);
         [self.navigationController dismissViewControllerAnimated:YES completion:nil];
     } else {

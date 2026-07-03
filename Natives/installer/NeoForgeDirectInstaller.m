@@ -353,8 +353,12 @@ NSString *const NeoForgeDirectInstallerErrorDomain = @"NeoForgeDirectInstallerEr
     profileDict[@"name"] = versionId;
     profileDict[@"lastVersionId"] = versionId;
     profileDict[@"gameDir"] = @".";
+    profileDict[@"type"] = @"custom";
+    profileDict[@"created"] = [NSDate date].description;
     [profiles saveProfile:profileDict withName:versionId];
-    NSLog(@"[NeoForgeDirect] Profile saved");
+    // 与 Fabric / Vanilla 安装路径保持一致：自动选中新建的 profile，避免用户回到主界面仍启动旧版本
+    profiles.selectedProfileName = versionId;
+    NSLog(@"[NeoForgeDirect] Profile saved and selected");
 }
 
 #pragma mark - ZIP / UnzipKit helpers

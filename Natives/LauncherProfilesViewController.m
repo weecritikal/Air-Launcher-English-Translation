@@ -14,6 +14,8 @@
 #import "UIKit+hook.h"
 #import "installer/FabricInstallViewController.h"
 #import "installer/ForgeInstallViewController.h"
+#import "installer/ForgeDirectInstaller.h"
+#import "installer/NeoForgeDirectInstaller.h"
 #import "installer/ModpackInstallViewController.h"
 #import "ios_uikit_bridge.h"
 #import "utils.h"
@@ -324,7 +326,119 @@ typedef NS_ENUM(NSInteger, VersionType) {
 
 - (void)actionCreateForgeProfile {
     ForgeInstallViewController *vc = [ForgeInstallViewController new];
+    __weak typeof(self) weakSelf = self;
+    vc.completionHandler = ^(BOOL success, NSString *profileName, id resultOrError) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+
+        // 用户取消：ForgeInstallerFlowErrorDomain/Cancelled 时静默
+        if (!success) {
+            if ([resultOrError isKindOfClass:[NSError class]]) {
+                NSError *err = (NSError *)resultOrError;
+                if ([err.domain isEqualToString:ForgeInstallerFlowErrorDomain] && err.code == ForgeInstallerFlowErrorCodeCancelled) {
+                    return;
+                }
+                showDialog(localize(@"Error", nil), err.localizedDescription);
+            }
+            return;
+        }
+
+        // 解析 ForgeInstallVC 打包的结果
+        NSInteger selectedScheme = 0;
+        NSString *filePath = nil;
+        if ([resultOrError isKindOfClass:[NSDictionary class]]) {
+            NSDictionary *result = (NSDictionary *)resultOrError;
+            filePath = result[@"filePath"];
+            selectedScheme = [result[@"selectedScheme"] integerValue];
+        } else if ([resultOrError isKindOfClass:[NSString class]]) {
+            filePath = (NSString *)resultOrError;
+        }
+
+        BOOL isNeoForge = vc.isNeoForge;
+
+        if (selectedScheme == 1 && filePath.length > 0) {
+            // 直装方案：纯文件操作，不依赖 LauncherNavigationController
+            dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+                NSError *directError = nil;
+                BOOL installed = NO;
+                if (isNeoForge) {
+                    installed = [NeoForgeDirectInstaller installNeoForgeFromInstaller:filePath versionId:profileName error:&directError];
+                } else {
+                    installed = [ForgeDirectInstaller installForgeFromInstaller:filePath versionId:profileName error:&directError];
+                }
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    if (installed) {
+                        showDialog(localize(@"Success", nil), [NSString stringWithFormat:@"%@ 安装成功", isNeoForge ? @"NeoForge" : @"Forge"]);
+                    } else {
+                        showDialog(localize(@"Error", nil), directError.localizedDescription ?: @"未知错误");
+                    }
+                });
+            });
+            return;
+        }
+
+        // 原版方案：通过 keyWindow.rootViewController 递归找到 LauncherNavigationController 启动 AWT 安装器
+        LauncherNavigationController *launcherNav = [strongSelf findLauncherNavigationController];
+        if (launcherNav && filePath.length > 0) {
+            [launcherNav enterModInstallerWithPath:filePath hitEnterAfterWindowShown:YES];
+            showDialog(localize(@"Info", nil), [NSString stringWithFormat:@"%@ 安装器已启动", isNeoForge ? @"NeoForge" : @"Forge"]);
+        } else if (filePath.length > 0) {
+            showDialog(localize(@"Error", nil), @"无法启动安装器：未找到主启动器导航控制器");
+        }
+    };
     [self presentNavigatedViewController:vc];
+}
+
+// 从 keyWindow.rootViewController 递归查找 LauncherNavigationController
+- (LauncherNavigationController *)findLauncherNavigationController {
+    UIWindow *keyWindow = nil;
+    if (@available(iOS 13.0, *)) {
+        for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) {
+            if (scene.activationState == UISceneActivationStateForegroundActive) {
+                keyWindow = scene.windows.firstObject;
+                break;
+            }
+        }
+    }
+    if (!keyWindow) {
+        keyWindow = [[UIApplication sharedApplication] windows].firstObject;
+    }
+    UIViewController *rootVC = keyWindow.rootViewController;
+    return [self findLauncherNavIn:rootVC];
+}
+
+- (LauncherNavigationController *)findLauncherNavIn:(UIViewController *)vc {
+    if (!vc) return nil;
+    if ([vc isKindOfClass:[LauncherNavigationController class]]) {
+        return (LauncherNavigationController *)vc;
+    }
+    if ([vc isKindOfClass:[UINavigationController class]]) {
+        for (UIViewController *child in ((UINavigationController *)vc).viewControllers) {
+            LauncherNavigationController *found = [self findLauncherNavIn:child];
+            if (found) return found;
+        }
+    }
+    if ([vc isKindOfClass:[UISplitViewController class]]) {
+        for (UIViewController *child in ((UISplitViewController *)vc).viewControllers) {
+            LauncherNavigationController *found = [self findLauncherNavIn:child];
+            if (found) return found;
+        }
+    }
+    if ([vc isKindOfClass:[UITabBarController class]]) {
+        for (UIViewController *child in ((UITabBarController *)vc).viewControllers) {
+            LauncherNavigationController *found = [self findLauncherNavIn:child];
+            if (found) return found;
+        }
+    }
+    if (vc.presentedViewController) {
+        LauncherNavigationController *found = [self findLauncherNavIn:vc.presentedViewController];
+        if (found) return found;
+    }
+    for (UIViewController *child in vc.childViewControllers) {
+        LauncherNavigationController *found = [self findLauncherNavIn:child];
+        if (found) return found;
+    }
+    return nil;
 }
 
 - (void)actionCreateModpackProfile {

@@ -2639,9 +2639,9 @@
     } else if ([loaderType isEqualToString:@"fabric"]) {
         [self installFabric:versionId loaderVersion:loaderVersion installAPI:installFabricAPI];
     } else if ([loaderType isEqualToString:@"forge"]) {
-        [self installForge:versionId installOptiFine:installOptiFine];
+        [self installForge:versionId installOptiFine:installOptiFine loaderVersion:loaderVersion];
     } else if ([loaderType isEqualToString:@"neoforge"]) {
-        [self installNeoForge:versionId];
+        [self installNeoForge:versionId loaderVersion:loaderVersion];
     } else if ([loaderType isEqualToString:@"quilt"]) {
         [self showError:@"Quilt 安装器暂未实现"];
     } else {
@@ -3129,31 +3129,18 @@
     }
 }
 
-- (void)installForge:(NSString *)gameVersion installOptiFine:(BOOL)installOptiFine {
+- (void)installForge:(NSString *)gameVersion installOptiFine:(BOOL)installOptiFine loaderVersion:(NSString *)loaderVersion {
     ForgeInstallViewController *forgeVC = [[ForgeInstallViewController alloc] init];
     forgeVC.gameVersion = gameVersion;
+    // LoaderSelectionViewController 已选好版本，传入以跳过重复的版本列表 UI
+    forgeVC.presetVersionString = loaderVersion;
 
     __weak typeof(self) weakSelf = self;
     void (^completion)(BOOL, NSString *, id) = ^(BOOL success, NSString *profileName, id resultOrError) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
 
-        // 先 pop 掉 ForgeInstallViewController，让后续进度页面在中间内容区显示
-        if (strongSelf.navigationController.topViewController != strongSelf) {
-            [strongSelf.navigationController popViewControllerAnimated:YES];
-        }
-
-        if (!success) {
-            // 用户取消或失败，无需再 pop（已 pop）；走原 handleInstallerDownloadResultWithVendorName 流程
-            [strongSelf handleInstallerDownloadResultWithVendorName:@"Forge"
-                                                        gameVersion:gameVersion
-                                                        profileName:profileName
-                                                      resultOrError:resultOrError
-                                                       installAction:nil];
-            return;
-        }
-
-        // 解析 ForgeInstallViewController 打包的回调结果
+        // 解析 ForgeInstallViewController 打包的回调结果（无论成败都需要先解析）
         NSInteger selectedScheme = 0;
         NSString *filePath = nil;
         if ([resultOrError isKindOfClass:[NSDictionary class]]) {
@@ -3164,64 +3151,105 @@
             filePath = (NSString *)resultOrError;
         }
 
-        if (selectedScheme == 1 && filePath.length > 0) {
-            // 直装方案：push 进度 VC，由 ForgeDirectInstaller 的 progress 回调驱动
-            NSLog(@"[ForgeDirect] DownloadViewController: starting direct install with progress UI");
-            InstallerProgressViewController *progressVC = [[InstallerProgressViewController alloc] init];
-            progressVC.titleText = @"Forge 直装中";
-            progressVC.progress = 0.0;
-            progressVC.stageMessage = @"准备中...";
-            strongSelf.installerProgressVC = progressVC;
-            [strongSelf.navigationController pushViewController:progressVC animated:YES];
+        // 先 pop 掉 ForgeInstallViewController；pop 完成后再走后续流程，
+        // 否则在 pop 动画期间 present alert / push 进度页会失败或弹错 VC
+        void (^continuation)(void) = ^{
+            __strong typeof(weakSelf) strongSelf2 = weakSelf;
+            if (!strongSelf2) return;
 
-            dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-                NSError *directError = nil;
-                BOOL installed = [ForgeDirectInstaller installForgeFromInstaller:filePath
-                                                                       versionId:profileName
-                                                                         progress:^(double progress, NSString *stageMessage) {
-                    dispatch_async(dispatch_get_main_queue(), ^{
-                        __strong typeof(weakSelf) strongSelf2 = weakSelf;
-                        if (!strongSelf2 || !strongSelf2.installerProgressVC) return;
-                        strongSelf2.installerProgressVC.progress = progress;
-                        NSString *stage = stageMessage ?: @"";
-                        strongSelf2.installerProgressVC.stageMessage = [NSString stringWithFormat:@"%@ - %.0f%%", stage, progress * 100];
-                    });
-                }
-                                                                           error:&directError];
+            if (!success) {
+                [strongSelf2 handleInstallerDownloadResultWithVendorName:@"Forge"
+                                                              gameVersion:gameVersion
+                                                              profileName:profileName
+                                                            resultOrError:resultOrError
+                                                             installAction:nil];
+                return;
+            }
 
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    __strong typeof(weakSelf) strongSelf2 = weakSelf;
-                    if (!strongSelf2) return;
-                    if (installed) {
-                        [strongSelf2 finishInstallerProgressWithSuccess:[NSString stringWithFormat:@"Forge 直装成功\n配置文件: %@", profileName ?: gameVersion]];
-                    } else {
-                        [strongSelf2 finishInstallerProgressWithError:[NSString stringWithFormat:@"Forge 直装失败: %@", directError.localizedDescription ?: @"未知错误"]];
+            if (selectedScheme == 1 && filePath.length > 0) {
+                // 直装方案：push 进度 VC，由 ForgeDirectInstaller 的 progress 回调驱动
+                NSLog(@"[ForgeDirect] DownloadViewController: starting direct install with progress UI");
+                InstallerProgressViewController *progressVC = [[InstallerProgressViewController alloc] init];
+                progressVC.titleText = @"Forge 直装中";
+                progressVC.progress = 0.0;
+                progressVC.stageMessage = @"准备中...";
+                strongSelf2.installerProgressVC = progressVC;
+                [strongSelf2.navigationController pushViewController:progressVC animated:YES];
+
+                dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+                    NSError *directError = nil;
+                    BOOL installed = [ForgeDirectInstaller installForgeFromInstaller:filePath
+                                                                           versionId:profileName
+                                                                             progress:^(double progress, NSString *stageMessage) {
+                        dispatch_async(dispatch_get_main_queue(), ^{
+                            __strong typeof(weakSelf) strongSelf3 = weakSelf;
+                            if (!strongSelf3 || !strongSelf3.installerProgressVC) return;
+                            strongSelf3.installerProgressVC.progress = progress;
+                            NSString *stage = stageMessage ?: @"";
+                            strongSelf3.installerProgressVC.stageMessage = [NSString stringWithFormat:@"%@ - %.0f%%", stage, progress * 100];
+                        });
                     }
-                });
-            });
-            return;
-        }
+                                                                               error:&directError];
 
-        // 原版方案（运行安装器）：进入 AWT 安装器 GUI 流程
-        [strongSelf handleInstallerDownloadResultWithVendorName:@"Forge"
-                                                    gameVersion:gameVersion
-                                                    profileName:profileName
-                                                  resultOrError:resultOrError
-                                                   installAction:^{
-            if (installOptiFine) {
-                [strongSelf downloadOptiFine:gameVersion completion:^(BOOL optiSuccess, NSError *optiError) {
                     dispatch_async(dispatch_get_main_queue(), ^{
-                        if (optiSuccess) {
-                            [strongSelf showSuccessMessage:[NSString stringWithFormat:@"Forge 安装器已启动\nOptiFine 已自动安装\n配置文件: %@", profileName ?: gameVersion]];
+                        __strong typeof(weakSelf) strongSelf3 = weakSelf;
+                        if (!strongSelf3) return;
+                        if (!installed) {
+                            [strongSelf3 finishInstallerProgressWithError:[NSString stringWithFormat:@"Forge 直装失败: %@", directError.localizedDescription ?: @"未知错误"]];
+                            return;
+                        }
+                        // 直装成功后，若用户勾选了 OptiFine，继续下载（之前的实现这里直接 return 漏掉了 OptiFine）
+                        if (installOptiFine) {
+                            strongSelf3.installerProgressVC.stageMessage = @"正在下载 OptiFine...";
+                            strongSelf3.installerProgressVC.progress = -1; // OptiFine 下载无法精确测算，进入不确定模式
+                            [strongSelf3 downloadOptiFine:gameVersion completion:^(BOOL optiSuccess, NSError *optiError) {
+                                dispatch_async(dispatch_get_main_queue(), ^{
+                                    __strong typeof(weakSelf) strongSelf4 = weakSelf;
+                                    if (!strongSelf4) return;
+                                    if (optiSuccess) {
+                                        [strongSelf4 finishInstallerProgressWithSuccess:[NSString stringWithFormat:@"Forge 直装成功\nOptiFine 已自动安装\n配置文件: %@", profileName ?: gameVersion]];
+                                    } else {
+                                        [strongSelf4 finishInstallerProgressWithSuccess:[NSString stringWithFormat:@"Forge 直装成功\nOptiFine 安装失败: %@\n配置文件: %@", optiError.localizedDescription ?: @"未知错误", profileName ?: gameVersion]];
+                                    }
+                                });
+                            }];
                         } else {
-                            [strongSelf showSuccessMessage:[NSString stringWithFormat:@"Forge 安装器已启动\nOptiFine 安装失败: %@\n配置文件: %@", optiError.localizedDescription ?: @"未知错误", profileName ?: gameVersion]];
+                            [strongSelf3 finishInstallerProgressWithSuccess:[NSString stringWithFormat:@"Forge 直装成功\n配置文件: %@", profileName ?: gameVersion]];
                         }
                     });
-                }];
-            } else {
-                [strongSelf showSuccessMessage:[NSString stringWithFormat:@"Forge 安装器已启动\n配置文件: %@", profileName ?: gameVersion]];
+                });
+                return;
             }
-        }];
+
+            // 原版方案（运行安装器）：进入 AWT 安装器 GUI 流程
+            [strongSelf2 handleInstallerDownloadResultWithVendorName:@"Forge"
+                                                          gameVersion:gameVersion
+                                                          profileName:profileName
+                                                        resultOrError:resultOrError
+                                                         installAction:^{
+                if (installOptiFine) {
+                    [strongSelf2 downloadOptiFine:gameVersion completion:^(BOOL optiSuccess, NSError *optiError) {
+                        dispatch_async(dispatch_get_main_queue(), ^{
+                            if (optiSuccess) {
+                                [strongSelf2 showSuccessMessage:[NSString stringWithFormat:@"Forge 安装器已启动\nOptiFine 已自动安装\n配置文件: %@", profileName ?: gameVersion]];
+                            } else {
+                                [strongSelf2 showSuccessMessage:[NSString stringWithFormat:@"Forge 安装器已启动\nOptiFine 安装失败: %@\n配置文件: %@", optiError.localizedDescription ?: @"未知错误", profileName ?: gameVersion]];
+                            }
+                        });
+                    }];
+                } else {
+                    [strongSelf2 showSuccessMessage:[NSString stringWithFormat:@"Forge 安装器已启动\n配置文件: %@", profileName ?: gameVersion]];
+                }
+            }];
+        };
+
+        if (strongSelf.navigationController.topViewController != strongSelf) {
+            [strongSelf.navigationController popViewControllerAnimated:YES];
+            // 等待 pop 动画结束后再触发后续 present / push，避免动画冲突
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.35 * NSEC_PER_SEC)), dispatch_get_main_queue(), continuation);
+        } else {
+            continuation();
+        }
     };
     forgeVC.completionHandler = completion;
 
@@ -3303,31 +3331,19 @@
 
 #pragma mark - NeoForge Installation
 
-- (void)installNeoForge:(NSString *)gameVersion {
+- (void)installNeoForge:(NSString *)gameVersion loaderVersion:(NSString *)loaderVersion {
     ForgeInstallViewController *neoForgeVC = [[ForgeInstallViewController alloc] init];
     neoForgeVC.gameVersion = gameVersion;
     neoForgeVC.isNeoForge = YES;
+    // LoaderSelectionViewController 已选好版本，传入以跳过重复的版本列表 UI
+    neoForgeVC.presetVersionString = loaderVersion;
 
     __weak typeof(self) weakSelf = self;
     void (^completion)(BOOL, NSString *, id) = ^(BOOL success, NSString *profileName, id resultOrError) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
 
-        // 先 pop 掉 NeoForge 安装器选择页，让后续进度页面在中间内容区显示
-        if (strongSelf.navigationController.topViewController != strongSelf) {
-            [strongSelf.navigationController popViewControllerAnimated:YES];
-        }
-
-        if (!success) {
-            [strongSelf handleInstallerDownloadResultWithVendorName:@"NeoForge"
-                                                        gameVersion:gameVersion
-                                                        profileName:profileName
-                                                      resultOrError:resultOrError
-                                                       installAction:nil];
-            return;
-        }
-
-        // 解析 ForgeInstallViewController 打包的回调结果
+        // 解析 ForgeInstallViewController 打包的回调结果（无论成败都需要先解析）
         NSInteger selectedScheme = 0;
         NSString *filePath = nil;
         if ([resultOrError isKindOfClass:[NSDictionary class]]) {
@@ -3338,52 +3354,75 @@
             filePath = (NSString *)resultOrError;
         }
 
-        if (selectedScheme == 1 && filePath.length > 0) {
-            // 直装方案：push 进度 VC，由 NeoForgeDirectInstaller 的 progress 回调驱动
-            NSLog(@"[NeoForgeDirect] DownloadViewController: starting direct install with progress UI");
-            InstallerProgressViewController *progressVC = [[InstallerProgressViewController alloc] init];
-            progressVC.titleText = @"NeoForge 直装中";
-            progressVC.progress = 0.0;
-            progressVC.stageMessage = @"准备中...";
-            strongSelf.installerProgressVC = progressVC;
-            [strongSelf.navigationController pushViewController:progressVC animated:YES];
+        // 先 pop 掉 NeoForge 安装器选择页；pop 完成后再走后续流程，避免动画期间 present/push 失败
+        void (^continuation)(void) = ^{
+            __strong typeof(weakSelf) strongSelf2 = weakSelf;
+            if (!strongSelf2) return;
 
-            dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-                NSError *directError = nil;
-                BOOL installed = [NeoForgeDirectInstaller installNeoForgeFromInstaller:filePath
-                                                                               versionId:profileName
-                                                                                progress:^(double progress, NSString *stageMessage) {
-                    dispatch_async(dispatch_get_main_queue(), ^{
-                        __strong typeof(weakSelf) strongSelf2 = weakSelf;
-                        if (!strongSelf2 || !strongSelf2.installerProgressVC) return;
-                        strongSelf2.installerProgressVC.progress = progress;
-                        NSString *stage = stageMessage ?: @"";
-                        strongSelf2.installerProgressVC.stageMessage = [NSString stringWithFormat:@"%@ - %.0f%%", stage, progress * 100];
-                    });
-                }
-                                                                                   error:&directError];
+            if (!success) {
+                [strongSelf2 handleInstallerDownloadResultWithVendorName:@"NeoForge"
+                                                              gameVersion:gameVersion
+                                                              profileName:profileName
+                                                            resultOrError:resultOrError
+                                                             installAction:nil];
+                return;
+            }
 
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    __strong typeof(weakSelf) strongSelf2 = weakSelf;
-                    if (!strongSelf2) return;
-                    if (installed) {
-                        [strongSelf2 finishInstallerProgressWithSuccess:[NSString stringWithFormat:@"NeoForge 直装成功\n配置文件: %@", profileName ?: gameVersion]];
-                    } else {
-                        [strongSelf2 finishInstallerProgressWithError:[NSString stringWithFormat:@"NeoForge 直装失败: %@", directError.localizedDescription ?: @"未知错误"]];
+            if (selectedScheme == 1 && filePath.length > 0) {
+                // 直装方案：push 进度 VC，由 NeoForgeDirectInstaller 的 progress 回调驱动
+                NSLog(@"[NeoForgeDirect] DownloadViewController: starting direct install with progress UI");
+                InstallerProgressViewController *progressVC = [[InstallerProgressViewController alloc] init];
+                progressVC.titleText = @"NeoForge 直装中";
+                progressVC.progress = 0.0;
+                progressVC.stageMessage = @"准备中...";
+                strongSelf2.installerProgressVC = progressVC;
+                [strongSelf2.navigationController pushViewController:progressVC animated:YES];
+
+                dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+                    NSError *directError = nil;
+                    BOOL installed = [NeoForgeDirectInstaller installNeoForgeFromInstaller:filePath
+                                                                                   versionId:profileName
+                                                                                    progress:^(double progress, NSString *stageMessage) {
+                        dispatch_async(dispatch_get_main_queue(), ^{
+                            __strong typeof(weakSelf) strongSelf3 = weakSelf;
+                            if (!strongSelf3 || !strongSelf3.installerProgressVC) return;
+                            strongSelf3.installerProgressVC.progress = progress;
+                            NSString *stage = stageMessage ?: @"";
+                            strongSelf3.installerProgressVC.stageMessage = [NSString stringWithFormat:@"%@ - %.0f%%", stage, progress * 100];
+                        });
                     }
-                });
-            });
-            return;
-        }
+                                                                                       error:&directError];
 
-        // 原版方案（运行安装器）
-        [strongSelf handleInstallerDownloadResultWithVendorName:@"NeoForge"
-                                                    gameVersion:gameVersion
-                                                    profileName:profileName
-                                                  resultOrError:resultOrError
-                                                   installAction:^{
-            [strongSelf showSuccessMessage:[NSString stringWithFormat:@"NeoForge 安装器已启动\n配置文件: %@", profileName ?: gameVersion]];
-        }];
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        __strong typeof(weakSelf) strongSelf3 = weakSelf;
+                        if (!strongSelf3) return;
+                        if (installed) {
+                            [strongSelf3 finishInstallerProgressWithSuccess:[NSString stringWithFormat:@"NeoForge 直装成功\n配置文件: %@", profileName ?: gameVersion]];
+                        } else {
+                            [strongSelf3 finishInstallerProgressWithError:[NSString stringWithFormat:@"NeoForge 直装失败: %@", directError.localizedDescription ?: @"未知错误"]];
+                        }
+                    });
+                });
+                return;
+            }
+
+            // 原版方案（运行安装器）
+            [strongSelf2 handleInstallerDownloadResultWithVendorName:@"NeoForge"
+                                                          gameVersion:gameVersion
+                                                          profileName:profileName
+                                                        resultOrError:resultOrError
+                                                         installAction:^{
+                [strongSelf2 showSuccessMessage:[NSString stringWithFormat:@"NeoForge 安装器已启动\n配置文件: %@", profileName ?: gameVersion]];
+            }];
+        };
+
+        if (strongSelf.navigationController.topViewController != strongSelf) {
+            [strongSelf.navigationController popViewControllerAnimated:YES];
+            // 等待 pop 动画结束后再触发后续 present / push，避免动画冲突
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.35 * NSEC_PER_SEC)), dispatch_get_main_queue(), continuation);
+        } else {
+            continuation();
+        }
     };
     neoForgeVC.completionHandler = completion;
 
