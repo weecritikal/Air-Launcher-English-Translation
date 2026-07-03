@@ -1,8 +1,14 @@
 #import <UIKit/UIKit.h>
 
+@class AFURLSessionManager;
 @class ModpackAPI;
 
+extern NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier;
+
 @interface MinecraftResourceDownloadTask : NSObject
+
++ (AFURLSessionManager *)sharedBackgroundSessionManager;
+
 @property NSProgress *progress, *textProgress;
 @property NSMutableArray *fileList, *progressList;
 @property NSMutableDictionary* metadata;

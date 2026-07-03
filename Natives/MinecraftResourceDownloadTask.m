@@ -1,4 +1,5 @@
 #include <CommonCrypto/CommonDigest.h>
+#include <sys/time.h>
 
 #import "authenticator/BaseAuthenticator.h"
 #import "installer/modpack/ModpackAPI.h"
@@ -7,22 +8,51 @@
 #import "LauncherPreferences.h"
 #import "MinecraftResourceDownloadTask.h"
 #import "MinecraftResourceUtils.h"
+#import "DownloadTaskManager.h"
+#import "DownloadTaskItem.h"
 #import "ios_uikit_bridge.h"
 #import "utils.h"
 
+NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"org.angelauramcremastered.amethyst.MinecraftResourceDownloadTask";
+
 @interface MinecraftResourceDownloadTask ()
 @property AFURLSessionManager* manager;
+@property (nonatomic, strong) DownloadTaskItem *currentDownloadTaskItem;
+@property (nonatomic, copy) NSString *currentVersionId;
+@property (nonatomic, assign) BOOL isObservingTaskProgress;
+@property (nonatomic, assign) NSTimeInterval progressLastTime;
+@property (nonatomic, assign) int64_t progressLastCompleted;
 @end
 
 @implementation MinecraftResourceDownloadTask
 
++ (AFURLSessionManager *)sharedBackgroundSessionManager {
+    static AFURLSessionManager *manager = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        NSURLSessionConfiguration *configuration = [NSURLSessionConfiguration backgroundSessionConfigurationWithIdentifier:kMinecraftResourceDownloadBackgroundSessionIdentifier];
+        configuration.timeoutIntervalForRequest = 86400;
+        configuration.sessionSendsLaunchEvents = YES;
+        configuration.discretionary = NO;
+        manager = [[AFURLSessionManager alloc] initWithSessionConfiguration:configuration];
+    });
+    return manager;
+}
+
+- (void)dealloc {
+    if (self.isObservingTaskProgress && self.progress) {
+        @try {
+            [self.progress removeObserver:self forKeyPath:@"fractionCompleted"];
+        } @catch (NSException *exception) {
+            // ignore
+        }
+        self.isObservingTaskProgress = NO;
+    }
+}
+
 - (instancetype)init {
     self = [super init];
-    // TODO: implement background download
-    NSURLSessionConfiguration *configuration = [NSURLSessionConfiguration defaultSessionConfiguration];
-    configuration.timeoutIntervalForRequest = 86400;
-    //backgroundSessionConfigurationWithIdentifier:@"net.kdt.pojavlauncher.downloadtask"];
-    self.manager = [[AFURLSessionManager alloc] initWithSessionConfiguration:configuration];
+    self.manager = [MinecraftResourceDownloadTask sharedBackgroundSessionManager];
     self.fileList = [NSMutableArray new];
     self.progressList = [NSMutableArray new];
     return self;
@@ -121,10 +151,15 @@
     __block NSURLSessionDownloadTask *task = [self.manager downloadTaskWithRequest:request progress:nil
     destination:^NSURL * _Nonnull(NSURL * _Nonnull targetPath, NSURLResponse * _Nonnull response) {
         NSLog(@"[MCDL] Downloading %@", name);
-        progress = [self.manager downloadProgressForTask:task];
+        if (!weakSelf) {
+            [NSFileManager.defaultManager createDirectoryAtPath:path.stringByDeletingLastPathComponent withIntermediateDirectories:YES attributes:nil error:nil];
+            [NSFileManager.defaultManager removeItemAtPath:path error:nil];
+            return [NSURL fileURLWithPath:path];
+        }
+        progress = [weakSelf.manager downloadProgressForTask:task];
         if (!size && task) {
-            [self addDownloadTaskToProgress:task size:response.expectedContentLength];
-            [self.fileList addObject:name];
+            [weakSelf addDownloadTaskToProgress:task size:response.expectedContentLength];
+            [weakSelf.fileList addObject:name];
         }
         [NSFileManager.defaultManager createDirectoryAtPath:path.stringByDeletingLastPathComponent withIntermediateDirectories:YES attributes:nil error:nil];
         [NSFileManager.defaultManager removeItemAtPath:path error:nil];
@@ -183,6 +218,10 @@
     if (size && task) {
         [self addDownloadTaskToProgress:task size:size];
         [self.fileList addObject:name];
+    }
+
+    if (task && self.currentDownloadTaskItem) {
+        task.taskDescription = self.currentDownloadTaskItem.taskId;
     }
 
     return task;
@@ -354,6 +393,7 @@
 }
 
 - (void)downloadVersion:(NSDictionary *)version {
+    self.currentVersionId = version[@"id"];
     [self prepareForDownload];
     [self downloadVersionMetadata:version success:^{
         [self downloadAssetMetadataWithSuccess:^{
@@ -373,6 +413,11 @@
             [libTasks makeObjectsPerformSelector:@selector(resume)];
             [assetTasks makeObjectsPerformSelector:@selector(resume)];
             [self.metadata removeObjectForKey:@"assetIndexObj"];
+
+            if (self.currentDownloadTaskItem) {
+                [[DownloadTaskManager sharedManager] setTaskWithId:self.currentDownloadTaskItem.taskId
+                                                              state:DownloadTaskStateDownloading];
+            }
         }];
     }];
 }
@@ -411,11 +456,70 @@
     self.progress.totalUnitCount = 1;
     [self.fileList removeAllObjects];
     [self.progressList removeAllObjects];
+
+    // 注册/更新到统一下载任务管理器
+    [self registerOrUpdateTaskItem];
+
+    // 监听总体进度
+    if (!self.isObservingTaskProgress) {
+        [self.progress addObserver:self
+                        forKeyPath:@"fractionCompleted"
+                           options:NSKeyValueObservingOptionInitial
+                           context:(void *)@"MCDownloadProgressContext"];
+        self.isObservingTaskProgress = YES;
+        self.progressLastTime = 0;
+        self.progressLastCompleted = 0;
+    }
+}
+
+- (void)registerOrUpdateTaskItem {
+    NSString *displayName = self.currentVersionId ?: (self.metadata[@"id"] ?: @"Minecraft");
+    NSString *downloadSource = getPrefObject(@"general.download_source") ?: @"official";
+
+    if (!self.currentDownloadTaskItem) {
+        self.currentDownloadTaskItem = [[DownloadTaskManager sharedManager]
+            registerTaskWithResourceType:DownloadTaskResourceTypeMinecraft
+                            resourceName:displayName
+                             displayName:displayName
+                          downloadSource:downloadSource
+                                 rawTask:self
+                          supportsResume:NO
+                                 iconURL:nil];
+    } else {
+        self.currentDownloadTaskItem.resourceName = displayName;
+        self.currentDownloadTaskItem.displayName = displayName;
+        self.currentDownloadTaskItem.downloadSource = downloadSource;
+        self.currentDownloadTaskItem.rawTask = self;
+        self.currentDownloadTaskItem.supportsResume = NO;
+        self.currentDownloadTaskItem.state = DownloadTaskStatePending;
+        self.currentDownloadTaskItem.progress = -1.0;
+        self.currentDownloadTaskItem.errorInfo = nil;
+    }
 }
 
 - (void)finishDownloadWithErrorString:(NSString *)error {
+    if (self.currentDownloadTaskItem && self.currentDownloadTaskItem.state != DownloadTaskStateCancelled) {
+        NSError *err = [NSError errorWithDomain:@"MinecraftResourceDownloadTask"
+                                           code:1
+                                       userInfo:@{NSLocalizedDescriptionKey: error ?: @"下载失败"}];
+        [[DownloadTaskManager sharedManager] setTaskWithId:self.currentDownloadTaskItem.taskId
+                                          completedWithError:err];
+    }
+
     [self.progress cancel];
-    [self.manager invalidateSessionCancelingTasks:YES resetSession:YES];
+
+    // 取消属于当前任务的所有后台下载任务，避免失败后继续浪费流量
+    NSString *taskId = self.currentDownloadTaskItem.taskId;
+    [self.manager.session getTasksWithCompletionHandler:^(NSArray<NSURLSessionDataTask *> *dataTasks,
+                                                          NSArray<NSURLSessionUploadTask *> *uploadTasks,
+                                                          NSArray<NSURLSessionDownloadTask *> *downloadTasks) {
+        for (NSURLSessionDownloadTask *downloadTask in downloadTasks) {
+            if (taskId.length > 0 && [downloadTask.taskDescription isEqualToString:taskId]) {
+                [downloadTask cancel];
+            }
+        }
+    }];
+
     showDialog(localize(@"Error", nil), error);
     self.handleError();
 }
@@ -424,6 +528,84 @@
     NSString *errorStr = [NSString stringWithFormat:localize(@"launcher.mcl.error_download", NULL), file, error.localizedDescription];
     NSLog(@"[MCDL] Error: %@ %@", errorStr, NSThread.callStackSymbols);
     [self finishDownloadWithErrorString:errorStr];
+}
+
+#pragma mark - Download Task Manager Reporting
+
+- (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary<NSKeyValueChangeKey,id> *)change context:(void *)context {
+    if (context != (void *)@"MCDownloadProgressContext") {
+        [super observeValueForKeyPath:keyPath ofObject:object change:change context:context];
+        return;
+    }
+
+    if (![keyPath isEqualToString:@"fractionCompleted"] || !self.currentDownloadTaskItem) return;
+
+    NSProgress *progress = self.progress;
+    double fraction = progress.fractionCompleted;
+    int64_t total = progress.totalUnitCount;
+    int64_t completed = (int64_t)(total * fraction);
+
+    // 速度 / 预计剩余时间（每秒计算一次）
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    NSTimeInterval now = tv.tv_sec + tv.tv_usec / 1000000.0;
+    double speed = 0.0;
+    NSTimeInterval eta = 0.0;
+
+    if (self.progressLastTime > 0 && now > self.progressLastTime) {
+        int64_t delta = completed - self.progressLastCompleted;
+        NSTimeInterval timeDelta = now - self.progressLastTime;
+        if (timeDelta > 0) {
+            speed = (double)delta / timeDelta;
+            if (speed > 0 && total > completed) {
+                eta = (total - completed) / speed;
+            }
+        }
+    }
+
+    if (self.progressLastTime == 0 || now >= self.progressLastTime + 1.0) {
+        self.progressLastTime = now;
+        self.progressLastCompleted = completed;
+    }
+
+    DownloadTaskManager *manager = [DownloadTaskManager sharedManager];
+    [manager updateTaskWithId:self.currentDownloadTaskItem.taskId
+                     progress:fraction
+                   totalBytes:total
+              downloadedBytes:completed];
+    [manager updateTaskWithId:self.currentDownloadTaskItem.taskId
+                        speed:speed
+       estimatedTimeRemaining:eta];
+
+    if (progress.cancelled) {
+        if (self.currentDownloadTaskItem.state != DownloadTaskStateCancelled &&
+            self.currentDownloadTaskItem.state != DownloadTaskStateCompleted &&
+            self.currentDownloadTaskItem.state != DownloadTaskStateFailed) {
+            [manager setTaskWithId:self.currentDownloadTaskItem.taskId state:DownloadTaskStateCancelled];
+        }
+        [self removeProgressObserver];
+        return;
+    }
+
+    if (progress.finished) {
+        if (self.currentDownloadTaskItem.state != DownloadTaskStateCompleted &&
+            self.currentDownloadTaskItem.state != DownloadTaskStateFailed &&
+            self.currentDownloadTaskItem.state != DownloadTaskStateCancelled) {
+            [manager setTaskWithId:self.currentDownloadTaskItem.taskId completedWithError:nil];
+        }
+        [self removeProgressObserver];
+    }
+}
+
+- (void)removeProgressObserver {
+    if (self.isObservingTaskProgress) {
+        @try {
+            [self.progress removeObserver:self forKeyPath:@"fractionCompleted"];
+        } @catch (NSException *exception) {
+            // ignore
+        }
+        self.isObservingTaskProgress = NO;
+    }
 }
 
 // 关键修改：移除本地账户下载限制和提示

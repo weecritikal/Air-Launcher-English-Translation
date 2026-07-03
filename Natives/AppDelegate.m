@@ -2,9 +2,15 @@
 #import "SceneDelegate.h"
 #import "ios_uikit_bridge.h"
 #import "utils.h"
+#import "AFNetworking.h"
+#import "MinecraftResourceDownloadTask.h"
 
 // SurfaceViewController
 extern dispatch_group_t fatalExitGroup;
+
+@interface AppDelegate ()
+@property (nonatomic, copy) void (^backgroundURLSessionCompletionHandler)(void);
+@end
 
 @implementation AppDelegate
 
@@ -24,6 +30,28 @@ extern dispatch_group_t fatalExitGroup;
         dispatch_group_leave(fatalExitGroup);
         fatalExitGroup = nil;
     }
+}
+
+#pragma mark - Background URL Session
+
+- (void)application:(UIApplication *)application handleEventsForBackgroundURLSession:(NSString *)identifier completionHandler:(void (^)(void))completionHandler {
+    if (![identifier isEqualToString:kMinecraftResourceDownloadBackgroundSessionIdentifier]) {
+        if (completionHandler) {
+            completionHandler();
+        }
+        return;
+    }
+
+    self.backgroundURLSessionCompletionHandler = completionHandler;
+
+    AFURLSessionManager *manager = [MinecraftResourceDownloadTask sharedBackgroundSessionManager];
+    __weak typeof(self) weakSelf = self;
+    [manager setDidFinishEventsForBackgroundURLSessionBlock:^(NSURLSession *session) {
+        if (weakSelf.backgroundURLSessionCompletionHandler) {
+            weakSelf.backgroundURLSessionCompletionHandler();
+            weakSelf.backgroundURLSessionCompletionHandler = nil;
+        }
+    }];
 }
 
 #pragma mark - Orientation Support

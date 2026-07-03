@@ -10,6 +10,7 @@
 #import "MinecraftResourceUtils.h"
 #import "MinecraftResourceDownloadTask.h"
 #import "DownloadProgressViewController.h"
+#import "DownloadTaskManager.h"
 #import "ALTServerConnection.h"
 #import "ios_uikit_bridge.h"
 #import "utils.h"
@@ -63,12 +64,19 @@ static void *ProgressObserverContext = &ProgressObserverContext;
                                              selector:@selector(updateVersionInfo)
                                                  name:@"SelectedProfileChanged"
                                                object:nil];
+
+    // 监听统一下载任务聚合状态变化，以更新启动按钮
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(updateLaunchButtonState)
+                                                 name:DownloadTaskManagerAggregateStateDidChangeNotification
+                                               object:nil];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
     [self updateAccountInfo];
     [self updateVersionInfo];
+    [self updateLaunchButtonState];
 }
 
 - (void)dealloc {
@@ -299,12 +307,19 @@ static void *ProgressObserverContext = &ProgressObserverContext;
         UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:self.progressVC];
         nav.modalPresentationStyle = UIModalPresentationFormSheet;
         [self presentViewController:nav animated:YES completion:nil];
+    } else if ([[DownloadTaskManager sharedManager] hasActiveTasks]) {
+        [self showAlert:@"存在进行中的下载任务" message:@"请等待所有下载完成后再启动游戏。"];
     } else {
         [self launchGame];
     }
 }
 
 - (void)launchGame {
+    if ([[DownloadTaskManager sharedManager] hasActiveTasks]) {
+        [self showAlert:@"存在进行中的下载任务" message:@"请等待所有下载完成后再启动游戏。"];
+        return;
+    }
+
     BaseAuthenticator *currentAuth = BaseAuthenticator.current;
     if (!currentAuth) {
         [self showAlert:@"请先登录账户"];
@@ -376,23 +391,32 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 }
 
 - (void)setInteractionEnabled:(BOOL)enabled {
-    self.launchButton.enabled = enabled;
     self.manageVersionBtn.enabled = enabled;
     self.executeJarBtn.enabled = enabled;
-    
+
     if (enabled) {
-        [self.launchButton setTitle:@"启动游戏" forState:UIControlStateNormal];
         self.progressView.hidden = YES;
         self.progressLabel.hidden = YES;
         self.progressLabel.text = @"";
     } else {
-        [self.launchButton setTitle:@"下载中..." forState:UIControlStateNormal];
         self.progressView.hidden = NO;
         self.progressLabel.hidden = NO;
         self.progressLabel.text = @"正在准备...";
     }
-    
+
     UIApplication.sharedApplication.idleTimerDisabled = !enabled;
+    [self updateLaunchButtonState];
+}
+
+- (void)updateLaunchButtonState {
+    BOOL hasActiveTasks = [[DownloadTaskManager sharedManager] hasActiveTasks];
+    BOOL hasAccount = (BaseAuthenticator.current != nil);
+    NSString *selectedProfile = PLProfiles.current.selectedProfileName;
+    BOOL hasVersion = selectedProfile && PLProfiles.current.profiles[selectedProfile][@"lastVersionId"] != nil;
+    BOOL enabled = !hasActiveTasks && hasAccount && hasVersion && !self.task;
+
+    self.launchButton.enabled = enabled;
+    [self.launchButton setTitle:(hasActiveTasks ? @"下载中..." : @"启动游戏") forState:UIControlStateNormal];
 }
 
 - (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary *)change context:(void *)context {
@@ -537,6 +561,8 @@ static void *ProgressObserverContext = &ProgressObserverContext;
         self.usernameLabel.text = @"未登录";
         self.avatarImageView.image = [UIImage systemImageNamed:@"person.circle.fill"];
     }
+
+    [self updateLaunchButtonState];
 }
 
 - (void)updateVersionInfo {
@@ -550,6 +576,8 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     } else {
         self.versionLabel.text = @"未选择版本";
     }
+
+    [self updateLaunchButtonState];
 }
 
 #pragma mark - Orientation
