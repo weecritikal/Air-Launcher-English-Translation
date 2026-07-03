@@ -113,6 +113,7 @@ static NSError* createError(NSString *message, NSInteger code) {
     NSString *passwordWithToken = [NSString stringWithFormat:@"%@:%@", password, token];
     
     NSDictionary *data = @{
+        @"agent": @{@"name": @"Minecraft", @"version": @1},
         @"username": username,
         @"password": passwordWithToken,
         @"clientToken": [[NSUUID UUID] UUIDString]
@@ -409,6 +410,7 @@ static NSError* createError(NSString *message, NSInteger code) {
         }
         
         NSDictionary *data = @{
+            @"agent": @{@"name": @"Minecraft", @"version": @1},
             @"username": username,
             @"password": password,
             @"clientToken": [[NSUUID UUID] UUIDString]
