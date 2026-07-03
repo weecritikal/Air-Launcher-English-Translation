@@ -17,6 +17,12 @@ NS_ASSUME_NONNULL_BEGIN
 // 导入整合包到游戏目录
 - (BOOL)importModpack:(NSDictionary *)modpackInfo error:(NSError **)error;
 
+// 导入整合包到游戏目录 (带进度回调)
+// progress: 0.0 ~ 1.0, stageMessage 是当前阶段的描述文案
+- (BOOL)importModpack:(NSDictionary *)modpackInfo
+             progress:(void (^_Nullable)(double progress, NSString *stageMessage))progress
+                error:(NSError **)error;
+
 // 获取已导入的整合包列表
 - (NSArray<NSDictionary *> *)getImportedModpacks;
 

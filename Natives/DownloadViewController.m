@@ -24,6 +24,7 @@
 #import "LauncherNavigationController.h"
 #import "installer/ModpackInstallViewController.h"
 #import "ModpackImportViewController.h"
+#import "ModpackImportService.h"
 #import "installer/CurseForgeAPIKeyViewController.h"
 #import "UZKArchive.h"
 #import <QuartzCore/QuartzCore.h>
@@ -3470,10 +3471,9 @@
 #pragma mark - Modpack Installation
 
 - (void)openImportModpackView {
+    // 修复: 改为 push 到中间内容区，与其他下载子流程一致，不再 FormSheet 弹窗
     ModpackImportViewController *importVC = [[ModpackImportViewController alloc] init];
-    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:importVC];
-    nav.modalPresentationStyle = UIModalPresentationFormSheet;
-    [self presentViewController:nav animated:YES completion:nil];
+    [self.navigationController pushViewController:importVC animated:YES];
 }
 
 - (void)installModpack:(UIButton *)sender {
@@ -3520,46 +3520,122 @@
         [self showError:@"无效的下载链接"];
         return;
     }
-    
-    UIAlertController *progressAlert = [UIAlertController alertControllerWithTitle:@"正在下载整合包" message:@"0%" preferredStyle:UIAlertControllerStyleAlert];
-    [self presentViewController:progressAlert animated:YES completion:nil];
-    
+
+    // 修复: 改为 push 进度 VC (FCL 风格)，替代转圈 alert
+    InstallerProgressViewController *progressVC = [[InstallerProgressViewController alloc] init];
+    progressVC.titleText = [NSString stringWithFormat:@"正在下载整合包 %@", modpack[@"title"] ?: @""];
+    progressVC.progress = -1;
+    progressVC.stageMessage = @"正在下载整合包文件...";
+    [self.navigationController pushViewController:progressVC animated:YES];
+
     NSURLSessionDownloadTask *task = [[NSURLSession sharedSession] downloadTaskWithURL:[NSURL URLWithString:downloadURL] completionHandler:^(NSURL *location, NSURLResponse *response, NSError *error) {
         dispatch_async(dispatch_get_main_queue(), ^{
-            [progressAlert dismissViewControllerAnimated:YES completion:^{
-                if (error) {
-                    [self showError:error.localizedDescription];
+            if (error) {
+                [self.navigationController popViewControllerAnimated:YES];
+                [self showError:error.localizedDescription];
+                return;
+            }
+            // 移动到临时文件
+            NSString *tempPath = [NSTemporaryDirectory() stringByAppendingPathComponent:[NSString stringWithFormat:@"%@_%@.mrpack", modpack[@"id"] ?: @"modpack", [[NSUUID UUID] UUIDString]]];
+            [[NSFileManager defaultManager] removeItemAtPath:tempPath error:nil];
+            [[NSFileManager defaultManager] moveItemAtPath:location.path toPath:tempPath error:nil];
+
+            // 复用 ModpackImportService 完成解析和导入
+            [progressVC setProgress:0.1 stageMessage:@"正在解析整合包..."];
+            ModpackImportService *importService = [[ModpackImportService alloc] init];
+            dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+                NSError *parseError = nil;
+                NSDictionary *modpackInfo = [importService parseModpackAtURL:[NSURL fileURLWithPath:tempPath] error:&parseError];
+                if (!modpackInfo) {
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        [self.navigationController popViewControllerAnimated:YES];
+                        [self showError:parseError.localizedDescription ?: @"解析整合包失败"];
+                    });
                     return;
                 }
-                NSString *tempPath = [NSTemporaryDirectory() stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.mrpack", modpack[@"id"]]];
+                // 用在线 modpack 信息补充 (title、icon 等)
+                NSMutableDictionary *mutableInfo = [modpackInfo mutableCopy];
+                if (!mutableInfo[@"name"] || [mutableInfo[@"name"] isEqualToString:[tempPath.lastPathComponent stringByDeletingPathExtension]]) {
+                    mutableInfo[@"name"] = modpack[@"title"] ?: mutableInfo[@"name"];
+                }
+                if (modpack[@"imageUrl"]) {
+                    // 不强制下载 icon，保留原整合包内的
+                }
+
+                NSError *importError = nil;
+                BOOL success = [importService importModpack:mutableInfo
+                                                   progress:^(double p, NSString *stage) {
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        [progressVC setProgress:p stageMessage:stage];
+                    });
+                } error:&importError];
+
+                // 清理临时文件
                 [[NSFileManager defaultManager] removeItemAtPath:tempPath error:nil];
-                [[NSFileManager defaultManager] moveItemAtPath:location.path toPath:tempPath error:nil];
-                [self installModpackFromFile:tempPath modpack:modpack];
-            }];
+
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    if (success) {
+                        [progressVC setProgress:1.0 stageMessage:@"安装完成"];
+                        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                            [self.navigationController popViewControllerAnimated:YES];
+                            NSString *loader = mutableInfo[@"loader"];
+                            NSString *msg = [NSString stringWithFormat:@"整合包 %@ 安装完成", mutableInfo[@"name"]];
+                            if ([loader isEqualToString:@"Forge"] || [loader isEqualToString:@"NeoForge"]) {
+                                msg = [msg stringByAppendingFormat:@"\n\n注意: 此整合包使用 %@ %@ 加载器，请先通过下载界面手动安装该加载器版本。", loader, mutableInfo[@"loaderVersion"]];
+                            }
+                            [self showSuccessMessage:msg];
+                        });
+                    } else {
+                        [self.navigationController popViewControllerAnimated:YES];
+                        [self showError:importError.localizedDescription ?: @"导入失败"];
+                    }
+                });
+            });
         });
     }];
     [task resume];
 }
 
 - (void)installModpackFromFile:(NSString *)filePath modpack:(NSDictionary *)modpack {
-    MinecraftResourceDownloadTask *downloader = [[MinecraftResourceDownloadTask alloc] init];
-    NSString *destPath = [NSString stringWithFormat:@"%s/custom_gamedir/%@", getenv("POJAV_GAME_DIR"), modpack[@"id"]];
-    [[NSFileManager defaultManager] createDirectoryAtPath:destPath withIntermediateDirectories:YES attributes:nil error:nil];
-    id api = [self currentAPIForTabType:@"modpack"];
-    [api downloader:downloader submitDownloadTasksFromPackage:filePath toPath:destPath];
-    
-    self.progressVC = [[DownloadProgressViewController alloc] initWithTask:downloader];
-    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:self.progressVC];
-    nav.modalPresentationStyle = UIModalPresentationFormSheet;
-    [self presentViewController:nav animated:YES completion:nil];
-    
-    __weak typeof(self) weakSelf = self;
-    downloader.modpackDownloadCompletion = ^{
+    // 修复: 此方法已废弃，在线下载流程改用 startModpackInstallation:modpack: 统一走 ModpackImportService
+    // 保留以防其他地方调用，但内部也走 ModpackImportService
+    InstallerProgressViewController *progressVC = [[InstallerProgressViewController alloc] init];
+    progressVC.titleText = @"正在导入整合包";
+    progressVC.progress = -1;
+    progressVC.stageMessage = @"正在解析整合包...";
+    [self.navigationController pushViewController:progressVC animated:YES];
+
+    ModpackImportService *importService = [[ModpackImportService alloc] init];
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+        NSError *parseError = nil;
+        NSDictionary *modpackInfo = [importService parseModpackAtURL:[NSURL fileURLWithPath:filePath] error:&parseError];
+        if (!modpackInfo) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [self.navigationController popViewControllerAnimated:YES];
+                [self showError:parseError.localizedDescription ?: @"解析失败"];
+            });
+            return;
+        }
+        NSError *importError = nil;
+        BOOL success = [importService importModpack:modpackInfo
+                                           progress:^(double p, NSString *stage) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [progressVC setProgress:p stageMessage:stage];
+            });
+        } error:&importError];
         dispatch_async(dispatch_get_main_queue(), ^{
-            [weakSelf.progressVC dismissViewControllerAnimated:YES completion:nil];
-            [weakSelf showSuccessMessage:[NSString stringWithFormat:@"整合包 %@ 安装完成", modpack[@"title"]]];
+            if (success) {
+                [progressVC setProgress:1.0 stageMessage:@"导入完成"];
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                    [self.navigationController popViewControllerAnimated:YES];
+                    [self showSuccessMessage:[NSString stringWithFormat:@"整合包 %@ 导入完成", modpackInfo[@"name"]]];
+                });
+            } else {
+                [self.navigationController popViewControllerAnimated:YES];
+                [self showError:importError.localizedDescription ?: @"导入失败"];
+            }
         });
-    };
+    });
 }
 
 #pragma mark - UITableView DataSource

@@ -3,6 +3,7 @@
 //  Amethyst
 //
 //  修改：增加异常捕获，彻底防止闪退
+//  重写：参照 FCL 风格，导入时显示进度卡片（百分比+进度条+阶段文案）替代转圈圈
 //
 
 #import "ModpackImportViewController.h"
@@ -14,12 +15,21 @@
 
 @interface ModpackImportViewController () <UITableViewDataSource, UITableViewDelegate, UIDocumentPickerDelegate>
 @property (nonatomic, strong) UITableView *tableView;
-@property (nonatomic, strong) UIActivityIndicatorView *activityIndicator;
 @property (nonatomic, strong) UILabel *emptyLabel;
 @property (nonatomic, strong) UIButton *importButton;
 @property (nonatomic, strong) NSMutableArray<NSDictionary *> *importedModpacks;
 @property (nonatomic, strong) ModpackImportService *importService;
 @property (nonatomic, strong) NSDictionary *currentImportingModpack;
+
+// FCL 风格进度卡片
+@property (nonatomic, strong) UIView *progressOverlay;       // 半透明遮罩
+@property (nonatomic, strong) UIView *progressCard;          // 居中卡片
+@property (nonatomic, strong) UILabel *progressTitleLabel;   // 标题
+@property (nonatomic, strong) UILabel *progressPercentLabel; // 百分比 (36pt 大字)
+@property (nonatomic, strong) UIProgressView *progressBar;   // 进度条
+@property (nonatomic, strong) UILabel *progressStageLabel;   // 阶段文案
+@property (nonatomic, strong) UIActivityIndicatorView *progressSpinner; // 不确定模式转圈
+@property (nonatomic, strong) UIButton *progressCancelButton; // 取消按钮
 @end
 
 @implementation ModpackImportViewController
@@ -34,7 +44,7 @@
     self.importedModpacks = [NSMutableArray array];
     [self setupUI];
     [self loadImportedModpacks];
-    
+
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(handleBackgroundUIEffectChanged:)
                                                  name:@"BackgroundUIEffectChanged"
@@ -67,11 +77,6 @@
     self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
     [self.view addSubview:self.tableView];
 
-    self.activityIndicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleLarge];
-    self.activityIndicator.translatesAutoresizingMaskIntoConstraints = NO;
-    self.activityIndicator.hidesWhenStopped = YES;
-    [self.view addSubview:self.activityIndicator];
-
     self.emptyLabel = [[UILabel alloc] init];
     self.emptyLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.emptyLabel.textAlignment = NSTextAlignmentCenter;
@@ -91,12 +96,155 @@
         [self.tableView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [self.tableView.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor],
 
-        [self.activityIndicator.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
-        [self.activityIndicator.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor],
-
         [self.emptyLabel.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
         [self.emptyLabel.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor]
     ]];
+}
+
+#pragma mark - FCL 风格进度卡片
+
+- (void)showProgressCardWithTitle:(NSString *)title {
+    [self hideProgressCard];
+
+    UIView *overlay = [[UIView alloc] init];
+    overlay.translatesAutoresizingMaskIntoConstraints = NO;
+    overlay.backgroundColor = [UIColor colorWithWhite:0 alpha:0.4];
+    [self.view addSubview:overlay];
+
+    UIView *card = [[UIView alloc] init];
+    card.translatesAutoresizingMaskIntoConstraints = NO;
+    card.backgroundColor = [UIColor secondarySystemGroupedBackgroundColor];
+    card.layer.cornerRadius = 18;
+    card.layer.masksToBounds = YES;
+    [overlay addSubview:card];
+
+    UILabel *titleLabel = [[UILabel alloc] init];
+    titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    titleLabel.text = title;
+    titleLabel.font = [UIFont systemFontOfSize:18 weight:UIFontWeightSemibold];
+    titleLabel.textAlignment = NSTextAlignmentCenter;
+    [card addSubview:titleLabel];
+
+    UILabel *percentLabel = [[UILabel alloc] init];
+    percentLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    percentLabel.font = [UIFont systemFontOfSize:36 weight:UIFontWeightHeavy];
+    percentLabel.textAlignment = NSTextAlignmentCenter;
+    percentLabel.text = @"0%";
+    [card addSubview:percentLabel];
+
+    UIProgressView *bar = [[UIProgressView alloc] initWithProgressViewStyle:UIProgressViewStyleDefault];
+    bar.translatesAutoresizingMaskIntoConstraints = NO;
+    bar.progressTintColor = [UIColor systemBlueColor];
+    [card addSubview:bar];
+
+    UILabel *stageLabel = [[UILabel alloc] init];
+    stageLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    stageLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightRegular];
+    stageLabel.textColor = [UIColor secondaryLabelColor];
+    stageLabel.textAlignment = NSTextAlignmentCenter;
+    stageLabel.numberOfLines = 0;
+    [card addSubview:stageLabel];
+
+    UIActivityIndicatorView *spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleLarge];
+    spinner.translatesAutoresizingMaskIntoConstraints = NO;
+    spinner.hidesWhenStopped = YES;
+    [card addSubview:spinner];
+
+    UIButton *cancelBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+    cancelBtn.translatesAutoresizingMaskIntoConstraints = NO;
+    [cancelBtn setTitle:@"取消" forState:UIControlStateNormal];
+    cancelBtn.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightMedium];
+    [cancelBtn addTarget:self action:@selector(cancelImport) forControlEvents:UIControlEventTouchUpInside];
+    [card addSubview:cancelBtn];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [overlay.topAnchor constraintEqualToAnchor:self.view.topAnchor],
+        [overlay.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
+        [overlay.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [overlay.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+
+        [card.centerXAnchor constraintEqualToAnchor:overlay.centerXAnchor],
+        [card.centerYAnchor constraintEqualToAnchor:overlay.centerYAnchor],
+        [card.widthAnchor constraintEqualToConstant:300],
+
+        [titleLabel.topAnchor constraintEqualToAnchor:card.topAnchor constant:24],
+        [titleLabel.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:20],
+        [titleLabel.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-20],
+
+        [percentLabel.topAnchor constraintEqualToAnchor:titleLabel.bottomAnchor constant:16],
+        [percentLabel.centerXAnchor constraintEqualToAnchor:card.centerXAnchor],
+
+        [spinner.topAnchor constraintEqualToAnchor:titleLabel.bottomAnchor constant:16],
+        [spinner.centerXAnchor constraintEqualToAnchor:card.centerXAnchor],
+
+        [bar.topAnchor constraintEqualToAnchor:percentLabel.bottomAnchor constant:12],
+        [bar.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:20],
+        [bar.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-20],
+        [bar.heightAnchor constraintEqualToConstant:8],
+
+        [stageLabel.topAnchor constraintEqualToAnchor:bar.bottomAnchor constant:12],
+        [stageLabel.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:20],
+        [stageLabel.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-20],
+
+        [cancelBtn.topAnchor constraintEqualToAnchor:stageLabel.bottomAnchor constant:16],
+        [cancelBtn.centerXAnchor constraintEqualToAnchor:card.centerXAnchor],
+        [cancelBtn.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-20]
+    ]];
+
+    self.progressOverlay = overlay;
+    self.progressCard = card;
+    self.progressTitleLabel = titleLabel;
+    self.progressPercentLabel = percentLabel;
+    self.progressBar = bar;
+    self.progressStageLabel = stageLabel;
+    self.progressSpinner = spinner;
+    self.progressCancelButton = cancelBtn;
+
+    // 初始不确定模式 (只显示转圈)
+    [self setProgress:-1 stageMessage:@"正在准备..."];
+}
+
+- (void)setProgress:(double)progress stageMessage:(NSString *)stageMessage {
+    if (!self.progressCard) return;
+
+    if (progress < 0) {
+        // 不确定模式
+        self.progressBar.hidden = YES;
+        self.progressPercentLabel.hidden = YES;
+        self.progressSpinner.hidden = NO;
+        [self.progressSpinner startAnimating];
+    } else {
+        self.progressBar.hidden = NO;
+        self.progressPercentLabel.hidden = NO;
+        self.progressSpinner.hidden = YES;
+        [self.progressSpinner stopAnimating];
+        double clamped = MAX(0.0, MIN(1.0, progress));
+        NSInteger percent = (NSInteger)(clamped * 100);
+        self.progressPercentLabel.text = [NSString stringWithFormat:@"%ld%%", (long)percent];
+        [self.progressBar setProgress:(float)clamped animated:YES];
+    }
+    self.progressStageLabel.text = stageMessage ?: @"";
+}
+
+- (void)hideProgressCard {
+    if (self.progressOverlay) {
+        [self.progressOverlay removeFromSuperview];
+        self.progressOverlay = nil;
+        self.progressCard = nil;
+        self.progressTitleLabel = nil;
+        self.progressPercentLabel = nil;
+        self.progressBar = nil;
+        self.progressStageLabel = nil;
+        self.progressSpinner = nil;
+        self.progressCancelButton = nil;
+    }
+}
+
+- (void)cancelImport {
+    // 简化处理：取消只是隐藏卡片 (后台导入会继续，但结果被忽略)
+    // 真正的取消需要 ModpackImportService 支持取消，这里暂不实现
+    [self hideProgressCard];
+    self.currentImportingModpack = nil;
 }
 
 - (void)loadImportedModpacks {
@@ -140,7 +288,9 @@
         return;
     }
 
-    [self.activityIndicator startAnimating];
+    // 解析阶段：显示不确定模式进度卡片
+    [self showProgressCardWithTitle:@"正在解析整合包"];
+    [self setProgress:-1 stageMessage:@"正在读取整合包信息..."];
 
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         NSError *error = nil;
@@ -156,13 +306,13 @@
         [fileURL stopAccessingSecurityScopedResource];
 
         dispatch_async(dispatch_get_main_queue(), ^{
-            [self.activityIndicator stopAnimating];
-
             if (error || !modpackInfo) {
+                [self hideProgressCard];
                 [self showAlertWithTitle:@"解析失败" message:error.localizedDescription ?: @"无法解析整合包文件"];
                 return;
             }
             self.currentImportingModpack = modpackInfo;
+            [self hideProgressCard];
             [self showModpackImportConfirmation:modpackInfo];
         });
     });
@@ -198,30 +348,46 @@
 }
 
 - (void)startModpackImport:(NSDictionary *)modpackInfo {
-    [self.activityIndicator startAnimating];
+    [self showProgressCardWithTitle:[NSString stringWithFormat:@"正在导入 %@", modpackInfo[@"name"] ?: @"整合包"]];
 
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        NSError *error = nil;
-        BOOL success = NO;
+        __block NSError *error = nil;
+        __block BOOL success = NO;
 
         @try {
-            success = [self.importService importModpack:modpackInfo error:&error];
+            success = [self.importService importModpack:modpackInfo
+                                               progress:^(double progress, NSString *stageMessage) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [self setProgress:progress stageMessage:stageMessage];
+                });
+            } error:&error];
         } @catch (NSException *exception) {
             error = [NSError errorWithDomain:@"ModpackImportError" code:9998
                                     userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"导入异常: %@", exception.reason]}];
         }
 
         dispatch_async(dispatch_get_main_queue(), ^{
-            [self.activityIndicator stopAnimating];
-            self.currentImportingModpack = nil;
+            // 完成时显示 100%
+            [self setProgress:1.0 stageMessage:@"导入完成"];
 
-            if (success) {
-                [self showAlertWithTitle:@"导入成功" message:[NSString stringWithFormat:@"整合包 '%@' 已成功导入。", modpackInfo[@"name"]] completion:^{
-                    [self loadImportedModpacks];
-                }];
-            } else {
-                [self showAlertWithTitle:@"导入失败" message:error.localizedDescription ?: @"未知错误"];
-            }
+            // 停留 0.6s 让用户看到完成状态
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.6 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                [self hideProgressCard];
+                self.currentImportingModpack = nil;
+
+                if (success) {
+                    NSString *loader = modpackInfo[@"loader"];
+                    NSString *msg = [NSString stringWithFormat:@"整合包 '%@' 已成功导入。", modpackInfo[@"name"]];
+                    if ([loader isEqualToString:@"Forge"] || [loader isEqualToString:@"NeoForge"]) {
+                        msg = [msg stringByAppendingFormat:@"\n\n注意: 此整合包使用 %@ %@ 加载器，请先通过下载界面手动安装该加载器版本，否则启动会失败。", loader, modpackInfo[@"loaderVersion"]];
+                    }
+                    [self showAlertWithTitle:@"导入成功" message:msg completion:^{
+                        [self loadImportedModpacks];
+                    }];
+                } else {
+                    [self showAlertWithTitle:@"导入失败" message:error.localizedDescription ?: @"未知错误"];
+                }
+            });
         });
     });
 }
@@ -234,6 +400,16 @@
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"ModpackCell" forIndexPath:indexPath];
+    // 重置 cell 样式
+    cell.textLabel.text = nil;
+    cell.detailTextLabel.text = nil;
+    cell.imageView.image = nil;
+    for (UIView *subview in cell.contentView.subviews) {
+        if ([subview isKindOfClass:[UIVisualEffectView class]]) {
+            [subview removeFromSuperview];
+        }
+    }
+
     NSDictionary *modpack = self.importedModpacks[indexPath.row];
     NSString *name = modpack[@"name"] ?: @"未知";
     NSString *mcVersion = modpack[@"minecraftVersion"] ?: @"未知";
@@ -244,13 +420,6 @@
     cell.imageView.image = [UIImage systemImageNamed:@"archivebox"];
     cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
     cell.backgroundColor = [UIColor clearColor];
-
-    // 移除旧的卡片背景（如果有）
-    for (UIView *subview in cell.contentView.subviews) {
-        if ([subview isKindOfClass:[UIVisualEffectView class]]) {
-            [subview removeFromSuperview];
-        }
-    }
 
     UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial]];
     blurView.translatesAutoresizingMaskIntoConstraints = NO;
@@ -306,12 +475,13 @@
     UIAlertController *confirm = [UIAlertController alertControllerWithTitle:@"确认删除" message:[NSString stringWithFormat:@"删除整合包 '%@'？此操作无法撤销。", modpack[@"name"]] preferredStyle:UIAlertControllerStyleAlert];
     [confirm addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
     [confirm addAction:[UIAlertAction actionWithTitle:@"删除" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
-        [self.activityIndicator startAnimating];
+        [self showProgressCardWithTitle:@"正在删除"];
+        [self setProgress:-1 stageMessage:@"正在删除整合包文件..."];
         dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
             NSError *error = nil;
             BOOL success = [self.importService deleteModpack:modpack error:&error];
             dispatch_async(dispatch_get_main_queue(), ^{
-                [self.activityIndicator stopAnimating];
+                [self hideProgressCard];
                 if (success) {
                     [self loadImportedModpacks];
                 } else {
