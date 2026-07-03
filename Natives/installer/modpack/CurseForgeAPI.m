@@ -444,7 +444,7 @@ static NSString *CFACompiledAPIKey(void) {
     int pageSize = 50;
     NSString *projectType = searchFilters[@"projectType"];
     if (projectType.length == 0) {
-        projectType = searchFilters[@"isModpack"] ? (searchFilters[@"isModpack"].boolValue ? @"modpack" : @"mod") : @"modpack";
+        projectType = searchFilters[@"isModpack"] ? ([searchFilters[@"isModpack"] boolValue] ? @"modpack" : @"mod") : @"modpack";
     }
     
     NSMutableDictionary *params = @{
@@ -564,7 +564,7 @@ static NSString *CFACompiledAPIKey(void) {
     NSString *projectType = filters[@"projectType"];
     if (projectType.length == 0) {
         // 防御性回退：与同步版本一致，未指定 projectType 但声明 isModpack 时按整合包搜索
-        projectType = filters[@"isModpack"].boolValue ? @"modpack" : @"mod";
+        projectType = [filters[@"isModpack"] boolValue] ? @"modpack" : @"mod";
     }
     NSString *query = filters[@"query"] ?: filters[@"name"] ?: @"";
     NSNumber *limitNum = filters[@"limit"] ?: @50;

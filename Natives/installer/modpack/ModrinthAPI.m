@@ -36,7 +36,7 @@
     NSString *projectType = searchFilters[@"projectType"];
     if (projectType.length == 0) {
         // 防御性回退：未指定 projectType 但声明 isModpack 时按整合包搜索，避免误搜 Mod
-        projectType = searchFilters[@"isModpack"].boolValue ? @"modpack" : @"mod";
+        projectType = [searchFilters[@"isModpack"] boolValue] ? @"modpack" : @"mod";
     }
     
     NSMutableString *facetString = [NSMutableString new];
@@ -171,7 +171,7 @@
     NSString *projectType = filters[@"projectType"];
     if (projectType.length == 0) {
         // 防御性回退：未指定 projectType 但声明 isModpack 时按整合包搜索，避免误搜 Mod
-        projectType = filters[@"isModpack"].boolValue ? @"modpack" : @"mod";
+        projectType = [filters[@"isModpack"] boolValue] ? @"modpack" : @"mod";
     }
     NSString *query = filters[@"query"] ?: filters[@"name"] ?: @"";
     NSNumber *limitNum = filters[@"limit"] ?: @50;
