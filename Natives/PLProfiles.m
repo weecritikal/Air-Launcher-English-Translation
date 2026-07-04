@@ -44,12 +44,11 @@ static PLProfiles* current;
     // 兼容 javaVersion 字段：Mojang 规范是 NSDictionary（{component, majorVersion}），
     // 但部分代码（如 ForgeDirectInstaller）也写入 NSDictionary。PLProfiles 期望返回 NSString。
     if ([rawValue isKindOfClass:[NSDictionary class]]) {
-        // javaVersion: 返回 majorVersion 的字符串值
+        // javaVersion: 返回 majorVersion 的字符串值；缺失则落入下方 valueDefaults
         id major = rawValue[@"majorVersion"];
         if (major) return [major description];
-        return nil;
-    }
-    if ([rawValue isKindOfClass:[NSString class]] && [(NSString *)rawValue length] > 0) {
+        // 落入下方 valueDefaults 逻辑，避免返回 nil 破坏调用方
+    } else if ([rawValue isKindOfClass:[NSString class]] && [(NSString *)rawValue length] > 0) {
         return rawValue;
     }
 

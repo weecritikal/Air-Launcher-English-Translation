@@ -8,7 +8,7 @@
 + (PLProfiles *)current;
 + (void)updateCurrent;
 
-//+ (id)profile:(NSMutableDictionary *)profile resolveKey:(id)key;
++ (id)profile:(NSMutableDictionary *)profile resolveKey:(id)key;
 + (NSString *)resolveKeyForCurrentProfile:(id)key;
 
 - (id)initWithCurrentInstance;

@@ -233,8 +233,13 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
         // 切换到就绪状态，避免列表显示 Loading...
         self.isDataLoading = NO;
         [self.tableView reloadData];
+        // weakSelf 防御：用户在 dispatch_async 期间快速返回（pop VC）时避免 present 作用于已不在栈中的 VC
+        __weak typeof(self) weakSelf = self;
         dispatch_async(dispatch_get_main_queue(), ^{
-            [self presentSchemeSelection];
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (strongSelf && [strongSelf.navigationController.viewControllers containsObject:strongSelf]) {
+                [strongSelf presentSchemeSelection];
+            }
         });
     } else {
         [self loadMetadataFromVendor:self.currentVendor];
@@ -616,7 +621,14 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
         if (lastDot.location != NSNotFound) {
             part = [part substringToIndex:lastDot.location];
         }
-        return part;
+        // 仅当 part 匹配快照版本号格式（如 25w14craftmine）才返回，避免误判
+        NSRegularExpression *snapshotRegex = [NSRegularExpression regularExpressionWithPattern:@"^\\d{2}w\\d{2}[a-z]+"
+                                                                                       options:0
+                                                                                         error:nil];
+        if ([snapshotRegex firstMatchInString:part options:0 range:NSMakeRange(0, part.length)]) {
+            return part;
+        }
+        return @"Unknown";
     }
 
     NSString *cleanVersion = version;
@@ -883,6 +895,16 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
 #pragma mark - ForgeInstallSchemeViewControllerDelegate
 
 - (void)schemeViewController:(ForgeInstallSchemeViewController *)controller didSelectScheme:(NSInteger)scheme {
+    if (scheme < 0) {
+        // 用户点关闭按钮取消，回调失败避免上游永久阻塞
+        if (self.completionHandler) {
+            NSError *cancelError = [NSError errorWithDomain:ForgeInstallerFlowErrorDomain
+                                                       code:ForgeInstallerFlowErrorCodeCancelled
+                                                   userInfo:@{NSLocalizedDescriptionKey: @"用户取消安装方案选择"}];
+            self.completionHandler(NO, nil, cancelError);
+        }
+        return;
+    }
     if (scheme == 0) {
         // 原版方案在 iOS 上对 Forge 1.13+/NeoForge 不可用（processors 需要 fork/exec）
         // 弹窗告知用户风险，让用户决定是否继续或改用直装方案
@@ -966,7 +988,10 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
     } else {
         jarURL = [NSString stringWithFormat:self.endpoints[self.currentVendor][@"installer"], versionString];
     }
-    NSString *outPath = [NSTemporaryDirectory() stringByAppendingPathComponent:@"tmp.jar"];
+    NSString *outPath = [NSTemporaryDirectory() stringByAppendingPathComponent:
+                         [NSString stringWithFormat:@"%@-installer-%@.jar",
+                          self.currentVendor,
+                          [[NSProcessInfo processInfo] globallyUniqueString]]];
     NSDebugLog(@"[%@ Installer] Downloading %@", self.currentVendor, jarURL);
 
     self.afManager = [AFURLSessionManager new];

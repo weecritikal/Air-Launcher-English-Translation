@@ -486,6 +486,8 @@ NSString *const NeoForgeDirectInstallerErrorDomain = @"NeoForgeDirectInstallerEr
     NSFileManager *fm = [NSFileManager defaultManager];
     for (NSString *name in filenames) {
         if (![name hasPrefix:@"maven/"]) continue;
+        // 跳过目录条目（以 / 结尾），避免 extractDataFromFile 返回空数据产生误报日志
+        if ([name hasSuffix:@"/"]) continue;
 
         NSString *relativePath = [name substringFromIndex:@"maven/".length];
         if (relativePath.length == 0) continue;

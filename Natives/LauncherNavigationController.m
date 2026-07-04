@@ -240,6 +240,9 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     vc.filepath = path;
     vc.hitEnterAfterWindowShown = hitEnter;
     if (!vc.requiredJavaVersion) {
+        // 解析失败（manifest 缺失/主类非法）时明确提示，避免静默 return 让用户以为安装器已启动
+        showDialog(localize(@"Error", nil),
+            [NSString stringWithFormat:@"无法解析安装器主类或 Java 版本：%@", path.lastPathComponent]);
         return;
     }
     [self invokeAfterJITEnabled:^{
