@@ -20,6 +20,7 @@
 #import "BackgroundManager.h"
 #import "AIFixViewController.h"
 #import "CurseForgeAPIKeyViewController.h"
+#import "DownloadFloatingBall.h"
 
 @interface LauncherPreferencesViewController()
 @property(nonatomic) NSArray<NSString*> *rendererKeys, *rendererList;
@@ -258,6 +259,47 @@
                   localize(@"preference.title.download_source-official", nil),
                   localize(@"preference.title.download_source-bmclapi", nil)
               ]
+            },
+            @{@"key": @"ui_layout",
+              @"title": @"UI 布局",
+              @"hasDetail": @YES,
+              @"icon": @"rectangle.split.3x3",
+              @"type": self.typePickField,
+              @"enableCondition": whenNotInGame,
+              @"pickKeys": @[
+                  @"vs",
+                  @"card"
+              ],
+              @"pickList": @[
+                  @"VS 三栏布局",
+                  @"卡片式布局"
+              ]
+            },
+            @{@"key": @"floating_ball_enabled",
+              @"title": @"下载悬浮球",
+              @"hasDetail": @YES,
+              @"icon": @"circle.fill",
+              @"type": self.typeSwitch,
+              @"enableCondition": whenNotInGame,
+              @"action": ^(BOOL enabled){
+                  [[NSNotificationCenter defaultCenter] postNotificationName:DownloadFloatingBallSettingsDidChangeNotification object:nil];
+              }
+            },
+            @{@"key": @"floating_ball_size",
+              @"title": @"悬浮球大小",
+              @"hasDetail": @YES,
+              @"icon": @"slider.horizontal.3",
+              @"type": self.typeSlider,
+              @"min": @40,
+              @"max": @100,
+              @"enableCondition": ^BOOL(){ return getPrefBool(@"general.floating_ball_enabled") && whenNotInGame(); }
+            },
+            @{@"key": @"multi_threaded",
+              @"title": @"多线程下载",
+              @"hasDetail": @YES,
+              @"icon": @"bolt.fill",
+              @"type": self.typeSwitch,
+              @"enableCondition": whenNotInGame
             },
             @{@"key": @"curseforge_api_key",
               @"hasDetail": @YES,

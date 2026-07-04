@@ -160,7 +160,7 @@ NSNotificationName const DownloadFloatingBallSettingsDidChangeNotification = @"c
 - (void)updateVisibility {
     if (!self.floatingButton) return;
 
-    BOOL enabled = getPrefBool(@"download.floating_ball_enabled");
+    BOOL enabled = getPrefBool(@"general.floating_ball_enabled");
     BOOL inGame  = [SurfaceViewController isRunning];
 
     if (!enabled || inGame) {
@@ -178,7 +178,7 @@ NSNotificationName const DownloadFloatingBallSettingsDidChangeNotification = @"c
     if (!self.floatingButton) return;
 
     // 尺寸
-    NSNumber *sizeValue = getPrefObject(@"download.floating_ball_size");
+    NSNumber *sizeValue = getPrefObject(@"general.floating_ball_size");
     CGFloat size = sizeValue ? [sizeValue floatValue] : kFloatingBallDefaultSize;
     size = MAX(kFloatingBallMinSize, MIN(kFloatingBallMaxSize, size));
     if (size != self.currentSize) {
