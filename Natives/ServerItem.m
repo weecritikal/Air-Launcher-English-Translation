@@ -36,7 +36,7 @@
         _serverDescription = [desc isKindOfClass:[NSString class]] ? desc : @"";
 
         // 图标 URL：Modrinth 用 icon_url / imageUrl，CurseForge 用 logo.thumbnailUrl / logo.url
-        id icon = data[@"iconURL"] ?: data[@"icon_url"] ?: data[@"imageUrl"];
+        NSString *icon = data[@"iconURL"] ?: data[@"icon_url"] ?: data[@"imageUrl"];
         if (![icon isKindOfClass:[NSString class]] || icon.length == 0) {
             NSDictionary *logo = [data[@"logo"] isKindOfClass:[NSDictionary class]] ? data[@"logo"] : nil;
             icon = logo[@"thumbnailUrl"] ?: logo[@"url"];
@@ -68,7 +68,7 @@
         _lastUpdated = [updated isKindOfClass:[NSString class]] ? updated : @"";
 
         // 项目类型：Modrinth 返回 project_type，CurseForge 通过 classId 推断
-        id ptype = data[@"projectType"] ?: data[@"project_type"];
+        NSString *ptype = data[@"projectType"] ?: data[@"project_type"];
         if ([ptype isKindOfClass:[NSString class]] && ptype.length > 0) {
             _projectType = ptype;
         } else {
@@ -81,7 +81,7 @@
         _categories = [cats isKindOfClass:[NSArray class]] ? cats : @[];
 
         // 主页：Modrinth 用 page_url，CurseForge 用 websiteUrl
-        id home = data[@"homepage"] ?: data[@"page_url"];
+        NSString *home = data[@"homepage"] ?: data[@"page_url"];
         if (![home isKindOfClass:[NSString class]] || home.length == 0) {
             NSDictionary *links = [data[@"links"] isKindOfClass:[NSDictionary class]] ? data[@"links"] : nil;
             home = links[@"websiteUrl"];
@@ -95,7 +95,7 @@
     if (![data isKindOfClass:[NSDictionary class]]) return;
 
     // 服务器地址：优先取 server_address / serverAddress / ip / address 字段
-    id addr = data[@"server_address"] ?: data[@"serverAddress"] ?: data[@"ip"] ?: data[@"address"];
+    NSString *addr = data[@"server_address"] ?: data[@"serverAddress"] ?: data[@"ip"] ?: data[@"address"];
     if ([addr isKindOfClass:[NSString class]] && addr.length > 0) {
         self.serverAddress = addr;
     } else if (self.serverDescription.length > 0) {
@@ -105,7 +105,7 @@
     }
 
     // 关联整合包 ID：Modrinth 用 modpack_project_id，CurseForge 用 modpackId
-    id mpID = data[@"modpack_project_id"] ?: data[@"modpackId"] ?: data[@"associatedModpackId"];
+    NSString *mpID = data[@"modpack_project_id"] ?: data[@"modpackId"] ?: data[@"associatedModpackId"];
     if ([mpID isKindOfClass:[NSString class]] && mpID.length > 0) {
         self.associatedModpackID = mpID;
     } else if ([mpID respondsToSelector:@selector(integerValue)]) {
@@ -113,11 +113,11 @@
     }
 
     // 服务端整合包文件信息（如果有）
-    id spURL = data[@"serverPackDownloadURL"] ?: data[@"downloadUrl"];
+    NSString *spURL = data[@"serverPackDownloadURL"] ?: data[@"downloadUrl"];
     if ([spURL isKindOfClass:[NSString class]] && spURL.length > 0) {
         self.serverPackDownloadURL = spURL;
     }
-    id spName = data[@"serverPackFileName"] ?: data[@"fileName"];
+    NSString *spName = data[@"serverPackFileName"] ?: data[@"fileName"];
     if ([spName isKindOfClass:[NSString class]] && spName.length > 0) {
         self.serverPackFileName = spName;
     }
