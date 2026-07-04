@@ -855,7 +855,8 @@ didFinishDownloadingToURL:(NSURL *)location {
 
     NSError *dlError = nil;
     if (![self downloadFileFromURL:installerURL toPath:tmpInstallerPath taskId:installerTaskId task:installerTask error:&dlError]) {
-        // installer.jar 下载失败：回退到写占位 JSON（至少让 profile 不崩，用户可手动装）
+        // installer.jar 下载失败：写显式失败的占位 JSON（mainClass 指向不存在的类，启动时会显式报错，
+        // 避免误装作 vanilla MC 让用户以为 mods 生效）
         NSLog(@"[ModpackImport] %@ installer.jar 下载失败，回退到占位 JSON: %@", loader, installerURL);
         NSInteger javaMajor = [self javaMajorVersionForMC:minecraftVersion];
         NSDictionary *placeholderJSON = @{
@@ -863,11 +864,16 @@ didFinishDownloadingToURL:(NSURL *)location {
             @"id": versionId,
             @"inheritsFrom": minecraftVersion,
             @"type": @"release",
-            @"mainClass": @"net.minecraft.client.main.Main",
+            @"mainClass": @"net.angelaura.installer.MissingLoader",  // 故意指向不存在的类，启动时显式报错
             @"javaVersion": @{@"component": @"java-runtime", @"majorVersion": @(javaMajor)}
         };
         NSData *jsonData = [NSJSONSerialization dataWithJSONObject:placeholderJSON options:NSJSONWritingPrettyPrinted error:nil];
-        return [jsonData writeToFile:versionJsonPath options:NSDataWritingAtomic error:error];
+        [jsonData writeToFile:versionJsonPath options:NSDataWritingAtomic error:nil];
+        if (error) {
+            *error = [NSError errorWithDomain:@"ModpackImportService" code:1001
+                                     userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"%@ installer.jar 下载失败，已写入占位 JSON。请手动安装加载器。", loader]}];
+        }
+        return NO;  // 让调用方感知失败并打印警告
     }
 
     NSLog(@"[ModpackImport] %@ installer.jar 下载完成: %@", loader, tmpInstallerPath);
@@ -901,16 +907,24 @@ didFinishDownloadingToURL:(NSURL *)location {
         if (installerTaskId) {
             [[DownloadTaskManager sharedManager] setTaskWithId:installerTaskId completedWithError:installError];
         }
-        // 直装失败：写占位 JSON 兜底（用户可手动装）
+        // 直装失败：写显式失败的占位 JSON（mainClass 指向不存在的类，启动时会显式报错，
+        // 避免误装作 vanilla MC 让用户以为 mods 生效）
+        NSInteger javaMajor = [self javaMajorVersionForMC:minecraftVersion];
         NSDictionary *placeholderJSON = @{
             @"_comment_": [NSString stringWithFormat:@"此整合包需要 %@ %@ 加载器，自动安装失败：%@。请通过下载界面手动安装。", loader, loaderVersion, installError.localizedDescription ?: @"未知错误"],
             @"id": versionId,
             @"inheritsFrom": minecraftVersion,
             @"type": @"release",
-            @"mainClass": @"net.minecraft.client.main.Main"
+            @"mainClass": @"net.angelaura.installer.MissingLoader",  // 故意指向不存在的类，启动时显式报错
+            @"javaVersion": @{@"component": @"java-runtime", @"majorVersion": @(javaMajor)}
         };
         NSData *jsonData = [NSJSONSerialization dataWithJSONObject:placeholderJSON options:NSJSONWritingPrettyPrinted error:nil];
-        return [jsonData writeToFile:versionJsonPath options:NSDataWritingAtomic error:error];
+        [jsonData writeToFile:versionJsonPath options:NSDataWritingAtomic error:nil];
+        if (error) {
+            *error = [NSError errorWithDomain:@"ModpackImportService" code:1002
+                                     userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"%@ 直装失败：%@。已写入占位 JSON。请手动安装加载器。", loader, installError.localizedDescription ?: @"未知错误"]}];
+        }
+        return NO;  // 让调用方感知失败并打印警告
     }
 
     NSLog(@"[ModpackImport] %@ 直装成功，version.json 已写入: %@", loader, versionJsonPath);

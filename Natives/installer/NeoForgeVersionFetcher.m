@@ -185,7 +185,8 @@
 
 + (NSString *)extractMinecraftVersionFromNeoForgeVersion:(NSString *)version {
     // 1.20.1 special versions: 1.20.1-47.1.3 -> 1.20.1
-    if ([version containsString:@"1.20.1"]) {
+    // 同时覆盖 47.x.y 系列（1.20.1 NeoForge release 版本号，不含 "1.20.1" 子串）
+    if ([version containsString:@"1.20.1"] || [version hasPrefix:@"47."]) {
         return @"1.20.1";
     }
 
@@ -221,11 +222,20 @@
         if (majorIsNum && minorIsNum) {
             NSInteger majorVal = [major integerValue];
             if (majorVal >= 26) {
-                // New format: 26.1.0.0 -> 26.1.0
+                // New format: 26.1.0.0 -> 1.26.0（NeoForge 26+ 对应 MC 1.26+，未来版本）
+                // 实际约定：NeoForge loader 主版本号 == MC 主版本号（从 21.x 开始）
+                // 但 47.x 是 1.20.1 的特例（已在上面处理）
                 if (components.count >= 3) {
-                    return [NSString stringWithFormat:@"%@.%@.%@", major, minor, components[2]];
+                    return [NSString stringWithFormat:@"1.%@.%@", major, components[2]];
                 } else {
-                    return [NSString stringWithFormat:@"%@.%@", major, minor];
+                    return [NSString stringWithFormat:@"1.%@.0", major];
+                }
+            } else if (majorVal >= 21) {
+                // 21.x - 25.x: NeoForge loader 版本号 == MC 版本号（21.x → MC 1.21.x）
+                if (components.count >= 3) {
+                    return [NSString stringWithFormat:@"1.%@.%@", major, components[2]];
+                } else {
+                    return [NSString stringWithFormat:@"1.%@.0", major];
                 }
             } else {
                 // Old format: 20.2.88 -> 1.20.2

@@ -255,7 +255,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
     if (minor >= 21) return 21;                  // 1.21+
     if (minor >= 20 && patch >= 5) return 21;    // 1.20.5+
     if (minor >= 18) return 17;                  // 1.18+
-    if (minor >= 17) return 16;                  // 1.17
+    if (minor >= 17) return 17;                  // 1.17（项目未捆绑 Java 16，Java 17 可向后兼容运行 1.17）
     return 8;                                     // 1.16.5 及以下
 }
 
@@ -320,6 +320,11 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
             return NO;
         }
         NSLog(@"[ForgeDirect] Universal jar extracted successfully");
+    } else {
+        // filePath 缺失：universal jar 是老版本 Forge 的核心运行时依赖
+        // 若 mavenPath 存在，后续 extractAllMavenEntries 可能会提取到（zip 内 maven/ 路径下）
+        // 若 mavenPath 也缺失，启动时可能 NoClassDefFoundError
+        NSLog(@"[ForgeDirect] ⚠️ install.filePath 缺失，universal jar 将依赖 extractAllMavenEntries 或后续 downloadMissingLibraries 补全");
     }
     reportProgress(0.7, @"正在提取 libraries (1/1)");
 
@@ -479,13 +484,28 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
     NSLog(@"[ForgeDirect] Downloading pre-patched client artifact");
     reportProgress(0.75, @"正在下载预打补丁的核心 jar");
     NSString *mainPath = installProfile[@"path"];
+    // 兜底：path 字段缺失时用 version 字段拼接标准 Forge 坐标
+    if (![mainPath isKindOfClass:[NSString class]] || mainPath.length == 0) {
+        NSString *versionField = installProfile[@"version"];
+        if ([versionField isKindOfClass:[NSString class]] && versionField.length > 0) {
+            mainPath = [NSString stringWithFormat:@"net.minecraftforge:forge:%@", versionField];
+            NSLog(@"[ForgeDirect] path 字段缺失，用 version 字段兜底拼接: %@", mainPath);
+        }
+    }
     if ([mainPath isKindOfClass:[NSString class]] && mainPath.length > 0) {
         if (![self downloadPatchedArtifact:mainPath librariesDir:librariesDir error:error]) {
             NSLog(@"[ForgeDirect] Failed to download patched artifact");
             return NO;
         }
     } else {
-        NSLog(@"[ForgeDirect] No main path in install_profile, skipping patched artifact download");
+        // path 是 Forge 1.13+ 运行核心依赖，缺失会导致启动时 ClassNotFoundException
+        NSLog(@"[ForgeDirect] install_profile.json 缺少 path/version 字段，无法下载 patched client jar");
+        if (error) {
+            *error = [NSError errorWithDomain:ForgeDirectInstallerErrorDomain
+                                         code:ForgeDirectInstallerErrorInvalidProfile
+                                     userInfo:@{NSLocalizedDescriptionKey: @"install_profile.json 缺少 path 和 version 字段，无法定位预打补丁核心 jar"}];
+        }
+        return NO;
     }
 
     // Write version JSON
@@ -526,6 +546,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
     }
 
     NSUInteger count = 0;
+    NSFileManager *fm = [NSFileManager defaultManager];
     for (NSString *name in filenames) {
         // 只处理 maven/ 前缀的文件
         if (![name hasPrefix:@"maven/"]) continue;
@@ -535,9 +556,28 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
         if (relativePath.length == 0) continue;
 
         NSString *destPath = [librariesDir stringByAppendingPathComponent:relativePath];
+        // 已存在的文件跳过，避免重复解压（重复安装场景）
+        if ([fm fileExistsAtPath:destPath]) {
+            count++;
+            continue;
+        }
+
+        // 直接用已打开的 archive 实例提取，避免每个文件都重新打开 zip（性能优化）
         NSError *extractError = nil;
-        if (![self extractFile:installerPath entry:name to:destPath error:&extractError]) {
+        NSData *data = [archive extractDataFromFile:name error:&extractError];
+        if (!data || extractError) {
             NSLog(@"[ForgeDirect] extractAllMavenEntries: failed to extract %@: %@", name, extractError.localizedDescription ?: @"unknown");
+            continue;
+        }
+
+        // 创建目标目录
+        NSString *destDir = [destPath stringByDeletingLastPathComponent];
+        [fm createDirectoryAtPath:destDir withIntermediateDirectories:YES attributes:nil error:nil];
+
+        // 写入文件
+        NSError *writeError = nil;
+        if (![data writeToFile:destPath options:NSDataWritingAtomic error:&writeError]) {
+            NSLog(@"[ForgeDirect] extractAllMavenEntries: failed to write %@: %@", destPath, writeError.localizedDescription ?: @"unknown");
             continue;
         }
         count++;
@@ -561,6 +601,8 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
     NSUInteger downloaded = 0;
     NSUInteger skipped = 0;
     NSUInteger failed = 0;
+    NSUInteger processed = 0;  // 已处理数（用于进度计算，包含成功/跳过/失败）
+    NSMutableArray<NSString *> *criticalFailures = [NSMutableArray array];  // 关键库失败清单
 
     for (NSDictionary *library in libraries) {
         if (![library isKindOfClass:[NSDictionary class]]) continue;
@@ -590,6 +632,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
         // 已存在则跳过
         if ([fm fileExistsAtPath:destPath]) {
             skipped++;
+            processed++;
             continue;
         }
 
@@ -612,12 +655,14 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
         if (!url) {
             NSLog(@"[ForgeDirect] Cannot build URL for library %@, skipping", name);
             failed++;
+            processed++;
             continue;
         }
 
+        // 用 processed 计算进度（避免失败时进度停滞）
         if (progress) {
-            double p = base + span * ((double)downloaded / (double)total);
-            progress(p, [NSString stringWithFormat:@"正在下载依赖库 (%lu/%lu): %@", (unsigned long)(downloaded + 1), (unsigned long)total, name]);
+            double p = base + span * ((double)processed / (double)total);
+            progress(p, [NSString stringWithFormat:@"正在下载依赖库 (%lu/%lu): %@", (unsigned long)(processed + 1), (unsigned long)total, name]);
         }
 
         NSError *downloadError = nil;
@@ -633,18 +678,60 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
                 if ([self downloadFileFromURL:fallbackURL toPath:destPath error:&fallbackError]) {
                     downloaded++;
                     NSLog(@"[ForgeDirect] Downloaded library via fallback: %@", name);
+                    processed++;
                     continue;
                 }
                 NSLog(@"[ForgeDirect] Fallback also failed for %@: %@", name, fallbackError.localizedDescription ?: @"unknown");
             }
             failed++;
-            NSLog(@"[ForgeDirect] Failed to download library %@ (both sources failed)", name);
+            // 关键库（modlauncher、bootstraplauncher、mixin、asm、forge/neoforged 自家库）失败会启动崩溃，记录警告
+            if ([self isCriticalLibrary:name]) {
+                [criticalFailures addObject:name];
+                NSLog(@"[ForgeDirect] ⚠️ 关键库下载失败（启动将崩溃）: %@", name);
+            } else {
+                NSLog(@"[ForgeDirect] Failed to download library %@ (both sources failed)", name);
+            }
             // 不中断流程，部分库可能不重要或可由游戏启动时再次下载
         }
+        processed++;
     }
 
-    NSLog(@"[ForgeDirect] Library download summary: downloaded=%lu, skipped=%lu, failed=%lu, total=%lu",
-          (unsigned long)downloaded, (unsigned long)skipped, (unsigned long)failed, (unsigned long)total);
+    NSLog(@"[ForgeDirect] Library download summary: downloaded=%lu, skipped=%lu, failed=%lu, total=%lu, criticalFailures=%lu",
+          (unsigned long)downloaded, (unsigned long)skipped, (unsigned long)failed, (unsigned long)total, (unsigned long)criticalFailures.count);
+    if (criticalFailures.count > 0) {
+        NSLog(@"[ForgeDirect] ⚠️ 关键库下载失败清单: %@", criticalFailures);
+    }
+}
+
+/// 判断是否为关键库（缺失会导致启动崩溃）
++ (BOOL)isCriticalLibrary:(NSString *)name {
+    if (!name.length) return NO;
+    // modlauncher、bootstraplauncher、mixin、asm、forge/neoforged 自家库、jimfs 等核心运行时依赖
+    NSArray<NSString *> *criticalPrefixes = @[
+        @"cpw.mods:modlauncher",
+        @"net.minecraftforge.bootstraplauncher",
+        @"net.minecraftforge:forge",
+        @"net.minecraftforge:fmlloader",
+        @"net.minecraftforge:javafmllanguage",
+        @"net.minecraftforge:lowcodelanguage",
+        @"net.minecraftforge:mclanguage",
+        @"net.neoforged:forge",
+        @"net.neoforged:neoforge",
+        @"net.neoforged.fancymodloader",
+        @"org.spongepowered:mixin",
+        @"org.ow2.asm:asm",
+        @"com.google.guava:guava",
+        @"com.google.code.gson:gson",
+        @"org.lwjgl:lwjgl",
+        @"com.mojang:authlib",
+        @"com.mojang:brigadier",
+        @"com.mojang:datafixerupper",
+        @"com.mojang:minecraft"
+    ];
+    for (NSString *prefix in criticalPrefixes) {
+        if ([name hasPrefix:prefix]) return YES;
+    }
+    return NO;
 }
 
 // 为 library 构建 maven URL
@@ -662,11 +749,19 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
     }
 
     // NeoForge 自家库走 maven.neoforged.net
-    if ([name hasPrefix:@"net.neoforged:"] || [name hasPrefix:@"net.neoforged."] || [name hasPrefix:@"cpw.mods:"]) {
+    if ([name hasPrefix:@"net.neoforged:"] || [name hasPrefix:@"net.neoforged."]) {
         if (useBMCLAPI) {
             return [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/maven/%@", relativePath];
         }
         return [NSString stringWithFormat:@"https://maven.neoforged.net/releases/%@", relativePath];
+    }
+
+    // cpw.mods:modlauncher 是 Forge 1.13+ 核心依赖，主源是 Forge maven
+    if ([name hasPrefix:@"cpw.mods:"]) {
+        if (useBMCLAPI) {
+            return [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/maven/%@", relativePath];
+        }
+        return [NSString stringWithFormat:@"https://maven.minecraftforge.net/%@", relativePath];
     }
 
     // SpongePowered (mixin、asm 等) 走 repo.spongepowered.org
@@ -726,10 +821,10 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
     // 主源是 BMCLAPI 时，fallback 到官方源；主源是官方源时，fallback 到 BMCLAPI
     if (useBMCLAPI) {
         // 从 BMCLAPI 失败，尝试官方源
-        if ([name hasPrefix:@"net.minecraftforge:"] || [name hasPrefix:@"de.oceanlabs.mcp:"] || [name hasPrefix:@"org.ow2.asm:"]) {
+        if ([name hasPrefix:@"net.minecraftforge:"] || [name hasPrefix:@"de.oceanlabs.mcp:"] || [name hasPrefix:@"org.ow2.asm:"] || [name hasPrefix:@"cpw.mods:"]) {
             return [NSString stringWithFormat:@"https://maven.minecraftforge.net/%@", relativePath];
         }
-        if ([name hasPrefix:@"net.neoforged:"] || [name hasPrefix:@"net.neoforged."] || [name hasPrefix:@"cpw.mods:"]) {
+        if ([name hasPrefix:@"net.neoforged:"] || [name hasPrefix:@"net.neoforged."]) {
             return [NSString stringWithFormat:@"https://maven.neoforged.net/releases/%@", relativePath];
         }
         if ([name hasPrefix:@"org.spongepowered:"]) {
@@ -889,7 +984,17 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
         dispatch_semaphore_signal(semaphore);
     }];
     [task resume];
-    dispatch_semaphore_wait(semaphore, dispatch_time(DISPATCH_TIME_NOW, 70 * NSEC_PER_SEC));
+    long waitResult = dispatch_semaphore_wait(semaphore, dispatch_time(DISPATCH_TIME_NOW, 70 * NSEC_PER_SEC));
+    if (waitResult != 0) {
+        // 信号量超时：取消 task 释放网络资源，避免后台 task 持续运行导致临时内存泄漏
+        [task cancel];
+        if (error) {
+            *error = [NSError errorWithDomain:ForgeDirectInstallerErrorDomain
+                                         code:NSURLErrorTimedOut
+                                     userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"下载超时（70s）: %@", urlString]}];
+        }
+        return NO;
+    }
 
     if (resultError) {
         if (error) *error = resultError;
