@@ -1,16 +1,61 @@
 #import "DownloadTasksViewController.h"
 #import "DownloadTaskManager.h"
 
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wunguarded-availability-new"
-#import "UIKit+AFNetworking.h"
-#pragma clang diagnostic pop
+#import <objc/runtime.h>
 
-static const CGFloat kCellCornerRadius     = 12.0;
-static const CGFloat kCellPadding          = 12.0;
-static const CGFloat kIconSize             = 50.0;
+static const CGFloat kCellCornerRadius      = 12.0;
+static const CGFloat kCellPadding           = 12.0;
+static const CGFloat kIconSize              = 50.0;
 static const CGFloat kTypeBadgeCornerRadius = 4.0;
-static const CGFloat kFilterBarHeight      = 44.0;
+static const CGFloat kFilterBarHeight       = 44.0;
+static const DownloadTaskState kDownloadTaskStateAll = -1;
+
+static inline BOOL hasProgress(double progress) {
+    return progress >= 0.0;
+}
+
+#pragma mark - UIImageView (DownloadTaskIconLoader)
+
+@interface UIImageView (DownloadTaskIconLoader)
+- (void)downloadTask_setImageWithURL:(nullable NSURL *)url placeholderImage:(UIImage *)placeholder;
+@end
+
+@implementation UIImageView (DownloadTaskIconLoader)
+
+static const char kDownloadIconTaskKey = 0;
+
+- (void)downloadTask_setImageWithURL:(NSURL *)url placeholderImage:(UIImage *)placeholder {
+    [self downloadTask_cancelIconLoad];
+    self.image = placeholder;
+
+    if (!url) return;
+
+    __weak typeof(self) weakSelf = self;
+    NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        if (error || !data) return;
+        UIImage *image = [UIImage imageWithData:data];
+        if (!image) return;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) return;
+            NSURLSessionDataTask *currentTask = objc_getAssociatedObject(strongSelf, &kDownloadIconTaskKey);
+            if (currentTask != task) return;
+            strongSelf.image = image;
+        });
+    }];
+    objc_setAssociatedObject(self, &kDownloadIconTaskKey, task, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    [task resume];
+}
+
+- (void)downloadTask_cancelIconLoad {
+    NSURLSessionDataTask *task = objc_getAssociatedObject(self, &kDownloadIconTaskKey);
+    if (task) {
+        [task cancel];
+        objc_setAssociatedObject(self, &kDownloadIconTaskKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+    }
+}
+
+@end
 
 #pragma mark - DownloadTaskTableViewCell
 
@@ -74,10 +119,6 @@ static const CGFloat kFilterBarHeight      = 44.0;
         [self setupConstraints];
     }
     return self;
-}
-
-- (UIView *)cardView {
-    return _cardView;
 }
 
 - (void)setupConstraints {
@@ -147,7 +188,7 @@ static const CGFloat kFilterBarHeight      = 44.0;
 
 - (void)prepareForReuse {
     [super prepareForReuse];
-    [_iconView cancelImageDownloadTask];
+    [_iconView downloadTask_cancelIconLoad];
     _iconView.image = nil;
 }
 
@@ -157,59 +198,62 @@ static const CGFloat kFilterBarHeight      = 44.0;
     self.typeBadgeLabel.text = [DownloadTasksViewController localizedTypeNameForResourceType:task.resourceType];
     self.typeBadgeLabel.backgroundColor = [DownloadTasksViewController colorForResourceType:task.resourceType];
 
-    // Icon
     UIImage *fallback = [DownloadTasksViewController systemImageForResourceType:task.resourceType];
     if (task.iconURL.length > 0) {
-        [self.iconView setImageWithURL:[NSURL URLWithString:task.iconURL] placeholderImage:fallback];
+        [self.iconView downloadTask_setImageWithURL:[NSURL URLWithString:task.iconURL] placeholderImage:fallback];
     } else {
         self.iconView.image = fallback;
     }
 
-    // State-specific UI
+    BOOL hasProgress = task.progress >= 0.0;
+    float progress = hasProgress ? (float)task.progress : 0.0f;
+    self.progressView.progress = progress;
+    self.percentLabel.text = hasProgress ? [NSString stringWithFormat:@"%.0f%%", task.progress * 100.0] : @"--%";
+
+    self.speedLabel.hidden = YES;
+    self.statusLabel.hidden = YES;
+
     switch (task.state) {
         case DownloadTaskStateCompleted:
-            self.progressView.progress = 1.0;
+            self.progressView.progress = 1.0f;
             self.progressView.progressTintColor = [UIColor systemGreenColor];
             self.percentLabel.text = @"100%";
-            self.speedLabel.hidden = YES;
-            self.statusLabel.hidden = YES;
             break;
         case DownloadTaskStateFailed:
-            self.progressView.progress = task.progress >= 0 ? (float)task.progress : 0.0f;
             self.progressView.progressTintColor = [UIColor systemRedColor];
-            self.percentLabel.text = task.progress >= 0 ? [NSString stringWithFormat:@"%.0f%%", task.progress * 100] : @"--";
-            self.speedLabel.hidden = YES;
             self.statusLabel.hidden = NO;
             self.statusLabel.textColor = [UIColor systemRedColor];
             self.statusLabel.text = task.errorInfo.localizedDescription ?: @"下载失败";
             break;
         case DownloadTaskStatePaused:
-            self.progressView.progress = task.progress >= 0 ? (float)task.progress : 0.0f;
             self.progressView.progressTintColor = [UIColor systemOrangeColor];
-            self.percentLabel.text = task.progress >= 0 ? [NSString stringWithFormat:@"%.0f%%", task.progress * 100] : @"--";
-            self.speedLabel.hidden = YES;
             self.statusLabel.hidden = NO;
             self.statusLabel.textColor = [UIColor systemOrangeColor];
             self.statusLabel.text = @"已暂停";
             break;
-        default: // Pending / Downloading / Cancelled
-            self.progressView.progress = task.progress >= 0 ? (float)task.progress : 0.0f;
+        case DownloadTaskStateCancelled:
+            self.progressView.progressTintColor = [UIColor systemGrayColor];
+            self.statusLabel.hidden = NO;
+            self.statusLabel.textColor = [UIColor systemGrayColor];
+            self.statusLabel.text = @"已取消";
+            break;
+        case DownloadTaskStatePending:
             self.progressView.progressTintColor = [UIColor systemBlueColor];
-            self.percentLabel.text = task.progress >= 0 ? [NSString stringWithFormat:@"%.0f%%", task.progress * 100] : @"--";
+            self.speedLabel.hidden = NO;
+            self.speedLabel.text = @"等待中...";
+            break;
+        case DownloadTaskStateDownloading:
+        default:
+            self.progressView.progressTintColor = [UIColor systemBlueColor];
             self.speedLabel.hidden = NO;
             self.speedLabel.text = [self speedTextForTask:task];
-            self.statusLabel.hidden = YES;
             break;
     }
 }
 
 - (NSString *)speedTextForTask:(DownloadTaskItem *)task {
-    if (task.state == DownloadTaskStatePending) {
-        return @"等待中...";
-    }
     if (task.speed <= 0) {
-        if (task.progress < 0) return @"--";
-        return @"正在计算速度...";
+        return hasProgress(task.progress) ? @"正在计算速度..." : @"--";
     }
     NSString *speed = [self formattedBytes:(int64_t)task.speed unit:@"/s"];
     if (task.estimatedTimeRemaining > 0) {
@@ -227,12 +271,15 @@ static const CGFloat kFilterBarHeight      = 44.0;
 }
 
 - (NSString *)formattedTime:(NSTimeInterval)seconds {
-    if (seconds < 60) return @"少于 1 分钟";
-    NSInteger minutes = (NSInteger)(seconds / 60);
-    if (minutes < 60) return [NSString stringWithFormat:@"%ld 分钟", (long)minutes];
-    NSInteger hours = minutes / 60;
-    minutes = minutes % 60;
-    return [NSString stringWithFormat:@"%ld 小时 %ld 分钟", (long)hours, (long)minutes];
+    if (seconds <= 0) return @"--";
+    NSInteger total = (NSInteger)ceil(seconds);
+    NSInteger hours = total / 3600;
+    NSInteger minutes = (total % 3600) / 60;
+    NSInteger secs = total % 60;
+    if (hours > 0) {
+        return [NSString stringWithFormat:@"%02ld:%02ld:%02ld", (long)hours, (long)minutes, (long)secs];
+    }
+    return [NSString stringWithFormat:@"%02ld:%02ld", (long)minutes, (long)secs];
 }
 
 @end
@@ -245,7 +292,7 @@ static const CGFloat kFilterBarHeight      = 44.0;
 @property (nonatomic, strong) UIScrollView *typeFilterScrollView;
 @property (nonatomic, strong) UIStackView *typeFilterStackView;
 @property (nonatomic, strong) UIView *emptyStateView;
-@property (nonatomic, strong) NSArray<DownloadTaskItem *> *filteredTasks;
+@property (nonatomic, copy) NSArray<DownloadTaskItem *> *filteredTasks;
 @property (nonatomic, copy) NSArray<NSString *> *allResourceTypes;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, UIButton *> *typeButtons;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, UILabel *> *typeBadges;
@@ -253,10 +300,18 @@ static const CGFloat kFilterBarHeight      = 44.0;
 
 @implementation DownloadTasksViewController
 
+- (instancetype)init {
+    self = [super init];
+    if (self) {
+        _filterState = kDownloadTaskStateAll;
+    }
+    return self;
+}
+
 - (void)viewDidLoad {
     [super viewDidLoad];
 
-    self.view.backgroundColor = [UIColor systemBackgroundColor];
+    self.view.backgroundColor = [UIColor secondarySystemBackgroundColor];
     self.title = @"下载任务";
 
     [self setupNavigationBar];
@@ -269,12 +324,6 @@ static const CGFloat kFilterBarHeight      = 44.0;
     [self registerNotifications];
 }
 
-- (void)viewDidLayoutSubviews {
-    [super viewDidLayoutSubviews];
-    // Ensure type filter scroll indicators update after layout
-    [self.typeFilterScrollView flashScrollIndicators];
-}
-
 - (void)dealloc {
     [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
@@ -282,16 +331,10 @@ static const CGFloat kFilterBarHeight      = 44.0;
 #pragma mark - Setup
 
 - (void)setupNavigationBar {
-    UIBarButtonItem *closeItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemClose
-                                                                               target:self
-                                                                               action:@selector(closeTapped:)];
-    self.navigationItem.leftBarButtonItem = closeItem;
-
-    UIBarButtonItem *clearItem = [[UIBarButtonItem alloc] initWithTitle:@"清空已完成"
-                                                                  style:UIBarButtonItemStylePlain
-                                                                 target:self
-                                                                 action:@selector(clearCompletedTapped:)];
-    self.navigationItem.rightBarButtonItem = clearItem;
+    UIBarButtonItem *doneItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone
+                                                                              target:self
+                                                                              action:@selector(doneTapped:)];
+    self.navigationItem.rightBarButtonItem = doneItem;
 }
 
 - (void)setupStateSegmentedControl {
@@ -342,7 +385,6 @@ static const CGFloat kFilterBarHeight      = 44.0;
         button.tag = [self.allResourceTypes indexOfObject:type];
         [button addTarget:self action:@selector(typeFilterTapped:) forControlEvents:UIControlEventTouchUpInside];
 
-        // Badge
         UILabel *badge = [[UILabel alloc] init];
         badge.translatesAutoresizingMaskIntoConstraints = NO;
         badge.font = [UIFont boldSystemFontOfSize:10];
@@ -495,17 +537,15 @@ static const CGFloat kFilterBarHeight      = 44.0;
         case DownloadTaskStateDownloading:
             return 1;
         case DownloadTaskStateCompleted:
-        case DownloadTaskStateFailed:
             return 2;
         default:
-            // Pending / Paused / Cancelled / default 0 -> "全部"
             return 0;
     }
 }
 
 - (void)stateSegmentChanged:(UISegmentedControl *)sender {
     switch (sender.selectedSegmentIndex) {
-        case 0: self.filterState = DownloadTaskStatePending; break; // marker for "全部"
+        case 0: self.filterState = kDownloadTaskStateAll; break;
         case 1: self.filterState = DownloadTaskStateDownloading; break;
         case 2: self.filterState = DownloadTaskStateCompleted; break;
     }
@@ -514,42 +554,44 @@ static const CGFloat kFilterBarHeight      = 44.0;
 
 - (void)typeFilterTapped:(UIButton *)sender {
     NSInteger index = sender.tag;
-    if (index >= 0 && index < self.allResourceTypes.count) {
-        NSString *type = self.allResourceTypes[index];
+    if (index >= 0 && index < (NSInteger)self.allResourceTypes.count) {
+        NSString *type = self.allResourceTypes[(NSUInteger)index];
         self.filterType = type.length > 0 ? type : nil;
         [self applyFilter];
         [self updateTypeFilterSelection];
     }
 }
 
+- (NSArray<NSNumber *> *)allowedStatesForFilterState:(DownloadTaskState)filterState {
+    if (filterState == DownloadTaskStateDownloading) {
+        return @[@(DownloadTaskStateDownloading), @(DownloadTaskStatePending)];
+    } else if (filterState == DownloadTaskStateCompleted) {
+        return @[@(DownloadTaskStateCompleted)];
+    }
+    return @[@(DownloadTaskStatePending),
+             @(DownloadTaskStateDownloading),
+             @(DownloadTaskStatePaused),
+             @(DownloadTaskStateCompleted),
+             @(DownloadTaskStateCancelled),
+             @(DownloadTaskStateFailed)];
+}
+
+- (BOOL)task:(DownloadTaskItem *)task matchesFilterType:(nullable NSString *)filterType {
+    if (!filterType) return YES;
+    return [task.resourceType isEqualToString:filterType];
+}
+
 - (void)applyFilter {
     NSArray<DownloadTaskItem *> *all = [[DownloadTaskManager sharedManager] allTasks];
-
-    // Primary filter by state
-    NSArray<NSNumber *> *allowedStates;
-    if (self.filterState == DownloadTaskStateDownloading) {
-        allowedStates = @[@(DownloadTaskStateDownloading), @(DownloadTaskStatePending)];
-    } else if (self.filterState == DownloadTaskStateCompleted) {
-        allowedStates = @[@(DownloadTaskStateCompleted), @(DownloadTaskStateFailed)];
-    } else {
-        // "全部" segment: everything except Cancelled
-        allowedStates = @[@(DownloadTaskStatePending),
-                          @(DownloadTaskStateDownloading),
-                          @(DownloadTaskStatePaused),
-                          @(DownloadTaskStateCompleted),
-                          @(DownloadTaskStateFailed)];
-    }
+    NSArray<NSNumber *> *allowedStates = [self allowedStatesForFilterState:self.filterState];
 
     NSMutableArray<DownloadTaskItem *> *result = [NSMutableArray array];
     for (DownloadTaskItem *task in all) {
-        if ([allowedStates containsObject:@(task.state)]) {
-            if (!self.filterType || [task.resourceType isEqualToString:self.filterType]) {
-                [result addObject:task];
-            }
+        if ([allowedStates containsObject:@(task.state)] && [self task:task matchesFilterType:self.filterType]) {
+            [result addObject:task];
         }
     }
 
-    // Sort: Downloading/Pending first, then Paused, Failed, Completed
     [result sortUsingComparator:^NSComparisonResult(DownloadTaskItem *a, DownloadTaskItem *b) {
         NSInteger orderA = [self sortOrderForState:a.state];
         NSInteger orderB = [self sortOrderForState:b.state];
@@ -558,9 +600,10 @@ static const CGFloat kFilterBarHeight      = 44.0;
     }];
 
     self.filteredTasks = [result copy];
-    [self.tableView reloadData];
     [self updateEmptyState];
-    [self updateTypeFilterBadges];
+    [self updateStateSegmentTitlesWithTasks:all];
+    [self updateTypeFilterBadgesWithTasks:all];
+    [self.tableView reloadData];
 }
 
 - (NSInteger)sortOrderForState:(DownloadTaskState)state {
@@ -569,8 +612,9 @@ static const CGFloat kFilterBarHeight      = 44.0;
         case DownloadTaskStatePending:     return 1;
         case DownloadTaskStatePaused:      return 2;
         case DownloadTaskStateFailed:      return 3;
-        case DownloadTaskStateCompleted:   return 4;
-        default: return 5;
+        case DownloadTaskStateCancelled:   return 4;
+        case DownloadTaskStateCompleted:   return 5;
+        default: return 6;
     }
 }
 
@@ -578,6 +622,34 @@ static const CGFloat kFilterBarHeight      = 44.0;
     BOOL empty = self.filteredTasks.count == 0;
     self.emptyStateView.hidden = !empty;
     self.tableView.hidden = empty;
+}
+
+- (void)updateStateSegmentTitlesWithTasks:(NSArray<DownloadTaskItem *> *)all {
+    [self.stateSegmentedControl setTitle:[self stateSegmentTitleAtIndex:0 count:[self countTasks:all matchingStateFilter:kDownloadTaskStateAll]] forSegmentAtIndex:0];
+    [self.stateSegmentedControl setTitle:[self stateSegmentTitleAtIndex:1 count:[self countTasks:all matchingStateFilter:DownloadTaskStateDownloading]] forSegmentAtIndex:1];
+    [self.stateSegmentedControl setTitle:[self stateSegmentTitleAtIndex:2 count:[self countTasks:all matchingStateFilter:DownloadTaskStateCompleted]] forSegmentAtIndex:2];
+}
+
+- (NSString *)stateSegmentTitleAtIndex:(NSInteger)index count:(NSInteger)count {
+    NSString *base;
+    switch (index) {
+        case 0: base = @"全部"; break;
+        case 1: base = @"下载中"; break;
+        case 2: base = @"已下载"; break;
+        default: base = @"";
+    }
+    return [NSString stringWithFormat:@"%@(%ld)", base, (long)count];
+}
+
+- (NSInteger)countTasks:(NSArray<DownloadTaskItem *> *)tasks matchingStateFilter:(DownloadTaskState)filterState {
+    NSArray<NSNumber *> *allowedStates = [self allowedStatesForFilterState:filterState];
+    NSInteger count = 0;
+    for (DownloadTaskItem *task in tasks) {
+        if ([allowedStates containsObject:@(task.state)]) {
+            count++;
+        }
+    }
+    return count;
 }
 
 - (void)updateTypeFilterSelection {
@@ -590,22 +662,8 @@ static const CGFloat kFilterBarHeight      = 44.0;
     }
 }
 
-- (void)updateTypeFilterBadges {
-    NSArray<DownloadTaskItem *> *all = [[DownloadTaskManager sharedManager] allTasks];
-
-    // Determine primary state filter for badge counting
-    NSArray<NSNumber *> *allowedStates;
-    if (self.filterState == DownloadTaskStateDownloading) {
-        allowedStates = @[@(DownloadTaskStateDownloading), @(DownloadTaskStatePending)];
-    } else if (self.filterState == DownloadTaskStateCompleted) {
-        allowedStates = @[@(DownloadTaskStateCompleted), @(DownloadTaskStateFailed)];
-    } else {
-        allowedStates = @[@(DownloadTaskStatePending),
-                          @(DownloadTaskStateDownloading),
-                          @(DownloadTaskStatePaused),
-                          @(DownloadTaskStateCompleted),
-                          @(DownloadTaskStateFailed)];
-    }
+- (void)updateTypeFilterBadgesWithTasks:(NSArray<DownloadTaskItem *> *)all {
+    NSArray<NSNumber *> *allowedStates = [self allowedStatesForFilterState:self.filterState];
 
     NSMutableDictionary<NSString *, NSNumber *> *counts = [NSMutableDictionary dictionary];
     for (DownloadTaskItem *task in all) {
@@ -628,18 +686,8 @@ static const CGFloat kFilterBarHeight      = 44.0;
 
 #pragma mark - Actions
 
-- (void)closeTapped:(id)sender {
+- (void)doneTapped:(id)sender {
     [self dismissViewControllerAnimated:YES completion:nil];
-}
-
-- (void)clearCompletedTapped:(id)sender {
-    NSArray<DownloadTaskItem *> *all = [[DownloadTaskManager sharedManager] allTasks];
-    for (DownloadTaskItem *task in all) {
-        if (task.state == DownloadTaskStateCompleted || task.state == DownloadTaskStateFailed || task.state == DownloadTaskStateCancelled) {
-            [[DownloadTaskManager sharedManager] removeTaskWithId:task.taskId];
-        }
-    }
-    [self applyFilter];
 }
 
 #pragma mark - Long press actions
@@ -651,18 +699,19 @@ static const CGFloat kFilterBarHeight      = 44.0;
     NSIndexPath *indexPath = [self.tableView indexPathForRowAtPoint:point];
     if (!indexPath) return;
 
-    DownloadTaskItem *task = self.filteredTasks[indexPath.row];
+    DownloadTaskItem *task = self.filteredTasks[(NSUInteger)indexPath.row];
     [self showActionSheetForTask:task];
 }
 
 - (void)showActionSheetForTask:(DownloadTaskItem *)task {
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:task.displayName
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:task.displayName ?: task.resourceName
                                                                    message:nil
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
 
     BOOL canPause = (task.state == DownloadTaskStateDownloading || task.state == DownloadTaskStatePending);
     BOOL canResume = (task.state == DownloadTaskStatePaused);
     BOOL canCancel = !(task.state == DownloadTaskStateCompleted || task.state == DownloadTaskStateCancelled || task.state == DownloadTaskStateFailed);
+    BOOL canDelete = (task.state == DownloadTaskStateCompleted || task.state == DownloadTaskStateFailed || task.state == DownloadTaskStateCancelled);
 
     if (canPause) {
         [sheet addAction:[UIAlertAction actionWithTitle:@"暂停" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
@@ -685,6 +734,12 @@ static const CGFloat kFilterBarHeight      = 44.0;
     [sheet addAction:[UIAlertAction actionWithTitle:@"切换下载源" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         [self showSwitchSourceAlertForTask:task];
     }]];
+
+    if (canDelete) {
+        [sheet addAction:[UIAlertAction actionWithTitle:@"删除记录" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
+            [[DownloadTaskManager sharedManager] removeTaskWithId:task.taskId];
+        }]];
+    }
 
     [sheet addAction:[UIAlertAction actionWithTitle:@"关闭" style:UIAlertActionStyleCancel handler:nil]];
 
@@ -720,6 +775,7 @@ static const CGFloat kFilterBarHeight      = 44.0;
                                                                   toSource:newSource
                                                                 completion:^(BOOL shouldRecreate, BOOL supportsResume, NSError * _Nullable error) {
             dispatch_async(dispatch_get_main_queue(), ^{
+                if (!strongSelf) return;
                 if (error) {
                     [strongSelf showAlertWithTitle:@"切换失败" message:error.localizedDescription];
                     return;
@@ -731,11 +787,13 @@ static const CGFloat kFilterBarHeight      = 44.0;
                     [confirm addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
                     [confirm addAction:[UIAlertAction actionWithTitle:@"确认" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
                         [[DownloadTaskManager sharedManager] cancelTaskWithId:task.taskId];
+                        [[DownloadTaskManager sharedManager] removeTaskWithId:task.taskId];
                         [strongSelf showAlertWithTitle:@"已取消" message:@"请手动重新触发下载以使用新的下载源。"];
                     }]];
                     [strongSelf presentViewController:confirm animated:YES completion:nil];
                 } else {
-                    [strongSelf showAlertWithTitle:@"切换成功" message:@"下载源已更新。"];
+                    NSString *message = supportsResume ? @"已切换源，将从断点继续下载。" : @"下载源已更新。";
+                    [strongSelf showAlertWithTitle:@"切换成功" message:message];
                 }
             });
         }];
@@ -760,10 +818,9 @@ static const CGFloat kFilterBarHeight      = 44.0;
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     DownloadTaskTableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"DownloadTaskCell" forIndexPath:indexPath];
-    DownloadTaskItem *task = self.filteredTasks[indexPath.row];
+    DownloadTaskItem *task = self.filteredTasks[(NSUInteger)indexPath.row];
     [cell configureWithTask:task];
 
-    // Attach long press gesture if not already attached
     BOOL hasGesture = NO;
     for (UIGestureRecognizer *g in cell.contentView.gestureRecognizers) {
         if ([g isKindOfClass:[UILongPressGestureRecognizer class]]) {
@@ -831,7 +888,7 @@ static const CGFloat kFilterBarHeight      = 44.0;
 
 + (UIImage *)systemImageForResourceType:(NSString *)type {
     NSString *name = @"doc";
-    if ([type isEqualToString:DownloadTaskResourceTypeMinecraft])    name = @"cube";
+    if ([type isEqualToString:DownloadTaskResourceTypeMinecraft])         name = @"cube";
     else if ([type isEqualToString:DownloadTaskResourceTypeModloader])    name = @"gearshape.2";
     else if ([type isEqualToString:DownloadTaskResourceTypeMod])          name = @"puzzlepiece.extension";
     else if ([type isEqualToString:DownloadTaskResourceTypeShader])       name = @"sun.max";
@@ -851,7 +908,7 @@ static const CGFloat kFilterBarHeight      = 44.0;
 }
 
 - (UIInterfaceOrientationMask)supportedInterfaceOrientations {
-    return UIInterfaceOrientationMaskLandscape;
+    return UIInterfaceOrientationMaskAll;
 }
 
 @end
