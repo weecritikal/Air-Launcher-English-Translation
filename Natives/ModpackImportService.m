@@ -971,7 +971,7 @@ didFinishDownloadingToURL:(NSURL *)location {
 }
 
 /// 根据 MC 版本推断所需 Java 主版本号
-/// 1.20.5+ → 21, 1.18+ → 17, 1.17 → 16, 1.16.5- → 8
+/// 1.20.5+ → 21, 1.18+ → 17, 1.17 → 17（项目未捆绑 Java 16，Java 17 可向后兼容），1.16.5- → 8
 - (NSInteger)javaMajorVersionForMC:(NSString *)mcVersion {
     NSArray *parts = [mcVersion componentsSeparatedByString:@"."];
     if (parts.count < 2) return 8;
@@ -979,7 +979,7 @@ didFinishDownloadingToURL:(NSURL *)location {
     if (major >= 21) return 21;       // 1.21+
     if (major >= 20 && parts.count >= 3 && [parts[2] integerValue] >= 5) return 21; // 1.20.5+
     if (major >= 18) return 17;       // 1.18+
-    if (major >= 17) return 16;       // 1.17
+    if (major >= 17) return 17;       // 1.17（项目未捆绑 Java 16，Java 17 可向后兼容运行 1.17）
     return 8;                          // 1.16.5 及以下
 }
 

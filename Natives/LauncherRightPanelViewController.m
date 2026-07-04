@@ -464,8 +464,17 @@ static void *ProgressObserverContext = &ProgressObserverContext;
                     setPrefString(@"video.renderer", renderer);
                 }
                 
-                // 应用Java版本设置
-                NSString *javaVer = profile[@"javaVersion"] ?: @"auto";
+                // 应用Java版本设置（兼容旧版直装器写入的 NSDictionary 格式）
+                id javaVerRaw = profile[@"javaVersion"];
+                NSString *javaVer = nil;
+                if ([javaVerRaw isKindOfClass:[NSDictionary class]]) {
+                    id major = javaVerRaw[@"majorVersion"];
+                    javaVer = major ? [major description] : @"auto";
+                } else if ([javaVerRaw isKindOfClass:[NSString class]]) {
+                    javaVer = javaVerRaw;
+                } else {
+                    javaVer = @"auto";
+                }
                 if (![javaVer isEqualToString:@"auto"]) {
                     setPrefString(@"java.java_version", javaVer);
                 }

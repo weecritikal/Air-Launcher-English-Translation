@@ -39,7 +39,13 @@
     // Setup preference getter and setter
     __weak LauncherProfileEditorViewController *weakSelf = self;
     self.getPreference = ^id(NSString *section, NSString *key){
-        NSString *value = weakSelf.profile[key];
+        id rawValue = weakSelf.profile[key];
+        // 兼容 NSDictionary 类型的 javaVersion（旧版直装器写入）
+        if ([rawValue isKindOfClass:[NSDictionary class]]) {
+            id major = rawValue[@"majorVersion"];
+            return major ? [major description] : @"(default)";
+        }
+        NSString *value = rawValue;
         if (value.length > 0 || ![weakSelf isPickFieldAtSection:section key:key]) {
             return value;
         } else {

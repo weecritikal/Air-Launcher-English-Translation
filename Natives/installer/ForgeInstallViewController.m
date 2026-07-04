@@ -884,10 +884,51 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
 
 - (void)schemeViewController:(ForgeInstallSchemeViewController *)controller didSelectScheme:(NSInteger)scheme {
     if (scheme == 0) {
+        // 原版方案在 iOS 上对 Forge 1.13+/NeoForge 不可用（processors 需要 fork/exec）
+        // 弹窗告知用户风险，让用户决定是否继续或改用直装方案
+        if ([self isOriginalSchemeIncompatible]) {
+            UIAlertController *alert = [UIAlertController
+                alertControllerWithTitle:@"原版方案可能不可用"
+                                 message:@"iOS 沙箱禁止 fork/exec，installer.jar 内部的 processors 无法运行。\nForge 1.13+ 和所有 NeoForge 版本必须使用直装方案。\n仅 Forge 1.12- 可尝试原版方案（仍需手动操作 AWT GUI）。"
+                          preferredStyle:UIAlertControllerStyleAlert];
+            [alert addAction:[UIAlertAction actionWithTitle:@"改用直装方案"
+                                                      style:UIAlertActionStyleDefault
+                                                    handler:^(UIAlertAction *a) {
+                [self startDownloadWithScheme:1];
+            }]];
+            [alert addAction:[UIAlertAction actionWithTitle:@"我已知风险，继续"
+                                                      style:UIAlertActionStyleDestructive
+                                                    handler:^(UIAlertAction *a) {
+                [self startDownloadWithScheme:0];
+            }]];
+            [self presentViewController:alert animated:YES completion:nil];
+            return;
+        }
         [self startDownloadWithScheme:0];
     } else if (scheme == 1) {
         [self startDownloadWithScheme:1];
     }
+}
+
+/// 判断原版方案（运行 installer.jar）对当前选中的版本是否不可用
+/// NeoForge 全版本、Forge 1.13+ 的 installer.jar 内含 processors，需要 fork/exec 子进程
+- (BOOL)isOriginalSchemeIncompatible {
+    if ([self.currentVendor isEqualToString:@"NeoForge"]) {
+        return YES;  // 所有 NeoForge 版本都依赖 processors
+    }
+    // Forge：检查 MC 版本是否 1.13+
+    // versionString 形如 "1.20.1-47.3.0"、"1.12.2-14.23.5.2860"
+    NSString *version = self.selectedVersionString;
+    if (![version hasPrefix:@"1."]) {
+        // 非 "1." 开头的版本号（纯 loader 版本）通常对应 1.13+ 的新格式
+        return YES;
+    }
+    NSArray *parts = [version componentsSeparatedByString:@"."];
+    if (parts.count >= 2) {
+        NSInteger minor = [parts[1] integerValue];
+        if (minor >= 13) return YES;
+    }
+    return NO;
 }
 
 - (void)startDownloadWithScheme:(NSInteger)scheme {

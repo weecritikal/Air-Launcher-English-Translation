@@ -73,8 +73,14 @@
     // 渲染器
     self.selectedRenderer = profile[@"renderer"] ?: @"auto";
     
-    // Java版本
-    self.selectedJavaVersion = profile[@"javaVersion"] ?: @"auto";
+    // Java版本（兼容旧版直装器写入的 NSDictionary 格式）
+    id javaVerRaw = profile[@"javaVersion"];
+    if ([javaVerRaw isKindOfClass:[NSDictionary class]]) {
+        id major = javaVerRaw[@"majorVersion"];
+        self.selectedJavaVersion = major ? [major description] : @"auto";
+    } else {
+        self.selectedJavaVersion = [javaVerRaw isKindOfClass:[NSString class]] ? javaVerRaw : @"auto";
+    }
     
     // 内存分配 (MB)
     self.allocatedMemory = [profile[@"allocatedMemory"] integerValue];
