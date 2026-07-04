@@ -16,7 +16,9 @@ NSNotificationName const DownloadFloatingBallSettingsDidChangeNotification = @"c
 @interface DownloadFloatingBall ()
 
 @property(nonatomic, strong) UIButton *floatingButton;
+@property(nonatomic, strong) UIImageView *iconImageView;
 @property(nonatomic, strong) UIImageView *checkmarkView;
+@property(nonatomic, strong) UILabel *badgeLabel;
 
 @property(nonatomic, strong) NSTimer *visibilityTimer;
 @property(nonatomic, strong) NSTimer *completedResetTimer;
@@ -91,6 +93,14 @@ NSNotificationName const DownloadFloatingBallSettingsDidChangeNotification = @"c
                                                                           action:@selector(handlePan:)];
     [button addGestureRecognizer:pan];
 
+    UIImageView *icon = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"arrow.down.circle.fill"]];
+    icon.tintColor = [UIColor whiteColor];
+    icon.contentMode = UIViewContentModeScaleAspectFit;
+    icon.frame = CGRectInset(button.bounds, 14.0, 14.0);
+    icon.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    [button addSubview:icon];
+    self.iconImageView = icon;
+
     UIImageView *checkmark = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"checkmark"]];
     checkmark.tintColor = [UIColor whiteColor];
     checkmark.contentMode = UIViewContentModeScaleAspectFit;
@@ -99,6 +109,25 @@ NSNotificationName const DownloadFloatingBallSettingsDidChangeNotification = @"c
     checkmark.hidden = YES;
     [button addSubview:checkmark];
     self.checkmarkView = checkmark;
+
+    UILabel *badge = [[UILabel alloc] init];
+    badge.translatesAutoresizingMaskIntoConstraints = NO;
+    badge.font = [UIFont boldSystemFontOfSize:12];
+    badge.textColor = [UIColor whiteColor];
+    badge.backgroundColor = [UIColor systemRedColor];
+    badge.textAlignment = NSTextAlignmentCenter;
+    badge.layer.cornerRadius = 9.0;
+    badge.layer.masksToBounds = YES;
+    badge.hidden = YES;
+    [button addSubview:badge];
+    self.badgeLabel = badge;
+
+    [NSLayoutConstraint activateConstraints:@[
+        [badge.topAnchor constraintEqualToAnchor:button.topAnchor constant:2],
+        [badge.trailingAnchor constraintEqualToAnchor:button.trailingAnchor constant:-2],
+        [badge.widthAnchor constraintGreaterThanOrEqualToConstant:18],
+        [badge.heightAnchor constraintEqualToConstant:18]
+    ]];
 
     self.floatingButton = button;
 }
@@ -219,6 +248,18 @@ NSNotificationName const DownloadFloatingBallSettingsDidChangeNotification = @"c
 
     self.floatingButton.backgroundColor = targetColor;
     self.checkmarkView.hidden = !showCheckmark;
+    self.iconImageView.hidden = showCheckmark;
+
+    // 角标：显示正在下载 + 等待中的任务数量
+    DownloadTaskManager *manager = [DownloadTaskManager sharedManager];
+    NSInteger activeCount = [manager countOfTasksWithState:DownloadTaskStateDownloading] +
+                            [manager countOfTasksWithState:DownloadTaskStatePending];
+    if (activeCount > 0) {
+        self.badgeLabel.text = [NSString stringWithFormat:@"%ld", (long)activeCount];
+        self.badgeLabel.hidden = NO;
+    } else {
+        self.badgeLabel.hidden = YES;
+    }
 }
 
 - (void)startCompletedResetTimer {

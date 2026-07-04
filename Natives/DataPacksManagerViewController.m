@@ -527,25 +527,30 @@
 }
 
 - (void)startDownloadForItem:(DataPackItem *)item {
-    UIAlertController *downloadingAlert = [UIAlertController alertControllerWithTitle:@"正在下载"
-                                                                              message:[NSString stringWithFormat:@"%@...\n下载完成后请手动移动到对应世界目录。", item.displayName]
-                                                                       preferredStyle:UIAlertControllerStyleAlert];
-    UIActivityIndicatorView *indicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
-    indicator.translatesAutoresizingMaskIntoConstraints = NO;
-    [downloadingAlert.view addSubview:indicator];
-    [NSLayoutConstraint activateConstraints:@[
-        [indicator.centerXAnchor constraintEqualToAnchor:downloadingAlert.view.centerXAnchor],
-        [indicator.centerYAnchor constraintEqualToAnchor:downloadingAlert.view.centerYAnchor constant:20]
-    ]];
-    [indicator startAnimating];
-    [self presentViewController:downloadingAlert animated:YES completion:nil];
+    // 开启悬浮球时不显示单独下载进度，仅通过悬浮球统一展示
+    BOOL showProgressUI = !getPrefBool(@"general.floating_ball_enabled");
+    UIAlertController *downloadingAlert = nil;
+    if (showProgressUI) {
+        downloadingAlert = [UIAlertController alertControllerWithTitle:@"正在下载"
+                                                                                  message:[NSString stringWithFormat:@"%@...\n下载完成后请手动移动到对应世界目录。", item.displayName]
+                                                                           preferredStyle:UIAlertControllerStyleAlert];
+        UIActivityIndicatorView *indicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
+        indicator.translatesAutoresizingMaskIntoConstraints = NO;
+        [downloadingAlert.view addSubview:indicator];
+        [NSLayoutConstraint activateConstraints:@[
+            [indicator.centerXAnchor constraintEqualToAnchor:downloadingAlert.view.centerXAnchor],
+            [indicator.centerYAnchor constraintEqualToAnchor:downloadingAlert.view.centerYAnchor constant:20]
+        ]];
+        [indicator startAnimating];
+        [self presentViewController:downloadingAlert animated:YES completion:nil];
+    }
 
     [[DataPackService sharedService] downloadDataPack:item
                                             toProfile:self.profileName
                                              progress:nil
                                            completion:^(BOOL success, NSError * _Nullable error) {
         dispatch_async(dispatch_get_main_queue(), ^{
-            [downloadingAlert dismissViewControllerAnimated:YES completion:^{
+            void (^showResult)(void) = ^{
                 if (!success || error) {
                     [self showSimpleAlertWithTitle:@"下载失败" message:error.localizedDescription ?: @"未知错误"];
                 } else {
@@ -560,7 +565,12 @@
                     }]];
                     [self presentViewController:successAlert animated:YES completion:nil];
                 }
-            }];
+            };
+            if (downloadingAlert) {
+                [downloadingAlert dismissViewControllerAnimated:YES completion:showResult];
+            } else {
+                showResult();
+            }
         });
     }];
 }

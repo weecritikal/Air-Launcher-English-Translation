@@ -300,13 +300,23 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 
 - (void)launchButtonTapped {
     if (self.task) {
-        // 正在下载，显示详情
-        if (!self.progressVC) {
-            self.progressVC = [[DownloadProgressViewController alloc] initWithTask:self.task];
+        if (getPrefBool(@"general.floating_ball_enabled")) {
+            // 悬浮球开启时打开统一下载任务界面，不再显示单独进度
+            Class tasksVCClass = NSClassFromString(@"DownloadTasksViewController");
+            if (tasksVCClass) {
+                UIViewController *vc = [[tasksVCClass alloc] init];
+                vc.modalPresentationStyle = UIModalPresentationFullScreen;
+                [self presentViewController:vc animated:YES completion:nil];
+            }
+        } else {
+            // 正在下载，显示详情
+            if (!self.progressVC) {
+                self.progressVC = [[DownloadProgressViewController alloc] initWithTask:self.task];
+            }
+            UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:self.progressVC];
+            nav.modalPresentationStyle = UIModalPresentationFormSheet;
+            [self presentViewController:nav animated:YES completion:nil];
         }
-        UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:self.progressVC];
-        nav.modalPresentationStyle = UIModalPresentationFormSheet;
-        [self presentViewController:nav animated:YES completion:nil];
     } else if ([[DownloadTaskManager sharedManager] hasActiveTasks]) {
         [self showAlert:@"存在进行中的下载任务" message:@"请等待所有下载完成后再启动游戏。"];
     } else {
@@ -394,14 +404,15 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     self.manageVersionBtn.enabled = enabled;
     self.executeJarBtn.enabled = enabled;
 
+    BOOL showProgressUI = !getPrefBool(@"general.floating_ball_enabled");
     if (enabled) {
         self.progressView.hidden = YES;
         self.progressLabel.hidden = YES;
         self.progressLabel.text = @"";
     } else {
-        self.progressView.hidden = NO;
-        self.progressLabel.hidden = NO;
-        self.progressLabel.text = @"正在准备...";
+        self.progressView.hidden = !showProgressUI;
+        self.progressLabel.hidden = !showProgressUI;
+        self.progressLabel.text = showProgressUI ? @"正在准备..." : @"";
     }
 
     UIApplication.sharedApplication.idleTimerDisabled = !enabled;
@@ -444,8 +455,11 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     }
     
     dispatch_async(dispatch_get_main_queue(), ^{
-        self.progressLabel.text = progress.localizedAdditionalDescription;
-        
+        BOOL showProgressUI = !getPrefBool(@"general.floating_ball_enabled");
+        if (showProgressUI) {
+            self.progressLabel.text = progress.localizedAdditionalDescription;
+        }
+
         if (!progress.finished) return;
         
         [self.progressVC dismissViewControllerAnimated:NO completion:nil];

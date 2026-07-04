@@ -15,7 +15,7 @@ static const CGFloat kSectionInset = 16.0;
 @property (nonatomic, strong) UIImageView *iconImageView;
 @property (nonatomic, strong) UILabel *nameLabel;
 @property (nonatomic, strong) UILabel *typeTagLabel;
-@property (nonatomic, strong) UILabel *sourceLabel;
+@property (nonatomic, strong) UIButton *sourceTagButton;
 @property (nonatomic, strong) UILabel *speedLabel;
 @property (nonatomic, strong) UIProgressView *progressView;
 @property (nonatomic, strong) UILabel *progressLabel;
@@ -66,12 +66,14 @@ static const CGFloat kSectionInset = 16.0;
     self.typeTagLabel.textAlignment = NSTextAlignmentCenter;
     [self.contentView addSubview:self.typeTagLabel];
 
-    self.sourceLabel = [[UILabel alloc] init];
-    self.sourceLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.sourceLabel.font = [UIFont systemFontOfSize:11];
-    self.sourceLabel.textColor = [UIColor secondaryLabelColor];
-    self.sourceLabel.numberOfLines = 1;
-    [self.contentView addSubview:self.sourceLabel];
+    self.sourceTagButton = [UIButton buttonWithType:UIButtonTypeCustom];
+    self.sourceTagButton.translatesAutoresizingMaskIntoConstraints = NO;
+    self.sourceTagButton.titleLabel.font = [UIFont systemFontOfSize:10 weight:UIFontWeightMedium];
+    self.sourceTagButton.contentEdgeInsets = UIEdgeInsetsMake(2, 6, 2, 6);
+    self.sourceTagButton.layer.cornerRadius = 4.0;
+    self.sourceTagButton.layer.masksToBounds = YES;
+    self.sourceTagButton.userInteractionEnabled = NO;
+    [self.contentView addSubview:self.sourceTagButton];
 
     self.speedLabel = [[UILabel alloc] init];
     self.speedLabel.translatesAutoresizingMaskIntoConstraints = NO;
@@ -115,13 +117,13 @@ static const CGFloat kSectionInset = 16.0;
         [self.typeTagLabel.heightAnchor constraintEqualToConstant:18],
         [self.typeTagLabel.widthAnchor constraintGreaterThanOrEqualToConstant:36],
 
-        [self.sourceLabel.leadingAnchor constraintEqualToAnchor:self.typeTagLabel.trailingAnchor constant:8],
-        [self.sourceLabel.centerYAnchor constraintEqualToAnchor:self.typeTagLabel.centerYAnchor],
-        [self.sourceLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.contentView.trailingAnchor constant:-12],
+        [self.sourceTagButton.leadingAnchor constraintEqualToAnchor:self.typeTagLabel.trailingAnchor constant:8],
+        [self.sourceTagButton.centerYAnchor constraintEqualToAnchor:self.typeTagLabel.centerYAnchor],
+        [self.sourceTagButton.trailingAnchor constraintLessThanOrEqualToAnchor:self.contentView.trailingAnchor constant:-12],
 
         [self.speedLabel.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-12],
         [self.speedLabel.centerYAnchor constraintEqualToAnchor:self.typeTagLabel.centerYAnchor],
-        [self.speedLabel.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.sourceLabel.trailingAnchor constant:8],
+        [self.speedLabel.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.sourceTagButton.trailingAnchor constant:8],
 
         [self.separatorView.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:12],
         [self.separatorView.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-12],
@@ -145,7 +147,8 @@ static const CGFloat kSectionInset = 16.0;
     self.iconImageView.image = nil;
     self.nameLabel.text = nil;
     self.typeTagLabel.text = nil;
-    self.sourceLabel.text = nil;
+    [self.sourceTagButton setTitle:nil forState:UIControlStateNormal];
+    self.sourceTagButton.backgroundColor = [UIColor clearColor];
     self.speedLabel.text = nil;
     self.progressView.progress = 0.0;
     self.progressLabel.text = nil;
@@ -156,7 +159,7 @@ static const CGFloat kSectionInset = 16.0;
     self.nameLabel.text = task.displayName.length > 0 ? task.displayName : task.resourceName;
     self.typeTagLabel.text = [self displayNameForResourceType:task.resourceType];
     [self.typeTagLabel sizeToFit];
-    self.sourceLabel.text = [NSString stringWithFormat:@"源: %@", task.downloadSource ?: @"official"];
+    [self configureSourceTagWithSource:task.downloadSource];
 
     // 图标
     UIImage *placeholder = [UIImage systemImageNamed:[self iconNameForResourceType:task.resourceType]];
@@ -270,6 +273,31 @@ static const CGFloat kSectionInset = 16.0;
 - (NSString *)formattedProgress:(double)progress {
     if (progress < 0.0) return @"--";
     return [NSString stringWithFormat:@"%.1f%%", progress * 100.0];
+}
+
+- (void)configureSourceTagWithSource:(NSString *)source {
+    NSString *normalized = source.length > 0 ? source.lowercaseString : @"official";
+    NSString *title = nil;
+    UIColor *backgroundColor = [UIColor systemGrayColor];
+    UIColor *textColor = [UIColor whiteColor];
+
+    if ([normalized isEqualToString:@"modrinth"]) {
+        title = @"Modrinth";
+        backgroundColor = [UIColor colorWithRed:0.18 green:0.80 blue:0.45 alpha:1.0];
+    } else if ([normalized isEqualToString:@"curseforge"]) {
+        title = @"CurseForge";
+        backgroundColor = [UIColor colorWithRed:0.95 green:0.45 blue:0.15 alpha:1.0];
+    } else if ([normalized isEqualToString:@"bmclapi"]) {
+        title = @"BMCLAPI";
+        backgroundColor = [UIColor colorWithRed:0.20 green:0.60 blue:0.90 alpha:1.0];
+    } else {
+        title = @"Official";
+        backgroundColor = [UIColor systemGrayColor];
+    }
+
+    [self.sourceTagButton setTitle:title forState:UIControlStateNormal];
+    [self.sourceTagButton setTitleColor:textColor forState:UIControlStateNormal];
+    self.sourceTagButton.backgroundColor = backgroundColor;
 }
 
 @end

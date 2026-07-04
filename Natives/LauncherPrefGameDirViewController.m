@@ -47,7 +47,10 @@
     [NSFileManager.defaultManager createSymbolicLinkAtPath:lasmPath withDestinationPath:multidirPath error:nil];
     [NSFileManager.defaultManager changeCurrentDirectoryPath:lasmPath];
     toggleIsolatedPref(NO);
-    
+
+    // 刷新 PLProfiles 缓存，确保后续读取的是新游戏目录的 launcher_profiles.json
+    [PLProfiles updateCurrent];
+
     // 尝试直接调用 reloadProfileList，如果 navigationController 响应该选择器
     if ([self.navigationController respondsToSelector:@selector(reloadProfileList)]) {
         [self.navigationController performSelector:@selector(reloadProfileList)];
@@ -55,7 +58,7 @@
         // 否则发送通知
         [[NSNotificationCenter defaultCenter] postNotificationName:@"ReloadProfileList" object:nil];
     }
-    
+
     // 发送通知刷新版本配置和编辑 profile 界面
     [[NSNotificationCenter defaultCenter] postNotificationName:@"SelectedProfileChanged" object:nil];
 }

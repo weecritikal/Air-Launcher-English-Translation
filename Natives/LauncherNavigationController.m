@@ -261,8 +261,11 @@ static void *ProgressObserverContext = &ProgressObserverContext;
             view.enabled = enabled;
         }
     }
-    self.progressViewMain.hidden = enabled;
-    self.progressText.text = nil;
+    BOOL showProgressUI = !getPrefBool(@"general.floating_ball_enabled");
+    self.progressViewMain.hidden = enabled || !showProgressUI;
+    if (!showProgressUI) {
+        self.progressText.text = nil;
+    }
     if (downloading) {
         [self.buttonInstall setTitle:localize(enabled ? @"Play" : @"Details", nil) forState:UIControlStateNormal];
         self.buttonInstall.alpha = 1;
@@ -319,16 +322,26 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 
 - (void)performInstallOrShowDetails:(UIButton *)sender {
     if (self.task) {
-        if (!self.progressVC) {
-            self.progressVC = [[DownloadProgressViewController alloc] initWithTask:self.task];
+        if (getPrefBool(@"general.floating_ball_enabled")) {
+            // 悬浮球开启时打开统一下载任务界面，不再显示单独进度
+            Class tasksVCClass = NSClassFromString(@"DownloadTasksViewController");
+            if (tasksVCClass) {
+                UIViewController *vc = [[tasksVCClass alloc] init];
+                vc.modalPresentationStyle = UIModalPresentationFullScreen;
+                [self presentViewController:vc animated:YES completion:nil];
+            }
+        } else {
+            if (!self.progressVC) {
+                self.progressVC = [[DownloadProgressViewController alloc] initWithTask:self.task];
+            }
+            UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:self.progressVC];
+            nav.modalPresentationStyle = UIModalPresentationPopover;
+            nav.popoverPresentationController.sourceView = sender;
+            [self presentViewController:nav animated:YES completion:nil];
         }
-        UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:self.progressVC];
-        nav.modalPresentationStyle = UIModalPresentationPopover;
-        nav.popoverPresentationController.sourceView = sender;
-        [self presentViewController:nav animated:YES completion:nil];
     } else {
         [self launchMinecraft:sender];
-    } 
+    }
 }
 
 - (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary *)change context:(void *)context {
@@ -356,7 +369,10 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     }
 
     dispatch_async(dispatch_get_main_queue(), ^{
-        self.progressText.text = progress.localizedAdditionalDescription;
+        BOOL showProgressUI = !getPrefBool(@"general.floating_ball_enabled");
+        if (showProgressUI) {
+            self.progressText.text = progress.localizedAdditionalDescription;
+        }
 
         if (!progress.finished) return;
         [self.progressVC dismissViewControllerAnimated:NO completion:nil];

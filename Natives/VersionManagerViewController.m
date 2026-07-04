@@ -263,6 +263,7 @@
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
+    [PLProfiles updateCurrent];
     [self loadProfiles];
     [self.collectionView reloadData];
 }
@@ -272,6 +273,7 @@
 }
 
 - (void)profileChanged {
+    [PLProfiles updateCurrent];
     [self loadProfiles];
     [self.collectionView reloadData];
 }

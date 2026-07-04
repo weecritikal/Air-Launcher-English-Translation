@@ -531,44 +531,55 @@
 }
 
 - (void)startDownloadForItem:(ModItem *)item {
-    // Show a temporary "downloading" alert
-    UIAlertController *downloadingAlert = [UIAlertController alertControllerWithTitle:@"正在下载"
-                                                                              message:[NSString stringWithFormat:@"%@...", item.displayName]
-                                                                       preferredStyle:UIAlertControllerStyleAlert];
+    // 开启悬浮球时不显示单独下载进度，仅通过悬浮球统一展示
+    BOOL showProgressUI = !getPrefBool(@"general.floating_ball_enabled");
+    UIAlertController *downloadingAlert = nil;
+    if (showProgressUI) {
+        downloadingAlert = [UIAlertController alertControllerWithTitle:@"正在下载"
+                                                                                  message:[NSString stringWithFormat:@"%@...", item.displayName]
+                                                                           preferredStyle:UIAlertControllerStyleAlert];
 
-    UIActivityIndicatorView *indicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
-    indicator.translatesAutoresizingMaskIntoConstraints = NO;
-    [downloadingAlert.view addSubview:indicator];
-    [NSLayoutConstraint activateConstraints:@[
-        [indicator.centerXAnchor constraintEqualToAnchor:downloadingAlert.view.centerXAnchor],
-        [indicator.centerYAnchor constraintEqualToAnchor:downloadingAlert.view.centerYAnchor constant:20]
-    ]];
-    [indicator startAnimating];
+        UIActivityIndicatorView *indicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
+        indicator.translatesAutoresizingMaskIntoConstraints = NO;
+        [downloadingAlert.view addSubview:indicator];
+        [NSLayoutConstraint activateConstraints:@[
+            [indicator.centerXAnchor constraintEqualToAnchor:downloadingAlert.view.centerXAnchor],
+            [indicator.centerYAnchor constraintEqualToAnchor:downloadingAlert.view.centerYAnchor constant:20]
+        ]];
+        [indicator startAnimating];
 
-    [self presentViewController:downloadingAlert animated:YES completion:nil];
+        [self presentViewController:downloadingAlert animated:YES completion:nil];
+    }
 
     [[ModService sharedService] downloadMod:item toProfile:self.profileName completion:^(NSError * _Nullable error) {
         dispatch_async(dispatch_get_main_queue(), ^{
             // First, dismiss the "downloading" alert
-            [downloadingAlert dismissViewControllerAnimated:YES completion:^{
-                // Then, show the result alert
-                if (error) {
-                    [self showSimpleAlertWithTitle:@"下载失败" message:error.localizedDescription];
-                } else {
-                    UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"下载成功"
-                                                                                          message:[NSString stringWithFormat:@"%@ 已成功安装。", item.displayName]
-                                                                                   preferredStyle:UIAlertControllerStyleAlert];
-                    [successAlert addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-                        // After user acknowledges, switch to local mods and refresh
-                        [self.modeSwitcher setSelectedSegmentIndex:0];
-                        [self modeChanged:self.modeSwitcher];
-                        [self refreshLocalModsList];
-                    }]];
-                    [self presentViewController:successAlert animated:YES completion:nil];
-                }
-            }];
+            if (downloadingAlert) {
+                [downloadingAlert dismissViewControllerAnimated:YES completion:^{
+                    [self showDownloadResultAlertForItem:item error:error];
+                }];
+            } else {
+                [self showDownloadResultAlertForItem:item error:error];
+            }
         });
     }];
+}
+
+- (void)showDownloadResultAlertForItem:(ModItem *)item error:(NSError *)error {
+    if (error) {
+        [self showSimpleAlertWithTitle:@"下载失败" message:error.localizedDescription];
+    } else {
+        UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"下载成功"
+                                                                              message:[NSString stringWithFormat:@"%@ 已成功安装。", item.displayName]
+                                                                       preferredStyle:UIAlertControllerStyleAlert];
+        [successAlert addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+            // After user acknowledges, switch to local mods and refresh
+            [self.modeSwitcher setSelectedSegmentIndex:0];
+            [self modeChanged:self.modeSwitcher];
+            [self refreshLocalModsList];
+        }]];
+        [self presentViewController:successAlert animated:YES completion:nil];
+    }
 }
 
 - (void)showSimpleAlertWithTitle:(NSString *)title message:(NSString *)message {
