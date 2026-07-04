@@ -269,7 +269,7 @@ static NSError* createError(NSString *message, NSInteger code) {
                                                                     error:nil];
             if (compactData) {
                 NSString *compactStr = [[NSString alloc] initWithData:compactData encoding:NSUTF8StringEncoding];
-                NSString *base64 = [compactStr dataUsingEncoding:NSUTF8StringEncoding].base64EncodedStringWithOptions:0];
+                NSString *base64 = [[compactStr dataUsingEncoding:NSUTF8StringEncoding] base64EncodedStringWithOptions:0];
                 if (base64.length > 0) {
                     NSString *prefetchedArg = [NSString stringWithFormat:@"-Dauthlibinjector.yggdrasil.prefetched=%@", base64];
                     [args addObject:prefetchedArg];
@@ -293,7 +293,7 @@ static NSError* createError(NSString *message, NSInteger code) {
                                                                         error:nil];
                 if (compactData) {
                     NSString *compactStr = [[NSString alloc] initWithData:compactData encoding:NSUTF8StringEncoding];
-                    NSString *base64 = [compactStr dataUsingEncoding:NSUTF8StringEncoding].base64EncodedStringWithOptions:0];
+                    NSString *base64 = [[compactStr dataUsingEncoding:NSUTF8StringEncoding] base64EncodedStringWithOptions:0];
                     if (base64.length > 0) {
                         NSString *prefetchedArg = [NSString stringWithFormat:@"-Dauthlibinjector.yggdrasil.prefetched=%@", base64];
                         [args addObject:prefetchedArg];
