@@ -394,8 +394,11 @@
 
     self.currentMenu = [UIMenu menuWithTitle:message children:menuItems];
     UIContextMenuInteraction *interaction = [[UIContextMenuInteraction alloc] initWithDelegate:self];
-    cell.detailTextLabel.interactions = @[interaction];
-    [interaction _presentMenuAtLocation:CGPointZero];
+    // 挂载到 cell 本身而不是 detailTextLabel，避免 detailTextLabel 尚未进入 window 时触发 UITargetedPreview 断言崩溃
+    [cell addInteraction:interaction];
+    CGRect detailFrame = cell.detailTextLabel.frame;
+    CGPoint location = CGPointMake(CGRectGetMidX(detailFrame), CGRectGetMidY(detailFrame));
+    [interaction _presentMenuAtLocation:location];
 }
 
 - (void)tableView:(UITableView *)tableView invokeActionWithPromptAtIndexPath:(NSIndexPath *)indexPath {
