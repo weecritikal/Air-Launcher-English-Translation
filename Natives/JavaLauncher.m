@@ -249,11 +249,13 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
     margv[++margc] = [NSString stringWithFormat:@"-Xmx%dM", allocmem].UTF8String;
     // Detect LWJGL version early to set correct library path
     BOOL useLWJGL33 = NO;
+    BOOL foundLWJGLDeclaration = NO;
     if ([launchTarget isKindOfClass:NSDictionary.class]) {
         NSArray *libraries = launchTarget[@"libraries"];
         for (NSDictionary *lib in libraries) {
             NSString *name = lib[@"name"];
             if (name && [name hasPrefix:@"org.lwjgl:lwjgl:"]) {
+                foundLWJGLDeclaration = YES;
                 NSString *ver = [[name componentsSeparatedByString:@":"] lastObject];
                 NSArray *parts = [ver componentsSeparatedByString:@"."];
                 if (parts.count >= 2 && [[parts objectAtIndex:1] intValue] < 4) {
@@ -261,6 +263,12 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
                 }
                 break;
             }
+        }
+        // Minecraft 26.x 版本 JSON 不再声明 LWJGL，但需要使用 3.4.x（含 spvc/vma/shaderc）。
+        // 若未扫描到 LWJGL 声明且所需 Java >= 21，强制使用 3.4.x 路径。
+        if (!foundLWJGLDeclaration && minVersion >= 21) {
+            useLWJGL33 = NO;
+            NSLog(@"[JavaLauncher] No LWJGL declaration in version JSON and minJava=%d, defaulting to LWJGL 3.4.x", minVersion);
         }
     }
     NSString *frameworksPath = [NSString stringWithFormat:@"%@/Frameworks", NSBundle.mainBundle.bundlePath];
@@ -430,12 +438,22 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
     NSString *lwjglJar = useLWJGL33
         ? [NSString stringWithFormat:@"%@/lwjgl33.jar", librariesPath]
         : [NSString stringWithFormat:@"%@/lwjgl.jar", librariesPath];
-    NSLog(@"[JavaLauncher] Using LWJGL %@ jar", useLWJGL33 ? @"3.3.x" : @"3.4.x");
+    NSLog(@"[JavaLauncher] Using LWJGL %@ jar at %@", useLWJGL33 ? @"3.3.x" : @"3.4.x", lwjglJar);
+
+    // 校验目标 LWJGL jar 是否存在，避免静默崩溃
+    if (![fm fileExistsAtPath:lwjglJar]) {
+        UIKit_returnToSplitView();
+        showDialog(localize(@"Error", nil), [NSString stringWithFormat:@"LWJGL jar missing: %@", [lwjglJar lastPathComponent]]);
+        return 1;
+    }
+
     NSMutableString *classpathBuilder = [NSMutableString string];
     NSArray *libFiles = [fm contentsOfDirectoryAtPath:librariesPath error:nil];
     for (NSString *libFile in libFiles) {
+        // 精确排除合并后的 LWJGL jar，避免重复；保留其他以 lwjgl 开头的依赖 jar
         if ([libFile hasSuffix:@".jar"] &&
-            ![libFile hasPrefix:@"lwjgl"] ) {
+            ![libFile isEqualToString:@"lwjgl.jar"] &&
+            ![libFile isEqualToString:@"lwjgl33.jar"]) {
             [classpathBuilder appendFormat:@"%@/%@:", librariesPath, libFile];
         }
     }

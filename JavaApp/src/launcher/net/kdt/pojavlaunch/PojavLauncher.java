@@ -85,7 +85,12 @@ public class PojavLauncher {
             }
         }
 
-        System.setProperty("org.lwjgl.vulkan.libname", "libMoltenVK.dylib");
+        // 仅在显式选择 Vulkan 渲染器时设置 LWJGL Vulkan native 库名称，
+        // 避免覆盖 JavaLauncher.m 为 ANGLE/MobileGlues/GL4ES 设置的 OpenGL libname。
+        String renderer = System.getenv("AMETHYST_RENDERER");
+        if ("libMoltenVK.dylib".equals(renderer) || "vulkan".equals(renderer)) {
+            System.setProperty("org.lwjgl.vulkan.libname", "libMoltenVK.dylib");
+        }
 
         MinecraftAccount account = MinecraftAccount.load(args[0]);
         JMinecraftVersionList.Version version = Tools.getVersionInfo(args[1]);
