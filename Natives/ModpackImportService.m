@@ -41,6 +41,7 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
 @property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, NSString *> *downloadTaskIds;
 /// task -> { lastTime, lastBytes }
 @property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, NSMutableDictionary *> *downloadProgressSnapshots;
+@property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, DownloadTaskItem *> *downloadTaskItems;
 @property (nonatomic, strong) NSLock *downloadLock;
 @end
 
@@ -68,6 +69,7 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
         _downloadSemaphores = [NSMutableDictionary dictionary];
         _downloadTaskIds = [NSMutableDictionary dictionary];
         _downloadProgressSnapshots = [NSMutableDictionary dictionary];
+        _downloadTaskItems = [NSMutableDictionary dictionary];
         _downloadLock = [[NSLock alloc] init];
     }
     return self;
@@ -486,18 +488,24 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
             NSString *destPath = [modsDir stringByAppendingPathComponent:fileName];
 
             NSURLSessionDownloadTask *task = [self.downloadSession downloadTaskWithURL:[NSURL URLWithString:url]];
-            DownloadTaskItem *taskItem = [[DownloadTaskManager sharedManager]
-                registerTaskWithResourceType:DownloadTaskResourceTypeMod
-                                resourceName:fileName
-                                 displayName:fileName
-                              downloadSource:downloadSource
-                                     rawTask:task
-                              supportsResume:YES
-                                     iconURL:iconURL];
-            [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId state:DownloadTaskStateDownloading];
+            NSString *taskId = nil;
+            BOOL floatingBallEnabled = getPrefBool(@"general.floating_ball_enabled");
+            if (floatingBallEnabled) {
+                DownloadTaskItem *taskItem = [[DownloadTaskManager sharedManager]
+                    registerTaskWithResourceType:DownloadTaskResourceTypeMod
+                                    resourceName:fileName
+                                     displayName:fileName
+                                  downloadSource:downloadSource
+                                         rawTask:task
+                                  supportsResume:YES
+                                         iconURL:iconURL];
+                self.downloadTaskItems[task] = taskItem;
+                [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId state:DownloadTaskStateDownloading];
+                taskId = taskItem.taskId;
+            }
 
             NSError *dlError = nil;
-            if ([self downloadFileFromURL:url toPath:destPath taskId:taskItem.taskId task:task error:&dlError]) {
+            if ([self downloadFileFromURL:url toPath:destPath taskId:taskId task:task error:&dlError]) {
                 successCount++;
             } else {
                 NSLog(@"[ModpackImport] mod 下载失败 %@: %@", fileName, dlError.localizedDescription);
@@ -524,18 +532,24 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
             NSString *destPath = [modsDir stringByAppendingPathComponent:fileName];
 
             NSURLSessionDownloadTask *task = [self.downloadSession downloadTaskWithURL:[NSURL URLWithString:downloadURL]];
-            DownloadTaskItem *taskItem = [[DownloadTaskManager sharedManager]
-                registerTaskWithResourceType:DownloadTaskResourceTypeMod
-                                resourceName:fileName
-                                 displayName:fileName
-                              downloadSource:downloadSource
-                                     rawTask:task
-                              supportsResume:YES
-                                     iconURL:iconURL];
-            [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId state:DownloadTaskStateDownloading];
+            NSString *taskId = nil;
+            BOOL floatingBallEnabled = getPrefBool(@"general.floating_ball_enabled");
+            if (floatingBallEnabled) {
+                DownloadTaskItem *taskItem = [[DownloadTaskManager sharedManager]
+                    registerTaskWithResourceType:DownloadTaskResourceTypeMod
+                                    resourceName:fileName
+                                     displayName:fileName
+                                  downloadSource:downloadSource
+                                         rawTask:task
+                                  supportsResume:YES
+                                         iconURL:iconURL];
+                self.downloadTaskItems[task] = taskItem;
+                [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId state:DownloadTaskStateDownloading];
+                taskId = taskItem.taskId;
+            }
 
             NSError *dlError = nil;
-            if ([self downloadFileFromURL:downloadURL toPath:destPath taskId:taskItem.taskId task:task error:&dlError]) {
+            if ([self downloadFileFromURL:downloadURL toPath:destPath taskId:taskId task:task error:&dlError]) {
                 successCount++;
             } else {
                 NSLog(@"[ModpackImport] mod 下载失败 %@: %@", fileName, dlError.localizedDescription);
@@ -588,6 +602,7 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
     [self.downloadSemaphores removeObjectForKey:task];
     [self.downloadTaskIds removeObjectForKey:task];
     [self.downloadProgressSnapshots removeObjectForKey:task];
+    [self.downloadTaskItems removeObjectForKey:task];
     [self.downloadLock unlock];
 
     BOOL success = [result[@"success"] boolValue];
@@ -635,11 +650,11 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
  totalBytesWritten:(int64_t)totalBytesWritten
 totalBytesExpectedToWrite:(int64_t)totalBytesExpectedToWrite {
     [self.downloadLock lock];
-    NSString *taskId = self.downloadTaskIds[downloadTask];
+    DownloadTaskItem *taskItem = self.downloadTaskItems[downloadTask];
     NSMutableDictionary *snapshot = self.downloadProgressSnapshots[downloadTask];
     [self.downloadLock unlock];
 
-    if (!taskId) return;
+    if (!taskItem) return;
 
     double fraction = totalBytesExpectedToWrite > 0 ? (double)totalBytesWritten / (double)totalBytesExpectedToWrite : -1.0;
     NSTimeInterval now = [NSDate date].timeIntervalSince1970;
@@ -664,11 +679,11 @@ totalBytesExpectedToWrite:(int64_t)totalBytesExpectedToWrite {
     snapshot[@"lastTime"] = @(now);
     snapshot[@"lastBytes"] = @(totalBytesWritten);
 
-    [[DownloadTaskManager sharedManager] updateTaskWithId:taskId
+    [[DownloadTaskManager sharedManager] updateTaskWithId:taskItem.taskId
                                                  progress:fraction
                                                totalBytes:totalBytesExpectedToWrite
                                           downloadedBytes:totalBytesWritten];
-    [[DownloadTaskManager sharedManager] updateTaskWithId:taskId
+    [[DownloadTaskManager sharedManager] updateTaskWithId:taskItem.taskId
                                                     speed:speed
                                    estimatedTimeRemaining:eta];
 }
@@ -678,10 +693,14 @@ totalBytesExpectedToWrite:(int64_t)totalBytesExpectedToWrite {
 didFinishDownloadingToURL:(NSURL *)location {
     [self.downloadLock lock];
     NSMutableDictionary *result = self.downloadResults[downloadTask];
+    DownloadTaskItem *taskItem = self.downloadTaskItems[downloadTask];
     [self.downloadLock unlock];
     if (result) {
         result[@"location"] = location;
         result[@"success"] = @YES;
+    }
+    if (taskItem) {
+        [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId state:DownloadTaskStateCompleted];
     }
 }
 
@@ -689,23 +708,23 @@ didFinishDownloadingToURL:(NSURL *)location {
     [self.downloadLock lock];
     NSMutableDictionary *result = self.downloadResults[task];
     dispatch_semaphore_t sema = self.downloadSemaphores[task];
-    NSString *taskId = self.downloadTaskIds[task];
+    DownloadTaskItem *taskItem = self.downloadTaskItems[task];
     BOOL alreadySuccessful = [result[@"success"] boolValue];
     [self.downloadLock unlock];
 
-    if (taskId) {
+    if (taskItem) {
         if (error) {
             if (error.code == NSURLErrorCancelled) {
-                [[DownloadTaskManager sharedManager] setTaskWithId:taskId state:DownloadTaskStateCancelled];
+                [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId state:DownloadTaskStateCancelled];
             } else {
-                [[DownloadTaskManager sharedManager] setTaskWithId:taskId completedWithError:error];
+                [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId completedWithError:error];
             }
         } else if (!alreadySuccessful) {
             // 没有文件数据但流程结束，标记为失败
             NSError *unknownError = [NSError errorWithDomain:@"ModpackImportError"
                                                         code:5003
                                                     userInfo:@{NSLocalizedDescriptionKey: @"下载未完成"}];
-            [[DownloadTaskManager sharedManager] setTaskWithId:taskId completedWithError:unknownError];
+            [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId completedWithError:unknownError];
         }
     }
 
@@ -773,18 +792,24 @@ didFinishDownloadingToURL:(NSURL *)location {
 
         NSString *displayName = [NSString stringWithFormat:@"%@ %@ profile", loader, loaderVersion];
         NSURLSessionDownloadTask *task = [self.downloadSession downloadTaskWithURL:url];
-        DownloadTaskItem *taskItem = [[DownloadTaskManager sharedManager]
-            registerTaskWithResourceType:DownloadTaskResourceTypeModloader
-                            resourceName:versionId
-                             displayName:displayName
-                          downloadSource:downloadSource
-                                 rawTask:task
-                          supportsResume:YES
-                                 iconURL:nil];
-        [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId state:DownloadTaskStateDownloading];
+        NSString *taskId = nil;
+        BOOL floatingBallEnabled = getPrefBool(@"general.floating_ball_enabled");
+        if (floatingBallEnabled) {
+            DownloadTaskItem *taskItem = [[DownloadTaskManager sharedManager]
+                registerTaskWithResourceType:DownloadTaskResourceTypeModloader
+                                resourceName:versionId
+                                 displayName:displayName
+                              downloadSource:downloadSource
+                                     rawTask:task
+                              supportsResume:YES
+                                     iconURL:nil];
+            self.downloadTaskItems[task] = taskItem;
+            [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId state:DownloadTaskStateDownloading];
+            taskId = taskItem.taskId;
+        }
 
         NSError *dlError = nil;
-        if (![self downloadFileFromURL:jsonURL toPath:versionJsonPath taskId:taskItem.taskId task:task error:&dlError]) {
+        if (![self downloadFileFromURL:jsonURL toPath:versionJsonPath taskId:taskId task:task error:&dlError]) {
             if (error) *error = dlError;
             return NO;
         }
@@ -812,18 +837,24 @@ didFinishDownloadingToURL:(NSURL *)location {
 
     NSString *installerDisplayName = [NSString stringWithFormat:@"%@ %@ installer", loader, loaderVersion];
     NSURLSessionDownloadTask *installerTask = [self.downloadSession downloadTaskWithURL:[NSURL URLWithString:installerURL]];
-    DownloadTaskItem *installerItem = [[DownloadTaskManager sharedManager]
-        registerTaskWithResourceType:DownloadTaskResourceTypeModloader
-                        resourceName:versionId
-                         displayName:installerDisplayName
-                      downloadSource:downloadSource
-                             rawTask:installerTask
-                      supportsResume:YES
-                             iconURL:nil];
-    [[DownloadTaskManager sharedManager] setTaskWithId:installerItem.taskId state:DownloadTaskStateDownloading];
+    NSString *installerTaskId = nil;
+    BOOL floatingBallEnabled = getPrefBool(@"general.floating_ball_enabled");
+    if (floatingBallEnabled) {
+        DownloadTaskItem *installerItem = [[DownloadTaskManager sharedManager]
+            registerTaskWithResourceType:DownloadTaskResourceTypeModloader
+                            resourceName:versionId
+                             displayName:installerDisplayName
+                          downloadSource:downloadSource
+                                 rawTask:installerTask
+                          supportsResume:YES
+                                 iconURL:nil];
+        self.downloadTaskItems[installerTask] = installerItem;
+        [[DownloadTaskManager sharedManager] setTaskWithId:installerItem.taskId state:DownloadTaskStateDownloading];
+        installerTaskId = installerItem.taskId;
+    }
 
     NSError *dlError = nil;
-    if (![self downloadFileFromURL:installerURL toPath:tmpInstallerPath taskId:installerItem.taskId task:installerTask error:&dlError]) {
+    if (![self downloadFileFromURL:installerURL toPath:tmpInstallerPath taskId:installerTaskId task:installerTask error:&dlError]) {
         // installer.jar 下载失败：回退到写占位 JSON（至少让 profile 不崩，用户可手动装）
         NSLog(@"[ModpackImport] %@ installer.jar 下载失败，回退到占位 JSON: %@", loader, installerURL);
         NSInteger javaMajor = [self javaMajorVersionForMC:minecraftVersion];

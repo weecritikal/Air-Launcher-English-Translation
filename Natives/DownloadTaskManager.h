@@ -68,6 +68,9 @@ extern NSString * const DownloadTaskManagerTaskKey;
 /// 标记任务完成或失败；error 为 nil 表示成功
 - (void)setTaskWithId:(NSString *)taskId completedWithError:(nullable NSError *)error;
 
+/// 更新任务错误信息（不修改状态）
+- (void)updateTaskWithId:(NSString *)taskId error:(nullable NSError *)error;
+
 @end
 
 NS_ASSUME_NONNULL_END

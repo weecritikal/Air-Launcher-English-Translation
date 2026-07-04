@@ -473,6 +473,12 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"org.a
 }
 
 - (void)registerOrUpdateTaskItem {
+    BOOL floatingBallEnabled = getPrefBool(@"general.floating_ball_enabled");
+    if (!floatingBallEnabled) {
+        self.currentDownloadTaskItem = nil;
+        return;
+    }
+
     NSString *displayName = self.currentVersionId ?: (self.metadata[@"id"] ?: @"Minecraft");
     NSString *downloadSource = getPrefObject(@"general.download_source") ?: @"official";
 

@@ -11,12 +11,17 @@
 #import <UIKit/UIKit.h>
 #import "PLProfiles.h"
 #import "ShaderItem.h"
+#import "DownloadTaskManager.h"
+#import "DownloadTaskItem.h"
+#import "LauncherPreferences.h"
 
 @interface ShaderService () <NSURLSessionDownloadDelegate>
 @property (nonatomic, strong) NSURLSession *downloadSession;
 @property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, ShaderDownloadHandler> *downloadCompletionHandlers;
 @property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, NSString *> *downloadDestinationPaths;
 @property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, void(^)(NSProgress *)> *downloadProgressHandlers;
+@property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, DownloadTaskItem *> *downloadTaskItems;
+@property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, NSMutableDictionary *> *downloadProgressSnapshots;
 @end
 
 @implementation ShaderService
@@ -45,6 +50,8 @@
         _downloadCompletionHandlers = [NSMutableDictionary dictionary];
         _downloadDestinationPaths = [NSMutableDictionary dictionary];
         _downloadProgressHandlers = [NSMutableDictionary dictionary];
+        _downloadTaskItems = [NSMutableDictionary dictionary];
+        _downloadProgressSnapshots = [NSMutableDictionary dictionary];
     }
     return self;
 }
@@ -250,89 +257,7 @@
 #pragma mark - Online Shader Downloading (Fixed: using NSURLSessionDownloadTask)
 
 - (void)downloadShader:(ShaderItem *)shader toProfile:(NSString *)profileName completion:(ShaderDownloadHandler)completion {
-    // Ensure shaderpacks folder exists
-    NSString *shadersFolder = [self existingShadersFolderForProfile:profileName];
-    NSFileManager *fm = [NSFileManager defaultManager];
-    
-    if (!shadersFolder) {
-        NSString *gameDir = nil;
-        NSString *profile = profileName.length ? profileName : @"default";
-        
-        @try {
-            NSDictionary *profiles = PLProfiles.current.profiles;
-            NSDictionary *prof = profiles[profile];
-            if ([prof isKindOfClass:[NSDictionary class]]) {
-                gameDir = prof[@"gameDir"];
-            }
-        } @catch (NSException *ex) { }
-        
-        if (!gameDir) {
-            const char *gameDirC = getenv("POJAV_GAME_DIR");
-            if (gameDirC) {
-                gameDir = [NSString stringWithUTF8String:gameDirC];
-            }
-        }
-        
-        if (gameDir) {
-            shadersFolder = [gameDir stringByAppendingPathComponent:@"shaderpacks"];
-            NSError *dirError = nil;
-            BOOL created = [fm createDirectoryAtPath:shadersFolder
-                         withIntermediateDirectories:YES
-                                          attributes:nil
-                                               error:&dirError];
-            if (!created || dirError) {
-                if (completion) {
-                    NSError *error = [NSError errorWithDomain:@"ShaderServiceError"
-                                                         code:1
-                                                     userInfo:@{NSLocalizedDescriptionKey: @"Failed to create shaderpacks folder, please check storage permissions."}];
-                    completion(error);
-                }
-                return;
-            }
-        } else {
-            if (completion) {
-                NSError *error = [NSError errorWithDomain:@"ShaderServiceError"
-                                                     code:1
-                                                 userInfo:@{NSLocalizedDescriptionKey: @"Cannot find game directory."}];
-                completion(error);
-            }
-            return;
-        }
-    }
-    
-    // Validate URL
-    NSURL *url = [NSURL URLWithString:shader.selectedVersionDownloadURL];
-    if (!url) {
-        if (completion) {
-            NSError *error = [NSError errorWithDomain:@"ShaderServiceError"
-                                                 code:2
-                                             userInfo:@{NSLocalizedDescriptionKey: @"Invalid download link."}];
-            completion(error);
-        }
-        return;
-    }
-    
-    // Ensure filename is valid
-    NSString *fileName = shader.fileName;
-    if (!fileName || fileName.length == 0) {
-        fileName = [url lastPathComponent];
-    }
-    if (!fileName || fileName.length == 0) {
-        fileName = @"shaderpack.zip";
-    }
-    if (![fileName.lowercaseString hasSuffix:@".zip"]) {
-        fileName = [fileName stringByAppendingString:@".zip"];
-    }
-    
-    NSString *destinationPath = [shadersFolder stringByAppendingPathComponent:fileName];
-    
-    // Create download task with the session (default configuration, no background throttling)
-    NSURLSessionDownloadTask *task = [self.downloadSession downloadTaskWithURL:url];
-    self.downloadCompletionHandlers[task] = completion;
-    self.downloadDestinationPaths[task] = destinationPath;
-    [task resume];
-
-    NSLog(@"[ShaderService] Starting download task for shader: %@ -> %@", url, destinationPath);
+    [self downloadShader:shader toProfile:profileName progress:nil completion:completion];
 }
 
 #pragma mark - Online Shader Downloading with progress
@@ -424,6 +349,25 @@
     if (progress) {
         self.downloadProgressHandlers[task] = progress;
     }
+
+    // 注册到统一下载任务管理器（仅当悬浮球开启时）
+    BOOL floatingBallEnabled = getPrefBool(@"general.floating_ball_enabled");
+    if (floatingBallEnabled) {
+        NSString *resourceName = shader.fileName.length > 0 ? shader.fileName : (shader.displayName.length > 0 ? shader.displayName : @"shader");
+        NSString *displayName = shader.displayName.length > 0 ? shader.displayName : resourceName;
+        NSString *downloadSource = getPrefObject(@"general.download_source") ?: @"official";
+        DownloadTaskItem *taskItem = [[DownloadTaskManager sharedManager]
+            registerTaskWithResourceType:DownloadTaskResourceTypeShader
+                            resourceName:resourceName
+                             displayName:displayName
+                          downloadSource:downloadSource
+                                 rawTask:task
+                          supportsResume:YES
+                                 iconURL:shader.iconURL];
+        self.downloadTaskItems[task] = taskItem;
+        [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId state:DownloadTaskStateDownloading];
+    }
+
     [task resume];
 
     NSLog(@"[ShaderService] Starting download task (with progress) for shader: %@ -> %@", url, destinationPath);
@@ -434,15 +378,14 @@
 - (void)URLSession:(NSURLSession *)session downloadTask:(NSURLSessionDownloadTask *)downloadTask didFinishDownloadingToURL:(NSURL *)location {
     ShaderDownloadHandler handler = self.downloadCompletionHandlers[downloadTask];
     NSString *destinationPath = self.downloadDestinationPaths[downloadTask];
+    DownloadTaskItem *taskItem = self.downloadTaskItems[downloadTask];
 
     [self.downloadCompletionHandlers removeObjectForKey:downloadTask];
     [self.downloadDestinationPaths removeObjectForKey:downloadTask];
     [self.downloadProgressHandlers removeObjectForKey:downloadTask];
+    [self.downloadTaskItems removeObjectForKey:downloadTask];
+    [self.downloadProgressSnapshots removeObjectForKey:downloadTask];
 
-    if (!handler || !destinationPath) {
-        return;
-    }
-    
     NSFileManager *fm = [NSFileManager defaultManager];
     NSError *moveError = nil;
     NSString *dir = [destinationPath stringByDeletingLastPathComponent];
@@ -452,16 +395,31 @@
     if ([fm fileExistsAtPath:destinationPath]) {
         [fm removeItemAtPath:destinationPath error:nil];
     }
-    if (![fm moveItemAtURL:location toURL:[NSURL fileURLWithPath:destinationPath] error:&moveError]) {
-        handler(moveError);
-    } else {
-        handler(nil);
+    BOOL success = destinationPath && [fm moveItemAtURL:location toURL:[NSURL fileURLWithPath:destinationPath] error:&moveError];
+
+    if (taskItem) {
+        if (success) {
+            [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId state:DownloadTaskStateCompleted];
+        } else {
+            [[DownloadTaskManager sharedManager] updateTaskWithId:taskItem.taskId error:moveError];
+            [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId state:DownloadTaskStateFailed];
+        }
+    }
+    if (handler) {
+        handler(success ? nil : moveError);
     }
 }
 
 - (void)URLSession:(NSURLSession *)session task:(NSURLSessionTask *)task didCompleteWithError:(NSError *)error {
     if (error) {
         ShaderDownloadHandler handler = self.downloadCompletionHandlers[task];
+        DownloadTaskItem *taskItem = self.downloadTaskItems[task];
+        if (taskItem) {
+            [[DownloadTaskManager sharedManager] updateTaskWithId:taskItem.taskId error:error];
+            [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId state:DownloadTaskStateFailed];
+            [self.downloadTaskItems removeObjectForKey:task];
+            [self.downloadProgressSnapshots removeObjectForKey:task];
+        }
         if (handler) {
             handler(error);
             [self.downloadCompletionHandlers removeObjectForKey:task];
@@ -477,6 +435,39 @@
  totalBytesWritten:(int64_t)totalBytesWritten
 totalBytesExpectedToWrite:(int64_t)totalBytesExpectedToWrite {
     void(^progress)(NSProgress *) = self.downloadProgressHandlers[downloadTask];
+    DownloadTaskItem *taskItem = self.downloadTaskItems[downloadTask];
+
+    if (taskItem) {
+        double fraction = totalBytesExpectedToWrite > 0 ? (double)totalBytesWritten / (double)totalBytesExpectedToWrite : -1.0;
+        NSTimeInterval now = [NSDate date].timeIntervalSince1970;
+        NSMutableDictionary *snapshot = self.downloadProgressSnapshots[downloadTask];
+        double speed = 0.0;
+        NSTimeInterval eta = 0.0;
+        if (snapshot) {
+            NSTimeInterval lastTime = [snapshot[@"lastTime"] doubleValue];
+            int64_t lastBytes = [snapshot[@"lastBytes"] longLongValue];
+            if (lastTime > 0 && now > lastTime) {
+                speed = (double)(totalBytesWritten - lastBytes) / (now - lastTime);
+                if (speed > 0 && totalBytesExpectedToWrite > totalBytesWritten) {
+                    eta = (double)(totalBytesExpectedToWrite - totalBytesWritten) / speed;
+                }
+            }
+        } else {
+            snapshot = [NSMutableDictionary dictionary];
+            self.downloadProgressSnapshots[downloadTask] = snapshot;
+        }
+        snapshot[@"lastTime"] = @(now);
+        snapshot[@"lastBytes"] = @(totalBytesWritten);
+
+        [[DownloadTaskManager sharedManager] updateTaskWithId:taskItem.taskId
+                                                     progress:fraction
+                                                   totalBytes:totalBytesExpectedToWrite
+                                              downloadedBytes:totalBytesWritten];
+        [[DownloadTaskManager sharedManager] updateTaskWithId:taskItem.taskId
+                                                          speed:speed
+                                        estimatedTimeRemaining:eta];
+    }
+
     if (!progress) return;
 
     NSProgress *downloadProgress = [NSProgress progressWithTotalUnitCount:totalBytesExpectedToWrite];

@@ -7,6 +7,7 @@ NSString * const DownloadTaskResourceTypeShader       = @"shader";
 NSString * const DownloadTaskResourceTypeResourcePack = @"resourcepack";
 NSString * const DownloadTaskResourceTypeDataPack     = @"datapack";
 NSString * const DownloadTaskResourceTypeModpack      = @"modpack";
+NSString * const DownloadTaskResourceTypeWorld        = @"world";
 
 @implementation DownloadTaskItem
 

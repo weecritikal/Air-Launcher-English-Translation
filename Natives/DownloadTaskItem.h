@@ -30,6 +30,7 @@ extern NSString * const DownloadTaskResourceTypeShader;
 extern NSString * const DownloadTaskResourceTypeResourcePack;
 extern NSString * const DownloadTaskResourceTypeDataPack;
 extern NSString * const DownloadTaskResourceTypeModpack;
+extern NSString * const DownloadTaskResourceTypeWorld;
 
 /**
  * 统一下载任务数据模型。

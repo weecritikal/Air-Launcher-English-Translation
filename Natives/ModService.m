@@ -12,12 +12,17 @@
 #import "PLProfiles.h"
 #import "ModItem.h"
 #import "UnzipKit.h"
+#import "DownloadTaskManager.h"
+#import "DownloadTaskItem.h"
+#import "LauncherPreferences.h"
 
 @interface ModService () <NSURLSessionDownloadDelegate>
 @property (nonatomic, strong) NSURLSession *downloadSession;
 @property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, ModDownloadHandler> *downloadCompletionHandlers;
 @property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, NSString *> *downloadDestinationPaths;
 @property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, void(^)(NSProgress *)> *downloadProgressHandlers;
+@property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, DownloadTaskItem *> *downloadTaskItems;
+@property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, NSMutableDictionary *> *downloadProgressSnapshots;
 
 // 缓存
 @property (nonatomic, strong) NSMutableDictionary<NSString *, ModItem *> *metadataCache;
@@ -133,6 +138,8 @@
         _downloadCompletionHandlers = [NSMutableDictionary dictionary];
         _downloadDestinationPaths = [NSMutableDictionary dictionary];
         _downloadProgressHandlers = [NSMutableDictionary dictionary];
+        _downloadTaskItems = [NSMutableDictionary dictionary];
+        _downloadProgressSnapshots = [NSMutableDictionary dictionary];
 
         // 初始化缓存
         _metadataCache = [NSMutableDictionary dictionary];
@@ -474,29 +481,7 @@
 
 // ---------- 下载（关键修复已应用：使用 defaultSessionConfiguration）----------
 - (void)downloadMod:(ModItem *)mod toProfile:(NSString *)profileName completion:(ModDownloadHandler)completion {
-    NSString *modsFolder = [self existingModsFolderForProfile:profileName];
-    if (!modsFolder) {
-        if (completion) {
-            NSError *error = [NSError errorWithDomain:@"ModServiceError" code:1 userInfo:@{NSLocalizedDescriptionKey:@"无法找到 Mods 文件夹。"}];
-            completion(error);
-        }
-        return;
-    }
-
-    NSURL *url = [NSURL URLWithString:mod.selectedVersionDownloadURL];
-    if (!url) {
-        if (completion) {
-            NSError *error = [NSError errorWithDomain:@"ModServiceError" code:2 userInfo:@{NSLocalizedDescriptionKey:@"无效的下载链接。"}];
-            completion(error);
-        }
-        return;
-    }
-
-    NSString *destinationPath = [modsFolder stringByAppendingPathComponent:mod.fileName];
-    NSURLSessionDownloadTask *task = [self.downloadSession downloadTaskWithURL:url];
-    self.downloadCompletionHandlers[task] = completion;
-    self.downloadDestinationPaths[task] = destinationPath;
-    [task resume];
+    [self downloadMod:mod toProfile:profileName progress:nil completion:completion];
 }
 
 // ---------- 带进度回调的下载 ----------
@@ -529,6 +514,25 @@
     if (progress) {
         self.downloadProgressHandlers[task] = progress;
     }
+
+    // 注册到统一下载任务管理器（仅当悬浮球开启时）
+    BOOL floatingBallEnabled = getPrefBool(@"general.floating_ball_enabled");
+    if (floatingBallEnabled) {
+        NSString *resourceName = mod.fileName.length > 0 ? mod.fileName : (mod.displayName.length > 0 ? mod.displayName : @"mod");
+        NSString *displayName = mod.displayName.length > 0 ? mod.displayName : resourceName;
+        NSString *downloadSource = getPrefObject(@"general.download_source") ?: @"official";
+        DownloadTaskItem *taskItem = [[DownloadTaskManager sharedManager]
+            registerTaskWithResourceType:DownloadTaskResourceTypeMod
+                            resourceName:resourceName
+                             displayName:displayName
+                          downloadSource:downloadSource
+                                 rawTask:task
+                          supportsResume:YES
+                                 iconURL:mod.iconURL];
+        self.downloadTaskItems[task] = taskItem;
+        [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId state:DownloadTaskStateDownloading];
+    }
+
     [task resume];
 }
 
@@ -537,12 +541,13 @@
 - (void)URLSession:(NSURLSession *)session downloadTask:(NSURLSessionDownloadTask *)downloadTask didFinishDownloadingToURL:(NSURL *)location {
     ModDownloadHandler handler = self.downloadCompletionHandlers[downloadTask];
     NSString *destinationPath = self.downloadDestinationPaths[downloadTask];
+    DownloadTaskItem *taskItem = self.downloadTaskItems[downloadTask];
 
     [self.downloadCompletionHandlers removeObjectForKey:downloadTask];
     [self.downloadDestinationPaths removeObjectForKey:downloadTask];
     [self.downloadProgressHandlers removeObjectForKey:downloadTask];
-
-    if (!handler || !destinationPath) return;
+    [self.downloadTaskItems removeObjectForKey:downloadTask];
+    [self.downloadProgressSnapshots removeObjectForKey:downloadTask];
 
     NSFileManager *fm = [NSFileManager defaultManager];
     NSError *moveError = nil;
@@ -553,16 +558,31 @@
     if ([fm fileExistsAtPath:destinationPath]) {
         [fm removeItemAtPath:destinationPath error:nil];
     }
-    if (![fm moveItemAtURL:location toURL:[NSURL fileURLWithPath:destinationPath] error:&moveError]) {
-        handler(moveError);
-    } else {
-        handler(nil);
+    BOOL success = destinationPath && [fm moveItemAtURL:location toURL:[NSURL fileURLWithPath:destinationPath] error:&moveError];
+
+    if (taskItem) {
+        if (success) {
+            [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId state:DownloadTaskStateCompleted];
+        } else {
+            [[DownloadTaskManager sharedManager] updateTaskWithId:taskItem.taskId error:moveError];
+            [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId state:DownloadTaskStateFailed];
+        }
+    }
+    if (handler) {
+        handler(success ? nil : moveError);
     }
 }
 
 - (void)URLSession:(NSURLSession *)session task:(NSURLSessionTask *)task didCompleteWithError:(NSError *)error {
     if (error) {
         ModDownloadHandler handler = self.downloadCompletionHandlers[task];
+        DownloadTaskItem *taskItem = self.downloadTaskItems[task];
+        if (taskItem) {
+            [[DownloadTaskManager sharedManager] updateTaskWithId:taskItem.taskId error:error];
+            [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId state:DownloadTaskStateFailed];
+            [self.downloadTaskItems removeObjectForKey:task];
+            [self.downloadProgressSnapshots removeObjectForKey:task];
+        }
         if (handler) {
             handler(error);
             [self.downloadCompletionHandlers removeObjectForKey:task];
@@ -578,6 +598,39 @@
  totalBytesWritten:(int64_t)totalBytesWritten
 totalBytesExpectedToWrite:(int64_t)totalBytesExpectedToWrite {
     void(^progress)(NSProgress *) = self.downloadProgressHandlers[downloadTask];
+    DownloadTaskItem *taskItem = self.downloadTaskItems[downloadTask];
+
+    if (taskItem) {
+        double fraction = totalBytesExpectedToWrite > 0 ? (double)totalBytesWritten / (double)totalBytesExpectedToWrite : -1.0;
+        NSTimeInterval now = [NSDate date].timeIntervalSince1970;
+        NSMutableDictionary *snapshot = self.downloadProgressSnapshots[downloadTask];
+        double speed = 0.0;
+        NSTimeInterval eta = 0.0;
+        if (snapshot) {
+            NSTimeInterval lastTime = [snapshot[@"lastTime"] doubleValue];
+            int64_t lastBytes = [snapshot[@"lastBytes"] longLongValue];
+            if (lastTime > 0 && now > lastTime) {
+                speed = (double)(totalBytesWritten - lastBytes) / (now - lastTime);
+                if (speed > 0 && totalBytesExpectedToWrite > totalBytesWritten) {
+                    eta = (double)(totalBytesExpectedToWrite - totalBytesWritten) / speed;
+                }
+            }
+        } else {
+            snapshot = [NSMutableDictionary dictionary];
+            self.downloadProgressSnapshots[downloadTask] = snapshot;
+        }
+        snapshot[@"lastTime"] = @(now);
+        snapshot[@"lastBytes"] = @(totalBytesWritten);
+
+        [[DownloadTaskManager sharedManager] updateTaskWithId:taskItem.taskId
+                                                     progress:fraction
+                                                   totalBytes:totalBytesExpectedToWrite
+                                              downloadedBytes:totalBytesWritten];
+        [[DownloadTaskManager sharedManager] updateTaskWithId:taskItem.taskId
+                                                          speed:speed
+                                        estimatedTimeRemaining:eta];
+    }
+
     if (!progress) return;
 
     NSProgress *downloadProgress = [NSProgress progressWithTotalUnitCount:totalBytesExpectedToWrite];

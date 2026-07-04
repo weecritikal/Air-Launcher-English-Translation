@@ -14,6 +14,9 @@
 #import "PLProfiles.h"
 #import "ResourcePackItem.h"
 #import "UZKArchive.h"
+#import "DownloadTaskManager.h"
+#import "DownloadTaskItem.h"
+#import "LauncherPreferences.h"
 
 @interface ResourcePackService () <NSURLSessionDownloadDelegate>
 @property (nonatomic, strong) NSURLSession *downloadSession;
@@ -23,6 +26,8 @@
 // 进度回调相关：分别保存进度 handler 和 NSProgress 对象
 @property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, ResourcePackDownloadProgressHandler> *downloadProgressHandlers;
 @property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, NSProgress *> *downloadProgresses;
+@property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, DownloadTaskItem *> *downloadTaskItems;
+@property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, NSMutableDictionary *> *downloadProgressSnapshots;
 @end
 
 @implementation ResourcePackService
@@ -52,6 +57,8 @@
         _downloadDestinationPaths = [NSMutableDictionary dictionary];
         _downloadProgressHandlers = [NSMutableDictionary dictionary];
         _downloadProgresses = [NSMutableDictionary dictionary];
+        _downloadTaskItems = [NSMutableDictionary dictionary];
+        _downloadProgressSnapshots = [NSMutableDictionary dictionary];
     }
     return self;
 }
@@ -381,6 +388,25 @@
         self.downloadProgresses[task] = progressObj;
         self.downloadProgressHandlers[task] = progress;
     }
+
+    // 注册到统一下载任务管理器（仅当悬浮球开启时）
+    BOOL floatingBallEnabled = getPrefBool(@"general.floating_ball_enabled");
+    if (floatingBallEnabled) {
+        NSString *resourceName = item.fileName.length > 0 ? item.fileName : (item.displayName.length > 0 ? item.displayName : @"resourcepack");
+        NSString *displayName = item.displayName.length > 0 ? item.displayName : resourceName;
+        NSString *downloadSource = getPrefObject(@"general.download_source") ?: @"official";
+        DownloadTaskItem *taskItem = [[DownloadTaskManager sharedManager]
+            registerTaskWithResourceType:DownloadTaskResourceTypeResourcePack
+                            resourceName:resourceName
+                             displayName:displayName
+                          downloadSource:downloadSource
+                                 rawTask:task
+                          supportsResume:YES
+                                 iconURL:item.iconURL];
+        self.downloadTaskItems[task] = taskItem;
+        [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId state:DownloadTaskStateDownloading];
+    }
+
     [task resume];
 
     NSLog(@"[ResourcePackService] 开始下载资源包: %@ -> %@", url, destinationPath);
@@ -395,6 +421,39 @@
 totalBytesExpectedToWrite:(int64_t)totalBytesExpectedToWrite {
     NSProgress *progressObj = self.downloadProgresses[downloadTask];
     ResourcePackDownloadProgressHandler progressHandler = self.downloadProgressHandlers[downloadTask];
+    DownloadTaskItem *taskItem = self.downloadTaskItems[downloadTask];
+
+    if (taskItem) {
+        double fraction = totalBytesExpectedToWrite > 0 ? (double)totalBytesWritten / (double)totalBytesExpectedToWrite : -1.0;
+        NSTimeInterval now = [NSDate date].timeIntervalSince1970;
+        NSMutableDictionary *snapshot = self.downloadProgressSnapshots[downloadTask];
+        double speed = 0.0;
+        NSTimeInterval eta = 0.0;
+        if (snapshot) {
+            NSTimeInterval lastTime = [snapshot[@"lastTime"] doubleValue];
+            int64_t lastBytes = [snapshot[@"lastBytes"] longLongValue];
+            if (lastTime > 0 && now > lastTime) {
+                speed = (double)(totalBytesWritten - lastBytes) / (now - lastTime);
+                if (speed > 0 && totalBytesExpectedToWrite > totalBytesWritten) {
+                    eta = (double)(totalBytesExpectedToWrite - totalBytesWritten) / speed;
+                }
+            }
+        } else {
+            snapshot = [NSMutableDictionary dictionary];
+            self.downloadProgressSnapshots[downloadTask] = snapshot;
+        }
+        snapshot[@"lastTime"] = @(now);
+        snapshot[@"lastBytes"] = @(totalBytesWritten);
+
+        [[DownloadTaskManager sharedManager] updateTaskWithId:taskItem.taskId
+                                                     progress:fraction
+                                                   totalBytes:totalBytesExpectedToWrite
+                                              downloadedBytes:totalBytesWritten];
+        [[DownloadTaskManager sharedManager] updateTaskWithId:taskItem.taskId
+                                                          speed:speed
+                                        estimatedTimeRemaining:eta];
+    }
+
     if (!progressObj || !progressHandler) return;
 
     // 首次回调时设置总字节数（HTTP 响应头中可能未提供，则保持 -1）
@@ -412,15 +471,14 @@ totalBytesExpectedToWrite:(int64_t)totalBytesExpectedToWrite {
 - (void)URLSession:(NSURLSession *)session downloadTask:(NSURLSessionDownloadTask *)downloadTask didFinishDownloadingToURL:(NSURL *)location {
     ResourcePackDownloadCompletionHandler handler = self.downloadCompletionHandlers[downloadTask];
     NSString *destinationPath = self.downloadDestinationPaths[downloadTask];
+    DownloadTaskItem *taskItem = self.downloadTaskItems[downloadTask];
 
     [self.downloadCompletionHandlers removeObjectForKey:downloadTask];
     [self.downloadDestinationPaths removeObjectForKey:downloadTask];
     [self.downloadProgresses removeObjectForKey:downloadTask];
     [self.downloadProgressHandlers removeObjectForKey:downloadTask];
-
-    if (!handler || !destinationPath) {
-        return;
-    }
+    [self.downloadTaskItems removeObjectForKey:downloadTask];
+    [self.downloadProgressSnapshots removeObjectForKey:downloadTask];
 
     NSFileManager *fm = [NSFileManager defaultManager];
     NSError *moveError = nil;
@@ -431,16 +489,31 @@ totalBytesExpectedToWrite:(int64_t)totalBytesExpectedToWrite {
     if ([fm fileExistsAtPath:destinationPath]) {
         [fm removeItemAtPath:destinationPath error:nil];
     }
-    if (![fm moveItemAtURL:location toURL:[NSURL fileURLWithPath:destinationPath] error:&moveError]) {
-        handler(NO, moveError);
-    } else {
-        handler(YES, nil);
+    BOOL success = destinationPath && [fm moveItemAtURL:location toURL:[NSURL fileURLWithPath:destinationPath] error:&moveError];
+
+    if (taskItem) {
+        if (success) {
+            [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId state:DownloadTaskStateCompleted];
+        } else {
+            [[DownloadTaskManager sharedManager] updateTaskWithId:taskItem.taskId error:moveError];
+            [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId state:DownloadTaskStateFailed];
+        }
+    }
+    if (handler) {
+        handler(success ? YES : NO, success ? nil : moveError);
     }
 }
 
 - (void)URLSession:(NSURLSession *)session task:(NSURLSessionTask *)task didCompleteWithError:(NSError *)error {
     if (error) {
         ResourcePackDownloadCompletionHandler handler = self.downloadCompletionHandlers[task];
+        DownloadTaskItem *taskItem = self.downloadTaskItems[task];
+        if (taskItem) {
+            [[DownloadTaskManager sharedManager] updateTaskWithId:taskItem.taskId error:error];
+            [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId state:DownloadTaskStateFailed];
+            [self.downloadTaskItems removeObjectForKey:task];
+            [self.downloadProgressSnapshots removeObjectForKey:task];
+        }
         if (handler) {
             handler(NO, error);
             [self.downloadCompletionHandlers removeObjectForKey:task];

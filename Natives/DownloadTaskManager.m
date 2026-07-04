@@ -341,6 +341,16 @@ NSString * const DownloadTaskManagerTaskKey                             = @"Down
     }
 }
 
+- (void)updateTaskWithId:(NSString *)taskId error:(NSError *)error {
+    if (!taskId) return;
+    [self.lock lock];
+    DownloadTaskItem *item = self.tasks[taskId];
+    if (item) item.errorInfo = error ?: item.errorInfo;
+    [self.lock unlock];
+
+    if (item) [self postUpdateForTask:item];
+}
+
 #pragma mark - Notifications
 
 - (void)postUpdateForTask:(DownloadTaskItem *)item {
