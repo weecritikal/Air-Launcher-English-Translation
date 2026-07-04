@@ -1,7 +1,7 @@
 #import "VersionManagerViewController.h"
 #import "BackgroundManager.h"
 #import "PLProfiles.h"
-#import "LauncherProfileEditorViewController.h"
+#import "ProfileSettingsViewController.h"
 #import "ModsManagerViewController.h"
 #import "ShadersManagerViewController.h"
 #import "LauncherPrefGameDirViewController.h"
@@ -482,12 +482,10 @@
 }
 
 - (void)editProfile:(NSString *)profileName {
-    NSDictionary *profile = PLProfiles.current.profiles[profileName];
-    LauncherProfileEditorViewController *vc = [[LauncherProfileEditorViewController alloc] init];
-    vc.profile = [profile mutableCopy];
-    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
-    nav.modalPresentationStyle = UIModalPresentationFormSheet;
-    [self presentViewController:nav animated:YES completion:nil];
+    // 使用 ProfileSettingsViewController（合并后的统一 Edit Profile 页面）
+    ProfileSettingsViewController *vc = [[ProfileSettingsViewController alloc] init];
+    vc.profileName = profileName;
+    [self.navigationController pushViewController:vc animated:YES];
 }
 
 - (void)deleteProfile:(NSString *)profileName {

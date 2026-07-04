@@ -4,7 +4,7 @@
 #import "LauncherRightPanelViewController.h"
 #import "DownloadViewController.h"
 #import "VersionManagerViewController.h"
-#import "LauncherProfileEditorViewController.h"
+#import "ProfileSettingsViewController.h"
 #import "LauncherPreferencesViewController.h"
 #import "LauncherNavigationController.h"
 #import "LauncherPreferences.h"
@@ -30,7 +30,7 @@ static const CGFloat kRightPanelWidth = 220.0;  // 右侧面板宽度
 @property(nonatomic, strong) NSLayoutConstraint *contentTrailingConstraint;
 
 @property(nonatomic, assign) BOOL isShowingProfileEditor;
-@property(nonatomic, strong) LauncherProfileEditorViewController *profileEditorVC;
+@property(nonatomic, strong) ProfileSettingsViewController *profileEditorVC;
 
 @end
 
@@ -329,20 +329,16 @@ static const CGFloat kRightPanelWidth = 220.0;  // 右侧面板宽度
 }
 
 - (void)showProfileEditor:(NSNotification *)notification {
-    // 在中间内容区显示版本编辑器页面
+    // 在中间内容区显示版本编辑器页面（使用 ProfileSettingsViewController）
     NSString *profileName = notification.object;
-    
-    LauncherProfileEditorViewController *vc = [[LauncherProfileEditorViewController alloc] init];
-    vc.profile = [PLProfiles.current.profiles[profileName] mutableCopy];
-    if (!vc.profile) {
-        vc.profile = [NSMutableDictionary dictionary];
-        vc.profile[@"name"] = profileName;
-    }
-    
+
+    ProfileSettingsViewController *vc = [[ProfileSettingsViewController alloc] init];
+    vc.profileName = profileName;
+
     // 包装在导航控制器中
     UINavigationController *navVC = [[UINavigationController alloc] initWithRootViewController:vc];
     navVC.navigationBar.prefersLargeTitles = NO;
-    
+
     self.profileEditorVC = vc;
     self.isShowingProfileEditor = YES;
     [self setContentViewController:navVC animated:YES];
@@ -431,7 +427,7 @@ static const CGFloat kRightPanelWidth = 220.0;  // 右侧面板宽度
     
     // 检查是否切换到非编辑器页面
     if (![viewController isKindOfClass:[UINavigationController class]] ||
-        ![((UINavigationController *)viewController).topViewController isKindOfClass:[LauncherProfileEditorViewController class]]) {
+        ![((UINavigationController *)viewController).topViewController isKindOfClass:[ProfileSettingsViewController class]]) {
         self.isShowingProfileEditor = NO;
         self.profileEditorVC = nil;
     }

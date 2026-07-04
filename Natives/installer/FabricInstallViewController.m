@@ -3,7 +3,7 @@
 #import "FabricUtils.h"
 #import "LauncherNavigationController.h"
 #import "LauncherPreferences.h"
-#import "LauncherProfileEditorViewController.h"
+#import "ProfileSettingsViewController.h"
 #import "PickTextField.h"
 #import "PLProfiles.h"
 #import "ios_uikit_bridge.h"
@@ -236,13 +236,9 @@ extern NSMutableArray *localVersionList;
         self.completionHandler(YES, profileId, nil);
         [self.navigationController dismissViewControllerAnimated:YES completion:nil];
     } else {
-        // Legacy mode: jump to profile editor
-        LauncherProfileEditorViewController *vc = [LauncherProfileEditorViewController new];
-        vc.profile = @{
-            @"icon": endpoint[@"icon"],
-            @"name": profileId,
-            @"lastVersionId": profileId
-        }.mutableCopy;
+        // Legacy mode: jump to profile editor (使用 ProfileSettingsViewController)
+        ProfileSettingsViewController *vc = [ProfileSettingsViewController new];
+        vc.profileName = profileId;
         [self.navigationController pushViewController:vc animated:YES];
     }
 }

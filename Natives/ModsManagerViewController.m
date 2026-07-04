@@ -9,7 +9,6 @@
 
 @interface ModsManagerViewController () <UITableViewDataSource, UITableViewDelegate, ModTableViewCellDelegate, UISearchBarDelegate, ModVersionViewControllerDelegate, UIDocumentPickerDelegate>
 
-@property (nonatomic, strong) UISegmentedControl *modeSwitcher;
 @property (nonatomic, strong) UISearchBar *searchBar;
 @property (nonatomic, strong) UITableView *tableView;
 @property (nonatomic, strong) UIActivityIndicatorView *activityIndicator;
@@ -28,24 +27,16 @@
     [super viewDidLoad];
     self.title = @"管理 Mod";
     self.view.backgroundColor = [UIColor systemBackgroundColor];
-    self.currentMode = self.initialMode; // Use initialMode if set
+    self.currentMode = ModsManagerModeLocal; // 始终使用本地模式（在线下载入口已移至下载界面）
     self.localMods = [NSMutableArray array];
     self.filteredLocalMods = [NSMutableArray array];
     self.onlineSearchResults = [NSMutableArray array];
     [self setupUI];
-    [self updateUIForCurrentMode]; // Update UI based on current mode
-    if (self.currentMode == ModsManagerModeLocal) {
-        [self refreshLocalModsList];
-    }
+    [self updateUIForCurrentMode];
+    [self refreshLocalModsList];
 }
 
 - (void)setupUI {
-    self.modeSwitcher = [[UISegmentedControl alloc] initWithItems:@[@"本地 Mod", @"在线搜索 (Modrinth)"]];
-    self.modeSwitcher.translatesAutoresizingMaskIntoConstraints = NO;
-    self.modeSwitcher.selectedSegmentIndex = self.currentMode; // Set based on initial mode
-    [self.modeSwitcher addTarget:self action:@selector(modeChanged:) forControlEvents:UIControlEventValueChanged];
-    [self.view addSubview:self.modeSwitcher];
-
     self.searchBar = [[UISearchBar alloc] initWithFrame:CGRectZero];
     self.searchBar.translatesAutoresizingMaskIntoConstraints = NO;
     self.searchBar.delegate = self;
@@ -90,11 +81,7 @@
     [self updateNavigationButtons];
 
     [NSLayoutConstraint activateConstraints:@[
-        [self.modeSwitcher.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:8],
-        [self.modeSwitcher.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:16],
-        [self.modeSwitcher.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-16],
-
-        [self.searchBar.topAnchor constraintEqualToAnchor:self.modeSwitcher.bottomAnchor constant:8],
+        [self.searchBar.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:8],
         [self.searchBar.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.searchBar.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
 
@@ -111,27 +98,10 @@
     ]];
 }
 
-- (void)modeChanged:(UISegmentedControl *)sender {
-    self.currentMode = (ModsManagerMode)sender.selectedSegmentIndex;
-    [self.searchBar resignFirstResponder];
-    self.searchBar.text = @"";
-    [self.onlineSearchResults removeAllObjects];
-    [self filterLocalMods];
-    [self.tableView reloadData];
-    [self updateUIForCurrentMode];
-}
-
 - (void)updateUIForCurrentMode {
-    if (self.currentMode == ModsManagerModeLocal) {
-        self.searchBar.placeholder = @"搜索本地 Mod...";
-        self.emptyLabel.text = @"未发现 Mod";
-        self.emptyLabel.hidden = self.localMods.count > 0;
-    } else {
-        self.searchBar.placeholder = @"在线搜索 Modrinth...";
-        self.emptyLabel.text = @"输入关键词进行在线搜索";
-        self.emptyLabel.hidden = self.onlineSearchResults.count > 0;
-    }
-    // Re-enable pull-to-refresh for all modes
+    self.searchBar.placeholder = @"搜索本地 Mod...";
+    self.emptyLabel.text = @"未发现 Mod";
+    self.emptyLabel.hidden = self.localMods.count > 0;
     self.tableView.refreshControl.enabled = YES;
     [self updateNavigationButtons];
     [self.tableView reloadData];
@@ -139,15 +109,9 @@
 
 - (void)updateNavigationButtons {
     UIBarButtonItem *closeButton = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone target:self action:@selector(closeTapped)];
-
-    if (self.currentMode == ModsManagerModeLocal) {
-        // rightBarButtonItems 从右到左显示：导入、刷新、检查更新
-        self.navigationItem.rightBarButtonItems = @[self.importButton, self.refreshButton, self.checkUpdateButton];
-        self.navigationItem.leftBarButtonItem = closeButton;
-    } else {
-        self.navigationItem.rightBarButtonItems = nil;
-        self.navigationItem.leftBarButtonItem = closeButton;
-    }
+    // rightBarButtonItems 从右到左显示：导入、刷新、检查更新
+    self.navigationItem.rightBarButtonItems = @[self.importButton, self.refreshButton, self.checkUpdateButton];
+    self.navigationItem.leftBarButtonItem = closeButton;
 }
 
 - (void)closeTapped {
@@ -281,17 +245,7 @@
 #pragma mark - Data Loading
 
 - (void)handleRefresh:(id)sender {
-    if (self.currentMode == ModsManagerModeLocal) {
-        [self refreshLocalModsList];
-    } else {
-        // For online mode, only refresh if there's text, otherwise it's pointless.
-        if (self.searchBar.text.length > 0) {
-            [self performOnlineSearch];
-        } else {
-            // If no text, just end the refreshing indicator.
-            [self.tableView.refreshControl endRefreshing];
-        }
-    }
+    [self refreshLocalModsList];
 }
 
 - (void)setLoading:(BOOL)loading {
@@ -307,8 +261,6 @@
 }
 
 - (void)refreshLocalModsList {
-    if (self.currentMode != ModsManagerModeLocal) return;
-
     [self setLoading:YES];
     NSString *profile = self.profileName ?: @"default";
     [[ModService sharedService] scanModsForProfile:profile completion:^(NSArray<ModItem *> *mods) {
@@ -321,96 +273,20 @@
     }];
 }
 
-- (void)performOnlineSearch {
-    NSString *searchText = self.searchBar.text;
-    if (searchText.length == 0) return;
-
-    [self setLoading:YES];
-    [self.onlineSearchResults removeAllObjects];
-    [self.tableView reloadData];
-
-    // 修复 #50/#51: 自动从当前 profile 解析 gameVersion 和 loader，传给 Modrinth API
-    // 这样筛选 neoforge/fabric 等加载器才会真正生效，且搜索结果会优先匹配当前版本
-    NSString *gameVersion = nil;
-    NSString *loader = nil;
-    [self resolveCurrentGameVersion:&gameVersion loader:&loader];
-
-    NSMutableDictionary *filters = [NSMutableDictionary dictionary];
-    filters[@"name"] = searchText;
-    filters[@"projectType"] = @"mod";
-    if (gameVersion.length > 0) {
-        filters[@"mcVersion"] = gameVersion;
-    }
-    if (loader.length > 0) {
-        filters[@"loader"] = loader;
-    }
-
-    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-        NSMutableArray *modrinthResults = [[ModrinthAPI sharedInstance] searchModWithFilters:filters previousPageResult:nil];
-
-        dispatch_async(dispatch_get_main_queue(), ^{
-            if (modrinthResults) {
-                [self.onlineSearchResults addObjectsFromArray:modrinthResults];
-            }
-            [self setLoading:NO];
-            self.emptyLabel.hidden = self.onlineSearchResults.count > 0;
-            if (self.onlineSearchResults.count == 0) {
-                self.emptyLabel.text = @"未找到在线结果";
-            }
-            [self.tableView reloadData];
-        });
-    });
-}
-
-// 从当前选中 profile 的 lastVersionId 解析 gameVersion 和 loader
-// lastVersionId 格式举例：1.20.1-forge-47.3.0 / 1.20.1-fabric-0.16.0 / 1.20.1-neoforge-47.1.0 / 1.20.1（原版）
-- (void)resolveCurrentGameVersion:(NSString **)outGameVersion loader:(NSString **)outLoader {
-    if (outGameVersion) *outGameVersion = nil;
-    if (outLoader) *outLoader = nil;
-
-    NSDictionary *selectedProfile = PLProfiles.current.selectedProfile;
-    NSString *lastVersionId = selectedProfile[@"lastVersionId"];
-    if (![lastVersionId isKindOfClass:[NSString class]] || lastVersionId.length == 0) return;
-
-    NSArray<NSString *> *loaders = @[@"forge", @"fabric", @"neoforge", @"quilt"];
-    for (NSString *name in loaders) {
-        NSString *delimiter = [NSString stringWithFormat:@"-%@-", name];
-        NSRange range = [lastVersionId rangeOfString:delimiter];
-        if (range.location != NSNotFound) {
-            if (outGameVersion) *outGameVersion = [lastVersionId substringToIndex:range.location];
-            if (outLoader) *outLoader = name;
-            return;
-        }
-    }
-    // 纯 <mc> 格式，无 loader
-    if (outGameVersion) *outGameVersion = lastVersionId;
-}
-
 #pragma mark - UISearchBarDelegate
 
 - (void)searchBar:(UISearchBar *)searchBar textDidChange:(NSString *)searchText {
-    if (self.currentMode == ModsManagerModeLocal) {
-        [self filterLocalMods];
-    }
+    [self filterLocalMods];
 }
 
 - (void)searchBarSearchButtonClicked:(UISearchBar *)searchBar {
     [searchBar resignFirstResponder];
-    if (self.currentMode == ModsManagerModeOnline) {
-        [self performOnlineSearch];
-    }
 }
 
 - (void)searchBarCancelButtonClicked:(UISearchBar *)searchBar {
     searchBar.text = @"";
     [searchBar resignFirstResponder];
-    if (self.currentMode == ModsManagerModeLocal) {
-        [self filterLocalMods];
-    } else {
-        [self.onlineSearchResults removeAllObjects];
-        [self.tableView reloadData];
-        [self updateUIForCurrentMode];
-    }
+    [self filterLocalMods];
 }
 
 - (void)filterLocalMods {
@@ -436,30 +312,20 @@
 #pragma mark - UITableView DataSource & Delegate
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    return self.currentMode == ModsManagerModeLocal ? self.filteredLocalMods.count : self.onlineSearchResults.count;
+    return self.filteredLocalMods.count;
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     ModTableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"ModCell" forIndexPath:indexPath];
     cell.delegate = self;
 
-    if (self.currentMode == ModsManagerModeLocal) {
-        ModItem *mod = self.filteredLocalMods[indexPath.row];
-        [cell configureWithMod:mod displayMode:ModTableViewCellDisplayModeLocal];
-    } else {
-        NSDictionary *modData = self.onlineSearchResults[indexPath.row];
-        ModItem *modItem = [[ModItem alloc] initWithOnlineData:modData];
-        [cell configureWithMod:modItem displayMode:ModTableViewCellDisplayModeOnline];
-    }
+    ModItem *mod = self.filteredLocalMods[indexPath.row];
+    [cell configureWithMod:mod displayMode:ModTableViewCellDisplayModeLocal];
 
     return cell;
 }
 
 - (UISwipeActionsConfiguration *)tableView:(UITableView *)tableView trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
-    if (self.currentMode != ModsManagerModeLocal) {
-        return nil;
-    }
-
     UIContextualAction *deleteAction = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleDestructive title:@"删除" handler:^(UIContextualAction * _Nonnull action, __kindof UIView * _Nonnull sourceView, void (^ _Nonnull completionHandler)(BOOL)) {
 
         ModItem *modToDelete = self.filteredLocalMods[indexPath.row];
@@ -507,17 +373,7 @@
 #pragma mark - ModTableViewCellDelegate (Download Implementation)
 
 - (void)modCellDidTapDownload:(UITableViewCell *)cell {
-    NSIndexPath *indexPath = [self.tableView indexPathForCell:cell];
-    if (!indexPath || self.currentMode != ModsManagerModeOnline) return;
-
-    NSDictionary *modData = self.onlineSearchResults[indexPath.row];
-    ModItem *modItem = [[ModItem alloc] initWithOnlineData:modData];
-    
-    ModVersionViewController *versionVC = [[ModVersionViewController alloc] init];
-    versionVC.modItem = modItem;
-    versionVC.delegate = self;
-    
-    [self.navigationController pushViewController:versionVC animated:YES];
+    // 在线下载入口已移除（请使用下载界面），此方法保留以实现协议
 }
 
 #pragma mark - ModVersionViewControllerDelegate
@@ -581,9 +437,7 @@
                                                                               message:[NSString stringWithFormat:@"%@ 已成功安装。", item.displayName]
                                                                        preferredStyle:UIAlertControllerStyleAlert];
         [successAlert addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-            // After user acknowledges, switch to local mods and refresh
-            [self.modeSwitcher setSelectedSegmentIndex:0];
-            [self modeChanged:self.modeSwitcher];
+            // After user acknowledges, refresh local mods list
             [self refreshLocalModsList];
         }]];
         [self presentViewController:successAlert animated:YES completion:nil];
@@ -597,15 +451,12 @@
 }
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
-    if (self.currentMode == ModsManagerModeOnline) {
-        // Handle online search item selection if necessary (e.g., show details)
-        [tableView deselectRowAtIndexPath:indexPath animated:YES];
-    }
+    [tableView deselectRowAtIndexPath:indexPath animated:YES];
 }
 
 - (void)modCellDidTapToggle:(UITableViewCell *)cell {
     NSIndexPath *indexPath = [self.tableView indexPathForCell:cell];
-    if (!indexPath || self.currentMode != ModsManagerModeLocal) return;
+    if (!indexPath) return;
 
     ModItem *mod = self.filteredLocalMods[indexPath.row];
 
@@ -627,13 +478,7 @@
     NSIndexPath *indexPath = [self.tableView indexPathForCell:cell];
     if (!indexPath) return;
 
-    ModItem *modItem = nil;
-    if (self.currentMode == ModsManagerModeLocal) {
-        modItem = self.filteredLocalMods[indexPath.row];
-    } else {
-        NSDictionary *modData = self.onlineSearchResults[indexPath.row];
-        modItem = [[ModItem alloc] initWithOnlineData:modData];
-    }
+    ModItem *modItem = self.filteredLocalMods[indexPath.row];
 
     if (modItem.onlineID && modItem.onlineID.length > 0) {
         NSString *urlString = [NSString stringWithFormat:@"https://modrinth.com/mod/%@", modItem.onlineID];

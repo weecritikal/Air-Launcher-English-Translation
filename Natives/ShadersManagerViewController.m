@@ -17,7 +17,6 @@
 
 @interface ShadersManagerViewController () <UITableViewDataSource, UITableViewDelegate, ShaderTableViewCellDelegate, UISearchBarDelegate, ShaderVersionViewControllerDelegate, UIDocumentPickerDelegate>
 
-@property (nonatomic, strong) UISegmentedControl *modeSwitcher;
 @property (nonatomic, strong) UISearchBar *searchBar;
 @property (nonatomic, strong) UITableView *tableView;
 @property (nonatomic, strong) UIActivityIndicatorView *activityIndicator;
@@ -36,24 +35,16 @@
     [super viewDidLoad];
     self.title = @"管理光影";
     self.view.backgroundColor = [UIColor systemBackgroundColor];
-    self.currentMode = self.initialMode; // Use initialMode if set
+    self.currentMode = ShadersManagerModeLocal; // 始终使用本地模式（在线下载入口已移至下载界面）
     self.localShaders = [NSMutableArray array];
     self.filteredLocalShaders = [NSMutableArray array];
     self.onlineSearchResults = [NSMutableArray array];
     [self setupUI];
-    [self updateUIForCurrentMode]; // Update UI based on current mode
-    if (self.currentMode == ShadersManagerModeLocal) {
-        [self refreshLocalShadersList];
-    }
+    [self updateUIForCurrentMode];
+    [self refreshLocalShadersList];
 }
 
 - (void)setupUI {
-    self.modeSwitcher = [[UISegmentedControl alloc] initWithItems:@[@"本地光影", @"在线搜索 (Modrinth)"]];
-    self.modeSwitcher.translatesAutoresizingMaskIntoConstraints = NO;
-    self.modeSwitcher.selectedSegmentIndex = self.currentMode; // Set based on initial mode
-    [self.modeSwitcher addTarget:self action:@selector(modeChanged:) forControlEvents:UIControlEventValueChanged];
-    [self.view addSubview:self.modeSwitcher];
-
     self.searchBar = [[UISearchBar alloc] initWithFrame:CGRectZero];
     self.searchBar.translatesAutoresizingMaskIntoConstraints = NO;
     self.searchBar.delegate = self;
@@ -98,11 +89,7 @@
     [self updateNavigationButtons];
 
     [NSLayoutConstraint activateConstraints:@[
-        [self.modeSwitcher.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:8],
-        [self.modeSwitcher.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:16],
-        [self.modeSwitcher.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-16],
-
-        [self.searchBar.topAnchor constraintEqualToAnchor:self.modeSwitcher.bottomAnchor constant:8],
+        [self.searchBar.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:8],
         [self.searchBar.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.searchBar.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
 
@@ -119,26 +106,10 @@
     ]];
 }
 
-- (void)modeChanged:(UISegmentedControl *)sender {
-    self.currentMode = (ShadersManagerMode)sender.selectedSegmentIndex;
-    [self.searchBar resignFirstResponder];
-    self.searchBar.text = @"";
-    [self.onlineSearchResults removeAllObjects];
-    [self filterLocalShaders];
-    [self.tableView reloadData];
-    [self updateUIForCurrentMode];
-}
-
 - (void)updateUIForCurrentMode {
-    if (self.currentMode == ShadersManagerModeLocal) {
-        self.searchBar.placeholder = @"搜索本地光影...";
-        self.emptyLabel.text = @"未发现光影";
-        self.emptyLabel.hidden = self.localShaders.count > 0;
-    } else {
-        self.searchBar.placeholder = @"在线搜索 Modrinth...";
-        self.emptyLabel.text = @"输入关键词进行在线搜索";
-        self.emptyLabel.hidden = self.onlineSearchResults.count > 0;
-    }
+    self.searchBar.placeholder = @"搜索本地光影...";
+    self.emptyLabel.text = @"未发现光影";
+    self.emptyLabel.hidden = self.localShaders.count > 0;
     self.tableView.refreshControl.enabled = YES;
     [self updateNavigationButtons];
     [self.tableView reloadData];
@@ -146,15 +117,9 @@
 
 - (void)updateNavigationButtons {
     UIBarButtonItem *closeButton = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone target:self action:@selector(closeTapped)];
-
-    if (self.currentMode == ShadersManagerModeLocal) {
-        // rightBarButtonItems 从右到左显示：导入、刷新、检查更新
-        self.navigationItem.rightBarButtonItems = @[self.importButton, self.refreshButton, self.checkUpdateButton];
-        self.navigationItem.leftBarButtonItem = closeButton;
-    } else {
-        self.navigationItem.rightBarButtonItems = nil;
-        self.navigationItem.leftBarButtonItem = closeButton;
-    }
+    // rightBarButtonItems 从右到左显示：导入、刷新、检查更新
+    self.navigationItem.rightBarButtonItems = @[self.importButton, self.refreshButton, self.checkUpdateButton];
+    self.navigationItem.leftBarButtonItem = closeButton;
 }
 
 - (void)closeTapped {
@@ -298,15 +263,7 @@
 #pragma mark - Data Loading
 
 - (void)handleRefresh:(id)sender {
-    if (self.currentMode == ShadersManagerModeLocal) {
-        [self refreshLocalShadersList];
-    } else {
-        if (self.searchBar.text.length > 0) {
-            [self performOnlineSearch];
-        } else {
-            [self.tableView.refreshControl endRefreshing];
-        }
-    }
+    [self refreshLocalShadersList];
 }
 
 - (void)setLoading:(BOOL)loading {
@@ -322,8 +279,6 @@
 }
 
 - (void)refreshLocalShadersList {
-    if (self.currentMode != ShadersManagerModeLocal) return;
-
     [self setLoading:YES];
     NSString *profile = self.profileName ?: @"default";
     [[ShaderService sharedService] scanShadersForProfile:profile completion:^(NSArray<ShaderItem *> *shaders) {
@@ -336,56 +291,20 @@
     }];
 }
 
-- (void)performOnlineSearch {
-    NSString *searchText = self.searchBar.text;
-    if (searchText.length == 0) return;
-
-    [self setLoading:YES];
-    [self.onlineSearchResults removeAllObjects];
-    [self.tableView reloadData];
-
-    NSDictionary *filters = @{@"name": searchText};
-
-    [[ModrinthAPI sharedInstance] searchShaderWithFilters:filters completion:^(NSArray * _Nullable results, NSError * _Nullable error) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            if (results) {
-                [self.onlineSearchResults addObjectsFromArray:results];
-            }
-            [self setLoading:NO];
-            self.emptyLabel.hidden = self.onlineSearchResults.count > 0;
-            if (self.onlineSearchResults.count == 0) {
-                self.emptyLabel.text = @"未找到在线结果";
-            }
-            [self.tableView reloadData];
-        });
-    }];
-}
-
 #pragma mark - UISearchBarDelegate
 
 - (void)searchBar:(UISearchBar *)searchBar textDidChange:(NSString *)searchText {
-    if (self.currentMode == ShadersManagerModeLocal) {
-        [self filterLocalShaders];
-    }
+    [self filterLocalShaders];
 }
 
 - (void)searchBarSearchButtonClicked:(UISearchBar *)searchBar {
     [searchBar resignFirstResponder];
-    if (self.currentMode == ShadersManagerModeOnline) {
-        [self performOnlineSearch];
-    }
 }
 
 - (void)searchBarCancelButtonClicked:(UISearchBar *)searchBar {
     searchBar.text = @"";
     [searchBar resignFirstResponder];
-    if (self.currentMode == ShadersManagerModeLocal) {
-        [self filterLocalShaders];
-    } else {
-        [self.onlineSearchResults removeAllObjects];
-        [self.tableView reloadData];
-        [self updateUIForCurrentMode];
-    }
+    [self filterLocalShaders];
 }
 
 - (void)filterLocalShaders {
@@ -411,30 +330,20 @@
 #pragma mark - UITableView DataSource & Delegate
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    return self.currentMode == ShadersManagerModeLocal ? self.filteredLocalShaders.count : self.onlineSearchResults.count;
+    return self.filteredLocalShaders.count;
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     ShaderTableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"ShaderCell" forIndexPath:indexPath];
     cell.delegate = self;
 
-    if (self.currentMode == ShadersManagerModeLocal) {
-        ShaderItem *shader = self.filteredLocalShaders[indexPath.row];
-        [cell configureWithShader:shader displayMode:ShaderTableViewCellDisplayModeLocal];
-    } else {
-        NSDictionary *shaderData = self.onlineSearchResults[indexPath.row];
-        ShaderItem *shaderItem = [[ShaderItem alloc] initWithOnlineData:shaderData];
-        [cell configureWithShader:shaderItem displayMode:ShaderTableViewCellDisplayModeOnline];
-    }
+    ShaderItem *shader = self.filteredLocalShaders[indexPath.row];
+    [cell configureWithShader:shader displayMode:ShaderTableViewCellDisplayModeLocal];
 
     return cell;
 }
 
 - (UISwipeActionsConfiguration *)tableView:(UITableView *)tableView trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
-    if (self.currentMode != ShadersManagerModeLocal) {
-        return nil;
-    }
-
     UIContextualAction *deleteAction = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleDestructive title:@"删除" handler:^(UIContextualAction * _Nonnull action, __kindof UIView * _Nonnull sourceView, void (^ _Nonnull completionHandler)(BOOL)) {
 
         ShaderItem *shaderToDelete = self.filteredLocalShaders[indexPath.row];
@@ -479,17 +388,7 @@
 #pragma mark - ShaderTableViewCellDelegate (Download Implementation)
 
 - (void)shaderCellDidTapDownload:(UITableViewCell *)cell {
-    NSIndexPath *indexPath = [self.tableView indexPathForCell:cell];
-    if (!indexPath || self.currentMode != ShadersManagerModeOnline) return;
-
-    NSDictionary *shaderData = self.onlineSearchResults[indexPath.row];
-    ShaderItem *shaderItem = [[ShaderItem alloc] initWithOnlineData:shaderData];
-
-    ShaderVersionViewController *versionVC = [[ShaderVersionViewController alloc] init];
-    versionVC.shaderItem = shaderItem;
-    versionVC.delegate = self;
-
-    [self.navigationController pushViewController:versionVC animated:YES];
+    // 在线下载入口已移除（请使用下载界面），此方法保留以实现协议
 }
 
 #pragma mark - ShaderVersionViewControllerDelegate
@@ -552,8 +451,7 @@
                                                                               message:[NSString stringWithFormat:@"%@ 已成功安装。", item.displayName]
                                                                        preferredStyle:UIAlertControllerStyleAlert];
         [successAlert addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-            [self.modeSwitcher setSelectedSegmentIndex:0];
-            [self modeChanged:self.modeSwitcher];
+            // After user acknowledges, refresh local shaders list
             [self refreshLocalShadersList];
         }]];
         [self presentViewController:successAlert animated:YES completion:nil];
@@ -567,9 +465,7 @@
 }
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
-    if (self.currentMode == ShadersManagerModeOnline) {
-        [tableView deselectRowAtIndexPath:indexPath animated:YES];
-    }
+    [tableView deselectRowAtIndexPath:indexPath animated:YES];
 }
 
 // 禁用光影切换功能 - 光影管理只用于查看和删除
@@ -581,13 +477,7 @@
     NSIndexPath *indexPath = [self.tableView indexPathForCell:cell];
     if (!indexPath) return;
 
-    ShaderItem *shaderItem = nil;
-    if (self.currentMode == ShadersManagerModeLocal) {
-        shaderItem = self.filteredLocalShaders[indexPath.row];
-    } else {
-        NSDictionary *shaderData = self.onlineSearchResults[indexPath.row];
-        shaderItem = [[ShaderItem alloc] initWithOnlineData:shaderData];
-    }
+    ShaderItem *shaderItem = self.filteredLocalShaders[indexPath.row];
 
     if (shaderItem.onlineID && shaderItem.onlineID.length > 0) {
         NSString *urlString = [NSString stringWithFormat:@"https://modrinth.com/shader/%@", shaderItem.onlineID];
