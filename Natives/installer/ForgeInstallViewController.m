@@ -599,10 +599,13 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
 }
 
 - (NSString *)extractMinecraftVersionFromNeoForgeVersion:(NSString *)version {
-    if ([version containsString:@"1.20.1"]) {
+    // 1.20.1 special versions: 1.20.1-47.1.3 -> 1.20.1
+    // 同时覆盖 47.x.y 系列（1.20.1 NeoForge release 版本号，不含 "1.20.1" 子串）
+    if ([version containsString:@"1.20.1"] || [version hasPrefix:@"47."]) {
         return @"1.20.1";
     }
-    
+
+    // 0.x special snapshots: 0.25w14craftmine.3 -> 25w14craftmine
     if ([version hasPrefix:@"0."]) {
         NSString *part = [version substringFromIndex:2];
         NSRange hyphenRange = [part rangeOfString:@"-"];
@@ -615,13 +618,13 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
         }
         return part;
     }
-    
+
     NSString *cleanVersion = version;
     NSRange hyphenRange = [version rangeOfString:@"-"];
     if (hyphenRange.location != NSNotFound) {
         cleanVersion = [version substringToIndex:hyphenRange.location];
     }
-    
+
     NSArray *components = [cleanVersion componentsSeparatedByString:@"."];
     if (components.count >= 2) {
         NSString *major = components[0];
@@ -629,28 +632,30 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
         NSCharacterSet *nonNumbers = [[NSCharacterSet decimalDigitCharacterSet] invertedSet];
         BOOL majorIsNum = [major rangeOfCharacterFromSet:nonNumbers].location == NSNotFound;
         BOOL minorIsNum = [minor rangeOfCharacterFromSet:nonNumbers].location == NSNotFound;
-        
+
         if (majorIsNum && minorIsNum) {
             NSInteger majorVal = [major integerValue];
-            if (majorVal >= 26) {
-                if (components.count >= 4) {
-                    return [NSString stringWithFormat:@"%@.%@.%@", major, minor, components[2]];
-                } else if (components.count >= 3) {
-                    return [NSString stringWithFormat:@"%@.%@.%@", major, minor, components[2]];
+            if (majorVal >= 21) {
+                // 21.x - 25.x: NeoForge loader 版本号 == MC 版本号（21.x → MC 1.21.x）
+                // NeoForge 版本格式: major.minor.patch[.build]，MC 版本 = 1.<major>.<patch>
+                if (components.count >= 3) {
+                    return [NSString stringWithFormat:@"1.%@.%@", major, components[2]];
+                } else {
+                    return [NSString stringWithFormat:@"1.%@.0", major];
                 }
-                return [NSString stringWithFormat:@"%@.%@", major, minor];
             } else {
+                // Old format: 20.2.88 -> 1.20.2
                 return [NSString stringWithFormat:@"1.%@.%@", major, minor];
             }
         }
     }
-    
+
     NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@"(\\d+\\.\\d+)" options:0 error:nil];
     NSTextCheckingResult *match = [regex firstMatchInString:version options:0 range:NSMakeRange(0, version.length)];
     if (match) {
         return [NSString stringWithFormat:@"1.%@", [version substringWithRange:match.range]];
     }
-    
+
     return @"Unknown";
 }
 
@@ -905,7 +910,7 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
     NSString *jarURL;
     NSString *downloadSource = getPrefObject(@"general.download_source");
     BOOL useBMCLAPI = [downloadSource isEqualToString:@"bmclapi"];
-    if ([self.currentVendor isEqualToString:@"NeoForge"] && [versionString containsString:@"1.20.1"]) {
+    if ([self.currentVendor isEqualToString:@"NeoForge"] && ([versionString containsString:@"1.20.1"] || [versionString hasPrefix:@"47."])) {
         if (useBMCLAPI) {
             jarURL = [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/maven/net/neoforged/forge/%@/forge-%@-installer.jar", versionString, versionString];
         } else {
