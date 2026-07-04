@@ -179,6 +179,7 @@ add_executable(AngelAuraAmethyst
   LauncherNewsViewController.m
   HomeCustomizeViewController.m
   LauncherRootViewController.m
+  LauncherCardLayoutViewController.m
   LauncherRightPanelViewController.m
   VersionManagerViewController.m
   ProfileSettingsViewController.m
@@ -193,6 +194,13 @@ add_executable(AngelAuraAmethyst
   LauncherSplitViewController.m
   MinecraftResourceDownloadTask.m
   MinecraftResourceUtils.m
+
+  # Unified download task management (Part 1 enhancement)
+  DownloadTaskItem.m
+  DownloadTaskManager.m
+  DownloadFloatingBall.m
+  DownloadTasksViewController.m
+
   PickTextField.m
   PLLogOutputView.m
   PLCrashView.m

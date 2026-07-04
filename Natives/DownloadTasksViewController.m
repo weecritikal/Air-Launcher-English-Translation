@@ -1,327 +1,356 @@
 #import "DownloadTasksViewController.h"
 #import "DownloadTaskManager.h"
+#import "DownloadTaskItem.h"
+#import "LauncherPreferences.h"
 
-#import <objc/runtime.h>
+static NSString * const kTaskCellReuseIdentifier = @"DownloadTaskCell";
+static NSString * const kEmptyStateReuseIdentifier = @"DownloadTaskEmptyCell";
 
-static const CGFloat kCellCornerRadius      = 12.0;
-static const CGFloat kCellPadding           = 12.0;
-static const CGFloat kIconSize              = 50.0;
-static const CGFloat kTypeBadgeCornerRadius = 4.0;
-static const CGFloat kFilterBarHeight       = 44.0;
-static const DownloadTaskState kDownloadTaskStateAll = -1;
+static const CGFloat kCardCornerRadius = 16.0;
+static const CGFloat kCardSpacing = 12.0;
+static const CGFloat kSectionInset = 16.0;
 
-static inline BOOL hasProgress(double progress) {
-    return progress >= 0.0;
-}
+@interface DownloadTaskCell : UICollectionViewCell
 
-#pragma mark - UIImageView (DownloadTaskIconLoader)
-
-@interface UIImageView (DownloadTaskIconLoader)
-- (void)downloadTask_setImageWithURL:(nullable NSURL *)url placeholderImage:(UIImage *)placeholder;
-@end
-
-@implementation UIImageView (DownloadTaskIconLoader)
-
-static const char kDownloadIconTaskKey = 0;
-
-- (void)downloadTask_setImageWithURL:(NSURL *)url placeholderImage:(UIImage *)placeholder {
-    [self downloadTask_cancelIconLoad];
-    self.image = placeholder;
-
-    if (!url) return;
-
-    __weak typeof(self) weakSelf = self;
-    NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
-        if (error || !data) return;
-        UIImage *image = [UIImage imageWithData:data];
-        if (!image) return;
-        dispatch_async(dispatch_get_main_queue(), ^{
-            __strong typeof(weakSelf) strongSelf = weakSelf;
-            if (!strongSelf) return;
-            NSURLSessionDataTask *currentTask = objc_getAssociatedObject(strongSelf, &kDownloadIconTaskKey);
-            if (currentTask != task) return;
-            strongSelf.image = image;
-        });
-    }];
-    objc_setAssociatedObject(self, &kDownloadIconTaskKey, task, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    [task resume];
-}
-
-- (void)downloadTask_cancelIconLoad {
-    NSURLSessionDataTask *task = objc_getAssociatedObject(self, &kDownloadIconTaskKey);
-    if (task) {
-        [task cancel];
-        objc_setAssociatedObject(self, &kDownloadIconTaskKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    }
-}
-
-@end
-
-#pragma mark - DownloadTaskTableViewCell
-
-@interface DownloadTaskTableViewCell : UITableViewCell
-@property (nonatomic, strong, readonly) UIView *cardView;
-@property (nonatomic, strong, readonly) UIImageView *iconView;
-@property (nonatomic, strong, readonly) UILabel *nameLabel;
-@property (nonatomic, strong, readonly) UILabel *typeBadgeLabel;
-@property (nonatomic, strong, readonly) UILabel *sourceLabel;
-@property (nonatomic, strong, readonly) UILabel *speedLabel;
-@property (nonatomic, strong, readonly) UILabel *percentLabel;
-@property (nonatomic, strong, readonly) UIProgressView *progressView;
-@property (nonatomic, strong, readonly) UILabel *statusLabel;
+@property (nonatomic, strong) UIImageView *iconImageView;
+@property (nonatomic, strong) UILabel *nameLabel;
+@property (nonatomic, strong) UILabel *typeTagLabel;
+@property (nonatomic, strong) UILabel *sourceLabel;
+@property (nonatomic, strong) UILabel *speedLabel;
+@property (nonatomic, strong) UIProgressView *progressView;
+@property (nonatomic, strong) UILabel *progressLabel;
+@property (nonatomic, strong) UIView *separatorView;
 
 - (void)configureWithTask:(DownloadTaskItem *)task;
+
 @end
 
-@implementation DownloadTaskTableViewCell
+@implementation DownloadTaskCell
 
-- (instancetype)initWithStyle:(UITableViewCellStyle)style reuseIdentifier:(NSString *)reuseIdentifier {
-    self = [super initWithStyle:style reuseIdentifier:reuseIdentifier];
+- (instancetype)initWithFrame:(CGRect)frame {
+    self = [super initWithFrame:frame];
     if (self) {
-        self.selectionStyle = UITableViewCellSelectionStyleNone;
-        self.backgroundColor = [UIColor clearColor];
-        self.contentView.backgroundColor = [UIColor clearColor];
-
-        UIView *card = [[UIView alloc] init];
-        card.translatesAutoresizingMaskIntoConstraints = NO;
-        card.layer.cornerRadius = kCellCornerRadius;
-        card.layer.masksToBounds = YES;
-        card.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.15];
-        [self.contentView addSubview:card];
-        _cardView = card;
-
-        _iconView = [DownloadTaskTableViewCell makeIconView];
-        _nameLabel = [DownloadTaskTableViewCell makeLabelWithFont:[UIFont boldSystemFontOfSize:16] textColor:[UIColor labelColor] numberOfLines:1];
-        _typeBadgeLabel = [DownloadTaskTableViewCell makeLabelWithFont:[UIFont systemFontOfSize:10 weight:UIFontWeightMedium] textColor:[UIColor whiteColor] numberOfLines:1];
-        _typeBadgeLabel.textAlignment = NSTextAlignmentCenter;
-        _typeBadgeLabel.layer.cornerRadius = kTypeBadgeCornerRadius;
-        _typeBadgeLabel.layer.masksToBounds = YES;
-        _typeBadgeLabel.backgroundColor = [UIColor systemBlueColor];
-        _sourceLabel = [DownloadTaskTableViewCell makeLabelWithFont:[UIFont systemFontOfSize:11] textColor:[UIColor secondaryLabelColor] numberOfLines:1];
-        _speedLabel = [DownloadTaskTableViewCell makeLabelWithFont:[UIFont systemFontOfSize:11] textColor:[UIColor secondaryLabelColor] numberOfLines:1];
-        _percentLabel = [DownloadTaskTableViewCell makeLabelWithFont:[UIFont systemFontOfSize:12 weight:UIFontWeightSemibold] textColor:[UIColor labelColor] numberOfLines:1];
-        _percentLabel.textAlignment = NSTextAlignmentRight;
-        _progressView = [[UIProgressView alloc] initWithProgressViewStyle:UIProgressViewStyleDefault];
-        _progressView.translatesAutoresizingMaskIntoConstraints = NO;
-        _progressView.trackTintColor = [UIColor colorWithWhite:0.5 alpha:0.2];
-        _progressView.progressTintColor = [UIColor systemBlueColor];
-        _statusLabel = [DownloadTaskTableViewCell makeLabelWithFont:[UIFont systemFontOfSize:11 weight:UIFontWeightMedium] textColor:[UIColor systemRedColor] numberOfLines:1];
-
-        [card addSubview:_iconView];
-        [card addSubview:_nameLabel];
-        [card addSubview:_typeBadgeLabel];
-        [card addSubview:_sourceLabel];
-        [card addSubview:_speedLabel];
-        [card addSubview:_percentLabel];
-        [card addSubview:_progressView];
-        [card addSubview:_statusLabel];
-
-        [self setupConstraints];
+        [self setupUI];
     }
     return self;
 }
 
-- (void)setupConstraints {
-    UIView *card = _cardView;
+- (void)setupUI {
+    self.contentView.backgroundColor = [UIColor secondarySystemBackgroundColor];
+    self.contentView.layer.cornerRadius = kCardCornerRadius;
+    self.contentView.layer.masksToBounds = YES;
+
+    self.iconImageView = [[UIImageView alloc] init];
+    self.iconImageView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.iconImageView.contentMode = UIViewContentModeScaleAspectFit;
+    self.iconImageView.layer.cornerRadius = 8.0;
+    self.iconImageView.layer.masksToBounds = YES;
+    self.iconImageView.backgroundColor = [UIColor tertiarySystemBackgroundColor];
+    self.iconImageView.tintColor = [UIColor secondaryLabelColor];
+    [self.contentView addSubview:self.iconImageView];
+
+    self.nameLabel = [[UILabel alloc] init];
+    self.nameLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.nameLabel.font = [UIFont boldSystemFontOfSize:15];
+    self.nameLabel.textColor = [UIColor labelColor];
+    self.nameLabel.numberOfLines = 1;
+    [self.contentView addSubview:self.nameLabel];
+
+    self.typeTagLabel = [[UILabel alloc] init];
+    self.typeTagLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.typeTagLabel.font = [UIFont systemFontOfSize:10];
+    self.typeTagLabel.textColor = [UIColor whiteColor];
+    self.typeTagLabel.backgroundColor = [UIColor systemBlueColor];
+    self.typeTagLabel.layer.cornerRadius = 4.0;
+    self.typeTagLabel.layer.masksToBounds = YES;
+    self.typeTagLabel.textAlignment = NSTextAlignmentCenter;
+    [self.contentView addSubview:self.typeTagLabel];
+
+    self.sourceLabel = [[UILabel alloc] init];
+    self.sourceLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.sourceLabel.font = [UIFont systemFontOfSize:11];
+    self.sourceLabel.textColor = [UIColor secondaryLabelColor];
+    self.sourceLabel.numberOfLines = 1;
+    [self.contentView addSubview:self.sourceLabel];
+
+    self.speedLabel = [[UILabel alloc] init];
+    self.speedLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.speedLabel.font = [UIFont monospacedDigitSystemFontOfSize:11 weight:UIFontWeightRegular];
+    self.speedLabel.textColor = [UIColor secondaryLabelColor];
+    self.speedLabel.textAlignment = NSTextAlignmentRight;
+    self.speedLabel.numberOfLines = 1;
+    [self.contentView addSubview:self.speedLabel];
+
+    self.progressView = [[UIProgressView alloc] initWithProgressViewStyle:UIProgressViewStyleDefault];
+    self.progressView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.progressView.progressTintColor = [UIColor systemBlueColor];
+    self.progressView.trackTintColor = [UIColor tertiarySystemBackgroundColor];
+    [self.contentView addSubview:self.progressView];
+
+    self.progressLabel = [[UILabel alloc] init];
+    self.progressLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.progressLabel.font = [UIFont monospacedDigitSystemFontOfSize:11 weight:UIFontWeightMedium];
+    self.progressLabel.textColor = [UIColor labelColor];
+    self.progressLabel.textAlignment = NSTextAlignmentRight;
+    self.progressLabel.numberOfLines = 1;
+    [self.contentView addSubview:self.progressLabel];
+
+    self.separatorView = [[UIView alloc] init];
+    self.separatorView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.separatorView.backgroundColor = [UIColor separatorColor];
+    [self.contentView addSubview:self.separatorView];
+
     [NSLayoutConstraint activateConstraints:@[
-        [card.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:kCellPadding],
-        [card.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-kCellPadding],
-        [card.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:6],
-        [card.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-6],
+        [self.iconImageView.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:12],
+        [self.iconImageView.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:12],
+        [self.iconImageView.widthAnchor constraintEqualToConstant:48],
+        [self.iconImageView.heightAnchor constraintEqualToConstant:48],
 
-        [_iconView.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:kCellPadding],
-        [_iconView.topAnchor constraintEqualToAnchor:card.topAnchor constant:kCellPadding],
-        [_iconView.widthAnchor constraintEqualToConstant:kIconSize],
-        [_iconView.heightAnchor constraintEqualToConstant:kIconSize],
+        [self.nameLabel.leadingAnchor constraintEqualToAnchor:self.iconImageView.trailingAnchor constant:10],
+        [self.nameLabel.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:12],
+        [self.nameLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.contentView.trailingAnchor constant:-12],
 
-        [_percentLabel.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-kCellPadding],
-        [_percentLabel.centerYAnchor constraintEqualToAnchor:_nameLabel.centerYAnchor],
-        [_percentLabel.widthAnchor constraintGreaterThanOrEqualToConstant:36],
+        [self.typeTagLabel.leadingAnchor constraintEqualToAnchor:self.nameLabel.leadingAnchor],
+        [self.typeTagLabel.topAnchor constraintEqualToAnchor:self.nameLabel.bottomAnchor constant:6],
+        [self.typeTagLabel.heightAnchor constraintEqualToConstant:18],
+        [self.typeTagLabel.widthAnchor constraintGreaterThanOrEqualToConstant:36],
 
-        [_nameLabel.leadingAnchor constraintEqualToAnchor:_iconView.trailingAnchor constant:10],
-        [_nameLabel.topAnchor constraintEqualToAnchor:card.topAnchor constant:kCellPadding],
-        [_nameLabel.trailingAnchor constraintLessThanOrEqualToAnchor:_percentLabel.leadingAnchor constant:-8],
+        [self.sourceLabel.leadingAnchor constraintEqualToAnchor:self.typeTagLabel.trailingAnchor constant:8],
+        [self.sourceLabel.centerYAnchor constraintEqualToAnchor:self.typeTagLabel.centerYAnchor],
+        [self.sourceLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.contentView.trailingAnchor constant:-12],
 
-        [_typeBadgeLabel.leadingAnchor constraintEqualToAnchor:_nameLabel.leadingAnchor],
-        [_typeBadgeLabel.topAnchor constraintEqualToAnchor:_nameLabel.bottomAnchor constant:4],
-        [_typeBadgeLabel.heightAnchor constraintEqualToConstant:16],
-        [_typeBadgeLabel.widthAnchor constraintGreaterThanOrEqualToConstant:28],
+        [self.speedLabel.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-12],
+        [self.speedLabel.centerYAnchor constraintEqualToAnchor:self.typeTagLabel.centerYAnchor],
+        [self.speedLabel.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.sourceLabel.trailingAnchor constant:8],
 
-        [_sourceLabel.leadingAnchor constraintEqualToAnchor:_typeBadgeLabel.trailingAnchor constant:6],
-        [_sourceLabel.centerYAnchor constraintEqualToAnchor:_typeBadgeLabel.centerYAnchor],
-        [_sourceLabel.trailingAnchor constraintLessThanOrEqualToAnchor:card.trailingAnchor constant:-kCellPadding],
+        [self.separatorView.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:12],
+        [self.separatorView.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-12],
+        [self.separatorView.topAnchor constraintEqualToAnchor:self.iconImageView.bottomAnchor constant:12],
+        [self.separatorView.heightAnchor constraintEqualToConstant:0.5],
 
-        [_speedLabel.leadingAnchor constraintEqualToAnchor:_nameLabel.leadingAnchor],
-        [_speedLabel.topAnchor constraintEqualToAnchor:_typeBadgeLabel.bottomAnchor constant:4],
-        [_speedLabel.trailingAnchor constraintLessThanOrEqualToAnchor:card.trailingAnchor constant:-kCellPadding],
+        [self.progressView.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:12],
+        [self.progressView.trailingAnchor constraintEqualToAnchor:self.progressLabel.leadingAnchor constant:-10],
+        [self.progressView.centerYAnchor constraintEqualToAnchor:self.progressLabel.centerYAnchor],
 
-        [_progressView.leadingAnchor constraintEqualToAnchor:_nameLabel.leadingAnchor],
-        [_progressView.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-kCellPadding],
-        [_progressView.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-kCellPadding],
-        [_progressView.heightAnchor constraintEqualToConstant:4],
+        [self.progressLabel.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-12],
+        [self.progressLabel.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-12],
+        [self.progressLabel.widthAnchor constraintEqualToConstant:44],
 
-        [_statusLabel.leadingAnchor constraintEqualToAnchor:_nameLabel.leadingAnchor],
-        [_statusLabel.centerYAnchor constraintEqualToAnchor:_speedLabel.centerYAnchor],
-        [_statusLabel.trailingAnchor constraintLessThanOrEqualToAnchor:card.trailingAnchor constant:-kCellPadding]
+        [self.progressView.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-18]
     ]];
-}
-
-+ (UIImageView *)makeIconView {
-    UIImageView *iv = [[UIImageView alloc] init];
-    iv.translatesAutoresizingMaskIntoConstraints = NO;
-    iv.contentMode = UIViewContentModeScaleAspectFill;
-    iv.layer.cornerRadius = 8;
-    iv.layer.masksToBounds = YES;
-    iv.backgroundColor = [UIColor colorWithWhite:0.5 alpha:0.15];
-    iv.tintColor = [UIColor secondaryLabelColor];
-    return iv;
-}
-
-+ (UILabel *)makeLabelWithFont:(UIFont *)font textColor:(UIColor *)color numberOfLines:(NSInteger)lines {
-    UILabel *label = [[UILabel alloc] init];
-    label.translatesAutoresizingMaskIntoConstraints = NO;
-    label.font = font;
-    label.textColor = color;
-    label.numberOfLines = lines;
-    return label;
 }
 
 - (void)prepareForReuse {
     [super prepareForReuse];
-    [_iconView downloadTask_cancelIconLoad];
-    _iconView.image = nil;
+    self.iconImageView.image = nil;
+    self.nameLabel.text = nil;
+    self.typeTagLabel.text = nil;
+    self.sourceLabel.text = nil;
+    self.speedLabel.text = nil;
+    self.progressView.progress = 0.0;
+    self.progressLabel.text = nil;
+    self.progressView.hidden = NO;
 }
 
 - (void)configureWithTask:(DownloadTaskItem *)task {
-    self.nameLabel.text = task.displayName ?: task.resourceName ?: @"";
-    self.sourceLabel.text = task.downloadSource ?: @"official";
-    self.typeBadgeLabel.text = [DownloadTasksViewController localizedTypeNameForResourceType:task.resourceType];
-    self.typeBadgeLabel.backgroundColor = [DownloadTasksViewController colorForResourceType:task.resourceType];
+    self.nameLabel.text = task.displayName.length > 0 ? task.displayName : task.resourceName;
+    self.typeTagLabel.text = [self displayNameForResourceType:task.resourceType];
+    [self.typeTagLabel sizeToFit];
+    self.sourceLabel.text = [NSString stringWithFormat:@"源: %@", task.downloadSource ?: @"official"];
 
-    UIImage *fallback = [DownloadTasksViewController systemImageForResourceType:task.resourceType];
+    // 图标
+    UIImage *placeholder = [UIImage systemImageNamed:[self iconNameForResourceType:task.resourceType]];
+    self.iconImageView.image = placeholder;
     if (task.iconURL.length > 0) {
-        [self.iconView downloadTask_setImageWithURL:[NSURL URLWithString:task.iconURL] placeholderImage:fallback];
-    } else {
-        self.iconView.image = fallback;
+        [self loadIconFromURL:task.iconURL];
     }
 
-    BOOL hasProgress = task.progress >= 0.0;
-    float progress = hasProgress ? (float)task.progress : 0.0f;
-    self.progressView.progress = progress;
-    self.percentLabel.text = hasProgress ? [NSString stringWithFormat:@"%.0f%%", task.progress * 100.0] : @"--%";
-
-    self.speedLabel.hidden = YES;
-    self.statusLabel.hidden = YES;
-
+    // 速度与进度
     switch (task.state) {
-        case DownloadTaskStateCompleted:
-            self.progressView.progress = 1.0f;
-            self.progressView.progressTintColor = [UIColor systemGreenColor];
-            self.percentLabel.text = @"100%";
-            break;
-        case DownloadTaskStateFailed:
-            self.progressView.progressTintColor = [UIColor systemRedColor];
-            self.statusLabel.hidden = NO;
-            self.statusLabel.textColor = [UIColor systemRedColor];
-            self.statusLabel.text = task.errorInfo.localizedDescription ?: @"下载失败";
-            break;
-        case DownloadTaskStatePaused:
-            self.progressView.progressTintColor = [UIColor systemOrangeColor];
-            self.statusLabel.hidden = NO;
-            self.statusLabel.textColor = [UIColor systemOrangeColor];
-            self.statusLabel.text = @"已暂停";
-            break;
-        case DownloadTaskStateCancelled:
-            self.progressView.progressTintColor = [UIColor systemGrayColor];
-            self.statusLabel.hidden = NO;
-            self.statusLabel.textColor = [UIColor systemGrayColor];
-            self.statusLabel.text = @"已取消";
-            break;
         case DownloadTaskStatePending:
-            self.progressView.progressTintColor = [UIColor systemBlueColor];
-            self.speedLabel.hidden = NO;
-            self.speedLabel.text = @"等待中...";
+            self.speedLabel.text = @"等待中";
+            self.progressLabel.text = @"--";
+            self.progressView.progress = 0.0;
+            self.progressView.hidden = NO;
             break;
         case DownloadTaskStateDownloading:
-        default:
-            self.progressView.progressTintColor = [UIColor systemBlueColor];
-            self.speedLabel.hidden = NO;
-            self.speedLabel.text = [self speedTextForTask:task];
+            self.speedLabel.text = [self formattedSpeed:task.speed];
+            self.progressLabel.text = [self formattedProgress:task.progress];
+            self.progressView.progress = task.progress >= 0.0 ? (float)task.progress : 0.0;
+            self.progressView.hidden = NO;
+            break;
+        case DownloadTaskStatePaused:
+            self.speedLabel.text = @"已暂停";
+            self.progressLabel.text = [self formattedProgress:task.progress];
+            self.progressView.progress = task.progress >= 0.0 ? (float)task.progress : 0.0;
+            self.progressView.hidden = NO;
+            break;
+        case DownloadTaskStateCompleted:
+            self.speedLabel.text = @"已完成";
+            self.progressLabel.text = @"100%";
+            self.progressView.progress = 1.0;
+            self.progressView.hidden = NO;
+            break;
+        case DownloadTaskStateCancelled:
+            self.speedLabel.text = @"已取消";
+            self.progressLabel.text = @"--";
+            self.progressView.progress = 0.0;
+            self.progressView.hidden = YES;
+            break;
+        case DownloadTaskStateFailed:
+            self.speedLabel.text = task.errorInfo ? task.errorInfo.localizedDescription : @"失败";
+            self.progressLabel.text = @"失败";
+            self.progressView.progress = 0.0;
+            self.progressView.hidden = YES;
             break;
     }
 }
 
-- (NSString *)speedTextForTask:(DownloadTaskItem *)task {
-    if (task.speed <= 0) {
-        return hasProgress(task.progress) ? @"正在计算速度..." : @"--";
-    }
-    NSString *speed = [self formattedBytes:(int64_t)task.speed unit:@"/s"];
-    if (task.estimatedTimeRemaining > 0) {
-        NSString *remaining = [self formattedTime:task.estimatedTimeRemaining];
-        return [NSString stringWithFormat:@"%@ · 剩余 %@", speed, remaining];
-    }
-    return speed;
+- (void)loadIconFromURL:(NSString *)urlString {
+    NSURL *url = [NSURL URLWithString:urlString];
+    if (!url) return;
+
+    __weak typeof(self) weakSelf = self;
+    NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithURL:url
+                                                             completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        if (data && !error) {
+            UIImage *image = [UIImage imageWithData:data];
+            if (image) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    __strong typeof(weakSelf) strongSelf = weakSelf;
+                    if (strongSelf) {
+                        strongSelf.iconImageView.image = image;
+                    }
+                });
+            }
+        }
+    }];
+    [task resume];
 }
 
-- (NSString *)formattedBytes:(int64_t)bytes unit:(NSString *)unit {
-    if (bytes < 1024) return [NSString stringWithFormat:@"%lld B%@", bytes, unit];
-    if (bytes < 1024 * 1024) return [NSString stringWithFormat:@"%.1f KB%@", bytes / 1024.0, unit];
-    if (bytes < 1024LL * 1024 * 1024) return [NSString stringWithFormat:@"%.1f MB%@", bytes / (1024.0 * 1024.0), unit];
-    return [NSString stringWithFormat:@"%.2f GB%@", bytes / (1024.0 * 1024.0 * 1024.0), unit];
+- (NSString *)displayNameForResourceType:(NSString *)type {
+    NSDictionary *map = @{
+        DownloadTaskResourceTypeMinecraft: @"MC 本体",
+        DownloadTaskResourceTypeModloader: @"加载器",
+        DownloadTaskResourceTypeMod: @"Mod",
+        DownloadTaskResourceTypeShader: @"光影包",
+        DownloadTaskResourceTypeResourcePack: @"资源包",
+        DownloadTaskResourceTypeDataPack: @"数据包",
+        DownloadTaskResourceTypeModpack: @"整合包"
+    };
+    return map[type] ?: type ?: @"未知";
 }
 
-- (NSString *)formattedTime:(NSTimeInterval)seconds {
-    if (seconds <= 0) return @"--";
-    NSInteger total = (NSInteger)ceil(seconds);
-    NSInteger hours = total / 3600;
-    NSInteger minutes = (total % 3600) / 60;
-    NSInteger secs = total % 60;
-    if (hours > 0) {
-        return [NSString stringWithFormat:@"%02ld:%02ld:%02ld", (long)hours, (long)minutes, (long)secs];
+- (NSString *)iconNameForResourceType:(NSString *)type {
+    NSDictionary *map = @{
+        DownloadTaskResourceTypeMinecraft: @"cube.box",
+        DownloadTaskResourceTypeModloader: @"wrench.and.screwdriver",
+        DownloadTaskResourceTypeMod: @"puzzlepiece.extension",
+        DownloadTaskResourceTypeShader: @"sun.max",
+        DownloadTaskResourceTypeResourcePack: @"photo",
+        DownloadTaskResourceTypeDataPack: @"archivebox",
+        DownloadTaskResourceTypeModpack: @"shippingbox"
+    };
+    return map[type] ?: @"arrow.down.circle";
+}
+
+- (NSString *)formattedSpeed:(double)speed {
+    if (speed <= 0) {
+        return @"计算中...";
     }
-    return [NSString stringWithFormat:@"%02ld:%02ld", (long)minutes, (long)secs];
+    if (speed < 1024.0) {
+        return [NSString stringWithFormat:@"%.0f B/s", speed];
+    } else if (speed < 1024.0 * 1024.0) {
+        return [NSString stringWithFormat:@"%.1f KB/s", speed / 1024.0];
+    } else {
+        return [NSString stringWithFormat:@"%.2f MB/s", speed / (1024.0 * 1024.0)];
+    }
+}
+
+- (NSString *)formattedProgress:(double)progress {
+    if (progress < 0.0) return @"--";
+    return [NSString stringWithFormat:@"%.1f%%", progress * 100.0];
 }
 
 @end
 
-#pragma mark - DownloadTasksViewController
+#pragma mark - Empty State Cell
 
-@interface DownloadTasksViewController () <UITableViewDataSource, UITableViewDelegate>
-@property (nonatomic, strong) UITableView *tableView;
-@property (nonatomic, strong) UISegmentedControl *stateSegmentedControl;
-@property (nonatomic, strong) UIScrollView *typeFilterScrollView;
-@property (nonatomic, strong) UIStackView *typeFilterStackView;
-@property (nonatomic, strong) UIView *emptyStateView;
-@property (nonatomic, copy) NSArray<DownloadTaskItem *> *filteredTasks;
-@property (nonatomic, copy) NSArray<NSString *> *allResourceTypes;
-@property (nonatomic, strong) NSMutableDictionary<NSString *, UIButton *> *typeButtons;
-@property (nonatomic, strong) NSMutableDictionary<NSString *, UILabel *> *typeBadges;
+@interface DownloadTaskEmptyCell : UICollectionViewCell
+@property (nonatomic, strong) UILabel *messageLabel;
 @end
 
-@implementation DownloadTasksViewController
+@implementation DownloadTaskEmptyCell
 
-- (instancetype)init {
-    self = [super init];
+- (instancetype)initWithFrame:(CGRect)frame {
+    self = [super initWithFrame:frame];
     if (self) {
-        _filterState = kDownloadTaskStateAll;
+        self.messageLabel = [[UILabel alloc] init];
+        self.messageLabel.translatesAutoresizingMaskIntoConstraints = NO;
+        self.messageLabel.font = [UIFont systemFontOfSize:16];
+        self.messageLabel.textColor = [UIColor secondaryLabelColor];
+        self.messageLabel.textAlignment = NSTextAlignmentCenter;
+        self.messageLabel.numberOfLines = 0;
+        self.messageLabel.text = @"暂无下载任务";
+        [self.contentView addSubview:self.messageLabel];
+
+        [NSLayoutConstraint activateConstraints:@[
+            [self.messageLabel.centerXAnchor constraintEqualToAnchor:self.contentView.centerXAnchor],
+            [self.messageLabel.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor],
+            [self.messageLabel.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:32],
+            [self.messageLabel.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-32]
+        ]];
     }
     return self;
 }
 
+@end
+
+#pragma mark - View Controller
+
+@interface DownloadTasksViewController () <UICollectionViewDataSource, UICollectionViewDelegate, UICollectionViewDelegateFlowLayout, UIGestureRecognizerDelegate>
+
+@property (nonatomic, strong) UIView *headerView;
+@property (nonatomic, strong) UILabel *titleLabel;
+@property (nonatomic, strong) UIButton *closeButton;
+@property (nonatomic, strong) UISegmentedControl *stateSegmentedControl;
+@property (nonatomic, strong) UIScrollView *typeScrollView;
+@property (nonatomic, strong) UIStackView *typeStackView;
+@property (nonatomic, strong) UICollectionView *collectionView;
+@property (nonatomic, strong) UIView *emptyStateView;
+
+@property (nonatomic, copy) NSArray<DownloadTaskItem *> *filteredTasks;
+@property (nonatomic, copy) NSArray<NSString *> *resourceTypes;
+@property (nonatomic, copy) NSDictionary<NSString *, NSString *> *typeDisplayNames;
+@property (nonatomic, strong) NSMutableDictionary<NSString *, NSNumber *> *typeCounts;
+
+@end
+
+@implementation DownloadTasksViewController
+
+#pragma mark - Lifecycle
+
 - (void)viewDidLoad {
     [super viewDidLoad];
 
-    self.view.backgroundColor = [UIColor secondarySystemBackgroundColor];
-    self.title = @"下载任务";
+    self.view.backgroundColor = [UIColor systemBackgroundColor];
+    self.filterState = DownloadTaskStatePending;
+    self.filterType = nil;
 
-    [self setupNavigationBar];
-    [self setupStateSegmentedControl];
-    [self setupTypeFilterBar];
-    [self setupTableView];
+    [self setupResourceTypeMetadata];
+    [self setupHeaderView];
+    [self setupStateFilter];
+    [self setupTypeFilter];
+    [self setupCollectionView];
     [self setupEmptyStateView];
+    [self setupNotifications];
 
-    [self applyFilter];
-    [self registerNotifications];
+    [self reloadData];
+}
+
+- (void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+    [self reloadData];
 }
 
 - (void)dealloc {
@@ -330,25 +359,8 @@ static const char kDownloadIconTaskKey = 0;
 
 #pragma mark - Setup
 
-- (void)setupNavigationBar {
-    UIBarButtonItem *doneItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone
-                                                                              target:self
-                                                                              action:@selector(doneTapped:)];
-    self.navigationItem.rightBarButtonItem = doneItem;
-}
-
-- (void)setupStateSegmentedControl {
-    UISegmentedControl *control = [[UISegmentedControl alloc] initWithItems:@[@"全部", @"下载中", @"已下载"]];
-    control.translatesAutoresizingMaskIntoConstraints = NO;
-    control.selectedSegmentIndex = [self initialStateSegmentIndex];
-    [control addTarget:self action:@selector(stateSegmentChanged:) forControlEvents:UIControlEventValueChanged];
-    [self.view addSubview:control];
-    self.stateSegmentedControl = control;
-}
-
-- (void)setupTypeFilterBar {
-    self.allResourceTypes = @[
-        @"",
+- (void)setupResourceTypeMetadata {
+    self.resourceTypes = @[
         DownloadTaskResourceTypeMinecraft,
         DownloadTaskResourceTypeModloader,
         DownloadTaskResourceTypeMod,
@@ -357,452 +369,436 @@ static const char kDownloadIconTaskKey = 0;
         DownloadTaskResourceTypeDataPack,
         DownloadTaskResourceTypeModpack
     ];
-
-    UIScrollView *scrollView = [[UIScrollView alloc] init];
-    scrollView.translatesAutoresizingMaskIntoConstraints = NO;
-    scrollView.showsHorizontalScrollIndicator = NO;
-    scrollView.alwaysBounceHorizontal = YES;
-    scrollView.contentInset = UIEdgeInsetsMake(0, 12, 0, 12);
-
-    UIStackView *stack = [[UIStackView alloc] init];
-    stack.translatesAutoresizingMaskIntoConstraints = NO;
-    stack.axis = UILayoutConstraintAxisHorizontal;
-    stack.spacing = 8;
-    stack.alignment = UIStackViewAlignmentCenter;
-
-    self.typeButtons = [NSMutableDictionary dictionary];
-    self.typeBadges = [NSMutableDictionary dictionary];
-
-    for (NSString *type in self.allResourceTypes) {
-        UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
-        button.translatesAutoresizingMaskIntoConstraints = NO;
-        button.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
-        [button setTitle:[self titleForTypeFilter:type] forState:UIControlStateNormal];
-        [button setTitleColor:[UIColor labelColor] forState:UIControlStateNormal];
-        button.backgroundColor = [UIColor colorWithWhite:0.5 alpha:0.15];
-        button.layer.cornerRadius = 14;
-        button.contentEdgeInsets = UIEdgeInsetsMake(6, 12, 6, 12);
-        button.tag = [self.allResourceTypes indexOfObject:type];
-        [button addTarget:self action:@selector(typeFilterTapped:) forControlEvents:UIControlEventTouchUpInside];
-
-        UILabel *badge = [[UILabel alloc] init];
-        badge.translatesAutoresizingMaskIntoConstraints = NO;
-        badge.font = [UIFont boldSystemFontOfSize:10];
-        badge.textColor = [UIColor whiteColor];
-        badge.backgroundColor = [UIColor systemRedColor];
-        badge.textAlignment = NSTextAlignmentCenter;
-        badge.layer.cornerRadius = 8;
-        badge.layer.masksToBounds = YES;
-        badge.hidden = YES;
-        badge.text = @"0";
-        [badge addConstraint:[badge.widthAnchor constraintGreaterThanOrEqualToConstant:16]];
-        [badge addConstraint:[badge.heightAnchor constraintEqualToConstant:16]];
-
-        [button addSubview:badge];
-        [NSLayoutConstraint activateConstraints:@[
-            [badge.trailingAnchor constraintEqualToAnchor:button.trailingAnchor constant:4],
-            [badge.topAnchor constraintEqualToAnchor:button.topAnchor constant:-4]
-        ]];
-
-        [stack addArrangedSubview:button];
-        self.typeButtons[type] = button;
-        self.typeBadges[type] = badge;
-    }
-
-    [scrollView addSubview:stack];
-    [self.view addSubview:scrollView];
-
-    [NSLayoutConstraint activateConstraints:@[
-        [stack.leadingAnchor constraintEqualToAnchor:scrollView.leadingAnchor],
-        [stack.trailingAnchor constraintEqualToAnchor:scrollView.trailingAnchor],
-        [stack.topAnchor constraintEqualToAnchor:scrollView.topAnchor],
-        [stack.bottomAnchor constraintEqualToAnchor:scrollView.bottomAnchor],
-        [stack.heightAnchor constraintEqualToAnchor:scrollView.heightAnchor]
-    ]];
-
-    self.typeFilterScrollView = scrollView;
-    self.typeFilterStackView = stack;
-
-    [self updateTypeFilterSelection];
+    self.typeDisplayNames = @{
+        DownloadTaskResourceTypeMinecraft: @"MC 本体",
+        DownloadTaskResourceTypeModloader: @"加载器",
+        DownloadTaskResourceTypeMod: @"Mod",
+        DownloadTaskResourceTypeShader: @"光影包",
+        DownloadTaskResourceTypeResourcePack: @"资源包",
+        DownloadTaskResourceTypeDataPack: @"数据包",
+        DownloadTaskResourceTypeModpack: @"整合包"
+    };
+    self.typeCounts = [NSMutableDictionary dictionary];
 }
 
-- (void)setupTableView {
-    UITableView *tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
-    tableView.translatesAutoresizingMaskIntoConstraints = NO;
-    tableView.dataSource = self;
-    tableView.delegate = self;
-    tableView.rowHeight = UITableViewAutomaticDimension;
-    tableView.estimatedRowHeight = 100;
-    tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
-    tableView.backgroundColor = [UIColor clearColor];
-    [tableView registerClass:[DownloadTaskTableViewCell class] forCellReuseIdentifier:@"DownloadTaskCell"];
-    [self.view addSubview:tableView];
-    self.tableView = tableView;
+- (void)setupHeaderView {
+    self.headerView = [[UIView alloc] init];
+    self.headerView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.headerView.backgroundColor = [UIColor secondarySystemBackgroundColor];
+    self.headerView.layer.cornerRadius = kCardCornerRadius;
+    [self.view addSubview:self.headerView];
+
+    self.titleLabel = [[UILabel alloc] init];
+    self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.titleLabel.font = [UIFont boldSystemFontOfSize:22];
+    self.titleLabel.textColor = [UIColor labelColor];
+    self.titleLabel.text = @"下载中心";
+    [self.headerView addSubview:self.titleLabel];
+
+    self.closeButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    self.closeButton.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.closeButton setImage:[UIImage systemImageNamed:@"xmark.circle.fill"] forState:UIControlStateNormal];
+    self.closeButton.tintColor = [UIColor labelColor];
+    [self.closeButton addTarget:self action:@selector(closeTapped:) forControlEvents:UIControlEventTouchUpInside];
+    [self.headerView addSubview:self.closeButton];
 
     [NSLayoutConstraint activateConstraints:@[
-        [self.stateSegmentedControl.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:12],
-        [self.stateSegmentedControl.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:16],
-        [self.stateSegmentedControl.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-16],
+        [self.headerView.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:12],
+        [self.headerView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:kSectionInset],
+        [self.headerView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-kSectionInset],
+        [self.headerView.heightAnchor constraintEqualToConstant:56],
 
-        [self.typeFilterScrollView.topAnchor constraintEqualToAnchor:self.stateSegmentedControl.bottomAnchor constant:12],
-        [self.typeFilterScrollView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
-        [self.typeFilterScrollView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [self.typeFilterScrollView.heightAnchor constraintEqualToConstant:kFilterBarHeight],
+        [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.headerView.leadingAnchor constant:16],
+        [self.titleLabel.centerYAnchor constraintEqualToAnchor:self.headerView.centerYAnchor],
 
-        [self.tableView.topAnchor constraintEqualToAnchor:self.typeFilterScrollView.bottomAnchor constant:8],
-        [self.tableView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
-        [self.tableView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [self.tableView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor]
+        [self.closeButton.trailingAnchor constraintEqualToAnchor:self.headerView.trailingAnchor constant:-12],
+        [self.closeButton.centerYAnchor constraintEqualToAnchor:self.headerView.centerYAnchor],
+        [self.closeButton.widthAnchor constraintEqualToConstant:36],
+        [self.closeButton.heightAnchor constraintEqualToConstant:36]
+    ]];
+}
+
+- (void)setupStateFilter {
+    self.stateSegmentedControl = [[UISegmentedControl alloc] initWithItems:@[@"全部", @"下载中", @"已完成"]];
+    self.stateSegmentedControl.translatesAutoresizingMaskIntoConstraints = NO;
+    self.stateSegmentedControl.selectedSegmentIndex = 0;
+    [self.stateSegmentedControl addTarget:self action:@selector(stateFilterChanged:) forControlEvents:UIControlEventValueChanged];
+    [self.view addSubview:self.stateSegmentedControl];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.stateSegmentedControl.topAnchor constraintEqualToAnchor:self.headerView.bottomAnchor constant:12],
+        [self.stateSegmentedControl.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:kSectionInset],
+        [self.stateSegmentedControl.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-kSectionInset],
+        [self.stateSegmentedControl.heightAnchor constraintEqualToConstant:36]
+    ]];
+}
+
+- (void)setupTypeFilter {
+    self.typeScrollView = [[UIScrollView alloc] init];
+    self.typeScrollView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.typeScrollView.showsHorizontalScrollIndicator = NO;
+    self.typeScrollView.alwaysBounceHorizontal = YES;
+    [self.view addSubview:self.typeScrollView];
+
+    self.typeStackView = [[UIStackView alloc] init];
+    self.typeStackView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.typeStackView.axis = UILayoutConstraintAxisHorizontal;
+    self.typeStackView.spacing = 8.0;
+    self.typeStackView.alignment = UIStackViewAlignmentFill;
+    self.typeStackView.distribution = UIStackViewDistributionFill;
+    [self.typeScrollView addSubview:self.typeStackView];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.typeScrollView.topAnchor constraintEqualToAnchor:self.stateSegmentedControl.bottomAnchor constant:12],
+        [self.typeScrollView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:kSectionInset],
+        [self.typeScrollView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-kSectionInset],
+        [self.typeScrollView.heightAnchor constraintEqualToConstant:40],
+
+        [self.typeStackView.topAnchor constraintEqualToAnchor:self.typeScrollView.topAnchor],
+        [self.typeStackView.leadingAnchor constraintEqualToAnchor:self.typeScrollView.leadingAnchor],
+        [self.typeStackView.trailingAnchor constraintEqualToAnchor:self.typeScrollView.trailingAnchor],
+        [self.typeStackView.bottomAnchor constraintEqualToAnchor:self.typeScrollView.bottomAnchor],
+        [self.typeStackView.heightAnchor constraintEqualToAnchor:self.typeScrollView.heightAnchor]
+    ]];
+
+    [self refreshTypeFilterButtons];
+}
+
+- (void)setupCollectionView {
+    UICollectionViewFlowLayout *layout = [[UICollectionViewFlowLayout alloc] init];
+    layout.scrollDirection = UICollectionViewScrollDirectionVertical;
+    layout.minimumLineSpacing = kCardSpacing;
+    layout.minimumInteritemSpacing = kCardSpacing;
+    layout.sectionInset = UIEdgeInsetsMake(kSectionInset, kSectionInset, kSectionInset, kSectionInset);
+
+    self.collectionView = [[UICollectionView alloc] initWithFrame:CGRectZero collectionViewLayout:layout];
+    self.collectionView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.collectionView.backgroundColor = [UIColor clearColor];
+    self.collectionView.dataSource = self;
+    self.collectionView.delegate = self;
+    self.collectionView.alwaysBounceVertical = YES;
+    [self.collectionView registerClass:[DownloadTaskCell class] forCellWithReuseIdentifier:kTaskCellReuseIdentifier];
+    [self.collectionView registerClass:[DownloadTaskEmptyCell class] forCellWithReuseIdentifier:kEmptyStateReuseIdentifier];
+    [self.view addSubview:self.collectionView];
+
+    UILongPressGestureRecognizer *longPress = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(handleLongPress:)];
+    longPress.minimumPressDuration = 0.5;
+    longPress.delegate = self;
+    [self.collectionView addGestureRecognizer:longPress];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.collectionView.topAnchor constraintEqualToAnchor:self.typeScrollView.bottomAnchor constant:4],
+        [self.collectionView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.collectionView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.collectionView.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor]
     ]];
 }
 
 - (void)setupEmptyStateView {
-    UIView *view = [[UIView alloc] init];
-    view.translatesAutoresizingMaskIntoConstraints = NO;
-    view.hidden = YES;
+    self.emptyStateView = [[UIView alloc] init];
+    self.emptyStateView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.emptyStateView.backgroundColor = [UIColor clearColor];
+    self.emptyStateView.hidden = YES;
+    [self.view addSubview:self.emptyStateView];
 
-    UIImageView *imageView = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"arrow.down.circle"]];
-    imageView.translatesAutoresizingMaskIntoConstraints = NO;
-    imageView.contentMode = UIViewContentModeScaleAspectFit;
-    imageView.tintColor = [UIColor tertiaryLabelColor];
+    UIImageView *iconView = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"arrow.down.circle"]];
+    iconView.translatesAutoresizingMaskIntoConstraints = NO;
+    iconView.tintColor = [UIColor tertiaryLabelColor];
+    iconView.contentMode = UIViewContentModeScaleAspectFit;
+    [self.emptyStateView addSubview:iconView];
 
     UILabel *label = [[UILabel alloc] init];
     label.translatesAutoresizingMaskIntoConstraints = NO;
-    label.text = @"暂无下载任务";
-    label.font = [UIFont systemFontOfSize:17 weight:UIFontWeightMedium];
+    label.font = [UIFont systemFontOfSize:16];
     label.textColor = [UIColor secondaryLabelColor];
-
-    [view addSubview:imageView];
-    [view addSubview:label];
-    [self.view addSubview:view];
+    label.textAlignment = NSTextAlignmentCenter;
+    label.text = @"当前筛选条件下没有下载任务";
+    [self.emptyStateView addSubview:label];
 
     [NSLayoutConstraint activateConstraints:@[
-        [imageView.centerXAnchor constraintEqualToAnchor:view.centerXAnchor],
-        [imageView.centerYAnchor constraintEqualToAnchor:view.centerYAnchor constant:-20],
-        [imageView.widthAnchor constraintEqualToConstant:64],
-        [imageView.heightAnchor constraintEqualToConstant:64],
+        [self.emptyStateView.topAnchor constraintEqualToAnchor:self.collectionView.topAnchor],
+        [self.emptyStateView.leadingAnchor constraintEqualToAnchor:self.collectionView.leadingAnchor],
+        [self.emptyStateView.trailingAnchor constraintEqualToAnchor:self.collectionView.trailingAnchor],
+        [self.emptyStateView.bottomAnchor constraintEqualToAnchor:self.collectionView.bottomAnchor],
 
-        [label.centerXAnchor constraintEqualToAnchor:view.centerXAnchor],
-        [label.topAnchor constraintEqualToAnchor:imageView.bottomAnchor constant:12],
+        [iconView.centerXAnchor constraintEqualToAnchor:self.emptyStateView.centerXAnchor],
+        [iconView.centerYAnchor constraintEqualToAnchor:self.emptyStateView.centerYAnchor constant:-30],
+        [iconView.widthAnchor constraintEqualToConstant:64],
+        [iconView.heightAnchor constraintEqualToConstant:64],
 
-        [view.centerXAnchor constraintEqualToAnchor:self.tableView.centerXAnchor],
-        [view.centerYAnchor constraintEqualToAnchor:self.tableView.centerYAnchor],
-        [view.widthAnchor constraintEqualToAnchor:self.tableView.widthAnchor],
-        [view.heightAnchor constraintEqualToAnchor:self.tableView.heightAnchor]
+        [label.topAnchor constraintEqualToAnchor:iconView.bottomAnchor constant:16],
+        [label.leadingAnchor constraintEqualToAnchor:self.emptyStateView.leadingAnchor constant:32],
+        [label.trailingAnchor constraintEqualToAnchor:self.emptyStateView.trailingAnchor constant:-32]
     ]];
-
-    self.emptyStateView = view;
 }
 
-#pragma mark - Notifications
-
-- (void)registerNotifications {
+- (void)setupNotifications {
     NSNotificationCenter *center = [NSNotificationCenter defaultCenter];
     [center addObserver:self
-               selector:@selector(handleTaskUpdated:)
+               selector:@selector(handleTaskUpdate:)
                    name:DownloadTaskManagerDidUpdateTaskNotification
                  object:nil];
     [center addObserver:self
                selector:@selector(handleAggregateStateChanged:)
                    name:DownloadTaskManagerAggregateStateDidChangeNotification
                  object:nil];
-    [center addObserver:self
-               selector:@selector(handleTaskCompleted:)
-                   name:DownloadTaskManagerTaskCompletedNotification
-                 object:nil];
 }
 
-- (void)handleTaskUpdated:(NSNotification *)notification {
-    dispatch_async(dispatch_get_main_queue(), ^{
-        [self applyFilter];
-    });
+#pragma mark - Data
+
+- (void)reloadData {
+    [self applyFilters];
+    [self refreshTypeFilterButtons];
+    [self.collectionView reloadData];
+    [self updateEmptyState];
 }
 
-- (void)handleAggregateStateChanged:(NSNotification *)notification {
-    dispatch_async(dispatch_get_main_queue(), ^{
-        [self applyFilter];
-    });
-}
-
-- (void)handleTaskCompleted:(NSNotification *)notification {
-    dispatch_async(dispatch_get_main_queue(), ^{
-        [self applyFilter];
-    });
-}
-
-#pragma mark - Filtering
-
-- (NSInteger)initialStateSegmentIndex {
-    switch (self.filterState) {
-        case DownloadTaskStateDownloading:
-            return 1;
-        case DownloadTaskStateCompleted:
-            return 2;
-        default:
-            return 0;
-    }
-}
-
-- (void)stateSegmentChanged:(UISegmentedControl *)sender {
-    switch (sender.selectedSegmentIndex) {
-        case 0: self.filterState = kDownloadTaskStateAll; break;
-        case 1: self.filterState = DownloadTaskStateDownloading; break;
-        case 2: self.filterState = DownloadTaskStateCompleted; break;
-    }
-    [self applyFilter];
-}
-
-- (void)typeFilterTapped:(UIButton *)sender {
-    NSInteger index = sender.tag;
-    if (index >= 0 && index < (NSInteger)self.allResourceTypes.count) {
-        NSString *type = self.allResourceTypes[(NSUInteger)index];
-        self.filterType = type.length > 0 ? type : nil;
-        [self applyFilter];
-        [self updateTypeFilterSelection];
-    }
-}
-
-- (NSArray<NSNumber *> *)allowedStatesForFilterState:(DownloadTaskState)filterState {
-    if (filterState == DownloadTaskStateDownloading) {
-        return @[@(DownloadTaskStateDownloading), @(DownloadTaskStatePending)];
-    } else if (filterState == DownloadTaskStateCompleted) {
-        return @[@(DownloadTaskStateCompleted)];
-    }
-    return @[@(DownloadTaskStatePending),
-             @(DownloadTaskStateDownloading),
-             @(DownloadTaskStatePaused),
-             @(DownloadTaskStateCompleted),
-             @(DownloadTaskStateCancelled),
-             @(DownloadTaskStateFailed)];
-}
-
-- (BOOL)task:(DownloadTaskItem *)task matchesFilterType:(nullable NSString *)filterType {
-    if (!filterType) return YES;
-    return [task.resourceType isEqualToString:filterType];
-}
-
-- (void)applyFilter {
-    NSArray<DownloadTaskItem *> *all = [[DownloadTaskManager sharedManager] allTasks];
-    NSArray<NSNumber *> *allowedStates = [self allowedStatesForFilterState:self.filterState];
-
+- (void)applyFilters {
+    NSArray<DownloadTaskItem *> *allTasks = [[DownloadTaskManager sharedManager] allTasks];
     NSMutableArray<DownloadTaskItem *> *result = [NSMutableArray array];
-    for (DownloadTaskItem *task in all) {
-        if ([allowedStates containsObject:@(task.state)] && [self task:task matchesFilterType:self.filterType]) {
+
+    for (DownloadTaskItem *task in allTasks) {
+        BOOL stateMatch = [self task:task matchesStateFilter:self.filterState];
+        BOOL typeMatch = (self.filterType == nil) || [task.resourceType isEqualToString:self.filterType];
+        if (stateMatch && typeMatch) {
             [result addObject:task];
         }
     }
 
+    // 按创建时间倒序，最新的在前面
     [result sortUsingComparator:^NSComparisonResult(DownloadTaskItem *a, DownloadTaskItem *b) {
-        NSInteger orderA = [self sortOrderForState:a.state];
-        NSInteger orderB = [self sortOrderForState:b.state];
-        if (orderA != orderB) return orderA < orderB ? NSOrderedAscending : NSOrderedDescending;
         return [b.createdDate compare:a.createdDate];
     }];
 
     self.filteredTasks = [result copy];
-    [self updateEmptyState];
-    [self updateStateSegmentTitlesWithTasks:all];
-    [self updateTypeFilterBadgesWithTasks:all];
-    [self.tableView reloadData];
+
+    // 更新各类型的数量
+    [self.typeCounts removeAllObjects];
+    DownloadTaskState effectiveState = self.filterState;
+    for (DownloadTaskItem *task in allTasks) {
+        if (![self task:task matchesStateFilter:effectiveState]) continue;
+        NSNumber *count = self.typeCounts[task.resourceType] ?: @0;
+        self.typeCounts[task.resourceType] = @(count.integerValue + 1);
+    }
 }
 
-- (NSInteger)sortOrderForState:(DownloadTaskState)state {
-    switch (state) {
-        case DownloadTaskStateDownloading: return 0;
-        case DownloadTaskStatePending:     return 1;
-        case DownloadTaskStatePaused:      return 2;
-        case DownloadTaskStateFailed:      return 3;
-        case DownloadTaskStateCancelled:   return 4;
-        case DownloadTaskStateCompleted:   return 5;
-        default: return 6;
+- (BOOL)task:(DownloadTaskItem *)task matchesStateFilter:(DownloadTaskState)filter {
+    switch (filter) {
+        case DownloadTaskStatePending:
+            return YES;
+        case DownloadTaskStateDownloading:
+            return task.state == DownloadTaskStateDownloading || task.state == DownloadTaskStatePending;
+        case DownloadTaskStateCompleted:
+            return task.state == DownloadTaskStateCompleted;
+        default:
+            return YES;
     }
+}
+
+- (void)refreshTypeFilterButtons {
+    NSArray *existing = [self.typeStackView.arrangedSubviews copy];
+    for (UIView *view in existing) {
+        [view removeFromSuperview];
+    }
+
+    UIButton *allButton = [self createTypeFilterButtonWithTitle:@"全部"
+                                                          count:@(self.filteredTasks.count)
+                                                        selected:(self.filterType == nil)];
+    [allButton addTarget:self action:@selector(typeButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
+    allButton.tag = -1;
+    [self.typeStackView addArrangedSubview:allButton];
+
+    for (NSUInteger i = 0; i < self.resourceTypes.count; i++) {
+        NSString *type = self.resourceTypes[i];
+        NSString *title = self.typeDisplayNames[type] ?: type;
+        NSNumber *count = self.typeCounts[type] ?: @0;
+        UIButton *button = [self createTypeFilterButtonWithTitle:title
+                                                           count:count
+                                                        selected:[type isEqualToString:self.filterType]];
+        button.tag = i;
+        [button addTarget:self action:@selector(typeButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
+        [self.typeStackView addArrangedSubview:button];
+    }
+}
+
+- (UIButton *)createTypeFilterButtonWithTitle:(NSString *)title count:(NSNumber *)count selected:(BOOL)selected {
+    UIButton *button = [UIButton buttonWithType:UIButtonTypeCustom];
+    button.translatesAutoresizingMaskIntoConstraints = NO;
+
+    NSString *fullTitle = [NSString stringWithFormat:@"%@ (%@)", title, count];
+    [button setTitle:fullTitle forState:UIControlStateNormal];
+    button.titleLabel.font = [UIFont systemFontOfSize:13 weight:selected ? UIFontWeightSemibold : UIFontWeightRegular];
+    [button setTitleColor:selected ? [UIColor whiteColor] : [UIColor labelColor] forState:UIControlStateNormal];
+    button.backgroundColor = selected ? [UIColor systemBlueColor] : [UIColor secondarySystemBackgroundColor];
+    button.layer.cornerRadius = 8.0;
+    button.layer.masksToBounds = YES;
+    button.contentEdgeInsets = UIEdgeInsetsMake(8, 12, 8, 12);
+
+    [button.widthAnchor constraintGreaterThanOrEqualToConstant:48].active = YES;
+    return button;
 }
 
 - (void)updateEmptyState {
-    BOOL empty = self.filteredTasks.count == 0;
-    self.emptyStateView.hidden = !empty;
-    self.tableView.hidden = empty;
-}
-
-- (void)updateStateSegmentTitlesWithTasks:(NSArray<DownloadTaskItem *> *)all {
-    [self.stateSegmentedControl setTitle:[self stateSegmentTitleAtIndex:0 count:[self countTasks:all matchingStateFilter:kDownloadTaskStateAll]] forSegmentAtIndex:0];
-    [self.stateSegmentedControl setTitle:[self stateSegmentTitleAtIndex:1 count:[self countTasks:all matchingStateFilter:DownloadTaskStateDownloading]] forSegmentAtIndex:1];
-    [self.stateSegmentedControl setTitle:[self stateSegmentTitleAtIndex:2 count:[self countTasks:all matchingStateFilter:DownloadTaskStateCompleted]] forSegmentAtIndex:2];
-}
-
-- (NSString *)stateSegmentTitleAtIndex:(NSInteger)index count:(NSInteger)count {
-    NSString *base;
-    switch (index) {
-        case 0: base = @"全部"; break;
-        case 1: base = @"下载中"; break;
-        case 2: base = @"已下载"; break;
-        default: base = @"";
-    }
-    return [NSString stringWithFormat:@"%@(%ld)", base, (long)count];
-}
-
-- (NSInteger)countTasks:(NSArray<DownloadTaskItem *> *)tasks matchingStateFilter:(DownloadTaskState)filterState {
-    NSArray<NSNumber *> *allowedStates = [self allowedStatesForFilterState:filterState];
-    NSInteger count = 0;
-    for (DownloadTaskItem *task in tasks) {
-        if ([allowedStates containsObject:@(task.state)]) {
-            count++;
-        }
-    }
-    return count;
-}
-
-- (void)updateTypeFilterSelection {
-    NSString *selectedType = self.filterType ?: @"";
-    for (NSString *type in self.allResourceTypes) {
-        UIButton *button = self.typeButtons[type];
-        BOOL selected = [type isEqualToString:selectedType];
-        button.backgroundColor = selected ? [UIColor systemBlueColor] : [UIColor colorWithWhite:0.5 alpha:0.15];
-        [button setTitleColor:selected ? [UIColor whiteColor] : [UIColor labelColor] forState:UIControlStateNormal];
-    }
-}
-
-- (void)updateTypeFilterBadgesWithTasks:(NSArray<DownloadTaskItem *> *)all {
-    NSArray<NSNumber *> *allowedStates = [self allowedStatesForFilterState:self.filterState];
-
-    NSMutableDictionary<NSString *, NSNumber *> *counts = [NSMutableDictionary dictionary];
-    for (DownloadTaskItem *task in all) {
-        if (![allowedStates containsObject:@(task.state)]) continue;
-        NSString *type = task.resourceType ?: @"";
-        counts[type] = @([counts[type] integerValue] + 1);
-    }
-
-    for (NSString *type in self.allResourceTypes) {
-        UILabel *badge = self.typeBadges[type];
-        NSInteger count = [counts[type] integerValue];
-        if (count > 0) {
-            badge.hidden = NO;
-            badge.text = [NSString stringWithFormat:@"%ld", (long)count];
-        } else {
-            badge.hidden = YES;
-        }
-    }
+    BOOL hasData = self.filteredTasks.count > 0;
+    self.emptyStateView.hidden = hasData;
+    self.collectionView.hidden = NO;
 }
 
 #pragma mark - Actions
 
-- (void)doneTapped:(id)sender {
+- (void)closeTapped:(UIButton *)sender {
     [self dismissViewControllerAnimated:YES completion:nil];
 }
 
-#pragma mark - Long press actions
+- (void)stateFilterChanged:(UISegmentedControl *)sender {
+    switch (sender.selectedSegmentIndex) {
+        case 0:
+            self.filterState = DownloadTaskStatePending; // 全部
+            break;
+        case 1:
+            self.filterState = DownloadTaskStateDownloading; // 下载中
+            break;
+        case 2:
+            self.filterState = DownloadTaskStateCompleted; // 已完成
+            break;
+    }
+    [self reloadData];
+}
+
+- (void)typeButtonTapped:(UIButton *)sender {
+    if (sender.tag < 0) {
+        self.filterType = nil;
+    } else if ((NSUInteger)sender.tag < self.resourceTypes.count) {
+        self.filterType = self.resourceTypes[(NSUInteger)sender.tag];
+    }
+    [self reloadData];
+}
 
 - (void)handleLongPress:(UILongPressGestureRecognizer *)gesture {
     if (gesture.state != UIGestureRecognizerStateBegan) return;
 
-    CGPoint point = [gesture locationInView:self.tableView];
-    NSIndexPath *indexPath = [self.tableView indexPathForRowAtPoint:point];
-    if (!indexPath) return;
+    CGPoint point = [gesture locationInView:self.collectionView];
+    NSIndexPath *indexPath = [self.collectionView indexPathForItemAtPoint:point];
+    if (!indexPath || indexPath.item >= self.filteredTasks.count) return;
 
-    DownloadTaskItem *task = self.filteredTasks[(NSUInteger)indexPath.row];
-    [self showActionSheetForTask:task];
+    DownloadTaskItem *task = self.filteredTasks[indexPath.item];
+    [self showActionsForTask:task];
 }
 
-- (void)showActionSheetForTask:(DownloadTaskItem *)task {
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:task.displayName ?: task.resourceName
+- (void)showActionsForTask:(DownloadTaskItem *)task {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:task.displayName
                                                                    message:nil
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
 
-    BOOL canPause = (task.state == DownloadTaskStateDownloading || task.state == DownloadTaskStatePending);
-    BOOL canResume = (task.state == DownloadTaskStatePaused);
-    BOOL canCancel = !(task.state == DownloadTaskStateCompleted || task.state == DownloadTaskStateCancelled || task.state == DownloadTaskStateFailed);
-    BOOL canDelete = (task.state == DownloadTaskStateCompleted || task.state == DownloadTaskStateFailed || task.state == DownloadTaskStateCancelled);
-
-    if (canPause) {
-        [sheet addAction:[UIAlertAction actionWithTitle:@"暂停" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+    if (task.state == DownloadTaskStateDownloading || task.state == DownloadTaskStatePending) {
+        [alert addAction:[UIAlertAction actionWithTitle:@"暂停"
+                                                  style:UIAlertActionStyleDefault
+                                                handler:^(UIAlertAction *action) {
             [[DownloadTaskManager sharedManager] pauseTaskWithId:task.taskId];
         }]];
-    }
-
-    if (canResume) {
-        [sheet addAction:[UIAlertAction actionWithTitle:@"继续" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+    } else if (task.state == DownloadTaskStatePaused) {
+        [alert addAction:[UIAlertAction actionWithTitle:@"恢复"
+                                                  style:UIAlertActionStyleDefault
+                                                handler:^(UIAlertAction *action) {
             [[DownloadTaskManager sharedManager] resumeTaskWithId:task.taskId];
         }]];
     }
 
-    if (canCancel) {
-        [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
+    if (task.state != DownloadTaskStateCompleted && task.state != DownloadTaskStateCancelled && task.state != DownloadTaskStateFailed) {
+        [alert addAction:[UIAlertAction actionWithTitle:@"取消"
+                                                  style:UIAlertActionStyleDestructive
+                                                handler:^(UIAlertAction *action) {
             [[DownloadTaskManager sharedManager] cancelTaskWithId:task.taskId];
         }]];
-    }
-
-    [sheet addAction:[UIAlertAction actionWithTitle:@"切换下载源" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-        [self showSwitchSourceAlertForTask:task];
-    }]];
-
-    if (canDelete) {
-        [sheet addAction:[UIAlertAction actionWithTitle:@"删除记录" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
+    } else {
+        [alert addAction:[UIAlertAction actionWithTitle:@"移除记录"
+                                                  style:UIAlertActionStyleDestructive
+                                                handler:^(UIAlertAction *action) {
             [[DownloadTaskManager sharedManager] removeTaskWithId:task.taskId];
         }]];
     }
 
-    [sheet addAction:[UIAlertAction actionWithTitle:@"关闭" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"切换下载源"
+                                              style:UIAlertActionStyleDefault
+                                            handler:^(UIAlertAction *action) {
+        [self showSourceSwitcherForTask:task];
+    }]];
+
+    [alert addAction:[UIAlertAction actionWithTitle:@"关闭"
+                                              style:UIAlertActionStyleCancel
+                                            handler:nil]];
 
     if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
-        sheet.popoverPresentationController.sourceView = self.view;
-        sheet.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(self.view.bounds), CGRectGetMidY(self.view.bounds), 1, 1);
-        sheet.popoverPresentationController.permittedArrowDirections = 0;
+        alert.popoverPresentationController.sourceView = self.view;
+        alert.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(self.view.bounds), CGRectGetMidY(self.view.bounds), 1, 1);
+        alert.popoverPresentationController.permittedArrowDirections = 0;
     }
-
-    [self presentViewController:sheet animated:YES completion:nil];
-}
-
-- (void)showSwitchSourceAlertForTask:(DownloadTaskItem *)task {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"切换下载源"
-                                                                   message:[NSString stringWithFormat:@"当前源：%@", task.downloadSource ?: @"official"]
-                                                            preferredStyle:UIAlertControllerStyleAlert];
-
-    [alert addTextFieldWithConfigurationHandler:^(UITextField * _Nonnull textField) {
-        textField.placeholder = @"输入新的下载源地址或标识";
-        textField.text = task.downloadSource;
-    }];
-
-    __weak typeof(self) weakSelf = self;
-    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
-    [alert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-        __strong typeof(weakSelf) strongSelf = weakSelf;
-        if (!strongSelf) return;
-        UITextField *textField = alert.textFields.firstObject;
-        NSString *newSource = textField.text ?: @"";
-        if (newSource.length == 0) return;
-
-        [[DownloadTaskManager sharedManager] switchDownloadSourceForTaskId:task.taskId
-                                                                  toSource:newSource
-                                                                completion:^(BOOL shouldRecreate, BOOL supportsResume, NSError * _Nullable error) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                if (!strongSelf) return;
-                if (error) {
-                    [strongSelf showAlertWithTitle:@"切换失败" message:error.localizedDescription];
-                    return;
-                }
-                if (shouldRecreate && !supportsResume) {
-                    UIAlertController *confirm = [UIAlertController alertControllerWithTitle:@"提示"
-                                                                                     message:@"该源不支持断点续传，确认后将重新从头下载。"
-                                                                              preferredStyle:UIAlertControllerStyleAlert];
-                    [confirm addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
-                    [confirm addAction:[UIAlertAction actionWithTitle:@"确认" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-                        [[DownloadTaskManager sharedManager] cancelTaskWithId:task.taskId];
-                        [[DownloadTaskManager sharedManager] removeTaskWithId:task.taskId];
-                        [strongSelf showAlertWithTitle:@"已取消" message:@"请手动重新触发下载以使用新的下载源。"];
-                    }]];
-                    [strongSelf presentViewController:confirm animated:YES completion:nil];
-                } else {
-                    NSString *message = supportsResume ? @"已切换源，将从断点继续下载。" : @"下载源已更新。";
-                    [strongSelf showAlertWithTitle:@"切换成功" message:message];
-                }
-            });
-        }];
-    }]];
 
     [self presentViewController:alert animated:YES completion:nil];
 }
 
-- (void)showAlertWithTitle:(NSString *)title message:(NSString *)message {
+- (void)showSourceSwitcherForTask:(DownloadTaskItem *)task {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"切换下载源"
+                                                                   message:[NSString stringWithFormat:@"当前源: %@", task.downloadSource ?: @"official"]
+                                                            preferredStyle:UIAlertControllerStyleActionSheet];
+
+    NSArray<NSString *> *sources = @[@"official", @"bmclapi"];
+    for (NSString *source in sources) {
+        if ([source isEqualToString:task.downloadSource]) continue;
+        [alert addAction:[UIAlertAction actionWithTitle:source
+                                                  style:UIAlertActionStyleDefault
+                                                handler:^(UIAlertAction *action) {
+            [self confirmSwitchSourceForTask:task toSource:source];
+        }]];
+    }
+
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消"
+                                              style:UIAlertActionStyleCancel
+                                            handler:nil]];
+
+    if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
+        alert.popoverPresentationController.sourceView = self.view;
+        alert.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(self.view.bounds), CGRectGetMidY(self.view.bounds), 1, 1);
+        alert.popoverPresentationController.permittedArrowDirections = 0;
+    }
+
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)confirmSwitchSourceForTask:(DownloadTaskItem *)task toSource:(NSString *)source {
+    __weak typeof(self) weakSelf = self;
+    [[DownloadTaskManager sharedManager] switchDownloadSourceForTaskId:task.taskId
+                                                              toSource:source
+                                                            completion:^(BOOL shouldRecreate, BOOL supportsResume, NSError *error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) return;
+
+            if (error) {
+                [strongSelf showAlert:@"切换失败" message:error.localizedDescription];
+                return;
+            }
+
+            if (!supportsResume) {
+                UIAlertController *confirm = [UIAlertController alertControllerWithTitle:@"切换下载源"
+                                                                                 message:@"该源不支持断点续传，确认后将重新从头下载。"
+                                                                          preferredStyle:UIAlertControllerStyleAlert];
+                [confirm addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+                [confirm addAction:[UIAlertAction actionWithTitle:@"确认" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+                    [[DownloadTaskManager sharedManager] cancelTaskWithId:task.taskId];
+                    // 业务方在取消后需要重新创建下载任务；这里仅更新源并移除旧记录。
+                    [[DownloadTaskManager sharedManager] removeTaskWithId:task.taskId];
+                }]];
+                [strongSelf presentViewController:confirm animated:YES completion:nil];
+            } else {
+                [[DownloadTaskManager sharedManager] cancelTaskWithId:task.taskId];
+                [[DownloadTaskManager sharedManager] removeTaskWithId:task.taskId];
+            }
+        });
+    }];
+}
+
+- (void)showAlert:(NSString *)title message:(NSString *)message {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:title
                                                                    message:message
                                                             preferredStyle:UIAlertControllerStyleAlert];
@@ -810,105 +806,68 @@ static const char kDownloadIconTaskKey = 0;
     [self presentViewController:alert animated:YES completion:nil];
 }
 
-#pragma mark - UITableViewDataSource
+#pragma mark - Notifications
 
-- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    return (NSInteger)self.filteredTasks.count;
+- (void)handleTaskUpdate:(NSNotification *)notification {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self reloadData];
+    });
 }
 
-- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-    DownloadTaskTableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"DownloadTaskCell" forIndexPath:indexPath];
-    DownloadTaskItem *task = self.filteredTasks[(NSUInteger)indexPath.row];
+- (void)handleAggregateStateChanged:(NSNotification *)notification {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self reloadData];
+    });
+}
+
+#pragma mark - UICollectionViewDataSource
+
+- (NSInteger)collectionView:(UICollectionView *)collectionView numberOfItemsInSection:(NSInteger)section {
+    if (self.filteredTasks.count == 0) {
+        return 1; // 空状态占位
+    }
+    return self.filteredTasks.count;
+}
+
+- (UICollectionViewCell *)collectionView:(UICollectionView *)collectionView cellForItemAtIndexPath:(NSIndexPath *)indexPath {
+    if (self.filteredTasks.count == 0) {
+        DownloadTaskEmptyCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:kEmptyStateReuseIdentifier forIndexPath:indexPath];
+        return cell;
+    }
+
+    DownloadTaskCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:kTaskCellReuseIdentifier forIndexPath:indexPath];
+    DownloadTaskItem *task = self.filteredTasks[indexPath.item];
     [cell configureWithTask:task];
-
-    BOOL hasGesture = NO;
-    for (UIGestureRecognizer *g in cell.contentView.gestureRecognizers) {
-        if ([g isKindOfClass:[UILongPressGestureRecognizer class]]) {
-            hasGesture = YES;
-            break;
-        }
-    }
-    if (!hasGesture) {
-        UILongPressGestureRecognizer *longPress = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(handleLongPress:)];
-        longPress.minimumPressDuration = 0.5;
-        [cell.contentView addGestureRecognizer:longPress];
-    }
-
     return cell;
 }
 
-#pragma mark - UITableViewDelegate
+#pragma mark - UICollectionViewDelegateFlowLayout
 
-- (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
-    return UITableViewAutomaticDimension;
-}
-
-- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
-    [tableView deselectRowAtIndexPath:indexPath animated:YES];
-}
-
-- (void)tableView:(UITableView *)tableView willDisplayCell:(UITableViewCell *)cell forRowAtIndexPath:(NSIndexPath *)indexPath {
-    if ([cell isKindOfClass:[DownloadTaskTableViewCell class]]) {
-        DownloadTaskTableViewCell *taskCell = (DownloadTaskTableViewCell *)cell;
-        UIView *card = taskCell.cardView;
-        if (card) {
-            card.backgroundColor = [UIColor colorWithWhite:0.0 alpha:0.15];
-        }
+- (CGSize)collectionView:(UICollectionView *)collectionView layout:(UICollectionViewLayout *)collectionViewLayout sizeForItemAtIndexPath:(NSIndexPath *)indexPath {
+    if (self.filteredTasks.count == 0) {
+        return CGSizeMake(collectionView.bounds.size.width - kSectionInset * 2, 200);
     }
+
+    CGFloat width = collectionView.bounds.size.width - kSectionInset * 2;
+    return CGSizeMake(width, 120);
 }
 
-#pragma mark - Helpers
-
-- (NSString *)titleForTypeFilter:(NSString *)type {
-    if (type.length == 0) return @"全部";
-    return [DownloadTasksViewController localizedTypeNameForResourceType:type];
+- (void)viewWillTransitionToSize:(CGSize)size withTransitionCoordinator:(id<UIViewControllerTransitionCoordinator>)coordinator {
+    [super viewWillTransitionToSize:size withTransitionCoordinator:coordinator];
+    [coordinator animateAlongsideTransition:^(id<UIViewControllerTransitionCoordinatorContext> context) {
+        [self.collectionView.collectionViewLayout invalidateLayout];
+    } completion:nil];
 }
 
-+ (NSString *)localizedTypeNameForResourceType:(NSString *)type {
-    if ([type isEqualToString:DownloadTaskResourceTypeMinecraft])    return @"MC 本体";
-    if ([type isEqualToString:DownloadTaskResourceTypeModloader])    return @"Mod 加载器";
-    if ([type isEqualToString:DownloadTaskResourceTypeMod])          return @"Mod";
-    if ([type isEqualToString:DownloadTaskResourceTypeShader])       return @"光影包";
-    if ([type isEqualToString:DownloadTaskResourceTypeResourcePack]) return @"资源包";
-    if ([type isEqualToString:DownloadTaskResourceTypeDataPack])     return @"数据包";
-    if ([type isEqualToString:DownloadTaskResourceTypeModpack])      return @"整合包";
-    return type ?: @"其他";
-}
+#pragma mark - UIGestureRecognizerDelegate
 
-+ (UIColor *)colorForResourceType:(NSString *)type {
-    if ([type isEqualToString:DownloadTaskResourceTypeMinecraft])    return [UIColor systemIndigoColor];
-    if ([type isEqualToString:DownloadTaskResourceTypeModloader])    return [UIColor systemOrangeColor];
-    if ([type isEqualToString:DownloadTaskResourceTypeMod])          return [UIColor systemBlueColor];
-    if ([type isEqualToString:DownloadTaskResourceTypeShader])       return [UIColor systemYellowColor];
-    if ([type isEqualToString:DownloadTaskResourceTypeResourcePack]) return [UIColor systemPinkColor];
-    if ([type isEqualToString:DownloadTaskResourceTypeDataPack])     return [UIColor systemTealColor];
-    if ([type isEqualToString:DownloadTaskResourceTypeModpack])      return [UIColor systemPurpleColor];
-    return [UIColor systemGrayColor];
-}
-
-+ (UIImage *)systemImageForResourceType:(NSString *)type {
-    NSString *name = @"doc";
-    if ([type isEqualToString:DownloadTaskResourceTypeMinecraft])         name = @"cube";
-    else if ([type isEqualToString:DownloadTaskResourceTypeModloader])    name = @"gearshape.2";
-    else if ([type isEqualToString:DownloadTaskResourceTypeMod])          name = @"puzzlepiece.extension";
-    else if ([type isEqualToString:DownloadTaskResourceTypeShader])       name = @"sun.max";
-    else if ([type isEqualToString:DownloadTaskResourceTypeResourcePack]) name = @"paintpalette";
-    else if ([type isEqualToString:DownloadTaskResourceTypeDataPack])     name = @"archivebox";
-    else if ([type isEqualToString:DownloadTaskResourceTypeModpack])      name = @"cube.box";
-
-    UIImage *image = [UIImage systemImageNamed:name];
-    if (!image) image = [UIImage systemImageNamed:@"doc"];
-    return image;
-}
-
-#pragma mark - Orientation
-
-- (BOOL)shouldAutorotate {
+- (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldReceiveTouch:(UITouch *)touch {
+    if ([gestureRecognizer isKindOfClass:[UILongPressGestureRecognizer class]]) {
+        CGPoint point = [touch locationInView:self.collectionView];
+        NSIndexPath *indexPath = [self.collectionView indexPathForItemAtPoint:point];
+        return indexPath != nil && self.filteredTasks.count > 0;
+    }
     return YES;
-}
-
-- (UIInterfaceOrientationMask)supportedInterfaceOrientations {
-    return UIInterfaceOrientationMaskAll;
 }
 
 @end
