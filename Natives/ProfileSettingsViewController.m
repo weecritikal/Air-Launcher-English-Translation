@@ -188,6 +188,8 @@
     existing[@"javaVersion"] = self.selectedJavaVersion;
     existing[@"allocatedMemory"] = @(self.allocatedMemory);
     existing[@"serverIp"] = self.serverIp ?: @"";
+    // 保存游戏目录（版本隔离用）：gameDir 为 nil 时默认 "."，与 main 分支行为一致
+    existing[@"gameDir"] = self.profile[@"gameDir"] ?: @".";
     // existing 中的 name 和 lastVersionId 字段保持原始值不变
     PLProfiles.current.profiles[profName] = existing;
     [PLProfiles.current save];
@@ -233,7 +235,7 @@
         return @"启动游戏后自动加入此服务器（参照 FCL）\n格式：host 或 host:port（IPv6 为 [host]:port），留空则不自动加入";
     }
     if (section == 0) {
-        return @"游戏目录决定存档/模组/配置文件的隔离位置";
+        return @"游戏目录决定存档/模组/配置文件的隔离位置\n\".\" = 使用当前游戏目录切换选中的实例\n点击可修改为相对/绝对路径实现版本隔离";
     }
     if (section == 5) {
         return @"Fabric API：Fabric 模组的依赖库（仅 Fabric 加载器有效）\nOptiFine：OptiFine 优化模组（仅原版/Forge 有效）";
@@ -271,7 +273,7 @@
                 cell.detailTextLabel.text = nil;
             } else if ([title isEqualToString:@"游戏目录"]) {
                 cell.imageView.image = [UIImage systemImageNamed:@"folder"];
-                cell.accessoryType = UITableViewCellAccessoryNone;
+                cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
                 NSString *gameDir = self.profile[@"gameDir"] ?: @".";
                 cell.detailTextLabel.text = gameDir;
             }
@@ -594,6 +596,8 @@
             } else if ([title isEqualToString:@"游戏版本"]) {
                 // 聚焦版本选择器
                 if (self.versionTextField) [self.versionTextField becomeFirstResponder];
+            } else if ([title isEqualToString:@"游戏目录"]) {
+                [self editGameDir];
             }
             break;
 
@@ -662,6 +666,53 @@
 }
 
 #pragma mark - Actions
+
+/// 编辑游戏目录（仿 main 分支 LauncherProfileEditorViewController 的 gameDir 文本框）
+/// gameDir="." 表示使用当前 POJAV_GAME_DIR（即"游戏目录切换"选中的实例目录）
+/// 也可以输入相对路径（相对于 POJAV_GAME_DIR）或绝对路径来实现版本隔离
+- (void)editGameDir {
+    NSString *currentGameDir = self.profile[@"gameDir"] ?: @".";
+    NSString *currentInstance = getPrefObject(@"general.game_directory") ?: @"default";
+
+    UIAlertController *alert = [UIAlertController
+        alertControllerWithTitle:@"游戏目录"
+                         message:[NSString stringWithFormat:
+                                  @"设定此版本使用的游戏目录。\n\n"
+                                   "\".\" = 使用当前游戏目录切换选中的实例（%@）\n"
+                                   "相对路径 = 相对于当前游戏目录的子目录（用于版本隔离）\n"
+                                   "绝对路径 = 使用指定路径",
+                                  currentInstance]
+                  preferredStyle:UIAlertControllerStyleAlert];
+
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
+        textField.text = currentGameDir;
+        textField.placeholder = [NSString stringWithFormat:@". -> /Documents/instances/%@", currentInstance];
+        textField.autocorrectionType = UITextAutocorrectionTypeNo;
+        textField.autocapitalizationType = UITextAutocapitalizationTypeNone;
+        textField.clearButtonMode = UITextFieldViewModeWhileEditing;
+    }];
+
+    [alert addAction:[UIAlertAction actionWithTitle:@"恢复默认" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
+        self.profile[@"gameDir"] = @".";
+        [self saveSettings];
+        [self.tableView reloadData];
+    }]];
+
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+
+    [alert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        NSString *newGameDir = alert.textFields.firstObject.text;
+        newGameDir = [newGameDir stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        if (newGameDir.length == 0) {
+            newGameDir = @".";
+        }
+        self.profile[@"gameDir"] = newGameDir;
+        [self saveSettings];
+        [self.tableView reloadData];
+    }]];
+
+    [self presentViewController:alert animated:YES completion:nil];
+}
 
 - (void)openModsManager {
     ModsManagerViewController *vc = [[ModsManagerViewController alloc] init];
