@@ -17,9 +17,13 @@ void loadPreferences(BOOL reset) {
 }
 
 void toggleIsolatedPref(BOOL forceEnable) {
-    if (!pref.instancePath) {
-        pref.instancePath = [NSString stringWithFormat:@"%s/launcher_preferences.plist", getenv("POJAV_GAME_DIR")];
-    }
+    // 总是基于当前 POJAV_GAME_DIR 重新计算 instancePath。
+    // POJAV_GAME_DIR 是符号链接（指向 $POJAV_HOME/instances/<current>），
+    // 切换游戏目录时 changeSelectionTo 已更新该符号链接的目标。
+    // 之前用 `if (!pref.instancePath)` 缓存了第一次设置的旧路径，
+    // 导致切换目录后仍读取旧实例的 launcher_preferences.plist，
+    // 用户必须重启启动器才能让 instancePath 重新计算。这里改为每次都刷新。
+    pref.instancePath = [NSString stringWithFormat:@"%s/launcher_preferences.plist", getenv("POJAV_GAME_DIR")];
     [pref toggleIsolationForced:forceEnable];
 }
 

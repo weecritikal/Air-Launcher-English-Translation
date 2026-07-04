@@ -43,9 +43,25 @@
     setPrefObject(@"general.game_directory", name);
     NSString *multidirPath = [NSString stringWithFormat:@"%s/instances/%@", getenv("POJAV_HOME"), name];
     NSString *lasmPath = @(getenv("POJAV_GAME_DIR"));
-    [NSFileManager.defaultManager removeItemAtPath:lasmPath error:nil];
-    [NSFileManager.defaultManager createSymbolicLinkAtPath:lasmPath withDestinationPath:multidirPath error:nil];
+    NSError *removeError = nil;
+    [NSFileManager.defaultManager removeItemAtPath:lasmPath error:&removeError];
+    // removeItem 失败不一定是致命的（首次切换时 lasmPath 可能不存在），忽略并继续
+
+    NSError *linkError = nil;
+    BOOL linkOK = [NSFileManager.defaultManager createSymbolicLinkAtPath:lasmPath
+                                                       withDestinationPath:multidirPath
+                                                                     error:&linkError];
+    if (!linkOK) {
+        // 符号链接创建失败：POJAV_GAME_DIR 仍是断链，后续所有路径都会失败。
+        // 提示用户并尽早返回，避免把状态搞得更乱。
+        NSLog(@"[GameDir] createSymbolicLink failed: %@", linkError.localizedDescription);
+        showDialog(localize(@"Error", nil),
+                   [NSString stringWithFormat:@"切换游戏目录失败：无法创建符号链接\n\n%@", linkError.localizedDescription]);
+        return;
+    }
     [NSFileManager.defaultManager changeCurrentDirectoryPath:lasmPath];
+    // 切换 pref.instancePath 到新目录的 launcher_preferences.plist
+    // （内部会基于 POJAV_GAME_DIR 重新计算，已修复之前需重启启动器的 bug）
     toggleIsolatedPref(NO);
 
     // 刷新 PLProfiles 缓存，确保后续读取的是新游戏目录的 launcher_profiles.json
