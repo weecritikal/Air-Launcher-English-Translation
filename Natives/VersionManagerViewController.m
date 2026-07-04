@@ -190,6 +190,29 @@
     self.versionLabel.text = version ?: @"未知版本";
     self.selectedBadge.hidden = !isSelected;
     
+    // FCL 风格：根据 versionId 中的关键字识别加载器类型，显示对应图标和颜色
+    NSString *lowerVersion = [version.lowercaseString stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    UIImage *icon = [UIImage systemImageNamed:@"cube.box.fill"];
+    UIColor *iconColor = [UIColor systemBlueColor];
+    if ([lowerVersion containsString:@"fabric"]) {
+        icon = [UIImage systemImageNamed:@"wand.and.stars"];
+        iconColor = [UIColor colorWithRed:0.85 green:0.55 blue:0.95 alpha:1.0];
+    } else if ([lowerVersion containsString:@"quilt"]) {
+        icon = [UIImage systemImageNamed:@"circle.hexagongrid.fill"];
+        iconColor = [UIColor colorWithRed:0.95 green:0.55 blue:0.55 alpha:1.0];
+    } else if ([lowerVersion containsString:@"neoforge"]) {
+        icon = [UIImage systemImageNamed:@"hammer.fill"];
+        iconColor = [UIColor colorWithRed:0.92 green:0.45 blue:0.30 alpha:1.0];
+    } else if ([lowerVersion containsString:@"forge"]) {
+        icon = [UIImage systemImageNamed:@"anvil.fill"];
+        iconColor = [UIColor colorWithRed:0.70 green:0.50 blue:0.40 alpha:1.0];
+    } else if ([lowerVersion containsString:@"optifine"] || [lowerVersion containsString:@"optifabric"]) {
+        icon = [UIImage systemImageNamed:@"eye.fill"];
+        iconColor = [UIColor systemOrangeColor];
+    }
+    self.iconView.image = icon;
+    self.iconView.tintColor = iconColor;
+    
     if (isSelected) {
         self.contentView.layer.borderColor = [UIColor systemGreenColor].CGColor;
         self.contentView.layer.borderWidth = 1.5;
@@ -243,6 +266,8 @@
     self.title = @"版本管理";
     self.view.backgroundColor = [UIColor clearColor];
     [self setupCollectionView];
+    [self setupNavigationBar];
+    [self setupLongPressGesture];
     [self loadProfiles];
     
     [[NSNotificationCenter defaultCenter] addObserver:self
@@ -259,6 +284,39 @@
                                              selector:@selector(handleBackgroundUIEffectChanged:)
                                                  name:@"BackgroundUIEffectChanged"
                                                object:nil];
+}
+
+/// FCL 风格：导航栏右侧"+"按钮，点击进入下载/新建版本页面
+- (void)setupNavigationBar {
+    UIBarButtonItem *addButton = [[UIBarButtonItem alloc]
+        initWithImage:[UIImage systemImageNamed:@"plus"]
+                style:UIBarButtonItemStylePlain
+               target:self
+               action:@selector(createNewVersion)];
+    addButton.accessibilityLabel = @"新建版本";
+    self.navigationItem.rightBarButtonItem = addButton;
+}
+
+/// FCL 风格：长按版本卡片弹出操作菜单（选择/编辑/删除）
+- (void)setupLongPressGesture {
+    UILongPressGestureRecognizer *longPress = [[UILongPressGestureRecognizer alloc]
+        initWithTarget:self action:@selector(handleLongPress:)];
+    longPress.minimumPressDuration = 0.5;
+    [self.collectionView addGestureRecognizer:longPress];
+}
+
+- (void)createNewVersion {
+    // 通知 LauncherRootViewController/LauncherCardLayoutViewController 切换到下载页面
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowDownloadPage" object:nil];
+}
+
+- (void)handleLongPress:(UILongPressGestureRecognizer *)gesture {
+    if (gesture.state != UIGestureRecognizerStateBegan) return;
+    CGPoint point = [gesture locationInView:self.collectionView];
+    NSIndexPath *indexPath = [self.collectionView indexPathForItemAtPoint:point];
+    if (!indexPath || indexPath.section == 0) return;
+    if (indexPath.item >= (NSInteger)self.profileList.count) return;
+    [self showProfileActions:self.profileList[indexPath.item]];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -307,9 +365,14 @@
         CGFloat width = layoutEnvironment.container.contentSize.width;
         BOOL isiPad = width > 700;
         
+        // 通用 header size（FCL 风格：两个 section 都带标题）
+        NSCollectionLayoutSize *headerSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0]
+                                                                              heightDimension:[NSCollectionLayoutDimension absoluteDimension:44]];
+        NSCollectionLayoutBoundarySupplementaryItem *header = [NSCollectionLayoutBoundarySupplementaryItem boundarySupplementaryItemWithLayoutSize:headerSize elementKind:UICollectionElementKindSectionHeader alignment:NSRectAlignmentTop];
+        
         if (sectionIndex == 0) {
-            // Quick actions section - 5 items total
-            NSInteger columnCount = isiPad ? 5 : 3;
+            // Quick actions section - 3 items
+            NSInteger columnCount = isiPad ? 3 : 3;
             NSCollectionLayoutSize *itemSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0 / columnCount]
                                                                               heightDimension:[NSCollectionLayoutDimension absoluteDimension:100]];
             NSCollectionLayoutItem *item = [NSCollectionLayoutItem itemWithLayoutSize:itemSize];
@@ -321,6 +384,7 @@
             
             NSCollectionLayoutSection *section = [NSCollectionLayoutSection sectionWithGroup:group];
             section.contentInsets = NSDirectionalEdgeInsetsMake(8, 14, 8, 14);
+            section.boundarySupplementaryItems = @[header];
             return section;
         } else {
             NSCollectionLayoutSize *itemSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:isiPad ? 0.5 : 1.0]
@@ -335,9 +399,6 @@
             NSCollectionLayoutSection *section = [NSCollectionLayoutSection sectionWithGroup:group];
             section.contentInsets = NSDirectionalEdgeInsetsMake(0, 14, 20, 14);
             
-            NSCollectionLayoutSize *headerSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0]
-                                                                             heightDimension:[NSCollectionLayoutDimension absoluteDimension:44]];
-            NSCollectionLayoutBoundarySupplementaryItem *header = [NSCollectionLayoutBoundarySupplementaryItem boundarySupplementaryItemWithLayoutSize:headerSize elementKind:UICollectionElementKindSectionHeader alignment:NSRectAlignmentTop];
             section.boundarySupplementaryItems = @[header];
             return section;
         }
@@ -399,9 +460,13 @@
 }
 
 - (UICollectionReusableView *)collectionView:(UICollectionView *)collectionView viewForSupplementaryElementOfKind:(NSString *)kind atIndexPath:(NSIndexPath *)indexPath {
-    if (kind == UICollectionElementKindSectionHeader && indexPath.section == 1) {
+    if (kind == UICollectionElementKindSectionHeader) {
         VMSectionHeaderView *header = [collectionView dequeueReusableSupplementaryViewOfKind:kind withReuseIdentifier:@"HeaderView" forIndexPath:indexPath];
-        header.titleLabel.text = @"版本配置";
+        if (indexPath.section == 0) {
+            header.titleLabel.text = @"快速操作";
+        } else {
+            header.titleLabel.text = @"已安装的版本";
+        }
         return header;
     }
     return [UICollectionReusableView new];
@@ -419,7 +484,20 @@
             case 2: [self openShadersManager]; break;
         }
     } else {
-        [self showProfileActions:self.profileList[indexPath.item]];
+        // FCL 风格：点击未选中版本 → 立即选中；点击已选中版本 → 弹出编辑/删除菜单
+        NSString *profileName = self.profileList[indexPath.item];
+        BOOL isSelected = [profileName isEqualToString:self.selectedProfile];
+        if (!isSelected) {
+            PLProfiles.current.selectedProfileName = profileName;
+            [PLProfiles.current save];
+            [[NSNotificationCenter defaultCenter] postNotificationName:@"SelectedProfileChanged" object:nil];
+            // 选中后立即刷新以更新选中徽章
+            [self loadProfiles];
+            [self.collectionView reloadData];
+        } else {
+            // 已选中的版本：点击则打开编辑/删除菜单
+            [self showProfileActions:profileName];
+        }
     }
 }
 
@@ -463,6 +541,10 @@
     if (!isSelected) {
         [alert addAction:[UIAlertAction actionWithTitle:@"选择此版本" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
             PLProfiles.current.selectedProfileName = profileName;
+            [PLProfiles.current save];
+            [[NSNotificationCenter defaultCenter] postNotificationName:@"SelectedProfileChanged" object:nil];
+            [self loadProfiles];
+            [self.collectionView reloadData];
         }]];
     }
     

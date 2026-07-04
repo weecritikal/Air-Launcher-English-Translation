@@ -15,6 +15,7 @@
 #import "ShadersManagerViewController.h"
 #import "ModpackImportViewController.h"
 #import "LauncherPrefGameDirViewController.h"
+#import "CustomControlsViewController.h"
 
 // 布局常量（iPad/宽屏基准值；iPhone 上通过 traitCollection 适配后会变窄）
 static const CGFloat kSidebarWidthPad = 70.0;      // iPad 左侧边栏卡片宽度
@@ -286,6 +287,10 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
                                              selector:@selector(showSettings)
                                                  name:@"ShowSettings"
                                                object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(showControlSettings)
+                                                 name:@"ShowControlSettings"
+                                               object:nil];
     // 首页快捷瓷砖触发：切到对应内容区子页面（不再 FormSheet 弹窗）
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(showModsManager)
@@ -419,6 +424,21 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
     // 包装在导航控制器中，使其子页面能够正常导航
     UINavigationController *navVC = [[UINavigationController alloc] initWithRootViewController:vc];
     navVC.navigationBar.prefersLargeTitles = YES;
+    [self setContentViewController:navVC animated:YES];
+}
+
+- (void)showControlSettings {
+    // 在中间内容区显示自定义控制布局编辑器（原右侧面板"编辑控件"挪到这里）
+    CustomControlsViewController *vc = [[CustomControlsViewController alloc] init];
+    vc.modalPresentationStyle = UIModalPresentationOverFullScreen;
+    vc.setDefaultCtrl = ^(NSString *name){
+        setPrefObject(@"control.default_ctrl", name);
+    };
+    vc.getDefaultCtrl = ^{
+        return getPrefObject(@"control.default_ctrl");
+    };
+    UINavigationController *navVC = [[UINavigationController alloc] initWithRootViewController:vc];
+    navVC.navigationBar.prefersLargeTitles = NO;
     [self setContentViewController:navVC animated:YES];
 }
 

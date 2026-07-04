@@ -8,6 +8,8 @@
 #import "LauncherPreferences.h"
 #import "LauncherNavigationController.h" // for localVersionList/remoteVersionList
 #import "MinecraftResourceUtils.h"
+#import "installer/modpack/ModrinthAPI.h"
+#import "ModVersion.h"
 #import "ios_uikit_bridge.h" // for showDialog
 #import "utils.h"
 #import "BackgroundManager.h"
@@ -157,6 +159,7 @@
         @[@"光影管理"],
         @[@"渲染器", @"Java版本", @"内存分配"],
         @[@"服务器地址"],
+        @[@"Fabric API", @"OptiFine"],
         @[@"资源包管理"],
         @[@"数据包管理"],
         @[@"世界管理"]
@@ -217,9 +220,10 @@
         case 2: return @"光影";
         case 3: return @"高级设置";
         case 4: return @"服务器";
-        case 5: return @"资源包";
-        case 6: return @"数据包";
-        case 7: return @"世界";
+        case 5: return @"组件安装";
+        case 6: return @"资源包";
+        case 7: return @"数据包";
+        case 8: return @"世界";
         default: return nil;
     }
 }
@@ -230,6 +234,9 @@
     }
     if (section == 0) {
         return @"游戏目录决定存档/模组/配置文件的隔离位置";
+    }
+    if (section == 5) {
+        return @"Fabric API：Fabric 模组的依赖库（仅 Fabric 加载器有效）\nOptiFine：OptiFine 优化模组（仅原版/Forge 有效）";
     }
     return nil;
 }
@@ -301,17 +308,31 @@
             cell.accessoryView = [self buildServerIpTextField];
             break;
 
-        case 5: // 资源包管理
+        case 5: // 组件安装
+            if ([title isEqualToString:@"Fabric API"]) {
+                cell.imageView.image = [UIImage systemImageNamed:@"bolt.fill"];
+                cell.imageView.tintColor = [UIColor systemOrangeColor];
+                cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+                cell.detailTextLabel.text = [self isFabricProfile] ? @"点击安装" : @"仅 Fabric 有效";
+            } else if ([title isEqualToString:@"OptiFine"]) {
+                cell.imageView.image = [UIImage systemImageNamed:@"speedometer"];
+                cell.imageView.tintColor = [UIColor systemRedColor];
+                cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+                cell.detailTextLabel.text = [self isOptiFineCompatibleProfile] ? @"点击安装" : @"仅原版/Forge 有效";
+            }
+            break;
+
+        case 6: // 资源包管理
             cell.imageView.image = [UIImage systemImageNamed:@"rectangle.stack.fill"];
             cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
             break;
 
-        case 6: // 数据包管理
+        case 7: // 数据包管理
             cell.imageView.image = [UIImage systemImageNamed:@"shippingbox.fill"];
             cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
             break;
 
-        case 7: // 世界管理
+        case 8: // 世界管理
             cell.imageView.image = [UIImage systemImageNamed:@"globe.asia.australia.fill"];
             cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
             break;
@@ -598,15 +619,23 @@
             [self focusTextFieldInCellAtIndexPath:indexPath];
             break;
 
-        case 5: // 资源包管理
+        case 5: // 组件安装
+            if ([title isEqualToString:@"Fabric API"]) {
+                [self installFabricAPIStandalone];
+            } else if ([title isEqualToString:@"OptiFine"]) {
+                [self installOptiFineStandalone];
+            }
+            break;
+
+        case 6: // 资源包管理
             [self openResourcePacksManager];
             break;
 
-        case 6: // 数据包管理
+        case 7: // 数据包管理
             [self openDataPacksManager];
             break;
 
-        case 7: // 世界管理
+        case 8: // 世界管理
             [self openWorldsManager];
             break;
     }
@@ -665,6 +694,363 @@
     WorldsManagerViewController *vc = [[WorldsManagerViewController alloc] init];
     vc.profileName = [self currentProfileName];
     [self.navigationController pushViewController:vc animated:YES];
+}
+
+#pragma mark - 组件独立安装（Fabric API / OptiFine）
+
+- (BOOL)isFabricProfile {
+    NSString *lastVersionId = self.profile[@"lastVersionId"];
+    if (![lastVersionId isKindOfClass:[NSString class]] || lastVersionId.length == 0) return NO;
+    // Fabric profile id 形如 "fabric-loader-0.16.0-1.21"，含 "fabric"
+    // Quilt profile id 含 "quilt"
+    return [lastVersionId.lowercaseString containsString:@"fabric"];
+}
+
+- (BOOL)isOptiFineCompatibleProfile {
+    NSString *lastVersionId = self.profile[@"lastVersionId"];
+    if (![lastVersionId isKindOfClass:[NSString class]] || lastVersionId.length == 0) return NO;
+    NSString *lower = lastVersionId.lowercaseString;
+    // OptiFine 兼容原版/vanilla 和 forge（不兼容 fabric/quilt/neoforge）
+    BOOL isForge = [lower containsString:@"forge"] && ![lower containsString:@"neoforge"];
+    BOOL isVanilla = ![lower containsString:@"forge"] && ![lower containsString:@"fabric"] && ![lower containsString:@"quilt"];
+    return isForge || isVanilla;
+}
+
+/// 当前 profile 的 mods 目录路径
+- (NSString *)currentProfileModsPath {
+    NSString *gameDir = self.profile[@"gameDir"];
+    NSString *baseDir;
+    const char *env = getenv("POJAV_GAME_DIR");
+    if (env) {
+        baseDir = [NSString stringWithUTF8String:env];
+    } else {
+        baseDir = NSHomeDirectory();
+    }
+
+    NSString *modsBase;
+    if ([gameDir isKindOfClass:[NSString class]] && gameDir.length > 0 && ![gameDir isEqualToString:@"."]) {
+        if ([gameDir isAbsolutePath]) {
+            modsBase = gameDir;
+        } else {
+            modsBase = [baseDir stringByAppendingPathComponent:gameDir];
+        }
+    } else {
+        modsBase = baseDir;
+    }
+
+    NSString *modsDir = [modsBase stringByAppendingPathComponent:@"mods"];
+    [[NSFileManager defaultManager] createDirectoryAtPath:modsDir withIntermediateDirectories:YES attributes:nil error:nil];
+    return modsDir;
+}
+
+/// 当前 profile 的游戏版本（从 lastVersionId 解析）
+- (NSString *)currentGameVersion {
+    NSString *lastVersionId = self.profile[@"lastVersionId"];
+    if (![lastVersionId isKindOfClass:[NSString class]] || lastVersionId.length == 0) return nil;
+    // 解析 loader 前的游戏版本：1.21.1-forge-47.3.0 → 1.21.1
+    // fabric-loader-0.16.0-1.21 → 1.21
+    NSArray<NSString *> *loaders = @[@"forge", @"fabric", @"neoforge", @"quilt", @"fabric-loader"];
+    NSString *result = lastVersionId;
+    for (NSString *loader in loaders) {
+        NSString *delimiter = [NSString stringWithFormat:@"-%@-", loader];
+        NSRange range = [result rangeOfString:delimiter options:NSCaseInsensitiveSearch];
+        if (range.location != NSNotFound) {
+            result = [result substringToIndex:range.location];
+            break;
+        }
+        // 处理 "fabric-loader-0.16.0-1.21" 形式：取最后一个版本号
+        if ([result.lowercaseString hasPrefix:[NSString stringWithFormat:@"%@-", loader]]) {
+            // fabric-loader-0.16.0-1.21 → 取最后的 "1.21"
+            NSArray *parts = [result componentsSeparatedByString:@"-"];
+            if (parts.count >= 2) {
+                // 找到形如 1.x.x 的部分
+                for (NSString *part in [parts reverseObjectEnumerator]) {
+                    if ([part hasPrefix:@"1."]) {
+                        return part;
+                    }
+                }
+            }
+        }
+    }
+    return result;
+}
+
+- (void)installFabricAPIStandalone {
+    if (![self isFabricProfile]) {
+        [self showComponentAlert:@"无法安装"
+                          message:@"Fabric API 仅对 Fabric 加载器有效。\n\n当前版本不是 Fabric 加载器，无法安装 Fabric API。\n\n如需使用 Fabric，请到下载页面安装 Fabric 加载器。"];
+        return;
+    }
+
+    NSString *gameVersion = [self currentGameVersion];
+    if (!gameVersion) {
+        [self showComponentAlert:@"无法安装" message:@"无法解析当前版本的游戏版本号"];
+        return;
+    }
+
+    UIAlertController *confirm = [UIAlertController alertControllerWithTitle:@"安装 Fabric API"
+                                                                     message:[NSString stringWithFormat:@"Fabric API 是大多数 Fabric 模组的依赖库。\n\n将下载适配 Minecraft %@ 的最新 Fabric API 到 mods 目录。\n\n游戏版本：%@", gameVersion, gameVersion]
+                                                              preferredStyle:UIAlertControllerStyleAlert];
+    [confirm addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [confirm addAction:[UIAlertAction actionWithTitle:@"安装" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        [self startInstallFabricAPIWithGameVersion:gameVersion];
+    }]];
+    [self presentViewController:confirm animated:YES completion:nil];
+}
+
+- (void)installOptiFineStandalone {
+    if (![self isOptiFineCompatibleProfile]) {
+        [self showComponentAlert:@"无法安装"
+                          message:@"OptiFine 仅对原版 (Vanilla) 和 Forge 加载器有效。\n\n当前版本不兼容 OptiFine。\n\nFabric/Quilt/NeoForge 加载器请使用其他优化模组（如 Sodium 等）。"];
+        return;
+    }
+
+    NSString *gameVersion = [self currentGameVersion];
+    if (!gameVersion) {
+        [self showComponentAlert:@"无法安装" message:@"无法解析当前版本的游戏版本号"];
+        return;
+    }
+
+    UIAlertController *confirm = [UIAlertController alertControllerWithTitle:@"安装 OptiFine"
+                                                                     message:[NSString stringWithFormat:@"OptiFine 是 Minecraft 的优化模组，提供光影支持和高帧率。\n\n将下载适配 Minecraft %@ 的最新 OptiFine 到 mods 目录。\n\n游戏版本：%@（仅原版/Forge 有效）", gameVersion, gameVersion]
+                                                              preferredStyle:UIAlertControllerStyleAlert];
+    [confirm addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [confirm addAction:[UIAlertAction actionWithTitle:@"安装" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        [self startInstallOptiFineWithGameVersion:gameVersion];
+    }]];
+    [self presentViewController:confirm animated:YES completion:nil];
+}
+
+- (void)showComponentAlert:(NSString *)title message:(NSString *)message {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:message preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleDefault handler:nil]];
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (UIAlertController *)showProgressAlertWithTitle:(NSString *)title message:(NSString *)message {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:title
+                                                                    message:message
+                                                             preferredStyle:UIAlertControllerStyleAlert];
+    UIActivityIndicatorView *indicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
+    indicator.translatesAutoresizingMaskIntoConstraints = NO;
+    [alert.view addSubview:indicator];
+    [NSLayoutConstraint activateConstraints:@[
+        [indicator.centerXAnchor constraintEqualToAnchor:alert.view.centerXAnchor],
+        [indicator.centerYAnchor constraintEqualToAnchor:alert.view.centerYAnchor constant:20]
+    ]];
+    [indicator startAnimating];
+    [self presentViewController:alert animated:YES completion:nil];
+    return alert;
+}
+
+- (void)startInstallFabricAPIWithGameVersion:(NSString *)gameVersion {
+    UIAlertController *progress = [self showProgressAlertWithTitle:@"正在安装 Fabric API"
+                                                            message:[NSString stringWithFormat:@"正在搜索适配 %@ 的 Fabric API...", gameVersion]];
+
+    NSMutableDictionary *filters = [NSMutableDictionary dictionary];
+    filters[@"query"] = @"fabric api";
+    filters[@"limit"] = @"20";
+
+    __weak typeof(self) weakSelf = self;
+    [[ModrinthAPI sharedInstance] searchModWithFilters:filters completion:^(NSArray *results, NSError *error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) return;
+
+            if (error || results.count == 0) {
+                [progress dismissViewControllerAnimated:YES completion:^{
+                    [strongSelf showComponentAlert:@"安装失败" message:[NSString stringWithFormat:@"未找到 Fabric API：%@", error.localizedDescription ?: @"无搜索结果"]];
+                }];
+                return;
+            }
+
+            // 找到标题包含 "fabric api" 且不包含 "kotlin" 的项目
+            NSDictionary *fabricAPI = nil;
+            for (NSDictionary *mod in results) {
+                NSString *title = mod[@"title"] ?: @"";
+                if ([title.lowercaseString containsString:@"fabric api"] && ![title.lowercaseString containsString:@"kotlin"]) {
+                    fabricAPI = mod;
+                    break;
+                }
+            }
+            if (!fabricAPI) {
+                [progress dismissViewControllerAnimated:YES completion:^{
+                    [strongSelf showComponentAlert:@"安装失败" message:@"未找到合适的 Fabric API 项目"];
+                }];
+                return;
+            }
+
+            [progress setMessage:@"正在获取 Fabric API 版本列表..."];
+
+            [[ModrinthAPI sharedInstance] getVersionsForModWithID:fabricAPI[@"id"] completion:^(NSArray<ModVersion *> *versions, NSError *versionError) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    __strong typeof(weakSelf) strongSelf2 = weakSelf;
+                    if (!strongSelf2) return;
+
+                    if (versionError || versions.count == 0) {
+                        [progress dismissViewControllerAnimated:YES completion:^{
+                            [strongSelf2 showComponentAlert:@"安装失败" message:[NSString stringWithFormat:@"获取 Fabric API 版本失败：%@", versionError.localizedDescription ?: @"无版本"]];
+                        }];
+                        return;
+                    }
+
+                    // 找到匹配当前 gameVersion 的版本
+                    ModVersion *matchingVersion = nil;
+                    for (ModVersion *ver in versions) {
+                        if ([ver.gameVersions containsObject:gameVersion]) {
+                            matchingVersion = ver;
+                            break;
+                        }
+                    }
+                    if (!matchingVersion) {
+                        matchingVersion = versions.firstObject;
+                    }
+
+                    NSDictionary *primaryFile = matchingVersion.primaryFile;
+                    if (!primaryFile || ![primaryFile[@"url"] isKindOfClass:[NSString class]]) {
+                        [progress dismissViewControllerAnimated:YES completion:^{
+                            [strongSelf2 showComponentAlert:@"安装失败" message:@"Fabric API 文件信息无效"];
+                        }];
+                        return;
+                    }
+
+                    [strongSelf2 downloadFabricAPIFile:primaryFile[@"url"]
+                                                filename:primaryFile[@"filename"]
+                                              progress:progress
+                                              modInfo:fabricAPI];
+                });
+            }];
+        });
+    }];
+}
+
+- (void)downloadFabricAPIFile:(NSString *)urlString filename:(NSString *)filename progress:(UIAlertController *)progress modInfo:(NSDictionary *)modInfo {
+    __weak typeof(self) weakSelf = self;
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+
+        NSURL *url = [NSURL URLWithString:urlString];
+        NSError *downloadError = nil;
+        NSData *data = [NSData dataWithContentsOfURL:url options:NSDataReadingUncached error:&downloadError];
+
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) strongSelf2 = weakSelf;
+            if (!strongSelf2) return;
+
+            if (!data || downloadError) {
+                [progress dismissViewControllerAnimated:YES completion:^{
+                    [strongSelf2 showComponentAlert:@"安装失败" message:[NSString stringWithFormat:@"下载 Fabric API 失败：%@", downloadError.localizedDescription ?: @"未知错误"]];
+                }];
+                return;
+            }
+
+            NSString *modsDir = [strongSelf2 currentProfileModsPath];
+            NSString *saveFilename = filename ?: @"fabric-api.jar";
+            NSString *savePath = [modsDir stringByAppendingPathComponent:saveFilename];
+
+            NSError *writeError = nil;
+            BOOL success = [data writeToFile:savePath options:NSDataWritingAtomic error:&writeError];
+
+            [progress dismissViewControllerAnimated:YES completion:^{
+                if (success) {
+                    [strongSelf2 showComponentAlert:@"安装成功" message:[NSString stringWithFormat:@"Fabric API 已安装到 mods 目录：\n%@", saveFilename]];
+                } else {
+                    [strongSelf2 showComponentAlert:@"安装失败" message:[NSString stringWithFormat:@"写入文件失败：%@", writeError.localizedDescription ?: @"未知错误"]];
+                }
+            }];
+        });
+    });
+}
+
+- (void)startInstallOptiFineWithGameVersion:(NSString *)gameVersion {
+    UIAlertController *progress = [self showProgressAlertWithTitle:@"正在安装 OptiFine"
+                                                            message:[NSString stringWithFormat:@"正在查询适配 %@ 的 OptiFine 版本...", gameVersion]];
+
+    __weak typeof(self) weakSelf = self;
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+
+        // BMCL API 列表查询
+        NSString *listURL = [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/optifine/%@", gameVersion];
+        NSURL *url = [NSURL URLWithString:listURL];
+        NSError *listError = nil;
+        NSData *listData = [NSData dataWithContentsOfURL:url options:NSDataReadingUncached error:&listError];
+
+        NSString *optiFineType = nil;
+        NSString *optiFinePatch = nil;
+        NSString *filename = nil;
+
+        if (listData && !listError) {
+            NSError *jsonError = nil;
+            NSArray *versions = [NSJSONSerialization JSONObjectWithData:listData options:0 error:&jsonError];
+            if (!jsonError && [versions isKindOfClass:[NSArray class]] && versions.count > 0) {
+                NSDictionary *first = versions.firstObject;
+                if ([first isKindOfClass:[NSDictionary class]]) {
+                    optiFineType = first[@"type"] ?: @"HD_U";
+                    optiFinePatch = first[@"patch"];
+                    filename = first[@"filename"];
+                }
+            }
+        }
+
+        if (!optiFinePatch) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                __strong typeof(weakSelf) strongSelf2 = weakSelf;
+                if (!strongSelf2) return;
+                [progress dismissViewControllerAnimated:YES completion:^{
+                    [strongSelf2 showComponentAlert:@"安装失败" message:[NSString stringWithFormat:@"未找到适配 Minecraft %@ 的 OptiFine 版本", gameVersion]];
+                }];
+            });
+            return;
+        }
+
+        // 下载 OptiFine
+        NSString *downloadURL = [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/optifine/%@/%@/%@", gameVersion, optiFineType, optiFinePatch];
+        NSURL *dlURL = [NSURL URLWithString:downloadURL];
+        NSError *downloadError = nil;
+        NSData *data = [NSData dataWithContentsOfURL:dlURL options:NSDataReadingUncached error:&downloadError];
+
+        // fallback: OptiFine 官方源
+        if ((!data || downloadError) && filename) {
+            NSString *officialURL = [NSString stringWithFormat:@"https://optifine.net/downloadx?f=%@", filename];
+            NSURL *officialURLObject = [NSURL URLWithString:officialURL];
+            NSError *officialError = nil;
+            NSData *officialData = [NSData dataWithContentsOfURL:officialURLObject options:NSDataReadingUncached error:&officialError];
+            if (officialData && !officialError) {
+                data = officialData;
+                downloadError = nil;
+            }
+        }
+
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) strongSelf2 = weakSelf;
+            if (!strongSelf2) return;
+
+            if (!data || downloadError) {
+                [progress dismissViewControllerAnimated:YES completion:^{
+                    [strongSelf2 showComponentAlert:@"安装失败" message:[NSString stringWithFormat:@"下载 OptiFine 失败：%@", downloadError.localizedDescription ?: @"未知错误"]];
+                }];
+                return;
+            }
+
+            NSString *modsDir = [strongSelf2 currentProfileModsPath];
+            NSString *saveFilename = filename ?: [NSString stringWithFormat:@"OptiFine_%@_%@_%@.jar", gameVersion, optiFineType, optiFinePatch];
+            NSString *savePath = [modsDir stringByAppendingPathComponent:saveFilename];
+
+            NSError *writeError = nil;
+            BOOL success = [data writeToFile:savePath options:NSDataWritingAtomic error:&writeError];
+
+            [progress dismissViewControllerAnimated:YES completion:^{
+                if (success) {
+                    [strongSelf2 showComponentAlert:@"安装成功" message:[NSString stringWithFormat:@"OptiFine %@ %@ 已安装到 mods 目录", optiFineType, optiFinePatch]];
+                } else {
+                    [strongSelf2 showComponentAlert:@"安装失败" message:[NSString stringWithFormat:@"写入文件失败：%@", writeError.localizedDescription ?: @"未知错误"]];
+                }
+            }];
+        });
+    });
 }
 
 - (void)showRendererSelector {

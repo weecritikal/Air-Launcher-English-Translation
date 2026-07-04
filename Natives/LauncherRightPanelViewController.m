@@ -3,7 +3,6 @@
 #import "LauncherProfilesViewController.h"
 #import "AccountListViewController.h"
 #import "SurfaceViewController.h"
-#import "CustomControlsViewController.h"
 #import "JavaGUIViewController.h"
 #import "PLProfiles.h"
 #import "LauncherPreferences.h"
@@ -115,6 +114,9 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     self.versionLabel.textColor = [UIColor secondaryLabelColor];
     self.versionLabel.textAlignment = NSTextAlignmentCenter;
     self.versionLabel.text = @"未选择版本";
+    // FCL 风格：点击版本标签也能弹出选择器
+    self.versionLabel.userInteractionEnabled = YES;
+    [self.versionLabel addGestureRecognizer:[[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(showVersionPicker)]];
     [self.view addSubview:self.versionLabel];
     
     // 进度标签
@@ -145,14 +147,15 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     [self.launchButton addTarget:self action:@selector(launchButtonTapped) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.launchButton];
     
-    // 编辑控件按钮
+    // 选择版本按钮（FCL 风格：右侧版本选择入口；控制设置已挪到左侧菜单 case 3）
     self.manageVersionBtn = [UIButton buttonWithType:UIButtonTypeSystem];
     self.manageVersionBtn.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.manageVersionBtn setTitle:@"编辑控件" forState:UIControlStateNormal];
+    [self.manageVersionBtn setTitle:@"选择版本" forState:UIControlStateNormal];
     [self.manageVersionBtn setTitleColor:[UIColor labelColor] forState:UIControlStateNormal];
+    [self.manageVersionBtn.titleLabel setFont:[UIFont systemFontOfSize:14 weight:UIFontWeightMedium]];
     self.manageVersionBtn.backgroundColor = [UIColor colorWithWhite:0.2 alpha:1.0];
     self.manageVersionBtn.layer.cornerRadius = 8;
-    [self.manageVersionBtn addTarget:self action:@selector(showVersionManager) forControlEvents:UIControlEventTouchUpInside];
+    [self.manageVersionBtn addTarget:self action:@selector(showVersionPicker) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.manageVersionBtn];
     
     // 执行JAR按钮
@@ -225,16 +228,66 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     [self presentViewController:nav animated:YES completion:nil];
 }
 
+- (void)showVersionPicker {
+    // FCL 风格：在右侧面板弹出 ActionSheet 让用户选择已安装的版本
+    NSDictionary *profiles = PLProfiles.current.profiles;
+    NSArray *sortedNames = [[profiles allKeys] sortedArrayUsingSelector:@selector(localizedCaseInsensitiveCompare:)];
+    NSString *currentSelected = PLProfiles.current.selectedProfileName;
+    
+    if (sortedNames.count == 0) {
+        [self showAlert:@"暂无已安装的版本" message:@"请先到下载页面安装一个版本"];
+        return;
+    }
+    
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"选择版本"
+                                                                   message:nil
+                                                            preferredStyle:UIAlertControllerStyleActionSheet];
+    
+    for (NSString *profileName in sortedNames) {
+        NSDictionary *profile = profiles[profileName];
+        NSString *versionId = profile[@"lastVersionId"] ?: @"";
+        // 检测是否启用版本隔离（gameDir != "."）
+        NSString *gameDir = profile[@"gameDir"] ?: @".";
+        BOOL isolated = ![gameDir isEqualToString:@"."];
+        NSMutableString *title = [NSMutableString string];
+        if ([profileName isEqualToString:currentSelected]) {
+            [title appendString:@"✓ "];
+        }
+        [title appendString:profileName];
+        [title appendFormat:@"  (%@)", versionId];
+        if (isolated) {
+            [title appendString:@"  · 隔离"];
+        }
+        [alert addAction:[UIAlertAction actionWithTitle:title
+                                                  style:UIAlertActionStyleDefault
+                                                handler:^(UIAlertAction * _Nonnull action) {
+            [self selectProfile:profileName];
+        }]];
+    }
+    
+    [alert addAction:[UIAlertAction actionWithTitle:@"管理版本" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        // 跳转到版本管理页面
+        [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowVersionManager" object:nil];
+    }]];
+    
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    
+    // iPad 上 ActionSheet 必须指定 popoverPresentationController
+    alert.popoverPresentationController.sourceView = self.manageVersionBtn;
+    alert.popoverPresentationController.sourceRect = self.manageVersionBtn.bounds;
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)selectProfile:(NSString *)profileName {
+    PLProfiles.current.selectedProfileName = profileName;
+    [PLProfiles.current save];
+    // SelectedProfileChanged 通知已由 setSelectedProfileName 内部发送
+    [self updateVersionInfo];
+}
+
 - (void)showVersionManager {
-    CustomControlsViewController *vc = [[CustomControlsViewController alloc] init];
-    vc.modalPresentationStyle = UIModalPresentationOverFullScreen;
-    vc.setDefaultCtrl = ^(NSString *name){
-        setPrefObject(@"control.default_ctrl", name);
-    };
-    vc.getDefaultCtrl = ^{
-        return getPrefObject(@"control.default_ctrl");
-    };
-    [self presentViewController:vc animated:YES completion:nil];
+    // 兼容旧调用方：跳转到版本管理页面
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowVersionManager" object:nil];
 }
 
 - (void)executeJar {
@@ -598,7 +651,14 @@ static void *ProgressObserverContext = &ProgressObserverContext;
         NSDictionary *profile = PLProfiles.current.profiles[selectedProfile];
         if (profile) {
             NSString *versionId = profile[@"lastVersionId"] ?: @"unknown";
-            self.versionLabel.text = versionId;
+            // 显示版本隔离状态：gameDir != "." 表示已隔离
+            NSString *gameDir = profile[@"gameDir"] ?: @".";
+            BOOL isolated = ![gameDir isEqualToString:@"."];
+            if (isolated) {
+                self.versionLabel.text = [NSString stringWithFormat:@"%@  · 隔离", versionId];
+            } else {
+                self.versionLabel.text = versionId;
+            }
         }
     } else {
         self.versionLabel.text = @"未选择版本";

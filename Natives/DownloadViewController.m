@@ -745,7 +745,14 @@
 }
 
 - (void)loadFabricVersions:(NSString *)loaderType {
-    NSString *urlString = [NSString stringWithFormat:@"https://meta.fabricmc.net/v2/versions/loader/%@", self.gameVersion];
+    // 根据 loaderType 选择对应的 meta API（Fabric/Quilt 都按 gameVersion 过滤）
+    NSString *metaBase = nil;
+    if ([loaderType isEqualToString:@"quilt"]) {
+        metaBase = @"https://meta.quiltmc.org/v3/versions/loader";
+    } else {
+        metaBase = @"https://meta.fabricmc.net/v2/versions/loader";
+    }
+    NSString *urlString = [NSString stringWithFormat:@"%@/%@", metaBase, self.gameVersion];
     NSURL *url = [NSURL URLWithString:urlString];
     
     __weak typeof(self) weakSelf = self;
@@ -2789,7 +2796,7 @@ static NSString *createIsolatedGameDir(NSString *versionId, NSString *loader) {
 
 - (void)proceedWithVersion:(NSDictionary *)version loaderType:(NSString *)loaderType installFabricAPI:(BOOL)installFabricAPI installOptiFine:(BOOL)installOptiFine loaderVersion:(NSString *)loaderVersion {
     NSString *versionId = version[@"id"];
-    
+
     if ([loaderType isEqualToString:@"vanilla"]) {
         [self downloadVanillaVersion:version];
     } else if ([loaderType isEqualToString:@"fabric"]) {
@@ -2799,7 +2806,9 @@ static NSString *createIsolatedGameDir(NSString *versionId, NSString *loader) {
     } else if ([loaderType isEqualToString:@"neoforge"]) {
         [self installNeoForge:versionId loaderVersion:loaderVersion];
     } else if ([loaderType isEqualToString:@"quilt"]) {
-        [self showError:@"Quilt 安装器暂未实现"];
+        // Quilt 加载器安装（仿 Fabric，使用 Quilt meta API）
+        // Quilt 不安装 Fabric API（用 QSL/QFAPI），installAPI 强制为 NO
+        [self installQuilt:versionId loaderVersion:loaderVersion];
     } else {
         [self showError:[NSString stringWithFormat:@"%@ 安装器暂未实现", loaderType]];
     }
@@ -2919,11 +2928,28 @@ static NSString *createIsolatedGameDir(NSString *versionId, NSString *loader) {
 #pragma mark - Fabric Installation
 
 - (void)installFabric:(NSString *)gameVersion loaderVersion:(NSString *)loaderVersion installAPI:(BOOL)installAPI {
+    [self installFabricLikeLoader:gameVersion loaderVersion:loaderVersion installAPI:installAPI vendor:@"fabric"];
+}
+
+- (void)installQuilt:(NSString *)gameVersion loaderVersion:(NSString *)loaderVersion {
+    // Quilt 不安装 Fabric API（用 QSL/QFAPI），强制 installAPI=NO
+    [self installFabricLikeLoader:gameVersion loaderVersion:loaderVersion installAPI:NO vendor:@"quilt"];
+}
+
+/// Fabric/Quilt 共用的 meta API 安装实现
+/// - vendor: @"fabric" 或 @"quilt"，决定 meta URL 与显示文案
+- (void)installFabricLikeLoader:(NSString *)gameVersion loaderVersion:(NSString *)loaderVersion installAPI:(BOOL)installAPI vendor:(NSString *)vendor {
+    BOOL isQuilt = [vendor isEqualToString:@"quilt"];
+    NSString *displayName = isQuilt ? @"Quilt" : @"Fabric";
+    NSString *metaBase = isQuilt ? @"https://meta.quiltmc.org/v3/versions/loader"
+                                 : @"https://meta.fabricmc.net/v2/versions/loader";
+    NSString *loaderTag = isQuilt ? @"quilt" : @"fabric";
+
     // FCL 风格进度展示：push 一个进度 VC，替代转圈 alert
     InstallerProgressViewController *progressVC = [[InstallerProgressViewController alloc] init];
-    progressVC.titleText = @"正在安装 Fabric";
+    progressVC.titleText = [NSString stringWithFormat:@"正在安装 %@", displayName];
     progressVC.progress = -1; // 不确定模式，正在拉取 profile JSON
-    progressVC.stageMessage = [NSString stringWithFormat:@"正在获取 Fabric profile...\n游戏版本: %@  加载器: %@", gameVersion, loaderVersion];
+    progressVC.stageMessage = [NSString stringWithFormat:@"正在获取 %@ profile...\n游戏版本: %@  加载器: %@", displayName, gameVersion, loaderVersion];
     self.installerProgressVC = progressVC;
 
     __weak typeof(self) weakSelf = self;
@@ -2939,23 +2965,23 @@ static NSString *createIsolatedGameDir(NSString *versionId, NSString *loader) {
 
     [self.navigationController pushViewController:progressVC animated:YES];
 
-    NSString *urlString = [NSString stringWithFormat:@"https://meta.fabricmc.net/v2/versions/loader/%@/%@/profile/json", gameVersion, loaderVersion];
+    NSString *urlString = [NSString stringWithFormat:@"%@/%@/%@/profile/json", metaBase, gameVersion, loaderVersion];
     NSURL *url = [NSURL URLWithString:urlString];
 
     // 注册到统一下载任务管理器
     NSString *source = getPrefObject(@"general.download_source") ?: @"official";
-    NSString *fabricTaskName = [NSString stringWithFormat:@"fabric-%@-%@", gameVersion, loaderVersion];
+    NSString *fabricTaskName = [NSString stringWithFormat:@"%@-%@-%@", loaderTag, gameVersion, loaderVersion];
     DownloadTaskItem *fabricTaskItem = [[DownloadTaskManager sharedManager]
         registerTaskWithResourceType:DownloadTaskResourceTypeModloader
                         resourceName:fabricTaskName
-                         displayName:[NSString stringWithFormat:@"Fabric %@ (%@)", loaderVersion, gameVersion]
+                         displayName:[NSString stringWithFormat:@"%@ %@ (%@)", displayName, loaderVersion, gameVersion]
                       downloadSource:source
                              rawTask:nil
                       supportsResume:YES
                              iconURL:nil];
     __block NSString *fabricTaskId = fabricTaskItem.taskId;
 
-    // Fabric profile JSON 较小，使用 dataTask；进度通过阶段驱动（无法精确测算）
+    // profile JSON 较小，使用 dataTask；进度通过阶段驱动（无法精确测算）
     dataTask = [[NSURLSession sharedSession] dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         dispatch_async(dispatch_get_main_queue(), ^{
             __strong typeof(weakSelf) strongSelf = weakSelf;
@@ -2969,14 +2995,14 @@ static NSString *createIsolatedGameDir(NSString *versionId, NSString *loader) {
                     NSError *err = [NSError errorWithDomain:@"FabricInstall" code:error.code userInfo:@{NSLocalizedDescriptionKey: error.localizedDescription ?: @"网络错误"}];
                     [[DownloadTaskManager sharedManager] setTaskWithId:fabricTaskId completedWithError:err];
                 }
-                [strongSelf finishInstallerProgressWithError:[NSString stringWithFormat:@"Fabric 安装失败: %@", error.localizedDescription ?: @"网络错误"]];
+                [strongSelf finishInstallerProgressWithError:[NSString stringWithFormat:@"%@ 安装失败: %@", displayName, error.localizedDescription ?: @"网络错误"]];
                 return;
             }
 
             if (!data) {
                 NSError *err = [NSError errorWithDomain:@"FabricInstall" code:2 userInfo:@{NSLocalizedDescriptionKey: @"返回数据为空"}];
                 [[DownloadTaskManager sharedManager] setTaskWithId:fabricTaskId completedWithError:err];
-                [strongSelf finishInstallerProgressWithError:@"Fabric 安装失败: 返回数据为空"];
+                [strongSelf finishInstallerProgressWithError:[NSString stringWithFormat:@"%@ 安装失败: 返回数据为空", displayName]];
                 return;
             }
 
@@ -2984,14 +3010,14 @@ static NSString *createIsolatedGameDir(NSString *versionId, NSString *loader) {
 
             // 解析 JSON
             strongSelf.installerProgressVC.progress = 0.5;
-            strongSelf.installerProgressVC.stageMessage = @"正在解析 Fabric 配置...";
+            strongSelf.installerProgressVC.stageMessage = [NSString stringWithFormat:@"正在解析 %@ 配置...", displayName];
 
             NSError *jsonError;
             NSDictionary *profileJson = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
             if (!profileJson || jsonError) {
                 NSError *err = [NSError errorWithDomain:@"FabricInstall" code:3 userInfo:@{NSLocalizedDescriptionKey: jsonError.localizedDescription ?: @"解析失败"}];
                 [[DownloadTaskManager sharedManager] setTaskWithId:fabricTaskId completedWithError:err];
-                [strongSelf finishInstallerProgressWithError:@"解析 Fabric 配置失败"];
+                [strongSelf finishInstallerProgressWithError:[NSString stringWithFormat:@"解析 %@ 配置失败", displayName]];
                 return;
             }
 
@@ -3027,15 +3053,16 @@ static NSString *createIsolatedGameDir(NSString *versionId, NSString *loader) {
             NSMutableDictionary *profile = [NSMutableDictionary dictionary];
             profile[@"name"] = versionId;
             profile[@"lastVersionId"] = versionId;
-            // 版本隔离：每个 Fabric 版本独立目录，saves/mods/configs 隔离
+            // 版本隔离：每个加载器版本独立目录，saves/mods/configs 隔离
             // versions/libraries/assets 通过相对符号链接共享
-            profile[@"gameDir"] = createIsolatedGameDir(versionId, @"fabric");
+            profile[@"gameDir"] = createIsolatedGameDir(versionId, loaderTag);
             profile[@"type"] = @"custom";
             profile[@"created"] = [NSDate date].description;
             [PLProfiles.current saveProfile:profile withName:versionId];
             PLProfiles.current.selectedProfileName = versionId;
 
-            if (installAPI) {
+            // 仅 Fabric 安装 Fabric API；Quilt 用 QSL/QFAPI，不安装
+            if (installAPI && !isQuilt) {
                 strongSelf.installerProgressVC.progress = 0.9;
                 strongSelf.installerProgressVC.stageMessage = @"正在下载 Fabric API...";
                 [strongSelf downloadFabricAPI:gameVersion completion:^(BOOL success, NSError *apiError) {
@@ -3044,17 +3071,17 @@ static NSString *createIsolatedGameDir(NSString *versionId, NSString *loader) {
                         if (!strongSelf2) return;
                         if (success) {
                             [[DownloadTaskManager sharedManager] setTaskWithId:fabricTaskId completedWithError:nil];
-                            [strongSelf2 finishInstallerProgressWithSuccess:[NSString stringWithFormat:@"Fabric %@ 安装成功\nFabric API 已自动安装", loaderVersion]];
+                            [strongSelf2 finishInstallerProgressWithSuccess:[NSString stringWithFormat:@"%@ %@ 安装成功\nFabric API 已自动安装", displayName, loaderVersion]];
                         } else {
                             NSError *err = [NSError errorWithDomain:@"FabricInstall" code:5 userInfo:@{NSLocalizedDescriptionKey: apiError.localizedDescription ?: @"Fabric API 下载失败"}];
                             [[DownloadTaskManager sharedManager] setTaskWithId:fabricTaskId completedWithError:err];
-                            [strongSelf2 finishInstallerProgressWithSuccess:[NSString stringWithFormat:@"Fabric %@ 安装成功\nFabric API 安装失败: %@", loaderVersion, apiError.localizedDescription ?: @"未知错误"]];
+                            [strongSelf2 finishInstallerProgressWithSuccess:[NSString stringWithFormat:@"%@ %@ 安装成功\nFabric API 安装失败: %@", displayName, loaderVersion, apiError.localizedDescription ?: @"未知错误"]];
                         }
                     });
                 }];
             } else {
                 [[DownloadTaskManager sharedManager] setTaskWithId:fabricTaskId completedWithError:nil];
-                [strongSelf finishInstallerProgressWithSuccess:[NSString stringWithFormat:@"Fabric %@ 安装成功", loaderVersion]];
+                [strongSelf finishInstallerProgressWithSuccess:[NSString stringWithFormat:@"%@ %@ 安装成功", displayName, loaderVersion]];
             }
         });
     }];

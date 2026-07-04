@@ -1085,6 +1085,14 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
             return;
         }
         
+        // 当 gameVersion 已设置时（例如由 DownloadViewController 传入），仅加载对应 MC 版本的加载器版本
+        // 避免一次性把所有 MC 版本的 Forge/NeoForge 全部加载出来
+        if (self.gameVersion.length > 0 && ![minecraftVersion isEqualToString:self.gameVersion]) {
+            NSLog(@"[ForgeInstall] Skipping NeoForge version (gameVersion filter): %@ (MC %@ != %@)", version, minecraftVersion, self.gameVersion);
+            [self.dataLock unlock];
+            return;
+        }
+        
         NSUInteger sectionIndex = NSNotFound;
         for (NSUInteger i = 0; i < self.versionList.count; i++) {
             if ([self.versionList[i] isEqualToString:minecraftVersion]) {
@@ -1130,6 +1138,14 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
         }
     
         NSString *minecraftVersion = [version substringToIndex:hyphenRange.location];
+        
+        // 当 gameVersion 已设置时（例如由 DownloadViewController 传入），仅加载对应 MC 版本的加载器版本
+        // 避免一次性把所有 MC 版本的 Forge 全部加载出来
+        if (self.gameVersion.length > 0 && ![minecraftVersion isEqualToString:self.gameVersion]) {
+            NSLog(@"[ForgeInstall] Skipping Forge version (gameVersion filter): %@ (MC %@ != %@)", version, minecraftVersion, self.gameVersion);
+            [self.dataLock unlock];
+            return;
+        }
         
         NSUInteger sectionIndex = NSNotFound;
         for (NSUInteger i = 0; i < self.versionList.count; i++) {

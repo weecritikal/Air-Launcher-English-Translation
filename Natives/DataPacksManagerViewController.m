@@ -175,7 +175,14 @@
 }
 
 - (void)closeTapped {
-    [self dismissViewControllerAnimated:YES completion:nil];
+    // 兼容两种容器：
+    // - push 进 UINavigationController（ProfileSettingsViewController 跳转）：pop 回上一级
+    // - present 弹窗（旧调用路径）：dismiss
+    if (self.navigationController && self.navigationController.viewControllers.firstObject != self) {
+        [self.navigationController popViewControllerAnimated:YES];
+    } else {
+        [self dismissViewControllerAnimated:YES completion:nil];
+    }
 }
 
 #pragma mark - 导入数据包

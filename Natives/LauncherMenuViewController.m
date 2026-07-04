@@ -23,11 +23,13 @@
     self.view.backgroundColor = [UIColor clearColor];
     
     // 菜单项配置
+    // 原 case 3（当前版本设置）与 case 2（版本管理）功能重合，合并到 case 2
+    // case 3 改为"控制设置"（CustomControlsViewController），原右侧面板的"编辑控件"挪到这里
     self.menuItems = @[
         @{@"icon": @"house.fill", @"title": @" ", @"index": @0},
         @{@"icon": @"arrow.down.circle.fill", @"title": @" ", @"index": @1},
         @{@"icon": @"puzzlepiece.fill", @"title": @" ", @"index": @2},
-        @{@"icon": @"paintbrush.fill", @"title": @" ", @"index": @3},
+        @{@"icon": @"gamecontroller.fill", @"title": @" ", @"index": @3},
         @{@"icon": @"gearshape.fill", @"title": @" ", @"index": @4}
     ];
     
@@ -144,19 +146,19 @@
             // 通知父控制器切换到新闻页
             [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowHomePage" object:nil];
             break;
-            
+
         case 1: // 下载
             [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowDownloadPage" object:nil];
             break;
-            
-        case 2: // 版本管理
+
+        case 2: // 版本管理（合并了原"当前版本设置"功能）
             [self showVersionManager];
             break;
-            
-        case 3: // 当前版本设置
-            [self showCurrentVersionSettings];
+
+        case 3: // 控制设置（原右侧面板"编辑控件"挪到这里）
+            [self showControlSettings];
             break;
-            
+
         case 4: // 设置
             [self showSettings];
             break;
@@ -168,19 +170,9 @@
     [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowVersionManager" object:nil];
 }
 
-- (void)showCurrentVersionSettings {
-    NSString *currentProfile = PLProfiles.current.selectedProfileName;
-    if (!currentProfile) {
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"提示"
-                                                                       message:@"请先选择一个版本"
-                                                                preferredStyle:UIAlertControllerStyleAlert];
-        [alert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
-        [self presentViewController:alert animated:YES completion:nil];
-        return;
-    }
-    
-    // 发送通知让 LauncherRootViewController 在中间内容区显示
-    [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowProfileEditor" object:currentProfile];
+- (void)showControlSettings {
+    // 发送通知让 LauncherRootViewController 显示控制设置
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowControlSettings" object:nil];
 }
 
 - (void)showSettings {
