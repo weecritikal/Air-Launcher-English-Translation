@@ -456,6 +456,11 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
 
     if ([launchTarget isKindOfClass:NSDictionary.class]) {
         margv[++margc] = [launchTarget[@"id"] UTF8String];
+        // 传递服务器地址给 PojavLauncher（FCL 风格）：
+        // 留空传 @"", Java 端据此判断不追加任何参数；非空则由 Java 端按 MC 版本
+        // 解析为 --server/--port 或 --quickPlayMultiplayer
+        NSString *serverIp = [PLProfiles.current serverIpForCurrentProfile] ?: @"";
+        margv[++margc] = serverIp.UTF8String;
     } else {
         margv[++margc] = [launchTarget UTF8String];
     }

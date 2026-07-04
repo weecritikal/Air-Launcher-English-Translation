@@ -1,5 +1,6 @@
 #import "ModpackInstallViewController.h"
 #import "BackgroundManager.h"
+#import "InlineMessageView.h"
 #import "modpack/ModrinthAPI.h"
 #import "MinecraftResourceDownloadTask.h"
 #import "PLProfiles.h"
@@ -20,6 +21,8 @@
 @property(nonatomic) NSMutableArray *list;
 @property(nonatomic) NSMutableDictionary *filters;
 @property ModrinthAPI *modrinth;
+@property(nonatomic, strong) InlineMessageView *currentMessageView;
+@property(nonatomic) NSIndexPath *loadingIndexPath;  // 当前正在加载版本的 indexPath
 @end
 
 @implementation ModpackInstallViewController
@@ -71,16 +74,29 @@
     }
 
     [self switchToLoadingState];
+    // 显示内联加载提示（首次加载时）
+    if (!prevList) {
+        self.currentMessageView = [InlineMessageView showInViewController:self
+                                                                    title:@"加载中"
+                                                                 message:nil
+                                                                    type:InlineMessageTypeLoading];
+    }
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         self.filters[@"name"] = name;
         self.list = [self.modrinth searchModWithFilters:self.filters previousPageResult:prevList ? self.list : nil];
         dispatch_async(dispatch_get_main_queue(), ^{
+            [self.currentMessageView dismiss];
+            self.currentMessageView = nil;
             if (self.list) {
                 [self switchToReadyState];
                 [self.tableView reloadData];
             } else {
-                showDialog(localize(@"Error", nil), self.modrinth.lastError.localizedDescription);
-                [self actionClose];
+                // 在内容区显示错误，不再用弹窗
+                self.currentMessageView = [InlineMessageView showInViewController:self
+                                                                            title:localize(@"Error", nil)
+                                                                         message:self.modrinth.lastError.localizedDescription
+                                                                            type:InlineMessageTypeError];
+                [self switchToReadyState];
             }
         });
     });
@@ -230,18 +246,41 @@
         return;
     }
     [tableView deselectRowAtIndexPath:indexPath animated:NO];
-    [self switchToLoadingState];
-    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        [self.modrinth loadDetailsOfMod:self.list[indexPath.row]];
+
+    // 防止重复点击
+    if (self.loadingIndexPath) return;
+    self.loadingIndexPath = indexPath;
+
+    // 在内容区中央显示加载提示（替代 nav bar 转圈，不阻塞）
+    NSString *loadingTitle = [NSString stringWithFormat:@"\"%@\"", item[@"title"]];
+    self.currentMessageView = [InlineMessageView showInViewController:self
+                                                                title:loadingTitle
+                                                             message:@"正在加载版本列表"
+                                                                type:InlineMessageTypeLoading];
+
+    // 使用异步加载，避免 dispatch_group_wait 同步阻塞（修复加载列表过慢）
+    NSMutableDictionary *mutableItem = self.list[indexPath.row];
+    __weak typeof(self) weakSelf = self;
+    [self.modrinth loadDetailsOfModAsync:mutableItem completion:^(BOOL success, NSError *error) {
         dispatch_async(dispatch_get_main_queue(), ^{
-            [self switchToReadyState];
-            if ([item[@"versionDetailsLoaded"] boolValue]) {
-                [self showDetails:item atIndexPath:indexPath];
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) return;
+            strongSelf.loadingIndexPath = nil;
+            [strongSelf.currentMessageView dismiss];
+            strongSelf.currentMessageView = nil;
+
+            if (success && [mutableItem[@"versionDetailsLoaded"] boolValue]) {
+                [strongSelf showDetails:mutableItem atIndexPath:indexPath];
             } else {
-                showDialog(localize(@"Error", nil), self.modrinth.lastError.localizedDescription);
+                // 在内容区显示错误，不弹窗
+                NSString *errMsg = error.localizedDescription ?: strongSelf.modrinth.lastError.localizedDescription;
+                strongSelf.currentMessageView = [InlineMessageView showInViewController:strongSelf
+                                                                                  title:localize(@"Error", nil)
+                                                                               message:errMsg
+                                                                                  type:InlineMessageTypeError];
             }
         });
-    });
+    }];
 }
 
 - (void)handleBackgroundUIEffectChanged:(NSNotification *)notification {

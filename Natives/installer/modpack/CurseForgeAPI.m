@@ -119,6 +119,23 @@ static NSString *CFACompiledAPIKey(void) {
     };
 }
 
++ (BOOL)isAPIKeyConfigured {
+    // 与 apiKey getter 保持一致的三层 fallback，避免 UI 门控与实际请求判断不一致
+    NSString *runtimeKey = [PLPreferences curseForgeAPIKey];
+    if ([runtimeKey isKindOfClass:NSString.class] && runtimeKey.length > 0) {
+        return YES;
+    }
+    NSString *compiledKey = CFACompiledAPIKey();
+    if (compiledKey.length > 0) {
+        return YES;
+    }
+    NSString *infoPlistKey = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CurseForgeAPIKey"];
+    if ([infoPlistKey isKindOfClass:NSString.class] && infoPlistKey.length > 0) {
+        return YES;
+    }
+    return NO;
+}
+
 - (NSError *)missingAPIKeyError {
     return [NSError errorWithDomain:@"CurseForgeAPI"
                                code:401
@@ -1003,6 +1020,97 @@ submitDownloadTasksFromPackage:(NSString *)packagePath
         NSLog(@"[CurseForgeAPI] ✅ loadDetailsOfMod 成功: modID=%@, %lu 个版本",
               modID, (unsigned long)versions.count);
         if (completion) dispatch_async(dispatch_get_main_queue(), ^{ completion(nil); });
+    }];
+    [task resume];
+}
+
+#pragma mark - Server Packs（服务端整合包）
+
+- (void)searchServersWithFilters:(NSDictionary *)filters
+                      completion:(void (^)(NSArray * _Nullable, NSError * _Nullable))completion {
+    // CurseForge 没有独立的 server 类型，使用 modpack（classId=4471）作为"服务器整合包"展示
+    NSMutableDictionary *serverFilters = [filters mutableCopy] ?: [NSMutableDictionary dictionary];
+    serverFilters[@"projectType"] = @"modpack";
+    // 复用现有的异步 modpack 搜索逻辑
+    [self searchModWithFilters:serverFilters completion:^(NSArray * _Nullable results, NSError * _Nullable error) {
+        if (error) {
+            if (completion) completion(nil, error);
+            return;
+        }
+        // 在每个结果中追加 serverID 字段，便于 ServerItem 统一识别
+        NSMutableArray *serverResults = [NSMutableArray array];
+        for (NSDictionary *item in results) {
+            if (![item isKindOfClass:[NSDictionary class]]) continue;
+            NSMutableDictionary *serverItem = [item mutableCopy];
+            serverItem[@"serverID"] = item[@"id"] ?: @"";
+            serverItem[@"projectType"] = @"modpack";
+            [serverResults addObject:serverItem];
+        }
+        if (completion) completion(serverResults, nil);
+    }];
+}
+
+- (void)getServerPackFilesForModpack:(NSString *)modpackID
+                          completion:(void (^)(NSArray * _Nullable, NSError * _Nullable error))completion {
+    if (modpackID.length == 0) {
+        if (completion) completion(nil, [NSError errorWithDomain:@"CurseForgeAPI" code:1 userInfo:@{NSLocalizedDescriptionKey: @"Invalid modpack ID"}]);
+        return;
+    }
+
+    // 拉取该 modpack 的所有文件，筛选 isServerPack=true 的文件
+    NSString *urlStr = [NSString stringWithFormat:@"%@/mods/%@/files?pageSize=10000", self.baseURL, modpackID];
+    NSURL *url = [NSURL URLWithString:urlStr];
+    if (!url) {
+        if (completion) completion(nil, [NSError errorWithDomain:@"CurseForgeAPI" code:2 userInfo:@{NSLocalizedDescriptionKey: @"Invalid URL"}]);
+        return;
+    }
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+    [request setValue:[self apiKey] forHTTPHeaderField:@"x-api-key"];
+    [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
+    request.timeoutInterval = 30.0;
+    NSLog(@"[CurseForgeAPI] 🔍 getServerPackFilesForModpack: %@", urlStr);
+
+    NSURLSessionDataTask *task = [self.session dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        if (error) {
+            NSError *diagnosticError = [self errorWithResponse:response data:data originalError:error snippet:nil];
+            if (completion) dispatch_async(dispatch_get_main_queue(), ^{ completion(nil, diagnosticError); });
+            return;
+        }
+        if (!data || data.length == 0) {
+            NSError *emptyError = [NSError errorWithDomain:@"CurseForgeAPI" code:3 userInfo:@{NSLocalizedDescriptionKey: @"CurseForge API returned empty response"}];
+            if (completion) dispatch_async(dispatch_get_main_queue(), ^{ completion(nil, emptyError); });
+            return;
+        }
+        NSError *jsonError = nil;
+        NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
+        if (jsonError || ![json isKindOfClass:NSDictionary.class]) {
+            NSError *baseError = jsonError ?: [NSError errorWithDomain:@"CurseForgeAPI" code:4 userInfo:@{NSLocalizedDescriptionKey: @"Invalid JSON"}];
+            if (completion) dispatch_async(dispatch_get_main_queue(), ^{ completion(nil, baseError); });
+            return;
+        }
+
+        NSArray *files = [json[@"data"] isKindOfClass:[NSArray class]] ? json[@"data"] : @[];
+        NSMutableArray *serverPacks = [NSMutableArray array];
+        for (NSDictionary *file in files) {
+            if (![file isKindOfClass:[NSDictionary class]]) continue;
+            // 筛选 isServerPack=true 的文件（与 loadDetailsOfMod 中排除 server pack 的逻辑相反）
+            if (![file[@"isServerPack"] boolValue]) continue;
+            // 解析下载 URL 和文件名
+            NSString *dlURL = [self downloadURLForFile:file];
+            NSString *fileName = [file[@"fileName"] isKindOfClass:[NSString class]] ? file[@"fileName"] : @"";
+            NSString *displayName = [file[@"displayName"] isKindOfClass:[NSString class]] ? file[@"displayName"] : fileName;
+            [serverPacks addObject:@{
+                @"serverPackDownloadURL": dlURL ?: @"",
+                @"serverPackFileName": fileName ?: @"",
+                @"serverPackDisplayName": displayName ?: fileName ?: @"",
+                @"serverPackFileSize": file[@"fileLength"] ?: @0,
+                @"fileId": [file[@"id"] description] ?: @"",
+                @"modpackId": modpackID
+            }];
+        }
+        NSLog(@"[CurseForgeAPI] ✅ getServerPackFilesForModpack 成功: modpackID=%@, %lu 个 server pack",
+              modpackID, (unsigned long)serverPacks.count);
+        if (completion) dispatch_async(dispatch_get_main_queue(), ^{ completion(serverPacks, nil); });
     }];
     [task resume];
 }

@@ -90,7 +90,11 @@ public class PojavLauncher {
         MinecraftAccount account = MinecraftAccount.load(args[0]);
         JMinecraftVersionList.Version version = Tools.getVersionInfo(args[1]);
         System.out.println("Launching Minecraft " + version.id);
-        
+
+        // 第三个参数为服务器地址（FCL 风格）：留空则不自动加入，非空则启动后自动加入
+        // 由 JavaLauncher.m 在 NSDictionary 启动分支以 args[2] 传入
+        String serverIp = (args.length > 2 && args[2] != null) ? args[2] : "";
+
         // Set language to Chinese on first launch
         // For Minecraft 1.11 and later: zh_cn (lowercase)
         // For Minecraft 1.6 to 1.10: zh_CN (uppercase)
@@ -116,6 +120,6 @@ public class PojavLauncher {
             System.setProperty("log4j.configurationFile", configPath);
         }
 
-        Tools.launchMinecraft(account, version);
+        Tools.launchMinecraft(account, version, serverIp);
     }
 }

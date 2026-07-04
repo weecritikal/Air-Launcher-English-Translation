@@ -52,7 +52,7 @@ public final class Tools {
     public static final String ASSETS_PATH = DIR_GAME_NEW + "/assets";
     public static final String OBSOLETE_RESOURCES_PATH=DIR_GAME_NEW + "/resources";
 
-    public static void launchMinecraft(MinecraftAccount profile, final JMinecraftVersionList.Version versionInfo) throws Throwable {
+    public static void launchMinecraft(MinecraftAccount profile, final JMinecraftVersionList.Version versionInfo, String serverIp) throws Throwable {
         // --- BEGIN AMETHYST UPSTREAM LWJGL 3.4.1 COMPLIANCE OVERRIDE ---
         // Programmatically configure modern allocator and turn off native libffi checks
         System.setProperty("org.lwjgl.system.libffi.enabled", "false");
@@ -68,7 +68,7 @@ public final class Tools {
         System.setProperty("org.lwjgl.openal.libname", "libopenal.dylib");
         // --- END AMETHYST UPSTREAM LWJGL 3.4.1 COMPLIANCE OVERRIDE ---
 
-        String[] launchArgs = getMinecraftArgs(profile, versionInfo);
+        String[] launchArgs = getMinecraftArgs(profile, versionInfo, serverIp);
         // System.out.println("Minecraft Args: " + Arrays.toString(launchArgs));
 
         final String launchClassPath = generateLaunchClassPath(versionInfo);
@@ -91,7 +91,7 @@ public final class Tools {
         method.invoke(null, new Object[]{launchArgs});
     }
 
-    public static String[] getMinecraftArgs(MinecraftAccount profile, JMinecraftVersionList.Version versionInfo) {
+    public static String[] getMinecraftArgs(MinecraftAccount profile, JMinecraftVersionList.Version versionInfo, String serverIp) {
         String username = profile.username.replace("Demo.", "");
         String versionName = versionInfo.id;
         if (versionInfo.inheritsFrom != null) {
@@ -133,12 +133,12 @@ public final class Tools {
                     if (argv.values != null) {
                         minecraftArgs.add(argv.values[0]);
                     } else {
-                        
+
                          for (JMinecraftVersionList.Arguments.ArgValue.ArgRules rule : arg.rules) {
                          // rule.action = allow
                          // TODO implement this
                          }
-                         
+
                     }
                     */
                 }
@@ -152,8 +152,91 @@ public final class Tools {
                 profile
             ), varArgMap
         );
+
+        // FCL 风格：启动后自动加入服务器。serverIp 为空时不追加任何参数，
+        // 行为与原启动流程完全一致。版本判定使用解析后的基础 MC 版本号
+        // （versionName 优先取 inheritsFrom，避免 modded 版本 id 干扰比较）
+        argsFromJson = appendServerArgs(argsFromJson, serverIp, versionName);
+
         // Tools.dialogOnUiThread(this, "Result args", Arrays.asList(argsFromJson).toString());
         return argsFromJson;
+    }
+
+    /**
+     * 根据 serverIp 和 MC 版本追加服务器加入参数（FCL/ZL2 风格）。
+     * - MC < 1.20：--server <host> --port <port>（端口缺省补 25565）
+     * - MC >= 1.20：--quickPlayMultiplayer <host:port>（端口缺省补 :25565）
+     * - 地址格式：host / host:port / [ipv6]:port
+     * - 解析失败仅告警不加入，不抛出异常
+     * - serverIp 为 null 或空字符串时直接返回原参数
+     */
+    private static String[] appendServerArgs(String[] args, String serverIp, String versionId) {
+        if (serverIp == null || serverIp.isEmpty()) {
+            return args;
+        }
+        String trimmed = serverIp.trim();
+        if (trimmed.isEmpty()) {
+            return args;
+        }
+
+        String host = null;
+        String port = "25565"; // 默认端口
+
+        // 地址解析：支持 host / host:port / [ipv6]:port
+        if (trimmed.startsWith("[")) {
+            // IPv6 形如 [::1]:25565 或 [::1]
+            int close = trimmed.indexOf("]");
+            if (close <= 0) {
+                System.err.println("[Tools] Invalid server address (unterminated IPv6 bracket): " + serverIp);
+                return args;
+            }
+            host = trimmed.substring(1, close);
+            if (close + 1 < trimmed.length()) {
+                // 括号后应跟 :port
+                String rest = trimmed.substring(close + 1);
+                if (rest.startsWith(":")) {
+                    String portStr = rest.substring(1);
+                    if (!portStr.isEmpty()) {
+                        port = portStr;
+                    }
+                } else if (!rest.isEmpty()) {
+                    System.err.println("[Tools] Invalid server address (unexpected chars after IPv6 bracket): " + serverIp);
+                    return args;
+                }
+            }
+        } else {
+            // 普通地址：以最后一个 : 分割端口
+            int lastColon = trimmed.lastIndexOf(":");
+            if (lastColon > 0) {
+                host = trimmed.substring(0, lastColon);
+                String portStr = trimmed.substring(lastColon + 1);
+                if (!portStr.isEmpty()) {
+                    port = portStr;
+                }
+            } else {
+                host = trimmed;
+            }
+        }
+
+        if (host == null || host.isEmpty()) {
+            System.err.println("[Tools] Invalid server address (empty host): " + serverIp);
+            return args;
+        }
+
+        List<String> argList = new ArrayList<String>(Arrays.asList(args));
+        // 版本判定：MC < 1.20 用 --server/--port，MC >= 1.20 用 --quickPlayMultiplayer
+        if (versionId.compareTo("1.20") < 0) {
+            argList.add("--server");
+            argList.add(host);
+            argList.add("--port");
+            argList.add(port);
+            System.out.println("[Tools] Auto-join server (legacy): " + host + ":" + port);
+        } else {
+            argList.add("--quickPlayMultiplayer");
+            argList.add(host + ":" + port);
+            System.out.println("[Tools] Auto-join server (quickPlay): " + host + ":" + port);
+        }
+        return argList.toArray(new String[0]);
     }
 
     public static String fromStringArray(String[] strArr) {

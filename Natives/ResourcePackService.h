@@ -2,25 +2,24 @@
 //  ResourcePackService.h
 //  Amethyst
 //
-//  Service for managing resource packs (local and online)
-//  资源包本地管理与下载服务，结构参照 ShaderService，复用 ShaderItem 作为数据模型
+//  资源包本地管理与下载服务，结构参照 ShaderService/ModService
+//  API 签名统一使用 NSString *profileName（与 ModService 一致）
+//  新增 pack.mcmeta 解析（pack_format / description）
 //
 
 #import <Foundation/Foundation.h>
-#import "ShaderItem.h"
+#import "ResourcePackItem.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
 // 资源包列表回调
-typedef void(^ResourcePackListHandler)(NSArray<ShaderItem *> *items);
-// 资源包元数据回调（资源包无嵌入元数据，目前为空实现）
-typedef void(^ResourcePackMetadataHandler)(ShaderItem *item, NSError * _Nullable error);
+typedef void(^ResourcePackListHandler)(NSArray<ResourcePackItem *> *items);
+// 资源包元数据回调
+typedef void(^ResourcePackMetadataHandler)(ResourcePackItem *item, NSError * _Nullable error);
 // 下载完成回调（success 表示是否成功）
 typedef void(^ResourcePackDownloadCompletionHandler)(BOOL success, NSError * _Nullable error);
 // 下载进度回调（在主线程执行，UI 更新安全）
 typedef void(^ResourcePackDownloadProgressHandler)(NSProgress * _Nullable downloadProgress);
-
-@class PLProfiles;
 
 @interface ResourcePackService : NSObject
 
@@ -30,20 +29,26 @@ typedef void(^ResourcePackDownloadProgressHandler)(NSProgress * _Nullable downlo
 
 // --- 本地资源包管理 ---
 // 扫描指定 profile 的 resourcepacks 目录，返回 .zip 和 .zip.disabled 文件列表
-- (void)scanResourcePacksForProfile:(PLProfiles *)profile completion:(ResourcePackListHandler)completion;
-// 获取资源包元数据（资源包无嵌入元数据，直接返回原对象）
-- (void)fetchMetadataForResourcePack:(ShaderItem *)item completion:(ResourcePackMetadataHandler)completion;
+- (void)scanResourcePacksForProfile:(NSString *)profileName completion:(ResourcePackListHandler)completion;
+// 获取资源包元数据（解析 zip 内的 pack.mcmeta，获取 pack_format 和 description）
+- (void)fetchMetadataForResourcePack:(ResourcePackItem *)item completion:(ResourcePackMetadataHandler)completion;
 // 启用/禁用资源包（加/去 .disabled 后缀）
-- (BOOL)toggleEnableForResourcePack:(ShaderItem *)item error:(NSError **)error;
+- (BOOL)toggleEnableForResourcePack:(ResourcePackItem *)item error:(NSError **)error;
 // 删除资源包文件
-- (BOOL)deleteResourcePack:(ShaderItem *)item error:(NSError **)error;
+- (BOOL)deleteResourcePack:(ResourcePackItem *)item error:(NSError **)error;
 
 // --- 在线资源包下载 ---
 // 下载资源包到指定 profile 的 resourcepacks 目录，支持实时进度回调
-- (void)downloadResourcePack:(ShaderItem *)item
-                   toProfile:(PLProfiles *)profile
+- (void)downloadResourcePack:(ResourcePackItem *)item
+                   toProfile:(NSString *)profileName
                     progress:(ResourcePackDownloadProgressHandler _Nullable)progress
                   completion:(ResourcePackDownloadCompletionHandler _Nullable)completion;
+
+// --- 工具方法 ---
+- (NSString *)iconCachePathForURL:(NSString *)urlString;
+
+/// 获取当前 profile 的 resourcepacks 目录，不存在时自动创建
+- (nullable NSString *)ensureResourcePacksFolderForProfile:(NSString *)profileName error:(NSError **)error;
 
 @end
 

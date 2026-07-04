@@ -1,0 +1,357 @@
+//
+//  ServerDetailViewController.m
+//  Amethyst
+//
+
+#import "ServerDetailViewController.h"
+#import "BackgroundManager.h"
+#import "InlineMessageView.h"
+#import "PLProfiles.h"
+#import "ServerService.h"
+#import "UIKit+AFNetworking.h"
+#import "utils.h"
+
+@interface ServerDetailViewController ()
+@property (nonatomic, strong) ServerItem *serverItem;
+@property (nonatomic, assign) ServerDownloadAPI api;
+@property (nonatomic, strong) UIImageView *iconView;
+@property (nonatomic, strong) UILabel *titleLabel;
+@property (nonatomic, strong) UILabel *metaLabel;
+@property (nonatomic, strong) UITextView *descTextView;
+@property (nonatomic, strong) UILabel *addressLabel;
+@property (nonatomic, strong) UIButton *copyAddressButton;
+@property (nonatomic, strong) UIButton *joinButton;
+@property (nonatomic, strong) UIButton *downloadPackButton;
+@property (nonatomic, strong) UIScrollView *scrollView;
+@property (nonatomic, strong) InlineMessageView *currentMessageView;
+@end
+
+@implementation ServerDetailViewController
+
+- (instancetype)initWithServerItem:(ServerItem *)item api:(ServerDownloadAPI)api {
+    self = [super init];
+    if (self) {
+        _serverItem = item;
+        _api = api;
+    }
+    return self;
+}
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    [[BackgroundManager sharedManager] applyEffectToView:self.view];
+    self.view.backgroundColor = [UIColor systemBackground];
+    self.title = @"服务器详情";
+
+    [self setupUI];
+    [self populateUI];
+
+    // 自动加载详情（补充服务器地址、关联整合包信息）
+    [self loadServerDetails];
+}
+
+- (void)setupUI {
+    self.scrollView = [[UIScrollView alloc] init];
+    self.scrollView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.scrollView.alwaysBounceVertical = YES;
+    [self.view addSubview:self.scrollView];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.scrollView.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor],
+        [self.scrollView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.scrollView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [self.scrollView.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor]
+    ]];
+
+    UIView *content = [[UIView alloc] init];
+    content.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.scrollView addSubview:content];
+    [NSLayoutConstraint activateConstraints:@[
+        [content.topAnchor constraintEqualToAnchor:self.scrollView.topAnchor],
+        [content.leadingAnchor constraintEqualToAnchor:self.scrollView.leadingAnchor],
+        [content.trailingAnchor constraintEqualToAnchor:self.scrollView.trailingAnchor],
+        [content.bottomAnchor constraintEqualToAnchor:self.scrollView.bottomAnchor],
+        [content.widthAnchor constraintEqualToAnchor:self.scrollView.widthAnchor]
+    ]];
+
+    // 图标
+    self.iconView = [[UIImageView alloc] init];
+    self.iconView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.iconView.layer.cornerRadius = 16;
+    self.iconView.clipsToBounds = YES;
+    self.iconView.contentMode = UIViewContentModeScaleAspectFill;
+    self.iconView.backgroundColor = [UIColor secondarySystemBackground];
+    [content addSubview:self.iconView];
+
+    // 标题
+    self.titleLabel = [[UILabel alloc] init];
+    self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.titleLabel.font = [UIFont systemFontOfSize:22 weight:UIFontWeightBold];
+    self.titleLabel.numberOfLines = 2;
+    [content addSubview:self.titleLabel];
+
+    // 元信息（来源/类型/下载量）
+    self.metaLabel = [[UILabel alloc] init];
+    self.metaLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.metaLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
+    self.metaLabel.textColor = [UIColor secondaryLabelColor];
+    self.metaLabel.numberOfLines = 0;
+    [content addSubview:self.metaLabel];
+
+    // 描述
+    self.descTextView = [[UITextView alloc] init];
+    self.descTextView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.descTextView.editable = NO;
+    self.descTextView.scrollEnabled = NO;
+    self.descTextView.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
+    self.descTextView.backgroundColor = [UIColor clearColor];
+    self.descTextView.textContainerInset = UIEdgeInsetsZero;
+    self.descTextView.textContainer.lineFragmentPadding = 0;
+    [content addSubview:self.descTextView];
+
+    // 服务器地址标签
+    self.addressLabel = [[UILabel alloc] init];
+    self.addressLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.addressLabel.font = [UIFont fontWithName:@"Menlo" size:15] ?: [UIFont monospacedSystemFontOfSize:15 weight:UIFontWeightRegular];
+    self.addressLabel.numberOfLines = 0;
+    self.addressLabel.textColor = [UIColor labelColor];
+    [content addSubview:self.addressLabel];
+
+    // 复制地址按钮
+    self.copyAddressButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    self.copyAddressButton.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.copyAddressButton setImage:[UIImage systemImageNamed:@"doc.on.doc"] forState:UIControlStateNormal];
+    [self.copyAddressButton setTitle:@" 复制" forState:UIControlStateNormal];
+    self.copyAddressButton.titleLabel.font = [UIFont systemFontOfSize:14];
+    [self.copyAddressButton addTarget:self action:@selector(copyAddress) forControlEvents:UIControlEventTouchUpInside];
+    [content addSubview:self.copyAddressButton];
+
+    // 加入服务器按钮
+    self.joinButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    self.joinButton.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.joinButton setTitle:@"加入服务器" forState:UIControlStateNormal];
+    [self.joinButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    self.joinButton.backgroundColor = [UIColor systemBlueColor];
+    self.joinButton.layer.cornerRadius = 10;
+    self.joinButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
+    [self.joinButton addTarget:self action:@selector(joinServer) forControlEvents:UIControlEventTouchUpInside];
+    [content addSubview:self.joinButton];
+
+    // 下载关联整合包按钮
+    self.downloadPackButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    self.downloadPackButton.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.downloadPackButton setTitle:@"下载关联整合包" forState:UIControlStateNormal];
+    [self.downloadPackButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    self.downloadPackButton.backgroundColor = [UIColor systemPurpleColor];
+    self.downloadPackButton.layer.cornerRadius = 10;
+    self.downloadPackButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
+    [self.downloadPackButton addTarget:self action:@selector(downloadServerPack) forControlEvents:UIControlEventTouchUpInside];
+    [content addSubview:self.downloadPackButton];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.iconView.topAnchor constraintEqualToAnchor:content.topAnchor constant:16],
+        [self.iconView.leadingAnchor constraintEqualToAnchor:content.leadingAnchor constant:16],
+        [self.iconView.widthAnchor constraintEqualToConstant:64],
+        [self.iconView.heightAnchor constraintEqualToConstant:64],
+
+        [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.iconView.trailingAnchor constant:12],
+        [self.titleLabel.trailingAnchor constraintEqualToAnchor:content.trailingAnchor constant:-16],
+        [self.titleLabel.centerYAnchor constraintEqualToAnchor:self.iconView.centerYAnchor],
+
+        [self.metaLabel.topAnchor constraintEqualToAnchor:self.iconView.bottomAnchor constant:12],
+        [self.metaLabel.leadingAnchor constraintEqualToAnchor:content.leadingAnchor constant:16],
+        [self.metaLabel.trailingAnchor constraintEqualToAnchor:content.trailingAnchor constant:-16],
+
+        [self.descTextView.topAnchor constraintEqualToAnchor:self.metaLabel.bottomAnchor constant:12],
+        [self.descTextView.leadingAnchor constraintEqualToAnchor:content.leadingAnchor constant:16],
+        [self.descTextView.trailingAnchor constraintEqualToAnchor:content.trailingAnchor constant:-16],
+
+        [self.addressLabel.topAnchor constraintEqualToAnchor:self.descTextView.bottomAnchor constant:16],
+        [self.addressLabel.leadingAnchor constraintEqualToAnchor:content.leadingAnchor constant:16],
+        [self.addressLabel.trailingAnchor constraintEqualToAnchor:self.copyAddressButton.leadingAnchor constant:-8],
+
+        [self.copyAddressButton.centerYAnchor constraintEqualToAnchor:self.addressLabel.centerYAnchor],
+        [self.copyAddressButton.trailingAnchor constraintEqualToAnchor:content.trailingAnchor constant:-16],
+        [self.copyAddressButton.heightAnchor constraintEqualToConstant:32],
+
+        [self.joinButton.topAnchor constraintEqualToAnchor:self.addressLabel.bottomAnchor constant:20],
+        [self.joinButton.leadingAnchor constraintEqualToAnchor:content.leadingAnchor constant:16],
+        [self.joinButton.trailingAnchor constraintEqualToAnchor:content.trailingAnchor constant:-16],
+        [self.joinButton.heightAnchor constraintEqualToConstant:44],
+
+        [self.downloadPackButton.topAnchor constraintEqualToAnchor:self.joinButton.bottomAnchor constant:12],
+        [self.downloadPackButton.leadingAnchor constraintEqualToAnchor:content.leadingAnchor constant:16],
+        [self.downloadPackButton.trailingAnchor constraintEqualToAnchor:content.trailingAnchor constant:-16],
+        [self.downloadPackButton.heightAnchor constraintEqualToConstant:44],
+
+        [self.downloadPackButton.bottomAnchor constraintEqualToAnchor:content.bottomAnchor constant:-24]
+    ]];
+}
+
+- (void)populateUI {
+    ServerItem *item = self.serverItem;
+    UIImage *placeholder = [UIImage imageNamed:@"DefaultProfile"];
+    [self.iconView setImageWithURL:[NSURL URLWithString:item.iconURL] placeholderImage:placeholder];
+
+    self.titleLabel.text = item.title.length ? item.title : item.serverID;
+
+    NSString *sourceTag = (item.apiSource == ServerAPISourceCurseForge) ? @"CurseForge" : @"Modrinth";
+    NSString *typeTag = item.projectType ?: @"server";
+    self.metaLabel.text = [NSString stringWithFormat:@"%@ · %@\n下载: %@  关注: %@\n作者: %@",
+                           sourceTag, typeTag,
+                           [item formattedDownloads], [item formattedLikes],
+                           item.author.length ? item.author : @"-"];
+
+    self.descTextView.text = item.serverDescription.length ? item.serverDescription : @"暂无描述";
+
+    NSString *addr = item.serverAddress.length ? item.serverAddress : @"（未提供地址，请等待详情加载）";
+    self.addressLabel.text = addr;
+
+    // 没有关联整合包时禁用下载按钮
+    BOOL hasModpack = (item.associatedModpackID.length > 0) || (item.serverPackDownloadURL.length > 0);
+    self.downloadPackButton.enabled = hasModpack;
+    self.downloadPackButton.alpha = hasModpack ? 1.0 : 0.5;
+
+    // 没有地址时禁用加入按钮
+    BOOL hasAddr = item.serverAddress.length > 0;
+    self.joinButton.enabled = hasAddr;
+    self.joinButton.alpha = hasAddr ? 1.0 : 0.5;
+}
+
+- (void)loadServerDetails {
+    if (!self.serverItem.serverID.length) return;
+    __weak typeof(self) weakSelf = self;
+    [[ServerService sharedService] getServerDetailsWithAPI:self.api
+                                                  serverID:self.serverItem.serverID
+                                                 completion:^(ServerItem * _Nullable server, NSError *error) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+        if (error || !server) {
+            NSLog(@"[ServerDetail] 获取详情失败: %@", error.localizedDescription);
+            // 详情获取失败不弹错误，保留搜索阶段已有的信息
+            return;
+        }
+        // 合并详情字段（不覆盖已有的标题/描述，只补充地址和整合包信息）
+        if (server.serverAddress.length > 0) {
+            strongSelf.serverItem.serverAddress = server.serverAddress;
+        }
+        if (server.associatedModpackID.length > 0) {
+            strongSelf.serverItem.associatedModpackID = server.associatedModpackID;
+            strongSelf.serverItem.associatedModpackSource = server.associatedModpackSource;
+        }
+        if (server.serverPackDownloadURL.length > 0) {
+            strongSelf.serverItem.serverPackDownloadURL = server.serverPackDownloadURL;
+            strongSelf.serverItem.serverPackFileName = server.serverPackFileName;
+            strongSelf.serverItem.serverPackFileSize = server.serverPackFileSize;
+        }
+        if (server.serverDescription.length > 0 && strongSelf.serverItem.serverDescription.length == 0) {
+            strongSelf.serverItem.serverDescription = server.serverDescription;
+        }
+        [strongSelf populateUI];
+    }];
+}
+
+#pragma mark - Actions
+
+- (void)copyAddress {
+    NSString *addr = self.serverItem.serverAddress;
+    if (addr.length == 0) {
+        self.currentMessageView = [InlineMessageView showInViewController:self
+                                                                    title:@"提示"
+                                                                 message:@"暂无服务器地址可复制"
+                                                                    type:InlineMessageTypeInfo];
+        return;
+    }
+    [UIPasteboard generalPasteboard].string = addr;
+    self.currentMessageView = [InlineMessageView showInViewController:self
+                                                                title:@"已复制"
+                                                             message:addr
+                                                                type:InlineMessageTypeSuccess];
+}
+
+- (void)joinServer {
+    NSString *addr = self.serverItem.serverAddress;
+    if (addr.length == 0) {
+        self.currentMessageView = [InlineMessageView showInViewController:self
+                                                                    title:@"提示"
+                                                                 message:@"暂无服务器地址，无法加入"
+                                                                    type:InlineMessageTypeInfo];
+        return;
+    }
+
+    NSString *profileName = [PLProfiles.current selectedProfileName];
+    NSError *error = nil;
+    BOOL ok = [[ServerService sharedService] joinServer:addr forProfile:profileName error:&error];
+    if (ok) {
+        NSString *msg = [NSString stringWithFormat:@"已保存到当前 profile（%@）\n启动游戏后将自动加入：%@", profileName, addr];
+        self.currentMessageView = [InlineMessageView showInViewController:self
+                                                                    title:@"加入成功"
+                                                                 message:msg
+                                                                    type:InlineMessageTypeSuccess];
+    } else {
+        self.currentMessageView = [InlineMessageView showInViewController:self
+                                                                    title:localize(@"Error", nil)
+                                                                 message:error.localizedDescription
+                                                                    type:InlineMessageTypeError];
+    }
+}
+
+- (void)downloadServerPack {
+    ServerItem *item = self.serverItem;
+    if (item.serverPackDownloadURL.length == 0) {
+        // 如果有关联整合包 ID 但没有直接下载链接，提示先查看关联整合包
+        if (item.associatedModpackID.length > 0) {
+            NSString *msg = [NSString stringWithFormat:@"该服务器关联了整合包（ID: %@），但未提供直接的 server pack 下载链接。\n请前往整合包下载页搜索该 ID。", item.associatedModpackID];
+            self.currentMessageView = [InlineMessageView showInViewController:self
+                                                                        title:@"提示"
+                                                                     message:msg
+                                                                        type:InlineMessageTypeInfo];
+        } else {
+            self.currentMessageView = [InlineMessageView showInViewController:self
+                                                                        title:@"提示"
+                                                                     message:@"该服务器没有可下载的关联整合包"
+                                                                        type:InlineMessageTypeInfo];
+        }
+        return;
+    }
+
+    NSString *profileName = [PLProfiles.current selectedProfileName];
+    if (profileName.length == 0) profileName = @"default";
+
+    self.joinButton.enabled = NO;
+    self.downloadPackButton.enabled = NO;
+    self.currentMessageView = [InlineMessageView showInViewController:self
+                                                                title:@"下载中"
+                                                             message:item.serverPackFileName ?: item.serverPackDownloadURL.lastPathComponent
+                                                                type:InlineMessageTypeLoading];
+
+    __weak typeof(self) weakSelf = self;
+    [[ServerService sharedService] downloadServerPack:item
+                                            toProfile:profileName
+                                             progress:^(NSProgress *progress) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+        double p = progress.fractionCompleted;
+        NSString *msg = [NSString stringWithFormat:@"下载中 %.0f%% (%lld / %lld 字节)",
+                         p * 100, progress.completedUnitCount, progress.totalUnitCount];
+        [strongSelf.currentMessageView updateMessage:msg];
+    } completion:^(NSError *error) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+        strongSelf.joinButton.enabled = YES;
+        strongSelf.downloadPackButton.enabled = YES;
+        if (error) {
+            strongSelf.currentMessageView = [InlineMessageView showInViewController:strongSelf
+                                                                              title:localize(@"Error", nil)
+                                                                           message:error.localizedDescription
+                                                                              type:InlineMessageTypeError];
+        } else {
+            strongSelf.currentMessageView = [InlineMessageView showInViewController:strongSelf
+                                                                              title:@"下载完成"
+                                                                           message:@"服务端整合包已保存到 Caches/server_packs 目录"
+                                                                              type:InlineMessageTypeSuccess];
+        }
+    }];
+}
+
+@end

@@ -2,6 +2,7 @@
 #import "BackgroundManager.h"
 #import "DownloadTaskManager.h"
 #import "DownloadTaskItem.h"
+#import "InlineMessageView.h"
 #import "installer/modpack/ModrinthAPI.h"
 #import "installer/modpack/CurseForgeAPI.h"
 #import "PLPreferences.h"
@@ -20,6 +21,11 @@
 #import "ShaderItem.h"
 #import "ShaderVersionViewController.h"
 #import "ShaderVersion.h"
+#import "ResourcePackItem.h"
+#import "DataPackItem.h"
+#import "WorldItem.h"
+#import "AssetVersionViewController.h"
+#import "WorldService.h"
 #import "installer/FabricInstallViewController.h"
 #import "installer/ForgeInstallViewController.h"
 #import "installer/ForgeDirectInstaller.h"
@@ -30,6 +36,10 @@
 #import "ModpackImportViewController.h"
 #import "ModpackImportService.h"
 #import "installer/CurseForgeAPIKeyViewController.h"
+#import "ServerListViewController.h"
+#import "ServerDetailViewController.h"
+#import "ServerService.h"
+#import "ServerItem.h"
 #import "UZKArchive.h"
 #import <QuartzCore/QuartzCore.h>
 #import "JavaGUIViewController.h"
@@ -702,9 +712,11 @@
 }
 
 - (void)showAlert:(NSString *)title message:(NSString *)message {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:message preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
-    [self presentViewController:alert animated:YES completion:nil];
+    // 在内容区显示提示，替代弹窗
+    [InlineMessageView showInViewController:self
+                                       title:title
+                                    message:message
+                                       type:InlineMessageTypeInfo];
 }
 
 #pragma mark - Load Versions (Real Network)
@@ -1164,7 +1176,7 @@
 
 #pragma mark - DownloadViewController
 
-@interface DownloadViewController () <UICollectionViewDataSource, UICollectionViewDelegate, UITableViewDataSource, UITableViewDelegate, UISearchBarDelegate, ModVersionViewControllerDelegate, ShaderVersionViewControllerDelegate>
+@interface DownloadViewController () <UICollectionViewDataSource, UICollectionViewDelegate, UITableViewDataSource, UITableViewDelegate, UISearchBarDelegate, ModVersionViewControllerDelegate, ShaderVersionViewControllerDelegate, AssetVersionViewControllerDelegate>
 
 @property (nonatomic, strong) UISegmentedControl *tabSegment;
 @property (nonatomic, strong) UISegmentedControl *versionFilterSegment;
@@ -1195,7 +1207,7 @@
 
 @property (nonatomic, strong) MinecraftResourceDownloadTask *downloadTask;
 @property (nonatomic, strong) DownloadProgressViewController *progressVC;
-@property (nonatomic, strong) UIAlertController *downloadingAlert;
+@property (nonatomic, strong) InlineMessageView *downloadingAlert;
 
 @property (nonatomic, assign) BOOL isObservingProgress;
 
@@ -1241,8 +1253,12 @@
 @property (nonatomic, strong) NSLayoutConstraint *sliderLeftPosConstraint;   // 滑块贴左（Modrinth）
 @property (nonatomic, strong) NSLayoutConstraint *sliderRightPosConstraint;  // 滑块贴右（CurseForge）
 
-// 当前待下载资源类型（mod/resourcepack/datapack），用于版本选择回调中决定下载目录
+// 当前待下载资源类型（mod/resourcepack/datapack/world），用于版本选择回调中决定下载目录
 @property (nonatomic, copy) NSString *pendingDownloadType;
+// 在线选择版本时临时持有的资源包/数据包/世界对象（AssetVersionViewController 回调使用）
+@property (nonatomic, strong, nullable) ResourcePackItem *pendingResourcePackItem;
+@property (nonatomic, strong, nullable) DataPackItem *pendingDataPackItem;
+@property (nonatomic, strong, nullable) WorldItem *pendingWorldItem;
 
 // 模组加载器安装进度 VC（FCL 风格进度展示，替代转圈 alert）
 @property (nonatomic, strong) InstallerProgressViewController *installerProgressVC;
@@ -1268,6 +1284,14 @@
 
     self.title = @"下载";
     self.view.backgroundColor = [UIColor clearColor];
+
+    // 导航栏左侧：服务器入口（Modrinth Server Projects + CurseForge server packs）
+    UIBarButtonItem *serverItem = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"network"]
+                                                                      style:UIBarButtonItemStylePlain
+                                                                     target:self
+                                                                     action:@selector(openServerList)];
+    serverItem.tintColor = [UIColor labelColor];
+    self.navigationItem.leftBarButtonItem = serverItem;
 
     // 导航栏右侧：CurseForge API Key 配置入口，避免用户在 Modrinth 模式下找不到配置路径
     UIBarButtonItem *apiKeyItem = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"key.fill"]
@@ -1836,16 +1860,17 @@
     NSString *currentSource = [PLPreferences currentDownloadSourceForType:type];
     if ([currentSource isEqualToString:@"curseforge"]) return;
 
-    // API Key 未配置时弹出引导提示，直接调用本 VC 的入口（不再走通知绕路）
-    if (![PLPreferences curseForgeAPIKey] && ![[NSBundle mainBundle] objectForInfoDictionaryKey:@"CurseForgeAPIKey"]) {
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"需要 CurseForge API Key"
-                                                                       message:@"检测到未配置 CurseForge API Key，是否前往设置？"
-                                                                preferredStyle:UIAlertControllerStyleAlert];
-        [alert addAction:[UIAlertAction actionWithTitle:@"前往设置" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+    // API Key 未配置时在内容区显示提示（替代弹窗）
+    if (![CurseForgeAPI isAPIKeyConfigured]) {
+        InlineMessageView *msgView = [InlineMessageView showInViewController:self
+                                                                       title:@"需要 CurseForge API Key"
+                                                                    message:@"检测到未配置 CurseForge API Key，点击前往设置"
+                                                                       type:InlineMessageTypeInfo];
+        // 2 秒后自动跳转设置页
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [msgView dismiss];
             [self openCurseForgeAPIKeySettings];
-        }]];
-        [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
-        [self presentViewController:alert animated:YES completion:nil];
+        });
         return;
     }
 
@@ -1872,6 +1897,14 @@
     CurseForgeAPIKeyViewController *vc = [[CurseForgeAPIKeyViewController alloc] init];
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
     nav.modalPresentationStyle = UIModalPresentationFormSheet;
+    [self presentViewController:nav animated:YES completion:nil];
+}
+
+// 导航栏服务器入口：弹出 ServerListViewController（自带双源切换、搜索、详情导航）
+- (void)openServerList {
+    ServerListViewController *vc = [ServerListViewController new];
+    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
+    nav.modalPresentationStyle = UIModalPresentationPageSheet;
     [self presentViewController:nav animated:YES completion:nil];
 }
 
@@ -2319,9 +2352,8 @@
         [self.loadingIndicator startAnimating];
     }
 
-    // 世界 tab 强制 CurseForge，但需 API Key；缺失时给出明确入口提示
-    NSString *cfKey = [PLPreferences curseForgeAPIKey];
-    if (![cfKey isKindOfClass:[NSString class]] || cfKey.length == 0) {
+    // 世界 tab 强制 CurseForge，但需 API Key（与实际请求一致的三层 fallback 判断）；缺失时给出明确入口提示
+    if (![CurseForgeAPI isAPIKeyConfigured]) {
         [self.loadingIndicator stopAnimating];
         [self.worldTableView.refreshControl endRefreshing];
         self.isLoadingWorlds = NO;
@@ -2625,11 +2657,11 @@
 }
 
 - (void)showError:(NSString *)message {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"错误"
-                                                                   message:message
-                                                            preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
-    [self presentViewController:alert animated:YES completion:nil];
+    // 在内容区显示错误，替代弹窗
+    [InlineMessageView showInViewController:self
+                                       title:@"错误"
+                                    message:message
+                                       type:InlineMessageTypeError];
 }
 
 #pragma mark - UISearchBarDelegate
@@ -2769,42 +2801,42 @@
 
 - (void)startVersionDownload:(NSDictionary *)version {
     __weak DownloadViewController *weakSelf = self;
-    
-    self.downloadingAlert = [UIAlertController alertControllerWithTitle:@"下载中"
-                                                                message:@"正在准备下载..."
-                                                         preferredStyle:UIAlertControllerStyleAlert];
-    
-    UIAlertAction *detailsAction = [UIAlertAction actionWithTitle:@"查看详情"
-                                                            style:UIAlertActionStyleDefault
-                                                          handler:^(UIAlertAction * _Nonnull action) {
-        if (weakSelf.downloadTask) {
-            weakSelf.progressVC = [[DownloadProgressViewController alloc] initWithTask:weakSelf.downloadTask];
-            UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:weakSelf.progressVC];
+
+    // 在内容区显示下载状态，替代弹窗（点击查看详情，关闭按钮取消）
+    self.downloadingAlert = [InlineMessageView showInViewController:self
+                                                              title:@"下载中"
+                                                           message:@"正在准备下载..."
+                                                              type:InlineMessageTypeLoading
+                                                  showsCloseButton:YES];
+    // 点击消息体打开详情视图
+    self.downloadingAlert.onTap = ^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+        if (strongSelf.downloadTask) {
+            strongSelf.progressVC = [[DownloadProgressViewController alloc] initWithTask:strongSelf.downloadTask];
+            UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:strongSelf.progressVC];
             nav.modalPresentationStyle = UIModalPresentationFormSheet;
-            [weakSelf presentViewController:nav animated:YES completion:nil];
+            [strongSelf presentViewController:nav animated:YES completion:nil];
         }
-    }];
-    [self.downloadingAlert addAction:detailsAction];
-    
-    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"取消"
-                                                           style:UIAlertActionStyleDestructive
-                                                         handler:^(UIAlertAction * _Nonnull action) {
-        if (weakSelf.downloadTask) {
-            if (weakSelf.isObservingProgress) {
-                [weakSelf.downloadTask.progress removeObserver:weakSelf forKeyPath:@"fractionCompleted"];
-                weakSelf.isObservingProgress = NO;
+    };
+    // 点击关闭按钮取消下载
+    self.downloadingAlert.onClose = ^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+        if (strongSelf.downloadTask) {
+            if (strongSelf.isObservingProgress) {
+                [strongSelf.downloadTask.progress removeObserver:strongSelf forKeyPath:@"fractionCompleted"];
+                strongSelf.isObservingProgress = NO;
             }
-            [weakSelf.downloadTask.progress cancel];
-            weakSelf.downloadTask = nil;
+            [strongSelf.downloadTask.progress cancel];
+            strongSelf.downloadTask = nil;
         }
-        weakSelf.view.userInteractionEnabled = YES;
-        [weakSelf.loadingIndicator stopAnimating];
-        [weakSelf.downloadingAlert dismissViewControllerAnimated:YES completion:nil];
-        weakSelf.downloadingAlert = nil;
-    }];
-    [self.downloadingAlert addAction:cancelAction];
-    
-    [self presentViewController:self.downloadingAlert animated:YES completion:nil];
+        strongSelf.view.userInteractionEnabled = YES;
+        [strongSelf.loadingIndicator stopAnimating];
+        [strongSelf.downloadingAlert dismiss];
+        strongSelf.downloadingAlert = nil;
+    };
+
     [self.loadingIndicator startAnimating];
     
     self.downloadTask = [MinecraftResourceDownloadTask new];
@@ -2813,11 +2845,11 @@
     self.downloadTask.retryCallback = ^(NSInteger retryCount, NSInteger maxRetryCount) {
         dispatch_async(dispatch_get_main_queue(), ^{
             if (weakSelf.downloadingAlert) {
-                weakSelf.downloadingAlert.message = [NSString stringWithFormat:@"下载失败，正在重试 (%ld/%ld)...", (long)retryCount, (long)maxRetryCount];
+                [weakSelf.downloadingAlert updateMessage:[NSString stringWithFormat:@"下载失败，正在重试 (%ld/%ld)...", (long)retryCount, (long)maxRetryCount]];
             }
         });
     };
-    
+
     self.downloadTask.handleError = ^{
         dispatch_async(dispatch_get_main_queue(), ^{
             if (weakSelf.isObservingProgress) {
@@ -2826,10 +2858,12 @@
             }
             weakSelf.view.userInteractionEnabled = YES;
             [weakSelf.loadingIndicator stopAnimating];
+            // 关闭下载中提示
+            [weakSelf.downloadingAlert dismiss];
+            weakSelf.downloadingAlert = nil;
             weakSelf.downloadTask = nil;
             weakSelf.progressVC = nil;
-            weakSelf.downloadingAlert = nil;
-            
+
             [weakSelf showError:@"版本下载失败，请检查网络连接"];
         });
     };
@@ -3192,17 +3226,19 @@
         return;
     }
     
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:localize(@"launcher.wait_jit.title", nil)
-                                                                   message:hasTrollStoreJIT ? localize(@"launcher.wait_jit_trollstore.message", nil) : localize(@"launcher.wait_jit.message", nil)
-                                                            preferredStyle:UIAlertControllerStyleAlert];
-    [self presentViewController:alert animated:YES completion:nil];
-    
+    // 在内容区显示 JIT 等待提示，替代弹窗
+    InlineMessageView *jitAlert = [InlineMessageView showInViewController:self
+                                                                    title:localize(@"launcher.wait_jit.title", nil)
+                                                                 message:hasTrollStoreJIT ? localize(@"launcher.wait_jit_trollstore.message", nil) : localize(@"launcher.wait_jit.message", nil)
+                                                                    type:InlineMessageTypeLoading];
+
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         while (!isJITEnabled(false)) {
             usleep(1000 * 200);
         }
         dispatch_async(dispatch_get_main_queue(), ^{
-            [alert dismissViewControllerAnimated:YES completion:handler];
+            [jitAlert dismiss];
+            if (handler) handler();
         });
     });
 }
@@ -3251,16 +3287,18 @@
     };
     
     void (^showAlertAndLaunch)(void) = ^{
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"下载完成"
-                                                                        message:message
-                                                                 preferredStyle:UIAlertControllerStyleAlert];
-        [self presentViewController:alert animated:YES completion:nil];
-        
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            [alert dismissViewControllerAnimated:YES completion:launchInstaller];
+        // 在内容区显示下载完成提示，替代弹窗
+        InlineMessageView *msgView = [InlineMessageView showInViewController:self
+                                                                       title:@"下载完成"
+                                                                    message:message
+                                                                       type:InlineMessageTypeSuccess];
+
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [msgView dismiss];
+            if (launchInstaller) launchInstaller();
         });
     };
-    
+
     if (self.presentedViewController) {
         [self dismissViewControllerAnimated:YES completion:showAlertAndLaunch];
     } else {
@@ -3622,9 +3660,11 @@
 }
 
 - (void)showSuccessMessage:(NSString *)message {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"安装成功" message:message preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
-    [self presentViewController:alert animated:YES completion:nil];
+    // 在内容区显示成功提示，替代弹窗
+    [InlineMessageView showInViewController:self
+                                       title:@"安装成功"
+                                    message:message
+                                       type:InlineMessageTypeSuccess];
 }
 
 #pragma mark - Mod Download Helper (Shared)
@@ -4094,14 +4134,17 @@
     if (indexPath.row >= self.resourcepackList.count) return;
 
     NSDictionary *resourcepack = self.resourcepackList[indexPath.row];
-    ModItem *modItem = [[ModItem alloc] initWithOnlineData:resourcepack];
+    ResourcePackItem *item = [[ResourcePackItem alloc] initWithOnlineData:resourcepack];
 
     self.pendingDownloadType = @"resourcepack";
+    self.pendingResourcePackItem = item;
 
-    ModVersionViewController *versionVC = [[ModVersionViewController alloc] init];
-    versionVC.modItem = modItem;
+    AssetVersionViewController *versionVC = [[AssetVersionViewController alloc] init];
+    versionVC.assetType = AssetVersionTypeResourcePack;
+    versionVC.projectID = item.onlineID;
+    versionVC.projectDisplayName = item.displayName;
     versionVC.delegate = self;
-    versionVC.title = modItem.displayName;
+    versionVC.title = item.displayName;
 
     [self.navigationController pushViewController:versionVC animated:YES];
 }
@@ -4115,14 +4158,17 @@
     if (indexPath.row >= self.datapackList.count) return;
 
     NSDictionary *datapack = self.datapackList[indexPath.row];
-    ModItem *modItem = [[ModItem alloc] initWithOnlineData:datapack];
+    DataPackItem *item = [[DataPackItem alloc] initWithOnlineData:datapack];
 
     self.pendingDownloadType = @"datapack";
+    self.pendingDataPackItem = item;
 
-    ModVersionViewController *versionVC = [[ModVersionViewController alloc] init];
-    versionVC.modItem = modItem;
+    AssetVersionViewController *versionVC = [[AssetVersionViewController alloc] init];
+    versionVC.assetType = AssetVersionTypeDataPack;
+    versionVC.projectID = item.onlineID;
+    versionVC.projectDisplayName = item.displayName;
     versionVC.delegate = self;
-    versionVC.title = modItem.displayName;
+    versionVC.title = item.displayName;
 
     [self.navigationController pushViewController:versionVC animated:YES];
 }
@@ -4136,14 +4182,17 @@
     if (indexPath.row >= self.worldList.count) return;
 
     NSDictionary *world = self.worldList[indexPath.row];
-    ModItem *modItem = [[ModItem alloc] initWithOnlineData:world];
+    WorldItem *item = [[WorldItem alloc] initWithOnlineData:world];
 
     self.pendingDownloadType = @"world";
+    self.pendingWorldItem = item;
 
-    ModVersionViewController *versionVC = [[ModVersionViewController alloc] init];
-    versionVC.modItem = modItem;
+    AssetVersionViewController *versionVC = [[AssetVersionViewController alloc] init];
+    versionVC.assetType = AssetVersionTypeWorld;
+    versionVC.projectID = item.onlineID;
+    versionVC.projectDisplayName = item.displayName;
     versionVC.delegate = self;
-    versionVC.title = modItem.displayName;
+    versionVC.title = item.displayName;
 
     [self.navigationController pushViewController:versionVC animated:YES];
 }
@@ -4162,17 +4211,49 @@
     itemToDownload.selectedVersionDownloadURL = primaryFile[@"url"];
     itemToDownload.fileName = primaryFile[@"filename"] ?: [NSString stringWithFormat:@"%@.jar", itemToDownload.displayName];
 
-    NSString *downloadType = self.pendingDownloadType ?: @"mod";
+    // 模组下载走 ModService（resourcepack/datapack/world 已改走 AssetVersionViewController）
     self.pendingDownloadType = nil;
 
     // 子页面已 push 到导航栈，选完版本后 pop 回下载列表
     [self.navigationController popViewControllerAnimated:YES];
-    if ([downloadType isEqualToString:@"resourcepack"] || [downloadType isEqualToString:@"datapack"]) {
-        [self startDownloadForAssetItem:itemToDownload type:downloadType];
+    [self startDownloadForModItem:itemToDownload];
+}
+
+#pragma mark - AssetVersionViewControllerDelegate
+
+- (void)assetVersionViewController:(AssetVersionViewController *)viewController didSelectVersion:(ModVersion *)version {
+    NSDictionary *primaryFile = version.primaryFile;
+    if (!primaryFile || ![primaryFile[@"url"] isKindOfClass:[NSString class]]) {
+        [self showError:@"未找到有效的下载链接"];
+        return;
+    }
+
+    NSString *downloadType = self.pendingDownloadType;
+    self.pendingDownloadType = nil;
+
+    // 子页面已 push 到导航栈，选完版本后 pop 回下载列表
+    [self.navigationController popViewControllerAnimated:YES];
+
+    if ([downloadType isEqualToString:@"resourcepack"]) {
+        ResourcePackItem *item = self.pendingResourcePackItem;
+        self.pendingResourcePackItem = nil;
+        if (!item) return;
+        item.selectedVersionDownloadURL = primaryFile[@"url"];
+        item.fileName = primaryFile[@"filename"] ?: [NSString stringWithFormat:@"%@.zip", item.displayName];
+        [self startDownloadForResourcePackItem:item];
+    } else if ([downloadType isEqualToString:@"datapack"]) {
+        DataPackItem *item = self.pendingDataPackItem;
+        self.pendingDataPackItem = nil;
+        if (!item) return;
+        item.selectedVersionDownloadURL = primaryFile[@"url"];
+        item.fileName = primaryFile[@"filename"] ?: [NSString stringWithFormat:@"%@.zip", item.displayName];
+        [self startDownloadForDataPackItem:item];
     } else if ([downloadType isEqualToString:@"world"]) {
-        [self startDownloadForWorldItem:itemToDownload];
-    } else {
-        [self startDownloadForModItem:itemToDownload];
+        WorldItem *item = self.pendingWorldItem;
+        self.pendingWorldItem = nil;
+        if (!item) return;
+        item.selectedVersionDownloadURL = primaryFile[@"url"];
+        [self startDownloadForWorldItem:item];
     }
 }
 
@@ -4201,151 +4282,103 @@
     }];
 }
 
-- (void)startDownloadForAssetItem:(ModItem *)item type:(NSString *)type {
-    // FCL 风格：push 进度页，替代 alert 转圈
+// 下载资源包（使用 ResourcePackService，NSString profileName）
+- (void)startDownloadForResourcePackItem:(ResourcePackItem *)item {
     InstallerProgressViewController *progressVC = [[InstallerProgressViewController alloc] init];
     progressVC.titleText = [NSString stringWithFormat:@"正在下载 %@", item.displayName ?: @""];
     progressVC.progress = -1;
-    progressVC.stageMessage = [NSString stringWithFormat:@"正在下载%@...", [type isEqualToString:@"datapack"] ? @"数据包" : @"资源包"];
+    progressVC.stageMessage = @"正在下载资源包...";
     [self.navigationController pushViewController:progressVC animated:YES];
 
-    // 使用 ShaderItem 作为资源包/数据包的数据载体（与 Service 约定一致）
-    ShaderItem *assetItem = [[ShaderItem alloc] init];
-    assetItem.displayName = item.displayName;
-    assetItem.fileName = item.fileName;
-    assetItem.selectedVersionDownloadURL = item.selectedVersionDownloadURL;
-    assetItem.iconURL = item.iconURL;
-
+    NSString *profileName = PLProfiles.current.selectedProfileName ?: @"default";
     __weak typeof(self) weakSelf = self;
     __weak InstallerProgressViewController *weakProgressVC = progressVC;
-    if ([type isEqualToString:@"datapack"]) {
-        [[DataPackService sharedService] downloadDataPack:assetItem
-                                                toProfile:PLProfiles.current
-                                                 progress:^(NSProgress * _Nullable downloadProgress) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                if (downloadProgress && weakProgressVC) {
-                    weakProgressVC.progress = downloadProgress.fractionCompleted;
-                }
-            });
-        } completion:^(BOOL success, NSError * _Nullable error) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                __strong typeof(weakSelf) strongSelf = weakSelf;
-                if (!strongSelf) return;
-                [strongSelf.navigationController popViewControllerAnimated:YES];
-                if (success && !error) {
-                    [strongSelf showSuccessMessage:[NSString stringWithFormat:@"%@ 已安装到 datapacks", item.displayName]];
-                } else {
-                    [strongSelf showError:error.localizedDescription ?: @"数据包下载失败"];
-                }
-            });
-        }];
-    } else {
-        [[ResourcePackService sharedService] downloadResourcePack:assetItem
-                                                        toProfile:PLProfiles.current
-                                                         progress:^(NSProgress * _Nullable downloadProgress) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                if (downloadProgress && weakProgressVC) {
-                    weakProgressVC.progress = downloadProgress.fractionCompleted;
-                }
-            });
-        } completion:^(BOOL success, NSError * _Nullable error) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                __strong typeof(weakSelf) strongSelf = weakSelf;
-                if (!strongSelf) return;
-                [strongSelf.navigationController popViewControllerAnimated:YES];
-                if (success && !error) {
-                    [strongSelf showSuccessMessage:[NSString stringWithFormat:@"%@ 已安装到 resourcepacks", item.displayName]];
-                } else {
-                    [strongSelf showError:error.localizedDescription ?: @"资源包下载失败"];
-                }
-            });
-        }];
-    }
+    [[ResourcePackService sharedService] downloadResourcePack:item
+                                                    toProfile:profileName
+                                                     progress:^(NSProgress * _Nullable downloadProgress) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (downloadProgress && weakProgressVC) {
+                weakProgressVC.progress = downloadProgress.fractionCompleted;
+            }
+        });
+    } completion:^(BOOL success, NSError * _Nullable error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) return;
+            [strongSelf.navigationController popViewControllerAnimated:YES];
+            if (success && !error) {
+                [strongSelf showSuccessMessage:[NSString stringWithFormat:@"%@ 已安装到 resourcepacks", item.displayName]];
+            } else {
+                [strongSelf showError:error.localizedDescription ?: @"资源包下载失败"];
+            }
+        });
+    }];
 }
 
-// 下载世界存档并解压到 saves 目录（仿 FCL 安卓世界下载行为）
-- (void)startDownloadForWorldItem:(ModItem *)item {
-    // FCL 风格：push 进度页（不确定模式），替代 alert 转圈
+// 下载数据包（使用 DataPackService，NSString profileName）
+- (void)startDownloadForDataPackItem:(DataPackItem *)item {
+    InstallerProgressViewController *progressVC = [[InstallerProgressViewController alloc] init];
+    progressVC.titleText = [NSString stringWithFormat:@"正在下载 %@", item.displayName ?: @""];
+    progressVC.progress = -1;
+    progressVC.stageMessage = @"正在下载数据包...";
+    [self.navigationController pushViewController:progressVC animated:YES];
+
+    NSString *profileName = PLProfiles.current.selectedProfileName ?: @"default";
+    __weak typeof(self) weakSelf = self;
+    __weak InstallerProgressViewController *weakProgressVC = progressVC;
+    [[DataPackService sharedService] downloadDataPack:item
+                                            toProfile:profileName
+                                             progress:^(NSProgress * _Nullable downloadProgress) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (downloadProgress && weakProgressVC) {
+                weakProgressVC.progress = downloadProgress.fractionCompleted;
+            }
+        });
+    } completion:^(BOOL success, NSError * _Nullable error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) return;
+            [strongSelf.navigationController popViewControllerAnimated:YES];
+            if (success && !error) {
+                [strongSelf showSuccessMessage:[NSString stringWithFormat:@"%@ 已安装到 datapacks\n请手动移动到对应世界目录", item.displayName]];
+            } else {
+                [strongSelf showError:error.localizedDescription ?: @"数据包下载失败"];
+            }
+        });
+    }];
+}
+
+// 下载世界存档并解压到 saves 目录（使用 WorldService，含进度回调与健壮解压）
+- (void)startDownloadForWorldItem:(WorldItem *)item {
     InstallerProgressViewController *progressVC = [[InstallerProgressViewController alloc] init];
     progressVC.titleText = [NSString stringWithFormat:@"正在下载 %@", item.displayName ?: @""];
     progressVC.progress = -1;
     progressVC.stageMessage = @"正在下载世界存档...";
     [self.navigationController pushViewController:progressVC animated:YES];
 
-    // 目标目录：saves
-    NSString *baseDir;
-    const char *env = getenv("POJAV_GAME_DIR");
-    if (env) {
-        baseDir = [NSString stringWithUTF8String:env];
-    } else {
-        baseDir = NSHomeDirectory();
-    }
-
-    NSString *profileName = PLProfiles.current.selectedProfileName;
-    if (profileName.length > 0) {
-        NSDictionary *profiles = PLProfiles.current.profiles;
-        NSDictionary *prof = profiles[profileName];
-        if ([prof isKindOfClass:[NSDictionary class]]) {
-            NSString *gameDir = prof[@"gameDir"];
-            if ([gameDir isKindOfClass:[NSString class]] && gameDir.length > 0 && ![gameDir isEqualToString:@"."]) {
-                if ([gameDir isAbsolutePath]) {
-                    baseDir = gameDir;
-                } else {
-                    baseDir = [baseDir stringByAppendingPathComponent:gameDir];
-                }
-            }
-        }
-    }
-
-    NSString *savesDir = [baseDir stringByAppendingPathComponent:@"saves"];
-    [[NSFileManager defaultManager] createDirectoryAtPath:savesDir withIntermediateDirectories:YES attributes:nil error:nil];
-
-    NSURL *url = [NSURL URLWithString:item.selectedVersionDownloadURL];
-    if (!url) {
-        __weak typeof(self) weakSelf = self;
-        [self.navigationController popViewControllerAnimated:YES];
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            [weakSelf showError:@"无效的下载链接"];
-        });
-        return;
-    }
-
+    NSString *profileName = PLProfiles.current.selectedProfileName ?: @"default";
     __weak typeof(self) weakSelf = self;
-    NSURLSessionDownloadTask *task = [[NSURLSession sharedSession] downloadTaskWithURL:url completionHandler:^(NSURL *location, NSURLResponse *response, NSError *error) {
+    __weak InstallerProgressViewController *weakProgressVC = progressVC;
+    [[WorldService sharedService] downloadWorld:item
+                                        toProfile:profileName
+                                         progress:^(NSProgress * _Nullable downloadProgress) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (downloadProgress && weakProgressVC) {
+                weakProgressVC.progress = downloadProgress.fractionCompleted;
+            }
+        });
+    } completion:^(BOOL success, NSError * _Nullable error) {
         dispatch_async(dispatch_get_main_queue(), ^{
             __strong typeof(weakSelf) strongSelf = weakSelf;
             if (!strongSelf) return;
             [strongSelf.navigationController popViewControllerAnimated:YES];
-            if (error) {
-                [strongSelf showError:error.localizedDescription];
-                return;
-            }
-            // 世界存档为 zip，先下载到临时文件再解压到 saves 目录
-            NSString *tempZip = [NSTemporaryDirectory() stringByAppendingPathComponent:[NSString stringWithFormat:@"world_%@.zip", @(arc4random())]];
-            NSError *moveError = nil;
-            [[NSFileManager defaultManager] moveItemAtPath:location.path toPath:tempZip error:&moveError];
-            if (moveError) {
-                [strongSelf showError:moveError.localizedDescription];
-                return;
-            }
-            // 解压 zip 到 saves 目录
-            NSError *unzipError = nil;
-            UZKArchive *archive = [[UZKArchive alloc] initWithPath:tempZip error:&unzipError];
-            if (unzipError) {
-                [strongSelf showError:unzipError.localizedDescription];
-                [[NSFileManager defaultManager] removeItemAtPath:tempZip error:nil];
-                return;
-            }
-            BOOL extracted = [archive extractFilesTo:savesDir overwrite:NO error:&unzipError];
-            [[NSFileManager defaultManager] removeItemAtPath:tempZip error:nil];
-            if (!extracted || unzipError) {
-                [strongSelf showError:unzipError.localizedDescription ?: @"解压失败"];
-            } else {
+            if (success && !error) {
                 [strongSelf showSuccessMessage:[NSString stringWithFormat:@"%@ 已解压到 saves 目录", item.displayName]];
+            } else {
+                [strongSelf showError:error.localizedDescription ?: @"世界下载失败"];
             }
         });
     }];
-    [task resume];
 }
 
 #pragma mark - ShaderVersionViewControllerDelegate
@@ -4478,24 +4511,24 @@
                 }
             }
             
-            self.downloadingAlert.message = [NSString stringWithFormat:@"正在下载...\n%@%@%@", progressText, speedText, etaText];
+            [self.downloadingAlert updateMessage:[NSString stringWithFormat:@"正在下载...\n%@%@%@", progressText, speedText, etaText]];
         }
-        
+
         if (progress.finished) {
             if (self.isObservingProgress) {
                 [self.downloadTask.progress removeObserver:self forKeyPath:@"fractionCompleted"];
                 self.isObservingProgress = NO;
             }
-            
+
             lastMsTime = 0;
             lastSecTime = 0;
             lastCompletedUnitCount = 0;
-            
+
             self.view.userInteractionEnabled = YES;
             [self.loadingIndicator stopAnimating];
-            
+
             if (self.downloadingAlert) {
-                [self dismissViewControllerAnimated:YES completion:nil];
+                [self.downloadingAlert dismiss];
                 self.downloadingAlert = nil;
             }
             
@@ -4504,11 +4537,11 @@
                 self.progressVC = nil;
             }
             
-            UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"下载完成"
-                                                                                  message:[NSString stringWithFormat:@"%@ 下载完成", self.downloadTask.metadata[@"id"] ?: @"版本"]
-                                                                           preferredStyle:UIAlertControllerStyleAlert];
-            [successAlert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
-            [self presentViewController:successAlert animated:YES completion:nil];
+            // 在内容区显示下载完成提示，替代弹窗
+            [InlineMessageView showInViewController:self
+                                               title:@"下载完成"
+                                            message:[NSString stringWithFormat:@"%@ 下载完成", self.downloadTask.metadata[@"id"] ?: @"版本"]
+                                               type:InlineMessageTypeSuccess];
             
             self.downloadTask = nil;
         }

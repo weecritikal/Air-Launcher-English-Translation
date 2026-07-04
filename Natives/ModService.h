@@ -38,6 +38,9 @@ typedef void(^ModDownloadHandler)(NSError * _Nullable error); // Added for downl
 // --- Utility ---
 - (NSString *)iconCachePathForURL:(NSString *)urlString;
 
+/// 获取当前 profile 的 mods 目录，不存在时自动创建
+- (nullable NSString *)ensureModsFolderForProfile:(NSString *)profileName error:(NSError **)error;
+
 @end
 
 NS_ASSUME_NONNULL_END

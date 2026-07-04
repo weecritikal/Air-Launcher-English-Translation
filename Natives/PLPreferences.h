@@ -7,6 +7,7 @@ extern NSString *const PREF_DOWNLOAD_SOURCE_RESOURCEPACK;
 extern NSString *const PREF_DOWNLOAD_SOURCE_DATAPACK;
 extern NSString *const PREF_DOWNLOAD_SOURCE_MODPACK;
 extern NSString *const PREF_DOWNLOAD_SOURCE_WORLD;
+extern NSString *const PREF_DOWNLOAD_SOURCE_SERVER;
 // CurseForge API Key 偏好键
 extern NSString *const PREF_CURSEFORGE_API_KEY;
 // Mod 更新时是否保留旧文件

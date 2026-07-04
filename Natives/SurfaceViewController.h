@@ -39,6 +39,7 @@ CGPoint lastVirtualMousePoint;
 @property(nonatomic) NSArray *menuArray;
 @property(nonatomic) UITableView *menuView;
 @property(nonatomic) UIScreenEdgePanGestureRecognizer* edgeGesture;
+@property(nonatomic) UIView *gameMenuOverlay; // FCL 风格悬浮按钮 + FPS/内存显示
 
 @end
 
