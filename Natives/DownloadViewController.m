@@ -44,6 +44,7 @@
 #import <QuartzCore/QuartzCore.h>
 #import "JavaGUIViewController.h"
 #import "utils.h"
+#import "ios_uikit_bridge.h"
 #import "ALTServerConnection.h"
 
 #include <sys/time.h>
