@@ -2,15 +2,19 @@
 //  DataPackService.m
 //  Amethyst
 //
-//  Data pack service implementation
-//  数据包服务实现，结构参照 ShaderService，复用 ShaderItem 作为数据模型
+//  数据包服务实现，结构参照 ShaderService/ModService
+//  API 签名统一使用 NSString *profileName
 //  使用 defaultSessionConfiguration + NSURLSessionDownloadTask 提升下载效率和速度
+//  实现 pack.mcmeta 解析（pack_format / description）
+//  支持 worldName 参数下载到指定世界的 datapacks 目录
 //
 
 #import "DataPackService.h"
+#import <CommonCrypto/CommonCrypto.h>
 #import <UIKit/UIKit.h>
 #import "PLProfiles.h"
-#import "ShaderItem.h"
+#import "DataPackItem.h"
+#import "UZKArchive.h"
 
 @interface DataPackService () <NSURLSessionDownloadDelegate>
 @property (nonatomic, strong) NSURLSession *downloadSession;
@@ -53,15 +57,92 @@
     return self;
 }
 
+#pragma mark - 工具方法
+
+// 计算 URL 字符串的 SHA1，用作图标缓存文件名
+- (NSString *)iconCachePathForURL:(NSString *)urlString {
+    if (!urlString) return nil;
+    NSString *cacheDir = [NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES) firstObject];
+    NSString *folder = [cacheDir stringByAppendingPathComponent:@"datapack_icons"];
+    if (![[NSFileManager defaultManager] fileExistsAtPath:folder]) {
+        [[NSFileManager defaultManager] createDirectoryAtPath:folder withIntermediateDirectories:YES attributes:nil error:nil];
+    }
+    const char *cstr = [urlString UTF8String];
+    unsigned char digest[CC_SHA1_DIGEST_LENGTH];
+    CC_SHA1(cstr, (CC_LONG)strlen(cstr), digest);
+    NSMutableString *hex = [NSMutableString stringWithCapacity:CC_SHA1_DIGEST_LENGTH * 2];
+    for (int i = 0; i < CC_SHA1_DIGEST_LENGTH; i++) {
+        [hex appendFormat:@"%02x", digest[i]];
+    }
+    return [folder stringByAppendingPathComponent:hex];
+}
+
+// 从 zip 中读取指定条目的数据
+- (nullable NSData *)readFileFromZip:(NSString *)zipPath entryName:(NSString *)entryName {
+    if (!zipPath || !entryName) return nil;
+    NSError *err = nil;
+    UZKArchive *archive = [[UZKArchive alloc] initWithPath:zipPath error:&err];
+    if (!archive || err) return nil;
+    NSData *data = [archive extractDataFromFile:entryName error:&err];
+    return data;
+}
+
+// 解析 pack.mcmeta，提取 pack_format 和 description
+- (void)parsePackMcmetaForItem:(DataPackItem *)item {
+    if (!item.filePath) return;
+    NSData *mcmetaData = [self readFileFromZip:item.filePath entryName:@"pack.mcmeta"];
+    if (!mcmetaData) return;
+    NSDictionary *json = [NSJSONSerialization JSONObjectWithData:mcmetaData options:0 error:nil];
+    if (![json isKindOfClass:[NSDictionary class]]) return;
+    NSDictionary *pack = json[@"pack"];
+    if (![pack isKindOfClass:[NSDictionary class]]) return;
+
+    id packFormatValue = pack[@"pack_format"];
+    if ([packFormatValue isKindOfClass:[NSNumber class]]) {
+        item.packFormat = packFormatValue;
+    } else if ([packFormatValue respondsToSelector:@selector(integerValue)]) {
+        item.packFormat = @([packFormatValue integerValue]);
+    }
+
+    id descValue = pack[@"description"];
+    if ([descValue isKindOfClass:[NSString class]]) {
+        item.dataPackDescription = descValue;
+    } else if ([descValue respondsToSelector:@selector(description)]) {
+        item.dataPackDescription = [descValue description];
+    }
+}
+
+// 解析 profile 的 gameDir，返回 gameDir 或 nil
+- (nullable NSString *)gameDirForProfile:(NSString *)profileName {
+    NSString *profile = profileName.length ? profileName : @"default";
+    @try {
+        NSDictionary *profiles = PLProfiles.current.profiles;
+        NSDictionary *prof = profiles[profile];
+        if ([prof isKindOfClass:[NSDictionary class]]) {
+            NSString *gameDir = prof[@"gameDir"];
+            if ([gameDir isKindOfClass:[NSString class]] && gameDir.length > 0) {
+                return gameDir;
+            }
+        }
+    } @catch (NSException *ex) { }
+
+    const char *gameDirC = getenv("POJAV_GAME_DIR");
+    if (gameDirC) {
+        return [NSString stringWithUTF8String:gameDirC];
+    }
+    return nil;
+}
+
 #pragma mark - DataPacks folder detection & scan
 
 // 查找指定 profile 的 datapacks 目录（已存在时返回路径，否则返回 nil）
-- (nullable NSString *)existingDataPacksFolderForProfile:(PLProfiles *)profile {
-    PLProfiles *profiles = profile ?: PLProfiles.current;
+- (nullable NSString *)existingDataPacksFolderForProfile:(NSString *)profileName {
+    NSString *profile = profileName.length ? profileName : @"default";
     NSFileManager *fm = [NSFileManager defaultManager];
 
     @try {
-        NSDictionary *prof = [profiles selectedProfile];
+        NSDictionary *profiles = PLProfiles.current.profiles;
+        NSDictionary *prof = profiles[profile];
         if ([prof isKindOfClass:[NSDictionary class]]) {
             NSString *gameDir = prof[@"gameDir"];
             if ([gameDir isKindOfClass:[NSString class]] && gameDir.length > 0) {
@@ -87,14 +168,64 @@
     return nil;
 }
 
-- (void)scanDataPacksForProfile:(PLProfiles *)profile completion:(DataPackListHandler)completion {
+/// 获取当前 profile 的 datapacks 目录，不存在时自动创建
+- (nullable NSString *)ensureDataPacksFolderForProfile:(NSString *)profileName error:(NSError **)error {
+    NSString *profile = profileName.length ? profileName : @"default";
+    NSFileManager *fm = [NSFileManager defaultManager];
+    NSString *dataPacksPath = nil;
+
+    @try {
+        NSDictionary *profiles = PLProfiles.current.profiles;
+        NSDictionary *prof = profiles[profile];
+        if ([prof isKindOfClass:[NSDictionary class]]) {
+            NSString *gameDir = prof[@"gameDir"];
+            if ([gameDir isKindOfClass:[NSString class]] && gameDir.length > 0) {
+                dataPacksPath = [gameDir stringByAppendingPathComponent:@"datapacks"];
+            }
+        }
+    } @catch (NSException *ex) { }
+
+    if (!dataPacksPath) {
+        const char *gameDirC = getenv("POJAV_GAME_DIR");
+        if (gameDirC) {
+            NSString *gameDir = [NSString stringWithUTF8String:gameDirC];
+            dataPacksPath = [gameDir stringByAppendingPathComponent:@"datapacks"];
+        }
+    }
+
+    if (!dataPacksPath) {
+        if (error) {
+            *error = [NSError errorWithDomain:@"DataPackService" code:1 userInfo:@{NSLocalizedDescriptionKey: @"无法确定游戏目录"}];
+        }
+        return nil;
+    }
+
+    BOOL isDir = NO;
+    if (![fm fileExistsAtPath:dataPacksPath isDirectory:&isDir]) {
+        NSError *createError = nil;
+        [fm createDirectoryAtPath:dataPacksPath withIntermediateDirectories:YES attributes:nil error:&createError];
+        if (createError) {
+            if (error) *error = createError;
+            return nil;
+        }
+        NSLog(@"[DataPackService] 已创建 datapacks 目录: %@", dataPacksPath);
+    } else if (!isDir) {
+        if (error) {
+            *error = [NSError errorWithDomain:@"DataPackService" code:2 userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"%@ 不是目录", dataPacksPath]}];
+        }
+        return nil;
+    }
+    return dataPacksPath;
+}
+
+- (void)scanDataPacksForProfile:(NSString *)profileName completion:(DataPackListHandler)completion {
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-        NSString *dataPacksFolder = [self existingDataPacksFolderForProfile:profile];
-        NSMutableArray<ShaderItem *> *items = [NSMutableArray array];
+        NSString *dataPacksFolder = [self existingDataPacksFolderForProfile:profileName];
+        NSMutableArray<DataPackItem *> *items = [NSMutableArray array];
 
         if (!dataPacksFolder) {
             if (completion) {
-                completion(items);
+                dispatch_async(dispatch_get_main_queue(), ^{ completion(items); });
             }
             return;
         }
@@ -105,18 +236,18 @@
         for (NSString *fileName in contents) {
             if ([fileName.lowercaseString hasSuffix:@".zip"] || [fileName.lowercaseString hasSuffix:@".zip.disabled"]) {
                 NSString *fullPath = [dataPacksFolder stringByAppendingPathComponent:fileName];
-                ShaderItem *dataPack = [[ShaderItem alloc] initWithFilePath:fullPath];
+                DataPackItem *dataPack = [[DataPackItem alloc] initWithFilePath:fullPath];
                 [items addObject:dataPack];
 
                 dispatch_group_enter(group);
-                [self fetchMetadataForDataPack:dataPack completion:^(ShaderItem *populatedItem, NSError * _Nullable error) {
+                [self fetchMetadataForDataPack:dataPack completion:^(DataPackItem *populatedItem, NSError * _Nullable error) {
                     dispatch_group_leave(group);
                 }];
             }
         }
 
         dispatch_group_notify(group, dispatch_get_main_queue(), ^{
-            [items sortUsingComparator:^NSComparisonResult(ShaderItem *obj1, ShaderItem *obj2) {
+            [items sortUsingComparator:^NSComparisonResult(DataPackItem *obj1, DataPackItem *obj2) {
                 NSString *name1 = obj1.displayName ?: obj1.fileName;
                 NSString *name2 = obj2.displayName ?: obj2.fileName;
                 return [name1 localizedCaseInsensitiveCompare:name2];
@@ -131,9 +262,14 @@
 
 #pragma mark - Metadata fetch
 
-// 数据包无嵌入元数据，直接返回原对象（与 ShaderService 行为一致）
-- (void)fetchMetadataForDataPack:(ShaderItem *)item completion:(DataPackMetadataHandler)completion {
+// 解析 zip 内的 pack.mcmeta，获取 pack_format 和 description
+- (void)fetchMetadataForDataPack:(DataPackItem *)item completion:(DataPackMetadataHandler)completion {
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+        @try {
+            [self parsePackMcmetaForItem:item];
+        } @catch (NSException *exception) {
+            NSLog(@"[DataPackService] 解析 pack.mcmeta 异常 %@: %@", item.fileName, exception);
+        }
         if (completion) completion(item, nil);
     });
 }
@@ -141,7 +277,7 @@
 #pragma mark - File operations
 
 // 启用/禁用数据包：通过加/去 .disabled 后缀实现
-- (BOOL)toggleEnableForDataPack:(ShaderItem *)item error:(NSError **)error {
+- (BOOL)toggleEnableForDataPack:(DataPackItem *)item error:(NSError **)error {
     NSFileManager *fileManager = [NSFileManager defaultManager];
     NSString *currentPath = item.filePath;
     NSString *newPath;
@@ -168,64 +304,90 @@
 }
 
 // 删除数据包文件
-- (BOOL)deleteDataPack:(ShaderItem *)item error:(NSError **)error {
+- (BOOL)deleteDataPack:(DataPackItem *)item error:(NSError **)error {
     return [[NSFileManager defaultManager] removeItemAtPath:item.filePath error:error];
 }
 
 #pragma mark - Online DataPack Downloading (使用 NSURLSessionDownloadTask)
 
-// 带实时进度回调的下载方法
-- (void)downloadDataPack:(ShaderItem *)item
-               toProfile:(PLProfiles *)profile
+// 下载数据包到默认 datapacks 目录（无 worldName）
+- (void)downloadDataPack:(DataPackItem *)item
+               toProfile:(NSString *)profileName
                 progress:(DataPackDownloadProgressHandler _Nullable)progress
               completion:(DataPackDownloadCompletionHandler _Nullable)completion {
-    // 确保 datapacks 目录存在
-    NSString *dataPacksFolder = [self existingDataPacksFolderForProfile:profile];
+    [self downloadDataPack:item toProfile:profileName worldName:nil progress:progress completion:completion];
+}
+
+// 下载数据包，worldName 不为空时下载到 saves/<worldName>/datapacks/
+- (void)downloadDataPack:(DataPackItem *)item
+               toProfile:(NSString *)profileName
+               worldName:(nullable NSString *)worldName
+                progress:(DataPackDownloadProgressHandler _Nullable)progress
+              completion:(DataPackDownloadCompletionHandler _Nullable)completion {
     NSFileManager *fm = [NSFileManager defaultManager];
+    NSString *dataPacksFolder = nil;
 
-    if (!dataPacksFolder) {
-        // 目录不存在时尝试创建
-        PLProfiles *profiles = profile ?: PLProfiles.current;
-        NSString *gameDir = nil;
-
-        @try {
-            NSDictionary *prof = [profiles selectedProfile];
-            if ([prof isKindOfClass:[NSDictionary class]]) {
-                gameDir = prof[@"gameDir"];
-            }
-        } @catch (NSException *ex) { }
-
+    // 根据是否指定 worldName 决定下载目录
+    if (worldName.length > 0) {
+        // 下载到 saves/<worldName>/datapacks/
+        NSString *gameDir = [self gameDirForProfile:profileName];
         if (!gameDir) {
-            const char *gameDirC = getenv("POJAV_GAME_DIR");
-            if (gameDirC) {
-                gameDir = [NSString stringWithUTF8String:gameDirC];
-            }
-        }
-
-        if (gameDir) {
-            dataPacksFolder = [gameDir stringByAppendingPathComponent:@"datapacks"];
-            NSError *dirError = nil;
-            BOOL created = [fm createDirectoryAtPath:dataPacksFolder
-                         withIntermediateDirectories:YES
-                                          attributes:nil
-                                               error:&dirError];
-            if (!created || dirError) {
-                if (completion) {
-                    NSError *error = [NSError errorWithDomain:@"DataPackServiceError"
-                                                         code:1
-                                                     userInfo:@{NSLocalizedDescriptionKey: @"创建 datapacks 目录失败，请检查存储权限。"}];
-                    completion(NO, error);
-                }
-                return;
-            }
-        } else {
             if (completion) {
                 NSError *error = [NSError errorWithDomain:@"DataPackServiceError"
                                                      code:1
                                                  userInfo:@{NSLocalizedDescriptionKey: @"找不到游戏目录。"}];
-                completion(NO, error);
+                dispatch_async(dispatch_get_main_queue(), ^{ completion(NO, error); });
             }
             return;
+        }
+        NSString *savesDir = [gameDir stringByAppendingPathComponent:@"saves"];
+        NSString *worldDir = [savesDir stringByAppendingPathComponent:worldName];
+        dataPacksFolder = [worldDir stringByAppendingPathComponent:@"datapacks"];
+        // 确保目标目录存在（含 saves/<worldName>/datapacks/）
+        NSError *dirError = nil;
+        BOOL created = [fm createDirectoryAtPath:dataPacksFolder
+                     withIntermediateDirectories:YES
+                                      attributes:nil
+                                           error:&dirError];
+        if (!created || dirError) {
+            if (completion) {
+                NSError *error = [NSError errorWithDomain:@"DataPackServiceError"
+                                                     code:1
+                                                 userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"创建世界 datapacks 目录失败：%@", dirError.localizedDescription ?: @"未知错误"]}];
+                dispatch_async(dispatch_get_main_queue(), ^{ completion(NO, error); });
+            }
+            return;
+        }
+    } else {
+        // 默认下载到 <gameDir>/datapacks/
+        dataPacksFolder = [self existingDataPacksFolderForProfile:profileName];
+        if (!dataPacksFolder) {
+            NSString *gameDir = [self gameDirForProfile:profileName];
+            if (gameDir) {
+                dataPacksFolder = [gameDir stringByAppendingPathComponent:@"datapacks"];
+                NSError *dirError = nil;
+                BOOL created = [fm createDirectoryAtPath:dataPacksFolder
+                             withIntermediateDirectories:YES
+                                              attributes:nil
+                                                   error:&dirError];
+                if (!created || dirError) {
+                    if (completion) {
+                        NSError *error = [NSError errorWithDomain:@"DataPackServiceError"
+                                                             code:1
+                                                         userInfo:@{NSLocalizedDescriptionKey: @"创建 datapacks 目录失败，请检查存储权限。"}];
+                        dispatch_async(dispatch_get_main_queue(), ^{ completion(NO, error); });
+                    }
+                    return;
+                }
+            } else {
+                if (completion) {
+                    NSError *error = [NSError errorWithDomain:@"DataPackServiceError"
+                                                         code:1
+                                                     userInfo:@{NSLocalizedDescriptionKey: @"找不到游戏目录。"}];
+                    dispatch_async(dispatch_get_main_queue(), ^{ completion(NO, error); });
+                }
+                return;
+            }
         }
     }
 
@@ -236,7 +398,7 @@
             NSError *error = [NSError errorWithDomain:@"DataPackServiceError"
                                                  code:2
                                              userInfo:@{NSLocalizedDescriptionKey: @"无效的下载链接。"}];
-            completion(NO, error);
+            dispatch_async(dispatch_get_main_queue(), ^{ completion(NO, error); });
         }
         return;
     }

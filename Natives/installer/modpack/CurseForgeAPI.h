@@ -39,6 +39,20 @@ extern NSString *const CurseForgeResponseSnippetKey;
 - (void)loadDetailsOfMod:(NSMutableDictionary *)item
               completion:(void (^)(NSError * _Nullable error))completion;
 
+#pragma mark - Server Packs（CurseForge 服务端整合包）
+
+/// 异步搜索服务器整合包：搜索 classId=4471（modpack）项目，作为服务器整合包展示
+/// @param filters 搜索过滤条件（query/limit/offset/mcVersion 等）
+/// @param completion 完成回调，返回字典数组（含 apiSource=2, projectType=modpack, serverID 字段）
+- (void)searchServersWithFilters:(NSDictionary *)filters
+                      completion:(void (^)(NSArray * _Nullable results, NSError * _Nullable error))completion;
+
+/// 异步获取指定 modpack 项目的服务端整合包文件列表（isServerPack=true 的文件）
+/// @param modpackID CurseForge project id
+/// @param completion 完成回调，返回 server pack 文件字典数组
+- (void)getServerPackFilesForModpack:(NSString *)modpackID
+                          completion:(void (^)(NSArray * _Nullable files, NSError * _Nullable error))completion;
+
 // ========== 下载工具方法 ==========
 /// 获取文件的直接下载链接（CurseForge 需要二次请求）
 - (NSString *)downloadURLForFile:(NSDictionary *)file;

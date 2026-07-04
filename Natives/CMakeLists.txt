@@ -246,9 +246,23 @@ add_executable(AngelAuraAmethyst
   # CurseForge MurmurHash2 fingerprint tool
   MurmurHash2.m
 
-  # Resource Pack and Data Pack services
+  # Resource Pack / Data Pack / World management (services, items, version VC, manager VCs)
+  ResourcePackItem.m
+  DataPackItem.m
+  WorldItem.m
   ResourcePackService.m
   DataPackService.m
+  WorldService.m
+  AssetVersionViewController.m
+  ResourcePacksManagerViewController.m
+  DataPacksManagerViewController.m
+  WorldsManagerViewController.m
+
+  # Server projects (Modrinth Server Projects + CurseForge server packs)
+  ServerItem.m
+  ServerService.m
+  ServerListViewController.m
+  ServerDetailViewController.m
 
   # CurseForge API Key settings page
   installer/CurseForgeAPIKeyViewController.m

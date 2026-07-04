@@ -2,15 +2,18 @@
 //  ResourcePackService.m
 //  Amethyst
 //
-//  Resource pack service implementation
-//  资源包服务实现，结构参照 ShaderService，复用 ShaderItem 作为数据模型
+//  资源包服务实现，结构参照 ShaderService/ModService
+//  API 签名统一使用 NSString *profileName
 //  使用 defaultSessionConfiguration + NSURLSessionDownloadTask 提升下载效率和速度
+//  实现 pack.mcmeta 解析（pack_format / description）
 //
 
 #import "ResourcePackService.h"
+#import <CommonCrypto/CommonCrypto.h>
 #import <UIKit/UIKit.h>
 #import "PLProfiles.h"
-#import "ShaderItem.h"
+#import "ResourcePackItem.h"
+#import "UZKArchive.h"
 
 @interface ResourcePackService () <NSURLSessionDownloadDelegate>
 @property (nonatomic, strong) NSURLSession *downloadSession;
@@ -53,15 +56,71 @@
     return self;
 }
 
+#pragma mark - 工具方法
+
+// 计算 URL 字符串的 SHA1，用作图标缓存文件名
+- (NSString *)iconCachePathForURL:(NSString *)urlString {
+    if (!urlString) return nil;
+    NSString *cacheDir = [NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES) firstObject];
+    NSString *folder = [cacheDir stringByAppendingPathComponent:@"resourcepack_icons"];
+    if (![[NSFileManager defaultManager] fileExistsAtPath:folder]) {
+        [[NSFileManager defaultManager] createDirectoryAtPath:folder withIntermediateDirectories:YES attributes:nil error:nil];
+    }
+    const char *cstr = [urlString UTF8String];
+    unsigned char digest[CC_SHA1_DIGEST_LENGTH];
+    CC_SHA1(cstr, (CC_LONG)strlen(cstr), digest);
+    NSMutableString *hex = [NSMutableString stringWithCapacity:CC_SHA1_DIGEST_LENGTH * 2];
+    for (int i = 0; i < CC_SHA1_DIGEST_LENGTH; i++) {
+        [hex appendFormat:@"%02x", digest[i]];
+    }
+    return [folder stringByAppendingPathComponent:hex];
+}
+
+// 从 zip 中读取指定条目的数据
+- (nullable NSData *)readFileFromZip:(NSString *)zipPath entryName:(NSString *)entryName {
+    if (!zipPath || !entryName) return nil;
+    NSError *err = nil;
+    UZKArchive *archive = [[UZKArchive alloc] initWithPath:zipPath error:&err];
+    if (!archive || err) return nil;
+    NSData *data = [archive extractDataFromFile:entryName error:&err];
+    return data;
+}
+
+// 解析 pack.mcmeta，提取 pack_format 和 description
+- (void)parsePackMcmetaForItem:(ResourcePackItem *)item {
+    if (!item.filePath) return;
+    NSData *mcmetaData = [self readFileFromZip:item.filePath entryName:@"pack.mcmeta"];
+    if (!mcmetaData) return;
+    NSDictionary *json = [NSJSONSerialization JSONObjectWithData:mcmetaData options:0 error:nil];
+    if (![json isKindOfClass:[NSDictionary class]]) return;
+    NSDictionary *pack = json[@"pack"];
+    if (![pack isKindOfClass:[NSDictionary class]]) return;
+
+    id packFormatValue = pack[@"pack_format"];
+    if ([packFormatValue isKindOfClass:[NSNumber class]]) {
+        item.packFormat = packFormatValue;
+    } else if ([packFormatValue respondsToSelector:@selector(integerValue)]) {
+        item.packFormat = @([packFormatValue integerValue]);
+    }
+
+    id descValue = pack[@"description"];
+    if ([descValue isKindOfClass:[NSString class]]) {
+        item.resourcePackDescription = descValue;
+    } else if ([descValue respondsToSelector:@selector(description)]) {
+        item.resourcePackDescription = [descValue description];
+    }
+}
+
 #pragma mark - ResourcePacks folder detection & scan
 
 // 查找指定 profile 的 resourcepacks 目录（已存在时返回路径，否则返回 nil）
-- (nullable NSString *)existingResourcePacksFolderForProfile:(PLProfiles *)profile {
-    PLProfiles *profiles = profile ?: PLProfiles.current;
+- (nullable NSString *)existingResourcePacksFolderForProfile:(NSString *)profileName {
+    NSString *profile = profileName.length ? profileName : @"default";
     NSFileManager *fm = [NSFileManager defaultManager];
 
     @try {
-        NSDictionary *prof = [profiles selectedProfile];
+        NSDictionary *profiles = PLProfiles.current.profiles;
+        NSDictionary *prof = profiles[profile];
         if ([prof isKindOfClass:[NSDictionary class]]) {
             NSString *gameDir = prof[@"gameDir"];
             if ([gameDir isKindOfClass:[NSString class]] && gameDir.length > 0) {
@@ -87,14 +146,64 @@
     return nil;
 }
 
-- (void)scanResourcePacksForProfile:(PLProfiles *)profile completion:(ResourcePackListHandler)completion {
+/// 获取当前 profile 的 resourcepacks 目录，不存在时自动创建
+- (nullable NSString *)ensureResourcePacksFolderForProfile:(NSString *)profileName error:(NSError **)error {
+    NSString *profile = profileName.length ? profileName : @"default";
+    NSFileManager *fm = [NSFileManager defaultManager];
+    NSString *resourcePacksPath = nil;
+
+    @try {
+        NSDictionary *profiles = PLProfiles.current.profiles;
+        NSDictionary *prof = profiles[profile];
+        if ([prof isKindOfClass:[NSDictionary class]]) {
+            NSString *gameDir = prof[@"gameDir"];
+            if ([gameDir isKindOfClass:[NSString class]] && gameDir.length > 0) {
+                resourcePacksPath = [gameDir stringByAppendingPathComponent:@"resourcepacks"];
+            }
+        }
+    } @catch (NSException *ex) { }
+
+    if (!resourcePacksPath) {
+        const char *gameDirC = getenv("POJAV_GAME_DIR");
+        if (gameDirC) {
+            NSString *gameDir = [NSString stringWithUTF8String:gameDirC];
+            resourcePacksPath = [gameDir stringByAppendingPathComponent:@"resourcepacks"];
+        }
+    }
+
+    if (!resourcePacksPath) {
+        if (error) {
+            *error = [NSError errorWithDomain:@"ResourcePackService" code:1 userInfo:@{NSLocalizedDescriptionKey: @"无法确定游戏目录"}];
+        }
+        return nil;
+    }
+
+    BOOL isDir = NO;
+    if (![fm fileExistsAtPath:resourcePacksPath isDirectory:&isDir]) {
+        NSError *createError = nil;
+        [fm createDirectoryAtPath:resourcePacksPath withIntermediateDirectories:YES attributes:nil error:&createError];
+        if (createError) {
+            if (error) *error = createError;
+            return nil;
+        }
+        NSLog(@"[ResourcePackService] 已创建 resourcepacks 目录: %@", resourcePacksPath);
+    } else if (!isDir) {
+        if (error) {
+            *error = [NSError errorWithDomain:@"ResourcePackService" code:2 userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"%@ 不是目录", resourcePacksPath]}];
+        }
+        return nil;
+    }
+    return resourcePacksPath;
+}
+
+- (void)scanResourcePacksForProfile:(NSString *)profileName completion:(ResourcePackListHandler)completion {
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-        NSString *resourcePacksFolder = [self existingResourcePacksFolderForProfile:profile];
-        NSMutableArray<ShaderItem *> *items = [NSMutableArray array];
+        NSString *resourcePacksFolder = [self existingResourcePacksFolderForProfile:profileName];
+        NSMutableArray<ResourcePackItem *> *items = [NSMutableArray array];
 
         if (!resourcePacksFolder) {
             if (completion) {
-                completion(items);
+                dispatch_async(dispatch_get_main_queue(), ^{ completion(items); });
             }
             return;
         }
@@ -105,18 +214,18 @@
         for (NSString *fileName in contents) {
             if ([fileName.lowercaseString hasSuffix:@".zip"] || [fileName.lowercaseString hasSuffix:@".zip.disabled"]) {
                 NSString *fullPath = [resourcePacksFolder stringByAppendingPathComponent:fileName];
-                ShaderItem *resourcePack = [[ShaderItem alloc] initWithFilePath:fullPath];
+                ResourcePackItem *resourcePack = [[ResourcePackItem alloc] initWithFilePath:fullPath];
                 [items addObject:resourcePack];
 
                 dispatch_group_enter(group);
-                [self fetchMetadataForResourcePack:resourcePack completion:^(ShaderItem *populatedItem, NSError * _Nullable error) {
+                [self fetchMetadataForResourcePack:resourcePack completion:^(ResourcePackItem *populatedItem, NSError * _Nullable error) {
                     dispatch_group_leave(group);
                 }];
             }
         }
 
         dispatch_group_notify(group, dispatch_get_main_queue(), ^{
-            [items sortUsingComparator:^NSComparisonResult(ShaderItem *obj1, ShaderItem *obj2) {
+            [items sortUsingComparator:^NSComparisonResult(ResourcePackItem *obj1, ResourcePackItem *obj2) {
                 NSString *name1 = obj1.displayName ?: obj1.fileName;
                 NSString *name2 = obj2.displayName ?: obj2.fileName;
                 return [name1 localizedCaseInsensitiveCompare:name2];
@@ -131,9 +240,14 @@
 
 #pragma mark - Metadata fetch
 
-// 资源包无嵌入元数据，直接返回原对象（与 ShaderService 行为一致）
-- (void)fetchMetadataForResourcePack:(ShaderItem *)item completion:(ResourcePackMetadataHandler)completion {
+// 解析 zip 内的 pack.mcmeta，获取 pack_format 和 description
+- (void)fetchMetadataForResourcePack:(ResourcePackItem *)item completion:(ResourcePackMetadataHandler)completion {
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+        @try {
+            [self parsePackMcmetaForItem:item];
+        } @catch (NSException *exception) {
+            NSLog(@"[ResourcePackService] 解析 pack.mcmeta 异常 %@: %@", item.fileName, exception);
+        }
         if (completion) completion(item, nil);
     });
 }
@@ -141,7 +255,7 @@
 #pragma mark - File operations
 
 // 启用/禁用资源包：通过加/去 .disabled 后缀实现
-- (BOOL)toggleEnableForResourcePack:(ShaderItem *)item error:(NSError **)error {
+- (BOOL)toggleEnableForResourcePack:(ResourcePackItem *)item error:(NSError **)error {
     NSFileManager *fileManager = [NSFileManager defaultManager];
     NSString *currentPath = item.filePath;
     NSString *newPath;
@@ -168,28 +282,29 @@
 }
 
 // 删除资源包文件
-- (BOOL)deleteResourcePack:(ShaderItem *)item error:(NSError **)error {
+- (BOOL)deleteResourcePack:(ResourcePackItem *)item error:(NSError **)error {
     return [[NSFileManager defaultManager] removeItemAtPath:item.filePath error:error];
 }
 
 #pragma mark - Online ResourcePack Downloading (使用 NSURLSessionDownloadTask)
 
 // 带实时进度回调的下载方法
-- (void)downloadResourcePack:(ShaderItem *)item
-                   toProfile:(PLProfiles *)profile
+- (void)downloadResourcePack:(ResourcePackItem *)item
+                   toProfile:(NSString *)profileName
                     progress:(ResourcePackDownloadProgressHandler _Nullable)progress
                   completion:(ResourcePackDownloadCompletionHandler _Nullable)completion {
     // 确保 resourcepacks 目录存在
-    NSString *resourcePacksFolder = [self existingResourcePacksFolderForProfile:profile];
+    NSString *resourcePacksFolder = [self existingResourcePacksFolderForProfile:profileName];
     NSFileManager *fm = [NSFileManager defaultManager];
 
     if (!resourcePacksFolder) {
         // 目录不存在时尝试创建
-        PLProfiles *profiles = profile ?: PLProfiles.current;
+        NSString *profile = profileName.length ? profileName : @"default";
         NSString *gameDir = nil;
 
         @try {
-            NSDictionary *prof = [profiles selectedProfile];
+            NSDictionary *profiles = PLProfiles.current.profiles;
+            NSDictionary *prof = profiles[profile];
             if ([prof isKindOfClass:[NSDictionary class]]) {
                 gameDir = prof[@"gameDir"];
             }
@@ -214,7 +329,7 @@
                     NSError *error = [NSError errorWithDomain:@"ResourcePackServiceError"
                                                          code:1
                                                      userInfo:@{NSLocalizedDescriptionKey: @"创建 resourcepacks 目录失败，请检查存储权限。"}];
-                    completion(NO, error);
+                    dispatch_async(dispatch_get_main_queue(), ^{ completion(NO, error); });
                 }
                 return;
             }
@@ -223,7 +338,7 @@
                 NSError *error = [NSError errorWithDomain:@"ResourcePackServiceError"
                                                      code:1
                                                  userInfo:@{NSLocalizedDescriptionKey: @"找不到游戏目录。"}];
-                completion(NO, error);
+                dispatch_async(dispatch_get_main_queue(), ^{ completion(NO, error); });
             }
             return;
         }
@@ -236,7 +351,7 @@
             NSError *error = [NSError errorWithDomain:@"ResourcePackServiceError"
                                                  code:2
                                              userInfo:@{NSLocalizedDescriptionKey: @"无效的下载链接。"}];
-            completion(NO, error);
+            dispatch_async(dispatch_get_main_queue(), ^{ completion(NO, error); });
         }
         return;
     }

@@ -395,37 +395,196 @@
         if (completion) completion(nil, [NSError errorWithDomain:@"ModrinthAPIError" code:1 userInfo:@{NSLocalizedDescriptionKey: @"Invalid shader ID"}]);
         return;
     }
-    
+
     NSString *urlString = [NSString stringWithFormat:@"%@/project/%@/version", self.baseURL, shaderID];
     NSURL *url = [NSURL URLWithString:urlString];
     if (!url) {
         if (completion) completion(nil, [NSError errorWithDomain:@"ModrinthAPIError" code:2 userInfo:@{NSLocalizedDescriptionKey: @"Invalid URL"}]);
         return;
     }
-    
+
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
     request.timeoutInterval = 30.0;
     [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
     [request setValue:@"Amethyst-iOS/1.0" forHTTPHeaderField:@"User-Agent"];
-    
+
     NSURLSession *session = [NSURLSession sharedSession];
     NSURLSessionDataTask *task = [session dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         if (error) { if (completion) completion(nil, error); return; }
         if (!data) { if (completion) completion(nil, [NSError errorWithDomain:@"ModrinthAPIError" code:3 userInfo:@{NSLocalizedDescriptionKey: @"No data"}]); return; }
-        
+
         NSError *jsonError = nil;
         id jsonResult = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
         if (jsonError || ![jsonResult isKindOfClass:[NSArray class]]) {
             if (completion) completion(nil, jsonError ?: [NSError errorWithDomain:@"ModrinthAPIError" code:4 userInfo:@{NSLocalizedDescriptionKey: @"Invalid JSON"}]);
             return;
         }
-        
+
         NSMutableArray<ShaderVersion *> *versions = [NSMutableArray array];
         for (NSDictionary *dict in jsonResult) {
             ShaderVersion *version = [[ShaderVersion alloc] initWithDictionary:dict];
             if (version) [versions addObject:version];
         }
         if (completion) completion(versions, nil);
+    }];
+    [task resume];
+}
+
+#pragma mark - Server Projects 搜索
+
+/// 内部工具：发起一次 server 或 modpack 的搜索请求
+- (void)_searchServerWithProjectType:(NSString *)projectType
+                              filters:(NSDictionary *)filters
+                           completion:(void (^)(NSArray * _Nullable, NSError * _Nullable))completion {
+    NSString *query = filters[@"query"] ?: filters[@"name"] ?: @"";
+    NSNumber *limitNum = filters[@"limit"] ?: @30;
+    int limit = [limitNum intValue];
+    NSNumber *offsetNum = filters[@"offset"] ?: @0;
+    int offset = [offsetNum intValue];
+
+    NSMutableString *facetString = [NSMutableString new];
+    [facetString appendString:@"["];
+    [facetString appendFormat:@"[\"project_type:%@\"]", projectType];
+    NSString *mcVersion = filters[@"mcVersion"] ?: filters[@"version"];
+    if (mcVersion.length > 0) {
+        [facetString appendFormat:@", [\"versions:%@\"]", mcVersion];
+    }
+    NSString *loader = filters[@"loader"] ?: filters[@"categories"];
+    if (loader.length > 0) {
+        [facetString appendFormat:@", [\"categories:%@\"]", loader];
+    }
+    [facetString appendString:@"]"];
+
+    NSString *encodedQuery = [query stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
+    NSString *encodedFacets = [facetString stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
+    NSString *index = query.length > 0 ? @"relevance" : @"follows";
+    NSString *urlString = [NSString stringWithFormat:@"%@/search?query=%@&limit=%d&offset=%d&facets=%@&index=%@",
+                           self.baseURL, encodedQuery, limit, offset, encodedFacets, index];
+
+    NSURL *url = [NSURL URLWithString:urlString];
+    if (!url) {
+        if (completion) completion(nil, [NSError errorWithDomain:@"ModrinthAPIError" code:1 userInfo:@{NSLocalizedDescriptionKey: @"Invalid URL"}]);
+        return;
+    }
+
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+    request.timeoutInterval = 30.0;
+    [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
+    [request setValue:@"Amethyst-iOS/1.0" forHTTPHeaderField:@"User-Agent"];
+
+    NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        if (error) { if (completion) completion(nil, error); return; }
+        if (!data) { if (completion) completion(nil, [NSError errorWithDomain:@"ModrinthAPIError" code:2 userInfo:@{NSLocalizedDescriptionKey: @"No data"}]); return; }
+
+        NSError *jsonError = nil;
+        NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
+        if (jsonError || ![json isKindOfClass:[NSDictionary class]]) {
+            if (completion) completion(nil, jsonError ?: [NSError errorWithDomain:@"ModrinthAPIError" code:3 userInfo:@{NSLocalizedDescriptionKey: @"Invalid JSON"}]);
+            return;
+        }
+
+        NSArray *hits = json[@"hits"];
+        if (![hits isKindOfClass:[NSArray class]]) { if (completion) completion(@[], nil); return; }
+
+        NSMutableArray *results = [NSMutableArray array];
+        for (NSDictionary *item in hits) {
+            if (![item isKindOfClass:[NSDictionary class]]) continue;
+            NSMutableDictionary *serverData = [NSMutableDictionary dictionary];
+            serverData[@"apiSource"] = @(1);
+            serverData[@"projectType"] = item[@"project_type"] ?: projectType;
+            serverData[@"serverID"] = item[@"project_id"] ?: item[@"slug"] ?: @"";
+            serverData[@"title"] = item[@"title"] ?: @"Unknown";
+            serverData[@"description"] = item[@"description"] ?: @"";
+            serverData[@"author"] = item[@"author"] ?: @"Unknown";
+            serverData[@"downloads"] = item[@"downloads"] ?: @0;
+            serverData[@"likes"] = item[@"follows"] ?: @0;
+            serverData[@"icon_url"] = item[@"icon_url"] ?: @"";
+            serverData[@"page_url"] = item[@"page_url"] ?: @"";
+            serverData[@"categories"] = item[@"categories"] ?: @[];
+            serverData[@"date_modified"] = item[@"date_modified"] ?: @"";
+            [results addObject:serverData];
+        }
+        if (completion) completion(results, nil);
+    }];
+    [task resume];
+}
+
+- (void)searchServersWithFilters:(NSDictionary *)filters
+                      completion:(void (^)(NSArray * _Nullable, NSError * _Nullable))completion {
+    // 优先使用 project_type=server（Modrinth Server Projects，2026 年新功能）
+    __weak typeof(self) weakSelf = self;
+    [self _searchServerWithProjectType:@"server" filters:filters completion:^(NSArray * _Nullable serverResults, NSError * _Nullable error) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (error) {
+            // server 类型 API 不可用，直接回退到 modpack 搜索
+            NSLog(@"[ModrinthAPI] Server Projects 搜索失败，回退到 modpack 搜索: %@", error.localizedDescription);
+            [strongSelf _searchServerWithProjectType:@"modpack" filters:filters completion:completion];
+            return;
+        }
+        if (serverResults.count > 0) {
+            if (completion) completion(serverResults, nil);
+            return;
+        }
+        // server 类型结果为空，回退到 modpack 搜索（作为"服务器整合包"展示）
+        NSLog(@"[ModrinthAPI] Server Projects 结果为空，回退到 modpack 搜索");
+        [strongSelf _searchServerWithProjectType:@"modpack" filters:filters completion:completion];
+    }];
+}
+
+- (void)getServerDetailsForID:(NSString *)serverID
+                   completion:(void (^)(NSDictionary * _Nullable, NSError * _Nullable))completion {
+    if (serverID.length == 0) {
+        if (completion) completion(nil, [NSError errorWithDomain:@"ModrinthAPIError" code:1 userInfo:@{NSLocalizedDescriptionKey: @"Invalid server ID"}]);
+        return;
+    }
+
+    NSString *urlString = [NSString stringWithFormat:@"%@/project/%@", self.baseURL, serverID];
+    NSURL *url = [NSURL URLWithString:urlString];
+    if (!url) {
+        if (completion) completion(nil, [NSError errorWithDomain:@"ModrinthAPIError" code:2 userInfo:@{NSLocalizedDescriptionKey: @"Invalid URL"}]);
+        return;
+    }
+
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+    request.timeoutInterval = 30.0;
+    [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
+    [request setValue:@"Amethyst-iOS/1.0" forHTTPHeaderField:@"User-Agent"];
+
+    NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        if (error) { if (completion) completion(nil, error); return; }
+        if (!data) { if (completion) completion(nil, [NSError errorWithDomain:@"ModrinthAPIError" code:3 userInfo:@{NSLocalizedDescriptionKey: @"No data"}]); return; }
+
+        NSError *jsonError = nil;
+        NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
+        if (jsonError || ![json isKindOfClass:[NSDictionary class]]) {
+            if (completion) completion(nil, jsonError ?: [NSError errorWithDomain:@"ModrinthAPIError" code:4 userInfo:@{NSLocalizedDescriptionKey: @"Invalid JSON"}]);
+            return;
+        }
+
+        // 提取关键字段，统一字段命名以便 ServerItem.applyDetailData: 处理
+        NSMutableDictionary *details = [NSMutableDictionary dictionary];
+        details[@"serverID"] = json[@"id"] ?: json[@"slug"] ?: @"";
+        details[@"title"] = json[@"title"] ?: @"";
+        details[@"description"] = json[@"description"] ?: @"";
+        details[@"projectType"] = json[@"project_type"] ?: @"server";
+        details[@"icon_url"] = json[@"icon_url"] ?: @"";
+        details[@"page_url"] = json[@"page_url"] ?: @"";
+        details[@"downloads"] = json[@"downloads"] ?: @0;
+        details[@"likes"] = json[@"followers"] ?: @0;
+        details[@"date_modified"] = json[@"updated"] ?: @"";
+
+        // Server Projects 详情可能直接包含 server_address 字段
+        id addr = json[@"server_address"] ?: json[@"ip"] ?: json[@"address"];
+        if ([addr isKindOfClass:[NSString class]] && addr.length > 0) {
+            details[@"serverAddress"] = addr;
+        }
+        // 关联整合包 ID
+        id mpID = json[@"modpack_project_id"] ?: json[@"modpack_id"];
+        if ([mpID isKindOfClass:[NSString class]] && mpID.length > 0) {
+            details[@"modpack_project_id"] = mpID;
+        }
+
+        if (completion) completion(details, nil);
     }];
     [task resume];
 }

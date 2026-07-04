@@ -10,6 +10,7 @@ NSString *const PREF_DOWNLOAD_SOURCE_RESOURCEPACK = @"general.download_source_re
 NSString *const PREF_DOWNLOAD_SOURCE_DATAPACK = @"general.download_source_datapack";
 NSString *const PREF_DOWNLOAD_SOURCE_MODPACK = @"general.download_source_modpack";
 NSString *const PREF_DOWNLOAD_SOURCE_WORLD = @"general.download_source_world";
+NSString *const PREF_DOWNLOAD_SOURCE_SERVER = @"general.download_source_server";
 NSString *const PREF_CURSEFORGE_API_KEY = @"general.curseforge_api_key";
 NSString *const PREF_MOD_UPDATE_KEEP_OLD = @"general.mod_update_keep_old";
 
@@ -298,6 +299,7 @@ NSString *const PREF_MOD_UPDATE_KEEP_OLD = @"general.mod_update_keep_old";
     if ([type isEqualToString:@"datapack"]) return PREF_DOWNLOAD_SOURCE_DATAPACK;
     if ([type isEqualToString:@"modpack"]) return PREF_DOWNLOAD_SOURCE_MODPACK;
     if ([type isEqualToString:@"world"]) return PREF_DOWNLOAD_SOURCE_WORLD;
+    if ([type isEqualToString:@"server"]) return PREF_DOWNLOAD_SOURCE_SERVER;
     return PREF_DOWNLOAD_SOURCE_MOD;
 }
 

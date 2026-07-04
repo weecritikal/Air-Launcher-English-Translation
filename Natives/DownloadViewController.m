@@ -21,6 +21,11 @@
 #import "ShaderItem.h"
 #import "ShaderVersionViewController.h"
 #import "ShaderVersion.h"
+#import "ResourcePackItem.h"
+#import "DataPackItem.h"
+#import "WorldItem.h"
+#import "AssetVersionViewController.h"
+#import "WorldService.h"
 #import "installer/FabricInstallViewController.h"
 #import "installer/ForgeInstallViewController.h"
 #import "installer/ForgeDirectInstaller.h"
@@ -31,6 +36,10 @@
 #import "ModpackImportViewController.h"
 #import "ModpackImportService.h"
 #import "installer/CurseForgeAPIKeyViewController.h"
+#import "ServerListViewController.h"
+#import "ServerDetailViewController.h"
+#import "ServerService.h"
+#import "ServerItem.h"
 #import "UZKArchive.h"
 #import <QuartzCore/QuartzCore.h>
 #import "JavaGUIViewController.h"
@@ -1167,7 +1176,7 @@
 
 #pragma mark - DownloadViewController
 
-@interface DownloadViewController () <UICollectionViewDataSource, UICollectionViewDelegate, UITableViewDataSource, UITableViewDelegate, UISearchBarDelegate, ModVersionViewControllerDelegate, ShaderVersionViewControllerDelegate>
+@interface DownloadViewController () <UICollectionViewDataSource, UICollectionViewDelegate, UITableViewDataSource, UITableViewDelegate, UISearchBarDelegate, ModVersionViewControllerDelegate, ShaderVersionViewControllerDelegate, AssetVersionViewControllerDelegate>
 
 @property (nonatomic, strong) UISegmentedControl *tabSegment;
 @property (nonatomic, strong) UISegmentedControl *versionFilterSegment;
@@ -1244,8 +1253,12 @@
 @property (nonatomic, strong) NSLayoutConstraint *sliderLeftPosConstraint;   // 滑块贴左（Modrinth）
 @property (nonatomic, strong) NSLayoutConstraint *sliderRightPosConstraint;  // 滑块贴右（CurseForge）
 
-// 当前待下载资源类型（mod/resourcepack/datapack），用于版本选择回调中决定下载目录
+// 当前待下载资源类型（mod/resourcepack/datapack/world），用于版本选择回调中决定下载目录
 @property (nonatomic, copy) NSString *pendingDownloadType;
+// 在线选择版本时临时持有的资源包/数据包/世界对象（AssetVersionViewController 回调使用）
+@property (nonatomic, strong, nullable) ResourcePackItem *pendingResourcePackItem;
+@property (nonatomic, strong, nullable) DataPackItem *pendingDataPackItem;
+@property (nonatomic, strong, nullable) WorldItem *pendingWorldItem;
 
 // 模组加载器安装进度 VC（FCL 风格进度展示，替代转圈 alert）
 @property (nonatomic, strong) InstallerProgressViewController *installerProgressVC;
@@ -1271,6 +1284,14 @@
 
     self.title = @"下载";
     self.view.backgroundColor = [UIColor clearColor];
+
+    // 导航栏左侧：服务器入口（Modrinth Server Projects + CurseForge server packs）
+    UIBarButtonItem *serverItem = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"network"]
+                                                                      style:UIBarButtonItemStylePlain
+                                                                     target:self
+                                                                     action:@selector(openServerList)];
+    serverItem.tintColor = [UIColor labelColor];
+    self.navigationItem.leftBarButtonItem = serverItem;
 
     // 导航栏右侧：CurseForge API Key 配置入口，避免用户在 Modrinth 模式下找不到配置路径
     UIBarButtonItem *apiKeyItem = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"key.fill"]
@@ -1876,6 +1897,14 @@
     CurseForgeAPIKeyViewController *vc = [[CurseForgeAPIKeyViewController alloc] init];
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
     nav.modalPresentationStyle = UIModalPresentationFormSheet;
+    [self presentViewController:nav animated:YES completion:nil];
+}
+
+// 导航栏服务器入口：弹出 ServerListViewController（自带双源切换、搜索、详情导航）
+- (void)openServerList {
+    ServerListViewController *vc = [ServerListViewController new];
+    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
+    nav.modalPresentationStyle = UIModalPresentationPageSheet;
     [self presentViewController:nav animated:YES completion:nil];
 }
 
@@ -4105,14 +4134,17 @@
     if (indexPath.row >= self.resourcepackList.count) return;
 
     NSDictionary *resourcepack = self.resourcepackList[indexPath.row];
-    ModItem *modItem = [[ModItem alloc] initWithOnlineData:resourcepack];
+    ResourcePackItem *item = [[ResourcePackItem alloc] initWithOnlineData:resourcepack];
 
     self.pendingDownloadType = @"resourcepack";
+    self.pendingResourcePackItem = item;
 
-    ModVersionViewController *versionVC = [[ModVersionViewController alloc] init];
-    versionVC.modItem = modItem;
+    AssetVersionViewController *versionVC = [[AssetVersionViewController alloc] init];
+    versionVC.assetType = AssetVersionTypeResourcePack;
+    versionVC.projectID = item.onlineID;
+    versionVC.projectDisplayName = item.displayName;
     versionVC.delegate = self;
-    versionVC.title = modItem.displayName;
+    versionVC.title = item.displayName;
 
     [self.navigationController pushViewController:versionVC animated:YES];
 }
@@ -4126,14 +4158,17 @@
     if (indexPath.row >= self.datapackList.count) return;
 
     NSDictionary *datapack = self.datapackList[indexPath.row];
-    ModItem *modItem = [[ModItem alloc] initWithOnlineData:datapack];
+    DataPackItem *item = [[DataPackItem alloc] initWithOnlineData:datapack];
 
     self.pendingDownloadType = @"datapack";
+    self.pendingDataPackItem = item;
 
-    ModVersionViewController *versionVC = [[ModVersionViewController alloc] init];
-    versionVC.modItem = modItem;
+    AssetVersionViewController *versionVC = [[AssetVersionViewController alloc] init];
+    versionVC.assetType = AssetVersionTypeDataPack;
+    versionVC.projectID = item.onlineID;
+    versionVC.projectDisplayName = item.displayName;
     versionVC.delegate = self;
-    versionVC.title = modItem.displayName;
+    versionVC.title = item.displayName;
 
     [self.navigationController pushViewController:versionVC animated:YES];
 }
@@ -4147,14 +4182,17 @@
     if (indexPath.row >= self.worldList.count) return;
 
     NSDictionary *world = self.worldList[indexPath.row];
-    ModItem *modItem = [[ModItem alloc] initWithOnlineData:world];
+    WorldItem *item = [[WorldItem alloc] initWithOnlineData:world];
 
     self.pendingDownloadType = @"world";
+    self.pendingWorldItem = item;
 
-    ModVersionViewController *versionVC = [[ModVersionViewController alloc] init];
-    versionVC.modItem = modItem;
+    AssetVersionViewController *versionVC = [[AssetVersionViewController alloc] init];
+    versionVC.assetType = AssetVersionTypeWorld;
+    versionVC.projectID = item.onlineID;
+    versionVC.projectDisplayName = item.displayName;
     versionVC.delegate = self;
-    versionVC.title = modItem.displayName;
+    versionVC.title = item.displayName;
 
     [self.navigationController pushViewController:versionVC animated:YES];
 }
@@ -4173,17 +4211,49 @@
     itemToDownload.selectedVersionDownloadURL = primaryFile[@"url"];
     itemToDownload.fileName = primaryFile[@"filename"] ?: [NSString stringWithFormat:@"%@.jar", itemToDownload.displayName];
 
-    NSString *downloadType = self.pendingDownloadType ?: @"mod";
+    // 模组下载走 ModService（resourcepack/datapack/world 已改走 AssetVersionViewController）
     self.pendingDownloadType = nil;
 
     // 子页面已 push 到导航栈，选完版本后 pop 回下载列表
     [self.navigationController popViewControllerAnimated:YES];
-    if ([downloadType isEqualToString:@"resourcepack"] || [downloadType isEqualToString:@"datapack"]) {
-        [self startDownloadForAssetItem:itemToDownload type:downloadType];
+    [self startDownloadForModItem:itemToDownload];
+}
+
+#pragma mark - AssetVersionViewControllerDelegate
+
+- (void)assetVersionViewController:(AssetVersionViewController *)viewController didSelectVersion:(ModVersion *)version {
+    NSDictionary *primaryFile = version.primaryFile;
+    if (!primaryFile || ![primaryFile[@"url"] isKindOfClass:[NSString class]]) {
+        [self showError:@"未找到有效的下载链接"];
+        return;
+    }
+
+    NSString *downloadType = self.pendingDownloadType;
+    self.pendingDownloadType = nil;
+
+    // 子页面已 push 到导航栈，选完版本后 pop 回下载列表
+    [self.navigationController popViewControllerAnimated:YES];
+
+    if ([downloadType isEqualToString:@"resourcepack"]) {
+        ResourcePackItem *item = self.pendingResourcePackItem;
+        self.pendingResourcePackItem = nil;
+        if (!item) return;
+        item.selectedVersionDownloadURL = primaryFile[@"url"];
+        item.fileName = primaryFile[@"filename"] ?: [NSString stringWithFormat:@"%@.zip", item.displayName];
+        [self startDownloadForResourcePackItem:item];
+    } else if ([downloadType isEqualToString:@"datapack"]) {
+        DataPackItem *item = self.pendingDataPackItem;
+        self.pendingDataPackItem = nil;
+        if (!item) return;
+        item.selectedVersionDownloadURL = primaryFile[@"url"];
+        item.fileName = primaryFile[@"filename"] ?: [NSString stringWithFormat:@"%@.zip", item.displayName];
+        [self startDownloadForDataPackItem:item];
     } else if ([downloadType isEqualToString:@"world"]) {
-        [self startDownloadForWorldItem:itemToDownload];
-    } else {
-        [self startDownloadForModItem:itemToDownload];
+        WorldItem *item = self.pendingWorldItem;
+        self.pendingWorldItem = nil;
+        if (!item) return;
+        item.selectedVersionDownloadURL = primaryFile[@"url"];
+        [self startDownloadForWorldItem:item];
     }
 }
 
@@ -4212,151 +4282,103 @@
     }];
 }
 
-- (void)startDownloadForAssetItem:(ModItem *)item type:(NSString *)type {
-    // FCL 风格：push 进度页，替代 alert 转圈
+// 下载资源包（使用 ResourcePackService，NSString profileName）
+- (void)startDownloadForResourcePackItem:(ResourcePackItem *)item {
     InstallerProgressViewController *progressVC = [[InstallerProgressViewController alloc] init];
     progressVC.titleText = [NSString stringWithFormat:@"正在下载 %@", item.displayName ?: @""];
     progressVC.progress = -1;
-    progressVC.stageMessage = [NSString stringWithFormat:@"正在下载%@...", [type isEqualToString:@"datapack"] ? @"数据包" : @"资源包"];
+    progressVC.stageMessage = @"正在下载资源包...";
     [self.navigationController pushViewController:progressVC animated:YES];
 
-    // 使用 ShaderItem 作为资源包/数据包的数据载体（与 Service 约定一致）
-    ShaderItem *assetItem = [[ShaderItem alloc] init];
-    assetItem.displayName = item.displayName;
-    assetItem.fileName = item.fileName;
-    assetItem.selectedVersionDownloadURL = item.selectedVersionDownloadURL;
-    assetItem.iconURL = item.iconURL;
-
+    NSString *profileName = PLProfiles.current.selectedProfileName ?: @"default";
     __weak typeof(self) weakSelf = self;
     __weak InstallerProgressViewController *weakProgressVC = progressVC;
-    if ([type isEqualToString:@"datapack"]) {
-        [[DataPackService sharedService] downloadDataPack:assetItem
-                                                toProfile:PLProfiles.current
-                                                 progress:^(NSProgress * _Nullable downloadProgress) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                if (downloadProgress && weakProgressVC) {
-                    weakProgressVC.progress = downloadProgress.fractionCompleted;
-                }
-            });
-        } completion:^(BOOL success, NSError * _Nullable error) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                __strong typeof(weakSelf) strongSelf = weakSelf;
-                if (!strongSelf) return;
-                [strongSelf.navigationController popViewControllerAnimated:YES];
-                if (success && !error) {
-                    [strongSelf showSuccessMessage:[NSString stringWithFormat:@"%@ 已安装到 datapacks", item.displayName]];
-                } else {
-                    [strongSelf showError:error.localizedDescription ?: @"数据包下载失败"];
-                }
-            });
-        }];
-    } else {
-        [[ResourcePackService sharedService] downloadResourcePack:assetItem
-                                                        toProfile:PLProfiles.current
-                                                         progress:^(NSProgress * _Nullable downloadProgress) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                if (downloadProgress && weakProgressVC) {
-                    weakProgressVC.progress = downloadProgress.fractionCompleted;
-                }
-            });
-        } completion:^(BOOL success, NSError * _Nullable error) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                __strong typeof(weakSelf) strongSelf = weakSelf;
-                if (!strongSelf) return;
-                [strongSelf.navigationController popViewControllerAnimated:YES];
-                if (success && !error) {
-                    [strongSelf showSuccessMessage:[NSString stringWithFormat:@"%@ 已安装到 resourcepacks", item.displayName]];
-                } else {
-                    [strongSelf showError:error.localizedDescription ?: @"资源包下载失败"];
-                }
-            });
-        }];
-    }
+    [[ResourcePackService sharedService] downloadResourcePack:item
+                                                    toProfile:profileName
+                                                     progress:^(NSProgress * _Nullable downloadProgress) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (downloadProgress && weakProgressVC) {
+                weakProgressVC.progress = downloadProgress.fractionCompleted;
+            }
+        });
+    } completion:^(BOOL success, NSError * _Nullable error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) return;
+            [strongSelf.navigationController popViewControllerAnimated:YES];
+            if (success && !error) {
+                [strongSelf showSuccessMessage:[NSString stringWithFormat:@"%@ 已安装到 resourcepacks", item.displayName]];
+            } else {
+                [strongSelf showError:error.localizedDescription ?: @"资源包下载失败"];
+            }
+        });
+    }];
 }
 
-// 下载世界存档并解压到 saves 目录（仿 FCL 安卓世界下载行为）
-- (void)startDownloadForWorldItem:(ModItem *)item {
-    // FCL 风格：push 进度页（不确定模式），替代 alert 转圈
+// 下载数据包（使用 DataPackService，NSString profileName）
+- (void)startDownloadForDataPackItem:(DataPackItem *)item {
+    InstallerProgressViewController *progressVC = [[InstallerProgressViewController alloc] init];
+    progressVC.titleText = [NSString stringWithFormat:@"正在下载 %@", item.displayName ?: @""];
+    progressVC.progress = -1;
+    progressVC.stageMessage = @"正在下载数据包...";
+    [self.navigationController pushViewController:progressVC animated:YES];
+
+    NSString *profileName = PLProfiles.current.selectedProfileName ?: @"default";
+    __weak typeof(self) weakSelf = self;
+    __weak InstallerProgressViewController *weakProgressVC = progressVC;
+    [[DataPackService sharedService] downloadDataPack:item
+                                            toProfile:profileName
+                                             progress:^(NSProgress * _Nullable downloadProgress) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (downloadProgress && weakProgressVC) {
+                weakProgressVC.progress = downloadProgress.fractionCompleted;
+            }
+        });
+    } completion:^(BOOL success, NSError * _Nullable error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) return;
+            [strongSelf.navigationController popViewControllerAnimated:YES];
+            if (success && !error) {
+                [strongSelf showSuccessMessage:[NSString stringWithFormat:@"%@ 已安装到 datapacks\n请手动移动到对应世界目录", item.displayName]];
+            } else {
+                [strongSelf showError:error.localizedDescription ?: @"数据包下载失败"];
+            }
+        });
+    }];
+}
+
+// 下载世界存档并解压到 saves 目录（使用 WorldService，含进度回调与健壮解压）
+- (void)startDownloadForWorldItem:(WorldItem *)item {
     InstallerProgressViewController *progressVC = [[InstallerProgressViewController alloc] init];
     progressVC.titleText = [NSString stringWithFormat:@"正在下载 %@", item.displayName ?: @""];
     progressVC.progress = -1;
     progressVC.stageMessage = @"正在下载世界存档...";
     [self.navigationController pushViewController:progressVC animated:YES];
 
-    // 目标目录：saves
-    NSString *baseDir;
-    const char *env = getenv("POJAV_GAME_DIR");
-    if (env) {
-        baseDir = [NSString stringWithUTF8String:env];
-    } else {
-        baseDir = NSHomeDirectory();
-    }
-
-    NSString *profileName = PLProfiles.current.selectedProfileName;
-    if (profileName.length > 0) {
-        NSDictionary *profiles = PLProfiles.current.profiles;
-        NSDictionary *prof = profiles[profileName];
-        if ([prof isKindOfClass:[NSDictionary class]]) {
-            NSString *gameDir = prof[@"gameDir"];
-            if ([gameDir isKindOfClass:[NSString class]] && gameDir.length > 0 && ![gameDir isEqualToString:@"."]) {
-                if ([gameDir isAbsolutePath]) {
-                    baseDir = gameDir;
-                } else {
-                    baseDir = [baseDir stringByAppendingPathComponent:gameDir];
-                }
-            }
-        }
-    }
-
-    NSString *savesDir = [baseDir stringByAppendingPathComponent:@"saves"];
-    [[NSFileManager defaultManager] createDirectoryAtPath:savesDir withIntermediateDirectories:YES attributes:nil error:nil];
-
-    NSURL *url = [NSURL URLWithString:item.selectedVersionDownloadURL];
-    if (!url) {
-        __weak typeof(self) weakSelf = self;
-        [self.navigationController popViewControllerAnimated:YES];
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            [weakSelf showError:@"无效的下载链接"];
-        });
-        return;
-    }
-
+    NSString *profileName = PLProfiles.current.selectedProfileName ?: @"default";
     __weak typeof(self) weakSelf = self;
-    NSURLSessionDownloadTask *task = [[NSURLSession sharedSession] downloadTaskWithURL:url completionHandler:^(NSURL *location, NSURLResponse *response, NSError *error) {
+    __weak InstallerProgressViewController *weakProgressVC = progressVC;
+    [[WorldService sharedService] downloadWorld:item
+                                        toProfile:profileName
+                                         progress:^(NSProgress * _Nullable downloadProgress) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (downloadProgress && weakProgressVC) {
+                weakProgressVC.progress = downloadProgress.fractionCompleted;
+            }
+        });
+    } completion:^(BOOL success, NSError * _Nullable error) {
         dispatch_async(dispatch_get_main_queue(), ^{
             __strong typeof(weakSelf) strongSelf = weakSelf;
             if (!strongSelf) return;
             [strongSelf.navigationController popViewControllerAnimated:YES];
-            if (error) {
-                [strongSelf showError:error.localizedDescription];
-                return;
-            }
-            // 世界存档为 zip，先下载到临时文件再解压到 saves 目录
-            NSString *tempZip = [NSTemporaryDirectory() stringByAppendingPathComponent:[NSString stringWithFormat:@"world_%@.zip", @(arc4random())]];
-            NSError *moveError = nil;
-            [[NSFileManager defaultManager] moveItemAtPath:location.path toPath:tempZip error:&moveError];
-            if (moveError) {
-                [strongSelf showError:moveError.localizedDescription];
-                return;
-            }
-            // 解压 zip 到 saves 目录
-            NSError *unzipError = nil;
-            UZKArchive *archive = [[UZKArchive alloc] initWithPath:tempZip error:&unzipError];
-            if (unzipError) {
-                [strongSelf showError:unzipError.localizedDescription];
-                [[NSFileManager defaultManager] removeItemAtPath:tempZip error:nil];
-                return;
-            }
-            BOOL extracted = [archive extractFilesTo:savesDir overwrite:NO error:&unzipError];
-            [[NSFileManager defaultManager] removeItemAtPath:tempZip error:nil];
-            if (!extracted || unzipError) {
-                [strongSelf showError:unzipError.localizedDescription ?: @"解压失败"];
-            } else {
+            if (success && !error) {
                 [strongSelf showSuccessMessage:[NSString stringWithFormat:@"%@ 已解压到 saves 目录", item.displayName]];
+            } else {
+                [strongSelf showError:error.localizedDescription ?: @"世界下载失败"];
             }
         });
     }];
-    [task resume];
 }
 
 #pragma mark - ShaderVersionViewControllerDelegate

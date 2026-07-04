@@ -1,18 +1,23 @@
 #import "ProfileSettingsViewController.h"
 #import "ModsManagerViewController.h"
 #import "ShadersManagerViewController.h"
+#import "ResourcePacksManagerViewController.h"
+#import "DataPacksManagerViewController.h"
+#import "WorldsManagerViewController.h"
 #import "PLProfiles.h"
 #import "LauncherPreferences.h"
 #import "utils.h"
 #import "BackgroundManager.h"
 
-@interface ProfileSettingsViewController ()
+@interface ProfileSettingsViewController () <UITextFieldDelegate>
 
 @property (nonatomic, strong) NSArray<NSArray *> *sections;
 @property (nonatomic, strong) NSString *selectedRenderer;
 @property (nonatomic, strong) NSString *selectedJavaVersion;
 @property (nonatomic, assign) NSInteger allocatedMemory;
 @property (nonatomic, assign) NSInteger maxMemory;
+// 服务器地址（FCL 风格：留空则不自动加入）
+@property (nonatomic, strong) NSString *serverIp;
 
 @end
 
@@ -81,13 +86,20 @@
     if (self.allocatedMemory > self.maxMemory) {
         self.allocatedMemory = self.maxMemory;
     }
+
+    // 服务器地址（默认空字符串，留空不自动加入）
+    self.serverIp = [PLProfiles.current serverIpForProfile:self.profileName] ?: @"";
 }
 
 - (void)setupSections {
     self.sections = @[
         @[@"模组管理"],
         @[@"光影管理"],
-        @[@"渲染器", @"Java版本", @"内存分配"]
+        @[@"渲染器", @"Java版本", @"内存分配"],
+        @[@"服务器地址"],
+        @[@"资源包管理"],
+        @[@"数据包管理"],
+        @[@"世界管理"]
     ];
 }
 
@@ -97,11 +109,13 @@
     if (!profile) {
         profile = [NSMutableDictionary dictionary];
     }
-    
+
     profile[@"renderer"] = self.selectedRenderer;
     profile[@"javaVersion"] = self.selectedJavaVersion;
     profile[@"allocatedMemory"] = @(self.allocatedMemory);
-    
+    // 服务器地址持久化（FCL 风格：留空则不自动加入）
+    profile[@"serverIp"] = self.serverIp ?: @"";
+
     profiles[self.profileName] = profile;
     [PLProfiles.current save];
 }
@@ -121,8 +135,20 @@
         case 0: return @"模组";
         case 1: return @"光影";
         case 2: return @"高级设置";
+        case 3: return @"服务器";
+        case 4: return @"资源包";
+        case 5: return @"数据包";
+        case 6: return @"世界";
         default: return nil;
     }
+}
+
+- (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
+    if (section == 3) {
+        // 说明文字（参照 FCL）：留空则不自动加入
+        return @"启动游戏后自动加入此服务器（参照 FCL）\n格式：host 或 host:port（IPv6 为 [host]:port），留空则不自动加入";
+    }
+    return nil;
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
@@ -132,23 +158,28 @@
         cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:cellIdentifier];
         [[BackgroundManager sharedManager] applyEffectToCell:cell];
     }
-    
+
+    // 重置复用 cell 的状态，避免上一行的 accessoryView（如服务器输入框）残留
+    cell.accessoryView = nil;
+    cell.accessoryType = UITableViewCellAccessoryNone;
+    cell.imageView.image = nil;
+
     NSString *title = self.sections[indexPath.section][indexPath.row];
     cell.textLabel.text = title;
-    
+
     switch (indexPath.section) {
         case 0: // 模组管理
             cell.imageView.image = [UIImage systemImageNamed:@"puzzlepiece.fill"];
             cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
             cell.detailTextLabel.text = nil;
             break;
-            
+
         case 1: // 光影管理
             cell.imageView.image = [UIImage systemImageNamed:@"paintbrush.fill"];
             cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
             cell.detailTextLabel.text = nil;
             break;
-            
+
         case 2: // 高级设置
             if ([title isEqualToString:@"渲染器"]) {
                 cell.imageView.image = [UIImage systemImageNamed:@"cpu"];
@@ -164,9 +195,75 @@
                 cell.detailTextLabel.text = [NSString stringWithFormat:@"%ld MB / %ld MB", (long)self.allocatedMemory, (long)self.maxMemory];
             }
             break;
+
+        case 3: // 服务器地址（FCL 风格）
+            cell.imageView.image = [UIImage systemImageNamed:@"antenna.radiowaves.left.and.right"];
+            cell.detailTextLabel.text = nil;
+            cell.accessoryView = [self buildServerIpTextField];
+            break;
+
+        case 4: // 资源包管理
+            cell.imageView.image = [UIImage systemImageNamed:@"rectangle.stack.fill"];
+            cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+            cell.detailTextLabel.text = nil;
+            break;
+
+        case 5: // 数据包管理
+            cell.imageView.image = [UIImage systemImageNamed:@"shippingbox.fill"];
+            cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+            cell.detailTextLabel.text = nil;
+            break;
+
+        case 6: // 世界管理
+            cell.imageView.image = [UIImage systemImageNamed:@"globe.asia.australia.fill"];
+            cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+            cell.detailTextLabel.text = nil;
+            break;
     }
-    
+
     return cell;
+}
+
+// 构建服务器地址输入框（UITextField），双向绑定到当前 profile 的 serverIp
+- (UITextField *)buildServerIpTextField {
+    UITextField *textField = [[UITextField alloc] initWithFrame:CGRectMake(0, 0, 220, 30)];
+    textField.placeholder = @"如 example.com:25565（留空则不自动加入）";
+    textField.text = self.serverIp;
+    textField.font = [UIFont systemFontOfSize:13];
+    textField.adjustsFontSizeToFitWidth = YES;
+    textField.minimumFontSize = 9;
+    textField.clearButtonMode = UITextFieldViewModeWhileEditing;
+    textField.returnKeyType = UIReturnKeyDone;
+    textField.autocorrectionType = UITextAutocorrectionTypeNo;
+    textField.autocapitalizationType = UITextAutocapitalizationTypeNone;
+    textField.keyboardType = UIKeyboardTypeURL;
+    textField.tag = 9527;
+    textField.delegate = self;
+    [textField addTarget:self action:@selector(serverIpTextFieldEditingChanged:) forControlEvents:UIControlEventEditingChanged];
+    // 编辑结束（回车收起键盘或失焦）时持久化保存；仅监听 EditingDidEnd 避免重复触发
+    [textField addTarget:self action:@selector(serverIpTextFieldEditingDidEnd:) forControlEvents:UIControlEventEditingDidEnd];
+    return textField;
+}
+
+#pragma mark - 服务器地址输入框事件
+
+// 输入过程中实时同步到 self.serverIp
+- (void)serverIpTextFieldEditingChanged:(UITextField *)textField {
+    self.serverIp = textField.text ?: @"";
+}
+
+// 结束编辑（回车 / 失焦）时持久化保存
+- (void)serverIpTextFieldEditingDidEnd:(UITextField *)textField {
+    self.serverIp = [textField.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] ?: @"";
+    textField.text = self.serverIp;
+    [self saveSettings];
+}
+
+#pragma mark - UITextFieldDelegate
+
+- (BOOL)textFieldShouldReturn:(UITextField *)textField {
+    [textField resignFirstResponder];
+    return YES;
 }
 
 - (NSString *)rendererDisplayName:(NSString *)renderer {
@@ -205,7 +302,45 @@
                 [self showMemoryAllocator];
             }
             break;
+
+        case 3: // 服务器地址：点击行时聚焦输入框
+            [self focusServerIpTextFieldAtIndexPath:indexPath];
+            break;
+
+        case 4: // 资源包管理
+            [self openResourcePacksManager];
+            break;
+
+        case 5: // 数据包管理
+            [self openDataPacksManager];
+            break;
+
+        case 6: // 世界管理
+            [self openWorldsManager];
+            break;
     }
+}
+
+// 定位服务器地址 cell 中的输入框并聚焦
+- (void)focusServerIpTextFieldAtIndexPath:(NSIndexPath *)indexPath {
+    UITableViewCell *cell = [self.tableView cellForRowAtIndexPath:indexPath];
+    if (!cell) return;
+    UITextField *textField = [self findTextFieldInView:cell.contentView];
+    if ([textField canBecomeFirstResponder]) {
+        [textField becomeFirstResponder];
+    }
+}
+
+// 递归查找 contentView 中的 UITextField（即服务器地址输入框）
+- (UITextField *)findTextFieldInView:(UIView *)view {
+    for (UIView *sub in view.subviews) {
+        if ([sub isKindOfClass:[UITextField class]]) {
+            return (UITextField *)sub;
+        }
+        UITextField *found = [self findTextFieldInView:sub];
+        if (found) return found;
+    }
+    return nil;
 }
 
 #pragma mark - Actions
@@ -218,6 +353,24 @@
 
 - (void)openShadersManager {
     ShadersManagerViewController *vc = [[ShadersManagerViewController alloc] init];
+    vc.profileName = self.profileName;
+    [self.navigationController pushViewController:vc animated:YES];
+}
+
+- (void)openResourcePacksManager {
+    ResourcePacksManagerViewController *vc = [[ResourcePacksManagerViewController alloc] init];
+    vc.profileName = self.profileName;
+    [self.navigationController pushViewController:vc animated:YES];
+}
+
+- (void)openDataPacksManager {
+    DataPacksManagerViewController *vc = [[DataPacksManagerViewController alloc] init];
+    vc.profileName = self.profileName;
+    [self.navigationController pushViewController:vc animated:YES];
+}
+
+- (void)openWorldsManager {
+    WorldsManagerViewController *vc = [[WorldsManagerViewController alloc] init];
     vc.profileName = self.profileName;
     [self.navigationController pushViewController:vc animated:YES];
 }

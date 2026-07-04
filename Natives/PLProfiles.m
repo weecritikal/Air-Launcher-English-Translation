@@ -143,4 +143,28 @@ static PLProfiles* current;
     [self save];
 }
 
+#pragma mark - 服务器地址（FCL 风格：启动后自动加入服务器）
+
+// 获取当前选中 profile 的服务器地址，留空返回 @""
+- (NSString *)serverIpForCurrentProfile {
+    return [self serverIpForProfile:self.selectedProfileName];
+}
+
+// 获取指定 profile 的服务器地址，缺失或为空均返回 @""
+- (NSString *)serverIpForProfile:(NSString *)profileName {
+    NSString *ip = self.profiles[profileName][@"serverIp"];
+    return ip ?: @"";
+}
+
+// 设置指定 profile 的服务器地址，nil 转为 @""
+- (void)setServerIp:(NSString *)serverIp forProfile:(NSString *)profileName {
+    NSMutableDictionary *profile = [self.profiles[profileName] mutableCopy];
+    if (!profile) {
+        profile = [NSMutableDictionary dictionary];
+    }
+    profile[@"serverIp"] = serverIp ?: @"";
+    self.profiles[profileName] = profile;
+    [self save];
+}
+
 @end
