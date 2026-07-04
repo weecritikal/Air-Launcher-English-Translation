@@ -8,8 +8,8 @@
 #import <UIKit/UIKit.h>
 #import "PLProfiles.h"
 #import "PLPreferences.h"
-#import "ModrinthAPI.h"
-#import "CurseForgeAPI.h"
+#import "installer/modpack/ModrinthAPI.h"
+#import "installer/modpack/CurseForgeAPI.h"
 #import "DownloadTaskManager.h"
 #import "DownloadTaskItem.h"
 #import "MinecraftResourceDownloadTask.h"
