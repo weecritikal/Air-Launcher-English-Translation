@@ -16,18 +16,41 @@
 #import "ModpackImportViewController.h"
 #import "LauncherPrefGameDirViewController.h"
 
-// 布局常量
-static const CGFloat kSidebarWidth = 70.0;      // 左侧边栏卡片宽度
-static const CGFloat kRightPanelWidth = 220.0;  // 右侧面板卡片宽度
-static const CGFloat kCardSpacing = 12.0;       // 卡片间距
-static const CGFloat kCardOuterMargin = 12.0;   // 卡片到外边缘的间距
-static const CGFloat kCardCornerRadius = 16.0;  // 卡片圆角
+// 布局常量（iPad/宽屏基准值；iPhone 上通过 traitCollection 适配后会变窄）
+static const CGFloat kSidebarWidthPad = 70.0;      // iPad 左侧边栏卡片宽度
+static const CGFloat kSidebarWidthPhone = 56.0;    // iPhone 左侧边栏卡片宽度（仅图标）
+static const CGFloat kRightPanelWidthPad = 220.0;  // iPad 右侧面板卡片宽度
+static const CGFloat kRightPanelWidthPhone = 168.0; // iPhone 右侧面板卡片宽度（保证启动/JAR 按钮可读）
+static const CGFloat kCardSpacing = 12.0;          // 卡片间距
+static const CGFloat kCardOuterMargin = 12.0;      // 卡片到外边缘的间距
+static const CGFloat kCardCornerRadius = 16.0;     // 卡片圆角
+
+/// 根据当前 traitCollection 与屏幕宽度决定侧栏宽度
+/// - iPhone 横屏（含 SE/8/Plus/X/Pro Max）：56pt（菜单只有图标，56pt 足够）
+/// - iPad：70pt
+static CGFloat LauncherCardLayoutSidebarWidth(UITraitCollection *trait) {
+    if (!trait) return kSidebarWidthPad;
+    if (trait.userInterfaceIdiom == UIUserInterfaceIdiomPhone) return kSidebarWidthPhone;
+    return kSidebarWidthPad;
+}
+
+/// 根据当前 traitCollection 与屏幕宽度决定右侧面板宽度
+/// - iPhone 横屏：168pt（保证启动/编辑控件/执行 Jar 按钮文字不截断）
+/// - iPad：220pt
+static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
+    if (!trait) return kRightPanelWidthPad;
+    if (trait.userInterfaceIdiom == UIUserInterfaceIdiomPhone) return kRightPanelWidthPhone;
+    return kRightPanelWidthPad;
+}
 
 @interface LauncherCardLayoutViewController ()
 
 @property(nonatomic, strong) UIView *sidebarCard;
 @property(nonatomic, strong) UIView *contentCard;
 @property(nonatomic, strong) UIView *rightPanelCard;
+
+@property(nonatomic, strong) NSLayoutConstraint *sidebarWidthConstraint;
+@property(nonatomic, strong) NSLayoutConstraint *rightPanelWidthConstraint;
 
 @property(nonatomic, assign) BOOL isShowingProfileEditor;
 @property(nonatomic, strong) LauncherProfileEditorViewController *profileEditorVC;
@@ -130,6 +153,35 @@ static const CGFloat kCardCornerRadius = 16.0;  // 卡片圆角
     [[BackgroundManager sharedManager] pauseVideo];
 }
 
+- (void)traitCollectionDidChange:(UITraitCollection *)previousTraitCollection {
+    [super traitCollectionDidChange:previousTraitCollection];
+    // iPhone 与 iPad 切换、或分屏调整大小时，更新侧栏与右侧面板宽度
+    CGFloat sidebarWidth = LauncherCardLayoutSidebarWidth(self.traitCollection);
+    CGFloat rightPanelWidth = LauncherCardLayoutRightPanelWidth(self.traitCollection);
+    if (self.sidebarWidthConstraint.constant != sidebarWidth) {
+        self.sidebarWidthConstraint.constant = sidebarWidth;
+    }
+    if (self.rightPanelWidthConstraint.constant != rightPanelWidth) {
+        self.rightPanelWidthConstraint.constant = rightPanelWidth;
+    }
+    // 同时通知子视图控制器（右侧面板内的按钮文字大小可能需要适配）
+    [self.childViewControllers enumerateObjectsUsingBlock:^(UIViewController *child, NSUInteger idx, BOOL *stop) {
+        [self adjustChildLayoutForTraitCollection:child];
+    }];
+}
+
+/// 递归调整子视图控制器（主要针对右侧面板的按钮字体/边距）
+- (void)adjustChildLayoutForTraitCollection:(UIViewController *)vc {
+    if (!vc) return;
+    if ([vc respondsToSelector:@selector(viewWillAppear:)]) {
+        // 通知子 VC 重新布局：通过 setNeedsLayout 触发布局更新
+        [vc.view setNeedsLayout];
+    }
+    for (UIViewController *child in vc.childViewControllers) {
+        [self adjustChildLayoutForTraitCollection:child];
+    }
+}
+
 #pragma mark - Setup
 
 - (UIView *)createCardContainer {
@@ -145,29 +197,33 @@ static const CGFloat kCardCornerRadius = 16.0;  // 卡片圆角
     // 左侧菜单卡片
     self.sidebarCard = [self createCardContainer];
     [self.view addSubview:self.sidebarCard];
-    
+
     // 中间内容卡片
     self.contentCard = [self createCardContainer];
     [self.view addSubview:self.contentCard];
-    
+
     // 右侧信息/启动卡片
     self.rightPanelCard = [self createCardContainer];
     [self.view addSubview:self.rightPanelCard];
-    
+
+    // 用自适应宽度创建可变宽度约束，便于 traitCollection 变化时更新
+    self.sidebarWidthConstraint = [self.sidebarCard.widthAnchor constraintEqualToConstant:LauncherCardLayoutSidebarWidth(self.traitCollection)];
+    self.rightPanelWidthConstraint = [self.rightPanelCard.widthAnchor constraintEqualToConstant:LauncherCardLayoutRightPanelWidth(self.traitCollection)];
+
     // 设置约束
     [NSLayoutConstraint activateConstraints:@[
         // 左侧菜单卡片
         [self.sidebarCard.leadingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.leadingAnchor constant:kCardOuterMargin],
         [self.sidebarCard.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:kCardOuterMargin],
         [self.sidebarCard.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-kCardOuterMargin],
-        [self.sidebarCard.widthAnchor constraintEqualToConstant:kSidebarWidth],
-        
+        self.sidebarWidthConstraint,
+
         // 右侧面板卡片
         [self.rightPanelCard.trailingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.trailingAnchor constant:-kCardOuterMargin],
         [self.rightPanelCard.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:kCardOuterMargin],
         [self.rightPanelCard.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-kCardOuterMargin],
-        [self.rightPanelCard.widthAnchor constraintEqualToConstant:kRightPanelWidth],
-        
+        self.rightPanelWidthConstraint,
+
         // 中间内容卡片
         [self.contentCard.leadingAnchor constraintEqualToAnchor:self.sidebarCard.trailingAnchor constant:kCardSpacing],
         [self.contentCard.trailingAnchor constraintEqualToAnchor:self.rightPanelCard.leadingAnchor constant:-kCardSpacing],

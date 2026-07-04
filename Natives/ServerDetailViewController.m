@@ -137,10 +137,10 @@
     [self.joinButton addTarget:self action:@selector(joinServer) forControlEvents:UIControlEventTouchUpInside];
     [content addSubview:self.joinButton];
 
-    // 下载关联整合包按钮
+    // 下载服务端文件包按钮
     self.downloadPackButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.downloadPackButton.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.downloadPackButton setTitle:@"下载关联整合包" forState:UIControlStateNormal];
+    [self.downloadPackButton setTitle:@"下载服务端文件包" forState:UIControlStateNormal];
     [self.downloadPackButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     self.downloadPackButton.backgroundColor = [UIColor systemPurpleColor];
     self.downloadPackButton.layer.cornerRadius = 10;
@@ -309,7 +309,7 @@
         } else {
             self.currentMessageView = [InlineMessageView showInViewController:self
                                                                         title:@"提示"
-                                                                     message:@"该服务器没有可下载的关联整合包"
+                                                                     message:@"该服务器没有可下载的服务端文件包"
                                                                         type:InlineMessageTypeInfo];
         }
         return;
@@ -348,7 +348,7 @@
         } else {
             strongSelf.currentMessageView = [InlineMessageView showInViewController:strongSelf
                                                                               title:@"下载完成"
-                                                                           message:@"服务端整合包已保存到 Caches/server_packs 目录"
+                                                                           message:@"服务端文件包已保存到 Caches/server_packs 目录"
                                                                               type:InlineMessageTypeSuccess];
         }
     }];

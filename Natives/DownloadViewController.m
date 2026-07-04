@@ -3207,12 +3207,15 @@
             [NSString stringWithFormat:@"无法解析安装器主类或 Java 版本：%@", path.lastPathComponent]);
         return;
     }
+    // execute_jar 路径必加载 caciocavallo17（Java 24+ 编译），强制 minVersion=25
+    // 与 JavaLauncher.m launchJar 分支保持一致
+    int requiredJavaVersion = MAX(vc.requiredJavaVersion, 25);
     // 预检 execute_jar 标签的 JRE 是否已配置，避免 present 后才发现没 JRE 导致黑屏
     // 与 LauncherRightPanelViewController.enterModInstallerWithPath: 行为一致
-    NSString *javaHome = getSelectedJavaHome(@"execute_jar", vc.requiredJavaVersion);
+    NSString *javaHome = getSelectedJavaHome(@"execute_jar", requiredJavaVersion);
     if (!javaHome) {
         showDialog(localize(@"Error", nil),
-            [NSString stringWithFormat:@"执行 JAR 需要 Java %d 或更高版本，但未配置对应的运行时。\n\n请到「设置 → 管理运行时」中为「执行 Jar」标签分配一个 Java %d+ 的运行时。", vc.requiredJavaVersion, vc.requiredJavaVersion]);
+            [NSString stringWithFormat:@"执行 JAR 需要 Java %d 或更高版本，但未配置对应的运行时。\n\n请到「设置 → 管理运行时」中为「执行 Jar」标签分配一个 Java %d+ 的运行时。", requiredJavaVersion, requiredJavaVersion]);
         return;
     }
     [self invokeAfterJITEnabled:^{

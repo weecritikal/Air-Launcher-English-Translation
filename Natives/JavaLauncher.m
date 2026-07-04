@@ -199,6 +199,13 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
         defaultJRETag = @"execute_jar";
         gameDir = @(getenv("POJAV_GAME_DIR"));
         launchJar = YES;
+        // Caciocavallo17 bootclasspath jar 被 Java 24+ 编译（class version 68.0），
+        // 仅 Java 25（class version 69）能加载。execute_jar 路径必加载 caciocavallo17，
+        // 因此强制 minVersion=25，避免 Java 21 runtime 加载时 UnsupportedClassVersionError。
+        // 注：仅影响 execute_jar 路径，游戏启动走 NSDictionary 分支不受影响。
+        if (minVersion < 25) {
+            minVersion = 25;
+        }
     }
     NSLog(@"[JavaLauncher] Looking for Java %d or later", minVersion);
     NSString *javaHome = getSelectedJavaHome(defaultJRETag, minVersion);

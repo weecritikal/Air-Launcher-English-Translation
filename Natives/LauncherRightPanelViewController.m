@@ -272,17 +272,21 @@ static void *ProgressObserverContext = &ProgressObserverContext;
         return;
     }
 
+    // execute_jar 路径必加载 caciocavallo17（Java 24+ 编译），强制 minVersion=25
+    // 与 JavaLauncher.m launchJar 分支保持一致
+    int requiredJavaVersion = MAX(javaVersion, 25);
+
     // 预检 execute_jar 标签的 JRE 是否已配置，避免 present 后才发现没 JRE 导致黑屏
-    NSString *javaHome = getSelectedJavaHome(@"execute_jar", javaVersion);
+    NSString *javaHome = getSelectedJavaHome(@"execute_jar", requiredJavaVersion);
     if (!javaHome) {
         [self showAlert:@"缺少 Java 运行时"
-                  message:[NSString stringWithFormat:@"执行 JAR 需要 Java %d 或更高版本，但未配置对应的运行时。\n\n请到「设置 → 管理运行时」中为「执行 Jar」标签分配一个 Java %d+ 的运行时。", javaVersion, javaVersion]];
+                  message:[NSString stringWithFormat:@"执行 JAR 需要 Java %d 或更高版本，但未配置对应的运行时。\n\n请到「设置 → 管理运行时」中为「执行 Jar」标签分配一个 Java %d+ 的运行时。", requiredJavaVersion, requiredJavaVersion]];
         return;
     }
 
     [self invokeAfterJITEnabled:^{
         vc.modalPresentationStyle = UIModalPresentationFullScreen;
-        NSLog(@"[ModInstaller] launching %@ (Java %d, home=%@)", vc.filepath, javaVersion, javaHome);
+        NSLog(@"[ModInstaller] launching %@ (Java %d, home=%@)", vc.filepath, requiredJavaVersion, javaHome);
         [self presentViewController:vc animated:YES completion:nil];
     }];
 }

@@ -28,6 +28,18 @@ NSString *const PREF_MOD_UPDATE_KEEP_OLD = @"general.mod_update_keep_old";
             @"debug_logging": @(!CONFIG_RELEASE),
             @"news_url": @"https://amethyst.ct.ws/welcome",
             @"download_source": @"bmclapi",
+            // 各资源类型独立下载源（未显式设置时回退到 modrinth）
+            @"download_source_mod": @"modrinth",
+            @"download_source_shader": @"modrinth",
+            @"download_source_resourcepack": @"modrinth",
+            @"download_source_datapack": @"modrinth",
+            @"download_source_modpack": @"modrinth",
+            @"download_source_world": @"modrinth",
+            @"download_source_server": @"modrinth",
+            // CurseForge API Key：空串代表使用编译时内置的默认 key
+            @"curseforge_api_key": @"",
+            // Mod 更新时是否保留旧文件（默认 YES）
+            @"mod_update_keep_old": @YES,
         }.mutableCopy,
         @"video": @{ // Video & Audio
             @"renderer": @"auto",
@@ -316,7 +328,9 @@ NSString *const PREF_MOD_UPDATE_KEEP_OLD = @"general.mod_update_keep_old";
     if (key && key.length > 0) {
         setPrefObject(PREF_CURSEFORGE_API_KEY, key);
     } else {
-        setPrefObject(PREF_CURSEFORGE_API_KEY, nil);
+        // 注意：传 nil 会被 setValue:forKeyPath: 当作 remove，导致下次再写时
+        // setObject:value: 因键不存在而静默失败。这里改写为空串以保留键。
+        setPrefObject(PREF_CURSEFORGE_API_KEY, @"");
     }
 }
 
