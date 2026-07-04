@@ -16,6 +16,7 @@
 #import "ModVersion.h"
 #import "installer/modpack/ModrinthAPI.h"
 #import "PLProfiles.h"
+#import "LauncherPreferences.h"
 
 @interface WorldsManagerViewController () <UITableViewDataSource, UITableViewDelegate, UISearchBarDelegate, AssetVersionViewControllerDelegate, UIDocumentPickerDelegate>
 

@@ -15,6 +15,7 @@
 #import "ModVersion.h"
 #import "installer/modpack/ModrinthAPI.h"
 #import "PLProfiles.h"
+#import "LauncherPreferences.h"
 
 @interface ResourcePacksManagerViewController () <UITableViewDataSource, UITableViewDelegate, UISearchBarDelegate, AssetVersionViewControllerDelegate, UIDocumentPickerDelegate>
 

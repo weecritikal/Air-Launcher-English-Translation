@@ -13,6 +13,7 @@
 #import "ModUpdateViewController.h"
 #import "PLProfiles.h"
 #import "installer/modpack/ModrinthAPI.h"
+#import "LauncherPreferences.h"
 
 @interface ShadersManagerViewController () <UITableViewDataSource, UITableViewDelegate, ShaderTableViewCellDelegate, UISearchBarDelegate, ShaderVersionViewControllerDelegate, UIDocumentPickerDelegate>
 

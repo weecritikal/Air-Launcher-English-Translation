@@ -5,6 +5,7 @@
 #import "installer/modpack/ModrinthAPI.h"
 #import "ModUpdateViewController.h"
 #import "PLProfiles.h"
+#import "LauncherPreferences.h"
 
 @interface ModsManagerViewController () <UITableViewDataSource, UITableViewDelegate, ModTableViewCellDelegate, UISearchBarDelegate, ModVersionViewControllerDelegate, UIDocumentPickerDelegate>
 
