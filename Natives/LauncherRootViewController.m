@@ -17,9 +17,25 @@
 #import "LauncherPrefGameDirViewController.h"
 #import "CustomControlsViewController.h"
 
-// 布局常量
-static const CGFloat kSidebarWidth = 70.0;      // 左侧边栏宽度
-static const CGFloat kRightPanelWidth = 220.0;  // 右侧面板宽度
+// 布局常量（iPad 基准值；iPhone 上通过 LauncherRootLayoutWidth 适配后会变窄）
+static const CGFloat kSidebarWidthPad = 70.0;      // iPad 左侧边栏宽度
+static const CGFloat kSidebarWidthPhone = 56.0;    // iPhone 左侧边栏宽度（仅图标）
+static const CGFloat kRightPanelWidthPad = 220.0;  // iPad 右侧面板宽度
+static const CGFloat kRightPanelWidthPhone = 168.0; // iPhone 右侧面板宽度（保证按钮文字可读）
+
+/// 根据当前 traitCollection 决定侧栏宽度（与 LauncherCardLayoutViewController 保持一致）
+static CGFloat LauncherRootLayoutSidebarWidth(UITraitCollection *trait) {
+    if (!trait) return kSidebarWidthPad;
+    if (trait.userInterfaceIdiom == UIUserInterfaceIdiomPhone) return kSidebarWidthPhone;
+    return kSidebarWidthPad;
+}
+
+/// 根据当前 traitCollection 决定右侧面板宽度
+static CGFloat LauncherRootLayoutRightPanelWidth(UITraitCollection *trait) {
+    if (!trait) return kRightPanelWidthPad;
+    if (trait.userInterfaceIdiom == UIUserInterfaceIdiomPhone) return kRightPanelWidthPhone;
+    return kRightPanelWidthPad;
+}
 
 @interface LauncherRootViewController ()
 
@@ -29,6 +45,8 @@ static const CGFloat kRightPanelWidth = 220.0;  // 右侧面板宽度
 
 @property(nonatomic, strong) NSLayoutConstraint *contentLeadingConstraint;
 @property(nonatomic, strong) NSLayoutConstraint *contentTrailingConstraint;
+@property(nonatomic, strong) NSLayoutConstraint *sidebarWidthConstraint;
+@property(nonatomic, strong) NSLayoutConstraint *rightPanelWidthConstraint;
 
 @property(nonatomic, assign) BOOL isShowingProfileEditor;
 @property(nonatomic, strong) ProfileSettingsViewController *profileEditorVC;
@@ -131,6 +149,23 @@ static const CGFloat kRightPanelWidth = 220.0;  // 右侧面板宽度
     [[BackgroundManager sharedManager] pauseVideo];
 }
 
+- (void)traitCollectionDidChange:(UITraitCollection *)previousTraitCollection {
+    [super traitCollectionDidChange:previousTraitCollection];
+    // iPhone 与 iPad 切换、或分屏调整大小时，更新侧栏与右侧面板宽度
+    CGFloat sidebarWidth = LauncherRootLayoutSidebarWidth(self.traitCollection);
+    CGFloat rightPanelWidth = LauncherRootLayoutRightPanelWidth(self.traitCollection);
+    if (self.sidebarWidthConstraint.constant != sidebarWidth) {
+        self.sidebarWidthConstraint.constant = sidebarWidth;
+    }
+    if (self.rightPanelWidthConstraint.constant != rightPanelWidth) {
+        self.rightPanelWidthConstraint.constant = rightPanelWidth;
+    }
+    // 通知子 VC 重新布局
+    for (UIViewController *child in self.childViewControllers) {
+        [child.view setNeedsLayout];
+    }
+}
+
 #pragma mark - Setup
 
 - (void)setupContainers {
@@ -153,18 +188,22 @@ static const CGFloat kRightPanelWidth = 220.0;  // 右侧面板宽度
     [self.view addSubview:self.rightPanelContainer];
     
     // 设置约束
+    // 使用可变宽度约束，便于 traitCollection 变化时更新（iPhone/iPad 适配）
+    self.sidebarWidthConstraint = [self.sidebarContainer.widthAnchor constraintEqualToConstant:LauncherRootLayoutSidebarWidth(self.traitCollection)];
+    self.rightPanelWidthConstraint = [self.rightPanelContainer.widthAnchor constraintEqualToConstant:LauncherRootLayoutRightPanelWidth(self.traitCollection)];
+
     [NSLayoutConstraint activateConstraints:@[
         // 左侧边栏
         [self.sidebarContainer.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.sidebarContainer.topAnchor constraintEqualToAnchor:self.view.topAnchor],
         [self.sidebarContainer.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
-        [self.sidebarContainer.widthAnchor constraintEqualToConstant:kSidebarWidth],
+        self.sidebarWidthConstraint,
         
         // 右侧面板
         [self.rightPanelContainer.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [self.rightPanelContainer.topAnchor constraintEqualToAnchor:self.view.topAnchor],
         [self.rightPanelContainer.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
-        [self.rightPanelContainer.widthAnchor constraintEqualToConstant:kRightPanelWidth],
+        self.rightPanelWidthConstraint,
         
         // 中间内容区
         [self.contentContainer.leadingAnchor constraintEqualToAnchor:self.sidebarContainer.trailingAnchor],

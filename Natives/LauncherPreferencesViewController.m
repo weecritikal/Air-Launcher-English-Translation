@@ -191,6 +191,9 @@
 
 - (void)viewDidLoad
 {
+    // 启用设置项搜索（必须在 super viewDidLoad 之前设置，父类据此创建 searchController）
+    self.searchEnabled = YES;
+
     self.getPreference = ^id(NSString *section, NSString *key){
         NSString *keyFull = [NSString stringWithFormat:@"%@.%@", section, key];
         return getPrefObject(keyFull);

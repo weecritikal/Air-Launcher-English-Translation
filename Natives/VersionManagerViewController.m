@@ -4,6 +4,9 @@
 #import "ProfileSettingsViewController.h"
 #import "ModsManagerViewController.h"
 #import "ShadersManagerViewController.h"
+#import "ResourcePacksManagerViewController.h"
+#import "DataPacksManagerViewController.h"
+#import "WorldsManagerViewController.h"
 #import "LauncherPrefGameDirViewController.h"
 #import "LauncherPreferences.h"
 #import "utils.h"
@@ -124,47 +127,70 @@
 @property (nonatomic, strong) UIImageView *iconView;
 @property (nonatomic, strong) UILabel *nameLabel;
 @property (nonatomic, strong) UILabel *versionLabel;
+@property (nonatomic, strong) UILabel *lastPlayedLabel;
 @property (nonatomic, strong) UIView *selectedBadge;
+@property (nonatomic, strong) UILabel *isolatedBadge;
 @end
 
 @implementation VMVersionCardCell
 
 - (void)setupViews {
     [super setupViews];
-    
+
     self.iconView = [[UIImageView alloc] init];
     self.iconView.translatesAutoresizingMaskIntoConstraints = NO;
     self.iconView.contentMode = UIViewContentModeScaleAspectFit;
     self.iconView.image = [UIImage systemImageNamed:@"cube.box.fill"];
     self.iconView.tintColor = [UIColor systemBlueColor];
     [self.contentContainer addSubview:self.iconView];
-    
+
     self.nameLabel = [[UILabel alloc] init];
     self.nameLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.nameLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
     self.nameLabel.textColor = [UIColor labelColor];
     self.nameLabel.numberOfLines = 1;
     [self.contentContainer addSubview:self.nameLabel];
-    
+
     self.versionLabel = [[UILabel alloc] init];
     self.versionLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.versionLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleCaption1];
     self.versionLabel.textColor = [UIColor secondaryLabelColor];
     [self.contentContainer addSubview:self.versionLabel];
-    
+
+    // FCL 风格：最后游玩时间小字（仅在有过游玩记录时显示）
+    self.lastPlayedLabel = [[UILabel alloc] init];
+    self.lastPlayedLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.lastPlayedLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleCaption2];
+    self.lastPlayedLabel.textColor = [UIColor tertiaryLabelColor];
+    self.lastPlayedLabel.text = @"";
+    [self.contentContainer addSubview:self.lastPlayedLabel];
+
     self.selectedBadge = [[UIView alloc] init];
     self.selectedBadge.translatesAutoresizingMaskIntoConstraints = NO;
     self.selectedBadge.backgroundColor = [UIColor systemGreenColor];
     self.selectedBadge.layer.cornerRadius = 12;
     self.selectedBadge.hidden = YES;
     [self.contentContainer addSubview:self.selectedBadge];
-    
+
     UIImageView *checkmark = [[UIImageView alloc] init];
     checkmark.translatesAutoresizingMaskIntoConstraints = NO;
     checkmark.image = [UIImage systemImageNamed:@"checkmark" withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:10 weight:UIFontWeightBold]];
     checkmark.tintColor = [UIColor whiteColor];
     [self.selectedBadge addSubview:checkmark];
-    
+
+    // FCL 风格：版本隔离徽章（仅当 gameDir != "." 时显示）
+    self.isolatedBadge = [[UILabel alloc] init];
+    self.isolatedBadge.translatesAutoresizingMaskIntoConstraints = NO;
+    self.isolatedBadge.font = [UIFont systemFontOfSize:9 weight:UIFontWeightSemibold];
+    self.isolatedBadge.textColor = [UIColor whiteColor];
+    self.isolatedBadge.backgroundColor = [UIColor systemTealColor];
+    self.isolatedBadge.textAlignment = NSTextAlignmentCenter;
+    self.isolatedBadge.layer.cornerRadius = 4;
+    self.isolatedBadge.layer.masksToBounds = YES;
+    self.isolatedBadge.text = @" 隔离 ";
+    self.isolatedBadge.hidden = YES;
+    [self.contentContainer addSubview:self.isolatedBadge];
+
     [NSLayoutConstraint activateConstraints:@[
         [self.iconView.leadingAnchor constraintEqualToAnchor:self.contentContainer.leadingAnchor constant:16],
         [self.iconView.centerYAnchor constraintEqualToAnchor:self.contentContainer.centerYAnchor],
@@ -176,6 +202,13 @@
         [self.versionLabel.leadingAnchor constraintEqualToAnchor:self.nameLabel.leadingAnchor],
         [self.versionLabel.topAnchor constraintEqualToAnchor:self.nameLabel.bottomAnchor constant:4],
         [self.versionLabel.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-16],
+        // 最后游玩时间放在 versionLabel 下方，与 isolatedBadge 同行
+        [self.lastPlayedLabel.leadingAnchor constraintEqualToAnchor:self.nameLabel.leadingAnchor],
+        [self.lastPlayedLabel.topAnchor constraintEqualToAnchor:self.versionLabel.bottomAnchor constant:2],
+        [self.lastPlayedLabel.trailingAnchor constraintEqualToAnchor:self.isolatedBadge.leadingAnchor constant:-6],
+        [self.isolatedBadge.centerYAnchor constraintEqualToAnchor:self.lastPlayedLabel.centerYAnchor],
+        [self.isolatedBadge.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-16],
+        [self.isolatedBadge.heightAnchor constraintEqualToConstant:16],
         [self.selectedBadge.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-16],
         [self.selectedBadge.centerYAnchor constraintEqualToAnchor:self.nameLabel.centerYAnchor],
         [self.selectedBadge.widthAnchor constraintEqualToConstant:24],
@@ -185,11 +218,13 @@
     ]];
 }
 
-- (void)configureWithName:(NSString *)name version:(NSString *)version isSelected:(BOOL)isSelected {
+- (void)configureWithName:(NSString *)name version:(NSString *)version isSelected:(BOOL)isSelected isolated:(BOOL)isolated lastPlayed:(NSString *)lastPlayed {
     self.nameLabel.text = name;
     self.versionLabel.text = version ?: @"未知版本";
     self.selectedBadge.hidden = !isSelected;
-    
+    self.isolatedBadge.hidden = !isolated;
+    self.lastPlayedLabel.text = lastPlayed.length > 0 ? lastPlayed : @"";
+
     // FCL 风格：根据 versionId 中的关键字识别加载器类型，显示对应图标和颜色
     NSString *lowerVersion = [version.lowercaseString stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
     UIImage *icon = [UIImage systemImageNamed:@"cube.box.fill"];
@@ -212,7 +247,7 @@
     }
     self.iconView.image = icon;
     self.iconView.tintColor = iconColor;
-    
+
     if (isSelected) {
         self.contentView.layer.borderColor = [UIColor systemGreenColor].CGColor;
         self.contentView.layer.borderWidth = 1.5;
@@ -371,34 +406,36 @@
         NSCollectionLayoutBoundarySupplementaryItem *header = [NSCollectionLayoutBoundarySupplementaryItem boundarySupplementaryItemWithLayoutSize:headerSize elementKind:UICollectionElementKindSectionHeader alignment:NSRectAlignmentTop];
         
         if (sectionIndex == 0) {
-            // Quick actions section - 3 items
-            NSInteger columnCount = isiPad ? 3 : 3;
+            // Quick actions section - 6 items，3 列 2 行（FCL 风格：游戏目录/Mod/光影/资源包/数据包/世界）
+            NSInteger columnCount = 3;
             NSCollectionLayoutSize *itemSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0 / columnCount]
                                                                               heightDimension:[NSCollectionLayoutDimension absoluteDimension:100]];
             NSCollectionLayoutItem *item = [NSCollectionLayoutItem itemWithLayoutSize:itemSize];
             item.contentInsets = NSDirectionalEdgeInsetsMake(6, 6, 6, 6);
-            
+
             NSCollectionLayoutSize *groupSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0]
                                                                                heightDimension:[NSCollectionLayoutDimension absoluteDimension:100]];
-            NSCollectionLayoutGroup *group = [NSCollectionLayoutGroup horizontalGroupWithLayoutSize:groupSize subitems:@[item]];
-            
+            // 用 subitem:count: 确保 group 包含 columnCount 个 item，section 会自动重复 group 渲染 2 行
+            NSCollectionLayoutGroup *group = [NSCollectionLayoutGroup horizontalGroupWithLayoutSize:groupSize subitem:item count:columnCount];
+
             NSCollectionLayoutSection *section = [NSCollectionLayoutSection sectionWithGroup:group];
             section.contentInsets = NSDirectionalEdgeInsetsMake(8, 14, 8, 14);
             section.boundarySupplementaryItems = @[header];
             return section;
         } else {
+            // 版本卡片：增加 lastPlayed/isolatedBadge 行后需要更高空间
             NSCollectionLayoutSize *itemSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:isiPad ? 0.5 : 1.0]
-                                                                              heightDimension:[NSCollectionLayoutDimension absoluteDimension:70]];
+                                                                              heightDimension:[NSCollectionLayoutDimension absoluteDimension:86]];
             NSCollectionLayoutItem *item = [NSCollectionLayoutItem itemWithLayoutSize:itemSize];
             item.contentInsets = NSDirectionalEdgeInsetsMake(4, 8, 4, 8);
-            
+
             NSCollectionLayoutSize *groupSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0]
-                                                                               heightDimension:[NSCollectionLayoutDimension absoluteDimension:70]];
+                                                                               heightDimension:[NSCollectionLayoutDimension absoluteDimension:86]];
             NSCollectionLayoutGroup *group = [NSCollectionLayoutGroup horizontalGroupWithLayoutSize:groupSize subitems:@[item]];
-            
+
             NSCollectionLayoutSection *section = [NSCollectionLayoutSection sectionWithGroup:group];
             section.contentInsets = NSDirectionalEdgeInsetsMake(0, 14, 20, 14);
-            
+
             section.boundarySupplementaryItems = @[header];
             return section;
         }
@@ -426,14 +463,14 @@
 }
 
 - (NSInteger)collectionView:(UICollectionView *)collectionView numberOfItemsInSection:(NSInteger)section {
-    if (section == 0) return 3;
+    if (section == 0) return 6;
     return self.profileList.count;
 }
 
 - (UICollectionViewCell *)collectionView:(UICollectionView *)collectionView cellForItemAtIndexPath:(NSIndexPath *)indexPath {
     if (indexPath.section == 0) {
         VMQuickActionCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"QuickActionCell" forIndexPath:indexPath];
-        
+
         switch (indexPath.item) {
             case 0:
                 [cell configureWithIcon:@"folder.fill" title:@"游戏目录" subtitle:getPrefObject(@"general.game_directory") color:[UIColor systemBlueColor]];
@@ -444,19 +481,54 @@
             case 2:
                 [cell configureWithIcon:@"paintbrush.fill" title:@"光影管理" subtitle:@"管理光影包" color:[UIColor systemPurpleColor]];
                 break;
+            case 3:
+                [cell configureWithIcon:@"shippingbox.fill" title:@"资源包管理" subtitle:@"管理资源包" color:[UIColor systemGreenColor]];
+                break;
+            case 4:
+                [cell configureWithIcon:@"doc.text.fill" title:@"数据包管理" subtitle:@"管理数据包" color:[UIColor systemPinkColor]];
+                break;
+            case 5:
+                [cell configureWithIcon:@"globe" title:@"世界管理" subtitle:@"管理存档" color:[UIColor systemTealColor]];
+                break;
         }
         return cell;
     } else {
         VMVersionCardCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"VersionCell" forIndexPath:indexPath];
-        
+
         NSString *profileName = self.profileList[indexPath.item];
         NSDictionary *profile = PLProfiles.current.profiles[profileName];
         NSString *versionId = profile[@"lastVersionId"] ?: @"未知版本";
         BOOL isSelected = [profileName isEqualToString:self.selectedProfile];
-        
-        [cell configureWithName:profileName version:versionId isSelected:isSelected];
+        // FCL 风格：gameDir != "." 表示该 profile 启用了版本隔离
+        NSString *gameDir = profile[@"gameDir"] ?: @".";
+        BOOL isolated = ![gameDir isEqualToString:@"."];
+        // 最后游玩时间（PLProfiles 在启动游戏时写入 lastPlayed 时间戳）
+        NSString *lastPlayed = [self formatLastPlayed:profile[@"lastPlayed"]];
+
+        [cell configureWithName:profileName version:versionId isSelected:isSelected isolated:isolated lastPlayed:lastPlayed];
         return cell;
     }
+}
+
+/// 将 lastPlayed 时间戳（NSNumber/NSString）格式化为"最后游玩：xxx"
+- (NSString *)formatLastPlayed:(id)lastPlayedRaw {
+    if (!lastPlayedRaw) return @"";
+    NSTimeInterval ts;
+    if ([lastPlayedRaw isKindOfClass:[NSNumber class]]) {
+        ts = [lastPlayedRaw doubleValue];
+    } else if ([lastPlayedRaw isKindOfClass:[NSString class]]) {
+        ts = [(NSString *)lastPlayedRaw doubleValue];
+    } else {
+        return @"";
+    }
+    if (ts <= 0) return @"";
+    NSDate *date = [NSDate dateWithTimeIntervalSince1970:ts];
+    NSDateFormatter *fmt = [[NSDateFormatter alloc] init];
+    fmt.locale = [NSLocale currentLocale];
+    fmt.doesRelativeDateFormatting = YES;
+    fmt.dateStyle = NSDateFormatterShortStyle;
+    fmt.timeStyle = NSDateFormatterShortStyle;
+    return [NSString stringWithFormat:@"最后游玩：%@", [fmt stringFromDate:date]];
 }
 
 - (UICollectionReusableView *)collectionView:(UICollectionView *)collectionView viewForSupplementaryElementOfKind:(NSString *)kind atIndexPath:(NSIndexPath *)indexPath {
@@ -476,12 +548,15 @@
 
 - (void)collectionView:(UICollectionView *)collectionView didSelectItemAtIndexPath:(NSIndexPath *)indexPath {
     [collectionView deselectItemAtIndexPath:indexPath animated:YES];
-    
+
     if (indexPath.section == 0) {
         switch (indexPath.item) {
             case 0: [self openGameDirectory]; break;
             case 1: [self openModsManager]; break;
             case 2: [self openShadersManager]; break;
+            case 3: [self openResourcePacksManager]; break;
+            case 4: [self openDataPacksManager]; break;
+            case 5: [self openWorldsManager]; break;
         }
     } else {
         // FCL 风格：点击未选中版本 → 立即选中；点击已选中版本 → 弹出编辑/删除菜单
@@ -527,6 +602,39 @@
     ShadersManagerViewController *vc = [[ShadersManagerViewController alloc] init];
     vc.profileName = self.selectedProfile;
     vc.initialMode = ShadersManagerModeLocal;
+    [self.navigationController pushViewController:vc animated:YES];
+}
+
+- (void)openResourcePacksManager {
+    if (!self.selectedProfile) {
+        [self showAlert:@"请先选择一个版本"];
+        return;
+    }
+    ResourcePacksManagerViewController *vc = [[ResourcePacksManagerViewController alloc] init];
+    vc.profileName = self.selectedProfile;
+    vc.initialMode = ResourcePacksManagerModeLocal;
+    [self.navigationController pushViewController:vc animated:YES];
+}
+
+- (void)openDataPacksManager {
+    if (!self.selectedProfile) {
+        [self showAlert:@"请先选择一个版本"];
+        return;
+    }
+    DataPacksManagerViewController *vc = [[DataPacksManagerViewController alloc] init];
+    vc.profileName = self.selectedProfile;
+    vc.initialMode = DataPacksManagerModeLocal;
+    [self.navigationController pushViewController:vc animated:YES];
+}
+
+- (void)openWorldsManager {
+    if (!self.selectedProfile) {
+        [self showAlert:@"请先选择一个版本"];
+        return;
+    }
+    WorldsManagerViewController *vc = [[WorldsManagerViewController alloc] init];
+    vc.profileName = self.selectedProfile;
+    vc.initialMode = WorldsManagerModeLocal;
     [self.navigationController pushViewController:vc animated:YES];
 }
 

@@ -1203,6 +1203,9 @@
 @property (nonatomic, strong) NSMutableArray *modList;
 @property (nonatomic, strong) NSMutableArray *shaderList;
 
+// 版本 tab 搜索关键词（按版本号前缀过滤，例如输入 "1.2" 匹配 1.20.x / 1.2.x）
+@property (nonatomic, strong) NSString *versionSearchQuery;
+
 @property (nonatomic, assign) NSInteger currentModOffset;
 @property (nonatomic, assign) NSInteger currentShaderOffset;
 @property (nonatomic, assign) BOOL isLoadingMore;
@@ -1388,10 +1391,11 @@
 - (void)setupSearchBar {
     self.searchBar = [[UISearchBar alloc] init];
     self.searchBar.translatesAutoresizingMaskIntoConstraints = NO;
-    self.searchBar.placeholder = @"搜索...";
+    self.searchBar.placeholder = @"搜索版本...";
     self.searchBar.delegate = self;
     self.searchBar.searchBarStyle = UISearchBarStyleMinimal;
-    self.searchBar.hidden = YES;
+    // 搜索框对所有 tab 都显示（版本 tab 用于按版本号前缀过滤）
+    self.searchBar.hidden = NO;
     [self.view addSubview:self.searchBar];
 
     self.filterButton = [UIButton buttonWithType:UIButtonTypeSystem];
@@ -1731,8 +1735,10 @@
     [UIView transitionWithView:self.view duration:0.2 options:UIViewAnimationOptionTransitionCrossDissolve animations:^{
         self.versionFilterSegment.hidden = (index != 0);
         self.versionCollectionView.hidden = (index != 0);
-        self.searchBar.hidden = (index == 0);
-        self.filterButton.hidden = (index == 0);
+        // 搜索框对所有 tab 都显示（版本 tab 用于按版本号前缀过滤本地+远程版本列表）
+        self.searchBar.hidden = NO;
+        // 过滤按钮仅在版本 tab 显示（用于调出版本类型筛选/排序选项）
+        self.filterButton.hidden = (index != 0);
         self.modTableView.hidden = (index != 1);
         self.shaderTableView.hidden = (index != 2);
         self.resourcepackTableView.hidden = (index != 3);
@@ -1755,7 +1761,11 @@
         [self.view layoutIfNeeded];
     }];
 
-    if (index == 1) {
+    if (index == 0) {
+        // 版本 tab：按版本号前缀过滤版本列表
+        self.searchBar.placeholder = @"搜索版本...";
+        // 版本 tab 不需要源切换
+    } else if (index == 1) {
         self.searchBar.placeholder = @"搜索模组...";
         [self updateSourceSwitchButtonsForType:@"mod"];
         if (self.modList.count == 0) {
@@ -1965,20 +1975,36 @@
     if (!self.versionList) return;
     
     NSInteger filterIndex = self.versionFilterSegment.selectedSegmentIndex;
+    // 搜索关键词：忽略大小写与首尾空格，按版本号前缀匹配
+    NSString *query = [self.versionSearchQuery stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    NSString *lowerQuery = query.lowercaseString;
+    BOOL hasQuery = (lowerQuery.length > 0);
+    
     NSMutableArray *filtered = [NSMutableArray array];
     
     for (NSDictionary *version in self.versionList) {
         NSString *type = version[@"type"];
         
+        BOOL typeMatch = NO;
         if (filterIndex == 0) {
-            [filtered addObject:version];
+            typeMatch = YES;
         } else if (filterIndex == 1 && [type isEqualToString:@"release"]) {
-            [filtered addObject:version];
+            typeMatch = YES;
         } else if (filterIndex == 2 && [type isEqualToString:@"snapshot"]) {
-            [filtered addObject:version];
+            typeMatch = YES;
         } else if (filterIndex == 3 && ([type isEqualToString:@"old_alpha"] || [type isEqualToString:@"old_beta"])) {
-            [filtered addObject:version];
+            typeMatch = YES;
         }
+        if (!typeMatch) continue;
+        
+        // 应用搜索关键词过滤（按 id 前缀匹配，例如 "1.2" 命中 "1.20.4"）
+        if (hasQuery) {
+            NSString *versionId = version[@"id"];
+            if (![versionId isKindOfClass:[NSString class]] || versionId.length == 0) continue;
+            if (![versionId.lowercaseString hasPrefix:lowerQuery]) continue;
+        }
+        
+        [filtered addObject:version];
     }
     
     self.filteredVersions = filtered;
@@ -1986,7 +2012,7 @@
     
     self.emptyLabel.hidden = (self.filteredVersions.count > 0);
     if (self.filteredVersions.count == 0) {
-        self.emptyLabel.text = @"暂无版本";
+        self.emptyLabel.text = hasQuery ? @"未匹配到版本" : @"暂无版本";
         self.emptyLabel.hidden = NO;
     } else {
         self.emptyLabel.hidden = YES;
@@ -2678,7 +2704,10 @@
     [searchBar resignFirstResponder];
 
     NSInteger tabIndex = self.tabSegment.selectedSegmentIndex;
-    if (tabIndex == 1) {
+    if (tabIndex == 0) {
+        // 版本 tab：搜索过滤已在 textDidChange 实时执行，此处仅收起键盘
+        // 不再重复调用 applyVersionFilter
+    } else if (tabIndex == 1) {
         [self searchMods:searchBar.text];
     } else if (tabIndex == 2) {
         [self searchShaders:searchBar.text];
@@ -2700,8 +2729,18 @@
     self.resourcepackSearchQuery = nil;
     self.datapackSearchQuery = nil;
     self.worldSearchQuery = nil;
+    self.versionSearchQuery = nil;
     [searchBar resignFirstResponder];
     [self reloadCurrentList];
+}
+
+- (void)searchBar:(UISearchBar *)searchBar textDidChange:(NSString *)searchText {
+    NSInteger tabIndex = self.tabSegment.selectedSegmentIndex;
+    if (tabIndex == 0) {
+        // 版本 tab：实时按版本号前缀过滤（无需点击搜索按钮）
+        self.versionSearchQuery = searchText;
+        [self applyVersionFilter];
+    }
 }
 
 #pragma mark - UICollectionView DataSource
@@ -2712,16 +2751,33 @@
 
 - (UICollectionViewCell *)collectionView:(UICollectionView *)collectionView cellForItemAtIndexPath:(NSIndexPath *)indexPath {
     VersionCardCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"VersionCard" forIndexPath:indexPath];
-    
+
     NSDictionary *version = self.filteredVersions[indexPath.row];
     NSString *versionId = version[@"id"];
     NSString *releaseTime = version[@"releaseTime"];
     NSString *versionType = version[@"type"];
-    
+
     NSString *formattedDate = [self formatDate:releaseTime];
     [cell configureWithVersionId:versionId date:formattedDate type:versionType];
-    
+
+    // FCL 风格：标记已安装的版本（遍历 PLProfiles，匹配 lastVersionId）
+    [cell setInstalled:[self isVersionInstalled:versionId]];
+
     return cell;
+}
+
+/// 检查指定 versionId 是否已安装在本地（任一 profile 的 lastVersionId 匹配即视为已安装）
+- (BOOL)isVersionInstalled:(NSString *)versionId {
+    if (!versionId.length) return NO;
+    NSDictionary *profiles = PLProfiles.current.profiles;
+    for (NSString *name in profiles.allKeys) {
+        NSDictionary *profile = profiles[name];
+        NSString *lastVersionId = profile[@"lastVersionId"];
+        if ([lastVersionId isKindOfClass:[NSString class]] && [lastVersionId isEqualToString:versionId]) {
+            return YES;
+        }
+    }
+    return NO;
 }
 
 - (NSString *)formatDate:(NSString *)dateString {

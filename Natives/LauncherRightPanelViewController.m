@@ -104,15 +104,22 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     self.usernameLabel.font = [UIFont boldSystemFontOfSize:16];
     self.usernameLabel.textColor = [UIColor labelColor];
     self.usernameLabel.textAlignment = NSTextAlignmentCenter;
+    // iPhone 上侧栏宽度更窄，开启字号自适应避免长用户名被截断
+    self.usernameLabel.adjustsFontSizeToFitWidth = YES;
+    self.usernameLabel.minimumScaleFactor = 0.7;
+    self.usernameLabel.lineBreakMode = NSLineBreakByTruncatingTail;
     self.usernameLabel.text = @"未登录";
     [self.view addSubview:self.usernameLabel];
-    
+
     // 版本标签
     self.versionLabel = [[UILabel alloc] init];
     self.versionLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.versionLabel.font = [UIFont systemFontOfSize:13];
     self.versionLabel.textColor = [UIColor secondaryLabelColor];
     self.versionLabel.textAlignment = NSTextAlignmentCenter;
+    self.versionLabel.adjustsFontSizeToFitWidth = YES;
+    self.versionLabel.minimumScaleFactor = 0.7;
+    self.versionLabel.lineBreakMode = NSLineBreakByTruncatingTail;
     self.versionLabel.text = @"未选择版本";
     // FCL 风格：点击版本标签也能弹出选择器
     self.versionLabel.userInteractionEnabled = YES;
@@ -141,28 +148,38 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     [self.launchButton setTitle:@"启动游戏" forState:UIControlStateNormal];
     [self.launchButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     self.launchButton.titleLabel.font = [UIFont boldSystemFontOfSize:18];
+    // iPhone 右侧面板更窄：标题字号自适应，避免"下载中..."等长文案被截断
+    self.launchButton.titleLabel.adjustsFontSizeToFitWidth = YES;
+    self.launchButton.titleLabel.minimumScaleFactor = 0.6;
+    self.launchButton.titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
     self.launchButton.backgroundColor = [UIColor colorWithRed:0.26 green:0.63 blue:0.96 alpha:1.0];
     self.launchButton.layer.cornerRadius = 12;
     self.launchButton.layer.masksToBounds = YES;
     [self.launchButton addTarget:self action:@selector(launchButtonTapped) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.launchButton];
-    
+
     // 选择版本按钮（FCL 风格：右侧版本选择入口；控制设置已挪到左侧菜单 case 3）
     self.manageVersionBtn = [UIButton buttonWithType:UIButtonTypeSystem];
     self.manageVersionBtn.translatesAutoresizingMaskIntoConstraints = NO;
     [self.manageVersionBtn setTitle:@"选择版本" forState:UIControlStateNormal];
     [self.manageVersionBtn setTitleColor:[UIColor labelColor] forState:UIControlStateNormal];
     [self.manageVersionBtn.titleLabel setFont:[UIFont systemFontOfSize:14 weight:UIFontWeightMedium]];
+    self.manageVersionBtn.titleLabel.adjustsFontSizeToFitWidth = YES;
+    self.manageVersionBtn.titleLabel.minimumScaleFactor = 0.7;
+    self.manageVersionBtn.titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
     self.manageVersionBtn.backgroundColor = [UIColor colorWithWhite:0.2 alpha:1.0];
     self.manageVersionBtn.layer.cornerRadius = 8;
     [self.manageVersionBtn addTarget:self action:@selector(showVersionPicker) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.manageVersionBtn];
-    
+
     // 执行JAR按钮
     self.executeJarBtn = [UIButton buttonWithType:UIButtonTypeSystem];
     self.executeJarBtn.translatesAutoresizingMaskIntoConstraints = NO;
     [self.executeJarBtn setTitle:@"执行Jar" forState:UIControlStateNormal];
     [self.executeJarBtn setTitleColor:[UIColor labelColor] forState:UIControlStateNormal];
+    self.executeJarBtn.titleLabel.adjustsFontSizeToFitWidth = YES;
+    self.executeJarBtn.titleLabel.minimumScaleFactor = 0.7;
+    self.executeJarBtn.titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
     self.executeJarBtn.backgroundColor = [UIColor colorWithWhite:0.2 alpha:1.0];
     self.executeJarBtn.layer.cornerRadius = 8;
     [self.executeJarBtn addTarget:self action:@selector(executeJar) forControlEvents:UIControlEventTouchUpInside];
@@ -392,19 +409,28 @@ static void *ProgressObserverContext = &ProgressObserverContext;
         [self showAlert:@"请先登录账户"];
         return;
     }
-    
+
     NSString *selectedProfile = PLProfiles.current.selectedProfileName;
     if (!selectedProfile) {
         [self showAlert:@"请先选择一个版本"];
         return;
     }
-    
+
     NSString *versionId = PLProfiles.current.profiles[selectedProfile][@"lastVersionId"];
     if (!versionId) {
         [self showAlert:@"无法获取版本信息"];
         return;
     }
-    
+
+    // FCL 风格：记录最后游玩时间戳到 profile，供版本管理页显示
+    NSMutableDictionary *profiles = PLProfiles.current.profiles;
+    NSMutableDictionary *profile = [profiles[selectedProfile] mutableCopy];
+    if (profile) {
+        profile[@"lastPlayed"] = @([[NSDate date] timeIntervalSince1970]);
+        profiles[selectedProfile] = profile;
+        [PLProfiles.current save];
+    }
+
     // 设置UI为下载状态
     [self setInteractionEnabled:NO];
     

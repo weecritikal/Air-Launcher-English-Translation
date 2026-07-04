@@ -11,9 +11,14 @@
 #import "ios_uikit_bridge.h"
 #import "utils.h"
 
-@interface PLPrefTableViewController()<UIContextMenuInteractionDelegate>{}
+@interface PLPrefTableViewController()<UIContextMenuInteractionDelegate>{
+    NSString *_currentSearchText;
+}
 @property(nonatomic) UIMenu* currentMenu;
 @property(nonatomic) UIBarButtonItem *helpBtn;
+@property(nonatomic, strong) UISearchController *searchController;
+/// 搜索结果：filteredSections[0] 为扁平化的所有匹配项（忽略 section 归属）
+@property(nonatomic, strong) NSArray<NSDictionary *> *filteredItems;
 
 @end
 
@@ -40,6 +45,68 @@
         // Display one singe section if prefSection is unspecified
         self.prefSectionsVisibility = (id)@[@YES];
     }
+
+    // 搜索栏初始化（仅当 searchEnabled=YES 时启用，子类负责设置）
+    if (self.searchEnabled) {
+        self.searchController = [[UISearchController alloc] initWithSearchResultsController:nil];
+        self.searchController.searchResultsUpdater = self;
+        self.searchController.obscuresBackgroundDuringPresentation = NO;
+        self.searchController.searchBar.placeholder = @"搜索设置项...";
+        self.searchController.searchBar.autocapitalizationType = UITextAutocapitalizationTypeNone;
+        self.searchController.searchBar.autocorrectionType = UITextAutocorrectionTypeNo;
+        self.tableView.tableHeaderView = self.searchController.searchBar;
+        self.definesPresentationContext = YES;
+        _currentSearchText = @"";
+    }
+}
+
+- (NSString *)currentSearchText {
+    return _currentSearchText ?: @"";
+}
+
+#pragma mark - Search
+
+- (void)updateSearchResultsForSearchController:(UISearchController *)searchController {
+    NSString *query = [searchController.searchBar.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    _currentSearchText = query ?: @"";
+
+    if (query.length == 0) {
+        self.filteredItems = nil;
+        [self.tableView reloadData];
+        return;
+    }
+
+    // 扁平化所有 prefContents 中的设置项，按 title/key/icon/localizedTitle 模糊匹配
+    NSMutableArray *results = [NSMutableArray array];
+    NSString *lowerQuery = query.lowercaseString;
+    for (int s = 0; s < self.prefContents.count; s++) {
+        NSArray *section = self.prefContents[s];
+        // 第 0 项是 section 头，跳过
+        for (int r = (self.prefSections ? 1 : 0); r < section.count; r++) {
+            NSDictionary *item = section[r];
+            NSString *title = item[@"title"];
+            if (!title) {
+                title = [NSString stringWithFormat:@"preference.title.%@", item[@"key"]];
+            }
+            NSString *localizedTitle = localize(title, nil);
+            NSString *key = item[@"key"] ?: @"";
+            NSString *icon = item[@"icon"] ?: @"";
+            // 匹配本地化标题、key、icon 名、原文标题
+            if ([localizedTitle.lowercaseString containsString:lowerQuery] ||
+                [key.lowercaseString containsString:lowerQuery] ||
+                [icon.lowercaseString containsString:lowerQuery] ||
+                [title.lowercaseString containsString:lowerQuery]) {
+                // 记录原始 section 和 row，便于点击时定位
+                NSMutableDictionary *matched = [item mutableCopy];
+                matched[@"__origSection"] = @(s);
+                matched[@"__origRow"] = @(r);
+                matched[@"__localizedTitle"] = localizedTitle;
+                [results addObject:matched];
+            }
+        }
+    }
+    self.filteredItems = results;
+    [self.tableView reloadData];
 }
 
 - (UIBarButtonItem *)drawHelpButton {
@@ -81,10 +148,16 @@
 }
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
+    // 搜索结果为单一扁平 section
+    if (self.filteredItems) return 1;
     return self.prefSectionsVisibility.count;
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
+    // 搜索结果模式
+    if (self.filteredItems) {
+        return self.filteredItems.count;
+    }
     if (self.prefSectionsVisibility[section].boolValue) {
         return self.prefContents[section].count;
     }
@@ -92,6 +165,33 @@
 }
 
 - (UITableViewCell *)tableView:(nonnull UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+    // 搜索结果模式：使用扁平化的 filteredItems
+    if (self.filteredItems) {
+        NSDictionary *item = self.filteredItems[indexPath.row];
+        NSString *cellID = @"searchResultCell";
+        UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:cellID];
+        if (cell == nil) {
+            cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:cellID];
+            cell.textLabel.adjustsFontSizeToFitWidth = YES;
+            cell.textLabel.numberOfLines = 0;
+            cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+            cell.selectionStyle = UITableViewCellSelectionStyleDefault;
+        }
+        cell.textLabel.text = item[@"__localizedTitle"];
+        // 副标题显示所属 section
+        NSNumber *origSection = item[@"__origSection"];
+        if (origSection && self.prefSections && origSection.intValue < (int)self.prefSections.count) {
+            NSString *sectionKey = self.prefSections[origSection.intValue];
+            cell.detailTextLabel.text = localize(([NSString stringWithFormat:@"preference.section.%@", sectionKey]), nil);
+        } else {
+            cell.detailTextLabel.text = nil;
+        }
+        cell.imageView.image = [UIImage systemImageNamed:item[@"icon"]];
+        cell.imageView.tintColor = [item[@"destructive"] boolValue] ? UIColor.systemRedColor : nil;
+        cell.userInteractionEnabled = YES;
+        return cell;
+    }
+
     NSDictionary *item = self.prefContents[indexPath.section][indexPath.row];
 
     NSString *cellID;
@@ -304,6 +404,35 @@
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:NO];
+
+    // 搜索结果模式：跳转到原始 section 并展开该 section
+    if (self.filteredItems) {
+        NSDictionary *item = self.filteredItems[indexPath.row];
+        NSNumber *origSection = item[@"__origSection"];
+        NSNumber *origRow = item[@"__origRow"];
+        if (!origSection || !origRow) return;
+
+        // 关闭搜索并恢复原始布局
+        [self.searchController setActive:NO animated:YES];
+        self.filteredItems = nil;
+        _currentSearchText = @"";
+
+        // 展开对应 section
+        if (origSection.intValue < (int)self.prefSectionsVisibility.count) {
+            self.prefSectionsVisibility[origSection.intValue] = @YES;
+        }
+        [self.tableView reloadData];
+
+        // 跳转到该项并触发原始点击行为
+        NSIndexPath *origIndexPath = [NSIndexPath indexPathForRow:origRow.intValue inSection:origSection.intValue];
+        [self.tableView scrollToRowAtIndexPath:origIndexPath atScrollPosition:UITableViewScrollPositionMiddle animated:YES];
+        // 延迟触发，等滚动完成
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self tableView:tableView didSelectRowAtIndexPath:origIndexPath];
+        });
+        return;
+    }
+
     if (indexPath.row == 0 && self.prefSections) {
         self.prefSectionsVisibility[indexPath.section] = @(![self.prefSectionsVisibility[indexPath.section] boolValue]);
         [tableView reloadSections:[NSIndexSet indexSetWithIndex:indexPath.section] withRowAnimation:UITableViewRowAnimationFade];
