@@ -413,7 +413,8 @@
         if (!origSection || !origRow) return;
 
         // 关闭搜索并恢复原始布局
-        [self.searchController setActive:NO animated:YES];
+        // 注意：UISearchController 没有 setActive:animated:，用 active 属性替代
+        self.searchController.active = NO;
         self.filteredItems = nil;
         _currentSearchText = @"";
 
