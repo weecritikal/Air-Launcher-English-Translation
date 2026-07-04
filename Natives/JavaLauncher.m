@@ -460,7 +460,11 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
     [classpathBuilder appendString:lwjglJar];
     NSString *classpath = classpathBuilder;
     if (launchJar) {
-        classpath = [classpath stringByAppendingFormat:@":%@", launchTarget];
+        // JAR 放在 classpath 最前面，避免 bundle libs 中的同名类（gson/guava/kotlin-stdlib 等）
+        // 优先加载，导致 installer 自带依赖被遮蔽引发 NoSuchMethodError/LinkageError
+        // 标准 `java -jar` 语义下 JAR 本应是唯一 classpath，此处保留 bundle libs 仅因 PojavLauncher
+        // 与 UIKit bridge 类需要加载，但 installer 自身依赖应优先
+        classpath = [NSString stringWithFormat:@"%@:%@", launchTarget, classpath];
     }
     margv[++margc] = "-cp";
     margv[++margc] = classpath.UTF8String;
