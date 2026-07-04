@@ -19,7 +19,7 @@
 @property (nonatomic, strong) UILabel *metaLabel;
 @property (nonatomic, strong) UITextView *descTextView;
 @property (nonatomic, strong) UILabel *addressLabel;
-@property (nonatomic, strong) UIButton *copyAddressButton;
+@property (nonatomic, strong) UIButton *addressCopyButton;
 @property (nonatomic, strong) UIButton *joinButton;
 @property (nonatomic, strong) UIButton *downloadPackButton;
 @property (nonatomic, strong) UIScrollView *scrollView;
@@ -40,7 +40,7 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     [[BackgroundManager sharedManager] applyEffectToView:self.view];
-    self.view.backgroundColor = [UIColor systemBackground];
+    self.view.backgroundColor = [UIColor systemBackgroundColor];
     self.title = @"服务器详情";
 
     [self setupUI];
@@ -80,7 +80,7 @@
     self.iconView.layer.cornerRadius = 16;
     self.iconView.clipsToBounds = YES;
     self.iconView.contentMode = UIViewContentModeScaleAspectFill;
-    self.iconView.backgroundColor = [UIColor secondarySystemBackground];
+    self.iconView.backgroundColor = [UIColor secondarySystemBackgroundColor];
     [content addSubview:self.iconView];
 
     // 标题
@@ -118,13 +118,13 @@
     [content addSubview:self.addressLabel];
 
     // 复制地址按钮
-    self.copyAddressButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    self.copyAddressButton.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.copyAddressButton setImage:[UIImage systemImageNamed:@"doc.on.doc"] forState:UIControlStateNormal];
-    [self.copyAddressButton setTitle:@" 复制" forState:UIControlStateNormal];
-    self.copyAddressButton.titleLabel.font = [UIFont systemFontOfSize:14];
-    [self.copyAddressButton addTarget:self action:@selector(copyAddress) forControlEvents:UIControlEventTouchUpInside];
-    [content addSubview:self.copyAddressButton];
+    self.addressCopyButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    self.addressCopyButton.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.addressCopyButton setImage:[UIImage systemImageNamed:@"doc.on.doc"] forState:UIControlStateNormal];
+    [self.addressCopyButton setTitle:@" 复制" forState:UIControlStateNormal];
+    self.addressCopyButton.titleLabel.font = [UIFont systemFontOfSize:14];
+    [self.addressCopyButton addTarget:self action:@selector(copyAddress) forControlEvents:UIControlEventTouchUpInside];
+    [content addSubview:self.addressCopyButton];
 
     // 加入服务器按钮
     self.joinButton = [UIButton buttonWithType:UIButtonTypeSystem];
@@ -168,11 +168,11 @@
 
         [self.addressLabel.topAnchor constraintEqualToAnchor:self.descTextView.bottomAnchor constant:16],
         [self.addressLabel.leadingAnchor constraintEqualToAnchor:content.leadingAnchor constant:16],
-        [self.addressLabel.trailingAnchor constraintEqualToAnchor:self.copyAddressButton.leadingAnchor constant:-8],
+        [self.addressLabel.trailingAnchor constraintEqualToAnchor:self.addressCopyButton.leadingAnchor constant:-8],
 
-        [self.copyAddressButton.centerYAnchor constraintEqualToAnchor:self.addressLabel.centerYAnchor],
-        [self.copyAddressButton.trailingAnchor constraintEqualToAnchor:content.trailingAnchor constant:-16],
-        [self.copyAddressButton.heightAnchor constraintEqualToConstant:32],
+        [self.addressCopyButton.centerYAnchor constraintEqualToAnchor:self.addressLabel.centerYAnchor],
+        [self.addressCopyButton.trailingAnchor constraintEqualToAnchor:content.trailingAnchor constant:-16],
+        [self.addressCopyButton.heightAnchor constraintEqualToConstant:32],
 
         [self.joinButton.topAnchor constraintEqualToAnchor:self.addressLabel.bottomAnchor constant:20],
         [self.joinButton.leadingAnchor constraintEqualToAnchor:content.leadingAnchor constant:16],
