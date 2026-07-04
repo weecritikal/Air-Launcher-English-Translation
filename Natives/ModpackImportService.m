@@ -897,7 +897,10 @@ didFinishDownloadingToURL:(NSURL *)location {
 
     if (!installSuccess) {
         NSLog(@"[ModpackImport] %@ 直装失败，回退到占位 JSON: %@", loader, installError.localizedDescription);
-        [[DownloadTaskManager sharedManager] setTaskWithId:installerItem.taskId completedWithError:installError];
+        // 使用外层作用域的 installerTaskId（installerItem 仅在 floatingBallEnabled 块内声明）
+        if (installerTaskId) {
+            [[DownloadTaskManager sharedManager] setTaskWithId:installerTaskId completedWithError:installError];
+        }
         // 直装失败：写占位 JSON 兜底（用户可手动装）
         NSDictionary *placeholderJSON = @{
             @"_comment_": [NSString stringWithFormat:@"此整合包需要 %@ %@ 加载器，自动安装失败：%@。请通过下载界面手动安装。", loader, loaderVersion, installError.localizedDescription ?: @"未知错误"],
