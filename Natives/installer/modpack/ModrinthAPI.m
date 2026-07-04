@@ -6,6 +6,8 @@
 
 @implementation ModrinthAPI
 
+@dynamic reachedLastPage, lastError;
+
 + (instancetype)sharedInstance {
     static ModrinthAPI *sharedInstance = nil;
     static dispatch_once_t onceToken;
@@ -574,14 +576,20 @@
         details[@"date_modified"] = json[@"updated"] ?: @"";
 
         // Server Projects 详情可能直接包含 server_address 字段
-        id addr = json[@"server_address"] ?: json[@"ip"] ?: json[@"address"];
-        if ([addr isKindOfClass:[NSString class]] && addr.length > 0) {
-            details[@"serverAddress"] = addr;
+        id addrObj = json[@"server_address"] ?: json[@"ip"] ?: json[@"address"];
+        if ([addrObj isKindOfClass:[NSString class]]) {
+            NSString *addr = (NSString *)addrObj;
+            if (addr.length > 0) {
+                details[@"serverAddress"] = addr;
+            }
         }
         // 关联整合包 ID
-        id mpID = json[@"modpack_project_id"] ?: json[@"modpack_id"];
-        if ([mpID isKindOfClass:[NSString class]] && mpID.length > 0) {
-            details[@"modpack_project_id"] = mpID;
+        id mpIDObj = json[@"modpack_project_id"] ?: json[@"modpack_id"];
+        if ([mpIDObj isKindOfClass:[NSString class]]) {
+            NSString *mpID = (NSString *)mpIDObj;
+            if (mpID.length > 0) {
+                details[@"modpack_project_id"] = mpID;
+            }
         }
 
         if (completion) completion(details, nil);
