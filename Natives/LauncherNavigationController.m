@@ -240,6 +240,17 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     vc.filepath = path;
     vc.hitEnterAfterWindowShown = hitEnter;
     if (!vc.requiredJavaVersion) {
+        // 解析失败（manifest 缺失/主类非法）时明确提示，避免静默 return 让用户以为安装器已启动
+        showDialog(localize(@"Error", nil),
+            [NSString stringWithFormat:@"无法解析安装器主类或 Java 版本：%@", path.lastPathComponent]);
+        return;
+    }
+    // 预检 execute_jar 标签的 JRE 是否已配置，避免 present 后才发现没 JRE 导致黑屏
+    // 与 LauncherRightPanelViewController.enterModInstallerWithPath: 行为一致
+    NSString *javaHome = getSelectedJavaHome(@"execute_jar", vc.requiredJavaVersion);
+    if (!javaHome) {
+        showDialog(localize(@"Error", nil),
+            [NSString stringWithFormat:@"执行 JAR 需要 Java %d 或更高版本，但未配置对应的运行时。\n\n请到「设置 → 管理运行时」中为「执行 Jar」标签分配一个 Java %d+ 的运行时。", vc.requiredJavaVersion, vc.requiredJavaVersion]);
         return;
     }
     [self invokeAfterJITEnabled:^{
@@ -418,7 +429,9 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 }
 
 - (void)invokeAfterJITEnabled:(void(^)(void))handler {
-    localVersionList = remoteVersionList = nil;
+    // 注意：不要在此清空 localVersionList/remoteVersionList
+    // 该方法既被 JAR 执行调用，也被正常启动游戏调用；清空会导致用户返回后版本列表为空、
+    // buttonInstall 短暂不可用。版本列表的生命周期应由 reloadProfileList 统一管理。
     BOOL hasTrollStoreJIT = getEntitlementValue(@"com.apple.private.local.sandboxed-jit");
 
     if (isJITEnabled(false)) {

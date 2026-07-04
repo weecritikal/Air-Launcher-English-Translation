@@ -313,7 +313,17 @@ void AWTInputBridge_sendKey(int keycode) {
 
     
 dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        launchJVM(nil, self.filepath, windowWidth, windowHeight, _requiredJavaVersion);
+        // 走 getter 兜底：若调用方未触发预解析，getter 会现场解析 manifest
+        // 避免 ivar=0 时 launchJVM 用 minVersion=0 匹配到错误的 JRE（如 Java 8 跑 NeoForge installer）
+        int javaVer = self.requiredJavaVersion;
+        if (javaVer <= 0) {
+            // 解析失败，getter 已弹错误提示，回主线程 dismiss VC 避免黑屏
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [self.presentingViewController dismissViewControllerAnimated:YES completion:nil];
+            });
+            return;
+        }
+        launchJVM(nil, self.filepath, windowWidth, windowHeight, javaVer);
         _requiredJavaVersion = 0;
     });
 }
@@ -381,12 +391,16 @@ dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
     NSArray *manifestLines = [manifestStr componentsSeparatedByCharactersInSet:NSCharacterSet.newlineCharacterSet];
     NSString *mainClass;
     for (NSString *line in manifestLines) {
-        if ([line hasPrefix:@"Main-Class: "]) {
-            mainClass = [line substringFromIndex:12];
+        // 容错：去除行尾 \r（Windows CRLF 换行会残留 \r）和首尾空白
+        NSString *trimmed = [line stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        if ([trimmed hasPrefix:@"Main-Class:"]) {
+            // Main-Class: 后可能有 0~N 个空格，规范允许任意空白
+            mainClass = [[trimmed substringFromIndex:@"Main-Class:".length]
+                stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
             break;
         }
     }
-    if (!mainClass) {
+    if (!mainClass || mainClass.length == 0) {
         [self showErrorMessage:[NSString stringWithFormat:
             localize(@"java.error.missing_main_class", nil), self.filepath.lastPathComponent]];
         return _requiredJavaVersion = 0;
@@ -399,19 +413,36 @@ dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         [self showErrorMessage:error.localizedDescription];
         return _requiredJavaVersion = 0;
     }
+    // 越界保护：class 文件至少需要 8 字节（magic 4 + minor 2 + major 2）
+    if (mainClassData.length < 8) {
+        [self showErrorMessage:[NSString stringWithFormat:@"Invalid class file: too small (%lu bytes)", (unsigned long)mainClassData.length]];
+        return _requiredJavaVersion = 0;
+    }
 
-    uint32_t magic = OSSwapConstInt32(*(uint32_t*)mainClassData.bytes);
+    // 用 memcpy 读取避免未对齐内存访问（NSData.bytes 不保证 2/4 字节对齐）
+    uint32_t magic;
+    memcpy(&magic, mainClassData.bytes, sizeof(magic));
+    magic = OSSwapConstInt32(magic);
     if (magic != 0xCAFEBABE) {
         [self showErrorMessage:[NSString stringWithFormat:@"Invalid magic number: 0x%x", magic]];
         return _requiredJavaVersion = 0;
     }
 
-    uint16_t *version = (uint16_t *)(mainClassData.bytes+sizeof(magic));
-    uint16_t minorVer = OSSwapConstInt16(version[0]);
-    uint16_t majorVer = OSSwapConstInt16(version[1]);
+    uint16_t minorVer, majorVer;
+    memcpy(&minorVer, (const uint8_t *)mainClassData.bytes + sizeof(magic), sizeof(minorVer));
+    memcpy(&majorVer, (const uint8_t *)mainClassData.bytes + sizeof(magic) + sizeof(minorVer), sizeof(majorVer));
+    minorVer = OSSwapConstInt16(minorVer);
+    majorVer = OSSwapConstInt16(majorVer);
     NSLog(@"[ModInstaller] Main class version: %u.%u", majorVer, minorVer);
 
-    // Minecraft version to Java version mapping:
+    // 字节码版本下界保护：class file major version 范围合理值是 45~70+
+    // Java 1.0 = 45, Java 8 = 52, Java 17 = 61, Java 21 = 65
+    if (majorVer < 45 || majorVer > 70) {
+        [self showErrorMessage:[NSString stringWithFormat:@"Invalid class file version: %u.%u", majorVer, minorVer]];
+        return _requiredJavaVersion = 0;
+    }
+
+    // Class file major version to Java version mapping:
     // Java 8 (version 52) = Minecraft 1.12 and earlier
     // Java 16 (version 60) = Minecraft 1.17 and later
     // Java 17 (version 61) = Minecraft 1.18 and later

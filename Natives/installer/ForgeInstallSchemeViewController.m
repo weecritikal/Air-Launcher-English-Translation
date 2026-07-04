@@ -203,7 +203,12 @@
 }
 
 - (void)actionClose:(UIButton *)sender {
-    [self dismissViewControllerAnimated:YES completion:nil];
+    [self dismissViewControllerAnimated:YES completion:^{
+        // 通知 delegate 用户取消，避免上游 completionHandler 永久阻塞
+        if ([self.delegate respondsToSelector:@selector(schemeViewController:didSelectScheme:)]) {
+            [self.delegate schemeViewController:self didSelectScheme:-1];
+        }
+    }];
 }
 
 - (void)handleBackgroundUIEffectChanged:(NSNotification *)notification {

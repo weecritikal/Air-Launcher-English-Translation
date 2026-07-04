@@ -304,13 +304,34 @@ NSString *const NeoForgeDirectInstallerErrorDomain = @"NeoForgeDirectInstallerEr
     NSLog(@"[NeoForgeDirect] Downloading pre-patched client artifact");
     reportProgress(0.75, @"正在下载预打补丁的核心 jar");
     NSString *mainPath = installProfile[@"path"];
+    // 兜底：path 字段缺失时用 version 字段拼接（NeoForge 1.20.1 用 forge artifactId，1.20.2+ 用 neoforge artifactId）
+    if (![mainPath isKindOfClass:[NSString class]] || mainPath.length == 0) {
+        NSString *versionField = installProfile[@"version"];
+        if ([versionField isKindOfClass:[NSString class]] && versionField.length > 0) {
+            // NeoForge 1.20.1 path 形如 "net.neoforged:forge:1.20.1-47.1.0"
+            // 其他版本 path 形如 "net.neoforged:neoforge:20.6.119-beta"
+            if ([versionField containsString:@"1.20.1"]) {
+                mainPath = [NSString stringWithFormat:@"net.neoforged:forge:%@", versionField];
+            } else {
+                mainPath = [NSString stringWithFormat:@"net.neoforged:neoforge:%@", versionField];
+            }
+            NSLog(@"[NeoForgeDirect] path 字段缺失，用 version 字段兜底拼接: %@", mainPath);
+        }
+    }
     if ([mainPath isKindOfClass:[NSString class]] && mainPath.length > 0) {
         if (![self downloadPatchedArtifact:mainPath librariesDir:librariesDir error:error]) {
             NSLog(@"[NeoForgeDirect] Failed to download patched artifact");
             return NO;
         }
     } else {
-        NSLog(@"[NeoForgeDirect] No main path in install_profile, skipping patched artifact download");
+        // path 是 NeoForge 运行核心依赖，缺失会导致启动时 ClassNotFoundException
+        NSLog(@"[NeoForgeDirect] install_profile.json 缺少 path/version 字段，无法下载 patched client jar");
+        if (error) {
+            *error = [NSError errorWithDomain:NeoForgeDirectInstallerErrorDomain
+                                         code:NeoForgeDirectInstallerErrorInvalidProfile
+                                     userInfo:@{NSLocalizedDescriptionKey: @"install_profile.json 缺少 path 和 version 字段，无法定位预打补丁核心 jar"}];
+        }
+        return NO;
     }
 
     // Write version JSON
@@ -360,7 +381,9 @@ NSString *const NeoForgeDirectInstallerErrorDomain = @"NeoForgeDirectInstallerEr
     profileDict[@"created"] = [NSDate date].description;
     // 推断 Java 版本：NeoForge 1.20.5+ 需 Java 21，1.18+ 需 Java 17，1.17 需 Java 16
     NSInteger javaMajor = [self inferJavaMajorVersionFromVersionId:versionId];
-    profileDict[@"javaVersion"] = @{@"component": @"java-runtime", @"majorVersion": @(javaMajor)};
+    // 写入 NSString 而非 NSDictionary，与 ProfileSettingsViewController 等所有读取方一致
+    // JavaLauncher 通过 .intValue 读取，"17".intValue = 17
+    profileDict[@"javaVersion"] = [NSString stringWithFormat:@"%ld", (long)javaMajor];
     [profiles saveProfile:profileDict withName:versionId];
     // 与 Fabric / Vanilla 安装路径保持一致：自动选中新建的 profile，避免用户回到主界面仍启动旧版本
     profiles.selectedProfileName = versionId;
@@ -368,23 +391,76 @@ NSString *const NeoForgeDirectInstallerErrorDomain = @"NeoForgeDirectInstallerEr
 }
 
 /// 从 versionId 中推断所需 Java 主版本号
+/// versionId 可能为两种格式：
+///   - 整合包路径: "{mc}-neoforge-{loader}"，如 "1.20.1-neoforge-47.1.0"、"1.21.5-neoforge-21.5.75"
+///   - UI 路径: "NeoForge-{loader}"，如 "NeoForge-47.1.0"、"NeoForge-21.5.75"
+/// 需兼顾两种格式，先尝试直接匹配 MC 版本，失败则从 NeoForge loader 版本号反推 MC 版本
 + (NSInteger)inferJavaMajorVersionFromVersionId:(NSString *)versionId {
-    NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@"1\\.(\\d+)(?:\\.(\\d+))?"
+    // 1. 先尝试匹配 "1.x.x" 格式的 MC 版本（覆盖整合包路径，以及 UI 路径中可能含 1.x.x 的边界情况）
+    //    使用锚定开头（^|[-_]) 避免误匹配 loader 版本号中的 "1.x" 子串
+    NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@"(?:^|[-_])1\\.(\\d+)(?:\\.(\\d+))?"
                                                                            options:0
                                                                              error:nil];
     NSTextCheckingResult *match = [regex firstMatchInString:versionId options:0 range:NSMakeRange(0, versionId.length)];
-    if (!match || match.numberOfRanges < 2) return 17; // NeoForge 最低 Java 17
-    NSString *minorStr = [versionId substringWithRange:[match rangeAtIndex:1]];
-    NSInteger minor = [minorStr integerValue];
-    NSString *patchStr = match.numberOfRanges >= 3 && [match rangeAtIndex:2].location != NSNotFound
-                        ? [versionId substringWithRange:[match rangeAtIndex:2]]
-                        : @"0";
-    NSInteger patch = [patchStr integerValue];
-    if (minor >= 21) return 21;
-    if (minor >= 20 && patch >= 5) return 21;
-    if (minor >= 18) return 17;
-    if (minor >= 17) return 16;
+    if (match && match.numberOfRanges >= 2) {
+        NSString *minorStr = [versionId substringWithRange:[match rangeAtIndex:1]];
+        NSInteger minor = [minorStr integerValue];
+        NSString *patchStr = (match.numberOfRanges >= 3 && [match rangeAtIndex:2].location != NSNotFound)
+                            ? [versionId substringWithRange:[match rangeAtIndex:2]]
+                            : @"0";
+        NSInteger patch = [patchStr integerValue];
+        if (minor >= 21) return 21;                  // 1.21+
+        if (minor >= 20 && patch >= 5) return 21;    // 1.20.5+
+        if (minor >= 18) return 17;                  // 1.18 - 1.20.4
+        if (minor >= 17) return 17;                  // 1.17（NeoForge 最低 17，Java 17 可向后兼容运行 1.17）
+        return 17;                                    // 1.16 及以下（NeoForge 不支持，但保守返回 17）
+    }
+
+    // 2. 匹配失败时（UI 路径 versionId = "NeoForge-{loader}"），从 NeoForge loader 版本号反推 MC 版本
+    //    NeoForge 版本号约定：
+    //      - 47.x.y         → MC 1.20.1（legacy forge artifactId）→ Java 17
+    //      - 20.2.x - 20.4.x → MC 1.20.2-1.20.4                     → Java 17
+    //      - 20.5.x - 20.6.x → MC 1.20.5-1.20.6                     → Java 21
+    //      - 21.x.x          → MC 1.21.x                            → Java 21
+    //      - 26.x.x+         → MC 1.26.x+（未来版本）               → Java 21
+    NSString *loaderVersion = [self extractNeoForgeLoaderVersionFromVersionId:versionId];
+    if (loaderVersion.length > 0) {
+        NSArray *parts = [loaderVersion componentsSeparatedByString:@"."];
+        if (parts.count >= 2) {
+            NSInteger major = [parts[0] integerValue];
+            NSInteger minor = (parts.count >= 2) ? [parts[1] integerValue] : 0;
+            // 47.x（1.20.1 legacy）→ Java 17
+            if (major == 47) return 17;
+            // 20.x 系列：20.5+ → Java 21，20.2-20.4 → Java 17
+            if (major == 20) {
+                return (minor >= 5) ? 21 : 17;
+            }
+            // 21.x 及以上（1.21+）→ Java 21
+            if (major >= 21) return 21;
+        }
+    }
+
     return 17; // NeoForge 最低 Java 17
+}
+
+/// 从 versionId 中提取 NeoForge loader 版本号
+/// "NeoForge-21.5.75" → "21.5.75"
+/// "1.20.1-neoforge-47.1.0" → "47.1.0"
+/// "1.21.5-neoforge-21.5.75-beta" → "21.5.75-beta"
++ (NSString *)extractNeoForgeLoaderVersionFromVersionId:(NSString *)versionId {
+    if (!versionId.length) return @"";
+    // 整合包路径格式: "{mc}-neoforge-{loader}"
+    NSString *marker = @"-neoforge-";
+    NSRange markerRange = [versionId rangeOfString:marker options:NSCaseInsensitiveSearch];
+    if (markerRange.location != NSNotFound) {
+        return [versionId substringFromIndex:markerRange.location + markerRange.length];
+    }
+    // UI 路径格式: "NeoForge-{loader}"
+    NSRange dashRange = [versionId rangeOfString:@"-"];
+    if (dashRange.location != NSNotFound) {
+        return [versionId substringFromIndex:dashRange.location + dashRange.length];
+    }
+    return versionId;
 }
 
 #pragma mark - Maven entry Extraction
@@ -407,16 +483,38 @@ NSString *const NeoForgeDirectInstallerErrorDomain = @"NeoForgeDirectInstallerEr
     }
 
     NSUInteger count = 0;
+    NSFileManager *fm = [NSFileManager defaultManager];
     for (NSString *name in filenames) {
         if (![name hasPrefix:@"maven/"]) continue;
+        // 跳过目录条目（以 / 结尾），避免 extractDataFromFile 返回空数据产生误报日志
+        if ([name hasSuffix:@"/"]) continue;
 
         NSString *relativePath = [name substringFromIndex:@"maven/".length];
         if (relativePath.length == 0) continue;
 
         NSString *destPath = [librariesDir stringByAppendingPathComponent:relativePath];
+        // 已存在的文件跳过，避免重复解压（重复安装场景）
+        if ([fm fileExistsAtPath:destPath]) {
+            count++;
+            continue;
+        }
+
+        // 直接用已打开的 archive 实例提取，避免每个文件都重新打开 zip（性能优化）
         NSError *extractError = nil;
-        if (![self extractFile:installerPath entry:name to:destPath error:&extractError]) {
+        NSData *data = [archive extractDataFromFile:name error:&extractError];
+        if (!data || extractError) {
             NSLog(@"[NeoForgeDirect] extractAllMavenEntries: failed to extract %@: %@", name, extractError.localizedDescription ?: @"unknown");
+            continue;
+        }
+
+        // 创建目标目录
+        NSString *destDir = [destPath stringByDeletingLastPathComponent];
+        [fm createDirectoryAtPath:destDir withIntermediateDirectories:YES attributes:nil error:nil];
+
+        // 写入文件
+        NSError *writeError = nil;
+        if (![data writeToFile:destPath options:NSDataWritingAtomic error:&writeError]) {
+            NSLog(@"[NeoForgeDirect] extractAllMavenEntries: failed to write %@: %@", destPath, writeError.localizedDescription ?: @"unknown");
             continue;
         }
         count++;
@@ -439,6 +537,8 @@ NSString *const NeoForgeDirectInstallerErrorDomain = @"NeoForgeDirectInstallerEr
     NSUInteger downloaded = 0;
     NSUInteger skipped = 0;
     NSUInteger failed = 0;
+    NSUInteger processed = 0;  // 已处理数（用于进度计算，包含成功/跳过/失败）
+    NSMutableArray<NSString *> *criticalFailures = [NSMutableArray array];  // 关键库失败清单
 
     for (NSDictionary *library in libraries) {
         if (![library isKindOfClass:[NSDictionary class]]) continue;
@@ -468,6 +568,7 @@ NSString *const NeoForgeDirectInstallerErrorDomain = @"NeoForgeDirectInstallerEr
         // 已存在则跳过
         if ([fm fileExistsAtPath:destPath]) {
             skipped++;
+            processed++;
             continue;
         }
 
@@ -489,12 +590,14 @@ NSString *const NeoForgeDirectInstallerErrorDomain = @"NeoForgeDirectInstallerEr
         if (!url) {
             NSLog(@"[NeoForgeDirect] Cannot build URL for library %@, skipping", name);
             failed++;
+            processed++;
             continue;
         }
 
+        // 用 processed 计算进度（避免失败时进度停滞）
         if (progress) {
-            double p = base + span * ((double)downloaded / (double)total);
-            progress(p, [NSString stringWithFormat:@"正在下载依赖库 (%lu/%lu): %@", (unsigned long)(downloaded + 1), (unsigned long)total, name]);
+            double p = base + span * ((double)processed / (double)total);
+            progress(p, [NSString stringWithFormat:@"正在下载依赖库 (%lu/%lu): %@", (unsigned long)(processed + 1), (unsigned long)total, name]);
         }
 
         NSError *downloadError = nil;
@@ -510,17 +613,54 @@ NSString *const NeoForgeDirectInstallerErrorDomain = @"NeoForgeDirectInstallerEr
                 if ([self downloadFileFromURL:fallbackURL toPath:destPath error:&fallbackError]) {
                     downloaded++;
                     NSLog(@"[NeoForgeDirect] Downloaded library via fallback: %@", name);
+                    processed++;
                     continue;
                 }
                 NSLog(@"[NeoForgeDirect] Fallback also failed for %@: %@", name, fallbackError.localizedDescription ?: @"unknown");
             }
             failed++;
-            NSLog(@"[NeoForgeDirect] Failed to download library %@ (both sources failed)", name);
+            // 关键库失败会启动崩溃，记录警告
+            if ([self isCriticalLibrary:name]) {
+                [criticalFailures addObject:name];
+                NSLog(@"[NeoForgeDirect] ⚠️ 关键库下载失败（启动将崩溃）: %@", name);
+            } else {
+                NSLog(@"[NeoForgeDirect] Failed to download library %@ (both sources failed)", name);
+            }
         }
+        processed++;
     }
 
-    NSLog(@"[NeoForgeDirect] Library download summary: downloaded=%lu, skipped=%lu, failed=%lu, total=%lu",
-          (unsigned long)downloaded, (unsigned long)skipped, (unsigned long)failed, (unsigned long)total);
+    NSLog(@"[NeoForgeDirect] Library download summary: downloaded=%lu, skipped=%lu, failed=%lu, total=%lu, criticalFailures=%lu",
+          (unsigned long)downloaded, (unsigned long)skipped, (unsigned long)failed, (unsigned long)total, (unsigned long)criticalFailures.count);
+    if (criticalFailures.count > 0) {
+        NSLog(@"[NeoForgeDirect] ⚠️ 关键库下载失败清单: %@", criticalFailures);
+    }
+}
+
+/// 判断是否为关键库（缺失会导致启动崩溃）
++ (BOOL)isCriticalLibrary:(NSString *)name {
+    if (!name.length) return NO;
+    NSArray<NSString *> *criticalPrefixes = @[
+        @"cpw.mods:modlauncher",
+        @"net.minecraftforge.bootstraplauncher",
+        @"net.minecraftforge:forge",
+        @"net.neoforged:forge",
+        @"net.neoforged:neoforge",
+        @"net.neoforged.fancymodloader",
+        @"org.spongepowered:mixin",
+        @"org.ow2.asm:asm",
+        @"com.google.guava:guava",
+        @"com.google.code.gson:gson",
+        @"org.lwjgl:lwjgl",
+        @"com.mojang:authlib",
+        @"com.mojang:brigadier",
+        @"com.mojang:datafixerupper",
+        @"com.mojang:minecraft"
+    ];
+    for (NSString *prefix in criticalPrefixes) {
+        if ([name hasPrefix:prefix]) return YES;
+    }
+    return NO;
 }
 
 // 为 library 构建 maven URL
@@ -732,7 +872,17 @@ NSString *const NeoForgeDirectInstallerErrorDomain = @"NeoForgeDirectInstallerEr
         dispatch_semaphore_signal(semaphore);
     }];
     [task resume];
-    dispatch_semaphore_wait(semaphore, dispatch_time(DISPATCH_TIME_NOW, 70 * NSEC_PER_SEC));
+    long waitResult = dispatch_semaphore_wait(semaphore, dispatch_time(DISPATCH_TIME_NOW, 70 * NSEC_PER_SEC));
+    if (waitResult != 0) {
+        // 信号量超时：取消 task 释放网络资源，避免后台 task 持续运行导致临时内存泄漏
+        [task cancel];
+        if (error) {
+            *error = [NSError errorWithDomain:NeoForgeDirectInstallerErrorDomain
+                                         code:NSURLErrorTimedOut
+                                     userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"下载超时（70s）: %@", urlString]}];
+        }
+        return NO;
+    }
 
     if (resultError) {
         if (error) *error = resultError;
