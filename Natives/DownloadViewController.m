@@ -1273,33 +1273,6 @@
 
 @end
 
-/// 创建版本隔离目录并返回相对路径（写入 profile.gameDir）
-/// 参见 ForgeDirectInstaller.m 中同名函数的说明
-static NSString *createIsolatedGameDir(NSString *versionId, NSString *loader) {
-    NSString *baseDir = @(getenv("POJAV_GAME_DIR") ?: ".");
-    NSString *customDir = [baseDir stringByAppendingPathComponent:@"custom_gamedir"];
-    NSString *instanceName = [NSString stringWithFormat:@"%@-%@", loader, versionId];
-    NSString *instanceDir = [customDir stringByAppendingPathComponent:instanceName];
-
-    NSFileManager *fm = [NSFileManager defaultManager];
-    [fm createDirectoryAtPath:instanceDir withIntermediateDirectories:YES attributes:nil error:nil];
-
-    NSArray *sharedDirs = @[@"versions", @"libraries", @"assets"];
-    for (NSString *dir in sharedDirs) {
-        NSString *linkPath = [instanceDir stringByAppendingPathComponent:dir];
-        if (![fm fileExistsAtPath:linkPath]) {
-            NSString *relativeTarget = [NSString stringWithFormat:@"../../%@", dir];
-            NSError *error = nil;
-            [fm createSymbolicLinkAtPath:linkPath withDestinationPath:relativeTarget error:&error];
-            if (error) {
-                NSLog(@"[VersionIsolation] %@: symlink %@ failed: %@", loader, linkPath, error.localizedDescription);
-            }
-        }
-    }
-
-    return [NSString stringWithFormat:@"./custom_gamedir/%@", instanceName];
-}
-
 @implementation DownloadViewController
 
 - (void)dealloc {
@@ -2827,9 +2800,9 @@ static NSString *createIsolatedGameDir(NSString *versionId, NSString *loader) {
     NSMutableDictionary *profile = [NSMutableDictionary dictionary];
     profile[@"name"] = versionId;
     profile[@"lastVersionId"] = versionId;
-    // 版本隔离：每个 vanilla 版本独立目录，saves/mods/configs 隔离
-    // versions/libraries/assets 通过相对符号链接共享
-    profile[@"gameDir"] = createIsolatedGameDir(versionId, @"vanilla");
+    // 改回原来的"游戏目录切换"机制：所有版本共享根目录（gameDir="."）
+    // 用户通过设置中的"游戏目录切换"功能手动切换不同的 gameDir
+    profile[@"gameDir"] = @".";
     profile[@"type"] = @"custom";
     profile[@"created"] = [NSDate date].description;
 
@@ -3053,9 +3026,9 @@ static NSString *createIsolatedGameDir(NSString *versionId, NSString *loader) {
             NSMutableDictionary *profile = [NSMutableDictionary dictionary];
             profile[@"name"] = versionId;
             profile[@"lastVersionId"] = versionId;
-            // 版本隔离：每个加载器版本独立目录，saves/mods/configs 隔离
-            // versions/libraries/assets 通过相对符号链接共享
-            profile[@"gameDir"] = createIsolatedGameDir(versionId, loaderTag);
+            // 改回原来的"游戏目录切换"机制：所有版本共享根目录（gameDir="."）
+            // 用户通过设置中的"游戏目录切换"功能手动切换不同的 gameDir
+            profile[@"gameDir"] = @".";
             profile[@"type"] = @"custom";
             profile[@"created"] = [NSDate date].description;
             [PLProfiles.current saveProfile:profile withName:versionId];

@@ -22,33 +22,6 @@
 
 NSString *const NeoForgeDirectInstallerErrorDomain = @"NeoForgeDirectInstallerErrorDomain";
 
-/// 创建版本隔离目录并返回相对路径（写入 profile.gameDir）
-/// 参见 ForgeDirectInstaller.m 中同名函数的说明
-static NSString *createIsolatedGameDir(NSString *versionId, NSString *loader) {
-    NSString *baseDir = @(getenv("POJAV_GAME_DIR") ?: ".");
-    NSString *customDir = [baseDir stringByAppendingPathComponent:@"custom_gamedir"];
-    NSString *instanceName = [NSString stringWithFormat:@"%@-%@", loader, versionId];
-    NSString *instanceDir = [customDir stringByAppendingPathComponent:instanceName];
-
-    NSFileManager *fm = [NSFileManager defaultManager];
-    [fm createDirectoryAtPath:instanceDir withIntermediateDirectories:YES attributes:nil error:nil];
-
-    NSArray *sharedDirs = @[@"versions", @"libraries", @"assets"];
-    for (NSString *dir in sharedDirs) {
-        NSString *linkPath = [instanceDir stringByAppendingPathComponent:dir];
-        if (![fm fileExistsAtPath:linkPath]) {
-            NSString *relativeTarget = [NSString stringWithFormat:@"../../%@", dir];
-            NSError *error = nil;
-            [fm createSymbolicLinkAtPath:linkPath withDestinationPath:relativeTarget error:&error];
-            if (error) {
-                NSLog(@"[VersionIsolation] NeoForge: symlink %@ failed: %@", linkPath, error.localizedDescription);
-            }
-        }
-    }
-
-    return [NSString stringWithFormat:@"./custom_gamedir/%@", instanceName];
-}
-
 @implementation NeoForgeDirectInstaller
 
 #pragma mark - Public
@@ -399,9 +372,9 @@ static NSString *createIsolatedGameDir(NSString *versionId, NSString *loader) {
     NSMutableDictionary *profileDict = [NSMutableDictionary dictionary];
     profileDict[@"name"] = versionId;
     profileDict[@"lastVersionId"] = versionId;
-    // 版本隔离：每个 NeoForge 版本独立目录，saves/mods/configs 隔离
-    // versions/libraries/assets 通过相对符号链接共享，不占用额外空间
-    profileDict[@"gameDir"] = createIsolatedGameDir(versionId, @"neoforge");
+    // 改回原来的"游戏目录切换"机制：所有版本共享根目录（gameDir="."）
+    // 用户通过设置中的"游戏目录切换"功能手动切换不同的 gameDir
+    profileDict[@"gameDir"] = @".";
     profileDict[@"type"] = @"custom";
     profileDict[@"created"] = [NSDate date].description;
     // 推断 Java 版本：NeoForge 1.20.5+ 需 Java 21，1.18+ 需 Java 17，1.17 需 Java 16
