@@ -49,6 +49,10 @@
             self.profile[@"name"] = self.profileName;
         }
     }
+    // 安全网：如果调用方既没传 profileName 也没传 profile，创建空字典避免后续 nil 写入
+    if (!self.profile) {
+        self.profile = [NSMutableDictionary dictionary];
+    }
 
     // 确保 profile 有 name 字段
     self.originalName = self.profile[@"name"];
@@ -435,10 +439,13 @@
     NSArray *newVersionList = self.versionList;
     if (sender || !self.versionList) {
         if (self.versionTypeControl.selectedSegmentIndex == 0) {
-            newVersionList = localVersionList;
+            // nil 安全：启动器刚启动时 localVersionList 可能尚未加载
+            newVersionList = localVersionList ?: @[];
         } else {
             NSString *type = @[@"installed", @"release", @"snapshot", @"old_beta", @"old_alpha"][self.versionTypeControl.selectedSegmentIndex];
-            newVersionList = [remoteVersionList filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"(type == %@)", type]];
+            // nil 安全：remoteVersionList 为 nil 时用空数组，避免 filteredArrayUsingPredicate 崩溃
+            NSArray *remote = remoteVersionList ?: @[];
+            newVersionList = [remote filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"(type == %@)", type]];
         }
     }
 

@@ -3,7 +3,7 @@
 #import "LauncherPreferences.h"
 #import "LauncherPrefGameDirViewController.h"
 #import "LauncherPrefManageJREViewController.h"
-#import "LauncherProfileEditorViewController.h"
+#import "ProfileSettingsViewController.h"
 #import "LauncherProfilesViewController.h"
 #import "PLProfiles.h"
 #import "VersionCardCell.h"  // 新增：导入独立的 VersionCardCell
