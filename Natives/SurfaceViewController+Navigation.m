@@ -8,26 +8,10 @@
 
 @implementation SurfaceViewController(Navigation)
 
-static UIView *menuSwipeView;
 - (void)initCategory_Navigation {
-    // 保留旧的边缘滑动条带引用以兼容现有代码，但隐藏交互（被悬浮按钮替代）
-    UIPanGestureRecognizer *menuPanGesture = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handleRightEdge:)];
-    menuPanGesture.delegate = self;
-
-    UIView *menuSwipeLineView = [[UIView alloc] initWithFrame:CGRectMake(11.0, self.view.frame.size.height/2 - 100.0, 8.0, 200.0)];
-    menuSwipeLineView.autoresizingMask = UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleBottomMargin;
-    menuSwipeLineView.backgroundColor = [UIColor clearColor];
-    menuSwipeLineView.layer.cornerRadius = 4;
-    menuSwipeLineView.userInteractionEnabled = NO;
-
-    menuSwipeView = [[UIView alloc] initWithFrame:CGRectMake(self.view.frame.size.width, 0, 30.0, self.view.frame.size.height)];
-    menuSwipeView.autoresizingMask = UIViewAutoresizingFlexibleHeight | UIViewAutoresizingFlexibleLeftMargin;
-    menuSwipeView.backgroundColor = [UIColor clearColor];
-    menuSwipeView.userInteractionEnabled = NO; // 禁用旧条带，由悬浮按钮取代
-    [menuSwipeView addSubview:menuSwipeLineView];
-    [self.rootView addSubview:menuSwipeView];
-
-    self.menuArray = @[@"game.menu.force_close", @"game.menu.log_output", @"game.menu.custom_controls", @"Settings"];
+    // FCL 风格：完全删除原来的右侧滑动调出菜单的方式
+    // 菜单改为通过悬浮按钮（GameMenuOverlayView）触发
+    self.menuArray = @[@"game.menu.force_close", @"game.menu.log_output", @"game.menu.custom_controls", @"game.menu.toggle_stats", @"Settings"];
 
     self.menuView = [[UITableView alloc] initWithFrame:CGRectMake(self.view.frame.size.width + 30.0, 0,
         self.view.frame.size.width * 0.3 - 36.0 * 0.7, self.view.frame.size.height)];
@@ -63,10 +47,9 @@ static UIView *menuSwipeView;
 }
 
 - (void)setupCategory_Navigation {
-    self.edgeGesture = [[UIScreenEdgePanGestureRecognizer alloc] initWithTarget:self action:@selector(handleRightEdge:)];
-    self.edgeGesture.edges = UIRectEdgeRight;
-    self.edgeGesture.delegate = self;
-    [self.touchView addGestureRecognizer:self.edgeGesture];
+    // FCL 风格：完全删除原来的右侧滑动调出菜单的方式
+    // 不再注册 UIScreenEdgePanGestureRecognizer，菜单通过悬浮按钮触发
+    // 保留空方法体，因为 SurfaceViewController.m 中通过 performSelector 调用
 }
 
 static CGPoint lastCenterPoint;
@@ -85,43 +68,6 @@ static CGPoint lastCenterPoint;
         [self setNeedsUpdateOfScreenEdgesDeferringSystemGestures];
         [self setNeedsStatusBarAppearanceUpdate];
     }];
-}
-
-- (void)handleRightEdge:(UIPanGestureRecognizer *)sender {
-    if (lastCenterPoint.y == 0) {
-        lastCenterPoint.x = self.rootView.center.x;
-        lastCenterPoint.y = 1;
-    }
-
-    CGFloat centerX = self.rootView.bounds.size.width / 2;
-    CGFloat centerY = self.rootView.bounds.size.height / 2;
-
-    CGPoint translation = [sender translationInView:sender.view];
-
-    if (sender.state == UIGestureRecognizerStateBegan) {
-        self.menuView.hidden = NO;
-    } else if (sender.state == UIGestureRecognizerStateChanged) {
-        self.rootView.center = CGPointMake(lastCenterPoint.x + translation.x/2, centerY + translation.y/10.0);
-        CGFloat scale = MAX(0.7, self.rootView.center.x / centerX);
-        self.rootView.transform = CGAffineTransformScale(CGAffineTransformIdentity, scale, scale);
-
-        self.menuView.frame = CGRectMake(self.rootView.frame.size.width, self.rootView.frame.origin.y, self.menuView.frame.size.width,  self.menuView.contentSize.height);
-        // scale is in range of 0.7-1
-        // 1.1 - scale produces in range of 0.4-0.1
-        // result in transform scale range of 1-0.25
-        self.menuView.transform = CGAffineTransformScale(CGAffineTransformIdentity, (1.1-scale)*2.5, (1.1-scale)*2.5);
-    } else {
-        CGPoint velocity = [sender velocityInView:sender.view];
-        CGFloat scale = (velocity.x >= 0) ? 1 : 0.7;
-
-        // calculate duration to produce smooth movement
-        // FIXME: any better way?
-        CGFloat duration = fabs(self.rootView.center.x - centerX * scale) / centerX + 0.1;
-        duration = MIN(0.4, duration);
-        //(110 - MIN(100, fabs(velocity.x))) / 100
-
-        [self animateMenuScale:scale duration:duration];
-    }
 }
 
 - (void)actionForceClose {
@@ -227,6 +173,12 @@ static CGPoint lastCenterPoint;
             [self actionOpenCustomControls];
             break;
         case 3:
+            // FCL 风格：FPS/内存显示开关
+            if ([self.gameMenuOverlay isKindOfClass:[GameMenuOverlayView class]]) {
+                [(GameMenuOverlayView *)self.gameMenuOverlay toggleStatsLabel];
+            }
+            break;
+        case 4:
             [self actionOpenPreferences];
             break;
     }

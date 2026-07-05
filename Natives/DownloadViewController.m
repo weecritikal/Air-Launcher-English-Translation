@@ -1425,7 +1425,8 @@
     [self.view addSubview:self.importModpackButton];
 
     [NSLayoutConstraint activateConstraints:@[
-        [self.searchBar.topAnchor constraintEqualToAnchor:self.tabSegment.bottomAnchor constant:8],
+        // 搜索框放在版本筛选框下方，避免与 versionFilterSegment 重合
+        [self.searchBar.topAnchor constraintEqualToAnchor:self.versionFilterSegment.bottomAnchor constant:8],
         [self.searchBar.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:8],
         [self.searchBar.trailingAnchor constraintEqualToAnchor:self.importModpackButton.leadingAnchor constant:-8],
 
@@ -1461,7 +1462,8 @@
     [self.view addSubview:self.versionCollectionView];
     
     [NSLayoutConstraint activateConstraints:@[
-        [self.versionCollectionView.topAnchor constraintEqualToAnchor:self.versionFilterSegment.bottomAnchor constant:8],
+        // 版本列表放在搜索框下方，避免与搜索框重合
+        [self.versionCollectionView.topAnchor constraintEqualToAnchor:self.searchBar.bottomAnchor constant:4],
         [self.versionCollectionView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.versionCollectionView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [self.versionCollectionView.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor]

@@ -3,6 +3,7 @@
 //  Amethyst
 //
 //  参照 FCL MenuView.java 与 ZL2 GameScreen.kt 实现
+//  关键改进：hitTest 穿透，只有按钮/标签区域拦截触摸，其他区域穿透到游戏画面
 //
 
 #import "GameMenuOverlayView.h"
@@ -13,6 +14,8 @@ static NSString *const kPrefMenuButtonX = @"game.menu_button_x";
 static NSString *const kPrefMenuButtonY = @"game.menu_button_y";
 static NSString *const kPrefStatsLabelX = @"game.stats_label_x";
 static NSString *const kPrefStatsLabelY = @"game.stats_label_y";
+// FPS/内存显示开关的 pref key
+static NSString *const kPrefStatsLabelVisible = @"game.stats_label_visible";
 
 // 按钮尺寸
 static const CGFloat kMenuButtonSize = 44.0;
@@ -29,7 +32,6 @@ static const CGFloat kDragThreshold = 10.0;
 @property (nonatomic, assign) BOOL isDragging;
 @property (nonatomic, assign) CGPoint dragStartPoint;
 @property (nonatomic, assign) CGPoint dragStartCenter;
-@property (nonatomic, strong) NSTimer *dragIdleTimer;
 
 @end
 
@@ -40,13 +42,25 @@ static const CGFloat kDragThreshold = 10.0;
     if (self) {
         self.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
         self.backgroundColor = [UIColor clearColor];
+        // 关键：userInteractionEnabled = YES 让子视图能响应触摸
+        // 但 hitTest 会过滤掉非按钮/标签区域的触摸，让其穿透到游戏画面
         self.userInteractionEnabled = YES;
+        // 默认显示 FPS/内存标签（可通过菜单开关）
+        _statsLabelVisible = YES;
+        _overlayHidden = NO;
+
+        // 从偏好加载 FPS/内存显示开关状态
+        NSNumber *savedVisible = getPrefObject(kPrefStatsLabelVisible);
+        if (savedVisible) {
+            _statsLabelVisible = [savedVisible boolValue];
+        }
 
         [self setupMenuButton];
         [self setupStatsLabel];
         [parentView addSubview:self];
 
         [self restorePositions];
+        [self applyStatsLabelVisibility];
     }
     return self;
 }
@@ -65,6 +79,8 @@ static const CGFloat kDragThreshold = 10.0;
     [self.menuButton setImage:icon forState:UIControlStateNormal];
     self.menuButton.tintColor = [UIColor whiteColor];
     self.menuButton.translatesAutoresizingMaskIntoConstraints = NO;
+    // 确保按钮能响应触摸
+    self.menuButton.userInteractionEnabled = YES;
 
     // 添加拖拽手势
     UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handleMenuButtonPan:)];
@@ -98,6 +114,32 @@ static const CGFloat kDragThreshold = 10.0;
     self.statsLabel.userInteractionEnabled = YES;
 
     [self addSubview:self.statsLabel];
+}
+
+#pragma mark - hitTest 穿透（关键：让触摸穿透到游戏画面）
+
+/// 重写 hitTest:withEvent: 实现：只有 menuButton 和 statsLabel 的区域拦截触摸，
+/// 其他区域返回 nil，让触摸穿透到下面的游戏画面（surfaceView/ctrlView）
+- (UIView *)hitTest:(CGPoint)point withEvent:(UIEvent *)event {
+    if (self.hidden || !self.userInteractionEnabled || self.overlayHidden) {
+        return nil;
+    }
+    // 检查 menuButton 是否包含触摸点
+    if (self.menuButton && !self.menuButton.hidden && self.menuButton.userInteractionEnabled) {
+        CGPoint btnPoint = [self convertPoint:point toView:self.menuButton];
+        if (CGRectContainsPoint(self.menuButton.bounds, btnPoint)) {
+            return [self.menuButton hitTest:btnPoint withEvent:event];
+        }
+    }
+    // 检查 statsLabel 是否包含触摸点（且可见）
+    if (self.statsLabel && !self.statsLabel.hidden && self.statsLabelVisible && self.statsLabel.userInteractionEnabled) {
+        CGPoint labelPoint = [self convertPoint:point toView:self.statsLabel];
+        if (CGRectContainsPoint(self.statsLabel.bounds, labelPoint)) {
+            return [self.statsLabel hitTest:labelPoint withEvent:event];
+        }
+    }
+    // 其他区域返回 nil，触摸穿透到游戏画面
+    return nil;
 }
 
 #pragma mark - 位置持久化
@@ -260,7 +302,23 @@ static const CGFloat kDragThreshold = 10.0;
 - (void)setOverlayHidden:(BOOL)overlayHidden {
     _overlayHidden = overlayHidden;
     self.menuButton.hidden = overlayHidden;
-    self.statsLabel.hidden = overlayHidden;
+    self.statsLabel.hidden = overlayHidden || !_statsLabelVisible;
+}
+
+- (void)setStatsLabelVisible:(BOOL)statsLabelVisible {
+    _statsLabelVisible = statsLabelVisible;
+    [self applyStatsLabelVisibility];
+    // 持久化开关状态
+    setPrefObject(kPrefStatsLabelVisible, @(statsLabelVisible));
+}
+
+- (void)applyStatsLabelVisibility {
+    self.statsLabel.hidden = self.overlayHidden || !_statsLabelVisible;
+}
+
+/// 切换 FPS/内存显示的开关状态（参照 FCL 的 toggleStatsView）
+- (void)toggleStatsLabel {
+    self.statsLabelVisible = !self.statsLabelVisible;
 }
 
 - (void)updateFPS:(NSInteger)fps memoryUsageMB:(double)memoryMB {

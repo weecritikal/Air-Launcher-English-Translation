@@ -236,13 +236,8 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 #pragma mark - Actions
 
 - (void)selectAccount:(UITapGestureRecognizer *)gesture {
-    AccountListViewController *vc = [[AccountListViewController alloc] init];
-    vc.whenItemSelected = ^void() {
-        [self updateAccountInfo];
-    };
-    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
-    nav.modalPresentationStyle = UIModalPresentationFormSheet;
-    [self presentViewController:nav animated:YES completion:nil];
+    // FCL 风格：账户管理在中间内容区显示，发送通知让 LauncherRootViewController 切换内容
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowAccountManager" object:nil];
 }
 
 - (void)showVersionPicker {

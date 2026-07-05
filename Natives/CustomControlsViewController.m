@@ -99,6 +99,70 @@
     NSString *fileName = self.getDefaultCtrl();
     self.currentFileName = [fileName stringByDeletingPathExtension];
     [self loadControlFile:fileName];
+
+    // FCL 风格：添加常驻顶部工具栏，带"完成"和"保存"按钮，避免依赖 UIMenuController 退出
+    [self setupTopToolbar];
+}
+
+/// 设置顶部工具栏（FCL 风格）：提供明显的"完成"和"保存"按钮，解决 UIMenuController 弃用后无法退出的问题
+- (void)setupTopToolbar {
+    UIView *toolbar = [[UIView alloc] init];
+    toolbar.translatesAutoresizingMaskIntoConstraints = NO;
+    toolbar.backgroundColor = [UIColor colorWithRed:0.1 green:0.1 blue:0.1 alpha:0.85];
+    toolbar.layer.cornerRadius = 8;
+    [self.view addSubview:toolbar];
+
+    UIButton *doneBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+    doneBtn.translatesAutoresizingMaskIntoConstraints = NO;
+    [doneBtn setTitle:localize(@"custom_controls.control_menu.exit", nil) forState:UIControlStateNormal];
+    doneBtn.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
+    [doneBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    doneBtn.backgroundColor = [UIColor systemRedColor];
+    doneBtn.layer.cornerRadius = 6;
+    [doneBtn addTarget:self action:@selector(actionMenuExit) forControlEvents:UIControlEventTouchUpInside];
+    [toolbar addSubview:doneBtn];
+
+    UIButton *saveBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+    saveBtn.translatesAutoresizingMaskIntoConstraints = NO;
+    [saveBtn setTitle:localize(@"custom_controls.control_menu.save", nil) forState:UIControlStateNormal];
+    saveBtn.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
+    [saveBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    saveBtn.backgroundColor = [UIColor systemBlueColor];
+    saveBtn.layer.cornerRadius = 6;
+    [saveBtn addTarget:self action:@selector(actionMenuSave) forControlEvents:UIControlEventTouchUpInside];
+    [toolbar addSubview:saveBtn];
+
+    UIButton *addBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+    addBtn.translatesAutoresizingMaskIntoConstraints = NO;
+    [addBtn setTitle:localize(@"custom_controls.control_menu.add_button", nil) forState:UIControlStateNormal];
+    addBtn.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
+    [addBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    addBtn.backgroundColor = [UIColor systemGreenColor];
+    addBtn.layer.cornerRadius = 6;
+    [addBtn addTarget:self action:@selector(actionMenuAddButton) forControlEvents:UIControlEventTouchUpInside];
+    [toolbar addSubview:addBtn];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [toolbar.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:8],
+        [toolbar.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+        [toolbar.heightAnchor constraintEqualToConstant:40],
+
+        [doneBtn.leadingAnchor constraintEqualToAnchor:toolbar.leadingAnchor constant:8],
+        [doneBtn.centerYAnchor constraintEqualToAnchor:toolbar.centerYAnchor],
+        [doneBtn.heightAnchor constraintEqualToConstant:32],
+        [doneBtn.widthAnchor constraintGreaterThanOrEqualToConstant:60],
+
+        [saveBtn.leadingAnchor constraintEqualToAnchor:doneBtn.trailingAnchor constant:8],
+        [saveBtn.centerYAnchor constraintEqualToAnchor:toolbar.centerYAnchor],
+        [saveBtn.heightAnchor constraintEqualToConstant:32],
+        [saveBtn.widthAnchor constraintGreaterThanOrEqualToConstant:60],
+
+        [addBtn.leadingAnchor constraintEqualToAnchor:saveBtn.trailingAnchor constant:8],
+        [addBtn.centerYAnchor constraintEqualToAnchor:toolbar.centerYAnchor],
+        [addBtn.trailingAnchor constraintEqualToAnchor:toolbar.trailingAnchor constant:-8],
+        [addBtn.heightAnchor constraintEqualToConstant:32],
+        [addBtn.widthAnchor constraintGreaterThanOrEqualToConstant:60]
+    ]];
 }
 
 - (void)viewWillDisappear:(BOOL)animated {

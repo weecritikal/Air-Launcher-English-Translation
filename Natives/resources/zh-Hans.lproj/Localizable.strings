@@ -7,6 +7,7 @@
 "game.menu.confirm.force_close" = "确认强制关闭？";
 "game.menu.log_output" = "日志输出";
 "game.menu.custom_controls" = "按键布局";
+"game.menu.toggle_stats" = "开关 FPS/内存显示";
 
 "game.note.airplay" = "Minecraft 正在通过隔空播放（AirPlay）到其他设备显示";
 

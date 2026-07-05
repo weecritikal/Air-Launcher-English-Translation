@@ -16,6 +16,7 @@
 #import "ModpackImportViewController.h"
 #import "LauncherPrefGameDirViewController.h"
 #import "CustomControlsViewController.h"
+#import "AccountListViewController.h"
 
 // 布局常量（iPad 基准值；iPhone 上通过 LauncherRootLayoutWidth 适配后会变窄）
 static const CGFloat kSidebarWidthPad = 70.0;      // iPad 左侧边栏宽度
@@ -288,6 +289,11 @@ static CGFloat LauncherRootLayoutRightPanelWidth(UITraitCollection *trait) {
                                              selector:@selector(showGameDirectory)
                                                  name:@"ShowGameDirectory"
                                                object:nil];
+    // FCL 风格：账户管理在中间内容区显示（不再 FormSheet 弹窗）
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(showAccountManager)
+                                                 name:@"ShowAccountManager"
+                                               object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(backgroundChanged)
                                                  name:@"BackgroundChanged"
@@ -462,6 +468,18 @@ static CGFloat LauncherRootLayoutRightPanelWidth(UITraitCollection *trait) {
     [self setContentViewController:nav animated:YES];
     ModpackImportViewController *m = [[ModpackImportViewController alloc] init];
     [nav pushViewController:m animated:NO];
+}
+
+/// FCL 风格：账户管理在中间内容区显示（不再 FormSheet 弹窗）
+- (void)showAccountManager {
+    AccountListViewController *vc = [[AccountListViewController alloc] init];
+    // 账户选择后通知右侧面板刷新（使用已有的 UpdateAccountInfo 通知）
+    vc.whenItemSelected = ^void() {
+        [[NSNotificationCenter defaultCenter] postNotificationName:@"UpdateAccountInfo" object:nil];
+    };
+    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
+    nav.navigationBar.prefersLargeTitles = NO;
+    [self setContentViewController:nav animated:YES];
 }
 
 - (void)backgroundChanged {

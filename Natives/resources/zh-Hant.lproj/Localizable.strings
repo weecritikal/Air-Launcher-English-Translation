@@ -7,6 +7,7 @@
 "game.menu.confirm.force_close" = "你是否肯定想強制關閉？";
 "game.menu.log_output" = "日誌輸出";
 "game.menu.custom_controls" = "自訂控制鍵";
+"game.menu.toggle_stats" = "切換 FPS/記憶體顯示";
 
 "game.note.airplay" = "我的世界正在AirPlay鏡像顯示器中顯示";
 
