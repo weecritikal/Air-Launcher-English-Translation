@@ -61,5 +61,10 @@ CGPoint lastVirtualMousePoint;
 - (void)actionOpenNavigationMenu;
 - (void)didSelectMenuItem:(int)item;
 - (void)viewWillTransitionToSize_Navigation:(CGRect)frame;
+// FCL 风格游戏内菜单动作
+- (void)actionToggleControls;        // 隐藏/显示控制按钮
+- (void)actionToggleVirtualMouse;    // 虚拟鼠标开关
+- (void)actionToggleKeyboard;        // 游戏内键盘开关
+- (void)actionAdjustResolution;      // 分辨率调整
 
 @end

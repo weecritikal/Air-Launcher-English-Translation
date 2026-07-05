@@ -206,7 +206,7 @@
             [self presentViewController:controller animated:YES completion:nil];
         } else {
             id callback = ^(id status, BOOL success) {
-                self.whenItemSelected();
+                if (self.whenItemSelected) self.whenItemSelected();
                 [self dismissViewControllerAnimated:YES completion:nil];
             };
             [[[LocalAuthenticator alloc] initWithInput:usernameField.text] loginWithCallback:callback];
@@ -224,7 +224,7 @@
     vc.onLoginComplete = ^(BOOL success, NSString *errorMessage) {
         if (success) {
             [weakSelf.navigationController popViewControllerAnimated:YES];
-            weakSelf.whenItemSelected();
+            if (weakSelf.whenItemSelected) weakSelf.whenItemSelected();
         }
     };
     [self.navigationController pushViewController:vc animated:YES];
@@ -239,7 +239,7 @@
     vc.onLoginComplete = ^(BOOL success, NSString *errorMessage) {
         if (success) {
             [weakSelf.navigationController popViewControllerAnimated:YES];
-            weakSelf.whenItemSelected();
+            if (weakSelf.whenItemSelected) weakSelf.whenItemSelected();
         }
     };
     [self.navigationController pushViewController:vc animated:YES];
@@ -346,8 +346,8 @@
             }
         }
     } else if (success) {
-        // Успешный вход без сообщений
-        self.whenItemSelected();
+        // 成功登录，无消息
+        if (self.whenItemSelected) self.whenItemSelected();
         [self removeActivityIndicatorFrom:cell];
         [self dismissViewControllerAnimated:YES completion:nil];
     }

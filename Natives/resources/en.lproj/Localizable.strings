@@ -8,6 +8,11 @@
 "game.menu.log_output" = "Log output";
 "game.menu.custom_controls" = "Custom controls";
 "game.menu.toggle_stats" = "Toggle FPS/Memory";
+"game.menu.toggle_controls" = "Toggle Controls";
+"game.menu.toggle_virtual_mouse" = "Toggle Virtual Mouse";
+"game.menu.toggle_keyboard" = "Toggle Keyboard";
+"game.menu.resolution" = "Resolution";
+"game.menu.resolution.message" = "Select game resolution scale";
 
 "game.note.airplay" = "Minecraft is being displayed in AirPlay mirrored display";
 

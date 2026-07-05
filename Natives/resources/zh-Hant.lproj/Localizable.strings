@@ -8,6 +8,11 @@
 "game.menu.log_output" = "日誌輸出";
 "game.menu.custom_controls" = "自訂控制鍵";
 "game.menu.toggle_stats" = "切換 FPS/記憶體顯示";
+"game.menu.toggle_controls" = "隱藏/顯示控制按鈕";
+"game.menu.toggle_virtual_mouse" = "虛擬滑鼠開關";
+"game.menu.toggle_keyboard" = "遊戲內鍵盤開關";
+"game.menu.resolution" = "解析度調整";
+"game.menu.resolution.message" = "選擇遊戲解析度縮放比例";
 
 "game.note.airplay" = "我的世界正在AirPlay鏡像顯示器中顯示";
 

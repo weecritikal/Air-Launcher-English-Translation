@@ -8,6 +8,11 @@
 "game.menu.log_output" = "日志输出";
 "game.menu.custom_controls" = "按键布局";
 "game.menu.toggle_stats" = "开关 FPS/内存显示";
+"game.menu.toggle_controls" = "隐藏/显示控制按钮";
+"game.menu.toggle_virtual_mouse" = "虚拟鼠标开关";
+"game.menu.toggle_keyboard" = "游戏内键盘开关";
+"game.menu.resolution" = "分辨率调整";
+"game.menu.resolution.message" = "选择游戏分辨率缩放比例";
 
 "game.note.airplay" = "Minecraft 正在通过隔空播放（AirPlay）到其他设备显示";
 

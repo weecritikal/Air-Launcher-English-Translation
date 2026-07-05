@@ -477,6 +477,10 @@ static CGFloat LauncherRootLayoutRightPanelWidth(UITraitCollection *trait) {
     vc.whenItemSelected = ^void() {
         [[NSNotificationCenter defaultCenter] postNotificationName:@"UpdateAccountInfo" object:nil];
     };
+    // 账户删除后也通知右侧面板刷新
+    vc.whenDelete = ^void(NSString *name) {
+        [[NSNotificationCenter defaultCenter] postNotificationName:@"UpdateAccountInfo" object:nil];
+    };
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
     nav.navigationBar.prefersLargeTitles = NO;
     [self setContentViewController:nav animated:YES];
