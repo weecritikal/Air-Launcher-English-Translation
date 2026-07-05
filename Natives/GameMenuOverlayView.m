@@ -78,7 +78,8 @@ static const CGFloat kDragThreshold = 10.0;
                     ?: [UIImage systemImageNamed:@"gear"];
     [self.menuButton setImage:icon forState:UIControlStateNormal];
     self.menuButton.tintColor = [UIColor whiteColor];
-    self.menuButton.translatesAutoresizingMaskIntoConstraints = NO;
+    // 使用纯 frame 布局（不用 auto layout），因为按钮位置通过 center 手动设置并持久化
+    // 不设置 translatesAutoresizingMaskIntoConstraints = NO，保持默认 YES，避免无约束导致 frame 不确定
     // 确保按钮能响应触摸
     self.menuButton.userInteractionEnabled = YES;
 
@@ -104,8 +105,7 @@ static const CGFloat kDragThreshold = 10.0;
     self.statsLabel.layer.masksToBounds = YES;
     self.statsLabel.textAlignment = NSTextAlignmentCenter;
     self.statsLabel.numberOfLines = 1;
-    self.statsLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    // 内边距
+    // 使用纯 frame 布局，位置通过 center 手动设置并持久化
     self.statsLabel.frame = CGRectMake(0, 0, 130, 24);
 
     // 拖拽手势

@@ -6,6 +6,7 @@
 
 #include <pthread.h>
 #include <stdint.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -20,6 +21,14 @@
 #include "utils.h"
 
 int clientAPI;
+
+// FPS 计数器（参照 FCL egl_bridge.c 的 atomic_uint 实现）
+// 在 pojavSwapBuffers() 中累加，在 SurfaceViewController 读取时重置
+static atomic_uint _pojavFpsCounter = 0;
+
+unsigned int pojavGetAndResetFps() {
+    return atomic_exchange(&_pojavFpsCounter, 0);
+}
 
 void JNI_LWJGL_changeRenderer(const char* value_c) {
     JNIEnv *env;
@@ -106,6 +115,8 @@ void pojavSetWindowHint(int hint, int value) {
 }
 
 void pojavSwapBuffers() {
+    // FPS 计数（参照 FCL/ZL2 在 native swap buffer 入口计数，反映真实渲染帧率）
+    atomic_fetch_add(&_pojavFpsCounter, 1);
     if (!br_swap_buffers) return;
     br_swap_buffers();
 }

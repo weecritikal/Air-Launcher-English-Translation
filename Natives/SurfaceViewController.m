@@ -165,11 +165,9 @@ static GameSurfaceView* pojavWindow;
 @interface SurfaceViewController ()<UITextFieldDelegate, UIGestureRecognizerDelegate> {
 }
 
-// FPS/内存监控相关（参照 FCL DraggableTextView 与 ZL2 的低频采样策略）
-@property(nonatomic) volatile int64_t frameCounter;       // CADisplayLink 每帧累加
-@property(nonatomic) volatile int64_t lastFrameCounter;   // 上次采样时的帧数
-@property(nonatomic) NSTimer *statsTimer;                 // 低频定时器，500ms 一次
-@property(nonatomic) CADisplayLink *statsDisplayLink;     // 渲染循环引用（用于失效）
+// FPS/内存监控相关（FPS 在 native pojavSwapBuffers 中计数，参照 FCL/ZL2）
+@property(nonatomic) NSTimer *statsTimer;                 // 低频定时器，1s 一次
+@property(nonatomic) CADisplayLink *statsDisplayLink;     // 渲染循环引用（用于 Gyro/Controller tick 和失效）
 
 @property(nonatomic) NSDictionary* metadata;
 @property(nonatomic) TrackedTextField *inputTextField;
@@ -665,14 +663,11 @@ static GameSurfaceView* pojavWindow;
         [self setNeedsUpdateOfHomeIndicatorAutoHidden];
     }
 
-    // 渲染循环 tick：除了原有的 Gyro/Controller 输入，还累加帧计数器用于 FPS 计算。
-    // 仅对 int64_t 自增，开销极低，不影响游戏帧数（参照 FCL 在游戏循环中累加 FPS 计数）。
+    // 渲染循环 tick：Gyro/Controller 输入采样（FPS 计数已移至 native pojavSwapBuffers）
     __weak typeof(self) weakSelf = self;
     id tickInput = ^{
         [GyroInput tick];
         [ControllerInput tick];
-        // 原子自增帧数（OSAtomicIncrement64 在 arm64 上是单条指令）
-        weakSelf.frameCounter++;
     };
     CADisplayLink *displayLink = [CADisplayLink displayLinkWithTarget:tickInput selector:@selector(invoke)];
     if (@available(iOS 15.0, tvOS 15.0, *)) {
@@ -685,11 +680,10 @@ static GameSurfaceView* pojavWindow;
     [displayLink addToRunLoop:NSRunLoop.currentRunLoop forMode:NSRunLoopCommonModes];
     self.statsDisplayLink = displayLink;
 
-    // 低频采样定时器：每 500ms 计算一次 FPS 和内存占用，避免每帧更新 UI
-    // 参照 ZL2 的低频刷新策略，确保完全不影响游戏帧数
-    self.lastFrameCounter = 0;
-    self.frameCounter = 0;
-    self.statsTimer = [NSTimer scheduledTimerWithTimeInterval:0.5
+    // 低频采样定时器：每 1 秒读取一次 native FPS 计数器和内存占用
+    // 参照 FCL/ZL2 的 1Hz 采样策略（FCL_GameMenu.java Thread.sleep(1000)）
+    // pojavGetAndResetFps() 读取并重置计数器，1 秒间隔直接返回 FPS 值
+    self.statsTimer = [NSTimer scheduledTimerWithTimeInterval:1.0
                                                       target:self
                                                     selector:@selector(updateGameStats)
                                                     userInfo:nil
@@ -1770,18 +1764,19 @@ static NSMutableDictionary *s_touchToFingerIdMap = nil;
     return pojavWindow;
 }
 
-#pragma mark - FPS/内存监控（参照 FCL DraggableTextView 与 ZL2 GameScreen.kt）
+#pragma mark - FPS/内存监控（参照 FCL egl_bridge.c 与 ZL2 MemoryUtils.kt）
 
 - (void)updateGameStats {
-    // 1. 计算 FPS：当前帧数 - 上次帧数 = 0.5 秒内的帧数，×2 得到每秒帧数
-    int64_t current = self.frameCounter;
-    int64_t delta = current - self.lastFrameCounter;
-    self.lastFrameCounter = current;
-    NSInteger fps = (NSInteger)(delta * 2);  // 0.5s 采样间隔，乘 2 得到每秒
+    // 1. 读取 native swap buffer 计数器并重置（参照 FCL CallbackBridge.getFps()）
+    // pojavGetAndResetFps() 返回自上次调用以来的渲染帧数
+    // 采样间隔 1 秒（statsTimer 已改为 1s），所以返回值即为 FPS
+    NSInteger fps = (NSInteger)pojavGetAndResetFps();
 
-    // 2. 获取内存占用（resident_size_bytes）
-    // 使用 mach_task_basic_info，比 task_basic_info 更准确（参照 ZL2 DebugUtils.kt）
-    double memoryMB = [self currentResidentMemoryMB];
+    // 2. 获取内存占用（phys_footprint）
+    // 使用 task_vm_info 的 phys_footprint 字段，这是 iOS 上最准确的进程内存占用指标
+    // 包含常驻内存、压缩内存、GPU 内存（UMA 架构下），与 Xcode 内存表盘一致
+    // 参照 ZL2 MemoryUtils.kt 的系统级内存统计理念，在 iOS 上用 phys_footprint 等价
+    double memoryMB = [self currentPhysFootprintMB];
 
     // 3. 更新 UI（GameMenuOverlayView 内部会 dispatch 到主线程）
     if ([self.gameMenuOverlay isKindOfClass:[GameMenuOverlayView class]]) {
@@ -1789,16 +1784,22 @@ static NSMutableDictionary *s_touchToFingerIdMap = nil;
     }
 }
 
-- (double)currentResidentMemoryMB {
-    mach_task_basic_info_data_t info;
-    mach_msg_type_number_t count = MACH_TASK_BASIC_INFO_COUNT;
-    kern_return_t kr = task_info(mach_task_self(), MACH_TASK_BASIC_INFO,
-                                 (task_info_t)&info, &count);
+- (double)currentPhysFootprintMB {
+    // 使用 TASK_VM_INFO flavor 读取 phys_footprint
+    // phys_footprint 是 Apple 推荐的进程内存占用指标，包含：
+    // - 常驻物理内存（resident_size）
+    // - 压缩内存
+    // - GPU 内存（iOS UMA 架构下 Metal 缓冲区映射到进程地址空间）
+    // 减去通过 mmap 共享的部分，与 Xcode/Memory Graph 显示的值一致
+    task_vm_info_data_t vmInfo;
+    mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
+    kern_return_t kr = task_info(mach_task_self(), TASK_VM_INFO,
+                                 (task_info_t)&vmInfo, &count);
     if (kr != KERN_SUCCESS) {
         return 0.0;
     }
-    // resident_size 单位是字节
-    return (double)info.resident_size / (1024.0 * 1024.0);
+    // phys_footprint 单位是字节
+    return (double)vmInfo.phys_footprint / (1024.0 * 1024.0);
 }
 
 - (void)dealloc {

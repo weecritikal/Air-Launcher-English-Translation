@@ -111,6 +111,9 @@ void callback_LauncherViewController_installMinecraft();
 void callback_SurfaceViewController_launchMinecraft(int width, int height);
 int callback_SurfaceViewController_touchHotbar(CGFloat x, CGFloat y);
 
+// FPS 计数器：在 pojavSwapBuffers() 中累加，调用此函数读取并重置（参照 FCL/ZL2）
+unsigned int pojavGetAndResetFps();
+
 void CallbackBridge_nativeSetInputReady(BOOL inputReady);
 BOOL CallbackBridge_nativeSendChar(jchar codepoint /* jint codepoint */);
 BOOL CallbackBridge_nativeSendCharMods(jchar codepoint, int mods);
