@@ -6,6 +6,8 @@
 #import "GameMenuOverlayView.h"
 #import "TrackedTextField.h"
 #import "utils.h"
+#import "ScreenUtils.h"
+#import <objc/runtime.h>
 
 // 暴露 class extension 中的私有属性，供 category 使用
 @interface SurfaceViewController()
@@ -14,35 +16,83 @@
 - (void)updateControlHiddenState:(BOOL)hide;
 @end
 
+// category 不能存储 ivar，用 associated object 实现 menuDimView
+static const void *kMenuDimViewKey = &kMenuDimViewKey;
+
+@interface SurfaceViewController(Navigation)
+// FCL 风格菜单的背景遮罩（半透明黑色，点击关闭菜单）
+@property(nonatomic) UIView *menuDimView;
+@end
+
 @implementation SurfaceViewController(Navigation)
 
+- (void)setMenuDimView:(UIView *)menuDimView {
+    objc_setAssociatedObject(self, kMenuDimViewKey, menuDimView, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+}
+
+- (UIView *)menuDimView {
+    return objc_getAssociatedObject(self, kMenuDimViewKey);
+}
+
 - (void)initCategory_Navigation {
-    // FCL 风格：完全删除原来的右侧滑动调出菜单的方式
-    // 菜单改为通过悬浮按钮（GameMenuOverlayView）触发
-    // 参照 FCL GameMenu.java 和 ZL2 GameMenuSubscreen.kt 的菜单选项
+    // FCL 安卓风格：菜单从底部弹出，游戏画面不缩小
+    // 参照 FCL GameMenu.java / GameMenuView.kt 的底部弹出菜单样式
     self.menuArray = @[
-        @"game.menu.force_close",          // 强制关闭（FCL/ZL2 都有）
-        @"game.menu.log_output",            // 日志输出（FCL switch_show_log / ZL2 game_menu_option_switch_log）
-        @"game.menu.custom_controls",       // 按键布局编辑（FCL edit_mode / ZL2 control_manage_info_edit）
-        @"game.menu.toggle_stats",          // FPS/内存显示开关（FCL switch_show_fps+switch_show_memory / ZL2 switch_fps+switch_memory）
-        @"game.menu.toggle_controls",       // 隐藏/显示控制按钮（FCL hide_all）
-        @"game.menu.toggle_virtual_mouse",  // 虚拟鼠标开关（FCL 鼠标分组 / ZL2 ControlMouse）
-        @"game.menu.toggle_keyboard",       // 游戏内键盘（FCL open_quick_input / ZL2 game_menu_option_input_method）
-        @"game.menu.resolution",            // 分辨率调整（FCL window_scale / ZL2 resolutionRatio）
-        @"Settings"                         // 设置（启动器偏好设置）
+        @"game.menu.force_close",          // 强制关闭
+        @"game.menu.log_output",            // 日志输出
+        @"game.menu.custom_controls",       // 按键布局编辑
+        @"game.menu.toggle_stats",          // FPS/内存显示开关
+        @"game.menu.toggle_controls",       // 隐藏/显示控制按钮
+        @"game.menu.toggle_virtual_mouse",  // 虚拟鼠标开关
+        @"game.menu.toggle_keyboard",       // 游戏内键盘
+        @"game.menu.resolution",            // 分辨率调整
+        @"Settings"                         // 设置
     ];
 
-    self.menuView = [[UITableView alloc] initWithFrame:CGRectMake(self.view.frame.size.width + 30.0, 0,
-        self.view.frame.size.width * 0.3 - 36.0 * 0.7, self.view.frame.size.height)];
+    // FCL 风格：菜单从底部弹出，宽度为屏幕宽度的 70%（居中），最大高度为屏幕高度的 60%
+    CGFloat screenWidth = [ScreenUtils screenSize].width;
+    CGFloat screenHeight = [ScreenUtils screenSize].height;
+    CGFloat menuWidth = MIN(screenWidth * 0.7, 400);
+    CGFloat menuMaxHeight = screenHeight * 0.6;
+    CGFloat menuEstimatedHeight = self.menuArray.count * 48 + 16;
+    CGFloat menuHeight = MIN(menuEstimatedHeight, menuMaxHeight);
 
-    //menuView.backgroundColor = [UIColor colorWithRed:240.0/255.0 green:240.0/255.0 blue:240.0/255.0 alpha:1];
+    self.menuView = [[UITableView alloc] initWithFrame:CGRectMake(
+        (screenWidth - menuWidth) / 2.0,
+        screenHeight,  // 初始放在屏幕底部外（动画时上滑）
+        menuWidth,
+        menuHeight
+    ) style:UITableViewStylePlain];
+
     self.menuView.dataSource = self;
     self.menuView.delegate = self;
     self.menuView.hidden = YES;
-    self.menuView.layer.cornerRadius = 12;
-    self.menuView.scrollEnabled = YES;  // 菜单项增多，启用滚动
-    self.menuView.separatorInset = UIEdgeInsetsZero;
+    self.menuView.layer.cornerRadius = 16;
+    self.menuView.clipsToBounds = YES;
+    self.menuView.scrollEnabled = YES;
+    self.menuView.separatorInset = UIEdgeInsetsMake(0, 16, 0, 16);
+    // FCL 风格：半透明深色背景
+    self.menuView.backgroundColor = [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull traitCollection) {
+        return [UIColor colorWithRed:28.0/255.0 green:28.0/255.0 blue:30.0/255.0 alpha:0.95];
+    }];
+    // 添加阴影
+    self.menuView.layer.shadowColor = [UIColor blackColor].CGColor;
+    self.menuView.layer.shadowOffset = CGSizeMake(0, -2);
+    self.menuView.layer.shadowRadius = 12;
+    self.menuView.layer.shadowOpacity = 0.4;
     [self.view addSubview:self.menuView];
+
+    // FCL 风格：半透明背景遮罩（点击关闭菜单）
+    self.menuDimView = [[UIView alloc] initWithFrame:self.view.bounds];
+    self.menuDimView.backgroundColor = [UIColor colorWithRed:0 green:0 blue:0 alpha:0.4];
+    self.menuDimView.alpha = 0;
+    self.menuDimView.hidden = YES;
+    UITapGestureRecognizer *dimTap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(dismissMenu)];
+    dimTap.cancelsTouchesInView = YES;
+    [self.menuDimView addGestureRecognizer:dimTap];
+    [self.view addSubview:self.menuDimView];
+    // 确保菜单在遮罩之上
+    [self.view bringSubviewToFront:self.menuView];
 
     // FCL/ZL2 风格悬浮按钮 + FPS/内存显示
     GameMenuOverlayView *overlay = [[GameMenuOverlayView alloc] initWithParentView:self.view];
@@ -56,39 +106,84 @@
 /// 切换菜单显示状态（悬浮按钮点击触发）
 - (void)toggleMenu {
     if (self.menuView.hidden) {
-        // 打开菜单
-        self.menuView.hidden = NO;
-        [self animateMenuScale:0.7 duration:0.3];
+        [self showMenu];
     } else {
-        // 关闭菜单
-        [self animateMenuScale:1.0 duration:0.3];
+        [self dismissMenu];
     }
+}
+
+/// FCL 风格：从底部弹出菜单（游戏画面不缩小）
+- (void)showMenu {
+    self.menuView.hidden = NO;
+    self.menuDimView.hidden = NO;
+
+    // 准备动画初始状态：菜单在屏幕底部外
+    CGFloat screenHeight = [ScreenUtils screenSize].height;
+    CGFloat menuHeight = self.menuView.frame.size.height;
+    self.menuView.transform = CGAffineTransformIdentity;
+    self.menuView.frame = CGRectMake(
+        self.menuView.frame.origin.x,
+        screenHeight,  // 屏幕底部外
+        self.menuView.frame.size.width,
+        menuHeight
+    );
+
+    // 计算目标位置：底部弹出，留出安全区域
+    CGFloat safeBottom = [ScreenUtils safeAreaBottom];
+    CGFloat targetY = screenHeight - menuHeight - safeBottom - 16;
+
+    [UIView animateWithDuration:0.3
+                          delay:0
+         usingSpringWithDamping:0.85
+          initialSpringVelocity:0.5
+                        options:UIViewAnimationOptionCurveEaseOut
+                     animations:^{
+        // 菜单上滑到目标位置
+        self.menuView.frame = CGRectMake(
+            self.menuView.frame.origin.x,
+            targetY,
+            self.menuView.frame.size.width,
+            menuHeight
+        );
+        // 背景遮罩淡入
+        self.menuDimView.alpha = 1.0;
+    } completion:^(BOOL finished) {
+        [self setNeedsUpdateOfHomeIndicatorAutoHidden];
+        [self setNeedsUpdateOfScreenEdgesDeferringSystemGestures];
+        [self setNeedsStatusBarAppearanceUpdate];
+    }];
+}
+
+/// FCL 风格：菜单下滑消失（游戏画面不缩小）
+- (void)dismissMenu {
+    CGFloat screenHeight = [ScreenUtils screenSize].height;
+
+    [UIView animateWithDuration:0.25
+                          delay:0
+                        options:UIViewAnimationOptionCurveEaseIn
+                     animations:^{
+        // 菜单下滑到屏幕底部外
+        self.menuView.frame = CGRectMake(
+            self.menuView.frame.origin.x,
+            screenHeight,
+            self.menuView.frame.size.width,
+            self.menuView.frame.size.height
+        );
+        // 背景遮罩淡出
+        self.menuDimView.alpha = 0.0;
+    } completion:^(BOOL finished) {
+        self.menuView.hidden = YES;
+        self.menuDimView.hidden = YES;
+        [self setNeedsUpdateOfHomeIndicatorAutoHidden];
+        [self setNeedsUpdateOfScreenEdgesDeferringSystemGestures];
+        [self setNeedsStatusBarAppearanceUpdate];
+    }];
 }
 
 - (void)setupCategory_Navigation {
     // FCL 风格：完全删除原来的右侧滑动调出菜单的方式
     // 不再注册 UIScreenEdgePanGestureRecognizer，菜单通过悬浮按钮触发
     // 保留空方法体，因为 SurfaceViewController.m 中通过 performSelector 调用
-}
-
-static CGPoint lastCenterPoint;
-- (void)animateMenuScale:(CGFloat)scale duration:(CGFloat)duration {
-    CGFloat centerX = self.rootView.bounds.size.width / 2;
-    CGFloat centerY = self.rootView.bounds.size.height / 2;
-    [UIView animateWithDuration:duration delay:0 options:UIViewAnimationOptionCurveEaseOut animations:^{
-        lastCenterPoint.x = centerX * scale;
-        self.rootView.center = CGPointMake(lastCenterPoint.x, centerY);
-        self.rootView.transform = CGAffineTransformScale(CGAffineTransformIdentity, scale, scale);
-        self.menuView.transform = CGAffineTransformScale(CGAffineTransformIdentity, (1.1-scale)*2.5, (1.1-scale)*2.5);
-        // 限制菜单高度不超过屏幕高度的 80%，避免菜单项过多时超出屏幕
-        CGFloat menuHeight = MIN(self.menuView.contentSize.height, self.view.frame.size.height * 0.8);
-        self.menuView.frame = CGRectMake(self.rootView.frame.size.width, self.rootView.frame.origin.y, self.menuView.frame.size.width, menuHeight);
-    } completion:^(BOOL finished) {
-        self.menuView.hidden = scale == 1.0;
-        [self setNeedsUpdateOfHomeIndicatorAutoHidden];
-        [self setNeedsUpdateOfScreenEdgesDeferringSystemGestures];
-        [self setNeedsStatusBarAppearanceUpdate];
-    }];
 }
 
 - (void)actionForceClose {
@@ -100,16 +195,12 @@ static CGPoint lastCenterPoint;
     [alert addAction:cancelAction];
 
     UIAlertAction* okAction = [UIAlertAction actionWithTitle:localize(@"OK", nil) style:UIAlertActionStyleDestructive handler:^(UIAlertAction * action) {
-        [UIView animateWithDuration:0.4 delay:0 options:UIViewAnimationOptionCurveEaseIn animations:^{
-            self.rootView.center = CGPointMake(self.rootView.bounds.size.width/-2, self.rootView.center.y);
-            self.menuView.frame = CGRectMake(self.view.frame.size.width, 0, 0, 0);
-        } completion:^(BOOL finished) {
-            if (fatalExitGroup == nil) {
-                exit(0);
-            } else {
-                dispatch_group_leave(fatalExitGroup);
-            }
-        }];
+        // FCL 风格：直接退出，不再做缩小动画
+        if (fatalExitGroup == nil) {
+            exit(0);
+        } else {
+            dispatch_group_leave(fatalExitGroup);
+        }
     }];
     [alert addAction:okAction];
 
@@ -117,7 +208,7 @@ static CGPoint lastCenterPoint;
 }
 
 - (void)actionOpenCustomControls {
-    [self animateMenuScale:1 duration:0.5];
+    [self dismissMenu];
     [self.ctrlView removeAllButtons];
     CustomControlsViewController *vc = [[CustomControlsViewController alloc] init];
     vc.modalPresentationStyle = UIModalPresentationOverFullScreen;
@@ -137,6 +228,7 @@ static CGPoint lastCenterPoint;
 }
 
 - (void)actionOpenPreferences {
+    [self dismissMenu];
     LauncherPreferencesViewController *vc = [[LauncherPreferencesViewController alloc] init];
     [self presentViewController:vc animated:YES completion:nil];
 }
@@ -196,6 +288,8 @@ static CGPoint lastCenterPoint;
 }
 
 - (void)actionOpenNavigationMenu {
+    // FCL 风格：游戏内自定义按键的 SPECIALBTN_MENU 也触发底部弹出菜单
+    [self toggleMenu];
 }
 
 - (UIRectEdge)preferredScreenEdgesDeferringSystemGestures {
@@ -219,16 +313,29 @@ static CGPoint lastCenterPoint;
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"cell"];
+    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"FCLMenuCell"];
 
     if (cell == nil) {
-        cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:@"cell"];
+        cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:@"FCLMenuCell"];
+        cell.backgroundColor = [UIColor clearColor];
+        cell.textLabel.textColor = [UIColor whiteColor];
+        cell.textLabel.font = [UIFont systemFontOfSize:[ScreenUtils sp:16]];
+        cell.textLabel.textAlignment = NSTextAlignmentLeft;
+        // FCL 风格：左侧留出图标空间，cell 高度 48
+        cell.separatorInset = UIEdgeInsetsMake(0, 16, 0, 16);
+        cell.selectionStyle = UITableViewCellSelectionStyleDefault;
+        // 选中状态背景
+        UIView *selectedBg = [[UIView alloc] init];
+        selectedBg.backgroundColor = [UIColor colorWithRed:80.0/255.0 green:80.0/255.0 blue:90.0/255.0 alpha:0.6];
+        cell.selectedBackgroundView = selectedBg;
     }
-    cell.backgroundColor = UIColor.systemFillColor;
 
     cell.textLabel.text = localize(self.menuArray[indexPath.row], nil);
-
     return cell;
+}
+
+- (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
+    return [ScreenUtils sp:48];
 }
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
@@ -271,14 +378,35 @@ static CGPoint lastCenterPoint;
 }
 
 - (void)viewWillTransitionToSize_Navigation:(CGRect)frame {
-    if (self.rootView.transform.a != 0) {
-        CGFloat centerX = self.rootView.bounds.size.width / 2;
-        CGFloat centerY = self.rootView.bounds.size.height / 2;
-        self.rootView.center = lastCenterPoint = CGPointMake(centerX * self.rootView.transform.a, centerY);
-    }
+    // FCL 风格：菜单从底部弹出，旋转时重新计算 frame
+    CGFloat screenWidth = frame.size.width;
+    CGFloat screenHeight = frame.size.height;
+    CGFloat menuWidth = MIN(screenWidth * 0.7, 400);
+    CGFloat menuMaxHeight = screenHeight * 0.6;
+    CGFloat menuEstimatedHeight = self.menuArray.count * 48 + 16;
+    CGFloat menuHeight = MIN(menuEstimatedHeight, menuMaxHeight);
 
-    self.menuView.frame = CGRectMake(self.rootView.frame.size.width, self.rootView.frame.origin.y,
-        frame.size.width*0.3 - 30.0*0.7, self.menuView.contentSize.height);
+    if (!self.menuView.hidden) {
+        // 菜单可见时，更新到新的目标位置
+        CGFloat safeBottom = [ScreenUtils safeAreaBottom];
+        CGFloat targetY = screenHeight - menuHeight - safeBottom - 16;
+        self.menuView.frame = CGRectMake(
+            (screenWidth - menuWidth) / 2.0,
+            targetY,
+            menuWidth,
+            menuHeight
+        );
+    } else {
+        // 菜单不可见时，保持在屏幕底部外
+        self.menuView.frame = CGRectMake(
+            (screenWidth - menuWidth) / 2.0,
+            screenHeight,
+            menuWidth,
+            menuHeight
+        );
+    }
+    // 更新遮罩 frame
+    self.menuDimView.frame = CGRectMake(0, 0, screenWidth, screenHeight);
 }
 
 @end

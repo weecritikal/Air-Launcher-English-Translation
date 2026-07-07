@@ -693,7 +693,7 @@ static GameSurfaceView* pojavWindow;
     CGFloat screenScale = UIScreen.mainScreen.scale;
     [self updateSavedResolution];
 
-    self.rootView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, self.view.frame.size.width + 30.0, self.view.frame.size.height)];
+    self.rootView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, self.view.frame.size.width, self.view.frame.size.height)];
     [self.view addSubview:self.rootView];
 
     self.ctrlView = [[ControlLayout alloc] initWithFrame:getSafeArea(self.view.frame)];
@@ -1111,7 +1111,7 @@ static GameSurfaceView* pojavWindow;
 - (void)viewWillTransitionToSize:(CGSize)size withTransitionCoordinator:(id<UIViewControllerTransitionCoordinator>)coordinator
 {
     [coordinator animateAlongsideTransition:^(id<UIViewControllerTransitionCoordinatorContext>  _Nonnull context) {
-        self.rootView.bounds = CGRectMake(0, 0, size.width + 30.0, size.height);
+        self.rootView.bounds = CGRectMake(0, 0, size.width, size.height);
 
         CGRect frame = self.view.frame;
         frame.size = size;
