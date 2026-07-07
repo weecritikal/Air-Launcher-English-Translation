@@ -123,6 +123,7 @@ add_executable(AngelAuraAmethyst
   JavaLauncher.m
   external/fishhook/fishhook.c
   UIKit+hook.m
+  ScreenUtils.m
 
   authenticator/BaseAuthenticator.m
   authenticator/LocalAuthenticator.m
