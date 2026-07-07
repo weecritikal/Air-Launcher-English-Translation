@@ -1,6 +1,7 @@
 #import "installer/FabricUtils.h"
 #import "ModpackUtils.h"
 #import "LauncherPreferences.h"
+#import "PLPreferences.h"
 
 @implementation ModpackUtils
 
@@ -36,7 +37,17 @@
     NSMutableDictionary *info = [NSMutableDictionary new];
     NSString *minecraftVersion = dependency[@"minecraft"];
     if (dependency[@"forge"]) {
+        // Forge 没有独立的 version JSON 下载 URL，version JSON 嵌入在 installer.jar 中。
+        // 设置 installer URL 和 loader 类型，让 ModrinthAPI/CurseForgeAPI 在整合包安装时
+        // 下载 installer.jar 并调用 ForgeDirectInstaller 写入完整的 version.json + 下载 Forge 库。
+        // 之前不设置任何字段会导致整合包安装后只设置 profile 但不下载版本 JSON，
+        // 启动时报"找不到版本信息"。
         info[@"id"] = [NSString stringWithFormat:@"%@-forge-%@", minecraftVersion, dependency[@"forge"]];
+        info[@"loader"] = @"Forge";
+        info[@"loaderVersion"] = dependency[@"forge"];
+        info[@"installer"] = [self installerURLForLoader:@"Forge"
+                                          loaderVersion:dependency[@"forge"]
+                                       minecraftVersion:minecraftVersion] ?: @"";
     } else if (dependency[@"fabric-loader"]) {
         info[@"id"] = [NSString stringWithFormat:@"fabric-loader-%@-%@", dependency[@"fabric-loader"], minecraftVersion];
         info[@"json"] = [NSString stringWithFormat:FabricUtils.endpoints[@"Fabric"][@"json"], minecraftVersion, dependency[@"fabric-loader"]];
@@ -44,16 +55,94 @@
         info[@"id"] = [NSString stringWithFormat:@"quilt-loader-%@-%@", dependency[@"quilt-loader"], minecraftVersion];
         info[@"json"] = [NSString stringWithFormat:FabricUtils.endpoints[@"Quilt"][@"json"], minecraftVersion, dependency[@"quilt-loader"]];
     } else if (dependency[@"neoforge"]) {
+        // NeoForge 同 Forge，version JSON 嵌入在 installer.jar 中。
+        // 设置 installer URL 和 loader 类型，让整合包安装时调用 NeoForgeDirectInstaller。
         NSString *neoforgeVer = dependency[@"neoforge"];
         info[@"id"] = [NSString stringWithFormat:@"%@-neoforge-%@", minecraftVersion, neoforgeVer];
-        NSString *downloadSource = getPrefObject(@"general.download_source");
-        if ([downloadSource isEqualToString:@"bmclapi"]) {
-            info[@"json"] = [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/maven/neoforged/releases/net/neoforged/neoforge/%@/neoforge-%@.json", neoforgeVer, neoforgeVer];
-        } else {
-            info[@"json"] = [NSString stringWithFormat:@"https://maven.neoforged.net/releases/net/neoforged/neoforge/%@/neoforge-%@.json", neoforgeVer, neoforgeVer];
-        }
+        info[@"loader"] = @"NeoForge";
+        info[@"loaderVersion"] = neoforgeVer;
+        info[@"installer"] = [self installerURLForLoader:@"NeoForge"
+                                          loaderVersion:neoforgeVer
+                                       minecraftVersion:minecraftVersion] ?: @"";
     }
+    info[@"minecraftVersion"] = minecraftVersion ?: @"";
     return info;
+}
+
++ (nullable NSString *)installerURLForLoader:(NSString *)loader
+                               loaderVersion:(NSString *)loaderVersion
+                            minecraftVersion:(NSString *)minecraftVersion {
+    NSString *downloadSource = [PLPreferences currentDownloadSourceForType:@"forge"];
+    BOOL useBMCLAPI = [downloadSource isEqualToString:@"bmclapi"];
+
+    if ([loader isEqualToString:@"Forge"]) {
+        // Forge versionString = "<mc>-<loaderVersion>"，例如 "1.20.1-47.3.0"
+        NSString *versionString = [NSString stringWithFormat:@"%@-%@", minecraftVersion, loaderVersion];
+        if (useBMCLAPI) {
+            return [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/maven/net/minecraftforge/forge/%@/forge-%@-installer.jar", versionString, versionString];
+        }
+        return [NSString stringWithFormat:@"https://maven.minecraftforge.net/net/minecraftforge/forge/%@/forge-%@-installer.jar", versionString, versionString];
+    }
+
+    if ([loader isEqualToString:@"NeoForge"]) {
+        // NeoForge 1.20.1 早期版本 artifactId 是 net.neoforged:forge，之后是 net.neoforged:neoforge
+        // loaderVersion 例如 "47.1.0"（1.20.1）或 "20.6.119-beta"（1.20.6+）
+        BOOL isLegacyForgeArtifact = [minecraftVersion isEqualToString:@"1.20.1"];
+        if (isLegacyForgeArtifact) {
+            if (useBMCLAPI) {
+                return [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/maven/net/neoforged/forge/%@/forge-%@-installer.jar", loaderVersion, loaderVersion];
+            }
+            return [NSString stringWithFormat:@"https://maven.neoforged.net/releases/net/neoforged/forge/%@/forge-%@-installer.jar", loaderVersion, loaderVersion];
+        }
+        if (useBMCLAPI) {
+            return [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/maven/net/neoforged/neoforge/%@/neoforge-%@-installer.jar", loaderVersion, loaderVersion];
+        }
+        return [NSString stringWithFormat:@"https://maven.neoforged.net/releases/net/neoforged/neoforge/%@/neoforge-%@-installer.jar", loaderVersion, loaderVersion];
+    }
+
+    return nil;
+}
+
++ (NSInteger)javaMajorVersionForMC:(NSString *)mcVersion {
+    NSArray *parts = [mcVersion componentsSeparatedByString:@"."];
+    if (parts.count < 2) return 8;
+    NSInteger major = [parts[1] integerValue];
+    if (major >= 21) return 21;       // 1.21+
+    if (major >= 20 && parts.count >= 3 && [parts[2] integerValue] >= 5) return 21; // 1.20.5+
+    if (major >= 18) return 17;       // 1.18+
+    if (major >= 17) return 17;       // 1.17（项目未捆绑 Java 16，Java 17 可向后兼容运行 1.17）
+    return 8;                          // 1.16.5 及以下
+}
+
++ (void)writePlaceholderVersionJSONForVersionId:(NSString *)versionId
+                               minecraftVersion:(NSString *)minecraftVersion
+                                         loader:(NSString *)loader
+                                 loaderVersion:(NSString *)loaderVersion
+                                          error:(NSError *)error {
+    // 占位 JSON：mainClass 指向不存在的类，启动时显式报错
+    // 避免 Forge/NeoForge 直装失败后误装作 vanilla MC 让用户以为 mods 生效
+    NSInteger javaMajor = [self javaMajorVersionForMC:minecraftVersion];
+    NSString *comment = error.localizedDescription.length > 0
+        ? [NSString stringWithFormat:@"此整合包需要 %@ %@ 加载器，自动安装失败：%@。请通过下载界面手动安装。", loader, loaderVersion, error.localizedDescription]
+        : [NSString stringWithFormat:@"此整合包需要 %@ %@ 加载器，自动安装失败。请通过下载界面手动安装。", loader, loaderVersion];
+    NSDictionary *placeholderJSON = @{
+        @"_comment_": comment,
+        @"id": versionId ?: @"",
+        @"inheritsFrom": minecraftVersion ?: @"",
+        @"type": @"release",
+        @"mainClass": @"net.angelaura.installer.MissingLoader",
+        @"javaVersion": @{@"component": @"java-runtime", @"majorVersion": @(javaMajor)}
+    };
+    NSData *jsonData = [NSJSONSerialization dataWithJSONObject:placeholderJSON options:NSJSONWritingPrettyPrinted error:nil];
+    if (!jsonData) return;
+
+    // 占位 JSON 写入 POJAV_GAME_DIR/versions/{versionId}/{versionId}.json
+    // 原因：Java 端固定从 POJAV_GAME_DIR/versions 加载版本 JSON
+    NSString *versionDir = [NSString stringWithFormat:@"%s/versions/%@", getenv("POJAV_GAME_DIR"), versionId];
+    [NSFileManager.defaultManager createDirectoryAtPath:versionDir withIntermediateDirectories:YES attributes:nil error:nil];
+    NSString *versionJsonPath = [versionDir stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.json", versionId]];
+    [jsonData writeToFile:versionJsonPath options:NSDataWritingAtomic error:nil];
+    NSLog(@"[ModpackUtils] 占位 version JSON 已写入: %@", versionJsonPath);
 }
 
 @end

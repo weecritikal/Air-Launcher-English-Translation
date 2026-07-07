@@ -3,6 +3,8 @@
 #import "PLProfiles.h"
 #import "ModpackUtils.h"
 #import "UZKArchive.h"
+#import "installer/ForgeDirectInstaller.h"
+#import "installer/NeoForgeDirectInstaller.h"
 
 @implementation ModrinthAPI
 
@@ -646,35 +648,78 @@ submitDownloadTasksFromPackage:(NSString *)packagePath
     }
     
     [NSFileManager.defaultManager removeItemAtPath:packagePath error:nil];
-    
+
     NSDictionary<NSString *, NSString *> *depInfo = [ModpackUtils infoForDependencies:indexDict[@"dependencies"]];
+    NSString *profileName = indexDict[@"name"] ?: destPath.lastPathComponent;
+    NSString *gameDirRelative = [NSString stringWithFormat:@"./custom_gamedir/%@", destPath.lastPathComponent];
+    NSString *tmpIconPath = [NSTemporaryDirectory() stringByAppendingPathComponent:@"icon.png"];
+    NSString *iconBase64 = [NSString stringWithFormat:@"data:image/png;base64,%@",
+                            [[NSData dataWithContentsOfFile:tmpIconPath] base64EncodedStringWithOptions:0]];
+
+    // 立即设置 profile，确保整合包安装后能从 profile 列表中看到（即使加载器安装失败）
+    PLProfiles.current.profiles[profileName] = @{
+        @"gameDir": gameDirRelative,
+        @"name": profileName,
+        @"lastVersionId": depInfo[@"id"] ?: @"",
+        @"icon": iconBase64
+    }.mutableCopy;
+    PLProfiles.current.selectedProfileName = profileName;
+
     if (depInfo[@"json"]) {
-        downloader.modpackDownloadCompletion = ^{
-            NSString *tmpIconPath = [NSTemporaryDirectory() stringByAppendingPathComponent:@"icon.png"];
-            PLProfiles.current.profiles[indexDict[@"name"]] = @{
-                @"gameDir": [NSString stringWithFormat:@"./custom_gamedir/%@", destPath.lastPathComponent],
-                @"name": indexDict[@"name"],
-                @"lastVersionId": depInfo[@"id"] ?: @"",
-                @"icon": [NSString stringWithFormat:@"data:image/png;base64,%@",
-                    [[NSData dataWithContentsOfFile:tmpIconPath] base64EncodedStringWithOptions:0]]
-            }.mutableCopy;
-            PLProfiles.current.selectedProfileName = indexDict[@"name"];
-        };
+        // Fabric/Quilt：直接下载 version JSON 并触发版本完整下载
         NSString *jsonPath = [NSString stringWithFormat:@"%1$s/versions/%2$@/%2$@.json", getenv("POJAV_GAME_DIR"), depInfo[@"id"]];
         NSURLSessionDownloadTask *task = [downloader createDownloadTask:depInfo[@"json"] size:0 sha:nil altName:nil toPath:jsonPath success:^{
             [downloader downloadVersion:@{@"id": depInfo[@"id"]}];
         }];
         [task resume];
-    } else {
-        NSString *tmpIconPath = [NSTemporaryDirectory() stringByAppendingPathComponent:@"icon.png"];
-        PLProfiles.current.profiles[indexDict[@"name"]] = @{
-            @"gameDir": [NSString stringWithFormat:@"./custom_gamedir/%@", destPath.lastPathComponent],
-            @"name": indexDict[@"name"],
-            @"lastVersionId": depInfo[@"id"] ?: @"",
-            @"icon": [NSString stringWithFormat:@"data:image/png;base64,%@",
-                [[NSData dataWithContentsOfFile:tmpIconPath] base64EncodedStringWithOptions:0]]
-        }.mutableCopy;
-        PLProfiles.current.selectedProfileName = indexDict[@"name"];
+    } else if (depInfo[@"installer"] && [(NSString *)depInfo[@"installer"] length] > 0) {
+        // Forge/NeoForge：下载 installer.jar 并调用直装器写入完整的 version.json + 下载库
+        // 之前不处理这个分支会导致整合包安装后只设置 profile 但不下载版本 JSON，
+        // 启动时报"找不到版本信息"。
+        NSString *versionId = depInfo[@"id"];
+        NSString *loader = depInfo[@"loader"];
+        NSString *customGameDir = destPath;  // 整合包隔离目录（mods/saves/configs）
+        NSString *installerPath = [NSTemporaryDirectory() stringByAppendingPathComponent:
+                                   [NSString stringWithFormat:@"%@-installer.jar", versionId]];
+
+        NSURLSessionDownloadTask *task = [downloader createDownloadTask:depInfo[@"installer"]
+                                                                   size:0 sha:nil altName:nil
+                                                                 toPath:installerPath success:^{
+            // 直装器是同步且耗时的，放到后台线程执行，避免阻塞主线程
+            dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+                NSError *installError = nil;
+                BOOL installSuccess = NO;
+                if ([loader isEqualToString:@"NeoForge"]) {
+                    installSuccess = [NeoForgeDirectInstaller installNeoForgeFromInstaller:installerPath
+                                                                                  versionId:versionId
+                                                                              customGameDir:customGameDir
+                                                                        skipRegisterVersion:YES
+                                                                                   progress:nil
+                                                                                     error:&installError];
+                } else {
+                    installSuccess = [ForgeDirectInstaller installForgeFromInstaller:installerPath
+                                                                           versionId:versionId
+                                                                       customGameDir:customGameDir
+                                                                 skipRegisterVersion:YES
+                                                                            progress:nil
+                                                                               error:&installError];
+                }
+                // 清理临时 installer.jar
+                [NSFileManager.defaultManager removeItemAtPath:installerPath error:nil];
+                if (!installSuccess) {
+                    NSLog(@"[ModrinthAPI] %@ 直装失败: %@", loader, installError.localizedDescription);
+                    // 写入占位 JSON，启动时显式报错而非误装作 vanilla
+                    [ModpackUtils writePlaceholderVersionJSONForVersionId:versionId
+                                                          minecraftVersion:depInfo[@"minecraftVersion"]
+                                                                    loader:loader
+                                                            loaderVersion:depInfo[@"loaderVersion"]
+                                                                     error:installError];
+                } else {
+                    NSLog(@"[ModrinthAPI] %@ 直装成功，version.json 已写入: %@", loader, versionId);
+                }
+            });
+        }];
+        [task resume];
     }
 }
 

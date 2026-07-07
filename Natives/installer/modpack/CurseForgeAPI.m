@@ -6,6 +6,8 @@
 #import "config.h"
 #import "ModpackUtils.h"
 #import "UZKArchive.h"
+#import "installer/ForgeDirectInstaller.h"
+#import "installer/NeoForgeDirectInstaller.h"
 
 // CurseForge 静态常量
 static const NSInteger kCurseForgeGameIDMinecraft = 432;
@@ -855,24 +857,75 @@ submitDownloadTasksFromPackage:(NSString *)packagePath
     }
     
     [NSFileManager.defaultManager removeItemAtPath:packagePath error:nil];
-    
+
     NSDictionary *depInfo = [self modpackDependencyInfoFromManifest:manifest];
+    NSString *profileName = manifest[@"name"] ?: destPath.lastPathComponent;
+    NSString *gameDirRelative = [NSString stringWithFormat:@"./custom_gamedir/%@", destPath.lastPathComponent];
+    NSString *tmpIconPath = [NSTemporaryDirectory() stringByAppendingPathComponent:@"icon.png"];
+    NSString *iconBase64 = [NSString stringWithFormat:@"data:image/png;base64,%@",
+                            [[NSData dataWithContentsOfFile:tmpIconPath] base64EncodedStringWithOptions:0]];
+
+    // 立即设置 profile，确保整合包安装后能从 profile 列表中看到（即使加载器安装失败）
+    PLProfiles.current.profiles[profileName] = @{
+        @"gameDir": gameDirRelative,
+        @"name": profileName,
+        @"lastVersionId": depInfo[@"id"] ?: @"",
+        @"icon": iconBase64
+    }.mutableCopy;
+    PLProfiles.current.selectedProfileName = profileName;
+
     if (depInfo[@"json"]) {
+        // Fabric/Quilt：直接下载 version JSON
         NSString *jsonPath = [NSString stringWithFormat:@"%1$s/versions/%2$@/%2$@.json", getenv("POJAV_GAME_DIR"), depInfo[@"id"]];
         NSURLSessionDownloadTask *task = [downloader createDownloadTask:depInfo[@"json"] size:0 sha:nil altName:nil toPath:jsonPath];
         [task resume];
+    } else if (depInfo[@"installer"] && [(NSString *)depInfo[@"installer"] length] > 0) {
+        // Forge/NeoForge：下载 installer.jar 并调用直装器写入完整的 version.json + 下载库
+        // 之前不处理这个分支会导致整合包安装后只设置 profile 但不下载版本 JSON，
+        // 启动时报"找不到版本信息"。
+        NSString *versionId = depInfo[@"id"];
+        NSString *loader = depInfo[@"loader"];
+        NSString *customGameDir = destPath;  // 整合包隔离目录（mods/saves/configs）
+        NSString *installerPath = [NSTemporaryDirectory() stringByAppendingPathComponent:
+                                   [NSString stringWithFormat:@"%@-installer.jar", versionId]];
+
+        NSURLSessionDownloadTask *task = [downloader createDownloadTask:depInfo[@"installer"]
+                                                                   size:0 sha:nil altName:nil
+                                                                 toPath:installerPath success:^{
+            // 直装器是同步且耗时的，放到后台线程执行，避免阻塞主线程
+            dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+                NSError *installError = nil;
+                BOOL installSuccess = NO;
+                if ([loader isEqualToString:@"NeoForge"]) {
+                    installSuccess = [NeoForgeDirectInstaller installNeoForgeFromInstaller:installerPath
+                                                                                  versionId:versionId
+                                                                              customGameDir:customGameDir
+                                                                        skipRegisterVersion:YES
+                                                                                   progress:nil
+                                                                                     error:&installError];
+                } else {
+                    installSuccess = [ForgeDirectInstaller installForgeFromInstaller:installerPath
+                                                                           versionId:versionId
+                                                                       customGameDir:customGameDir
+                                                                 skipRegisterVersion:YES
+                                                                            progress:nil
+                                                                               error:&installError];
+                }
+                [NSFileManager.defaultManager removeItemAtPath:installerPath error:nil];
+                if (!installSuccess) {
+                    NSLog(@"[CurseForgeAPI] %@ 直装失败: %@", loader, installError.localizedDescription);
+                    [ModpackUtils writePlaceholderVersionJSONForVersionId:versionId
+                                                          minecraftVersion:depInfo[@"minecraftVersion"]
+                                                                    loader:loader
+                                                            loaderVersion:depInfo[@"loaderVersion"]
+                                                                     error:installError];
+                } else {
+                    NSLog(@"[CurseForgeAPI] %@ 直装成功，version.json 已写入: %@", loader, versionId);
+                }
+            });
+        }];
+        [task resume];
     }
-    
-    NSString *profileName = manifest[@"name"] ?: destPath.lastPathComponent;
-    NSString *tmpIconPath = [NSTemporaryDirectory() stringByAppendingPathComponent:@"icon.png"];
-    PLProfiles.current.profiles[profileName] = @{
-        @"gameDir": [NSString stringWithFormat:@"./custom_gamedir/%@", destPath.lastPathComponent],
-        @"name": profileName,
-        @"lastVersionId": depInfo[@"id"] ?: @"",
-        @"icon": [NSString stringWithFormat:@"data:image/png;base64,%@",
-                  [[NSData dataWithContentsOfFile:tmpIconPath] base64EncodedStringWithOptions:0]]
-    }.mutableCopy;
-    PLProfiles.current.selectedProfileName = profileName;
 }
 
 - (NSMutableDictionary *)projectForFileHash:(NSString *)murmurHash projectType:(NSString *)projectType {
