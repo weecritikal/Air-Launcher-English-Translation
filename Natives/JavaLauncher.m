@@ -275,6 +275,14 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
         // 若未扫描到 LWJGL 声明且所需 Java >= 21，强制使用 3.4.x 路径。
         if (!foundLWJGLDeclaration && minVersion >= 21) {
             useLWJGL33 = NO;
+            // 26.x 同时强制要求 Java 25 以加载 caciocavallo17（class version 68.0，需 Java 25+）。
+            // -Xbootclasspath/a 在所有 Java 17+ 路径都无条件添加 caciocavallo17，若用 Java 21
+            // runtime 启动 26.x 会触发 UnsupportedClassVersionError。仅 execute_jar 路径强制 25 不够，
+            // 游戏启动（NSDictionary 分支）也需要。
+            if (minVersion < 25) {
+                minVersion = 25;
+                NSLog(@"[JavaLauncher] 26.x detected, forcing minVersion=25 for caciocavallo17 compatibility");
+            }
             NSLog(@"[JavaLauncher] No LWJGL declaration in version JSON and minJava=%d, defaulting to LWJGL 3.4.x", minVersion);
         }
     }

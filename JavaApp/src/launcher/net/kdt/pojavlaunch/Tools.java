@@ -60,7 +60,12 @@ public final class Tools {
         System.setProperty("org.lwjgl.system.Allocator", "Custom");
 
         // FIX FOR LWJGL / SPVC LINKING FAILURE ON iOS:
-        // Force lookups for libspirv-cross.dylib to match your native compiled binary name
+        // Force lookups for libspirv-cross.dylib to match your native compiled binary name.
+        // 注意：LWJGL Configuration.SPVC_LIBRARY_NAME 对应的属性名是 "org.lwjgl.spvc.libname"
+        // （不含 util 子包名），早期版本误写为 "org.lwjgl.util.spvc.libname" 导致 override 不生效，
+        // 26.x 启动时 Spvc.<clinit> 仍查找默认名 libspirv-cross.dylib 而 UnsatisfiedLinkError。
+        System.setProperty("org.lwjgl.spvc.libname", "libspirv-cross-c-shared.0.dylib");
+        // 兼容旧属性名（部分 LWJGL 分支可能读取），双保险
         System.setProperty("org.lwjgl.util.spvc.libname", "libspirv-cross-c-shared.0.dylib");
 
         // FIX FOR LWJGL / OPENAL LINKING FAILURE ON iOS:

@@ -76,6 +76,11 @@ void openURLGlobal(NSString *path) {
 /**
  * Hooked version of java.lang.UNIXProcess.forkAndExec()
  * which is used to handle the "open" command.
+ *
+ * iOS 沙箱禁止 fork/exec，原生 forkAndExec 必然失败并可能导致进程崩溃。
+ * 此处对非 "open" 命令不再透传给原生实现，而是抛出明确的 Java IOException，
+ * 让调用方（如 Forge/NeoForge installer.jar 的 processor 步骤）能优雅失败而非原生崩溃。
+ * "open" 命令仍走 URL scheme 转发到 Files/Filza 等外部应用。
  */
 jint
 hooked_ProcessImpl_forkAndExec(JNIEnv *env, jobject process, jint mode, jbyteArray helperpath, jbyteArray prog, jbyteArray argBlock, jint argc, jbyteArray envBlock, jint envc, jbyteArray dir, jintArray std_fds, jboolean redirectErrorStream) {
@@ -83,8 +88,16 @@ hooked_ProcessImpl_forkAndExec(JNIEnv *env, jobject process, jint mode, jbyteArr
 
     // Here we only handle the "open" command
     if (strcmp(basename(pProg), "open")) {
+        // 非 "open" 命令：iOS 沙箱禁止 fork/exec，透传给原生实现会导致
+        // "Operation not permitted" 或直接崩溃。改为抛 IOException 让上层优雅失败。
+        NSLog(@"[input_bridge] Blocked fork/exec of '%s' (iOS sandbox forbids fork/exec)", pProg);
         (*env)->ReleaseByteArrayElements(env, prog, (jbyte *)pProg, 0);
-        return orig_ProcessImpl_forkAndExec(env, process, mode, helperpath, prog, argBlock, argc, envBlock, envc, dir, std_fds, redirectErrorStream);
+        jclass exClass = (*env)->FindClass(env, "java/io/IOException");
+        if (exClass != NULL) {
+            (*env)->ThrowNew(env, exClass, "fork/exec not permitted on iOS sandbox");
+            (*env)->DeleteLocalRef(env, exClass);
+        }
+        return -1;
     }
 
     char *path = (char *)((*env)->GetByteArrayElements(env, argBlock, NULL));
