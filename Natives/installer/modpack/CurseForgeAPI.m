@@ -739,7 +739,10 @@ static NSString *CFACompiledAPIKey(void) {
     } else if ([loaderName isEqualToString:@"quilt"]) {
         dependencies[@"quilt-loader"] = loaderVersion;
     } else if ([loaderName isEqualToString:@"neoforge"]) {
-        dependencies[@"forge"] = loaderVersion;
+        // 修复：之前错误地映射到 @"forge"，导致版本 ID 格式错误（用 forge 而非 neoforge），
+        // 且 ModpackUtils.infoForDependencies: 不下载 NeoForge 版本 JSON。
+        // 正确映射到 @"neoforge"，与 Modrinth 格式保持一致。
+        dependencies[@"neoforge"] = loaderVersion;
     }
     
     NSMutableDictionary *info = [[ModpackUtils infoForDependencies:dependencies] mutableCopy];

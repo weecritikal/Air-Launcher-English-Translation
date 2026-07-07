@@ -109,9 +109,15 @@ NSString *const NeoForgeDirectInstallerErrorDomain = @"NeoForgeDirectInstallerEr
         }
 
         // 整合包导入时使用自定义 gameDir；否则使用默认 POJAV_GAME_DIR
+        // 注意：gameDir（user.dir，mods/saves/configs 隔离目录）用 customGameDir，
+        // 但 versionDir 和 librariesDir 必须始终用 POJAV_GAME_DIR（主目录）。
+        // 原因：Minecraft 启动器 Java 端固定从 POJAV_GAME_DIR/versions 和 /libraries 加载，
+        // 之前把 versionDir/librariesDir 放到 customGameDir 下会导致启动时"找不到版本信息"。
         NSString *gameDir = customGameDir.length > 0 ? customGameDir : [self gameDirectory];
-        NSString *librariesDir = [gameDir stringByAppendingPathComponent:@"libraries"];
-        NSLog(@"[NeoForgeDirect] Game directory: %@", gameDir);
+        NSString *mainGameDir = [self gameDirectory];  // 始终用主目录存放 versions 和 libraries
+        NSString *librariesDir = [mainGameDir stringByAppendingPathComponent:@"libraries"];
+        NSLog(@"[NeoForgeDirect] Game directory (user.dir): %@", gameDir);
+        NSLog(@"[NeoForgeDirect] Main game directory (versions/libraries): %@", mainGameDir);
         NSLog(@"[NeoForgeDirect] Libraries directory: %@", librariesDir);
         reportProgress(0.15, @"正在准备版本目录");
 
@@ -276,7 +282,9 @@ NSString *const NeoForgeDirectInstallerErrorDomain = @"NeoForgeDirectInstallerEr
     }
 
     // Prepare version directory
-    NSString *versionDir = [gameDir stringByAppendingPathComponent:[NSString stringWithFormat:@"versions/%@", versionId]];
+    // 版本 JSON 必须写入 POJAV_GAME_DIR/versions/（主目录），而非 profile gameDir。
+    // Minecraft 启动器 Java 端固定从 POJAV_GAME_DIR/versions 加载版本 JSON。
+    NSString *versionDir = [[self gameDirectory] stringByAppendingPathComponent:[NSString stringWithFormat:@"versions/%@", versionId]];
     NSString *versionJsonPath = [versionDir stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.json", versionId]];
     NSLog(@"[NeoForgeDirect] Version directory: %@", versionDir);
     [[NSFileManager defaultManager] createDirectoryAtPath:versionDir

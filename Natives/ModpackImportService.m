@@ -770,7 +770,12 @@ didFinishDownloadingToURL:(NSURL *)location {
     }
 
     NSString *downloadSource = getPrefObject(@"general.download_source") ?: @"official";
-    NSString *versionDir = [gameDirAbsolute stringByAppendingPathComponent:[NSString stringWithFormat:@"versions/%@", versionId]];
+    // 版本 JSON 必须写入 POJAV_GAME_DIR/versions/（主目录），而非 gameDirAbsolute（整合包隔离目录）。
+    // Minecraft 启动器 Java 端 Tools.java 的 DIR_HOME_VERSION 固定指向 POJAV_GAME_DIR/versions，
+    // 不从 profile gameDir 读取。之前写入 gameDirAbsolute/versions/ 会导致启动时"找不到版本信息"。
+    // gameDirAbsolute 仅用于 mods/saves/configs 等用户数据隔离（通过 profile gameDir=user.dir 实现）。
+    NSString *mainVersionDir = [NSString stringWithFormat:@"%s/versions/%@", getenv("POJAV_GAME_DIR"), versionId];
+    NSString *versionDir = mainVersionDir;
     NSString *versionJsonPath = [versionDir stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.json", versionId]];
     NSFileManager *fm = [NSFileManager defaultManager];
     [fm createDirectoryAtPath:versionDir withIntermediateDirectories:YES attributes:nil error:nil];

@@ -114,9 +114,16 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
         }
 
         // 整合包导入时使用自定义 gameDir；否则使用默认 POJAV_GAME_DIR
+        // 注意：gameDir（user.dir，mods/saves/configs 隔离目录）用 customGameDir，
+        // 但 versionDir 和 librariesDir 必须始终用 POJAV_GAME_DIR（主目录）。
+        // 原因：Minecraft 启动器（Java 端 Tools.java）的 DIR_HOME_VERSION 和 DIR_HOME_LIBRARY
+        // 固定指向 POJAV_GAME_DIR/versions 和 POJAV_GAME_DIR/libraries，不从 profile gameDir 读取。
+        // 之前把 versionDir/librariesDir 放到 customGameDir 下会导致启动时"找不到版本信息"。
         NSString *gameDir = customGameDir.length > 0 ? customGameDir : [self gameDirectory];
-        NSString *librariesDir = [gameDir stringByAppendingPathComponent:@"libraries"];
-        NSLog(@"[ForgeDirect] Game directory: %@", gameDir);
+        NSString *mainGameDir = [self gameDirectory];  // 始终用主目录存放 versions 和 libraries
+        NSString *librariesDir = [mainGameDir stringByAppendingPathComponent:@"libraries"];
+        NSLog(@"[ForgeDirect] Game directory (user.dir): %@", gameDir);
+        NSLog(@"[ForgeDirect] Main game directory (versions/libraries): %@", mainGameDir);
         NSLog(@"[ForgeDirect] Libraries directory: %@", librariesDir);
         reportProgress(0.15, @"正在准备版本目录");
 
@@ -290,7 +297,9 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
     mutableVersionInfo[@"id"] = versionId;
 
     // Prepare version directory
-    NSString *versionDir = [gameDir stringByAppendingPathComponent:[NSString stringWithFormat:@"versions/%@", versionId]];
+    // 版本 JSON 必须写入 POJAV_GAME_DIR/versions/（主目录），而非 profile gameDir。
+    // Minecraft 启动器 Java 端固定从 POJAV_GAME_DIR/versions 加载版本 JSON。
+    NSString *versionDir = [[self gameDirectory] stringByAppendingPathComponent:[NSString stringWithFormat:@"versions/%@", versionId]];
     NSString *versionJsonPath = [versionDir stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.json", versionId]];
     NSLog(@"[ForgeDirect] Version directory: %@", versionDir);
     [[NSFileManager defaultManager] createDirectoryAtPath:versionDir
@@ -453,7 +462,9 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
     }
 
     // Prepare version directory
-    NSString *versionDir = [gameDir stringByAppendingPathComponent:[NSString stringWithFormat:@"versions/%@", versionId]];
+    // 版本 JSON 必须写入 POJAV_GAME_DIR/versions/（主目录），而非 profile gameDir。
+    // Minecraft 启动器 Java 端固定从 POJAV_GAME_DIR/versions 加载版本 JSON。
+    NSString *versionDir = [[self gameDirectory] stringByAppendingPathComponent:[NSString stringWithFormat:@"versions/%@", versionId]];
     NSString *versionJsonPath = [versionDir stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.json", versionId]];
     NSLog(@"[ForgeDirect] Version directory: %@", versionDir);
     [[NSFileManager defaultManager] createDirectoryAtPath:versionDir
