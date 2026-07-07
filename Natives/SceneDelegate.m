@@ -40,6 +40,14 @@ extern UIWindow *mainWindow;
     }
     self.window.rootViewController = rootVC;
 
+    // 强制深色模式：整个启动器 UI 基于 SystemMaterialDark 毛玻璃 + 深色硬编码颜色设计，
+    // 若跟随系统浅色模式，中间内容区（systemBackgroundColor=白）与两侧面板（SystemMaterialDark=深灰）
+    // 会严重不一致。强制深色确保三栏视觉统一，且与 FCL 安卓默认深色风格一致。
+    // iOS 13+ 支持 overrideUserInterfaceStyle，不影响系统其他 app 的外观偏好。
+    if (@available(iOS 13.0, *)) {
+        self.window.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
+    }
+
     [self.window makeKeyAndVisible];
 
     // 应用背景

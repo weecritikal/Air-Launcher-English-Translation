@@ -1188,6 +1188,9 @@
 
 @property (nonatomic, strong) UISegmentedControl *tabSegment;
 @property (nonatomic, strong) UISegmentedControl *versionFilterSegment;
+// versionFilterSegment 高度约束：版本 tab 显示（约 32pt），其他 tab 设为 0，
+// 避免 hidden=YES 时仍占空间导致 tabSegment 与 searchBar 之间出现"大白条"。
+@property (nonatomic, strong) NSLayoutConstraint *versionFilterHeightConstraint;
 @property (nonatomic, strong) UISearchBar *searchBar;
 @property (nonatomic, strong) UIButton *filterButton;
 @property (nonatomic, strong) UIButton *importModpackButton;  // 整合包 tab 专用导入按钮（参照 FCL）
@@ -1380,11 +1383,16 @@
     self.versionFilterSegment.selectedSegmentIndex = 0;
     [self.versionFilterSegment addTarget:self action:@selector(versionFilterChanged:) forControlEvents:UIControlEventValueChanged];
     [self.view addSubview:self.versionFilterSegment];
-    
+
+    // 高度约束：版本 tab 时设为 32（系统默认 UISegmentedControl 高度），其他 tab 设为 0
+    // 避免 hidden=YES 仍占空间导致 tabSegment 与 searchBar 之间出现"大白条"
+    self.versionFilterHeightConstraint = [self.versionFilterSegment.heightAnchor constraintEqualToConstant:32];
+
     [NSLayoutConstraint activateConstraints:@[
         [self.versionFilterSegment.topAnchor constraintEqualToAnchor:self.tabSegment.bottomAnchor constant:8],
         [self.versionFilterSegment.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:16],
-        [self.versionFilterSegment.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-16]
+        [self.versionFilterSegment.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-16],
+        self.versionFilterHeightConstraint
     ]];
 }
 
@@ -1753,6 +1761,10 @@
     BOOL showSourceSwitch = (index != 0 && index != 6);
     self.sourceSwitchContainer.hidden = !showSourceSwitch;
     self.sourceSwitchHeightConstraint.constant = showSourceSwitch ? 36 : 0;
+
+    // versionFilterSegment 高度同步切换：版本 tab 显示 32pt，其他 tab 设为 0 不占空间，
+    // 避免 hidden=YES 仍占空间导致 tabSegment 与 searchBar 之间出现"大白条"
+    self.versionFilterHeightConstraint.constant = (index == 0) ? 32 : 0;
 
     // 整合包 tab 显示"导入本地整合包"按钮（参照 FCL 安卓），其他 tab 隐藏且宽度归零不占空间
     BOOL showImportButton = (index == 5);

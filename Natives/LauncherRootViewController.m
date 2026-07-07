@@ -537,7 +537,19 @@ static CGFloat LauncherRootLayoutRightPanelWidth(UITraitCollection *trait) {
     _contentViewController = viewController;
     [self addChildViewController:viewController];
     viewController.view.translatesAutoresizingMaskIntoConstraints = NO;
-    
+
+    // FCL 风格：对 UINavigationController 应用 nav bar 毛玻璃效果，并对内容 VC 透明化处理，
+    // 避免顶部出现默认白色 nav bar 形成"大白条"，同时与两侧深色毛玻璃面板视觉一致。
+    if ([viewController isKindOfClass:[UINavigationController class]]) {
+        UINavigationController *nav = (UINavigationController *)viewController;
+        [[BackgroundManager sharedManager] applyEffectToNavigationBar:nav.navigationBar];
+        // 透明化 topViewController，让背景透出 nav bar 毛玻璃
+        [[BackgroundManager sharedManager] makeViewControllerTransparent:nav.topViewController];
+    } else {
+        // 非导航控制器包装的 VC 也透明化，确保与背景融合
+        [[BackgroundManager sharedManager] makeViewControllerTransparent:viewController];
+    }
+
     if (animated && oldVC) {
         [UIView transitionWithView:self.contentContainer
                           duration:0.25
