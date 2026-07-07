@@ -801,23 +801,51 @@
 }
 
 - (void)loadForgeVersionsReal {
-    NSString *urlString = @"https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml";
+    // 参照 FCL：根据下载源偏好切换 BMCLAPI 镜像，提升国内版本列表拉取成功率。
+    // BMCLAPI 完整镜像了 Forge maven-metadata.xml。
+    NSString *downloadSource = getPrefObject(@"general.download_source");
+    BOOL useBMCLAPI = [downloadSource isEqualToString:@"bmclapi"];
+    NSString *urlString;
+    if (useBMCLAPI) {
+        urlString = @"https://bmclapi2.bangbang93.com/maven/net/minecraftforge/forge/maven-metadata.xml";
+    } else {
+        urlString = @"https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml";
+    }
     NSURL *url = [NSURL URLWithString:urlString];
-    
+
     self.forgeVersionList = [NSMutableArray array];
     self.isParsingForge = YES;
-    
+
     __weak typeof(self) weakSelf = self;
-    self.currentVersionTask = [[NSURLSession sharedSession] dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+    request.timeoutInterval = 30.0;
+    [request setValue:@"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15" forHTTPHeaderField:@"User-Agent"];
+    self.currentVersionTask = [[NSURLSession sharedSession] dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         if (error) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                __strong typeof(weakSelf) strongSelf = weakSelf;
-                if (!strongSelf) return;
-                [strongSelf.loadingIndicator stopAnimating];
-                strongSelf.loaderVersions = @[];
-                [strongSelf.versionTableView reloadData];
-                strongSelf.emptyVersionsLabel.hidden = NO;
-            });
+            // 主源失败：尝试 fallback 源（BMCLAPI <-> 官方源）
+            NSString *fallbackURLString = useBMCLAPI
+                ? @"https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml"
+                : @"https://bmclapi2.bangbang93.com/maven/net/minecraftforge/forge/maven-metadata.xml";
+            NSMutableURLRequest *fallbackRequest = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:fallbackURLString]];
+            fallbackRequest.timeoutInterval = 30.0;
+            [fallbackRequest setValue:@"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15" forHTTPHeaderField:@"User-Agent"];
+            weakSelf.currentVersionTask = [[NSURLSession sharedSession] dataTaskWithRequest:fallbackRequest completionHandler:^(NSData *fallbackData, NSURLResponse *fallbackResponse, NSError *fallbackError) {
+                if (fallbackError) {
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        __strong typeof(weakSelf) strongSelf = weakSelf;
+                        if (!strongSelf) return;
+                        [strongSelf.loadingIndicator stopAnimating];
+                        strongSelf.loaderVersions = @[];
+                        [strongSelf.versionTableView reloadData];
+                        strongSelf.emptyVersionsLabel.hidden = NO;
+                    });
+                    return;
+                }
+                NSXMLParser *parser = [[NSXMLParser alloc] initWithData:fallbackData];
+                parser.delegate = weakSelf;
+                [parser parse];
+            }];
+            [weakSelf.currentVersionTask resume];
             return;
         }
         NSXMLParser *parser = [[NSXMLParser alloc] initWithData:data];

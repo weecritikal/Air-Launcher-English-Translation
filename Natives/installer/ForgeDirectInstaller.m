@@ -860,85 +860,86 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
     NSString *version = parts[2];
 
     NSString *groupPath = [groupId stringByReplacingOccurrencesOfString:@"." withString:@"/"];
-    // 关键：client classifier，这是 Forge/NeoForge 预打补丁的 jar
-    NSString *jarName = [NSString stringWithFormat:@"%@-%@-client.jar", artifactId, version];
-    NSString *relativePath = [NSString stringWithFormat:@"%@/%@/%@/%@", groupPath, artifactId, version, jarName];
-    NSString *destPath = [librariesDir stringByAppendingPathComponent:relativePath];
 
-    // 已存在则跳过
-    if ([NSFileManager.defaultManager fileExistsAtPath:destPath]) {
-        NSLog(@"[ForgeDirect] Patched artifact already exists: %@", destPath);
-        return YES;
-    }
-
-    // 拼 URL
+    // 参照 FCL：尝试多个 classifier。Forge/NeoForge 预打补丁 jar 通常发布为 -client，
+    // 但老 Forge（1.7-1.12）可能只有 -universal，部分 BMCLAPI 镜像只同步了 universal。
+    // 按 client -> universal -> 无 classifier 顺序尝试，提升下载成功率。
+    NSArray *classifiers = @[@"client", @"universal", @""];
     NSString *downloadSource = getPrefObject(@"general.download_source");
     BOOL useBMCLAPI = [downloadSource isEqualToString:@"bmclapi"];
-    NSString *url;
+
+    // 源 URL 构造：官方源 + BMCLAPI + HMCL 镜像
+    // 注意：腾讯云镜像（mirrors.cloud.tencent.com/maven）不镜像 Forge/NeoForge maven，
+    // 之前作为 fallback 是错误配置，已替换为 HMCL 镜像（mirror.hua-u.me）。
+    NSMutableArray *baseURLs = [NSMutableArray array];
     if ([groupId hasPrefix:@"net.neoforged"]) {
-        // NeoForge 走 maven.neoforged.net/releases
         if (useBMCLAPI) {
-            url = [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/maven/%@", relativePath];
+            [baseURLs addObject:@"https://bmclapi2.bangbang93.com/maven"];
+            [baseURLs addObject:@"https://maven.neoforged.net/releases"];
         } else {
-            url = [NSString stringWithFormat:@"https://maven.neoforged.net/releases/%@", relativePath];
+            [baseURLs addObject:@"https://maven.neoforged.net/releases"];
+            [baseURLs addObject:@"https://bmclapi2.bangbang93.com/maven"];
         }
     } else {
-        // Forge 走 maven.minecraftforge.net
         if (useBMCLAPI) {
-            url = [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/maven/%@", relativePath];
+            [baseURLs addObject:@"https://bmclapi2.bangbang93.com/maven"];
+            [baseURLs addObject:@"https://maven.minecraftforge.net"];
         } else {
-            url = [NSString stringWithFormat:@"https://maven.minecraftforge.net/%@", relativePath];
+            [baseURLs addObject:@"https://maven.minecraftforge.net"];
+            [baseURLs addObject:@"https://bmclapi2.bangbang93.com/maven"];
+        }
+    }
+    // HMCL 镜像作为最后兜底（国内可用性较好，且镜像了 Forge maven）
+    if ([groupId hasPrefix:@"net.neoforged"]) {
+        [baseURLs addObject:@"https://mirror.hua-u.me/neoforge"];
+    } else {
+        [baseURLs addObject:@"https://mirror.hua-u.me/forge"];
+    }
+
+    NSError *lastError = nil;
+    NSString *firstTriedURL = nil;
+    for (NSString *classifier in classifiers) {
+        NSString *jarName;
+        if (classifier.length > 0) {
+            jarName = [NSString stringWithFormat:@"%@-%@-%@.jar", artifactId, version, classifier];
+        } else {
+            jarName = [NSString stringWithFormat:@"%@-%@.jar", artifactId, version];
+        }
+        NSString *relativePath = [NSString stringWithFormat:@"%@/%@/%@/%@", groupPath, artifactId, version, jarName];
+        NSString *destPath = [librariesDir stringByAppendingPathComponent:relativePath];
+
+        // 已存在则跳过
+        if ([NSFileManager.defaultManager fileExistsAtPath:destPath]) {
+            NSLog(@"[ForgeDirect] Patched artifact already exists: %@", destPath);
+            return YES;
+        }
+
+        for (NSString *baseURL in baseURLs) {
+            NSString *url = [NSString stringWithFormat:@"%@/%@", baseURL, relativePath];
+            if (firstTriedURL == nil) firstTriedURL = url;
+            NSLog(@"[ForgeDirect] Trying classifier=%@ source=%@", classifier, url);
+            NSError *downloadError = nil;
+            if ([self downloadFileFromURL:url toPath:destPath error:&downloadError]) {
+                NSLog(@"[ForgeDirect] Patched artifact downloaded: %@ (classifier=%@)", destPath, classifier);
+                return YES;
+            }
+            // 下载失败：清理可能的部分文件，避免下次误判已存在
+            [NSFileManager.defaultManager removeItemAtPath:destPath error:nil];
+            lastError = downloadError;
+            NSLog(@"[ForgeDirect] Failed: %@ (%@)", url, downloadError.localizedDescription ?: @"未知错误");
         }
     }
 
-    NSLog(@"[ForgeDirect] Downloading patched artifact from: %@", url);
-    NSError *downloadError = nil;
-    if (![self downloadFileFromURL:url toPath:destPath error:&downloadError]) {
-        // 主源失败：按顺序尝试多个 fallback 源，提升国内可用性
-        NSMutableArray *fallbackURLs = [NSMutableArray array];
-        if (useBMCLAPI) {
-            // 从 BMCLAPI 失败：依次尝试官方源、hmcl 镜像
-            if ([groupId hasPrefix:@"net.neoforged"]) {
-                [fallbackURLs addObject:[NSString stringWithFormat:@"https://maven.neoforged.net/releases/%@", relativePath]];
-            } else {
-                [fallbackURLs addObject:[NSString stringWithFormat:@"https://maven.minecraftforge.net/%@", relativePath]];
-            }
-            // HMCL 镜像（mirror.hua-u.me）备用
-            [fallbackURLs addObject:[NSString stringWithFormat:@"https://mirrors.cloud.tencent.com/maven/%@", relativePath]];
-        } else {
-            // 从官方源失败：依次尝试 BMCLAPI、腾讯云镜像
-            [fallbackURLs addObject:[NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/maven/%@", relativePath]];
-            [fallbackURLs addObject:[NSString stringWithFormat:@"https://mirrors.cloud.tencent.com/maven/%@", relativePath]];
-        }
-        NSLog(@"[ForgeDirect] Primary source failed, trying %lu fallback(s)", (unsigned long)fallbackURLs.count);
-        NSError *lastError = downloadError;
-        BOOL success = NO;
-        for (NSString *fallbackURL in fallbackURLs) {
-            NSLog(@"[ForgeDirect] Trying fallback: %@", fallbackURL);
-            NSError *fallbackError = nil;
-            if ([self downloadFileFromURL:fallbackURL toPath:destPath error:&fallbackError]) {
-                NSLog(@"[ForgeDirect] Patched artifact downloaded via fallback: %@", destPath);
-                success = YES;
-                break;
-            }
-            lastError = fallbackError;
-        }
-        if (!success) {
-            if (error) {
-                *error = [NSError errorWithDomain:ForgeDirectInstallerErrorDomain
-                                             code:ForgeDirectInstallerErrorExtractionFailed
-                                         userInfo:@{
-                                             NSLocalizedDescriptionKey: [NSString stringWithFormat:@"下载预打补丁核心 jar 失败: %@\n主源 URL: %@\n错误: %@\n备用源错误: %@",
-                                                 jarName, url, downloadError.localizedDescription ?: @"未知错误",
-                                                 lastError.localizedDescription ?: @"未知错误"]
-                                         }];
-            }
-            return NO;
-        }
-        return YES;
+    if (error) {
+        *error = [NSError errorWithDomain:ForgeDirectInstallerErrorDomain
+                                     code:ForgeDirectInstallerErrorExtractionFailed
+                                 userInfo:@{
+                                     NSLocalizedDescriptionKey: [NSString stringWithFormat:@"下载预打补丁核心 jar 失败\n主源 URL: %@\n已尝试 classifier: client/universal/无\n已尝试源: 官方/BMCLAPI/HMCL镜像\n最后错误: %@",
+                                         firstTriedURL ?: @"未知",
+                                         lastError.localizedDescription ?: @"未知错误"]
+                                 }];
     }
-    NSLog(@"[ForgeDirect] Patched artifact downloaded: %@", destPath);
-    return YES;
+    return NO;
 }
 
 // 同步下载文件到指定路径（带 60 秒超时）
@@ -975,8 +976,9 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
     request.timeoutInterval = 60.0;
     request.cachePolicy = NSURLRequestReloadIgnoringLocalCacheData;
-    // 添加 User-Agent：部分 maven 仓库会拒绝无 UA 的请求（返回 403）
-    [request setValue:@"AngelAuraAmethyst/1.0 (iOS; Minecraft Launcher)" forHTTPHeaderField:@"User-Agent"];
+    // 添加 User-Agent：部分 maven 仓库（BMCLAPI/Cloudflare 保护的源）会拒绝非浏览器 UA（403/WAF）。
+    // 参照 FCL 使用浏览器风格 UA 提升兼容性。
+    [request setValue:@"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15" forHTTPHeaderField:@"User-Agent"];
     [request setValue:@"application/java-archive,*/*;q=0.9" forHTTPHeaderField:@"Accept"];
 
     __block NSData *resultData = nil;
