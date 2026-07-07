@@ -5,6 +5,7 @@
 #import "WFWorkflowProgressView.h"
 #import "ios_uikit_bridge.h"
 #import "utils.h"
+#import "BackgroundManager.h"
 #include <dlfcn.h>
 
 NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain";
@@ -159,25 +160,21 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    
+
+    // FCL 风格：适配自定义启动器背景，应用毛玻璃到导航栏 + 透明化视图
     if (self.navigationController) {
-        self.navigationController.navigationBar.translucent = NO;
-        UINavigationBarAppearance *appearance = [[UINavigationBarAppearance alloc] init];
-        [appearance configureWithOpaqueBackground];
-        appearance.backgroundColor = [UIColor systemBackgroundColor];
-        self.navigationController.navigationBar.standardAppearance = appearance;
-        self.navigationController.navigationBar.compactAppearance = appearance;
-        self.navigationController.navigationBar.scrollEdgeAppearance = appearance;
+        [[BackgroundManager sharedManager] applyEffectToNavigationBar:self.navigationController.navigationBar];
     }
-    
+    [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
+
     if (@available(iOS 15.0, *)) {
         self.tableView.sectionHeaderTopPadding = 0;
     }
-    
+
     self.tableView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentAutomatic;
-    
-    self.extendedLayoutIncludesOpaqueBars = NO;
-    self.edgesForExtendedLayout = UIRectEdgeNone;
+
+    self.extendedLayoutIncludesOpaqueBars = YES;
+    self.edgesForExtendedLayout = UIRectEdgeAll;
     
     [self.tableView registerClass:[ForgeVersionCell class] forCellReuseIdentifier:@"ForgeVersionCell"];
     [self.tableView registerClass:[MinecraftVersionHeaderView class] forHeaderFooterViewReuseIdentifier:@"MinecraftVersionHeader"];
