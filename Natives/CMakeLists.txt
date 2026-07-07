@@ -243,9 +243,10 @@ add_executable(AngelAuraAmethyst
   ShaderVersionViewController.m
   ShadersManagerViewController.m
 
-  # Modpack import sources
+  # Modpack import/export sources
   ModpackImportViewController.m
   ModpackImportService.m
+  ModpackExportService.m
 
   # CurseForge MurmurHash2 fingerprint tool
   MurmurHash2.m

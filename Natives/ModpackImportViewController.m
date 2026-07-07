@@ -9,6 +9,7 @@
 #import "ModpackImportViewController.h"
 #import "BackgroundManager.h"
 #import "ModpackImportService.h"
+#import "ModpackExportService.h"
 #import "PLProfiles.h"
 #import "UnzipKit.h"
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
@@ -44,6 +45,14 @@
     self.importedModpacks = [NSMutableArray array];
     [self setupUI];
     [self loadImportedModpacks];
+
+    // 右上角导出按钮（参照 FCL/HMCL 整合包导出入口）
+    UIBarButtonItem *exportItem = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"square.and.arrow.up"]
+                                                                    style:UIBarButtonItemStylePlain
+                                                                   target:self
+                                                                   action:@selector(showExportProfilePicker)];
+    exportItem.accessibilityLabel = @"导出整合包";
+    self.navigationItem.rightBarButtonItem = exportItem;
 
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(handleBackgroundUIEffectChanged:)
@@ -516,6 +525,178 @@
         [[BackgroundManager sharedManager] applyEffectToView:self.view];
         [self.tableView reloadData];
     });
+}
+
+#pragma mark - 整合包导出（参照 FCL ExportModpackViewModel / HMCL ModpackHelper）
+
+- (void)showExportProfilePicker {
+    NSDictionary *profiles = PLProfiles.current.profiles;
+    NSArray *profileNames = profiles.allKeys;
+
+    if (profileNames.count == 0) {
+        [self showAlertWithTitle:@"无法导出" message:@"当前没有任何可导出的游戏配置文件"];
+        return;
+    }
+
+    // 优先使用当前选中 profile
+    NSString *selected = PLProfiles.current.selectedProfileName;
+
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"选择要导出的配置文件"
+                                                                   message:nil
+                                                            preferredStyle:UIAlertControllerStyleActionSheet];
+    for (NSString *name in profileNames) {
+        NSString *title = name;
+        if ([name isEqualToString:selected]) {
+            title = [NSString stringWithFormat:@"%@ (当前)", name];
+        }
+        [sheet addAction:[UIAlertAction actionWithTitle:title style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+            [self showExportFormatPickerForProfile:name];
+        }]];
+    }
+    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+
+    if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
+        sheet.popoverPresentationController.barButtonItem = self.navigationItem.rightBarButtonItem;
+    }
+    [self presentViewController:sheet animated:YES completion:nil];
+}
+
+- (void)showExportFormatPickerForProfile:(NSString *)profileName {
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"选择导出格式"
+                                                                   message:nil
+                                                            preferredStyle:UIAlertControllerStyleActionSheet];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Modrinth (.mrpack)" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        [self showExportInfoAlertForProfile:profileName format:ModpackExportFormatModrinth];
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"CurseForge (.zip)" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        [self showExportInfoAlertForProfile:profileName format:ModpackExportFormatCurseForge];
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"链接列表 (.txt)" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        [self showExportInfoAlertForProfile:profileName format:ModpackExportFormatLinkList];
+    }]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+
+    if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
+        sheet.popoverPresentationController.barButtonItem = self.navigationItem.rightBarButtonItem;
+    }
+    [self presentViewController:sheet animated:YES completion:nil];
+}
+
+- (void)showExportInfoAlertForProfile:(NSString *)profileName format:(ModpackExportFormat)format {
+    // 预填名称和版本
+    NSDictionary *profile = PLProfiles.current.profiles[profileName];
+    NSString *lastVersionId = profile[@"lastVersionId"] ?: @"";
+    NSDictionary *parsed = [ModpackExportService parseVersionId:lastVersionId];
+    NSString *defaultName = profileName;
+    NSString *defaultVersion = @"1.0";
+
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"导出整合包"
+                                                                   message:@"请输入整合包信息"
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
+        textField.placeholder = @"整合包名称";
+        textField.text = defaultName;
+        textField.clearButtonMode = UITextFieldViewModeWhileEditing;
+    }];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
+        textField.placeholder = @"版本号";
+        textField.text = defaultVersion;
+        textField.clearButtonMode = UITextFieldViewModeWhileEditing;
+    }];
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
+        textField.placeholder = @"作者";
+        textField.text = @"Amethyst User";
+        textField.clearButtonMode = UITextFieldViewModeWhileEditing;
+    }];
+
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"导出" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        NSString *name = alert.textFields[0].text ?: @"";
+        NSString *version = alert.textFields[1].text ?: @"1.0";
+        NSString *author = alert.textFields[2].text ?: @"Amethyst User";
+        if (name.length == 0) name = profileName;
+        if (version.length == 0) version = @"1.0";
+        (void)parsed;
+        [self startExportForProfile:profileName name:name version:version author:author format:format];
+    }]];
+
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)startExportForProfile:(NSString *)profileName
+                         name:(NSString *)name
+                      version:(NSString *)version
+                       author:(NSString *)author
+                       format:(ModpackExportFormat)format {
+    // 确定文件扩展名
+    NSString *ext = @"mrpack";
+    switch (format) {
+        case ModpackExportFormatModrinth:   ext = @"mrpack"; break;
+        case ModpackExportFormatCurseForge: ext = @"zip";    break;
+        case ModpackExportFormatLinkList:   ext = @"txt";    break;
+    }
+
+    // 构造导出路径到 Documents/Exports/
+    NSString *exportsDir = [NSHomeDirectory() stringByAppendingPathComponent:@"Documents/Exports"];
+    [[NSFileManager defaultManager] createDirectoryAtPath:exportsDir withIntermediateDirectories:YES attributes:nil error:nil];
+
+    // 清理文件名中的非法字符
+    NSCharacterSet *invalidChars = [NSCharacterSet characterSetWithCharactersInString:@"/\\:*?\"<>|"];
+    NSString *safeName = [[name componentsSeparatedByCharactersInSet:invalidChars] componentsJoinedByString:@"_"];
+
+    NSString *destPath = [exportsDir stringByAppendingPathComponent:[NSString stringWithFormat:@"%@-v%@.%@", safeName, version, ext]];
+
+    // 显示进度卡片
+    [self showProgressCardWithTitle:@"正在导出整合包"];
+    [self setProgress:0.0 stageMessage:@"准备中..."];
+
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        NSError *error = nil;
+        BOOL success = [[ModpackExportService sharedService] exportModpackForProfile:profileName
+                                                                               toPath:destPath
+                                                                                  name:name
+                                                                               version:version
+                                                                                author:author
+                                                                                format:format
+                                                                      includeOverrides:YES
+                                                                             progress:^(double p, NSString *stageMessage) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [self setProgress:p stageMessage:stageMessage];
+            });
+        }
+                                                                                  error:&error];
+
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self hideProgressCard];
+            if (success) {
+                [self showExportSuccessWithPath:destPath];
+            } else {
+                NSString *msg = error.localizedDescription ?: @"未知错误";
+                [self showAlertWithTitle:@"导出失败" message:msg];
+            }
+        });
+    });
+}
+
+- (void)showExportSuccessWithPath:(NSString *)path {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"导出成功"
+                                                                   message:[NSString stringWithFormat:@"整合包已保存到：\n%@", path]
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"关闭" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"分享" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        [self shareExportedFile:path];
+    }]];
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)shareExportedFile:(NSString *)path {
+    NSURL *fileURL = [NSURL fileURLWithPath:path];
+    UIActivityViewController *activityVC = [[UIActivityViewController alloc] initWithActivityItems:@[fileURL] applicationActivities:nil];
+
+    if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
+        activityVC.popoverPresentationController.barButtonItem = self.navigationItem.rightBarButtonItem;
+    }
+    [self presentViewController:activityVC animated:YES completion:nil];
 }
 
 @end
