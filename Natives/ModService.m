@@ -188,24 +188,52 @@
     return data;
 }
 
-- (nullable NSString *)existingModsFolderForProfile:(NSString *)profileName {
+/// 解析 profile 的 gameDir 为绝对路径。
+/// profile gameDir 通常是相对路径（如 "./custom_gamedir/{name}"），需相对于 POJAV_GAME_DIR 解析。
+/// 之前直接使用相对路径会导致 mods 文件夹找不到（fileExistsAtPath 对相对路径基于 cwd 解析，
+/// 而 cwd 不一定是 POJAV_GAME_DIR）。
+- (nullable NSString *)resolveAbsoluteGameDirForProfile:(NSString *)profileName {
     NSString *profile = profileName.length ? profileName : @"default";
-    NSFileManager *fm = [NSFileManager defaultManager];
     @try {
         NSDictionary *profiles = PLProfiles.current.profiles;
         NSDictionary *prof = profiles[profile];
-        if ([prof isKindOfClass:[NSDictionary class]]) {
-            NSString *gameDir = prof[@"gameDir"];
-            if ([gameDir isKindOfClass:[NSString class]] && gameDir.length > 0) {
-                NSString *modsPath = [gameDir stringByAppendingPathComponent:@"mods"];
-                BOOL isDir = NO;
-                if ([fm fileExistsAtPath:modsPath isDirectory:&isDir] && isDir) {
-                    return modsPath;
-                }
-            }
+        if (![prof isKindOfClass:[NSDictionary class]]) return nil;
+        NSString *gameDir = prof[@"gameDir"];
+        if (![gameDir isKindOfClass:[NSString class]] || gameDir.length == 0) return nil;
+        if ([gameDir isEqualToString:@"."]) {
+            // "." 表示主目录
+            const char *env = getenv("POJAV_GAME_DIR");
+            return env ? [NSString stringWithUTF8String:env] : NSHomeDirectory();
         }
-    } @catch (NSException *ex) { }
+        if ([gameDir isAbsolutePath]) {
+            return gameDir;
+        }
+        // 相对路径，相对于 POJAV_GAME_DIR 解析
+        const char *env = getenv("POJAV_GAME_DIR");
+        NSString *baseDir = env ? [NSString stringWithUTF8String:env] : NSHomeDirectory();
+        // 去掉 "./" 前缀（如果有），stringByAppendingPathComponent 能正确处理
+        NSString *cleanGameDir = [gameDir hasPrefix:@"./"] ? [gameDir substringFromIndex:2] : gameDir;
+        return [baseDir stringByAppendingPathComponent:cleanGameDir];
+    } @catch (NSException *ex) {
+        return nil;
+    }
+}
 
+- (nullable NSString *)existingModsFolderForProfile:(NSString *)profileName {
+    NSString *profile = profileName.length ? profileName : @"default";
+    NSFileManager *fm = [NSFileManager defaultManager];
+
+    // 优先用 profile gameDir（已解析为绝对路径）
+    NSString *resolvedGameDir = [self resolveAbsoluteGameDirForProfile:profile];
+    if (resolvedGameDir.length > 0) {
+        NSString *modsPath = [resolvedGameDir stringByAppendingPathComponent:@"mods"];
+        BOOL isDir = NO;
+        if ([fm fileExistsAtPath:modsPath isDirectory:&isDir] && isDir) {
+            return modsPath;
+        }
+    }
+
+    // 回退到 POJAV_GAME_DIR/mods
     const char *gameDirC = getenv("POJAV_GAME_DIR");
     if (gameDirC) {
         NSString *gameDir = [NSString stringWithUTF8String:gameDirC];
@@ -224,16 +252,11 @@
     NSFileManager *fm = [NSFileManager defaultManager];
     NSString *modsPath = nil;
 
-    @try {
-        NSDictionary *profiles = PLProfiles.current.profiles;
-        NSDictionary *prof = profiles[profile];
-        if ([prof isKindOfClass:[NSDictionary class]]) {
-            NSString *gameDir = prof[@"gameDir"];
-            if ([gameDir isKindOfClass:[NSString class]] && gameDir.length > 0) {
-                modsPath = [gameDir stringByAppendingPathComponent:@"mods"];
-            }
-        }
-    } @catch (NSException *ex) { }
+    // 优先用 profile gameDir（已解析为绝对路径）
+    NSString *resolvedGameDir = [self resolveAbsoluteGameDirForProfile:profile];
+    if (resolvedGameDir.length > 0) {
+        modsPath = [resolvedGameDir stringByAppendingPathComponent:@"mods"];
+    }
 
     if (!modsPath) {
         const char *gameDirC = getenv("POJAV_GAME_DIR");
