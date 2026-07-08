@@ -153,8 +153,10 @@
     NSString *profName = self.profile[@"name"] ?: self.profileName;
     self.serverIp = [PLProfiles.current serverIpForProfile:profName] ?: @"";
 
-    // JVM 启动参数：profile 字段 javaArgs，未设置时回退到全局 java.java_args
-    id rawArgs = [PLProfiles resolveKeyForCurrentProfile:@"javaArgs"];
+    // JVM 启动参数：参照 main 分支，仅读取 profile 自身字段；
+    // 为空时 UI 显示 "(default)" placeholder，实际启动时由 PLProfiles.resolveKeyForCurrentProfile
+    // 回退到全局 java.java_args（见 JavaLauncher.init_loadCustomJvmFlags）。
+    id rawArgs = self.profile[@"javaArgs"];
     if ([rawArgs isKindOfClass:[NSString class]]) {
         self.javaArgs = rawArgs;
     } else {
@@ -200,7 +202,12 @@
     existing[@"javaVersion"] = self.selectedJavaVersion;
     existing[@"allocatedMemory"] = @(self.allocatedMemory);
     existing[@"serverIp"] = self.serverIp ?: @"";
-    existing[@"javaArgs"] = self.javaArgs ?: @"";
+    // 参照 main 分支：javaArgs 为空时移除 key，让 profile 回退到全局 java.java_args
+    if (self.javaArgs.length > 0) {
+        existing[@"javaArgs"] = self.javaArgs;
+    } else {
+        [existing removeObjectForKey:@"javaArgs"];
+    }
     // 保存游戏目录（版本隔离用）：gameDir 为 nil 时默认 "."，与 main 分支行为一致
     existing[@"gameDir"] = self.profile[@"gameDir"] ?: @".";
     // existing 中的 name 和 lastVersionId 字段保持原始值不变
@@ -579,8 +586,11 @@
         }
     }
     UITextField *textField = [[UITextField alloc] initWithFrame:CGRectMake(0, 0, 200, 30)];
-    textField.placeholder = @"如 -Dfoo=bar";
-    textField.text = self.javaArgs;
+    // 参照 main 分支 LauncherProfileEditorViewController：placeholder 为 "(default)"，
+    // 表示未设置时回退到全局 java.java_args。
+    textField.placeholder = @"(default)";
+    // 仅当 profile 显式设置了 javaArgs 时才显示，否则留空显示 placeholder
+    textField.text = self.profile[@"javaArgs"] ?: @"";
     textField.font = [UIFont systemFontOfSize:13];
     textField.adjustsFontSizeToFitWidth = YES;
     textField.minimumFontSize = 9;
@@ -601,8 +611,15 @@
 }
 
 - (void)javaArgsTextFieldEditingDidEnd:(UITextField *)textField {
-    self.javaArgs = [textField.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] ?: @"";
-    textField.text = self.javaArgs;
+    // 参照 main 分支：空串或 "(default)" 视为未设置，保存时移除 key 以回退全局 java.java_args
+    NSString *trimmed = [textField.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] ?: @"";
+    if (trimmed.length == 0 || [trimmed isEqualToString:@"(default)"]) {
+        self.javaArgs = @"";
+        textField.text = @"";
+    } else {
+        self.javaArgs = trimmed;
+        textField.text = trimmed;
+    }
     [self saveSettings];
 }
 
