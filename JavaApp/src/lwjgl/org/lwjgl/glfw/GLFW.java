@@ -848,6 +848,14 @@ public class GLFW
         return 1L;
     }
 
+    // Minecraft 26.x 的 com.mojang.blaze3d.platform.Monitor.queryMonitorName 会调用此方法
+    // 获取显示器名称。iOS 只有一个概念显示器，返回固定名称避免 NoSuchMethodError。
+    @Nullable
+    @NativeType("const char *")
+    public static String glfwGetMonitorName(@NativeType("GLFWmonitor *") long monitor) {
+        return "AngelAura Monitor";
+    }
+
     public static void glfwGetMonitorPos(@NativeType("GLFWmonitor *") long monitor, @Nullable @NativeType("int *") IntBuffer xpos, @Nullable @NativeType("int *") IntBuffer ypos) {
         if (CHECKS) {
             checkSafe(xpos, 1);

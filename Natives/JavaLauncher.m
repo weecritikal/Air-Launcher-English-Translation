@@ -423,11 +423,31 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
     NSString *cacio_libs_path = [NSString stringWithFormat:@"%@/libs_caciocavallo%s", NSBundle.mainBundle.bundlePath, isJava8 ? "" : "17"];
     NSArray *files = [fm contentsOfDirectoryAtPath:cacio_libs_path error:nil];
     for(NSString *file in files) {
-        if ([file hasSuffix:@".jar"]) {
+        // 跳过 stub-surface-manager.jar：它通过 --patch-module java.desktop 注入，
+        // 不能放在 -Xbootclasspath/a（unnamed module），否则与 java.desktop 模块的
+        // sun.java2d 包形成 split package，Java 9+ 会拒绝加载。
+        if ([file hasSuffix:@".jar"] && ![file isEqualToString:@"stub-surface-manager.jar"]) {
             cacio_classpath = [NSString stringWithFormat:@"%@:%@/%@", cacio_classpath, cacio_libs_path, file];
         }
     }
     margv[++margc] = cacio_classpath.UTF8String;
+
+    // Java 9+ 移除了 sun.java2d.SurfaceManagerFactory（迁至 sun.awt.image.SurfaceManagerFactory）。
+    // Caciocavallo17 的 CTCPreloadClassLoader.<clinit> 仍调用 Class.forName("sun.java2d.SurfaceManagerFactory")
+    // 来重置其 instance 字段。forName 失败抛出 ClassNotFoundException 后，<clinit> 的 catch 块会
+    // 跳过后面的 setFinalStatic(LocalGE.INSTANCE, new CTCGraphicsEnvironment())，导致 GE 未安装，
+    // JVM 回退 headless 模式，Swing GUI（如 OptiFine 安装器）抛出 java.awt.HeadlessException。
+    // sun.java2d 包属于 java.desktop 模块，通过 --patch-module 注入 stub 类让 forName 成功，
+    // <clinit> 才能继续安装 CTCGraphicsEnvironment，execute_jar 与 Minecraft 启动均受益。
+    if (!isJava8) {
+        NSString *stubJar = [NSString stringWithFormat:@"%@/libs_caciocavallo17/stub-surface-manager.jar", NSBundle.mainBundle.bundlePath];
+        if ([fm fileExistsAtPath:stubJar]) {
+            margv[++margc] = [NSString stringWithFormat:@"--patch-module=java.desktop=%@", stubJar].UTF8String;
+            NSLog(@"[JavaLauncher] Patching java.desktop with stub SurfaceManagerFactory for Caciocavallo17");
+        } else {
+            NSLog(@"[JavaLauncher] WARNING: stub-surface-manager.jar missing, Caciocavallo17 may fall back to headless");
+        }
+    }
 
     if (!getEntitlementValue(@"com.apple.developer.kernel.extended-virtual-addressing")) {
         // In jailed environment, where extended virtual addressing entitlement isn't
