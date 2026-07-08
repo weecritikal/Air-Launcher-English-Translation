@@ -3,10 +3,15 @@
 #import "../ios_uikit_bridge.h"
 #import "../utils.h"
 
-// authlib-injector 下载源：BMCLAPI 镜像优先，失败后回退到 GitHub 官方源
-#define AUTHLIB_INJECTOR_URL_BMCL  @"https://bmclapi2.bangbang93.com/mirrors/authlib-injector/artifact/54/authlib-injector-1.2.6.jar"
-#define AUTHLIB_INJECTOR_URL_GITHUB @"https://github.com/yushijinhun/authlib-injector/releases/download/v1.2.6/authlib-injector-1.2.6.jar"
+// authlib-injector 下载源：BMCLAPI 镜像优先，失败后回退到官方源
+// 修复：从 1.2.6 升级到 1.2.7（build 55），1.2.7 修复了 Java 25 兼容性问题。
+// 第三方账户登录启动 26.x（强制 Java 25）时，1.2.6 的 ASM 字节码处理无法识别
+// Java 25 class file version 69，导致 javaagent 加载失败、游戏无法启动。
+#define AUTHLIB_INJECTOR_URL_BMCL  @"https://bmclapi2.bangbang93.com/mirrors/authlib-injector/artifact/55/authlib-injector-1.2.7.jar"
+#define AUTHLIB_INJECTOR_URL_GITHUB @"https://authlib-injector.yushi.moe/artifact/55/authlib-injector-1.2.7.jar"
 #define AUTHLIB_INJECTOR_FILE @"authlib-injector.jar"
+#define AUTHLIB_INJECTOR_VERSION @"1.2.7"
+#define AUTHLIB_INJECTOR_VERSION_FILE @"authlib-injector.version"
 
 // Helper function to create NSError
 static NSError* createError(NSString *message, NSInteger code) {
@@ -158,9 +163,32 @@ static NSError* createError(NSString *message, NSInteger code) {
     return path;
 }
 
+- (NSString *)getAuthlibInjectorVersionPath {
+    NSString *path = [NSString stringWithFormat:@"%s/authlib-injector/%@", getenv("POJAV_HOME"), AUTHLIB_INJECTOR_VERSION_FILE];
+    return path;
+}
+
 - (BOOL)isAuthlibInjectorDownloaded {
     NSString *path = [self getAuthlibInjectorPath];
-    return [[NSFileManager defaultManager] fileExistsAtPath:path];
+    if (![[NSFileManager defaultManager] fileExistsAtPath:path]) {
+        return NO;
+    }
+    // 版本检查：已下载的 jar 版本必须与当前期望版本一致
+    // 修复：旧版 1.2.6 jar 与 Java 25 不兼容，必须升级到 1.2.7
+    NSString *versionPath = [self getAuthlibInjectorVersionPath];
+    NSString *downloadedVersion = [NSString stringWithContentsOfFile:versionPath encoding:NSUTF8StringEncoding error:nil];
+    if (downloadedVersion.length == 0 || ![downloadedVersion isEqualToString:AUTHLIB_INJECTOR_VERSION]) {
+        NSLog(@"[ThirdPartyAuthenticator] authlib-injector 版本过期 (当前: %@, 需要: %@)，需要重新下载",
+              downloadedVersion.length > 0 ? downloadedVersion : @"未知", AUTHLIB_INJECTOR_VERSION);
+        return NO;
+    }
+    return YES;
+}
+
+/// 下载成功后保存版本标记
+- (void)saveAuthlibInjectorVersion {
+    NSString *versionPath = [self getAuthlibInjectorVersionPath];
+    [AUTHLIB_INJECTOR_VERSION writeToFile:versionPath atomically:YES encoding:NSUTF8StringEncoding error:nil];
 }
 
 - (void)downloadAuthlibInjector:(void (^)(BOOL success, NSError *error))completion {
@@ -207,6 +235,8 @@ static NSError* createError(NSString *message, NSInteger code) {
             }
         } else {
             NSLog(@"[ThirdPartyAuthenticator] 下载成功 (第%ld源)", (long)attempt);
+            // 保存版本标记，用于后续版本检查
+            [self saveAuthlibInjectorVersion];
             completion(YES, nil);
         }
     }];
