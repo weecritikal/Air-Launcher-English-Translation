@@ -54,10 +54,16 @@ public final class Tools {
 
     public static void launchMinecraft(MinecraftAccount profile, final JMinecraftVersionList.Version versionInfo, String serverIp) throws Throwable {
         // --- BEGIN AMETHYST UPSTREAM LWJGL 3.4.1 COMPLIANCE OVERRIDE ---
-        // Programmatically configure modern allocator and turn off native libffi checks
+        // 关闭 native libffi 检查（防止 LibFFI <clinit> 中的 NoSuchFieldError）
+        // 注意：allocator 由 JavaLauncher.m 通过 -Dorg.lwjgl.system.allocator=system 统一配置，
+        // 这里不再重复设置。原代码 System.setProperty("org.lwjgl.system.Allocator", "Custom")
+        // 存在两个致命问题导致其从未生效，且会误导调试：
+        //   1) 属性名大小写错误：LWJGL 实际读取小写 org.lwjgl.system.allocator，大写 Allocator 被忽略
+        //   2) "Custom" 不是 LWJGL 有效 allocator 值（有效值仅 system/jemalloc/rpmalloc）
+        // 26.2 启动崩溃的真正根因是 spvc 库名二次包装导致 UnsatisfiedLinkError，
+        // 已通过 Makefile 软链接（libspirv-cross.dylib -> libspirv-cross-c-shared.0.dylib）修复。
         System.setProperty("org.lwjgl.system.libffi.enabled", "false");
         System.setProperty("org.lwjgl.system.libffi.initialize", "false"); // Prevents NoSuchFieldError in LibFFI <clinit>
-        System.setProperty("org.lwjgl.system.Allocator", "Custom");
 
         // spvc / openal 库加载说明：
         // 不再设置 org.lwjgl.spvc.libname / org.lwjgl.openal.libname override。
