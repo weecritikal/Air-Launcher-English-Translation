@@ -186,16 +186,16 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
         defaultJRETag = @"execute_jar";
         gameDir = @(getenv("POJAV_GAME_DIR"));
         launchJar = YES;
-        // Caciocavallo17 bootclasspath jar 被 Java 24+ 编译（class version 68.0），
-        // 仅 Java 25（class version 69）能加载。当 JAR 要求 Java 17+ 时走 Caciocavallo17
-        // 路径，必须强制 minVersion=25 避免 UnsupportedClassVersionError。
-        // 但 Java 8 JAR（如 OptiFine 安装器）走 Caciocavallo（非 17）路径，用 Java 8 即可，
-        // 强制 25 反而导致 Caciocavallo17 的 CTCGraphicsEnvironment 初始化失败，
-        // JVM 回退 headless 模式，Swing GUI 抛出 java.awt.HeadlessException。
-        // 修复：仅当 JAR 要求 Java >= 17 时才强制提升到 25。
-        if (minVersion >= 17 && minVersion < 25) {
-            minVersion = 25;
-        }
+        // Caciocavallo 切换说明（保证对所有 Java 版本的兼容性）：
+        // - Java 8：使用 libs_caciocavallo/（cacio 1.10，class version 52=Java 8，
+        //   包名 net.java.openjdk.cacio.ctc），通过 -Xbootclasspath/p 注入，
+        //   仅兼容 Java 8（依赖 Java 8 内部 API sun.awt.peer.cacio.*）。
+        // - Java 17/21/25：使用 libs_caciocavallo17/（cacio 1.18，class version 61=Java 17，
+        //   包名 com.github.caciocavallosilano.cacio.ctc），通过 -Xbootclasspath/a 注入，
+        //   兼容 Java 17+（独立包名，通过 --add-exports/--add-opens 访问内部 API）。
+        // 切换由 isJava8 标志控制（基于 JRE 目录结构检测，见下方 libjli 路径判断）。
+        // 不再强制提升 minVersion=25：caciocavallo17 是 Java 17 编译的，Java 17/21 均可加载。
+        // JAR 按其 Main-Class 字节码版本选择对应 Java 运行时即可。
     }
     NSLog(@"[JavaLauncher] Looking for Java %d or later", minVersion);
     NSString *javaHome = getSelectedJavaHome(defaultJRETag, minVersion);
@@ -265,13 +265,13 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
         // 若未扫描到 LWJGL 声明且所需 Java >= 21，强制使用 3.4.x 路径。
         if (!foundLWJGLDeclaration && minVersion >= 21) {
             useLWJGL33 = NO;
-            // 26.x 同时强制要求 Java 25 以加载 caciocavallo17（class version 68.0，需 Java 25+）。
-            // -Xbootclasspath/a 在所有 Java 17+ 路径都无条件添加 caciocavallo17，若用 Java 21
-            // runtime 启动 26.x 会触发 UnsupportedClassVersionError。仅 execute_jar 路径强制 25 不够，
-            // 游戏启动（NSDictionary 分支）也需要。
+            // MC 26.x 版本 JSON 通常指定 javaVersion.majorNumber=25（MC 26.2 实际要求 Java 25）。
+            // 此处保留 minVersion=25 强制提升作为保险：即使版本 JSON 未指定 Java 25，
+            // MC 26.x 的 class 文件可能需要 Java 25。注意：这与 caciocavallo17 无关
+            // （caciocavallo17 1.18 是 Java 17 编译的，class version 61，Java 17/21/25 均可加载）。
             if (minVersion < 25) {
                 minVersion = 25;
-                NSLog(@"[JavaLauncher] 26.x detected, forcing minVersion=25 for caciocavallo17 compatibility");
+                NSLog(@"[JavaLauncher] 26.x detected, forcing minVersion=25 (MC 26.x requires Java 25)");
             }
             NSLog(@"[JavaLauncher] No LWJGL declaration in version JSON and minJava=%d, defaulting to LWJGL 3.4.x", minVersion);
         }
@@ -380,14 +380,17 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
     margv[++margc] = [NSString stringWithFormat:@"-Dcacio.managed.screensize=%dx%d", width, height].UTF8String;
     margv[++margc] = "-Dswing.defaultlaf=javax.swing.plaf.metal.MetalLookAndFeel";
     if (isJava8) {
-        // Setup Caciocavallo
+        // Caciocavallo 1.10（Java 8 专用）：包名 net.java.openjdk.cacio.ctc
+        NSLog(@"[JavaLauncher] Caciocavallo switch: using caciocavallo 1.10 for Java 8");
         margv[++margc] = "-Dawt.toolkit=net.java.openjdk.cacio.ctc.CTCToolkit";
         margv[++margc] = "-Djava.awt.graphicsenv=net.java.openjdk.cacio.ctc.CTCGraphicsEnvironment";
     } else {
         // Required by Cosmetica to inject DNS
         margv[++margc] = "--add-opens=java.base/java.net=ALL-UNNAMED";
 
-        // Setup Caciocavallo
+        // Caciocavallo17 1.18（Java 17+ 通用）：包名 com.github.caciocavallosilano.cacio.ctc
+        // 兼容 Java 17/21/25（class version 61=Java 17，向后兼容）
+        NSLog(@"[JavaLauncher] Caciocavallo switch: using caciocavallo17 1.18 for Java 17+");
         margv[++margc] = "-Dawt.toolkit=com.github.caciocavallosilano.cacio.ctc.CTCToolkit";
         margv[++margc] = "-Djava.awt.graphicsenv=com.github.caciocavallosilano.cacio.ctc.CTCGraphicsEnvironment";
 
@@ -407,9 +410,10 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
         margv[++margc] = "--add-opens=java.desktop/sun.font=ALL-UNNAMED";
         margv[++margc] = "--add-opens=java.desktop/sun.java2d=ALL-UNNAMED";
         margv[++margc] = "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED";
-        // Java 25 额外需要的 add-opens：Caciocavallo17 的 CTCGraphicsEnvironment 通过反射访问
+        // Java 17+ 需要的 add-opens：Caciocavallo17 的 CTCGraphicsEnvironment 通过反射访问
         // sun.awt.PlatformGraphicsInfo 和 sun.awt.image，若缺少这些 opens，GE 初始化失败会导致
-        // JVM 回退到 headless 模式，OptiFine 安装器等 Swing GUI 应用抛出 HeadlessException。
+        // JVM 回退到 headless 模式，Swing GUI（如 OptiFine 安装器）抛出 HeadlessException。
+        // 这些 add-opens 对 Java 17/21/25 均需要，不仅限于 Java 25。
         margv[++margc] = "--add-opens=java.desktop/sun.awt=ALL-UNNAMED";
         margv[++margc] = "--add-opens=java.desktop/sun.awt.image=ALL-UNNAMED";
         margv[++margc] = "--add-opens=java.desktop/java.awt.peer=ALL-UNNAMED";
