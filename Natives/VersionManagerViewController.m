@@ -92,14 +92,16 @@
     self.titleLabel = [[UILabel alloc] init];
     self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.titleLabel.font = [UIFont systemFontOfSize:titleFont weight:UIFontWeightSemibold];
-    self.titleLabel.textColor = [UIColor labelColor];
+    // 背景系统（BackgroundManager）始终使用深色样式（SystemMaterialDark / 深色半透明），
+    // 因此文字必须使用固定浅色，避免在浅色外观模式下 labelColor 解析为黑色导致不可见。
+    self.titleLabel.textColor = [UIColor whiteColor];
     self.titleLabel.adjustsFontForContentSizeCategory = YES;
     [self.contentContainer addSubview:self.titleLabel];
 
     self.subtitleLabel = [[UILabel alloc] init];
     self.subtitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.subtitleLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleCaption2];
-    self.subtitleLabel.textColor = [UIColor secondaryLabelColor];
+    self.subtitleLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.65];
     self.subtitleLabel.numberOfLines = 1;
     self.subtitleLabel.adjustsFontForContentSizeCategory = YES;
     [self.contentContainer addSubview:self.subtitleLabel];
@@ -157,7 +159,7 @@
     self.nameLabel = [[UILabel alloc] init];
     self.nameLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.nameLabel.font = [UIFont systemFontOfSize:nameFont weight:UIFontWeightSemibold];
-    self.nameLabel.textColor = [UIColor labelColor];
+    self.nameLabel.textColor = [UIColor whiteColor];
     self.nameLabel.numberOfLines = 1;
     self.nameLabel.adjustsFontForContentSizeCategory = YES;
     [self.contentContainer addSubview:self.nameLabel];
@@ -165,7 +167,7 @@
     self.versionLabel = [[UILabel alloc] init];
     self.versionLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.versionLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleCaption1];
-    self.versionLabel.textColor = [UIColor secondaryLabelColor];
+    self.versionLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.65];
     self.versionLabel.adjustsFontForContentSizeCategory = YES;
     [self.contentContainer addSubview:self.versionLabel];
 
@@ -173,7 +175,7 @@
     self.lastPlayedLabel = [[UILabel alloc] init];
     self.lastPlayedLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.lastPlayedLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleCaption2];
-    self.lastPlayedLabel.textColor = [UIColor tertiaryLabelColor];
+    self.lastPlayedLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.45];
     self.lastPlayedLabel.text = @"";
     self.lastPlayedLabel.adjustsFontForContentSizeCategory = YES;
     [self.contentContainer addSubview:self.lastPlayedLabel];
@@ -265,7 +267,7 @@
         self.contentView.layer.borderColor = [UIColor systemGreenColor].CGColor;
         self.contentView.layer.borderWidth = 1.5;
     } else {
-        self.contentView.layer.borderColor = [UIColor separatorColor].CGColor;
+        self.contentView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.12].CGColor;
         self.contentView.layer.borderWidth = 0.5;
     }
 }
@@ -299,7 +301,7 @@
     self.nameLabel = [[UILabel alloc] init];
     self.nameLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.nameLabel.font = [UIFont systemFontOfSize:nameFont weight:UIFontWeightSemibold];
-    self.nameLabel.textColor = [UIColor labelColor];
+    self.nameLabel.textColor = [UIColor whiteColor];
     self.nameLabel.numberOfLines = 1;
     self.nameLabel.adjustsFontForContentSizeCategory = YES;
     [self.contentContainer addSubview:self.nameLabel];
@@ -307,7 +309,7 @@
     self.detailLabel = [[UILabel alloc] init];
     self.detailLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.detailLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleCaption2];
-    self.detailLabel.textColor = [UIColor secondaryLabelColor];
+    self.detailLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.65];
     self.detailLabel.numberOfLines = 1;
     self.detailLabel.adjustsFontForContentSizeCategory = YES;
     [self.contentContainer addSubview:self.detailLabel];
@@ -370,7 +372,7 @@
         self.contentView.layer.borderColor = [UIColor systemGreenColor].CGColor;
         self.contentView.layer.borderWidth = 1.5;
     } else {
-        self.contentView.layer.borderColor = [UIColor separatorColor].CGColor;
+        self.contentView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.12].CGColor;
         self.contentView.layer.borderWidth = 0.5;
     }
     self.contentView.layer.cornerRadius = 14;
@@ -393,7 +395,7 @@
         self.titleLabel = [[UILabel alloc] init];
         self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
         self.titleLabel.font = [UIFont systemFontOfSize:[ScreenUtils sp:18] weight:UIFontWeightBold];
-        self.titleLabel.textColor = [UIColor labelColor];
+        self.titleLabel.textColor = [UIColor whiteColor];
         [self addSubview:self.titleLabel];
 
         [NSLayoutConstraint activateConstraints:@[
@@ -514,7 +516,9 @@
     self.collectionView.dataSource = self;
     self.collectionView.delegate = self;
     self.collectionView.alwaysBounceVertical = YES;
-    self.collectionView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
+    // 使用 automatic 让 UICollectionView 自动为半透明导航栏补偿顶部 contentInset，
+    // 避免 Section 0 的标题被导航栏遮挡（原 Never 导致内容起始于导航栏之下）。
+    self.collectionView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentAutomatic;
 
     [self.collectionView registerClass:[VMGameDirCell class] forCellWithReuseIdentifier:@"GameDirCell"];
     [self.collectionView registerClass:[VMQuickActionCell class] forCellWithReuseIdentifier:@"QuickActionCell"];

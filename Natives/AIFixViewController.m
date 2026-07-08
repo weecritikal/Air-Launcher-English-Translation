@@ -230,10 +230,48 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     _rightPanel = [[UIView alloc] initWithFrame:CGRectZero];
     [_mainContentView addSubview:_rightPanel];
 
+    // 必须在 setupLeftPanel/setupRightPanel 之前给 _mainContentView/_leftPanel/_rightPanel
+    // 设置有效尺寸。原实现使用 CGRectZero，导致 setupLeftPanel 内部以 panelWidth=0 计算子视图
+    // frame（如 panelWidth - 32 = -32 负宽度），诊断标题/历史/风险卡片等标签不可见。
+    [self applyPanelContainerFrames];
+
     [self setupLeftPanel];
     [self setupRightPanel];
     [self setupStatusBar];
     [self layoutMainPanelsIfNeeded];
+}
+
+/// 计算 _mainContentView / _leftPanel / _rightPanel 的 frame 并应用。
+/// 仅设置三个容器视图的尺寸，不触碰 scrollview / contentView（它们在 setupLeftPanel/setupRightPanel 中创建）。
+/// layoutMainPanelsIfNeeded 会随后再次调用相同逻辑并补充 scrollview 布局。
+- (void)applyPanelContainerFrames {
+    CGFloat viewWidth = self.view.bounds.size.width;
+    CGFloat viewHeight = self.view.bounds.size.height;
+    if (viewWidth <= 0 || viewHeight <= 0) return;
+
+    BOOL isCompact = viewWidth < 700;
+    CGFloat horizontalPadding = isCompact ? 12 : 16;
+    CGFloat maxContentWidth = isCompact ? (viewWidth - horizontalPadding * 2) : 1200;
+    CGFloat contentWidth = MIN(viewWidth - horizontalPadding * 2, maxContentWidth);
+    CGFloat topPadding = isCompact ? 16 : 40;
+    CGFloat bottomPadding = isCompact ? 16 : 24;
+    CGFloat contentHeight = MAX(viewHeight - topPadding - bottomPadding, 300);
+    CGFloat startX = floor((viewWidth - contentWidth) / 2.0);
+
+    _mainContentView.frame = CGRectMake(startX, topPadding, contentWidth, contentHeight);
+
+    if (isCompact) {
+        CGFloat gap = 8;
+        CGFloat leftHeight = floor((contentHeight - gap) * 0.58);
+        CGFloat rightHeight = contentHeight - gap - leftHeight;
+        _leftPanel.frame = CGRectMake(0, 0, contentWidth, leftHeight);
+        _rightPanel.frame = CGRectMake(0, leftHeight + gap, contentWidth, rightHeight);
+    } else {
+        CGFloat leftWidth = floor(contentWidth * 0.6);
+        CGFloat rightWidth = contentWidth - leftWidth;
+        _leftPanel.frame = CGRectMake(0, 0, leftWidth, contentHeight);
+        _rightPanel.frame = CGRectMake(leftWidth, 0, rightWidth, contentHeight);
+    }
 }
 
 - (void)setupBackground {
