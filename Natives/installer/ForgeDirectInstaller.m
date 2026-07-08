@@ -583,9 +583,9 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
             continue;
         }
 
-        // 创建目标目录
+        // 创建目标目录（处理同名文件冲突）
         NSString *destDir = [destPath stringByDeletingLastPathComponent];
-        [fm createDirectoryAtPath:destDir withIntermediateDirectories:YES attributes:nil error:nil];
+        [self ensureDirectoryExists:destDir error:nil];
 
         // 写入文件
         NSError *writeError = nil;
@@ -953,6 +953,33 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
     return NO;
 }
 
+// 安全创建目录：若路径上存在同名普通文件（之前安装失败残留），先删除再创建。
+// APFS 不允许同名文件和目录共存，直接 createDirectoryAtPath 会失败。
++ (BOOL)ensureDirectoryExists:(NSString *)path error:(NSError **)error {
+    NSFileManager *fm = NSFileManager.defaultManager;
+    BOOL isDir = NO;
+    if ([fm fileExistsAtPath:path isDirectory:&isDir]) {
+        if (isDir) return YES; // 目录已存在
+        // 存在同名普通文件，删除它
+        NSError *removeError = nil;
+        if (![fm removeItemAtPath:path error:&removeError]) {
+            if (error) {
+                *error = [NSError errorWithDomain:ForgeDirectInstallerErrorDomain
+                                             code:ForgeDirectInstallerErrorWriteFailed
+                                         userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"无法删除冲突文件 %@: %@", path, removeError.localizedDescription]}];
+            }
+            return NO;
+        }
+    }
+    NSError *createError = nil;
+    [fm createDirectoryAtPath:path withIntermediateDirectories:YES attributes:nil error:&createError];
+    if (createError) {
+        if (error) *error = createError;
+        return NO;
+    }
+    return YES;
+}
+
 // 同步下载文件到指定路径（带 60 秒超时）
 + (BOOL)downloadFileFromURL:(NSString *)urlString toPath:(NSString *)destPath error:(NSError **)error {
     if (error) *error = nil;
@@ -967,18 +994,14 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
         return NO;
     }
 
-    // 创建目标目录
+    // 创建目标目录（处理同名文件冲突）
     NSString *destDir = [destPath stringByDeletingLastPathComponent];
     NSError *dirError = nil;
-    [NSFileManager.defaultManager createDirectoryAtPath:destDir
-                            withIntermediateDirectories:YES
-                                             attributes:nil
-                                                  error:&dirError];
-    if (dirError) {
+    if (![self ensureDirectoryExists:destDir error:&dirError]) {
         if (error) {
-            *error = [NSError errorWithDomain:ForgeDirectInstallerErrorDomain
-                                         code:ForgeDirectInstallerErrorWriteFailed
-                                     userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Failed to create directory %@: %@", destDir, dirError.localizedDescription]}];
+            *error = dirError ?: [NSError errorWithDomain:ForgeDirectInstallerErrorDomain
+                                                   code:ForgeDirectInstallerErrorWriteFailed
+                                               userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Failed to create directory %@: %@", destDir, dirError.localizedDescription]}];
         }
         return NO;
     }

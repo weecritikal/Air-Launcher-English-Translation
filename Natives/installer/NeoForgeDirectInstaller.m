@@ -320,8 +320,14 @@ NSString *const NeoForgeDirectInstallerErrorDomain = @"NeoForgeDirectInstallerEr
             // 其他版本 path 形如 "net.neoforged:neoforge:20.6.119-beta"
             // 注意：NeoForge loader 版本号 47.x 对应 MC 1.20.1，但 versionField 可能是 "47.1.0"
             // 不含 "1.20.1" 子串，需双重判断（与 NeoForgeVersionFetcher.m:54 保持一致）。
+            // 当 versionField 以 "47." 开头但不含 MC 版本前缀时，必须补上 "1.20.1-" 前缀，
+            // 否则 maven 坐标 net/neoforged/forge/47.1.0/forge-47.1.0-client.jar 会 404。
             if ([versionField containsString:@"1.20.1"] || [versionField hasPrefix:@"47."]) {
-                mainPath = [NSString stringWithFormat:@"net.neoforged:forge:%@", versionField];
+                NSString *resolvedVersion = versionField;
+                if ([versionField hasPrefix:@"47."] && ![versionField containsString:@"1.20.1"]) {
+                    resolvedVersion = [NSString stringWithFormat:@"1.20.1-%@", versionField];
+                }
+                mainPath = [NSString stringWithFormat:@"net.neoforged:forge:%@", resolvedVersion];
             } else {
                 mainPath = [NSString stringWithFormat:@"net.neoforged:neoforge:%@", versionField];
             }

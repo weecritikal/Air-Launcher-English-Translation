@@ -346,15 +346,17 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
 // 重新计算左栏内会话滚动视图与输入框的 frame，避免在尺寸变化后被挤压或重叠。
 // setupLeftPanel 中这两个视图基于初始 panelHeight 一次性写死，布局变化时不会更新。
 - (void)relayoutLeftPanelContents {
-    if (!_conversationScrollView || !_inputContainerView || !_riskCardView || !_leftContentView) return;
-    CGFloat panelWidth = _leftContentView.bounds.size.width;
-    CGFloat panelHeight = _leftContentView.bounds.size.height;
+    if (!_conversationScrollView || !_inputContainerView || !_riskCardView || !_leftScrollView) return;
+    // 必须读取 _leftScrollView（可见视口）的尺寸，而非 _leftContentView（被撑大的可滚动内容）。
+    // 否则 inputTop 会被锚定到内容底部（如 560），导致会话区塌缩为 16pt、输入框挤出视口。
+    CGFloat panelWidth = _leftScrollView.bounds.size.width;
+    CGFloat panelHeight = _leftScrollView.bounds.size.height;
     if (panelWidth <= 0 || panelHeight <= 0) return;
     CGFloat sidePadding = 16;
     CGFloat sectionGap = 12;
     CGFloat inputHeight = 128;
 
-    // inputTop 锚定到面板底部，会话区填充 riskCardView 底部到 inputTop 之间
+    // inputTop 锚定到可见视口底部，会话区填充 riskCardView 底部到 inputTop 之间
     CGFloat inputTop = panelHeight - inputHeight;
     CGFloat scrollViewTop = CGRectGetMaxY(_riskCardView.frame) + sectionGap;
     CGFloat scrollBottom = inputTop - sectionGap;

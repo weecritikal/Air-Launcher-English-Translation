@@ -809,6 +809,12 @@ public class GLFW
         return GLFW_PLATFORM_X11;
     }
 
+    // LWJGL 3.4.x 新增方法，Minecraft 26.2 的 GLX._initGlfw 会调用。
+    // iOS 上通过补丁固定为 X11 平台，因此只对 X11 返回 true。
+    public static boolean glfwPlatformSupported(int platform) {
+        return platform == GLFW_PLATFORM_X11;
+    }
+
     @NativeType("GLFWwindow *")
     public static long glfwGetCurrentContext() {
         long __functionAddress = Functions.GetCurrentContext;

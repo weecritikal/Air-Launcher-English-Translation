@@ -404,6 +404,12 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
         margv[++margc] = "--add-opens=java.desktop/sun.font=ALL-UNNAMED";
         margv[++margc] = "--add-opens=java.desktop/sun.java2d=ALL-UNNAMED";
         margv[++margc] = "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED";
+        // Java 25 额外需要的 add-opens：Caciocavallo17 的 CTCGraphicsEnvironment 通过反射访问
+        // sun.awt.PlatformGraphicsInfo 和 sun.awt.image，若缺少这些 opens，GE 初始化失败会导致
+        // JVM 回退到 headless 模式，OptiFine 安装器等 Swing GUI 应用抛出 HeadlessException。
+        margv[++margc] = "--add-opens=java.desktop/sun.awt=ALL-UNNAMED";
+        margv[++margc] = "--add-opens=java.desktop/sun.awt.image=ALL-UNNAMED";
+        margv[++margc] = "--add-opens=java.desktop/java.awt.peer=ALL-UNNAMED";
 
         // TODO: workaround, will be removed once the startup part works without PLaunchApp
         margv[++margc] = "--add-exports=cpw.mods.bootstraplauncher/cpw.mods.bootstraplauncher=ALL-UNNAMED";

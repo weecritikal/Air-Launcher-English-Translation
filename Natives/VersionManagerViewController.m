@@ -392,6 +392,13 @@
 - (instancetype)initWithFrame:(CGRect)frame {
     self = [super initWithFrame:frame];
     if (self) {
+        // Section header 需要深色背景托底，避免在透明 collectionView 上文字透到父背景。
+        // 与 BackgroundManager 的深色风格保持一致。
+        UIBlurEffect *blurEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterialDark];
+        UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:blurEffect];
+        blurView.translatesAutoresizingMaskIntoConstraints = NO;
+        [self addSubview:blurView];
+
         self.titleLabel = [[UILabel alloc] init];
         self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
         self.titleLabel.font = [UIFont systemFontOfSize:[ScreenUtils sp:18] weight:UIFontWeightBold];
@@ -399,7 +406,12 @@
         [self addSubview:self.titleLabel];
 
         [NSLayoutConstraint activateConstraints:@[
+            [blurView.topAnchor constraintEqualToAnchor:self.topAnchor],
+            [blurView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
+            [blurView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
+            [blurView.bottomAnchor constraintEqualToAnchor:self.bottomAnchor],
             [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:20],
+            [self.titleLabel.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-20],
             [self.titleLabel.centerYAnchor constraintEqualToAnchor:self.centerYAnchor]
         ]];
     }

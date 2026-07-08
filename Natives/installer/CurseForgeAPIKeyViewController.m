@@ -177,6 +177,11 @@ static UIColor *CFKErrorColor(void) {
     [super viewDidLoad];
 
     self.title = @"CurseForge API Key";
+    // 强制深色风格，与 App 其他界面（BackgroundManager 始终深色）保持一致，
+    // 避免浅色模式下此页变浅色实色背景与其他页面深色毛玻璃割裂。
+    if (@available(iOS 13.0, *)) {
+        self.view.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
+    }
     self.view.backgroundColor = CFKPageBackgroundColor();
 
     [self setupUI];

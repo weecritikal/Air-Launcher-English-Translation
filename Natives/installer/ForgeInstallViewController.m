@@ -438,18 +438,55 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
             fetchFromSource(useBMCLAPI);
         });
     } else {
+        // Forge 分支：尊重 general.download_source 偏好（BMCLAPI/官方源），带超时和 fallback。
+        // 原实现用 NSXMLParser initWithContentsOfURL 无超时、无 UA、无 fallback，
+        // 国内用户即使选了 BMCLAPI 仍走官方源，弱网下会长时间卡死或失败。
         dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-            NSURL *url = [[NSURL alloc] initWithString:self.endpoints[vendor][@"metadata"]];
-            NSXMLParser *parser = [[NSXMLParser alloc] initWithContentsOfURL:url];
-            parser.delegate = self;
-            
-            self.currentVersionValue = [NSMutableString new];
-            
-            if (![parser parse]) {
+            NSString *downloadSource = getPrefObject(@"general.download_source");
+            BOOL useBMCLAPI = [downloadSource isEqualToString:@"bmclapi"];
+
+            // 内部方法：从指定源加载 Forge 版本列表，成功返回 YES
+            __block BOOL (^fetchFromSource)(BOOL) = ^(BOOL useBMCL) {
+                NSString *metadataURLString = useBMCL ?
+                    @"https://bmclapi2.bangbang93.com/maven/net/minecraftforge/forge/maven-metadata.xml" :
+                    @"https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml";
+
+                NSURL *url = [NSURL URLWithString:metadataURLString];
+                NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+                request.timeoutInterval = 30.0;
+                [request setValue:@"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15" forHTTPHeaderField:@"User-Agent"];
+
+                NSData *data = [NSURLConnection sendSynchronousRequest:request returningResponse:nil error:nil];
+                if (!data || data.length == 0) {
+                    NSLog(@"[Forge] Fetch %@ failed: no data", useBMCL ? @"BMCLAPI" : @"official");
+                    return NO;
+                }
+                NSXMLParser *parser = [[NSXMLParser alloc] initWithData:data];
+                parser.delegate = self;
+                self.currentVersionValue = [NSMutableString new];
+                // parser 解析完毕后 parserDidEndDocument 会自动调用 finalizeVersionList
+                BOOL success = [parser parse];
+                if (success && self.versionList.count > 0) {
+                    return YES;
+                }
+                NSLog(@"[Forge] Parse %@ failed: %@", useBMCL ? @"BMCLAPI" : @"official", parser.parserError.localizedDescription ?: @"no versions");
+                return NO;
+            };
+
+            BOOL success = fetchFromSource(useBMCLAPI);
+
+            // 主源失败时，尝试 fallback 到另一源
+            if (!success && self.versionList.count == 0) {
+                NSLog(@"[Forge] Primary source (%@) failed, falling back to %@", useBMCLAPI ? @"BMCLAPI" : @"official", useBMCLAPI ? @"official" : @"BMCLAPI");
+                success = fetchFromSource(!useBMCLAPI);
+            }
+
+            // 双源均失败
+            if (!success && self.versionList.count == 0) {
                 dispatch_async(dispatch_get_main_queue(), ^{
                     self.isDataLoading = NO;
                     [self.refreshControl endRefreshing];
-                    showDialog(localize(@"Error", nil), parser.parserError.localizedDescription);
+                    showDialog(localize(@"Error", nil), @"无法获取 Forge 版本列表，请检查网络连接或切换下载源");
                     [self actionClose];
                 });
             }
