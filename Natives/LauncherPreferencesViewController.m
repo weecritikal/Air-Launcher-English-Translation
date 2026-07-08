@@ -25,6 +25,8 @@
 @interface LauncherPreferencesViewController()
 @property(nonatomic) NSArray<NSString*> *rendererKeys, *rendererList;
 @property(nonatomic) BOOL pickingMousePointer;
+// 当前正在选择的颜色偏好键（general.text_color / general.card_color）
+@property(nonatomic, copy, nullable) NSString *pickingColorPrefKey;
 @end
 
 @implementation LauncherPreferencesViewController
@@ -75,6 +77,57 @@
     dispatch_async(dispatch_get_main_queue(), ^{
         [self presentViewController:imagePicker animated:YES completion:nil];
     });
+}
+
+#pragma mark - 自定义颜色选择（字体/卡片颜色）
+
+- (void)openColorPickerForKey:(NSString *)fullKey title:(NSString *)title {
+    if (@available(iOS 14.0, *)) {
+        UIColorPickerViewController *picker = [[UIColorPickerViewController alloc] init];
+        picker.title = title;
+        picker.delegate = self;
+        // 预选当前已保存的颜色
+        NSString *hex = getPrefObject(fullKey);
+        UIColor *current = [self colorFromHexString:hex];
+        if (current) {
+            picker.selectedColor = current;
+        }
+        self.pickingColorPrefKey = fullKey;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self presentViewController:picker animated:YES completion:nil];
+        });
+    } else {
+        [self showCustomIconError:@"当前系统版本不支持颜色选择器（需 iOS 14+）"];
+    }
+}
+
+- (void)colorPickerViewControllerDidFinish:(UIColorPickerViewController *)viewController API_AVAILABLE(ios(14.0)) {
+    NSString *key = self.pickingColorPrefKey;
+    self.pickingColorPrefKey = nil;
+    if (!key) return;
+    UIColor *color = viewController.selectedColor;
+    NSString *hex = [self hexStringFromColor:color];
+    setPrefObject(key, hex);
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"LauncherAppearanceChanged" object:nil];
+    [self.tableView reloadData];
+}
+
+- (nullable UIColor *)colorFromHexString:(id)hex {
+    if (![hex isKindOfClass:[NSString class]] || [(NSString *)hex length] == 0) return nil;
+    NSString *clean = [(NSString *)hex stringByReplacingOccurrencesOfString:@"#" withString:@""];
+    unsigned int rgb = 0;
+    NSScanner *scanner = [NSScanner scannerWithString:clean];
+    if (![scanner scanHexInt:&rgb]) return nil;
+    return [UIColor colorWithRed:((rgb >> 16) & 0xFF) / 255.0
+                           green:((rgb >> 8) & 0xFF) / 255.0
+                            blue:(rgb & 0xFF) / 255.0
+                           alpha:1.0];
+}
+
+- (NSString *)hexStringFromColor:(UIColor *)color {
+    CGFloat r = 0, g = 0, b = 0, a = 0;
+    [color getRed:&r green:&g blue:&b alpha:&a];
+    return [NSString stringWithFormat:@"%02X%02X%02X", (unsigned)(r * 255), (unsigned)(g * 255), (unsigned)(b * 255)];
 }
 
 #pragma mark - UIImagePickerControllerDelegate
@@ -299,6 +352,38 @@
                   // 不调用 loadPreferences(YES) 等会重置账号偏好的操作，
                   // 仅设置 window.overrideUserInterfaceStyle，账号数据不受影响。
                   [[NSNotificationCenter defaultCenter] postNotificationName:@"UIThemeChanged" object:value];
+              }
+            },
+            @{@"key": @"custom_text_color",
+              @"title": @"字体颜色",
+              @"hasDetail": @YES,
+              @"icon": @"textformat",
+              @"type": self.typeButton,
+              @"enableCondition": whenNotInGame,
+              @"action": ^void(){
+                  [self openColorPickerForKey:@"general.text_color" title:@"字体颜色"];
+              }
+            },
+            @{@"key": @"custom_card_color",
+              @"title": @"卡片颜色",
+              @"hasDetail": @YES,
+              @"icon": @"rectangle.fill",
+              @"type": self.typeButton,
+              @"enableCondition": whenNotInGame,
+              @"action": ^void(){
+                  [self openColorPickerForKey:@"general.card_color" title:@"卡片颜色"];
+              }
+            },
+            @{@"key": @"reset_appearance_colors",
+              @"title": @"重置字体/卡片颜色",
+              @"icon": @"arrow.counterclockwise",
+              @"type": self.typeButton,
+              @"enableCondition": whenNotInGame,
+              @"action": ^void(){
+                  setPrefObject(@"general.text_color", @"");
+                  setPrefObject(@"general.card_color", @"");
+                  [[NSNotificationCenter defaultCenter] postNotificationName:@"LauncherAppearanceChanged" object:nil];
+                  [self.tableView reloadData];
               }
             },
             @{@"key": @"floating_ball_enabled",

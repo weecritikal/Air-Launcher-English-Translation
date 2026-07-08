@@ -280,6 +280,9 @@ add_executable(AngelAuraAmethyst
   CustomIconManager.m
   ImageCropperViewController.m
 
+  # Account custom avatar management sources
+  AvatarManager.m
+
   # Background wallpaper sources
   BackgroundManager.m
   BackgroundSettingsViewController.m

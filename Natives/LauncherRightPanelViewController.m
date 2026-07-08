@@ -13,6 +13,8 @@
 #import "ALTServerConnection.h"
 #import "ios_uikit_bridge.h"
 #import "utils.h"
+#import "AvatarManager.h"
+#import "ImageCropperViewController.h"
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
 #include <sys/time.h>
@@ -23,7 +25,7 @@ extern void setPrefInt(NSString *key, NSInteger value);
 
 static void *ProgressObserverContext = &ProgressObserverContext;
 
-@interface LauncherRightPanelViewController () <UIDocumentPickerDelegate>
+@interface LauncherRightPanelViewController () <UIDocumentPickerDelegate, UIImagePickerControllerDelegate, UINavigationControllerDelegate>
 
 @property(nonatomic, strong) UIImageView *avatarImageView;
 @property(nonatomic, strong) UILabel *usernameLabel;
@@ -31,6 +33,8 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 @property(nonatomic, strong) UIButton *launchButton;
 @property(nonatomic, strong) UIButton *manageVersionBtn;
 @property(nonatomic, strong) UIButton *executeJarBtn;
+// JIT 状态指示标签（启动游戏按钮上方）
+@property(nonatomic, strong) UILabel *jitStatusLabel;
 
 // 下载相关属性
 @property(nonatomic, strong) MinecraftResourceDownloadTask *task;
@@ -69,6 +73,12 @@ static void *ProgressObserverContext = &ProgressObserverContext;
                                              selector:@selector(updateLaunchButtonState)
                                                  name:DownloadTaskManagerAggregateStateDidChangeNotification
                                                object:nil];
+
+    // 监听启动器外观变化（自定义字体/卡片颜色），刷新文字颜色
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(applyCustomAppearance)
+                                                 name:@"LauncherAppearanceChanged"
+                                               object:nil];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -76,6 +86,8 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     [self updateAccountInfo];
     [self updateVersionInfo];
     [self updateLaunchButtonState];
+    [self updateJITStatus];
+    [self applyCustomAppearance];
 }
 
 - (void)dealloc {
@@ -96,6 +108,10 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     self.avatarImageView.tintColor = [UIColor systemGrayColor];
     self.avatarImageView.userInteractionEnabled = YES;
     [self.avatarImageView addGestureRecognizer:[[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(selectAccount:)]];
+    // 长按头像：弹出自定义头像导入/清除菜单
+    UILongPressGestureRecognizer *longPress = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(showAvatarMenu:)];
+    longPress.minimumPressDuration = 0.5;
+    [self.avatarImageView addGestureRecognizer:longPress];
     [self.view addSubview:self.avatarImageView];
     
     // 用户名标签
@@ -157,6 +173,16 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     self.launchButton.layer.masksToBounds = YES;
     [self.launchButton addTarget:self action:@selector(launchButtonTapped) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.launchButton];
+
+    // JIT 状态指示标签（位于启动游戏按钮上方）
+    self.jitStatusLabel = [[UILabel alloc] init];
+    self.jitStatusLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.jitStatusLabel.font = [UIFont systemFontOfSize:11 weight:UIFontWeightMedium];
+    self.jitStatusLabel.textAlignment = NSTextAlignmentCenter;
+    self.jitStatusLabel.layer.cornerRadius = 8;
+    self.jitStatusLabel.layer.masksToBounds = YES;
+    self.jitStatusLabel.text = @"JIT: 检测中...";
+    [self.view addSubview:self.jitStatusLabel];
 
     // 选择版本按钮（FCL 风格：右侧版本选择入口；控制设置已挪到左侧菜单 case 3）
     self.manageVersionBtn = [UIButton buttonWithType:UIButtonTypeSystem];
@@ -229,7 +255,13 @@ static void *ProgressObserverContext = &ProgressObserverContext;
         [self.launchButton.bottomAnchor constraintEqualToAnchor:self.manageVersionBtn.topAnchor constant:-16],
         [self.launchButton.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:16],
         [self.launchButton.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-16],
-        [self.launchButton.heightAnchor constraintEqualToConstant:50]
+        [self.launchButton.heightAnchor constraintEqualToConstant:50],
+
+        // JIT 状态标签（启动按钮上方 8pt）
+        [self.jitStatusLabel.bottomAnchor constraintEqualToAnchor:self.launchButton.topAnchor constant:-8],
+        [self.jitStatusLabel.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:16],
+        [self.jitStatusLabel.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-16],
+        [self.jitStatusLabel.heightAnchor constraintEqualToConstant:20]
     ]];
 }
 
@@ -238,6 +270,155 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 - (void)selectAccount:(UITapGestureRecognizer *)gesture {
     // FCL 风格：账户管理在中间内容区显示，发送通知让 LauncherRootViewController 切换内容
     [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowAccountManager" object:nil];
+}
+
+#pragma mark - 自定义头像导入
+
+- (void)showAvatarMenu:(UILongPressGestureRecognizer *)gesture {
+    if (gesture.state != UIGestureRecognizerStateBegan) return;
+
+    BaseAuthenticator *currentAuth = BaseAuthenticator.current;
+    NSString *accountName = currentAuth.authData[@"username"];
+    if (!accountName || accountName.length == 0) {
+        [self showAlert:@"未登录" message:@"请先登录账户后再设置自定义头像"];
+        return;
+    }
+
+    BOOL hasCustom = [[AvatarManager sharedManager] hasCustomAvatarForAccount:accountName];
+
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"自定义头像"
+                                                                   message:nil
+                                                            preferredStyle:UIAlertControllerStyleActionSheet];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"从相册导入图片" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        [self openAvatarImagePicker];
+    }]];
+    if (hasCustom) {
+        [sheet addAction:[UIAlertAction actionWithTitle:@"清除自定义头像" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
+            [[AvatarManager sharedManager] removeAvatarForAccount:accountName];
+            [self updateAccountInfo];
+        }]];
+    }
+    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+
+    // iPad 适配：用 popover 锚定到头像
+    if (sheet.popoverPresentationController) {
+        sheet.popoverPresentationController.sourceView = self.avatarImageView;
+        sheet.popoverPresentationController.sourceRect = self.avatarImageView.bounds;
+    }
+    [self presentViewController:sheet animated:YES completion:nil];
+}
+
+- (void)openAvatarImagePicker {
+    // 防止重复弹出
+    for (UIWindow *window in UIApplication.sharedApplication.windows) {
+        for (UIView *view in window.subviews) {
+            if ([view isKindOfClass:[UIImagePickerController class]]) return;
+        }
+    }
+    UIImagePickerController *picker = [[UIImagePickerController alloc] init];
+    picker.sourceType = UIImagePickerControllerSourceTypePhotoLibrary;
+    picker.delegate = self;
+    [self presentViewController:picker animated:YES completion:nil];
+}
+
+- (void)imagePickerController:(UIImagePickerController *)picker didFinishPickingMediaWithInfo:(NSDictionary<UIImagePickerControllerInfoKey,id> *)info {
+    [picker dismissViewControllerAnimated:YES completion:^{
+        dispatch_async(dispatch_get_main_queue(), ^{
+            UIImage *selectedImage = info[UIImagePickerControllerOriginalImage];
+            if (!selectedImage) {
+                [self showAlert:@"错误" message:@"无法获取选中的图片"];
+                return;
+            }
+            // 头像需要正方形，非正方形则裁剪
+            if (selectedImage.size.width != selectedImage.size.height) {
+                ImageCropperViewController *cropperVC = [[ImageCropperViewController alloc] initWithImage:selectedImage];
+                __weak typeof(self) weakSelf = self;
+                cropperVC.completionHandler = ^(UIImage * _Nullable croppedImage) {
+                    [weakSelf dismissViewControllerAnimated:YES completion:^{
+                        if (croppedImage) {
+                            [weakSelf saveAvatarImage:croppedImage];
+                        }
+                    }];
+                };
+                // 本 VC 为 child view controller，self.navigationController 可能为 nil，
+                // 故用 present 方式呈现裁剪器（包装在 NavigationController 中以保留其导航栏样式）
+                UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:cropperVC];
+                nav.modalPresentationStyle = UIModalPresentationFullScreen;
+                [self presentViewController:nav animated:YES completion:nil];
+            } else {
+                [self saveAvatarImage:selectedImage];
+            }
+        });
+    }];
+}
+
+- (void)imagePickerControllerDidCancel:(UIImagePickerController *)picker {
+    [picker dismissViewControllerAnimated:YES completion:nil];
+}
+
+- (void)saveAvatarImage:(UIImage *)image {
+    BaseAuthenticator *currentAuth = BaseAuthenticator.current;
+    NSString *accountName = currentAuth.authData[@"username"];
+    if (!accountName || accountName.length == 0) {
+        [self showAlert:@"错误" message:@"未登录账户，无法保存头像"];
+        return;
+    }
+    __weak typeof(self) weakSelf = self;
+    [[AvatarManager sharedManager] saveAvatarForAccount:accountName image:image withCompletion:^(BOOL success, NSError * _Nullable error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (success) {
+                [weakSelf updateAccountInfo];
+            } else {
+                NSString *msg = error.localizedDescription ?: @"保存头像失败";
+                [weakSelf showAlert:@"错误" message:msg];
+            }
+        });
+    }];
+}
+
+#pragma mark - JIT 状态显示
+
+- (void)updateJITStatus {
+    if (!self.jitStatusLabel) return;
+    BOOL enabled = isJITEnabled(NO);
+    if (enabled) {
+        self.jitStatusLabel.text = @"JIT: 已开启";
+        self.jitStatusLabel.textColor = [UIColor colorWithRed:0.2 green:0.7 blue:0.3 alpha:1.0];
+        self.jitStatusLabel.backgroundColor = [[UIColor colorWithRed:0.2 green:0.7 blue:0.3 alpha:1.0] colorWithAlphaComponent:0.15];
+    } else {
+        self.jitStatusLabel.text = @"JIT: 未开启";
+        self.jitStatusLabel.textColor = [UIColor colorWithRed:0.9 green:0.4 blue:0.3 alpha:1.0];
+        self.jitStatusLabel.backgroundColor = [[UIColor colorWithRed:0.9 green:0.4 blue:0.3 alpha:1.0] colorWithAlphaComponent:0.15];
+    }
+}
+
+#pragma mark - 自定义外观（字体颜色）
+
+/// 读取 general.text_color 偏好并应用到右侧面板的主要文字。
+/// 卡片背景始终深色（BackgroundManager），用户若设置浅色 card_color 则需同时设置 text_color。
+- (void)applyCustomAppearance {
+    NSString *hex = getPrefObject(@"general.text_color");
+    UIColor *customColor = [self colorFromHexString:hex];
+    if (customColor) {
+        self.usernameLabel.textColor = customColor;
+        self.versionLabel.textColor = [customColor colorWithAlphaComponent:0.75];
+        self.progressLabel.textColor = [customColor colorWithAlphaComponent:0.75];
+        self.jitStatusLabel.textColor = customColor;
+        [self.manageVersionBtn setTitleColor:customColor forState:UIControlStateNormal];
+        [self.executeJarBtn setTitleColor:customColor forState:UIControlStateNormal];
+    }
+}
+
+- (nullable UIColor *)colorFromHexString:(id)hex {
+    if (![hex isKindOfClass:[NSString class]] || [(NSString *)hex length] == 0) return nil;
+    NSString *clean = [(NSString *)hex stringByReplacingOccurrencesOfString:@"#" withString:@""];
+    unsigned int rgb = 0;
+    NSScanner *scanner = [NSScanner scannerWithString:clean];
+    if (![scanner scanHexInt:&rgb]) return nil;
+    return [UIColor colorWithRed:((rgb >> 16) & 0xFF) / 255.0
+                           green:((rgb >> 8) & 0xFF) / 255.0
+                            blue:(rgb & 0xFF) / 255.0
+                           alpha:1.0];
 }
 
 - (void)showVersionPicker {
@@ -645,20 +826,25 @@ static void *ProgressObserverContext = &ProgressObserverContext;
             }
             self.usernameLabel.text = username;
         }
-        
-        // 加载头像
-        NSString *avatarURL = currentAuth.authData[@"profilePicURL"];
-        if (avatarURL) {
-            avatarURL = [avatarURL stringByReplacingOccurrencesOfString:@"\\/" withString:@"/"];
-            dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-                NSData *imageData = [NSData dataWithContentsOfURL:[NSURL URLWithString:avatarURL]];
-                if (imageData) {
-                    UIImage *image = [UIImage imageWithData:imageData];
-                    dispatch_async(dispatch_get_main_queue(), ^{
-                        self.avatarImageView.image = image;
-                    });
-                }
-            });
+
+        // 加载头像：本地自定义头像优先，回退到在线 URL
+        UIImage *localAvatar = [[AvatarManager sharedManager] avatarForAccount:currentAuth.authData[@"username"]];
+        if (localAvatar) {
+            self.avatarImageView.image = localAvatar;
+        } else {
+            NSString *avatarURL = currentAuth.authData[@"profilePicURL"];
+            if (avatarURL) {
+                avatarURL = [avatarURL stringByReplacingOccurrencesOfString:@"\\/" withString:@"/"];
+                dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+                    NSData *imageData = [NSData dataWithContentsOfURL:[NSURL URLWithString:avatarURL]];
+                    if (imageData) {
+                        UIImage *image = [UIImage imageWithData:imageData];
+                        dispatch_async(dispatch_get_main_queue(), ^{
+                            self.avatarImageView.image = image;
+                        });
+                    }
+                });
+            }
         }
     } else {
         self.usernameLabel.text = @"未登录";

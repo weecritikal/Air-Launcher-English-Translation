@@ -79,6 +79,12 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
     
     // 应用背景
     [[BackgroundManager sharedManager] applyBackgroundToView:self.view];
+
+    // 监听启动器外观变化（自定义字体/卡片颜色），刷新卡片背景
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(applyCustomAppearance)
+                                                 name:@"LauncherAppearanceChanged"
+                                               object:nil];
 }
 
 - (void)initializeVersionLists {
@@ -192,7 +198,42 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
     card.layer.cornerRadius = kCardCornerRadius;
     card.layer.masksToBounds = YES;
     [[BackgroundManager sharedManager] applyEffectToView:card];
+    [self applyCustomCardColorToCard:card];
     return card;
+}
+
+/// 读取 general.card_color 偏好，若已设置则用纯色覆盖毛玻璃背景。
+/// 用户设置浅色卡片时需同时在设置里设置深色字体颜色，否则白色文字不可见。
+- (void)applyCustomCardColorToCard:(UIView *)card {
+    NSString *hex = getPrefObject(@"general.card_color");
+    UIColor *color = [self colorFromHexString:hex];
+    if (!color) return;
+    // 移除 BackgroundManager 插入的毛玻璃子视图，用纯色覆盖
+    for (UIView *sub in [card.subviews copy]) {
+        if ([sub isKindOfClass:[UIVisualEffectView class]]) {
+            [sub removeFromSuperview];
+        }
+    }
+    card.backgroundColor = color;
+}
+
+- (nullable UIColor *)colorFromHexString:(id)hex {
+    if (![hex isKindOfClass:[NSString class]] || [(NSString *)hex length] == 0) return nil;
+    NSString *clean = [(NSString *)hex stringByReplacingOccurrencesOfString:@"#" withString:@""];
+    unsigned int rgb = 0;
+    NSScanner *scanner = [NSScanner scannerWithString:clean];
+    if (![scanner scanHexInt:&rgb]) return nil;
+    return [UIColor colorWithRed:((rgb >> 16) & 0xFF) / 255.0
+                           green:((rgb >> 8) & 0xFF) / 255.0
+                            blue:(rgb & 0xFF) / 255.0
+                           alpha:1.0];
+}
+
+/// 外观变化时重新应用卡片颜色（保留圆角，重建背景）
+- (void)applyCustomAppearance {
+    [self applyCustomCardColorToCard:self.sidebarCard];
+    [self applyCustomCardColorToCard:self.contentCard];
+    [self applyCustomCardColorToCard:self.rightPanelCard];
 }
 
 - (void)setupCardContainers {
@@ -452,7 +493,8 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
 - (void)showAccountManager {
     // 卡片布局下账户管理在中间内容区显示（与 VS 布局 LauncherRootViewController 行为一致）。
     // 右侧面板点击头像发 ShowAccountManager 通知触发此方法。
-    AccountListViewController *vc = [[AccountListViewController alloc] init];
+    // 使用 insetGrouped 样式让账户列表呈现圆角分组卡片（原默认 plain 为直角行）。
+    AccountListViewController *vc = [[AccountListViewController alloc] initWithStyle:UITableViewStyleInsetGrouped];
     vc.whenItemSelected = ^void() {
         [[NSNotificationCenter defaultCenter] postNotificationName:@"UpdateAccountInfo" object:nil];
     };

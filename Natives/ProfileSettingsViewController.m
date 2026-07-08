@@ -23,6 +23,10 @@
 @property (nonatomic, assign) NSInteger maxMemory;
 // 服务器地址（FCL 风格：留空则不自动加入）
 @property (nonatomic, strong) NSString *serverIp;
+// JVM 启动参数（如 -Dfoo=bar -Xnoclassgc 等；Xms/Xmx/d32/d64 由内存分配控制会被过滤）
+@property (nonatomic, strong) NSString *javaArgs;
+// JVM 参数输入框
+@property (nonatomic, strong) UITextField *javaArgsTextField;
 // 版本选择器
 @property (nonatomic, strong) UITextField *versionTextField;
 @property (nonatomic, strong) UITextField *nameTextField;
@@ -148,6 +152,14 @@
     // 服务器地址（默认空字符串，留空不自动加入）
     NSString *profName = self.profile[@"name"] ?: self.profileName;
     self.serverIp = [PLProfiles.current serverIpForProfile:profName] ?: @"";
+
+    // JVM 启动参数：profile 字段 javaArgs，未设置时回退到全局 java.java_args
+    id rawArgs = [PLProfiles resolveKeyForCurrentProfile:@"javaArgs"];
+    if ([rawArgs isKindOfClass:[NSString class]]) {
+        self.javaArgs = rawArgs;
+    } else {
+        self.javaArgs = @"";
+    }
 }
 
 #pragma mark - Sections
@@ -157,7 +169,7 @@
         @[@"名称", @"游戏版本", @"游戏目录"],
         @[@"模组管理"],
         @[@"光影管理"],
-        @[@"渲染器", @"Java版本", @"内存分配"],
+        @[@"渲染器", @"Java版本", @"内存分配", @"JVM 启动参数", @"清除JVM参数"],
         @[@"服务器地址"],
         @[@"Fabric API", @"OptiFine"],
         @[@"资源包管理"],
@@ -188,6 +200,7 @@
     existing[@"javaVersion"] = self.selectedJavaVersion;
     existing[@"allocatedMemory"] = @(self.allocatedMemory);
     existing[@"serverIp"] = self.serverIp ?: @"";
+    existing[@"javaArgs"] = self.javaArgs ?: @"";
     // 保存游戏目录（版本隔离用）：gameDir 为 nil 时默认 "."，与 main 分支行为一致
     existing[@"gameDir"] = self.profile[@"gameDir"] ?: @".";
     // existing 中的 name 和 lastVersionId 字段保持原始值不变
@@ -302,6 +315,15 @@
                 cell.imageView.image = [UIImage systemImageNamed:@"memorychip"];
                 cell.accessoryType = UITableViewCellAccessoryNone;
                 cell.detailTextLabel.text = [NSString stringWithFormat:@"%ld MB / %ld MB", (long)self.allocatedMemory, (long)self.maxMemory];
+            } else if ([title isEqualToString:@"JVM 启动参数"]) {
+                cell.imageView.image = [UIImage systemImageNamed:@"slider.vertical.3"];
+                cell.accessoryView = [self buildJavaArgsTextField];
+                cell.detailTextLabel.text = nil;
+            } else if ([title isEqualToString:@"清除JVM参数"]) {
+                cell.imageView.image = [UIImage systemImageNamed:@"trash"];
+                cell.imageView.tintColor = [UIColor systemRedColor];
+                cell.textLabel.textColor = [UIColor systemRedColor];
+                cell.detailTextLabel.text = self.javaArgs.length > 0 ? @"点击清除" : @"(无参数)";
             }
             break;
 
@@ -548,6 +570,69 @@
     return textField;
 }
 
+#pragma mark - JVM 启动参数输入框
+
+- (UITextField *)buildJavaArgsTextField {
+    if (self.javaArgsTextField) {
+        if (!self.javaArgsTextField.superview || self.javaArgsTextField.superview == self.view) {
+            return self.javaArgsTextField;
+        }
+    }
+    UITextField *textField = [[UITextField alloc] initWithFrame:CGRectMake(0, 0, 200, 30)];
+    textField.placeholder = @"如 -Dfoo=bar";
+    textField.text = self.javaArgs;
+    textField.font = [UIFont systemFontOfSize:13];
+    textField.adjustsFontSizeToFitWidth = YES;
+    textField.minimumFontSize = 9;
+    textField.clearButtonMode = UITextFieldViewModeWhileEditing;
+    textField.returnKeyType = UIReturnKeyDone;
+    textField.autocorrectionType = UITextAutocorrectionTypeNo;
+    textField.autocapitalizationType = UITextAutocapitalizationTypeNone;
+    textField.tag = 1003;
+    textField.delegate = self;
+    [textField addTarget:self action:@selector(javaArgsTextFieldEditingChanged:) forControlEvents:UIControlEventEditingChanged];
+    [textField addTarget:self action:@selector(javaArgsTextFieldEditingDidEnd:) forControlEvents:UIControlEventEditingDidEnd];
+    self.javaArgsTextField = textField;
+    return textField;
+}
+
+- (void)javaArgsTextFieldEditingChanged:(UITextField *)textField {
+    self.javaArgs = textField.text ?: @"";
+}
+
+- (void)javaArgsTextFieldEditingDidEnd:(UITextField *)textField {
+    self.javaArgs = [textField.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] ?: @"";
+    textField.text = self.javaArgs;
+    [self saveSettings];
+}
+
+/// 一键清除当前版本已设置的 JVM 启动参数
+- (void)clearJavaArgs {
+    if (self.javaArgs.length == 0) {
+        UIAlertController *tip = [UIAlertController alertControllerWithTitle:@"提示"
+                                                                     message:@"当前没有已设置的 JVM 启动参数"
+                                                              preferredStyle:UIAlertControllerStyleAlert];
+        [tip addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
+        [self presentViewController:tip animated:YES completion:nil];
+        return;
+    }
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"清除 JVM 启动参数"
+                                                                   message:@"确定要清除当前版本的 JVM 启动参数吗？此操作不可撤销。"
+                                                            preferredStyle:UIAlertControllerStyleActionSheet];
+    [alert addAction:[UIAlertAction actionWithTitle:@"清除" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
+        self.javaArgs = @"";
+        self.javaArgsTextField.text = @"";
+        [self saveSettings];
+        [self.tableView reloadData];
+    }]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    if (alert.popoverPresentationController) {
+        alert.popoverPresentationController.sourceView = self.view;
+        alert.popoverPresentationController.sourceRect = CGRectMake(self.view.bounds.size.width / 2.0, self.view.bounds.size.height / 2.0, 1, 1);
+    }
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
 - (void)serverIpTextFieldEditingChanged:(UITextField *)textField {
     self.serverIp = textField.text ?: @"";
 }
@@ -616,6 +701,10 @@
                 [self showJavaVersionSelector];
             } else if ([title isEqualToString:@"内存分配"]) {
                 [self showMemoryAllocator];
+            } else if ([title isEqualToString:@"JVM 启动参数"]) {
+                if (self.javaArgsTextField) [self.javaArgsTextField becomeFirstResponder];
+            } else if ([title isEqualToString:@"清除JVM参数"]) {
+                [self clearJavaArgs];
             }
             break;
 
