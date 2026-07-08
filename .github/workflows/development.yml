@@ -52,6 +52,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Remove stale MobileGL gitlink
+        # MobileGL submodule 已完整移除（.gitmodules 中无对应条目），
+        # 但并行 agent 操作或本地 index 残留可能反复引入孤立 gitlink，
+        # 导致后续 git submodule update --init 因找不到 URL 而 exit 128。
+        # checkout 后、submodule 初始化前强制清理。
+        run: |
+          git rm --cached -f Natives/external/MobileGL 2>/dev/null || true
+          git config --remove-section submodule.Natives/external/MobileGL 2>/dev/null || true
+
       - name: Checkout repository submodules
         env:
           # MobileGL 上游 LFS 配额已用尽，其 LFS 文件（tools/trace_replay/fixtures）

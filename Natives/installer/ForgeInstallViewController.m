@@ -446,22 +446,31 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
             BOOL useBMCLAPI = [downloadSource isEqualToString:@"bmclapi"];
 
             // 内部方法：从指定源加载 Forge 版本列表，成功返回 YES
-            __block BOOL (^fetchFromSource)(BOOL) = ^(BOOL useBMCL) {
+            BOOL (^fetchFromSource)(BOOL) = ^(BOOL useBMCL) {
                 NSString *metadataURLString = useBMCL ?
                     @"https://bmclapi2.bangbang93.com/maven/net/minecraftforge/forge/maven-metadata.xml" :
                     @"https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml";
 
                 NSURL *url = [NSURL URLWithString:metadataURLString];
+
+                // 用 NSURLSession 同步等待，避免 NSURLConnection 的 deprecated 警告
+                __block NSData *resultData = nil;
+                dispatch_semaphore_t sem = dispatch_semaphore_create(0);
                 NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
                 request.timeoutInterval = 30.0;
                 [request setValue:@"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15" forHTTPHeaderField:@"User-Agent"];
+                NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+                    resultData = data;
+                    dispatch_semaphore_signal(sem);
+                }];
+                [task resume];
+                dispatch_semaphore_wait(sem, dispatch_time(DISPATCH_TIME_NOW, 30 * NSEC_PER_SEC));
 
-                NSData *data = [NSURLConnection sendSynchronousRequest:request returningResponse:nil error:nil];
-                if (!data || data.length == 0) {
+                if (!resultData || resultData.length == 0) {
                     NSLog(@"[Forge] Fetch %@ failed: no data", useBMCL ? @"BMCLAPI" : @"official");
                     return NO;
                 }
-                NSXMLParser *parser = [[NSXMLParser alloc] initWithData:data];
+                NSXMLParser *parser = [[NSXMLParser alloc] initWithData:resultData];
                 parser.delegate = self;
                 self.currentVersionValue = [NSMutableString new];
                 // parser 解析完毕后 parserDidEndDocument 会自动调用 finalizeVersionList
