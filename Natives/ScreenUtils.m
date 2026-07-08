@@ -4,7 +4,9 @@
 
 // 极速缓存：nativeBounds/nativeScale 是固定值，用 dispatch_once 一次性获取
 // UIScreen.main.bounds/nativeBounds 是 O(1) 操作，但 dispatch_once 仍能避免重复调用开销
-static CGSize _cachedNativeBounds = CGSizeZero;
+// 注意：CGSizeZero 在 iOS SDK 中展开为 compound literal (CGSize){0,0}，不是编译期常量，
+// 不能用于全局变量初始化。改用 plain struct initializer {0,0}。
+static CGSize _cachedNativeBounds = {0, 0};
 static CGFloat _cachedNativeScale = 0;
 static CGFloat _cachedScale = 0;
 static dispatch_once_t _nativeOnceToken;
