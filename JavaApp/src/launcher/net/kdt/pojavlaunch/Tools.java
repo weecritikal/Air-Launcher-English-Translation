@@ -59,18 +59,15 @@ public final class Tools {
         System.setProperty("org.lwjgl.system.libffi.initialize", "false"); // Prevents NoSuchFieldError in LibFFI <clinit>
         System.setProperty("org.lwjgl.system.Allocator", "Custom");
 
-        // FIX FOR LWJGL / SPVC LINKING FAILURE ON iOS:
-        // Force lookups for libspirv-cross.dylib to match your native compiled binary name.
-        // 注意：LWJGL Configuration.SPVC_LIBRARY_NAME 对应的属性名是 "org.lwjgl.spvc.libname"
-        // （不含 util 子包名），早期版本误写为 "org.lwjgl.util.spvc.libname" 导致 override 不生效，
-        // 26.x 启动时 Spvc.<clinit> 仍查找默认名 libspirv-cross.dylib 而 UnsatisfiedLinkError。
-        System.setProperty("org.lwjgl.spvc.libname", "libspirv-cross-c-shared.0.dylib");
-        // 兼容旧属性名（部分 LWJGL 分支可能读取），双保险
-        System.setProperty("org.lwjgl.util.spvc.libname", "libspirv-cross-c-shared.0.dylib");
-
-        // FIX FOR LWJGL / OPENAL LINKING FAILURE ON iOS:
-        // Force lookup for libopenal.dylib directly to match your flat native library path
-        System.setProperty("org.lwjgl.openal.libname", "libopenal.dylib");
+        // spvc / openal 库加载说明：
+        // 不再设置 org.lwjgl.spvc.libname / org.lwjgl.openal.libname override。
+        // 原因：LWJGL 的 Library.loadNative 在 macOS 上会对 libname 自动加 "lib" 前缀和
+        // ".dylib" 后缀。若传入已带前后缀的完整文件名（如 "libspirv-cross-c-shared.0.dylib"），
+        // 会被二次包装成 "liblibspirv-cross-c-shared.0.dylib.dylib" 导致 UnsatisfiedLinkError
+        // （26.2 启动崩溃的根因）。
+        // 正确做法：使用 LWJGL 默认库名。LWJGL spvc 默认查找 "spirv-cross" -> 加载
+        // "libspirv-cross.dylib"；Makefile payload 阶段已为该默认名创建软链接指向
+        // 实际文件 libspirv-cross-c-shared.0.dylib。openal 同理用默认名加载 libopenal.dylib。
         // --- END AMETHYST UPSTREAM LWJGL 3.4.1 COMPLIANCE OVERRIDE ---
 
         String[] launchArgs = getMinecraftArgs(profile, versionInfo, serverIp);

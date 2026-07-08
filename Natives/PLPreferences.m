@@ -107,6 +107,7 @@ NSString *const PREF_MOD_UPDATE_KEEP_OLD = @"general.mod_update_keep_old";
             @"hidden_sidebar": @(realUIIdiom == UIUserInterfaceIdiomPhone),
             @"appicon": @"AppIcon-Light",
             @"ui_layout": @"vs",
+            @"ui_theme": @"dark",
             @"floating_ball_enabled": @YES,
             @"floating_ball_size": @(60),
             @"multi_threaded": @NO

@@ -16,6 +16,7 @@
 #import "ModpackImportViewController.h"
 #import "LauncherPrefGameDirViewController.h"
 #import "CustomControlsViewController.h"
+#import "AccountListViewController.h"
 
 // 布局常量（iPad/宽屏基准值；iPhone 上通过 traitCollection 适配后会变窄）
 static const CGFloat kSidebarWidthPad = 70.0;      // iPad 左侧边栏卡片宽度
@@ -291,6 +292,12 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
                                              selector:@selector(showControlSettings)
                                                  name:@"ShowControlSettings"
                                                object:nil];
+    // 账户管理：右侧面板点击头像会发 ShowAccountManager 通知。
+    // 原实现遗漏此监听，导致卡片布局下点头像无反应、无法登录账号。
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(showAccountManager)
+                                                 name:@"ShowAccountManager"
+                                               object:nil];
     // 首页快捷瓷砖触发：切到对应内容区子页面（不再 FormSheet 弹窗）
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(showModsManager)
@@ -440,6 +447,21 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
     UINavigationController *navVC = [[UINavigationController alloc] initWithRootViewController:vc];
     navVC.navigationBar.prefersLargeTitles = NO;
     [self setContentViewController:navVC animated:YES];
+}
+
+- (void)showAccountManager {
+    // 卡片布局下账户管理在中间内容区显示（与 VS 布局 LauncherRootViewController 行为一致）。
+    // 右侧面板点击头像发 ShowAccountManager 通知触发此方法。
+    AccountListViewController *vc = [[AccountListViewController alloc] init];
+    vc.whenItemSelected = ^void() {
+        [[NSNotificationCenter defaultCenter] postNotificationName:@"UpdateAccountInfo" object:nil];
+    };
+    vc.whenDelete = ^void(NSString *name) {
+        [[NSNotificationCenter defaultCenter] postNotificationName:@"UpdateAccountInfo" object:nil];
+    };
+    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
+    nav.navigationBar.prefersLargeTitles = NO;
+    [self setContentViewController:nav animated:YES];
 }
 
 #pragma mark - 首页快捷入口 (替换原 FormSheet 弹窗)

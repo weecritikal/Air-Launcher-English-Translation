@@ -28,6 +28,9 @@ extern UIWindow *mainWindow;
     
     self.window = [[UIWindow alloc] initWithWindowScene:windowScene];
     self.window.frame = windowScene.coordinateSpace.bounds;
+    // 创建窗口后立即设置不透明深色背景，消除背景延迟 0.1s 应用造成的启动黑闪，
+    // 也避免卡片布局卡片内缩区域露出窗口默认 nil（黑）背景形成的"小黑条"。
+    self.window.backgroundColor = [UIColor blackColor];
     mainWindow = self.window;
 
     // 根据设置选择布局：默认 VS 三栏布局，可切换为卡片式便当盒布局
@@ -40,12 +43,20 @@ extern UIWindow *mainWindow;
     }
     self.window.rootViewController = rootVC;
 
-    // 强制深色模式：整个启动器 UI 基于 SystemMaterialDark 毛玻璃 + 深色硬编码颜色设计，
-    // 若跟随系统浅色模式，中间内容区（systemBackgroundColor=白）与两侧面板（SystemMaterialDark=深灰）
-    // 会严重不一致。强制深色确保三栏视觉统一，且与 FCL 安卓默认深色风格一致。
-    // iOS 13+ 支持 overrideUserInterfaceStyle，不影响系统其他 app 的外观偏好。
+    // 外观模式（浅色/深色/跟随系统）：读 general.ui_theme 偏好。
+    //   light  -> UIUserInterfaceStyleLight
+    //   dark   -> UIUserInterfaceStyleDark（默认，保持与原行为一致）
+    //   auto   -> UIUserInterfaceStyleUnspecified（跟随系统）
+    // iOS 13+ 支持 overrideUserInterfaceStyle。仅设置 window 级别，不触碰账号/偏好。
     if (@available(iOS 13.0, *)) {
-        self.window.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
+        NSString *theme = getPrefObject(@"general.ui_theme");
+        if ([theme isEqualToString:@"light"]) {
+            self.window.overrideUserInterfaceStyle = UIUserInterfaceStyleLight;
+        } else if ([theme isEqualToString:@"auto"]) {
+            self.window.overrideUserInterfaceStyle = UIUserInterfaceStyleUnspecified;
+        } else {
+            self.window.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
+        }
     }
 
     [self.window makeKeyAndVisible];
@@ -59,9 +70,31 @@ extern UIWindow *mainWindow;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         [[DownloadFloatingBall sharedBall] attachToMainWindow];
     });
+
+    // 监听主题切换通知（设置页"外观模式"切换时实时应用，无需重启）
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(applyUITheme:)
+                                                 name:@"UIThemeChanged"
+                                               object:nil];
+}
+
+- (void)applyUITheme:(NSNotification *)notification {
+    // 实时切换外观模式。仅修改 window.overrideUserInterfaceStyle，
+    // 不触碰 PLPreferences 重置逻辑、不读写账号数据，确保切换主题不会导致账号退出。
+    NSString *theme = notification.object ?: getPrefObject(@"general.ui_theme");
+    if (@available(iOS 13.0, *)) {
+        if ([theme isEqualToString:@"light"]) {
+            self.window.overrideUserInterfaceStyle = UIUserInterfaceStyleLight;
+        } else if ([theme isEqualToString:@"auto"]) {
+            self.window.overrideUserInterfaceStyle = UIUserInterfaceStyleUnspecified;
+        } else {
+            self.window.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
+        }
+    }
 }
 
 - (void)sceneDidDisconnect:(UIScene *)scene {
+    [[NSNotificationCenter defaultCenter] removeObserver:self name:@"UIThemeChanged" object:nil];
 }
 
 - (void)sceneDidBecomeActive:(UIScene *)scene {

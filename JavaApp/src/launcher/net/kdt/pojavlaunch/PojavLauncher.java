@@ -87,9 +87,12 @@ public class PojavLauncher {
 
         // 仅在显式选择 Vulkan 渲染器时设置 LWJGL Vulkan native 库名称，
         // 避免覆盖 JavaLauncher.m 为 ANGLE/MobileGlues/GL4ES 设置的 OpenGL libname。
+        // 注意：LWJGL Library.loadNative 在 macOS 上会自动加 "lib" 前缀和 ".dylib" 后缀，
+        // 所以这里必须传裸名 "MoltenVK"，否则 "libMoltenVK.dylib" 会被二次包装成
+        // "liblibMoltenVK.dylib.dylib" 导致 UnsatisfiedLinkError。
         String renderer = System.getenv("AMETHYST_RENDERER");
         if ("libMoltenVK.dylib".equals(renderer) || "vulkan".equals(renderer)) {
-            System.setProperty("org.lwjgl.vulkan.libname", "libMoltenVK.dylib");
+            System.setProperty("org.lwjgl.vulkan.libname", "MoltenVK");
         }
 
         MinecraftAccount account = MinecraftAccount.load(args[0]);

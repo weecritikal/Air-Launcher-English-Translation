@@ -387,18 +387,19 @@ static void *ProgressObserverContext = &ProgressObserverContext;
             [self presentViewController:nav animated:YES completion:nil];
         }
     } else if ([[DownloadTaskManager sharedManager] hasActiveTasks]) {
-        [self showAlert:@"存在进行中的下载任务" message:@"请等待所有下载完成后再启动游戏。"];
+        // 下载中仍允许启动游戏（不再硬阻断），仅提示用户有进行中的下载。
+        // 原实现在此处 return 导致"开了下载球后任意下载未完成就永远无法启动游戏"，
+        // 且某些下载任务状态机异常会卡住导致永久无法启动。
+        [self showAlert:@"提示" message:@"有下载任务正在进行，启动游戏可能受影响。"];
+        [self launchGame];
     } else {
         [self launchGame];
     }
 }
 
 - (void)launchGame {
-    if ([[DownloadTaskManager sharedManager] hasActiveTasks]) {
-        [self showAlert:@"存在进行中的下载任务" message:@"请等待所有下载完成后再启动游戏。"];
-        return;
-    }
-
+    // 下载任务不再阻断启动。某些下载（如 Mod/光影）与游戏本体启动无依赖关系，
+    // 强制等待会造成"启动游戏过慢或无法启动"的体验问题。
     BaseAuthenticator *currentAuth = BaseAuthenticator.current;
     if (!currentAuth) {
         [self showAlert:@"请先登录账户"];
@@ -502,10 +503,11 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     BOOL hasAccount = (BaseAuthenticator.current != nil);
     NSString *selectedProfile = PLProfiles.current.selectedProfileName;
     BOOL hasVersion = selectedProfile && PLProfiles.current.profiles[selectedProfile][@"lastVersionId"] != nil;
-    BOOL enabled = !hasActiveTasks && hasAccount && hasVersion && !self.task;
+    // 下载中不再禁用启动按钮：仅作提示，不阻断启动（避免下载卡住导致永久无法启动）
+    BOOL enabled = hasAccount && hasVersion && !self.task;
 
     self.launchButton.enabled = enabled;
-    [self.launchButton setTitle:(hasActiveTasks ? @"下载中..." : @"启动游戏") forState:UIControlStateNormal];
+    [self.launchButton setTitle:(hasActiveTasks ? @"启动游戏（下载中）" : @"启动游戏") forState:UIControlStateNormal];
 }
 
 - (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary *)change context:(void *)context {

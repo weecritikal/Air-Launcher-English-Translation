@@ -278,6 +278,29 @@
                   @"卡片式布局"
               ]
             },
+            @{@"key": @"ui_theme",
+              @"title": @"外观模式",
+              @"hasDetail": @YES,
+              @"icon": @"circle.lefthalf.filled",
+              @"type": self.typePickField,
+              @"enableCondition": whenNotInGame,
+              @"pickKeys": @[
+                  @"dark",
+                  @"light",
+                  @"auto"
+              ],
+              @"pickList": @[
+                  @"深色模式",
+                  @"浅色模式",
+                  @"跟随系统"
+              ],
+              @"action": ^(NSString *value){
+                  // 实时应用主题，发通知由 SceneDelegate 处理。
+                  // 不调用 loadPreferences(YES) 等会重置账号偏好的操作，
+                  // 仅设置 window.overrideUserInterfaceStyle，账号数据不受影响。
+                  [[NSNotificationCenter defaultCenter] postNotificationName:@"UIThemeChanged" object:value];
+              }
+            },
             @{@"key": @"floating_ball_enabled",
               @"title": @"下载悬浮球",
               @"hasDetail": @YES,
