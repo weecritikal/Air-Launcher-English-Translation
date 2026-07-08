@@ -53,6 +53,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Checkout repository submodules
+        env:
+          # MobileGL 上游 LFS 配额已用尽，其 LFS 文件（tools/trace_replay/fixtures）
+          # 与 iOS 构建无关，跳过 smudge 避免 submodule checkout 失败 exit 128
+          GIT_LFS_SKIP_SMUDGE: "1"
         run: git submodule update --init --recursive
 
       - name: Build for ${{ matrix.platform_name }}
