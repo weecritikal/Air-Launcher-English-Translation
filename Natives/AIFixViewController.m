@@ -623,7 +623,9 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     [self setupToolsCard];
 
     _exitButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    _exitButton.frame = CGRectMake(sidePadding, panelHeight - 48, panelWidth - sidePadding * 2, 44);
+    // 修复：退出按钮加到 _rightPanel（非滚动视图）而非 _rightContentView，
+    // 用 Auto Layout 钉在面板底部，避免在 iPhone 紧凑布局下被配置卡片遮挡或随滚动消失。
+    _exitButton.translatesAutoresizingMaskIntoConstraints = NO;
     [_exitButton setTitle:localize(@"ai.fix.exit", @"退出启动器") forState:UIControlStateNormal];
     _exitButton.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
     _exitButton.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.1];
@@ -631,7 +633,16 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     _exitButton.layer.cornerCurve = kCACornerCurveContinuous;
     _exitButton.tintColor = [UIColor whiteColor];
     [_exitButton addTarget:self action:@selector(exitLauncher) forControlEvents:UIControlEventTouchUpInside];
-    [_rightContentView addSubview:_exitButton];
+    [_rightPanel addSubview:_exitButton];
+    [NSLayoutConstraint activateConstraints:@[
+        [_exitButton.leadingAnchor constraintEqualToAnchor:_rightPanel.leadingAnchor constant:sidePadding],
+        [_exitButton.trailingAnchor constraintEqualToAnchor:_rightPanel.trailingAnchor constant:-sidePadding],
+        [_exitButton.bottomAnchor constraintEqualToAnchor:_rightPanel.bottomAnchor constant:-12],
+        [_exitButton.heightAnchor constraintEqualToConstant:44]
+    ]];
+    // 调整滚动视图底部内边距，避免内容被退出按钮遮挡
+    _rightScrollView.contentInset = UIEdgeInsetsMake(0, 0, 44 + 12 + 8, 0);
+    _rightScrollView.scrollIndicatorInsets = _rightScrollView.contentInset;
 }
 
 - (void)setupConfigCard {

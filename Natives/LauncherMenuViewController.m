@@ -19,9 +19,15 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    
+
     self.view.backgroundColor = [UIColor clearColor];
-    
+
+    // 监听外观变更（字体颜色变化时刷新菜单按钮颜色）
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(applyCustomAppearance)
+                                                 name:@"LauncherAppearanceChanged"
+                                               object:nil];
+
     // 菜单项配置
     // 原 case 3（当前版本设置）与 case 2（版本管理）功能重合，合并到 case 2
     // case 3 改为"控制设置"（CustomControlsViewController），原右侧面板的"编辑控件"挪到这里
@@ -76,22 +82,25 @@
     UIButton *btn = [UIButton buttonWithType:UIButtonTypeSystem];
     btn.translatesAutoresizingMaskIntoConstraints = NO;
     btn.tag = index;
-    
+
     // 设置图标
     UIImage *icon = [UIImage systemImageNamed:item[@"icon"]];
     [btn setImage:icon forState:UIControlStateNormal];
-    
+
     // 设置颜色 - 选中项高亮
+    // 支持自定义字体颜色：用户在设置中配置 general.text_color 后，
+    // 未选中项使用自定义颜色，选中项保持高亮蓝色
+    UIColor *normalColor = [self menuNormalColor];
     if (index == self.selectedIndex) {
         btn.tintColor = [UIColor colorWithRed:0.26 green:0.63 blue:0.96 alpha:1.0];
     } else {
-        btn.tintColor = [UIColor systemGrayColor];
+        btn.tintColor = normalColor;
     }
-    
+
     // 设置标题（在图标下方）
     btn.titleLabel.font = [UIFont systemFontOfSize:10];
     [btn setTitle:item[@"title"] forState:UIControlStateNormal];
-    [btn setTitleColor:(index == self.selectedIndex) ? [UIColor colorWithRed:0.26 green:0.63 blue:0.96 alpha:1.0] : [UIColor systemGrayColor] forState:UIControlStateNormal];
+    [btn setTitleColor:(index == self.selectedIndex) ? [UIColor colorWithRed:0.26 green:0.63 blue:0.96 alpha:1.0] : normalColor forState:UIControlStateNormal];
     
     // 垂直布局：图标在上，文字在下
     btn.contentHorizontalAlignment = UIControlContentHorizontalAlignmentCenter;
@@ -124,20 +133,59 @@
 }
 
 - (void)updateButtonColors {
+    UIColor *normalColor = [self menuNormalColor];
     for (UIView *view in self.sidebarView.subviews) {
         if ([view isKindOfClass:[UIButton class]]) {
             UIButton *btn = (UIButton *)view;
             NSInteger index = btn.tag;
-            
+
             if (index == self.selectedIndex) {
                 btn.tintColor = [UIColor colorWithRed:0.26 green:0.63 blue:0.96 alpha:1.0];
                 [btn setTitleColor:[UIColor colorWithRed:0.26 green:0.63 blue:0.96 alpha:1.0] forState:UIControlStateNormal];
             } else {
-                btn.tintColor = [UIColor systemGrayColor];
-                [btn setTitleColor:[UIColor systemGrayColor] forState:UIControlStateNormal];
+                btn.tintColor = normalColor;
+                [btn setTitleColor:normalColor forState:UIControlStateNormal];
             }
         }
     }
+}
+
+// 字体颜色变更时刷新所有菜单按钮
+- (void)applyCustomAppearance {
+    [self updateButtonColors];
+}
+
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
+// 未选中菜单项的颜色：优先使用用户自定义的 general.text_color，否则默认 systemGray
+- (UIColor *)menuNormalColor {
+    NSString *hex = getPrefObject(@"general.text_color");
+    if (hex.length > 0) {
+        UIColor *custom = [self colorFromHexString:hex];
+        if (custom) return custom;
+    }
+    return [UIColor systemGrayColor];
+}
+
+- (UIColor *)colorFromHexString:(NSString *)hexString {
+    NSString *hex = [hexString stringByReplacingOccurrencesOfString:@"#" withString:@""];
+    if (hex.length != 6 && hex.length != 8) return nil;
+    unsigned int r, g, b, a = 255;
+    if (hex.length == 6) {
+        [[NSScanner scannerWithString:hex] scanHexInt:&r];
+        b = r & 0xFF;
+        g = (r >> 8) & 0xFF;
+        r = (r >> 16) & 0xFF;
+    } else {
+        [[NSScanner scannerWithString:hex] scanHexInt:&r];
+        a = r & 0xFF;
+        b = (r >> 8) & 0xFF;
+        g = (r >> 16) & 0xFF;
+        r = (r >> 24) & 0xFF;
+    }
+    return [UIColor colorWithRed:r/255.0 green:g/255.0 blue:b/255.0 alpha:a/255.0];
 }
 
 - (void)handleMenuSelection:(NSInteger)index {

@@ -930,9 +930,10 @@ NSString *const NeoForgeDirectInstallerErrorDomain = @"NeoForgeDirectInstallerEr
 
     NSString *groupPath = [groupId stringByReplacingOccurrencesOfString:@"." withString:@"/"];
 
-    // 参照 FCL：尝试多个 classifier。NeoForge 预打补丁 jar 通常发布为 -client，
-    // 但部分 BMCLAPI 镜像可能只同步了 universal。按 client -> universal -> 无 classifier 顺序尝试。
-    NSArray *classifiers = @[@"client", @"universal", @""];
+    // 参照 FCL/HMCL：实测 NeoForge maven（如 21.1.77）只发布 -universal（HTTP 200），
+    // -client 和无 classifier 均 404。调整顺序为 universal -> client -> 无 classifier，
+    // 优先尝试成功率最高的 universal。
+    NSArray *classifiers = @[@"universal", @"client", @""];
     NSString *downloadSource = getPrefObject(@"general.download_source");
     BOOL useBMCLAPI = [downloadSource isEqualToString:@"bmclapi"];
 

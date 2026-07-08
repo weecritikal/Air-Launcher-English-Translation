@@ -178,15 +178,14 @@ static const NSInteger kDefaultBackgroundTag = 99995;
     
     // Remove existing
     [self removeGlobalBackground];
-    
+
     // For default background, just set the window's background color
     // No need for container
+    // 注意：使用深灰（0.08）而非 systemBackgroundColor，避免 Card 布局下卡片上方的
+    // 状态栏区域透出纯黑底色，在 iPhone 刘海/灵动岛区域呈现为"顶部黑条"。
+    // SceneDelegate 也设置了相同的深灰色，但此处会覆盖，故必须保持一致。
     if (self.currentType == BackgroundTypeNone) {
-        if (@available(iOS 13.0, *)) {
-            window.backgroundColor = [UIColor systemBackgroundColor];
-        } else {
-            window.backgroundColor = [UIColor blackColor];
-        }
+        window.backgroundColor = [UIColor colorWithWhite:0.08 alpha:1.0];
         return;
     }
     
@@ -227,12 +226,9 @@ static const NSInteger kDefaultBackgroundTag = 99995;
     
     // For default background, just set the view's background color
     // No need for container or transparency
+    // 使用深灰避免顶部黑条（与 applyBackgroundToWindow 保持一致）
     if (self.currentType == BackgroundTypeNone) {
-        if (@available(iOS 13.0, *)) {
-            splitVC.view.backgroundColor = [UIColor systemBackgroundColor];
-        } else {
-            splitVC.view.backgroundColor = [UIColor blackColor];
-        }
+        splitVC.view.backgroundColor = [UIColor colorWithWhite:0.08 alpha:1.0];
         return;
     }
     

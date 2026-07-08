@@ -60,20 +60,27 @@ static CGFloat LauncherRootLayoutRightPanelWidth(UITraitCollection *trait) {
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    
+
     self.view.backgroundColor = [UIColor clearColor];
-    
+
     // 初始化版本列表（必须在其他视图控制器之前）
     [self initializeVersionLists];
-    
+
     // 创建三个容器视图
     [self setupContainers];
-    
+
     // 添加子视图控制器
     [self setupChildViewControllers];
-    
+
     // 应用背景
     [[BackgroundManager sharedManager] applyBackgroundToView:self.view];
+
+    // 监听外观变更（字体颜色 / 卡片颜色），与 Card 布局保持一致
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(applyCustomAppearance)
+                                                 name:@"LauncherAppearanceChanged"
+                                               object:nil];
+    [self applyCustomAppearance];
 }
 
 - (void)initializeVersionLists {
@@ -170,21 +177,25 @@ static CGFloat LauncherRootLayoutRightPanelWidth(UITraitCollection *trait) {
 #pragma mark - Setup
 
 - (void)setupContainers {
-    // 左侧边栏容器 - 半透明
+    // 左侧边栏容器 - 半透明（圆角，与 Card 布局保持一致）
     self.sidebarContainer = [[UIView alloc] init];
     self.sidebarContainer.translatesAutoresizingMaskIntoConstraints = NO;
+    self.sidebarContainer.layer.cornerRadius = 16;
+    self.sidebarContainer.layer.masksToBounds = YES;
     [[BackgroundManager sharedManager] applyEffectToView:self.sidebarContainer];
     [self.view addSubview:self.sidebarContainer];
-    
+
     // 中间内容容器 - 完全透明
     self.contentContainer = [[UIView alloc] init];
     self.contentContainer.translatesAutoresizingMaskIntoConstraints = NO;
     self.contentContainer.backgroundColor = [UIColor clearColor];
     [self.view addSubview:self.contentContainer];
-    
-    // 右侧面板容器 - 半透明
+
+    // 右侧面板容器 - 半透明（圆角，与 Card 布局保持一致）
     self.rightPanelContainer = [[UIView alloc] init];
     self.rightPanelContainer.translatesAutoresizingMaskIntoConstraints = NO;
+    self.rightPanelContainer.layer.cornerRadius = 16;
+    self.rightPanelContainer.layer.masksToBounds = YES;
     [[BackgroundManager sharedManager] applyEffectToView:self.rightPanelContainer];
     [self.view addSubview:self.rightPanelContainer];
     
@@ -499,6 +510,70 @@ static CGFloat LauncherRootLayoutRightPanelWidth(UITraitCollection *trait) {
 
 - (void)dealloc {
     [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
+#pragma mark - Custom Appearance（字体颜色 / 卡片颜色，与 Card 布局一致）
+
+- (void)applyCustomAppearance {
+    // 应用自定义卡片颜色（覆盖 BackgroundManager 的毛玻璃）
+    NSString *cardColor = getPrefObject(@"general.card_color");
+    if (cardColor.length > 0) {
+        UIColor *color = [self colorFromHexString:cardColor];
+        if (color) {
+            // 移除 BackgroundManager 插入的毛玻璃 UIVisualEffectView，用纯色覆盖
+            [self applySolidColor:color toContainer:self.sidebarContainer];
+            [self applySolidColor:color toContainer:self.rightPanelContainer];
+        }
+    } else {
+        // 未设置自定义颜色时，恢复毛玻璃效果
+        [self restoreEffectToContainer:self.sidebarContainer];
+        [self restoreEffectToContainer:self.rightPanelContainer];
+    }
+}
+
+- (void)applySolidColor:(UIColor *)color toContainer:(UIView *)container {
+    // 移除已有的毛玻璃子视图（BackgroundManager 插入的 UIVisualEffectView）
+    for (UIView *sub in container.subviews) {
+        if ([sub isKindOfClass:[UIVisualEffectView class]]) {
+            [sub removeFromSuperview];
+        }
+    }
+    container.backgroundColor = color;
+}
+
+- (void)restoreEffectToContainer:(UIView *)container {
+    container.backgroundColor = [UIColor clearColor];
+    // 检查是否已有毛玻璃，没有则重新应用
+    BOOL hasBlur = NO;
+    for (UIView *sub in container.subviews) {
+        if ([sub isKindOfClass:[UIVisualEffectView class]]) {
+            hasBlur = YES;
+            break;
+        }
+    }
+    if (!hasBlur) {
+        [[BackgroundManager sharedManager] applyEffectToView:container];
+    }
+}
+
+- (UIColor *)colorFromHexString:(NSString *)hexString {
+    NSString *hex = [hexString stringByReplacingOccurrencesOfString:@"#" withString:@""];
+    if (hex.length != 6 && hex.length != 8) return nil;
+    unsigned int r, g, b, a = 255;
+    if (hex.length == 6) {
+        [[NSScanner scannerWithString:hex] scanHexInt:&r];
+        // 解析为 0xRRGGBB
+        b = r & 0xFF;
+        g = (r >> 8) & 0xFF;
+        r = (r >> 16) & 0xFF;
+    } else {
+        [[NSScanner scannerWithString:hex] scanHexInt:&r];
+        a = r & 0xFF;
+        b = (r >> 8) & 0xFF;
+        g = (r >> 16) & 0xFF;
+        r = (r >> 24) & 0xFF;
+    }
+    return [UIColor colorWithRed:r/255.0 green:g/255.0 blue:b/255.0 alpha:a/255.0];
 }
 
 #pragma mark - Content Switching

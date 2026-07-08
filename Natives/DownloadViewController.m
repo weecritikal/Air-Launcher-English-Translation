@@ -801,58 +801,82 @@
 }
 
 - (void)loadForgeVersionsReal {
-    // 参照 FCL：根据下载源偏好切换 BMCLAPI 镜像，提升国内版本列表拉取成功率。
-    // BMCLAPI 完整镜像了 Forge maven-metadata.xml。
-    NSString *downloadSource = getPrefObject(@"general.download_source");
-    BOOL useBMCLAPI = [downloadSource isEqualToString:@"bmclapi"];
-    NSString *urlString;
-    if (useBMCLAPI) {
-        urlString = @"https://bmclapi2.bangbang93.com/maven/net/minecraftforge/forge/maven-metadata.xml";
-    } else {
-        urlString = @"https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml";
-    }
-    NSURL *url = [NSURL URLWithString:urlString];
+    // 参照 FCL/HMCL：并发竞速同时发起官方源和 BMCLAPI 请求，谁先成功用谁，
+    // 避免串行 fallback 在弱网下要等 30s+30s=60s 才出结果。
+    // 实测 Forge maven-metadata.xml 包含所有 MC 版本的 Forge（如 1.21.11 有 21 个版本），
+    // 解析时用 gameVersion 前缀过滤。
+    NSString *bmclURL = @"https://bmclapi2.bangbang93.com/maven/net/minecraftforge/forge/maven-metadata.xml";
+    NSString *officialURL = @"https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml";
 
     self.forgeVersionList = [NSMutableArray array];
     self.isParsingForge = YES;
 
     __weak typeof(self) weakSelf = self;
-    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
-    request.timeoutInterval = 30.0;
-    [request setValue:@"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15" forHTTPHeaderField:@"User-Agent"];
-    self.currentVersionTask = [[NSURLSession sharedSession] dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
-        if (error) {
-            // 主源失败：尝试 fallback 源（BMCLAPI <-> 官方源）
-            NSString *fallbackURLString = useBMCLAPI
-                ? @"https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml"
-                : @"https://bmclapi2.bangbang93.com/maven/net/minecraftforge/forge/maven-metadata.xml";
-            NSMutableURLRequest *fallbackRequest = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:fallbackURLString]];
-            fallbackRequest.timeoutInterval = 30.0;
-            [fallbackRequest setValue:@"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15" forHTTPHeaderField:@"User-Agent"];
-            weakSelf.currentVersionTask = [[NSURLSession sharedSession] dataTaskWithRequest:fallbackRequest completionHandler:^(NSData *fallbackData, NSURLResponse *fallbackResponse, NSError *fallbackError) {
-                if (fallbackError) {
-                    dispatch_async(dispatch_get_main_queue(), ^{
-                        __strong typeof(weakSelf) strongSelf = weakSelf;
-                        if (!strongSelf) return;
-                        [strongSelf.loadingIndicator stopAnimating];
-                        strongSelf.loaderVersions = @[];
-                        [strongSelf.versionTableView reloadData];
-                        strongSelf.emptyVersionsLabel.hidden = NO;
-                    });
-                    return;
-                }
-                NSXMLParser *parser = [[NSXMLParser alloc] initWithData:fallbackData];
-                parser.delegate = weakSelf;
-                [parser parse];
-            }];
-            [weakSelf.currentVersionTask resume];
-            return;
+    __block BOOL settled = NO;  // 竞速标志：首个成功的请求处理结果，另一个被忽略
+
+    NSString *userAgent = @"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15";
+
+    void (^processData)(NSData *) = ^(NSData *data) {
+        @synchronized(weakSelf) {
+            if (settled) return;
+            settled = YES;
         }
+        if (!data || data.length == 0) return;
         NSXMLParser *parser = [[NSXMLParser alloc] initWithData:data];
         parser.delegate = weakSelf;
         [parser parse];
+    };
+
+    // 请求 1：BMCLAPI
+    NSMutableURLRequest *bmclRequest = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:bmclURL]];
+    bmclRequest.timeoutInterval = 20.0;
+    [bmclRequest setValue:userAgent forHTTPHeaderField:@"User-Agent"];
+    NSURLSessionDataTask *bmclTask = [[NSURLSession sharedSession] dataTaskWithRequest:bmclRequest completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        if (error || !data) {
+            // BMCLAPI 失败，不直接报错，等官方源结果（若官方源已成功则 settled=YES，handleFailure 无效）
+            @synchronized(weakSelf) {
+                if (settled) return;
+            }
+            // 标记 BMCLAPI 已失败，但不 settle（让官方源有机会）
+            return;
+        }
+        processData(data);
     }];
-    [self.currentVersionTask resume];
+
+    // 请求 2：官方源
+    NSMutableURLRequest *officialRequest = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:officialURL]];
+    officialRequest.timeoutInterval = 20.0;
+    [officialRequest setValue:userAgent forHTTPHeaderField:@"User-Agent"];
+    NSURLSessionDataTask *officialTask = [[NSURLSession sharedSession] dataTaskWithRequest:officialRequest completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        if (error || !data) {
+            // 官方源失败：检查 BMCLAPI 是否已成功
+            @synchronized(weakSelf) {
+                if (settled) return;
+            }
+            // 两个都失败：等待 BMCLAPI 的最终超时（它可能还在跑）
+            // 给 BMCLAPI 额外 5s 宽限期，如果还没结果则判定失败
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                @synchronized(weakSelf) {
+                    if (settled) return;
+                    settled = YES;
+                }
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    __strong typeof(weakSelf) strongSelf = weakSelf;
+                    if (!strongSelf) return;
+                    [strongSelf.loadingIndicator stopAnimating];
+                    strongSelf.loaderVersions = @[];
+                    [strongSelf.versionTableView reloadData];
+                    strongSelf.emptyVersionsLabel.hidden = NO;
+                });
+            });
+            return;
+        }
+        processData(data);
+    }];
+
+    self.currentVersionTask = officialTask;  // 保留引用以便 cancel
+    [bmclTask resume];
+    [officialTask resume];
 }
 
 - (void)loadNeoForgeVersionsReal {
@@ -904,17 +928,19 @@
 }
 
 - (void)parserDidEndDocument:(NSXMLParser *)parser {
+    // 重置 isParsingForge 标志，避免后续其他解析器（如 NeoForge JSON）被错误过滤
+    self.isParsingForge = NO;
     dispatch_async(dispatch_get_main_queue(), ^{
         [self.loadingIndicator stopAnimating];
-        
+
         [self.forgeVersionList sortUsingComparator:^NSComparisonResult(NSString *v1, NSString *v2) {
             return [v2 compare:v1 options:NSNumericSearch];
         }];
-        
+
         self.loaderVersions = self.forgeVersionList;
         [self.versionTableView reloadData];
         self.emptyVersionsLabel.hidden = (self.loaderVersions.count > 0);
-        
+
         if (self.loaderVersions.count > 0 && !self.selectedLoaderVersion) {
             self.selectedLoaderVersion = self.loaderVersions.firstObject;
             [self.versionTableView reloadData];
@@ -923,6 +949,7 @@
 }
 
 - (void)parser:(NSXMLParser *)parser parseErrorOccurred:(NSError *)parseError {
+    self.isParsingForge = NO;
     dispatch_async(dispatch_get_main_queue(), ^{
         [self.loadingIndicator stopAnimating];
         self.loaderVersions = @[];

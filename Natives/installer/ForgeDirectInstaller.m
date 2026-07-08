@@ -1052,10 +1052,12 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
 
     NSString *groupPath = [groupId stringByReplacingOccurrencesOfString:@"." withString:@"/"];
 
-    // 参照 FCL：尝试多个 classifier。Forge/NeoForge 预打补丁 jar 通常发布为 -client，
-    // 但老 Forge（1.7-1.12）可能只有 -universal，部分 BMCLAPI 镜像只同步了 universal。
-    // 按 client -> universal -> 无 classifier 顺序尝试，提升下载成功率。
-    NSArray *classifiers = @[@"client", @"universal", @""];
+    // 参照 FCL/HMCL：尝试多个 classifier。
+    // 实测 Forge maven（如 1.21.11-61.0.x）通常只发布 -universal（HTTP 200），
+    // -client 和无 classifier 均 404。早期 Forge（1.7-1.12）也主要用 -universal。
+    // 调整顺序为 universal -> client -> 无 classifier，优先尝试成功率最高的 universal，
+    // 避免先尝试必定 404 的 client 浪费时间（每次 404 仍需等待响应）。
+    NSArray *classifiers = @[@"universal", @"client", @""];
     NSString *downloadSource = getPrefObject(@"general.download_source");
     BOOL useBMCLAPI = [downloadSource isEqualToString:@"bmclapi"];
 
