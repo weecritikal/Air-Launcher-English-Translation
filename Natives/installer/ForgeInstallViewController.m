@@ -171,7 +171,10 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
         self.tableView.sectionHeaderTopPadding = 0;
     }
 
-    self.tableView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentAutomatic;
+    // 使用 Never 而非 Automatic：Automatic 会自动为导航栏/状态栏添加顶部 contentInset，
+    // 在透明导航栏下形成可见的"空白条"。配合 edgesForExtendedLayout = UIRectEdgeAll
+    // 让 tableView 延伸到导航栏下方，与毛玻璃导航栏视觉融合。
+    self.tableView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
 
     self.extendedLayoutIncludesOpaqueBars = YES;
     self.edgesForExtendedLayout = UIRectEdgeAll;
@@ -1269,6 +1272,27 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
     self.visibilityList = newVisibility;
     self.versionList = newVersionList;
     self.forgeList = newForgeList;
+
+    // 修复：自动展开分区。原实现所有 visibilityList 默认为 NO（折叠），用户只看到
+    // MC 版本标题但看不到任何 Forge 版本，误以为"加载不出任何版本"。
+    // 策略：若指定了 gameVersion，展开匹配该版本的分区；否则展开第一个分区。
+    // 分区数 <= 5 时全部展开（常见场景，避免用户逐个点击）。
+    if (self.versionList.count > 0) {
+        BOOL expandAll = (self.versionList.count <= 5);
+        BOOL foundMatchingSection = NO;
+        for (NSUInteger i = 0; i < self.versionList.count; i++) {
+            if (expandAll) {
+                self.visibilityList[i] = @YES;
+            } else if (self.gameVersion.length > 0 && [self.versionList[i] isEqualToString:self.gameVersion]) {
+                self.visibilityList[i] = @YES;
+                foundMatchingSection = YES;
+            }
+        }
+        // 若未找到匹配 gameVersion 的分区，至少展开第一个（最新版本）
+        if (!expandAll && !foundMatchingSection) {
+            self.visibilityList[0] = @YES;
+        }
+    }
 
     for (NSMutableArray<NSString *> *versions in self.forgeList) {
         [versions sortUsingComparator:^NSComparisonResult(NSString *lhs, NSString *rhs) {

@@ -531,6 +531,11 @@ static const NSInteger kDefaultBackgroundTag = 99995;
             
             UIBlurEffect *blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterialDark];
             appearance.backgroundEffect = blur;
+            // 修复"所有界面顶部一行小白条"问题：configureWithTransparentBackground 不会
+            // 完全移除底部分隔线（shadow hairline），在 iPhone 上会看到 1px 白线。
+            // 显式将 shadowColor 置 nil、shadowImage 置空 UIImage 彻底消除。
+            appearance.shadowColor = nil;
+            appearance.shadowImage = [[UIImage alloc] init];
             
             navigationBar.standardAppearance = appearance;
             navigationBar.scrollEdgeAppearance = appearance;
@@ -538,6 +543,8 @@ static const NSInteger kDefaultBackgroundTag = 99995;
         }
         navigationBar.barTintColor = [UIColor clearColor];
         navigationBar.backgroundColor = [UIColor clearColor];
+        // 兼容 iOS 12 及以下：显式置空 shadowImage 移除底部分隔线
+        navigationBar.shadowImage = [[UIImage alloc] init];
     } else {
         // 半透明效果
         navigationBar.barTintColor = [UIColor colorWithWhite:0.1 alpha:self.uiOpacity];
@@ -548,11 +555,16 @@ static const NSInteger kDefaultBackgroundTag = 99995;
             [appearance configureWithTransparentBackground];
             appearance.backgroundColor = [UIColor colorWithWhite:0.1 alpha:self.uiOpacity];
             appearance.backgroundEffect = nil;
+            // 同上：显式移除底部分隔线，消除"一行小白条"
+            appearance.shadowColor = nil;
+            appearance.shadowImage = [[UIImage alloc] init];
             
             navigationBar.standardAppearance = appearance;
             navigationBar.scrollEdgeAppearance = appearance;
             navigationBar.compactAppearance = appearance;
         }
+        // 兼容 iOS 12 及以下
+        navigationBar.shadowImage = [[UIImage alloc] init];
     }
 }
 
@@ -566,6 +578,9 @@ static const NSInteger kDefaultBackgroundTag = 99995;
             
             UIBlurEffect *blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterialDark];
             appearance.backgroundEffect = blur;
+            // 同 nav bar：移除底部分隔线，消除"小白条"
+            appearance.shadowColor = nil;
+            appearance.shadowImage = [[UIImage alloc] init];
             
             toolbar.standardAppearance = appearance;
             toolbar.scrollEdgeAppearance = appearance;
@@ -583,6 +598,9 @@ static const NSInteger kDefaultBackgroundTag = 99995;
             [appearance configureWithTransparentBackground];
             appearance.backgroundColor = [UIColor colorWithWhite:0.1 alpha:self.uiOpacity];
             appearance.backgroundEffect = nil;
+            // 同 nav bar：移除底部分隔线
+            appearance.shadowColor = nil;
+            appearance.shadowImage = [[UIImage alloc] init];
             
             toolbar.standardAppearance = appearance;
             toolbar.scrollEdgeAppearance = appearance;

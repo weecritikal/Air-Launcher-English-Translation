@@ -187,10 +187,13 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
         gameDir = @(getenv("POJAV_GAME_DIR"));
         launchJar = YES;
         // Caciocavallo17 bootclasspath jar 被 Java 24+ 编译（class version 68.0），
-        // 仅 Java 25（class version 69）能加载。execute_jar 路径必加载 caciocavallo17，
-        // 因此强制 minVersion=25，避免 Java 21 runtime 加载时 UnsupportedClassVersionError。
-        // 注：仅影响 execute_jar 路径，游戏启动走 NSDictionary 分支不受影响。
-        if (minVersion < 25) {
+        // 仅 Java 25（class version 69）能加载。当 JAR 要求 Java 17+ 时走 Caciocavallo17
+        // 路径，必须强制 minVersion=25 避免 UnsupportedClassVersionError。
+        // 但 Java 8 JAR（如 OptiFine 安装器）走 Caciocavallo（非 17）路径，用 Java 8 即可，
+        // 强制 25 反而导致 Caciocavallo17 的 CTCGraphicsEnvironment 初始化失败，
+        // JVM 回退 headless 模式，Swing GUI 抛出 java.awt.HeadlessException。
+        // 修复：仅当 JAR 要求 Java >= 17 时才强制提升到 25。
+        if (minVersion >= 17 && minVersion < 25) {
             minVersion = 25;
         }
     }

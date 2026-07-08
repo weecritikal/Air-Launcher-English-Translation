@@ -20,6 +20,7 @@
 #import "PLProfiles.h"
 #import "utils.h"
 #import "LauncherPreferences.h"
+#import "MinecraftResourceUtils.h"
 #import "external/UnzipKit/UZKArchive.h"
 
 NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDomain";
@@ -220,6 +221,141 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
     return NSHomeDirectory();
 }
 
+/// 参照 FCL/HMCL：确保父版本（vanilla MC）的 version JSON 已存在。
+/// Forge/NeoForge 的 version.json 含 "inheritsFrom": "1.20.1" 等字段，启动时 Java 端
+/// Tools.getVersionInfo() 会读取 versions/{inheritsFrom}/{inheritsFrom}.json 与当前版本合并。
+/// 若用户尚未安装原版，启动会因 FileNotFoundException 崩溃。
+/// 本方法仅下载父版本的 version JSON（不下载原版 client.jar，因为 iOS 启动器使用
+/// 自有渲染管线，不需要原版 client.jar；但需要 JSON 以提供 mainClass、arguments、
+/// assetIndex、vanilla libraries 等元数据）。
++ (BOOL)ensureParentVersionExists:(NSString *)parentVersionId error:(NSError **)error {
+    if (parentVersionId.length == 0) return YES;
+
+    NSString *mainGameDir = [self gameDirectory];
+    NSString *parentVersionDir = [mainGameDir stringByAppendingPathComponent:
+                                  [NSString stringWithFormat:@"versions/%@", parentVersionId]];
+    NSString *parentJsonPath = [parentVersionDir stringByAppendingPathComponent:
+                                [NSString stringWithFormat:@"%@.json", parentVersionId]];
+
+    // 1. 父版本 JSON 已存在，无需下载
+    if ([NSFileManager.defaultManager fileExistsAtPath:parentJsonPath]) {
+        NSLog(@"[ForgeDirect] Parent version JSON already exists: %@", parentJsonPath);
+        return YES;
+    }
+
+    NSLog(@"[ForgeDirect] Parent version JSON missing, downloading: %@", parentVersionId);
+
+    // 2. 拉取 Mojang 版本清单
+    NSString *downloadSource = getPrefObject(@"general.download_source");
+    BOOL useBMCLAPI = [downloadSource isEqualToString:@"bmclapi"];
+    NSString *manifestURL = useBMCLAPI
+        ? @"https://bmclapi2.bangbang93.com/mc/game/version_manifest_v2.json"
+        : @"https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
+
+    NSURL *url = [NSURL URLWithString:manifestURL];
+    if (!url) {
+        if (error) {
+            *error = [NSError errorWithDomain:ForgeDirectInstallerErrorDomain
+                                         code:ForgeDirectInstallerErrorWriteFailed
+                                     userInfo:@{NSLocalizedDescriptionKey: @"Invalid manifest URL"}];
+        }
+        return NO;
+    }
+
+    NSMutableURLRequest *manifestRequest = [NSMutableURLRequest requestWithURL:url];
+    manifestRequest.timeoutInterval = 30.0;
+    manifestRequest.cachePolicy = NSURLRequestReloadIgnoringLocalCacheData;
+    [manifestRequest setValue:@"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15" forHTTPHeaderField:@"User-Agent"];
+
+    NSData *manifestData = [NSURLConnection sendSynchronousRequest:manifestRequest returningResponse:nil error:error];
+    if (!manifestData) {
+        NSLog(@"[ForgeDirect] Failed to download version manifest: %@", error ? [*error localizedDescription] : @"unknown");
+        return NO;
+    }
+
+    NSDictionary *manifest = [NSJSONSerialization JSONObjectWithData:manifestData options:0 error:nil];
+    NSArray *versions = [manifest isKindOfClass:[NSDictionary class]] ? manifest[@"versions"] : nil;
+    if (![versions isKindOfClass:[NSArray class]]) {
+        if (error) {
+            *error = [NSError errorWithDomain:ForgeDirectInstallerErrorDomain
+                                         code:ForgeDirectInstallerErrorInvalidProfile
+                                     userInfo:@{NSLocalizedDescriptionKey: @"Invalid version manifest format"}];
+        }
+        return NO;
+    }
+
+    // 3. 查找匹配的版本条目，获取 version JSON URL
+    NSString *versionJSONURL = nil;
+    for (NSDictionary *v in versions) {
+        if ([v isKindOfClass:[NSDictionary class]] && [v[@"id"] isEqualToString:parentVersionId]) {
+            versionJSONURL = [v[@"url"] isKindOfClass:[NSString class]] ? v[@"url"] : nil;
+            break;
+        }
+    }
+    if (!versionJSONURL) {
+        if (error) {
+            *error = [NSError errorWithDomain:ForgeDirectInstallerErrorDomain
+                                         code:ForgeDirectInstallerErrorInvalidProfile
+                                     userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Version %@ not found in manifest", parentVersionId]}];
+        }
+        return NO;
+    }
+
+    // BMCLAPI 镜像：替换 Mojang 官方域名为 BMCLAPI 域名
+    if (useBMCLAPI) {
+        versionJSONURL = [versionJSONURL stringByReplacingOccurrencesOfString:@"piston-meta.mojang.com"
+                                                                    withString:@"bmclapi2.bangbang93.com"];
+        versionJSONURL = [versionJSONURL stringByReplacingOccurrencesOfString:@"launchermeta.mojang.com"
+                                                                    withString:@"bmclapi2.bangbang93.com"];
+    }
+
+    NSLog(@"[ForgeDirect] Downloading parent version JSON from: %@", versionJSONURL);
+
+    // 4. 下载 version JSON
+    NSURL *jsonURL = [NSURL URLWithString:versionJSONURL];
+    if (!jsonURL) {
+        if (error) {
+            *error = [NSError errorWithDomain:ForgeDirectInstallerErrorDomain
+                                         code:ForgeDirectInstallerErrorWriteFailed
+                                     userInfo:@{NSLocalizedDescriptionKey: @"Invalid version JSON URL"}];
+        }
+        return NO;
+    }
+
+    NSMutableURLRequest *jsonRequest = [NSMutableURLRequest requestWithURL:jsonURL];
+    jsonRequest.timeoutInterval = 30.0;
+    jsonRequest.cachePolicy = NSURLRequestReloadIgnoringLocalCacheData;
+    [jsonRequest setValue:@"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15" forHTTPHeaderField:@"User-Agent"];
+
+    NSData *jsonData = [NSURLConnection sendSynchronousRequest:jsonRequest returningResponse:nil error:error];
+    if (!jsonData) {
+        NSLog(@"[ForgeDirect] Failed to download parent version JSON: %@", error ? [*error localizedDescription] : @"unknown");
+        return NO;
+    }
+
+    // 5. 创建父版本目录并写入 JSON
+    NSError *dirError = nil;
+    [NSFileManager.defaultManager createDirectoryAtPath:parentVersionDir
+                            withIntermediateDirectories:YES
+                                             attributes:nil
+                                                  error:&dirError];
+    if (dirError) {
+        NSLog(@"[ForgeDirect] Failed to create parent version dir: %@", dirError.localizedDescription);
+        if (error) *error = dirError;
+        return NO;
+    }
+
+    NSError *writeErr = nil;
+    if (![jsonData writeToFile:parentJsonPath options:NSDataWritingAtomic error:&writeErr]) {
+        NSLog(@"[ForgeDirect] Failed to write parent version JSON: %@", writeErr.localizedDescription);
+        if (error) *error = writeErr;
+        return NO;
+    }
+
+    NSLog(@"[ForgeDirect] Parent version JSON saved: %@ (%lu bytes)", parentJsonPath, (unsigned long)jsonData.length);
+    return YES;
+}
+
 + (void)registerVersion:(NSString *)versionId {
     NSLog(@"[ForgeDirect] registerVersion called: %@", versionId);
     PLProfiles *profiles = [PLProfiles current];
@@ -362,6 +498,19 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
         return NO;
     }
     NSLog(@"[ForgeDirect] Version JSON written successfully");
+
+    // 参照 FCL/HMCL：老格式 Forge 1.12- 的 versionInfo 也可能含 inheritsFrom，
+    // 确保父版本（vanilla MC）的 version JSON 已存在。
+    NSString *oldInheritsFrom = [mutableVersionInfo[@"inheritsFrom"] isKindOfClass:[NSString class]] ? mutableVersionInfo[@"inheritsFrom"] : nil;
+    if (oldInheritsFrom.length > 0 && ![oldInheritsFrom isEqualToString:versionId]) {
+        NSLog(@"[ForgeDirect] Checking parent vanilla version (old format): %@", oldInheritsFrom);
+        NSError *parentError = nil;
+        if (![self ensureParentVersionExists:oldInheritsFrom error:&parentError]) {
+            NSLog(@"[ForgeDirect] ⚠️ 父版本 %@ 未能自动补全: %@", oldInheritsFrom, parentError.localizedDescription ?: @"未知错误");
+        } else {
+            NSLog(@"[ForgeDirect] Parent vanilla version ensured: %@", oldInheritsFrom);
+        }
+    }
 
     NSLog(@"[ForgeDirect] installOldFormat completed");
     return YES;
@@ -533,6 +682,24 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
     }
     NSLog(@"[ForgeDirect] Version JSON written successfully");
 
+    // 参照 FCL/HMCL：确保父版本（vanilla MC）的 version JSON 已存在。
+    // Forge 1.13+ 的 version.json 含 "inheritsFrom": "1.20.1" 等字段，启动时 Java 端会
+    // 读取 versions/{inheritsFrom}/{inheritsFrom}.json 与 Forge 版本合并。
+    // 若用户尚未安装原版，启动会因 FileNotFoundException 崩溃。
+    // 这里在直装完成后自动补全缺失的父版本 JSON（仅下载 JSON，不下载原版客户端 jar，
+    // 因为 iOS 启动器使用自有渲染管线，不需要原版 client.jar）。
+    NSString *inheritsFrom = [versionJson[@"inheritsFrom"] isKindOfClass:[NSString class]] ? versionJson[@"inheritsFrom"] : nil;
+    if (inheritsFrom.length > 0 && ![inheritsFrom isEqualToString:versionId]) {
+        NSLog(@"[ForgeDirect] Checking parent vanilla version: %@", inheritsFrom);
+        NSError *parentError = nil;
+        if (![self ensureParentVersionExists:inheritsFrom error:&parentError]) {
+            // 父版本缺失只发出警告，不阻断安装（用户可能后续手动安装原版）
+            NSLog(@"[ForgeDirect] ⚠️ 父版本 %@ 未能自动补全: %@", inheritsFrom, parentError.localizedDescription ?: @"未知错误");
+        } else {
+            NSLog(@"[ForgeDirect] Parent vanilla version ensured: %@", inheritsFrom);
+        }
+    }
+
     NSLog(@"[ForgeDirect] installNewFormat completed");
     return YES;
 }
@@ -622,6 +789,19 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
 
         NSString *name = [library[@"name"] isKindOfClass:[NSString class]] ? library[@"name"] : nil;
         if (!name) continue;
+
+        // 参照 FCL/HMCL：评估库的 OS rules，iOS 视为 osx。
+        // 跳过仅在 Windows/Linux 上启用的库（如 natives-windows、twitch 平台库等），
+        // 避免下载无用的二进制 natives 和潜在的 404 失败。
+        id rulesObj = library[@"rules"];
+        if ([rulesObj isKindOfClass:[NSArray class]] && [(NSArray *)rulesObj count] > 0) {
+            if (![MinecraftResourceUtils evaluateRules:(NSArray *)rulesObj]) {
+                NSLog(@"[ForgeDirect] Skipping library %@ (OS rules disallow osx/iOS)", name);
+                skipped++;
+                processed++;
+                continue;
+            }
+        }
 
         // 解析目标路径
         NSString *relativePath = nil;
