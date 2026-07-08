@@ -600,7 +600,18 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
     _contentViewController = viewController;
     [self addChildViewController:viewController];
     viewController.view.translatesAutoresizingMaskIntoConstraints = NO;
-    
+
+    // 修复：对齐 LauncherRootViewController 的 nav bar 透明化处理。
+    // 原卡片布局缺失此逻辑，导致 VersionManagerViewController 等被 UINavigationController
+    // 包裹的子页面顶部出现默认不透明 nav bar（白条），与卡片背景不融合。
+    if ([viewController isKindOfClass:[UINavigationController class]]) {
+        UINavigationController *nav = (UINavigationController *)viewController;
+        [[BackgroundManager sharedManager] applyEffectToNavigationBar:nav.navigationBar];
+        [[BackgroundManager sharedManager] makeViewControllerTransparent:nav.topViewController];
+    } else {
+        [[BackgroundManager sharedManager] makeViewControllerTransparent:viewController];
+    }
+
     if (animated && oldVC) {
         [UIView transitionWithView:self.contentCard
                           duration:0.25

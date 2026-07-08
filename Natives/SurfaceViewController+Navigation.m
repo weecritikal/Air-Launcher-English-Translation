@@ -319,7 +319,9 @@ static const void *kMenuDimViewKey = &kMenuDimViewKey;
         cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:@"FCLMenuCell"];
         cell.backgroundColor = [UIColor clearColor];
         cell.textLabel.textColor = [UIColor whiteColor];
-        cell.textLabel.font = [UIFont systemFontOfSize:[ScreenUtils sp:16]];
+        // 修复：游戏内菜单字体不应使用 sp 缩放，使用固定 16pt 保证所有设备一致
+        // 原 [ScreenUtils sp:16] 在 iPad 上会放大到 32pt 导致菜单字体过大
+        cell.textLabel.font = [UIFont systemFontOfSize:16];
         cell.textLabel.textAlignment = NSTextAlignmentLeft;
         // FCL 风格：左侧留出图标空间，cell 高度 48
         cell.separatorInset = UIEdgeInsetsMake(0, 16, 0, 16);
@@ -335,7 +337,9 @@ static const void *kMenuDimViewKey = &kMenuDimViewKey;
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
-    return [ScreenUtils sp:48];
+    // 修复：行高使用固定值 48pt，不随屏幕缩放
+    // 原 [ScreenUtils sp:48] 在 iPad 上会放大到 96pt 导致菜单项过高
+    return 48;
 }
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {

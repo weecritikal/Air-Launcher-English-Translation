@@ -143,14 +143,25 @@ static dispatch_once_t _nativeOnceToken;
     CGFloat screenWidth = [self screenSize].width;
     CGFloat scale = screenWidth / baseWidth;
     // 限制缩放范围，避免极端尺寸
-    if (scale < 0.8) scale = 0.8;
-    if (scale > 2.0) scale = 2.0;
+    // 修复：原 max=2.0 导致 iPad 上字体放大到 2 倍（16pt->32pt），
+    // 菜单/版本管理界面字体严重过大。iPad 宽度 1024+ 时 scale=2.73 被 clamp 到 2.0，
+    // 远超合理范围。将上限降低至 1.15，iPad 上字体仅略大于 iPhone 基准，
+    // 与系统动态字体风格保持一致。
+    if (scale < 0.85) scale = 0.85;
+    if (scale > 1.15) scale = 1.15;
     return sp * scale;
 }
 
 + (CGFloat)dp:(CGFloat)dp {
     // 同 sp，基于屏幕宽度缩放
-    return [self sp:dp];
+    CGFloat baseWidth = 375.0;
+    CGFloat screenWidth = [self screenSize].width;
+    CGFloat scale = screenWidth / baseWidth;
+    // dp 用于尺寸（icon 大小、间距等），允许比 sp 稍大的缩放范围，
+    // 但仍需限制避免 iPad 上元素过大
+    if (scale < 0.85) scale = 0.85;
+    if (scale > 1.3) scale = 1.3;
+    return dp * scale;
 }
 
 + (UIWindow *)keyWindow {

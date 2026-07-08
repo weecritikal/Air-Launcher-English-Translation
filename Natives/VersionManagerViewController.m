@@ -528,9 +528,11 @@
     self.collectionView.dataSource = self;
     self.collectionView.delegate = self;
     self.collectionView.alwaysBounceVertical = YES;
-    // 使用 automatic 让 UICollectionView 自动为半透明导航栏补偿顶部 contentInset，
-    // 避免 Section 0 的标题被导航栏遮挡（原 Never 导致内容起始于导航栏之下）。
-    self.collectionView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentAutomatic;
+    // 修复：原 Automatic 会导致系统自动为 navigationBar 补偿顶部 contentInset，
+    // 但版本管理页已被嵌入到中间内容卡片中（contentCard 顶部已有 12pt 边距 + safeArea），
+    // 导航栏也在卡片内部，系统仍按"导航栏在 safeArea 之下"的假设叠加 inset，
+    // 导致顶部出现一整行空白。改为 Never，让内容紧贴导航栏下方。
+    self.collectionView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
 
     [self.collectionView registerClass:[VMGameDirCell class] forCellWithReuseIdentifier:@"GameDirCell"];
     [self.collectionView registerClass:[VMQuickActionCell class] forCellWithReuseIdentifier:@"QuickActionCell"];
@@ -563,7 +565,8 @@
 
             NSCollectionLayoutSection *section = [NSCollectionLayoutSection sectionWithGroup:group];
             section.orthogonalScrollingBehavior = UICollectionLayoutSectionOrthogonalScrollingBehaviorContinuous;
-            section.contentInsets = NSDirectionalEdgeInsetsMake(8, 14, 8, 14);
+            // 修复：顶部 inset 从 8 改为 0，消除导航栏下方的额外空白
+            section.contentInsets = NSDirectionalEdgeInsetsMake(0, 14, 8, 14);
             section.boundarySupplementaryItems = @[header];
             return section;
         } else if (sectionIndex == 1) {
@@ -580,7 +583,7 @@
             NSCollectionLayoutGroup *group = [NSCollectionLayoutGroup horizontalGroupWithLayoutSize:groupSize subitem:item count:columnCount];
 
             NSCollectionLayoutSection *section = [NSCollectionLayoutSection sectionWithGroup:group];
-            section.contentInsets = NSDirectionalEdgeInsetsMake(8, 14, 8, 14);
+            section.contentInsets = NSDirectionalEdgeInsetsMake(4, 14, 8, 14);
             section.boundarySupplementaryItems = @[header];
             return section;
         } else {
