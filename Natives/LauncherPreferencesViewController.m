@@ -558,21 +558,30 @@
               @"action": ^void(){
                   AIFixViewController *aiFixVC = [[AIFixViewController alloc] initForSettings];
                   aiFixVC.modalPresentationStyle = UIModalPresentationOverFullScreen;
-                  
+
                   aiFixVC.view.alpha = 0;
                   aiFixVC.view.transform = CGAffineTransformMakeScale(0.9, 0.9);
-                  
+
                   [self presentViewController:aiFixVC animated:NO completion:^{
-                      [UIView animateWithDuration:0.4 
-                                            delay:0 
-                           usingSpringWithDamping:0.8 
-                            initialSpringVelocity:0.5 
-                                          options:UIViewAnimationOptionCurveEaseOut 
+                      [UIView animateWithDuration:0.4
+                                            delay:0
+                           usingSpringWithDamping:0.8
+                            initialSpringVelocity:0.5
+                                          options:UIViewAnimationOptionCurveEaseOut
                                        animations:^{
                           aiFixVC.view.alpha = 1;
                           aiFixVC.view.transform = CGAffineTransformIdentity;
                       } completion:nil];
                   }];
+              }
+            },
+            @{@"key": @"memory_limit_help",
+              @"hasDetail": @YES,
+              @"icon": @"memorychip",
+              @"type": self.typeButton,
+              @"enableCondition": whenNotInGame,
+              @"action": ^void(){
+                  [self showMemoryLimitHelp];
               }
             },
             @{@"key": @"erase_demo_data",
@@ -1016,6 +1025,37 @@
     dispatch_async(dispatch_get_main_queue(), ^{
         [self.tableView reloadData];
     });
+}
+
+#pragma mark - Memory Limit Help
+
+- (void)showMemoryLimitHelp {
+    UIAlertController *alert = [UIAlertController
+        alertControllerWithTitle:localize(@"mem_help.title", @"关于内存限制")
+                         message:localize(@"mem_help.message",
+                             @"iOS 18 / iOS 26 单实例内存上限约为 1440MB，玩大型整合包时可能因内存不足崩溃。\n\n"
+                              "解决方法：\n"
+                              "使用 GetMoreRam (LiveContainer 插件) 解除内存限制。\n"
+                              "GetMoreRam 仓库：github.com/hugeBlack/GetMoreRam\n\n"
+                              "安装后重启启动器即可生效。\n\n"
+                              "如果不使用 LiveContainer，可尝试降低内存分配（设置 > Java > 内存分配），"
+                              "但部分整合包在内存限制下可能无法正常运行。")
+                  preferredStyle:UIAlertControllerStyleAlert];
+
+    [alert addAction:[UIAlertAction actionWithTitle:@"GetMoreRam"
+                                              style:UIAlertActionStyleDefault
+                                            handler:^(UIAlertAction *action) {
+        NSURL *url = [NSURL URLWithString:@"https://github.com/hugeBlack/GetMoreRam"];
+        if (@available(iOS 10.0, *)) {
+            [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:nil];
+        }
+    }]];
+
+    [alert addAction:[UIAlertAction actionWithTitle:localize(@"OK", nil)
+                                              style:UIAlertActionStyleCancel
+                                            handler:nil]];
+
+    [self presentViewController:alert animated:YES completion:nil];
 }
 
 #pragma mark - CurseForge API Key Settings

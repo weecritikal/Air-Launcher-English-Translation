@@ -215,17 +215,45 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     errorCode.textAlignment = NSTextAlignmentCenter;
     [_errorCardView addSubview:errorCode];
     
-    // 可能原因
+    // 可能原因——根据 exitCode 和日志关键词智能识别崩溃类型（OOM/段错误/abort 等）
     UILabel *reasonLabel = [[UILabel alloc] initWithFrame:CGRectMake(16, 112, _errorCardView.bounds.size.width - 32, 20)];
-    reasonLabel.text = [NSString stringWithFormat:@"%@%@", localize(@"crash.possible_reason", nil), localize(@"crash.debug_reference", nil)];
+    reasonLabel.text = [self crashReasonText];
     reasonLabel.font = [UIFont systemFontOfSize:12];
     reasonLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.75];
     reasonLabel.textAlignment = NSTextAlignmentCenter;
     reasonLabel.adjustsFontSizeToFitWidth = YES;
+    reasonLabel.numberOfLines = 2;
     [_errorCardView addSubview:reasonLabel];
+
+    // OOM 崩溃时显示针对性建议（提示用户使用 GetMoreRam 解除内存限制）
+    if ([self isOOMCrash]) {
+        UILabel *oomSuggestionLabel = [[UILabel alloc] initWithFrame:CGRectMake(16, 132, _errorCardView.bounds.size.width - 32, 0)];
+        NSString *suggestion = [NSString stringWithFormat:@"%@ %@",
+                                localize(@"crash.suggestion", @"建议操作"),
+                                localize(@"crash.suggestion.oom", @"iOS 内存限制导致崩溃，建议使用 GetMoreRam (LiveContainer) 解除内存限制后重试")];
+        oomSuggestionLabel.text = suggestion;
+        oomSuggestionLabel.font = [UIFont systemFontOfSize:10];
+        oomSuggestionLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.6];
+        oomSuggestionLabel.textAlignment = NSTextAlignmentCenter;
+        oomSuggestionLabel.adjustsFontSizeToFitWidth = YES;
+        oomSuggestionLabel.minimumScaleFactor = 0.7;
+        oomSuggestionLabel.numberOfLines = 0;
+        // 自动计算高度
+        CGSize maxSize = CGSizeMake(_errorCardView.bounds.size.width - 32, CGFLOAT_MAX);
+        CGRect textRect = [suggestion boundingRectWithSize:maxSize
+                                                   options:NSStringDrawingUsesLineFragmentOrigin
+                                                attributes:@{NSFontAttributeName: oomSuggestionLabel.font}
+                                                   context:nil];
+        oomSuggestionLabel.frame = CGRectMake(16, 132, _errorCardView.bounds.size.width - 32, ceil(textRect.size.height));
+        [_errorCardView addSubview:oomSuggestionLabel];
+        // 扩展 errorCardView 高度以容纳建议文字
+        CGRect cardFrame = _errorCardView.frame;
+        cardFrame.size.height = 132 + ceil(textRect.size.height) + 12;
+        _errorCardView.frame = cardFrame;
+    }
     
-    // 分享日志按钮
-    CGFloat shareBtnTop = 156;
+    // 分享日志按钮（OOM 时下移以避开扩展的错误卡片）
+    CGFloat shareBtnTop = _errorCardView.frame.origin.y + _errorCardView.frame.size.height + cardSpacing;
     _shareButton = [self createPrimaryButton:CGRectMake(sidePadding, shareBtnTop, panelWidth - sidePadding * 2, 48)
                                              title:localize(@"crash.share_log", nil)
                                               icon:@"square.and.arrow.up"
@@ -391,11 +419,97 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     
     _logTextView.text = [lastLines componentsJoinedByString:@"\n"];
     _logPlaceholderLabel.hidden = _logTextView.text.length > 0;
-    
+
     // 滚动到底部
     dispatch_async(dispatch_get_main_queue(), ^{
         [self.logTextView scrollRangeToVisible:NSMakeRange(self.logTextView.text.length, 0)];
     });
+}
+
+#pragma mark - Crash Analysis
+
+/// 读取 latestlog.txt 的内容（用于崩溃原因分析）
+- (NSString *)readLatestLogForAnalysis {
+    static NSString *cachedLog = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        NSString *latestlogPath = [NSString stringWithFormat:@"%s/latestlog.txt", getenv("POJAV_HOME")];
+        cachedLog = [NSString stringWithContentsOfFile:latestlogPath encoding:NSUTF8StringEncoding error:nil] ?: @"";
+    });
+    return cachedLog;
+}
+
+/// 判断是否为 OOM（内存不足）崩溃
+- (BOOL)isOOMCrash {
+    // SIGKILL (信号 9) 通常是系统因内存不足强制终止进程
+    if (_exitCode == 9) return YES;
+
+    // 检查日志中是否包含 OOM 相关关键词
+    NSString *logContent = [self readLatestLogForAnalysis];
+    if (logContent.length > 0) {
+        NSString *lowerLog = [logContent lowercaseString];
+        NSArray<NSString *> *oomKeywords = @[
+            @"outofmemoryerror",
+            @"cannot allocate memory",
+            @"failed to allocate",
+            @"java.lang.outofmemory",
+            @"insufficient memory",
+            @"mmap failed",
+            @"out of memory"
+        ];
+        for (NSString *keyword in oomKeywords) {
+            if ([lowerLog containsString:keyword]) return YES;
+        }
+    }
+    return NO;
+}
+
+/// 根据 exitCode 和日志关键词智能识别崩溃类型，返回本地化的原因描述
+- (NSString *)crashReasonText {
+    // 优先使用自定义原因
+    if (_customReason.length > 0) {
+        return [NSString stringWithFormat:@"%@%@", localize(@"crash.possible_reason", nil), _customReason];
+    }
+
+    NSString *reason = nil;
+
+    // 正常退出（exitCode == 0）
+    if (_exitCode == 0) {
+        reason = localize(@"crash.reason.normal", nil);
+    }
+    // OOM 内存不足（SIGKILL 或日志含 OOM 关键词）
+    else if ([self isOOMCrash]) {
+        reason = localize(@"crash.reason.memory", nil);
+    }
+    // SIGSEGV 段错误（信号 11）
+    else if (_exitCode == 11) {
+        reason = localize(@"crash.reason.segmentation", nil);
+    }
+    // SIGABRT 程序异常终止（信号 6）
+    else if (_exitCode == 6) {
+        reason = localize(@"crash.reason.abort", nil);
+    }
+    // SIGTERM 被外部信号终止（信号 15）
+    else if (_exitCode == 15) {
+        reason = localize(@"crash.reason.terminated", nil);
+    }
+    // 检查日志是否含 Java 异常关键词
+    else {
+        NSString *logContent = [self readLatestLogForAnalysis];
+        if (logContent.length > 0) {
+            NSString *lowerLog = [logContent lowercaseString];
+            if ([lowerLog containsString:@"exception"] || [lowerLog containsString:@"stacktrace"]) {
+                reason = localize(@"crash.reason.java_exception", nil);
+            }
+        }
+    }
+
+    // 兜底：未知错误
+    if (reason.length == 0) {
+        reason = [NSString stringWithFormat:localize(@"crash.reason.unknown", @"未知错误 (代码: %d)"), _exitCode];
+    }
+
+    return [NSString stringWithFormat:@"%@%@", localize(@"crash.possible_reason", nil), reason];
 }
 
 #pragma mark - Actions

@@ -489,6 +489,7 @@
 "crash.reason.terminated" = "Process terminated by external signal";
 "crash.reason.unknown" = "Unknown error (code: %d)";
 "crash.suggestion" = "Suggested Action";
+"crash.suggestion.oom" = "Crash caused by iOS memory limit. Use GetMoreRam (LiveContainer) to lift the memory limit and retry";
 "crash.view_log" = "View Log Details";
 "crash.share_log" = "Share Log";
 "crash.full_log" = "View Full Log";
@@ -546,3 +547,9 @@
 
 "preference.title.ai_crash_fix" = "AI Crash Fix";
 "preference.detail.ai_crash_fix" = "Configure and use AI assistant to automatically diagnose and fix game crash issues";
+"preference.title.memory_limit_help" = "Memory Limit Info";
+"preference.detail.memory_limit_help" = "Learn why iOS memory limits cause modpack crashes and how to fix it (GetMoreRam)";
+
+// Memory limit help dialog
+"mem_help.title" = "About Memory Limit";
+"mem_help.message" = "iOS 18 / iOS 26 single-instance memory limit is about 1440MB. Large modpacks may crash due to insufficient memory.\n\nSolution:\nUse GetMoreRam (a LiveContainer plugin) to lift the memory limit.\nGetMoreRam repo: github.com/hugeBlack/GetMoreRam\n\nRestart the launcher after installation to take effect.\n\nIf you don't use LiveContainer, try lowering the memory allocation (Settings > Java > Memory Allocation), but some modpacks may not run under the memory limit.";

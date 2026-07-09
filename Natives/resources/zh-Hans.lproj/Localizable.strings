@@ -507,6 +507,7 @@
 "crash.reason.terminated" = "进程被外部信号终止";
 "crash.reason.unknown" = "未知错误 (代码: %d)";
 "crash.suggestion" = "建议操作";
+"crash.suggestion.oom" = "iOS 内存限制导致崩溃，建议使用 GetMoreRam (LiveContainer) 解除内存限制后重试";
 "crash.view_log" = "查看日志详情";
 "crash.share_log" = "分享日志";
 "crash.full_log" = "查看完整日志";
@@ -564,3 +565,9 @@
 
 "preference.title.ai_crash_fix" = "AI 崩溃修复";
 "preference.detail.ai_crash_fix" = "配置并使用 AI 助手自动诊断和修复游戏崩溃问题";
+"preference.title.memory_limit_help" = "内存限制说明";
+"preference.detail.memory_limit_help" = "了解 iOS 内存限制导致整合包闪退的原因及解决方法（GetMoreRam）";
+
+// 内存限制帮助弹窗
+"mem_help.title" = "关于内存限制";
+"mem_help.message" = "iOS 18 / iOS 26 单实例内存上限约为 1440MB，玩大型整合包时可能因内存不足崩溃。\n\n解决方法：\n使用 GetMoreRam (LiveContainer 插件) 解除内存限制。\nGetMoreRam 仓库：github.com/hugeBlack/GetMoreRam\n\n安装后重启启动器即可生效。\n\n如果不使用 LiveContainer，可尝试降低内存分配（设置 > Java > 内存分配），但部分整合包在内存限制下可能无法正常运行。";
