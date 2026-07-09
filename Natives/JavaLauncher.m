@@ -207,32 +207,17 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
         // 之前强制 25 是为了兼容 Java 24+ 编译的 cacio jar，现已通过替换 jar 修复。
     }
 
-    // 26.x 安全钳制：若 Profile 的 javaVersion 被错误地写为 25（如某些安装器行为），
-    // 而实际是 26.x 版本（Mojang 指定 Java 21），则将 minVersion 钳制回 Mojang 要求的版本。
-    // 原因：jre25-ios 在 get_method_id 阶段存在 SIGSEGV 崩溃（JVM 初始化早期），
-    // 26.x 用 Java 21 可正常启动且性能/兼容性更好。
-    // 注意：仅当 minVersion > mojangMinVersion 时才钳制（即 Profile 把版本提升了）。
-    // 若 mojangMinVersion 本身就是 25（理论上 Mojang 不会这样指定，但保留兼容），不钳制。
-    if ([launchTarget isKindOfClass:NSDictionary.class] && minVersion > mojangMinVersion) {
-        // 检测是否为 26.x（无 LWJGL 声明 + Mojang 要求 Java >= 21）
-        BOOL is26x = NO;
-        NSArray *libraries = launchTarget[@"libraries"];
-        BOOL hasLWJGL = NO;
-        for (NSDictionary *lib in libraries) {
-            NSString *name = lib[@"name"];
-            if (name && [name hasPrefix:@"org.lwjgl:lwjgl:"]) {
-                hasLWJGL = YES;
-                break;
-            }
-        }
-        if (!hasLWJGL && mojangMinVersion >= 21) {
-            is26x = YES;
-        }
-        if (is26x && minVersion >= 25) {
-            NSLog(@"[JavaLauncher] 26.x detected with Profile javaVersion=%d, clamping back to Mojang's required Java %d to avoid Java 25 JVM SIGSEGV crash", minVersion, mojangMinVersion);
-            minVersion = mojangMinVersion;
-        }
-    }
+    // 26.x 版本官方强制要求 Java 25（Mojang 自 26.x 起将 javaVersion.majorVersion 设为 25）。
+    // 不再钳制 Profile 的 javaVersion，26.x 必须使用 Java 25 启动。
+    // 为兼容 Java 25 的 caciocavallo，libs_caciocavallo17 目录使用包含 Java 24 class 的版本
+    // （catsruledogs/Amethyst-iOS-25 的 caciocavallo17 jar，部分 class 为 class version 68，
+    // 仅 Java 24+ 运行时可加载）。
+    // 对于 Java 17/21，使用 libs_caciocavallo 目录中的纯 Java 17 编译版本
+    // （class version 61，Java 17/21 均可加载）。
+    // 参照 FCL/ZalithLauncher2 的 caciocavallo 切换策略，增强为三路切换：
+    // - Java 8        → libs_caciocavallo（1.10-SNAPSHOT，包名 net.java.openjdk.cacio，bootclasspath/p）
+    // - Java 17/21    → libs_caciocavallo（1.18-SNAPSHOT，包名 com.github.caciocavallosilano.cacio，bootclasspath/a）
+    // - Java 25       → libs_caciocavallo17（1.18-SNAPSHOT 含 Java 24 class，包名 com.github.caciocavallosilano.cacio，bootclasspath/a）
 
     NSLog(@"[JavaLauncher] Looking for Java %d or later", minVersion);
     NSString *javaHome = getSelectedJavaHome(defaultJRETag, minVersion);
