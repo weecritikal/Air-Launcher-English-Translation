@@ -31,6 +31,7 @@
 #import "installer/ForgeDirectInstaller.h"
 #import "installer/NeoForgeDirectInstaller.h"
 #import "installer/NeoForgeVersionFetcher.h"
+#import "installer/ModLoaderInstallViewController.h"
 #import "LauncherNavigationController.h"
 #import "installer/ModpackInstallViewController.h"
 #import "ModpackImportViewController.h"
@@ -288,801 +289,9 @@
 
 @end
 
-#pragma mark - Loader Selection Cell
+// LoaderCell 与 LoaderSelectionViewController 已迁移至 installer/ModLoaderInstallViewController.m
+// 参照 FCL (FoldCraftLauncher) 的 InstallerListPage + VersionInstallInfoPage 重构
 
-@interface LoaderCell : UITableViewCell
-@property (nonatomic, strong) UIImageView *iconView;
-@property (nonatomic, strong) UILabel *nameLabel;
-@property (nonatomic, strong) UILabel *descLabel;
-@property (nonatomic, strong) UILabel *statusLabel;
-@property (nonatomic, strong) UIView *separator;
-@end
-
-@implementation LoaderCell
-
-- (instancetype)initWithStyle:(UITableViewCellStyle)style reuseIdentifier:(NSString *)reuseIdentifier {
-    self = [super initWithStyle:style reuseIdentifier:reuseIdentifier];
-    if (self) {
-        self.backgroundColor = [UIColor clearColor];
-        self.selectionStyle = UITableViewCellSelectionStyleNone;
-        
-        self.iconView = [[UIImageView alloc] init];
-        self.iconView.translatesAutoresizingMaskIntoConstraints = NO;
-        self.iconView.layer.cornerRadius = 10;
-        self.iconView.clipsToBounds = YES;
-        self.iconView.contentMode = UIViewContentModeScaleAspectFit;
-        [self.contentView addSubview:self.iconView];
-        
-        self.nameLabel = [[UILabel alloc] init];
-        self.nameLabel.translatesAutoresizingMaskIntoConstraints = NO;
-        self.nameLabel.font = [UIFont systemFontOfSize:17 weight:UIFontWeightSemibold];
-        self.nameLabel.textColor = [UIColor labelColor];
-        [self.contentView addSubview:self.nameLabel];
-        
-        self.descLabel = [[UILabel alloc] init];
-        self.descLabel.translatesAutoresizingMaskIntoConstraints = NO;
-        self.descLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleCaption1];
-        self.descLabel.textColor = [UIColor secondaryLabelColor];
-        self.descLabel.numberOfLines = 2;
-        [self.contentView addSubview:self.descLabel];
-        
-        self.statusLabel = [[UILabel alloc] init];
-        self.statusLabel.translatesAutoresizingMaskIntoConstraints = NO;
-        self.statusLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightMedium];
-        self.statusLabel.textAlignment = NSTextAlignmentRight;
-        self.statusLabel.hidden = YES;
-        [self.contentView addSubview:self.statusLabel];
-        
-        self.separator = [[UIView alloc] init];
-        self.separator.translatesAutoresizingMaskIntoConstraints = NO;
-        self.separator.backgroundColor = [UIColor separatorColor];
-        [self.contentView addSubview:self.separator];
-        
-        [NSLayoutConstraint activateConstraints:@[
-            [self.iconView.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:16],
-            [self.iconView.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor],
-            [self.iconView.widthAnchor constraintEqualToConstant:48],
-            [self.iconView.heightAnchor constraintEqualToConstant:48],
-            
-            [self.nameLabel.leadingAnchor constraintEqualToAnchor:self.iconView.trailingAnchor constant:12],
-            [self.nameLabel.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:12],
-            [self.nameLabel.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-16],
-            
-            [self.descLabel.leadingAnchor constraintEqualToAnchor:self.nameLabel.leadingAnchor],
-            [self.descLabel.topAnchor constraintEqualToAnchor:self.nameLabel.bottomAnchor constant:4],
-            [self.descLabel.trailingAnchor constraintEqualToAnchor:self.nameLabel.trailingAnchor],
-            [self.descLabel.bottomAnchor constraintLessThanOrEqualToAnchor:self.contentView.bottomAnchor constant:-12],
-            
-            [self.statusLabel.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-16],
-            [self.statusLabel.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor],
-            
-            [self.separator.leadingAnchor constraintEqualToAnchor:self.nameLabel.leadingAnchor],
-            [self.separator.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor],
-            [self.separator.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor],
-            [self.separator.heightAnchor constraintEqualToConstant:0.5]
-        ]];
-    }
-    return self;
-}
-
-- (void)setSelected:(BOOL)selected animated:(BOOL)animated {
-    [super setSelected:selected animated:animated];
-    if (selected) {
-        self.contentView.backgroundColor = [UIColor tertiarySystemBackgroundColor];
-    } else {
-        self.contentView.backgroundColor = [UIColor clearColor];
-    }
-}
-
-- (void)setIncompatible:(BOOL)incompatible {
-    if (incompatible) {
-        self.statusLabel.hidden = NO;
-        self.statusLabel.text = @"不兼容";
-        self.statusLabel.textColor = [UIColor systemRedColor];
-        self.nameLabel.textColor = [UIColor tertiaryLabelColor];
-        self.descLabel.textColor = [UIColor quaternaryLabelColor];
-        self.iconView.alpha = 0.5;
-        self.userInteractionEnabled = NO;
-    } else {
-        self.statusLabel.hidden = YES;
-        self.nameLabel.textColor = [UIColor labelColor];
-        self.descLabel.textColor = [UIColor secondaryLabelColor];
-        self.iconView.alpha = 1.0;
-        self.userInteractionEnabled = YES;
-    }
-}
-
-@end
-
-#pragma mark - Loader Selection View Controller (居中卡片式)
-
-@interface LoaderSelectionViewController : UIViewController
-@property (nonatomic, copy) void (^completion)(NSString *loader, BOOL installFabricAPI, BOOL installOptiFine, NSString *loaderVersion);
-@property (nonatomic, copy) void (^cancelled)(void);
-@property (nonatomic, strong) NSString *gameVersion;
-@end
-
-@interface LoaderSelectionViewController () <UITableViewDataSource, UITableViewDelegate, NSXMLParserDelegate>
-@property (nonatomic, strong) NSArray *loaders;
-@property (nonatomic, strong) UITableView *tableView;
-@property (nonatomic, strong) UIView *optionsContainer;
-@property (nonatomic, strong) UISwitch *fabricAPISwitch;
-@property (nonatomic, strong) UISwitch *optiFineSwitch;
-@property (nonatomic, strong) UILabel *fabricAPILabel;
-@property (nonatomic, strong) UILabel *optiFineLabel;
-@property (nonatomic, strong) UIButton *installButton;
-@property (nonatomic, strong) NSString *selectedLoader;
-@property (nonatomic, strong) NSArray *loaderVersions;
-@property (nonatomic, strong) UITableView *versionTableView;
-@property (nonatomic, strong) NSString *selectedLoaderVersion;
-@property (nonatomic, strong) UIActivityIndicatorView *loadingIndicator;
-@property (nonatomic, strong) UILabel *emptyVersionsLabel;
-
-// For XML parsing
-@property (nonatomic, strong) NSMutableArray *forgeVersionList;
-@property (nonatomic, assign) BOOL isParsingForge;
-@property (nonatomic, strong) NSMutableString *currentVersionValue;
-
-// 网络任务取消
-@property (nonatomic, strong) NSURLSessionDataTask *currentVersionTask;
-@end
-
-@implementation LoaderSelectionViewController
-
-- (void)dealloc {
-    if (self.currentVersionTask) {
-        [self.currentVersionTask cancel];
-        self.currentVersionTask = nil;
-    }
-}
-
-- (void)viewDidLoad {
-    [super viewDidLoad];
-
-    self.title = @"选择安装方式";
-    // 已 push 到导航栈，使用系统背景色保持与中间内容区其他页面一致
-    self.view.backgroundColor = [UIColor systemGroupedBackgroundColor];
-
-    [self setupNavigation];
-    [self setupLoadersForVersion];
-    [self setupLoaderTableView];
-    [self setupOptionsContainer];
-    [self setupInstallButton];
-    [self setupVersionTableView];
-}
-
-- (void)setupLoadersForVersion {
-    BOOL fabricCompatible = [self isFabricCompatible];
-    BOOL quiltCompatible = [self isQuiltCompatible];
-    BOOL forgeCompatible = [self isForgeCompatible];
-    BOOL neoForgeCompatible = [self isNeoForgeCompatible];
-    
-    self.loaders = @[
-        @{@"id": @"vanilla", @"name": @"原版 (Vanilla)", @"desc": @"纯净 Minecraft，不包含任何模组加载器", @"icon": @"cube.fill", @"color": [UIColor systemGrayColor], @"compatible": @YES},
-        @{@"id": @"fabric", @"name": @"Fabric", @"desc": @"轻量级模组加载器，适合小型模组", @"icon": @"bolt.fill", @"color": [UIColor systemOrangeColor], @"compatible": @(fabricCompatible)},
-        @{@"id": @"forge", @"name": @"Forge", @"desc": @"经典模组加载器，模组生态丰富（支持 1.1+）", @"icon": @"hammer.fill", @"color": [UIColor systemRedColor], @"compatible": @(forgeCompatible)},
-        @{@"id": @"neoforge", @"name": @"NeoForge", @"desc": @"Forge 的分支，支持 1.20.1+", @"icon": @"hammer.fill", @"color": [UIColor systemBrownColor], @"compatible": @(neoForgeCompatible)},
-        @{@"id": @"quilt", @"name": @"Quilt", @"desc": @"基于 Fabric 的新一代加载器", @"icon": @"bolt.fill", @"color": [UIColor systemPurpleColor], @"compatible": @(quiltCompatible)}
-    ];
-}
-
-- (BOOL)isFabricCompatible {
-    if (!self.gameVersion) return YES;
-    NSArray *components = [self.gameVersion componentsSeparatedByString:@"."];
-    if (components.count < 2) return YES;
-    NSInteger major = [components[0] integerValue];
-    NSInteger minor = [components[1] integerValue];
-    if (major > 1) return YES;
-    if (major == 1 && minor >= 14) return YES;
-    return NO;
-}
-
-- (BOOL)isQuiltCompatible {
-    if (!self.gameVersion) return YES;
-    NSArray *components = [self.gameVersion componentsSeparatedByString:@"."];
-    if (components.count < 2) return YES;
-    NSInteger major = [components[0] integerValue];
-    NSInteger minor = [components[1] integerValue];
-    if (major > 1) return YES;
-    if (major == 1 && minor >= 18) return YES;
-    return NO;
-}
-
-- (BOOL)isForgeCompatible {
-    if (!self.gameVersion) return YES;
-    NSArray *components = [self.gameVersion componentsSeparatedByString:@"."];
-    if (components.count < 2) return YES;
-    NSInteger major = [components[0] integerValue];
-    NSInteger minor = [components[1] integerValue];
-    if (major == 1 && minor >= 1) return YES;
-    if (major > 1) return YES;
-    return NO;
-}
-
-- (BOOL)isNeoForgeCompatible {
-    if (!self.gameVersion) return NO;
-    NSArray *components = [self.gameVersion componentsSeparatedByString:@"."];
-    if (components.count < 2) return NO;
-    NSInteger major = [components[0] integerValue];
-    NSInteger minor = [components[1] integerValue];
-    NSInteger patch = (components.count > 2) ? [components[2] integerValue] : 0;
-    if (major > 1) return YES;
-    if (major == 1 && minor == 20 && patch >= 1) return YES;
-    if (major == 1 && minor > 20) return YES;
-    return NO;
-}
-
-- (void)setupNavigation {
-    self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"chevron.left"]
-                                                                              style:UIBarButtonItemStylePlain
-                                                                             target:self
-                                                                             action:@selector(backButtonTapped)];
-    self.navigationItem.leftBarButtonItem.tintColor = [UIColor labelColor];
-}
-
-- (void)backButtonTapped {
-    if (self.cancelled) {
-        // cancelled 回调会调用 popViewControllerAnimated
-        self.cancelled();
-    } else if (self.navigationController.viewControllers.count > 1) {
-        [self.navigationController popViewControllerAnimated:YES];
-    } else {
-        [self dismissViewControllerAnimated:YES completion:nil];
-    }
-}
-
-- (void)setupLoaderTableView {
-    self.tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
-    self.tableView.translatesAutoresizingMaskIntoConstraints = NO;
-    self.tableView.backgroundColor = [UIColor clearColor];
-    self.tableView.dataSource = self;
-    self.tableView.delegate = self;
-    self.tableView.rowHeight = 76;
-    self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
-    [self.tableView registerClass:[LoaderCell class] forCellReuseIdentifier:@"LoaderCell"];
-    [self.view addSubview:self.tableView];
-    
-    UILayoutGuide *safeGuide;
-    if (@available(iOS 11.0, *)) {
-        safeGuide = self.view.safeAreaLayoutGuide;
-    } else {
-        safeGuide = self.view.layoutMarginsGuide;
-    }
-    
-    [NSLayoutConstraint activateConstraints:@[
-        [self.tableView.topAnchor constraintEqualToAnchor:safeGuide.topAnchor constant:8],
-        [self.tableView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:16],
-        [self.tableView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-16],
-        [self.tableView.heightAnchor constraintEqualToConstant:320]
-    ]];
-}
-
-- (void)setupOptionsContainer {
-    self.optionsContainer = [[UIView alloc] init];
-    self.optionsContainer.translatesAutoresizingMaskIntoConstraints = NO;
-    self.optionsContainer.backgroundColor = [UIColor clearColor];
-    
-    self.fabricAPILabel = [[UILabel alloc] init];
-    self.fabricAPILabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.fabricAPILabel.text = @"同时安装 Fabric API";
-    self.fabricAPILabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightMedium];
-    self.fabricAPILabel.textColor = [UIColor labelColor];
-    self.fabricAPILabel.hidden = YES;
-    [self.optionsContainer addSubview:self.fabricAPILabel];
-    
-    self.fabricAPISwitch = [[UISwitch alloc] init];
-    self.fabricAPISwitch.translatesAutoresizingMaskIntoConstraints = NO;
-    self.fabricAPISwitch.on = YES;
-    self.fabricAPISwitch.hidden = YES;
-    [self.optionsContainer addSubview:self.fabricAPISwitch];
-    
-    self.optiFineLabel = [[UILabel alloc] init];
-    self.optiFineLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.optiFineLabel.text = @"同时安装 OptiFine";
-    self.optiFineLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightMedium];
-    self.optiFineLabel.textColor = [UIColor labelColor];
-    self.optiFineLabel.hidden = YES;
-    [self.optionsContainer addSubview:self.optiFineLabel];
-    
-    self.optiFineSwitch = [[UISwitch alloc] init];
-    self.optiFineSwitch.translatesAutoresizingMaskIntoConstraints = NO;
-    self.optiFineSwitch.on = NO;
-    self.optiFineSwitch.hidden = YES;
-    [self.optionsContainer addSubview:self.optiFineSwitch];
-    
-    self.optionsContainer.hidden = YES;
-    [self.view addSubview:self.optionsContainer];
-    
-    [NSLayoutConstraint activateConstraints:@[
-        [self.optionsContainer.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:16],
-        [self.optionsContainer.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-16],
-        [self.optionsContainer.topAnchor constraintEqualToAnchor:self.tableView.bottomAnchor constant:8],
-        [self.optionsContainer.heightAnchor constraintEqualToConstant:50],
-        
-        [self.fabricAPILabel.leadingAnchor constraintEqualToAnchor:self.optionsContainer.leadingAnchor constant:16],
-        [self.fabricAPILabel.centerYAnchor constraintEqualToAnchor:self.optionsContainer.centerYAnchor],
-        
-        [self.fabricAPISwitch.trailingAnchor constraintEqualToAnchor:self.optionsContainer.trailingAnchor constant:-16],
-        [self.fabricAPISwitch.centerYAnchor constraintEqualToAnchor:self.optionsContainer.centerYAnchor],
-        
-        [self.optiFineLabel.leadingAnchor constraintEqualToAnchor:self.optionsContainer.leadingAnchor constant:16],
-        [self.optiFineLabel.centerYAnchor constraintEqualToAnchor:self.optionsContainer.centerYAnchor],
-        
-        [self.optiFineSwitch.trailingAnchor constraintEqualToAnchor:self.optionsContainer.trailingAnchor constant:-16],
-        [self.optiFineSwitch.centerYAnchor constraintEqualToAnchor:self.optionsContainer.centerYAnchor]
-    ]];
-}
-
-- (void)setupVersionTableView {
-    self.versionTableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
-    self.versionTableView.translatesAutoresizingMaskIntoConstraints = NO;
-    self.versionTableView.backgroundColor = [UIColor clearColor];
-    self.versionTableView.dataSource = self;
-    self.versionTableView.delegate = self;
-    self.versionTableView.rowHeight = 44;
-    self.versionTableView.separatorStyle = UITableViewCellSeparatorStyleSingleLine;
-    self.versionTableView.hidden = YES;
-    [self.versionTableView registerClass:[UITableViewCell class] forCellReuseIdentifier:@"VersionCell"];
-    [self.view addSubview:self.versionTableView];
-    
-    self.loadingIndicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
-    self.loadingIndicator.translatesAutoresizingMaskIntoConstraints = NO;
-    self.loadingIndicator.hidesWhenStopped = YES;
-    [self.view addSubview:self.loadingIndicator];
-    
-    self.emptyVersionsLabel = [[UILabel alloc] init];
-    self.emptyVersionsLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.emptyVersionsLabel.text = @"暂无可用版本";
-    self.emptyVersionsLabel.textAlignment = NSTextAlignmentCenter;
-    self.emptyVersionsLabel.textColor = [UIColor secondaryLabelColor];
-    self.emptyVersionsLabel.font = [UIFont systemFontOfSize:14];
-    self.emptyVersionsLabel.hidden = YES;
-    [self.view addSubview:self.emptyVersionsLabel];
-    
-    [NSLayoutConstraint activateConstraints:@[
-        [self.versionTableView.topAnchor constraintEqualToAnchor:self.optionsContainer.bottomAnchor constant:8],
-        [self.versionTableView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:16],
-        [self.versionTableView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-16],
-        [self.versionTableView.bottomAnchor constraintEqualToAnchor:self.installButton.topAnchor constant:-16],
-        
-        [self.loadingIndicator.centerXAnchor constraintEqualToAnchor:self.versionTableView.centerXAnchor],
-        [self.loadingIndicator.centerYAnchor constraintEqualToAnchor:self.versionTableView.centerYAnchor],
-        
-        [self.emptyVersionsLabel.centerXAnchor constraintEqualToAnchor:self.versionTableView.centerXAnchor],
-        [self.emptyVersionsLabel.centerYAnchor constraintEqualToAnchor:self.versionTableView.centerYAnchor]
-    ]];
-}
-
-- (void)setupInstallButton {
-    self.installButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    self.installButton.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.installButton setTitle:@"安装" forState:UIControlStateNormal];
-    self.installButton.titleLabel.font = [UIFont systemFontOfSize:17 weight:UIFontWeightSemibold];
-    self.installButton.backgroundColor = [UIColor systemGreenColor];
-    [self.installButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    self.installButton.layer.cornerRadius = 10;
-    [self.installButton addTarget:self action:@selector(installButtonTapped) forControlEvents:UIControlEventTouchUpInside];
-    [self.view addSubview:self.installButton];
-    
-    [NSLayoutConstraint activateConstraints:@[
-        [self.installButton.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:16],
-        [self.installButton.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-16],
-        [self.installButton.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor constant:-20],
-        [self.installButton.heightAnchor constraintEqualToConstant:50]
-    ]];
-}
-
-- (void)installButtonTapped {
-    if (!self.selectedLoader) {
-        [self showAlert:@"请选择安装方式" message:nil];
-        return;
-    }
-    
-    BOOL needsVersion = ![self.selectedLoader isEqualToString:@"vanilla"];
-    
-    if (needsVersion) {
-        if (self.loaderVersions == nil) {
-            [self showAlert:@"正在加载版本列表" message:@"请稍后再试"];
-            return;
-        }
-        if (self.loaderVersions.count == 0) {
-            NSString *loaderName = @"";
-            for (NSDictionary *loader in self.loaders) {
-                if ([loader[@"id"] isEqualToString:self.selectedLoader]) {
-                    loaderName = loader[@"name"];
-                    break;
-                }
-            }
-            [self showAlert:[NSString stringWithFormat:@"%@ 暂无可用的版本", loaderName]
-                    message:[NSString stringWithFormat:@"当前选择的 Minecraft %@ 没有可用的 %@ 版本", self.gameVersion, loaderName]];
-            return;
-        }
-        
-        if (!self.selectedLoaderVersion) {
-            [self showAlert:@"请选择版本" message:nil];
-            return;
-        }
-    }
-    
-    BOOL installFabricAPI = [self.selectedLoader isEqualToString:@"fabric"] ? self.fabricAPISwitch.isOn : NO;
-    BOOL installOptiFine = [self.selectedLoader isEqualToString:@"forge"] ? self.optiFineSwitch.isOn : NO;
-    
-    if (self.completion) {
-        self.completion(self.selectedLoader, installFabricAPI, installOptiFine, self.selectedLoaderVersion);
-    }
-}
-
-- (void)showAlert:(NSString *)title message:(NSString *)message {
-    // 在内容区显示提示，替代弹窗
-    [InlineMessageView showInViewController:self
-                                       title:title
-                                    message:message
-                                       type:InlineMessageTypeInfo];
-}
-
-#pragma mark - Load Versions (Real Network)
-
-- (void)loadVersionsForLoader:(NSString *)loaderId {
-    self.loaderVersions = nil;
-    self.selectedLoaderVersion = nil;
-    [self.versionTableView reloadData];
-    self.versionTableView.hidden = NO;
-    self.emptyVersionsLabel.hidden = YES;
-    [self.loadingIndicator startAnimating];
-    
-    if (self.currentVersionTask) {
-        [self.currentVersionTask cancel];
-        self.currentVersionTask = nil;
-    }
-    
-    if ([loaderId isEqualToString:@"fabric"] || [loaderId isEqualToString:@"quilt"]) {
-        [self loadFabricVersions:loaderId];
-    } else if ([loaderId isEqualToString:@"forge"]) {
-        [self loadForgeVersionsReal];
-    } else if ([loaderId isEqualToString:@"neoforge"]) {
-        [self loadNeoForgeVersionsReal];
-    }
-}
-
-- (void)loadFabricVersions:(NSString *)loaderType {
-    // 根据 loaderType 选择对应的 meta API（Fabric/Quilt 都按 gameVersion 过滤）
-    NSString *metaBase = nil;
-    if ([loaderType isEqualToString:@"quilt"]) {
-        metaBase = @"https://meta.quiltmc.org/v3/versions/loader";
-    } else {
-        metaBase = @"https://meta.fabricmc.net/v2/versions/loader";
-    }
-    NSString *urlString = [NSString stringWithFormat:@"%@/%@", metaBase, self.gameVersion];
-    NSURL *url = [NSURL URLWithString:urlString];
-    
-    __weak typeof(self) weakSelf = self;
-    self.currentVersionTask = [[NSURLSession sharedSession] dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            __strong typeof(weakSelf) strongSelf = weakSelf;
-            if (!strongSelf) return;
-            [strongSelf.loadingIndicator stopAnimating];
-            if (error && error.code != NSURLErrorCancelled) {
-                strongSelf.loaderVersions = @[];
-                [strongSelf.versionTableView reloadData];
-                strongSelf.emptyVersionsLabel.hidden = NO;
-                return;
-            }
-            if (data && !error) {
-                NSError *jsonError;
-                NSArray *versions = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
-                if (versions && !jsonError) {
-                    NSMutableArray *versionList = [NSMutableArray array];
-                    for (NSDictionary *ver in versions) {
-                        NSString *loaderVersion = ver[@"loader"][@"version"];
-                        if (loaderVersion && ![versionList containsObject:loaderVersion]) {
-                            [versionList addObject:loaderVersion];
-                        }
-                    }
-                    strongSelf.loaderVersions = versionList;
-                    [strongSelf.versionTableView reloadData];
-                    strongSelf.emptyVersionsLabel.hidden = (versionList.count > 0);
-                    if (versionList.count > 0 && !strongSelf.selectedLoaderVersion) {
-                        strongSelf.selectedLoaderVersion = versionList[0];
-                        [strongSelf.versionTableView reloadData];
-                    }
-                } else {
-                    strongSelf.loaderVersions = @[];
-                    [strongSelf.versionTableView reloadData];
-                    strongSelf.emptyVersionsLabel.hidden = NO;
-                }
-            } else {
-                strongSelf.loaderVersions = @[];
-                [strongSelf.versionTableView reloadData];
-                strongSelf.emptyVersionsLabel.hidden = NO;
-            }
-        });
-    }];
-    [self.currentVersionTask resume];
-}
-
-- (void)loadForgeVersionsReal {
-    // 参照 FCL/HMCL：并发竞速同时发起官方源和 BMCLAPI 请求，谁先成功用谁，
-    // 避免串行 fallback 在弱网下要等 30s+30s=60s 才出结果。
-    // 实测 Forge maven-metadata.xml 包含所有 MC 版本的 Forge（如 1.21.11 有 21 个版本），
-    // 解析时用 gameVersion 前缀过滤。
-    NSString *bmclURL = @"https://bmclapi2.bangbang93.com/maven/net/minecraftforge/forge/maven-metadata.xml";
-    NSString *officialURL = @"https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml";
-
-    self.forgeVersionList = [NSMutableArray array];
-    self.isParsingForge = YES;
-
-    __weak typeof(self) weakSelf = self;
-    __block BOOL settled = NO;  // 竞速标志：首个成功的请求处理结果，另一个被忽略
-
-    NSString *userAgent = @"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15";
-
-    void (^processData)(NSData *) = ^(NSData *data) {
-        @synchronized(weakSelf) {
-            if (settled) return;
-            settled = YES;
-        }
-        if (!data || data.length == 0) return;
-        NSXMLParser *parser = [[NSXMLParser alloc] initWithData:data];
-        parser.delegate = weakSelf;
-        [parser parse];
-    };
-
-    // 请求 1：BMCLAPI
-    NSMutableURLRequest *bmclRequest = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:bmclURL]];
-    bmclRequest.timeoutInterval = 20.0;
-    [bmclRequest setValue:userAgent forHTTPHeaderField:@"User-Agent"];
-    NSURLSessionDataTask *bmclTask = [[NSURLSession sharedSession] dataTaskWithRequest:bmclRequest completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
-        if (error || !data) {
-            // BMCLAPI 失败，不直接报错，等官方源结果（若官方源已成功则 settled=YES，handleFailure 无效）
-            @synchronized(weakSelf) {
-                if (settled) return;
-            }
-            // 标记 BMCLAPI 已失败，但不 settle（让官方源有机会）
-            return;
-        }
-        processData(data);
-    }];
-
-    // 请求 2：官方源
-    NSMutableURLRequest *officialRequest = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:officialURL]];
-    officialRequest.timeoutInterval = 20.0;
-    [officialRequest setValue:userAgent forHTTPHeaderField:@"User-Agent"];
-    NSURLSessionDataTask *officialTask = [[NSURLSession sharedSession] dataTaskWithRequest:officialRequest completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
-        if (error || !data) {
-            // 官方源失败：检查 BMCLAPI 是否已成功
-            @synchronized(weakSelf) {
-                if (settled) return;
-            }
-            // 两个都失败：等待 BMCLAPI 的最终超时（它可能还在跑）
-            // 给 BMCLAPI 额外 5s 宽限期，如果还没结果则判定失败
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                @synchronized(weakSelf) {
-                    if (settled) return;
-                    settled = YES;
-                }
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    __strong typeof(weakSelf) strongSelf = weakSelf;
-                    if (!strongSelf) return;
-                    [strongSelf.loadingIndicator stopAnimating];
-                    strongSelf.loaderVersions = @[];
-                    [strongSelf.versionTableView reloadData];
-                    strongSelf.emptyVersionsLabel.hidden = NO;
-                });
-            });
-            return;
-        }
-        processData(data);
-    }];
-
-    self.currentVersionTask = officialTask;  // 保留引用以便 cancel
-    [bmclTask resume];
-    [officialTask resume];
-}
-
-- (void)loadNeoForgeVersionsReal {
-    __weak typeof(self) weakSelf = self;
-    [NeoForgeVersionFetcher fetchVersionsForGameVersion:self.gameVersion completion:^(NSArray *versions, NSError *error) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            __strong typeof(weakSelf) strongSelf = weakSelf;
-            if (!strongSelf) return;
-            [strongSelf.loadingIndicator stopAnimating];
-            strongSelf.loaderVersions = versions ?: @[];
-            [strongSelf.versionTableView reloadData];
-            strongSelf.emptyVersionsLabel.hidden = (strongSelf.loaderVersions.count > 0);
-            if (strongSelf.loaderVersions.count > 0 && !strongSelf.selectedLoaderVersion) {
-                strongSelf.selectedLoaderVersion = strongSelf.loaderVersions.firstObject;
-                [strongSelf.versionTableView reloadData];
-            }
-        });
-    }];
-}
-
-#pragma mark - NSXMLParserDelegate (Forge/NeoForge)
-
-- (void)parser:(NSXMLParser *)parser didStartElement:(NSString *)elementName namespaceURI:(NSString *)namespaceURI qualifiedName:(NSString *)qName attributes:(NSDictionary *)attributeDict {
-    if ([elementName isEqualToString:@"version"]) {
-        self.currentVersionValue = [NSMutableString new];
-    }
-}
-
-- (void)parser:(NSXMLParser *)parser foundCharacters:(NSString *)string {
-    [self.currentVersionValue appendString:string];
-}
-
-- (void)parser:(NSXMLParser *)parser didEndElement:(NSString *)elementName namespaceURI:(NSString *)namespaceURI qualifiedName:(NSString *)qName {
-    if (!self.isParsingForge) {
-        return;
-    }
-    
-    if ([elementName isEqualToString:@"version"]) {
-        NSString *version = [self.currentVersionValue stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-        if (version.length > 0) {
-            @synchronized (self) {
-                NSString *prefix = [self.gameVersion stringByAppendingString:@"-"];
-                if ([version hasPrefix:prefix]) {
-                    [self.forgeVersionList addObject:version];
-                }
-            }
-        }
-    }
-}
-
-- (void)parserDidEndDocument:(NSXMLParser *)parser {
-    // 重置 isParsingForge 标志，避免后续其他解析器（如 NeoForge JSON）被错误过滤
-    self.isParsingForge = NO;
-    dispatch_async(dispatch_get_main_queue(), ^{
-        [self.loadingIndicator stopAnimating];
-
-        [self.forgeVersionList sortUsingComparator:^NSComparisonResult(NSString *v1, NSString *v2) {
-            return [v2 compare:v1 options:NSNumericSearch];
-        }];
-
-        self.loaderVersions = self.forgeVersionList;
-        [self.versionTableView reloadData];
-        self.emptyVersionsLabel.hidden = (self.loaderVersions.count > 0);
-
-        if (self.loaderVersions.count > 0 && !self.selectedLoaderVersion) {
-            self.selectedLoaderVersion = self.loaderVersions.firstObject;
-            [self.versionTableView reloadData];
-        }
-    });
-}
-
-- (void)parser:(NSXMLParser *)parser parseErrorOccurred:(NSError *)parseError {
-    self.isParsingForge = NO;
-    dispatch_async(dispatch_get_main_queue(), ^{
-        [self.loadingIndicator stopAnimating];
-        self.loaderVersions = @[];
-        [self.versionTableView reloadData];
-        self.emptyVersionsLabel.hidden = NO;
-        NSLog(@"Parse error: %@", parseError);
-    });
-}
-
-
-#pragma mark - TableView
-
-- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    if (tableView == self.tableView) {
-        return self.loaders.count;
-    } else if (tableView == self.versionTableView) {
-        return self.loaderVersions.count;
-    }
-    return 0;
-}
-
-- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-    if (tableView == self.tableView) {
-        LoaderCell *cell = [tableView dequeueReusableCellWithIdentifier:@"LoaderCell" forIndexPath:indexPath];
-        NSDictionary *loader = self.loaders[indexPath.row];
-        
-        cell.nameLabel.text = loader[@"name"];
-        cell.descLabel.text = loader[@"desc"];
-        
-        NSString *iconName = loader[@"icon"];
-        UIImage *iconImage = [UIImage systemImageNamed:iconName];
-        
-        cell.iconView.image = iconImage;
-        cell.iconView.tintColor = loader[@"color"];
-        cell.iconView.backgroundColor = [loader[@"color"] colorWithAlphaComponent:0.15];
-        
-        BOOL isSelected = [self.selectedLoader isEqualToString:loader[@"id"]];
-        if (isSelected) {
-            cell.accessoryType = UITableViewCellAccessoryCheckmark;
-            cell.tintColor = [UIColor systemGreenColor];
-        } else {
-            cell.accessoryType = UITableViewCellAccessoryNone;
-        }
-        
-        BOOL compatible = [loader[@"compatible"] boolValue];
-        [cell setIncompatible:!compatible];
-        
-        return cell;
-    } else {
-        UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"VersionCell" forIndexPath:indexPath];
-        NSString *version = self.loaderVersions[indexPath.row];
-        cell.textLabel.text = version;
-        cell.textLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightMedium];
-        cell.backgroundColor = [UIColor clearColor];
-        
-        if ([self.selectedLoaderVersion isEqualToString:version]) {
-            cell.accessoryType = UITableViewCellAccessoryCheckmark;
-            cell.tintColor = [UIColor systemGreenColor];
-        } else {
-            cell.accessoryType = UITableViewCellAccessoryNone;
-        }
-        
-        return cell;
-    }
-}
-
-- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
-    if (tableView == self.tableView) {
-        [tableView deselectRowAtIndexPath:indexPath animated:YES];
-        
-        NSDictionary *loader = self.loaders[indexPath.row];
-        NSString *loaderId = loader[@"id"];
-        
-        BOOL compatible = [loader[@"compatible"] boolValue];
-        if (!compatible) {
-            return;
-        }
-        
-        if ([self.selectedLoader isEqualToString:loaderId]) {
-            self.selectedLoader = nil;
-            self.optionsContainer.hidden = YES;
-            self.versionTableView.hidden = YES;
-        } else {
-            self.selectedLoader = loaderId;
-            self.optionsContainer.hidden = NO;
-            self.optionsContainer.alpha = 0;
-            
-            [UIView animateWithDuration:0.3 animations:^{
-                self.optionsContainer.alpha = 1;
-            }];
-            
-            if ([loaderId isEqualToString:@"fabric"]) {
-                self.fabricAPILabel.hidden = NO;
-                self.fabricAPISwitch.hidden = NO;
-                self.optiFineLabel.hidden = YES;
-                self.optiFineSwitch.hidden = YES;
-                [self loadVersionsForLoader:@"fabric"];
-            } else if ([loaderId isEqualToString:@"forge"]) {
-                self.fabricAPILabel.hidden = YES;
-                self.fabricAPISwitch.hidden = YES;
-                self.optiFineLabel.hidden = NO;
-                self.optiFineSwitch.hidden = NO;
-                [self loadVersionsForLoader:@"forge"];
-            } else if ([loaderId isEqualToString:@"neoforge"]) {
-                self.fabricAPILabel.hidden = YES;
-                self.fabricAPISwitch.hidden = YES;
-                self.optiFineLabel.hidden = YES;
-                self.optiFineSwitch.hidden = YES;
-                [self loadVersionsForLoader:@"neoforge"];
-            } else if ([loaderId isEqualToString:@"quilt"]) {
-                self.fabricAPILabel.hidden = YES;
-                self.fabricAPISwitch.hidden = YES;
-                self.optiFineLabel.hidden = YES;
-                self.optiFineSwitch.hidden = YES;
-                [self loadVersionsForLoader:@"quilt"];
-            } else {
-                self.fabricAPILabel.hidden = YES;
-                self.fabricAPISwitch.hidden = YES;
-                self.optiFineLabel.hidden = YES;
-                self.optiFineSwitch.hidden = YES;
-                self.versionTableView.hidden = YES;
-            }
-        }
-        
-        [tableView reloadData];
-    } else if (tableView == self.versionTableView) {
-        NSString *version = self.loaderVersions[indexPath.row];
-        self.selectedLoaderVersion = version;
-        [tableView reloadData];
-    }
-}
-
-@end
 
 #pragma mark - Installer Progress View Controller (FCL 风格进度展示)
 
@@ -2864,7 +2073,7 @@
 #pragma mark - Loader Selection (push 到中间内容区)
 
 - (void)showLoaderSelectionForVersion:(NSDictionary *)version {
-    LoaderSelectionViewController *loaderVC = [[LoaderSelectionViewController alloc] init];
+    ModLoaderInstallViewController *loaderVC = [[ModLoaderInstallViewController alloc] init];
     loaderVC.gameVersion = version[@"id"];
 
     __weak typeof(self) weakSelf = self;
@@ -2907,6 +2116,9 @@
         // Quilt 加载器安装（仿 Fabric，使用 Quilt meta API）
         // Quilt 不安装 Fabric API（用 QSL/QFAPI），installAPI 强制为 NO
         [self installQuilt:versionId loaderVersion:loaderVersion];
+    } else if ([loaderType isEqualToString:@"optifine"]) {
+        // 单独 OptiFine：作为版本补丁安装（参照 FCL OptiFineInstallTask，iOS 跳过 Patcher）
+        [self installOptiFineAsPatch:versionId loaderVersion:loaderVersion];
     } else {
         [self showError:[NSString stringWithFormat:@"%@ 安装器暂未实现", loaderType]];
     }
@@ -3485,7 +2697,7 @@
 - (void)installForge:(NSString *)gameVersion installOptiFine:(BOOL)installOptiFine loaderVersion:(NSString *)loaderVersion {
     ForgeInstallViewController *forgeVC = [[ForgeInstallViewController alloc] init];
     forgeVC.gameVersion = gameVersion;
-    // LoaderSelectionViewController 已选好版本，传入以跳过重复的版本列表 UI
+    // ModLoaderInstallViewController 已选好版本，传入以跳过重复的版本列表 UI
     forgeVC.presetVersionString = loaderVersion;
 
     __weak typeof(self) weakSelf = self;
@@ -3734,13 +2946,183 @@
     return nil;
 }
 
+#pragma mark - OptiFine as Patch Installation (单独安装，参照 FCL OptiFineInstallTask)
+
+/// 单独安装 OptiFine 作为版本补丁（不依赖 Forge）
+/// loaderVersion 是 packed 格式：type\x1fpatch\x1ffilename\x1fdisplay
+- (void)installOptiFineAsPatch:(NSString *)gameVersion loaderVersion:(NSString *)loaderVersion {
+    // 解析 packed 格式
+    NSArray *parts = [loaderVersion componentsSeparatedByString:@"\x1f"];
+    if (parts.count < 3) {
+        [self showError:@"OptiFine 版本信息无效"];
+        return;
+    }
+    NSString *optiType = parts[0];
+    NSString *optiPatch = parts[1];
+    NSString *filename = parts[2];
+
+    NSString *versionId = [NSString stringWithFormat:@"%@-OptiFine_%@_%@", gameVersion, optiType, optiPatch];
+
+    // push 进度 VC
+    InstallerProgressViewController *progressVC = [[InstallerProgressViewController alloc] init];
+    progressVC.titleText = @"正在安装 OptiFine";
+    progressVC.progress = -1;
+    progressVC.stageMessage = [NSString stringWithFormat:@"正在下载 OptiFine %@_%@...", optiType, optiPatch];
+    self.installerProgressVC = progressVC;
+
+    __weak typeof(self) weakSelf = self;
+    progressVC.cancelHandler = ^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (strongSelf) {
+            [strongSelf.navigationController popViewControllerAnimated:YES];
+            strongSelf.installerProgressVC = nil;
+        }
+    };
+
+    [self.navigationController pushViewController:progressVC animated:YES];
+
+    // 注册到下载任务管理器
+    NSString *source = getPrefObject(@"general.download_source") ?: @"official";
+    NSString *taskName = [NSString stringWithFormat:@"optifine-%@-%@-%@", gameVersion, optiType, optiPatch];
+    DownloadTaskItem *taskItem = [[DownloadTaskManager sharedManager]
+        registerTaskWithResourceType:DownloadTaskResourceTypeModloader
+                        resourceName:taskName
+                         displayName:[NSString stringWithFormat:@"OptiFine %@_%@ (%@)", optiType, optiPatch, gameVersion]
+                      downloadSource:source
+                             rawTask:nil
+                      supportsResume:NO
+                             iconURL:nil];
+    __block NSString *taskId = taskItem.taskId;
+
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        // 1. 下载 OptiFine jar
+        NSString *bmclURL = [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/optifine/%@/%@/%@", gameVersion, optiType, optiPatch];
+        NSURL *url = [NSURL URLWithString:bmclURL];
+        NSError *downloadError = nil;
+        NSData *jarData = [NSData dataWithContentsOfURL:url options:NSDataReadingUncached error:&downloadError];
+
+        // fallback 官方源
+        if ((!jarData || downloadError) && filename.length > 0) {
+            NSString *officialURL = [NSString stringWithFormat:@"https://optifine.net/downloadx?f=%@", filename];
+            NSURL *officialURLObject = [NSURL URLWithString:officialURL];
+            NSError *officialError = nil;
+            NSData *officialData = [NSData dataWithContentsOfURL:officialURLObject options:NSDataReadingUncached error:&officialError];
+            if (officialData && !officialError) {
+                jarData = officialData;
+                downloadError = nil;
+            }
+        }
+
+        if (!jarData || downloadError) {
+            NSError *err = [NSError errorWithDomain:@"OptiFineInstall" code:1 userInfo:@{NSLocalizedDescriptionKey: downloadError.localizedDescription ?: @"下载 OptiFine 失败"}];
+            [[DownloadTaskManager sharedManager] setTaskWithId:taskId completedWithError:err];
+            dispatch_async(dispatch_get_main_queue(), ^{
+                __strong typeof(weakSelf) strongSelf = weakSelf;
+                if (!strongSelf) return;
+                [strongSelf finishInstallerProgressWithError:[NSString stringWithFormat:@"下载 OptiFine 失败: %@", downloadError.localizedDescription ?: @"未知错误"]];
+            });
+            return;
+        }
+
+        [[DownloadTaskManager sharedManager] updateTaskWithId:taskId progress:0.5 totalBytes:-1 downloadedBytes:0];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) return;
+            strongSelf.installerProgressVC.progress = 0.5;
+            strongSelf.installerProgressVC.stageMessage = @"正在写入版本文件...";
+        });
+
+        // 2. 创建版本目录
+        const char *env = getenv("POJAV_GAME_DIR");
+        NSString *gameDir = env ? [NSString stringWithUTF8String:env] : NSHomeDirectory();
+        NSString *versionDir = [gameDir stringByAppendingPathComponent:[NSString stringWithFormat:@"versions/%@", versionId]];
+        [[NSFileManager defaultManager] createDirectoryAtPath:versionDir withIntermediateDirectories:YES attributes:nil error:nil];
+
+        // 3. 写入 jar 文件作为 client.jar
+        // 对于 1.14+ OptiFine，安装器 jar 本身就是 patched client.jar，可以直接使用
+        // 对于 1.13- OptiFine，安装器 jar 含 Patcher，但 iOS 无法运行 Patcher，
+        //   降级方案：直接使用安装器 jar 作为 client.jar（部分老版本可能无法启动，提示用户）
+        NSString *jarPath = [versionDir stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.jar", versionId]];
+        NSError *writeError = nil;
+        [jarData writeToFile:jarPath options:NSDataWritingAtomic error:&writeError];
+        if (writeError) {
+            NSError *err = [NSError errorWithDomain:@"OptiFineInstall" code:2 userInfo:@{NSLocalizedDescriptionKey: writeError.localizedDescription}];
+            [[DownloadTaskManager sharedManager] setTaskWithId:taskId completedWithError:err];
+            dispatch_async(dispatch_get_main_queue(), ^{
+                __strong typeof(weakSelf) strongSelf = weakSelf;
+                if (!strongSelf) return;
+                [strongSelf finishInstallerProgressWithError:[NSString stringWithFormat:@"写入 OptiFine jar 失败: %@", writeError.localizedDescription]];
+            });
+            return;
+        }
+
+        // 4. 创建 version.json（使用 inheritsFrom 继承 vanilla 元数据，参照 FCL OptiFineInstallTask）
+        // OptiFine jar 作为 client.jar（jar 字段指向 versionId）
+        // mainClass 用标准 vanilla 入口，启动器会从 OptiFine jar 内加载 net.minecraft.client.main.Main
+        NSDictionary *versionJson = @{
+            @"id": versionId,
+            @"inheritsFrom": gameVersion,  // 继承 vanilla 版本的 assets/libraries/arguments
+            @"type": @"release",
+            @"mainClass": @"net.minecraft.client.main.Main",
+            @"libraries": @[],
+            @"jar": versionId,
+            @"minimumLauncherVersion": @21
+        };
+        NSString *jsonPath = [versionDir stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.json", versionId]];
+        NSData *jsonData = [NSJSONSerialization dataWithJSONObject:versionJson options:NSJSONWritingPrettyPrinted error:nil];
+        [jsonData writeToFile:jsonPath options:NSDataWritingAtomic error:nil];
+
+        // 4.1 确保父版本（vanilla）的 version JSON 已存在
+        NSString *parentJsonPath = [gameDir stringByAppendingPathComponent:
+                                    [NSString stringWithFormat:@"versions/%@/%@.json", gameVersion, gameVersion]];
+        if (![[NSFileManager defaultManager] fileExistsAtPath:parentJsonPath]) {
+            // 父版本不存在，提示用户先安装原版
+            NSError *err = [NSError errorWithDomain:@"OptiFineInstall" code:3
+                                         userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"未找到原版 %@ 的版本信息。请先在下载页面安装原版 %@，然后再安装 OptiFine。", gameVersion, gameVersion]}];
+            [[DownloadTaskManager sharedManager] setTaskWithId:taskId completedWithError:err];
+            dispatch_async(dispatch_get_main_queue(), ^{
+                __strong typeof(weakSelf) strongSelf = weakSelf;
+                if (!strongSelf) return;
+                [strongSelf finishInstallerProgressWithError:err.localizedDescription];
+            });
+            return;
+        }
+
+        [[DownloadTaskManager sharedManager] updateTaskWithId:taskId progress:0.85 totalBytes:-1 downloadedBytes:0];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) return;
+            strongSelf.installerProgressVC.progress = 0.85;
+            strongSelf.installerProgressVC.stageMessage = @"正在注册配置...";
+        });
+
+        // 5. 注册 profile
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) return;
+
+            NSMutableDictionary *profile = [NSMutableDictionary dictionary];
+            profile[@"name"] = versionId;
+            profile[@"lastVersionId"] = versionId;
+            profile[@"gameDir"] = @".";
+            profile[@"type"] = @"custom";
+            profile[@"created"] = [NSDate date].description;
+            [PLProfiles.current saveProfile:profile withName:versionId];
+            PLProfiles.current.selectedProfileName = versionId;
+
+            [[DownloadTaskManager sharedManager] setTaskWithId:taskId completedWithError:nil];
+            [strongSelf finishInstallerProgressWithSuccess:[NSString stringWithFormat:@"OptiFine 安装成功\n版本: %@\n配置文件: %@", versionId, versionId]];
+        });
+    });
+}
+
 #pragma mark - NeoForge Installation
 
 - (void)installNeoForge:(NSString *)gameVersion loaderVersion:(NSString *)loaderVersion {
     ForgeInstallViewController *neoForgeVC = [[ForgeInstallViewController alloc] init];
     neoForgeVC.gameVersion = gameVersion;
     neoForgeVC.isNeoForge = YES;
-    // LoaderSelectionViewController 已选好版本，传入以跳过重复的版本列表 UI
+    // ModLoaderInstallViewController 已选好版本，传入以跳过重复的版本列表 UI
     neoForgeVC.presetVersionString = loaderVersion;
 
     __weak typeof(self) weakSelf = self;
