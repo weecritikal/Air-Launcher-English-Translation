@@ -160,10 +160,10 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
         // Get preferred Java version from current profile
         // 26.x 官方强制要求 Java 25（Mojang 自 26.x 起将 javaVersion.majorVersion 设为 25），
         // 不再对 preferredJavaVersion 做任何钳制，直接采纳 Profile 指定的 Java 版本。
-        // caciocavallo 三路切换会根据实际 Java 版本选择对应 jar：
+        // caciocavallo 三路切换会根据实际 Java 版本选择对应 jar（三个独立文件夹）：
         // - Java 8     → libs_caciocavallo（1.10-SNAPSHOT）
-        // - Java 17/21 → libs_caciocavallo/java17（1.18-SNAPSHOT 纯 Java 17 编译）
-        // - Java 25    → libs_caciocavallo17（1.18-SNAPSHOT 含 Java 24 class，catsruledogs iOS）
+        // - Java 17/21 → libs_caciocavallo17（1.18-SNAPSHOT 纯 Java 17 编译）
+        // - Java 25    → libs_caciocavallo25（1.18-SNAPSHOT 含 Java 24 class，catsruledogs iOS）
         int preferredJavaVersion = [PLProfiles resolveKeyForCurrentProfile:@"javaVersion"].intValue;
         if (preferredJavaVersion > 0) {
             if (minVersion > preferredJavaVersion) {
@@ -199,13 +199,14 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
 
     // 26.x 版本官方强制要求 Java 25（Mojang 自 26.x 起将 javaVersion.majorVersion 设为 25）。
     // 不再钳制 Profile 的 javaVersion，26.x 必须使用 Java 25 启动。
-    // caciocavallo 切换（参照 FCL/ZalithLauncher2 二元思路，扩展为三路以兼容 Java 25）：
+    // caciocavallo 三路切换（参照 FCL/ZalithLauncher2 二元思路，扩展为三路以兼容 Java 25）：
+    // 三个独立的平级文件夹，按实际 Java 版本选择：
     // - Java 8     → libs_caciocavallo（1.10-SNAPSHOT，包名 net.java.openjdk.cacio，bootclasspath/p）
-    // - Java 17/21 → libs_caciocavallo/java17（1.18-SNAPSHOT 纯 Java 17 编译，包名 com.github.caciocavallosilano.cacio，bootclasspath/a）
-    // - Java 25    → libs_caciocavallo17（1.18-SNAPSHOT 含 Java 24 class，包名 com.github.caciocavallosilano.cacio，bootclasspath/a）
+    // - Java 17/21 → libs_caciocavallo17（1.18-SNAPSHOT 纯 Java 17 编译，包名 com.github.caciocavallosilano.cacio，bootclasspath/a）
+    // - Java 25    → libs_caciocavallo25（1.18-SNAPSHOT 含 Java 24 class，包名 com.github.caciocavallosilano.cacio，bootclasspath/a）
     //   来自 catsruledogs/Amethyst-iOS-25。其 CTCGraphicsEnvironment 是 Java 24 class（class version 68），
     //   含 Java 25 兼容修复，纯 Java 17 编译版本会在 get_method_id 阶段 SIGSEGV。
-    //   class version 68 仅 Java 24+ 可加载，故 Java 17/21 不能共用，需用 java17/ 目录的纯 Java 17 jar。
+    //   class version 68 仅 Java 24+ 可加载，故 Java 17/21 不能共用，需用 caciocavallo17 目录的纯 Java 17 jar。
 
     NSLog(@"[JavaLauncher] Looking for Java %d or later", minVersion);
     NSString *javaHome = getSelectedJavaHome(defaultJRETag, minVersion);
@@ -444,20 +445,25 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
     }
 
     // Add Caciocavallo bootclasspath
-    // caciocavallo 切换（参照 FCL/ZalithLauncher2 的二元思路，扩展为三路以兼容 Java 25）：
-    // 切换依据为实际选中的 Java 运行时版本：
+    // caciocavallo 三路切换（参照 FCL/ZalithLauncher2 的二元思路，扩展为三路以兼容 Java 25）：
+    // 三个独立的 caciocavallo 文件夹，按实际选中的 Java 运行时版本选择：
     //   - isJava8 通过 libjli 路径检测（lib/jli/libjli.dylib 仅 Java 8 存在）
     //   - isJava25 通过 javaHome 路径包含 "java-25" 或 minVersion >= 25 检测
     //   - 其余为 Java 17/21
     //
+    // 目录布局（三个平级独立文件夹，无嵌套子目录）：
+    //   libs_caciocavallo   → Java 8（1.10-SNAPSHOT，包名 net.java.openjdk.cacio，class version 52）
+    //   libs_caciocavallo17 → Java 17/21（1.18-SNAPSHOT 纯 Java 17 编译，包名 com.github.caciocavallosilano.cacio，class version 61）
+    //   libs_caciocavallo25 → Java 25（1.18-SNAPSHOT 含 Java 24 class，包名 com.github.caciocavallosilano.cacio，来自 catsruledogs iOS）
+    //
     // 为什么不能像 FCL/ZL2 那样简单二元切换（Java 8 vs Java 17+）：
-    //   catsruledogs/Amethyst-iOS-25 的 caciocavallo17 jar 中，AWT 入口类
+    //   catsruledogs/Amethyst-iOS-25 的 caciocavallo25 jar 中，AWT 入口类
     //   CTCGraphicsEnvironment（通过 -Djava.awt.graphicsenv 在 JVM 启动时加载）
     //   是 Java 24 编译（class version 68），Java 17/21 无法加载。
     //   而 26.2 + Java 25 又必须用这个 jar（含 Java 25 兼容修复，纯 Java 17 编译版本
     //   会在 get_method_id 阶段 SIGSEGV）。
-    //   因此 Java 17/21 必须用纯 Java 17 编译的 jar（class version 61），
-    //   Java 25 必须用 catsruledogs 的 jar（含 Java 24 class），两者不可共用。
+    //   因此 Java 17/21 必须用纯 Java 17 编译的 jar（class version 61，放 caciocavallo17），
+    //   Java 25 必须用 catsruledogs 的 jar（含 Java 24 class，放 caciocavallo25），两者不可共用。
     //   这是确保"所有版本（Java 8/17/21/25）启动都没有问题"的唯一方案。
     BOOL isJava25 = (minVersion >= 25) || [javaHome containsString:@"java-25"];
     const char *cacio_bootclasspath_mode;
@@ -471,13 +477,13 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
     } else if (isJava25) {
         // Java 25: 1.18-SNAPSHOT 含 Java 24 class（catsruledogs iOS），bootclasspath/a
         cacio_bootclasspath_mode = "a";
-        cacio_libs_path = [NSString stringWithFormat:@"%@/libs_caciocavallo17", NSBundle.mainBundle.bundlePath];
-        cacio_stub_jar_path = [NSString stringWithFormat:@"%@/libs_caciocavallo17/stub-surface-manager.jar", NSBundle.mainBundle.bundlePath];
+        cacio_libs_path = [NSString stringWithFormat:@"%@/libs_caciocavallo25", NSBundle.mainBundle.bundlePath];
+        cacio_stub_jar_path = [NSString stringWithFormat:@"%@/libs_caciocavallo25/stub-surface-manager.jar", NSBundle.mainBundle.bundlePath];
     } else {
         // Java 17/21: 1.18-SNAPSHOT 纯 Java 17 编译（class version 61），bootclasspath/a
-        cacio_libs_path = [NSString stringWithFormat:@"%@/libs_caciocavallo/java17", NSBundle.mainBundle.bundlePath];
         cacio_bootclasspath_mode = "a";
-        cacio_stub_jar_path = [NSString stringWithFormat:@"%@/libs_caciocavallo/java17/stub-surface-manager.jar", NSBundle.mainBundle.bundlePath];
+        cacio_libs_path = [NSString stringWithFormat:@"%@/libs_caciocavallo17", NSBundle.mainBundle.bundlePath];
+        cacio_stub_jar_path = [NSString stringWithFormat:@"%@/libs_caciocavallo17/stub-surface-manager.jar", NSBundle.mainBundle.bundlePath];
     }
     NSLog(@"[JavaLauncher] Caciocavallo: isJava8=%d isJava25=%d libs=%@ mode=/%s",
           isJava8, isJava25, cacio_libs_path.lastPathComponent, cacio_bootclasspath_mode);
@@ -488,7 +494,6 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
         // 跳过 stub-surface-manager.jar：它通过 --patch-module java.desktop 注入，
         // 不能放在 -Xbootclasspath/a（unnamed module），否则与 java.desktop 模块的
         // sun.java2d 包形成 split package，Java 9+ 会拒绝加载。
-        // hasSuffix:@".jar" 会自动跳过子目录（如 java17/）。
         if ([file hasSuffix:@".jar"] && ![file isEqualToString:@"stub-surface-manager.jar"]) {
             cacio_classpath = [NSString stringWithFormat:@"%@:%@/%@", cacio_classpath, cacio_libs_path, file];
         }
@@ -502,7 +507,7 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
     // JVM 回退 headless 模式，Swing GUI（如 OptiFine 安装器）抛出 java.awt.HeadlessException。
     // sun.java2d 包属于 java.desktop 模块，通过 --patch-module 注入 stub 类让 forName 成功，
     // <clinit> 才能继续安装 CTCGraphicsEnvironment，execute_jar 与 Minecraft 启动均受益。
-    // stub jar 路径随切换变化：Java 25 从 caciocavallo17/ 加载，Java 17/21 从 caciocavallo/java17/ 加载。
+    // stub jar 路径随切换变化：Java 25 从 caciocavallo25/ 加载，Java 17/21 从 caciocavallo17/ 加载。
     if (cacio_stub_jar_path) {
         if ([fm fileExistsAtPath:cacio_stub_jar_path]) {
             margv[++margc] = [NSString stringWithFormat:@"--patch-module=java.desktop=%@", cacio_stub_jar_path].UTF8String;
