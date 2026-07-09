@@ -186,16 +186,13 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
         defaultJRETag = @"execute_jar";
         gameDir = @(getenv("POJAV_GAME_DIR"));
         launchJar = YES;
-        // Caciocavallo17 bootclasspath jar 被 Java 24+ 编译（class version 68.0），
-        // 仅 Java 25（class version 69）能加载。当 JAR 要求 Java 17+ 时走 Caciocavallo17
-        // 路径，必须强制 minVersion=25 避免 UnsupportedClassVersionError。
-        // 但 Java 8 JAR（如 OptiFine 安装器）走 Caciocavallo（非 17）路径，用 Java 8 即可，
-        // 强制 25 反而导致 Caciocavallo17 的 CTCGraphicsEnvironment 初始化失败，
-        // JVM 回退 headless 模式，Swing GUI 抛出 java.awt.HeadlessException。
-        // 修复：仅当 JAR 要求 Java >= 17 时才强制提升到 25。
-        if (minVersion >= 17 && minVersion < 25) {
-            minVersion = 25;
-        }
+        // Caciocavallo17 bootclasspath jar 现已统一使用 Java 17 编译版本
+        // （cacio-shared-1.18-SNAPSHOT.jar / cacio-tta-1.18-SNAPSHOT.jar 内所有 class
+        // 均为 class version 61.0，Java 17+ 均可加载）。
+        // 因此 execute_jar 路径不再需要强制提升 minVersion 到 25：
+        // - Java 8 JAR（如 OptiFine 安装器）走 Caciocavallo（非 17）路径，用 Java 8
+        // - Java 17+ JAR 走 Caciocavallo17 路径，用 Java 17/21 即可加载
+        // 之前强制 25 是为了兼容 Java 24+ 编译的 cacio jar，现已通过替换 jar 修复。
     }
     NSLog(@"[JavaLauncher] Looking for Java %d or later", minVersion);
     NSString *javaHome = getSelectedJavaHome(defaultJRETag, minVersion);
@@ -262,18 +259,12 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
             }
         }
         // Minecraft 26.x 版本 JSON 不再声明 LWJGL，但需要使用 3.4.x（含 spvc/vma/shaderc）。
-        // 若未扫描到 LWJGL 声明且所需 Java >= 21，强制使用 3.4.x 路径。
+        // 若未扫描到 LWJGL 声明且所需 Java >= 21，判定为 26.x，强制使用 LWJGL 3.4.x 路径。
+        // 注意：caciocavallo17 jar 现已统一为 Java 17 编译版本，26.x 不再需要强制升到 Java 25，
+        // 用 Java 21（Mojang 为 26.x 指定的最低 Java 版本）即可正常启动。
         if (!foundLWJGLDeclaration && minVersion >= 21) {
             useLWJGL33 = NO;
-            // 26.x 同时强制要求 Java 25 以加载 caciocavallo17（class version 68.0，需 Java 25+）。
-            // -Xbootclasspath/a 在所有 Java 17+ 路径都无条件添加 caciocavallo17，若用 Java 21
-            // runtime 启动 26.x 会触发 UnsupportedClassVersionError。仅 execute_jar 路径强制 25 不够，
-            // 游戏启动（NSDictionary 分支）也需要。
-            if (minVersion < 25) {
-                minVersion = 25;
-                NSLog(@"[JavaLauncher] 26.x detected, forcing minVersion=25 for caciocavallo17 compatibility");
-            }
-            NSLog(@"[JavaLauncher] No LWJGL declaration in version JSON and minJava=%d, defaulting to LWJGL 3.4.x", minVersion);
+            NSLog(@"[JavaLauncher] 26.x detected (no LWJGL declaration, minJava=%d), defaulting to LWJGL 3.4.x", minVersion);
         }
     }
     NSString *frameworksPath = [NSString stringWithFormat:@"%@/Frameworks", NSBundle.mainBundle.bundlePath];
@@ -407,9 +398,11 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
         margv[++margc] = "--add-opens=java.desktop/sun.font=ALL-UNNAMED";
         margv[++margc] = "--add-opens=java.desktop/sun.java2d=ALL-UNNAMED";
         margv[++margc] = "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED";
-        // Java 25 额外需要的 add-opens：Caciocavallo17 的 CTCGraphicsEnvironment 通过反射访问
-        // sun.awt.PlatformGraphicsInfo 和 sun.awt.image，若缺少这些 opens，GE 初始化失败会导致
-        // JVM 回退到 headless 模式，OptiFine 安装器等 Swing GUI 应用抛出 HeadlessException。
+        // Caciocavallo17 的 CTCGraphicsEnvironment 通过反射访问 sun.awt.PlatformGraphicsInfo
+        // 和 sun.awt.image，若缺少这些 opens，GE 初始化失败会导致 JVM 回退到 headless 模式，
+        // OptiFine 安装器等 Swing GUI 应用抛出 HeadlessException。
+        // 这些 add-opens 在 Java 17/21/25 上都需要，对 Java 17/21 是必需的，
+        // 对 Java 25 也无害（多余的 opens 会被 JVM 忽略）。
         margv[++margc] = "--add-opens=java.desktop/sun.awt=ALL-UNNAMED";
         margv[++margc] = "--add-opens=java.desktop/sun.awt.image=ALL-UNNAMED";
         margv[++margc] = "--add-opens=java.desktop/java.awt.peer=ALL-UNNAMED";

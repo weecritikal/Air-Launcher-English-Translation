@@ -518,12 +518,12 @@ static void *ProgressObserverContext = &ProgressObserverContext;
         return;
     }
 
-    // execute_jar 路径：JAR 要求 Java >= 17 时走 Caciocavallo17（Java 24+ 编译），
-    // 需强制 minVersion=25 避免 UnsupportedClassVersionError。
-    // Java 8 JAR（如 OptiFine）走 Caciocavallo 路径，用 Java 8 即可，
-    // 强制 25 会导致 Caciocavallo17 初始化失败引发 HeadlessException。
+    // execute_jar 路径：Caciocavallo17 jar 现已统一为 Java 17 编译版本，
+    // Java 17/21 均可加载，不再需要强制提升 requiredJavaVersion 到 25。
+    // - Java 8 JAR（如 OptiFine 安装器）走 Caciocavallo（非 17）路径，用 Java 8
+    // - Java 17+ JAR 走 Caciocavallo17 路径，用 Java 17/21 即可
     // 与 JavaLauncher.m launchJar 分支保持一致。
-    int requiredJavaVersion = (javaVersion >= 17) ? MAX(javaVersion, 25) : javaVersion;
+    int requiredJavaVersion = javaVersion;
 
     // 预检 execute_jar 标签的 JRE 是否已配置，避免 present 后才发现没 JRE 导致黑屏
     NSString *javaHome = getSelectedJavaHome(@"execute_jar", requiredJavaVersion);
