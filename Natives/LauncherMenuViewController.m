@@ -1,5 +1,6 @@
 #import "LauncherMenuViewController.h"
 #import "LauncherPreferencesViewController.h"
+#import "LauncherPreferences.h"
 #import "VersionManagerViewController.h"
 #import "ProfileSettingsViewController.h"
 #import "PLProfiles.h"
