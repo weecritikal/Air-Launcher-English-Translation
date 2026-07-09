@@ -477,11 +477,20 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
         cacio_libs_path = [NSString stringWithFormat:@"%@/libs_caciocavallo", NSBundle.mainBundle.bundlePath];
     } else if (isJava25) {
         // Java 25: 1.18-SNAPSHOT 含 Java 24 class（catsruledogs iOS），bootclasspath/a
-        // caciocavallo25 的 CTCPreloadClassLoader.<clinit> 调用
-        // Class.forName("sun.java2d.SurfaceManagerFactory")，Java 9+ 已将该类迁至
-        // sun.awt.image.SurfaceManagerFactory。stub-surface-manager.jar 提供旧路径的
-        // stub 类让 forName 成功。stub 随其他 cacio jar 一起放入 bootclasspath/a
-        // （参照 catsruledogs/Amethyst-iOS-25，不使用 --patch-module）。
+        // 注意：caciocavallo25 的 cacio-tta jar 与 catsruledogs/Amethyst-iOS-25 的
+        // libs_caciocavallo17/cacio-tta jar MD5 完全一致（catsruledogs 对 Java 25 也用
+        // caciocavallo17 目录，workspace 为区分 Java 17/21 纯编译版另设 caciocavallo25）。
+        //
+        // 关于 stub-surface-manager.jar：已删除，不再使用。
+        // CTCPreloadClassLoader.<clinit> 会 Class.forName("sun.java2d.SurfaceManagerFactory")，
+        // Java 9+ 已将该类迁至 sun.awt.image.SurfaceManagerFactory，故 forName 抛
+        // ClassNotFoundException。但该 <clinit> 用 try/catch(Exception) 包裹整个逻辑
+        // （异常表 16-177），异常仅 printStackTrace 后被吞掉，不终止启动。
+        // catsruledogs 不提供 stub 也能正常启动 26.2 + Java 25，证明此异常无害。
+        // 之前 workspace 添加 stub-surface-manager.jar（含 sun/java2d/SurfaceManagerFactory）
+        // 到 bootclasspath/a，反而把类注入 java.desktop 模块内部包，破坏模块封装，
+        // 导致后续 JNI get_method_id 时类查找状态损坏 → SIGSEGV。删除 stub 后对齐
+        // catsruledogs，问题解决。
         cacio_bootclasspath_mode = "a";
         cacio_libs_path = [NSString stringWithFormat:@"%@/libs_caciocavallo25", NSBundle.mainBundle.bundlePath];
     } else {
@@ -495,19 +504,18 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
     NSString *cacio_classpath = [NSString stringWithFormat:@"-Xbootclasspath/%s", cacio_bootclasspath_mode];
     NSArray *files = [fm contentsOfDirectoryAtPath:cacio_libs_path error:nil];
     for(NSString *file in files) {
-        // 所有 cacio jar（含 stub-surface-manager.jar）均放入 -Xbootclasspath/a。
-        // 参照 catsruledogs/Amethyst-iOS-25：不使用 --patch-module，stub 放在 bootclasspath/a。
-        // 之前用 --patch-module 注入 stub 反而导致 Java 25 模块系统不一致 → get_method_id SIGSEGV。
+        // 所有 cacio jar 均放入 -Xbootclasspath/a（或 /p for Java 8）。
+        // 参照 catsruledogs/Amethyst-iOS-25：不使用 --patch-module，不使用 stub-surface-manager.jar。
+        // 之前用 --patch-module 或 stub jar 注入 sun.java2d.SurfaceManagerFactory，
+        // 会破坏 java.desktop 模块封装，导致 get_method_id SIGSEGV。
         if ([file hasSuffix:@".jar"]) {
             cacio_classpath = [NSString stringWithFormat:@"%@:%@/%@", cacio_classpath, cacio_libs_path, file];
         }
     }
     margv[++margc] = cacio_classpath.UTF8String;
 
-    // stub-surface-manager.jar 已随上述 bootclasspath/a 一起加载（参照 catsruledogs/Amethyst-iOS-25）。
-    // 不再使用 --patch-module 注入：之前用 --patch-module 将 stub 注入 java.desktop 模块，
-    // 导致 Java 25 模块系统不一致，最终在 get_method_id 阶段 SIGSEGV。
-    // catsruledogs 的方案是将所有 cacio jar（含 stub）统一放入 bootclasspath/a，经验证可正常启动 26.2。
+    // stub-surface-manager.jar 已删除（见上方注释）。不再使用 --patch-module。
+    // CTCPreloadClassLoader.<clinit> 抛出的 ClassNotFoundException 被吞掉，不影响启动。
 
     if (!getEntitlementValue(@"com.apple.developer.kernel.extended-virtual-addressing")) {
         // In jailed environment, where extended virtual addressing entitlement isn't
