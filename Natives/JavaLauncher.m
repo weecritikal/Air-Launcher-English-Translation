@@ -105,7 +105,7 @@ void init_loadCustomJvmFlags(int* argc, const char** argv) {
     }
 }
 
-int launchJVM(NSString *username, id launchTarget, int width, int height, int minVersion) {
+int launchJVM(NSString *accountId, id launchTarget, int width, int height, int minVersion) {
     NSLog(@"[JavaLauncher] Beginning JVM launch");
 
     BOOL jit26UniversalScript = getPrefBool(@"debug.debug_universal_script_jit");
@@ -345,7 +345,7 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
     }
 
       // 添加authlib-injector参数以支持第三方认证账户的皮肤显示
-    if ([username length] > 0 && [BaseAuthenticator.current isKindOfClass:[ThirdPartyAuthenticator class]]) {
+    if ([accountId length] > 0 && [BaseAuthenticator.current isKindOfClass:[ThirdPartyAuthenticator class]]) {
         BaseAuthenticator *currentAuth = BaseAuthenticator.current;
         if (currentAuth.authData[@"authserver"] != nil) {
             NSLog(@"[JavaLauncher] Adding authlib-injector arguments for third party account");
@@ -586,7 +586,7 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
     if (launchJar) {
         margv[++margc] = "-jar";
     } else {
-        margv[++margc] = username.UTF8String;
+        margv[++margc] = accountId.UTF8String;
     }
 
     if ([launchTarget isKindOfClass:NSDictionary.class]) {

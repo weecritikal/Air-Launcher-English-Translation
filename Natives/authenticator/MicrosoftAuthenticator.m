@@ -186,8 +186,9 @@ typedef void(^XSTSCallback)(NSString *xsts, NSString *uhs);
             [uuid substringWithRange:NSMakeRange(20, 12)]
         ];
         self.authData[@"profilePicURL"] = [NSString stringWithFormat:@"https://api.rms.net.cn/head/%@", self.authData[@"username"]];
-        self.authData[@"oldusername"] = self.authData[@"username"];
         self.authData[@"username"] = response[@"name"];
+        // 微软账户用 xuid 作为 accountId（全局唯一且稳定），使同名账户可共存
+        self.authData[@"accountId"] = self.authData[@"xuid"];
         callback(nil, [self saveChanges]);
     } failure:^(NSURLSessionDataTask *task, NSError *error) {
         NSData *errorData = error.userInfo[AFNetworkingOperationFailingURLResponseDataErrorKey];
@@ -196,6 +197,8 @@ typedef void(^XSTSCallback)(NSString *xsts, NSString *uhs);
             // If there is no profile, use the Xbox gamertag as username with Demo mode
             self.authData[@"profileId"] = @"00000000-0000-0000-0000-000000000000";
             self.authData[@"username"] = [NSString stringWithFormat:@"Demo.%@", self.authData[@"xboxGamertag"]];
+            // Demo 账户同样用 xuid 作为 accountId
+            self.authData[@"accountId"] = self.authData[@"xuid"];
 
             if ([self saveChanges]) {
                 callback(@"DEMO", YES);

@@ -528,6 +528,8 @@ static NSError* createError(NSString *message, NSInteger code) {
                     [uuid substringWithRange:NSMakeRange(20, 12)]
                 ];
             }
+            // 第三方账户用 profileId（角色 UUID）作为 accountId，使同名账户可共存
+            weakSelf.authData[@"accountId"] = weakSelf.authData[@"profileId"];
 
             // 异步获取头像（与单角色路径一致）
             [weakSelf fetchProfileTextureWithCallback:callback];
@@ -681,14 +683,16 @@ static NSError* createError(NSString *message, NSInteger code) {
                     [uuid substringWithRange:NSMakeRange(20, 12)]
                 ];
             }
-            
+            // 第三方账户用 profileId（角色 UUID）作为 accountId，使同名账户可共存
+            self.authData[@"accountId"] = self.authData[@"profileId"];
+
             // 尝试使用Yggdrasil API获取头像
             NSString *serverURL = self.authData[@"authserver"] ?: @"https://authserver.ely.by";
             // 确保serverURL以斜杠结尾
             if (![serverURL hasSuffix:@"/"]) {
                 serverURL = [serverURL stringByAppendingString:@"/"];
             }
-            
+
             AFHTTPSessionManager *manager = AFHTTPSessionManager.manager;
             manager.requestSerializer = AFJSONRequestSerializer.serializer;
             NSString *profileURL = [NSString stringWithFormat:@"%@sessionserver/session/minecraft/profile/%@", serverURL, self.authData[@"profileId"]];
@@ -962,7 +966,9 @@ static NSError* createError(NSString *message, NSInteger code) {
                     } else {
                         self.authData[@"profileId"] = uuid;
                     }
-                    
+                    // 第三方账户用 profileId（角色 UUID）作为 accountId，使同名账户可共存
+                    self.authData[@"accountId"] = self.authData[@"profileId"];
+
                     // 尝试使用Yggdrasil API获取头像
                     NSString *serverURL = self.authData[@"authserver"] ?: @"https://authserver.ely.by";
                     // 确保serverURL以斜杠结尾

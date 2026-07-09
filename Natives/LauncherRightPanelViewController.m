@@ -288,13 +288,13 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     if (gesture.state != UIGestureRecognizerStateBegan) return;
 
     BaseAuthenticator *currentAuth = BaseAuthenticator.current;
-    NSString *accountName = currentAuth.authData[@"username"];
-    if (!accountName || accountName.length == 0) {
+    NSString *accountId = currentAuth.authData[@"accountId"];
+    if (!accountId || accountId.length == 0) {
         [self showAlert:@"未登录" message:@"请先登录账户后再设置自定义头像"];
         return;
     }
 
-    BOOL hasCustom = [[AvatarManager sharedManager] hasCustomAvatarForAccount:accountName];
+    BOOL hasCustom = [[AvatarManager sharedManager] hasCustomAvatarForAccount:accountId];
 
     UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"自定义头像"
                                                                    message:nil
@@ -304,7 +304,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     }]];
     if (hasCustom) {
         [sheet addAction:[UIAlertAction actionWithTitle:@"清除自定义头像" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
-            [[AvatarManager sharedManager] removeAvatarForAccount:accountName];
+            [[AvatarManager sharedManager] removeAvatarForAccount:accountId];
             [self updateAccountInfo];
         }]];
     }
@@ -368,13 +368,13 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 
 - (void)saveAvatarImage:(UIImage *)image {
     BaseAuthenticator *currentAuth = BaseAuthenticator.current;
-    NSString *accountName = currentAuth.authData[@"username"];
-    if (!accountName || accountName.length == 0) {
+    NSString *accountId = currentAuth.authData[@"accountId"];
+    if (!accountId || accountId.length == 0) {
         [self showAlert:@"错误" message:@"未登录账户，无法保存头像"];
         return;
     }
     __weak typeof(self) weakSelf = self;
-    [[AvatarManager sharedManager] saveAvatarForAccount:accountName image:image withCompletion:^(BOOL success, NSError * _Nullable error) {
+    [[AvatarManager sharedManager] saveAvatarForAccount:accountId image:image withCompletion:^(BOOL success, NSError * _Nullable error) {
         dispatch_async(dispatch_get_main_queue(), ^{
             if (success) {
                 [weakSelf updateAccountInfo];
@@ -861,7 +861,8 @@ static void *ProgressObserverContext = &ProgressObserverContext;
         }
 
         // 加载头像：本地自定义头像优先，回退到在线 URL
-        UIImage *localAvatar = [[AvatarManager sharedManager] avatarForAccount:currentAuth.authData[@"username"]];
+        // 头像文件名使用 accountId（唯一标识），同名账户头像不再冲突
+        UIImage *localAvatar = [[AvatarManager sharedManager] avatarForAccount:currentAuth.authData[@"accountId"]];
         if (localAvatar) {
             self.avatarImageView.image = localAvatar;
         } else {

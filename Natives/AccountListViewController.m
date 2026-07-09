@@ -124,11 +124,12 @@
     }
 }
 
-/// 当前选中的账户用户名（用于卡片显示选中状态）
-- (NSString *)currentSelectedAccountUsername {
+/// 当前选中的账户 accountId（用于卡片显示选中状态）
+/// 使用 accountId 而非 username，确保同名账户也能正确区分选中状态
+- (NSString *)currentSelectedAccountId {
     // BaseAuthenticator.current 保存当前活跃账户的 authData
     BaseAuthenticator *currentAuth = BaseAuthenticator.current;
-    return currentAuth.authData[@"username"];
+    return currentAuth.authData[@"accountId"];
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath
@@ -231,9 +232,9 @@
     checkmark.contentMode = UIViewContentModeScaleAspectFit;
     [cardView addSubview:checkmark];
 
-    NSString *selectedUsername = [self currentSelectedAccountUsername];
-    BOOL isCurrentSelected = (selectedUsername.length > 0 &&
-                              [selectedUsername isEqualToString:accountData[@"username"]]);
+    NSString *selectedAccountId = [self currentSelectedAccountId];
+    BOOL isCurrentSelected = (selectedAccountId.length > 0 &&
+                              [selectedAccountId isEqualToString:accountData[@"accountId"]]);
     checkmark.hidden = !isCurrentSelected;
 
     // 卡片内边距与子视图布局约束
@@ -287,12 +288,17 @@
 
     // Check if this is a third party account
     NSDictionary *accountData = self.accountList[indexPath.row];
+    // 优先用 accountId 加载；若 accountId 缺失（旧格式账户未迁移），回退到 username 触发迁移
+    NSString *loadKey = accountData[@"accountId"];
+    if (loadKey.length == 0) {
+        loadKey = accountData[@"username"];
+    }
     if (accountData[@"clientToken"] != nil) {
         // This is a third party account
-        [[ThirdPartyAuthenticator loadSavedName:accountData[@"username"]] refreshTokenWithCallback:callback];
+        [[ThirdPartyAuthenticator loadSavedName:loadKey] refreshTokenWithCallback:callback];
     } else {
         // This is a Microsoft or local account
-        [[BaseAuthenticator loadSavedName:accountData[@"username"]] refreshTokenWithCallback:callback];
+        [[BaseAuthenticator loadSavedName:loadKey] refreshTokenWithCallback:callback];
     }
 }
 
@@ -300,17 +306,27 @@
     if (editingStyle == UITableViewCellEditingStyleDelete) {
         // TODO: invalidate token
 
-        NSString *str = self.accountList[indexPath.row][@"username"];
+        // 用 accountId 作为文件名（唯一标识），同名账户删除互不影响
+        // 若 accountId 缺失（旧格式账户未迁移），回退到 username
+        NSString *accountId = self.accountList[indexPath.row][@"accountId"];
+        if (accountId.length == 0) {
+            accountId = self.accountList[indexPath.row][@"username"];
+        }
         NSFileManager *fm = [NSFileManager defaultManager];
-        NSString *path = [NSString stringWithFormat:@"%s/accounts/%@.json", getenv("POJAV_HOME"), str];
+        NSString *path = [NSString stringWithFormat:@"%s/accounts/%@.json", getenv("POJAV_HOME"), accountId];
         if (self.whenDelete != nil) {
-            self.whenDelete(str);
+            self.whenDelete(accountId);
         }
         NSString *xuid = self.accountList[indexPath.row][@"xuid"];
         if (xuid) {
             [MicrosoftAuthenticator clearTokenDataOfProfile:xuid];
         }
         [fm removeItemAtPath:path error:nil];
+        // 若删除的正是当前选中账户，清空 selected_account，避免下次启动尝试加载已删除的账户
+        if ([getPrefObject(@"internal.selected_account") isEqualToString:accountId]) {
+            setPrefObject(@"internal.selected_account", @"");
+            [BaseAuthenticator setCurrent:nil];
+        }
         [self.accountList removeObjectAtIndex:indexPath.row];
         [tableView deleteRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationFade];
     }

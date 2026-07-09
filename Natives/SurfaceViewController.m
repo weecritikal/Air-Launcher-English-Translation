@@ -1046,17 +1046,21 @@ static GameSurfaceView* pojavWindow;
             return;
         }
         
-        // Validate username
-        NSString *username = currentAuth.authData[@"username"];
-        if (!username || username.length == 0) {
-            username = @"Player";
+        // Validate accountId（用作账户文件名，传给 Java 端加载对应账户）
+        NSString *accountId = currentAuth.authData[@"accountId"];
+        if (!accountId || accountId.length == 0) {
+            // 兜底：极少数情况下 accountId 缺失（如旧账户未迁移），回退到 username
+            accountId = currentAuth.authData[@"username"];
+            if (!accountId || accountId.length == 0) {
+                accountId = @"Player";
+            }
         }
-        
-        NSLog(@"[SurfaceViewController] Launching Minecraft with username: %@, version: %d, size: %dx%d", 
-              username, minVersion, windowWidth, windowHeight);
-        
-        // Launch JVM
-        launchJVM(username, self.metadata, windowWidth, windowHeight, minVersion);
+
+        NSLog(@"[SurfaceViewController] Launching Minecraft with accountId: %@, version: %d, size: %dx%d",
+              accountId, minVersion, windowWidth, windowHeight);
+
+        // Launch JVM（args[0] 传 accountId，Java 端 MinecraftAccount.load(accountId) 据此加载账户）
+        launchJVM(accountId, self.metadata, windowWidth, windowHeight, minVersion);
     });
 }
 
