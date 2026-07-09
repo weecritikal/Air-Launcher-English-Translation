@@ -166,6 +166,10 @@ static UIColor *CFKErrorColor(void) {
 
 // 状态
 @property (nonatomic, assign) BOOL isTesting;
+// 记录上次安装约束时的宽度，避免 viewDidLayoutSubviews 重复安装
+@property (nonatomic, assign) CGFloat lastInstalledWidth;
+// 标记约束是否已首次安装（viewDidLoad 阶段用全屏宽度安装一次，viewDidLayoutSubviews 修正）
+@property (nonatomic, assign) BOOL hasInstalledConstraints;
 
 @end
 
@@ -195,6 +199,19 @@ static UIColor *CFKErrorColor(void) {
     [coordinator animateAlongsideTransition:^(id<UIViewControllerTransitionCoordinatorContext> _Nonnull context) {
         [self updateLayoutForWidth:size.width];
     } completion:nil];
+}
+
+- (void)viewDidLayoutSubviews {
+    [super viewDidLayoutSubviews];
+    // 修复错位：viewDidLoad 时 self.view.bounds.size.width 在 FormSheet 模式下
+    // 可能是全屏宽度（尚未完成 modal 布局），导致 horizontalPadding 计算错误
+    // （大屏居中限宽逻辑 MAX(16, (width - 600) / 2.0) 会产生过大边距）。
+    // 在 viewDidLayoutSubviews 中用真实宽度重新安装约束。
+    CGFloat currentWidth = self.view.bounds.size.width;
+    if (currentWidth > 0 && currentWidth != _lastInstalledWidth) {
+        _lastInstalledWidth = currentWidth;
+        [self installLayoutConstraintsForWidth:currentWidth];
+    }
 }
 
 #pragma mark - UI 搭建
@@ -454,36 +471,24 @@ static UIColor *CFKErrorColor(void) {
 }
 
 - (void)removeConstraintsOnContentView {
-    // 仅移除与本次布局相关的视图约束（避免重复添加导致冲突）
+    // 修复错位：原实现 removeFromSuperview 后重新 addSubview 会丢失所有约束，
+    // 且 _contentView 上引用这些子视图的约束不会被移除，导致约束冲突。
+    // 正确做法：仅移除 _contentView 及各卡片视图上的约束，不改变视图层级。
     NSArray<UIView *> *related = @[_infoCardView, _infoDescLabel, _infoTitleLabel,
                                     _inputCardView, _inputCardTitleLabel, _apiKeyTextField, _sourceHintLabel,
                                     _actionCardView, _saveButton, _testButton, _clearButton, _testActivityIndicator,
-                                    _statusLabel];
+                                    _statusLabel, _contentView];
     for (UIView *v in related) {
-        for (NSLayoutConstraint *c in v.constraints) {
-            // 仅移除自身参与的、并指向 _contentView 体系内的约束
+        // 移除该视图自身持有的约束（firstItem == v）
+        NSArray<NSLayoutConstraint *> *toRemove = [v.constraints copy];
+        for (NSLayoutConstraint *c in toRemove) {
             if (c.firstAttribute != NSLayoutAttributeWidth && c.firstAttribute != NSLayoutAttributeHeight) {
                 [v removeConstraint:c];
             }
         }
     }
-    for (UIView *v in related) {
-        [v removeFromSuperview];
-    }
-    // 重新加回 contentView（保持引用与层级）
-    [_contentView addSubview:_infoCardView];
-    [_infoCardView addSubview:_infoTitleLabel];
-    [_infoCardView addSubview:_infoDescLabel];
-    [_contentView addSubview:_inputCardView];
-    [_inputCardView addSubview:_inputCardTitleLabel];
-    [_inputCardView addSubview:_apiKeyTextField];
-    [_inputCardView addSubview:_sourceHintLabel];
-    [_contentView addSubview:_actionCardView];
-    [_actionCardView addSubview:_saveButton];
-    [_actionCardView addSubview:_testButton];
-    [_actionCardView addSubview:_clearButton];
-    [_actionCardView addSubview:_testActivityIndicator];
-    [_contentView addSubview:_statusLabel];
+    // 同时移除 _contentView 上引用各子视图的约束（firstItem == _contentView, secondItem == 子视图）
+    // _contentView 的约束已在上面循环中移除（因为 _contentView 在 related 数组中）
 }
 
 - (void)updateLayoutForWidth:(CGFloat)width {

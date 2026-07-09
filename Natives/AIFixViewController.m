@@ -193,15 +193,15 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    
+
     self.view.backgroundColor = [UIColor clearColor];
     self.modalPresentationStyle = UIModalPresentationOverFullScreen;
     self.modalTransitionStyle = UIModalTransitionStyleCrossDissolve;
-    
+
     [self setupUI];
     [self loadConfig];
     [self refreshHistoryAndRiskInfo];
-    
+
     if (![AIConfigService sharedService].hasShownExperimentalWarning) {
         [self showExperimentalWarning];
     }
@@ -209,6 +209,10 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
 
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
+    // 修复错位：viewDidLoad 时 self.view.bounds 可能为 0（modal 尚未完成布局），
+    // applyPanelContainerFrames 会因 width/height <= 0 直接 return，导致 _leftPanel/_rightPanel
+    // 尺寸为 0，setupLeftPanel/setupRightPanel 内部以 panelWidth=0 计算子视图 frame。
+    // 这里在 viewDidLayoutSubviews 中重新应用 frame 并 relayout，确保布局正确。
     [self layoutMainPanelsIfNeeded];
     [self scrollToBottomAnimated:NO];
 }
@@ -216,7 +220,15 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
 #pragma mark - UI Setup
 
 - (void)setupUI {
-    self.view.frame = [UIScreen mainScreen].bounds;
+    // 修复错位：使用 self.view.bounds 而非 [UIScreen mainScreen].bounds。
+    // modal presentation 时 self.view 的实际 bounds 可能与 screen bounds 不同
+    // （safeArea、statusBar 等）。如果 bounds 为 0（viewDidLoad 阶段），
+    // 回退到 screen bounds，viewDidLayoutSubviews 会再次修正。
+    CGRect viewBounds = self.view.bounds;
+    if (viewBounds.size.width <= 0 || viewBounds.size.height <= 0) {
+        viewBounds = [UIScreen mainScreen].bounds;
+        self.view.frame = viewBounds;
+    }
     self.view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
 
     [self setupBackground];

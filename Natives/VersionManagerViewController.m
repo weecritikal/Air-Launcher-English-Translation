@@ -593,13 +593,16 @@
             // 快速操作区段 - 5 个 item（移除了"游戏目录"，因为已独立到 section 0）
             NSInteger columnCount = isiPad ? 3 : (width > 400 ? 3 : 2);
             // 使用 5 个 cell：Mod/光影/资源包/数据包/世界
+            // 修复字体上下被裁切：原 100pt 高度不足以容纳 icon(28) + title(sp:15) +
+            // subtitle(sp:11) + 上下 padding(16+12+12)，contentContainer 的 masksToBounds
+            // 会裁掉超出部分。增加到 120pt 让内容完整显示。
             NSCollectionLayoutSize *itemSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0 / columnCount]
-                                                                                       heightDimension:[NSCollectionLayoutDimension absoluteDimension:100]];
+                                                                                       heightDimension:[NSCollectionLayoutDimension absoluteDimension:120]];
             NSCollectionLayoutItem *item = [NSCollectionLayoutItem itemWithLayoutSize:itemSize];
             item.contentInsets = NSDirectionalEdgeInsetsMake(6, 6, 6, 6);
 
             NSCollectionLayoutSize *groupSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0]
-                                                                                          heightDimension:[NSCollectionLayoutDimension absoluteDimension:100]];
+                                                                                          heightDimension:[NSCollectionLayoutDimension absoluteDimension:120]];
             NSCollectionLayoutGroup *group = [NSCollectionLayoutGroup horizontalGroupWithLayoutSize:groupSize subitem:item count:columnCount];
 
             NSCollectionLayoutSection *section = [NSCollectionLayoutSection sectionWithGroup:group];
