@@ -68,7 +68,6 @@
     }
 
     self.title = [NSString stringWithFormat:@"%@ 设置", self.originalName];
-    self.view.backgroundColor = [UIColor clearColor];
 
     // 导航栏按钮
     self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone target:self action:@selector(actionDone)];
@@ -77,7 +76,14 @@
     // 设置表格
     self.tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStyleInsetGrouped];
     self.tableView.keyboardDismissMode = UIScrollViewKeyboardDismissModeInteractive;
-    self.tableView.backgroundColor = [UIColor clearColor];
+    // 修复"前一个界面没有及时消失"：原 [UIColor clearColor] 导致 push 进入时
+    // ProfileSettingsViewController 的视图透明，底下的 VersionManagerViewController
+    // 的 collection view 直接透过显示。改用 systemBackgroundColor 提供不透明背景，
+    // 完全遮挡底层 VC。
+    // 当 ProfileSettingsVC 作为新 nav 的 rootViewController（showProfileEditor 通知路径）
+    // 时，setContentViewController 会调用 makeViewControllerTransparent: 把 backgroundColor
+    // 改回 clearColor（让 contentCard 的毛玻璃透出）；本设置仅在 push 路径下生效。
+    self.tableView.backgroundColor = [UIColor systemBackgroundColor];
 
     // 计算最大内存
     [self calculateMaxMemory];

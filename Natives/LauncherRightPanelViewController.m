@@ -211,9 +211,12 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     [self.executeJarBtn addTarget:self action:@selector(executeJar) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.executeJarBtn];
     
-    // 约束（自上而下单向锚定，避免 iPhone 横屏双向锚定导致 JIT 标签与头像重叠）
+    // 约束布局：
+    // - 上半部分（头像/用户名/版本/进度）自上而下锚定在顶部
+    // - 下半部分（执行Jar/选择版本/JIT/启动按钮）自下而上锚定在底部
+    // 这样 JIT 显示和启动游戏按钮位于右侧面板下方，与头像区分离，避免拥挤。
     [NSLayoutConstraint activateConstraints:@[
-        // 头像
+        // 头像（顶部）
         [self.avatarImageView.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:16],
         [self.avatarImageView.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
         [self.avatarImageView.widthAnchor constraintEqualToConstant:72],
@@ -239,40 +242,40 @@ static void *ProgressObserverContext = &ProgressObserverContext;
         [self.progressView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:12],
         [self.progressView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-12],
 
-        // JIT 状态标签（紧接进度条下方，单向锚定避免与头像重叠）
-        [self.jitStatusLabel.topAnchor constraintEqualToAnchor:self.progressView.bottomAnchor constant:8],
-        [self.jitStatusLabel.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:12],
-        [self.jitStatusLabel.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-12],
-        [self.jitStatusLabel.heightAnchor constraintEqualToConstant:20],
-
-        // 启动按钮（JIT 标签下方）
-        [self.launchButton.topAnchor constraintEqualToAnchor:self.jitStatusLabel.bottomAnchor constant:8],
-        [self.launchButton.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:12],
-        [self.launchButton.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-12],
-        [self.launchButton.heightAnchor constraintEqualToConstant:46],
+        // ===== 下方按钮区（自下而上锚定到 safeArea 底部）=====
+        // 执行Jar 按钮（最底部）
+        [self.executeJarBtn.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-12],
+        [self.executeJarBtn.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:12],
+        [self.executeJarBtn.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-12],
+        [self.executeJarBtn.heightAnchor constraintEqualToConstant:38],
 
         // 管理版本按钮
-        [self.manageVersionBtn.topAnchor constraintEqualToAnchor:self.launchButton.bottomAnchor constant:8],
+        [self.manageVersionBtn.bottomAnchor constraintEqualToAnchor:self.executeJarBtn.topAnchor constant:-8],
         [self.manageVersionBtn.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:12],
         [self.manageVersionBtn.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-12],
         [self.manageVersionBtn.heightAnchor constraintEqualToConstant:38],
 
-        // 执行JAR按钮
-        [self.executeJarBtn.topAnchor constraintEqualToAnchor:self.manageVersionBtn.bottomAnchor constant:8],
-        [self.executeJarBtn.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:12],
-        [self.executeJarBtn.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-12],
-        [self.executeJarBtn.heightAnchor constraintEqualToConstant:38]
+        // 启动按钮
+        [self.launchButton.bottomAnchor constraintEqualToAnchor:self.manageVersionBtn.topAnchor constant:-8],
+        [self.launchButton.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:12],
+        [self.launchButton.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-12],
+        [self.launchButton.heightAnchor constraintEqualToConstant:46],
+
+        // JIT 状态标签（启动按钮上方）
+        [self.jitStatusLabel.bottomAnchor constraintEqualToAnchor:self.launchButton.topAnchor constant:-8],
+        [self.jitStatusLabel.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:12],
+        [self.jitStatusLabel.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-12],
+        [self.jitStatusLabel.heightAnchor constraintEqualToConstant:20],
     ]];
 
-    // iPhone 横屏高度可能不足以容纳所有元素，允许底部留白但不重叠
-    // 通过设置 executeJarBtn 的 bottom <= safeAreaBottom 作为弱约束兜底
-    [NSLayoutConstraint constraintWithItem:self.executeJarBtn
-                                attribute:NSLayoutAttributeBottom
-                                relatedBy:NSLayoutRelationLessThanOrEqual
-                                   toItem:self.view.safeAreaLayoutGuide
+    // 进度条底部需留出空间避免与下方 JIT 标签重叠（弱约束，允许中间留白）
+    [NSLayoutConstraint constraintWithItem:self.jitStatusLabel
+                                attribute:NSLayoutAttributeTop
+                                relatedBy:NSLayoutRelationGreaterThanOrEqual
+                                   toItem:self.progressView
                                 attribute:NSLayoutAttributeBottom
                                multiplier:1.0
-                                 constant:-12].active = YES;
+                                 constant:12].active = YES;
 }
 
 #pragma mark - Actions

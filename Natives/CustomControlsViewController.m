@@ -57,6 +57,12 @@
     self.ctrlView.layer.borderColor = UIColor.labelColor.CGColor;
     [self.view addSubview:self.ctrlView];
 
+    // 顶部工具栏高度（40）+ 上下间距（8+8）= 56pt。
+    // ctrlView 初始 frame 顶部需预留此高度，避免工具栏遮挡控制区上方的按钮导致无法调整。
+    // viewDidLayoutSubviews 中也会应用相同的顶部偏移。
+    // 注意：此偏移仅在默认 safeArea 模式（navigationBar.hidden=YES）下生效，
+    // 用户切换到 None/Default safeArea 模式时 ctrlView.frame 会被 changeSafeAreaSelection: 重置。
+
     // Prepare the navigation bar for safe area customization
     UINavigationItem *navigationItem = [[UINavigationItem alloc] init];
     UISegmentedControl *segmentedControl = [[UISegmentedControl alloc] initWithItems:@[@"None", @"Default", @"Custom"]];
@@ -246,7 +252,12 @@
 
 - (void)viewDidLayoutSubviews {
     if (self.navigationBar.hidden) {
-        self.ctrlView.frame = getSafeArea(self.view.frame);
+        // 默认 safeArea 模式：顶部预留工具栏空间（工具栏 40pt + 上间距 8 + 下间距 8 = 56pt），
+        // 避免顶部工具栏遮挡控制区上方的按钮导致无法调整键位。
+        CGRect safeFrame = getSafeArea(self.view.frame);
+        safeFrame.origin.y += 56;
+        safeFrame.size.height -= 56;
+        self.ctrlView.frame = safeFrame;
     }
 
     // Update dynamic position for each view

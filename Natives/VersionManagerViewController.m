@@ -95,15 +95,18 @@
     // 背景系统（BackgroundManager）始终使用深色样式（SystemMaterialDark / 深色半透明），
     // 因此文字必须使用固定浅色，避免在浅色外观模式下 labelColor 解析为黑色导致不可见。
     self.titleLabel.textColor = [UIColor whiteColor];
-    self.titleLabel.adjustsFontForContentSizeCategory = YES;
+    // 关闭动态字体缩放，sp: 已根据屏幕宽度做基准缩放，避免双重缩放导致字体异常。
+    self.titleLabel.adjustsFontForContentSizeCategory = NO;
     [self.contentContainer addSubview:self.titleLabel];
 
     self.subtitleLabel = [[UILabel alloc] init];
     self.subtitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.subtitleLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleCaption2];
+    // 修复字体问题：原 preferredFontForTextStyle: 会按用户系统动态字体大小缩放，
+    // 与 sp: 缩放叠加导致字体异常。改用 systemFontOfSize + sp: 缩放，行为可控。
+    self.subtitleLabel.font = [UIFont systemFontOfSize:[ScreenUtils sp:11] weight:UIFontWeightRegular];
     self.subtitleLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.65];
     self.subtitleLabel.numberOfLines = 1;
-    self.subtitleLabel.adjustsFontForContentSizeCategory = YES;
+    self.subtitleLabel.adjustsFontForContentSizeCategory = NO;
     [self.contentContainer addSubview:self.subtitleLabel];
 
     [NSLayoutConstraint activateConstraints:@[
@@ -161,23 +164,28 @@
     self.nameLabel.font = [UIFont systemFontOfSize:nameFont weight:UIFontWeightSemibold];
     self.nameLabel.textColor = [UIColor whiteColor];
     self.nameLabel.numberOfLines = 1;
-    self.nameLabel.adjustsFontForContentSizeCategory = YES;
+    // 关闭动态字体缩放，sp: 已根据屏幕宽度做基准缩放，避免双重缩放导致字体异常。
+    self.nameLabel.adjustsFontForContentSizeCategory = NO;
     [self.contentContainer addSubview:self.nameLabel];
 
     self.versionLabel = [[UILabel alloc] init];
     self.versionLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.versionLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleCaption1];
+    // 修复字体问题：原 preferredFontForTextStyle: 会按用户系统动态字体大小缩放，
+    // 与 sp: 缩放叠加导致字体异常。改用 systemFontOfSize + sp: 缩放，行为可控。
+    self.versionLabel.font = [UIFont systemFontOfSize:[ScreenUtils sp:12] weight:UIFontWeightRegular];
     self.versionLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.65];
-    self.versionLabel.adjustsFontForContentSizeCategory = YES;
+    self.versionLabel.adjustsFontForContentSizeCategory = NO;
     [self.contentContainer addSubview:self.versionLabel];
 
     // FCL 风格：最后游玩时间小字（仅在有过游玩记录时显示）
     self.lastPlayedLabel = [[UILabel alloc] init];
     self.lastPlayedLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.lastPlayedLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleCaption2];
+    // 修复字体问题：原 preferredFontForTextStyle: 会按用户系统动态字体大小缩放，
+    // 与 sp: 缩放叠加导致字体异常。改用 systemFontOfSize + sp: 缩放，行为可控。
+    self.lastPlayedLabel.font = [UIFont systemFontOfSize:[ScreenUtils sp:11] weight:UIFontWeightRegular];
     self.lastPlayedLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.45];
     self.lastPlayedLabel.text = @"";
-    self.lastPlayedLabel.adjustsFontForContentSizeCategory = YES;
+    self.lastPlayedLabel.adjustsFontForContentSizeCategory = NO;
     [self.contentContainer addSubview:self.lastPlayedLabel];
 
     self.selectedBadge = [[UIView alloc] init];
@@ -303,15 +311,18 @@
     self.nameLabel.font = [UIFont systemFontOfSize:nameFont weight:UIFontWeightSemibold];
     self.nameLabel.textColor = [UIColor whiteColor];
     self.nameLabel.numberOfLines = 1;
-    self.nameLabel.adjustsFontForContentSizeCategory = YES;
+    // 关闭动态字体缩放，sp: 已根据屏幕宽度做基准缩放，避免双重缩放导致字体异常。
+    self.nameLabel.adjustsFontForContentSizeCategory = NO;
     [self.contentContainer addSubview:self.nameLabel];
 
     self.detailLabel = [[UILabel alloc] init];
     self.detailLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.detailLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleCaption2];
+    // 修复字体问题：原 preferredFontForTextStyle: 会按用户系统动态字体大小缩放，
+    // 与 sp: 缩放叠加导致字体异常。改用 systemFontOfSize + sp: 缩放，行为可控。
+    self.detailLabel.font = [UIFont systemFontOfSize:[ScreenUtils sp:11] weight:UIFontWeightRegular];
     self.detailLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.65];
     self.detailLabel.numberOfLines = 1;
-    self.detailLabel.adjustsFontForContentSizeCategory = YES;
+    self.detailLabel.adjustsFontForContentSizeCategory = NO;
     [self.contentContainer addSubview:self.detailLabel];
 
     self.selectedBadge = [[UIView alloc] init];
@@ -528,11 +539,20 @@
     self.collectionView.dataSource = self;
     self.collectionView.delegate = self;
     self.collectionView.alwaysBounceVertical = YES;
-    // 修复：原 Automatic 会导致系统自动为 navigationBar 补偿顶部 contentInset，
-    // 但版本管理页已被嵌入到中间内容卡片中（contentCard 顶部已有 12pt 边距 + safeArea），
-    // 导航栏也在卡片内部，系统仍按"导航栏在 safeArea 之下"的假设叠加 inset，
-    // 导致顶部出现一整行空白。改为 Never，让内容紧贴导航栏下方。
+    // 修复顶部遮挡：VersionManagerViewController 被包在 UINavigationController 中，
+    // nav bar 由 applyEffectToNavigationBar 配置为 transparent + blur（translucent），
+    // 此时 collection view 的内容会延伸到 nav bar 下方被遮挡。
+    // - Never：避免系统叠加 safeArea.top（系统认为 nav bar 在 safeArea 之下，
+    //   但卡片布局中 nav bar 已经在 safeArea 之内，叠加会重复导致顶部空白）
+    // - 手动设置 contentInset.top = nav bar 高度，让 section header 和首行 cell
+    //   从 nav bar 下方开始绘制，避免被 nav bar 遮挡
     self.collectionView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
+    CGFloat navBarHeight = 44.0;
+    if (self.navigationController && self.navigationController.navigationBar.bounds.size.height > 0) {
+        navBarHeight = self.navigationController.navigationBar.bounds.size.height;
+    }
+    self.collectionView.contentInset = UIEdgeInsetsMake(navBarHeight, 0, 0, 0);
+    self.collectionView.scrollIndicatorInsets = UIEdgeInsetsMake(navBarHeight, 0, 0, 0);
 
     [self.collectionView registerClass:[VMGameDirCell class] forCellWithReuseIdentifier:@"GameDirCell"];
     [self.collectionView registerClass:[VMQuickActionCell class] forCellWithReuseIdentifier:@"QuickActionCell"];

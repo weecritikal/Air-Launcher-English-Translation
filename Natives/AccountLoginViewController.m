@@ -115,7 +115,9 @@
     card.layer.borderWidth = 1;
     card.layer.borderColor = [UIColor separatorColor].CGColor;
     [card addTarget:self action:@selector(cardTapped:) forControlEvents:UIControlEventTouchUpInside];
-    card.tag = type;
+    // tag 从 1 开始，避免 0 被 UIKit 视为"未设置 tag"。
+    // AccountLoginType 枚举从 0 开始，这里 +1 存储并在 cardTapped: 中 -1 还原。
+    card.tag = type + 1;
 
     // 毛玻璃背景
     [[BackgroundManager sharedManager] applyEffectToView:card];
@@ -125,6 +127,8 @@
     iconCircle.translatesAutoresizingMaskIntoConstraints = NO;
     iconCircle.backgroundColor = [accentColor colorWithAlphaComponent:0.15];
     iconCircle.layer.cornerRadius = 24;
+    // 图标圆及其子视图不拦截触摸，确保点击卡片任意位置都能触发 UIControlEventTouchUpInside
+    iconCircle.userInteractionEnabled = NO;
     [card addSubview:iconCircle];
 
     UIImageView *iconView = [[UIImageView alloc] init];
@@ -133,6 +137,7 @@
     iconView.image = icon;
     iconView.tintColor = accentColor;
     iconView.contentMode = UIViewContentModeScaleAspectFit;
+    iconView.userInteractionEnabled = NO;
     [iconCircle addSubview:iconView];
 
     // 中间文字
@@ -156,6 +161,7 @@
     chevron.translatesAutoresizingMaskIntoConstraints = NO;
     chevron.image = [UIImage systemImageNamed:@"chevron.right"];
     chevron.tintColor = [UIColor tertiaryLabelColor];
+    chevron.userInteractionEnabled = NO;
     [card addSubview:chevron];
 
     [NSLayoutConstraint activateConstraints:@[
@@ -197,7 +203,8 @@
 #pragma mark - Actions
 
 - (void)cardTapped:(UIControl *)sender {
-    AccountLoginType type = (AccountLoginType)sender.tag;
+    // 还原 tag 偏移（createLoginCardWithType 中存储时 +1）
+    AccountLoginType type = (AccountLoginType)(sender.tag - 1);
     // 轻微高亮反馈
     [UIView animateWithDuration:0.1 animations:^{
         sender.alpha = 0.7;

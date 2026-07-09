@@ -692,6 +692,10 @@ static const NSInteger kDefaultBackgroundTag = 99995;
         blurView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
         blurView.layer.cornerRadius = view.layer.cornerRadius;
         blurView.layer.masksToBounds = YES;
+        // 毛玻璃本身不响应触摸，让事件穿透到宿主视图（如 UIControl 卡片）。
+        // 否则 blurView 会拦截 touch，导致 AccountLoginViewController 的登录卡片
+        // 点击无反应（UIControlEventTouchUpInside 永远不触发）。
+        blurView.userInteractionEnabled = NO;
 
         [view insertSubview:blurView atIndex:0];
         view.backgroundColor = [UIColor clearColor];
