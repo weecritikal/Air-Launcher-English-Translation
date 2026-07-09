@@ -431,14 +431,12 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
         margv[++margc] = "--add-opens=java.desktop/sun.font=ALL-UNNAMED";
         margv[++margc] = "--add-opens=java.desktop/sun.java2d=ALL-UNNAMED";
         margv[++margc] = "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED";
-        // Caciocavallo17 的 CTCGraphicsEnvironment 通过反射访问 sun.awt.PlatformGraphicsInfo
-        // 和 sun.awt.image，若缺少这些 opens，GE 初始化失败会导致 JVM 回退到 headless 模式，
-        // OptiFine 安装器等 Swing GUI 应用抛出 HeadlessException。
-        // 这些 add-opens 在 Java 17/21/25 上都需要，对 Java 17/21 是必需的，
-        // 对 Java 25 也无害（多余的 opens 会被 JVM 忽略）。
-        margv[++margc] = "--add-opens=java.desktop/sun.awt=ALL-UNNAMED";
-        margv[++margc] = "--add-opens=java.desktop/sun.awt.image=ALL-UNNAMED";
-        margv[++margc] = "--add-opens=java.desktop/java.awt.peer=ALL-UNNAMED";
+        // 参照 catsruledogs/Amethyst-iOS-25：不添加 sun.awt / sun.awt.image / java.awt.peer 的
+        // add-opens。catsruledogs 不加这些 opens 也能正常启动 26.2 + Java 25。
+        // workspace 之前多加这 3 条 opens 会导致 Java 25 上 GE 提前初始化，
+        // 在 caciocavallo25 的 CTCGraphicsEnvironment 注册完成前触发 get_method_id → SIGSEGV。
+        // 纯 Java 17 编译版 caciocavallo17（Java 17/21 用）不依赖这些 opens，
+        // 其 CTCGraphicsEnvironment 通过 --add-exports（上方已添加）即可访问所需内部 API。
 
         // TODO: workaround, will be removed once the startup part works without PLaunchApp
         margv[++margc] = "--add-exports=cpw.mods.bootstraplauncher/cpw.mods.bootstraplauncher=ALL-UNNAMED";

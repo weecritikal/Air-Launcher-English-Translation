@@ -178,6 +178,30 @@ static CGFloat LauncherRootLayoutRightPanelWidth(UITraitCollection *trait) {
     }
 }
 
+- (void)viewDidLayoutSubviews {
+    [super viewDidLayoutSubviews];
+    // 消除内容区子 VC 的顶部 safeArea 留白（"大白条"）。
+    // 内容 VC 内部用 safeAreaLayoutGuide.topAnchor 布局，顶部会留出状态栏高度的空间，
+    // 该空间透出 window 的 systemBackgroundColor（浅色模式=白），形成刺眼的"大白条"。
+    // 通过 additionalSafeAreaInsets 负值抵消顶部 safeArea，让子 VC 内容延伸到顶部。
+    CGFloat topInset = self.contentContainer.safeAreaInsets.top;
+    UIEdgeInsets target = (topInset > 0) ? UIEdgeInsetsMake(-topInset, 0, 0, 0) : UIEdgeInsetsZero;
+    UIViewController *contentVC = _contentViewController;
+    if (!contentVC) return;
+    if ([contentVC isKindOfClass:[UINavigationController class]]) {
+        UINavigationController *nav = (UINavigationController *)contentVC;
+        for (UIViewController *vc in nav.viewControllers) {
+            if (!UIEdgeInsetsEqualToEdgeInsets(vc.additionalSafeAreaInsets, target)) {
+                vc.additionalSafeAreaInsets = target;
+            }
+        }
+    } else {
+        if (!UIEdgeInsetsEqualToEdgeInsets(contentVC.additionalSafeAreaInsets, target)) {
+            contentVC.additionalSafeAreaInsets = target;
+        }
+    }
+}
+
 #pragma mark - Setup
 
 - (void)setupContainers {
