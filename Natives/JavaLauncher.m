@@ -476,9 +476,14 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
         cacio_stub_jar_path = nil; // Java 8 不需要 stub-surface-manager
     } else if (isJava25) {
         // Java 25: 1.18-SNAPSHOT 含 Java 24 class（catsruledogs iOS），bootclasspath/a
+        // 参照 catsruledogs/Amethyst-iOS-25：不使用 --patch-module 注入 stub-surface-manager。
+        // 原因：catsruledogs 的 caciocavallo25 jar 中 CTCPreloadClassLoader 没有 static 块
+        // （不会调用 Class.forName("sun.java2d.SurfaceManagerFactory")），不需要 stub。
+        // 且 --patch-module 会用 stub 替换 java.desktop 的 SurfaceManagerFactory，
+        // stub 缺少 createManager 等方法，Java 25 的 get_method_id 内部解析时会 SIGSEGV。
         cacio_bootclasspath_mode = "a";
         cacio_libs_path = [NSString stringWithFormat:@"%@/libs_caciocavallo25", NSBundle.mainBundle.bundlePath];
-        cacio_stub_jar_path = [NSString stringWithFormat:@"%@/libs_caciocavallo25/stub-surface-manager.jar", NSBundle.mainBundle.bundlePath];
+        cacio_stub_jar_path = nil; // Java 25 不需要 stub（参照 catsruledogs）
     } else {
         // Java 17/21: 1.18-SNAPSHOT 纯 Java 17 编译（class version 61），bootclasspath/a
         cacio_bootclasspath_mode = "a";
@@ -501,13 +506,11 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
     margv[++margc] = cacio_classpath.UTF8String;
 
     // Java 9+ 移除了 sun.java2d.SurfaceManagerFactory（迁至 sun.awt.image.SurfaceManagerFactory）。
-    // Caciocavallo17 的 CTCPreloadClassLoader.<clinit> 仍调用 Class.forName("sun.java2d.SurfaceManagerFactory")
-    // 来重置其 instance 字段。forName 失败抛出 ClassNotFoundException 后，<clinit> 的 catch 块会
-    // 跳过后面的 setFinalStatic(LocalGE.INSTANCE, new CTCGraphicsEnvironment())，导致 GE 未安装，
-    // JVM 回退 headless 模式，Swing GUI（如 OptiFine 安装器）抛出 java.awt.HeadlessException。
-    // sun.java2d 包属于 java.desktop 模块，通过 --patch-module 注入 stub 类让 forName 成功，
-    // <clinit> 才能继续安装 CTCGraphicsEnvironment，execute_jar 与 Minecraft 启动均受益。
-    // stub jar 路径随切换变化：Java 25 从 caciocavallo25/ 加载，Java 17/21 从 caciocavallo17/ 加载。
+    // 纯 Java 17 编译版 caciocavallo17 的 CTCPreloadClassLoader.<clinit> 会调用
+    // Class.forName("sun.java2d.SurfaceManagerFactory")，Java 9+ 上 forName 失败会导致
+    // LocalGE 未安装、JVM 回退 headless 模式。通过 --patch-module 注入含 setInstance/getInstance
+    // 的 stub 类让 forName 成功。<clinit> 才能继续安装 CTCGraphicsEnvironment。
+    // 仅 Java 17/21 需要 stub（caciocavallo17 目录）；Java 25 的 catsruledogs jar 无 static 块，不需要。
     if (cacio_stub_jar_path) {
         if ([fm fileExistsAtPath:cacio_stub_jar_path]) {
             margv[++margc] = [NSString stringWithFormat:@"--patch-module=java.desktop=%@", cacio_stub_jar_path].UTF8String;

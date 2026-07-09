@@ -83,6 +83,10 @@ static CGFloat LauncherRootLayoutRightPanelWidth(UITraitCollection *trait) {
     [self applyCustomAppearance];
 }
 
+- (BOOL)prefersStatusBarHidden {
+    return YES;
+}
+
 - (void)initializeVersionLists {
     // 初始化本地版本列表
     if (!localVersionList) {
