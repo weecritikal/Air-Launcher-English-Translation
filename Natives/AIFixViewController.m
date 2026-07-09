@@ -113,6 +113,7 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
 @property (nonatomic, strong) UIButton *sendButton;
 @property (nonatomic, strong) UIButton *stopButton;
 @property (nonatomic, strong) UIButton *exitButton;
+@property (nonatomic, strong) UIButton *restartButton;
 
 // 右侧面板组件
 @property (nonatomic, strong) UIView *configCardView;
@@ -622,6 +623,19 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     [_rightContentView addSubview:_toolsCardView];
     [self setupToolsCard];
 
+    // 重启启动器按钮（参照 FCL 的"重启软件"按钮，优先放置）。
+    // 很多崩溃是临时加载失败（JIT/dylib/内存碎片），重启即可解决。
+    _restartButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    _restartButton.translatesAutoresizingMaskIntoConstraints = NO;
+    [_restartButton setTitle:localize(@"ai.fix.restart", @"重启启动器") forState:UIControlStateNormal];
+    _restartButton.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
+    _restartButton.backgroundColor = [UIColor colorWithRed:0.2 green:0.6 blue:0.95 alpha:1.0];
+    _restartButton.layer.cornerRadius = 14;
+    _restartButton.layer.cornerCurve = kCACornerCurveContinuous;
+    _restartButton.tintColor = [UIColor whiteColor];
+    [_restartButton addTarget:self action:@selector(restartLauncher) forControlEvents:UIControlEventTouchUpInside];
+    [_rightPanel addSubview:_restartButton];
+
     _exitButton = [UIButton buttonWithType:UIButtonTypeSystem];
     // 修复：退出按钮加到 _rightPanel（非滚动视图）而非 _rightContentView，
     // 用 Auto Layout 钉在面板底部，避免在 iPhone 紧凑布局下被配置卡片遮挡或随滚动消失。
@@ -634,13 +648,18 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     _exitButton.tintColor = [UIColor whiteColor];
     [_exitButton addTarget:self action:@selector(exitLauncher) forControlEvents:UIControlEventTouchUpInside];
     [_rightPanel addSubview:_exitButton];
+    // 重启与退出按钮水平并排，各占一半宽度，中间留 8pt 间距
     [NSLayoutConstraint activateConstraints:@[
-        [_exitButton.leadingAnchor constraintEqualToAnchor:_rightPanel.leadingAnchor constant:sidePadding],
+        [_restartButton.leadingAnchor constraintEqualToAnchor:_rightPanel.leadingAnchor constant:sidePadding],
+        [_restartButton.trailingAnchor constraintEqualToAnchor:_exitButton.leadingAnchor constant:-8],
         [_exitButton.trailingAnchor constraintEqualToAnchor:_rightPanel.trailingAnchor constant:-sidePadding],
+        [_restartButton.bottomAnchor constraintEqualToAnchor:_rightPanel.bottomAnchor constant:-12],
         [_exitButton.bottomAnchor constraintEqualToAnchor:_rightPanel.bottomAnchor constant:-12],
-        [_exitButton.heightAnchor constraintEqualToConstant:44]
+        [_restartButton.heightAnchor constraintEqualToConstant:44],
+        [_exitButton.heightAnchor constraintEqualToAnchor:_restartButton.heightAnchor],
+        [_exitButton.widthAnchor constraintEqualToAnchor:_restartButton.widthAnchor]
     ]];
-    // 调整滚动视图底部内边距，避免内容被退出按钮遮挡
+    // 调整滚动视图底部内边距，避免内容被按钮遮挡
     _rightScrollView.contentInset = UIEdgeInsetsMake(0, 0, 44 + 12 + 8, 0);
     _rightScrollView.scrollIndicatorInsets = _rightScrollView.contentInset;
 }
@@ -1246,10 +1265,25 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     if ([AIFixService sharedService].isRunning) {
         [[AIFixService sharedService] stopFix];
     }
-    
+
     [self dismissViewControllerAnimated:YES completion:^{
-        // 返回启动器
-        [[PLCrashView class] performSelector:@selector(dismissAndReturnToLauncher) withObject:nil afterDelay:0];
+        // 返回启动器主界面。
+        // 之前用 performSelector 把实例方法发给 [PLCrashView class] 会触发
+        // unrecognized selector 崩溃。现改用新增的类方法 +dismissAndReturnToLauncher。
+        [PLCrashView dismissAndReturnToLauncher];
+    }];
+}
+
+/// 重启启动器：参照 FCL 的"重启软件"按钮。
+/// 很多崩溃是临时加载失败（JIT 未就绪、dylib 加载顺序、内存碎片），
+/// 重启进程即可解决。该方法会清理 AI 修复 + 崩溃界面，然后 exit(0) 重启。
+- (void)restartLauncher {
+    if ([AIFixService sharedService].isRunning) {
+        [[AIFixService sharedService] stopFix];
+    }
+
+    [self dismissViewControllerAnimated:YES completion:^{
+        [PLCrashView restartLauncher];
     }];
 }
 

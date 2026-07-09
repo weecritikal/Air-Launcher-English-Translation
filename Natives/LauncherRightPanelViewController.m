@@ -101,7 +101,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     self.avatarImageView = [[UIImageView alloc] init];
     self.avatarImageView.translatesAutoresizingMaskIntoConstraints = NO;
     self.avatarImageView.contentMode = UIViewContentModeScaleAspectFit;
-    self.avatarImageView.layer.cornerRadius = 40;
+    self.avatarImageView.layer.cornerRadius = 36;
     self.avatarImageView.layer.masksToBounds = YES;
     self.avatarImageView.backgroundColor = [UIColor colorWithWhite:0.2 alpha:1.0];
     self.avatarImageView.image = [UIImage systemImageNamed:@"person.circle.fill"];
@@ -211,58 +211,68 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     [self.executeJarBtn addTarget:self action:@selector(executeJar) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.executeJarBtn];
     
-    // 约束
+    // 约束（自上而下单向锚定，避免 iPhone 横屏双向锚定导致 JIT 标签与头像重叠）
     [NSLayoutConstraint activateConstraints:@[
         // 头像
-        [self.avatarImageView.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:30],
+        [self.avatarImageView.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:16],
         [self.avatarImageView.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
-        [self.avatarImageView.widthAnchor constraintEqualToConstant:80],
-        [self.avatarImageView.heightAnchor constraintEqualToConstant:80],
-        
+        [self.avatarImageView.widthAnchor constraintEqualToConstant:72],
+        [self.avatarImageView.heightAnchor constraintEqualToConstant:72],
+
         // 用户名
-        [self.usernameLabel.topAnchor constraintEqualToAnchor:self.avatarImageView.bottomAnchor constant:12],
-        [self.usernameLabel.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:16],
-        [self.usernameLabel.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-16],
-        
+        [self.usernameLabel.topAnchor constraintEqualToAnchor:self.avatarImageView.bottomAnchor constant:8],
+        [self.usernameLabel.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:12],
+        [self.usernameLabel.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-12],
+
         // 版本
         [self.versionLabel.topAnchor constraintEqualToAnchor:self.usernameLabel.bottomAnchor constant:4],
-        [self.versionLabel.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:16],
-        [self.versionLabel.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-16],
-        
+        [self.versionLabel.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:12],
+        [self.versionLabel.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-12],
+
         // 进度标签
         [self.progressLabel.topAnchor constraintEqualToAnchor:self.versionLabel.bottomAnchor constant:8],
-        [self.progressLabel.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:16],
-        [self.progressLabel.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-16],
-        
+        [self.progressLabel.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:12],
+        [self.progressLabel.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-12],
+
         // 进度条
         [self.progressView.topAnchor constraintEqualToAnchor:self.progressLabel.bottomAnchor constant:4],
-        [self.progressView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:16],
-        [self.progressView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-16],
-        
-        // 执行JAR按钮 (最底部)
-        [self.executeJarBtn.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-20],
-        [self.executeJarBtn.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:16],
-        [self.executeJarBtn.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-16],
-        [self.executeJarBtn.heightAnchor constraintEqualToConstant:40],
-        
-        // 管理版本按钮
-        [self.manageVersionBtn.bottomAnchor constraintEqualToAnchor:self.executeJarBtn.topAnchor constant:-8],
-        [self.manageVersionBtn.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:16],
-        [self.manageVersionBtn.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-16],
-        [self.manageVersionBtn.heightAnchor constraintEqualToConstant:40],
-        
-        // 启动按钮
-        [self.launchButton.bottomAnchor constraintEqualToAnchor:self.manageVersionBtn.topAnchor constant:-16],
-        [self.launchButton.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:16],
-        [self.launchButton.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-16],
-        [self.launchButton.heightAnchor constraintEqualToConstant:50],
+        [self.progressView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:12],
+        [self.progressView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-12],
 
-        // JIT 状态标签（启动按钮上方 8pt）
-        [self.jitStatusLabel.bottomAnchor constraintEqualToAnchor:self.launchButton.topAnchor constant:-8],
-        [self.jitStatusLabel.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:16],
-        [self.jitStatusLabel.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-16],
-        [self.jitStatusLabel.heightAnchor constraintEqualToConstant:20]
+        // JIT 状态标签（紧接进度条下方，单向锚定避免与头像重叠）
+        [self.jitStatusLabel.topAnchor constraintEqualToAnchor:self.progressView.bottomAnchor constant:8],
+        [self.jitStatusLabel.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:12],
+        [self.jitStatusLabel.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-12],
+        [self.jitStatusLabel.heightAnchor constraintEqualToConstant:20],
+
+        // 启动按钮（JIT 标签下方）
+        [self.launchButton.topAnchor constraintEqualToAnchor:self.jitStatusLabel.bottomAnchor constant:8],
+        [self.launchButton.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:12],
+        [self.launchButton.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-12],
+        [self.launchButton.heightAnchor constraintEqualToConstant:46],
+
+        // 管理版本按钮
+        [self.manageVersionBtn.topAnchor constraintEqualToAnchor:self.launchButton.bottomAnchor constant:8],
+        [self.manageVersionBtn.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:12],
+        [self.manageVersionBtn.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-12],
+        [self.manageVersionBtn.heightAnchor constraintEqualToConstant:38],
+
+        // 执行JAR按钮
+        [self.executeJarBtn.topAnchor constraintEqualToAnchor:self.manageVersionBtn.bottomAnchor constant:8],
+        [self.executeJarBtn.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:12],
+        [self.executeJarBtn.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-12],
+        [self.executeJarBtn.heightAnchor constraintEqualToConstant:38]
     ]];
+
+    // iPhone 横屏高度可能不足以容纳所有元素，允许底部留白但不重叠
+    // 通过设置 executeJarBtn 的 bottom <= safeAreaBottom 作为弱约束兜底
+    [NSLayoutConstraint constraintWithItem:self.executeJarBtn
+                                attribute:NSLayoutAttributeBottom
+                                relatedBy:NSLayoutRelationLessThanOrEqual
+                                   toItem:self.view.safeAreaLayoutGuide
+                                attribute:NSLayoutAttributeBottom
+                               multiplier:1.0
+                                 constant:-12].active = YES;
 }
 
 #pragma mark - Actions
@@ -406,19 +416,39 @@ static void *ProgressObserverContext = &ProgressObserverContext;
         self.jitStatusLabel.textColor = customColor;
         [self.manageVersionBtn setTitleColor:customColor forState:UIControlStateNormal];
         [self.executeJarBtn setTitleColor:customColor forState:UIControlStateNormal];
+    } else {
+        // 未设置自定义字体颜色时，恢复系统自适应颜色
+        self.usernameLabel.textColor = [UIColor labelColor];
+        self.versionLabel.textColor = [UIColor secondaryLabelColor];
+        self.progressLabel.textColor = [UIColor secondaryLabelColor];
+        [self.manageVersionBtn setTitleColor:[UIColor labelColor] forState:UIControlStateNormal];
+        [self.executeJarBtn setTitleColor:[UIColor labelColor] forState:UIControlStateNormal];
+        // JIT 状态颜色由 updateJITStatus 单独管理，不在此重置
     }
 }
 
 - (nullable UIColor *)colorFromHexString:(id)hex {
     if (![hex isKindOfClass:[NSString class]] || [(NSString *)hex length] == 0) return nil;
     NSString *clean = [(NSString *)hex stringByReplacingOccurrencesOfString:@"#" withString:@""];
+    if (clean.length != 6 && clean.length != 8) return nil;
     unsigned int rgb = 0;
     NSScanner *scanner = [NSScanner scannerWithString:clean];
     if (![scanner scanHexInt:&rgb]) return nil;
-    return [UIColor colorWithRed:((rgb >> 16) & 0xFF) / 255.0
-                           green:((rgb >> 8) & 0xFF) / 255.0
-                            blue:(rgb & 0xFF) / 255.0
-                           alpha:1.0];
+    unsigned int r, g, b, a;
+    if (clean.length == 6) {
+        // RRGGBB
+        r = (rgb >> 16) & 0xFF;
+        g = (rgb >> 8) & 0xFF;
+        b = rgb & 0xFF;
+        a = 255;
+    } else {
+        // AARRGGBB
+        a = (rgb >> 24) & 0xFF;
+        r = (rgb >> 16) & 0xFF;
+        g = (rgb >> 8) & 0xFF;
+        b = rgb & 0xFF;
+    }
+    return [UIColor colorWithRed:r / 255.0 green:g / 255.0 blue:b / 255.0 alpha:a / 255.0];
 }
 
 - (void)showVersionPicker {

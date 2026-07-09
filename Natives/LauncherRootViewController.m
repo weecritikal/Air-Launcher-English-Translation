@@ -548,14 +548,13 @@ static CGFloat LauncherRootLayoutRightPanelWidth(UITraitCollection *trait) {
     if (cardColor.length > 0) {
         UIColor *color = [self colorFromHexString:cardColor];
         if (color) {
-            // 修复：使用半透明颜色而非纯色，让背景图能透过侧栏显示。
-            // 之前 applySolidColor 移除毛玻璃并设置 alpha=1.0 纯色，
-            // 导致"改完背景后左右两边完全不透明"。
-            // 现在保留毛玻璃，叠加半透明卡片颜色（alpha 0.7），
+            // 使用半透明颜色覆盖毛玻璃，alpha 提升到 0.85 增强可见度。
+            // 之前 0.7 太淡，浅色背景几乎看不出效果。
+            // 保留毛玻璃（backgroundColor 叠加在 UIVisualEffectView 之上），
             // 既显示卡片色调又透出背景图。
             CGFloat r, g, b, a;
             if ([color getRed:&r green:&g blue:&b alpha:&a]) {
-                UIColor *semiColor = [UIColor colorWithRed:r green:g blue:b alpha:MIN(a, 0.7)];
+                UIColor *semiColor = [UIColor colorWithRed:r green:g blue:b alpha:MIN(a, 0.85)];
                 [self applySemiTransparentColor:semiColor toContainer:self.sidebarContainer];
                 [self applySemiTransparentColor:semiColor toContainer:self.rightPanelContainer];
             }
@@ -565,6 +564,8 @@ static CGFloat LauncherRootLayoutRightPanelWidth(UITraitCollection *trait) {
         [self restoreEffectToContainer:self.sidebarContainer];
         [self restoreEffectToContainer:self.rightPanelContainer];
     }
+    // 通知右侧面板、菜单等子 VC 同步刷新外观（text_color / card_color 联动）
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"LauncherAppearanceApplied" object:nil];
 }
 
 - (void)applySemiTransparentColor:(UIColor *)color toContainer:(UIView *)container {
@@ -591,19 +592,21 @@ static CGFloat LauncherRootLayoutRightPanelWidth(UITraitCollection *trait) {
 - (UIColor *)colorFromHexString:(NSString *)hexString {
     NSString *hex = [hexString stringByReplacingOccurrencesOfString:@"#" withString:@""];
     if (hex.length != 6 && hex.length != 8) return nil;
-    unsigned int r, g, b, a = 255;
+    unsigned int rgb = 0;
+    if (![[NSScanner scannerWithString:hex] scanHexInt:&rgb]) return nil;
+    unsigned int r, g, b, a;
     if (hex.length == 6) {
-        [[NSScanner scannerWithString:hex] scanHexInt:&r];
-        // 解析为 0xRRGGBB
-        b = r & 0xFF;
-        g = (r >> 8) & 0xFF;
-        r = (r >> 16) & 0xFF;
+        // RRGGBB
+        r = (rgb >> 16) & 0xFF;
+        g = (rgb >> 8) & 0xFF;
+        b = rgb & 0xFF;
+        a = 255;
     } else {
-        [[NSScanner scannerWithString:hex] scanHexInt:&r];
-        a = r & 0xFF;
-        b = (r >> 8) & 0xFF;
-        g = (r >> 16) & 0xFF;
-        r = (r >> 24) & 0xFF;
+        // AARRGGBB
+        a = (rgb >> 24) & 0xFF;
+        r = (rgb >> 16) & 0xFF;
+        g = (rgb >> 8) & 0xFF;
+        b = rgb & 0xFF;
     }
     return [UIColor colorWithRed:r/255.0 green:g/255.0 blue:b/255.0 alpha:a/255.0];
 }

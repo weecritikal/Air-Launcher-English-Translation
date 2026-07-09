@@ -493,6 +493,7 @@
 "crash.share_log" = "Share Log";
 "crash.full_log" = "View Full Log";
 "crash.return_launcher" = "Exit Launcher";
+"crash.restart_launcher" = "Restart Launcher";
 "crash.log_unavailable" = "Unable to read log file";
 "crash.interface_title" = "Crash Interface";
 "crash.log_info" = "Log Info";
@@ -511,6 +512,7 @@
 "ai.fix.send" = "Send";
 "ai.fix.stop" = "Stop";
 "ai.fix.exit" = "Exit Launcher";
+"ai.fix.restart" = "Restart Launcher";
 "ai.fix.model_config" = "Model Configuration";
 "ai.fix.model_name" = "Model Name";
 "ai.fix.save" = "Save";

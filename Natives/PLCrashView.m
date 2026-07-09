@@ -4,6 +4,7 @@
 #import "ios_uikit_bridge.h"
 #import "utils.h"
 #import "AIFixViewController.h"
+#import "AIFixService.h"
 
 @interface PLCrashView ()
 @property (nonatomic, strong) UIView *leftPanel;
@@ -18,6 +19,7 @@
 @property (nonatomic, strong) UILabel *experimentalLabel;
 @property (nonatomic, strong) UIButton *shareButton;
 @property (nonatomic, strong) UIButton *exitButton;
+@property (nonatomic, strong) UIButton *restartButton;
 @property (nonatomic, strong) UIButton *fullLogButton;
 @property (nonatomic, assign) int exitCode;
 @property (nonatomic, assign) BOOL logExpanded;
@@ -259,8 +261,16 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     _experimentalLabel.textAlignment = NSTextAlignmentRight;
     [_rightPanel addSubview:_experimentalLabel];
     
+    // 重启启动器按钮（参照 FCL 的"重启软件"，优先放置，蓝色强调）
+    CGFloat restartBtnTop = cardsTop + cardHeight + cardSpacing + 20;
+    _restartButton = [self createPrimaryButton:CGRectMake(sidePadding, restartBtnTop, panelWidth - sidePadding * 2, 48)
+                                          title:localize(@"crash.restart_launcher", @"重启启动器")
+                                           icon:@"arrow.clockwise"
+                                         action:@selector(restartLauncherAction)];
+    [_rightPanel addSubview:_restartButton];
+
     // 退出启动器按钮
-    CGFloat exitBtnTop = cardsTop + cardHeight + cardSpacing + 20;
+    CGFloat exitBtnTop = restartBtnTop + 48 + 8;
     _exitButton = [self createSecondaryButton:CGRectMake(sidePadding, exitBtnTop, panelWidth - sidePadding * 2, 48)
                                               title:localize(@"crash.return_launcher", nil)
                                                icon:@"rectangle.portrait.and.arrow.right"
@@ -456,13 +466,76 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     if ([SurfaceViewController currentInstance]) {
         [[SurfaceViewController currentInstance].logOutputView dismissAndReturnToLauncher];
     }
-    
+
     [UIView animateWithDuration:0.3 animations:^{
         self.alpha = 0;
     } completion:^(BOOL finished) {
         [self removeFromSuperview];
         currentCrashView = nil;
     }];
+}
+
+/// 重启启动器按钮的实例回调，委托给类方法 +restartLauncher
+- (void)restartLauncherAction {
+    [PLCrashView restartLauncher];
+}
+
+#pragma mark - Class Methods for External Callers
+
+/// 类方法：隐藏崩溃界面并返回启动器。
+/// 供 AIFixViewController 等外部 VC 安全调用，避免直接对类对象 performSelector
+/// 实例方法导致的 unrecognized selector 崩溃。
++ (void)dismissAndReturnToLauncher {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (currentCrashView) {
+            [currentCrashView dismissAndReturnToLauncher];
+        } else if ([SurfaceViewController currentInstance]) {
+            [[SurfaceViewController currentInstance].logOutputView dismissAndReturnToLauncher];
+        }
+    });
+}
+
+/// 重启启动器：清理崩溃界面与游戏 surface，通过 exit(0) + relaunch 触发系统重启。
+/// 参照 FCL 的"重启软件"按钮：很多崩溃是临时加载失败，重启即可解决。
++ (void)restartLauncher {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        // 1. 停止 AI 修复服务（若运行中）
+        if ([[AIFixService sharedService] isRunning]) {
+            [[AIFixService sharedService] stopFix];
+        }
+
+        // 2. 清理崩溃界面
+        if (currentCrashView) {
+            [currentCrashView removeFromSuperview];
+            currentCrashView = nil;
+        }
+
+        // 3. 通知 SurfaceViewController 释放游戏资源
+        if ([SurfaceViewController currentInstance]) {
+            [[SurfaceViewController currentInstance].logOutputView dismissAndReturnToLauncher];
+        }
+
+        // 4. 通过 NSURL relaunch 触发系统重新拉起应用（TrollStore/越狱环境支持）
+        //    若 relaunch 失败则回退到 exit(0)，系统在 10 秒内会重新唤起前台 App
+        NSString *bundlePath = [NSBundle mainBundle].bundlePath;
+        NSURL *appURL = [NSURL fileURLWithPath:bundlePath];
+        NSLog(@"[PLCrashView] Restarting launcher from %@", bundlePath);
+
+        // 尝试通过 openURL 拉起（需要 UIApplication.openURL，越狱/TrollStore 可用）
+        if (@available(iOS 10.0, *)) {
+            [[UIApplication sharedApplication] openURL:appURL
+                                               options:@{}
+                                     completionHandler:^(BOOL success) {
+                if (!success) {
+                    NSLog(@"[PLCrashView] openURL failed, falling back to exit(0)");
+                }
+                // 无论如何都退出当前进程，让系统重新拉起
+                exit(0);
+            }];
+        } else {
+            exit(0);
+        }
+    });
 }
 
 - (UIViewController *)nextViewController {
@@ -570,13 +643,19 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     }
     
     currentY += 20; // 添加间距
-    
+
+    // 重启启动器按钮（FCL 风格，位于退出按钮上方）
+    if (_restartButton) {
+        _restartButton.frame = CGRectMake(rightSidePadding, currentY, rightPanelWidth - rightSidePadding * 2, 48);
+        currentY += 48 + 8;
+    }
+
     // 退出启动器按钮
     if (_exitButton) {
         _exitButton.frame = CGRectMake(rightSidePadding, currentY, rightPanelWidth - rightSidePadding * 2, 48);
         currentY += 48 + 8;
     }
-    
+
     // 查看完整日志按钮
     if (_fullLogButton) {
         _fullLogButton.frame = CGRectMake(rightSidePadding, currentY, rightPanelWidth - rightSidePadding * 2, 32);

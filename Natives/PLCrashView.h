@@ -15,4 +15,11 @@
 /// 隐藏崩溃界面并返回启动器
 - (void)dismissAndReturnToLauncher;
 
+/// 重启启动器（类方法，可从其他 VC 安全调用）
+/// 会清理当前崩溃界面并重启应用进程
++ (void)restartLauncher;
+
+/// 隐藏崩溃界面并返回启动器（类方法，可从其他 VC 安全调用）
++ (void)dismissAndReturnToLauncher;
+
 @end

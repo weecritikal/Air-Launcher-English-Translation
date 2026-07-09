@@ -335,6 +335,7 @@
 "ai.fix.stop" = "停止";
 "ai.fix.send" = "发送";
 "ai.fix.exit" = "退出启动器";
+"ai.fix.restart" = "重启启动器";
 "ai.fix.model_config" = "模型配置";
 "ai.fix.config_subtitle" = "可对接兼容 OpenAI 的 API 服务";
 "ai.fix.start_fix" = "开始修复";
@@ -510,6 +511,7 @@
 "crash.share_log" = "分享日志";
 "crash.full_log" = "查看完整日志";
 "crash.return_launcher" = "退出启动器";
+"crash.restart_launcher" = "重启启动器";
 "crash.log_unavailable" = "无法读取日志文件";
 "crash.interface_title" = "崩溃界面";
 "crash.log_info" = "日志信息";
@@ -528,6 +530,7 @@
 "ai.fix.send" = "发送";
 "ai.fix.stop" = "停止";
 "ai.fix.exit" = "退出启动器";
+"ai.fix.restart" = "重启启动器";
 "ai.fix.model_config" = "模型配置";
 "ai.fix.model_name" = "模型名";
 "ai.fix.save" = "保存";
