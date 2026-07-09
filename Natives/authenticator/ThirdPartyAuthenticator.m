@@ -5,8 +5,12 @@
 
 // authlib-injector 下载源：BMCLAPI 镜像优先，失败后回退到官方源
 // 修复：从 1.2.6 升级到 1.2.7（build 55），1.2.7 修复了 Java 25 兼容性问题。
-// 第三方账户登录启动 26.x（强制 Java 25）时，1.2.6 的 ASM 字节码处理无法识别
-// Java 25 class file version 69，导致 javaagent 加载失败、游戏无法启动。
+// 说明：26.x 默认使用 Java 21 启动（Mojang 元数据 javaVersion.majorVersion=21），
+// 但若用户在 PLProfiles 中为 26.x 显式设置 javaVersion=25，则 26.x 会使用 Java 25，
+// 此时 authlib-injector 1.2.6 的 ASM 字节码处理无法识别 Java 25 class file version 69，
+// 导致 javaagent 加载失败、游戏无法启动。升级到 1.2.7 后同时兼容 Java 17/21/25。
+// 另：authlib-injector 1.2.7 对 Java 25 的支持也用于 execute_jar 路径
+// （如某些 Mod 安装器 JAR 编译目标为 Java 25）。
 #define AUTHLIB_INJECTOR_URL_BMCL  @"https://bmclapi2.bangbang93.com/mirrors/authlib-injector/artifact/55/authlib-injector-1.2.7.jar"
 #define AUTHLIB_INJECTOR_URL_GITHUB @"https://authlib-injector.yushi.moe/artifact/55/authlib-injector-1.2.7.jar"
 #define AUTHLIB_INJECTOR_FILE @"authlib-injector.jar"

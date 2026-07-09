@@ -129,10 +129,20 @@ public final class Tools {
         List<String> minecraftArgs = new ArrayList<String>();
         if (versionInfo.arguments != null) {
             // Support Minecraft 1.13+
+            // 检测当前账户是否为第三方认证账户（authlib-injector / Yggdrasil）
+            // 第三方账户的特征：clientToken 非 "0" 且 xuid 为 null 或 "0"
+            // （Microsoft 账户有 xuid，本地账户 clientToken 为 "0"）
+            // 对第三方账户，即使版本 JSON 含 --xuid 参数，user_type 也必须保持 "mojang"
+            // 而不能改为 "msa"，否则 Minecraft 26.x 内部会按 MSA 流程处理
+            // 导致认证失败（无法加载皮肤 / 无法加入服务器 / 崩溃）
+            boolean isThirdPartyAccount = !"0".equals(profile.clientToken)
+                && (profile.xuid == null || "0".equals(profile.xuid));
             for (Object arg : versionInfo.arguments.game) {
                 if (arg instanceof String) {
                     minecraftArgs.add((String) arg);
-                    if (arg.equals("--xuid")) {
+                    if (arg.equals("--xuid") && !isThirdPartyAccount) {
+                        // 仅对 Microsoft 账户（有 xuid）设置 user_type=msa
+                        // 第三方账户保持 "mojang"，避免 26.x 认证流程错误
                         varArgMap.put("user_type", "msa");
                     }
                 } else {

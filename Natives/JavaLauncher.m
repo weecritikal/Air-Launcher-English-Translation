@@ -306,9 +306,28 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
         if (strcmp(glLibName, RENDERER_NAME_VULKAN) == 0) {
             // Vulkan mode: set vulkan libname and fallback opengl libname for LWJGL startup probing
             margv[++margc] = [NSString stringWithFormat:@"-Dorg.lwjgl.vulkan.libname=%s", RENDERER_NAME_VULKAN].UTF8String;
-            glLibName = RENDERER_NAME_MTL_ANGLE;
+            // 参照 TAYlen-chud/Amethyst-iOS: Vulkan 模式下 OpenGL 回退库使用 MobileGlues 而非 ANGLE
+            // 原因：MC 26.2 的 NativeLibrariesBootstrap.loadOpenGL() 在启动时会初始化 GL，
+            // iOS 上无系统 OpenGL framework，ANGLE 可能不如 MobileGlues 适合
+            // （MobileGlues 可路由到 Vulkan 后端，与 Vulkan 模式更协同）
+            // 仅当 MobileGlues 存在时使用，否则回退 ANGLE
+            NSString *mobilegluesVulkanPath = [NSString stringWithFormat:@"%@/Frameworks/%s",
+                NSBundle.mainBundle.bundlePath, RENDERER_NAME_MOBILEGLUES];
+            if ([NSFileManager.defaultManager fileExistsAtPath:mobilegluesVulkanPath]) {
+                glLibName = RENDERER_NAME_MOBILEGLUES;
+            } else {
+                glLibName = RENDERER_NAME_MTL_ANGLE;
+            }
         }
         margv[++margc] = [NSString stringWithFormat:@"-Dorg.lwjgl.opengl.libname=%s", glLibName].UTF8String;
+
+        // 参照 TAYlen-chud/Amethyst-iOS: 显式指定 spirv-cross 库名
+        // 原因：LWJGL 3.4.x（MC 1.20.5+ / 26.x 使用）默认尝试加载 libspirv-cross.dylib，
+        // 但 MobileGlues 已加载 libspirv-cross-c-shared.0.dylib，两者 install_name 不同
+        // 会导致 dyld install_name 冲突或 spirv-cross 重复注册
+        // 显式指定 libname 为 spirv-cross-c-shared.0 可避免此问题
+        // 对 Java 8 / 1.21 及以下版本（使用 LWJGL 3.3.x）无影响，该参数会被忽略
+        margv[++margc] = "-Dorg.lwjgl.spvc.libname=spirv-cross-c-shared.0";
     }
 
       // 添加authlib-injector参数以支持第三方认证账户的皮肤显示
