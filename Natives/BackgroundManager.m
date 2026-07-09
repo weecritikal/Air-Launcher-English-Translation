@@ -181,11 +181,16 @@ static const NSInteger kDefaultBackgroundTag = 99995;
 
     // For default background, just set the window's background color
     // No need for container
-    // 注意：使用深灰（0.08）而非 systemBackgroundColor，避免 Card 布局下卡片上方的
-    // 状态栏区域透出纯黑底色，在 iPhone 刘海/灵动岛区域呈现为"顶部黑条"。
-    // SceneDelegate 也设置了相同的深灰色，但此处会覆盖，故必须保持一致。
+    // 修复：使用 systemBackgroundColor 自适应浅色/深色模式。
+    // 之前硬编码深灰（0.08）在浅色模式下导致"中间一片黑"。
+    // systemBackgroundColor 在浅色模式为白、深色模式为黑，自动适配。
+    // 为避免状态栏区域透出纯黑，使用 systemBackground 而非纯黑。
     if (self.currentType == BackgroundTypeNone) {
-        window.backgroundColor = [UIColor colorWithWhite:0.08 alpha:1.0];
+        if (@available(iOS 13.0, *)) {
+            window.backgroundColor = [UIColor systemBackgroundColor];
+        } else {
+            window.backgroundColor = [UIColor colorWithWhite:0.08 alpha:1.0];
+        }
         return;
     }
     
@@ -226,9 +231,13 @@ static const NSInteger kDefaultBackgroundTag = 99995;
     
     // For default background, just set the view's background color
     // No need for container or transparency
-    // 使用深灰避免顶部黑条（与 applyBackgroundToWindow 保持一致）
+    // 修复：使用 systemBackgroundColor 自适应浅色/深色模式
     if (self.currentType == BackgroundTypeNone) {
-        splitVC.view.backgroundColor = [UIColor colorWithWhite:0.08 alpha:1.0];
+        if (@available(iOS 13.0, *)) {
+            splitVC.view.backgroundColor = [UIColor systemBackgroundColor];
+        } else {
+            splitVC.view.backgroundColor = [UIColor colorWithWhite:0.08 alpha:1.0];
+        }
         return;
     }
     
@@ -393,27 +402,41 @@ static const NSInteger kDefaultBackgroundTag = 99995;
     // Remove existing blur
     UIView *existingBlur = [container viewWithTag:kBackgroundBlurTag];
     if (existingBlur) [existingBlur removeFromSuperview];
-    
+
     UIView *existingDim = [container viewWithTag:kBackgroundDimTag];
     if (existingDim) [existingDim removeFromSuperview];
-    
-    // Add dark blur effect with adjustable intensity
-    UIBlurEffect *blurEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleDark];
+
+    // 修复：使用 SystemThinMaterial（自适应浅色/深色，且较通透）替代硬编码 Dark。
+    // 之前使用 UIBlurEffectStyleDark + 黑色 dim view 叠加，导致：
+    // 1. 浅色模式下背景图被完全压暗成"中间一片黑"
+    // 2. 左右侧栏完全不透明，背景图透不出来
+    // SystemThinMaterial 会在浅色模式呈浅色毛玻璃、深色模式呈深色毛玻璃，
+    // 且透明度适中，背景图可见。
+    UIBlurEffect *blurEffect;
+    if (@available(iOS 13.0, *)) {
+        blurEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemThinMaterial];
+    } else {
+        blurEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleLight];
+    }
     UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:blurEffect];
     blurView.tag = kBackgroundBlurTag;
     blurView.alpha = self.blurIntensity * 0.5; // max 0.5 for readability
     blurView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     blurView.frame = container.bounds;
-    
+
     [container addSubview:blurView];
-    
-    // Add additional dimming view for better contrast
+
+    // 修复：dim view 改为自适应颜色而非纯黑，避免浅色模式下过度压暗
     UIView *dimView = [[UIView alloc] initWithFrame:container.bounds];
     dimView.tag = kBackgroundDimTag;
-    dimView.backgroundColor = [UIColor blackColor];
-    dimView.alpha = self.blurIntensity * 0.3; // max 0.3 for dimming
+    if (@available(iOS 13.0, *)) {
+        dimView.backgroundColor = [UIColor labelColor];
+    } else {
+        dimView.backgroundColor = [UIColor blackColor];
+    }
+    dimView.alpha = self.blurIntensity * 0.2; // 降低到 0.2，避免过度压暗
     dimView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    
+
     [container addSubview:dimView];
 }
 
@@ -427,8 +450,14 @@ static const NSInteger kDefaultBackgroundTag = 99995;
         // 毛玻璃效果 - clear background, let blur show through
         viewController.view.backgroundColor = [UIColor clearColor];
     } else {
-        // 半透明效果 - semi-transparent dark background
-        viewController.view.backgroundColor = [UIColor colorWithWhite:0 alpha:1.0 - self.uiOpacity];
+        // 半透明效果 - semi-transparent background
+        // 修复：使用 systemBackgroundColor 替代硬编码黑色，自适应浅色/深色模式
+        if (@available(iOS 13.0, *)) {
+            UIColor *base = [UIColor systemBackgroundColor];
+            viewController.view.backgroundColor = [base colorWithAlphaComponent:1.0 - self.uiOpacity];
+        } else {
+            viewController.view.backgroundColor = [UIColor colorWithWhite:0 alpha:1.0 - self.uiOpacity];
+        }
     }
     
     // For UITableViewController
@@ -462,18 +491,18 @@ static const NSInteger kDefaultBackgroundTag = 99995;
     if (self.uiEffect == BackgroundUIEffectBlur) {
         // 毛玻璃效果 - use UIBlurEffect on cell background
         if (@available(iOS 13.0, *)) {
-            UIBlurEffect *blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterialDark];
+            UIBlurEffect *blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial];
             UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:blur];
             blurView.frame = cell.bounds;
             blurView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-            
+
             // Remove old background views
             for (UIView *subview in cell.contentView.superview.subviews) {
                 if ([subview isKindOfClass:[UIVisualEffectView class]] && subview != blurView) {
                     [subview removeFromSuperview];
                 }
             }
-            
+
             cell.backgroundView = blurView;
         } else {
             cell.backgroundColor = [UIColor colorWithWhite:0.1 alpha:self.uiOpacity];
@@ -481,7 +510,12 @@ static const NSInteger kDefaultBackgroundTag = 99995;
         cell.contentView.backgroundColor = [UIColor clearColor];
     } else {
         // 半透明效果 - simple semi-transparent background
-        cell.backgroundColor = [UIColor colorWithWhite:0.1 alpha:self.uiOpacity];
+        // 修复：使用 secondarySystemBackgroundColor 替代硬编码 0.1 黑色
+        if (@available(iOS 13.0, *)) {
+            cell.backgroundColor = [[UIColor secondarySystemBackgroundColor] colorWithAlphaComponent:self.uiOpacity];
+        } else {
+            cell.backgroundColor = [UIColor colorWithWhite:0.1 alpha:self.uiOpacity];
+        }
         cell.contentView.backgroundColor = [UIColor clearColor];
         cell.backgroundView = nil;
     }
@@ -525,7 +559,7 @@ static const NSInteger kDefaultBackgroundTag = 99995;
             [appearance configureWithTransparentBackground];
             appearance.backgroundColor = [UIColor clearColor];
             
-            UIBlurEffect *blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterialDark];
+            UIBlurEffect *blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial];
             appearance.backgroundEffect = blur;
             // 修复"所有界面顶部一行小白条"问题：configureWithTransparentBackground 不会
             // 完全移除底部分隔线（shadow hairline），在 iPhone 上会看到 1px 白线。
@@ -543,21 +577,26 @@ static const NSInteger kDefaultBackgroundTag = 99995;
         navigationBar.shadowImage = [[UIImage alloc] init];
     } else {
         // 半透明效果
-        navigationBar.barTintColor = [UIColor colorWithWhite:0.1 alpha:self.uiOpacity];
-        navigationBar.backgroundColor = [UIColor colorWithWhite:0.1 alpha:self.uiOpacity];
-        
+        // 修复：使用 secondarySystemBackgroundColor 替代硬编码 0.1 黑色
         if (@available(iOS 13.0, *)) {
+            UIColor *barColor = [[UIColor secondarySystemBackgroundColor] colorWithAlphaComponent:self.uiOpacity];
+            navigationBar.barTintColor = barColor;
+            navigationBar.backgroundColor = barColor;
+
             UINavigationBarAppearance *appearance = [[UINavigationBarAppearance alloc] init];
             [appearance configureWithTransparentBackground];
-            appearance.backgroundColor = [UIColor colorWithWhite:0.1 alpha:self.uiOpacity];
+            appearance.backgroundColor = barColor;
             appearance.backgroundEffect = nil;
             // 同上：显式移除底部分隔线，消除"一行小白条"
             appearance.shadowColor = nil;
             appearance.shadowImage = [[UIImage alloc] init];
-            
+
             navigationBar.standardAppearance = appearance;
             navigationBar.scrollEdgeAppearance = appearance;
             navigationBar.compactAppearance = appearance;
+        } else {
+            navigationBar.barTintColor = [UIColor colorWithWhite:0.1 alpha:self.uiOpacity];
+            navigationBar.backgroundColor = [UIColor colorWithWhite:0.1 alpha:self.uiOpacity];
         }
         // 兼容 iOS 12 及以下
         navigationBar.shadowImage = [[UIImage alloc] init];
@@ -571,13 +610,13 @@ static const NSInteger kDefaultBackgroundTag = 99995;
             UIToolbarAppearance *appearance = [[UIToolbarAppearance alloc] init];
             [appearance configureWithTransparentBackground];
             appearance.backgroundColor = [UIColor clearColor];
-            
-            UIBlurEffect *blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterialDark];
+
+            UIBlurEffect *blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial];
             appearance.backgroundEffect = blur;
             // 同 nav bar：移除底部分隔线，消除"小白条"
             appearance.shadowColor = nil;
             appearance.shadowImage = [[UIImage alloc] init];
-            
+
             toolbar.standardAppearance = appearance;
             toolbar.scrollEdgeAppearance = appearance;
             toolbar.compactAppearance = appearance;
@@ -586,21 +625,26 @@ static const NSInteger kDefaultBackgroundTag = 99995;
         toolbar.backgroundColor = [UIColor clearColor];
     } else {
         // 半透明效果
-        toolbar.barTintColor = [UIColor colorWithWhite:0.1 alpha:self.uiOpacity];
-        toolbar.backgroundColor = [UIColor colorWithWhite:0.1 alpha:self.uiOpacity];
-        
+        // 修复：使用 secondarySystemBackgroundColor 替代硬编码 0.1 黑色
         if (@available(iOS 13.0, *)) {
+            UIColor *barColor = [[UIColor secondarySystemBackgroundColor] colorWithAlphaComponent:self.uiOpacity];
+            toolbar.barTintColor = barColor;
+            toolbar.backgroundColor = barColor;
+
             UIToolbarAppearance *appearance = [[UIToolbarAppearance alloc] init];
             [appearance configureWithTransparentBackground];
-            appearance.backgroundColor = [UIColor colorWithWhite:0.1 alpha:self.uiOpacity];
+            appearance.backgroundColor = barColor;
             appearance.backgroundEffect = nil;
             // 同 nav bar：移除底部分隔线
             appearance.shadowColor = nil;
             appearance.shadowImage = [[UIImage alloc] init];
-            
+
             toolbar.standardAppearance = appearance;
             toolbar.scrollEdgeAppearance = appearance;
             toolbar.compactAppearance = appearance;
+        } else {
+            toolbar.barTintColor = [UIColor colorWithWhite:0.1 alpha:self.uiOpacity];
+            toolbar.backgroundColor = [UIColor colorWithWhite:0.1 alpha:self.uiOpacity];
         }
     }
 }
@@ -623,7 +667,7 @@ static const NSInteger kDefaultBackgroundTag = 99995;
 
 - (void)applyEffectToView:(UIView *)view {
     if (!view) return;
-    
+
     if (self.uiEffect == BackgroundUIEffectBlur) {
         // 毛玻璃效果 - 创建 UIVisualEffectView 作为子视图
         // 先移除已有的 blur view
@@ -632,25 +676,40 @@ static const NSInteger kDefaultBackgroundTag = 99995;
                 [subview removeFromSuperview];
             }
         }
-        
-        UIBlurEffect *blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterialDark];
+
+        // 修复：使用 SystemThinMaterial 替代 SystemMaterialDark，使左右侧栏
+        // 在浅色/深色模式下都自适应，且足够通透让背景图透出。
+        // SystemMaterialDark 过于不透明，导致"左右两边完全不透明"。
+        UIBlurEffect *blur;
+        if (@available(iOS 13.0, *)) {
+            blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemThinMaterial];
+        } else {
+            blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleLight];
+        }
         UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:blur];
         blurView.tag = kBackgroundBlurTag;
         blurView.frame = view.bounds;
         blurView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
         blurView.layer.cornerRadius = view.layer.cornerRadius;
         blurView.layer.masksToBounds = YES;
-        
+
         [view insertSubview:blurView atIndex:0];
         view.backgroundColor = [UIColor clearColor];
     } else {
         // 半透明效果 - 移除 blur view，使用半透明背景
+        // 修复：使用 systemBackgroundColor 替代硬编码深灰，自适应浅色/深色模式
         for (UIView *subview in view.subviews) {
             if ([subview isKindOfClass:[UIVisualEffectView class]] && subview.tag == kBackgroundBlurTag) {
                 [subview removeFromSuperview];
             }
         }
-        view.backgroundColor = [UIColor colorWithWhite:0.08 alpha:self.uiOpacity];
+        if (@available(iOS 13.0, *)) {
+            // 使用 secondarySystemBackgroundColor 作为半透明基底，再叠加 alpha
+            UIColor *base = [UIColor secondarySystemBackgroundColor];
+            view.backgroundColor = [base colorWithAlphaComponent:self.uiOpacity];
+        } else {
+            view.backgroundColor = [UIColor colorWithWhite:0.08 alpha:self.uiOpacity];
+        }
     }
 }
 
@@ -665,7 +724,7 @@ static const NSInteger kDefaultBackgroundTag = 99995;
             }
         }
         
-        UIBlurEffect *blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterialDark];
+        UIBlurEffect *blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial];
         UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:blur];
         blurView.tag = kBackgroundBlurTag;
         blurView.frame = cell.contentView.bounds;
@@ -683,7 +742,12 @@ static const NSInteger kDefaultBackgroundTag = 99995;
                 [subview removeFromSuperview];
             }
         }
-        cell.backgroundColor = [UIColor colorWithWhite:0.1 alpha:self.uiOpacity];
+        // 修复：使用 secondarySystemBackgroundColor 替代硬编码 0.1 黑色
+        if (@available(iOS 13.0, *)) {
+            cell.backgroundColor = [[UIColor secondarySystemBackgroundColor] colorWithAlphaComponent:self.uiOpacity];
+        } else {
+            cell.backgroundColor = [UIColor colorWithWhite:0.1 alpha:self.uiOpacity];
+        }
         cell.contentView.backgroundColor = [UIColor clearColor];
     }
 }

@@ -156,6 +156,12 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
     BOOL launchJar = NO;
     NSString *gameDir;
     NSString *defaultJRETag;
+    // 记录 Mojang 版本 JSON 指定的原始最低 Java 版本，用于后续 26.x 安全钳制
+    // 某些 Profile 的 javaVersion 可能被安装器（Forge/NeoForge/Modpack）错误地写为 25，
+    // 而 Java 25 的 iOS 移植版（jre25-ios）在 get_method_id 阶段存在崩溃问题（SIGSEGV）。
+    // 对于 26.x（Mojang 指定 Java 21），若 Profile 强制 25 会导致 JVM 启动即崩溃，
+    // 因此需要在 26.x 检测后对 preferredJavaVersion 做安全钳制。
+    int mojangMinVersion = minVersion;
     if ([launchTarget isKindOfClass:NSDictionary.class]) {
         // Get preferred Java version from current profile
         int preferredJavaVersion = [PLProfiles resolveKeyForCurrentProfile:@"javaVersion"].intValue;
@@ -163,7 +169,13 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
             if (minVersion > preferredJavaVersion) {
                 NSLog(@"[JavaLauncher] Profile's preferred Java version (%d) does not meet the minimum version (%d), dropping request", preferredJavaVersion, minVersion);
             } else {
-                NSDebugLog(@"[PLProfiles] Applying javaVersion");
+                // 先暂存 preferredJavaVersion，但不立即覆盖 minVersion。
+                // 因为 26.x 检测在后面才进行，需要在 26.x 检测后决定是否采纳 preferredJavaVersion。
+                // 对于 26.x + preferredJavaVersion=25 的场景，会触发 Java 25 JVM 崩溃，
+                // 必须在 26.x 检测后钳制为 mojangMinVersion（21）。
+                // 这里先记录，后续 26.x 检测块会处理。
+                NSDebugLog(@"[PLProfiles] Applying javaVersion (deferred, will clamp after 26.x check)");
+                // 暂时应用，26.x 检测块会按需钳制回 mojangMinVersion
                 minVersion = preferredJavaVersion;
             }
         }
@@ -194,6 +206,34 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
         // - Java 17+ JAR 走 Caciocavallo17 路径，用 Java 17/21 即可加载
         // 之前强制 25 是为了兼容 Java 24+ 编译的 cacio jar，现已通过替换 jar 修复。
     }
+
+    // 26.x 安全钳制：若 Profile 的 javaVersion 被错误地写为 25（如某些安装器行为），
+    // 而实际是 26.x 版本（Mojang 指定 Java 21），则将 minVersion 钳制回 Mojang 要求的版本。
+    // 原因：jre25-ios 在 get_method_id 阶段存在 SIGSEGV 崩溃（JVM 初始化早期），
+    // 26.x 用 Java 21 可正常启动且性能/兼容性更好。
+    // 注意：仅当 minVersion > mojangMinVersion 时才钳制（即 Profile 把版本提升了）。
+    // 若 mojangMinVersion 本身就是 25（理论上 Mojang 不会这样指定，但保留兼容），不钳制。
+    if ([launchTarget isKindOfClass:NSDictionary.class] && minVersion > mojangMinVersion) {
+        // 检测是否为 26.x（无 LWJGL 声明 + Mojang 要求 Java >= 21）
+        BOOL is26x = NO;
+        NSArray *libraries = launchTarget[@"libraries"];
+        BOOL hasLWJGL = NO;
+        for (NSDictionary *lib in libraries) {
+            NSString *name = lib[@"name"];
+            if (name && [name hasPrefix:@"org.lwjgl:lwjgl:"]) {
+                hasLWJGL = YES;
+                break;
+            }
+        }
+        if (!hasLWJGL && mojangMinVersion >= 21) {
+            is26x = YES;
+        }
+        if (is26x && minVersion >= 25) {
+            NSLog(@"[JavaLauncher] 26.x detected with Profile javaVersion=%d, clamping back to Mojang's required Java %d to avoid Java 25 JVM SIGSEGV crash", minVersion, mojangMinVersion);
+            minVersion = mojangMinVersion;
+        }
+    }
+
     NSLog(@"[JavaLauncher] Looking for Java %d or later", minVersion);
     NSString *javaHome = getSelectedJavaHome(defaultJRETag, minVersion);
 

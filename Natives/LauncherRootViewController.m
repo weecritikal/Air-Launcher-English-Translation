@@ -515,14 +515,22 @@ static CGFloat LauncherRootLayoutRightPanelWidth(UITraitCollection *trait) {
 #pragma mark - Custom Appearance（字体颜色 / 卡片颜色，与 Card 布局一致）
 
 - (void)applyCustomAppearance {
-    // 应用自定义卡片颜色（覆盖 BackgroundManager 的毛玻璃）
+    // 应用自定义卡片颜色（半透明覆盖 BackgroundManager 的毛玻璃，而非完全替换）
     NSString *cardColor = getPrefObject(@"general.card_color");
     if (cardColor.length > 0) {
         UIColor *color = [self colorFromHexString:cardColor];
         if (color) {
-            // 移除 BackgroundManager 插入的毛玻璃 UIVisualEffectView，用纯色覆盖
-            [self applySolidColor:color toContainer:self.sidebarContainer];
-            [self applySolidColor:color toContainer:self.rightPanelContainer];
+            // 修复：使用半透明颜色而非纯色，让背景图能透过侧栏显示。
+            // 之前 applySolidColor 移除毛玻璃并设置 alpha=1.0 纯色，
+            // 导致"改完背景后左右两边完全不透明"。
+            // 现在保留毛玻璃，叠加半透明卡片颜色（alpha 0.7），
+            // 既显示卡片色调又透出背景图。
+            CGFloat r, g, b, a;
+            if ([color getRed:&r green:&g blue:&b alpha:&a]) {
+                UIColor *semiColor = [UIColor colorWithRed:r green:g blue:b alpha:MIN(a, 0.7)];
+                [self applySemiTransparentColor:semiColor toContainer:self.sidebarContainer];
+                [self applySemiTransparentColor:semiColor toContainer:self.rightPanelContainer];
+            }
         }
     } else {
         // 未设置自定义颜色时，恢复毛玻璃效果
@@ -531,13 +539,9 @@ static CGFloat LauncherRootLayoutRightPanelWidth(UITraitCollection *trait) {
     }
 }
 
-- (void)applySolidColor:(UIColor *)color toContainer:(UIView *)container {
-    // 移除已有的毛玻璃子视图（BackgroundManager 插入的 UIVisualEffectView）
-    for (UIView *sub in container.subviews) {
-        if ([sub isKindOfClass:[UIVisualEffectView class]]) {
-            [sub removeFromSuperview];
-        }
-    }
+- (void)applySemiTransparentColor:(UIColor *)color toContainer:(UIView *)container {
+    // 保留 BackgroundManager 的毛玻璃 UIVisualEffectView，在其上叠加半透明纯色
+    // 这样既显示用户自定义的卡片颜色，又能透出背景图
     container.backgroundColor = color;
 }
 

@@ -294,7 +294,11 @@ NSNotificationName const DownloadFloatingBallSettingsDidChangeNotification = @"c
 
     CGFloat insetLeft   = MAX(safeArea.left,   4.0);
     CGFloat insetRight  = MAX(safeArea.right,  4.0);
-    CGFloat insetTop    = MAX(safeArea.top,    4.0);
+    // 修复：顶部 inset 使用较小固定值（4pt）而非 safeArea.top，
+    // 允许悬浮球移动到顶部导航栏/状态栏区域（用户反馈"大黑条上方"）。
+    // 之前使用 safeArea.top（带刘海设备约 44-59pt）导致悬浮球
+    // 无法移动到顶部导航栏区域。
+    CGFloat insetTop    = 4.0;
     CGFloat insetBottom = MAX(safeArea.bottom, 4.0);
 
     return CGRectMake(insetLeft,

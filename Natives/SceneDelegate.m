@@ -28,11 +28,15 @@ extern UIWindow *mainWindow;
     
     self.window = [[UIWindow alloc] initWithWindowScene:windowScene];
     self.window.frame = windowScene.coordinateSpace.bounds;
-    // 窗口背景设为深灰（而非纯黑），消除卡片布局卡片内缩区域与顶部状态栏区域
-    // 看起来的"黑条"——纯黑在 iPhone 灵动岛/刘海区域显得突兀，深灰与毛玻璃面板
-    // 视觉一致。BackgroundManager.applyBackgroundToWindow 会根据用户是否设置自定义
-    // 壁纸覆盖此颜色（BackgroundTypeNone 时改写为 systemBackgroundColor）。
-    self.window.backgroundColor = [UIColor colorWithWhite:0.08 alpha:1.0];
+    // 修复：使用 systemBackgroundColor 自适应浅色/深色模式。
+    // 之前硬编码深灰（0.08）在浅色模式下导致"中间一片黑"。
+    // systemBackgroundColor 在浅色模式为白、深色模式为黑，自动适配。
+    // BackgroundManager.applyBackgroundToWindow 会根据用户是否设置自定义壁纸覆盖此颜色。
+    if (@available(iOS 13.0, *)) {
+        self.window.backgroundColor = [UIColor systemBackgroundColor];
+    } else {
+        self.window.backgroundColor = [UIColor colorWithWhite:0.08 alpha:1.0];
+    }
     mainWindow = self.window;
 
     // 根据设置选择布局：默认 VS 三栏布局，可切换为卡片式便当盒布局

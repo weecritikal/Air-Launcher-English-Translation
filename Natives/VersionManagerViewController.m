@@ -810,20 +810,11 @@
             case 4: [self openWorldsManager]; break;
         }
     } else {
-        // 版本卡片区段：点击未选中 → 立即选中；点击已选中 → 弹出编辑/删除菜单
+        // 版本卡片区段：点击任意版本都弹出操作菜单（FCL 风格）
+        // 菜单中包含"选择此版本/编辑配置/删除"，用户可一步到位。
+        // 之前需要"先点一次选中，再点一次已选中"才能弹菜单，交互不直观。
         NSString *profileName = self.profileList[indexPath.item];
-        BOOL isSelected = [profileName isEqualToString:self.selectedProfile];
-        if (!isSelected) {
-            PLProfiles.current.selectedProfileName = profileName;
-            [PLProfiles.current save];
-            [[NSNotificationCenter defaultCenter] postNotificationName:@"SelectedProfileChanged" object:nil];
-            // 选中后立即刷新以更新选中徽章
-            [self loadProfiles];
-            [self.collectionView reloadData];
-        } else {
-            // 已选中的版本：点击则打开编辑/删除菜单
-            [self showProfileActions:profileName];
-        }
+        [self showProfileActions:profileName];
     }
 }
 
@@ -984,8 +975,15 @@
 
     [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
 
-    alert.popoverPresentationController.sourceView = self.view;
-    alert.popoverPresentationController.sourceRect = CGRectMake(self.view.bounds.size.width / 2, self.view.bounds.size.height / 2, 1, 1);
+    // 修复：仅在 iPad 上设置 popoverPresentationController，iPhone 上 ActionSheet
+    // 会自动从底部滑出，无需 popover 设置。
+    // 之前无条件设置 1x1 中心点 sourceRect，导致 iPhone 横屏下 ActionSheet
+    // 尝试以极小 popover 形式从屏幕中心弹出，"约等于显示不出来"。
+    if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
+        alert.popoverPresentationController.sourceView = self.view;
+        alert.popoverPresentationController.sourceRect = CGRectMake(self.view.bounds.size.width / 2, self.view.bounds.size.height / 2, 1, 1);
+        alert.popoverPresentationController.permittedArrowDirections = UIPopoverArrowDirectionAny;
+    }
     [self presentViewController:alert animated:YES completion:nil];
 }
 
