@@ -21,6 +21,7 @@
 #import "ModLoaderInstallViewController.h"
 #import "NeoForgeVersionFetcher.h"
 #import "LauncherPreferences.h"
+#import "BackgroundManager.h"
 
 #pragma mark - Data Models
 
@@ -249,12 +250,18 @@
 - (void)dealloc {
     if (_currentTask) { [_currentTask cancel]; _currentTask = nil; }
     if (_bmclTask) { [_bmclTask cancel]; _bmclTask = nil; }
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.title = [self pickerTitle];
-    self.view.backgroundColor = [UIColor systemGroupedBackgroundColor];
+    // 适配自定义启动器背景（参照 ForgeInstallViewController）
+    [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(refreshBackgroundEffect)
+                                                 name:@"BackgroundUIEffectChanged"
+                                               object:nil];
 
     self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"chevron.left"]
                                                                               style:UIBarButtonItemStylePlain
@@ -264,6 +271,10 @@
 
     [self setupTableView];
     [self startLoading];
+}
+
+- (void)refreshBackgroundEffect {
+    // 透明背景下无需额外操作，毛玻璃由 tableView cell 各自处理
 }
 
 - (NSString *)pickerTitle {
@@ -672,7 +683,12 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.title = @"选择安装方式";
-    self.view.backgroundColor = [UIColor systemGroupedBackgroundColor];
+    // 适配自定义启动器背景（参照 ForgeInstallViewController）
+    [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(refreshBackgroundEffect)
+                                                 name:@"BackgroundUIEffectChanged"
+                                               object:nil];
 
     self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"chevron.left"]
                                                                               style:UIBarButtonItemStylePlain
@@ -688,6 +704,10 @@
     [self setupTableView];
     [self refreshIncompatibilities];
     [self refreshVersionName];
+}
+
+- (void)refreshBackgroundEffect {
+    // 透明背景下无需额外操作
 }
 
 #pragma mark Setup
@@ -1264,6 +1284,10 @@
     picker.onCancelled = nil;
 
     [self.navigationController pushViewController:picker animated:YES];
+}
+
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
 @end

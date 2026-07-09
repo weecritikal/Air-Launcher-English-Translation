@@ -6,6 +6,7 @@
 #import "ProfileSettingsViewController.h"
 #import "PickTextField.h"
 #import "PLProfiles.h"
+#import "BackgroundManager.h"
 #import "ios_uikit_bridge.h"
 #import "utils.h"
 #include <objc/runtime.h>
@@ -34,6 +35,17 @@ extern NSMutableArray *localVersionList;
     self.title = localize(@"profile.title.install_fabric_quilt", nil);
     self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone target:self action:@selector(actionDone:)];
     self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemClose target:self action:@selector(actionClose)];
+
+    // 适配自定义启动器背景（参照 ForgeInstallViewController）
+    [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
+    if (self.navigationController) {
+        [[BackgroundManager sharedManager] applyEffectToNavigationBar:self.navigationController.navigationBar];
+    }
+    // 监听背景效果变化通知，实时刷新毛玻璃
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(refreshBackgroundEffect)
+                                                 name:@"BackgroundUIEffectChanged"
+                                               object:nil];
 
     // Setup appearance
     self.prefSectionsVisible = YES;
@@ -152,6 +164,16 @@ extern NSMutableArray *localVersionList;
         self.completionHandler(NO, nil, nil);
     }
     [self.navigationController dismissViewControllerAnimated:YES completion:nil];
+}
+
+- (void)refreshBackgroundEffect {
+    if (self.navigationController) {
+        [[BackgroundManager sharedManager] applyEffectToNavigationBar:self.navigationController.navigationBar];
+    }
+}
+
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
 - (void)actionDone:(UIBarButtonItem *)sender {

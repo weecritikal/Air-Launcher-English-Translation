@@ -316,7 +316,12 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.view.backgroundColor = [UIColor systemGroupedBackgroundColor];
+    // 适配自定义启动器背景（参照 ForgeInstallViewController）
+    [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(refreshBackgroundEffect)
+                                                 name:@"BackgroundUIEffectChanged"
+                                               object:nil];
 
     // 取消按钮（替代返回按钮，避免误以为已完成）
     self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemCancel
@@ -328,10 +333,19 @@
     [self updateUI];
 }
 
+- (void)refreshBackgroundEffect {
+    // 透明背景下无需额外操作
+}
+
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
 - (void)setupUI {
     self.cardView = [[UIView alloc] init];
     self.cardView.translatesAutoresizingMaskIntoConstraints = NO;
-    self.cardView.backgroundColor = [UIColor secondarySystemGroupedBackgroundColor];
+    self.cardView.backgroundColor = [UIColor clearColor];
+    [[BackgroundManager sharedManager] applyEffectToView:self.cardView];
     self.cardView.layer.cornerRadius = 18;
     self.cardView.layer.masksToBounds = YES;
     [self.view addSubview:self.cardView];
@@ -2106,22 +2120,157 @@
 
     if ([loaderType isEqualToString:@"vanilla"]) {
         [self downloadVanillaVersion:version];
-    } else if ([loaderType isEqualToString:@"fabric"]) {
-        [self installFabric:versionId loaderVersion:loaderVersion installAPI:installFabricAPI];
-    } else if ([loaderType isEqualToString:@"forge"]) {
-        [self installForge:versionId installOptiFine:installOptiFine loaderVersion:loaderVersion];
-    } else if ([loaderType isEqualToString:@"neoforge"]) {
-        [self installNeoForge:versionId loaderVersion:loaderVersion];
-    } else if ([loaderType isEqualToString:@"quilt"]) {
-        // Quilt 加载器安装（仿 Fabric，使用 Quilt meta API）
-        // Quilt 不安装 Fabric API（用 QSL/QFAPI），installAPI 强制为 NO
-        [self installQuilt:versionId loaderVersion:loaderVersion];
-    } else if ([loaderType isEqualToString:@"optifine"]) {
-        // 单独 OptiFine：作为版本补丁安装（参照 FCL OptiFineInstallTask，iOS 跳过 Patcher）
-        [self installOptiFineAsPatch:versionId loaderVersion:loaderVersion];
-    } else {
-        [self showError:[NSString stringWithFormat:@"%@ 安装器暂未实现", loaderType]];
+        return;
     }
+
+    // 参照 FCL：安装模组加载器前，先确保对应的原版版本 JSON 已存在。
+    // Fabric/Quilt/OptiFine 的版本 JSON 含 "inheritsFrom" 字段，启动时 Java 端
+    // Tools.getVersionInfo() 会读取 versions/{inheritsFrom}/{inheritsFrom}.json 合并。
+    // 若用户尚未安装原版，启动会因 FileNotFoundException 崩溃。
+    // Forge/NeoForge 直装器内部已有 ensureParentVersionExists 逻辑，无需在此重复检查。
+    __weak typeof(self) weakSelf = self;
+    [self ensureVanillaVersionJSONExists:versionId completion:^(BOOL success) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+        if (!success) {
+            [strongSelf showError:[NSString stringWithFormat:@"无法获取原版 %@ 的版本信息，请检查网络后重试", versionId]];
+            return;
+        }
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if ([loaderType isEqualToString:@"fabric"]) {
+                [strongSelf installFabric:versionId loaderVersion:loaderVersion installAPI:installFabricAPI];
+            } else if ([loaderType isEqualToString:@"forge"]) {
+                [strongSelf installForge:versionId installOptiFine:installOptiFine loaderVersion:loaderVersion];
+            } else if ([loaderType isEqualToString:@"neoforge"]) {
+                [strongSelf installNeoForge:versionId loaderVersion:loaderVersion];
+            } else if ([loaderType isEqualToString:@"quilt"]) {
+                [strongSelf installQuilt:versionId loaderVersion:loaderVersion];
+            } else if ([loaderType isEqualToString:@"optifine"]) {
+                [strongSelf installOptiFineAsPatch:versionId loaderVersion:loaderVersion];
+            } else {
+                [strongSelf showError:[NSString stringWithFormat:@"%@ 安装器暂未实现", loaderType]];
+            }
+        });
+    }];
+}
+
+/// 参照 FCL：确保原版版本的 version JSON 已存在。
+/// 若 versions/{versionId}/{versionId}.json 不存在，从 Mojang/BMCLAPI 版本清单下载。
+/// 仅下载 version JSON（不下载 client.jar/assets/libraries，这些在游戏首次启动时由 Java 端自动下载）。
+/// Forge/NeoForge 直装器内部也有相同逻辑（ensureParentVersionExists），但 Fabric/Quilt/OptiFine 没有，
+/// 因此在 proceedWithVersion 中统一前置调用。
+- (void)ensureVanillaVersionJSONExists:(NSString *)versionId completion:(void (^)(BOOL success))completion {
+    NSString *pojavHome = @(getenv("POJAV_HOME"));
+    NSString *versionDir = [pojavHome stringByAppendingPathComponent:
+                            [NSString stringWithFormat:@"versions/%@", versionId]];
+    NSString *versionJsonPath = [versionDir stringByAppendingPathComponent:
+                                 [NSString stringWithFormat:@"%@.json", versionId]];
+
+    // 1. 版本 JSON 已存在，无需下载
+    if ([NSFileManager.defaultManager fileExistsAtPath:versionJsonPath]) {
+        if (completion) completion(YES);
+        return;
+    }
+
+    NSLog(@"[DownloadVC] Vanilla version JSON missing, downloading: %@", versionId);
+
+    // 2. 在后台线程拉取 Mojang 版本清单并下载 version JSON
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        NSString *downloadSource = getPrefObject(@"general.download_source") ?: @"official";
+        BOOL useBMCLAPI = [downloadSource isEqualToString:@"bmclapi"];
+        NSString *manifestURL = useBMCLAPI
+            ? @"https://bmclapi2.bangbang93.com/mc/game/version_manifest_v2.json"
+            : @"https://piston-meta.mojang.com/mc/game/version_manifest_v2.json";
+
+        NSURL *url = [NSURL URLWithString:manifestURL];
+        if (!url) {
+            if (completion) dispatch_async(dispatch_get_main_queue(), ^{ completion(NO); });
+            return;
+        }
+
+        NSMutableURLRequest *manifestRequest = [NSMutableURLRequest requestWithURL:url];
+        manifestRequest.timeoutInterval = 30.0;
+        manifestRequest.cachePolicy = NSURLRequestReloadIgnoringLocalCacheData;
+        [manifestRequest setValue:@"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15" forHTTPHeaderField:@"User-Agent"];
+
+        NSData *manifestData = [NSURLConnection sendSynchronousRequest:manifestRequest returningResponse:nil error:nil];
+        if (!manifestData) {
+            NSLog(@"[DownloadVC] Failed to download version manifest");
+            if (completion) dispatch_async(dispatch_get_main_queue(), ^{ completion(NO); });
+            return;
+        }
+
+        NSDictionary *manifest = [NSJSONSerialization JSONObjectWithData:manifestData options:0 error:nil];
+        NSArray *versions = [manifest isKindOfClass:[NSDictionary class]] ? manifest[@"versions"] : nil;
+        if (![versions isKindOfClass:[NSArray class]]) {
+            NSLog(@"[DownloadVC] Invalid version manifest format");
+            if (completion) dispatch_async(dispatch_get_main_queue(), ^{ completion(NO); });
+            return;
+        }
+
+        // 3. 查找匹配的版本条目，获取 version JSON URL
+        NSString *versionJSONURL = nil;
+        for (NSDictionary *v in versions) {
+            if ([v isKindOfClass:[NSDictionary class]] && [v[@"id"] isEqualToString:versionId]) {
+                versionJSONURL = [v[@"url"] isKindOfClass:[NSString class]] ? v[@"url"] : nil;
+                break;
+            }
+        }
+        if (!versionJSONURL) {
+            NSLog(@"[DownloadVC] Version %@ not found in manifest", versionId);
+            if (completion) dispatch_async(dispatch_get_main_queue(), ^{ completion(NO); });
+            return;
+        }
+
+        // BMCLAPI 镜像：替换 Mojang 官方域名
+        if (useBMCLAPI) {
+            versionJSONURL = [versionJSONURL stringByReplacingOccurrencesOfString:@"piston-meta.mojang.com"
+                                                                        withString:@"bmclapi2.bangbang93.com"];
+            versionJSONURL = [versionJSONURL stringByReplacingOccurrencesOfString:@"launchermeta.mojang.com"
+                                                                        withString:@"bmclapi2.bangbang93.com"];
+        }
+
+        // 4. 下载 version JSON
+        NSURL *jsonURL = [NSURL URLWithString:versionJSONURL];
+        if (!jsonURL) {
+            if (completion) dispatch_async(dispatch_get_main_queue(), ^{ completion(NO); });
+            return;
+        }
+
+        NSMutableURLRequest *jsonRequest = [NSMutableURLRequest requestWithURL:jsonURL];
+        jsonRequest.timeoutInterval = 30.0;
+        jsonRequest.cachePolicy = NSURLRequestReloadIgnoringLocalCacheData;
+        [jsonRequest setValue:@"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15" forHTTPHeaderField:@"User-Agent"];
+
+        NSData *jsonData = [NSURLConnection sendSynchronousRequest:jsonRequest returningResponse:nil error:nil];
+        if (!jsonData) {
+            NSLog(@"[DownloadVC] Failed to download version JSON for %@", versionId);
+            if (completion) dispatch_async(dispatch_get_main_queue(), ^{ completion(NO); });
+            return;
+        }
+
+        // 5. 创建版本目录并写入 JSON
+        NSError *dirError = nil;
+        [NSFileManager.defaultManager createDirectoryAtPath:versionDir
+                                withIntermediateDirectories:YES
+                                                 attributes:nil
+                                                      error:&dirError];
+        if (dirError) {
+            NSLog(@"[DownloadVC] Failed to create version dir: %@", dirError.localizedDescription);
+            if (completion) dispatch_async(dispatch_get_main_queue(), ^{ completion(NO); });
+            return;
+        }
+
+        NSError *writeErr = nil;
+        if (![jsonData writeToFile:versionJsonPath options:NSDataWritingAtomic error:&writeErr]) {
+            NSLog(@"[DownloadVC] Failed to write version JSON: %@", writeErr.localizedDescription);
+            if (completion) dispatch_async(dispatch_get_main_queue(), ^{ completion(NO); });
+            return;
+        }
+
+        NSLog(@"[DownloadVC] Vanilla version JSON saved: %@ (%lu bytes)", versionJsonPath, (unsigned long)jsonData.length);
+        if (completion) dispatch_async(dispatch_get_main_queue(), ^{ completion(YES); });
+    });
 }
 
 #pragma mark - Vanilla Installation

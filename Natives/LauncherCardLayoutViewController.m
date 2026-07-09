@@ -258,6 +258,8 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
     self.rightPanelWidthConstraint = [self.rightPanelCard.widthAnchor constraintEqualToConstant:LauncherCardLayoutRightPanelWidth(self.traitCollection)];
 
     // 设置约束
+    // FCL 风格：中间内容卡片水平居中于屏幕，侧栏贴左、右面板贴右，
+    // 两侧间距自动适配（因右面板比侧栏宽，左侧间距会略大于右侧，但内容卡片始终视觉居中）。
     [NSLayoutConstraint activateConstraints:@[
         // 左侧菜单卡片
         [self.sidebarCard.leadingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.leadingAnchor constant:kCardOuterMargin],
@@ -271,9 +273,10 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
         [self.rightPanelCard.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-kCardOuterMargin],
         self.rightPanelWidthConstraint,
 
-        // 中间内容卡片
-        [self.contentCard.leadingAnchor constraintEqualToAnchor:self.sidebarCard.trailingAnchor constant:kCardSpacing],
-        [self.contentCard.trailingAnchor constraintEqualToAnchor:self.rightPanelCard.leadingAnchor constant:-kCardSpacing],
+        // 中间内容卡片——水平居中于 safeArea，宽度受两侧卡片约束自动收缩
+        [self.contentCard.centerXAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.centerXAnchor],
+        [self.contentCard.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.sidebarCard.trailingAnchor constant:kCardSpacing],
+        [self.contentCard.trailingAnchor constraintLessThanOrEqualToAnchor:self.rightPanelCard.leadingAnchor constant:-kCardSpacing],
         [self.contentCard.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:kCardOuterMargin],
         [self.contentCard.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-kCardOuterMargin]
     ]];
