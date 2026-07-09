@@ -440,15 +440,11 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
         // 纯 Java 17 编译版 caciocavallo17（Java 17/21 用）不依赖这些 opens，
         // 其 CTCGraphicsEnvironment 通过 --add-exports（上方已添加）即可访问所需内部 API。
 
-        // cpw.mods.bootstraplauncher 模块导出仅对 Java 17/21 添加。
-        // Java 25 上该模块在 JVM 启动时不存在（bootstraplauncher 是 Forge 运行时依赖，
-        // 由 modlauncher 在游戏启动阶段动态加载），JVM 会抛 "Unknown module" 警告，
-        // 在 Java 25 严格模块校验下进一步加剧类加载混乱，最终在 JNI 层触发 SIGSEGV。
-        BOOL needBootstrapLauncherExport = !isJava25;
-        if (needBootstrapLauncherExport) {
-            // TODO: workaround, will be removed once the startup part works without PLaunchApp
-            margv[++margc] = "--add-exports=cpw.mods.bootstraplauncher/cpw.mods.bootstraplauncher=ALL-UNNAMED";
-        }
+        // cpw.mods.bootstraplauncher 模块导出：所有 Java 版本均添加（参照 catsruledogs/Amethyst-iOS-25）。
+        // 之前仅对 Java 17/21 添加、Java 25 跳过，导致 26.2 + Java 25 启动时类加载混乱，
+        // 最终在 get_method_id 阶段 SIGSEGV。catsruledogs 对所有版本统一添加此导出且能正常启动 26.2。
+        // TODO: workaround, will be removed once the startup part works without PLaunchApp
+        margv[++margc] = "--add-exports=cpw.mods.bootstraplauncher/cpw.mods.bootstraplauncher=ALL-UNNAMED";
     }
 
     // Add Caciocavallo bootclasspath
@@ -475,29 +471,23 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
     // isJava25 已在上方提前计算（供 add-exports 条件判断与 bootclasspath 切换共用）
     const char *cacio_bootclasspath_mode;
     NSString *cacio_libs_path;
-    NSString *cacio_stub_jar_path;
     if (isJava8) {
         // Java 8: 1.10-SNAPSHOT，bootclasspath/p（前置，覆盖 java.awt 实现）
         cacio_bootclasspath_mode = "p";
         cacio_libs_path = [NSString stringWithFormat:@"%@/libs_caciocavallo", NSBundle.mainBundle.bundlePath];
-        cacio_stub_jar_path = nil; // Java 8 不需要 stub-surface-manager
     } else if (isJava25) {
         // Java 25: 1.18-SNAPSHOT 含 Java 24 class（catsruledogs iOS），bootclasspath/a
-        // 反编译验证：caciocavallo25 的 CTCPreloadClassLoader.<clinit> 确实调用
-        // Class.forName("sun.java2d.SurfaceManagerFactory")，与 caciocavallo17 相同。
-        // Java 9+ 已将该类迁至 sun.awt.image.SurfaceManagerFactory，原路径不存在，
-        // forName 失败会导致 LocalGE 未安装、JVM 回退 headless 模式。
-        // 因此 Java 25 同样需要通过 --patch-module 注入 stub-surface-manager.jar。
-        // 之前认为"catsruledogs jar 无 static 块不需要 stub"的判断与字节码事实不符，已纠正。
-        // --patch-module 本身不触发 SIGSEGV（SIGSEGV 根因是多余的 add-opens，已在 commit 9ef6d5b 修复）。
+        // caciocavallo25 的 CTCPreloadClassLoader.<clinit> 调用
+        // Class.forName("sun.java2d.SurfaceManagerFactory")，Java 9+ 已将该类迁至
+        // sun.awt.image.SurfaceManagerFactory。stub-surface-manager.jar 提供旧路径的
+        // stub 类让 forName 成功。stub 随其他 cacio jar 一起放入 bootclasspath/a
+        // （参照 catsruledogs/Amethyst-iOS-25，不使用 --patch-module）。
         cacio_bootclasspath_mode = "a";
         cacio_libs_path = [NSString stringWithFormat:@"%@/libs_caciocavallo25", NSBundle.mainBundle.bundlePath];
-        cacio_stub_jar_path = [NSString stringWithFormat:@"%@/libs_caciocavallo25/stub-surface-manager.jar", NSBundle.mainBundle.bundlePath];
     } else {
         // Java 17/21: 1.18-SNAPSHOT 纯 Java 17 编译（class version 61），bootclasspath/a
         cacio_bootclasspath_mode = "a";
         cacio_libs_path = [NSString stringWithFormat:@"%@/libs_caciocavallo17", NSBundle.mainBundle.bundlePath];
-        cacio_stub_jar_path = [NSString stringWithFormat:@"%@/libs_caciocavallo17/stub-surface-manager.jar", NSBundle.mainBundle.bundlePath];
     }
     NSLog(@"[JavaLauncher] Caciocavallo: isJava8=%d isJava25=%d libs=%@ mode=/%s",
           isJava8, isJava25, cacio_libs_path.lastPathComponent, cacio_bootclasspath_mode);
@@ -505,31 +495,19 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
     NSString *cacio_classpath = [NSString stringWithFormat:@"-Xbootclasspath/%s", cacio_bootclasspath_mode];
     NSArray *files = [fm contentsOfDirectoryAtPath:cacio_libs_path error:nil];
     for(NSString *file in files) {
-        // 跳过 stub-surface-manager.jar：它通过 --patch-module java.desktop 注入，
-        // 不能放在 -Xbootclasspath/a（unnamed module），否则与 java.desktop 模块的
-        // sun.java2d 包形成 split package，Java 9+ 会拒绝加载。
-        if ([file hasSuffix:@".jar"] && ![file isEqualToString:@"stub-surface-manager.jar"]) {
+        // 所有 cacio jar（含 stub-surface-manager.jar）均放入 -Xbootclasspath/a。
+        // 参照 catsruledogs/Amethyst-iOS-25：不使用 --patch-module，stub 放在 bootclasspath/a。
+        // 之前用 --patch-module 注入 stub 反而导致 Java 25 模块系统不一致 → get_method_id SIGSEGV。
+        if ([file hasSuffix:@".jar"]) {
             cacio_classpath = [NSString stringWithFormat:@"%@:%@/%@", cacio_classpath, cacio_libs_path, file];
         }
     }
     margv[++margc] = cacio_classpath.UTF8String;
 
-    // Java 9+ 移除了 sun.java2d.SurfaceManagerFactory（迁至 sun.awt.image.SurfaceManagerFactory）。
-    // caciocavallo17 和 caciocavallo25 的 CTCPreloadClassLoader.<clinit> 都会调用
-    // Class.forName("sun.java2d.SurfaceManagerFactory")，Java 9+ 上 forName 失败会导致
-    // LocalGE 未安装、JVM 回退 headless 模式。通过 --patch-module 注入含 setInstance/getInstance
-    // 的 stub 类让 forName 成功，<clinit> 才能继续安装 CTCGraphicsEnvironment。
-    // Java 17/21 和 Java 25 均需要 stub（分别在 caciocavallo17 / caciocavallo25 目录）。
-    // stub 仅含 getInstance/setInstance/构造函数，不含 createManager 等业务方法，
-    // 但 <clinit> 只读取 instance 字段，不会触发缺失方法。
-    if (cacio_stub_jar_path) {
-        if ([fm fileExistsAtPath:cacio_stub_jar_path]) {
-            margv[++margc] = [NSString stringWithFormat:@"--patch-module=java.desktop=%@", cacio_stub_jar_path].UTF8String;
-            NSLog(@"[JavaLauncher] Patching java.desktop with stub SurfaceManagerFactory: %@", cacio_stub_jar_path.lastPathComponent);
-        } else {
-            NSLog(@"[JavaLauncher] WARNING: stub-surface-manager.jar missing at %@, Caciocavallo may fall back to headless", cacio_stub_jar_path);
-        }
-    }
+    // stub-surface-manager.jar 已随上述 bootclasspath/a 一起加载（参照 catsruledogs/Amethyst-iOS-25）。
+    // 不再使用 --patch-module 注入：之前用 --patch-module 将 stub 注入 java.desktop 模块，
+    // 导致 Java 25 模块系统不一致，最终在 get_method_id 阶段 SIGSEGV。
+    // catsruledogs 的方案是将所有 cacio jar（含 stub）统一放入 bootclasspath/a，经验证可正常启动 26.2。
 
     if (!getEntitlementValue(@"com.apple.developer.kernel.extended-virtual-addressing")) {
         // In jailed environment, where extended virtual addressing entitlement isn't

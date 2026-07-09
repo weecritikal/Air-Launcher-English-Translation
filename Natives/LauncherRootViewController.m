@@ -245,11 +245,9 @@ static CGFloat LauncherRootLayoutRightPanelWidth(UITraitCollection *trait) {
         [self.rightPanelContainer.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
         self.rightPanelWidthConstraint,
 
-        // 中间内容区——水平居中于屏幕，宽度受两侧容器约束自动收缩
-        // （因右面板比侧栏宽，左侧间距会略大于右侧，但内容区始终视觉居中）
-        [self.contentContainer.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
-        [self.contentContainer.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.sidebarContainer.trailingAnchor],
-        [self.contentContainer.trailingAnchor constraintLessThanOrEqualToAnchor:self.rightPanelContainer.leadingAnchor],
+        // 中间内容区——填满侧栏与右面板之间的空间
+        [self.contentContainer.leadingAnchor constraintEqualToAnchor:self.sidebarContainer.trailingAnchor],
+        [self.contentContainer.trailingAnchor constraintEqualToAnchor:self.rightPanelContainer.leadingAnchor],
         [self.contentContainer.topAnchor constraintEqualToAnchor:self.view.topAnchor],
         [self.contentContainer.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor]
     ]];
