@@ -1123,41 +1123,49 @@
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     UITableViewCell *cell = [super tableView:tableView cellForRowAtIndexPath:indexPath];
-    
+
+    // ===== iOS 设置 App 风格：彩色圆角图标背景 =====
+    // 参照 iOS 设置应用：每个设置项左侧图标用带颜色的圆角方块背景包裹，
+    // 图标本身渲染为白色 SF Symbol。不同 section 用不同颜色区分：
+    //   general=蓝 / video=紫 / control=绿 / java=橙 / debug=红
+    // destructive（危险操作）项统一用红色背景。
+    // 搜索结果模式下用蓝灰色背景。
+    [self applySettingsAppStyleToCell:cell indexPath:indexPath];
+
     // Apply background styling if global background is active
     if ([[BackgroundManager sharedManager] hasBackground]) {
         // Set semi-transparent dark background for cells
         [[BackgroundManager sharedManager] applyEffectToCell:cell];
-        
+
         // Set white text for better visibility on dark background
         cell.textLabel.textColor = [UIColor whiteColor];
         cell.textLabel.shadowColor = [UIColor blackColor];
         cell.textLabel.shadowOffset = CGSizeMake(0, 1);
-        
+
         // Detail text light gray
         cell.detailTextLabel.textColor = [UIColor colorWithWhite:0.8 alpha:1.0];
         cell.detailTextLabel.shadowColor = [UIColor blackColor];
         cell.detailTextLabel.shadowOffset = CGSizeMake(0, 1);
-        
-        // Tint color for icons and accessories
-        cell.tintColor = [UIColor systemBlueColor];
-        
+
+        // Tint color for icons and accessories：使用主题强调色（accentColor）
+        cell.tintColor = accentColor();
+
         // Handle specific cell types
         NSArray *subviews = cell.contentView.subviews;
         for (UIView *subview in subviews) {
             // Style sliders
             if ([subview isKindOfClass:[UISlider class]]) {
                 UISlider *slider = (UISlider *)subview;
-                slider.tintColor = [UIColor systemBlueColor];
+                slider.tintColor = accentColor();
                 slider.thumbTintColor = [UIColor whiteColor];
             }
-            
+
             // Style switches
             if ([subview isKindOfClass:[UISwitch class]]) {
                 UISwitch *switchControl = (UISwitch *)subview;
-                switchControl.onTintColor = [UIColor systemBlueColor];
+                switchControl.onTintColor = accentColor();
             }
-            
+
             // Style text fields
             if ([subview isKindOfClass:[UITextField class]]) {
                 UITextField *textField = (UITextField *)subview;
@@ -1165,7 +1173,7 @@
                 textField.backgroundColor = [UIColor colorWithWhite:0.2 alpha:0.6];
                 textField.layer.cornerRadius = 8;
             }
-            
+
             // Style labels
             if ([subview isKindOfClass:[UILabel class]]) {
                 UILabel *label = (UILabel *)subview;
@@ -1174,7 +1182,7 @@
                 label.shadowOffset = CGSizeMake(0, 1);
             }
         }
-        
+
         // Style the picker label if exists
         if (cell.accessoryView && [cell.accessoryView isKindOfClass:[UILabel class]]) {
             UILabel *pickerLabel = (UILabel *)cell.accessoryView;
@@ -1190,8 +1198,119 @@
         cell.detailTextLabel.shadowColor = nil;
         cell.detailTextLabel.shadowOffset = CGSizeZero;
     }
-    
+
     return cell;
+}
+
+/// iOS 设置 App 风格图标背景：给 cell.imageView 加圆角彩色背景 + 白色图标
+/// 参照 iOS 设置应用（General=灰、Display=蓝、Privacy=蓝 等彩色圆角图标）
+/// 在 cellForRow 中调用，仅做视觉装饰，不改变 cell 数据或交互逻辑
+- (void)applySettingsAppStyleToCell:(UITableViewCell *)cell indexPath:(NSIndexPath *)indexPath {
+    UIImageView *iconView = cell.imageView;
+    if (!iconView) return;
+
+    // 判断是否为 section header 行（row 0 且有 prefSections）
+    // section header 行不加彩色背景，保持原始样式（避免与组内项视觉混淆）
+    BOOL isSectionHeader = (indexPath.row == 0 && self.prefSections && !self.filteredItems);
+    if (isSectionHeader) {
+        // section header：恢复默认 tint（不加背景），让图标保持系统默认外观
+        iconView.backgroundColor = [UIColor clearColor];
+        iconView.layer.cornerRadius = 0;
+        iconView.layer.masksToBounds = NO;
+        // section header 图标用主题强调色（accentColor），与启动按钮/菜单选中态统一
+        iconView.tintColor = accentColor();
+        return;
+    }
+
+    // 获取当前项的数据
+    NSDictionary *item = nil;
+    if (self.filteredItems) {
+        // 搜索结果模式
+        item = self.filteredItems[indexPath.row];
+    } else if (self.prefSections && indexPath.section < (NSInteger)self.prefContents.count) {
+        NSArray *sectionItems = self.prefContents[indexPath.section];
+        if (indexPath.row < (NSInteger)sectionItems.count) {
+            item = sectionItems[indexPath.row];
+        }
+    }
+
+    // 判断是否为危险操作项
+    BOOL destructive = [item[@"destructive"] boolValue];
+
+    // 获取图标名，用 UIImageSymbolConfiguration 重新渲染为白色、合适大小的 SF Symbol
+    NSString *iconName = item[@"icon"];
+    UIImage *styledIcon = nil;
+    if (iconName.length > 0) {
+        // 用 UIImageSymbolConfiguration 控制图标大小和颜色
+        // pointSize 16 适配默认 UITableViewCell imageView 的 29pt 尺寸（留出内边距）
+        UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:16
+                                                                                            weight:UIFontWeightMedium];
+        styledIcon = [UIImage systemImageNamed:iconName withConfiguration:config];
+        if (!styledIcon) {
+            styledIcon = [UIImage systemImageNamed:iconName];
+        }
+    }
+
+    // 设置图标：白色模板渲染，在彩色背景上显示
+    if (styledIcon) {
+        // withTintColor 让 SF Symbol 以白色渲染（模板模式），与背景色搭配
+        UIImage *whiteIcon = [styledIcon imageWithTintColor:[UIColor whiteColor]
+                                               renderingMode:UIImageRenderingModeAlwaysOriginal];
+        iconView.image = whiteIcon;
+    }
+    iconView.tintColor = [UIColor whiteColor];
+    iconView.contentMode = UIViewContentModeCenter;
+
+    // 设置彩色圆角背景
+    UIColor *bgColor = [self iconBackgroundColorForItem:item indexPath:indexPath destructive:destructive];
+    iconView.backgroundColor = bgColor;
+    iconView.layer.cornerRadius = 7;
+    iconView.layer.cornerCurve = kCACornerCurveContinuous;
+    iconView.layer.masksToBounds = YES;
+}
+
+/// 根据设置项所属 section 与图标名返回 iOS 设置 App 风格的彩色背景
+/// 参照 iOS 设置应用：不同功能模块用不同颜色区分，一眼可辨识归属
+- (UIColor *)iconBackgroundColorForItem:(NSDictionary *)item
+                              indexPath:(NSIndexPath *)indexPath
+                             destructive:(BOOL)destructive {
+    // 危险操作项统一红色背景
+    if (destructive) {
+        return [UIColor systemRedColor];
+    }
+
+    // 搜索结果模式：统一用蓝灰色背景
+    if (self.filteredItems) {
+        NSNumber *origSection = item[@"__origSection"];
+        if (origSection) {
+            return [self colorForPreferenceSection:origSection.intValue];
+        }
+        return [UIColor systemBlueColor];
+    }
+
+    // 正常模式：按 section 着色
+    return [self colorForPreferenceSection:indexPath.section];
+}
+
+/// section 索引 → 配色映射（参照 iOS 设置应用的模块色系）
+/// general=蓝（通用设置）/ video=紫（显示）/ control=绿（控制）/ java=橙（运行时）/ debug=红（调试）
+- (UIColor *)colorForPreferenceSection:(NSInteger)section {
+    if (!self.prefSections || section >= (NSInteger)self.prefSections.count) {
+        return [UIColor systemGrayColor];
+    }
+    NSString *sectionKey = self.prefSections[section];
+    if ([sectionKey isEqualToString:@"general"]) {
+        return [UIColor systemBlueColor];
+    } else if ([sectionKey isEqualToString:@"video"]) {
+        return [UIColor systemPurpleColor];
+    } else if ([sectionKey isEqualToString:@"control"]) {
+        return [UIColor systemGreenColor];
+    } else if ([sectionKey isEqualToString:@"java"]) {
+        return [UIColor systemOrangeColor];
+    } else if ([sectionKey isEqualToString:@"debug"]) {
+        return [UIColor systemRedColor];
+    }
+    return [UIColor systemGrayColor];
 }
 
 #pragma mark - UITableView Delegate
