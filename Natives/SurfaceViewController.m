@@ -972,7 +972,15 @@ static GameSurfaceView* pojavWindow;
     if ((windowWidth % 2) != 0) { --windowWidth; }
     if ((windowHeight % 2) != 0) { --windowHeight; }
     if ([self.surfaceView.layer isKindOfClass:CAMetalLayer.class]) {
-        ((CAMetalLayer *)self.surfaceView.layer).drawableSize = CGSizeMake(MAX(windowWidth, 1), MAX(windowHeight, 1));
+        CAMetalLayer *metalLayer = (CAMetalLayer *)self.surfaceView.layer;
+        metalLayer.drawableSize = CGSizeMake(MAX(windowWidth, 1), MAX(windowHeight, 1));
+        // 解锁帧率（关闭垂直同步）：三缓冲。
+        // 默认 maximumDrawableCount（通常为 2）下，当两个 drawable 都在等待呈现时，
+        // nextDrawable 会阻塞到 vblank 释放一个 drawable，间接把渲染线程锁在刷新率。
+        // 设为 3（三缓冲）后几乎总有空闲 drawable，渲染线程不再因等待 drawable 而 stall，
+        // 配合 VSync 关闭可让帧率超过屏幕刷新率。该值是 Metal 低延迟/高吞吐渲染的标准设置。
+        // 注：此优化对 GL 类渲染器（经 CAMetalLayer 呈现）最有意义；Vulkan/MoltenVK 自管 swapchain。
+        metalLayer.maximumDrawableCount = 3;
     }
     CallbackBridge_nativeSendScreenSize(windowWidth, windowHeight);
 }

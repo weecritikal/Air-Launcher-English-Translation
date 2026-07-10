@@ -66,6 +66,15 @@ public class PojavLauncher {
         MCOptionUtils.set("fullscreen", "false");
         MCOptionUtils.set("overrideWidth", size[0]);
         MCOptionUtils.set("overrideHeight", size[1]);
+        // 解锁帧率（关闭垂直同步）：MC 默认 enableVsync=true，会把帧率锁在屏幕刷新率
+        // （60Hz 锁 60、120Hz ProMotion 锁 120）。当启动器偏好 video.disable_game_vsync 开启时
+        // （通过环境变量 POJAV_DISABLE_VSYNC=1 传入），强制写 enableVsync=false 到 options.txt，
+        // 让 MC 不再调用 glfwSwapInterval(1) 请求垂直同步。
+        // 用 set（而非 setDefault）覆盖：每次启动都强制关闭，确保生效；
+        // 用户若想恢复游戏内垂直同步，可在启动器设置关闭该开关。
+        if ("1".equals(System.getenv("POJAV_DISABLE_VSYNC"))) {
+            MCOptionUtils.set("enableVsync", "false");
+        }
         // Default settings for performance
         MCOptionUtils.setDefault("mipmapLevels", "0");
         MCOptionUtils.setDefault("particles", "1");

@@ -636,6 +636,14 @@
                   return whenNotInGame() && (UIScreen.mainScreen.maximumFramesPerSecond > 60);
               }
             },
+            // 解锁帧率（关闭垂直同步）：三层联动关闭 VSync，让游戏帧率可超过屏幕刷新率。
+            // 不限制 ProMotion 设备：60Hz 设备同样会被 VSync 锁在 60，也需要解锁。
+            @{@"key": @"disable_game_vsync",
+              @"hasDetail": @YES,
+              @"icon": @"hare",
+              @"type": self.typeSwitch,
+              @"enableCondition": whenNotInGame
+            },
             @{@"key": @"performance_hud",
               @"hasDetail": @YES,
               @"icon": @"waveform.path.ecg",

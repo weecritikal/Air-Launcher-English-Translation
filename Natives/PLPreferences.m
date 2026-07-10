@@ -45,6 +45,11 @@ NSString *const PREF_MOD_UPDATE_KEEP_OLD = @"general.mod_update_keep_old";
             @"renderer": @"auto",
             @"resolution": @(100),
             @"max_framerate": @YES,
+            // 解锁帧率（关闭垂直同步）：默认开启。
+            // MC 默认 enableVsync=true，会把帧率锁在屏幕刷新率（60Hz 锁 60、120Hz ProMotion 锁 120）。
+            // 开启后启动器会在三层联动关闭 VSync：options.txt 强制 enableVsync=false、
+            // pojavSwapInterval 强制 interval=0、CAMetalLayer 三缓冲。详见各修改点注释。
+            @"disable_game_vsync": @YES,
             @"performance_hud": @NO,
             @"fullscreen_airplay": @YES,
             @"silence_other_audio": @NO,

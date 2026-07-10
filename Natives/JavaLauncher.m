@@ -57,6 +57,12 @@ void init_loadDefaultEnv() {
 
     // Force MoltenVK to use immediate present mode (uncapped fps)
     setenv("MVK_CONFIG_PRESENT_MODE_IMMEDIATE", "1", 1);
+
+    // 解锁帧率（关闭垂直同步）：读取启动器偏好，通过环境变量传递给 Java 层和 native 桥接层。
+    // - Java 层（PojavLauncher.java）读取 POJAV_DISABLE_VSYNC=1 后强制写 enableVsync=false 到 options.txt
+    // - native 桥接层（egl_bridge.m pojavSwapInterval）读取 POJAV_DISABLE_VSYNC=1 后强制 interval=0
+    // 两层独立生效，互为兜底。默认开启（PLPreferences 中 video.disable_game_vsync 默认 YES）。
+    setenv("POJAV_DISABLE_VSYNC", getPrefBool(@"video.disable_game_vsync") ? "1" : "0", 1);
 }
 
 void init_loadCustomEnv() {
