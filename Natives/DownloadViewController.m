@@ -481,13 +481,30 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 @property (nonatomic, copy, nullable) NSString *stageMessage;
 @property (nonatomic, copy, nullable) NSString *titleText;
 @property (nonatomic, copy, nullable) void (^cancelHandler)(void);
+
+// ===== 阶段12新增：FCL/ZL2 风格增强字段 =====
+// 类别图标（SF Symbol 名称），如 "cube.box.fill"=原版 / "wand.and.stars"=Fabric / "archivebox.fill"=整合包
+@property (nonatomic, copy, nullable) NSString *categoryIconName;
+// 类别图标颜色（不设则使用 accentColor）
+@property (nonatomic, strong, nullable) UIColor *categoryIconColor;
+// 详情信息行（如 "42.3 MB / 102.5 MB • 3.2 MB/s"），不设则隐藏
+@property (nonatomic, copy, nullable) NSString *detailInfoText;
+// 剩余时间文本（如 "剩余 18秒"），不设则隐藏
+@property (nonatomic, copy, nullable) NSString *etaText;
+// 阶段步骤列表：每个元素为 NSDictionary，含 @"title"(NSString) 和 @"status"(NSNumber: 0=未开始 1=进行中 2=已完成)
+@property (nonatomic, copy, nullable) NSArray<NSDictionary *> *stageSteps;
 @end
 
 @interface InstallerProgressViewController ()
 @property (nonatomic, strong) UIView *cardView;
+@property (nonatomic, strong) UIImageView *iconView; // 类别图标（48x48）
 @property (nonatomic, strong) UILabel *titleLabel;
 @property (nonatomic, strong) UILabel *percentLabel;
 @property (nonatomic, strong) UIProgressView *progressBar;
+@property (nonatomic, strong) UILabel *detailInfoLabel; // 文件大小 + 速度
+@property (nonatomic, strong) UILabel *etaLabel; // 剩余时间
+@property (nonatomic, strong) UIView *stagesContainer; // 阶段步骤容器
+@property (nonatomic, strong) UIStackView *stagesStack; // 阶段步骤垂直排列
 @property (nonatomic, strong) UILabel *stageLabel;
 @property (nonatomic, strong) UIActivityIndicatorView *indeterminateIndicator;
 @end
@@ -530,10 +547,20 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     self.cardView.layer.masksToBounds = YES;
     [self.view addSubview:self.cardView];
 
+    // ===== 类别图标（48x48，参照 FCL 安装页顶部的类别图标）=====
+    self.iconView = [[UIImageView alloc] init];
+    self.iconView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.iconView.contentMode = UIViewContentModeScaleAspectFit;
+    self.iconView.tintColor = accentColor();
+    self.iconView.image = [UIImage systemImageNamed:@"cube.box.fill"];
+    self.iconView.hidden = YES; // 默认隐藏，设置了 categoryIconName 后显示
+    [self.cardView addSubview:self.iconView];
+
     self.titleLabel = [[UILabel alloc] init];
     self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.titleLabel.font = [UIFont systemFontOfSize:20 weight:UIFontWeightBold];
     self.titleLabel.textAlignment = NSTextAlignmentCenter;
+    self.titleLabel.numberOfLines = 0;
     self.titleLabel.text = @"正在安装";
     [self.cardView addSubview:self.titleLabel];
 
@@ -560,6 +587,38 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     self.progressBar.progressTintColor = accentColor();
     [self.cardView addSubview:self.progressBar];
 
+    // ===== 详情信息行（文件大小 + 速度，参照 FCL 安装页的文件信息行）=====
+    self.detailInfoLabel = [[UILabel alloc] init];
+    self.detailInfoLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.detailInfoLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightMedium];
+    self.detailInfoLabel.textAlignment = NSTextAlignmentCenter;
+    self.detailInfoLabel.textColor = [UIColor secondaryLabelColor];
+    self.detailInfoLabel.hidden = YES; // 默认隐藏，设置了 detailInfoText 后显示
+    [self.cardView addSubview:self.detailInfoLabel];
+
+    // ===== 剩余时间（ETA，参照 FCL 安装页的剩余时间显示）=====
+    self.etaLabel = [[UILabel alloc] init];
+    self.etaLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.etaLabel.font = [UIFont systemFontOfSize:12];
+    self.etaLabel.textAlignment = NSTextAlignmentCenter;
+    self.etaLabel.textColor = [UIColor tertiaryLabelColor];
+    self.etaLabel.hidden = YES; // 默认隐藏，设置了 etaText 后显示
+    [self.cardView addSubview:self.etaLabel];
+
+    // ===== 阶段步骤容器（参照 FCL 的安装步骤列表，显示 ✓/◐/○ 状态）=====
+    self.stagesContainer = [[UIView alloc] init];
+    self.stagesContainer.translatesAutoresizingMaskIntoConstraints = NO;
+    self.stagesContainer.hidden = YES; // 默认隐藏，设置了 stageSteps 后显示
+    [self.cardView addSubview:self.stagesContainer];
+
+    self.stagesStack = [[UIStackView alloc] init];
+    self.stagesStack.translatesAutoresizingMaskIntoConstraints = NO;
+    self.stagesStack.axis = UILayoutConstraintAxisVertical;
+    self.stagesStack.spacing = 8;
+    self.stagesStack.alignment = UIStackViewAlignmentLeading;
+    self.stagesStack.distribution = UIStackViewDistributionFill;
+    [self.stagesContainer addSubview:self.stagesStack];
+
     self.stageLabel = [[UILabel alloc] init];
     self.stageLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.stageLabel.font = [UIFont systemFontOfSize:14];
@@ -569,12 +628,22 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     self.stageLabel.text = @"准备中...";
     [self.cardView addSubview:self.stageLabel];
 
+    // 使用容器视图 + 垂直 stack 来组织所有内容，使 stagesContainer 可动态显隐
+    // 布局策略：从上到下依次排列，stagesContainer 底部约束到 stageLabel 顶部
+    // cardView 底部约束到 stageLabel 底部，stagesContainer 隐藏时高度自动为 0
     [NSLayoutConstraint activateConstraints:@[
         [self.cardView.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor],
         [self.cardView.leadingAnchor constraintEqualToAnchor:self.view.layoutMarginsGuide.leadingAnchor],
         [self.cardView.trailingAnchor constraintEqualToAnchor:self.view.layoutMarginsGuide.trailingAnchor],
 
-        [self.titleLabel.topAnchor constraintEqualToAnchor:self.cardView.topAnchor constant:24],
+        // 类别图标：顶部 24pt，居中，48x48
+        [self.iconView.topAnchor constraintEqualToAnchor:self.cardView.topAnchor constant:24],
+        [self.iconView.centerXAnchor constraintEqualToAnchor:self.cardView.centerXAnchor],
+        [self.iconView.widthAnchor constraintEqualToConstant:48],
+        [self.iconView.heightAnchor constraintEqualToConstant:48],
+
+        // titleLabel：图标下方 12pt（图标隐藏时通过约束仍正常布局）
+        [self.titleLabel.topAnchor constraintEqualToAnchor:self.iconView.bottomAnchor constant:12],
         [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.cardView.leadingAnchor constant:16],
         [self.titleLabel.trailingAnchor constraintEqualToAnchor:self.cardView.trailingAnchor constant:-16],
 
@@ -590,7 +659,29 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         [self.progressBar.trailingAnchor constraintEqualToAnchor:self.cardView.trailingAnchor constant:-16],
         [self.progressBar.heightAnchor constraintEqualToConstant:8],
 
-        [self.stageLabel.topAnchor constraintEqualToAnchor:self.progressBar.bottomAnchor constant:12],
+        // 详情信息行：进度条下方 10pt
+        [self.detailInfoLabel.topAnchor constraintEqualToAnchor:self.progressBar.bottomAnchor constant:10],
+        [self.detailInfoLabel.leadingAnchor constraintEqualToAnchor:self.cardView.leadingAnchor constant:16],
+        [self.detailInfoLabel.trailingAnchor constraintEqualToAnchor:self.cardView.trailingAnchor constant:-16],
+
+        // ETA：详情信息行下方 4pt
+        [self.etaLabel.topAnchor constraintEqualToAnchor:self.detailInfoLabel.bottomAnchor constant:4],
+        [self.etaLabel.leadingAnchor constraintEqualToAnchor:self.cardView.leadingAnchor constant:16],
+        [self.etaLabel.trailingAnchor constraintEqualToAnchor:self.cardView.trailingAnchor constant:-16],
+
+        // 阶段步骤容器：ETA 下方 12pt
+        [self.stagesContainer.topAnchor constraintEqualToAnchor:self.etaLabel.bottomAnchor constant:12],
+        [self.stagesContainer.leadingAnchor constraintEqualToAnchor:self.cardView.leadingAnchor constant:20],
+        [self.stagesContainer.trailingAnchor constraintEqualToAnchor:self.cardView.trailingAnchor constant:-20],
+
+        // stagesStack 充满 stagesContainer
+        [self.stagesStack.topAnchor constraintEqualToAnchor:self.stagesContainer.topAnchor],
+        [self.stagesStack.leadingAnchor constraintEqualToAnchor:self.stagesContainer.leadingAnchor],
+        [self.stagesStack.trailingAnchor constraintEqualToAnchor:self.stagesContainer.trailingAnchor],
+        [self.stagesStack.bottomAnchor constraintEqualToAnchor:self.stagesContainer.bottomAnchor],
+
+        // stageLabel：阶段步骤容器下方 12pt
+        [self.stageLabel.topAnchor constraintEqualToAnchor:self.stagesContainer.bottomAnchor constant:12],
         [self.stageLabel.leadingAnchor constraintEqualToAnchor:self.cardView.leadingAnchor constant:16],
         [self.stageLabel.trailingAnchor constraintEqualToAnchor:self.cardView.trailingAnchor constant:-16],
         [self.stageLabel.bottomAnchor constraintEqualToAnchor:self.cardView.bottomAnchor constant:-24]
@@ -611,6 +702,100 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 - (void)setProgress:(double)progress {
     _progress = progress;
     [self updateUI];
+}
+
+- (void)setCategoryIconName:(NSString *)categoryIconName {
+    _categoryIconName = [categoryIconName copy];
+    if (categoryIconName.length > 0) {
+        self.iconView.image = [UIImage systemImageNamed:categoryIconName];
+        self.iconView.hidden = NO;
+    } else {
+        self.iconView.hidden = YES;
+    }
+}
+
+- (void)setCategoryIconColor:(UIColor *)categoryIconColor {
+    _categoryIconColor = categoryIconColor;
+    self.iconView.tintColor = categoryIconColor ?: accentColor();
+}
+
+- (void)setDetailInfoText:(NSString *)detailInfoText {
+    _detailInfoText = [detailInfoText copy];
+    if (detailInfoText.length > 0) {
+        self.detailInfoLabel.text = detailInfoText;
+        self.detailInfoLabel.hidden = NO;
+    } else {
+        self.detailInfoLabel.hidden = YES;
+    }
+}
+
+- (void)setEtaText:(NSString *)etaText {
+    _etaText = [etaText copy];
+    if (etaText.length > 0) {
+        self.etaLabel.text = etaText;
+        self.etaLabel.hidden = NO;
+    } else {
+        self.etaLabel.hidden = YES;
+    }
+}
+
+- (void)setStageSteps:(NSArray<NSDictionary *> *)stageSteps {
+    _stageSteps = [stageSteps copy];
+    [self rebuildStagesStack];
+}
+
+/// 重建阶段步骤列表（参照 FCL 的安装步骤列表）
+/// 每行包含状态图标（✓/◐/○）+ 步骤标题，状态用不同颜色区分
+- (void)rebuildStagesStack {
+    // 清除旧的步骤行
+    [self.stagesStack.arrangedSubviews makeObjectsPerformSelector:@selector(removeFromSuperview)];
+
+    if (!self.stageSteps || self.stageSteps.count == 0) {
+        self.stagesContainer.hidden = YES;
+        return;
+    }
+
+    self.stagesContainer.hidden = NO;
+    for (NSDictionary *step in self.stageSteps) {
+        NSString *title = [step[@"title"] isKindOfClass:[NSString class]] ? step[@"title"] : @"";
+        NSInteger status = [step[@"status"] integerValue]; // 0=未开始 1=进行中 2=已完成
+
+        UILabel *stepLabel = [[UILabel alloc] init];
+        stepLabel.translatesAutoresizingMaskIntoConstraints = NO;
+        stepLabel.font = [UIFont systemFontOfSize:13];
+        stepLabel.numberOfLines = 0;
+
+        NSString *symbolName;
+        UIColor *statusColor;
+        switch (status) {
+            case 2: // 已完成
+                symbolName = @"checkmark.circle.fill";
+                statusColor = [UIColor systemGreenColor];
+                break;
+            case 1: // 进行中
+                symbolName = @"circle.dotted";
+                statusColor = accentColor();
+                break;
+            default: // 未开始
+                symbolName = @"circle";
+                statusColor = [UIColor tertiaryLabelColor];
+                break;
+        }
+
+        // 使用 NSAttributedString 构建带图标的步骤行
+        NSTextAttachment *attachment = [[NSTextAttachment alloc] init];
+        attachment.image = [[UIImage systemImageNamed:symbolName] imageWithTintColor:statusColor renderingMode:UIImageRenderingModeAlwaysOriginal];
+        attachment.bounds = CGRectMake(0, -2, 16, 16);
+        NSAttributedString *iconAttr = [NSAttributedString attributedStringWithAttachment:attachment];
+        NSMutableAttributedString *attrString = [[NSMutableAttributedString alloc] initWithAttributedString:iconAttr];
+        [attrString appendAttributedString:[[NSAttributedString alloc] initWithString:[NSString stringWithFormat:@"  %@", title]
+                                                                         attributes:@{
+            NSFontAttributeName: [UIFont systemFontOfSize:13],
+            NSForegroundColorAttributeName: (status == 0) ? [UIColor tertiaryLabelColor] : [UIColor labelColor]
+        }]];
+        stepLabel.attributedText = attrString;
+        [self.stagesStack addArrangedSubview:stepLabel];
+    }
 }
 
 - (void)updateUI {
@@ -2561,6 +2746,16 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             progressVC.titleText = [NSString stringWithFormat:@"正在安装原版 %@", versionId];
             progressVC.stageMessage = @"正在准备下载原版文件...";
             progressVC.progress = -1; // 初始不确定模式，待拿到总字节数后切换为确定模式
+            // 阶段12增强：类别图标 + 阶段步骤列表（参照 FCL 原版安装步骤）
+            progressVC.categoryIconName = @"cube.box.fill";
+            progressVC.categoryIconColor = [UIColor systemGreenColor];
+            progressVC.stageSteps = @[
+                @{@"title": @"获取版本清单", @"status": @2},
+                @{@"title": @"下载版本 JSON", @"status": @2},
+                @{@"title": @"下载游戏库文件", @"status": @1},
+                @{@"title": @"下载资源文件", @"status": @0},
+                @{@"title": @"验证文件完整性", @"status": @0},
+            ];
             progressVC.cancelHandler = ^{
                 __strong typeof(weakSelf) ss = weakSelf;
                 if (!ss) return;
@@ -2755,6 +2950,14 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     progressVC.titleText = [NSString stringWithFormat:@"正在安装 %@", displayName];
     progressVC.progress = -1; // 不确定模式，正在拉取 profile JSON
     progressVC.stageMessage = [NSString stringWithFormat:@"正在获取 %@ profile...\n游戏版本: %@  加载器: %@", displayName, gameVersion, loaderVersion];
+    // 阶段12增强：加载器图标 + 阶段步骤列表（使用 ModLoaderIconHelper 统一图标）
+    progressVC.categoryIconName = [ModLoaderIconHelper symbolNameForLoader:loaderTag];
+    progressVC.categoryIconColor = [ModLoaderIconHelper brandColorForLoader:loaderTag];
+    progressVC.stageSteps = @[
+        @{@"title": @"获取加载器 profile", @"status": @1},
+        @{@"title": @"下载加载器库文件", @"status": @0},
+        @{@"title": @"写入版本 JSON", @"status": @0},
+    ];
     self.installerProgressVC = progressVC;
 
     __weak typeof(self) weakSelf = self;
@@ -3233,6 +3436,14 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                 progressVC.titleText = @"Forge 直装中";
                 progressVC.progress = 0.0;
                 progressVC.stageMessage = @"准备中...";
+                // 阶段12增强：Forge 图标 + 阶段步骤列表
+                progressVC.categoryIconName = [ModLoaderIconHelper symbolNameForLoader:@"forge"];
+                progressVC.categoryIconColor = [ModLoaderIconHelper brandColorForLoader:@"forge"];
+                progressVC.stageSteps = @[
+                    @{@"title": @"解析安装器 JAR", @"status": @1},
+                    @{@"title": @"下载 Forge 库文件", @"status": @0},
+                    @{@"title": @"写入版本 JSON", @"status": @0},
+                ];
                 strongSelf2.installerProgressVC = progressVC;
                 [strongSelf2.navigationController pushViewController:progressVC animated:YES];
 
@@ -3463,6 +3674,14 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     progressVC.titleText = @"正在安装 OptiFine";
     progressVC.progress = -1;
     progressVC.stageMessage = [NSString stringWithFormat:@"正在下载 OptiFine %@_%@...", optiType, optiPatch];
+    // 阶段12增强：OptiFine 图标 + 阶段步骤列表
+    progressVC.categoryIconName = [ModLoaderIconHelper symbolNameForLoader:@"optifine"];
+    progressVC.categoryIconColor = [ModLoaderIconHelper brandColorForLoader:@"optifine"];
+    progressVC.stageSteps = @[
+        @{@"title": @"下载 OptiFine JAR", @"status": @1},
+        @{@"title": @"安装 OptiFine", @"status": @0},
+        @{@"title": @"写入版本 JSON", @"status": @0},
+    ];
     self.installerProgressVC = progressVC;
 
     __weak typeof(self) weakSelf = self;
@@ -3657,6 +3876,14 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                 progressVC.titleText = @"NeoForge 直装中";
                 progressVC.progress = 0.0;
                 progressVC.stageMessage = @"准备中...";
+                // 阶段12增强：NeoForge 图标 + 阶段步骤列表
+                progressVC.categoryIconName = [ModLoaderIconHelper symbolNameForLoader:@"neoforge"];
+                progressVC.categoryIconColor = [ModLoaderIconHelper brandColorForLoader:@"neoforge"];
+                progressVC.stageSteps = @[
+                    @{@"title": @"解析安装器 JAR", @"status": @1},
+                    @{@"title": @"下载 NeoForge 库文件", @"status": @0},
+                    @{@"title": @"写入版本 JSON", @"status": @0},
+                ];
                 strongSelf2.installerProgressVC = progressVC;
                 [strongSelf2.navigationController pushViewController:progressVC animated:YES];
 
@@ -3796,6 +4023,16 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     progressVC.titleText = [NSString stringWithFormat:@"正在下载整合包 %@", modpack[@"title"] ?: @""];
     progressVC.progress = -1;
     progressVC.stageMessage = @"正在下载整合包文件...";
+    // 阶段12增强：整合包图标 + 阶段步骤列表（参照 FCL 整合包安装流程）
+    progressVC.categoryIconName = @"archivebox.fill";
+    progressVC.categoryIconColor = [UIColor systemOrangeColor];
+    progressVC.stageSteps = @[
+        @{@"title": @"下载整合包文件", @"status": @1},
+        @{@"title": @"解析整合包结构", @"status": @0},
+        @{@"title": @"下载 Mod 文件", @"status": @0},
+        @{@"title": @"安装模组加载器", @"status": @0},
+        @{@"title": @"写入配置文件", @"status": @0},
+    ];
     [self.navigationController pushViewController:progressVC animated:YES];
 
     NSURL *url = [NSURL URLWithString:downloadURL];
@@ -3830,6 +4067,14 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             // 复用 ModpackImportService 完成解析和导入
             progressVC.progress = 0.1;
             progressVC.stageMessage = @"正在解析整合包...";
+            // 阶段12增强：更新步骤状态（下载完成，解析中）
+            progressVC.stageSteps = @[
+                @{@"title": @"下载整合包文件", @"status": @2},
+                @{@"title": @"解析整合包结构", @"status": @1},
+                @{@"title": @"下载 Mod 文件", @"status": @0},
+                @{@"title": @"安装模组加载器", @"status": @0},
+                @{@"title": @"写入配置文件", @"status": @0},
+            ];
             ModpackImportService *importService = [[ModpackImportService alloc] init];
             dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
                 NSError *parseError = nil;
@@ -3856,6 +4101,43 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                     dispatch_async(dispatch_get_main_queue(), ^{
                         progressVC.progress = p;
                         progressVC.stageMessage = stage;
+                        // 阶段12增强：根据进度动态更新步骤状态
+                        // ModpackImportService 进度区间：0.1-0.3=下载mods, 0.3-0.7=安装加载器, 0.7-1.0=写配置
+                        NSArray *steps;
+                        if (p < 0.3) {
+                            steps = @[
+                                @{@"title": @"下载整合包文件", @"status": @2},
+                                @{@"title": @"解析整合包结构", @"status": @2},
+                                @{@"title": @"下载 Mod 文件", @"status": @1},
+                                @{@"title": @"安装模组加载器", @"status": @0},
+                                @{@"title": @"写入配置文件", @"status": @0},
+                            ];
+                        } else if (p < 0.7) {
+                            steps = @[
+                                @{@"title": @"下载整合包文件", @"status": @2},
+                                @{@"title": @"解析整合包结构", @"status": @2},
+                                @{@"title": @"下载 Mod 文件", @"status": @2},
+                                @{@"title": @"安装模组加载器", @"status": @1},
+                                @{@"title": @"写入配置文件", @"status": @0},
+                            ];
+                        } else if (p < 1.0) {
+                            steps = @[
+                                @{@"title": @"下载整合包文件", @"status": @2},
+                                @{@"title": @"解析整合包结构", @"status": @2},
+                                @{@"title": @"下载 Mod 文件", @"status": @2},
+                                @{@"title": @"安装模组加载器", @"status": @2},
+                                @{@"title": @"写入配置文件", @"status": @1},
+                            ];
+                        } else {
+                            steps = @[
+                                @{@"title": @"下载整合包文件", @"status": @2},
+                                @{@"title": @"解析整合包结构", @"status": @2},
+                                @{@"title": @"下载 Mod 文件", @"status": @2},
+                                @{@"title": @"安装模组加载器", @"status": @2},
+                                @{@"title": @"写入配置文件", @"status": @2},
+                            ];
+                        }
+                        progressVC.stageSteps = steps;
                     });
                 } error:&importError];
 
@@ -3866,6 +4148,13 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                     if (success) {
                         progressVC.progress = 1.0;
                         progressVC.stageMessage = @"安装完成";
+                        progressVC.stageSteps = @[
+                            @{@"title": @"下载整合包文件", @"status": @2},
+                            @{@"title": @"解析整合包结构", @"status": @2},
+                            @{@"title": @"下载 Mod 文件", @"status": @2},
+                            @{@"title": @"安装模组加载器", @"status": @2},
+                            @{@"title": @"写入配置文件", @"status": @2},
+                        ];
                         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                             [self.navigationController popViewControllerAnimated:YES];
                             NSString *loader = mutableInfo[@"loader"];
@@ -3904,6 +4193,15 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     progressVC.titleText = @"正在导入整合包";
     progressVC.progress = -1;
     progressVC.stageMessage = @"正在解析整合包...";
+    // 阶段12增强：整合包导入图标 + 阶段步骤列表
+    progressVC.categoryIconName = @"archivebox.fill";
+    progressVC.categoryIconColor = [UIColor systemOrangeColor];
+    progressVC.stageSteps = @[
+        @{@"title": @"解析整合包结构", @"status": @1},
+        @{@"title": @"下载 Mod 文件", @"status": @0},
+        @{@"title": @"安装模组加载器", @"status": @0},
+        @{@"title": @"写入配置文件", @"status": @0},
+    ];
     [self.navigationController pushViewController:progressVC animated:YES];
 
     ModpackImportService *importService = [[ModpackImportService alloc] init];
@@ -3923,12 +4221,50 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 progressVC.progress = p;
                 progressVC.stageMessage = stage;
+                // 阶段12增强：根据进度动态更新步骤状态
+                NSArray *steps;
+                if (p < 0.3) {
+                    steps = @[
+                        @{@"title": @"解析整合包结构", @"status": @2},
+                        @{@"title": @"下载 Mod 文件", @"status": @1},
+                        @{@"title": @"安装模组加载器", @"status": @0},
+                        @{@"title": @"写入配置文件", @"status": @0},
+                    ];
+                } else if (p < 0.7) {
+                    steps = @[
+                        @{@"title": @"解析整合包结构", @"status": @2},
+                        @{@"title": @"下载 Mod 文件", @"status": @2},
+                        @{@"title": @"安装模组加载器", @"status": @1},
+                        @{@"title": @"写入配置文件", @"status": @0},
+                    ];
+                } else if (p < 1.0) {
+                    steps = @[
+                        @{@"title": @"解析整合包结构", @"status": @2},
+                        @{@"title": @"下载 Mod 文件", @"status": @2},
+                        @{@"title": @"安装模组加载器", @"status": @2},
+                        @{@"title": @"写入配置文件", @"status": @1},
+                    ];
+                } else {
+                    steps = @[
+                        @{@"title": @"解析整合包结构", @"status": @2},
+                        @{@"title": @"下载 Mod 文件", @"status": @2},
+                        @{@"title": @"安装模组加载器", @"status": @2},
+                        @{@"title": @"写入配置文件", @"status": @2},
+                    ];
+                }
+                progressVC.stageSteps = steps;
             });
         } error:&importError];
         dispatch_async(dispatch_get_main_queue(), ^{
             if (success) {
                 progressVC.progress = 1.0;
                 progressVC.stageMessage = @"导入完成";
+                progressVC.stageSteps = @[
+                    @{@"title": @"解析整合包结构", @"status": @2},
+                    @{@"title": @"下载 Mod 文件", @"status": @2},
+                    @{@"title": @"安装模组加载器", @"status": @2},
+                    @{@"title": @"写入配置文件", @"status": @2},
+                ];
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                     [self.navigationController popViewControllerAnimated:YES];
                     [self showSuccessMessage:[NSString stringWithFormat:@"整合包 %@ 导入完成", modpackInfo[@"name"]]];
@@ -4337,6 +4673,9 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     progressVC.titleText = [NSString stringWithFormat:@"正在下载 %@", item.displayName ?: @""];
     progressVC.progress = -1;
     progressVC.stageMessage = @"正在下载模组文件...";
+    // 阶段12增强：模组图标
+    progressVC.categoryIconName = @"puzzlepiece.extension.fill";
+    progressVC.categoryIconColor = [UIColor systemBlueColor];
     [self.navigationController pushViewController:progressVC animated:YES];
 
     NSString *profileName = PLProfiles.current.selectedProfileName ?: @"default";
@@ -4362,6 +4701,9 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     progressVC.titleText = [NSString stringWithFormat:@"正在下载 %@", item.displayName ?: @""];
     progressVC.progress = -1;
     progressVC.stageMessage = @"正在下载资源包...";
+    // 阶段12增强：资源包图标
+    progressVC.categoryIconName = @"paintpalette.fill";
+    progressVC.categoryIconColor = [UIColor systemPurpleColor];
     [self.navigationController pushViewController:progressVC animated:YES];
 
     NSString *profileName = PLProfiles.current.selectedProfileName ?: @"default";
@@ -4395,6 +4737,9 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     progressVC.titleText = [NSString stringWithFormat:@"正在下载 %@", item.displayName ?: @""];
     progressVC.progress = -1;
     progressVC.stageMessage = @"正在下载数据包...";
+    // 阶段12增强：数据包图标
+    progressVC.categoryIconName = @"doc.text.fill";
+    progressVC.categoryIconColor = [UIColor systemTealColor];
     [self.navigationController pushViewController:progressVC animated:YES];
 
     NSString *profileName = PLProfiles.current.selectedProfileName ?: @"default";
@@ -4428,6 +4773,9 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     progressVC.titleText = [NSString stringWithFormat:@"正在下载 %@", item.displayName ?: @""];
     progressVC.progress = -1;
     progressVC.stageMessage = @"正在下载世界存档...";
+    // 阶段12增强：世界图标
+    progressVC.categoryIconName = @"globe.asia.australia.fill";
+    progressVC.categoryIconColor = [UIColor systemGreenColor];
     [self.navigationController pushViewController:progressVC animated:YES];
 
     NSString *profileName = PLProfiles.current.selectedProfileName ?: @"default";
@@ -4480,6 +4828,9 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     progressVC.titleText = [NSString stringWithFormat:@"正在下载 %@", item.displayName ?: @""];
     progressVC.progress = -1;
     progressVC.stageMessage = @"正在下载光影包...";
+    // 阶段12增强：光影包图标
+    progressVC.categoryIconName = @"camera.aperture";
+    progressVC.categoryIconColor = [UIColor systemIndigoColor];
     [self.navigationController pushViewController:progressVC animated:YES];
 
     NSString *profileName = PLProfiles.current.selectedProfileName ?: @"default";
@@ -4670,27 +5021,74 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             } else {
                 pvc.progress = -1; // 不确定模式
             }
-            // 阶段文案：百分比 + 速度 + 剩余时间
-            NSString *stage = [NSString stringWithFormat:@"%.1f%%", fraction * 100.0];
+
+            // 阶段12增强：详情信息行（已下载 / 总大小 • 速度）
+            NSInteger completedBytes = progress.totalUnitCount * fraction;
+            NSString *sizeInfo = [NSString stringWithFormat:@"%@ / %@",
+                                  [NSByteCountFormatter stringFromByteCount:completedBytes countStyle:NSByteCountFormatterCountStyleFile],
+                                  [NSByteCountFormatter stringFromByteCount:progress.totalUnitCount countStyle:NSByteCountFormatterCountStyleFile]];
+            NSString *speedInfo = @"";
             if (textProgress.throughput) {
                 NSInteger speed = [textProgress.throughput integerValue];
                 if (speed > 1024 * 1024) {
-                    stage = [stage stringByAppendingFormat:@" • %.1f MB/s", speed / (1024.0 * 1024.0)];
+                    speedInfo = [NSString stringWithFormat:@" • %.1f MB/s", speed / (1024.0 * 1024.0)];
                 } else if (speed > 1024) {
-                    stage = [stage stringByAppendingFormat:@" • %.1f KB/s", speed / 1024.0];
+                    speedInfo = [NSString stringWithFormat:@" • %.1f KB/s", speed / 1024.0];
                 } else if (speed > 0) {
-                    stage = [stage stringByAppendingFormat:@" • %ld B/s", (long)speed];
+                    speedInfo = [NSString stringWithFormat:@" • %ld B/s", (long)speed];
                 }
             }
+            pvc.detailInfoText = [NSString stringWithFormat:@"%@%@", sizeInfo, speedInfo];
+
+            // 阶段12增强：剩余时间（ETA）单独显示
             if (textProgress.estimatedTimeRemaining) {
                 NSInteger eta = [textProgress.estimatedTimeRemaining integerValue];
-                if (eta > 60) {
-                    stage = [stage stringByAppendingFormat:@" • 剩余 %ld分%ld秒", (long)(eta / 60), (long)(eta % 60)];
+                if (eta > 3600) {
+                    pvc.etaText = [NSString stringWithFormat:@"剩余 %ld小时%ld分", (long)(eta / 3600), (long)((eta % 3600) / 60)];
+                } else if (eta > 60) {
+                    pvc.etaText = [NSString stringWithFormat:@"剩余 %ld分%ld秒", (long)(eta / 60), (long)(eta % 60)];
                 } else if (eta > 0) {
-                    stage = [stage stringByAppendingFormat:@" • 剩余 %ld秒", (long)eta];
+                    pvc.etaText = [NSString stringWithFormat:@"剩余 %ld秒", (long)eta];
+                } else {
+                    pvc.etaText = nil;
                 }
+            } else {
+                pvc.etaText = nil;
             }
-            pvc.stageMessage = stage;
+
+            // 阶段12增强：根据进度百分比动态更新阶段步骤状态
+            // 原版安装步骤：获取版本清单(✓) → 下载版本JSON(✓) → 下载游戏库文件 → 下载资源文件 → 验证文件
+            // 大致按进度划分：0-30%=下载库文件, 30-90%=下载资源, 90-100%=验证
+            NSArray *steps;
+            if (fraction < 0.3) {
+                steps = @[
+                    @{@"title": @"获取版本清单", @"status": @2},
+                    @{@"title": @"下载版本 JSON", @"status": @2},
+                    @{@"title": @"下载游戏库文件", @"status": @1},
+                    @{@"title": @"下载资源文件", @"status": @0},
+                    @{@"title": @"验证文件完整性", @"status": @0},
+                ];
+            } else if (fraction < 0.9) {
+                steps = @[
+                    @{@"title": @"获取版本清单", @"status": @2},
+                    @{@"title": @"下载版本 JSON", @"status": @2},
+                    @{@"title": @"下载游戏库文件", @"status": @2},
+                    @{@"title": @"下载资源文件", @"status": @1},
+                    @{@"title": @"验证文件完整性", @"status": @0},
+                ];
+            } else {
+                steps = @[
+                    @{@"title": @"获取版本清单", @"status": @2},
+                    @{@"title": @"下载版本 JSON", @"status": @2},
+                    @{@"title": @"下载游戏库文件", @"status": @2},
+                    @{@"title": @"下载资源文件", @"status": @2},
+                    @{@"title": @"验证文件完整性", @"status": @1},
+                ];
+            }
+            pvc.stageSteps = steps;
+
+            // 阶段文案：当前正在下载的文件名（简化显示百分比）
+            pvc.stageMessage = [NSString stringWithFormat:@"正在下载原版文件... %.1f%%", fraction * 100.0];
         }
 
         if (progress.finished) {

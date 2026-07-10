@@ -68,8 +68,8 @@
     self.nameLabel.adjustsFontSizeToFitWidth = YES;
     self.nameLabel.minimumScaleFactor = 0.7;
     self.nameLabel.lineBreakMode = NSLineBreakByTruncatingTail;
-    self.nameLabel.setContentHuggingPriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal;
-    self.nameLabel.setContentCompressionResistancePriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal;
+    [self.nameLabel setContentHuggingPriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
+    [self.nameLabel setContentCompressionResistancePriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
 
     // 发布类型徽章（Release/Beta/Alpha，参照 FCL/ZL2 版本行的发布类型标签）
     self.releaseTypeBadge = [[UILabel alloc] init];
@@ -82,8 +82,8 @@
     self.releaseTypeBadge.translatesAutoresizingMaskIntoConstraints = NO;
     [self.releaseTypeBadge.heightAnchor constraintEqualToConstant:16].active = YES;
     self.releaseTypeBadge.hidden = YES;
-    self.releaseTypeBadge.setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal;
-    self.releaseTypeBadge.setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal;
+    [self.releaseTypeBadge setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+    [self.releaseTypeBadge setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
 
     // 版本名行（水平：nameLabel + releaseTypeBadge）
     self.nameRowStack = [[UIStackView alloc] initWithArrangedSubviews:@[self.nameLabel, self.releaseTypeBadge]];
