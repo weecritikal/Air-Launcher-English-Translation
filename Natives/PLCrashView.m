@@ -182,7 +182,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
 
     // StackView 左右留白（卡片不贴边）
     _mainStackView.layoutMargins = UIEdgeInsetsMake(16, 20, 16, 20);
-    _mainStackView.isLayoutMarginsRelativeArrangement = YES;
+    _mainStackView.layoutMarginsRelativeArrangement = YES;
 
     [self setupErrorCard];
     [self setupLogCard];
