@@ -257,14 +257,26 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
     margv[++margc] = [NSString stringWithFormat:@"-Xmx%dM", allocmem].UTF8String;
     // Detect LWJGL version early to set correct library path
     // 参照 Taylen-chud/Amethyst-iOS（Rebase-everything）的 dylib 布局：
-    //   Frameworks/              = 共享 dylib（libMoltenVK/libopenal/libOSMesa/libgl4es/libglapi/libvirgil_test_server）
-    //   Frameworks/lwjgl33/      = LWJGL 3.3.3 专属 dylib（liblwjgl/liblwjgl_opengl/.../libglfw 等）
-    //   Frameworks/lwjgl34/      = LWJGL 3.4.x 专属 dylib（liblwjgl/liblwjgl_opengl/liblwjgl_msdfgen/.../libglfw/libshaderc/libspirv-cross 等）
+    //   Frameworks/              = 共享 dylib（libMoltenVK/libopenal/libOSMesa/libgl4es/libglapi/libvirgil_test_server/libspirv-cross-c-shared.0）
+    //   Frameworks/lwjgl33/      = LWJGL 3.3.3 专属 dylib（liblwjgl/liblwjgl_opengl/liblwjgl_nanovg/liblwjgl_stb/liblwjgl_tinyfd/liblwjgl_vma/libshaderc/libfreetype 等 9 个）
+    //   Frameworks/lwjgl34/      = LWJGL 3.4.x 专属 dylib（liblwjgl/liblwjgl_opengl/liblwjgl_msdfgen/liblwjgl_nanovg/liblwjgl_stb/liblwjgl_tinyfd/liblwjgl_vma/libshaderc/libfreetype 共 9 个）
     // library.path = Frameworks:Frameworks/lwjglXX（共享在前，LWJGL 专属在后）
+    //
+    // 关于 libglfw.dylib：iOS 上不需要独立 libglfw.dylib。workspace 用 Java + native 桥接
+    // （pojav* 函数）完全替代 GLFW native 库。JavaApp/src/lwjgl/org/lwjgl/glfw/GLFW.java 是
+    // override 版本，加载主程序二进制 AngelAuraAmethyst（System.load(BUNDLE_PATH/AngelAuraAmethyst)），
+    // 所有函数指针从 pojav* 符号解析，不查找任何 glfw 原生符号。因此 libglfw.dylib 是多余文件，
+    // 已从 lwjgl34/ 删除。
+    //
+    // 关于 libspirv-cross-c-shared.0.dylib：作为共享 dylib 放在根目录 Frameworks/。
+    // LWJGL spvc 模块通过 -Dorg.lwjgl.spvc.libname=spirv-cross-c-shared.0 显式指定库名，
+    // LWJGL 加载 libspirv-cross-c-shared.0.dylib，从 library.path 的 Frameworks/ 找到。
+    // spirv-cross 是外部库（非 LWJGL 专属），LWJGL 3.3.x 和 3.4.x 共用同一版本，放根目录合理。
+    //
     // 之前根目录 Frameworks/ 同时放置 LWJGL 3.4.x 专属 dylib，26.x 路径为 Frameworks:Frameworks，
     // 虽能工作但与 Taylen-chud 结构不一致，且旧版路径 Frameworks/lwjgl33:Frameworks 可能误从根目录
     // 加载到 LWJGL 3.4.x 的 liblwjgl.dylib 造成版本错配。现对齐 Taylen-chud：专属 dylib 全部移入
-    // lwjgl34/，根目录只保留共享 dylib，旧版与新版都走 Frameworks:Frameworks/lwjglXX 路径。
+    // lwjgl34/，根目录只保留共享 dylib（含 spirv-cross），旧版与新版都走 Frameworks:Frameworks/lwjglXX 路径。
     BOOL useLWJGL33 = NO;
     BOOL foundLWJGLDeclaration = NO;
     if ([launchTarget isKindOfClass:NSDictionary.class]) {
@@ -345,17 +357,26 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
         }
         margv[++margc] = [NSString stringWithFormat:@"-Dorg.lwjgl.opengl.libname=%s", glLibName].UTF8String;
 
-        // spirv-cross 库加载说明（参照 Taylen-chud/Amethyst-iOS Rebase-everything）：
-        // 不在此处设置 -Dorg.lwjgl.spvc.libname，使用 LWJGL 默认库名 "spirv-cross"，
-        // LWJGL 会自动加 macOS 前后缀加载 "libspirv-cross.dylib"。
-        // Makefile payload 阶段已为 Frameworks/lwjgl33/ 与 Frameworks/lwjgl34/ 分别创建
-        // libspirv-cross.dylib -> libspirv-cross-c-shared.0.dylib 软链接，LWJGL 通过
-        // library.path（Frameworks:Frameworks/lwjglXX）找到对应版本的软链接并加载。
-        // dyld 加载软链接时会解析为实际文件 libspirv-cross-c-shared.0.dylib，与 MobileGlues
-        // 已加载的是同一个文件（相同 realpath + 相同 LC_ID_DYLIB install_name），不会重复注册。
-        // 之前曾显式设置 -Dorg.lwjgl.spvc.libname=spirv-cross-c-shared.0，虽能工作但与
-        // Taylen-chud 及 JavaApp/Tools.java 的注释（"不再设置 spvc.libname override"）不一致，
-        // 现统一为 LWJGL 默认名 + Makefile 软链接方案。
+        // 显式指定 spirv-cross 库名（参照 catsruledogs/Amethyst-iOS-25）：
+        // LWJGL spvc 模块默认查找 "spirv-cross" -> 加载 libspirv-cross.dylib（macOS 标准名），
+        // 但实际文件名为 libspirv-cross-c-shared.0.dylib（带版本后缀的 SO 名）。
+        // 显式设置 -Dorg.lwjgl.spvc.libname=spirv-cross-c-shared.0，LWJGL 的 Library.loadNative
+        // 会对 libname 加 "lib" 前缀和 ".dylib" 后缀，得到 "libspirv-cross-c-shared.0.dylib"，
+        // 从 library.path（Frameworks:Frameworks/lwjglXX）的根目录 Frameworks/ 找到该文件。
+        //
+        // 为什么不用 Makefile 软链接（libspirv-cross.dylib -> libspirv-cross-c-shared.0.dylib）+默认名：
+        // 之前曾尝试该方案，但 26.2 启动时在 "Now starting game" 阶段 SIGSEGV at get_method_id。
+        // 根因：LWJGL spvc 模块在 native 库加载失败或 JNI 注册状态不一致时，get_method_id 可能
+        // 访问已损坏的类元数据导致 SIGSEGV（而非抛出 UnsatisfiedLinkError）。软链接方案依赖构建
+        // 阶段正确创建符号链接，一旦构建环境差异导致软链接缺失或指向错误，spvc 加载会进入异常
+        // 状态。显式指定完整 SO 名（spirv-cross-c-shared.0）直接定位实际文件，无需软链接，
+        // 与 catsruledogs（能正常启动 26.2 + Java 25）完全一致，是最稳妥的方案。
+        //
+        // LWJGL Library.loadNative 的 libname 处理（macOS）：
+        // - 若 libname 已含 "lib" 前缀和 ".dylib" 后缀，直接使用
+        // - 否则加 "lib" 前缀和 ".dylib" 后缀
+        // "spirv-cross-c-shared.0" -> "libspirv-cross-c-shared.0.dylib"（正确，不会二次包装）
+        margv[++margc] = "-Dorg.lwjgl.spvc.libname=spirv-cross-c-shared.0";
     }
 
       // 添加authlib-injector参数以支持第三方认证账户的皮肤显示

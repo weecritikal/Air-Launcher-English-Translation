@@ -60,20 +60,29 @@ public final class Tools {
         // 存在两个致命问题导致其从未生效，且会误导调试：
         //   1) 属性名大小写错误：LWJGL 实际读取小写 org.lwjgl.system.allocator，大写 Allocator 被忽略
         //   2) "Custom" 不是 LWJGL 有效 allocator 值（有效值仅 system/jemalloc/rpmalloc）
-        // 26.2 启动崩溃的真正根因是 spvc 库名二次包装导致 UnsatisfiedLinkError，
-        // 已通过 Makefile 软链接（libspirv-cross.dylib -> libspirv-cross-c-shared.0.dylib）修复。
         System.setProperty("org.lwjgl.system.libffi.enabled", "false");
         System.setProperty("org.lwjgl.system.libffi.initialize", "false"); // Prevents NoSuchFieldError in LibFFI <clinit>
 
         // spvc / openal 库加载说明：
-        // 不再设置 org.lwjgl.spvc.libname / org.lwjgl.openal.libname override。
-        // 原因：LWJGL 的 Library.loadNative 在 macOS 上会对 libname 自动加 "lib" 前缀和
-        // ".dylib" 后缀。若传入已带前后缀的完整文件名（如 "libspirv-cross-c-shared.0.dylib"），
-        // 会被二次包装成 "liblibspirv-cross-c-shared.0.dylib.dylib" 导致 UnsatisfiedLinkError
-        // （26.2 启动崩溃的根因）。
-        // 正确做法：使用 LWJGL 默认库名。LWJGL spvc 默认查找 "spirv-cross" -> 加载
-        // "libspirv-cross.dylib"；Makefile payload 阶段已为该默认名创建软链接指向
-        // 实际文件 libspirv-cross-c-shared.0.dylib。openal 同理用默认名加载 libopenal.dylib。
+        // spvc 库名由 JavaLauncher.m 显式设置 -Dorg.lwjgl.spvc.libname=spirv-cross-c-shared.0
+        // （参照 catsruledogs/Amethyst-iOS-25，能正常启动 26.2 + Java 25）。
+        // LWJGL Library.loadNative 在 macOS 上对 libname 的处理：
+        //   - 若 libname 已含 "lib" 前缀和 ".dylib" 后缀，直接使用
+        //   - 否则加 "lib" 前缀和 ".dylib" 后缀
+        // "spirv-cross-c-shared.0" -> "libspirv-cross-c-shared.0.dylib"（正确，不会二次包装）。
+        // spirv-cross 作为共享 dylib 放在根目录 Frameworks/，从 library.path
+        // （Frameworks:Frameworks/lwjglXX）的根目录 Frameworks/ 加载。
+        //
+        // openal 用 LWJGL 默认名加载 libopenal.dylib（libopenal.dylib 直接存在于根目录 Frameworks/），
+        // 无需 override。
+        //
+        // 历史教训：曾尝试移除 spvc.libname override 改用 Makefile 软链接
+        // （libspirv-cross.dylib -> libspirv-cross-c-shared.0.dylib）+ LWJGL 默认名 "spirv-cross"，
+        // 但 26.2 启动时在 "Now starting game" 阶段 SIGSEGV at get_method_id。根因：软链接方案
+        // 依赖构建阶段正确创建符号链接，一旦构建环境差异导致软链接缺失或指向错误，spvc 加载
+        // 进入异常状态，JNI 注册状态不一致，get_method_id 访问已损坏类元数据导致 SIGSEGV
+        // （而非抛出 UnsatisfiedLinkError）。显式指定完整 SO 名直接定位实际文件，无需软链接，
+        // 是最稳妥的方案。
         // --- END AMETHYST UPSTREAM LWJGL 3.4.1 COMPLIANCE OVERRIDE ---
 
         String[] launchArgs = getMinecraftArgs(profile, versionInfo, serverIp);

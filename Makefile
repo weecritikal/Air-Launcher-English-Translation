@@ -370,26 +370,33 @@ payload: native dep_mg java jre assets
 	cp -R $(SOURCEDIR)/Natives/resources/en.lproj/LaunchScreen.storyboardc $(WORKINGDIR)/AngelAuraAmethyst.app/Base.lproj/ || exit 1
 	cp -R $(SOURCEDIR)/Natives/resources/* $(WORKINGDIR)/AngelAuraAmethyst.app/ || exit 1
 	cp $(WORKINGDIR)/*.dylib $(WORKINGDIR)/AngelAuraAmethyst.app/Frameworks/ || exit 1
-	# 26.x LWJGL spvc 兼容：LWJGL spvc 模块默认查找 libspirv-cross.dylib（macOS 标准名），
-	# 而 Frameworks 下实际文件名为 libspirv-cross-c-shared.0.dylib（带版本后缀的 SO 名）。
-	# 参照 Taylen-chud/Amethyst-iOS（Rebase-everything）的 dylib 布局，spirv-cross dylib
-	# 已随 LWJGL 专属 dylib 分别放入 lwjgl33/ 与 lwjgl34/ 子目录，根目录 Frameworks/ 不再
-	# 保留 spirv-cross（避免与 LWJGL 专属版本错配）。JavaApp 端已移除 org.lwjgl.spvc.libname
-	# override，使用 LWJGL 默认库名，因此必须为每个 LWJGL 子目录建立 libspirv-cross.dylib
-	# 软链接，让 LWJGL spvc 能通过默认名加载到对应版本的 spirv-cross，避免 UnsatisfiedLinkError。
-	# 根目录 Frameworks/ 的 spirv-cross 软链接逻辑保留作为防御性兜底（若未来根目录重新引入
-	# spirv-cross dylib 仍能正常工作），但当前根目录不含 spirv-cross，条件不成立不会创建。
+	# spirv-cross 软链接（防御性兜底，非 LWJGL spvc 加载的必要路径）：
+	# 当前 dylib 布局（参照 Taylen-chud/Amethyst-iOS Rebase-everything）：
+	#   Frameworks/         = 共享 dylib（libMoltenVK/libopenal/libOSMesa/libgl4es/libglapi/libvirgl_test_server/libspirv-cross-c-shared.0 共 7 个）
+	#   Frameworks/lwjgl33/ = LWJGL 3.3.3 专属 dylib（含 spirv-cross 副本，历史布局）
+	#   Frameworks/lwjgl34/ = LWJGL 3.4.x 专属 dylib（9 个，不含 spirv-cross 和 glfw）
+	# spirv-cross 作为共享 dylib 放在根目录 Frameworks/，LWJGL 3.3.x 和 3.4.x 共用同一版本。
+	#
+	# LWJGL spvc 加载方式：JavaLauncher.m 显式设置 -Dorg.lwjgl.spvc.libname=spirv-cross-c-shared.0
+	# （对齐 catsruledogs/Amethyst-iOS-25），LWJGL Library.loadNative 会对 libname 加 "lib" 前缀和
+	# ".dylib" 后缀得到 "libspirv-cross-c-shared.0.dylib"，从 library.path（Frameworks:Frameworks/lwjglXX）
+	# 的根目录 Frameworks/ 找到该文件。因此 LWJGL spvc 加载不依赖这里的软链接。
+	#
+	# 这里的软链接仅为防御性兜底：若未来有其他 native 代码（如 Mesa/Zink/Virgl）按 macOS 默认名
+	# "libspirv-cross.dylib" 加载 spirv-cross，仍能通过软链接找到实际文件。libspirv-cross.dylib
+	# -> libspirv-cross-c-shared.0.dylib。
+	#
+	# 根目录 Frameworks/ 软链接（spirv-cross 当前在此目录）
 	if [ -f "$(WORKINGDIR)/AngelAuraAmethyst.app/Frameworks/libspirv-cross-c-shared.0.dylib" ] && [ ! -f "$(WORKINGDIR)/AngelAuraAmethyst.app/Frameworks/libspirv-cross.dylib" ]; then \
 		ln -sf libspirv-cross-c-shared.0.dylib $(WORKINGDIR)/AngelAuraAmethyst.app/Frameworks/libspirv-cross.dylib; \
 	fi
-	# LWJGL 3.3.3（旧版 MC，如 1.20-1.21.x）专属 spirv-cross 软链接
+	# LWJGL 3.3.3（旧版 MC，如 1.20-1.21.x）子目录软链接（lwjgl33/ 仍保留 spirv-cross 副本）
 	if [ -f "$(WORKINGDIR)/AngelAuraAmethyst.app/Frameworks/lwjgl33/libspirv-cross-c-shared.0.dylib" ] && [ ! -f "$(WORKINGDIR)/AngelAuraAmethyst.app/Frameworks/lwjgl33/libspirv-cross.dylib" ]; then \
 		ln -sf libspirv-cross-c-shared.0.dylib $(WORKINGDIR)/AngelAuraAmethyst.app/Frameworks/lwjgl33/libspirv-cross.dylib; \
 	fi
-	# LWJGL 3.4.x（26.x 新版 MC）专属 spirv-cross 软链接，26.x 走 lwjgl34/ 路径必须创建
-	if [ -f "$(WORKINGDIR)/AngelAuraAmethyst.app/Frameworks/lwjgl34/libspirv-cross-c-shared.0.dylib" ] && [ ! -f "$(WORKINGDIR)/AngelAuraAmethyst.app/Frameworks/lwjgl34/libspirv-cross.dylib" ]; then \
-		ln -sf libspirv-cross-c-shared.0.dylib $(WORKINGDIR)/AngelAuraAmethyst.app/Frameworks/lwjgl34/libspirv-cross.dylib; \
-	fi
+	# 注：lwjgl34/ 不再保留 spirv-cross dylib（已作为共享 dylib 移到根目录 Frameworks/），
+	# 因此无需为 lwjgl34/ 创建 spirv-cross 软链接。LWJGL 3.4.x spvc 通过 spvc.libname
+	# 显式指定库名，从 library.path 的根目录 Frameworks/ 加载 libspirv-cross-c-shared.0.dylib。
 	cp -R $(SOURCEDIR)/JavaApp/libs/others/* $(WORKINGDIR)/AngelAuraAmethyst.app/libs/ || exit 1
 	cp $(SOURCEDIR)/JavaApp/build/*.jar $(WORKINGDIR)/AngelAuraAmethyst.app/libs/ || exit 1
 	cp -R $(SOURCEDIR)/JavaApp/libs/caciocavallo/* $(WORKINGDIR)/AngelAuraAmethyst.app/libs_caciocavallo || exit 1
