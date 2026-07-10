@@ -13,14 +13,17 @@
 @interface ModVersionTableViewCell ()
 // 卡片容器：圆角 + 阴影 + 半透明背景（统一视觉规范）
 @property (nonatomic, strong) UIView *cardContainer;
-// 左侧信息区（版本名 + 版本号 + 加载器徽章行）
+// 左侧信息区（版本名行 + 版本号 + 加载器徽章行）
 @property (nonatomic, strong) UIStackView *leftStackView;
+// 版本名行（水平：nameLabel + releaseTypeBadge，参照 FCL 版本行的发布类型标签）
+@property (nonatomic, strong) UIStackView *nameRowStack;
 // 加载器徽章容器（水平排列的彩色 pill 标签）
 @property (nonatomic, strong) UIStackView *loaderBadgeStack;
 // 右侧信息区（日期 + 大小 + 游戏版本）
 @property (nonatomic, strong) UIStackView *rightStackView;
 // 子视图
 @property (nonatomic, strong) UILabel *nameLabel;
+@property (nonatomic, strong) UILabel *releaseTypeBadge; // 发布类型徽章（Release/Beta/Alpha）
 @property (nonatomic, strong) UILabel *versionNumberLabel;
 @property (nonatomic, strong) UILabel *datePublishedLabel;
 @property (nonatomic, strong) UILabel *fileSizeLabel;
@@ -57,7 +60,7 @@
     self.cardContainer.layer.shadowRadius = 8;
     [self.contentView addSubview:self.cardContainer];
 
-    // ===== 左侧：版本名 + 版本号 =====
+    // ===== 左侧：版本名行（含发布类型徽章）+ 版本号 =====
     self.nameLabel = [[UILabel alloc] init];
     self.nameLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
     self.nameLabel.textColor = [UIColor labelColor];
@@ -65,6 +68,30 @@
     self.nameLabel.adjustsFontSizeToFitWidth = YES;
     self.nameLabel.minimumScaleFactor = 0.7;
     self.nameLabel.lineBreakMode = NSLineBreakByTruncatingTail;
+    self.nameLabel.setContentHuggingPriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal;
+    self.nameLabel.setContentCompressionResistancePriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal;
+
+    // 发布类型徽章（Release/Beta/Alpha，参照 FCL/ZL2 版本行的发布类型标签）
+    self.releaseTypeBadge = [[UILabel alloc] init];
+    self.releaseTypeBadge.font = [UIFont systemFontOfSize:9 weight:UIFontWeightBold];
+    self.releaseTypeBadge.textColor = [UIColor whiteColor];
+    self.releaseTypeBadge.textAlignment = NSTextAlignmentCenter;
+    self.releaseTypeBadge.layer.cornerRadius = 4;
+    self.releaseTypeBadge.layer.cornerCurve = kCACornerCurveContinuous;
+    self.releaseTypeBadge.layer.masksToBounds = YES;
+    self.releaseTypeBadge.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.releaseTypeBadge.heightAnchor constraintEqualToConstant:16].active = YES;
+    self.releaseTypeBadge.hidden = YES; // 默认隐藏，configureWithVersion 时按需显示
+    self.releaseTypeBadge.setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal;
+    self.releaseTypeBadge.setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal;
+
+    // 版本名行（水平：nameLabel + releaseTypeBadge）
+    self.nameRowStack = [[UIStackView alloc] initWithArrangedSubviews:@[self.nameLabel, self.releaseTypeBadge]];
+    self.nameRowStack.axis = UILayoutConstraintAxisHorizontal;
+    self.nameRowStack.spacing = 6;
+    self.nameRowStack.alignment = UIStackViewAlignmentCenter;
+    self.nameRowStack.distribution = UIStackViewDistributionFill;
+    self.nameRowStack.translatesAutoresizingMaskIntoConstraints = NO;
 
     self.versionNumberLabel = [[UILabel alloc] init];
     self.versionNumberLabel.font = [UIFont systemFontOfSize:13];
@@ -82,8 +109,8 @@
     self.loaderBadgeStack.distribution = UIStackViewDistributionFill;
     self.loaderBadgeStack.translatesAutoresizingMaskIntoConstraints = NO;
 
-    // 左侧主 stack（垂直：版本名 → 版本号 → 加载器徽章行）
-    self.leftStackView = [[UIStackView alloc] initWithArrangedSubviews:@[self.nameLabel, self.versionNumberLabel, self.loaderBadgeStack]];
+    // 左侧主 stack（垂直：版本名行 → 版本号 → 加载器徽章行）
+    self.leftStackView = [[UIStackView alloc] initWithArrangedSubviews:@[self.nameRowStack, self.versionNumberLabel, self.loaderBadgeStack]];
     self.leftStackView.axis = UILayoutConstraintAxisVertical;
     self.leftStackView.spacing = 4;
     self.leftStackView.alignment = UIStackViewAlignmentLeading;
@@ -218,6 +245,27 @@
 - (void)configureWithVersion:(ModVersion *)version {
     self.nameLabel.text = version.name;
     self.versionNumberLabel.text = version.versionNumber;
+
+    // 发布类型徽章（Release/Beta/Alpha，参照 FCL/ZL2 版本行的发布类型标签）
+    NSString *vType = version.versionType.lowercaseString;
+    if ([vType isEqualToString:@"release"] || vType.length == 0) {
+        // Release：绿色徽章
+        self.releaseTypeBadge.text = @" Release ";
+        self.releaseTypeBadge.backgroundColor = [UIColor colorWithRed:0.30 green:0.75 blue:0.40 alpha:1.0];
+        self.releaseTypeBadge.hidden = NO;
+    } else if ([vType isEqualToString:@"beta"]) {
+        // Beta：橙色徽章
+        self.releaseTypeBadge.text = @" Beta ";
+        self.releaseTypeBadge.backgroundColor = [UIColor colorWithRed:0.90 green:0.60 blue:0.10 alpha:1.0];
+        self.releaseTypeBadge.hidden = NO;
+    } else if ([vType isEqualToString:@"alpha"]) {
+        // Alpha：红色徽章
+        self.releaseTypeBadge.text = @" Alpha ";
+        self.releaseTypeBadge.backgroundColor = [UIColor colorWithRed:0.85 green:0.30 blue:0.30 alpha:1.0];
+        self.releaseTypeBadge.hidden = NO;
+    } else {
+        self.releaseTypeBadge.hidden = YES;
+    }
 
     // 发布日期：ISO 8601 → 短日期格式
     NSISO8601DateFormatter *dateFormatter = [[NSISO8601DateFormatter alloc] init];

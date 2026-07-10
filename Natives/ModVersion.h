@@ -10,6 +10,9 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, copy, readonly) NSArray<NSString *> *gameVersions;
 @property (nonatomic, copy, readonly) NSArray<NSString *> *loaders;
 @property (nonatomic, copy, readonly, nullable) NSDictionary *primaryFile; // The first file in the files array
+// 发布类型（Modrinth: release/beta/alpha；CurseForge: 1=release/2=beta/3=alpha）
+// 用于版本行显示发布类型徽章（参照 FCL/ZL2 的 Release/Beta/Alpha 标签）
+@property (nonatomic, copy, readonly) NSString *versionType;
 
 // 资源来源 API（1=Modrinth, 2=CurseForge）
 @property (nonatomic, assign) NSInteger apiSource;

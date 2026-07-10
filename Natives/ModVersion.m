@@ -23,6 +23,8 @@
         _datePublished = [dictionary[@"date_published"] isKindOfClass:[NSString class]] ? dictionary[@"date_published"] : @"";
         _gameVersions = [dictionary[@"game_versions"] isKindOfClass:[NSArray class]] ? dictionary[@"game_versions"] : @[];
         _loaders = [dictionary[@"loaders"] isKindOfClass:[NSArray class]] ? dictionary[@"loaders"] : @[];
+        // 发布类型（Modrinth: release/beta/alpha）
+        _versionType = [dictionary[@"version_type"] isKindOfClass:[NSString class]] ? dictionary[@"version_type"] : @"release";
 
         NSArray *files = [dictionary[@"files"] isKindOfClass:[NSArray class]] ? dictionary[@"files"] : @[];
         _primaryFile = [files firstObject];
@@ -34,6 +36,15 @@
     _apiSource = 2; // CurseForge
     // 文件名
     NSString *fileName = dictionary[@"fileName"];
+    // 发布类型（CurseForge: 1=release, 2=beta, 3=alpha）
+    NSInteger releaseType = [dictionary[@"releaseType"] integerValue];
+    if (releaseType == 2) {
+        _versionType = @"beta";
+    } else if (releaseType == 3) {
+        _versionType = @"alpha";
+    } else {
+        _versionType = @"release";
+    }
     // 文件大小
     if (dictionary[@"fileLength"]) {
         _fileSize = dictionary[@"fileLength"];
