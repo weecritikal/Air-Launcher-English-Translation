@@ -2569,8 +2569,15 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 /// Forge/NeoForge 直装器内部也有相同逻辑（ensureParentVersionExists），但 Fabric/Quilt/OptiFine 没有，
 /// 因此在 proceedWithVersion 中统一前置调用。
 - (void)ensureVanillaVersionJSONExists:(NSString *)versionId completion:(void (^)(BOOL success))completion {
-    NSString *pojavHome = @(getenv("POJAV_HOME"));
-    NSString *versionDir = [pojavHome stringByAppendingPathComponent:
+    // 修复：必须使用 POJAV_GAME_DIR（与 ensureVanillaInstalled: 和 MinecraftResourceDownloadTask 一致），
+    // 而非 POJAV_HOME。POJAV_GAME_DIR 是 Minecraft 实际读取 versions/ 的目录。
+    // 若用 POJAV_HOME，version JSON 会存到错误位置，导致 MinecraftResourceDownloadTask
+    // 找不到 JSON 而崩溃，且游戏启动时 Java 端 Tools.getVersionInfo() 也会 FileNotFoundException。
+    NSString *gameDir = @(getenv("POJAV_GAME_DIR"));
+    if (gameDir.length == 0) {
+        gameDir = @(getenv("POJAV_HOME"));
+    }
+    NSString *versionDir = [gameDir stringByAppendingPathComponent:
                             [NSString stringWithFormat:@"versions/%@", versionId]];
     NSString *versionJsonPath = [versionDir stringByAppendingPathComponent:
                                  [NSString stringWithFormat:@"%@.json", versionId]];

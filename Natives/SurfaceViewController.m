@@ -199,15 +199,20 @@ static GameSurfaceView* pojavWindow;
 @property(nonatomic, strong) UITextField *touchControllerTextField;
 @property(nonatomic) BOOL touchControllerTextInputEnabled;
 
-// 阶段13：启动遮罩层（参照 FCL 的启动进度显示，JVM 启动到首帧渲染期间显示）
+// 阶段13/16：启动遮罩层（参照 FCL/ZL2 的启动进度显示，JVM 启动到首帧渲染期间显示）
 @property(nonatomic, strong) UIView *launchOverlayView;
+@property(nonatomic, strong) CAGradientLayer *launchGradientLayer;
+@property(nonatomic, strong) UIImageView *launchIconView;
 @property(nonatomic, strong) UIActivityIndicatorView *launchSpinner;
 @property(nonatomic, strong) UILabel *launchTitleLabel;
 @property(nonatomic, strong) UILabel *launchStageLabel;
+@property(nonatomic, strong) UIProgressView *launchProgressBar;
+@property(nonatomic, strong) UILabel *launchElapsedTimeLabel;
 @property(nonatomic, strong) NSTimer *launchStageTimer;
 @property(nonatomic, assign) NSTimeInterval launchStartTime;
 @property(nonatomic, strong) NSArray<NSString *> *launchStages;
 @property(nonatomic, assign) NSInteger currentStageIndex;
+@property(nonatomic, assign) BOOL launchOverlayDismissed;
 
 @end
 
@@ -887,6 +892,14 @@ static GameSurfaceView* pojavWindow;
     [self setNeedsUpdateOfPrefersPointerLocked];
 }
 
+- (void)viewDidLayoutSubviews {
+    [super viewDidLayoutSubviews];
+    // 更新启动遮罩层渐变背景的 frame（旋转/尺寸变化时）
+    if (self.launchGradientLayer && self.launchOverlayView) {
+        self.launchGradientLayer.frame = self.launchOverlayView.bounds;
+    }
+}
+
 - (void)updateAudioSettings {
     NSError *sessionError = nil;
     AVAudioSessionCategory category;
@@ -1036,7 +1049,8 @@ static GameSurfaceView* pojavWindow;
         if (!self.metadata) {
             NSLog(@"[SurfaceViewController] Error: metadata is nil");
             dispatch_async(dispatch_get_main_queue(), ^{
-                showDialog(localize(@"Error", nil), @"æ¸¸ææ°æ®å è½½å¤±è´¥ï¼è¯·éæ°éæ©çæ¬");
+                [self dismissLaunchOverlayOnError];
+                showDialog(localize(@"Error", nil), @"æ¸¸æçæ®å è½½å¤±è´¥ï¼è¯·éæ°éæ©çæ¬");
             });
             return;
         }
@@ -1062,7 +1076,8 @@ static GameSurfaceView* pojavWindow;
         if (!currentAuth) {
             NSLog(@"[SurfaceViewController] Error: no authenticator available");
             dispatch_async(dispatch_get_main_queue(), ^{
-                showDialog(localize(@"Error", nil), @"è¯·åç»å½è´¦æ·");
+                [self dismissLaunchOverlayOnError];
+                showDialog(localize(@"Error", nil), @"è¯·åç»å½è´¦æ·");
             });
             return;
         }
@@ -1081,18 +1096,33 @@ static GameSurfaceView* pojavWindow;
               accountId, minVersion, windowWidth, windowHeight);
 
         // Launch JVM（args[0] 传 accountId，Java 端 MinecraftAccount.load(accountId) 据此加载账户）
-        launchJVM(accountId, self.metadata, windowWidth, windowHeight, minVersion);
+        int launchResult = launchJVM(accountId, self.metadata, windowWidth, windowHeight, minVersion);
+
+        // JVM 启动失败（返回非 0）：移除启动遮罩层，让用户看到错误对话框
+        // launchJVM 内部失败时会调用 showDialog 显示错误，此处仅负责清理遮罩层
+        if (launchResult != 0) {
+            NSLog(@"[SurfaceViewController] JVM launch failed with code %d", launchResult);
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [self dismissLaunchOverlayOnError];
+            });
+        }
     });
 }
 
-#pragma mark - 阶段13：启动遮罩层（参照 FCL/ZL2 的启动进度显示）
+#pragma mark - 阶段13/16：启动遮罩层（仿 FCL/ZL2 全屏启动进度显示）
 
-/// 创建并显示启动遮罩层：在 JVM 启动到首帧渲染期间显示进度
-/// 包含旋转指示器 + 标题 + 阶段文案 + 已耗时
+/// 创建并显示启动遮罩层（仿 FCL/ZL2 风格）：
+/// - 全屏深色渐变背景（非卡片式，更沉浸）
+/// - 顶部游戏图标 + 标题
+/// - 中部水平进度条（随时间推进，首帧渲染前封顶 95%）
+/// - 进度条下方阶段文案 + 已耗时
+/// - 适配 iPhone/iPad 屏幕
 - (void)setupLaunchOverlay {
-    // 启动阶段列表（参照 FCL 启动日志的关键节点）
+    // 启动阶段列表（参照 FCL/ZL2 启动流程，含完整性检查阶段）
+    // 仿 FCL/HMCL：启动前先校验游戏文件完整性
     self.launchStages = @[
         @"正在初始化运行环境...",
+        @"正在校验游戏文件完整性...",
         @"正在加载 Java 运行时...",
         @"正在配置 JVM 参数...",
         @"正在启动 Java 虚拟机...",
@@ -1103,86 +1133,112 @@ static GameSurfaceView* pojavWindow;
     ];
     self.currentStageIndex = 0;
     self.launchStartTime = [NSDate timeIntervalSinceReferenceDate];
+    self.launchOverlayDismissed = NO;
 
-    // 遮罩容器：半透明黑色背景，覆盖全屏
+    // 全屏遮罩容器
     self.launchOverlayView = [[UIView alloc] initWithFrame:self.view.bounds];
     self.launchOverlayView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    self.launchOverlayView.backgroundColor = [UIColor colorWithRed:0.04 green:0.04 blue:0.06 alpha:0.95];
     self.launchOverlayView.userInteractionEnabled = YES;
     [self.view addSubview:self.launchOverlayView];
 
-    // 适配自定义启动器背景：在遮罩层上叠加毛玻璃效果
-    UIView *blurEffectView = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterialDark]];
-    blurEffectView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    blurEffectView.frame = self.launchOverlayView.bounds;
-    blurEffectView.alpha = 0.3;
-    [self.launchOverlayView addSubview:blurEffectView];
+    // 深色渐变背景层（仿 FCL 启动页的深色渐变）
+    CAGradientLayer *gradient = [CAGradientLayer layer];
+    gradient.frame = self.launchOverlayView.bounds;
+    gradient.colors = @[
+        (__bridge id)[UIColor colorWithRed:0.08 green:0.09 blue:0.13 alpha:1.0].CGColor,
+        (__bridge id)[UIColor colorWithRed:0.03 green:0.03 blue:0.05 alpha:1.0].CGColor,
+    ];
+    gradient.locations = @[@0.0, @1.0];
+    gradient.startPoint = CGPointMake(0.5, 0.0);
+    gradient.endPoint = CGPointMake(0.5, 1.0);
+    [self.launchOverlayView.layer insertSublayer:gradient atIndex:0];
+    self.launchGradientLayer = gradient;
 
-    // 内容卡片容器（居中）
-    UIView *cardView = [[UIView alloc] init];
-    cardView.translatesAutoresizingMaskIntoConstraints = NO;
-    cardView.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.08];
-    cardView.layer.cornerRadius = 20;
-    cardView.layer.masksToBounds = YES;
-    [self.launchOverlayView addSubview:cardView];
+    // 游戏图标（顶部，仿 FCL 启动页的 Minecraft 图标）
+    self.launchIconView = [[UIImageView alloc] init];
+    self.launchIconView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.launchIconView.contentMode = UIViewContentModeScaleAspectFit;
+    self.launchIconView.image = [UIImage systemImageNamed:@"cube.transparent.fill"];
+    self.launchIconView.tintColor = [UIColor systemGreenColor];
+    [self.launchOverlayView addSubview:self.launchIconView];
 
-    // 游戏图标（使用 SF Symbol 代替，参照 FCL 启动页的游戏图标）
-    UIImageView *iconView = [[UIImageView alloc] init];
-    iconView.translatesAutoresizingMaskIntoConstraints = NO;
-    iconView.contentMode = UIViewContentModeScaleAspectFit;
-    iconView.image = [UIImage systemImageNamed:@"cube.transparent.fill"];
-    iconView.tintColor = [UIColor systemGreenColor];
-    [cardView addSubview:iconView];
-
-    // 旋转指示器
-    self.launchSpinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleLarge];
+    // 旋转指示器（图标下方小转圈，仿 FCL 的加载动画）
+    self.launchSpinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
     self.launchSpinner.translatesAutoresizingMaskIntoConstraints = NO;
-    self.launchSpinner.color = [UIColor whiteColor];
+    self.launchSpinner.color = [UIColor colorWithWhite:0.85 alpha:1.0];
     [self.launchSpinner startAnimating];
-    [cardView addSubview:self.launchSpinner];
+    [self.launchOverlayView addSubview:self.launchSpinner];
 
     // 标题
     self.launchTitleLabel = [[UILabel alloc] init];
     self.launchTitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.launchTitleLabel.text = @"正在启动 Minecraft";
-    self.launchTitleLabel.font = [UIFont systemFontOfSize:20 weight:UIFontWeightBold];
+    self.launchTitleLabel.font = [UIFont systemFontOfSize:22 weight:UIFontWeightBold];
     self.launchTitleLabel.textColor = [UIColor whiteColor];
     self.launchTitleLabel.textAlignment = NSTextAlignmentCenter;
-    [cardView addSubview:self.launchTitleLabel];
+    [self.launchOverlayView addSubview:self.launchTitleLabel];
 
     // 阶段文案
     self.launchStageLabel = [[UILabel alloc] init];
     self.launchStageLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.launchStageLabel.text = self.launchStages.firstObject ?: @"正在准备...";
     self.launchStageLabel.font = [UIFont systemFontOfSize:14];
-    self.launchStageLabel.textColor = [UIColor colorWithWhite:0.7 alpha:1.0];
+    self.launchStageLabel.textColor = [UIColor colorWithWhite:0.65 alpha:1.0];
     self.launchStageLabel.textAlignment = NSTextAlignmentCenter;
     self.launchStageLabel.numberOfLines = 0;
-    [cardView addSubview:self.launchStageLabel];
+    [self.launchOverlayView addSubview:self.launchStageLabel];
 
-    // 布局约束
+    // 水平进度条（仿 FCL/ZL2 的启动进度条）
+    self.launchProgressBar = [[UIProgressView alloc] initWithProgressViewStyle:UIProgressViewStyleBar];
+    self.launchProgressBar.translatesAutoresizingMaskIntoConstraints = NO;
+    self.launchProgressBar.progressTintColor = [UIColor systemGreenColor];
+    self.launchProgressBar.trackTintColor = [[UIColor whiteColor] colorWithAlphaComponent:0.15];
+    self.launchProgressBar.progress = 0.02;
+    [self.launchOverlayView addSubview:self.launchProgressBar];
+
+    // 已耗时标签
+    self.launchElapsedTimeLabel = [[UILabel alloc] init];
+    self.launchElapsedTimeLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.launchElapsedTimeLabel.text = @"已耗时 0秒";
+    self.launchElapsedTimeLabel.font = [UIFont monospacedDigitSystemFontOfSize:12 weight:UIFontWeightRegular];
+    self.launchElapsedTimeLabel.textColor = [UIColor colorWithWhite:0.5 alpha:1.0];
+    self.launchElapsedTimeLabel.textAlignment = NSTextAlignmentCenter;
+    [self.launchOverlayView addSubview:self.launchElapsedTimeLabel];
+
+    // 布局约束（全屏沉浸式，内容垂直居中偏上）
+    CGFloat sidePadding = self.traitCollection.userInterfaceIdiom == UIUserInterfaceIdiomPad ? 80.0 : 32.0;
+
     [NSLayoutConstraint activateConstraints:@[
-        [cardView.centerXAnchor constraintEqualToAnchor:self.launchOverlayView.centerXAnchor],
-        [cardView.centerYAnchor constraintEqualToAnchor:self.launchOverlayView.centerYAnchor],
-        [cardView.leadingAnchor constraintEqualToAnchor:self.launchOverlayView.leadingAnchor constant:40],
-        [cardView.trailingAnchor constraintEqualToAnchor:self.launchOverlayView.trailingAnchor constant:-40],
+        // 图标：距顶部约 20% 屏幕高度，水平居中
+        [self.launchIconView.topAnchor constraintEqualToAnchor:self.launchOverlayView.safeAreaLayoutGuide.topAnchor constant:0],
+        [self.launchIconView.centerXAnchor constraintEqualToAnchor:self.launchOverlayView.centerXAnchor],
+        [self.launchIconView.widthAnchor constraintEqualToConstant:72],
+        [self.launchIconView.heightAnchor constraintEqualToConstant:72],
 
-        [iconView.topAnchor constraintEqualToAnchor:cardView.topAnchor constant:28],
-        [iconView.centerXAnchor constraintEqualToAnchor:cardView.centerXAnchor],
-        [iconView.widthAnchor constraintEqualToConstant:56],
-        [iconView.heightAnchor constraintEqualToConstant:56],
+        // 旋转指示器：图标下方
+        [self.launchSpinner.topAnchor constraintEqualToAnchor:self.launchIconView.bottomAnchor constant:12],
+        [self.launchSpinner.centerXAnchor constraintEqualToAnchor:self.launchOverlayView.centerXAnchor],
 
-        [self.launchSpinner.topAnchor constraintEqualToAnchor:iconView.bottomAnchor constant:16],
-        [self.launchSpinner.centerXAnchor constraintEqualToAnchor:cardView.centerXAnchor],
+        // 标题：旋转指示器下方
+        [self.launchTitleLabel.topAnchor constraintEqualToAnchor:self.launchSpinner.bottomAnchor constant:10],
+        [self.launchTitleLabel.leadingAnchor constraintEqualToAnchor:self.launchOverlayView.leadingAnchor constant:sidePadding],
+        [self.launchTitleLabel.trailingAnchor constraintEqualToAnchor:self.launchOverlayView.trailingAnchor constant:-sidePadding],
 
-        [self.launchTitleLabel.topAnchor constraintEqualToAnchor:self.launchSpinner.bottomAnchor constant:12],
-        [self.launchTitleLabel.leadingAnchor constraintEqualToAnchor:cardView.leadingAnchor constant:20],
-        [self.launchTitleLabel.trailingAnchor constraintEqualToAnchor:cardView.trailingAnchor constant:-20],
-
+        // 阶段文案：标题下方
         [self.launchStageLabel.topAnchor constraintEqualToAnchor:self.launchTitleLabel.bottomAnchor constant:8],
-        [self.launchStageLabel.leadingAnchor constraintEqualToAnchor:cardView.leadingAnchor constant:20],
-        [self.launchStageLabel.trailingAnchor constraintEqualToAnchor:cardView.trailingAnchor constant:-20],
-        [self.launchStageLabel.bottomAnchor constraintEqualToAnchor:cardView.bottomAnchor constant:-28]
+        [self.launchStageLabel.leadingAnchor constraintEqualToAnchor:self.launchOverlayView.leadingAnchor constant:sidePadding],
+        [self.launchStageLabel.trailingAnchor constraintEqualToAnchor:self.launchOverlayView.trailingAnchor constant:-sidePadding],
+
+        // 进度条：阶段文案下方
+        [self.launchProgressBar.topAnchor constraintEqualToAnchor:self.launchStageLabel.bottomAnchor constant:20],
+        [self.launchProgressBar.leadingAnchor constraintEqualToAnchor:self.launchOverlayView.leadingAnchor constant:sidePadding],
+        [self.launchProgressBar.trailingAnchor constraintEqualToAnchor:self.launchOverlayView.trailingAnchor constant:-sidePadding],
+        [self.launchProgressBar.heightAnchor constraintEqualToConstant:6],
+
+        // 已耗时：进度条下方
+        [self.launchElapsedTimeLabel.topAnchor constraintEqualToAnchor:self.launchProgressBar.bottomAnchor constant:8],
+        [self.launchElapsedTimeLabel.leadingAnchor constraintEqualToAnchor:self.launchOverlayView.leadingAnchor constant:sidePadding],
+        [self.launchElapsedTimeLabel.trailingAnchor constraintEqualToAnchor:self.launchOverlayView.trailingAnchor constant:-sidePadding],
     ]];
 
     // 注册首帧渲染通知（egl_bridge.m 中 pojavSwapBuffers 首次调用时发送）
@@ -1191,53 +1247,87 @@ static GameSurfaceView* pojavWindow;
                                                  name:@"PojavFirstFrameRendered"
                                                object:nil];
 
-    // 启动阶段轮转定时器（每 3 秒切换一次阶段文案，直到首帧渲染）
-    self.launchStageTimer = [NSTimer scheduledTimerWithTimeInterval:3.0
+    // 启动阶段轮转定时器（每 2.5 秒切换一次阶段文案，同时推进进度条）
+    self.launchStageTimer = [NSTimer scheduledTimerWithTimeInterval:0.5
                                                              target:self
                                                            selector:@selector(updateLaunchStage)
                                                            userInfo:nil
                                                             repeats:YES];
     [[NSRunLoop mainRunLoop] addTimer:self.launchStageTimer forMode:NSRunLoopCommonModes];
-
-    // 适配 iPad：在 iPad 上使用更大的卡片
-    if (self.traitCollection.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
-        [cardView.leadingAnchor constraintEqualToAnchor:self.launchOverlayView.leadingAnchor constant:80].active = YES;
-        [cardView.trailingAnchor constraintEqualToAnchor:self.launchOverlayView.trailingAnchor constant:-80].active = YES;
-    }
 }
 
-/// 定时器回调：轮转启动阶段文案并显示已耗时
+/// 定时器回调（每 0.5 秒）：
+/// 1. 基于已耗时计算当前阶段索引（每 2.5 秒一个阶段，避免 static 变量在多次启动间不重置）
+/// 2. 推进进度条（基于已耗时，封顶 95%）
+/// 3. 更新已耗时显示
 - (void)updateLaunchStage {
-    if (self.currentStageIndex < self.launchStages.count - 1) {
-        self.currentStageIndex++;
-    }
-    // 保持在最后一个阶段（"即将进入游戏..."）直到首帧渲染
-    NSString *stageText = self.launchStages[self.currentStageIndex];
+    if (self.launchOverlayDismissed || !self.launchOverlayView) return;
 
-    // 添加已耗时显示
     NSTimeInterval elapsed = [NSDate timeIntervalSinceReferenceDate] - self.launchStartTime;
+
+    // 阶段切换：基于已耗时计算（每 2.5 秒一个阶段），避免 static 变量在多次启动间不重置
+    NSInteger stageIndex = (NSInteger)(elapsed / 2.5);
+    if (stageIndex >= self.launchStages.count) {
+        stageIndex = self.launchStages.count - 1;
+    }
+    if (stageIndex != self.currentStageIndex) {
+        self.currentStageIndex = stageIndex;
+        self.launchStageLabel.text = self.launchStages[stageIndex];
+    }
+
+    // 进度条推进：基于已耗时，前 3 秒快速到 20%，之后缓慢推进，封顶 95%
+    CGFloat targetProgress;
+    if (elapsed < 3.0) {
+        targetProgress = 0.02 + (elapsed / 3.0) * 0.18; // 2% → 20%
+    } else if (elapsed < 30.0) {
+        targetProgress = 0.20 + ((elapsed - 3.0) / 27.0) * 0.55; // 20% → 75%
+    } else if (elapsed < 60.0) {
+        targetProgress = 0.75 + ((elapsed - 30.0) / 30.0) * 0.15; // 75% → 90%
+    } else {
+        targetProgress = MIN(0.95, 0.90 + ((elapsed - 60.0) / 60.0) * 0.05); // 90% → 95%（封顶）
+    }
+    // 仅当目标进度大于当前进度时更新（避免回退）
+    if (targetProgress > self.launchProgressBar.progress) {
+        [self.launchProgressBar setProgress:targetProgress animated:YES];
+    }
+
+    // 更新已耗时显示
     NSString *timeStr;
     if (elapsed > 60) {
         timeStr = [NSString stringWithFormat:@"已耗时 %.0f分%.0f秒", elapsed / 60, (double)((int)elapsed % 60)];
     } else {
         timeStr = [NSString stringWithFormat:@"已耗时 %.0f秒", elapsed];
     }
-    self.launchStageLabel.text = [NSString stringWithFormat:@"%@\n%@", stageText, timeStr];
+    self.launchElapsedTimeLabel.text = timeStr;
 }
 
-/// 首帧渲染通知回调：淡出并移除启动遮罩层
+/// 首帧渲染通知回调：进度条跳到 100%，淡出并移除启动遮罩层
 - (void)onFirstFrameRendered {
     dispatch_async(dispatch_get_main_queue(), ^{
+        if (self.launchOverlayDismissed) return;
+        self.launchOverlayDismissed = YES;
+
         [self.launchStageTimer invalidate];
         self.launchStageTimer = nil;
+        [self.launchSpinner stopAnimating];
+
+        // 进度条跳到 100%
+        [self.launchProgressBar setProgress:1.0 animated:YES];
 
         // 更新最终文案
         NSTimeInterval elapsed = [NSDate timeIntervalSinceReferenceDate] - self.launchStartTime;
-        self.launchStageLabel.text = [NSString stringWithFormat:@"启动完成！\n总耗时 %.1f秒", elapsed];
+        self.launchStageLabel.text = @"启动完成！";
+        NSString *timeStr;
+        if (elapsed > 60) {
+            timeStr = [NSString stringWithFormat:@"总耗时 %.0f分%.0f秒", elapsed / 60, (double)((int)elapsed % 60)];
+        } else {
+            timeStr = [NSString stringWithFormat:@"总耗时 %.1f秒", elapsed];
+        }
+        self.launchElapsedTimeLabel.text = timeStr;
 
-        // 延迟 0.5 秒后淡出移除（让用户看到"启动完成"提示）
-        [UIView animateWithDuration:0.5
-                              delay:0.5
+        // 延迟 0.4 秒后淡出移除（让用户看到 100% 进度和"启动完成"提示）
+        [UIView animateWithDuration:0.4
+                              delay:0.4
                             options:UIViewAnimationOptionCurveEaseOut
                          animations:^{
             self.launchOverlayView.alpha = 0.0;
@@ -1245,9 +1335,28 @@ static GameSurfaceView* pojavWindow;
                          completion:^(BOOL finished) {
             [self.launchOverlayView removeFromSuperview];
             self.launchOverlayView = nil;
+            self.launchGradientLayer = nil;
             [[NSNotificationCenter defaultCenter] removeObserver:self name:@"PojavFirstFrameRendered" object:nil];
             NSLog(@"[SurfaceViewController] Launch overlay dismissed after %.1f seconds", elapsed);
         }];
+    });
+}
+
+/// 启动失败时移除遮罩层（JVM 启动失败、metadata 为空等错误路径调用）
+- (void)dismissLaunchOverlayOnError {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (self.launchOverlayDismissed) return;
+        self.launchOverlayDismissed = YES;
+
+        [self.launchStageTimer invalidate];
+        self.launchStageTimer = nil;
+        [self.launchSpinner stopAnimating];
+        [[NSNotificationCenter defaultCenter] removeObserver:self name:@"PojavFirstFrameRendered" object:nil];
+
+        [self.launchOverlayView removeFromSuperview];
+        self.launchOverlayView = nil;
+        self.launchGradientLayer = nil;
+        NSLog(@"[SurfaceViewController] Launch overlay dismissed due to launch error");
     });
 }
 
@@ -2000,10 +2109,12 @@ static NSMutableDictionary *s_touchToFingerIdMap = nil;
     [self.statsDisplayLink invalidate];
     self.statsDisplayLink = nil;
 
-    // 阶段13：清理启动遮罩层资源
+    // 阶段13/16：清理启动遮罩层资源
     [self.launchStageTimer invalidate];
     self.launchStageTimer = nil;
     [[NSNotificationCenter defaultCenter] removeObserver:self name:@"PojavFirstFrameRendered" object:nil];
+    self.launchOverlayView = nil;
+    self.launchGradientLayer = nil;
 
     //æ¸ç TouchController èµæº
     if (self.touchControllerTransportHandle >= 0) {
