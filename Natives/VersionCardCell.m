@@ -7,7 +7,6 @@
 // 替代原 100x120 纵向网格卡片，信息密度更高、更接近 FCL/ZL2 视觉。
 
 #import "VersionCardCell.h"
-#import <CoreGraphics/CoreGraphics.h>
 
 // 修复问题3：带内边距的 UILabel 子类，让"正式版/测试版"等类型标签文字
 // 在背景块内完美居中，不再与背景边缘重叠。
@@ -36,96 +35,6 @@
 - (void)drawTextInRect:(CGRect)rect {
     [super drawTextInRect:UIEdgeInsetsInsetRect(rect, self.textInsets)];
 }
-@end
-
-// 修复问题4：程序化绘制标准原版草方块图标（俯视图），与 FCL/ZL2/HMCL 视觉一致。
-// 采用 16x16 像素网格绘制（每像素 4pt，总 64x64），还原 Minecraft grass_block_top 的视觉特征：
-// - 草绿色主调，深浅交替的像素块
-// - 零星分布的亮色高光像素
-// - 底部一行土壤色（草方块侧边的泥土边缘在俯视图中的投影）
-// 程序化绘制确保开箱即用，无需导入任何外部 PNG 资源，也不依赖 Mojang 版权素材。
-// 绘制结果用 static 变量缓存，整个 App 生命周期只绘制一次。
-@interface VersionCardCell (VanillaIcon)
-+ (UIImage *)vanillaGrassBlockIcon;
-@end
-
-@implementation VersionCardCell (VanillaIcon)
-
-/// 绘制 64x64 的草方块图标并缓存。调用线程安全（dispatch_once）。
-+ (UIImage *)vanillaGrassBlockIcon {
-    static UIImage *cachedIcon = nil;
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        const CGFloat pixelSize = 4.0;  // 每个像素块 4pt
-        const NSInteger gridSize = 16;  // 16x16 网格
-        const CGFloat totalSize = pixelSize * gridSize; // 64pt
-
-        UIGraphicsBeginImageContextWithOptions(CGSizeMake(totalSize, totalSize), NO, [UIScreen mainScreen].scale);
-        CGContextRef ctx = UIGraphicsGetCurrentContext();
-
-        // 草方块颜色调色板（还原 Minecraft grass_block_top.png 的像素色彩）
-        // 主草色
-        UIColor *grassMain   = [UIColor colorWithRed:0.486 green:0.741 blue:0.337 alpha:1.0]; // #7CBD56
-        // 暗草色（阴影）
-        UIColor *grassDark   = [UIColor colorWithRed:0.365 green:0.612 blue:0.239 alpha:1.0]; // #5D9C3D
-        // 亮草色（高光）
-        UIColor *grassLight  = [UIColor colorWithRed:0.549 green:0.686 blue:0.290 alpha:1.0]; // #8CB04A
-        // 最亮草色（零星高光像素）
-        UIColor *grassBright = [UIColor colorWithRed:0.620 green:0.800 blue:0.400 alpha:1.0]; // #9ECC66
-        // 土壤色（底部边缘）
-        UIColor *dirtColor   = [UIColor colorWithRed:0.525 green:0.376 blue:0.263 alpha:1.0]; // #866043
-        // 暗土壤色
-        UIColor *dirtDark    = [UIColor colorWithRed:0.404 green:0.290 blue:0.196 alpha:1.0]; // #674A32
-
-        // 16x16 像素布局（0=主色, 1=暗色, 2=亮色, 3=最亮, 4=土壤, 5=暗土壤）
-        // 参照原版 grass_block_top 纹理的像素分布特征：随机感但均匀的绿色 + 底部土壤带
-        // 第 0-14 行：草色区域；第 15 行：土壤边缘
-        static const int layout[16][16] = {
-            // y=0  (顶行)
-            {0,1,0,2,0,0,1,0,2,0,0,1,0,2,0,0},
-            {1,0,2,0,1,0,0,2,0,1,3,0,1,0,2,0},
-            {0,2,0,1,0,3,0,1,0,0,2,0,0,1,0,2},
-            {2,0,0,1,0,0,2,0,1,0,0,1,3,0,0,1},
-            {0,1,3,0,1,0,0,1,0,2,0,0,1,0,2,0},
-            {0,0,1,0,2,0,1,0,0,1,3,0,0,1,0,0},
-            {1,0,0,2,0,1,0,0,3,0,1,0,2,0,0,1},
-            {0,2,0,0,1,0,3,0,1,0,0,2,0,1,3,0},
-            {0,0,1,0,0,2,0,1,0,0,1,0,0,2,0,1},
-            {2,0,0,1,3,0,0,1,0,2,0,1,0,0,1,0},
-            {0,1,0,0,2,0,1,0,0,0,1,0,3,0,0,2},
-            {0,0,2,0,0,1,0,0,3,1,0,0,2,0,1,0},
-            {1,0,0,1,0,0,2,0,1,0,0,1,0,3,0,0},
-            {0,2,0,0,1,3,0,1,0,2,0,0,1,0,0,1},
-            {0,0,1,0,0,2,0,0,1,0,3,0,0,1,2,0},
-            // y=15 (底行，土壤边缘)
-            {4,5,4,4,5,4,4,5,4,4,5,4,4,5,4,4}
-        };
-
-        // 按像素绘制
-        for (NSInteger y = 0; y < gridSize; y++) {
-            for (NSInteger x = 0; x < gridSize; x++) {
-                int code = layout[y][x];
-                UIColor *color;
-                switch (code) {
-                    case 1:  color = grassDark;   break;
-                    case 2:  color = grassLight;  break;
-                    case 3:  color = grassBright; break;
-                    case 4:  color = dirtColor;   break;
-                    case 5:  color = dirtDark;    break;
-                    default: color = grassMain;   break;
-                }
-                CGContextSetFillColorWithColor(ctx, color.CGColor);
-                CGRect pixelRect = CGRectMake(x * pixelSize, y * pixelSize, pixelSize, pixelSize);
-                CGContextFillRect(ctx, pixelRect);
-            }
-        }
-
-        cachedIcon = UIGraphicsGetImageFromCurrentImageContext();
-        UIGraphicsEndImageContext();
-    });
-    return cachedIcon;
-}
-
 @end
 
 @interface VersionCardCell ()
@@ -350,18 +259,18 @@
     }
     self.iconImageView.tintColor = [UIColor whiteColor];
 
-    // 修复问题4：使用程序化绘制的标准草方块图标（俯视图），与 FCL/ZL2/HMCL 视觉一致。
-    // 图标在 App 首次调用时用 Core Graphics 绘制 16x16 像素网格并缓存，开箱即用，无需导入任何外部资源。
-    // 铺满图标容器（AspectFill），背景透明以保留草方块纹理本色。
-    UIImage *grassIcon = [VersionCardCell vanillaGrassBlockIcon];
-    if (grassIcon) {
-        self.iconImageView.image = grassIcon;
+    // 修复问题4：使用 HMCL 仓库自带的标准草方块图标（grass.png/grass@2x.png），
+    // 已导入 Assets.xcassets 的 VanillaIcon 图片集，与 FCL/ZL2/HMCL 等主流启动器视觉完全一致。
+    // 图标铺满容器（AspectFill），背景透明以保留草方块纹理本色。
+    UIImage *vanillaIcon = [UIImage imageNamed:@"VanillaIcon"];
+    if (vanillaIcon) {
+        self.iconImageView.image = vanillaIcon;
         self.iconImageView.contentMode = UIViewContentModeScaleAspectFill;
         self.iconImageView.tintColor = nil; // 取消着色，显示草方块原色
         // 草方块图标自带色彩，图标容器背景设为透明
         self.iconContainer.backgroundColor = [UIColor clearColor];
     } else {
-        // 极端兜底：程序化绘制失败时回退 SF Symbol + 类型色背景
+        // 兜底：图片集加载失败时回退 SF Symbol + 类型色背景
         self.iconImageView.contentMode = UIViewContentModeScaleAspectFit;
         self.iconImageView.tintColor = [UIColor whiteColor];
         self.iconContainer.backgroundColor = [typeColor colorWithAlphaComponent:0.85];
@@ -378,7 +287,7 @@
 
 - (void)prepareForReuse {
     [super prepareForReuse];
-    // 重置为 SF Symbol 默认状态（configureWithVersionId 会再次绘制草方块图标覆盖）
+    // 重置为 SF Symbol 默认状态（configureWithVersionId 会再次加载 VanillaIcon 覆盖）
     self.iconImageView.image = [UIImage systemImageNamed:@"cube.fill"];
     self.iconImageView.tintColor = [UIColor whiteColor];
     self.iconImageView.contentMode = UIViewContentModeScaleAspectFit;
