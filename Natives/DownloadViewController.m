@@ -78,7 +78,7 @@
         
         self.iconView = [[UIImageView alloc] init];
         self.iconView.translatesAutoresizingMaskIntoConstraints = NO;
-        self.iconView.layer.cornerRadius = 12;
+        self.iconView.layer.cornerRadius = 10;
         self.iconView.clipsToBounds = YES;
         // 移除灰色背景：加载失败时由占位 SF Symbol 兜底，不再显示灰色方块
         self.iconView.backgroundColor = [UIColor clearColor];
@@ -276,7 +276,7 @@
     label.font = [UIFont systemFontOfSize:10 weight:UIFontWeightMedium];
     label.textColor = [UIColor tertiaryLabelColor];
     label.backgroundColor = [UIColor tertiarySystemBackgroundColor];
-    label.layer.cornerRadius = 4;
+    label.layer.cornerRadius = 8;
     label.layer.masksToBounds = YES;
     label.textAlignment = NSTextAlignmentCenter;
     [label sizeToFit];
@@ -346,7 +346,7 @@
     self.cardView.translatesAutoresizingMaskIntoConstraints = NO;
     self.cardView.backgroundColor = [UIColor clearColor];
     [[BackgroundManager sharedManager] applyEffectToView:self.cardView];
-    self.cardView.layer.cornerRadius = 18;
+    self.cardView.layer.cornerRadius = 16;
     self.cardView.layer.masksToBounds = YES;
     [self.view addSubview:self.cardView];
 

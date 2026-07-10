@@ -213,10 +213,12 @@ static CGFloat LauncherRootLayoutRightPanelWidth(UITraitCollection *trait) {
     [[BackgroundManager sharedManager] applyEffectToView:self.sidebarContainer];
     [self.view addSubview:self.sidebarContainer];
 
-    // 中间内容容器 - 完全透明
+    // 中间内容容器 - 完全透明（防御性补 16pt 圆角，保持与左右容器一致）
     self.contentContainer = [[UIView alloc] init];
     self.contentContainer.translatesAutoresizingMaskIntoConstraints = NO;
     self.contentContainer.backgroundColor = [UIColor clearColor];
+    self.contentContainer.layer.cornerRadius = 16;
+    self.contentContainer.layer.masksToBounds = YES;
     [self.view addSubview:self.contentContainer];
 
     // 右侧面板容器 - 半透明（圆角，与 Card 布局保持一致）

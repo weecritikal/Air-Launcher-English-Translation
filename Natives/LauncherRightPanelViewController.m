@@ -173,7 +173,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     self.launchButton.titleLabel.minimumScaleFactor = 0.6;
     self.launchButton.titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
     self.launchButton.backgroundColor = [UIColor colorWithRed:0.26 green:0.63 blue:0.96 alpha:1.0];
-    self.launchButton.layer.cornerRadius = 12;
+    self.launchButton.layer.cornerRadius = 10;
     self.launchButton.layer.masksToBounds = YES;
     [self.launchButton addTarget:self action:@selector(launchButtonTapped) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.launchButton];
@@ -198,7 +198,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     self.manageVersionBtn.titleLabel.minimumScaleFactor = 0.7;
     self.manageVersionBtn.titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
     self.manageVersionBtn.backgroundColor = [UIColor colorWithWhite:0.2 alpha:1.0];
-    self.manageVersionBtn.layer.cornerRadius = 8;
+    self.manageVersionBtn.layer.cornerRadius = 10;
     [self.manageVersionBtn addTarget:self action:@selector(showVersionPicker) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.manageVersionBtn];
 
@@ -211,7 +211,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     self.executeJarBtn.titleLabel.minimumScaleFactor = 0.7;
     self.executeJarBtn.titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
     self.executeJarBtn.backgroundColor = [UIColor colorWithWhite:0.2 alpha:1.0];
-    self.executeJarBtn.layer.cornerRadius = 8;
+    self.executeJarBtn.layer.cornerRadius = 10;
     [self.executeJarBtn addTarget:self action:@selector(executeJar) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.executeJarBtn];
     

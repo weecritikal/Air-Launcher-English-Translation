@@ -123,7 +123,7 @@
     UIView *card = [[UIView alloc] init];
     card.translatesAutoresizingMaskIntoConstraints = NO;
     card.backgroundColor = [UIColor secondarySystemGroupedBackgroundColor];
-    card.layer.cornerRadius = 18;
+    card.layer.cornerRadius = 16;
     card.layer.masksToBounds = YES;
     [overlay addSubview:card];
 

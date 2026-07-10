@@ -43,7 +43,7 @@
         self.typeLabel.textColor = [UIColor whiteColor];
         self.typeLabel.backgroundColor = [UIColor systemBlueColor];
         self.typeLabel.textAlignment = NSTextAlignmentCenter;
-        self.typeLabel.layer.cornerRadius = 4;
+        self.typeLabel.layer.cornerRadius = 8;
         self.typeLabel.layer.masksToBounds = YES;
         [self.contentView addSubview:self.typeLabel];
 

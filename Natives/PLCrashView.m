@@ -194,6 +194,10 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     _errorCardView.backgroundColor = [UIColor colorWithRed:1.0 green:0.278 blue:0.318 alpha:1.0]; // #FF4757
     _errorCardView.layer.cornerRadius = 16;
     _errorCardView.layer.cornerCurve = kCACornerCurveContinuous;
+    _errorCardView.layer.shadowColor = [UIColor blackColor].CGColor;
+    _errorCardView.layer.shadowOffset = CGSizeMake(0, 4);
+    _errorCardView.layer.shadowOpacity = 0.15;
+    _errorCardView.layer.shadowRadius = 8;
     _errorCardView.translatesAutoresizingMaskIntoConstraints = NO;
     [_mainStackView addArrangedSubview:_errorCardView];
 
@@ -406,7 +410,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
     button.translatesAutoresizingMaskIntoConstraints = NO;
     button.backgroundColor = bgColor;
-    button.layer.cornerRadius = 12;
+    button.layer.cornerRadius = 10;
     button.layer.cornerCurve = kCACornerCurveContinuous;
 
     [button setTitleColor:textColor forState:UIControlStateNormal];

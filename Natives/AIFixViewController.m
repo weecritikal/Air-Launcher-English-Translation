@@ -426,7 +426,7 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
 
     _diagnosticStripView = [[UIView alloc] initWithFrame:CGRectMake(sidePadding, 0, panelWidth - sidePadding * 2, 70)];
     _diagnosticStripView.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.07];
-    _diagnosticStripView.layer.cornerRadius = 18;
+    _diagnosticStripView.layer.cornerRadius = 16;
     _diagnosticStripView.layer.cornerCurve = kCACornerCurveContinuous;
     _diagnosticStripView.layer.borderWidth = 0.5;
     _diagnosticStripView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.12].CGColor;
@@ -468,7 +468,7 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     CGFloat historyHeight = 88;
     _historyCardView = [[UIView alloc] initWithFrame:CGRectMake(sidePadding, historyTop, panelWidth - sidePadding * 2, historyHeight)];
     _historyCardView.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.07];
-    _historyCardView.layer.cornerRadius = 18;
+    _historyCardView.layer.cornerRadius = 16;
     _historyCardView.layer.cornerCurve = kCACornerCurveContinuous;
     _historyCardView.layer.borderWidth = 0.5;
     _historyCardView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.12].CGColor;
@@ -500,7 +500,7 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     CGFloat riskHeight = 116;
     _riskCardView = [[UIView alloc] initWithFrame:CGRectMake(sidePadding, riskTop, panelWidth - sidePadding * 2, riskHeight)];
     _riskCardView.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.07];
-    _riskCardView.layer.cornerRadius = 18;
+    _riskCardView.layer.cornerRadius = 16;
     _riskCardView.layer.cornerCurve = kCACornerCurveContinuous;
     _riskCardView.layer.borderWidth = 0.5;
     _riskCardView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.12].CGColor;
@@ -547,7 +547,7 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     CGFloat scrollBottom = inputTop - 12;
     _conversationScrollView = [[UIScrollView alloc] initWithFrame:CGRectMake(sidePadding, scrollViewTop, panelWidth - sidePadding * 2, scrollBottom - scrollViewTop)];
     _conversationScrollView.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.05];
-    _conversationScrollView.layer.cornerRadius = 18;
+    _conversationScrollView.layer.cornerRadius = 16;
     _conversationScrollView.layer.cornerCurve = kCACornerCurveContinuous;
     _conversationScrollView.layer.borderWidth = 0.5;
     _conversationScrollView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.12].CGColor;
@@ -575,7 +575,7 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
 
     _inputContainerView = [[UIView alloc] initWithFrame:CGRectMake(sidePadding, inputTop, panelWidth - sidePadding * 2, inputHeight)];
     _inputContainerView.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.08];
-    _inputContainerView.layer.cornerRadius = 18;
+    _inputContainerView.layer.cornerRadius = 16;
     _inputContainerView.layer.cornerCurve = kCACornerCurveContinuous;
     _inputContainerView.layer.borderWidth = 0.5;
     _inputContainerView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.12].CGColor;
@@ -645,7 +645,7 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
 
     _configCardView = [[UIView alloc] initWithFrame:CGRectMake(sidePadding, top, panelWidth - sidePadding * 2, 206)];
     _configCardView.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.08];
-    _configCardView.layer.cornerRadius = 18;
+    _configCardView.layer.cornerRadius = 16;
     _configCardView.layer.cornerCurve = kCACornerCurveContinuous;
     _configCardView.layer.borderWidth = 0.5;
     _configCardView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.12].CGColor;
@@ -654,7 +654,7 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
 
     _toolsCardView = [[UIView alloc] initWithFrame:CGRectMake(sidePadding, 218, panelWidth - sidePadding * 2, 220)];
     _toolsCardView.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.08];
-    _toolsCardView.layer.cornerRadius = 18;
+    _toolsCardView.layer.cornerRadius = 16;
     _toolsCardView.layer.cornerCurve = kCACornerCurveContinuous;
     _toolsCardView.layer.borderWidth = 0.5;
     _toolsCardView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.12].CGColor;
@@ -1394,13 +1394,13 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     self = [super initWithFrame:CGRectZero];
     if (self) {
         self.translatesAutoresizingMaskIntoConstraints = NO;
-        self.layer.cornerRadius = 18;
+        self.layer.cornerRadius = 16;
         self.layer.cornerCurve = kCACornerCurveContinuous;
         self.clipsToBounds = NO;
 
         _blurView = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterialDark]];
         _blurView.translatesAutoresizingMaskIntoConstraints = NO;
-        _blurView.layer.cornerRadius = 18;
+        _blurView.layer.cornerRadius = 16;
         _blurView.layer.cornerCurve = kCACornerCurveContinuous;
         _blurView.layer.masksToBounds = YES;
         [self addSubview:_blurView];

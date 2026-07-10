@@ -126,7 +126,11 @@
     btn.imageEdgeInsets = UIEdgeInsetsMake(-10, 0, 0, 0);
     
     [btn addTarget:self action:@selector(menuButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
-    
+
+    // 统一圆角：防御性设置 10pt，避免后续给选中态加背景高亮时出现直角方块
+    btn.layer.cornerRadius = 10;
+    btn.layer.masksToBounds = YES;
+
     return btn;
 }
 

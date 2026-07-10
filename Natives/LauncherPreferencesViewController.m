@@ -1152,7 +1152,7 @@
                 UITextField *textField = (UITextField *)subview;
                 textField.textColor = [UIColor whiteColor];
                 textField.backgroundColor = [UIColor colorWithWhite:0.2 alpha:0.6];
-                textField.layer.cornerRadius = 6;
+                textField.layer.cornerRadius = 8;
             }
             
             // Style labels

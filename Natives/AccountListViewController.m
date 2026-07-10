@@ -172,6 +172,10 @@
     cardView.layer.cornerCurve = kCACornerCurveContinuous;
     cardView.layer.borderWidth = 0.5;
     cardView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.12].CGColor;
+    cardView.layer.shadowColor = [UIColor blackColor].CGColor;
+    cardView.layer.shadowOffset = CGSizeMake(0, 4);
+    cardView.layer.shadowOpacity = 0.12;
+    cardView.layer.shadowRadius = 10;
     [cell.contentView addSubview:cardView];
     [[BackgroundManager sharedManager] applyEffectToView:cardView];
 

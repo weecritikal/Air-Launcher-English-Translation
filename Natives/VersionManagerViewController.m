@@ -38,7 +38,7 @@
 
     self.contentContainer = [[UIView alloc] initWithFrame:self.contentView.bounds];
     self.contentContainer.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    self.contentContainer.layer.cornerRadius = 14;
+    self.contentContainer.layer.cornerRadius = 12;
     self.contentContainer.layer.masksToBounds = YES;
     [self.contentView addSubview:self.contentContainer];
 
@@ -208,7 +208,7 @@
     self.isolatedBadge.textColor = [UIColor whiteColor];
     self.isolatedBadge.backgroundColor = [UIColor systemTealColor];
     self.isolatedBadge.textAlignment = NSTextAlignmentCenter;
-    self.isolatedBadge.layer.cornerRadius = 4;
+    self.isolatedBadge.layer.cornerRadius = 8;
     self.isolatedBadge.layer.masksToBounds = YES;
     self.isolatedBadge.text = @" 隔离 ";
     self.isolatedBadge.hidden = YES;
@@ -368,7 +368,7 @@
         self.selectedBadge.hidden = YES;
         self.contentView.layer.borderColor = [UIColor systemGreenColor].CGColor;
         self.contentView.layer.borderWidth = 1.0;
-        self.contentView.layer.cornerRadius = 14;
+        self.contentView.layer.cornerRadius = 12;
         self.contentView.layer.masksToBounds = YES;
         return;
     }
@@ -386,7 +386,7 @@
         self.contentView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.12].CGColor;
         self.contentView.layer.borderWidth = 0.5;
     }
-    self.contentView.layer.cornerRadius = 14;
+    self.contentView.layer.cornerRadius = 12;
     self.contentView.layer.masksToBounds = YES;
 }
 

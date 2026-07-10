@@ -778,6 +778,8 @@
         _nameBar.layer.masksToBounds = YES;
     } else {
         _nameBar.backgroundColor = [UIColor secondarySystemGroupedBackgroundColor];
+        _nameBar.layer.cornerRadius = 12;
+        _nameBar.layer.masksToBounds = YES;
     }
     [self.view addSubview:_nameBar];
 
@@ -849,7 +851,7 @@
     _installButton.titleLabel.font = [UIFont systemFontOfSize:17 weight:UIFontWeightSemibold];
     _installButton.backgroundColor = [UIColor systemGreenColor];
     [_installButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    _installButton.layer.cornerRadius = 12;
+    _installButton.layer.cornerRadius = 10;
     [_installButton addTarget:self action:@selector(installTapped) forControlEvents:UIControlEventTouchUpInside];
     [_bottomBar addSubview:_installButton];
 
