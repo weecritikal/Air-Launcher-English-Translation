@@ -175,12 +175,15 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
     // 修复：读取实际 safeAreaInsets，取上下 max、左右 max，通过 additionalSafeAreaInsets
     // 将较小一侧补偿到与较大一侧相同。补偿后 safeAreaLayoutGuide 四边对称，卡片约束
     // （safeAreaLayoutGuide + kCardOuterMargin）四边外边距完全一致。
+    // 注意：使用 self.additionalSafeAreaInsets（UIViewController 属性，iOS 11+），
+    // 而非 self.view.additionalSafeAreaInsets（UIView 属性在某些 SDK 头文件可见性下
+    // 编译报 "property not found" 错误），与 LauncherRootViewController.m 一致。
     UIEdgeInsets sa = self.view.safeAreaInsets;
     CGFloat vMax = MAX(sa.top, sa.bottom);
     CGFloat hMax = MAX(sa.left, sa.right);
     UIEdgeInsets additional = UIEdgeInsetsMake(vMax - sa.top, hMax - sa.left, vMax - sa.bottom, hMax - sa.right);
-    if (!UIEdgeInsetsEqualToEdgeInsets(additional, self.view.additionalSafeAreaInsets)) {
-        self.view.additionalSafeAreaInsets = additional;
+    if (!UIEdgeInsetsEqualToEdgeInsets(additional, self.additionalSafeAreaInsets)) {
+        self.additionalSafeAreaInsets = additional;
     }
 }
 
