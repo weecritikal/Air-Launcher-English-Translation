@@ -199,6 +199,16 @@ static GameSurfaceView* pojavWindow;
 @property(nonatomic, strong) UITextField *touchControllerTextField;
 @property(nonatomic) BOOL touchControllerTextInputEnabled;
 
+// 阶段13：启动遮罩层（参照 FCL 的启动进度显示，JVM 启动到首帧渲染期间显示）
+@property(nonatomic, strong) UIView *launchOverlayView;
+@property(nonatomic, strong) UIActivityIndicatorView *launchSpinner;
+@property(nonatomic, strong) UILabel *launchTitleLabel;
+@property(nonatomic, strong) UILabel *launchStageLabel;
+@property(nonatomic, strong) NSTimer *launchStageTimer;
+@property(nonatomic, assign) NSTimeInterval launchStartTime;
+@property(nonatomic, strong) NSArray<NSString *> *launchStages;
+@property(nonatomic, assign) NSInteger currentStageIndex;
+
 @end
 
 @implementation SurfaceViewController
@@ -856,6 +866,9 @@ static GameSurfaceView* pojavWindow;
         [self startTouchControllerMessageLoop];
     }
 
+    // 阶段13：显示启动遮罩层（在 launchMinecraft 之前显示，首帧渲染后自动移除）
+    [self setupLaunchOverlay];
+
     [self launchMinecraft];
 }
 
@@ -1069,6 +1082,172 @@ static GameSurfaceView* pojavWindow;
 
         // Launch JVM（args[0] 传 accountId，Java 端 MinecraftAccount.load(accountId) 据此加载账户）
         launchJVM(accountId, self.metadata, windowWidth, windowHeight, minVersion);
+    });
+}
+
+#pragma mark - 阶段13：启动遮罩层（参照 FCL/ZL2 的启动进度显示）
+
+/// 创建并显示启动遮罩层：在 JVM 启动到首帧渲染期间显示进度
+/// 包含旋转指示器 + 标题 + 阶段文案 + 已耗时
+- (void)setupLaunchOverlay {
+    // 启动阶段列表（参照 FCL 启动日志的关键节点）
+    self.launchStages = @[
+        @"正在初始化运行环境...",
+        @"正在加载 Java 运行时...",
+        @"正在配置 JVM 参数...",
+        @"正在启动 Java 虚拟机...",
+        @"正在加载游戏库...",
+        @"正在初始化 Minecraft...",
+        @"正在加载资源文件...",
+        @"即将进入游戏...",
+    ];
+    self.currentStageIndex = 0;
+    self.launchStartTime = [NSDate timeIntervalSinceReferenceDate];
+
+    // 遮罩容器：半透明黑色背景，覆盖全屏
+    self.launchOverlayView = [[UIView alloc] initWithFrame:self.view.bounds];
+    self.launchOverlayView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    self.launchOverlayView.backgroundColor = [UIColor colorWithRed:0.04 green:0.04 blue:0.06 alpha:0.95];
+    self.launchOverlayView.userInteractionEnabled = YES;
+    [self.view addSubview:self.launchOverlayView];
+
+    // 适配自定义启动器背景：在遮罩层上叠加毛玻璃效果
+    UIView *blurEffectView = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemUltraThinMaterialDark]];
+    blurEffectView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    blurEffectView.frame = self.launchOverlayView.bounds;
+    blurEffectView.alpha = 0.3;
+    [self.launchOverlayView addSubview:blurEffectView];
+
+    // 内容卡片容器（居中）
+    UIView *cardView = [[UIView alloc] init];
+    cardView.translatesAutoresizingMaskIntoConstraints = NO;
+    cardView.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.08];
+    cardView.layer.cornerRadius = 20;
+    cardView.layer.masksToBounds = YES;
+    [self.launchOverlayView addSubview:cardView];
+
+    // 游戏图标（使用 SF Symbol 代替，参照 FCL 启动页的游戏图标）
+    UIImageView *iconView = [[UIImageView alloc] init];
+    iconView.translatesAutoresizingMaskIntoConstraints = NO;
+    iconView.contentMode = UIViewContentModeScaleAspectFit;
+    iconView.image = [UIImage systemImageNamed:@"cube.transparent.fill"];
+    iconView.tintColor = [UIColor systemGreenColor];
+    [cardView addSubview:iconView];
+
+    // 旋转指示器
+    self.launchSpinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleLarge];
+    self.launchSpinner.translatesAutoresizingMaskIntoConstraints = NO;
+    self.launchSpinner.color = [UIColor whiteColor];
+    [self.launchSpinner startAnimating];
+    [cardView addSubview:self.launchSpinner];
+
+    // 标题
+    self.launchTitleLabel = [[UILabel alloc] init];
+    self.launchTitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.launchTitleLabel.text = @"正在启动 Minecraft";
+    self.launchTitleLabel.font = [UIFont systemFontOfSize:20 weight:UIFontWeightBold];
+    self.launchTitleLabel.textColor = [UIColor whiteColor];
+    self.launchTitleLabel.textAlignment = NSTextAlignmentCenter;
+    [cardView addSubview:self.launchTitleLabel];
+
+    // 阶段文案
+    self.launchStageLabel = [[UILabel alloc] init];
+    self.launchStageLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.launchStageLabel.text = self.launchStages.firstObject ?: @"正在准备...";
+    self.launchStageLabel.font = [UIFont systemFontOfSize:14];
+    self.launchStageLabel.textColor = [UIColor colorWithWhite:0.7 alpha:1.0];
+    self.launchStageLabel.textAlignment = NSTextAlignmentCenter;
+    self.launchStageLabel.numberOfLines = 0;
+    [cardView addSubview:self.launchStageLabel];
+
+    // 布局约束
+    [NSLayoutConstraint activateConstraints:@[
+        [cardView.centerXAnchor constraintEqualToAnchor:self.launchOverlayView.centerXAnchor],
+        [cardView.centerYAnchor constraintEqualToAnchor:self.launchOverlayView.centerYAnchor],
+        [cardView.leadingAnchor constraintEqualToAnchor:self.launchOverlayView.leadingAnchor constant:40],
+        [cardView.trailingAnchor constraintEqualToAnchor:self.launchOverlayView.trailingAnchor constant:-40],
+
+        [iconView.topAnchor constraintEqualToAnchor:cardView.topAnchor constant:28],
+        [iconView.centerXAnchor constraintEqualToAnchor:cardView.centerXAnchor],
+        [iconView.widthAnchor constraintEqualToConstant:56],
+        [iconView.heightAnchor constraintEqualToConstant:56],
+
+        [self.launchSpinner.topAnchor constraintEqualToAnchor:iconView.bottomAnchor constant:16],
+        [self.launchSpinner.centerXAnchor constraintEqualToAnchor:cardView.centerXAnchor],
+
+        [self.launchTitleLabel.topAnchor constraintEqualToAnchor:self.launchSpinner.bottomAnchor constant:12],
+        [self.launchTitleLabel.leadingAnchor constraintEqualToAnchor:cardView.leadingAnchor constant:20],
+        [self.launchTitleLabel.trailingAnchor constraintEqualToAnchor:cardView.trailingAnchor constant:-20],
+
+        [self.launchStageLabel.topAnchor constraintEqualToAnchor:self.launchTitleLabel.bottomAnchor constant:8],
+        [self.launchStageLabel.leadingAnchor constraintEqualToAnchor:cardView.leadingAnchor constant:20],
+        [self.launchStageLabel.trailingAnchor constraintEqualToAnchor:cardView.trailingAnchor constant:-20],
+        [self.launchStageLabel.bottomAnchor constraintEqualToAnchor:cardView.bottomAnchor constant:-28]
+    ]];
+
+    // 注册首帧渲染通知（egl_bridge.m 中 pojavSwapBuffers 首次调用时发送）
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(onFirstFrameRendered)
+                                                 name:@"PojavFirstFrameRendered"
+                                               object:nil];
+
+    // 启动阶段轮转定时器（每 3 秒切换一次阶段文案，直到首帧渲染）
+    self.launchStageTimer = [NSTimer scheduledTimerWithTimeInterval:3.0
+                                                             target:self
+                                                           selector:@selector(updateLaunchStage)
+                                                           userInfo:nil
+                                                            repeats:YES];
+    [[NSRunLoop mainRunLoop] addTimer:self.launchStageTimer forMode:NSRunLoopCommonModes];
+
+    // 适配 iPad：在 iPad 上使用更大的卡片
+    if (self.traitCollection.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
+        [cardView.leadingAnchor constraintEqualToAnchor:self.launchOverlayView.leadingAnchor constant:80].active = YES;
+        [cardView.trailingAnchor constraintEqualToAnchor:self.launchOverlayView.trailingAnchor constant:-80].active = YES;
+    }
+}
+
+/// 定时器回调：轮转启动阶段文案并显示已耗时
+- (void)updateLaunchStage {
+    if (self.currentStageIndex < self.launchStages.count - 1) {
+        self.currentStageIndex++;
+    }
+    // 保持在最后一个阶段（"即将进入游戏..."）直到首帧渲染
+    NSString *stageText = self.launchStages[self.currentStageIndex];
+
+    // 添加已耗时显示
+    NSTimeInterval elapsed = [NSDate timeIntervalSinceReferenceDate] - self.launchStartTime;
+    NSString *timeStr;
+    if (elapsed > 60) {
+        timeStr = [NSString stringWithFormat:@"已耗时 %.0f分%.0f秒", elapsed / 60, (double)((int)elapsed % 60)];
+    } else {
+        timeStr = [NSString stringWithFormat:@"已耗时 %.0f秒", elapsed];
+    }
+    self.launchStageLabel.text = [NSString stringWithFormat:@"%@\n%@", stageText, timeStr];
+}
+
+/// 首帧渲染通知回调：淡出并移除启动遮罩层
+- (void)onFirstFrameRendered {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self.launchStageTimer invalidate];
+        self.launchStageTimer = nil;
+
+        // 更新最终文案
+        NSTimeInterval elapsed = [NSDate timeIntervalSinceReferenceDate] - self.launchStartTime;
+        self.launchStageLabel.text = [NSString stringWithFormat:@"启动完成！\n总耗时 %.1f秒", elapsed];
+
+        // 延迟 0.5 秒后淡出移除（让用户看到"启动完成"提示）
+        [UIView animateWithDuration:0.5
+                              delay:0.5
+                            options:UIViewAnimationOptionCurveEaseOut
+                         animations:^{
+            self.launchOverlayView.alpha = 0.0;
+        }
+                         completion:^(BOOL finished) {
+            [self.launchOverlayView removeFromSuperview];
+            self.launchOverlayView = nil;
+            [[NSNotificationCenter defaultCenter] removeObserver:self name:@"PojavFirstFrameRendered" object:nil];
+            NSLog(@"[SurfaceViewController] Launch overlay dismissed after %.1f seconds", elapsed);
+        }];
     });
 }
 
@@ -1821,7 +2000,12 @@ static NSMutableDictionary *s_touchToFingerIdMap = nil;
     [self.statsDisplayLink invalidate];
     self.statsDisplayLink = nil;
 
-    // æ¸ç TouchController èµæº
+    // 阶段13：清理启动遮罩层资源
+    [self.launchStageTimer invalidate];
+    self.launchStageTimer = nil;
+    [[NSNotificationCenter defaultCenter] removeObserver:self name:@"PojavFirstFrameRendered" object:nil];
+
+    //æ¸ç TouchController èµæº
     if (self.touchControllerTransportHandle >= 0) {
         [TouchControllerBridge destroyTransport:self.touchControllerTransportHandle];
         self.touchControllerTransportHandle = -1;

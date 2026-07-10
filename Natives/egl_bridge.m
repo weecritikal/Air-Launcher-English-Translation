@@ -26,6 +26,10 @@ int clientAPI;
 // 在 pojavSwapBuffers() 中累加，在 SurfaceViewController 读取时重置
 static atomic_uint _pojavFpsCounter = 0;
 
+// 阶段13：首帧渲染检测标志（参照 FCL 的 game_ready 回调）
+// pojavSwapBuffers() 首次调用时置为 YES 并发送通知，SurfaceViewController 据此移除启动遮罩
+static BOOL s_firstFrameRendered = NO;
+
 unsigned int pojavGetAndResetFps() {
     return atomic_exchange(&_pojavFpsCounter, 0);
 }
@@ -112,6 +116,17 @@ void pojavSetWindowHint(int hint, int value) {
 void pojavSwapBuffers() {
     // FPS 计数（参照 FCL/ZL2 在 native swap buffer 入口计数，反映真实渲染帧率）
     atomic_fetch_add(&_pojavFpsCounter, 1);
+
+    // 阶段13：首帧渲染检测（参照 FCL 的 game_ready 回调）
+    // 首次调用 pojavSwapBuffers 表示游戏已渲染第一帧，发送通知移除启动遮罩
+    if (!s_firstFrameRendered) {
+        s_firstFrameRendered = YES;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [[NSNotificationCenter defaultCenter] postNotificationName:@"PojavFirstFrameRendered" object:nil];
+            NSLog(@"[egl_bridge] First frame rendered, game is ready");
+        });
+    }
+
     if (!br_swap_buffers) return;
     br_swap_buffers();
 }
