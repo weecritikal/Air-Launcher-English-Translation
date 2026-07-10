@@ -445,6 +445,15 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
         margv[++margc] = "-Dawt.toolkit=net.java.openjdk.cacio.ctc.CTCToolkit";
         margv[++margc] = "-Djava.awt.graphicsenv=net.java.openjdk.cacio.ctc.CTCGraphicsEnvironment";
     } else {
+        // 启用 native access（Java 17+ 支持，Java 25 强制要求）。
+        // 参照 catsruledogs/Amethyst-iOS-25：Java 25 对受限方法（@Restricted，含 JNI、
+        // sun.misc.Unsafe、Foreign API）的限制更严格，缺失此参数会导致 caciocavallo/LWJGL/JNA
+        // 的 native access 触发警告路径，在 bootclasspath/a 未命名模块类上可能引发
+        // get_method_id 访问不一致的类元数据导致 SIGSEGV（26.2 启动崩溃的根因）。
+        // 日志中 "WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning"
+        // 也明确提示需要此参数。Java 17/21 添加此参数无副作用，统一在非 Java 8 分支添加。
+        margv[++margc] = "--enable-native-access=ALL-UNNAMED";
+
         // Required by Cosmetica to inject DNS
         margv[++margc] = "--add-opens=java.base/java.net=ALL-UNNAMED";
 

@@ -42,6 +42,10 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 @property(nonatomic, strong) UIProgressView *progressView;
 @property(nonatomic, strong) UILabel *progressLabel;
 
+// FCL 风格：无账号时点击启动游戏跳转添加账号界面，登录完成后自动继续启动。
+// pendingLaunchAfterLogin=YES 表示用户从启动按钮进入账号登录，登录成功后应自动触发 launchGame。
+@property(nonatomic, assign) BOOL pendingLaunchAfterLogin;
+
 @end
 
 @implementation LauncherRightPanelViewController
@@ -281,6 +285,9 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 #pragma mark - Actions
 
 - (void)selectAccount:(UITapGestureRecognizer *)gesture {
+    // 用户主动管理账号（非启动入口），取消任何"待启动"意图，
+    // 避免登录后意外自动启动游戏。
+    self.pendingLaunchAfterLogin = NO;
     // FCL 风格：账户管理在中间内容区显示，发送通知让 LauncherRootViewController 切换内容
     [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowAccountManager" object:nil];
 }
@@ -619,9 +626,17 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     // 强制等待会造成"启动游戏过慢或无法启动"的体验问题。
     BaseAuthenticator *currentAuth = BaseAuthenticator.current;
     if (!currentAuth) {
-        [self showAlert:@"请先登录账户"];
+        // FCL 风格：无账号时跳转到账号管理界面，登录完成后自动继续启动。
+        // 之前的行为是弹 alert 提示"请先登录账户"然后 return，用户需手动去登录再回来启动，
+        // 体验不友好。改为设置 pendingLaunchAfterLogin 标记后发送 ShowAccountManager 通知，
+        // 账号添加成功后 UpdateAccountInfo 通知回到此处时自动触发 launchGame 继续启动。
+        self.pendingLaunchAfterLogin = YES;
+        [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowAccountManager" object:nil];
         return;
     }
+
+    // 正常启动，清除待启动标记
+    self.pendingLaunchAfterLogin = NO;
 
     NSString *selectedProfile = PLProfiles.current.selectedProfileName;
     if (!selectedProfile) {
@@ -720,11 +735,21 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     BOOL hasAccount = (BaseAuthenticator.current != nil);
     NSString *selectedProfile = PLProfiles.current.selectedProfileName;
     BOOL hasVersion = selectedProfile && PLProfiles.current.profiles[selectedProfile][@"lastVersionId"] != nil;
-    // 下载中不再禁用启动按钮：仅作提示，不阻断启动（避免下载卡住导致永久无法启动）
-    BOOL enabled = hasAccount && hasVersion && !self.task;
+    // FCL 风格：无账号时按钮仍可点击，点击后跳转账号管理界面（登录后自动继续启动）。
+    // 之前 hasAccount 参与禁用判断导致无账号时按钮完全不可点，用户"点击启动游戏完全没有反应"。
+    // 现在无账号时按钮可点，标题改为"登录并启动"提示用户点击后会先登录。
+    BOOL enabled = hasVersion && !self.task;
 
     self.launchButton.enabled = enabled;
-    [self.launchButton setTitle:(hasActiveTasks ? @"启动游戏（下载中）" : @"启动游戏") forState:UIControlStateNormal];
+    NSString *title;
+    if (hasActiveTasks) {
+        title = @"启动游戏（下载中）";
+    } else if (!hasAccount) {
+        title = @"登录并启动";
+    } else {
+        title = @"启动游戏";
+    }
+    [self.launchButton setTitle:title forState:UIControlStateNormal];
 }
 
 - (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary *)change context:(void *)context {
@@ -889,6 +914,13 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     }
 
     [self updateLaunchButtonState];
+
+    // FCL 风格：若用户从"启动游戏"进来登录（pendingLaunchAfterLogin=YES），
+    // 且账号已就绪，自动继续启动游戏。
+    if (self.pendingLaunchAfterLogin && BaseAuthenticator.current != nil) {
+        self.pendingLaunchAfterLogin = NO;
+        [self launchGame];
+    }
 }
 
 - (void)updateVersionInfo {

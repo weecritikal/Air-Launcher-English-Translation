@@ -504,6 +504,48 @@
 
     NSArray *pickKeys = item[@"pickKeys"];
     NSArray *pickList = item[@"pickList"];
+
+    // 修复 iPhone 上选项弹出菜单被过度压缩不可调整的问题。
+    // 根因：UIContextMenuInteraction 紧凑菜单（preferredLayout=3）锚点取自窄小的
+    // cell.detailTextLabel.frame，在 iPhone 窄屏上把多个中文选项挤压到很小的浮动气泡内。
+    // 修复：iPhone 上改用 UIAlertController actionSheet，提供标准尺寸的全宽选择器，
+    // 每个选项有足够空间可正常点击。iPad 上保留 UIContextMenuInteraction 紧凑菜单
+    // （锚点 popover 在大屏上更自然）。
+    if ([UIDevice currentDevice].userInterfaceIdiom == UIUserInterfaceIdiomPhone) {
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:message
+                                                                       message:nil
+                                                                preferredStyle:UIAlertControllerStyleActionSheet];
+        for (int i = 0; i < pickList.count; i++) {
+            NSString *title = pickList[i];
+            NSString *value = pickKeys[i];
+            // 在标题前加 ✓ 标记当前选中项，让用户能直观看到当前值
+            if ([cell.detailTextLabel.text isEqualToString:value]) {
+                title = [NSString stringWithFormat:@"✓ %@", title];
+            }
+            UIAlertAction *action = [UIAlertAction actionWithTitle:title
+                                                              style:UIAlertActionStyleDefault
+                                                            handler:^(UIAlertAction *a) {
+                cell.detailTextLabel.text = value;
+                self.setPreference(self.prefSections[indexPath.section], item[@"key"], value);
+                void(^invokeAction)(NSString *) = item[@"action"];
+                if (invokeAction) {
+                    invokeAction(value);
+                }
+            }];
+            [alert addAction:action];
+        }
+        [alert addAction:[UIAlertAction actionWithTitle:localize(@"Cancel", nil)
+                                                   style:UIAlertActionStyleCancel
+                                                 handler:nil]];
+        // 配置 popoverPresentationController，防御性处理（iPhone 上 actionSheet 从底部弹出，
+        // popoverPresentationController 不会生效，但设置 sourceView 避免 iPad 分屏时崩溃）
+        alert.popoverPresentationController.sourceView = cell;
+        alert.popoverPresentationController.sourceRect = cell.bounds;
+        [self presentViewController:alert animated:YES completion:nil];
+        return;
+    }
+
+    // iPad：保留 UIContextMenuInteraction 紧凑菜单
     NSMutableArray<UIAction *> *menuItems = [[NSMutableArray alloc] init];
     for (int i = 0; i < pickList.count; i++) {
         [menuItems addObject:[UIAction

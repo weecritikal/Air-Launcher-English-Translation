@@ -165,6 +165,25 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
     [[BackgroundManager sharedManager] pauseVideo];
 }
 
+- (void)viewDidLayoutSubviews {
+    [super viewDidLayoutSubviews];
+    // 对称补偿 safeAreaInsets，使卡片四边外边距一致。
+    // 问题：iPhone 横屏下 safeArea 上下不对称（top≈0, bottom≈21 home indicator），
+    // 左右不对称（刘海侧≈44, 非刘海侧≈0），导致卡片四边到屏幕边缘的距离不一致
+    // （top=12, bottom=33; left=56, right=12），观感为"上下空隙不一样下面大、
+    // 左右空隙也不一致"。
+    // 修复：读取实际 safeAreaInsets，取上下 max、左右 max，通过 additionalSafeAreaInsets
+    // 将较小一侧补偿到与较大一侧相同。补偿后 safeAreaLayoutGuide 四边对称，卡片约束
+    // （safeAreaLayoutGuide + kCardOuterMargin）四边外边距完全一致。
+    UIEdgeInsets sa = self.view.safeAreaInsets;
+    CGFloat vMax = MAX(sa.top, sa.bottom);
+    CGFloat hMax = MAX(sa.left, sa.right);
+    UIEdgeInsets additional = UIEdgeInsetsMake(vMax - sa.top, hMax - sa.left, vMax - sa.bottom, hMax - sa.right);
+    if (!UIEdgeInsetsEqualToEdgeInsets(additional, self.view.additionalSafeAreaInsets)) {
+        self.view.additionalSafeAreaInsets = additional;
+    }
+}
+
 - (void)traitCollectionDidChange:(UITraitCollection *)previousTraitCollection {
     [super traitCollectionDidChange:previousTraitCollection];
     // iPhone 与 iPad 切换、或分屏调整大小时，更新侧栏与右侧面板宽度

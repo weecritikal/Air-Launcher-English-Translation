@@ -9,6 +9,7 @@
 @interface LauncherMenuViewController ()
 
 @property(nonatomic, strong) UIView *sidebarView;
+@property(nonatomic, strong) UIStackView *menuStackView;
 @property(nonatomic, strong) NSArray<NSDictionary *> *menuItems;
 @property(nonatomic, assign) NSInteger selectedIndex;
 
@@ -52,31 +53,46 @@
     self.sidebarView.translatesAutoresizingMaskIntoConstraints = NO;
     self.sidebarView.backgroundColor = [UIColor clearColor];
     [self.view addSubview:self.sidebarView];
-    
+
     [NSLayoutConstraint activateConstraints:@[
         [self.sidebarView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.sidebarView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [self.sidebarView.topAnchor constraintEqualToAnchor:self.view.topAnchor],
         [self.sidebarView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor]
     ]];
-    
-    // 创建菜单按钮
+
+    // 创建垂直均分的 UIStackView，替代固定偏移布局。
+    // 之前用 startY=60 + 固定间距 15，5 个按钮总高 370pt，在 iPhone 横屏（卡片高度不足）
+    // 时第 5 个按钮（设置）被卡片 masksToBounds 裁剪，且按钮只锚定 top 无 bottom 约束，
+    // 下方留出大块空白加剧"下面空隙大"的观感。
+    // 改用 UIStackView EqualSpacing 让按钮在可用空间内垂直均匀分布，上下留白相同，
+    // 无论卡片高度如何都能完整显示所有按钮，且消除固定 startY 导致的下方空白。
+    self.menuStackView = [[UIStackView alloc] init];
+    self.menuStackView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.menuStackView.axis = UILayoutConstraintAxisVertical;
+    self.menuStackView.distribution = UIStackViewDistributionEqualSpacing;
+    self.menuStackView.alignment = UIStackViewAlignmentCenter;
+    self.menuStackView.spacing = 8;
+    [self.sidebarView addSubview:self.menuStackView];
+
     CGFloat buttonSize = 50;
-    CGFloat spacing = 15;
-    CGFloat startY = 60;
-    
     for (NSInteger i = 0; i < self.menuItems.count; i++) {
         NSDictionary *item = self.menuItems[i];
         UIButton *btn = [self createMenuButtonWithItem:item index:i];
-        [self.sidebarView addSubview:btn];
-        
+        [self.menuStackView addArrangedSubview:btn];
         [NSLayoutConstraint activateConstraints:@[
-            [btn.topAnchor constraintEqualToAnchor:self.sidebarView.topAnchor constant:startY + i * (buttonSize + spacing)],
-            [btn.centerXAnchor constraintEqualToAnchor:self.sidebarView.centerXAnchor],
             [btn.widthAnchor constraintEqualToConstant:buttonSize],
             [btn.heightAnchor constraintEqualToConstant:buttonSize]
         ]];
     }
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.menuStackView.leadingAnchor constraintEqualToAnchor:self.sidebarView.leadingAnchor],
+        [self.menuStackView.trailingAnchor constraintEqualToAnchor:self.sidebarView.trailingAnchor],
+        [self.menuStackView.topAnchor constraintEqualToAnchor:self.sidebarView.topAnchor constant:8],
+        [self.menuStackView.bottomAnchor constraintEqualToAnchor:self.sidebarView.bottomAnchor constant:-8],
+        [self.menuStackView.centerXAnchor constraintEqualToAnchor:self.sidebarView.centerXAnchor]
+    ]];
 }
 
 - (UIButton *)createMenuButtonWithItem:(NSDictionary *)item index:(NSInteger)index {
@@ -135,7 +151,8 @@
 
 - (void)updateButtonColors {
     UIColor *normalColor = [self menuNormalColor];
-    for (UIView *view in self.sidebarView.subviews) {
+    // 按钮现在在 menuStackView.arrangedSubviews 中（UIStackView 重构后）
+    for (UIView *view in self.menuStackView.arrangedSubviews) {
         if ([view isKindOfClass:[UIButton class]]) {
             UIButton *btn = (UIButton *)view;
             NSInteger index = btn.tag;
