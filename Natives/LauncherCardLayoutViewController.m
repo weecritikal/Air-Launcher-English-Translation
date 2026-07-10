@@ -629,26 +629,8 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
     }
     
     UIViewController *oldVC = _contentViewController;
-    
-    // 移除旧的
-    if (oldVC) {
-        if (animated) {
-            [UIView transitionWithView:self.contentCard
-                              duration:0.25
-                               options:UIViewAnimationOptionTransitionCrossDissolve
-                            animations:^{
-                                [oldVC willMoveToParentViewController:nil];
-                                [oldVC.view removeFromSuperview];
-                                [oldVC removeFromParentViewController];
-                            } completion:nil];
-        } else {
-            [oldVC willMoveToParentViewController:nil];
-            [oldVC.view removeFromSuperview];
-            [oldVC removeFromParentViewController];
-        }
-    }
-    
-    // 添加新的
+
+    // 移除旧的 + 添加新的
     _contentViewController = viewController;
     [self addChildViewController:viewController];
     viewController.view.translatesAutoresizingMaskIntoConstraints = NO;
@@ -665,10 +647,16 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
     }
 
     if (animated && oldVC) {
+        // 修复问题5：原实现用两个独立的 UIView transitionWithView:（一个移除旧视图、一个添加新视图），
+        // 两个 crossDissolve 同时作用于 contentCard 会导致视觉冲突和残影（旧画面未完全消失就覆盖新界面）。
+        // 改为单个 transition：在同一个 animations block 内完成"移除旧视图 + 添加新视图"，
+        // crossDissolve 会正确抓取前后快照做交叉渐变，completion 中清理旧 VC 父子关系。
         [UIView transitionWithView:self.contentCard
                           duration:0.25
                            options:UIViewAnimationOptionTransitionCrossDissolve
                         animations:^{
+                            [oldVC willMoveToParentViewController:nil];
+                            [oldVC.view removeFromSuperview];
                             [self.contentCard addSubview:viewController.view];
                             [NSLayoutConstraint activateConstraints:@[
                                 [viewController.view.leadingAnchor constraintEqualToAnchor:self.contentCard.leadingAnchor],
@@ -677,9 +665,15 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
                                 [viewController.view.bottomAnchor constraintEqualToAnchor:self.contentCard.bottomAnchor]
                             ]];
                         } completion:^(BOOL finished) {
+                            [oldVC removeFromParentViewController];
                             [viewController didMoveToParentViewController:self];
                         }];
     } else {
+        if (oldVC) {
+            [oldVC willMoveToParentViewController:nil];
+            [oldVC.view removeFromSuperview];
+            [oldVC removeFromParentViewController];
+        }
         [self.contentCard addSubview:viewController.view];
         [NSLayoutConstraint activateConstraints:@[
             [viewController.view.leadingAnchor constraintEqualToAnchor:self.contentCard.leadingAnchor],

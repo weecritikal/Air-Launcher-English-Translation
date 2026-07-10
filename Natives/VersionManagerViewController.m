@@ -106,7 +106,9 @@
     // 与 sp: 缩放叠加导致字体异常。改用 systemFontOfSize + sp: 缩放，行为可控。
     self.subtitleLabel.font = [UIFont systemFontOfSize:[ScreenUtils sp:11] weight:UIFontWeightRegular];
     self.subtitleLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.65];
-    self.subtitleLabel.numberOfLines = 1;
+    // 修复问题6：副标题（路径名/大小等）自动换行，避免被截断
+    self.subtitleLabel.numberOfLines = 0;
+    self.subtitleLabel.lineBreakMode = NSLineBreakByWordWrapping;
     self.subtitleLabel.adjustsFontForContentSizeCategory = NO;
     [self.contentContainer addSubview:self.subtitleLabel];
 
@@ -312,7 +314,9 @@
     // 与 sp: 缩放叠加导致字体异常。改用 systemFontOfSize + sp: 缩放，行为可控。
     self.detailLabel.font = [UIFont systemFontOfSize:[ScreenUtils sp:11] weight:UIFontWeightRegular];
     self.detailLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.65];
-    self.detailLabel.numberOfLines = 1;
+    // 修复问题6：副标题（路径名/大小等）自动换行，避免被截断
+    self.detailLabel.numberOfLines = 0;
+    self.detailLabel.lineBreakMode = NSLineBreakByWordWrapping;
     self.detailLabel.adjustsFontForContentSizeCategory = NO;
     [self.contentContainer addSubview:self.detailLabel];
 

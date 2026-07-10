@@ -472,6 +472,9 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     _historyCardView.layer.cornerCurve = kCACornerCurveContinuous;
     _historyCardView.layer.borderWidth = 0.5;
     _historyCardView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.12].CGColor;
+    // 修复问题2：补充 autoresizingMask，容器宽度变化时卡片宽度跟随，
+    // 避免不同屏幕（尤其旋转/分屏）下卡片宽度写死导致右侧空白或与右面板错位。
+    _historyCardView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleRightMargin;
     [_leftContentView addSubview:_historyCardView];
 
     _historyTitleLabel = [[UILabel alloc] initWithFrame:CGRectMake(16, 10, _historyCardView.bounds.size.width - 32, 18)];
@@ -504,6 +507,8 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     _riskCardView.layer.cornerCurve = kCACornerCurveContinuous;
     _riskCardView.layer.borderWidth = 0.5;
     _riskCardView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.12].CGColor;
+    // 修复问题2：补充 autoresizingMask，与 _historyCardView 一致
+    _riskCardView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleRightMargin;
     [_leftContentView addSubview:_riskCardView];
 
     _riskTitleLabel = [[UILabel alloc] initWithFrame:CGRectMake(16, 10, _riskCardView.bounds.size.width - 32, 18)];
@@ -649,6 +654,8 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     _configCardView.layer.cornerCurve = kCACornerCurveContinuous;
     _configCardView.layer.borderWidth = 0.5;
     _configCardView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.12].CGColor;
+    // 修复问题2：补充 autoresizingMask，右面板宽度变化时配置卡片宽度跟随
+    _configCardView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleRightMargin;
     [_rightContentView addSubview:_configCardView];
     [self setupConfigCard];
 
@@ -658,6 +665,8 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     _toolsCardView.layer.cornerCurve = kCACornerCurveContinuous;
     _toolsCardView.layer.borderWidth = 0.5;
     _toolsCardView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.12].CGColor;
+    // 修复问题2：补充 autoresizingMask，与 _configCardView 一致
+    _toolsCardView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleRightMargin;
     _toolsCardView.hidden = YES;
     [_rightContentView addSubview:_toolsCardView];
     [self setupToolsCard];

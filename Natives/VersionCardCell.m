@@ -8,6 +8,35 @@
 
 #import "VersionCardCell.h"
 
+// 修复问题3：带内边距的 UILabel 子类，让"正式版/测试版"等类型标签文字
+// 在背景块内完美居中，不再与背景边缘重叠。
+// 通过重写 textRectForBounds: 和 drawTextInRect: 注入左右 8pt / 上下 0pt 内边距，
+// 同时保持 UILabel 接口不变，VersionCardCell.h 中的 typeLabel 声明无需修改。
+@interface InsetTypeLabel : UILabel
+@property (nonatomic, assign) UIEdgeInsets textInsets;
+@end
+
+@implementation InsetTypeLabel
+- (instancetype)init {
+    self = [super init];
+    if (self) {
+        // 默认内边距：左右 8pt，上下 1pt，让文字在 pill 背景块内居中
+        _textInsets = UIEdgeInsetsMake(1, 8, 1, 8);
+    }
+    return self;
+}
+- (CGRect)textRectForBounds:(CGRect)bounds limitedToNumberOfLines:(NSInteger)numberOfLines {
+    CGRect insetRect = UIEdgeInsetsInsetRect(bounds, self.textInsets);
+    CGRect textRect = [super textRectForBounds:insetRect limitedToNumberOfLines:numberOfLines];
+    textRect.origin.x -= self.textInsets.left;
+    textRect.origin.y -= self.textInsets.top;
+    return textRect;
+}
+- (void)drawTextInRect:(CGRect)rect {
+    [super drawTextInRect:UIEdgeInsetsInsetRect(rect, self.textInsets)];
+}
+@end
+
 @interface VersionCardCell ()
 // 容器视图：整张卡片的圆角背景（毛玻璃 + 半透明）
 @property (nonatomic, strong) UIView *cardContainer;
@@ -72,8 +101,8 @@
         [self.versionLabel setContentHuggingPriority:UILayoutPriorityDefaultHigh forAxis:UILayoutConstraintAxisHorizontal];
         [self.versionLabel setContentCompressionResistancePriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
 
-        // ----- 类型标签（pill 样式） -----
-        self.typeLabel = [[UILabel alloc] init];
+        // ----- 类型标签（pill 样式，修复问题3：使用带内边距的 InsetTypeLabel） -----
+        self.typeLabel = [[InsetTypeLabel alloc] init];
         self.typeLabel.translatesAutoresizingMaskIntoConstraints = NO;
         self.typeLabel.font = [UIFont systemFontOfSize:10 weight:UIFontWeightBold];
         self.typeLabel.textColor = [UIColor whiteColor];
@@ -230,8 +259,24 @@
     }
     self.iconImageView.tintColor = [UIColor whiteColor];
 
-    // 图标容器背景：类型色 + 半透明（柔和感），与 ZL2 Surface cardColor 风格一致
-    self.iconContainer.backgroundColor = [typeColor colorWithAlphaComponent:0.85];
+    // 修复问题4：优先加载标准原版游戏图标（草方块）VanillaIcon，
+    // 与 FCL/ZL2/HMCL 等主流启动器保持一致。
+    // 资源需在 Xcode Assets.xcassets 中导入名为 VanillaIcon 的图片集（详见使用说明）。
+    // 若资源存在，使用真实草方块纹理（铺满图标容器，去掉类型色背景以保留纹理本色）；
+    // 若资源不存在，回退到上面的 SF Symbol + 类型色背景方案，保证不崩溃、视觉不缺失。
+    UIImage *vanillaIcon = [UIImage imageNamed:@"VanillaIcon"];
+    if (vanillaIcon) {
+        self.iconImageView.image = vanillaIcon;
+        self.iconImageView.contentMode = UIViewContentModeScaleAspectFill;
+        self.iconImageView.tintColor = nil; // 取消着色，显示纹理原色
+        // 有真实图标时，图标容器背景设为透明，避免类型色遮挡纹理
+        self.iconContainer.backgroundColor = [UIColor clearColor];
+    } else {
+        // 无真实图标资源：保持 SF Symbol + 类型色背景
+        self.iconImageView.contentMode = UIViewContentModeScaleAspectFit;
+        self.iconImageView.tintColor = [UIColor whiteColor];
+        self.iconContainer.backgroundColor = [typeColor colorWithAlphaComponent:0.85];
+    }
 
     // 类型标签：类型色背景 + 白字
     self.typeLabel.text = typeText;
@@ -244,8 +289,10 @@
 
 - (void)prepareForReuse {
     [super prepareForReuse];
+    // 重置为 SF Symbol 默认状态（configureWithVersionId 会再次判断是否加载 VanillaIcon）
     self.iconImageView.image = [UIImage systemImageNamed:@"cube.fill"];
     self.iconImageView.tintColor = [UIColor whiteColor];
+    self.iconImageView.contentMode = UIViewContentModeScaleAspectFit;
     self.iconContainer.backgroundColor = [UIColor systemGreenColor];
     self.versionLabel.text = nil;
     self.dateLabel.text = nil;

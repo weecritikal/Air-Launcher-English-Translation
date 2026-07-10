@@ -188,6 +188,32 @@
     CGFloat propX = [self calculateDynamicPos:propDynamicX];
     CGFloat propY = [self calculateDynamicPos:propDynamicY];
 
+    // 修复问题1：将按键 frame 钳制在父视图的 safeArea 区域内，
+    // 避免"Debug/Chat/Mouse"等按键超出屏幕边界或覆盖 iOS 底部 Home Indicator 区域。
+    // 参照 FCL/ZL2 的控制布局边界保护：动态坐标在不同设备尺寸下可能把按键推到屏幕外，
+    // 此处用 superview.bounds + safeAreaInsets 做最终边界钳制，保证按键始终可见可触。
+    CGRect parentBounds = self.superview.bounds;
+    UIEdgeInsets safeInsets = UIEdgeInsetsZero;
+    if (self.superview.safeAreaInsets.bottom > 0 || self.superview.safeAreaInsets.top > 0) {
+        safeInsets = self.superview.safeAreaInsets;
+    } else {
+        // 兜底：superview 尚未布局完成时，回退到 keyWindow 的 safeAreaInsets
+        UIWindow *keyWindow = UIApplication.sharedApplication.windows.firstObject;
+        if (keyWindow) {
+            safeInsets = keyWindow.safeAreaInsets;
+        }
+    }
+    // 水平边界：按键不超出左右边缘（留 2pt 安全间距）
+    CGFloat minX = 2.0;
+    CGFloat maxX = parentBounds.size.width - propW - 2.0;
+    if (maxX < minX) maxX = minX; // 按键比屏幕宽时，左对齐不越界
+    propX = MAX(minX, MIN(propX, maxX));
+    // 垂直边界：顶部不超出 safeArea 顶部，底部不覆盖 Home Indicator（留 2pt 安全间距）
+    CGFloat minY = safeInsets.top + 2.0;
+    CGFloat maxY = parentBounds.size.height - propH - safeInsets.bottom - 2.0;
+    if (maxY < minY) maxY = minY; // 按键比可用高度高时，顶部对齐不越界
+    propY = MAX(minY, MIN(propY, maxY));
+
     // Update other properties
     self.frame = CGRectMake(propX, propY, propW, propH);
     self.alpha = [self.properties[@"opacity"] floatValue];
