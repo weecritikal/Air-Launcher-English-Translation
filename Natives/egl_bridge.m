@@ -138,5 +138,16 @@ void* pojavCreateContext(basic_render_window_t* contextSrc) {
 
 void pojavSwapInterval(int interval) {
     if (!br_swap_interval) return;
+    // 解锁帧率（关闭垂直同步）：当启动器偏好 video.disable_game_vsync 开启时
+    // （POJAV_DISABLE_VSYNC=1，由 JavaLauncher.m 设置），强制 swap interval=0，
+    // 覆盖游戏 glfwSwapInterval(1) 的垂直同步请求。
+    // 这是 GL 类渲染器（gl4es/ANGLE/MobileGlues）真正生效 VSync 的落点
+    // （gl_bridge.m gl_swap_interval → eglSwapInterval）。对 honors eglSwapInterval(0)
+    // 的渲染器，此处强制 0 可让 eglSwapBuffers 不等待 vblank，从而解锁帧率。
+    // 与 PojavLauncher.java 写 enableVsync=false 互为兜底：即便游戏在运行时再次请求
+    // VSync（某些 mod/版本会重设），native 层也会拦截。
+    if (getenv("POJAV_DISABLE_VSYNC") && strcmp(getenv("POJAV_DISABLE_VSYNC"), "1") == 0) {
+        interval = 0;
+    }
     br_swap_interval(interval);
 }

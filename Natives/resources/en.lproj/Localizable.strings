@@ -225,6 +225,9 @@
 "preference.title.max_framerate" = "Maximum framerate";
 "preference.detail.max_framerate" = "Allows you to limit the game framerate to 60FPS on ProMotion displays.";
 
+"preference.title.disable_game_vsync" = "Unlock framerate (disable VSync)";
+"preference.detail.disable_game_vsync" = "Minecraft enables VSync by default, which caps FPS at the screen refresh rate (60 or 120). When enabled, the launcher forces VSync off so the game can exceed the refresh rate. Turn off if you prefer VSync or want to reduce heat/battery drain.";
+
 "preference.title.performance_hud" = "Show Performance HUD";
 "preference.detail.performance_hud" = "When available, show the performance monitoring overlay.";
 
