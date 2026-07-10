@@ -729,12 +729,14 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 @property (nonatomic, strong) NSLayoutConstraint *sliderLeftPosConstraint;   // 滑块贴左（Modrinth）
 @property (nonatomic, strong) NSLayoutConstraint *sliderRightPosConstraint;  // 滑块贴右（CurseForge）
 
-// 当前待下载资源类型（mod/resourcepack/datapack/world），用于版本选择回调中决定下载目录
+// 当前待下载资源类型（mod/resourcepack/datapack/world/modpack），用于版本选择回调中决定下载目录
 @property (nonatomic, copy) NSString *pendingDownloadType;
 // 在线选择版本时临时持有的资源包/数据包/世界对象（AssetVersionViewController 回调使用）
 @property (nonatomic, strong, nullable) ResourcePackItem *pendingResourcePackItem;
 @property (nonatomic, strong, nullable) DataPackItem *pendingDataPackItem;
 @property (nonatomic, strong, nullable) WorldItem *pendingWorldItem;
+// 整合包版本选择回调时临时持有的整合包字典（ModVersionViewController 回调使用，与 Mod 共用 VC 但下载流程不同）
+@property (nonatomic, strong, nullable) NSDictionary *pendingModpackDict;
 
 // 模组加载器安装进度 VC（FCL 风格进度展示，替代转圈 alert）
 @property (nonatomic, strong) InstallerProgressViewController *installerProgressVC;
@@ -3765,35 +3767,22 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
 - (void)installModpackAtIndexPath:(NSIndexPath *)indexPath {
     NSDictionary *modpack = self.modpackList[indexPath.row];
-    id api = [self currentAPIForTabType:@"modpack"];
-    [api getVersionsForModWithID:modpack[@"id"] completion:^(NSArray<ModVersion *> * _Nullable versions, NSError * _Nullable error) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            if (error || versions.count == 0) {
-                [self showError:@"获取整合包版本失败"];
-                return;
-            }
-            [self showModpackVersionSelection:versions modpack:modpack];
-        });
-    }];
-}
 
-- (void)showModpackVersionSelection:(NSArray<ModVersion *> *)versions modpack:(NSDictionary *)modpack {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"选择整合包版本" message:nil preferredStyle:UIAlertControllerStyleActionSheet];
-    for (ModVersion *ver in versions) {
-        NSString *title = ver.name;
-        if (ver.gameVersions.count > 0) {
-            title = [NSString stringWithFormat:@"%@ - %@", ver.name, ver.gameVersions.firstObject];
-        }
-        [alert addAction:[UIAlertAction actionWithTitle:title style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-            [self startModpackInstallation:ver modpack:modpack];
-        }]];
-    }
-    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
-    if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
-        alert.popoverPresentationController.sourceView = self.view;
-        alert.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(self.view.bounds), CGRectGetMidY(self.view.bounds), 0, 0);
-    }
-    [self presentViewController:alert animated:YES completion:nil];
+    // 仿 FCL/ZL2：整合包也使用独立的版本选择页（复用 ModVersionViewController + AssetDetailHeaderView）
+    // 替代原有的 ActionSheet 选版本方式，补齐项目封面图/描述/作者/下载量/标签等信息显示
+    ModItem *modItem = [[ModItem alloc] initWithOnlineData:modpack];
+
+    ModVersionViewController *versionVC = [[ModVersionViewController alloc] init];
+    versionVC.modItem = modItem;
+    versionVC.delegate = self;
+    versionVC.title = modItem.displayName;
+
+    // 标记当前为整合包下载类型，版本选择回调时走整合包安装流程（而非 Mod 下载流程）
+    self.pendingDownloadType = @"modpack";
+    self.pendingModpackDict = modpack;
+
+    // 在中间内容区 push 显示，与 Mod/Shader/ResourcePack 等保持一致的交互
+    [self.navigationController pushViewController:versionVC animated:YES];
 }
 
 - (void)startModpackInstallation:(ModVersion *)version modpack:(NSDictionary *)modpack {
@@ -4276,14 +4265,24 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 #pragma mark - ModVersionViewControllerDelegate
 
 - (void)modVersionViewController:(ModVersionViewController *)viewController didSelectVersion:(ModVersion *)version {
-    ModItem *itemToDownload = viewController.modItem;
-
     NSDictionary *primaryFile = version.primaryFile;
     if (!primaryFile || ![primaryFile[@"url"] isKindOfClass:[NSString class]]) {
         [self showError:@"未找到有效的下载链接"];
         return;
     }
 
+    // 整合包走独立安装流程（下载+解析+导入），与普通 Mod 下载不同
+    if ([self.pendingDownloadType isEqualToString:@"modpack"]) {
+        NSDictionary *modpack = self.pendingModpackDict;
+        self.pendingDownloadType = nil;
+        self.pendingModpackDict = nil;
+        // 子页面已 push 到导航栈，选完版本后 pop 回下载列表
+        [self.navigationController popViewControllerAnimated:YES];
+        [self startModpackInstallation:version modpack:modpack];
+        return;
+    }
+
+    ModItem *itemToDownload = viewController.modItem;
     itemToDownload.selectedVersionDownloadURL = primaryFile[@"url"];
     itemToDownload.fileName = primaryFile[@"filename"] ?: [NSString stringWithFormat:@"%@.jar", itemToDownload.displayName];
 
