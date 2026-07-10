@@ -103,7 +103,8 @@
     self.iconImageView.layer.cornerRadius = 14;
     self.iconImageView.layer.cornerCurve = kCACornerCurveContinuous;
     self.iconImageView.backgroundColor = [UIColor clearColor];
-    self.iconImageView.hidden = YES; // 默认隐藏，有图时显示
+    // 始终显示：加载成功时显示真实图覆盖下方占位 SF Symbol，加载失败/加载中时透明透出占位
+    self.iconImageView.hidden = NO;
     [self.iconPlaceholderContainer addSubview:self.iconImageView];
 
     // 标题（18pt bold，最多 2 行）
@@ -521,53 +522,24 @@
 - (void)loadIconFromURL:(nullable NSString *)iconURL
    placeholderSymbolName:(NSString *)symbolName
        placeholderColor:(UIColor *)color {
-    // 先设置占位 SF Symbol
+    // 先设置占位 SF Symbol（始终显示在底层，真实图加载成功后被覆盖）
     UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:30 weight:UIFontWeightRegular];
-    UIImage *placeholderImage = [UIImage systemImageNamed:symbolName withConfiguration:config] ?: [UIImage systemImageNamed:@"puzzlepiece.extension.fill" withConfiguration:config];
-    self.placeholderSymbolView.image = placeholderImage;
+    UIImage *placeholderSymbol = [UIImage systemImageNamed:symbolName withConfiguration:config] ?: [UIImage systemImageNamed:@"puzzlepiece.extension.fill" withConfiguration:config];
+    self.placeholderSymbolView.image = placeholderSymbol;
     self.placeholderSymbolView.tintColor = color ?: [UIColor systemBlueColor];
     self.iconPlaceholderContainer.backgroundColor = [color ?: [UIColor systemBlueColor] colorWithAlphaComponent:0.18];
 
-    // 无 URL 则保持占位
-    if (iconURL.length == 0) {
-        self.iconImageView.hidden = YES;
-        self.placeholderSymbolView.hidden = NO;
-        return;
-    }
-
-    // 有 URL：用 AFNetworking 加载（自带内存+磁盘缓存）
-    self.iconImageView.hidden = NO;
-    self.placeholderSymbolView.hidden = NO; // 加载期间显示占位
-
+    // 无 URL 或非法 URL：iconImageView 保持透明，透出底层占位 SF Symbol
     NSURL *url = [NSURL URLWithString:iconURL];
-    if (!url) {
-        // URL 非法，回退占位
-        self.iconImageView.hidden = YES;
+    if (!url || iconURL.length == 0) {
+        self.iconImageView.image = nil;
         return;
     }
 
-    __weak typeof(self) weakSelf = self;
-    // AFNetworking 的 setImageWithURL: 会自动处理加载/缓存/占位
-    [self.iconImageView setImageWithURL:url
-                       placeholderImage:nil
-                        success:^(NSURLRequest * _Nonnull request, NSHTTPURLResponse * _Nullable response, UIImage * _Nonnull image) {
-        __strong typeof(weakSelf) strongSelf = weakSelf;
-        if (!strongSelf) return;
-        dispatch_async(dispatch_get_main_queue(), ^{
-            // 加载成功：隐藏占位，显示真实图
-            strongSelf.iconImageView.image = image;
-            strongSelf.iconImageView.hidden = NO;
-            strongSelf.placeholderSymbolView.hidden = YES;
-        });
-    } failure:^(NSURLRequest * _Nonnull request, NSHTTPURLResponse * _Nullable response, NSError * _Nonnull error) {
-        __strong typeof(weakSelf) strongSelf = weakSelf;
-        if (!strongSelf) return;
-        dispatch_async(dispatch_get_main_queue(), ^{
-            // 加载失败：隐藏真实图，显示占位
-            strongSelf.iconImageView.hidden = YES;
-            strongSelf.placeholderSymbolView.hidden = NO;
-        });
-    }];
+    // 用 AFNetworking 加载（自带内存+磁盘缓存），placeholderImage=nil
+    // 加载成功：iconImageView 显示真实图，覆盖下方占位 SF Symbol
+    // 加载失败/加载中：iconImageView 为空（透明），透出下方占位 SF Symbol
+    [self.iconImageView setImageWithURL:url placeholderImage:nil];
 }
 
 #pragma mark - Formatting Helpers
