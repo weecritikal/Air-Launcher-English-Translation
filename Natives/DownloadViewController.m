@@ -2398,7 +2398,7 @@
             [task.progress addObserver:s
                             forKeyPath:@"fractionCompleted"
                                options:NSKeyValueObservingOptionInitial
-                               context:(__bridge void * _Nullable)(@"VanillaPreinstallContext"));
+                               context:(void *)@"VanillaPreinstallContext"];
             s.isObservingVanillaPreinstall = YES;
 
             // 6. 后台线程启动下载
