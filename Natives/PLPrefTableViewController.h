@@ -21,6 +21,10 @@ typedef void (^SetPreferenceBlock)(NSString *, NSString *, id);
 @property(nonatomic) BOOL searchEnabled;
 /// 当前搜索关键词（仅读，由 searchController 内部更新）
 @property(nonatomic, readonly) NSString *currentSearchText;
+/// 搜索结果列表（仅读，搜索激活时非 nil，否则为 nil）。
+/// 子类可据此判断当前是否处于搜索模式，并访问过滤后的项数据
+/// （每项含 __origSection / __origRow / __localizedTitle 等内部字段）
+@property(nonatomic, readonly, nullable) NSArray *filteredItems;
 
 - (UIBarButtonItem *)drawHelpButton;
 - (void)initViewCreation;
