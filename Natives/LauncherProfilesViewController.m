@@ -108,14 +108,13 @@ typedef NS_ENUM(NSInteger, VersionType) {
 - (void)setupCollectionView {
     UICollectionViewFlowLayout *layout = [[UICollectionViewFlowLayout alloc] init];
     layout.scrollDirection = UICollectionViewScrollDirectionVertical;
-    layout.minimumInteritemSpacing = 12;
-    layout.minimumLineSpacing = 12;
-    
-    // 计算单元格大小 (每行4个)
-    CGFloat itemWidth = (self.view.bounds.size.width - 60) / 4;
-    layout.itemSize = CGSizeMake(itemWidth, 140);
-    layout.sectionInset = UIEdgeInsetsMake(12, 12, 12, 12);
-    
+    // 与 DownloadViewController 一致：单列横向列表行，行高 64pt
+    // （VersionCardCell 已改为 FCL/ZL2 风格横向行布局，不再使用 100x140 网格卡片）
+    layout.minimumInteritemSpacing = 0;
+    layout.minimumLineSpacing = 4;
+    layout.itemSize = CGSizeMake(self.view.bounds.size.width - 32, 64);
+    layout.sectionInset = UIEdgeInsetsMake(8, 16, 8, 16);
+
     self.collectionView = [[UICollectionView alloc] initWithFrame:CGRectZero collectionViewLayout:layout];
     self.collectionView.translatesAutoresizingMaskIntoConstraints = NO;
     self.collectionView.backgroundColor = [UIColor clearColor];
@@ -123,17 +122,33 @@ typedef NS_ENUM(NSInteger, VersionType) {
     self.collectionView.delegate = self;
     [self.collectionView registerClass:[VersionCardCell class] forCellWithReuseIdentifier:@"VersionCard"];
     [self.view addSubview:self.collectionView];
-    
+
     [NSLayoutConstraint activateConstraints:@[
         [self.filterSegment.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:8],
         [self.filterSegment.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:16],
         [self.filterSegment.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-16],
-        
+
         [self.collectionView.topAnchor constraintEqualToAnchor:self.filterSegment.bottomAnchor constant:8],
         [self.collectionView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.collectionView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [self.collectionView.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor]
     ]];
+}
+
+// 动态更新 itemSize 宽度，使其填满 collectionView（减去 sectionInset 左右各 16pt）。
+// 与 DownloadViewController 的 viewDidLayoutSubviews 保持一致，避免横竖屏切换时 cell 宽度滞后。
+- (void)viewDidLayoutSubviews {
+    [super viewDidLayoutSubviews];
+    if (!self.collectionView) return;
+    UICollectionViewFlowLayout *layout = (UICollectionViewFlowLayout *)self.collectionView.collectionViewLayout;
+    if (![layout isKindOfClass:[UICollectionViewFlowLayout class]]) return;
+    CGFloat horizInset = layout.sectionInset.left + layout.sectionInset.right;
+    CGFloat availableWidth = MAX(0, self.collectionView.bounds.size.width - horizInset);
+    CGSize target = CGSizeMake(availableWidth, 64);
+    if (!CGSizeEqualToSize(layout.itemSize, target)) {
+        layout.itemSize = target;
+        [layout invalidateLayout];
+    }
 }
 
 - (void)setupLoadingIndicator {

@@ -361,7 +361,9 @@
     self.percentLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.percentLabel.font = [UIFont systemFontOfSize:36 weight:UIFontWeightHeavy];
     self.percentLabel.textAlignment = NSTextAlignmentCenter;
-    self.percentLabel.textColor = [UIColor systemBlueColor];
+    // 使用启动器主题强调色（accentColor），与启动按钮/菜单选中态保持一致。
+    // 用户在设置中切换主题色后，进度百分比会同步变色（FCL auto_tint 风格）。
+    self.percentLabel.textColor = accentColor();
     self.percentLabel.text = @"0%";
     [self.cardView addSubview:self.percentLabel];
 
@@ -374,7 +376,8 @@
     self.progressBar = [[UIProgressView alloc] initWithProgressViewStyle:UIProgressViewStyleDefault];
     self.progressBar.translatesAutoresizingMaskIntoConstraints = NO;
     self.progressBar.progress = 0.0;
-    self.progressBar.progressTintColor = [UIColor systemBlueColor];
+    // 进度条填充色跟随主题强调色（accentColor），与百分比数字、启动按钮统一
+    self.progressBar.progressTintColor = accentColor();
     [self.cardView addSubview:self.progressBar];
 
     self.stageLabel = [[UILabel alloc] init];
@@ -747,21 +750,27 @@
 }
 
 - (void)setupVersionCollectionView {
+    // 参照 FCL (item_remote_version.xml 单列列表) 与 ZL2 (LazyColumn VersionItemLayout)：
+    // 改为单列横向列表行布局，每行一个全宽卡片，行高 64pt（cell 内部再留 4pt 上下边距，实际卡片 56pt）。
+    // itemSize.width 在 viewDidLayoutSubviews 里按 collectionView 实际宽度动态更新，避免横竖屏切换错位。
     UICollectionViewFlowLayout *layout = [[UICollectionViewFlowLayout alloc] init];
     layout.scrollDirection = UICollectionViewScrollDirectionVertical;
-    layout.minimumInteritemSpacing = 10;
-    layout.minimumLineSpacing = 10;
-    layout.itemSize = CGSizeMake(100, 120);
-    layout.sectionInset = UIEdgeInsetsMake(10, 10, 10, 10);
-    
+    layout.minimumInteritemSpacing = 0;  // 单列，无横向间距
+    layout.minimumLineSpacing = 4;       // 行间小间距，卡片自带阴影做视觉分隔
+    layout.itemSize = CGSizeMake(360, 64); // 默认宽度，viewDidLayoutSubviews 会覆盖
+    layout.sectionInset = UIEdgeInsetsMake(8, 16, 8, 16);
+
     self.versionCollectionView = [[UICollectionView alloc] initWithFrame:CGRectZero collectionViewLayout:layout];
     self.versionCollectionView.translatesAutoresizingMaskIntoConstraints = NO;
     self.versionCollectionView.backgroundColor = [UIColor clearColor];
     self.versionCollectionView.dataSource = self;
     self.versionCollectionView.delegate = self;
+    // 选中态反馈：点击单元格时短暂高亮（FCL/ZL2 都有按压视觉反馈）
+    self.versionCollectionView.allowsSelection = YES;
+    self.versionCollectionView.alwaysBounceVertical = YES;
     [self.versionCollectionView registerClass:[VersionCardCell class] forCellWithReuseIdentifier:@"VersionCard"];
     [self.view addSubview:self.versionCollectionView];
-    
+
     [NSLayoutConstraint activateConstraints:@[
         // 版本列表放在搜索框下方，避免与搜索框重合
         [self.versionCollectionView.topAnchor constraintEqualToAnchor:self.searchBar.bottomAnchor constant:4],
@@ -769,6 +778,23 @@
         [self.versionCollectionView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [self.versionCollectionView.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor]
     ]];
+}
+
+// 动态更新版本列表 itemSize 宽度，使其填满 collectionView 宽度（减去 sectionInset 左右各 16pt）。
+// 横屏切换或分屏尺寸变化时由系统自动调用，无需手动注册通知。
+- (void)viewDidLayoutSubviews {
+    [super viewDidLayoutSubviews];
+    if (!self.versionCollectionView) return;
+    UICollectionViewFlowLayout *layout = (UICollectionViewFlowLayout *)self.versionCollectionView.collectionViewLayout;
+    if (![layout isKindOfClass:[UICollectionViewFlowLayout class]]) return;
+    CGFloat horizInset = layout.sectionInset.left + layout.sectionInset.right;
+    CGFloat availableWidth = MAX(0, self.versionCollectionView.bounds.size.width - horizInset);
+    CGSize target = CGSizeMake(availableWidth, 64);
+    if (!CGSizeEqualToSize(layout.itemSize, target)) {
+        layout.itemSize = target;
+        // invalidateLayout 触发重新排版，避免 cell 复用时宽度滞后
+        [layout invalidateLayout];
+    }
 }
 
 - (void)setupModTableView {
