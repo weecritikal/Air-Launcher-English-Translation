@@ -11,6 +11,7 @@
 #import "installer/modpack/ModrinthAPI.h"
 #import "ModVersion.h"
 #import "ModVersionTableViewCell.h"
+#import "AssetDetailHeaderView.h"
 
 @interface AssetVersionViewController () <UITableViewDataSource, UITableViewDelegate>
 
@@ -24,6 +25,9 @@
 @property (nonatomic, strong) NSArray<NSString *> *availableGameVersions;
 @property (nonatomic, strong) NSString *selectedGameVersion;
 
+// 项目详情头部视图（展示项目封面图/标题/作者/下载量/标签/描述，补齐信息显示缺口）
+@property (nonatomic, strong) AssetDetailHeaderView *detailHeaderView;
+
 @end
 
 @implementation AssetVersionViewController
@@ -36,8 +40,80 @@
     [self setupFilterControls];
     [self setupTableView];
     [self setupActivityIndicator];
+    [self setupDetailHeader];
 
     [self fetchVersions];
+}
+
+#pragma mark - Detail Header（项目信息展示）
+
+/// 创建并配置项目详情头部视图，设置为 tableView.tableHeaderView
+/// 补齐之前版本页缺少的项目封面图/标题/作者/下载量/标签/描述等信息显示
+- (void)setupDetailHeader {
+    self.detailHeaderView = [[AssetDetailHeaderView alloc] init];
+
+    // 描述展开/收起时重新计算 header 高度（避免循环引用，用 weak）
+    __weak typeof(self) weakSelf = self;
+    self.detailHeaderView.onSizeChanged = ^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (strongSelf) [strongSelf updateTableHeaderHeight];
+    };
+
+    // 根据 assetType 选占位 SF Symbol + 配色（与 ModernAssetCell 的资源类型配色一致）
+    NSString *placeholderSymbol = @"doc.fill";
+    UIColor *placeholderColor = [UIColor systemBlueColor];
+    switch (self.assetType) {
+        case AssetVersionTypeResourcePack:
+            placeholderSymbol = @"photo.stack.fill";
+            placeholderColor = [UIColor systemBlueColor];
+            break;
+        case AssetVersionTypeDataPack:
+            placeholderSymbol = @"doc.text.fill";
+            placeholderColor = [UIColor systemTealColor];
+            break;
+        case AssetVersionTypeWorld:
+            placeholderSymbol = @"globe";
+            placeholderColor = [UIColor systemGreenColor];
+            break;
+    }
+
+    // 用 DownloadViewController 传入的项目展示信息填充
+    [self.detailHeaderView configureWithIconURL:self.projectIconURL
+                                          title:self.projectDisplayName ?: @"未知项目"
+                                         author:self.projectAuthor
+                                      downloads:self.projectDownloads
+                                          likes:self.projectLikes
+                                descriptionText:self.projectDescription
+                                    categories:self.projectCategories
+                                   lastUpdated:self.projectLastUpdated
+                           placeholderSymbolName:placeholderSymbol
+                               placeholderColor:placeholderColor];
+
+    [self updateTableHeaderHeight];
+    self.tableView.tableHeaderView = self.detailHeaderView;
+}
+
+/// 重新计算 tableHeaderView 高度并刷新（在 viewDidLayoutSubviews 和描述展开/收起时调用）
+- (void)updateTableHeaderHeight {
+    if (!self.detailHeaderView) return;
+    CGFloat width = self.tableView.bounds.size.width;
+    if (width <= 0) width = self.view.bounds.size.width;
+    if (width <= 0) width = [UIScreen mainScreen].bounds.size.width;
+    CGFloat height = [self.detailHeaderView fittingHeightForWidth:width];
+    CGRect frame = self.detailHeaderView.frame;
+    if (fabs(frame.size.height - height) < 1) return; // 高度未变化则跳过
+    frame.size.height = height;
+    self.detailHeaderView.frame = frame;
+    // 重新赋值触发 tableView 重新布局 header
+    self.tableView.tableHeaderView = self.detailHeaderView;
+}
+
+- (void)viewDidLayoutSubviews {
+    [super viewDidLayoutSubviews];
+    // 首次 layout 后 tableView 宽度才确定，此时更新一次 header 高度
+    if (self.detailHeaderView) {
+        [self updateTableHeaderHeight];
+    }
 }
 
 // 根据资产类型返回默认导航栏标题

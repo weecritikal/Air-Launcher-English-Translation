@@ -4197,6 +4197,14 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     versionVC.projectDisplayName = item.displayName;
     versionVC.delegate = self;
     versionVC.title = item.displayName;
+    // 传入项目展示信息（用于详情 header 显示封面图/作者/下载量/标签/描述）
+    versionVC.projectIconURL = item.iconURL;
+    versionVC.projectAuthor = item.author;
+    versionVC.projectDownloads = item.downloads;
+    versionVC.projectLikes = item.likes;
+    versionVC.projectDescription = item.resourcePackDescription;
+    versionVC.projectCategories = item.categories;
+    versionVC.projectLastUpdated = item.lastUpdated;
 
     [self.navigationController pushViewController:versionVC animated:YES];
 }
@@ -4221,6 +4229,14 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     versionVC.projectDisplayName = item.displayName;
     versionVC.delegate = self;
     versionVC.title = item.displayName;
+    // 传入项目展示信息（用于详情 header 显示封面图/作者/下载量/标签/描述）
+    versionVC.projectIconURL = item.iconURL;
+    versionVC.projectAuthor = item.author;
+    versionVC.projectDownloads = item.downloads;
+    versionVC.projectLikes = item.likes;
+    versionVC.projectDescription = item.dataPackDescription;
+    versionVC.projectCategories = item.categories;
+    versionVC.projectLastUpdated = item.lastUpdated;
 
     [self.navigationController pushViewController:versionVC animated:YES];
 }
@@ -4245,6 +4261,14 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     versionVC.projectDisplayName = item.displayName;
     versionVC.delegate = self;
     versionVC.title = item.displayName;
+    // 传入项目展示信息（用于详情 header 显示封面图/作者/下载量/标签/描述）
+    versionVC.projectIconURL = item.iconURL;
+    versionVC.projectAuthor = item.author;
+    versionVC.projectDownloads = item.downloads;
+    versionVC.projectLikes = item.likes;
+    versionVC.projectDescription = item.worldDescription;
+    versionVC.projectCategories = item.categories;
+    versionVC.projectLastUpdated = item.lastUpdated;
 
     [self.navigationController pushViewController:versionVC animated:YES];
 }

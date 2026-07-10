@@ -2,6 +2,7 @@
 #import "installer/modpack/ModrinthAPI.h"
 #import "ModVersion.h"
 #import "ModVersionTableViewCell.h"
+#import "AssetDetailHeaderView.h"
 
 @interface ModVersionViewController () <UITableViewDataSource, UITableViewDelegate>
 
@@ -18,6 +19,9 @@
 @property (nonatomic, strong) NSString *selectedGameVersion;
 @property (nonatomic, strong) NSString *selectedLoader;
 
+// 项目详情头部视图（展示项目封面图/标题/作者/下载量/标签/描述，补齐信息显示缺口）
+@property (nonatomic, strong) AssetDetailHeaderView *detailHeaderView;
+
 @end
 
 @implementation ModVersionViewController
@@ -30,8 +34,62 @@
     [self setupFilterControls];
     [self setupTableView];
     [self setupActivityIndicator];
+    [self setupDetailHeader];
 
     [self fetchVersions];
+}
+
+#pragma mark - Detail Header（项目信息展示）
+
+/// 创建并配置项目详情头部视图，设置为 tableView.tableHeaderView
+/// 补齐之前版本页缺少的项目封面图/标题/作者/下载量/标签/描述等信息显示
+- (void)setupDetailHeader {
+    self.detailHeaderView = [[AssetDetailHeaderView alloc] init];
+
+    // 描述展开/收起时重新计算 header 高度（避免循环引用，用 weak）
+    __weak typeof(self) weakSelf = self;
+    self.detailHeaderView.onSizeChanged = ^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (strongSelf) [strongSelf updateTableHeaderHeight];
+    };
+
+    // 用搜索阶段已有的 modItem 数据填充（无需额外 API 调用）
+    [self.detailHeaderView configureWithIconURL:self.modItem.iconURL
+                                          title:self.modItem.displayName
+                                         author:self.modItem.author
+                                      downloads:self.modItem.downloads
+                                          likes:self.modItem.likes
+                                descriptionText:self.modItem.modDescription
+                                    categories:self.modItem.categories
+                                   lastUpdated:self.modItem.lastUpdated
+                           placeholderSymbolName:@"puzzlepiece.extension.fill"
+                               placeholderColor:[UIColor systemOrangeColor]];
+
+    [self updateTableHeaderHeight];
+    self.tableView.tableHeaderView = self.detailHeaderView;
+}
+
+/// 重新计算 tableHeaderView 高度并刷新（在 viewDidLayoutSubviews 和描述展开/收起时调用）
+- (void)updateTableHeaderHeight {
+    if (!self.detailHeaderView) return;
+    CGFloat width = self.tableView.bounds.size.width;
+    if (width <= 0) width = self.view.bounds.size.width;
+    if (width <= 0) width = [UIScreen mainScreen].bounds.size.width;
+    CGFloat height = [self.detailHeaderView fittingHeightForWidth:width];
+    CGRect frame = self.detailHeaderView.frame;
+    if (fabs(frame.size.height - height) < 1) return; // 高度未变化则跳过
+    frame.size.height = height;
+    self.detailHeaderView.frame = frame;
+    // 重新赋值触发 tableView 重新布局 header
+    self.tableView.tableHeaderView = self.detailHeaderView;
+}
+
+- (void)viewDidLayoutSubviews {
+    [super viewDidLayoutSubviews];
+    // 首次 layout 后 tableView 宽度才确定，此时更新一次 header 高度
+    if (self.detailHeaderView) {
+        [self updateTableHeaderHeight];
+    }
 }
 
 - (void)setupFilterControls {

@@ -39,6 +39,16 @@ typedef NS_ENUM(NSInteger, AssetVersionType) {
 // 代理
 @property (nonatomic, weak, nullable) id<AssetVersionViewControllerDelegate> delegate;
 
+// --- 项目展示信息（用于详情 header，由 DownloadViewController 传入）---
+// 补齐之前版本页缺少的项目封面图/标题/作者/下载量/标签/描述等信息显示
+@property (nonatomic, copy, nullable) NSString *projectIconURL;
+@property (nonatomic, copy, nullable) NSString *projectAuthor;
+@property (nonatomic, strong, nullable) NSNumber *projectDownloads;
+@property (nonatomic, strong, nullable) NSNumber *projectLikes;
+@property (nonatomic, copy, nullable) NSString *projectDescription;
+@property (nonatomic, strong, nullable) NSArray<NSString *> *projectCategories;
+@property (nonatomic, copy, nullable) NSString *projectLastUpdated;
+
 @end
 
 NS_ASSUME_NONNULL_END

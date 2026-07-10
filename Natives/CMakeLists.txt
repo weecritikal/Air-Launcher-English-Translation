@@ -235,6 +235,9 @@ add_executable(AngelAuraAmethyst
   ModVersionViewController.m
   ModVersionTableViewCell.m
 
+  # 通用资源详情页头部视图（Mod/Shader/Asset 版本页共用，展示项目封面图/信息/标签/描述）
+  AssetDetailHeaderView.m
+
   # Shader-related sources
   ShaderItem.m
   ShaderService.m
