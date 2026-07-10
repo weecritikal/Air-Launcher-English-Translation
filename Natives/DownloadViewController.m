@@ -2408,7 +2408,7 @@
                 [ss.vanillaPreinstallTask downloadVersion:version];
             });
         });
-    });
+    }];
 }
 
 #pragma mark - Vanilla Installation
