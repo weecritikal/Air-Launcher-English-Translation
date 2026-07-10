@@ -108,8 +108,9 @@
     // 支持自定义字体颜色：用户在设置中配置 general.text_color 后，
     // 未选中项使用自定义颜色，选中项保持高亮蓝色
     UIColor *normalColor = [self menuNormalColor];
+    UIColor *accent = accentColor();
     if (index == self.selectedIndex) {
-        btn.tintColor = [UIColor colorWithRed:0.26 green:0.63 blue:0.96 alpha:1.0];
+        btn.tintColor = accent;
     } else {
         btn.tintColor = normalColor;
     }
@@ -117,7 +118,7 @@
     // 设置标题（在图标下方）
     btn.titleLabel.font = [UIFont systemFontOfSize:10];
     [btn setTitle:item[@"title"] forState:UIControlStateNormal];
-    [btn setTitleColor:(index == self.selectedIndex) ? [UIColor colorWithRed:0.26 green:0.63 blue:0.96 alpha:1.0] : normalColor forState:UIControlStateNormal];
+    [btn setTitleColor:(index == self.selectedIndex) ? accent : normalColor forState:UIControlStateNormal];
     
     // 垂直布局：图标在上，文字在下
     btn.contentHorizontalAlignment = UIControlContentHorizontalAlignmentCenter;
@@ -155,6 +156,7 @@
 
 - (void)updateButtonColors {
     UIColor *normalColor = [self menuNormalColor];
+    UIColor *accent = accentColor();
     // 按钮现在在 menuStackView.arrangedSubviews 中（UIStackView 重构后）
     for (UIView *view in self.menuStackView.arrangedSubviews) {
         if ([view isKindOfClass:[UIButton class]]) {
@@ -162,8 +164,8 @@
             NSInteger index = btn.tag;
 
             if (index == self.selectedIndex) {
-                btn.tintColor = [UIColor colorWithRed:0.26 green:0.63 blue:0.96 alpha:1.0];
-                [btn setTitleColor:[UIColor colorWithRed:0.26 green:0.63 blue:0.96 alpha:1.0] forState:UIControlStateNormal];
+                btn.tintColor = accent;
+                [btn setTitleColor:accent forState:UIControlStateNormal];
             } else {
                 btn.tintColor = normalColor;
                 [btn setTitleColor:normalColor forState:UIControlStateNormal];

@@ -63,6 +63,30 @@ void resetWarnings() {
     }
 }
 
+#pragma mark Accent Color
+
+/// 将 hex 字符串（如 "429CF5" 或 "#429CF5"）解析为 UIColor，失败返回 nil
+static UIColor *colorFromHex(NSString *hex) {
+    if (![hex isKindOfClass:[NSString class]] || hex.length == 0) return nil;
+    NSString *clean = [hex stringByReplacingOccurrencesOfString:@"#" withString:@""];
+    unsigned int rgb = 0;
+    NSScanner *scanner = [NSScanner scannerWithString:clean];
+    if (![scanner scanHexInt:&rgb]) return nil;
+    return [UIColor colorWithRed:((rgb >> 16) & 0xFF) / 255.0
+                           green:((rgb >> 8) & 0xFF) / 255.0
+                            blue:(rgb & 0xFF) / 255.0
+                           alpha:1.0];
+}
+
+UIColor *accentColor(void) {
+    // 优先读取用户自定义主题强调色，未设置则回退到默认蓝 #429CF5
+    NSString *hex = getPrefObject(@"general.accent_color");
+    UIColor *custom = colorFromHex(hex);
+    if (custom) return custom;
+    // 默认蓝 RGB(0.26, 0.63, 0.96) = #429CF5
+    return [UIColor colorWithRed:0.26 green:0.63 blue:0.96 alpha:1.0];
+}
+
 #pragma mark Safe area
 
 CGRect getSafeArea(CGRect screenBounds) {

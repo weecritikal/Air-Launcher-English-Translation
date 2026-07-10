@@ -172,7 +172,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     self.launchButton.titleLabel.adjustsFontSizeToFitWidth = YES;
     self.launchButton.titleLabel.minimumScaleFactor = 0.6;
     self.launchButton.titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
-    self.launchButton.backgroundColor = [UIColor colorWithRed:0.26 green:0.63 blue:0.96 alpha:1.0];
+    self.launchButton.backgroundColor = accentColor();
     self.launchButton.layer.cornerRadius = 10;
     self.launchButton.layer.masksToBounds = YES;
     [self.launchButton addTarget:self action:@selector(launchButtonTapped) forControlEvents:UIControlEventTouchUpInside];
@@ -416,7 +416,11 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 
 /// 读取 general.text_color 偏好并应用到右侧面板的主要文字。
 /// 卡片背景始终深色（BackgroundManager），用户若设置浅色 card_color 则需同时设置 text_color。
+/// 同时读取 general.accent_color 刷新启动按钮主题色（FCL 风格主题强调色）。
 - (void)applyCustomAppearance {
+    // 主题强调色：刷新启动按钮背景，使用户自选的主题色立即生效
+    self.launchButton.backgroundColor = accentColor();
+
     NSString *hex = getPrefObject(@"general.text_color");
     UIColor *customColor = [self colorFromHexString:hex];
     if (customColor) {

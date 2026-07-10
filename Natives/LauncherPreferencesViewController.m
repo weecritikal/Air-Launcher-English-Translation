@@ -354,6 +354,16 @@
                   [[NSNotificationCenter defaultCenter] postNotificationName:@"UIThemeChanged" object:value];
               }
             },
+            @{@"key": @"custom_accent_color",
+              @"title": @"主题强调色",
+              @"hasDetail": @YES,
+              @"icon": @"paintpalette.fill",
+              @"type": self.typeButton,
+              @"enableCondition": whenNotInGame,
+              @"action": ^void(){
+                  [self openColorPickerForKey:@"general.accent_color" title:@"主题强调色"];
+              }
+            },
             @{@"key": @"custom_text_color",
               @"title": @"字体颜色",
               @"hasDetail": @YES,
@@ -375,11 +385,12 @@
               }
             },
             @{@"key": @"reset_appearance_colors",
-              @"title": @"重置字体/卡片颜色",
+              @"title": @"重置主题/字体/卡片颜色",
               @"icon": @"arrow.counterclockwise",
               @"type": self.typeButton,
               @"enableCondition": whenNotInGame,
               @"action": ^void(){
+                  setPrefObject(@"general.accent_color", @"");
                   setPrefObject(@"general.text_color", @"");
                   setPrefObject(@"general.card_color", @"");
                   [[NSNotificationCenter defaultCenter] postNotificationName:@"LauncherAppearanceChanged" object:nil];

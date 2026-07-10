@@ -71,7 +71,7 @@
     addBtn.titleLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
     [addBtn setImage:[UIImage systemImageNamed:@"plus"] forState:UIControlStateNormal];
     addBtn.tintColor = [UIColor whiteColor];
-    addBtn.backgroundColor = [UIColor colorWithRed:0.2 green:0.55 blue:0.95 alpha:1.0];
+    addBtn.backgroundColor = accentColor();
     addBtn.layer.cornerRadius = 24;
     addBtn.layer.cornerCurve = kCACornerCurveContinuous;
     addBtn.titleEdgeInsets = UIEdgeInsetsMake(0, 6, 0, 0);
