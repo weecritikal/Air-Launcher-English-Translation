@@ -7,29 +7,38 @@
 #import "AIFixService.h"
 
 @interface PLCrashView ()
-@property (nonatomic, strong) UIView *leftPanel;
-@property (nonatomic, strong) UIView *rightPanel;
-@property (nonatomic, strong) UIView *logPanel;
-@property (nonatomic, strong) UITextView *logTextView;
-@property (nonatomic, strong) UILabel *logPlaceholderLabel;
-@property (nonatomic, strong) UIView *errorCardView;
-@property (nonatomic, strong) UIView *logDetailContainer;
-@property (nonatomic, strong) UIView *githubCard;
-@property (nonatomic, strong) UIView *aiCard;
-@property (nonatomic, strong) UILabel *experimentalLabel;
-@property (nonatomic, strong) UIButton *shareButton;
-@property (nonatomic, strong) UIButton *exitButton;
-@property (nonatomic, strong) UIButton *restartButton;
-@property (nonatomic, strong) UIButton *fullLogButton;
+// 数据
 @property (nonatomic, assign) int exitCode;
-@property (nonatomic, assign) BOOL logExpanded;
 @property (nonatomic, copy) NSString *customTitle;
 @property (nonatomic, copy) NSString *customReason;
+
+// UI 组件
+@property (nonatomic, strong) UIScrollView *mainScrollView;
+@property (nonatomic, strong) UIStackView *mainStackView;
+@property (nonatomic, strong) UIView *errorCardView;
+@property (nonatomic, strong) UIImageView *errorIconView;
+@property (nonatomic, strong) UILabel *errorTitleLabel;
+@property (nonatomic, strong) UILabel *errorCodeLabel;
+@property (nonatomic, strong) UILabel *reasonLabel;
+@property (nonatomic, strong) UILabel *oomSuggestionLabel;
+@property (nonatomic, strong) UIView *logCardView;
+@property (nonatomic, strong) UILabel *logTitleLabel;
+@property (nonatomic, strong) UITextView *logTextView;
+@property (nonatomic, strong) UILabel *logPlaceholderLabel;
+@property (nonatomic, strong) UIButton *restartButton;
+@property (nonatomic, strong) UIButton *shareButton;
+@property (nonatomic, strong) UIButton *aiFixButton;
+@property (nonatomic, strong) UIButton *githubButton;
+@property (nonatomic, strong) UIButton *fullLogButton;
+@property (nonatomic, strong) UIButton *exitButton;
+// 日志卡片高度约束（根据屏幕高度动态调整）
+@property (nonatomic, strong) NSLayoutConstraint *logCardHeightConstraint;
 @end
 
 @implementation PLCrashView
 
-static PLCrashView *currentCrashView = nil;
+// 当前正在显示的崩溃 VC 实例（单例）
+static PLCrashView *currentCrashVC = nil;
 static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amethyst-iOS-MyRemastered/issues";
 
 #pragma mark - Public Methods
@@ -40,14 +49,13 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
 
 + (void)showWithExitCode:(int)exitCode customTitle:(NSString *)customTitle customReason:(NSString *)customReason {
     dispatch_async(dispatch_get_main_queue(), ^{
-        // 如果已经存在崩溃界面，先移除
-        if (currentCrashView) {
-            [currentCrashView removeFromSuperview];
+        // 如果已经存在崩溃界面，先 dismiss，避免叠加
+        if (currentCrashVC) {
+            [currentCrashVC dismissViewControllerAnimated:NO completion:nil];
+            currentCrashVC = nil;
         }
-        
+
         UIWindow *keyWindow = nil;
-        
-        // iOS 13+ 使用 connectedScenes
         if (@available(iOS 13.0, *)) {
             for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
                 if (scene.activationState == UISceneActivationStateForegroundActive ||
@@ -63,349 +71,392 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
                 }
             }
         }
-        
-        if (!keyWindow) {
-            return;
+
+        if (!keyWindow) return;
+
+        // 找到最顶层的 presented VC 来 present 崩溃界面。
+        // 旧实现把 UIView 直接 addSubview 到 keyWindow，存在生命周期无人管理、
+        // 旋转/安全区不跟随等问题。改为 UIViewController 后由系统管理生命周期。
+        UIViewController *rootVC = keyWindow.rootViewController;
+        while (rootVC.presentedViewController) {
+            rootVC = rootVC.presentedViewController;
         }
-        
-        PLCrashView *crashView = [[PLCrashView alloc] initWithFrame:keyWindow.bounds];
-        crashView.exitCode = exitCode;
-        crashView.customTitle = customTitle;
-        crashView.customReason = customReason;
-        
-        [keyWindow addSubview:crashView];
-        currentCrashView = crashView;
+
+        PLCrashView *crashVC = [[PLCrashView alloc] init];
+        crashVC.exitCode = exitCode;
+        crashVC.customTitle = customTitle;
+        crashVC.customReason = customReason;
+        crashVC.modalPresentationStyle = UIModalPresentationOverFullScreen;
+        crashVC.modalTransitionStyle = UIModalTransitionStyleCrossDissolve;
+
+        currentCrashVC = crashVC;
+        [rootVC presentViewController:crashVC animated:NO completion:nil];
     });
 }
 
-- (instancetype)initWithFrame:(CGRect)frame {
-    self = [super initWithFrame:frame];
+- (instancetype)init {
+    self = [super init];
     if (self) {
-        [self setupUI];
+        _exitCode = 0;
+        _customTitle = nil;
+        _customReason = nil;
     }
     return self;
+}
+
+#pragma mark - Lifecycle
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    self.view.backgroundColor = [UIColor clearColor];
+    [self setupBackground];
+    [self setupUI];
+    [self loadLogContent];
+}
+
+- (void)viewDidLayoutSubviews {
+    [super viewDidLayoutSubviews];
+    // 根据屏幕高度动态调整日志卡片高度，避免小屏挤压按钮或大屏浪费空间
+    [self adjustLogCardHeight];
+}
+
+#pragma mark - Background
+
+- (void)setupBackground {
+    // 毛玻璃背景
+    UIBlurEffect *blurEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleDark];
+    UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:blurEffect];
+    blurView.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.view addSubview:blurView];
+
+    // 深色蒙层增强毛玻璃效果
+    UIView *overlayView = [[UIView alloc] init];
+    overlayView.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.5];
+    overlayView.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.view addSubview:overlayView];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [blurView.topAnchor constraintEqualToAnchor:self.view.topAnchor],
+        [blurView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
+        [blurView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [blurView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [overlayView.topAnchor constraintEqualToAnchor:self.view.topAnchor],
+        [overlayView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
+        [overlayView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [overlayView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+    ]];
 }
 
 #pragma mark - UI Setup
 
 - (void)setupUI {
-    self.backgroundColor = [UIColor clearColor];
-    self.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    
-    // 毛玻璃背景
-    UIBlurEffect *blurEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleDark];
-    UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:blurEffect];
-    blurView.frame = self.bounds;
-    blurView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    [self addSubview:blurView];
-    
-    // 深色蒙层增强毛玻璃效果
-    UIView *overlayView = [[UIView alloc] initWithFrame:self.bounds];
-    overlayView.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.5];
-    overlayView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    [self addSubview:overlayView];
-    
-    // 创建左右分栏容器
-    CGFloat leftWidth = self.bounds.size.width * 0.58;
-    CGFloat rightWidth = self.bounds.size.width - leftWidth;
-    CGFloat topPadding = 60;
-    CGFloat bottomPadding = 40;
-    CGFloat sidePadding = 16;
-    
-    // 左侧面板
-    _leftPanel = [[UIView alloc] initWithFrame:CGRectMake(0, topPadding, leftWidth, self.bounds.size.height - topPadding - bottomPadding)];
-    _leftPanel.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    [self addSubview:_leftPanel];
-    
-    // 右侧面板
-    _rightPanel = [[UIView alloc] initWithFrame:CGRectMake(leftWidth, topPadding, rightWidth, self.bounds.size.height - topPadding - bottomPadding)];
-    _rightPanel.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    [self addSubview:_rightPanel];
-    
-    [self setupLeftPanel];
-    [self setupRightPanel];
+    // 主滚动视图（内容超出屏幕时可滚动）
+    _mainScrollView = [[UIScrollView alloc] init];
+    _mainScrollView.translatesAutoresizingMaskIntoConstraints = NO;
+    _mainScrollView.alwaysBounceVertical = YES;
+    _mainScrollView.showsVerticalScrollIndicator = YES;
+    _mainScrollView.indicatorStyle = UIScrollViewIndicatorStyleWhite;
+    _mainScrollView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
+    [self.view addSubview:_mainScrollView];
+
+    // 主垂直 StackView（所有卡片和按钮垂直排列）
+    _mainStackView = [[UIStackView alloc] init];
+    _mainStackView.axis = UILayoutConstraintAxisVertical;
+    _mainStackView.spacing = 16;
+    _mainStackView.alignment = UIStackViewAlignmentFill;
+    _mainStackView.distribution = UIStackViewDistributionFill;
+    _mainStackView.translatesAutoresizingMaskIntoConstraints = NO;
+    [_mainScrollView addSubview:_mainStackView];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [_mainScrollView.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:16],
+        [_mainScrollView.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-16],
+        [_mainScrollView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [_mainScrollView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [_mainStackView.topAnchor constraintEqualToAnchor:_mainScrollView.contentLayoutGuide.topAnchor],
+        [_mainStackView.bottomAnchor constraintEqualToAnchor:_mainScrollView.contentLayoutGuide.bottomAnchor],
+        [_mainStackView.leadingAnchor constraintEqualToAnchor:_mainScrollView.contentLayoutGuide.leadingAnchor],
+        [_mainStackView.trailingAnchor constraintEqualToAnchor:_mainScrollView.contentLayoutGuide.trailingAnchor],
+        [_mainStackView.widthAnchor constraintEqualToAnchor:_mainScrollView.frameLayoutGuide.widthAnchor],
+    ]];
+
+    // StackView 左右留白（卡片不贴边）
+    _mainStackView.layoutMargins = UIEdgeInsetsMake(16, 20, 16, 20);
+    _mainStackView.isLayoutMarginsRelativeArrangement = YES;
+
+    [self setupErrorCard];
+    [self setupLogCard];
+    [self setupButtons];
 }
 
-- (void)setupLeftPanel {
-    CGFloat panelWidth = _leftPanel.bounds.size.width;
-    CGFloat panelHeight = _leftPanel.bounds.size.height;
-    CGFloat sidePadding = 16;
-    
-    // 顶部标签条 "崩溃界面"
-    UIView *labelBar = [[UIView alloc] initWithFrame:CGRectMake(sidePadding, 0, panelWidth - sidePadding * 2, 36)];
-    labelBar.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.15];
-    labelBar.layer.cornerRadius = 8;
-    [_leftPanel addSubview:labelBar];
-    
-    UILabel *labelBarText = [[UILabel alloc] initWithFrame:CGRectMake(12, 0, labelBar.bounds.size.width - 24, 36)];
-    labelBarText.text = localize(@"crash.interface_title", nil);
-    labelBarText.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
-    labelBarText.textColor = [UIColor whiteColor];
-    labelBarText.textAlignment = NSTextAlignmentLeft;
-    [labelBar addSubview:labelBarText];
-    
-    // 日志面板（黑色背景）
-    CGFloat logTop = 48;
-    CGFloat logHeight = panelHeight - logTop;
-    _logPanel = [[UIView alloc] initWithFrame:CGRectMake(sidePadding, logTop, panelWidth - sidePadding * 2, logHeight)];
-    _logPanel.backgroundColor = [UIColor colorWithWhite:0.08 alpha:1.0];
-    _logPanel.layer.cornerRadius = 12;
-    _logPanel.layer.masksToBounds = YES;
-    [_leftPanel addSubview:_logPanel];
-    
-    // 日志文本视图
-    _logTextView = [[UITextView alloc] initWithFrame:CGRectMake(8, 8, _logPanel.bounds.size.width - 16, _logPanel.bounds.size.height - 16)];
+- (void)setupErrorCard {
+    _errorCardView = [[UIView alloc] init];
+    _errorCardView.backgroundColor = [UIColor colorWithRed:1.0 green:0.278 blue:0.318 alpha:1.0]; // #FF4757
+    _errorCardView.layer.cornerRadius = 16;
+    _errorCardView.layer.cornerCurve = kCACornerCurveContinuous;
+    _errorCardView.translatesAutoresizingMaskIntoConstraints = NO;
+    [_mainStackView addArrangedSubview:_errorCardView];
+
+    // 错误图标
+    _errorIconView = [[UIImageView alloc] init];
+    _errorIconView.translatesAutoresizingMaskIntoConstraints = NO;
+    if (@available(iOS 13.0, *)) {
+        UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:36 weight:UIImageSymbolWeightBold];
+        _errorIconView.image = [UIImage systemImageNamed:@"exclamationmark.triangle.fill" withConfiguration:config];
+    }
+    _errorIconView.tintColor = [UIColor whiteColor];
+    _errorIconView.contentMode = UIViewContentModeScaleAspectFit;
+    [_errorCardView addSubview:_errorIconView];
+
+    // 错误标题
+    _errorTitleLabel = [[UILabel alloc] init];
+    _errorTitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    _errorTitleLabel.text = _customTitle ?: localize(@"crash.error_title", nil);
+    _errorTitleLabel.font = [UIFont boldSystemFontOfSize:18];
+    _errorTitleLabel.textColor = [UIColor whiteColor];
+    _errorTitleLabel.textAlignment = NSTextAlignmentCenter;
+    _errorTitleLabel.numberOfLines = 0;
+    [_errorCardView addSubview:_errorTitleLabel];
+
+    // 错误代码
+    _errorCodeLabel = [[UILabel alloc] init];
+    _errorCodeLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    _errorCodeLabel.text = [NSString stringWithFormat:@"%@%d", localize(@"crash.error_code", nil), _exitCode];
+    _errorCodeLabel.font = [UIFont systemFontOfSize:14];
+    _errorCodeLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.9];
+    _errorCodeLabel.textAlignment = NSTextAlignmentCenter;
+    [_errorCardView addSubview:_errorCodeLabel];
+
+    // 可能原因
+    _reasonLabel = [[UILabel alloc] init];
+    _reasonLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    _reasonLabel.text = [self crashReasonText];
+    _reasonLabel.font = [UIFont systemFontOfSize:13];
+    _reasonLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.75];
+    _reasonLabel.textAlignment = NSTextAlignmentCenter;
+    _reasonLabel.numberOfLines = 0;
+    [_errorCardView addSubview:_reasonLabel];
+
+    // 通用约束（图标/标题/代码/原因）
+    NSMutableArray<NSLayoutConstraint *> *constraints = [NSMutableArray arrayWithArray:@[
+        [_errorIconView.topAnchor constraintEqualToAnchor:_errorCardView.topAnchor constant:16],
+        [_errorIconView.centerXAnchor constraintEqualToAnchor:_errorCardView.centerXAnchor],
+        [_errorIconView.widthAnchor constraintEqualToConstant:40],
+        [_errorIconView.heightAnchor constraintEqualToConstant:40],
+
+        [_errorTitleLabel.topAnchor constraintEqualToAnchor:_errorIconView.bottomAnchor constant:12],
+        [_errorTitleLabel.leadingAnchor constraintEqualToAnchor:_errorCardView.leadingAnchor constant:16],
+        [_errorTitleLabel.trailingAnchor constraintEqualToAnchor:_errorCardView.trailingAnchor constant:-16],
+
+        [_errorCodeLabel.topAnchor constraintEqualToAnchor:_errorTitleLabel.bottomAnchor constant:6],
+        [_errorCodeLabel.leadingAnchor constraintEqualToAnchor:_errorCardView.leadingAnchor constant:16],
+        [_errorCodeLabel.trailingAnchor constraintEqualToAnchor:_errorCardView.trailingAnchor constant:-16],
+
+        [_reasonLabel.topAnchor constraintEqualToAnchor:_errorCodeLabel.bottomAnchor constant:6],
+        [_reasonLabel.leadingAnchor constraintEqualToAnchor:_errorCardView.leadingAnchor constant:16],
+        [_reasonLabel.trailingAnchor constraintEqualToAnchor:_errorCardView.trailingAnchor constant:-16],
+    ]];
+
+    // OOM 崩溃时显示建议标签，errorCardView 底部锚定到 oomSuggestionLabel 底部
+    if ([self isOOMCrash]) {
+        _oomSuggestionLabel = [[UILabel alloc] init];
+        _oomSuggestionLabel.translatesAutoresizingMaskIntoConstraints = NO;
+        _oomSuggestionLabel.font = [UIFont systemFontOfSize:12];
+        _oomSuggestionLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.65];
+        _oomSuggestionLabel.textAlignment = NSTextAlignmentCenter;
+        _oomSuggestionLabel.numberOfLines = 0;
+        NSString *suggestion = [NSString stringWithFormat:@"%@ %@",
+                                localize(@"crash.suggestion", @"建议操作"),
+                                localize(@"crash.suggestion.oom", @"iOS 内存限制导致崩溃，建议使用 GetMoreRam (LiveContainer) 解除内存限制后重试")];
+        _oomSuggestionLabel.text = suggestion;
+        [_errorCardView addSubview:_oomSuggestionLabel];
+
+        [constraints addObjectsFromArray:@[
+            [_oomSuggestionLabel.topAnchor constraintEqualToAnchor:_reasonLabel.bottomAnchor constant:8],
+            [_oomSuggestionLabel.leadingAnchor constraintEqualToAnchor:_errorCardView.leadingAnchor constant:16],
+            [_oomSuggestionLabel.trailingAnchor constraintEqualToAnchor:_errorCardView.trailingAnchor constant:-16],
+            [_oomSuggestionLabel.bottomAnchor constraintEqualToAnchor:_errorCardView.bottomAnchor constant:-16],
+        ]];
+    } else {
+        // 非 OOM 时，errorCardView 底部直接锚定到 reasonLabel 底部
+        [constraints addObject:[_reasonLabel.bottomAnchor constraintEqualToAnchor:_errorCardView.bottomAnchor constant:-16]];
+    }
+
+    [NSLayoutConstraint activateConstraints:constraints];
+}
+
+- (void)setupLogCard {
+    _logCardView = [[UIView alloc] init];
+    _logCardView.backgroundColor = [UIColor colorWithWhite:0.08 alpha:1.0];
+    _logCardView.layer.cornerRadius = 16;
+    _logCardView.layer.cornerCurve = kCACornerCurveContinuous;
+    _logCardView.layer.masksToBounds = YES;
+    _logCardView.translatesAutoresizingMaskIntoConstraints = NO;
+    [_mainStackView addArrangedSubview:_logCardView];
+
+    // 日志标题
+    _logTitleLabel = [[UILabel alloc] init];
+    _logTitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    _logTitleLabel.text = localize(@"crash.log_info", nil);
+    _logTitleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
+    _logTitleLabel.textColor = [UIColor whiteColor];
+    [_logCardView addSubview:_logTitleLabel];
+
+    // 日志文本视图（可内部滚动）
+    _logTextView = [[UITextView alloc] init];
+    _logTextView.translatesAutoresizingMaskIntoConstraints = NO;
     _logTextView.backgroundColor = [UIColor clearColor];
     _logTextView.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.85];
     _logTextView.font = [UIFont fontWithName:@"Menlo" size:11];
     _logTextView.editable = NO;
     _logTextView.showsVerticalScrollIndicator = YES;
     _logTextView.indicatorStyle = UIScrollViewIndicatorStyleWhite;
-    _logTextView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    [_logPanel addSubview:_logTextView];
-    
-    // 占位符标签 "日志信息"（日志为空时显示）
-    _logPlaceholderLabel = [[UILabel alloc] initWithFrame:_logPanel.bounds];
+    [_logCardView addSubview:_logTextView];
+
+    // 占位符（日志为空时显示，居中放大文字）
+    _logPlaceholderLabel = [[UILabel alloc] init];
+    _logPlaceholderLabel.translatesAutoresizingMaskIntoConstraints = NO;
     _logPlaceholderLabel.text = localize(@"crash.log_info", nil);
-    _logPlaceholderLabel.font = [UIFont systemFontOfSize:48 weight:UIFontWeightBold];
+    _logPlaceholderLabel.font = [UIFont systemFontOfSize:36 weight:UIFontWeightBold];
     _logPlaceholderLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.15];
     _logPlaceholderLabel.textAlignment = NSTextAlignmentCenter;
-    _logPlaceholderLabel.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    [_logPanel addSubview:_logPlaceholderLabel];
-    
-    // 加载日志内容
-    [self loadLogContent];
+    [_logCardView addSubview:_logPlaceholderLabel];
+
+    // 日志卡片高度约束（初始 240，viewDidLayoutSubviews 中根据屏幕高度调整）
+    self.logCardHeightConstraint = [_logCardView.heightAnchor constraintEqualToConstant:240];
+    self.logCardHeightConstraint.priority = UILayoutPriorityDefaultHigh;
+
+    [NSLayoutConstraint activateConstraints:@[
+        [_logTitleLabel.topAnchor constraintEqualToAnchor:_logCardView.topAnchor constant:12],
+        [_logTitleLabel.leadingAnchor constraintEqualToAnchor:_logCardView.leadingAnchor constant:16],
+        [_logTitleLabel.trailingAnchor constraintEqualToAnchor:_logCardView.trailingAnchor constant:-16],
+
+        [_logTextView.topAnchor constraintEqualToAnchor:_logTitleLabel.bottomAnchor constant:8],
+        [_logTextView.leadingAnchor constraintEqualToAnchor:_logCardView.leadingAnchor constant:8],
+        [_logTextView.trailingAnchor constraintEqualToAnchor:_logCardView.trailingAnchor constant:-8],
+        [_logTextView.bottomAnchor constraintEqualToAnchor:_logCardView.bottomAnchor constant:-8],
+
+        [_logPlaceholderLabel.topAnchor constraintEqualToAnchor:_logCardView.topAnchor],
+        [_logPlaceholderLabel.bottomAnchor constraintEqualToAnchor:_logCardView.bottomAnchor],
+        [_logPlaceholderLabel.leadingAnchor constraintEqualToAnchor:_logCardView.leadingAnchor],
+        [_logPlaceholderLabel.trailingAnchor constraintEqualToAnchor:_logCardView.trailingAnchor],
+
+        self.logCardHeightConstraint,
+    ]];
 }
 
-- (void)setupRightPanel {
-    CGFloat panelWidth = _rightPanel.bounds.size.width;
-    CGFloat panelHeight = _rightPanel.bounds.size.height;
-    CGFloat sidePadding = 12;
-    CGFloat cardSpacing = 12;
-    
-    // 红色错误提示卡片
-    _errorCardView = [[UIView alloc] initWithFrame:CGRectMake(sidePadding, 0, panelWidth - sidePadding * 2, 140)];
-    _errorCardView.backgroundColor = [UIColor colorWithRed:1.0 green:0.278 blue:0.318 alpha:1.0]; // #FF4757
-    _errorCardView.layer.cornerRadius = 12;
-    [_rightPanel addSubview:_errorCardView];
-    
-    // 感叹号图标
-    UIImageView *iconView = [[UIImageView alloc] initWithFrame:CGRectMake(_errorCardView.bounds.size.width / 2 - 20, 16, 40, 40)];
-    if (@available(iOS 13.0, *)) {
-        UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:32 weight:UIImageSymbolWeightSemibold];
-        iconView.image = [UIImage systemImageNamed:@"exclamationmark.triangle.fill" withConfiguration:config];
-    }
-    iconView.tintColor = [UIColor whiteColor];
-    iconView.contentMode = UIViewContentModeScaleAspectFit;
-    [_errorCardView addSubview:iconView];
-    
-    // 错误标题
-    UILabel *errorTitle = [[UILabel alloc] initWithFrame:CGRectMake(16, 62, _errorCardView.bounds.size.width - 32, 24)];
-    errorTitle.text = localize(@"crash.error_title", nil);
-    errorTitle.font = [UIFont boldSystemFontOfSize:15];
-    errorTitle.textColor = [UIColor whiteColor];
-    errorTitle.textAlignment = NSTextAlignmentCenter;
-    [_errorCardView addSubview:errorTitle];
-    
-    // 错误代码
-    UILabel *errorCode = [[UILabel alloc] initWithFrame:CGRectMake(16, 90, _errorCardView.bounds.size.width - 32, 20)];
-    errorCode.text = [NSString stringWithFormat:@"%@%d", localize(@"crash.error_code", nil), _exitCode];
-    errorCode.font = [UIFont systemFontOfSize:13];
-    errorCode.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.9];
-    errorCode.textAlignment = NSTextAlignmentCenter;
-    [_errorCardView addSubview:errorCode];
-    
-    // 可能原因——根据 exitCode 和日志关键词智能识别崩溃类型（OOM/段错误/abort 等）
-    UILabel *reasonLabel = [[UILabel alloc] initWithFrame:CGRectMake(16, 112, _errorCardView.bounds.size.width - 32, 20)];
-    reasonLabel.text = [self crashReasonText];
-    reasonLabel.font = [UIFont systemFontOfSize:12];
-    reasonLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.75];
-    reasonLabel.textAlignment = NSTextAlignmentCenter;
-    reasonLabel.adjustsFontSizeToFitWidth = YES;
-    reasonLabel.numberOfLines = 2;
-    [_errorCardView addSubview:reasonLabel];
+- (void)setupButtons {
+    // 重启启动器按钮（蓝色强调，FCL 风格优先放置）
+    // 参照 FCL：很多崩溃是临时加载失败（JIT/dylib/内存碎片），重启即可解决。
+    _restartButton = [self createButtonWithTitle:localize(@"crash.restart_launcher", @"重启启动器")
+                                            icon:@"arrow.clockwise"
+                                   backgroundColor:[UIColor colorWithRed:0.2 green:0.6 blue:0.95 alpha:1.0]
+                                       textColor:[UIColor whiteColor]
+                                          bold:YES
+                                          action:@selector(restartLauncherAction)];
+    [_mainStackView addArrangedSubview:_restartButton];
 
-    // OOM 崩溃时显示针对性建议（提示用户使用 GetMoreRam 解除内存限制）
-    if ([self isOOMCrash]) {
-        UILabel *oomSuggestionLabel = [[UILabel alloc] initWithFrame:CGRectMake(16, 132, _errorCardView.bounds.size.width - 32, 0)];
-        NSString *suggestion = [NSString stringWithFormat:@"%@ %@",
-                                localize(@"crash.suggestion", @"建议操作"),
-                                localize(@"crash.suggestion.oom", @"iOS 内存限制导致崩溃，建议使用 GetMoreRam (LiveContainer) 解除内存限制后重试")];
-        oomSuggestionLabel.text = suggestion;
-        oomSuggestionLabel.font = [UIFont systemFontOfSize:10];
-        oomSuggestionLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.6];
-        oomSuggestionLabel.textAlignment = NSTextAlignmentCenter;
-        oomSuggestionLabel.adjustsFontSizeToFitWidth = YES;
-        oomSuggestionLabel.minimumScaleFactor = 0.7;
-        oomSuggestionLabel.numberOfLines = 0;
-        // 自动计算高度
-        CGSize maxSize = CGSizeMake(_errorCardView.bounds.size.width - 32, CGFLOAT_MAX);
-        CGRect textRect = [suggestion boundingRectWithSize:maxSize
-                                                   options:NSStringDrawingUsesLineFragmentOrigin
-                                                attributes:@{NSFontAttributeName: oomSuggestionLabel.font}
-                                                   context:nil];
-        oomSuggestionLabel.frame = CGRectMake(16, 132, _errorCardView.bounds.size.width - 32, ceil(textRect.size.height));
-        [_errorCardView addSubview:oomSuggestionLabel];
-        // 扩展 errorCardView 高度以容纳建议文字
-        CGRect cardFrame = _errorCardView.frame;
-        cardFrame.size.height = 132 + ceil(textRect.size.height) + 12;
-        _errorCardView.frame = cardFrame;
-    }
-    
-    // 分享日志按钮（OOM 时下移以避开扩展的错误卡片）
-    CGFloat shareBtnTop = _errorCardView.frame.origin.y + _errorCardView.frame.size.height + cardSpacing;
-    _shareButton = [self createPrimaryButton:CGRectMake(sidePadding, shareBtnTop, panelWidth - sidePadding * 2, 48)
-                                             title:localize(@"crash.share_log", nil)
-                                              icon:@"square.and.arrow.up"
-                                            action:@selector(shareLog)];
-    [_rightPanel addSubview:_shareButton];
-    
-    // 卡片容器（GitHub Issues 和 AI 解决问题）
-    CGFloat cardsTop = shareBtnTop + 48 + cardSpacing;
-    CGFloat cardWidth = (panelWidth - sidePadding * 3) / 2;
-    CGFloat cardHeight = 80;
-    
-    // GitHub Issues 卡片
-    _githubCard = [self createActionCard:CGRectMake(sidePadding, cardsTop, cardWidth, cardHeight)
-                                          title:localize(@"crash.github_issue", nil)
-                                      iconName:@"link"
-                                     iconColor:[UIColor colorWithRed:0.3 green:0.5 blue:0.9 alpha:1.0]
-                                        action:@selector(openGitHubIssues)];
-    [_rightPanel addSubview:_githubCard];
-    
-    // AI 解决问题卡片
-    _aiCard = [self createActionCard:CGRectMake(sidePadding * 2 + cardWidth, cardsTop, cardWidth, cardHeight)
-                                      title:localize(@"crash.ai_solve", nil)
-                                  iconName:@"cpu"
-                                 iconColor:[UIColor colorWithRed:0.6 green:0.4 blue:0.9 alpha:1.0]
-                                    action:@selector(useAIToSolve)];
-    [_rightPanel addSubview:_aiCard];
-    
-    // 实验性标签
-    _experimentalLabel = [[UILabel alloc] initWithFrame:CGRectMake(_aiCard.frame.origin.x + 8, _aiCard.frame.origin.y + 60, cardWidth - 16, 16)];
-    _experimentalLabel.text = [NSString stringWithFormat:@"(%@)", localize(@"crash.experimental", nil)];
-    _experimentalLabel.font = [UIFont systemFontOfSize:10];
-    _experimentalLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.5];
-    _experimentalLabel.textAlignment = NSTextAlignmentRight;
-    [_rightPanel addSubview:_experimentalLabel];
-    
-    // 重启启动器按钮（参照 FCL 的"重启软件"，优先放置，蓝色强调）
-    CGFloat restartBtnTop = cardsTop + cardHeight + cardSpacing + 20;
-    _restartButton = [self createPrimaryButton:CGRectMake(sidePadding, restartBtnTop, panelWidth - sidePadding * 2, 48)
-                                          title:localize(@"crash.restart_launcher", @"重启启动器")
-                                           icon:@"arrow.clockwise"
-                                         action:@selector(restartLauncherAction)];
-    [_rightPanel addSubview:_restartButton];
+    // 分享日志按钮
+    _shareButton = [self createButtonWithTitle:localize(@"crash.share_log", nil)
+                                          icon:@"square.and.arrow.up"
+                                 backgroundColor:[[UIColor whiteColor] colorWithAlphaComponent:0.15]
+                                     textColor:[UIColor whiteColor]
+                                        bold:YES
+                                        action:@selector(shareLog)];
+    [_mainStackView addArrangedSubview:_shareButton];
 
-    // 退出启动器按钮
-    CGFloat exitBtnTop = restartBtnTop + 48 + 8;
-    _exitButton = [self createSecondaryButton:CGRectMake(sidePadding, exitBtnTop, panelWidth - sidePadding * 2, 48)
-                                              title:localize(@"crash.return_launcher", nil)
-                                               icon:@"rectangle.portrait.and.arrow.right"
-                                             action:@selector(dismissAndReturnToLauncher)];
-    [_rightPanel addSubview:_exitButton];
-    
-    // 查看完整日志按钮（小按钮）
-    CGFloat fullLogBtnTop = exitBtnTop + 48 + 8;
+    // AI 修复按钮（实验性）
+    _aiFixButton = [self createButtonWithTitle:[NSString stringWithFormat:@"%@ (%@)", localize(@"crash.ai_solve", nil), localize(@"crash.experimental", nil)]
+                                          icon:@"cpu"
+                                 backgroundColor:[[UIColor colorWithRed:0.6 green:0.4 blue:0.9 alpha:1.0] colorWithAlphaComponent:0.3]
+                                     textColor:[UIColor whiteColor]
+                                        bold:NO
+                                        action:@selector(useAIToSolve)];
+    [_mainStackView addArrangedSubview:_aiFixButton];
+
+    // GitHub Issues 按钮
+    _githubButton = [self createButtonWithTitle:localize(@"crash.github_issue", nil)
+                                            icon:@"link"
+                                   backgroundColor:[[UIColor colorWithRed:0.3 green:0.5 blue:0.9 alpha:1.0] colorWithAlphaComponent:0.3]
+                                       textColor:[UIColor whiteColor]
+                                          bold:NO
+                                          action:@selector(openGitHubIssues)];
+    [_mainStackView addArrangedSubview:_githubButton];
+
+    // 查看完整日志按钮（透明，只文字）
     _fullLogButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    _fullLogButton.frame = CGRectMake(sidePadding, fullLogBtnTop, panelWidth - sidePadding * 2, 32);
+    _fullLogButton.translatesAutoresizingMaskIntoConstraints = NO;
     [_fullLogButton setTitle:localize(@"crash.view_log", nil) forState:UIControlStateNormal];
-    _fullLogButton.titleLabel.font = [UIFont systemFontOfSize:13];
+    _fullLogButton.titleLabel.font = [UIFont systemFontOfSize:14];
     _fullLogButton.tintColor = [[UIColor whiteColor] colorWithAlphaComponent:0.6];
     [_fullLogButton addTarget:self action:@selector(showFullLog) forControlEvents:UIControlEventTouchUpInside];
-    [_rightPanel addSubview:_fullLogButton];
+    [_mainStackView addArrangedSubview:_fullLogButton];
+
+    // 返回启动器按钮
+    _exitButton = [self createButtonWithTitle:localize(@"crash.return_launcher", nil)
+                                          icon:@"rectangle.portrait.and.arrow.right"
+                                 backgroundColor:[[UIColor whiteColor] colorWithAlphaComponent:0.1]
+                                     textColor:[UIColor whiteColor]
+                                        bold:NO
+                                        action:@selector(dismissAndReturnToLauncher)];
+    [_mainStackView addArrangedSubview:_exitButton];
 }
 
-#pragma mark - Helper Methods
-
-- (UIButton *)createPrimaryButton:(CGRect)frame title:(NSString *)title icon:(NSString *)icon action:(SEL)action {
+- (UIButton *)createButtonWithTitle:(NSString *)title icon:(NSString *)icon backgroundColor:(UIColor *)bgColor textColor:(UIColor *)textColor bold:(BOOL)bold action:(SEL)action {
     UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
-    button.frame = frame;
-    button.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.15];
-    button.layer.cornerRadius = 10;
-    
-    [button setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    button.titleLabel.font = [UIFont boldSystemFontOfSize:15];
-    
+    button.translatesAutoresizingMaskIntoConstraints = NO;
+    button.backgroundColor = bgColor;
+    button.layer.cornerRadius = 12;
+    button.layer.cornerCurve = kCACornerCurveContinuous;
+
+    [button setTitleColor:textColor forState:UIControlStateNormal];
+    button.titleLabel.font = bold ? [UIFont boldSystemFontOfSize:15] : [UIFont systemFontOfSize:15];
+
     if (@available(iOS 13.0, *)) {
-        UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:15 weight:UIImageSymbolWeightMedium];
+        UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:15 weight:bold ? UIImageSymbolWeightMedium : UIImageSymbolWeightRegular];
         UIImage *iconImage = [UIImage systemImageNamed:icon withConfiguration:config];
         [button setImage:iconImage forState:UIControlStateNormal];
     }
-    
+
     button.titleEdgeInsets = UIEdgeInsetsMake(0, 8, 0, 0);
     button.imageEdgeInsets = UIEdgeInsetsMake(0, -8, 0, 0);
     [button setTitle:title forState:UIControlStateNormal];
     [button addTarget:self action:action forControlEvents:UIControlEventTouchUpInside];
-    
+
+    // 固定按钮高度
+    [button.heightAnchor constraintEqualToConstant:48].active = YES;
+
     return button;
 }
 
-- (UIButton *)createSecondaryButton:(CGRect)frame title:(NSString *)title icon:(NSString *)icon action:(SEL)action {
-    UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
-    button.frame = frame;
-    button.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.1];
-    button.layer.cornerRadius = 10;
-    
-    [button setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    button.titleLabel.font = [UIFont systemFontOfSize:15];
-    
-    if (@available(iOS 13.0, *)) {
-        UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:15 weight:UIFontWeightRegular];
-        UIImage *iconImage = [UIImage systemImageNamed:icon withConfiguration:config];
-        [button setImage:iconImage forState:UIControlStateNormal];
+- (void)adjustLogCardHeight {
+    CGFloat screenHeight = self.view.bounds.size.height;
+    // 根据屏幕高度调整日志卡片高度：
+    //   小屏幕（iPhone SE）日志区较矮，给按钮留空间
+    //   大屏幕（iPad）日志区较高，充分利用空间
+    CGFloat logHeight;
+    if (screenHeight < 600) {
+        logHeight = 160;
+    } else if (screenHeight < 800) {
+        logHeight = 220;
+    } else {
+        logHeight = 300;
     }
-    
-    button.titleEdgeInsets = UIEdgeInsetsMake(0, 8, 0, 0);
-    button.imageEdgeInsets = UIEdgeInsetsMake(0, -8, 0, 0);
-    [button setTitle:title forState:UIControlStateNormal];
-    [button addTarget:self action:action forControlEvents:UIControlEventTouchUpInside];
-    
-    return button;
+    self.logCardHeightConstraint.constant = logHeight;
 }
 
-- (UIView *)createActionCard:(CGRect)frame title:(NSString *)title iconName:(NSString *)iconName iconColor:(UIColor *)iconColor action:(SEL)action {
-    UIView *card = [[UIView alloc] initWithFrame:frame];
-    card.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.08];
-    card.layer.cornerRadius = 12;
-    
-    // 添加点击手势
-    UITapGestureRecognizer *tapGesture = [[UITapGestureRecognizer alloc] initWithTarget:self action:action];
-    [card addGestureRecognizer:tapGesture];
-    
-    // 图标
-    UIImageView *iconView = [[UIImageView alloc] initWithFrame:CGRectMake((card.bounds.size.width - 28) / 2, 14, 28, 28)];
-    if (@available(iOS 13.0, *)) {
-        UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:20 weight:UIImageSymbolWeightMedium];
-        iconView.image = [UIImage systemImageNamed:iconName withConfiguration:config];
-    }
-    iconView.tintColor = iconColor;
-    iconView.contentMode = UIViewContentModeScaleAspectFit;
-    [card addSubview:iconView];
-    
-    // 标题
-    UILabel *titleLabel = [[UILabel alloc] initWithFrame:CGRectMake(8, 46, card.bounds.size.width - 16, 24)];
-    titleLabel.text = title;
-    titleLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
-    titleLabel.textColor = [UIColor whiteColor];
-    titleLabel.textAlignment = NSTextAlignmentCenter;
-    titleLabel.numberOfLines = 2;
-    titleLabel.adjustsFontSizeToFitWidth = YES;
-    [card addSubview:titleLabel];
-    
-    return card;
-}
+#pragma mark - Log Content
 
 - (void)loadLogContent {
     NSString *latestlogPath = [NSString stringWithFormat:@"%s/latestlog.txt", getenv("POJAV_HOME")];
     NSString *logContent = [NSString stringWithContentsOfFile:latestlogPath encoding:NSUTF8StringEncoding error:nil];
-    
+
     if (!logContent || logContent.length == 0) {
         _logTextView.text = nil;
         _logPlaceholderLabel.hidden = NO;
         return;
     }
-    
+
     // 获取最后150行
     NSArray *lines = [logContent componentsSeparatedByCharactersInSet:[NSCharacterSet newlineCharacterSet]];
     NSInteger startIndex = MAX(0, (NSInteger)lines.count - 150);
@@ -416,7 +467,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
             [lastLines addObject:line];
         }
     }
-    
+
     _logTextView.text = [lastLines componentsJoinedByString:@"\n"];
     _logPlaceholderLabel.hidden = _logTextView.text.length > 0;
 
@@ -517,16 +568,11 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
 - (void)shareLog {
     NSString *latestlogPath = [NSString stringWithFormat:@"file://%s/latestlog.txt", getenv("POJAV_HOME")];
     UIActivityViewController *activityVC = [[UIActivityViewController alloc] initWithActivityItems:@[@"latestlog.txt", [NSURL URLWithString:latestlogPath]] applicationActivities:nil];
-    
-    UIViewController *presentingVC = [self nextViewController];
-    if (!presentingVC) {
-        presentingVC = currentVC();
-    }
-    
-    activityVC.popoverPresentationController.sourceView = self;
-    activityVC.popoverPresentationController.sourceRect = CGRectMake(self.bounds.size.width / 2, self.bounds.size.height / 2, 1, 1);
-    
-    [presentingVC presentViewController:activityVC animated:YES completion:nil];
+
+    activityVC.popoverPresentationController.sourceView = self.view;
+    activityVC.popoverPresentationController.sourceRect = CGRectMake(self.view.bounds.size.width / 2, self.view.bounds.size.height / 2, 1, 1);
+
+    [self presentViewController:activityVC animated:YES completion:nil];
 }
 
 - (void)showFullLog {
@@ -544,35 +590,14 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
 }
 
 - (void)useAIToSolve {
-    // 获取当前视图控制器
-    UIViewController *presentingVC = [self nextViewController];
-    if (!presentingVC) {
-        presentingVC = currentVC();
-    }
-    
     // 获取崩溃日志路径
     NSString *logPath = [NSString stringWithFormat:@"%s/latestlog.txt", getenv("POJAV_HOME")];
-    
+
     // 创建 AI 修复界面
     AIFixViewController *aiFixVC = [[AIFixViewController alloc] initWithLogPath:logPath];
     aiFixVC.modalPresentationStyle = UIModalPresentationOverFullScreen;
-    
-    // 非线性动画展示
-    aiFixVC.view.alpha = 0;
-    aiFixVC.view.transform = CGAffineTransformMakeScale(0.9, 0.9);
-    
-    [presentingVC presentViewController:aiFixVC animated:NO completion:^{
-        // 使用弹性动画
-        [UIView animateWithDuration:0.4 
-                              delay:0 
-             usingSpringWithDamping:0.8 
-              initialSpringVelocity:0.5 
-                            options:UIViewAnimationOptionCurveEaseOut 
-                         animations:^{
-            aiFixVC.view.alpha = 1;
-            aiFixVC.view.transform = CGAffineTransformIdentity;
-        } completion:nil];
-    }];
+
+    [self presentViewController:aiFixVC animated:YES completion:nil];
 }
 
 - (void)dismissAndReturnToLauncher {
@@ -581,11 +606,8 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
         [[SurfaceViewController currentInstance].logOutputView dismissAndReturnToLauncher];
     }
 
-    [UIView animateWithDuration:0.3 animations:^{
-        self.alpha = 0;
-    } completion:^(BOOL finished) {
-        [self removeFromSuperview];
-        currentCrashView = nil;
+    [self dismissViewControllerAnimated:YES completion:^{
+        currentCrashVC = nil;
     }];
 }
 
@@ -601,8 +623,8 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
 /// 实例方法导致的 unrecognized selector 崩溃。
 + (void)dismissAndReturnToLauncher {
     dispatch_async(dispatch_get_main_queue(), ^{
-        if (currentCrashView) {
-            [currentCrashView dismissAndReturnToLauncher];
+        if (currentCrashVC) {
+            [currentCrashVC dismissAndReturnToLauncher];
         } else if ([SurfaceViewController currentInstance]) {
             [[SurfaceViewController currentInstance].logOutputView dismissAndReturnToLauncher];
         }
@@ -619,9 +641,9 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
         }
 
         // 2. 清理崩溃界面
-        if (currentCrashView) {
-            [currentCrashView removeFromSuperview];
-            currentCrashView = nil;
+        if (currentCrashVC) {
+            [currentCrashVC dismissViewControllerAnimated:NO completion:nil];
+            currentCrashVC = nil;
         }
 
         // 3. 通知 SurfaceViewController 释放游戏资源
@@ -650,130 +672,6 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
             exit(0);
         }
     });
-}
-
-- (UIViewController *)nextViewController {
-    UIResponder *responder = self;
-    while (responder) {
-        responder = [responder nextResponder];
-        if ([responder isKindOfClass:[UIViewController class]]) {
-            return (UIViewController *)responder;
-        }
-    }
-    return nil;
-}
-
-#pragma mark - Layout
-
-- (void)layoutSubviews {
-    [super layoutSubviews];
-    
-    // 重新计算布局
-    CGFloat leftWidth = self.bounds.size.width * 0.58;
-    CGFloat rightWidth = self.bounds.size.width - leftWidth;
-    CGFloat topPadding = 60;
-    CGFloat bottomPadding = 40;
-    
-    _leftPanel.frame = CGRectMake(0, topPadding, leftWidth, self.bounds.size.height - topPadding - bottomPadding);
-    _rightPanel.frame = CGRectMake(leftWidth, topPadding, rightWidth, self.bounds.size.height - topPadding - bottomPadding);
-    
-    // 更新左侧面板内部布局
-    CGFloat panelWidth = _leftPanel.bounds.size.width;
-    CGFloat panelHeight = _leftPanel.bounds.size.height;
-    CGFloat sidePadding = 16;
-    
-    // 更新标签条
-    UIView *labelBar = _leftPanel.subviews.firstObject;
-    labelBar.frame = CGRectMake(sidePadding, 0, panelWidth - sidePadding * 2, 36);
-    
-    // 更新日志面板
-    CGFloat logTop = 48;
-    _logPanel.frame = CGRectMake(sidePadding, logTop, panelWidth - sidePadding * 2, panelHeight - logTop);
-    _logTextView.frame = CGRectMake(8, 8, _logPanel.bounds.size.width - 16, _logPanel.bounds.size.height - 16);
-    _logPlaceholderLabel.frame = _logPanel.bounds;
-    
-    // 更新右侧面板内部布局
-    CGFloat rightPanelWidth = _rightPanel.bounds.size.width;
-    CGFloat rightSidePadding = 12;
-    CGFloat cardSpacing = 12;
-    
-    // 更新错误卡片
-    _errorCardView.frame = CGRectMake(rightSidePadding, 0, rightPanelWidth - rightSidePadding * 2, 140);
-    
-    // 更新错误卡片内部元素
-    for (UIView *subview in _errorCardView.subviews) {
-        if ([subview isKindOfClass:[UIImageView class]]) {
-            subview.center = CGPointMake(_errorCardView.bounds.size.width / 2, 36);
-        } else if ([subview isKindOfClass:[UILabel class]]) {
-            UILabel *label = (UILabel *)subview;
-            label.frame = CGRectMake(16, label.frame.origin.y, _errorCardView.bounds.size.width - 32, label.frame.size.height);
-        }
-    }
-    
-    // 更新按钮和卡片位置
-    CGFloat currentY = 156;
-    CGFloat cardWidth = (rightPanelWidth - rightSidePadding * 3) / 2;
-    CGFloat cardHeight = 80;
-    
-    // 分享日志按钮
-    if (_shareButton) {
-        _shareButton.frame = CGRectMake(rightSidePadding, currentY, rightPanelWidth - rightSidePadding * 2, 48);
-        currentY += 48 + cardSpacing;
-    }
-    
-    // GitHub 卡片
-    if (_githubCard) {
-        _githubCard.frame = CGRectMake(rightSidePadding, currentY, cardWidth, cardHeight);
-        // 更新卡片内部图标位置
-        for (UIView *cardSubview in _githubCard.subviews) {
-            if ([cardSubview isKindOfClass:[UIImageView class]]) {
-                cardSubview.center = CGPointMake(_githubCard.bounds.size.width / 2, 28);
-            } else if ([cardSubview isKindOfClass:[UILabel class]]) {
-                UILabel *label = (UILabel *)cardSubview;
-                label.frame = CGRectMake(8, 46, _githubCard.bounds.size.width - 16, 24);
-            }
-        }
-    }
-    
-    // AI 卡片
-    if (_aiCard) {
-        _aiCard.frame = CGRectMake(rightSidePadding * 2 + cardWidth, currentY, cardWidth, cardHeight);
-        // 更新卡片内部图标位置
-        for (UIView *cardSubview in _aiCard.subviews) {
-            if ([cardSubview isKindOfClass:[UIImageView class]]) {
-                cardSubview.center = CGPointMake(_aiCard.bounds.size.width / 2, 28);
-            } else if ([cardSubview isKindOfClass:[UILabel class]]) {
-                UILabel *label = (UILabel *)cardSubview;
-                label.frame = CGRectMake(8, 46, _aiCard.bounds.size.width - 16, 24);
-            }
-        }
-    }
-    
-    currentY += cardHeight + cardSpacing;
-    
-    // 实验性标签
-    if (_experimentalLabel) {
-        _experimentalLabel.frame = CGRectMake(rightSidePadding * 2 + cardWidth + 8, currentY - cardSpacing - 16, cardWidth - 16, 16);
-    }
-    
-    currentY += 20; // 添加间距
-
-    // 重启启动器按钮（FCL 风格，位于退出按钮上方）
-    if (_restartButton) {
-        _restartButton.frame = CGRectMake(rightSidePadding, currentY, rightPanelWidth - rightSidePadding * 2, 48);
-        currentY += 48 + 8;
-    }
-
-    // 退出启动器按钮
-    if (_exitButton) {
-        _exitButton.frame = CGRectMake(rightSidePadding, currentY, rightPanelWidth - rightSidePadding * 2, 48);
-        currentY += 48 + 8;
-    }
-
-    // 查看完整日志按钮
-    if (_fullLogButton) {
-        _fullLogButton.frame = CGRectMake(rightSidePadding, currentY, rightPanelWidth - rightSidePadding * 2, 32);
-    }
 }
 
 @end

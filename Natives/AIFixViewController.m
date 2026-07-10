@@ -358,28 +358,51 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
 
 // 重新计算左栏内会话滚动视图与输入框的 frame，避免在尺寸变化后被挤压或重叠。
 // setupLeftPanel 中这两个视图基于初始 panelHeight 一次性写死，布局变化时不会更新。
+//
+// 修复错位：_conversationScrollView 与 _inputContainerView 已改为加到 _leftPanel（视口层），
+// 因此这里基于 _leftPanel.bounds 计算 frame，并重新分配 _leftScrollView 的高度：
+//   _leftScrollView 占顶部（诊断/历史/风险卡片可滚动区域）
+//   _conversationScrollView 占中部（常驻视口）
+//   _inputContainerView 占底部（常驻视口，在 _statusBarView 上方）
 - (void)relayoutLeftPanelContents {
-    if (!_conversationScrollView || !_inputContainerView || !_riskCardView || !_leftScrollView) return;
-    // 必须读取 _leftScrollView（可见视口）的尺寸，而非 _leftContentView（被撑大的可滚动内容）。
-    // 否则 inputTop 会被锚定到内容底部（如 560），导致会话区塌缩为 16pt、输入框挤出视口。
-    CGFloat panelWidth = _leftScrollView.bounds.size.width;
-    CGFloat panelHeight = _leftScrollView.bounds.size.height;
+    if (!_conversationScrollView || !_inputContainerView || !_leftScrollView || !_leftPanel) return;
+    // 基于 _leftPanel.bounds（视口层）算 frame，而非 _leftScrollView.bounds
+    CGFloat panelWidth = _leftPanel.bounds.size.width;
+    CGFloat panelHeight = _leftPanel.bounds.size.height;
     if (panelWidth <= 0 || panelHeight <= 0) return;
     CGFloat sidePadding = 16;
     CGFloat sectionGap = 12;
     CGFloat inputHeight = 128;
+    CGFloat statusBarHeight = 26;
 
-    // inputTop 锚定到可见视口底部，会话区填充 riskCardView 底部到 inputTop 之间
-    CGFloat inputTop = panelHeight - inputHeight;
-    CGFloat scrollViewTop = CGRectGetMaxY(_riskCardView.frame) + sectionGap;
-    CGFloat scrollBottom = inputTop - sectionGap;
-    if (scrollBottom > scrollViewTop) {
-        _conversationScrollView.frame = CGRectMake(sidePadding, scrollViewTop, panelWidth - sidePadding * 2, scrollBottom - scrollViewTop);
-    } else {
-        // 高度不足时，至少给会话区保留一个最小可见高度，避免完全不可见
-        _conversationScrollView.frame = CGRectMake(sidePadding, scrollViewTop, panelWidth - sidePadding * 2, 60);
+    // inputTop 锚定到 _leftPanel 底部（_statusBarView 上方留 sectionGap 间距）
+    CGFloat inputTop = panelHeight - statusBarHeight - sectionGap - inputHeight;
+    // conversationBottom 是会话区底部（inputTop 上方留 sectionGap 间距）
+    CGFloat conversationBottom = inputTop - sectionGap;
+
+    // _leftScrollView 占顶部区域：高度为 conversationBottom 的 55%，至少 200pt。
+    // 若剩余空间不足以容纳最小会话区（80pt），则压缩 _leftScrollView 给会话区让位。
+    CGFloat minConversationHeight = 80;
+    CGFloat scrollViewHeight = MAX(200.0, conversationBottom * 0.55);
+    if (scrollViewHeight > conversationBottom - minConversationHeight) {
+        scrollViewHeight = MAX(minConversationHeight, conversationBottom - minConversationHeight);
     }
+    _leftScrollView.frame = CGRectMake(0, 0, panelWidth, scrollViewHeight);
+
+    // _conversationScrollView 占 _leftScrollView 下方到 conversationBottom 之间
+    CGFloat conversationTop = scrollViewHeight + sectionGap;
+    CGFloat conversationHeight = conversationBottom - conversationTop;
+    if (conversationHeight < minConversationHeight) {
+        conversationHeight = minConversationHeight;
+    }
+    _conversationScrollView.frame = CGRectMake(sidePadding, conversationTop, panelWidth - sidePadding * 2, conversationHeight);
+
+    // _inputContainerView 占底部（inputTop 到 inputTop + inputHeight）
     _inputContainerView.frame = CGRectMake(sidePadding, inputTop, panelWidth - sidePadding * 2, inputHeight);
+
+    // _leftContentView 的高度保持由 layoutMainPanelsIfNeeded 设置（基于 panelHeight * 1.25），
+    // 确保诊断/历史/风险卡片有足够的滚动空间。
+    _leftScrollView.contentSize = _leftContentView.bounds.size;
 }
 
 - (void)setupLeftPanel {
@@ -531,7 +554,9 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     _conversationScrollView.showsVerticalScrollIndicator = YES;
     _conversationScrollView.indicatorStyle = UIScrollViewIndicatorStyleWhite;
     _conversationScrollView.alwaysBounceVertical = YES;
-    [_leftContentView addSubview:_conversationScrollView];
+    // 修复错位：_conversationScrollView 必须加到 _leftPanel（视口层）而非 _leftContentView（可滚动内容）。
+    // 否则它会随 _leftScrollView 滚动而漂移，无法常驻视口中部，造成"AI 修复界面错位"。
+    [_leftPanel addSubview:_conversationScrollView];
 
     _conversationStackView = [[UIStackView alloc] init];
     _conversationStackView.axis = UILayoutConstraintAxisVertical;
@@ -554,7 +579,9 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     _inputContainerView.layer.cornerCurve = kCACornerCurveContinuous;
     _inputContainerView.layer.borderWidth = 0.5;
     _inputContainerView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.12].CGColor;
-    [_leftContentView addSubview:_inputContainerView];
+    // 修复错位：_inputContainerView 必须加到 _leftPanel（视口层）而非 _leftContentView（可滚动内容）。
+    // 否则它会随 _leftScrollView 滚动而漂移，无法常驻视口底部，造成"输入框被挤走/错位"。
+    [_leftPanel addSubview:_inputContainerView];
 
     UILabel *inputTitle = [[UILabel alloc] initWithFrame:CGRectMake(16, 10, 180, 18)];
     inputTitle.text = localize(@"ai.fix.input_title", @"指令与补充信息");

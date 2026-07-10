@@ -447,6 +447,11 @@
     [super viewDidLoad];
     self.title = @"版本管理";
     self.view.backgroundColor = [UIColor clearColor];
+    // 适配自定义启动器背景：导航栏毛玻璃 + 视图透明
+    if (self.navigationController) {
+        [[BackgroundManager sharedManager] applyEffectToNavigationBar:self.navigationController.navigationBar];
+    }
+    [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
     [self setupCollectionView];
     [self setupNavigationBar];
     [self setupLongPressGesture];

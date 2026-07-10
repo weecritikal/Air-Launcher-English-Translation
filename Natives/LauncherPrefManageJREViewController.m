@@ -7,6 +7,7 @@
 #import "UIKit+hook.h"
 #import "ios_uikit_bridge.h"
 #import "utils.h"
+#import "BackgroundManager.h"
 
 #include <dlfcn.h>
 #include <lzma.h>
@@ -93,6 +94,15 @@ static WFWorkflowProgressView* currentProgressView;
 
     self.tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStyleInsetGrouped];
     self.tableView.keyboardDismissMode = UIScrollViewKeyboardDismissModeInteractive;
+
+    // 适配自定义启动器背景：透明化 tableView + 导航栏毛玻璃
+    if (self.navigationController) {
+        [[BackgroundManager sharedManager] applyEffectToNavigationBar:self.navigationController.navigationBar];
+    }
+    [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
+    self.tableView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
+    self.extendedLayoutIncludesOpaqueBars = YES;
+    self.edgesForExtendedLayout = UIRectEdgeAll;
 
     self.javaRuntimes = @{
         @(DEFAULT_JRE): @[@"preference.manage_runtime.default.1165", @"preference.manage_runtime.default.117", @"launcher.menu.execute_jar"]
@@ -343,22 +353,68 @@ static WFWorkflowProgressView* currentProgressView;
 
 - (void)tableView:(UITableView *)tableView openPickerAtIndexPath:(NSIndexPath *)indexPath minVersion:(NSInteger)minVer {
     UITableViewCell *cell = [tableView cellForRowAtIndexPath:indexPath];
-    //NSDictionary *item = self.prefContents[indexPath.section][indexPath.row];
 
-    NSMutableArray *menuItems = [NSMutableArray new];
+    // 收集可选的 Java 版本
+    NSMutableArray<NSString *> *versionTitles = [NSMutableArray new];
+    NSMutableArray<NSNumber *> *versionNumbers = [NSMutableArray new];
     for (int i = 1; i < self.sortedJavaVersions.count; i++) {
         if (self.sortedJavaVersions[i].intValue < minVer ||
             self.sortedJavaVersions[i].intValue == INVALID_JRE) {
             continue;
         }
         NSString *version = [self tableView:tableView titleForHeaderInSection:i];
+        [versionTitles addObject:version];
+        [versionNumbers addObject:self.sortedJavaVersions[i]];
+    }
+
+    // iPhone 上改用 UIAlertController actionSheet，避免紧凑菜单被压缩不可调整
+    if ([UIDevice currentDevice].userInterfaceIdiom == UIUserInterfaceIdiomPhone) {
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:cell.textLabel.text
+                                                                       message:nil
+                                                                preferredStyle:UIAlertControllerStyleActionSheet];
+        if (versionTitles.count == 0) {
+            [alert addAction:[UIAlertAction actionWithTitle:localize(@"None", nil)
+                                                       style:UIAlertActionStyleDefault
+                                                     handler:nil]];
+        } else {
+            for (int i = 0; i < versionTitles.count; i++) {
+                NSString *version = versionTitles[i];
+                NSNumber *verNum = versionNumbers[i];
+                // 当前选中项前加 ✓ 标记
+                NSString *title = version;
+                if ([cell.detailTextLabel.text isEqualToString:version]) {
+                    title = [NSString stringWithFormat:@"✓ %@", version];
+                }
+                [alert addAction:[UIAlertAction actionWithTitle:title
+                                                           style:UIAlertActionStyleDefault
+                                                         handler:^(UIAlertAction *a) {
+                    cell.detailTextLabel.text = version;
+                    ((NSMutableDictionary *)self.selectedRuntimes[@"0"])[self.selectedRTTags[indexPath.row]] = verNum.stringValue;
+                    setPrefObject(@"java.java_homes", self.selectedRuntimes);
+                }]];
+            }
+        }
+        [alert addAction:[UIAlertAction actionWithTitle:localize(@"Cancel", nil)
+                                                   style:UIAlertActionStyleCancel
+                                                 handler:nil]];
+        alert.popoverPresentationController.sourceView = cell;
+        alert.popoverPresentationController.sourceRect = cell.bounds;
+        [self presentViewController:alert animated:YES completion:nil];
+        return;
+    }
+
+    // iPad：保留 UIContextMenuInteraction 紧凑菜单
+    NSMutableArray *menuItems = [NSMutableArray new];
+    for (int i = 0; i < versionTitles.count; i++) {
+        NSString *version = versionTitles[i];
+        NSNumber *verNum = versionNumbers[i];
         [menuItems addObject:[UIAction
             actionWithTitle:version
             image:nil
             identifier:nil
             handler:^(UIAction *action) {
                 cell.detailTextLabel.text = version;
-                ((NSMutableDictionary *)self.selectedRuntimes[@"0"])[self.selectedRTTags[indexPath.row]] = self.sortedJavaVersions[i].stringValue;
+                ((NSMutableDictionary *)self.selectedRuntimes[@"0"])[self.selectedRTTags[indexPath.row]] = verNum.stringValue;
                 setPrefObject(@"java.java_homes", self.selectedRuntimes);
             }]];
     }
@@ -375,8 +431,10 @@ static WFWorkflowProgressView* currentProgressView;
 
     self.currentMenu = [UIMenu menuWithTitle:cell.textLabel.text children:menuItems];
     UIContextMenuInteraction *interaction = [[UIContextMenuInteraction alloc] initWithDelegate:self];
-    [cell.detailTextLabel addInteraction:interaction];
-    [interaction _presentMenuAtLocation:CGPointZero];
+    [cell addInteraction:interaction];
+    CGRect detailFrame = cell.detailTextLabel.frame;
+    CGPoint location = CGPointMake(CGRectGetMidX(detailFrame), CGRectGetMidY(detailFrame));
+    [interaction _presentMenuAtLocation:location];
 }
 
 - (UIContextMenuConfiguration *)contextMenuInteraction:(UIContextMenuInteraction *)interaction configurationForMenuAtLocation:(CGPoint)location

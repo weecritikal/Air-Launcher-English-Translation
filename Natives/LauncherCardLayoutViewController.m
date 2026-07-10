@@ -24,8 +24,16 @@ static const CGFloat kSidebarWidthPhone = 56.0;    // iPhone 左侧边栏卡片�
 static const CGFloat kRightPanelWidthPad = 220.0;  // iPad 右侧面板卡片宽度
 static const CGFloat kRightPanelWidthPhone = 168.0; // iPhone 右侧面板卡片宽度（保证启动/JAR 按钮可读）
 static const CGFloat kCardSpacing = 12.0;          // 卡片间距
-static const CGFloat kCardOuterMargin = 12.0;      // 卡片到外边缘的间距
+static const CGFloat kCardOuterMarginPad = 12.0;   // iPad 卡片到外边缘的间距
+static const CGFloat kCardOuterMarginPhone = 8.0;  // iPhone 卡片到外边缘的间距（窄屏减小留白）
 static const CGFloat kCardCornerRadius = 16.0;     // 卡片圆角
+
+/// 根据当前 traitCollection 决定卡片外边距
+static CGFloat LauncherCardLayoutOuterMargin(UITraitCollection *trait) {
+    if (!trait) return kCardOuterMarginPad;
+    if (trait.userInterfaceIdiom == UIUserInterfaceIdiomPhone) return kCardOuterMarginPhone;
+    return kCardOuterMarginPad;
+}
 
 /// 根据当前 traitCollection 与屏幕宽度决定侧栏宽度
 /// - iPhone 横屏（含 SE/8/Plus/X/Pro Max）：56pt（菜单只有图标，56pt 足够）
@@ -53,6 +61,8 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
 
 @property(nonatomic, strong) NSLayoutConstraint *sidebarWidthConstraint;
 @property(nonatomic, strong) NSLayoutConstraint *rightPanelWidthConstraint;
+// 存储外边距约束，traitCollection 变化时动态更新
+@property(nonatomic, strong) NSArray<NSLayoutConstraint *> *outerMarginConstraints;
 
 @property(nonatomic, assign) BOOL isShowingProfileEditor;
 @property(nonatomic, strong) ProfileSettingsViewController *profileEditorVC;
@@ -167,24 +177,11 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
 
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
-    // 对称补偿 safeAreaInsets，使卡片四边外边距一致。
-    // 问题：iPhone 横屏下 safeArea 上下不对称（top≈0, bottom≈21 home indicator），
-    // 左右不对称（刘海侧≈44, 非刘海侧≈0），导致卡片四边到屏幕边缘的距离不一致
-    // （top=12, bottom=33; left=56, right=12），观感为"上下空隙不一样下面大、
-    // 左右空隙也不一致"。
-    // 修复：读取实际 safeAreaInsets，取上下 max、左右 max，通过 additionalSafeAreaInsets
-    // 将较小一侧补偿到与较大一侧相同。补偿后 safeAreaLayoutGuide 四边对称，卡片约束
-    // （safeAreaLayoutGuide + kCardOuterMargin）四边外边距完全一致。
-    // 注意：使用 self.additionalSafeAreaInsets（UIViewController 属性，iOS 11+），
-    // 而非 self.view.additionalSafeAreaInsets（UIView 属性在某些 SDK 头文件可见性下
-    // 编译报 "property not found" 错误），与 LauncherRootViewController.m 一致。
-    UIEdgeInsets sa = self.view.safeAreaInsets;
-    CGFloat vMax = MAX(sa.top, sa.bottom);
-    CGFloat hMax = MAX(sa.left, sa.right);
-    UIEdgeInsets additional = UIEdgeInsetsMake(vMax - sa.top, hMax - sa.left, vMax - sa.bottom, hMax - sa.right);
-    if (!UIEdgeInsetsEqualToEdgeInsets(additional, self.additionalSafeAreaInsets)) {
-        self.additionalSafeAreaInsets = additional;
-    }
+    // card 布局四边外边距一致性由约束保证（用 view.edgeAnchor + kCardOuterMargin，
+    // 不依赖 safeAreaLayoutGuide），此处无需额外补偿。
+    // 之前用 additionalSafeAreaInsets 补偿 safeArea 不对称，但补偿后外边距 =
+    // max(safeArea) + kCardOuterMargin 反而更大（"下边和左右两边空隙过大"），
+    // 故移除该补偿方案，改用 view.edgeAnchor 直接约束。
 }
 
 - (void)traitCollectionDidChange:(UITraitCollection *)previousTraitCollection {
@@ -197,6 +194,18 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
     }
     if (self.rightPanelWidthConstraint.constant != rightPanelWidth) {
         self.rightPanelWidthConstraint.constant = rightPanelWidth;
+    }
+    // 更新外边距约束（iPhone/iPad 切换时 outerMargin 不同）
+    CGFloat outerMargin = LauncherCardLayoutOuterMargin(self.traitCollection);
+    for (NSLayoutConstraint *c in self.outerMarginConstraints) {
+        // 第一、四、七个约束是 leading/trailing（正外边距），其余是 top/bottom
+        // leading 用正 outerMargin，trailing 用负 outerMargin，top 用正，bottom 用负
+        // 简化处理：根据原 constant 符号决定正负
+        if (c.constant >= 0) {
+            c.constant = outerMargin;
+        } else {
+            c.constant = -outerMargin;
+        }
     }
     // 同时通知子视图控制器（右侧面板内的按钮文字大小可能需要适配）
     [self.childViewControllers enumerateObjectsUsingBlock:^(UIViewController *child, NSUInteger idx, BOOL *stop) {
@@ -279,27 +288,42 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
     self.sidebarWidthConstraint = [self.sidebarCard.widthAnchor constraintEqualToConstant:LauncherCardLayoutSidebarWidth(self.traitCollection)];
     self.rightPanelWidthConstraint = [self.rightPanelCard.widthAnchor constraintEqualToConstant:LauncherCardLayoutRightPanelWidth(self.traitCollection)];
 
+    // 卡片外边距：iPhone 窄屏用较小值减少留白
+    CGFloat outerMargin = LauncherCardLayoutOuterMargin(self.traitCollection);
+
     // 设置约束
-    // FCL 风格：中间内容卡片水平居中于屏幕，侧栏贴左、右面板贴右，
-    // 两侧间距均等（kCardSpacing），内容卡片填满侧栏与右面板之间的空间。
+    // 用 view.leadingAnchor/TrailingAnchor（而非 safeAreaLayoutGuide）约束左右，
+    // 使左右外边距完全由 outerMargin 控制，不受刘海/圆角导致的 safeArea 左右不对称影响。
+    // 顶部/底部仍用 safeAreaLayoutGuide 避免被刘海/home indicator 遮挡，
+    // 但加上 outerMargin 使上下外边距 = safeArea + outerMargin，与左右一致。
+    // 注意：上下用 safeAreaLayoutGuide + outerMargin，左右用 view.edge + outerMargin，
+    // 这样上下会自动避开刘海/home indicator，左右则贴边（卡片圆角与屏幕圆角对齐）。
+    NSLayoutConstraint *sidebarLeading = [self.sidebarCard.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:outerMargin];
+    NSLayoutConstraint *sidebarTop = [self.sidebarCard.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:outerMargin];
+    NSLayoutConstraint *sidebarBottom = [self.sidebarCard.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-outerMargin];
+    NSLayoutConstraint *rightTrailing = [self.rightPanelCard.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-outerMargin];
+    NSLayoutConstraint *rightTop = [self.rightPanelCard.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:outerMargin];
+    NSLayoutConstraint *rightBottom = [self.rightPanelCard.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-outerMargin];
+    NSLayoutConstraint *contentTop = [self.contentCard.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:outerMargin];
+    NSLayoutConstraint *contentBottom = [self.contentCard.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-outerMargin];
+
+    self.outerMarginConstraints = @[sidebarLeading, sidebarTop, sidebarBottom,
+                                    rightTrailing, rightTop, rightBottom,
+                                    contentTop, contentBottom];
+
     [NSLayoutConstraint activateConstraints:@[
         // 左侧菜单卡片
-        [self.sidebarCard.leadingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.leadingAnchor constant:kCardOuterMargin],
-        [self.sidebarCard.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:kCardOuterMargin],
-        [self.sidebarCard.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-kCardOuterMargin],
+        sidebarLeading, sidebarTop, sidebarBottom,
         self.sidebarWidthConstraint,
 
         // 右侧面板卡片
-        [self.rightPanelCard.trailingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.trailingAnchor constant:-kCardOuterMargin],
-        [self.rightPanelCard.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:kCardOuterMargin],
-        [self.rightPanelCard.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-kCardOuterMargin],
+        rightTrailing, rightTop, rightBottom,
         self.rightPanelWidthConstraint,
 
         // 中间内容卡片——填满侧栏与右面板之间的空间，两侧间距均等为 kCardSpacing
         [self.contentCard.leadingAnchor constraintEqualToAnchor:self.sidebarCard.trailingAnchor constant:kCardSpacing],
         [self.contentCard.trailingAnchor constraintEqualToAnchor:self.rightPanelCard.leadingAnchor constant:-kCardSpacing],
-        [self.contentCard.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:kCardOuterMargin],
-        [self.contentCard.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-kCardOuterMargin]
+        contentTop, contentBottom
     ]];
 }
 

@@ -67,7 +67,8 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
     self = [super initWithReuseIdentifier:reuseIdentifier];
     if (self) {
         UIView *containerView = [[UIView alloc] init];
-        containerView.backgroundColor = [UIColor systemGroupedBackgroundColor];
+        // 适配自定义启动器背景：透明背景让底层毛玻璃透出
+        containerView.backgroundColor = [UIColor clearColor];
         containerView.translatesAutoresizingMaskIntoConstraints = NO;
         [self.contentView addSubview:containerView];
         
@@ -695,12 +696,14 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
             NSInteger majorVal = [major integerValue];
             if (majorVal >= 21) {
                 // 21.x - 25.x: NeoForge loader 版本号 == MC 版本号（21.x → MC 1.21.x）
-                // NeoForge 版本格式: major.minor.patch[.build]，MC 版本 = 1.<major>.<patch>
-                if (components.count >= 3) {
-                    return [NSString stringWithFormat:@"1.%@.%@", major, components[2]];
-                } else {
-                    return [NSString stringWithFormat:@"1.%@.0", major];
-                }
+                // NeoForge 版本格式: major.minor.patch[.build]
+                //   - major 对应 MC 的 minor（21 → MC 1.21）
+                //   - minor 对应 MC 的 patch（21.1 → MC 1.21.1）
+                //   - patch 是 NeoForge 自己的 build 号（与 MC 版本无关）
+                // 因此 MC 版本 = 1.<major>.<minor>，而非 1.<major>.<patch>。
+                // 修复前错误取 components[2]（patch），导致 21.1.5 被解析为 MC 1.21.5
+                // 而非正确的 1.21.1，版本被错误分组。
+                return [NSString stringWithFormat:@"1.%@.%@", major, minor];
             } else {
                 // Old format: 20.2.88 -> 1.20.2
                 return [NSString stringWithFormat:@"1.%@.%@", major, minor];

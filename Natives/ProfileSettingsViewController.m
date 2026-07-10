@@ -76,14 +76,21 @@
     // 设置表格
     self.tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStyleInsetGrouped];
     self.tableView.keyboardDismissMode = UIScrollViewKeyboardDismissModeInteractive;
-    // 修复"前一个界面没有及时消失"：原 [UIColor clearColor] 导致 push 进入时
-    // ProfileSettingsViewController 的视图透明，底下的 VersionManagerViewController
-    // 的 collection view 直接透过显示。改用 systemBackgroundColor 提供不透明背景，
-    // 完全遮挡底层 VC。
-    // 当 ProfileSettingsVC 作为新 nav 的 rootViewController（showProfileEditor 通知路径）
-    // 时，setContentViewController 会调用 makeViewControllerTransparent: 把 backgroundColor
-    // 改回 clearColor（让 contentCard 的毛玻璃透出）；本设置仅在 push 路径下生效。
-    self.tableView.backgroundColor = [UIColor systemBackgroundColor];
+    // 适配自定义启动器背景：透明背景让底层背景毛玻璃透出。
+    // 之前用 systemBackgroundColor 遮挡底层 VersionManagerViewController 的 collection view，
+    // 但现在 VersionManagerViewController 已适配背景透明（viewDidLoad 调用
+    // makeViewControllerTransparent + applyEffectToNavigationBar），不再需要遮挡。
+    // 两条进入路径（push 和 showProfileEditor modal）都使用 clearColor，
+    // 统一由 BackgroundManager 管理背景效果。
+    self.tableView.backgroundColor = [UIColor clearColor];
+    // 适配自定义启动器背景：导航栏毛玻璃 + 视图透明
+    if (self.navigationController) {
+        [[BackgroundManager sharedManager] applyEffectToNavigationBar:self.navigationController.navigationBar];
+    }
+    [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
+    self.tableView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
+    self.extendedLayoutIncludesOpaqueBars = YES;
+    self.edgesForExtendedLayout = UIRectEdgeAll;
 
     // 计算最大内存
     [self calculateMaxMemory];

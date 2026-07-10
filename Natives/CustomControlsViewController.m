@@ -33,18 +33,22 @@
     [super viewDidLoad];
     [self.undoManager removeAllActions];
 
-    // 修复 vs 布局键位调整界面顶部"一行小白条"问题。
-    // 根因：applyEffectToView:self.view 给整个 self.view 加了 SystemThinMaterial 毛玻璃，
-    // 该毛玻璃延伸到半透明 nav bar 下方，与 nav bar 自身的 SystemMaterial 毛玻璃
-    // （BackgroundManager.applyEffectToNavigationBar）叠加，在 nav bar 底边形成
-    // 不透明度断层，在 vs 布局下（contentContainer 为 clearColor 无底色缓冲）表现为
-    // 明显的"一行小白条"。
-    // 修复：在启动器内嵌入场景（有 UINavigationController 包装，isInGame=NO）下，
-    // 设置 edgesForExtendedLayout=UIRectEdgeNone 让 self.view 不延伸到 nav bar 下方，
-    // 毛玻璃不再与 nav bar 重叠，消除断层。游戏内 modal 场景（isInGame=YES，无 nav 包装）
-    // 不受影响，仍保留全屏毛玻璃遮盖底层。
-    if (!isInGame) {
-        self.edgesForExtendedLayout = UIRectEdgeNone;
+    // 修复键位调整界面顶部"一行小白条"及"布局越来越奇怪"问题。
+    //
+    // 之前用 edgesForExtendedLayout=UIRectEdgeNone 修复小白条，但有严重副作用：
+    // (1) 改变 self.view.frame，导致 getSafeArea(self.view.frame) 在不同入口下
+    //     产生不同 ctrlView frame，键位预览位置漂移（"越来越奇怪"）。
+    // (2) isInGame 宏误用为"Nav 包装"判据：入口4（LauncherNavigationController
+    //     模态）无 Nav 但 isInGame=NO，错误应用 edgesForExtendedLayout=None，
+    //     且小白条仍存在（底层 nav bar 毛玻璃透出），导致"时有时无"。
+    //
+    // 正确方案：放弃 edgesForExtendedLayout，改从根源消除毛玻璃断层。
+    // 小白条根因是 self.view 的 SystemThinMaterial 毛玻璃与 nav bar 的 SystemMaterial
+    // 毛玻璃在 nav bar 底边叠加形成不透明度断层。在有 UINavigationController 包装时，
+    // 让 nav bar 不透明（translucent=NO），断层自然消失，无需改变 self.view.frame。
+    // 无 Nav 包装的游戏内 modal 场景保持原样（无 nav bar 无断层）。
+    if (self.navigationController != nil) {
+        self.navigationController.navigationBar.translucent = NO;
     }
 
     [[BackgroundManager sharedManager] applyEffectToView:self.view];
