@@ -4029,6 +4029,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     progressVC.stageSteps = @[
         @{@"title": @"下载整合包文件", @"status": @1},
         @{@"title": @"解析整合包结构", @"status": @0},
+        @{@"title": @"安装原版 Minecraft", @"status": @0},
         @{@"title": @"下载 Mod 文件", @"status": @0},
         @{@"title": @"安装模组加载器", @"status": @0},
         @{@"title": @"写入配置文件", @"status": @0},
@@ -4071,6 +4072,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             progressVC.stageSteps = @[
                 @{@"title": @"下载整合包文件", @"status": @2},
                 @{@"title": @"解析整合包结构", @"status": @1},
+                @{@"title": @"安装原版 Minecraft", @"status": @0},
                 @{@"title": @"下载 Mod 文件", @"status": @0},
                 @{@"title": @"安装模组加载器", @"status": @0},
                 @{@"title": @"写入配置文件", @"status": @0},
@@ -4095,80 +4097,72 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                     // 不强制下载 icon，保留原整合包内的
                 }
 
-                NSError *importError = nil;
-                BOOL success = [importService importModpack:mutableInfo
-                                                   progress:^(double p, NSString *stage) {
+                // 阶段14增强：参照 FCL/ZL2/HMCL，安装整合包前先安装对应的原版 Minecraft
+                // ModpackImportService 只下载 mod 文件和安装加载器，不下载原版 client.jar/libraries/assets
+                // 若不预装原版，启动时 Java 端 Tools.getVersionInfo() 会因 FileNotFoundException 崩溃
+                NSString *mcVersion = mutableInfo[@"minecraftVersion"];
+                if (![mcVersion isKindOfClass:[NSString class]] || mcVersion.length == 0) {
+                    mcVersion = mutableInfo[@"dependencies"][@"minecraft"];
+                }
+                if ([mcVersion isKindOfClass:[NSString class]] && mcVersion.length > 0) {
                     dispatch_async(dispatch_get_main_queue(), ^{
-                        progressVC.progress = p;
-                        progressVC.stageMessage = stage;
-                        // 阶段12增强：根据进度动态更新步骤状态
-                        // ModpackImportService 进度区间：0.1-0.3=下载mods, 0.3-0.7=安装加载器, 0.7-1.0=写配置
-                        NSArray *steps;
-                        if (p < 0.3) {
-                            steps = @[
-                                @{@"title": @"下载整合包文件", @"status": @2},
-                                @{@"title": @"解析整合包结构", @"status": @2},
-                                @{@"title": @"下载 Mod 文件", @"status": @1},
-                                @{@"title": @"安装模组加载器", @"status": @0},
-                                @{@"title": @"写入配置文件", @"status": @0},
-                            ];
-                        } else if (p < 0.7) {
-                            steps = @[
-                                @{@"title": @"下载整合包文件", @"status": @2},
-                                @{@"title": @"解析整合包结构", @"status": @2},
-                                @{@"title": @"下载 Mod 文件", @"status": @2},
-                                @{@"title": @"安装模组加载器", @"status": @1},
-                                @{@"title": @"写入配置文件", @"status": @0},
-                            ];
-                        } else if (p < 1.0) {
-                            steps = @[
-                                @{@"title": @"下载整合包文件", @"status": @2},
-                                @{@"title": @"解析整合包结构", @"status": @2},
-                                @{@"title": @"下载 Mod 文件", @"status": @2},
-                                @{@"title": @"安装模组加载器", @"status": @2},
-                                @{@"title": @"写入配置文件", @"status": @1},
-                            ];
-                        } else {
-                            steps = @[
-                                @{@"title": @"下载整合包文件", @"status": @2},
-                                @{@"title": @"解析整合包结构", @"status": @2},
-                                @{@"title": @"下载 Mod 文件", @"status": @2},
-                                @{@"title": @"安装模组加载器", @"status": @2},
-                                @{@"title": @"写入配置文件", @"status": @2},
-                            ];
-                        }
-                        progressVC.stageSteps = steps;
-                    });
-                } error:&importError];
-
-                // 清理临时文件
-                [[NSFileManager defaultManager] removeItemAtPath:tempPath error:nil];
-
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    if (success) {
-                        progressVC.progress = 1.0;
-                        progressVC.stageMessage = @"安装完成";
+                        // 更新进度：解析完成，准备安装原版
                         progressVC.stageSteps = @[
                             @{@"title": @"下载整合包文件", @"status": @2},
                             @{@"title": @"解析整合包结构", @"status": @2},
-                            @{@"title": @"下载 Mod 文件", @"status": @2},
-                            @{@"title": @"安装模组加载器", @"status": @2},
-                            @{@"title": @"写入配置文件", @"status": @2},
+                            @{@"title": @"安装原版 Minecraft", @"status": @1},
+                            @{@"title": @"下载 Mod 文件", @"status": @0},
+                            @{@"title": @"安装模组加载器", @"status": @0},
+                            @{@"title": @"写入配置文件", @"status": @0},
                         ];
-                        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                            [self.navigationController popViewControllerAnimated:YES];
-                            NSString *loader = mutableInfo[@"loader"];
-                            NSString *msg = [NSString stringWithFormat:@"整合包 %@ 安装完成", mutableInfo[@"name"]];
-                            if ([loader isEqualToString:@"Forge"] || [loader isEqualToString:@"NeoForge"]) {
-                                msg = [msg stringByAppendingFormat:@"\n\n注意: 此整合包使用 %@ %@ 加载器，请先通过下载界面手动安装该加载器版本。", loader, mutableInfo[@"loaderVersion"]];
+                        progressVC.stageMessage = [NSString stringWithFormat:@"正在安装原版 Minecraft %@...", mcVersion];
+
+                        // 调用原版预安装（ensureVanillaInstalled 会检查是否已安装，已安装则直接跳过）
+                        NSDictionary *vanillaVersion = @{@"id": mcVersion};
+                        __weak typeof(self) weakSelf = self;
+                        [self ensureVanillaInstalled:vanillaVersion completion:^(BOOL vanillaSuccess) {
+                            __strong typeof(weakSelf) strongSelf = weakSelf;
+                            if (!strongSelf) return;
+                            if (!vanillaSuccess) {
+                                dispatch_async(dispatch_get_main_queue(), ^{
+                                    [strongSelf.navigationController popViewControllerAnimated:YES];
+                                    [strongSelf showError:[NSString stringWithFormat:@"无法安装原版 %@，请检查网络后重试", mcVersion]];
+                                });
+                                return;
                             }
-                            [self showSuccessMessage:msg];
-                        });
-                    } else {
-                        [self.navigationController popViewControllerAnimated:YES];
-                        [self showError:importError.localizedDescription ?: @"导入失败"];
-                    }
-                });
+                            // 原版安装完成，继续导入整合包
+                            dispatch_async(dispatch_get_main_queue(), ^{
+                                progressVC.stageSteps = @[
+                                    @{@"title": @"下载整合包文件", @"status": @2},
+                                    @{@"title": @"解析整合包结构", @"status": @2},
+                                    @{@"title": @"安装原版 Minecraft", @"status": @2},
+                                    @{@"title": @"下载 Mod 文件", @"status": @1},
+                                    @{@"title": @"安装模组加载器", @"status": @0},
+                                    @{@"title": @"写入配置文件", @"status": @0},
+                                ];
+                                progressVC.stageMessage = @"正在下载 Mod 文件...";
+                            });
+                            // 在后台线程执行整合包导入
+                            dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+                                [strongSelf importModpackWithService:importService info:mutableInfo progressVC:progressVC tempPath:tempPath];
+                            });
+                        }];
+                    });
+                } else {
+                    // 无法提取游戏版本，跳过原版预安装，直接导入
+                    dispatch_async(dispatch_get_main_queue(), ^{
+                        progressVC.stageMessage = @"未检测到游戏版本，跳过原版安装，开始导入整合包...";
+                        progressVC.stageSteps = @[
+                            @{@"title": @"下载整合包文件", @"status": @2},
+                            @{@"title": @"解析整合包结构", @"status": @2},
+                            @{@"title": @"安装原版 Minecraft", @"status": @2},
+                            @{@"title": @"下载 Mod 文件", @"status": @1},
+                            @{@"title": @"安装模组加载器", @"status": @0},
+                            @{@"title": @"写入配置文件", @"status": @0},
+                        ];
+                    });
+                    [self importModpackWithService:importService info:mutableInfo progressVC:progressVC tempPath:tempPath];
+                }
             });
         });
     }];
@@ -4184,6 +4178,104 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId state:DownloadTaskStateDownloading];
 
     [task resume];
+}
+
+/// 阶段14：整合包导入辅助方法
+/// 参照 FCL/ZL2/HMCL：原版预安装完成后（或跳过后），执行实际的整合包导入流程。
+/// 包含：调用 ModpackImportService 下载 mod 文件、安装加载器、写入配置，
+/// 并通过 progressVC 实时展示 6 步进度（含原版安装步骤标记为已完成）。
+/// 导入完成后清理临时文件，并在主线程展示成功/失败结果。
+/// 注：此方法应在后台线程调用（QOS_CLASS_USER_INITIATED），进度回调内部自行 dispatch 到主线程。
+- (void)importModpackWithService:(ModpackImportService *)importService
+                            info:(NSDictionary *)info
+                      progressVC:(InstallerProgressViewController *)progressVC
+                        tempPath:(NSString *)tempPath {
+    NSError *importError = nil;
+    __weak typeof(self) weakSelf = self;
+    BOOL success = [importService importModpack:info
+                                       progress:^(double p, NSString *stage) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            progressVC.progress = p;
+            progressVC.stageMessage = stage;
+            // 阶段14增强：6 步进度列表（含"安装原版 Minecraft"标记为已完成）
+            // ModpackImportService 进度区间：0.1-0.3=下载mods, 0.3-0.7=安装加载器, 0.7-1.0=写配置
+            NSArray *steps;
+            if (p < 0.3) {
+                steps = @[
+                    @{@"title": @"下载整合包文件", @"status": @2},
+                    @{@"title": @"解析整合包结构", @"status": @2},
+                    @{@"title": @"安装原版 Minecraft", @"status": @2},
+                    @{@"title": @"下载 Mod 文件", @"status": @1},
+                    @{@"title": @"安装模组加载器", @"status": @0},
+                    @{@"title": @"写入配置文件", @"status": @0},
+                ];
+            } else if (p < 0.7) {
+                steps = @[
+                    @{@"title": @"下载整合包文件", @"status": @2},
+                    @{@"title": @"解析整合包结构", @"status": @2},
+                    @{@"title": @"安装原版 Minecraft", @"status": @2},
+                    @{@"title": @"下载 Mod 文件", @"status": @2},
+                    @{@"title": @"安装模组加载器", @"status": @1},
+                    @{@"title": @"写入配置文件", @"status": @0},
+                ];
+            } else if (p < 1.0) {
+                steps = @[
+                    @{@"title": @"下载整合包文件", @"status": @2},
+                    @{@"title": @"解析整合包结构", @"status": @2},
+                    @{@"title": @"安装原版 Minecraft", @"status": @2},
+                    @{@"title": @"下载 Mod 文件", @"status": @2},
+                    @{@"title": @"安装模组加载器", @"status": @2},
+                    @{@"title": @"写入配置文件", @"status": @1},
+                ];
+            } else {
+                steps = @[
+                    @{@"title": @"下载整合包文件", @"status": @2},
+                    @{@"title": @"解析整合包结构", @"status": @2},
+                    @{@"title": @"安装原版 Minecraft", @"status": @2},
+                    @{@"title": @"下载 Mod 文件", @"status": @2},
+                    @{@"title": @"安装模组加载器", @"status": @2},
+                    @{@"title": @"写入配置文件", @"status": @2},
+                ];
+            }
+            progressVC.stageSteps = steps;
+        });
+    } error:&importError];
+
+    // 清理临时文件
+    [[NSFileManager defaultManager] removeItemAtPath:tempPath error:nil];
+
+    dispatch_async(dispatch_get_main_queue(), ^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+        if (success) {
+            progressVC.progress = 1.0;
+            progressVC.stageMessage = @"安装完成";
+            progressVC.stageSteps = @[
+                @{@"title": @"下载整合包文件", @"status": @2},
+                @{@"title": @"解析整合包结构", @"status": @2},
+                @{@"title": @"安装原版 Minecraft", @"status": @2},
+                @{@"title": @"下载 Mod 文件", @"status": @2},
+                @{@"title": @"安装模组加载器", @"status": @2},
+                @{@"title": @"写入配置文件", @"status": @2},
+            ];
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                __strong typeof(weakSelf) s = weakSelf;
+                if (!s) return;
+                [s.navigationController popViewControllerAnimated:YES];
+                NSString *loader = info[@"loader"];
+                NSString *msg = [NSString stringWithFormat:@"整合包 %@ 安装完成", info[@"name"]];
+                if ([loader isEqualToString:@"Forge"] || [loader isEqualToString:@"NeoForge"]) {
+                    msg = [msg stringByAppendingFormat:@"\n\n注意: 此整合包使用 %@ %@ 加载器，请先通过下载界面手动安装该加载器版本。", loader, info[@"loaderVersion"]];
+                }
+                [s showSuccessMessage:msg];
+            });
+        } else {
+            [strongSelf.navigationController popViewControllerAnimated:YES];
+            [strongSelf showError:importError.localizedDescription ?: @"导入失败"];
+        }
+    });
 }
 
 - (void)installModpackFromFile:(NSString *)filePath modpack:(NSDictionary *)modpack {
