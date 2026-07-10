@@ -238,6 +238,9 @@ add_executable(AngelAuraAmethyst
   # 通用资源详情页头部视图（Mod/Shader/Asset 版本页共用，展示项目封面图/信息/标签/描述）
   AssetDetailHeaderView.m
 
+  # 模组加载器图标统一工具类（优先 bundle PNG，回退 SF Symbol，统一全项目加载器品牌色与图标）
+  ModLoaderIconHelper.m
+
   # Shader-related sources
   ShaderItem.m
   ShaderService.m

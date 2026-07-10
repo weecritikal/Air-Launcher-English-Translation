@@ -50,6 +50,7 @@
 #import "utils.h"
 #import "ios_uikit_bridge.h"
 #import "ALTServerConnection.h"
+#import "ModLoaderIconHelper.h"
 
 #include <sys/time.h>
 #include <SystemConfiguration/SystemConfiguration.h>
@@ -363,15 +364,13 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     }
 }
 
-/// 根据类别名返回配色：mod loader 用品牌色，其它用中性色（参照 ZL2 颜色编码）
+/// 根据类别名返回配色：加载器品牌色统一委托 ModLoaderIconHelper，类别色保持本地映射
 - (UIColor *)colorForCategory:(NSString *)category {
     NSString *lower = category.lowercaseString;
-    // 加载器品牌色
-    if ([lower containsString:@"fabric"])    return [UIColor colorWithRed:0.18 green:0.55 blue:0.95 alpha:1.0];
-    if ([lower containsString:@"quilt"])     return [UIColor colorWithRed:0.85 green:0.20 blue:0.45 alpha:1.0];
-    if ([lower containsString:@"forge"])     return [UIColor colorWithRed:0.55 green:0.35 blue:0.20 alpha:1.0];
-    if ([lower containsString:@"neoforge"])  return [UIColor colorWithRed:0.85 green:0.45 blue:0.15 alpha:1.0];
-    if ([lower containsString:@"optifine"])  return [UIColor colorWithRed:0.90 green:0.60 blue:0.10 alpha:1.0];
+    // 加载器品牌色：统一委托 ModLoaderIconHelper（优先 PNG 图标的官方配色）
+    if ([ModLoaderIconHelper isKnownLoader:category]) {
+        return [ModLoaderIconHelper brandColorForLoader:category];
+    }
     // 常见模组类别配色
     if ([lower containsString:@"magic"])     return [UIColor systemPurpleColor];
     if ([lower containsString:@"tech"])      return [UIColor systemOrangeColor];

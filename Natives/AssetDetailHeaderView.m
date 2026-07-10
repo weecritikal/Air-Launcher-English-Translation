@@ -13,6 +13,7 @@
 #import "AssetDetailHeaderView.h"
 #import "BackgroundManager.h"
 #import "UIKit+AFNetworking.h"
+#import "ModLoaderIconHelper.h"
 
 @interface AssetDetailHeaderView ()
 
@@ -432,19 +433,14 @@
     return badge;
 }
 
-/// 类别名称 → 品牌色映射（参照 FCL/ZL2 的加载器/类别配色，与 ModernAssetCell.colorForCategory 一致）
+/// 类别名称 → 品牌色映射（加载器品牌色统一委托 ModLoaderIconHelper，类别色保持本地映射）
 - (UIColor *)colorForCategory:(NSString *)category {
     NSString *lower = category.lowercaseString;
 
-    // 加载器品牌色
-    if ([lower containsString:@"fabric"])     return [UIColor colorWithRed:0.18 green:0.55 blue:0.95 alpha:1.0];
-    if ([lower containsString:@"quilt"])      return [UIColor colorWithRed:0.85 green:0.20 blue:0.45 alpha:1.0];
-    if ([lower containsString:@"forge"])      return [UIColor colorWithRed:0.55 green:0.35 blue:0.20 alpha:1.0];
-    if ([lower containsString:@"neoforge"])   return [UIColor colorWithRed:0.85 green:0.45 blue:0.15 alpha:1.0];
-    if ([lower containsString:@"optifine"])   return [UIColor colorWithRed:0.90 green:0.60 blue:0.10 alpha:1.0];
-    if ([lower containsString:@"optifabric"]) return [UIColor colorWithRed:0.90 green:0.60 blue:0.10 alpha:1.0];
-    if ([lower containsString:@"iris"])       return [UIColor colorWithRed:0.30 green:0.65 blue:0.95 alpha:1.0];
-    if ([lower containsString:@"rift"])       return [UIColor colorWithRed:0.20 green:0.70 blue:0.50 alpha:1.0];
+    // 加载器品牌色：统一委托 ModLoaderIconHelper（优先 PNG 图标的官方配色）
+    if ([ModLoaderIconHelper isKnownLoader:category]) {
+        return [ModLoaderIconHelper brandColorForLoader:category];
+    }
 
     // 常见类别色
     if ([lower containsString:@"performance"])   return [UIColor colorWithRed:0.30 green:0.80 blue:0.40 alpha:1.0]; // 绿

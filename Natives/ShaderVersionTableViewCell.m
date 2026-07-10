@@ -8,6 +8,7 @@
 
 #import "ShaderVersionTableViewCell.h"
 #import "BackgroundManager.h"
+#import "ModLoaderIconHelper.h"
 
 @interface ShaderVersionTableViewCell ()
 // 卡片容器：圆角 + 阴影 + 半透明背景（统一视觉规范）
@@ -173,17 +174,9 @@
     return badge;
 }
 
-/// 加载器名称 → 品牌色映射（参照 FCL/ZL2 的加载器图标配色）
+/// 加载器名称 → 品牌色映射（统一委托 ModLoaderIconHelper，消除多文件配色不一致）
 - (UIColor *)colorForLoader:(NSString *)loader {
-    NSString *lower = loader.lowercaseString;
-    if ([lower containsString:@"iris"])      return [UIColor colorWithRed:0.30 green:0.65 blue:0.95 alpha:1.0]; // Iris Shaders 蓝
-    if ([lower containsString:@"optifine"])  return [UIColor colorWithRed:0.90 green:0.60 blue:0.10 alpha:1.0]; // OptiFine 黄
-    if ([lower containsString:@"vanilla"])   return [UIColor colorWithRed:0.40 green:0.75 blue:0.40 alpha:1.0]; // Vanilla 绿
-    if ([lower containsString:@"fabric"])    return [UIColor colorWithRed:0.18 green:0.55 blue:0.95 alpha:1.0]; // Fabric 蓝
-    if ([lower containsString:@"quilt"])     return [UIColor colorWithRed:0.85 green:0.20 blue:0.45 alpha:1.0]; // Quilt 红
-    if ([lower containsString:@"optifabric"]) return [UIColor colorWithRed:0.90 green:0.60 blue:0.10 alpha:1.0]; // OptiFabric 黄
-    // 兜底：灰色
-    return [UIColor tertiaryLabelColor];
+    return [ModLoaderIconHelper brandColorForLoader:loader];
 }
 
 /// 根据版本数据填充加载器徽章（最多显示 4 个，避免徽章过多溢出）

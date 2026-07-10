@@ -8,6 +8,7 @@
 
 #import "ModVersionTableViewCell.h"
 #import "BackgroundManager.h"
+#import "ModLoaderIconHelper.h"
 
 @interface ModVersionTableViewCell ()
 // 卡片容器：圆角 + 阴影 + 半透明背景（统一视觉规范）
@@ -173,17 +174,9 @@
     return badge;
 }
 
-/// 加载器名称 → 品牌色映射（参照 FCL/ZL2 的加载器图标配色）
+/// 加载器名称 → 品牌色映射（统一委托 ModLoaderIconHelper，消除多文件配色不一致）
 - (UIColor *)colorForLoader:(NSString *)loader {
-    NSString *lower = loader.lowercaseString;
-    if ([lower containsString:@"fabric"])    return [UIColor colorWithRed:0.18 green:0.55 blue:0.95 alpha:1.0];
-    if ([lower containsString:@"quilt"])     return [UIColor colorWithRed:0.85 green:0.20 blue:0.45 alpha:1.0];
-    if ([lower containsString:@"forge"])     return [UIColor colorWithRed:0.55 green:0.35 blue:0.20 alpha:1.0];
-    if ([lower containsString:@"neoforge"])  return [UIColor colorWithRed:0.85 green:0.45 blue:0.15 alpha:1.0];
-    if ([lower containsString:@"optifine"])  return [UIColor colorWithRed:0.90 green:0.60 blue:0.10 alpha:1.0];
-    if ([lower containsString:@"rift"])      return [UIColor colorWithRed:0.20 green:0.70 blue:0.50 alpha:1.0];
-    // 兜底：灰色
-    return [UIColor tertiaryLabelColor];
+    return [ModLoaderIconHelper brandColorForLoader:loader];
 }
 
 /// 根据版本数据填充加载器徽章（最多显示 4 个，避免徽章过多溢出）

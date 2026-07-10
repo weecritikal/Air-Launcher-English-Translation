@@ -22,6 +22,7 @@
 #import "NeoForgeVersionFetcher.h"
 #import "LauncherPreferences.h"
 #import "BackgroundManager.h"
+#import "ModLoaderIconHelper.h"
 
 #pragma mark - Data Models
 
@@ -730,22 +731,14 @@
     BOOL neoForgeCompatible = [self isNeoForgeCompatible];
     BOOL optiFineCompatible = [self isOptiFineCompatible];
 
-    NSDictionary *iconFor = @{
-        @"vanilla":  @"cube.fill",
-        @"fabric":   @"bolt.fill",
-        @"forge":    @"hammer.fill",
-        @"neoforge": @"hammer.fill",
-        @"quilt":    @"bolt.fill",
-        @"optifine": @"eyeglasses",
-    };
-
+    // 通过 ModLoaderIconHelper 统一获取加载器图标和品牌色（优先 PNG，回退 SF Symbol）
     NSArray *defs = @[
-        @{ @"id": @"vanilla",  @"name": @"原版 (Vanilla)", @"desc": @"纯净 Minecraft，不包含任何模组加载器", @"color": @"gray",  @"compatible": @YES },
-        @{ @"id": @"fabric",   @"name": @"Fabric",        @"desc": @"轻量级模组加载器，适合小型模组",      @"color": @"orange",@"compatible": @(fabricCompatible) },
-        @{ @"id": @"forge",    @"name": @"Forge",         @"desc": @"经典模组加载器，模组生态丰富",        @"color": @"red",   @"compatible": @(forgeCompatible) },
-        @{ @"id": @"neoforge", @"name": @"NeoForge",      @"desc": @"Forge 的分支，支持 1.20.1+",          @"color": @"brown", @"compatible": @(neoForgeCompatible) },
-        @{ @"id": @"quilt",    @"name": @"Quilt",         @"desc": @"基于 Fabric 的新一代加载器",         @"color": @"purple",@"compatible": @(quiltCompatible) },
-        @{ @"id": @"optifine", @"name": @"OptiFine",      @"desc": @"光影与画质优化（作为版本补丁安装）",  @"color": @"blue",  @"compatible": @(optiFineCompatible) },
+        @{ @"id": @"vanilla",  @"name": @"原版 (Vanilla)", @"desc": @"纯净 Minecraft，不包含任何模组加载器", @"compatible": @YES },
+        @{ @"id": @"fabric",   @"name": @"Fabric",        @"desc": @"轻量级模组加载器，适合小型模组",      @"compatible": @(fabricCompatible) },
+        @{ @"id": @"forge",    @"name": @"Forge",         @"desc": @"经典模组加载器，模组生态丰富",        @"compatible": @(forgeCompatible) },
+        @{ @"id": @"neoforge", @"name": @"NeoForge",      @"desc": @"Forge 的分支，支持 1.20.1+",          @"compatible": @(neoForgeCompatible) },
+        @{ @"id": @"quilt",    @"name": @"Quilt",         @"desc": @"基于 Fabric 的新一代加载器",         @"compatible": @(quiltCompatible) },
+        @{ @"id": @"optifine", @"name": @"OptiFine",      @"desc": @"光影与画质优化（作为版本补丁安装）",  @"compatible": @(optiFineCompatible) },
     ];
 
     for (NSDictionary *d in defs) {
@@ -753,16 +746,10 @@
         row.identifier = d[@"id"];
         row.name = d[@"name"];
         row.desc = d[@"desc"];
-        row.iconName = iconFor[d[@"id"]] ?: @"cube.fill";
+        // 通过 ModLoaderIconHelper 统一获取图标符号名和品牌色
+        row.iconName = [ModLoaderIconHelper symbolNameForLoader:d[@"id"]];
         row.compatible = [d[@"compatible"] boolValue];
-        NSString *colorKey = d[@"color"];
-        if ([colorKey isEqualToString:@"gray"])   row.iconColor = [UIColor systemGrayColor];
-        else if ([colorKey isEqualToString:@"orange"]) row.iconColor = [UIColor systemOrangeColor];
-        else if ([colorKey isEqualToString:@"red"])    row.iconColor = [UIColor systemRedColor];
-        else if ([colorKey isEqualToString:@"brown"])  row.iconColor = [UIColor systemBrownColor];
-        else if ([colorKey isEqualToString:@"purple"]) row.iconColor = [UIColor systemPurpleColor];
-        else if ([colorKey isEqualToString:@"blue"])   row.iconColor = [UIColor systemBlueColor];
-        else row.iconColor = [UIColor systemGrayColor];
+        row.iconColor = [ModLoaderIconHelper brandColorForLoader:d[@"id"]];
         [_loaders addObject:row];
     }
 }

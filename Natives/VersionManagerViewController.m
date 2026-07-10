@@ -10,6 +10,7 @@
 #import "LauncherPreferences.h"
 #import "ScreenUtils.h"
 #import "utils.h"
+#import "ModLoaderIconHelper.h"
 #import <QuartzCore/QuartzCore.h>
 
 #pragma mark - Modern Tile Base Cell
@@ -248,28 +249,18 @@
     self.isolatedBadge.hidden = !isolated;
     self.lastPlayedLabel.text = lastPlayed.length > 0 ? lastPlayed : @"";
 
-    // FCL 风格：根据 versionId 中的关键字识别加载器类型，显示对应图标和颜色
-    NSString *lowerVersion = [version.lowercaseString stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-    UIImage *icon = [UIImage systemImageNamed:@"cube.box.fill"];
-    UIColor *iconColor = [UIColor systemBlueColor];
-    if ([lowerVersion containsString:@"fabric"]) {
-        icon = [UIImage systemImageNamed:@"wand.and.stars"];
-        iconColor = [UIColor colorWithRed:0.85 green:0.55 blue:0.95 alpha:1.0];
-    } else if ([lowerVersion containsString:@"quilt"]) {
-        icon = [UIImage systemImageNamed:@"circle.hexagongrid.fill"];
-        iconColor = [UIColor colorWithRed:0.95 green:0.55 blue:0.55 alpha:1.0];
-    } else if ([lowerVersion containsString:@"neoforge"]) {
-        icon = [UIImage systemImageNamed:@"hammer.fill"];
-        iconColor = [UIColor colorWithRed:0.92 green:0.45 blue:0.30 alpha:1.0];
-    } else if ([lowerVersion containsString:@"forge"]) {
-        icon = [UIImage systemImageNamed:@"anvil.fill"];
-        iconColor = [UIColor colorWithRed:0.70 green:0.50 blue:0.40 alpha:1.0];
-    } else if ([lowerVersion containsString:@"optifine"] || [lowerVersion containsString:@"optifabric"]) {
-        icon = [UIImage systemImageNamed:@"eye.fill"];
-        iconColor = [UIColor systemOrangeColor];
+    // FCL/ZL2 风格：通过 ModLoaderIconHelper 统一识别加载器类型，显示对应官方图标和品牌色
+    // 优先使用 bundle 中的官方 PNG（fabric/forge/neoforge），缺失时回退 SF Symbol + 品牌色
+    NSString *detectedLoader = [ModLoaderIconHelper detectLoaderFromVersionId:version];
+    if (detectedLoader) {
+        [ModLoaderIconHelper configureImageView:self.iconView
+                                      forLoader:detectedLoader
+                                 traitCollection:self.traitCollection];
+    } else {
+        // 未识别到加载器：默认方块图标 + 蓝色
+        self.iconView.image = [UIImage systemImageNamed:@"cube.box.fill"];
+        self.iconView.tintColor = [UIColor systemBlueColor];
     }
-    self.iconView.image = icon;
-    self.iconView.tintColor = iconColor;
 
     if (isSelected) {
         self.contentView.layer.borderColor = [UIColor systemGreenColor].CGColor;
