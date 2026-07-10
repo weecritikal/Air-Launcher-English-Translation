@@ -274,7 +274,8 @@
 }
 
 - (void)refreshBackgroundEffect {
-    // 透明背景下无需额外操作，毛玻璃由 tableView cell 各自处理
+    // 背景效果切换时刷新 cell 毛玻璃外观
+    [_tableView reloadData];
 }
 
 - (NSString *)pickerTitle {
@@ -292,6 +293,9 @@
     _tableView.dataSource = self;
     _tableView.delegate = self;
     _tableView.rowHeight = 50;
+    // 适配自定义启动器背景：透明背景让底层毛玻璃/壁纸透出
+    _tableView.backgroundColor = [UIColor clearColor];
+    _tableView.separatorColor = [UIColor separatorColor];
     [_tableView registerClass:[UITableViewCell class] forCellReuseIdentifier:@"VersionCell"];
     [self.view addSubview:_tableView];
 
@@ -627,6 +631,10 @@
     cell.backgroundColor = [UIColor clearColor];
     cell.accessoryType = [_selectedVersion isEqualToString:raw] ? UITableViewCellAccessoryCheckmark : UITableViewCellAccessoryNone;
     cell.tintColor = [UIColor systemGreenColor];
+    // 适配自定义启动器背景：有全局背景时给 cell 套毛玻璃/半透明效果
+    if ([[BackgroundManager sharedManager] hasBackground]) {
+        [[BackgroundManager sharedManager] applyEffectToCell:cell];
+    }
     return cell;
 }
 
@@ -707,7 +715,8 @@
 }
 
 - (void)refreshBackgroundEffect {
-    // 透明背景下无需额外操作
+    // 背景效果切换时刷新 cell 与 nameBar 的毛玻璃外观
+    [self.tableView reloadData];
 }
 
 #pragma mark Setup
@@ -761,7 +770,15 @@
 - (void)setupNameBar {
     _nameBar = [[UIView alloc] init];
     _nameBar.translatesAutoresizingMaskIntoConstraints = NO;
-    _nameBar.backgroundColor = [UIColor secondarySystemGroupedBackgroundColor];
+    // 适配自定义启动器背景：有全局背景时用毛玻璃，否则用默认实色
+    if ([[BackgroundManager sharedManager] hasBackground]) {
+        _nameBar.backgroundColor = [UIColor clearColor];
+        [[BackgroundManager sharedManager] applyEffectToView:_nameBar];
+        _nameBar.layer.cornerRadius = 12;
+        _nameBar.layer.masksToBounds = YES;
+    } else {
+        _nameBar.backgroundColor = [UIColor secondarySystemGroupedBackgroundColor];
+    }
     [self.view addSubview:_nameBar];
 
     UILabel *label = [[UILabel alloc] init];
@@ -1189,6 +1206,10 @@
                 }
             }
         }
+        // 适配自定义启动器背景：有全局背景时给 cell 套毛玻璃/半透明效果，避免实色背景遮挡壁纸
+        if ([[BackgroundManager sharedManager] hasBackground]) {
+            [[BackgroundManager sharedManager] applyEffectToCell:cell];
+        }
         return cell;
     } else {
         // section 1: 选项
@@ -1215,6 +1236,10 @@
         }
         [cell.switchControl removeTarget:nil action:NULL forControlEvents:UIControlEventAllEvents];
         [cell.switchControl addTarget:self action:@selector(switchChanged:) forControlEvents:UIControlEventValueChanged];
+        // 适配自定义启动器背景
+        if ([[BackgroundManager sharedManager] hasBackground]) {
+            [[BackgroundManager sharedManager] applyEffectToCell:cell];
+        }
         return cell;
     }
 }

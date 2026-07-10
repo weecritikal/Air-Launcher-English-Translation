@@ -715,7 +715,10 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     self.manageVersionBtn.enabled = enabled;
     self.executeJarBtn.enabled = enabled;
 
-    BOOL showProgressUI = !getPrefBool(@"general.floating_ball_enabled");
+    // 启动游戏的完整性检查/下载：始终显示进度（HMCL 风格进度条+文本），
+    // 不再被悬浮球设置隐藏。悬浮球（球心百分比）与此处进度条互为补充，
+    // 确保用户在启动前能"一模一样"地看到完整性检查进度。
+    BOOL showProgressUI = YES;
     if (enabled) {
         self.progressView.hidden = YES;
         self.progressLabel.hidden = YES;
@@ -777,7 +780,10 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     }
     
     dispatch_async(dispatch_get_main_queue(), ^{
-        BOOL showProgressUI = !getPrefBool(@"general.floating_ball_enabled");
+        // 启动游戏的完整性检查/下载：始终显示进度（HMCL 风格进度条+文本），
+        // 不再被悬浮球设置隐藏。悬浮球（球心百分比）与此处进度条互为补充，
+        // 确保用户在启动前能"一模一样"地看到完整性检查进度。
+        BOOL showProgressUI = YES;
         if (showProgressUI) {
             self.progressLabel.text = progress.localizedAdditionalDescription;
         }

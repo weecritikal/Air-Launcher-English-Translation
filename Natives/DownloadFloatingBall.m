@@ -47,6 +47,8 @@ NSNotificationName const DownloadFloatingBallSettingsDidChangeNotification = @"c
 @property(nonatomic, strong) UIImageView *iconImageView;
 @property(nonatomic, strong) UIImageView *checkmarkView;
 @property(nonatomic, strong) UILabel *badgeLabel;
+/// FCL 风格进度显示：下载中在球心叠加百分比文字，让悬浮球变成进度显示
+@property(nonatomic, strong) UILabel *progressPercentLabel;
 
 /// 专用窗口：windowLevel 高于 modal presentation，确保悬浮球始终在最上层，
 /// 不会被全屏 modal 的 transition view 遮挡（修复"图层跑到后面"问题）。
@@ -163,6 +165,25 @@ NSNotificationName const DownloadFloatingBallSettingsDidChangeNotification = @"c
         [badge.heightAnchor constraintEqualToConstant:18]
     ]];
 
+    // FCL 风格进度显示：球心百分比文字。下载中显示，其余状态隐藏（露出下载图标/对勾）。
+    UILabel *percentLabel = [[UILabel alloc] init];
+    percentLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    percentLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightBold];
+    percentLabel.textColor = [UIColor whiteColor];
+    percentLabel.textAlignment = NSTextAlignmentCenter;
+    percentLabel.adjustsFontSizeToFitWidth = YES;
+    percentLabel.minimumScaleFactor = 0.5;
+    percentLabel.hidden = YES;
+    [button addSubview:percentLabel];
+    self.progressPercentLabel = percentLabel;
+
+    [NSLayoutConstraint activateConstraints:@[
+        [percentLabel.centerXAnchor constraintEqualToAnchor:button.centerXAnchor],
+        [percentLabel.centerYAnchor constraintEqualToAnchor:button.centerYAnchor],
+        [percentLabel.leadingAnchor constraintGreaterThanOrEqualToAnchor:button.leadingAnchor constant:2],
+        [percentLabel.trailingAnchor constraintLessThanOrEqualToAnchor:button.trailingAnchor constant:-2]
+    ]];
+
     self.floatingButton = button;
 }
 
@@ -262,9 +283,11 @@ NSNotificationName const DownloadFloatingBallSettingsDidChangeNotification = @"c
     if (!enabled || inGame) {
         [self hide];
     } else {
-        if (self.floatingButton.hidden) {
-            [self show];
-        }
+        // 始终调用 show：确保 ballWindow 可见并启动刷新定时器。
+        // 旧逻辑 `if (self.floatingButton.hidden) [self show]` 在 UIButton 默认 hidden=NO 时
+        // 不会调用 show()，导致刷新定时器从不启动 → 外观永不更新（下载中不变色、不显示进度），
+        // 表现为"悬浮球显示不出来"。show() 内部 startVisibilityTimer 会去重，可安全重复调用。
+        [self show];
     }
 }
 
@@ -327,6 +350,61 @@ NSNotificationName const DownloadFloatingBallSettingsDidChangeNotification = @"c
     } else {
         self.badgeLabel.hidden = YES;
     }
+
+    // FCL 风格进度显示：下载中在球心显示聚合百分比，隐藏下载图标，让悬浮球变成进度显示。
+    // 聚合进度 = 所有 downloading 任务的进度均值；同时通过 accessibility 暴露速度/剩余时间。
+    if (state == DownloadTaskAggregateStateActive) {
+        NSArray<DownloadTaskItem *> *downloading = [manager tasksWithState:DownloadTaskStateDownloading];
+        double sum = 0.0;
+        NSInteger count = 0;
+        double totalSpeed = 0.0;
+        int64_t totalDownloaded = 0;
+        int64_t totalSize = 0;
+        for (DownloadTaskItem *item in downloading) {
+            if (item.progress >= 0) {
+                sum += item.progress;
+                count++;
+            }
+            totalSpeed += item.speed;
+            totalDownloaded += item.downloadedSize;
+            totalSize += item.totalSize;
+        }
+        double aggProgress = (count > 0) ? (sum / count) : -1.0;
+
+        // 优先用字节数算总进度（更准确），无法算时回退到任务进度均值
+        if (totalSize > 0) {
+            aggProgress = (double)totalDownloaded / (double)totalSize;
+        }
+
+        if (aggProgress >= 0.0) {
+            NSInteger percent = (NSInteger)(aggProgress * 100.0 + 0.5);
+            self.progressPercentLabel.text = [NSString stringWithFormat:@"%ld%%", (long)percent];
+        } else {
+            self.progressPercentLabel.text = @"...";
+        }
+        self.progressPercentLabel.hidden = NO;
+        // 隐藏下载图标，避免与百分比文字重叠
+        self.iconImageView.hidden = YES;
+
+        // 速度/ETA 通过 accessibility 暴露（无障碍朗读，不挤占球面）
+        NSString *speedStr = [self formatSpeed:totalSpeed];
+        self.floatingButton.accessibilityLabel =
+            [NSString stringWithFormat:@"下载中，进度 %@，速度 %@", self.progressPercentLabel.text, speedStr];
+    } else {
+        self.progressPercentLabel.hidden = YES;
+        // 恢复图标可见性（完成态显示对勾、其他态显示下载图标）
+        self.iconImageView.hidden = showCheckmark;
+        self.floatingButton.accessibilityLabel = nil;
+    }
+}
+
+/// 格式化下载速度（bytes/s → KB/s 或 MB/s）
+- (NSString *)formatSpeed:(double)bytesPerSec {
+    if (bytesPerSec <= 0) return @"0 KB/s";
+    if (bytesPerSec < 1024.0 * 1024.0) {
+        return [NSString stringWithFormat:@"%.1f KB/s", bytesPerSec / 1024.0];
+    }
+    return [NSString stringWithFormat:@"%.1f MB/s", bytesPerSec / (1024.0 * 1024.0)];
 }
 
 - (void)startCompletedResetTimer {

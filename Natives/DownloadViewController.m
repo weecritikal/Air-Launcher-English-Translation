@@ -555,6 +555,12 @@
 // 模组加载器安装进度 VC（FCL 风格进度展示，替代转圈 alert）
 @property (nonatomic, strong) InstallerProgressViewController *installerProgressVC;
 
+// 原版前置安装（FCL 风格：安装模组加载器前先装好对应原版）
+@property (nonatomic, strong) MinecraftResourceDownloadTask *vanillaPreinstallTask;
+@property (nonatomic, strong) InstallerProgressViewController *vanillaPreinstallProgressVC;
+@property (nonatomic, assign) BOOL isObservingVanillaPreinstall;
+@property (nonatomic, copy, nullable) void (^vanillaPreinstallCompletion)(BOOL success);
+
 @end
 
 @implementation DownloadViewController
@@ -567,6 +573,15 @@
     if (self.downloadTask) {
         [self.downloadTask.progress cancel];
         self.downloadTask = nil;
+    }
+    // 清理原版前置安装的 KVO 观察者，避免 VC 释放后 KVO 回调向已释放对象发送消息导致崩溃
+    if (self.isObservingVanillaPreinstall) {
+        [self.vanillaPreinstallTask.progress removeObserver:self forKeyPath:@"fractionCompleted"];
+        self.isObservingVanillaPreinstall = NO;
+    }
+    if (self.vanillaPreinstallTask) {
+        [self.vanillaPreinstallTask.progress cancel];
+        self.vanillaPreinstallTask = nil;
     }
     [[NSNotificationCenter defaultCenter] removeObserver:self name:@"BackgroundUIEffectChanged" object:nil];
 }
@@ -2123,17 +2138,18 @@
         return;
     }
 
-    // 参照 FCL：安装模组加载器前，先确保对应的原版版本 JSON 已存在。
+    // 参照 FCL：安装模组加载器前，先完整安装对应的原版（client.jar + libraries + assets）。
     // Fabric/Quilt/OptiFine 的版本 JSON 含 "inheritsFrom" 字段，启动时 Java 端
     // Tools.getVersionInfo() 会读取 versions/{inheritsFrom}/{inheritsFrom}.json 合并。
-    // 若用户尚未安装原版，启动会因 FileNotFoundException 崩溃。
-    // Forge/NeoForge 直装器内部已有 ensureParentVersionExists 逻辑，无需在此重复检查。
+    // 若用户尚未安装原版，启动会因 FileNotFoundException 崩溃；仅下载 JSON 不够，
+    // 还需下载 client.jar/资源/库，否则首次启动仍要现下、体验割裂。
+    // Forge/NeoForge 直装器内部已有 ensureParentVersionExists 逻辑（仅 JSON），此处补全完整原版。
     __weak typeof(self) weakSelf = self;
-    [self ensureVanillaVersionJSONExists:versionId completion:^(BOOL success) {
+    [self ensureVanillaInstalled:version completion:^(BOOL success) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
         if (!success) {
-            [strongSelf showError:[NSString stringWithFormat:@"无法获取原版 %@ 的版本信息，请检查网络后重试", versionId]];
+            [strongSelf showError:[NSString stringWithFormat:@"无法安装原版 %@，请检查网络后重试", versionId]];
             return;
         }
         dispatch_async(dispatch_get_main_queue(), ^{
@@ -2270,6 +2286,128 @@
 
         NSLog(@"[DownloadVC] Vanilla version JSON saved: %@ (%lu bytes)", versionJsonPath, (unsigned long)jsonData.length);
         if (completion) dispatch_async(dispatch_get_main_queue(), ^{ completion(YES); });
+    });
+}
+
+/// 参照 FCL：安装模组加载器前，先完整安装对应的原版（version JSON + libraries + assets）。
+/// 若原版已安装（versions/{id}/{id}.json 存在于 POJAV_GAME_DIR），直接 completion(YES)。
+/// 否则：1) 确保 version JSON 存在；2) 用 MinecraftResourceDownloadTask 下载完整原版文件（库+资源）；
+/// 3) 通过 InstallerProgressViewController 显示 FCL 风格进度。
+/// 注：client.jar 由 Java 端启动时按需下载，此处不检查；MinecraftResourceDownloadTask
+/// 下载时会对已存在且 SHA1 正确的文件跳过，因此重复调用安全。
+- (void)ensureVanillaInstalled:(NSDictionary *)version completion:(void (^)(BOOL success))completion {
+    if (![version isKindOfClass:[NSDictionary class]]) {
+        if (completion) completion(NO);
+        return;
+    }
+    NSString *versionId = version[@"id"];
+    if (![versionId isKindOfClass:[NSString class]] || versionId.length == 0) {
+        if (completion) completion(NO);
+        return;
+    }
+
+    // 用 POJAV_GAME_DIR（与 MinecraftResourceDownloadTask 一致），而非 POJAV_HOME
+    NSString *gameDir = @(getenv("POJAV_GAME_DIR"));
+    if (gameDir.length == 0) {
+        // 极端情况下环境变量缺失，回退到 POJAV_HOME
+        gameDir = @(getenv("POJAV_HOME"));
+    }
+    NSString *versionJsonPath = [gameDir stringByAppendingPathComponent:
+                                 [NSString stringWithFormat:@"versions/%@/%@.json", versionId, versionId]];
+
+    // 1. 原版 JSON 已存在（说明之前已下载过原版），直接返回，避免重复下载。
+    //   downloadVersion: 内部对已存在且 SHA1 正确的库/资源会自动跳过，无需此处逐一检查。
+    if ([NSFileManager.defaultManager fileExistsAtPath:versionJsonPath]) {
+        NSLog(@"[DownloadVC] Vanilla %@ already installed (JSON exists), skip preinstall", versionId);
+        if (completion) completion(YES);
+        return;
+    }
+
+    NSLog(@"[DownloadVC] Vanilla %@ not installed, preinstalling...", versionId);
+
+    // 保存 completion，KVO 完成时调用
+    __weak typeof(self) weakSelf = self;
+    self.vanillaPreinstallCompletion = completion;
+
+    // 2. 先确保 version JSON 存在（复用已有逻辑）
+    [self ensureVanillaVersionJSONExists:versionId completion:^(BOOL jsonSuccess) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) {
+            if (completion) completion(NO);
+            return;
+        }
+        if (!jsonSuccess) {
+            strongSelf.vanillaPreinstallCompletion = nil;
+            if (completion) completion(NO);
+            return;
+        }
+
+        // 3. 创建 FCL 风格进度 VC 并 push
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) s = weakSelf;
+            if (!s) {
+                if (completion) completion(NO);
+                return;
+            }
+            InstallerProgressViewController *progressVC = [[InstallerProgressViewController alloc] init];
+            progressVC.titleText = [NSString stringWithFormat:@"正在安装原版 %@", versionId];
+            progressVC.stageMessage = @"正在准备下载原版文件...";
+            progressVC.progress = -1; // 初始不确定模式，待拿到总字节数后切换为确定模式
+            progressVC.cancelHandler = ^{
+                __strong typeof(weakSelf) ss = weakSelf;
+                if (!ss) return;
+                if (ss.vanillaPreinstallTask) {
+                    if (ss.isObservingVanillaPreinstall) {
+                        [ss.vanillaPreinstallTask.progress removeObserver:ss forKeyPath:@"fractionCompleted"];
+                        ss.isObservingVanillaPreinstall = NO;
+                    }
+                    [ss.vanillaPreinstallTask.progress cancel];
+                    ss.vanillaPreinstallTask = nil;
+                }
+                ss.vanillaPreinstallProgressVC = nil;
+                ss.vanillaPreinstallCompletion = nil;
+            };
+            s.vanillaPreinstallProgressVC = progressVC;
+            [s.navigationController pushViewController:progressVC animated:YES];
+
+            // 4. 创建下载任务
+            MinecraftResourceDownloadTask *task = [MinecraftResourceDownloadTask new];
+            task.maxRetryCount = 3;
+            s.vanillaPreinstallTask = task;
+
+            task.handleError = ^{
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    __strong typeof(weakSelf) ss = weakSelf;
+                    if (!ss) return;
+                    if (ss.isObservingVanillaPreinstall) {
+                        [ss.vanillaPreinstallTask.progress removeObserver:ss forKeyPath:@"fractionCompleted"];
+                        ss.isObservingVanillaPreinstall = NO;
+                    }
+                    if (ss.vanillaPreinstallProgressVC && [ss.navigationController.viewControllers containsObject:ss.vanillaPreinstallProgressVC]) {
+                        [ss.navigationController popViewControllerAnimated:YES];
+                    }
+                    ss.vanillaPreinstallTask = nil;
+                    ss.vanillaPreinstallProgressVC = nil;
+                    void (^cb)(BOOL) = ss.vanillaPreinstallCompletion;
+                    ss.vanillaPreinstallCompletion = nil;
+                    if (cb) cb(NO);
+                });
+            };
+
+            // 5. KVO 监听进度（用独立 context 与主下载流程区分）
+            [task.progress addObserver:s
+                            forKeyPath:@"fractionCompleted"
+                               options:NSKeyValueObservingOptionInitial
+                               context:(__bridge void * _Nullable)(@"VanillaPreinstallContext"));
+            s.isObservingVanillaPreinstall = YES;
+
+            // 6. 后台线程启动下载
+            dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+                __strong typeof(weakSelf) ss = weakSelf;
+                if (!ss) return;
+                [ss.vanillaPreinstallTask downloadVersion:version];
+            });
+        });
     });
 }
 
@@ -4151,6 +4289,11 @@
 }
 
 - (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary *)change context:(void *)context {
+    // 原版前置安装进度（独立 context，避免与主下载流程冲突）
+    if ([(__bridge NSString *)context isEqualToString:@"VanillaPreinstallContext"]) {
+        [self handleVanillaPreinstallProgress];
+        return;
+    }
     if (![(__bridge NSString *)context isEqualToString:@"DownloadProgressContext"]) {
         [super observeValueForKeyPath:keyPath ofObject:object change:change context:context];
         return;
@@ -4251,6 +4394,94 @@
                                                type:InlineMessageTypeSuccess];
             
             self.downloadTask = nil;
+        }
+    });
+}
+
+/// 原版前置安装的进度处理：更新 FCL 风格进度 VC，完成时弹出 VC 并触发后续模组加载器安装。
+- (void)handleVanillaPreinstallProgress {
+    MinecraftResourceDownloadTask *task = self.vanillaPreinstallTask;
+    if (!task) return;
+    NSProgress *progress = task.progress;
+    NSProgress *textProgress = task.textProgress;
+    double fraction = progress.fractionCompleted;
+
+    // 计算 speed / ETA（与主下载流程一致）
+    static CGFloat lastMsTime = 0;
+    static NSUInteger lastSecTime = 0;
+    static NSInteger lastCompletedUnitCount = 0;
+    if (textProgress) {
+        NSInteger completedUnitCount = progress.totalUnitCount * fraction;
+        textProgress.completedUnitCount = completedUnitCount;
+        struct timeval tv;
+        gettimeofday(&tv, NULL);
+        if (lastSecTime < tv.tv_sec) {
+            CGFloat currentTime = tv.tv_sec + tv.tv_usec / 1000000.0;
+            if (lastMsTime > 0) {
+                NSInteger throughput = (completedUnitCount - lastCompletedUnitCount) / (currentTime - lastMsTime);
+                textProgress.throughput = @(throughput);
+                if (throughput > 0) {
+                    NSInteger remaining = (progress.totalUnitCount - completedUnitCount) / throughput;
+                    textProgress.estimatedTimeRemaining = @(remaining);
+                }
+            }
+            lastCompletedUnitCount = completedUnitCount;
+            lastSecTime = tv.tv_sec;
+            lastMsTime = currentTime;
+        }
+    }
+
+    dispatch_async(dispatch_get_main_queue(), ^{
+        __strong typeof(self) s = self;
+        if (!s) return;
+        InstallerProgressViewController *pvc = s.vanillaPreinstallProgressVC;
+        if (pvc) {
+            if (fraction >= 0.0 && progress.totalUnitCount > 1) {
+                pvc.progress = fraction;
+            } else {
+                pvc.progress = -1; // 不确定模式
+            }
+            // 阶段文案：百分比 + 速度 + 剩余时间
+            NSString *stage = [NSString stringWithFormat:@"%.1f%%", fraction * 100.0];
+            if (textProgress.throughput) {
+                NSInteger speed = [textProgress.throughput integerValue];
+                if (speed > 1024 * 1024) {
+                    stage = [stage stringByAppendingFormat:@" • %.1f MB/s", speed / (1024.0 * 1024.0)];
+                } else if (speed > 1024) {
+                    stage = [stage stringByAppendingFormat:@" • %.1f KB/s", speed / 1024.0];
+                } else if (speed > 0) {
+                    stage = [stage stringByAppendingFormat:@" • %ld B/s", (long)speed];
+                }
+            }
+            if (textProgress.estimatedTimeRemaining) {
+                NSInteger eta = [textProgress.estimatedTimeRemaining integerValue];
+                if (eta > 60) {
+                    stage = [stage stringByAppendingFormat:@" • 剩余 %ld分%ld秒", (long)(eta / 60), (long)(eta % 60)];
+                } else if (eta > 0) {
+                    stage = [stage stringByAppendingFormat:@" • 剩余 %ld秒", (long)eta];
+                }
+            }
+            pvc.stageMessage = stage;
+        }
+
+        if (progress.finished) {
+            // 重置速度统计静态变量
+            lastMsTime = 0;
+            lastSecTime = 0;
+            lastCompletedUnitCount = 0;
+
+            if (s.isObservingVanillaPreinstall) {
+                [s.vanillaPreinstallTask.progress removeObserver:s forKeyPath:@"fractionCompleted"];
+                s.isObservingVanillaPreinstall = NO;
+            }
+            if (s.vanillaPreinstallProgressVC && [s.navigationController.viewControllers containsObject:s.vanillaPreinstallProgressVC]) {
+                [s.navigationController popViewControllerAnimated:YES];
+            }
+            s.vanillaPreinstallTask = nil;
+            s.vanillaPreinstallProgressVC = nil;
+            void (^cb)(BOOL) = s.vanillaPreinstallCompletion;
+            s.vanillaPreinstallCompletion = nil;
+            if (cb) cb(YES);
         }
     });
 }
