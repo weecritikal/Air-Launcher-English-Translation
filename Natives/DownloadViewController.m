@@ -1,5 +1,8 @@
 #import "DownloadViewController.h"
 #import "BackgroundManager.h"
+// UIImageView+AFNetworking：为 ModernAssetCell 提供 setImageWithURL:placeholderImage:，
+// 自带内存+磁盘缓存，比手动 NSData 下载更高效，且能复用同一 URL 的下载任务
+#import "UIImageView+AFNetworking.h"
 #import "DownloadTaskManager.h"
 #import "DownloadTaskItem.h"
 #import "InlineMessageView.h"
@@ -54,6 +57,17 @@
 
 #pragma mark - Modern Asset Cell
 
+// 资源类型枚举：决定占位图标与配色，区分 6 类资源（mod/shader/resourcepack/datapack/world/modpack）
+// 参照 FCL CategoryBox 与 ZL2 AddonListLayout 的图标体系，使用 SF Symbols 替代项目自有 PNG
+typedef NS_ENUM(NSInteger, ModernAssetType) {
+    ModernAssetTypeMod = 0,           // 模组：puzzlepiece.fill + 橙
+    ModernAssetTypeShader,            // 光影：paintbrush.fill + 紫
+    ModernAssetTypeResourcepack,      // 资源包：photo.stack.fill + 蓝
+    ModernAssetTypeDatapack,          // 数据包：doc.text.fill + 青
+    ModernAssetTypeWorld,             // 世界：globe.asia.australia.fill + 绿
+    ModernAssetTypeModpack            // 整合包：shippingbox.fill + 粉
+};
+
 @interface ModernAssetCell : UITableViewCell
 @property (nonatomic, strong) UIView *contentContainer;
 @property (nonatomic, strong) UIImageView *iconView;
@@ -62,6 +76,10 @@
 @property (nonatomic, strong) UILabel *metaLabel;
 @property (nonatomic, strong) UIStackView *tagsStack;
 @property (nonatomic, strong) UIButton *downloadButton;
+// 当前资源类型（用于在 prepareForReuse 时重置占位图标与配色）
+@property (nonatomic, assign) ModernAssetType assetType;
+// 缓存当前正在加载图片的 URL，避免复用时旧请求覆盖新请求（cell 复用竞态）
+@property (nonatomic, copy, nullable) NSString *currentIconURL;
 @end
 
 @implementation ModernAssetCell
@@ -71,220 +89,383 @@
     if (self) {
         self.selectionStyle = UITableViewCellSelectionStyleNone;
         self.backgroundColor = [UIColor clearColor];
-        
+        self.contentView.backgroundColor = [UIColor clearColor];
+        self.assetType = ModernAssetTypeMod;
+
+        // ----- 卡片容器：圆角 + 半透明背景 + 浅阴影（参照 FCL bg_container_white + ZL2 Surface cardColor）-----
+        // 替代原来直接 addSubview 到 contentView 的扁平布局，统一与 VersionCardCell 一致的视觉规范
         self.contentContainer = [[UIView alloc] init];
         self.contentContainer.translatesAutoresizingMaskIntoConstraints = NO;
+        self.contentContainer.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.08];
+        self.contentContainer.layer.cornerRadius = 16;
+        self.contentContainer.layer.cornerCurve = kCACornerCurveContinuous;
+        self.contentContainer.layer.borderWidth = 0.5;
+        self.contentContainer.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.10].CGColor;
+        self.contentContainer.layer.shadowColor = [UIColor blackColor].CGColor;
+        self.contentContainer.layer.shadowOffset = CGSizeMake(0, 4);
+        self.contentContainer.layer.shadowOpacity = 0.12;
+        self.contentContainer.layer.shadowRadius = 8;
         [self.contentView addSubview:self.contentContainer];
-        
+
+        // ----- 左侧图标：56x56 圆角，承载资源主图（项目 icon 或占位 SF Symbol）-----
         self.iconView = [[UIImageView alloc] init];
         self.iconView.translatesAutoresizingMaskIntoConstraints = NO;
-        self.iconView.layer.cornerRadius = 10;
+        self.iconView.layer.cornerRadius = 12;
+        self.iconView.layer.cornerCurve = kCACornerCurveContinuous;
         self.iconView.clipsToBounds = YES;
-        // 移除灰色背景：加载失败时由占位 SF Symbol 兜底，不再显示灰色方块
-        self.iconView.backgroundColor = [UIColor clearColor];
+        // 默认背景：浅灰色圆角方块，图标加载前给一个视觉占位（FCL/ZL2 风格）
+        self.iconView.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.06];
         self.iconView.contentMode = UIViewContentModeScaleAspectFit;
         self.iconView.tintColor = [UIColor systemOrangeColor];
         [self.contentContainer addSubview:self.iconView];
-        
+
+        // ----- 标题 -----
         self.titleLabel = [[UILabel alloc] init];
         self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
         self.titleLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
         self.titleLabel.textColor = [UIColor labelColor];
         self.titleLabel.numberOfLines = 1;
+        self.titleLabel.adjustsFontSizeToFitWidth = YES;
+        self.titleLabel.minimumScaleFactor = 0.7;
+        self.titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
+        [self.titleLabel setContentCompressionResistancePriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
         [self.contentContainer addSubview:self.titleLabel];
-        
+
+        // ----- 描述（最多 2 行）-----
         self.descLabel = [[UILabel alloc] init];
         self.descLabel.translatesAutoresizingMaskIntoConstraints = NO;
         self.descLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleCaption1];
         self.descLabel.textColor = [UIColor secondaryLabelColor];
         self.descLabel.numberOfLines = 2;
+        self.descLabel.lineBreakMode = NSLineBreakByTruncatingTail;
         [self.contentContainer addSubview:self.descLabel];
-        
+
+        // ----- 元信息：作者 • 下载量 • 更新日期 -----
         self.metaLabel = [[UILabel alloc] init];
         self.metaLabel.translatesAutoresizingMaskIntoConstraints = NO;
         self.metaLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleCaption2];
         self.metaLabel.textColor = [UIColor tertiaryLabelColor];
+        self.metaLabel.numberOfLines = 1;
+        self.metaLabel.lineBreakMode = NSLineBreakByTruncatingTail;
         [self.contentContainer addSubview:self.metaLabel];
-        
+
+        // ----- 标签 stack：水平排列，最多 3 个，自动按 loader/类别配色 -----
         self.tagsStack = [[UIStackView alloc] init];
         self.tagsStack.translatesAutoresizingMaskIntoConstraints = NO;
         self.tagsStack.axis = UILayoutConstraintAxisHorizontal;
         self.tagsStack.spacing = 6;
         self.tagsStack.distribution = UIStackViewDistributionFill;
+        self.tagsStack.alignment = UIStackViewAlignmentCenter;
         [self.contentContainer addSubview:self.tagsStack];
-        
+
+        // ----- 下载按钮（圆形图标按钮，FCL 风格）-----
         self.downloadButton = [UIButton buttonWithType:UIButtonTypeSystem];
         self.downloadButton.translatesAutoresizingMaskIntoConstraints = NO;
-        [self.downloadButton setImage:[UIImage systemImageNamed:@"arrow.down.circle.fill"] forState:UIControlStateNormal];
+        // 用 UIImageSymbolConfiguration 控制图标大小（iOS 13+），回退到普通 setImage
+        UIImage *downloadSymbol = [UIImage systemImageNamed:@"arrow.down.circle.fill"
+                                          withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:28 weight:UIFontWeightRegular]];
+        if (!downloadSymbol) {
+            downloadSymbol = [UIImage systemImageNamed:@"arrow.down.circle.fill"];
+        }
+        [self.downloadButton setImage:downloadSymbol forState:UIControlStateNormal];
         self.downloadButton.tintColor = [UIColor systemGreenColor];
-        self.downloadButton.layer.cornerRadius = 20;
+        // 按下反馈：缩小动画（FCL anim_scale）
+        self.downloadButton.showsTouchWhenHighlighted = NO;
+        [self.downloadButton setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+        [self.downloadButton setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
         [self.contentContainer addSubview:self.downloadButton];
-        
+
         [NSLayoutConstraint activateConstraints:@[
-            [self.contentContainer.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:16],
-            [self.contentContainer.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:24],
-            [self.contentContainer.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-24],
-            [self.contentContainer.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-16],
-            
-            [self.iconView.leadingAnchor constraintEqualToAnchor:self.contentContainer.leadingAnchor],
+            // 卡片容器充满 contentView，上下留 6pt 间距作为行间分隔
+            [self.contentContainer.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:6],
+            [self.contentContainer.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:16],
+            [self.contentContainer.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-16],
+            [self.contentContainer.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-6],
+
+            // 图标：左 14，垂直居中，56x56
+            [self.iconView.leadingAnchor constraintEqualToAnchor:self.contentContainer.leadingAnchor constant:14],
             [self.iconView.centerYAnchor constraintEqualToAnchor:self.contentContainer.centerYAnchor],
             [self.iconView.widthAnchor constraintEqualToConstant:56],
             [self.iconView.heightAnchor constraintEqualToConstant:56],
-            
+
+            // 标题：紧跟图标右侧 +12，顶部对齐图标顶部，右侧留出下载按钮空间
             [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.iconView.trailingAnchor constant:12],
             [self.titleLabel.topAnchor constraintEqualToAnchor:self.iconView.topAnchor],
             [self.titleLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.downloadButton.leadingAnchor constant:-8],
-            
+
+            // 描述：与标题左对齐，紧跟标题下方 +2
             [self.descLabel.leadingAnchor constraintEqualToAnchor:self.titleLabel.leadingAnchor],
             [self.descLabel.topAnchor constraintEqualToAnchor:self.titleLabel.bottomAnchor constant:2],
             [self.descLabel.trailingAnchor constraintEqualToAnchor:self.titleLabel.trailingAnchor],
-            
+
+            // 元信息：紧跟描述下方 +2
             [self.metaLabel.leadingAnchor constraintEqualToAnchor:self.titleLabel.leadingAnchor],
             [self.metaLabel.topAnchor constraintEqualToAnchor:self.descLabel.bottomAnchor constant:2],
             [self.metaLabel.trailingAnchor constraintEqualToAnchor:self.titleLabel.trailingAnchor],
-            
+
+            // 标签 stack：紧跟元信息下方 +4
             [self.tagsStack.leadingAnchor constraintEqualToAnchor:self.titleLabel.leadingAnchor],
             [self.tagsStack.topAnchor constraintEqualToAnchor:self.metaLabel.bottomAnchor constant:4],
             [self.tagsStack.trailingAnchor constraintLessThanOrEqualToAnchor:self.downloadButton.leadingAnchor constant:-8],
-            
-            [self.downloadButton.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor],
+            [self.tagsStack.bottomAnchor constraintLessThanOrEqualToAnchor:self.contentContainer.bottomAnchor constant:-10],
+
+            // 下载按钮：右侧 -14，垂直居中，40x40
+            [self.downloadButton.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-14],
             [self.downloadButton.centerYAnchor constraintEqualToAnchor:self.contentContainer.centerYAnchor],
             [self.downloadButton.widthAnchor constraintEqualToConstant:40],
             [self.downloadButton.heightAnchor constraintEqualToConstant:40]
         ]];
-        
-        [[BackgroundManager sharedManager] applyEffectToView:self.contentView];
+
+        // 应用毛玻璃背景效果（BackgroundManager 统一管理深浅色与模糊度）
+        [[BackgroundManager sharedManager] applyEffectToView:self.contentContainer];
     }
     return self;
 }
 
 - (void)prepareForReuse {
     [super prepareForReuse];
-    // 重置图标状态，避免复用时旧图残留导致显示成方块
+    // 重置图标状态：避免复用时旧图残留导致显示错乱
     self.iconView.image = nil;
     self.iconView.tintColor = [UIColor systemOrangeColor];
     self.iconView.contentMode = UIViewContentModeScaleAspectFit;
+    self.iconView.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.06];
+    self.currentIconURL = nil;
+    // 移除所有标签
+    [self.tagsStack.arrangedSubviews makeObjectsPerformSelector:@selector(removeFromSuperview)];
+    // 重置下载按钮 target（防止复用后旧 target 残留触发错误下载）
+    [self.downloadButton removeTarget:nil action:NULL forControlEvents:UIControlEventAllEvents];
 }
 
-- (void)configureWithMod:(NSDictionary *)mod {
-    self.titleLabel.text = mod[@"title"] ?: mod[@"slug"] ?: @"Unknown";
-    self.descLabel.text = mod[@"description"] ?: @"";
+#pragma mark - 占位图标与配色（按资源类型）
 
-    NSString *author = mod[@"author"] ?: @"Unknown";
-    NSNumber *downloads = mod[@"downloads"];
-    NSString *downloadsStr = @"";
-    if (downloads) {
-        NSInteger dl = [downloads integerValue];
-        if (dl >= 1000000) {
-            downloadsStr = [NSString stringWithFormat:@"%.1fM", dl / 1000000.0];
-        } else if (dl >= 1000) {
-            downloadsStr = [NSString stringWithFormat:@"%.1fK", dl / 1000.0];
-        } else {
-            downloadsStr = [NSString stringWithFormat:@"%ld", (long)dl];
-        }
+/// 根据资源类型返回默认占位 SF Symbol 名称
+- (NSString *)placeholderIconNameForType:(ModernAssetType)type {
+    switch (type) {
+        case ModernAssetTypeMod:          return @"puzzlepiece.fill";
+        case ModernAssetTypeShader:       return @"paintbrush.fill";
+        case ModernAssetTypeResourcepack: return @"photo.stack.fill";
+        case ModernAssetTypeDatapack:     return @"doc.text.fill";
+        case ModernAssetTypeWorld:        return @"globe.asia.australia.fill";
+        case ModernAssetTypeModpack:      return @"shippingbox.fill";
     }
-    self.metaLabel.text = [NSString stringWithFormat:@"%@ • %@ 下载", author, downloadsStr];
+    return @"puzzlepiece.fill";
+}
 
-    // 先设置默认占位图标，避免异步加载期间显示成灰色方块
-    self.iconView.image = [UIImage systemImageNamed:@"puzzlepiece.fill"];
-    self.iconView.tintColor = [UIColor systemOrangeColor];
+/// 根据资源类型返回占位图标主色（用作 iconView.tintColor，与 FCL/ZL2 各资源类型的视觉色一致）
+- (UIColor *)placeholderColorForType:(ModernAssetType)type {
+    switch (type) {
+        case ModernAssetTypeMod:          return [UIColor systemOrangeColor];
+        case ModernAssetTypeShader:       return [UIColor systemPurpleColor];
+        case ModernAssetTypeResourcepack: return [UIColor systemBlueColor];
+        case ModernAssetTypeDatapack:     return [UIColor systemTealColor];
+        case ModernAssetTypeWorld:        return [UIColor systemGreenColor];
+        case ModernAssetTypeModpack:      return [UIColor systemPinkColor];
+    }
+    return [UIColor systemOrangeColor];
+}
+
+/// 应用占位图标：先显示类型对应的 SF Symbol，等异步加载完成后替换为项目图标
+- (void)applyPlaceholderIconForType:(ModernAssetType)type {
+    NSString *iconName = [self placeholderIconNameForType:type];
+    UIColor *iconColor = [self placeholderColorForType:type];
+    UIImage *symbol = [UIImage systemImageNamed:iconName];
+    if (symbol) {
+        self.iconView.image = symbol;
+    } else {
+        self.iconView.image = [UIImage systemImageNamed:@"puzzlepiece.fill"];
+    }
+    self.iconView.tintColor = iconColor;
     self.iconView.contentMode = UIViewContentModeScaleAspectFit;
+}
 
-    NSString *iconUrl = mod[@"imageUrl"] ?: mod[@"icon_url"];
-    if (iconUrl.length > 0) {
-        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-            NSData *data = [NSData dataWithContentsOfURL:[NSURL URLWithString:iconUrl]
-                                                  options:NSDataReadingUncached
-                                                    error:nil];
-            UIImage *image = data ? [UIImage imageWithData:data] : nil;
-            dispatch_async(dispatch_get_main_queue(), ^{
-                if (image) {
-                    self.iconView.contentMode = UIViewContentModeScaleAspectFill;
-                    self.iconView.image = image;
-                }
-                // 加载失败时保留默认占位图标 puzzlepiece.fill，不再显示灰色方块
-            });
-        });
-    }
+#pragma mark - 通用配置辅助
 
-    [self.tagsStack.arrangedSubviews makeObjectsPerformSelector:@selector(removeFromSuperview)];
-    NSArray *categories = mod[@"categories"] ?: @[];
-    for (NSInteger i = 0; i < MIN(3, categories.count); i++) {
-        NSString *cat = categories[i];
-        if ([cat isKindOfClass:[NSString class]]) {
-            UILabel *tag = [self createTagLabel:cat];
-            [self.tagsStack addArrangedSubview:tag];
-        }
+/// 格式化下载量数字：1234 → "1.2K"，1234567 → "1.2M"
+- (NSString *)formatDownloadCount:(NSNumber *)downloads {
+    if (!downloads) return @"0";
+    NSInteger dl = [downloads integerValue];
+    if (dl >= 1000000) {
+        return [NSString stringWithFormat:@"%.1fM", dl / 1000000.0];
+    } else if (dl >= 1000) {
+        return [NSString stringWithFormat:@"%.1fK", dl / 1000.0];
+    } else {
+        return [NSString stringWithFormat:@"%ld", (long)dl];
     }
 }
 
-- (void)configureWithShader:(NSDictionary *)shader {
-    self.titleLabel.text = shader[@"title"] ?: shader[@"slug"] ?: @"Unknown";
-    self.descLabel.text = shader[@"description"] ?: @"";
+/// 格式化日期字符串："2024-01-15T12:34:56Z" → "2024-01-15"，失败返回空串
+- (NSString *)formatDateString:(NSString *)dateString {
+    if (![dateString isKindOfClass:[NSString class]] || dateString.length < 10) return @"";
+    return [dateString substringToIndex:10];
+}
 
-    NSString *author = shader[@"author"] ?: @"Unknown";
-    NSNumber *downloads = shader[@"downloads"];
-    NSString *downloadsStr = @"";
-    if (downloads) {
-        NSInteger dl = [downloads integerValue];
-        if (dl >= 1000000) {
-            downloadsStr = [NSString stringWithFormat:@"%.1fM", dl / 1000000.0];
-        } else if (dl >= 1000) {
-            downloadsStr = [NSString stringWithFormat:@"%.1fK", dl / 1000.0];
-        } else {
-            downloadsStr = [NSString stringWithFormat:@"%ld", (long)dl];
-        }
+/// 异步加载项目图标：优先用 AFNetworking（带缓存），回退到 NSData
+- (void)loadIconFromURL:(NSString *)iconUrl placeholderType:(ModernAssetType)type {
+    // 先显示占位图标
+    [self applyPlaceholderIconForType:type];
+
+    if (![iconUrl isKindOfClass:[NSString class]] || iconUrl.length == 0) {
+        return;
     }
-    self.metaLabel.text = [NSString stringWithFormat:@"%@ • %@ 下载", author, downloadsStr];
 
-    // 先设置默认占位图标，避免异步加载期间显示成灰色方块
-    self.iconView.image = [UIImage systemImageNamed:@"paintbrush.fill"];
-    self.iconView.tintColor = [UIColor systemPurpleColor];
-    self.iconView.contentMode = UIViewContentModeScaleAspectFit;
+    // 记录当前正在加载的 URL，防止 cell 复用后旧请求覆盖新请求
+    self.currentIconURL = [iconUrl copy];
 
-    NSString *iconUrl = shader[@"imageUrl"] ?: shader[@"icon_url"];
-    if (iconUrl.length > 0) {
-        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-            NSData *data = [NSData dataWithContentsOfURL:[NSURL URLWithString:iconUrl]
-                                                  options:NSDataReadingUncached
-                                                    error:nil];
-            UIImage *image = data ? [UIImage imageWithData:data] : nil;
-            dispatch_async(dispatch_get_main_queue(), ^{
-                if (image) {
-                    self.iconView.contentMode = UIViewContentModeScaleAspectFill;
-                    self.iconView.image = image;
-                }
-                // 加载失败时保留默认占位图标 paintbrush.fill，不再显示灰色方块
-            });
+    __weak typeof(self) weakSelf = self;
+    void (^applyImage)(UIImage *) = ^(UIImage *image) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf || !image) return;
+        // 校验：cell 复用后 currentIconURL 可能已变，避免旧图覆盖新 cell
+        if (![strongSelf.currentIconURL isEqualToString:iconUrl]) return;
+        strongSelf.iconView.contentMode = UIViewContentModeScaleAspectFill;
+        strongSelf.iconView.image = image;
+        strongSelf.iconView.tintColor = [UIColor clearColor];
+    };
+
+    // 优先用 AFNetworking（自带内存+磁盘缓存，命中率高，且能复用同一 URL 的下载任务）
+    if ([self.iconView respondsToSelector:@selector(setImageWithURL:placeholderImage:)]) {
+        UIImage *placeholder = self.iconView.image; // 保留当前占位 SF Symbol 作为加载期间显示
+        [self.iconView setImageWithURL:[NSURL URLWithString:iconUrl] placeholderImage:placeholder];
+        return;
+    }
+
+    // 回退：手动 NSData 下载
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        NSData *data = [NSData dataWithContentsOfURL:[NSURL URLWithString:iconUrl]
+                                              options:NSDataReadingUncached
+                                                error:nil];
+        UIImage *image = data ? [UIImage imageWithData:data] : nil;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            applyImage(image);
         });
-    }
+    });
+}
 
+/// 配置标签 stack：从 categories 数组取最多 3 个，按 loader/类别配色
+/// 参照 ZL2 LittleTextLabel：mod loader 用品牌色，普通类别用中性色
+- (void)configureTagsWithCategories:(NSArray *)categories {
     [self.tagsStack.arrangedSubviews makeObjectsPerformSelector:@selector(removeFromSuperview)];
-    NSArray *categories = shader[@"categories"] ?: @[];
+    if (![categories isKindOfClass:[NSArray class]]) return;
+
     for (NSInteger i = 0; i < MIN(3, categories.count); i++) {
-        NSString *cat = categories[i];
-        if ([cat isKindOfClass:[NSString class]]) {
-            UILabel *tag = [self createTagLabel:cat];
-            [self.tagsStack addArrangedSubview:tag];
+        id catObj = categories[i];
+        NSString *cat = nil;
+        if ([catObj isKindOfClass:[NSString class]]) {
+            cat = catObj;
+        } else if ([catObj isKindOfClass:[NSDictionary class]]) {
+            // CurseForge 的 categories 是 dict，取 name 字段
+            cat = catObj[@"name"];
         }
+        if (![cat isKindOfClass:[NSString class]] || cat.length == 0) continue;
+
+        UILabel *tag = [self createTagLabel:cat];
+        [self.tagsStack addArrangedSubview:tag];
     }
+}
+
+/// 根据类别名返回配色：mod loader 用品牌色，其它用中性色（参照 ZL2 颜色编码）
+- (UIColor *)colorForCategory:(NSString *)category {
+    NSString *lower = category.lowercaseString;
+    // 加载器品牌色
+    if ([lower containsString:@"fabric"])    return [UIColor colorWithRed:0.18 green:0.55 blue:0.95 alpha:1.0];
+    if ([lower containsString:@"quilt"])     return [UIColor colorWithRed:0.85 green:0.20 blue:0.45 alpha:1.0];
+    if ([lower containsString:@"forge"])     return [UIColor colorWithRed:0.55 green:0.35 blue:0.20 alpha:1.0];
+    if ([lower containsString:@"neoforge"])  return [UIColor colorWithRed:0.85 green:0.45 blue:0.15 alpha:1.0];
+    if ([lower containsString:@"optifine"])  return [UIColor colorWithRed:0.90 green:0.60 blue:0.10 alpha:1.0];
+    // 常见模组类别配色
+    if ([lower containsString:@"magic"])     return [UIColor systemPurpleColor];
+    if ([lower containsString:@"tech"])      return [UIColor systemOrangeColor];
+    if ([lower containsString:@"adventure"]) return [UIColor systemTealColor];
+    if ([lower containsString:@"decoration"]) return [UIColor systemPinkColor];
+    if ([lower containsString:@"utility"])   return [UIColor systemBlueColor];
+    if ([lower containsString:@"world"])     return [UIColor systemGreenColor];
+    // 兜底
+    return [UIColor tertiaryLabelColor];
 }
 
 - (UILabel *)createTagLabel:(NSString *)text {
     UILabel *label = [[UILabel alloc] init];
     label.text = text;
     label.font = [UIFont systemFontOfSize:10 weight:UIFontWeightMedium];
-    label.textColor = [UIColor tertiaryLabelColor];
-    label.backgroundColor = [UIColor tertiarySystemBackgroundColor];
+    label.textColor = [UIColor whiteColor];
+    label.backgroundColor = [self colorForCategory:text];
     label.layer.cornerRadius = 8;
+    label.layer.cornerCurve = kCACornerCurveContinuous;
     label.layer.masksToBounds = YES;
     label.textAlignment = NSTextAlignmentCenter;
+    // 用 autolayout 而非 sizeToFit+frame：前者能正确响应 stackView 的 fill 分布
+    [label setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+    [label setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+    // 内边距：左右 8，上下 2
+    label.translatesAutoresizingMaskIntoConstraints = NO;
+    [NSLayoutConstraint activateConstraints:@[
+        [label.heightAnchor constraintEqualToConstant:18]
+    ]];
+    // 通过 sizeToFit 算出文字宽度，再加 padding 作为 widthAnchor 约束
     [label sizeToFit];
-    CGRect frame = label.frame;
-    frame.size.width += 8;
-    frame.size.height = 18;
-    label.frame = frame;
+    CGFloat textWidth = label.frame.size.width;
+    [label.widthAnchor constraintEqualToConstant:textWidth + 12].active = YES;
     return label;
+}
+
+#pragma mark - 各资源类型配置入口
+
+- (void)configureWithMod:(NSDictionary *)mod {
+    self.assetType = ModernAssetTypeMod;
+    [self configureCommonWithData:mod type:ModernAssetTypeMod];
+}
+
+- (void)configureWithShader:(NSDictionary *)shader {
+    self.assetType = ModernAssetTypeShader;
+    [self configureCommonWithData:shader type:ModernAssetTypeShader];
+}
+
+- (void)configureWithResourcepack:(NSDictionary *)resourcepack {
+    self.assetType = ModernAssetTypeResourcepack;
+    [self configureCommonWithData:resourcepack type:ModernAssetTypeResourcepack];
+}
+
+- (void)configureWithDatapack:(NSDictionary *)datapack {
+    self.assetType = ModernAssetTypeDatapack;
+    [self configureCommonWithData:datapack type:ModernAssetTypeDatapack];
+}
+
+- (void)configureWithWorld:(NSDictionary *)world {
+    self.assetType = ModernAssetTypeWorld;
+    [self configureCommonWithData:world type:ModernAssetTypeWorld];
+}
+
+- (void)configureWithModpack:(NSDictionary *)modpack {
+    self.assetType = ModernAssetTypeModpack;
+    [self configureCommonWithData:modpack type:ModernAssetTypeModpack];
+}
+
+/// 6 类资源共用的配置逻辑：标题/描述/元信息/图标/标签
+- (void)configureCommonWithData:(NSDictionary *)data type:(ModernAssetType)type {
+    self.titleLabel.text = data[@"title"] ?: data[@"slug"] ?: @"Unknown";
+    self.descLabel.text = data[@"description"] ?: @"";
+
+    // 元信息：作者 • 下载量 • 更新日期（参照 ZL2 行布局的摘要展示）
+    NSString *author = data[@"author"] ?: @"Unknown";
+    NSString *downloadsStr = [self formatDownloadCount:data[@"downloads"]];
+    NSString *updatedDate = [self formatDateString:data[@"lastUpdated"]];
+
+    NSMutableString *meta = [NSMutableString string];
+    [meta appendString:author];
+    [meta appendString:@"  •  "];
+    [meta appendFormat:@"%@ 下载", downloadsStr];
+    if (updatedDate.length > 0) {
+        [meta appendString:@"  •  更新 "];
+        [meta appendString:updatedDate];
+    }
+    self.metaLabel.text = meta;
+
+    // 图标：先占位，再异步加载项目图标
+    NSString *iconUrl = data[@"imageUrl"] ?: data[@"icon_url"];
+    [self loadIconFromURL:iconUrl placeholderType:type];
+
+    // 标签
+    [self configureTagsWithCategories:data[@"categories"]];
 }
 
 @end
@@ -803,7 +984,7 @@
     self.modTableView.backgroundColor = [UIColor clearColor];
     self.modTableView.dataSource = self;
     self.modTableView.delegate = self;
-    self.modTableView.rowHeight = 100;
+    self.modTableView.rowHeight = 112;
     self.modTableView.separatorStyle = UITableViewCellSeparatorStyleNone;
     [self.modTableView registerClass:[ModernAssetCell class] forCellReuseIdentifier:@"ModCell"];
     self.modTableView.hidden = YES;
@@ -827,7 +1008,7 @@
     self.shaderTableView.backgroundColor = [UIColor clearColor];
     self.shaderTableView.dataSource = self;
     self.shaderTableView.delegate = self;
-    self.shaderTableView.rowHeight = 100;
+    self.shaderTableView.rowHeight = 112;
     self.shaderTableView.separatorStyle = UITableViewCellSeparatorStyleNone;
     [self.shaderTableView registerClass:[ModernAssetCell class] forCellReuseIdentifier:@"ShaderCell"];
     self.shaderTableView.hidden = YES;
@@ -851,7 +1032,7 @@
     self.modpackTableView.backgroundColor = [UIColor clearColor];
     self.modpackTableView.dataSource = self;
     self.modpackTableView.delegate = self;
-    self.modpackTableView.rowHeight = 100;
+    self.modpackTableView.rowHeight = 112;
     self.modpackTableView.separatorStyle = UITableViewCellSeparatorStyleNone;
     [self.modpackTableView registerClass:[ModernAssetCell class] forCellReuseIdentifier:@"ModpackCell"];
     self.modpackTableView.hidden = YES;
@@ -875,7 +1056,7 @@
     self.resourcepackTableView.backgroundColor = [UIColor clearColor];
     self.resourcepackTableView.dataSource = self;
     self.resourcepackTableView.delegate = self;
-    self.resourcepackTableView.rowHeight = 100;
+    self.resourcepackTableView.rowHeight = 112;
     self.resourcepackTableView.separatorStyle = UITableViewCellSeparatorStyleNone;
     [self.resourcepackTableView registerClass:[ModernAssetCell class] forCellReuseIdentifier:@"ResourcepackCell"];
     self.resourcepackTableView.hidden = YES;
@@ -899,7 +1080,7 @@
     self.datapackTableView.backgroundColor = [UIColor clearColor];
     self.datapackTableView.dataSource = self;
     self.datapackTableView.delegate = self;
-    self.datapackTableView.rowHeight = 100;
+    self.datapackTableView.rowHeight = 112;
     self.datapackTableView.separatorStyle = UITableViewCellSeparatorStyleNone;
     [self.datapackTableView registerClass:[ModernAssetCell class] forCellReuseIdentifier:@"DatapackCell"];
     self.datapackTableView.hidden = YES;
@@ -923,7 +1104,7 @@
     self.worldTableView.backgroundColor = [UIColor clearColor];
     self.worldTableView.dataSource = self;
     self.worldTableView.delegate = self;
-    self.worldTableView.rowHeight = 100;
+    self.worldTableView.rowHeight = 112;
     self.worldTableView.separatorStyle = UITableViewCellSeparatorStyleNone;
     [self.worldTableView registerClass:[ModernAssetCell class] forCellReuseIdentifier:@"WorldCell"];
     self.worldTableView.hidden = YES;
@@ -3862,25 +4043,25 @@
     } else if (tableView == self.resourcepackTableView) {
         cell = [tableView dequeueReusableCellWithIdentifier:@"ResourcepackCell" forIndexPath:indexPath];
         NSDictionary *resourcepack = self.resourcepackList[indexPath.row];
-        [cell configureWithMod:resourcepack];
+        [cell configureWithResourcepack:resourcepack];
         [cell.downloadButton addTarget:self action:@selector(downloadResourcepack:) forControlEvents:UIControlEventTouchUpInside];
         cell.downloadButton.tag = indexPath.row;
     } else if (tableView == self.datapackTableView) {
         cell = [tableView dequeueReusableCellWithIdentifier:@"DatapackCell" forIndexPath:indexPath];
         NSDictionary *datapack = self.datapackList[indexPath.row];
-        [cell configureWithMod:datapack];
+        [cell configureWithDatapack:datapack];
         [cell.downloadButton addTarget:self action:@selector(downloadDatapack:) forControlEvents:UIControlEventTouchUpInside];
         cell.downloadButton.tag = indexPath.row;
     } else if (tableView == self.worldTableView) {
         cell = [tableView dequeueReusableCellWithIdentifier:@"WorldCell" forIndexPath:indexPath];
         NSDictionary *world = self.worldList[indexPath.row];
-        [cell configureWithMod:world];
+        [cell configureWithWorld:world];
         [cell.downloadButton addTarget:self action:@selector(downloadWorld:) forControlEvents:UIControlEventTouchUpInside];
         cell.downloadButton.tag = indexPath.row;
     } else {
         cell = [tableView dequeueReusableCellWithIdentifier:@"ModpackCell" forIndexPath:indexPath];
         NSDictionary *modpack = self.modpackList[indexPath.row];
-        [cell configureWithMod:modpack];
+        [cell configureWithModpack:modpack];
         [cell.downloadButton addTarget:self action:@selector(installModpack:) forControlEvents:UIControlEventTouchUpInside];
         cell.downloadButton.tag = indexPath.row;
     }
