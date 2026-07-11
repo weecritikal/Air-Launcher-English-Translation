@@ -150,6 +150,17 @@
         return [UIImage systemImageNamed:@"cube.box.fill"];
     }
 
+    // Vanilla 原版：使用 Assets.xcassets 中的 VanillaIcon 草方块图标
+    // 与 VersionCardCell 中版本卡片的原版图标保持一致（HMCL 仓库自带的标准草方块）
+    if ([loader.lowercaseString containsString:@"vanilla"]) {
+        UIImage *vanillaIcon = [UIImage imageNamed:@"VanillaIcon"];
+        if (vanillaIcon) {
+            return vanillaIcon;
+        }
+        // 如果 VanillaIcon 加载失败，回退到 SF Symbol
+        return [UIImage systemImageNamed:@"cube.fill"];
+    }
+
     // 提取加载器的规范化名称（用于 PNG 文件名匹配）
     NSString *pngKey = [self pngKeyForLoader:loader];
     if (pngKey) {
@@ -224,7 +235,13 @@
     imageView.image = image;
     imageView.contentMode = UIViewContentModeScaleAspectFit;
 
-    // 判断是否为 PNG（PNG 不着色，SF Symbol 着色）
+    // 判断是否为 PNG 或 VanillaIcon（不着色），SF Symbol 着色
+    // Vanilla 使用 Assets.xcassets 的草方块图标，保持原色不着色
+    if ([loader.lowercaseString containsString:@"vanilla"]) {
+        imageView.tintColor = nil;
+        return;
+    }
+
     // 与 iconImageForLoader 的加载顺序一致：先标准单文件，再主题文件
     NSString *pngKey = [self pngKeyForLoader:loader];
     BOOL hasPng = NO;
