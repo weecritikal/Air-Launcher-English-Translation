@@ -47,6 +47,7 @@
 #import "ios_uikit_bridge.h"
 #import "ALTServerConnection.h"
 #import "ModLoaderIconHelper.h"
+#import "DownloadProgressCardView.h"
 
 #include <sys/time.h>
 #include <SystemConfiguration/SystemConfiguration.h>
@@ -864,6 +865,8 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 @property (nonatomic, strong) MinecraftResourceDownloadTask *downloadTask;
 @property (nonatomic, strong) DownloadProgressViewController *progressVC;
 @property (nonatomic, strong) InlineMessageView *downloadingAlert;
+// 参照 FCL/ZL2/HMCL 的下载进度卡片，替代转圈圈的 loadingIndicator
+@property (nonatomic, strong) DownloadProgressCardView *progressCardView;
 
 @property (nonatomic, assign) BOOL isObservingProgress;
 
@@ -2829,50 +2832,41 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 - (void)startVersionDownload:(NSDictionary *)version {
     __weak DownloadViewController *weakSelf = self;
 
-    // 在内容区显示下载状态，替代弹窗（点击查看详情，关闭按钮取消）
-    self.downloadingAlert = [InlineMessageView showInViewController:self
-                                                              title:@"下载中"
-                                                           message:@"正在准备下载..."
-                                                              type:InlineMessageTypeLoading
-                                                  showsCloseButton:YES];
-    // 点击消息体打开详情视图
-    self.downloadingAlert.onTap = ^{
-        __strong typeof(weakSelf) strongSelf = weakSelf;
-        if (!strongSelf) return;
-        if (strongSelf.downloadTask) {
-            strongSelf.progressVC = [[DownloadProgressViewController alloc] initWithTask:strongSelf.downloadTask];
-            UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:strongSelf.progressVC];
-            nav.modalPresentationStyle = UIModalPresentationFormSheet;
-            [strongSelf presentViewController:nav animated:YES completion:nil];
-        }
-    };
-    // 点击关闭按钮取消下载
-    self.downloadingAlert.onClose = ^{
-        __strong typeof(weakSelf) strongSelf = weakSelf;
-        if (!strongSelf) return;
-        if (strongSelf.downloadTask) {
-            if (strongSelf.isObservingProgress) {
-                [strongSelf.downloadTask.progress removeObserver:strongSelf forKeyPath:@"fractionCompleted"];
-                strongSelf.isObservingProgress = NO;
-            }
-            [strongSelf.downloadTask.progress cancel];
-            strongSelf.downloadTask = nil;
-        }
-        strongSelf.view.userInteractionEnabled = YES;
-        [strongSelf.loadingIndicator stopAnimating];
-        [strongSelf.downloadingAlert dismiss];
-        strongSelf.downloadingAlert = nil;
-    };
+    // 参照 FCL/ZL2/HMCL：使用下载进度卡片替代转圈圈和纯文字进度
+    // 清理旧的进度卡片（如果存在）
+    if (self.progressCardView) {
+        [self.progressCardView dismiss];
+        self.progressCardView = nil;
+    }
+    if (self.downloadingAlert) {
+        [self.downloadingAlert dismiss];
+        self.downloadingAlert = nil;
+    }
 
-    [self.loadingIndicator startAnimating];
-    
+    NSString *versionId = version[@"id"] ?: @"版本";
+    NSString *versionType = version[@"type"] ?: @"";
+    NSString *subtitle = [versionType isEqualToString:@"release"] ? @"Minecraft 正式版" :
+                         [versionType isEqualToString:@"snapshot"] ? @"Minecraft 测试版" : @"Minecraft";
+
+    // 创建并显示下载进度卡片
+    self.progressCardView = [DownloadProgressCardView showInParentView:self.view
+                                                                 title:[NSString stringWithFormat:@"正在下载 %@", versionId]];
+    [self.progressCardView startDownloadWithTitle:[NSString stringWithFormat:@"正在下载 %@", versionId]
+                                          subtitle:subtitle];
+
     self.downloadTask = [MinecraftResourceDownloadTask new];
     self.downloadTask.maxRetryCount = 3;
-    
+
     self.downloadTask.retryCallback = ^(NSInteger retryCount, NSInteger maxRetryCount) {
         dispatch_async(dispatch_get_main_queue(), ^{
-            if (weakSelf.downloadingAlert) {
-                [weakSelf.downloadingAlert updateMessage:[NSString stringWithFormat:@"下载失败，正在重试 (%ld/%ld)...", (long)retryCount, (long)maxRetryCount]];
+            if (weakSelf.progressCardView) {
+                // 重试时显示不确定模式（转圈），提示用户正在重试
+                [weakSelf.progressCardView updateProgress:-1
+                                               downloaded:0
+                                                     total:-1
+                                                    speed:0
+                                                      eta:-1
+                                              currentFile:[NSString stringWithFormat:@"下载失败，正在重试 (%ld/%ld)...", (long)retryCount, (long)maxRetryCount]];
             }
         });
     };
@@ -2884,20 +2878,22 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                 weakSelf.isObservingProgress = NO;
             }
             weakSelf.view.userInteractionEnabled = YES;
-            [weakSelf.loadingIndicator stopAnimating];
-            // 关闭下载中提示
-            [weakSelf.downloadingAlert dismiss];
-            weakSelf.downloadingAlert = nil;
+
+            // 使用进度卡片显示失败状态
+            if (weakSelf.progressCardView) {
+                NSError *error = [NSError errorWithDomain:@"DownloadError" code:-1
+                                                 userInfo:@{NSLocalizedDescriptionKey: @"版本下载失败，请检查网络连接"}];
+                [weakSelf.progressCardView failWithError:error];
+                weakSelf.progressCardView = nil;
+            }
             weakSelf.downloadTask = nil;
             weakSelf.progressVC = nil;
-
-            [weakSelf showError:@"版本下载失败，请检查网络连接"];
         });
     };
-    
+
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         [self.downloadTask downloadVersion:version];
-        
+
         dispatch_async(dispatch_get_main_queue(), ^{
             if (self.isObservingProgress) {
                 [self.downloadTask.progress removeObserver:self forKeyPath:@"fractionCompleted"];
@@ -4988,39 +4984,32 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     }
     
     dispatch_async(dispatch_get_main_queue(), ^{
-        if (self.progressVC) {
-            // 更新进度视图
-        } else if (self.downloadingAlert) {
-            NSString *progressText = textProgress.localizedAdditionalDescription;
-            if (!progressText || progressText.length == 0) {
-                progressText = [NSString stringWithFormat:@"%.1f%%", progress.fractionCompleted * 100];
-            }
-            
-            NSString *speedText = @"";
+        // 参照 FCL/ZL2/HMCL：使用下载进度卡片显示进度
+        if (self.progressCardView) {
+            long long totalBytes = progress.totalUnitCount;
+            long long downloadedBytes = completedUnitCount;
+            long long speed = 0;
+            NSInteger eta = -1;
+
             if (textProgress.throughput) {
-                NSInteger speed = [textProgress.throughput integerValue];
-                if (speed > 1024 * 1024) {
-                    speedText = [NSString stringWithFormat:@" • %.1f MB/s", speed / (1024.0 * 1024.0)];
-                } else if (speed > 1024) {
-                    speedText = [NSString stringWithFormat:@" • %.1f KB/s", speed / 1024.0];
-                } else if (speed > 0) {
-                    speedText = [NSString stringWithFormat:@" • %ld B/s", (long)speed];
-                }
+                speed = [textProgress.throughput integerValue];
             }
-            
-            NSString *etaText = @"";
             if (textProgress.estimatedTimeRemaining) {
-                NSInteger eta = [textProgress.estimatedTimeRemaining integerValue];
-                if (eta > 3600) {
-                    etaText = [NSString stringWithFormat:@" • 剩余 %ld小时%ld分", (long)(eta / 3600), (long)((eta % 3600) / 60)];
-                } else if (eta > 60) {
-                    etaText = [NSString stringWithFormat:@" • 剩余 %ld分%ld秒", (long)(eta / 60), (long)(eta % 60)];
-                } else if (eta > 0) {
-                    etaText = [NSString stringWithFormat:@" • 剩余 %ld秒", (long)eta];
-                }
+                eta = [textProgress.estimatedTimeRemaining integerValue];
             }
-            
-            [self.downloadingAlert updateMessage:[NSString stringWithFormat:@"正在下载...\n%@%@%@", progressText, speedText, etaText]];
+
+            // 获取当前下载文件名（从 textProgress 的 description 中提取）
+            NSString *currentFile = nil;
+            if (textProgress.localizedDescription && textProgress.localizedDescription.length > 0) {
+                currentFile = textProgress.localizedDescription;
+            }
+
+            [self.progressCardView updateProgress:progress.fractionCompleted
+                                      downloaded:downloadedBytes
+                                            total:totalBytes
+                                           speed:speed
+                                             eta:eta
+                                     currentFile:currentFile];
         }
 
         if (progress.finished) {
@@ -5034,24 +5023,20 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             lastCompletedUnitCount = 0;
 
             self.view.userInteractionEnabled = YES;
-            [self.loadingIndicator stopAnimating];
 
-            if (self.downloadingAlert) {
-                [self.downloadingAlert dismiss];
-                self.downloadingAlert = nil;
+            // 使用进度卡片显示完成状态
+            if (self.progressCardView) {
+                NSString *completeTitle = [NSString stringWithFormat:@"%@ 下载完成",
+                                           self.downloadTask.metadata[@"id"] ?: @"版本"];
+                [self.progressCardView completeWithTitle:completeTitle];
+                self.progressCardView = nil;
             }
-            
+
             if (self.progressVC) {
                 [self.progressVC dismissViewControllerAnimated:YES completion:nil];
                 self.progressVC = nil;
             }
-            
-            // 在内容区显示下载完成提示，替代弹窗
-            [InlineMessageView showInViewController:self
-                                               title:@"下载完成"
-                                            message:[NSString stringWithFormat:@"%@ 下载完成", self.downloadTask.metadata[@"id"] ?: @"版本"]
-                                               type:InlineMessageTypeSuccess];
-            
+
             self.downloadTask = nil;
         }
     });
