@@ -29,4 +29,8 @@ typedef void (^SetPreferenceBlock)(NSString *, NSString *, id);
 - (UIBarButtonItem *)drawHelpButton;
 - (void)initViewCreation;
 
+/// 打开子页面（typeChildPane 类型的设置项触发）
+/// 子类可重写此方法以自定义特定 key 的跳转逻辑，然后调用 super 处理其他项
+- (void)tableView:(UITableView *)tableView openChildPaneAtIndexPath:(NSIndexPath *)indexPath;
+
 @end
