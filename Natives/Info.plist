@@ -131,6 +131,7 @@
 		<string>santander</string>
 		<string>shareddocuments</string>
 		<string>zerotier</string>
+		<string>easytier</string>
 	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>

@@ -6,19 +6,20 @@
 //
 //  本文件实现基于 EasyTier 的 Minecraft 联机功能界面，主要包含：
 //
-//  1. EasyTier 状态卡片（Section 0）
+//  1. 联机服务（EasyTier 状态）（Section 0）
 //     - 检测 EasyTier app 是否已安装
 //     - 显示安装状态（绿色/红色指示灯）
-//     - 显示系统要求：需要 iOS 16.0 及以上系统
-//     - 显示兼容性信息：兼容 FCL/ZL2/HMCL 陶瓦联机
-//     - 点击跳转至 EasyTier app 或 TestFlight 下载页面
+//     - 如果 iOS 版本 < 16.0，显示"EasyTier 需要 iOS 16.0 及以上系统"警告
+//     - "打开 EasyTier App" 按钮（如果未安装则显示"下载 EasyTier"）
+//     - 系统要求说明：EasyTier 支持 iOS 16+，ZeroTier 支持 iOS 13+，本启动器支持 iOS 14+
 //
-//  2. 联机房间列表（Section 1）
-//     - 展示所有已保存的 EasyTier 联机房间
-//     - 每个房间显示名称、网络名、IP:端口、连接状态
-//     - 支持连接/断开、编辑、分享、删除操作
-//     - 右上角 + 按钮创建新房间或通过分享文本导入
-//     - 空状态提示
+//  2. 联机房间（Section 1）
+//     - 房间列表（每个房间显示：名称、邀请码、角色标签[房主/房客]、状态）
+//     - 点击房间卡片：展开操作选项（连接/断开、分享邀请码、编辑、删除）
+//     - 右上角"+"按钮：创建房间对话框
+//       - 选择"我要当房主"→ 输入房间名 → 生成邀请码 → 显示邀请码供分享
+//       - 选择"我要当房客"→ 输入邀请码（实时验证）→ 保存房间
+//     - 滑动删除房间
 //
 //  3. 快速直连（Section 2）
 //     - IP 地址输入框
@@ -26,8 +27,9 @@
 //     - 直接将服务器地址写入当前 profile，启动游戏后自动加入
 //
 //  自定义 Cell：
-//  - EasyTierStatusCell：EasyTier 状态展示
-//  - EasyTierRoomCell：房间列表项
+//  - EasyTierStatusCell：EasyTier 状态展示（含打开/下载按钮）
+//  - EasyTierInfoCell：系统要求与 iOS 版本警告
+//  - EasyTierRoomCell：房间列表项（含角色标签）
 //  - EasyTierInputCell：直连输入框
 //
 //  背景适配：
@@ -35,12 +37,7 @@
 //  - 监听 BackgroundUIEffectChanged 通知动态刷新
 //  - 有自定义背景时使用白色文字，无背景时使用系统默认色
 //
-//  EasyTier 与 ZeroTier 的主要区别：
-//  - EasyTier 使用「网络名 + 密码」标识网络，而非 Network ID
-//  - EasyTier 支持指定中继服务器 URL 辅助 NAT 穿透
-//  - EasyTier iOS app 需要 iOS 16.0+（ZeroTier 仅需 iOS 13.0+）
-//  - EasyTier 可与 FCL/ZL2/HMCL 的陶瓦联机互通
-//  - EasyTier iOS app 当前未注册 URL Scheme，需用户手动在 app 中加入网络
+//  邀请码格式：U/XXXX-XXXX-XXXX-XXXX（21 字符，与 HMCL/FCL/ZL2/PCL2 互通）
 //
 
 #import "EasyTierMultiplayerViewController.h"
@@ -51,16 +48,15 @@
 
 #pragma mark - EasyTierStatusCell
 
-/// EasyTier 状态展示 Cell（Section 0）
-/// 左侧图标 + 中间标题/状态/说明 + 右侧状态指示灯
+/// EasyTier 状态展示 Cell（Section 0, Row 0）
+/// 左侧图标 + 中间标题/状态 + 右侧打开/下载按钮
 @interface EasyTierStatusCell : UITableViewCell
 
 @property (nonatomic, strong) UIView *iconView;
 @property (nonatomic, strong) UIImageView *iconImageView;
 @property (nonatomic, strong) UILabel *titleLabel;
 @property (nonatomic, strong) UILabel *subtitleLabel;
-@property (nonatomic, strong) UILabel *infoLabel;
-@property (nonatomic, strong) UIView *statusDot;
+@property (nonatomic, strong) UIButton *actionButton;
 
 - (void)configureWithInstalled:(BOOL)installed;
 
@@ -72,6 +68,7 @@
     self = [super initWithStyle:style reuseIdentifier:reuseIdentifier];
     if (self) {
         self.backgroundColor = [UIColor secondarySystemGroupedBackgroundColor];
+        self.selectionStyle = UITableViewCellSelectionStyleNone;
         [self setupSubviews];
     }
     return self;
@@ -108,20 +105,14 @@
     _subtitleLabel.textColor = [UIColor secondaryLabelColor];
     [self.contentView addSubview:_subtitleLabel];
 
-    // 信息标签：11pt tertiary，显示系统要求和兼容性
-    _infoLabel = [[UILabel alloc] init];
-    _infoLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    _infoLabel.font = [UIFont systemFontOfSize:11];
-    _infoLabel.textColor = [UIColor tertiaryLabelColor];
-    _infoLabel.text = @"需要 iOS 16.0 及以上系统 · 兼容 FCL/ZL2/HMCL 陶瓦联机";
-    [self.contentView addSubview:_infoLabel];
-
-    // 状态指示灯：10x10 圆形
-    _statusDot = [[UIView alloc] init];
-    _statusDot.translatesAutoresizingMaskIntoConstraints = NO;
-    _statusDot.layer.cornerRadius = 5;
-    _statusDot.layer.masksToBounds = YES;
-    [self.contentView addSubview:_statusDot];
+    // 右侧操作按钮：打开 EasyTier / 下载 EasyTier
+    _actionButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    _actionButton.translatesAutoresizingMaskIntoConstraints = NO;
+    _actionButton.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
+    _actionButton.layer.cornerRadius = 8;
+    _actionButton.layer.masksToBounds = YES;
+    _actionButton.contentEdgeInsets = UIEdgeInsetsMake(6, 12, 6, 12);
+    [self.contentView addSubview:_actionButton];
 
     [NSLayoutConstraint activateConstraints:@[
         [_iconView.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:16],
@@ -139,42 +130,117 @@
 
         [_subtitleLabel.leadingAnchor constraintEqualToAnchor:_titleLabel.leadingAnchor],
         [_subtitleLabel.topAnchor constraintEqualToAnchor:_titleLabel.bottomAnchor constant:2],
+        [_subtitleLabel.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-12],
 
-        [_infoLabel.leadingAnchor constraintEqualToAnchor:_titleLabel.leadingAnchor],
-        [_infoLabel.topAnchor constraintEqualToAnchor:_subtitleLabel.bottomAnchor constant:2],
-        [_infoLabel.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-12],
+        [_actionButton.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-16],
+        [_actionButton.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor],
 
-        [_statusDot.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-16],
-        [_statusDot.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor],
-        [_statusDot.widthAnchor constraintEqualToConstant:10],
-        [_statusDot.heightAnchor constraintEqualToConstant:10],
-
-        [_titleLabel.trailingAnchor constraintEqualToAnchor:_statusDot.leadingAnchor constant:-12],
-        [_subtitleLabel.trailingAnchor constraintEqualToAnchor:_statusDot.leadingAnchor constant:-12],
-        [_infoLabel.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-16],
+        [_titleLabel.trailingAnchor constraintEqualToAnchor:_actionButton.leadingAnchor constant:-12],
+        [_subtitleLabel.trailingAnchor constraintEqualToAnchor:_actionButton.leadingAnchor constant:-12],
     ]];
 }
 
 - (void)configureWithInstalled:(BOOL)installed {
     if (installed) {
-        self.subtitleLabel.text = @"已安装，点击打开";
-        self.statusDot.backgroundColor = [UIColor systemGreenColor];
+        self.subtitleLabel.text = @"已安装";
+        [self.actionButton setTitle:@"打开" forState:UIControlStateNormal];
+        [self.actionButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+        self.actionButton.backgroundColor = [UIColor systemBlueColor];
     } else {
-        self.subtitleLabel.text = @"未安装，点击前往下载";
-        self.statusDot.backgroundColor = [UIColor systemRedColor];
+        self.subtitleLabel.text = @"未安装";
+        [self.actionButton setTitle:@"下载" forState:UIControlStateNormal];
+        [self.actionButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+        self.actionButton.backgroundColor = [UIColor systemOrangeColor];
     }
-    // 系统要求和兼容性信息始终显示
-    self.infoLabel.text = @"需要 iOS 16.0 及以上系统 · 兼容 FCL/ZL2/HMCL 陶瓦联机";
 
     // 适配自定义背景：有背景时使用白色文字
     if ([[BackgroundManager sharedManager] hasBackground]) {
         self.titleLabel.textColor = [UIColor whiteColor];
         self.subtitleLabel.textColor = [UIColor whiteColor];
-        self.infoLabel.textColor = [UIColor colorWithWhite:1.0 alpha:0.8];
     } else {
         self.titleLabel.textColor = [UIColor labelColor];
         self.subtitleLabel.textColor = [UIColor secondaryLabelColor];
-        self.infoLabel.textColor = [UIColor tertiaryLabelColor];
+    }
+}
+
+@end
+
+#pragma mark - EasyTierInfoCell
+
+/// 系统信息 Cell（Section 0, Row 1）
+/// 显示系统要求说明和 iOS 版本警告
+@interface EasyTierInfoCell : UITableViewCell
+
+@property (nonatomic, strong) UIImageView *iconImageView;
+@property (nonatomic, strong) UILabel *infoLabel;
+
+- (void)configureWithIOSVersion;
+
+@end
+
+@implementation EasyTierInfoCell
+
+- (instancetype)initWithStyle:(UITableViewCellStyle)style reuseIdentifier:(NSString *)reuseIdentifier {
+    self = [super initWithStyle:style reuseIdentifier:reuseIdentifier];
+    if (self) {
+        self.backgroundColor = [UIColor secondarySystemGroupedBackgroundColor];
+        self.selectionStyle = UITableViewCellSelectionStyleNone;
+        [self setupSubviews];
+    }
+    return self;
+}
+
+- (void)setupSubviews {
+    _iconImageView = [[UIImageView alloc] init];
+    _iconImageView.translatesAutoresizingMaskIntoConstraints = NO;
+    _iconImageView.contentMode = UIViewContentModeScaleAspectFit;
+    [self.contentView addSubview:_iconImageView];
+
+    _infoLabel = [[UILabel alloc] init];
+    _infoLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    _infoLabel.font = [UIFont systemFontOfSize:12];
+    _infoLabel.numberOfLines = 0;
+    [self.contentView addSubview:_infoLabel];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [_iconImageView.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:16],
+        [_iconImageView.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:14],
+        [_iconImageView.widthAnchor constraintEqualToConstant:18],
+        [_iconImageView.heightAnchor constraintEqualToConstant:18],
+
+        [_infoLabel.leadingAnchor constraintEqualToAnchor:_iconImageView.trailingAnchor constant:8],
+        [_infoLabel.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:12],
+        [_infoLabel.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-12],
+        [_infoLabel.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-16],
+    ]];
+}
+
+- (void)configureWithIOSVersion {
+    BOOL hasBackground = [[BackgroundManager sharedManager] hasBackground];
+
+    // 检查 iOS 版本是否满足 EasyTier 要求（iOS 16.0+）
+    if (@available(iOS 16.0, *)) {
+        // iOS 16+，显示系统要求说明
+        self.iconImageView.image = [UIImage systemImageNamed:@"info.circle"];
+        self.iconImageView.tintColor = [UIColor secondaryLabelColor];
+        self.infoLabel.text = @"EasyTier 支持 iOS 16+，ZeroTier 支持 iOS 13+，本启动器支持 iOS 14+。"
+                              @"EasyTier 邀请码与 HMCL/FCL/ZL2/PCL2 陶瓦联机互通。";
+        if (hasBackground) {
+            self.infoLabel.textColor = [UIColor colorWithWhite:1.0 alpha:0.85];
+        } else {
+            self.infoLabel.textColor = [UIColor secondaryLabelColor];
+        }
+    } else {
+        // iOS < 16.0，显示警告
+        self.iconImageView.image = [UIImage systemImageNamed:@"exclamationmark.triangle.fill"];
+        self.iconImageView.tintColor = [UIColor systemOrangeColor];
+        self.infoLabel.text = @"EasyTier app 需要 iOS 16.0 及以上系统，当前系统版本不满足要求。"
+                              @"可使用 ZeroTier（支持 iOS 13+）或在「快速直连」中直接输入 IP 加入。";
+        if (hasBackground) {
+            self.infoLabel.textColor = [UIColor systemYellowColor];
+        } else {
+            self.infoLabel.textColor = [UIColor systemOrangeColor];
+        }
     }
 }
 
@@ -183,18 +249,18 @@
 #pragma mark - EasyTierRoomCell
 
 /// EasyTier 联机房间列表 Cell（Section 1）
-/// 左侧房间图标 + 中间房间名/网络名/IP:端口 + 右侧连接按钮
+/// 左侧房间图标 + 中间房间名/角色标签/邀请码 + 右侧状态指示
 @interface EasyTierRoomCell : UITableViewCell
 
 @property (nonatomic, strong) UIView *iconView;
 @property (nonatomic, strong) UIImageView *iconImageView;
 @property (nonatomic, strong) UILabel *nameLabel;
-@property (nonatomic, strong) UILabel *networkNameLabel;
-@property (nonatomic, strong) UILabel *addressLabel;
-@property (nonatomic, strong) UIButton *connectButton;
-@property (nonatomic, strong) UIActivityIndicatorView *activityIndicator;
+@property (nonatomic, strong) UILabel *roleTagLabel;
+@property (nonatomic, strong) UILabel *codeLabel;
+@property (nonatomic, strong) UIView *statusDot;
+@property (nonatomic, strong) UILabel *statusLabel;
 
-@property (nonatomic, copy) void (^onConnectTapped)(EasyTierRoom *room);
+- (void)configureWithRoom:(EasyTierRoom *)room hasBackground:(BOOL)hasBackground;
 
 @end
 
@@ -210,18 +276,16 @@
 }
 
 - (void)setupSubviews {
-    // 左侧图标容器：36x36 圆角方块，紫色背景
+    // 左侧图标容器：36x36 圆角方块
     _iconView = [[UIView alloc] init];
     _iconView.translatesAutoresizingMaskIntoConstraints = NO;
-    _iconView.backgroundColor = [UIColor systemPurpleColor];
     _iconView.layer.cornerRadius = 10;
     _iconView.layer.masksToBounds = YES;
     [self.contentView addSubview:_iconView];
 
-    // 图标：SF Symbol person.3.fill，白色
+    // 图标：SF Symbol，白色
     _iconImageView = [[UIImageView alloc] init];
     _iconImageView.translatesAutoresizingMaskIntoConstraints = NO;
-    _iconImageView.image = [UIImage systemImageNamed:@"person.3.fill"];
     _iconImageView.tintColor = [UIColor whiteColor];
     _iconImageView.contentMode = UIViewContentModeScaleAspectFit;
     [_iconView addSubview:_iconImageView];
@@ -232,35 +296,36 @@
     _nameLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
     [self.contentView addSubview:_nameLabel];
 
-    // 网络名：12pt secondary，截断
-    _networkNameLabel = [[UILabel alloc] init];
-    _networkNameLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    _networkNameLabel.font = [UIFont systemFontOfSize:12];
-    _networkNameLabel.textColor = [UIColor secondaryLabelColor];
-    _networkNameLabel.lineBreakMode = NSLineBreakByTruncatingTail;
-    [self.contentView addSubview:_networkNameLabel];
+    // 角色标签：小尺寸圆角标签（房主/房客）
+    _roleTagLabel = [[UILabel alloc] init];
+    _roleTagLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    _roleTagLabel.font = [UIFont systemFontOfSize:10 weight:UIFontWeightMedium];
+    _roleTagLabel.textColor = [UIColor whiteColor];
+    _roleTagLabel.textAlignment = NSTextAlignmentCenter;
+    _roleTagLabel.layer.cornerRadius = 4;
+    _roleTagLabel.layer.masksToBounds = YES;
+    [self.contentView addSubview:_roleTagLabel];
 
-    // IP:端口：13pt secondary
-    _addressLabel = [[UILabel alloc] init];
-    _addressLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    _addressLabel.font = [UIFont systemFontOfSize:13];
-    _addressLabel.textColor = [UIColor secondaryLabelColor];
-    [self.contentView addSubview:_addressLabel];
+    // 邀请码：12pt monospace secondary
+    _codeLabel = [[UILabel alloc] init];
+    _codeLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    _codeLabel.font = [UIFont fontWithName:@"Menlo" size:12] ?: [UIFont systemFontOfSize:12];
+    _codeLabel.textColor = [UIColor secondaryLabelColor];
+    _codeLabel.lineBreakMode = NSLineBreakByTruncatingTail;
+    [self.contentView addSubview:_codeLabel];
 
-    // 连接按钮：72pt 宽
-    _connectButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    _connectButton.translatesAutoresizingMaskIntoConstraints = NO;
-    _connectButton.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
-    _connectButton.layer.cornerRadius = 8;
-    _connectButton.layer.masksToBounds = YES;
-    [_connectButton addTarget:self action:@selector(connectButtonTapped) forControlEvents:UIControlEventTouchUpInside];
-    [self.contentView addSubview:_connectButton];
+    // 状态指示灯：8x8 圆形
+    _statusDot = [[UIView alloc] init];
+    _statusDot.translatesAutoresizingMaskIntoConstraints = NO;
+    _statusDot.layer.cornerRadius = 4;
+    _statusDot.layer.masksToBounds = YES;
+    [self.contentView addSubview:_statusDot];
 
-    // 连接中指示器
-    _activityIndicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
-    _activityIndicator.translatesAutoresizingMaskIntoConstraints = NO;
-    _activityIndicator.hidesWhenStopped = YES;
-    [self.contentView addSubview:_activityIndicator];
+    // 状态文字
+    _statusLabel = [[UILabel alloc] init];
+    _statusLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    _statusLabel.font = [UIFont systemFontOfSize:11];
+    [self.contentView addSubview:_statusLabel];
 
     [NSLayoutConstraint activateConstraints:@[
         [_iconView.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:16],
@@ -273,84 +338,89 @@
         [_iconImageView.widthAnchor constraintEqualToConstant:20],
         [_iconImageView.heightAnchor constraintEqualToConstant:20],
 
+        // 房间名在图标右侧
         [_nameLabel.leadingAnchor constraintEqualToAnchor:_iconView.trailingAnchor constant:12],
         [_nameLabel.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:12],
 
-        [_networkNameLabel.leadingAnchor constraintEqualToAnchor:_nameLabel.leadingAnchor],
-        [_networkNameLabel.topAnchor constraintEqualToAnchor:_nameLabel.bottomAnchor constant:2],
+        // 角色标签紧跟房间名右侧
+        [_roleTagLabel.leadingAnchor constraintEqualToAnchor:_nameLabel.trailingAnchor constant:8],
+        [_roleTagLabel.centerYAnchor constraintEqualToAnchor:_nameLabel.centerYAnchor],
+        [_roleTagLabel.heightAnchor constraintEqualToConstant:18],
 
-        [_addressLabel.leadingAnchor constraintEqualToAnchor:_nameLabel.leadingAnchor],
-        [_addressLabel.topAnchor constraintEqualToAnchor:_networkNameLabel.bottomAnchor constant:2],
-        [_addressLabel.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-12],
+        // 邀请码在房间名下方
+        [_codeLabel.leadingAnchor constraintEqualToAnchor:_nameLabel.leadingAnchor],
+        [_codeLabel.topAnchor constraintEqualToAnchor:_nameLabel.bottomAnchor constant:4],
+        [_codeLabel.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-12],
 
-        // 连接按钮右侧固定
-        [_connectButton.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-16],
-        [_connectButton.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor],
-        [_connectButton.widthAnchor constraintEqualToConstant:72],
-        [_connectButton.heightAnchor constraintEqualToConstant:32],
+        // 状态指示灯和文字在右侧
+        [_statusLabel.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-16],
+        [_statusLabel.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor],
 
-        [_activityIndicator.centerXAnchor constraintEqualToAnchor:_connectButton.centerXAnchor],
-        [_activityIndicator.centerYAnchor constraintEqualToAnchor:_connectButton.centerYAnchor],
+        [_statusDot.trailingAnchor constraintEqualToAnchor:_statusLabel.leadingAnchor constant:-4],
+        [_statusDot.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor],
+        [_statusDot.widthAnchor constraintEqualToConstant:8],
+        [_statusDot.heightAnchor constraintEqualToConstant:8],
 
-        // 中间文字不延伸到按钮
-        [_nameLabel.trailingAnchor constraintEqualToAnchor:_connectButton.leadingAnchor constant:-8],
-        [_networkNameLabel.trailingAnchor constraintEqualToAnchor:_connectButton.leadingAnchor constant:-8],
-        [_addressLabel.trailingAnchor constraintEqualToAnchor:_connectButton.leadingAnchor constant:-8],
+        // 房间名和邀请码不延伸到状态区域
+        [_nameLabel.trailingAnchor constraintLessThanOrEqualToAnchor:_statusDot.leadingAnchor constant:-12],
+        [_codeLabel.trailingAnchor constraintLessThanOrEqualToAnchor:_statusDot.leadingAnchor constant:-12],
     ]];
-}
-
-- (void)connectButtonTapped {
-    if (self.onConnectTapped) {
-        // 实际由 controller 在 configure 时注入 room
-        self.onConnectTapped(nil);
-    }
 }
 
 - (void)configureWithRoom:(EasyTierRoom *)room hasBackground:(BOOL)hasBackground {
     self.nameLabel.text = room.name.length ? room.name : @"未命名房间";
-    self.networkNameLabel.text = [NSString stringWithFormat:@"网络名: %@", room.networkName ?: @"-"];
-    self.addressLabel.text = [NSString stringWithFormat:@"%@:%@", room.hostIP ?: @"-", room.hostPort ?: @"25565"];
+    self.codeLabel.text = room.invitationCode ?: @"-";
 
+    // 角色标签与图标颜色
+    if (room.role == EasyTierRoomRoleHost) {
+        self.roleTagLabel.text = @" 房主 ";
+        self.roleTagLabel.backgroundColor = [UIColor systemOrangeColor];
+        _iconView.backgroundColor = [UIColor systemOrangeColor];
+        _iconImageView.image = [UIImage systemImageNamed:@"crown.fill"];
+    } else {
+        self.roleTagLabel.text = @" 房客 ";
+        self.roleTagLabel.backgroundColor = [UIColor systemBlueColor];
+        _iconView.backgroundColor = [UIColor systemBlueColor];
+        _iconImageView.image = [UIImage systemImageNamed:@"person.2.fill"];
+    }
+
+    // 状态指示
+    UIColor *statusColor;
+    NSString *statusText;
     switch (room.status) {
         case EasyTierRoomStatusDisconnected:
-            [self.connectButton setTitle:@"连接" forState:UIControlStateNormal];
-            [self.connectButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-            self.connectButton.backgroundColor = [UIColor systemBlueColor];
-            [self.connectButton setHidden:NO];
-            [self.activityIndicator stopAnimating];
+            statusColor = [UIColor systemGrayColor];
+            statusText = @"未连接";
             break;
         case EasyTierRoomStatusConnecting:
-            [self.connectButton setTitle:@"连接中" forState:UIControlStateNormal];
-            [self.connectButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-            self.connectButton.backgroundColor = [UIColor systemGrayColor];
-            [self.connectButton setHidden:NO];
-            [self.activityIndicator startAnimating];
+            statusColor = [UIColor systemYellowColor];
+            statusText = @"连接中";
             break;
         case EasyTierRoomStatusConnected:
-            [self.connectButton setTitle:@"已连接" forState:UIControlStateNormal];
-            [self.connectButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-            self.connectButton.backgroundColor = [UIColor systemGreenColor];
-            [self.connectButton setHidden:NO];
-            [self.activityIndicator stopAnimating];
+            statusColor = [UIColor systemGreenColor];
+            statusText = @"已连接";
             break;
         case EasyTierRoomStatusError:
-            [self.connectButton setTitle:@"重试" forState:UIControlStateNormal];
-            [self.connectButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-            self.connectButton.backgroundColor = [UIColor systemOrangeColor];
-            [self.connectButton setHidden:NO];
-            [self.activityIndicator stopAnimating];
+            statusColor = [UIColor systemRedColor];
+            statusText = @"错误";
+            break;
+        default:
+            statusColor = [UIColor systemGrayColor];
+            statusText = @"-";
             break;
     }
+    self.statusDot.backgroundColor = statusColor;
+    self.statusLabel.text = statusText;
 
     // 适配自定义背景
     if (hasBackground) {
         self.nameLabel.textColor = [UIColor whiteColor];
-        self.networkNameLabel.textColor = [UIColor whiteColor];
-        self.addressLabel.textColor = [UIColor whiteColor];
+        self.codeLabel.textColor = [UIColor colorWithWhite:1.0 alpha:0.85];
+        self.statusLabel.textColor = [UIColor whiteColor];
     } else {
         self.nameLabel.textColor = [UIColor labelColor];
-        self.networkNameLabel.textColor = [UIColor secondaryLabelColor];
-        self.addressLabel.textColor = [UIColor secondaryLabelColor];
+        self.codeLabel.textColor = [UIColor secondaryLabelColor];
+        self.statusLabel.textColor = [UIColor secondaryLabelColor];
     }
 }
 
@@ -362,7 +432,6 @@
 /// 文本输入框 + 可选的尾部按钮
 @interface EasyTierInputCell : UITableViewCell <UITextFieldDelegate>
 
-@property (nonatomic, strong) UIImageView *iconView;
 @property (nonatomic, strong) UITextField *textField;
 @property (nonatomic, strong) UIButton *trailingButton;
 @property (nonatomic, strong) NSLayoutConstraint *textFieldTrailingConstraint;
@@ -385,14 +454,6 @@
 }
 
 - (void)setupSubviews {
-    // 可选图标
-    _iconView = [[UIImageView alloc] init];
-    _iconView.translatesAutoresizingMaskIntoConstraints = NO;
-    _iconView.tintColor = [UIColor secondaryLabelColor];
-    _iconView.contentMode = UIViewContentModeScaleAspectFit;
-    _iconView.hidden = YES;
-    [self.contentView addSubview:_iconView];
-
     // 输入框
     _textField = [[UITextField alloc] init];
     _textField.translatesAutoresizingMaskIntoConstraints = NO;
@@ -414,11 +475,6 @@
     [self.contentView addSubview:_trailingButton];
 
     [NSLayoutConstraint activateConstraints:@[
-        [_iconView.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:16],
-        [_iconView.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor],
-        [_iconView.widthAnchor constraintEqualToConstant:22],
-        [_iconView.heightAnchor constraintEqualToConstant:22],
-
         [_textField.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:16],
         [_textField.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor],
         [_textField.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:10],
@@ -506,16 +562,21 @@
 @property (nonatomic, copy) NSString *directIP;
 @property (nonatomic, copy) NSString *directPort;
 
+// 房客创建弹窗的实时验证支持
+@property (nonatomic, strong, nullable) UIAlertController *guestAlert;
+@property (nonatomic, strong, nullable) UIAlertAction *guestSaveAction;
+
 @end
 
 @implementation EasyTierMultiplayerViewController
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.title = @"EasyTier 联机";
+    self.title = NSLocalizedString(@"multiplayer.easytier.title", @"EasyTier 联机");
 
-    // 适配自定义启动器背景：透明化当前 VC，让全局背景图/毛玻璃透出
+    // 适配自定义启动器背景：透明化当前 VC 和 tableView，让全局背景图/毛玻璃透出
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
+    [self makeViewControllerTransparent:self.tableView];
 
     // 初始化数据
     self.rooms = [[EasyTierMultiplayerManager sharedManager] savedRooms] ?: @[];
@@ -526,26 +587,53 @@
 
     // 监听背景效果变化通知，背景切换时重新应用透明效果并刷新表格
     [[NSNotificationCenter defaultCenter] addObserver:self
-                                             selector:@selector(refreshBackgroundEffect)
+                                             selector:@selector(onBackgroundEffectChanged:)
                                                  name:@"BackgroundUIEffectChanged"
                                                object:nil];
-}
-
-- (void)refreshBackgroundEffect {
-    // 背景效果改变时重新透明化当前 VC 并刷新表格，让所有 cell 重新适配文字颜色
-    dispatch_async(dispatch_get_main_queue(), ^{
-        [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
-        self.tableView.backgroundColor = [UIColor clearColor];
-        self.tableView.backgroundView = nil;
-        // 重新应用导航栏毛玻璃效果
-        [[BackgroundManager sharedManager] applyEffectToNavigationBar:self.navigationController.navigationBar];
-        [self.tableView reloadData];
-    });
 }
 
 - (void)dealloc {
     // 移除通知观察者，避免 dealloc 后收到通知导致崩溃
     [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
+#pragma mark - 背景适配
+
+- (void)makeViewControllerTransparent:(UIView *)view {
+    view.backgroundColor = [UIColor clearColor];
+    self.view.backgroundColor = [UIColor clearColor];
+}
+
+- (void)applyEffectToCell:(UITableViewCell *)cell {
+    // 移除旧的背景效果，避免叠加
+    for (UIView *subview in cell.contentView.subviews) {
+        if ([subview isKindOfClass:[UIVisualEffectView class]) {
+            [subview removeFromSuperview];
+        }
+    }
+    // 应用 BackgroundManager 的效果
+    [[BackgroundManager sharedManager] applyEffectToView:cell.contentView];
+}
+
+- (void)reapplyBackgroundEffect {
+    // 遍历所有可见 cell 重新应用效果
+    for (UITableViewCell *cell in self.tableView.visibleCells) {
+        [self applyEffectToCell:cell];
+    }
+}
+
+- (void)onBackgroundEffectChanged:(NSNotification *)notification {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        // 重新透明化当前 VC
+        [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
+        self.tableView.backgroundColor = [UIColor clearColor];
+        self.tableView.backgroundView = nil;
+        // 重新应用导航栏毛玻璃效果
+        [[BackgroundManager sharedManager] applyEffectToNavigationBar:self.navigationController.navigationBar];
+        // 刷新所有可见 cell 的背景效果和文字颜色
+        [self reapplyBackgroundEffect];
+        [self.tableView reloadData];
+    });
 }
 
 #pragma mark - UI Setup
@@ -563,6 +651,7 @@
     self.tableView.estimatedRowHeight = 84;
     // 注册自定义 cell
     [self.tableView registerClass:[EasyTierStatusCell class] forCellReuseIdentifier:@"StatusCell"];
+    [self.tableView registerClass:[EasyTierInfoCell class] forCellReuseIdentifier:@"InfoCell"];
     [self.tableView registerClass:[EasyTierRoomCell class] forCellReuseIdentifier:@"RoomCell"];
     [self.tableView registerClass:[EasyTierInputCell class] forCellReuseIdentifier:@"InputCell"];
     [self.tableView registerClass:[UITableViewCell class] forCellReuseIdentifier:@"EmptyCell"];
@@ -604,17 +693,17 @@
 }
 
 - (void)addButtonTapped {
-    // 弹出 ActionSheet 让用户选择：创建房间 / 通过分享文本导入
+    // 弹出 ActionSheet 让用户选择：我要当房主 / 我要当房客
     UIAlertController *sheet = [UIAlertController alertControllerWithTitle:nil
                                                                    message:@"添加 EasyTier 联机房间"
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
 
-    [sheet addAction:[UIAlertAction actionWithTitle:@"创建新房间" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-        [self showCreateRoomDialog];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"我要当房主" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        [self showCreateAsHostDialog];
     }]];
 
-    [sheet addAction:[UIAlertAction actionWithTitle:@"通过分享文本导入" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-        [self showImportRoomDialog];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"我要当房客" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        [self showCreateAsGuestDialog];
     }]];
 
     [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
@@ -627,11 +716,11 @@
     [self presentViewController:sheet animated:YES completion:nil];
 }
 
-#pragma mark - 创建房间
+#pragma mark - 创建房间：房主模式
 
-- (void)showCreateRoomDialog {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"创建 EasyTier 联机房间"
-                                                                   message:nil
+- (void)showCreateAsHostDialog {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"创建房间（房主）"
+                                                                   message:@"输入房间名称，系统将自动生成邀请码供朋友加入"
                                                             preferredStyle:UIAlertControllerStyleAlert];
 
     // 1. 房间名称
@@ -641,42 +730,9 @@
         textField.autocorrectionType = UITextAutocorrectionTypeNo;
     }];
 
-    // 2. EasyTier 网络名
+    // 2. 服务器端口
     [alert addTextFieldWithConfigurationHandler:^(UITextField * _Nonnull textField) {
-        textField.placeholder = @"EasyTier 网络名";
-        textField.autocapitalizationType = UITextAutocapitalizationTypeNone;
-        textField.autocorrectionType = UITextAutocorrectionTypeNo;
-        textField.keyboardType = UIKeyboardTypeASCIICapable;
-    }];
-
-    // 3. 网络密码
-    [alert addTextFieldWithConfigurationHandler:^(UITextField * _Nonnull textField) {
-        textField.placeholder = @"网络密码";
-        textField.autocapitalizationType = UITextAutocapitalizationTypeNone;
-        textField.autocorrectionType = UITextAutocorrectionTypeNo;
-        textField.secureTextEntry = NO;
-        textField.keyboardType = UIKeyboardTypeASCIICapable;
-    }];
-
-    // 4. 中继服务器 URL（可选）
-    [alert addTextFieldWithConfigurationHandler:^(UITextField * _Nonnull textField) {
-        textField.placeholder = @"中继服务器 URL（可选）";
-        textField.autocapitalizationType = UITextAutocapitalizationTypeNone;
-        textField.autocorrectionType = UITextAutocorrectionTypeNo;
-        textField.keyboardType = UIKeyboardTypeURL;
-    }];
-
-    // 5. 服务器 IP
-    [alert addTextFieldWithConfigurationHandler:^(UITextField * _Nonnull textField) {
-        textField.placeholder = @"服务器 IP，如 10.144.144.1";
-        textField.autocapitalizationType = UITextAutocapitalizationTypeNone;
-        textField.autocorrectionType = UITextAutocorrectionTypeNo;
-        textField.keyboardType = UIKeyboardTypeNumbersAndPunctuation;
-    }];
-
-    // 6. 端口
-    [alert addTextFieldWithConfigurationHandler:^(UITextField * _Nonnull textField) {
-        textField.placeholder = @"端口";
+        textField.placeholder = @"MC 服务器端口（默认 25565）";
         textField.text = @"25565";
         textField.keyboardType = UIKeyboardTypeNumberPad;
     }];
@@ -685,106 +741,174 @@
 
     [alert addAction:[UIAlertAction actionWithTitle:@"创建" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         NSString *name = alert.textFields[0].text;
-        NSString *networkName = alert.textFields[1].text;
-        NSString *networkSecret = alert.textFields[2].text;
-        NSString *serverUrl = alert.textFields[3].text;
-        NSString *ip = alert.textFields[4].text;
-        NSString *port = alert.textFields[5].text;
+        NSString *port = alert.textFields[1].text;
 
         // 输入验证
         if (!name || name.length == 0) {
             [self showSimpleAlertWithTitle:@"提示" message:@"请输入房间名称"];
             return;
         }
-        if (!networkName || networkName.length == 0) {
-            [self showSimpleAlertWithTitle:@"提示" message:@"请输入 EasyTier 网络名"];
-            return;
-        }
-        if (!networkSecret || networkSecret.length == 0) {
-            [self showSimpleAlertWithTitle:@"提示" message:@"请输入网络密码"];
-            return;
-        }
-        if (!ip || ip.length == 0) {
-            [self showSimpleAlertWithTitle:@"提示" message:@"请输入服务器 IP 地址"];
-            return;
-        }
         if (!port || port.length == 0) {
             port = @"25565";
         }
-        // 中继服务器 URL 可选，为空时使用默认公共节点
-        if (!serverUrl || serverUrl.length == 0) {
-            serverUrl = @"";
-        }
 
-        // 创建房间对象
-        EasyTierRoom *room = [[EasyTierRoom alloc] init];
-        room.roomId = [[EasyTierMultiplayerManager sharedManager] generateRoomId];
-        room.name = name;
-        room.networkName = networkName;
-        room.networkSecret = networkSecret;
-        room.serverUrl = serverUrl;
-        room.hostIP = ip;
-        room.hostPort = port;
-        room.roomDescription = @"";
-        room.status = EasyTierRoomStatusDisconnected;
-        room.createdAt = [NSDate date];
+        // 房主模式：使用 initAsHostWithName:hostPort: 创建房间（内部生成邀请码）
+        EasyTierRoom *room = [[EasyTierRoom alloc] initAsHostWithName:name hostPort:port];
+        if (!room || !room.invitationCode) {
+            [self showSimpleAlertWithTitle:@"创建失败" message:@"无法生成邀请码，请稍后重试"];
+            return;
+        }
 
         // 保存到本地列表
         [[EasyTierMultiplayerManager sharedManager] addRoom:room];
-
-        // 刷新表格
         [self refreshRooms];
+
+        // 显示邀请码供分享
+        [self showInvitationCodeDialog:room.invitationCode roomName:room.name];
     }]];
 
     [self presentViewController:alert animated:YES completion:nil];
 }
 
-#pragma mark - 通过分享文本导入房间
+#pragma mark - 创建房间：房客模式
 
-- (void)showImportRoomDialog {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"通过分享文本导入"
-                                                                   message:@"粘贴朋友分享的 EasyTier 房间文本"
+- (void)showCreateAsGuestDialog {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"加入房间（房客）"
+                                                                   message:@"输入房主分享的邀请码（U/XXXX-XXXX-XXXX-XXXX）"
                                                             preferredStyle:UIAlertControllerStyleAlert];
 
+    // 1. 邀请码
     [alert addTextFieldWithConfigurationHandler:^(UITextField * _Nonnull textField) {
-        textField.placeholder = @"粘贴 EasyTier 分享文本";
+        textField.placeholder = @"U/XXXX-XXXX-XXXX-XXXX";
         textField.autocapitalizationType = UITextAutocapitalizationTypeNone;
         textField.autocorrectionType = UITextAutocorrectionTypeNo;
+        textField.keyboardType = UIKeyboardTypeASCIICapable;
         textField.clearButtonMode = UITextFieldViewModeWhileEditing;
     }];
 
-    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    // 2. 房间名称（可选）
+    [alert addTextFieldWithConfigurationHandler:^(UITextField * _Nonnull textField) {
+        textField.placeholder = @"房间名称（可选，如：和小明联机）";
+        textField.autocapitalizationType = UITextAutocapitalizationTypeNone;
+        textField.autocorrectionType = UITextAutocorrectionTypeNo;
+    }];
 
-    [alert addAction:[UIAlertAction actionWithTitle:@"导入" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-        NSString *shareText = alert.textFields[0].text;
-        if (!shareText || shareText.length == 0) {
-            [self showSimpleAlertWithTitle:@"提示" message:@"请粘贴分享文本"];
+    // 保存按钮（初始禁用，待邀请码验证通过后启用）
+    UIAlertAction *saveAction = [UIAlertAction actionWithTitle:@"保存" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        [self cleanupGuestAlertObserver];
+
+        NSString *code = alert.textFields[0].text;
+        NSString *name = alert.textFields[1].text;
+
+        // 最终验证
+        if (![[EasyTierMultiplayerManager sharedManager] isValidInvitationCode:code]) {
+            [self showSimpleAlertWithTitle:@"邀请码无效" message:@"请检查邀请码格式是否正确（U/XXXX-XXXX-XXXX-XXXX）"];
             return;
         }
 
-        // 解析分享文本
-        EasyTierRoom *parsedRoom = [[EasyTierMultiplayerManager sharedManager] parseRoomFromShareText:shareText];
-        if (!parsedRoom) {
-            [self showSimpleAlertWithTitle:@"导入失败" message:@"无法解析分享文本，请确认文本格式正确"];
-            return;
+        // 如果未填写房间名，使用默认名称
+        if (!name || name.length == 0) {
+            name = [NSString stringWithFormat:@"房客-%@", code];
         }
 
-        // 补充房间 ID 和创建时间
-        if (!parsedRoom.roomId || parsedRoom.roomId.length == 0) {
-            parsedRoom.roomId = [[EasyTierMultiplayerManager sharedManager] generateRoomId];
+        // 房客模式：使用 initAsGuestWithName:invitationCode: 创建房间（内部解析邀请码）
+        EasyTierRoom *room = [[EasyTierRoom alloc] initAsGuestWithName:name invitationCode:code];
+        if (!room) {
+            [self showSimpleAlertWithTitle:@"加入失败" message:@"无法解析邀请码，请检查格式后重试"];
+            return;
         }
-        if (!parsedRoom.hostPort || parsedRoom.hostPort.length == 0) {
-            parsedRoom.hostPort = @"25565";
-        }
-        parsedRoom.status = EasyTierRoomStatusDisconnected;
-        parsedRoom.createdAt = [NSDate date];
 
         // 保存到本地列表
-        [[EasyTierMultiplayerManager sharedManager] addRoom:parsedRoom];
+        [[EasyTierMultiplayerManager sharedManager] addRoom:room];
         [self refreshRooms];
 
-        [self showSimpleAlertWithTitle:@"导入成功" message:[NSString stringWithFormat:@"房间「%@」已添加", parsedRoom.name]];
+        [self showSimpleAlertWithTitle:@"加入成功"
+                               message:[NSString stringWithFormat:@"房间「%@」已添加，点击房间卡片可连接网络", room.name]];
+    }];
+    saveAction.enabled = NO;
+
+    UIAlertAction *cancelAction = [UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:^(UIAlertAction * _Nonnull action) {
+        [self cleanupGuestAlertObserver];
+    }];
+
+    [alert addAction:cancelAction];
+    [alert addAction:saveAction];
+
+    // 保存引用以供实时验证使用
+    self.guestAlert = alert;
+    self.guestSaveAction = saveAction;
+
+    // 注册文本变化通知，实现邀请码实时验证
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(onGuestCodeTextChanged:)
+                                                 name:UITextFieldTextDidChangeNotification
+                                               object:nil];
+
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+/// 邀请码实时验证回调
+/// 检查格式：U/ 开头，总长度 21 字符，并通过管理器完整验证
+- (void)onGuestCodeTextChanged:(NSNotification *)notification {
+    UITextField *field = notification.object;
+    // 只处理当前弹窗中的文本框
+    if (!self.guestAlert || ![self.guestAlert.textFields containsObject:field]) {
+        return;
+    }
+
+    NSString *code = self.guestAlert.textFields[0].text;
+
+    // 格式预检：U/ 开头且长度为 21（U/XXXX-XXXX-XXXX-XXXX = 2+4+1+4+1+4+1+4 = 21）
+    BOOL formatOk = NO;
+    if (code.length > 0) {
+        BOOL hasPrefix = [code hasPrefix:@"U/"] || [code hasPrefix:@"u/"];
+        if (hasPrefix) {
+            // 通过管理器完整验证（包含校验和检查）
+            formatOk = [[EasyTierMultiplayerManager sharedManager] isValidInvitationCode:code];
+        }
+    }
+
+    self.guestSaveAction.enabled = formatOk;
+}
+
+/// 清理房客弹窗的实时验证观察者
+- (void)cleanupGuestAlertObserver {
+    [[NSNotificationCenter defaultCenter] removeObserver:self name:UITextFieldTextDidChangeNotification object:nil];
+    self.guestAlert = nil;
+    self.guestSaveAction = nil;
+}
+
+#pragma mark - 邀请码展示弹窗
+
+/// 房主创建房间后，弹窗显示邀请码并提供"复制"和"分享"按钮
+- (void)showInvitationCodeDialog:(NSString *)code roomName:(NSString *)roomName {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"房间创建成功"
+                                                                   message:[NSString stringWithFormat:
+                                                                       @"房间「%@」的邀请码：\n\n%@\n\n将此邀请码分享给朋友，他们即可通过「我要当房客」加入你的房间。",
+                                                                       roomName, code]
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+
+    // 复制邀请码到剪贴板
+    [alert addAction:[UIAlertAction actionWithTitle:@"复制" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        [UIPasteboard generalPasteboard].string = code;
+        [self showSimpleAlertWithTitle:@"已复制" message:@"邀请码已复制到剪贴板"];
     }]];
+
+    // 分享邀请码
+    [alert addAction:[UIAlertAction actionWithTitle:@"分享" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        NSString *shareText = [NSString stringWithFormat:
+            @"EasyTier 联机邀请码：%@\n房间：%@\n打开 EasyTier app，加入网络即可联机 Minecraft！",
+            code, roomName];
+        UIActivityViewController *activityVC = [[UIActivityViewController alloc] initWithActivityItems:@[shareText] applicationActivities:nil];
+        // iPad 适配
+        if (activityVC.popoverPresentationController) {
+            activityVC.popoverPresentationController.sourceView = self.view;
+            activityVC.popoverPresentationController.sourceRect = CGRectMake(self.view.bounds.size.width / 2.0, self.view.bounds.size.height / 2.0, 1, 1);
+        }
+        [self presentViewController:activityVC animated:YES completion:nil];
+    }]];
+
+    [alert addAction:[UIAlertAction actionWithTitle:@"完成" style:UIAlertActionStyleCancel handler:nil]];
 
     [self presentViewController:alert animated:YES completion:nil];
 }
@@ -793,7 +917,7 @@
 
 - (void)showRoomDetailActionsForRoom:(EasyTierRoom *)room {
     UIAlertController *sheet = [UIAlertController alertControllerWithTitle:room.name
-                                                                   message:[NSString stringWithFormat:@"%@:%@", room.hostIP, room.hostPort]
+                                                                   message:room.invitationCode
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
 
     // 连接/断开
@@ -815,13 +939,8 @@
         }
     }]];
 
-    // 编辑房间
-    [sheet addAction:[UIAlertAction actionWithTitle:@"编辑房间" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-        [self showEditRoomDialog:room];
-    }]];
-
-    // 分享房间
-    [sheet addAction:[UIAlertAction actionWithTitle:@"分享房间" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+    // 分享邀请码
+    [sheet addAction:[UIAlertAction actionWithTitle:@"分享邀请码" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         NSString *shareText = [[EasyTierMultiplayerManager sharedManager] shareTextForRoom:room];
         UIActivityViewController *activityVC = [[UIActivityViewController alloc] initWithActivityItems:@[shareText] applicationActivities:nil];
         // iPad 适配
@@ -830,6 +949,11 @@
             activityVC.popoverPresentationController.sourceRect = CGRectMake(self.view.bounds.size.width / 2.0, self.view.bounds.size.height / 2.0, 1, 1);
         }
         [self presentViewController:activityVC animated:YES completion:nil];
+    }]];
+
+    // 编辑房间
+    [sheet addAction:[UIAlertAction actionWithTitle:@"编辑房间" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        [self showEditRoomDialog:room];
     }]];
 
     // 删除房间（destructive）
@@ -860,59 +984,29 @@
 #pragma mark - 编辑房间
 
 - (void)showEditRoomDialog:(EasyTierRoom *)room {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"编辑 EasyTier 房间"
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"编辑房间"
                                                                    message:nil
                                                             preferredStyle:UIAlertControllerStyleAlert];
 
-    // 预填已有数据
-    // 1. 房间名称
+    // 1. 房间名称（可编辑）
     [alert addTextFieldWithConfigurationHandler:^(UITextField * _Nonnull textField) {
-        textField.placeholder = @"房间名称，如：和朋友的生存世界";
+        textField.placeholder = @"房间名称";
         textField.text = room.name;
         textField.autocapitalizationType = UITextAutocapitalizationTypeNone;
         textField.autocorrectionType = UITextAutocorrectionTypeNo;
     }];
 
-    // 2. EasyTier 网络名
+    // 2. 邀请码（只读展示，不可修改）
     [alert addTextFieldWithConfigurationHandler:^(UITextField * _Nonnull textField) {
-        textField.placeholder = @"EasyTier 网络名";
-        textField.text = room.networkName;
-        textField.autocapitalizationType = UITextAutocapitalizationTypeNone;
-        textField.autocorrectionType = UITextAutocorrectionTypeNo;
-        textField.keyboardType = UIKeyboardTypeASCIICapable;
+        textField.placeholder = @"邀请码（不可修改）";
+        textField.text = room.invitationCode;
+        textField.enabled = NO;
     }];
 
-    // 3. 网络密码
+    // 3. 服务器端口（可编辑）
     [alert addTextFieldWithConfigurationHandler:^(UITextField * _Nonnull textField) {
-        textField.placeholder = @"网络密码";
-        textField.text = room.networkSecret;
-        textField.autocapitalizationType = UITextAutocapitalizationTypeNone;
-        textField.autocorrectionType = UITextAutocorrectionTypeNo;
-        textField.keyboardType = UIKeyboardTypeASCIICapable;
-    }];
-
-    // 4. 中继服务器 URL（可选）
-    [alert addTextFieldWithConfigurationHandler:^(UITextField * _Nonnull textField) {
-        textField.placeholder = @"中继服务器 URL（可选）";
-        textField.text = room.serverUrl;
-        textField.autocapitalizationType = UITextAutocapitalizationTypeNone;
-        textField.autocorrectionType = UITextAutocorrectionTypeNo;
-        textField.keyboardType = UIKeyboardTypeURL;
-    }];
-
-    // 5. 服务器 IP
-    [alert addTextFieldWithConfigurationHandler:^(UITextField * _Nonnull textField) {
-        textField.placeholder = @"服务器 IP，如 10.144.144.1";
-        textField.text = room.hostIP;
-        textField.autocapitalizationType = UITextAutocapitalizationTypeNone;
-        textField.autocorrectionType = UITextAutocorrectionTypeNo;
-        textField.keyboardType = UIKeyboardTypeNumbersAndPunctuation;
-    }];
-
-    // 6. 端口
-    [alert addTextFieldWithConfigurationHandler:^(UITextField * _Nonnull textField) {
-        textField.placeholder = @"端口";
-        textField.text = room.hostPort;
+        textField.placeholder = @"MC 服务器端口";
+        textField.text = room.hostPort ?: @"25565";
         textField.keyboardType = UIKeyboardTypeNumberPad;
     }];
 
@@ -920,42 +1014,19 @@
 
     [alert addAction:[UIAlertAction actionWithTitle:@"保存" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         NSString *name = alert.textFields[0].text;
-        NSString *networkName = alert.textFields[1].text;
-        NSString *networkSecret = alert.textFields[2].text;
-        NSString *serverUrl = alert.textFields[3].text;
-        NSString *ip = alert.textFields[4].text;
-        NSString *port = alert.textFields[5].text;
+        NSString *port = alert.textFields[2].text;
 
         // 输入验证
         if (!name || name.length == 0) {
             [self showSimpleAlertWithTitle:@"提示" message:@"请输入房间名称"];
             return;
         }
-        if (!networkName || networkName.length == 0) {
-            [self showSimpleAlertWithTitle:@"提示" message:@"请输入 EasyTier 网络名"];
-            return;
-        }
-        if (!networkSecret || networkSecret.length == 0) {
-            [self showSimpleAlertWithTitle:@"提示" message:@"请输入网络密码"];
-            return;
-        }
-        if (!ip || ip.length == 0) {
-            [self showSimpleAlertWithTitle:@"提示" message:@"请输入服务器 IP 地址"];
-            return;
-        }
         if (!port || port.length == 0) {
             port = @"25565";
         }
-        if (!serverUrl || serverUrl.length == 0) {
-            serverUrl = @"";
-        }
 
-        // 更新房间对象
+        // 更新房间对象（邀请码和网络信息不可修改）
         room.name = name;
-        room.networkName = networkName;
-        room.networkSecret = networkSecret;
-        room.serverUrl = serverUrl;
-        room.hostIP = ip;
         room.hostPort = port;
 
         [[EasyTierMultiplayerManager sharedManager] updateRoom:room];
@@ -968,98 +1039,55 @@
 #pragma mark - 连接房间
 
 - (void)connectToRoom:(EasyTierRoom *)room completion:(void (^)(BOOL success, NSError *error))completion {
-    // EasyTier iOS app 当前未注册 URL Scheme，无法自动传参加入网络
-    // 需要弹出提示，引导用户手动在 EasyTier app 中加入网络
-    [self showConnectInstructionsForRoom:room completion:^(BOOL proceed) {
-        if (!proceed) {
-            if (completion) {
-                NSError *error = [NSError errorWithDomain:@"EasyTierMultiplayer" code:-2 userInfo:@{NSLocalizedDescriptionKey: @"用户取消连接"}];
-                completion(NO, error);
-            }
-            return;
-        }
+    // 先更新状态为连接中
+    room.status = EasyTierRoomStatusConnecting;
+    [[EasyTierMultiplayerManager sharedManager] updateRoom:room];
+    [self refreshRooms];
 
-        // 先更新状态为连接中
-        room.status = EasyTierRoomStatusConnecting;
+    // 检查 EasyTier app 是否已安装
+    if (![[EasyTierMultiplayerManager sharedManager] isEasyTierAppInstalled]) {
+        room.status = EasyTierRoomStatusError;
         [[EasyTierMultiplayerManager sharedManager] updateRoom:room];
         [self refreshRooms];
 
-        // 检查 EasyTier app 是否已安装
-        if (![[EasyTierMultiplayerManager sharedManager] isEasyTierAppInstalled]) {
-            room.status = EasyTierRoomStatusError;
-            [[EasyTierMultiplayerManager sharedManager] updateRoom:room];
-            [self refreshRooms];
+        // 提示用户安装 EasyTier
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"需要 EasyTier"
+                                                                       message:@"未检测到 EasyTier 应用，请先通过 TestFlight 安装后再联机。"
+                                                                preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:@"下载 EasyTier" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+            [[EasyTierMultiplayerManager sharedManager] openEasyTierApp];
+        }]];
+        [alert addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleCancel handler:nil]];
+        [self presentViewController:alert animated:YES completion:nil];
 
-            // 提示用户安装 EasyTier
-            UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"需要 EasyTier"
-                                                                           message:@"未检测到 EasyTier 应用，请先通过 TestFlight 安装后再联机。"
-                                                                    preferredStyle:UIAlertControllerStyleAlert];
-            [alert addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleDefault handler:nil]];
-            [self presentViewController:alert animated:YES completion:nil];
+        if (completion) {
+            NSError *error = [NSError errorWithDomain:@"EasyTierMultiplayer" code:-1 userInfo:@{NSLocalizedDescriptionKey: @"未安装 EasyTier"}];
+            completion(NO, error);
+        }
+        return;
+    }
+
+    // 调用管理器连接房间（内部会唤起 EasyTier app 加入网络）
+    __weak typeof(self) weakSelf = self;
+    [[EasyTierMultiplayerManager sharedManager] connectToRoom:room completion:^(BOOL success, NSError * _Nullable error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) return;
+
+            if (success) {
+                room.status = EasyTierRoomStatusConnected;
+                room.lastConnectedAt = [NSDate date];
+            } else {
+                room.status = EasyTierRoomStatusError;
+            }
+            [[EasyTierMultiplayerManager sharedManager] updateRoom:room];
+            [strongSelf refreshRooms];
 
             if (completion) {
-                NSError *error = [NSError errorWithDomain:@"EasyTierMultiplayer" code:-1 userInfo:@{NSLocalizedDescriptionKey: @"未安装 EasyTier"}];
-                completion(NO, error);
+                completion(success, error);
             }
-            return;
-        }
-
-        // 调用管理器连接房间（内部会调用 joinNetwork:networkSecret:serverUrl: 唤起 EasyTier app 加入网络）
-        __weak typeof(self) weakSelf = self;
-        [[EasyTierMultiplayerManager sharedManager] connectToRoom:room completion:^(BOOL success, NSError * _Nullable error) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                __strong typeof(weakSelf) strongSelf = weakSelf;
-                if (!strongSelf) return;
-
-                if (success) {
-                    room.status = EasyTierRoomStatusConnected;
-                    room.lastConnectedAt = [NSDate date];
-                } else {
-                    room.status = EasyTierRoomStatusError;
-                }
-                [[EasyTierMultiplayerManager sharedManager] updateRoom:room];
-                [strongSelf refreshRooms];
-
-                if (completion) {
-                    completion(success, error);
-                }
-            });
-        }];
+        });
     }];
-}
-
-#pragma mark - 连接提示
-
-/// 显示 EasyTier 连接提示弹窗
-/// 由于 EasyTier iOS app 未注册 URL Scheme，无法自动传参加入网络，
-/// 需要提示用户手动在 EasyTier app 中加入网络名和密码
-- (void)showConnectInstructionsForRoom:(EasyTierRoom *)room completion:(void (^)(BOOL proceed))completion {
-    NSString *networkName = room.networkName ?: @"-";
-    NSString *networkSecret = room.networkSecret ?: @"-";
-    NSString *hostIP = room.hostIP ?: @"-";
-    NSString *hostPort = room.hostPort ?: @"25565";
-
-    NSString *message = [NSString stringWithFormat:
-        @"请在 EasyTier app 中加入网络名: %@ 密码: %@，然后在游戏中通过「多人游戏」加入服务器 %@:%@",
-        networkName, networkSecret, hostIP, hostPort];
-
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"连接房间"
-                                                                   message:message
-                                                            preferredStyle:UIAlertControllerStyleAlert];
-
-    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:^(UIAlertAction * _Nonnull action) {
-        if (completion) {
-            completion(NO);
-        }
-    }]];
-
-    [alert addAction:[UIAlertAction actionWithTitle:@"打开 EasyTier 加入网络" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-        if (completion) {
-            completion(YES);
-        }
-    }]];
-
-    [self presentViewController:alert animated:YES completion:nil];
 }
 
 #pragma mark - 快速直连
@@ -1080,7 +1108,7 @@
         port = @"25565";
     }
 
-    // 验证 IP 格式（简单校验：包含点分十进制或 EasyTier 风格地址）
+    // 验证 IP 格式
     if (![self isValidIPAddress:ip]) {
         [self showSimpleAlertWithTitle:@"提示" message:@"IP 地址格式不正确，请检查输入"];
         return;
@@ -1146,8 +1174,8 @@
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     switch (section) {
         case 0:
-            // EasyTier 状态：1 行
-            return 1;
+            // 联机服务：状态 + 系统信息
+            return 2;
         case 1:
             // 联机房间列表：至少 1 行（空状态提示）
             return MAX(1, (NSInteger)self.rooms.count);
@@ -1173,21 +1201,32 @@
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
-    if (section == 2) {
-        return @"输入朋友的 EasyTier IP 地址和端口，直接加入游戏";
+    switch (section) {
+        case 0:
+            return @"EasyTier 邀请码与 HMCL/FCL/ZL2/PCL2 陶瓦联机互通";
+        case 2:
+            return @"输入朋友的 EasyTier IP 地址和端口，直接加入游戏";
+        default:
+            return nil;
     }
-    return nil;
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     switch (indexPath.section) {
         case 0: {
-            // Section 0: EasyTier 状态
-            EasyTierStatusCell *cell = [tableView dequeueReusableCellWithIdentifier:@"StatusCell" forIndexPath:indexPath];
-            BOOL installed = [[EasyTierMultiplayerManager sharedManager] isEasyTierAppInstalled];
-            [cell configureWithInstalled:installed];
-            [[BackgroundManager sharedManager] applyEffectToCell:cell];
-            return cell;
+            // Section 0: 联机服务
+            if (indexPath.row == 0) {
+                // EasyTier 状态
+                EasyTierStatusCell *cell = [tableView dequeueReusableCellWithIdentifier:@"StatusCell" forIndexPath:indexPath];
+                BOOL installed = [[EasyTierMultiplayerManager sharedManager] isEasyTierAppInstalled];
+                [cell configureWithInstalled:installed];
+                return cell;
+            } else {
+                // 系统信息与 iOS 版本警告
+                EasyTierInfoCell *cell = [tableView dequeueReusableCellWithIdentifier:@"InfoCell" forIndexPath:indexPath];
+                [cell configureWithIOSVersion];
+                return cell;
+            }
         }
         case 1: {
             // Section 1: 联机房间列表
@@ -1200,7 +1239,6 @@
                 cell.textLabel.font = [UIFont systemFontOfSize:14];
                 cell.selectionStyle = UITableViewCellSelectionStyleNone;
                 cell.backgroundColor = [UIColor secondarySystemGroupedBackgroundColor];
-                [[BackgroundManager sharedManager] applyEffectToCell:cell];
                 return cell;
             }
 
@@ -1208,32 +1246,6 @@
             EasyTierRoom *room = self.rooms[indexPath.row];
             BOOL hasBackground = [[BackgroundManager sharedManager] hasBackground];
             [cell configureWithRoom:room hasBackground:hasBackground];
-
-            // 注入连接按钮回调
-            __weak typeof(self) weakSelf = self;
-            __weak EasyTierRoom *weakRoom = room;
-            cell.onConnectTapped = ^(EasyTierRoom *tappedRoom) {
-                __strong typeof(weakSelf) strongSelf = weakSelf;
-                EasyTierRoom *targetRoom = tappedRoom ?: weakRoom;
-                if (!strongSelf || !targetRoom) return;
-                if (targetRoom.status == EasyTierRoomStatusConnected) {
-                    // 已连接则断开
-                    [[EasyTierMultiplayerManager sharedManager] disconnectCurrentRoom];
-                    targetRoom.status = EasyTierRoomStatusDisconnected;
-                    [[EasyTierMultiplayerManager sharedManager] updateRoom:targetRoom];
-                    [strongSelf refreshRooms];
-                } else {
-                    // 未连接则连接（会先显示提示弹窗）
-                    [strongSelf connectToRoom:targetRoom completion:^(BOOL success, NSError *error) {
-                        if (!success && error.code != -2) {
-                            // -2 表示用户主动取消，不提示错误
-                            [strongSelf showSimpleAlertWithTitle:@"连接失败" message:error.localizedDescription ?: @"无法连接到房间"];
-                        }
-                    }];
-                }
-            };
-
-            [[BackgroundManager sharedManager] applyEffectToCell:cell];
             return cell;
         }
         case 2: {
@@ -1275,7 +1287,6 @@
                     }
                 };
             }
-            [[BackgroundManager sharedManager] applyEffectToCell:cell];
             return cell;
         }
         default:
@@ -1285,15 +1296,22 @@
 
 #pragma mark - UITableViewDelegate
 
+- (void)tableView:(UITableView *)tableView willDisplayCell:(UITableViewCell *)cell forRowAtIndexPath:(NSIndexPath *)indexPath {
+    // 为每个 cell 应用背景毛玻璃效果
+    [self applyEffectToCell:cell];
+}
+
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
 
     switch (indexPath.section) {
         case 0: {
             // 点击 EasyTier 状态行：打开 EasyTier app
-            [[EasyTierMultiplayerManager sharedManager] openEasyTierApp];
-            // 刷新状态
-            [self.tableView reloadRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationAutomatic];
+            if (indexPath.row == 0) {
+                [[EasyTierMultiplayerManager sharedManager] openEasyTierApp];
+                // 刷新状态
+                [self.tableView reloadRowsAtIndexPaths:@[[NSIndexPath indexPathForRow:0 inSection:0]] withRowAnimation:UITableViewRowAnimationAutomatic];
+            }
             break;
         }
         case 1: {
@@ -1318,10 +1336,46 @@
     }
 }
 
+/// 滑动删除房间
+- (UISwipeActionsConfiguration *)tableView:(UITableView *)tableView trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
+    // 仅房间列表行支持滑动删除
+    if (indexPath.section != 1 || self.rooms.count == 0) {
+        return nil;
+    }
+
+    EasyTierRoom *room = self.rooms[indexPath.row];
+
+    UIContextualAction *deleteAction = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleDestructive
+                                                                               title:@"删除"
+                                                                             handler:^(UIContextualAction * _Nonnull action, __kindof UIView * _Nonnull sourceView, void (^ _Nonnull completionHandler)(BOOL)) {
+        // 二次确认
+        UIAlertController *confirm = [UIAlertController alertControllerWithTitle:@"确认删除"
+                                                                          message:[NSString stringWithFormat:@"确定要删除房间「%@」吗？\n此操作无法撤销。", room.name]
+                                                                   preferredStyle:UIAlertControllerStyleAlert];
+        [confirm addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:^(UIAlertAction * _Nonnull action) {
+            completionHandler(NO);
+        }]];
+        [confirm addAction:[UIAlertAction actionWithTitle:@"删除" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
+            [[EasyTierMultiplayerManager sharedManager] removeRoom:room.roomId];
+            [self refreshRooms];
+            completionHandler(YES);
+        }]];
+        [self presentViewController:confirm animated:YES completion:nil];
+    }];
+    deleteAction.image = [UIImage systemImageNamed:@"trash"];
+
+    return [UISwipeActionsConfiguration configurationWithActions:@[deleteAction]];
+}
+
 - (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
     if (indexPath.section == 0) {
-        // 状态卡片：包含标题、副标题、信息标签三行，需要更高
-        return 84;
+        if (indexPath.row == 0) {
+            // 状态卡片
+            return 72;
+        } else {
+            // 系统信息卡片（多行文本，使用自动尺寸）
+            return UITableViewAutomaticDimension;
+        }
     }
     if (indexPath.section == 1) {
         if (self.rooms.count == 0) {

@@ -185,6 +185,8 @@ add_executable(AngelAuraAmethyst
   JavaGUIViewController.m
   MultiplayerManager.m
   MultiplayerViewController.m
+  EasyTierMultiplayerManager.m
+  EasyTierMultiplayerViewController.m
   LauncherMenuViewController.m
   LauncherNavigationController.m
   LauncherNewsViewController.m

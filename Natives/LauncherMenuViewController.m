@@ -43,14 +43,18 @@
                                                object:nil];
 
     // 菜单项配置
-    // case 3 原为"控制设置"，现改为"联机"（基于 ZeroTier 的 MC 联机功能，参照 FCL/ZL2）
+    // case 3 为"联机"（基于 ZeroTier 的 MC 联机功能，ZeroTier iOS app 支持 iOS 13+）
+    // case 4 为"EasyTier 联机"（基于 EasyTier 的陶瓦联机，与 HMCL/FCL/ZL2/PCL2 互通，
+    //   使用 U/XXXX-XXXX-XXXX-XXXX 邀请码格式，EasyTier iOS app 需要 iOS 16+）
+    // case 5 为"设置"（原 case 4，因新增 EasyTier 入口而下移）
     // 键位调整界面已移到设置页面中
     self.menuItems = @[
         @{@"icon": @"house.fill", @"title": @" ", @"index": @0},
         @{@"icon": @"arrow.down.circle.fill", @"title": @" ", @"index": @1},
         @{@"icon": @"puzzlepiece.fill", @"title": @" ", @"index": @2},
         @{@"icon": @"antenna.radiowaves.left.and.right", @"title": @" ", @"index": @3},
-        @{@"icon": @"gearshape.fill", @"title": @" ", @"index": @4}
+        @{@"icon": @"network.badge.shield.half.filled", @"title": @" ", @"index": @4},
+        @{@"icon": @"gearshape.fill", @"title": @" ", @"index": @5}
     ];
     
     self.selectedIndex = 0;
@@ -250,7 +254,11 @@
             [self showMultiplayer];
             break;
 
-        case 4: // 设置
+        case 4: // EasyTier 联机（基于 EasyTier 的陶瓦联机，与 HMCL/FCL/ZL2/PCL2 互通）
+            [self showEasyTierMultiplayer];
+            break;
+
+        case 5: // 设置
             [self showSettings];
             break;
     }
@@ -262,8 +270,15 @@
 }
 
 - (void)showMultiplayer {
-    // 发送通知让 LauncherRootViewController 显示联机界面
+    // 发送通知让 LauncherRootViewController 显示 ZeroTier 联机界面
     [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowMultiplayer" object:nil];
+}
+
+- (void)showEasyTierMultiplayer {
+    // 发送通知让 LauncherRootViewController 显示 EasyTier 联机界面
+    // EasyTier 基于 Terracotta（陶瓦联机）的 Scaffolding-MC 协议，
+    // 使用 U/XXXX-XXXX-XXXX-XXXX 邀请码格式，与 HMCL/FCL/ZL2/PCL2 完全互通
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowEasyTierMultiplayer" object:nil];
 }
 
 - (void)showSettings {
