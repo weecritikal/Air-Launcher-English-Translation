@@ -3,6 +3,7 @@
 #import "DownloadTaskItem.h"
 #import "LauncherPreferences.h"
 #import "BackgroundManager.h"
+#import "IconLoader.h"
 
 static NSString * const kTaskCellReuseIdentifier = @"DownloadTaskCell";
 static NSString * const kEmptyStateReuseIdentifier = @"DownloadTaskEmptyCell";
@@ -166,7 +167,16 @@ static const CGFloat kSectionInset = 16.0;
     UIImage *placeholder = [UIImage systemImageNamed:[self iconNameForResourceType:task.resourceType]];
     self.iconImageView.image = placeholder;
     if (task.iconURL.length > 0) {
-        [self loadIconFromURL:task.iconURL];
+        // 使用 IconLoader 统一加载（双层缓存+降采样+CDN镜像+并发控制）
+        // 图标显示尺寸 48x48，降采样到此尺寸避免按原图解码
+        [IconLoader loadIconForImageView:self.iconImageView
+                                     URL:task.iconURL
+                             placeholder:placeholder
+                                fallback:placeholder
+                               targetSize:CGSizeMake(48, 48)];
+    } else {
+        // 无 URL：取消可能存在的旧请求
+        [IconLoader cancelLoadingForImageView:self.iconImageView];
     }
 
     // 速度与进度
@@ -210,27 +220,8 @@ static const CGFloat kSectionInset = 16.0;
     }
 }
 
-- (void)loadIconFromURL:(NSString *)urlString {
-    NSURL *url = [NSURL URLWithString:urlString];
-    if (!url) return;
-
-    __weak typeof(self) weakSelf = self;
-    NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithURL:url
-                                                             completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
-        if (data && !error) {
-            UIImage *image = [UIImage imageWithData:data];
-            if (image) {
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    __strong typeof(weakSelf) strongSelf = weakSelf;
-                    if (strongSelf) {
-                        strongSelf.iconImageView.image = image;
-                    }
-                });
-            }
-        }
-    }];
-    [task resume];
-}
+// loadIconFromURL: 已移除，改用 IconLoader 统一加载器
+// （IconLoader 提供双层缓存+降采样+CDN镜像+并发控制，比原 NSURLSession 直连更高效）
 
 - (NSString *)displayNameForResourceType:(NSString *)type {
     NSDictionary *map = @{

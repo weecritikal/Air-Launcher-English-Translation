@@ -247,6 +247,9 @@ add_executable(AngelAuraAmethyst
   # 模组加载器图标统一工具类（优先 bundle PNG，回退 SF Symbol，统一全项目加载器品牌色与图标）
   ModLoaderIconHelper.m
 
+  # 统一的项目图标加载器（双层缓存+降采样+并发控制+CDN镜像，参照 FCL Glide + ZL2 Coil）
+  IconLoader.m
+
   # Shader-related sources
   ShaderItem.m
   ShaderService.m
@@ -349,6 +352,7 @@ target_link_libraries(AngelAuraAmethyst
   "-framework CoreGraphics"
   "-framework CoreImage"
   "-framework CoreMedia"
+  "-framework ImageIO"
   "-framework CoreMotion"
   "-framework GameController"
   "-framework IOKit"

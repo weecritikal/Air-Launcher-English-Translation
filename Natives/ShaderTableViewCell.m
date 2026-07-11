@@ -8,11 +8,13 @@
 #import "ShaderTableViewCell.h"
 #import "ShaderItem.h"
 #import "ShaderService.h"
+#import "IconLoader.h"
 #import <QuartzCore/QuartzCore.h>
 
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunguarded-availability-new"
-#import "UIKit+AFNetworking.h"
+// 注意：UIKit+AFNetworking 已移除，改用 IconLoader 统一加载器
+// （AFNetworking 仅内存缓存无降采样，IconLoader 提供双层缓存+降采样+CDN镜像+并发控制）
 #pragma clang diagnostic pop
 
 @interface ShaderTableViewCell ()
@@ -168,12 +170,9 @@
 
 - (void)prepareForReuse {
     [super prepareForReuse];
-    // 修复图标加载慢/错乱：取消正在进行的 AFNetworking 图片请求，
-    // 防止复用 cell 时旧请求完成后覆盖新配置的图标。
-    // 使用 performSelector: 调用，兼容不同版本的 AFNetworking（部分版本可能未导出该方法声明）
-    if ([_shaderIconView respondsToSelector:@selector(cancelImageRequestOperation)]) {
-        [_shaderIconView performSelector:@selector(cancelImageRequestOperation)];
-    }
+    // 取消该 cell 上正在进行的图标加载请求（cell 复用时旧请求不应继续占用网络与回调）
+    // 对应 Glide 的 clear() + ZL2 Compose 组合自动取消
+    [IconLoader cancelLoadingForImageView:_shaderIconView];
     _shaderIconView.image = [UIImage systemImageNamed:@"photo"];
     _nameLabel.text = nil;
     _shaderVersionLabel.text = nil;
@@ -189,10 +188,20 @@
     _nameLabel.text = shader.displayName ?: shader.fileName;
 
     if (shader.icon) {
+        // 本地已加载的图标：直接显示，无需网络加载
+        [IconLoader cancelLoadingForImageView:_shaderIconView];
         _shaderIconView.image = shader.icon;
     } else if (shader.iconURL) {
-        [_shaderIconView setImageWithURL:[NSURL URLWithString:shader.iconURL] placeholderImage:[UIImage systemImageNamed:@"photo"]];
+        // 在线图标：使用 IconLoader 加载（双层缓存 + 降采样 + CDN 镜像）
+        // 图标显示尺寸 36x36（在 setupConstraints 中定义），降采样到此尺寸避免按原图解码
+        UIImage *placeholder = [UIImage systemImageNamed:@"photo"];
+        [IconLoader loadIconForImageView:_shaderIconView
+                                     URL:shader.iconURL
+                             placeholder:placeholder
+                                fallback:placeholder
+                               targetSize:CGSizeMake(36, 36)];
     } else {
+        [IconLoader cancelLoadingForImageView:_shaderIconView];
         _shaderIconView.image = [UIImage systemImageNamed:@"photo"];
     }
 

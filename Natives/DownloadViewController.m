@@ -1,8 +1,9 @@
 #import "DownloadViewController.h"
 #import "BackgroundManager.h"
-// UIImageView+AFNetworking：为 ModernAssetCell 提供 setImageWithURL:placeholderImage:，
-// 自带内存+磁盘缓存，比手动 NSData 下载更高效，且能复用同一 URL 的下载任务
-#import "UIImageView+AFNetworking.h"
+// IconLoader：统一的项目图标加载器（双层缓存 + 降采样 + 并发控制 + CDN 镜像），
+// 替代 UIImageView+AFNetworking（仅内存缓存，无降采样，无镜像）
+// 参照 FCL Glide + ZL2 Coil 的最佳实践
+#import "IconLoader.h"
 #import "DownloadTaskManager.h"
 #import "DownloadTaskItem.h"
 #import "InlineMessageView.h"
@@ -222,6 +223,9 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
 - (void)prepareForReuse {
     [super prepareForReuse];
+    // 取消该 cell 上正在进行的图标加载请求（cell 复用时旧请求不应继续占用网络与回调）
+    // 对应 Glide 的 clear() + ZL2 Compose 组合自动取消
+    [IconLoader cancelLoadingForImageView:self.iconView];
     // 重置图标状态：避免复用时旧图残留导致显示错乱
     self.iconView.image = nil;
     self.iconView.tintColor = [UIColor systemOrangeColor];
@@ -297,9 +301,10 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     return [dateString substringToIndex:10];
 }
 
-/// 异步加载项目图标：优先用 AFNetworking（带缓存），回退到 NSData
+/// 异步加载项目图标（使用 IconLoader 统一加载器）
+/// 对应 ZL2 AssetsIcon 的 loadIcon 逻辑：双层缓存 + 降采样 + CDN 镜像 + 占位/兜底
 - (void)loadIconFromURL:(NSString *)iconUrl placeholderType:(ModernAssetType)type {
-    // 先显示占位图标
+    // 先显示占位图标（加载期间显示类型对应的 SF Symbol）
     [self applyPlaceholderIconForType:type];
 
     if (![iconUrl isKindOfClass:[NSString class]] || iconUrl.length == 0) {
@@ -309,34 +314,29 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     // 记录当前正在加载的 URL，防止 cell 复用后旧请求覆盖新请求
     self.currentIconURL = [iconUrl copy];
 
+    // 构造兜底图：与占位图标相同，加载失败时也显示类型对应的 SF Symbol
+    UIImage *placeholder = self.iconView.image;
+    UIImage *fallback = [UIImage systemImageNamed:[self placeholderIconNameForType:type]] ?: placeholder;
+
+    // 使用 IconLoader 加载（自动处理：取消旧请求 → 占位 → 内存缓存 → 磁盘缓存 → 降采样解码 → CDN 镜像 → 兜底）
+    // 图标显示尺寸 56x56（在 setupConstraints 中定义），降采样到此尺寸避免按原图解码
     __weak typeof(self) weakSelf = self;
-    void (^applyImage)(UIImage *) = ^(UIImage *image) {
+    [IconLoader loadIconForImageView:self.iconView
+                                 URL:iconUrl
+                         placeholder:placeholder
+                            fallback:fallback
+                           targetSize:CGSizeMake(56, 56)
+                              options:IconLoaderOptionsDefault
+                           completion:^(UIImage *image) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf || !image) return;
         // 校验：cell 复用后 currentIconURL 可能已变，避免旧图覆盖新 cell
+        // （IconLoader 内部已通过关联对象做了校验，这里二次校验更稳妥）
         if (![strongSelf.currentIconURL isEqualToString:iconUrl]) return;
+        // 真实项目图标使用 AspectFill 填充，覆盖占位 SF Symbol 的 AspectFit 样式
         strongSelf.iconView.contentMode = UIViewContentModeScaleAspectFill;
-        strongSelf.iconView.image = image;
         strongSelf.iconView.tintColor = [UIColor clearColor];
-    };
-
-    // 优先用 AFNetworking（自带内存+磁盘缓存，命中率高，且能复用同一 URL 的下载任务）
-    if ([self.iconView respondsToSelector:@selector(setImageWithURL:placeholderImage:)]) {
-        UIImage *placeholder = self.iconView.image; // 保留当前占位 SF Symbol 作为加载期间显示
-        [self.iconView setImageWithURL:[NSURL URLWithString:iconUrl] placeholderImage:placeholder];
-        return;
-    }
-
-    // 回退：手动 NSData 下载
-    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        NSData *data = [NSData dataWithContentsOfURL:[NSURL URLWithString:iconUrl]
-                                              options:NSDataReadingUncached
-                                                error:nil];
-        UIImage *image = data ? [UIImage imageWithData:data] : nil;
-        dispatch_async(dispatch_get_main_queue(), ^{
-            applyImage(image);
-        });
-    });
+    }];
 }
 
 /// 配置标签 stack：从 categories 数组取最多 3 个，按 loader/类别配色

@@ -4,7 +4,9 @@
 #import "modpack/ModrinthAPI.h"
 #import "MinecraftResourceDownloadTask.h"
 #import "PLProfiles.h"
-#import "UIKit+AFNetworking.h"
+// 注意：UIKit+AFNetworking 已替换为 IconLoader 统一加载器
+// （AFNetworking 仅内存缓存无降采样，IconLoader 提供双层缓存+降采样+CDN镜像+并发控制）
+#import "IconLoader.h"
 #import "WFWorkflowProgressView.h"
 #import "config.h"
 #import "ios_uikit_bridge.h"
@@ -190,7 +192,13 @@
     cell.detailTextLabel.text = item[@"description"];
     cell.detailTextLabel.numberOfLines = 2;
     UIImage *fallbackImage = [UIImage imageNamed:@"DefaultProfile"];
-    [cell.imageView setImageWithURL:[NSURL URLWithString:item[@"imageUrl"]] placeholderImage:fallbackImage];
+    // 整合包列表图标：使用 IconLoader 统一加载（双层缓存+降采样+CDN镜像+并发控制）
+    // 整合包图标显示尺寸较小（约 38x38 UITableViewCell 默认图标尺寸），降采样到此尺寸避免按原图解码
+    [IconLoader loadIconForImageView:cell.imageView
+                                 URL:item[@"imageUrl"]
+                         placeholder:fallbackImage
+                            fallback:fallbackImage
+                           targetSize:CGSizeMake(38, 38)];
     cell.imageView.layer.cornerRadius = 8;
     cell.imageView.clipsToBounds = YES;
 

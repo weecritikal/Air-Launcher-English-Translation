@@ -12,7 +12,9 @@
 
 #import "AssetDetailHeaderView.h"
 #import "BackgroundManager.h"
-#import "UIKit+AFNetworking.h"
+// 注意：UIKit+AFNetworking 已替换为 IconLoader 统一加载器
+// （AFNetworking 仅内存缓存无降采样，IconLoader 提供双层缓存+降采样+CDN镜像+并发控制）
+#import "IconLoader.h"
 #import "ModLoaderIconHelper.h"
 
 @interface AssetDetailHeaderView ()
@@ -514,7 +516,8 @@
 
 #pragma mark - Icon Loading
 
-/// 加载项目封面图（优先 AFNetworking，失败则显示占位 SF Symbol）
+/// 加载项目封面图（使用 IconLoader 统一加载器）
+/// 对应 ZL2 AssetsIcon 的 loadIcon 逻辑：双层缓存 + 降采样 + CDN 镜像 + 占位/兜底
 - (void)loadIconFromURL:(nullable NSString *)iconURL
    placeholderSymbolName:(NSString *)symbolName
        placeholderColor:(UIColor *)color {
@@ -526,16 +529,21 @@
     self.iconPlaceholderContainer.backgroundColor = [color ?: [UIColor systemBlueColor] colorWithAlphaComponent:0.18];
 
     // 无 URL 或非法 URL：iconImageView 保持透明，透出底层占位 SF Symbol
-    NSURL *url = [NSURL URLWithString:iconURL];
-    if (!url || iconURL.length == 0) {
+    if (!iconURL || iconURL.length == 0) {
+        [IconLoader cancelLoadingForImageView:self.iconImageView];
         self.iconImageView.image = nil;
         return;
     }
 
-    // 用 AFNetworking 加载（自带内存+磁盘缓存），placeholderImage=nil
+    // 用 IconLoader 加载（自带内存+磁盘缓存+降采样+CDN镜像），placeholderImage=nil
     // 加载成功：iconImageView 显示真实图，覆盖下方占位 SF Symbol
     // 加载失败/加载中：iconImageView 为空（透明），透出下方占位 SF Symbol
-    [self.iconImageView setImageWithURL:url placeholderImage:nil];
+    // 封面图显示尺寸 72x72（在 setupViews 中定义），降采样到此尺寸避免按原图解码
+    [IconLoader loadIconForImageView:self.iconImageView
+                                 URL:iconURL
+                         placeholder:nil
+                            fallback:nil
+                           targetSize:CGSizeMake(72, 72)];
 }
 
 #pragma mark - Formatting Helpers

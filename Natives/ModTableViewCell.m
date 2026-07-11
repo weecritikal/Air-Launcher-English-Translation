@@ -1,11 +1,13 @@
 #import "ModTableViewCell.h"
 #import "ModItem.h"
 #import "ModService.h"
+#import "IconLoader.h"
 #import <QuartzCore/QuartzCore.h>
 
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunguarded-availability-new"
-#import "UIKit+AFNetworking.h"
+// 注意：UIKit+AFNetworking 已移除，改用 IconLoader 统一加载器
+// （AFNetworking 仅内存缓存无降采样，IconLoader 提供双层缓存+降采样+CDN镜像+并发控制）
 #pragma clang diagnostic pop
 
 @interface ModTableViewCell ()
@@ -240,17 +242,9 @@
 
 - (void)prepareForReuse {
     [super prepareForReuse];
-    // 修复图标加载慢/错乱：取消正在进行的 AFNetworking 图片请求，
-    // 防止复用 cell 时旧请求完成后覆盖新配置的图标。
-    // AFNetworking 的 UIImageView+AFNetworking 类别会在 setImageWithURL: 时
-    // 自动取消该 imageView 上之前的请求，但仅在再次调用 setImageWithURL: 时才取消。
-    // 如果新 cell 配置走的是 mod.icon（本地图片）或默认图标分支（不调用 setImageWithURL:），
-    // 旧的异步请求不会被取消，导致延迟加载的旧图标覆盖新图标。
-    // 这里显式取消，确保 cell 复用时不会有残留请求。
-    // 使用 performSelector: 调用，兼容不同版本的 AFNetworking（部分版本可能未导出该方法声明）
-    if ([_modIconView respondsToSelector:@selector(cancelImageRequestOperation)]) {
-        [_modIconView performSelector:@selector(cancelImageRequestOperation)];
-    }
+    // 取消该 cell 上正在进行的图标加载请求（cell 复用时旧请求不应继续占用网络与回调）
+    // 对应 Glide 的 clear() + ZL2 Compose 组合自动取消
+    [IconLoader cancelLoadingForImageView:_modIconView];
     _modIconView.image = [UIImage systemImageNamed:@"puzzlepiece.extension"];
     _loaderIconView.image = nil;
     _nameLabel.text = nil;
@@ -273,10 +267,20 @@
     _nameLabel.text = mod.displayName ?: mod.fileName;
 
     if (mod.icon) {
+        // 本地已加载的图标（如从 jar 内解析的 pack.png）：直接显示，无需网络加载
+        [IconLoader cancelLoadingForImageView:_modIconView];
         _modIconView.image = mod.icon;
     } else if (mod.iconURL) {
-        [_modIconView setImageWithURL:[NSURL URLWithString:mod.iconURL] placeholderImage:[UIImage systemImageNamed:@"puzzlepiece.extension"]];
+        // 在线图标：使用 IconLoader 加载（双层缓存 + 降采样 + CDN 镜像）
+        // 图标显示尺寸 36x36（在 setupConstraints 中定义），降采样到此尺寸避免按原图解码
+        UIImage *placeholder = [UIImage systemImageNamed:@"puzzlepiece.extension"];
+        [IconLoader loadIconForImageView:_modIconView
+                                     URL:mod.iconURL
+                             placeholder:placeholder
+                                fallback:placeholder
+                               targetSize:CGSizeMake(36, 36)];
     } else {
+        [IconLoader cancelLoadingForImageView:_modIconView];
         _modIconView.image = [UIImage systemImageNamed:@"puzzlepiece.extension"];
     }
 
