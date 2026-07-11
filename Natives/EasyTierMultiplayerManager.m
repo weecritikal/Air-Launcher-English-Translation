@@ -45,12 +45,20 @@
 //  因此 value mod 7 = (d0 - d1 + d2 - d3 + d4 - d5 + ...) mod 7
 //  这是一个交替和，可以方便地计算和验证
 //
-//  系统要求：
-//  - EasyTier iOS app 需要 iOS 16.0 及以上系统
-//  - ZeroTier iOS app 支持 iOS 13.0 及以上系统
-//  - 本启动器最低支持 iOS 14.0
-//  - iOS 14-15 用户只能使用 ZeroTier 联机
-//  - iOS 16+ 用户可以同时使用 EasyTier 和 ZeroTier 联机
+//  关于 iOS 集成方式：
+//  - Android 平台（FCL/ZL2）通过子进程 + VpnService 运行 EasyTier 核心
+//  - iOS 沙盒禁止子进程和直接操作 utun 设备
+//  - 完整嵌入式集成需要 NetworkExtension（NEPacketTunnelProvider）+ Rust 静态库
+//    （EasyTier-iOS 项目即采用此方案，但已停止维护且为 GPL v3 许可证）
+//  - 当前版本采用"配置信息透明展示"模式：
+//    1. 生成完整的 EasyTier 配置（邀请码、网络名、密码、公共服务器、TOML 配置）
+//    2. 用户可在任意 EasyTier 客户端中使用这些配置
+//    3. 协议层完全兼容，确保与 FCL/ZL2/HMCL 完美互通
+//  - 这样的设计保证了：
+//    a. 邀请码生成与解析与 Terracotta 源码完全一致（协议兼容）
+//    b. 用户可获取所有必要的连接信息
+//    c. 不引入复杂的 Rust 交叉编译和 NetworkExtension 依赖
+//    d. CI 构建稳定，游戏启动不受影响
 //
 
 #import "EasyTierMultiplayerManager.h"
@@ -63,15 +71,6 @@ static NSString *const kEasyTierSavedRoomsKey = @"easytier_multiplayer_saved_roo
 /// MC 默认服务器端口
 static NSString *const kDefaultMCPort = @"25565";
 
-/// EasyTier iOS app 的 URL Scheme
-static NSString *const kEasyTierURLScheme = @"easytier";
-
-/// EasyTier TestFlight 安装链接
-static NSString *const kEasyTierTestFlightURL = @"https://testflight.apple.com/join/YWnDyJfM";
-
-/// EasyTier GitHub 仓库链接
-static NSString *const kEasyTierGitHubURL = @"https://github.com/EasyTier/EasyTier-iOS";
-
 /// 房主在 EasyTier 网络中的固定虚拟 IP
 static NSString *const kEasyTierHostVirtualIP = @"10.144.144.1";
 
@@ -81,6 +80,9 @@ static NSString *const kScaffoldingNetworkNamePrefix = @"scaffolding-mc-";
 /// Base-34 字符表（排除 I 和 O，避免与 1 和 0 混淆）
 /// 索引 0-33 对应字符 '0'-'9', 'A'-'H', 'J'-'N', 'P'-'Z'
 static NSString *const kBase34Charset = @"0123456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+
+/// EasyTier 本地监听端口（用于节点发现）
+static NSInteger const kEasyTierDefaultPort = 11010;
 
 /// Terracotta 默认公共服务器列表（硬编码，不在邀请码中编码）
 static NSArray<NSString *> *kDefaultPublicServers = nil;
@@ -254,6 +256,9 @@ static NSArray<NSString *> *kDefaultPublicServers = nil;
 // 以便在实现内部赋值（头文件中对外暴露为 readonly）
 @property (nonatomic, strong, readwrite, nullable) EasyTierRoom *currentRoom;
 
+// 在 class extension 中将 hostVirtualIP 重新声明为 readwrite
+@property (nonatomic, copy, readwrite) NSString *hostVirtualIP;
+
 @end
 
 @implementation EasyTierMultiplayerManager
@@ -284,8 +289,10 @@ static NSArray<NSString *> *kDefaultPublicServers = nil;
         _serializationQueue = dispatch_queue_create("com.angelaura.easytier.multiplayer.serialization", DISPATCH_QUEUE_SERIAL);
         _internalRooms = [[NSMutableArray alloc] init];
         _currentRoom = nil;
+        _hostVirtualIP = kEasyTierHostVirtualIP;
 
         // 初始化默认公共服务器列表
+        // 这些服务器是 Terracotta/HMCL/FCL/ZL2 共用的公共 EasyTier 节点
         kDefaultPublicServers = @[
             @"tcp://public.easytier.top:11010",
             @"tcp://public2.easytier.cn:54321",
@@ -507,59 +514,137 @@ static NSArray<NSString *> *kDefaultPublicServers = nil;
     return parsed[@"networkSecret"];
 }
 
-#pragma mark - EasyTier App 检测与唤起
+#pragma mark - 配置生成
 
-- (BOOL)isEasyTierAppInstalled {
-    NSString *urlString = [NSString stringWithFormat:@"%@://", kEasyTierURLScheme];
-    NSURL *url = [NSURL URLWithString:urlString];
-    if (!url) return NO;
+/// 生成房间的 EasyTier TOML 配置字符串
+///
+/// 该配置可直接用于 EasyTier 命令行或图形客户端导入。
+/// 配置格式参照 EasyTier 官方文档和 FCL/ZL2 的集成方式。
+///
+/// 房主配置：
+/// - ipv4 = 10.144.144.1（固定虚拟 IP）
+/// - 启用 DHCP（为房客分配 IP）
+///
+/// 房客配置：
+/// - ipv4 由 EasyTier 自动分配（DHCP）
+/// - 不启用 DHCP
+- (NSString *)generateTOMLConfigForRoom:(EasyTierRoom *)room {
+    if (!room || !room.networkName || !room.networkSecret) {
+        return @"";
+    }
 
-    if ([NSThread isMainThread]) {
-        return [[UIApplication sharedApplication] canOpenURL:url];
+    // 获取公共服务器列表
+    NSArray<NSString *> *servers = [self defaultPublicServers];
+
+    NSMutableString *toml = [NSMutableString string];
+
+    // IPv4 配置
+    // 房主使用固定 IP 10.144.144.1，房客使用 DHCP 自动分配
+    if (room.role == EasyTierRoomRoleHost) {
+        [toml appendFormat:@"ipv4 = \"%@\"\n", kEasyTierHostVirtualIP];
     } else {
-        __block BOOL canOpen = NO;
-        dispatch_sync(dispatch_get_main_queue(), ^{
-            canOpen = [[UIApplication sharedApplication] canOpenURL:url];
-        });
-        return canOpen;
-    }
-}
-
-- (void)openEasyTierApp {
-    dispatch_async(dispatch_get_main_queue(), ^{
-        if ([self isEasyTierAppInstalled]) {
-            NSString *urlString = [NSString stringWithFormat:@"%@://", kEasyTierURLScheme];
-            NSURL *url = [NSURL URLWithString:urlString];
-            [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:nil];
-            NSLog(@"[EasyTierMultiplayerManager] 已唤起 EasyTier app");
-        } else {
-            NSURL *testFlightUrl = [NSURL URLWithString:kEasyTierTestFlightURL];
-            [[UIApplication sharedApplication] openURL:testFlightUrl options:@{} completionHandler:nil];
-            NSLog(@"[EasyTierMultiplayerManager] EasyTier app 未安装，已打开 TestFlight 安装页面");
-        }
-    });
-}
-
-- (void)joinNetwork:(NSString *)networkName
-       networkSecret:(NSString *)networkSecret {
-    if (!networkName || networkName.length == 0) {
-        NSLog(@"[EasyTierMultiplayerManager] joinNetwork 失败：networkName 为空");
-        return;
+        // 房客：使用 DHCP，由房主的 EasyTier 节点分配 IP
+        [toml appendString:@"# 房客 IP 由 EasyTier DHCP 自动分配\n"];
+        [toml appendString:@"# 如需固定 IP，可取消下面一行的注释并修改地址\n"];
+        [toml appendFormat:@"# ipv4 = \"10.144.144.2\"\n"];
     }
 
-    dispatch_async(dispatch_get_main_queue(), ^{
-        if ([self isEasyTierAppInstalled]) {
-            // 当前 EasyTier iOS app 未注册 URL Scheme，直接打开 app 主界面
-            // 未来如果 EasyTier 支持 URL Scheme，可以在这里传参
-            NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"%@://", kEasyTierURLScheme]];
-            [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:nil];
-            NSLog(@"[EasyTierMultiplayerManager] 已打开 EasyTier app（需手动加入网络：%@）", networkName);
-        } else {
-            NSURL *testFlightUrl = [NSURL URLWithString:kEasyTierTestFlightURL];
-            [[UIApplication sharedApplication] openURL:testFlightUrl options:@{} completionHandler:nil];
-            NSLog(@"[EasyTierMultiplayerManager] EasyTier app 未安装，已打开 TestFlight 安装页面");
-        }
-    });
+    // 网络身份（network_name + network_secret）
+    [toml appendString:@"\n[network_identity]\n"];
+    [toml appendFormat:@"network_name = \"%@\"\n", room.networkName];
+    [toml appendFormat:@"network_secret = \"%@\"\n", room.networkSecret];
+
+    // 公共服务器（peer）
+    // 这些服务器用于节点发现和穿透，所有客户端必须配置相同的 peer
+    [toml appendString:@"\n# 公共服务器（用于节点发现和 NAT 穿透）\n"];
+    for (NSString *server in servers) {
+        [toml appendString:@"[[peer]]\n"];
+        [toml appendFormat:@"uri = \"%@\"\n", server];
+        [toml appendString:@"\n"];
+    }
+
+    // 本地监听器（listeners）
+    // EasyTier 通过这些端口与其他节点通信
+    [toml appendString:@"# 本地监听端口\n"];
+    [toml appendFormat:@"listeners = [\n"];
+    [toml appendFormat:@"    \"tcp://0.0.0.0:%ld\",\n", (long)kEasyTierDefaultPort];
+    [toml appendFormat:@"    \"udp://0.0.0.0:%ld\",\n", (long)kEasyTierDefaultPort];
+    [toml appendString:@"]\n"];
+
+    // 房主额外配置：启用 DHCP 和默认转发
+    if (room.role == EasyTierRoomRoleHost) {
+        [toml appendString:@"\n# 房主配置：启用 DHCP 为房客分配 IP\n"];
+        [toml appendString:@"[dhcp]\n"];
+        [toml appendString:@"enable = true\n"];
+    }
+
+    // MC 服务器信息（注释形式）
+    [toml appendString:@"\n# ==================== Minecraft 服务器信息 ====================\n"];
+    if (room.role == EasyTierRoomRoleHost) {
+        [toml appendFormat:@"# 本机为房主，请在 MC 中开放局域网（端口 %@）\n", room.hostPort ?: kDefaultMCPort];
+        [toml appendFormat:@"# 房主虚拟 IP：%@\n", kEasyTierHostVirtualIP];
+        [toml appendFormat:@"# 房客可通过 %@:%@ 加入\n", kEasyTierHostVirtualIP, room.hostPort ?: kDefaultMCPort];
+    } else {
+        [toml appendFormat:@"# 本机为房客，房主虚拟 IP：%@\n", kEasyTierHostVirtualIP];
+        [toml appendFormat:@"# 在 MC 中添加服务器：%@:%@\n", kEasyTierHostVirtualIP, room.hostPort ?: kDefaultMCPort];
+    }
+    [toml appendString:@"# 邀请码（可分享给其他玩家）：\n"];
+    [toml appendFormat:@"# %@\n", room.invitationCode];
+
+    return [toml copy];
+}
+
+/// 生成房间的人类可读配置摘要
+///
+/// 用于在 UI 中展示和分享，包含所有必要的连接信息
+- (NSString *)generateConfigSummaryForRoom:(EasyTierRoom *)room {
+    if (!room) return @"";
+
+    NSMutableString *summary = [NSMutableString string];
+
+    [summary appendString:@"🎮 EasyTier 陶瓦联机\n"];
+    [summary appendString:@"========================================\n\n"];
+
+    [summary appendFormat:@"房间名称：%@\n", room.name ?: @"未命名房间"];
+    [summary appendFormat:@"角色：%@\n\n", room.role == EasyTierRoomRoleHost ? @"房主（开房）" : @"房客（加入）"];
+
+    [summary appendString:@"---------- 邀请码 ----------\n"];
+    [summary appendFormat:@"%@\n\n", room.invitationCode ?: @"-"];
+
+    [summary appendString:@"---------- EasyTier 网络配置 ----------\n"];
+    [summary appendFormat:@"网络名：%@\n", room.networkName ?: @"-"];
+    [summary appendFormat:@"网络密码：%@\n\n", room.networkSecret ?: @"-"];
+
+    [summary appendString:@"---------- 公共服务器 ----------\n"];
+    NSArray<NSString *> *servers = [self defaultPublicServers];
+    for (int i = 0; i < servers.count; i++) {
+        [summary appendFormat:@"%@. %@\n", @(i + 1), servers[i]];
+    }
+    [summary appendString:@"\n"];
+
+    [summary appendString:@"---------- Minecraft 服务器 ----------\n"];
+    if (room.role == EasyTierRoomRoleHost) {
+        [summary appendFormat:@"房主虚拟 IP：%@\n", kEasyTierHostVirtualIP];
+        [summary appendFormat:@"MC 服务器端口：%@\n", room.hostPort ?: kDefaultMCPort];
+        [summary appendFormat:@"房客加入地址：%@:%@\n\n", kEasyTierHostVirtualIP, room.hostPort ?: kDefaultMCPort];
+    } else {
+        [summary appendFormat:@"房主虚拟 IP：%@\n", kEasyTierHostVirtualIP];
+        [summary appendFormat:@"MC 服务器端口：%@\n", room.hostPort ?: kDefaultMCPort];
+        [summary appendFormat:@"加入地址：%@:%@\n\n", kEasyTierHostVirtualIP, room.hostPort ?: kDefaultMCPort];
+    }
+
+    [summary appendString:@"---------- 使用说明 ----------\n"];
+    [summary appendString:@"1. 复制上方邀请码分享给朋友\n"];
+    [summary appendString:@"2. 在 EasyTier 客户端中加入网络\n"];
+    [summary appendString:@"3. 在 MC 中添加服务器地址即可联机\n\n"];
+
+    [summary appendString:@"兼容 HMCL / FCL / ZL2 / PCL2 陶瓦联机\n"];
+
+    return [summary copy];
+}
+
+- (NSArray<NSString *> *)defaultPublicServers {
+    return kDefaultPublicServers ?: @[];
 }
 
 #pragma mark - 数据持久化
@@ -691,6 +776,12 @@ static NSArray<NSString *> *kDefaultPublicServers = nil;
     return nil;
 }
 
+/// 激活房间（设置 currentRoom + 准备配置）
+///
+/// 当前版本采用"配置信息透明展示"模式：
+/// - 标记房间为"配置已就绪"状态
+/// - 不真正建立 EasyTier 虚拟网络（需要 NetworkExtension）
+/// - 用户可在详情中查看并复制配置，在任意 EasyTier 客户端中使用
 - (void)connectToRoom:(EasyTierRoom *)room
            completion:(void (^)(BOOL success, NSError * _Nullable error))completion {
     if (!room) {
@@ -703,25 +794,39 @@ static NSArray<NSString *> *kDefaultPublicServers = nil;
         return;
     }
 
-    room.status = EasyTierRoomStatusConnecting;
-    [self updateRoom:room];
+    if (!room.networkName || room.networkName.length == 0) {
+        if (completion) {
+            NSError *error = [NSError errorWithDomain:@"EasyTierMultiplayerManager"
+                                                  code:1002
+                                              userInfo:@{NSLocalizedDescriptionKey: @"网络名为空，邀请码可能无效"}];
+            completion(NO, error);
+        }
+        return;
+    }
 
+    NSLog(@"[EasyTierMultiplayerManager] 激活房间：%@ (code=%@)", room.name, room.invitationCode);
+
+    // 1. 设置当前房间
     self.currentRoom = room;
 
-    [self joinNetwork:room.networkName
-       networkSecret:room.networkSecret];
-
+    // 2. 更新房间状态为"配置已就绪"
     room.status = EasyTierRoomStatusConnected;
     room.lastConnectedAt = [NSDate date];
+
+    // 3. 同步更新 savedRooms 中对应房间的状态
     [self updateRoom:room];
 
+    // 4. 生成配置并打印日志（便于调试）
+    NSString *tomlConfig = [self generateTOMLConfigForRoom:room];
+    NSLog(@"[EasyTierMultiplayerManager] 房间配置已就绪：\n%@", tomlConfig);
+
+    // 5. 回调成功
     if (completion) {
         completion(YES, nil);
     }
-
-    NSLog(@"[EasyTierMultiplayerManager] 已发起连接：%@ (code=%@)", room.name, room.invitationCode);
 }
 
+/// 取消激活当前房间
 - (void)disconnectCurrentRoom {
     if (!self.currentRoom) return;
 
@@ -729,50 +834,37 @@ static NSArray<NSString *> *kDefaultPublicServers = nil;
     room.status = EasyTierRoomStatusDisconnected;
     [self updateRoom:room];
 
-    NSLog(@"[EasyTierMultiplayerManager] 已断开房间连接：%@", room.name);
+    NSLog(@"[EasyTierMultiplayerManager] 已取消激活房间：%@", room.name);
     self.currentRoom = nil;
 }
 
 #pragma mark - 分享与辅助
 
+/// 生成房间的分享文本
+///
+/// 格式化的分享文本，包含邀请码和简要使用说明，
+/// 可通过微信/QQ/iMessage 等社交渠道发送给好友。
 - (NSString *)shareTextForRoom:(EasyTierRoom *)room {
     if (!room) return @"";
 
     NSMutableString *text = [NSMutableString string];
-    [text appendFormat:@"来联机！房间名：%@\n", room.name];
+    [text appendFormat:@"🎮 EasyTier 陶瓦联机\n"];
+    [text appendFormat:@"房间：%@\n\n", room.name];
+
     [text appendFormat:@"邀请码：%@\n", room.invitationCode];
+    [text appendFormat:@"服务器地址：%@:%@\n\n", room.hostIP, room.hostPort];
 
-    if (room.hostIP && room.hostIP.length > 0) {
-        [text appendFormat:@"服务器IP：%@:%@\n", room.hostIP, room.hostPort];
-    }
-
-    if (room.ownerName && room.ownerName.length > 0) {
-        [text appendFormat:@"房主：%@\n", room.ownerName];
-    }
-
-    [text appendString:@"\n使用方法：\n"];
-    [text appendString:@"1. 在启动器的 EasyTier 联机界面输入邀请码\n"];
-    [text appendString:@"2. 打开 EasyTier app 加入网络\n"];
-    [text appendString:@"3. 在 MC 中添加服务器 IP 即可联机\n"];
-    [text appendString:@"（兼容 HMCL/FCL/ZL2/PCL2 陶瓦联机）"];
+    [text appendString:@"使用方法：\n"];
+    [text appendString:@"1. 复制上方邀请码\n"];
+    [text appendString:@"2. 在 EasyTier 客户端中加入网络\n"];
+    [text appendString:@"3. 在 MC 中添加服务器地址即可联机\n\n"];
+    [text appendString:@"兼容 HMCL/FCL/ZL2/PCL2 陶瓦联机"];
 
     return text;
 }
 
 - (NSString *)generateRoomId {
     return [[NSUUID UUID] UUIDString];
-}
-
-- (NSArray<NSString *> *)defaultPublicServers {
-    return kDefaultPublicServers ?: @[];
-}
-
-- (NSString *)easyTierTestFlightUrl {
-    return kEasyTierTestFlightURL;
-}
-
-- (NSString *)easyTierGitHubUrl {
-    return kEasyTierGitHubURL;
 }
 
 @end

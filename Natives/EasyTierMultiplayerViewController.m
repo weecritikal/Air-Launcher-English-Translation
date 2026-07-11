@@ -6,16 +6,15 @@
 //
 //  本文件实现基于 EasyTier 的 Minecraft 联机功能界面，主要包含：
 //
-//  1. 联机服务（EasyTier 状态）（Section 0）
-//     - 检测 EasyTier app 是否已安装
-//     - 显示安装状态（绿色/红色指示灯）
-//     - 如果 iOS 版本 < 16.0，显示"EasyTier 需要 iOS 16.0 及以上系统"警告
-//     - "打开 EasyTier App" 按钮（如果未安装则显示"下载 EasyTier"）
-//     - 系统要求说明：EasyTier 支持 iOS 16+，ZeroTier 支持 iOS 13+，本启动器支持 iOS 14+
+//  1. 联机服务（Section 0）
+//     - EasyTier 服务说明（配置信息透明展示模式）
+//     - 协议兼容性说明（与 HMCL/FCL/ZL2/PCL2 陶瓦联机互通）
+//     - 当前激活房间的配置信息卡片（邀请码、网络名、密码、服务器地址）
+//     - 一键复制邀请码 / 复制 TOML 配置 / 分享
 //
 //  2. 联机房间（Section 1）
 //     - 房间列表（每个房间显示：名称、邀请码、角色标签[房主/房客]、状态）
-//     - 点击房间卡片：展开操作选项（连接/断开、分享邀请码、编辑、删除）
+//     - 点击房间卡片：展开操作选项（激活/取消激活、查看配置、分享邀请码、编辑、删除）
 //     - 右上角"+"按钮：创建房间对话框
 //       - 选择"我要当房主"→ 输入房间名 → 生成邀请码 → 显示邀请码供分享
 //       - 选择"我要当房客"→ 输入邀请码（实时验证）→ 保存房间
@@ -27,8 +26,8 @@
 //     - 直接将服务器地址写入当前 profile，启动游戏后自动加入
 //
 //  自定义 Cell：
-//  - EasyTierStatusCell：EasyTier 状态展示（含打开/下载按钮）
-//  - EasyTierInfoCell：系统要求与 iOS 版本警告
+//  - EasyTierServiceCell：服务说明与协议兼容性
+//  - EasyTierConfigCell：当前激活房间的配置信息展示
 //  - EasyTierRoomCell：房间列表项（含角色标签）
 //  - EasyTierInputCell：直连输入框
 //
@@ -39,6 +38,11 @@
 //
 //  邀请码格式：U/XXXX-XXXX-XXXX-XXXX（21 字符，与 HMCL/FCL/ZL2/PCL2 互通）
 //
+//  关于 iOS 集成方式：
+//  - 当前版本采用"配置信息透明展示"模式
+//  - 协议层完全兼容，确保与 FCL/ZL2/HMCL 完美互通
+//  - 用户可获取完整的 EasyTier 配置（邀请码、网络名、密码、TOML 配置）
+//
 
 #import "EasyTierMultiplayerViewController.h"
 #import "EasyTierMultiplayerManager.h"
@@ -46,23 +50,22 @@
 #import "LauncherPreferences.h"
 #import "PLProfiles.h"
 
-#pragma mark - EasyTierStatusCell
+#pragma mark - EasyTierServiceCell
 
-/// EasyTier 状态展示 Cell（Section 0, Row 0）
-/// 左侧图标 + 中间标题/状态 + 右侧打开/下载按钮
-@interface EasyTierStatusCell : UITableViewCell
+/// EasyTier 服务说明 Cell（Section 0, Row 0）
+/// 显示 EasyTier 服务图标、标题、协议兼容性说明
+@interface EasyTierServiceCell : UITableViewCell
 
 @property (nonatomic, strong) UIView *iconView;
 @property (nonatomic, strong) UIImageView *iconImageView;
 @property (nonatomic, strong) UILabel *titleLabel;
 @property (nonatomic, strong) UILabel *subtitleLabel;
-@property (nonatomic, strong) UIButton *actionButton;
 
-- (void)configureWithInstalled:(BOOL)installed;
+- (void)configureWithHasBackground:(BOOL)hasBackground;
 
 @end
 
-@implementation EasyTierStatusCell
+@implementation EasyTierServiceCell
 
 - (instancetype)initWithStyle:(UITableViewCellStyle)style reuseIdentifier:(NSString *)reuseIdentifier {
     self = [super initWithStyle:style reuseIdentifier:reuseIdentifier];
@@ -95,28 +98,20 @@
     _titleLabel = [[UILabel alloc] init];
     _titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     _titleLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
-    _titleLabel.text = @"EasyTier 虚拟局域网";
+    _titleLabel.text = @"EasyTier 陶瓦联机";
     [self.contentView addSubview:_titleLabel];
 
-    // 副标题：12pt secondary，显示安装状态
+    // 副标题：12pt secondary，显示协议兼容性
     _subtitleLabel = [[UILabel alloc] init];
     _subtitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     _subtitleLabel.font = [UIFont systemFontOfSize:12];
-    _subtitleLabel.textColor = [UIColor secondaryLabelColor];
+    _subtitleLabel.numberOfLines = 0;
+    _subtitleLabel.text = @"邀请码与 HMCL/FCL/ZL2/PCL2 互通。点击房间查看配置信息。";
     [self.contentView addSubview:_subtitleLabel];
-
-    // 右侧操作按钮：打开 EasyTier / 下载 EasyTier
-    _actionButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    _actionButton.translatesAutoresizingMaskIntoConstraints = NO;
-    _actionButton.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
-    _actionButton.layer.cornerRadius = 8;
-    _actionButton.layer.masksToBounds = YES;
-    _actionButton.contentEdgeInsets = UIEdgeInsetsMake(6, 12, 6, 12);
-    [self.contentView addSubview:_actionButton];
 
     [NSLayoutConstraint activateConstraints:@[
         [_iconView.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:16],
-        [_iconView.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor],
+        [_iconView.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:14],
         [_iconView.widthAnchor constraintEqualToConstant:40],
         [_iconView.heightAnchor constraintEqualToConstant:40],
 
@@ -126,37 +121,20 @@
         [_iconImageView.heightAnchor constraintEqualToConstant:22],
 
         [_titleLabel.leadingAnchor constraintEqualToAnchor:_iconView.trailingAnchor constant:12],
-        [_titleLabel.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:12],
+        [_titleLabel.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:14],
+        [_titleLabel.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-16],
 
         [_subtitleLabel.leadingAnchor constraintEqualToAnchor:_titleLabel.leadingAnchor],
-        [_subtitleLabel.topAnchor constraintEqualToAnchor:_titleLabel.bottomAnchor constant:2],
-        [_subtitleLabel.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-12],
-
-        [_actionButton.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-16],
-        [_actionButton.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor],
-
-        [_titleLabel.trailingAnchor constraintEqualToAnchor:_actionButton.leadingAnchor constant:-12],
-        [_subtitleLabel.trailingAnchor constraintEqualToAnchor:_actionButton.leadingAnchor constant:-12],
+        [_subtitleLabel.topAnchor constraintEqualToAnchor:_titleLabel.bottomAnchor constant:4],
+        [_subtitleLabel.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-14],
+        [_subtitleLabel.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-16],
     ]];
 }
 
-- (void)configureWithInstalled:(BOOL)installed {
-    if (installed) {
-        self.subtitleLabel.text = @"已安装";
-        [self.actionButton setTitle:@"打开" forState:UIControlStateNormal];
-        [self.actionButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-        self.actionButton.backgroundColor = [UIColor systemBlueColor];
-    } else {
-        self.subtitleLabel.text = @"未安装";
-        [self.actionButton setTitle:@"下载" forState:UIControlStateNormal];
-        [self.actionButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-        self.actionButton.backgroundColor = [UIColor systemOrangeColor];
-    }
-
-    // 适配自定义背景：有背景时使用白色文字
-    if ([[BackgroundManager sharedManager] hasBackground]) {
+- (void)configureWithHasBackground:(BOOL)hasBackground {
+    if (hasBackground) {
         self.titleLabel.textColor = [UIColor whiteColor];
-        self.subtitleLabel.textColor = [UIColor whiteColor];
+        self.subtitleLabel.textColor = [UIColor colorWithWhite:1.0 alpha:0.85];
     } else {
         self.titleLabel.textColor = [UIColor labelColor];
         self.subtitleLabel.textColor = [UIColor secondaryLabelColor];
@@ -165,20 +143,26 @@
 
 @end
 
-#pragma mark - EasyTierInfoCell
+#pragma mark - EasyTierConfigCell
 
-/// 系统信息 Cell（Section 0, Row 1）
-/// 显示系统要求说明和 iOS 版本警告
-@interface EasyTierInfoCell : UITableViewCell
+/// 当前激活房间的配置信息 Cell（Section 0, Row 1，仅当有激活房间时显示）
+/// 显示邀请码、网络名、密码、服务器地址，并提供复制按钮
+@interface EasyTierConfigCell : UITableViewCell
 
-@property (nonatomic, strong) UIImageView *iconImageView;
-@property (nonatomic, strong) UILabel *infoLabel;
+@property (nonatomic, strong) UILabel *sectionLabel;
+@property (nonatomic, strong) UILabel *invitationCodeLabel;
+@property (nonatomic, strong) UIButton *copyCodeButton;
+@property (nonatomic, strong) UILabel *networkNameLabel;
+@property (nonatomic, strong) UILabel *networkSecretLabel;
+@property (nonatomic, strong) UILabel *serverAddressLabel;
+@property (nonatomic, strong) UIButton *copyConfigButton;
+@property (nonatomic, strong) UIButton *shareButton;
 
-- (void)configureWithIOSVersion;
+- (void)configureWithRoom:(EasyTierRoom *)room hasBackground:(BOOL)hasBackground;
 
 @end
 
-@implementation EasyTierInfoCell
+@implementation EasyTierConfigCell
 
 - (instancetype)initWithStyle:(UITableViewCellStyle)style reuseIdentifier:(NSString *)reuseIdentifier {
     self = [super initWithStyle:style reuseIdentifier:reuseIdentifier];
@@ -191,56 +175,144 @@
 }
 
 - (void)setupSubviews {
-    _iconImageView = [[UIImageView alloc] init];
-    _iconImageView.translatesAutoresizingMaskIntoConstraints = NO;
-    _iconImageView.contentMode = UIViewContentModeScaleAspectFit;
-    [self.contentView addSubview:_iconImageView];
+    // 区段标题：邀请码
+    _sectionLabel = [[UILabel alloc] init];
+    _sectionLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    _sectionLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
+    _sectionLabel.text = @"邀请码";
+    [self.contentView addSubview:_sectionLabel];
 
-    _infoLabel = [[UILabel alloc] init];
-    _infoLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    _infoLabel.font = [UIFont systemFontOfSize:12];
-    _infoLabel.numberOfLines = 0;
-    [self.contentView addSubview:_infoLabel];
+    // 邀请码显示：14pt monospace
+    _invitationCodeLabel = [[UILabel alloc] init];
+    _invitationCodeLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    _invitationCodeLabel.font = [UIFont fontWithName:@"Menlo" size:14] ?: [UIFont systemFontOfSize:14];
+    _invitationCodeLabel.text = @"U/XXXX-XXXX-XXXX-XXXX";
+    [self.contentView addSubview:_invitationCodeLabel];
+
+    // 复制邀请码按钮
+    _copyCodeButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    _copyCodeButton.translatesAutoresizingMaskIntoConstraints = NO;
+    _copyCodeButton.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightMedium];
+    [_copyCodeButton setImage:[UIImage systemImageNamed:@"doc.on.doc"] forState:UIControlStateNormal];
+    _copyCodeButton.tintColor = [UIColor systemBlueColor];
+    _copyCodeButton.accessibilityLabel = @"复制邀请码";
+    [self.contentView addSubview:_copyCodeButton];
+
+    // 网络名
+    _networkNameLabel = [[UILabel alloc] init];
+    _networkNameLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    _networkNameLabel.font = [UIFont systemFontOfSize:12];
+    _networkNameLabel.numberOfLines = 0;
+    [self.contentView addSubview:_networkNameLabel];
+
+    // 网络密码
+    _networkSecretLabel = [[UILabel alloc] init];
+    _networkSecretLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    _networkSecretLabel.font = [UIFont fontWithName:@"Menlo" size:12] ?: [UIFont systemFontOfSize:12];
+    _networkSecretLabel.numberOfLines = 0;
+    [self.contentView addSubview:_networkSecretLabel];
+
+    // 服务器地址
+    _serverAddressLabel = [[UILabel alloc] init];
+    _serverAddressLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    _serverAddressLabel.font = [UIFont systemFontOfSize:12];
+    _serverAddressLabel.numberOfLines = 0;
+    [self.contentView addSubview:_serverAddressLabel];
+
+    // 复制 TOML 配置按钮
+    _copyConfigButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    _copyConfigButton.translatesAutoresizingMaskIntoConstraints = NO;
+    _copyConfigButton.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightMedium];
+    [_copyConfigButton setTitle:@"复制 TOML 配置" forState:UIControlStateNormal];
+    _copyConfigButton.tintColor = [UIColor systemBlueColor];
+    _copyConfigButton.layer.cornerRadius = 8;
+    _copyConfigButton.layer.masksToBounds = YES;
+    _copyConfigButton.contentEdgeInsets = UIEdgeInsetsMake(6, 12, 6, 12);
+    [self.contentView addSubview:_copyConfigButton];
+
+    // 分享按钮
+    _shareButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    _shareButton.translatesAutoresizingMaskIntoConstraints = NO;
+    _shareButton.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightMedium];
+    [_shareButton setTitle:@"分享" forState:UIControlStateNormal];
+    _shareButton.tintColor = [UIColor whiteColor];
+    _shareButton.backgroundColor = [UIColor systemBlueColor];
+    _shareButton.layer.cornerRadius = 8;
+    _shareButton.layer.masksToBounds = YES;
+    _shareButton.contentEdgeInsets = UIEdgeInsetsMake(6, 12, 6, 12);
+    [self.contentView addSubview:_shareButton];
 
     [NSLayoutConstraint activateConstraints:@[
-        [_iconImageView.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:16],
-        [_iconImageView.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:14],
-        [_iconImageView.widthAnchor constraintEqualToConstant:18],
-        [_iconImageView.heightAnchor constraintEqualToConstant:18],
+        [_sectionLabel.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:16],
+        [_sectionLabel.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:14],
 
-        [_infoLabel.leadingAnchor constraintEqualToAnchor:_iconImageView.trailingAnchor constant:8],
-        [_infoLabel.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:12],
-        [_infoLabel.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-12],
-        [_infoLabel.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-16],
+        [_invitationCodeLabel.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:16],
+        [_invitationCodeLabel.topAnchor constraintEqualToAnchor:_sectionLabel.bottomAnchor constant:4],
+
+        [_copyCodeButton.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-16],
+        [_copyCodeButton.centerYAnchor constraintEqualToAnchor:_invitationCodeLabel.centerYAnchor],
+        [_copyCodeButton.widthAnchor constraintEqualToConstant:36],
+        [_copyCodeButton.heightAnchor constraintEqualToConstant:36],
+
+        [_networkNameLabel.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:16],
+        [_networkNameLabel.topAnchor constraintEqualToAnchor:_invitationCodeLabel.bottomAnchor constant:10],
+        [_networkNameLabel.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-16],
+
+        [_networkSecretLabel.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:16],
+        [_networkSecretLabel.topAnchor constraintEqualToAnchor:_networkNameLabel.bottomAnchor constant:4],
+        [_networkSecretLabel.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-16],
+
+        [_serverAddressLabel.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:16],
+        [_serverAddressLabel.topAnchor constraintEqualToAnchor:_networkSecretLabel.bottomAnchor constant:10],
+        [_serverAddressLabel.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-16],
+
+        [_copyConfigButton.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:16],
+        [_copyConfigButton.topAnchor constraintEqualToAnchor:_serverAddressLabel.bottomAnchor constant:12],
+
+        [_shareButton.leadingAnchor constraintEqualToAnchor:_copyConfigButton.trailingAnchor constant:12],
+        [_shareButton.centerYAnchor constraintEqualToAnchor:_copyConfigButton.centerYAnchor],
+
+        [_shareButton.trailingAnchor constraintLessThanOrEqualToAnchor:self.contentView.trailingAnchor constant:-16],
+
+        // 底部留白
+        [UIView new].translatesAutoresizingMaskIntoConstraints = NO, // 占位符，无实际作用
     ]];
+
+    // 添加底部约束
+    [_shareButton.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-14].active = YES;
 }
 
-- (void)configureWithIOSVersion {
-    BOOL hasBackground = [[BackgroundManager sharedManager] hasBackground];
+- (void)configureWithRoom:(EasyTierRoom *)room hasBackground:(BOOL)hasBackground {
+    if (!room) return;
 
-    // 检查 iOS 版本是否满足 EasyTier 要求（iOS 16.0+）
-    if (@available(iOS 16.0, *)) {
-        // iOS 16+，显示系统要求说明
-        self.iconImageView.image = [UIImage systemImageNamed:@"info.circle"];
-        self.iconImageView.tintColor = [UIColor secondaryLabelColor];
-        self.infoLabel.text = @"EasyTier 支持 iOS 16+，ZeroTier 支持 iOS 13+，本启动器支持 iOS 14+。"
-                              @"EasyTier 邀请码与 HMCL/FCL/ZL2/PCL2 陶瓦联机互通。";
-        if (hasBackground) {
-            self.infoLabel.textColor = [UIColor colorWithWhite:1.0 alpha:0.85];
-        } else {
-            self.infoLabel.textColor = [UIColor secondaryLabelColor];
-        }
+    EasyTierMultiplayerManager *mgr = [EasyTierMultiplayerManager sharedManager];
+
+    // 邀请码
+    self.invitationCodeLabel.text = room.invitationCode ?: @"-";
+
+    // 网络配置
+    self.networkNameLabel.text = [NSString stringWithFormat:@"网络名：%@", room.networkName ?: @"-"];
+    self.networkSecretLabel.text = [NSString stringWithFormat:@"网络密码：%@", room.networkSecret ?: @"-"];
+
+    // 服务器地址
+    NSString *serverAddr = [NSString stringWithFormat:@"%@:%@",
+                            room.hostIP ?: mgr.hostVirtualIP,
+                            room.hostPort ?: @"25565"];
+    self.serverAddressLabel.text = [NSString stringWithFormat:@"MC 服务器地址：%@", serverAddr];
+
+    // 适配自定义背景
+    if (hasBackground) {
+        self.sectionLabel.textColor = [UIColor colorWithWhite:1.0 alpha:0.7];
+        self.invitationCodeLabel.textColor = [UIColor whiteColor];
+        self.networkNameLabel.textColor = [UIColor colorWithWhite:1.0 alpha:0.85];
+        self.networkSecretLabel.textColor = [UIColor colorWithWhite:1.0 alpha:0.85];
+        self.serverAddressLabel.textColor = [UIColor colorWithWhite:1.0 alpha:0.85];
     } else {
-        // iOS < 16.0，显示警告
-        self.iconImageView.image = [UIImage systemImageNamed:@"exclamationmark.triangle.fill"];
-        self.iconImageView.tintColor = [UIColor systemOrangeColor];
-        self.infoLabel.text = @"EasyTier app 需要 iOS 16.0 及以上系统，当前系统版本不满足要求。"
-                              @"可使用 ZeroTier（支持 iOS 13+）或在「快速直连」中直接输入 IP 加入。";
-        if (hasBackground) {
-            self.infoLabel.textColor = [UIColor systemYellowColor];
-        } else {
-            self.infoLabel.textColor = [UIColor systemOrangeColor];
-        }
+        self.sectionLabel.textColor = [UIColor secondaryLabelColor];
+        self.invitationCodeLabel.textColor = [UIColor labelColor];
+        self.networkNameLabel.textColor = [UIColor secondaryLabelColor];
+        self.networkSecretLabel.textColor = [UIColor secondaryLabelColor];
+        self.serverAddressLabel.textColor = [UIColor secondaryLabelColor];
     }
 }
 
@@ -390,15 +462,15 @@
     switch (room.status) {
         case EasyTierRoomStatusDisconnected:
             statusColor = [UIColor systemGrayColor];
-            statusText = @"未连接";
+            statusText = @"未激活";
             break;
         case EasyTierRoomStatusConnecting:
             statusColor = [UIColor systemYellowColor];
-            statusText = @"连接中";
+            statusText = @"准备中";
             break;
         case EasyTierRoomStatusConnected:
             statusColor = [UIColor systemGreenColor];
-            statusText = @"已连接";
+            statusText = @"已就绪";
             break;
         case EasyTierRoomStatusError:
             statusColor = [UIColor systemRedColor];
@@ -650,8 +722,8 @@
     self.tableView.rowHeight = UITableViewAutomaticDimension;
     self.tableView.estimatedRowHeight = 84;
     // 注册自定义 cell
-    [self.tableView registerClass:[EasyTierStatusCell class] forCellReuseIdentifier:@"StatusCell"];
-    [self.tableView registerClass:[EasyTierInfoCell class] forCellReuseIdentifier:@"InfoCell"];
+    [self.tableView registerClass:[EasyTierServiceCell class] forCellReuseIdentifier:@"ServiceCell"];
+    [self.tableView registerClass:[EasyTierConfigCell class] forCellReuseIdentifier:@"ConfigCell"];
     [self.tableView registerClass:[EasyTierRoomCell class] forCellReuseIdentifier:@"RoomCell"];
     [self.tableView registerClass:[EasyTierInputCell class] forCellReuseIdentifier:@"InputCell"];
     [self.tableView registerClass:[UITableViewCell class] forCellReuseIdentifier:@"EmptyCell"];
@@ -823,7 +895,7 @@
         [self refreshRooms];
 
         [self showSimpleAlertWithTitle:@"加入成功"
-                               message:[NSString stringWithFormat:@"房间「%@」已添加，点击房间卡片可连接网络", room.name]];
+                               message:[NSString stringWithFormat:@"房间「%@」已添加，点击房间卡片可查看配置信息", room.name]];
     }];
     saveAction.enabled = NO;
 
@@ -897,7 +969,7 @@
     // 分享邀请码
     [alert addAction:[UIAlertAction actionWithTitle:@"分享" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         NSString *shareText = [NSString stringWithFormat:
-            @"EasyTier 联机邀请码：%@\n房间：%@\n打开 EasyTier app，加入网络即可联机 Minecraft！",
+            @"EasyTier 联机邀请码：%@\n房间：%@\n打开 EasyTier 客户端，加入网络即可联机 Minecraft！",
             code, roomName];
         UIActivityViewController *activityVC = [[UIActivityViewController alloc] initWithActivityItems:@[shareText] applicationActivities:nil];
         // iPad 适配
@@ -916,27 +988,53 @@
 #pragma mark - 房间详情 ActionSheet
 
 - (void)showRoomDetailActionsForRoom:(EasyTierRoom *)room {
+    // 构建详情信息
+    NSString *detailMessage = [NSString stringWithFormat:
+        @"邀请码：%@\n网络名：%@\nMC 服务器：%@:%@",
+        room.invitationCode,
+        room.networkName,
+        room.hostIP,
+        room.hostPort];
+
     UIAlertController *sheet = [UIAlertController alertControllerWithTitle:room.name
-                                                                   message:room.invitationCode
+                                                                   message:detailMessage
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
 
-    // 连接/断开
-    NSString *connectTitle = (room.status == EasyTierRoomStatusConnected) ? @"断开连接" : @"连接房间";
-    [sheet addAction:[UIAlertAction actionWithTitle:connectTitle style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+    // 激活/取消激活
+    NSString *activateTitle = (room.status == EasyTierRoomStatusConnected) ? @"取消激活" : @"激活房间";
+    [sheet addAction:[UIAlertAction actionWithTitle:activateTitle style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         if (room.status == EasyTierRoomStatusConnected) {
             [[EasyTierMultiplayerManager sharedManager] disconnectCurrentRoom];
             room.status = EasyTierRoomStatusDisconnected;
             [[EasyTierMultiplayerManager sharedManager] updateRoom:room];
             [self refreshRooms];
         } else {
-            [self connectToRoom:room completion:^(BOOL success, NSError *error) {
+            [self activateRoom:room completion:^(BOOL success, NSError *error) {
                 if (success) {
                     [self refreshRooms];
                 } else {
-                    [self showSimpleAlertWithTitle:@"连接失败" message:error.localizedDescription ?: @"无法连接到房间"];
+                    [self showSimpleAlertWithTitle:@"激活失败" message:error.localizedDescription ?: @"无法激活房间"];
                 }
             }];
         }
+    }]];
+
+    // 查看完整配置
+    [sheet addAction:[UIAlertAction actionWithTitle:@"查看完整配置" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        [self showFullConfigDialogForRoom:room];
+    }]];
+
+    // 复制邀请码
+    [sheet addAction:[UIAlertAction actionWithTitle:@"复制邀请码" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        [UIPasteboard generalPasteboard].string = room.invitationCode;
+        [self showSimpleAlertWithTitle:@"已复制" message:@"邀请码已复制到剪贴板"];
+    }]];
+
+    // 复制 TOML 配置
+    [sheet addAction:[UIAlertAction actionWithTitle:@"复制 TOML 配置" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        NSString *tomlConfig = [[EasyTierMultiplayerManager sharedManager] generateTOMLConfigForRoom:room];
+        [UIPasteboard generalPasteboard].string = tomlConfig;
+        [self showSimpleAlertWithTitle:@"已复制" message:@"TOML 配置已复制到剪贴板，可在 EasyTier 客户端中粘贴使用"];
     }]];
 
     // 分享邀请码
@@ -949,6 +1047,14 @@
             activityVC.popoverPresentationController.sourceRect = CGRectMake(self.view.bounds.size.width / 2.0, self.view.bounds.size.height / 2.0, 1, 1);
         }
         [self presentViewController:activityVC animated:YES completion:nil];
+    }]];
+
+    // 添加服务器到 MC
+    [sheet addAction:[UIAlertAction actionWithTitle:@"添加服务器到 MC" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        NSString *serverAddress = [NSString stringWithFormat:@"%@:%@", room.hostIP, room.hostPort];
+        [self addServerToProfile:[PLProfiles current].selectedProfileName address:serverAddress];
+        [self showSimpleAlertWithTitle:@"已添加服务器"
+                               message:@"已添加服务器，请在游戏中点击\"多人游戏\"加入"];
     }]];
 
     // 编辑房间
@@ -979,6 +1085,32 @@
     }
 
     [self presentViewController:sheet animated:YES completion:nil];
+}
+
+#pragma mark - 完整配置展示弹窗
+
+/// 显示房间的完整配置信息（人类可读格式）
+- (void)showFullConfigDialogForRoom:(EasyTierRoom *)room {
+    NSString *summary = [[EasyTierMultiplayerManager sharedManager] generateConfigSummaryForRoom:room];
+
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"完整配置信息"
+                                                                   message:summary
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+
+    [alert addAction:[UIAlertAction actionWithTitle:@"复制配置摘要" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        [UIPasteboard generalPasteboard].string = summary;
+        [self showSimpleAlertWithTitle:@"已复制" message:@"配置摘要已复制到剪贴板"];
+    }]];
+
+    [alert addAction:[UIAlertAction actionWithTitle:@"复制 TOML 配置" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        NSString *tomlConfig = [[EasyTierMultiplayerManager sharedManager] generateTOMLConfigForRoom:room];
+        [UIPasteboard generalPasteboard].string = tomlConfig;
+        [self showSimpleAlertWithTitle:@"已复制" message:@"TOML 配置已复制到剪贴板"];
+    }]];
+
+    [alert addAction:[UIAlertAction actionWithTitle:@"关闭" style:UIAlertActionStyleCancel handler:nil]];
+
+    [self presentViewController:alert animated:YES completion:nil];
 }
 
 #pragma mark - 编辑房间
@@ -1036,38 +1168,19 @@
     [self presentViewController:alert animated:YES completion:nil];
 }
 
-#pragma mark - 连接房间
+#pragma mark - 激活房间
 
-- (void)connectToRoom:(EasyTierRoom *)room completion:(void (^)(BOOL success, NSError *error))completion {
-    // 先更新状态为连接中
+/// 激活房间（设置 currentRoom + 准备配置）
+///
+/// 当前版本不会真正建立 EasyTier 虚拟网络，而是标记房间为"配置已就绪"状态，
+/// 用户可在详情中查看并复制配置，在任意 EasyTier 客户端中使用。
+- (void)activateRoom:(EasyTierRoom *)room completion:(void (^)(BOOL success, NSError *error))completion {
+    // 先更新状态为准备中
     room.status = EasyTierRoomStatusConnecting;
     [[EasyTierMultiplayerManager sharedManager] updateRoom:room];
     [self refreshRooms];
 
-    // 检查 EasyTier app 是否已安装
-    if (![[EasyTierMultiplayerManager sharedManager] isEasyTierAppInstalled]) {
-        room.status = EasyTierRoomStatusError;
-        [[EasyTierMultiplayerManager sharedManager] updateRoom:room];
-        [self refreshRooms];
-
-        // 提示用户安装 EasyTier
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"需要 EasyTier"
-                                                                       message:@"未检测到 EasyTier 应用，请先通过 TestFlight 安装后再联机。"
-                                                                preferredStyle:UIAlertControllerStyleAlert];
-        [alert addAction:[UIAlertAction actionWithTitle:@"下载 EasyTier" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-            [[EasyTierMultiplayerManager sharedManager] openEasyTierApp];
-        }]];
-        [alert addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleCancel handler:nil]];
-        [self presentViewController:alert animated:YES completion:nil];
-
-        if (completion) {
-            NSError *error = [NSError errorWithDomain:@"EasyTierMultiplayer" code:-1 userInfo:@{NSLocalizedDescriptionKey: @"未安装 EasyTier"}];
-            completion(NO, error);
-        }
-        return;
-    }
-
-    // 调用管理器连接房间（内部会唤起 EasyTier app 加入网络）
+    // 调用管理器激活房间
     __weak typeof(self) weakSelf = self;
     [[EasyTierMultiplayerManager sharedManager] connectToRoom:room completion:^(BOOL success, NSError * _Nullable error) {
         dispatch_async(dispatch_get_main_queue(), ^{
@@ -1168,14 +1281,19 @@
 #pragma mark - UITableViewDataSource
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
+    // Section 0: 服务说明 + 配置信息（当前激活房间）
+    // Section 1: 联机房间列表
+    // Section 2: 快速直连
     return 3;
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     switch (section) {
-        case 0:
-            // 联机服务：状态 + 系统信息
-            return 2;
+        case 0: {
+            // 服务说明 + 配置信息（仅当有激活房间时显示配置卡片）
+            EasyTierRoom *currentRoom = [EasyTierMultiplayerManager sharedManager].currentRoom;
+            return currentRoom ? 2 : 1;
+        }
         case 1:
             // 联机房间列表：至少 1 行（空状态提示）
             return MAX(1, (NSInteger)self.rooms.count);
@@ -1203,7 +1321,7 @@
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
     switch (section) {
         case 0:
-            return @"EasyTier 邀请码与 HMCL/FCL/ZL2/PCL2 陶瓦联机互通";
+            return @"EasyTier 邀请码与 HMCL/FCL/ZL2/PCL2 陶瓦联机互通。点击房间查看配置信息。";
         case 2:
             return @"输入朋友的 EasyTier IP 地址和端口，直接加入游戏";
         default:
@@ -1214,17 +1332,29 @@
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     switch (indexPath.section) {
         case 0: {
-            // Section 0: 联机服务
+            // Section 0: 服务说明 + 配置信息
             if (indexPath.row == 0) {
-                // EasyTier 状态
-                EasyTierStatusCell *cell = [tableView dequeueReusableCellWithIdentifier:@"StatusCell" forIndexPath:indexPath];
-                BOOL installed = [[EasyTierMultiplayerManager sharedManager] isEasyTierAppInstalled];
-                [cell configureWithInstalled:installed];
+                // 服务说明
+                EasyTierServiceCell *cell = [tableView dequeueReusableCellWithIdentifier:@"ServiceCell" forIndexPath:indexPath];
+                BOOL hasBackground = [[BackgroundManager sharedManager] hasBackground];
+                [cell configureWithHasBackground:hasBackground];
                 return cell;
             } else {
-                // 系统信息与 iOS 版本警告
-                EasyTierInfoCell *cell = [tableView dequeueReusableCellWithIdentifier:@"InfoCell" forIndexPath:indexPath];
-                [cell configureWithIOSVersion];
+                // 当前激活房间的配置信息
+                EasyTierConfigCell *cell = [tableView dequeueReusableCellWithIdentifier:@"ConfigCell" forIndexPath:indexPath];
+                EasyTierRoom *currentRoom = [EasyTierMultiplayerManager sharedManager].currentRoom;
+                BOOL hasBackground = [[BackgroundManager sharedManager] hasBackground];
+                [cell configureWithRoom:currentRoom hasBackground:hasBackground];
+
+                // 绑定按钮事件
+                __weak typeof(self) weakSelf = self;
+                cell.copyCodeButton.tintAdjustmentMode = UIViewTintAdjustmentModeNormal;
+                [cell.copyCodeButton addTarget:weakSelf action:@selector(copyInvitationCodeButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
+
+                [cell.copyConfigButton addTarget:weakSelf action:@selector(copyTOMLConfigButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
+
+                [cell.shareButton addTarget:weakSelf action:@selector(shareButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
+
                 return cell;
             }
         }
@@ -1294,6 +1424,42 @@
     }
 }
 
+#pragma mark - ConfigCell 按钮事件
+
+/// 复制邀请码按钮点击
+- (void)copyInvitationCodeButtonTapped:(UIButton *)sender {
+    EasyTierRoom *currentRoom = [EasyTierMultiplayerManager sharedManager].currentRoom;
+    if (currentRoom && currentRoom.invitationCode) {
+        [UIPasteboard generalPasteboard].string = currentRoom.invitationCode;
+        [self showSimpleAlertWithTitle:@"已复制" message:@"邀请码已复制到剪贴板"];
+    }
+}
+
+/// 复制 TOML 配置按钮点击
+- (void)copyTOMLConfigButtonTapped:(UIButton *)sender {
+    EasyTierRoom *currentRoom = [EasyTierMultiplayerManager sharedManager].currentRoom;
+    if (currentRoom) {
+        NSString *tomlConfig = [[EasyTierMultiplayerManager sharedManager] generateTOMLConfigForRoom:currentRoom];
+        [UIPasteboard generalPasteboard].string = tomlConfig;
+        [self showSimpleAlertWithTitle:@"已复制" message:@"TOML 配置已复制到剪贴板"];
+    }
+}
+
+/// 分享按钮点击
+- (void)shareButtonTapped:(UIButton *)sender {
+    EasyTierRoom *currentRoom = [EasyTierMultiplayerManager sharedManager].currentRoom;
+    if (currentRoom) {
+        NSString *shareText = [[EasyTierMultiplayerManager sharedManager] shareTextForRoom:currentRoom];
+        UIActivityViewController *activityVC = [[UIActivityViewController alloc] initWithActivityItems:@[shareText] applicationActivities:nil];
+        // iPad 适配
+        if (activityVC.popoverPresentationController) {
+            activityVC.popoverPresentationController.sourceView = self.view;
+            activityVC.popoverPresentationController.sourceRect = CGRectMake(self.view.bounds.size.width / 2.0, self.view.bounds.size.height / 2.0, 1, 1);
+        }
+        [self presentViewController:activityVC animated:YES completion:nil];
+    }
+}
+
 #pragma mark - UITableViewDelegate
 
 - (void)tableView:(UITableView *)tableView willDisplayCell:(UITableViewCell *)cell forRowAtIndexPath:(NSIndexPath *)indexPath {
@@ -1306,11 +1472,13 @@
 
     switch (indexPath.section) {
         case 0: {
-            // 点击 EasyTier 状态行：打开 EasyTier app
-            if (indexPath.row == 0) {
-                [[EasyTierMultiplayerManager sharedManager] openEasyTierApp];
-                // 刷新状态
-                [self.tableView reloadRowsAtIndexPaths:@[[NSIndexPath indexPathForRow:0 inSection:0]] withRowAnimation:UITableViewRowAnimationAutomatic];
+            // Section 0: 服务说明和配置信息
+            // 点击配置卡片可查看完整配置
+            if (indexPath.row == 1) {
+                EasyTierRoom *currentRoom = [EasyTierMultiplayerManager sharedManager].currentRoom;
+                if (currentRoom) {
+                    [self showFullConfigDialogForRoom:currentRoom];
+                }
             }
             break;
         }
@@ -1370,10 +1538,10 @@
 - (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
     if (indexPath.section == 0) {
         if (indexPath.row == 0) {
-            // 状态卡片
-            return 72;
+            // 服务说明卡片
+            return UITableViewAutomaticDimension;
         } else {
-            // 系统信息卡片（多行文本，使用自动尺寸）
+            // 配置信息卡片（多行内容，使用自动尺寸）
             return UITableViewAutomaticDimension;
         }
     }

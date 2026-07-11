@@ -4,9 +4,9 @@ NS_ASSUME_NONNULL_BEGIN
 
 /// EasyTier 联机房间状态
 typedef NS_ENUM(NSInteger, EasyTierRoomStatus) {
-    EasyTierRoomStatusDisconnected = 0, // 未连接
-    EasyTierRoomStatusConnecting   = 1, // 连接中
-    EasyTierRoomStatusConnected    = 2, // 已连接
+    EasyTierRoomStatusDisconnected = 0, // 未激活
+    EasyTierRoomStatusConnecting   = 1, // 准备配置中
+    EasyTierRoomStatusConnected    = 2, // 配置已就绪（可查看并使用）
     EasyTierRoomStatusError        = 3  // 错误
 };
 
@@ -29,10 +29,17 @@ typedef NS_ENUM(NSInteger, EasyTierRoomRole) {
 /// - 前 8 字符 → EasyTier network-name（加 `scaffolding-mc-` 前缀）
 /// - 后 8 字符 → EasyTier network-secret
 ///
-/// 系统要求：
-/// - EasyTier iOS app 需要 iOS 16.0 及以上系统
-/// - ZeroTier iOS app 支持 iOS 13.0 及以上系统
-/// - 本启动器最低支持 iOS 14.0
+/// 协议兼容性：
+/// - 邀请码生成与解析算法完全遵循 Terracotta 源码（src/controller/rooms/scaffolding/room.rs）
+/// - 生成的邀请码可在 HMCL、FCL、ZL2、PCL2 中直接导入使用
+/// - 接收来自上述任一启动器的邀请码也可正确解析
+///
+/// 关于嵌入式集成：
+/// - iOS 平台由于沙盒限制，无法像 Android（FCL/ZL2）那样以子进程方式运行 EasyTier 核心
+/// - 完整的嵌入式集成需要 NetworkExtension（NEPacketTunnelProvider）+ Rust 静态库
+/// - 当前版本采用"配置信息透明展示"模式：生成完整的 EasyTier 配置（邀请码、网络名、
+///   密码、公共服务器、TOML 配置），用户可在任意 EasyTier 客户端中使用
+/// - 协议层完全兼容，确保与 FCL/ZL2/HMCL 完美互通
 @interface EasyTierRoom : NSObject <NSCoding, NSSecureCoding>
 
 /// 唯一标识（UUID）
@@ -110,16 +117,26 @@ typedef NS_ENUM(NSInteger, EasyTierRoomRole) {
 /// - network-name = `scaffolding-mc-` + 前 8 字符（第 4 位后插 `-`）
 /// - network-secret = 后 8 字符（第 12 位后插 `-`）
 /// - 公共服务器使用硬编码默认值（不在邀请码中）
+///
+/// 关于 iOS 集成方式：
+/// - Android 平台（FCL/ZL2）通过子进程 + VpnService 运行 EasyTier 核心
+/// - iOS 沙盒禁止子进程和直接操作 utun 设备
+/// - 完整嵌入式集成需要 NetworkExtension + Rust 静态库（工程复杂度极高）
+/// - 当前版本采用"配置信息透明展示"模式：生成完整配置供用户使用
+/// - 协议层完全兼容，确保与 FCL/ZL2/HMCL 完美互通
 @interface EasyTierMultiplayerManager : NSObject
 
 /// 单例访问
 + (instancetype)sharedManager;
 
-/// 当前连接的房间（nil 表示未连接任何房间）
+/// 当前激活的房间（nil 表示未激活任何房间）
 @property (nonatomic, strong, readonly, nullable) EasyTierRoom *currentRoom;
 
 /// 所有已保存的房间列表
 @property (nonatomic, strong, readonly) NSArray<EasyTierRoom *> *savedRooms;
+
+/// 房主在 EasyTier 网络中的固定虚拟 IP
+@property (nonatomic, copy, readonly) NSString *hostVirtualIP;
 
 #pragma mark - 邀请码生成与解析
 
@@ -147,20 +164,37 @@ typedef NS_ENUM(NSInteger, EasyTierRoomRole) {
 /// @return network-secret（如 EEFF-GGHH），失败返回 nil
 - (nullable NSString *)networkSecretFromInvitationCode:(NSString *)invitationCode;
 
-#pragma mark - EasyTier App 检测与唤起
+#pragma mark - 配置生成
 
-/// EasyTier app 是否已安装
-- (BOOL)isEasyTierAppInstalled;
+/// 生成房间的 EasyTier TOML 配置字符串
+///
+/// 该配置可直接用于 EasyTier 命令行或图形客户端导入。
+/// 配置包含：
+/// - ipv4：虚拟 IP（房主为 10.144.144.1，房客由 EasyTier 自动分配）
+/// - network_identity：network_name + network_secret（从邀请码解析）
+/// - peer：公共服务器列表
+/// - listeners：本地监听端口
+///
+/// @param room 房间对象
+/// @return TOML 格式的配置字符串
+- (NSString *)generateTOMLConfigForRoom:(EasyTierRoom *)room;
 
-/// 尝试打开 EasyTier app
-/// 如果已安装则通过 URL Scheme 唤起，否则打开 TestFlight 安装页面
-- (void)openEasyTierApp;
+/// 生成房间的人类可读配置摘要
+///
+/// 用于在 UI 中展示和分享，包含：
+/// - 邀请码
+/// - 网络名
+/// - 网络密码
+/// - 公共服务器
+/// - 房主 IP
+/// - MC 服务器地址
+///
+/// @param room 房间对象
+/// @return 配置摘要字符串
+- (NSString *)generateConfigSummaryForRoom:(EasyTierRoom *)room;
 
-/// 尝试通过 URL Scheme 加入 EasyTier 网络
-/// @param networkName 网络名称
-/// @param networkSecret 网络密码
-- (void)joinNetwork:(NSString *)networkName
-       networkSecret:(NSString *)networkSecret;
+/// 获取 EasyTier 默认公共服务器列表
+- (NSArray<NSString *> *)defaultPublicServers;
 
 #pragma mark - 房间管理
 
@@ -176,29 +210,26 @@ typedef NS_ENUM(NSInteger, EasyTierRoomRole) {
 /// 获取指定房间
 - (nullable EasyTierRoom *)roomWithId:(NSString *)roomId;
 
-/// 连接到房间（设置 currentRoom + 尝试唤起 EasyTier）
+/// 激活房间（设置 currentRoom + 准备配置）
+///
+/// 注意：当前版本不会真正建立 EasyTier 虚拟网络（需要 NetworkExtension）。
+/// 此方法仅标记房间为"配置已就绪"状态，用户可在详情中查看并复制配置。
+///
+/// @param room       房间对象
+/// @param completion 完成回调（主线程）
 - (void)connectToRoom:(EasyTierRoom *)room
            completion:(void (^)(BOOL success, NSError * _Nullable error))completion;
 
-/// 断开当前房间连接
+/// 取消激活当前房间
 - (void)disconnectCurrentRoom;
 
 #pragma mark - 分享与辅助
 
-/// 生成房间的分享文本
+/// 生成房间的分享文本（用于社交渠道分享）
 - (NSString *)shareTextForRoom:(EasyTierRoom *)room;
 
 /// 生成新的房间 ID（UUID）
 - (NSString *)generateRoomId;
-
-/// 获取 EasyTier 默认公共服务器列表
-- (NSArray<NSString *> *)defaultPublicServers;
-
-/// 获取 EasyTier TestFlight 链接
-- (NSString *)easyTierTestFlightUrl;
-
-/// 获取 EasyTier GitHub 仓库链接
-- (NSString *)easyTierGitHubUrl;
 
 @end
 
