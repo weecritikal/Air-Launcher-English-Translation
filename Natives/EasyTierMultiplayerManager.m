@@ -250,6 +250,10 @@ static NSArray<NSString *> *kDefaultPublicServers = nil;
 @property (nonatomic, strong) NSMutableArray<EasyTierRoom *> *internalRooms;
 @property (nonatomic, strong) dispatch_queue_t serializationQueue;
 
+// 在 class extension 中将 currentRoom 重新声明为 readwrite，
+// 以便在实现内部赋值（头文件中对外暴露为 readonly）
+@property (nonatomic, strong, readwrite, nullable) EasyTierRoom *currentRoom;
+
 @end
 
 @implementation EasyTierMultiplayerManager

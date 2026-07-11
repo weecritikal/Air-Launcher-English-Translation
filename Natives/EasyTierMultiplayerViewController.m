@@ -607,7 +607,7 @@
 - (void)applyEffectToCell:(UITableViewCell *)cell {
     // 移除旧的背景效果，避免叠加
     for (UIView *subview in cell.contentView.subviews) {
-        if ([subview isKindOfClass:[UIVisualEffectView class]) {
+        if ([subview isKindOfClass:[UIVisualEffectView class]]) {
             [subview removeFromSuperview];
         }
     }
