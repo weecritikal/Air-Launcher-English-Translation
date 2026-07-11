@@ -151,11 +151,11 @@
 
 @property (nonatomic, strong) UILabel *sectionLabel;
 @property (nonatomic, strong) UILabel *invitationCodeLabel;
-@property (nonatomic, strong) UIButton *copyCodeButton;
+@property (nonatomic, strong) UIButton *duplicateCodeButton;
 @property (nonatomic, strong) UILabel *networkNameLabel;
 @property (nonatomic, strong) UILabel *networkSecretLabel;
 @property (nonatomic, strong) UILabel *serverAddressLabel;
-@property (nonatomic, strong) UIButton *copyConfigButton;
+@property (nonatomic, strong) UIButton *duplicateConfigButton;
 @property (nonatomic, strong) UIButton *shareButton;
 
 - (void)configureWithRoom:(EasyTierRoom *)room hasBackground:(BOOL)hasBackground;
@@ -190,13 +190,13 @@
     [self.contentView addSubview:_invitationCodeLabel];
 
     // 复制邀请码按钮
-    _copyCodeButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    _copyCodeButton.translatesAutoresizingMaskIntoConstraints = NO;
-    _copyCodeButton.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightMedium];
-    [_copyCodeButton setImage:[UIImage systemImageNamed:@"doc.on.doc"] forState:UIControlStateNormal];
-    _copyCodeButton.tintColor = [UIColor systemBlueColor];
-    _copyCodeButton.accessibilityLabel = @"复制邀请码";
-    [self.contentView addSubview:_copyCodeButton];
+    _duplicateCodeButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    _duplicateCodeButton.translatesAutoresizingMaskIntoConstraints = NO;
+    _duplicateCodeButton.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightMedium];
+    [_duplicateCodeButton setImage:[UIImage systemImageNamed:@"doc.on.doc"] forState:UIControlStateNormal];
+    _duplicateCodeButton.tintColor = [UIColor systemBlueColor];
+    _duplicateCodeButton.accessibilityLabel = @"复制邀请码";
+    [self.contentView addSubview:_duplicateCodeButton];
 
     // 网络名
     _networkNameLabel = [[UILabel alloc] init];
@@ -220,15 +220,15 @@
     [self.contentView addSubview:_serverAddressLabel];
 
     // 复制 TOML 配置按钮
-    _copyConfigButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    _copyConfigButton.translatesAutoresizingMaskIntoConstraints = NO;
-    _copyConfigButton.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightMedium];
-    [_copyConfigButton setTitle:@"复制 TOML 配置" forState:UIControlStateNormal];
-    _copyConfigButton.tintColor = [UIColor systemBlueColor];
-    _copyConfigButton.layer.cornerRadius = 8;
-    _copyConfigButton.layer.masksToBounds = YES;
-    _copyConfigButton.contentEdgeInsets = UIEdgeInsetsMake(6, 12, 6, 12);
-    [self.contentView addSubview:_copyConfigButton];
+    _duplicateConfigButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    _duplicateConfigButton.translatesAutoresizingMaskIntoConstraints = NO;
+    _duplicateConfigButton.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightMedium];
+    [_duplicateConfigButton setTitle:@"复制 TOML 配置" forState:UIControlStateNormal];
+    _duplicateConfigButton.tintColor = [UIColor systemBlueColor];
+    _duplicateConfigButton.layer.cornerRadius = 8;
+    _duplicateConfigButton.layer.masksToBounds = YES;
+    _duplicateConfigButton.contentEdgeInsets = UIEdgeInsetsMake(6, 12, 6, 12);
+    [self.contentView addSubview:_duplicateConfigButton];
 
     // 分享按钮
     _shareButton = [UIButton buttonWithType:UIButtonTypeSystem];
@@ -249,10 +249,10 @@
         [_invitationCodeLabel.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:16],
         [_invitationCodeLabel.topAnchor constraintEqualToAnchor:_sectionLabel.bottomAnchor constant:4],
 
-        [_copyCodeButton.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-16],
-        [_copyCodeButton.centerYAnchor constraintEqualToAnchor:_invitationCodeLabel.centerYAnchor],
-        [_copyCodeButton.widthAnchor constraintEqualToConstant:36],
-        [_copyCodeButton.heightAnchor constraintEqualToConstant:36],
+        [_duplicateCodeButton.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-16],
+        [_duplicateCodeButton.centerYAnchor constraintEqualToAnchor:_invitationCodeLabel.centerYAnchor],
+        [_duplicateCodeButton.widthAnchor constraintEqualToConstant:36],
+        [_duplicateCodeButton.heightAnchor constraintEqualToConstant:36],
 
         [_networkNameLabel.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:16],
         [_networkNameLabel.topAnchor constraintEqualToAnchor:_invitationCodeLabel.bottomAnchor constant:10],
@@ -266,16 +266,15 @@
         [_serverAddressLabel.topAnchor constraintEqualToAnchor:_networkSecretLabel.bottomAnchor constant:10],
         [_serverAddressLabel.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-16],
 
-        [_copyConfigButton.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:16],
-        [_copyConfigButton.topAnchor constraintEqualToAnchor:_serverAddressLabel.bottomAnchor constant:12],
+        [_duplicateConfigButton.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:16],
+        [_duplicateConfigButton.topAnchor constraintEqualToAnchor:_serverAddressLabel.bottomAnchor constant:12],
 
-        [_shareButton.leadingAnchor constraintEqualToAnchor:_copyConfigButton.trailingAnchor constant:12],
-        [_shareButton.centerYAnchor constraintEqualToAnchor:_copyConfigButton.centerYAnchor],
+        [_shareButton.leadingAnchor constraintEqualToAnchor:_duplicateConfigButton.trailingAnchor constant:12],
+        [_shareButton.centerYAnchor constraintEqualToAnchor:_duplicateConfigButton.centerYAnchor],
 
         [_shareButton.trailingAnchor constraintLessThanOrEqualToAnchor:self.contentView.trailingAnchor constant:-16],
 
-        // 底部留白
-        [UIView new].translatesAutoresizingMaskIntoConstraints = NO, // 占位符，无实际作用
+        // 底部留白由底部约束单独处理（见下方 active = YES）
     ]];
 
     // 添加底部约束
@@ -1348,10 +1347,10 @@
 
                 // 绑定按钮事件
                 __weak typeof(self) weakSelf = self;
-                cell.copyCodeButton.tintAdjustmentMode = UIViewTintAdjustmentModeNormal;
-                [cell.copyCodeButton addTarget:weakSelf action:@selector(copyInvitationCodeButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
+                cell.duplicateCodeButton.tintAdjustmentMode = UIViewTintAdjustmentModeNormal;
+                [cell.duplicateCodeButton addTarget:weakSelf action:@selector(copyInvitationCodeButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
 
-                [cell.copyConfigButton addTarget:weakSelf action:@selector(copyTOMLConfigButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
+                [cell.duplicateConfigButton addTarget:weakSelf action:@selector(copyTOMLConfigButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
 
                 [cell.shareButton addTarget:weakSelf action:@selector(shareButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
 
