@@ -130,6 +130,7 @@
 		<string>filza</string>
 		<string>santander</string>
 		<string>shareddocuments</string>
+		<string>zerotier</string>
 	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>

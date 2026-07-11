@@ -183,6 +183,8 @@ add_executable(AngelAuraAmethyst
   FileListViewController.m
   GameSurfaceView.m
   JavaGUIViewController.m
+  MultiplayerManager.m
+  MultiplayerViewController.m
   LauncherMenuViewController.m
   LauncherNavigationController.m
   LauncherNewsViewController.m

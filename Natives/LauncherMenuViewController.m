@@ -43,13 +43,13 @@
                                                object:nil];
 
     // 菜单项配置
-    // 原 case 3（当前版本设置）与 case 2（版本管理）功能重合，合并到 case 2
-    // case 3 改为"控制设置"（CustomControlsViewController），原右侧面板的"编辑控件"挪到这里
+    // case 3 原为"控制设置"，现改为"联机"（基于 ZeroTier 的 MC 联机功能，参照 FCL/ZL2）
+    // 键位调整界面已移到设置页面中
     self.menuItems = @[
         @{@"icon": @"house.fill", @"title": @" ", @"index": @0},
         @{@"icon": @"arrow.down.circle.fill", @"title": @" ", @"index": @1},
         @{@"icon": @"puzzlepiece.fill", @"title": @" ", @"index": @2},
-        @{@"icon": @"gamecontroller.fill", @"title": @" ", @"index": @3},
+        @{@"icon": @"antenna.radiowaves.left.and.right", @"title": @" ", @"index": @3},
         @{@"icon": @"gearshape.fill", @"title": @" ", @"index": @4}
     ];
     
@@ -246,8 +246,8 @@
             [self showVersionManager];
             break;
 
-        case 3: // 控制设置（原右侧面板"编辑控件"挪到这里）
-            [self showControlSettings];
+        case 3: // 联机（基于 ZeroTier 的 MC 联机功能，参照 FCL/ZL2）
+            [self showMultiplayer];
             break;
 
         case 4: // 设置
@@ -261,9 +261,9 @@
     [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowVersionManager" object:nil];
 }
 
-- (void)showControlSettings {
-    // 发送通知让 LauncherRootViewController 显示控制设置
-    [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowControlSettings" object:nil];
+- (void)showMultiplayer {
+    // 发送通知让 LauncherRootViewController 显示联机界面
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowMultiplayer" object:nil];
 }
 
 - (void)showSettings {

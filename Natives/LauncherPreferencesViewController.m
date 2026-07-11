@@ -21,6 +21,7 @@
 #import "AIFixViewController.h"
 #import "CurseForgeAPIKeyViewController.h"
 #import "DownloadFloatingBall.h"
+#import "CustomControlsViewController.h"
 
 @interface LauncherPreferencesViewController()
 @property(nonatomic) NSArray<NSString*> *rendererKeys, *rendererList;
@@ -707,6 +708,17 @@
             },
             // ------------------------------------------
 
+            // --- [新增] 键位调整（从左侧菜单移到设置中） ---
+            @{@"key": @"custom_controls",
+              @"icon": @"gamecontroller.fill",
+              @"hasDetail": @YES,
+              @"type": self.typeChildPane,
+              @"enableCondition": whenNotInGame,
+              @"canDismissWithSwipe": @NO,
+              @"class": CustomControlsViewController.class
+            },
+            // ---------------------------------------------
+
             @{@"key": @"default_gamepad_ctrl",
                 @"icon": @"hammer",
                 @"type": self.typeChildPane,
@@ -1369,6 +1381,31 @@
             header.backgroundView.backgroundColor = [UIColor clearColor];
         }
     }
+}
+
+/// 重写子页面跳转：为 CustomControlsViewController 设置必需的回调块
+- (void)tableView:(UITableView *)tableView openChildPaneAtIndexPath:(NSIndexPath *)indexPath {
+    NSDictionary *item = self.prefContents[indexPath.section][indexPath.row];
+
+    // 特殊处理：键位调整界面需要 setDefaultCtrl / getDefaultCtrl 回调
+    if ([item[@"key"] isEqualToString:@"custom_controls"]) {
+        CustomControlsViewController *vc = [[CustomControlsViewController alloc] init];
+        vc.modalPresentationStyle = UIModalPresentationOverFullScreen;
+        vc.setDefaultCtrl = ^(NSString *name){
+            setPrefObject(@"control.default_ctrl", name);
+        };
+        vc.getDefaultCtrl = ^{
+            return getPrefObject(@"control.default_ctrl");
+        };
+        UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
+        nav.navigationBar.prefersLargeTitles = YES;
+        nav.modalInPresentation = YES;
+        [self.navigationController presentViewController:nav animated:YES completion:nil];
+        return;
+    }
+
+    // 其他设置项走父类默认逻辑
+    [super tableView:tableView openChildPaneAtIndexPath:indexPath];
 }
 
 - (void)tableView:(UITableView *)tableView willDisplayFooterView:(UIView *)view forSection:(NSInteger)section {

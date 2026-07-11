@@ -7,6 +7,7 @@
 #import "TrackedTextField.h"
 #import "utils.h"
 #import "ScreenUtils.h"
+#import "MultiplayerViewController.h"
 #import <objc/runtime.h>
 
 // 暴露 class extension 中的私有属性，供 category 使用
@@ -41,6 +42,7 @@ static const void *kMenuDimViewKey = &kMenuDimViewKey;
         @"game.menu.force_close",          // 强制关闭
         @"game.menu.log_output",            // 日志输出
         @"game.menu.custom_controls",       // 按键布局编辑
+        @"game.menu.multiplayer",           // 联机（ZeroTier）
         @"game.menu.toggle_stats",          // FPS/内存显示开关
         @"game.menu.toggle_controls",       // 隐藏/显示控制按钮
         @"game.menu.toggle_virtual_mouse",  // 虚拟鼠标开关
@@ -233,6 +235,15 @@ static const void *kMenuDimViewKey = &kMenuDimViewKey;
     [self presentViewController:vc animated:YES completion:nil];
 }
 
+/// 游戏内打开联机界面（参照 FCL/ZL2，基于 ZeroTier）
+- (void)actionOpenMultiplayer {
+    [self dismissMenu];
+    MultiplayerViewController *vc = [[MultiplayerViewController alloc] init];
+    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
+    nav.modalPresentationStyle = UIModalPresentationPageSheet;
+    [self presentViewController:nav animated:YES completion:nil];
+}
+
 /// FCL 风格：隐藏/显示控制按钮（对应 FCL hide_all 开关）
 - (void)actionToggleControls {
     self.toggleHidden = !self.toggleHidden;
@@ -358,24 +369,27 @@ static const void *kMenuDimViewKey = &kMenuDimViewKey;
         case 2: // 按键布局编辑
             [self actionOpenCustomControls];
             break;
-        case 3: // FPS/内存显示开关
+        case 3: // 联机（ZeroTier）
+            [self actionOpenMultiplayer];
+            break;
+        case 4: // FPS/内存显示开关
             if ([self.gameMenuOverlay isKindOfClass:[GameMenuOverlayView class]]) {
                 [(GameMenuOverlayView *)self.gameMenuOverlay toggleStatsLabel];
             }
             break;
-        case 4: // 隐藏/显示控制按钮
+        case 5: // 隐藏/显示控制按钮
             [self actionToggleControls];
             break;
-        case 5: // 虚拟鼠标开关
+        case 6: // 虚拟鼠标开关
             [self actionToggleVirtualMouse];
             break;
-        case 6: // 游戏内键盘
+        case 7: // 游戏内键盘
             [self actionToggleKeyboard];
             break;
-        case 7: // 分辨率调整
+        case 8: // 分辨率调整
             [self actionAdjustResolution];
             break;
-        case 8: // 设置
+        case 9: // 设置
             [self actionOpenPreferences];
             break;
     }

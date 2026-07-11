@@ -16,6 +16,7 @@
 #import "ModpackImportViewController.h"
 #import "LauncherPrefGameDirViewController.h"
 #import "CustomControlsViewController.h"
+#import "MultiplayerViewController.h"
 #import "AccountListViewController.h"
 
 // 布局常量（iPad 基准值；iPhone 上通过 LauncherRootLayoutWidth 适配后会变窄）
@@ -317,8 +318,8 @@ static CGFloat LauncherRootLayoutRightPanelWidth(UITraitCollection *trait) {
                                                  name:@"ShowSettings"
                                                object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self
-                                             selector:@selector(showControlSettings)
-                                                 name:@"ShowControlSettings"
+                                             selector:@selector(showMultiplayer)
+                                                 name:@"ShowMultiplayer"
                                                object:nil];
     // 首页快捷瓷砖触发：切到对应内容区子页面（不再 FormSheet 弹窗）
     [[NSNotificationCenter defaultCenter] addObserver:self
@@ -461,16 +462,9 @@ static CGFloat LauncherRootLayoutRightPanelWidth(UITraitCollection *trait) {
     [self setContentViewController:navVC animated:YES];
 }
 
-- (void)showControlSettings {
-    // 在中间内容区显示自定义控制布局编辑器（原右侧面板"编辑控件"挪到这里）
-    CustomControlsViewController *vc = [[CustomControlsViewController alloc] init];
-    vc.modalPresentationStyle = UIModalPresentationOverFullScreen;
-    vc.setDefaultCtrl = ^(NSString *name){
-        setPrefObject(@"control.default_ctrl", name);
-    };
-    vc.getDefaultCtrl = ^{
-        return getPrefObject(@"control.default_ctrl");
-    };
+- (void)showMultiplayer {
+    // 在中间内容区显示联机界面（基于 ZeroTier 的 MC 联机功能，参照 FCL/ZL2）
+    MultiplayerViewController *vc = [[MultiplayerViewController alloc] init];
     UINavigationController *navVC = [[UINavigationController alloc] initWithRootViewController:vc];
     navVC.navigationBar.prefersLargeTitles = NO;
     [self setContentViewController:navVC animated:YES];
