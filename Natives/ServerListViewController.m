@@ -34,10 +34,13 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+    // 适配自定义启动器背景：将当前视图控制器透明化，使全局背景壁纸能够透出
+    [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
 
     [[BackgroundManager sharedManager] applyEffectToView:self.view];
     self.title = @"服务器";
     self.tableView.backgroundColor = [UIColor clearColor];
+    self.tableView.backgroundView = nil;
     self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
     self.tableView.rowHeight = 88;
 
@@ -90,6 +93,8 @@
 
 - (void)handleBackgroundUIEffectChanged:(NSNotification *)notification {
     dispatch_async(dispatch_get_main_queue(), ^{
+        // 重新应用透明化，确保背景效果切换后视图仍能透出全局背景
+        [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
         [[BackgroundManager sharedManager] applyEffectToView:self.view];
         [self.tableView reloadData];
     });

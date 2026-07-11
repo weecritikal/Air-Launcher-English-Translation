@@ -262,20 +262,28 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     CGFloat viewHeight = self.view.bounds.size.height;
     if (viewWidth <= 0 || viewHeight <= 0) return;
 
+    // 修复 iPhone 错位：必须将 safeAreaInsets 纳入 topPadding/bottomPadding 计算。
+    // 原先 topPadding=16/bottomPadding=16 未考虑刘海屏/底部 Home Indicator 区域，
+    // 导致顶部内容被状态栏遮挡、底部按钮被 Home Indicator 覆盖。
+    UIEdgeInsets safeArea = self.view.safeAreaInsets;
     BOOL isCompact = viewWidth < 700;
     CGFloat horizontalPadding = isCompact ? 12 : 16;
     CGFloat maxContentWidth = isCompact ? (viewWidth - horizontalPadding * 2) : 1200;
     CGFloat contentWidth = MIN(viewWidth - horizontalPadding * 2, maxContentWidth);
-    CGFloat topPadding = isCompact ? 16 : 40;
-    CGFloat bottomPadding = isCompact ? 16 : 24;
-    CGFloat contentHeight = MAX(viewHeight - topPadding - bottomPadding, 300);
+    // topPadding 必须加上 safeAreaInsets.top（刘海屏状态栏高度），否则顶部内容会被状态栏遮挡
+    CGFloat topPadding = (isCompact ? 12 : 40) + safeArea.top;
+    // bottomPadding 必须加上 safeAreaInsets.bottom（Home Indicator 高度），否则底部按钮被覆盖
+    CGFloat bottomPadding = (isCompact ? 12 : 24) + safeArea.bottom;
+    CGFloat contentHeight = MAX(viewHeight - topPadding - bottomPadding, 200);
     CGFloat startX = floor((viewWidth - contentWidth) / 2.0);
 
     _mainContentView.frame = CGRectMake(startX, topPadding, contentWidth, contentHeight);
 
     if (isCompact) {
+        // 修复 iPhone 错位：将 58/42 改为 50/50，让右面板（配置/历史卡片）有足够高度，
+        // 避免配置卡片(206pt) + 工具卡片(220pt) 在矮小的右面板中溢出底部。
         CGFloat gap = 8;
-        CGFloat leftHeight = floor((contentHeight - gap) * 0.58);
+        CGFloat leftHeight = floor((contentHeight - gap) * 0.50);
         CGFloat rightHeight = contentHeight - gap - leftHeight;
         _leftPanel.frame = CGRectMake(0, 0, contentWidth, leftHeight);
         _rightPanel.frame = CGRectMake(0, leftHeight + gap, contentWidth, rightHeight);
@@ -307,33 +315,33 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     CGFloat viewHeight = self.view.bounds.size.height;
     if (viewWidth <= 0 || viewHeight <= 0 || !_mainContentView) return;
 
-    // 适配 iPhone 窄屏：宽度不足时使用单栏布局，并收紧边距与最大宽度
+    // 修复 iPhone 错位：将 safeAreaInsets 纳入 topPadding/bottomPadding 计算
+    UIEdgeInsets safeArea = self.view.safeAreaInsets;
     BOOL isCompact = viewWidth < 700;
     CGFloat horizontalPadding = isCompact ? 12 : 16;
     CGFloat maxContentWidth = isCompact ? (viewWidth - horizontalPadding * 2) : 1200;
     CGFloat contentWidth = MIN(viewWidth - horizontalPadding * 2, maxContentWidth);
-    CGFloat topPadding = isCompact ? 16 : 40;
-    CGFloat bottomPadding = isCompact ? 16 : 24;
-    CGFloat contentHeight = MAX(viewHeight - topPadding - bottomPadding, 300);
+    CGFloat topPadding = (isCompact ? 12 : 40) + safeArea.top;
+    CGFloat bottomPadding = (isCompact ? 12 : 24) + safeArea.bottom;
+    CGFloat contentHeight = MAX(viewHeight - topPadding - bottomPadding, 200);
     CGFloat startX = floor((viewWidth - contentWidth) / 2.0);
 
     _mainContentView.frame = CGRectMake(startX, topPadding, contentWidth, contentHeight);
 
     CGFloat leftWidth, rightWidth, panelHeight;
     if (isCompact) {
-        // 紧凑布局：双栏上下堆叠，左栏（诊断/会话）占 58%，右栏（配置/历史）占 42%
+        // 紧凑布局：双栏上下堆叠，50/50 分割（修复 iPhone 右面板高度不足问题）
         leftWidth = contentWidth;
         rightWidth = contentWidth;
         CGFloat gap = 8;
-        leftWidth = contentWidth;
-        panelHeight = floor((contentHeight - gap) * 0.58);
+        panelHeight = floor((contentHeight - gap) * 0.50);
         CGFloat rightHeight = contentHeight - gap - panelHeight;
         _leftPanel.frame = CGRectMake(0, 0, leftWidth, panelHeight);
         _rightPanel.frame = CGRectMake(0, panelHeight + gap, rightWidth, rightHeight);
         _leftScrollView.frame = CGRectMake(0, 0, leftWidth, MAX(panelHeight - 18, 0));
         _rightScrollView.frame = CGRectMake(0, 0, rightWidth, MAX(rightHeight - 18, 0));
-        _leftContentView.frame = CGRectMake(0, 0, leftWidth, MAX(panelHeight * 1.25, 560));
-        _rightContentView.frame = CGRectMake(0, 0, rightWidth, MAX(rightHeight * 1.35, 420));
+        _leftContentView.frame = CGRectMake(0, 0, leftWidth, MAX(panelHeight * 1.25, 400));
+        _rightContentView.frame = CGRectMake(0, 0, rightWidth, MAX(rightHeight * 1.50, 400));
     } else {
         leftWidth = floor(contentWidth * 0.6);
         rightWidth = contentWidth - leftWidth;
@@ -595,6 +603,8 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     [_inputContainerView addSubview:inputTitle];
 
     _inputTextView = [[UITextView alloc] initWithFrame:CGRectMake(12, 30, _inputContainerView.bounds.size.width - 24, 56)];
+    // 修复 iPhone 错位：输入框随容器宽度变化自动调整
+    _inputTextView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleBottomMargin;
     _inputTextView.backgroundColor = [UIColor clearColor];
     _inputTextView.textColor = [UIColor whiteColor];
     _inputTextView.font = [UIFont systemFontOfSize:15];
@@ -604,6 +614,7 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     [_inputContainerView addSubview:_inputTextView];
 
     UILabel *placeholder = [[UILabel alloc] initWithFrame:CGRectMake(12, 30, 260, 24)];
+    placeholder.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleBottomMargin;
     placeholder.text = localize(@"ai.fix.input_placeholder", @"描述现象、补充信息或直接开始对话...");
     placeholder.font = [UIFont systemFontOfSize:15];
     placeholder.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.35];
@@ -612,6 +623,8 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
 
     _stopButton = [UIButton buttonWithType:UIButtonTypeSystem];
     _stopButton.frame = CGRectMake(_inputContainerView.bounds.size.width - 162, _inputContainerView.bounds.size.height - 36, 72, 28);
+    // 修复 iPhone 错位：添加 autoresizingMask，按钮随输入容器宽度/高度变化自动调整位置
+    _stopButton.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleWidth;
     [_stopButton setTitle:localize(@"ai.fix.stop", @"停止") forState:UIControlStateNormal];
     _stopButton.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
     _stopButton.backgroundColor = AFHexColor(@"#DC2626");
@@ -623,6 +636,8 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
 
     _sendButton = [UIButton buttonWithType:UIButtonTypeSystem];
     _sendButton.frame = CGRectMake(_inputContainerView.bounds.size.width - 80, _inputContainerView.bounds.size.height - 36, 68, 28);
+    // 修复 iPhone 错位：添加 autoresizingMask，与 _stopButton 一致
+    _sendButton.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleWidth;
     [_sendButton setTitle:localize(@"ai.fix.send", @"发送") forState:UIControlStateNormal];
     _sendButton.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightSemibold];
     _sendButton.backgroundColor = AFHexColor(@"#2563EB");

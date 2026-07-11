@@ -10,6 +10,7 @@
 #import "ModItem.h"
 #import "ModService.h"
 #import "ModTableViewCell.h"
+#import "BackgroundManager.h"
 
 @interface ModTableViewController () <ModTableViewCellDelegate, UISearchBarDelegate>
 @property (nonatomic, strong) NSArray<ModItem *> *mods;
@@ -22,6 +23,9 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+    // 适配自定义启动器背景：透明化当前 VC，让全局背景图/毛玻璃透出
+    // ModTableViewController 是 UITableViewController 子类，makeViewControllerTransparent 会自动处理 tableView 背景透明化
+    [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
     self.title = @"Mods";
     [self.tableView registerClass:[ModTableViewCell class] forCellReuseIdentifier:@"ModCell"];
     self.tableView.rowHeight = 96;
@@ -64,6 +68,23 @@
     
     // Ensure switch reflects current state when view appears
     [self refreshTapped];
+
+    // 监听背景效果变化通知，背景切换时重新应用透明效果
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(reapplyBackgroundEffect)
+                                                 name:@"BackgroundUIEffectChanged"
+                                               object:nil];
+}
+
+- (void)reapplyBackgroundEffect {
+    // 背景效果改变时重新透明化当前 VC
+    // UITableViewController 的 tableView 背景由 makeViewControllerTransparent 自动处理
+    [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
+}
+
+- (void)dealloc {
+    // 移除通知观察者，避免dealloc后收到通知导致崩溃
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
 - (void)viewWillAppear:(BOOL)animated {

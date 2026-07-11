@@ -129,22 +129,35 @@
 - (UIImage *)loadImageWithName:(NSString *)imageName {
     NSBundle *bundle = [NSBundle mainBundle];
     NSString *resourcePath = [bundle resourcePath];
-    
-    // Check if dark mode is active
-    BOOL isDarkMode = self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark;
-    
-    // Try to load appropriate theme version first
-    NSString *theme = isDarkMode ? @"dark" : @"light";
-    NSString *imagePath = [resourcePath stringByAppendingPathComponent:[NSString stringWithFormat:@"ModLoaderIcons/%@_%@.png", imageName, theme]];
-    
-    UIImage *image = [UIImage imageWithContentsOfFile:imagePath];
-    if (!image) {
-        // Fallback to opposite theme if preferred theme doesn't exist
-        theme = isDarkMode ? @"light" : @"dark";
-        imagePath = [resourcePath stringByAppendingPathComponent:[NSString stringWithFormat:@"ModLoaderIcons/%@_%@.png", imageName, theme]];
-        image = [UIImage imageWithContentsOfFile:imagePath];
+
+    // 修复模组加载器图标不显示：原实现只查找 ModLoaderIcons/{name}_{light|dark}.png 主题文件，
+    // 但 HMCL 官方图标是标准单文件 ModLoaderIcons/{name}.png（不区分深浅色），
+    // 导致 fabric/forge/neoforge/quilt/optifine 的 PNG 永远找不到，回退到空白或自编图标。
+    // 现在改为：优先加载标准单文件 → 再尝试主题文件 → 最后返回 nil。
+    // 与 ModLoaderIconHelper 的 iconImageForLoader: 加载顺序保持一致。
+
+    // 1. 优先加载 HMCL 官方标准单文件（不区分深浅色主题）
+    NSString *standardPath = [resourcePath stringByAppendingPathComponent:
+                              [NSString stringWithFormat:@"ModLoaderIcons/%@.png", imageName]];
+    UIImage *image = [UIImage imageWithContentsOfFile:standardPath];
+    if (image) {
+        return image;
     }
-    
+
+    // 2. 回退到旧格式主题文件（区分 light/dark）
+    BOOL isDarkMode = self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark;
+    NSString *theme = isDarkMode ? @"dark" : @"light";
+    NSString *themedPath = [resourcePath stringByAppendingPathComponent:
+                            [NSString stringWithFormat:@"ModLoaderIcons/%@_%@.png", imageName, theme]];
+    image = [UIImage imageWithContentsOfFile:themedPath];
+    if (!image) {
+        // 3. 尝试相反主题
+        theme = isDarkMode ? @"light" : @"dark";
+        themedPath = [resourcePath stringByAppendingPathComponent:
+                      [NSString stringWithFormat:@"ModLoaderIcons/%@_%@.png", imageName, theme]];
+        image = [UIImage imageWithContentsOfFile:themedPath];
+    }
+
     return image;
 }
 
@@ -224,6 +237,32 @@
 }
 
 #pragma mark - Configuration
+
+- (void)prepareForReuse {
+    [super prepareForReuse];
+    // 修复图标加载慢/错乱：取消正在进行的 AFNetworking 图片请求，
+    // 防止复用 cell 时旧请求完成后覆盖新配置的图标。
+    // AFNetworking 的 UIImageView+AFNetworking 类别会在 setImageWithURL: 时
+    // 自动取消该 imageView 上之前的请求，但仅在再次调用 setImageWithURL: 时才取消。
+    // 如果新 cell 配置走的是 mod.icon（本地图片）或默认图标分支（不调用 setImageWithURL:），
+    // 旧的异步请求不会被取消，导致延迟加载的旧图标覆盖新图标。
+    // 这里显式取消，确保 cell 复用时不会有残留请求。
+    [_modIconView cancelImageRequestOperation];
+    _modIconView.image = [UIImage systemImageNamed:@"puzzlepiece.extension"];
+    _loaderIconView.image = nil;
+    _nameLabel.text = nil;
+    _modVersionLabel.text = nil;
+    _gameVersionLabel.text = nil;
+    _descLabel.text = nil;
+    _authorLabel.text = nil;
+    _statsLabel.text = nil;
+
+    // 清除旧的 loader badges
+    for (UIView *view in self.loaderBadgesStackView.arrangedSubviews) {
+        [self.loaderBadgesStackView removeArrangedSubview:view];
+        [view removeFromSuperview];
+    }
+}
 
 - (void)configureWithMod:(ModItem *)mod displayMode:(ModTableViewCellDisplayMode)mode {
     self.currentMod = mod;

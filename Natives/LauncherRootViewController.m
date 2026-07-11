@@ -180,24 +180,31 @@ static CGFloat LauncherRootLayoutRightPanelWidth(UITraitCollection *trait) {
 
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
-    // 消除内容区子 VC 的顶部 safeArea 留白（"大白条"）。
-    // 内容 VC 内部用 safeAreaLayoutGuide.topAnchor 布局，顶部会留出状态栏高度的空间，
-    // 该空间透出 window 的 systemBackgroundColor（浅色模式=白），形成刺眼的"大白条"。
-    // 通过 additionalSafeAreaInsets 负值抵消顶部 safeArea，让子 VC 内容延伸到顶部。
-    CGFloat topInset = self.contentContainer.safeAreaInsets.top;
-    UIEdgeInsets target = (topInset > 0) ? UIEdgeInsetsMake(-topInset, 0, 0, 0) : UIEdgeInsetsZero;
+    // 修复：移除原先对 nav 栈所有 VC 一刀切注入负 additionalSafeAreaInsets.top 的逻辑。
+    // 该负 inset 会导致两个严重问题：
+    //   1. 设置页等使用 safeAreaLayoutGuide.topAnchor 布局的 VC，其内容被推到导航栏之上（"飞到顶上"），
+    //      外观调整等选项无法正常滚动和操作。
+    //   2. Java 管理等 push 进来的子页面，前一个页面的内容因为负 inset 透出在当前页面下方，
+    //      形成"前一页面没有及时消失"的视觉残留。
+    // "大白条"问题已通过 makeViewControllerTransparent（将 VC view 背景设为 clearColor）
+    // + applyEffectToNavigationBar（导航栏毛玻璃）解决，不再需要此 hack。
+    // 这里仅清理可能残留的旧负 inset 值，将其归零。
     UIViewController *contentVC = _contentViewController;
     if (!contentVC) return;
     if ([contentVC isKindOfClass:[UINavigationController class]]) {
         UINavigationController *nav = (UINavigationController *)contentVC;
         for (UIViewController *vc in nav.viewControllers) {
-            if (!UIEdgeInsetsEqualToEdgeInsets(vc.additionalSafeAreaInsets, target)) {
-                vc.additionalSafeAreaInsets = target;
+            if (vc.additionalSafeAreaInsets.top < 0) {
+                UIEdgeInsets cleared = vc.additionalSafeAreaInsets;
+                cleared.top = 0;
+                vc.additionalSafeAreaInsets = cleared;
             }
         }
     } else {
-        if (!UIEdgeInsetsEqualToEdgeInsets(contentVC.additionalSafeAreaInsets, target)) {
-            contentVC.additionalSafeAreaInsets = target;
+        if (contentVC.additionalSafeAreaInsets.top < 0) {
+            UIEdgeInsets cleared = contentVC.additionalSafeAreaInsets;
+            cleared.top = 0;
+            contentVC.additionalSafeAreaInsets = cleared;
         }
     }
 }
@@ -636,9 +643,14 @@ static CGFloat LauncherRootLayoutRightPanelWidth(UITraitCollection *trait) {
     // 避免顶部出现默认白色 nav bar 形成"大白条"，同时与两侧深色毛玻璃面板视觉一致。
     if ([viewController isKindOfClass:[UINavigationController class]]) {
         UINavigationController *nav = (UINavigationController *)viewController;
+        nav.delegate = self;
         [[BackgroundManager sharedManager] applyEffectToNavigationBar:nav.navigationBar];
         // 透明化 topViewController，让背景透出 nav bar 毛玻璃
         [[BackgroundManager sharedManager] makeViewControllerTransparent:nav.topViewController];
+        // 透明化 nav 栈中所有已存在的 VC（防止前一个页面透出残留）
+        for (UIViewController *stackVC in nav.viewControllers) {
+            [[BackgroundManager sharedManager] makeViewControllerTransparent:stackVC];
+        }
     } else {
         // 非导航控制器包装的 VC 也透明化，确保与背景融合
         [[BackgroundManager sharedManager] makeViewControllerTransparent:viewController];
@@ -691,6 +703,24 @@ static CGFloat LauncherRootLayoutRightPanelWidth(UITraitCollection *trait) {
 
 - (UIInterfaceOrientationMask)supportedInterfaceOrientations {
     return UIInterfaceOrientationMaskLandscape;
+}
+
+#pragma mark - UINavigationControllerDelegate
+
+/// 当 nav 栈 push 或 pop 完成后，对新显示的 VC 透明化处理，
+/// 确保所有 push 进来的子页面（如 Java 管理、模组管理、整合包导入等）
+/// 都能透出自定义启动器背景，而非显示默认的 systemBackgroundColor（白色）。
+- (void)navigationController:(UINavigationController *)navigationController
+       didShowViewController:(UIViewController *)viewController
+                    animated:(BOOL)animated {
+    // 透明化刚显示的 VC
+    [[BackgroundManager sharedManager] makeViewControllerTransparent:viewController];
+    // 同时透明化栈中所有 VC（防止前一个页面透出残留，解决"前一页面未及时消失"问题）
+    for (UIViewController *stackVC in navigationController.viewControllers) {
+        [[BackgroundManager sharedManager] makeViewControllerTransparent:stackVC];
+    }
+    // 重新应用导航栏毛玻璃效果（防止 push 后 nav bar 样式被重置）
+    [[BackgroundManager sharedManager] applyEffectToNavigationBar:navigationController.navigationBar];
 }
 
 @end

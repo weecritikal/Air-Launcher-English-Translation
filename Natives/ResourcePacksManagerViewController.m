@@ -16,6 +16,7 @@
 #import "installer/modpack/ModrinthAPI.h"
 #import "PLProfiles.h"
 #import "LauncherPreferences.h"
+#import "BackgroundManager.h"
 
 @interface ResourcePacksManagerViewController () <UITableViewDataSource, UITableViewDelegate, UISearchBarDelegate, AssetVersionViewControllerDelegate, UIDocumentPickerDelegate>
 
@@ -40,15 +41,39 @@
     [super viewDidLoad];
     self.title = @"管理资源包";
     self.view.backgroundColor = [UIColor systemBackgroundColor];
+    // 适配自定义启动器背景：透明化当前 VC，让全局背景图/毛玻璃透出
+    [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
     self.currentMode = self.initialMode;
     self.localItems = [NSMutableArray array];
     self.filteredLocalItems = [NSMutableArray array];
     self.onlineSearchResults = [NSMutableArray array];
     [self setupUI];
+    // 透明化 tableView 背景与 backgroundView，避免遮挡全局背景
+    self.tableView.backgroundColor = [UIColor clearColor];
+    self.tableView.backgroundView = nil;
     [self updateUIForCurrentMode];
     if (self.currentMode == ResourcePacksManagerModeLocal) {
         [self refreshLocalList];
     }
+    // 监听背景效果变化通知，背景切换时重新应用透明效果
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(reapplyBackgroundEffect)
+                                                 name:@"BackgroundUIEffectChanged"
+                                               object:nil];
+}
+
+/// 背景效果变化时重新应用透明化处理，确保背景切换后仍透出全局背景
+- (void)reapplyBackgroundEffect {
+    // 重新透明化当前 VC
+    [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
+    // 重新设置 tableView 背景为透明，确保背景效果切换后仍透出全局背景
+    self.tableView.backgroundColor = [UIColor clearColor];
+    self.tableView.backgroundView = nil;
+}
+
+- (void)dealloc {
+    // 移除背景效果变化通知的观察者，避免 dealloc 后收到通知导致野指针崩溃
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
 - (void)setupUI {

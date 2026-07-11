@@ -10,6 +10,7 @@
 #import "ModVersion.h"
 #import "PLPreferences.h"
 #import "ModService.h"
+#import "BackgroundManager.h"
 #import <objc/runtime.h>
 
 /// 关联对象 key：下载任务对应的 ModDownloadTaskInfo
@@ -153,6 +154,8 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
     // 取消并销毁 session
     [self.session invalidateAndCancel];
     self.session = nil;
+    // 移除背景效果变化通知的观察者，避免 dealloc 后收到通知导致野指针崩溃
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
 #pragma mark - 视图加载
@@ -160,9 +163,28 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.view.backgroundColor = [UIColor systemBackgroundColor];
+    // 适配自定义启动器背景：透明化当前 VC，让全局背景图/毛玻璃透出
+    [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
 
     [self setupBentoLayout];
+    // 透明化 tableView 背景，避免遮挡全局背景
+    self.tableView.backgroundColor = [UIColor clearColor];
+    self.tableView.backgroundView = nil;
     [self transitionToPhase:ModUpdatePhasePrepare];
+
+    // 监听背景效果变化通知，背景切换时重新应用透明效果
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(reapplyBackgroundEffect)
+                                                 name:@"BackgroundUIEffectChanged"
+                                               object:nil];
+}
+
+- (void)reapplyBackgroundEffect {
+    // 背景效果改变时重新透明化当前 VC
+    [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
+    // 重新设置 tableView 背景为透明，确保背景效果切换后仍透出全局背景
+    self.tableView.backgroundColor = [UIColor clearColor];
+    self.tableView.backgroundView = nil;
 }
 
 #pragma mark - Bento Grid 布局

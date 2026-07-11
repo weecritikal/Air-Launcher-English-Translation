@@ -8,6 +8,7 @@
 #import "TouchControllerPreferencesViewController.h"
 #import "LauncherPreferences.h"
 #import "PLPreferences.h"
+#import "BackgroundManager.h"
 #import "config.h"
 #import "utils.h"
 
@@ -27,9 +28,21 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.title = localize(@"preference.touchcontroller.title", nil);
-    
+
     // 添加关闭按钮
     self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemClose target:self action:@selector(actionClose)];
+
+    // 适配自定义启动器背景：将当前视图控制器透明化，让全局背景（图片/视频）能够透出显示。
+    // 虽然父类 PLPrefTableViewController 的 viewDidLoad 已调用 makeViewControllerTransparent，
+    // 但此处再次调用以确保本子类的背景设置在所有初始化完成后仍然正确。
+    [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
+
+    // 监听背景 UI 效果变化通知：当用户在背景设置中切换毛玻璃/半透明或调整透明度时，
+    // 重新调用 makeViewControllerTransparent 以应用最新的视觉效果，保证背景始终正确透出。
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(reapplyBackgroundEffect)
+                                                 name:@"BackgroundUIEffectChanged"
+                                               object:nil];
 }
 
 - (void)initViewCreation {
@@ -381,6 +394,19 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
 
 - (void)actionClose {
     [self.navigationController dismissViewControllerAnimated:YES completion:nil];
+}
+
+/// 重新应用背景效果：当 BackgroundUIEffectChanged 通知到达时调用，
+/// 通过 BackgroundManager 重新设置当前视图控制器的透明度/毛玻璃效果，
+/// 并手动清空 tableView 背景与 backgroundView，确保全局背景能够正常透出。
+- (void)reapplyBackgroundEffect {
+    [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
+    self.tableView.backgroundColor = [UIColor clearColor];
+    self.tableView.backgroundView = nil;
+}
+
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
 @end

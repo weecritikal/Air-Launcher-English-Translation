@@ -23,6 +23,7 @@
 #import "ShadersManagerViewController.h"
 #import "authenticator/BaseAuthenticator.h"
 #import "AccountListViewController.h"
+#import "BackgroundManager.h"
 
 // 版本类型
 typedef NS_ENUM(NSInteger, VersionType) {
@@ -55,23 +56,36 @@ typedef NS_ENUM(NSInteger, VersionType) {
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    
+
     self.view.backgroundColor = [UIColor systemBackgroundColor];
-    
+    // 适配自定义启动器背景：将当前视图控制器透明化，让全局背景（图片/视频）能够透出显示。
+    // 放在 view.backgroundColor 设置之后调用，确保透明效果不会被不透明背景色覆盖。
+    [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
+
     // 设置导航栏
     [self setupNavigationBar];
-    
+
     // 设置筛选器
     [self setupFilterSegment];
-    
+
     // 设置集合视图
     [self setupCollectionView];
-    
+    // 确保 collectionView 背景透明，让全局背景能够透出
+    // （UICollectionView 没有 backgroundView 属性，仅需清空 backgroundColor）
+    self.collectionView.backgroundColor = [UIColor clearColor];
+
     // 设置加载指示器
     [self setupLoadingIndicator];
-    
+
     // 加载版本列表
     [self loadVersionList];
+
+    // 监听背景 UI 效果变化通知：当用户在背景设置中切换毛玻璃/半透明或调整透明度时，
+    // 重新调用 makeViewControllerTransparent 以应用最新的视觉效果，保证背景始终正确透出。
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(reapplyBackgroundEffect)
+                                                 name:@"BackgroundUIEffectChanged"
+                                               object:nil];
 }
 
 - (void)setupNavigationBar {
@@ -515,6 +529,18 @@ typedef NS_ENUM(NSInteger, VersionType) {
 
 - (UIInterfaceOrientationMask)supportedInterfaceOrientations {
     return UIInterfaceOrientationMaskLandscape;
+}
+
+/// 重新应用背景效果：当 BackgroundUIEffectChanged 通知到达时调用，
+/// 通过 BackgroundManager 重新设置当前视图控制器的透明度/毛玻璃效果，
+/// 并将 collectionView 背景置为透明，确保全局背景能够正常透出。
+- (void)reapplyBackgroundEffect {
+    [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
+    self.collectionView.backgroundColor = [UIColor clearColor];
+}
+
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
 @end

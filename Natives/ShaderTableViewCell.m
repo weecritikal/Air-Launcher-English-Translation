@@ -166,6 +166,20 @@
 
 #pragma mark - Configuration
 
+- (void)prepareForReuse {
+    [super prepareForReuse];
+    // 修复图标加载慢/错乱：取消正在进行的 AFNetworking 图片请求，
+    // 防止复用 cell 时旧请求完成后覆盖新配置的图标。
+    [_shaderIconView cancelImageRequestOperation];
+    _shaderIconView.image = [UIImage systemImageNamed:@"photo"];
+    _nameLabel.text = nil;
+    _shaderVersionLabel.text = nil;
+    _gameVersionLabel.text = nil;
+    _descLabel.text = nil;
+    _authorLabel.text = nil;
+    _statsLabel.text = nil;
+}
+
 - (void)configureWithShader:(ShaderItem *)shader displayMode:(ShaderTableViewCellDisplayMode)mode {
     self.currentShader = shader;
 

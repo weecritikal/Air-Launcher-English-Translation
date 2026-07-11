@@ -29,7 +29,11 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    
+
+    // 适配自定义启动器背景：透明化当前 VC，让全局背景图/毛玻璃透出
+    // 本控制器为 UITableViewController 子类，makeViewControllerTransparent 内部会自动处理 tableView 背景透明化
+    [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
+    // 应用毛玻璃效果到根视图
     [[BackgroundManager sharedManager] applyEffectToView:self.view];
     
     self.searchController = [[UISearchController alloc] initWithSearchResultsController:nil];
@@ -283,9 +287,20 @@
     }];
 }
 
+/// 背景效果变化时重新应用透明化处理与毛玻璃效果，确保背景切换后仍透出全局背景
+- (void)reapplyBackgroundEffect {
+    // 重新透明化当前 VC（UITableViewController 子类，内部自动处理 tableView 背景透明化）
+    [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
+    // 重新应用毛玻璃效果到根视图
+    [[BackgroundManager sharedManager] applyEffectToView:self.view];
+    // 兜底重新设置 tableView 背景为透明，确保背景效果切换后仍透出全局背景
+    self.tableView.backgroundColor = [UIColor clearColor];
+    self.tableView.backgroundView = nil;
+}
+
 - (void)handleBackgroundUIEffectChanged:(NSNotification *)notification {
     dispatch_async(dispatch_get_main_queue(), ^{
-        [[BackgroundManager sharedManager] applyEffectToView:self.view];
+        [self reapplyBackgroundEffect];
         [self.tableView reloadData];
     });
 }

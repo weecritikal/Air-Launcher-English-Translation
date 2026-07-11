@@ -43,6 +43,9 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
 @property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, NSMutableDictionary *> *downloadProgressSnapshots;
 @property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, DownloadTaskItem *> *downloadTaskItems;
 @property (nonatomic, strong) NSLock *downloadLock;
+
+// 前向声明：将 modpackInfo 中的 iconBase64 解析为可用的文件 URL 字符串
+- (nullable NSString *)resolveIconURLFromModpackInfo:(NSDictionary *)modpackInfo;
 @end
 
 @implementation ModpackImportService
@@ -76,6 +79,41 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
 }
 
 #pragma mark - Helpers
+
+/// 将 modpackInfo 中的 iconBase64 字段解析为可用的图标 URL。
+/// modrinth.index.json 中 iconBase64 是 base64 编码的图片数据（如 "data:image/png;base64,...." 或纯 base64 字符串），
+/// 不能直接作为 URL 使用。该方法将其解码为 UIImage，保存到临时文件，返回文件 URL 字符串。
+/// 如果解析失败或无图标，返回 nil（调用方使用默认图标）。
+- (nullable NSString *)resolveIconURLFromModpackInfo:(NSDictionary *)modpackInfo {
+    NSString *iconBase64 = modpackInfo[@"iconBase64"];
+    if (!iconBase64 || iconBase64.length == 0) return nil;
+
+    // 去除可能的 data URI 前缀（如 "data:image/png;base64,"）
+    NSString *base64String = iconBase64;
+    NSString *prefix = @"base64,";
+    NSRange prefixRange = [iconBase64 rangeOfString:prefix];
+    if (prefixRange.location != NSNotFound) {
+        base64String = [iconBase64 substringFromIndex:prefixRange.location + prefixRange.length];
+    }
+
+    // 解码 base64
+    NSData *imageData = [[NSData alloc] initWithBase64EncodedString:base64String
+                                                             options:NSDataBase64DecodingIgnoreUnknownCharacters];
+    if (!imageData || imageData.length == 0) return nil;
+
+    // 保存到临时文件
+    NSString *tempDir = NSTemporaryDirectory();
+    NSString *iconFileName = [NSString stringWithFormat:@"modpack_icon_%@.png",
+                              modpackInfo[@"id"] ?: modpackInfo[@"name"] ?: @"unknown"];
+    NSString *iconPath = [tempDir stringByAppendingPathComponent:iconFileName];
+    NSError *writeError = nil;
+    if ([imageData writeToFile:iconPath options:NSDataWritingAtomic error:&writeError]) {
+        // 返回文件 URL 字符串（AFNetworking 的 setImageWithURL: 支持文件 URL）
+        NSURL *fileURL = [NSURL fileURLWithPath:iconPath];
+        return fileURL.absoluteString;
+    }
+    return nil;
+}
 
 /// 将 NSDate 转为 ISO8601 字符串，确保 JSON 序列化安全
 - (NSString *)iso8601StringFromDate:(NSDate *)date {
@@ -468,7 +506,11 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
     NSUInteger total = files.count;
     NSUInteger successCount = 0;
     NSString *downloadSource = getPrefObject(@"general.download_source") ?: @"official";
-    NSString *iconURL = modpackInfo[@"iconBase64"];
+    // 修复整合包图标不显示：原实现将 modpackInfo[@"iconBase64"]（base64 编码的图片数据字符串）
+    // 直接赋给 iconURL 字段，传给 setImageWithURL: 时 NSURL URLWithString: 返回 nil（base64 不是合法 URL），
+    // 导致整合包下载任务的图标永远不显示。
+    // 正确做法：将 base64 数据解码为 UIImage，保存到临时文件，使用文件 URL。
+    NSString *iconURL = [self resolveIconURLFromModpackInfo:modpackInfo];
 
     if ([format isEqualToString:@"modrinth"]) {
         // Modrinth: 直接下载

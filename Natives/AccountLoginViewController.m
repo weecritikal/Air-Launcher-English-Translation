@@ -29,6 +29,8 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+    // 适配自定义启动器背景：将当前视图控制器透明化，使全局背景壁纸能够透出
+    [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
     self.title = @"添加账户";
     // 透明背景，让自定义启动器背景透出（applyBackgroundToView 会把背景加到 window/splitVC 底层）
     self.view.backgroundColor = [UIColor clearColor];
@@ -36,6 +38,21 @@
     [self setupUI];
     // 应用背景（遍历 responder chain 找到 splitVC/window，在最底层加背景）
     [[BackgroundManager sharedManager] applyBackgroundToView:self.view];
+
+    // 监听背景 UI 效果变化通知，当用户切换背景效果（半透明/毛玻璃）时重新应用透明化
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(reapplyBackgroundEffect)
+                                                 name:@"BackgroundUIEffectChanged"
+                                               object:nil];
+}
+
+/// 背景效果改变时重新应用透明化（由 BackgroundUIEffectChanged 通知触发）
+- (void)reapplyBackgroundEffect {
+    [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
+}
+
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
 - (void)viewDidLayoutSubviews {

@@ -4,6 +4,7 @@
 #import "VersionManagerViewController.h"
 #import "ProfileSettingsViewController.h"
 #import "PLProfiles.h"
+#import "BackgroundManager.h"
 #import "utils.h"
 
 @interface LauncherMenuViewController ()
@@ -23,6 +24,17 @@
     [super viewDidLoad];
 
     self.view.backgroundColor = [UIColor clearColor];
+
+    // 适配自定义启动器背景：将当前视图控制器透明化，让全局背景（图片/视频）能够透出显示。
+    // 即使本控制器在 LauncherRootViewController 中作为子 VC 添加，仍需在自身 viewDidLoad 中调用。
+    [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
+
+    // 监听背景 UI 效果变化通知：当用户在背景设置中切换毛玻璃/半透明或调整透明度时，
+    // 重新调用 makeViewControllerTransparent 以应用最新的视觉效果，保证背景始终正确透出。
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(reapplyBackgroundEffect)
+                                                 name:@"BackgroundUIEffectChanged"
+                                               object:nil];
 
     // 监听外观变更（字体颜色变化时刷新菜单按钮颜色）
     [[NSNotificationCenter defaultCenter] addObserver:self
@@ -177,6 +189,13 @@
 // 字体颜色变更时刷新所有菜单按钮
 - (void)applyCustomAppearance {
     [self updateButtonColors];
+}
+
+/// 重新应用背景效果：当 BackgroundUIEffectChanged 通知到达时调用，
+/// 通过 BackgroundManager 重新设置当前视图控制器的透明度/毛玻璃效果，
+/// 确保全局背景能够正常透出。
+- (void)reapplyBackgroundEffect {
+    [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
 }
 
 - (void)dealloc {

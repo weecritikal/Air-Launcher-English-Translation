@@ -3,19 +3,24 @@
 //  Amethyst
 //
 //  参照 FCL (FoldCraftLauncher) 的模组加载器选择界面重构。
+//  视觉风格与 VersionManagerViewController 的"原版安装列表"完全一致：
+//  使用 UICollectionView + CompositionalLayout + 卡片式 cell（毛玻璃 + 阴影 + 圆角）。
 //
 //  主要改进：
-//  1. 加载器列表用 UITableView(UITableViewStyleGrouped) Grouped 风格，行卡片式选择
-//     （与 FCL 的 InstallerItemGroup 行布局一致：图标 + 名称 + 状态 + 选择按钮）
+//  1. 加载器列表用 UICollectionView 卡片式布局（与 VersionManagerViewController
+//     的 VMTileBaseCell / VMVersionCardCell / VMSectionHeaderView 风格一致），
+//     全宽卡片 86pt 高度，左侧加载器图标 36pt + 中间名称/描述 + 右侧状态/选中徽章。
 //  2. 互斥逻辑与 FCL 完全一致：
 //     - forge/fabric/quilt/neoforge 互斥
 //     - optifine 与 fabric/quilt/neoforge 不兼容（与 forge 可共存）
 //     - fabricApi 依赖 fabric，与 forge/optifine/neoforge 互斥
 //  3. 版本列表 push 到独立的 ModLoaderVersionPickerViewController，
 //     解决原实现"加载器列表固定 320pt + optionsContainer 50pt + 安装按钮"
-//     在 iPhone 上挤压 versionTableView 到接近 0 高度的问题
-//  4. 底部安装按钮钉在 safeAreaLayoutGuide.bottomAnchor，iPhone 上不会被 Home Indicator 遮挡
-//  5. 顶部新增"版本名"输入框，自动生成 "游戏版本-加载器名"（参照 FCL VersionInstallInfoPage）
+//     在 iPhone 上挤压 versionTableView 到接近 0 高度的问题。
+//     子页面 cell 也改为卡片式（ModLoaderVersionCardCell）。
+//  4. 底部安装按钮钉在 safeAreaLayoutGuide.bottomAnchor，iPhone 上不会被 Home Indicator 遮挡。
+//  5. 顶部新增"版本名"输入框，自动生成 "游戏版本-加载器名"（参照 FCL VersionInstallInfoPage）。
+//  6. 文字颜色统一白色（BackgroundManager 使用 SystemMaterialDark 深色样式）。
 //
 
 #import "ModLoaderInstallViewController.h"
@@ -23,6 +28,8 @@
 #import "LauncherPreferences.h"
 #import "BackgroundManager.h"
 #import "ModLoaderIconHelper.h"
+#import "ScreenUtils.h"
+#import <QuartzCore/QuartzCore.h>
 
 #pragma mark - Data Models
 
@@ -31,7 +38,7 @@
 @property (nonatomic, copy) NSString *identifier;   // "vanilla"/"fabric"/"forge"/"neoforge"/"quilt"/"optifine"
 @property (nonatomic, copy) NSString *name;         // 显示名
 @property (nonatomic, copy) NSString *desc;         // 描述
-@property (nonatomic, copy) NSString *iconName;     // SF Symbol 名
+@property (nonatomic, copy) NSString *iconName;     // SF Symbol 名（PNG 缺失时回退用）
 @property (nonatomic, strong) UIColor *iconColor;   // 图标主色
 @property (nonatomic, assign) BOOL compatible;      // 与当前游戏版本是否兼容
 @property (nonatomic, copy, nullable) NSString *selectedVersion; // 选中版本（nil 表示未选）
@@ -39,191 +46,421 @@
 @implementation ModLoaderRow
 @end
 
-#pragma mark - Loader Cell (行卡片式)
+#pragma mark - Card Base Cell (参照 VMTileBaseCell)
 
-@interface ModLoaderLoaderCell : UITableViewCell
-@property (nonatomic, strong) UIImageView *iconView;
-@property (nonatomic, strong) UILabel *nameLabel;
-@property (nonatomic, strong) UILabel *descLabel;
-@property (nonatomic, strong) UILabel *statusLabel;   // 右侧状态：选中版本/不兼容/未选择
-@property (nonatomic, strong) UIImageView *chevronView;
-@property (nonatomic, strong) UIView *separator;
+@interface ModLoaderCardBaseCell : UICollectionViewCell
+@property (nonatomic, strong) UIView *contentContainer;
+- (void)setupViews;
 @end
 
-@implementation ModLoaderLoaderCell
+@implementation ModLoaderCardBaseCell
 
-- (instancetype)initWithStyle:(UITableViewCellStyle)style reuseIdentifier:(NSString *)reuseIdentifier {
-    self = [super initWithStyle:style reuseIdentifier:reuseIdentifier];
+- (instancetype)initWithFrame:(CGRect)frame {
+    self = [super initWithFrame:frame];
     if (self) {
-        self.backgroundColor = [UIColor secondarySystemGroupedBackgroundColor];
-        self.selectionStyle = UITableViewCellSelectionStyleNone;
-
-        _iconView = [[UIImageView alloc] init];
-        _iconView.translatesAutoresizingMaskIntoConstraints = NO;
-        _iconView.layer.cornerRadius = 10;
-        _iconView.clipsToBounds = YES;
-        _iconView.contentMode = UIViewContentModeScaleAspectFit;
-        [self.contentView addSubview:_iconView];
-
-        _nameLabel = [[UILabel alloc] init];
-        _nameLabel.translatesAutoresizingMaskIntoConstraints = NO;
-        _nameLabel.font = [UIFont systemFontOfSize:17 weight:UIFontWeightSemibold];
-        _nameLabel.textColor = [UIColor labelColor];
-        [self.contentView addSubview:_nameLabel];
-
-        _descLabel = [[UILabel alloc] init];
-        _descLabel.translatesAutoresizingMaskIntoConstraints = NO;
-        _descLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleCaption1];
-        _descLabel.textColor = [UIColor secondaryLabelColor];
-        _descLabel.numberOfLines = 2;
-        [self.contentView addSubview:_descLabel];
-
-        _statusLabel = [[UILabel alloc] init];
-        _statusLabel.translatesAutoresizingMaskIntoConstraints = NO;
-        _statusLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightRegular];
-        _statusLabel.textColor = [UIColor secondaryLabelColor];
-        _statusLabel.textAlignment = NSTextAlignmentRight;
-        _statusLabel.lineBreakMode = NSLineBreakByTruncatingTail;
-        [self.contentView addSubview:_statusLabel];
-
-        _chevronView = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"chevron.right"]];
-        _chevronView.translatesAutoresizingMaskIntoConstraints = NO;
-        _chevronView.tintColor = [UIColor tertiaryLabelColor];
-        _chevronView.contentMode = UIViewContentModeScaleAspectFit;
-        [self.contentView addSubview:_chevronView];
-
-        _separator = [[UIView alloc] init];
-        _separator.translatesAutoresizingMaskIntoConstraints = NO;
-        _separator.backgroundColor = [UIColor separatorColor];
-        [self.contentView addSubview:_separator];
-
-        [NSLayoutConstraint activateConstraints:@[
-            [_iconView.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:16],
-            [_iconView.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor],
-            [_iconView.widthAnchor constraintEqualToConstant:40],
-            [_iconView.heightAnchor constraintEqualToConstant:40],
-
-            [_nameLabel.leadingAnchor constraintEqualToAnchor:_iconView.trailingAnchor constant:12],
-            [_nameLabel.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:12],
-            [_nameLabel.trailingAnchor constraintLessThanOrEqualToAnchor:_statusLabel.leadingAnchor constant:-8],
-
-            [_descLabel.leadingAnchor constraintEqualToAnchor:_nameLabel.leadingAnchor],
-            [_descLabel.topAnchor constraintEqualToAnchor:_nameLabel.bottomAnchor constant:3],
-            [_descLabel.trailingAnchor constraintLessThanOrEqualToAnchor:_statusLabel.leadingAnchor constant:-8],
-            [_descLabel.bottomAnchor constraintLessThanOrEqualToAnchor:self.contentView.bottomAnchor constant:-12],
-
-            [_statusLabel.trailingAnchor constraintEqualToAnchor:_chevronView.leadingAnchor constant:-4],
-            [_statusLabel.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor],
-            [_statusLabel.widthAnchor constraintLessThanOrEqualToConstant:140],
-
-            [_chevronView.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-16],
-            [_chevronView.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor],
-            [_chevronView.widthAnchor constraintEqualToConstant:14],
-            [_chevronView.heightAnchor constraintEqualToConstant:14],
-
-            [_separator.leadingAnchor constraintEqualToAnchor:_nameLabel.leadingAnchor],
-            [_separator.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor],
-            [_separator.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor],
-            [_separator.heightAnchor constraintEqualToConstant:0.5],
-        ]];
+        [self setupViews];
     }
     return self;
 }
 
+- (void)setupViews {
+    // 阴影：cell 层级，masksToBounds = NO 才能让阴影外溢
+    self.layer.shadowColor = [UIColor blackColor].CGColor;
+    self.layer.shadowOffset = CGSizeMake(0, 4);
+    self.layer.shadowOpacity = 0.15;
+    self.layer.shadowRadius = 8;
+    self.layer.masksToBounds = NO;
+
+    // contentContainer：圆角 + 裁切，承载毛玻璃和子视图
+    self.contentContainer = [[UIView alloc] initWithFrame:self.contentView.bounds];
+    self.contentContainer.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    self.contentContainer.layer.cornerRadius = 12;
+    self.contentContainer.layer.masksToBounds = YES;
+    [self.contentView addSubview:self.contentContainer];
+
+    // BackgroundManager 的 applyEffectToCollectionViewCell: 会在 cell 上叠加毛玻璃
+    [[BackgroundManager sharedManager] applyEffectToCollectionViewCell:self];
+}
+
+- (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
+    [super touchesBegan:touches withEvent:event];
+    [UIView animateWithDuration:0.3 delay:0 usingSpringWithDamping:0.6 initialSpringVelocity:0.8 options:UIViewAnimationOptionAllowUserInteraction animations:^{
+        self.transform = CGAffineTransformMakeScale(0.95, 0.95);
+    } completion:nil];
+}
+
+- (void)touchesEnded:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
+    [super touchesEnded:touches withEvent:event];
+    [UIView animateWithDuration:0.3 delay:0 usingSpringWithDamping:0.6 initialSpringVelocity:0.8 options:UIViewAnimationOptionAllowUserInteraction animations:^{
+        self.transform = CGAffineTransformIdentity;
+    } completion:nil];
+}
+
+- (void)touchesCancelled:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
+    [super touchesCancelled:touches withEvent:event];
+    [UIView animateWithDuration:0.3 delay:0 usingSpringWithDamping:0.6 initialSpringVelocity:0.8 options:UIViewAnimationOptionAllowUserInteraction animations:^{
+        self.transform = CGAffineTransformIdentity;
+    } completion:nil];
+}
+
+@end
+
+#pragma mark - Loader Card Cell (参照 VMVersionCardCell)
+
+@interface ModLoaderCardCell : ModLoaderCardBaseCell
+@property (nonatomic, strong) UIImageView *iconView;
+@property (nonatomic, strong) UILabel *nameLabel;
+@property (nonatomic, strong) UILabel *descLabel;
+@property (nonatomic, strong) UILabel *statusLabel;       // 右侧状态：选中版本/不兼容/未选择
+@property (nonatomic, strong) UIView *selectedBadge;      // 选中时显示的绿色圆圈 + 勾选
+@property (nonatomic, strong) UIImageView *chevronView;   // 不兼容时隐藏，提示可点击
+@end
+
+@implementation ModLoaderCardCell
+
+- (void)setupViews {
+    [super setupViews];
+
+    CGFloat iconSize = [ScreenUtils dp:36];
+    CGFloat nameFont = [ScreenUtils sp:16];
+    CGFloat descFont = [ScreenUtils sp:12];
+    CGFloat statusFont = [ScreenUtils sp:13];
+
+    self.iconView = [[UIImageView alloc] init];
+    self.iconView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.iconView.contentMode = UIViewContentModeScaleAspectFit;
+    self.iconView.image = [UIImage systemImageNamed:@"cube.box.fill"];
+    self.iconView.tintColor = [UIColor systemBlueColor];
+    [self.contentContainer addSubview:self.iconView];
+
+    self.nameLabel = [[UILabel alloc] init];
+    self.nameLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.nameLabel.font = [UIFont systemFontOfSize:nameFont weight:UIFontWeightSemibold];
+    // BackgroundManager 的毛玻璃使用 SystemMaterialDark 深色样式，文字必须用白色
+    self.nameLabel.textColor = [UIColor whiteColor];
+    self.nameLabel.numberOfLines = 1;
+    self.nameLabel.adjustsFontForContentSizeCategory = NO;
+    [self.contentContainer addSubview:self.nameLabel];
+
+    self.descLabel = [[UILabel alloc] init];
+    self.descLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.descLabel.font = [UIFont systemFontOfSize:descFont weight:UIFontWeightRegular];
+    self.descLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.65];
+    self.descLabel.numberOfLines = 2;
+    self.descLabel.adjustsFontForContentSizeCategory = NO;
+    [self.contentContainer addSubview:self.descLabel];
+
+    self.statusLabel = [[UILabel alloc] init];
+    self.statusLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.statusLabel.font = [UIFont systemFontOfSize:statusFont weight:UIFontWeightRegular];
+    self.statusLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.65];
+    self.statusLabel.textAlignment = NSTextAlignmentRight;
+    self.statusLabel.lineBreakMode = NSLineBreakByTruncatingTail;
+    self.statusLabel.adjustsFontForContentSizeCategory = NO;
+    [self.contentContainer addSubview:self.statusLabel];
+
+    self.chevronView = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"chevron.right"]];
+    self.chevronView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.chevronView.tintColor = [[UIColor whiteColor] colorWithAlphaComponent:0.45];
+    self.chevronView.contentMode = UIViewContentModeScaleAspectFit;
+    [self.contentContainer addSubview:self.chevronView];
+
+    self.selectedBadge = [[UIView alloc] init];
+    self.selectedBadge.translatesAutoresizingMaskIntoConstraints = NO;
+    self.selectedBadge.backgroundColor = [UIColor systemGreenColor];
+    self.selectedBadge.layer.cornerRadius = 12;
+    self.selectedBadge.hidden = YES;
+    [self.contentContainer addSubview:self.selectedBadge];
+
+    UIImageView *checkmark = [[UIImageView alloc] init];
+    checkmark.translatesAutoresizingMaskIntoConstraints = NO;
+    checkmark.image = [UIImage systemImageNamed:@"checkmark" withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:10 weight:UIFontWeightBold]];
+    checkmark.tintColor = [UIColor whiteColor];
+    [self.selectedBadge addSubview:checkmark];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.iconView.leadingAnchor constraintEqualToAnchor:self.contentContainer.leadingAnchor constant:16],
+        [self.iconView.centerYAnchor constraintEqualToAnchor:self.contentContainer.centerYAnchor],
+        [self.iconView.widthAnchor constraintEqualToConstant:iconSize],
+        [self.iconView.heightAnchor constraintEqualToConstant:iconSize],
+
+        [self.nameLabel.leadingAnchor constraintEqualToAnchor:self.iconView.trailingAnchor constant:12],
+        [self.nameLabel.topAnchor constraintEqualToAnchor:self.contentContainer.topAnchor constant:14],
+        [self.nameLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.statusLabel.leadingAnchor constant:-8],
+
+        [self.descLabel.leadingAnchor constraintEqualToAnchor:self.nameLabel.leadingAnchor],
+        [self.descLabel.topAnchor constraintEqualToAnchor:self.nameLabel.bottomAnchor constant:4],
+        [self.descLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.statusLabel.leadingAnchor constant:-8],
+        [self.descLabel.bottomAnchor constraintLessThanOrEqualToAnchor:self.contentContainer.bottomAnchor constant:-12],
+
+        [self.statusLabel.trailingAnchor constraintEqualToAnchor:self.chevronView.leadingAnchor constant:-4],
+        [self.statusLabel.centerYAnchor constraintEqualToAnchor:self.contentContainer.centerYAnchor],
+        [self.statusLabel.widthAnchor constraintLessThanOrEqualToConstant:140],
+
+        [self.chevronView.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-16],
+        [self.chevronView.centerYAnchor constraintEqualToAnchor:self.contentContainer.centerYAnchor],
+        [self.chevronView.widthAnchor constraintEqualToConstant:14],
+        [self.chevronView.heightAnchor constraintEqualToConstant:14],
+
+        [self.selectedBadge.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-16],
+        [self.selectedBadge.centerYAnchor constraintEqualToAnchor:self.nameLabel.centerYAnchor],
+        [self.selectedBadge.widthAnchor constraintEqualToConstant:24],
+        [self.selectedBadge.heightAnchor constraintEqualToConstant:24],
+        [checkmark.centerXAnchor constraintEqualToAnchor:self.selectedBadge.centerXAnchor],
+        [checkmark.centerYAnchor constraintEqualToAnchor:self.selectedBadge.centerYAnchor],
+    ]];
+}
+
 - (void)setIncompatible:(BOOL)incompatible reason:(NSString *)reason {
     if (incompatible) {
-        _statusLabel.hidden = NO;
-        _statusLabel.text = reason ?: @"不兼容";
-        _statusLabel.textColor = [UIColor systemRedColor];
-        _nameLabel.textColor = [UIColor tertiaryLabelColor];
-        _descLabel.textColor = [UIColor quaternaryLabelColor];
-        _iconView.alpha = 0.5;
-        _chevronView.hidden = YES;
-        self.userInteractionEnabled = NO;
+        self.statusLabel.hidden = NO;
+        self.statusLabel.text = reason ?: @"不兼容";
+        self.statusLabel.textColor = [UIColor systemRedColor];
+        self.nameLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.45];
+        self.descLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.35];
+        self.iconView.alpha = 0.5;
+        self.chevronView.hidden = YES;
+        self.selectedBadge.hidden = YES;
+        self.contentView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.06].CGColor;
+        self.contentView.layer.borderWidth = 0.5;
+        self.contentView.userInteractionEnabled = NO;
     } else {
-        _nameLabel.textColor = [UIColor labelColor];
-        _descLabel.textColor = [UIColor secondaryLabelColor];
-        _iconView.alpha = 1.0;
-        _chevronView.hidden = NO;
-        self.userInteractionEnabled = YES;
+        self.nameLabel.textColor = [UIColor whiteColor];
+        self.descLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.65];
+        self.iconView.alpha = 1.0;
+        self.chevronView.hidden = NO;
+        self.contentView.userInteractionEnabled = YES;
     }
 }
 
 - (void)setSelectedVersionText:(NSString *)text {
     if (text.length > 0) {
-        _statusLabel.hidden = NO;
-        _statusLabel.text = text;
-        _statusLabel.textColor = [UIColor systemGreenColor];
+        self.statusLabel.hidden = NO;
+        self.statusLabel.text = text;
+        self.statusLabel.textColor = [UIColor systemGreenColor];
     } else {
-        _statusLabel.hidden = NO;
-        _statusLabel.text = @"选择版本";
-        _statusLabel.textColor = [UIColor secondaryLabelColor];
+        self.statusLabel.hidden = NO;
+        self.statusLabel.text = @"选择版本";
+        self.statusLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.65];
     }
 }
 
 /// 清空右侧状态文字（未选中加载器时使用）
 - (void)clearStatusText {
-    _statusLabel.hidden = YES;
-    _statusLabel.text = nil;
+    self.statusLabel.hidden = YES;
+    self.statusLabel.text = nil;
+}
+
+- (void)configureWithRow:(ModLoaderRow *)row
+            isSelected:(BOOL)isSelected
+      selectedVersionDisplay:(NSString *)versionDisplay
+                incompatible:(BOOL)incompatible
+                     reason:(NSString *)reason {
+    self.nameLabel.text = row.name;
+    self.descLabel.text = row.desc;
+
+    // 通过 ModLoaderIconHelper 统一配置加载器图标（优先 PNG，回退 SF Symbol + 品牌色）
+    [ModLoaderIconHelper configureImageView:self.iconView
+                                  forLoader:row.identifier
+                             traitCollection:self.traitCollection];
+
+    if (incompatible) {
+        [self setIncompatible:YES reason:reason];
+        return;
+    }
+
+    [self setIncompatible:NO reason:nil];
+
+    if (isSelected) {
+        if (versionDisplay.length > 0) {
+            [self setSelectedVersionText:versionDisplay];
+        } else if ([row.identifier isEqualToString:@"vanilla"]) {
+            [self setSelectedVersionText:@"已选择"];
+        } else {
+            [self setSelectedVersionText:nil];
+        }
+        self.selectedBadge.hidden = NO;
+        self.contentView.layer.borderColor = [UIColor systemGreenColor].CGColor;
+        self.contentView.layer.borderWidth = 1.5;
+    } else {
+        [self clearStatusText];
+        self.selectedBadge.hidden = YES;
+        self.contentView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.12].CGColor;
+        self.contentView.layer.borderWidth = 0.5;
+    }
 }
 
 @end
 
-#pragma mark - Switch Cell (Fabric API / OptiFine 选项)
+#pragma mark - Switch Card Cell (Fabric API / OptiFine 选项卡片)
 
-@interface ModLoaderSwitchCell : UITableViewCell
+@interface ModLoaderSwitchCardCell : ModLoaderCardBaseCell
 @property (nonatomic, strong) UILabel *titleLabel;
 @property (nonatomic, strong) UILabel *descLabel;
 @property (nonatomic, strong) UISwitch *switchControl;
 @end
 
-@implementation ModLoaderSwitchCell
+@implementation ModLoaderSwitchCardCell
 
-- (instancetype)initWithStyle:(UITableViewCellStyle)style reuseIdentifier:(NSString *)reuseIdentifier {
-    self = [super initWithStyle:style reuseIdentifier:reuseIdentifier];
+- (void)setupViews {
+    [super setupViews];
+
+    CGFloat titleFont = [ScreenUtils sp:16];
+    CGFloat descFont = [ScreenUtils sp:12];
+
+    self.titleLabel = [[UILabel alloc] init];
+    self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.titleLabel.font = [UIFont systemFontOfSize:titleFont weight:UIFontWeightSemibold];
+    // 毛玻璃使用深色样式，文字必须用白色
+    self.titleLabel.textColor = [UIColor whiteColor];
+    self.titleLabel.adjustsFontForContentSizeCategory = NO;
+    [self.contentContainer addSubview:self.titleLabel];
+
+    self.descLabel = [[UILabel alloc] init];
+    self.descLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.descLabel.font = [UIFont systemFontOfSize:descFont weight:UIFontWeightRegular];
+    self.descLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.65];
+    self.descLabel.numberOfLines = 0;
+    self.descLabel.lineBreakMode = NSLineBreakByWordWrapping;
+    self.descLabel.adjustsFontForContentSizeCategory = NO;
+    [self.contentContainer addSubview:self.descLabel];
+
+    self.switchControl = [[UISwitch alloc] init];
+    self.switchControl.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.contentContainer addSubview:self.switchControl];
+
+    // 默认边框：与版本卡片保持一致的弱边框
+    self.contentView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.12].CGColor;
+    self.contentView.layer.borderWidth = 0.5;
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.contentContainer.leadingAnchor constant:16],
+        [self.titleLabel.topAnchor constraintEqualToAnchor:self.contentContainer.topAnchor constant:14],
+        [self.titleLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.switchControl.leadingAnchor constant:-12],
+
+        [self.descLabel.leadingAnchor constraintEqualToAnchor:self.titleLabel.leadingAnchor],
+        [self.descLabel.topAnchor constraintEqualToAnchor:self.titleLabel.bottomAnchor constant:4],
+        [self.descLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.switchControl.leadingAnchor constant:-12],
+        [self.descLabel.bottomAnchor constraintLessThanOrEqualToAnchor:self.contentContainer.bottomAnchor constant:-12],
+
+        [self.switchControl.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-16],
+        [self.switchControl.centerYAnchor constraintEqualToAnchor:self.contentContainer.centerYAnchor],
+    ]];
+}
+
+@end
+
+#pragma mark - Section Header View (参照 VMSectionHeaderView)
+
+@interface ModLoaderSectionHeaderView : UICollectionReusableView
+@property (nonatomic, strong) UILabel *titleLabel;
+@end
+
+@implementation ModLoaderSectionHeaderView
+
+- (instancetype)initWithFrame:(CGRect)frame {
+    self = [super initWithFrame:frame];
     if (self) {
-        self.backgroundColor = [UIColor secondarySystemGroupedBackgroundColor];
-        self.selectionStyle = UITableViewCellSelectionStyleNone;
+        // Section header 需要深色背景托底，避免在透明 collectionView 上文字透到父背景。
+        // 与 BackgroundManager 的深色风格保持一致。
+        UIBlurEffect *blurEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterialDark];
+        UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:blurEffect];
+        blurView.translatesAutoresizingMaskIntoConstraints = NO;
+        [self addSubview:blurView];
 
-        _titleLabel = [[UILabel alloc] init];
-        _titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-        _titleLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightMedium];
-        _titleLabel.textColor = [UIColor labelColor];
-        [self.contentView addSubview:_titleLabel];
-
-        _descLabel = [[UILabel alloc] init];
-        _descLabel.translatesAutoresizingMaskIntoConstraints = NO;
-        _descLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleCaption1];
-        _descLabel.textColor = [UIColor secondaryLabelColor];
-        _descLabel.numberOfLines = 0;
-        [self.contentView addSubview:_descLabel];
-
-        _switchControl = [[UISwitch alloc] init];
-        _switchControl.translatesAutoresizingMaskIntoConstraints = NO;
-        [self.contentView addSubview:_switchControl];
+        self.titleLabel = [[UILabel alloc] init];
+        self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+        self.titleLabel.font = [UIFont systemFontOfSize:[ScreenUtils sp:18] weight:UIFontWeightBold];
+        self.titleLabel.textColor = [UIColor whiteColor];
+        self.titleLabel.adjustsFontForContentSizeCategory = NO;
+        [self addSubview:self.titleLabel];
 
         [NSLayoutConstraint activateConstraints:@[
-            [_titleLabel.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:16],
-            [_titleLabel.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:10],
-            [_titleLabel.trailingAnchor constraintLessThanOrEqualToAnchor:_switchControl.leadingAnchor constant:-12],
-
-            [_descLabel.leadingAnchor constraintEqualToAnchor:_titleLabel.leadingAnchor],
-            [_descLabel.topAnchor constraintEqualToAnchor:_titleLabel.bottomAnchor constant:2],
-            [_descLabel.trailingAnchor constraintLessThanOrEqualToAnchor:_switchControl.leadingAnchor constant:-12],
-            [_descLabel.bottomAnchor constraintLessThanOrEqualToAnchor:self.contentView.bottomAnchor constant:-10],
-
-            [_switchControl.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-16],
-            [_switchControl.centerYAnchor constraintEqualToAnchor:self.contentView.centerYAnchor],
+            [blurView.topAnchor constraintEqualToAnchor:self.topAnchor],
+            [blurView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
+            [blurView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
+            [blurView.bottomAnchor constraintEqualToAnchor:self.bottomAnchor],
+            [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:20],
+            [self.titleLabel.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-20],
+            [self.titleLabel.centerYAnchor constraintEqualToAnchor:self.centerYAnchor]
         ]];
     }
     return self;
+}
+
+@end
+
+#pragma mark - Version Picker Card Cell (版本选择子页面的卡片)
+
+@interface ModLoaderVersionCardCell : ModLoaderCardBaseCell
+@property (nonatomic, strong) UILabel *versionLabel;
+@property (nonatomic, strong) UIView *selectedBadge;
+@end
+
+@implementation ModLoaderVersionCardCell
+
+- (void)setupViews {
+    [super setupViews];
+
+    CGFloat versionFont = [ScreenUtils sp:15];
+
+    self.versionLabel = [[UILabel alloc] init];
+    self.versionLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.versionLabel.font = [UIFont systemFontOfSize:versionFont weight:UIFontWeightMedium];
+    // 毛玻璃深色样式：文字必须用白色
+    self.versionLabel.textColor = [UIColor whiteColor];
+    self.versionLabel.numberOfLines = 1;
+    self.versionLabel.adjustsFontForContentSizeCategory = NO;
+    [self.contentContainer addSubview:self.versionLabel];
+
+    self.selectedBadge = [[UIView alloc] init];
+    self.selectedBadge.translatesAutoresizingMaskIntoConstraints = NO;
+    self.selectedBadge.backgroundColor = [UIColor systemGreenColor];
+    self.selectedBadge.layer.cornerRadius = 12;
+    self.selectedBadge.hidden = YES;
+    [self.contentContainer addSubview:self.selectedBadge];
+
+    UIImageView *checkmark = [[UIImageView alloc] init];
+    checkmark.translatesAutoresizingMaskIntoConstraints = NO;
+    checkmark.image = [UIImage systemImageNamed:@"checkmark" withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:10 weight:UIFontWeightBold]];
+    checkmark.tintColor = [UIColor whiteColor];
+    [self.selectedBadge addSubview:checkmark];
+
+    // 默认弱边框
+    self.contentView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.12].CGColor;
+    self.contentView.layer.borderWidth = 0.5;
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.versionLabel.leadingAnchor constraintEqualToAnchor:self.contentContainer.leadingAnchor constant:16],
+        [self.versionLabel.centerYAnchor constraintEqualToAnchor:self.contentContainer.centerYAnchor],
+        [self.versionLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.selectedBadge.leadingAnchor constant:-8],
+
+        [self.selectedBadge.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-16],
+        [self.selectedBadge.centerYAnchor constraintEqualToAnchor:self.contentContainer.centerYAnchor],
+        [self.selectedBadge.widthAnchor constraintEqualToConstant:24],
+        [self.selectedBadge.heightAnchor constraintEqualToConstant:24],
+        [checkmark.centerXAnchor constraintEqualToAnchor:self.selectedBadge.centerXAnchor],
+        [checkmark.centerYAnchor constraintEqualToAnchor:self.selectedBadge.centerYAnchor],
+    ]];
+}
+
+- (void)configureWithDisplay:(NSString *)display isSelected:(BOOL)isSelected {
+    self.versionLabel.text = display;
+    self.selectedBadge.hidden = !isSelected;
+    if (isSelected) {
+        self.contentView.layer.borderColor = [UIColor systemGreenColor].CGColor;
+        self.contentView.layer.borderWidth = 1.5;
+    } else {
+        self.contentView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.12].CGColor;
+        self.contentView.layer.borderWidth = 0.5;
+    }
 }
 
 @end
 
 #pragma mark - Version Picker View Controller (版本选择子页面)
 
-@interface ModLoaderVersionPickerViewController : UIViewController <UITableViewDataSource, UITableViewDelegate, NSXMLParserDelegate>
+@interface ModLoaderVersionPickerViewController : UIViewController <UICollectionViewDataSource, UICollectionViewDelegate, NSXMLParserDelegate>
 @property (nonatomic, copy) NSString *loaderId;
 @property (nonatomic, copy) NSString *gameVersion;
 @property (nonatomic, copy) NSString *selectedVersion;
@@ -232,7 +469,7 @@
 @end
 
 @interface ModLoaderVersionPickerViewController ()
-@property (nonatomic, strong) UITableView *tableView;
+@property (nonatomic, strong) UICollectionView *collectionView;
 @property (nonatomic, strong) UIActivityIndicatorView *loadingIndicator;
 @property (nonatomic, strong) UILabel *emptyLabel;
 @property (nonatomic, strong) UILabel *errorLabel;
@@ -257,8 +494,12 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.title = [self pickerTitle];
-    // 适配自定义启动器背景（参照 ForgeInstallViewController）
+    self.view.backgroundColor = [UIColor clearColor];
+    // 适配自定义启动器背景（参照 ForgeInstallViewController / VersionManagerViewController）
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
+    if (self.navigationController) {
+        [[BackgroundManager sharedManager] applyEffectToNavigationBar:self.navigationController.navigationBar];
+    }
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(refreshBackgroundEffect)
                                                  name:@"BackgroundUIEffectChanged"
@@ -268,15 +509,15 @@
                                                                               style:UIBarButtonItemStylePlain
                                                                              target:self
                                                                              action:@selector(backTapped)];
-    self.navigationItem.leftBarButtonItem.tintColor = [UIColor labelColor];
+    self.navigationItem.leftBarButtonItem.tintColor = [UIColor whiteColor];
 
-    [self setupTableView];
+    [self setupCollectionView];
     [self startLoading];
 }
 
 - (void)refreshBackgroundEffect {
     // 背景效果切换时刷新 cell 毛玻璃外观
-    [_tableView reloadData];
+    [_collectionView reloadData];
 }
 
 - (NSString *)pickerTitle {
@@ -288,17 +529,26 @@
     return @"选择版本";
 }
 
-- (void)setupTableView {
-    _tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
-    _tableView.translatesAutoresizingMaskIntoConstraints = NO;
-    _tableView.dataSource = self;
-    _tableView.delegate = self;
-    _tableView.rowHeight = 50;
-    // 适配自定义启动器背景：透明背景让底层毛玻璃/壁纸透出
-    _tableView.backgroundColor = [UIColor clearColor];
-    _tableView.separatorColor = [UIColor separatorColor];
-    [_tableView registerClass:[UITableViewCell class] forCellReuseIdentifier:@"VersionCell"];
-    [self.view addSubview:_tableView];
+- (void)setupCollectionView {
+    UICollectionViewLayout *layout = [self createLayout];
+    _collectionView = [[UICollectionView alloc] initWithFrame:self.view.bounds collectionViewLayout:layout];
+    _collectionView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    _collectionView.backgroundColor = [UIColor clearColor];
+    _collectionView.dataSource = self;
+    _collectionView.delegate = self;
+    _collectionView.alwaysBounceVertical = YES;
+    // 与 VersionManagerViewController 一致：避免系统叠加 safeArea.top，
+    // 手动用 contentInset.top = nav bar 高度让首行从 nav bar 下方开始绘制
+    _collectionView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
+    CGFloat navBarHeight = 44.0;
+    if (self.navigationController && self.navigationController.navigationBar.bounds.size.height > 0) {
+        navBarHeight = self.navigationController.navigationBar.bounds.size.height;
+    }
+    _collectionView.contentInset = UIEdgeInsetsMake(navBarHeight, 0, 0, 0);
+    _collectionView.scrollIndicatorInsets = UIEdgeInsetsMake(navBarHeight, 0, 0, 0);
+
+    [_collectionView registerClass:[ModLoaderVersionCardCell class] forCellWithReuseIdentifier:@"VersionCardCell"];
+    [self.view addSubview:_collectionView];
 
     _loadingIndicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
     _loadingIndicator.translatesAutoresizingMaskIntoConstraints = NO;
@@ -309,7 +559,7 @@
     _emptyLabel.translatesAutoresizingMaskIntoConstraints = NO;
     _emptyLabel.text = @"暂无可用版本";
     _emptyLabel.textAlignment = NSTextAlignmentCenter;
-    _emptyLabel.textColor = [UIColor secondaryLabelColor];
+    _emptyLabel.textColor = [UIColor whiteColor];
     _emptyLabel.font = [UIFont systemFontOfSize:15];
     _emptyLabel.hidden = YES;
     [self.view addSubview:_emptyLabel];
@@ -324,13 +574,7 @@
     _errorLabel.hidden = YES;
     [self.view addSubview:_errorLabel];
 
-    UILayoutGuide *safe = self.view.safeAreaLayoutGuide;
     [NSLayoutConstraint activateConstraints:@[
-        [_tableView.topAnchor constraintEqualToAnchor:safe.topAnchor],
-        [_tableView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
-        [_tableView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [_tableView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
-
         [_loadingIndicator.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
         [_loadingIndicator.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor],
 
@@ -344,6 +588,24 @@
     ]];
 }
 
+- (UICollectionViewLayout *)createLayout {
+    return [[UICollectionViewCompositionalLayout alloc] initWithSectionProvider:^NSCollectionLayoutSection * _Nullable(NSInteger sectionIndex, id<NSCollectionLayoutEnvironment> _Nonnull layoutEnvironment) {
+        // 全宽卡片，高度 60pt（版本行内容较少，比加载器卡片矮）
+        NSCollectionLayoutSize *itemSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0]
+                                                                               heightDimension:[NSCollectionLayoutDimension absoluteDimension:60]];
+        NSCollectionLayoutItem *item = [NSCollectionLayoutItem itemWithLayoutSize:itemSize];
+        item.contentInsets = NSDirectionalEdgeInsetsMake(4, 14, 4, 14);
+
+        NSCollectionLayoutSize *groupSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0]
+                                                                                  heightDimension:[NSCollectionLayoutDimension absoluteDimension:60]];
+        NSCollectionLayoutGroup *group = [NSCollectionLayoutGroup horizontalGroupWithLayoutSize:groupSize subitems:@[item]];
+
+        NSCollectionLayoutSection *section = [NSCollectionLayoutSection sectionWithGroup:group];
+        section.contentInsets = NSDirectionalEdgeInsetsMake(8, 0, 20, 0);
+        return section;
+    }];
+}
+
 - (void)backTapped {
     if (_onCancelled) _onCancelled();
     if (self.navigationController.viewControllers.count > 1) {
@@ -355,7 +617,7 @@
 
 - (void)startLoading {
     _versions = nil;
-    [_tableView reloadData];
+    [_collectionView reloadData];
     _emptyLabel.hidden = YES;
     _errorLabel.hidden = YES;
     [_loadingIndicator startAnimating];
@@ -418,7 +680,7 @@
 #pragma mark Forge (并发竞速，参照原 loadForgeVersionsReal)
 
 - (void)loadForgeVersions {
-    // 参照 FCL/HMCL：并发竞速同时发起官方源和 BMCLAPI 请求，谁先成功用谁
+    // 参照 FCL/HMCL：并发竞速同时发起官方源和 BMCL API 请求，谁先成功用谁
     NSString *bmclURL = @"https://bmclapi2.bangbang93.com/maven/net/minecraftforge/forge/maven-metadata.xml";
     NSString *officialURL = @"https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml";
 
@@ -553,14 +815,14 @@
         _errorLabel.hidden = YES;
         _emptyLabel.hidden = (_versions.count > 0);
     }
-    [_tableView reloadData];
+    [_collectionView reloadData];
 
     // 若当前已选中版本，滚动到选中行
     if (_selectedVersion.length > 0 && _versions.count > 0) {
         NSUInteger idx = [_versions indexOfObject:_selectedVersion];
         if (idx != NSNotFound) {
-            [_tableView scrollToRowAtIndexPath:[NSIndexPath indexPathForRow:idx inSection:0]
-                              atScrollPosition:UITableViewScrollPositionMiddle animated:NO];
+            [self.collectionView scrollToItemAtIndexPath:[NSIndexPath indexPathForItem:idx inSection:0]
+                                        atScrollPosition:UICollectionViewScrollPositionCenteredVertically animated:NO];
         }
     }
 }
@@ -609,14 +871,14 @@
     });
 }
 
-#pragma mark TableView
+#pragma mark CollectionView
 
-- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
+- (NSInteger)collectionView:(UICollectionView *)collectionView numberOfItemsInSection:(NSInteger)section {
     return _versions.count;
 }
 
-- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"VersionCell" forIndexPath:indexPath];
+- (UICollectionViewCell *)collectionView:(UICollectionView *)collectionView cellForItemAtIndexPath:(NSIndexPath *)indexPath {
+    ModLoaderVersionCardCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"VersionCardCell" forIndexPath:indexPath];
     NSString *raw = _versions[indexPath.row];
 
     // 处理 OptiFine packed 格式（type\x1fpatch\x1ffilename\x1fdisplay）
@@ -626,24 +888,16 @@
         if (parts.count >= 4) display = parts[3];
     }
 
-    cell.textLabel.text = display;
-    cell.textLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightMedium];
-    cell.textLabel.textColor = [UIColor labelColor];
-    cell.backgroundColor = [UIColor clearColor];
-    cell.accessoryType = [_selectedVersion isEqualToString:raw] ? UITableViewCellAccessoryCheckmark : UITableViewCellAccessoryNone;
-    cell.tintColor = [UIColor systemGreenColor];
-    // 适配自定义启动器背景：有全局背景时给 cell 套毛玻璃/半透明效果
-    if ([[BackgroundManager sharedManager] hasBackground]) {
-        [[BackgroundManager sharedManager] applyEffectToCell:cell];
-    }
+    BOOL isSelected = [_selectedVersion isEqualToString:raw];
+    [cell configureWithDisplay:display isSelected:isSelected];
     return cell;
 }
 
-- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
-    [tableView deselectRowAtIndexPath:indexPath animated:YES];
-    NSString *raw = _versions[indexPath.row];
+- (void)collectionView:(UICollectionView *)collectionView didSelectItemAtIndexPath:(NSIndexPath *)indexPath {
+    [collectionView deselectItemAtIndexPath:indexPath animated:YES];
+    NSString *raw = _versions[indexPath.item];
     _selectedVersion = raw;
-    [tableView reloadData];
+    [collectionView reloadData];
 
     // 短暂展示选中状态后 pop
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
@@ -660,8 +914,8 @@
 
 #pragma mark - Main Controller
 
-@interface ModLoaderInstallViewController () <UITableViewDataSource, UITableViewDelegate, UITextFieldDelegate>
-@property (nonatomic, strong) UITableView *tableView;
+@interface ModLoaderInstallViewController () <UICollectionViewDataSource, UICollectionViewDelegate, UITextFieldDelegate>
+@property (nonatomic, strong) UICollectionView *collectionView;
 @property (nonatomic, strong) UIView *bottomBar;
 @property (nonatomic, strong) UIButton *installButton;
 @property (nonatomic, strong) UITextField *versionNameField;
@@ -692,7 +946,11 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.title = @"选择安装方式";
-    // 适配自定义启动器背景（参照 ForgeInstallViewController）
+    self.view.backgroundColor = [UIColor clearColor];
+    // 适配自定义启动器背景（参照 VersionManagerViewController）
+    if (self.navigationController) {
+        [[BackgroundManager sharedManager] applyEffectToNavigationBar:self.navigationController.navigationBar];
+    }
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(refreshBackgroundEffect)
@@ -703,21 +961,21 @@
                                                                               style:UIBarButtonItemStylePlain
                                                                              target:self
                                                                              action:@selector(backTapped)];
-    self.navigationItem.leftBarButtonItem.tintColor = [UIColor labelColor];
+    self.navigationItem.leftBarButtonItem.tintColor = [UIColor whiteColor];
 
     _installFabricAPI = YES;  // Fabric 默认勾选 Fabric API（与 FCL 默认行为一致）
 
     [self setupLoaders];
     [self setupNameBar];
-    [self setupBottomBar];    // 先创建底部按钮，setupTableView 才能引用 _bottomBar.topAnchor
-    [self setupTableView];
+    [self setupBottomBar];    // 先创建底部按钮，setupCollectionView 才能引用 _bottomBar.topAnchor
+    [self setupCollectionView];
     [self refreshIncompatibilities];
     [self refreshVersionName];
 }
 
 - (void)refreshBackgroundEffect {
     // 背景效果切换时刷新 cell 与 nameBar 的毛玻璃外观
-    [self.tableView reloadData];
+    [_collectionView reloadData];
 }
 
 #pragma mark Setup
@@ -746,7 +1004,7 @@
         row.identifier = d[@"id"];
         row.name = d[@"name"];
         row.desc = d[@"desc"];
-        // 通过 ModLoaderIconHelper 统一获取图标符号名和品牌色
+        // 通过 ModLoaderIconHelper 统一获取图标符号名和品牌色（PNG 缺失时回退用）
         row.iconName = [ModLoaderIconHelper symbolNameForLoader:d[@"id"]];
         row.compatible = [d[@"compatible"] boolValue];
         row.iconColor = [ModLoaderIconHelper brandColorForLoader:d[@"id"]];
@@ -773,15 +1031,24 @@
     UILabel *label = [[UILabel alloc] init];
     label.translatesAutoresizingMaskIntoConstraints = NO;
     label.text = @"版本名";
-    label.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
-    label.textColor = [UIColor secondaryLabelColor];
+    label.font = [UIFont systemFontOfSize:[ScreenUtils sp:14] weight:UIFontWeightMedium];
+    // 与卡片文字配色一致：毛玻璃深色样式下用白色
+    label.textColor = [[BackgroundManager sharedManager] hasBackground] ? [UIColor whiteColor] : [UIColor secondaryLabelColor];
+    label.adjustsFontForContentSizeCategory = NO;
     [_nameBar addSubview:label];
 
     _versionNameField = [[UITextField alloc] init];
     _versionNameField.translatesAutoresizingMaskIntoConstraints = NO;
-    _versionNameField.font = [UIFont systemFontOfSize:15];
-    _versionNameField.textColor = [UIColor labelColor];
-    _versionNameField.placeholder = @"输入版本名";
+    _versionNameField.font = [UIFont systemFontOfSize:[ScreenUtils sp:15]];
+    // 顶部 versionNameField 字色改为白色
+    _versionNameField.textColor = [[BackgroundManager sharedManager] hasBackground] ? [UIColor whiteColor] : [UIColor labelColor];
+    // placeholder 用浅灰色（毛玻璃下保持可读）
+    _versionNameField.attributedPlaceholder = [[NSAttributedString alloc] initWithString:@"输入版本名"
+                                                                             attributes:@{
+        NSForegroundColorAttributeName: [[BackgroundManager sharedManager] hasBackground]
+            ? [[UIColor whiteColor] colorWithAlphaComponent:0.5]
+            : [UIColor placeholderTextColor]
+    }];
     _versionNameField.borderStyle = UITextBorderStyleNone;
     _versionNameField.returnKeyType = UIReturnKeyDone;
     _versionNameField.delegate = self;
@@ -805,25 +1072,57 @@
     ]];
 }
 
-- (void)setupTableView {
-    _tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStyleGrouped];
-    _tableView.translatesAutoresizingMaskIntoConstraints = NO;
-    _tableView.dataSource = self;
-    _tableView.delegate = self;
-    _tableView.estimatedRowHeight = 76;
-    _tableView.rowHeight = UITableViewAutomaticDimension;
-    _tableView.backgroundColor = [UIColor clearColor];
-    _tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
-    [_tableView registerClass:[ModLoaderLoaderCell class] forCellReuseIdentifier:@"LoaderCell"];
-    [_tableView registerClass:[ModLoaderSwitchCell class] forCellReuseIdentifier:@"SwitchCell"];
-    [self.view addSubview:_tableView];
+- (void)setupCollectionView {
+    UICollectionViewLayout *layout = [self createLayout];
+    _collectionView = [[UICollectionView alloc] initWithFrame:CGRectZero collectionViewLayout:layout];
+    // 使用 Auto Layout 约束到 nameBar 和 bottomBar 之间，必须关闭 autoresizing
+    _collectionView.translatesAutoresizingMaskIntoConstraints = NO;
+    _collectionView.backgroundColor = [UIColor clearColor];
+    _collectionView.dataSource = self;
+    _collectionView.delegate = self;
+    _collectionView.alwaysBounceVertical = YES;
+    // 与 VersionManagerViewController 一致：避免系统叠加 safeArea.top，
+    // 这里主控制器顶部有 nameBar，不需要 navBar inset；保持 Never 让布局从 nameBar 下方开始。
+    _collectionView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
+    _collectionView.contentInset = UIEdgeInsetsZero;
+    _collectionView.scrollIndicatorInsets = UIEdgeInsetsZero;
 
+    [_collectionView registerClass:[ModLoaderCardCell class] forCellWithReuseIdentifier:@"LoaderCardCell"];
+    [_collectionView registerClass:[ModLoaderSwitchCardCell class] forCellWithReuseIdentifier:@"SwitchCardCell"];
+    [_collectionView registerClass:[ModLoaderSectionHeaderView class] forSupplementaryViewOfKind:UICollectionElementKindSectionHeader withReuseIdentifier:@"HeaderView"];
+    [self.view addSubview:_collectionView];
+
+    // 顶部约束到 nameBar 底部，底部约束到 bottomBar 顶部
     [NSLayoutConstraint activateConstraints:@[
-        [_tableView.topAnchor constraintEqualToAnchor:_nameBar.bottomAnchor constant:8],
-        [_tableView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
-        [_tableView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [_tableView.bottomAnchor constraintEqualToAnchor:_bottomBar.topAnchor],
+        [_collectionView.topAnchor constraintEqualToAnchor:_nameBar.bottomAnchor constant:8],
+        [_collectionView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [_collectionView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        [_collectionView.bottomAnchor constraintEqualToAnchor:_bottomBar.topAnchor],
     ]];
+}
+
+- (UICollectionViewLayout *)createLayout {
+    return [[UICollectionViewCompositionalLayout alloc] initWithSectionProvider:^NSCollectionLayoutSection * _Nullable(NSInteger sectionIndex, id<NSCollectionLayoutEnvironment> _Nonnull layoutEnvironment) {
+        // 通用 header size（参照 VersionManagerViewController：44pt 高度）
+        NSCollectionLayoutSize *headerSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0]
+                                                                              heightDimension:[NSCollectionLayoutDimension absoluteDimension:44]];
+        NSCollectionLayoutBoundarySupplementaryItem *header = [NSCollectionLayoutBoundarySupplementaryItem boundarySupplementaryItemWithLayoutSize:headerSize elementKind:UICollectionElementKindSectionHeader alignment:NSRectAlignmentTop];
+
+        // section 0（模组加载器）和 section 1（附加选项）都用全宽 86pt 卡片，参照 VMVersionCardCell
+        NSCollectionLayoutSize *itemSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0]
+                                                                               heightDimension:[NSCollectionLayoutDimension absoluteDimension:86]];
+        NSCollectionLayoutItem *item = [NSCollectionLayoutItem itemWithLayoutSize:itemSize];
+        item.contentInsets = NSDirectionalEdgeInsetsMake(4, 14, 4, 14);
+
+        NSCollectionLayoutSize *groupSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0]
+                                                                                  heightDimension:[NSCollectionLayoutDimension absoluteDimension:86]];
+        NSCollectionLayoutGroup *group = [NSCollectionLayoutGroup horizontalGroupWithLayoutSize:groupSize subitems:@[item]];
+
+        NSCollectionLayoutSection *section = [NSCollectionLayoutSection sectionWithGroup:group];
+        section.contentInsets = NSDirectionalEdgeInsetsMake(0, 0, 20, 0);
+        section.boundarySupplementaryItems = @[header];
+        return section;
+    }];
 }
 
 - (void)setupBottomBar {
@@ -835,7 +1134,7 @@
     _installButton = [UIButton buttonWithType:UIButtonTypeSystem];
     _installButton.translatesAutoresizingMaskIntoConstraints = NO;
     [_installButton setTitle:@"安装" forState:UIControlStateNormal];
-    _installButton.titleLabel.font = [UIFont systemFontOfSize:17 weight:UIFontWeightSemibold];
+    _installButton.titleLabel.font = [UIFont systemFontOfSize:[ScreenUtils sp:17] weight:UIFontWeightSemibold];
     _installButton.backgroundColor = [UIColor systemGreenColor];
     [_installButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     _installButton.layer.cornerRadius = 10;
@@ -955,10 +1254,8 @@
 }
 
 - (void)refreshIncompatibilities {
-    for (ModLoaderRow *row in _loaders) {
-        // 不在 cell 上记录 reason，渲染时计算
-    }
-    [_tableView reloadData];
+    // 重新渲染所有卡片，互斥/兼容状态在 cellForItemAtIndexPath 中计算
+    [_collectionView reloadData];
 }
 
 #pragma mark Version name (参照 FCL VersionInstallInfoPage.generateVersionName)
@@ -1110,37 +1407,18 @@
     }
 }
 
-#pragma mark - TableView
+#pragma mark - CollectionView
 
-- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
+- (NSInteger)numberOfSectionsInCollectionView:(UICollectionView *)collectionView {
     return 2;  // 0: 加载器列表, 1: 选项
 }
 
-- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
+- (NSInteger)collectionView:(UICollectionView *)collectionView numberOfItemsInSection:(NSInteger)section {
     if (section == 0) {
         return _loaders.count;
     }
     // section 1: 选项
-    NSMutableArray *opts = [self currentOptions];
-    return opts.count;
-}
-
-- (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
-    if (section == 0) return @"模组加载器";
-    return [self currentOptions].count > 0 ? @"附加选项" : nil;
-}
-
-- (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
-    if (section == 0) {
-        if ([_selectedLoaderId isEqualToString:@"forge"] && _installOptiFine) {
-            return @"已勾选 OptiFine：将与 Forge 共存，自动安装到 mods 目录";
-        }
-        if ([_selectedLoaderId isEqualToString:@"optifine"]) {
-            return @"OptiFine 将作为版本补丁独立安装（不依赖 Forge）";
-        }
-        return nil;
-    }
-    return nil;
+    return [self currentOptions].count;
 }
 
 - (NSMutableArray *)currentOptions {
@@ -1154,57 +1432,49 @@
     return opts;
 }
 
-- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+- (UICollectionViewCell *)collectionView:(UICollectionView *)collectionView cellForItemAtIndexPath:(NSIndexPath *)indexPath {
     if (indexPath.section == 0) {
-        ModLoaderLoaderCell *cell = [tableView dequeueReusableCellWithIdentifier:@"LoaderCell" forIndexPath:indexPath];
-        ModLoaderRow *row = _loaders[indexPath.row];
+        ModLoaderCardCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"LoaderCardCell" forIndexPath:indexPath];
+        ModLoaderRow *row = _loaders[indexPath.item];
 
-        cell.nameLabel.text = row.name;
-        cell.descLabel.text = row.desc;
-        cell.iconView.image = [UIImage systemImageNamed:row.iconName];
-        cell.iconView.tintColor = row.iconColor;
-        cell.iconView.backgroundColor = [row.iconColor colorWithAlphaComponent:0.15];
+        BOOL isSelected = [_selectedLoaderId isEqualToString:row.identifier];
 
-        if (!row.compatible) {
-            [cell setIncompatible:YES reason:@"当前版本不支持"];
-        } else {
-            NSString *incompatReason = [self incompatibleReasonForLoaderId:row.identifier];
-            if (incompatReason) {
-                [cell setIncompatible:YES reason:incompatReason];
-            } else {
-                [cell setIncompatible:NO reason:nil];
-                if ([_selectedLoaderId isEqualToString:row.identifier]) {
-                    NSString *selVer = [self selectedVersionForLoader:row.identifier];
-                    if ([row.identifier isEqualToString:@"vanilla"]) {
-                        [cell setSelectedVersionText:@"已选择"];
-                    } else if (selVer.length > 0) {
-                        // OptiFine packed 格式提取 display
-                        NSString *display = selVer;
-                        if ([selVer containsString:@"\x1f"]) {
-                            NSArray *parts = [selVer componentsSeparatedByString:@"\x1f"];
-                            if (parts.count >= 4) display = parts[3];
-                            else if (parts.count >= 1) display = parts[0];
-                        }
-                        [cell setSelectedVersionText:display];
-                    } else {
-                        [cell setSelectedVersionText:nil];
-                    }
-                } else {
-                    // 未选中加载器：不显示状态文字（避免误导）
-                    [cell clearStatusText];
+        // 计算选中版本的显示文本（OptiFine packed 格式提取 display）
+        NSString *versionDisplay = nil;
+        if (isSelected && ![row.identifier isEqualToString:@"vanilla"]) {
+            NSString *selVer = [self selectedVersionForLoader:row.identifier];
+            if (selVer.length > 0) {
+                versionDisplay = selVer;
+                if ([selVer containsString:@"\x1f"]) {
+                    NSArray *parts = [selVer componentsSeparatedByString:@"\x1f"];
+                    if (parts.count >= 4) versionDisplay = parts[3];
+                    else if (parts.count >= 1) versionDisplay = parts[0];
                 }
             }
         }
-        // 适配自定义启动器背景：有全局背景时给 cell 套毛玻璃/半透明效果，避免实色背景遮挡壁纸
-        if ([[BackgroundManager sharedManager] hasBackground]) {
-            [[BackgroundManager sharedManager] applyEffectToCell:cell];
+
+        // 兼容性 + 互斥判断
+        BOOL incompatible = NO;
+        NSString *reason = nil;
+        if (!row.compatible) {
+            incompatible = YES;
+            reason = @"当前版本不支持";
+        } else {
+            reason = [self incompatibleReasonForLoaderId:row.identifier];
+            if (reason) incompatible = YES;
         }
+
+        [cell configureWithRow:row
+                    isSelected:isSelected
+          selectedVersionDisplay:versionDisplay
+                    incompatible:incompatible
+                         reason:reason];
         return cell;
     } else {
-        // section 1: 选项
-        ModLoaderSwitchCell *cell = [tableView dequeueReusableCellWithIdentifier:@"SwitchCell" forIndexPath:indexPath];
+        // section 1: 附加选项（Fabric API / OptiFine 共存开关）
+        ModLoaderSwitchCardCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"SwitchCardCell" forIndexPath:indexPath];
         NSMutableArray *opts = [self currentOptions];
-        NSDictionary *opt = opts[indexPath.row];
+        NSDictionary *opt = opts[indexPath.item];
         NSString *type = opt[@"type"];
 
         if ([type isEqualToString:@"fabric_api"]) {
@@ -1225,12 +1495,22 @@
         }
         [cell.switchControl removeTarget:nil action:NULL forControlEvents:UIControlEventAllEvents];
         [cell.switchControl addTarget:self action:@selector(switchChanged:) forControlEvents:UIControlEventValueChanged];
-        // 适配自定义启动器背景
-        if ([[BackgroundManager sharedManager] hasBackground]) {
-            [[BackgroundManager sharedManager] applyEffectToCell:cell];
-        }
         return cell;
     }
+}
+
+- (UICollectionReusableView *)collectionView:(UICollectionView *)collectionView viewForSupplementaryElementOfKind:(NSString *)kind atIndexPath:(NSIndexPath *)indexPath {
+    if (kind == UICollectionElementKindSectionHeader) {
+        ModLoaderSectionHeaderView *header = [collectionView dequeueReusableSupplementaryViewOfKind:kind withReuseIdentifier:@"HeaderView" forIndexPath:indexPath];
+        if (indexPath.section == 0) {
+            header.titleLabel.text = @"模组加载器";
+        } else {
+            // 附加选项 section 只有在 currentOptions 非空时才显示标题
+            header.titleLabel.text = [self currentOptions].count > 0 ? @"附加选项" : @"";
+        }
+        return header;
+    }
+    return [UICollectionReusableView new];
 }
 
 - (void)switchChanged:(UISwitch *)sender {
@@ -1240,15 +1520,15 @@
         _installOptiFine = sender.on;
     }
     [self refreshVersionName];
-    // 重新加载 footer 文案
-    [_tableView reloadSections:[NSIndexSet indexSetWithIndex:0] withRowAnimation:UITableViewRowAnimationNone];
+    // 重新加载 section 0 让卡片选中边框和互斥状态同步刷新
+    [_collectionView reloadSections:[NSIndexSet indexSetWithIndex:0]];
 }
 
-- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
-    [tableView deselectRowAtIndexPath:indexPath animated:YES];
+- (void)collectionView:(UICollectionView *)collectionView didSelectItemAtIndexPath:(NSIndexPath *)indexPath {
+    [collectionView deselectItemAtIndexPath:indexPath animated:YES];
     if (indexPath.section != 0) return;
 
-    ModLoaderRow *row = _loaders[indexPath.row];
+    ModLoaderRow *row = _loaders[indexPath.item];
     if (!row.compatible) return;
 
     NSString *reason = [self incompatibleReasonForLoaderId:row.identifier];
@@ -1263,7 +1543,7 @@
         _installOptiFine = NO;
         _installFabricAPI = NO;
         [self refreshVersionName];
-        [tableView reloadData];
+        [collectionView reloadData];
         return;
     }
 
@@ -1278,7 +1558,7 @@
 
     // 直接 push 版本选择页
     [self pushVersionPickerForLoader:row.identifier];
-    [tableView reloadData];
+    [collectionView reloadData];
 }
 
 - (void)pushVersionPickerForLoader:(NSString *)loaderId {
@@ -1293,7 +1573,7 @@
         if (!strongSelf) return;
         [strongSelf setSelectedVersion:version forLoader:loaderId];
         [strongSelf refreshVersionName];
-        [strongSelf.tableView reloadData];
+        [strongSelf.collectionView reloadData];
     };
     picker.onCancelled = nil;
 

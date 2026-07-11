@@ -20,8 +20,10 @@
 - (instancetype)init {
     self = [super init];
     if (self) {
-        // 默认内边距：左右 8pt，上下 1pt，让文字在 pill 背景块内居中
-        _textInsets = UIEdgeInsetsMake(1, 8, 1, 8);
+        // 修复字号过小：增大上下内边距以配合更大的字号（13pt），
+        // 让"正式版/测试版"等类型标签文字清晰可读，不再"快看不见了"。
+        // 左右 10pt 确保文字不贴背景边缘，上下 3pt 让 pill 高度足够容纳 13pt 字号。
+        _textInsets = UIEdgeInsetsMake(3, 10, 3, 10);
     }
     return self;
 }
@@ -102,12 +104,14 @@
         [self.versionLabel setContentCompressionResistancePriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
 
         // ----- 类型标签（pill 样式，修复问题3：使用带内边距的 InsetTypeLabel） -----
+        // 修复字号过小：字号从 10pt 增大到 13pt，让"正式版/测试版"文字清晰可读。
+        // 配合 InsetTypeLabel 的上下 3pt 内边距，pill 整体高度约 20pt，视觉更醒目。
         self.typeLabel = [[InsetTypeLabel alloc] init];
         self.typeLabel.translatesAutoresizingMaskIntoConstraints = NO;
-        self.typeLabel.font = [UIFont systemFontOfSize:10 weight:UIFontWeightBold];
+        self.typeLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightBold];
         self.typeLabel.textColor = [UIColor whiteColor];
         self.typeLabel.textAlignment = NSTextAlignmentCenter;
-        self.typeLabel.layer.cornerRadius = 8;
+        self.typeLabel.layer.cornerRadius = 10;
         self.typeLabel.layer.cornerCurve = kCACornerCurveContinuous;
         self.typeLabel.layer.masksToBounds = YES;
         // 类型标签 hugging 高、compression 也高（保持完整 pill 形状，不被压缩）

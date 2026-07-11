@@ -46,6 +46,17 @@
     self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone
                                                                                            target:self
                                                                                            action:@selector(closeTapped)];
+
+    // 适配自定义启动器背景：将当前视图控制器透明化，让全局背景（图片/视频）能够透出显示。
+    // 即使本页是背景设置页本身，也需要透明化以实时预览背景效果。
+    [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
+
+    // 监听背景 UI 效果变化通知：当用户在背景设置中切换毛玻璃/半透明或调整透明度时，
+    // 重新调用 makeViewControllerTransparent 以应用最新的视觉效果，保证背景始终正确透出。
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(reapplyBackgroundEffect)
+                                                 name:@"BackgroundUIEffectChanged"
+                                               object:nil];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -697,6 +708,19 @@
             }
         }];
     }];
+}
+
+/// 重新应用背景效果：当 BackgroundUIEffectChanged 通知到达时调用，
+/// 通过 BackgroundManager 重新设置当前视图控制器的透明度/毛玻璃效果，
+/// 并手动清空 tableView 背景与 backgroundView，确保全局背景能够正常透出。
+- (void)reapplyBackgroundEffect {
+    [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
+    self.tableView.backgroundColor = [UIColor clearColor];
+    self.tableView.backgroundView = nil;
+}
+
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
 @end

@@ -6,6 +6,7 @@
 #import "ModUpdateViewController.h"
 #import "PLProfiles.h"
 #import "LauncherPreferences.h"
+#import "BackgroundManager.h"
 
 @interface ModsManagerViewController () <UITableViewDataSource, UITableViewDelegate, ModTableViewCellDelegate, UISearchBarDelegate, ModVersionViewControllerDelegate, UIDocumentPickerDelegate>
 
@@ -27,13 +28,37 @@
     [super viewDidLoad];
     self.title = @"管理 Mod";
     self.view.backgroundColor = [UIColor systemBackgroundColor];
+    // 适配自定义启动器背景：透明化当前 VC，让全局背景图/毛玻璃透出
+    [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
     self.currentMode = ModsManagerModeLocal; // 始终使用本地模式（在线下载入口已移至下载界面）
     self.localMods = [NSMutableArray array];
     self.filteredLocalMods = [NSMutableArray array];
     self.onlineSearchResults = [NSMutableArray array];
     [self setupUI];
+    // 透明化 tableView 背景，避免遮挡全局背景
+    self.tableView.backgroundColor = [UIColor clearColor];
+    self.tableView.backgroundView = nil;
     [self updateUIForCurrentMode];
     [self refreshLocalModsList];
+
+    // 监听背景效果变化通知，背景切换时重新应用透明效果
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(reapplyBackgroundEffect)
+                                                 name:@"BackgroundUIEffectChanged"
+                                               object:nil];
+}
+
+- (void)reapplyBackgroundEffect {
+    // 背景效果改变时重新透明化当前 VC
+    [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
+    // 重新设置 tableView 背景为透明，确保背景效果切换后仍透出全局背景
+    self.tableView.backgroundColor = [UIColor clearColor];
+    self.tableView.backgroundView = nil;
+}
+
+- (void)dealloc {
+    // 移除通知观察者，避免dealloc后收到通知导致崩溃
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
 - (void)setupUI {

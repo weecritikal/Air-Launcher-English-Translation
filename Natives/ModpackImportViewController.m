@@ -37,6 +37,8 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+    // 适配自定义启动器背景：将当前视图控制器透明化，使全局背景壁纸能够透出
+    [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
     self.title = @"导入整合包";
 
     [[BackgroundManager sharedManager] applyEffectToView:self.view];
@@ -79,6 +81,7 @@
     self.tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
     self.tableView.translatesAutoresizingMaskIntoConstraints = NO;
     self.tableView.backgroundColor = [UIColor clearColor];
+    self.tableView.backgroundView = nil;
     self.tableView.dataSource = self;
     self.tableView.delegate = self;
     [self.tableView registerClass:[UITableViewCell class] forCellReuseIdentifier:@"ModpackCell"];
@@ -522,6 +525,10 @@
 
 - (void)handleBackgroundUIEffectChanged:(NSNotification *)notification {
     dispatch_async(dispatch_get_main_queue(), ^{
+        // 重新应用透明化，确保背景效果切换后视图仍能透出全局背景
+        [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
+        self.tableView.backgroundColor = [UIColor clearColor];
+        self.tableView.backgroundView = nil;
         [[BackgroundManager sharedManager] applyEffectToView:self.view];
         [self.tableView reloadData];
     });

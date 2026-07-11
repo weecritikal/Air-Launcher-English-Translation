@@ -12,6 +12,7 @@
 #import "ModVersion.h"
 #import "ModVersionTableViewCell.h"
 #import "AssetDetailHeaderView.h"
+#import "BackgroundManager.h"
 
 @interface AssetVersionViewController () <UITableViewDataSource, UITableViewDelegate>
 
@@ -36,13 +37,38 @@
     [super viewDidLoad];
     self.view.backgroundColor = [UIColor systemBackgroundColor];
     self.title = self.projectDisplayName ?: [self titleForAssetType];
+    // 适配自定义启动器背景：透明化当前 VC，让全局背景图/毛玻璃透出
+    [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
 
     [self setupFilterControls];
     [self setupTableView];
     [self setupActivityIndicator];
     [self setupDetailHeader];
 
+    // 透明化 tableView 背景，避免遮挡全局背景
+    self.tableView.backgroundColor = [UIColor clearColor];
+    self.tableView.backgroundView = nil;
+
     [self fetchVersions];
+
+    // 监听背景效果变化通知，背景切换时重新应用透明效果
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(reapplyBackgroundEffect)
+                                                 name:@"BackgroundUIEffectChanged"
+                                               object:nil];
+}
+
+- (void)reapplyBackgroundEffect {
+    // 背景效果改变时重新透明化当前 VC
+    [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
+    // 重新设置 tableView 背景为透明，确保背景效果切换后仍透出全局背景
+    self.tableView.backgroundColor = [UIColor clearColor];
+    self.tableView.backgroundView = nil;
+}
+
+- (void)dealloc {
+    // 移除通知观察者，避免dealloc后收到通知导致崩溃
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
 #pragma mark - Detail Header（项目信息展示）
