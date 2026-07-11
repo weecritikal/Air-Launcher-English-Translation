@@ -179,6 +179,7 @@ add_executable(AngelAuraAmethyst
   CustomControlsViewController.m
   CustomControlsViewController+UndoManager.m
   DownloadProgressViewController.m
+  DownloadProgressCardView.m
   FileListViewController.m
   GameSurfaceView.m
   JavaGUIViewController.m

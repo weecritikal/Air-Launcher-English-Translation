@@ -40,10 +40,6 @@
 #import "ModpackImportViewController.h"
 #import "ModpackImportService.h"
 #import "installer/CurseForgeAPIKeyViewController.h"
-#import "ServerListViewController.h"
-#import "ServerDetailViewController.h"
-#import "ServerService.h"
-#import "ServerItem.h"
 #import "UZKArchive.h"
 #import <QuartzCore/QuartzCore.h>
 #import "JavaGUIViewController.h"
@@ -962,14 +958,6 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     self.title = @"下载";
     self.view.backgroundColor = [UIColor clearColor];
 
-    // 导航栏左侧：服务器入口（Modrinth Server Projects + CurseForge server packs）
-    UIBarButtonItem *serverItem = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"network"]
-                                                                      style:UIBarButtonItemStylePlain
-                                                                     target:self
-                                                                     action:@selector(openServerList)];
-    serverItem.tintColor = [UIColor labelColor];
-    self.navigationItem.leftBarButtonItem = serverItem;
-
     // 导航栏右侧：CurseForge API Key 配置入口，避免用户在 Modrinth 模式下找不到配置路径
     UIBarButtonItem *apiKeyItem = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"key.fill"]
                                                                      style:UIBarButtonItemStylePlain
@@ -1615,14 +1603,6 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     CurseForgeAPIKeyViewController *vc = [[CurseForgeAPIKeyViewController alloc] init];
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
     nav.modalPresentationStyle = UIModalPresentationFormSheet;
-    [self presentViewController:nav animated:YES completion:nil];
-}
-
-// 导航栏服务器入口：弹出 ServerListViewController（自带双源切换、搜索、详情导航）
-- (void)openServerList {
-    ServerListViewController *vc = [ServerListViewController new];
-    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
-    nav.modalPresentationStyle = UIModalPresentationPageSheet;
     [self presentViewController:nav animated:YES completion:nil];
 }
 

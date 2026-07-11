@@ -225,6 +225,45 @@ static WFWorkflowProgressView* currentProgressView;
     }
 }
 
+/// 修复：为 section header 提供不透明的毛玻璃背景，防止上划时 header 透明导致下方内容透出遮挡。
+/// 参照 HMCL 的设置页 header 样式：毛玻璃背景 + 白色（有自定义背景时）或系统默认色文字。
+- (UIView *)tableView:(UITableView *)tableView viewForHeaderInSection:(NSInteger)section {
+    NSString *title = [self tableView:tableView titleForHeaderInSection:section];
+    UITableViewHeaderFooterView *header = [tableView dequeueReusableHeaderFooterViewWithIdentifier:@"JRESectionHeader"];
+    if (!header) {
+        header = [[UITableViewHeaderFooterView alloc] initWithReuseIdentifier:@"JRESectionHeader"];
+    }
+    header.textLabel.text = title;
+    return header;
+}
+
+/// 修复：section header 显示时套上毛玻璃背景，避免透明 header 遮挡内容
+- (void)tableView:(UITableView *)tableView willDisplayHeaderView:(UIView *)view forSection:(NSInteger)section {
+    if (![view isKindOfClass:[UITableViewHeaderFooterView class]]) return;
+    UITableViewHeaderFooterView *header = (UITableViewHeaderFooterView *)view;
+    
+    // 有自定义背景时用毛玻璃 + 白色文字；无背景时用系统默认样式
+    if ([[BackgroundManager sharedManager] hasBackground]) {
+        if (@available(iOS 13.0, *)) {
+            UIBlurEffect *blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial];
+            UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:blur];
+            blurView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+            blurView.frame = header.bounds;
+            header.backgroundView = blurView;
+        } else {
+            header.backgroundView = [[UIView alloc] init];
+            header.backgroundView.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.9];
+        }
+        header.textLabel.textColor = [UIColor whiteColor];
+        header.textLabel.shadowColor = [UIColor blackColor];
+        header.textLabel.shadowOffset = CGSizeMake(0, 1);
+    } else {
+        header.backgroundView = nil;
+        header.textLabel.textColor = [UIColor labelColor];
+        header.textLabel.shadowColor = nil;
+    }
+}
+
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
     switch (self.sortedJavaVersions[section].intValue) {
         case DEFAULT_JRE: return localize(@"preference.manage_runtime.footer.default", nil);
