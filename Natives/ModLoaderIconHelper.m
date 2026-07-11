@@ -140,6 +140,10 @@
 #pragma mark - 图标加载
 
 /// 加载加载器图标（优先 bundle PNG，回退 SF Symbol）
+/// 加载顺序：
+///   1. ModLoaderIcons/{key}.png（HMCL 官方标准单文件，不区分深浅色，品牌色透明 PNG）
+///   2. ModLoaderIcons/{key}_{light|dark}.png（旧格式兼容，区分主题）
+///   3. SF Symbol + 品牌色着色（兜底）
 + (UIImage *)iconImageForLoader:(NSString *)loader
                  traitCollection:(UITraitCollection *)traitCollection {
     if (!loader || loader.length == 0) {
@@ -149,35 +153,40 @@
     // 提取加载器的规范化名称（用于 PNG 文件名匹配）
     NSString *pngKey = [self pngKeyForLoader:loader];
     if (pngKey) {
-        // 根据 traitCollection 判断深浅色
-        BOOL isDarkMode = NO;
-        if (traitCollection) {
-            isDarkMode = (traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark);
-        }
-
         NSBundle *bundle = [NSBundle mainBundle];
         NSString *resourcePath = [bundle resourcePath];
 
-        // 优先加载当前主题的 PNG
-        NSString *theme = isDarkMode ? @"dark" : @"light";
-        NSString *imagePath = [resourcePath stringByAppendingPathComponent:
-                               [NSString stringWithFormat:@"ModLoaderIcons/%@_%@.png", pngKey, theme]];
-        UIImage *image = [UIImage imageWithContentsOfFile:imagePath];
+        // 1. 优先加载 HMCL 官方标准单文件（不区分深浅色主题）
+        NSString *standardPath = [resourcePath stringByAppendingPathComponent:
+                                  [NSString stringWithFormat:@"ModLoaderIcons/%@.png", pngKey]];
+        UIImage *image = [UIImage imageWithContentsOfFile:standardPath];
         if (image) {
             return image;
         }
 
-        // 回退到相反主题的 PNG
+        // 2. 回退到旧格式（区分 light/dark 主题）
+        BOOL isDarkMode = NO;
+        if (traitCollection) {
+            isDarkMode = (traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark);
+        }
+        NSString *theme = isDarkMode ? @"dark" : @"light";
+        NSString *themedPath = [resourcePath stringByAppendingPathComponent:
+                                [NSString stringWithFormat:@"ModLoaderIcons/%@_%@.png", pngKey, theme]];
+        image = [UIImage imageWithContentsOfFile:themedPath];
+        if (image) {
+            return image;
+        }
+        // 尝试相反主题
         theme = isDarkMode ? @"light" : @"dark";
-        imagePath = [resourcePath stringByAppendingPathComponent:
-                     [NSString stringWithFormat:@"ModLoaderIcons/%@_%@.png", pngKey, theme]];
-        image = [UIImage imageWithContentsOfFile:imagePath];
+        themedPath = [resourcePath stringByAppendingPathComponent:
+                      [NSString stringWithFormat:@"ModLoaderIcons/%@_%@.png", pngKey, theme]];
+        image = [UIImage imageWithContentsOfFile:themedPath];
         if (image) {
             return image;
         }
     }
 
-    // 无 PNG 或加载失败：回退到 SF Symbol
+    // 3. 无 PNG 或加载失败：回退到 SF Symbol
     NSString *symbolName = [self symbolNameForLoader:loader];
     UIImage *symbolImage = [UIImage systemImageNamed:symbolName];
     return symbolImage ?: [UIImage systemImageNamed:@"cube.box.fill"];
@@ -189,16 +198,16 @@
     if (!loader || loader.length == 0) return nil;
     NSString *lower = loader.lowercaseString;
 
-    // 注意顺序：neoforge 在 forge 之前
+    // 注意顺序：neoforge 在 forge 之前，optifabric 在 optifine 之前
     if ([lower containsString:@"neoforge"])   return @"neoforge";
     if ([lower containsString:@"forge"])      return @"forge";
-    if ([lower containsString:@"optifabric"]) return nil; // 无独立 PNG，用 optifine
-    if ([lower containsString:@"optifine"])   return nil; // 暂无 PNG，回退 SF Symbol
-    if ([lower containsString:@"quilt"])      return nil; // 暂无 PNG，回退 SF Symbol
+    if ([lower containsString:@"optifabric"]) return @"optifine"; // 与 OptiFine 共用图标
+    if ([lower containsString:@"optifine"])   return @"optifine"; // HMCL 官方 PNG
+    if ([lower containsString:@"quilt"])      return @"quilt";    // HMCL 官方 PNG
     if ([lower containsString:@"fabric"])     return @"fabric";
-    if ([lower containsString:@"iris"])       return nil; // 暂无 PNG，回退 SF Symbol
-    if ([lower containsString:@"rift"])       return nil; // 暂无 PNG，回退 SF Symbol
-    if ([lower containsString:@"vanilla"])    return nil; // 暂无 PNG，回退 SF Symbol
+    if ([lower containsString:@"iris"])       return nil; // 暂无官方 PNG，回退 SF Symbol
+    if ([lower containsString:@"rift"])       return nil; // 暂无官方 PNG，回退 SF Symbol
+    if ([lower containsString:@"vanilla"])    return nil; // 用 Assets.xcassets 的 VanillaIcon
     return nil;
 }
 
@@ -216,23 +225,32 @@
     imageView.contentMode = UIViewContentModeScaleAspectFit;
 
     // 判断是否为 PNG（PNG 不着色，SF Symbol 着色）
+    // 与 iconImageForLoader 的加载顺序一致：先标准单文件，再主题文件
     NSString *pngKey = [self pngKeyForLoader:loader];
     BOOL hasPng = NO;
     if (pngKey) {
         NSBundle *bundle = [NSBundle mainBundle];
         NSString *resourcePath = [bundle resourcePath];
-        BOOL isDarkMode = traitCollection ? (traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark) : NO;
-        NSString *theme = isDarkMode ? @"dark" : @"light";
-        NSString *imagePath = [resourcePath stringByAppendingPathComponent:
-                               [NSString stringWithFormat:@"ModLoaderIcons/%@_%@.png", pngKey, theme]];
-        if ([NSFileManager.defaultManager fileExistsAtPath:imagePath]) {
+        // 1. 先检查 HMCL 官方标准单文件
+        NSString *standardPath = [resourcePath stringByAppendingPathComponent:
+                                  [NSString stringWithFormat:@"ModLoaderIcons/%@.png", pngKey]];
+        if ([NSFileManager.defaultManager fileExistsAtPath:standardPath]) {
             hasPng = YES;
         } else {
-            theme = isDarkMode ? @"light" : @"dark";
-            imagePath = [resourcePath stringByAppendingPathComponent:
-                         [NSString stringWithFormat:@"ModLoaderIcons/%@_%@.png", pngKey, theme]];
-            if ([NSFileManager.defaultManager fileExistsAtPath:imagePath]) {
+            // 2. 再检查旧格式主题文件
+            BOOL isDarkMode = traitCollection ? (traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark) : NO;
+            NSString *theme = isDarkMode ? @"dark" : @"light";
+            NSString *themedPath = [resourcePath stringByAppendingPathComponent:
+                                    [NSString stringWithFormat:@"ModLoaderIcons/%@_%@.png", pngKey, theme]];
+            if ([NSFileManager.defaultManager fileExistsAtPath:themedPath]) {
                 hasPng = YES;
+            } else {
+                theme = isDarkMode ? @"light" : @"dark";
+                themedPath = [resourcePath stringByAppendingPathComponent:
+                              [NSString stringWithFormat:@"ModLoaderIcons/%@_%@.png", pngKey, theme]];
+                if ([NSFileManager.defaultManager fileExistsAtPath:themedPath]) {
+                    hasPng = YES;
+                }
             }
         }
     }
