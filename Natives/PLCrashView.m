@@ -5,6 +5,7 @@
 #import "utils.h"
 #import "AIFixViewController.h"
 #import "AIFixService.h"
+#import "BackgroundManager.h"
 
 @interface PLCrashView ()
 // 数据
@@ -31,6 +32,8 @@
 @property (nonatomic, strong) UIButton *githubButton;
 @property (nonatomic, strong) UIButton *fullLogButton;
 @property (nonatomic, strong) UIButton *exitButton;
+// 错误卡片顶部红色 accent 条
+@property (nonatomic, strong) CAGradientLayer *accentGradientLayer;
 // 日志卡片高度约束（根据屏幕高度动态调整）
 @property (nonatomic, strong) NSLayoutConstraint *logCardHeightConstraint;
 @end
@@ -118,33 +121,39 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     [super viewDidLayoutSubviews];
     // 根据屏幕高度动态调整日志卡片高度，避免小屏挤压按钮或大屏浪费空间
     [self adjustLogCardHeight];
+    // 更新错误卡片顶部红色 accent 条的 frame
+    if (_accentGradientLayer) {
+        _accentGradientLayer.frame = CGRectMake(0, 0, _errorCardView.bounds.size.width, 2);
+    }
 }
 
 #pragma mark - Background
 
 - (void)setupBackground {
-    // 毛玻璃背景
-    UIBlurEffect *blurEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleDark];
-    UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:blurEffect];
-    blurView.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.view addSubview:blurView];
+    // 适配自定义背景壁纸：让 BackgroundManager 的全局背景透出
+    [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
+    self.view.backgroundColor = [UIColor clearColor];
 
-    // 深色蒙层增强毛玻璃效果
-    UIView *overlayView = [[UIView alloc] init];
-    overlayView.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.5];
-    overlayView.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.view addSubview:overlayView];
+    // 如果没有自定义背景，使用系统材质毛玻璃作为回退（自适应深浅色）
+    if (![[BackgroundManager sharedManager] hasBackground]) {
+        UIBlurEffect *blurEffect;
+        if (@available(iOS 13.0, *)) {
+            blurEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial];
+        } else {
+            blurEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleLight];
+        }
+        UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:blurEffect];
+        blurView.translatesAutoresizingMaskIntoConstraints = NO;
+        [self.view addSubview:blurView];
+        [self.view sendSubviewToBack:blurView];
 
-    [NSLayoutConstraint activateConstraints:@[
-        [blurView.topAnchor constraintEqualToAnchor:self.view.topAnchor],
-        [blurView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
-        [blurView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
-        [blurView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        [overlayView.topAnchor constraintEqualToAnchor:self.view.topAnchor],
-        [overlayView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
-        [overlayView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
-        [overlayView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-    ]];
+        [NSLayoutConstraint activateConstraints:@[
+            [blurView.topAnchor constraintEqualToAnchor:self.view.topAnchor],
+            [blurView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
+            [blurView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+            [blurView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+        ]];
+    }
 }
 
 #pragma mark - UI Setup
@@ -191,15 +200,32 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
 
 - (void)setupErrorCard {
     _errorCardView = [[UIView alloc] init];
-    _errorCardView.backgroundColor = [UIColor colorWithRed:1.0 green:0.278 blue:0.318 alpha:1.0]; // #FF4757
+    _errorCardView.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.08];
     _errorCardView.layer.cornerRadius = 16;
     _errorCardView.layer.cornerCurve = kCACornerCurveContinuous;
+    _errorCardView.layer.borderWidth = 0.5;
+    _errorCardView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.10].CGColor;
     _errorCardView.layer.shadowColor = [UIColor blackColor].CGColor;
     _errorCardView.layer.shadowOffset = CGSizeMake(0, 4);
-    _errorCardView.layer.shadowOpacity = 0.15;
+    _errorCardView.layer.shadowOpacity = 0.12;
     _errorCardView.layer.shadowRadius = 8;
     _errorCardView.translatesAutoresizingMaskIntoConstraints = NO;
     [_mainStackView addArrangedSubview:_errorCardView];
+    // 应用毛玻璃效果（适配自定义背景壁纸）
+    [[BackgroundManager sharedManager] applyEffectToView:_errorCardView];
+
+    // 顶部红色 accent 条（2pt 高的渐变层，从红色到透明）
+    _accentGradientLayer = [CAGradientLayer layer];
+    _accentGradientLayer.colors = @[
+        (__bridge id)[UIColor systemRedColor].CGColor,
+        (__bridge id)[[UIColor systemRedColor] colorWithAlphaComponent:0].CGColor,
+    ];
+    _accentGradientLayer.locations = @[@0.0, @1.0];
+    _accentGradientLayer.startPoint = CGPointMake(0.5, 0.0);
+    _accentGradientLayer.endPoint = CGPointMake(0.5, 1.0);
+    _accentGradientLayer.cornerRadius = 16;
+    _accentGradientLayer.maskedCorners = kCALayerMinXMinYCorner | kCALayerMaxXMinYCorner;
+    [_errorCardView.layer addSublayer:_accentGradientLayer];
 
     // 错误图标
     _errorIconView = [[UIImageView alloc] init];
@@ -208,7 +234,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
         UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:36 weight:UIImageSymbolWeightBold];
         _errorIconView.image = [UIImage systemImageNamed:@"exclamationmark.triangle.fill" withConfiguration:config];
     }
-    _errorIconView.tintColor = [UIColor whiteColor];
+    _errorIconView.tintColor = [UIColor systemRedColor];
     _errorIconView.contentMode = UIViewContentModeScaleAspectFit;
     [_errorCardView addSubview:_errorIconView];
 
@@ -217,7 +243,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     _errorTitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     _errorTitleLabel.text = _customTitle ?: localize(@"crash.error_title", nil);
     _errorTitleLabel.font = [UIFont boldSystemFontOfSize:18];
-    _errorTitleLabel.textColor = [UIColor whiteColor];
+    _errorTitleLabel.textColor = [UIColor labelColor];
     _errorTitleLabel.textAlignment = NSTextAlignmentCenter;
     _errorTitleLabel.numberOfLines = 0;
     [_errorCardView addSubview:_errorTitleLabel];
@@ -227,7 +253,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     _errorCodeLabel.translatesAutoresizingMaskIntoConstraints = NO;
     _errorCodeLabel.text = [NSString stringWithFormat:@"%@%d", localize(@"crash.error_code", nil), _exitCode];
     _errorCodeLabel.font = [UIFont systemFontOfSize:14];
-    _errorCodeLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.9];
+    _errorCodeLabel.textColor = [UIColor secondaryLabelColor];
     _errorCodeLabel.textAlignment = NSTextAlignmentCenter;
     [_errorCardView addSubview:_errorCodeLabel];
 
@@ -236,7 +262,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     _reasonLabel.translatesAutoresizingMaskIntoConstraints = NO;
     _reasonLabel.text = [self crashReasonText];
     _reasonLabel.font = [UIFont systemFontOfSize:13];
-    _reasonLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.75];
+    _reasonLabel.textColor = [UIColor secondaryLabelColor];
     _reasonLabel.textAlignment = NSTextAlignmentCenter;
     _reasonLabel.numberOfLines = 0;
     [_errorCardView addSubview:_reasonLabel];
@@ -266,7 +292,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
         _oomSuggestionLabel = [[UILabel alloc] init];
         _oomSuggestionLabel.translatesAutoresizingMaskIntoConstraints = NO;
         _oomSuggestionLabel.font = [UIFont systemFontOfSize:12];
-        _oomSuggestionLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.65];
+        _oomSuggestionLabel.textColor = [UIColor secondaryLabelColor];
         _oomSuggestionLabel.textAlignment = NSTextAlignmentCenter;
         _oomSuggestionLabel.numberOfLines = 0;
         NSString *suggestion = [NSString stringWithFormat:@"%@ %@",
@@ -291,26 +317,30 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
 
 - (void)setupLogCard {
     _logCardView = [[UIView alloc] init];
-    _logCardView.backgroundColor = [UIColor colorWithWhite:0.08 alpha:1.0];
+    _logCardView.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.08];
     _logCardView.layer.cornerRadius = 16;
     _logCardView.layer.cornerCurve = kCACornerCurveContinuous;
     _logCardView.layer.masksToBounds = YES;
+    _logCardView.layer.borderWidth = 0.5;
+    _logCardView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.10].CGColor;
     _logCardView.translatesAutoresizingMaskIntoConstraints = NO;
     [_mainStackView addArrangedSubview:_logCardView];
+    // 应用毛玻璃效果（适配自定义背景壁纸）
+    [[BackgroundManager sharedManager] applyEffectToView:_logCardView];
 
     // 日志标题
     _logTitleLabel = [[UILabel alloc] init];
     _logTitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     _logTitleLabel.text = localize(@"crash.log_info", nil);
     _logTitleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
-    _logTitleLabel.textColor = [UIColor whiteColor];
+    _logTitleLabel.textColor = [UIColor labelColor];
     [_logCardView addSubview:_logTitleLabel];
 
     // 日志文本视图（可内部滚动）
     _logTextView = [[UITextView alloc] init];
     _logTextView.translatesAutoresizingMaskIntoConstraints = NO;
     _logTextView.backgroundColor = [UIColor clearColor];
-    _logTextView.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.85];
+    _logTextView.textColor = [UIColor labelColor];
     _logTextView.font = [UIFont fontWithName:@"Menlo" size:11];
     _logTextView.editable = NO;
     _logTextView.showsVerticalScrollIndicator = YES;
@@ -322,7 +352,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     _logPlaceholderLabel.translatesAutoresizingMaskIntoConstraints = NO;
     _logPlaceholderLabel.text = localize(@"crash.log_info", nil);
     _logPlaceholderLabel.font = [UIFont systemFontOfSize:36 weight:UIFontWeightBold];
-    _logPlaceholderLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.15];
+    _logPlaceholderLabel.textColor = [UIColor tertiaryLabelColor];
     _logPlaceholderLabel.textAlignment = NSTextAlignmentCenter;
     [_logCardView addSubview:_logPlaceholderLabel];
 
@@ -364,7 +394,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     _shareButton = [self createButtonWithTitle:localize(@"crash.share_log", nil)
                                           icon:@"square.and.arrow.up"
                                  backgroundColor:[[UIColor whiteColor] colorWithAlphaComponent:0.15]
-                                     textColor:[UIColor whiteColor]
+                                     textColor:[UIColor labelColor]
                                         bold:YES
                                         action:@selector(shareLog)];
     [_mainStackView addArrangedSubview:_shareButton];
@@ -392,15 +422,15 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     _fullLogButton.translatesAutoresizingMaskIntoConstraints = NO;
     [_fullLogButton setTitle:localize(@"crash.view_log", nil) forState:UIControlStateNormal];
     _fullLogButton.titleLabel.font = [UIFont systemFontOfSize:14];
-    _fullLogButton.tintColor = [[UIColor whiteColor] colorWithAlphaComponent:0.6];
+    [_fullLogButton setTitleColor:[UIColor secondaryLabelColor] forState:UIControlStateNormal];
     [_fullLogButton addTarget:self action:@selector(showFullLog) forControlEvents:UIControlEventTouchUpInside];
     [_mainStackView addArrangedSubview:_fullLogButton];
 
     // 返回启动器按钮
     _exitButton = [self createButtonWithTitle:localize(@"crash.return_launcher", nil)
                                           icon:@"rectangle.portrait.and.arrow.right"
-                                 backgroundColor:[[UIColor whiteColor] colorWithAlphaComponent:0.1]
-                                     textColor:[UIColor whiteColor]
+                                 backgroundColor:[[UIColor whiteColor] colorWithAlphaComponent:0.10]
+                                     textColor:[UIColor labelColor]
                                         bold:NO
                                         action:@selector(dismissAndReturnToLauncher)];
     [_mainStackView addArrangedSubview:_exitButton];
@@ -410,7 +440,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
     button.translatesAutoresizingMaskIntoConstraints = NO;
     button.backgroundColor = bgColor;
-    button.layer.cornerRadius = 10;
+    button.layer.cornerRadius = 12;
     button.layer.cornerCurve = kCACornerCurveContinuous;
 
     [button setTitleColor:textColor forState:UIControlStateNormal];

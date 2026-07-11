@@ -24,6 +24,7 @@
 #import "ModService.h"
 #import "ModItem.h"
 #import "PLProfiles.h"
+#import "BackgroundManager.h"
 
 static UIColor *AFHexColor(NSString *hex) {
     hex = [hex stringByReplacingOccurrencesOfString:@"#" withString:@""];
@@ -296,16 +297,22 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
 }
 
 - (void)setupBackground {
-    // 毛玻璃背景
-    UIBlurEffect *blurEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleDark];
-    UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:blurEffect];
-    blurView.frame = self.view.bounds;
-    blurView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    [self.view addSubview:blurView];
-    
-    // 深色蒙层
+    // 适配自定义启动器背景：将当前视图控制器透明化，使全局背景壁纸能够透出
+    [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
+
+    if (![[BackgroundManager sharedManager] hasBackground]) {
+        // 无自定义背景时，使用系统材质毛玻璃作为回退（FCL/ZL2 风格）
+        UIBlurEffect *blurEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial];
+        UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:blurEffect];
+        blurView.frame = self.view.bounds;
+        blurView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+        [self.view addSubview:blurView];
+    }
+    // 已设置自定义背景时不添加任何额外背景，让壁纸直接透出
+
+    // 保留 _backgroundView 属性引用（不再用作黑色蒙层），透明且不阻挡内容
     _backgroundView = [[UIView alloc] initWithFrame:self.view.bounds];
-    _backgroundView.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.6];
+    _backgroundView.backgroundColor = [UIColor clearColor];
     _backgroundView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     [self.view addSubview:_backgroundView];
 }
@@ -440,6 +447,7 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     _diagnosticStripView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.12].CGColor;
     _diagnosticStripView.autoresizingMask = UIViewAutoresizingFlexibleWidth;
     [_leftContentView addSubview:_diagnosticStripView];
+    [[BackgroundManager sharedManager] applyEffectToView:_diagnosticStripView];
 
     _diagnosticTitleLabel = [[UILabel alloc] initWithFrame:CGRectMake(16, 12, _diagnosticStripView.bounds.size.width - 32, 22)];
     _diagnosticTitleLabel.font = [UIFont systemFontOfSize:18 weight:UIFontWeightBold];
@@ -484,6 +492,7 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     // 避免不同屏幕（尤其旋转/分屏）下卡片宽度写死导致右侧空白或与右面板错位。
     _historyCardView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleRightMargin;
     [_leftContentView addSubview:_historyCardView];
+    [[BackgroundManager sharedManager] applyEffectToView:_historyCardView];
 
     _historyTitleLabel = [[UILabel alloc] initWithFrame:CGRectMake(16, 10, _historyCardView.bounds.size.width - 32, 18)];
     _historyTitleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
@@ -518,6 +527,7 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     // 修复问题2：补充 autoresizingMask，与 _historyCardView 一致
     _riskCardView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleRightMargin;
     [_leftContentView addSubview:_riskCardView];
+    [[BackgroundManager sharedManager] applyEffectToView:_riskCardView];
 
     _riskTitleLabel = [[UILabel alloc] initWithFrame:CGRectMake(16, 10, _riskCardView.bounds.size.width - 32, 18)];
     _riskTitleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
@@ -538,7 +548,7 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     ];
     for (NSDictionary *item in riskItems) {
         UIView *row = [[UIView alloc] initWithFrame:CGRectZero];
-        row.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.18];
+        row.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.06];
         row.layer.cornerRadius = 10;
         row.layer.cornerCurve = kCACornerCurveContinuous;
         UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(10, 6, _riskStackView.bounds.size.width - 20, 16)];
@@ -570,6 +580,7 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     // 修复错位：_conversationScrollView 必须加到 _leftPanel（视口层）而非 _leftContentView（可滚动内容）。
     // 否则它会随 _leftScrollView 滚动而漂移，无法常驻视口中部，造成"AI 修复界面错位"。
     [_leftPanel addSubview:_conversationScrollView];
+    [[BackgroundManager sharedManager] applyEffectToView:_conversationScrollView];
 
     _conversationStackView = [[UIStackView alloc] init];
     _conversationStackView.axis = UILayoutConstraintAxisVertical;
@@ -595,6 +606,7 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     // 修复错位：_inputContainerView 必须加到 _leftPanel（视口层）而非 _leftContentView（可滚动内容）。
     // 否则它会随 _leftScrollView 滚动而漂移，无法常驻视口底部，造成"输入框被挤走/错位"。
     [_leftPanel addSubview:_inputContainerView];
+    [[BackgroundManager sharedManager] applyEffectToView:_inputContainerView];
 
     UILabel *inputTitle = [[UILabel alloc] initWithFrame:CGRectMake(16, 10, 180, 18)];
     inputTitle.text = localize(@"ai.fix.input_title", @"指令与补充信息");
@@ -672,6 +684,7 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     // 修复问题2：补充 autoresizingMask，右面板宽度变化时配置卡片宽度跟随
     _configCardView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleRightMargin;
     [_rightContentView addSubview:_configCardView];
+    [[BackgroundManager sharedManager] applyEffectToView:_configCardView];
     [self setupConfigCard];
 
     _toolsCardView = [[UIView alloc] initWithFrame:CGRectMake(sidePadding, 218, panelWidth - sidePadding * 2, 220)];
@@ -684,6 +697,7 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     _toolsCardView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleRightMargin;
     _toolsCardView.hidden = YES;
     [_rightContentView addSubview:_toolsCardView];
+    [[BackgroundManager sharedManager] applyEffectToView:_toolsCardView];
     [self setupToolsCard];
 
     // 重启启动器按钮（参照 FCL 的"重启软件"按钮，优先放置）。
@@ -810,6 +824,7 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     _statusBarView.layer.cornerRadius = 13;
     _statusBarView.layer.cornerCurve = kCACornerCurveContinuous;
     [_leftPanel addSubview:_statusBarView];
+    [[BackgroundManager sharedManager] applyEffectToView:_statusBarView];
 
     _activityIndicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
     _activityIndicator.color = [UIColor whiteColor];
@@ -825,7 +840,7 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
 
 - (UITextField *)createTextField:(CGRect)frame placeholder:(NSString *)placeholder {
     UITextField *textField = [[UITextField alloc] initWithFrame:frame];
-    textField.backgroundColor = [UIColor colorWithWhite:0.2 alpha:1.0];
+    textField.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.12];
     textField.layer.cornerRadius = 8;
     textField.textColor = [UIColor whiteColor];
     textField.font = [UIFont systemFontOfSize:14];
@@ -1224,7 +1239,7 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     ];
     for (NSDictionary *item in riskItems) {
         UIView *row = [[UIView alloc] initWithFrame:CGRectZero];
-        row.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.18];
+        row.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.06];
         row.layer.cornerRadius = 10;
         row.layer.cornerCurve = kCACornerCurveContinuous;
         UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(10, 5, _riskStackView.bounds.size.width - 20, 14)];
@@ -1370,7 +1385,7 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     toast.text = message;
     toast.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
     toast.textColor = [UIColor whiteColor];
-    toast.backgroundColor = [UIColor colorWithWhite:0 alpha:0.8];
+    toast.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.15];
     toast.textAlignment = NSTextAlignmentCenter;
     toast.layer.cornerRadius = 20;
     toast.clipsToBounds = YES;
@@ -1537,7 +1552,7 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
 }
 
 - (void)setupUI {
-    self.backgroundColor = [UIColor colorWithWhite:0.2 alpha:0.9];
+    self.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.10];
     self.layer.cornerRadius = 10;
     
     // 图标 - 使用 SVG 图标助手
@@ -1560,7 +1575,7 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
     
     // 参数显示
     _parametersTextView = [[UITextView alloc] initWithFrame:CGRectMake(12, 64, self.bounds.size.width - 24, 48)];
-    _parametersTextView.backgroundColor = [UIColor colorWithWhite:0.1 alpha:1.0];
+    _parametersTextView.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.06];
     _parametersTextView.layer.cornerRadius = 6;
     _parametersTextView.font = [UIFont fontWithName:@"Menlo" size:10];
     _parametersTextView.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.8];
@@ -1651,14 +1666,14 @@ typedef NS_ENUM(NSInteger, MessageBubbleType) {
 - (void)setupModPreview {
     // Mod 预览容器
     _modPreviewContainer = [[UIView alloc] init];
-    _modPreviewContainer.backgroundColor = [UIColor colorWithWhite:0.15 alpha:1.0];
+    _modPreviewContainer.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.08];
     _modPreviewContainer.layer.cornerRadius = 8;
     _modPreviewContainer.hidden = YES;
     [self addSubview:_modPreviewContainer];
     
     // Mod 图标
     _modIconView = [[UIImageView alloc] initWithFrame:CGRectMake(12, 10, 50, 50)];
-    _modIconView.backgroundColor = [UIColor colorWithWhite:0.25 alpha:1.0];
+    _modIconView.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.12];
     _modIconView.layer.cornerRadius = 10;
     _modIconView.clipsToBounds = YES;
     _modIconView.contentMode = UIViewContentModeScaleAspectFill;

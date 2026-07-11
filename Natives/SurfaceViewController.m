@@ -22,6 +22,7 @@
 #import "UIKit+hook.h"
 #import "ios_uikit_bridge.h"
 #import "LanPortDetector.h"
+#import "BackgroundManager.h"
 
 #include "glfw_keycodes.h"
 #include "utils.h"
@@ -722,7 +723,7 @@ static GameSurfaceView* pojavWindow;
     pojavWindow = self.surfaceView;
 
     self.touchView = [[UIView alloc] initWithFrame:self.view.frame];
-    self.touchView.backgroundColor = [UIColor colorWithRed:0 green:0 blue:0 alpha:1];
+    self.touchView.backgroundColor = [UIColor colorWithRed:0.05 green:0.06 blue:0.09 alpha:1.0];
     self.touchView.multipleTouchEnabled = YES;
     [self.touchView addSubview:self.surfaceView];
 
@@ -1126,15 +1127,15 @@ static GameSurfaceView* pojavWindow;
     // 启动阶段列表（参照 FCL/ZL2 启动流程，含完整性检查阶段）
     // 仿 FCL/HMCL：启动前先校验游戏文件完整性
     self.launchStages = @[
-        @"正在初始化运行环境...",
-        @"正在校验游戏文件完整性...",
-        @"正在加载 Java 运行时...",
-        @"正在配置 JVM 参数...",
-        @"正在启动 Java 虚拟机...",
-        @"正在加载游戏库...",
-        @"正在初始化 Minecraft...",
-        @"正在加载资源文件...",
-        @"即将进入游戏...",
+        localize(@"launch.stage.init_env", @"正在初始化运行环境..."),
+        localize(@"launch.stage.verify_files", @"正在校验游戏文件完整性..."),
+        localize(@"launch.stage.load_jre", @"正在加载 Java 运行时..."),
+        localize(@"launch.stage.config_jvm", @"正在配置 JVM 参数..."),
+        localize(@"launch.stage.start_jvm", @"正在启动 Java 虚拟机..."),
+        localize(@"launch.stage.load_libs", @"正在加载游戏库..."),
+        localize(@"launch.stage.init_mc", @"正在初始化 Minecraft..."),
+        localize(@"launch.stage.load_assets", @"正在加载资源文件..."),
+        localize(@"launch.stage.entering", @"即将进入游戏..."),
     ];
     self.currentStageIndex = 0;
     self.launchStartTime = [NSDate timeIntervalSinceReferenceDate];
@@ -1146,18 +1147,30 @@ static GameSurfaceView* pojavWindow;
     self.launchOverlayView.userInteractionEnabled = YES;
     [self.view addSubview:self.launchOverlayView];
 
-    // 深色渐变背景层（仿 FCL 启动页的深色渐变）
-    CAGradientLayer *gradient = [CAGradientLayer layer];
-    gradient.frame = self.launchOverlayView.bounds;
-    gradient.colors = @[
-        (__bridge id)[UIColor colorWithRed:0.08 green:0.09 blue:0.13 alpha:1.0].CGColor,
-        (__bridge id)[UIColor colorWithRed:0.03 green:0.03 blue:0.05 alpha:1.0].CGColor,
-    ];
-    gradient.locations = @[@0.0, @1.0];
-    gradient.startPoint = CGPointMake(0.5, 0.0);
-    gradient.endPoint = CGPointMake(0.5, 1.0);
-    [self.launchOverlayView.layer insertSublayer:gradient atIndex:0];
-    self.launchGradientLayer = gradient;
+    // 背景层：有自定义壁纸时透明让壁纸透出（加半透明蒙层增强文字可读性），
+    // 无自定义壁纸时使用深色渐变作为回退（仿 FCL 启动页的深色渐变）
+    if ([[BackgroundManager sharedManager] hasBackground]) {
+        // 有自定义背景：透明遮罩 + 半透明蒙层
+        self.launchOverlayView.backgroundColor = [UIColor clearColor];
+        UIView *dimOverlay = [[UIView alloc] initWithFrame:self.launchOverlayView.bounds];
+        dimOverlay.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+        dimOverlay.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.4];
+        dimOverlay.userInteractionEnabled = NO;
+        [self.launchOverlayView addSubview:dimOverlay];
+    } else {
+        // 无自定义背景：使用深色渐变
+        CAGradientLayer *gradient = [CAGradientLayer layer];
+        gradient.frame = self.launchOverlayView.bounds;
+        gradient.colors = @[
+            (__bridge id)[UIColor colorWithRed:0.08 green:0.09 blue:0.13 alpha:1.0].CGColor,
+            (__bridge id)[UIColor colorWithRed:0.03 green:0.03 blue:0.05 alpha:1.0].CGColor,
+        ];
+        gradient.locations = @[@0.0, @1.0];
+        gradient.startPoint = CGPointMake(0.5, 0.0);
+        gradient.endPoint = CGPointMake(0.5, 1.0);
+        [self.launchOverlayView.layer insertSublayer:gradient atIndex:0];
+        self.launchGradientLayer = gradient;
+    }
 
     // 游戏图标（顶部，仿 FCL 启动页的 Minecraft 图标）
     self.launchIconView = [[UIImageView alloc] init];
@@ -1177,7 +1190,7 @@ static GameSurfaceView* pojavWindow;
     // 标题
     self.launchTitleLabel = [[UILabel alloc] init];
     self.launchTitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.launchTitleLabel.text = @"正在启动 Minecraft";
+    self.launchTitleLabel.text = localize(@"launch.title", @"正在启动 Minecraft");
     self.launchTitleLabel.font = [UIFont systemFontOfSize:22 weight:UIFontWeightBold];
     self.launchTitleLabel.textColor = [UIColor whiteColor];
     self.launchTitleLabel.textAlignment = NSTextAlignmentCenter;
@@ -1186,7 +1199,7 @@ static GameSurfaceView* pojavWindow;
     // 阶段文案
     self.launchStageLabel = [[UILabel alloc] init];
     self.launchStageLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.launchStageLabel.text = self.launchStages.firstObject ?: @"正在准备...";
+    self.launchStageLabel.text = self.launchStages.firstObject ?: localize(@"launch.stage.preparing", @"正在准备...");
     self.launchStageLabel.font = [UIFont systemFontOfSize:14];
     self.launchStageLabel.textColor = [UIColor colorWithWhite:0.65 alpha:1.0];
     self.launchStageLabel.textAlignment = NSTextAlignmentCenter;
@@ -1204,7 +1217,7 @@ static GameSurfaceView* pojavWindow;
     // 已耗时标签
     self.launchElapsedTimeLabel = [[UILabel alloc] init];
     self.launchElapsedTimeLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.launchElapsedTimeLabel.text = @"已耗时 0秒";
+    self.launchElapsedTimeLabel.text = localize(@"launch.elapsed", @"已耗时 0秒");
     self.launchElapsedTimeLabel.font = [UIFont monospacedDigitSystemFontOfSize:12 weight:UIFontWeightRegular];
     self.launchElapsedTimeLabel.textColor = [UIColor colorWithWhite:0.5 alpha:1.0];
     self.launchElapsedTimeLabel.textAlignment = NSTextAlignmentCenter;
@@ -1299,9 +1312,9 @@ static GameSurfaceView* pojavWindow;
     // 更新已耗时显示
     NSString *timeStr;
     if (elapsed > 60) {
-        timeStr = [NSString stringWithFormat:@"已耗时 %.0f分%.0f秒", elapsed / 60, (double)((int)elapsed % 60)];
+        timeStr = [NSString stringWithFormat:localize(@"launch.elapsed_minutes", @"已耗时 %.0f分%.0f秒"), elapsed / 60, (double)((int)elapsed % 60)];
     } else {
-        timeStr = [NSString stringWithFormat:@"已耗时 %.0f秒", elapsed];
+        timeStr = [NSString stringWithFormat:localize(@"launch.elapsed_seconds", @"已耗时 %.0f秒"), elapsed];
     }
     self.launchElapsedTimeLabel.text = timeStr;
 }
@@ -1321,12 +1334,12 @@ static GameSurfaceView* pojavWindow;
 
         // 更新最终文案
         NSTimeInterval elapsed = [NSDate timeIntervalSinceReferenceDate] - self.launchStartTime;
-        self.launchStageLabel.text = @"启动完成！";
+        self.launchStageLabel.text = localize(@"launch.complete", @"启动完成！");
         NSString *timeStr;
         if (elapsed > 60) {
-            timeStr = [NSString stringWithFormat:@"总耗时 %.0f分%.0f秒", elapsed / 60, (double)((int)elapsed % 60)];
+            timeStr = [NSString stringWithFormat:localize(@"launch.total_minutes", @"总耗时 %.0f分%.0f秒"), elapsed / 60, (double)((int)elapsed % 60)];
         } else {
-            timeStr = [NSString stringWithFormat:@"总耗时 %.1f秒", elapsed];
+            timeStr = [NSString stringWithFormat:localize(@"launch.total_seconds", @"总耗时 %.1f秒"), elapsed];
         }
         self.launchElapsedTimeLabel.text = timeStr;
 

@@ -1,8 +1,7 @@
-#import <dlfcn.h>
 #import <objc/runtime.h>
 #import "DownloadProgressViewController.h"
-#import "WFWorkflowProgressView.h"
 #import "BackgroundManager.h"
+#import "utils.h"
 
 static void *CellProgressObserverContext = &CellProgressObserverContext;
 static void *TotalProgressObserverContext = &TotalProgressObserverContext;
@@ -14,6 +13,137 @@ static void *TotalProgressObserverContext = &TotalProgressObserverContext;
 @property (nonatomic, strong) UILabel *summaryTitleLabel;
 @property (nonatomic, strong) UILabel *summaryDetailLabel;
 @property (nonatomic, strong) UIProgressView *summaryProgressBar;
+@end
+
+// 自定义圆形进度视图，替代私有框架 WFWorkflowProgressView
+@interface CircularProgressView : UIView
+@property (nonatomic, assign) CGFloat fractionCompleted;
+@property (nonatomic, strong) UIColor *resolvedTintColor;
+@property (nonatomic, assign) CGFloat stopSize;
+- (void)reset;
+- (void)transitionCompletedLayerToVisible:(BOOL)visible animated:(BOOL)animated haptic:(BOOL)haptic;
+- (void)transitionRunningLayerToVisible:(BOOL)visible animated:(BOOL)animated;
+@end
+
+@implementation CircularProgressView {
+    CAShapeLayer *_trackLayer;
+    CAShapeLayer *_progressLayer;
+    CAShapeLayer *_completedLayer; // 完成时的对勾
+    BOOL _completedVisible;
+    BOOL _runningVisible;
+}
+
+- (instancetype)initWithFrame:(CGRect)frame {
+    self = [super initWithFrame:frame];
+    if (self) {
+        self.backgroundColor = [UIColor clearColor];
+        _resolvedTintColor = [UIColor systemBlueColor];
+        _stopSize = 0;
+        _fractionCompleted = 0.0;
+        _completedVisible = NO;
+        _runningVisible = YES;
+
+        CGFloat lineWidth = 3.0;
+        CGFloat radius = (MIN(frame.size.width, frame.size.height) - lineWidth) / 2.0 - 1.0;
+        CGPoint center = CGPointMake(frame.size.width / 2.0, frame.size.height / 2.0);
+        UIBezierPath *circlePath = [UIBezierPath bezierPathWithArcCenter:center
+                                                                  radius:radius
+                                                              startAngle:-M_PI_2
+                                                                endAngle:-M_PI_2 + 2.0 * M_PI
+                                                               clockwise:YES];
+
+        _trackLayer = [CAShapeLayer layer];
+        _trackLayer.path = circlePath.CGPath;
+        _trackLayer.fillColor = nil;
+        _trackLayer.strokeColor = [[UIColor whiteColor] colorWithAlphaComponent:0.15].CGColor;
+        _trackLayer.lineWidth = lineWidth;
+        _trackLayer.strokeStart = 0.0;
+        _trackLayer.strokeEnd = 1.0;
+        [self.layer addSublayer:_trackLayer];
+
+        _progressLayer = [CAShapeLayer layer];
+        _progressLayer.path = circlePath.CGPath;
+        _progressLayer.fillColor = nil;
+        _progressLayer.strokeColor = _resolvedTintColor.CGColor;
+        _progressLayer.lineWidth = lineWidth;
+        _progressLayer.lineCap = kCALineCapRound;
+        _progressLayer.strokeStart = 0.0;
+        _progressLayer.strokeEnd = 0.0;
+        [self.layer addSublayer:_progressLayer];
+
+        // 完成对勾（默认隐藏）
+        UIBezierPath *checkPath = [UIBezierPath bezierPath];
+        CGFloat checkSize = radius * 0.7;
+        CGPoint checkCenter = center;
+        [checkPath moveToPoint:CGPointMake(checkCenter.x - checkSize * 0.4, checkCenter.y)];
+        [checkPath addLineToPoint:CGPointMake(checkCenter.x - checkSize * 0.1, checkCenter.y + checkSize * 0.3)];
+        [checkPath addLineToPoint:CGPointMake(checkCenter.x + checkSize * 0.4, checkCenter.y - checkSize * 0.3)];
+
+        _completedLayer = [CAShapeLayer layer];
+        _completedLayer.path = checkPath.CGPath;
+        _completedLayer.fillColor = nil;
+        _completedLayer.strokeColor = [UIColor systemGreenColor].CGColor;
+        _completedLayer.lineWidth = lineWidth;
+        _completedLayer.lineCap = kCALineCapRound;
+        _completedLayer.lineJoin = kCALineJoinRound;
+        _completedLayer.opacity = 0.0;
+        [self.layer addSublayer:_completedLayer];
+    }
+    return self;
+}
+
+- (void)setFractionCompleted:(CGFloat)fractionCompleted {
+    _fractionCompleted = MAX(0.0, MIN(1.0, fractionCompleted));
+    [CATransaction begin];
+    [CATransaction setAnimationDuration:0.3];
+    _progressLayer.strokeEnd = _fractionCompleted;
+    [CATransaction commit];
+}
+
+- (void)setResolvedTintColor:(UIColor *)resolvedTintColor {
+    _resolvedTintColor = resolvedTintColor ?: [UIColor systemBlueColor];
+    _progressLayer.strokeColor = _resolvedTintColor.CGColor;
+}
+
+- (void)reset {
+    [CATransaction begin];
+    [CATransaction setAnimationDuration:0.25];
+    _progressLayer.strokeEnd = 0.0;
+    _completedLayer.opacity = 0.0;
+    [CATransaction commit];
+    _fractionCompleted = 0.0;
+    _completedVisible = NO;
+}
+
+- (void)transitionCompletedLayerToVisible:(BOOL)visible animated:(BOOL)animated haptic:(BOOL)haptic {
+    _completedVisible = visible;
+    [CATransaction begin];
+    [CATransaction setAnimationDuration:animated ? 0.3 : 0.0];
+    if (visible) {
+        _completedLayer.opacity = 1.0;
+        _trackLayer.opacity = 0.0;
+        _progressLayer.opacity = 0.0;
+    } else {
+        _completedLayer.opacity = 0.0;
+        _trackLayer.opacity = 1.0;
+        _progressLayer.opacity = 1.0;
+    }
+    [CATransaction commit];
+}
+
+- (void)transitionRunningLayerToVisible:(BOOL)visible animated:(BOOL)animated {
+    _runningVisible = visible;
+    [CATransaction begin];
+    [CATransaction setAnimationDuration:animated ? 0.25 : 0.0];
+    if (!visible && !_completedVisible) {
+        // 隐藏运行中状态但未完成：显示暂停状态
+        _progressLayer.opacity = 0.5;
+    } else {
+        _progressLayer.opacity = visible ? 1.0 : 0.5;
+    }
+    [CATransaction commit];
+}
+
 @end
 
 @implementation DownloadProgressViewController
@@ -35,9 +165,6 @@ static void *TotalProgressObserverContext = &TotalProgressObserverContext;
 
     // 阶段12增强：创建表头摘要视图（参照 FCL 下载页顶部的总进度摘要）
     [self setupSummaryHeader];
-
-    // Load WFWorkflowProgressView
-    dlopen("/System/Library/PrivateFrameworks/WorkflowUIServices.framework/WorkflowUIServices", RTLD_GLOBAL);
 }
 
 /// 创建表头摘要视图：总进度百分比 + 进度条 + 速度/ETA 信息
@@ -57,7 +184,7 @@ static void *TotalProgressObserverContext = &TotalProgressObserverContext;
     self.summaryTitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.summaryTitleLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightBold];
     self.summaryTitleLabel.textColor = [UIColor labelColor];
-    self.summaryTitleLabel.text = @"正在下载...";
+    self.summaryTitleLabel.text = localize(@"download.progress.downloading", @"正在下载...");
     [cardView addSubview:self.summaryTitleLabel];
 
     self.summaryDetailLabel = [[UILabel alloc] init];
@@ -122,7 +249,7 @@ static void *TotalProgressObserverContext = &TotalProgressObserverContext;
         if (!cell) return;
         dispatch_async(dispatch_get_main_queue(), ^{
             cell.detailTextLabel.text = progress.localizedAdditionalDescription;
-            WFWorkflowProgressView *progressView = (id)cell.accessoryView;
+            CircularProgressView *progressView = (id)cell.accessoryView;
             progressView.fractionCompleted = progress.fractionCompleted;
             if (progress.finished) {
                 [progressView transitionCompletedLayerToVisible:YES animated:YES haptic:NO];
@@ -133,7 +260,7 @@ static void *TotalProgressObserverContext = &TotalProgressObserverContext;
             self.title = progress.localizedDescription;
             // 阶段12增强：更新表头摘要
             double fraction = progress.fractionCompleted;
-            self.summaryTitleLabel.text = [NSString stringWithFormat:@"正在下载... %.0f%%", fraction * 100.0];
+            self.summaryTitleLabel.text = [NSString stringWithFormat:localize(@"download.progress.downloading_percent", @"正在下载... %.0f%%"), fraction * 100.0];
             [self.summaryProgressBar setProgress:(float)fraction animated:YES];
 
             // 构建详情文本：已下载/总大小 + 速度 + ETA
@@ -157,9 +284,9 @@ static void *TotalProgressObserverContext = &TotalProgressObserverContext;
             if (progress.estimatedTimeRemaining) {
                 NSInteger eta = [progress.estimatedTimeRemaining integerValue];
                 if (eta > 60) {
-                    [detail appendFormat:@" • 剩余 %ld分%ld秒", (long)(eta / 60), (long)(eta % 60)];
+                    [detail appendFormat:@" • %@", [NSString stringWithFormat:localize(@"download.progress.eta_minutes", @"剩余 %ld分%ld秒"), (long)(eta / 60), (long)(eta % 60)]];
                 } else if (eta > 0) {
-                    [detail appendFormat:@" • 剩余 %ld秒", (long)eta];
+                    [detail appendFormat:@" • %@", [NSString stringWithFormat:localize(@"download.progress.eta_seconds", @"剩余 %ld秒"), (long)eta]];
                 }
             }
             self.summaryDetailLabel.text = detail.length > 0 ? detail : @"";
@@ -185,7 +312,7 @@ static void *TotalProgressObserverContext = &TotalProgressObserverContext;
 
     if (cell == nil) {
         cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:@"cell"];
-        WFWorkflowProgressView *progressView = [[NSClassFromString(@"WFWorkflowProgressView") alloc] initWithFrame:CGRectMake(0, 0, 30, 30)];
+        CircularProgressView *progressView = [[CircularProgressView alloc] initWithFrame:CGRectMake(0, 0, 30, 30)];
         progressView.resolvedTintColor = self.view.tintColor;
         progressView.stopSize = 0;
         cell.accessoryView = progressView;
@@ -208,7 +335,7 @@ static void *TotalProgressObserverContext = &TotalProgressObserverContext;
         options:NSKeyValueObservingOptionInitial
         context:CellProgressObserverContext];
 
-    WFWorkflowProgressView *progressView = (id)cell.accessoryView;
+    CircularProgressView *progressView = (id)cell.accessoryView;
     if (lastProgress && lastProgress.finished) {
         [progressView reset];
     }
