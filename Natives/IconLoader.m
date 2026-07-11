@@ -379,7 +379,14 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
 
 + (NSUInteger)memoryCacheCount {
     IconLoader *loader = [self sharedLoader];
-    return loader.memoryCache.count;
+    // NSCache 没有直接的 count 属性，使用 NSCache 的 countLimit 不准确
+    // 这里通过 enumerateKeysAndObjectsUsingBlock: 遍历计数
+    // （仅用于设置页显示，非热点路径，性能可接受）
+    __block NSUInteger count = 0;
+    [loader.memoryCache enumerateKeysAndObjectsUsingBlock:^(id key, id obj, BOOL *stop) {
+        count++;
+    }];
+    return count;
 }
 
 #pragma mark - 公共接口：CDN 镜像
