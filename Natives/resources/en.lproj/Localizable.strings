@@ -58,6 +58,10 @@
 "custom_controls.button_edit.corner_radius" = "Corner radius (%)";
 "custom_controls.button_edit.opacity" = "Opacity (%)";
 "custom_controls.button_edit.visibility" = "Visibility";
+"custom_controls.button_edit.section.basic" = "Basic";
+"custom_controls.button_edit.section.input" = "Input";
+"custom_controls.button_edit.section.behavior" = "Behavior";
+"custom_controls.button_edit.section.appearance" = "Appearance";
 
 "custom_controls.button_menu.add_subbutton" = "Add sub-button";
 "custom_controls.control_menu.discard_changes" = "Discard changes";

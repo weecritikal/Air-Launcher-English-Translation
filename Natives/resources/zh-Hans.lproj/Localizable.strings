@@ -58,6 +58,10 @@
 "custom_controls.button_edit.corner_radius" = "圆角半径 (%)";
 "custom_controls.button_edit.opacity" = "不透明度 (%)：";
 "custom_controls.button_edit.visibility" = "可见性";
+"custom_controls.button_edit.section.basic" = "基础";
+"custom_controls.button_edit.section.input" = "输入";
+"custom_controls.button_edit.section.behavior" = "行为";
+"custom_controls.button_edit.section.appearance" = "外观";
 
 "custom_controls.button_menu.add_subbutton" = "添加子按钮";
 "custom_controls.control_menu.discard_changes" = "取消更改";
