@@ -170,7 +170,10 @@
     [super prepareForReuse];
     // 修复图标加载慢/错乱：取消正在进行的 AFNetworking 图片请求，
     // 防止复用 cell 时旧请求完成后覆盖新配置的图标。
-    [_shaderIconView cancelImageRequestOperation];
+    // 使用 performSelector: 调用，兼容不同版本的 AFNetworking（部分版本可能未导出该方法声明）
+    if ([_shaderIconView respondsToSelector:@selector(cancelImageRequestOperation)]) {
+        [_shaderIconView performSelector:@selector(cancelImageRequestOperation)];
+    }
     _shaderIconView.image = [UIImage systemImageNamed:@"photo"];
     _nameLabel.text = nil;
     _shaderVersionLabel.text = nil;

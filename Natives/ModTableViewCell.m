@@ -247,7 +247,10 @@
     // 如果新 cell 配置走的是 mod.icon（本地图片）或默认图标分支（不调用 setImageWithURL:），
     // 旧的异步请求不会被取消，导致延迟加载的旧图标覆盖新图标。
     // 这里显式取消，确保 cell 复用时不会有残留请求。
-    [_modIconView cancelImageRequestOperation];
+    // 使用 performSelector: 调用，兼容不同版本的 AFNetworking（部分版本可能未导出该方法声明）
+    if ([_modIconView respondsToSelector:@selector(cancelImageRequestOperation)]) {
+        [_modIconView performSelector:@selector(cancelImageRequestOperation)];
+    }
     _modIconView.image = [UIImage systemImageNamed:@"puzzlepiece.extension"];
     _loaderIconView.image = nil;
     _nameLabel.text = nil;
