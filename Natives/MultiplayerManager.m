@@ -23,8 +23,8 @@
 //  在 iOS 平台上，由于以下限制，无法完全照搬 Android 的实现：
 //    a. iOS 不允许 App 在后台长期运行 VPN / 虚拟网卡（ZeroTier 官方 app
 //       使用 NetworkExtension.framework 的 NEPacketTunnelProvider，需要
-       Apple 颁发的 Network Extension 权限，普通开发者账号无法获取）。
-    b. iOS 沙盒机制禁止第三方 App 直接操作 utun 设备。
+//       Apple 颁发的 Network Extension 权限，普通开发者账号无法获取）。
+//    b. iOS 沙盒机制禁止第三方 App 直接操作 utun 设备。
 //
 //  因此，iOS 上的联机策略调整为：
 //    1. 启动器不直接集成 ZeroTier SDK，而是通过 URL Scheme 唤起
@@ -121,7 +121,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
         _networkId = [networkId copy] ?: @"";
         _hostIP = [hostIP copy] ?: @"";
         _hostPort = [hostPort copy] ?: kDefaultMCPort;
-        _description = @"";
+        _roomDescription = @"";
         _status = MultiplayerRoomStatusDisconnected;
         _ownerName = @"";
         _createdAt = [NSDate date];
@@ -143,7 +143,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
         _networkId = [coder decodeObjectOfClass:[NSString class] forKey:@"networkId"] ?: @"";
         _hostIP = [coder decodeObjectOfClass:[NSString class] forKey:@"hostIP"] ?: @"";
         _hostPort = [coder decodeObjectOfClass:[NSString class] forKey:@"hostPort"] ?: kDefaultMCPort;
-        _description = [coder decodeObjectOfClass:[NSString class] forKey:@"description"] ?: @"";
+        _roomDescription = [coder decodeObjectOfClass:[NSString class] forKey:@"description"] ?: @"";
         _ownerName = [coder decodeObjectOfClass:[NSString class] forKey:@"ownerName"] ?: @"";
 
         // 日期属性使用 NSDate 类安全解码
@@ -170,7 +170,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     [coder encodeObject:self.networkId forKey:@"networkId"];
     [coder encodeObject:self.hostIP forKey:@"hostIP"];
     [coder encodeObject:self.hostPort forKey:@"hostPort"];
-    [coder encodeObject:self.description forKey:@"description"];
+    [coder encodeObject:self.roomDescription forKey:@"description"];
     [coder encodeObject:self.ownerName forKey:@"ownerName"];
     [coder encodeObject:self.createdAt forKey:@"createdAt"];
     [coder encodeObject:self.lastConnectedAt forKey:@"lastConnectedAt"];
@@ -202,7 +202,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     copy.networkId = [self.networkId copy];
     copy.hostIP = [self.hostIP copy];
     copy.hostPort = [self.hostPort copy];
-    copy.description = [self.description copy];
+    copy.roomDescription = [self.roomDescription copy];
     copy.status = self.status;
     copy.ownerName = [self.ownerName copy];
     copy.createdAt = [self.createdAt copy];
@@ -1128,7 +1128,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
                                                        networkId:networkId
                                                           hostIP:hostIP
                                                         hostPort:hostPort];
-    room.description = @"从分享文本导入";
+    room.roomDescription = @"从分享文本导入";
     room.status = MultiplayerRoomStatusDisconnected;
 
     NSLog(@"[MultiplayerManager] 成功解析分享文本：name=%@, networkId=%@, host=%@:%@",

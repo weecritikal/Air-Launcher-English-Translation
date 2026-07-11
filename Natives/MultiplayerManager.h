@@ -17,7 +17,7 @@ typedef NS_ENUM(NSInteger, MultiplayerRoomStatus) {
 @property (nonatomic, copy) NSString *networkId;       // ZeroTier Network ID（16位十六进制）
 @property (nonatomic, copy) NSString *hostIP;          // 房主在 ZeroTier 网络中的 IP（如 10.147.17.1）
 @property (nonatomic, copy) NSString *hostPort;        // MC 服务器端口（默认 25565）
-@property (nonatomic, copy) NSString *description;     // 房间描述
+@property (nonatomic, copy) NSString *roomDescription; // 房间描述
 @property (nonatomic, assign) MultiplayerRoomStatus status; // 连接状态
 @property (nonatomic, copy) NSString *ownerName;       // 房主名称
 @property (nonatomic, strong) NSDate *createdAt;       // 创建时间

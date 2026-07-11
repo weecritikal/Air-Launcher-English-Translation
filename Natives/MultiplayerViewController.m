@@ -672,7 +672,7 @@
         room.networkId = networkId;
         room.hostIP = ip;
         room.hostPort = port;
-        room.description = @"";
+        room.roomDescription = @"";
         room.status = MultiplayerRoomStatusDisconnected;
         room.createdAt = [NSDate date];
 
