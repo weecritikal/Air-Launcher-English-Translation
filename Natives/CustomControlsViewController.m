@@ -394,12 +394,25 @@
 
 - (void)viewDidLayoutSubviews {
     if (self.navigationBar.hidden) {
-        // 默认 safeArea 模式：顶部预留工具栏空间（工具栏 40pt + 上间距 8 + 下间距 8 = 56pt），
-        // 避免顶部工具栏遮挡控制区上方的按钮导致无法调整键位。
-        // 底部也需要预留底部浮动工具栏的空间（工具栏高度 64 + 下间距 8 + 安全区域 = ~80pt）
+        // 默认 safeArea 模式：ctrlView 需在顶部工具栏和底部浮动工具栏之间。
+        //
+        // 顶部预留：工具栏 40pt + 上间距 8 + 下间距 8 = 56pt
+        //
+        // 底部预留：底部浮动工具栏通过 Auto Layout 固定在 safeAreaLayoutGuide.bottomAnchor
+        // 上方 8pt 处，工具栏高度 64pt。所以工具栏顶部距 safeArea 底部 = 8 + 64 = 72pt。
+        // 但 getSafeArea() 返回的 frame 的 top/bottom 偏移为 0（只有左右偏移），
+        // 因此 safeFrame 底部 = self.view.frame 底部（含 Home Indicator 区域）。
+        // 为避免 ctrlView 与工具栏重叠，需从 safeFrame 底部减去：
+        //   Home Indicator 高度 + 工具栏下间距 8 + 工具栏高度 64 + 上间距 8
+        // 由于无法预知 Home Indicator 精确高度，直接用 self.view.safeAreaInsets.bottom
+        // 获取当前设备的 Home Indicator 高度。
+        CGFloat topInset = 56.0;
+        CGFloat homeIndicator = self.view.safeAreaInsets.bottom;
+        CGFloat bottomInset = homeIndicator + 8.0 + _bottomToolbarHeight + 8.0;
+
         CGRect safeFrame = getSafeArea(self.view.frame);
-        safeFrame.origin.y += 56;
-        safeFrame.size.height -= 56 + _bottomToolbarHeight + 16;
+        safeFrame.origin.y += topInset;
+        safeFrame.size.height -= topInset + bottomInset;
         self.ctrlView.frame = safeFrame;
     }
 
