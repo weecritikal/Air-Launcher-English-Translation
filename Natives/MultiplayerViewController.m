@@ -39,6 +39,7 @@
 #import "BackgroundManager.h"
 #import "LauncherPreferences.h"
 #import "PLProfiles.h"
+#import "LanPortDetector.h"
 
 #pragma mark - MultiplayerStatusCell
 
@@ -606,8 +607,20 @@
 #pragma mark - 创建房间
 
 - (void)showCreateRoomDialog {
+    // 检测 LAN 端口（FCL 风格：自动预填端口）
+    LanPortDetector *detector = [LanPortDetector sharedDetector];
+    NSString *detectedPort = detector.detectedPort ?: @"25565";
+    NSString *portHint = @"";
+    if (detector.detectedPort) {
+        if (detector.source == LanPortSourceAuto) {
+            portHint = [NSString stringWithFormat:@"已自动检测到 LAN 端口：%@", detector.detectedPort];
+        } else {
+            portHint = [NSString stringWithFormat:@"上次输入的端口：%@", detector.detectedPort];
+        }
+    }
+
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"创建联机房间"
-                                                                   message:nil
+                                                                   message:portHint.length > 0 ? portHint : nil
                                                             preferredStyle:UIAlertControllerStyleAlert];
 
     // 1. 房间名称
@@ -633,10 +646,10 @@
         textField.keyboardType = UIKeyboardTypeNumbersAndPunctuation;
     }];
 
-    // 4. 端口
+    // 4. 端口（自动预填检测到的 LAN 端口）
     [alert addTextFieldWithConfigurationHandler:^(UITextField * _Nonnull textField) {
         textField.placeholder = @"25565";
-        textField.text = @"25565";
+        textField.text = detectedPort;
         textField.keyboardType = UIKeyboardTypeNumberPad;
     }];
 
@@ -664,6 +677,9 @@
         if (!port || port.length == 0) {
             port = @"25565";
         }
+
+        // 保存端口到 LanPortDetector（下次创建房间时预填）
+        [[LanPortDetector sharedDetector] setManualPort:port];
 
         // 创建房间对象
         MultiplayerRoom *room = [[MultiplayerRoom alloc] init];
@@ -1156,10 +1172,20 @@
 
     switch (indexPath.section) {
         case 0: {
-            // 点击 ZeroTier 状态行：打开 ZeroTier One app
-            [[MultiplayerManager sharedManager] openZeroTierApp];
-            // 刷新状态
-            [self.tableView reloadRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationAutomatic];
+            // 点击 ZeroTier 状态行
+            BOOL installed = [[MultiplayerManager sharedManager] isZeroTierAppInstalled];
+            BOOL overridden = [[MultiplayerManager sharedManager] isZeroTierInstallOverridden];
+
+            if (installed && !overridden) {
+                // 已安装（自动检测到）：直接打开
+                [[MultiplayerManager sharedManager] openZeroTierApp];
+            } else if (overridden) {
+                // 用户手动确认已安装：尝试打开，失败则提示
+                [[MultiplayerManager sharedManager] openZeroTierApp];
+            } else {
+                // 未检测到：弹出选项让用户选择
+                [self showZeroTierNotInstalledOptions:indexPath];
+            }
             break;
         }
         case 1: {
@@ -1182,6 +1208,47 @@
         default:
             break;
     }
+}
+
+/// 显示 ZeroTier 未安装时的选项（FCL 风格）
+/// 提供"前往 App Store"、"手动确认已安装"两个选项
+/// 后者用于通过 NB 助手/TrollStore 等非 App Store 方式安装的情况
+- (void)showZeroTierNotInstalledOptions:(NSIndexPath *)indexPath {
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:nil
+                                                                   message:@"未检测到 ZeroTier One。\n如果你已通过 NB 助手等工具安装，请选择\"手动确认已安装\"。"
+                                                            preferredStyle:UIAlertControllerStyleActionSheet];
+
+    [sheet addAction:[UIAlertAction actionWithTitle:@"前往 App Store 安装" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        [[MultiplayerManager sharedManager] openZeroTierApp];
+    }]];
+
+    [sheet addAction:[UIAlertAction actionWithTitle:@"手动确认已安装" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        // 设置用户偏好覆盖
+        [[MultiplayerManager sharedManager] setZeroTierInstalledOverride:YES];
+        // 刷新状态
+        [self.tableView reloadRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationAutomatic];
+        // 尝试打开 ZeroTier
+        [[MultiplayerManager sharedManager] openZeroTierApp];
+    }]];
+
+    [sheet addAction:[UIAlertAction actionWithTitle:@"取消手动确认" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
+        // 取消手动覆盖
+        [[MultiplayerManager sharedManager] setZeroTierInstalledOverride:NO];
+        [self.tableView reloadRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationAutomatic];
+    }]];
+
+    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+
+    // iPad 适配
+    if (sheet.popoverPresentationController) {
+        UITableViewCell *cell = [self.tableView cellForRowAtIndexPath:indexPath];
+        if (cell) {
+            sheet.popoverPresentationController.sourceView = cell.contentView;
+            sheet.popoverPresentationController.sourceRect = cell.contentView.bounds;
+        }
+    }
+
+    [self presentViewController:sheet animated:YES completion:nil];
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {

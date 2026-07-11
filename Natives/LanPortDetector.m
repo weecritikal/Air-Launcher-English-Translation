@@ -1,0 +1,317 @@
+//
+//  LanPortDetector.m
+//  Amethyst
+//
+//  Minecraft "对局域网开放"端口检测器实现
+//
+//  ============================================================================
+//  实现原理
+//  ============================================================================
+//
+//  1. 日志拦截：
+//     PLLogOutputView.appendToLog: 是所有 MC 日志的入口点。本检测器通过
+//     Method Swizzle 交换 appendToLog: 的实现，在日志写入 UI 的同时
+//     传递给 LanPortDetector 进行正则匹配。
+//
+//     但为了不侵入 PLLogOutputView 的实现，改用更轻量的方案：
+//     直接在 PLLogOutputView._appendToLog: 中调用 LanPortDetector
+//     的 parsePortFromLogLine: 方法（需在 PLLogOutputView.m 中添加一行调用）。
+//
+//     最终权衡：采用通知机制。LanPortDetector 监听一个自定义通知
+//     "PLLogOutputLineNotification"，PLLogOutputView 在 _appendToLog: 中
+//     发送此通知。这样 LanPortDetector 无需 swizzle，也不依赖
+//     PLLogOutputView 的私有实现。
+//
+//  2. 正则匹配：
+//     MC "对局域网开放"日志格式多样，需要覆盖以下模式：
+//     - "Local game hosted on port 54321"
+//     - "Local game hosted on 0.0.0.0:54321"
+//     - "Started serving on 54321"
+//     - "Integrated server started on port 54321"
+//     - "Starting integrated minecraft server on port 54321"
+//
+//  3. 通知机制：
+//     检测到端口后发送 LanPortDetectorDidDetectPortNotification，
+//     userInfo 包含 port 和 source 字段。
+//
+//  4. 日志文件回退：
+//     如果实时检测失败（如用户在检测器启动前就开了 LAN），
+//     detectFromLogFile 方法从 latestlog.txt 重新搜索端口。
+//
+//
+
+#import "LanPortDetector.h"
+
+/// 通知名：PLLogOutputView 输出一行日志时发送
+/// PLLogOutputView._appendToLog: 中会发送此通知
+/// userInfo: @{@"line": @"日志内容"}
+NSString *const PLLogOutputLineNotification = @"PLLogOutputLineNotification";
+
+/// LAN 端口检测通知名
+NSString *const LanPortDetectorDidDetectPortNotification = @"LanPortDetectorDidDetectPort";
+
+/// 日志文件路径（POJAV_HOME/latestlog.txt）
+static NSString *const kLatestLogPath = @"%s/latestlog.txt";
+
+@interface LanPortDetector ()
+{
+    id _logObserver;
+}
+
+@property (nonatomic, copy, readwrite, nullable) NSString *detectedPort;
+@property (nonatomic, assign, readwrite) LanPortSource source;
+@property (nonatomic, strong, readwrite, nullable) NSDate *detectedAt;
+@property (nonatomic, assign, readwrite, getter=isDetecting) BOOL detecting;
+
+@end
+
+@implementation LanPortDetector
+
+#pragma mark - 单例
+
++ (instancetype)sharedDetector {
+    static LanPortDetector *shared = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        shared = [[self alloc] init];
+    });
+    return shared;
+}
+
++ (instancetype)allocWithZone:(struct _NSZone *)zone {
+    static LanPortDetector *shared = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        shared = [super allocWithZone:zone];
+    });
+    return shared;
+}
+
+- (instancetype)init {
+    self = [super init];
+    if (self) {
+        _detectedPort = nil;
+        _source = LanPortSourceUnknown;
+        _detectedAt = nil;
+        _detecting = NO;
+    }
+    return self;
+}
+
+#pragma mark - 检测控制
+
+/// 开始检测
+/// 注册 PLLogOutputLineNotification 通知监听
+- (void)startDetecting {
+    if (self.detecting) {
+        NSLog(@"[LanPortDetector] 已在检测中，跳过重复启动");
+        return;
+    }
+
+    self.detecting = YES;
+    NSLog(@"[LanPortDetector] 开始检测 LAN 端口");
+
+    // 先从日志文件尝试检测一次（覆盖检测器启动前就开 LAN 的情况）
+    NSString *existingPort = [self detectFromLogFile];
+    if (existingPort) {
+        NSLog(@"[LanPortDetector] 从日志文件检测到已有 LAN 端口：%@", existingPort);
+        [self setPort:existingPort source:LanPortSourceAuto];
+    }
+
+    // 注册日志行通知
+    __weak typeof(self) weakSelf = self;
+    _logObserver = [[NSNotificationCenter defaultCenter] addObserverForName:PLLogOutputLineNotification
+                                                                     object:nil
+                                                                      queue:nil
+                                                                 usingBlock:^(NSNotification *notification) {
+        NSString *line = notification.userInfo[@"line"];
+        if (line) {
+            [weakSelf processLogLine:line];
+        }
+    }];
+}
+
+/// 停止检测
+- (void)stopDetecting {
+    if (!self.detecting) return;
+
+    NSLog(@"[LanPortDetector] 停止检测 LAN 端口");
+    self.detecting = NO;
+
+    if (_logObserver) {
+        [[NSNotificationCenter defaultCenter] removeObserver:_logObserver];
+        _logObserver = nil;
+    }
+}
+
+#pragma mark - 日志处理
+
+/// 处理一行日志，检测是否包含 LAN 端口信息
+- (void)processLogLine:(NSString *)line {
+    if (!line || line.length == 0) return;
+
+    NSString *port = [self parsePortFromLogLine:line];
+    if (port) {
+        NSLog(@"[LanPortDetector] 从日志检测到 LAN 端口：%@（来源：行 '%@'）", port, line);
+        [self setPort:port source:LanPortSourceAuto];
+    }
+}
+
+/// 从日志行解析 LAN 端口
+///
+/// 支持的 MC 日志格式：
+/// 1. "Local game hosted on port 54321"
+/// 2. "Local game hosted on 0.0.0.0:54321"
+/// 3. "Started serving on 54321"
+/// 4. "Integrated server started on port 54321"
+/// 5. "Starting integrated minecraft server on port 54321"
+/// 6. "ThreadedAnvilChunkSystem: Integrated server started on *:54321"
+///
+/// @param logLine 日志行
+/// @return 端口号字符串，nil 表示不包含
+- (NSString *)parsePortFromLogLine:(NSString *)logLine {
+    if (!logLine || logLine.length == 0) return nil;
+
+    // 预编译正则表达式（性能优化：静态变量只编译一次）
+    // 模式 1：hosted on port XXXXX
+    static NSRegularExpression *hostedOnPortRegex = nil;
+    static NSRegularExpression *hostedOnAddrPortRegex = nil;
+    static NSRegularExpression *startedServingRegex = nil;
+    static NSRegularExpression *integratedStartedRegex = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        // "Local game hosted on port 54321"
+        hostedOnPortRegex = [NSRegularExpression regularExpressionWithPattern:
+            @"hosted on port (\\d{1,5})"
+            options:NSRegularExpressionCaseInsensitive error:nil];
+        // "Local game hosted on 0.0.0.0:54321" 或 "hosted on *:54321"
+        hostedOnAddrPortRegex = [NSRegularExpression regularExpressionWithPattern:
+            @"hosted on (?:[0-9.*]+):(\\d{1,5})"
+            options:NSRegularExpressionCaseInsensitive error:nil];
+        // "Started serving on 54321"
+        startedServingRegex = [NSRegularExpression regularExpressionWithPattern:
+            @"started serving on (\\d{1,5})"
+            options:NSRegularExpressionCaseInsensitive error:nil];
+        // "Integrated server started on port 54321" 或 "on *:54321"
+        integratedStartedRegex = [NSRegularExpression regularExpressionWithPattern:
+            @"integrated server.*?(?:port|on [\\*0-9.]*:?)\\s*(\\d{4,5})"
+            options:NSRegularExpressionCaseInsensitive error:nil];
+    });
+
+    // 逐个模式匹配
+    NSArray<NSRegularExpression *> *regexes = @[
+        hostedOnPortRegex,
+        hostedOnAddrPortRegex,
+        startedServingRegex,
+        integratedStartedRegex,
+    ];
+
+    for (NSRegularExpression *regex in regexes) {
+        if (!regex) continue;
+        NSTextCheckingResult *match = [regex firstMatchInString:logLine
+                                                        options:0
+                                                          range:NSMakeRange(0, logLine.length)];
+        if (match && match.numberOfRanges >= 2) {
+            NSString *portStr = [logLine substringWithRange:[match rangeAtIndex:1]];
+            // 验证端口号范围（1024-65535，LAN 端口通常在这个范围）
+            NSInteger portNum = [portStr integerValue];
+            if (portNum >= 1024 && portNum <= 65535) {
+                return portStr;
+            }
+        }
+    }
+
+    return nil;
+}
+
+#pragma mark - 日志文件检测
+
+/// 从 latestlog.txt 检测端口
+///
+/// 当实时检测失败时（如检测器启动前就开了 LAN），
+/// 从日志文件中从后往前搜索最近的端口匹配。
+- (NSString *)detectFromLogFile {
+    NSString *logPath = [NSString stringWithFormat:kLatestLogPath, getenv("POJAV_HOME")];
+    if (!logPath) return nil;
+
+    NSError *error = nil;
+    NSString *content = [NSString stringWithContentsOfFile:logPath
+                                                  encoding:NSUTF8StringEncoding
+                                                     error:&error];
+    if (error || !content || content.length == 0) {
+        NSLog(@"[LanPortDetector] 读取日志文件失败：%@", error.localizedDescription);
+        return nil;
+    }
+
+    // 按行分割，从后往前搜索（最近的端口匹配）
+    NSArray<NSString *> *lines = [content componentsSeparatedByCharactersInSet:
+        [NSCharacterSet newlineCharacterSet]];
+
+    for (NSInteger i = lines.count - 1; i >= 0; i--) {
+        NSString *line = lines[i];
+        NSString *port = [self parsePortFromLogLine:line];
+        if (port) {
+            NSLog(@"[LanPortDetector] 从日志文件第 %ld 行检测到端口：%@", (long)i, port);
+            return port;
+        }
+    }
+
+    return nil;
+}
+
+#pragma mark - 端口设置
+
+/// 手动设置端口
+- (void)setManualPort:(NSString *)port {
+    if (!port || port.length == 0) {
+        NSLog(@"[LanPortDetector] setManualPort: 端口为空");
+        return;
+    }
+
+    // 验证端口号
+    NSInteger portNum = [port integerValue];
+    if (portNum < 1 || portNum > 65535) {
+        NSLog(@"[LanPortDetector] setManualPort: 端口号无效：%@", port);
+        return;
+    }
+
+    [self setPort:port source:LanPortSourceManual];
+}
+
+/// 清除当前端口
+- (void)clearPort {
+    NSLog(@"[LanPortDetector] 清除端口（之前：%@）", self.detectedPort);
+    self.detectedPort = nil;
+    self.source = LanPortSourceUnknown;
+    self.detectedAt = nil;
+}
+
+/// 内部设置端口方法
+- (void)setPort:(NSString *)port source:(LanPortSource)source {
+    if (!port || port.length == 0) return;
+
+    // 如果端口相同且来源相同，不重复通知
+    if ([port isEqualToString:self.detectedPort] && source == self.source) {
+        return;
+    }
+
+    self.detectedPort = [port copy];
+    self.source = source;
+    self.detectedAt = [NSDate date];
+
+    NSLog(@"[LanPortDetector] 端口已设置：%@（来源：%@）", port,
+          source == LanPortSourceAuto ? @"自动检测" :
+          source == LanPortSourceManual ? @"手动输入" : @"未知");
+
+    // 发送通知
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [[NSNotificationCenter defaultCenter] postNotificationName:LanPortDetectorDidDetectPortNotification
+                                                            object:self
+                                                          userInfo:@{
+        @"port": port,
+        @"source": @(source),
+    }];
+    });
+}
+
+@end

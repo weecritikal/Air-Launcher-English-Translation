@@ -45,6 +45,13 @@ typedef NS_ENUM(NSInteger, MultiplayerRoomStatus) {
 /// ZeroTier One app 是否已安装
 - (BOOL)isZeroTierAppInstalled;
 
+/// 设置 ZeroTier 安装状态覆盖（用户手动指定，用于 canOpenURL 检测失败时）
+/// @param installed YES 表示用户确认已安装 ZeroTier One
+- (void)setZeroTierInstalledOverride:(BOOL)installed;
+
+/// 用户是否已手动覆盖 ZeroTier 安装状态
+- (BOOL)isZeroTierInstallOverridden;
+
 /// 打开 ZeroTier One app
 - (void)openZeroTierApp;
 

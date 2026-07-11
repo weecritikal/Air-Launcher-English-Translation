@@ -21,6 +21,7 @@
 #import "TouchControllerBridge.h"
 #import "UIKit+hook.h"
 #import "ios_uikit_bridge.h"
+#import "LanPortDetector.h"
 
 #include "glfw_keycodes.h"
 #include "utils.h"
@@ -890,6 +891,10 @@ static GameSurfaceView* pojavWindow;
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
     [self setNeedsUpdateOfPrefersPointerLocked];
+
+    // 启动 LAN 端口检测器（用于联机功能自动检测 MC "对局域网开放"端口）
+    // 检测器通过监听 MC 日志输出识别端口，检测到后通过通知 LanPortDetectorDidDetectPort 通知 UI
+    [[LanPortDetector sharedDetector] startDetecting];
 }
 
 - (void)viewDidLayoutSubviews {
@@ -2115,6 +2120,9 @@ static NSMutableDictionary *s_touchToFingerIdMap = nil;
     [[NSNotificationCenter defaultCenter] removeObserver:self name:@"PojavFirstFrameRendered" object:nil];
     self.launchOverlayView = nil;
     self.launchGradientLayer = nil;
+
+    // 停止 LAN 端口检测器（游戏退出时清理）
+    [[LanPortDetector sharedDetector] stopDetecting];
 
     //æ¸ç TouchController èµæº
     if (self.touchControllerTransportHandle >= 0) {

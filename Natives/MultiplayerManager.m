@@ -54,6 +54,7 @@
 //
 
 #import "MultiplayerManager.h"
+#import "LauncherPreferences.h"
 #import <UIKit/UIKit.h>
 
 #pragma mark - 常量定义
@@ -395,36 +396,112 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
 
 /// 检测 ZeroTier One app 是否已安装
 ///
-/// 通过 canOpenURL: 检测系统是否能处理 "zerotier://" URL Scheme。
+/// 检测策略（多重 fallback，确保各种安装方式都能正确识别）：
 ///
-/// 重要提示：
-///   iOS 9+ 要求在 Info.plist 的 LSApplicationQueriesSchemes 数组中声明
-///   要查询的 scheme。如果未声明 "zerotier"，canOpenURL: 会始终返回 NO，
-///   并在控制台输出警告：
-///   "This app is not allowed to query for scheme zerotier"
+/// 1. canOpenURL:（首选）
+///    iOS 9+ 要求在 Info.plist 的 LSApplicationQueriesSchemes 中声明 "zerotier"。
+///    适用于 App Store 安装的 ZeroTier One。
+///    局限：某些非 App Store 安装方式（TrollStore、越狱 ipa）可能返回 NO。
 ///
-///   需要在 Info.plist 中添加：
-///   <key>LSApplicationQueriesSchemes</key>
-///   <array>
-///       <string>zerotier</string>
-///       ... 其他 scheme ...
-///   </array>
+/// 2. LSApplicationWorkspace 检查（fallback 1）
+///    私有 API，枚举已安装 app 的 bundle id。
+///    适用于越狱/TrollStore 设备上通过非 App Store 方式安装的 ZeroTier One。
+///    ZeroTier One 的 bundle id 为 com.zerotier.one。
 ///
-/// @return YES 如果 ZeroTier One app 已安装且可被唤起
+/// 3. 用户偏好覆盖（fallback 2）
+///    如果用户通过设置手动指定"已安装 ZeroTier"，则跳过自动检测。
+///    pref key: multiplayer.zerotier.installed_override (BOOL)
+///
+/// 关于 canOpenURL: 在某些情况下返回 NO 的原因：
+/// - iOS 限制最多查询 50 个 scheme，超过后所有查询返回 NO
+/// - 某些 iOS 版本上 TrollStore 安装的 app 不注册 URL Scheme
+/// - 越狱设备上某些注入工具可能破坏 URL Scheme 注册
+///
+/// @return YES 如果 ZeroTier One app 已安装
 - (BOOL)isZeroTierAppInstalled {
+    // 策略 0：用户偏好覆盖（最高优先级）
+    // 用户明确知道装了，但自动检测失败时可手动覆盖
+    if (getPrefBool(@"multiplayer.zerotier.installed_override")) {
+        return YES;
+    }
+
+    // 策略 1：canOpenURL:（App Store 安装的标准方式）
     NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"%@://", kZeroTierURLScheme]];
-    if (!url) {
-        return NO;
+    if (url) {
+        __block BOOL canOpen = NO;
+        if ([NSThread isMainThread]) {
+            canOpen = [[UIApplication sharedApplication] canOpenURL:url];
+        } else {
+            dispatch_sync(dispatch_get_main_queue(), ^{
+                canOpen = [[UIApplication sharedApplication] canOpenURL:url];
+            });
+        }
+        if (canOpen) {
+            return YES;
+        }
     }
-    // canOpenURL: 必须在主线程调用
-    if (![NSThread isMainThread]) {
-        __block BOOL result = NO;
-        dispatch_sync(dispatch_get_main_queue(), ^{
-            result = [[UIApplication sharedApplication] canOpenURL:url];
-        });
-        return result;
+
+    // 策略 2：LSApplicationWorkspace 私有 API（TrollStore/越狱安装）
+    // 检查 com.zerotier.one bundle id 是否存在于已安装 app 列表
+    Class LSApplicationWorkspaceClass = NSClassFromString(@"LSApplicationWorkspace");
+    if (LSApplicationWorkspaceClass) {
+        SEL defaultWorkspaceSel = NSSelectorFromString(@"defaultWorkspace");
+        SEL installedAppsSel = NSSelectorFromString(@"allInstalledApplications");
+        if ([LSApplicationWorkspaceClass respondsToSelector:defaultWorkspaceSel] &&
+            [LSApplicationWorkspaceClass respondsToSelector:installedAppsSel]) {
+            id workspace = [LSApplicationWorkspaceClass performSelector:defaultWorkspaceSel];
+            if (workspace && [workspace respondsToSelector:installedAppsSel]) {
+                NSArray *installedApps = [workspace performSelector:installedAppsSel];
+                for (id app in installedApps) {
+                    NSString *bundleID = nil;
+                    if ([app respondsToSelector:@selector(applicationIdentifier)]) {
+                        bundleID = [app performSelector:@selector(applicationIdentifier)];
+                    } else if ([app respondsToSelector:NSSelectorFromString(@"bundleIdentifier")]) {
+                        bundleID = [app performSelector:NSSelectorFromString(@"bundleIdentifier")];
+                    }
+                    if ([bundleID isEqualToString:@"com.zerotier.one"]) {
+                        return YES;
+                    }
+                }
+            }
+        }
     }
-    return [[UIApplication sharedApplication] canOpenURL:url];
+
+    // 策略 3：检查 /var/containers/Bundle 下的 ZeroTier app 目录（越狱/TrollStore）
+    // 这是最底层的检测方式，不依赖任何框架
+    NSFileManager *fm = [NSFileManager defaultManager];
+    NSArray *searchPaths = @[
+        @"/var/containers/Bundle/Application",
+        @"/var/jb/containers/Bundle/Application",
+        @"/Applications",
+        @"/var/containers/Bundle/ Applications",
+    ];
+    for (NSString *searchPath in searchPaths) {
+        if (![fm fileExistsAtPath:searchPath]) continue;
+        NSDirectoryEnumerator *enumerator = [fm enumeratorAtPath:searchPath];
+        NSString *subpath;
+        while ((subpath = [enumerator nextObject])) {
+            // 查找 ZeroTier.app 或包含 com.zerotier.one 的目录
+            if ([subpath hasSuffix:@"ZeroTier.app"] ||
+                [subpath hasSuffix:@"ZeroTier One.app"] ||
+                [subpath.pathExtension isEqualToString:@"app"] && [subpath containsString:@"ZeroTier"]) {
+                return YES;
+            }
+        }
+    }
+
+    return NO;
+}
+
+/// 设置 ZeroTier 安装状态覆盖（用户手动指定）
+/// @param installed YES 表示用户确认已安装 ZeroTier One
+- (void)setZeroTierInstalledOverride:(BOOL)installed {
+    setPrefBool(@"multiplayer.zerotier.installed_override", installed);
+}
+
+/// 用户是否已手动覆盖 ZeroTier 安装状态
+- (BOOL)isZeroTierInstallOverridden {
+    return getPrefBool(@"multiplayer.zerotier.installed_override");
 }
 
 /// 打开 ZeroTier One app

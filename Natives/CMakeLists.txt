@@ -187,6 +187,7 @@ add_executable(AngelAuraAmethyst
   MultiplayerViewController.m
   EasyTierMultiplayerManager.m
   EasyTierMultiplayerViewController.m
+  LanPortDetector.m
   LauncherMenuViewController.m
   LauncherNavigationController.m
   LauncherNewsViewController.m

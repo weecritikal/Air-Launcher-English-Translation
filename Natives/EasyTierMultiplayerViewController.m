@@ -49,6 +49,7 @@
 #import "BackgroundManager.h"
 #import "LauncherPreferences.h"
 #import "PLProfiles.h"
+#import "LanPortDetector.h"
 
 #pragma mark - EasyTierServiceCell
 
@@ -790,8 +791,20 @@
 #pragma mark - 创建房间：房主模式
 
 - (void)showCreateAsHostDialog {
+    // 检测 LAN 端口（FCL 风格：自动预填端口）
+    LanPortDetector *detector = [LanPortDetector sharedDetector];
+    NSString *detectedPort = detector.detectedPort ?: @"25565";
+    NSString *portHint = @"输入房间名称，系统将自动生成邀请码供朋友加入";
+    if (detector.detectedPort) {
+        if (detector.source == LanPortSourceAuto) {
+            portHint = [NSString stringWithFormat:@"已自动检测到 LAN 端口：%@，输入房间名称创建房间", detector.detectedPort];
+        } else {
+            portHint = [NSString stringWithFormat:@"上次输入的端口：%@，输入房间名称创建房间", detector.detectedPort];
+        }
+    }
+
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"创建房间（房主）"
-                                                                   message:@"输入房间名称，系统将自动生成邀请码供朋友加入"
+                                                                   message:portHint
                                                             preferredStyle:UIAlertControllerStyleAlert];
 
     // 1. 房间名称
@@ -801,10 +814,10 @@
         textField.autocorrectionType = UITextAutocorrectionTypeNo;
     }];
 
-    // 2. 服务器端口
+    // 2. 服务器端口（自动预填检测到的 LAN 端口）
     [alert addTextFieldWithConfigurationHandler:^(UITextField * _Nonnull textField) {
         textField.placeholder = @"MC 服务器端口（默认 25565）";
-        textField.text = @"25565";
+        textField.text = detectedPort;
         textField.keyboardType = UIKeyboardTypeNumberPad;
     }];
 
@@ -822,6 +835,9 @@
         if (!port || port.length == 0) {
             port = @"25565";
         }
+
+        // 保存端口到 LanPortDetector（下次创建房间时预填）
+        [[LanPortDetector sharedDetector] setManualPort:port];
 
         // 房主模式：使用 initAsHostWithName:hostPort: 创建房间（内部生成邀请码）
         EasyTierRoom *room = [[EasyTierRoom alloc] initAsHostWithName:name hostPort:port];
