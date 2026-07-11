@@ -692,6 +692,19 @@ static const NSInteger kDefaultBackgroundTag = 99995;
         blurView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
         blurView.layer.cornerRadius = view.layer.cornerRadius;
         blurView.layer.masksToBounds = YES;
+
+        // 参照 ZL2 双层透明度控制：
+        // 1. blurIntensity 控制毛玻璃本身的模糊强度（0.3~1.0 范围，避免过低完全透明）
+        // 2. 有自定义背景时降低不透明度让背景透出，无背景时保持较高不透明度
+        // 这样实现了 ZL2 的 influencedByBackgroundColor 效果：
+        // 有背景图/视频时卡片更通透，无背景时卡片更不透明（与系统默认一致）
+        CGFloat effectiveAlpha = 0.3 + (self.blurIntensity * 0.7);  // 0.3~1.0
+        if (![self hasBackground]) {
+            // 无自定义背景时，提高不透明度，使 UI 更清晰
+            effectiveAlpha = MIN(effectiveAlpha + 0.2, 1.0);
+        }
+        blurView.alpha = effectiveAlpha;
+
         // 毛玻璃本身不响应触摸，让事件穿透到宿主视图（如 UIControl 卡片）。
         // 否则 blurView 会拦截 touch，导致 AccountLoginViewController 的登录卡片
         // 点击无反应（UIControlEventTouchUpInside 永远不触发）。
@@ -709,8 +722,14 @@ static const NSInteger kDefaultBackgroundTag = 99995;
         }
         if (@available(iOS 13.0, *)) {
             // 使用 secondarySystemBackgroundColor 作为半透明基底，再叠加 alpha
+            // 参照 ZL2 双层透明度控制：有背景时降低不透明度让背景透出
+            CGFloat effectiveOpacity = self.uiOpacity;
+            if (![self hasBackground]) {
+                // 无自定义背景时，提高不透明度，使 UI 更清晰
+                effectiveOpacity = MIN(effectiveOpacity + 0.3, 1.0);
+            }
             UIColor *base = [UIColor secondarySystemBackgroundColor];
-            view.backgroundColor = [base colorWithAlphaComponent:self.uiOpacity];
+            view.backgroundColor = [base colorWithAlphaComponent:effectiveOpacity];
         } else {
             view.backgroundColor = [UIColor colorWithWhite:0.08 alpha:self.uiOpacity];
         }

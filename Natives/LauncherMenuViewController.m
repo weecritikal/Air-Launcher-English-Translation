@@ -155,17 +155,34 @@
 
 - (void)menuButtonTapped:(UIButton *)sender {
     NSInteger index = sender.tag;
-    
+
+    // FCL 风格：选中菜单项时添加弹跳动画（ScaleX/ScaleY 弹跳，OvershootInterpolator 效果）
+    [UIView animateWithDuration:0.3
+                          delay:0
+         usingSpringWithDamping:0.5
+          initialSpringVelocity:0.8
+                        options:UIViewAnimationOptionAllowUserInteraction
+                     animations:^{
+        sender.transform = CGAffineTransformMakeScale(1.2, 1.2);
+    } completion:^(BOOL finished) {
+        [UIView animateWithDuration:0.2
+                              delay:0
+                            options:UIViewAnimationOptionCurveEaseOut
+                         animations:^{
+            sender.transform = CGAffineTransformIdentity;
+        } completion:nil];
+    }];
+
     // 更新选中状态
     self.selectedIndex = index;
     [self updateButtonColors];
-    
+
     // 回调
     NSString *title = self.menuItems[index][@"title"];
     if (self.onMenuItemSelected) {
         self.onMenuItemSelected(index, title);
     }
-    
+
     // 处理导航
     [self handleMenuSelection:index];
 }
@@ -182,9 +199,12 @@
             if (index == self.selectedIndex) {
                 btn.tintColor = accent;
                 [btn setTitleColor:accent forState:UIControlStateNormal];
+                // FCL 风格：选中项添加半透明背景高亮
+                btn.backgroundColor = [accent colorWithAlphaComponent:0.15];
             } else {
                 btn.tintColor = normalColor;
                 [btn setTitleColor:normalColor forState:UIControlStateNormal];
+                btn.backgroundColor = [UIColor clearColor];
             }
         }
     }

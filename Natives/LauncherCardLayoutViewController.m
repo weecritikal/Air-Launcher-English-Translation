@@ -239,19 +239,26 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
     return card;
 }
 
-/// 读取 general.card_color 偏好，若已设置则用纯色覆盖毛玻璃背景。
-/// 用户设置浅色卡片时需同时在设置里设置深色字体颜色，否则白色文字不可见。
+/// 读取 general.card_color 偏好，若已设置则在毛玻璃上叠加半透明色。
+///
+/// 统一参照 ZL2 的 Haze + tint 方案和 RootVC 的 applySemiTransparentColor: 实现：
+/// 保留 BackgroundManager 的毛玻璃 UIVisualEffectView（让背景图能透出），
+/// 在容器背景色上叠加用户自定义的半透明颜色。
+///
+/// 之前 CardVC 的做法是移除毛玻璃用纯色覆盖，导致：
+/// 1. 与 RootVC 行为不一致（RootVC 保留毛玻璃叠加半透明色）
+/// 2. 自定义背景图被完全遮挡，无法透出
+/// 3. 视觉效果与 FCL/ZL2 不符（FCL/ZL2 都保留模糊效果 + 颜色叠加）
+///
+/// 现统一为：保留毛玻璃 + 叠加半透明色（与 RootVC 完全一致）
 - (void)applyCustomCardColorToCard:(UIView *)card {
     NSString *hex = getPrefObject(@"general.card_color");
     UIColor *color = [self colorFromHexString:hex];
     if (!color) return;
-    // 移除 BackgroundManager 插入的毛玻璃子视图，用纯色覆盖
-    for (UIView *sub in [card.subviews copy]) {
-        if ([sub isKindOfClass:[UIVisualEffectView class]]) {
-            [sub removeFromSuperview];
-        }
-    }
-    card.backgroundColor = color;
+    // 保留 BackgroundManager 插入的毛玻璃 UIVisualEffectView，仅叠加半透明色
+    // 这样既显示用户自定义的卡片颜色，又能透出背景图（与 RootVC 行为一致）
+    // 使用 0.7 alpha 让背景图能适度透出（参照 ZL2 的 influencedByBackgroundColor 思路）
+    card.backgroundColor = [color colorWithAlphaComponent:0.7];
 }
 
 - (nullable UIColor *)colorFromHexString:(id)hex {
@@ -647,10 +654,20 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
     // 修复：对齐 LauncherRootViewController 的 nav bar 透明化处理。
     // 原卡片布局缺失此逻辑，导致 VersionManagerViewController 等被 UINavigationController
     // 包裹的子页面顶部出现默认不透明 nav bar（白条），与卡片背景不融合。
+    //
+    // 统一参照 RootVC 的完整处理（setContentViewController 中对 nav 栈所有 VC 透明化 +
+    // 设置 nav.delegate + didShowViewController 回调中重新透明化）：
+    // 1. 透明化 nav 栈中所有 VC（不仅是 topViewController），防止 push 后子页面样式被重置
+    // 2. 设置 nav.delegate = self，在 didShowViewController 回调中重新应用 nav bar 效果
+    // 3. 重新应用 nav bar 效果，确保 push/pop 后样式一致
     if ([viewController isKindOfClass:[UINavigationController class]]) {
         UINavigationController *nav = (UINavigationController *)viewController;
+        nav.delegate = self;
         [[BackgroundManager sharedManager] applyEffectToNavigationBar:nav.navigationBar];
-        [[BackgroundManager sharedManager] makeViewControllerTransparent:nav.topViewController];
+        // 透明化栈中所有 VC（与 RootVC 一致），防止 push 后子页面背景不透明
+        for (UIViewController *vc in nav.viewControllers) {
+            [[BackgroundManager sharedManager] makeViewControllerTransparent:vc];
+        }
     } else {
         [[BackgroundManager sharedManager] makeViewControllerTransparent:viewController];
     }
@@ -702,6 +719,23 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
 
 - (UIInterfaceOrientationMask)supportedInterfaceOrientations {
     return UIInterfaceOrientationMaskLandscape;
+}
+
+#pragma mark - UINavigationControllerDelegate
+
+/// nav push/pop 后重新透明化所有 VC 并重新应用 nav bar 效果
+/// 参照 RootVC 的同名实现，确保 push 后子页面样式与卡片背景一致
+- (void)navigationController:(UINavigationController *)navigationController
+       didShowViewController:(UIViewController *)viewController
+                    animated:(BOOL)animated {
+    // 透明化刚显示的 VC
+    [[BackgroundManager sharedManager] makeViewControllerTransparent:viewController];
+    // 同时透明化栈中所有 VC（防止前一个页面透出残留，解决"前一页面未及时消失"问题）
+    for (UIViewController *stackVC in navigationController.viewControllers) {
+        [[BackgroundManager sharedManager] makeViewControllerTransparent:stackVC];
+    }
+    // 重新应用导航栏毛玻璃效果（防止 push 后 nav bar 样式被重置）
+    [[BackgroundManager sharedManager] applyEffectToNavigationBar:navigationController.navigationBar];
 }
 
 @end

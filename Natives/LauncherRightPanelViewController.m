@@ -181,7 +181,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     self.progressView.hidden = YES;
     [self.view addSubview:self.progressView];
     
-    // 启动游戏按钮
+    // 启动游戏按钮（FCL 复合布局 + ZL2 按压动画风格）
     self.launchButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.launchButton.translatesAutoresizingMaskIntoConstraints = NO;
     [self.launchButton setTitle:@"启动游戏" forState:UIControlStateNormal];
@@ -194,7 +194,20 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     self.launchButton.backgroundColor = accentColor();
     self.launchButton.layer.cornerRadius = 10;
     self.launchButton.layer.masksToBounds = YES;
+    // FCL 风格：按钮阴影（elevation 效果），增强层次感
+    self.launchButton.layer.shadowColor = [UIColor blackColor].CGColor;
+    self.launchButton.layer.shadowOffset = CGSizeMake(0, 2);
+    self.launchButton.layer.shadowRadius = 4;
+    self.launchButton.layer.shadowOpacity = 0.3;
+    // masksToBounds 会裁剪阴影，改用 backgroundColor + cornerRadius 不裁剪
+    // 但 masksToBounds=YES 是为了让背景色圆角生效，阴影需要单独的容器视图
+    // 权衡：保留 masksToBounds=YES（圆角更重要），放弃阴影（iOS 上 UIButton 本身有高亮效果）
+    self.launchButton.layer.masksToBounds = YES;
+
     [self.launchButton addTarget:self action:@selector(launchButtonTapped) forControlEvents:UIControlEventTouchUpInside];
+    // ZL2 风格按压动画：按下时缩放到 0.95，松开时恢复
+    [self.launchButton addTarget:self action:@selector(launchButtonTouchDown) forControlEvents:UIControlEventTouchDown];
+    [self.launchButton addTarget:self action:@selector(launchButtonTouchUp) forControlEvents:UIControlEventTouchUpOutside | UIControlEventTouchCancel];
     [self.view addSubview:self.launchButton];
 
     // JIT 状态指示标签（位于启动游戏按钮上方）
@@ -614,7 +627,35 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 
 #pragma mark - Launch Game
 
+/// ZL2 风格按压动画：按下时缩放到 0.95
+- (void)launchButtonTouchDown {
+    [UIView animateWithDuration:0.1
+                          delay:0
+                        options:UIViewAnimationOptionCurveEaseIn
+                     animations:^{
+        self.launchButton.transform = CGAffineTransformMakeScale(0.95, 0.95);
+    } completion:nil];
+}
+
+/// ZL2 风格按压动画：松开时恢复到 1.0
+- (void)launchButtonTouchUp {
+    [UIView animateWithDuration:0.1
+                          delay:0
+                        options:UIViewAnimationOptionCurveEaseOut
+                     animations:^{
+        self.launchButton.transform = CGAffineTransformIdentity;
+    } completion:nil];
+}
+
 - (void)launchButtonTapped {
+    // 恢复按压动画（TouchUpInside 不触发 launchButtonTouchUp）
+    [UIView animateWithDuration:0.1
+                          delay:0
+                        options:UIViewAnimationOptionCurveEaseOut
+                     animations:^{
+        self.launchButton.transform = CGAffineTransformIdentity;
+    } completion:nil];
+
     if (self.task) {
         if (getPrefBool(@"general.floating_ball_enabled")) {
             // 悬浮球开启时打开统一下载任务界面，不再显示单独进度

@@ -529,7 +529,7 @@ static CGFloat LauncherRootLayoutRightPanelWidth(UITraitCollection *trait) {
 
 /// FCL 风格：账户管理在中间内容区显示（不再 FormSheet 弹窗）
 - (void)showAccountManager {
-    AccountListViewController *vc = [[AccountListViewController alloc] init];
+    AccountListViewController *vc = [[AccountListViewController alloc] initWithStyle:UITableViewStyleInsetGrouped];
     // 账户选择后通知右侧面板刷新（使用已有的 UpdateAccountInfo 通知）
     vc.whenItemSelected = ^void() {
         [[NSNotificationCenter defaultCenter] postNotificationName:@"UpdateAccountInfo" object:nil];
