@@ -60,9 +60,12 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
 @interface IconLoader ()
 /// 内存缓存
 @property (nonatomic, strong) NSCache<NSString *, UIImage *> *memoryCache;
+/// 内存缓存的 key 跟踪集合（NSCache 不暴露 count，也不支持枚举，
+/// 用独立的 NSMutableSet 跟踪当前已缓存的 key，用于 memoryCacheCount 统计）
+@property (nonatomic, strong) NSMutableSet<NSString *> *memoryCacheKeys;
 /// 并发下载信号量
 @property (nonatomic, strong) dispatch_semaphore_t downloadSemaphore;
-/// 串行队列，保护 _inFlightRequests 字典的线程安全
+/// 串行队列，保护 _inFlightRequests 字典和 memoryCacheKeys 的线程安全
 @property (nonatomic, strong) dispatch_queue_t syncQueue;
 /// 磁盘缓存目录
 @property (nonatomic, copy) NSString *diskCacheDirectory;
@@ -98,6 +101,9 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
         _memoryCache.countLimit = kMemoryCacheCountLimit;
         // NSCache 在收到 UIApplicationDidReceiveMemoryWarningNotification 时会自动清空，
         // 无需手动监听（但额外监听也无害，可加快响应）
+
+        // key 跟踪集合（用于 memoryCacheCount 统计，因为 NSCache 不暴露 count）
+        _memoryCacheKeys = [NSMutableSet set];
 
         // 并发下载信号量
         _downloadSemaphore = dispatch_semaphore_create(kMaxConcurrentDownloads);
@@ -335,7 +341,7 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
 
 + (void)clearMemoryCache {
     IconLoader *loader = [self sharedLoader];
-    [loader.memoryCache removeAllObjects];
+    [loader clearMemoryCacheInternal];
 }
 
 + (void)clearDiskCacheWithCompletion:(nullable dispatch_block_t)completion {
@@ -379,13 +385,14 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
 
 + (NSUInteger)memoryCacheCount {
     IconLoader *loader = [self sharedLoader];
-    // NSCache 没有直接的 count 属性，使用 NSCache 的 countLimit 不准确
-    // 这里通过 enumerateKeysAndObjectsUsingBlock: 遍历计数
-    // （仅用于设置页显示，非热点路径，性能可接受）
+    // NSCache 不暴露 count 属性，也不支持 enumerateKeysAndObjectsUsingBlock:（这是 NSDictionary 的方法）。
+    // 用独立的 memoryCacheKeys 集合来统计当前已缓存的条目数。
+    // 注：NSCache 可能在内存压力下静默驱逐条目而不通知，此时 memoryCacheKeys 可能略多于实际缓存数，
+    // 但此方法仅用于设置页统计显示，非热点路径，轻微高估可接受。
     __block NSUInteger count = 0;
-    [loader.memoryCache enumerateKeysAndObjectsUsingBlock:^(id key, id obj, BOOL *stop) {
-        count++;
-    }];
+    dispatch_sync(loader.syncQueue, ^{
+        count = loader.memoryCacheKeys.count;
+    });
     return count;
 }
 
@@ -552,9 +559,7 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
     if (!data) return nil;
     UIImage *image = [UIImage imageWithData:data];
     if (image) {
-        [self.memoryCache setObject:image
-                             forKey:cacheKey
-                               cost:[self costForImage:image]];
+        [self storeInMemoryCache:image forKey:cacheKey];
     }
     return image;
 }
@@ -591,9 +596,7 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
                                                         options:options];
             if (decodedImage) {
                 // 写入双层缓存
-                [strongSelf.memoryCache setObject:decodedImage
-                                          forKey:cacheKey
-                                            cost:[strongSelf costForImage:decodedImage]];
+                [strongSelf storeInMemoryCache:decodedImage forKey:cacheKey];
 
                 // 写入磁盘缓存（除非指定 MemoryCacheOnly）
                 if (!(options & IconLoaderOptionsMemoryCacheOnly)) {
@@ -729,10 +732,28 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
     return (NSUInteger)(image.size.width * image.scale * image.size.height * image.scale * 4);
 }
 
+/// 将图像存入内存缓存，并同步更新 key 跟踪集合
+- (void)storeInMemoryCache:(UIImage *)image forKey:(NSString *)cacheKey {
+    [self.memoryCache setObject:image
+                       forKey:cacheKey
+                         cost:[self costForImage:image]];
+    dispatch_async(self.syncQueue, ^{
+        [self.memoryCacheKeys addObject:cacheKey];
+    });
+}
+
+/// 清空内存缓存及其 key 跟踪集合
+- (void)clearMemoryCacheInternal {
+    [self.memoryCache removeAllObjects];
+    dispatch_async(self.syncQueue, ^{
+        [self.memoryCacheKeys removeAllObjects];
+    });
+}
+
 #pragma mark - 通知处理
 
 - (void)handleMemoryWarning {
-    [self.memoryCache removeAllObjects];
+    [self clearMemoryCacheInternal];
     NSDebugLog(@"[IconLoader] 内存警告：已清空内存缓存");
 }
 
