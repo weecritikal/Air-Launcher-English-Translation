@@ -514,6 +514,64 @@
 "crash.ai_solve" = "Use AI to Solve";
 "crash.ai_solve_experimental" = "Use AI to Solve";
 "crash.experimental" = "Experimental";
+"crash.quick_fix" = "Quick Fix Suggestions";
+"crash.reason.mod_conflict" = "Mod conflict (NoSuchMethodError/ClassCastException)";
+"crash.reason.missing_library" = "Missing library (UnsatisfiedLinkError/NoClassDefFoundError)";
+"crash.reason.java_version" = "Java version mismatch (UnsupportedClassVersionError)";
+"crash.reason.renderer" = "Renderer error (OpenGL/Metal/EGL initialization failed)";
+"crash.reason.mod_loading" = "Mod loading failure (Forge/Fabric/OptiFine)";
+// Quick fix suggestion texts
+"crash.suggestion.oom_ram" = "Reduce memory allocation (recommended 1024-2048MB)";
+"crash.suggestion.oom_getmoream" = "Use GetMoreRam (LiveContainer) to bypass iOS memory limit";
+"crash.suggestion.oom_mods" = "Remove heavy mods (shaders, high-res textures)";
+"crash.suggestion.oom_restart" = "Restart launcher and retry (release memory fragmentation)";
+"crash.suggestion.segfault_renderer" = "Try switching renderer (gl4es / MetalGlues / virgil)";
+"crash.suggestion.segfault_jit" = "Ensure JIT is enabled (TrollStore/SideStore + JIT)";
+"crash.suggestion.segfault_restart" = "Restart launcher and retry";
+"crash.suggestion.abort_mods" = "Check mod compatibility (remove recently added mods)";
+"crash.suggestion.abort_renderer" = "Try switching renderer";
+"crash.suggestion.abort_restart" = "Restart launcher and retry";
+"crash.suggestion.modconflict_remove" = "Remove recently added mods";
+"crash.suggestion.modconflict_check" = "Check mod version compatibility (Forge/Fabric/API)";
+"crash.suggestion.modconflict_log" = "View full log to identify conflicting mod";
+"crash.suggestion.missinglib_reinstall" = "Reinstall the current game version";
+"crash.suggestion.missinglib_check" = "Check if libraries folder is complete";
+"crash.suggestion.missinglib_network" = "Check network connection and download source";
+"crash.suggestion.javaver_change" = "Switch Java version in settings (8/17/21)";
+"crash.suggestion.javaver_check" = "Check required Java version for game version";
+"crash.suggestion.renderer_switch" = "Try switching renderer: gl4es / MetalGlues / virgil";
+"crash.suggestion.renderer_shader" = "Disable shaders and retry";
+"crash.suggestion.renderer_resolution" = "Lower game resolution scale";
+"crash.suggestion.modload_remove" = "Remove problematic mod (check log for errors)";
+"crash.suggestion.modload_update" = "Update mod loader (Forge/Fabric/OptiFine)";
+"crash.suggestion.modload_version" = "Check if mod supports current MC version";
+"crash.suggestion.java_log" = "View full log for exception stack trace";
+"crash.suggestion.java_mods" = "Check mod compatibility (remove recently added mods)";
+"crash.suggestion.java_restart" = "Restart launcher and retry";
+
+// Launch overlay (FCL/ZL2 style)
+"launch.title" = "Starting Minecraft";
+"launch.stage.init_env" = "Initializing environment...";
+"launch.stage.verify_files" = "Verifying game files...";
+"launch.stage.load_jre" = "Loading Java runtime...";
+"launch.stage.config_jvm" = "Configuring JVM parameters...";
+"launch.stage.start_jvm" = "Starting Java virtual machine...";
+"launch.stage.load_libs" = "Loading game libraries...";
+"launch.stage.init_mc" = "Initializing Minecraft...";
+"launch.stage.load_assets" = "Loading assets...";
+"launch.stage.entering" = "Entering game...";
+"launch.stage.preparing" = "Preparing...";
+"launch.elapsed" = "Elapsed 0s";
+"launch.elapsed_seconds" = "Elapsed %.0fs";
+"launch.elapsed_minutes" = "Elapsed %.0fm %.0fs";
+"launch.complete" = "Launch complete!";
+"launch.total_seconds" = "Total %.1fs";
+"launch.total_minutes" = "Total %.0fm %.0fs";
+"launch.cancel" = "Cancel";
+"launch.cancel_confirm_title" = "Cancel launch?";
+"launch.cancel_confirm_message" = "Canceling will terminate the current game loading process and return to the launcher.";
+"launch.cancel_confirm_yes" = "Cancel";
+"launch.cancel_confirm_no" = "Keep waiting";
 
 // AI Fix Feature
 "ai.fix.conversation" = "Conversation";

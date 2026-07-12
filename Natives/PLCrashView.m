@@ -13,6 +13,24 @@
 @property (nonatomic, copy) NSString *customTitle;
 @property (nonatomic, copy) NSString *customReason;
 
+// 崩溃类型分析（参照 HMCL 的崩溃分析器，提供更精确的崩溃分类和建议）
+typedef NS_ENUM(NSInteger, CrashType) {
+    CrashTypeNormal = 0,         // 正常退出
+    CrashTypeOOM,                // 内存不足
+    CrashTypeSegfault,           // 段错误（JNI/原生库）
+    CrashTypeAbort,              // 程序异常终止
+    CrashTypeTerminated,         // 被外部信号终止
+    CrashTypeModConflict,        // Mod 冲突
+    CrashTypeMissingLibrary,     // 缺失库文件
+    CrashTypeJavaVersionMismatch,// Java 版本不匹配
+    CrashTypeRendererError,      // 渲染器错误
+    CrashTypeModLoadingFailure,  // Mod 加载失败
+    CrashTypeJavaException,      // Java 异常
+    CrashTypeUnknown             // 未知错误
+};
+@property (nonatomic, assign) CrashType crashType;
+@property (nonatomic, strong, nullable) NSString *crashDetail; // 崩溃详情（从日志提取的关键行）
+
 // UI 组件
 @property (nonatomic, strong) UIScrollView *mainScrollView;
 @property (nonatomic, strong) UIStackView *mainStackView;
@@ -22,6 +40,10 @@
 @property (nonatomic, strong) UILabel *errorCodeLabel;
 @property (nonatomic, strong) UILabel *reasonLabel;
 @property (nonatomic, strong) UILabel *oomSuggestionLabel;
+// 快速修复建议卡片（参照 FCL/HMCL 的"快速修复"面板）
+@property (nonatomic, strong) UIView *suggestionsCardView;
+@property (nonatomic, strong) UILabel *suggestionsTitleLabel;
+@property (nonatomic, strong) UIStackView *suggestionsStackView;
 @property (nonatomic, strong) UIView *logCardView;
 @property (nonatomic, strong) UILabel *logTitleLabel;
 @property (nonatomic, strong) UITextView *logTextView;
@@ -34,6 +56,8 @@
 @property (nonatomic, strong) UIButton *exitButton;
 // 错误卡片顶部红色 accent 条
 @property (nonatomic, strong) CAGradientLayer *accentGradientLayer;
+// 建议卡片顶部黄色 accent 条
+@property (nonatomic, strong) CAGradientLayer *suggestionAccentLayer;
 // 日志卡片高度约束（根据屏幕高度动态调整）
 @property (nonatomic, strong) NSLayoutConstraint *logCardHeightConstraint;
 @end
@@ -113,6 +137,8 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     [super viewDidLoad];
     self.view.backgroundColor = [UIColor clearColor];
     [self setupBackground];
+    // 先分析崩溃类型，setupUI 中的建议卡片依赖此结果
+    [self analyzeCrashType];
     [self setupUI];
     [self loadLogContent];
 }
@@ -124,6 +150,10 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     // 更新错误卡片顶部红色 accent 条的 frame
     if (_accentGradientLayer) {
         _accentGradientLayer.frame = CGRectMake(0, 0, _errorCardView.bounds.size.width, 2);
+    }
+    // 更新建议卡片顶部黄色 accent 条的 frame
+    if (_suggestionAccentLayer && _suggestionsCardView) {
+        _suggestionAccentLayer.frame = CGRectMake(0, 0, _suggestionsCardView.bounds.size.width, 2);
     }
 }
 
@@ -194,6 +224,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     _mainStackView.layoutMarginsRelativeArrangement = YES;
 
     [self setupErrorCard];
+    [self setupSuggestionsCard];
     [self setupLogCard];
     [self setupButtons];
 }
@@ -313,6 +344,340 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     }
 
     [NSLayoutConstraint activateConstraints:constraints];
+}
+
+#pragma mark - Suggestions Card (快速修复建议卡片)
+
+/// 创建快速修复建议卡片（参照 FCL/HMCL 的"快速修复"面板）
+///
+/// 根据 analyzeCrashType 分析的崩溃类型，显示对应的修复建议：
+/// - OOM: 降低内存分配、移除重量级 Mod、使用 GetMoreRam
+/// - Segfault: 切换渲染器、检查原生库兼容性
+/// - ModConflict: 移除最近添加的 Mod、检查 Mod 兼容性
+/// - MissingLibrary: 重新安装游戏版本、检查库文件
+/// - JavaVersionMismatch: 切换 Java 版本
+/// - RendererError: 切换渲染器、禁用光影
+/// - ModLoadingFailure: 检查 Mod 加载器版本、移除问题 Mod
+///
+/// 每条建议以一行带图标的文字展示，点击可复制到剪贴板。
+- (void)setupSuggestionsCard {
+    // 获取当前崩溃类型的建议列表
+    NSArray<NSDictionary *> *suggestions = [self suggestionsForCrashType];
+    if (suggestions.count == 0) return; // 无建议时不显示卡片
+
+    _suggestionsCardView = [[UIView alloc] init];
+    _suggestionsCardView.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.06];
+    _suggestionsCardView.layer.cornerRadius = 16;
+    _suggestionsCardView.layer.cornerCurve = kCACornerCurveContinuous;
+    _suggestionsCardView.layer.borderWidth = 0.5;
+    _suggestionsCardView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.10].CGColor;
+    _suggestionsCardView.translatesAutoresizingMaskIntoConstraints = NO;
+    [_mainStackView addArrangedSubview:_suggestionsCardView];
+    // 应用毛玻璃效果（适配自定义背景壁纸）
+    [[BackgroundManager sharedManager] applyEffectToView:_suggestionsCardView];
+
+    // 顶部黄色 accent 条（提示性质，非致命错误）
+    CAGradientLayer *suggestionAccent = [CAGradientLayer layer];
+    suggestionAccent.colors = @[
+        (__bridge id)[UIColor systemYellowColor].CGColor,
+        (__bridge id)[[UIColor systemYellowColor] colorWithAlphaComponent:0].CGColor,
+    ];
+    suggestionAccent.locations = @[@0.0, @1.0];
+    suggestionAccent.startPoint = CGPointMake(0.5, 0.0);
+    suggestionAccent.endPoint = CGPointMake(0.5, 1.0);
+    suggestionAccent.cornerRadius = 16;
+    suggestionAccent.maskedCorners = kCALayerMinXMinYCorner | kCALayerMaxXMinYCorner;
+    [_suggestionsCardView.layer addSublayer:suggestionAccent];
+    self.suggestionAccentLayer = suggestionAccent;
+    // accent 条 frame 在 viewDidLayoutSubviews 中设置
+
+    // 标题行：图标 + "快速修复建议"
+    UIView *titleRow = [[UIView alloc] init];
+    titleRow.translatesAutoresizingMaskIntoConstraints = NO;
+    [_suggestionsCardView addSubview:titleRow];
+
+    UIImageView *titleIcon = [[UIImageView alloc] init];
+    titleIcon.translatesAutoresizingMaskIntoConstraints = NO;
+    if (@available(iOS 13.0, *)) {
+        UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:16 weight:UIImageSymbolWeightSemibold];
+        titleIcon.image = [UIImage systemImageNamed:@"lightbulb.fill" withConfiguration:config];
+    }
+    titleIcon.tintColor = [UIColor systemYellowColor];
+    titleIcon.contentMode = UIViewContentModeScaleAspectFit;
+    [titleRow addSubview:titleIcon];
+
+    _suggestionsTitleLabel = [[UILabel alloc] init];
+    _suggestionsTitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    _suggestionsTitleLabel.text = localize(@"crash.quick_fix", @"快速修复建议");
+    _suggestionsTitleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
+    _suggestionsTitleLabel.textColor = [UIColor labelColor];
+    [titleRow addSubview:_suggestionsTitleLabel];
+
+    // 建议列表（垂直 StackView）
+    _suggestionsStackView = [[UIStackView alloc] init];
+    _suggestionsStackView.axis = UILayoutConstraintAxisVertical;
+    _suggestionsStackView.spacing = 8;
+    _suggestionsStackView.alignment = UIStackViewAlignmentFill;
+    _suggestionsStackView.distribution = UIStackViewDistributionFill;
+    _suggestionsStackView.translatesAutoresizingMaskIntoConstraints = NO;
+    [_suggestionsCardView addSubview:_suggestionsStackView];
+
+    // 为每条建议创建一行
+    for (NSDictionary *suggestion in suggestions) {
+        NSString *icon = suggestion[@"icon"];
+        NSString *text = suggestion[@"text"];
+        UIView *row = [self createSuggestionRowWithIcon:icon text:text];
+        [_suggestionsStackView addArrangedSubview:row];
+    }
+
+    // 布局约束
+    [NSLayoutConstraint activateConstraints:@[
+        [titleRow.topAnchor constraintEqualToAnchor:_suggestionsCardView.topAnchor constant:14],
+        [titleRow.leadingAnchor constraintEqualToAnchor:_suggestionsCardView.leadingAnchor constant:16],
+        [titleRow.trailingAnchor constraintEqualToAnchor:_suggestionsCardView.trailingAnchor constant:-16],
+        [titleRow.heightAnchor constraintEqualToConstant:22],
+
+        [titleIcon.leadingAnchor constraintEqualToAnchor:titleRow.leadingAnchor],
+        [titleIcon.centerYAnchor constraintEqualToAnchor:titleRow.centerYAnchor],
+        [titleIcon.widthAnchor constraintEqualToConstant:18],
+        [titleIcon.heightAnchor constraintEqualToConstant:18],
+
+        [_suggestionsTitleLabel.leadingAnchor constraintEqualToAnchor:titleIcon.trailingAnchor constant:8],
+        [_suggestionsTitleLabel.centerYAnchor constraintEqualToAnchor:titleRow.centerYAnchor],
+        [_suggestionsTitleLabel.trailingAnchor constraintEqualToAnchor:titleRow.trailingAnchor],
+
+        [_suggestionsStackView.topAnchor constraintEqualToAnchor:titleRow.bottomAnchor constant:12],
+        [_suggestionsStackView.leadingAnchor constraintEqualToAnchor:_suggestionsCardView.leadingAnchor constant:16],
+        [_suggestionsStackView.trailingAnchor constraintEqualToAnchor:_suggestionsCardView.trailingAnchor constant:-16],
+        [_suggestionsStackView.bottomAnchor constraintEqualToAnchor:_suggestionsCardView.bottomAnchor constant:-14],
+    ]];
+}
+
+/// 创建单条建议行（图标 + 文字）
+- (UIView *)createSuggestionRowWithIcon:(NSString *)iconName text:(NSString *)text {
+    UIView *row = [[UIView alloc] init];
+    row.translatesAutoresizingMaskIntoConstraints = NO;
+
+    UIImageView *icon = [[UIImageView alloc] init];
+    icon.translatesAutoresizingMaskIntoConstraints = NO;
+    if (@available(iOS 13.0, *)) {
+        UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:13 weight:UIImageSymbolWeightRegular];
+        icon.image = [UIImage systemImageNamed:iconName withConfiguration:config] ?: [UIImage systemImageNamed:@"chevron.right.circle" withConfiguration:config];
+    }
+    icon.tintColor = [UIColor systemYellowColor];
+    icon.contentMode = UIViewContentModeScaleAspectFit;
+    [row addSubview:icon];
+
+    UILabel *label = [[UILabel alloc] init];
+    label.translatesAutoresizingMaskIntoConstraints = NO;
+    label.text = text;
+    label.font = [UIFont systemFontOfSize:13];
+    label.textColor = [UIColor secondaryLabelColor];
+    label.numberOfLines = 0;
+    [row addSubview:label];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [icon.leadingAnchor constraintEqualToAnchor:row.leadingAnchor],
+        [icon.topAnchor constraintEqualToAnchor:row.topAnchor constant:2],
+        [icon.widthAnchor constraintEqualToConstant:16],
+        [icon.heightAnchor constraintEqualToConstant:16],
+
+        [label.leadingAnchor constraintEqualToAnchor:icon.trailingAnchor constant:8],
+        [label.topAnchor constraintEqualToAnchor:row.topAnchor],
+        [label.trailingAnchor constraintEqualToAnchor:row.trailingAnchor],
+        [label.bottomAnchor constraintEqualToAnchor:row.bottomAnchor],
+    ]];
+
+    return row;
+}
+
+/// 根据崩溃类型返回对应的修复建议列表
+- (NSArray<NSDictionary *> *)suggestionsForCrashType {
+    NSMutableArray *result = [NSMutableArray array];
+
+    switch (self.crashType) {
+        case CrashTypeOOM:
+            [result addObject:@{@"icon": @"arrow.down.circle", @"text": localize(@"crash.suggestion.oom_ram", @"降低内存分配（建议 1024-2048MB）")}];
+            [result addObject:@{@"icon": @"sparkles", @"text": localize(@"crash.suggestion.oom_getmoream", @"使用 GetMoreRam (LiveContainer) 解除 iOS 内存限制")}];
+            [result addObject:@{@"icon": @"trash", @"text": localize(@"crash.suggestion.oom_mods", @"移除重量级 Mod（如光影、高清材质）")}];
+            [result addObject:@{@"icon": @"arrow.clockwise", @"text": localize(@"crash.suggestion.oom_restart", @"重启启动器后重试（释放内存碎片）")}];
+            break;
+        case CrashTypeSegfault:
+            [result addObject:@{@"icon": @"cpu", @"text": localize(@"crash.suggestion.segfault_renderer", @"尝试切换渲染器（gl4es / MetalGlues / virgil）")}];
+            [result addObject:@{@"icon": @"shield", @"text": localize(@"crash.suggestion.segfault_jit", @"确保 JIT 已启用（TrollStore/SideStore + JIT 权限）")}];
+            [result addObject:@{@"icon": @"arrow.clockwise", @"text": localize(@"crash.suggestion.segfault_restart", @"重启启动器后重试")}];
+            break;
+        case CrashTypeAbort:
+            [result addObject:@{@"icon": @"exclamationmark.bubble", @"text": localize(@"crash.suggestion.abort_mods", @"检查 Mod 是否兼容（移除最近添加的 Mod）")}];
+            [result addObject:@{@"icon": @"cpu", @"text": localize(@"crash.suggestion.abort_renderer", @"尝试切换渲染器")}];
+            [result addObject:@{@"icon": @"arrow.clockwise", @"text": localize(@"crash.suggestion.abort_restart", @"重启启动器后重试")}];
+            break;
+        case CrashTypeModConflict:
+            [result addObject:@{@"icon": @"trash", @"text": localize(@"crash.suggestion.modconflict_remove", @"移除最近添加的 Mod")}];
+            [result addObject:@{@"icon": @"info.circle", @"text": localize(@"crash.suggestion.modconflict_check", @"检查 Mod 版本兼容性（Forge/Fabric/API 版本）")}];
+            [result addObject:@{@"icon": @"doc.text", @"text": localize(@"crash.suggestion.modconflict_log", @"查看完整日志定位冲突 Mod")}];
+            break;
+        case CrashTypeMissingLibrary:
+            [result addObject:@{@"icon": @"arrow.clockwise.circle", @"text": localize(@"crash.suggestion.missinglib_reinstall", @"重新安装当前游戏版本")}];
+            [result addObject:@{@"icon": @"folder", @"text": localize(@"crash.suggestion.missinglib_check", @"检查实例目录中的 libraries 文件夹是否完整")}];
+            [result addObject:@{@"icon": @"wifi", @"text": localize(@"crash.suggestion.missinglib_network", @"检查网络连接，确保下载源可访问")}];
+            break;
+        case CrashTypeJavaVersionMismatch:
+            [result addObject:@{@"icon": @"hammer", @"text": localize(@"crash.suggestion.javaver_change", @"在设置中切换 Java 版本（8/17/21）")}];
+            [result addObject:@{@"icon": @"info.circle", @"text": localize(@"crash.suggestion.javaver_check", @"检查游戏版本要求的 Java 版本")}];
+            break;
+        case CrashTypeRendererError:
+            [result addObject:@{@"icon": @"cpu", @"text": localize(@"crash.suggestion.renderer_switch", @"尝试切换渲染器：gl4es / MetalGlues / virgil")}];
+            [result addObject:@{@"icon": @"eye.slash", @"text": localize(@"crash.suggestion.renderer_shader", @"禁用光影包后重试")}];
+            [result addObject:@{@"icon": @"arrow.down.circle", @"text": localize(@"crash.suggestion.renderer_resolution", @"降低游戏分辨率缩放比例")}];
+            break;
+        case CrashTypeModLoadingFailure:
+            [result addObject:@{@"icon": @"trash", @"text": localize(@"crash.suggestion.modload_remove", @"移除问题 Mod（查看日志中的错误行）")}];
+            [result addObject:@{@"icon": @"arrow.clockwise.circle", @"text": localize(@"crash.suggestion.modload_update", @"更新 Mod 加载器（Forge/Fabric/OptiFine）")}];
+            [result addObject:@{@"icon": @"info.circle", @"text": localize(@"crash.suggestion.modload_version", @"检查 Mod 是否支持当前 MC 版本")}];
+            break;
+        case CrashTypeJavaException:
+            [result addObject:@{@"icon": @"doc.text", @"text": localize(@"crash.suggestion.java_log", @"查看完整日志定位异常堆栈")}];
+            [result addObject:@{@"icon": @"trash", @"text": localize(@"crash.suggestion.java_mods", @"检查 Mod 是否兼容（移除最近添加的 Mod）")}];
+            [result addObject:@{@"icon": @"arrow.clockwise", @"text": localize(@"crash.suggestion.java_restart", @"重启启动器后重试")}];
+            break;
+        case CrashTypeNormal:
+        case CrashTypeTerminated:
+        case CrashTypeUnknown:
+            // 这些类型不显示建议卡片
+            break;
+    }
+
+    return result;
+}
+
+#pragma mark - Crash Type Analysis (崩溃类型分析，参照 HMCL)
+
+/// 分析崩溃类型（基于 exitCode 和日志关键词）
+///
+/// 参照 HMCL 的崩溃分析器，通过 exitCode 和日志中的异常关键词，
+/// 将崩溃分类为 OOM/段错误/Mod 冲突/缺失库/Java 版本不匹配/渲染器错误等类型。
+/// 分析结果用于：
+/// 1. 在错误卡片中显示更精确的原因描述
+/// 2. 在建议卡片中显示对应的修复建议
+- (void)analyzeCrashType {
+    NSString *logContent = [self readLatestLogForAnalysis];
+    NSString *lowerLog = logContent.length > 0 ? [logContent lowercaseString] : @"";
+
+    // 1. 正常退出
+    if (_exitCode == 0) {
+        self.crashType = CrashTypeNormal;
+        self.crashDetail = nil;
+        return;
+    }
+
+    // 2. OOM（SIGKILL 或日志含 OOM 关键词）
+    if ([self isOOMCrash]) {
+        self.crashType = CrashTypeOOM;
+        self.crashDetail = [self extractLineContaining:@"outofmemory" fromLog:lowerLog] ?: [self extractLineContaining:@"cannot allocate" fromLog:lowerLog];
+        return;
+    }
+
+    // 3. SIGSEGV 段错误
+    if (_exitCode == 11) {
+        self.crashType = CrashTypeSegfault;
+        self.crashDetail = nil;
+        return;
+    }
+
+    // 4. SIGABRT
+    if (_exitCode == 6) {
+        // 检查是否为 Mod 冲突导致
+        if ([lowerLog containsString:@"nosuchmethoderror"] || [lowerLog containsString:@"classcastexception"] ||
+            [lowerLog containsString:@"illegalaccessexception"] || [lowerLog containsString:@"nosuchfielderror"]) {
+            self.crashType = CrashTypeModConflict;
+            self.crashDetail = [self extractLineContaining:@"nosuchmethod" fromLog:lowerLog] ?: [self extractLineContaining:@"classcast" fromLog:lowerLog];
+        } else if ([lowerLog containsString:@"unsatisfiedlinkerror"] || [lowerLog containsString:@"noclassdeffounderror"]) {
+            self.crashType = CrashTypeMissingLibrary;
+            self.crashDetail = [self extractLineContaining:@"unsatisfiedlink" fromLog:lowerLog] ?: [self extractLineContaining:@"noclassdef" fromLog:lowerLog];
+        } else if ([lowerLog containsString:@"unsupportedclassversionerror"]) {
+            self.crashType = CrashTypeJavaVersionMismatch;
+            self.crashDetail = [self extractLineContaining:@"unsupportedclassversion" fromLog:lowerLog];
+        } else {
+            self.crashType = CrashTypeAbort;
+            self.crashDetail = nil;
+        }
+        return;
+    }
+
+    // 5. SIGTERM
+    if (_exitCode == 15) {
+        self.crashType = CrashTypeTerminated;
+        self.crashDetail = nil;
+        return;
+    }
+
+    // 6. 基于日志关键词分析（其他 exitCode）
+    // Mod 冲突
+    if ([lowerLog containsString:@"nosuchmethoderror"] || [lowerLog containsString:@"classcastexception"] ||
+        [lowerLog containsString:@"illegalaccessexception"] || [lowerLog containsString:@"nosuchfielderror"] ||
+        [lowerLog containsString:@"duplicate mod"]) {
+        self.crashType = CrashTypeModConflict;
+        self.crashDetail = [self extractLineContaining:@"nosuchmethod" fromLog:lowerLog] ?: [self extractLineContaining:@"classcast" fromLog:lowerLog];
+        return;
+    }
+
+    // 缺失库
+    if ([lowerLog containsString:@"unsatisfiedlinkerror"] || [lowerLog containsString:@"noclassdeffounderror"] ||
+        [lowerLog containsString:@"filenotfoundexception"] && [lowerLog containsString:@"library"]) {
+        self.crashType = CrashTypeMissingLibrary;
+        self.crashDetail = [self extractLineContaining:@"unsatisfiedlink" fromLog:lowerLog] ?: [self extractLineContaining:@"noclassdef" fromLog:lowerLog];
+        return;
+    }
+
+    // Java 版本不匹配
+    if ([lowerLog containsString:@"unsupportedclassversionerror"] || [lowerLog containsString:@"unsupported major.minor version"]) {
+        self.crashType = CrashTypeJavaVersionMismatch;
+        self.crashDetail = [self extractLineContaining:@"unsupportedclassversion" fromLog:lowerLog] ?: [self extractLineContaining:@"unsupported major" fromLog:lowerLog];
+        return;
+    }
+
+    // 渲染器错误
+    if ([lowerLog containsString:@"gl_invalid"] || [lowerLog containsString:@"egl_error"] ||
+        [lowerLog containsString:@"opengl error"] || [lowerLog containsString:@"failed to create context"] ||
+        [lowerLog containsString:@"glgeterror"] || [lowerLog containsString:@"metal:"]) {
+        self.crashType = CrashTypeRendererError;
+        self.crashDetail = [self extractLineContaining:@"gl_invalid" fromLog:lowerLog] ?: [self extractLineContaining:@"egl_error" fromLog:lowerLog] ?: [self extractLineContaining:@"opengl error" fromLog:lowerLog];
+        return;
+    }
+
+    // Mod 加载失败
+    if ([lowerLog containsString:@"fml"] && [lowerLog containsString:@"error"] ||
+        [lowerLog containsString:@"forge"] && [lowerLog containsString:@"modloading"] ||
+        [lowerLog containsString:@"fabric"] && [lowerLog containsString:@"error"] ||
+        [lowerLog containsString:@"optifine"] && [lowerLog containsString:@"error"]) {
+        self.crashType = CrashTypeModLoadingFailure;
+        self.crashDetail = [self extractLineContaining:@"modloading" fromLog:lowerLog] ?: [self extractLineContaining:@"fml" fromLog:lowerLog];
+        return;
+    }
+
+    // Java 异常
+    if ([lowerLog containsString:@"exception"] || [lowerLog containsString:@"stacktrace"]) {
+        self.crashType = CrashTypeJavaException;
+        self.crashDetail = [self extractLineContaining:@"exception" fromLog:lowerLog];
+        return;
+    }
+
+    // 兜底：未知
+    self.crashType = CrashTypeUnknown;
+    self.crashDetail = nil;
+}
+
+/// 从日志中提取包含指定关键词的第一行（用于崩溃详情展示）
+- (NSString *)extractLineContaining:(NSString *)keyword fromLog:(NSString *)lowerLog {
+    if (lowerLog.length == 0) return nil;
+    NSArray *lines = [lowerLog componentsSeparatedByCharactersInSet:[NSCharacterSet newlineCharacterSet]];
+    for (NSString *line in lines) {
+        if ([line containsString:keyword] && line.length < 200) {
+            return [line stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+        }
+    }
+    return nil;
 }
 
 - (void)setupLogCard {
@@ -549,7 +914,10 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     return NO;
 }
 
-/// 根据 exitCode 和日志关键词智能识别崩溃类型，返回本地化的原因描述
+/// 根据 analyzeCrashType 分析的崩溃类型，返回本地化的原因描述
+///
+/// 参照 HMCL 的崩溃分析器，提供更精确的崩溃原因描述。
+/// 新增的崩溃类型：Mod 冲突、缺失库、Java 版本不匹配、渲染器错误、Mod 加载失败。
 - (NSString *)crashReasonText {
     // 优先使用自定义原因
     if (_customReason.length > 0) {
@@ -558,40 +926,48 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
 
     NSString *reason = nil;
 
-    // 正常退出（exitCode == 0）
-    if (_exitCode == 0) {
-        reason = localize(@"crash.reason.normal", nil);
-    }
-    // OOM 内存不足（SIGKILL 或日志含 OOM 关键词）
-    else if ([self isOOMCrash]) {
-        reason = localize(@"crash.reason.memory", nil);
-    }
-    // SIGSEGV 段错误（信号 11）
-    else if (_exitCode == 11) {
-        reason = localize(@"crash.reason.segmentation", nil);
-    }
-    // SIGABRT 程序异常终止（信号 6）
-    else if (_exitCode == 6) {
-        reason = localize(@"crash.reason.abort", nil);
-    }
-    // SIGTERM 被外部信号终止（信号 15）
-    else if (_exitCode == 15) {
-        reason = localize(@"crash.reason.terminated", nil);
-    }
-    // 检查日志是否含 Java 异常关键词
-    else {
-        NSString *logContent = [self readLatestLogForAnalysis];
-        if (logContent.length > 0) {
-            NSString *lowerLog = [logContent lowercaseString];
-            if ([lowerLog containsString:@"exception"] || [lowerLog containsString:@"stacktrace"]) {
-                reason = localize(@"crash.reason.java_exception", nil);
-            }
-        }
+    switch (self.crashType) {
+        case CrashTypeNormal:
+            reason = localize(@"crash.reason.normal", nil);
+            break;
+        case CrashTypeOOM:
+            reason = localize(@"crash.reason.memory", nil);
+            break;
+        case CrashTypeSegfault:
+            reason = localize(@"crash.reason.segmentation", nil);
+            break;
+        case CrashTypeAbort:
+            reason = localize(@"crash.reason.abort", nil);
+            break;
+        case CrashTypeTerminated:
+            reason = localize(@"crash.reason.terminated", nil);
+            break;
+        case CrashTypeModConflict:
+            reason = localize(@"crash.reason.mod_conflict", @"Mod 冲突导致崩溃（NoSuchMethodError/ClassCastException 等）");
+            break;
+        case CrashTypeMissingLibrary:
+            reason = localize(@"crash.reason.missing_library", @"缺失游戏库文件（UnsatisfiedLinkError/NoClassDefFoundError）");
+            break;
+        case CrashTypeJavaVersionMismatch:
+            reason = localize(@"crash.reason.java_version", @"Java 版本不匹配（UnsupportedClassVersionError）");
+            break;
+        case CrashTypeRendererError:
+            reason = localize(@"crash.reason.renderer", @"渲染器错误（OpenGL/Metal/EGL 初始化失败）");
+            break;
+        case CrashTypeModLoadingFailure:
+            reason = localize(@"crash.reason.mod_loading", @"Mod 加载失败（Forge/Fabric/OptiFine 加载错误）");
+            break;
+        case CrashTypeJavaException:
+            reason = localize(@"crash.reason.java_exception", nil);
+            break;
+        case CrashTypeUnknown:
+            reason = [NSString stringWithFormat:localize(@"crash.reason.unknown", @"未知错误 (代码: %d)"), _exitCode];
+            break;
     }
 
-    // 兜底：未知错误
-    if (reason.length == 0) {
-        reason = [NSString stringWithFormat:localize(@"crash.reason.unknown", @"未知错误 (代码: %d)"), _exitCode];
+    // 如果有崩溃详情，追加到原因后面
+    if (self.crashDetail.length > 0) {
+        reason = [NSString stringWithFormat:@"%@\n%@", reason, self.crashDetail];
     }
 
     return [NSString stringWithFormat:@"%@%@", localize(@"crash.possible_reason", nil), reason];

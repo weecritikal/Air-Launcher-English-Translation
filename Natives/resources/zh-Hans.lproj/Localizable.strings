@@ -535,6 +535,64 @@
 "crash.ai_solve" = "使用 AI 解决问题";
 "crash.ai_solve_experimental" = "使用 AI 解决问题";
 "crash.experimental" = "实验性";
+"crash.quick_fix" = "快速修复建议";
+"crash.reason.mod_conflict" = "Mod 冲突导致崩溃（NoSuchMethodError/ClassCastException 等）";
+"crash.reason.missing_library" = "缺失游戏库文件（UnsatisfiedLinkError/NoClassDefFoundError）";
+"crash.reason.java_version" = "Java 版本不匹配（UnsupportedClassVersionError）";
+"crash.reason.renderer" = "渲染器错误（OpenGL/Metal/EGL 初始化失败）";
+"crash.reason.mod_loading" = "Mod 加载失败（Forge/Fabric/OptiFine 加载错误）";
+// 快速修复建议文案
+"crash.suggestion.oom_ram" = "降低内存分配（建议 1024-2048MB）";
+"crash.suggestion.oom_getmoream" = "使用 GetMoreRam (LiveContainer) 解除 iOS 内存限制";
+"crash.suggestion.oom_mods" = "移除重量级 Mod（如光影、高清材质）";
+"crash.suggestion.oom_restart" = "重启启动器后重试（释放内存碎片）";
+"crash.suggestion.segfault_renderer" = "尝试切换渲染器（gl4es / MetalGlues / virgil）";
+"crash.suggestion.segfault_jit" = "确保 JIT 已启用（TrollStore/SideStore + JIT 权限）";
+"crash.suggestion.segfault_restart" = "重启启动器后重试";
+"crash.suggestion.abort_mods" = "检查 Mod 是否兼容（移除最近添加的 Mod）";
+"crash.suggestion.abort_renderer" = "尝试切换渲染器";
+"crash.suggestion.abort_restart" = "重启启动器后重试";
+"crash.suggestion.modconflict_remove" = "移除最近添加的 Mod";
+"crash.suggestion.modconflict_check" = "检查 Mod 版本兼容性（Forge/Fabric/API 版本）";
+"crash.suggestion.modconflict_log" = "查看完整日志定位冲突 Mod";
+"crash.suggestion.missinglib_reinstall" = "重新安装当前游戏版本";
+"crash.suggestion.missinglib_check" = "检查实例目录中的 libraries 文件夹是否完整";
+"crash.suggestion.missinglib_network" = "检查网络连接，确保下载源可访问";
+"crash.suggestion.javaver_change" = "在设置中切换 Java 版本（8/17/21）";
+"crash.suggestion.javaver_check" = "检查游戏版本要求的 Java 版本";
+"crash.suggestion.renderer_switch" = "尝试切换渲染器：gl4es / MetalGlues / virgil";
+"crash.suggestion.renderer_shader" = "禁用光影包后重试";
+"crash.suggestion.renderer_resolution" = "降低游戏分辨率缩放比例";
+"crash.suggestion.modload_remove" = "移除问题 Mod（查看日志中的错误行）";
+"crash.suggestion.modload_update" = "更新 Mod 加载器（Forge/Fabric/OptiFine）";
+"crash.suggestion.modload_version" = "检查 Mod 是否支持当前 MC 版本";
+"crash.suggestion.java_log" = "查看完整日志定位异常堆栈";
+"crash.suggestion.java_mods" = "检查 Mod 是否兼容（移除最近添加的 Mod）";
+"crash.suggestion.java_restart" = "重启启动器后重试";
+
+// 启动加载界面（参照 FCL/ZL2 风格）
+"launch.title" = "正在启动 Minecraft";
+"launch.stage.init_env" = "正在初始化运行环境...";
+"launch.stage.verify_files" = "正在校验游戏文件完整性...";
+"launch.stage.load_jre" = "正在加载 Java 运行时...";
+"launch.stage.config_jvm" = "正在配置 JVM 参数...";
+"launch.stage.start_jvm" = "正在启动 Java 虚拟机...";
+"launch.stage.load_libs" = "正在加载游戏库...";
+"launch.stage.init_mc" = "正在初始化 Minecraft...";
+"launch.stage.load_assets" = "正在加载资源文件...";
+"launch.stage.entering" = "即将进入游戏...";
+"launch.stage.preparing" = "正在准备...";
+"launch.elapsed" = "已耗时 0秒";
+"launch.elapsed_seconds" = "已耗时 %.0f秒";
+"launch.elapsed_minutes" = "已耗时 %.0f分%.0f秒";
+"launch.complete" = "启动完成！";
+"launch.total_seconds" = "总耗时 %.1f秒";
+"launch.total_minutes" = "总耗时 %.0f分%.0f秒";
+"launch.cancel" = "取消启动";
+"launch.cancel_confirm_title" = "确认取消启动？";
+"launch.cancel_confirm_message" = "取消启动将终止当前的游戏加载流程并返回启动器。";
+"launch.cancel_confirm_yes" = "确认取消";
+"launch.cancel_confirm_no" = "继续等待";
 
 // AI Fix Feature
 "ai.fix.conversation" = "对话窗口";
