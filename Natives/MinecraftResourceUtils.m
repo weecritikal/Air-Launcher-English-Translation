@@ -17,7 +17,25 @@
         @"mainClass", @"minecraftArguments",
         @"optifineLib", @"releaseTime", @"time", @"type"
     ]];
-    inheritsFrom[@"arguments"] = json[@"arguments"];
+    // 合并 arguments 而非覆盖（参照 HMCL 的合并逻辑）
+    // 修复：原代码 inheritsFrom[@"arguments"] = json[@"arguments"] 会无条件用子版本 arguments
+    //   覆盖父版本，当子版本没有 arguments 字段时会把父版本的 arguments 清空为 nil，
+    //   导致父版本的 arguments.jvm（可能包含 26.x 新增强制 --add-opens/--add-exports）被完全忽略，
+    //   引发反射访问失败崩溃。
+    if (json[@"arguments"]) {
+        NSMutableDictionary *mergedArgs = [NSMutableDictionary dictionary];
+        // 先保留父版本的 arguments
+        if (inheritsFrom[@"arguments"]) {
+            [mergedArgs addEntriesFromDictionary:inheritsFrom[@"arguments"]];
+        }
+        // 再用子版本的 arguments 覆盖（但保留父版本中子版本没有的键）
+        if ([json[@"arguments"] isKindOfClass:[NSDictionary class]]) {
+            for (NSString *key in json[@"arguments"]) {
+                mergedArgs[key] = json[@"arguments"][key];
+            }
+        }
+        inheritsFrom[@"arguments"] = mergedArgs;
+    }
 
     for (NSMutableDictionary *lib in json[@"libraries"]) {
         NSString *libName = [lib[@"name"] substringToIndex:[lib[@"name"] rangeOfString:@":" options:NSBackwardsSearch].location];

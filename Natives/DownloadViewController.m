@@ -2510,7 +2510,23 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     NSString *versionId = version[@"id"];
 
     if ([loaderType isEqualToString:@"vanilla"]) {
-        [self downloadVanillaVersion:version];
+        // 原版也经过 ensureVanillaInstalled，确保 version.json 正确下载和 BMCLAPI 替换
+        // 修复：原先直接调用 downloadVanillaVersion: 不经过 ensureVanillaInstalled:，
+        //   在 BMCLAPI 模式下 version.json 直连 piston-meta.mojang.com 会国内超时，
+        //   导致一直转圈不下载。ensureVanillaInstalled: 内部会调用 ensureVanillaVersionJSONExists:，
+        //   后者已正确将 piston-meta.mojang.com 替换为 bmclapi2.bangbang93.com。
+        // 注意：ensureVanillaInstalled: 在 JSON 已存在时会直接跳过，避免重复下载；
+        //   downloadVanillaVersion: 内部也会通过 createDownloadTask: 的 SHA1 校验跳过已下载文件。
+        __weak typeof(self) weakSelf = self;
+        [self ensureVanillaInstalled:version completion:^(BOOL success) {
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) return;
+            if (success) {
+                [strongSelf downloadVanillaVersion:version];
+            } else {
+                [strongSelf showError:[NSString stringWithFormat:@"无法安装原版 %@，请检查网络后重试", versionId]];
+            }
+        }];
         return;
     }
 
@@ -3735,13 +3751,20 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         NSString *versionDir = [gameDir stringByAppendingPathComponent:[NSString stringWithFormat:@"versions/%@", versionId]];
         [[NSFileManager defaultManager] createDirectoryAtPath:versionDir withIntermediateDirectories:YES attributes:nil error:nil];
 
-        // 3. 写入 jar 文件作为 client.jar
-        // 对于 1.14+ OptiFine，安装器 jar 本身就是 patched client.jar，可以直接使用
-        // 对于 1.13- OptiFine，安装器 jar 含 Patcher，但 iOS 无法运行 Patcher，
-        //   降级方案：直接使用安装器 jar 作为 client.jar（部分老版本可能无法启动，提示用户）
-        NSString *jarPath = [versionDir stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.jar", versionId]];
+        // 3. 写入 jar 文件到 libraries 目录（参照 FCL OptiFineInstallTask / HMCL OptiFineInstallTask）
+        // OptiFine 使用 launchwrapper 作为入口，通过 tweaker 加载，jar 不再作为 client.jar
+        // 而是作为普通库条目写入 libraries/optifine/OptiFine/{gameVersion}/{versionId}.jar
+        // 这样做的目的：
+        //   1. 让原版 client.jar 仍可被 inheritsFrom 引用（保留原版 jar）
+        //   2. OptiFine jar 作为 launchwrapper 的 tweakClass 输入
+        //   3. mainClass 设为 net.minecraft.launchwrapper.Launcher，通过 --tweakClass optifine.OptiFineTweaker 加载
+        NSString *optifineJarPath = [NSString stringWithFormat:@"optifine/OptiFine/%@/%@.jar", gameVersion, versionId];
+        NSString *optifineJarAbsPath = [NSString stringWithFormat:@"%s/libraries/%@", getenv("POJAV_GAME_DIR"), optifineJarPath];
+        // 确保 jar 文件写入到正确的 libraries 路径
+        NSString *jarDir = [optifineJarAbsPath stringByDeletingLastPathComponent];
+        [[NSFileManager defaultManager] createDirectoryAtPath:jarDir withIntermediateDirectories:YES attributes:nil error:nil];
         NSError *writeError = nil;
-        [jarData writeToFile:jarPath options:NSDataWritingAtomic error:&writeError];
+        [jarData writeToFile:optifineJarAbsPath options:NSDataWritingAtomic error:&writeError];
         if (writeError) {
             NSError *err = [NSError errorWithDomain:@"OptiFineInstall" code:2 userInfo:@{NSLocalizedDescriptionKey: writeError.localizedDescription}];
             [[DownloadTaskManager sharedManager] setTaskWithId:taskId completedWithError:err];
@@ -3753,16 +3776,31 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             return;
         }
 
-        // 4. 创建 version.json（使用 inheritsFrom 继承 vanilla 元数据，参照 FCL OptiFineInstallTask）
-        // OptiFine jar 作为 client.jar（jar 字段指向 versionId）
-        // mainClass 用标准 vanilla 入口，启动器会从 OptiFine jar 内加载 net.minecraft.client.main.Main
+        // 4. 创建 version.json（参照 FCL OptiFineInstallTask / HMCL OptiFineInstallTask）
+        // OptiFine 使用 launchwrapper 作为入口，通过 tweaker 加载
+        // 关键：mainClass 必须是 net.minecraft.launchwrapper.Launcher
+        //       必须添加 --tweakClass optifine.OptiFineTweaker
+        //       OptiFine jar 必须加入 libraries 列表
         NSDictionary *versionJson = @{
             @"id": versionId,
-            @"inheritsFrom": gameVersion,  // 继承 vanilla 版本的 assets/libraries/arguments
+            @"inheritsFrom": gameVersion,
             @"type": @"release",
-            @"mainClass": @"net.minecraft.client.main.Main",
-            @"libraries": @[],
-            @"jar": versionId,
+            @"mainClass": @"net.minecraft.launchwrapper.Launcher",
+            @"minecraftArguments": @"--username ${auth_player_name} --version ${version_name} --gameDir ${game_directory} --assetsDir ${assets_root} --assetIndex ${assets_index_name} --uuid ${auth_uuid} --accessToken ${auth_access_token} --userType ${user_type} --versionType ${version_type} --tweakClass optifine.OptiFineTweaker",
+            @"libraries": @[
+                @{
+                    @"name": [NSString stringWithFormat:@"optifine:OptiFine:%@", gameVersion],
+                    @"downloads": @{
+                        @"artifact": @{
+                            @"path": optifineJarPath,
+                            @"url": @"",  // 已下载，URL 留空
+                            @"size": @(jarData.length),
+                            @"sha1": @""
+                        }
+                    }
+                }
+            ],
+            @"jar": gameVersion,  // 使用原版 jar
             @"minimumLauncherVersion": @21
         };
         NSString *jsonPath = [versionDir stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.json", versionId]];

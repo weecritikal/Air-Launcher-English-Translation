@@ -69,10 +69,22 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"org.a
     
     // BMCLAPI镜像源
     if ([downloadSource isEqualToString:@"bmclapi"]) {
-        // 版本清单和版本JSON
-        if ([originalURL containsString:@"launchermeta.mojang.com"] || 
+        // piston-meta.mojang.com：Mojang 新版版本清单和版本 JSON 域名（1.19+ 起使用）
+        // 修复：原版安装时 version.json 直连此域名，国内超时导致转圈不下载
+        if ([originalURL containsString:@"piston-meta.mojang.com"]) {
+            originalURL = [originalURL stringByReplacingOccurrencesOfString:@"https://piston-meta.mojang.com"
+                                                                withString:@"https://bmclapi2.bangbang93.com"];
+        }
+        // piston-data.mojang.com：Mojang 新版 client.jar 和资源下载域名
+        if ([originalURL containsString:@"piston-data.mojang.com"]) {
+            originalURL = [originalURL stringByReplacingOccurrencesOfString:@"https://piston-data.mojang.com"
+                                                                withString:@"https://bmclapi2.bangbang93.com"];
+        }
+
+        // 版本清单和版本JSON（旧域名，向后兼容）
+        if ([originalURL containsString:@"launchermeta.mojang.com"] ||
             [originalURL containsString:@"launcher.mojang.com"]) {
-            return [originalURL stringByReplacingOccurrencesOfString:@"https://launchermeta.mojang.com" 
+            return [originalURL stringByReplacingOccurrencesOfString:@"https://launchermeta.mojang.com"
                                                            withString:@"https://bmclapi2.bangbang93.com"];
         }
         
@@ -265,9 +277,15 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"org.a
         }
         if (self.metadata[@"inheritsFrom"]) {
             NSMutableDictionary *inheritsFromDict = parseJSONFromFile([NSString stringWithFormat:@"%1$s/versions/%2$@/%2$@.json", getenv("POJAV_GAME_DIR"), self.metadata[@"inheritsFrom"]]);
-            if (inheritsFromDict) {
+            if (inheritsFromDict && !inheritsFromDict[@"NSErrorObject"]) {  // 添加错误字典检测
+                // 修复：parseJSONFromFile 返回错误字典而非 nil，
+                //   导致 inheritsFrom 父版本缺失时错误字典被当作 metadata
                 [MinecraftResourceUtils processVersion:self.metadata inheritsFrom:inheritsFromDict];
                 self.metadata = inheritsFromDict;
+            } else {
+                // 父版本不存在或损坏，报错
+                [self finishDownloadWithErrorString:[NSString stringWithFormat:@"缺少父版本 %@ 的 version.json", self.metadata[@"inheritsFrom"]]];
+                return;
             }
         }
         [MinecraftResourceUtils tweakVersionJson:self.metadata];
@@ -658,7 +676,13 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"org.a
     if (getPrefBool(@"general.check_sha")) {
         return [self checkSHAIgnorePref:sha forFile:path altName:altName logSuccess:logSuccess];
     } else {
-        return [NSFileManager.defaultManager fileExistsAtPath:path];
+        // 不仅检查文件存在性，还要检查文件大小 > 0（防止空文件被误判为已下载）
+        // 修复：原版安装时若文件被错误创建为 0 字节，会被视为已下载，
+        //   导致 totalUnitCount 从 1 变 0，触发强制完成（0 字节下载）
+        if (![NSFileManager.defaultManager fileExistsAtPath:path]) return NO;
+        NSDictionary *attrs = [NSFileManager.defaultManager attributesOfItemAtPath:path error:nil];
+        unsigned long long fileSize = [attrs fileSize];
+        return fileSize > 0;
     }
 }
 
