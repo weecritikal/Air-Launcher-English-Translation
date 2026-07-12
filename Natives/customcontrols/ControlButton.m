@@ -188,43 +188,6 @@
     CGFloat propX = [self calculateDynamicPos:propDynamicX];
     CGFloat propY = [self calculateDynamicPos:propDynamicY];
 
-    // 边界钳制：仅游戏运行时（isControlModifiable == NO）应用。
-    //
-    // 之所以不在键位编辑器中钳制：
-    // 编辑器中的 ctrlView.frame 已被 viewDidLayoutSubviews 缩小
-    // （顶部预留 56pt 工具栏 + 底部预留 ~80pt 浮动工具栏），
-    // 而 self.superview.safeAreaInsets 反映的是整个屏幕的安全区域，
-    // 不是 ctrlView 自身被缩小后的 frame。若在编辑器中也用
-    // parentBounds.height - safeAreaInsets.bottom 做钳制，
-    // 会在已缩小的 ctrlView 内再做一次"减去屏幕底部安全区"的二次压缩，
-    // 导致 maxY 过小，按键被强制压到 ctrlView 底部边缘甚至挤出可视区。
-    //
-    // 游戏运行时（SurfaceViewController）ctrlView.frame = getSafeArea(self.view.frame)
-    // 是完整的安全区域，此时钳制才有意义，可避免按键覆盖 Home Indicator。
-    if (!isControlModifiable) {
-        CGRect parentBounds = self.superview.bounds;
-        UIEdgeInsets safeInsets = UIEdgeInsetsZero;
-        if (self.superview.safeAreaInsets.bottom > 0 || self.superview.safeAreaInsets.top > 0) {
-            safeInsets = self.superview.safeAreaInsets;
-        } else {
-            // 兜底：superview 尚未布局完成时，回退到 keyWindow 的 safeAreaInsets
-            UIWindow *keyWindow = UIApplication.sharedApplication.windows.firstObject;
-            if (keyWindow) {
-                safeInsets = keyWindow.safeAreaInsets;
-            }
-        }
-        // 水平边界：按键不超出左右边缘（留 2pt 安全间距）
-        CGFloat minX = 2.0;
-        CGFloat maxX = parentBounds.size.width - propW - 2.0;
-        if (maxX < minX) maxX = minX; // 按键比屏幕宽时，左对齐不越界
-        propX = MAX(minX, MIN(propX, maxX));
-        // 垂直边界：顶部不超出 safeArea 顶部，底部不覆盖 Home Indicator（留 2pt 安全间距）
-        CGFloat minY = safeInsets.top + 2.0;
-        CGFloat maxY = parentBounds.size.height - propH - safeInsets.bottom - 2.0;
-        if (maxY < minY) maxY = minY; // 按键比可用高度高时，顶部对齐不越界
-        propY = MAX(minY, MIN(propY, maxY));
-    }
-
     // Update other properties
     self.frame = CGRectMake(propX, propY, propW, propH);
     self.alpha = [self.properties[@"opacity"] floatValue];
