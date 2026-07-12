@@ -8,8 +8,6 @@
 "game.menu.log_output" = "日志输出";
 "game.menu.custom_controls" = "按键布局";
 "game.menu.multiplayer" = "联机";
-"game.menu.easytier_multiplayer" = "EasyTier 联机";
-"multiplayer.easytier.title" = "EasyTier 联机";
 "game.menu.toggle_stats" = "开关 FPS/内存显示";
 "game.menu.toggle_controls" = "隐藏/显示控制按钮";
 "game.menu.toggle_virtual_mouse" = "虚拟鼠标开关";

@@ -34,7 +34,33 @@ include_directories(
   "external/Apple"
   "external/ballpa1n"
   "external/ballpa1n/wrapped"
+  "external/zt.framework/Headers"
 )
+
+# ============================================================================
+# ZeroTier Apple Framework 集成
+# ============================================================================
+# 如果存在真实 zt.framework（含二进制库），则链接真实库；
+# 否则编译 stub 实现（zt_stub.c），使项目能编译通过但联机功能不可用。
+#
+# 真实 framework 路径：external/zt.framework/zt（二进制静态库）
+# stub 实现路径：external/zt_stub.c
+#
+# 要启用真正的联机功能：
+#   1. 从 https://github.com/zerotier/zerotier-sockets-apple-framework 获取 zt.framework
+#   2. 替换 Natives/external/zt.framework/ 中的文件（保留 Headers 和 Modules，替换二进制）
+#   3. 或运行 .github/workflows/build-zt-framework.yml 工作流自动下载
+#   4. 重新构建主项目
+set(ZT_FRAMEWORK_LIB "${CMAKE_CURRENT_LIST_DIR}/external/zt.framework/zt")
+if(EXISTS "${ZT_FRAMEWORK_LIB}")
+  message(STATUS "Found ZeroTier framework binary: ${ZT_FRAMEWORK_LIB}")
+  set(ZT_SOURCES "")
+  set(ZT_LIBS "${ZT_FRAMEWORK_LIB}" "-lc++")
+else()
+  message(STATUS "zt.framework binary not found, using stub implementation (multiplayer will be unavailable)")
+  set(ZT_SOURCES "external/zt_stub.c")
+  set(ZT_LIBS "")
+endif()
 
 # For cacio support library
 set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -rpath @loader_path -rpath @executable_path/java_runtimes/java-8-openjdk/lib -rpath /usr/lib/jvm/java-8-openjdk/lib")
@@ -185,9 +211,9 @@ add_executable(AngelAuraAmethyst
   JavaGUIViewController.m
   MultiplayerManager.m
   MultiplayerViewController.m
-  EasyTierMultiplayerManager.m
-  EasyTierMultiplayerViewController.m
   LanPortDetector.m
+  ZeroTierBridge.m
+  SOCKS5Proxy.m
   LauncherMenuViewController.m
   LauncherNavigationController.m
   LauncherNewsViewController.m
@@ -226,6 +252,10 @@ add_executable(AngelAuraAmethyst
   input_bridge_v3.m
   ios_uikit_bridge.m
   utils.m
+
+  # ZeroTier Apple Framework 的 stub 实现（仅在真实 zt.framework 二进制不存在时生效）
+  # 真实 framework 存在时 ZT_SOURCES 为空，链接 ZT_LIBS（zt + libc++）
+  ${ZT_SOURCES}
 
   # Version card cell (shared between DownloadViewController and LauncherProfilesViewController)
   VersionCardCell.m
@@ -363,6 +393,7 @@ target_link_libraries(AngelAuraAmethyst
   "-framework WebKit"
   "-weak_framework SafariServices"
   ${TOUCHCONTROLLER_LIB}
+  ${ZT_LIBS}
 )
 set_target_properties(AngelAuraAmethyst PROPERTIES
   MACOSX_BUNDLE TRUE

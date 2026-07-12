@@ -323,6 +323,56 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
     //margv[++margc] = "-Dorg.lwjgl.util.NoChecks=true";
     margv[++margc] = "-Dlog4j2.formatMsgNoLookups=true";
 
+    // ============================================================================
+    // ZeroTier 联机 SOCKS5 代理注入
+    // ============================================================================
+    // 当用户在联机界面连接到 ZeroTier 房间后，MultiplayerManager 会启动一个本地
+    // SOCKS5 代理（127.0.0.1:1080），并通过环境变量 AMETHYST_SOCKS5_PROXY 传递
+    // 代理地址（格式："127.0.0.1:port"）。
+    //
+    // 这里检测该环境变量，如果存在，则注入 JVM 的 SOCKS5 代理参数：
+    //   -DsocksProxyHost=127.0.0.1
+    //   -DsocksProxyPort=<port>
+    //
+    // Java 的 Socket 网络栈会自动走 SOCKS5 代理，所有 Minecraft 的 TCP 流量
+    // （包括登录、世界加载、区块同步、聊天等）都会经过本地 SOCKS5 代理，再由
+    // SOCKS5Proxy 通过 libzt 的 BSD socket API 转发到 ZeroTier 虚拟网络中，
+    // 最终到达房主的 Minecraft 服务器。
+    //
+    // 参照 FCL (FoldCraftLauncher) 和 ZL2 (ZalithLauncher) 的实现：
+    //   - FCL 在 LaunchPlugin 中注入 socksProxyHost/socksProxyPort 参数
+    //   - ZL2 在 ZTLaunchPlugin 中做相同的事情
+    //   - 本实现直接在 JVM 参数构建阶段注入，效果一致
+    //
+    // 注意：
+    //   1. 仅当 AMETHYST_SOCKS5_PROXY 环境变量存在且格式正确时才注入
+    //   2. 不影响非联机场景下的正常网络访问（环境变量不存在时跳过）
+    //   3. 此参数对 Java 的所有 Socket 连接生效，包括第三方库的网络请求
+    // ============================================================================
+    const char *socks5ProxyEnv = getenv("AMETHYST_SOCKS5_PROXY");
+    if (socks5ProxyEnv && socks5ProxyEnv[0] != '\0') {
+        NSString *proxyStr = [NSString stringWithUTF8String:socks5ProxyEnv];
+        // 解析 "host:port" 格式
+        NSRange colonRange = [proxyStr rangeOfString:@":"];
+        if (colonRange.location != NSNotFound && colonRange.location > 0 &&
+            colonRange.location + 1 < proxyStr.length) {
+            NSString *proxyHost = [proxyStr substringToIndex:colonRange.location];
+            NSString *proxyPortStr = [proxyStr substringFromIndex:colonRange.location + 1];
+
+            // 校验端口为纯数字且在有效范围
+            NSInteger portValue = [proxyPortStr integerValue];
+            if (portValue > 0 && portValue <= 65535) {
+                margv[++margc] = [NSString stringWithFormat:@"-DsocksProxyHost=%@", proxyHost].UTF8String;
+                margv[++margc] = [NSString stringWithFormat:@"-DsocksProxyPort=%@", proxyPortStr].UTF8String;
+                NSLog(@"[JavaLauncher] 已注入 ZeroTier SOCKS5 代理：%@:%@", proxyHost, proxyPortStr);
+            } else {
+                NSLog(@"[JavaLauncher] AMETHYST_SOCKS5_PROXY 端口无效：%@", proxyPortStr);
+            }
+        } else {
+            NSLog(@"[JavaLauncher] AMETHYST_SOCKS5_PROXY 格式无效（应为 host:port）：%@", proxyStr);
+        }
+    }
+
     // Preset OpenGL libname
     const char *glLibName = getenv("AMETHYST_RENDERER");
     if (glLibName) {

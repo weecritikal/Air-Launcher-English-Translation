@@ -24,17 +24,55 @@ typedef NS_ENUM(NSInteger, MultiplayerRoomStatus) {
 @property (nonatomic, strong) NSDate *lastConnectedAt; // 上次连接时间
 @end
 
+/// 联机状态变化通知代理
+///
+/// 当 ZeroTier 节点状态、网络状态发生变化时，会通过代理回调通知上层。
+/// 所有回调方法都在主线程调用。
+@protocol MultiplayerManagerDelegate <NSObject>
+@optional
+
+/// ZeroTier 节点已上线
+- (void)multiplayerNodeOnline;
+
+/// ZeroTier 节点已离线
+- (void)multiplayerNodeOffline;
+
+/// 指定房间已连接成功（网络已就绪且 SOCKS5 代理已启动）
+/// @param room 连接成功的房间
+- (void)multiplayerRoomConnected:(MultiplayerRoom *)room;
+
+/// 指定房间连接失败
+/// @param room 连接失败的房间
+/// @param error 错误信息
+- (void)multiplayerRoom:(MultiplayerRoom *)room
+   didFailWithError:(NSError *)error;
+
+/// ZeroTier 框架可用性检测结果
+/// @param available YES 表示 zt.framework 已加载（非 stub）
+- (void)multiplayerFrameworkAvailabilityChecked:(BOOL)available;
+
+@end
+
 /// ZeroTier 联机管理器
 ///
 /// 参照 FCL 的 MultiplayerManager 和 ZL2 的 LanServerManager 设计：
 /// 1. 管理本地联机房间列表（增删改查）
-/// 2. 通过 URL Scheme 唤起 ZeroTier One app 加入/离开网络
-/// 3. 检测 ZeroTier One app 是否已安装
-/// 4. 管理当前连接状态
-/// 5. 生成分享信息（房间名 + Network ID + IP + 端口）
+/// 2. 通过 ZeroTier Apple Framework (zt.framework) 在进程内加入/离开 ZeroTier 网络
+/// 3. 启动本地 SOCKS5 代理，将 Minecraft 流量转发到 ZeroTier 虚拟网络
+/// 4. 检测 zt.framework 是否可用（非 stub）
+/// 5. 管理当前连接状态
+/// 6. 生成分享信息（房间名 + Network ID + IP + 端口）
+///
+/// 与旧的基于 URL Scheme 的实现不同，本版本完全在 App 进程内运行 ZeroTier 节点，
+/// 无需依赖外部的 ZeroTier One app，也不需要 NetworkExtension 权限。
+/// 流量通过本地 SOCKS5 代理（127.0.0.1:1080）转发，Minecraft 通过 JVM 的
+/// -DsocksProxyHost/-DsocksProxyPort 参数走代理。
 @interface MultiplayerManager : NSObject
 
 + (instancetype)sharedManager;
+
+/// 代理对象（弱引用）
+@property (nonatomic, weak, nullable) id<MultiplayerManagerDelegate> delegate;
 
 /// 当前连接的房间（nil 表示未连接任何房间）
 @property (nonatomic, strong, readonly, nullable) MultiplayerRoom *currentRoom;
@@ -42,26 +80,83 @@ typedef NS_ENUM(NSInteger, MultiplayerRoomStatus) {
 /// 所有已保存的房间列表
 @property (nonatomic, strong, readonly) NSArray<MultiplayerRoom *> *savedRooms;
 
-/// ZeroTier One app 是否已安装
-- (BOOL)isZeroTierAppInstalled;
+/// 当前 SOCKS5 代理监听端口（代理未运行时返回 0）
+@property (nonatomic, assign, readonly) uint16_t currentSOCKS5Port;
 
-/// 设置 ZeroTier 安装状态覆盖（用户手动指定，用于 canOpenURL 检测失败时）
-/// @param installed YES 表示用户确认已安装 ZeroTier One
-- (void)setZeroTierInstalledOverride:(BOOL)installed;
+/// 当前 SOCKS5 代理是否正在运行
+@property (nonatomic, assign, readonly) BOOL isSOCKS5ProxyRunning;
 
-/// 用户是否已手动覆盖 ZeroTier 安装状态
-- (BOOL)isZeroTierInstallOverridden;
+/// ZeroTier 节点是否已上线
+@property (nonatomic, assign, readonly) BOOL isNodeOnline;
 
-/// 打开 ZeroTier One app
-- (void)openZeroTierApp;
+/// 当前房间在 ZeroTier 网络中分配到的本地 IP（可用于显示给用户）
+/// 仅在房间已连接且 ZeroTier 分配了 IP 后才有效
+@property (nonatomic, copy, readonly, nullable) NSString *currentLocalIP;
 
-/// 通过 Network ID 加入 ZeroTier 网络（唤起 ZeroTier One app）
+#pragma mark - 框架检测
+
+/// 检测 zt.framework 是否可用（非 stub 实现）
+///
+/// 本方法委托给 ZeroTierBridge 的 isFrameworkAvailable，结果会被缓存。
+/// 当 framework 不可用时（如 CI 构建环境链接了 zt_stub.c），所有联机功能将不可用。
+///
+/// @return YES 如果 framework 可用
+- (BOOL)isFrameworkAvailable;
+
+/// ZeroTier 节点是否已启动
+/// @return YES 如果节点已启动（不要求已上线）
+- (BOOL)isNodeStarted;
+
+/// 启动 ZeroTier 节点
+///
+/// 如果节点尚未启动，则在后台线程启动节点。
+/// 节点启动后会异步触发 ZTS_EVENT_NODE_ONLINE 事件。
+///
+/// @param completion 完成回调（主线程，YES 表示启动请求已成功提交）
+- (void)ensureNodeStartedWithCompletion:(void (^)(BOOL success, NSError * _Nullable error))completion;
+
+#pragma mark - 兼容旧 API（已废弃，仅用于平滑过渡）
+
+/// 检测 ZeroTier One app 是否已安装（已废弃）
+///
+/// 旧的基于 URL Scheme 的实现需要检测外部 ZeroTier One app 是否安装。
+/// 新版本使用进程内 zt.framework，不再依赖外部 app。
+/// 本方法现在返回 isFrameworkAvailable 的结果，保持 API 兼容性。
+///
+/// @return YES 如果 zt.framework 可用
+- (BOOL)isZeroTierAppInstalled __attribute__((deprecated("使用 isFrameworkAvailable 代替")));
+
+/// 设置 ZeroTier 安装状态覆盖（已废弃，新版本为空操作）
+/// @param installed 已废弃参数，无实际效果
+- (void)setZeroTierInstalledOverride:(BOOL)installed __attribute__((deprecated("新版本无需手动覆盖安装状态")));
+
+/// 用户是否已手动覆盖 ZeroTier 安装状态（已废弃）
+/// @return 始终返回 NO
+- (BOOL)isZeroTierInstallOverridden __attribute__((deprecated("新版本始终返回 NO")));
+
+/// 打开 ZeroTier One app（已废弃，新版本为空操作）
+- (void)openZeroTierApp __attribute__((deprecated("新版本使用进程内框架，无需打开外部 app")));
+
+#pragma mark - 网络加入与离开
+
+/// 通过 Network ID 加入 ZeroTier 网络
+///
+/// 本方法直接在进程内调用 zts_net_join 加入指定网络。
+/// 如果节点尚未启动，会先启动节点。
+///
 /// @param networkId ZeroTier Network ID（16位十六进制）
-- (void)joinNetwork:(NSString *)networkId;
+/// @param completion 完成回调（主线程，YES 表示加入请求已成功提交，不代表网络已就绪）
+- (void)joinNetwork:(NSString *)networkId
+         completion:(nullable void (^)(BOOL success, NSError * _Nullable error))completion;
 
-/// 离开 ZeroTier 网络（唤起 ZeroTier One app）
+/// 离开 ZeroTier 网络
+///
+/// 本方法直接在进程内调用 zts_net_leave 离开指定网络。
+///
 /// @param networkId ZeroTier Network ID
 - (void)leaveNetwork:(NSString *)networkId;
+
+#pragma mark - 房间管理（增删改查）
 
 /// 添加房间到本地列表
 /// @param room 房间对象
@@ -79,17 +174,42 @@ typedef NS_ENUM(NSInteger, MultiplayerRoomStatus) {
 /// @param roomId 房间 ID
 - (nullable MultiplayerRoom *)roomWithId:(NSString *)roomId;
 
-/// 连接到房间（设置 currentRoom + 唤起 ZeroTier）
-/// @param room 房间对象
-/// @param completion 完成回调
-- (void)connectToRoom:(MultiplayerRoom *)room completion:(void (^)(BOOL success, NSError * _Nullable error))completion;
+#pragma mark - 连接管理
+
+/// 连接到房间
+///
+/// 完整流程：
+///   1. 校验 room 非空且 networkId 有效
+///   2. 设置 currentRoom 并更新状态为 Connecting
+///   3. 启动 ZeroTier 节点（如果尚未启动）
+///   4. 加入 ZeroTier 网络
+///   5. 等待网络就绪（IPv4 地址已分配）
+///   6. 启动本地 SOCKS5 代理（端口 1080）
+///   7. 设置 AMETHYST_SOCKS5_PROXY 环境变量（供 JavaLauncher 读取）
+///   8. 更新房间状态为 Connected，回调 completion
+///
+/// 任何一步失败都会更新房间状态为 Error 并回调 completion(NO, error)。
+///
+/// @param room       房间对象
+/// @param completion 完成回调（主线程）
+- (void)connectToRoom:(MultiplayerRoom *)room
+           completion:(void (^)(BOOL success, NSError * _Nullable error))completion;
 
 /// 断开当前房间连接
+///
+/// 流程：
+///   1. 停止本地 SOCKS5 代理
+///   2. 清除 AMETHYST_SOCKS5_PROXY 环境变量
+///   3. 离开 ZeroTier 网络
+///   4. 更新房间状态为 Disconnected
+///   5. 清空 currentRoom
 - (void)disconnectCurrentRoom;
+
+#pragma mark - 分享与导入
 
 /// 生成房间的分享文本
 /// @param room 房间对象
-/// @return 分享文本（如 "来联机！房间名：xxx\nZeroTier网络ID：xxx\n服务器IP：xxx:xxx"）
+/// @return 分享文本
 - (NSString *)shareTextForRoom:(MultiplayerRoom *)room;
 
 /// 从分享文本解析房间信息
@@ -99,6 +219,18 @@ typedef NS_ENUM(NSInteger, MultiplayerRoomStatus) {
 
 /// 生成新的 ZeroTier 风格房间 ID（UUID）
 - (NSString *)generateRoomId;
+
+#pragma mark - 校验工具
+
+/// 验证 ZeroTier Network ID 格式
+/// @param networkId 待校验的 Network ID 字符串
+/// @return YES 如果格式有效
+- (BOOL)isValidNetworkId:(NSString *)networkId;
+
+/// 验证 IP 地址格式
+/// @param ipAddress 待校验的 IP 地址字符串
+/// @return YES 如果格式有效
+- (BOOL)isValidIPAddress:(NSString *)ipAddress;
 
 @end
 

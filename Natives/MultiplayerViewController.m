@@ -136,10 +136,10 @@
 
 - (void)configureWithInstalled:(BOOL)installed {
     if (installed) {
-        self.subtitleLabel.text = @"已安装，点击打开";
+        self.subtitleLabel.text = @"联机核心已加载，可直接连接房间";
         self.statusDot.backgroundColor = [UIColor systemGreenColor];
     } else {
-        self.subtitleLabel.text = @"未安装，点击前往 App Store";
+        self.subtitleLabel.text = @"联机核心未加载（CI 构建版本）";
         self.statusDot.backgroundColor = [UIColor systemRedColor];
     }
     // 适配自定义背景：有背景时使用白色文字
@@ -903,27 +903,27 @@
     [[MultiplayerManager sharedManager] updateRoom:room];
     [self refreshRooms];
 
-    // 检查 ZeroTier One 是否已安装
-    if (![[MultiplayerManager sharedManager] isZeroTierAppInstalled]) {
+    // 检查 ZeroTier 框架是否可用（进程内联机核心）
+    if (![[MultiplayerManager sharedManager] isFrameworkAvailable]) {
         room.status = MultiplayerRoomStatusError;
         [[MultiplayerManager sharedManager] updateRoom:room];
         [self refreshRooms];
 
-        // 提示用户安装 ZeroTier One
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"需要 ZeroTier One"
-                                                                       message:@"未检测到 ZeroTier One 应用，请先从 App Store 安装后再联机。"
+        // 提示用户联机核心未加载
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"联机核心不可用"
+                                                                       message:@"ZeroTier 联机核心未加载（当前为 stub 实现）。请使用包含真实 zt.framework 的构建版本。"
                                                                 preferredStyle:UIAlertControllerStyleAlert];
         [alert addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleDefault handler:nil]];
         [self presentViewController:alert animated:YES completion:nil];
 
         if (completion) {
-            NSError *error = [NSError errorWithDomain:@"Multiplayer" code:-1 userInfo:@{NSLocalizedDescriptionKey: @"未安装 ZeroTier One"}];
+            NSError *error = [NSError errorWithDomain:@"Multiplayer" code:-1 userInfo:@{NSLocalizedDescriptionKey: @"ZeroTier 联机核心不可用"}];
             completion(NO, error);
         }
         return;
     }
 
-    // 调用管理器连接房间（内部会唤起 ZeroTier One app 加入网络）
+    // 调用管理器连接房间（内部会启动 ZeroTier 节点、加入网络、启动 SOCKS5 代理）
     __weak typeof(self) weakSelf = self;
     [[MultiplayerManager sharedManager] connectToRoom:room completion:^(BOOL success, NSError * _Nullable error) {
         dispatch_async(dispatch_get_main_queue(), ^{
@@ -1066,10 +1066,10 @@
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     switch (indexPath.section) {
         case 0: {
-            // Section 0: ZeroTier 状态
+            // Section 0: ZeroTier 联机核心状态
             MultiplayerStatusCell *cell = [tableView dequeueReusableCellWithIdentifier:@"StatusCell" forIndexPath:indexPath];
-            BOOL installed = [[MultiplayerManager sharedManager] isZeroTierAppInstalled];
-            [cell configureWithInstalled:installed];
+            BOOL available = [[MultiplayerManager sharedManager] isFrameworkAvailable];
+            [cell configureWithInstalled:available];
             [[BackgroundManager sharedManager] applyEffectToCell:cell];
             return cell;
         }
@@ -1172,20 +1172,26 @@
 
     switch (indexPath.section) {
         case 0: {
-            // 点击 ZeroTier 状态行
-            BOOL installed = [[MultiplayerManager sharedManager] isZeroTierAppInstalled];
-            BOOL overridden = [[MultiplayerManager sharedManager] isZeroTierInstallOverridden];
-
-            if (installed && !overridden) {
-                // 已安装（自动检测到）：直接打开
-                [[MultiplayerManager sharedManager] openZeroTierApp];
-            } else if (overridden) {
-                // 用户手动确认已安装：尝试打开，失败则提示
-                [[MultiplayerManager sharedManager] openZeroTierApp];
+            // 点击 ZeroTier 联机核心状态行：显示详细信息
+            BOOL available = [[MultiplayerManager sharedManager] isFrameworkAvailable];
+            BOOL online = [[MultiplayerManager sharedManager] isNodeOnline];
+            NSString *title = available ? @"联机核心已就绪" : @"联机核心不可用";
+            NSString *message = nil;
+            if (!available) {
+                message = @"当前构建未集成真实的 ZeroTier Framework (zt.framework)，联机功能不可用。\n请使用包含 zt.framework 的构建版本。";
+            } else if (online) {
+                NSString *socksInfo = [[MultiplayerManager sharedManager] isSOCKS5ProxyRunning]
+                    ? [NSString stringWithFormat:@"SOCKS5 代理运行中，端口 %u", [[MultiplayerManager sharedManager] currentSOCKS5Port]]
+                    : @"SOCKS5 代理未运行";
+                message = [NSString stringWithFormat:@"ZeroTier 节点已上线。\n%@。", socksInfo];
             } else {
-                // 未检测到：弹出选项让用户选择
-                [self showZeroTierNotInstalledOptions:indexPath];
+                message = @"ZeroTier 节点未上线。点击\"连接房间\"后会自动启动节点。";
             }
+            UIAlertController *alert = [UIAlertController alertControllerWithTitle:title
+                                                                           message:message
+                                                                    preferredStyle:UIAlertControllerStyleAlert];
+            [alert addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleDefault handler:nil]];
+            [self presentViewController:alert animated:YES completion:nil];
             break;
         }
         case 1: {
@@ -1210,45 +1216,14 @@
     }
 }
 
-/// 显示 ZeroTier 未安装时的选项（FCL 风格）
-/// 提供"前往 App Store"、"手动确认已安装"两个选项
-/// 后者用于通过 NB 助手/TrollStore 等非 App Store 方式安装的情况
+/// 显示 ZeroTier 联机核心信息（已废弃，保留方法避免调用方崩溃）
+/// 新版本使用进程内 zt.framework，无需外部 app 安装检测
 - (void)showZeroTierNotInstalledOptions:(NSIndexPath *)indexPath {
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:nil
-                                                                   message:@"未检测到 ZeroTier One。\n如果你已通过 NB 助手等工具安装，请选择\"手动确认已安装\"。"
-                                                            preferredStyle:UIAlertControllerStyleActionSheet];
-
-    [sheet addAction:[UIAlertAction actionWithTitle:@"前往 App Store 安装" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-        [[MultiplayerManager sharedManager] openZeroTierApp];
-    }]];
-
-    [sheet addAction:[UIAlertAction actionWithTitle:@"手动确认已安装" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-        // 设置用户偏好覆盖
-        [[MultiplayerManager sharedManager] setZeroTierInstalledOverride:YES];
-        // 刷新状态
-        [self.tableView reloadRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationAutomatic];
-        // 尝试打开 ZeroTier
-        [[MultiplayerManager sharedManager] openZeroTierApp];
-    }]];
-
-    [sheet addAction:[UIAlertAction actionWithTitle:@"取消手动确认" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
-        // 取消手动覆盖
-        [[MultiplayerManager sharedManager] setZeroTierInstalledOverride:NO];
-        [self.tableView reloadRowsAtIndexPaths:@[indexPath] withRowAnimation:UITableViewRowAnimationAutomatic];
-    }]];
-
-    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
-
-    // iPad 适配
-    if (sheet.popoverPresentationController) {
-        UITableViewCell *cell = [self.tableView cellForRowAtIndexPath:indexPath];
-        if (cell) {
-            sheet.popoverPresentationController.sourceView = cell.contentView;
-            sheet.popoverPresentationController.sourceRect = cell.contentView.bounds;
-        }
-    }
-
-    [self presentViewController:sheet animated:YES completion:nil];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"联机核心信息"
+                                                                   message:@"当前启动器使用进程内 ZeroTier Framework 进行联机。\n如果联机核心不可用，请使用包含真实 zt.framework 的构建版本。"
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleDefault handler:nil]];
+    [self presentViewController:alert animated:YES completion:nil];
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {

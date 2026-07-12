@@ -1,0 +1,5 @@
+framework module zt {
+  umbrella header "ZeroTierSockets.h"
+  export *
+  module * { export * }
+}

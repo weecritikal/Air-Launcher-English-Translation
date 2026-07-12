@@ -17,7 +17,6 @@
 #import "LauncherPrefGameDirViewController.h"
 #import "CustomControlsViewController.h"
 #import "MultiplayerViewController.h"
-#import "EasyTierMultiplayerViewController.h"
 #import "AccountListViewController.h"
 
 // 布局常量（iPad 基准值；iPhone 上通过 LauncherRootLayoutWidth 适配后会变窄）
@@ -322,11 +321,6 @@ static CGFloat LauncherRootLayoutRightPanelWidth(UITraitCollection *trait) {
                                              selector:@selector(showMultiplayer)
                                                  name:@"ShowMultiplayer"
                                                object:nil];
-    // EasyTier 联机（基于 EasyTier 的陶瓦联机，与 HMCL/FCL/ZL2/PCL2 互通）
-    [[NSNotificationCenter defaultCenter] addObserver:self
-                                             selector:@selector(showEasyTierMultiplayer)
-                                                 name:@"ShowEasyTierMultiplayer"
-                                               object:nil];
     // 首页快捷瓷砖触发：切到对应内容区子页面（不再 FormSheet 弹窗）
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(showModsManager)
@@ -471,15 +465,6 @@ static CGFloat LauncherRootLayoutRightPanelWidth(UITraitCollection *trait) {
 - (void)showMultiplayer {
     // 在中间内容区显示联机界面（基于 ZeroTier 的 MC 联机功能，参照 FCL/ZL2）
     MultiplayerViewController *vc = [[MultiplayerViewController alloc] init];
-    UINavigationController *navVC = [[UINavigationController alloc] initWithRootViewController:vc];
-    navVC.navigationBar.prefersLargeTitles = NO;
-    [self setContentViewController:navVC animated:YES];
-}
-
-- (void)showEasyTierMultiplayer {
-    // 在中间内容区显示 EasyTier 联机界面（基于 EasyTier 的陶瓦联机，与 HMCL/FCL/ZL2/PCL2 互通）
-    // 使用 U/XXXX-XXXX-XXXX-XXXX 邀请码格式，EasyTier iOS app 需要 iOS 16+，本启动器支持 iOS 14+
-    EasyTierMultiplayerViewController *vc = [[EasyTierMultiplayerViewController alloc] init];
     UINavigationController *navVC = [[UINavigationController alloc] initWithRootViewController:vc];
     navVC.navigationBar.prefersLargeTitles = NO;
     [self setContentViewController:navVC animated:YES];
