@@ -170,9 +170,11 @@ void pojavSwapInterval(int interval) {
     // VSync（某些 mod/版本会重设），native 层也会拦截。
     //
     // 与 Vulkan 渲染器的区别：
-    // - GL 类渲染器：VSync 通过 eglSwapInterval 控制（此处生效）
+    // - GL 类渲染器（含 zink）：VSync 通过 eglSwapInterval 控制（此处生效）
+    //   zink 创建 swapchain 时根据 eglSwapInterval 选择 present mode：
+    //   interval=0 → IMMEDIATE（不等 vsync），interval=1 → FIFO（等 vsync）
     // - Vulkan 渲染器：VSync 通过 vkCreateSwapchainKHR 的 presentMode 控制
-    //   （由 MoltenVKConfig.json 和 MVK_CONFIG_PRESENT_MODE_IMMEDIATE 环境变量控制）
+    //   （由 LWJGL 根据 glfwSwapInterval 选择，设备能力由 MoltenVK 自动检测）
 
     const char* vsyncEnv = getenv("POJAV_DISABLE_VSYNC");
     const char* renderer = getenv("AMETHYST_RENDERER");

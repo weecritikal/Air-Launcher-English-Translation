@@ -55,36 +55,36 @@ void init_loadDefaultEnv() {
     // Runs JVM in a separate thread
     setenv("HACK_IGNORE_START_ON_FIRST_THREAD", "1", 1);
 
-    // Force MoltenVK to use immediate present mode (uncapped fps)
-    // MVK_CONFIG_PRESENT_MODE_IMMEDIATE=1 声明设备支持 VK_PRESENT_MODE_IMMEDIATE_KHR，
-    // 允许 MoltenVK 在 vkCreateSwapchainKHR 时使用 immediate present mode（不等待 vblank）。
-    // 注意：此环境变量仅声明能力（capability），不强制覆盖应用请求的 present mode。
-    // 应用需要在 vkCreateSwapchainKHR 时显式选择 VK_PRESENT_MODE_IMMEDIATE_KHR。
-    // 当游戏内 VSync 关闭时（enableVsync=false），LWJGL 会请求 IMMEDIATE present mode。
-    setenv("MVK_CONFIG_PRESENT_MODE_IMMEDIATE", "1", 1);
-
-    // 指定 MoltenVK 配置文件路径：让 MoltenVK 读取应用 bundle 内的 moltenvk.cfg
-    // MoltenVK 默认搜索 ~/Library/Application Support/MoltenVK/moltenvk.cfg（macOS），
-    // 在 iOS 沙箱中此路径不可用。通过 MVK_CONFIG_FILE 环境变量显式指定配置文件路径。
-    // 注意：当前 MoltenVK 1.1.2 版本的 MVKConfiguration 结构体不包含 swapchainPresentMode 成员，
-    // 该配置键仅在 moltenvk.cfg 文件中有效（MoltenVK 1.2.0+ 才支持）。
-    // 但设置 MVK_CONFIG_FILE 无害，未来 MoltenVK 升级后自动生效。
-    NSString *moltenVKConfigPath = [NSBundle.mainBundle.bundlePath stringByAppendingPathComponent:@"moltenvk.cfg"];
-    if ([[NSFileManager defaultManager] fileExistsAtPath:moltenVKConfigPath]) {
-        setenv("MVK_CONFIG_FILE", [moltenVKConfigPath UTF8String], 1);
-        NSLog(@"[JavaLauncher] MoltenVK config file: %@", moltenVKConfigPath);
-    }
-
     // 解锁帧率（关闭垂直同步）：读取启动器偏好，通过环境变量传递给 Java 层和 native 桥接层。
-    // - Java 层（PojavLauncher.java）读取 POJAV_DISABLE_VSYNC=1 后：
-    //   a) 强制写 enableVsync=false → MC 不调用 glfwSwapInterval(1)
-    //   b) 强制写 maxFps=0 → MC 不限制每秒渲染帧数（默认 maxFps=120 会限制帧率）
-    // - native 桥接层（egl_bridge.m pojavSwapInterval）读取 POJAV_DISABLE_VSYNC=1 后强制 interval=0
-    // 两层独立生效，互为兜底。默认开启（PLPreferences 中 video.disable_game_vsync 默认 YES）。
+    //
+    // 帧率解锁的三层机制（各层独立生效，互为兜底）：
+    //
+    // 1. Java 层（PojavLauncher.java）读取 POJAV_DISABLE_VSYNC=1 后：
+    //    a) 强制写 enableVsync=false → MC 不调用 glfwSwapInterval(1)
+    //    b) 强制写 maxFps=0 → MC 不限制每秒渲染帧数（默认 maxFps=120 会限制帧率）
+    //
+    // 2. native 桥接层（egl_bridge.m pojavSwapInterval）读取 POJAV_DISABLE_VSYNC=1 后：
+    //    拦截 MC 的 glfwSwapInterval(1) 请求，强制改为 interval=0
+    //
+    // 3. EGL 初始化层（gl_bridge.m gl_make_current）读取 POJAV_DISABLE_VSYNC=1 后：
+    //    在 eglMakeCurrent 成功后立即调用 eglSwapInterval(0)。
+    //    这是 zink 渲染器帧率解锁的关键——Mesa 21.0 的 zink 在延迟创建 Vulkan swapchain
+    //    时根据当前 eglSwapInterval 选择 present mode：
+    //      interval=0 → VK_PRESENT_MODE_IMMEDIATE_KHR（不等 vsync，帧率可超 60）
+    //      interval=1 → VK_PRESENT_MODE_FIFO_KHR（等 vsync，锁在屏幕刷新率）
+    //    如果等 MC 调用 glfwSwapInterval 时才设置，swapchain 可能已用 FIFO 创建，
+    //    Mesa 21.0 的 zink 不会动态重建 swapchain，导致帧率锁死在屏幕刷新率。
+    //
+    // 关于 MoltenVK 配置：
+    //   当前 MoltenVK 版本的 MVKConfiguration 结构体不包含 swapchainPresentMode 成员，
+    //   不支持通过配置文件或环境变量强制 present mode。present mode 完全由应用在
+    //   vkCreateSwapchainKHR 时选择。设备是否支持 IMMEDIATE present mode 由
+    //   MVKPhysicalDeviceMetalFeatures.presentModeImmediate 自动检测（大多数 iOS 设备支持）。
     //
     // 各渲染器的帧率解锁效果：
-    // - Vulkan（MoltenVK）：完全解锁，帧率可超过屏幕刷新率（immediate present mode）
-    // - GL 类（ANGLE Metal）：部分解锁，渲染线程不阻塞但 Core Animation vsync 仍限制合成频率
+    // - zink（GL→Vulkan）：通过 eglSwapInterval(0) → IMMEDIATE present mode 完全解锁
+    // - Vulkan（LWJGL3）：通过 glfwSwapInterval(0) → IMMEDIATE present mode 完全解锁
+    // - ANGLE Metal：eglSwapInterval(0) 让 ANGLE 不等 vsync，渲染线程不阻塞
     // - ProMotion 设备：通过 CADisableMinimumFrameDurationOnPhone + preferredFrameRateRange 启用 120Hz
     setenv("POJAV_DISABLE_VSYNC", getPrefBool(@"video.disable_game_vsync") ? "1" : "0", 1);
 
@@ -93,7 +93,6 @@ void init_loadDefaultEnv() {
     NSLog(@"[JavaLauncher]   video.disable_game_vsync=%d", getPrefBool(@"video.disable_game_vsync"));
     NSLog(@"[JavaLauncher]   video.max_framerate=%d", getPrefBool(@"video.max_framerate"));
     NSLog(@"[JavaLauncher]   POJAV_DISABLE_VSYNC=%s", getenv("POJAV_DISABLE_VSYNC"));
-    NSLog(@"[JavaLauncher]   MVK_CONFIG_PRESENT_MODE_IMMEDIATE=%s", getenv("MVK_CONFIG_PRESENT_MODE_IMMEDIATE"));
     NSLog(@"[JavaLauncher]   UIScreen.maximumFramesPerSecond=%d", (int)UIScreen.mainScreen.maximumFramesPerSecond);
 }
 

@@ -155,6 +155,34 @@ void gl_make_current(gl_render_window_t* bundle) {
 
     if(handle.eglMakeCurrent(g_EglDisplay, bundle->surface, bundle->surface, bundle->context)) {
         currentBundle = (basic_render_window_t *)bundle;
+
+        // 帧率解锁关键点：在 EGL context 首次变为 current 后立即设置 swap interval=0。
+        //
+        // 为什么必须在这里设置（而不是等 MC 调用 glfwSwapInterval 时才设置）：
+        //
+        // 对于 zink 渲染器（Mesa 21.0），Vulkan swapchain 是延迟创建的——
+        // 在第一次 eglSwapBuffers 或需要 swapchain 时才创建。
+        // zink 创建 swapchain 时会根据当前 eglSwapInterval 的值选择 present mode：
+        //   - interval=0 → VK_PRESENT_MODE_IMMEDIATE_KHR（不等 vsync，帧率可超 60）
+        //   - interval=1 → VK_PRESENT_MODE_FIFO_KHR（等 vsync，锁在屏幕刷新率）
+        //
+        // 如果等 MC 调用 glfwSwapInterval(1) → pojavSwapInterval(0) → eglSwapInterval(0)
+        // 时才设置，swapchain 可能已经用默认的 FIFO 创建了。
+        // Mesa 21.0 的 zink 不会在 eglSwapInterval 变化时重建 swapchain，
+        // 导致 present mode 固定为 FIFO，帧率被锁死在屏幕刷新率（60Hz/120Hz）。
+        //
+        // 在 gl_make_current 中提前设置 eglSwapInterval(0)，可确保 zink 创建
+        // swapchain 时读到 interval=0，从而选择 IMMEDIATE present mode。
+        //
+        // 这对 ANGLE Metal 后端也有效（ANGLE 在 interval=0 时不等 vsync）。
+        if (getenv("POJAV_DISABLE_VSYNC") && strcmp(getenv("POJAV_DISABLE_VSYNC"), "1") == 0) {
+            static BOOL s_loggedInitialSwapInterval = NO;
+            handle.eglSwapInterval(g_EglDisplay, 0);
+            if (!s_loggedInitialSwapInterval) {
+                s_loggedInitialSwapInterval = YES;
+                NSLog(@"[gl_bridge] eglSwapInterval(0) set immediately after eglMakeCurrent (POJAV_DISABLE_VSYNC=1, renderer=%s)", getenv("AMETHYST_RENDERER") ?: "<unset>");
+            }
+        }
     } else {
         NSLog(@"EGLBridge: eglMakeCurrent returned with error: 0x%x", handle.eglGetError());
     }

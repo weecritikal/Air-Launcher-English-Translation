@@ -151,16 +151,18 @@ static void logMoltenVKConfiguration() {
 
 /// 检查并记录 VSync 相关环境变量状态
 /// 这些环境变量影响 Vulkan 渲染器的帧率限制行为：
-/// - MVK_CONFIG_PRESENT_MODE_IMMEDIATE: 声明设备支持 VK_PRESENT_MODE_IMMEDIATE_KHR
 /// - POJAV_DISABLE_VSYNC: 启动器偏好，控制是否禁用垂直同步
+///
+/// 注意：当前 MoltenVK 版本不支持 MVK_CONFIG_PRESENT_MODE_IMMEDIATE 环境变量，
+/// 也不支持通过配置文件设置 swapchainPresentMode。设备是否支持 IMMEDIATE present mode
+/// 由 MVKPhysicalDeviceMetalFeatures.presentModeImmediate 自动检测（大多数 iOS 设备支持）。
+/// present mode 完全由应用在 vkCreateSwapchainKHR 时选择，受 eglSwapInterval/glfwSwapInterval 控制。
 static void logVSyncEnvironment() {
-    const char* mvkPresentMode = getenv("MVK_CONFIG_PRESENT_MODE_IMMEDIATE");
     const char* pojavDisableVsync = getenv("POJAV_DISABLE_VSYNC");
     const char* renderer = getenv("AMETHYST_RENDERER");
 
     NSLog(@"[VKBridge] VSync Environment Check:");
     NSLog(@"[VKBridge]   AMETHYST_RENDERER=%s", renderer ?: "<unset>");
-    NSLog(@"[VKBridge]   MVK_CONFIG_PRESENT_MODE_IMMEDIATE=%s", mvkPresentMode ?: "<unset>");
     NSLog(@"[VKBridge]   POJAV_DISABLE_VSYNC=%s", pojavDisableVsync ?: "<unset>");
 
     // 判断 VSync 是否应该被禁用
@@ -170,12 +172,6 @@ static void logVSyncEnvironment() {
     } else {
         s_vsyncDisabled = NO;
         NSLog(@"[VKBridge]   -> VSync is ENABLED (POJAV_DISABLE_VSYNC!=1)");
-    }
-
-    if (mvkPresentMode && strcmp(mvkPresentMode, "1") == 0) {
-        NSLog(@"[VKBridge]   -> MoltenVK immediate present mode support is DECLARED");
-    } else {
-        NSLog(@"[VKBridge]   -> MoltenVK immediate present mode support is NOT declared");
     }
 }
 
@@ -230,11 +226,10 @@ static void vk_swap_interval(int interval) {
     // - interval=0 表示请求禁用 VSync（解锁帧率）
     // - interval=1 表示请求启用 VSync（锁屏刷新率）
     //
-    // 对于 Vulkan 渲染器，真正的 VSync 控制通过以下机制实现：
-    // 1. MoltenVKConfig.json 中的 swapchainPresentMode（已设为 0=IMMEDIATE）
-    // 2. MVK_CONFIG_PRESENT_MODE_IMMEDIATE=1 环境变量（声明支持 immediate present）
-    // 3. PojavLauncher.java 写 enableVsync=false 到 options.txt（让 MC 不请求 VSync）
-    // 4. LWJGL 在 vkCreateSwapchainKHR 时选择 VK_PRESENT_MODE_IMMEDIATE_KHR
+    // 对于 Vulkan 渲染器，VSync 控制通过以下机制实现：
+    // 1. PojavLauncher.java 写 enableVsync=false 到 options.txt（让 MC 不请求 VSync）
+    // 2. LWJGL 在 vkCreateSwapchainKHR 时选择 VK_PRESENT_MODE_IMMEDIATE_KHR
+    // （设备是否支持 IMMEDIATE 由 MoltenVK 自动检测，无需环境变量声明）
 
     // 拦截 VSync 请求：当 POJAV_DISABLE_VSYNC=1 时，强制 interval=0
     // 虽然这对 Vulkan 渲染器没有直接效果（Minecraft 自管 swapchain），
