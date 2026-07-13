@@ -54,33 +54,6 @@ typedef NS_ENUM(NSInteger, ZeroTierErrorCode) {
     ZeroTierErrorCodeSocketError          = 7,  // socket 操作失败
 };
 
-#pragma mark - 事件回调（静态 C 函数）
-
-/// ZeroTier 事件回调入口（C 函数）
-///
-/// libzt 的事件回调是在后台线程调用的，不能直接调用 Objective-C 方法。
-/// 本函数将事件分发到主线程处理，确保 delegate 回调在主线程执行。
-///
-/// @param msgPtr 指向 zts_event_msg_t 的指针
-static void zeroTierEventCallback(void *msgPtr) {
-    zts_event_msg_t *msg = (zts_event_msg_t *)msgPtr;
-    if (!msg) {
-        return;
-    }
-
-    int eventCode = msg->event_code;
-    NSLog(@"[ZeroTierBridge] 收到事件回调：event_code = %d", eventCode);
-
-    // 将事件分发到主线程处理
-    // 注意：msg 指针在回调返回后可能失效，但 libzt 保证在回调期间指针有效，
-    // 且我们在这里同步读取需要的字段。主线程处理时如果需要访问 msg 内容，
-    // 应该在此处先提取数据。但为简化实现，我们直接传递 msg 指针，
-    // 因为 libzt 的事件消息在回调期间是有效的（根据 libzt 源码）。
-    dispatch_async(dispatch_get_main_queue(), ^{
-        [[ZeroTierBridge sharedInstance] handleEvent:msg];
-    });
-}
-
 #pragma mark - ZeroTierBridge 类扩展
 
 @interface ZeroTierBridge () {
@@ -120,6 +93,33 @@ static void zeroTierEventCallback(void *msgPtr) {
 - (void)handleEvent:(zts_event_msg_t *)msg;
 
 @end
+
+#pragma mark - 事件回调（静态 C 函数）
+
+/// ZeroTier 事件回调入口（C 函数）
+///
+/// libzt 的事件回调是在后台线程调用的，不能直接调用 Objective-C 方法。
+/// 本函数将事件分发到主线程处理，确保 delegate 回调在主线程执行。
+///
+/// @param msgPtr 指向 zts_event_msg_t 的指针
+static void zeroTierEventCallback(void *msgPtr) {
+    zts_event_msg_t *msg = (zts_event_msg_t *)msgPtr;
+    if (!msg) {
+        return;
+    }
+
+    int eventCode = msg->event_code;
+    NSLog(@"[ZeroTierBridge] 收到事件回调：event_code = %d", eventCode);
+
+    // 将事件分发到主线程处理
+    // 注意：msg 指针在回调返回后可能失效，但 libzt 保证在回调期间指针有效，
+    // 且我们在这里同步读取需要的字段。主线程处理时如果需要访问 msg 内容，
+    // 应该在此处先提取数据。但为简化实现，我们直接传递 msg 指针，
+    // 因为 libzt 的事件消息在回调期间是有效的（根据 libzt 源码）。
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [[ZeroTierBridge sharedInstance] handleEvent:msg];
+    });
+}
 
 #pragma mark - ZeroTierBridge 实现
 
