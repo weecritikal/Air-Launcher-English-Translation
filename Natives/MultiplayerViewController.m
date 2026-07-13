@@ -297,7 +297,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 
 /// 点击 Network ID 行：弹出 UIAlertController 让用户输入预设 Network ID
 ///
-/// 对标 FCL：房主首次设置一次 Network ID（在 my.zerotier.com 创建后填入），
+/// 对标 FCL：房主首次设置一次 Network ID（在 central.zerotier.com 创建后填入），
 /// 之后每次开房自动使用，分享代码中自动包含此 Network ID。
 - (void)networkIdCellTapped {
     [self.view endEditing:YES];
@@ -312,7 +312,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     NSString *current = [[MultiplayerManager sharedManager] presetNetworkId] ?: @"";
 
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:MPLocalized(@"mp.network_id.title", @"设置 Network ID")
-                                                                   message:MPLocalized(@"mp.network_id.message", @"在 my.zerotier.com 创建网络后填入 16 位 Network ID，开房时自动使用")
+                                                                   message:MPLocalized(@"mp.network_id.message", @"在 central.zerotier.com 创建网络后填入 16 位 Network ID，开房时自动使用")
                                                             preferredStyle:UIAlertControllerStyleAlert];
 
     [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
@@ -399,7 +399,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 /// 对标 FCL 的"联机帮助"功能：说明两种联机模式的区别和使用方法。
 ///
 /// 两种模式：
-///   1. 标准模式（稳定）：在 my.zerotier.com 注册账号创建网络
+///   1. 标准模式（稳定）：在 central.zerotier.com 注册账号创建网络
 ///      - 优点：IP 固定、支持 Private 授权、每人独立网络
 ///      - 缺点：需要注册账号、配置较复杂
 ///   2. 快速模式（不稳定）：使用 Ad-hoc 网络自动分配
@@ -412,7 +412,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     NSString *modeStandard = [NSString stringWithFormat:@"%@（%@）\n%@",
                               MPLocalized(@"mp.guide.mode_standard", @"标准模式"),
                               MPLocalized(@"mp.guide.stable", @"稳定"),
-                              MPLocalized(@"mp.guide.mode_standard_desc", @"在 my.zerotier.com 注册账号并创建网络，获得固定的 Network ID。IP 稳定、支持授权管理、每人独立网络。")];
+                              MPLocalized(@"mp.guide.mode_standard_desc", @"在 central.zerotier.com 注册账号并创建组织，获得固定的 Network ID。IP 稳定、支持授权管理、每人独立网络。")];
 
     NSString *modeFast = [NSString stringWithFormat:@"%@（%@）\n%@",
                           MPLocalized(@"mp.guide.mode_fast", @"快速模式"),
@@ -424,27 +424,31 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 
     NSString *step1 = [NSString stringWithFormat:@"1. %@\n   %@",
                        MPLocalized(@"mp.guide.step1_title", @"注册 ZeroTier 账号"),
-                       MPLocalized(@"mp.guide.step1_desc", @"访问 my.zerotier.com，注册并登录账号（免费）")];
+                       MPLocalized(@"mp.guide.step1_desc", @"访问 central.zerotier.com（新版 Central），注册并登录账号（免费，支持 Google/GitHub/Microsoft 登录）")];
 
     NSString *step2 = [NSString stringWithFormat:@"2. %@\n   %@",
-                       MPLocalized(@"mp.guide.step2_title", @"创建网络"),
-                       MPLocalized(@"mp.guide.step2_desc", @"点击「Create A Network」按钮，系统会自动生成一个 16 位的 Network ID")];
+                       MPLocalized(@"mp.guide.step2_title", @"创建组织"),
+                       MPLocalized(@"mp.guide.step2_desc", @"登录后输入组织名称，点击「Create Organization」。免费套餐自带一个 Network Group 和一个 Network")];
 
     NSString *step3 = [NSString stringWithFormat:@"3. %@\n   %@",
-                       MPLocalized(@"mp.guide.step3_title", @"设置网络可见性"),
-                       MPLocalized(@"mp.guide.step3_desc", @"Private（推荐）：需手动授权每个加入的成员，更安全\n   Public：任何人可直接加入，适合快速联机")];
+                       MPLocalized(@"mp.guide.step3_title", @"获取 Network ID"),
+                       MPLocalized(@"mp.guide.step3_desc", @"在左侧边栏展开「Networks」，点击默认网络（如 my-first-network），复制顶部的 16 位 Network ID")];
 
     NSString *step4 = [NSString stringWithFormat:@"4. %@\n   %@",
-                       MPLocalized(@"mp.guide.step4_title", @"复制 Network ID"),
-                       MPLocalized(@"mp.guide.step4_desc", @"将页面上显示的 16 位 Network ID 复制（如 1a2b3c4d5e6f7g8h）")];
+                       MPLocalized(@"mp.guide.step4_title", @"设置网络访问控制"),
+                       MPLocalized(@"mp.guide.step4_desc", @"Private（推荐）：需手动授权成员更安全；Public：任何人可直接加入")];
 
     NSString *step5 = [NSString stringWithFormat:@"5. %@\n   %@",
                        MPLocalized(@"mp.guide.step5_title", @"填入启动器"),
                        MPLocalized(@"mp.guide.step5_desc", @"回到本页面，点击「预设 Network ID」行，粘贴并保存")];
 
     NSString *step6 = [NSString stringWithFormat:@"6. %@\n   %@",
-                       MPLocalized(@"mp.guide.step6_title", @"开始联机"),
-                       MPLocalized(@"mp.guide.step6_desc", @"启动游戏后在悬浮球中打开联机界面，选择「当房主」即可开房")];
+                       MPLocalized(@"mp.guide.step6_title", @"授权房客设备"),
+                       MPLocalized(@"mp.guide.step6_desc", @"房客加入后在「Member Devices」标签点击三点菜单→「Authorize」授权（Private 模式需要，Public 模式跳过）")];
+
+    NSString *step7 = [NSString stringWithFormat:@"7. %@\n   %@",
+                       MPLocalized(@"mp.guide.step7_title", @"开始联机"),
+                       MPLocalized(@"mp.guide.step7_desc", @"启动游戏后在悬浮球中打开联机界面，选择「当房主」即可开房")];
 
     // 快速模式步骤
     NSString *fastTitle = [NSString stringWithFormat:@"\n【%@】", MPLocalized(@"mp.guide.mode_fast", @"快速模式")];
@@ -467,14 +471,15 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
                          modeFast,
                          standardTitle, step1];
 
-    // 使用多行格式拼接所有步骤
-    message = [NSString stringWithFormat:@"%@\n\n%@\n\n%@\n\n%@\n\n%@\n\n%@\n\n%@\n\n%@",
+    // 使用多行格式拼接所有步骤（标准模式 7 步 + 快速模式 3 步）
+    message = [NSString stringWithFormat:@"%@\n\n%@\n\n%@\n\n%@\n\n%@\n\n%@\n\n%@\n\n%@\n\n%@",
                message,
                step2,
                step3,
                step4,
                step5,
                step6,
+               step7,
                fastTitle,
                [NSString stringWithFormat:@"%@\n%@\n%@", fastStep1, fastStep2, fastStep3]];
 
@@ -487,11 +492,13 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
                                                                    message:message
                                                             preferredStyle:UIAlertControllerStyleAlert];
 
-    // 「打开 my.zerotier.com」按钮：直接跳转到浏览器（标准模式需要）
-    [alert addAction:[UIAlertAction actionWithTitle:MPLocalized(@"mp.guide.open_website", @"打开 my.zerotier.com（标准模式）")
+    // 「打开 central.zerotier.com」按钮：直接跳转到浏览器（标准模式需要）
+    // 新版 Central：central.zerotier.com（推荐新用户使用）
+    // 旧版 Central：my.zerotier.com（老用户继续使用）
+    [alert addAction:[UIAlertAction actionWithTitle:MPLocalized(@"mp.guide.open_website", @"打开 central.zerotier.com（标准模式）")
                                               style:UIAlertActionStyleDefault
                                             handler:^(UIAlertAction *action) {
-        NSURL *url = [NSURL URLWithString:@"https://my.zerotier.com/"];
+        NSURL *url = [NSURL URLWithString:@"https://central.zerotier.com/"];
         if (url && [[UIApplication sharedApplication] canOpenURL:url]) {
             [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:nil];
         }
@@ -1506,7 +1513,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 ///
 /// 对标 FCL 的"联机帮助"入口：引导房主完成 ZeroTier 网络的创建和配置。
 /// 点击后弹出详细的图文教程，包含注册账号、创建网络、获取 Network ID、
-/// 设置网络可见性等步骤，并提供"打开 my.zerotier.com"快捷按钮。
+/// 设置网络可见性等步骤，并提供"打开 central.zerotier.com"快捷按钮。
 - (UITableViewCell *)cellForGuideSection {
     UITableViewCell *cell = [self.tableView dequeueReusableCellWithIdentifier:@"DefaultCell"];
     cell.selectionStyle = UITableViewCellSelectionStyleDefault;
