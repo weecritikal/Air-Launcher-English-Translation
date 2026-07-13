@@ -1052,53 +1052,16 @@ static GameSurfaceView* pojavWindow;
         // 确保异步绘制开启（GameSurfaceView.initWithFrame 已设置，此处二次确认）
         metalLayer.drawsAsynchronously = YES;
 
-        // 解锁帧率（关闭垂直同步）：禁用 CAMetalLayer 的 display sync。
-        // 这是 iOS 上 GL 类渲染器帧率被锁在屏幕刷新率的根本原因：
-        //   CAMetalLayer 默认 _displaySyncEnabled=YES，presentDrawable 会被
-        //   Core Animation 强制同步到 vsync，即使 eglSwapInterval(0) 也无效。
-        //   这导致 eglSwapBuffers 内部的 nextDrawable/present 阻塞渲染线程，
-        //   把 MC 渲染帧率锁死在 60Hz（非 ProMotion）或 120Hz（ProMotion）。
-        //
-        // 解决方案：调用私有方法 _setDisplaySyncEnabled:NO 关闭 display sync。
-        // 这是 iOS MC 启动器社区（PojavLauncher/FCL iOS port）广泛使用的方案，
-        // 关闭后 presentDrawable 不再等待 vsync，渲染线程可立即继续下一帧，
-        // F3 FPS 可突破屏幕刷新率（与安卓行为一致）。
-        //
-        // 安全性说明：
-        //   - 该私有 API 自 iOS 8 存在至今（iOS 18+），未被 Apple 废弃
-        //   - 仅影响当前 layer 的 present 行为，不影响系统其他部分
-        //   - App Store 审核不检测此 API（非运行时私有 API 调用，通过 selector）
-        //   - 失败时静默降级，不影响正常功能
-        SEL displaySyncSelector = NSSelectorFromString(@"_setDisplaySyncEnabled:");
-        if ([metalLayer respondsToSelector:displaySyncSelector]) {
-            // suppressPerformSelectorLeakWarning 宏防止 ARC 警告
-            #pragma clang diagnostic push
-            #pragma clang diagnostic ignored "-Warc-performSelector-leaks"
-            NSMethodSignature *signature = [metalLayer methodSignatureForSelector:displaySyncSelector];
-            if (signature != nil) {
-                NSInvocation *invocation = [NSInvocation invocationWithMethodSignature:signature];
-                [invocation setTarget:metalLayer];
-                [invocation setSelector:displaySyncSelector];
-                BOOL arg = NO;
-                [invocation setArgument:&arg atIndex:2];
-                [invocation invoke];
-            }
-            #pragma clang diagnostic pop
-        }
-
         // 记录 Metal 层配置（仅首次），帮助诊断帧率问题
         static BOOL s_loggedMetalConfig = NO;
         if (!s_loggedMetalConfig) {
             s_loggedMetalConfig = YES;
-            // 检测 display sync 是否成功禁用
-            BOOL displaySyncDisabled = [metalLayer respondsToSelector:displaySyncSelector];
-            NSLog(@"[SurfaceVC] CAMetalLayer configured: drawableSize=%.0fx%.0f, maximumDrawableCount=%ld, presentsWithTransaction=%d, drawsAsynchronously=%d, contentsScale=%.2f, displaySyncDisabled=%d",
+            NSLog(@"[SurfaceVC] CAMetalLayer configured: drawableSize=%.0fx%.0f, maximumDrawableCount=%ld, presentsWithTransaction=%d, drawsAsynchronously=%d, contentsScale=%.2f",
                   metalLayer.drawableSize.width, metalLayer.drawableSize.height,
                   (long)metalLayer.maximumDrawableCount,
                   metalLayer.presentsWithTransaction,
                   metalLayer.drawsAsynchronously,
-                  metalLayer.contentsScale,
-                  displaySyncDisabled);
+                  metalLayer.contentsScale);
         }
     }
     CallbackBridge_nativeSendScreenSize(windowWidth, windowHeight);
