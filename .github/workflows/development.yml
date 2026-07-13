@@ -76,22 +76,6 @@ jobs:
           GIT_LFS_SKIP_SMUDGE: "1"
         run: git submodule update --init --recursive
 
-      - name: Download ZeroTier framework binary
-        # 从 zerotier/zerotier-sockets-apple-framework 仓库下载真实的 zt 二进制文件，
-        # 放置到 Natives/external/zt.framework/zt，使 CMakeLists.txt 链接真实库而非 stub。
-        # stub 实现（zt_stub.c）会导致联机核心不可用（isFrameworkAvailable 返回 NO）。
-        # 真实 zt 二进制是 arm64 静态库，包含完整的 ZeroTier 节点实现。
-        run: |
-          set -e
-          ZT_BIN_PATH="Natives/external/zt.framework/zt"
-          ZT_URL="https://raw.githubusercontent.com/zerotier/zerotier-sockets-apple-framework/main/ios-example-app/zt.framework/zt"
-          echo "Downloading ZeroTier framework binary from $ZT_URL ..."
-          curl -fSL -o "$ZT_BIN_PATH" "$ZT_URL"
-          chmod 644 "$ZT_BIN_PATH"
-          echo "Downloaded zt binary:"
-          ls -lah "$ZT_BIN_PATH"
-          file "$ZT_BIN_PATH"
-
       - name: Build for ${{ matrix.platform_name }}
         env:
           IPHONEOS_DEPLOYMENT_TARGET: 14.0
