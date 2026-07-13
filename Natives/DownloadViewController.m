@@ -1552,31 +1552,46 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     ]];
 
     // ===== 2. 游戏版本选择按钮 =====
-    [self setupSidebarButton:&_sidebarVersionButton
-                titleLabel:&_sidebarVersionTitleLabel
-               valueLabel:&_sidebarVersionValueLabel
-                       title:@"游戏版本"
-                       value:@"全部版本"
-                  topAnchor:self.sidebarSourceContainer.bottomAnchor
-                   selector:@selector(sidebarVersionButtonClicked:)];
+    self.sidebarVersionButton = [self createSidebarSelectButtonWithTitle:@"游戏版本"
+                                                                    value:@"全部版本"
+                                                                  selector:@selector(sidebarVersionButtonClicked:)];
+    [self.filterSidebarContainer addSubview:self.sidebarVersionButton];
+    self.sidebarVersionTitleLabel = [self findSubviewInButton:self.sidebarVersionButton withTag:100];
+    self.sidebarVersionValueLabel = [self findSubviewInButton:self.sidebarVersionButton withTag:101];
+    [NSLayoutConstraint activateConstraints:@[
+        [self.sidebarVersionButton.topAnchor constraintEqualToAnchor:self.sidebarSourceContainer.bottomAnchor constant:8],
+        [self.sidebarVersionButton.leadingAnchor constraintEqualToAnchor:self.filterSidebarContainer.leadingAnchor constant:8],
+        [self.sidebarVersionButton.trailingAnchor constraintEqualToAnchor:self.filterSidebarContainer.trailingAnchor constant:-8],
+        [self.sidebarVersionButton.heightAnchor constraintEqualToConstant:44]
+    ]];
 
     // ===== 3. 模组加载器选择按钮 =====
-    [self setupSidebarButton:&_sidebarLoaderButton
-                titleLabel:&_sidebarLoaderTitleLabel
-               valueLabel:&_sidebarLoaderValueLabel
-                       title:@"模组加载器"
-                       value:@"全部"
-                  topAnchor:self.sidebarVersionButton.bottomAnchor
-                   selector:@selector(sidebarLoaderButtonClicked:)];
+    self.sidebarLoaderButton = [self createSidebarSelectButtonWithTitle:@"模组加载器"
+                                                                   value:@"全部"
+                                                                 selector:@selector(sidebarLoaderButtonClicked:)];
+    [self.filterSidebarContainer addSubview:self.sidebarLoaderButton];
+    self.sidebarLoaderTitleLabel = [self findSubviewInButton:self.sidebarLoaderButton withTag:100];
+    self.sidebarLoaderValueLabel = [self findSubviewInButton:self.sidebarLoaderButton withTag:101];
+    [NSLayoutConstraint activateConstraints:@[
+        [self.sidebarLoaderButton.topAnchor constraintEqualToAnchor:self.sidebarVersionButton.bottomAnchor constant:8],
+        [self.sidebarLoaderButton.leadingAnchor constraintEqualToAnchor:self.filterSidebarContainer.leadingAnchor constant:8],
+        [self.sidebarLoaderButton.trailingAnchor constraintEqualToAnchor:self.filterSidebarContainer.trailingAnchor constant:-8],
+        [self.sidebarLoaderButton.heightAnchor constraintEqualToConstant:44]
+    ]];
 
     // ===== 4. 排序方式选择按钮 =====
-    [self setupSidebarButton:&_sidebarSortButton
-                titleLabel:&_sidebarSortTitleLabel
-               valueLabel:&_sidebarSortValueLabel
-                       title:@"排序方式"
-                       value:@"相关度"
-                  topAnchor:self.sidebarLoaderButton.bottomAnchor
-                   selector:@selector(sidebarSortButtonClicked:)];
+    self.sidebarSortButton = [self createSidebarSelectButtonWithTitle:@"排序方式"
+                                                                 value:@"相关度"
+                                                               selector:@selector(sidebarSortButtonClicked:)];
+    [self.filterSidebarContainer addSubview:self.sidebarSortButton];
+    self.sidebarSortTitleLabel = [self findSubviewInButton:self.sidebarSortButton withTag:100];
+    self.sidebarSortValueLabel = [self findSubviewInButton:self.sidebarSortButton withTag:101];
+    [NSLayoutConstraint activateConstraints:@[
+        [self.sidebarSortButton.topAnchor constraintEqualToAnchor:self.sidebarLoaderButton.bottomAnchor constant:8],
+        [self.sidebarSortButton.leadingAnchor constraintEqualToAnchor:self.filterSidebarContainer.leadingAnchor constant:8],
+        [self.sidebarSortButton.trailingAnchor constraintEqualToAnchor:self.filterSidebarContainer.trailingAnchor constant:-8],
+        [self.sidebarSortButton.heightAnchor constraintEqualToConstant:44]
+    ]];
 
     // ===== 5. 重置筛选按钮 =====
     self.sidebarResetButton = [UIButton buttonWithType:UIButtonTypeSystem];
@@ -1612,73 +1627,71 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     ]];
 }
 
-/// 辅助方法：创建侧边栏的选择按钮（标题 + 当前值 + 箭头）
-/// @param buttonPtr 按钮指针的指针（用于赋值回属性）
-/// @param titleLabelPtr 标题标签指针的指针
-/// @param valueLabelPtr 值标签指针的指针
-/// @param title 按钮标题（如"游戏版本"）
-/// @param value 默认值（如"全部版本"）
-/// @param topAnchor 按钮顶部锚点（上一个元素的底部）
-/// @param selector 点击事件选择器
-- (void)setupSidebarButton:(UIButton * __autoreleasing *)buttonPtr
-              titleLabel:(UILabel * __autoreleasing *)titleLabelPtr
-             valueLabel:(UILabel * __autoreleasing *)valueLabelPtr
-                     title:(NSString *)title
-                     value:(NSString *)value
-                topAnchor:(NSLayoutAnchor *)topAnchor
-                 selector:(SEL)selector {
-    *buttonPtr = [UIButton buttonWithType:UIButtonTypeSystem];
-    (*buttonPtr).translatesAutoresizingMaskIntoConstraints = NO;
-    (*buttonPtr).backgroundColor = [UIColor tertiarySystemFillColor];
-    (*buttonPtr).layer.cornerRadius = 8;
-    [(*buttonPtr) addTarget:self action:selector forControlEvents:UIControlEventTouchUpInside];
-    // 按钮内容左对齐
-    (*buttonPtr).contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeft;
-    (*buttonPtr).contentEdgeInsets = UIEdgeInsetsMake(0, 12, 0, 12);
-    [self.filterSidebarContainer addSubview:*buttonPtr];
+/// 创建侧边栏的选择按钮（标题 + 当前值 + 箭头）
+/// 按钮内子视图通过 tag 标记：titleTag=100, valueTag=101, arrowTag=102
+/// 创建后可通过 findSubviewInButton:withTag: 取出对应的 label
+- (UIButton *)createSidebarSelectButtonWithTitle:(NSString *)title
+                                           value:(NSString *)value
+                                         selector:(SEL)selector {
+    UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
+    button.translatesAutoresizingMaskIntoConstraints = NO;
+    button.backgroundColor = [UIColor tertiarySystemFillColor];
+    button.layer.cornerRadius = 8;
+    [button addTarget:self action:selector forControlEvents:UIControlEventTouchUpInside];
+    button.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeft;
+    button.contentEdgeInsets = UIEdgeInsetsMake(0, 12, 0, 12);
 
-    *titleLabelPtr = [[UILabel alloc] init];
-    (*titleLabelPtr).translatesAutoresizingMaskIntoConstraints = NO;
-    (*titleLabelPtr).text = title;
-    (*titleLabelPtr).font = [UIFont systemFontOfSize:12 weight:UIFontWeightSemibold];
-    (*titleLabelPtr).textColor = [UIColor secondaryLabelColor];
-    [*buttonPtr addSubview:*titleLabelPtr];
+    UILabel *titleLabel = [[UILabel alloc] init];
+    titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    titleLabel.text = title;
+    titleLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightSemibold];
+    titleLabel.textColor = [UIColor secondaryLabelColor];
+    titleLabel.tag = 100;
+    [button addSubview:titleLabel];
 
-    *valueLabelPtr = [[UILabel alloc] init];
-    (*valueLabelPtr).translatesAutoresizingMaskIntoConstraints = NO;
-    (*valueLabelPtr).text = value;
-    (*valueLabelPtr).font = [UIFont systemFontOfSize:12];
-    (*valueLabelPtr).textColor = [UIColor labelColor];
-    (*valueLabelPtr).adjustsFontSizeToFitWidth = YES;
-    (*valueLabelPtr).minimumScaleFactor = 0.7;
-    (*valueLabelPtr).textAlignment = NSTextAlignmentRight;
-    [*buttonPtr addSubview:*valueLabelPtr];
+    UILabel *valueLabel = [[UILabel alloc] init];
+    valueLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    valueLabel.text = value;
+    valueLabel.font = [UIFont systemFontOfSize:12];
+    valueLabel.textColor = [UIColor labelColor];
+    valueLabel.adjustsFontSizeToFitWidth = YES;
+    valueLabel.minimumScaleFactor = 0.7;
+    valueLabel.textAlignment = NSTextAlignmentRight;
+    valueLabel.tag = 101;
+    [button addSubview:valueLabel];
 
-    // 箭头图标
     UIImageView *arrow = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"chevron.right"]];
     arrow.translatesAutoresizingMaskIntoConstraints = NO;
     arrow.tintColor = [UIColor tertiaryLabelColor];
     arrow.contentMode = UIViewContentModeScaleAspectFit;
-    [*buttonPtr addSubview:arrow];
+    arrow.tag = 102;
+    [button addSubview:arrow];
 
     [NSLayoutConstraint activateConstraints:@[
-        [(*buttonPtr).topAnchor constraintEqualToAnchor:topAnchor constant:8],
-        [(*buttonPtr).leadingAnchor constraintEqualToAnchor:self.filterSidebarContainer.leadingAnchor constant:8],
-        [(*buttonPtr).trailingAnchor constraintEqualToAnchor:self.filterSidebarContainer.trailingAnchor constant:-8],
-        [(*buttonPtr).heightAnchor constraintEqualToConstant:44],
+        [titleLabel.leadingAnchor constraintEqualToAnchor:button.leadingAnchor constant:12],
+        [titleLabel.centerYAnchor constraintEqualToAnchor:button.centerYAnchor],
 
-        [(*titleLabelPtr).leadingAnchor constraintEqualToAnchor:(*buttonPtr).leadingAnchor constant:12],
-        [(*titleLabelPtr).centerYAnchor constraintEqualToAnchor:(*buttonPtr).centerYAnchor],
+        [valueLabel.trailingAnchor constraintEqualToAnchor:arrow.leadingAnchor constant:-4],
+        [valueLabel.centerYAnchor constraintEqualToAnchor:button.centerYAnchor],
+        [valueLabel.widthAnchor constraintLessThanOrEqualToConstant:80],
 
-        [(*valueLabelPtr).trailingAnchor constraintEqualToAnchor:arrow.leadingAnchor constant:-4],
-        [(*valueLabelPtr).centerYAnchor constraintEqualToAnchor:(*buttonPtr).centerYAnchor],
-        [(*valueLabelPtr).widthAnchor constraintLessThanOrEqualToConstant:80],
-
-        [arrow.trailingAnchor constraintEqualToAnchor:(*buttonPtr).trailingAnchor constant:-12],
-        [arrow.centerYAnchor constraintEqualToAnchor:(*buttonPtr).centerYAnchor],
+        [arrow.trailingAnchor constraintEqualToAnchor:button.trailingAnchor constant:-12],
+        [arrow.centerYAnchor constraintEqualToAnchor:button.centerYAnchor],
         [arrow.widthAnchor constraintEqualToConstant:12],
         [arrow.heightAnchor constraintEqualToConstant:12]
     ]];
+
+    return button;
+}
+
+/// 从按钮中按 tag 取出子视图（用于 createSidebarSelectButtonWithTitle: 创建的按钮）
+- (UILabel *)findSubviewInButton:(UIButton *)button withTag:(NSInteger)tag {
+    for (UIView *sub in button.subviews) {
+        if (sub.tag == tag && [sub isKindOfClass:[UILabel class]]) {
+            return (UILabel *)sub;
+        }
+    }
+    return nil;
 }
 
 - (void)setupLoadingIndicator {
