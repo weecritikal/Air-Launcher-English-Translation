@@ -114,6 +114,11 @@ static void zeroTierEventCallback(void *msgPtr) {
     /// 线程锁，保护所有内部状态变量
     NSLock *_lock;
 }
+
+/// 处理 ZeroTier 事件回调（由 zeroTierEventCallback 通过主线程分发调用）
+/// @param msg 事件消息指针
+- (void)handleEvent:(zts_event_msg_t *)msg;
+
 @end
 
 #pragma mark - ZeroTierBridge 实现
