@@ -682,6 +682,13 @@ static const CGFloat kSectionInset = 16.0;
 #pragma mark - Actions
 
 - (void)closeTapped:(UIButton *)sender {
+    // 发送通知：用户手动关闭了下载中心。
+    // 启动器（LauncherNavigationController / LauncherRightPanelViewController）收到此通知后，
+    // 会设置 userDismissedDownloadCenter=YES，避免后续下载任务更新时反复自动弹出下载中心。
+    // 用户可以通过点击启动器上的"下载中心"按钮重新打开。
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"DownloadCenterDidDismiss"
+                                                      object:nil
+                                                    userInfo:nil];
     [self dismissViewControllerAnimated:YES completion:nil];
 }
 

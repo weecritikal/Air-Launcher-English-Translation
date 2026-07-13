@@ -10,6 +10,8 @@
 #import "MinecraftResourceDownloadTask.h"
 #import "DownloadProgressViewController.h"
 #import "DownloadTaskManager.h"
+#import "DownloadTasksViewController.h"
+#import "DownloadTaskItem.h"
 #import "ALTServerConnection.h"
 #import "BackgroundManager.h"
 #import "ios_uikit_bridge.h"
@@ -42,6 +44,21 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 @property(nonatomic, strong) DownloadProgressViewController *progressVC;
 @property(nonatomic, strong) UIProgressView *progressView;
 @property(nonatomic, strong) UILabel *progressLabel;
+
+// ===== 下载中心入口（参照 FCL/ZL2/HMCL 的统一下载进度弹窗入口）=====
+// FCL/ZL2/HMCL 都在启动器主界面提供一个"下载管理/下载中心"入口按钮，
+// 点击后弹出下载进度对话框，集中显示所有下载任务（MC本体/模组/光影/资源包等）的实时进度。
+// 本按钮即对应这个入口：当 DownloadTaskManager 中存在任何下载任务时显示，
+// 点击以 FormSheet 方式弹出 DownloadTasksViewController（全任务列表 + 进度详情）。
+@property(nonatomic, strong) UIButton *downloadCenterButton;
+// 按钮上的活动指示器（下载进行中时旋转，表示有活跃任务）
+@property(nonatomic, strong) UIActivityIndicatorView *downloadCenterActivityIndicator;
+// 按钮上的进度百分比标签（实时显示所有活动任务的聚合进度）
+@property(nonatomic, strong) UILabel *downloadCenterProgressLabel;
+// 当前弹出的下载中心 VC（弱引用，避免循环持有）
+@property(nonatomic, weak) DownloadTasksViewController *presentedDownloadCenterVC;
+// 标记用户是否手动关闭了下载中心（避免下载任务更新时反复自动弹出）
+@property(nonatomic, assign) BOOL userDismissedDownloadCenter;
 
 // FCL 风格：无账号时点击启动游戏跳转添加账号界面，登录完成后自动继续启动。
 // pendingLaunchAfterLogin=YES 表示用户从启动按钮进入账号登录，登录成功后应自动触发 launchGame。
@@ -83,6 +100,25 @@ static void *ProgressObserverContext = &ProgressObserverContext;
                                                  name:DownloadTaskManagerAggregateStateDidChangeNotification
                                                object:nil];
 
+    // ===== 下载中心入口通知监听 =====
+    // 监听下载任务更新通知（进度变化、新任务注册等），实时更新下载中心按钮的显示状态和进度百分比。
+    // 这确保了模组、光影、资源包、数据包、世界存档等所有通过 DownloadTaskManager 注册的下载任务
+    // 都能在下载中心按钮上反映出来，用户点击即可查看详情（参照 FCL/ZL2/HMCL 的下载进度弹窗）。
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(handleDownloadTaskUpdate:)
+                                                 name:DownloadTaskManagerDidUpdateTaskNotification
+                                               object:nil];
+    // 监听任务完成通知，更新按钮状态并在全部完成时隐藏活动指示器
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(handleDownloadTaskCompleted:)
+                                                 name:DownloadTaskManagerTaskCompletedNotification
+                                               object:nil];
+    // 监听下载中心被用户手动关闭的通知，设置标记避免反复自动弹出
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(handleDownloadCenterDismissed)
+                                                 name:@"DownloadCenterDidDismiss"
+                                               object:nil];
+
     // 监听启动器外观变化（自定义字体/卡片颜色），刷新文字颜色
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(applyCustomAppearance)
@@ -104,6 +140,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     [self updateLaunchButtonState];
     [self updateJITStatus];
     [self applyCustomAppearance];
+    [self updateDownloadCenterButton];
 }
 
 /// 重新应用背景效果：当 BackgroundUIEffectChanged 通知到达时调用，
@@ -180,6 +217,53 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     self.progressView.translatesAutoresizingMaskIntoConstraints = NO;
     self.progressView.hidden = YES;
     [self.view addSubview:self.progressView];
+
+    // ===== 下载中心入口按钮（参照 FCL/ZL2/HMCL 下载进度弹窗入口）=====
+    // 设计理念：FCL 和 ZL2 在启动器主界面提供一个"下载管理"按钮，点击后弹出下载进度对话框；
+    // HMCL 在下载页面显示所有下载任务的进度。本按钮综合三者风格：
+    // - 按钮样式：圆角卡片式，与启动器其他按钮统一
+    // - 左侧：下载图标 + 活动指示器（下载中时旋转）
+    // - 中间："下载中心"文字 + 进度百分比
+    // - 右侧：箭头图标（表示点击可查看详情）
+    // - 当 DownloadTaskManager 中存在任何下载任务时显示，无任务时隐藏
+    self.downloadCenterButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    self.downloadCenterButton.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.downloadCenterButton setTitle:@"下载中心" forState:UIControlStateNormal];
+    [self.downloadCenterButton setTitleColor:[UIColor labelColor] forState:UIControlStateNormal];
+    self.downloadCenterButton.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightMedium];
+    self.downloadCenterButton.titleLabel.adjustsFontSizeToFitWidth = YES;
+    self.downloadCenterButton.titleLabel.minimumScaleFactor = 0.7;
+    self.downloadCenterButton.titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
+    self.downloadCenterButton.backgroundColor = [UIColor colorWithWhite:0.2 alpha:1.0];
+    self.downloadCenterButton.layer.cornerRadius = 10;
+    self.downloadCenterButton.layer.masksToBounds = YES;
+    // 左侧下载图标
+    UIImage *downloadIcon = [UIImage systemImageNamed:@"arrow.down.circle"];
+    [self.downloadCenterButton setImage:downloadIcon forState:UIControlStateNormal];
+    self.downloadCenterButton.tintColor = accentColor();
+    self.downloadCenterButton.imageEdgeInsets = UIEdgeInsetsMake(0, -4, 0, 4);
+    self.downloadCenterButton.titleEdgeInsets = UIEdgeInsetsMake(0, 4, 0, -4);
+    self.downloadCenterButton.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeft;
+    self.downloadCenterButton.contentEdgeInsets = UIEdgeInsetsMake(0, 12, 0, 12);
+    [self.downloadCenterButton addTarget:self action:@selector(openDownloadCenter) forControlEvents:UIControlEventTouchUpInside];
+    self.downloadCenterButton.hidden = YES; // 默认隐藏，有下载任务时显示
+    [self.view addSubview:self.downloadCenterButton];
+
+    // 活动指示器（下载中时旋转，叠加在按钮右侧）
+    self.downloadCenterActivityIndicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
+    self.downloadCenterActivityIndicator.translatesAutoresizingMaskIntoConstraints = NO;
+    self.downloadCenterActivityIndicator.color = accentColor();
+    self.downloadCenterActivityIndicator.hidesWhenStopped = YES;
+    [self.downloadCenterButton addSubview:self.downloadCenterActivityIndicator];
+
+    // 进度百分比标签（叠加在按钮右侧，显示聚合进度）
+    self.downloadCenterProgressLabel = [[UILabel alloc] init];
+    self.downloadCenterProgressLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.downloadCenterProgressLabel.font = [UIFont monospacedDigitSystemFontOfSize:12 weight:UIFontWeightMedium];
+    self.downloadCenterProgressLabel.textColor = accentColor();
+    self.downloadCenterProgressLabel.textAlignment = NSTextAlignmentRight;
+    self.downloadCenterProgressLabel.text = @"0%";
+    [self.downloadCenterButton addSubview:self.downloadCenterProgressLabel];
     
     // 启动游戏按钮（FCL 复合布局 + ZL2 按压动画风格）
     self.launchButton = [UIButton buttonWithType:UIButtonTypeSystem];
@@ -278,6 +362,21 @@ static void *ProgressObserverContext = &ProgressObserverContext;
         [self.progressView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:12],
         [self.progressView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-12],
 
+        // ===== 下载中心入口按钮（进度条下方）=====
+        // 当有下载任务时显示，点击弹出 DownloadTasksViewController（参照 FCL/ZL2/HMCL 下载进度弹窗）
+        [self.downloadCenterButton.topAnchor constraintEqualToAnchor:self.progressView.bottomAnchor constant:8],
+        [self.downloadCenterButton.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:12],
+        [self.downloadCenterButton.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-12],
+        [self.downloadCenterButton.heightAnchor constraintEqualToConstant:36],
+
+        // 活动指示器（按钮右侧，垂直居中）
+        [self.downloadCenterActivityIndicator.trailingAnchor constraintEqualToAnchor:self.downloadCenterButton.trailingAnchor constant:-12],
+        [self.downloadCenterActivityIndicator.centerYAnchor constraintEqualToAnchor:self.downloadCenterButton.centerYAnchor],
+
+        // 进度百分比标签（指示器左侧，垂直居中）
+        [self.downloadCenterProgressLabel.trailingAnchor constraintEqualToAnchor:self.downloadCenterActivityIndicator.leadingAnchor constant:-6],
+        [self.downloadCenterProgressLabel.centerYAnchor constraintEqualToAnchor:self.downloadCenterButton.centerYAnchor],
+
         // ===== 下方按钮区（自下而上锚定到 safeArea 底部）=====
         // 执行Jar 按钮（最底部）
         [self.executeJarBtn.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-12],
@@ -322,6 +421,136 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     self.pendingLaunchAfterLogin = NO;
     // FCL 风格：账户管理在中间内容区显示，发送通知让 LauncherRootViewController 切换内容
     [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowAccountManager" object:nil];
+}
+
+#pragma mark - 下载中心（参照 FCL/ZL2/HMCL 下载进度弹窗）
+
+/// 打开下载中心弹窗
+/// 参照 FCL/ZL2/HMCL 的下载进度显示方式：以 FormSheet 方式弹出 DownloadTasksViewController，
+/// 集中显示所有下载任务（MC本体/模组/光影/资源包/数据包/世界存档/整合包）的实时进度。
+/// 所有通过 DownloadTaskManager 注册的下载任务都会在这里显示，实现统一的下载进度管理。
+- (void)openDownloadCenter {
+    // 如果已经弹出了下载中心，直接返回避免重复弹出
+    if (self.presentedDownloadCenterVC) {
+        return;
+    }
+
+    // 用户主动打开了下载中心，重置"用户已关闭"标记
+    self.userDismissedDownloadCenter = NO;
+
+    DownloadTasksViewController *downloadCenterVC = [[DownloadTasksViewController alloc] init];
+    downloadCenterVC.modalPresentationStyle = UIModalPresentationFormSheet;
+    // 弹出时不要覆盖全屏，FormSheet 方式在 iPad 上居中显示，在 iPhone 上接近全屏
+    downloadCenterVC.preferredContentSize = CGSizeMake(500, 600);
+
+    // 弱引用持有，避免循环持有
+    self.presentedDownloadCenterVC = downloadCenterVC;
+
+    // 获取最顶层的视图控制器来 present
+    UIViewController *topVC = self;
+    while (topVC.presentedViewController) {
+        topVC = topVC.presentedViewController;
+    }
+
+    [topVC presentViewController:downloadCenterVC animated:YES completion:nil];
+}
+
+/// 处理下载任务更新通知（进度变化、新任务注册等）
+/// 当收到通知时：
+/// 1. 更新下载中心按钮的显示状态和进度百分比
+/// 2. 如果是新任务且用户未手动关闭下载中心，自动弹出下载中心（参照 FCL/ZL2 自动弹出下载进度对话框的行为）
+- (void)handleDownloadTaskUpdate:(NSNotification *)notification {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self updateDownloadCenterButton];
+
+        // 自动弹出逻辑：当存在活跃下载任务（downloading/pending状态）且用户未手动关闭下载中心时，
+        // 自动弹出下载中心弹窗，让用户立即看到下载进度（参照 FCL 下载开始时自动显示进度对话框）。
+        // 但如果当前已经弹出了下载中心，则不需要重复弹出。
+        DownloadTaskManager *manager = [DownloadTaskManager sharedManager];
+        BOOL hasActiveTasks = [manager hasActiveTasks];
+
+        if (hasActiveTasks && !self.userDismissedDownloadCenter && !self.presentedDownloadCenterVC) {
+            // 检查是否已经有其他模态视图弹出（避免覆盖重要弹窗如账号登录）
+            UIViewController *topVC = self;
+            while (topVC.presentedViewController) {
+                topVC = topVC.presentedViewController;
+            }
+            // 只在没有其他模态视图弹出时自动弹出下载中心
+            if (!topVC.presentedViewController) {
+                [self openDownloadCenter];
+            }
+        }
+    });
+}
+
+/// 处理下载任务完成通知
+/// 当任务完成时更新按钮状态；如果所有任务都已完成，延迟隐藏下载中心按钮
+- (void)handleDownloadTaskCompleted:(NSNotification *)notification {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self updateDownloadCenterButton];
+    });
+}
+
+/// 处理下载中心被用户手动关闭的通知
+/// 设置 userDismissedDownloadCenter=YES，避免后续下载任务更新时反复自动弹出下载中心。
+/// 用户可以通过点击启动器上的"下载中心"按钮重新打开（会重置此标记）。
+- (void)handleDownloadCenterDismissed {
+    self.userDismissedDownloadCenter = YES;
+    self.presentedDownloadCenterVC = nil;
+}
+
+/// 更新下载中心按钮的显示状态和进度百分比
+/// 根据 DownloadTaskManager 的当前状态：
+/// - 无任务：隐藏按钮
+/// - 有活跃任务（downloading/pending）：显示按钮 + 活动指示器旋转 + 显示聚合进度百分比
+/// - 全部完成：显示按钮 + 活动指示器停止 + 显示"已完成"
+- (void)updateDownloadCenterButton {
+    DownloadTaskManager *manager = [DownloadTaskManager sharedManager];
+    NSArray<DownloadTaskItem *> *allTasks = [manager allTasks];
+
+    if (allTasks.count == 0) {
+        // 无任何下载任务，隐藏下载中心按钮
+        self.downloadCenterButton.hidden = YES;
+        [self.downloadCenterActivityIndicator stopAnimating];
+        return;
+    }
+
+    // 有下载任务，显示按钮
+    self.downloadCenterButton.hidden = NO;
+
+    // 计算聚合进度（所有活动任务的平均进度）
+    BOOL hasActive = NO;
+    BOOL allCompleted = YES;
+    double totalProgress = 0.0;
+    NSInteger activeCount = 0;
+
+    for (DownloadTaskItem *task in allTasks) {
+        if (task.state == DownloadTaskStateDownloading || task.state == DownloadTaskStatePending) {
+            hasActive = YES;
+            allCompleted = NO;
+            totalProgress += task.progress;
+            activeCount++;
+        } else if (task.state != DownloadTaskStateCompleted) {
+            allCompleted = NO;
+        }
+    }
+
+    if (hasActive) {
+        // 有活跃下载任务
+        double avgProgress = activeCount > 0 ? totalProgress / activeCount : 0.0;
+        NSInteger percent = (NSInteger)(avgProgress * 100.0 + 0.5);
+        percent = MAX(0, MIN(100, percent));
+        self.downloadCenterProgressLabel.text = [NSString stringWithFormat:@"%ld%%", (long)percent];
+        [self.downloadCenterActivityIndicator startAnimating];
+    } else if (allCompleted) {
+        // 全部完成
+        self.downloadCenterProgressLabel.text = @"已完成";
+        [self.downloadCenterActivityIndicator stopAnimating];
+    } else {
+        // 有暂停/失败/取消的任务但没有活跃任务
+        self.downloadCenterProgressLabel.text = @"已暂停";
+        [self.downloadCenterActivityIndicator stopAnimating];
+    }
 }
 
 #pragma mark - 自定义头像导入

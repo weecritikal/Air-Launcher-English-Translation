@@ -4,6 +4,9 @@
 #import "ALTServerConnection.h"
 #import "CustomControlsViewController.h"
 #import "DownloadProgressViewController.h"
+#import "DownloadTasksViewController.h"
+#import "DownloadTaskManager.h"
+#import "DownloadTaskItem.h"
 #import "JavaGUIViewController.h"
 #import "LauncherMenuViewController.h"
 #import "LauncherNavigationController.h"
@@ -33,6 +36,17 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 @property(nonatomic) PLPickerView* versionPickerView;
 @property(nonatomic) UITextField* versionTextField;
 @property(nonatomic) int profileSelectedAt;
+
+// ===== 下载中心入口（参照 FCL/ZL2/HMCL 下载进度弹窗入口）=====
+// 在工具栏上添加"下载中心"按钮，点击后弹出 DownloadTasksViewController，
+// 集中显示所有下载任务的进度（MC本体/模组/光影/资源包/数据包/世界存档/整合包）。
+// 所有通过 DownloadTaskManager 注册的下载任务都统一由这个弹窗显示进度。
+@property(nonatomic, strong) UIButton *downloadCenterButton;
+@property(nonatomic, strong) UIActivityIndicatorView *downloadCenterActivityIndicator;
+@property(nonatomic, strong) UILabel *downloadCenterProgressLabel;
+@property(nonatomic, weak) DownloadTasksViewController *presentedDownloadCenterVC;
+// 标记用户是否手动关闭了下载中心（避免下载任务更新时反复自动弹出）
+@property(nonatomic, assign) BOOL userDismissedDownloadCenter;
 
 @end
 
@@ -104,11 +118,70 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     self.progressText.userInteractionEnabled = NO;
     [targetToolbar addSubview:self.progressText];
 
+    // ===== 下载中心入口按钮（参照 FCL/ZL2/HMCL 下载进度弹窗入口）=====
+    // 在工具栏左侧添加一个"下载中心"按钮，当有下载任务时显示，
+    // 点击弹出 DownloadTasksViewController（FormSheet 方式），集中显示所有下载任务进度。
+    // 按钮布局：[图标] [进度百分比] [活动指示器]
+    CGFloat dcBtnWidth = 72.0;
+    CGFloat dcBtnHeight = self.toolbar.frame.size.height - 8;
+    self.downloadCenterButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    // 不使用按钮的 title 显示文字，改用独立的 progressLabel 避免与图标布局冲突
+    self.downloadCenterButton.tintColor = [UIColor whiteColor];
+    self.downloadCenterButton.backgroundColor = [UIColor colorWithRed:121/255.0 green:56/255.0 blue:162/255.0 alpha:0.85];
+    self.downloadCenterButton.layer.cornerRadius = 5;
+    self.downloadCenterButton.frame = CGRectMake(4, 4, dcBtnWidth, dcBtnHeight);
+    self.downloadCenterButton.autoresizingMask = UIViewAutoresizingFlexibleRightMargin;
+    [self.downloadCenterButton setImage:[UIImage systemImageNamed:@"arrow.down.circle"] forState:UIControlStateNormal];
+    // 图标固定在按钮左侧
+    CGFloat iconSize = 22.0;
+    [self.downloadCenterButton setImageEdgeInsets:UIEdgeInsetsMake(0, 4, 0, dcBtnWidth - iconSize - 4)];
+    [self.downloadCenterButton addTarget:self action:@selector(openDownloadCenter) forControlEvents:UIControlEventTouchUpInside];
+    self.downloadCenterButton.hidden = YES;
+    [targetToolbar addSubview:self.downloadCenterButton];
+
+    // 活动指示器（按钮右侧，下载中时旋转）
+    self.downloadCenterActivityIndicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
+    self.downloadCenterActivityIndicator.color = [UIColor whiteColor];
+    self.downloadCenterActivityIndicator.hidesWhenStopped = YES;
+    CGFloat indicatorSize = 20.0;
+    self.downloadCenterActivityIndicator.frame = CGRectMake(dcBtnWidth - indicatorSize - 4, (dcBtnHeight - indicatorSize) / 2.0, indicatorSize, indicatorSize);
+    self.downloadCenterActivityIndicator.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin;
+    [self.downloadCenterButton addSubview:self.downloadCenterActivityIndicator];
+
+    // 进度百分比标签（按钮中间，显示聚合进度百分比）
+    self.downloadCenterProgressLabel = [[UILabel alloc] init];
+    self.downloadCenterProgressLabel.font = [UIFont monospacedDigitSystemFontOfSize:11 weight:UIFontWeightBold];
+    self.downloadCenterProgressLabel.textColor = [UIColor whiteColor];
+    self.downloadCenterProgressLabel.textAlignment = NSTextAlignmentCenter;
+    self.downloadCenterProgressLabel.text = @"";
+    self.downloadCenterProgressLabel.frame = CGRectMake(iconSize + 6, 0, dcBtnWidth - iconSize - indicatorSize - 12, dcBtnHeight);
+    self.downloadCenterProgressLabel.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    [self.downloadCenterButton addSubview:self.downloadCenterProgressLabel];
+
     [self fetchRemoteVersionList];
     [NSNotificationCenter.defaultCenter addObserver:self
-        selector:@selector(receiveNotification:) 
+        selector:@selector(receiveNotification:)
         name:@"InstallModpack"
         object:nil];
+
+    // ===== 下载中心入口通知监听 =====
+    // 监听 DownloadTaskManager 的通知，当有新下载任务注册或进度更新时：
+    // 1. 更新下载中心按钮的显示状态和进度百分比
+    // 2. 自动弹出下载中心弹窗（如果用户未手动关闭且没有其他模态视图）
+    // 这确保了模组、光影、资源包等所有下载都能通过下载中心统一显示进度。
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(handleDownloadTaskUpdate:)
+                                                 name:DownloadTaskManagerDidUpdateTaskNotification
+                                               object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(handleDownloadTaskCompleted:)
+                                                 name:DownloadTaskManagerTaskCompletedNotification
+                                               object:nil];
+    // 监听下载中心被用户手动关闭的通知，设置标记避免反复自动弹出
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(handleDownloadCenterDismissed)
+                                                 name:@"DownloadCenterDidDismiss"
+                                               object:nil];
 
     if ([BaseAuthenticator.current isKindOfClass:MicrosoftAuthenticator.class]) {
         // Perform token refreshment on startup
@@ -209,6 +282,117 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 
 - (void)dealloc {
     [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
+#pragma mark - 下载中心（参照 FCL/ZL2/HMCL 下载进度弹窗）
+
+/// 打开下载中心弹窗
+/// 参照 FCL/ZL2/HMCL 的下载进度显示方式：以 FormSheet 方式弹出 DownloadTasksViewController，
+/// 集中显示所有下载任务（MC本体/模组/光影/资源包/数据包/世界存档/整合包）的实时进度。
+/// 所有通过 DownloadTaskManager 注册的下载任务都会在这里显示，实现统一的下载进度管理。
+- (void)openDownloadCenter {
+    // 如果已经弹出了下载中心，直接返回避免重复弹出
+    if (self.presentedDownloadCenterVC) {
+        return;
+    }
+
+    // 用户主动打开了下载中心，重置"用户已关闭"标记
+    self.userDismissedDownloadCenter = NO;
+
+    DownloadTasksViewController *downloadCenterVC = [[DownloadTasksViewController alloc] init];
+    downloadCenterVC.modalPresentationStyle = UIModalPresentationFormSheet;
+    downloadCenterVC.preferredContentSize = CGSizeMake(500, 600);
+
+    // 弱引用持有，避免循环持有
+    self.presentedDownloadCenterVC = downloadCenterVC;
+
+    // 获取最顶层的视图控制器来 present
+    UIViewController *topVC = self;
+    while (topVC.presentedViewController) {
+        topVC = topVC.presentedViewController;
+    }
+
+    [topVC presentViewController:downloadCenterVC animated:YES completion:nil];
+}
+
+/// 处理下载任务更新通知（进度变化、新任务注册等）
+- (void)handleDownloadTaskUpdate:(NSNotification *)notification {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self updateDownloadCenterButton];
+
+        // 自动弹出逻辑：当存在活跃下载任务且用户未手动关闭下载中心时，自动弹出下载中心。
+        DownloadTaskManager *manager = [DownloadTaskManager sharedManager];
+        BOOL hasActiveTasks = [manager hasActiveTasks];
+
+        if (hasActiveTasks && !self.userDismissedDownloadCenter && !self.presentedDownloadCenterVC) {
+            UIViewController *topVC = self;
+            while (topVC.presentedViewController) {
+                topVC = topVC.presentedViewController;
+            }
+            if (!topVC.presentedViewController) {
+                [self openDownloadCenter];
+            }
+        }
+    });
+}
+
+/// 处理下载任务完成通知
+- (void)handleDownloadTaskCompleted:(NSNotification *)notification {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self updateDownloadCenterButton];
+    });
+}
+
+/// 处理下载中心被用户手动关闭的通知
+/// 设置 userDismissedDownloadCenter=YES，避免后续下载任务更新时反复自动弹出下载中心。
+/// 用户可以通过点击启动器上的"下载中心"按钮重新打开（会重置此标记）。
+- (void)handleDownloadCenterDismissed {
+    self.userDismissedDownloadCenter = YES;
+    self.presentedDownloadCenterVC = nil;
+}
+
+/// 更新下载中心按钮的显示状态和进度百分比
+- (void)updateDownloadCenterButton {
+    DownloadTaskManager *manager = [DownloadTaskManager sharedManager];
+    NSArray<DownloadTaskItem *> *allTasks = [manager allTasks];
+
+    if (allTasks.count == 0) {
+        self.downloadCenterButton.hidden = YES;
+        [self.downloadCenterActivityIndicator stopAnimating];
+        return;
+    }
+
+    self.downloadCenterButton.hidden = NO;
+
+    BOOL hasActive = NO;
+    BOOL allCompleted = YES;
+    double totalProgress = 0.0;
+    NSInteger activeCount = 0;
+
+    for (DownloadTaskItem *task in allTasks) {
+        if (task.state == DownloadTaskStateDownloading || task.state == DownloadTaskStatePending) {
+            hasActive = YES;
+            allCompleted = NO;
+            totalProgress += task.progress;
+            activeCount++;
+        } else if (task.state != DownloadTaskStateCompleted) {
+            allCompleted = NO;
+        }
+    }
+
+    if (hasActive) {
+        double avgProgress = activeCount > 0 ? totalProgress / activeCount : 0.0;
+        NSInteger percent = (NSInteger)(avgProgress * 100.0 + 0.5);
+        percent = MAX(0, MIN(100, percent));
+        self.downloadCenterProgressLabel.text = [NSString stringWithFormat:@"%ld%%", (long)percent];
+        [self.downloadCenterActivityIndicator startAnimating];
+    } else if (allCompleted) {
+        self.downloadCenterProgressLabel.text = @"完成";
+        [self.downloadCenterActivityIndicator stopAnimating];
+    } else {
+        self.downloadCenterProgressLabel.text = @"暂停";
+        [self.downloadCenterActivityIndicator stopAnimating];
+    }
 }
 
 #pragma mark - Options
