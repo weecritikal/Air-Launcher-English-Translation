@@ -456,30 +456,17 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 }
 
 /// 处理下载任务更新通知（进度变化、新任务注册等）
-/// 当收到通知时：
-/// 1. 更新下载中心按钮的显示状态和进度百分比
-/// 2. 如果是新任务且用户未手动关闭下载中心，自动弹出下载中心（参照 FCL/ZL2 自动弹出下载进度对话框的行为）
+/// 当收到通知时仅更新下载中心按钮的状态，不再自动弹出下载中心界面。
+///
+/// 修改说明（修复下载版本时出现两个进度显示的问题）：
+///   之前此方法会在检测到活跃下载任务时自动弹出 DownloadTasksViewController（下载中心界面），
+///   同时启动器自身在 startDownloadWithVersion: 中会自动弹出 DownloadProgressViewController
+///   （FCL/ZL2 风格单任务进度），导致两个进度显示同时出现。
+///   现在统一为 FCL/ZL2/HMCL 风格：版本下载开始时自动弹出 DownloadProgressViewController，
+///   DownloadTasksViewController 仅保留为手动打开（通过下载中心按钮）。
 - (void)handleDownloadTaskUpdate:(NSNotification *)notification {
     dispatch_async(dispatch_get_main_queue(), ^{
         [self updateDownloadCenterButton];
-
-        // 自动弹出逻辑：当存在活跃下载任务（downloading/pending状态）且用户未手动关闭下载中心时，
-        // 自动弹出下载中心弹窗，让用户立即看到下载进度（参照 FCL 下载开始时自动显示进度对话框）。
-        // 但如果当前已经弹出了下载中心，则不需要重复弹出。
-        DownloadTaskManager *manager = [DownloadTaskManager sharedManager];
-        BOOL hasActiveTasks = [manager hasActiveTasks];
-
-        if (hasActiveTasks && !self.userDismissedDownloadCenter && !self.presentedDownloadCenterVC) {
-            // 检查是否已经有其他模态视图弹出（避免覆盖重要弹窗如账号登录）
-            UIViewController *topVC = self;
-            while (topVC.presentedViewController) {
-                topVC = topVC.presentedViewController;
-            }
-            // 只在没有其他模态视图弹出时自动弹出下载中心
-            if (!topVC.presentedViewController) {
-                [self openDownloadCenter];
-            }
-        }
     });
 }
 
@@ -970,9 +957,9 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 
 - (void)startDownloadWithVersion:(NSDictionary *)versionObject profileName:(NSString *)profileName {
     self.task = [MinecraftResourceDownloadTask new];
-    
+
     __weak LauncherRightPanelViewController *weakSelf = self;
-    
+
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         weakSelf.task.handleError = ^{
             dispatch_async(dispatch_get_main_queue(), ^{
@@ -981,15 +968,32 @@ static void *ProgressObserverContext = &ProgressObserverContext;
                 weakSelf.progressVC = nil;
             });
         };
-        
+
         [weakSelf.task downloadVersion:versionObject];
-        
+
         dispatch_async(dispatch_get_main_queue(), ^{
             weakSelf.progressView.observedProgress = weakSelf.task.progress;
             [weakSelf.task.progress addObserver:weakSelf
                                     forKeyPath:@"fractionCompleted"
                                        options:NSKeyValueObservingOptionInitial
                                        context:ProgressObserverContext];
+
+            // 自动弹出 FCL/ZL2 风格的单任务进度对话框（参照 FCL 启动下载时自动显示进度对话框）
+            // 之前通过 DownloadTaskManager 通知自动弹出 DownloadTasksViewController（下载中心界面），
+            // 导致两个进度显示同时出现。现在统一使用 DownloadProgressViewController。
+            if (!weakSelf.progressVC) {
+                weakSelf.progressVC = [[DownloadProgressViewController alloc] initWithTask:weakSelf.task];
+            }
+            UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:weakSelf.progressVC];
+            nav.modalPresentationStyle = UIModalPresentationFormSheet;
+            // 检查是否已有模态视图弹出，避免覆盖重要弹窗（如账号登录）
+            UIViewController *topVC = weakSelf;
+            while (topVC.presentedViewController) {
+                topVC = topVC.presentedViewController;
+            }
+            if (!topVC.presentedViewController) {
+                [topVC presentViewController:nav animated:YES completion:nil];
+            }
         });
     });
 }

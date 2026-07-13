@@ -620,14 +620,9 @@
               @"min": @(25),
               @"max": @(150)
             },
-            @{@"key": @"max_framerate",
-              @"hasDetail": @YES,
-              @"icon": @"timelapse",
-              @"type": self.typeSwitch,
-              @"enableCondition": ^BOOL(){
-                  return whenNotInGame() && (UIScreen.mainScreen.maximumFramesPerSecond > 60);
-              }
-            },
+            // 帧率限制选项已移除：CADisplayLink 始终采用 30-120Hz 自适应范围，
+            // 由屏幕硬件能力决定实际帧率（60Hz 设备仍为 60，120Hz ProMotion 设备可达 120）。
+            // 不再提供"最大帧率限制 60FPS"开关，避免用户误关闭导致帧率被人为锁死。
             // 解锁帧率（关闭垂直同步）：三层联动关闭 VSync，让游戏帧率可超过屏幕刷新率。
             // 不限制 ProMotion 设备：60Hz 设备同样会被 VSync 锁在 60，也需要解锁。
             @{@"key": @"disable_game_vsync",

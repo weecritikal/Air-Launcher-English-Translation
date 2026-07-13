@@ -44,7 +44,8 @@ NSString *const PREF_MOD_UPDATE_KEEP_OLD = @"general.mod_update_keep_old";
         @"video": @{ // Video & Audio
             @"renderer": @"auto",
             @"resolution": @(100),
-            @"max_framerate": @YES,
+            // max_framerate 选项已移除：CADisplayLink 始终采用 30-120Hz 自适应范围，
+            // 由屏幕硬件能力决定实际帧率。保留 disable_game_vsync 作为唯一帧率解锁开关。
             // 解锁帧率（关闭垂直同步）：默认开启。
             // MC 默认 enableVsync=true，会把帧率锁在屏幕刷新率（60Hz 锁 60、120Hz ProMotion 锁 120）。
             // 开启后启动器会在三层联动关闭 VSync：options.txt 强制 enableVsync=false、

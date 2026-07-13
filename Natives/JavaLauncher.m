@@ -91,7 +91,6 @@ void init_loadDefaultEnv() {
     // 帧率解锁诊断日志：记录关键环境变量和偏好设置
     NSLog(@"[JavaLauncher] Framerate unlock configuration:");
     NSLog(@"[JavaLauncher]   video.disable_game_vsync=%d", getPrefBool(@"video.disable_game_vsync"));
-    NSLog(@"[JavaLauncher]   video.max_framerate=%d", getPrefBool(@"video.max_framerate"));
     NSLog(@"[JavaLauncher]   POJAV_DISABLE_VSYNC=%s", getenv("POJAV_DISABLE_VSYNC"));
     NSLog(@"[JavaLauncher]   UIScreen.maximumFramesPerSecond=%d", (int)UIScreen.mainScreen.maximumFramesPerSecond);
 }

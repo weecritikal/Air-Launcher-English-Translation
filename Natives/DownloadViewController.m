@@ -997,6 +997,11 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     self.title = @"下载";
     self.view.backgroundColor = [UIColor clearColor];
 
+    // 适配自定义启动器背景（参照 LauncherPreferencesViewController / LauncherRightPanelViewController）
+    // makeViewControllerTransparent: 会根据 BackgroundUIEffect 设置（毛玻璃/半透明）正确处理 view 背景，
+    // 并递归透明化子 VC。之前缺失此调用导致模组下载界面不适配自定义背景。
+    [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
+
     // 导航栏右侧：CurseForge API Key 配置入口，避免用户在 Modrinth 模式下找不到配置路径
     UIBarButtonItem *apiKeyItem = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"key.fill"]
                                                                      style:UIBarButtonItemStylePlain
@@ -1034,6 +1039,25 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                                              selector:@selector(handleBackgroundUIEffectChanged:)
                                                  name:@"BackgroundUIEffectChanged"
                                                object:nil];
+}
+
+- (void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+    // 重新应用背景透明效果（参照 LauncherPreferencesViewController）
+    // 用户可能在外部页面切换了背景设置，回到此页时需重新适配
+    if ([[BackgroundManager sharedManager] hasBackground]) {
+        self.view.backgroundColor = [UIColor clearColor];
+        // 对导航栏应用效果（DownloadViewController 被包在 UINavigationController 中）
+        UINavigationController *nav = self.navigationController;
+        if (nav) {
+            nav.view.backgroundColor = [UIColor clearColor];
+            [[BackgroundManager sharedManager] applyEffectToNavigationBar:nav.navigationBar];
+        }
+        // 重新应用侧边栏效果
+        if (self.filterSidebarContainer) {
+            [[BackgroundManager sharedManager] applyEffectToView:self.filterSidebarContainer];
+        }
+    }
 }
 
 - (void)setupUI {
@@ -1447,7 +1471,15 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 - (void)setupFilterSidebar {
     self.filterSidebarContainer = [[UIView alloc] init];
     self.filterSidebarContainer.translatesAutoresizingMaskIntoConstraints = NO;
-    self.filterSidebarContainer.backgroundColor = [UIColor secondarySystemBackgroundColor];
+    // 适配自定义启动器背景：使用 BackgroundManager 的 applyEffectToView: 而非不透明的
+    // secondarySystemBackgroundColor。之前用 secondarySystemBackgroundColor（完全不透明）
+    // 会遮挡自定义背景，导致模组/光影下载界面不适配自定义启动器背景。
+    // applyEffectToView: 会根据 BackgroundUIEffect 设置（毛玻璃/半透明）正确处理，
+    // 参照 LauncherRootViewController.m 中对 sidebarContainer 的处理方式。
+    self.filterSidebarContainer.backgroundColor = [UIColor clearColor];
+    self.filterSidebarContainer.layer.cornerRadius = 12;
+    self.filterSidebarContainer.layer.masksToBounds = YES;
+    [[BackgroundManager sharedManager] applyEffectToView:self.filterSidebarContainer];
     self.filterSidebarContainer.hidden = YES;
     [self.view addSubview:self.filterSidebarContainer];
 
@@ -5794,7 +5826,26 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
 - (void)handleBackgroundUIEffectChanged:(NSNotification *)notification {
     dispatch_async(dispatch_get_main_queue(), ^{
+        // 重新应用背景透明效果（参照 LauncherRightPanelViewController.reapplyBackgroundEffect）
+        [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
+        // 重新应用侧边栏效果（filterSidebarContainer 的毛玻璃/半透明效果需要随设置更新）
+        if (self.filterSidebarContainer) {
+            [[BackgroundManager sharedManager] applyEffectToView:self.filterSidebarContainer];
+        }
+        // 对导航栏应用效果
+        UINavigationController *nav = self.navigationController;
+        if (nav) {
+            nav.view.backgroundColor = [UIColor clearColor];
+            [[BackgroundManager sharedManager] applyEffectToNavigationBar:nav.navigationBar];
+        }
+        // 刷新所有列表以更新 cell 的背景效果
         [self.versionCollectionView reloadData];
+        [self.modTableView reloadData];
+        [self.shaderTableView reloadData];
+        [self.modpackTableView reloadData];
+        [self.resourcepackTableView reloadData];
+        [self.datapackTableView reloadData];
+        [self.worldTableView reloadData];
     });
 }
 

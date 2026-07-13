@@ -175,8 +175,6 @@
 
 "preference.title.resolution" = "Разрешение (%)";
 "preference.detail.resolution" = "Можно уменьшить разрешение игры в целях быстродействия.";
-"preference.title.max_framerate" = "Максимальная частота кадров";
-"preference.detail.max_framerate" = "Позволяет включить ограничение частоты обновления в 60 кадров в секунду на дисплеях ProMotion.";
 
 "preference.title.fullscreen_airplay" = "Полноэкранный AirPlay";
 "preference.detail.fullscreen_airplay" = "Транслировать на внешний монитор только окно игры во весь экран вместо отображения всего, что происходит на устройстве.";

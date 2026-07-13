@@ -176,8 +176,6 @@
 
 "preference.title.resolution" = "الدقة (%)";
 "preference.detail.resolution" = "يسمح لك بتقليل دقة اللعبة.";
-"preference.title.max_framerate" = "الحد الأقصى للإطارات";
-"preference.detail.max_framerate" = "يسمح لك بالحد من إطارات اللعبة إلى 60FPS على عروض ProMotion.";
 
 "preference.title.fullscreen_airplay" = "AirPlay ملء الشاشة";
 "preference.detail.fullscreen_airplay" = "يسمح بتقديم نافذة لعبة ملء الشاشة على الشاشة الخارجية بدلاً من عكس كل شيء على الشاشة.";

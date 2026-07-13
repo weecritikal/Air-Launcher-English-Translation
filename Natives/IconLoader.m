@@ -262,7 +262,16 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
     }
 
     // 9. 发起下载（后台线程）
-    [loader startDownloadForURL:finalURL cacheKey:cacheKey targetSize:targetSize options:options];
+    // 传入原始 URL（镜像前的）用于回退重试：
+    // 如果镜像 URL 失败（HTTP 4xx/5xx、超时、Content-Type 非 image、解码失败），
+    // 会自动用原始 URL 重试一次。这是图标完全不加载的关键修复——
+    // BMCLAPI 的 MCIM 镜像路径（/mcim/modrinth/）可能不提供 cdn.modrinth.com 的
+    // 静态图标资源，导致所有镜像后的图标请求返回 404/HTML，但原始 CDN 可以正常访问。
+    [loader startDownloadForURL:finalURL
+                  originalURL:url
+                      cacheKey:cacheKey
+                     targetSize:targetSize
+                        options:options];
 }
 
 + (void)loadIconForImageView:(nullable UIImageView *)imageView
@@ -314,7 +323,11 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
         // 预取不需要更新 UI，仅依赖下载流程写入缓存
     } forCacheKey:cacheKey];
 
-    [loader startDownloadForURL:finalURL cacheKey:cacheKey targetSize:targetSize options:IconLoaderOptionsDefault];
+    [loader startDownloadForURL:finalURL
+                  originalURL:url
+                      cacheKey:cacheKey
+                     targetSize:targetSize
+                        options:IconLoaderOptionsDefault];
 }
 
 #pragma mark - 公共接口：取消
@@ -530,6 +543,7 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
 #pragma mark - 内部：下载与解码
 
 - (void)startDownloadForURL:(NSString *)urlString
+               originalURL:(NSString *)originalURLString
                    cacheKey:(NSString *)cacheKey
                  targetSize:(CGSize)targetSize
                     options:(IconLoaderOptions)options {
@@ -553,8 +567,12 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
             [[NSFileManager defaultManager] removeItemAtPath:diskPath error:nil];
         }
 
-        // 网络下载
-        [self downloadFromURL:url cacheKey:cacheKey targetSize:targetSize options:options];
+        // 网络下载（传入原始 URL 用于镜像失败时回退重试）
+        [self downloadFromURL:url
+                originalURLString:originalURLString
+                      cacheKey:cacheKey
+                     targetSize:targetSize
+                        options:options];
     });
 }
 
@@ -570,6 +588,7 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
 }
 
 - (void)downloadFromURL:(NSURL *)url
+       originalURLString:(NSString *)originalURLString
                cacheKey:(NSString *)cacheKey
              targetSize:(CGSize)targetSize
                 options:(IconLoaderOptions)options {
@@ -580,21 +599,93 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
     NSURLSessionDataTask *task = [self.session dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) {
-            // self 已释放，信号量槽位需要在闭包外释放（这里无法访问，由任务取消时自动释放）
-            // 实际上由于 self 是单例，永远不会 dealloc，这里只是防御性写法
+            // 防御性写法：单例不会触发，但仍释放信号量避免泄漏
+            dispatch_semaphore_signal(weakSelf.downloadSemaphore);
             return;
         }
 
         // 释放信号量槽位
         dispatch_semaphore_signal(strongSelf.downloadSemaphore);
 
-        if (error || !data || data.length == 0) {
-            NSDebugLog(@"[IconLoader] 下载失败: %@ - %@", url, error.localizedDescription);
+        // ── HTTP 响应校验（关键修复：防止 404/HTML 错误页被当作图片数据）──
+        //
+        // 之前的 bug：完全没有校验 statusCode 和 Content-Type，
+        // 镜像 URL 返回 404 时 error 为 nil、data 非空（HTML 错误页），
+        // 三条 if 判断全部不命中，HTML 被送进解码器，
+        // CGImageSourceCreateWithData 失败返回 nil，静默吞掉，
+        // 最终只剩 fallback 拼图占位图标。
+        NSInteger statusCode = 0;
+        NSString *contentType = nil;
+        if ([response isKindOfClass:[NSHTTPURLResponse class]]) {
+            NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
+            statusCode = httpResponse.statusCode;
+            contentType = httpResponse.allHeaderFields[@"Content-Type"];
+        }
+
+        BOOL isNetworkError = (error != nil);
+        BOOL isEmptyData = (!data || data.length == 0);
+        BOOL isHTTPError = (statusCode >= 400);
+        BOOL isNonImageContentType = NO;
+        if (contentType && contentType.length > 0) {
+            NSString *lowerCT = [contentType lowercaseString];
+            // 严格的 Content-Type 校验：只接受 image/* 类型
+            // HTML 错误页的 Content-Type 通常是 text/html，应被拒绝
+            if (![lowerCT hasPrefix:@"image/"]) {
+                isNonImageContentType = YES;
+            }
+        }
+
+        BOOL shouldFallbackToOriginal = NO;
+
+        if (isNetworkError) {
+            NSLog(@"[IconLoader] 网络错误: %@ - %@", url, error.localizedDescription);
+            shouldFallbackToOriginal = YES;
+        } else if (isEmptyData) {
+            NSLog(@"[IconLoader] 响应数据为空: %@ (HTTP %ld)", url, (long)statusCode);
+            shouldFallbackToOriginal = YES;
+        } else if (isHTTPError) {
+            NSLog(@"[IconLoader] HTTP 错误: %@ (status=%ld, Content-Type=%@)", url, (long)statusCode, contentType);
+            shouldFallbackToOriginal = YES;
+        } else if (isNonImageContentType) {
+            NSLog(@"[IconLoader] Content-Type 非图片: %@ (Content-Type=%@)", url, contentType);
+            shouldFallbackToOriginal = YES;
+        }
+
+        // ── 镜像失败回退到原始 URL 重试（关键修复）──
+        //
+        // 如果当前请求使用的是镜像 URL（与原始 URL 不同）且失败了，
+        // 自动用原始 URL 重试一次。这是图标完全不加载的核心修复——
+        // BMCLAPI 的 MCIM 镜像路径（/mcim/modrinth/）可能不提供 cdn.modrinth.com 的
+        // 静态图标资源，但原始 CDN 可以正常访问。
+        //
+        // 即使在"中国大陆"环境下，cdn.modrinth.com 和 edge.forgecdn.net 的
+        // 小图标资源通常也能正常访问（延迟稍高但不会失败），因此回退到原始 URL 是安全的。
+        if (shouldFallbackToOriginal && originalURLString && originalURLString.length > 0) {
+            NSString *currentURLString = url.absoluteString;
+            // 仅当当前 URL 与原始 URL 不同时才回退（避免无限重试）
+            if (![currentURLString isEqualToString:originalURLString]) {
+                NSLog(@"[IconLoader] 回退到原始 URL 重试: %@", originalURLString);
+                NSURL *originalURL = [NSURL URLWithString:originalURLString];
+                if (originalURL) {
+                    // 递归调用自身，但传入 nil 作为 originalURLString 防止再次回退
+                    [strongSelf downloadFromURL:originalURL
+                              originalURLString:nil
+                                      cacheKey:cacheKey
+                                     targetSize:targetSize
+                                        options:options];
+                    return;
+                }
+            }
+        }
+
+        if (shouldFallbackToOriginal) {
+            // 所有重试都已穷尽，最终失败
+            NSLog(@"[IconLoader] 图标加载最终失败（所有 URL 均不可用）: %@", url);
             [strongSelf completeRequestWithCacheKey:cacheKey image:nil];
             return;
         }
 
-        // 后台线程解码 + 降采样
+        // ── 后台线程解码 + 降采样 ──
         dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
             UIImage *decodedImage = [strongSelf decodeImageData:data
                                                      targetSize:targetSize
@@ -606,6 +697,25 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
                 // 写入磁盘缓存（除非指定 MemoryCacheOnly）
                 if (!(options & IconLoaderOptionsMemoryCacheOnly)) {
                     [strongSelf writeDataToDisk:data cacheKey:cacheKey];
+                }
+            } else {
+                // 解码失败：可能是数据损坏或非图片数据伪装成 image Content-Type
+                // 尝试回退到原始 URL（如果尚未回退过）
+                NSLog(@"[IconLoader] 图像解码失败，数据可能损坏或非图片: %@ (data.length=%lu)", url, (unsigned long)data.length);
+                if (originalURLString && originalURLString.length > 0) {
+                    NSString *currentURLString = url.absoluteString;
+                    if (![currentURLString isEqualToString:originalURLString]) {
+                        NSLog(@"[IconLoader] 解码失败后回退到原始 URL 重试: %@", originalURLString);
+                        NSURL *originalURL = [NSURL URLWithString:originalURLString];
+                        if (originalURL) {
+                            [strongSelf downloadFromURL:originalURL
+                                      originalURLString:nil
+                                              cacheKey:cacheKey
+                                             targetSize:targetSize
+                                                options:options];
+                            return;
+                        }
+                    }
                 }
             }
             [strongSelf completeRequestWithCacheKey:cacheKey image:decodedImage];
@@ -625,14 +735,22 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
 
     // 跳过降采样：直接解码原图
     if (options & IconLoaderOptionsNoDownsample || CGSizeEqualToSize(targetSize, CGSizeZero)) {
-        return [UIImage imageWithData:data];
+        UIImage *directImage = [UIImage imageWithData:data];
+        if (!directImage) {
+            NSLog(@"[IconLoader] decodeImageData: UIImage imageWithData: 返回 nil (data.length=%lu)", (unsigned long)data.length);
+        }
+        return directImage;
     }
 
     CGImageSourceRef source = CGImageSourceCreateWithData((__bridge CFDataRef)data, nil);
-    if (!source) return nil;
+    if (!source) {
+        NSLog(@"[IconLoader] decodeImageData: CGImageSourceCreateWithData 失败 (data.length=%lu)", (unsigned long)data.length);
+        return nil;
+    }
 
     CFIndex imageCount = CGImageSourceGetCount(source);
     if (imageCount == 0) {
+        NSLog(@"[IconLoader] decodeImageData: CGImageSourceGetCount 返回 0 (data.length=%lu)", (unsigned long)data.length);
         CFRelease(source);
         return nil;
     }
@@ -655,7 +773,12 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
     CFRelease(source);
 
     if (!thumbnail) {
-        return [UIImage imageWithData:data];
+        // 降采样失败，退回直接解码（可能数据本身没问题但 thumbnail 创建失败）
+        UIImage *fallbackImage = [UIImage imageWithData:data];
+        if (!fallbackImage) {
+            NSLog(@"[IconLoader] decodeImageData: 降采样和直接解码均失败 (data.length=%lu)", (unsigned long)data.length);
+        }
+        return fallbackImage;
     }
 
     UIImage *result = [UIImage imageWithCGImage:thumbnail scale:scale orientation:UIImageOrientationUp];

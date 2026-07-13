@@ -176,8 +176,6 @@
 
 "preference.title.resolution" = "Độ phân giải (%)";
 "preference.detail.resolution" = "Cho phép thay đổi độ phân giải trò chơi.";
-"preference.title.max_framerate" = "Tốc độ Khung Hình tối đa";
-"preference.detail.max_framerate" = "Cho phép bạn giới hạn tốc độ khung hình của trò chơi ở mức 60FPS trên màn hình ProMotion.";
 
 "preference.title.fullscreen_airplay" = "AirPlay toàn màn hình";
 "preference.detail.fullscreen_airplay" = "Cho phép chiếu toàn màn hình cửa sổ game thay vì chiếu mọi thứ trên màn hình ngoài.";

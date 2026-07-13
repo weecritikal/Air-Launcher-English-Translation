@@ -176,8 +176,6 @@
 
 "preference.title.resolution" = "Rozlišení (%)";
 "preference.detail.resolution" = "Umožňuje ti snížit rozlišení hry.";
-"preference.title.max_framerate" = "Maximální snímková frekvence";
-"preference.detail.max_framerate" = "Umožňuje omezit frekvenci snímků hry na 60FPS na displejích ProMotion.";
 
 "preference.title.fullscreen_airplay" = "AirPlay celé obrazovky";
 "preference.detail.fullscreen_airplay" = "Umožňuje zobrazovat okno hry na celé obrazovce na externím displeji bez zrcadlení všeho na obrazovce.";

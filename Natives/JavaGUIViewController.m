@@ -304,11 +304,10 @@ void AWTInputBridge_sendKey(int keycode) {
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         CADisplayLink *displayLink = [CADisplayLink displayLinkWithTarget:surfaceView selector:@selector(refreshBuffer)];
         if (@available(iOS 15.0, tvOS 15.0, *)) {
-            if(getPrefBool(@"video.max_framerate")) {
-                displayLink.preferredFrameRateRange = CAFrameRateRangeMake(30, 120, 120);
-            } else {
-                displayLink.preferredFrameRateRange = CAFrameRateRangeMake(30, 60, 60);
-            }
+            // max_framerate 选项已移除：始终采用 30-120Hz 自适应范围。
+            // 屏幕硬件决定实际帧率（60Hz 设备仍为 60，120Hz ProMotion 设备可达 120），
+            // 不再人为限制在 60FPS。配合 disable_game_vsync 完整解锁 VSync 后帧率可超过屏幕刷新率。
+            displayLink.preferredFrameRateRange = CAFrameRateRangeMake(30, 120, 120);
         }
         [displayLink addToRunLoop:NSRunLoop.currentRunLoop forMode:NSRunLoopCommonModes];
         [NSRunLoop.currentRunLoop run];

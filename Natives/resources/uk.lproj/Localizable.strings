@@ -174,8 +174,6 @@
 
 "preference.title.resolution" = "Роздільна здатність відео (%)";
 "preference.detail.resolution" = "Дозволяє вам зменшити роздільну здатність гри.";
-"preference.title.max_framerate" = "Максимальна частота кадрів";
-"preference.detail.max_framerate" = "Дозволяє вам обмежити частоту кадрів в грі до 60 FPS на ProMotion дисплеях.";
 
 "preference.title.fullscreen_airplay" = "Повноекранний AirPlay";
 "preference.detail.fullscreen_airplay" = "Дозволяє презентувати повноекранне вікно гри на зовнішньому дисплеї, а не віддзеркалювати все, що є на екрані.";
