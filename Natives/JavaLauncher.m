@@ -56,6 +56,11 @@ void init_loadDefaultEnv() {
     setenv("HACK_IGNORE_START_ON_FIRST_THREAD", "1", 1);
 
     // Force MoltenVK to use immediate present mode (uncapped fps)
+    // MVK_CONFIG_PRESENT_MODE_IMMEDIATE=1 声明设备支持 VK_PRESENT_MODE_IMMEDIATE_KHR，
+    // 允许 MoltenVK 在 vkCreateSwapchainKHR 时使用 immediate present mode（不等待 vblank）。
+    // 注意：此环境变量仅声明能力（capability），不强制覆盖应用请求的 present mode。
+    // 应用需要在 vkCreateSwapchainKHR 时显式选择 VK_PRESENT_MODE_IMMEDIATE_KHR。
+    // 当游戏内 VSync 关闭时（enableVsync=false），LWJGL 会请求 IMMEDIATE present mode。
     setenv("MVK_CONFIG_PRESENT_MODE_IMMEDIATE", "1", 1);
 
     // 解锁帧率（关闭垂直同步）：读取启动器偏好，通过环境变量传递给 Java 层和 native 桥接层。
@@ -63,6 +68,14 @@ void init_loadDefaultEnv() {
     // - native 桥接层（egl_bridge.m pojavSwapInterval）读取 POJAV_DISABLE_VSYNC=1 后强制 interval=0
     // 两层独立生效，互为兜底。默认开启（PLPreferences 中 video.disable_game_vsync 默认 YES）。
     setenv("POJAV_DISABLE_VSYNC", getPrefBool(@"video.disable_game_vsync") ? "1" : "0", 1);
+
+    // 帧率解锁诊断日志：记录关键环境变量和偏好设置
+    NSLog(@"[JavaLauncher] Framerate unlock configuration:");
+    NSLog(@"[JavaLauncher]   video.disable_game_vsync=%d", getPrefBool(@"video.disable_game_vsync"));
+    NSLog(@"[JavaLauncher]   video.max_framerate=%d", getPrefBool(@"video.max_framerate"));
+    NSLog(@"[JavaLauncher]   POJAV_DISABLE_VSYNC=%s", getenv("POJAV_DISABLE_VSYNC"));
+    NSLog(@"[JavaLauncher]   MVK_CONFIG_PRESENT_MODE_IMMEDIATE=%s", getenv("MVK_CONFIG_PRESENT_MODE_IMMEDIATE"));
+    NSLog(@"[JavaLauncher]   UIScreen.maximumFramesPerSecond=%d", (int)UIScreen.mainScreen.maximumFramesPerSecond);
 }
 
 void init_loadCustomEnv() {

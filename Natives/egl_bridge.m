@@ -156,13 +156,41 @@ void pojavSwapInterval(int interval) {
     // 解锁帧率（关闭垂直同步）：当启动器偏好 video.disable_game_vsync 开启时
     // （POJAV_DISABLE_VSYNC=1，由 JavaLauncher.m 设置），强制 swap interval=0，
     // 覆盖游戏 glfwSwapInterval(1) 的垂直同步请求。
+    //
     // 这是 GL 类渲染器（gl4es/ANGLE/MobileGlues）真正生效 VSync 的落点
-    // （gl_bridge.m gl_swap_interval → eglSwapInterval）。对 honors eglSwapInterval(0)
-    // 的渲染器，此处强制 0 可让 eglSwapBuffers 不等待 vblank，从而解锁帧率。
+    // （gl_bridge.m gl_swap_interval → eglSwapInterval）。
+    //
+    // ANGLE Metal 后端对 eglSwapInterval 的处理：
+    // - interval=0：eglSwapBuffers 不等待 vblank，渲染线程可立即继续下一帧渲染。
+    //   虽然 Core Animation 仍按屏幕刷新率合成（60/120Hz），但渲染线程不被阻塞，
+    //   可保持高吞吐量。多余的帧会被 Core Animation 丢弃，但 FPS 计数器反映渲染帧率。
+    // - interval=1：eglSwapBuffers 等待 vblank，渲染线程被锁在屏幕刷新率。
+    //
     // 与 PojavLauncher.java 写 enableVsync=false 互为兜底：即便游戏在运行时再次请求
     // VSync（某些 mod/版本会重设），native 层也会拦截。
-    if (getenv("POJAV_DISABLE_VSYNC") && strcmp(getenv("POJAV_DISABLE_VSYNC"), "1") == 0) {
+    //
+    // 与 Vulkan 渲染器的区别：
+    // - GL 类渲染器：VSync 通过 eglSwapInterval 控制（此处生效）
+    // - Vulkan 渲染器：VSync 通过 vkCreateSwapchainKHR 的 presentMode 控制
+    //   （由 MoltenVKConfig.json 和 MVK_CONFIG_PRESENT_MODE_IMMEDIATE 环境变量控制）
+
+    const char* vsyncEnv = getenv("POJAV_DISABLE_VSYNC");
+    const char* renderer = getenv("AMETHYST_RENDERER");
+
+    if (vsyncEnv && strcmp(vsyncEnv, "1") == 0) {
+        if (interval != 0) {
+            NSLog(@"[egl_bridge] pojavSwapInterval: intercepted VSync request interval=%d -> 0 (POJAV_DISABLE_VSYNC=1, renderer=%s)", interval, renderer ?: "<unset>");
+        }
         interval = 0;
+    } else {
+        // 仅记录前几次调用，帮助诊断
+        static int s_logCount = 0;
+        if (s_logCount < 3) {
+            s_logCount++;
+            NSLog(@"[egl_bridge] pojavSwapInterval(%d) called (POJAV_DISABLE_VSYNC=%s, renderer=%s, count=%d)",
+                  interval, vsyncEnv ?: "<unset>", renderer ?: "<unset>", s_logCount);
+        }
     }
+
     br_swap_interval(interval);
 }

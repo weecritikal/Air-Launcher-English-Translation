@@ -1,5 +1,5 @@
 {
     "MVKConfiguration": {
-        "swapchainPresentMode": 1
+        "swapchainPresentMode": 0
     }
 }

@@ -230,7 +230,7 @@
 "preference.title.resolution" = "分辨率缩放 (%)";
 "preference.detail.resolution" = "降低分辨率会影响游戏内 UI 大小，也可能会提升FPS。默认分辨率为屏幕的分辨率，此功能可能不适用于新版 Minecraft。";
 "preference.title.max_framerate" = "最大帧率";
-"preference.detail.max_framerate" = "允许您在 ProMotion 显示器上将游戏帧率限制为 60FPS。";
+"preference.detail.max_framerate" = "允许在 ProMotion 显示器上以 120FPS 高帧率运行游戏。关闭则将帧率限制为 60FPS。此选项仅对支持 ProMotion 的设备有效。";
 
 "preference.title.disable_game_vsync" = "解锁帧率（关闭垂直同步）";
 "preference.detail.disable_game_vsync" = "Minecraft 默认开启垂直同步，会把帧率锁在屏幕刷新率（60Hz 锁 60、120Hz 锁 120）。开启后启动器会强制关闭垂直同步，让游戏帧率可超过屏幕刷新率。如需省电降温或偏好垂直同步可关闭。";
