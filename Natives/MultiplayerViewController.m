@@ -741,6 +741,10 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 /// 支持两种模式：
 /// - 创建模式（默认）：表单为空，按钮标题"创建房间"
 /// - 编辑模式（initWithRoom:）：预填已有房间数据，按钮标题"保存修改"
+/// 前向声明基类（让编译器知道 CreateRoomViewController 继承自 UIViewController）
+@interface CreateRoomViewController : UIViewController
+@end
+
 @interface CreateRoomViewController () <UITextFieldDelegate>
 
 /// 主滚动视图
@@ -1400,6 +1404,10 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 /// 由于 iOS 相机权限需要 Info.plist 中配置 NSCameraUsageDescription，
 /// 本界面不直接调用相机，而是让用户粘贴二维码扫描结果或分享文本。
 /// 用户可使用系统相机或任何二维码扫描 App 扫描后，将内容粘贴到此处。
+/// 前向声明基类（让编译器知道 ScanImportRoomViewController 继承自 UIViewController）
+@interface ScanImportRoomViewController : UIViewController
+@end
+
 @interface ScanImportRoomViewController () <UITextViewDelegate>
 
 /// 主滚动视图
