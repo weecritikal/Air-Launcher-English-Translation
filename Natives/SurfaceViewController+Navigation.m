@@ -236,9 +236,13 @@ static const void *kMenuDimViewKey = &kMenuDimViewKey;
 }
 
 /// 游戏内打开联机界面（参照 FCL/ZL2，基于 ZeroTier）
+///
+/// 对标 FCL 流程：启动游戏后通过悬浮球菜单进入联机界面，
+/// 选择当房主（创建世界→开放局域网→自动检测端口→生成分享代码）
+/// 或当房客（输入分享代码→加入网络→在多人游戏界面看到房间）。
 - (void)actionOpenMultiplayer {
     [self dismissMenu];
-    MultiplayerViewController *vc = [[MultiplayerViewController alloc] init];
+    MultiplayerViewController *vc = [[MultiplayerViewController alloc] initWithMode:MultiplayerVCModeInGame];
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
     nav.modalPresentationStyle = UIModalPresentationPageSheet;
     [self presentViewController:nav animated:YES completion:nil];

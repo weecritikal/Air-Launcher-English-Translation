@@ -220,6 +220,43 @@ typedef NS_ENUM(NSInteger, MultiplayerRoomStatus) {
 /// 生成新的 ZeroTier 风格房间 ID（UUID）
 - (NSString *)generateRoomId;
 
+#pragma mark - 分享代码（FCL 风格 Base64 编码）
+
+/// 生成房间的分享代码（Base64 编码的 JSON）
+///
+/// 对标 FCL 的联机分享码：房主开放局域网后自动生成一段代码，
+/// 房客输入代码即可加入房间。
+///
+/// 代码格式：Base64(JSON)，JSON 包含：
+///   - networkId: ZeroTier Network ID
+///   - hostIP: 房主在 ZeroTier 网络中的 IP
+///   - hostPort: MC 服务器端口（LAN 端口或 25565）
+///   - roomName: 房间名称
+///
+/// @param room 房间对象
+/// @return Base64 编码的分享代码
+- (NSString *)generateShareCodeForRoom:(MultiplayerRoom *)room;
+
+/// 从分享代码解析房间信息（Base64 编码的 JSON）
+///
+/// @param code Base64 编码的分享代码
+/// @return 解析出的房间对象（解析失败返回 nil）
+- (nullable MultiplayerRoom *)parseShareCode:(NSString *)code;
+
+#pragma mark - 预设 Network ID 管理（FCL 风格）
+
+/// 获取用户预设的 ZeroTier Network ID
+///
+/// 对标 FCL：房主首次设置一次 Network ID（在 my.zerotier.com 创建后填入），
+/// 之后每次开房自动使用这个 Network ID，无需重复输入。
+///
+/// @return 预设的 Network ID（未设置时返回 nil）
+- (nullable NSString *)presetNetworkId;
+
+/// 设置预设的 ZeroTier Network ID
+/// @param networkId Network ID（传入 nil 或空字符串则清除）
+- (void)setPresetNetworkId:(nullable NSString *)networkId;
+
 #pragma mark - 校验工具
 
 /// 验证 ZeroTier Network ID 格式

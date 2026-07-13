@@ -464,7 +464,8 @@ static CGFloat LauncherRootLayoutRightPanelWidth(UITraitCollection *trait) {
 
 - (void)showMultiplayer {
     // 在中间内容区显示联机界面（基于 ZeroTier 的 MC 联机功能，参照 FCL/ZL2）
-    MultiplayerViewController *vc = [[MultiplayerViewController alloc] init];
+    // 启动器模式：启用联机开关 + 预设 Network ID 设置 + 房间列表 + 直连
+    MultiplayerViewController *vc = [[MultiplayerViewController alloc] initWithMode:MultiplayerVCModeLauncher];
     UINavigationController *navVC = [[UINavigationController alloc] initWithRootViewController:vc];
     navVC.navigationBar.prefersLargeTitles = NO;
     [self setContentViewController:navVC animated:YES];

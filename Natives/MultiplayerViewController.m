@@ -2,32 +2,33 @@
 //  MultiplayerViewController.m
 //  Amethyst
 //
-//  MC 联机界面实现（参照 FCL 和 HMCL 联机界面风格简化版）
+//  MC 联机界面实现（FCL 风格重制版）
 //
-//  本文件实现基于 ZeroTier 的 Minecraft 联机功能界面，采用 TableView InsetGrouped 风格，
-//  界面简洁直观，分为 3 个 Section：
+//  本文件参照 FCL (FoldCraftLauncher) 的联机流程重新设计：
 //
-//  1. 加入房间（Section 0）
-//     - 一行 UITextField：输入 ZeroTier Network ID（16 位十六进制）
-//     - 一行按钮：点击后自动创建房间并连接，连接成功后保存到房间列表
+//  模式 1：启动器模式（MultiplayerVCModeLauncher）
+//    用户在启动游戏前在此界面启用联机、设置预设 Network ID、管理房间、配置直连。
+//    Section 0「联机设置」：UISwitch 启用联机开关 + 预设 Network ID 显示/编辑
+//    Section 1「我的房间」：保存的房间列表（每行显示 房间名 + Network ID + 状态 + 连接/断开按钮）
+//    Section 2「直连」：IP+端口输入 + 加入游戏按钮（写入 PLProfiles）
 //
-//  2. 我的房间（Section 1）
-//     - 没有房间：显示"还没有保存的房间"提示
-//     - 有房间：每行显示一个房间（房间名 + Network ID + 状态 + 连接/断开按钮）
-//     - 点击房间行弹出 ActionSheet：连接/断开、分享、删除
+//  模式 2：游戏内模式（MultiplayerVCModeInGame）
+//    用户启动游戏后通过悬浮球菜单进入，选择当房主或房客。
+//    Section 0「选择角色」：当房主按钮 + 当房客按钮（大卡片样式）
+//    Section 1「联机状态」：当前联机状态 + Network ID + 本地 IP
 //
-//  3. 直连（Section 2）
-//     - 一行：IP 地址输入框 + 端口输入框
-//     - 一行按钮：点击后将服务器地址写入当前 profile，启动游戏后自动加入
+//  房主流程：
+//    1. 检查 ZeroTier 框架可用性 + 预设 Network ID 是否已设置
+//    2. 连接到预设 Network ID 房间（调用 connectToRoom:completion:）
+//    3. 连接成功后监听 LanPortDetectorDidDetectPortNotification
+//    4. 自动检测 LAN 端口并生成分享代码（调用 generateShareCodeForRoom:）
+//    5. 显示分享代码（可复制、可分享）
 //
-//  实现要点：
-//  - 仅保留 1 个 ViewController（MultiplayerViewController），不再使用自定义 Cell / 子 VC
-//  - 房间行使用标准 UITableViewCell（subtitle 风格）+ 内联配置
-//  - 创建房间使用 UIAlertController（两个文本框：房间名称 + Network ID）
-//  - 加入房间：输入 Network ID → 创建临时 MultiplayerRoom → 调用 connectToRoom: → 成功后保存
-//  - 连接状态：通过 detailTextLabel 文本 + imageView 状态点 + 按钮文字综合显示
-//  - 保留所有 MultiplayerManagerDelegate 回调
-//  - 适配自定义启动器背景（BackgroundManager）
+//  房客流程：
+//    1. 弹出输入框（UIAlertController with textField）
+//    2. 解析分享代码（调用 parseShareCode:）
+//    3. 连接到房间（调用 connectToRoom:completion:）
+//    4. 连接成功后提示并显示服务器地址（房主 IP:端口）
 //
 
 #import "MultiplayerViewController.h"
@@ -49,32 +50,78 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 
 @interface MultiplayerViewController () <UITableViewDataSource, UITableViewDelegate, UITextFieldDelegate, MultiplayerManagerDelegate>
 
+/// 当前界面模式（启动器 / 游戏内）
+@property (nonatomic, assign) MultiplayerVCMode mode;
+
 /// 主表格视图（InsetGrouped 风格）
 @property (nonatomic, strong) UITableView *tableView;
 
 /// 当前已保存的房间列表
 @property (nonatomic, strong) NSArray<MultiplayerRoom *> *rooms;
 
-/// Section 0 的 Network ID 输入框（强引用，确保跨 cell 复用时数据不丢失）
-@property (nonatomic, strong) UITextField *joinNetworkIdField;
+#pragma mark - 启动器模式专用控件
 
-/// Section 2 的 IP 地址输入框（强引用）
+/// Section 0 Row 0 的"启用联机"开关
+@property (nonatomic, strong) UISwitch *enableSwitch;
+
+/// Section 2 Row 0 的 IP 地址输入框（强引用，确保跨 cell 复用时数据不丢失）
 @property (nonatomic, strong) UITextField *directIPField;
 
-/// Section 2 的端口输入框（强引用）
+/// Section 2 Row 0 的端口输入框（强引用）
 @property (nonatomic, strong) UITextField *directPortField;
+
+#pragma mark - 游戏内模式专用状态
+
+/// 房主流程是否激活（已点击"当房主"且正在等待/已连接）
+@property (nonatomic, assign) BOOL isHostFlowActive;
+
+/// 房客流程是否激活（已点击"当房客"且正在等待/已连接）
+@property (nonatomic, assign) BOOL isGuestFlowActive;
+
+/// 房主流程中最新生成的分享代码（用于显示与复制）
+@property (nonatomic, copy, nullable) NSString *lastShareCode;
+
+/// 房客流程中最新解析出的服务器地址（hostIP:hostPort，用于显示给用户）
+@property (nonatomic, copy, nullable) NSString *lastServerAddress;
+
+/// 房主流程中正在使用的房间对象（用于生成分享代码）
+@property (nonatomic, strong, nullable) MultiplayerRoom *hostRoom;
+
+/// 房客流程中正在连接的房间对象（用于显示连接状态）
+@property (nonatomic, strong, nullable) MultiplayerRoom *guestRoom;
 
 @end
 
 @implementation MultiplayerViewController
+
+#pragma mark - Init
+
+/// 通过模式初始化联机界面
+/// @param mode 界面模式（启动器 / 游戏内）
+- (instancetype)initWithMode:(MultiplayerVCMode)mode {
+    self = [super initWithNibName:nil bundle:nil];
+    if (self) {
+        _mode = mode;
+    }
+    return self;
+}
+
+/// 兜底初始化：未指定模式时默认使用启动器模式
+- (instancetype)init {
+    return [self initWithMode:MultiplayerVCModeLauncher];
+}
 
 #pragma mark - Lifecycle
 
 - (void)viewDidLoad {
     [super viewDidLoad];
 
-    // 设置标题
-    self.title = MPLocalized(@"mp.title", @"联机");
+    // 根据模式设置标题
+    if (self.mode == MultiplayerVCModeInGame) {
+        self.title = MPLocalized(@"mp.title.ingame", @"联机");
+    } else {
+        self.title = MPLocalized(@"mp.title", @"联机");
+    }
 
     // 适配自定义启动器背景：透明化当前 VC，让全局背景图/毛玻璃透出
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
@@ -93,6 +140,14 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
                                              selector:@selector(backgroundEffectChanged)
                                                  name:@"BackgroundUIEffectChanged"
                                                object:nil];
+
+    // 游戏内模式：监听 LAN 端口检测通知（房主流程依赖）
+    if (self.mode == MultiplayerVCModeInGame) {
+        [[NSNotificationCenter defaultCenter] addObserver:self
+                                                 selector:@selector(lanPortDidDetect:)
+                                                     name:LanPortDetectorDidDetectPortNotification
+                                                   object:nil];
+    }
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -108,6 +163,12 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 
     // 刷新房间列表（可能在其他界面修改过）
     [self refreshRooms];
+
+    // 启动器模式：根据节点状态同步开关初始值
+    if (self.mode == MultiplayerVCModeLauncher) {
+        BOOL started = [[MultiplayerManager sharedManager] isNodeStarted];
+        [self.enableSwitch setOn:started animated:NO];
+    }
 }
 
 - (void)backgroundEffectChanged {
@@ -146,13 +207,14 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     self.tableView.rowHeight = UITableViewAutomaticDimension;
     self.tableView.estimatedRowHeight = 56;
     // 注册复用的 cell 类型
-    // 注意：RoomCell 不注册，以便使用 subtitle 风格手工创建
-    // 注意：JoinInputCell / DirectInputCell 分别用独立标识符，避免 cell 在两个输入行之间复用导致 textField 错位
     [self.tableView registerClass:[UITableViewCell class] forCellReuseIdentifier:@"DefaultCell"];
     [self.tableView registerClass:[UITableViewCell class] forCellReuseIdentifier:@"ButtonCell"];
     [self.tableView registerClass:[UITableViewCell class] forCellReuseIdentifier:@"EmptyCell"];
-    [self.tableView registerClass:[UITableViewCell class] forCellReuseIdentifier:@"JoinInputCell"];
+    [self.tableView registerClass:[UITableViewCell class] forCellReuseIdentifier:@"SwitchCell"];
+    [self.tableView registerClass:[UITableViewCell class] forCellReuseIdentifier:@"NetworkIdCell"];
     [self.tableView registerClass:[UITableViewCell class] forCellReuseIdentifier:@"DirectInputCell"];
+    [self.tableView registerClass:[UITableViewCell class] forCellReuseIdentifier:@"RoleCardCell"];
+    [self.tableView registerClass:[UITableViewCell class] forCellReuseIdentifier:@"StatusCell"];
     [self.view addSubview:self.tableView];
 
     [NSLayoutConstraint activateConstraints:@[
@@ -162,7 +224,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         [self.tableView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
     ]];
 
-    // 导航栏左上角：关闭按钮（xmark）
+    // 导航栏左上角：关闭按钮（xmark），两种模式都需要
     UIBarButtonItem *closeButton = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"xmark"]
                                                                      style:UIBarButtonItemStylePlain
                                                                     target:self
@@ -170,11 +232,8 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     closeButton.accessibilityLabel = MPLocalized(@"mp.close", @"关闭");
     self.navigationItem.leftBarButtonItem = closeButton;
 
-    // 导航栏右上角：创建房间按钮（+）
-    UIBarButtonItem *addButton = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemAdd
-                                                                               target:self
-                                                                               action:@selector(createRoomTapped)];
-    self.navigationItem.rightBarButtonItem = addButton;
+    // 注意：启动器模式右上角不需要按钮（Network ID 通过 Section 0 设置）
+    // 注意：游戏内模式右上角也不需要按钮（房主/房客通过 Section 0 选择）
 
     // 应用导航栏毛玻璃效果
     [[BackgroundManager sharedManager] applyEffectToNavigationBar:self.navigationController.navigationBar];
@@ -188,228 +247,124 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     if (self.navigationController && self.navigationController.viewControllers.firstObject != self) {
         [self.navigationController popViewControllerAnimated:YES];
     } else {
-        [self.dismissViewControllerAnimated:YES completion:nil];
+        [self dismissViewControllerAnimated:YES completion:nil];
     }
 }
 
-#pragma mark - 创建房间（使用 UIAlertController）
+#pragma mark - 启动器模式：启用联机开关
 
-/// 点击右上角 + 按钮：弹出创建房间对话框
+/// "启用联机"开关状态变化回调
 ///
-/// 对话框包含两个文本框：
-///   - 房间名称：用户自定义的房间名
-///   - ZeroTier Network ID：16 位十六进制网络 ID
+/// 对标 FCL 启动器界面顶部的联机总开关：
+///   - 打开：调用 ensureNodeStartedWithCompletion: 启动 ZeroTier 节点
+///   - 关闭：调用 disconnectCurrentRoom 停止所有联机活动（节点保持运行，可再次打开）
+- (void)enableSwitchChanged:(UISwitch *)sender {
+    if (sender.on) {
+        // 检查 ZeroTier 框架可用性
+        if (![[MultiplayerManager sharedManager] isFrameworkAvailable]) {
+            [sender setOn:NO animated:YES];
+            [self showSimpleAlertWithTitle:MPLocalized(@"mp.core.unavailable_title", @"联机核心不可用")
+                                    message:MPLocalized(@"mp.core.unavailable_msg", @"ZeroTier 联机核心未加载，无法启用联机。请使用包含真实 zt.framework 的构建版本。")];
+            return;
+        }
+
+        // 启动 ZeroTier 节点
+        __weak typeof(self) weakSelf = self;
+        [[MultiplayerManager sharedManager] ensureNodeStartedWithCompletion:^(BOOL success, NSError *error) {
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf) return;
+
+            if (!success) {
+                // 启动失败：回退开关状态
+                [strongSelf.enableSwitch setOn:NO animated:YES];
+                [strongSelf showSimpleAlertWithTitle:MPLocalized(@"mp.node.start_failed_title", @"启动失败")
+                                              message:error.localizedDescription ?: MPLocalized(@"mp.node.start_failed_msg", @"ZeroTier 节点启动失败，请重试。")];
+            } else {
+                // 启动成功：刷新表格以更新开关行的辅助文字
+                [strongSelf.tableView reloadData];
+            }
+        }];
+    } else {
+        // 关闭联机：断开当前房间（如有）
+        if ([[MultiplayerManager sharedManager] currentRoom]) {
+            [[MultiplayerManager sharedManager] disconnectCurrentRoom];
+        }
+        [self refreshRooms];
+    }
+}
+
+#pragma mark - 启动器模式：预设 Network ID 编辑
+
+/// 点击 Network ID 行：弹出 UIAlertController 让用户输入预设 Network ID
 ///
-/// 点击"创建"后创建 MultiplayerRoom 对象并添加到 MultiplayerManager
-- (void)createRoomTapped {
+/// 对标 FCL：房主首次设置一次 Network ID（在 my.zerotier.com 创建后填入），
+/// 之后每次开房自动使用，分享代码中自动包含此 Network ID。
+- (void)networkIdCellTapped {
     [self.view endEditing:YES];
 
     // 检查 ZeroTier 框架可用性
     if (![[MultiplayerManager sharedManager] isFrameworkAvailable]) {
         [self showSimpleAlertWithTitle:MPLocalized(@"mp.core.unavailable_title", @"联机核心不可用")
-                                message:MPLocalized(@"mp.core.unavailable_msg", @"ZeroTier 联机核心未加载，无法创建房间。请使用包含真实 zt.framework 的构建版本。")];
+                                message:MPLocalized(@"mp.core.unavailable_msg", @"ZeroTier 联机核心未加载，无法设置 Network ID。")];
         return;
     }
 
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:MPLocalized(@"mp.create_room.title", @"创建房间")
-                                                                   message:MPLocalized(@"mp.create_room.message", @"输入房间信息")
+    NSString *current = [[MultiplayerManager sharedManager] presetNetworkId] ?: @"";
+
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:MPLocalized(@"mp.network_id.title", @"设置 Network ID")
+                                                                   message:MPLocalized(@"mp.network_id.message", @"在 my.zerotier.com 创建网络后填入 16 位 Network ID，开房时自动使用")
                                                             preferredStyle:UIAlertControllerStyleAlert];
 
-    // 文本框 1：房间名称
     [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
-        textField.placeholder = MPLocalized(@"mp.create_room.name.placeholder", @"房间名称（如：和朋友的生存世界）");
-        textField.autocapitalizationType = UITextAutocapitalizationTypeNone;
-        textField.autocorrectionType = UITextAutocorrectionTypeNo;
-        textField.clearButtonMode = UITextFieldViewModeWhileEditing;
-        textField.returnKeyType = UIReturnKeyNext;
-    }];
-
-    // 文本框 2：ZeroTier Network ID
-    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
-        textField.placeholder = MPLocalized(@"mp.create_room.network_id.placeholder", @"ZeroTier Network ID (16 位十六进制)");
+        textField.text = current;
+        textField.placeholder = MPLocalized(@"mp.network_id.placeholder", @"16 位十六进制 Network ID");
         textField.autocapitalizationType = UITextAutocapitalizationTypeNone;
         textField.autocorrectionType = UITextAutocorrectionTypeNo;
         textField.keyboardType = UIKeyboardTypeASCIICapable;
         textField.clearButtonMode = UITextFieldViewModeWhileEditing;
-        textField.returnKeyType = UIReturnKeyDone;
     }];
 
-    // 取消按钮
     [alert addAction:[UIAlertAction actionWithTitle:MPLocalized(@"common.cancel", @"取消")
                                               style:UIAlertActionStyleCancel
                                             handler:nil]];
 
-    // 创建按钮
     __weak typeof(self) weakSelf = self;
-    [alert addAction:[UIAlertAction actionWithTitle:MPLocalized(@"mp.create_room.button", @"创建")
+    [alert addAction:[UIAlertAction actionWithTitle:MPLocalized(@"common.save", @"保存")
                                               style:UIAlertActionStyleDefault
                                             handler:^(UIAlertAction *action) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
 
-        // 收集并校验输入
-        UITextField *nameField = alert.textFields.firstObject;
-        UITextField *networkIdField = alert.textFields.lastObject;
+        UITextField *field = alert.textFields.firstObject;
+        NSString *value = [field.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 
-        NSString *name = [nameField.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-        NSString *networkId = [networkIdField.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-
-        // 校验：房间名称
-        if (name.length == 0) {
-            [strongSelf showSimpleAlertWithTitle:MPLocalized(@"mp.create_room.error.title", @"输入不完整")
-                                         message:MPLocalized(@"mp.create_room.error.name", @"请输入房间名称")];
+        if (value.length == 0) {
+            // 空字符串：清除预设
+            [[MultiplayerManager sharedManager] setPresetNetworkId:nil];
+            [strongSelf.tableView reloadData];
             return;
         }
 
-        // 校验：Network ID 非空
-        if (networkId.length == 0) {
-            [strongSelf showSimpleAlertWithTitle:MPLocalized(@"mp.create_room.error.title", @"输入不完整")
-                                         message:MPLocalized(@"mp.create_room.error.network_id", @"请输入 ZeroTier Network ID")];
+        // 校验格式
+        if (![[MultiplayerManager sharedManager] isValidNetworkId:value]) {
+            [strongSelf showSimpleAlertWithTitle:MPLocalized(@"mp.network_id.invalid_title", @"格式不正确")
+                                          message:MPLocalized(@"mp.network_id.invalid_msg", @"Network ID 应为 16 位十六进制字符串")];
             return;
         }
 
-        // 校验：Network ID 格式（16 位十六进制）
-        if (![[MultiplayerManager sharedManager] isValidNetworkId:networkId]) {
-            [strongSelf showSimpleAlertWithTitle:MPLocalized(@"mp.create_room.error.title", @"输入不完整")
-                                         message:MPLocalized(@"mp.create_room.error.network_id_format", @"Network ID 格式不正确，应为 16 位十六进制")];
-            return;
-        }
-
-        // 创建房间对象并保存
-        MultiplayerRoom *room = [[MultiplayerRoom alloc] init];
-        room.roomId = [[MultiplayerManager sharedManager] generateRoomId];
-        room.name = name;
-        room.networkId = networkId;
-        room.hostIP = @"";
-        room.hostPort = @"25565";
-        room.roomDescription = @"";
-        // ownerName 留空表示本地创建（房主）
-        room.ownerName = @"";
-        room.status = MultiplayerRoomStatusDisconnected;
-        room.createdAt = [NSDate date];
-
-        [[MultiplayerManager sharedManager] addRoom:room];
-        [strongSelf refreshRooms];
+        [[MultiplayerManager sharedManager] setPresetNetworkId:value];
+        [strongSelf.tableView reloadData];
     }]];
 
     [self presentViewController:alert animated:YES completion:nil];
 }
 
-#pragma mark - 加入房间
-
-/// 点击"加入房间"按钮：根据输入的 Network ID 创建临时房间并连接
-///
-/// 流程：
-///   1. 读取并校验 Network ID
-///   2. 检查 ZeroTier 框架可用性
-///   3. 如果该 Network ID 已存在于房间列表，复用之；否则创建临时房间（name=Network ID 前 8 位）
-///   4. 如果当前已连接其他房间，先断开
-///   5. 调用 connectToRoom:completion:
-///   6. 连接成功后保存到房间列表（如果是新房间）
-- (void)joinRoomTapped {
-    [self.view endEditing:YES];
-
-    NSString *networkId = [self.joinNetworkIdField.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
-
-    // 校验：Network ID 非空
-    if (networkId.length == 0) {
-        [self showSimpleAlertWithTitle:MPLocalized(@"mp.create_room.error.title", @"输入不完整")
-                                message:MPLocalized(@"mp.create_room.error.network_id", @"请输入 ZeroTier Network ID")];
-        return;
-    }
-
-    // 校验：Network ID 格式
-    if (![[MultiplayerManager sharedManager] isValidNetworkId:networkId]) {
-        [self showSimpleAlertWithTitle:MPLocalized(@"mp.create_room.error.title", @"输入不完整")
-                                message:MPLocalized(@"mp.create_room.error.network_id_format", @"Network ID 格式不正确，应为 16 位十六进制")];
-        return;
-    }
-
-    // 检查 ZeroTier 框架可用性
-    if (![[MultiplayerManager sharedManager] isFrameworkAvailable]) {
-        [self showSimpleAlertWithTitle:MPLocalized(@"mp.core.unavailable_title", @"联机核心不可用")
-                                message:MPLocalized(@"mp.core.unavailable_msg", @"ZeroTier 联机核心未加载，无法加入房间。请使用包含真实 zt.framework 的构建版本。")];
-        return;
-    }
-
-    // 检查是否已存在该 Network ID 的房间
-    MultiplayerRoom *existingRoom = nil;
-    for (MultiplayerRoom *r in self.rooms) {
-        if ([r.networkId isEqualToString:networkId]) {
-            existingRoom = r;
-            break;
-        }
-    }
-
-    MultiplayerRoom *room = existingRoom;
-    BOOL isNewRoom = NO;
-    if (!room) {
-        // 创建临时房间对象：房间名取 Network ID 前 8 位
-        room = [[MultiplayerRoom alloc] init];
-        room.roomId = [[MultiplayerManager sharedManager] generateRoomId];
-        room.name = networkId.length >= 8 ? [networkId substringToIndex:8] : networkId;
-        room.networkId = networkId;
-        room.hostIP = @"";
-        room.hostPort = @"25565";
-        room.roomDescription = @"";
-        room.ownerName = @"";
-        room.status = MultiplayerRoomStatusDisconnected;
-        room.createdAt = [NSDate date];
-        isNewRoom = YES;
-    }
-
-    // 如果该房间正在连接中，提示用户稍候
-    if (room.status == MultiplayerRoomStatusConnecting) {
-        [self showSimpleAlertWithTitle:MPLocalized(@"mp.connect.in_progress_title", @"正在连接")
-                                message:MPLocalized(@"mp.connect.in_progress_msg", @"当前房间正在连接中，请稍候。")];
-        return;
-    }
-
-    // 如果该房间已连接，提示用户
-    if (room.status == MultiplayerRoomStatusConnected) {
-        [self showSimpleAlertWithTitle:MPLocalized(@"mp.connect.already_connected_title", @"已连接")
-                                message:MPLocalized(@"mp.connect.already_connected_msg", @"该房间已连接，无需重复连接。")];
-        return;
-    }
-
-    // 如果当前已连接到其他房间，先断开
-    MultiplayerRoom *currentRoom = [[MultiplayerManager sharedManager] currentRoom];
-    if (currentRoom && ![currentRoom.networkId isEqualToString:networkId]) {
-        [[MultiplayerManager sharedManager] disconnectCurrentRoom];
-        currentRoom.status = MultiplayerRoomStatusDisconnected;
-        [[MultiplayerManager sharedManager] updateRoom:currentRoom];
-    }
-
-    // 连接房间
-    __weak typeof(self) weakSelf = self;
-    __weak MultiplayerRoom *weakRoom = room;
-    [self connectToRoom:room completion:^(BOOL success, NSError *error) {
-        __strong typeof(weakSelf) strongSelf = weakSelf;
-        if (!strongSelf) return;
-
-        if (success) {
-            // 连接成功后保存到房间列表（如果未保存过）
-            if (isNewRoom) {
-                [[MultiplayerManager sharedManager] addRoom:weakRoom];
-            }
-            [strongSelf refreshRooms];
-        } else {
-            // 连接失败：显示错误信息（临时房间不保存）
-            [strongSelf showSimpleAlertWithTitle:MPLocalized(@"mp.connect.failed", @"连接失败")
-                                         message:error.localizedDescription ?: MPLocalized(@"mp.connect.failed_msg", @"无法连接到房间，请检查 Network ID 是否正确以及网络是否畅通。")];
-        }
-    }];
-
-    // 清空输入框，方便用户下次输入
-    self.joinNetworkIdField.text = @"";
-}
-
-#pragma mark - 连接房间
+#pragma mark - 房间连接
 
 /// 连接到指定房间
 ///
 /// 内部调用 MultiplayerManager 的 connectToRoom:completion:，
-/// 并在主线程更新房间状态和 UI。连接成功后显示操作引导（对标 FCL/HMCL）。
+/// 并在主线程更新房间状态和 UI。连接成功后回调 completion。
 - (void)connectToRoom:(MultiplayerRoom *)room completion:(void (^)(BOOL success, NSError *error))completion {
     // 设置状态为连接中
     room.status = MultiplayerRoomStatusConnecting;
@@ -426,22 +381,6 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
             if (success) {
                 room.status = MultiplayerRoomStatusConnected;
                 room.lastConnectedAt = [NSDate date];
-
-                // 连接成功后显示操作引导（对标 FCL/HMCL 连接成功后的提示）
-                // 获取房主 ZeroTier IP（已由 MultiplayerManager 自动同步到 room.hostIP）
-                NSString *hostIP = room.hostIP.length ? room.hostIP : [[MultiplayerManager sharedManager] currentLocalIP];
-                NSString *hostPort = room.hostPort.length ? room.hostPort : @"25565";
-                NSString *serverAddress = [NSString stringWithFormat:@"%@:%@", hostIP, hostPort];
-
-                NSString *successMsg = [NSString stringWithFormat:@"%@\n\n%@\n%@\n\n%@",
-                    MPLocalized(@"mp.connect.success_msg", @"ZeroTier 联机网络已连接，SOCKS5 代理已启动"),
-                    MPLocalized(@"mp.connect.guide_host", @"房主：启动游戏并开放局域网（或运行服务器），点击分享按钮将地址发给朋友"),
-                    [NSString stringWithFormat:@"%@: %@",
-                        MPLocalized(@"mp.connect.guide_join", @"加入者：启动游戏，在 MC 中添加服务器"),
-                        serverAddress],
-                    MPLocalized(@"mp.connect.guide_share", @"点击房间可分享、断开连接或查看详情")];
-                [strongSelf showSimpleAlertWithTitle:MPLocalized(@"mp.connect.success_title", @"连接成功")
-                                              message:successMsg];
             } else {
                 room.status = MultiplayerRoomStatusError;
             }
@@ -454,8 +393,6 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         });
     }];
 }
-
-#pragma mark - 断开房间
 
 /// 断开当前房间连接
 - (void)disconnectRoom:(MultiplayerRoom *)room {
@@ -539,7 +476,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         }
     }]];
 
-    // 分享房间按钮
+    // 分享房间按钮（使用 shareTextForRoom: 生成可读分享文本）
     [sheet addAction:[UIAlertAction actionWithTitle:MPLocalized(@"mp.room.action.share", @"分享房间")
                                               style:UIAlertActionStyleDefault
                                             handler:^(UIAlertAction *action) {
@@ -602,7 +539,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     [self presentViewController:sheet animated:YES completion:nil];
 }
 
-#pragma mark - 快速直连
+#pragma mark - 启动器模式：直连
 
 /// 点击"加入游戏"按钮：将 IP:端口 写入当前 profile，启动游戏后自动加入
 - (void)joinDirectConnect {
@@ -649,31 +586,389 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
                                     serverAddress]];
 }
 
+#pragma mark - 游戏内模式：房主流程
+
+/// 点击"当房主"按钮：进入房主流程
+///
+/// 对标 FCL 房主流程：
+///   1. 检查 ZeroTier 框架可用性
+///   2. 检查预设 Network ID 是否已设置（未设置则提示去启动器设置）
+///   3. 自动连接到预设 Network ID 的房间
+///   4. 连接成功后监听 LanPortDetectorDidDetectPortNotification
+///   5. 自动检测 LAN 端口
+///   6. 生成分享代码（generateShareCodeForRoom:）
+///   7. 显示分享代码（可复制、可分享）
+- (void)hostButtonTapped {
+    [self.view endEditing:YES];
+
+    // 检查 1：ZeroTier 框架可用性
+    if (![[MultiplayerManager sharedManager] isFrameworkAvailable]) {
+        [self showSimpleAlertWithTitle:MPLocalized(@"mp.core.unavailable_title", @"联机核心不可用")
+                                message:MPLocalized(@"mp.core.unavailable_msg", @"ZeroTier 联机核心未加载，无法作为房主开房。请使用包含真实 zt.framework 的构建版本。")];
+        return;
+    }
+
+    // 检查 2：预设 Network ID 是否已设置
+    NSString *presetNetId = [[MultiplayerManager sharedManager] presetNetworkId];
+    if (!presetNetId.length) {
+        // 未设置：提示用户去启动器设置
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:MPLocalized(@"mp.host.no_network_id_title", @"未设置 Network ID")
+                                                                       message:MPLocalized(@"mp.host.no_network_id_msg", @"房主需要先设置预设 ZeroTier Network ID。请在启动器联机界面中设置后再来。")
+                                                                preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:MPLocalized(@"common.ok", @"好") style:UIAlertActionStyleDefault handler:nil]];
+        [self presentViewController:alert animated:YES completion:nil];
+        return;
+    }
+
+    // 校验 Network ID 格式
+    if (![[MultiplayerManager sharedManager] isValidNetworkId:presetNetId]) {
+        [self showSimpleAlertWithTitle:MPLocalized(@"mp.network_id.invalid_title", @"Network ID 格式不正确")
+                                message:MPLocalized(@"mp.network_id.invalid_msg", @"请在启动器联机界面设置正确的 16 位十六进制 Network ID")];
+        return;
+    }
+
+    // 标记房主流程激活
+    self.isHostFlowActive = YES;
+    self.lastShareCode = nil;
+    self.lastServerAddress = nil;
+
+    // 构建/复用房主房间对象
+    MultiplayerRoom *room = self.hostRoom;
+    if (!room || ![room.networkId isEqualToString:presetNetId]) {
+        room = [[MultiplayerRoom alloc] init];
+        room.roomId = [[MultiplayerManager sharedManager] generateRoomId];
+        room.name = MPLocalized(@"mp.host.default_room_name", @"我的联机房间");
+        room.networkId = presetNetId;
+        room.hostIP = @"";
+        room.hostPort = @"25565";
+        room.roomDescription = @"";
+        room.ownerName = @"";
+        room.status = MultiplayerRoomStatusDisconnected;
+        room.createdAt = [NSDate date];
+        self.hostRoom = room;
+    }
+
+    // 如果当前已连接到其他房间，先断开
+    MultiplayerRoom *currentRoom = [[MultiplayerManager sharedManager] currentRoom];
+    if (currentRoom && ![currentRoom.networkId isEqualToString:presetNetId]) {
+        [[MultiplayerManager sharedManager] disconnectCurrentRoom];
+    }
+
+    // 显示"正在连接"提示
+    [self showSimpleAlertWithTitle:MPLocalized(@"mp.host.connecting_title", @"正在开启联机")
+                           message:MPLocalized(@"mp.host.connecting_msg", @"正在连接到 ZeroTier 网络，请稍候...")];
+
+    // 启动 LAN 端口检测器（房主在 MC 中开放局域网后会被自动检测到）
+    [[LanPortDetector sharedDetector] startDetecting];
+
+    // 连接到预设房间
+    __weak typeof(self) weakSelf = self;
+    [self connectToRoom:room completion:^(BOOL success, NSError *error) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+
+        if (success) {
+            // 连接成功：显示房主提示
+            [strongSelf showHostConnectedAlert];
+        } else {
+            // 连接失败
+            strongSelf.isHostFlowActive = NO;
+            [strongSelf showSimpleAlertWithTitle:MPLocalized(@"mp.connect.failed", @"连接失败")
+                                          message:error.localizedDescription ?: MPLocalized(@"mp.connect.failed_msg", @"无法连接到 ZeroTier 网络，请检查 Network ID 是否正确以及网络是否畅通。")];
+        }
+        [strongSelf.tableView reloadData];
+    }];
+
+    [self.tableView reloadData];
+}
+
+/// 显示房主连接成功后的提示
+///
+/// 对标 FCL 房主开房成功后的引导：
+///   - "请在 MC 中创建世界并开放局域网"
+///   - "系统会自动检测 LAN 端口并生成分享代码"
+- (void)showHostConnectedAlert {
+    NSString *localIP = [[MultiplayerManager sharedManager] currentLocalIP] ?: @"-";
+    NSString *message = [NSString stringWithFormat:@"%@\n\n%@\n%@\n\n%@: %@",
+                         MPLocalized(@"mp.host.connected_msg", @"已连接到联机网络，等待检测 LAN 端口..."),
+                         MPLocalized(@"mp.host.tip.create_world", @"请在 MC 中创建世界并开放局域网"),
+                         MPLocalized(@"mp.host.tip.auto_detect", @"系统会自动检测 LAN 端口并生成分享代码"),
+                         MPLocalized(@"mp.host.local_ip", @"本机 IP"),
+                         localIP];
+    [self showSimpleAlertWithTitle:MPLocalized(@"mp.host.connected_title", @"联机已开启")
+                           message:message];
+}
+
+#pragma mark - 游戏内模式：LAN 端口检测回调
+
+/// LanPortDetector 检测到端口后的回调
+///
+/// 房主流程核心：MC 开放局域网后，LanPortDetector 自动检测到端口号，
+/// 触发本回调。本方法负责：
+///   1. 将检测到的端口写入房主房间对象
+///   2. 生成分享代码（generateShareCodeForRoom:）
+///   3. 刷新 UI 显示分享代码
+- (void)lanPortDidDetect:(NSNotification *)notification {
+    // 仅在房主流程激活时处理
+    if (!self.isHostFlowActive) {
+        return;
+    }
+
+    NSString *port = notification.userInfo[@"port"];
+    if (!port.length) {
+        return;
+    }
+
+    MultiplayerRoom *room = self.hostRoom;
+    if (!room) {
+        return;
+    }
+
+    // 更新房间的端口和本机 IP
+    room.hostPort = port;
+    NSString *localIP = [[MultiplayerManager sharedManager] currentLocalIP];
+    if (localIP.length) {
+        room.hostIP = localIP;
+    }
+    [[MultiplayerManager sharedManager] updateRoom:room];
+
+    // 生成分享代码
+    self.lastShareCode = [[MultiplayerManager sharedManager] generateShareCodeForRoom:room];
+    self.lastServerAddress = [NSString stringWithFormat:@"%@:%@", room.hostIP, room.hostPort];
+
+    // 刷新表格，让 Section 1 显示最新的分享代码
+    [self.tableView reloadData];
+
+    // 弹出提示告知用户分享代码已生成
+    [self showHostShareCodeAlert];
+}
+
+/// 显示房主分享代码 Alert
+///
+/// 提供以下操作：
+///   - 复制分享代码到剪贴板
+///   - 通过系统分享面板分享
+- (void)showHostShareCodeAlert {
+    NSString *shareCode = self.lastShareCode ?: @"";
+    NSString *serverAddr = self.lastServerAddress ?: @"-";
+
+    NSString *message = [NSString stringWithFormat:@"%@\n\n%@\n\n%@\n%@\n\n%@",
+                         MPLocalized(@"mp.host.share_code_ready", @"分享代码已生成！将以下代码发给房客："),
+                         shareCode,
+                         MPLocalized(@"mp.host.tip.wait_guest", @"房客输入此代码即可加入你的联机网络"),
+                         [NSString stringWithFormat:@"%@: %@", MPLocalized(@"mp.host.server_address", @"服务器地址"), serverAddr],
+                         MPLocalized(@"mp.host.tip.copy_or_share", @"可点击下方按钮复制或分享代码")];
+
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:MPLocalized(@"mp.host.share_code_title", @"分享代码已生成")
+                                                                   message:message
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+
+    // 复制按钮
+    [alert addAction:[UIAlertAction actionWithTitle:MPLocalized(@"mp.host.copy_code", @"复制代码")
+                                              style:UIAlertActionStyleDefault
+                                            handler:^(UIAlertAction *action) {
+        UIPasteboard *pasteboard = [UIPasteboard generalPasteboard];
+        pasteboard.string = shareCode;
+    }]];
+
+    // 分享按钮
+    __weak typeof(self) weakSelf = self;
+    [alert addAction:[UIAlertAction actionWithTitle:MPLocalized(@"mp.host.share_button", @"分享...")
+                                              style:UIAlertActionStyleDefault
+                                            handler:^(UIAlertAction *action) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+
+        UIActivityViewController *activityVC = [[UIActivityViewController alloc] initWithActivityItems:@[shareCode] applicationActivities:nil];
+        if (activityVC.popoverPresentationController) {
+            activityVC.popoverPresentationController.sourceView = strongSelf.view;
+            activityVC.popoverPresentationController.sourceRect = CGRectMake(strongSelf.view.bounds.size.width / 2.0,
+                                                                              strongSelf.view.bounds.size.height / 2.0,
+                                                                              1, 1);
+        }
+        [strongSelf presentViewController:activityVC animated:YES completion:nil];
+    }]];
+
+    // 关闭按钮
+    [alert addAction:[UIAlertAction actionWithTitle:MPLocalized(@"common.ok", @"好")
+                                              style:UIAlertActionStyleCancel
+                                            handler:nil]];
+
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+#pragma mark - 游戏内模式：房客流程
+
+/// 点击"当房客"按钮：进入房客流程
+///
+/// 对标 FCL 房客流程：
+///   1. 弹出输入框（UIAlertController with textField）
+///   2. 用户输入分享代码
+///   3. 解析代码（parseShareCode:）
+///   4. 连接到房间（connectToRoom:completion:）
+///   5. 连接成功后提示并显示服务器地址
+- (void)guestButtonTapped {
+    [self.view endEditing:YES];
+
+    // 检查 ZeroTier 框架可用性
+    if (![[MultiplayerManager sharedManager] isFrameworkAvailable]) {
+        [self showSimpleAlertWithTitle:MPLocalized(@"mp.core.unavailable_title", @"联机核心不可用")
+                                message:MPLocalized(@"mp.core.unavailable_msg", @"ZeroTier 联机核心未加载，无法作为房客加入。请使用包含真实 zt.framework 的构建版本。")];
+        return;
+    }
+
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:MPLocalized(@"mp.guest.input_title", @"输入分享代码")
+                                                                   message:MPLocalized(@"mp.guest.input_msg", @"请输入房主提供的分享代码")
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
+        textField.placeholder = MPLocalized(@"mp.guest.code_placeholder", @"在此粘贴分享代码");
+        textField.autocapitalizationType = UITextAutocapitalizationTypeNone;
+        textField.autocorrectionType = UITextAutocorrectionTypeNo;
+        textField.keyboardType = UIKeyboardTypeASCIICapable;
+        textField.clearButtonMode = UITextFieldViewModeWhileEditing;
+    }];
+
+    [alert addAction:[UIAlertAction actionWithTitle:MPLocalized(@"common.cancel", @"取消")
+                                              style:UIAlertActionStyleCancel
+                                            handler:nil]];
+
+    __weak typeof(self) weakSelf = self;
+    [alert addAction:[UIAlertAction actionWithTitle:MPLocalized(@"mp.guest.join_button", @"加入")
+                                              style:UIAlertActionStyleDefault
+                                            handler:^(UIAlertAction *action) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+
+        UITextField *field = alert.textFields.firstObject;
+        NSString *code = [field.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+
+        // 校验：代码非空
+        if (code.length == 0) {
+            [strongSelf showSimpleAlertWithTitle:MPLocalized(@"mp.guest.error_title", @"输入为空")
+                                          message:MPLocalized(@"mp.guest.error.empty", @"请输入房主提供的分享代码")];
+            return;
+        }
+
+        // 解析分享代码
+        MultiplayerRoom *parsedRoom = [[MultiplayerManager sharedManager] parseShareCode:code];
+        if (!parsedRoom) {
+            [strongSelf showSimpleAlertWithTitle:MPLocalized(@"mp.guest.error_title", @"代码无效")
+                                          message:MPLocalized(@"mp.guest.error.invalid_code", @"无法解析分享代码，请确认代码完整无误")];
+            return;
+        }
+
+        // 校验解析出的 Network ID
+        if (!parsedRoom.networkId.length || ![[MultiplayerManager sharedManager] isValidNetworkId:parsedRoom.networkId]) {
+            [strongSelf showSimpleAlertWithTitle:MPLocalized(@"mp.guest.error_title", @"代码无效")
+                                          message:MPLocalized(@"mp.guest.error.invalid_network_id", @"分享代码中的 Network ID 无效")];
+            return;
+        }
+
+        [strongSelf performGuestJoinWithRoom:parsedRoom shareCode:code];
+    }]];
+
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+/// 房客流程：执行加入房间
+///
+/// @param parsedRoom 从分享代码解析出的房间对象
+/// @param shareCode 原始分享代码（用于显示）
+- (void)performGuestJoinWithRoom:(MultiplayerRoom *)parsedRoom shareCode:(NSString *)shareCode {
+    // 标记房客流程激活
+    self.isGuestFlowActive = YES;
+    self.lastShareCode = shareCode;
+    self.lastServerAddress = [NSString stringWithFormat:@"%@:%@", parsedRoom.hostIP, parsedRoom.hostPort];
+
+    // 设置房客房间对象（保存以便显示状态）
+    self.guestRoom = parsedRoom;
+
+    // 如果当前已连接到其他房间，先断开
+    MultiplayerRoom *currentRoom = [[MultiplayerManager sharedManager] currentRoom];
+    if (currentRoom && ![currentRoom.networkId isEqualToString:parsedRoom.networkId]) {
+        [[MultiplayerManager sharedManager] disconnectCurrentRoom];
+    }
+
+    // 显示"正在连接"提示
+    [self showSimpleAlertWithTitle:MPLocalized(@"mp.guest.connecting_title", @"正在加入联机")
+                           message:MPLocalized(@"mp.guest.connecting_msg", @"正在连接到房主的 ZeroTier 网络，请稍候...")];
+
+    // 连接到房间
+    __weak typeof(self) weakSelf = self;
+    [self connectToRoom:parsedRoom completion:^(BOOL success, NSError *error) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+
+        if (success) {
+            // 连接成功：显示房客加入成功提示
+            [strongSelf showGuestConnectedAlert];
+        } else {
+            // 连接失败
+            strongSelf.isGuestFlowActive = NO;
+            [strongSelf showSimpleAlertWithTitle:MPLocalized(@"mp.connect.failed", @"连接失败")
+                                          message:error.localizedDescription ?: MPLocalized(@"mp.connect.failed_msg", @"无法连接到房主的网络，请检查分享代码是否正确以及网络是否畅通。")];
+        }
+        [strongSelf.tableView reloadData];
+    }];
+
+    [self.tableView reloadData];
+}
+
+/// 显示房客连接成功后的提示
+///
+/// 对标 FCL 房客加入成功后的引导：
+///   - "已连接到房主的联机网络"
+///   - "请在 MC 多人游戏界面查看房间"
+///   - 显示服务器地址（房主 IP:端口）
+- (void)showGuestConnectedAlert {
+    MultiplayerRoom *room = self.guestRoom;
+    NSString *hostIP = room.hostIP.length ? room.hostIP : ([[MultiplayerManager sharedManager] currentLocalIP] ?: @"-");
+    NSString *hostPort = room.hostPort.length ? room.hostPort : @"25565";
+    NSString *serverAddress = [NSString stringWithFormat:@"%@:%@", hostIP, hostPort];
+    self.lastServerAddress = serverAddress;
+
+    NSString *message = [NSString stringWithFormat:@"%@\n\n%@\n%@\n\n%@: %@",
+                         MPLocalized(@"mp.guest.connected_msg", @"已连接到房主的联机网络"),
+                         MPLocalized(@"mp.guest.tip.open_multiplayer", @"请在 MC 多人游戏界面查看房间"),
+                         MPLocalized(@"mp.guest.tip.add_server", @"若未自动发现房间，可手动添加下方服务器地址"),
+                         MPLocalized(@"mp.guest.server_address", @"服务器地址"),
+                         serverAddress];
+
+    [self showSimpleAlertWithTitle:MPLocalized(@"mp.guest.connected_title", @"已加入联机")
+                           message:message];
+}
+
 #pragma mark - MultiplayerManagerDelegate
 
-/// ZeroTier 节点已上线：刷新房间列表（状态点可能需要更新）
+/// ZeroTier 节点已上线：刷新房间列表与状态
 - (void)multiplayerNodeOnline {
     [self refreshRooms];
+    [self.tableView reloadData];
 }
 
-/// ZeroTier 节点已离线：刷新房间列表
+/// ZeroTier 节点已离线：刷新房间列表与状态
 - (void)multiplayerNodeOffline {
     [self refreshRooms];
+    [self.tableView reloadData];
 }
 
-/// 指定房间已连接成功：刷新房间列表
+/// 指定房间已连接成功：刷新房间列表与状态
 - (void)multiplayerRoomConnected:(MultiplayerRoom *)room {
     [self refreshRooms];
+    [self.tableView reloadData];
 }
 
-/// 指定房间连接失败：刷新房间列表
+/// 指定房间连接失败：刷新房间列表与状态
 - (void)multiplayerRoom:(MultiplayerRoom *)room didFailWithError:(NSError *)error {
     [self refreshRooms];
+    [self.tableView reloadData];
 }
 
 /// ZeroTier 框架可用性检测结果：刷新房间列表
 - (void)multiplayerFrameworkAvailabilityChecked:(BOOL)available {
     [self refreshRooms];
+    [self.tableView reloadData];
 }
 
 #pragma mark - 工具方法
@@ -691,7 +986,14 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     dispatch_async(dispatch_get_main_queue(), ^{
         UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:message preferredStyle:UIAlertControllerStyleAlert];
         [alert addAction:[UIAlertAction actionWithTitle:MPLocalized(@"common.ok", @"好") style:UIAlertActionStyleDefault handler:nil]];
-        [self presentViewController:alert animated:YES completion:nil];
+        // 避免重复 present
+        if (self.presentedViewController) {
+            [self.presentedViewController dismissViewControllerAnimated:NO completion:^{
+                [self presentViewController:alert animated:YES completion:nil];
+            }];
+        } else {
+            [self presentViewController:alert animated:YES completion:nil];
+        }
     });
 }
 
@@ -788,9 +1090,9 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 
 /// 点击 Return 键时收起键盘
 - (BOOL)textFieldShouldReturn:(UITextField *)textField {
-    if (textField == self.joinNetworkIdField) {
-        // 在加入房间输入框按 Return 直接触发加入
-        [self joinRoomTapped];
+    if (textField == self.directIPField) {
+        // 在 IP 输入框按 Return 切换到端口输入框
+        [self.directPortField becomeFirstResponder];
     } else {
         [textField resignFirstResponder];
     }
@@ -799,14 +1101,34 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 
 #pragma mark - UITableViewDataSource
 
+/// Section 数量：根据模式返回
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
+    if (self.mode == MultiplayerVCModeInGame) {
+        // 游戏内模式：选择角色 + 联机状态
+        return 2;
+    }
+    // 启动器模式：联机设置 + 我的房间 + 直连
     return 3;
 }
 
+/// 每个 Section 的行数：根据模式和 Section 返回
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
+    if (self.mode == MultiplayerVCModeInGame) {
+        switch (section) {
+            case 0:
+                // 选择角色：当房主 + 当房客
+                return 2;
+            case 1:
+                // 联机状态：1 行综合状态
+                return 1;
+            default:
+                return 0;
+        }
+    }
+    // 启动器模式
     switch (section) {
         case 0:
-            // 加入房间：Network ID 输入框 + 加入按钮
+            // 联机设置：启用联机开关 + Network ID
             return 2;
         case 1:
             // 我的房间：至少 1 行（空状态提示）
@@ -819,10 +1141,21 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     }
 }
 
+/// Section 标题：根据模式返回
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
+    if (self.mode == MultiplayerVCModeInGame) {
+        switch (section) {
+            case 0:
+                return MPLocalized(@"mp.ingame.section.role", @"选择角色");
+            case 1:
+                return MPLocalized(@"mp.ingame.section.status", @"联机状态");
+            default:
+                return nil;
+        }
+    }
     switch (section) {
         case 0:
-            return MPLocalized(@"mp.section.join", @"加入房间");
+            return MPLocalized(@"mp.section.settings", @"联机设置");
         case 1:
             return MPLocalized(@"mp.section.rooms", @"我的房间");
         case 2:
@@ -832,21 +1165,43 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     }
 }
 
+/// Section 脚注：根据模式返回
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
+    if (self.mode == MultiplayerVCModeInGame) {
+        switch (section) {
+            case 0:
+                return MPLocalized(@"mp.ingame.section.role_footer", @"房主需在 MC 中开放局域网，房客输入分享代码即可加入");
+            case 1:
+                return MPLocalized(@"mp.ingame.section.status_footer", @"显示当前联机网络的状态信息");
+            default:
+                return nil;
+        }
+    }
     switch (section) {
         case 0:
-            return MPLocalized(@"mp.section.join_footer", @"输入 16 位 ZeroTier Network ID，点击加入房间即可联机");
+            return MPLocalized(@"mp.section.settings_footer", @"启用联机后可设置 Network ID，房主开房时自动使用");
         case 2:
-            return MPLocalized(@"mp.section.direct_footer", @"输入朋友的 ZeroTier IP 地址和端口，直接加入游戏");
+            return MPLocalized(@"mp.section.direct_footer", @"输入服务器 IP 和端口，写入当前 profile，启动游戏后自动加入");
         default:
             return nil;
     }
 }
 
+/// 根据 IndexPath 配置对应的 cell
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+    if (self.mode == MultiplayerVCModeInGame) {
+        return [self cellForInGameSection:indexPath];
+    }
+    return [self cellForLauncherSection:indexPath];
+}
+
+#pragma mark - 启动器模式 Cell 配置
+
+/// 启动器模式 cell 配置分发
+- (UITableViewCell *)cellForLauncherSection:(NSIndexPath *)indexPath {
     switch (indexPath.section) {
         case 0:
-            return [self cellForJoinSectionAtRow:indexPath.row];
+            return [self cellForSettingsSectionAtRow:indexPath.row];
         case 1:
             return [self cellForRoomsSectionAtRow:indexPath.row];
         case 2:
@@ -856,64 +1211,88 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     }
 }
 
-/// Section 0「加入房间」的 cell 配置
-/// @param row 行号（0=Network ID 输入框，1=加入按钮）
-- (UITableViewCell *)cellForJoinSectionAtRow:(NSInteger)row {
+/// Section 0「联机设置」的 cell 配置
+/// @param row 行号（0=启用联机开关，1=预设 Network ID）
+- (UITableViewCell *)cellForSettingsSectionAtRow:(NSInteger)row {
     if (row == 0) {
-        // Network ID 输入框行
-        UITableViewCell *cell = [self.tableView dequeueReusableCellWithIdentifier:@"JoinInputCell"];
+        // 启用联机开关行
+        UITableViewCell *cell = [self.tableView dequeueReusableCellWithIdentifier:@"SwitchCell"];
         cell.selectionStyle = UITableViewCellSelectionStyleNone;
+        cell.textLabel.text = MPLocalized(@"mp.settings.enable_multiplayer", @"启用联机");
+        cell.textLabel.font = [UIFont systemFontOfSize:16];
 
-        // 懒初始化 textField
-        if (!self.joinNetworkIdField) {
-            self.joinNetworkIdField = [[UITextField alloc] init];
-            self.joinNetworkIdField.placeholder = MPLocalized(@"mp.join.network_id_placeholder", @"ZeroTier Network ID (16 位十六进制)");
-            self.joinNetworkIdField.font = [UIFont systemFontOfSize:15];
-            self.joinNetworkIdField.autocapitalizationType = UITextAutocapitalizationTypeNone;
-            self.joinNetworkIdField.autocorrectionType = UITextAutocorrectionTypeNo;
-            self.joinNetworkIdField.keyboardType = UIKeyboardTypeASCIICapable;
-            self.joinNetworkIdField.clearButtonMode = UITextFieldViewModeWhileEditing;
-            self.joinNetworkIdField.returnKeyType = UIReturnKeyDone;
-            self.joinNetworkIdField.delegate = self;
-            self.joinNetworkIdField.translatesAutoresizingMaskIntoConstraints = NO;
+        // 懒初始化 UISwitch
+        if (!self.enableSwitch) {
+            self.enableSwitch = [[UISwitch alloc] init];
+            [self.enableSwitch addTarget:self action:@selector(enableSwitchChanged:) forControlEvents:UIControlEventValueChanged];
         }
+        // 初始状态：根据节点是否已启动设置开关
+        BOOL started = [[MultiplayerManager sharedManager] isNodeStarted];
+        [self.enableSwitch setOn:started animated:NO];
+        cell.accessoryView = self.enableSwitch;
 
-        // 若 textField 已在别的 cell 上（cell 复用场景），先移除
-        if (self.joinNetworkIdField.superview && self.joinNetworkIdField.superview != cell.contentView) {
-            [self.joinNetworkIdField removeFromSuperview];
-        }
-        if (!self.joinNetworkIdField.superview) {
-            [cell.contentView addSubview:self.joinNetworkIdField];
-            [NSLayoutConstraint activateConstraints:@[
-                [self.joinNetworkIdField.leadingAnchor constraintEqualToAnchor:cell.contentView.leadingAnchor constant:16],
-                [self.joinNetworkIdField.trailingAnchor constraintEqualToAnchor:cell.contentView.trailingAnchor constant:-16],
-                [self.joinNetworkIdField.topAnchor constraintEqualToAnchor:cell.contentView.topAnchor constant:12],
-                [self.joinNetworkIdField.bottomAnchor constraintEqualToAnchor:cell.contentView.bottomAnchor constant:-12],
-            ]];
-        }
-
-        // 适配自定义背景：有背景时使用白色文字
-        if ([[BackgroundManager sharedManager] hasBackground]) {
-            self.joinNetworkIdField.textColor = [UIColor whiteColor];
+        // 辅助文字：显示节点状态
+        if (started) {
+            if ([[MultiplayerManager sharedManager] isNodeOnline]) {
+                cell.detailTextLabel.text = MPLocalized(@"mp.settings.node_online", @"节点已上线");
+            } else {
+                cell.detailTextLabel.text = MPLocalized(@"mp.settings.node_starting", @"节点启动中...");
+            }
         } else {
-            self.joinNetworkIdField.textColor = [UIColor labelColor];
+            cell.detailTextLabel.text = MPLocalized(@"mp.settings.node_offline", @"节点未启动");
+        }
+        cell.detailTextLabel.font = [UIFont systemFontOfSize:12];
+
+        // 适配自定义背景
+        if ([[BackgroundManager sharedManager] hasBackground]) {
+            cell.textLabel.textColor = [UIColor whiteColor];
+            cell.detailTextLabel.textColor = [UIColor whiteColor];
+        } else {
+            cell.textLabel.textColor = [UIColor labelColor];
+            cell.detailTextLabel.textColor = [UIColor secondaryLabelColor];
         }
 
         [[BackgroundManager sharedManager] applyEffectToCell:cell];
         return cell;
     } else {
-        // 加入房间按钮行
-        UITableViewCell *cell = [self.tableView dequeueReusableCellWithIdentifier:@"ButtonCell"];
-        cell.selectionStyle = UITableViewCellSelectionStyleNone;
-        cell.textLabel.text = MPLocalized(@"mp.join.button", @"加入房间");
-        cell.textLabel.textAlignment = NSTextAlignmentCenter;
-        cell.textLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
+        // 预设 Network ID 行
+        UITableViewCell *cell = [self.tableView dequeueReusableCellWithIdentifier:@"NetworkIdCell"];
+        cell.selectionStyle = UITableViewCellSelectionStyleDefault;
+        cell.textLabel.text = MPLocalized(@"mp.settings.preset_network_id", @"预设 Network ID");
+        cell.textLabel.font = [UIFont systemFontOfSize:16];
+
+        // 显示当前预设的 Network ID（脱敏显示：前 4 + ... + 后 4）
+        NSString *presetNetId = [[MultiplayerManager sharedManager] presetNetworkId];
+        NSString *displayValue;
+        if (presetNetId.length >= 16) {
+            displayValue = [NSString stringWithFormat:@"%@...%@",
+                            [presetNetId substringToIndex:4],
+                            [presetNetId substringFromIndex:presetNetId.length - 4]];
+        } else if (presetNetId.length > 0) {
+            displayValue = presetNetId;
+        } else {
+            displayValue = MPLocalized(@"mp.settings.not_set", @"未设置");
+        }
+
+        // 使用 detailTextLabel 显示值
+        cell.detailTextLabel.text = displayValue;
+        cell.detailTextLabel.font = [UIFont systemFontOfSize:14];
+        cell.detailTextLabel.numberOfLines = 1;
+        cell.detailTextLabel.adjustsFontSizeToFitWidth = YES;
+        cell.detailTextLabel.minimumScaleFactor = 0.7;
+
+        // 右侧显示编辑图标
+        cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+
         // 适配自定义背景
         if ([[BackgroundManager sharedManager] hasBackground]) {
             cell.textLabel.textColor = [UIColor whiteColor];
+            cell.detailTextLabel.textColor = [UIColor whiteColor];
         } else {
-            cell.textLabel.textColor = [UIColor systemBlueColor];
+            cell.textLabel.textColor = [UIColor labelColor];
+            cell.detailTextLabel.textColor = [UIColor secondaryLabelColor];
         }
+
         [[BackgroundManager sharedManager] applyEffectToCell:cell];
         return cell;
     }
@@ -960,8 +1339,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         room.networkId ?: @"-"];
     [detail appendFormat:@"\n%@", statusText];
     if (room.status == MultiplayerRoomStatusConnected) {
-        // 已连接时显示完整服务器地址（对标 FCL/HMCL，让房主能直接看到并分享给朋友）
-        // 房主的 hostIP 已由 MultiplayerManager.connectToRoomFlow: 自动同步为本机 ZeroTier IP
+        // 已连接时显示完整服务器地址
         NSString *hostIP = room.hostIP.length ? room.hostIP : [[MultiplayerManager sharedManager] currentLocalIP];
         NSString *hostPort = room.hostPort.length ? room.hostPort : @"25565";
         if (hostIP.length) {
@@ -1034,7 +1412,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
             self.directPortField.translatesAutoresizingMaskIntoConstraints = NO;
         }
 
-        // 懒初始化冒号分隔标签（与 textField 不同，colonLabel 没有 superview 引用问题，直接放在 cell 上）
+        // 懒初始化冒号分隔标签
         UILabel *colonLabel = (UILabel *)[cell.contentView viewWithTag:9528];
         if (!colonLabel) {
             colonLabel = [[UILabel alloc] init];
@@ -1113,25 +1491,186 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     }
 }
 
+#pragma mark - 游戏内模式 Cell 配置
+
+/// 游戏内模式 cell 配置分发
+- (UITableViewCell *)cellForInGameSection:(NSIndexPath *)indexPath {
+    switch (indexPath.section) {
+        case 0:
+            return [self cellForRoleSectionAtRow:indexPath.row];
+        case 1:
+            return [self cellForInGameStatusSection];
+        default:
+            return [UITableViewCell new];
+    }
+}
+
+/// Section 0「选择角色」的 cell 配置
+/// @param row 行号（0=当房主，1=当房客）
+- (UITableViewCell *)cellForRoleSectionAtRow:(NSInteger)row {
+    UITableViewCell *cell = [self.tableView dequeueReusableCellWithIdentifier:@"RoleCardCell"];
+    cell.selectionStyle = UITableViewCellSelectionStyleNone;
+
+    // 自定义卡片式布局：左侧大图标 + 右侧标题和说明
+    if (row == 0) {
+        // 当房主
+        cell.imageView.image = [UIImage systemImageNamed:@"crown"];
+        cell.imageView.tintColor = [UIColor systemOrangeColor];
+        cell.textLabel.text = MPLocalized(@"mp.ingame.host_title", @"当房主");
+        cell.textLabel.font = [UIFont systemFontOfSize:18 weight:UIFontWeightSemibold];
+        cell.detailTextLabel.text = MPLocalized(@"mp.ingame.host_desc", @"创建联机房间，开放局域网后生成分享代码");
+        cell.detailTextLabel.font = [UIFont systemFontOfSize:13];
+        cell.detailTextLabel.numberOfLines = 0;
+
+        // 房主流程激活时显示状态指示
+        if (self.isHostFlowActive) {
+            cell.accessoryType = UITableViewCellAccessoryCheckmark;
+        } else {
+            cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+        }
+    } else {
+        // 当房客
+        cell.imageView.image = [UIImage systemImageNamed:@"person.2"];
+        cell.imageView.tintColor = [UIColor systemBlueColor];
+        cell.textLabel.text = MPLocalized(@"mp.ingame.guest_title", @"当房客");
+        cell.textLabel.font = [UIFont systemFontOfSize:18 weight:UIFontWeightSemibold];
+        cell.detailTextLabel.text = MPLocalized(@"mp.ingame.guest_desc", @"输入分享代码，加入房主的联机网络");
+        cell.detailTextLabel.font = [UIFont systemFontOfSize:13];
+        cell.detailTextLabel.numberOfLines = 0;
+
+        // 房客流程激活时显示状态指示
+        if (self.isGuestFlowActive) {
+            cell.accessoryType = UITableViewCellAccessoryCheckmark;
+        } else {
+            cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+        }
+    }
+
+    // 适配自定义背景
+    if ([[BackgroundManager sharedManager] hasBackground]) {
+        cell.textLabel.textColor = [UIColor whiteColor];
+        cell.detailTextLabel.textColor = [UIColor whiteColor];
+    } else {
+        cell.textLabel.textColor = [UIColor labelColor];
+        cell.detailTextLabel.textColor = [UIColor secondaryLabelColor];
+    }
+
+    [[BackgroundManager sharedManager] applyEffectToCell:cell];
+    return cell;
+}
+
+/// Section 1「联机状态」的 cell 配置
+///
+/// 综合显示：
+///   - 当前联机状态（已连接/未连接）
+///   - Network ID
+///   - 本地 IP
+///   - 房主流程：分享代码
+///   - 房客流程：服务器地址
+- (UITableViewCell *)cellForInGameStatusSection {
+    UITableViewCell *cell = [self.tableView dequeueReusableCellWithIdentifier:@"StatusCell"];
+    cell.selectionStyle = UITableViewCellSelectionStyleNone;
+
+    MultiplayerManager *manager = [MultiplayerManager sharedManager];
+    MultiplayerRoom *currentRoom = manager.currentRoom;
+    BOOL connected = (currentRoom != nil) && (currentRoom.status == MultiplayerRoomStatusConnected);
+
+    // 标题：联机状态
+    cell.textLabel.text = connected ? MPLocalized(@"mp.ingame.status.connected", @"已连接") : MPLocalized(@"mp.ingame.status.disconnected", @"未连接");
+    cell.textLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightMedium];
+
+    // 详情：Network ID + 本地 IP + （房主）分享代码 / （房客）服务器地址
+    NSMutableString *detail = [NSMutableString string];
+
+    // 状态指示
+    if (self.isHostFlowActive) {
+        [detail appendString:MPLocalized(@"mp.ingame.status.host_mode", @"房主模式")];
+    } else if (self.isGuestFlowActive) {
+        [detail appendString:MPLocalized(@"mp.ingame.status.guest_mode", @"房客模式")];
+    } else {
+        [detail appendString:MPLocalized(@"mp.ingame.status.idle", @"未开始")];
+    }
+
+    // Network ID
+    NSString *networkId = currentRoom.networkId.length ? currentRoom.networkId : [manager presetNetworkId];
+    if (networkId.length) {
+        [detail appendFormat:@"\n%@: %@", MPLocalized(@"mp.ingame.status.network_id", @"Network ID"), networkId];
+    } else {
+        [detail appendFormat:@"\n%@: %@", MPLocalized(@"mp.ingame.status.network_id", @"Network ID"), MPLocalized(@"mp.settings.not_set", @"未设置")];
+    }
+
+    // 本地 IP
+    NSString *localIP = manager.currentLocalIP;
+    if (localIP.length) {
+        [detail appendFormat:@"\n%@: %@", MPLocalized(@"mp.ingame.status.local_ip", @"本地 IP"), localIP];
+    }
+
+    // 房主流程：显示分享代码
+    if (self.isHostFlowActive && self.lastShareCode.length) {
+        [detail appendFormat:@"\n%@: %@",
+            MPLocalized(@"mp.ingame.status.share_code", @"分享代码"),
+            self.lastShareCode];
+    }
+
+    // 房客流程：显示服务器地址
+    if (self.isGuestFlowActive && self.lastServerAddress.length) {
+        [detail appendFormat:@"\n%@: %@",
+            MPLocalized(@"mp.ingame.status.server_address", @"服务器地址"),
+            self.lastServerAddress];
+    }
+
+    cell.detailTextLabel.text = detail;
+    cell.detailTextLabel.font = [UIFont systemFontOfSize:13];
+    cell.detailTextLabel.numberOfLines = 0;
+
+    // 状态指示点
+    UIColor *statusColor = connected ? [UIColor systemGreenColor] : [UIColor systemGrayColor];
+    UIImage *dotImage = [self circleImageWithColor:statusColor size:10];
+    cell.imageView.image = dotImage;
+
+    // 适配自定义背景
+    if ([[BackgroundManager sharedManager] hasBackground]) {
+        cell.textLabel.textColor = [UIColor whiteColor];
+        cell.detailTextLabel.textColor = [UIColor whiteColor];
+    } else {
+        cell.textLabel.textColor = [UIColor labelColor];
+        cell.detailTextLabel.textColor = [UIColor secondaryLabelColor];
+    }
+
+    [[BackgroundManager sharedManager] applyEffectToCell:cell];
+    return cell;
+}
+
 #pragma mark - UITableViewDelegate
 
+/// 点击行回调：根据模式和 Section 分发
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
 
+    if (self.mode == MultiplayerVCModeInGame) {
+        [self handleInGameSelectionAtIndexPath:indexPath];
+        return;
+    }
+    [self handleLauncherSelectionAtIndexPath:indexPath];
+}
+
+/// 启动器模式点击处理
+- (void)handleLauncherSelectionAtIndexPath:(NSIndexPath *)indexPath {
     switch (indexPath.section) {
         case 0:
             if (indexPath.row == 0) {
-                // 点击输入框行：让输入框获得焦点
-                [self.joinNetworkIdField becomeFirstResponder];
+                // 点击开关行：让开关获得焦点（切换开关状态）
+                // 不做处理，开关自身会响应
             } else if (indexPath.row == 1) {
-                // 点击加入房间按钮
-                [self joinRoomTapped];
+                // 点击 Network ID 行：弹出编辑对话框
+                [self networkIdCellTapped];
             }
             break;
         case 1:
             if (self.rooms.count == 0) {
-                // 空状态：引导用户创建房间
-                [self createRoomTapped];
+                // 空状态：提示用户先设置 Network ID 或直接加入房间
+                [self showSimpleAlertWithTitle:MPLocalized(@"mp.rooms.empty_title", @"暂无房间")
+                                         message:MPLocalized(@"mp.rooms.empty_msg", @"请先在 Section 0 设置 Network ID，然后在游戏内模式中选择当房主或房客")];
             } else {
                 // 点击房间行：弹出 ActionSheet
                 MultiplayerRoom *room = self.rooms[indexPath.row];
@@ -1152,17 +1691,54 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     }
 }
 
+/// 游戏内模式点击处理
+- (void)handleInGameSelectionAtIndexPath:(NSIndexPath *)indexPath {
+    switch (indexPath.section) {
+        case 0:
+            if (indexPath.row == 0) {
+                // 当房主
+                [self hostButtonTapped];
+            } else if (indexPath.row == 1) {
+                // 当房客
+                [self guestButtonTapped];
+            }
+            break;
+        case 1:
+            // 联机状态行：无操作（仅显示信息）
+            // 房主流程激活时点击可重新显示分享代码
+            if (self.isHostFlowActive && self.lastShareCode.length) {
+                [self showHostShareCodeAlert];
+            }
+            break;
+        default:
+            break;
+    }
+}
+
+/// 行高：根据模式和 IndexPath 返回
 - (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
+    if (self.mode == MultiplayerVCModeInGame) {
+        if (indexPath.section == 0) {
+            // 选择角色卡片行：大卡片样式，更高
+            return 76;
+        }
+        if (indexPath.section == 1) {
+            // 联机状态行：动态高度（多行详情）
+            return UITableViewAutomaticDimension;
+        }
+        return 56;
+    }
+    // 启动器模式
     if (indexPath.section == 0) {
-        // Network ID 输入框行 / 加入按钮行
-        return 48;
+        // 联机设置行
+        return 56;
     }
     if (indexPath.section == 1) {
         if (self.rooms.count == 0) {
             // 空状态提示行
             return 60;
         }
-        // 房间行：subtitle 显示 2 行，需要更多空间
+        // 房间行：subtitle 显示 2-3 行，需要更多空间
         return 76;
     }
     if (indexPath.section == 2) {

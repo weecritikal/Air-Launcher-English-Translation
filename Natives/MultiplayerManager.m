@@ -1372,4 +1372,146 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     return YES;
 }
 
+#pragma mark - 分享代码（FCL 风格 Base64 编码）
+
+/// 分享代码的 JSON key 常量
+static NSString * const kShareCodeKeyNetworkId = @"n";
+static NSString * const kShareCodeKeyHostIP = @"h";
+static NSString * const kShareCodeKeyHostPort = @"p";
+static NSString * const kShareCodeKeyRoomName = @"r";
+
+/// 预设 Network ID 的偏好键
+static NSString * const kPresetNetworkIdPrefKey = @"multiplayer.preset_network_id";
+
+- (NSString *)generateShareCodeForRoom:(MultiplayerRoom *)room {
+    if (!room || !room.networkId) {
+        return @"";
+    }
+
+    // 构建 JSON 字典
+    NSMutableDictionary *jsonDict = [NSMutableDictionary dictionary];
+    jsonDict[kShareCodeKeyNetworkId] = room.networkId;
+    if (room.hostIP && room.hostIP.length > 0) {
+        jsonDict[kShareCodeKeyHostIP] = room.hostIP;
+    }
+    if (room.hostPort && room.hostPort.length > 0) {
+        jsonDict[kShareCodeKeyHostPort] = room.hostPort;
+    } else {
+        jsonDict[kShareCodeKeyHostPort] = kDefaultMCPort;
+    }
+    if (room.name && room.name.length > 0) {
+        jsonDict[kShareCodeKeyRoomName] = room.name;
+    }
+
+    // 序列化为 JSON Data
+    NSError *jsonError = nil;
+    NSData *jsonData = [NSJSONSerialization dataWithJSONObject:jsonDict
+                                                       options:NSJSONWritingSortedKeys
+                                                         error:&jsonError];
+    if (jsonError || !jsonData) {
+        NSLog(@"[MultiplayerManager] 生成分享代码失败：JSON 序列化失败 - %@", jsonError);
+        return @"";
+    }
+
+    // Base64 编码（URL 安全：去掉换行符）
+    NSString *base64String = [jsonData base64EncodedStringWithOptions:0];
+    // 去除可能的换行符和空格
+    base64String = [base64String stringByReplacingOccurrencesOfString:@"\n" withString:@""];
+    base64String = [base64String stringByReplacingOccurrencesOfString:@"\r" withString:@""];
+    base64String = [base64String stringByReplacingOccurrencesOfString:@" " withString:@""];
+
+    NSLog(@"[MultiplayerManager] 已生成分享代码（长度=%lu）：%@...",
+          (unsigned long)base64String.length,
+          base64String.length > 20 ? [base64String substringToIndex:20] : base64String);
+
+    return base64String;
+}
+
+- (nullable MultiplayerRoom *)parseShareCode:(NSString *)code {
+    if (!code || code.length == 0) {
+        return nil;
+    }
+
+    // 清理输入：去除首尾空白和换行符
+    NSString *cleanCode = [code stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    if (cleanCode.length == 0) {
+        return nil;
+    }
+
+    // Base64 解码
+    NSData *jsonData = [[NSData alloc] initWithBase64EncodedString:cleanCode
+                                                            options:NSDataBase64DecodingIgnoreUnknownCharacters];
+    if (!jsonData || jsonData.length == 0) {
+        NSLog(@"[MultiplayerManager] 解析分享代码失败：Base64 解码失败");
+        return nil;
+    }
+
+    // JSON 反序列化
+    NSError *jsonError = nil;
+    NSDictionary *jsonDict = [NSJSONSerialization JSONObjectWithData:jsonData
+                                                            options:0
+                                                              error:&jsonError];
+    if (jsonError || !jsonDict || ![jsonDict isKindOfClass:[NSDictionary class]]) {
+        NSLog(@"[MultiplayerManager] 解析分享代码失败：JSON 反序列化失败 - %@", jsonError);
+        return nil;
+    }
+
+    // 提取字段
+    NSString *networkId = jsonDict[kShareCodeKeyNetworkId];
+    NSString *hostIP = jsonDict[kShareCodeKeyHostIP];
+    NSString *hostPort = jsonDict[kShareCodeKeyHostPort];
+    NSString *roomName = jsonDict[kShareCodeKeyRoomName];
+
+    // 校验 Network ID
+    if (!networkId || ![self isValidNetworkId:networkId]) {
+        NSLog(@"[MultiplayerManager] 解析分享代码失败：Network ID 无效 - %@", networkId);
+        return nil;
+    }
+
+    // 构建房间对象
+    MultiplayerRoom *room = [[MultiplayerRoom alloc] init];
+    room.roomId = [self generateRoomId];
+    room.networkId = networkId;
+    room.hostIP = hostIP ?: @"";
+    room.hostPort = hostPort ?: kDefaultMCPort;
+    room.name = roomName ?: [NSString stringWithFormat:@"%@...", [networkId substringToIndex:8]];
+    room.roomDescription = @"";
+    room.ownerName = @"";
+    room.status = MultiplayerRoomStatusDisconnected;
+    room.createdAt = [NSDate date];
+
+    NSLog(@"[MultiplayerManager] 已解析分享代码：roomName=%@ networkId=%@ hostIP=%@ hostPort=%@",
+          room.name, room.networkId, room.hostIP, room.hostPort);
+
+    return room;
+}
+
+#pragma mark - 预设 Network ID 管理（FCL 风格）
+
+- (nullable NSString *)presetNetworkId {
+    NSString *networkId = [[NSUserDefaults standardUserDefaults] stringForKey:kPresetNetworkIdPrefKey];
+    if (networkId && networkId.length > 0 && [self isValidNetworkId:networkId]) {
+        return networkId;
+    }
+    return nil;
+}
+
+- (void)setPresetNetworkId:(nullable NSString *)networkId {
+    if (!networkId || networkId.length == 0) {
+        [[NSUserDefaults standardUserDefaults] removeObjectForKey:kPresetNetworkIdPrefKey];
+        NSLog(@"[MultiplayerManager] 已清除预设 Network ID");
+        return;
+    }
+
+    // 校验格式
+    if (![self isValidNetworkId:networkId]) {
+        NSLog(@"[MultiplayerManager] 预设 Network ID 格式无效，未保存：%@", networkId);
+        return;
+    }
+
+    [[NSUserDefaults standardUserDefaults] setObject:networkId forKey:kPresetNetworkIdPrefKey];
+    [[NSUserDefaults standardUserDefaults] synchronize];
+    NSLog(@"[MultiplayerManager] 已保存预设 Network ID：%@", networkId);
+}
+
 @end
