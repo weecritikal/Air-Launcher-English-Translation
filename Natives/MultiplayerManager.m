@@ -803,6 +803,12 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
 
     room.status = MultiplayerRoomStatusConnecting;
     room.lastConnectedAt = [NSDate date];
+
+    // 关键修复：如果房间不在列表中，先添加到列表，否则后续 updateRoom 都会因找不到 roomId 而失败
+    if (![self roomWithId:room.roomId]) {
+        NSLog(@"[MultiplayerManager] 房间不在列表中，先添加：%@", room.roomId);
+        [self addRoom:room];
+    }
     [self updateRoom:room];
 
     // 2. 完整连接流程（在后台线程执行，避免阻塞主线程）
