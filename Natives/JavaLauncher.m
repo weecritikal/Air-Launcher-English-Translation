@@ -119,6 +119,21 @@ void init_loadCustomJvmFlags(int* argc, const char** argv) {
     jvmargs = [jvmargs stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceCharacterSet];
     jvmargs = [@" " stringByAppendingString:jvmargs];
 
+    // 关键修复（N3+N4）：retainedCustomFlags 强引用所有自定义 JVM flag 字符串，
+    // 防止 [@"-" stringByAppendingString:jvmarg].UTF8String 返回的 C 字符串悬垂。
+    //
+    // 之前 argv[*argc] = [@"-" stringByAppendingString:jvmarg].UTF8String 直接取临时
+    // NSString 的 UTF8String，autoreleased NSString 在 runloop drain 后会释放，
+    // 导致 argv 中的指针悬垂。虽然 launchJava 通常在 JVM 启动前不会 drain autoreleasepool，
+    // 但这是脆弱的隐式依赖。retainedCustomFlags 作为静态变量，生命周期覆盖整个进程，
+    // 保证字符串在 pJLI_Launch 调用期间有效。
+    static NSMutableArray<NSString *> *retainedCustomFlags = nil;
+    if (retainedCustomFlags == nil) {
+        retainedCustomFlags = [NSMutableArray array];
+    }
+    // 注意：不清空 retainedCustomFlags，因为 launchJava 在进程生命周期内只调用一次。
+    // 如果未来变为可多次调用，需要在调用前清空。
+
     NSLog(@"[JavaLauncher] Reading custom JVM flags");
     NSArray *argsToPurge = @[@"Xms", @"Xmx", @"d32", @"d64"];
     for (NSString *arg in [jvmargs componentsSeparatedByString:@" -"]) {
@@ -134,8 +149,15 @@ void init_loadCustomJvmFlags(int* argc, const char** argv) {
         }
         if (ignore) continue;
 
+        // N3 边界检查：argv 数组大小由调用方决定（margv[1000]），这里做防御性检查
+        if (*argc + 1 >= 1000) {
+            NSLog(@"[JavaLauncher] 警告：margv 已达上限（1000），丢弃自定义 JVM flag：-%@", jvmarg);
+            continue;
+        }
+        NSString *flagStr = [@"-" stringByAppendingString:jvmarg];
+        [retainedCustomFlags addObject:flagStr];
         ++*argc;
-        argv[*argc] = [@"-" stringByAppendingString:jvmarg].UTF8String;
+        argv[*argc] = flagStr.UTF8String;
 
         NSLog(@"[JavaLauncher] Added custom JVM flag: %s", argv[*argc]);
     }
@@ -284,13 +306,57 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
     int margc = -1;
     const char *margv[1000];
 
-    margv[++margc] = [NSString stringWithFormat:@"%@/bin/java", javaHome].UTF8String;
-    margv[++margc] = "-XstartOnFirstThread";
+    // 关键修复（N3+N4）：margv 边界检查 + 字符串生命周期管理
+    //
+    // N3（边界检查）：
+    //   margv[1000] 是固定大小数组，每次 margv[++margc] = ... 都没有检查 margc 是否越界。
+    //   如果未来扩展参数可能造成栈缓冲区溢出。这里通过 PUSH_MARGV_* 宏做防御性边界检查。
+    //
+    // N4（悬垂指针）：
+    //   [NSString stringWithFormat:...].UTF8String 返回的 C 字符串指针依赖 autoreleased NSString
+    //   的生命周期。当前 launchJVM 函数没有显式 @autoreleasepool 包裹整个函数体，autoreleased
+    //   对象进入当前线程的 autorelease pool，到下一次 runloop drain 时才释放。由于函数末尾立即
+    //   调用 pJLI_Launch(margc, margv, ...)，期间没有显式 drain，所以暂时安全。
+    //   但这是脆弱的隐式依赖：如果将来有人在中间插入 @autoreleasepool 块或调用 drain，
+    //   所有 margv 中由 stringWithFormat: 生成的指针会立即悬垂，导致 JVM 启动崩溃。
+    //
+    //   修复方案：用 retainedStrings 数组强引用所有通过 stringWithFormat: 创建的 NSString，
+    //   确保其生命周期覆盖 pJLI_Launch 调用。retainedStrings 是局部 strong 引用，随函数
+    //   退出自动释放，无需手动管理。
+    NSMutableArray<NSString *> *retainedStrings = [NSMutableArray array];
+
+    // 宏：安全地添加一个字面量参数到 margv
+    // 字符串字面量（如 "-XstartOnFirstThread"）是静态存储期的 const char*，永不失效
+    // 边界检查：margc 达到上限时停止添加，避免栈溢出
+    #define PUSH_MARGV_LITERAL(literal) do { \
+        if (margc + 1 < 1000) { \
+            margv[++margc] = (literal); \
+        } else { \
+            NSLog(@"[JavaLauncher] 警告：margv 已达上限（1000），丢弃字面量参数 %s", (literal)); \
+        } \
+    } while (0)
+
+    // 宏：通过 stringWithFormat: 构造参数并添加到 margv
+    // 创建的 NSString 会被 retainedStrings 强引用，直到函数返回才释放，
+    // 保证 margv 中保存的 UTF8String 指针在 pJLI_Launch 调用期间有效。
+    // 注意：NSLog 警告消息不直接用 fmt 作为格式串（避免 % 被错误解析），仅打印字面量提示。
+    #define PUSH_MARGV_FORMAT(ns_fmt, ...) do { \
+        if (margc + 1 < 1000) { \
+            NSString *_tmpStr = [NSString stringWithFormat:(ns_fmt), ##__VA_ARGS__]; \
+            [retainedStrings addObject:_tmpStr]; \
+            margv[++margc] = _tmpStr.UTF8String; \
+        } else { \
+            NSLog(@"[JavaLauncher] 警告：margv 已达上限（1000），丢弃格式化参数"); \
+        } \
+    } while (0)
+
+    PUSH_MARGV_FORMAT(@"%@/bin/java", javaHome);
+    PUSH_MARGV_LITERAL("-XstartOnFirstThread");
     if (!launchJar) {
-        margv[++margc] = "-Djava.system.class.loader=net.kdt.pojavlaunch.PojavClassLoader";
+        PUSH_MARGV_LITERAL("-Djava.system.class.loader=net.kdt.pojavlaunch.PojavClassLoader");
     }
-    margv[++margc] = "-Xms128M";
-    margv[++margc] = [NSString stringWithFormat:@"-Xmx%dM", allocmem].UTF8String;
+    PUSH_MARGV_LITERAL("-Xms128M");
+    PUSH_MARGV_FORMAT(@"-Xmx%dM", allocmem);
     // Detect LWJGL version early to set correct library path
     // 参照 Taylen-chud/Amethyst-iOS（Rebase-everything）的 dylib 布局：
     //   Frameworks/              = 共享 dylib（libMoltenVK/libopenal/libOSMesa/libgl4es/libglapi/libvirgil_test_server/libspirv-cross-c-shared.0）
@@ -342,16 +408,16 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
     // 26.x（LWJGL 3.4.x）走 lwjgl34/，旧版走 lwjgl33/。共享 dylib 始终从根目录 Frameworks/ 加载。
     NSString *lwjglNativesSubfolder = useLWJGL33 ? @"lwjgl33" : @"lwjgl34";
     NSString *lwjglFrameworksPath = [frameworksPath stringByAppendingPathComponent:lwjglNativesSubfolder];
-    margv[++margc] = [NSString stringWithFormat:@"-Djava.library.path=%@:%@", frameworksPath, lwjglFrameworksPath].UTF8String;
+    PUSH_MARGV_FORMAT(@"-Djava.library.path=%@:%@", frameworksPath, lwjglFrameworksPath);
     NSLog(@"[JavaLauncher] library.path = %@:%@ (useLWJGL33=%d)", frameworksPath, lwjglFrameworksPath, useLWJGL33);
-    margv[++margc] = [NSString stringWithFormat:@"-Duser.dir=%@", gameDir].UTF8String;
-    margv[++margc] = [NSString stringWithFormat:@"-Duser.home=%s", getenv("POJAV_HOME")].UTF8String;
-    margv[++margc] = [NSString stringWithFormat:@"-Duser.timezone=%@", NSTimeZone.localTimeZone.name].UTF8String;
-    margv[++margc] = [NSString stringWithFormat:@"-DUIScreen.maximumFramesPerSecond=%d", (int)UIScreen.mainScreen.maximumFramesPerSecond].UTF8String;
-    margv[++margc] = "-Dorg.lwjgl.glfw.checkThread0=false";
-    margv[++margc] = "-Dorg.lwjgl.system.allocator=system";
-    //margv[++margc] = "-Dorg.lwjgl.util.NoChecks=true";
-    margv[++margc] = "-Dlog4j2.formatMsgNoLookups=true";
+    PUSH_MARGV_FORMAT(@"-Duser.dir=%@", gameDir);
+    PUSH_MARGV_FORMAT(@"-Duser.home=%s", getenv("POJAV_HOME"));
+    PUSH_MARGV_FORMAT(@"-Duser.timezone=%@", NSTimeZone.localTimeZone.name);
+    PUSH_MARGV_FORMAT(@"-DUIScreen.maximumFramesPerSecond=%d", (int)UIScreen.mainScreen.maximumFramesPerSecond);
+    PUSH_MARGV_LITERAL("-Dorg.lwjgl.glfw.checkThread0=false");
+    PUSH_MARGV_LITERAL("-Dorg.lwjgl.system.allocator=system");
+    //PUSH_MARGV_LITERAL("-Dorg.lwjgl.util.NoChecks=true");
+    PUSH_MARGV_LITERAL("-Dlog4j2.formatMsgNoLookups=true");
 
     // ============================================================================
     // ZeroTier 联机 SOCKS5 代理注入
@@ -392,8 +458,8 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
             // 校验端口为纯数字且在有效范围
             NSInteger portValue = [proxyPortStr integerValue];
             if (portValue > 0 && portValue <= 65535) {
-                margv[++margc] = [NSString stringWithFormat:@"-DsocksProxyHost=%@", proxyHost].UTF8String;
-                margv[++margc] = [NSString stringWithFormat:@"-DsocksProxyPort=%@", proxyPortStr].UTF8String;
+                PUSH_MARGV_FORMAT(@"-DsocksProxyHost=%@", proxyHost);
+                PUSH_MARGV_FORMAT(@"-DsocksProxyPort=%@", proxyPortStr);
 
                 // 关键修复（C4/H13）：注入 -DsocksNonProxyHosts 参数，让 Minecraft 登录、
                 // 认证、皮肤、披风、版本库、Mod 下载等官方/第三方服务请求绕过 SOCKS5 代理。
@@ -443,7 +509,7 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
                                           @"172.19.*|172.20.*|172.21.*|172.22.*|172.23.*|"
                                           @"172.24.*|172.25.*|172.26.*|172.27.*|172.28.*|"
                                           @"172.29.*|172.30.*|172.31.*";
-                margv[++margc] = [NSString stringWithFormat:@"-DsocksNonProxyHosts=%@", nonProxyHosts].UTF8String;
+                PUSH_MARGV_FORMAT(@"-DsocksNonProxyHosts=%@", nonProxyHosts);
 
                 NSLog(@"[JavaLauncher] 已注入 ZeroTier SOCKS5 代理：%@:%@（同时注入 socksNonProxyHosts 让登录/皮肤/Mod 下载绕过代理）",
                       proxyHost, proxyPortStr);
@@ -479,7 +545,7 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
         }
         if (strcmp(glLibName, RENDERER_NAME_VULKAN) == 0) {
             // Vulkan mode: set vulkan libname and fallback opengl libname for LWJGL startup probing
-            margv[++margc] = [NSString stringWithFormat:@"-Dorg.lwjgl.vulkan.libname=%s", RENDERER_NAME_VULKAN].UTF8String;
+            PUSH_MARGV_FORMAT(@"-Dorg.lwjgl.vulkan.libname=%s", RENDERER_NAME_VULKAN);
             // 参照 TAYlen-chud/Amethyst-iOS: Vulkan 模式下 OpenGL 回退库使用 MobileGlues 而非 ANGLE
             // 原因：MC 26.2 的 NativeLibrariesBootstrap.loadOpenGL() 在启动时会初始化 GL，
             // iOS 上无系统 OpenGL framework，ANGLE 可能不如 MobileGlues 适合
@@ -493,7 +559,7 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
                 glLibName = RENDERER_NAME_MTL_ANGLE;
             }
         }
-        margv[++margc] = [NSString stringWithFormat:@"-Dorg.lwjgl.opengl.libname=%s", glLibName].UTF8String;
+        PUSH_MARGV_FORMAT(@"-Dorg.lwjgl.opengl.libname=%s", glLibName);
 
         // 显式指定 spirv-cross 库名（参照 catsruledogs/Amethyst-iOS-25）：
         // LWJGL spvc 模块默认查找 "spirv-cross" -> 加载 libspirv-cross.dylib（macOS 标准名），
@@ -514,7 +580,7 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
         // - 若 libname 已含 "lib" 前缀和 ".dylib" 后缀，直接使用
         // - 否则加 "lib" 前缀和 ".dylib" 后缀
         // "spirv-cross-c-shared.0" -> "libspirv-cross-c-shared.0.dylib"（正确，不会二次包装）
-        margv[++margc] = "-Dorg.lwjgl.spvc.libname=spirv-cross-c-shared.0";
+        PUSH_MARGV_LITERAL("-Dorg.lwjgl.spvc.libname=spirv-cross-c-shared.0");
     }
 
       // 添加authlib-injector参数以支持第三方认证账户的皮肤显示
@@ -525,7 +591,9 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
             NSArray *authlibArgs = [(ThirdPartyAuthenticator *)currentAuth getJvmArgsForAuthlib];
             if (authlibArgs.count > 0) {
                 for (NSString *arg in authlibArgs) {
-                    margv[++margc] = arg.UTF8String;
+                    // arg 来自 authlibArgs 数组，是 strong 引用；但数组本身可能在循环外
+                    // 被释放，为防止悬垂，通过 PUSH_MARGV_FORMAT 持久化
+                    PUSH_MARGV_FORMAT(@"%@", arg);
                     NSLog(@"[JavaLauncher] Added authlib-injector arg: %s", arg.UTF8String);
                 }     
             } else {
@@ -535,25 +603,25 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
     }
   
     NSString *librariesPath = [NSString stringWithFormat:@"%@/libs", NSBundle.mainBundle.bundlePath];
-    margv[++margc] = [NSString stringWithFormat:@"-javaagent:%@/patchjna_agent.jar=", librariesPath].UTF8String;
+    PUSH_MARGV_FORMAT(@"-javaagent:%@/patchjna_agent.jar=", librariesPath);
     if(getPrefBool(@"general.cosmetica")) {
-        margv[++margc] = [NSString stringWithFormat:@"-javaagent:%@/arc_dns_injector.jar=23.95.137.176", librariesPath].UTF8String;
+        PUSH_MARGV_FORMAT(@"-javaagent:%@/arc_dns_injector.jar=23.95.137.176", librariesPath);
     }
     if(getPrefBool(@"video.fix_simple_voice_chat_mod")) {
-        margv[++margc] = [NSString stringWithFormat:@"-javaagent:%@/patchsvc.jar=", librariesPath].UTF8String;
+        PUSH_MARGV_FORMAT(@"-javaagent:%@/patchsvc.jar=", librariesPath);
     }
 
     // Workaround random stack guard allocation crashes
-    margv[++margc] = "-XX:+UnlockExperimentalVMOptions";
-    margv[++margc] = "-XX:+DisablePrimordialThreadGuardPages";
+    PUSH_MARGV_LITERAL("-XX:+UnlockExperimentalVMOptions");
+    PUSH_MARGV_LITERAL("-XX:+DisablePrimordialThreadGuardPages");
 
     // On iOS 26, use mirror mapped JIT by default
     if (@available(iOS 26.0, *)) {
-        margv[++margc] = "-XX:+MirrorMappedCodeCache";
+        PUSH_MARGV_LITERAL("-XX:+MirrorMappedCodeCache");
     }
 
     // Disable Forge 1.16.x early progress window
-    margv[++margc] = "-Dfml.earlyprogresswindow=false";
+    PUSH_MARGV_LITERAL("-Dfml.earlyprogresswindow=false");
 
     // Load java
     NSString *libjlipath8 = [NSString stringWithFormat:@"%@/lib/jli/libjli.dylib", javaHome]; // java 8
@@ -573,15 +641,15 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
     }
 
     // Setup Caciocavallo
-    margv[++margc] = "-Djava.awt.headless=false";
-    margv[++margc] = "-Dcacio.font.fontmanager=sun.awt.X11FontManager";
-    margv[++margc] = "-Dcacio.font.fontscaler=sun.font.FreetypeFontScaler";
-    margv[++margc] = [NSString stringWithFormat:@"-Dcacio.managed.screensize=%dx%d", width, height].UTF8String;
-    margv[++margc] = "-Dswing.defaultlaf=javax.swing.plaf.metal.MetalLookAndFeel";
+    PUSH_MARGV_LITERAL("-Djava.awt.headless=false");
+    PUSH_MARGV_LITERAL("-Dcacio.font.fontmanager=sun.awt.X11FontManager");
+    PUSH_MARGV_LITERAL("-Dcacio.font.fontscaler=sun.font.FreetypeFontScaler");
+    PUSH_MARGV_FORMAT(@"-Dcacio.managed.screensize=%dx%d", width, height);
+    PUSH_MARGV_LITERAL("-Dswing.defaultlaf=javax.swing.plaf.metal.MetalLookAndFeel");
     if (isJava8) {
         // Setup Caciocavallo
-        margv[++margc] = "-Dawt.toolkit=net.java.openjdk.cacio.ctc.CTCToolkit";
-        margv[++margc] = "-Djava.awt.graphicsenv=net.java.openjdk.cacio.ctc.CTCGraphicsEnvironment";
+        PUSH_MARGV_LITERAL("-Dawt.toolkit=net.java.openjdk.cacio.ctc.CTCToolkit");
+        PUSH_MARGV_LITERAL("-Djava.awt.graphicsenv=net.java.openjdk.cacio.ctc.CTCGraphicsEnvironment");
     } else {
         // 启用 native access（Java 17+ 支持，Java 25 强制要求）。
         // 参照 catsruledogs/Amethyst-iOS-25：Java 25 对受限方法（@Restricted，含 JNI、
@@ -590,31 +658,31 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
         // get_method_id 访问不一致的类元数据导致 SIGSEGV（26.2 启动崩溃的根因）。
         // 日志中 "WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning"
         // 也明确提示需要此参数。Java 17/21 添加此参数无副作用，统一在非 Java 8 分支添加。
-        margv[++margc] = "--enable-native-access=ALL-UNNAMED";
+        PUSH_MARGV_LITERAL("--enable-native-access=ALL-UNNAMED");
 
         // Required by Cosmetica to inject DNS
-        margv[++margc] = "--add-opens=java.base/java.net=ALL-UNNAMED";
+        PUSH_MARGV_LITERAL("--add-opens=java.base/java.net=ALL-UNNAMED");
 
         // Setup Caciocavallo
-        margv[++margc] = "-Dawt.toolkit=com.github.caciocavallosilano.cacio.ctc.CTCToolkit";
-        margv[++margc] = "-Djava.awt.graphicsenv=com.github.caciocavallosilano.cacio.ctc.CTCGraphicsEnvironment";
+        PUSH_MARGV_LITERAL("-Dawt.toolkit=com.github.caciocavallosilano.cacio.ctc.CTCToolkit");
+        PUSH_MARGV_LITERAL("-Djava.awt.graphicsenv=com.github.caciocavallosilano.cacio.ctc.CTCGraphicsEnvironment");
 
         // Required by Caciocavallo17 to access internal API
-        margv[++margc] = "--add-exports=java.desktop/java.awt=ALL-UNNAMED";
-        margv[++margc] = "--add-exports=java.desktop/java.awt.peer=ALL-UNNAMED";
-        margv[++margc] = "--add-exports=java.desktop/sun.awt.image=ALL-UNNAMED";
-        margv[++margc] = "--add-exports=java.desktop/sun.java2d=ALL-UNNAMED";
-        margv[++margc] = "--add-exports=java.desktop/java.awt.dnd.peer=ALL-UNNAMED";
-        margv[++margc] = "--add-exports=java.desktop/sun.awt=ALL-UNNAMED";
-        margv[++margc] = "--add-exports=java.desktop/sun.awt.event=ALL-UNNAMED";
-        margv[++margc] = "--add-exports=java.desktop/sun.awt.datatransfer=ALL-UNNAMED";
-        margv[++margc] = "--add-exports=java.desktop/sun.font=ALL-UNNAMED";
-        margv[++margc] = "--add-exports=java.base/sun.security.action=ALL-UNNAMED";
-        margv[++margc] = "--add-opens=java.base/java.util=ALL-UNNAMED";
-        margv[++margc] = "--add-opens=java.desktop/java.awt=ALL-UNNAMED";
-        margv[++margc] = "--add-opens=java.desktop/sun.font=ALL-UNNAMED";
-        margv[++margc] = "--add-opens=java.desktop/sun.java2d=ALL-UNNAMED";
-        margv[++margc] = "--add-opens=java.base/java.lang.reflect=ALL-UNNAMED";
+        PUSH_MARGV_LITERAL("--add-exports=java.desktop/java.awt=ALL-UNNAMED");
+        PUSH_MARGV_LITERAL("--add-exports=java.desktop/java.awt.peer=ALL-UNNAMED");
+        PUSH_MARGV_LITERAL("--add-exports=java.desktop/sun.awt.image=ALL-UNNAMED");
+        PUSH_MARGV_LITERAL("--add-exports=java.desktop/sun.java2d=ALL-UNNAMED");
+        PUSH_MARGV_LITERAL("--add-exports=java.desktop/java.awt.dnd.peer=ALL-UNNAMED");
+        PUSH_MARGV_LITERAL("--add-exports=java.desktop/sun.awt=ALL-UNNAMED");
+        PUSH_MARGV_LITERAL("--add-exports=java.desktop/sun.awt.event=ALL-UNNAMED");
+        PUSH_MARGV_LITERAL("--add-exports=java.desktop/sun.awt.datatransfer=ALL-UNNAMED");
+        PUSH_MARGV_LITERAL("--add-exports=java.desktop/sun.font=ALL-UNNAMED");
+        PUSH_MARGV_LITERAL("--add-exports=java.base/sun.security.action=ALL-UNNAMED");
+        PUSH_MARGV_LITERAL("--add-opens=java.base/java.util=ALL-UNNAMED");
+        PUSH_MARGV_LITERAL("--add-opens=java.desktop/java.awt=ALL-UNNAMED");
+        PUSH_MARGV_LITERAL("--add-opens=java.desktop/sun.font=ALL-UNNAMED");
+        PUSH_MARGV_LITERAL("--add-opens=java.desktop/sun.java2d=ALL-UNNAMED");
+        PUSH_MARGV_LITERAL("--add-opens=java.base/java.lang.reflect=ALL-UNNAMED");
         // 参照 catsruledogs/Amethyst-iOS-25：不添加 sun.awt / sun.awt.image / java.awt.peer 的
         // add-opens。catsruledogs 不加这些 opens 也能正常启动 26.2 + Java 25。
         // workspace 之前多加这 3 条 opens 会导致 Java 25 上 GE 提前初始化，
@@ -626,7 +694,7 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
         // 之前仅对 Java 17/21 添加、Java 25 跳过，导致 26.2 + Java 25 启动时类加载混乱，
         // 最终在 get_method_id 阶段 SIGSEGV。catsruledogs 对所有版本统一添加此导出且能正常启动 26.2。
         // TODO: workaround, will be removed once the startup part works without PLaunchApp
-        margv[++margc] = "--add-exports=cpw.mods.bootstraplauncher/cpw.mods.bootstraplauncher=ALL-UNNAMED";
+        PUSH_MARGV_LITERAL("--add-exports=cpw.mods.bootstraplauncher/cpw.mods.bootstraplauncher=ALL-UNNAMED");
     }
 
     // Add Caciocavallo bootclasspath
@@ -694,7 +762,7 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
             cacio_classpath = [NSString stringWithFormat:@"%@:%@/%@", cacio_classpath, cacio_libs_path, file];
         }
     }
-    margv[++margc] = cacio_classpath.UTF8String;
+    PUSH_MARGV_FORMAT(@"%@", cacio_classpath);
 
     // stub-surface-manager.jar 已删除（见上方注释）。不再使用 --patch-module。
     // CTCPreloadClassLoader.<clinit> 抛出的 ClassNotFoundException 被吞掉，不影响启动。
@@ -703,12 +771,14 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
         // In jailed environment, where extended virtual addressing entitlement isn't
         // present (for free dev account), allocating compressed space fails.
         // FIXME: does extended VA allow allocating compressed class space?
-        margv[++margc] = "-XX:-UseCompressedClassPointers";
+        PUSH_MARGV_LITERAL("-XX:-UseCompressedClassPointers");
     }
 
     if ([launchTarget isKindOfClass:NSDictionary.class]) {
         for (NSString *arg in launchTarget[@"arguments"][@"jvm_processed"]) {
-            margv[++margc] = arg.UTF8String;
+            // arg 来自 launchTarget[@"arguments"][@"jvm_processed"] 数组，是 strong 引用；
+            // 但 launchTarget 可能在循环结束后被释放，为防止悬垂，通过 PUSH_MARGV_FORMAT 持久化
+            PUSH_MARGV_FORMAT(@"%@", arg);
         }
     }
 
@@ -747,27 +817,27 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
         // 与 UIKit bridge 类需要加载，但 installer 自身依赖应优先
         classpath = [NSString stringWithFormat:@"%@:%@", launchTarget, classpath];
     }
-    margv[++margc] = "-cp";
-    margv[++margc] = classpath.UTF8String;
-    margv[++margc] = "net.kdt.pojavlaunch.PojavLauncher";
+    PUSH_MARGV_LITERAL("-cp");
+    PUSH_MARGV_FORMAT(@"%@", classpath);
+    PUSH_MARGV_LITERAL("net.kdt.pojavlaunch.PojavLauncher");
 
     if (launchJar) {
-        margv[++margc] = "-jar";
+        PUSH_MARGV_LITERAL("-jar");
     } else {
-        margv[++margc] = accountId.UTF8String;
+        PUSH_MARGV_FORMAT(@"%@", accountId);
     }
 
     if ([launchTarget isKindOfClass:NSDictionary.class]) {
-        margv[++margc] = [launchTarget[@"id"] UTF8String];
+        PUSH_MARGV_FORMAT(@"%@", launchTarget[@"id"]);
         // 传递服务器地址给 PojavLauncher（FCL 风格）：
         // 留空传 @"", Java 端据此判断不追加任何参数；非空则由 Java 端按 MC 版本
         // 解析为 --server/--port 或 --quickPlayMultiplayer
         NSString *serverIp = [PLProfiles.current serverIpForCurrentProfile] ?: @"";
-        margv[++margc] = serverIp.UTF8String;
+        PUSH_MARGV_FORMAT(@"%@", serverIp);
     } else {
-        margv[++margc] = [launchTarget UTF8String];
+        PUSH_MARGV_FORMAT(@"%@", launchTarget);
     }
-    //margv[++margc] = "ghidra.GhidraRun";
+    //PUSH_MARGV_LITERAL("ghidra.GhidraRun");
 
     pJLI_Launch = (JLI_Launch_func *)dlsym(libjli, "JLI_Launch");
 

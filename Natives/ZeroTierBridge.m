@@ -327,6 +327,39 @@ static void zeroTierEventCallback(void *msgPtr) {
     }
     [_lock unlock];
 
+    // 关键修复（N7）：处理 stopNode 主线程不等待导致的 startNode 竞争。
+    //
+    // 问题：stopNode 在主线程调用时不等待节点真正下线（避免阻塞 UI），仅设置 _isStarted=NO。
+    // 如果立即调用 startNode（如断开后立即重连），libzt 内部节点可能仍在关闭中：
+    //   - zts_node_is_online() 仍返回 1
+    //   - zts_init_from_storage 可能返回错误或行为未定义
+    //   - zts_node_start 可能失败
+    //
+    // 修复方案：在 startNode 进入初始化流程前，检测 libzt 内部是否仍有"残留"节点在线
+    // （_isStarted=NO 但 zts_node_is_online()=1）。如果有，先等待其真正下线再继续。
+    // 主线程最多等待 2 秒（避免长时间卡 UI），后台线程最多等待 5 秒。
+    if (zts_node_is_online() == 1) {
+        BOOL isMainThread = [NSThread isMainThread];
+        NSTimeInterval maxWait = isMainThread ? 2.0 : 5.0;
+        NSLog(@"[ZeroTierBridge] startNode：检测到 libzt 内部仍有残留节点在线（_isStarted=NO），"
+              @"等待其下线（最多 %.0f 秒，isMainThread=%d）", maxWait, isMainThread);
+        NSTimeInterval waitDeadline = [NSDate timeIntervalSinceReferenceDate] + maxWait;
+        int onlineCheck = zts_node_is_online();
+        int pollCount = 0;
+        while (onlineCheck == 1 && [NSDate timeIntervalSinceReferenceDate] < waitDeadline) {
+            [NSThread sleepForTimeInterval:0.1];
+            onlineCheck = zts_node_is_online();
+            pollCount++;
+        }
+        if (onlineCheck == 1) {
+            NSLog(@"[ZeroTierBridge] startNode 警告：残留节点在线等待超时（%.0f 秒），"
+                  @"继续尝试初始化（可能失败）", maxWait);
+        } else {
+            NSLog(@"[ZeroTierBridge] startNode：残留节点已下线（polling %d 次，约 %.1f 秒）",
+                  pollCount, pollCount * 0.1);
+        }
+    }
+
     NSLog(@"[ZeroTierBridge] 启动节点，homeDir = %@", homeDir);
 
     // 步骤 1：初始化存储路径
@@ -340,6 +373,10 @@ static void zeroTierEventCallback(void *msgPtr) {
                                           code:ZeroTierErrorCodeNodeStartFailed
                                       userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"初始化存储目录失败 (code=%d)", result]}];
         }
+        // 关键修复（N6）：zts_init_from_storage 失败，libzt 内部状态可能未清理。
+        // 调用 zts_node_stop 请求清理（即使节点未启动，调用也是安全的），
+        // 确保下次 startNode 能正常重新初始化。
+        zts_node_stop();
         return NO;
     }
     NSLog(@"[ZeroTierBridge] zts_init_from_storage 成功");
@@ -355,6 +392,10 @@ static void zeroTierEventCallback(void *msgPtr) {
                                           code:ZeroTierErrorCodeNodeStartFailed
                                       userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"设置事件回调失败 (code=%d)", result]}];
         }
+        // 关键修复（N6）：zts_init_from_storage 已成功，但 event_handler 设置失败。
+        // libzt 内部可能已部分初始化（存储路径已设置），调用 zts_node_stop 请求清理，
+        // 确保下次 startNode 能正常重新初始化。
+        zts_node_stop();
         return NO;
     }
     NSLog(@"[ZeroTierBridge] zts_init_set_event_handler 成功");
@@ -370,6 +411,10 @@ static void zeroTierEventCallback(void *msgPtr) {
                                           code:ZeroTierErrorCodeNodeStartFailed
                                       userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"节点启动失败 (code=%d)", result]}];
         }
+        // 关键修复（N6）：zts_init_from_storage 和 zts_init_set_event_handler 都已成功，
+        // libzt 内部已部分初始化。zts_node_start 失败时调用 zts_node_stop 请求清理，
+        // 确保下次 startNode 能正常重新初始化。
+        zts_node_stop();
         return NO;
     }
 
@@ -466,13 +511,32 @@ static void zeroTierEventCallback(void *msgPtr) {
     int online = zts_node_is_online();
     // 关键修复：如果 zts_node_is_online() 返回 1 但 _hasBeenOnline 还未被事件回调设置，
     // 在这里同步设置（事件回调可能因主线程阻塞而延迟，但 API 查询是实时的）
+    //
+    // 关键修复（N5）：仅在 _isStarted=YES 时才更新 _hasBeenOnline。
+    //
+    // 问题：stopNode 在主线程调用时，先调用 zts_node_stop()（异步），再立即设置
+    // _isStarted=NO、_hasBeenOnline=NO。但 libzt 内部节点可能仍在运行（zts_node_is_online()
+    // 仍返回 1）。如果此时立即调用 isNodeOnline，旧的实现会因 online==1 而把
+    // _hasBeenOnline 重新设置为 YES，导致状态机混乱：
+    //   - _nodeStatus=Stopped 但 _hasBeenOnline=YES 且 isNodeOnline=YES
+    //   - 后续 waitForNodeOnlineWithTimeout: 因 _hasBeenOnline=YES 而错误认为节点可用
+    //
+    // 修复方案：只有在 _isStarted=YES 时才认为是节点真正上线，才更新 _hasBeenOnline。
+    // stopNode 后即使 zts_node_is_online() 短暂返回 1，也不会污染 _hasBeenOnline。
+    // 同时，若 _isStarted=NO 但 libzt 报告 online，返回 NO 以反映调用方的 stop 意图。
     if (online == 1) {
         [_lock lock];
-        if (!_hasBeenOnline) {
+        BOOL started = _isStarted;
+        if (started && !_hasBeenOnline) {
             _hasBeenOnline = YES;
             NSLog(@"[ZeroTierBridge] isNodeOnline 检测到节点上线，同步设置 _hasBeenOnline = YES");
         }
         [_lock unlock];
+
+        if (!started) {
+            NSLog(@"[ZeroTierBridge] isNodeOnline：zts_node_is_online()=1 但 _isStarted=NO（stopNode 后残留），返回 NO");
+            return NO;
+        }
     }
     return online == 1;
 }

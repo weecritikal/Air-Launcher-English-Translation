@@ -1206,6 +1206,19 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     NSLog(@"[MultiplayerManager] ZeroTier 网络就绪：networkID=%llu ipv4=%@ ipv6=%@",
           networkID, ipv4 ?: @"(nil)", ipv6 ?: @"(nil)");
 
+    // 关键修复（N8）：将 currentRoom 读取、isAdhoc 判断、effectiveIP 计算全部移入 _stateLock 内。
+    //
+    // 问题：之前在锁外读取 self.currentRoom，然后计算 isAdhoc 和 effectiveIP，
+    // 再进入锁内检查 _currentNetworkID。在锁外读取与锁内检查之间存在时间窗口，
+    // 在此窗口内 disconnectCurrentRoom 可能清空 currentRoom 和 currentNetworkID。
+    // 虽然实际影响有限（effectiveIP 已被计算但不会被写入，因为 _currentNetworkID 已被清空），
+    // 但仍存在以下风险：
+    //   - 在锁外读取的 currentRoom 在进入锁内时可能已被替换为另一个房间（切换房间场景）
+    //   - 导致 effectiveIP 使用旧房间的 isAdhoc 判断写入到新房间的 currentLocalIP
+    //
+    // 修复方案：所有相关读取和判断都在 _stateLock 内完成，确保状态一致性。
+    [_stateLock lock];
+
     // 判断当前网络是否为 Ad-hoc 网络
     // Ad-hoc 网络只有 IPv6 地址，需要使用 ipv6 而非 ipv4
     MultiplayerRoom *currentRoom = self.currentRoom;
@@ -1213,14 +1226,13 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     NSString *effectiveIP = isAdhoc ? ipv6 : ipv4;
 
     // 更新当前房间的本地 IP
-    [_stateLock lock];
     if (_currentNetworkID == networkID) {
         self.currentLocalIP = effectiveIP;
         // 关键修复（对标 FCL/HMCL）：ZeroTier 网络就绪回调可能晚于 connectToRoomFlow 完成，
         // 此处也需将 IP 同步到 room.hostIP，确保分享文本能输出正确的服务器地址。
         // Ad-hoc 模式下使用 IPv6，标准模式下使用 IPv4。
     }
-    MultiplayerRoom *room = self.currentRoom;
+    MultiplayerRoom *room = currentRoom;
     BOOL needsUpdate = NO;
     if (room && effectiveIP && effectiveIP.length > 0) {
         // 仅当 IP 变化时才更新，避免重复写入

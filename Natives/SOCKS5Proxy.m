@@ -49,6 +49,7 @@
 #include <errno.h>
 #include <sys/select.h>
 #include <sys/time.h>
+#include <stdatomic.h>  // C11 原子操作，用于 forwardDataBetweenClientFD: 中的标志变量
 
 #pragma mark - 常量定义
 
@@ -495,6 +496,23 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
 /// 关键修复（M4）：stop 后短暂等待，让客户端线程有机会清理资源，
 /// 然后再由调用方离开 ZeroTier 网络。
 - (void)stop {
+    // 关键修复（N1）：stop 在主线程被调用时会阻塞 UI 最长 2 秒。
+    //
+    // 触发链路：用户点击「断开连接」按钮 → MultiplayerManager.disconnectCurrentRoom
+    // （主线程）→ SOCKS5Proxy.stop（主线程）→ 等待客户端线程退出（2 秒）→ UI 卡死。
+    //
+    // 修复方案：
+    //   1. 所有立即性的清理工作（关闭监听 socket、shutdown 客户端/远程 fd、清空列表、
+    //      设置 _running=NO）都在当前线程同步执行，确保 stop 返回后代理不再接受
+    //      新连接、不再转发数据，状态对调用方立即可见
+    //   2. 「等待客户端线程退出」这一耗时操作改为：主线程异步派发到后台队列执行，
+    //      不阻塞 UI；后台线程则同步等待（disconnectCurrentRoom 通常在主线程，
+    //      但若在后台线程调用则同步等待无影响）
+    //
+    // 这样 stop 在主线程调用时几乎立即返回（仅耗时 shutdown 系统调用），UI 不卡顿；
+    // 客户端线程在后台线程被等待退出，资源仍会被正确清理。
+    BOOL isMainThread = [NSThread isMainThread];
+
     [_lock lock];
     if (!_running) {
         [_lock unlock];
@@ -502,7 +520,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
         return;
     }
 
-    NSLog(@"[SOCKS5Proxy] 停止代理服务器...");
+    NSLog(@"[SOCKS5Proxy] 停止代理服务器（isMainThread=%d）...", isMainThread);
     _running = NO;
 
     // 关闭监听 socket，这会导致 accept() 返回错误，accept 线程退出
@@ -555,19 +573,47 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
     NSLog(@"[SOCKS5Proxy] 已 shutdown 所有客户端连接，等待 %lu 个客户端线程退出...",
           (unsigned long)threads.count);
 
-    // 关键修复（C1）：等待客户端线程退出（带超时，避免无限等待）
-    // 客户端线程被 shutdown 唤醒后会很快退出，但需要给它们一点时间
-    NSTimeInterval waitDeadline = [NSDate timeIntervalSinceReferenceDate] + 2.0;
-    for (NSThread *thread in threads) {
-        while (![thread isFinished] && [NSDate timeIntervalSinceReferenceDate] < waitDeadline) {
-            [NSThread sleepForTimeInterval:0.05];
-        }
-        if (![thread isFinished]) {
-            NSLog(@"[SOCKS5Proxy] 警告：客户端线程 %@ 未在 2 秒内退出", thread.name);
-        }
+    // 关键修复（N1）：等待客户端线程退出（带超时，避免无限等待）
+    // - 后台线程：同步等待，调用方已不在主线程，阻塞无 UI 影响
+    // - 主线程：异步派发到后台队列执行等待，避免 UI 卡死
+    //   客户端线程被 shutdown 唤醒后会很快退出，等待逻辑即使异步执行也不会延迟
+    //   下一次 startWithPort:（startWithPort: 内部已检测 _running 标志和 _listenFD，
+    //   且强制停止旧代理时也只等待 0.1 秒，不会与异步等待冲突）
+    if (threads.count == 0) {
+        NSLog(@"[SOCKS5Proxy] 代理已停止（无活跃客户端线程）");
+        return;
     }
 
-    NSLog(@"[SOCKS5Proxy] 代理已停止，所有客户端连接已清理");
+    if (isMainThread) {
+        // 主线程：异步派发到后台队列等待，不阻塞 UI
+        NSArray<NSThread *> *threadsToWait = [threads copy];
+        dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+            NSTimeInterval waitDeadline = [NSDate timeIntervalSinceReferenceDate] + 2.0;
+            for (NSThread *thread in threadsToWait) {
+                while (![thread isFinished] && [NSDate timeIntervalSinceReferenceDate] < waitDeadline) {
+                    [NSThread sleepForTimeInterval:0.05];
+                }
+                if (![thread isFinished]) {
+                    NSLog(@"[SOCKS5Proxy] 警告：客户端线程 %@ 未在 2 秒内退出", thread.name);
+                }
+            }
+            NSLog(@"[SOCKS5Proxy] 代理已停止，所有客户端连接已清理（后台等待完成）");
+        });
+        NSLog(@"[SOCKS5Proxy] stop 在主线程调用，已派发 %lu 个客户端线程的等待到后台队列",
+              (unsigned long)threads.count);
+    } else {
+        // 后台线程：同步等待
+        NSTimeInterval waitDeadline = [NSDate timeIntervalSinceReferenceDate] + 2.0;
+        for (NSThread *thread in threads) {
+            while (![thread isFinished] && [NSDate timeIntervalSinceReferenceDate] < waitDeadline) {
+                [NSThread sleepForTimeInterval:0.05];
+            }
+            if (![thread isFinished]) {
+                NSLog(@"[SOCKS5Proxy] 警告：客户端线程 %@ 未在 2 秒内退出", thread.name);
+            }
+        }
+        NSLog(@"[SOCKS5Proxy] 代理已停止，所有客户端连接已清理");
+    }
 }
 
 /// 代理服务器是否正在运行
@@ -1134,10 +1180,19 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
 /// @param remoteFD 远程 socket 文件描述符（libzt socket）
 - (void)forwardDataBetweenClientFD:(int)clientFD
                           remoteFD:(int)remoteFD {
-    // 使用 __block 修饰的标志变量，用于在 block 之间通信
-    // 当一个方向结束时，设置标志通知另一个方向退出
-    __block BOOL clientClosed = NO;
-    __block BOOL remoteClosed = NO;
+    // 关键修复（N2）：使用 _Atomic(BOOL) 替代 __block BOOL，确保跨线程内存可见性。
+    //
+    // 问题：__block 修饰符只是让变量可以在 block 内被修改，但不提供内存屏障。
+    // 在 ARM64（iPhone）等弱内存模型架构上，一个线程对 __block 变量的写入
+    // 可能不会被另一个线程立即看到，导致：
+    //   - 一个方向已关闭，但另一个方向的循环没有及时看到标志变化
+    //   - 继续阻塞在 read/recvData 上，直到对端 FIN 到达或 IO 超时才退出
+    //   - 转发任务延迟退出（最坏情况下需要等待对端关闭或 IO 超时）
+    //
+    // 修复方案：使用 C11 _Atomic(BOOL)，原子操作自带合适的内存屏障
+    // （memory_order_seq_cst），保证一个线程的写入对另一个线程立即可见。
+    _Atomic(BOOL) clientClosed = NO;
+    _Atomic(BOOL) remoteClosed = NO;
 
     // 创建并发队列用于双向转发
     dispatch_queue_t forwardQueue = dispatch_queue_create("com.angelaura.socks5.forward", DISPATCH_QUEUE_CONCURRENT);
@@ -1152,9 +1207,8 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
 
         while (YES) {
             @autoreleasepool {
-                // 检查远程是否已关闭
-                // 使用 __block 变量在两个 block 之间共享状态
-                if (remoteClosed) {
+                // 检查远程是否已关闭（原子读，自带内存屏障）
+                if (atomic_load(&remoteClosed)) {
                     NSLog(@"[SOCKS5Proxy] client→remote：远程已关闭，退出转发");
                     break;
                 }
@@ -1166,8 +1220,8 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
                     // n < 0：读取错误
                     NSLog(@"[SOCKS5Proxy] client→remote 结束：n=%zd, errno=%d", n, errno);
 
-                    // 标记客户端已关闭
-                    clientClosed = YES;
+                    // 标记客户端已关闭（原子写，自带内存屏障）
+                    atomic_store(&clientClosed, YES);
 
                     // 关闭远程的写端，通知 remote→client 方向退出
                     // shutdown 会导致另一端的 recv 返回 0
@@ -1182,8 +1236,8 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
                 if (sent <= 0) {
                     NSLog(@"[SOCKS5Proxy] 发送到远程失败：sent=%zd", sent);
 
-                    // 标记远程已关闭
-                    remoteClosed = YES;
+                    // 标记远程已关闭（原子写）
+                    atomic_store(&remoteClosed, YES);
 
                     // 关闭客户端的写端
                     shutdown(clientFD, SHUT_WR);
@@ -1202,8 +1256,8 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
 
         while (YES) {
             @autoreleasepool {
-                // 检查客户端是否已关闭
-                if (clientClosed) {
+                // 检查客户端是否已关闭（原子读，自带内存屏障）
+                if (atomic_load(&clientClosed)) {
                     NSLog(@"[SOCKS5Proxy] remote→client：客户端已关闭，退出转发");
                     break;
                 }
@@ -1217,8 +1271,8 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
                     // n < 0：接收错误
                     NSLog(@"[SOCKS5Proxy] remote→client 结束：n=%zd", n);
 
-                    // 标记远程已关闭
-                    remoteClosed = YES;
+                    // 标记远程已关闭（原子写）
+                    atomic_store(&remoteClosed, YES);
 
                     // 关闭客户端的写端，通知 client→remote 方向退出
                     shutdown(clientFD, SHUT_WR);
@@ -1230,8 +1284,8 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
                 if (sent <= 0) {
                     NSLog(@"[SOCKS5Proxy] 发送到客户端失败：sent=%zd", sent);
 
-                    // 标记客户端已关闭
-                    clientClosed = YES;
+                    // 标记客户端已关闭（原子写）
+                    atomic_store(&clientClosed, YES);
 
                     // 关闭远程的写端
                     shutdown(remoteFD, SHUT_WR);
