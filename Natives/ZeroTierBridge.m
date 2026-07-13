@@ -423,7 +423,18 @@ static void zeroTierEventCallback(void *msgPtr) {
 /// 节点是否在线
 /// @return YES 如果节点已上线
 - (BOOL)isNodeOnline {
-    return zts_node_is_online() == 1;
+    int online = zts_node_is_online();
+    // 关键修复：如果 zts_node_is_online() 返回 1 但 _hasBeenOnline 还未被事件回调设置，
+    // 在这里同步设置（事件回调可能因主线程阻塞而延迟，但 API 查询是实时的）
+    if (online == 1) {
+        [_lock lock];
+        if (!_hasBeenOnline) {
+            _hasBeenOnline = YES;
+            NSLog(@"[ZeroTierBridge] isNodeOnline 检测到节点上线，同步设置 _hasBeenOnline = YES");
+        }
+        [_lock unlock];
+    }
+    return online == 1;
 }
 
 /// 获取节点 ID
@@ -666,8 +677,13 @@ static void zeroTierEventCallback(void *msgPtr) {
     //   2. 如果实时查询返回 0，但 _nodeStatus 曾经为 Online（_hasBeenOnline 标记），也认为节点可用
     //      —— 因为节点会自动重连，掉线只是暂时的，网络加入请求仍会被处理
     //   3. 如果节点从未上线过（_hasBeenOnline == NO），则严格等待实时查询返回 1
+    //   4. 关键修复：如果等待过半仍未上线，尝试重新调用 zts_node_start() 唤醒节点
+    //      （libzt 在某些情况下需要外部触发才能重连）
 
     NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:timeout];
+    BOOL hasTriggeredRestart = NO;
+    NSTimeInterval halfTimeout = timeout * 0.5;
+
     while ([[NSDate date] compare:deadline] == NSOrderedAscending) {
         int online = zts_node_is_online();
         if (online == 1) {
@@ -680,10 +696,24 @@ static void zeroTierEventCallback(void *msgPtr) {
         [_lock lock];
         BOOL hasBeenOnline = _hasBeenOnline;
         ZeroTierNodeStatus status = _nodeStatus;
+        BOOL isStarted = _isStarted;
         [_lock unlock];
         if (hasBeenOnline && status != ZeroTierNodeStatusStopped && status != ZeroTierNodeStatusError) {
             NSLog(@"[ZeroTierBridge] 节点曾上线过，当前状态=%d，视为可用（容错）", (int)status);
             return YES;
+        }
+
+        // 关键修复：如果等待过半仍未上线，且节点已启动但从未上线（或掉线后未重连），
+        // 尝试重新调用 zts_node_start() 唤醒节点
+        NSTimeInterval elapsed = timeout - [deadline timeIntervalSinceNow];
+        if (!hasTriggeredRestart && elapsed > halfTimeout && isStarted) {
+            NSLog(@"[ZeroTierBridge] 等待过半（%.1fs）节点仍未上线，尝试重新调用 zts_node_start() 唤醒", elapsed);
+            int restartResult = zts_node_start();
+            NSLog(@"[ZeroTierBridge] zts_node_start() 重新调用结果 = %d", restartResult);
+            hasTriggeredRestart = YES;
+            // 重新调用后给节点 2 秒恢复时间
+            [NSThread sleepForTimeInterval:2.0];
+            continue;
         }
 
         // 每 200ms 检查一次

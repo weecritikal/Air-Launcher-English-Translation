@@ -247,6 +247,25 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
 ///   8. 启动 Accept 线程
 - (BOOL)startWithPort:(uint16_t)port
                 error:(NSError **)error {
+    // 关键修复：bind 失败 (errno=48 EADDRINUSE) 的根因是上次断开时 socket 未被正确关闭，
+    // 或 app 进程崩溃（SIGSEGV）后 _running 标记与实际 socket 状态不一致。
+    // 修复方案：启动前先强制停止一次，确保旧的监听 socket 已被关闭，端口被释放。
+    // 注意：stop 内部会检查 _running，所以这里调用是安全的（如果未运行则空操作）。
+    if (_running) {
+        NSLog(@"[SOCKS5Proxy] 启动前检测到代理仍在运行，先停止旧代理以释放端口");
+        [self stop];
+        // 给系统一点时间释放端口（TIME_WAIT 状态）
+        [NSThread sleepForTimeInterval:0.1];
+    } else if (_listenFD >= 0) {
+        // _running 为 NO 但 _listenFD 仍有效（异常状态），强制关闭
+        NSLog(@"[SOCKS5Proxy] 检测到僵尸监听 socket（fd=%d），强制关闭", _listenFD);
+        [_lock lock];
+        close(_listenFD);
+        _listenFD = -1;
+        [_lock unlock];
+        [NSThread sleepForTimeInterval:0.1];
+    }
+
     // 检查是否已运行
     [_lock lock];
     if (_running) {
