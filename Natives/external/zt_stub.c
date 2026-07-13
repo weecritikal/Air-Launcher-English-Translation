@@ -476,7 +476,7 @@ int zts_socket(int family, int type, int protocol) {
     return ZTS_ERR_SOCKET;
 }
 
-int zts_connect(int fd, const char* addr, int port, int timeout_ms) {
+int zts_connect(int fd, const char* addr, unsigned short port, int timeout_ms) {
     (void)fd;
     (void)addr;
     (void)port;
@@ -484,7 +484,7 @@ int zts_connect(int fd, const char* addr, int port, int timeout_ms) {
     return ZTS_ERR_SOCKET;
 }
 
-int zts_bind(int fd, const char* addr, int port) {
+int zts_bind(int fd, const char* addr, unsigned short port) {
     (void)fd;
     (void)addr;
     (void)port;
@@ -505,21 +505,21 @@ int zts_accept(int fd, char* remote_addr, int len, unsigned short* remote_port) 
     return ZTS_ERR_SOCKET;
 }
 
-ssize_t zts_read(int fd, void* buf, unsigned int len) {
+ssize_t zts_read(int fd, void* buf, size_t len) {
     (void)fd;
     (void)buf;
     (void)len;
     return ZTS_ERR_SOCKET;
 }
 
-ssize_t zts_write(int fd, const void* buf, unsigned int len) {
+ssize_t zts_write(int fd, const void* buf, size_t len) {
     (void)fd;
     (void)buf;
     (void)len;
     return ZTS_ERR_SOCKET;
 }
 
-ssize_t zts_send(int fd, const void* buf, unsigned int len, int flags) {
+ssize_t zts_send(int fd, const void* buf, size_t len, int flags) {
     (void)fd;
     (void)buf;
     (void)len;
@@ -527,7 +527,7 @@ ssize_t zts_send(int fd, const void* buf, unsigned int len, int flags) {
     return ZTS_ERR_SOCKET;
 }
 
-ssize_t zts_recv(int fd, void* buf, unsigned int len, int flags) {
+ssize_t zts_recv(int fd, void* buf, size_t len, int flags) {
     (void)fd;
     (void)buf;
     (void)len;
@@ -540,7 +540,7 @@ int zts_close(int fd) {
     return ZTS_ERR_SOCKET;
 }
 
-int zts_tcp_server(const char* local_addr, int local_port, char* remote_addr, int len, unsigned short* remote_port) {
+int zts_tcp_server(const char* local_addr, unsigned short local_port, char* remote_addr, int len, unsigned short* remote_port) {
     (void)local_addr;
     (void)local_port;
     (void)remote_addr;
@@ -549,21 +549,20 @@ int zts_tcp_server(const char* local_addr, int local_port, char* remote_addr, in
     return ZTS_ERR_SOCKET;
 }
 
-int zts_tcp_client(const char* remote_addr, int remote_port) {
+int zts_tcp_client(const char* remote_addr, unsigned short remote_port) {
     (void)remote_addr;
     (void)remote_port;
     return ZTS_ERR_SOCKET;
 }
 
-int zts_udp_server(const char* local_addr, int local_port) {
+int zts_udp_server(const char* local_addr, unsigned short local_port) {
     (void)local_addr;
     (void)local_port;
     return ZTS_ERR_SOCKET;
 }
 
-int zts_udp_client(const char* remote_addr, int remote_port) {
+int zts_udp_client(const char* remote_addr) {
     (void)remote_addr;
-    (void)remote_port;
     return ZTS_ERR_SOCKET;
 }
 
