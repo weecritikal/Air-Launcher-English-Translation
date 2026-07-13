@@ -509,7 +509,7 @@ struct zts_in6_addr {
     //#define s6_addr  un.u8_addr
 };
 
-const struct zts_in6_addr zts_in6addr_any = ZTS_IN6ADDR_ANY_INIT;
+static const struct zts_in6_addr zts_in6addr_any = ZTS_IN6ADDR_ANY_INIT;
 
 /**
  * Address structure to specify an IPv4 endpoint
