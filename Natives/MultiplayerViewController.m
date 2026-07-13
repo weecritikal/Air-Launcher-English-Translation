@@ -409,7 +409,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 /// 连接到指定房间
 ///
 /// 内部调用 MultiplayerManager 的 connectToRoom:completion:，
-/// 并在主线程更新房间状态和 UI
+/// 并在主线程更新房间状态和 UI。连接成功后显示操作引导（对标 FCL/HMCL）。
 - (void)connectToRoom:(MultiplayerRoom *)room completion:(void (^)(BOOL success, NSError *error))completion {
     // 设置状态为连接中
     room.status = MultiplayerRoomStatusConnecting;
@@ -426,6 +426,22 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
             if (success) {
                 room.status = MultiplayerRoomStatusConnected;
                 room.lastConnectedAt = [NSDate date];
+
+                // 连接成功后显示操作引导（对标 FCL/HMCL 连接成功后的提示）
+                // 获取房主 ZeroTier IP（已由 MultiplayerManager 自动同步到 room.hostIP）
+                NSString *hostIP = room.hostIP.length ? room.hostIP : [[MultiplayerManager sharedManager] currentLocalIP];
+                NSString *hostPort = room.hostPort.length ? room.hostPort : @"25565";
+                NSString *serverAddress = [NSString stringWithFormat:@"%@:%@", hostIP, hostPort];
+
+                NSString *successMsg = [NSString stringWithFormat:@"%@\n\n%@\n%@\n\n%@",
+                    MPLocalized(@"mp.connect.success_msg", @"ZeroTier 联机网络已连接，SOCKS5 代理已启动"),
+                    MPLocalized(@"mp.connect.guide_host", @"房主：启动游戏并开放局域网（或运行服务器），点击分享按钮将地址发给朋友"),
+                    [NSString stringWithFormat:@"%@: %@",
+                        MPLocalized(@"mp.connect.guide_join", @"加入者：启动游戏，在 MC 中添加服务器"),
+                        serverAddress],
+                    MPLocalized(@"mp.connect.guide_share", @"点击房间可分享、断开连接或查看详情")];
+                [strongSelf showSimpleAlertWithTitle:MPLocalized(@"mp.connect.success_title", @"连接成功")
+                                              message:successMsg];
             } else {
                 room.status = MultiplayerRoomStatusError;
             }
@@ -936,7 +952,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     cell.textLabel.text = room.name.length ? room.name : MPLocalized(@"mp.room.unnamed", @"未命名房间");
     cell.textLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightMedium];
 
-    // 详情：Network ID + 状态 + 本地 IP（已连接时显示）
+    // 详情：Network ID + 状态 + 服务器地址（已连接时显示完整地址方便分享）
     NSString *statusText = [self textForRoomStatus:room.status];
     NSMutableString *detail = [NSMutableString string];
     [detail appendFormat:@"%@: %@",
@@ -944,12 +960,14 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         room.networkId ?: @"-"];
     [detail appendFormat:@"\n%@", statusText];
     if (room.status == MultiplayerRoomStatusConnected) {
-        // 已连接时显示本地 IP
-        NSString *localIP = [[MultiplayerManager sharedManager] currentLocalIP];
-        if (localIP.length) {
-            [detail appendFormat:@" · %@ %@",
-                localIP,
-                MPLocalized(@"mp.room.local_ip", @"本地 IP")];
+        // 已连接时显示完整服务器地址（对标 FCL/HMCL，让房主能直接看到并分享给朋友）
+        // 房主的 hostIP 已由 MultiplayerManager.connectToRoomFlow: 自动同步为本机 ZeroTier IP
+        NSString *hostIP = room.hostIP.length ? room.hostIP : [[MultiplayerManager sharedManager] currentLocalIP];
+        NSString *hostPort = room.hostPort.length ? room.hostPort : @"25565";
+        if (hostIP.length) {
+            [detail appendFormat:@"\n%@: %@:%@",
+                MPLocalized(@"mp.room.server_address", @"服务器地址"),
+                hostIP, hostPort];
         }
     }
     cell.detailTextLabel.text = detail;

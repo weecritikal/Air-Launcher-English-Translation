@@ -919,7 +919,20 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
 
     [_stateLock lock];
     self.currentLocalIP = localIP;
+    // 关键修复（对标 FCL/HMCL）：将本机 ZeroTier IP 同步到 room.hostIP，
+    // 使 shareTextForRoom: 能正确输出房主的服务器地址，而不显示「未知」。
+    // 之前缺失此同步导致分享文本中服务器地址为空，加入者无法直接获取连接地址。
+    if (localIP && localIP.length > 0 && self.currentRoom) {
+        self.currentRoom.hostIP = localIP;
+        NSLog(@"[MultiplayerManager] [连接流程] 已同步房主 ZeroTier IP 到房间 %@：%@", self.currentRoom.name, localIP);
+    }
+    MultiplayerRoom *roomForIPUpdate = self.currentRoom;
     [_stateLock unlock];
+
+    // 持久化房主 IP 到房间列表（后台异步写入，避免阻塞连接流程）
+    if (roomForIPUpdate && localIP && localIP.length > 0) {
+        [self updateRoom:roomForIPUpdate];
+    }
 
     // 步骤 5：启动 SOCKS5 代理
     NSLog(@"[MultiplayerManager] [连接流程] 步骤 5：启动 SOCKS5 代理");
@@ -1040,13 +1053,31 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     [_stateLock lock];
     if (_currentNetworkID == networkID) {
         self.currentLocalIP = ipv4;
+        // 关键修复（对标 FCL/HMCL）：ZeroTier 网络就绪回调可能晚于 connectToRoomFlow 完成，
+        // 此处也需将 IPv4 同步到 room.hostIP，确保分享文本能输出正确的服务器地址。
     }
     MultiplayerRoom *room = self.currentRoom;
+    BOOL needsUpdate = NO;
+    if (room && ipv4 && ipv4.length > 0) {
+        // 仅当 IP 变化时才更新，避免重复写入
+        if (![room.hostIP isEqualToString:ipv4]) {
+            room.hostIP = ipv4;
+            needsUpdate = YES;
+        }
+        NSLog(@"[MultiplayerManager] 已更新房间 %@ 的本地 IP：%@", room.name, ipv4);
+    }
     [_stateLock unlock];
 
-    if (room && ipv4) {
-        // 房间状态可能已经被 connectToRoomFlow 设置为 Connected，这里只更新 localIP
-        NSLog(@"[MultiplayerManager] 已更新房间 %@ 的本地 IP：%@", room.name, ipv4);
+    // 持久化到房间列表（后台异步写入）
+    if (needsUpdate && room) {
+        [self updateRoom:room];
+    }
+
+    // 通知 delegate 刷新 UI（IP 显示可能需要更新）
+    if (room && [self.delegate respondsToSelector:@selector(multiplayerRoomConnected:)]) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self.delegate multiplayerRoomConnected:room];
+        });
     }
 }
 
@@ -1098,8 +1129,9 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
 
     NSString *name = room.name ?: @"未命名房间";
     NSString *networkId = room.networkId ?: @"";
-    NSString *hostIP = room.hostIP ?: @"未知";
-    NSString *hostPort = room.hostPort ?: kDefaultMCPort;
+    // hostIP 可能为空字符串（房主尚未连接房间时），此时显示提示
+    NSString *hostIP = (room.hostIP && room.hostIP.length > 0) ? room.hostIP : @"（房主连接房间后自动显示）";
+    NSString *hostPort = (room.hostPort && room.hostPort.length > 0) ? room.hostPort : kDefaultMCPort;
 
     NSString *serverAddress = [NSString stringWithFormat:@"%@:%@", hostIP, hostPort];
 
@@ -1121,9 +1153,12 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     [text appendString:@"\n"];
 
     [text appendString:@"\n"];
-    [text appendString:@"1. 在启动器内点击\"连接房间\"\n"];
-    [text appendFormat:@"2. 加入 ZeroTier 网络 ID：%@（启动器会自动处理）\n", networkId];
-    [text appendFormat:@"3. 启动游戏后，在 MC 中添加服务器：%@", serverAddress];
+    [text appendString:@"加入步骤：\n"];
+    [text appendString:@"1. 在启动器联机页面输入上方的 ZeroTier 网络 ID\n"];
+    [text appendString:@"2. 点击「加入房间」，启动器会自动启动联机核心并连接\n"];
+    [text appendFormat:@"3. 连接成功后启动游戏，在 MC 中添加服务器：%@", serverAddress];
+    [text appendString:@"\n\n"];
+    [text appendString:@"提示：房主需先在启动器内连接房间并启动游戏（或开放局域网），加入者才能连入。"];
 
     return [text copy];
 }
