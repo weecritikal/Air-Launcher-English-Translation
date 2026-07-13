@@ -328,7 +328,40 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
                                               style:UIAlertActionStyleCancel
                                             handler:nil]];
 
+    // 快速模式按钮：自动生成 Ad-hoc 网络 ID，无需注册账号
     __weak typeof(self) weakSelf = self;
+    [alert addAction:[UIAlertAction actionWithTitle:MPLocalized(@"mp.network_id.use_adhoc", @"使用快速模式（无需注册）")
+                                              style:UIAlertActionStyleDefault
+                                            handler:^(UIAlertAction *action) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+
+        // 检查 ZeroTier 框架可用性
+        if (![[MultiplayerManager sharedManager] isFrameworkAvailable]) {
+            [strongSelf showSimpleAlertWithTitle:MPLocalized(@"mp.core.unavailable_title", @"联机核心不可用")
+                                          message:MPLocalized(@"mp.core.unavailable_msg", @"ZeroTier 联机核心未加载，无法使用快速模式。")];
+            return;
+        }
+
+        // 生成 Ad-hoc 网络 ID
+        NSString *adhocNetId = [[MultiplayerManager sharedManager] generateAdhocNetworkId];
+        if (!adhocNetId.length) {
+            [strongSelf showSimpleAlertWithTitle:MPLocalized(@"mp.network_id.adhoc_failed_title", @"生成失败")
+                                          message:MPLocalized(@"mp.network_id.adhoc_failed_msg", @"无法生成快速模式 Network ID，请改用标准模式")];
+            return;
+        }
+
+        // 保存为预设 Network ID
+        [[MultiplayerManager sharedManager] setPresetNetworkId:adhocNetId];
+        [strongSelf.tableView reloadData];
+
+        // 提示用户
+        [strongSelf showSimpleAlertWithTitle:MPLocalized(@"mp.network_id.adhoc_success_title", @"已启用快速模式")
+                                      message:[NSString stringWithFormat:@"%@\n\n%@",
+                                               MPLocalized(@"mp.network_id.adhoc_success_msg", @"已自动生成 Network ID，无需注册账号即可联机。注意：快速模式稳定性不如标准模式，IP 可能变化。"),
+                                               [NSString stringWithFormat:@"Network ID: %@", adhocNetId]]];
+    }]];
+
     [alert addAction:[UIAlertAction actionWithTitle:MPLocalized(@"common.save", @"保存")
                                               style:UIAlertActionStyleDefault
                                             handler:^(UIAlertAction *action) {
@@ -363,23 +396,32 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 
 /// 显示 ZeroTier 网络创建教程
 ///
-/// 对标 FCL 的"联机帮助"功能：引导房主完成 ZeroTier 网络的创建和配置。
+/// 对标 FCL 的"联机帮助"功能：说明两种联机模式的区别和使用方法。
 ///
-/// ZeroTier 与 EasyTier（FCL 使用）的区别：
-///   - EasyTier 支持公共服务器发现，无需用户自己创建网络
-///   - ZeroTier 需要用户在 my.zerotier.com 创建网络后获得 Network ID
-///   - 因此需要提供清晰的引导教程，降低房主的配置门槛
-///
-/// 教程包含以下步骤：
-///   1. 访问 my.zerotier.com 注册账号
-///   2. 创建网络并获得 Network ID
-///   3. 设置网络可见性（Public/Private）
-///   4. 将 Network ID 填入启动器的"预设 Network ID"
-///   5. 房主开房时自动使用此 Network ID
+/// 两种模式：
+///   1. 标准模式（稳定）：在 my.zerotier.com 注册账号创建网络
+///      - 优点：IP 固定、支持 Private 授权、每人独立网络
+///      - 缺点：需要注册账号、配置较复杂
+///   2. 快速模式（不稳定）：使用 Ad-hoc 网络自动分配
+///      - 优点：无需注册账号、即开即用
+///      - 缺点：只有 IPv6、公开网络、IP 可能变化
 - (void)showZeroTierGuide {
     [self.view endEditing:YES];
 
-    // 构建教程内容
+    // 构建教程内容：两种模式对比
+    NSString *modeStandard = [NSString stringWithFormat:@"%@（%@）\n%@",
+                              MPLocalized(@"mp.guide.mode_standard", @"标准模式"),
+                              MPLocalized(@"mp.guide.stable", @"稳定"),
+                              MPLocalized(@"mp.guide.mode_standard_desc", @"在 my.zerotier.com 注册账号并创建网络，获得固定的 Network ID。IP 稳定、支持授权管理、每人独立网络。")];
+
+    NSString *modeFast = [NSString stringWithFormat:@"%@（%@）\n%@",
+                          MPLocalized(@"mp.guide.mode_fast", @"快速模式"),
+                          MPLocalized(@"mp.guide.unstable", @"不稳定"),
+                          MPLocalized(@"mp.guide.mode_fast_desc", @"使用 Ad-hoc 网络自动生成 Network ID，无需注册账号。但只有 IPv6 地址、公开网络安全性弱、IP 可能变化。")];
+
+    // 标准模式步骤
+    NSString *standardTitle = [NSString stringWithFormat:@"\n【%@】", MPLocalized(@"mp.guide.mode_standard", @"标准模式")];
+
     NSString *step1 = [NSString stringWithFormat:@"1. %@\n   %@",
                        MPLocalized(@"mp.guide.step1_title", @"注册 ZeroTier 账号"),
                        MPLocalized(@"mp.guide.step1_desc", @"访问 my.zerotier.com，注册并登录账号（免费）")];
@@ -404,28 +446,89 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
                        MPLocalized(@"mp.guide.step6_title", @"开始联机"),
                        MPLocalized(@"mp.guide.step6_desc", @"启动游戏后在悬浮球中打开联机界面，选择「当房主」即可开房")];
 
-    NSString *message = [NSString stringWithFormat:@"%@\n\n%@\n\n%@\n\n%@\n\n%@\n\n%@\n\n%@\n\n%@",
-                         MPLocalized(@"mp.guide.intro", @"ZeroTier 是一个免费的虚拟局域网工具，创建网络后即可获得唯一的 Network ID，用于精准进入对应的联机房间。"),
-                         step1,
-                         step2,
-                         step3,
-                         step4,
-                         step5,
-                         step6,
-                         MPLocalized(@"mp.guide.note", @"注意：房主和房客使用相同的 Network ID 才能联机。房主只需创建一次网络，之后每次开房自动使用。")];
+    // 快速模式步骤
+    NSString *fastTitle = [NSString stringWithFormat:@"\n【%@】", MPLocalized(@"mp.guide.mode_fast", @"快速模式")];
 
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:MPLocalized(@"mp.guide.title", @"ZeroTier 网络创建教程")
+    NSString *fastStep1 = [NSString stringWithFormat:@"1. %@\n   %@",
+                           MPLocalized(@"mp.guide.fast_step1_title", @"点击「预设 Network ID」"),
+                           MPLocalized(@"mp.guide.fast_step1_desc", @"在本页面点击「预设 Network ID」行")];
+
+    NSString *fastStep2 = [NSString stringWithFormat:@"2. %@\n   %@",
+                           MPLocalized(@"mp.guide.fast_step2_title", @"选择快速模式"),
+                           MPLocalized(@"mp.guide.fast_step2_desc", @"点击「使用快速模式（无需注册）」按钮，系统自动生成 Network ID")];
+
+    NSString *fastStep3 = [NSString stringWithFormat:@"3. %@\n   %@",
+                           MPLocalized(@"mp.guide.fast_step3_title", @"开始联机"),
+                           MPLocalized(@"mp.guide.fast_step3_desc", @"启动游戏后在悬浮球中打开联机界面，选择「当房主」即可开房")];
+
+    NSString *message = [NSString stringWithFormat:@"%@\n\n%@\n\n%@\n\n%@%@",
+                         MPLocalized(@"mp.guide.intro", @"ZeroTier 提供两种联机模式，根据需求选择："),
+                         modeStandard,
+                         modeFast,
+                         standardTitle, step1];
+
+    // 使用多行格式拼接所有步骤
+    message = [NSString stringWithFormat:@"%@\n\n%@\n\n%@\n\n%@\n\n%@\n\n%@\n\n%@\n\n%@",
+               message,
+               step2,
+               step3,
+               step4,
+               step5,
+               step6,
+               fastTitle,
+               [NSString stringWithFormat:@"%@\n%@\n%@", fastStep1, fastStep2, fastStep3]];
+
+    // 添加注意事项
+    message = [NSString stringWithFormat:@"%@\n\n%@",
+               message,
+               MPLocalized(@"mp.guide.note", @"注意：房主和房客使用相同的 Network ID 才能联机。标准模式需在后台授权成员（Private）或设为 Public。快速模式所有人共享同一公开网络。")];
+
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:MPLocalized(@"mp.guide.title", @"ZeroTier 联机教程")
                                                                    message:message
                                                             preferredStyle:UIAlertControllerStyleAlert];
 
-    // 「打开 my.zerotier.com」按钮：直接跳转到浏览器
-    [alert addAction:[UIAlertAction actionWithTitle:MPLocalized(@"mp.guide.open_website", @"打开 my.zerotier.com")
+    // 「打开 my.zerotier.com」按钮：直接跳转到浏览器（标准模式需要）
+    [alert addAction:[UIAlertAction actionWithTitle:MPLocalized(@"mp.guide.open_website", @"打开 my.zerotier.com（标准模式）")
                                               style:UIAlertActionStyleDefault
                                             handler:^(UIAlertAction *action) {
         NSURL *url = [NSURL URLWithString:@"https://my.zerotier.com/"];
         if (url && [[UIApplication sharedApplication] canOpenURL:url]) {
             [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:nil];
         }
+    }]];
+
+    // 「使用快速模式」按钮：直接生成 Ad-hoc 网络 ID
+    __weak typeof(self) weakSelf = self;
+    [alert addAction:[UIAlertAction actionWithTitle:MPLocalized(@"mp.guide.use_fast_mode", @"使用快速模式")
+                                              style:UIAlertActionStyleDefault
+                                            handler:^(UIAlertAction *action) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+
+        // 检查 ZeroTier 框架可用性
+        if (![[MultiplayerManager sharedManager] isFrameworkAvailable]) {
+            [strongSelf showSimpleAlertWithTitle:MPLocalized(@"mp.core.unavailable_title", @"联机核心不可用")
+                                          message:MPLocalized(@"mp.core.unavailable_msg", @"ZeroTier 联机核心未加载，无法使用快速模式。")];
+            return;
+        }
+
+        // 生成 Ad-hoc 网络 ID
+        NSString *adhocNetId = [[MultiplayerManager sharedManager] generateAdhocNetworkId];
+        if (!adhocNetId.length) {
+            [strongSelf showSimpleAlertWithTitle:MPLocalized(@"mp.network_id.adhoc_failed_title", @"生成失败")
+                                          message:MPLocalized(@"mp.network_id.adhoc_failed_msg", @"无法生成快速模式 Network ID，请改用标准模式")];
+            return;
+        }
+
+        // 保存为预设 Network ID
+        [[MultiplayerManager sharedManager] setPresetNetworkId:adhocNetId];
+        [strongSelf.tableView reloadData];
+
+        // 提示用户
+        [strongSelf showSimpleAlertWithTitle:MPLocalized(@"mp.network_id.adhoc_success_title", @"已启用快速模式")
+                                      message:[NSString stringWithFormat:@"%@\n\n%@",
+                                               MPLocalized(@"mp.network_id.adhoc_success_msg", @"已自动生成 Network ID，无需注册账号即可联机。注意：快速模式稳定性不如标准模式，IP 可能变化。"),
+                                               [NSString stringWithFormat:@"Network ID: %@", adhocNetId]]];
     }]];
 
     // 「我知道了」按钮

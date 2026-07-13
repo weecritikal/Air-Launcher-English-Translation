@@ -740,10 +740,15 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
     // 步骤 3：通过 ZeroTier 虚拟网络连接目标
     // ============================================================
 
-    // 创建 libzt socket（ZeroTier 虚拟网络 socket）
-    int ztFD = [[ZeroTierBridge sharedInstance] createTCPSocket];
+    // 检测目标地址类型：IPv6 地址包含 ':'，IPv4 地址包含 '.'
+    BOOL isIPv6Target = ([destHost rangeOfString:@":"].location != NSNotFound);
+    int socketFamily = isIPv6Target ? ZTS_AF_INET6 : ZTS_AF_INET;
+
+    // 创建 libzt socket（根据目标地址类型选择 IPv4 或 IPv6）
+    // Ad-hoc 网络只有 IPv6，必须使用 ZTS_AF_INET6 创建 socket
+    int ztFD = [[ZeroTierBridge sharedInstance] createTCPSocketForFamily:socketFamily];
     if (ztFD < 0) {
-        NSLog(@"[SOCKS5Proxy] 创建 ZeroTier socket 失败：ztFD=%d", ztFD);
+        NSLog(@"[SOCKS5Proxy] 创建 ZeroTier socket(family=%d) 失败：ztFD=%d", socketFamily, ztFD);
         [self sendSocks5Reply:clientFD
                           rep:SOCKS5_REP_GENERAL_FAILURE
                      bindAddr:@"0.0.0.0"

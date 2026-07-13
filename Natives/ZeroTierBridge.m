@@ -653,12 +653,14 @@ static void zeroTierEventCallback(void *msgPtr) {
     while ([[NSDate date] compare:deadline] == NSOrderedAscending) {
         // 检查传输层是否就绪
         int transportReady = zts_net_transport_is_ready(networkID);
-        // 检查 IPv4 地址是否已分配
+        // 检查 IPv4 或 IPv6 地址是否已分配
+        // 标准网络会分配 IPv4 地址，Ad-hoc 网络只有 IPv6 地址
         int ipv4Assigned = zts_addr_is_assigned(networkID, ZTS_AF_INET);
+        int ipv6Assigned = zts_addr_is_assigned(networkID, ZTS_AF_INET6);
 
-        if (transportReady == 1 && ipv4Assigned == 1) {
-            NSLog(@"[ZeroTierBridge] 网络已就绪：transportReady=%d, ipv4Assigned=%d",
-                  transportReady, ipv4Assigned);
+        if (transportReady == 1 && (ipv4Assigned == 1 || ipv6Assigned == 1)) {
+            NSLog(@"[ZeroTierBridge] 网络已就绪：transportReady=%d, ipv4=%d, ipv6=%d",
+                  transportReady, ipv4Assigned, ipv6Assigned);
             return YES;
         }
 
@@ -1021,6 +1023,18 @@ static void zeroTierEventCallback(void *msgPtr) {
         NSLog(@"[ZeroTierBridge] 创建 TCP socket 失败：fd = %d, zts_errno = %d", fd, zts_errno);
     } else {
         NSLog(@"[ZeroTierBridge] 创建 TCP socket 成功：fd = %d", fd);
+    }
+    return fd;
+}
+
+- (int)createTCPSocketForFamily:(int)family {
+    // 根据指定的地址族创建 TCP socket
+    // 用于 Ad-hoc 网络等只有 IPv6 的场景
+    int fd = zts_bsd_socket(family, ZTS_SOCK_STREAM, ZTS_IPPROTO_TCP);
+    if (fd < 0) {
+        NSLog(@"[ZeroTierBridge] 创建 TCP socket(family=%d) 失败：fd = %d, zts_errno = %d", family, fd, zts_errno);
+    } else {
+        NSLog(@"[ZeroTierBridge] 创建 TCP socket(family=%d) 成功：fd = %d", family, fd);
     }
     return fd;
 }

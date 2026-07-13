@@ -220,6 +220,16 @@ typedef NS_ENUM(NSInteger, ZeroTierNetworkStatus) {
 /// @return socket 文件描述符（≥ 0 表示成功，< 0 表示失败）
 - (int)createTCPSocket;
 
+/// 创建 TCP socket（指定地址族）
+///
+/// 用于 Ad-hoc 网络等只有 IPv6 的场景。
+/// - ZTS_AF_INET（IPv4）：标准 ZeroTier 网络
+/// - ZTS_AF_INET6（IPv6）：Ad-hoc 网络（只有 IPv6 地址）
+///
+/// @param family 地址族（ZTS_AF_INET 或 ZTS_AF_INET6）
+/// @return socket 文件描述符（≥ 0 表示成功，< 0 表示失败）
+- (int)createTCPSocketForFamily:(int)family;
+
 /// 连接 socket 到目标主机
 ///
 /// 封装 zts_bsd_connect，支持 IPv4 和 IPv6。

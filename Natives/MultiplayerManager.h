@@ -257,6 +257,36 @@ typedef NS_ENUM(NSInteger, MultiplayerRoomStatus) {
 /// @param networkId Network ID（传入 nil 或空字符串则清除）
 - (void)setPresetNetworkId:(nullable NSString *)networkId;
 
+#pragma mark - Ad-hoc 网络（快速模式，无需注册账号）
+
+/// 生成 Ad-hoc 网络 ID（快速模式）
+///
+/// 对标 FCL 的"无需注册直接联机"体验：
+///   - 调用 zts_net_compute_adhoc_id 生成一个无需网络控制器的公开网络 ID
+///   - 房主和房客使用相同的端口范围即可加入同一网络
+///   - 无需在 my.zerotier.com 注册账号、创建网络、授权成员
+///
+/// 注意：
+///   1. Ad-hoc 网络只有 IPv6 地址（无 IPv4）
+///   2. 网络是公开的，任何人都能加入（安全性弱）
+///   3. IP 基于节点 ID 自动分配，可能变化（稳定性不如标准模式）
+///   4. 端口范围限制：MC 服务器端口和 LAN 端口需在范围内
+///
+/// 为兼容 MC 的所有端口（25565 和 LAN 随机端口 49152-65535），
+/// 本方法使用 0-65535 的全端口范围。
+///
+/// @return 16 位十六进制的 Ad-hoc 网络 ID 字符串
+- (NSString *)generateAdhocNetworkId;
+
+/// 判断 Network ID 是否为 Ad-hoc 网络
+///
+/// Ad-hoc 网络 ID 以 "ff" 开头（如 ff0000ffff000000）。
+/// 用于在连接流程中区分标准模式和快速模式。
+///
+/// @param networkId 待判断的 Network ID
+/// @return YES 如果是 Ad-hoc 网络
+- (BOOL)isAdhocNetworkId:(NSString *)networkId;
+
 #pragma mark - 校验工具
 
 /// 验证 ZeroTier Network ID 格式

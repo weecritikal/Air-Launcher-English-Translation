@@ -913,9 +913,20 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
         return;
     }
 
-    // 获取分配的 IPv4 地址
-    NSString *localIP = [[ZeroTierBridge sharedInstance] ipv4AddressForNetwork:netID];
-    NSLog(@"[MultiplayerManager] [连接流程] 网络已就绪，本机 ZeroTier IP：%@", localIP ?: @"（未分配）");
+    // 获取分配的 IP 地址
+    // 标准模式：获取 IPv4 地址
+    // Ad-hoc 模式（快速模式）：只有 IPv6 地址，需要特殊处理
+    NSString *localIP = nil;
+    BOOL isAdhoc = [self isAdhocNetworkId:room.networkId];
+    if (isAdhoc) {
+        // Ad-hoc 网络只有 IPv6 地址
+        localIP = [[ZeroTierBridge sharedInstance] ipv6AddressForNetwork:netID];
+        NSLog(@"[MultiplayerManager] [连接流程] Ad-hoc 模式，本机 ZeroTier IPv6：%@", localIP ?: @"（未分配）");
+    } else {
+        // 标准模式：获取 IPv4 地址
+        localIP = [[ZeroTierBridge sharedInstance] ipv4AddressForNetwork:netID];
+        NSLog(@"[MultiplayerManager] [连接流程] 标准模式，本机 ZeroTier IPv4：%@", localIP ?: @"（未分配）");
+    }
 
     [_stateLock lock];
     self.currentLocalIP = localIP;
@@ -1049,22 +1060,30 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     NSLog(@"[MultiplayerManager] ZeroTier 网络就绪：networkID=%llu ipv4=%@ ipv6=%@",
           networkID, ipv4 ?: @"(nil)", ipv6 ?: @"(nil)");
 
+    // 判断当前网络是否为 Ad-hoc 网络
+    // Ad-hoc 网络只有 IPv6 地址，需要使用 ipv6 而非 ipv4
+    MultiplayerRoom *currentRoom = self.currentRoom;
+    BOOL isAdhoc = currentRoom && [self isAdhocNetworkId:currentRoom.networkId];
+    NSString *effectiveIP = isAdhoc ? ipv6 : ipv4;
+
     // 更新当前房间的本地 IP
     [_stateLock lock];
     if (_currentNetworkID == networkID) {
-        self.currentLocalIP = ipv4;
+        self.currentLocalIP = effectiveIP;
         // 关键修复（对标 FCL/HMCL）：ZeroTier 网络就绪回调可能晚于 connectToRoomFlow 完成，
-        // 此处也需将 IPv4 同步到 room.hostIP，确保分享文本能输出正确的服务器地址。
+        // 此处也需将 IP 同步到 room.hostIP，确保分享文本能输出正确的服务器地址。
+        // Ad-hoc 模式下使用 IPv6，标准模式下使用 IPv4。
     }
     MultiplayerRoom *room = self.currentRoom;
     BOOL needsUpdate = NO;
-    if (room && ipv4 && ipv4.length > 0) {
+    if (room && effectiveIP && effectiveIP.length > 0) {
         // 仅当 IP 变化时才更新，避免重复写入
-        if (![room.hostIP isEqualToString:ipv4]) {
-            room.hostIP = ipv4;
+        if (![room.hostIP isEqualToString:effectiveIP]) {
+            room.hostIP = effectiveIP;
             needsUpdate = YES;
         }
-        NSLog(@"[MultiplayerManager] 已更新房间 %@ 的本地 IP：%@", room.name, ipv4);
+        NSLog(@"[MultiplayerManager] 已更新房间 %@ 的本地 IP（%@）：%@",
+              room.name, isAdhoc ? @"IPv6" : @"IPv4", effectiveIP);
     }
     [_stateLock unlock];
 
@@ -1512,6 +1531,31 @@ static NSString * const kPresetNetworkIdPrefKey = @"multiplayer.preset_network_i
     [[NSUserDefaults standardUserDefaults] setObject:networkId forKey:kPresetNetworkIdPrefKey];
     [[NSUserDefaults standardUserDefaults] synchronize];
     NSLog(@"[MultiplayerManager] 已保存预设 Network ID：%@", networkId);
+}
+
+#pragma mark - Ad-hoc 网络（快速模式，无需注册账号）
+
+- (NSString *)generateAdhocNetworkId {
+    // 使用 zts_net_compute_adhoc_id 生成 Ad-hoc 网络 ID
+    // 参数：端口范围 0-65535（兼容 MC 所有端口，包括 25565 和 LAN 随机端口）
+    // 返回值：uint64_t 类型的网络 ID，需要转换为 16 位十六进制字符串
+    uint64_t adhocNetId = zts_net_compute_adhoc_id(0, 65535);
+
+    // 转换为 16 位十六进制字符串（与标准 Network ID 格式一致）
+    NSString *adhocNetIdStr = [NSString stringWithFormat:@"%016llx", adhocNetId];
+
+    NSLog(@"[MultiplayerManager] 已生成 Ad-hoc 网络 ID：%@ (raw=%llu)", adhocNetIdStr, adhocNetId);
+    return adhocNetIdStr;
+}
+
+- (BOOL)isAdhocNetworkId:(NSString *)networkId {
+    // Ad-hoc 网络 ID 以 "ff" 开头（如 ff0000ffff000000）
+    // 标准网络 ID 以其他字符开头（如 1a2b3c4d5e6f7g8h）
+    if (!networkId || networkId.length < 2) {
+        return NO;
+    }
+    NSString *prefix = [[networkId substringToIndex:2] lowercaseString];
+    return [prefix isEqualToString:@"ff"];
 }
 
 @end
