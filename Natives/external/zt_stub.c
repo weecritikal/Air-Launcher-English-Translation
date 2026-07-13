@@ -601,3 +601,24 @@ int zts_util_ntop(struct zts_sockaddr* addr, zts_socklen_t addrlen, char* dst_st
 
 /* 全局错误变量 */
 int zts_errno = 0;
+
+/* =========================================================================
+ * 地址转换函数（inet_ntop / inet_pton 的 ZeroTier 封装）
+ * ========================================================================= */
+
+const char* zts_inet_ntop(int family, const void* src, char* dst, zts_socklen_t size) {
+    (void)family;
+    (void)src;
+    (void)size;
+    if (dst) {
+        dst[0] = '\0';
+    }
+    return NULL;
+}
+
+int zts_inet_pton(int family, const char* src, void* dst) {
+    (void)family;
+    (void)src;
+    (void)dst;
+    return 0;
+}
