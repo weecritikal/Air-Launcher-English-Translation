@@ -78,6 +78,18 @@ typedef NS_ENUM(NSInteger, ZeroTierNetworkStatus) {
 /// 节点已离线（网络不可达）
 - (void)zeroTierNodeOffline;
 
+/// 节点发生致命错误
+///
+/// 关键修复（H3）：节点发生致命错误（如身份冲突）时通知 delegate，
+/// 让上层 UI 能感知并提示用户。之前仅记录日志，UI 会一直显示"连接中"。
+///
+/// 可能原因：
+///   - 身份冲突（两个节点的公钥哈希到同一个 40 位地址）
+///   - libzt 内部不可恢复的错误
+///
+/// 节点进入此状态后，需要用户重新启动节点（可能需要清理身份文件）。
+- (void)zeroTierNodeFatalError;
+
 /// 网络已就绪（已收到 IP 地址分配）
 /// @param networkID 网络 ID
 /// @param ipv4 分配的 IPv4 地址（可能为 nil，如果尚未分配）
@@ -249,6 +261,19 @@ typedef NS_ENUM(NSInteger, ZeroTierNetworkStatus) {
 /// @param fd socket 文件描述符
 /// @return 0 表示成功，< 0 表示失败
 - (int)closeSocket:(int)fd;
+
+/// 关闭 socket 的读/写端（封装 zts_bsd_shutdown）
+///
+/// 与 closeSocket: 不同，shutdownSocket: 不会释放 fd 资源，
+/// 但会立即让所有阻塞在该 fd 上的 read/recv/write/send 返回。
+///
+/// 关键修复（M12）：SOCKS5Proxy.stop 需要 shutdown 远程 fd 来唤醒
+/// 阻塞在 recvData: 上的客户端线程，避免线程泄漏。
+///
+/// @param fd socket 文件描述符
+/// @param how 关闭方式（ZTS_SHUT_RD / ZTS_SHUT_WR / ZTS_SHUT_RDWR）
+/// @return 0 表示成功，< 0 表示失败
+- (int)shutdownSocket:(int)fd how:(int)how;
 
 /// 发送数据（封装 zts_bsd_send）
 /// @param fd socket 文件描述符

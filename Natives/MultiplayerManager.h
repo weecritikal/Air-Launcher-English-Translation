@@ -15,10 +15,31 @@ typedef NS_ENUM(NSInteger, MultiplayerRoomStatus) {
 @property (nonatomic, copy) NSString *roomId;          // 唯一标识（UUID）
 @property (nonatomic, copy) NSString *name;            // 房间名称
 @property (nonatomic, copy) NSString *networkId;       // ZeroTier Network ID（16位十六进制）
-@property (nonatomic, copy) NSString *hostIP;          // 房主在 ZeroTier 网络中的 IP（如 10.147.17.1）
+/// 房主在 ZeroTier 网络中的 IP（如 10.147.17.1，Ad-hoc 模式下为 IPv6 地址）。
+///
+/// 关键修复（M13）：hostIP 改为 atomic，与 status（H12 修复）保持一致。
+/// hostIP 在 connectToRoomFlow:（后台 utility queue，在 _stateLock 内）和
+/// zeroTierNetworkReady:（主线程，在 _stateLock 内）被写入，但在 UI cell、
+/// shareTextForRoom:、lanPortDidDetect: 等主线程位置无锁读取。
+/// atomic 保证单个 getter/setter 调用的原子性，避免读到中间状态。
+@property (atomic, copy) NSString *hostIP;          // 房主在 ZeroTier 网络中的 IP（如 10.147.17.1）
 @property (nonatomic, copy) NSString *hostPort;        // MC 服务器端口（默认 25565）
 @property (nonatomic, copy) NSString *roomDescription; // 房间描述
-@property (nonatomic, assign) MultiplayerRoomStatus status; // 连接状态
+/// 连接状态。
+///
+/// 关键修复（H12）：status 改为 atomic，保证多线程读写的内存一致性。
+/// 之前为 nonatomic assign，存在以下问题：
+///   - 后台连接线程（MultiplayerManager.connectToRoomFlow）会写入 status
+///   - 主线程（MultiplayerViewController）会读取 status 用于 UI 显示
+///   - 主线程也会写入 status（如点击断开按钮时）
+///   - 多线程同时读写 nonatomic 属性会导致读到部分写入的值或脏数据
+///
+/// atomic 属性会通过底层锁机制保证单个 getter/setter 调用的原子性，
+/// 避免读到中间状态。对于状态机这种「单一值」属性，atomic 已足够。
+///
+/// 注意：atomic 不能保证组合操作（如 read-modify-write）的原子性，
+/// 复杂的状态转换仍应由调用方通过锁（如 MultiplayerManager._stateLock）保护。
+@property (atomic, assign) MultiplayerRoomStatus status; // 连接状态
 @property (nonatomic, copy) NSString *ownerName;       // 房主名称
 @property (nonatomic, strong) NSDate *createdAt;       // 创建时间
 @property (nonatomic, strong) NSDate *lastConnectedAt; // 上次连接时间
@@ -75,13 +96,20 @@ typedef NS_ENUM(NSInteger, MultiplayerRoomStatus) {
 @property (nonatomic, weak, nullable) id<MultiplayerManagerDelegate> delegate;
 
 /// 当前连接的房间（nil 表示未连接任何房间）
-@property (nonatomic, strong, readonly, nullable) MultiplayerRoom *currentRoom;
+///
+/// 关键修复（M1）：改为 atomic，保证多线程读写的内存一致性。
+/// currentRoom 在 connectToRoom（主线程）、connectToRoomFlow（后台 utility queue）、
+/// disconnectCurrentRoom（任意线程）中被写入，在 UI、delegate 回调等多处被读取。
+/// atomic 保证 getter/setter 的原子性，避免读到中间状态。
+@property (atomic, strong, readonly, nullable) MultiplayerRoom *currentRoom;
 
 /// 所有已保存的房间列表
 @property (nonatomic, strong, readonly) NSArray<MultiplayerRoom *> *savedRooms;
 
 /// 当前 SOCKS5 代理监听端口（代理未运行时返回 0）
-@property (nonatomic, assign, readonly) uint16_t currentSOCKS5Port;
+///
+/// 关键修复（M1）：改为 atomic，与 currentRoom 保持一致。
+@property (atomic, assign, readonly) uint16_t currentSOCKS5Port;
 
 /// 当前 SOCKS5 代理是否正在运行
 @property (nonatomic, assign, readonly) BOOL isSOCKS5ProxyRunning;
@@ -91,7 +119,9 @@ typedef NS_ENUM(NSInteger, MultiplayerRoomStatus) {
 
 /// 当前房间在 ZeroTier 网络中分配到的本地 IP（可用于显示给用户）
 /// 仅在房间已连接且 ZeroTier 分配了 IP 后才有效
-@property (nonatomic, copy, readonly, nullable) NSString *currentLocalIP;
+///
+/// 关键修复（M1）：改为 atomic，与 currentRoom 保持一致。
+@property (atomic, copy, readonly, nullable) NSString *currentLocalIP;
 
 #pragma mark - 框架检测
 

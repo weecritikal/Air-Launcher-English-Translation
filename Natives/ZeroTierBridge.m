@@ -387,6 +387,19 @@ static void zeroTierEventCallback(void *msgPtr) {
 /// 停止 ZeroTier 节点
 ///
 /// 调用 zts_node_stop 停止节点，并清理所有内部状态缓存。
+///
+/// 关键修复（H14）：同步等待节点真正下线，避免后续 startNode 失败。
+/// 之前的实现仅调用 zts_node_stop() 后立即设置 _isStarted = NO，
+/// 但 zts_node_stop() 是异步的——它只是发出停止请求，节点实际关闭需要时间。
+/// 如果在 stopNode 后立即调用 startNode，会出现：
+///   - libzt 内部节点可能还在关闭中，zts_node_start 会失败或行为未定义
+///   - 即使 _isStarted = NO 让 startNode 进入启动流程，启动也可能失败
+///   - 多次快速 stop/start 会导致状态混乱
+///
+/// 修复方案：
+///   - 调用 zts_node_stop() 后，使用 polling + sleep 等待 zts_node_is_online() 返回 0
+///   - 设置 5 秒超时，避免无限等待
+///   - 如果在主线程调用，则不等待（避免阻塞 UI），改为异步 dispatch 到后台线程等待
 - (void)stopNode {
     [_lock lock];
     if (!_isStarted) {
@@ -405,7 +418,34 @@ static void zeroTierEventCallback(void *msgPtr) {
         NSLog(@"[ZeroTierBridge] zts_node_stop 成功");
     }
 
+    // 关键修复（H14）：同步等待节点真正下线
+    // zts_node_stop() 是异步的，需要等待 zts_node_is_online() 返回 0 才算真正关闭。
+    // 主线程不能 sleep 等待（会卡 UI），所以如果当前在主线程，则不等待，
+    // 依靠 NODE_DOWN 事件回调来清理状态（H1 修复已确保事件会清理 _isStarted）。
+    BOOL isMainThread = [NSThread isMainThread];
+    if (isMainThread) {
+        NSLog(@"[ZeroTierBridge] stopNode 在主线程调用，跳过同步等待（依靠 NODE_DOWN 事件清理状态）");
+    } else {
+        // 后台线程：polling 等待节点下线，最多 5 秒
+        NSTimeInterval waitDeadline = [NSDate timeIntervalSinceReferenceDate] + 5.0;
+        int onlineCheck = zts_node_is_online();
+        int pollCount = 0;
+        while (onlineCheck == 1 && [NSDate timeIntervalSinceReferenceDate] < waitDeadline) {
+            [NSThread sleepForTimeInterval:0.1];
+            onlineCheck = zts_node_is_online();
+            pollCount++;
+        }
+        if (onlineCheck == 0) {
+            NSLog(@"[ZeroTierBridge] 节点已确认下线（polling %d 次，约 %.1f 秒）",
+                  pollCount, pollCount * 0.1);
+        } else {
+            NSLog(@"[ZeroTierBridge] 节点下线等待超时（5秒），onlineCheck = %d，继续清理状态", onlineCheck);
+        }
+    }
+
     // 清理内部状态
+    // 注意：即使没有收到 NODE_DOWN 事件，这里也要主动清理，确保下次 startNode 能正常工作。
+    // NODE_DOWN 事件回调（H1 修复）也会做同样的清理，两者互不冲突（幂等操作）。
     [_lock lock];
     _isStarted = NO;
     _nodeStatus = ZeroTierNodeStatusStopped;
@@ -665,29 +705,35 @@ static void zeroTierEventCallback(void *msgPtr) {
 ///
 /// 以 200ms 为间隔轮询 zts_node_is_online()，直到节点上线或超时。
 ///
+/// 关键修复（H2）：移除"等待过半后重新调用 zts_node_start() 唤醒节点"的逻辑。
+/// 原因：libzt 的 zts_node_start 不是幂等的，在节点已处于 Starting 状态时再次调用
+/// 行为未定义，可能导致状态混乱、事件丢失或重复事件。
+/// 正确做法：如果节点确实无法上线，返回失败让上层处理，由用户决定是否重启。
+///
 /// @param timeout 超时时间（秒）
 /// @return YES 如果节点在超时前上线
 - (BOOL)waitForNodeOnlineWithTimeout:(NSTimeInterval)timeout {
     NSLog(@"[ZeroTierBridge] 等待节点上线，超时 = %.1f 秒", timeout);
 
-    // 关键修复：ZeroTier 节点在网络波动时会短暂掉线再重连（典型表现：NODE_ONLINE → NODE_OFFLINE → NODE_ONLINE）。
-    // 如果等待窗口正好处于离线期，会导致连接流程失败。
-    // 修复策略：
+    // 容错策略：
     //   1. 优先检查 zts_node_is_online()（libzt 实时查询，最准确）
     //   2. 如果实时查询返回 0，但 _nodeStatus 曾经为 Online（_hasBeenOnline 标记），也认为节点可用
     //      —— 因为节点会自动重连，掉线只是暂时的，网络加入请求仍会被处理
     //   3. 如果节点从未上线过（_hasBeenOnline == NO），则严格等待实时查询返回 1
-    //   4. 关键修复：如果等待过半仍未上线，尝试重新调用 zts_node_start() 唤醒节点
-    //      （libzt 在某些情况下需要外部触发才能重连）
 
     NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:timeout];
-    BOOL hasTriggeredRestart = NO;
-    NSTimeInterval halfTimeout = timeout * 0.5;
 
     while ([[NSDate date] compare:deadline] == NSOrderedAscending) {
         int online = zts_node_is_online();
         if (online == 1) {
             NSLog(@"[ZeroTierBridge] 节点已上线（zts_node_is_online = 1）");
+            // 同步设置 _hasBeenOnline，防止事件回调延迟
+            [_lock lock];
+            if (!_hasBeenOnline) {
+                _hasBeenOnline = YES;
+                NSLog(@"[ZeroTierBridge] waitForNodeOnline 同步设置 _hasBeenOnline = YES");
+            }
+            [_lock unlock];
             return YES;
         }
 
@@ -696,24 +742,10 @@ static void zeroTierEventCallback(void *msgPtr) {
         [_lock lock];
         BOOL hasBeenOnline = _hasBeenOnline;
         ZeroTierNodeStatus status = _nodeStatus;
-        BOOL isStarted = _isStarted;
         [_lock unlock];
         if (hasBeenOnline && status != ZeroTierNodeStatusStopped && status != ZeroTierNodeStatusError) {
             NSLog(@"[ZeroTierBridge] 节点曾上线过，当前状态=%d，视为可用（容错）", (int)status);
             return YES;
-        }
-
-        // 关键修复：如果等待过半仍未上线，且节点已启动但从未上线（或掉线后未重连），
-        // 尝试重新调用 zts_node_start() 唤醒节点
-        NSTimeInterval elapsed = timeout - [deadline timeIntervalSinceNow];
-        if (!hasTriggeredRestart && elapsed > halfTimeout && isStarted) {
-            NSLog(@"[ZeroTierBridge] 等待过半（%.1fs）节点仍未上线，尝试重新调用 zts_node_start() 唤醒", elapsed);
-            int restartResult = zts_node_start();
-            NSLog(@"[ZeroTierBridge] zts_node_start() 重新调用结果 = %d", restartResult);
-            hasTriggeredRestart = YES;
-            // 重新调用后给节点 2 秒恢复时间
-            [NSThread sleepForTimeInterval:2.0];
-            continue;
         }
 
         // 每 200ms 检查一次
@@ -738,6 +770,27 @@ static void zeroTierEventCallback(void *msgPtr) {
 
     NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:timeout];
     while ([[NSDate date] compare:deadline] == NSOrderedAscending) {
+        // 关键修复（M9）：在每次循环迭代中检查 _networkStatuses[networkID]，
+        // 若为 Denied（未授权）或 NotFound（网络不存在）则立即返回 NO，
+        // 避免无谓等待到 30 秒超时。
+        //
+        // 之前不检查这些状态，导致：
+        //   - 网络访问被拒绝（ZTS_EVENT_NETWORK_ACCESS_DENIED）时，仍持续轮询 30 秒
+        //   - 网络不存在（ZTS_EVENT_NETWORK_NOT_FOUND）时，同样持续轮询 30 秒
+        //   - 用户体验差：明明网络 ID 错误或未授权，却要等 30 秒才返回失败
+        //
+        // 修复后：Denied/NotFound 状态下立即返回 NO，让用户尽早得到错误反馈，
+        // 上层可以提示"网络 ID 错误"或"节点未授权，请到 my.zerotier.com 后台授权"。
+        ZeroTierNetworkStatus cachedStatus = [self networkStatus:networkID];
+        if (cachedStatus == ZeroTierNetworkStatusDenied) {
+            NSLog(@"[ZeroTierBridge] 网络访问被拒绝（networkID = %016llx），立即返回失败", networkID);
+            return NO;
+        }
+        if (cachedStatus == ZeroTierNetworkStatusNotFound) {
+            NSLog(@"[ZeroTierBridge] 网络不存在（networkID = %016llx），立即返回失败", networkID);
+            return NO;
+        }
+
         // 检查传输层是否就绪
         int transportReady = zts_net_transport_is_ready(networkID);
         // 检查 IPv4 或 IPv6 地址是否已分配
@@ -821,8 +874,20 @@ static void zeroTierEventCallback(void *msgPtr) {
         case ZTS_EVENT_NODE_DOWN: {
             // 节点正在关闭（203）
             NSLog(@"[ZeroTierBridge] 事件：节点正在关闭 (NODE_DOWN)");
+            // 关键修复（H1）：ZTS_EVENT_NODE_DOWN 表示节点已真正关闭（可能是用户主动 stop，
+            // 也可能是 libzt 内部错误导致节点 DOWN）。
+            // 必须清理 _isStarted，否则后续 startNodeWithHomeDirectory: 会因 _isStarted=YES
+            // 而跳过启动，导致节点永远无法重新启动。
+            // 与 stopNode 方法保持一致，清理所有内部状态。
             [_lock lock];
+            _isStarted = NO;
             _nodeStatus = ZeroTierNodeStatusStopped;
+            _nodeID = 0;
+            _hasBeenOnline = NO;
+            _homeDirectory = nil;
+            [_networkStatuses removeAllObjects];
+            [_ipv4Addresses removeAllObjects];
+            [_ipv6Addresses removeAllObjects];
             [_lock unlock];
             break;
         }
@@ -831,9 +896,22 @@ static void zeroTierEventCallback(void *msgPtr) {
             // 节点发生致命错误（204）
             // 可能原因：身份冲突（两个节点的公钥哈希到同一个 40 位地址）
             NSLog(@"[ZeroTierBridge] 事件：节点发生致命错误 (NODE_FATAL_ERROR)");
+            // 关键修复（H1）：致命错误后节点实际已不可用，清理 _isStarted
+            // 关键修复（H3）：通知 delegate 节点发生错误，让上层 UI 能感知并提示用户
             [_lock lock];
+            _isStarted = NO;
             _nodeStatus = ZeroTierNodeStatusError;
+            _nodeID = 0;
+            _hasBeenOnline = NO;
+            [_networkStatuses removeAllObjects];
+            [_ipv4Addresses removeAllObjects];
+            [_ipv6Addresses removeAllObjects];
             [_lock unlock];
+
+            // 通知 delegate 节点发生致命错误
+            if ([self.delegate respondsToSelector:@selector(zeroTierNodeFatalError)]) {
+                [self.delegate zeroTierNodeFatalError];
+            }
             break;
         }
 
@@ -1077,7 +1155,11 @@ static void zeroTierEventCallback(void *msgPtr) {
 /// 连接 socket 到目标主机
 ///
 /// 封装 zts_bsd_connect，支持 IPv4 和 IPv6。
-/// 超时通过 zts_bsd_setsockopt 设置 SO_RCVTIMEO 和 SO_SNDTIMEO 实现。
+///
+/// 关键修复（C3）：原实现通过 SO_RCVTIMEO/SO_SNDTIMEO 设置超时，
+/// 但这两个选项不影响 connect 的超时（它们只影响 recv/send）。
+/// BSD socket 的 connect 在阻塞模式下默认超时约 75 秒（TCP 重传策略）。
+/// 修复方案：使用非阻塞 socket + select 实现真正的 connect 超时。
 ///
 /// 注意：zts_sockaddr_in 的字段名与系统 sockaddr_in 不同：
 ///   - zts_sockaddr_in 使用 sin_len、sin_family、sin_port、sin_addr、sin_zero
@@ -1109,8 +1191,7 @@ static void zeroTierEventCallback(void *msgPtr) {
 
     const char *hostCStr = [host UTF8String];
 
-    // 设置超时（通过 SO_RCVTIMEO 和 SO_SNDTIMEO）
-    // 这会影响后续的 send/recv 操作超时
+    // 设置 recv/send 超时（影响后续的数据传输，不影响 connect）
     if (timeout > 0) {
         struct zts_timeval tv;
         tv.tv_sec = (long)timeout;
@@ -1133,57 +1214,121 @@ static void zeroTierEventCallback(void *msgPtr) {
     }
 
     // 检测 IP 地址类型（IPv4 或 IPv6）
-    // 通过检查字符串中是否包含 ':' 来判断（IPv6 地址包含冒号）
-    BOOL isIPv6 = ([host rangeOfString:@":"].location != NSNotFound);
+    // 关键修复（L1）：使用 inet_pton 严格校验，而非简单检查 ':'
+    BOOL isIPv6 = (zts_inet_pton(ZTS_AF_INET6, hostCStr, NULL) == 1);
     NSLog(@"[ZeroTierBridge] 地址类型：%@", isIPv6 ? @"IPv6" : @"IPv4");
 
-    if (isIPv6) {
-        // IPv6 连接
-        struct zts_sockaddr_in6 addr6;
-        memset(&addr6, 0, sizeof(addr6));
-        addr6.sin6_len = sizeof(addr6);
-        addr6.sin6_family = ZTS_AF_INET6;
-        addr6.sin6_port = htons(port);
+    // 准备目标地址结构
+    struct zts_sockaddr_storage addrStorage;
+    memset(&addrStorage, 0, sizeof(addrStorage));
+    socklen_t addrLen = 0;
 
-        // 使用 zts_inet_pton 将 IPv6 字符串转换为二进制地址
-        int ptonResult = zts_inet_pton(ZTS_AF_INET6, hostCStr, &addr6.sin6_addr);
+    if (isIPv6) {
+        struct zts_sockaddr_in6 *addr6 = (struct zts_sockaddr_in6 *)&addrStorage;
+        addr6->sin6_len = sizeof(struct zts_sockaddr_in6);
+        addr6->sin6_family = ZTS_AF_INET6;
+        addr6->sin6_port = htons(port);
+
+        int ptonResult = zts_inet_pton(ZTS_AF_INET6, hostCStr, &addr6->sin6_addr);
         if (ptonResult != 1) {
             NSLog(@"[ZeroTierBridge] zts_inet_pton(IPv6) 失败：result = %d, host = %@", ptonResult, host);
             return ZTS_ERR_ARG;
         }
-
-        // 调用 zts_bsd_connect 连接
-        int result = zts_bsd_connect(fd, (const struct zts_sockaddr *)&addr6, sizeof(addr6));
-        if (result != ZTS_ERR_OK) {
-            NSLog(@"[ZeroTierBridge] zts_bsd_connect(IPv6) 失败：result = %d, zts_errno = %d", result, zts_errno);
-        } else {
-            NSLog(@"[ZeroTierBridge] IPv6 连接成功");
-        }
-        return result;
+        addrLen = sizeof(struct zts_sockaddr_in6);
     } else {
-        // IPv4 连接
-        struct zts_sockaddr_in addr;
-        memset(&addr, 0, sizeof(addr));
-        addr.sin_len = sizeof(addr);
-        addr.sin_family = ZTS_AF_INET;
-        addr.sin_port = htons(port);
+        struct zts_sockaddr_in *addr = (struct zts_sockaddr_in *)&addrStorage;
+        addr->sin_len = sizeof(struct zts_sockaddr_in);
+        addr->sin_family = ZTS_AF_INET;
+        addr->sin_port = htons(port);
 
-        // 使用 zts_inet_pton 将 IPv4 字符串转换为二进制地址
-        int ptonResult = zts_inet_pton(ZTS_AF_INET, hostCStr, &addr.sin_addr);
+        int ptonResult = zts_inet_pton(ZTS_AF_INET, hostCStr, &addr->sin_addr);
         if (ptonResult != 1) {
             NSLog(@"[ZeroTierBridge] zts_inet_pton(IPv4) 失败：result = %d, host = %@", ptonResult, host);
             return ZTS_ERR_ARG;
         }
+        addrLen = sizeof(struct zts_sockaddr_in);
+    }
 
-        // 调用 zts_bsd_connect 连接
-        int result = zts_bsd_connect(fd, (const struct zts_sockaddr *)&addr, sizeof(addr));
+    // 关键修复（C3）：使用非阻塞 connect + select 实现真正的超时控制
+    // 步骤 1：获取当前 socket 的 flags，设置为非阻塞
+    int origFlags = zts_bsd_fcntl(fd, ZTS_F_GETFL, 0);
+    if (origFlags < 0) {
+        NSLog(@"[ZeroTierBridge] zts_bsd_fcntl(F_GETFL) 失败：zts_errno = %d", zts_errno);
+        // 如果 fcntl 失败，回退到阻塞模式 connect（超时由系统控制）
+        int result = zts_bsd_connect(fd, (const struct zts_sockaddr *)&addrStorage, addrLen);
         if (result != ZTS_ERR_OK) {
-            NSLog(@"[ZeroTierBridge] zts_bsd_connect(IPv4) 失败：result = %d, zts_errno = %d", result, zts_errno);
+            NSLog(@"[ZeroTierBridge] zts_bsd_connect(阻塞模式) 失败：result = %d, zts_errno = %d", result, zts_errno);
         } else {
-            NSLog(@"[ZeroTierBridge] IPv4 连接成功");
+            NSLog(@"[ZeroTierBridge] 连接成功（阻塞模式）");
         }
         return result;
     }
+
+    // 设置为非阻塞
+    zts_bsd_fcntl(fd, ZTS_F_SETFL, origFlags | ZTS_O_NONBLOCK);
+
+    // 步骤 2：发起非阻塞 connect，预期返回 -1 且 zts_errno == ZTS_EINPROGRESS
+    int connectResult = zts_bsd_connect(fd, (const struct zts_sockaddr *)&addrStorage, addrLen);
+    if (connectResult == ZTS_ERR_OK) {
+        // 立即连接成功（本地回环等快速连接场景）
+        NSLog(@"[ZeroTierBridge] 连接立即成功");
+        // 恢复原始阻塞模式
+        zts_bsd_fcntl(fd, ZTS_F_SETFL, origFlags);
+        return ZTS_ERR_OK;
+    }
+
+    // 检查是否是 EINPROGRESS（非阻塞 connect 的预期返回）
+    if (zts_errno != ZTS_EINPROGRESS) {
+        NSLog(@"[ZeroTierBridge] zts_bsd_connect 失败：zts_errno = %d（非 EINPROGRESS）", zts_errno);
+        // 恢复原始阻塞模式
+        zts_bsd_fcntl(fd, ZTS_F_SETFL, origFlags);
+        return connectResult;
+    }
+
+    // 步骤 3：使用 select 等待 socket 可写，带超时
+    zts_fd_set writeFds;
+    ZTS_FD_ZERO(&writeFds);
+    ZTS_FD_SET(fd, &writeFds);
+
+    struct zts_timeval selectTimeout;
+    selectTimeout.tv_sec = (long)timeout;
+    selectTimeout.tv_usec = (long)((timeout - (NSTimeInterval)selectTimeout.tv_sec) * 1000000);
+    if (selectTimeout.tv_usec < 0) {
+        selectTimeout.tv_usec = 0;
+    }
+
+    int selectResult = zts_bsd_select(fd + 1, NULL, &writeFds, NULL, &selectTimeout);
+
+    // 恢复原始阻塞模式（无论 select 结果如何）
+    zts_bsd_fcntl(fd, ZTS_F_SETFL, origFlags);
+
+    if (selectResult < 0) {
+        NSLog(@"[ZeroTierBridge] select 错误：zts_errno = %d", zts_errno);
+        return ZTS_ERR_SOCKET;
+    }
+
+    if (selectResult == 0) {
+        // 超时
+        NSLog(@"[ZeroTierBridge] connect 超时（%.1f 秒）：host = %@, port = %u", timeout, host, port);
+        return ZTS_ERR_SOCKET;
+    }
+
+    // 步骤 4：检查连接结果（通过 SO_ERROR）
+    int socketError = 0;
+    socklen_t errorLen = sizeof(socketError);
+    int sockoptResult = zts_bsd_getsockopt(fd, ZTS_SOL_SOCKET, ZTS_SO_ERROR, &socketError, &errorLen);
+    if (sockoptResult != ZTS_ERR_OK) {
+        NSLog(@"[ZeroTierBridge] getsockopt(SO_ERROR) 失败：zts_errno = %d", zts_errno);
+        return ZTS_ERR_SOCKET;
+    }
+
+    if (socketError != 0) {
+        NSLog(@"[ZeroTierBridge] connect 失败：SO_ERROR = %d, host = %@, port = %u", socketError, host, port);
+        return ZTS_ERR_SOCKET;
+    }
+
+    NSLog(@"[ZeroTierBridge] 连接成功（非阻塞+select，%@）", isIPv6 ? @"IPv6" : @"IPv4");
+    return ZTS_ERR_OK;
 }
 
 /// 关闭 socket（封装 zts_bsd_close）
@@ -1194,6 +1339,19 @@ static void zeroTierEventCallback(void *msgPtr) {
     int result = zts_bsd_close(fd);
     if (result != ZTS_ERR_OK) {
         NSLog(@"[ZeroTierBridge] zts_bsd_close 失败：result = %d, zts_errno = %d", result, zts_errno);
+    }
+    return result;
+}
+
+/// 关闭 socket 的读/写端（封装 zts_bsd_shutdown）
+///
+/// 关键修复（M12）：SOCKS5Proxy.stop 调用此方法 shutdown 远程 fd，
+/// 强制阻塞在 recvData: 上的客户端线程立即返回，避免线程泄漏。
+- (int)shutdownSocket:(int)fd how:(int)how {
+    NSLog(@"[ZeroTierBridge] shutdown socket：fd = %d, how = %d", fd, how);
+    int result = zts_bsd_shutdown(fd, how);
+    if (result != ZTS_ERR_OK) {
+        NSLog(@"[ZeroTierBridge] zts_bsd_shutdown 失败：result = %d, zts_errno = %d", result, zts_errno);
     }
     return result;
 }

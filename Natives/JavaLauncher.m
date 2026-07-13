@@ -394,7 +394,59 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
             if (portValue > 0 && portValue <= 65535) {
                 margv[++margc] = [NSString stringWithFormat:@"-DsocksProxyHost=%@", proxyHost].UTF8String;
                 margv[++margc] = [NSString stringWithFormat:@"-DsocksProxyPort=%@", proxyPortStr].UTF8String;
-                NSLog(@"[JavaLauncher] 已注入 ZeroTier SOCKS5 代理：%@:%@", proxyHost, proxyPortStr);
+
+                // 关键修复（C4/H13）：注入 -DsocksNonProxyHosts 参数，让 Minecraft 登录、
+                // 认证、皮肤、披风、版本库、Mod 下载等官方/第三方服务请求绕过 SOCKS5 代理。
+                //
+                // 问题描述：
+                //   仅注入 socksProxyHost/socksProxyPort 后，Java 的所有 Socket 连接默认都会
+                //   走 SOCKS5 代理，包括 Microsoft 登录、Mojang 认证、Yggdrasil 验证、
+                //   皮肤/披风资源加载、Mojang 版本库元数据、Modrinth/CurseForge Mod 下载、
+                //   GitHub 资源下载、AWS S3 资源下载等。这些服务走 ZeroTier 虚拟网络会被
+                //   路由到错误的目标，导致登录失败、皮肤丢失、Mod 无法下载，进而影响联机体验。
+                //
+                // 修复方案：
+                //   通过 socksNonProxyHosts JVM 参数指定不走代理的主机名模式列表，
+                //   多个模式用 "|" 分隔，支持 * 通配符（如 *.mojang.com）。
+                //
+                // 主机名列表说明：
+                //   - localhost / 127.* / [::1]：本地回环，绝不应走代理
+                //   - *.minecraft.net：Minecraft 官方服务（会话、会话服务器、皮肤服务）
+                //   - *.mojang.com：Mojang 服务（认证、皮肤、披风、版本库）
+                //   - *.microsoft.com：Microsoft 在线服务（账号、Xbox Live 元数据）
+                //   - *.microsoftonline.com：Microsoft 在线认证
+                //   - *.xboxlive.com：Xbox Live 认证（Mojang 与 MS 账号互通）
+                //   - *.modrinth.com：Modrinth Mod 下载
+                //   - *.curseforge.com：CurseForge Mod 下载
+                //   - *.githubusercontent.com：GitHub 资源（部分 Mod/资源/raw 文件）
+                //   - *.github.com：GitHub API
+                //   - *.amazonaws.com：AWS S3（Mojang/MS 资源、皮肤 CDN）
+                //   - *.cloudfront.net：CloudFront（部分资源 CDN）
+                //   - *.akamaihd.net：Akamai（部分资源 CDN）
+                //   - 10.* / 192.168.* / 172.16-31.*：本地局域网，绝不应走代理
+                //     注意：10.* 与 ZeroTier 默认子网 10.147.17.x 重叠，但我们用 SOCKS5
+                //     而非系统路由，因此本地 10.* 仍走系统路由。Minecraft 房主的
+                //     ZeroTier IP 是通过 SOCKS5 转发的，不会受 socksNonProxyHosts 影响。
+                //
+                // 重要：房主在 ZeroTier 网络中的 IP（如 10.147.17.x）走 SOCKS5 代理时是
+                // 直接通过 ZeroTierBridge 的 libzt socket 转发到 ZeroTier 网络的，
+                // 不依赖 socksNonProxyHosts 的设置，所以即使 10.* 在不代理列表里，
+                // Minecraft 仍能正确连接房主服务器。
+                NSString *nonProxyHosts = @"localhost|127.*|[::1]|"
+                                          @"*.minecraft.net|*.mojang.com|"
+                                          @"*.microsoft.com|*.microsoftonline.com|"
+                                          @"*.xboxlive.com|*.modrinth.com|"
+                                          @"*.curseforge.com|*.githubusercontent.com|"
+                                          @"*.github.com|*.amazonaws.com|"
+                                          @"*.cloudfront.net|*.akamaihd.net|"
+                                          @"10.*|192.168.*|172.16.*|172.17.*|172.18.*|"
+                                          @"172.19.*|172.20.*|172.21.*|172.22.*|172.23.*|"
+                                          @"172.24.*|172.25.*|172.26.*|172.27.*|172.28.*|"
+                                          @"172.29.*|172.30.*|172.31.*";
+                margv[++margc] = [NSString stringWithFormat:@"-DsocksNonProxyHosts=%@", nonProxyHosts].UTF8String;
+
+                NSLog(@"[JavaLauncher] 已注入 ZeroTier SOCKS5 代理：%@:%@（同时注入 socksNonProxyHosts 让登录/皮肤/Mod 下载绕过代理）",
+                      proxyHost, proxyPortStr);
             } else {
                 NSLog(@"[JavaLauncher] AMETHYST_SOCKS5_PROXY 端口无效：%@", proxyPortStr);
             }

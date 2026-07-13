@@ -47,6 +47,8 @@
 #include <unistd.h>
 #include <string.h>
 #include <errno.h>
+#include <sys/select.h>
+#include <sys/time.h>
 
 #pragma mark - 常量定义
 
@@ -100,22 +102,59 @@ typedef NS_ENUM(NSInteger, SOCKS5ProxyErrorCode) {
 /// 连接远程主机的超时时间（秒）
 #define SOCKS5_CONNECT_TIMEOUT 30.0
 
+/// 客户端 socket 读写超时（秒）
+/// 防止恶意客户端只发送部分数据后保持连接不发送，导致服务器线程永久阻塞
+#define SOCKS5_CLIENT_IO_TIMEOUT 30
+
+/// 客户端握手阶段的读写超时（秒）
+#define SOCKS5_HANDSHAKE_TIMEOUT 15
+
 #pragma mark - 辅助函数
 
-/// 完整读取指定长度的数据
+/// 完整读取指定长度的数据（带超时）
 ///
 /// read() 系统调用可能不会一次性返回所有请求的字节，需要循环读取。
 /// 本函数会阻塞直到读取到指定长度或连接关闭。
 ///
+/// 关键修复（H9）：使用 select 实现超时，防止恶意客户端只发送部分数据后
+/// 保持连接但不发送更多数据，导致服务器线程永久阻塞。
+///
 /// @param fd socket 文件描述符
 /// @param buf 接收缓冲区
 /// @param len 需要读取的长度
-/// @return 实际读取的字节数（< len 表示连接已关闭或出错）
-static ssize_t readAll(int fd, void *buf, size_t len) {
+/// @param timeoutSec 超时秒数（≤0 表示阻塞模式，无超时）
+/// @return 实际读取的字节数（< len 表示连接已关闭或出错，-1 表示错误或超时）
+static ssize_t readAllWithTimeout(int fd, void *buf, size_t len, int timeoutSec) {
     size_t totalRead = 0;
     uint8_t *p = (uint8_t *)buf;
 
     while (totalRead < len) {
+        // 使用 select 检查 socket 可读，带超时
+        if (timeoutSec > 0) {
+            fd_set readFds;
+            FD_ZERO(&readFds);
+            FD_SET(fd, &readFds);
+
+            struct timeval tv;
+            tv.tv_sec = timeoutSec;
+            tv.tv_usec = 0;
+
+            int selectResult = select(fd + 1, &readFds, NULL, NULL, &tv);
+            if (selectResult < 0) {
+                if (errno == EINTR) {
+                    continue;
+                }
+                NSLog(@"[SOCKS5Proxy] readAll select 错误：errno = %d, fd = %d", errno, fd);
+                return -1;
+            }
+            if (selectResult == 0) {
+                // 超时
+                NSLog(@"[SOCKS5Proxy] readAll 超时（%d秒），fd = %d, 已读 %zu/%zu 字节",
+                      timeoutSec, fd, totalRead, len);
+                return totalRead > 0 ? (ssize_t)totalRead : -1;
+            }
+        }
+
         ssize_t n = read(fd, p + totalRead, len - totalRead);
         if (n < 0) {
             // 被信号中断，重试
@@ -136,19 +175,53 @@ static ssize_t readAll(int fd, void *buf, size_t len) {
     return (ssize_t)totalRead;
 }
 
-/// 完整写入指定长度的数据
+/// 兼容旧调用：无超时的 readAll（用于已经设置 SO_RCVTIMEO 的 socket）
+static ssize_t readAll(int fd, void *buf, size_t len) {
+    return readAllWithTimeout(fd, buf, len, 0);
+}
+
+/// 完整写入指定长度的数据（带超时）
 ///
 /// write() 系统调用可能不会一次性写入所有字节，需要循环写入。
+///
+/// 关键修复（M9）：write 返回 0 视为错误（对端可能已关闭）。
 ///
 /// @param fd socket 文件描述符
 /// @param buf 写入缓冲区
 /// @param len 需要写入的长度
-/// @return 实际写入的字节数（< len 表示出错）
-static ssize_t writeAll(int fd, const void *buf, size_t len) {
+/// @param timeoutSec 超时秒数（≤0 表示阻塞模式，无超时）
+/// @return 实际写入的字节数（< len 表示出错，-1 表示错误或超时）
+static ssize_t writeAllWithTimeout(int fd, const void *buf, size_t len, int timeoutSec) {
     size_t totalWritten = 0;
     const uint8_t *p = (const uint8_t *)buf;
 
     while (totalWritten < len) {
+        // 使用 select 检查 socket 可写，带超时
+        if (timeoutSec > 0) {
+            fd_set writeFds;
+            FD_ZERO(&writeFds);
+            FD_SET(fd, &writeFds);
+
+            struct timeval tv;
+            tv.tv_sec = timeoutSec;
+            tv.tv_usec = 0;
+
+            int selectResult = select(fd + 1, NULL, &writeFds, NULL, &tv);
+            if (selectResult < 0) {
+                if (errno == EINTR) {
+                    continue;
+                }
+                NSLog(@"[SOCKS5Proxy] writeAll select 错误：errno = %d, fd = %d", errno, fd);
+                return -1;
+            }
+            if (selectResult == 0) {
+                // 超时
+                NSLog(@"[SOCKS5Proxy] writeAll 超时（%d秒），fd = %d, 已写 %zu/%zu 字节",
+                      timeoutSec, fd, totalWritten, len);
+                return totalWritten > 0 ? (ssize_t)totalWritten : -1;
+            }
+        }
+
         ssize_t n = write(fd, p + totalWritten, len - totalWritten);
         if (n < 0) {
             if (errno == EINTR) {
@@ -158,12 +231,19 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
             return -1;
         }
         if (n == 0) {
-            return (ssize_t)totalWritten;
+            // 关键修复（M9）：write 返回 0 通常表示错误（对端已关闭或缓冲区满）
+            NSLog(@"[SOCKS5Proxy] writeAll 返回 0，对端可能已关闭：fd = %d", fd);
+            return -1;
         }
         totalWritten += (size_t)n;
     }
 
     return (ssize_t)totalWritten;
+}
+
+/// 兼容旧调用：无超时的 writeAll
+static ssize_t writeAll(int fd, const void *buf, size_t len) {
+    return writeAllWithTimeout(fd, buf, len, 0);
 }
 
 #pragma mark - SOCKS5Proxy 类扩展
@@ -186,6 +266,27 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
 
     /// 活跃的客户端处理线程列表（受 _lock 保护）
     NSMutableArray<NSThread *> *_clientThreads;
+
+    /// 关键修复（C1）：活跃的客户端 socket fd 列表（受 _lock 保护）
+    /// 用于在 stop 时主动 shutdown 所有客户端连接，强制 read/write 返回，
+    /// 避免客户端处理线程因阻塞 IO 无法退出导致线程泄漏。
+    NSMutableArray<NSNumber *> *_clientFDs;
+
+    /// 关键修复（M12）：活跃的远程（libzt）socket fd 列表（受 _lock 保护）
+    /// 用于在 stop 时主动 shutdown 所有远程连接，强制 recv/send 返回，
+    /// 避免客户端线程在 forwardDataBetweenClientFD: 中阻塞在 recvData:remoteFD: 上
+    /// 最长 30 秒（SOCKS5_CONNECT_TIMEOUT 设置的 SO_RCVTIMEO）。
+    ///
+    /// 之前 stop 仅 shutdown 客户端 fd，不处理远程 fd：
+    ///   1. client→remote 任务因 read(clientFD) 返回 0 而退出
+    ///   2. remote→client 任务仍阻塞在 recvData:remoteFD: 中
+    ///      （shutdown(clientFD, SHUT_WR) 只关闭客户端 fd 的写端，不影响远程 fd 的读端）
+    ///   3. dispatch_group_wait(group, DISPATCH_TIME_FOREVER) 等待两个方向都完成
+    ///   4. 客户端线程在 stop 返回后继续存活最长 30 秒，造成线程和 fd 临时泄漏
+    ///
+    /// 修复方案：跟踪所有远程 fd，在 stop 时对每个远程 fd 执行 shutdown(SHUT_RDWR)，
+    /// 强制 recvData: 立即返回，让客户端线程快速退出。
+    NSMutableArray<NSNumber *> *_remoteFDs;
 }
 @end
 
@@ -226,6 +327,8 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
         _acceptThread = nil;
         _lock = [[NSLock alloc] init];
         _clientThreads = [[NSMutableArray alloc] init];
+        _clientFDs = [[NSMutableArray alloc] init];
+        _remoteFDs = [[NSMutableArray alloc] init];
 
         NSLog(@"[SOCKS5Proxy] 单例已初始化");
     }
@@ -247,27 +350,29 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
 ///   8. 启动 Accept 线程
 - (BOOL)startWithPort:(uint16_t)port
                 error:(NSError **)error {
-    // 关键修复：bind 失败 (errno=48 EADDRINUSE) 的根因是上次断开时 socket 未被正确关闭，
+    // 关键修复（H8）：整个启动流程用锁保护，避免并发调用导致状态混乱
+    [_lock lock];
+
+    // 关键修复（C1/H8）：bind 失败 (errno=48 EADDRINUSE) 的根因是上次断开时 socket 未被正确关闭，
     // 或 app 进程崩溃（SIGSEGV）后 _running 标记与实际 socket 状态不一致。
     // 修复方案：启动前先强制停止一次，确保旧的监听 socket 已被关闭，端口被释放。
-    // 注意：stop 内部会检查 _running，所以这里调用是安全的（如果未运行则空操作）。
     if (_running) {
         NSLog(@"[SOCKS5Proxy] 启动前检测到代理仍在运行，先停止旧代理以释放端口");
+        // 临时释放锁以调用 stop（stop 内部会加锁）
+        [_lock unlock];
         [self stop];
         // 给系统一点时间释放端口（TIME_WAIT 状态）
         [NSThread sleepForTimeInterval:0.1];
+        [_lock lock];
     } else if (_listenFD >= 0) {
         // _running 为 NO 但 _listenFD 仍有效（异常状态），强制关闭
         NSLog(@"[SOCKS5Proxy] 检测到僵尸监听 socket（fd=%d），强制关闭", _listenFD);
-        [_lock lock];
         close(_listenFD);
         _listenFD = -1;
-        [_lock unlock];
         [NSThread sleepForTimeInterval:0.1];
     }
 
-    // 检查是否已运行
-    [_lock lock];
+    // 检查是否已运行（停止后再次检查）
     if (_running) {
         [_lock unlock];
         NSLog(@"[SOCKS5Proxy] 代理已在运行，端口 = %u", _listeningPort);
@@ -365,6 +470,8 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
     _listenFD = fd;
     _listeningPort = actualPort;
     _running = YES;
+    [_clientFDs removeAllObjects];
+    [_clientThreads removeAllObjects];
     [_lock unlock];
 
     NSLog(@"[SOCKS5Proxy] 代理服务器已启动，监听 127.0.0.1:%u", actualPort);
@@ -382,8 +489,11 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
 
 /// 停止代理服务器
 ///
-/// 关闭监听 socket，停止接受新连接。
-/// 已建立的客户端连接会继续处理直到完成。
+/// 关键修复（C1）：关闭监听 socket 后，主动 shutdown 所有活跃客户端连接，
+/// 强制阻塞在 read/recv 上的客户端线程返回，避免线程泄漏。
+///
+/// 关键修复（M4）：stop 后短暂等待，让客户端线程有机会清理资源，
+/// 然后再由调用方离开 ZeroTier 网络。
 - (void)stop {
     [_lock lock];
     if (!_running) {
@@ -405,16 +515,59 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
     uint16_t savedPort = _listeningPort;
     _listeningPort = 0;
 
-    // 复制客户端线程列表（不阻塞太久）
+    // 复制客户端线程列表和 fd 列表（不阻塞太久）
     NSArray<NSThread *> *threads = [_clientThreads copy];
+    NSArray<NSNumber *> *clientFDs = [_clientFDs copy];
+    NSArray<NSNumber *> *remoteFDs = [_remoteFDs copy];
     [_clientThreads removeAllObjects];
+    [_clientFDs removeAllObjects];
+    [_remoteFDs removeAllObjects];
     [_lock unlock];
 
-    NSLog(@"[SOCKS5Proxy] 监听已关闭（端口 %u），等待 %lu 个客户端线程完成...",
-          savedPort, (unsigned long)threads.count);
+    NSLog(@"[SOCKS5Proxy] 监听已关闭（端口 %u），正在 shutdown %lu 个客户端连接和 %lu 个远程连接...",
+          savedPort, (unsigned long)clientFDs.count, (unsigned long)remoteFDs.count);
 
-    // 注意：不强制终止客户端线程，让它们自然完成
-    // 客户端线程会在数据转发完成后自动退出
+    // 关键修复（C1）：主动 shutdown 所有活跃客户端 fd
+    // shutdown(SHUT_RDWR) 会强制 read/recv 返回 0 或错误，唤醒阻塞的客户端线程
+    // 这是解决线程泄漏的核心：只有唤醒阻塞的 read，客户端线程才能退出
+    for (NSNumber *fdNum in clientFDs) {
+        int clientFD = [fdNum intValue];
+        if (clientFD >= 0) {
+            // shutdown 而不是 close：close 只是减少引用计数，不会立即唤醒阻塞的 read
+            // shutdown(SHUT_RDWR) 会立即让所有阻塞在该 fd 上的 read/write 返回
+            int rc = shutdown(clientFD, SHUT_RDWR);
+            NSLog(@"[SOCKS5Proxy] shutdown 客户端 fd=%d，结果=%d (errno=%d)", clientFD, rc, errno);
+        }
+    }
+
+    // 关键修复（M12）：主动 shutdown 所有活跃远程 fd（libzt socket）
+    // 之前不 shutdown 远程 fd，导致客户端线程在 forwardDataBetweenClientFD: 中
+    // 阻塞在 recvData:remoteFD: 上最长 30 秒（SO_RCVTIMEO 超时）。
+    // shutdown 远程 fd 的 SHUT_RDWR 会立即让 recv 返回，让客户端线程快速退出。
+    for (NSNumber *fdNum in remoteFDs) {
+        int remoteFD = [fdNum intValue];
+        if (remoteFD >= 0) {
+            int rc = [[ZeroTierBridge sharedInstance] shutdownSocket:remoteFD how:2 /* SHUT_RDWR */];
+            NSLog(@"[SOCKS5Proxy] shutdown 远程 fd=%d，结果=%d", remoteFD, rc);
+        }
+    }
+
+    NSLog(@"[SOCKS5Proxy] 已 shutdown 所有客户端连接，等待 %lu 个客户端线程退出...",
+          (unsigned long)threads.count);
+
+    // 关键修复（C1）：等待客户端线程退出（带超时，避免无限等待）
+    // 客户端线程被 shutdown 唤醒后会很快退出，但需要给它们一点时间
+    NSTimeInterval waitDeadline = [NSDate timeIntervalSinceReferenceDate] + 2.0;
+    for (NSThread *thread in threads) {
+        while (![thread isFinished] && [NSDate timeIntervalSinceReferenceDate] < waitDeadline) {
+            [NSThread sleepForTimeInterval:0.05];
+        }
+        if (![thread isFinished]) {
+            NSLog(@"[SOCKS5Proxy] 警告：客户端线程 %@ 未在 2 秒内退出", thread.name);
+        }
+    }
+
+    NSLog(@"[SOCKS5Proxy] 代理已停止，所有客户端连接已清理");
 }
 
 /// 代理服务器是否正在运行
@@ -442,6 +595,10 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
 /// 循环接受新客户端连接，为每个客户端启动一个处理线程。
 - (void)acceptLoop {
     NSLog(@"[SOCKS5Proxy] Accept 线程已启动");
+
+    // 关键修复（M10）：连续 accept 错误计数器，防止无限循环消耗 CPU
+    int consecutiveErrors = 0;
+    static const int kMaxConsecutiveErrors = 20;
 
     while (YES) {
         // 检查运行状态
@@ -471,16 +628,78 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
                 break;
             }
 
-            // 其他错误，记录日志并继续
-            NSLog(@"[SOCKS5Proxy] accept 失败：errno = %d", errno);
+            // 关键修复（M10）：EBADF 表示 listenFD 无效，直接退出
+            // EMFILE/ENFILE 表示文件描述符耗尽，退避后继续
+            if (errno == EBADF) {
+                NSLog(@"[SOCKS5Proxy] accept 返回 EBADF（listenFD 无效），退出循环");
+                // 关键修复（M11）：异常退出时必须清理 _running 状态，
+                // 否则 isRunning 仍返回 YES，上层认为代理正常但实际已停止接受连接。
+                [_lock lock];
+                _running = NO;
+                if (_listenFD >= 0) {
+                    close(_listenFD);
+                    _listenFD = -1;
+                }
+                _listeningPort = 0;
+                [_lock unlock];
+                break;
+            }
+
+            consecutiveErrors++;
+            NSLog(@"[SOCKS5Proxy] accept 失败：errno = %d（连续 %d 次）", errno, consecutiveErrors);
+
+            // 关键修复（M10）：连续错误次数过多，退出避免无限循环
+            if (consecutiveErrors >= kMaxConsecutiveErrors) {
+                NSLog(@"[SOCKS5Proxy] 连续 %d 次 accept 错误，退出循环", consecutiveErrors);
+                // 关键修复（M11）：异常退出时清理 _running 状态和 _listenFD，
+                // 让 isRunning 返回 NO，上层（MultiplayerManager）能检测到代理已停止。
+                // 之前不清理导致：
+                //   - isRunning 仍返回 YES
+                //   - MultiplayerManager.isSOCKS5ProxyRunning 报告代理在运行
+                //   - 但实际不再接受新连接，Minecraft 的 SOCKS5 连接请求被静默丢弃
+                //   - 系统进入不一致状态
+                [_lock lock];
+                _running = NO;
+                if (_listenFD >= 0) {
+                    close(_listenFD);
+                    _listenFD = -1;
+                }
+                _listeningPort = 0;
+                [_lock unlock];
+                break;
+            }
+
+            // 退避，避免 CPU 空转
+            [NSThread sleepForTimeInterval:0.1];
             continue;
         }
+
+        // 重置错误计数器
+        consecutiveErrors = 0;
 
         // 获取客户端 IP 和端口
         char clientIP[INET_ADDRSTRLEN] = {0};
         inet_ntop(AF_INET, &clientAddr.sin_addr, clientIP, sizeof(clientIP));
         uint16_t clientPort = ntohs(clientAddr.sin_port);
         NSLog(@"[SOCKS5Proxy] 新客户端连接：%s:%u (fd=%d)", clientIP, clientPort, clientFD);
+
+        // 关键修复（H9/C1）：为客户端 socket 设置 SO_RCVTIMEO
+        // 防止恶意客户端只发送部分数据后保持连接不发送，导致服务器线程永久阻塞。
+        // 超时后 read 返回 -1 且 errno=EAGAIN/EWOULDBLOCK，客户端线程可以退出。
+        struct timeval rcvTimeout;
+        rcvTimeout.tv_sec = SOCKS5_CLIENT_IO_TIMEOUT;
+        rcvTimeout.tv_usec = 0;
+        if (setsockopt(clientFD, SOL_SOCKET, SO_RCVTIMEO, &rcvTimeout, sizeof(rcvTimeout)) < 0) {
+            NSLog(@"[SOCKS5Proxy] 设置 SO_RCVTIMEO 失败：errno = %d（忽略，继续）", errno);
+        }
+
+        // 关键修复（M14）：设置 SO_KEEPALIVE
+        // 如果对端异常断开（如网络中断、进程崩溃），本端能及时检测到，
+        // 避免长时间阻塞在 read 上不知道连接已断开。
+        int keepalive = 1;
+        if (setsockopt(clientFD, SOL_SOCKET, SO_KEEPALIVE, &keepalive, sizeof(keepalive)) < 0) {
+            NSLog(@"[SOCKS5Proxy] 设置 SO_KEEPALIVE 失败：errno = %d（忽略，继续）", errno);
+        }
 
         // 发送客户端连接通知
         [[NSNotificationCenter defaultCenter] postNotificationName:SOCKS5ProxyClientConnectedNotification
@@ -500,6 +719,8 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
         [_lock lock];
         if (_running) {
             [_clientThreads addObject:clientThread];
+            // 关键修复（C1）：将客户端 fd 加入数组，stop 时可以主动 shutdown
+            [_clientFDs addObject:@(clientFD)];
             [clientThread start];
         } else {
             // 代理已停止，直接关闭客户端连接
@@ -522,6 +743,9 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
 ///   3. 双向转发数据
 ///   4. 清理资源
 ///
+/// 关键修复（H10）：使用 @try @finally 确保 fd 在所有路径下都被正确关闭，
+/// 即使握手或转发过程中抛出异常也不会泄漏 fd。
+///
 /// @param clientFD 客户端 socket 文件描述符
 - (void)handleClient:(int)clientFD {
     @autoreleasepool {
@@ -532,50 +756,68 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
         uint16_t targetPort = 0;
         int remoteFD = -1;
 
-        // 步骤 1：SOCKS5 握手
-        BOOL handshakeOK = [self socks5Handshake:clientFD
-                                      targetHost:&targetHost
-                                      targetPort:&targetPort
-                                        remoteFD:&remoteFD];
+        @try {
+            // 步骤 1：SOCKS5 握手
+            BOOL handshakeOK = [self socks5Handshake:clientFD
+                                          targetHost:&targetHost
+                                          targetPort:&targetPort
+                                            remoteFD:&remoteFD];
 
-        if (!handshakeOK) {
-            NSLog(@"[SOCKS5Proxy] SOCKS5 握手失败，关闭客户端 fd=%d", clientFD);
-            close(clientFD);
-            if (remoteFD >= 0) {
-                [[ZeroTierBridge sharedInstance] closeSocket:remoteFD];
+            if (!handshakeOK) {
+                NSLog(@"[SOCKS5Proxy] SOCKS5 握手失败，关闭客户端 fd=%d", clientFD);
+
+                // 发送客户端断开通知
+                [[NSNotificationCenter defaultCenter] postNotificationName:SOCKS5ProxyClientDisconnectedNotification
+                                                                    object:self
+                                                                  userInfo:@{@"reason": @"handshake_failed"}];
+                return;
             }
+
+            NSLog(@"[SOCKS5Proxy] SOCKS5 握手成功，目标 %@:%u，开始转发 (clientFD=%d, remoteFD=%d)",
+                  targetHost, targetPort, clientFD, remoteFD);
+
+            // 关键修复（M12）：将远程 fd 加入 _remoteFDs 列表，以便 stop 时能 shutdown 它。
+            // 否则 stop 时只 shutdown 客户端 fd，远程 fd 仍阻塞 recv，客户端线程无法退出。
+            [_lock lock];
+            [_remoteFDs addObject:@(remoteFD)];
+            [_lock unlock];
+
+            // 步骤 2：双向转发数据
+            [self forwardDataBetweenClientFD:clientFD remoteFD:remoteFD];
 
             // 发送客户端断开通知
             [[NSNotificationCenter defaultCenter] postNotificationName:SOCKS5ProxyClientDisconnectedNotification
                                                                 object:self
-                                                              userInfo:@{@"reason": @"handshake_failed"}];
+                                                              userInfo:@{@"reason": @"closed"}];
 
-            // 从线程列表移除自己
-            [self removeCurrentThread];
-            return;
+            NSLog(@"[SOCKS5Proxy] 客户端处理完成 fd=%d", clientFD);
+        } @finally {
+            // 关键修复（H10）：无论是否异常，都要关闭 fd，避免资源泄漏
+            //
+            // 关键修复（M10）：先从 _clientFDs 移除 fd，再 close(fd)。
+            // 之前先 close(clientFD) 再 removeCurrentThreadAndFD:，存在 fd 复用竞争：
+            //   1. close(clientFD) 后 fd 编号可被新 accept 调用复用
+            //   2. 若在 close 和 removeCurrentThreadAndFD: 之间发生了新的 start 周期且
+            //      accept 返回了相同的 fd 编号
+            //   3. removeCurrentThreadAndFD: 中的 indexOfObject:@(clientFD) 会匹配到
+            //      新连接的条目并将其错误移除
+            //   4. 后续 stop 调用时不会 shutdown 这个新连接的 fd，导致线程泄漏
+            // 修复方案：先在 _lock 内从 _clientFDs 移除 fd，然后在锁外 close(fd)。
+            // 这样 fd 编号在被复用前已从列表中移除，不会误删新连接的条目。
+            //
+            // 关键修复（M12）：同时从 _remoteFDs 移除 remoteFD，避免 stop 时
+            // shutdown 已关闭的 remoteFD。
+            [self removeCurrentThreadAndClientFD:clientFD remoteFD:remoteFD];
+
+            // 关闭客户端 socket（系统 POSIX socket）
+            if (clientFD >= 0) {
+                close(clientFD);
+            }
+            // 关闭远程 socket（libzt socket，通过 ZeroTierBridge 关闭）
+            if (remoteFD >= 0) {
+                [[ZeroTierBridge sharedInstance] closeSocket:remoteFD];
+            }
         }
-
-        NSLog(@"[SOCKS5Proxy] SOCKS5 握手成功，目标 %@:%u，开始转发 (clientFD=%d, remoteFD=%d)",
-              targetHost, targetPort, clientFD, remoteFD);
-
-        // 步骤 2：双向转发数据
-        [self forwardDataBetweenClientFD:clientFD remoteFD:remoteFD];
-
-        // 步骤 3：清理资源
-        // 关闭客户端 socket（系统 POSIX socket）
-        close(clientFD);
-        // 关闭远程 socket（libzt socket，通过 ZeroTierBridge 关闭）
-        [[ZeroTierBridge sharedInstance] closeSocket:remoteFD];
-
-        NSLog(@"[SOCKS5Proxy] 客户端处理完成 fd=%d", clientFD);
-
-        // 发送客户端断开通知
-        [[NSNotificationCenter defaultCenter] postNotificationName:SOCKS5ProxyClientDisconnectedNotification
-                                                            object:self
-                                                          userInfo:@{@"reason": @"closed"}];
-
-        // 从线程列表移除自己
-        [self removeCurrentThread];
     }
 }
 
@@ -867,7 +1109,12 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
     [reply appendBytes:portBytes length:2];
 
     // 发送回复
-    writeAll(clientFD, reply.bytes, reply.length);
+    // 关键修复（L2）：检查 writeAll 返回值，失败时记录日志
+    ssize_t writeResult = writeAll(clientFD, reply.bytes, reply.length);
+    if (writeResult < 0 || (size_t)writeResult != reply.length) {
+        NSLog(@"[SOCKS5Proxy] 发送 SOCKS5 回复失败：writeResult=%zd, expected=%lu",
+              writeResult, (unsigned long)reply.length);
+    }
 
     NSLog(@"[SOCKS5Proxy] 已发送 SOCKS5 回复：rep=%d, addr=%@:%u, atyp=%d",
           rep, bindAddr, bindPort, atyp);
@@ -1002,11 +1249,33 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
 
 #pragma mark - 辅助方法
 
-/// 从客户端线程列表中移除当前线程
-- (void)removeCurrentThread {
+/// 从客户端线程列表、客户端 fd 列表和远程 fd 列表中移除当前线程和对应的 fd
+///
+/// 关键修复（C1）：同时移除客户端 fd，避免 stop 时 shutdown 已关闭的 fd
+/// 关键修复（M12）：同时移除远程 fd，避免 stop 时 shutdown 已关闭的 remoteFD
+- (void)removeCurrentThreadAndClientFD:(int)clientFD remoteFD:(int)remoteFD {
     NSThread *current = [NSThread currentThread];
     [_lock lock];
     [_clientThreads removeObject:current];
+
+    // 移除客户端 fd（使用 indexOfObject: 找到对应的 NSNumber）
+    if (clientFD >= 0) {
+        NSNumber *clientFDNum = @(clientFD);
+        NSUInteger clientIndex = [_clientFDs indexOfObject:clientFDNum];
+        if (clientIndex != NSNotFound) {
+            [_clientFDs removeObjectAtIndex:clientIndex];
+        }
+    }
+
+    // 关键修复（M12）：移除远程 fd
+    if (remoteFD >= 0) {
+        NSNumber *remoteFDNum = @(remoteFD);
+        NSUInteger remoteIndex = [_remoteFDs indexOfObject:remoteFDNum];
+        if (remoteIndex != NSNotFound) {
+            [_remoteFDs removeObjectAtIndex:remoteIndex];
+        }
+    }
+
     [_lock unlock];
 }
 
