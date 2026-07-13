@@ -3063,7 +3063,17 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         manifestRequest.cachePolicy = NSURLRequestReloadIgnoringLocalCacheData;
         [manifestRequest setValue:@"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15" forHTTPHeaderField:@"User-Agent"];
 
-        NSData *manifestData = [NSURLConnection sendSynchronousRequest:manifestRequest returningResponse:nil error:nil];
+        // 使用 NSURLSession 替代已废弃的 NSURLConnection sendSynchronousRequest
+        dispatch_semaphore_t manifestSem = dispatch_semaphore_create(0);
+        __block NSData *manifestData = nil;
+        NSURLSessionDataTask *manifestTask = [[NSURLSession sharedSession] dataTaskWithRequest:manifestRequest
+                                                                              completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+            manifestData = data;
+            dispatch_semaphore_signal(manifestSem);
+        }];
+        [manifestTask resume];
+        dispatch_semaphore_wait(manifestSem, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(30 * NSEC_PER_SEC)));
+
         if (!manifestData) {
             NSLog(@"[DownloadVC] Failed to download version manifest");
             if (completion) dispatch_async(dispatch_get_main_queue(), ^{ completion(NO); });
@@ -3100,7 +3110,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                                                                         withString:@"bmclapi2.bangbang93.com"];
         }
 
-        // 4. 下载 version JSON
+        // 4. 下载 version JSON（使用 NSURLSession 替代已废弃的 NSURLConnection）
         NSURL *jsonURL = [NSURL URLWithString:versionJSONURL];
         if (!jsonURL) {
             if (completion) dispatch_async(dispatch_get_main_queue(), ^{ completion(NO); });
@@ -3112,7 +3122,19 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         jsonRequest.cachePolicy = NSURLRequestReloadIgnoringLocalCacheData;
         [jsonRequest setValue:@"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15" forHTTPHeaderField:@"User-Agent"];
 
-        NSData *jsonData = [NSURLConnection sendSynchronousRequest:jsonRequest returningResponse:nil error:nil];
+        // 使用 NSURLSession dataTaskWithCompletionHandler 替代已废弃的 NSURLConnection sendSynchronousRequest
+        // 已在外层 dispatch_async 到后台队列，此处用信号量等待结果
+        dispatch_semaphore_t sem = dispatch_semaphore_create(0);
+        __block NSData *jsonData = nil;
+        NSURLSessionDataTask *jsonTask = [[NSURLSession sharedSession] dataTaskWithRequest:jsonRequest
+                                                                          completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+            jsonData = data;
+            dispatch_semaphore_signal(sem);
+        }];
+        [jsonTask resume];
+        // 等待最多 30 秒（与 timeoutInterval 一致）
+        dispatch_semaphore_wait(sem, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(30 * NSEC_PER_SEC)));
+
         if (!jsonData) {
             NSLog(@"[DownloadVC] Failed to download version JSON for %@", versionId);
             if (completion) dispatch_async(dispatch_get_main_queue(), ^{ completion(NO); });

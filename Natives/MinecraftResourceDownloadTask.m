@@ -27,13 +27,22 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"org.a
 @implementation MinecraftResourceDownloadTask
 
 + (AFURLSessionManager *)sharedBackgroundSessionManager {
+    // 参照 main 分支：使用前台 defaultSessionConfiguration 而非后台 backgroundSessionConfiguration。
+    //
+    // 为什么不用后台 URLSession：
+    // 1. 后台会话由系统守护进程 nsurlsessiond 调度，会限流并发数、串行化任务，
+    //    导致原版下载（数百个 asset + 数十个 library）极慢，"转圈不下载"。
+    // 2. 后台会话的未完成任务会被系统持久化，失败/取消不干净时残留 task 卡住新下载。
+    // 3. 前台会话 resume 即立即并发执行，适合启动器这种前台活跃下载场景。
+    //
+    // 保留单例模式（避免每次 init 都创建新会话），但使用前台配置。
     static AFURLSessionManager *manager = nil;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        NSURLSessionConfiguration *configuration = [NSURLSessionConfiguration backgroundSessionConfigurationWithIdentifier:kMinecraftResourceDownloadBackgroundSessionIdentifier];
+        NSURLSessionConfiguration *configuration = [NSURLSessionConfiguration defaultSessionConfiguration];
         configuration.timeoutIntervalForRequest = 86400;
-        configuration.sessionSendsLaunchEvents = YES;
-        configuration.discretionary = NO;
+        // 提升并发连接数，加快原版下载（数百个 asset 并发）
+        configuration.HTTPMaximumConnectionsPerHost = 16;
         manager = [[AFURLSessionManager alloc] initWithSessionConfiguration:configuration];
     });
     return manager;
@@ -192,8 +201,8 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"org.a
                     });
                 }
                 
-                // 延迟重试
-                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                // 延迟重试（缩短到 0.5 秒，避免数百个文件重试时累加延迟过长）
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                     NSURLSessionDownloadTask *retryTask = [weakSelf createDownloadTask:url size:size sha:sha altName:altName toPath:path retryCount:nextRetry success:success];
                     if (retryTask) {
                         [retryTask resume];
@@ -211,8 +220,9 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"org.a
                 
                 // 删除损坏的文件
                 [NSFileManager.defaultManager removeItemAtPath:path error:nil];
-                
-                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+
+                // SHA 失败重试延迟缩短到 0.3 秒
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                     NSURLSessionDownloadTask *retryTask = [weakSelf createDownloadTask:url size:size sha:sha altName:altName toPath:path retryCount:nextRetry success:success];
                     if (retryTask) {
                         [retryTask resume];
@@ -462,6 +472,22 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"org.a
 #pragma mark - Utilities
 
 - (void)prepareForDownload {
+    // 清理单例会话上残留的上一次下载任务（前台会话单例模式下必须清理，
+    // 否则上一次失败/取消的 task 残留在会话中可能影响新下载）。
+    // 注意：不能 invalidate 单例会话（会破坏后续所有下载），只取消任务。
+    NSString *oldTaskId = self.currentDownloadTaskItem.taskId;
+    if (oldTaskId.length > 0) {
+        [self.manager.session getTasksWithCompletionHandler:^(NSArray<NSURLSessionDataTask *> *dataTasks,
+                                                              NSArray<NSURLSessionUploadTask *> *uploadTasks,
+                                                              NSArray<NSURLSessionDownloadTask *> *downloadTasks) {
+            for (NSURLSessionDownloadTask *dt in downloadTasks) {
+                if ([dt.taskDescription isEqualToString:oldTaskId]) {
+                    [dt cancel];
+                }
+            }
+        }];
+    }
+
     // Create a fake progress which is used to update completedUnitCount properly
     // (completedUnitCount does not update unless subprogress completes)
     self.textProgress = [NSProgress new];
