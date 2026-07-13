@@ -38,11 +38,12 @@ static const NSUInteger kMemoryCacheCountLimit = 200;
 /// 磁盘缓存上限：256MB（FCL 250MB 与 ZL2 512MB 的折中）
 static const unsigned long long kDiskCacheSizeLimit = 256ULL * 1024 * 1024;
 
-/// 并发下载上限（提升到 10 以加快列表图标并发加载速度）
-static const NSInteger kMaxConcurrentDownloads = 10;
+/// 并发下载上限（提升到 15 以加快列表图标并发加载速度）
+/// 参照 FCL Glide 的线程池上限（默认 4 个 CPU 核数，移动端列表图标场景需要更高并发）
+static const NSInteger kMaxConcurrentDownloads = 15;
 
-/// 网络请求超时（秒）—— 缩短到 10 秒，快速失败后允许其他排队请求更快获得槽位
-static const NSTimeInterval kRequestTimeout = 10.0;
+/// 网络请求超时（秒）—— 缩短到 8 秒，快速失败后允许其他排队请求更快获得槽位
+static const NSTimeInterval kRequestTimeout = 8.0;
 
 /// 单例实例
 static IconLoader *_sharedLoader = nil;
@@ -123,11 +124,12 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
                                                        error:nil];
 
         // NSURLSession（ephemeral 配置，不持久化 cookie/cache，避免与 AFNetworking 混用）
-        // 提升并发连接数到 8，加快列表页大量图标的并发加载速度
+        // 提升并发连接数到 16，加快列表页大量图标的并发加载速度
+        // 参照 FCL Glide 的磁盘缓存线程池 + 活跃请求队列，列表滚动时可能同时有 20+ 图标请求
         NSURLSessionConfiguration *config = [NSURLSessionConfiguration ephemeralSessionConfiguration];
         config.timeoutIntervalForRequest = kRequestTimeout;
-        config.timeoutIntervalForResource = 20.0;
-        config.HTTPMaximumConnectionsPerHost = 8;
+        config.timeoutIntervalForResource = 15.0;
+        config.HTTPMaximumConnectionsPerHost = 16;
         config.requestCachePolicy = NSURLRequestReloadIgnoringLocalCacheData;
         // 启用 HTTP/2 多路复用（iOS 9+ 默认支持，显式设置确保生效）
         config.HTTPShouldUsePipelining = YES;

@@ -912,6 +912,42 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 @property (nonatomic, strong) NSLayoutConstraint *sliderLeftPosConstraint;   // 滑块贴左（Modrinth）
 @property (nonatomic, strong) NSLayoutConstraint *sliderRightPosConstraint;  // 滑块贴右（CurseForge）
 
+// ===== FCL/ZL2 风格侧边筛选栏 =====
+// 参照 FCL（FoldCraftLauncher）和 ZL2（ZalithLauncher）的模组/光影下载界面布局：
+// 左侧是筛选面板（下载源、游戏版本、模组加载器、排序方式），右侧是搜索框+列表。
+// 侧边栏在模组/光影/资源包/数据包/整合包 tab 显示，版本 tab 和世界 tab 隐藏。
+// 窄屏（iPhone 竖屏）时侧边栏宽度自动缩小为 140pt，宽屏（iPad）时为 180pt。
+@property (nonatomic, strong) UIView *filterSidebarContainer;      // 侧边栏容器
+@property (nonatomic, strong) NSLayoutConstraint *sidebarWidthConstraint;  // 侧边栏宽度约束（隐藏时为 0）
+@property (nonatomic, strong) NSLayoutConstraint *sidebarLeadingConstraint; // 侧边栏 leading（隐藏时贴左，列表不偏移）
+
+// 侧边栏内的下载源选择（从顶部移到侧边栏）
+@property (nonatomic, strong) UIView *sidebarSourceContainer;
+@property (nonatomic, strong) UIButton *sidebarModrinthButton;
+@property (nonatomic, strong) UIButton *sidebarCurseforgeButton;
+@property (nonatomic, strong) NSLayoutConstraint *sidebarSliderLeftConstraint;
+@property (nonatomic, strong) NSLayoutConstraint *sidebarSliderRightConstraint;
+@property (nonatomic, strong) UIView *sidebarSourceTrack;
+@property (nonatomic, strong) UIView *sidebarSourceSlider;
+
+// 侧边栏内的游戏版本选择按钮（点击弹出 ActionSheet 选择版本）
+@property (nonatomic, strong) UIButton *sidebarVersionButton;
+@property (nonatomic, strong) UILabel *sidebarVersionTitleLabel;
+@property (nonatomic, strong) UILabel *sidebarVersionValueLabel;
+
+// 侧边栏内的模组加载器选择按钮（点击弹出 ActionSheet 选择加载器）
+@property (nonatomic, strong) UIButton *sidebarLoaderButton;
+@property (nonatomic, strong) UILabel *sidebarLoaderTitleLabel;
+@property (nonatomic, strong) UILabel *sidebarLoaderValueLabel;
+
+// 侧边栏内的排序方式选择按钮
+@property (nonatomic, strong) UIButton *sidebarSortButton;
+@property (nonatomic, strong) UILabel *sidebarSortTitleLabel;
+@property (nonatomic, strong) UILabel *sidebarSortValueLabel;
+
+// 侧边栏重置筛选按钮
+@property (nonatomic, strong) UIButton *sidebarResetButton;
+
 // 当前待下载资源类型（mod/resourcepack/datapack/world/modpack），用于版本选择回调中决定下载目录
 @property (nonatomic, copy) NSString *pendingDownloadType;
 // 在线选择版本时临时持有的资源包/数据包/世界对象（AssetVersionViewController 回调使用）
@@ -1005,6 +1041,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     [self setupVersionFilterSegment];
     [self setupSearchBar];
     [self setupSourceSwitch];
+    [self setupFilterSidebar];  // FCL/ZL2 风格侧边筛选栏
     [self setupVersionCollectionView];
     [self setupModTableView];
     [self setupShaderTableView];
@@ -1153,6 +1190,15 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         // invalidateLayout 触发重新排版，避免 cell 复用时宽度滞后
         [layout invalidateLayout];
     }
+
+    // 动态调整侧边栏宽度（横竖屏切换时）
+    if (self.filterSidebarContainer && !self.filterSidebarContainer.hidden) {
+        CGFloat screenWidth = self.view.bounds.size.width;
+        CGFloat newWidth = (screenWidth >= 768) ? 180.0 : 140.0;
+        if (ABS(self.sidebarWidthConstraint.constant - newWidth) > 0.5) {
+            self.sidebarWidthConstraint.constant = newWidth;
+        }
+    }
 }
 
 - (void)setupModTableView {
@@ -1166,14 +1212,16 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     [self.modTableView registerClass:[ModernAssetCell class] forCellReuseIdentifier:@"ModCell"];
     self.modTableView.hidden = YES;
     [self.view addSubview:self.modTableView];
-    
+
     UIRefreshControl *refreshControl = [[UIRefreshControl alloc] init];
     [refreshControl addTarget:self action:@selector(refreshModList) forControlEvents:UIControlEventValueChanged];
     self.modTableView.refreshControl = refreshControl;
-    
+
+    // FCL/ZL2 风格：列表 leading 跟随侧边栏 trailing，top 跟随 searchBar
+    // 侧边栏隐藏时宽度为 0，trailingAnchor 等于 view.leadingAnchor，列表自动铺满
     [NSLayoutConstraint activateConstraints:@[
-        [self.modTableView.topAnchor constraintEqualToAnchor:self.sourceSwitchContainer.bottomAnchor constant:4],
-        [self.modTableView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.modTableView.topAnchor constraintEqualToAnchor:self.searchBar.bottomAnchor constant:4],
+        [self.modTableView.leadingAnchor constraintEqualToAnchor:self.filterSidebarContainer.trailingAnchor],
         [self.modTableView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [self.modTableView.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor]
     ]];
@@ -1196,8 +1244,8 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     self.shaderTableView.refreshControl = refreshControl;
     
     [NSLayoutConstraint activateConstraints:@[
-        [self.shaderTableView.topAnchor constraintEqualToAnchor:self.sourceSwitchContainer.bottomAnchor constant:4],
-        [self.shaderTableView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.shaderTableView.topAnchor constraintEqualToAnchor:self.searchBar.bottomAnchor constant:4],
+        [self.shaderTableView.leadingAnchor constraintEqualToAnchor:self.filterSidebarContainer.trailingAnchor],
         [self.shaderTableView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [self.shaderTableView.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor]
     ]];
@@ -1220,8 +1268,8 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     self.modpackTableView.refreshControl = refreshControl;
 
     [NSLayoutConstraint activateConstraints:@[
-        [self.modpackTableView.topAnchor constraintEqualToAnchor:self.sourceSwitchContainer.bottomAnchor constant:4],
-        [self.modpackTableView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.modpackTableView.topAnchor constraintEqualToAnchor:self.searchBar.bottomAnchor constant:4],
+        [self.modpackTableView.leadingAnchor constraintEqualToAnchor:self.filterSidebarContainer.trailingAnchor],
         [self.modpackTableView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [self.modpackTableView.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor]
     ]];
@@ -1244,8 +1292,8 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     self.resourcepackTableView.refreshControl = refreshControl;
 
     [NSLayoutConstraint activateConstraints:@[
-        [self.resourcepackTableView.topAnchor constraintEqualToAnchor:self.sourceSwitchContainer.bottomAnchor constant:4],
-        [self.resourcepackTableView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.resourcepackTableView.topAnchor constraintEqualToAnchor:self.searchBar.bottomAnchor constant:4],
+        [self.resourcepackTableView.leadingAnchor constraintEqualToAnchor:self.filterSidebarContainer.trailingAnchor],
         [self.resourcepackTableView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [self.resourcepackTableView.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor]
     ]];
@@ -1268,8 +1316,8 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     self.datapackTableView.refreshControl = refreshControl;
 
     [NSLayoutConstraint activateConstraints:@[
-        [self.datapackTableView.topAnchor constraintEqualToAnchor:self.sourceSwitchContainer.bottomAnchor constant:4],
-        [self.datapackTableView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.datapackTableView.topAnchor constraintEqualToAnchor:self.searchBar.bottomAnchor constant:4],
+        [self.datapackTableView.leadingAnchor constraintEqualToAnchor:self.filterSidebarContainer.trailingAnchor],
         [self.datapackTableView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [self.datapackTableView.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor]
     ]];
@@ -1291,9 +1339,10 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     [refreshControl addTarget:self action:@selector(refreshWorldList) forControlEvents:UIControlEventValueChanged];
     self.worldTableView.refreshControl = refreshControl;
 
+    // 世界 tab 不显示侧边栏（强制 CurseForge），列表 leading 直接跟随 view
     [NSLayoutConstraint activateConstraints:@[
-        [self.worldTableView.topAnchor constraintEqualToAnchor:self.sourceSwitchContainer.bottomAnchor constant:4],
-        [self.worldTableView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.worldTableView.topAnchor constraintEqualToAnchor:self.searchBar.bottomAnchor constant:4],
+        [self.worldTableView.leadingAnchor constraintEqualToAnchor:self.filterSidebarContainer.trailingAnchor],
         [self.worldTableView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [self.worldTableView.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor]
     ]];
@@ -1382,6 +1431,256 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     self.sourceSwitchHeightConstraint.active = YES;
 }
 
+#pragma mark - FCL/ZL2 风格侧边筛选栏
+
+/// 创建侧边筛选栏（参照 FCL/ZL2 的模组/光影下载界面布局）
+///
+/// 布局结构（侧边栏内从上到下）：
+/// 1. 下载源选择器（Modrinth / CurseForge 圆角胶囊切换器）
+/// 2. 游戏版本选择按钮（点击弹出 ActionSheet 选择版本）
+/// 3. 模组加载器选择按钮（点击弹出 ActionSheet 选择加载器，仅模组 tab 显示）
+/// 4. 排序方式选择按钮（点击弹出 ActionSheet 选择排序方式）
+/// 5. 重置筛选按钮
+///
+/// 侧边栏在模组/光影/资源包/数据包/整合包 tab 显示，版本 tab 和世界 tab 隐藏。
+/// 隐藏时宽度为 0，不占空间；显示时宽度 180pt（宽屏）或 140pt（窄屏）。
+- (void)setupFilterSidebar {
+    self.filterSidebarContainer = [[UIView alloc] init];
+    self.filterSidebarContainer.translatesAutoresizingMaskIntoConstraints = NO;
+    self.filterSidebarContainer.backgroundColor = [UIColor secondarySystemBackgroundColor];
+    self.filterSidebarContainer.hidden = YES;
+    [self.view addSubview:self.filterSidebarContainer];
+
+    // 侧边栏宽度约束：隐藏时为 0，显示时为 180（宽屏）或 140（窄屏）
+    // 在 viewDidLayoutSubviews 中根据屏幕宽度动态调整
+    self.sidebarWidthConstraint = [self.filterSidebarContainer.widthAnchor constraintEqualToConstant:0];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.filterSidebarContainer.topAnchor constraintEqualToAnchor:self.tabSegment.bottomAnchor constant:8],
+        [self.filterSidebarContainer.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        [self.filterSidebarContainer.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor],
+        self.sidebarWidthConstraint
+    ]];
+
+    // ===== 1. 下载源选择器（从顶部移到侧边栏）=====
+    self.sidebarSourceContainer = [[UIView alloc] init];
+    self.sidebarSourceContainer.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.filterSidebarContainer addSubview:self.sidebarSourceContainer];
+
+    // 下载源标题
+    UILabel *sourceTitleLabel = [[UILabel alloc] init];
+    sourceTitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    sourceTitleLabel.text = @"下载源";
+    sourceTitleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
+    sourceTitleLabel.textColor = [UIColor secondaryLabelColor];
+    [self.filterSidebarContainer addSubview:sourceTitleLabel];
+
+    // 下载源轨道
+    self.sidebarSourceTrack = [[UIView alloc] init];
+    self.sidebarSourceTrack.translatesAutoresizingMaskIntoConstraints = NO;
+    self.sidebarSourceTrack.backgroundColor = [UIColor tertiarySystemFillColor];
+    self.sidebarSourceTrack.layer.cornerRadius = 14;
+    self.sidebarSourceTrack.layer.masksToBounds = YES;
+    [self.sidebarSourceContainer addSubview:self.sidebarSourceTrack];
+
+    // 下载源滑块
+    self.sidebarSourceSlider = [[UIView alloc] init];
+    self.sidebarSourceSlider.translatesAutoresizingMaskIntoConstraints = NO;
+    self.sidebarSourceSlider.backgroundColor = [UIColor systemGreenColor];
+    self.sidebarSourceSlider.layer.cornerRadius = 12;
+    self.sidebarSourceSlider.layer.shadowColor = [UIColor blackColor].CGColor;
+    self.sidebarSourceSlider.layer.shadowOpacity = 0.15;
+    self.sidebarSourceSlider.layer.shadowOffset = CGSizeMake(0, 1);
+    self.sidebarSourceSlider.layer.shadowRadius = 3;
+    [self.sidebarSourceTrack addSubview:self.sidebarSourceSlider];
+
+    // Modrinth 按钮
+    self.sidebarModrinthButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    self.sidebarModrinthButton.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.sidebarModrinthButton setTitle:@"Mod" forState:UIControlStateNormal];
+    self.sidebarModrinthButton.titleLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightSemibold];
+    [self.sidebarModrinthButton addTarget:self action:@selector(sidebarModrinthClicked:) forControlEvents:UIControlEventTouchUpInside];
+    [self.sidebarSourceTrack addSubview:self.sidebarModrinthButton];
+
+    // CurseForge 按钮
+    self.sidebarCurseforgeButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    self.sidebarCurseforgeButton.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.sidebarCurseforgeButton setTitle:@"CF" forState:UIControlStateNormal];
+    self.sidebarCurseforgeButton.titleLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightSemibold];
+    [self.sidebarCurseforgeButton addTarget:self action:@selector(sidebarCurseforgeClicked:) forControlEvents:UIControlEventTouchUpInside];
+    [self.sidebarSourceTrack addSubview:self.sidebarCurseforgeButton];
+
+    // 下载源滑块位置约束
+    self.sidebarSliderLeftConstraint = [self.sidebarSourceSlider.leadingAnchor constraintEqualToAnchor:self.sidebarSourceTrack.leadingAnchor constant:2];
+    self.sidebarSliderRightConstraint = [self.sidebarSourceSlider.trailingAnchor constraintEqualToAnchor:self.sidebarSourceTrack.trailingAnchor constant:-2];
+    self.sidebarSliderRightConstraint.active = NO;
+
+    [NSLayoutConstraint activateConstraints:@[
+        // 下载源标题
+        [sourceTitleLabel.topAnchor constraintEqualToAnchor:self.filterSidebarContainer.topAnchor constant:12],
+        [sourceTitleLabel.leadingAnchor constraintEqualToAnchor:self.filterSidebarContainer.leadingAnchor constant:12],
+        [sourceTitleLabel.trailingAnchor constraintEqualToAnchor:self.filterSidebarContainer.trailingAnchor constant:-12],
+
+        // 下载源容器
+        [self.sidebarSourceContainer.topAnchor constraintEqualToAnchor:sourceTitleLabel.bottomAnchor constant:4],
+        [self.sidebarSourceContainer.leadingAnchor constraintEqualToAnchor:self.filterSidebarContainer.leadingAnchor constant:8],
+        [self.sidebarSourceContainer.trailingAnchor constraintEqualToAnchor:self.filterSidebarContainer.trailingAnchor constant:-8],
+        [self.sidebarSourceContainer.heightAnchor constraintEqualToConstant:32],
+
+        // 轨道铺满容器
+        [self.sidebarSourceTrack.topAnchor constraintEqualToAnchor:self.sidebarSourceContainer.topAnchor],
+        [self.sidebarSourceTrack.leadingAnchor constraintEqualToAnchor:self.sidebarSourceContainer.leadingAnchor],
+        [self.sidebarSourceTrack.trailingAnchor constraintEqualToAnchor:self.sidebarSourceContainer.trailingAnchor],
+        [self.sidebarSourceTrack.bottomAnchor constraintEqualToAnchor:self.sidebarSourceContainer.bottomAnchor],
+
+        // 滑块
+        [self.sidebarSourceSlider.topAnchor constraintEqualToAnchor:self.sidebarSourceTrack.topAnchor constant:2],
+        [self.sidebarSourceSlider.bottomAnchor constraintEqualToAnchor:self.sidebarSourceTrack.bottomAnchor constant:-2],
+        [self.sidebarSourceSlider.widthAnchor constraintEqualToAnchor:self.sidebarSourceTrack.widthAnchor multiplier:0.5 constant:-2],
+        self.sidebarSliderLeftConstraint,
+
+        // 两个按钮各占一半
+        [self.sidebarModrinthButton.topAnchor constraintEqualToAnchor:self.sidebarSourceTrack.topAnchor],
+        [self.sidebarModrinthButton.bottomAnchor constraintEqualToAnchor:self.sidebarSourceTrack.bottomAnchor],
+        [self.sidebarModrinthButton.leadingAnchor constraintEqualToAnchor:self.sidebarSourceTrack.leadingAnchor],
+        [self.sidebarModrinthButton.widthAnchor constraintEqualToAnchor:self.sidebarSourceTrack.widthAnchor multiplier:0.5],
+
+        [self.sidebarCurseforgeButton.topAnchor constraintEqualToAnchor:self.sidebarSourceTrack.topAnchor],
+        [self.sidebarCurseforgeButton.bottomAnchor constraintEqualToAnchor:self.sidebarSourceTrack.bottomAnchor],
+        [self.sidebarCurseforgeButton.trailingAnchor constraintEqualToAnchor:self.sidebarSourceTrack.trailingAnchor],
+        [self.sidebarCurseforgeButton.widthAnchor constraintEqualToAnchor:self.sidebarSourceTrack.widthAnchor multiplier:0.5]
+    ]];
+
+    // ===== 2. 游戏版本选择按钮 =====
+    [self setupSidebarButton:&_sidebarVersionButton
+                titleLabel:&_sidebarVersionTitleLabel
+               valueLabel:&_sidebarVersionValueLabel
+                       title:@"游戏版本"
+                       value:@"全部版本"
+                  topAnchor:self.sidebarSourceContainer.bottomAnchor
+                   selector:@selector(sidebarVersionButtonClicked:)];
+
+    // ===== 3. 模组加载器选择按钮 =====
+    [self setupSidebarButton:&_sidebarLoaderButton
+                titleLabel:&_sidebarLoaderTitleLabel
+               valueLabel:&_sidebarLoaderValueLabel
+                       title:@"模组加载器"
+                       value:@"全部"
+                  topAnchor:self.sidebarVersionButton.bottomAnchor
+                   selector:@selector(sidebarLoaderButtonClicked:)];
+
+    // ===== 4. 排序方式选择按钮 =====
+    [self setupSidebarButton:&_sidebarSortButton
+                titleLabel:&_sidebarSortTitleLabel
+               valueLabel:&_sidebarSortValueLabel
+                       title:@"排序方式"
+                       value:@"相关度"
+                  topAnchor:self.sidebarLoaderButton.bottomAnchor
+                   selector:@selector(sidebarSortButtonClicked:)];
+
+    // ===== 5. 重置筛选按钮 =====
+    self.sidebarResetButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    self.sidebarResetButton.translatesAutoresizingMaskIntoConstraints = NO;
+    [self.sidebarResetButton setTitle:@"重置筛选" forState:UIControlStateNormal];
+    self.sidebarResetButton.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightMedium];
+    [self.sidebarResetButton setImage:[UIImage systemImageNamed:@"arrow.counterclockwise"] forState:UIControlStateNormal];
+    self.sidebarResetButton.tintColor = [UIColor systemRedColor];
+    self.sidebarResetButton.backgroundColor = [UIColor tertiarySystemFillColor];
+    self.sidebarResetButton.layer.cornerRadius = 8;
+    self.sidebarResetButton.imageEdgeInsets = UIEdgeInsetsMake(0, -2, 0, 2);
+    self.sidebarResetButton.titleEdgeInsets = UIEdgeInsetsMake(0, 2, 0, -2);
+    [self.sidebarResetButton addTarget:self action:@selector(sidebarResetButtonClicked:) forControlEvents:UIControlEventTouchUpInside];
+    [self.filterSidebarContainer addSubview:self.sidebarResetButton];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.sidebarResetButton.topAnchor constraintEqualToAnchor:self.sidebarSortButton.bottomAnchor constant:12],
+        [self.sidebarResetButton.leadingAnchor constraintEqualToAnchor:self.filterSidebarContainer.leadingAnchor constant:12],
+        [self.sidebarResetButton.trailingAnchor constraintEqualToAnchor:self.filterSidebarContainer.trailingAnchor constant:-12],
+        [self.sidebarResetButton.heightAnchor constraintEqualToConstant:32]
+    ]];
+
+    // 底部分隔线
+    UIView *sidebarSeparator = [[UIView alloc] init];
+    sidebarSeparator.translatesAutoresizingMaskIntoConstraints = NO;
+    sidebarSeparator.backgroundColor = [UIColor separatorColor];
+    [self.filterSidebarContainer addSubview:sidebarSeparator];
+    [NSLayoutConstraint activateConstraints:@[
+        [sidebarSeparator.trailingAnchor constraintEqualToAnchor:self.filterSidebarContainer.trailingAnchor],
+        [sidebarSeparator.topAnchor constraintEqualToAnchor:self.filterSidebarContainer.topAnchor],
+        [sidebarSeparator.bottomAnchor constraintEqualToAnchor:self.filterSidebarContainer.bottomAnchor],
+        [sidebarSeparator.widthAnchor constraintEqualToConstant:0.5]
+    ]];
+}
+
+/// 辅助方法：创建侧边栏的选择按钮（标题 + 当前值 + 箭头）
+/// @param buttonPtr 按钮指针的指针（用于赋值回属性）
+/// @param titleLabelPtr 标题标签指针的指针
+/// @param valueLabelPtr 值标签指针的指针
+/// @param title 按钮标题（如"游戏版本"）
+/// @param value 默认值（如"全部版本"）
+/// @param topAnchor 按钮顶部锚点（上一个元素的底部）
+/// @param selector 点击事件选择器
+- (void)setupSidebarButton:(UIButton * __autoreleasing *)buttonPtr
+              titleLabel:(UILabel * __autoreleasing *)titleLabelPtr
+             valueLabel:(UILabel * __autoreleasing *)valueLabelPtr
+                     title:(NSString *)title
+                     value:(NSString *)value
+                topAnchor:(NSLayoutAnchor *)topAnchor
+                 selector:(SEL)selector {
+    *buttonPtr = [UIButton buttonWithType:UIButtonTypeSystem];
+    (*buttonPtr).translatesAutoresizingMaskIntoConstraints = NO;
+    (*buttonPtr).backgroundColor = [UIColor tertiarySystemFillColor];
+    (*buttonPtr).layer.cornerRadius = 8;
+    [(*buttonPtr) addTarget:self action:selector forControlEvents:UIControlEventTouchUpInside];
+    // 按钮内容左对齐
+    (*buttonPtr).contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeft;
+    (*buttonPtr).contentEdgeInsets = UIEdgeInsetsMake(0, 12, 0, 12);
+    [self.filterSidebarContainer addSubview:*buttonPtr];
+
+    *titleLabelPtr = [[UILabel alloc] init];
+    (*titleLabelPtr).translatesAutoresizingMaskIntoConstraints = NO;
+    (*titleLabelPtr).text = title;
+    (*titleLabelPtr).font = [UIFont systemFontOfSize:12 weight:UIFontWeightSemibold];
+    (*titleLabelPtr).textColor = [UIColor secondaryLabelColor];
+    [*buttonPtr addSubview:*titleLabelPtr];
+
+    *valueLabelPtr = [[UILabel alloc] init];
+    (*valueLabelPtr).translatesAutoresizingMaskIntoConstraints = NO;
+    (*valueLabelPtr).text = value;
+    (*valueLabelPtr).font = [UIFont systemFontOfSize:12];
+    (*valueLabelPtr).textColor = [UIColor labelColor];
+    (*valueLabelPtr).adjustsFontSizeToFitWidth = YES;
+    (*valueLabelPtr).minimumScaleFactor = 0.7;
+    (*valueLabelPtr).textAlignment = NSTextAlignmentRight;
+    [*buttonPtr addSubview:*valueLabelPtr];
+
+    // 箭头图标
+    UIImageView *arrow = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"chevron.right"]];
+    arrow.translatesAutoresizingMaskIntoConstraints = NO;
+    arrow.tintColor = [UIColor tertiaryLabelColor];
+    arrow.contentMode = UIViewContentModeScaleAspectFit;
+    [*buttonPtr addSubview:arrow];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [(*buttonPtr).topAnchor constraintEqualToAnchor:topAnchor constant:8],
+        [(*buttonPtr).leadingAnchor constraintEqualToAnchor:self.filterSidebarContainer.leadingAnchor constant:8],
+        [(*buttonPtr).trailingAnchor constraintEqualToAnchor:self.filterSidebarContainer.trailingAnchor constant:-8],
+        [(*buttonPtr).heightAnchor constraintEqualToConstant:44],
+
+        [(*titleLabelPtr).leadingAnchor constraintEqualToAnchor:(*buttonPtr).leadingAnchor constant:12],
+        [(*titleLabelPtr).centerYAnchor constraintEqualToAnchor:(*buttonPtr).centerYAnchor],
+
+        [(*valueLabelPtr).trailingAnchor constraintEqualToAnchor:arrow.leadingAnchor constant:-4],
+        [(*valueLabelPtr).centerYAnchor constraintEqualToAnchor:(*buttonPtr).centerYAnchor],
+        [(*valueLabelPtr).widthAnchor constraintLessThanOrEqualToConstant:80],
+
+        [arrow.trailingAnchor constraintEqualToAnchor:(*buttonPtr).trailingAnchor constant:-12],
+        [arrow.centerYAnchor constraintEqualToAnchor:(*buttonPtr).centerYAnchor],
+        [arrow.widthAnchor constraintEqualToConstant:12],
+        [arrow.heightAnchor constraintEqualToConstant:12]
+    ]];
+}
+
 - (void)setupLoadingIndicator {
     self.loadingIndicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleLarge];
     self.loadingIndicator.translatesAutoresizingMaskIntoConstraints = NO;
@@ -1435,9 +1734,29 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     } completion:nil];
 
     // 源切换仅在非版本 tab 显示；世界 tab 强制 CurseForge，无需切换
+    // 注意：顶部 sourceSwitchContainer 现在已弃用（下载源已移到侧边栏），始终隐藏
+    // 保留属性避免其他方法引用时崩溃，但高度始终为 0
     BOOL showSourceSwitch = (index != 0 && index != 6);
-    self.sourceSwitchContainer.hidden = !showSourceSwitch;
-    self.sourceSwitchHeightConstraint.constant = showSourceSwitch ? 36 : 0;
+    self.sourceSwitchContainer.hidden = YES;
+    self.sourceSwitchHeightConstraint.constant = 0;
+
+    // ===== FCL/ZL2 风格侧边栏显示/隐藏 =====
+    // 侧边栏在模组/光影/资源包/数据包/整合包 tab 显示，版本 tab 和世界 tab 隐藏
+    BOOL showSidebar = (index != 0 && index != 6);
+    self.filterSidebarContainer.hidden = !showSidebar;
+    // 根据屏幕宽度动态调整侧边栏宽度
+    CGFloat screenWidth = self.view.bounds.size.width;
+    CGFloat sidebarWidth = 0;
+    if (showSidebar) {
+        // 宽屏（iPad 横屏）180pt，窄屏（iPhone 竖屏）140pt
+        sidebarWidth = (screenWidth >= 768) ? 180.0 : 140.0;
+    }
+    self.sidebarWidthConstraint.constant = sidebarWidth;
+
+    // 模组加载器选择按钮仅在模组 tab 显示（其他 tab 无加载器概念）
+    self.sidebarLoaderButton.hidden = (index != 1);
+    self.sidebarLoaderTitleLabel.hidden = (index != 1);
+    self.sidebarLoaderValueLabel.hidden = (index != 1);
 
     // versionFilterSegment 高度同步切换：版本 tab 显示 32pt，其他 tab 设为 0 不占空间，
     // 避免 hidden=YES 仍占空间导致 tabSegment 与 searchBar 之间出现"大白条"
@@ -1493,6 +1812,9 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             [self loadWorldList];
         }
     }
+
+    // 更新侧边栏各筛选项的当前值显示
+    [self updateSidebarFilterValues];
 }
 
 #pragma mark - Source Switch
@@ -1501,7 +1823,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     NSString *currentSource = [PLPreferences currentDownloadSourceForType:type];
     BOOL isModrinth = [currentSource isEqualToString:@"modrinth"];
 
-    // 选中项文字白色，未选中项使用 labelColor
+    // 选中项文字白色，未选中项使用 labelColor（顶部 sourceSwitch，已弃用但保留同步）
     [self.modrinthSourceButton setTitleColor:isModrinth ? [UIColor whiteColor] : [UIColor labelColor] forState:UIControlStateNormal];
     [self.curseforgeSourceButton setTitleColor:isModrinth ? [UIColor labelColor] : [UIColor whiteColor] forState:UIControlStateNormal];
 
@@ -1517,6 +1839,23 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
     self.modrinthSourceButton.tag = [self tagForType:type];
     self.curseforgeSourceButton.tag = [self tagForType:type];
+
+    // ===== 同步更新侧边栏的下载源选择器 =====
+    [self.sidebarModrinthButton setTitleColor:isModrinth ? [UIColor whiteColor] : [UIColor labelColor] forState:UIControlStateNormal];
+    [self.sidebarCurseforgeButton setTitleColor:isModrinth ? [UIColor labelColor] : [UIColor whiteColor] forState:UIControlStateNormal];
+
+    self.sidebarSliderLeftConstraint.active = isModrinth;
+    self.sidebarSliderRightConstraint.active = !isModrinth;
+    UIColor *sidebarSliderColor = isModrinth ? [UIColor systemGreenColor] : [UIColor systemOrangeColor];
+
+    [UIView animateWithDuration:0.25 delay:0 options:UIViewAnimationOptionCurveEaseInOut animations:^{
+        self.sidebarSourceSlider.backgroundColor = sidebarSliderColor;
+        [self.sidebarSourceTrack layoutIfNeeded];
+    } completion:nil];
+
+    // 记录当前类型到侧边栏按钮的 tag，用于点击事件中获取类型
+    self.sidebarModrinthButton.tag = [self tagForType:type];
+    self.sidebarCurseforgeButton.tag = [self tagForType:type];
 }
 
 - (NSInteger)tagForType:(NSString *)type {
@@ -1586,6 +1925,101 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     [PLPreferences setDownloadSource:@"curseforge" forType:type];
     [self updateSourceSwitchButtonsForType:type];
     [self reloadCurrentList];
+}
+
+#pragma mark - 侧边栏下载源点击事件
+
+/// 侧边栏 Modrinth 源按钮点击
+- (void)sidebarModrinthClicked:(UIButton *)sender {
+    NSString *type = [self typeForTag:sender.tag];
+    NSString *currentSource = [PLPreferences currentDownloadSourceForType:type];
+    if ([currentSource isEqualToString:@"modrinth"]) return;
+
+    [PLPreferences setDownloadSource:@"modrinth" forType:type];
+    [self updateSourceSwitchButtonsForType:type];
+    [self reloadCurrentList];
+}
+
+/// 侧边栏 CurseForge 源按钮点击
+- (void)sidebarCurseforgeClicked:(UIButton *)sender {
+    NSString *type = [self typeForTag:sender.tag];
+    NSString *currentSource = [PLPreferences currentDownloadSourceForType:type];
+    if ([currentSource isEqualToString:@"curseforge"]) return;
+
+    // API Key 未配置时提示
+    if (![CurseForgeAPI isAPIKeyConfigured]) {
+        InlineMessageView *msgView = [InlineMessageView showInViewController:self
+                                                                       title:@"需要 CurseForge API Key"
+                                                                    message:@"检测到未配置 CurseForge API Key，点击前往设置"
+                                                                       type:InlineMessageTypeInfo];
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [msgView dismiss];
+            [self openCurseForgeAPIKeySettings];
+        });
+        return;
+    }
+
+    [PLPreferences setDownloadSource:@"curseforge" forType:type];
+    [self updateSourceSwitchButtonsForType:type];
+    [self reloadCurrentList];
+}
+
+#pragma mark - 侧边栏筛选按钮点击事件
+
+/// 侧边栏游戏版本选择按钮点击
+- (void)sidebarVersionButtonClicked:(UIButton *)sender {
+    [self showGameVersionPicker];
+}
+
+/// 侧边栏模组加载器选择按钮点击
+- (void)sidebarLoaderButtonClicked:(UIButton *)sender {
+    [self showModLoaderPicker];
+}
+
+/// 侧边栏排序方式选择按钮点击
+- (void)sidebarSortButtonClicked:(UIButton *)sender {
+    [self showSortOptions];
+}
+
+/// 侧边栏重置筛选按钮点击
+- (void)sidebarResetButtonClicked:(UIButton *)sender {
+    [self resetFilters];
+}
+
+/// 更新侧边栏各筛选项的当前值显示
+- (void)updateSidebarFilterValues {
+    // 游戏版本
+    if (self.currentGameVersion.length > 0) {
+        self.sidebarVersionValueLabel.text = self.currentGameVersion;
+    } else {
+        self.sidebarVersionValueLabel.text = @"全部版本";
+    }
+
+    // 模组加载器
+    if (self.currentModLoader.length > 0) {
+        // 首字母大写显示
+        NSString *loader = self.currentModLoader;
+        NSString *capitalized = [[loader substringToIndex:1].uppercaseString stringByAppendingString:[loader substringFromIndex:1]];
+        self.sidebarLoaderValueLabel.text = capitalized;
+    } else {
+        self.sidebarLoaderValueLabel.text = @"全部";
+    }
+
+    // 排序方式
+    if (self.currentSortField.length > 0) {
+        // 转换排序字段为中文显示
+        NSDictionary *sortDisplayMap = @{
+            @"relevance": @"相关度",
+            @"downloads": @"下载量",
+            @"follows": @"关注数",
+            @"newest": @"最新",
+            @"updated": @"最近更新"
+        };
+        NSString *display = sortDisplayMap[self.currentSortField];
+        self.sidebarSortValueLabel.text = display ?: self.currentSortField;
+    } else {
+        self.sidebarSortValueLabel.text = @"相关度";
+    }
 }
 
 - (id)currentAPIForTabType:(NSString *)type {
@@ -2221,9 +2655,9 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"选择游戏版本"
                                                                    message:nil
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
-    
+
     NSArray *versions = @[@"全部版本", @"1.21", @"1.20.4", @"1.20.1", @"1.19.4", @"1.19.2", @"1.18.2", @"1.16.5", @"1.12.2", @"1.8.9"];
-    
+
     for (NSString *version in versions) {
         [alert addAction:[UIAlertAction actionWithTitle:version
                                                   style:UIAlertActionStyleDefault
@@ -2233,19 +2667,22 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             } else {
                 self.currentGameVersion = version;
             }
+            [self updateSidebarFilterValues];
             [self reloadCurrentList];
         }]];
     }
-    
+
     [alert addAction:[UIAlertAction actionWithTitle:@"取消"
                                               style:UIAlertActionStyleCancel
                                             handler:nil]];
-    
+
+    // iPad popover sourceView 优先使用侧边栏按钮（filterButton 在非版本 tab 隐藏）
+    UIView *sourceView = self.sidebarVersionButton.hidden ? self.filterButton : self.sidebarVersionButton;
     if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
-        alert.popoverPresentationController.sourceView = self.filterButton;
-        alert.popoverPresentationController.sourceRect = self.filterButton.bounds;
+        alert.popoverPresentationController.sourceView = sourceView;
+        alert.popoverPresentationController.sourceRect = sourceView.bounds;
     }
-    
+
     [self presentViewController:alert animated:YES completion:nil];
 }
 
@@ -2253,7 +2690,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"排序方式"
                                                                    message:nil
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
-    
+
     NSDictionary *sortOptions = @{
         @"关注度": @"follows",
         @"下载数": @"downloads",
@@ -2261,25 +2698,27 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         @"最新发布": @"newest",
         @"相关性": @"relevance"
     };
-    
+
     for (NSString *title in sortOptions) {
         [alert addAction:[UIAlertAction actionWithTitle:title
                                                   style:UIAlertActionStyleDefault
                                                 handler:^(UIAlertAction * _Nonnull action) {
             self.currentSortField = sortOptions[title];
+            [self updateSidebarFilterValues];
             [self reloadCurrentList];
         }]];
     }
-    
+
     [alert addAction:[UIAlertAction actionWithTitle:@"取消"
                                               style:UIAlertActionStyleCancel
                                             handler:nil]];
-    
+
+    UIView *sourceView = self.sidebarSortButton.hidden ? self.filterButton : self.sidebarSortButton;
     if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
-        alert.popoverPresentationController.sourceView = self.filterButton;
-        alert.popoverPresentationController.sourceRect = self.filterButton.bounds;
+        alert.popoverPresentationController.sourceView = sourceView;
+        alert.popoverPresentationController.sourceRect = sourceView.bounds;
     }
-    
+
     [self presentViewController:alert animated:YES completion:nil];
 }
 
@@ -2287,31 +2726,33 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"模组加载器"
                                                                    message:nil
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
-    
+
     NSArray *loaderNames = @[@"全部", @"Fabric", @"Forge", @"Quilt", @"NeoForge"];
     NSArray *loaderValues = @[[NSNull null], @"fabric", @"forge", @"quilt", @"neoforge"];
-    
+
     for (NSInteger i = 0; i < loaderNames.count; i++) {
         NSString *name = loaderNames[i];
         id value = loaderValues[i];
-        
+
         [alert addAction:[UIAlertAction actionWithTitle:name
                                                   style:UIAlertActionStyleDefault
                                                 handler:^(UIAlertAction * _Nonnull action) {
             self.currentModLoader = (value == [NSNull null]) ? nil : value;
+            [self updateSidebarFilterValues];
             [self reloadCurrentList];
         }]];
     }
-    
+
     [alert addAction:[UIAlertAction actionWithTitle:@"取消"
                                               style:UIAlertActionStyleCancel
                                             handler:nil]];
-    
+
+    UIView *sourceView = self.sidebarLoaderButton.hidden ? self.filterButton : self.sidebarLoaderButton;
     if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
-        alert.popoverPresentationController.sourceView = self.filterButton;
-        alert.popoverPresentationController.sourceRect = self.filterButton.bounds;
+        alert.popoverPresentationController.sourceView = sourceView;
+        alert.popoverPresentationController.sourceRect = sourceView.bounds;
     }
-    
+
     [self presentViewController:alert animated:YES completion:nil];
 }
 
@@ -2323,6 +2764,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     self.resourcepackSearchQuery = nil;
     self.datapackSearchQuery = nil;
     self.searchBar.text = nil;
+    [self updateSidebarFilterValues];
     [self reloadCurrentList];
 }
 
@@ -4528,6 +4970,50 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
     if (tableView == self.worldTableView && indexPath.row == self.worldList.count - 5 && self.hasMoreWorlds && !self.isLoadingWorlds) {
         [self loadWorldList];
+    }
+
+    // ===== 图标预取（参照 FCL Glide 的 prefetch + ZL2 Coil 的 enqueue）=====
+    // 在 cell 即将显示时，预取后续 5 个 cell 的图标到磁盘缓存。
+    // 这样用户滚动列表时，后续 cell 的图标已经在缓存中，可以立即显示，显著减少"图标加载过慢"的感觉。
+    // 预取仅下载+缓存，不绑定 imageView，不影响当前显示。
+    [self prefetchIconsForTableView:tableView currentIndex:indexPath.row];
+}
+
+/// 预取后续 cell 的图标到缓存
+/// @param tableView 当前 tableView
+/// @param currentIndex 当前显示的 cell 索引
+- (void)prefetchIconsForTableView:(UITableView *)tableView currentIndex:(NSInteger)currentIndex {
+    // 预取后续 5 个 cell 的图标
+    NSInteger prefetchCount = 5;
+    NSInteger startIndex = currentIndex + 1;
+    NSInteger endIndex = currentIndex + prefetchCount;
+
+    for (NSInteger row = startIndex; row <= endIndex; row++) {
+        NSString *iconUrl = nil;
+
+        if (tableView == self.modTableView && row < (NSInteger)self.modList.count) {
+            NSDictionary *mod = self.modList[row];
+            iconUrl = mod[@"imageUrl"] ?: mod[@"icon_url"];
+        } else if (tableView == self.shaderTableView && row < (NSInteger)self.shaderList.count) {
+            NSDictionary *shader = self.shaderList[row];
+            iconUrl = shader[@"imageUrl"] ?: shader[@"icon_url"];
+        } else if (tableView == self.modpackTableView && row < (NSInteger)self.modpackList.count) {
+            NSDictionary *modpack = self.modpackList[row];
+            iconUrl = modpack[@"imageUrl"] ?: modpack[@"icon_url"];
+        } else if (tableView == self.resourcepackTableView && row < (NSInteger)self.resourcepackList.count) {
+            NSDictionary *resourcepack = self.resourcepackList[row];
+            iconUrl = resourcepack[@"imageUrl"] ?: resourcepack[@"icon_url"];
+        } else if (tableView == self.datapackTableView && row < (NSInteger)self.datapackList.count) {
+            NSDictionary *datapack = self.datapackList[row];
+            iconUrl = datapack[@"imageUrl"] ?: datapack[@"icon_url"];
+        } else if (tableView == self.worldTableView && row < (NSInteger)self.worldList.count) {
+            NSDictionary *world = self.worldList[row];
+            iconUrl = world[@"imageUrl"] ?: world[@"icon_url"];
+        }
+
+        if (iconUrl && iconUrl.length > 0) {
+            [IconLoader prefetchIconWithURL:iconUrl targetSize:CGSizeMake(56, 56)];
+        }
     }
 }
 
