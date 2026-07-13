@@ -207,35 +207,59 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
     [self.filterContainerView addSubview:self.filterMainStack];
 
     // ----- 第 1 行：下载源筛选（Modrinth / CurseForge）-----
-    UIStackView *sourceRow = [self createFilterRowWithIconName:@"globe"
-                                                         label:@"来源"
-                                                    scrollStackOut:&_sourceScrollView
-                                                      chipStackOut:&_sourceChipStack];
-    [self.filterMainStack addArrangedSubview:sourceRow];
+    {
+        UIScrollView *scrollOut = nil;
+        UIStackView *chipOut = nil;
+        UIStackView *sourceRow = [self createFilterRowWithIconName:@"globe"
+                                                             label:@"来源"
+                                                        scrollStackOut:&scrollOut
+                                                          chipStackOut:&chipOut];
+        self.sourceScrollView = scrollOut;
+        self.sourceChipStack = chipOut;
+        [self.filterMainStack addArrangedSubview:sourceRow];
+    }
     [self rebuildSourceChips];
 
     // ----- 第 2 行：游戏版本筛选（动态填充，初始显示"加载中"）-----
-    UIStackView *versionRow = [self createFilterRowWithIconName:@"gamecontroller.fill"
-                                                          label:@"版本"
-                                                     scrollStackOut:&_versionScrollView
-                                                       chipStackOut:&_versionChipStack];
-    [self.filterMainStack addArrangedSubview:versionRow];
+    {
+        UIScrollView *scrollOut = nil;
+        UIStackView *chipOut = nil;
+        UIStackView *versionRow = [self createFilterRowWithIconName:@"gamecontroller.fill"
+                                                              label:@"版本"
+                                                         scrollStackOut:&scrollOut
+                                                           chipStackOut:&chipOut];
+        self.versionScrollView = scrollOut;
+        self.versionChipStack = chipOut;
+        [self.filterMainStack addArrangedSubview:versionRow];
+    }
     [self addChipToStack:self.versionChipStack title:@"加载中..." selected:NO action:NULL];
 
     // ----- 第 3 行：模组加载器筛选（动态填充，初始显示"加载中"）-----
-    UIStackView *loaderRow = [self createFilterRowWithIconName:@"puzzlepiece.extension.fill"
-                                                         label:@"加载器"
-                                                    scrollStackOut:&_loaderScrollView
-                                                      chipStackOut:&_loaderChipStack];
-    [self.filterMainStack addArrangedSubview:loaderRow];
+    {
+        UIScrollView *scrollOut = nil;
+        UIStackView *chipOut = nil;
+        UIStackView *loaderRow = [self createFilterRowWithIconName:@"puzzlepiece.extension.fill"
+                                                             label:@"加载器"
+                                                        scrollStackOut:&scrollOut
+                                                          chipStackOut:&chipOut];
+        self.loaderScrollView = scrollOut;
+        self.loaderChipStack = chipOut;
+        [self.filterMainStack addArrangedSubview:loaderRow];
+    }
     [self addChipToStack:self.loaderChipStack title:@"加载中..." selected:NO action:NULL];
 
     // ----- 第 4 行：排序方式筛选（相关性 / 下载量 / 最新更新 / 创建时间）-----
-    UIStackView *sortRow = [self createFilterRowWithIconName:@"arrow.up.arrow.down"
-                                                       label:@"排序"
-                                                  scrollStackOut:&_sortScrollView
-                                                    chipStackOut:&_sortChipStack];
-    [self.filterMainStack addArrangedSubview:sortRow];
+    {
+        UIScrollView *scrollOut = nil;
+        UIStackView *chipOut = nil;
+        UIStackView *sortRow = [self createFilterRowWithIconName:@"arrow.up.arrow.down"
+                                                           label:@"排序"
+                                                      scrollStackOut:&scrollOut
+                                                        chipStackOut:&chipOut];
+        self.sortScrollView = scrollOut;
+        self.sortChipStack = chipOut;
+        [self.filterMainStack addArrangedSubview:sortRow];
+    }
     [self rebuildSortChips];
 
     // ===== 容器约束：顶部紧贴安全区域，左右留 8pt 边距 =====

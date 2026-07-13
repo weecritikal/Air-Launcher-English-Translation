@@ -138,7 +138,8 @@
     self.navSelectAllButtonItem = [[UIBarButtonItem alloc] initWithTitle:@"全选" style:UIBarButtonItemStylePlain target:self action:@selector(toggleSelectAll)];
     self.toolbarSelectAllButtonItem = [[UIBarButtonItem alloc] initWithTitle:@"全选" style:UIBarButtonItemStylePlain target:self action:@selector(selectAll)];
     self.toolbarDeselectAllButtonItem = [[UIBarButtonItem alloc] initWithTitle:@"取消全选" style:UIBarButtonItemStylePlain target:self action:@selector(deselectAll)];
-    self.toolbarDeleteButtonItem = [[UIBarButtonItem alloc] initWithTitle:@"删除选中" style:UIBarButtonItemStyleDestructive target:self action:@selector(deleteSelectedShaders)];
+    self.toolbarDeleteButtonItem = [[UIBarButtonItem alloc] initWithTitle:@"删除选中" style:UIBarButtonItemStylePlain target:self action:@selector(deleteSelectedShaders)];
+    self.toolbarDeleteButtonItem.tintColor = [UIColor systemRedColor];
     self.flexibleSpaceItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace target:nil action:nil];
 
     // 底部工具栏（选择模式下显示）
@@ -236,8 +237,14 @@
         toolbarHeight = self.bottomToolbar.bounds.size.height;
         if (toolbarHeight <= 0) toolbarHeight = 44.0;
     }
-    self.tableView.contentInset.bottom = toolbarHeight;
-    self.tableView.scrollIndicatorInsets.bottom = toolbarHeight;
+    {
+        UIEdgeInsets inset = self.tableView.contentInset;
+        inset.bottom = toolbarHeight;
+        self.tableView.contentInset = inset;
+        UIEdgeInsets scrollInset = self.tableView.scrollIndicatorInsets;
+        scrollInset.bottom = toolbarHeight;
+        self.tableView.scrollIndicatorInsets = scrollInset;
+    }
 
     [self updateNavigationButtons];
     [self.tableView reloadData];
@@ -250,8 +257,14 @@
     self.bottomToolbar.hidden = YES;
     self.bottomToolbar.items = nil;
     // 恢复 tableView 底部内边距
-    self.tableView.contentInset.bottom = 0;
-    self.tableView.scrollIndicatorInsets.bottom = 0;
+    {
+        UIEdgeInsets inset = self.tableView.contentInset;
+        inset.bottom = 0;
+        self.tableView.contentInset = inset;
+        UIEdgeInsets scrollInset = self.tableView.scrollIndicatorInsets;
+        scrollInset.bottom = 0;
+        self.tableView.scrollIndicatorInsets = scrollInset;
+    }
 
     [self updateNavigationButtons];
     [self.tableView reloadData];
