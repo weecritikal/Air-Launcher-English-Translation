@@ -359,6 +359,83 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     [self presentViewController:alert animated:YES completion:nil];
 }
 
+#pragma mark - 启动器模式：ZeroTier 网络创建教程
+
+/// 显示 ZeroTier 网络创建教程
+///
+/// 对标 FCL 的"联机帮助"功能：引导房主完成 ZeroTier 网络的创建和配置。
+///
+/// ZeroTier 与 EasyTier（FCL 使用）的区别：
+///   - EasyTier 支持公共服务器发现，无需用户自己创建网络
+///   - ZeroTier 需要用户在 my.zerotier.com 创建网络后获得 Network ID
+///   - 因此需要提供清晰的引导教程，降低房主的配置门槛
+///
+/// 教程包含以下步骤：
+///   1. 访问 my.zerotier.com 注册账号
+///   2. 创建网络并获得 Network ID
+///   3. 设置网络可见性（Public/Private）
+///   4. 将 Network ID 填入启动器的"预设 Network ID"
+///   5. 房主开房时自动使用此 Network ID
+- (void)showZeroTierGuide {
+    [self.view endEditing:YES];
+
+    // 构建教程内容
+    NSString *step1 = [NSString stringWithFormat:@"1. %@\n   %@",
+                       MPLocalized(@"mp.guide.step1_title", @"注册 ZeroTier 账号"),
+                       MPLocalized(@"mp.guide.step1_desc", @"访问 my.zerotier.com，注册并登录账号（免费）")];
+
+    NSString *step2 = [NSString stringWithFormat:@"2. %@\n   %@",
+                       MPLocalized(@"mp.guide.step2_title", @"创建网络"),
+                       MPLocalized(@"mp.guide.step2_desc", @"点击「Create A Network」按钮，系统会自动生成一个 16 位的 Network ID")];
+
+    NSString *step3 = [NSString stringWithFormat:@"3. %@\n   %@",
+                       MPLocalized(@"mp.guide.step3_title", @"设置网络可见性"),
+                       MPLocalized(@"mp.guide.step3_desc", @"Private（推荐）：需手动授权每个加入的成员，更安全\n   Public：任何人可直接加入，适合快速联机")];
+
+    NSString *step4 = [NSString stringWithFormat:@"4. %@\n   %@",
+                       MPLocalized(@"mp.guide.step4_title", @"复制 Network ID"),
+                       MPLocalized(@"mp.guide.step4_desc", @"将页面上显示的 16 位 Network ID 复制（如 1a2b3c4d5e6f7g8h）")];
+
+    NSString *step5 = [NSString stringWithFormat:@"5. %@\n   %@",
+                       MPLocalized(@"mp.guide.step5_title", @"填入启动器"),
+                       MPLocalized(@"mp.guide.step5_desc", @"回到本页面，点击「预设 Network ID」行，粘贴并保存")];
+
+    NSString *step6 = [NSString stringWithFormat:@"6. %@\n   %@",
+                       MPLocalized(@"mp.guide.step6_title", @"开始联机"),
+                       MPLocalized(@"mp.guide.step6_desc", @"启动游戏后在悬浮球中打开联机界面，选择「当房主」即可开房")];
+
+    NSString *message = [NSString stringWithFormat:@"%@\n\n%@\n\n%@\n\n%@\n\n%@\n\n%@\n\n%@\n\n%@",
+                         MPLocalized(@"mp.guide.intro", @"ZeroTier 是一个免费的虚拟局域网工具，创建网络后即可获得唯一的 Network ID，用于精准进入对应的联机房间。"),
+                         step1,
+                         step2,
+                         step3,
+                         step4,
+                         step5,
+                         step6,
+                         MPLocalized(@"mp.guide.note", @"注意：房主和房客使用相同的 Network ID 才能联机。房主只需创建一次网络，之后每次开房自动使用。")];
+
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:MPLocalized(@"mp.guide.title", @"ZeroTier 网络创建教程")
+                                                                   message:message
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+
+    // 「打开 my.zerotier.com」按钮：直接跳转到浏览器
+    [alert addAction:[UIAlertAction actionWithTitle:MPLocalized(@"mp.guide.open_website", @"打开 my.zerotier.com")
+                                              style:UIAlertActionStyleDefault
+                                            handler:^(UIAlertAction *action) {
+        NSURL *url = [NSURL URLWithString:@"https://my.zerotier.com/"];
+        if (url && [[UIApplication sharedApplication] canOpenURL:url]) {
+            [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:nil];
+        }
+    }]];
+
+    // 「我知道了」按钮
+    [alert addAction:[UIAlertAction actionWithTitle:MPLocalized(@"common.ok", @"我知道了")
+                                              style:UIAlertActionStyleCancel
+                                            handler:nil]];
+
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
 #pragma mark - 房间连接
 
 /// 连接到指定房间
@@ -919,8 +996,15 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 ///
 /// 对标 FCL 房客加入成功后的引导：
 ///   - "已连接到房主的联机网络"
-///   - "请在 MC 多人游戏界面查看房间"
-///   - 显示服务器地址（房主 IP:端口）
+///   - 自动将服务器地址写入当前 profile（下次启动 MC 自动连接）
+///   - 自动将服务器地址复制到剪贴板（方便在 MC 中粘贴）
+///   - 显示操作引导和服务器地址
+///
+/// 由于我们使用进程内 libzt（不创建系统网络接口），MC 的 UDP 局域网广播
+/// 无法通过 ZeroTier 网络，因此"自动发现房间"不可行。替代方案是：
+///   1. 自动写入 profile 的 serverIp（下次启动 MC 时自动连接）
+///   2. 自动复制服务器地址到剪贴板（方便房客在 MC 中"添加服务器"时粘贴）
+///   3. 显示清晰的操作引导
 - (void)showGuestConnectedAlert {
     MultiplayerRoom *room = self.guestRoom;
     NSString *hostIP = room.hostIP.length ? room.hostIP : ([[MultiplayerManager sharedManager] currentLocalIP] ?: @"-");
@@ -928,12 +1012,25 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     NSString *serverAddress = [NSString stringWithFormat:@"%@:%@", hostIP, hostPort];
     self.lastServerAddress = serverAddress;
 
-    NSString *message = [NSString stringWithFormat:@"%@\n\n%@\n%@\n\n%@: %@",
+    // 自动将服务器地址写入当前 profile（下次启动 MC 时会自动连接到此服务器）
+    NSString *profileName = [PLProfiles current].selectedProfileName;
+    if (profileName && profileName.length > 0) {
+        [[PLProfiles current] setServerIp:serverAddress forProfile:profileName];
+        NSLog(@"[Multiplayer] 已自动将服务器地址 %@ 写入 profile %@", serverAddress, profileName);
+    }
+
+    // 自动复制服务器地址到剪贴板（方便房客在 MC 中"添加服务器"时直接粘贴）
+    UIPasteboard *pasteboard = [UIPasteboard generalPasteboard];
+    pasteboard.string = serverAddress;
+
+    // 构建提示信息
+    NSString *message = [NSString stringWithFormat:@"%@\n\n%@\n%@\n\n%@: %@\n\n%@",
                          MPLocalized(@"mp.guest.connected_msg", @"已连接到房主的联机网络"),
-                         MPLocalized(@"mp.guest.tip.open_multiplayer", @"请在 MC 多人游戏界面查看房间"),
-                         MPLocalized(@"mp.guest.tip.add_server", @"若未自动发现房间，可手动添加下方服务器地址"),
+                         MPLocalized(@"mp.guest.tip.add_server", @"请在 MC 多人游戏界面点击「添加服务器」，粘贴以下地址即可加入"),
+                         MPLocalized(@"mp.guest.tip.address_copied", @"服务器地址已自动复制到剪贴板，直接粘贴即可"),
                          MPLocalized(@"mp.guest.server_address", @"服务器地址"),
-                         serverAddress];
+                         serverAddress,
+                         MPLocalized(@"mp.guest.tip.auto_saved", @"地址已自动保存到当前配置，下次启动游戏会自动连接")];
 
     [self showSimpleAlertWithTitle:MPLocalized(@"mp.guest.connected_title", @"已加入联机")
                            message:message];
@@ -1128,8 +1225,8 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     // 启动器模式
     switch (section) {
         case 0:
-            // 联机设置：启用联机开关 + Network ID
-            return 2;
+            // 联机设置：启用联机开关 + Network ID + ZeroTier 创建教程
+            return 3;
         case 1:
             // 我的房间：至少 1 行（空状态提示）
             return MAX(1, (NSInteger)self.rooms.count);
@@ -1212,8 +1309,12 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 }
 
 /// Section 0「联机设置」的 cell 配置
-/// @param row 行号（0=启用联机开关，1=预设 Network ID）
+/// @param row 行号（0=启用联机开关，1=预设 Network ID，2=ZeroTier 创建教程）
 - (UITableViewCell *)cellForSettingsSectionAtRow:(NSInteger)row {
+    if (row == 2) {
+        // ZeroTier 网络创建教程入口
+        return [self cellForGuideSection];
+    }
     if (row == 0) {
         // 启用联机开关行
         UITableViewCell *cell = [self.tableView dequeueReusableCellWithIdentifier:@"SwitchCell"];
@@ -1296,6 +1397,41 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         [[BackgroundManager sharedManager] applyEffectToCell:cell];
         return cell;
     }
+}
+
+/// Section 0「联机设置」的教程入口 cell（row == 2）
+///
+/// 对标 FCL 的"联机帮助"入口：引导房主完成 ZeroTier 网络的创建和配置。
+/// 点击后弹出详细的图文教程，包含注册账号、创建网络、获取 Network ID、
+/// 设置网络可见性等步骤，并提供"打开 my.zerotier.com"快捷按钮。
+- (UITableViewCell *)cellForGuideSection {
+    UITableViewCell *cell = [self.tableView dequeueReusableCellWithIdentifier:@"DefaultCell"];
+    cell.selectionStyle = UITableViewCellSelectionStyleDefault;
+    cell.textLabel.text = MPLocalized(@"mp.settings.zt_guide", @"ZeroTier 网络创建教程");
+    cell.textLabel.font = [UIFont systemFontOfSize:16];
+
+    // 左侧图标：问号圆圈
+    cell.imageView.image = [UIImage systemImageNamed:@"questionmark.circle"];
+    cell.imageView.tintColor = [UIColor systemBlueColor];
+
+    // 右侧箭头
+    cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+
+    // 辅助文字：简短说明
+    cell.detailTextLabel.text = MPLocalized(@"mp.settings.zt_guide_desc", @"不知道怎么创建网络？点这里");
+    cell.detailTextLabel.font = [UIFont systemFontOfSize:12];
+
+    // 适配自定义背景
+    if ([[BackgroundManager sharedManager] hasBackground]) {
+        cell.textLabel.textColor = [UIColor whiteColor];
+        cell.detailTextLabel.textColor = [UIColor whiteColor];
+    } else {
+        cell.textLabel.textColor = [UIColor labelColor];
+        cell.detailTextLabel.textColor = [UIColor secondaryLabelColor];
+    }
+
+    [[BackgroundManager sharedManager] applyEffectToCell:cell];
+    return cell;
 }
 
 /// Section 1「我的房间」的 cell 配置
@@ -1664,6 +1800,9 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
             } else if (indexPath.row == 1) {
                 // 点击 Network ID 行：弹出编辑对话框
                 [self networkIdCellTapped];
+            } else if (indexPath.row == 2) {
+                // 点击教程入口：弹出 ZeroTier 网络创建教程
+                [self showZeroTierGuide];
             }
             break;
         case 1:
