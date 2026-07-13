@@ -181,6 +181,10 @@ void pojavSwapInterval(int interval) {
 
     if (vsyncEnv && strcmp(vsyncEnv, "1") == 0) {
         if (interval != 0) {
+            // 关键修复（FPS 解锁无效问题）：记录每次 VSync 拦截
+            // 某些 mod（如 OptiFine、Sodium）或 MC 版本会在运行时反复调用 glfwSwapInterval(1)
+            // 重新启用 VSync。记录每次拦截帮助诊断"帧率被重新锁定"的问题。
+            // 之前只记录前几次，无法发现运行中被 mod 重新启用的情况。
             NSLog(@"[egl_bridge] pojavSwapInterval: intercepted VSync request interval=%d -> 0 (POJAV_DISABLE_VSYNC=1, renderer=%s)", interval, renderer ?: "<unset>");
         }
         interval = 0;

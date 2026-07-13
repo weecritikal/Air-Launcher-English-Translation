@@ -72,7 +72,17 @@ public class PojavLauncher {
         //
         // 当启动器偏好 video.disable_game_vsync 开启时（通过环境变量 POJAV_DISABLE_VSYNC=1 传入）：
         // 1. 强制写 enableVsync=false → MC 不再调用 glfwSwapInterval(1) 请求垂直同步
-        // 2. 强制写 maxFps=0（无限制）→ MC 不再限制每秒渲染帧数
+        // 2. 强制写 maxFps=260 → MC 1.16+ 的源码中 maxFps>=260 时视为"无限制"（unlimited）
+        //
+        // 关键修复（FPS 解锁无效问题）：
+        //   之前使用 maxFps=0，但 MC 的 maxFps 有效值范围是 10-260（默认 120）。
+        //   maxFps=0 不是"无限制"——MC 1.16+ 源码中 0 会被当作无效值而忽略，MC 继续使用
+        //   options.txt 中的旧值或默认值 120，导致帧率被锁在 120。
+        //   MC 1.16+ 源码中有一个特殊判断：if (maxFps >= 260) treat as unlimited。
+        //   因此正确的"无限制"设置是 maxFps=260（或更高）。
+        //
+        //   对于 MC 1.8-1.15 旧版本：maxFps 选项不存在或行为不同，此设置会被忽略，
+        //   帧率解锁完全依赖 native 层的 eglSwapInterval(0) 拦截。
         //
         // 这样做的效果：
         // - Vulkan 渲染器（MoltenVK）：LWJGL 创建 swapchain 时使用 VK_PRESENT_MODE_IMMEDIATE_KHR，
@@ -84,7 +94,9 @@ public class PojavLauncher {
         // 用户若想恢复游戏内垂直同步和帧率限制，可在启动器设置关闭该开关。
         if ("1".equals(System.getenv("POJAV_DISABLE_VSYNC"))) {
             MCOptionUtils.set("enableVsync", "false");
-            MCOptionUtils.set("maxFps", "0");
+            // maxFps=260：MC 1.16+ 源码中 maxFps>=260 视为 unlimited
+            // （之前用 0 会被当作无效值忽略，导致帧率仍被 maxFps=120 限制）
+            MCOptionUtils.set("maxFps", "260");
         }
         // Default settings for performance
         MCOptionUtils.setDefault("mipmapLevels", "0");

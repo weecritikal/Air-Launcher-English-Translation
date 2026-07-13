@@ -60,11 +60,13 @@ void init_loadDefaultEnv() {
     // 帧率解锁的三层机制（各层独立生效，互为兜底）：
     //
     // 1. Java 层（PojavLauncher.java）读取 POJAV_DISABLE_VSYNC=1 后：
-    //    a) 强制写 enableVsync=false → MC 不调用 glfwSwapInterval(1)
-    //    b) 强制写 maxFps=0 → MC 不限制每秒渲染帧数（默认 maxFps=120 会限制帧率）
+    //    a) 强制写 enableVsync=false → MC 不再调用 glfwSwapInterval(1)
+    //    b) 强制写 maxFps=260 → MC 1.16+ 源码中 maxFps>=260 视为"无限制"
+    //       （之前用 maxFps=0 会被 MC 当作无效值忽略，导致帧率仍被 maxFps=120 限制）
     //
     // 2. native 桥接层（egl_bridge.m pojavSwapInterval）读取 POJAV_DISABLE_VSYNC=1 后：
     //    拦截 MC 的 glfwSwapInterval(1) 请求，强制改为 interval=0
+    //    （会记录每次拦截，帮助诊断 mod 运行时重新启用 VSync 的情况）
     //
     // 3. EGL 初始化层（gl_bridge.m gl_make_current）读取 POJAV_DISABLE_VSYNC=1 后：
     //    在 eglMakeCurrent 成功后立即调用 eglSwapInterval(0)。

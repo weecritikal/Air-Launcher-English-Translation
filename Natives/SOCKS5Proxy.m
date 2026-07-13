@@ -1191,8 +1191,14 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
     //
     // 修复方案：使用 C11 _Atomic(BOOL)，原子操作自带合适的内存屏障
     // （memory_order_seq_cst），保证一个线程的写入对另一个线程立即可见。
-    _Atomic(BOOL) clientClosed = NO;
-    _Atomic(BOOL) remoteClosed = NO;
+    //
+    // 关键修复（N2 验证发现）：必须同时使用 __block 和 _Atomic。
+    // - __block：让变量被 block 按引用捕获（两个 block 共享同一变量），而不是按值捕获
+    //   （按值捕获会导致每个 block 有独立副本，原子操作在各自副本上执行，完全失效）
+    // - _Atomic：提供内存屏障，保证跨线程可见性
+    // 两者缺一不可：只有 __block 无内存屏障，只有 _Atomic 会被按值捕获。
+    __block _Atomic(BOOL) clientClosed = NO;
+    __block _Atomic(BOOL) remoteClosed = NO;
 
     // 创建并发队列用于双向转发
     dispatch_queue_t forwardQueue = dispatch_queue_create("com.angelaura.socks5.forward", DISPATCH_QUEUE_CONCURRENT);
