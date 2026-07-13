@@ -657,23 +657,13 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     } completion:nil];
 
     if (self.task) {
-        if (getPrefBool(@"general.floating_ball_enabled")) {
-            // 悬浮球开启时打开统一下载任务界面，不再显示单独进度
-            Class tasksVCClass = NSClassFromString(@"DownloadTasksViewController");
-            if (tasksVCClass) {
-                UIViewController *vc = [[tasksVCClass alloc] init];
-                vc.modalPresentationStyle = UIModalPresentationFullScreen;
-                [self presentViewController:vc animated:YES completion:nil];
-            }
-        } else {
-            // 正在下载，显示详情
-            if (!self.progressVC) {
-                self.progressVC = [[DownloadProgressViewController alloc] initWithTask:self.task];
-            }
-            UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:self.progressVC];
-            nav.modalPresentationStyle = UIModalPresentationFormSheet;
-            [self presentViewController:nav animated:YES completion:nil];
+        // 正在下载，显示详情（悬浮球已移除）
+        if (!self.progressVC) {
+            self.progressVC = [[DownloadProgressViewController alloc] initWithTask:self.task];
         }
+        UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:self.progressVC];
+        nav.modalPresentationStyle = UIModalPresentationFormSheet;
+        [self presentViewController:nav animated:YES completion:nil];
     } else if ([[DownloadTaskManager sharedManager] hasActiveTasks]) {
         // 下载中仍允许启动游戏（不再硬阻断），仅提示用户有进行中的下载。
         // 原实现在此处 return 导致"开了下载球后任意下载未完成就永远无法启动游戏"，

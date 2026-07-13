@@ -20,7 +20,6 @@
 #import "BackgroundManager.h"
 #import "AIFixViewController.h"
 #import "CurseForgeAPIKeyViewController.h"
-#import "DownloadFloatingBall.h"
 #import "CustomControlsViewController.h"
 
 @interface LauncherPreferencesViewController()
@@ -397,25 +396,6 @@
                   [[NSNotificationCenter defaultCenter] postNotificationName:@"LauncherAppearanceChanged" object:nil];
                   [self.tableView reloadData];
               }
-            },
-            @{@"key": @"floating_ball_enabled",
-              @"title": @"下载悬浮球",
-              @"hasDetail": @YES,
-              @"icon": @"circle.fill",
-              @"type": self.typeSwitch,
-              @"enableCondition": whenNotInGame,
-              @"action": ^(BOOL enabled){
-                  [[NSNotificationCenter defaultCenter] postNotificationName:DownloadFloatingBallSettingsDidChangeNotification object:nil];
-              }
-            },
-            @{@"key": @"floating_ball_size",
-              @"title": @"悬浮球大小",
-              @"hasDetail": @YES,
-              @"icon": @"slider.horizontal.3",
-              @"type": self.typeSlider,
-              @"min": @40,
-              @"max": @100,
-              @"enableCondition": ^BOOL(){ return getPrefBool(@"general.floating_ball_enabled") && whenNotInGame(); }
             },
             @{@"key": @"multi_threaded",
               @"title": @"多线程下载",

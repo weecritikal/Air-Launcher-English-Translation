@@ -3,7 +3,6 @@
 #import "utils.h"
 #import "LauncherRootViewController.h"
 #import "LauncherCardLayoutViewController.h"
-#import "DownloadFloatingBall.h"
 #import "LauncherPreferences.h"
 #import "BackgroundManager.h"
 
@@ -71,11 +70,6 @@ extern UIWindow *mainWindow;
     // 延迟会在启动时露出窗口底色形成"黑条"或"黑闪"。BackgroundManager 在其 init
     // 中已 loadSavedBackground/loadUISettings，单例首次访问即完成初始化，无需延迟。
     [[BackgroundManager sharedManager] applyBackgroundToWindow:self.window];
-
-    // 挂载下载任务悬浮球（用户可在设置中开关）
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        [[DownloadFloatingBall sharedBall] attachToMainWindow];
-    });
 
     // 监听主题切换通知（设置页"外观模式"切换时实时应用，无需重启）
     [[NSNotificationCenter defaultCenter] addObserver:self

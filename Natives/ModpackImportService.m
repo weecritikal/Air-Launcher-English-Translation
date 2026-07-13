@@ -531,8 +531,7 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
 
             NSURLSessionDownloadTask *task = [self.downloadSession downloadTaskWithURL:[NSURL URLWithString:url]];
             NSString *taskId = nil;
-            BOOL floatingBallEnabled = getPrefBool(@"general.floating_ball_enabled");
-            if (floatingBallEnabled) {
+            {
                 DownloadTaskItem *taskItem = [[DownloadTaskManager sharedManager]
                     registerTaskWithResourceType:DownloadTaskResourceTypeMod
                                     resourceName:fileName
@@ -575,8 +574,7 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
 
             NSURLSessionDownloadTask *task = [self.downloadSession downloadTaskWithURL:[NSURL URLWithString:downloadURL]];
             NSString *taskId = nil;
-            BOOL floatingBallEnabled = getPrefBool(@"general.floating_ball_enabled");
-            if (floatingBallEnabled) {
+            {
                 DownloadTaskItem *taskItem = [[DownloadTaskManager sharedManager]
                     registerTaskWithResourceType:DownloadTaskResourceTypeMod
                                     resourceName:fileName
@@ -840,8 +838,7 @@ didFinishDownloadingToURL:(NSURL *)location {
         NSString *displayName = [NSString stringWithFormat:@"%@ %@ profile", loader, loaderVersion];
         NSURLSessionDownloadTask *task = [self.downloadSession downloadTaskWithURL:url];
         NSString *taskId = nil;
-        BOOL floatingBallEnabled = getPrefBool(@"general.floating_ball_enabled");
-        if (floatingBallEnabled) {
+        {
             DownloadTaskItem *taskItem = [[DownloadTaskManager sharedManager]
                 registerTaskWithResourceType:DownloadTaskResourceTypeModloader
                                 resourceName:versionId
@@ -885,8 +882,7 @@ didFinishDownloadingToURL:(NSURL *)location {
     NSString *installerDisplayName = [NSString stringWithFormat:@"%@ %@ installer", loader, loaderVersion];
     NSURLSessionDownloadTask *installerTask = [self.downloadSession downloadTaskWithURL:[NSURL URLWithString:installerURL]];
     NSString *installerTaskId = nil;
-    BOOL floatingBallEnabled = getPrefBool(@"general.floating_ball_enabled");
-    if (floatingBallEnabled) {
+    {
         DownloadTaskItem *installerItem = [[DownloadTaskManager sharedManager]
             registerTaskWithResourceType:DownloadTaskResourceTypeModloader
                             resourceName:versionId

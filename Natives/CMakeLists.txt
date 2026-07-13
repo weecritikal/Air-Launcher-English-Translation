@@ -199,7 +199,6 @@ add_executable(AngelAuraAmethyst
   InlineMessageView.m
   DownloadTaskItem.m
   DownloadTaskManager.m
-  DownloadFloatingBall.m
   DownloadTasksViewController.m
   AppDelegate.m
   CustomControlsViewController.m

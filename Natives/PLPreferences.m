@@ -113,8 +113,6 @@ NSString *const PREF_MOD_UPDATE_KEEP_OLD = @"general.mod_update_keep_old";
             @"appicon": @"AppIcon-Light",
             @"ui_layout": @"vs",
             @"ui_theme": @"dark",
-            @"floating_ball_enabled": @YES,
-            @"floating_ball_size": @(60),
             @"multi_threaded": @NO,
             // 自定义外观颜色（hex 字符串，空串=使用默认深色毛玻璃/白色文字）
             @"text_color": @"",

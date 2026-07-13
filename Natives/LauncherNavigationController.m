@@ -341,23 +341,14 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 
 - (void)performInstallOrShowDetails:(UIButton *)sender {
     if (self.task) {
-        if (getPrefBool(@"general.floating_ball_enabled")) {
-            // 悬浮球开启时打开统一下载任务界面，不再显示单独进度
-            Class tasksVCClass = NSClassFromString(@"DownloadTasksViewController");
-            if (tasksVCClass) {
-                UIViewController *vc = [[tasksVCClass alloc] init];
-                vc.modalPresentationStyle = UIModalPresentationFullScreen;
-                [self presentViewController:vc animated:YES completion:nil];
-            }
-        } else {
-            if (!self.progressVC) {
-                self.progressVC = [[DownloadProgressViewController alloc] initWithTask:self.task];
-            }
-            UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:self.progressVC];
-            nav.modalPresentationStyle = UIModalPresentationPopover;
-            nav.popoverPresentationController.sourceView = sender;
-            [self presentViewController:nav animated:YES completion:nil];
+        // 显示下载进度详情（悬浮球已移除）
+        if (!self.progressVC) {
+            self.progressVC = [[DownloadProgressViewController alloc] initWithTask:self.task];
         }
+        UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:self.progressVC];
+        nav.modalPresentationStyle = UIModalPresentationPopover;
+        nav.popoverPresentationController.sourceView = sender;
+        [self presentViewController:nav animated:YES completion:nil];
     } else {
         [self launchMinecraft:sender];
     }

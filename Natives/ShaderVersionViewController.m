@@ -3,27 +3,87 @@
 //  Amethyst
 //
 //  Shader version selection view controller implementation
+//  重构版：参照 FCL/ZL2 风格添加侧边筛选面板（下载源/版本/加载器/排序 chips）
 //
 
 #import "ShaderVersionViewController.h"
 #import "installer/modpack/ModrinthAPI.h"
+#import "installer/modpack/CurseForgeAPI.h"
 #import "ShaderVersion.h"
+#import "ModVersion.h"
 #import "ShaderVersionTableViewCell.h"
 #import "AssetDetailHeaderView.h"
 #import "BackgroundManager.h"
 
+// ============================================================================
+// 下载源常量（与 ShaderVersion.apiSource 字段保持一致：1=Modrinth, 2=CurseForge）
+// ============================================================================
+static const NSInteger kSourceModrinth    = 1;
+static const NSInteger kSourceCurseForge  = 2;
+
+// ============================================================================
+// 排序方式常量（参照 FCL/ZL2 的排序选项）
+// ============================================================================
+static NSString *const kSortRelevance = @"relevance"; // 相关性（保持 API 原始顺序）
+static NSString *const kSortDownloads = @"downloads"; // 下载量（版本级别无此字段，回退为原始顺序）
+static NSString *const kSortUpdated   = @"updated";   // 最新更新（datePublished 降序）
+static NSString *const kSortCreated   = @"created";   // 创建时间（datePublished 升序）
+
+// 排序选项显示文案（与常量一一对应，用于 chips 渲染）
+static NSArray<NSDictionary *> *SortOptionItems(void) {
+    static NSArray *items = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        items = @[
+            @{ @"key": kSortRelevance, @"title": @"相关性" },
+            @{ @"key": kSortDownloads, @"title": @"下载量" },
+            @{ @"key": kSortUpdated,   @"title": @"最新更新" },
+            @{ @"key": kSortCreated,   @"title": @"创建时间" },
+        ];
+    });
+    return items;
+}
+
 @interface ShaderVersionViewController () <UITableViewDataSource, UITableViewDelegate>
 
+// 主表格视图（展示版本列表）
 @property (nonatomic, strong) UITableView *tableView;
-@property (nonatomic, strong) UIButton *gameVersionFilterButton;
-@property (nonatomic, strong) UIButton *loaderFilterButton;
 
+// ===== 侧边筛选面板（参照 FCL/ZL2 的水平滚动 chips 筛选条）=====
+// 筛选面板容器（半透明 + 毛玻璃背景，固定在 tableView 上方不随列表滚动）
+@property (nonatomic, strong) UIView *filterContainerView;
+// 主垂直 stack（容纳 4 行筛选：来源 / 版本 / 加载器 / 排序）
+@property (nonatomic, strong) UIStackView *filterMainStack;
+
+// --- 下载源筛选行 ---
+@property (nonatomic, strong) UIScrollView *sourceScrollView;   // 水平滚动容器
+@property (nonatomic, strong) UIStackView  *sourceChipStack;    // chips 水平排列
+
+// --- 游戏版本筛选行 ---
+@property (nonatomic, strong) UIScrollView *versionScrollView;
+@property (nonatomic, strong) UIStackView  *versionChipStack;
+
+// --- 模组加载器筛选行 ---
+@property (nonatomic, strong) UIScrollView *loaderScrollView;
+@property (nonatomic, strong) UIStackView  *loaderChipStack;
+
+// --- 排序方式筛选行 ---
+@property (nonatomic, strong) UIScrollView *sortScrollView;
+@property (nonatomic, strong) UIStackView  *sortChipStack;
+
+// ===== 当前选中的筛选状态 =====
+@property (nonatomic, assign) NSInteger selectedSource;  // 1=Modrinth, 2=CurseForge
+@property (nonatomic, copy)   NSString *selectedSort;    // 排序方式 key
+
+// ===== 数据源 =====
 @property (nonatomic, strong) NSArray<ShaderVersion *> *allVersions;
 @property (nonatomic, strong) NSArray<ShaderVersion *> *filteredVersions;
 
+// 可选的筛选选项列表（从版本数据中动态提取）
 @property (nonatomic, strong) NSArray<NSString *> *availableGameVersions;
 @property (nonatomic, strong) NSArray<NSString *> *availableLoaders;
 
+// 当前选中的版本 / 加载器（"全部" 表示不过滤）
 @property (nonatomic, strong) NSString *selectedGameVersion;
 @property (nonatomic, strong) NSString *selectedLoader;
 
@@ -41,7 +101,11 @@
     // 适配自定义启动器背景：透明化当前 VC，让全局背景图/毛玻璃透出
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
 
-    [self setupFilterControls];
+    // 初始化筛选状态（默认 Modrinth 源 + 相关性排序）
+    self.selectedSource = kSourceModrinth;
+    self.selectedSort = kSortRelevance;
+
+    [self setupSideFilterPanel];
     [self setupTableView];
     [self setupActivityIndicator];
     [self setupDetailHeader];
@@ -50,7 +114,7 @@
     self.tableView.backgroundColor = [UIColor clearColor];
     self.tableView.backgroundView = nil;
 
-    [self fetchVersions];
+    [self fetchVersionsFromCurrentSource];
 
     // 监听背景效果变化通知，背景切换时重新应用透明效果
     [[NSNotificationCenter defaultCenter] addObserver:self
@@ -125,47 +189,382 @@
     }
 }
 
-- (void)setupFilterControls {
-    self.gameVersionFilterButton = [self createFilterButtonWithTitle:@"游戏版本: 加载中..."];
-    self.loaderFilterButton = [self createFilterButtonWithTitle:@"加载器: 加载中..."];
+#pragma mark - 侧边筛选面板（参照 FCL/ZL2 水平滚动 chips）
 
-    UIStackView *filterStackView = [[UIStackView alloc] initWithArrangedSubviews:@[self.gameVersionFilterButton, self.loaderFilterButton]];
-    filterStackView.translatesAutoresizingMaskIntoConstraints = NO;
-    filterStackView.axis = UILayoutConstraintAxisHorizontal;
-    filterStackView.distribution = UIStackViewDistributionFillEqually;
-    filterStackView.spacing = 8;
+/// 创建侧边筛选面板：4 行水平滚动 chips（下载源 / 游戏版本 / 加载器 / 排序方式）
+/// 参照 FCL 安卓版的筛选条设计：每个类别一行，图标+标签前缀，chips 水平滚动，
+/// 选中项高亮（主题色背景 + 白字），未选中项半透明背景 + 浅边框。
+- (void)setupSideFilterPanel {
+    // ===== 筛选面板容器（半透明 + 毛玻璃，固定在顶部不随列表滚动）=====
+    self.filterContainerView = [[UIView alloc] init];
+    self.filterContainerView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.filterContainerView.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.06];
+    self.filterContainerView.layer.cornerRadius = 14;
+    self.filterContainerView.layer.cornerCurve = kCACornerCurveContinuous;
+    self.filterContainerView.layer.borderWidth = 0.5;
+    self.filterContainerView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.10].CGColor;
+    [self.view addSubview:self.filterContainerView];
+    // 应用毛玻璃背景效果，与启动器整体风格一致
+    [[BackgroundManager sharedManager] applyEffectToView:self.filterContainerView];
 
-    [self.view addSubview:filterStackView];
+    // ===== 主垂直 stack（4 行筛选，每行 = 图标标签 + 水平滚动 chips）=====
+    self.filterMainStack = [[UIStackView alloc] init];
+    self.filterMainStack.translatesAutoresizingMaskIntoConstraints = NO;
+    self.filterMainStack.axis = UILayoutConstraintAxisVertical;
+    self.filterMainStack.spacing = 4;
+    self.filterMainStack.alignment = UIStackViewAlignmentFill;
+    [self.filterContainerView addSubview:self.filterMainStack];
 
+    // ----- 第 1 行：下载源筛选（Modrinth / CurseForge）-----
+    UIStackView *sourceRow = [self createFilterRowWithIconName:@"globe"
+                                                         label:@"来源"
+                                                    scrollStackOut:&_sourceScrollView
+                                                      chipStackOut:&_sourceChipStack];
+    [self.filterMainStack addArrangedSubview:sourceRow];
+    [self rebuildSourceChips];
+
+    // ----- 第 2 行：游戏版本筛选（动态填充，初始显示"加载中"）-----
+    UIStackView *versionRow = [self createFilterRowWithIconName:@"gamecontroller.fill"
+                                                          label:@"版本"
+                                                     scrollStackOut:&_versionScrollView
+                                                       chipStackOut:&_versionChipStack];
+    [self.filterMainStack addArrangedSubview:versionRow];
+    [self addChipToStack:self.versionChipStack title:@"加载中..." selected:NO action:NULL];
+
+    // ----- 第 3 行：加载器筛选（动态填充，初始显示"加载中"）-----
+    UIStackView *loaderRow = [self createFilterRowWithIconName:@"puzzlepiece.extension.fill"
+                                                         label:@"加载器"
+                                                    scrollStackOut:&_loaderScrollView
+                                                      chipStackOut:&_loaderChipStack];
+    [self.filterMainStack addArrangedSubview:loaderRow];
+    [self addChipToStack:self.loaderChipStack title:@"加载中..." selected:NO action:NULL];
+
+    // ----- 第 4 行：排序方式筛选（相关性 / 下载量 / 最新更新 / 创建时间）-----
+    UIStackView *sortRow = [self createFilterRowWithIconName:@"arrow.up.arrow.down"
+                                                       label:@"排序"
+                                                  scrollStackOut:&_sortScrollView
+                                                    chipStackOut:&_sortChipStack];
+    [self.filterMainStack addArrangedSubview:sortRow];
+    [self rebuildSortChips];
+
+    // ===== 容器约束：顶部紧贴安全区域，左右留 8pt 边距 =====
     [NSLayoutConstraint activateConstraints:@[
-        [filterStackView.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:8],
-        [filterStackView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:8],
-        [filterStackView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-8],
+        [self.filterContainerView.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:6],
+        [self.filterContainerView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:8],
+        [self.filterContainerView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-8],
+        // 主 stack 内边距
+        [self.filterMainStack.topAnchor constraintEqualToAnchor:self.filterContainerView.topAnchor constant:8],
+        [self.filterMainStack.bottomAnchor constraintEqualToAnchor:self.filterContainerView.bottomAnchor constant:-8],
+        [self.filterMainStack.leadingAnchor constraintEqualToAnchor:self.filterContainerView.leadingAnchor constant:10],
+        [self.filterMainStack.trailingAnchor constraintEqualToAnchor:self.filterContainerView.trailingAnchor constant:-10],
     ]];
 }
 
-- (UIButton *)createFilterButtonWithTitle:(NSString *)title {
-    UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
-    button.translatesAutoresizingMaskIntoConstraints = NO;
-    [button setTitle:title forState:UIControlStateNormal];
-    button.layer.cornerRadius = 8;
-    button.backgroundColor = [UIColor secondarySystemBackgroundColor];
-    button.showsMenuAsPrimaryAction = YES;
-    return button;
+/// 创建单行筛选布局：左侧图标+标签（固定宽度），右侧水平滚动 chips 容器
+/// 参照 FCL 筛选面板的行结构：icon + label + horizontal scrollview
+- (UIStackView *)createFilterRowWithIconName:(NSString *)iconName
+                                       label:(NSString *)labelText
+                                scrollStackOut:(UIScrollView **)scrollStackOut
+                                  chipStackOut:(UIStackView **)chipStackOut {
+    // --- 左侧：图标 + 标签（固定宽度，不随 chips 滚动）---
+    UIImageView *iconView = [[UIImageView alloc] init];
+    iconView.translatesAutoresizingMaskIntoConstraints = NO;
+    iconView.image = [UIImage systemImageNamed:iconName];
+    iconView.tintColor = [UIColor secondaryLabelColor];
+    iconView.contentMode = UIViewContentModeScaleAspectFit;
+    [iconView setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+    [iconView setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+    [NSLayoutConstraint activateConstraints:@[
+        [iconView.widthAnchor constraintEqualToConstant:15],
+        [iconView.heightAnchor constraintEqualToConstant:15],
+    ]];
+
+    UILabel *label = [[UILabel alloc] init];
+    label.translatesAutoresizingMaskIntoConstraints = NO;
+    label.text = labelText;
+    label.font = [UIFont systemFontOfSize:11 weight:UIFontWeightMedium];
+    label.textColor = [UIColor secondaryLabelColor];
+    label.textAlignment = NSTextAlignmentLeft;
+    [label setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+    [label setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+    [label.widthAnchor constraintEqualToConstant:34].active = YES;
+
+    UIStackView *labelStack = [[UIStackView alloc] initWithArrangedSubviews:@[iconView, label]];
+    labelStack.translatesAutoresizingMaskIntoConstraints = NO;
+    labelStack.axis = UILayoutConstraintAxisHorizontal;
+    labelStack.spacing = 3;
+    labelStack.alignment = UIStackViewAlignmentCenter;
+    [labelStack setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+
+    // --- 右侧：水平滚动 chips 容器 ---
+    UIScrollView *scrollView = [[UIScrollView alloc] init];
+    scrollView.translatesAutoresizingMaskIntoConstraints = NO;
+    scrollView.showsHorizontalScrollIndicator = NO;
+    scrollView.alwaysBounceHorizontal = YES;
+
+    UIStackView *chipStack = [[UIStackView alloc] init];
+    chipStack.translatesAutoresizingMaskIntoConstraints = NO;
+    chipStack.axis = UILayoutConstraintAxisHorizontal;
+    chipStack.spacing = 6;
+    chipStack.alignment = UIStackViewAlignmentCenter;
+    [scrollView addSubview:chipStack];
+
+    // chipStack 填满 scrollView 的 contentLayoutGuide，高度与 frameLayoutGuide 一致
+    [NSLayoutConstraint activateConstraints:@[
+        [chipStack.topAnchor constraintEqualToAnchor:scrollView.contentLayoutGuide.topAnchor],
+        [chipStack.bottomAnchor constraintEqualToAnchor:scrollView.contentLayoutGuide.bottomAnchor],
+        [chipStack.leadingAnchor constraintEqualToAnchor:scrollView.contentLayoutGuide.leadingAnchor],
+        [chipStack.trailingAnchor constraintEqualToAnchor:scrollView.contentLayoutGuide.trailingAnchor],
+        [chipStack.heightAnchor constraintEqualToAnchor:scrollView.frameLayoutGuide.heightAnchor],
+    ]];
+
+    // 输出到调用方的属性
+    if (scrollStackOut) *scrollStackOut = scrollView;
+    if (chipStackOut) *chipStackOut = chipStack;
+
+    // --- 行容器：标签 + 滚动视图 水平排列 ---
+    UIStackView *row = [[UIStackView alloc] initWithArrangedSubviews:@[labelStack, scrollView]];
+    row.translatesAutoresizingMaskIntoConstraints = NO;
+    row.axis = UILayoutConstraintAxisHorizontal;
+    row.spacing = 6;
+    row.alignment = UIStackViewAlignmentCenter;
+    // 固定行高，让 4 行总高度可控
+    [row.heightAnchor constraintEqualToConstant:30].active = YES;
+    return row;
 }
+
+/// 创建单个筛选 chip 按钮（pill 样式，参照 FCL/ZL2 的标签条）
+/// 选中态：主题色(systemBlue)背景 + 白字；未选中态：半透明背景 + 标签色文字 + 浅边框
+- (UIButton *)createFilterChipWithTitle:(NSString *)title selected:(BOOL)selected {
+    UIButton *chip = [UIButton buttonWithType:UIButtonTypeSystem];
+    chip.translatesAutoresizingMaskIntoConstraints = NO;
+    [chip setTitle:title forState:UIControlStateNormal];
+    chip.titleLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
+    chip.titleLabel.adjustsFontSizeToFitWidth = YES;
+    chip.titleLabel.minimumScaleFactor = 0.75;
+    chip.contentEdgeInsets = UIEdgeInsetsMake(4, 12, 4, 12);
+    chip.layer.cornerRadius = 14;
+    chip.layer.cornerCurve = kCACornerCurveContinuous;
+    chip.layer.masksToBounds = YES;
+    // 固定高度，防止内容变化导致高度跳动
+    [chip.heightAnchor constraintEqualToConstant:28].active = YES;
+    [chip setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+    [chip setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+    [self applyChipStyle:chip selected:selected];
+    return chip;
+}
+
+/// 应用 chip 选中/未选中样式
+- (void)applyChipStyle:(UIButton *)chip selected:(BOOL)selected {
+    if (selected) {
+        // 选中态：主题色背景 + 白字（参照 FCL 选中标签高亮）
+        chip.backgroundColor = [UIColor systemBlueColor];
+        [chip setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+        chip.layer.borderWidth = 0;
+    } else {
+        // 未选中态：半透明背景 + 标签色文字 + 浅边框
+        chip.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.08];
+        [chip setTitleColor:[UIColor labelColor] forState:UIControlStateNormal];
+        chip.layer.borderWidth = 0.5;
+        chip.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.15].CGColor;
+    }
+}
+
+/// 向 chipStack 添加一个 chip（快捷方法，用于初始占位）
+- (void)addChipToStack:(UIStackView *)stack title:(NSString *)title selected:(BOOL)selected action:(SEL)action {
+    UIButton *chip = [self createFilterChipWithTitle:title selected:selected];
+    if (action) {
+        [chip addTarget:self action:action forControlEvents:UIControlEventTouchUpInside];
+    }
+    [stack addArrangedSubview:chip];
+}
+
+/// 清空 chipStack 中所有已排列的子视图（用于重建 chips）
+- (void)clearChipStack:(UIStackView *)stack {
+    [stack.arrangedSubviews makeObjectsPerformSelector:@selector(removeFromSuperview)];
+}
+
+#pragma mark - 重建各筛选行 chips
+
+/// 重建下载源 chips（Modrinth / CurseForge）
+- (void)rebuildSourceChips {
+    [self clearChipStack:self.sourceChipStack];
+
+    // Modrinth chip
+    UIButton *modrinthChip = [self createFilterChipWithTitle:@"Modrinth"
+                                                    selected:(self.selectedSource == kSourceModrinth)];
+    modrinthChip.tag = kSourceModrinth;
+    [modrinthChip addTarget:self action:@selector(sourceChipTapped:) forControlEvents:UIControlEventTouchUpInside];
+    [self.sourceChipStack addArrangedSubview:modrinthChip];
+
+    // CurseForge chip
+    UIButton *curseforgeChip = [self createFilterChipWithTitle:@"CurseForge"
+                                                      selected:(self.selectedSource == kSourceCurseForge)];
+    curseforgeChip.tag = kSourceCurseForge;
+    [curseforgeChip addTarget:self action:@selector(sourceChipTapped:) forControlEvents:UIControlEventTouchUpInside];
+    [self.sourceChipStack addArrangedSubview:curseforgeChip];
+}
+
+/// 重建游戏版本 chips（从 availableGameVersions 动态填充，含"全部"）
+- (void)rebuildVersionChips {
+    [self clearChipStack:self.versionChipStack];
+    if (!self.availableGameVersions || self.availableGameVersions.count == 0) {
+        [self addChipToStack:self.versionChipStack title:@"无版本" selected:NO action:NULL];
+        return;
+    }
+    for (NSString *version in self.availableGameVersions) {
+        BOOL isSelected = [self.selectedGameVersion isEqualToString:version];
+        UIButton *chip = [self createFilterChipWithTitle:version selected:isSelected];
+        [chip addTarget:self action:@selector(versionChipTapped:) forControlEvents:UIControlEventTouchUpInside];
+        [self.versionChipStack addArrangedSubview:chip];
+    }
+    // 滚动到选中项位置（让用户能看到当前选中的 chip）
+    [self scrollToSelectedChipInStack:self.versionChipStack withTitle:self.selectedGameVersion];
+}
+
+/// 重建加载器 chips（从 availableLoaders 动态填充，含"全部"）
+- (void)rebuildLoaderChips {
+    [self clearChipStack:self.loaderChipStack];
+    if (!self.availableLoaders || self.availableLoaders.count == 0) {
+        [self addChipToStack:self.loaderChipStack title:@"无加载器" selected:NO action:NULL];
+        return;
+    }
+    for (NSString *loader in self.availableLoaders) {
+        BOOL isSelected = [self.selectedLoader isEqualToString:loader];
+        UIButton *chip = [self createFilterChipWithTitle:loader selected:isSelected];
+        [chip addTarget:self action:@selector(loaderChipTapped:) forControlEvents:UIControlEventTouchUpInside];
+        [self.loaderChipStack addArrangedSubview:chip];
+    }
+    // 滚动到选中项位置
+    [self scrollToSelectedChipInStack:self.loaderChipStack withTitle:self.selectedLoader];
+}
+
+/// 重建排序方式 chips（固定 4 个选项：相关性 / 下载量 / 最新更新 / 创建时间）
+- (void)rebuildSortChips {
+    [self clearChipStack:self.sortChipStack];
+    for (NSDictionary *item in SortOptionItems()) {
+        NSString *key = item[@"key"];
+        NSString *title = item[@"title"];
+        BOOL isSelected = [self.selectedSort isEqualToString:key];
+        UIButton *chip = [self createFilterChipWithTitle:title selected:isSelected];
+        chip.accessibilityIdentifier = key; // 用 accessibilityIdentifier 存储 sort key
+        [chip addTarget:self action:@selector(sortChipTapped:) forControlEvents:UIControlEventTouchUpInside];
+        [self.sortChipStack addArrangedSubview:chip];
+    }
+}
+
+/// 滚动 scrollView 使指定标题的 chip 可见
+- (void)scrollToSelectedChipInStack:(UIStackView *)stack withTitle:(NSString *)title {
+    if (!title || title.length == 0) return;
+    UIScrollView *scrollView = (UIScrollView *)stack.superview;
+    if (![scrollView isKindOfClass:[UIScrollView class]]) return;
+    for (UIButton *chip in stack.arrangedSubviews) {
+        if (![chip isKindOfClass:[UIButton class]]) continue;
+        NSString *chipTitle = chip.titleLabel.text;
+        if ([chipTitle isEqualToString:title]) {
+            CGRect frameInScroll = [chip.superview convertRect:chip.frame toView:scrollView];
+            CGFloat targetX = frameInScroll.origin.x - scrollView.bounds.size.width / 2 + frameInScroll.size.width / 2;
+            targetX = MAX(0, targetX);
+            CGFloat maxOffset = scrollView.contentSize.width - scrollView.bounds.size.width;
+            targetX = MIN(targetX, MAX(0, maxOffset));
+            [scrollView setContentOffset:CGPointMake(targetX, 0) animated:YES];
+            break;
+        }
+    }
+}
+
+#pragma mark - Chip 点击事件处理
+
+/// 下载源 chip 点击：切换 Modrinth / CurseForge，并重新拉取版本列表
+- (void)sourceChipTapped:(UIButton *)sender {
+    NSInteger newSource = sender.tag;
+    if (newSource == self.selectedSource) return; // 未切换则忽略
+
+    // CurseForge 源：检查 API Key 是否已配置
+    if (newSource == kSourceCurseForge && ![CurseForgeAPI isAPIKeyConfigured]) {
+        [self showSourceAlertWithTitle:@"CurseForge 不可用"
+                                message:@"未配置 CurseForge API Key。请在设置中配置后重试，或继续使用 Modrinth 源。"];
+        return;
+    }
+
+    self.selectedSource = newSource;
+    // 更新 chips 选中样式
+    for (UIButton *chip in self.sourceChipStack.arrangedSubviews) {
+        if (![chip isKindOfClass:[UIButton class]]) continue;
+        [self applyChipStyle:chip selected:(chip.tag == self.selectedSource)];
+    }
+    // 清空已有数据，重新拉取
+    self.allVersions = nil;
+    self.filteredVersions = nil;
+    [self.tableView reloadData];
+    [self fetchVersionsFromCurrentSource];
+}
+
+/// 游戏版本 chip 点击：切换选中版本，重新筛选
+- (void)versionChipTapped:(UIButton *)sender {
+    NSString *newVersion = sender.titleLabel.text;
+    if ([newVersion isEqualToString:self.selectedGameVersion]) return;
+    self.selectedGameVersion = newVersion;
+    // 更新 chips 选中样式
+    for (UIButton *chip in self.versionChipStack.arrangedSubviews) {
+        if (![chip isKindOfClass:[UIButton class]]) continue;
+        [self applyChipStyle:chip selected:[chip.titleLabel.text isEqualToString:self.selectedGameVersion]];
+    }
+    [self applyFiltersAndSort];
+}
+
+/// 加载器 chip 点击：切换选中加载器，重新筛选
+- (void)loaderChipTapped:(UIButton *)sender {
+    NSString *newLoader = sender.titleLabel.text;
+    if ([newLoader isEqualToString:self.selectedLoader]) return;
+    self.selectedLoader = newLoader;
+    // 更新 chips 选中样式
+    for (UIButton *chip in self.loaderChipStack.arrangedSubviews) {
+        if (![chip isKindOfClass:[UIButton class]]) continue;
+        [self applyChipStyle:chip selected:[chip.titleLabel.text isEqualToString:self.selectedLoader]];
+    }
+    [self applyFiltersAndSort];
+}
+
+/// 排序方式 chip 点击：切换排序，重新排序并刷新列表
+- (void)sortChipTapped:(UIButton *)sender {
+    NSString *newSort = sender.accessibilityIdentifier;
+    if (!newSort || [newSort isEqualToString:self.selectedSort]) return;
+    self.selectedSort = newSort;
+    // 更新 chips 选中样式
+    for (UIButton *chip in self.sortChipStack.arrangedSubviews) {
+        if (![chip isKindOfClass:[UIButton class]]) continue;
+        [self applyChipStyle:chip selected:[chip.accessibilityIdentifier isEqualToString:self.selectedSort]];
+    }
+    [self applyFiltersAndSort];
+}
+
+/// 显示来源切换失败提示
+- (void)showSourceAlertWithTitle:(NSString *)title message:(NSString *)message {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:title
+                                                                    message:message
+                                                             preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+#pragma mark - TableView 设置
 
 - (void)setupTableView {
     self.tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
     self.tableView.translatesAutoresizingMaskIntoConstraints = NO;
     self.tableView.dataSource = self;
     self.tableView.delegate = self;
+    // 启用自动行高，让紧凑卡片自适应内容
+    self.tableView.rowHeight = UITableViewAutomaticDimension;
+    self.tableView.estimatedRowHeight = 78;
+    self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
     [self.tableView registerClass:[ShaderVersionTableViewCell class] forCellReuseIdentifier:@"ShaderVersionCell"];
     [self.view addSubview:self.tableView];
 
-    UIView *filterStackView = self.gameVersionFilterButton.superview;
-
+    // tableView 紧贴筛选面板下方
     [NSLayoutConstraint activateConstraints:@[
-        [self.tableView.topAnchor constraintEqualToAnchor:filterStackView.bottomAnchor constant:8],
+        [self.tableView.topAnchor constraintEqualToAnchor:self.filterContainerView.bottomAnchor constant:6],
         [self.tableView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.tableView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [self.tableView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
@@ -184,26 +583,59 @@
     ]];
 }
 
-- (void)fetchVersions {
+#pragma mark - 数据拉取
+
+/// 根据当前选中的下载源拉取版本列表
+/// Modrinth 源 → ModrinthAPI.getVersionsForShaderWithID
+/// CurseForge 源 → CurseForgeAPI.getVersionsForModWithID（CurseForge 无独立 shader 方法，
+///                 复用 mod 版本接口；ModVersion 与 ShaderVersion 接口完全一致，可安全转换）
+- (void)fetchVersionsFromCurrentSource {
     [self.activityIndicator startAnimating];
-    [[ModrinthAPI sharedInstance] getVersionsForShaderWithID:self.shaderItem.onlineID completion:^(NSArray<ShaderVersion *> * _Nullable versions, NSError * _Nullable error) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [self.activityIndicator stopAnimating];
-            if (error) {
-                NSLog(@"[ShaderVersionVC] Error fetching versions: %@", error);
-                UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"错误" message:@"无法获取版本信息" preferredStyle:UIAlertControllerStyleAlert];
-                [alert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
-                [self presentViewController:alert animated:YES completion:nil];
-                return;
-            }
-            self.allVersions = versions;
-            [self processFilters];
-            [self filterChanged];
-        });
-    }];
+
+    if (self.selectedSource == kSourceCurseForge) {
+        // ===== CurseForge 源 =====
+        // CurseForgeAPI 没有专门的 shader 版本接口，复用 getVersionsForModWithID:。
+        // 该方法返回 ModVersion 数组，但 ModVersion 与 ShaderVersion 的属性完全一致
+        // （name/versionNumber/datePublished/gameVersions/loaders/primaryFile/versionType
+        //   /apiSource/fileSize/fileId/projectId），利用 Objective-C 动态消息派发，
+        //   ShaderVersionTableViewCell.configureWithVersion: 调用的所有 selector 在 ModVersion
+        //   上均有实现，运行时可安全工作。
+        [[CurseForgeAPI sharedInstance] getVersionsForModWithID:self.shaderItem.onlineID
+                                                     completion:^(NSArray<ModVersion *> * _Nullable versions, NSError * _Nullable error) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [self handleVersionsResponse:(NSArray<ShaderVersion *> *)versions error:error];
+            });
+        }];
+    } else {
+        // ===== Modrinth 源（默认）=====
+        [[ModrinthAPI sharedInstance] getVersionsForShaderWithID:self.shaderItem.onlineID
+                                                      completion:^(NSArray<ShaderVersion *> * _Nullable versions, NSError * _Nullable error) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [self handleVersionsResponse:versions error:error];
+            });
+        }];
+    }
+}
+
+/// 统一处理版本拉取回调
+- (void)handleVersionsResponse:(NSArray<ShaderVersion *> *)versions error:(NSError *)error {
+    [self.activityIndicator stopAnimating];
+    if (error) {
+        NSLog(@"[ShaderVersionVC] Error fetching versions (source=%ld): %@", (long)self.selectedSource, error);
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"错误"
+                                                                        message:@"无法获取版本信息"
+                                                                 preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
+        [self presentViewController:alert animated:YES completion:nil];
+        return;
+    }
+    self.allVersions = versions;
+    [self processFilters];
+    [self applyFiltersAndSort];
 }
 
 - (void)processFilters {
+    // 从版本数据中提取所有可选的游戏版本和加载器
     NSMutableSet<NSString *> *gameVersions = [NSMutableSet setWithObject:@"全部"];
     NSMutableSet<NSString *> *loaders = [NSMutableSet setWithObject:@"全部"];
 
@@ -216,68 +648,79 @@
         }
     }
 
-    // Sort game versions with semantic versioning
+    // 游戏版本按语义版本号降序排列（新的在前），"全部"始终在最前
     self.availableGameVersions = [[gameVersions allObjects] sortedArrayUsingComparator:^NSComparisonResult(NSString *obj1, NSString *obj2) {
         if ([obj1 isEqualToString:@"全部"]) return NSOrderedAscending;
         if ([obj2 isEqualToString:@"全部"]) return NSOrderedDescending;
         return [obj2 compare:obj1 options:NSNumericSearch];
     }];
 
+    // 加载器按字母序排列，"全部"始终在最前
     self.availableLoaders = [[loaders allObjects] sortedArrayUsingSelector:@selector(compare:)];
 
-    self.selectedGameVersion = self.availableGameVersions.firstObject;
-    self.selectedLoader = self.availableLoaders.firstObject;
+    // 默认选中"全部"
+    self.selectedGameVersion = self.availableGameVersions.firstObject ?: @"全部";
+    self.selectedLoader = self.availableLoaders.firstObject ?: @"全部";
 
-    [self updateFilterButtons];
+    // 重建版本/加载器 chips（从"加载中..."替换为实际数据）
+    [self rebuildVersionChips];
+    [self rebuildLoaderChips];
 }
 
-- (void)updateFilterButtons {
-    // Game Version Button Menu
-    NSMutableArray<UIAction *> *gameVersionActions = [NSMutableArray array];
-    for (NSString *version in self.availableGameVersions) {
-        UIAction *action = [UIAction actionWithTitle:version image:nil identifier:nil handler:^(__kindof UIAction * _Nonnull action) {
-            self.selectedGameVersion = action.title;
-            [self filterAndReload];
-            [self updateFilterButtons];
-        }];
-        if ([self.selectedGameVersion isEqualToString:version]) {
-            action.state = UIMenuElementStateOn;
-        }
-        [gameVersionActions addObject:action];
-    }
-    self.gameVersionFilterButton.menu = [UIMenu menuWithTitle:@"选择游戏版本" children:gameVersionActions];
-    [self.gameVersionFilterButton setTitle:[NSString stringWithFormat:@"游戏版本: %@", self.selectedGameVersion] forState:UIControlStateNormal];
+#pragma mark - 筛选 + 排序
 
-    // Loader Button Menu
-    NSMutableArray<UIAction *> *loaderActions = [NSMutableArray array];
-    for (NSString *loader in self.availableLoaders) {
-        UIAction *action = [UIAction actionWithTitle:loader image:nil identifier:nil handler:^(__kindof UIAction * _Nonnull action) {
-            self.selectedLoader = action.title;
-            [self filterAndReload];
-            [self updateFilterButtons];
-        }];
-        if ([self.selectedLoader isEqualToString:loader]) {
-            action.state = UIMenuElementStateOn;
-        }
-        [loaderActions addObject:action];
-    }
-    self.loaderFilterButton.menu = [UIMenu menuWithTitle:@"选择加载器" children:loaderActions];
-    [self.loaderFilterButton setTitle:[NSString stringWithFormat:@"加载器: %@", self.selectedLoader] forState:UIControlStateNormal];
-}
-
-- (void)filterChanged {
-    [self filterAndReload];
-}
-
-- (void)filterAndReload {
+/// 应用筛选 + 排序并刷新表格
+/// 先按游戏版本/加载器过滤，再按排序方式排序
+- (void)applyFiltersAndSort {
+    // ----- 1. 筛选：游戏版本 + 加载器 -----
     NSPredicate *predicate = [NSPredicate predicateWithBlock:^BOOL(ShaderVersion *evaluatedObject, NSDictionary *bindings) {
-        BOOL gameVersionMatch = [self.selectedGameVersion isEqualToString:@"全部"] || [evaluatedObject.gameVersions containsObject:self.selectedGameVersion];
-        BOOL loaderMatch = [self.selectedLoader isEqualToString:@"全部"] || [evaluatedObject.loaders containsObject:self.selectedLoader.lowercaseString];
+        BOOL gameVersionMatch = [self.selectedGameVersion isEqualToString:@"全部"] ||
+                                 [evaluatedObject.gameVersions containsObject:self.selectedGameVersion];
+        BOOL loaderMatch = [self.selectedLoader isEqualToString:@"全部"] ||
+                            [evaluatedObject.loaders containsObject:self.selectedLoader.lowercaseString];
         return gameVersionMatch && loaderMatch;
     }];
+    NSArray<ShaderVersion *> *filtered = [self.allVersions filteredArrayUsingPredicate:predicate];
 
-    self.filteredVersions = [self.allVersions filteredArrayUsingPredicate:predicate];
+    // ----- 2. 排序：按选中的排序方式 -----
+    self.filteredVersions = [self sortVersions:filtered];
+
     [self.tableView reloadData];
+}
+
+/// 对版本数组按当前选中的排序方式进行排序
+- (NSArray<ShaderVersion *> *)sortVersions:(NSArray<ShaderVersion *> *)versions {
+    if (!versions || versions.count <= 1) return versions;
+
+    // 相关性 / 下载量：保持 API 原始顺序
+    // （ShaderVersion 模型无单版本下载量字段，下载量排序回退为原始顺序，
+    //   下载量数据仅存在于项目级别 ShaderItem.downloads）
+    if ([self.selectedSort isEqualToString:kSortRelevance] ||
+        [self.selectedSort isEqualToString:kSortDownloads]) {
+        return versions;
+    }
+
+    // 最新更新 / 创建时间：按 datePublished 排序
+    NSISO8601DateFormatter *dateFormatter = [[NSISO8601DateFormatter alloc] init];
+    NSMutableArray<ShaderVersion *> *sorted = [versions mutableCopy];
+    __weak typeof(self) weakSelf = self;
+    [sorted sortUsingComparator:^NSComparisonResult(ShaderVersion *v1, ShaderVersion *v2) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        NSDate *d1 = [dateFormatter dateFromString:v1.datePublished];
+        NSDate *d2 = [dateFormatter dateFromString:v2.datePublished];
+        if (!d1) d1 = [NSDate distantPast];
+        if (!d2) d2 = [NSDate distantPast];
+
+        if ([strongSelf.selectedSort isEqualToString:kSortUpdated]) {
+            // 最新更新：降序（新的在前）
+            return [d2 compare:d1];
+        } else if ([strongSelf.selectedSort isEqualToString:kSortCreated]) {
+            // 创建时间：升序（旧的在前）
+            return [d1 compare:d2];
+        }
+        return NSOrderedSame;
+    }];
+    return [sorted copy];
 }
 
 #pragma mark - UITableViewDataSource

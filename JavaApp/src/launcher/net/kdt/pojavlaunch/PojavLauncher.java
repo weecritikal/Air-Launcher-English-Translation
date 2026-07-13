@@ -66,14 +66,25 @@ public class PojavLauncher {
         MCOptionUtils.set("fullscreen", "false");
         MCOptionUtils.set("overrideWidth", size[0]);
         MCOptionUtils.set("overrideHeight", size[1]);
-        // 解锁帧率（关闭垂直同步）：MC 默认 enableVsync=true，会把帧率锁在屏幕刷新率
-        // （60Hz 锁 60、120Hz ProMotion 锁 120）。当启动器偏好 video.disable_game_vsync 开启时
-        // （通过环境变量 POJAV_DISABLE_VSYNC=1 传入），强制写 enableVsync=false 到 options.txt，
-        // 让 MC 不再调用 glfwSwapInterval(1) 请求垂直同步。
+        // 解锁帧率（关闭垂直同步 + 解除 maxFps 限制）：
+        // MC 默认 enableVsync=true，会把帧率锁在屏幕刷新率（60Hz 锁 60、120Hz ProMotion 锁 120）。
+        // 同时 MC 默认 maxFps=120，即使关闭 VSync 也会被 maxFps 限制。
+        //
+        // 当启动器偏好 video.disable_game_vsync 开启时（通过环境变量 POJAV_DISABLE_VSYNC=1 传入）：
+        // 1. 强制写 enableVsync=false → MC 不再调用 glfwSwapInterval(1) 请求垂直同步
+        // 2. 强制写 maxFps=0（无限制）→ MC 不再限制每秒渲染帧数
+        //
+        // 这样做的效果：
+        // - Vulkan 渲染器（MoltenVK）：LWJGL 创建 swapchain 时使用 VK_PRESENT_MODE_IMMEDIATE_KHR，
+        //   MoltenVK 不等待 vblank 直接 present，帧率可超过屏幕刷新率（减少输入延迟）
+        // - GL 类渲染器（ANGLE Metal）：eglSwapInterval(0) 让渲染线程不阻塞，
+        //   但 Core Animation 仍按屏幕刷新率合成（实际帧率不超过屏幕刷新率，但渲染线程吞吐量提高）
+        //
         // 用 set（而非 setDefault）覆盖：每次启动都强制关闭，确保生效；
-        // 用户若想恢复游戏内垂直同步，可在启动器设置关闭该开关。
+        // 用户若想恢复游戏内垂直同步和帧率限制，可在启动器设置关闭该开关。
         if ("1".equals(System.getenv("POJAV_DISABLE_VSYNC"))) {
             MCOptionUtils.set("enableVsync", "false");
+            MCOptionUtils.set("maxFps", "0");
         }
         // Default settings for performance
         MCOptionUtils.setDefault("mipmapLevels", "0");

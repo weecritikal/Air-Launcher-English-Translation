@@ -63,10 +63,29 @@ void init_loadDefaultEnv() {
     // 当游戏内 VSync 关闭时（enableVsync=false），LWJGL 会请求 IMMEDIATE present mode。
     setenv("MVK_CONFIG_PRESENT_MODE_IMMEDIATE", "1", 1);
 
+    // 指定 MoltenVK 配置文件路径：让 MoltenVK 读取应用 bundle 内的 moltenvk.cfg
+    // MoltenVK 默认搜索 ~/Library/Application Support/MoltenVK/moltenvk.cfg（macOS），
+    // 在 iOS 沙箱中此路径不可用。通过 MVK_CONFIG_FILE 环境变量显式指定配置文件路径。
+    // 注意：当前 MoltenVK 1.1.2 版本的 MVKConfiguration 结构体不包含 swapchainPresentMode 成员，
+    // 该配置键仅在 moltenvk.cfg 文件中有效（MoltenVK 1.2.0+ 才支持）。
+    // 但设置 MVK_CONFIG_FILE 无害，未来 MoltenVK 升级后自动生效。
+    NSString *moltenVKConfigPath = [NSBundle.mainBundle.bundlePath stringByAppendingPathComponent:@"moltenvk.cfg"];
+    if ([[NSFileManager defaultManager] fileExistsAtPath:moltenVKConfigPath]) {
+        setenv("MVK_CONFIG_FILE", [moltenVKConfigPath UTF8String], 1);
+        NSLog(@"[JavaLauncher] MoltenVK config file: %@", moltenVKConfigPath);
+    }
+
     // 解锁帧率（关闭垂直同步）：读取启动器偏好，通过环境变量传递给 Java 层和 native 桥接层。
-    // - Java 层（PojavLauncher.java）读取 POJAV_DISABLE_VSYNC=1 后强制写 enableVsync=false 到 options.txt
+    // - Java 层（PojavLauncher.java）读取 POJAV_DISABLE_VSYNC=1 后：
+    //   a) 强制写 enableVsync=false → MC 不调用 glfwSwapInterval(1)
+    //   b) 强制写 maxFps=0 → MC 不限制每秒渲染帧数（默认 maxFps=120 会限制帧率）
     // - native 桥接层（egl_bridge.m pojavSwapInterval）读取 POJAV_DISABLE_VSYNC=1 后强制 interval=0
     // 两层独立生效，互为兜底。默认开启（PLPreferences 中 video.disable_game_vsync 默认 YES）。
+    //
+    // 各渲染器的帧率解锁效果：
+    // - Vulkan（MoltenVK）：完全解锁，帧率可超过屏幕刷新率（immediate present mode）
+    // - GL 类（ANGLE Metal）：部分解锁，渲染线程不阻塞但 Core Animation vsync 仍限制合成频率
+    // - ProMotion 设备：通过 CADisableMinimumFrameDurationOnPhone + preferredFrameRateRange 启用 120Hz
     setenv("POJAV_DISABLE_VSYNC", getPrefBool(@"video.disable_game_vsync") ? "1" : "0", 1);
 
     // 帧率解锁诊断日志：记录关键环境变量和偏好设置

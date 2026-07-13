@@ -20,10 +20,11 @@
 - (instancetype)init {
     self = [super init];
     if (self) {
-        // 修复字号过小：增大上下内边距以配合更大的字号（13pt），
-        // 让"正式版/测试版"等类型标签文字清晰可读，不再"快看不见了"。
-        // 左右 10pt 确保文字不贴背景边缘，上下 3pt 让 pill 高度足够容纳 13pt 字号。
-        _textInsets = UIEdgeInsetsMake(3, 10, 3, 10);
+        // 修复"正式版/测试版"文字变成"……"的问题：
+        // 字号从 13pt 减小到 11pt，内边距从 (3,10,3,10) 减小到 (2,6,2,6)，
+        // 让 pill 标签更紧凑，减少与 versionLabel 的空间竞争。
+        // 同时设置 adjustsFontSizeToFitWidth 确保极端情况下也不会被截断。
+        _textInsets = UIEdgeInsetsMake(2, 6, 2, 6);
     }
     return self;
 }
@@ -103,27 +104,34 @@
         [self.versionLabel setContentHuggingPriority:UILayoutPriorityDefaultHigh forAxis:UILayoutConstraintAxisHorizontal];
         [self.versionLabel setContentCompressionResistancePriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
 
-        // ----- 类型标签（pill 样式，修复问题3：使用带内边距的 InsetTypeLabel） -----
-        // 修复字号过小：字号从 10pt 增大到 13pt，让"正式版/测试版"文字清晰可读。
-        // 配合 InsetTypeLabel 的上下 3pt 内边距，pill 整体高度约 20pt，视觉更醒目。
+        // ----- 类型标签（pill 样式，修复"正式版/测试版"文字变"……"的问题） -----
+        // 字号从 13pt 减小到 11pt，内边距从 (3,10,3,10) 减小到 (2,6,2,6)，
+        // cornerRadius 从 10 减小到 8，让 pill 更紧凑。
+        // 设置 adjustsFontSizeToFitWidth + minimumScaleFactor=0.8 作为兜底，
+        // 确保任何情况下文字都不会被截断成"……"。
         self.typeLabel = [[InsetTypeLabel alloc] init];
         self.typeLabel.translatesAutoresizingMaskIntoConstraints = NO;
-        self.typeLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightBold];
+        self.typeLabel.font = [UIFont systemFontOfSize:11 weight:UIFontWeightBold];
         self.typeLabel.textColor = [UIColor whiteColor];
         self.typeLabel.textAlignment = NSTextAlignmentCenter;
-        self.typeLabel.layer.cornerRadius = 10;
+        self.typeLabel.adjustsFontSizeToFitWidth = YES;
+        self.typeLabel.minimumScaleFactor = 0.8;
+        self.typeLabel.lineBreakMode = NSLineBreakByClipping;
+        self.typeLabel.layer.cornerRadius = 8;
         self.typeLabel.layer.cornerCurve = kCACornerCurveContinuous;
         self.typeLabel.layer.masksToBounds = YES;
         // 类型标签 hugging 高、compression 也高（保持完整 pill 形状，不被压缩）
-        [self.typeLabel setContentHuggingPriority:UILayoutPriorityDefaultHigh forAxis:UILayoutConstraintAxisHorizontal];
+        [self.typeLabel setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
         [self.typeLabel setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
 
         // ----- 顶行 stack：版本号 + 类型标签 水平排列 -----
-        // 用 UIStackView 自动处理两者间距与裁剪优先级，避免手写约束出现 typeLabel 撞 chevron 的问题
+        // 修复"位置不对"问题：alignment 从 FirstBaseline 改为 Center，
+        // 避免 InsetTypeLabel 上下内边距导致 typeLabel 视觉偏移。
+        // distribution 改为 Fill 使 versionLabel 优先被压缩，typeLabel 保持完整。
         self.topRowStack = [[UIStackView alloc] initWithArrangedSubviews:@[self.versionLabel, self.typeLabel]];
         self.topRowStack.translatesAutoresizingMaskIntoConstraints = NO;
         self.topRowStack.axis = UILayoutConstraintAxisHorizontal;
-        self.topRowStack.alignment = UIStackViewAlignmentFirstBaseline;
+        self.topRowStack.alignment = UIStackViewAlignmentCenter;
         self.topRowStack.distribution = UIStackViewDistributionFill;
         self.topRowStack.spacing = 8;
         [self.cardContainer addSubview:self.topRowStack];

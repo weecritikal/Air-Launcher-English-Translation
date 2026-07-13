@@ -389,23 +389,20 @@
         self.downloadProgressHandlers[task] = progress;
     }
 
-    // 注册到统一下载任务管理器（仅当悬浮球开启时）
-    BOOL floatingBallEnabled = getPrefBool(@"general.floating_ball_enabled");
-    if (floatingBallEnabled) {
-        NSString *resourceName = item.fileName.length > 0 ? item.fileName : (item.displayName.length > 0 ? item.displayName : @"resourcepack");
-        NSString *displayName = item.displayName.length > 0 ? item.displayName : resourceName;
-        NSString *downloadSource = getPrefObject(@"general.download_source") ?: @"official";
-        DownloadTaskItem *taskItem = [[DownloadTaskManager sharedManager]
-            registerTaskWithResourceType:DownloadTaskResourceTypeResourcePack
-                            resourceName:resourceName
-                             displayName:displayName
-                          downloadSource:downloadSource
-                                 rawTask:task
-                          supportsResume:YES
-                                 iconURL:item.iconURL];
-        self.downloadTaskItems[task] = taskItem;
-        [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId state:DownloadTaskStateDownloading];
-    }
+    // 注册到统一下载任务管理器（悬浮球已移除，始终注册以便下载任务列表跟踪）
+    NSString *resourceName = item.fileName.length > 0 ? item.fileName : (item.displayName.length > 0 ? item.displayName : @"resourcepack");
+    NSString *displayName = item.displayName.length > 0 ? item.displayName : resourceName;
+    NSString *downloadSource = getPrefObject(@"general.download_source") ?: @"official";
+    DownloadTaskItem *taskItem = [[DownloadTaskManager sharedManager]
+        registerTaskWithResourceType:DownloadTaskResourceTypeResourcePack
+                        resourceName:resourceName
+                         displayName:displayName
+                      downloadSource:downloadSource
+                             rawTask:task
+                      supportsResume:YES
+                             iconURL:item.iconURL];
+    self.downloadTaskItems[task] = taskItem;
+    [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId state:DownloadTaskStateDownloading];
 
     [task resume];
 

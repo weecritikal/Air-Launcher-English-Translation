@@ -560,8 +560,8 @@
 }
 
 - (void)startDownloadForItem:(DataPackItem *)item {
-    // 开启悬浮球时不显示单独下载进度，仅通过悬浮球统一展示
-    BOOL showProgressUI = !getPrefBool(@"general.floating_ball_enabled");
+    // 始终显示单独下载进度（悬浮球已移除）
+    BOOL showProgressUI = YES;
     UIAlertController *downloadingAlert = nil;
     if (showProgressUI) {
         downloadingAlert = [UIAlertController alertControllerWithTitle:@"正在下载"
