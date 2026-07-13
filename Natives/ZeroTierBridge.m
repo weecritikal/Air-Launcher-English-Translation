@@ -200,11 +200,25 @@ static void zeroTierEventCallback(void *msgPtr) {
 
     NSLog(@"[ZeroTierBridge] 开始检测 framework 可用性...");
 
-    // 步骤 1：检查 zts_node_is_online()，在节点未启动时应返回 0
+    // 检测原理：
+    //   - stub 实现（zt_stub.c）中，zts_node_start() 固定返回 ZTS_ERR_SERVICE (-2)
+    //   - 真实 framework 中，zts_node_start() 会返回 ZTS_ERR_OK (0) 并启动节点
+    //
+    // 注意：zts_node_start() 在真实库中有副作用（启动节点），但在尚未调用
+    // zts_init_from_storage 和 zts_init_set_event_handler 之前调用它，节点会以
+    // 默认配置启动且无事件回调。这种检测方式不理想，但没有其他无副作用的检测 API。
+    //
+    // 改进：不在检测阶段启动节点，改为检查 zts_node_is_online() 返回值是否为 0
+    // 来判断库是否存在（真实库在节点未启动时返回 0，stub 也返回 0，无法区分）。
+    //
+    // 最终方案：使用 dlsym 检测 zts_node_start 符号是否存在且非 stub。
+    // 但 stub 也定义了此符号，所以必须通过调用返回值区分。
+    //
+    // 折中方案：调用 zts_node_start()，如果返回 ZTS_ERR_OK 则立即调用 zts_node_stop()
+    // 停止节点，避免节点以默认配置运行。然后 startNodeWithHomeDirectory: 会重新启动。
     int onlineCheck = zts_node_is_online();
     NSLog(@"[ZeroTierBridge] 检测：zts_node_is_online() = %d", onlineCheck);
 
-    // 步骤 2：调用 zts_node_start() 检测返回值
     int startResult = zts_node_start();
     NSLog(@"[ZeroTierBridge] 检测：zts_node_start() = %d", startResult);
 
@@ -212,17 +226,20 @@ static void zeroTierEventCallback(void *msgPtr) {
     BOOL isStub = (startResult == ZTS_ERR_SERVICE);
     BOOL frameworkAvailable = !isStub;
 
+    // 如果检测过程中节点被意外启动（真实库返回 ZTS_ERR_OK），立即停止它，
+    // 避免节点以默认配置（无存储路径、无事件回调）运行。
+    // startNodeWithHomeDirectory: 会重新调用 zts_init_from_storage +
+    // zts_init_set_event_handler + zts_node_start 完整启动。
+    if (frameworkAvailable && startResult == ZTS_ERR_OK) {
+        NSLog(@"[ZeroTierBridge] 检测过程中节点被启动，立即停止以避免默认配置运行");
+        int stopResult = zts_node_stop();
+        NSLog(@"[ZeroTierBridge] zts_node_stop() = %d（检测后清理）", stopResult);
+    }
+
     [_lock lock];
     _frameworkAvailable = frameworkAvailable;
     _frameworkChecked = YES;
-
-    // 如果 framework 真实可用，且 zts_node_start 返回 OK，
-    // 那么 node 实际上已经被启动了，需要标记 _isStarted
-    if (frameworkAvailable && startResult == ZTS_ERR_OK) {
-        _isStarted = YES;
-        _nodeStatus = ZeroTierNodeStatusStarting;
-        NSLog(@"[ZeroTierBridge] framework 检测过程中节点已被启动");
-    }
+    // 不在此处设置 _isStarted=YES，让 startNodeWithHomeDirectory: 完整初始化
     [_lock unlock];
 
     NSLog(@"[ZeroTierBridge] framework 检测完成：available = %@",
