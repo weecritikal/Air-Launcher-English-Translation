@@ -204,37 +204,27 @@ static void zeroTierEventCallback(void *msgPtr) {
     //   - stub 实现（zt_stub.c）中，zts_node_start() 固定返回 ZTS_ERR_SERVICE (-2)
     //   - 真实 framework 中，zts_node_start() 会返回 ZTS_ERR_OK (0) 并启动节点
     //
-    // 注意：zts_node_start() 在真实库中有副作用（启动节点），但在尚未调用
-    // zts_init_from_storage 和 zts_init_set_event_handler 之前调用它，节点会以
-    // 默认配置启动且无事件回调。这种检测方式不理想，但没有其他无副作用的检测 API。
+    // 重要修复（闪退问题）：
+    //   之前的实现调用 zts_node_start() 检测后立即调用 zts_node_stop() 停止节点。
+    //   但 zts_node_stop() 是异步的，会立即返回 ZTS_ERR_SERVICE(-2) 但节点并未真正停止，
+    //   导致后续 zts_init_from_storage 失败（返回 -2），节点启动失败，打开联机开关闪退。
     //
-    // 改进：不在检测阶段启动节点，改为检查 zts_node_is_online() 返回值是否为 0
-    // 来判断库是否存在（真实库在节点未启动时返回 0，stub 也返回 0，无法区分）。
+    // 新方案：不调用任何有副作用的 API（zts_node_start/zts_node_stop），
+    //   只调用无副作用的 zts_node_is_online() 验证符号存在：
+    //   - stub 返回 0
+    //   - 真实库（节点未启动）也返回 0
+    //   - 真实库（节点已启动）返回 1
+    //   这个调用本身不会崩溃，仅用于验证符号存在。
     //
-    // 最终方案：使用 dlsym 检测 zts_node_start 符号是否存在且非 stub。
-    // 但 stub 也定义了此符号，所以必须通过调用返回值区分。
-    //
-    // 折中方案：调用 zts_node_start()，如果返回 ZTS_ERR_OK 则立即调用 zts_node_stop()
-    // 停止节点，避免节点以默认配置运行。然后 startNodeWithHomeDirectory: 会重新启动。
+    //   然后直接信任编译时链接结果：如果 zt.framework 二进制存在，
+    //   CMakeLists.txt 的 if(EXISTS) 检测通过，链接真实库；否则链接 stub。
+    //   如果链接的是 stub，startNodeWithHomeDirectory: 会在 zts_init_from_storage
+    //   时返回错误，由调用方处理。这样避免了"启动后停止"导致的节点状态混乱和闪退。
     int onlineCheck = zts_node_is_online();
-    NSLog(@"[ZeroTierBridge] 检测：zts_node_is_online() = %d", onlineCheck);
+    NSLog(@"[ZeroTierBridge] 检测：zts_node_is_online() = %d（无副作用调用，仅验证符号）", onlineCheck);
 
-    int startResult = zts_node_start();
-    NSLog(@"[ZeroTierBridge] 检测：zts_node_start() = %d", startResult);
-
-    // 判断是否为 stub：如果返回 ZTS_ERR_SERVICE，说明是 stub
-    BOOL isStub = (startResult == ZTS_ERR_SERVICE);
-    BOOL frameworkAvailable = !isStub;
-
-    // 如果检测过程中节点被意外启动（真实库返回 ZTS_ERR_OK），立即停止它，
-    // 避免节点以默认配置（无存储路径、无事件回调）运行。
-    // startNodeWithHomeDirectory: 会重新调用 zts_init_from_storage +
-    // zts_init_set_event_handler + zts_node_start 完整启动。
-    if (frameworkAvailable && startResult == ZTS_ERR_OK) {
-        NSLog(@"[ZeroTierBridge] 检测过程中节点被启动，立即停止以避免默认配置运行");
-        int stopResult = zts_node_stop();
-        NSLog(@"[ZeroTierBridge] zts_node_stop() = %d（检测后清理）", stopResult);
-    }
+    // 信任编译时链接结果，直接返回 YES
+    BOOL frameworkAvailable = YES;
 
     [_lock lock];
     _frameworkAvailable = frameworkAvailable;
@@ -242,7 +232,7 @@ static void zeroTierEventCallback(void *msgPtr) {
     // 不在此处设置 _isStarted=YES，让 startNodeWithHomeDirectory: 完整初始化
     [_lock unlock];
 
-    NSLog(@"[ZeroTierBridge] framework 检测完成：available = %@",
+    NSLog(@"[ZeroTierBridge] framework 检测完成：available = %@（信任编译时链接）",
           frameworkAvailable ? @"YES" : @"NO");
 
     return frameworkAvailable;
