@@ -184,32 +184,34 @@ static NSString *const kLatestLogPath = @"%s/latestlog.txt";
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         // 模式 1："Local game hosted on port 54321" 或 "[CHAT] Local game hosted on port 54321"
-        // 这是 MC 1.8+ 所有版本通用的聊天消息日志，是最可靠的检测依据
+        // 或 "[System] [CHAT] Local game hosted on port [54321]"（部分 Mod/版本端口号被方括号包围）
+        // 这是 MC 1.7+ 所有版本通用的聊天消息日志，是最可靠的检测依据
+        // 关键兼容性修复：\[?...\]? 支持端口号被方括号包围的变体格式
         hostedOnPortRegex = [NSRegularExpression regularExpressionWithPattern:
-            @"hosted on port (\\d{1,5})"
+            @"hosted on port \\[?(\\d{1,5})\\]?"
             options:NSRegularExpressionCaseInsensitive error:nil];
         // 模式 2："Local game hosted on 0.0.0.0:54321" 或 "hosted on *:54321"
         hostedOnAddrPortRegex = [NSRegularExpression regularExpressionWithPattern:
             @"hosted on (?:[0-9.*]+):(\\d{1,5})"
             options:NSRegularExpressionCaseInsensitive error:nil];
-        // 模式 3："Started serving on 54321"（极旧版本）
+        // 模式 3："Started serving on 54321" 或 "Started serving on [54321]"（极旧版本/Mod 变体）
         startedServingRegex = [NSRegularExpression regularExpressionWithPattern:
-            @"started serving on (\\d{1,5})"
+            @"started serving on \\[?(\\d{1,5})\\]?"
             options:NSRegularExpressionCaseInsensitive error:nil];
         // 模式 4："Started on 54321"（MC 1.8 Client thread 日志）
         // 注意：要求 4-5 位数字以减少误匹配（LAN 端口范围 1024-65535）
         startedOnRegex = [NSRegularExpression regularExpressionWithPattern:
-            @"started on (\\d{4,5})"
+            @"started on \\[?(\\d{4,5})\\]?"
             options:NSRegularExpressionCaseInsensitive error:nil];
         // 模式 5："Integrated server started on port 54321" 或 "on *:54321"
         integratedStartedRegex = [NSRegularExpression regularExpressionWithPattern:
-            @"integrated server.*?(?:port|on [\\*0-9.]*:?)\\s*(\\d{4,5})"
+            @"integrated server.*?(?:port|on [\\*0-9.]*:?)\\s*\\[?(\\d{4,5})\\]?"
             options:NSRegularExpressionCaseInsensitive error:nil];
         // 模式 6：通用兜底模式
         // 匹配包含 "serving"、"hosted"、"lan port"、"lan server" 等关键词
-        // 且后面跟着端口号的日志行
+        // 且后面跟着端口号的日志行（支持端口号被方括号包围的变体）
         genericPortRegex = [NSRegularExpression regularExpressionWithPattern:
-            @"(?:serving|hosted|lan\\s*(?:port|server)|open.*?lan).*(?::|\\s)+(\\d{4,5})"
+            @"(?:serving|hosted|lan\\s*(?:port|server)|open.*?lan).*(?::|\\s)+\\[?(\\d{4,5})\\]?"
             options:NSRegularExpressionCaseInsensitive error:nil];
     });
 
