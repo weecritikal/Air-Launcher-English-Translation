@@ -1339,13 +1339,6 @@ static void zeroTierEventCallback(void *msgPtr) {
             break;
         }
 
-        case ZTS_EVENT_ADDR_UNWANTED: {
-            // 地址分配被网络拒绝（264，部分版本存在）
-            uint64_t netID = [eventData[@"addrNetID"] unsignedLongLongValue];
-            NSLog(@"[ZeroTierBridge] 事件：地址分配被网络拒绝 (ADDR_UNWANTED)，netID = %016llx", netID);
-            break;
-        }
-
         // ===== 对端节点事件 =====
 
         case ZTS_EVENT_PEER_DIRECT: {
