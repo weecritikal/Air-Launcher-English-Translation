@@ -878,6 +878,38 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         return;
     }
 
+    // ============================================================
+    // 幂等性检查：房主流程已激活时的短路处理
+    // ============================================================
+    // 关键修复：之前再次点击"当房主"按钮会重新走整个连接流程，
+    // 即使已经连接成功且 LAN 端口已检测到，也会：
+    //   1. 清空 lastShareCode/lastServerAddress（丢失已生成的分享代码）
+    //   2. 重新显示"正在开启联机"进度提示
+    //   3. 重新调用 connectToRoom（把 status 重置为 Connecting）
+    //   4. 连接成功后再次显示"等待检测 LAN 端口..."提示（误导）
+    //   5. 由于 LanPortDetector 对相同端口去重，不会再次触发 lanPortDidDetect:
+    //      导致用户无法重新看到分享代码
+    //
+    // 修复方案：如果房主流程已激活且房间已连接，根据是否已有分享代码
+    // 直接显示对应提示，不重新走连接流程。
+    if (self.isHostFlowActive) {
+        MultiplayerRoom *currentRoom = [[MultiplayerManager sharedManager] currentRoom];
+        if (currentRoom && [currentRoom.networkId isEqualToString:presetNetId]) {
+            // 房间已连接，根据是否已有分享代码显示对应提示
+            if (self.lastShareCode.length) {
+                // LAN 端口已检测到，分享代码已生成：直接显示分享代码
+                NSLog(@"[MultiplayerVC] 房主流程已激活且分享代码已存在，直接显示分享代码");
+                [self showHostShareCodeAlert];
+            } else {
+                // LAN 端口尚未检测到：显示"等待检测 LAN 端口"提示
+                NSLog(@"[MultiplayerVC] 房主流程已激活但 LAN 端口尚未检测到，显示等待提示");
+                [self showHostConnectedAlert];
+            }
+            return;
+        }
+        // 房间未连接或 networkId 不匹配：继续走完整流程（会先断开旧连接）
+    }
+
     // 标记房主流程激活
     self.isHostFlowActive = YES;
     self.lastShareCode = nil;
