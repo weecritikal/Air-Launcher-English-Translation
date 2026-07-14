@@ -72,6 +72,15 @@ typedef NS_ENUM(NSInteger, MultiplayerRoomStatus) {
 /// @param available YES 表示 zt.framework 已加载（非 stub）
 - (void)multiplayerFrameworkAvailabilityChecked:(BOOL)available;
 
+/// 连接流程进度更新
+///
+/// 在 connectToRoomFlow: 的各个步骤中调用，通知 UI 当前进度。
+/// 用于让用户看到"正在启动节点"、"正在加入网络"等详细进度，
+/// 而不是只显示一个静态的"正在连接..."提示。
+///
+/// @param message 进度描述文本（如"步骤 2：等待节点上线..."）
+- (void)multiplayerConnectionProgress:(NSString *)message;
+
 @end
 
 /// ZeroTier 联机管理器
@@ -132,6 +141,29 @@ typedef NS_ENUM(NSInteger, MultiplayerRoomStatus) {
 ///
 /// @return YES 如果 framework 可用
 - (BOOL)isFrameworkAvailable;
+
+/// 用户是否启用了联机（持久化到 NSUserDefaults）
+///
+/// 此属性独立于 isNodeStarted，表示用户的意图而非节点实际状态。
+/// 用于在 ViewController 重新加载时恢复联机开关状态。
+///
+/// 场景：用户点击联机开关 ON → 后台开始启动 ZeroTier 节点（耗时数秒）→
+/// 用户关闭联机 ViewController → 用户重新打开联机 ViewController →
+/// 此时节点可能仍在启动中（isNodeStarted=NO），但用户已表达启用意图
+/// （isMultiplayerEnabled=YES），开关应显示为 ON。
+///
+/// 节点启动成功后，如果 isMultiplayerEnabled=YES，开关保持 ON；
+/// 节点启动失败时，调用方应将 isMultiplayerEnabled 设为 NO 并回退开关。
+///
+/// 此属性持久化到 NSUserDefaults，即使关闭启动器（杀进程）再重新打开，
+/// 也能恢复用户的联机启用状态（但节点不会自动启动，需要用户再次操作开关）。
+///
+/// @return YES 如果用户已启用联机
+- (BOOL)isMultiplayerEnabled;
+
+/// 设置联机启用状态（持久化到 NSUserDefaults）
+/// @param enabled YES 表示用户启用了联机
+- (void)setMultiplayerEnabled:(BOOL)enabled;
 
 /// ZeroTier 节点是否已启动
 /// @return YES 如果节点已启动（不要求已上线）

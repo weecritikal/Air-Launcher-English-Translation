@@ -421,37 +421,102 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
 
     // 步骤 3：绑定到 127.0.0.1:port
     // 只监听本地回环地址，避免暴露到外部网络
-    struct sockaddr_in addr;
-    memset(&addr, 0, sizeof(addr));
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(port);
-    addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    //
+    // 关键修复（端口冲突处理）：bind 失败时自动尝试下一个端口。
+    //
+    // errno=48 (EADDRINUSE) 表示端口被占用，可能原因：
+    //   1. 上一次启动器进程的 socket 处于 TIME_WAIT 状态（SO_REUSEADDR 在 iOS 上
+    //      某些情况下对 127.0.0.1 bind 行为不一致，仍可能拒绝 bind）
+    //   2. iOS jailbreak 设备上端口被其他进程占用（如越狱环境下的 VPN 工具、
+    //      SSH 动态转发等常使用 1080 端口）
+    //   3. 同一进程内上一次 SOCKS5 代理未正确关闭（虽然 startWithPort: 入口
+    //      已有 stop 检查，但极端情况下仍可能残留）
+    //
+    // 修复方案：
+    //   - 先尝试用户指定的端口（通常是 1080）
+    //   - 如果 bind 失败，依次尝试 port+1, port+2, ..., port+9（共 10 个端口）
+    //   - 如果 10 个端口都失败，最后使用 port=0 让系统自动分配可用端口
+    //   - 实际使用的端口通过 listeningPort 属性和 currentSOCKS5Port 暴露给
+    //     JavaLauncher，确保 JVM 参数 -DsocksProxyPort 使用正确端口
+    //
+    // 这样既能尽量使用固定端口（方便用户调试和防火墙配置），又能避免端口
+    // 冲突导致联机功能完全不可用。
 
-    if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-        NSLog(@"[SOCKS5Proxy] bind 失败：errno = %d, port = %u", errno, port);
+    uint16_t actualPort = 0;
+    BOOL bindSuccess = NO;
+    int lastBindErrno = 0;
+
+    for (int attempt = 0; attempt < 11; attempt++) {
+        // 前 10 次尝试 port+0 到 port+9，第 11 次使用 port=0（系统自动分配）
+        uint16_t tryPort = (attempt < 10) ? (port + attempt) : 0;
+
+        struct sockaddr_in addr;
+        memset(&addr, 0, sizeof(addr));
+        addr.sin_family = AF_INET;
+        addr.sin_port = htons(tryPort);
+        addr.sin_addr.s_addr = inet_addr("127.0.0.1");
+
+        if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) == 0) {
+            // bind 成功
+            bindSuccess = YES;
+
+            if (tryPort == 0) {
+                // 系统自动分配的端口，需要通过 getsockname 查询实际端口
+                socklen_t addrLen = sizeof(addr);
+                if (getsockname(fd, (struct sockaddr *)&addr, &addrLen) < 0) {
+                    NSLog(@"[SOCKS5Proxy] getsockname 失败：errno = %d", errno);
+                    close(fd);
+                    if (error) {
+                        *error = [NSError errorWithDomain:kSOCKS5ProxyErrorDomain
+                                                      code:SOCKS5ProxyErrorCodeSocketCreateFailed
+                                                  userInfo:@{NSLocalizedDescriptionKey: @"获取实际监听端口失败"}];
+                    }
+                    return NO;
+                }
+                actualPort = ntohs(addr.sin_port);
+            } else {
+                actualPort = tryPort;
+            }
+
+            if (tryPort != port) {
+                NSLog(@"[SOCKS5Proxy] 请求端口 %u 被占用，改用端口 %u", port, actualPort);
+            }
+            break;
+        }
+
+        // bind 失败
+        lastBindErrno = errno;
+        NSLog(@"[SOCKS5Proxy] bind 端口 %u 失败：errno = %d（尝试下一个端口）", tryPort, errno);
+
+        // bind 失败后，需要关闭旧 socket 并创建新 socket
+        // （bind 失败后 socket 状态不可预测，不能直接复用）
+        close(fd);
+        fd = socket(AF_INET, SOCK_STREAM, 0);
+        if (fd < 0) {
+            NSLog(@"[SOCKS5Proxy] 重新创建 socket 失败：errno = %d", errno);
+            if (error) {
+                *error = [NSError errorWithDomain:kSOCKS5ProxyErrorDomain
+                                              code:SOCKS5ProxyErrorCodeSocketCreateFailed
+                                          userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"创建 socket 失败 (errno=%d)", errno]}];
+            }
+            return NO;
+        }
+
+        // 重新设置 SO_REUSEADDR（新 socket 需要重新设置）
+        int reuseOpt = 1;
+        setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuseOpt, sizeof(reuseOpt));
+    }
+
+    if (!bindSuccess) {
+        NSLog(@"[SOCKS5Proxy] 所有端口尝试均失败（最后 errno = %d）", lastBindErrno);
         close(fd);
         if (error) {
             *error = [NSError errorWithDomain:kSOCKS5ProxyErrorDomain
                                           code:SOCKS5ProxyErrorCodeBindFailed
-                                      userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"绑定端口 %u 失败 (errno=%d)", port, errno]}];
+                                      userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"绑定端口 %u 失败 (errno=%d)，且备用端口均不可用", port, lastBindErrno]}];
         }
         return NO;
     }
-
-    // 步骤 4：获取实际绑定的端口
-    // 如果 port=0，系统会自动分配一个可用端口，需要通过 getsockname 查询
-    socklen_t addrLen = sizeof(addr);
-    if (getsockname(fd, (struct sockaddr *)&addr, &addrLen) < 0) {
-        NSLog(@"[SOCKS5Proxy] getsockname 失败：errno = %d", errno);
-        close(fd);
-        if (error) {
-            *error = [NSError errorWithDomain:kSOCKS5ProxyErrorDomain
-                                          code:SOCKS5ProxyErrorCodeSocketCreateFailed
-                                      userInfo:@{NSLocalizedDescriptionKey: @"获取实际监听端口失败"}];
-        }
-        return NO;
-    }
-    uint16_t actualPort = ntohs(addr.sin_port);
 
     // 步骤 5：开始监听
     // backlog = 16，允许最多 16 个等待接受的连接

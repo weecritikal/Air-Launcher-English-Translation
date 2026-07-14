@@ -90,6 +90,17 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 /// 房客流程中正在连接的房间对象（用于显示连接状态）
 @property (nonatomic, strong, nullable) MultiplayerRoom *guestRoom;
 
+/// 连接进度提示 Alert（用于动态更新进度文本）
+///
+/// 当房主或房客流程开始连接时，会 present 此 Alert 并在其中显示进度文本。
+/// multiplayerConnectionProgress: 回调会更新此 Alert 的 message 属性，
+/// 让用户实时看到"步骤 1/6：正在启动 ZeroTier 节点..."等进度。
+///
+/// 关键修复：之前连接流程只显示一个静态的"正在连接到 ZeroTier 网络"提示，
+/// 用户无法知道后台进度，只能干等 15-30 秒直到成功或失败。
+/// 现在通过此 Alert 实时更新进度，让用户看到详细的步骤信息。
+@property (nonatomic, strong, nullable) UIAlertController *connectionProgressAlert;
+
 @end
 
 @implementation MultiplayerViewController
@@ -164,10 +175,47 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     // 刷新房间列表（可能在其他界面修改过）
     [self refreshRooms];
 
-    // 启动器模式：根据节点状态同步开关初始值
+    // 启动器模式：根据持久化的用户意图恢复开关状态
+    //
+    // 关键修复（开关状态不同步）：
+    // 之前使用 isNodeStarted（运行时状态）恢复开关，存在以下问题：
+    //   - 用户点击开关 ON → 后台开始启动节点（耗时 5+ 秒）→ 用户关闭 VC →
+    //     重新打开 VC → 此时节点可能仍在启动中（isNodeStarted=NO）→ 开关显示 OFF
+    //   - 用户点击开关 ON → 节点启动成功 → 用户关闭启动器（杀进程）→
+    //     重新打开启动器 → isNodeStarted=NO（进程重启后状态丢失）→ 开关显示 OFF
+    //
+    // 修复方案：使用 isMultiplayerEnabled（持久化到 NSUserDefaults）恢复开关状态，
+    // 表示用户的意图而非节点实际状态。即使关闭启动器再重新打开，开关也能正确显示。
     if (self.mode == MultiplayerVCModeLauncher) {
-        BOOL started = [[MultiplayerManager sharedManager] isNodeStarted];
-        [self.enableSwitch setOn:started animated:NO];
+        BOOL enabled = [[MultiplayerManager sharedManager] isMultiplayerEnabled];
+        [self.enableSwitch setOn:enabled animated:NO];
+
+        // 如果用户之前启用了联机但节点未启动（如关闭启动器后重新打开），
+        // 自动重启节点以恢复联机功能，让用户体验无缝衔接。
+        if (enabled && ![[MultiplayerManager sharedManager] isNodeStarted]) {
+            if ([[MultiplayerManager sharedManager] isFrameworkAvailable]) {
+                NSLog(@"[MultiplayerVC] 检测到联机已启用但节点未启动，自动重启节点...");
+                __weak typeof(self) weakSelf = self;
+                [[MultiplayerManager sharedManager] ensureNodeStartedWithCompletion:^(BOOL success, NSError *error) {
+                    __strong typeof(weakSelf) strongSelf = weakSelf;
+                    if (!strongSelf) return;
+
+                    if (!success) {
+                        // 启动失败：重置联机启用状态并回退开关
+                        [[MultiplayerManager sharedManager] setMultiplayerEnabled:NO];
+                        [strongSelf.enableSwitch setOn:NO animated:YES];
+                        NSLog(@"[MultiplayerVC] 自动重启节点失败：%@", error.localizedDescription);
+                    } else {
+                        NSLog(@"[MultiplayerVC] 自动重启节点成功");
+                        [strongSelf.tableView reloadData];
+                    }
+                }];
+            } else {
+                // 框架不可用：重置联机启用状态
+                [[MultiplayerManager sharedManager] setMultiplayerEnabled:NO];
+                [self.enableSwitch setOn:NO animated:NO];
+            }
+        }
     }
 }
 
@@ -258,6 +306,10 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 /// 对标 FCL 启动器界面顶部的联机总开关：
 ///   - 打开：调用 ensureNodeStartedWithCompletion: 启动 ZeroTier 节点
 ///   - 关闭：调用 disconnectCurrentRoom 停止所有联机活动（节点保持运行，可再次打开）
+///
+/// 关键修复（开关状态不同步）：
+/// 打开/关闭时通过 setMultiplayerEnabled: 持久化用户意图到 NSUserDefaults，
+/// 这样即使关闭启动器再重新打开，开关状态也能正确恢复。
 - (void)enableSwitchChanged:(UISwitch *)sender {
     if (sender.on) {
         // 检查 ZeroTier 框架可用性
@@ -268,6 +320,9 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
             return;
         }
 
+        // 持久化用户启用联机的意图
+        [[MultiplayerManager sharedManager] setMultiplayerEnabled:YES];
+
         // 启动 ZeroTier 节点
         __weak typeof(self) weakSelf = self;
         [[MultiplayerManager sharedManager] ensureNodeStartedWithCompletion:^(BOOL success, NSError *error) {
@@ -275,7 +330,8 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
             if (!strongSelf) return;
 
             if (!success) {
-                // 启动失败：回退开关状态
+                // 启动失败：回退开关状态并重置联机启用状态
+                [[MultiplayerManager sharedManager] setMultiplayerEnabled:NO];
                 [strongSelf.enableSwitch setOn:NO animated:YES];
                 [strongSelf showSimpleAlertWithTitle:MPLocalized(@"mp.node.start_failed_title", @"启动失败")
                                               message:error.localizedDescription ?: MPLocalized(@"mp.node.start_failed_msg", @"ZeroTier 节点启动失败，请重试。")];
@@ -285,6 +341,9 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
             }
         }];
     } else {
+        // 持久化用户关闭联机的意图
+        [[MultiplayerManager sharedManager] setMultiplayerEnabled:NO];
+
         // 关闭联机：断开当前房间（如有）
         if ([[MultiplayerManager sharedManager] currentRoom]) {
             [[MultiplayerManager sharedManager] disconnectCurrentRoom];
@@ -841,9 +900,15 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         [[MultiplayerManager sharedManager] disconnectCurrentRoom];
     }
 
-    // 显示"正在连接"提示
-    [self showSimpleAlertWithTitle:MPLocalized(@"mp.host.connecting_title", @"正在开启联机")
-                           message:MPLocalized(@"mp.host.connecting_msg", @"正在连接到 ZeroTier 网络，请稍候...")];
+    // 显示"正在连接"进度提示（可动态更新进度文本）
+    //
+    // 关键修复（前台无反馈）：
+    // 之前只显示一个静态的"正在连接到 ZeroTier 网络，请稍候..."提示，
+    // 用户无法知道后台进度，连接流程耗时 15-30 秒期间用户只能干等。
+    // 现在使用 showConnectionProgressWithTitle:message: 显示一个带 Cancel 按钮的 Alert，
+    // 并通过 multiplayerConnectionProgress: 回调实时更新 message 为"步骤 1/6：..."等进度。
+    [self showConnectionProgressWithTitle:MPLocalized(@"mp.host.connecting_title", @"正在开启联机")
+                                   message:MPLocalized(@"mp.host.connecting_msg", @"正在连接到 ZeroTier 网络，请稍候...")];
 
     // 启动 LAN 端口检测器（房主在 MC 中开放局域网后会被自动检测到）
     [[LanPortDetector sharedDetector] startDetecting];
@@ -854,15 +919,18 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
 
-        if (success) {
-            // 连接成功：显示房主提示
-            [strongSelf showHostConnectedAlert];
-        } else {
-            // 连接失败
-            strongSelf.isHostFlowActive = NO;
-            [strongSelf showSimpleAlertWithTitle:MPLocalized(@"mp.connect.failed", @"连接失败")
-                                          message:error.localizedDescription ?: MPLocalized(@"mp.connect.failed_msg", @"无法连接到 ZeroTier 网络，请检查 Network ID 是否正确以及网络是否畅通。")];
-        }
+        // 先关闭进度提示 Alert，再显示结果
+        [strongSelf dismissConnectionProgressAlertWithCompletion:^{
+            if (success) {
+                // 连接成功：显示房主提示
+                [strongSelf showHostConnectedAlert];
+            } else {
+                // 连接失败
+                strongSelf.isHostFlowActive = NO;
+                [strongSelf showSimpleAlertWithTitle:MPLocalized(@"mp.connect.failed", @"连接失败")
+                                              message:error.localizedDescription ?: MPLocalized(@"mp.connect.failed_msg", @"无法连接到 ZeroTier 网络，请检查 Network ID 是否正确以及网络是否畅通。")];
+            }
+        }];
         [strongSelf.tableView reloadData];
     }];
 
@@ -1077,9 +1145,12 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         [[MultiplayerManager sharedManager] disconnectCurrentRoom];
     }
 
-    // 显示"正在连接"提示
-    [self showSimpleAlertWithTitle:MPLocalized(@"mp.guest.connecting_title", @"正在加入联机")
-                           message:MPLocalized(@"mp.guest.connecting_msg", @"正在连接到房主的 ZeroTier 网络，请稍候...")];
+    // 显示"正在连接"进度提示（可动态更新进度文本）
+    //
+    // 关键修复（前台无反馈）：
+    // 与 hostButtonTapped 相同，使用可更新进度的 Alert 替代静态提示。
+    [self showConnectionProgressWithTitle:MPLocalized(@"mp.guest.connecting_title", @"正在加入联机")
+                                   message:MPLocalized(@"mp.guest.connecting_msg", @"正在连接到房主的 ZeroTier 网络，请稍候...")];
 
     // 连接到房间
     __weak typeof(self) weakSelf = self;
@@ -1087,15 +1158,18 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
 
-        if (success) {
-            // 连接成功：显示房客加入成功提示
-            [strongSelf showGuestConnectedAlert];
-        } else {
-            // 连接失败
-            strongSelf.isGuestFlowActive = NO;
-            [strongSelf showSimpleAlertWithTitle:MPLocalized(@"mp.connect.failed", @"连接失败")
-                                          message:error.localizedDescription ?: MPLocalized(@"mp.connect.failed_msg", @"无法连接到房主的网络，请检查分享代码是否正确以及网络是否畅通。")];
-        }
+        // 先关闭进度提示 Alert，再显示结果
+        [strongSelf dismissConnectionProgressAlertWithCompletion:^{
+            if (success) {
+                // 连接成功：显示房客加入成功提示
+                [strongSelf showGuestConnectedAlert];
+            } else {
+                // 连接失败
+                strongSelf.isGuestFlowActive = NO;
+                [strongSelf showSimpleAlertWithTitle:MPLocalized(@"mp.connect.failed", @"连接失败")
+                                              message:error.localizedDescription ?: MPLocalized(@"mp.connect.failed_msg", @"无法连接到房主的网络，请检查分享代码是否正确以及网络是否畅通。")];
+            }
+        }];
         [strongSelf.tableView reloadData];
     }];
 
@@ -1178,6 +1252,28 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     [self.tableView reloadData];
 }
 
+/// 连接流程进度更新
+///
+/// 由 MultiplayerManager 的 notifyConnectionProgress: 在主线程调用。
+/// 更新 connectionProgressAlert 的 message 属性，让用户实时看到当前连接步骤。
+///
+/// 关键修复（前台无反馈）：
+/// 之前连接流程只显示静态"正在连接到 ZeroTier 网络"提示，
+/// 用户无法知道后台进度（启动节点、等待上线、加入网络、等待就绪、启动代理...）。
+/// 现在通过此回调实时更新进度文本，让用户看到详细的步骤信息。
+///
+/// @param message 进度描述文本（如"步骤 2/6：正在等待节点上线..."）
+- (void)multiplayerConnectionProgress:(NSString *)message {
+    // 此方法已在主线程调用（由 MultiplayerManager.notifyConnectionProgress: 保证）
+    if (self.connectionProgressAlert) {
+        // 更新已显示的进度 Alert 的 message
+        // UIAlertController 的 message 属性可以在 present 后动态更新，
+        // 系统会自动刷新 UI 显示，无需重新 present。
+        self.connectionProgressAlert.message = message;
+    }
+    NSLog(@"[MultiplayerVC] 连接进度：%@", message);
+}
+
 #pragma mark - 工具方法
 
 /// 刷新房间列表（主线程）
@@ -1191,6 +1287,8 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 /// 显示简单的 Alert 提示
 - (void)showSimpleAlertWithTitle:(NSString *)title message:(NSString *)message {
     dispatch_async(dispatch_get_main_queue(), ^{
+        // 关键修复：显示新 Alert 前清除进度 Alert 引用（如果存在）
+        self.connectionProgressAlert = nil;
         UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:message preferredStyle:UIAlertControllerStyleAlert];
         [alert addAction:[UIAlertAction actionWithTitle:MPLocalized(@"common.ok", @"好") style:UIAlertActionStyleDefault handler:nil]];
         // 避免重复 present
@@ -1200,6 +1298,84 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
             }];
         } else {
             [self presentViewController:alert animated:YES completion:nil];
+        }
+    });
+}
+
+/// 显示连接进度 Alert（可动态更新 message）
+///
+/// 此 Alert 包含一个"取消"按钮，允许用户在连接过程中取消连接。
+/// 取消时会调用 disconnectCurrentRoom 中止连接流程。
+///
+/// 显示后，通过 multiplayerConnectionProgress: 回调更新 self.connectionProgressAlert.message
+/// 即可实时更新 Alert 中显示的进度文本，无需重新 present。
+///
+/// @param title   Alert 标题（如"正在开启联机"）
+/// @param message 初始进度文本（如"正在连接到 ZeroTier 网络，请稍候..."）
+- (void)showConnectionProgressWithTitle:(NSString *)title message:(NSString *)message {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        // 如果已有进度 Alert 在显示，先关闭它
+        if (self.connectionProgressAlert && self.presentedViewController == self.connectionProgressAlert) {
+            [self dismissViewControllerAnimated:NO completion:^{
+                [self presentNewConnectionProgressAlertWithTitle:title message:message];
+            }];
+        } else if (self.presentedViewController) {
+            // 有其他 VC 在显示（如之前的简单 Alert），先关闭
+            [self.presentedViewController dismissViewControllerAnimated:NO completion:^{
+                [self presentNewConnectionProgressAlertWithTitle:title message:message];
+            }];
+        } else {
+            [self presentNewConnectionProgressAlertWithTitle:title message:message];
+        }
+    });
+}
+
+/// 内部方法：创建并 present 新的连接进度 Alert
+- (void)presentNewConnectionProgressAlertWithTitle:(NSString *)title message:(NSString *)message {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:title
+                                                                    message:message
+                                                             preferredStyle:UIAlertControllerStyleAlert];
+
+    // 添加"取消"按钮：用户可在连接过程中取消
+    __weak typeof(self) weakSelf = self;
+    [alert addAction:[UIAlertAction actionWithTitle:MPLocalized(@"common.cancel", @"取消")
+                                              style:UIAlertActionStyleCancel
+                                            handler:^(UIAlertAction *action) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+
+        // 用户取消连接：中止正在进行的连接流程
+        NSLog(@"[MultiplayerVC] 用户取消了连接流程");
+        strongSelf.isHostFlowActive = NO;
+        strongSelf.isGuestFlowActive = NO;
+        [[MultiplayerManager sharedManager] disconnectCurrentRoom];
+        strongSelf.connectionProgressAlert = nil;
+        [strongSelf.tableView reloadData];
+    }]];
+
+    self.connectionProgressAlert = alert;
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+/// 关闭连接进度 Alert
+///
+/// 在连接完成（成功或失败）后调用，关闭进度提示 Alert，
+/// 然后在 completion 中显示结果 Alert（成功提示或错误提示）。
+///
+/// @param completion Alert 关闭后的回调
+- (void)dismissConnectionProgressAlertWithCompletion:(void (^)(void))completion {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (self.connectionProgressAlert && self.presentedViewController == self.connectionProgressAlert) {
+            // 进度 Alert 正在显示：关闭它，然后在 completion 中执行后续操作
+            self.connectionProgressAlert = nil;
+            [self dismissViewControllerAnimated:YES completion:^{
+                if (completion) completion();
+            }];
+        } else {
+            // 进度 Alert 不在显示（可能已被用户取消或未创建）：
+            // 清除引用，直接执行 completion
+            self.connectionProgressAlert = nil;
+            if (completion) completion();
         }
     });
 }
@@ -1437,12 +1613,13 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
             self.enableSwitch = [[UISwitch alloc] init];
             [self.enableSwitch addTarget:self action:@selector(enableSwitchChanged:) forControlEvents:UIControlEventValueChanged];
         }
-        // 初始状态：根据节点是否已启动设置开关
-        BOOL started = [[MultiplayerManager sharedManager] isNodeStarted];
-        [self.enableSwitch setOn:started animated:NO];
+        // 初始状态：根据持久化的用户意图设置开关（与 viewWillAppear: 保持一致）
+        BOOL enabled = [[MultiplayerManager sharedManager] isMultiplayerEnabled];
+        [self.enableSwitch setOn:enabled animated:NO];
         cell.accessoryView = self.enableSwitch;
 
-        // 辅助文字：显示节点状态
+        // 辅助文字：显示节点的实际运行状态（而非用户意图）
+        BOOL started = [[MultiplayerManager sharedManager] isNodeStarted];
         if (started) {
             if ([[MultiplayerManager sharedManager] isNodeOnline]) {
                 cell.detailTextLabel.text = MPLocalized(@"mp.settings.node_online", @"节点已上线");
@@ -1450,7 +1627,12 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
                 cell.detailTextLabel.text = MPLocalized(@"mp.settings.node_starting", @"节点启动中...");
             }
         } else {
-            cell.detailTextLabel.text = MPLocalized(@"mp.settings.node_offline", @"节点未启动");
+            // 节点未启动：如果用户已启用（等待自动重启），显示"启动中"
+            if (enabled) {
+                cell.detailTextLabel.text = MPLocalized(@"mp.settings.node_starting", @"节点启动中...");
+            } else {
+                cell.detailTextLabel.text = MPLocalized(@"mp.settings.node_offline", @"节点未启动");
+            }
         }
         cell.detailTextLabel.font = [UIFont systemFontOfSize:12];
 
@@ -1551,7 +1733,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     if (self.rooms.count == 0) {
         UITableViewCell *cell = [self.tableView dequeueReusableCellWithIdentifier:@"EmptyCell"];
         cell.selectionStyle = UITableViewCellSelectionStyleNone;
-        cell.textLabel.text = MPLocalized(@"mp.rooms.empty", @"还没有保存的房间");
+        cell.textLabel.text = MPLocalized(@"mp.rooms.empty", @"暂无房间（房间仅在本次会话中保留）");
         cell.textLabel.textAlignment = NSTextAlignmentCenter;
         cell.textLabel.font = [UIFont systemFontOfSize:14];
         // 适配自定义背景

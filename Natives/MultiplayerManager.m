@@ -59,7 +59,16 @@
 #pragma mark - 常量定义
 
 /// NSUserDefaults 中存储房间列表的 key
+///
+/// 关键修复（移除保存历史房间功能）：此 key 仅用于一次性迁移清理，
+/// 不再用于持久化房间列表。用户明确表示不需要保存历史房间功能
+/// （FCL 也没有此功能），每次启动器启动时房间列表应为空。
+/// 启动时如果检测到旧数据，会主动清除。
 static NSString * const kMultiplayerSavedRoomsKey = @"multiplayer_saved_rooms";
+
+/// NSUserDefaults 中存储联机启用状态的 key
+/// 用于持久化用户的联机启用意图，独立于节点实际启动状态。
+static NSString * const kMultiplayerEnabledKey = @"multiplayer.enabled";
 
 /// MC 默认服务器端口
 static NSString * const kDefaultMCPort = @"25565";
@@ -285,12 +294,15 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
         _nodeStarted = NO;
         _currentNetworkID = 0;
 
-        [self loadRooms];
+        // 关键修复（移除保存历史房间功能）：
+        // 不再从 NSUserDefaults 加载历史房间列表，每次启动时房间列表为空。
+        // 同时主动清除可能存在的旧数据（一次性迁移），避免残留。
+        [self cleanupLegacySavedRooms];
 
         // 设置 ZeroTierBridge 代理，接收节点/网络状态回调
         [[ZeroTierBridge sharedInstance] setDelegate:self];
 
-        NSLog(@"[MultiplayerManager] 初始化完成，已加载 %lu 个房间", (unsigned long)_internalRooms.count);
+        NSLog(@"[MultiplayerManager] 初始化完成（不加载历史房间，房间列表为空）");
     }
     return self;
 }
@@ -316,74 +328,68 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     return [[ZeroTierBridge sharedInstance] isNodeOnline];
 }
 
-#pragma mark - 数据持久化
+#pragma mark - 联机启用状态管理
 
-- (void)loadRooms {
-    @synchronized(self) {
-        NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-        NSData *data = [defaults dataForKey:kMultiplayerSavedRoomsKey];
+/// 用户是否启用了联机（从 NSUserDefaults 读取）
+///
+/// 此属性独立于 isNodeStarted，表示用户的意图而非节点实际状态。
+/// 用于在 ViewController 重新加载时恢复联机开关状态。
+- (BOOL)isMultiplayerEnabled {
+    return [[NSUserDefaults standardUserDefaults] boolForKey:kMultiplayerEnabledKey];
+}
 
-        if (!data || data.length == 0) {
-            self.internalRooms = [[NSMutableArray alloc] init];
-            return;
-        }
+/// 设置联机启用状态（持久化到 NSUserDefaults）
+- (void)setMultiplayerEnabled:(BOOL)enabled {
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    if (enabled) {
+        [defaults setBool:YES forKey:kMultiplayerEnabledKey];
+    } else {
+        [defaults setBool:NO forKey:kMultiplayerEnabledKey];
+    }
+    [defaults synchronize];
+    NSLog(@"[MultiplayerManager] 联机启用状态已设置为 %d", enabled);
+}
 
-        NSError *error = nil;
-        NSSet *allowedClasses = [NSSet setWithObjects:[NSArray class], [MultiplayerRoom class], nil];
-        NSArray *rooms = [NSKeyedUnarchiver unarchivedObjectOfClasses:allowedClasses
-                                                           fromData:data
-                                                              error:&error];
-        if (error || !rooms) {
-            NSLog(@"[MultiplayerManager] 加载房间列表失败：%@", error.localizedDescription);
-            NSKeyedUnarchiver *unarchiver = [[NSKeyedUnarchiver alloc] initForReadingFromData:data error:&error];
-            unarchiver.requiresSecureCoding = NO;
-            @try {
-                NSArray *legacyRooms = [unarchiver decodeObjectForKey:NSKeyedArchiveRootObjectKey];
-                if ([legacyRooms isKindOfClass:[NSArray class]]) {
-                    self.internalRooms = [NSMutableArray arrayWithArray:legacyRooms];
-                    NSLog(@"[MultiplayerManager] 使用兼容模式加载了 %lu 个房间", (unsigned long)self.internalRooms.count);
-                    [unarchiver finishDecoding];
-                    return;
-                }
-            } @catch (NSException *exception) {
-                NSLog(@"[MultiplayerManager] 兼容模式解档异常：%@", exception);
-            }
-            [unarchiver finishDecoding];
-            self.internalRooms = [[NSMutableArray alloc] init];
-            return;
-        }
+#pragma mark - 数据持久化（已禁用）
 
-        NSMutableArray *validRooms = [[NSMutableArray alloc] init];
-        for (id obj in rooms) {
-            if ([obj isKindOfClass:[MultiplayerRoom class]]) {
-                [validRooms addObject:obj];
-            }
-        }
-
-        self.internalRooms = validRooms;
-        NSLog(@"[MultiplayerManager] 成功加载 %lu 个房间", (unsigned long)self.internalRooms.count);
+/// 清除旧的保存房间数据（一次性迁移）
+///
+/// 关键修复（移除保存历史房间功能）：
+/// 用户明确表示不需要保存历史房间功能（FCL 也没有此功能）。
+/// 此方法在 init 中调用，主动清除可能存在于 NSUserDefaults 中的旧房间数据。
+/// 清除后，房间列表完全在内存中管理，不进行持久化。
+- (void)cleanupLegacySavedRooms {
+    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+    NSData *legacyData = [defaults dataForKey:kMultiplayerSavedRoomsKey];
+    if (legacyData && legacyData.length > 0) {
+        NSLog(@"[MultiplayerManager] 检测到旧版本保存的房间数据（%lu 字节），正在清除...",
+              (unsigned long)legacyData.length);
+        [defaults removeObjectForKey:kMultiplayerSavedRoomsKey];
+        [defaults synchronize];
+        NSLog(@"[MultiplayerManager] 旧房间数据已清除（不再持久化房间列表）");
     }
 }
 
+/// loadRooms 已废弃（空操作）
+///
+/// 关键修复（移除保存历史房间功能）：房间列表不再从 NSUserDefaults 加载。
+/// 每次启动器启动时房间列表为空，房间仅在当前会话中存在（内存中）。
+/// 此方法保留为空操作是为了兼容现有代码中可能的调用（虽然 init 已不再调用）。
+- (void)loadRooms {
+    // 空操作：不再从持久化存储加载房间列表
+    @synchronized(self) {
+        self.internalRooms = [[NSMutableArray alloc] init];
+    }
+}
+
+/// saveRooms 已废弃（空操作）
+///
+/// 关键修复（移除保存历史房间功能）：房间列表不再持久化到 NSUserDefaults。
+/// 此方法保留为空操作是为了兼容现有代码中大量的 [self saveRooms] 调用，
+/// 避免需要修改每一处调用点。房间列表仅在内存中管理，关闭启动器后自动清空。
 - (void)saveRooms {
-    NSArray *roomsToSave = [self.internalRooms copy];
-
-    dispatch_async(_serializationQueue, ^{
-        NSError *error = nil;
-        NSData *data = [NSKeyedArchiver archivedDataWithRootObject:roomsToSave
-                                             requiringSecureCoding:YES
-                                                             error:&error];
-        if (error || !data) {
-            NSLog(@"[MultiplayerManager] 序列化房间列表失败：%@", error.localizedDescription);
-            return;
-        }
-
-        NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-        [defaults setObject:data forKey:kMultiplayerSavedRoomsKey];
-        BOOL synced = [defaults synchronize];
-        NSLog(@"[MultiplayerManager] 房间列表已保存（%lu 个，synchronize=%d）",
-              (unsigned long)roomsToSave.count, synced);
-    });
+    // 空操作：不再持久化房间列表到 NSUserDefaults
+    // 房间列表仅在内存中管理，关闭启动器后自动清空
 }
 
 #pragma mark - 框架检测与节点管理
@@ -887,6 +893,20 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     });
 }
 
+/// 通知 delegate 连接流程进度
+///
+/// 在 connectToRoomFlow: 的各个步骤中调用，让 UI 能实时显示当前进度。
+/// 通过 dispatch_async 到主线程调用，确保线程安全。
+///
+/// @param message 进度描述文本
+- (void)notifyConnectionProgress:(NSString *)message {
+    if ([self.delegate respondsToSelector:@selector(multiplayerConnectionProgress:)]) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self.delegate multiplayerConnectionProgress:message];
+        });
+    }
+}
+
 /// 房间连接的完整流程（在后台线程执行）
 ///
 /// 步骤：
@@ -914,6 +934,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     // main_queue 分发。framework 可用性检查在 connectToRoom 入口已做，此处不再重复。
     if (![self isNodeStarted]) {
         NSLog(@"[MultiplayerManager] [连接流程] 步骤 1：启动 ZeroTier 节点");
+        [self notifyConnectionProgress:@"步骤 1/6：正在启动 ZeroTier 节点..."];
         NSString *homeDir = [self zeroTierHomeDirectory];
         NSError *startError = nil;
         BOOL nodeStartSuccess = [[ZeroTierBridge sharedInstance] startNodeWithHomeDirectory:homeDir
@@ -938,6 +959,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
 
     // 步骤 2：等待节点上线
     NSLog(@"[MultiplayerManager] [连接流程] 步骤 2：等待节点上线（超时 %.0fs）", kNodeOnlineTimeout);
+    [self notifyConnectionProgress:@"步骤 2/6：正在等待节点上线..."];
     if (![[ZeroTierBridge sharedInstance] isNodeOnline]) {
         BOOL online = [[ZeroTierBridge sharedInstance] waitForNodeOnlineWithTimeout:kNodeOnlineTimeout];
         if (!online) {
@@ -980,6 +1002,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
 
     // 步骤 3：加入网络
     NSLog(@"[MultiplayerManager] [连接流程] 步骤 3：加入 ZeroTier 网络 %@", room.networkId);
+    [self notifyConnectionProgress:[NSString stringWithFormat:@"步骤 3/6：正在加入 ZeroTier 网络 %@...", room.networkId]];
     uint64_t netID = [ZeroTierBridge parseNetworkIDFromString:room.networkId];
     if (netID == 0) {
         if (completion) {
@@ -1002,6 +1025,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
 
     // 步骤 4：等待网络就绪
     NSLog(@"[MultiplayerManager] [连接流程] 步骤 4：等待网络就绪（超时 %.0fs）", kNetworkReadyTimeout);
+    [self notifyConnectionProgress:@"步骤 4/6：正在等待网络就绪（可能需要授权）..."];
     BOOL ready = [[ZeroTierBridge sharedInstance] waitForNetworkReady:netID
                                                               timeout:kNetworkReadyTimeout];
     if (!ready) {
@@ -1088,6 +1112,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
 
     // 步骤 5：启动 SOCKS5 代理
     NSLog(@"[MultiplayerManager] [连接流程] 步骤 5：启动 SOCKS5 代理");
+    [self notifyConnectionProgress:@"步骤 5/6：正在启动 SOCKS5 代理..."];
     NSError *proxyError = nil;
     BOOL proxyStarted = [[SOCKS5Proxy sharedProxy] startWithPort:kMultiplayerDefaultSOCKS5Port
                                                             error:&proxyError];
@@ -1114,6 +1139,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     NSLog(@"[MultiplayerManager] [连接流程] SOCKS5 代理已启动，监听 127.0.0.1:%u", actualPort);
 
     // 步骤 6：设置环境变量，供 JavaLauncher 读取
+    [self notifyConnectionProgress:@"步骤 6/6：正在设置代理环境变量..."];
     NSString *proxyValue = [NSString stringWithFormat:@"127.0.0.1:%u", actualPort];
     setenv([kAMETHYSTSOCKS5ProxyEnvVar UTF8String], [proxyValue UTF8String], 1);
     NSLog(@"[MultiplayerManager] [连接流程] 已设置环境变量 %@=%@", kAMETHYSTSOCKS5ProxyEnvVar, proxyValue);
