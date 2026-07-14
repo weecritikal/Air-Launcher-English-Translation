@@ -37,6 +37,9 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
+// 前向声明：delegate 协议方法需要引用 ZeroTierBridge 类型
+@class ZeroTierBridge;
+
 /// ZeroTier 节点状态
 ///
 /// 描述 ZeroTier 节点的运行状态生命周期：
