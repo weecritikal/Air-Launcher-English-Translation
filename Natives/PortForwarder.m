@@ -38,6 +38,7 @@
 // POSIX socket 头文件
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>  // TCP_NODELAY（禁用 Nagle 算法，降低延迟）
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <string.h>
@@ -110,15 +111,23 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
 @interface PortForwarder () {
     /// 监听 socket 文件描述符（-1 表示未创建）
     int _listenFD;
-    
+
     /// Accept 线程
     NSThread *_acceptThread;
-    
+
     /// 线程锁，保护内部状态
     NSLock *_lock;
-    
+
     /// 是否正在停止（用于通知 accept 线程退出）
     BOOL _stopping;
+
+    /// 活跃客户端 socket fd 集合（用于 stop 时 shutdown 唤醒阻塞的 read）
+    /// 关键稳定性优化：stop 时如果不 shutdown 这些 fd，客户端线程会一直阻塞在
+    /// read/recvData 上，导致线程泄漏。shutdown(SHUT_RDWR) 会立即唤醒它们。
+    NSMutableArray<NSNumber *> *_activeClientFDs;
+
+    /// 活跃 libzt 远程 socket fd 集合（用于 stop 时 shutdown 唤醒阻塞的 recvData）
+    NSMutableArray<NSNumber *> *_activeRemoteFDs;
 }
 
 /// 实际监听端口
@@ -184,6 +193,8 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
         _remoteHost = nil;
         _remotePort = 0;
         _lock = [[NSLock alloc] init];
+        _activeClientFDs = [[NSMutableArray alloc] init];
+        _activeRemoteFDs = [[NSMutableArray alloc] init];
         NSLog(@"[PortForwarder] 单例已初始化");
     }
     return self;
@@ -495,21 +506,41 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
         }
         
         NSLog(@"[PortForwarder] 处理客户端连接 fd=%d，转发到 %@:%u", clientFD, remoteHost, remotePort);
-        
+
+        // 对客户端 socket 设置 TCP_NODELAY（禁用 Nagle 算法）
+        //
+        // 关键性能优化：Minecraft 是实时交互游戏，玩家操作需要立即发送到服务器。
+        // Nagle 算法会将小数据包合并发送以减少网络开销，但会增加延迟。
+        // 对于 MC 这种实时游戏，延迟比带宽更重要，因此必须禁用 Nagle。
+        int clientNoDelay = 1;
+        setsockopt(clientFD, IPPROTO_TCP, TCP_NODELAY, &clientNoDelay, sizeof(clientNoDelay));
+
+        // 对客户端 socket 设置 SO_KEEPALIVE（连接保活）
+        //
+        // 关键稳定性优化：MC 的 TCP 连接可能长时间无数据传输（如玩家挂机），
+        // 中间的 NAT/防火墙可能会因超时而丢弃连接表项，导致连接"假死"。
+        // SO_KEEPALIVE 让系统定期发送 keepalive 探测包，保持连接活跃。
+        int clientKeepAlive = 1;
+        setsockopt(clientFD, SOL_SOCKET, SO_KEEPALIVE, &clientKeepAlive, sizeof(clientKeepAlive));
+
         // ============================================================
         // 步骤 1：创建 libzt socket
         // ============================================================
-        // 检测远程地址类型：IPv6 地址包含 ':'，IPv4 地址包含 '.'
-        BOOL isIPv6Target = ([remoteHost rangeOfString:@":"].location != NSNotFound);
+        // 使用 inet_pton 严格校验地址类型，避免误判
+        BOOL isIPv6Target = (zts_inet_pton(ZTS_AF_INET6, [remoteHost UTF8String], NULL) == 1);
         int socketFamily = isIPv6Target ? ZTS_AF_INET6 : ZTS_AF_INET;
-        
+
         int ztFD = [[ZeroTierBridge sharedInstance] createTCPSocketForFamily:socketFamily];
         if (ztFD < 0) {
             NSLog(@"[PortForwarder] 创建 ZeroTier socket(family=%d) 失败：ztFD=%d", socketFamily, ztFD);
             close(clientFD);
             return;
         }
-        
+
+        // 对 libzt socket 也设置 TCP_NODELAY（降低 ZeroTier 虚拟网络的延迟）
+        int ztNoDelay = 1;
+        zts_bsd_setsockopt(ztFD, ZTS_IPPROTO_TCP, ZTS_TCP_NODELAY, &ztNoDelay, sizeof(ztNoDelay));
+
         // ============================================================
         // 步骤 2：连接到远程主机
         // ============================================================
@@ -524,15 +555,27 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
             close(clientFD);
             return;
         }
-        
+
         NSLog(@"[PortForwarder] 通过 ZeroTier 连接目标成功：target=%@:%u, ztFD=%d",
               remoteHost, remotePort, ztFD);
-        
+
+        // 将 fd 加入活跃列表（用于 stop 时 shutdown 唤醒阻塞的 read/recv）
+        [_lock lock];
+        [_activeClientFDs addObject:@(clientFD)];
+        [_activeRemoteFDs addObject:@(ztFD)];
+        [_lock unlock];
+
         // ============================================================
         // 步骤 3：双向转发数据
         // ============================================================
         [self forwardDataBetweenClientFD:clientFD remoteFD:ztFD];
-        
+
+        // 从活跃列表中移除（转发已结束，fd 即将被关闭）
+        [_lock lock];
+        [_activeClientFDs removeObject:@(clientFD)];
+        [_activeRemoteFDs removeObject:@(ztFD)];
+        [_lock unlock];
+
         // ============================================================
         // 步骤 4：关闭连接
         // ============================================================
@@ -673,39 +716,64 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
 /// 流程：
 ///   1. 设置停止标志
 ///   2. 关闭监听 socket（唤醒 accept 线程的 select）
-///   3. 等待 accept 线程退出
-///   4. 清理状态
+///   3. shutdown 所有活跃的客户端/远程 fd（唤醒阻塞的 read/recv）
+///   4. 异步等待客户端线程退出（主线程不阻塞）
+///   5. 清理状态
+///
+/// 关键稳定性优化：shutdown 活跃连接
+///   如果不 shutdown，正在 forwardDataBetweenClientFD: 中阻塞的 read/recvData
+///   不会返回，客户端线程会一直存在（线程泄漏）。shutdown(SHUT_RDWR) 会立即
+///   唤醒所有阻塞在该 fd 上的 read/write，让客户端线程正常退出。
 - (void)stop {
+    BOOL isMainThread = [NSThread isMainThread];
+
     [_lock lock];
     if (!_running) {
         [_lock unlock];
         NSLog(@"[PortForwarder] stop：转发器未在运行，跳过");
         return;
     }
-    
-    NSLog(@"[PortForwarder] 停止端口转发（端口 %u → %@:%u）",
-          _listeningPort, _remoteHost, _remotePort);
-    
+
+    NSLog(@"[PortForwarder] 停止端口转发（端口 %u → %@:%u，isMainThread=%d）",
+          _listeningPort, _remoteHost, _remotePort, isMainThread);
+
     _stopping = YES;
+    _running = NO;
     int listenFD = _listenFD;
     _listenFD = -1;
-    _running = NO;
     NSThread *acceptThread = _acceptThread;
+
+    // 复制活跃 fd 列表（不阻塞太久）
+    NSArray<NSNumber *> *clientFDs = [_activeClientFDs copy];
+    NSArray<NSNumber *> *remoteFDs = [_activeRemoteFDs copy];
+    [_activeClientFDs removeAllObjects];
+    [_activeRemoteFDs removeAllObjects];
     [_lock unlock];
-    
-    // 关闭监听 socket，唤醒 accept 线程的 select
+
+    // 1. 关闭监听 socket，唤醒 accept 线程的 select
     if (listenFD >= 0) {
         close(listenFD);
     }
-    
-    // 等待 accept 线程退出（最多 3 秒）
-    if (acceptThread) {
-        [NSThread sleepForTimeInterval:0.1];
-        // accept 线程会在下次 select 超时后检测到 _stopping 标志并退出
-        // 不强制等待，避免阻塞主线程
+
+    // 2. shutdown 所有活跃的客户端/远程 fd（唤醒阻塞的 read/recv）
+    NSLog(@"[PortForwarder] shutdown %lu 个客户端连接和 %lu 个远程连接...",
+          (unsigned long)clientFDs.count, (unsigned long)remoteFDs.count);
+
+    for (NSNumber *fdNum in clientFDs) {
+        int fd = [fdNum intValue];
+        if (fd >= 0) {
+            shutdown(fd, SHUT_RDWR);
+        }
     }
-    
-    // 清理状态
+
+    for (NSNumber *fdNum in remoteFDs) {
+        int fd = [fdNum intValue];
+        if (fd >= 0) {
+            [[ZeroTierBridge sharedInstance] shutdownSocket:fd how:SHUT_RDWR];
+        }
+    }
+
+    // 3. 清理状态（主线程立即返回，客户端线程在后台自行退出）
     [_lock lock];
     _acceptThread = nil;
     _listeningPort = 0;
@@ -713,7 +781,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
     _remotePort = 0;
     _stopping = NO;
     [_lock unlock];
-    
+
     NSLog(@"[PortForwarder] 端口转发已停止");
 }
 

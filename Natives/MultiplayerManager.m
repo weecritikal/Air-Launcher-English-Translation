@@ -1359,6 +1359,24 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
 
 - (void)zeroTierNodeOffline {
     NSLog(@"[MultiplayerManager] ZeroTier 节点已离线");
+
+    // 关键稳定性优化：节点离线时，PortForwarder 和 SOCKS5Proxy 已无法转发数据，
+    // 应该立即停止它们，避免房客在 MC 中看到"连接中"长时间卡住。
+    // 不调用 disconnectCurrentRoom（会清空 currentRoom），仅停止代理和转发器。
+    if ([[PortForwarder sharedForwarder] isRunning]) {
+        NSLog(@"[MultiplayerManager] 节点离线，停止端口转发器");
+        [[PortForwarder sharedForwarder] stop];
+    }
+    if ([[SOCKS5Proxy sharedProxy] isRunning]) {
+        NSLog(@"[MultiplayerManager] 节点离线，停止 SOCKS5 代理");
+        [[SOCKS5Proxy sharedProxy] stop];
+    }
+
+    [_stateLock lock];
+    self.currentSOCKS5Port = 0;
+    self.currentForwardingPort = 0;
+    [_stateLock unlock];
+
     if ([self.delegate respondsToSelector:@selector(multiplayerNodeOffline)]) {
         dispatch_async(dispatch_get_main_queue(), ^{
             [self.delegate multiplayerNodeOffline];
