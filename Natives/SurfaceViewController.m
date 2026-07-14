@@ -225,23 +225,10 @@ static GameSurfaceView* pojavWindow;
 //        - 未命中 → 返回 nil，触摸继续穿透到游戏画面
 @property(nonatomic, strong) UIView *launchOverlayView;
 @property(nonatomic, strong) CAGradientLayer *launchGradientLayer;
-@property(nonatomic, strong) UIImageView *launchIconView;
 @property(nonatomic, strong) UIActivityIndicatorView *launchSpinner;
 @property(nonatomic, strong) UILabel *launchTitleLabel;
-@property(nonatomic, strong) UILabel *launchStageLabel;
-@property(nonatomic, strong) UIProgressView *launchProgressBar;
-@property(nonatomic, strong) UILabel *launchElapsedTimeLabel;
-@property(nonatomic, strong) NSTimer *launchStageTimer;
 @property(nonatomic, assign) NSTimeInterval launchStartTime;
-@property(nonatomic, strong) NSArray<NSString *> *launchStages;
-@property(nonatomic, assign) NSInteger currentStageIndex;
 @property(nonatomic, assign) BOOL launchOverlayDismissed;
-// 重构新增：更丰富的启动信息展示（参照 FCL/ZL2 的启动信息面板）
-@property(nonatomic, strong) UIView *launchInfoCardView;       // 信息卡片容器
-@property(nonatomic, strong) UILabel *launchPercentLabel;      // 进度百分比
-@property(nonatomic, strong) UILabel *launchJavaVersionLabel;  // Java 版本
-@property(nonatomic, strong) UILabel *launchMemoryLabel;       // 内存分配
-@property(nonatomic, strong) UILabel *launchRendererLabel;     // 渲染器
 @property(nonatomic, strong) UIButton *launchCancelButton;     // 取消启动按钮
 
 @end
@@ -1189,60 +1176,48 @@ static GameSurfaceView* pojavWindow;
 ///   │        [ 取消启动 ]              │
 ///   └─────────────────────────────────┘
 - (void)setupLaunchOverlay {
-    // 启动阶段列表（参照 FCL/ZL2 启动流程，含完整性检查阶段）
-    // 仿 FCL/HMCL：启动前先校验游戏文件完整性
-    self.launchStages = @[
-        localize(@"launch.stage.init_env", @"正在初始化运行环境..."),
-        localize(@"launch.stage.verify_files", @"正在校验游戏文件完整性..."),
-        localize(@"launch.stage.load_jre", @"正在加载 Java 运行时..."),
-        localize(@"launch.stage.config_jvm", @"正在配置 JVM 参数..."),
-        localize(@"launch.stage.start_jvm", @"正在启动 Java 虚拟机..."),
-        localize(@"launch.stage.load_libs", @"正在加载游戏库..."),
-        localize(@"launch.stage.init_mc", @"正在初始化 Minecraft..."),
-        localize(@"launch.stage.load_assets", @"正在加载资源文件..."),
-        localize(@"launch.stage.entering", @"即将进入游戏..."),
-    ];
-    self.currentStageIndex = 0;
+    // ============================================================
+    // FCL 风格启动界面：中间转圈圈 + 显示自定义启动器背景
+    // ============================================================
+    // 参照 FCL (FoldCraftLauncher) 的启动加载界面：
+    //   - 背景显示启动器的自定义壁纸（如果有）
+    //   - 屏幕正中央显示一个大的旋转加载指示器
+    //   - 指示器下方显示简短的标题文字（如"正在启动 Minecraft"）
+    //   - 不显示进度条、百分比、阶段文案、信息卡片等多余元素
+    //   - 底部保留一个小的"取消启动"按钮
+    //
+    // 之前的实现包含了图标、进度条、百分比、已耗时、信息卡片、
+    // 阶段轮转文案等大量元素，过于复杂。FCL 的设计理念是简洁：
+    // 用户只需要知道"正在加载"即可，不需要知道详细的阶段和进度。
     self.launchStartTime = [NSDate timeIntervalSinceReferenceDate];
     self.launchOverlayDismissed = NO;
 
     // ========================================================================
     // 全屏遮罩容器
     // ========================================================================
-    // 【关键修复】userInteractionEnabled = NO
-    // 这是修复"启动期间悬浮球和 FPS 显示无法拖动和点击"的核心改动。
-    // 之前为 YES，导致全屏遮罩拦截所有触摸事件，下层的 gameMenuOverlay
-    // 完全无法接收触摸。改为 NO 后，触摸事件穿透遮罩层到达 gameMenuOverlay，
-    // 用户即可在启动期间拖动悬浮球、查看 FPS。
-    //
-    // 所有子控件（图标、进度条、文字、取消按钮）不需要从 launchOverlayView
-    // 继承交互能力——取消按钮单独设置 userInteractionEnabled = YES 即可
-    // （UIButton 默认就是 YES，不受父视图影响——实际上受影响，需要额外处理）。
-    //
-    // 解决方案：launchOverlayView.userInteractionEnabled = NO 时，所有子视图
-    // 都无法接收触摸。因此取消按钮不放在 launchOverlayView 内，而是放在
-    // launchOverlayView 下方的一个独立透明容器中（userInteractionEnabled = YES），
-    // 该容器仅覆盖取消按钮的区域，不影响其他区域的触摸穿透。
+    // userInteractionEnabled = NO：让触摸穿透到下层的 gameMenuOverlay，
+    // 用户可在启动期间拖动悬浮球、查看 FPS。
+    // 取消按钮单独加到 self.view 上（不受此设置影响）。
     self.launchOverlayView = [[UIView alloc] initWithFrame:self.view.bounds];
     self.launchOverlayView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    self.launchOverlayView.userInteractionEnabled = NO; // ← 核心修复：不拦截触摸
+    self.launchOverlayView.userInteractionEnabled = NO;
     [self.view addSubview:self.launchOverlayView];
 
     // ========================================================================
-    // 背景层
+    // 背景层：显示自定义启动器背景
     // ========================================================================
-    // 有自定义壁纸时透明让壁纸透出（加半透明蒙层增强文字可读性），
-    // 无自定义壁纸时使用深色渐变作为回退（仿 FCL 启动页的深色渐变）
+    // 有自定义壁纸时：透明遮罩 + 轻微暗化蒙层（增强文字可读性）
+    // 无自定义壁纸时：使用深色渐变作为回退
     if ([[BackgroundManager sharedManager] hasBackground]) {
-        // 有自定义背景：透明遮罩 + 半透明蒙层
+        // 有自定义背景：透明遮罩 + 轻微暗化蒙层
         self.launchOverlayView.backgroundColor = [UIColor clearColor];
         UIView *dimOverlay = [[UIView alloc] initWithFrame:self.launchOverlayView.bounds];
         dimOverlay.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-        dimOverlay.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.4];
+        dimOverlay.backgroundColor = [[UIColor blackColor] colorWithAlphaComponent:0.3];
         dimOverlay.userInteractionEnabled = NO;
         [self.launchOverlayView addSubview:dimOverlay];
     } else {
-        // 无自定义背景：使用深色渐变（仿 FCL 的深蓝-黑色渐变）
+        // 无自定义背景：使用深色渐变
         CAGradientLayer *gradient = [CAGradientLayer layer];
         gradient.frame = self.launchOverlayView.bounds;
         gradient.colors = @[
@@ -1257,245 +1232,63 @@ static GameSurfaceView* pojavWindow;
     }
 
     // ========================================================================
-    // 游戏图标（顶部，仿 FCL 启动页的 Minecraft 图标）
+    // 中央内容容器（居中显示转圈圈 + 标题）
     // ========================================================================
-    self.launchIconView = [[UIImageView alloc] init];
-    self.launchIconView.translatesAutoresizingMaskIntoConstraints = NO;
-    self.launchIconView.contentMode = UIViewContentModeScaleAspectFit;
-    self.launchIconView.image = [UIImage systemImageNamed:@"cube.transparent.fill"];
-    self.launchIconView.tintColor = [UIColor systemGreenColor];
-    [self.launchOverlayView addSubview:self.launchIconView];
+    UIView *centerContainer = [[UIView alloc] init];
+    centerContainer.translatesAutoresizingMaskIntoConstraints = NO;
+    centerContainer.userInteractionEnabled = NO;
+    [self.launchOverlayView addSubview:centerContainer];
 
-    // 旋转指示器（图标下方小转圈，仿 FCL 的加载动画）
-    self.launchSpinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
+    // 大号旋转指示器（FCL 风格：屏幕正中央的大转圈）
+    self.launchSpinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleLarge];
     self.launchSpinner.translatesAutoresizingMaskIntoConstraints = NO;
-    self.launchSpinner.color = [UIColor colorWithWhite:0.85 alpha:1.0];
+    self.launchSpinner.color = [UIColor whiteColor];
     [self.launchSpinner startAnimating];
-    [self.launchOverlayView addSubview:self.launchSpinner];
+    [centerContainer addSubview:self.launchSpinner];
 
-    // 标题
+    // 标题文字（转圈下方，简短提示）
     self.launchTitleLabel = [[UILabel alloc] init];
     self.launchTitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.launchTitleLabel.text = localize(@"launch.title", @"正在启动 Minecraft");
-    self.launchTitleLabel.font = [UIFont systemFontOfSize:22 weight:UIFontWeightBold];
-    self.launchTitleLabel.textColor = [UIColor whiteColor];
+    self.launchTitleLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightMedium];
+    self.launchTitleLabel.textColor = [UIColor colorWithWhite:0.9 alpha:1.0];
     self.launchTitleLabel.textAlignment = NSTextAlignmentCenter;
-    [self.launchOverlayView addSubview:self.launchTitleLabel];
-
-    // 阶段文案
-    self.launchStageLabel = [[UILabel alloc] init];
-    self.launchStageLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.launchStageLabel.text = self.launchStages.firstObject ?: localize(@"launch.stage.preparing", @"正在准备...");
-    self.launchStageLabel.font = [UIFont systemFontOfSize:14];
-    self.launchStageLabel.textColor = [UIColor colorWithWhite:0.65 alpha:1.0];
-    self.launchStageLabel.textAlignment = NSTextAlignmentCenter;
-    self.launchStageLabel.numberOfLines = 0;
-    [self.launchOverlayView addSubview:self.launchStageLabel];
+    [centerContainer addSubview:self.launchTitleLabel];
 
     // ========================================================================
-    // 进度条 + 百分比（参照 FCL/ZL2 的进度条样式）
+    // 取消启动按钮（底部，独立添加到 self.view 不受遮罩穿透影响）
     // ========================================================================
-    self.launchProgressBar = [[UIProgressView alloc] initWithProgressViewStyle:UIProgressViewStyleBar];
-    self.launchProgressBar.translatesAutoresizingMaskIntoConstraints = NO;
-    self.launchProgressBar.progressTintColor = [UIColor systemGreenColor];
-    self.launchProgressBar.trackTintColor = [[UIColor whiteColor] colorWithAlphaComponent:0.15];
-    self.launchProgressBar.progress = 0.02;
-    [self.launchOverlayView addSubview:self.launchProgressBar];
-
-    // 进度百分比标签（进度条右侧）
-    self.launchPercentLabel = [[UILabel alloc] init];
-    self.launchPercentLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.launchPercentLabel.text = @"2%";
-    self.launchPercentLabel.font = [UIFont monospacedDigitSystemFontOfSize:13 weight:UIFontWeightSemibold];
-    self.launchPercentLabel.textColor = [UIColor systemGreenColor];
-    self.launchPercentLabel.textAlignment = NSTextAlignmentRight;
-    [self.launchOverlayView addSubview:self.launchPercentLabel];
-
-    // 已耗时标签
-    self.launchElapsedTimeLabel = [[UILabel alloc] init];
-    self.launchElapsedTimeLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.launchElapsedTimeLabel.text = localize(@"launch.elapsed", @"已耗时 0秒");
-    self.launchElapsedTimeLabel.font = [UIFont monospacedDigitSystemFontOfSize:12 weight:UIFontWeightRegular];
-    self.launchElapsedTimeLabel.textColor = [UIColor colorWithWhite:0.5 alpha:1.0];
-    self.launchElapsedTimeLabel.textAlignment = NSTextAlignmentCenter;
-    [self.launchOverlayView addSubview:self.launchElapsedTimeLabel];
-
-    // ========================================================================
-    // 信息卡片（Java 版本 / 内存 / 渲染器）—— 参照 FCL 启动信息面板
-    // ========================================================================
-    self.launchInfoCardView = [[UIView alloc] init];
-    self.launchInfoCardView.translatesAutoresizingMaskIntoConstraints = NO;
-    self.launchInfoCardView.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.08];
-    self.launchInfoCardView.layer.cornerRadius = 12;
-    self.launchInfoCardView.layer.cornerCurve = kCACornerCurveContinuous;
-    self.launchInfoCardView.layer.borderWidth = 0.5;
-    self.launchInfoCardView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.10].CGColor;
-    [self.launchOverlayView addSubview:self.launchInfoCardView];
-
-    // 读取当前 profile 的启动信息
-    NSString *rendererStr = [PLProfiles resolveKeyForCurrentProfile:@"renderer"] ?: @"auto";
-    NSString *javaVersionStr = [NSString stringWithFormat:@"%@", [PLProfiles resolveKeyForCurrentProfile:@"javaVersion"]];
-    if (javaVersionStr.length == 0 || [javaVersionStr isEqualToString:@"(null)"]) {
-        javaVersionStr = @"自动";
-    } else {
-        javaVersionStr = [NSString stringWithFormat:@"Java %@", javaVersionStr];
-    }
-    NSString *memoryStr;
-    if (getPrefBool(@"java.auto_ram")) {
-        memoryStr = @"自动内存";
-    } else {
-        memoryStr = [NSString stringWithFormat:@"%dMB", getPrefInt(@"java.allocated_memory")];
-    }
-
-    // Java 版本标签
-    self.launchJavaVersionLabel = [[UILabel alloc] init];
-    self.launchJavaVersionLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.launchJavaVersionLabel.text = javaVersionStr;
-    self.launchJavaVersionLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
-    self.launchJavaVersionLabel.textColor = [UIColor colorWithWhite:0.7 alpha:1.0];
-    self.launchJavaVersionLabel.textAlignment = NSTextAlignmentCenter;
-    self.launchJavaVersionLabel.adjustsFontSizeToFitWidth = YES;
-    self.launchJavaVersionLabel.minimumScaleFactor = 0.8;
-    [self.launchInfoCardView addSubview:self.launchJavaVersionLabel];
-
-    // 分隔线 1
-    UIView *separator1 = [[UIView alloc] init];
-    separator1.translatesAutoresizingMaskIntoConstraints = NO;
-    separator1.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.15];
-    [self.launchInfoCardView addSubview:separator1];
-
-    // 内存标签
-    self.launchMemoryLabel = [[UILabel alloc] init];
-    self.launchMemoryLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.launchMemoryLabel.text = memoryStr;
-    self.launchMemoryLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
-    self.launchMemoryLabel.textColor = [UIColor colorWithWhite:0.7 alpha:1.0];
-    self.launchMemoryLabel.textAlignment = NSTextAlignmentCenter;
-    self.launchMemoryLabel.adjustsFontSizeToFitWidth = YES;
-    self.launchMemoryLabel.minimumScaleFactor = 0.8;
-    [self.launchInfoCardView addSubview:self.launchMemoryLabel];
-
-    // 分隔线 2
-    UIView *separator2 = [[UIView alloc] init];
-    separator2.translatesAutoresizingMaskIntoConstraints = NO;
-    separator2.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.15];
-    [self.launchInfoCardView addSubview:separator2];
-
-    // 渲染器标签
-    self.launchRendererLabel = [[UILabel alloc] init];
-    self.launchRendererLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.launchRendererLabel.text = rendererStr;
-    self.launchRendererLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
-    self.launchRendererLabel.textColor = [UIColor colorWithWhite:0.7 alpha:1.0];
-    self.launchRendererLabel.textAlignment = NSTextAlignmentCenter;
-    self.launchRendererLabel.adjustsFontSizeToFitWidth = YES;
-    self.launchRendererLabel.minimumScaleFactor = 0.8;
-    [self.launchInfoCardView addSubview:self.launchRendererLabel];
-
-    // ========================================================================
-    // 取消启动按钮
-    // ========================================================================
-    // 注意：由于 launchOverlayView.userInteractionEnabled = NO，
-    // 取消按钮放在一个独立的透明容器中，该容器仅覆盖按钮区域，
-    // 不影响其他区域的触摸穿透。
-    // 但更简单的做法是：将取消按钮也添加到 launchOverlayView，
-    // 然后重写 launchOverlayView 的 hitTest 方法使其仅对取消按钮返回命中。
-    // 这里采用更简洁的方案：取消按钮放在 launchOverlayView 外层的一个
-    // 独立容器中（该容器 userInteractionEnabled = YES，但仅覆盖按钮区域）。
-    // 但为了简化代码，我们直接把取消按钮加到 launchOverlayView，
-    // 并在 launchOverlayView 上重写 hitTest。
-    // —— 实际上 UIView 不能在运行时重写 hitTest（需要子类）。
-    // 最简方案：取消按钮不加到 launchOverlayView，而是加到 self.view，
-    // 位于 launchOverlayView 之上，仅覆盖按钮区域。
     self.launchCancelButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.launchCancelButton.translatesAutoresizingMaskIntoConstraints = NO;
     [self.launchCancelButton setTitle:localize(@"launch.cancel", @"取消启动") forState:UIControlStateNormal];
-    [self.launchCancelButton setTitleColor:[UIColor colorWithWhite:0.6 alpha:1.0] forState:UIControlStateNormal];
+    [self.launchCancelButton setTitleColor:[UIColor colorWithWhite:0.7 alpha:1.0] forState:UIControlStateNormal];
     self.launchCancelButton.titleLabel.font = [UIFont systemFontOfSize:14];
-    self.launchCancelButton.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.08];
+    self.launchCancelButton.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.1];
     self.launchCancelButton.layer.cornerRadius = 8;
     self.launchCancelButton.layer.cornerCurve = kCACornerCurveContinuous;
     [self.launchCancelButton addTarget:self action:@selector(cancelLaunch) forControlEvents:UIControlEventTouchUpInside];
-    // 取消按钮直接添加到 self.view（在 launchOverlayView 之上），
-    // 这样它不受 launchOverlayView.userInteractionEnabled = NO 的影响。
     [self.view addSubview:self.launchCancelButton];
 
     // ========================================================================
     // 布局约束
     // ========================================================================
-    CGFloat sidePadding = self.traitCollection.userInterfaceIdiom == UIUserInterfaceIdiomPad ? 80.0 : 32.0;
-
     [NSLayoutConstraint activateConstraints:@[
-        // 图标：距顶部安全区域
-        [self.launchIconView.topAnchor constraintEqualToAnchor:self.launchOverlayView.safeAreaLayoutGuide.topAnchor constant:0],
-        [self.launchIconView.centerXAnchor constraintEqualToAnchor:self.launchOverlayView.centerXAnchor],
-        [self.launchIconView.widthAnchor constraintEqualToConstant:72],
-        [self.launchIconView.heightAnchor constraintEqualToConstant:72],
+        // 中央容器：水平居中，垂直居中
+        [centerContainer.centerXAnchor constraintEqualToAnchor:self.launchOverlayView.centerXAnchor],
+        [centerContainer.centerYAnchor constraintEqualToAnchor:self.launchOverlayView.centerYAnchor],
 
-        // 旋转指示器：图标下方
-        [self.launchSpinner.topAnchor constraintEqualToAnchor:self.launchIconView.bottomAnchor constant:12],
-        [self.launchSpinner.centerXAnchor constraintEqualToAnchor:self.launchOverlayView.centerXAnchor],
+        // 旋转指示器：容器顶部居中
+        [self.launchSpinner.topAnchor constraintEqualToAnchor:centerContainer.topAnchor],
+        [self.launchSpinner.centerXAnchor constraintEqualToAnchor:centerContainer.centerXAnchor],
 
-        // 标题：旋转指示器下方
-        [self.launchTitleLabel.topAnchor constraintEqualToAnchor:self.launchSpinner.bottomAnchor constant:10],
-        [self.launchTitleLabel.leadingAnchor constraintEqualToAnchor:self.launchOverlayView.leadingAnchor constant:sidePadding],
-        [self.launchTitleLabel.trailingAnchor constraintEqualToAnchor:self.launchOverlayView.trailingAnchor constant:-sidePadding],
+        // 标题：转圈下方
+        [self.launchTitleLabel.topAnchor constraintEqualToAnchor:self.launchSpinner.bottomAnchor constant:16],
+        [self.launchTitleLabel.leadingAnchor constraintEqualToAnchor:centerContainer.leadingAnchor],
+        [self.launchTitleLabel.trailingAnchor constraintEqualToAnchor:centerContainer.trailingAnchor],
+        [self.launchTitleLabel.bottomAnchor constraintEqualToAnchor:centerContainer.bottomAnchor],
 
-        // 阶段文案：标题下方
-        [self.launchStageLabel.topAnchor constraintEqualToAnchor:self.launchTitleLabel.bottomAnchor constant:8],
-        [self.launchStageLabel.leadingAnchor constraintEqualToAnchor:self.launchOverlayView.leadingAnchor constant:sidePadding],
-        [self.launchStageLabel.trailingAnchor constraintEqualToAnchor:self.launchOverlayView.trailingAnchor constant:-sidePadding],
-
-        // 进度条：阶段文案下方
-        [self.launchProgressBar.topAnchor constraintEqualToAnchor:self.launchStageLabel.bottomAnchor constant:20],
-        [self.launchProgressBar.leadingAnchor constraintEqualToAnchor:self.launchOverlayView.leadingAnchor constant:sidePadding],
-        [self.launchProgressBar.trailingAnchor constraintEqualToAnchor:self.launchOverlayView.trailingAnchor constant:-sidePadding],
-        [self.launchProgressBar.heightAnchor constraintEqualToConstant:6],
-
-        // 百分比：进度条下方右侧
-        [self.launchPercentLabel.topAnchor constraintEqualToAnchor:self.launchProgressBar.bottomAnchor constant:4],
-        [self.launchPercentLabel.trailingAnchor constraintEqualToAnchor:self.launchOverlayView.trailingAnchor constant:-sidePadding],
-
-        // 已耗时：百分比下方
-        [self.launchElapsedTimeLabel.topAnchor constraintEqualToAnchor:self.launchPercentLabel.bottomAnchor constant:4],
-        [self.launchElapsedTimeLabel.leadingAnchor constraintEqualToAnchor:self.launchOverlayView.leadingAnchor constant:sidePadding],
-        [self.launchElapsedTimeLabel.trailingAnchor constraintEqualToAnchor:self.launchOverlayView.trailingAnchor constant:-sidePadding],
-
-        // 信息卡片：已耗时下方
-        [self.launchInfoCardView.topAnchor constraintEqualToAnchor:self.launchElapsedTimeLabel.bottomAnchor constant:16],
-        [self.launchInfoCardView.leadingAnchor constraintEqualToAnchor:self.launchOverlayView.leadingAnchor constant:sidePadding],
-        [self.launchInfoCardView.trailingAnchor constraintEqualToAnchor:self.launchOverlayView.trailingAnchor constant:-sidePadding],
-        [self.launchInfoCardView.heightAnchor constraintEqualToConstant:36],
-
-        // Java 版本：卡片左侧 1/3
-        [self.launchJavaVersionLabel.leadingAnchor constraintEqualToAnchor:self.launchInfoCardView.leadingAnchor constant:8],
-        [self.launchJavaVersionLabel.centerYAnchor constraintEqualToAnchor:self.launchInfoCardView.centerYAnchor],
-        [self.launchJavaVersionLabel.widthAnchor constraintEqualToAnchor:self.launchInfoCardView.widthAnchor multiplier:0.3 constant:-8],
-
-        // 分隔线 1
-        [separator1.leadingAnchor constraintEqualToAnchor:self.launchJavaVersionLabel.trailingAnchor constant:4],
-        [separator1.centerYAnchor constraintEqualToAnchor:self.launchInfoCardView.centerYAnchor],
-        [separator1.widthAnchor constraintEqualToConstant:1],
-        [separator1.heightAnchor constraintEqualToAnchor:self.launchInfoCardView.heightAnchor multiplier:0.5],
-
-        // 内存：卡片中间 1/3
-        [self.launchMemoryLabel.leadingAnchor constraintEqualToAnchor:separator1.trailingAnchor constant:4],
-        [self.launchMemoryLabel.centerYAnchor constraintEqualToAnchor:self.launchInfoCardView.centerYAnchor],
-        [self.launchMemoryLabel.widthAnchor constraintEqualToAnchor:self.launchInfoCardView.widthAnchor multiplier:0.3 constant:-8],
-
-        // 分隔线 2
-        [separator2.leadingAnchor constraintEqualToAnchor:self.launchMemoryLabel.trailingAnchor constant:4],
-        [separator2.centerYAnchor constraintEqualToAnchor:self.launchInfoCardView.centerYAnchor],
-        [separator2.widthAnchor constraintEqualToConstant:1],
-        [separator2.heightAnchor constraintEqualToAnchor:self.launchInfoCardView.heightAnchor multiplier:0.5],
-
-        // 渲染器：卡片右侧 1/3
-        [self.launchRendererLabel.leadingAnchor constraintEqualToAnchor:separator2.trailingAnchor constant:4],
-        [self.launchRendererLabel.centerYAnchor constraintEqualToAnchor:self.launchInfoCardView.centerYAnchor],
-        [self.launchRendererLabel.trailingAnchor constraintEqualToAnchor:self.launchInfoCardView.trailingAnchor constant:-8],
-
-        // 取消按钮：信息卡片下方
-        [self.launchCancelButton.topAnchor constraintEqualToAnchor:self.launchInfoCardView.bottomAnchor constant:16],
+        // 取消按钮：底部安全区域上方
+        [self.launchCancelButton.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-24],
         [self.launchCancelButton.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
         [self.launchCancelButton.widthAnchor constraintEqualToConstant:120],
         [self.launchCancelButton.heightAnchor constraintEqualToConstant:36],
@@ -1506,14 +1299,6 @@ static GameSurfaceView* pojavWindow;
                                              selector:@selector(onFirstFrameRendered)
                                                  name:@"PojavFirstFrameRendered"
                                                object:nil];
-
-    // 启动阶段轮转定时器（每 0.5 秒切换一次阶段文案，同时推进进度条）
-    self.launchStageTimer = [NSTimer scheduledTimerWithTimeInterval:0.5
-                                                             target:self
-                                                           selector:@selector(updateLaunchStage)
-                                                           userInfo:nil
-                                                            repeats:YES];
-    [[NSRunLoop mainRunLoop] addTimer:self.launchStageTimer forMode:NSRunLoopCommonModes];
 }
 
 /// 取消启动：用户点击"取消启动"按钮时调用。
@@ -1542,79 +1327,27 @@ static GameSurfaceView* pojavWindow;
 /// 2. 推进进度条（基于已耗时，封顶 95%）
 /// 3. 更新已耗时显示
 - (void)updateLaunchStage {
-    if (self.launchOverlayDismissed || !self.launchOverlayView) return;
-
-    NSTimeInterval elapsed = [NSDate timeIntervalSinceReferenceDate] - self.launchStartTime;
-
-    // 阶段切换：基于已耗时计算（每 2.5 秒一个阶段），避免 static 变量在多次启动间不重置
-    NSInteger stageIndex = (NSInteger)(elapsed / 2.5);
-    if (stageIndex >= self.launchStages.count) {
-        stageIndex = self.launchStages.count - 1;
-    }
-    if (stageIndex != self.currentStageIndex) {
-        self.currentStageIndex = stageIndex;
-        self.launchStageLabel.text = self.launchStages[stageIndex];
-    }
-
-    // 进度条推进：基于已耗时，前 3 秒快速到 20%，之后缓慢推进，封顶 95%
-    CGFloat targetProgress;
-    if (elapsed < 3.0) {
-        targetProgress = 0.02 + (elapsed / 3.0) * 0.18; // 2% → 20%
-    } else if (elapsed < 30.0) {
-        targetProgress = 0.20 + ((elapsed - 3.0) / 27.0) * 0.55; // 20% → 75%
-    } else if (elapsed < 60.0) {
-        targetProgress = 0.75 + ((elapsed - 30.0) / 30.0) * 0.15; // 75% → 90%
-    } else {
-        targetProgress = MIN(0.95, 0.90 + ((elapsed - 60.0) / 60.0) * 0.05); // 90% → 95%（封顶）
-    }
-    // 仅当目标进度大于当前进度时更新（避免回退）
-    if (targetProgress > self.launchProgressBar.progress) {
-        [self.launchProgressBar setProgress:targetProgress animated:YES];
-        // 同步更新百分比标签
-        self.launchPercentLabel.text = [NSString stringWithFormat:@"%.0f%%", targetProgress * 100];
-    }
-
-    // 更新已耗时显示
-    NSString *timeStr;
-    if (elapsed > 60) {
-        timeStr = [NSString stringWithFormat:localize(@"launch.elapsed_minutes", @"已耗时 %.0f分%.0f秒"), elapsed / 60, (double)((int)elapsed % 60)];
-    } else {
-        timeStr = [NSString stringWithFormat:localize(@"launch.elapsed_seconds", @"已耗时 %.0f秒"), elapsed];
-    }
-    self.launchElapsedTimeLabel.text = timeStr;
+    // FCL 风格启动界面不再需要阶段轮转和进度推进。
+    // 此方法保留为空实现仅为兼容可能的旧调用点（实际上 setupLaunchOverlay
+    // 已不再创建 launchStageTimer，此方法不会被调用）。
 }
 
-/// 首帧渲染通知回调：进度条跳到 100%，淡出并移除启动遮罩层
+/// 首帧渲染通知回调：淡出并移除启动遮罩层
 - (void)onFirstFrameRendered {
     dispatch_async(dispatch_get_main_queue(), ^{
         if (self.launchOverlayDismissed) return;
         self.launchOverlayDismissed = YES;
 
-        [self.launchStageTimer invalidate];
-        self.launchStageTimer = nil;
         [self.launchSpinner stopAnimating];
 
-        // 进度条跳到 100%
-        [self.launchProgressBar setProgress:1.0 animated:YES];
-        self.launchPercentLabel.text = @"100%";
-
-        // 更新最终文案
         NSTimeInterval elapsed = [NSDate timeIntervalSinceReferenceDate] - self.launchStartTime;
-        self.launchStageLabel.text = localize(@"launch.complete", @"启动完成！");
-        NSString *timeStr;
-        if (elapsed > 60) {
-            timeStr = [NSString stringWithFormat:localize(@"launch.total_minutes", @"总耗时 %.0f分%.0f秒"), elapsed / 60, (double)((int)elapsed % 60)];
-        } else {
-            timeStr = [NSString stringWithFormat:localize(@"launch.total_seconds", @"总耗时 %.1f秒"), elapsed];
-        }
-        self.launchElapsedTimeLabel.text = timeStr;
 
         // 隐藏取消按钮（淡出动画与遮罩层一起进行）
         [self.launchCancelButton setHidden:YES];
 
-        // 延迟 0.4 秒后淡出移除（让用户看到 100% 进度和"启动完成"提示）
+        // 淡出移除遮罩层（FCL 风格：简洁的淡出过渡）
         [UIView animateWithDuration:0.4
-                              delay:0.4
+                              delay:0.1
                             options:UIViewAnimationOptionCurveEaseOut
                          animations:^{
             self.launchOverlayView.alpha = 0.0;
@@ -1624,12 +1357,6 @@ static GameSurfaceView* pojavWindow;
             [self.launchOverlayView removeFromSuperview];
             self.launchOverlayView = nil;
             self.launchGradientLayer = nil;
-            // 清理新增的 UI 元素引用
-            self.launchInfoCardView = nil;
-            self.launchPercentLabel = nil;
-            self.launchJavaVersionLabel = nil;
-            self.launchMemoryLabel = nil;
-            self.launchRendererLabel = nil;
             [self.launchCancelButton removeFromSuperview];
             self.launchCancelButton = nil;
             [[NSNotificationCenter defaultCenter] removeObserver:self name:@"PojavFirstFrameRendered" object:nil];
@@ -1644,20 +1371,12 @@ static GameSurfaceView* pojavWindow;
         if (self.launchOverlayDismissed) return;
         self.launchOverlayDismissed = YES;
 
-        [self.launchStageTimer invalidate];
-        self.launchStageTimer = nil;
         [self.launchSpinner stopAnimating];
         [[NSNotificationCenter defaultCenter] removeObserver:self name:@"PojavFirstFrameRendered" object:nil];
 
         [self.launchOverlayView removeFromSuperview];
         self.launchOverlayView = nil;
         self.launchGradientLayer = nil;
-        // 清理新增的 UI 元素引用
-        self.launchInfoCardView = nil;
-        self.launchPercentLabel = nil;
-        self.launchJavaVersionLabel = nil;
-        self.launchMemoryLabel = nil;
-        self.launchRendererLabel = nil;
         [self.launchCancelButton removeFromSuperview];
         self.launchCancelButton = nil;
         NSLog(@"[SurfaceViewController] Launch overlay dismissed due to launch error");
@@ -2413,9 +2132,7 @@ static NSMutableDictionary *s_touchToFingerIdMap = nil;
     [self.statsDisplayLink invalidate];
     self.statsDisplayLink = nil;
 
-    // 阶段13/16：清理启动遮罩层资源
-    [self.launchStageTimer invalidate];
-    self.launchStageTimer = nil;
+    // 清理启动遮罩层资源
     [[NSNotificationCenter defaultCenter] removeObserver:self name:@"PojavFirstFrameRendered" object:nil];
     self.launchOverlayView = nil;
     self.launchGradientLayer = nil;

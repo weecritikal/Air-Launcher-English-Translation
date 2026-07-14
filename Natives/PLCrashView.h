@@ -1,8 +1,9 @@
 #import <UIKit/UIKit.h>
 
 // FCL 风格重构：PLCrashView 现为 UIViewController 子类（不再是 UIView）。
-// 类名保留为 PLCrashView 以保持向后兼容（AIFixViewController / PLLogOutputView 的调用点不变）。
-// 内部采用单列卡片布局 + Auto Layout + UIStackView，修复旧实现的手算 frame 问题：
+// 类名保留为 PLCrashView 以保持向后兼容（PLLogOutputView 的调用点不变）。
+// 内部采用左右分栏布局（左日志 + 右按钮）+ Auto Layout + UIStackView，
+// 参照 FCL 的崩溃界面设计。
 //   1. OOM 卡片高度被 layoutSubviews 硬编码 140 覆盖
 //   2. 窄屏左右分栏挤压（iPhone 上右栏过窄）
 //   3. layoutSubviews 反复重算导致按钮错位

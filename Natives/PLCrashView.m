@@ -3,8 +3,6 @@
 #import "SurfaceViewController.h"
 #import "ios_uikit_bridge.h"
 #import "utils.h"
-#import "AIFixViewController.h"
-#import "AIFixService.h"
 #import "BackgroundManager.h"
 
 @interface PLCrashView ()
@@ -50,7 +48,6 @@ typedef NS_ENUM(NSInteger, CrashType) {
 @property (nonatomic, strong) UILabel *logPlaceholderLabel;
 @property (nonatomic, strong) UIButton *restartButton;
 @property (nonatomic, strong) UIButton *shareButton;
-@property (nonatomic, strong) UIButton *aiFixButton;
 @property (nonatomic, strong) UIButton *githubButton;
 @property (nonatomic, strong) UIButton *fullLogButton;
 @property (nonatomic, strong) UIButton *exitButton;
@@ -189,6 +186,25 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
 #pragma mark - UI Setup
 
 - (void)setupUI {
+    // ============================================================
+    // FCL 风格崩溃界面：左边大日志框 + 右边按钮列
+    // ============================================================
+    // 参照 FCL (FoldCraftLauncher) 的崩溃界面布局：
+    //   - 顶部：简洁的错误信息卡片（图标 + 标题 + 错误代码）
+    //   - 下方水平分栏：
+    //     - 左侧（占 65% 宽度）：大日志文本框，显示崩溃日志内容
+    //     - 右侧（占 35% 宽度）：垂直排列的按钮列
+    //       - 重启启动器（蓝色强调）
+    //       - 退出启动器（退出进程，不重启）
+    //       - 分享日志
+    //       - 前往 GitHub Issues
+    //       - 查看完整日志
+    //
+    // 关键修复：之前"重启启动器"和"退出启动器"按钮功能相同
+    // （都是返回启动器主界面），现在明确区分：
+    //   - 重启启动器：exit(0) + openURL 拉起应用（重启整个启动器）
+    //   - 退出启动器：exit(0) 直接退出进程（不重启）
+
     // 主滚动视图（内容超出屏幕时可滚动）
     _mainScrollView = [[UIScrollView alloc] init];
     _mainScrollView.translatesAutoresizingMaskIntoConstraints = NO;
@@ -198,7 +214,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     _mainScrollView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
     [self.view addSubview:_mainScrollView];
 
-    // 主垂直 StackView（所有卡片和按钮垂直排列）
+    // 主垂直 StackView（错误卡片 + 水平分栏）
     _mainStackView = [[UIStackView alloc] init];
     _mainStackView.axis = UILayoutConstraintAxisVertical;
     _mainStackView.spacing = 16;
@@ -219,14 +235,49 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
         [_mainStackView.widthAnchor constraintEqualToAnchor:_mainScrollView.frameLayoutGuide.widthAnchor],
     ]];
 
-    // StackView 左右留白（卡片不贴边）
+    // StackView 左右留白
     _mainStackView.layoutMargins = UIEdgeInsetsMake(16, 20, 16, 20);
     _mainStackView.layoutMarginsRelativeArrangement = YES;
 
+    // 1. 错误信息卡片（顶部）
     [self setupErrorCard];
+
+    // 2. 快速修复建议卡片（可选，有建议时才显示）
     [self setupSuggestionsCard];
+
+    // 3. 水平分栏容器：左日志 + 右按钮
+    UIStackView *horizontalSplit = [[UIStackView alloc] init];
+    horizontalSplit.axis = UILayoutConstraintAxisHorizontal;
+    horizontalSplit.spacing = 12;
+    horizontalSplit.alignment = UIStackViewAlignmentFill;
+    horizontalSplit.distribution = UIStackViewDistributionFill;
+    horizontalSplit.translatesAutoresizingMaskIntoConstraints = NO;
+    [_mainStackView addArrangedSubview:horizontalSplit];
+
+    // 3a. 左侧：日志卡片
     [self setupLogCard];
-    [self setupButtons];
+    // 将日志卡片添加到水平分栏的左侧
+    [horizontalSplit addArrangedSubview:_logCardView];
+
+    // 3b. 右侧：按钮列容器
+    UIStackView *buttonColumn = [[UIStackView alloc] init];
+    buttonColumn.axis = UILayoutConstraintAxisVertical;
+    buttonColumn.spacing = 10;
+    buttonColumn.alignment = UIStackViewAlignmentFill;
+    buttonColumn.distribution = UIStackViewDistributionFillEqually;
+    buttonColumn.translatesAutoresizingMaskIntoConstraints = NO;
+    [horizontalSplit addArrangedSubview:buttonColumn];
+
+    // 设置左侧日志卡片占据约 65% 宽度，右侧按钮列占据约 35%
+    NSLayoutConstraint *logWidthConstraint = [_logCardView.widthAnchor constraintEqualToAnchor:horizontalSplit.widthAnchor multiplier:0.65];
+    logWidthConstraint.priority = UILayoutPriorityDefaultHigh;
+    logWidthConstraint.active = YES;
+
+    // 按钮列最小宽度（确保按钮文字不被截断）
+    [buttonColumn.widthAnchor constraintGreaterThanOrEqualToConstant:140].active = YES;
+
+    // 4. 创建按钮并添加到右侧按钮列
+    [self setupButtonsIntoContainer:buttonColumn];
 }
 
 - (void)setupErrorCard {
@@ -689,7 +740,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     _logCardView.layer.borderWidth = 0.5;
     _logCardView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.10].CGColor;
     _logCardView.translatesAutoresizingMaskIntoConstraints = NO;
-    [_mainStackView addArrangedSubview:_logCardView];
+    // 注意：不在此处添加到 _mainStackView，由 setupUI 中的水平分栏容器管理
     // 应用毛玻璃效果（适配自定义背景壁纸）
     [[BackgroundManager sharedManager] applyEffectToView:_logCardView];
 
@@ -744,8 +795,24 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     ]];
 }
 
-- (void)setupButtons {
-    // 重启启动器按钮（蓝色强调，FCL 风格优先放置）
+- (void)setupButtonsIntoContainer:(UIStackView *)container {
+    // ============================================================
+    // FCL 风格按钮列（右侧垂直排列）
+    // ============================================================
+    // 按钮顺序（从上到下）：
+    //   1. 重启启动器（蓝色强调）— exit(0) + openURL 拉起应用
+    //   2. 退出启动器（红色）— exit(0) 直接退出进程，不重启
+    //   3. 分享日志
+    //   4. 前往 GitHub Issues
+    //   5. 查看完整日志
+    //
+    // 关键修复：之前"重启启动器"和"退出启动器"功能相同
+    //   - 重启：调用 +restartLauncher（exit + relaunch）
+    //   - 退出：调用 dismissAndReturnToLauncher（仅返回启动器主界面，不退出进程）
+    // 用户反馈两个按钮效果一样（都回到启动器），不符合 FCL 行为。
+    // 现在"退出启动器"改为调用 exitLauncherAction（exit(0) 直接退出，不重启）。
+
+    // 1. 重启启动器按钮（蓝色强调）
     // 参照 FCL：很多崩溃是临时加载失败（JIT/dylib/内存碎片），重启即可解决。
     _restartButton = [self createButtonWithTitle:localize(@"crash.restart_launcher", @"重启启动器")
                                             icon:@"arrow.clockwise"
@@ -753,52 +820,46 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
                                        textColor:[UIColor whiteColor]
                                           bold:YES
                                           action:@selector(restartLauncherAction)];
-    [_mainStackView addArrangedSubview:_restartButton];
+    [container addArrangedSubview:_restartButton];
 
-    // 分享日志按钮
-    _shareButton = [self createButtonWithTitle:localize(@"crash.share_log", nil)
+    // 2. 退出启动器按钮（红色强调）
+    // 关键修复：之前此按钮调用 dismissAndReturnToLauncher（返回启动器主界面），
+    // 与"重启启动器"效果一样（都是回到启动器）。现在改为直接 exit(0) 退出进程，
+    // 不重启应用，与 FCL 的"退出"行为一致。
+    _exitButton = [self createButtonWithTitle:localize(@"crash.return_launcher", @"退出启动器")
+                                         icon:@"xmark.circle.fill"
+                                backgroundColor:[UIColor colorWithRed:0.85 green:0.2 blue:0.2 alpha:1.0]
+                                    textColor:[UIColor whiteColor]
+                                       bold:YES
+                                       action:@selector(exitLauncherAction)];
+    [container addArrangedSubview:_exitButton];
+
+    // 3. 分享日志按钮
+    _shareButton = [self createButtonWithTitle:localize(@"crash.share_log", @"分享日志")
                                           icon:@"square.and.arrow.up"
                                  backgroundColor:[[UIColor whiteColor] colorWithAlphaComponent:0.15]
                                      textColor:[UIColor labelColor]
-                                        bold:YES
-                                        action:@selector(shareLog)];
-    [_mainStackView addArrangedSubview:_shareButton];
-
-    // AI 修复按钮（实验性）
-    _aiFixButton = [self createButtonWithTitle:[NSString stringWithFormat:@"%@ (%@)", localize(@"crash.ai_solve", nil), localize(@"crash.experimental", nil)]
-                                          icon:@"cpu"
-                                 backgroundColor:[[UIColor colorWithRed:0.6 green:0.4 blue:0.9 alpha:1.0] colorWithAlphaComponent:0.3]
-                                     textColor:[UIColor whiteColor]
                                         bold:NO
-                                        action:@selector(useAIToSolve)];
-    [_mainStackView addArrangedSubview:_aiFixButton];
+                                        action:@selector(shareLog)];
+    [container addArrangedSubview:_shareButton];
 
-    // GitHub Issues 按钮
-    _githubButton = [self createButtonWithTitle:localize(@"crash.github_issue", nil)
-                                            icon:@"link"
-                                   backgroundColor:[[UIColor colorWithRed:0.3 green:0.5 blue:0.9 alpha:1.0] colorWithAlphaComponent:0.3]
-                                       textColor:[UIColor whiteColor]
-                                          bold:NO
-                                          action:@selector(openGitHubIssues)];
-    [_mainStackView addArrangedSubview:_githubButton];
+    // 4. GitHub Issues 按钮
+    _githubButton = [self createButtonWithTitle:localize(@"crash.github_issue", @"前往 GitHub Issues")
+                                           icon:@"link"
+                                  backgroundColor:[[UIColor colorWithRed:0.3 green:0.5 blue:0.9 alpha:1.0] colorWithAlphaComponent:0.3]
+                                      textColor:[UIColor whiteColor]
+                                         bold:NO
+                                         action:@selector(openGitHubIssues)];
+    [container addArrangedSubview:_githubButton];
 
-    // 查看完整日志按钮（透明，只文字）
+    // 5. 查看完整日志按钮（透明文字按钮）
     _fullLogButton = [UIButton buttonWithType:UIButtonTypeSystem];
     _fullLogButton.translatesAutoresizingMaskIntoConstraints = NO;
-    [_fullLogButton setTitle:localize(@"crash.view_log", nil) forState:UIControlStateNormal];
+    [_fullLogButton setTitle:localize(@"crash.view_log", @"查看日志详情") forState:UIControlStateNormal];
     _fullLogButton.titleLabel.font = [UIFont systemFontOfSize:14];
     [_fullLogButton setTitleColor:[UIColor secondaryLabelColor] forState:UIControlStateNormal];
     [_fullLogButton addTarget:self action:@selector(showFullLog) forControlEvents:UIControlEventTouchUpInside];
-    [_mainStackView addArrangedSubview:_fullLogButton];
-
-    // 返回启动器按钮
-    _exitButton = [self createButtonWithTitle:localize(@"crash.return_launcher", nil)
-                                          icon:@"rectangle.portrait.and.arrow.right"
-                                 backgroundColor:[[UIColor whiteColor] colorWithAlphaComponent:0.10]
-                                     textColor:[UIColor labelColor]
-                                        bold:NO
-                                        action:@selector(dismissAndReturnToLauncher)];
-    [_mainStackView addArrangedSubview:_exitButton];
+    [container addArrangedSubview:_fullLogButton];
 }
 
 - (UIButton *)createButtonWithTitle:(NSString *)title icon:(NSString *)icon backgroundColor:(UIColor *)bgColor textColor:(UIColor *)textColor bold:(BOOL)bold action:(SEL)action {
@@ -999,15 +1060,30 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     }
 }
 
-- (void)useAIToSolve {
-    // 获取崩溃日志路径
-    NSString *logPath = [NSString stringWithFormat:@"%s/latestlog.txt", getenv("POJAV_HOME")];
-
-    // 创建 AI 修复界面
-    AIFixViewController *aiFixVC = [[AIFixViewController alloc] initWithLogPath:logPath];
-    aiFixVC.modalPresentationStyle = UIModalPresentationOverFullScreen;
-
-    [self presentViewController:aiFixVC animated:YES completion:nil];
+/// 退出启动器：直接 exit(0) 退出进程，不重启应用。
+///
+/// 关键修复：之前"退出启动器"按钮调用 dismissAndReturnToLauncher，
+/// 该方法仅返回启动器主界面（不退出进程），与"重启启动器"按钮效果一样
+/// （都是回到启动器）。用户反馈两个按钮功能相同，不符合 FCL 行为。
+///
+/// FCL 的行为：
+///   - 重启启动器 = exit(0) + relaunch（重新拉起应用）
+///   - 退出启动器 = exit(0)（直接退出，不重启）
+///
+/// 现在此方法直接调用 exit(0) 退出进程，不进行 relaunch。
+- (void)exitLauncherAction {
+    NSLog(@"[PLCrashView] 用户点击退出启动器，直接退出进程");
+    // 先清理崩溃界面
+    if (currentCrashVC) {
+        [currentCrashVC dismissViewControllerAnimated:NO completion:nil];
+        currentCrashVC = nil;
+    }
+    // 通知 SurfaceViewController 释放游戏资源
+    if ([SurfaceViewController currentInstance]) {
+        [[SurfaceViewController currentInstance].logOutputView dismissAndReturnToLauncher];
+    }
+    // 直接退出进程，不重启
+    exit(0);
 }
 
 - (void)dismissAndReturnToLauncher {
@@ -1029,8 +1105,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
 #pragma mark - Class Methods for External Callers
 
 /// 类方法：隐藏崩溃界面并返回启动器。
-/// 供 AIFixViewController 等外部 VC 安全调用，避免直接对类对象 performSelector
-/// 实例方法导致的 unrecognized selector 崩溃。
+/// 供外部 VC 安全调用，避免直接对类对象 performSelector 实例方法导致的崩溃。
 + (void)dismissAndReturnToLauncher {
     dispatch_async(dispatch_get_main_queue(), ^{
         if (currentCrashVC) {
@@ -1045,23 +1120,18 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
 /// 参照 FCL 的"重启软件"按钮：很多崩溃是临时加载失败，重启即可解决。
 + (void)restartLauncher {
     dispatch_async(dispatch_get_main_queue(), ^{
-        // 1. 停止 AI 修复服务（若运行中）
-        if ([[AIFixService sharedService] isRunning]) {
-            [[AIFixService sharedService] stopFix];
-        }
-
-        // 2. 清理崩溃界面
+        // 1. 清理崩溃界面
         if (currentCrashVC) {
             [currentCrashVC dismissViewControllerAnimated:NO completion:nil];
             currentCrashVC = nil;
         }
 
-        // 3. 通知 SurfaceViewController 释放游戏资源
+        // 2. 通知 SurfaceViewController 释放游戏资源
         if ([SurfaceViewController currentInstance]) {
             [[SurfaceViewController currentInstance].logOutputView dismissAndReturnToLauncher];
         }
 
-        // 4. 通过 NSURL relaunch 触发系统重新拉起应用（TrollStore/越狱环境支持）
+        // 3. 通过 NSURL relaunch 触发系统重新拉起应用（TrollStore/越狱环境支持）
         //    若 relaunch 失败则回退到 exit(0)，系统在 10 秒内会重新唤起前台 App
         NSString *bundlePath = [NSBundle mainBundle].bundlePath;
         NSURL *appURL = [NSURL fileURLWithPath:bundlePath];

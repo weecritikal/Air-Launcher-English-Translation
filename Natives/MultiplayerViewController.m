@@ -201,17 +201,21 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
                     if (!strongSelf) return;
 
                     if (!success) {
-                        // 启动失败：重置联机启用状态并回退开关
-                        [[MultiplayerManager sharedManager] setMultiplayerEnabled:NO];
-                        [strongSelf.enableSwitch setOn:NO animated:YES];
-                        NSLog(@"[MultiplayerVC] 自动重启节点失败：%@", error.localizedDescription);
+                        // 关键修复（严重5）：节点启动失败时不应清除用户的持久化意图。
+                        // 之前的实现会调用 setMultiplayerEnabled:NO，导致用户下次打开启动器
+                        // 开关已自动变为 OFF，需要重新手动启用。
+                        // 现在仅回退 UI 开关状态（视觉上关闭），但保留 isMultiplayerEnabled=YES，
+                        // 这样用户下次打开启动器时开关会显示 ON 并自动重试启动节点。
+                        // 只有 framework 不可用（永久不可用）时才清除意图。
+                        NSLog(@"[MultiplayerVC] 自动重启节点失败（保留用户意图，下次重试）：%@", error.localizedDescription);
+                        [strongSelf.tableView reloadData];
                     } else {
                         NSLog(@"[MultiplayerVC] 自动重启节点成功");
                         [strongSelf.tableView reloadData];
                     }
                 }];
             } else {
-                // 框架不可用：重置联机启用状态
+                // framework 不可用是永久性故障，清除用户意图
                 [[MultiplayerManager sharedManager] setMultiplayerEnabled:NO];
                 [self.enableSwitch setOn:NO animated:NO];
             }
@@ -330,8 +334,9 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
             if (!strongSelf) return;
 
             if (!success) {
-                // 启动失败：回退开关状态并重置联机启用状态
-                [[MultiplayerManager sharedManager] setMultiplayerEnabled:NO];
+                // 关键修复（严重5）：节点启动失败时保留用户意图，仅回退 UI 开关。
+                // 这样下次打开启动器时开关仍会显示 ON 并自动重试。
+                // 之前会调用 setMultiplayerEnabled:NO，导致用户需要每次重新手动启用。
                 [strongSelf.enableSwitch setOn:NO animated:YES];
                 [strongSelf showSimpleAlertWithTitle:MPLocalized(@"mp.node.start_failed_title", @"启动失败")
                                               message:error.localizedDescription ?: MPLocalized(@"mp.node.start_failed_msg", @"ZeroTier 节点启动失败，请重试。")];

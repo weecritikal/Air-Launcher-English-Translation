@@ -7,6 +7,7 @@
 // 替代原 100x120 纵向网格卡片，信息密度更高、更接近 FCL/ZL2 视觉。
 
 #import "VersionCardCell.h"
+#import "BackgroundManager.h"
 
 // 修复问题3：带内边距的 UILabel 子类，让"正式版/测试版"等类型标签文字
 // 在背景块内完美居中，不再与背景边缘重叠。
@@ -61,7 +62,16 @@
         self.contentView.backgroundColor = [UIColor clearColor];
         self.layer.masksToBounds = NO;
 
-        // ----- 卡片容器：圆角 + 半透明背景 + 浅阴影（与 VMTileBaseCell 阴影标准一致）-----
+        // ----- 卡片容器：圆角 + 背景 + 浅阴影（与 VMTileBaseCell 阴影标准一致）-----
+        //
+        // 关键修复（卡片过于透明）：
+        // 之前使用硬编码的白色 8% alpha 半透明背景，在更换某些自定义背景壁纸后
+        // 卡片几乎不可见，文字与背景对比度极低，严重影响可读性。
+        // 现在通过 BackgroundManager.applyEffectToView: 应用与启动器其他卡片
+        // （如 Mod/光影资源卡片、版本管理磁贴）一致的效果：
+        //   - 毛玻璃模式：插入 UIBlurEffect（SystemThinMaterial），自适应深浅色
+        //   - 半透明模式：使用 secondarySystemBackgroundColor + 用户自定义透明度
+        // 这样卡片背景会随用户的背景设置自适应，不再过于透明。
         self.cardContainer = [[UIView alloc] init];
         self.cardContainer.translatesAutoresizingMaskIntoConstraints = NO;
         self.cardContainer.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.08];
@@ -74,6 +84,9 @@
         self.cardContainer.layer.shadowOpacity = 0.12;
         self.cardContainer.layer.shadowRadius = 8;
         [self.contentView addSubview:self.cardContainer];
+
+        // 应用 BackgroundManager 效果（毛玻璃/半透明自适应），解决过于透明的问题
+        [[BackgroundManager sharedManager] applyEffectToView:self.cardContainer];
 
         // ----- 左侧图标容器：40x40 圆角方块，类型色背景 -----
         self.iconContainer = [[UIView alloc] init];

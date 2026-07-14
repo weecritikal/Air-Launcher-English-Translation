@@ -835,13 +835,21 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     NSLog(@"[MultiplayerManager] 开始连接房间：%@（Network ID: %@）", room.name, room.networkId);
 
     // 1. 设置当前房间并更新状态为连接中
+    //
+    // 关键修复（严重1）：room.status 的修改必须在 _stateLock 内完成，
+    // 与 currentRoom 的赋值保持原子性。之前在锁外修改 room.status，
+    // 如果 disconnectCurrentRoom 并发执行，会出现：
+    //   - connectToRoom 设置 currentRoom = room（持锁）
+    //   - disconnectCurrentRoom 读到 currentRoom = room（持锁）
+    //   - connectToRoom 写 room.status = Connecting（已释放锁）
+    //   - disconnectCurrentRoom 写 room.status = Disconnected（已释放锁，覆盖）
+    //   - 最终 status 与实际状态不符
     [_stateLock lock];
     self.currentRoom = room;
     self.currentNetworkID = [ZeroTierBridge parseNetworkIDFromString:room.networkId];
-    [_stateLock unlock];
-
     room.status = MultiplayerRoomStatusConnecting;
     room.lastConnectedAt = [NSDate date];
+    [_stateLock unlock];
 
     // 关键修复：如果房间不在列表中，先添加到列表，否则后续 updateRoom 都会因找不到 roomId 而失败
     if (![self roomWithId:room.roomId]) {
@@ -1132,9 +1140,37 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     }
 
     uint16_t actualPort = [[SOCKS5Proxy sharedProxy] listeningPort];
+
+    // 关键修复（严重2）：SOCKS5 代理启动成功后，再次检查 currentRoom 是否仍是 room。
+    // M5 修复只在 startWithPort 调用前检查，但检查通过后到 startWithPort 返回之间
+    // 仍有时间窗口。如果用户在此期间点击断开：
+    //   - disconnectCurrentRoom 会清空 currentRoom、清除环境变量、leaveNetwork
+    //   - 但 connectToRoomFlow 继续执行，SOCKS5 代理已启动
+    //   - 最终 SOCKS5 代理在运行、环境变量已设置，但 currentRoom == nil
+    //   - 用户再次调用 disconnectCurrentRoom 因 currentRoom == nil 直接返回，无法清理
+    //   - 导致 SOCKS5 代理和环境变量泄漏
+    //
+    // 修复方案：代理启动成功后再次检查，如果不是当前房间则立即停止代理并返回。
     [_stateLock lock];
-    self.currentSOCKS5Port = actualPort;
+    BOOL stillCurrentAfterProxy = (self.currentRoom != nil &&
+                                   [self.currentRoom.roomId isEqualToString:room.roomId]);
+    if (stillCurrentAfterProxy) {
+        self.currentSOCKS5Port = actualPort;
+    }
     [_stateLock unlock];
+
+    if (!stillCurrentAfterProxy) {
+        NSLog(@"[MultiplayerManager] [连接流程] SOCKS5 启动后检测到 currentRoom 已变更，立即停止代理并清理");
+        [[SOCKS5Proxy sharedProxy] stop];
+        unsetenv([kAMETHYSTSOCKS5ProxyEnvVar UTF8String]);
+        [[ZeroTierBridge sharedInstance] leaveNetwork:netID];
+        if (completion) {
+            completion(NO, [NSError errorWithDomain:kMultiplayerErrorDomain
+                                                code:MultiplayerErrorCodeRoomNotFound
+                                            userInfo:@{NSLocalizedDescriptionKey: @"连接已取消"}]);
+        }
+        return;
+    }
 
     NSLog(@"[MultiplayerManager] [连接流程] SOCKS5 代理已启动，监听 127.0.0.1:%u", actualPort);
 

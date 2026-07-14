@@ -337,12 +337,6 @@ add_executable(AngelAuraAmethyst
   # TouchController bridge and preferences
   TouchControllerBridge.m
   TouchControllerPreferencesViewController.m
-
-  # AI Crash Fix sources
-  AIConfigService.m
-  AIFixService.m
-  AIFixViewController.m
-  AIToolKit.m
 )
 
 # Add ModLoaderIcons PNG files into the app bundle Resources/ModLoaderIcons so they are available at runtime.
