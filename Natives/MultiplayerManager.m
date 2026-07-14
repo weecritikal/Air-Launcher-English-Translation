@@ -1032,23 +1032,66 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     }
 
     // 步骤 4：等待网络就绪
+    //
+    // 关键修复（房客授权卡住问题）：
+    // Private 网络中未授权的节点加入时，ZeroTier 控制器会忽略该节点（不分配 IP），
+    // 但不发送 ACCESS_DENIED 事件。导致 waitForNetworkReady 中的 Denied 检查
+    // 永远不触发，持续轮询 30 秒直到超时，用户看到"正在等待网络就绪"卡住。
+    //
+    // 修复方案：
+    //   1. 启动一个 8 秒后的后台定时器，检查网络状态
+    //   2. 如果已加入网络（Joined）但没有 IP，说明节点未授权
+    //      → 发送"正在等待房主授权"的进度通知
+    //   3. 超时后检查网络状态，给出更精确的错误信息
     NSLog(@"[MultiplayerManager] [连接流程] 步骤 4：等待网络就绪（超时 %.0fs）", kNetworkReadyTimeout);
-    [self notifyConnectionProgress:@"步骤 4/6：正在等待网络就绪（可能需要授权）..."];
+    [self notifyConnectionProgress:@"步骤 4/6：正在等待网络就绪..."];
+
+    // 8 秒后检查是否需要授权提示（Private 网络未授权的节点不会收到 ACCESS_DENIED 事件）
+    __block BOOL step4Done = NO;
+    __weak typeof(self) weakSelf = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(8.0 * NSEC_PER_SEC)),
+                   dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+        if (step4Done) return;
+        ZeroTierNetworkStatus status = [[ZeroTierBridge sharedInstance] networkStatus:netID];
+        NSString *ipv4 = [[ZeroTierBridge sharedInstance] ipv4AddressForNetwork:netID];
+        NSString *ipv6 = [[ZeroTierBridge sharedInstance] ipv6AddressForNetwork:netID];
+        NSLog(@"[MultiplayerManager] [连接流程] 8秒检查：status=%ld, ipv4=%@, ipv6=%@",
+              (long)status, ipv4, ipv6);
+        if (status == ZeroTierNetworkStatusJoined && !ipv4.length && !ipv6.length) {
+            // 已加入网络但没有 IP = Private 网络未授权
+            [weakSelf notifyConnectionProgress:@"仍在等待网络就绪...你的节点可能未被授权，请提醒房主在 central.zerotier.com 后台授权你的设备"];
+        } else if (status == ZeroTierNetworkStatusNotJoined || status == ZeroTierNetworkStatusRequesting) {
+            // 仍在请求加入网络
+            [weakSelf notifyConnectionProgress:@"仍在请求加入网络，请稍候..."];
+        }
+    });
+
     BOOL ready = [[ZeroTierBridge sharedInstance] waitForNetworkReady:netID
                                                               timeout:kNetworkReadyTimeout];
+    step4Done = YES;
+
     if (!ready) {
         // 关键修复（H4）：网络就绪等待失败时，必须离开已加入的网络，避免资源泄漏。
-        // 之前缺失此清理导致：
-        //   - ZeroTier 内部维护着已加入的网络列表，但应用层已放弃连接，网络资源无法释放。
-        //   - 后续重新连接同一房间时，ZeroTier 可能认为"已经加入过"，行为未定义。
-        //   - 多次重试可能导致多个未就绪的网络堆积在节点上，影响后续连接稳定性。
         NSLog(@"[MultiplayerManager] [连接流程] 网络就绪等待失败，清理已加入的网络 %@", room.networkId);
         [[ZeroTierBridge sharedInstance] leaveNetwork:netID];
+
+        // 检查网络状态，给出更精确的错误信息
+        ZeroTierNetworkStatus failStatus = [[ZeroTierBridge sharedInstance] networkStatus:netID];
+        NSString *failDesc = nil;
+        if (failStatus == ZeroTierNetworkStatusDenied) {
+            failDesc = @"网络访问被拒绝。请联系房主在 central.zerotier.com 后台授权你的设备。";
+        } else if (failStatus == ZeroTierNetworkStatusNotFound) {
+            failDesc = @"网络不存在，请检查 Network ID 是否正确。";
+        } else if (failStatus == ZeroTierNetworkStatusJoined) {
+            failDesc = @"已加入网络但未分配到 IP 地址。你的节点可能未被授权，请提醒房主在 central.zerotier.com 后台的 Member Devices 中授权你的设备（勾选 Auth 复选框）。";
+        } else {
+            failDesc = [NSString stringWithFormat:@"等待 ZeroTier 网络就绪超时（%.0fs）。请确认网络 ID 正确且节点已在 central.zerotier.com 后台授权。", kNetworkReadyTimeout];
+        }
 
         if (completion) {
             completion(NO, [NSError errorWithDomain:kMultiplayerErrorDomain
                                                 code:MultiplayerErrorCodeNetworkReadyTimeout
-                                            userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"等待 ZeroTier 网络就绪超时（%.0fs）。请确认网络 ID 正确且节点已在 my.zerotier.com 后台授权。", kNetworkReadyTimeout]}]);
+                                            userInfo:@{NSLocalizedDescriptionKey: failDesc}]);
         }
         return;
     }
