@@ -181,7 +181,28 @@ void init_redirectStdio() {
                 }
             }
             if (canAppendToLog) {
+                // canAppendToLog=YES 时，通过 appendToLog: 同时更新 UI 表格和发送通知
                 [PLLogOutputView appendToLog:@(buf)];
+            } else {
+                // canAppendToLog=NO 时（默认状态，用户未打开日志面板），
+                // PLLogOutputView 不会更新 UI，但 LanPortDetector 仍需要实时检测
+                // MC "对局域网开放"端口。直接在后台线程发送通知，
+                // LanPortDetector 的处理是线程安全的（processLogLine: 是无状态的，
+                // setPort:source: 内部 dispatch_async 到主线程）。
+                //
+                // 关键修复：之前 canAppendToLog=NO 时完全不发送通知，
+                // 导致 LanPortDetector 无法实时检测端口，用户先"对局域网开放"
+                // 再点"当房主"时无法生成分享代码。
+                NSString *logString = @(buf);
+                NSArray *lines = [logString componentsSeparatedByCharactersInSet:
+                    [NSCharacterSet newlineCharacterSet]];
+                for (NSString *line in lines) {
+                    if (line.length > 0) {
+                        [[NSNotificationCenter defaultCenter] postNotificationName:@"PLLogOutputLineNotification"
+                                                                            object:nil
+                                                                          userInfo:@{@"line": line}];
+                    }
+                }
             }
             [file writeData:[NSData dataWithBytes:buf length:rsize]];
             [file synchronizeFile];

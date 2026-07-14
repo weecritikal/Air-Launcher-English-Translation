@@ -38,6 +38,9 @@
 #include <stdlib.h>
 #include <arpa/inet.h>
 
+// Security.framework（用于 Keychain 备份/恢复 ZeroTier 身份文件）
+#import <Security/Security.h>
+
 #pragma mark - 常量定义
 
 /// 错误域名
@@ -361,6 +364,17 @@ static void zeroTierEventCallback(void *msgPtr) {
     }
 
     NSLog(@"[ZeroTierBridge] 启动节点，homeDir = %@", homeDir);
+
+    // 步骤 0：从 Keychain 恢复 ZeroTier 身份文件
+    //
+    // 关键修复：删除启动器重新安装后，zerotier_home 目录被删除，
+    // 节点会生成新的身份（新的 nodeID），导致在 my.zerotier.com 需要
+    // 重新授权新成员。通过 Keychain 备份/恢复身份文件，重装后仍使用
+    // 原来的节点身份，无需重新授权。
+    //
+    // Keychain 数据在删除应用后仍然保留（iOS 安全特性），是持久化
+    // 敏感数据的理想位置。identity.secret 是节点的私钥，需要安全存储。
+    [self restoreIdentityFromKeychainToHomeDir:homeDir];
 
     // 步骤 1：初始化存储路径
     // zts_init_from_storage 指定身份文件的存储目录，
@@ -913,6 +927,11 @@ static void zeroTierEventCallback(void *msgPtr) {
             _nodeID = nodeID;
             _hasBeenOnline = YES; // 标记节点曾经上线，用于 waitForNodeOnlineWithTimeout: 容错
             [_lock unlock];
+
+            // 节点上线后，身份文件已被 libzt 写入 homeDir。
+            // 备份身份文件到 Keychain，这样即使用户删除启动器重新安装，
+            // 也能恢复相同的节点身份，无需在 my.zerotier.com 重新授权。
+            [self backupIdentityToKeychain];
 
             // 通知 delegate
             if ([self.delegate respondsToSelector:@selector(zeroTierNodeOnlineWithID:)]) {
@@ -1485,6 +1504,136 @@ static void zeroTierEventCallback(void *msgPtr) {
 /// @return 16 位十六进制字符串（如 "a84ac5c10a1b2c3d"）
 + (NSString *)formatNetworkID:(uint64_t)networkID {
     return [NSString stringWithFormat:@"%016llx", networkID];
+}
+
+#pragma mark - 身份文件 Keychain 备份与恢复
+
+/// Keychain 中存储身份数据的 service 标识
+static NSString * const kZTIdentityKeychainService = @"com.angelaura.zerotier.identity";
+
+/// ZeroTier 身份文件名列表
+///
+/// libzt 在 homeDir 下生成以下文件：
+/// - identity.secret：节点私钥（最重要，丢失后节点身份改变）
+/// - identity.public：节点公钥
+/// - authtoken.secret：API 认证令牌
+///
+/// 只需备份 identity.secret 和 identity.public 即可保持节点身份不变。
+/// authtoken.secret 会在每次 zts_init_from_storage 时自动重新生成。
+static NSArray<NSString *> * const kZTIdentityFiles = @[@"identity.secret", @"identity.public"];
+
+/// 从 Keychain 读取数据
++ (nullable NSData *)keychainDataForKey:(NSString *)key {
+    NSDictionary *query = @{
+        (__bridge id)kSecClass: (__bridge id)kSecClassGenericPassword,
+        (__bridge id)kSecAttrService: kZTIdentityKeychainService,
+        (__bridge id)kSecAttrAccount: key,
+        (__bridge id)kSecReturnData: @YES,
+        (__bridge id)kSecMatchLimit: (__bridge id)kSecMatchLimitOne,
+    };
+    CFTypeRef result = NULL;
+    OSStatus status = SecItemCopyMatching((__bridge CFDictionaryRef)query, &result);
+    if (status == errSecSuccess && result) {
+        return (__bridge_transfer NSData *)result;
+    }
+    return nil;
+}
+
+/// 向 Keychain 写入数据
++ (void)setKeychainData:(NSData *)data forKey:(NSString *)key {
+    // 先删除旧数据
+    NSDictionary *deleteQuery = @{
+        (__bridge id)kSecClass: (__bridge id)kSecClassGenericPassword,
+        (__bridge id)kSecAttrService: kZTIdentityKeychainService,
+        (__bridge id)kSecAttrAccount: key,
+    };
+    SecItemDelete((__bridge CFDictionaryRef)deleteQuery);
+
+    // 写入新数据
+    NSDictionary *addQuery = @{
+        (__bridge id)kSecClass: (__bridge id)kSecClassGenericPassword,
+        (__bridge id)kSecAttrService: kZTIdentityKeychainService,
+        (__bridge id)kSecAttrAccount: key,
+        (__bridge id)kSecValueData: data,
+        (__bridge id)kSecAttrAccessible: (__bridge id)kSecAttrAccessibleAfterFirstUnlock,
+    };
+    OSStatus status = SecItemAdd((__bridge CFDictionaryRef)addQuery, NULL);
+    if (status != errSecSuccess) {
+        NSLog(@"[ZeroTierBridge] Keychain 写入失败：key=%@, status=%d", key, (int)status);
+    }
+}
+
+/// 备份 ZeroTier 身份文件到 Keychain
+///
+/// 在节点上线后（NODE_ONLINE 事件）调用。此时 libzt 已经在 homeDir 中
+/// 生成了 identity.secret 和 identity.public 文件。
+/// 将这些文件的内容读取并存储到 Keychain，以便删除应用后恢复。
+- (void)backupIdentityToKeychain {
+    NSString *homeDir = nil;
+    [_lock lock];
+    homeDir = [_homeDirectory copy];
+    [_lock unlock];
+
+    if (!homeDir.length) {
+        NSLog(@"[ZeroTierBridge] backupIdentityToKeychain：homeDir 为空，跳过备份");
+        return;
+    }
+
+    NSFileManager *fm = [NSFileManager defaultManager];
+    for (NSString *fileName in kZTIdentityFiles) {
+        NSString *filePath = [homeDir stringByAppendingPathComponent:fileName];
+        if ([fm fileExistsAtPath:filePath]) {
+            NSData *data = [NSData dataWithContentsOfFile:filePath];
+            if (data && data.length > 0) {
+                [[self class] setKeychainData:data forKey:fileName];
+                NSLog(@"[ZeroTierBridge] 身份文件 %@ 已备份到 Keychain（%lu 字节）",
+                      fileName, (unsigned long)data.length);
+            }
+        }
+    }
+}
+
+/// 从 Keychain 恢复 ZeroTier 身份文件到 homeDir
+///
+/// 在 startNodeWithHomeDirectory: 中、zts_init_from_storage 调用前执行。
+/// 检查 homeDir 中是否已有身份文件，如果没有则从 Keychain 恢复。
+/// 这样删除应用重新安装后，仍能使用原来的节点身份。
+- (void)restoreIdentityFromKeychainToHomeDir:(NSString *)homeDir {
+    if (!homeDir || homeDir.length == 0) return;
+
+    NSFileManager *fm = [NSFileManager defaultManager];
+
+    // 确保 homeDir 存在
+    if (![fm fileExistsAtPath:homeDir]) {
+        [fm createDirectoryAtPath:homeDir withIntermediateDirectories:YES attributes:nil error:nil];
+    }
+
+    // 检查 identity.secret 是否已存在
+    NSString *secretPath = [homeDir stringByAppendingPathComponent:@"identity.secret"];
+    if ([fm fileExistsAtPath:secretPath]) {
+        // 身份文件已存在，无需恢复
+        return;
+    }
+
+    // 从 Keychain 恢复身份文件
+    NSLog(@"[ZeroTierBridge] zerotier_home 中未找到身份文件，尝试从 Keychain 恢复...");
+    BOOL restored = NO;
+    for (NSString *fileName in kZTIdentityFiles) {
+        NSData *data = [[self class] keychainDataForKey:fileName];
+        if (data && data.length > 0) {
+            NSString *filePath = [homeDir stringByAppendingPathComponent:fileName];
+            [data writeToFile:filePath atomically:YES];
+            NSLog(@"[ZeroTierBridge] 身份文件 %@ 已从 Keychain 恢复（%lu 字节）",
+                  fileName, (unsigned long)data.length);
+            restored = YES;
+        }
+    }
+
+    if (restored) {
+        NSLog(@"[ZeroTierBridge] 身份文件恢复完成，节点将使用原有身份（无需重新授权）");
+    } else {
+        NSLog(@"[ZeroTierBridge] Keychain 中未找到备份的身份文件，将生成新身份");
+    }
 }
 
 @end

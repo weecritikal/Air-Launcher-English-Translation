@@ -902,10 +902,17 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
                 [self showHostShareCodeAlert];
             } else {
                 // 分享代码不存在：检查 LanPortDetector 是否已检测到端口
-                // （用户可能在连接成功后才开放局域网，端口已检测但分享代码尚未生成）
+                // 先检查 detectedPort，再尝试从日志文件解析
                 NSString *detectedPort = [[LanPortDetector sharedDetector] detectedPort];
+                if (!detectedPort.length) {
+                    NSLog(@"[MultiplayerVC] 幂等检查：detectedPort 为空，尝试从日志文件重新解析...");
+                    detectedPort = [[LanPortDetector sharedDetector] detectFromLogFile];
+                    if (detectedPort.length) {
+                        [[LanPortDetector sharedDetector] setManualPort:detectedPort];
+                    }
+                }
                 if (detectedPort.length) {
-                    NSLog(@"[MultiplayerVC] 房主流程已激活，LanPortDetector 已检测到端口 %@，生成分享代码", detectedPort);
+                    NSLog(@"[MultiplayerVC] 房主流程已激活，检测到端口 %@，生成分享代码", detectedPort);
                     [self generateShareCodeWithPort:detectedPort];
                 } else {
                     // LAN 端口尚未检测到：显示"等待检测 LAN 端口"提示
@@ -976,14 +983,29 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
                 // 之后连接成功时，LanPortDetector 因端口去重不再发通知，
                 // 导致分享代码永远无法生成。
                 //
-                // 修复方案：连接成功后主动检查 LanPortDetector.detectedPort，
-                // 如果已有端口则直接生成分享代码，不再显示"等待检测"提示。
+                // 修复方案（三层兜底）：
+                //   1. 优先检查 LanPortDetector.detectedPort（实时通知已检测到的端口）
+                //   2. 若为 nil，调用 detectFromLogFile 从日志文件重新搜索
+                //      （覆盖通知丢失或检测器未及时启动的情况）
+                //   3. 若仍为 nil，显示"等待检测 LAN 端口"提示
                 NSString *detectedPort = [[LanPortDetector sharedDetector] detectedPort];
+                if (!detectedPort.length) {
+                    // detectedPort 为空：尝试从日志文件重新解析
+                    NSLog(@"[MultiplayerVC] detectedPort 为空，尝试从日志文件重新解析...");
+                    detectedPort = [[LanPortDetector sharedDetector] detectFromLogFile];
+                    if (detectedPort.length) {
+                        // 从日志文件找到端口，手动设置到 LanPortDetector
+                        NSLog(@"[MultiplayerVC] 从日志文件检测到端口 %@，设置到 LanPortDetector", detectedPort);
+                        [[LanPortDetector sharedDetector] setManualPort:detectedPort];
+                    }
+                }
+
                 if (detectedPort.length && strongSelf.hostRoom) {
-                    NSLog(@"[MultiplayerVC] 连接成功时发现 LanPortDetector 已检测到端口 %@，直接生成分享代码", detectedPort);
+                    NSLog(@"[MultiplayerVC] 连接成功，检测到 LAN 端口 %@，直接生成分享代码", detectedPort);
                     [strongSelf generateShareCodeWithPort:detectedPort];
                 } else {
                     // 尚未检测到 LAN 端口：显示等待提示
+                    NSLog(@"[MultiplayerVC] 连接成功但未检测到 LAN 端口，显示等待提示");
                     [strongSelf showHostConnectedAlert];
                 }
             } else {

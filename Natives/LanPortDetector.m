@@ -159,13 +159,15 @@ static NSString *const kLatestLogPath = @"%s/latestlog.txt";
 
 /// 从日志行解析 LAN 端口
 ///
-/// 支持的 MC 日志格式：
-/// 1. "Local game hosted on port 54321"
-/// 2. "Local game hosted on 0.0.0.0:54321"
-/// 3. "Started serving on 54321"
-/// 4. "Integrated server started on port 54321"
-/// 5. "Starting integrated minecraft server on port 54321"
-/// 6. "ThreadedAnvilChunkSystem: Integrated server started on *:54321"
+/// 支持的 MC 日志格式（覆盖 MC 1.8 ~ 1.21+ 所有主流版本）：
+/// 1. "[CHAT] Local game hosted on port 54321"（MC 1.8+ 通用聊天消息日志）
+/// 2. "Local game hosted on 0.0.0.0:54321"（部分版本）
+/// 3. "Local game hosted on *:54321"（部分版本）
+/// 4. "Started serving on 54321"（极旧版本）
+/// 5. "Started on 54321"（MC 1.8 Client thread 日志）
+/// 6. "Integrated server started on port 54321"（部分 Forge 版本）
+/// 7. "Starting integrated minecraft server on port 54321"
+/// 8. "ThreadedAnvilChunkSystem: Integrated server started on *:54321"
 ///
 /// @param logLine 日志行
 /// @return 端口号字符串，nil 表示不包含
@@ -173,37 +175,52 @@ static NSString *const kLatestLogPath = @"%s/latestlog.txt";
     if (!logLine || logLine.length == 0) return nil;
 
     // 预编译正则表达式（性能优化：静态变量只编译一次）
-    // 模式 1：hosted on port XXXXX
     static NSRegularExpression *hostedOnPortRegex = nil;
     static NSRegularExpression *hostedOnAddrPortRegex = nil;
     static NSRegularExpression *startedServingRegex = nil;
+    static NSRegularExpression *startedOnRegex = nil;
     static NSRegularExpression *integratedStartedRegex = nil;
+    static NSRegularExpression *genericPortRegex = nil;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        // "Local game hosted on port 54321"
+        // 模式 1："Local game hosted on port 54321" 或 "[CHAT] Local game hosted on port 54321"
+        // 这是 MC 1.8+ 所有版本通用的聊天消息日志，是最可靠的检测依据
         hostedOnPortRegex = [NSRegularExpression regularExpressionWithPattern:
             @"hosted on port (\\d{1,5})"
             options:NSRegularExpressionCaseInsensitive error:nil];
-        // "Local game hosted on 0.0.0.0:54321" 或 "hosted on *:54321"
+        // 模式 2："Local game hosted on 0.0.0.0:54321" 或 "hosted on *:54321"
         hostedOnAddrPortRegex = [NSRegularExpression regularExpressionWithPattern:
             @"hosted on (?:[0-9.*]+):(\\d{1,5})"
             options:NSRegularExpressionCaseInsensitive error:nil];
-        // "Started serving on 54321"
+        // 模式 3："Started serving on 54321"（极旧版本）
         startedServingRegex = [NSRegularExpression regularExpressionWithPattern:
             @"started serving on (\\d{1,5})"
             options:NSRegularExpressionCaseInsensitive error:nil];
-        // "Integrated server started on port 54321" 或 "on *:54321"
+        // 模式 4："Started on 54321"（MC 1.8 Client thread 日志）
+        // 注意：要求 4-5 位数字以减少误匹配（LAN 端口范围 1024-65535）
+        startedOnRegex = [NSRegularExpression regularExpressionWithPattern:
+            @"started on (\\d{4,5})"
+            options:NSRegularExpressionCaseInsensitive error:nil];
+        // 模式 5："Integrated server started on port 54321" 或 "on *:54321"
         integratedStartedRegex = [NSRegularExpression regularExpressionWithPattern:
             @"integrated server.*?(?:port|on [\\*0-9.]*:?)\\s*(\\d{4,5})"
             options:NSRegularExpressionCaseInsensitive error:nil];
+        // 模式 6：通用兜底模式
+        // 匹配包含 "serving"、"hosted"、"lan port"、"lan server" 等关键词
+        // 且后面跟着端口号的日志行
+        genericPortRegex = [NSRegularExpression regularExpressionWithPattern:
+            @"(?:serving|hosted|lan\\s*(?:port|server)|open.*?lan).*(?::|\\s)+(\\d{4,5})"
+            options:NSRegularExpressionCaseInsensitive error:nil];
     });
 
-    // 逐个模式匹配
+    // 逐个模式匹配（按可靠性从高到低排序）
     NSArray<NSRegularExpression *> *regexes = @[
-        hostedOnPortRegex,
-        hostedOnAddrPortRegex,
-        startedServingRegex,
-        integratedStartedRegex,
+        hostedOnPortRegex,       // 最可靠：MC 1.8+ 通用聊天消息
+        hostedOnAddrPortRegex,   // 次可靠：带 IP/通配符的 hosted on
+        startedServingRegex,     // 旧版本：started serving on
+        startedOnRegex,          // MC 1.8：started on
+        integratedStartedRegex,  // Forge：integrated server
+        genericPortRegex,        // 兜底：通用模式
     ];
 
     for (NSRegularExpression *regex in regexes) {
@@ -239,21 +256,32 @@ static NSString *const kLatestLogPath = @"%s/latestlog.txt";
                                                   encoding:NSUTF8StringEncoding
                                                      error:&error];
     if (error || !content || content.length == 0) {
-        NSLog(@"[LanPortDetector] 读取日志文件失败：%@", error.localizedDescription);
+        NSLog(@"[LanPortDetector] 读取日志文件失败：%@（路径：%@）", error.localizedDescription, logPath);
         return nil;
     }
+
+    NSLog(@"[LanPortDetector] 日志文件读取成功（%lu 字节），开始搜索 LAN 端口...", (unsigned long)content.length);
 
     // 按行分割，从后往前搜索（最近的端口匹配）
     NSArray<NSString *> *lines = [content componentsSeparatedByCharactersInSet:
         [NSCharacterSet newlineCharacterSet]];
 
+    NSLog(@"[LanPortDetector] 日志共 %lu 行", (unsigned long)lines.count);
+
     for (NSInteger i = lines.count - 1; i >= 0; i--) {
         NSString *line = lines[i];
         NSString *port = [self parsePortFromLogLine:line];
         if (port) {
-            NSLog(@"[LanPortDetector] 从日志文件第 %ld 行检测到端口：%@", (long)i, port);
+            NSLog(@"[LanPortDetector] 从日志文件第 %ld 行检测到端口：%@（行内容：%@）", (long)i, port, line);
             return port;
         }
+    }
+
+    // 未找到端口：打印最后 10 行日志帮助诊断
+    NSLog(@"[LanPortDetector] 日志文件中未找到 LAN 端口，最后 10 行日志：");
+    NSInteger startIdx = MAX(0, (NSInteger)lines.count - 10);
+    for (NSInteger i = startIdx; i < (NSInteger)lines.count; i++) {
+        NSLog(@"[LanPortDetector]   行 %ld: %@", (long)i, lines[i]);
     }
 
     return nil;
