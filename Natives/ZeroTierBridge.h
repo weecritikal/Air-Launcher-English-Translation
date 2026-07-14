@@ -64,6 +64,20 @@ typedef NS_ENUM(NSInteger, ZeroTierNetworkStatus) {
     ZeroTierNetworkStatusError           // 网络状态错误
 };
 
+/// ZeroTier 对端节点连接模式
+///
+/// 描述到某个 ZeroTier peer 的当前路径状态：
+///   Unknown    → 尚未收到该 peer 的连接事件
+///   Direct     → 直连
+///   Relay      → 流量通过 ZeroTier 中继转发
+///   Unreachable→ 对端不可达
+typedef NS_ENUM(NSInteger, ZeroTierPeerConnectionMode) {
+    ZeroTierPeerConnectionModeUnknown = 0,
+    ZeroTierPeerConnectionModeDirect,
+    ZeroTierPeerConnectionModeRelay,
+    ZeroTierPeerConnectionModeUnreachable
+};
+
 /// ZeroTierBridge 代理协议
 ///
 /// 所有方法均为 @optional，代理可选择实现感兴趣的事件回调。
@@ -111,6 +125,39 @@ typedef NS_ENUM(NSInteger, ZeroTierNetworkStatus) {
 - (void)zeroTierAddressAssigned:(uint64_t)networkID
                          family:(int)family
                         address:(NSString *)address;
+
+/// 节点已上线（新版回调，同时返回节点 ID 字符串）
+/// @param nodeId ZeroTier 节点 ID 字符串（16 位十六进制）
+- (void)zeroTierBridgeDidGoOnline:(NSString *)nodeId;
+
+/// 节点已离线
+- (void)zeroTierBridgeDidGoOffline;
+
+/// 对端节点连接模式发生变化
+/// @param mode 新的连接模式
+/// @param peerID 对端节点 ID
+- (void)zeroTierPeerConnectionModeChanged:(ZeroTierPeerConnectionMode)mode
+                                forPeer:(uint64_t)peerID;
+
+/// 对端节点路径地址发生变化
+/// @param bridge ZeroTierBridge 实例
+/// @param peerId 对端节点 ID
+/// @param address 路径地址字符串（可能为 nil）
+- (void)zeroTierBridge:(ZeroTierBridge *)bridge
+                  peer:(uint64_t)peerId
+      didUpdateAddress:(nullable NSString *)address;
+
+/// ZeroTier 客户端版本过旧，无法加入网络
+/// @param bridge ZeroTierBridge 实例
+/// @param networkId 网络 ID
+- (void)zeroTierBridge:(ZeroTierBridge *)bridge
+ clientTooOldWithNetworkId:(uint64_t)networkId;
+
+/// TCP/IP 协议栈启动/停止状态变化
+/// @param bridge ZeroTierBridge 实例
+/// @param up YES 表示协议栈已启动
+- (void)zeroTierBridge:(ZeroTierBridge *)bridge
+         stackDidGoUp:(BOOL)up;
 
 @end
 
@@ -204,7 +251,11 @@ typedef NS_ENUM(NSInteger, ZeroTierNetworkStatus) {
 
 /// 等待节点上线
 ///
-/// 以 200ms 为间隔轮询 zts_node_is_online()，直到节点上线或超时。
+/// 优先检查当前状态；若未上线则通过信号量等待节点上下线事件，避免忙等。
+/// 状态机：
+///   - 节点从未上线：严格等待 zts_node_is_online() == 1
+///   - 节点曾上线但当前离线：最多等待 10 秒恢复
+///   - 节点正在启动：继续等待直到 Online 或原始超时
 ///
 /// @param timeout 超时时间（秒）
 /// @return YES 如果节点在超时前上线
@@ -212,8 +263,9 @@ typedef NS_ENUM(NSInteger, ZeroTierNetworkStatus) {
 
 /// 等待网络就绪
 ///
-/// 以 200ms 为间隔轮询 zts_net_transport_is_ready() 和 zts_addr_is_assigned()，
-/// 直到网络就绪且 IPv4 地址已分配，或超时。
+/// 优先检查当前状态；若未就绪则通过信号量等待网络相关事件，避免忙等。
+/// 按网络类型区分：标准网络要求 IPv4 地址已分配，Ad-hoc 网络（以 "ff" 开头）
+/// 要求 IPv6 地址已分配，两者都要求 zts_net_transport_is_ready() == 1。
 ///
 /// @param networkID 网络 ID
 /// @param timeout 超时时间（秒）
@@ -308,6 +360,35 @@ typedef NS_ENUM(NSInteger, ZeroTierNetworkStatus) {
 /// @param networkID 网络 ID
 /// @return 16 位十六进制字符串（小写，如 "a84ac5c10a1b2c3d"）
 + (NSString *)formatNetworkID:(uint64_t)networkID;
+
+#pragma mark - Peer 连接模式
+
+/// 查询指定 peer 当前的连接模式
+/// @param peerID 对端节点 ID
+/// @return 连接模式枚举值（无信息时返回 Unknown）
+- (ZeroTierPeerConnectionMode)peerConnectionModeForPeer:(uint64_t)peerID;
+
+#pragma mark - 网络详情查询
+
+/// 获取网络名称
+/// @param networkID ZeroTier Network ID（64 位无符号整数）
+/// @return 网络名称（不可用返回 nil）
+- (nullable NSString *)networkNameForNetwork:(uint64_t)networkID;
+
+/// 获取网络 MTU
+/// @param networkID ZeroTier Network ID（64 位无符号整数）
+/// @return MTU 值（不可用返回 0）
+- (int)networkMTUForNetwork:(uint64_t)networkID;
+
+/// 获取网络类型
+/// @param networkID ZeroTier Network ID（64 位无符号整数）
+/// @return 网络类型（0=private，1=public）
+- (int)networkTypeForNetwork:(uint64_t)networkID;
+
+/// 获取本节点在该网络中的 MAC 地址
+/// @param networkID ZeroTier Network ID（64 位无符号整数）
+/// @return MAC 地址（不可用返回 0）
+- (uint64_t)macAddressForNetwork:(uint64_t)networkID;
 
 @end
 

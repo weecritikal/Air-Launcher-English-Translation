@@ -1,4 +1,5 @@
 #import <Foundation/Foundation.h>
+#import "ZeroTierBridge.h"
 
 NS_ASSUME_NONNULL_BEGIN
 
@@ -81,6 +82,13 @@ typedef NS_ENUM(NSInteger, MultiplayerRoomStatus) {
 /// @param message 进度描述文本（如"步骤 2：等待节点上线..."）
 - (void)multiplayerConnectionProgress:(NSString *)message;
 
+/// ZeroTier 对端节点连接模式发生变化
+///
+/// P2P 直连与中继在延迟和带宽上差异显著，UI 可通过此回调感知当前连接质量。
+///
+/// @param modeDescription 人类可读的连接模式描述（"直连" / "中继" / "不可达" 等）
+- (void)multiplayerPeerConnectionModeChanged:(NSString *)modeDescription;
+
 @end
 
 /// ZeroTier 联机管理器
@@ -141,6 +149,12 @@ typedef NS_ENUM(NSInteger, MultiplayerRoomStatus) {
 ///
 /// 关键修复（M1）：改为 atomic，与 currentRoom 保持一致。
 @property (atomic, copy, readonly, nullable) NSString *currentLocalIP;
+
+/// 当前对端节点的 ZeroTier 连接模式描述
+///
+/// 仅在房间已连接且收到过对端节点的 PEER_* 事件后有效。
+/// 人类可读的描述，如"直连"/"中继"/"不可达"/"未知"，未连接时为 nil。
+@property (atomic, copy, readonly, nullable) NSString *currentPeerConnectionMode;
 
 #pragma mark - 框架检测
 

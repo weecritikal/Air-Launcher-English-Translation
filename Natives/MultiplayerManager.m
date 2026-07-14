@@ -253,6 +253,9 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
 /// 关键修复（M1）：改为 atomic，与头文件声明保持一致
 @property (atomic, copy, readwrite, nullable) NSString *currentLocalIP;
 
+/// 可读写的对端节点连接模式描述
+@property (atomic, copy, readwrite, nullable) NSString *currentPeerConnectionMode;
+
 /// 可读写的端口转发本地端口
 @property (atomic, assign, readwrite) uint16_t currentForwardingPort;
 
@@ -295,6 +298,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
         _currentRoom = nil;
         _currentSOCKS5Port = 0;
         _currentLocalIP = nil;
+        _currentPeerConnectionMode = nil;
         _nodeStarted = NO;
         _currentNetworkID = 0;
 
@@ -893,6 +897,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
                     self.currentLocalIP = nil;
                     self.currentSOCKS5Port = 0;
                     self.currentForwardingPort = 0;
+                    self.currentPeerConnectionMode = nil;
                     NSLog(@"[MultiplayerManager] 连接失败，已清空 currentRoom 状态引用");
                 } else {
                     NSLog(@"[MultiplayerManager] 连接失败但 currentRoom 已变更（用户可能切换了房间），不清空状态");
@@ -1311,6 +1316,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     self.currentSOCKS5Port = 0;
     self.currentForwardingPort = 0;
     self.currentLocalIP = nil;
+    self.currentPeerConnectionMode = nil;
     [_stateLock unlock];
 
     // 2. 清除环境变量
@@ -1375,6 +1381,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     [_stateLock lock];
     self.currentSOCKS5Port = 0;
     self.currentForwardingPort = 0;
+    self.currentPeerConnectionMode = nil;
     [_stateLock unlock];
 
     if ([self.delegate respondsToSelector:@selector(multiplayerNodeOffline)]) {
@@ -1469,9 +1476,15 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
         [self updateRoom:room];
 
         if ([self.delegate respondsToSelector:@selector(multiplayerRoom:didFailWithError:)]) {
+            // 明确识别 ZeroTier 客户端版本过旧错误，附带清晰描述
+            NSString *finalDescription = errorDescription;
+            if ([errorDescription containsString:@"版本过旧"]) {
+                finalDescription = @"ZeroTier 版本过旧，无法加入网络。请更新 zt.framework 后重试。";
+                NSLog(@"[MultiplayerManager] 检测到 CLIENT_TOO_OLD 错误，已转换为明确提示");
+            }
             NSError *error = [NSError errorWithDomain:kMultiplayerErrorDomain
                                                   code:MultiplayerErrorCodeJoinNetworkFailed
-                                              userInfo:@{NSLocalizedDescriptionKey: errorDescription}];
+                                              userInfo:@{NSLocalizedDescriptionKey: finalDescription}];
             // 关键修复（H6）：与 zeroTierNetworkReady 同样的修复——
             // dispatch_async 到主线程期间，用户可能切换了房间，需要再次校验
             // currentRoom 仍是同一个 room，避免向 delegate 通知过时的房间状态。
@@ -1485,6 +1498,39 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
                 }
             });
         }
+    }
+}
+
+- (void)zeroTierPeerConnectionModeChanged:(ZeroTierPeerConnectionMode)mode
+                                forPeer:(uint64_t)peerID {
+    NSString *description = [self descriptionForPeerConnectionMode:mode];
+    NSLog(@"[MultiplayerManager] 对端节点连接模式变化：peerID=%016llx mode=%@", peerID, description);
+
+    [_stateLock lock];
+    self.currentPeerConnectionMode = description;
+    [_stateLock unlock];
+
+    if ([self.delegate respondsToSelector:@selector(multiplayerPeerConnectionModeChanged:)]) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self.delegate multiplayerPeerConnectionModeChanged:description];
+        });
+    }
+}
+
+/// 将 ZeroTierPeerConnectionMode 转换为人类可读的描述
+/// @param mode 连接模式枚举值
+/// @return 本地化描述字符串
+- (NSString *)descriptionForPeerConnectionMode:(ZeroTierPeerConnectionMode)mode {
+    switch (mode) {
+        case ZeroTierPeerConnectionModeDirect:
+            return @"直连";
+        case ZeroTierPeerConnectionModeRelay:
+            return @"中继";
+        case ZeroTierPeerConnectionModeUnreachable:
+            return @"不可达";
+        case ZeroTierPeerConnectionModeUnknown:
+        default:
+            return @"未知";
     }
 }
 

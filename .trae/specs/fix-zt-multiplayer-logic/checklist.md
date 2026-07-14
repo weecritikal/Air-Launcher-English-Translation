@@ -1,0 +1,26 @@
+# Checklist
+
+- [x] ZeroTierBridge.h 中新增 ZeroTierPeerConnectionMode 枚举定义（Unknown/Direct/Relay/Unreachable）
+- [x] ZeroTierBridge.h 中 ZeroTierBridgeDelegate 协议新增 zeroTierPeerConnectionModeChanged:forPeer: 方法
+- [x] ZeroTierBridge.h 中新增 networkNameForNetwork:、networkMTUForNetwork:、networkTypeForNetwork:、macAddressForNetwork: 方法声明
+- [x] ZeroTierBridge.h 中新增 peerConnectionModeForPeer: 方法声明
+- [x] ZeroTierBridge.m 的 zeroTierEventCallback 函数中提取 peer 信息（peer_id）封装到 eventData
+- [x] ZeroTierBridge.m 的 handleEventData: 中处理 ZTS_EVENT_NETWORK_CLIENT_TOO_OLD 事件，通知 delegate 错误信息
+- [x] ZeroTierBridge.m 的 handleEventData: 中处理 ZTS_EVENT_NETWORK_UPDATE 事件，清除 IP 缓存并重新通知 delegate
+- [x] ZeroTierBridge.m 的 handleEventData: 中处理 ZTS_EVENT_PEER_DIRECT 事件，更新 peer 模式为 Direct
+- [x] ZeroTierBridge.m 的 handleEventData: 中处理 ZTS_EVENT_PEER_RELAY 事件，更新 peer 模式为 Relay
+- [x] ZeroTierBridge.m 的 handleEventData: 中处理 ZTS_EVENT_PEER_UNREACHABLE 事件，更新 peer 模式为 Unreachable
+- [x] ZeroTierBridge.m 实现 peerConnectionModeForPeer: 查询方法
+- [x] ZeroTierBridge.m 实现网络详情查询方法（networkNameForNetwork:、networkMTUForNetwork:、networkTypeForNetwork:、macAddressForNetwork:）
+- [x] ZeroTierBridge.m 的 stopNode 和 ZTS_EVENT_NODE_DOWN 处理中清理 _peerConnectionModes 字典
+- [x] ZeroTierBridge.m 的 waitForNodeOnlineWithTimeout: 实现新的分类等待策略（严格等待/10秒重连等待/继续等待）
+- [x] ZeroTierBridge.m 的 waitForNetworkReady:timeout: 按网络类型区分 IPv4/IPv6 检查
+- [x] MultiplayerManager.h 的 MultiplayerManagerDelegate 协议新增 multiplayerPeerConnectionModeChanged: 方法
+- [x] MultiplayerManager.h 新增 currentPeerConnectionMode 只读属性
+- [x] MultiplayerManager.m 实现 zeroTierPeerConnectionModeChanged:forPeer: 回调，转换为 multiplayerPeerConnectionModeChanged:
+- [x] MultiplayerManager.m 处理 CLIENT_TOO_OLD 错误事件时附带明确错误信息
+- [x] MultiplayerManager.m 处理 NETWORK_UPDATE 触发后的 IP 刷新逻辑
+- [x] 所有新增的 delegate 方法均标记为 @optional
+- [x] 新增的代码不引入 minizip / SSZipArchive 依赖
+- [x] 新增的代码不修改 SOCKS5Proxy、PortForwarder、JavaLauncher、LanPortDetector、CMakeLists.txt
+- [x] MultiplayerManager.m 中对 PortForwarder 的调用逻辑保持不变（远程新增的 PortForwarder 不属本优化范围）
