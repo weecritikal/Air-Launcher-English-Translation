@@ -123,6 +123,16 @@ typedef NS_ENUM(NSInteger, MultiplayerRoomStatus) {
 /// 当前 SOCKS5 代理是否正在运行
 @property (nonatomic, assign, readonly) BOOL isSOCKS5ProxyRunning;
 
+/// 当前端口转发器监听的本地端口（未运行时返回 0）
+///
+/// 房客连接成功后，PortForwarder 在本地监听一个端口（如 25565），
+/// 转发到房主的 ZeroTier IP:MC LAN 端口。房客在 MC 中输入
+/// 127.0.0.1:此端口 即可连接到房主的游戏。
+@property (atomic, assign, readonly) uint16_t currentForwardingPort;
+
+/// 当前端口转发器是否正在运行
+@property (nonatomic, assign, readonly) BOOL isPortForwarderRunning;
+
 /// ZeroTier 节点是否已上线
 @property (nonatomic, assign, readonly) BOOL isNodeOnline;
 

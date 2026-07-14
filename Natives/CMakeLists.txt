@@ -213,6 +213,7 @@ add_executable(AngelAuraAmethyst
   LanPortDetector.m
   ZeroTierBridge.m
   SOCKS5Proxy.m
+  PortForwarder.m
   LauncherMenuViewController.m
   LauncherNavigationController.m
   LauncherNewsViewController.m

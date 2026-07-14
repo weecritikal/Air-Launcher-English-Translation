@@ -1233,6 +1233,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     // 标记房客流程激活
     self.isGuestFlowActive = YES;
     self.lastShareCode = shareCode;
+    // 临时设置房主地址，连接成功后会在 showGuestConnectedAlert 中更新为端口转发地址
     self.lastServerAddress = [NSString stringWithFormat:@"%@:%@", parsedRoom.hostIP, parsedRoom.hostPort];
 
     // 设置房客房间对象（保存以便显示状态）
@@ -1292,7 +1293,24 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     MultiplayerRoom *room = self.guestRoom;
     NSString *hostIP = room.hostIP.length ? room.hostIP : ([[MultiplayerManager sharedManager] currentLocalIP] ?: @"-");
     NSString *hostPort = room.hostPort.length ? room.hostPort : @"25565";
-    NSString *serverAddress = [NSString stringWithFormat:@"%@:%@", hostIP, hostPort];
+
+    // 关键修复：MC 使用 Netty 的 NioSocketChannel，不走 Java 的 SOCKS5 代理。
+    // 房客不能直接输入房主的 ZeroTier IP（系统无法路由），必须通过本地端口转发器。
+    // PortForwarder 在 127.0.0.1:25565（或下一个可用端口）监听，转发到房主的 ZeroTier IP:端口。
+    // 房客在 MC 中输入 127.0.0.1:转发端口 即可连接。
+    uint16_t forwardPort = [[MultiplayerManager sharedManager] currentForwardingPort];
+    NSString *serverAddress;
+    if (forwardPort > 0) {
+        // 端口转发器已启动，使用本地地址
+        serverAddress = [NSString stringWithFormat:@"127.0.0.1:%u", forwardPort];
+        NSLog(@"[MultiplayerVC] 房客使用端口转发地址：%@（转发到 %@:%@）",
+              serverAddress, hostIP, hostPort);
+    } else {
+        // 端口转发器未启动（回退到直连，可能失败）
+        serverAddress = [NSString stringWithFormat:@"%@:%@", hostIP, hostPort];
+        NSLog(@"[MultiplayerVC] 警告：端口转发器未启动，房客直连 %@（可能无法连接）",
+              serverAddress);
+    }
     self.lastServerAddress = serverAddress;
 
     // 自动将服务器地址写入当前 profile（下次启动 MC 时会自动连接到此服务器）

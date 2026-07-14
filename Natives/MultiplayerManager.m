@@ -54,6 +54,7 @@
 #import "MultiplayerManager.h"
 #import "ZeroTierBridge.h"
 #import "SOCKS5Proxy.h"
+#import "PortForwarder.h"
 #import "LauncherPreferences.h"
 
 #pragma mark - 常量定义
@@ -252,6 +253,9 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
 /// 关键修复（M1）：改为 atomic，与头文件声明保持一致
 @property (atomic, copy, readwrite, nullable) NSString *currentLocalIP;
 
+/// 可读写的端口转发本地端口
+@property (atomic, assign, readwrite) uint16_t currentForwardingPort;
+
 /// ZeroTier 节点是否已启动（不代表已上线）
 @property (nonatomic, assign, readwrite) BOOL nodeStarted;
 
@@ -322,6 +326,10 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
 
 - (BOOL)isSOCKS5ProxyRunning {
     return [[SOCKS5Proxy sharedProxy] isRunning];
+}
+
+- (BOOL)isPortForwarderRunning {
+    return [[PortForwarder sharedForwarder] isRunning];
 }
 
 - (BOOL)isNodeOnline {
@@ -884,6 +892,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
                     self.currentNetworkID = 0;
                     self.currentLocalIP = nil;
                     self.currentSOCKS5Port = 0;
+                    self.currentForwardingPort = 0;
                     NSLog(@"[MultiplayerManager] 连接失败，已清空 currentRoom 状态引用");
                 } else {
                     NSLog(@"[MultiplayerManager] 连接失败但 currentRoom 已变更（用户可能切换了房间），不清空状态");
@@ -1217,11 +1226,56 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
 
     NSLog(@"[MultiplayerManager] [连接流程] SOCKS5 代理已启动，监听 127.0.0.1:%u", actualPort);
 
-    // 步骤 6：设置环境变量，供 JavaLauncher 读取
-    [self notifyConnectionProgress:@"步骤 6/6：正在设置代理环境变量..."];
+    // 步骤 6：设置环境变量 + 启动端口转发器
+    //
+    // 端口转发器说明：
+    //   SOCKS5 代理只对 java.net.Socket 有效（登录认证等），但 MC 的多人游戏连接
+    //   使用 Netty 的 NioSocketChannel（基于 java.nio.channels.SocketChannel），
+    //   不走 Java 的 SOCKS5 代理。因此需要额外启动一个本地端口转发器：
+    //     - 在 127.0.0.1:25565（或下一个可用端口）监听 TCP
+    //     - 通过 libzt socket 转发到房主的 ZeroTier IP:MC LAN 端口
+    //     - 房客在 MC 中输入 127.0.0.1:25565 即可连接
+    //
+    //   仅当房间有 hostIP 和 hostPort 时才启动（即房客连接到房主房间时）。
+    //   房主不需要端口转发器（房主自己开 LAN，其他玩家通过 ZeroTier 连过来）。
+    [self notifyConnectionProgress:@"步骤 6/6：正在设置代理和端口转发..."];
     NSString *proxyValue = [NSString stringWithFormat:@"127.0.0.1:%u", actualPort];
     setenv([kAMETHYSTSOCKS5ProxyEnvVar UTF8String], [proxyValue UTF8String], 1);
     NSLog(@"[MultiplayerManager] [连接流程] 已设置环境变量 %@=%@", kAMETHYSTSOCKS5ProxyEnvVar, proxyValue);
+
+    // 如果房间有房主 IP 和端口（房客模式），启动端口转发器
+    NSString *hostIP = room.hostIP;
+    NSString *hostPortStr = room.hostPort;
+    if (hostIP.length > 0 && hostPortStr.length > 0) {
+        uint16_t hostPort = (uint16_t)[hostPortStr integerValue];
+        if (hostPort > 0) {
+            NSLog(@"[MultiplayerManager] [连接流程] 启动端口转发器：127.0.0.1:%u → %@:%u",
+                  PortForwarderDefaultLocalPort, hostIP, hostPort);
+
+            NSError *forwardError = nil;
+            uint16_t forwardPort = [[PortForwarder sharedForwarder] startWithLocalPort:PortForwarderDefaultLocalPort
+                                                                            remoteHost:hostIP
+                                                                            remotePort:hostPort
+                                                                                 error:&forwardError];
+            if (forwardPort > 0) {
+                NSLog(@"[MultiplayerManager] [连接流程] 端口转发器已启动：127.0.0.1:%u → %@:%u",
+                      forwardPort, hostIP, hostPort);
+
+                [_stateLock lock];
+                self.currentForwardingPort = forwardPort;
+                [_stateLock unlock];
+            } else {
+                NSLog(@"[MultiplayerManager] [连接流程] 端口转发器启动失败：%@（不影响 SOCKS5 代理）",
+                      forwardError.localizedDescription);
+                // 端口转发器失败不中断整个连接流程（SOCKS5 代理仍然有效）
+                // 但需要在 completion 中告知调用方，让它可以提示用户
+            }
+        } else {
+            NSLog(@"[MultiplayerManager] [连接流程] 房主端口无效：%@，跳过端口转发", hostPortStr);
+        }
+    } else {
+        NSLog(@"[MultiplayerManager] [连接流程] 房间无房主 IP/端口（可能是房主模式），跳过端口转发");
+    }
 
     if (completion) {
         completion(YES, nil);
@@ -1247,8 +1301,15 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
         [[SOCKS5Proxy sharedProxy] stop];
     }
 
+    // 1.5 停止端口转发器（房客模式）
+    if ([[PortForwarder sharedForwarder] isRunning]) {
+        NSLog(@"[MultiplayerManager] 停止端口转发器");
+        [[PortForwarder sharedForwarder] stop];
+    }
+
     [_stateLock lock];
     self.currentSOCKS5Port = 0;
+    self.currentForwardingPort = 0;
     self.currentLocalIP = nil;
     [_stateLock unlock];
 
