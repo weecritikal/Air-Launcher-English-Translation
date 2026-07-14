@@ -895,15 +895,23 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     if (self.isHostFlowActive) {
         MultiplayerRoom *currentRoom = [[MultiplayerManager sharedManager] currentRoom];
         if (currentRoom && [currentRoom.networkId isEqualToString:presetNetId]) {
-            // 房间已连接，根据是否已有分享代码显示对应提示
+            // 房间已连接
             if (self.lastShareCode.length) {
-                // LAN 端口已检测到，分享代码已生成：直接显示分享代码
+                // 分享代码已存在：直接显示分享代码
                 NSLog(@"[MultiplayerVC] 房主流程已激活且分享代码已存在，直接显示分享代码");
                 [self showHostShareCodeAlert];
             } else {
-                // LAN 端口尚未检测到：显示"等待检测 LAN 端口"提示
-                NSLog(@"[MultiplayerVC] 房主流程已激活但 LAN 端口尚未检测到，显示等待提示");
-                [self showHostConnectedAlert];
+                // 分享代码不存在：检查 LanPortDetector 是否已检测到端口
+                // （用户可能在连接成功后才开放局域网，端口已检测但分享代码尚未生成）
+                NSString *detectedPort = [[LanPortDetector sharedDetector] detectedPort];
+                if (detectedPort.length) {
+                    NSLog(@"[MultiplayerVC] 房主流程已激活，LanPortDetector 已检测到端口 %@，生成分享代码", detectedPort);
+                    [self generateShareCodeWithPort:detectedPort];
+                } else {
+                    // LAN 端口尚未检测到：显示"等待检测 LAN 端口"提示
+                    NSLog(@"[MultiplayerVC] 房主流程已激活但 LAN 端口尚未检测到，显示等待提示");
+                    [self showHostConnectedAlert];
+                }
             }
             return;
         }
@@ -959,8 +967,25 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         // 先关闭进度提示 Alert，再显示结果
         [strongSelf dismissConnectionProgressAlertWithCompletion:^{
             if (success) {
-                // 连接成功：显示房主提示
-                [strongSelf showHostConnectedAlert];
+                // 连接成功
+                //
+                // 关键修复：检查 LanPortDetector 是否已经检测到端口。
+                // 用户可能先在游戏中"对局域网开放"，然后才点"当房主"按钮。
+                // 此时 LanPortDetector 已经检测到端口并发送过通知，但由于
+                // isHostFlowActive 还是 NO，lanPortDidDetect: 回调被忽略。
+                // 之后连接成功时，LanPortDetector 因端口去重不再发通知，
+                // 导致分享代码永远无法生成。
+                //
+                // 修复方案：连接成功后主动检查 LanPortDetector.detectedPort，
+                // 如果已有端口则直接生成分享代码，不再显示"等待检测"提示。
+                NSString *detectedPort = [[LanPortDetector sharedDetector] detectedPort];
+                if (detectedPort.length && strongSelf.hostRoom) {
+                    NSLog(@"[MultiplayerVC] 连接成功时发现 LanPortDetector 已检测到端口 %@，直接生成分享代码", detectedPort);
+                    [strongSelf generateShareCodeWithPort:detectedPort];
+                } else {
+                    // 尚未检测到 LAN 端口：显示等待提示
+                    [strongSelf showHostConnectedAlert];
+                }
             } else {
                 // 连接失败
                 strongSelf.isHostFlowActive = NO;
@@ -1011,6 +1036,21 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         return;
     }
 
+    [self generateShareCodeWithPort:port];
+}
+
+/// 根据检测到的 LAN 端口生成分享代码并显示
+///
+/// 此方法提取自 lanPortDidDetect:，供以下两个场景复用：
+///   1. lanPortDidDetect: 收到 LanPortDetector 通知时调用
+///   2. hostButtonTapped 连接成功后主动检查 LanPortDetector.detectedPort 时调用
+///
+/// 第二个场景用于修复"用户先开放局域网再点当房主"的问题：
+///   - 用户先在 MC 中"对局域网开放" → LanPortDetector 检测到端口并发通知
+///   - 但此时 isHostFlowActive=NO，lanPortDidDetect: 忽略通知
+///   - 用户点"当房主"→ 连接成功 → LanPortDetector 因去重不再发通知
+///   - 修复：连接成功后主动检查 detectedPort 并调用此方法
+- (void)generateShareCodeWithPort:(NSString *)port {
     MultiplayerRoom *room = self.hostRoom;
     if (!room) {
         return;
