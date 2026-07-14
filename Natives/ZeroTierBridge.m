@@ -265,11 +265,12 @@ static void zeroTierEventCallback(void *msgPtr) {
 
 #pragma mark - 框架检测
 
-/// 检测 zt.framework 是否可用（非 stub）
+/// 检测 zt.framework 是否可用
 ///
 /// 检测原理：
-///   - stub 实现（zt_stub.c）中，zts_node_start() 固定返回 ZTS_ERR_SERVICE (-2)
-///   - 真实 framework 中，zts_node_start() 会返回 ZTS_ERR_OK (0) 并启动节点
+///   - ZeroTier Apple Framework 通过 git submodule 引入（external/ZeroTierFramework），
+///     构建时直接链接 submodule 中的预编译 zt.framework。
+///   - 若 zts_node_start() 返回 ZTS_ERR_OK (0)，说明 framework 已正确加载并启动节点。
 ///
 /// 注意：此方法在检测过程中如果发现 framework 可用，会顺带启动节点
 /// （因为 zts_node_start() 有副作用）。这种设计是有意为之，因为：
@@ -293,7 +294,7 @@ static void zeroTierEventCallback(void *msgPtr) {
     NSLog(@"[ZeroTierBridge] 开始检测 framework 可用性...");
 
     // 检测原理：
-    //   - stub 实现（zt_stub.c）中，zts_node_start() 固定返回 ZTS_ERR_SERVICE (-2)
+    //   - ZeroTier Apple Framework 通过 git submodule 引入（external/ZeroTierFramework）
     //   - 真实 framework 中，zts_node_start() 会返回 ZTS_ERR_OK (0) 并启动节点
     //
     // 重要修复（闪退问题）：

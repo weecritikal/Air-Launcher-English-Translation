@@ -34,32 +34,32 @@ include_directories(
   "external/Apple"
   "external/ballpa1n"
   "external/ballpa1n/wrapped"
-  "external/zt.framework/Headers"
+  "external/ZeroTierFramework/ios-example-app/zt.framework/Headers"
 )
 
 # ============================================================================
 # ZeroTier Apple Framework 集成
 # ============================================================================
-# 如果存在真实 zt.framework（含二进制库），则链接真实库；
-# 否则编译 stub 实现（zt_stub.c），使项目能编译通过但联机功能不可用。
+# 参考 ShardLauncher-iOS：将 zerotier-sockets-apple-framework 作为 git submodule
+# 引入（Natives/external/ZeroTierFramework），随仓库一起 checkout/更新，避免手动
+# 复制导致版本陈旧。构建时直接链接 submodule 中的预编译 zt.framework。
 #
-# 真实 framework 路径：external/zt.framework/zt（二进制静态库）
-# stub 实现路径：external/zt_stub.c
-#
-# 要启用真正的联机功能：
-#   1. 从 https://github.com/zerotier/zerotier-sockets-apple-framework 获取 zt.framework
-#   2. 替换 Natives/external/zt.framework/ 中的文件（保留 Headers 和 Modules，替换二进制）
-#   3. 或运行 .github/workflows/build-zt-framework.yml 工作流自动下载
-#   4. 重新构建主项目
-set(ZT_FRAMEWORK_LIB "${CMAKE_CURRENT_LIST_DIR}/external/zt.framework/zt")
+# 要更新 framework：
+#   cd Natives/external/ZeroTierFramework
+#   git fetch origin
+#   git checkout origin/main
+#   cd ../..
+#   git add Natives/external/ZeroTierFramework
+#   git commit -m "chore(deps): update ZeroTierFramework"
+set(ZT_FRAMEWORK_DIR "${CMAKE_CURRENT_LIST_DIR}/external/ZeroTierFramework/ios-example-app")
+set(ZT_FRAMEWORK_LIB "${ZT_FRAMEWORK_DIR}/zt.framework/zt")
 if(EXISTS "${ZT_FRAMEWORK_LIB}")
   message(STATUS "Found ZeroTier framework binary: ${ZT_FRAMEWORK_LIB}")
-  set(ZT_SOURCES "")
-  set(ZT_LIBS "${ZT_FRAMEWORK_LIB}" "-lc++")
+  set(ZT_FRAMEWORK_SEARCH_PATH "-F'${ZT_FRAMEWORK_DIR}'")
+  set(ZT_FRAMEWORK_LINK "-framework zt")
+  set(ZT_CXX_LIB "-lc++")
 else()
-  message(STATUS "zt.framework binary not found, using stub implementation (multiplayer will be unavailable)")
-  set(ZT_SOURCES "external/zt_stub.c")
-  set(ZT_LIBS "")
+  message(FATAL_ERROR "ZeroTier framework not found at ${ZT_FRAMEWORK_LIB}. Please run: git submodule update --init --recursive")
 endif()
 
 # For cacio support library
@@ -253,10 +253,6 @@ add_executable(AngelAuraAmethyst
   ios_uikit_bridge.m
   utils.m
 
-  # ZeroTier Apple Framework 的 stub 实现（仅在真实 zt.framework 二进制不存在时生效）
-  # 真实 framework 存在时 ZT_SOURCES 为空，链接 ZT_LIBS（zt + libc++）
-  ${ZT_SOURCES}
-
   # Version card cell (shared between DownloadViewController and LauncherProfilesViewController)
   VersionCardCell.m
 
@@ -368,6 +364,9 @@ target_link_libraries(AngelAuraAmethyst
   lzma
   "-F'${CMAKE_CURRENT_LIST_DIR}/build'"
   "-F'${CMAKE_CURRENT_LIST_DIR}/resources/Frameworks'"
+  "${ZT_FRAMEWORK_SEARCH_PATH}"
+  "${ZT_FRAMEWORK_LINK}"
+  "${ZT_CXX_LIB}"
   "-framework AltKit"
   "-framework AuthenticationServices"
   "-framework AVFoundation"
@@ -387,7 +386,6 @@ target_link_libraries(AngelAuraAmethyst
   "-framework WebKit"
   "-weak_framework SafariServices"
   ${TOUCHCONTROLLER_LIB}
-  ${ZT_LIBS}
 )
 set_target_properties(AngelAuraAmethyst PROPERTIES
   MACOSX_BUNDLE TRUE

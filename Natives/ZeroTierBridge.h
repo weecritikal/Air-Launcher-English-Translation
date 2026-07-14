@@ -26,14 +26,14 @@
 //    - 协议层完全兼容，可以与 FCL/ZL2/HMCL 互通
 //
 //  stub 模式：
-//    如果 zt.framework 不可用（例如 CI 构建环境），项目会链接 zt_stub.c，
-//    所有 API 返回 ZTS_ERR_SERVICE (-2)。本封装层通过 isFrameworkAvailable
-//    方法检测此情况，避免在无框架环境下执行无效操作。
+//    ZeroTier Apple Framework 通过 git submodule 引入
+//    Natives/external/ZeroTierFramework，随仓库一起更新，避免手动复制导致
+//    版本陈旧。构建时直接链接 submodule 中的预编译 zt.framework。
 //
 //  ============================================================================
 
 #import <Foundation/Foundation.h>
-#import "external/zt.framework/Headers/ZeroTierSockets.h"
+#import "external/ZeroTierFramework/ios-example-app/zt.framework/Headers/ZeroTierSockets.h"
 
 NS_ASSUME_NONNULL_BEGIN
 

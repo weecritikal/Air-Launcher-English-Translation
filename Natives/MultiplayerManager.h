@@ -161,7 +161,8 @@ typedef NS_ENUM(NSInteger, MultiplayerRoomStatus) {
 /// 检测 zt.framework 是否可用（非 stub 实现）
 ///
 /// 本方法委托给 ZeroTierBridge 的 isFrameworkAvailable，结果会被缓存。
-/// 当 framework 不可用时（如 CI 构建环境链接了 zt_stub.c），所有联机功能将不可用。
+/// ZeroTier Apple Framework 通过 git submodule 引入，构建时链接 submodule 中的
+/// 预编译 zt.framework。若 submodule 未初始化，则构建失败。
 ///
 /// @return YES 如果 framework 可用
 - (BOOL)isFrameworkAvailable;

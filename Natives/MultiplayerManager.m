@@ -44,10 +44,11 @@
 //    - 房主需在后台将网络设为"Private"并授权成员，或设为"Public"让任何人可加入
 //    - 加入网络后，ZeroTier 会为每个节点分配一个虚拟 IP（如 10.147.17.x）
 //
-//  stub 模式：
-//    如果 zt.framework 不可用（如 CI 构建环境链接了 zt_stub.c），所有 ZeroTier
-//    API 返回 ZTS_ERR_SERVICE (-2)，isFrameworkAvailable 返回 NO，联机功能不可用。
-//    UI 层应检测此情况并提示用户。
+//  ZeroTier Framework 集成：
+//    参考 ShardLauncher-iOS，将 zerotier-sockets-apple-framework 作为 git submodule
+//    引入（Natives/external/ZeroTierFramework），随仓库一起 checkout/更新，避免手动
+//    复制导致版本陈旧。构建时直接链接 submodule 中的预编译 zt.framework。
+//    若 submodule 未初始化，CMake 会报错并提示运行 git submodule update --init。
 //
 //  ============================================================================
 
