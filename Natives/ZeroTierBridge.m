@@ -112,11 +112,61 @@ typedef NS_ENUM(NSInteger, ZeroTierErrorCode) {
 
     /// 线程锁，保护所有内部状态变量
     NSLock *_lock;
+
+    /// ===== 新增：自动重连与稳定性优化 =====
+
+    /// 是否正在自动重连中（防止重复触发）
+    BOOL _isAutoReconnecting;
+
+    /// 自动重连尝试次数
+    int _autoReconnectAttempts;
+
+    /// 最近一次节点上线时间（用于判断是否为频繁掉线）
+    NSDate *_lastOnlineTime;
+
+    /// 连续掉线计数（用于检测不稳定网络）
+    int _consecutiveOfflineCount;
+
+    /// 保活定时器
+    NSTimer *_keepAliveTimer;
+
+    /// 当前加入的网络ID列表（用于重连后恢复）
+    NSMutableArray<NSNumber *> *_joinedNetworkIDs;
+
+    /// 重连延迟工作项（用于取消待执行的重连）
+    dispatch_block_t _pendingReconnectWork;
 }
 
 /// 处理 ZeroTier 事件回调（由 zeroTierEventCallback 在主线程调用）
 /// @param eventData 从事件消息中提取的数据（eventCode/nodeID/netID/addrStr 等）
 - (void)handleEventData:(NSDictionary *)eventData;
+
+/// 新增：启动自动重连流程
+- (void)startAutoReconnect;
+
+/// 新增：执行自动重连
+- (void)performAutoReconnect;
+
+/// 新增：停止自动重连
+- (void)stopAutoReconnect;
+
+/// 新增：启动网络保活
+- (void)startKeepAlive;
+
+/// 新增：停止网络保活
+- (void)stopKeepAlive;
+
+/// 新增：发送保活包
+- (void)sendKeepAlivePacket;
+
+/// 新增：恢复已加入的网络（重连后调用）
+- (void)restoreJoinedNetworks;
+
+/// 新增：记录网络加入状态（用于重连恢复）
+- (void)recordJoinedNetwork:(uint64_t)networkID;
+
+/// 新增：清除网络加入记录
+- (void)clearJoinedNetworkRecords;
 
 @end
 
@@ -258,7 +308,16 @@ static void zeroTierEventCallback(void *msgPtr) {
         _networkEventSemaphore = dispatch_semaphore_create(0);
         _lock = [[NSLock alloc] init];
 
-        NSLog(@"[ZeroTierBridge] 单例已初始化");
+        // 新增：初始化重连与保活相关状态
+        _isAutoReconnecting = NO;
+        _autoReconnectAttempts = 0;
+        _lastOnlineTime = nil;
+        _consecutiveOfflineCount = 0;
+        _keepAliveTimer = nil;
+        _joinedNetworkIDs = [[NSMutableArray alloc] init];
+        _pendingReconnectWork = nil;
+
+        NSLog(@"[ZeroTierBridge] 单例已初始化（含自动重连与保活机制）");
     }
     return self;
 }
@@ -558,12 +617,20 @@ static void zeroTierEventCallback(void *msgPtr) {
     _homeDirectory = nil;
     _ownNodeIdString = nil;
     _isStackUp = NO;
+    _isAutoReconnecting = NO;
+    _autoReconnectAttempts = 0;
+    _consecutiveOfflineCount = 0;
     [_networkStatuses removeAllObjects];
     [_ipv4Addresses removeAllObjects];
     [_ipv6Addresses removeAllObjects];
     [_peerConnectionModes removeAllObjects];
     [_peerAddresses removeAllObjects];
     [_lock unlock];
+
+    // 新增：停止保活和重连
+    [self stopKeepAlive];
+    [self stopAutoReconnect];
+    [self clearJoinedNetworkRecords];
 
     NSLog(@"[ZeroTierBridge] 节点已停止，内部状态已清理");
 }
@@ -681,6 +748,10 @@ static void zeroTierEventCallback(void *msgPtr) {
     // 更新网络状态为"请求中"
     [_lock lock];
     _networkStatuses[@(networkID)] = @(ZeroTierNetworkStatusRequesting);
+    // 记录已加入的网络
+    if (![_joinedNetworkIDs containsObject:@(networkID)]) {
+        [_joinedNetworkIDs addObject:@(networkID)];
+    }
     [_lock unlock];
 
     NSLog(@"[ZeroTierBridge] 加入网络请求已提交，等待网络配置...");
@@ -706,6 +777,8 @@ static void zeroTierEventCallback(void *msgPtr) {
     [_ipv6Addresses removeObjectForKey:@(networkID)];
     [_peerConnectionModes removeAllObjects];
     [_peerAddresses removeAllObjects];
+    // 从已加入列表中移除
+    [_joinedNetworkIDs removeObject:@(networkID)];
     [_lock unlock];
 
     NSLog(@"[ZeroTierBridge] 已离开网络并清理缓存");
@@ -998,6 +1071,10 @@ static void zeroTierEventCallback(void *msgPtr) {
             _nodeID = nodeID;
             _hasBeenOnline = YES; // 标记节点曾经上线，用于 waitForNodeOnlineWithTimeout: 容错
             _ownNodeIdString = nodeIdString;
+            _consecutiveOfflineCount = 0; // 重置连续掉线计数
+            _lastOnlineTime = [NSDate date];
+            _isAutoReconnecting = NO; // 重连成功，重置标志
+            _autoReconnectAttempts = 0; // 重置重连计数
             [_lock unlock];
 
             // 节点上线后，身份文件已被 libzt 写入 homeDir。
@@ -1015,6 +1092,12 @@ static void zeroTierEventCallback(void *msgPtr) {
 
             // 唤醒等待节点上线的线程
             dispatch_semaphore_signal(_nodeOnlineSemaphore);
+
+            // 新增：启动网络保活（防止iOS系统关闭网络连接）
+            [self startKeepAlive];
+
+            // 新增：如果是自动重连成功，恢复之前加入的网络
+            [self restoreJoinedNetworks];
             break;
         }
 
@@ -1023,6 +1106,8 @@ static void zeroTierEventCallback(void *msgPtr) {
             NSLog(@"[ZeroTierBridge] 事件：节点已离线 (NODE_OFFLINE)");
             [_lock lock];
             _nodeStatus = ZeroTierNodeStatusOffline;
+            _consecutiveOfflineCount++;
+            int offlineCount = _consecutiveOfflineCount;
             [_lock unlock];
 
             // 通知 delegate
@@ -1035,6 +1120,17 @@ static void zeroTierEventCallback(void *msgPtr) {
 
             // 唤醒等待节点上线的线程，让它重新评估状态
             dispatch_semaphore_signal(_nodeOnlineSemaphore);
+
+            // 新增：停止保活（节点已离线，保活无意义）
+            [self stopKeepAlive];
+
+            // 新增：触发自动重连（如果不是用户主动停止）
+            // 连续掉线超过5次可能是网络环境根本问题，不再自动重连
+            if (offlineCount < 5) {
+                [self startAutoReconnect];
+            } else {
+                NSLog(@"[ZeroTierBridge] 连续掉线 %d 次，停止自动重连，建议检查网络环境", offlineCount);
+            }
             break;
         }
 
@@ -1054,12 +1150,20 @@ static void zeroTierEventCallback(void *msgPtr) {
             _homeDirectory = nil;
             _ownNodeIdString = nil;
             _isStackUp = NO;
+            _isAutoReconnecting = NO;
+            _autoReconnectAttempts = 0;
+            _consecutiveOfflineCount = 0;
             [_networkStatuses removeAllObjects];
             [_ipv4Addresses removeAllObjects];
             [_ipv6Addresses removeAllObjects];
             [_peerConnectionModes removeAllObjects];
             [_peerAddresses removeAllObjects];
             [_lock unlock];
+
+            // 新增：停止保活和重连
+            [self stopKeepAlive];
+            [self stopAutoReconnect];
+            [self clearJoinedNetworkRecords];
 
             // 唤醒可能在等待节点上线的线程
             dispatch_semaphore_signal(_nodeOnlineSemaphore);
@@ -1079,12 +1183,18 @@ static void zeroTierEventCallback(void *msgPtr) {
             _hasBeenOnline = NO;
             _ownNodeIdString = nil;
             _isStackUp = NO;
+            _isAutoReconnecting = NO;
+            _autoReconnectAttempts = 0;
             [_networkStatuses removeAllObjects];
             [_ipv4Addresses removeAllObjects];
             [_ipv6Addresses removeAllObjects];
             [_peerConnectionModes removeAllObjects];
             [_peerAddresses removeAllObjects];
             [_lock unlock];
+
+            // 新增：停止保活和重连
+            [self stopKeepAlive];
+            [self stopAutoReconnect];
 
             // 通知 delegate 节点发生致命错误
             if ([self.delegate respondsToSelector:@selector(zeroTierNodeFatalError)]) {
@@ -1105,6 +1215,10 @@ static void zeroTierEventCallback(void *msgPtr) {
 
             [_lock lock];
             _networkStatuses[@(netID)] = @(ZeroTierNetworkStatusJoined);
+            // 记录已加入的网络
+            if (![_joinedNetworkIDs containsObject:@(netID)]) {
+                [_joinedNetworkIDs addObject:@(netID)];
+            }
             [_lock unlock];
 
             // 通知 delegate 网络已就绪
@@ -1232,6 +1346,10 @@ static void zeroTierEventCallback(void *msgPtr) {
             [_lock lock];
             [_ipv4Addresses removeObjectForKey:@(netID)];
             [_ipv6Addresses removeObjectForKey:@(netID)];
+            // 记录此网络为已加入（用于重连恢复）
+            if (![_joinedNetworkIDs containsObject:@(netID)]) {
+                [_joinedNetworkIDs addObject:@(netID)];
+            }
             [_lock unlock];
 
             // 重新查询并通知 delegate
@@ -2035,6 +2153,158 @@ static NSArray<NSString *> * const kZTIdentityFiles = @[@"identity.secret", @"id
     } else {
         NSLog(@"[ZeroTierBridge] Keychain 中未找到备份的身份文件，将生成新身份");
     }
+}
+
+
+#pragma mark - 自动重连与保活
+
+/// 启动自动重连流程
+/// 使用指数退避策略，最多重试5次
+- (void)startAutoReconnect {
+    [_lock lock];
+    if (_isAutoReconnecting || _autoReconnectAttempts >= 5) {
+        [_lock unlock];
+        return;
+    }
+    _isAutoReconnecting = YES;
+    _autoReconnectAttempts++;
+    int attempt = _autoReconnectAttempts;
+    [_lock unlock];
+
+    // 取消之前的待执行重连
+    if (_pendingReconnectWork) {
+        dispatch_block_cancel(_pendingReconnectWork);
+    }
+
+    // 指数退避：2秒, 4秒, 8秒, 16秒, 32秒
+    NSTimeInterval delay = 2.0 * pow(2, attempt - 1);
+    delay = MIN(delay, 60.0);
+
+    NSLog(@"[ZeroTierBridge] 将在%.1f秒后第%d次自动重连", delay, attempt);
+
+    __weak typeof(self) weakSelf = self;
+    _pendingReconnectWork = dispatch_block_create(0, ^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+
+        NSLog(@"[ZeroTierBridge] 执行第%d次自动重连...", attempt);
+
+        // 检查节点状态
+        [strongSelf->_lock lock];
+        BOOL alreadyStarted = strongSelf->_isStarted;
+        NSString *homeDir = strongSelf->_homeDirectory;
+        [strongSelf->_lock unlock];
+
+        if (alreadyStarted) {
+            NSLog(@"[ZeroTierBridge] 重连前检测到节点已启动，跳过");
+            return;
+        }
+
+        if (!homeDir || homeDir.length == 0) {
+            NSLog(@"[ZeroTierBridge] 重连失败：homeDir为空");
+            return;
+        }
+
+        // 重新启动节点
+        NSError *error = nil;
+        BOOL success = [strongSelf startNodeWithHomeDirectory:homeDir error:&error];
+        if (!success) {
+            NSLog(@"[ZeroTierBridge] 自动重连失败：%@", error.localizedDescription);
+            [strongSelf->_lock lock];
+            strongSelf->_isAutoReconnecting = NO;
+            [strongSelf->_lock unlock];
+            // 继续下一次重连
+            [strongSelf startAutoReconnect];
+        }
+    });
+
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay * NSEC_PER_SEC)), 
+                   dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), 
+                   _pendingReconnectWork);
+}
+
+/// 停止自动重连
+- (void)stopAutoReconnect {
+    [_lock lock];
+    _isAutoReconnecting = NO;
+    _autoReconnectAttempts = 0;
+    [_lock unlock];
+
+    if (_pendingReconnectWork) {
+        dispatch_block_cancel(_pendingReconnectWork);
+        _pendingReconnectWork = nil;
+    }
+}
+
+/// 启动网络保活定时器
+- (void)startKeepAlive {
+    [self stopKeepAlive];
+
+    __weak typeof(self) weakSelf = self;
+    _keepAliveTimer = [NSTimer scheduledTimerWithTimeInterval:30.0
+                                                        repeats:YES
+                                                          block:^(NSTimer *timer) {
+        [weakSelf sendKeepAlivePacket];
+    }];
+    NSLog(@"[ZeroTierBridge] 保活定时器已启动（间隔30秒）");
+}
+
+/// 停止网络保活定时器
+- (void)stopKeepAlive {
+    if (_keepAliveTimer) {
+        [_keepAliveTimer invalidate];
+        _keepAliveTimer = nil;
+        NSLog(@"[ZeroTierBridge] 保活定时器已停止");
+    }
+}
+
+/// 发送UDP保活包
+/// 通过ZeroTier网络广播，防止iOS系统关闭连接
+- (void)sendKeepAlivePacket {
+    [_lock lock];
+    BOOL online = (_nodeStatus == ZeroTierNodeStatusOnline);
+    [_lock unlock];
+
+    if (!online) return;
+
+    // 创建UDP socket
+    int sock = zts_bsd_socket(ZTS_AF_INET, ZTS_SOCK_DGRAM, ZTS_IPPROTO_UDP);
+    if (sock < 0) return;
+
+    // 设置广播
+    int broadcast = 1;
+    zts_bsd_setsockopt(sock, ZTS_SOL_SOCKET, ZTS_SO_BROADCAST, &broadcast, sizeof(broadcast));
+
+    struct zts_sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_len = sizeof(addr);
+    addr.sin_family = ZTS_AF_INET;
+    addr.sin_port = htons(9999);
+    zts_inet_pton(ZTS_AF_INET, "255.255.255.255", &addr.sin_addr);
+
+    const char *data = "KEEPALIVE";
+    zts_bsd_sendto(sock, data, strlen(data), 0, (struct zts_sockaddr *)&addr, sizeof(addr));
+    zts_bsd_close(sock);
+}
+
+/// 恢复已加入的网络（重连后调用）
+- (void)restoreJoinedNetworks {
+    [_lock lock];
+    NSArray *networkIDs = [_joinedNetworkIDs copy];
+    [_lock unlock];
+
+    for (NSNumber *netIDNum in networkIDs) {
+        uint64_t netID = [netIDNum unsignedLongLongValue];
+        NSLog(@"[ZeroTierBridge] 重连后恢复加入网络：%016llx", netID);
+        [self joinNetwork:netID error:nil];
+    }
+}
+
+/// 清除网络加入记录
+- (void)clearJoinedNetworkRecords {
+    [_lock lock];
+    [_joinedNetworkIDs removeAllObjects];
+    [_lock unlock];
 }
 
 @end
