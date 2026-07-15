@@ -198,6 +198,13 @@ typedef NS_ENUM(NSInteger, ZeroTierPeerConnectionMode) {
 /// 调用 zts_node_stop 停止节点，并清理内部状态缓存。
 - (void)stopNode;
 
+/// 启动自动重连流程
+///
+/// 使用指数退避策略（2/4/8/16/32 秒）尝试恢复节点连接，最多重试 5 次。
+/// 在 iOS 后台限制导致节点掉线后，由 MultiplayerManager 在应用回到前台时调用。
+/// 若节点已在线或已在重连中，本方法为空操作。
+- (void)startAutoReconnect;
+
 /// 节点是否在线
 /// @return YES 如果节点已上线（zts_node_is_online() 返回 1）
 - (BOOL)isNodeOnline;
