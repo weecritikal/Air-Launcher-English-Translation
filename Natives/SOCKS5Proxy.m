@@ -51,6 +51,7 @@
 #include <sys/select.h>
 #include <sys/time.h>
 #include <stdatomic.h>  // C11 原子操作
+#include <netdb.h>      // getaddrinfo（域名解析，用于 P0-2）
 
 #pragma mark - 常量定义
 
@@ -1110,7 +1111,40 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
                 NSLog(@"[SOCKS5Proxy] 读取域名失败：n=%zd, expected=%d", n, domainLen);
                 return NO;
             }
-            destHost = [NSString stringWithUTF8String:domain];
+            NSString *domainStr = [NSString stringWithUTF8String:domain];
+
+            // 关键修复（P0-2）：libzt 的 zts_bsd_connect 不支持域名解析
+            // （zts_inet_pton 遇到非数字 IP 直接返回 0），需要先用系统
+            // getaddrinfo 把域名解析为 IP，再传给 ZeroTierBridge.connectSocket。
+            // 否则用户在 MC 中填入域名时联机会直接失败。
+            // 解析失败时回退使用原始域名，保持与旧行为兼容（由上层报错）。
+            struct addrinfo hints, *res = NULL;
+            memset(&hints, 0, sizeof(hints));
+            hints.ai_family = AF_UNSPEC;       // 同时接受 IPv4 / IPv6
+            hints.ai_socktype = SOCK_STREAM;
+            int gaiResult = getaddrinfo(domain, NULL, &hints, &res);
+            if (gaiResult == 0 && res != NULL) {
+                char resolvedIP[INET6_ADDRSTRLEN] = {0};
+                if (res->ai_family == AF_INET) {
+                    struct sockaddr_in *sin = (struct sockaddr_in *)res->ai_addr;
+                    inet_ntop(AF_INET, &sin->sin_addr, resolvedIP, sizeof(resolvedIP));
+                } else if (res->ai_family == AF_INET6) {
+                    struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)res->ai_addr;
+                    inet_ntop(AF_INET6, &sin6->sin6_addr, resolvedIP, sizeof(resolvedIP));
+                }
+                if (resolvedIP[0] != '\0') {
+                    destHost = [NSString stringWithUTF8String:resolvedIP];
+                    NSLog(@"[SOCKS5Proxy] 域名 %@ 解析为 %@", domainStr, destHost);
+                } else {
+                    destHost = domainStr;
+                    NSLog(@"[SOCKS5Proxy] 域名 %@ 解析结果为空，回退使用原始域名", domainStr);
+                }
+                freeaddrinfo(res);
+            } else {
+                destHost = domainStr;
+                NSLog(@"[SOCKS5Proxy] 域名 %@ 解析失败（gaiResult=%d：%s），使用原始域名",
+                      domainStr, gaiResult, gai_strerror(gaiResult));
+            }
             break;
         }
 
