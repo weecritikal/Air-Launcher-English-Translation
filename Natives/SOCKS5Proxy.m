@@ -43,13 +43,14 @@
 // POSIX socket 头文件
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>  // TCP_NODELAY
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <string.h>
 #include <errno.h>
 #include <sys/select.h>
 #include <sys/time.h>
-#include <stdatomic.h>  // C11 原子操作，用于 forwardDataBetweenClientFD: 中的标志变量
+#include <stdatomic.h>  // C11 原子操作
 
 #pragma mark - 常量定义
 
@@ -893,6 +894,15 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
             [_remoteFDs addObject:@(remoteFD)];
             [_lock unlock];
 
+            // 关键修复：对客户端 socket 设置 TCP_NODELAY（禁用 Nagle 算法）
+            // Minecraft 是实时交互游戏，延迟比带宽更重要
+            int clientNoDelay = 1;
+            setsockopt(clientFD, IPPROTO_TCP, TCP_NODELAY, &clientNoDelay, sizeof(clientNoDelay));
+
+            // 关键修复：对 libzt socket 设置 TCP_NODELAY（降低 ZeroTier 虚拟网络延迟）
+            int ztNoDelay = 1;
+            zts_bsd_setsockopt(remoteFD, ZTS_IPPROTO_TCP, ZTS_TCP_NODELAY, &ztNoDelay, sizeof(ztNoDelay));
+
             // 步骤 2：双向转发数据
             [self forwardDataBetweenClientFD:clientFD remoteFD:remoteFD];
 
@@ -1245,7 +1255,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
 /// @param remoteFD 远程 socket 文件描述符（libzt socket）
 - (void)forwardDataBetweenClientFD:(int)clientFD
                           remoteFD:(int)remoteFD {
-    // 关键修复（N2）：使用 _Atomic(BOOL) 替代 __block BOOL，确保跨线程内存可见性。
+    // 关键修复（N2）：使用 atomic_bool 替代 __block BOOL，确保跨线程内存可见性。
     //
     // 问题：__block 修饰符只是让变量可以在 block 内被修改，但不提供内存屏障。
     // 在 ARM64（iPhone）等弱内存模型架构上，一个线程对 __block 变量的写入
@@ -1254,16 +1264,18 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
     //   - 继续阻塞在 read/recvData 上，直到对端 FIN 到达或 IO 超时才退出
     //   - 转发任务延迟退出（最坏情况下需要等待对端关闭或 IO 超时）
     //
-    // 修复方案：使用 C11 _Atomic(BOOL)，原子操作自带合适的内存屏障
+    // 修复方案：使用 C11 atomic_bool，原子操作自带合适的内存屏障
     // （memory_order_seq_cst），保证一个线程的写入对另一个线程立即可见。
     //
-    // 关键修复（N2 验证发现）：必须同时使用 __block 和 _Atomic。
+    // 关键修复（N2 验证发现）：必须同时使用 __block 和 atomic。
     // - __block：让变量被 block 按引用捕获（两个 block 共享同一变量），而不是按值捕获
     //   （按值捕获会导致每个 block 有独立副本，原子操作在各自副本上执行，完全失效）
-    // - _Atomic：提供内存屏障，保证跨线程可见性
-    // 两者缺一不可：只有 __block 无内存屏障，只有 _Atomic 会被按值捕获。
-    __block _Atomic(BOOL) clientClosed = NO;
-    __block _Atomic(BOOL) remoteClosed = NO;
+    // - atomic_bool：提供内存屏障，保证跨线程可见性
+    // 两者缺一不可：只有 __block 无内存屏障，只有 atomic 会被按值捕获。
+    // 关键修复：使用 atomic_bool 替代 _Atomic(BOOL)，确保跨平台兼容性
+    // _Atomic(BOOL) 在 Objective-C 中可能不被支持（BOOL 是 signed char 的 typedef）
+    __block atomic_bool clientClosed = ATOMIC_VAR_INIT(false);
+    __block atomic_bool remoteClosed = ATOMIC_VAR_INIT(false);
 
     // 创建并发队列用于双向转发
     dispatch_queue_t forwardQueue = dispatch_queue_create("com.angelaura.socks5.forward", DISPATCH_QUEUE_CONCURRENT);
@@ -1292,11 +1304,12 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
                     NSLog(@"[SOCKS5Proxy] client→remote 结束：n=%zd, errno=%d", n, errno);
 
                     // 标记客户端已关闭（原子写，自带内存屏障）
-                    atomic_store(&clientClosed, YES);
+                    atomic_store(&clientClosed, true);
 
                     // 关闭远程的写端，通知 remote→client 方向退出
                     // shutdown 会导致另一端的 recv 返回 0
-                    shutdown(remoteFD, SHUT_WR);
+                    // 关键修复：remoteFD 是 libzt socket，必须使用 zts_bsd_shutdown
+                    [[ZeroTierBridge sharedInstance] shutdownSocket:remoteFD how:SHUT_WR];
                     break;
                 }
 
@@ -1308,7 +1321,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
                     NSLog(@"[SOCKS5Proxy] 发送到远程失败：sent=%zd", sent);
 
                     // 标记远程已关闭（原子写）
-                    atomic_store(&remoteClosed, YES);
+                    atomic_store(&remoteClosed, true);
 
                     // 关闭客户端的写端
                     shutdown(clientFD, SHUT_WR);
@@ -1343,7 +1356,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
                     NSLog(@"[SOCKS5Proxy] remote→client 结束：n=%zd", n);
 
                     // 标记远程已关闭（原子写）
-                    atomic_store(&remoteClosed, YES);
+                    atomic_store(&remoteClosed, true);
 
                     // 关闭客户端的写端，通知 client→remote 方向退出
                     shutdown(clientFD, SHUT_WR);
@@ -1356,10 +1369,11 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
                     NSLog(@"[SOCKS5Proxy] 发送到客户端失败：sent=%zd", sent);
 
                     // 标记客户端已关闭（原子写）
-                    atomic_store(&clientClosed, YES);
+                    atomic_store(&clientClosed, true);
 
                     // 关闭远程的写端
-                    shutdown(remoteFD, SHUT_WR);
+                    // 关键修复：remoteFD 是 libzt socket，必须使用 zts_bsd_shutdown
+                    [[ZeroTierBridge sharedInstance] shutdownSocket:remoteFD how:SHUT_WR];
                     break;
                 }
             }
