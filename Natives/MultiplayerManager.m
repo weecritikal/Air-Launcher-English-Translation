@@ -58,6 +58,7 @@
 #import "PortForwarder.h"
 #import "LauncherPreferences.h"
 #import "PLProfiles.h"
+#import <UIKit/UIKit.h>  // UIApplicationDidEnterBackgroundNotification 等（P0-B 生命周期监听）
 
 #pragma mark - 常量定义
 
@@ -1424,9 +1425,9 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     // 但 MC 仍会显示"正在连接服务器"界面，造成"进游戏必显示连接服务器"的 bug。
     // 修复：断开联机时同步清空当前 profile 的 serverIp。
     @try {
-        NSString *currentProfile = [PLProfiles.current selectedProfileName];
+        NSString *currentProfile = [[PLProfiles current] selectedProfileName];
         if (currentProfile.length > 0) {
-            [PLProfiles.current setServerIp:@"" forProfile:currentProfile];
+            [[PLProfiles current] setServerIp:@"" forProfile:currentProfile];
             NSLog(@"[MultiplayerManager] 已清空 profile '%@' 的 serverIp", currentProfile);
         }
     } @catch (NSException *e) {
@@ -2280,9 +2281,9 @@ static NSString * const kPresetNetworkIdPrefKey = @"multiplayer.preset_network_i
     // "进游戏必显示连接服务器"的 bug。stopAllMultiplayerServices 在游戏退出
     // /App 进入后台/App 被终止时调用，必须彻底清理。
     @try {
-        NSString *currentProfile = [PLProfiles.current selectedProfileName];
+        NSString *currentProfile = [[PLProfiles current] selectedProfileName];
         if (currentProfile.length > 0) {
-            [PLProfiles.current setServerIp:@"" forProfile:currentProfile];
+            [[PLProfiles current] setServerIp:@"" forProfile:currentProfile];
             NSLog(@"[MultiplayerManager] 已清空 profile '%@' 的 serverIp", currentProfile);
         }
     } @catch (NSException *e) {

@@ -153,6 +153,9 @@ typedef NS_ENUM(NSInteger, ZeroTierErrorCode) {
 /// 新增：执行自动重连
 - (void)performAutoReconnect;
 
+/// 新增：startNode 成功后检查节点是否真正上线（P1-C 修复）
+- (void)checkNodeOnlineAfterStartNode;
+
 /// 新增：停止自动重连
 - (void)stopAutoReconnect;
 
@@ -2294,24 +2297,12 @@ static NSArray<NSString *> * const kZTIdentityFiles = @[@"identity.secret", @"id
             [strongSelf->_lock unlock];
             if (currentAttempt < 5) {
                 NSLog(@"[ZeroTierBridge] startNode 成功，将在60秒后检查节点是否真正上线");
+                __weak typeof(weakSelf) weakWeakSelf = weakSelf;
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(60.0 * NSEC_PER_SEC)),
                                dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
-                    __strong typeof(weakSelf) strongSelf2 = weakSelf;
-                    if (!strongSelf2) return;
-                    BOOL online = (zts_node_is_online() == 1);
-                    if (!online) {
-                        NSLog(@"[ZeroTierBridge] startNode 后60秒节点仍未上线，触发下一次重连");
-                        [strongSelf2->_lock lock];
-                        strongSelf2->_isAutoReconnecting = NO;  // 复位以允许 startAutoReconnect 进入
-                        [strongSelf2->_lock unlock];
-                        [strongSelf2 startAutoReconnect];
-                    } else {
-                        NSLog(@"[ZeroTierBridge] startNode 后60秒节点已确认上线，重连成功");
-                        [strongSelf2->_lock lock];
-                        strongSelf2->_isAutoReconnecting = NO;
-                        strongSelf2->_autoReconnectAttempts = 0;  // 重连成功，复位计数器
-                        strongSelf2->_consecutiveOfflineCount = 0;
-                        [strongSelf2->_lock unlock];
+                    __strong typeof(weakWeakSelf) strongSelf2 = weakWeakSelf;
+                    if (strongSelf2) {
+                        [strongSelf2 checkNodeOnlineAfterStartNode];
                     }
                 });
             } else {
@@ -2328,11 +2319,34 @@ static NSArray<NSString *> * const kZTIdentityFiles = @[@"identity.secret", @"id
                    _pendingReconnectWork);
 }
 
+/// startNode 成功后检查节点是否真正上线（P1-C 修复）
+/// 在 performAutoReconnect 中 startNode 返回成功后 60 秒调用
+/// 若节点仍未上线，复位标志并递归触发下一次重连
+- (void)checkNodeOnlineAfterStartNode {
+    BOOL online = (zts_node_is_online() == 1);
+    if (!online) {
+        NSLog(@"[ZeroTierBridge] startNode 后60秒节点仍未上线，触发下一次重连");
+        [_lock lock];
+        _isAutoReconnecting = NO;  // 复位以允许 startAutoReconnect 进入
+        [_lock unlock];
+        [self startAutoReconnect];
+    } else {
+        NSLog(@"[ZeroTierBridge] startNode 后60秒节点已确认上线，重连成功");
+        [_lock lock];
+        _isAutoReconnecting = NO;
+        _autoReconnectAttempts = 0;  // 重连成功，复位计数器
+        _consecutiveOfflineCount = 0;
+        [_lock unlock];
+    }
+}
+
 /// 停止自动重连
+/// 注意（P1-C 修复）：本方法只复位 _isAutoReconnecting 标志并取消待执行的重连 block，
+/// 不复位 _autoReconnectAttempts / _consecutiveOfflineCount。
+/// 这两个计数器的复位由 stopNode 根据调用场景（用户主动 vs 自动重连）统一管理。
 - (void)stopAutoReconnect {
     [_lock lock];
     _isAutoReconnecting = NO;
-    _autoReconnectAttempts = 0;
     [_lock unlock];
 
     if (_pendingReconnectWork) {
@@ -2383,7 +2397,7 @@ static NSArray<NSString *> * const kZTIdentityFiles = @[@"identity.secret", @"id
     [_lock lock];
     BOOL online = (_nodeStatus == ZeroTierNodeStatusOnline);
     NSArray *networkIDs = [_joinedNetworkIDs copy];
-    NSMutableDictionary<NSNumber *, NSString *> *ipv4Copy = [_ipv4Addresses copy];
+    NSDictionary<NSNumber *, NSString *> *ipv4Copy = [_ipv4Addresses copy];
     [_lock unlock];
 
     if (!online) {
