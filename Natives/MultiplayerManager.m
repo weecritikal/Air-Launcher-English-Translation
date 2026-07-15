@@ -2073,7 +2073,13 @@ static NSString * const kPresetNetworkIdPrefKey = @"multiplayer.preset_network_i
 
     for (MultiplayerRoom *room in rooms) {
         if (room.networkId && room.networkId.length > 0) {
-            uint64_t networkID = [room.networkId unsignedLongLongValue];
+            // networkId 是 16 位十六进制字符串，必须用 parseNetworkIDFromString 解析，
+            // 不能用 unsignedLongLongValue（NSString 无此方法，且默认按十进制解析）
+            uint64_t networkID = [ZeroTierBridge parseNetworkIDFromString:room.networkId];
+            if (networkID == 0) {
+                NSLog(@"[MultiplayerManager] 跳过无效 Network ID：%@", room.networkId);
+                continue;
+            }
             NSLog(@"[MultiplayerManager] 离开网络：%@", room.networkId);
             [[ZeroTierBridge sharedInstance] leaveNetwork:networkID];
         }
