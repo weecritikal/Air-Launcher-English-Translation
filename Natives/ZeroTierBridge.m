@@ -1930,6 +1930,16 @@ static void zeroTierEventCallback(void *msgPtr) {
     }
 
     NSLog(@"[ZeroTierBridge] 连接成功（非阻塞+select，%@）", isIPv6 ? @"IPv6" : @"IPv4");
+
+    // 关键修复：设置 TCP_NODELAY 禁用 Nagle 算法，降低 Minecraft 实时交互延迟
+    int noDelay = 1;
+    int nodelayResult = zts_bsd_setsockopt(fd, ZTS_IPPROTO_TCP, ZTS_TCP_NODELAY, &noDelay, sizeof(noDelay));
+    if (nodelayResult != ZTS_ERR_OK) {
+        NSLog(@"[ZeroTierBridge] 设置 ZTS_TCP_NODELAY 失败：rc = %d, zts_errno = %d（忽略，继续）", nodelayResult, zts_errno);
+    } else {
+        NSLog(@"[ZeroTierBridge] 已设置 ZTS_TCP_NODELAY（禁用 Nagle 算法）");
+    }
+
     return ZTS_ERR_OK;
 }
 
