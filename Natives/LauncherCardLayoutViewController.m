@@ -300,20 +300,22 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
     CGFloat outerMargin = LauncherCardLayoutOuterMargin(self.traitCollection);
 
     // 设置约束
-    // 用 view.leadingAnchor/TrailingAnchor（而非 safeAreaLayoutGuide）约束左右，
-    // 使左右外边距完全由 outerMargin 控制，不受刘海/圆角导致的 safeArea 左右不对称影响。
-    // 顶部/底部仍用 safeAreaLayoutGuide 避免被刘海/home indicator 遮挡，
-    // 但加上 outerMargin 使上下外边距 = safeArea + outerMargin，与左右一致。
-    // 注意：上下用 safeAreaLayoutGuide + outerMargin，左右用 view.edge + outerMargin，
-    // 这样上下会自动避开刘海/home indicator，左右则贴边（卡片圆角与屏幕圆角对齐）。
+    // 四个方向均用 view.edgeAnchor（而非 safeAreaLayoutGuide），使外边距完全由 outerMargin 控制，
+    // 上下左右边距一致（均 = outerMargin），不受刘海/home indicator 导致的 safeArea 不对称影响。
+    //
+    // 修复"下面过宽"问题：之前上下用 safeAreaLayoutGuide + outerMargin，
+    // 导致底部边距 = homeIndicatorInset + outerMargin（约 21+8=29pt），
+    // 而顶部边距 = 0 + outerMargin = 8pt，底部比顶部宽 3.6 倍。
+    // 改为 view.topAnchor/view.bottomAnchor 后，上下边距均 = outerMargin，保持一致。
+    // 卡片背景会延伸到 home indicator 下方，视觉上无影响（卡片有不透明/毛玻璃背景）。
     NSLayoutConstraint *sidebarLeading = [self.sidebarCard.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:outerMargin];
-    NSLayoutConstraint *sidebarTop = [self.sidebarCard.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:outerMargin];
-    NSLayoutConstraint *sidebarBottom = [self.sidebarCard.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-outerMargin];
+    NSLayoutConstraint *sidebarTop = [self.sidebarCard.topAnchor constraintEqualToAnchor:self.view.topAnchor constant:outerMargin];
+    NSLayoutConstraint *sidebarBottom = [self.sidebarCard.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor constant:-outerMargin];
     NSLayoutConstraint *rightTrailing = [self.rightPanelCard.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-outerMargin];
-    NSLayoutConstraint *rightTop = [self.rightPanelCard.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:outerMargin];
-    NSLayoutConstraint *rightBottom = [self.rightPanelCard.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-outerMargin];
-    NSLayoutConstraint *contentTop = [self.contentCard.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:outerMargin];
-    NSLayoutConstraint *contentBottom = [self.contentCard.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-outerMargin];
+    NSLayoutConstraint *rightTop = [self.rightPanelCard.topAnchor constraintEqualToAnchor:self.view.topAnchor constant:outerMargin];
+    NSLayoutConstraint *rightBottom = [self.rightPanelCard.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor constant:-outerMargin];
+    NSLayoutConstraint *contentTop = [self.contentCard.topAnchor constraintEqualToAnchor:self.view.topAnchor constant:outerMargin];
+    NSLayoutConstraint *contentBottom = [self.contentCard.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor constant:-outerMargin];
 
     self.outerMarginConstraints = @[sidebarLeading, sidebarTop, sidebarBottom,
                                     rightTrailing, rightTop, rightBottom,
