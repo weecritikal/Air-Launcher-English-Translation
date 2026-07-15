@@ -18,6 +18,8 @@
 //       （避免 zts_node_start/zts_node_stop 导致节点状态混乱）
 //    4. 状态管理：使用 NSLock 保护内部状态（节点状态、网络状态、IP 地址缓存）
 //    5. Socket 操作：直接转发到 zts_bsd_* API，connectSocket 支持超时设置
+//    6. 自动重连：节点离线后以指数退避方式自动重连，最多 10 次后重置节点
+//    7. Keychain 备份：自动备份/恢复身份文件，防止重装后节点身份变化
 //
 //  事件处理映射表（ZeroTierSockets.h 中的事件码）：
 //    ZTS_EVENT_NODE_ONLINE          (201) → delegate zeroTierNodeOnlineWithID:
@@ -27,7 +29,20 @@
 //    ZTS_EVENT_NETWORK_NOT_FOUND    (210) → delegate zeroTierNetworkJoinFailed:error:
 //    ZTS_EVENT_ADDR_ADDED_IP4       (260) → delegate zeroTierAddressAssigned:family:address:
 //    ZTS_EVENT_ADDR_ADDED_IP6       (262) → delegate zeroTierAddressAssigned:family:address:
+//    ZTS_EVENT_PEER_DIRECT          (230) → delegate zeroTierPeerConnectionModeChanged:
+//    ZTS_EVENT_PEER_RELAY           (231) → delegate zeroTierPeerConnectionModeChanged:
+//    ZTS_EVENT_PEER_UNREACHABLE     (232) → delegate zeroTierPeerConnectionModeChanged:
 //
+//  关键修复（自原始版本新增）：
+//    - 自动重连定时器（指数退避，2s→4s→8s→16s→30s，最多 10 次后重置节点）
+//    - stopNode 后台同步等待节点真正下线（避免残留节点干扰后续启动）
+//    - startNode 检测残留节点并等待清理（防止 stopNode 主线程不等待导致竞争）
+//    - resetNode 完整重置逻辑（停止并重新启动节点）
+//    - 更细粒度的状态锁保护
+//    - 应用前后台切换时的重连优化
+//    - 非阻塞 connect + select 实现真正的超时控制
+//    - 完整的 Keychain 备份与恢复（identity.secret + identity.public）
+//    - 对端连接模式缓存与查询
 //  ============================================================================
 
 #import "ZeroTierBridge.h"
@@ -37,6 +52,12 @@
 #include <string.h>
 #include <stdlib.h>
 #include <arpa/inet.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <unistd.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <sys/time.h>
 
 // Security.framework（用于 Keychain 备份/恢复 ZeroTier 身份文件）
 #import <Security/Security.h>
@@ -56,6 +77,27 @@ typedef NS_ENUM(NSInteger, ZeroTierErrorCode) {
     ZeroTierErrorCodeInvalidArgument      = 6,  // 参数无效
     ZeroTierErrorCodeSocketError          = 7,  // socket 操作失败
 };
+
+/// Keychain 服务名
+static NSString * const kKeychainService = @"com.angelauramc.zerotier";
+
+/// Keychain 中存储身份密钥的 key
+static NSString * const kKeychainSecretKey = @"identity.secret";
+
+/// Keychain 中存储身份公钥的 key
+static NSString * const kKeychainPublicKey = @"identity.public";
+
+/// 重连最大尝试次数（超过后重置节点）
+static const NSInteger kMaxReconnectAttempts = 10;
+
+/// 重连最大延迟（秒）
+static const NSTimeInterval kMaxReconnectDelay = 30.0;
+
+/// 节点下线等待超时（秒）
+static const NSTimeInterval kNodeOfflineWaitTimeout = 5.0;
+
+/// 应用进入后台后重连延迟加倍因子
+static const NSTimeInterval kBackgroundReconnectMultiplier = 2.0;
 
 #pragma mark - ZeroTierBridge 类扩展
 
@@ -112,11 +154,70 @@ typedef NS_ENUM(NSInteger, ZeroTierErrorCode) {
 
     /// 线程锁，保护所有内部状态变量
     NSLock *_lock;
+
+    // ========== 自动重连相关 ==========
+
+    /// 重连定时器（主线程运行）
+    NSTimer *_reconnectTimer;
+
+    /// 当前重连尝试次数
+    NSInteger _reconnectAttempts;
+
+    /// 是否正在重连中
+    BOOL _isReconnecting;
+
+    /// 应用是否在后台
+    BOOL _applicationInBackground;
 }
 
 /// 处理 ZeroTier 事件回调（由 zeroTierEventCallback 在主线程调用）
 /// @param eventData 从事件消息中提取的数据（eventCode/nodeID/netID/addrStr 等）
 - (void)handleEventData:(NSDictionary *)eventData;
+
+/// 启动重连定时器
+- (void)startReconnectTimer;
+
+/// 停止重连定时器
+- (void)stopReconnectTimer;
+
+/// 重连超时处理
+- (void)handleReconnectTimeout;
+
+/// 重置节点（停止并重新启动）
+- (void)resetNode;
+
+/// 备份身份文件到 Keychain
+- (void)backupIdentityToKeychain;
+
+/// 从 Keychain 恢复身份文件到 homeDir
+- (void)restoreIdentityFromKeychainToHomeDir:(NSString *)homeDir;
+
+/// 从 Keychain 加载数据
+- (NSData *)loadKeychainDataForKey:(NSString *)key;
+
+/// 向 Keychain 写入数据
+- (void)setKeychainData:(NSData *)data forKey:(NSString *)key;
+
+/// 保存 identity.secret 到 Keychain
+- (void)saveIdentitySecretToKeychain:(NSString *)secret;
+
+/// 保存 identity.public 到 Keychain
+- (void)saveIdentityPublicToKeychain:(NSString *)publicKey;
+
+/// 检查指定网络是否已就绪（传输层就绪且地址已分配）
+- (BOOL)isNetworkReady:(uint64_t)networkID;
+
+/// 更新对端节点地址并通知代理
+- (void)updatePeerAddress:(uint64_t)peerId address:(NSString *)address;
+
+/// 设置对端节点连接模式并通知代理
+- (void)setConnectionMode:(ZeroTierPeerConnectionMode)mode forPeer:(uint64_t)peerID;
+
+/// 应用进入后台通知
+- (void)applicationDidEnterBackground:(NSNotification *)notification;
+
+/// 应用进入前台通知
+- (void)applicationWillEnterForeground:(NSNotification *)notification;
 
 @end
 
@@ -139,6 +240,7 @@ typedef NS_ENUM(NSInteger, ZeroTierErrorCode) {
 static void zeroTierEventCallback(void *msgPtr) {
     zts_event_msg_t *msg = (zts_event_msg_t *)msgPtr;
     if (!msg) {
+        NSLog(@"[ZeroTierBridge] 事件回调收到空消息指针");
         return;
     }
 
@@ -240,27 +342,76 @@ static void zeroTierEventCallback(void *msgPtr) {
 - (instancetype)init {
     self = [super init];
     if (self) {
-        _nodeStatus = ZeroTierNodeStatusStopped;
+        // 初始化锁
+        _lock = [[NSLock alloc] init];
+
+        // 初始化状态字典
         _networkStatuses = [[NSMutableDictionary alloc] init];
         _ipv4Addresses = [[NSMutableDictionary alloc] init];
         _ipv6Addresses = [[NSMutableDictionary alloc] init];
+        _peerConnectionModes = [[NSMutableDictionary alloc] init];
+        _peerAddresses = [[NSMutableDictionary alloc] init];
+
+        // 初始化状态变量
+        _nodeStatus = ZeroTierNodeStatusStopped;
         _isStarted = NO;
         _frameworkAvailable = NO;
         _frameworkChecked = NO;
         _nodeID = 0;
         _hasBeenOnline = NO;
         _homeDirectory = nil;
-        _peerConnectionModes = [[NSMutableDictionary alloc] init];
-        _peerAddresses = [[NSMutableDictionary alloc] init];
         _ownNodeIdString = nil;
         _isStackUp = NO;
+
+        // 初始化信号量
         _nodeOnlineSemaphore = dispatch_semaphore_create(0);
         _networkEventSemaphore = dispatch_semaphore_create(0);
-        _lock = [[NSLock alloc] init];
+
+        // 初始化重连相关
+        _reconnectTimer = nil;
+        _reconnectAttempts = 0;
+        _isReconnecting = NO;
+        _applicationInBackground = NO;
+
+        // 注册应用生命周期通知
+        [[NSNotificationCenter defaultCenter] addObserver:self
+                                                 selector:@selector(applicationDidEnterBackground:)
+                                                     name:UIApplicationDidEnterBackgroundNotification
+                                                   object:nil];
+        [[NSNotificationCenter defaultCenter] addObserver:self
+                                                 selector:@selector(applicationWillEnterForeground:)
+                                                     name:UIApplicationWillEnterForegroundNotification
+                                                   object:nil];
 
         NSLog(@"[ZeroTierBridge] 单例已初始化");
     }
     return self;
+}
+
+/// 析构：移除通知观察者
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+    [self stopReconnectTimer];
+}
+
+#pragma mark - 应用生命周期
+
+/// 应用进入后台通知
+- (void)applicationDidEnterBackground:(NSNotification *)notification {
+    NSLog(@"[ZeroTierBridge] 应用进入后台");
+    _applicationInBackground = YES;
+    // 后台时重连定时器会继续工作，但延迟加倍（由 startReconnectTimer 处理）
+}
+
+/// 应用进入前台通知
+- (void)applicationWillEnterForeground:(NSNotification *)notification {
+    NSLog(@"[ZeroTierBridge] 应用进入前台");
+    _applicationInBackground = NO;
+    // 如果节点离线且未在重连中，立即启动重连
+    if (_isStarted && ![self isNodeOnline] && !_isReconnecting) {
+        NSLog(@"[ZeroTierBridge] 应用回到前台，节点离线，启动重连");
+        [self startReconnectTimer];
+    }
 }
 
 #pragma mark - 框架检测
@@ -293,36 +444,12 @@ static void zeroTierEventCallback(void *msgPtr) {
 
     NSLog(@"[ZeroTierBridge] 开始检测 framework 可用性...");
 
-    // 检测原理：
-    //   - ZeroTier Apple Framework 通过 git submodule 引入（external/ZeroTierFramework）
-    //   - 真实 framework 中，zts_node_start() 会返回 ZTS_ERR_OK (0) 并启动节点
-    //
-    // 重要修复（闪退问题）：
-    //   之前的实现调用 zts_node_start() 检测后立即调用 zts_node_stop() 停止节点。
-    //   但 zts_node_stop() 是异步的，会立即返回 ZTS_ERR_SERVICE(-2) 但节点并未真正停止，
-    //   导致后续 zts_init_from_storage 失败（返回 -2），节点启动失败，打开联机开关闪退。
-    //
-    // 新方案：不调用任何有副作用的 API（zts_node_start/zts_node_stop），
-    //   只调用无副作用的 zts_node_is_online() 验证符号存在：
-    //   - stub 返回 0
-    //   - 真实库（节点未启动）也返回 0
-    //   - 真实库（节点已启动）返回 1
-    //   这个调用本身不会崩溃，仅用于验证符号存在。
-    //
-    //   然后直接信任编译时链接结果：如果 zt.framework 二进制存在，
-    //   CMakeLists.txt 的 if(EXISTS) 检测通过，链接真实库；否则链接 stub。
-    //   如果链接的是 stub，startNodeWithHomeDirectory: 会在 zts_init_from_storage
-    //   时返回错误，由调用方处理。这样避免了"启动后停止"导致的节点状态混乱和闪退。
-    int onlineCheck = zts_node_is_online();
-    NSLog(@"[ZeroTierBridge] 检测：zts_node_is_online() = %d（无副作用调用，仅验证符号）", onlineCheck);
-
     // 信任编译时链接结果，直接返回 YES
     BOOL frameworkAvailable = YES;
 
     [_lock lock];
     _frameworkAvailable = frameworkAvailable;
     _frameworkChecked = YES;
-    // 不在此处设置 _isStarted=YES，让 startNodeWithHomeDirectory: 完整初始化
     [_lock unlock];
 
     NSLog(@"[ZeroTierBridge] framework 检测完成：available = %@（信任编译时链接）",
@@ -339,12 +466,20 @@ static void zeroTierEventCallback(void *msgPtr) {
 ///   1. 校验 homeDir 参数
 ///   2. 检测 framework 可用性
 ///   3. 检查是否已启动（避免重复启动）
-///   4. 调用 zts_init_from_storage 设置存储目录
-///   5. 调用 zts_init_set_event_handler 设置事件回调
-///   6. 调用 zts_node_start 启动节点
+///   4. 等待残留节点下线（关键修复：避免 stopNode 主线程不等待导致的竞争）
+///   5. 从 Keychain 恢复身份文件
+///   6. 调用 zts_init_from_storage 设置存储目录
+///   7. 调用 zts_init_set_event_handler 设置事件回调
+///   8. 调用 zts_node_start 启动节点
+///
+/// @param homeDir 主页目录路径
+/// @param error 错误输出
+/// @return YES 如果启动成功
 - (BOOL)startNodeWithHomeDirectory:(NSString *)homeDir
                              error:(NSError **)error {
-    // 参数校验
+    // ============================================================
+    // 步骤 1：参数校验
+    // ============================================================
     if (!homeDir || homeDir.length == 0) {
         NSLog(@"[ZeroTierBridge] startNode 失败：homeDir 为空");
         if (error) {
@@ -355,18 +490,22 @@ static void zeroTierEventCallback(void *msgPtr) {
         return NO;
     }
 
-    // 检测 framework 是否可用
+    // ============================================================
+    // 步骤 2：检测 framework 可用性
+    // ============================================================
     if (![self isFrameworkAvailable]) {
-        NSLog(@"[ZeroTierBridge] startNode 失败：framework 不可用（stub 模式）");
+        NSLog(@"[ZeroTierBridge] startNode 失败：framework 不可用");
         if (error) {
             *error = [NSError errorWithDomain:kZeroTierErrorDomain
                                           code:ZeroTierErrorCodeFrameworkUnavailable
-                                      userInfo:@{NSLocalizedDescriptionKey: @"ZeroTier framework 不可用（stub 模式），请集成真实的 zt.framework"}];
+                                      userInfo:@{NSLocalizedDescriptionKey: @"ZeroTier framework 不可用"}];
         }
         return NO;
     }
 
-    // 检查是否已启动
+    // ============================================================
+    // 步骤 3：检查是否已启动
+    // ============================================================
     [_lock lock];
     if (_isStarted) {
         [_lock unlock];
@@ -375,31 +514,24 @@ static void zeroTierEventCallback(void *msgPtr) {
     }
     [_lock unlock];
 
-    // 关键修复（N7）：处理 stopNode 主线程不等待导致的 startNode 竞争。
-    //
-    // 问题：stopNode 在主线程调用时不等待节点真正下线（避免阻塞 UI），仅设置 _isStarted=NO。
-    // 如果立即调用 startNode（如断开后立即重连），libzt 内部节点可能仍在关闭中：
-    //   - zts_node_is_online() 仍返回 1
-    //   - zts_init_from_storage 可能返回错误或行为未定义
-    //   - zts_node_start 可能失败
-    //
-    // 修复方案：在 startNode 进入初始化流程前，检测 libzt 内部是否仍有"残留"节点在线
-    // （_isStarted=NO 但 zts_node_is_online()=1）。如果有，先等待其真正下线再继续。
-    // 主线程最多等待 2 秒（避免长时间卡 UI），后台线程最多等待 5 秒。
+    // ============================================================
+    // 步骤 4：关键修复：等待残留节点下线
+    //   当 stopNode 在主线程调用时，由于不等待节点真正下线，
+    //   可能导致 zts_node_is_online() 仍返回 1，但 _isStarted 已为 NO。
+    //   此时再次调用 startNode 会与残留节点冲突，导致启动失败。
+    // ============================================================
     if (zts_node_is_online() == 1) {
         BOOL isMainThread = [NSThread isMainThread];
         NSTimeInterval maxWait = isMainThread ? 2.0 : 5.0;
-        NSLog(@"[ZeroTierBridge] startNode：检测到 libzt 内部仍有残留节点在线（_isStarted=NO），"
+        NSLog(@"[ZeroTierBridge] startNode：检测到 libzt 内部仍有残留节点在线，"
               @"等待其下线（最多 %.0f 秒，isMainThread=%d）", maxWait, isMainThread);
-        NSTimeInterval waitDeadline = [NSDate timeIntervalSinceReferenceDate] + maxWait;
-        int onlineCheck = zts_node_is_online();
+        NSTimeInterval deadline = [NSDate timeIntervalSinceReferenceDate] + maxWait;
         int pollCount = 0;
-        while (onlineCheck == 1 && [NSDate timeIntervalSinceReferenceDate] < waitDeadline) {
+        while (zts_node_is_online() == 1 && [NSDate timeIntervalSinceReferenceDate] < deadline) {
             [NSThread sleepForTimeInterval:0.1];
-            onlineCheck = zts_node_is_online();
             pollCount++;
         }
-        if (onlineCheck == 1) {
+        if (zts_node_is_online() == 1) {
             NSLog(@"[ZeroTierBridge] startNode 警告：残留节点在线等待超时（%.0f 秒），"
                   @"继续尝试初始化（可能失败）", maxWait);
         } else {
@@ -408,22 +540,14 @@ static void zeroTierEventCallback(void *msgPtr) {
         }
     }
 
-    NSLog(@"[ZeroTierBridge] 启动节点，homeDir = %@", homeDir);
-
-    // 步骤 0：从 Keychain 恢复 ZeroTier 身份文件
-    //
-    // 关键修复：删除启动器重新安装后，zerotier_home 目录被删除，
-    // 节点会生成新的身份（新的 nodeID），导致在 my.zerotier.com 需要
-    // 重新授权新成员。通过 Keychain 备份/恢复身份文件，重装后仍使用
-    // 原来的节点身份，无需重新授权。
-    //
-    // Keychain 数据在删除应用后仍然保留（iOS 安全特性），是持久化
-    // 敏感数据的理想位置。identity.secret 是节点的私钥，需要安全存储。
+    // ============================================================
+    // 步骤 5：从 Keychain 恢复 ZeroTier 身份文件
+    // ============================================================
     [self restoreIdentityFromKeychainToHomeDir:homeDir];
 
-    // 步骤 1：初始化存储路径
-    // zts_init_from_storage 指定身份文件的存储目录，
-    // 节点会在此目录下读写 authtoken.secret、identity.public、identity.secret 等文件
+    // ============================================================
+    // 步骤 6：初始化存储路径
+    // ============================================================
     int result = zts_init_from_storage([homeDir UTF8String]);
     if (result != ZTS_ERR_OK) {
         NSLog(@"[ZeroTierBridge] zts_init_from_storage 失败：result = %d", result);
@@ -432,17 +556,15 @@ static void zeroTierEventCallback(void *msgPtr) {
                                           code:ZeroTierErrorCodeNodeStartFailed
                                       userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"初始化存储目录失败 (code=%d)", result]}];
         }
-        // 关键修复（N6）：zts_init_from_storage 失败，libzt 内部状态可能未清理。
-        // 调用 zts_node_stop 请求清理（即使节点未启动，调用也是安全的），
-        // 确保下次 startNode 能正常重新初始化。
+        // 关键修复：zts_init_from_storage 失败，调用 zts_node_stop 清理
         zts_node_stop();
         return NO;
     }
     NSLog(@"[ZeroTierBridge] zts_init_from_storage 成功");
 
-    // 步骤 2：设置事件回调
-    // 事件回调会在 libzt 的后台线程中被调用，我们通过 zeroTierEventCallback
-    // 转发到主线程处理
+    // ============================================================
+    // 步骤 7：设置事件回调
+    // ============================================================
     result = zts_init_set_event_handler(zeroTierEventCallback);
     if (result != ZTS_ERR_OK) {
         NSLog(@"[ZeroTierBridge] zts_init_set_event_handler 失败：result = %d", result);
@@ -451,17 +573,14 @@ static void zeroTierEventCallback(void *msgPtr) {
                                           code:ZeroTierErrorCodeNodeStartFailed
                                       userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"设置事件回调失败 (code=%d)", result]}];
         }
-        // 关键修复（N6）：zts_init_from_storage 已成功，但 event_handler 设置失败。
-        // libzt 内部可能已部分初始化（存储路径已设置），调用 zts_node_stop 请求清理，
-        // 确保下次 startNode 能正常重新初始化。
         zts_node_stop();
         return NO;
     }
     NSLog(@"[ZeroTierBridge] zts_init_set_event_handler 成功");
 
-    // 步骤 3：启动节点
-    // zts_node_start 是异步的，调用后立即返回，节点会在后台初始化。
-    // 当节点成功上线后，会触发 ZTS_EVENT_NODE_ONLINE 事件。
+    // ============================================================
+    // 步骤 8：启动节点
+    // ============================================================
     result = zts_node_start();
     if (result != ZTS_ERR_OK) {
         NSLog(@"[ZeroTierBridge] zts_node_start 失败：result = %d", result);
@@ -470,18 +589,25 @@ static void zeroTierEventCallback(void *msgPtr) {
                                           code:ZeroTierErrorCodeNodeStartFailed
                                       userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"节点启动失败 (code=%d)", result]}];
         }
-        // 关键修复（N6）：zts_init_from_storage 和 zts_init_set_event_handler 都已成功，
-        // libzt 内部已部分初始化。zts_node_start 失败时调用 zts_node_stop 请求清理，
-        // 确保下次 startNode 能正常重新初始化。
         zts_node_stop();
         return NO;
     }
 
-    // 更新内部状态
+    // ============================================================
+    // 步骤 9：更新内部状态
+    // ============================================================
     [_lock lock];
     _isStarted = YES;
     _nodeStatus = ZeroTierNodeStatusStarting;
     _homeDirectory = [homeDir copy];
+    _reconnectAttempts = 0;
+    _isReconnecting = NO;
+    // 清空旧缓存
+    [_networkStatuses removeAllObjects];
+    [_ipv4Addresses removeAllObjects];
+    [_ipv6Addresses removeAllObjects];
+    [_peerConnectionModes removeAllObjects];
+    [_peerAddresses removeAllObjects];
     [_lock unlock];
 
     NSLog(@"[ZeroTierBridge] 节点启动请求已提交，等待上线事件...");
@@ -503,18 +629,35 @@ static void zeroTierEventCallback(void *msgPtr) {
 /// 修复方案：
 ///   - 调用 zts_node_stop() 后，使用 polling + sleep 等待 zts_node_is_online() 返回 0
 ///   - 设置 5 秒超时，避免无限等待
-///   - 如果在主线程调用，则不等待（避免阻塞 UI），改为异步 dispatch 到后台线程等待
+///   - 如果在主线程调用，则不等待（避免阻塞 UI），改为依靠 NODE_DOWN 事件清理
 - (void)stopNode {
+    // ============================================================
+    // 步骤 1：检查是否已启动
+    // ============================================================
     [_lock lock];
     if (!_isStarted) {
         [_lock unlock];
-        NSLog(@"[ZeroTierBridge] 节点未启动，无需停止");
+        NSLog(@"[ZeroTierBridge] stopNode：节点未启动，跳过");
         return;
     }
     [_lock unlock];
 
     NSLog(@"[ZeroTierBridge] 停止节点...");
 
+    // ============================================================
+    // 步骤 2：停止重连定时器
+    // ============================================================
+    [self stopReconnectTimer];
+
+    // ============================================================
+    // 步骤 3：离开所有网络
+    // ============================================================
+    zts_net_leave_all();
+    NSLog(@"[ZeroTierBridge] 已请求离开所有网络");
+
+    // ============================================================
+    // 步骤 4：停止节点
+    // ============================================================
     int result = zts_node_stop();
     if (result != ZTS_ERR_OK) {
         NSLog(@"[ZeroTierBridge] zts_node_stop 失败：result = %d", result);
@@ -522,34 +665,31 @@ static void zeroTierEventCallback(void *msgPtr) {
         NSLog(@"[ZeroTierBridge] zts_node_stop 成功");
     }
 
-    // 关键修复（H14）：同步等待节点真正下线
-    // zts_node_stop() 是异步的，需要等待 zts_node_is_online() 返回 0 才算真正关闭。
-    // 主线程不能 sleep 等待（会卡 UI），所以如果当前在主线程，则不等待，
-    // 依靠 NODE_DOWN 事件回调来清理状态（H1 修复已确保事件会清理 _isStarted）。
+    // ============================================================
+    // 步骤 5：关键修复：后台线程同步等待节点真正下线
+    // ============================================================
     BOOL isMainThread = [NSThread isMainThread];
     if (isMainThread) {
         NSLog(@"[ZeroTierBridge] stopNode 在主线程调用，跳过同步等待（依靠 NODE_DOWN 事件清理状态）");
     } else {
-        // 后台线程：polling 等待节点下线，最多 5 秒
-        NSTimeInterval waitDeadline = [NSDate timeIntervalSinceReferenceDate] + 5.0;
-        int onlineCheck = zts_node_is_online();
+        NSTimeInterval deadline = [NSDate timeIntervalSinceReferenceDate] + kNodeOfflineWaitTimeout;
         int pollCount = 0;
-        while (onlineCheck == 1 && [NSDate timeIntervalSinceReferenceDate] < waitDeadline) {
+        while (zts_node_is_online() == 1 && [NSDate timeIntervalSinceReferenceDate] < deadline) {
             [NSThread sleepForTimeInterval:0.1];
-            onlineCheck = zts_node_is_online();
             pollCount++;
         }
-        if (onlineCheck == 0) {
+        if (zts_node_is_online() == 0) {
             NSLog(@"[ZeroTierBridge] 节点已确认下线（polling %d 次，约 %.1f 秒）",
                   pollCount, pollCount * 0.1);
         } else {
-            NSLog(@"[ZeroTierBridge] 节点下线等待超时（5秒），onlineCheck = %d，继续清理状态", onlineCheck);
+            NSLog(@"[ZeroTierBridge] 节点下线等待超时（%.0f 秒），继续清理状态",
+                  kNodeOfflineWaitTimeout);
         }
     }
 
-    // 清理内部状态
-    // 注意：即使没有收到 NODE_DOWN 事件，这里也要主动清理，确保下次 startNode 能正常工作。
-    // NODE_DOWN 事件回调（H1 修复）也会做同样的清理，两者互不冲突（幂等操作）。
+    // ============================================================
+    // 步骤 6：清理所有内部状态
+    // ============================================================
     [_lock lock];
     _isStarted = NO;
     _nodeStatus = ZeroTierNodeStatusStopped;
@@ -563,6 +703,8 @@ static void zeroTierEventCallback(void *msgPtr) {
     [_ipv6Addresses removeAllObjects];
     [_peerConnectionModes removeAllObjects];
     [_peerAddresses removeAllObjects];
+    _reconnectAttempts = 0;
+    _isReconnecting = NO;
     [_lock unlock];
 
     NSLog(@"[ZeroTierBridge] 节点已停止，内部状态已清理");
@@ -572,36 +714,22 @@ static void zeroTierEventCallback(void *msgPtr) {
 /// @return YES 如果节点已上线
 - (BOOL)isNodeOnline {
     int online = zts_node_is_online();
-    // 关键修复：如果 zts_node_is_online() 返回 1 但 _hasBeenOnline 还未被事件回调设置，
-    // 在这里同步设置（事件回调可能因主线程阻塞而延迟，但 API 查询是实时的）
-    //
-    // 关键修复（N5）：仅在 _isStarted=YES 时才更新 _hasBeenOnline。
-    //
-    // 问题：stopNode 在主线程调用时，先调用 zts_node_stop()（异步），再立即设置
-    // _isStarted=NO、_hasBeenOnline=NO。但 libzt 内部节点可能仍在运行（zts_node_is_online()
-    // 仍返回 1）。如果此时立即调用 isNodeOnline，旧的实现会因 online==1 而把
-    // _hasBeenOnline 重新设置为 YES，导致状态机混乱：
-    //   - _nodeStatus=Stopped 但 _hasBeenOnline=YES 且 isNodeOnline=YES
-    //   - 后续 waitForNodeOnlineWithTimeout: 因 _hasBeenOnline=YES 而错误认为节点可用
-    //
-    // 修复方案：只有在 _isStarted=YES 时才认为是节点真正上线，才更新 _hasBeenOnline。
-    // stopNode 后即使 zts_node_is_online() 短暂返回 1，也不会污染 _hasBeenOnline。
-    // 同时，若 _isStarted=NO 但 libzt 报告 online，返回 NO 以反映调用方的 stop 意图。
     if (online == 1) {
         [_lock lock];
-        BOOL started = _isStarted;
-        if (started && !_hasBeenOnline) {
+        if (_isStarted && !_hasBeenOnline) {
             _hasBeenOnline = YES;
             NSLog(@"[ZeroTierBridge] isNodeOnline 检测到节点上线，同步设置 _hasBeenOnline = YES");
         }
+        BOOL started = _isStarted;
         [_lock unlock];
-
+        // 只有 _isStarted 为 YES 时才认为在线，避免 stopNode 后残留报告在线
         if (!started) {
-            NSLog(@"[ZeroTierBridge] isNodeOnline：zts_node_is_online()=1 但 _isStarted=NO（stopNode 后残留），返回 NO");
+            NSLog(@"[ZeroTierBridge] isNodeOnline：zts_node_is_online()=1 但 _isStarted=NO，返回 NO");
             return NO;
         }
+        return YES;
     }
-    return online == 1;
+    return NO;
 }
 
 /// 获取节点 ID
@@ -619,12 +747,13 @@ static void zeroTierEventCallback(void *msgPtr) {
     }
 
     // 如果未缓存，调用 API 查询
-    if (zts_node_is_online()) {
+    if ([self isNodeOnline]) {
         id = zts_node_get_id();
         if (id != 0) {
             [_lock lock];
             _nodeID = id;
             [_lock unlock];
+            NSLog(@"[ZeroTierBridge] 从 API 获取 nodeID = %016llx", id);
         }
     }
     return id;
@@ -637,6 +766,24 @@ static void zeroTierEventCallback(void *msgPtr) {
     ZeroTierNodeStatus status = _nodeStatus;
     [_lock unlock];
     return status;
+}
+
+/// 获取节点 ID 字符串
+- (NSString *)nodeIdString {
+    [_lock lock];
+    NSString *s = _ownNodeIdString;
+    [_lock unlock];
+    if (s) {
+        return s;
+    }
+    uint64_t nid = [self nodeID];
+    if (nid != 0) {
+        s = [ZeroTierBridge formatNetworkID:nid];
+        [_lock lock];
+        _ownNodeIdString = s;
+        [_lock unlock];
+    }
+    return s;
 }
 
 #pragma mark - 网络管理
@@ -699,13 +846,12 @@ static void zeroTierEventCallback(void *msgPtr) {
         return NO;
     }
 
-    // 清理该网络的所有缓存，同时清空 peer 状态（离开后所有对端路径失效）
+    // 清理该网络的所有缓存
     [_lock lock];
     [_networkStatuses removeObjectForKey:@(networkID)];
     [_ipv4Addresses removeObjectForKey:@(networkID)];
     [_ipv6Addresses removeObjectForKey:@(networkID)];
-    [_peerConnectionModes removeAllObjects];
-    [_peerAddresses removeAllObjects];
+    // 不清理对端缓存（可能仍需要），但清理网络相关的
     [_lock unlock];
 
     NSLog(@"[ZeroTierBridge] 已离开网络并清理缓存");
@@ -729,8 +875,7 @@ static void zeroTierEventCallback(void *msgPtr) {
     [_lock unlock];
 
     // 如果节点在线，查询实时状态作为补充
-    // zts_net_get_status 返回 ZTS_NETWORK_STATUS_* 枚举值
-    if (zts_node_is_online()) {
+    if ([self isNodeOnline]) {
         int apiStatus = zts_net_get_status(networkID);
         // ZTS_NETWORK_STATUS_REQUESTING_CONFIGURATION = 0
         // ZTS_NETWORK_STATUS_OK = 1
@@ -756,9 +901,7 @@ static void zeroTierEventCallback(void *msgPtr) {
                 status = ZeroTierNetworkStatusError;
                 break;
             default:
-                // 如果 API 返回负值（错误），保留缓存状态
                 if (apiStatus < 0 && status == ZeroTierNetworkStatusNotJoined) {
-                    // 缓存中也没有，标记为错误
                     status = ZeroTierNetworkStatusError;
                 }
                 break;
@@ -828,6 +971,32 @@ static void zeroTierEventCallback(void *msgPtr) {
     return nil;
 }
 
+/// 检查指定网络是否已就绪（内部方法）
+///
+/// 按网络类型区分地址族要求：
+///   - 标准网络（networkID 高字节不是 0xff）：要求 IPv4 地址已分配
+///   - Ad-hoc 网络（networkID 高字节是 0xff，即以 "ff" 开头）：要求 IPv6 地址已分配
+/// 两者都要求 zts_net_transport_is_ready(networkID) == 1。
+///
+/// @param networkID 网络 ID
+/// @return YES 如果网络传输就绪且对应地址族已分配
+- (BOOL)isNetworkReady:(uint64_t)networkID {
+    if (zts_net_transport_is_ready(networkID) != 1) {
+        return NO;
+    }
+
+    // Ad-hoc 网络 ID 以 "ff" 开头（高字节为 0xff），只有 IPv6 地址
+    uint8_t highByte = (uint8_t)((networkID >> 56) & 0xFF);
+    BOOL isAdhoc = (highByte == 0xFF);
+
+    if (isAdhoc) {
+        return zts_addr_is_assigned(networkID, ZTS_AF_INET6) == 1;
+    }
+
+    // 标准网络通常只分配 IPv4
+    return zts_addr_is_assigned(networkID, ZTS_AF_INET) == 1;
+}
+
 #pragma mark - 等待操作
 
 /// 等待节点上线
@@ -835,11 +1004,6 @@ static void zeroTierEventCallback(void *msgPtr) {
 /// 优先检查当前状态；若未上线则通过信号量等待 ZTS_EVENT_NODE_ONLINE /
 /// ZTS_EVENT_NODE_OFFLINE 事件，避免忙等。事件会在主线程触发信号量，
 /// 等待线程在后台被唤醒后重新评估状态。
-///
-/// 关键修复（H2）：移除"等待过半后重新调用 zts_node_start() 唤醒节点"的逻辑。
-/// 原因：libzt 的 zts_node_start 不是幂等的，在节点已处于 Starting 状态时再次调用
-/// 行为未定义，可能导致状态混乱、事件丢失或重复事件。
-/// 正确做法：如果节点确实无法上线，返回失败让上层处理，由用户决定是否重启。
 ///
 /// 状态机：
 ///   - 节点从未上线（!_hasBeenOnline）：严格等待 zts_node_is_online() == 1
@@ -856,44 +1020,47 @@ static void zeroTierEventCallback(void *msgPtr) {
         return YES;
     }
 
-    // 根据节点状态决定有效超时：
-    // 节点曾上线但当前离线时，只给 10 秒恢复窗口，避免在掉线期间继续后续流程
-    // （如启动 PortForwarder）导致流量无法到达房主。
-    NSTimeInterval effectiveTimeout = timeout;
+    // 检查节点是否处于不可恢复状态
     [_lock lock];
-    BOOL hasBeenOnline = _hasBeenOnline;
     ZeroTierNodeStatus status = _nodeStatus;
-    if (hasBeenOnline && status == ZeroTierNodeStatusOffline) {
+    BOOL hasBeenOnline = _hasBeenOnline;
+    [_lock unlock];
+    if (status == ZeroTierNodeStatusStopped || status == ZeroTierNodeStatusError) {
+        NSLog(@"[ZeroTierBridge] 节点已停止或发生错误，结束等待");
+        return NO;
+    }
+
+    // 根据节点是否曾上线决定有效超时
+    NSTimeInterval effectiveTimeout = timeout;
+    if (hasBeenOnline) {
         effectiveTimeout = MIN(timeout, 10.0);
         NSLog(@"[ZeroTierBridge] 节点曾上线但当前离线，使用 %.1f 秒恢复等待窗口", effectiveTimeout);
     }
-    [_lock unlock];
 
     NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:effectiveTimeout];
 
     while ([[NSDate date] compare:deadline] == NSOrderedAscending) {
-        // 检查节点是否进入不可恢复状态
+        // 检查当前状态
+        if ([self isNodeOnline]) {
+            NSLog(@"[ZeroTierBridge] 节点已上线（等待成功）");
+            return YES;
+        }
+
+        // 检查是否进入错误状态
         [_lock lock];
-        status = _nodeStatus;
+        ZeroTierNodeStatus currentStatus = _nodeStatus;
         [_lock unlock];
-        if (status == ZeroTierNodeStatusStopped || status == ZeroTierNodeStatusError) {
-            NSLog(@"[ZeroTierBridge] 节点已停止或发生错误，结束等待");
+        if (currentStatus == ZeroTierNodeStatusStopped || currentStatus == ZeroTierNodeStatusError) {
+            NSLog(@"[ZeroTierBridge] 节点进入停止或错误状态，结束等待");
             return NO;
         }
 
-        // 使用信号量等待下一次节点上下线事件，避免忙等
+        // 使用信号量等待下一次节点上下线事件
         NSTimeInterval remaining = [deadline timeIntervalSinceNow];
         if (remaining <= 0) {
             break;
         }
-        dispatch_time_t waitTime = dispatch_time(DISPATCH_TIME_NOW, (int64_t)(remaining * NSEC_PER_SEC));
-        dispatch_semaphore_wait(_nodeOnlineSemaphore, waitTime);
-
-        // 被事件唤醒后再次检查
-        if ([self isNodeOnline]) {
-            NSLog(@"[ZeroTierBridge] 节点已上线（事件唤醒）");
-            return YES;
-        }
+        dispatch_semaphore_wait(_nodeOnlineSemaphore, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(remaining * NSEC_PER_SEC)));
 
         // 兜底：短睡眠防止极端情况下事件丢失导致 CPU 空转
         [NSThread sleepForTimeInterval:0.05];
@@ -923,34 +1090,41 @@ static void zeroTierEventCallback(void *msgPtr) {
         return YES;
     }
 
+    // 检查是否已被拒绝或不存在
+    ZeroTierNetworkStatus cachedStatus = [self networkStatus:networkID];
+    if (cachedStatus == ZeroTierNetworkStatusDenied) {
+        NSLog(@"[ZeroTierBridge] 网络访问被拒绝（networkID = %016llx），立即返回失败", networkID);
+        return NO;
+    }
+    if (cachedStatus == ZeroTierNetworkStatusNotFound) {
+        NSLog(@"[ZeroTierBridge] 网络不存在（networkID = %016llx），立即返回失败", networkID);
+        return NO;
+    }
+
     NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:timeout];
 
     while ([[NSDate date] compare:deadline] == NSOrderedAscending) {
-        // 关键修复（M9）：在每次循环迭代中检查 _networkStatuses[networkID]，
-        // 若为 Denied（未授权）或 NotFound（网络不存在）则立即返回 NO，
-        // 避免无谓等待到 30 秒超时。
-        ZeroTierNetworkStatus cachedStatus = [self networkStatus:networkID];
-        if (cachedStatus == ZeroTierNetworkStatusDenied) {
-            NSLog(@"[ZeroTierBridge] 网络访问被拒绝（networkID = %016llx），立即返回失败", networkID);
-            return NO;
-        }
-        if (cachedStatus == ZeroTierNetworkStatusNotFound) {
-            NSLog(@"[ZeroTierBridge] 网络不存在（networkID = %016llx），立即返回失败", networkID);
-            return NO;
-        }
-
         if ([self isNetworkReady:networkID]) {
             NSLog(@"[ZeroTierBridge] 网络已就绪（事件唤醒）");
             return YES;
         }
 
-        // 使用信号量等待下一次网络事件，避免忙等
+        // 再次检查状态
+        ZeroTierNetworkStatus currentStatus = [self networkStatus:networkID];
+        if (currentStatus == ZeroTierNetworkStatusDenied) {
+            NSLog(@"[ZeroTierBridge] 网络访问被拒绝，立即返回失败");
+            return NO;
+        }
+        if (currentStatus == ZeroTierNetworkStatusNotFound) {
+            NSLog(@"[ZeroTierBridge] 网络不存在，立即返回失败");
+            return NO;
+        }
+
         NSTimeInterval remaining = [deadline timeIntervalSinceNow];
         if (remaining <= 0) {
             break;
         }
-        dispatch_time_t waitTime = dispatch_time(DISPATCH_TIME_NOW, (int64_t)(remaining * NSEC_PER_SEC));
-        dispatch_semaphore_wait(_networkEventSemaphore, waitTime);
+        dispatch_semaphore_wait(_networkEventSemaphore, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(remaining * NSEC_PER_SEC)));
 
         // 兜底：短睡眠防止极端情况下事件丢失导致 CPU 空转
         [NSThread sleepForTimeInterval:0.05];
@@ -966,9 +1140,10 @@ static void zeroTierEventCallback(void *msgPtr) {
 ///
 /// 根据 zts_event_msg_t 的 event_code 字段分发到对应的处理逻辑。
 ///
-/// @param msg 事件消息指针
+/// @param eventData 事件数据字典
 - (void)handleEventData:(NSDictionary *)eventData {
     if (!eventData) {
+        NSLog(@"[ZeroTierBridge] handleEventData 收到空数据");
         return;
     }
 
@@ -991,30 +1166,35 @@ static void zeroTierEventCallback(void *msgPtr) {
             // 节点已上线（201）
             uint64_t nodeID = [eventData[@"nodeID"] unsignedLongLongValue];
             NSString *nodeIdString = [ZeroTierBridge formatNetworkID:nodeID];
-            NSLog(@"[ZeroTierBridge] 事件：节点已上线 (NODE_ONLINE)，nodeID = %016llx", nodeID);
+            NSLog(@"[ZeroTierBridge] 事件：节点已上线 (NODE_ONLINE)，nodeID = %@", nodeIdString);
 
             [_lock lock];
             _nodeStatus = ZeroTierNodeStatusOnline;
             _nodeID = nodeID;
-            _hasBeenOnline = YES; // 标记节点曾经上线，用于 waitForNodeOnlineWithTimeout: 容错
+            _hasBeenOnline = YES;
             _ownNodeIdString = nodeIdString;
             [_lock unlock];
 
-            // 节点上线后，身份文件已被 libzt 写入 homeDir。
-            // 备份身份文件到 Keychain，这样即使用户删除启动器重新安装，
-            // 也能恢复相同的节点身份，无需在 my.zerotier.com 重新授权。
+            // 备份身份文件到 Keychain
             [self backupIdentityToKeychain];
 
-            // 通知 delegate
-            if ([self.delegate respondsToSelector:@selector(zeroTierNodeOnlineWithID:)]) {
-                [self.delegate zeroTierNodeOnlineWithID:nodeID];
-            }
-            if ([self.delegate respondsToSelector:@selector(zeroTierBridgeDidGoOnline:)]) {
-                [self.delegate zeroTierBridgeDidGoOnline:nodeIdString];
-            }
+            // 停止重连定时器
+            [self stopReconnectTimer];
+            _reconnectAttempts = 0;
+            _isReconnecting = NO;
 
             // 唤醒等待节点上线的线程
             dispatch_semaphore_signal(_nodeOnlineSemaphore);
+
+            // 通知代理
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if ([self.delegate respondsToSelector:@selector(zeroTierBridgeDidGoOnline:)]) {
+                    [self.delegate zeroTierBridgeDidGoOnline:nodeIdString];
+                }
+                if ([self.delegate respondsToSelector:@selector(zeroTierNodeOnlineWithID:)]) {
+                    [self.delegate zeroTierNodeOnlineWithID:nodeID];
+                }
+            });
             break;
         }
 
@@ -1025,27 +1205,29 @@ static void zeroTierEventCallback(void *msgPtr) {
             _nodeStatus = ZeroTierNodeStatusOffline;
             [_lock unlock];
 
-            // 通知 delegate
-            if ([self.delegate respondsToSelector:@selector(zeroTierNodeOffline)]) {
-                [self.delegate zeroTierNodeOffline];
-            }
-            if ([self.delegate respondsToSelector:@selector(zeroTierBridgeDidGoOffline)]) {
-                [self.delegate zeroTierBridgeDidGoOffline];
-            }
-
-            // 唤醒等待节点上线的线程，让它重新评估状态
+            // 唤醒等待节点上线的线程
             dispatch_semaphore_signal(_nodeOnlineSemaphore);
+
+            // 通知代理
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if ([self.delegate respondsToSelector:@selector(zeroTierBridgeDidGoOffline)]) {
+                    [self.delegate zeroTierBridgeDidGoOffline];
+                }
+                if ([self.delegate respondsToSelector:@selector(zeroTierNodeOffline)]) {
+                    [self.delegate zeroTierNodeOffline];
+                }
+            });
+
+            // 启动自动重连（如果节点仍处于启动状态且不在后台重连中）
+            if (_isStarted && !_isReconnecting) {
+                [self startReconnectTimer];
+            }
             break;
         }
 
         case ZTS_EVENT_NODE_DOWN: {
             // 节点正在关闭（203）
             NSLog(@"[ZeroTierBridge] 事件：节点正在关闭 (NODE_DOWN)");
-            // 关键修复（H1）：ZTS_EVENT_NODE_DOWN 表示节点已真正关闭（可能是用户主动 stop，
-            // 也可能是 libzt 内部错误导致节点 DOWN）。
-            // 必须清理 _isStarted，否则后续 startNodeWithHomeDirectory: 会因 _isStarted=YES
-            // 而跳过启动，导致节点永远无法重新启动。
-            // 与 stopNode 方法保持一致，清理所有内部状态。
             [_lock lock];
             _isStarted = NO;
             _nodeStatus = ZeroTierNodeStatusStopped;
@@ -1068,10 +1250,7 @@ static void zeroTierEventCallback(void *msgPtr) {
 
         case ZTS_EVENT_NODE_FATAL_ERROR: {
             // 节点发生致命错误（204）
-            // 可能原因：身份冲突（两个节点的公钥哈希到同一个 40 位地址）
             NSLog(@"[ZeroTierBridge] 事件：节点发生致命错误 (NODE_FATAL_ERROR)");
-            // 关键修复（H1）：致命错误后节点实际已不可用，清理 _isStarted
-            // 关键修复（H3）：通知 delegate 节点发生错误，让上层 UI 能感知并提示用户
             [_lock lock];
             _isStarted = NO;
             _nodeStatus = ZeroTierNodeStatusError;
@@ -1086,12 +1265,14 @@ static void zeroTierEventCallback(void *msgPtr) {
             [_peerAddresses removeAllObjects];
             [_lock unlock];
 
-            // 通知 delegate 节点发生致命错误
-            if ([self.delegate respondsToSelector:@selector(zeroTierNodeFatalError)]) {
-                [self.delegate zeroTierNodeFatalError];
-            }
+            // 通知代理
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if ([self.delegate respondsToSelector:@selector(zeroTierNodeFatalError)]) {
+                    [self.delegate zeroTierNodeFatalError];
+                }
+            });
 
-            // 唤醒可能在等待节点上线的线程
+            // 唤醒等待线程
             dispatch_semaphore_signal(_nodeOnlineSemaphore);
             break;
         }
@@ -1107,12 +1288,14 @@ static void zeroTierEventCallback(void *msgPtr) {
             _networkStatuses[@(netID)] = @(ZeroTierNetworkStatusJoined);
             [_lock unlock];
 
-            // 通知 delegate 网络已就绪
-            NSString *ipv4 = [self ipv4AddressForNetwork:netID];
-            NSString *ipv6 = [self ipv6AddressForNetwork:netID];
-            if ([self.delegate respondsToSelector:@selector(zeroTierNetworkReady:ipv4:ipv6:)]) {
-                [self.delegate zeroTierNetworkReady:netID ipv4:ipv4 ipv6:ipv6];
-            }
+            // 通知代理网络已就绪
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if ([self.delegate respondsToSelector:@selector(zeroTierNetworkReady:ipv4:ipv6:)]) {
+                    NSString *ipv4 = [self ipv4AddressForNetwork:netID];
+                    NSString *ipv6 = [self ipv6AddressForNetwork:netID];
+                    [self.delegate zeroTierNetworkReady:netID ipv4:ipv4 ipv6:ipv6];
+                }
+            });
 
             dispatch_semaphore_signal(_networkEventSemaphore);
             break;
@@ -1127,11 +1310,13 @@ static void zeroTierEventCallback(void *msgPtr) {
             _networkStatuses[@(netID)] = @(ZeroTierNetworkStatusDenied);
             [_lock unlock];
 
-            // 通知 delegate 加入失败
-            if ([self.delegate respondsToSelector:@selector(zeroTierNetworkJoinFailed:error:)]) {
-                [self.delegate zeroTierNetworkJoinFailed:netID
-                                                   error:@"网络访问被拒绝，请联系网络管理员授权此节点"];
-            }
+            // 通知代理加入失败
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if ([self.delegate respondsToSelector:@selector(zeroTierNetworkJoinFailed:error:)]) {
+                    [self.delegate zeroTierNetworkJoinFailed:netID
+                                                       error:@"网络访问被拒绝，请联系网络管理员授权此节点"];
+                }
+            });
 
             dispatch_semaphore_signal(_networkEventSemaphore);
             break;
@@ -1146,11 +1331,27 @@ static void zeroTierEventCallback(void *msgPtr) {
             _networkStatuses[@(netID)] = @(ZeroTierNetworkStatusNotFound);
             [_lock unlock];
 
-            // 通知 delegate 加入失败
-            if ([self.delegate respondsToSelector:@selector(zeroTierNetworkJoinFailed:error:)]) {
-                [self.delegate zeroTierNetworkJoinFailed:netID
-                                                   error:@"网络不存在，请检查 Network ID 是否正确"];
-            }
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if ([self.delegate respondsToSelector:@selector(zeroTierNetworkJoinFailed:error:)]) {
+                    [self.delegate zeroTierNetworkJoinFailed:netID
+                                                       error:@"网络不存在，请检查 Network ID 是否正确"];
+                }
+            });
+
+            dispatch_semaphore_signal(_networkEventSemaphore);
+            break;
+        }
+
+        case ZTS_EVENT_NETWORK_UPDATE: {
+            // 网络配置已更新（219）
+            uint64_t netID = [eventData[@"netID"] unsignedLongLongValue];
+            NSLog(@"[ZeroTierBridge] 事件：网络配置已更新 (NETWORK_UPDATE)，netID = %016llx", netID);
+
+            // 清除地址缓存，强制重新查询
+            [_lock lock];
+            [_ipv4Addresses removeObjectForKey:@(netID)];
+            [_ipv6Addresses removeObjectForKey:@(netID)];
+            [_lock unlock];
 
             dispatch_semaphore_signal(_networkEventSemaphore);
             break;
@@ -1161,17 +1362,17 @@ static void zeroTierEventCallback(void *msgPtr) {
             uint64_t netID = [eventData[@"netID"] unsignedLongLongValue];
             NSLog(@"[ZeroTierBridge] 事件：IPv4 网络就绪 (NETWORK_READY_IP4)，netID = %016llx", netID);
 
-            // 清除 IPv4 缓存，强制下次查询时刷新
             [_lock lock];
             [_ipv4Addresses removeObjectForKey:@(netID)];
             [_lock unlock];
 
-            // 通知 delegate 网络已就绪
-            NSString *ipv4 = [self ipv4AddressForNetwork:netID];
-            NSString *ipv6 = [self ipv6AddressForNetwork:netID];
-            if ([self.delegate respondsToSelector:@selector(zeroTierNetworkReady:ipv4:ipv6:)]) {
-                [self.delegate zeroTierNetworkReady:netID ipv4:ipv4 ipv6:ipv6];
-            }
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if ([self.delegate respondsToSelector:@selector(zeroTierNetworkReady:ipv4:ipv6:)]) {
+                    NSString *ipv4 = [self ipv4AddressForNetwork:netID];
+                    NSString *ipv6 = [self ipv6AddressForNetwork:netID];
+                    [self.delegate zeroTierNetworkReady:netID ipv4:ipv4 ipv6:ipv6];
+                }
+            });
 
             dispatch_semaphore_signal(_networkEventSemaphore);
             break;
@@ -1182,17 +1383,17 @@ static void zeroTierEventCallback(void *msgPtr) {
             uint64_t netID = [eventData[@"netID"] unsignedLongLongValue];
             NSLog(@"[ZeroTierBridge] 事件：IPv6 网络就绪 (NETWORK_READY_IP6)，netID = %016llx", netID);
 
-            // 清除 IPv6 缓存，强制下次查询时刷新
             [_lock lock];
             [_ipv6Addresses removeObjectForKey:@(netID)];
             [_lock unlock];
 
-            // 通知 delegate 网络已就绪
-            NSString *ipv4 = [self ipv4AddressForNetwork:netID];
-            NSString *ipv6 = [self ipv6AddressForNetwork:netID];
-            if ([self.delegate respondsToSelector:@selector(zeroTierNetworkReady:ipv4:ipv6:)]) {
-                [self.delegate zeroTierNetworkReady:netID ipv4:ipv4 ipv6:ipv6];
-            }
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if ([self.delegate respondsToSelector:@selector(zeroTierNetworkReady:ipv4:ipv6:)]) {
+                    NSString *ipv4 = [self ipv4AddressForNetwork:netID];
+                    NSString *ipv6 = [self ipv6AddressForNetwork:netID];
+                    [self.delegate zeroTierNetworkReady:netID ipv4:ipv4 ipv6:ipv6];
+                }
+            });
 
             dispatch_semaphore_signal(_networkEventSemaphore);
             break;
@@ -1215,6 +1416,7 @@ static void zeroTierEventCallback(void *msgPtr) {
             // 网络配置请求中（212）
             uint64_t netID = [eventData[@"netID"] unsignedLongLongValue];
             NSLog(@"[ZeroTierBridge] 事件：网络配置请求中 (NETWORK_REQ_CONFIG)，netID = %016llx", netID);
+
             [_lock lock];
             _networkStatuses[@(netID)] = @(ZeroTierNetworkStatusRequesting);
             [_lock unlock];
@@ -1223,44 +1425,24 @@ static void zeroTierEventCallback(void *msgPtr) {
             break;
         }
 
-        case ZTS_EVENT_NETWORK_UPDATE: {
-            // 网络配置已更新（219）
-            uint64_t netID = [eventData[@"netID"] unsignedLongLongValue];
-            NSLog(@"[ZeroTierBridge] 事件：网络配置已更新 (NETWORK_UPDATE)，netID = %016llx", netID);
-
-            // 清除地址缓存，强制重新查询
-            [_lock lock];
-            [_ipv4Addresses removeObjectForKey:@(netID)];
-            [_ipv6Addresses removeObjectForKey:@(netID)];
-            [_lock unlock];
-
-            // 重新查询并通知 delegate
-            NSString *ipv4 = [self ipv4AddressForNetwork:netID];
-            NSString *ipv6 = [self ipv6AddressForNetwork:netID];
-            if ([self.delegate respondsToSelector:@selector(zeroTierNetworkReady:ipv4:ipv6:)]) {
-                [self.delegate zeroTierNetworkReady:netID ipv4:ipv4 ipv6:ipv6];
-            }
-
-            dispatch_semaphore_signal(_networkEventSemaphore);
-            break;
-        }
-
         case ZTS_EVENT_NETWORK_CLIENT_TOO_OLD: {
             // ZeroTier 客户端版本过旧（211）
             uint64_t netID = [eventData[@"netID"] unsignedLongLongValue];
-            NSLog(@"[ZeroTierBridge] 事件：ZeroTier 客户端版本过旧 (NETWORK_CLIENT_TOO_OLD)，netID = %016llx", netID);
+            NSLog(@"[ZeroTierBridge] 事件：客户端版本过旧 (NETWORK_CLIENT_TOO_OLD)，netID = %016llx", netID);
 
             [_lock lock];
             _networkStatuses[@(netID)] = @(ZeroTierNetworkStatusError);
             [_lock unlock];
 
-            if ([self.delegate respondsToSelector:@selector(zeroTierNetworkJoinFailed:error:)]) {
-                [self.delegate zeroTierNetworkJoinFailed:netID
-                                                   error:@"ZeroTier 版本过旧，请更新 zt.framework"];
-            }
-            if ([self.delegate respondsToSelector:@selector(zeroTierBridge:clientTooOldWithNetworkId:)]) {
-                [self.delegate zeroTierBridge:self clientTooOldWithNetworkId:netID];
-            }
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if ([self.delegate respondsToSelector:@selector(zeroTierNetworkJoinFailed:error:)]) {
+                    [self.delegate zeroTierNetworkJoinFailed:netID
+                                                       error:@"ZeroTier 版本过旧，请更新 zt.framework"];
+                }
+                if ([self.delegate respondsToSelector:@selector(zeroTierBridge:clientTooOldWithNetworkId:)]) {
+                    [self.delegate zeroTierBridge:self clientTooOldWithNetworkId:netID];
+                }
+            });
 
             dispatch_semaphore_signal(_networkEventSemaphore);
             break;
@@ -1274,21 +1456,21 @@ static void zeroTierEventCallback(void *msgPtr) {
             NSString *addrStr = eventData[@"addrStr"];
             int family = ZTS_AF_INET;
 
-            NSLog(@"[ZeroTierBridge] 事件：IPv4 地址已分配 (ADDR_ADDED_IP4)，netID = %016llx，addr = %@", netID, addrStr);
-
-            // 更新缓存
             if (addrStr) {
+                NSLog(@"[ZeroTierBridge] 事件：IPv4 地址已分配 (ADDR_ADDED_IP4)，netID = %016llx，addr = %@", netID, addrStr);
+
                 [_lock lock];
                 _ipv4Addresses[@(netID)] = addrStr;
                 [_lock unlock];
-            }
 
-            // 通知 delegate
-            if ([self.delegate respondsToSelector:@selector(zeroTierAddressAssigned:family:address:)]) {
-                [self.delegate zeroTierAddressAssigned:netID family:family address:addrStr ?: @""];
-            }
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    if ([self.delegate respondsToSelector:@selector(zeroTierAddressAssigned:family:address:)]) {
+                        [self.delegate zeroTierAddressAssigned:netID family:family address:addrStr];
+                    }
+                });
 
-            dispatch_semaphore_signal(_networkEventSemaphore);
+                dispatch_semaphore_signal(_networkEventSemaphore);
+            }
             break;
         }
 
@@ -1298,21 +1480,21 @@ static void zeroTierEventCallback(void *msgPtr) {
             NSString *addrStr = eventData[@"addrStr"];
             int family = ZTS_AF_INET6;
 
-            NSLog(@"[ZeroTierBridge] 事件：IPv6 地址已分配 (ADDR_ADDED_IP6)，netID = %016llx，addr = %@", netID, addrStr);
-
-            // 更新缓存
             if (addrStr) {
+                NSLog(@"[ZeroTierBridge] 事件：IPv6 地址已分配 (ADDR_ADDED_IP6)，netID = %016llx，addr = %@", netID, addrStr);
+
                 [_lock lock];
                 _ipv6Addresses[@(netID)] = addrStr;
                 [_lock unlock];
-            }
 
-            // 通知 delegate
-            if ([self.delegate respondsToSelector:@selector(zeroTierAddressAssigned:family:address:)]) {
-                [self.delegate zeroTierAddressAssigned:netID family:family address:addrStr ?: @""];
-            }
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    if ([self.delegate respondsToSelector:@selector(zeroTierAddressAssigned:family:address:)]) {
+                        [self.delegate zeroTierAddressAssigned:netID family:family address:addrStr];
+                    }
+                });
 
-            dispatch_semaphore_signal(_networkEventSemaphore);
+                dispatch_semaphore_signal(_networkEventSemaphore);
+            }
             break;
         }
 
@@ -1323,7 +1505,6 @@ static void zeroTierEventCallback(void *msgPtr) {
             [_lock lock];
             [_ipv4Addresses removeObjectForKey:@(netID)];
             [_lock unlock];
-
             dispatch_semaphore_signal(_networkEventSemaphore);
             break;
         }
@@ -1335,7 +1516,6 @@ static void zeroTierEventCallback(void *msgPtr) {
             [_lock lock];
             [_ipv6Addresses removeObjectForKey:@(netID)];
             [_lock unlock];
-
             dispatch_semaphore_signal(_networkEventSemaphore);
             break;
         }
@@ -1345,12 +1525,10 @@ static void zeroTierEventCallback(void *msgPtr) {
         case ZTS_EVENT_PEER_DIRECT: {
             uint64_t peerID = [eventData[@"peerID"] unsignedLongLongValue];
             NSString *pathAddr = eventData[@"peerPathAddress"];
-            ZeroTierPeerConnectionMode mode = ZeroTierPeerConnectionModeDirect;
+            NSLog(@"[ZeroTierBridge] 事件：对端直连 (PEER_DIRECT)，peerID = %016llx，path = %@",
+                  peerID, pathAddr ?: @"(unknown)");
 
-            NSLog(@"[ZeroTierBridge] 事件：对端直连 (PEER_DIRECT)，peerID = %016llx，path = %@，mode = %ld",
-                  peerID, pathAddr ?: @"(unknown)", (long)mode);
-
-            [self setConnectionMode:mode forPeer:peerID];
+            [self setConnectionMode:ZeroTierPeerConnectionModeDirect forPeer:peerID];
             [self updatePeerAddress:peerID address:pathAddr];
             break;
         }
@@ -1381,19 +1559,25 @@ static void zeroTierEventCallback(void *msgPtr) {
         case ZTS_EVENT_PEER_PATH_DEAD: {
             uint64_t peerID = [eventData[@"peerID"] unsignedLongLongValue];
             NSLog(@"[ZeroTierBridge] 事件：对端路径失效 (PEER_PATH_DEAD)，peerID = %016llx", peerID);
+            // 清除缓存地址
+            [_lock lock];
+            [_peerAddresses removeObjectForKey:@(peerID)];
+            [_lock unlock];
             break;
         }
 
-        // ===== 其他事件（仅记录日志或更新内部标志） =====
+        // ===== 其他事件 =====
 
         case ZTS_EVENT_STACK_UP: {
             NSLog(@"[ZeroTierBridge] 事件：TCP/IP 栈已启动 (STACK_UP)");
             [_lock lock];
             _isStackUp = YES;
             [_lock unlock];
-            if ([self.delegate respondsToSelector:@selector(zeroTierBridge:stackDidGoUp:)]) {
-                [self.delegate zeroTierBridge:self stackDidGoUp:YES];
-            }
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if ([self.delegate respondsToSelector:@selector(zeroTierBridge:stackDidGoUp:)]) {
+                    [self.delegate zeroTierBridge:self stackDidGoUp:YES];
+                }
+            });
             break;
         }
 
@@ -1402,9 +1586,11 @@ static void zeroTierEventCallback(void *msgPtr) {
             [_lock lock];
             _isStackUp = NO;
             [_lock unlock];
-            if ([self.delegate respondsToSelector:@selector(zeroTierBridge:stackDidGoUp:)]) {
-                [self.delegate zeroTierBridge:self stackDidGoUp:NO];
-            }
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if ([self.delegate respondsToSelector:@selector(zeroTierBridge:stackDidGoUp:)]) {
+                    [self.delegate zeroTierBridge:self stackDidGoUp:NO];
+                }
+            });
             break;
         }
 
@@ -1478,13 +1664,15 @@ static void zeroTierEventCallback(void *msgPtr) {
     }
     if (oldMode != mode) {
         _peerConnectionModes[key] = @(mode);
-    }
-    [_lock unlock];
+        [_lock unlock];
 
-    if (oldMode != mode) {
-        if ([self.delegate respondsToSelector:@selector(zeroTierPeerConnectionModeChanged:forPeer:)]) {
-            [self.delegate zeroTierPeerConnectionModeChanged:mode forPeer:peerID];
-        }
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if ([self.delegate respondsToSelector:@selector(zeroTierPeerConnectionModeChanged:forPeer:)]) {
+                [self.delegate zeroTierPeerConnectionModeChanged:mode forPeer:peerID];
+            }
+        });
+    } else {
+        [_lock unlock];
     }
 }
 
@@ -1493,26 +1681,273 @@ static void zeroTierEventCallback(void *msgPtr) {
 /// @param address 路径地址字符串（可能为 nil）
 - (void)updatePeerAddress:(uint64_t)peerId address:(nullable NSString *)address {
     NSNumber *key = @(peerId);
-    BOOL changed = NO;
+
+    if (!address || address.length == 0) {
+        [_lock lock];
+        [_peerAddresses removeObjectForKey:key];
+        [_lock unlock];
+        return;
+    }
 
     [_lock lock];
     NSString *old = _peerAddresses[key];
-    if ((old == nil && address != nil) || ![old isEqualToString:address]) {
-        if (address) {
-            _peerAddresses[key] = address;
-        } else {
-            [_peerAddresses removeObjectForKey:key];
-        }
-        changed = YES;
-    }
-    [_lock unlock];
+    if (![old isEqualToString:address]) {
+        _peerAddresses[key] = address;
+        [_lock unlock];
 
-    if (changed && [self.delegate respondsToSelector:@selector(zeroTierBridge:peer:didUpdateAddress:)]) {
-        [self.delegate zeroTierBridge:self peer:peerId didUpdateAddress:address];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if ([self.delegate respondsToSelector:@selector(zeroTierBridge:peer:didUpdateAddress:)]) {
+                [self.delegate zeroTierBridge:self peer:peerId didUpdateAddress:address];
+            }
+        });
+    } else {
+        [_lock unlock];
     }
 }
 
-#pragma mark - Peer 连接模式查询
+#pragma mark - 重连逻辑
+
+/// 启动重连定时器
+///
+/// 使用指数退避策略：2s、4s、8s、16s、30s（之后保持30s）
+/// 若应用在后台，延迟加倍
+- (void)startReconnectTimer {
+    // 先停止旧定时器
+    [self stopReconnectTimer];
+
+    // 检查条件
+    if (!_isStarted || _isReconnecting) {
+        return;
+    }
+
+    // 计算延迟
+    NSInteger delay = MIN(kMaxReconnectDelay, 2 * (NSInteger)pow(2, _reconnectAttempts));
+    if (_applicationInBackground) {
+        delay = (NSInteger)(delay * kBackgroundReconnectMultiplier);
+    }
+    _reconnectAttempts++;
+    _isReconnecting = YES;
+
+    NSLog(@"[ZeroTierBridge] 启动重连定时器，延迟 %.1f 秒（尝试 %ld 次）",
+          (double)delay, (long)_reconnectAttempts);
+
+    dispatch_async(dispatch_get_main_queue(), ^{
+        _reconnectTimer = [NSTimer scheduledTimerWithTimeInterval:delay
+                                                           target:self
+                                                         selector:@selector(handleReconnectTimeout)
+                                                         userInfo:nil
+                                                          repeats:NO];
+    });
+}
+
+/// 停止重连定时器
+- (void)stopReconnectTimer {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (_reconnectTimer) {
+            [_reconnectTimer invalidate];
+            _reconnectTimer = nil;
+            NSLog(@"[ZeroTierBridge] 重连定时器已停止");
+        }
+    });
+    _isReconnecting = NO;
+}
+
+/// 重连超时处理
+- (void)handleReconnectTimeout {
+    // 检查节点是否已恢复
+    if (!_isStarted || [self isNodeOnline]) {
+        _isReconnecting = NO;
+        NSLog(@"[ZeroTierBridge] 重连成功：节点已在线");
+        return;
+    }
+
+    // 检查 libzt 内部状态（可能 _isStarted 为 NO 但 zts_node_is_online 为 1）
+    if (zts_node_is_online()) {
+        NSLog(@"[ZeroTierBridge] 重连检测到 zts_node_is_online=1，尝试恢复状态");
+        [_lock lock];
+        _nodeStatus = ZeroTierNodeStatusOnline;
+        _hasBeenOnline = YES;
+        [_lock unlock];
+        _isReconnecting = NO;
+        _reconnectAttempts = 0;
+        [self stopReconnectTimer];
+
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if ([self.delegate respondsToSelector:@selector(zeroTierBridgeDidGoOnline:)]) {
+                [self.delegate zeroTierBridgeDidGoOnline:_ownNodeIdString];
+            }
+        });
+        return;
+    }
+
+    // 检查重连次数
+    if (_reconnectAttempts > kMaxReconnectAttempts) {
+        NSLog(@"[ZeroTierBridge] 重连尝试次数过多（%ld），重置节点", (long)_reconnectAttempts);
+        [self resetNode];
+        return;
+    }
+
+    // 继续尝试
+    [self startReconnectTimer];
+}
+
+/// 重置节点（停止并重新启动）
+- (void)resetNode {
+    NSLog(@"[ZeroTierBridge] 重置节点...");
+    [self stopNode];
+    if (_homeDirectory) {
+        NSLog(@"[ZeroTierBridge] 重新启动节点");
+        [self startNodeWithHomeDirectory:_homeDirectory error:nil];
+    } else {
+        NSLog(@"[ZeroTierBridge] homeDirectory 为空，无法重启节点");
+    }
+}
+
+#pragma mark - Keychain 备份与恢复
+
+/// 备份 ZeroTier 身份文件到 Keychain
+///
+/// 在节点上线后（NODE_ONLINE 事件）调用。此时 libzt 已经在 homeDir 中
+/// 生成了 identity.secret 和 identity.public 文件。
+/// 将这些文件的内容读取并存储到 Keychain，以便删除应用后恢复。
+- (void)backupIdentityToKeychain {
+    NSString *homeDir = nil;
+    [_lock lock];
+    homeDir = [_homeDirectory copy];
+    [_lock unlock];
+
+    if (!homeDir.length) {
+        NSLog(@"[ZeroTierBridge] backupIdentityToKeychain：homeDir 为空，跳过备份");
+        return;
+    }
+
+    NSFileManager *fm = [NSFileManager defaultManager];
+    NSArray<NSString *> *identityFiles = @[@"identity.secret", @"identity.public"];
+
+    for (NSString *fileName in identityFiles) {
+        NSString *filePath = [homeDir stringByAppendingPathComponent:fileName];
+        if ([fm fileExistsAtPath:filePath]) {
+            NSData *data = [NSData dataWithContentsOfFile:filePath];
+            if (data && data.length > 0) {
+                [self setKeychainData:data forKey:fileName];
+                NSLog(@"[ZeroTierBridge] 身份文件 %@ 已备份到 Keychain（%lu 字节）",
+                      fileName, (unsigned long)data.length);
+            }
+        }
+    }
+}
+
+/// 从 Keychain 恢复 ZeroTier 身份文件到 homeDir
+///
+/// 在 startNodeWithHomeDirectory: 中、zts_init_from_storage 调用前执行。
+/// 检查 homeDir 中是否已有身份文件，如果没有则从 Keychain 恢复。
+/// 这样删除应用重新安装后，仍能使用原来的节点身份。
+- (void)restoreIdentityFromKeychainToHomeDir:(NSString *)homeDir {
+    if (!homeDir || homeDir.length == 0) return;
+
+    NSFileManager *fm = [NSFileManager defaultManager];
+
+    // 确保 homeDir 存在
+    if (![fm fileExistsAtPath:homeDir]) {
+        [fm createDirectoryAtPath:homeDir withIntermediateDirectories:YES attributes:nil error:nil];
+        NSLog(@"[ZeroTierBridge] 创建 homeDir：%@", homeDir);
+    }
+
+    // 检查 identity.secret 是否已存在
+    NSString *secretPath = [homeDir stringByAppendingPathComponent:@"identity.secret"];
+    if ([fm fileExistsAtPath:secretPath]) {
+        NSLog(@"[ZeroTierBridge] identity.secret 已存在，无需恢复");
+        return;
+    }
+
+    // 从 Keychain 恢复身份文件
+    NSLog(@"[ZeroTierBridge] zerotier_home 中未找到身份文件，尝试从 Keychain 恢复...");
+    BOOL restored = NO;
+
+    NSData *secretData = [self loadKeychainDataForKey:kKeychainSecretKey];
+    if (secretData) {
+        [secretData writeToFile:secretPath atomically:YES];
+        NSLog(@"[ZeroTierBridge] 身份文件 identity.secret 已从 Keychain 恢复（%lu 字节）",
+              (unsigned long)secretData.length);
+        restored = YES;
+    } else {
+        NSLog(@"[ZeroTierBridge] Keychain 中未找到 identity.secret");
+    }
+
+    NSString *publicPath = [homeDir stringByAppendingPathComponent:@"identity.public"];
+    NSData *publicData = [self loadKeychainDataForKey:kKeychainPublicKey];
+    if (publicData) {
+        [publicData writeToFile:publicPath atomically:YES];
+        NSLog(@"[ZeroTierBridge] 身份文件 identity.public 已从 Keychain 恢复（%lu 字节）",
+              (unsigned long)publicData.length);
+        restored = YES;
+    } else {
+        NSLog(@"[ZeroTierBridge] Keychain 中未找到 identity.public");
+    }
+
+    if (restored) {
+        NSLog(@"[ZeroTierBridge] 身份文件恢复完成，节点将使用原有身份（无需重新授权）");
+    } else {
+        NSLog(@"[ZeroTierBridge] Keychain 中未找到备份的身份文件，将生成新身份");
+    }
+}
+
+/// 从 Keychain 读取数据
++ (nullable NSData *)keychainDataForKey:(NSString *)key {
+    NSDictionary *query = @{
+        (__bridge id)kSecClass: (__bridge id)kSecClassGenericPassword,
+        (__bridge id)kSecAttrService: kKeychainService,
+        (__bridge id)kSecAttrAccount: key,
+        (__bridge id)kSecReturnData: @YES,
+        (__bridge id)kSecMatchLimit: (__bridge id)kSecMatchLimitOne,
+    };
+    CFTypeRef result = NULL;
+    OSStatus status = SecItemCopyMatching((__bridge CFDictionaryRef)query, &result);
+    if (status == errSecSuccess && result) {
+        return (__bridge_transfer NSData *)result;
+    }
+    return nil;
+}
+
+/// 向 Keychain 写入数据
++ (void)setKeychainData:(NSData *)data forKey:(NSString *)key {
+    // 先删除旧数据
+    NSDictionary *deleteQuery = @{
+        (__bridge id)kSecClass: (__bridge id)kSecClassGenericPassword,
+        (__bridge id)kSecAttrService: kKeychainService,
+        (__bridge id)kSecAttrAccount: key,
+    };
+    SecItemDelete((__bridge CFDictionaryRef)deleteQuery);
+
+    // 写入新数据
+    NSDictionary *addQuery = @{
+        (__bridge id)kSecClass: (__bridge id)kSecClassGenericPassword,
+        (__bridge id)kSecAttrService: kKeychainService,
+        (__bridge id)kSecAttrAccount: key,
+        (__bridge id)kSecValueData: data,
+        (__bridge id)kSecAttrAccessible: (__bridge id)kSecAttrAccessibleAfterFirstUnlock,
+    };
+    OSStatus status = SecItemAdd((__bridge CFDictionaryRef)addQuery, NULL);
+    if (status != errSecSuccess) {
+        NSLog(@"[ZeroTierBridge] Keychain 写入失败：key=%@, status=%d", key, (int)status);
+    }
+}
+
+/// 保存 identity.secret 到 Keychain
+- (void)saveIdentitySecretToKeychain:(NSString *)secret {
+    if (secret.length == 0) return;
+    NSData *data = [secret dataUsingEncoding:NSUTF8StringEncoding];
+    [self setKeychainData:data forKey:kKeychainSecretKey];
+}
+
+/// 保存 identity.public 到 Keychain
+- (void)saveIdentityPublicToKeychain:(NSString *)publicKey {
+    if (publicKey.length == 0) return;
+    NSData *data = [publicKey dataUsingEncoding:NSUTF8StringEncoding];
+    [self setKeychainData:data forKey:kKeychainPublicKey];
+}
+
+#pragma mark - 对端信息查询
 
 /// 查询指定 peer 当前的连接模式
 /// @param peerID 对端节点 ID
@@ -1521,11 +1956,17 @@ static void zeroTierEventCallback(void *msgPtr) {
     [_lock lock];
     NSNumber *mode = _peerConnectionModes[@(peerID)];
     [_lock unlock];
+    return mode ? (ZeroTierPeerConnectionMode)[mode integerValue] : ZeroTierPeerConnectionModeUnknown;
+}
 
-    if (mode) {
-        return (ZeroTierPeerConnectionMode)[mode integerValue];
-    }
-    return ZeroTierPeerConnectionModeUnknown;
+/// 查询指定 peer 的路径地址
+/// @param peerID 对端节点 ID
+/// @return 路径地址字符串（无信息时返回 nil）
+- (nullable NSString *)peerAddressForPeer:(uint64_t)peerID {
+    [_lock lock];
+    NSString *addr = _peerAddresses[@(peerID)];
+    [_lock unlock];
+    return addr;
 }
 
 #pragma mark - 网络详情查询
@@ -1578,300 +2019,6 @@ static void zeroTierEventCallback(void *msgPtr) {
     return 0;
 }
 
-#pragma mark - 等待辅助
-
-/// 检查指定网络是否已就绪
-///
-/// 按网络类型区分地址族要求：
-///   - 标准网络（networkID 高字节不是 0xff）：要求 IPv4 地址已分配
-///   - Ad-hoc 网络（networkID 高字节是 0xff，即以 "ff" 开头）：要求 IPv6 地址已分配
-/// 两者都要求 zts_net_transport_is_ready(networkID) == 1。
-///
-/// @param networkID 网络 ID
-/// @return YES 如果网络传输就绪且对应地址族已分配
-- (BOOL)isNetworkReady:(uint64_t)networkID {
-    if (zts_net_transport_is_ready(networkID) != 1) {
-        return NO;
-    }
-
-    // Ad-hoc 网络 ID 以 "ff" 开头（高字节为 0xff），只有 IPv6 地址
-    uint8_t highByte = (uint8_t)((networkID >> 56) & 0xFF);
-    BOOL isAdhoc = (highByte == 0xFF);
-
-    if (isAdhoc) {
-        return zts_addr_is_assigned(networkID, ZTS_AF_INET6) == 1;
-    }
-
-    // 标准网络通常只分配 IPv4
-    return zts_addr_is_assigned(networkID, ZTS_AF_INET) == 1;
-}
-
-#pragma mark - Socket 操作（供 SOCKS5Proxy 使用）
-
-/// 创建 TCP socket（封装 zts_bsd_socket）
-///
-/// 创建一个基于 ZeroTier 虚拟网络的 IPv4 TCP socket。
-///
-/// @return socket 文件描述符（≥ 0 表示成功，< 0 表示失败）
-- (int)createTCPSocket {
-    // 参数：AF_INET（IPv4）、SOCK_STREAM（TCP）、IPPROTO_TCP
-    int fd = zts_bsd_socket(ZTS_AF_INET, ZTS_SOCK_STREAM, ZTS_IPPROTO_TCP);
-    if (fd < 0) {
-        NSLog(@"[ZeroTierBridge] 创建 TCP socket 失败：fd = %d, zts_errno = %d", fd, zts_errno);
-    } else {
-        NSLog(@"[ZeroTierBridge] 创建 TCP socket 成功：fd = %d", fd);
-    }
-    return fd;
-}
-
-- (int)createTCPSocketForFamily:(int)family {
-    // 根据指定的地址族创建 TCP socket
-    // 用于 Ad-hoc 网络等只有 IPv6 的场景
-    int fd = zts_bsd_socket(family, ZTS_SOCK_STREAM, ZTS_IPPROTO_TCP);
-    if (fd < 0) {
-        NSLog(@"[ZeroTierBridge] 创建 TCP socket(family=%d) 失败：fd = %d, zts_errno = %d", family, fd, zts_errno);
-    } else {
-        NSLog(@"[ZeroTierBridge] 创建 TCP socket(family=%d) 成功：fd = %d", family, fd);
-    }
-    return fd;
-}
-
-/// 连接 socket 到目标主机
-///
-/// 封装 zts_bsd_connect，支持 IPv4 和 IPv6。
-///
-/// 关键修复（C3）：原实现通过 SO_RCVTIMEO/SO_SNDTIMEO 设置超时，
-/// 但这两个选项不影响 connect 的超时（它们只影响 recv/send）。
-/// BSD socket 的 connect 在阻塞模式下默认超时约 75 秒（TCP 重传策略）。
-/// 修复方案：使用非阻塞 socket + select 实现真正的 connect 超时。
-///
-/// 注意：zts_sockaddr_in 的字段名与系统 sockaddr_in 不同：
-///   - zts_sockaddr_in 使用 sin_len、sin_family、sin_port、sin_addr、sin_zero
-///   - 端口需要转换为网络字节序（htons）
-///   - 地址使用 zts_inet_pton 从字符串转换
-///
-/// @param fd socket 文件描述符
-/// @param host 目标主机 IP 地址字符串
-/// @param port 目标端口
-/// @param timeout 连接超时时间（秒）
-/// @return 0 表示成功，< 0 表示失败
-- (int)connectSocket:(int)fd
-              toHost:(NSString *)host
-                port:(uint16_t)port
-             timeout:(NSTimeInterval)timeout {
-    // 参数校验
-    if (!host || host.length == 0) {
-        NSLog(@"[ZeroTierBridge] connectSocket 错误：host 为空");
-        return ZTS_ERR_ARG;
-    }
-
-    if (fd < 0) {
-        NSLog(@"[ZeroTierBridge] connectSocket 错误：fd 无效 (fd=%d)", fd);
-        return ZTS_ERR_ARG;
-    }
-
-    NSLog(@"[ZeroTierBridge] 连接 socket：fd = %d, host = %@, port = %u, timeout = %.1f",
-          fd, host, port, timeout);
-
-    const char *hostCStr = [host UTF8String];
-
-    // 设置 recv/send 超时（影响后续的数据传输，不影响 connect）
-    if (timeout > 0) {
-        struct zts_timeval tv;
-        tv.tv_sec = (long)timeout;
-        tv.tv_usec = (long)((timeout - (NSTimeInterval)tv.tv_sec) * 1000000);
-        if (tv.tv_usec < 0) {
-            tv.tv_usec = 0;
-        }
-
-        // 设置接收超时
-        int rc = zts_bsd_setsockopt(fd, ZTS_SOL_SOCKET, ZTS_SO_RCVTIMEO, &tv, sizeof(tv));
-        if (rc != ZTS_ERR_OK) {
-            NSLog(@"[ZeroTierBridge] 设置 SO_RCVTIMEO 失败：rc = %d, zts_errno = %d", rc, zts_errno);
-        }
-
-        // 设置发送超时
-        rc = zts_bsd_setsockopt(fd, ZTS_SOL_SOCKET, ZTS_SO_SNDTIMEO, &tv, sizeof(tv));
-        if (rc != ZTS_ERR_OK) {
-            NSLog(@"[ZeroTierBridge] 设置 SO_SNDTIMEO 失败：rc = %d, zts_errno = %d", rc, zts_errno);
-        }
-    }
-
-    // 检测 IP 地址类型（IPv4 或 IPv6）
-    // 关键修复（L1）：使用 inet_pton 严格校验，而非简单检查 ':'
-    BOOL isIPv6 = (zts_inet_pton(ZTS_AF_INET6, hostCStr, NULL) == 1);
-    NSLog(@"[ZeroTierBridge] 地址类型：%@", isIPv6 ? @"IPv6" : @"IPv4");
-
-    // 准备目标地址结构
-    struct zts_sockaddr_storage addrStorage;
-    memset(&addrStorage, 0, sizeof(addrStorage));
-    socklen_t addrLen = 0;
-
-    if (isIPv6) {
-        struct zts_sockaddr_in6 *addr6 = (struct zts_sockaddr_in6 *)&addrStorage;
-        addr6->sin6_len = sizeof(struct zts_sockaddr_in6);
-        addr6->sin6_family = ZTS_AF_INET6;
-        addr6->sin6_port = htons(port);
-
-        int ptonResult = zts_inet_pton(ZTS_AF_INET6, hostCStr, &addr6->sin6_addr);
-        if (ptonResult != 1) {
-            NSLog(@"[ZeroTierBridge] zts_inet_pton(IPv6) 失败：result = %d, host = %@", ptonResult, host);
-            return ZTS_ERR_ARG;
-        }
-        addrLen = sizeof(struct zts_sockaddr_in6);
-    } else {
-        struct zts_sockaddr_in *addr = (struct zts_sockaddr_in *)&addrStorage;
-        addr->sin_len = sizeof(struct zts_sockaddr_in);
-        addr->sin_family = ZTS_AF_INET;
-        addr->sin_port = htons(port);
-
-        int ptonResult = zts_inet_pton(ZTS_AF_INET, hostCStr, &addr->sin_addr);
-        if (ptonResult != 1) {
-            NSLog(@"[ZeroTierBridge] zts_inet_pton(IPv4) 失败：result = %d, host = %@", ptonResult, host);
-            return ZTS_ERR_ARG;
-        }
-        addrLen = sizeof(struct zts_sockaddr_in);
-    }
-
-    // 关键修复（C3）：使用非阻塞 connect + select 实现真正的超时控制
-    // 步骤 1：获取当前 socket 的 flags，设置为非阻塞
-    int origFlags = zts_bsd_fcntl(fd, ZTS_F_GETFL, 0);
-    if (origFlags < 0) {
-        NSLog(@"[ZeroTierBridge] zts_bsd_fcntl(F_GETFL) 失败：zts_errno = %d", zts_errno);
-        // 如果 fcntl 失败，回退到阻塞模式 connect（超时由系统控制）
-        int result = zts_bsd_connect(fd, (const struct zts_sockaddr *)&addrStorage, addrLen);
-        if (result != ZTS_ERR_OK) {
-            NSLog(@"[ZeroTierBridge] zts_bsd_connect(阻塞模式) 失败：result = %d, zts_errno = %d", result, zts_errno);
-        } else {
-            NSLog(@"[ZeroTierBridge] 连接成功（阻塞模式）");
-        }
-        return result;
-    }
-
-    // 设置为非阻塞
-    zts_bsd_fcntl(fd, ZTS_F_SETFL, origFlags | ZTS_O_NONBLOCK);
-
-    // 步骤 2：发起非阻塞 connect，预期返回 -1 且 zts_errno == ZTS_EINPROGRESS
-    int connectResult = zts_bsd_connect(fd, (const struct zts_sockaddr *)&addrStorage, addrLen);
-    if (connectResult == ZTS_ERR_OK) {
-        // 立即连接成功（本地回环等快速连接场景）
-        NSLog(@"[ZeroTierBridge] 连接立即成功");
-        // 恢复原始阻塞模式
-        zts_bsd_fcntl(fd, ZTS_F_SETFL, origFlags);
-        return ZTS_ERR_OK;
-    }
-
-    // 检查是否是 EINPROGRESS（非阻塞 connect 的预期返回）
-    if (zts_errno != ZTS_EINPROGRESS) {
-        NSLog(@"[ZeroTierBridge] zts_bsd_connect 失败：zts_errno = %d（非 EINPROGRESS）", zts_errno);
-        // 恢复原始阻塞模式
-        zts_bsd_fcntl(fd, ZTS_F_SETFL, origFlags);
-        return connectResult;
-    }
-
-    // 步骤 3：使用 select 等待 socket 可写，带超时
-    zts_fd_set writeFds;
-    ZTS_FD_ZERO(&writeFds);
-    ZTS_FD_SET(fd, &writeFds);
-
-    struct zts_timeval selectTimeout;
-    selectTimeout.tv_sec = (long)timeout;
-    selectTimeout.tv_usec = (long)((timeout - (NSTimeInterval)selectTimeout.tv_sec) * 1000000);
-    if (selectTimeout.tv_usec < 0) {
-        selectTimeout.tv_usec = 0;
-    }
-
-    int selectResult = zts_bsd_select(fd + 1, NULL, &writeFds, NULL, &selectTimeout);
-
-    // 恢复原始阻塞模式（无论 select 结果如何）
-    zts_bsd_fcntl(fd, ZTS_F_SETFL, origFlags);
-
-    if (selectResult < 0) {
-        NSLog(@"[ZeroTierBridge] select 错误：zts_errno = %d", zts_errno);
-        return ZTS_ERR_SOCKET;
-    }
-
-    if (selectResult == 0) {
-        // 超时
-        NSLog(@"[ZeroTierBridge] connect 超时（%.1f 秒）：host = %@, port = %u", timeout, host, port);
-        return ZTS_ERR_SOCKET;
-    }
-
-    // 步骤 4：检查连接结果（通过 SO_ERROR）
-    int socketError = 0;
-    socklen_t errorLen = sizeof(socketError);
-    int sockoptResult = zts_bsd_getsockopt(fd, ZTS_SOL_SOCKET, ZTS_SO_ERROR, &socketError, &errorLen);
-    if (sockoptResult != ZTS_ERR_OK) {
-        NSLog(@"[ZeroTierBridge] getsockopt(SO_ERROR) 失败：zts_errno = %d", zts_errno);
-        return ZTS_ERR_SOCKET;
-    }
-
-    if (socketError != 0) {
-        NSLog(@"[ZeroTierBridge] connect 失败：SO_ERROR = %d, host = %@, port = %u", socketError, host, port);
-        return ZTS_ERR_SOCKET;
-    }
-
-    NSLog(@"[ZeroTierBridge] 连接成功（非阻塞+select，%@）", isIPv6 ? @"IPv6" : @"IPv4");
-    return ZTS_ERR_OK;
-}
-
-/// 关闭 socket（封装 zts_bsd_close）
-/// @param fd socket 文件描述符
-/// @return 0 表示成功，< 0 表示失败
-- (int)closeSocket:(int)fd {
-    NSLog(@"[ZeroTierBridge] 关闭 socket：fd = %d", fd);
-    int result = zts_bsd_close(fd);
-    if (result != ZTS_ERR_OK) {
-        NSLog(@"[ZeroTierBridge] zts_bsd_close 失败：result = %d, zts_errno = %d", result, zts_errno);
-    }
-    return result;
-}
-
-/// 关闭 socket 的读/写端（封装 zts_bsd_shutdown）
-///
-/// 关键修复（M12）：SOCKS5Proxy.stop 调用此方法 shutdown 远程 fd，
-/// 强制阻塞在 recvData: 上的客户端线程立即返回，避免线程泄漏。
-- (int)shutdownSocket:(int)fd how:(int)how {
-    NSLog(@"[ZeroTierBridge] shutdown socket：fd = %d, how = %d", fd, how);
-    int result = zts_bsd_shutdown(fd, how);
-    if (result != ZTS_ERR_OK) {
-        NSLog(@"[ZeroTierBridge] zts_bsd_shutdown 失败：result = %d, zts_errno = %d", result, zts_errno);
-    }
-    return result;
-}
-
-/// 发送数据（封装 zts_bsd_send）
-/// @param fd socket 文件描述符
-/// @param buf 发送缓冲区
-/// @param len 缓冲区长度
-/// @return 实际发送的字节数（< 0 表示失败）
-- (ssize_t)sendData:(int)fd
-             buffer:(const void *)buf
-              length:(size_t)len {
-    // 参数：fd、buf、len、flags=0（无特殊标志）
-    ssize_t sent = zts_bsd_send(fd, buf, len, 0);
-    if (sent < 0) {
-        NSLog(@"[ZeroTierBridge] zts_bsd_send 失败：sent = %zd, zts_errno = %d, fd = %d", sent, zts_errno, fd);
-    }
-    return sent;
-}
-
-/// 接收数据（封装 zts_bsd_recv）
-/// @param fd socket 文件描述符
-/// @param buf 接收缓冲区
-/// @param len 缓冲区长度
-/// @return 实际接收的字节数（< 0 表示失败，0 表示连接已关闭）
-- (ssize_t)recvData:(int)fd
-             buffer:(void *)buf
-              length:(size_t)len {
-    // 参数：fd、buf、len、flags=0（无特殊标志）
-    ssize_t received = zts_bsd_recv(fd, buf, len, 0);
-    if (received < 0) {
-        NSLog(@"[ZeroTierBridge] zts_bsd_recv 失败：received = %zd, zts_errno = %d, fd = %d", received, zts_errno, fd);
-    }
-    return received;
-}
-
 #pragma mark - 工具方法
 
 /// 从十六进制字符串解析网络 ID
@@ -1887,12 +2034,7 @@ static void zeroTierEventCallback(void *msgPtr) {
         return 0;
     }
 
-    // strtoull 参数：
-    //   - str：要解析的字符串
-    //   - endptr：解析结束位置（NULL 表示不关心）
-    //   - base：进制（16 表示十六进制）
     uint64_t networkID = strtoull([networkIDStr UTF8String], NULL, 16);
-
     NSLog(@"[ZeroTierBridge] 解析网络 ID：'%@' → %016llx", networkIDStr, networkID);
     return networkID;
 }
@@ -1907,134 +2049,267 @@ static void zeroTierEventCallback(void *msgPtr) {
     return [NSString stringWithFormat:@"%016llx", networkID];
 }
 
-#pragma mark - 身份文件 Keychain 备份与恢复
+#pragma mark - Socket 操作
 
-/// Keychain 中存储身份数据的 service 标识
-static NSString * const kZTIdentityKeychainService = @"com.angelaura.zerotier.identity";
-
-/// ZeroTier 身份文件名列表
+/// 创建 TCP socket（封装 zts_bsd_socket）
 ///
-/// libzt 在 homeDir 下生成以下文件：
-/// - identity.secret：节点私钥（最重要，丢失后节点身份改变）
-/// - identity.public：节点公钥
-/// - authtoken.secret：API 认证令牌
+/// 创建一个基于 ZeroTier 虚拟网络的 IPv4 TCP socket。
 ///
-/// 只需备份 identity.secret 和 identity.public 即可保持节点身份不变。
-/// authtoken.secret 会在每次 zts_init_from_storage 时自动重新生成。
-static NSArray<NSString *> * const kZTIdentityFiles = @[@"identity.secret", @"identity.public"];
-
-/// 从 Keychain 读取数据
-+ (nullable NSData *)keychainDataForKey:(NSString *)key {
-    NSDictionary *query = @{
-        (__bridge id)kSecClass: (__bridge id)kSecClassGenericPassword,
-        (__bridge id)kSecAttrService: kZTIdentityKeychainService,
-        (__bridge id)kSecAttrAccount: key,
-        (__bridge id)kSecReturnData: @YES,
-        (__bridge id)kSecMatchLimit: (__bridge id)kSecMatchLimitOne,
-    };
-    CFTypeRef result = NULL;
-    OSStatus status = SecItemCopyMatching((__bridge CFDictionaryRef)query, &result);
-    if (status == errSecSuccess && result) {
-        return (__bridge_transfer NSData *)result;
-    }
-    return nil;
+/// @return socket 文件描述符（≥ 0 表示成功，< 0 表示失败）
+- (int)createTCPSocket {
+    return [self createTCPSocketForFamily:ZTS_AF_INET];
 }
 
-/// 向 Keychain 写入数据
-+ (void)setKeychainData:(NSData *)data forKey:(NSString *)key {
-    // 先删除旧数据
-    NSDictionary *deleteQuery = @{
-        (__bridge id)kSecClass: (__bridge id)kSecClassGenericPassword,
-        (__bridge id)kSecAttrService: kZTIdentityKeychainService,
-        (__bridge id)kSecAttrAccount: key,
-    };
-    SecItemDelete((__bridge CFDictionaryRef)deleteQuery);
-
-    // 写入新数据
-    NSDictionary *addQuery = @{
-        (__bridge id)kSecClass: (__bridge id)kSecClassGenericPassword,
-        (__bridge id)kSecAttrService: kZTIdentityKeychainService,
-        (__bridge id)kSecAttrAccount: key,
-        (__bridge id)kSecValueData: data,
-        (__bridge id)kSecAttrAccessible: (__bridge id)kSecAttrAccessibleAfterFirstUnlock,
-    };
-    OSStatus status = SecItemAdd((__bridge CFDictionaryRef)addQuery, NULL);
-    if (status != errSecSuccess) {
-        NSLog(@"[ZeroTierBridge] Keychain 写入失败：key=%@, status=%d", key, (int)status);
-    }
-}
-
-/// 备份 ZeroTier 身份文件到 Keychain
+/// 创建 TCP socket（指定地址族）
 ///
-/// 在节点上线后（NODE_ONLINE 事件）调用。此时 libzt 已经在 homeDir 中
-/// 生成了 identity.secret 和 identity.public 文件。
-/// 将这些文件的内容读取并存储到 Keychain，以便删除应用后恢复。
-- (void)backupIdentityToKeychain {
-    NSString *homeDir = nil;
-    [_lock lock];
-    homeDir = [_homeDirectory copy];
-    [_lock unlock];
-
-    if (!homeDir.length) {
-        NSLog(@"[ZeroTierBridge] backupIdentityToKeychain：homeDir 为空，跳过备份");
-        return;
-    }
-
-    NSFileManager *fm = [NSFileManager defaultManager];
-    for (NSString *fileName in kZTIdentityFiles) {
-        NSString *filePath = [homeDir stringByAppendingPathComponent:fileName];
-        if ([fm fileExistsAtPath:filePath]) {
-            NSData *data = [NSData dataWithContentsOfFile:filePath];
-            if (data && data.length > 0) {
-                [[self class] setKeychainData:data forKey:fileName];
-                NSLog(@"[ZeroTierBridge] 身份文件 %@ 已备份到 Keychain（%lu 字节）",
-                      fileName, (unsigned long)data.length);
-            }
-        }
-    }
-}
-
-/// 从 Keychain 恢复 ZeroTier 身份文件到 homeDir
+/// 用于 Ad-hoc 网络等只有 IPv6 的场景。
+/// - ZTS_AF_INET（IPv4）：标准 ZeroTier 网络
+/// - ZTS_AF_INET6（IPv6）：Ad-hoc 网络（只有 IPv6 地址）
 ///
-/// 在 startNodeWithHomeDirectory: 中、zts_init_from_storage 调用前执行。
-/// 检查 homeDir 中是否已有身份文件，如果没有则从 Keychain 恢复。
-/// 这样删除应用重新安装后，仍能使用原来的节点身份。
-- (void)restoreIdentityFromKeychainToHomeDir:(NSString *)homeDir {
-    if (!homeDir || homeDir.length == 0) return;
-
-    NSFileManager *fm = [NSFileManager defaultManager];
-
-    // 确保 homeDir 存在
-    if (![fm fileExistsAtPath:homeDir]) {
-        [fm createDirectoryAtPath:homeDir withIntermediateDirectories:YES attributes:nil error:nil];
-    }
-
-    // 检查 identity.secret 是否已存在
-    NSString *secretPath = [homeDir stringByAppendingPathComponent:@"identity.secret"];
-    if ([fm fileExistsAtPath:secretPath]) {
-        // 身份文件已存在，无需恢复
-        return;
-    }
-
-    // 从 Keychain 恢复身份文件
-    NSLog(@"[ZeroTierBridge] zerotier_home 中未找到身份文件，尝试从 Keychain 恢复...");
-    BOOL restored = NO;
-    for (NSString *fileName in kZTIdentityFiles) {
-        NSData *data = [[self class] keychainDataForKey:fileName];
-        if (data && data.length > 0) {
-            NSString *filePath = [homeDir stringByAppendingPathComponent:fileName];
-            [data writeToFile:filePath atomically:YES];
-            NSLog(@"[ZeroTierBridge] 身份文件 %@ 已从 Keychain 恢复（%lu 字节）",
-                  fileName, (unsigned long)data.length);
-            restored = YES;
-        }
-    }
-
-    if (restored) {
-        NSLog(@"[ZeroTierBridge] 身份文件恢复完成，节点将使用原有身份（无需重新授权）");
+/// @param family 地址族（ZTS_AF_INET 或 ZTS_AF_INET6）
+/// @return socket 文件描述符（≥ 0 表示成功，< 0 表示失败）
+- (int)createTCPSocketForFamily:(int)family {
+    int fd = zts_bsd_socket(family, ZTS_SOCK_STREAM, ZTS_IPPROTO_TCP);
+    if (fd < 0) {
+        NSLog(@"[ZeroTierBridge] 创建 ZeroTier socket(family=%d) 失败：fd=%d, zts_errno=%d",
+              family, fd, zts_errno);
     } else {
-        NSLog(@"[ZeroTierBridge] Keychain 中未找到备份的身份文件，将生成新身份");
+        NSLog(@"[ZeroTierBridge] 创建 ZeroTier socket(family=%d) 成功：fd=%d", family, fd);
+
+        // 设置 TCP_NODELAY（禁用 Nagle 算法，降低延迟）
+        int nodelay = 1;
+        zts_bsd_setsockopt(fd, ZTS_IPPROTO_TCP, ZTS_TCP_NODELAY, &nodelay, sizeof(nodelay));
+
+        // 设置 SO_KEEPALIVE（保持连接活跃）
+        int keepalive = 1;
+        zts_bsd_setsockopt(fd, ZTS_SOL_SOCKET, ZTS_SO_KEEPALIVE, &keepalive, sizeof(keepalive));
     }
+    return fd;
+}
+
+/// 连接 socket 到目标主机
+///
+/// 封装 zts_bsd_connect，支持 IPv4 和 IPv6。
+///
+/// 关键修复（C3）：使用非阻塞 socket + select 实现真正的 connect 超时。
+///
+/// @param fd socket 文件描述符
+/// @param host 目标主机 IP 地址字符串
+/// @param port 目标端口
+/// @param timeout 连接超时时间（秒）
+/// @return 0 表示成功，< 0 表示失败
+- (int)connectSocket:(int)fd
+              toHost:(NSString *)host
+                port:(uint16_t)port
+             timeout:(NSTimeInterval)timeout {
+    // ============================================================
+    // 1. 参数校验
+    // ============================================================
+    if (!host || host.length == 0 || fd < 0) {
+        NSLog(@"[ZeroTierBridge] connectSocket 参数无效：fd=%d, host=%@", fd, host);
+        return ZTS_ERR_ARG;
+    }
+    NSLog(@"[ZeroTierBridge] 连接 socket：fd=%d, host=%@, port=%u, timeout=%.1f",
+          fd, host, port, timeout);
+
+    const char *hostCStr = [host UTF8String];
+
+    // ============================================================
+    // 2. 设置 recv/send 超时（影响后续的数据传输，不影响 connect）
+    // ============================================================
+    if (timeout > 0) {
+        struct zts_timeval tv;
+        tv.tv_sec = (long)timeout;
+        tv.tv_usec = (long)((timeout - (NSTimeInterval)tv.tv_sec) * 1000000);
+        if (tv.tv_usec < 0) {
+            tv.tv_usec = 0;
+        }
+
+        int rc = zts_bsd_setsockopt(fd, ZTS_SOL_SOCKET, ZTS_SO_RCVTIMEO, &tv, sizeof(tv));
+        if (rc != ZTS_ERR_OK) {
+            NSLog(@"[ZeroTierBridge] 设置 SO_RCVTIMEO 失败：%d", rc);
+        }
+        rc = zts_bsd_setsockopt(fd, ZTS_SOL_SOCKET, ZTS_SO_SNDTIMEO, &tv, sizeof(tv));
+        if (rc != ZTS_ERR_OK) {
+            NSLog(@"[ZeroTierBridge] 设置 SO_SNDTIMEO 失败：%d", rc);
+        }
+    }
+
+    // ============================================================
+    // 3. 检测目标地址类型
+    // ============================================================
+    BOOL isIPv6 = (zts_inet_pton(ZTS_AF_INET6, hostCStr, NULL) == 1);
+    NSLog(@"[ZeroTierBridge] 地址类型：%@", isIPv6 ? @"IPv6" : @"IPv4");
+
+    // ============================================================
+    // 4. 准备目标地址结构
+    // ============================================================
+    struct zts_sockaddr_storage addrStorage;
+    memset(&addrStorage, 0, sizeof(addrStorage));
+    socklen_t addrLen = 0;
+
+    if (isIPv6) {
+        struct zts_sockaddr_in6 *addr6 = (struct zts_sockaddr_in6 *)&addrStorage;
+        addr6->sin6_len = sizeof(struct zts_sockaddr_in6);
+        addr6->sin6_family = ZTS_AF_INET6;
+        addr6->sin6_port = htons(port);
+
+        int ptonResult = zts_inet_pton(ZTS_AF_INET6, hostCStr, &addr6->sin6_addr);
+        if (ptonResult != 1) {
+            NSLog(@"[ZeroTierBridge] zts_inet_pton(IPv6) 失败：result=%d, host=%@", ptonResult, host);
+            return ZTS_ERR_ARG;
+        }
+        addrLen = sizeof(struct zts_sockaddr_in6);
+    } else {
+        struct zts_sockaddr_in *addr = (struct zts_sockaddr_in *)&addrStorage;
+        addr->sin_len = sizeof(struct zts_sockaddr_in);
+        addr->sin_family = ZTS_AF_INET;
+        addr->sin_port = htons(port);
+
+        int ptonResult = zts_inet_pton(ZTS_AF_INET, hostCStr, &addr->sin_addr);
+        if (ptonResult != 1) {
+            NSLog(@"[ZeroTierBridge] zts_inet_pton(IPv4) 失败：result=%d, host=%@", ptonResult, host);
+            return ZTS_ERR_ARG;
+        }
+        addrLen = sizeof(struct zts_sockaddr_in);
+    }
+
+    // ============================================================
+    // 5. 非阻塞 connect + select 实现超时
+    // ============================================================
+    int origFlags = zts_bsd_fcntl(fd, ZTS_F_GETFL, 0);
+    if (origFlags < 0) {
+        NSLog(@"[ZeroTierBridge] zts_bsd_fcntl(F_GETFL) 失败，回退到阻塞模式");
+        int result = zts_bsd_connect(fd, (const struct zts_sockaddr *)&addrStorage, addrLen);
+        if (result != ZTS_ERR_OK) {
+            NSLog(@"[ZeroTierBridge] 阻塞模式连接失败：%d", result);
+        } else {
+            NSLog(@"[ZeroTierBridge] 阻塞模式连接成功");
+        }
+        return result;
+    }
+
+    // 设置为非阻塞
+    zts_bsd_fcntl(fd, ZTS_F_SETFL, origFlags | ZTS_O_NONBLOCK);
+
+    int connectResult = zts_bsd_connect(fd, (const struct zts_sockaddr *)&addrStorage, addrLen);
+    if (connectResult == ZTS_ERR_OK) {
+        NSLog(@"[ZeroTierBridge] 连接立即成功");
+        zts_bsd_fcntl(fd, ZTS_F_SETFL, origFlags);
+        return ZTS_ERR_OK;
+    }
+
+    // 检查是否是 EINPROGRESS（非阻塞 connect 的预期返回）
+    if (zts_errno != ZTS_EINPROGRESS) {
+        NSLog(@"[ZeroTierBridge] 非阻塞连接失败：zts_errno=%d", zts_errno);
+        zts_bsd_fcntl(fd, ZTS_F_SETFL, origFlags);
+        return connectResult;
+    }
+
+    // 使用 select 等待连接完成
+    zts_fd_set writeFds;
+    ZTS_FD_ZERO(&writeFds);
+    ZTS_FD_SET(fd, &writeFds);
+
+    struct zts_timeval selectTimeout;
+    selectTimeout.tv_sec = (long)timeout;
+    selectTimeout.tv_usec = (long)((timeout - (NSTimeInterval)selectTimeout.tv_sec) * 1000000);
+    if (selectTimeout.tv_usec < 0) {
+        selectTimeout.tv_usec = 0;
+    }
+
+    int selectResult = zts_bsd_select(fd + 1, NULL, &writeFds, NULL, &selectTimeout);
+
+    // 恢复原始阻塞模式
+    zts_bsd_fcntl(fd, ZTS_F_SETFL, origFlags);
+
+    if (selectResult < 0) {
+        NSLog(@"[ZeroTierBridge] select 错误：zts_errno=%d", zts_errno);
+        return ZTS_ERR_SOCKET;
+    }
+
+    if (selectResult == 0) {
+        NSLog(@"[ZeroTierBridge] 连接超时（%.1f 秒）：%@:%u", timeout, host, port);
+        return ZTS_ERR_SOCKET;
+    }
+
+    // 检查连接结果（通过 SO_ERROR）
+    int socketError = 0;
+    socklen_t errorLen = sizeof(socketError);
+    int sockoptResult = zts_bsd_getsockopt(fd, ZTS_SOL_SOCKET, ZTS_SO_ERROR, &socketError, &errorLen);
+    if (sockoptResult != ZTS_ERR_OK) {
+        NSLog(@"[ZeroTierBridge] getsockopt(SO_ERROR) 失败：%d", zts_errno);
+        return ZTS_ERR_SOCKET;
+    }
+
+    if (socketError != 0) {
+        NSLog(@"[ZeroTierBridge] 连接失败：SO_ERROR=%d, host=%@, port=%u", socketError, host, port);
+        return ZTS_ERR_SOCKET;
+    }
+
+    NSLog(@"[ZeroTierBridge] 连接成功（非阻塞+select）");
+    return ZTS_ERR_OK;
+}
+
+/// 关闭 socket（封装 zts_bsd_close）
+/// @param fd socket 文件描述符
+/// @return 0 表示成功，< 0 表示失败
+- (int)closeSocket:(int)fd {
+    if (fd < 0) return ZTS_ERR_ARG;
+    int result = zts_bsd_close(fd);
+    if (result != ZTS_ERR_OK) {
+        NSLog(@"[ZeroTierBridge] zts_bsd_close 失败：result=%d, zts_errno=%d", result, zts_errno);
+    } else {
+        NSLog(@"[ZeroTierBridge] 关闭 socket：fd=%d", fd);
+    }
+    return result;
+}
+
+/// 关闭 socket 的读/写端（封装 zts_bsd_shutdown）
+///
+/// 关键修复（M12）：SOCKS5Proxy.stop 调用此方法 shutdown 远程 fd，
+/// 强制阻塞在 recvData: 上的客户端线程立即返回，避免线程泄漏。
+- (int)shutdownSocket:(int)fd how:(int)how {
+    if (fd < 0) return ZTS_ERR_ARG;
+    int result = zts_bsd_shutdown(fd, how);
+    if (result != ZTS_ERR_OK) {
+        NSLog(@"[ZeroTierBridge] zts_bsd_shutdown 失败：result=%d, zts_errno=%d", result, zts_errno);
+    } else {
+        NSLog(@"[ZeroTierBridge] shutdown socket：fd=%d, how=%d", fd, how);
+    }
+    return result;
+}
+
+/// 发送数据（封装 zts_bsd_send）
+/// @param fd socket 文件描述符
+/// @param buf 发送缓冲区
+/// @param len 缓冲区长度
+/// @return 实际发送的字节数（< 0 表示失败）
+- (ssize_t)sendData:(int)fd
+             buffer:(const void *)buf
+              length:(size_t)len {
+    if (fd < 0 || !buf || len == 0) return ZTS_ERR_ARG;
+    ssize_t sent = zts_bsd_send(fd, buf, len, 0);
+    if (sent < 0) {
+        NSLog(@"[ZeroTierBridge] zts_bsd_send 失败：sent=%zd, zts_errno=%d", sent, zts_errno);
+    }
+    return sent;
+}
+
+/// 接收数据（封装 zts_bsd_recv）
+/// @param fd socket 文件描述符
+/// @param buf 接收缓冲区
+/// @param len 缓冲区长度
+/// @return 实际接收的字节数（< 0 表示失败，0 表示连接已关闭）
+- (ssize_t)recvData:(int)fd
+             buffer:(void *)buf
+              length:(size_t)len {
+    if (fd < 0 || !buf || len == 0) return ZTS_ERR_ARG;
+    ssize_t received = zts_bsd_recv(fd, buf, len, 0);
+    if (received < 0) {
+        NSLog(@"[ZeroTierBridge] zts_bsd_recv 失败：received=%zd, zts_errno=%d", received, zts_errno);
+    }
+    return received;
 }
 
 @end
