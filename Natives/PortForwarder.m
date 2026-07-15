@@ -15,7 +15,7 @@
 //    2. 客户端连接后，在新线程中处理连接和数据转发
 //    3. 远程连接通过 ZeroTierBridge 的 libzt socket API 建立
 //    4. 双向转发使用 GCD 并发队列，两个方向同时转发
-//    5. 使用 _Atomic(BOOL) 标志确保跨线程内存可见性
+//    5. 使用 atomic_bool 标志确保跨线程内存可见性
 //    6. 端口冲突处理：尝试 localPort 到 localPort+9，最后回退 port=0
 //
 //  线程模型：
@@ -591,16 +591,18 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
 ///
 /// 在客户端 socket（系统 POSIX）和远程 socket（libzt）之间双向转发数据。
 /// 使用 GCD 并发队列，两个方向同时转发。
-/// 使用 _Atomic(BOOL) 标志确保跨线程内存可见性。
+/// 使用 atomic_bool 标志确保跨线程内存可见性。
 ///
 /// @param clientFD 客户端 socket（系统 POSIX socket）
 /// @param remoteFD 远程 socket（libzt socket）
 - (void)forwardDataBetweenClientFD:(int)clientFD
                           remoteFD:(int)remoteFD {
-    // 使用 _Atomic(BOOL) 替代 __block BOOL，确保跨线程内存可见性
+    // 使用 atomic_bool 替代 __block BOOL，确保跨线程内存可见性
     // （参考 SOCKS5Proxy 的实现，ARM64 弱内存模型需要原子操作提供内存屏障）
-    __block _Atomic(BOOL) clientClosed = NO;
-    __block _Atomic(BOOL) remoteClosed = NO;
+    // 关键修复：使用 atomic_bool 替代 atomic_bool，确保跨平台兼容性
+    // atomic_bool 在 Objective-C 中可能不被支持（BOOL 是 signed char 的 typedef）
+    __block atomic_bool clientClosed = ATOMIC_VAR_INIT(false);
+    __block atomic_bool remoteClosed = ATOMIC_VAR_INIT(false);
     
     // 创建并发队列用于双向转发
     dispatch_queue_t forwardQueue = dispatch_queue_create("com.angelaura.portforwarder.forward", DISPATCH_QUEUE_CONCURRENT);
@@ -629,7 +631,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
                     NSLog(@"[PortForwarder] client→remote 结束：n=%zd, errno=%d", n, errno);
                     
                     // 标记客户端已关闭（原子写，自带内存屏障）
-                    atomic_store(&clientClosed, YES);
+                    atomic_store(&clientClosed, true);
                     
                     // 关闭远程的写端，通知 remote→client 方向退出
                     // shutdown 会导致另一端的 recv 返回 0
@@ -645,7 +647,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
                     NSLog(@"[PortForwarder] 发送到远程失败：sent=%zd", sent);
                     
                     // 标记远程已关闭（原子写）
-                    atomic_store(&remoteClosed, YES);
+                    atomic_store(&remoteClosed, true);
                     
                     // 关闭客户端的写端
                     shutdown(clientFD, SHUT_WR);
@@ -680,7 +682,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
                     NSLog(@"[PortForwarder] remote→client 结束：n=%zd", n);
                     
                     // 标记远程已关闭（原子写）
-                    atomic_store(&remoteClosed, YES);
+                    atomic_store(&remoteClosed, true);
                     
                     // 关闭客户端的写端，通知 client→remote 方向退出
                     shutdown(clientFD, SHUT_WR);
@@ -693,7 +695,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
                     NSLog(@"[PortForwarder] 发送到客户端失败：sent=%zd", sent);
                     
                     // 标记客户端已关闭（原子写）
-                    atomic_store(&clientClosed, YES);
+                    atomic_store(&clientClosed, true);
                     
                     // 关闭远程的写端
                     [[ZeroTierBridge sharedInstance] shutdownSocket:remoteFD how:SHUT_WR];
