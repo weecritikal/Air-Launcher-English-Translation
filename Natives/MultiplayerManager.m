@@ -2042,4 +2042,59 @@ static NSString * const kPresetNetworkIdPrefKey = @"multiplayer.preset_network_i
     return [prefix isEqualToString:@"ff"];
 }
 
+
+#pragma mark - 存档关闭彻底清理
+
+/// 停止所有联机服务
+/// 在存档关闭、应用退出或断开连接时调用，确保所有资源被彻底释放
+- (void)stopAllMultiplayerServices {
+    NSLog(@"[MultiplayerManager] 停止所有联机服务...");
+
+    // 1. 停止 SOCKS5 代理
+    if ([[SOCKS5Proxy sharedProxy] isRunning]) {
+        NSLog(@"[MultiplayerManager] 停止 SOCKS5 代理");
+        [[SOCKS5Proxy sharedProxy] stop];
+    }
+
+    // 2. 停止端口转发器
+    if ([[PortForwarder sharedForwarder] isRunning]) {
+        NSLog(@"[MultiplayerManager] 停止端口转发器");
+        [[PortForwarder sharedForwarder] stop];
+    }
+
+    // 3. 清除环境变量（防止旧联机码残留）
+    unsetenv([kAMETHYSTSOCKS5ProxyEnvVar UTF8String]);
+    NSLog(@"[MultiplayerManager] 已清除 SOCKS5 环境变量");
+
+    // 4. 离开所有 ZeroTier 网络
+    [_stateLock lock];
+    NSArray *rooms = [self.internalRooms copy];
+    [_stateLock unlock];
+
+    for (MultiplayerRoom *room in rooms) {
+        if (room.networkId && room.networkId.length > 0) {
+            uint64_t networkID = [room.networkId unsignedLongLongValue];
+            NSLog(@"[MultiplayerManager] 离开网络：%@", room.networkId);
+            [[ZeroTierBridge sharedInstance] leaveNetwork:networkID];
+        }
+    }
+
+    // 5. 停止 ZeroTier 节点
+    NSLog(@"[MultiplayerManager] 停止 ZeroTier 节点");
+    [[ZeroTierBridge sharedInstance] stopNode];
+
+    // 6. 重置所有状态（确保下次开房生成新联机码）
+    [_stateLock lock];
+    self.currentRoom = nil;
+    self.currentNetworkID = 0;
+    self.currentLocalIP = nil;
+    self.currentSOCKS5Port = 0;
+    self.currentForwardingPort = 0;
+    self.currentPeerConnectionMode = nil;
+    _nodeStarted = NO;
+    [_stateLock unlock];
+
+    NSLog(@"[MultiplayerManager] 所有联机服务已停止，状态已重置");
+}
+
 @end
