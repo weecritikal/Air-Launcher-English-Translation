@@ -292,6 +292,18 @@ typedef NS_ENUM(NSInteger, MultiplayerRoomStatus) {
 ///   5. 清空 currentRoom
 - (void)disconnectCurrentRoom;
 
+/// 停止所有联机服务（彻底清理）
+///
+/// 在存档关闭、游戏退出、应用进入后台或被终止时调用，确保所有资源被彻底释放：
+///   1. 停止 SOCKS5 代理
+///   2. 停止端口转发器
+///   3. 清除 AMETHYST_SOCKS5_PROXY 环境变量
+///   4. 离开所有 ZeroTier 网络
+///   5. 停止 ZeroTier 节点
+///   6. 重置所有状态
+///   7. 清除 PLProfiles 中残留的 serverIp
+- (void)stopAllMultiplayerServices;
+
 #pragma mark - 分享与导入
 
 /// 生成房间的分享文本

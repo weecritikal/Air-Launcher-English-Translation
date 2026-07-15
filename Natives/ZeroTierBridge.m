@@ -121,6 +121,12 @@ typedef NS_ENUM(NSInteger, ZeroTierErrorCode) {
     /// 自动重连尝试次数
     int _autoReconnectAttempts;
 
+    /// 关键修复（P1-C）：区分"自动重连触发的 stopNode"与"用户/外部调用的 stopNode"
+    /// 自动重连触发的 stopNode 不复位 _autoReconnectAttempts / _consecutiveOfflineCount，
+    /// 否则 flapping 节点（快速上下线）会反复清零计数器，导致 5 次上限形同虚设，
+    /// 可能造成无限 stop/start 循环。只有用户主动停止节点时才复位计数器。
+    BOOL _stopNodeForReconnect;
+
     /// 最近一次节点上线时间（用于判断是否为频繁掉线）
     NSDate *_lastOnlineTime;
 
@@ -311,6 +317,7 @@ static void zeroTierEventCallback(void *msgPtr) {
         // 新增：初始化重连与保活相关状态
         _isAutoReconnecting = NO;
         _autoReconnectAttempts = 0;
+        _stopNodeForReconnect = NO;
         _lastOnlineTime = nil;
         _consecutiveOfflineCount = 0;
         _keepAliveTimer = nil;
@@ -609,7 +616,15 @@ static void zeroTierEventCallback(void *msgPtr) {
     // 清理内部状态
     // 注意：即使没有收到 NODE_DOWN 事件，这里也要主动清理，确保下次 startNode 能正常工作。
     // NODE_DOWN 事件回调（H1 修复）也会做同样的清理，两者互不冲突（幂等操作）。
+    //
+    // 关键修复（P1-C）：_autoReconnectAttempts 和 _consecutiveOfflineCount 的复位逻辑
+    // 原实现：stopNode 无条件复位这两个计数器，导致 performAutoReconnect 内部调用
+    //   stopNode（重连前强制停止节点）时也清零了计数器。flapping 节点（快速上下线）
+    //   会反复清零，5 次上限形同虚设，可能造成无限 stop/start 循环。
+    // 修复：用 _stopNodeForReconnect 标志区分。自动重连触发的 stopNode（标志为 YES）
+    //   不复位计数器，让重试次数能正确累积；用户主动停止（标志为 NO）才复位。
     [_lock lock];
+    BOOL shouldResetReconnectCounters = !_stopNodeForReconnect;
     _isStarted = NO;
     _nodeStatus = ZeroTierNodeStatusStopped;
     _nodeID = 0;
@@ -617,9 +632,18 @@ static void zeroTierEventCallback(void *msgPtr) {
     _homeDirectory = nil;
     _ownNodeIdString = nil;
     _isStackUp = NO;
-    _isAutoReconnecting = NO;
-    _autoReconnectAttempts = 0;
-    _consecutiveOfflineCount = 0;
+    if (shouldResetReconnectCounters) {
+        // 用户主动停止：复位所有重连计数器
+        _isAutoReconnecting = NO;
+        _autoReconnectAttempts = 0;
+        _consecutiveOfflineCount = 0;
+    } else {
+        // 自动重连触发的 stopNode：仅复位 _isAutoReconnecting（允许下次重连），
+        // 保留 _autoReconnectAttempts 和 _consecutiveOfflineCount 以累积计数
+        _isAutoReconnecting = NO;
+    }
+    // 复位标志，防止状态泄漏到下一次 stopNode
+    _stopNodeForReconnect = NO;
     [_networkStatuses removeAllObjects];
     [_ipv4Addresses removeAllObjects];
     [_ipv6Addresses removeAllObjects];
@@ -629,10 +653,12 @@ static void zeroTierEventCallback(void *msgPtr) {
 
     // 新增：停止保活和重连
     [self stopKeepAlive];
+    // stopAutoReconnect 会取消待执行的重连 block，但不清零计数器（计数器已在上面按场景处理）
     [self stopAutoReconnect];
     [self clearJoinedNetworkRecords];
 
-    NSLog(@"[ZeroTierBridge] 节点已停止，内部状态已清理");
+    NSLog(@"[ZeroTierBridge] 节点已停止，内部状态已清理（复位重连计数器：%@）",
+          shouldResetReconnectCounters ? @"YES（用户主动停止）" : @"NO（自动重连触发）");
 }
 
 /// 节点是否在线
@@ -2226,6 +2252,12 @@ static NSArray<NSString *> * const kZTIdentityFiles = @[@"identity.secret", @"id
                 return;
             }
             NSLog(@"[ZeroTierBridge] 检测到 _isStarted=YES 但节点已掉线，强制重启节点");
+            // 关键修复（P1-C）：设置标志，通知 stopNode 这是自动重连触发的，
+            // 不要复位 _autoReconnectAttempts / _consecutiveOfflineCount，
+            // 让重试次数能正确累积到 5 次上限，防止 flapping 无限循环
+            [strongSelf->_lock lock];
+            strongSelf->_stopNodeForReconnect = YES;
+            [strongSelf->_lock unlock];
             // 强制 stop 清理 _isStarted 等状态，让后续 startNode 能正常工作
             [[ZeroTierBridge sharedInstance] stopNode];
         }
@@ -2248,6 +2280,46 @@ static NSArray<NSString *> * const kZTIdentityFiles = @[@"identity.secret", @"id
             [strongSelf->_lock unlock];
             // 继续下一次重连
             [strongSelf startAutoReconnect];
+        } else {
+            // 关键修复（P1-C）：startNode 成功但 NODE_ONLINE 可能永不触发
+            //
+            // 问题：startNodeWithHomeDirectory 返回 YES 仅表示 zts_node_start 提交成功，
+            // 但节点实际上线需要等待 NODE_ONLINE 事件。若网络完全不通，NODE_ONLINE 永不触发，
+            // _isAutoReconnecting 永远为 YES，自动重连特性静默停止，无告警。
+            //
+            // 修复：在 60 秒后检查节点是否真正上线，若未上线则复位标志并递归触发下一次重连。
+            // 60 秒足够 libzt 完成正常启动流程（通常 5-15 秒）。
+            [strongSelf->_lock lock];
+            int currentAttempt = strongSelf->_autoReconnectAttempts;
+            [strongSelf->_lock unlock];
+            if (currentAttempt < 5) {
+                NSLog(@"[ZeroTierBridge] startNode 成功，将在60秒后检查节点是否真正上线");
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(60.0 * NSEC_PER_SEC)),
+                               dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
+                    __strong typeof(weakSelf) strongSelf2 = weakSelf;
+                    if (!strongSelf2) return;
+                    BOOL online = (zts_node_is_online() == 1);
+                    if (!online) {
+                        NSLog(@"[ZeroTierBridge] startNode 后60秒节点仍未上线，触发下一次重连");
+                        [strongSelf2->_lock lock];
+                        strongSelf2->_isAutoReconnecting = NO;  // 复位以允许 startAutoReconnect 进入
+                        [strongSelf2->_lock unlock];
+                        [strongSelf2 startAutoReconnect];
+                    } else {
+                        NSLog(@"[ZeroTierBridge] startNode 后60秒节点已确认上线，重连成功");
+                        [strongSelf2->_lock lock];
+                        strongSelf2->_isAutoReconnecting = NO;
+                        strongSelf2->_autoReconnectAttempts = 0;  // 重连成功，复位计数器
+                        strongSelf2->_consecutiveOfflineCount = 0;
+                        [strongSelf2->_lock unlock];
+                    }
+                });
+            } else {
+                NSLog(@"[ZeroTierBridge] 已达到5次重连上限，startNode 成功后等待 libzt 自愈");
+                [strongSelf->_lock lock];
+                strongSelf->_isAutoReconnecting = NO;
+                [strongSelf->_lock unlock];
+            }
         }
     });
 
@@ -2292,32 +2364,84 @@ static NSArray<NSString *> * const kZTIdentityFiles = @[@"identity.secret", @"id
 }
 
 /// 发送UDP保活包
-/// 通过ZeroTier网络广播，防止iOS系统关闭连接
+///
+/// 关键修复（P1-D）：废弃旧的 255.255.255.255:9999 广播方案。
+///
+/// 原方案缺陷：
+///   1. 255.255.255.255 受限广播在 ZeroTier 虚拟网络中通常不被转发
+///   2. 端口 9999 无任何监听者，仅产生广播噪音
+///   3. 每次 sendto 后立即关闭 socket，无法维持 NAT 映射
+///   4. sendto 返回值未检查，无法发现发送失败
+///   5. 未检查网络是否已加入（仅检查节点 Online）
+///
+/// 新方案：向已加入网络的 .1 地址（通常是 ZeroTier 路由器/网关）发送定向 UDP 包。
+///   - 定向单播比广播更可靠，ZeroTier 虚拟网络会实际转发
+///   - 向 .1 发送即使无监听者，ZeroTier 也会为维持 NAT 映射处理这个流量
+///   - 检查 sendto 返回值，失败时记录日志
+///   - 检查网络就绪状态（有已分配的 IPv4 地址）
 - (void)sendKeepAlivePacket {
     [_lock lock];
     BOOL online = (_nodeStatus == ZeroTierNodeStatusOnline);
+    NSArray *networkIDs = [_joinedNetworkIDs copy];
+    NSMutableDictionary<NSNumber *, NSString *> *ipv4Copy = [_ipv4Addresses copy];
     [_lock unlock];
 
-    if (!online) return;
+    if (!online) {
+        return;
+    }
+    if (networkIDs.count == 0) {
+        // 没有已加入的网络，跳过（保活无意义）
+        return;
+    }
 
-    // 创建UDP socket
-    int sock = zts_bsd_socket(ZTS_AF_INET, ZTS_SOCK_DGRAM, ZTS_IPPROTO_UDP);
-    if (sock < 0) return;
+    // 遍历所有已加入的网络，向每个网络的 .1 地址发送保活包
+    for (NSNumber *netIDNum in networkIDs) {
+        uint64_t netID = [netIDNum unsignedLongLongValue];
+        NSString *myIPv4 = ipv4Copy[netIDNum];
+        if (!myIPv4 || myIPv4.length == 0) {
+            // 该网络尚未分配 IPv4 地址，跳过
+            continue;
+        }
 
-    // 设置广播
-    int broadcast = 1;
-    zts_bsd_setsockopt(sock, ZTS_SOL_SOCKET, ZTS_SO_BROADCAST, &broadcast, sizeof(broadcast));
+        // 从自己的 IPv4 地址推算网关地址（将最后一段改为 1）
+        // 例如：10.147.17.50 → 10.147.17.1
+        NSArray *parts = [myIPv4 componentsSeparatedByString:@"."];
+        if (parts.count != 4) continue;
+        NSString *gatewayIP = [NSString stringWithFormat:@"%@.%@.%@.1",
+                               parts[0], parts[1], parts[2]];
 
-    struct zts_sockaddr_in addr;
-    memset(&addr, 0, sizeof(addr));
-    addr.sin_len = sizeof(addr);
-    addr.sin_family = ZTS_AF_INET;
-    addr.sin_port = htons(9999);
-    zts_inet_pton(ZTS_AF_INET, "255.255.255.255", &addr.sin_addr);
+        // 创建 UDP socket
+        int sock = zts_bsd_socket(ZTS_AF_INET, ZTS_SOCK_DGRAM, ZTS_IPPROTO_UDP);
+        if (sock < 0) {
+            NSLog(@"[ZeroTierBridge] 保活：创建 socket 失败（netID=%016llx, errno=%d）", netID, zts_errno);
+            continue;
+        }
 
-    const char *data = "KEEPALIVE";
-    zts_bsd_sendto(sock, data, strlen(data), 0, (struct zts_sockaddr *)&addr, sizeof(addr));
-    zts_bsd_close(sock);
+        // 发送定向 UDP 包到网关 .1:9999
+        // 端口 9999 只是占位符，真正的目的是让 ZeroTier 虚拟网络维持 NAT 映射
+        struct zts_sockaddr_in addr;
+        memset(&addr, 0, sizeof(addr));
+        addr.sin_len = sizeof(addr);
+        addr.sin_family = ZTS_AF_INET;
+        addr.sin_port = htons(9999);
+        int ptonResult = zts_inet_pton(ZTS_AF_INET, [gatewayIP UTF8String], &addr.sin_addr);
+        if (ptonResult != 1) {
+            NSLog(@"[ZeroTierBridge] 保活：网关地址解析失败（gatewayIP=%@）", gatewayIP);
+            zts_bsd_close(sock);
+            continue;
+        }
+
+        const char *data = "KEEPALIVE";
+        ssize_t sent = zts_bsd_sendto(sock, data, strlen(data), 0,
+                                       (struct zts_sockaddr *)&addr, sizeof(addr));
+        if (sent < 0) {
+            NSLog(@"[ZeroTierBridge] 保活：sendto 失败（gateway=%@, errno=%d, netID=%016llx）",
+                  gatewayIP, zts_errno, netID);
+        } else {
+            // 静默成功（避免 30 秒一次的日志刷屏）
+        }
+        zts_bsd_close(sock);
+    }
 }
 
 /// 恢复已加入的网络（重连后调用）

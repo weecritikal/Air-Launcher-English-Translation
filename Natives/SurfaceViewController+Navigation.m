@@ -8,6 +8,7 @@
 #import "utils.h"
 #import "ScreenUtils.h"
 #import "MultiplayerViewController.h"
+#import "MultiplayerManager.h"
 #import <objc/runtime.h>
 
 // 暴露 class extension 中的私有属性，供 category 使用
@@ -197,6 +198,18 @@ static const void *kMenuDimViewKey = &kMenuDimViewKey;
     [alert addAction:cancelAction];
 
     UIAlertAction* okAction = [UIAlertAction actionWithTitle:localize(@"OK", nil) style:UIAlertActionStyleDestructive handler:^(UIAlertAction * action) {
+        // 关键修复（P0-A）：强制关闭前清理联机资源
+        // 原代码直接 exit(0)，导致 SOCKS5 代理、端口转发器、ZeroTier 网络、
+        // AMETHYST_SOCKS5_PROXY 环境变量、PLProfiles 中的 serverIp 全部残留。
+        // 表现为"存档关闭后端口仍存在"和"下次进游戏仍显示连接服务器"。
+        // 修复：在退出前调用 stopAllMultiplayerServices 彻底清理。
+        @try {
+            [[MultiplayerManager sharedManager] stopAllMultiplayerServices];
+            NSLog(@"[ForceClose] 联机资源已清理");
+        } @catch (NSException *e) {
+            NSLog(@"[ForceClose] 清理联机资源异常：%@", e);
+        }
+
         // FCL 风格：直接退出，不再做缩小动画
         if (fatalExitGroup == nil) {
             exit(0);

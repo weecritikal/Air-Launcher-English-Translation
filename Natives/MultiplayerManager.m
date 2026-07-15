@@ -57,6 +57,7 @@
 #import "SOCKS5Proxy.h"
 #import "PortForwarder.h"
 #import "LauncherPreferences.h"
+#import "PLProfiles.h"
 
 #pragma mark - 常量定义
 
@@ -311,9 +312,75 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
         // 设置 ZeroTierBridge 代理，接收节点/网络状态回调
         [[ZeroTierBridge sharedInstance] setDelegate:self];
 
-        NSLog(@"[MultiplayerManager] 初始化完成（不加载历史房间，房间列表为空）");
+        // 关键修复（P0-B）：监听 iOS 应用生命周期通知
+        // iOS 后台限制会挂起/回收 ZeroTier 的网络连接，导致节点频繁掉线。
+        // 应用进入后台时：记录当前状态，允许 libzt 自愈，不主动停止节点
+        // 应用回到前台时：检测节点状态，若掉线则触发自动重连和数据平面恢复
+        // 注意：不在进后台时停止节点——iOS 后台 RunLoop 仍能处理 libzt 事件，
+        // libzt 自身的 NAT keepalive 会在短时间内维持连接，主动停止反而增加重连成本。
+        [[NSNotificationCenter defaultCenter] addObserver:self
+                                                 selector:@selector(applicationDidEnterBackground)
+                                                     name:UIApplicationDidEnterBackgroundNotification
+                                                   object:nil];
+        [[NSNotificationCenter defaultCenter] addObserver:self
+                                                 selector:@selector(applicationWillEnterForeground)
+                                                     name:UIApplicationWillEnterForegroundNotification
+                                                   object:nil];
+
+        NSLog(@"[MultiplayerManager] 初始化完成（不加载历史房间，房间列表为空，已注册生命周期监听）");
     }
     return self;
+}
+
+#pragma mark - iOS 应用生命周期处理
+
+/// 应用进入后台
+/// iOS 后台策略：
+///   - 不主动停止 ZeroTier 节点（libzt 自身有 NAT keepalive，短时间后台能维持）
+///   - 记录当前是否有活跃联机房间，用于回前台时判断是否需要恢复
+///   - NSTimer 在后台会被挂起，保活定时器会暂时失效，回前台时恢复
+- (void)applicationDidEnterBackground {
+    [_stateLock lock];
+    MultiplayerRoom *room = self.currentRoom;
+    BOOL hasActiveRoom = (room != nil && self.currentNetworkID != 0);
+    [_stateLock unlock];
+
+    if (hasActiveRoom) {
+        NSLog(@"[MultiplayerManager] 应用进入后台：当前有活跃联机房间（%@），"
+              @"依赖 libzt 自愈能力维持连接，回前台时检测恢复", room.name);
+    } else {
+        NSLog(@"[MultiplayerManager] 应用进入后台：无活跃联机房间");
+    }
+}
+
+/// 应用回到前台
+/// 检测 ZeroTier 节点状态，若掉线则触发自动重连和数据平面恢复
+- (void)applicationWillEnterForeground {
+    [_stateLock lock];
+    MultiplayerRoom *room = self.currentRoom;
+    BOOL hasActiveRoom = (room != nil && self.currentNetworkID != 0);
+    [_stateLock unlock];
+
+    if (!hasActiveRoom) {
+        NSLog(@"[MultiplayerManager] 应用回到前台：无活跃联机房间，无需恢复");
+        return;
+    }
+
+    NSLog(@"[MultiplayerManager] 应用回到前台：检测到有活跃联机房间（%@），检查 ZeroTier 节点状态", room.name);
+
+    // 异步检测节点状态，避免阻塞主线程
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        BOOL nodeOnline = [[ZeroTierBridge sharedInstance] isNodeOnline];
+        if (nodeOnline) {
+            // 节点仍在线，检查数据平面是否需要恢复
+            NSLog(@"[MultiplayerManager] 应用回到前台：ZeroTier 节点仍在线，检查数据平面");
+            [self ensureDataPlaneRunningForCurrentRoom];
+        } else {
+            // 节点已掉线（iOS 后台杀掉了连接），触发自动重连
+            NSLog(@"[MultiplayerManager] 应用回到前台：ZeroTier 节点已掉线（iOS 后台限制），触发自动重连");
+            [[ZeroTierBridge sharedInstance] startAutoReconnect];
+        }
+    });
 }
 
 #pragma mark - 对外暴露的只读属性
@@ -1350,6 +1417,22 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     // 6. 持久化
     [self saveRooms];
 
+    // 7. 关键修复（P0-A）：清除 PLProfiles 中残留的 serverIp
+    // 问题：connectToRoomFlow 会在连接成功后把房主 IP:port 写入 profile 的 serverIp
+    // 字段（下次启动 MC 时自动连接）。但断开联机后若不清空，下次启动 MC 仍会
+    // 尝试连接旧服务器——此时 SOCKS5 代理未运行、ZeroTier 未加入，连接会失败，
+    // 但 MC 仍会显示"正在连接服务器"界面，造成"进游戏必显示连接服务器"的 bug。
+    // 修复：断开联机时同步清空当前 profile 的 serverIp。
+    @try {
+        NSString *currentProfile = [PLProfiles.current selectedProfileName];
+        if (currentProfile.length > 0) {
+            [PLProfiles.current setServerIp:@"" forProfile:currentProfile];
+            NSLog(@"[MultiplayerManager] 已清空 profile '%@' 的 serverIp", currentProfile);
+        }
+    } @catch (NSException *e) {
+        NSLog(@"[MultiplayerManager] 清空 serverIp 失败：%@", e);
+    }
+
     NSLog(@"[MultiplayerManager] 已断开房间连接");
 }
 
@@ -2191,6 +2274,20 @@ static NSString * const kPresetNetworkIdPrefKey = @"multiplayer.preset_network_i
     self.currentPeerConnectionMode = nil;
     _nodeStarted = NO;
     [_stateLock unlock];
+
+    // 7. 关键修复（P0-A）：清除 PLProfiles 中残留的 serverIp
+    // 与 disconnectCurrentRoom 同理：防止下次启动 MC 时残留的 serverIp 触发
+    // "进游戏必显示连接服务器"的 bug。stopAllMultiplayerServices 在游戏退出
+    // /App 进入后台/App 被终止时调用，必须彻底清理。
+    @try {
+        NSString *currentProfile = [PLProfiles.current selectedProfileName];
+        if (currentProfile.length > 0) {
+            [PLProfiles.current setServerIp:@"" forProfile:currentProfile];
+            NSLog(@"[MultiplayerManager] 已清空 profile '%@' 的 serverIp", currentProfile);
+        }
+    } @catch (NSException *e) {
+        NSLog(@"[MultiplayerManager] 清空 serverIp 失败：%@", e);
+    }
 
     NSLog(@"[MultiplayerManager] 所有联机服务已停止，状态已重置");
 }
