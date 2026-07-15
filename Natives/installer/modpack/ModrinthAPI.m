@@ -618,12 +618,36 @@ submitDownloadTasksFromPackage:(NSString *)packagePath
         return;
     }
     
-    downloader.progress.totalUnitCount = [indexDict[@"files"] count];
-    for (NSDictionary *indexFile in indexDict[@"files"]) {
-        NSString *url = [indexFile[@"downloads"] firstObject];
+    NSArray *indexFiles = [indexDict[@"files"] isKindOfClass:[NSArray class]] ? indexDict[@"files"] : @[];
+    downloader.progress.totalUnitCount = indexFiles.count;
+    NSUInteger skippedEmptyURL = 0;
+    NSUInteger skippedServerOnly = 0;
+    for (NSDictionary *indexFile in indexFiles) {
+        if (![indexFile isKindOfClass:[NSDictionary class]]) {
+            downloader.progress.completedUnitCount++;
+            continue;
+        }
+        // env 字段过滤：与 ModpackImportService 一致，跳过 env.client=="unsupported" 的服务端专用文件。
+        NSDictionary *env = indexFile[@"env"];
+        NSString *clientEnv = env[@"client"];
+        if ([clientEnv isKindOfClass:[NSString class]] && [clientEnv isEqualToString:@"unsupported"]) {
+            skippedServerOnly++;
+            downloader.progress.completedUnitCount++;
+            NSLog(@"[ModrinthAPI] 跳过 server-only 文件: %@", indexFile[@"path"]);
+            continue;
+        }
+        NSString *url = [indexFile[@"downloads"] isKindOfClass:[NSArray class]] ? [indexFile[@"downloads"] firstObject] : nil;
         NSString *sha = indexFile[@"hashes"][@"sha1"];
         NSString *path = [destPath stringByAppendingPathComponent:indexFile[@"path"]];
         NSUInteger size = [indexFile[@"fileSize"] unsignedLongLongValue];
+        // 关键修复：URL 为空时不能静默 completedUnitCount++ 跳过，否则用户不会感知缺失，
+        // 但又没有可下载的链接。改为记录警告并推进进度（避免卡死），但不视为致命错误。
+        if (!url || ![url isKindOfClass:[NSString class]] || url.length == 0) {
+            skippedEmptyURL++;
+            downloader.progress.completedUnitCount++;
+            NSLog(@"[ModrinthAPI] 警告：Modrinth 文件 %@ 缺少 download URL，跳过", indexFile[@"path"]);
+            continue;
+        }
         NSURLSessionDownloadTask *task = [downloader createDownloadTask:url size:size sha:sha altName:nil toPath:path];
         if (task) {
             [downloader.fileList addObject:indexFile[@"path"]];
@@ -633,6 +657,9 @@ submitDownloadTasksFromPackage:(NSString *)packagePath
         } else {
             return;
         }
+    }
+    if (skippedEmptyURL > 0 || skippedServerOnly > 0) {
+        NSLog(@"[ModrinthAPI] 整合包下载：跳过空 URL %lu 个，server-only %lu 个", (unsigned long)skippedEmptyURL, (unsigned long)skippedServerOnly);
     }
     
     [ModpackUtils archive:archive extractDirectory:@"overrides" toPath:destPath error:&error];

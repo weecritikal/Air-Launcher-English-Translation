@@ -1364,6 +1364,79 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     }
 }
 
+/// 关键修复（P0-1）：节点掉线恢复后数据平面（SOCKS5Proxy + PortForwarder）不重启的修复。
+///
+/// 背景：zeroTierNodeOffline 会主动停止 SOCKS5/PortForwarder 以释放资源，
+/// 但当节点恢复上线（libzt 内部重连成功 → NODE_ONLINE → restoreJoinedNetworks → NETWORK_OK）
+/// 时，原实现只更新 currentLocalIP，不重启数据平面。导致：
+///   - UI 仍显示"已连接"
+///   - 但 Minecraft 流量无代理可用，连接立即断开
+///   - 用户必须手动断开房间再重新连接
+///
+/// 本方法在 zeroTierNetworkReady: 中被调用，仅当当前房间有 currentRoom 且代理未运行时重启。
+/// 首次连接时数据平面已由 connectToRoomFlow 启动，此方法不会重复启动（避免端口冲突）。
+- (void)ensureDataPlaneRunningForCurrentRoom {
+    [_stateLock lock];
+    MultiplayerRoom *room = self.currentRoom;
+    NSString *hostIP = room.hostIP;
+    NSString *hostPortStr = room.hostPort;
+    uint16_t savedSocksPort = _currentSOCKS5Port;
+    uint16_t savedForwardPort = _currentForwardingPort;
+    uint64_t currentNetID = _currentNetworkID;
+    [_stateLock unlock];
+
+    // 没有当前房间或没有正在连接的网络，无需重启数据平面
+    if (!room || currentNetID == 0) {
+        return;
+    }
+
+    // SOCKS5 代理重启（仅在未运行时）
+    if (![[SOCKS5Proxy sharedProxy] isRunning] || savedSocksPort == 0) {
+        NSLog(@"[MultiplayerManager] [数据平面恢复] 重启 SOCKS5 代理（房间：%@）", room.name);
+        NSError *proxyError = nil;
+        BOOL proxyStarted = [[SOCKS5Proxy sharedProxy] startWithPort:kMultiplayerDefaultSOCKS5Port
+                                                                error:&proxyError];
+        if (proxyStarted) {
+            uint16_t actualPort = [[SOCKS5Proxy sharedProxy] listeningPort];
+            [_stateLock lock];
+            self.currentSOCKS5Port = actualPort;
+            [_stateLock unlock];
+            NSString *proxyValue = [NSString stringWithFormat:@"127.0.0.1:%u", actualPort];
+            setenv([kAMETHYSTSOCKS5ProxyEnvVar UTF8String], [proxyValue UTF8String], 1);
+            NSLog(@"[MultiplayerManager] [数据平面恢复] SOCKS5 代理已重启，监听 127.0.0.1:%u", actualPort);
+        } else {
+            NSLog(@"[MultiplayerManager] [数据平面恢复] SOCKS5 代理重启失败：%@",
+                  proxyError.localizedDescription ?: @"未知错误");
+        }
+    }
+
+    // PortForwarder 重启（仅在未运行且为房客模式时）
+    // 房主模式不需要端口转发（房主自己开 LAN，其他玩家通过 ZeroTier 连过来）
+    if (hostIP.length > 0 && hostPortStr.length > 0 &&
+        (![[PortForwarder sharedForwarder] isRunning] || savedForwardPort == 0)) {
+        uint16_t hostPort = (uint16_t)[hostPortStr integerValue];
+        if (hostPort > 0) {
+            NSLog(@"[MultiplayerManager] [数据平面恢复] 重启端口转发器：127.0.0.1:%u → %@:%u",
+                  PortForwarderDefaultLocalPort, hostIP, hostPort);
+            NSError *forwardError = nil;
+            uint16_t forwardPort = [[PortForwarder sharedForwarder] startWithLocalPort:PortForwarderDefaultLocalPort
+                                                                            remoteHost:hostIP
+                                                                            remotePort:hostPort
+                                                                                 error:&forwardError];
+            if (forwardPort > 0) {
+                [_stateLock lock];
+                self.currentForwardingPort = forwardPort;
+                [_stateLock unlock];
+                NSLog(@"[MultiplayerManager] [数据平面恢复] 端口转发器已重启：127.0.0.1:%u → %@:%u",
+                      forwardPort, hostIP, hostPort);
+            } else {
+                NSLog(@"[MultiplayerManager] [数据平面恢复] 端口转发器重启失败：%@",
+                      forwardError.localizedDescription ?: @"未知错误");
+            }
+        }
+    }
+}
+
 - (void)zeroTierNodeOffline {
     NSLog(@"[MultiplayerManager] ZeroTier 节点已离线");
 
@@ -1423,9 +1496,16 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
         // 关键修复（对标 FCL/HMCL）：ZeroTier 网络就绪回调可能晚于 connectToRoomFlow 完成，
         // 此处也需将 IP 同步到 room.hostIP，确保分享文本能输出正确的服务器地址。
         // Ad-hoc 模式下使用 IPv6，标准模式下使用 IPv4。
+
+        // 关键修复（P0-1）：节点掉线恢复后数据平面（SOCKS5/PortForwarder）不重启的修复。
+        // zeroTierNodeOffline 已停止代理；此处当网络就绪后调用 ensureDataPlaneRunningForCurrentRoom
+        // 重启数据平面。首次连接时代理已运行，方法内部 isRunning 检查会跳过重启，无副作用。
+        // 注意：此调用在 _stateLock 内会有死锁风险（ensureDataPlaneRunningForCurrentRoom 内部也获取 _stateLock），
+        // 所以在 unlock 之后调用。
     }
     MultiplayerRoom *room = currentRoom;
     BOOL needsUpdate = NO;
+    BOOL needsDataPlaneRestore = (_currentNetworkID == networkID);
     if (room && effectiveIP && effectiveIP.length > 0) {
         // 仅当 IP 变化时才更新，避免重复写入
         if (![room.hostIP isEqualToString:effectiveIP]) {
@@ -1436,6 +1516,12 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
               room.name, isAdhoc ? @"IPv6" : @"IPv4", effectiveIP);
     }
     [_stateLock unlock];
+
+    // 关键修复（P0-1）：在锁外调用 ensureDataPlaneRunningForCurrentRoom，
+    // 避免与 _stateLock 嵌套获取造成死锁。
+    if (needsDataPlaneRestore) {
+        [self ensureDataPlaneRunningForCurrentRoom];
+    }
 
     // 持久化到房间列表（后台异步写入）
     if (needsUpdate && room) {

@@ -3618,6 +3618,10 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         [strongSelf.navigationController popViewControllerAnimated:YES];
         strongSelf.installerProgressVC = nil;
         [strongSelf showSuccessMessage:message];
+        // 关键修复（issue #61）：Fabric/Forge/NeoForge/OptiFine 安装完成后未发送 ReloadProfileList 通知，
+        // 导致"已安装的版本"列表不刷新、新版本卡片不显示、加载器图标也不显示。
+        // 此处统一在安装完成后发通知，触发 LauncherRootViewController / VersionManagerViewController 等监听者重新加载版本列表。
+        [[NSNotificationCenter defaultCenter] postNotificationName:@"ReloadProfileList" object:nil];
     });
 }
 
@@ -5629,6 +5633,13 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             }
 
             self.downloadTask = nil;
+
+            // 关键修复（issue #61）：Vanilla 版本下载完成后未发送 ReloadProfileList 通知，
+            // 导致"已安装的版本"列表不刷新、新版本卡片不显示。
+            // downloadVanillaVersion: 中已 saveProfile + setSelectedProfileName（会发 SelectedProfileChanged），
+            // 但版本卡片列表（LauncherRootViewController/VersionManagerViewController）监听的是 ReloadProfileList，
+            // 不补发此通知则 UI 永远不刷新。
+            [[NSNotificationCenter defaultCenter] postNotificationName:@"ReloadProfileList" object:nil];
         }
     });
 }
@@ -5761,6 +5772,9 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             }
             s.vanillaPreinstallTask = nil;
             s.vanillaPreinstallProgressVC = nil;
+            // 关键修复（issue #61）：原版前置安装完成后也需发送 ReloadProfileList 通知，
+            // 让"已安装的版本"列表及时显示已就绪的原版版本。
+            [[NSNotificationCenter defaultCenter] postNotificationName:@"ReloadProfileList" object:nil];
             void (^cb)(BOOL) = s.vanillaPreinstallCompletion;
             s.vanillaPreinstallCompletion = nil;
             if (cb) cb(YES);

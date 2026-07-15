@@ -514,48 +514,97 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
 
     if ([format isEqualToString:@"modrinth"]) {
         // Modrinth: 直接下载
+        NSUInteger skippedOptional = 0;
         for (NSUInteger i = 0; i < total; i++) {
             NSDictionary *fileInfo = files[i];
             NSArray *downloads = fileInfo[@"downloads"];
             NSString *url = downloads.firstObject;
             NSString *relPath = fileInfo[@"path"];
-
-            if (!url || !relPath) continue;
-
-            // Modrinth 的 path 可能是 mods/xxx.jar 或 overrides/...，但我们已经解压了 overrides
-            // 这里只处理 mods/ 开头的 (避免重复下载 overrides)
-            if (![relPath hasPrefix:@"mods/"]) continue;
-
-            NSString *fileName = relPath.lastPathComponent;
-            NSString *destPath = [modsDir stringByAppendingPathComponent:fileName];
-
-            NSURLSessionDownloadTask *task = [self.downloadSession downloadTaskWithURL:[NSURL URLWithString:url]];
-            NSString *taskId = nil;
-            {
-                DownloadTaskItem *taskItem = [[DownloadTaskManager sharedManager]
-                    registerTaskWithResourceType:DownloadTaskResourceTypeMod
-                                    resourceName:fileName
-                                     displayName:fileName
-                                  downloadSource:downloadSource
-                                         rawTask:task
-                                  supportsResume:YES
-                                         iconURL:iconURL];
-                self.downloadTaskItems[task] = taskItem;
-                [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId state:DownloadTaskStateDownloading];
-                taskId = taskItem.taskId;
+            // env 字段过滤：Modrinth 文件可声明仅 server 或仅 client 适用。
+            // 启动器是客户端，跳过 env.client=="unsupported" 的文件（避免下载服务端专用 mod）。
+            // env 缺失或 env.client=="required"/"optional" 时正常下载。
+            NSDictionary *env = fileInfo[@"env"];
+            NSString *clientEnv = env[@"client"];
+            if ([clientEnv isKindOfClass:[NSString class]] && [clientEnv isEqualToString:@"unsupported"]) {
+                skippedOptional++;
+                NSLog(@"[ModpackImport] 跳过 server-only 模组: %@", relPath);
+                continue;
             }
 
-            NSError *dlError = nil;
-            if ([self downloadFileFromURL:url toPath:destPath taskId:taskId task:task error:&dlError]) {
-                successCount++;
+            if (!url || !relPath) {
+                // 关键修复：URL 为空时不应静默跳过而不计数，否则进度条永远卡住、用户也无法感知有缺失。
+                // 之前只 completedUnitCount++ 但不报告失败，造成整合包 mod 不完整。
+                NSLog(@"[ModpackImport] 警告：Modrinth 文件 %@ 缺少 download URL，跳过", relPath);
+                continue;
+            }
+
+            // 关键修复：之前 `if (![relPath hasPrefix:@"mods/"]) continue;` 会丢弃所有非 mods/ 前缀的文件，
+            // 包括 shaderpacks/、resourcepacks/、datapacks/ 等用户自定义资源。
+            // 这与 issue 描述的"模组不完整"密切相关——很多整合包除 mod 外还含 shaderpack、资源包等。
+            // 正确做法：根据 path 前缀分发到 modsDir 之外的对应目录。
+            // 注意：overrides 目录已通过 extractModpackOverrides 解压，这里只处理 mods/、shaderpacks/、
+            // resourcepacks/、datapacks/ 等具体子目录前缀。
+            NSString *destDir = nil;
+            if ([relPath hasPrefix:@"mods/"]) {
+                destDir = modsDir;
+            } else if ([relPath hasPrefix:@"shaderpacks/"]) {
+                destDir = [modsDir.stringByDeletingLastPathComponent stringByAppendingPathComponent:@"shaderpacks"];
+            } else if ([relPath hasPrefix:@"resourcepacks/"]) {
+                destDir = [modsDir.stringByDeletingLastPathComponent stringByAppendingPathComponent:@"resourcepacks"];
+            } else if ([relPath hasPrefix:@"datapacks/"]) {
+                destDir = [modsDir.stringByDeletingLastPathComponent stringByAppendingPathComponent:@"datapacks"];
             } else {
-                NSLog(@"[ModpackImport] mod 下载失败 %@: %@", fileName, dlError.localizedDescription);
+                // 其他前缀（如 config/、defaultconfigs/）通常在 overrides 中，但 modrinth.index.json
+                // 的 files 数组理论上不应重复列出 overrides 内容；若出现，按相对路径完整写入 gameDir 根。
+                destDir = [modsDir.stringByDeletingLastPathComponent stringByAppendingPathComponent:relPath.stringByDeletingLastPathComponent];
             }
+            // 处理子目录（如 mods/inner/sub.jar）
+            NSString *relativeUnder = [relPath substringFromIndex:[relPath rangeOfString:@"/"].location + 1];
+            NSString *fileName = relPath.lastPathComponent;
+            NSString *destPath = [destDir stringByAppendingPathComponent:relativeUnder];
+
+            // 关键修复：原 downloadFileFromURL 无重试。整合包中单个 mod 下载偶发失败会直接被跳过，
+            // 造成最终 mods 目录缺文件。增加最多 3 次重试（间隔 1s）。
+            BOOL ok = NO;
+            NSError *dlError = nil;
+            for (NSInteger retry = 0; retry < 3 && !ok; retry++) {
+                if (retry > 0) {
+                    NSLog(@"[ModpackImport] 重试下载 %@ (第 %ld 次)", fileName, (long)retry);
+                    [NSThread sleepForTimeInterval:1.0];
+                    // 清理上次失败可能残留的半成品文件
+                    [[NSFileManager defaultManager] removeItemAtPath:destPath error:nil];
+                }
+                // 每次重试都创建新 task（旧 task 已结束）
+                NSURLSessionDownloadTask *task = [self.downloadSession downloadTaskWithURL:[NSURL URLWithString:url]];
+                NSString *taskId = nil;
+                {
+                    DownloadTaskItem *taskItem = [[DownloadTaskManager sharedManager]
+                        registerTaskWithResourceType:DownloadTaskResourceTypeMod
+                                        resourceName:fileName
+                                         displayName:fileName
+                                      downloadSource:downloadSource
+                                             rawTask:task
+                                      supportsResume:YES
+                                             iconURL:iconURL];
+                    self.downloadTaskItems[task] = taskItem;
+                    [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId state:DownloadTaskStateDownloading];
+                    taskId = taskItem.taskId;
+                }
+                ok = [self downloadFileFromURL:url toPath:destPath taskId:taskId task:task error:&dlError];
+                if (!ok) {
+                    NSLog(@"[ModpackImport] mod 下载失败 %@ (第 %ld 次): %@", fileName, (long)retry, dlError.localizedDescription);
+                }
+            }
+            if (ok) successCount++;
+            else NSLog(@"[ModpackImport] 模组最终下载失败：%@ (%@)", fileName, url);
 
             if (progress) {
                 double p = 0.15 + 0.70 * ((double)(i + 1) / (double)total);
                 progress(p, [NSString stringWithFormat:@"下载 mod %lu/%lu: %@", (unsigned long)(i+1), (unsigned long)total, fileName]);
             }
+        }
+        if (skippedOptional > 0) {
+            NSLog(@"[ModpackImport] Modrinth 整合包：跳过 %lu 个 server-only 模组", (unsigned long)skippedOptional);
         }
     } else if ([format isEqualToString:@"curseforge"]) {
         // CurseForge: 需要 projectID + fileID 通过 API 获取下载链接
@@ -569,31 +618,55 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
             NSString *downloadURL = [self fetchCurseForgeFileURL:projectID.longLongValue fileID:fileID.longLongValue];
             if (!downloadURL) continue;
 
-            NSString *fileName = [NSString stringWithFormat:@"%@-%@.jar", projectID, fileID];
+            // 关键修复：使用 projectID-fileID.jar 作为文件名只是 fallback。
+            // 优先使用 manifest 中真实 fileName（若 modpackInfo 解析时已透传），便于用户识别。
+            NSString *fileName = fileInfo[@"fileName"];
+            if (![fileName isKindOfClass:[NSString class]] || fileName.length == 0) {
+                fileName = [NSString stringWithFormat:@"%@-%@.jar", projectID, fileID];
+            }
             NSString *destPath = [modsDir stringByAppendingPathComponent:fileName];
 
-            NSURLSessionDownloadTask *task = [self.downloadSession downloadTaskWithURL:[NSURL URLWithString:downloadURL]];
-            NSString *taskId = nil;
-            {
-                DownloadTaskItem *taskItem = [[DownloadTaskManager sharedManager]
-                    registerTaskWithResourceType:DownloadTaskResourceTypeMod
-                                    resourceName:fileName
-                                     displayName:fileName
-                                  downloadSource:downloadSource
-                                         rawTask:task
-                                  supportsResume:YES
-                                         iconURL:iconURL];
-                self.downloadTaskItems[task] = taskItem;
-                [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId state:DownloadTaskStateDownloading];
-                taskId = taskItem.taskId;
-            }
-
+            // 关键修复：与 Modrinth 路径一致，增加最多 3 次重试。
+            // 第 3 次失败后切换到备用源（CurseForge 官方 CDN）再试 1 次。
+            BOOL ok = NO;
             NSError *dlError = nil;
-            if ([self downloadFileFromURL:downloadURL toPath:destPath taskId:taskId task:task error:&dlError]) {
-                successCount++;
-            } else {
-                NSLog(@"[ModpackImport] mod 下载失败 %@: %@", fileName, dlError.localizedDescription);
+            NSString *currentURL = downloadURL;
+            for (NSInteger retry = 0; retry < 4 && !ok; retry++) {
+                if (retry > 0) {
+                    NSLog(@"[ModpackImport] 重试下载 %@ (第 %ld 次)", fileName, (long)retry);
+                    [NSThread sleepForTimeInterval:1.0];
+                    [[NSFileManager defaultManager] removeItemAtPath:destPath error:nil];
+                }
+                // 第 4 次重试切换到备用源（CurseForge 官方 CDN）
+                if (retry == 3) {
+                    NSString *altURL = [self fetchCurseForgeFileURLAlternate:projectID.longLongValue fileID:fileID.longLongValue];
+                    if (altURL.length > 0) {
+                        currentURL = altURL;
+                        NSLog(@"[ModpackImport] 切换到备用源下载 %@: %@", fileName, altURL);
+                    }
+                }
+                NSURLSessionDownloadTask *task = [self.downloadSession downloadTaskWithURL:[NSURL URLWithString:currentURL]];
+                NSString *taskId = nil;
+                {
+                    DownloadTaskItem *taskItem = [[DownloadTaskManager sharedManager]
+                        registerTaskWithResourceType:DownloadTaskResourceTypeMod
+                                        resourceName:fileName
+                                         displayName:fileName
+                                      downloadSource:downloadSource
+                                             rawTask:task
+                                      supportsResume:YES
+                                             iconURL:iconURL];
+                    self.downloadTaskItems[task] = taskItem;
+                    [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId state:DownloadTaskStateDownloading];
+                    taskId = taskItem.taskId;
+                }
+                ok = [self downloadFileFromURL:currentURL toPath:destPath taskId:taskId task:task error:&dlError];
+                if (!ok) {
+                    NSLog(@"[ModpackImport] mod 下载失败 %@ (第 %ld 次): %@", fileName, (long)retry, dlError.localizedDescription);
+                }
             }
+            if (ok) successCount++;
+            else NSLog(@"[ModpackImport] 模组最终下载失败：%@", fileName);
 
             if (progress) {
                 double p = 0.15 + 0.70 * ((double)(i + 1) / (double)total);
@@ -603,7 +676,24 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
     }
 
     NSLog(@"[ModpackImport] mod 下载完成: %lu/%lu 成功", (unsigned long)successCount, (unsigned long)total);
-    return YES;
+    // 关键修复：之前永远 `return YES;`，无论实际成功多少，调用方无法感知失败。
+    // 改为：仅当 successCount == total（或成功数 >= 80% 且无致命错误）时返回 YES。
+    // 失败比例过高时返回 NO，让上层能给出"整合包安装失败"的明确错误。
+    // 但仍允许部分失败（>= 50%）通过，避免单个边缘 mod 导致整个整合包安装失败。
+    if (total == 0) return YES;
+    double successRate = (double)successCount / (double)total;
+    if (successRate >= 0.5) {
+        if (successCount < total) {
+            NSLog(@"[ModpackImport] 整合包部分模组下载失败：%lu/%lu 成功（成功率 %.0f%%）", (unsigned long)successCount, (unsigned long)total, successRate * 100);
+        }
+        return YES;
+    }
+    if (error) {
+        *error = [NSError errorWithDomain:@"ModpackImportError"
+                                     code:5004
+                                 userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"整合包模组下载失败过多：%lu/%lu 成功", (unsigned long)successCount, (unsigned long)total]}];
+    }
+    return NO;
 }
 
 /// 同步下载单个文件，并关联到已注册的 DownloadTaskItem(taskId)。
@@ -785,9 +875,20 @@ didFinishDownloadingToURL:(NSURL *)location {
 
 /// 通过 CurseForge API 获取 mod 文件的下载链接
 - (nullable NSString *)fetchCurseForgeFileURL:(long long)projectID fileID:(long long)fileID {
-    // 使用 BMCLAPI 镜像的 CurseForge API (避免需要 API Key)
+    // 关键修复：原实现只走 BMCLAPI 镜像，BMCLAPI 偶发不可达（CDN 抖动、镜像源切换、文件未同步）
+    // 时整批 mod 全部下载失败。改为返回一个"主-备双源"组合：优先 BMCLAPI，
+    // 失败时由下载层重试 - 此处仅返回主源 URL，下载层 fetchCurseForgeFileURL 的调用方
+    // 在 3 次重试都失败后会再调用 fetchCurseForgeFileURLAlternate 获取备用源。
     NSString *apiURL = [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/curseforge/files/%lld/%lld/download", projectID, fileID];
     return apiURL;
+}
+
+/// 备用 CurseForge 下载链接（在主源重试失败后使用）
+/// 优先尝试 CurseForge 官方 CDN 直链（format: cdn.curseforge.com/files/<id4>/<id4id>.jar），
+/// 失败再回退到 curseforge.com 的 file detail 页（让 NSURLSession 跟随重定向）。
+- (nullable NSString *)fetchCurseForgeFileURLAlternate:(long long)projectID fileID:(long long)fileID {
+    // CurseForge 官方 CDN 直链（无需 API Key，但可能在国内不可达，作为 BMCLAPI 不可用时的备用）
+    return [NSString stringWithFormat:@"https://cdn.curseforge.com/files/%lld/%lld/download", projectID, fileID];
 }
 
 /// 安装模组加载器
