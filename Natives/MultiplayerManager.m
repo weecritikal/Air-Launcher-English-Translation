@@ -2153,9 +2153,15 @@ static NSString * const kPresetNetworkIdPrefKey = @"multiplayer.preset_network_i
     NSLog(@"[MultiplayerManager] 已清除 SOCKS5 环境变量");
 
     // 4. 离开所有 ZeroTier 网络
-    [_stateLock lock];
-    NSArray *rooms = [self.internalRooms copy];
-    [_stateLock unlock];
+    // 关键修复（P1-6）：原代码用 _stateLock 保护 internalRooms 的读取，
+    // 但 internalRooms 的所有其他读写（addRoom/removeRoom/updateRoom/savedRooms getter）
+    // 都用 @synchronized(self)。_stateLock 与 @synchronized(self) 是两套互不相干的锁，
+    // 同时读写可变数组属于未定义行为，可能引发 EXC_BAD_ACCESS 崩溃。
+    // 修复：internalRooms 的读取统一使用 @synchronized(self)，与项目其他位置保持一致。
+    NSArray *rooms;
+    @synchronized(self) {
+        rooms = [self.internalRooms copy];
+    }
 
     for (MultiplayerRoom *room in rooms) {
         if (room.networkId && room.networkId.length > 0) {

@@ -94,6 +94,14 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
                 // 被信号中断，重试
                 continue;
             }
+            // 关键修复（P1-4）：处理 SO_SNDTIMEO 超时
+            // EAGAIN/EWOULDBLOCK 表示发送缓冲区暂时不可用（达到 SO_SNDTIMEO 超时）。
+            // 之前直接返回 -1 视为错误，导致转发线程退出，连接断开。
+            // 实际上对于实时游戏流量，超时通常意味着对端处理不过来，应该断开连接让 MC 自动重连，
+            // 而不是无限阻塞。这里直接返回 -1 让上层关闭连接。
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                NSLog(@"[PortForwarder] writeAll 超时（fd=%d），关闭连接", fd);
+            }
             // 真正的错误
             return -1;
         }
@@ -120,6 +128,12 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
 
     /// 是否正在停止（用于通知 accept 线程退出）
     BOOL _stopping;
+
+    /// 关键修复（P1-8）：accept 线程代际计数器
+    /// 每次 start 自增，acceptLoop 启动时捕获当前代际值，
+    /// 循环中检查代际是否仍匹配。若不匹配（说明期间发生过 stop→start），
+    /// 旧线程立即退出，避免与新一轮 start 启动的 accept 线程重复 accept 同一 listenFD。
+    int _acceptGeneration;
 
     /// 活跃客户端 socket fd 集合（用于 stop 时 shutdown 唤醒阻塞的 read）
     /// 关键稳定性优化：stop 时如果不 shutdown 这些 fd，客户端线程会一直阻塞在
@@ -195,6 +209,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
         _lock = [[NSLock alloc] init];
         _activeClientFDs = [[NSMutableArray alloc] init];
         _activeRemoteFDs = [[NSMutableArray alloc] init];
+        _acceptGeneration = 0;
         NSLog(@"[PortForwarder] 单例已初始化");
     }
     return self;
@@ -382,12 +397,17 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
     _remotePort = remotePort;
     _running = YES;
     _stopping = NO;
+    // 关键修复（P1-8）：代际自增，标识本次 start 周期
+    // 用于解决快速 stop→start 时旧 accept 线程未及时退出、与新 accept 线程
+    // 同时 accept 同一 listenFD（fd 数字可能被复用）导致重复 accept 的问题
+    _acceptGeneration++;
+    int myGen = _acceptGeneration;
     [_lock unlock];
-    
-    // 启动 accept 线程
+
+    // 启动 accept 线程，传入当前代际值
     __weak typeof(self) weakSelf = self;
     _acceptThread = [[NSThread alloc] initWithBlock:^{
-        [weakSelf acceptLoop];
+        [weakSelf acceptLoopWithGeneration:myGen];
     }];
     _acceptThread.name = @"PortForwarder-Accept";
     [_acceptThread start];
@@ -404,16 +424,31 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
 ///
 /// 使用 select 检测监听 socket 是否可读（有新连接），
 /// 这样可以在 stop 时通过关闭监听 socket 来唤醒 select，优雅退出。
-- (void)acceptLoop {
-    NSLog(@"[PortForwarder] Accept 线程已启动");
-    
+///
+/// 关键修复（P1-8）：接受代际参数。
+/// 当快速 stop→start 时，旧 accept 线程可能未及时退出。由于 fd 数字可能被
+/// 系统复用（旧 listenFD 关闭后，新 socket 可能拿到相同数字），旧线程会
+/// 错误地接受新 listenFD 上的连接，造成重复 accept 与状态混乱。
+/// 通过代际计数器识别旧线程并使其主动退出。
+- (void)acceptLoopWithGeneration:(int)myGen {
+    NSLog(@"[PortForwarder] Accept 线程已启动（代际=%d）", myGen);
+
     while (YES) {
         @autoreleasepool {
             [_lock lock];
             int listenFD = _listenFD;
             BOOL stopping = _stopping;
+            int currentGen = _acceptGeneration;
             [_lock unlock];
-            
+
+            // 关键修复（P1-8）：代际不匹配说明期间发生过 stop→start，
+            // 当前 accept 线程属于上一周期，应立即退出，把 listenFD 让给新线程
+            if (currentGen != myGen) {
+                NSLog(@"[PortForwarder] Accept 线程：代际不匹配（my=%d, current=%d），退出循环",
+                      myGen, currentGen);
+                break;
+            }
+
             if (stopping || listenFD < 0) {
                 NSLog(@"[PortForwarder] Accept 线程：收到停止信号，退出循环");
                 break;
@@ -523,6 +558,34 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
         int clientKeepAlive = 1;
         setsockopt(clientFD, SOL_SOCKET, SO_KEEPALIVE, &clientKeepAlive, sizeof(clientKeepAlive));
 
+        // 关键修复（P1-4）：客户端 socket 设置 SO_SNDTIMEO / SO_RCVTIMEO / SO_NOSIGPIPE
+        //
+        // 问题：原 writeAll 仅处理 EINTR 重试，无超时。当 MC 客户端接收缓冲区满
+        // （主线程卡顿、大区块加载）时，write 会无限阻塞，导致转发线程泄漏。
+        // 即使 stop() 调用 shutdown(clientFD, SHUT_RDWR)，由于线程卡在 write 而非 read，
+        // shutdown 不一定能立即唤醒已阻塞的 write（取决于内核实现）。
+        //
+        // 修复：设置 30 秒发送/接收超时 + SO_NOSIGPIPE 防止 SIGPIPE 崩溃。
+        // 超时后 writeAll 会返回 EAGAIN/EWOULDBLOCK，转发循环可主动退出。
+        struct timeval ioTimeout;
+        ioTimeout.tv_sec = 30;
+        ioTimeout.tv_usec = 0;
+        setsockopt(clientFD, SOL_SOCKET, SO_SNDTIMEO, &ioTimeout, sizeof(ioTimeout));
+        setsockopt(clientFD, SOL_SOCKET, SO_RCVTIMEO, &ioTimeout, sizeof(ioTimeout));
+        int clientNoSigPipe = 1;
+        setsockopt(clientFD, SOL_SOCKET, SO_NOSIGPIPE, &clientNoSigPipe, sizeof(clientNoSigPipe));
+
+        // 关键修复（P2-11）：iOS 默认 keepalive 间隔 ~2 小时，无法及时检测半死连接。
+        // 改为更激进的参数：空闲 30s 开始探测，每 10s 探测一次，3 次失败判定死亡。
+        // TCP_KEEPALIVE 是 iOS 上 keep-alive 间隔的对应选项（macOS 用 TCP_KEEPALIVE，
+        // Linux 用 TCP_KEEPIDLE，这里只编译 iOS，用 TCP_KEEPALIVE）。
+        int keepIdle = 30;
+        setsockopt(clientFD, IPPROTO_TCP, TCP_KEEPALIVE, &keepIdle, sizeof(keepIdle));
+        int keepIntvl = 10;
+        setsockopt(clientFD, IPPROTO_TCP, TCP_KEEPINTVL, &keepIntvl, sizeof(keepIntvl));
+        int keepCnt = 3;
+        setsockopt(clientFD, IPPROTO_TCP, TCP_KEEPCNT, &keepCnt, sizeof(keepCnt));
+
         // ============================================================
         // 步骤 1：创建 libzt socket
         // ============================================================
@@ -560,10 +623,24 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
               remoteHost, remotePort, ztFD);
 
         // 将 fd 加入活跃列表（用于 stop 时 shutdown 唤醒阻塞的 read/recv）
+        // 关键修复（P1-7）：connect 期间 stop 可能已被调用，stop 复制活跃列表时
+        // 此连接尚未加入，导致 fd 漏网，stop 后仍继续转发，且永不清理。
+        // 修复：加入活跃列表前检查 _running，若已停止则立即关闭 fd 并返回。
         [_lock lock];
-        [_activeClientFDs addObject:@(clientFD)];
-        [_activeRemoteFDs addObject:@(ztFD)];
+        BOOL stillRunning = _running;
+        if (stillRunning) {
+            [_activeClientFDs addObject:@(clientFD)];
+            [_activeRemoteFDs addObject:@(ztFD)];
+        }
         [_lock unlock];
+
+        if (!stillRunning) {
+            NSLog(@"[PortForwarder] handleClient：转发器已停止，关闭新连接 clientFD=%d ztFD=%d",
+                  clientFD, ztFD);
+            [[ZeroTierBridge sharedInstance] closeSocket:ztFD];
+            close(clientFD);
+            return;
+        }
 
         // ============================================================
         // 步骤 3：双向转发数据

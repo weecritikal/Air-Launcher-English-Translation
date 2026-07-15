@@ -539,6 +539,10 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
     _running = YES;
     [_clientFDs removeAllObjects];
     [_clientThreads removeAllObjects];
+    // 关键修复（P1-9）：start 时未清理 _remoteFDs，重启后残留的旧 remoteFD
+    // 会在下一次 stop() 时被 shutdownSocket:，可能误关闭已被系统复用的新 fd。
+    // 与 _clientFDs / _clientThreads 同步清理，保证 fd 列表一致。
+    [_remoteFDs removeAllObjects];
     [_lock unlock];
 
     NSLog(@"[SOCKS5Proxy] 代理服务器已启动，监听 127.0.0.1:%u", actualPort);
@@ -812,6 +816,33 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
         if (setsockopt(clientFD, SOL_SOCKET, SO_KEEPALIVE, &keepalive, sizeof(keepalive)) < 0) {
             NSLog(@"[SOCKS5Proxy] 设置 SO_KEEPALIVE 失败：errno = %d（忽略，继续）", errno);
         }
+
+        // 关键修复（P1-5）：客户端 socket 设置 SO_SNDTIMEO / SO_NOSIGPIPE
+        //
+        // 问题：与 PortForwarder 同源问题——writeAll 调用 writeAllWithTimeout(fd, buf, len, 0)
+        // 时 timeoutSec=0 表示无超时。MC 接收缓冲区满时 write 永久阻塞，转发线程泄漏。
+        //
+        // 修复：设置 30 秒发送超时，超时后 write 返回 -1 且 errno=EAGAIN，转发循环退出。
+        // SO_NOSIGPIPE 防止 write 对已关闭连接触发 SIGPIPE 崩溃。
+        struct timeval sndTimeout;
+        sndTimeout.tv_sec = SOCKS5_CLIENT_IO_TIMEOUT;
+        sndTimeout.tv_usec = 0;
+        if (setsockopt(clientFD, SOL_SOCKET, SO_SNDTIMEO, &sndTimeout, sizeof(sndTimeout)) < 0) {
+            NSLog(@"[SOCKS5Proxy] 设置 SO_SNDTIMEO 失败：errno = %d（忽略，继续）", errno);
+        }
+        int nosigpipe = 1;
+        if (setsockopt(clientFD, SOL_SOCKET, SO_NOSIGPIPE, &nosigpipe, sizeof(nosigpipe)) < 0) {
+            NSLog(@"[SOCKS5Proxy] 设置 SO_NOSIGPIPE 失败：errno = %d（忽略，继续）", errno);
+        }
+
+        // 关键修复（P2-11）：iOS 默认 keepalive 间隔 ~2 小时，无法及时检测半死连接。
+        // 改为更激进：空闲 30s 探测，每 10s 一次，3 次失败判定死亡。
+        int keepIdle = 30;
+        setsockopt(clientFD, IPPROTO_TCP, TCP_KEEPALIVE, &keepIdle, sizeof(keepIdle));
+        int keepIntvl = 10;
+        setsockopt(clientFD, IPPROTO_TCP, TCP_KEEPINTVL, &keepIntvl, sizeof(keepIntvl));
+        int keepCnt = 3;
+        setsockopt(clientFD, IPPROTO_TCP, TCP_KEEPCNT, &keepCnt, sizeof(keepCnt));
 
         // 发送客户端连接通知
         [[NSNotificationCenter defaultCenter] postNotificationName:SOCKS5ProxyClientConnectedNotification

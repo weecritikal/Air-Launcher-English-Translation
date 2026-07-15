@@ -2205,13 +2205,36 @@ static NSArray<NSString *> * const kZTIdentityFiles = @[@"identity.secret", @"id
         NSString *homeDir = strongSelf->_homeDirectory;
         [strongSelf->_lock unlock];
 
+        // 关键修复（P1-3）：自动重连逻辑死锁
+        //
+        // 问题：NODE_OFFLINE 时 _isStarted 仍为 YES（只有 NODE_DOWN/NODE_FATAL_ERROR/stopNode 才置 NO）。
+        // 于是 alreadyStarted=YES 时直接 return，但 return 路径未复位 _isAutoReconnecting=NO。
+        // 后续所有 startAutoReconnect 在入口 `if (_isAutoReconnecting) return;` 直接退出。
+        // 唯一能复位 _isAutoReconnecting 的是 NODE_ONLINE，但节点若一直无法恢复就永远不会触发。
+        // 结果：自动重连特性形同虚设，节点掉线后永不自动恢复。
+        //
+        // 修复：用 zts_node_is_online() 判断节点是否真正在线，而非 _isStarted。
+        // - 真正在线：libzt 自愈成功，跳过重启，复位标志
+        // - 已掉线但 _isStarted=YES：libzt 卡死，需要 stop 后重新 start
         if (alreadyStarted) {
-            NSLog(@"[ZeroTierBridge] 重连前检测到节点已启动，跳过");
-            return;
+            BOOL nodeActuallyOnline = (zts_node_is_online() == 1);
+            if (nodeActuallyOnline) {
+                NSLog(@"[ZeroTierBridge] 重连前检测到节点已在线（libzt 自愈中），跳过重启");
+                [strongSelf->_lock lock];
+                strongSelf->_isAutoReconnecting = NO;  // 关键：复位标志，允许下次重连
+                [strongSelf->_lock unlock];
+                return;
+            }
+            NSLog(@"[ZeroTierBridge] 检测到 _isStarted=YES 但节点已掉线，强制重启节点");
+            // 强制 stop 清理 _isStarted 等状态，让后续 startNode 能正常工作
+            [[ZeroTierBridge sharedInstance] stopNode];
         }
 
         if (!homeDir || homeDir.length == 0) {
             NSLog(@"[ZeroTierBridge] 重连失败：homeDir为空");
+            [strongSelf->_lock lock];
+            strongSelf->_isAutoReconnecting = NO;  // 复位以允许下次重连
+            [strongSelf->_lock unlock];
             return;
         }
 
