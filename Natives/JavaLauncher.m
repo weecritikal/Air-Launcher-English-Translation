@@ -120,12 +120,15 @@ void init_loadCustomEnv() {
 
 /// 加载 MobileGlues 配置并写入 config.json（对齐 Ynnyny 仓库）
 ///
-/// 当渲染器为 MobileGlues 时，将用户偏好设置写入 <POJAV_HOME>/MG/config.json。
+/// 当渲染器为 MobileGlues、Auto 或 Vulkan 时，将用户偏好设置写入 <POJAV_HOME>/MG/config.json。
 /// MobileGlues 是 GL-on-Metal/Vulkan 渲染器，需要 config.json 才能正常工作。
-/// 即使 Auto 现在始终选 ANGLE，用户仍可手动选择 MobileGlues，此时需要此配置。
+/// Auto 在 JavaLauncher 中虽然被解析为 ANGLE，但写入 config.json 是无害的兜底，
+/// 且 Vulkan 渲染器实际通过 MobileGlues 加载 GL，必须配置。
 void init_loadMobileGluesConfig() {
     NSString *renderer = [PLProfiles resolveKeyForCurrentProfile:@"renderer"];
-    BOOL usesMobileGlues = [renderer isEqualToString:@ RENDERER_NAME_MOBILEGLUES];
+    BOOL usesMobileGlues = [renderer isEqualToString:@ RENDERER_NAME_MOBILEGLUES] ||
+        [renderer isEqualToString:@"auto"] ||
+        [renderer isEqualToString:@ RENDERER_NAME_VULKAN];
 
     if (!usesMobileGlues) {
         return;
