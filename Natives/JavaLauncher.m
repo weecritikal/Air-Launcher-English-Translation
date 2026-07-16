@@ -52,6 +52,10 @@ void init_loadDefaultEnv() {
     // Override OpenGL version to 4.1 for Zink
     setenv("MESA_GL_VERSION_OVERRIDE", "4.1", 1);
 
+    // Suppress [mvk-info] log spam (swapchain creation, etc.)
+    // 对齐 Ynnyny 仓库：抑制 MoltenVK 日志刷屏，便于诊断启动问题
+    setenv("MVK_CONFIG_LOG_LEVEL", "2", 1);
+
     // Runs JVM in a separate thread
     setenv("HACK_IGNORE_START_ON_FIRST_THREAD", "1", 1);
 
@@ -111,6 +115,85 @@ void init_loadCustomEnv() {
         NSString *value = [line substringFromIndex:range.location+range.length];
         setenv(key.UTF8String, value.UTF8String, 1);
         NSLog(@"[JavaLauncher] Added custom env variable: %@", line);
+    }
+}
+
+/// 加载 MobileGlues 配置并写入 config.json（对齐 Ynnyny 仓库）
+///
+/// 当渲染器为 MobileGlues 时，将用户偏好设置写入 <POJAV_HOME>/MG/config.json。
+/// MobileGlues 是 GL-on-Metal/Vulkan 渲染器，需要 config.json 才能正常工作。
+/// 即使 Auto 现在始终选 ANGLE，用户仍可手动选择 MobileGlues，此时需要此配置。
+void init_loadMobileGluesConfig() {
+    NSString *renderer = [PLProfiles resolveKeyForCurrentProfile:@"renderer"];
+    BOOL usesMobileGlues = [renderer isEqualToString:@ RENDERER_NAME_MOBILEGLUES];
+
+    if (!usesMobileGlues) {
+        return;
+    }
+
+    NSString *mgDirPath = [NSString stringWithFormat:@"%s/MG", getenv("POJAV_HOME")];
+    setenv("MG_DIR_PATH", mgDirPath.UTF8String, 1);
+
+    NSMutableDictionary *config = [NSMutableDictionary dictionary];
+
+    // 安全默认值
+    config[@"enableExtGL43"] = @1;
+    config[@"enableExtDirectStateAccess"] = @1;
+    config[@"maxGlslCacheSize"] = @128;
+    config[@"customGLVersion"] = @0x030100;
+
+    id enableAngle = getPrefObject(@"mobileglues.enable_angle");
+    if (enableAngle) config[@"enableANGLE"] = [enableAngle boolValue] ? @1 : @0;
+
+    id enableNoError = getPrefObject(@"mobileglues.enable_no_error");
+    if (enableNoError) config[@"enableNoError"] = @([enableNoError intValue]);
+
+    id enableExtTimerQuery = getPrefObject(@"mobileglues.enable_ext_timer_query");
+    if (enableExtTimerQuery) config[@"enableExtTimerQuery"] = [enableExtTimerQuery boolValue] ? @1 : @0;
+
+    id enableExtComputeShader = getPrefObject(@"mobileglues.enable_ext_compute_shader");
+    if (enableExtComputeShader) config[@"enableExtComputeShader"] = [enableExtComputeShader boolValue] ? @1 : @0;
+
+    id enableExtDirectStateAccess = getPrefObject(@"mobileglues.enable_ext_direct_state_access");
+    if (enableExtDirectStateAccess) config[@"enableExtDirectStateAccess"] = [enableExtDirectStateAccess boolValue] ? @1 : @0;
+
+    id maxGlslCacheSize = getPrefObject(@"mobileglues.max_glsl_cache_size");
+    if (maxGlslCacheSize) config[@"maxGlslCacheSize"] = @([maxGlslCacheSize intValue]);
+
+    id multidrawMode = getPrefObject(@"mobileglues.multidraw_mode");
+    if (multidrawMode) config[@"multidrawMode"] = @([multidrawMode intValue]);
+
+    id angleDepthClearFixMode = getPrefObject(@"mobileglues.angle_depth_clear_fix_mode");
+    if (angleDepthClearFixMode) config[@"angleDepthClearFixMode"] = [angleDepthClearFixMode boolValue] ? @1 : @0;
+
+    id customGlVersion = getPrefObject(@"mobileglues.custom_gl_version");
+    if (customGlVersion) {
+        NSString *verStr = [customGlVersion description];
+        if ([verStr isEqualToString:@"3.0"]) config[@"customGLVersion"] = @0x030000;
+        else if ([verStr isEqualToString:@"3.1"]) config[@"customGLVersion"] = @0x030100;
+        else if ([verStr isEqualToString:@"3.2"]) config[@"customGLVersion"] = @0x030200;
+        else if ([verStr isEqualToString:@"3.3"]) config[@"customGLVersion"] = @0x030300;
+        else if ([verStr isEqualToString:@"4.0"]) config[@"customGLVersion"] = @0x040000;
+        else if ([verStr isEqualToString:@"4.1"]) config[@"customGLVersion"] = @0x040100;
+        else if ([verStr isEqualToString:@"4.2"]) config[@"customGLVersion"] = @0x040200;
+        else if ([verStr isEqualToString:@"4.3"]) config[@"customGLVersion"] = @0x040300;
+        else if ([verStr isEqualToString:@"4.4"]) config[@"customGLVersion"] = @0x040400;
+        else if ([verStr isEqualToString:@"4.5"]) config[@"customGLVersion"] = @0x040500;
+        else if ([verStr isEqualToString:@"4.6"]) config[@"customGLVersion"] = @0x040600;
+    }
+
+    id fsr1Setting = getPrefObject(@"mobileglues.fsr1_setting");
+    if (fsr1Setting) config[@"fsr1Setting"] = @([fsr1Setting intValue]);
+
+    NSError *error = nil;
+    NSData *jsonData = [NSJSONSerialization dataWithJSONObject:config options:NSJSONWritingPrettyPrinted error:&error];
+    if (jsonData) {
+        NSString *jsonString = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
+        [fm createDirectoryAtPath:mgDirPath withIntermediateDirectories:YES attributes:nil error:nil];
+        [jsonString writeToFile:[mgDirPath stringByAppendingPathComponent:@"config.json"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
+        NSLog(@"[JavaLauncher] MobileGlues config written to %@/config.json", mgDirPath);
+    } else {
+        NSLog(@"[JavaLauncher] Failed to serialize MobileGlues config: %@", error);
     }
 }
 
@@ -197,6 +280,8 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
 
     init_loadDefaultEnv();
     init_loadCustomEnv();
+    // 加载 MobileGlues 配置（仅当用户手动选择 MobileGlues 渲染器时生效）
+    init_loadMobileGluesConfig();
 
     // --- [更新] TouchController 通信方式支持 ---
     // 检查是否启用了 TouchController 以及选择的通信方式
@@ -359,59 +444,18 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
     }
     PUSH_MARGV_LITERAL("-Xms128M");
     PUSH_MARGV_FORMAT(@"-Xmx%dM", allocmem);
-    // Detect LWJGL version early to set correct library path
-    // 参照 Taylen-chud/Amethyst-iOS（Rebase-everything）的 dylib 布局：
-    //   Frameworks/              = 共享 dylib（libMoltenVK/libopenal/libOSMesa/libgl4es/libglapi/libvirgil_test_server/libspirv-cross-c-shared.0）
-    //   Frameworks/lwjgl33/      = LWJGL 3.3.3 专属 dylib（liblwjgl/liblwjgl_opengl/liblwjgl_nanovg/liblwjgl_stb/liblwjgl_tinyfd/liblwjgl_vma/libshaderc/libfreetype 等 9 个）
-    //   Frameworks/lwjgl34/      = LWJGL 3.4.x 专属 dylib（liblwjgl/liblwjgl_opengl/liblwjgl_msdfgen/liblwjgl_nanovg/liblwjgl_stb/liblwjgl_tinyfd/liblwjgl_vma/libshaderc/libfreetype 共 9 个）
-    // library.path = Frameworks:Frameworks/lwjglXX（共享在前，LWJGL 专属在后）
+    // library.path: 单一 Frameworks 路径（对齐 Ynnyny 仓库）
     //
-    // 关于 libglfw.dylib：iOS 上不需要独立 libglfw.dylib。workspace 用 Java + native 桥接
-    // （pojav* 函数）完全替代 GLFW native 库。JavaApp/src/lwjgl/org/lwjgl/glfw/GLFW.java 是
-    // override 版本，加载主程序二进制 AngelAuraAmethyst（System.load(BUNDLE_PATH/AngelAuraAmethyst)），
-    // 所有函数指针从 pojav* 符号解析，不查找任何 glfw 原生符号。因此 libglfw.dylib 是多余文件，
-    // 已从 lwjgl34/ 删除。
+    // 关键修复（26.2 启动崩溃）：之前 workspace 将 LWJGL dylib 分裂为 lwjgl33/ 和 lwjgl34/ 子目录，
+    // 并通过扫描版本 JSON 的 LWJGL 声明来选择路径。但 Ynnyny 仓库用单一 Frameworks 路径就能正常
+    // 启动 26.2，证明分裂路径是多余的，且若 dylib 未按子目录正确摆放会导致加载错误版本 native 库。
     //
-    // 关于 libspirv-cross-c-shared.0.dylib：作为共享 dylib 放在根目录 Frameworks/。
-    // LWJGL spvc 模块通过 -Dorg.lwjgl.spvc.libname=spirv-cross-c-shared.0 显式指定库名，
-    // LWJGL 加载 libspirv-cross-c-shared.0.dylib，从 library.path 的 Frameworks/ 找到。
-    // spirv-cross 是外部库（非 LWJGL 专属），LWJGL 3.3.x 和 3.4.x 共用同一版本，放根目录合理。
-    //
-    // 之前根目录 Frameworks/ 同时放置 LWJGL 3.4.x 专属 dylib，26.x 路径为 Frameworks:Frameworks，
-    // 虽能工作但与 Taylen-chud 结构不一致，且旧版路径 Frameworks/lwjgl33:Frameworks 可能误从根目录
-    // 加载到 LWJGL 3.4.x 的 liblwjgl.dylib 造成版本错配。现对齐 Taylen-chud：专属 dylib 全部移入
-    // lwjgl34/，根目录只保留共享 dylib（含 spirv-cross），旧版与新版都走 Frameworks:Frameworks/lwjglXX 路径。
-    BOOL useLWJGL33 = NO;
-    BOOL foundLWJGLDeclaration = NO;
-    if ([launchTarget isKindOfClass:NSDictionary.class]) {
-        NSArray *libraries = launchTarget[@"libraries"];
-        for (NSDictionary *lib in libraries) {
-            NSString *name = lib[@"name"];
-            if (name && [name hasPrefix:@"org.lwjgl:lwjgl:"]) {
-                foundLWJGLDeclaration = YES;
-                NSString *ver = [[name componentsSeparatedByString:@":"] lastObject];
-                NSArray *parts = [ver componentsSeparatedByString:@"."];
-                if (parts.count >= 2 && [[parts objectAtIndex:1] intValue] < 4) {
-                    useLWJGL33 = YES;
-                }
-                break;
-            }
-        }
-        // Minecraft 26.x 版本 JSON 不再声明 LWJGL，但需要使用 3.4.x（含 spvc/vma/shaderc/msdfgen）。
-        // 若未扫描到 LWJGL 声明且所需 Java >= 21，判定为 26.x，强制使用 LWJGL 3.4.x 路径。
-        // 26.2 官方强制 Java 25（Profile javaVersion=25），minVersion 经 preferredJavaVersion
-        // 覆盖后为 25，此处 minVersion >= 21 条件仍成立，LWJGL 3.4.x 路径正确选中。
-        if (!foundLWJGLDeclaration && minVersion >= 21) {
-            useLWJGL33 = NO;
-            NSLog(@"[JavaLauncher] 26.x detected (no LWJGL declaration, minJava=%d), defaulting to LWJGL 3.4.x", minVersion);
-        }
-    }
+    // 现对齐 Ynnyny：所有 native dylib（含 LWJGL 专属和共享库）统一放在 Frameworks/ 根目录，
+    // library.path = Frameworks。定制版 root lwjgl.jar（含 iOS 专用 LWJGL 补丁）通过 JavaApp/Makefile
+    // 合并进最终 lwjgl.jar，确保 LWJGL 在 iOS 上能正确加载 GL 实现。
     NSString *frameworksPath = [NSString stringWithFormat:@"%@/Frameworks", NSBundle.mainBundle.bundlePath];
-    // 26.x（LWJGL 3.4.x）走 lwjgl34/，旧版走 lwjgl33/。共享 dylib 始终从根目录 Frameworks/ 加载。
-    NSString *lwjglNativesSubfolder = useLWJGL33 ? @"lwjgl33" : @"lwjgl34";
-    NSString *lwjglFrameworksPath = [frameworksPath stringByAppendingPathComponent:lwjglNativesSubfolder];
-    PUSH_MARGV_FORMAT(@"-Djava.library.path=%@:%@", frameworksPath, lwjglFrameworksPath);
-    NSLog(@"[JavaLauncher] library.path = %@:%@ (useLWJGL33=%d)", frameworksPath, lwjglFrameworksPath, useLWJGL33);
+    PUSH_MARGV_FORMAT(@"-Djava.library.path=%@", frameworksPath);
+    NSLog(@"[JavaLauncher] library.path = %@", frameworksPath);
     PUSH_MARGV_FORMAT(@"-Duser.dir=%@", gameDir);
     PUSH_MARGV_FORMAT(@"-Duser.home=%s", getenv("POJAV_HOME"));
     PUSH_MARGV_FORMAT(@"-Duser.timezone=%@", NSTimeZone.localTimeZone.name);
@@ -527,39 +571,21 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
     const char *glLibName = getenv("AMETHYST_RENDERER");
     if (glLibName) {
         if (!strcmp(glLibName, "auto")) {
-            // 自动选择渲染器：基于 MC 所需 Java 版本推断。
-            // README 宣传 "Auto 自动选择合适的渲染器（含 MobileGlues）"，原代码无版本判断永远选 ANGLE。
-            // - Java 8 (MC 1.16.5-) 走 gl4es，对旧版 GL 兼容性最佳
-            // - Java 17 (MC 1.17-1.20.4) 走 ANGLE（GL 3.2 Core）
-            // - Java 21+ (MC 1.20.5+/26.x) 优先走 MobileGlues（GL 4.x），缺失则回退 ANGLE
-            NSString *mobilegluesPath = [NSString stringWithFormat:@"%@/Frameworks/%s",
-                NSBundle.mainBundle.bundlePath, RENDERER_NAME_MOBILEGLUES];
-            if (minVersion >= 21 && [NSFileManager.defaultManager fileExistsAtPath:mobilegluesPath]) {
-                glLibName = RENDERER_NAME_MOBILEGLUES;
-            } else if (minVersion >= 17) {
-                glLibName = RENDERER_NAME_MTL_ANGLE;
-            } else {
-                glLibName = RENDERER_NAME_GL4ES;
-            }
-            // 同步更新环境变量，使 egl_bridge 选用对应桥接
+            // 关键修复（26.2 启动崩溃）：Auto 渲染器始终选 ANGLE（对齐 Ynnyny 仓库）
+            //
+            // 之前 workspace 在 Java 21+ 优先选 MobileGlues，但 Ynnyny 仓库用 ANGLE 就能正常启动 26.2。
+            // workspace 选 MobileGlues 后又缺少 init_loadMobileGluesConfig() 写 config.json，
+            // 导致 MobileGlues 用不安全默认值初始化 GL 上下文可能崩溃。现对齐 Ynnyny 始终选 ANGLE。
+            // MobileGlues 仍保留为手动选项（用户可在设置中显式选择）。
+            glLibName = RENDERER_NAME_MTL_ANGLE;
             setenv("AMETHYST_RENDERER", glLibName, 1);
-            NSLog(@"[JavaLauncher] Auto renderer resolved to %s (minJava=%d)", glLibName, minVersion);
+            NSLog(@"[JavaLauncher] Auto renderer resolved to %s (always ANGLE)", glLibName);
         }
         if (strcmp(glLibName, RENDERER_NAME_VULKAN) == 0) {
             // Vulkan mode: set vulkan libname and fallback opengl libname for LWJGL startup probing
             PUSH_MARGV_FORMAT(@"-Dorg.lwjgl.vulkan.libname=%s", RENDERER_NAME_VULKAN);
-            // 参照 TAYlen-chud/Amethyst-iOS: Vulkan 模式下 OpenGL 回退库使用 MobileGlues 而非 ANGLE
-            // 原因：MC 26.2 的 NativeLibrariesBootstrap.loadOpenGL() 在启动时会初始化 GL，
-            // iOS 上无系统 OpenGL framework，ANGLE 可能不如 MobileGlues 适合
-            // （MobileGlues 可路由到 Vulkan 后端，与 Vulkan 模式更协同）
-            // 仅当 MobileGlues 存在时使用，否则回退 ANGLE
-            NSString *mobilegluesVulkanPath = [NSString stringWithFormat:@"%@/Frameworks/%s",
-                NSBundle.mainBundle.bundlePath, RENDERER_NAME_MOBILEGLUES];
-            if ([NSFileManager.defaultManager fileExistsAtPath:mobilegluesVulkanPath]) {
-                glLibName = RENDERER_NAME_MOBILEGLUES;
-            } else {
-                glLibName = RENDERER_NAME_MTL_ANGLE;
-            }
+            // 参照 Ynnyny 仓库：Vulkan 模式下 OpenGL 回退库使用 ANGLE
+            glLibName = RENDERER_NAME_MTL_ANGLE;
         }
         PUSH_MARGV_FORMAT(@"-Dorg.lwjgl.opengl.libname=%s", glLibName);
 
@@ -568,20 +594,7 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
         // 但实际文件名为 libspirv-cross-c-shared.0.dylib（带版本后缀的 SO 名）。
         // 显式设置 -Dorg.lwjgl.spvc.libname=spirv-cross-c-shared.0，LWJGL 的 Library.loadNative
         // 会对 libname 加 "lib" 前缀和 ".dylib" 后缀，得到 "libspirv-cross-c-shared.0.dylib"，
-        // 从 library.path（Frameworks:Frameworks/lwjglXX）的根目录 Frameworks/ 找到该文件。
-        //
-        // 为什么不用 Makefile 软链接（libspirv-cross.dylib -> libspirv-cross-c-shared.0.dylib）+默认名：
-        // 之前曾尝试该方案，但 26.2 启动时在 "Now starting game" 阶段 SIGSEGV at get_method_id。
-        // 根因：LWJGL spvc 模块在 native 库加载失败或 JNI 注册状态不一致时，get_method_id 可能
-        // 访问已损坏的类元数据导致 SIGSEGV（而非抛出 UnsatisfiedLinkError）。软链接方案依赖构建
-        // 阶段正确创建符号链接，一旦构建环境差异导致软链接缺失或指向错误，spvc 加载会进入异常
-        // 状态。显式指定完整 SO 名（spirv-cross-c-shared.0）直接定位实际文件，无需软链接，
-        // 与 catsruledogs（能正常启动 26.2 + Java 25）完全一致，是最稳妥的方案。
-        //
-        // LWJGL Library.loadNative 的 libname 处理（macOS）：
-        // - 若 libname 已含 "lib" 前缀和 ".dylib" 后缀，直接使用
-        // - 否则加 "lib" 前缀和 ".dylib" 后缀
-        // "spirv-cross-c-shared.0" -> "libspirv-cross-c-shared.0.dylib"（正确，不会二次包装）
+        // 从 library.path（Frameworks）找到该文件。
         PUSH_MARGV_LITERAL("-Dorg.lwjgl.spvc.libname=spirv-cross-c-shared.0");
     }
 
@@ -629,8 +642,6 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
     NSString *libjlipath8 = [NSString stringWithFormat:@"%@/lib/jli/libjli.dylib", javaHome]; // java 8
     NSString *libjlipath11 = [NSString stringWithFormat:@"%@/lib/libjli.dylib", javaHome]; // java 11+
     BOOL isJava8 = [fm fileExistsAtPath:libjlipath8];
-    // 提前计算 isJava25，供下方 add-exports 条件判断与 cacio bootclasspath 三路切换共用
-    BOOL isJava25 = (minVersion >= 25) || [javaHome containsString:@"java-25"];
     setenv("INTERNAL_JLI_PATH", (isJava8 ? libjlipath8 : libjlipath11).UTF8String, 1);
     void* libjli = dlopen(getenv("INTERNAL_JLI_PATH"), RTLD_GLOBAL);
 
@@ -660,7 +671,10 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
         // get_method_id 访问不一致的类元数据导致 SIGSEGV（26.2 启动崩溃的根因）。
         // 日志中 "WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning"
         // 也明确提示需要此参数。Java 17/21 添加此参数无副作用，统一在非 Java 8 分支添加。
-        PUSH_MARGV_LITERAL("--enable-native-access=ALL-UNNAMED");
+        // 关键修复（26.2 启动崩溃）：删除 --enable-native-access=ALL-UNNAMED（对齐 Ynnyny 仓库）
+        // Ynnyny 仓库不添加此参数也能正常启动 26.2，证明之前的诊断（Java 25 必需）是错误的。
+        // 该参数会改变未命名模块的受限方法警告路径，可能干扰 bootclasspath/a 上 caciocavallo
+        // 类的初始化顺序。
 
         // Required by Cosmetica to inject DNS
         PUSH_MARGV_LITERAL("--add-opens=java.base/java.net=ALL-UNNAMED");
@@ -700,58 +714,29 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
     }
 
     // Add Caciocavallo bootclasspath
-    // caciocavallo 三路切换（参照 FCL/ZalithLauncher2 的二元思路，扩展为三路以兼容 Java 25）：
-    // 三个独立的 caciocavallo 文件夹，按实际选中的 Java 运行时版本选择：
-    //   - isJava8 通过 libjli 路径检测（lib/jli/libjli.dylib 仅 Java 8 存在）
-    //   - isJava25 通过 javaHome 路径包含 "java-25" 或 minVersion >= 25 检测
-    //   - 其余为 Java 17/21
+    // 关键修复（26.2 启动崩溃）：caciocavallo 二元切换（对齐 Ynnyny 仓库）
     //
-    // 目录布局（三个平级独立文件夹，无嵌套子目录）：
-    //   libs_caciocavallo   → Java 8（1.10-SNAPSHOT，包名 net.java.openjdk.cacio，class version 52）
-    //   libs_caciocavallo17 → Java 17/21（1.18-SNAPSHOT 纯 Java 17 编译，包名 com.github.caciocavallosilano.cacio，class version 61）
-    //   libs_caciocavallo25 → Java 25（1.18-SNAPSHOT 含 Java 24 class，包名 com.github.caciocavallosilano.cacio，来自 catsruledogs iOS）
+    // 之前 workspace 误判"纯 Java 17 编译版会在 Java 25 上 get_method_id SIGSEGV"，
+    // 引入了 caciocavallo25（catsruledogs Java 24 class jar）三路切换。
+    // 但 Ynnyny 仓库用纯 Java 17 编译版 caciocavallo17 启动 26.2 完全正常，
+    // 证明该诊断是错误的。catsruledogs jar 的 Java 24 class 反而可能是真正的崩溃源。
     //
-    // 为什么不能像 FCL/ZL2 那样简单二元切换（Java 8 vs Java 17+）：
-    //   catsruledogs/Amethyst-iOS-25 的 caciocavallo25 jar 中，AWT 入口类
-    //   CTCGraphicsEnvironment（通过 -Djava.awt.graphicsenv 在 JVM 启动时加载）
-    //   是 Java 24 编译（class version 68），Java 17/21 无法加载。
-    //   而 26.2 + Java 25 又必须用这个 jar（含 Java 25 兼容修复，纯 Java 17 编译版本
-    //   会在 get_method_id 阶段 SIGSEGV）。
-    //   因此 Java 17/21 必须用纯 Java 17 编译的 jar（class version 61，放 caciocavallo17），
-    //   Java 25 必须用 catsruledogs 的 jar（含 Java 24 class，放 caciocavallo25），两者不可共用。
-    //   这是确保"所有版本（Java 8/17/21/25）启动都没有问题"的唯一方案。
-    // isJava25 已在上方提前计算（供 add-exports 条件判断与 bootclasspath 切换共用）
+    // 现对齐 Ynnyny：二元切换
+    //   - Java 8     → libs_caciocavallo（1.10-SNAPSHOT，bootclasspath/p）
+    //   - Java 17/21/25 → libs_caciocavallo17（1.18-SNAPSHOT 纯 Java 17 编译，bootclasspath/a）
     const char *cacio_bootclasspath_mode;
     NSString *cacio_libs_path;
     if (isJava8) {
         // Java 8: 1.10-SNAPSHOT，bootclasspath/p（前置，覆盖 java.awt 实现）
         cacio_bootclasspath_mode = "p";
         cacio_libs_path = [NSString stringWithFormat:@"%@/libs_caciocavallo", NSBundle.mainBundle.bundlePath];
-    } else if (isJava25) {
-        // Java 25: 1.18-SNAPSHOT 含 Java 24 class（catsruledogs iOS），bootclasspath/a
-        // 注意：caciocavallo25 的 cacio-tta jar 与 catsruledogs/Amethyst-iOS-25 的
-        // libs_caciocavallo17/cacio-tta jar MD5 完全一致（catsruledogs 对 Java 25 也用
-        // caciocavallo17 目录，workspace 为区分 Java 17/21 纯编译版另设 caciocavallo25）。
-        //
-        // 关于 stub-surface-manager.jar：已删除，不再使用。
-        // CTCPreloadClassLoader.<clinit> 会 Class.forName("sun.java2d.SurfaceManagerFactory")，
-        // Java 9+ 已将该类迁至 sun.awt.image.SurfaceManagerFactory，故 forName 抛
-        // ClassNotFoundException。但该 <clinit> 用 try/catch(Exception) 包裹整个逻辑
-        // （异常表 16-177），异常仅 printStackTrace 后被吞掉，不终止启动。
-        // catsruledogs 不提供 stub 也能正常启动 26.2 + Java 25，证明此异常无害。
-        // 之前 workspace 添加 stub-surface-manager.jar（含 sun/java2d/SurfaceManagerFactory）
-        // 到 bootclasspath/a，反而把类注入 java.desktop 模块内部包，破坏模块封装，
-        // 导致后续 JNI get_method_id 时类查找状态损坏 → SIGSEGV。删除 stub 后对齐
-        // catsruledogs，问题解决。
-        cacio_bootclasspath_mode = "a";
-        cacio_libs_path = [NSString stringWithFormat:@"%@/libs_caciocavallo25", NSBundle.mainBundle.bundlePath];
     } else {
-        // Java 17/21: 1.18-SNAPSHOT 纯 Java 17 编译（class version 61），bootclasspath/a
+        // Java 17/21/25: 1.18-SNAPSHOT 纯 Java 17 编译（class version 61），bootclasspath/a
         cacio_bootclasspath_mode = "a";
         cacio_libs_path = [NSString stringWithFormat:@"%@/libs_caciocavallo17", NSBundle.mainBundle.bundlePath];
     }
-    NSLog(@"[JavaLauncher] Caciocavallo: isJava8=%d isJava25=%d libs=%@ mode=/%s",
-          isJava8, isJava25, cacio_libs_path.lastPathComponent, cacio_bootclasspath_mode);
+    NSLog(@"[JavaLauncher] Caciocavallo: isJava8=%d libs=%@ mode=/%s",
+          isJava8, cacio_libs_path.lastPathComponent, cacio_bootclasspath_mode);
 
     NSString *cacio_classpath = [NSString stringWithFormat:@"-Xbootclasspath/%s", cacio_bootclasspath_mode];
     NSArray *files = [fm contentsOfDirectoryAtPath:cacio_libs_path error:nil];
@@ -787,11 +772,11 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
     init_loadCustomJvmFlags(&margc, (const char **)margv);
     NSLog(@"[Init] Found JLI lib");
 
-    // Pick correct LWJGL jar based on earlier version detection
-    NSString *lwjglJar = useLWJGL33
-        ? [NSString stringWithFormat:@"%@/lwjgl33.jar", librariesPath]
-        : [NSString stringWithFormat:@"%@/lwjgl.jar", librariesPath];
-    NSLog(@"[JavaLauncher] Using LWJGL %@ jar at %@", useLWJGL33 ? @"3.3.x" : @"3.4.x", lwjglJar);
+    // 关键修复（26.2 启动崩溃）：单一 lwjgl.jar（对齐 Ynnyny 仓库）
+    // 之前 workspace 分裂为 lwjgl.jar 和 lwjgl33.jar，现对齐 Ynnyny 用单一合并 jar。
+    // 定制版 root lwjgl.jar（含 iOS 专用 LWJGL 补丁）已通过 JavaApp/Makefile 合并进 lwjgl.jar。
+    NSString *lwjglJar = [NSString stringWithFormat:@"%@/lwjgl.jar", librariesPath];
+    NSLog(@"[JavaLauncher] Using LWJGL jar at %@", lwjglJar);
 
     // 校验目标 LWJGL jar 是否存在，避免静默崩溃
     if (![fm fileExistsAtPath:lwjglJar]) {
@@ -805,8 +790,7 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
     for (NSString *libFile in libFiles) {
         // 精确排除合并后的 LWJGL jar，避免重复；保留其他以 lwjgl 开头的依赖 jar
         if ([libFile hasSuffix:@".jar"] &&
-            ![libFile isEqualToString:@"lwjgl.jar"] &&
-            ![libFile isEqualToString:@"lwjgl33.jar"]) {
+            ![libFile isEqualToString:@"lwjgl.jar"]) {
             [classpathBuilder appendFormat:@"%@/%@:", librariesPath, libFile];
         }
     }

@@ -286,29 +286,13 @@ jre: native
 	echo '[Amethyst v$(VERSION)] jre - start'
 	mkdir -p $(SOURCEDIR)/depends
 	cd $(SOURCEDIR)/depends; \
-	$(call METHOD_JAVA_UNPACK,8,'https://crystall1ne.dev/cdn/amethyst-ios/jre8-ios-aarch64.zip'); \
-	$(call METHOD_JAVA_UNPACK,17,'https://crystall1ne.dev/cdn/amethyst-ios/jre17-ios-aarch64.zip'); \
-	$(call METHOD_JAVA_UNPACK,21,'https://crystall1ne.dev/cdn/amethyst-ios/jre21-ios-aarch64.zip'); \
+	$(call METHOD_JAVA_UNPACK,8,'https://assets.angelauramc.dev/openjdk/ios-arm64/jre8-ios-aarch64.zip'); \
+	$(call METHOD_JAVA_UNPACK,17,'https://assets.angelauramc.dev/openjdk/ios-arm64/jre17-ios-aarch64.zip'); \
+	$(call METHOD_JAVA_UNPACK,21,'https://assets.angelauramc.dev/openjdk/ios-arm64/jre21-ios-aarch64.zip'); \
+	$(call METHOD_JAVA_UNPACK,25,'https://assets.angelauramc.dev/openjdk/ios-arm64/jre25-ios-aarch64.zip'); \
 	if [ -f "$(ls jre*.tar.xz)" ]; then rm $(SOURCEDIR)/depends/jre*.tar.xz; fi; \
 	cd $(SOURCEDIR); \
-	if [ ! -f "$(SOURCEDIR)/depends/java-25-openjdk/release" ] || [ ! -f "$(SOURCEDIR)/depends/java-25-openjdk/lib/server/libjvm.dylib" ]; then \
-		JRE25_URL="https://github.com/vibecodest/Amethyst-iOS/releases/download/jre25-ios-v10/jre25-ios-arm64-20260509-release.tar.xz"; \
-		echo "[jre25] downloading iOS-built OpenJDK 25..."; \
-		curl -L --fail -o /tmp/jre25.tar.xz "$$JRE25_URL"; \
-		mkdir -p $(SOURCEDIR)/depends/java-25-openjdk; \
-		tar xf /tmp/jre25.tar.xz -C $(SOURCEDIR)/depends/java-25-openjdk; \
-		rm -f /tmp/jre25.tar.xz; \
-		if vtool -show $(SOURCEDIR)/depends/java-25-openjdk/lib/server/libjvm.dylib 2>/dev/null | grep -q "platform IOS"; then \
-			echo "[jre25] confirmed: libjvm.dylib has platform IOS"; \
-		else \
-			echo "[jre25] WARNING: libjvm.dylib is not tagged as iOS"; \
-		fi; \
-		echo "[jre25] done. Final size:"; \
-		du -sh $(SOURCEDIR)/depends/java-25-openjdk; \
-	else \
-		echo "[jre25] already present, skipping download"; \
-	fi; \
-	rm -rf $(SOURCEDIR)/depends/java-{8,17,21}-openjdk/{ASSEMBLY_EXCEPTION,bin,include,jre,legal,LICENSE,man,THIRD_PARTY_README,lib/{ct.sym,jspawnhelper,libjsig.dylib,src.zip,tools.jar}}; \
+	rm -rf $(SOURCEDIR)/depends/java-{8,17,21,25}-openjdk/{ASSEMBLY_EXCEPTION,bin,include,jre,legal,LICENSE,man,THIRD_PARTY_README,lib/{ct.sym,jspawnhelper,libjsig.dylib,src.zip,tools.jar}}; \
 	$(call METHOD_DIRCHECK,$(OUTPUTDIR)/java_runtimes); \
 	cp -R $(POJAV_JRE8_DIR) $(OUTPUTDIR)/java_runtimes; \
 	cp -R $(POJAV_JRE17_DIR) $(OUTPUTDIR)/java_runtimes; \
@@ -332,10 +316,12 @@ dep_mg:
 		-DCMAKE_OSX_ARCHITECTURES=arm64 \
 		-DCMAKE_OSX_DEPLOYMENT_TARGET=14.0 \
 		-DCMAKE_C_FLAGS="-arch arm64" \
+		-DSPIRV_CROSS_SHARED="ON" \
 		$(SOURCEDIR)/Natives/external/MobileGlues/MobileGlues-cpp/
 
 	cmake --build $(WORKINGDIR)/mobileglues --config RelWithDebInfo -j$(JOBS) --target mobileglues
-	cp $(WORKINGDIR)/mobileglues/libmobileglues.dylib $(WORKINGDIR)/libmobileglues.dylib
+	cp $(WORKINGDIR)/mobileglues/libmobileglues*.dylib $(WORKINGDIR)/
+	cp $(WORKINGDIR)/mobileglues/libspirv-cross*.dylib $(WORKINGDIR)/ 2>/dev/null || true
 	echo '[Amethyst v$(VERSION)] dep_mg - end'
 
 dep_mobilegl:
@@ -366,42 +352,18 @@ payload: native dep_mg java jre assets
 	$(call METHOD_DIRCHECK,$(WORKINGDIR)/AngelAuraAmethyst.app/libs)
 	$(call METHOD_DIRCHECK,$(WORKINGDIR)/AngelAuraAmethyst.app/libs_caciocavallo)
 	$(call METHOD_DIRCHECK,$(WORKINGDIR)/AngelAuraAmethyst.app/libs_caciocavallo17)
-	$(call METHOD_DIRCHECK,$(WORKINGDIR)/AngelAuraAmethyst.app/libs_caciocavallo25)
 	cp -R $(SOURCEDIR)/Natives/resources/en.lproj/LaunchScreen.storyboardc $(WORKINGDIR)/AngelAuraAmethyst.app/Base.lproj/ || exit 1
 	cp -R $(SOURCEDIR)/Natives/resources/* $(WORKINGDIR)/AngelAuraAmethyst.app/ || exit 1
 	cp $(WORKINGDIR)/*.dylib $(WORKINGDIR)/AngelAuraAmethyst.app/Frameworks/ || exit 1
-	# spirv-cross 软链接（防御性兜底，非 LWJGL spvc 加载的必要路径）：
-	# 当前 dylib 布局（参照 Taylen-chud/Amethyst-iOS Rebase-everything）：
-	#   Frameworks/         = 共享 dylib（libMoltenVK/libopenal/libOSMesa/libgl4es/libglapi/libvirgl_test_server/libspirv-cross-c-shared.0 共 7 个）
-	#   Frameworks/lwjgl33/ = LWJGL 3.3.3 专属 dylib（含 spirv-cross 副本，历史布局）
-	#   Frameworks/lwjgl34/ = LWJGL 3.4.x 专属 dylib（9 个，不含 spirv-cross 和 glfw）
-	# spirv-cross 作为共享 dylib 放在根目录 Frameworks/，LWJGL 3.3.x 和 3.4.x 共用同一版本。
-	#
-	# LWJGL spvc 加载方式：JavaLauncher.m 显式设置 -Dorg.lwjgl.spvc.libname=spirv-cross-c-shared.0
-	# （对齐 catsruledogs/Amethyst-iOS-25），LWJGL Library.loadNative 会对 libname 加 "lib" 前缀和
-	# ".dylib" 后缀得到 "libspirv-cross-c-shared.0.dylib"，从 library.path（Frameworks:Frameworks/lwjglXX）
-	# 的根目录 Frameworks/ 找到该文件。因此 LWJGL spvc 加载不依赖这里的软链接。
-	#
-	# 这里的软链接仅为防御性兜底：若未来有其他 native 代码（如 Mesa/Zink/Virgl）按 macOS 默认名
-	# "libspirv-cross.dylib" 加载 spirv-cross，仍能通过软链接找到实际文件。libspirv-cross.dylib
-	# -> libspirv-cross-c-shared.0.dylib。
-	#
-	# 根目录 Frameworks/ 软链接（spirv-cross 当前在此目录）
+	# spirv-cross 软链接（防御性兜底）：若 MobileGlues 构建产出 libspirv-cross-c-shared.0.dylib，
+	# 创建 libspirv-cross.dylib 软链接，兼容按 macOS 默认名加载的 native 代码。
 	if [ -f "$(WORKINGDIR)/AngelAuraAmethyst.app/Frameworks/libspirv-cross-c-shared.0.dylib" ] && [ ! -f "$(WORKINGDIR)/AngelAuraAmethyst.app/Frameworks/libspirv-cross.dylib" ]; then \
 		ln -sf libspirv-cross-c-shared.0.dylib $(WORKINGDIR)/AngelAuraAmethyst.app/Frameworks/libspirv-cross.dylib; \
 	fi
-	# LWJGL 3.3.3（旧版 MC，如 1.20-1.21.x）子目录软链接（lwjgl33/ 仍保留 spirv-cross 副本）
-	if [ -f "$(WORKINGDIR)/AngelAuraAmethyst.app/Frameworks/lwjgl33/libspirv-cross-c-shared.0.dylib" ] && [ ! -f "$(WORKINGDIR)/AngelAuraAmethyst.app/Frameworks/lwjgl33/libspirv-cross.dylib" ]; then \
-		ln -sf libspirv-cross-c-shared.0.dylib $(WORKINGDIR)/AngelAuraAmethyst.app/Frameworks/lwjgl33/libspirv-cross.dylib; \
-	fi
-	# 注：lwjgl34/ 不再保留 spirv-cross dylib（已作为共享 dylib 移到根目录 Frameworks/），
-	# 因此无需为 lwjgl34/ 创建 spirv-cross 软链接。LWJGL 3.4.x spvc 通过 spvc.libname
-	# 显式指定库名，从 library.path 的根目录 Frameworks/ 加载 libspirv-cross-c-shared.0.dylib。
-	cp -R $(SOURCEDIR)/JavaApp/libs/others/* $(WORKINGDIR)/AngelAuraAmethyst.app/libs/ || exit 1
+		cp -R $(SOURCEDIR)/JavaApp/libs/others/* $(WORKINGDIR)/AngelAuraAmethyst.app/libs/ || exit 1
 	cp $(SOURCEDIR)/JavaApp/build/*.jar $(WORKINGDIR)/AngelAuraAmethyst.app/libs/ || exit 1
 	cp -R $(SOURCEDIR)/JavaApp/libs/caciocavallo/* $(WORKINGDIR)/AngelAuraAmethyst.app/libs_caciocavallo || exit 1
 	cp -R $(SOURCEDIR)/JavaApp/libs/caciocavallo17/* $(WORKINGDIR)/AngelAuraAmethyst.app/libs_caciocavallo17 || exit 1
-	cp -R $(SOURCEDIR)/JavaApp/libs/caciocavallo25/* $(WORKINGDIR)/AngelAuraAmethyst.app/libs_caciocavallo25 || exit 1
 	# Copy TouchController static library if available
 	if [ -f "$(SOURCEDIR)/TouchController/libproxy_server_ios.a" ]; then \
 		mkdir -p $(WORKINGDIR)/AngelAuraAmethyst.app/Frameworks; \
