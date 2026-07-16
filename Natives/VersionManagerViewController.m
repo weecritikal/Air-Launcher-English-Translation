@@ -13,6 +13,18 @@
 #import "ModLoaderIconHelper.h"
 #import <QuartzCore/QuartzCore.h>
 
+// Section 索引：4 个 section（游戏目录 / 图形 API / 快速操作 / 已安装版本）
+// 重新设计要点（参照 FCL/HMCL）：
+//   1. 完全不调用旧 UI（LauncherPrefGameDirViewController / LauncherProfileEditorViewController）
+//   2. 新增"图形 API"section，针对 MC 26.2+ 提供渲染器选择（FCL 风格卡片）
+//   3. 游戏目录卡片支持长按弹出菜单（切换/删除当前目录）
+//   4. 整体卡片更紧凑，避免界面过大
+//   5. 统一使用 accentColor() 与毛玻璃背景，适配启动器新 UI
+static NSInteger const kSectionGameDir     = 0;
+static NSInteger const kSectionRenderer    = 1;
+static NSInteger const kSectionQuickAction = 2;
+static NSInteger const kSectionVersions    = 3;
+
 #pragma mark - Modern Tile Base Cell
 
 @interface VMTileBaseCell : UICollectionViewCell
@@ -32,9 +44,9 @@
 
 - (void)setupViews {
     self.layer.shadowColor = [UIColor blackColor].CGColor;
-    self.layer.shadowOffset = CGSizeMake(0, 4);
-    self.layer.shadowOpacity = 0.15;
-    self.layer.shadowRadius = 8;
+    self.layer.shadowOffset = CGSizeMake(0, 3);
+    self.layer.shadowOpacity = 0.12;
+    self.layer.shadowRadius = 6;
     self.layer.masksToBounds = NO;
 
     self.contentContainer = [[UIView alloc] initWithFrame:self.contentView.bounds];
@@ -48,21 +60,21 @@
 
 - (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
     [super touchesBegan:touches withEvent:event];
-    [UIView animateWithDuration:0.3 delay:0 usingSpringWithDamping:0.6 initialSpringVelocity:0.8 options:UIViewAnimationOptionAllowUserInteraction animations:^{
-        self.transform = CGAffineTransformMakeScale(0.95, 0.95);
+    [UIView animateWithDuration:0.25 delay:0 usingSpringWithDamping:0.7 initialSpringVelocity:0.8 options:UIViewAnimationOptionAllowUserInteraction animations:^{
+        self.transform = CGAffineTransformMakeScale(0.96, 0.96);
     } completion:nil];
 }
 
 - (void)touchesEnded:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
     [super touchesEnded:touches withEvent:event];
-    [UIView animateWithDuration:0.3 delay:0 usingSpringWithDamping:0.6 initialSpringVelocity:0.8 options:UIViewAnimationOptionAllowUserInteraction animations:^{
+    [UIView animateWithDuration:0.25 delay:0 usingSpringWithDamping:0.7 initialSpringVelocity:0.8 options:UIViewAnimationOptionAllowUserInteraction animations:^{
         self.transform = CGAffineTransformIdentity;
     } completion:nil];
 }
 
 - (void)touchesCancelled:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
     [super touchesCancelled:touches withEvent:event];
-    [UIView animateWithDuration:0.3 delay:0 usingSpringWithDamping:0.6 initialSpringVelocity:0.8 options:UIViewAnimationOptionAllowUserInteraction animations:^{
+    [UIView animateWithDuration:0.25 delay:0 usingSpringWithDamping:0.7 initialSpringVelocity:0.8 options:UIViewAnimationOptionAllowUserInteraction animations:^{
         self.transform = CGAffineTransformIdentity;
     } completion:nil];
 }
@@ -82,8 +94,8 @@
 - (void)setupViews {
     [super setupViews];
 
-    CGFloat iconSize = [ScreenUtils dp:28];
-    CGFloat titleFont = [ScreenUtils sp:15];
+    CGFloat iconSize = [ScreenUtils dp:24];
+    CGFloat titleFont = [ScreenUtils sp:13];
 
     self.iconView = [[UIImageView alloc] init];
     self.iconView.translatesAutoresizingMaskIntoConstraints = NO;
@@ -93,37 +105,31 @@
     self.titleLabel = [[UILabel alloc] init];
     self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.titleLabel.font = [UIFont systemFontOfSize:titleFont weight:UIFontWeightSemibold];
-    // 背景系统（BackgroundManager）始终使用深色样式（SystemMaterialDark / 深色半透明），
-    // 因此文字必须使用固定浅色，避免在浅色外观模式下 labelColor 解析为黑色导致不可见。
     self.titleLabel.textColor = [UIColor whiteColor];
-    // 关闭动态字体缩放，sp: 已根据屏幕宽度做基准缩放，避免双重缩放导致字体异常。
     self.titleLabel.adjustsFontForContentSizeCategory = NO;
     [self.contentContainer addSubview:self.titleLabel];
 
     self.subtitleLabel = [[UILabel alloc] init];
     self.subtitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    // 修复字体问题：原 preferredFontForTextStyle: 会按用户系统动态字体大小缩放，
-    // 与 sp: 缩放叠加导致字体异常。改用 systemFontOfSize + sp: 缩放，行为可控。
-    self.subtitleLabel.font = [UIFont systemFontOfSize:[ScreenUtils sp:11] weight:UIFontWeightRegular];
-    self.subtitleLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.65];
-    // 修复问题6：副标题（路径名/大小等）自动换行，避免被截断
+    self.subtitleLabel.font = [UIFont systemFontOfSize:[ScreenUtils sp:10] weight:UIFontWeightRegular];
+    self.subtitleLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.6];
     self.subtitleLabel.numberOfLines = 0;
     self.subtitleLabel.lineBreakMode = NSLineBreakByWordWrapping;
     self.subtitleLabel.adjustsFontForContentSizeCategory = NO;
     [self.contentContainer addSubview:self.subtitleLabel];
 
     [NSLayoutConstraint activateConstraints:@[
-        [self.iconView.topAnchor constraintEqualToAnchor:self.contentContainer.topAnchor constant:16],
-        [self.iconView.leadingAnchor constraintEqualToAnchor:self.contentContainer.leadingAnchor constant:16],
+        [self.iconView.topAnchor constraintEqualToAnchor:self.contentContainer.topAnchor constant:12],
+        [self.iconView.leadingAnchor constraintEqualToAnchor:self.contentContainer.leadingAnchor constant:12],
         [self.iconView.widthAnchor constraintEqualToConstant:iconSize],
         [self.iconView.heightAnchor constraintEqualToConstant:iconSize],
-        [self.titleLabel.topAnchor constraintEqualToAnchor:self.iconView.bottomAnchor constant:12],
-        [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.contentContainer.leadingAnchor constant:16],
-        [self.titleLabel.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-16],
+        [self.titleLabel.topAnchor constraintEqualToAnchor:self.iconView.bottomAnchor constant:8],
+        [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.contentContainer.leadingAnchor constant:12],
+        [self.titleLabel.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-12],
         [self.subtitleLabel.topAnchor constraintEqualToAnchor:self.titleLabel.bottomAnchor constant:2],
-        [self.subtitleLabel.leadingAnchor constraintEqualToAnchor:self.contentContainer.leadingAnchor constant:16],
-        [self.subtitleLabel.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-16],
-        [self.subtitleLabel.bottomAnchor constraintLessThanOrEqualToAnchor:self.contentContainer.bottomAnchor constant:-12]
+        [self.subtitleLabel.leadingAnchor constraintEqualToAnchor:self.contentContainer.leadingAnchor constant:12],
+        [self.subtitleLabel.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-12],
+        [self.subtitleLabel.bottomAnchor constraintLessThanOrEqualToAnchor:self.contentContainer.bottomAnchor constant:-10]
     ]];
 }
 
@@ -152,8 +158,8 @@
 - (void)setupViews {
     [super setupViews];
 
-    CGFloat iconSize = [ScreenUtils dp:36];
-    CGFloat nameFont = [ScreenUtils sp:16];
+    CGFloat iconSize = [ScreenUtils dp:30];
+    CGFloat nameFont = [ScreenUtils sp:15];
 
     self.iconView = [[UIImageView alloc] init];
     self.iconView.translatesAutoresizingMaskIntoConstraints = NO;
@@ -167,25 +173,19 @@
     self.nameLabel.font = [UIFont systemFontOfSize:nameFont weight:UIFontWeightSemibold];
     self.nameLabel.textColor = [UIColor whiteColor];
     self.nameLabel.numberOfLines = 1;
-    // 关闭动态字体缩放，sp: 已根据屏幕宽度做基准缩放，避免双重缩放导致字体异常。
     self.nameLabel.adjustsFontForContentSizeCategory = NO;
     [self.contentContainer addSubview:self.nameLabel];
 
     self.versionLabel = [[UILabel alloc] init];
     self.versionLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    // 修复字体问题：原 preferredFontForTextStyle: 会按用户系统动态字体大小缩放，
-    // 与 sp: 缩放叠加导致字体异常。改用 systemFontOfSize + sp: 缩放，行为可控。
-    self.versionLabel.font = [UIFont systemFontOfSize:[ScreenUtils sp:12] weight:UIFontWeightRegular];
+    self.versionLabel.font = [UIFont systemFontOfSize:[ScreenUtils sp:11] weight:UIFontWeightRegular];
     self.versionLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.65];
     self.versionLabel.adjustsFontForContentSizeCategory = NO;
     [self.contentContainer addSubview:self.versionLabel];
 
-    // FCL 风格：最后游玩时间小字（仅在有过游玩记录时显示）
     self.lastPlayedLabel = [[UILabel alloc] init];
     self.lastPlayedLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    // 修复字体问题：原 preferredFontForTextStyle: 会按用户系统动态字体大小缩放，
-    // 与 sp: 缩放叠加导致字体异常。改用 systemFontOfSize + sp: 缩放，行为可控。
-    self.lastPlayedLabel.font = [UIFont systemFontOfSize:[ScreenUtils sp:11] weight:UIFontWeightRegular];
+    self.lastPlayedLabel.font = [UIFont systemFontOfSize:[ScreenUtils sp:10] weight:UIFontWeightRegular];
     self.lastPlayedLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.45];
     self.lastPlayedLabel.text = @"";
     self.lastPlayedLabel.adjustsFontForContentSizeCategory = NO;
@@ -193,18 +193,17 @@
 
     self.selectedBadge = [[UIView alloc] init];
     self.selectedBadge.translatesAutoresizingMaskIntoConstraints = NO;
-    self.selectedBadge.backgroundColor = [UIColor systemGreenColor];
-    self.selectedBadge.layer.cornerRadius = 12;
+    self.selectedBadge.backgroundColor = accentColor();
+    self.selectedBadge.layer.cornerRadius = 10;
     self.selectedBadge.hidden = YES;
     [self.contentContainer addSubview:self.selectedBadge];
 
     UIImageView *checkmark = [[UIImageView alloc] init];
     checkmark.translatesAutoresizingMaskIntoConstraints = NO;
-    checkmark.image = [UIImage systemImageNamed:@"checkmark" withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:10 weight:UIFontWeightBold]];
+    checkmark.image = [UIImage systemImageNamed:@"checkmark" withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:9 weight:UIFontWeightBold]];
     checkmark.tintColor = [UIColor whiteColor];
     [self.selectedBadge addSubview:checkmark];
 
-    // FCL 风格：版本隔离徽章（仅当 gameDir != "." 时显示）
     self.isolatedBadge = [[UILabel alloc] init];
     self.isolatedBadge.translatesAutoresizingMaskIntoConstraints = NO;
     self.isolatedBadge.font = [UIFont systemFontOfSize:9 weight:UIFontWeightSemibold];
@@ -218,27 +217,26 @@
     [self.contentContainer addSubview:self.isolatedBadge];
 
     [NSLayoutConstraint activateConstraints:@[
-        [self.iconView.leadingAnchor constraintEqualToAnchor:self.contentContainer.leadingAnchor constant:16],
+        [self.iconView.leadingAnchor constraintEqualToAnchor:self.contentContainer.leadingAnchor constant:14],
         [self.iconView.centerYAnchor constraintEqualToAnchor:self.contentContainer.centerYAnchor],
         [self.iconView.widthAnchor constraintEqualToConstant:iconSize],
         [self.iconView.heightAnchor constraintEqualToConstant:iconSize],
-        [self.nameLabel.leadingAnchor constraintEqualToAnchor:self.iconView.trailingAnchor constant:12],
-        [self.nameLabel.topAnchor constraintEqualToAnchor:self.contentContainer.topAnchor constant:14],
+        [self.nameLabel.leadingAnchor constraintEqualToAnchor:self.iconView.trailingAnchor constant:10],
+        [self.nameLabel.topAnchor constraintEqualToAnchor:self.contentContainer.topAnchor constant:12],
         [self.nameLabel.trailingAnchor constraintEqualToAnchor:self.selectedBadge.leadingAnchor constant:-8],
         [self.versionLabel.leadingAnchor constraintEqualToAnchor:self.nameLabel.leadingAnchor],
-        [self.versionLabel.topAnchor constraintEqualToAnchor:self.nameLabel.bottomAnchor constant:4],
-        [self.versionLabel.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-16],
-        // 最后游玩时间放在 versionLabel 下方，与 isolatedBadge 同行
+        [self.versionLabel.topAnchor constraintEqualToAnchor:self.nameLabel.bottomAnchor constant:3],
+        [self.versionLabel.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-14],
         [self.lastPlayedLabel.leadingAnchor constraintEqualToAnchor:self.nameLabel.leadingAnchor],
         [self.lastPlayedLabel.topAnchor constraintEqualToAnchor:self.versionLabel.bottomAnchor constant:2],
         [self.lastPlayedLabel.trailingAnchor constraintEqualToAnchor:self.isolatedBadge.leadingAnchor constant:-6],
         [self.isolatedBadge.centerYAnchor constraintEqualToAnchor:self.lastPlayedLabel.centerYAnchor],
-        [self.isolatedBadge.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-16],
+        [self.isolatedBadge.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-14],
         [self.isolatedBadge.heightAnchor constraintEqualToConstant:16],
-        [self.selectedBadge.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-16],
+        [self.selectedBadge.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-14],
         [self.selectedBadge.centerYAnchor constraintEqualToAnchor:self.nameLabel.centerYAnchor],
-        [self.selectedBadge.widthAnchor constraintEqualToConstant:24],
-        [self.selectedBadge.heightAnchor constraintEqualToConstant:24],
+        [self.selectedBadge.widthAnchor constraintEqualToConstant:20],
+        [self.selectedBadge.heightAnchor constraintEqualToConstant:20],
         [checkmark.centerXAnchor constraintEqualToAnchor:self.selectedBadge.centerXAnchor],
         [checkmark.centerYAnchor constraintEqualToAnchor:self.selectedBadge.centerYAnchor]
     ]];
@@ -248,24 +246,22 @@
     self.nameLabel.text = name;
     self.versionLabel.text = version ?: @"未知版本";
     self.selectedBadge.hidden = !isSelected;
+    self.selectedBadge.backgroundColor = accentColor();
     self.isolatedBadge.hidden = !isolated;
     self.lastPlayedLabel.text = lastPlayed.length > 0 ? lastPlayed : @"";
 
-    // FCL/ZL2 风格：通过 ModLoaderIconHelper 统一识别加载器类型，显示对应官方图标和品牌色
-    // 优先使用 bundle 中的官方 PNG（fabric/forge/neoforge），缺失时回退 SF Symbol + 品牌色
     NSString *detectedLoader = [ModLoaderIconHelper detectLoaderFromVersionId:version];
     if (detectedLoader) {
         [ModLoaderIconHelper configureImageView:self.iconView
                                       forLoader:detectedLoader
                                  traitCollection:self.traitCollection];
     } else {
-        // 未识别到加载器：默认方块图标 + 蓝色
         self.iconView.image = [UIImage systemImageNamed:@"cube.box.fill"];
         self.iconView.tintColor = [UIColor systemBlueColor];
     }
 
     if (isSelected) {
-        self.contentView.layer.borderColor = [UIColor systemGreenColor].CGColor;
+        self.contentView.layer.borderColor = accentColor().CGColor;
         self.contentView.layer.borderWidth = 1.5;
     } else {
         self.contentView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.12].CGColor;
@@ -289,8 +285,8 @@
 - (void)setupViews {
     [super setupViews];
 
-    CGFloat iconSize = [ScreenUtils dp:24];
-    CGFloat nameFont = [ScreenUtils sp:14];
+    CGFloat iconSize = [ScreenUtils dp:22];
+    CGFloat nameFont = [ScreenUtils sp:13];
 
     self.iconView = [[UIImageView alloc] init];
     self.iconView.translatesAutoresizingMaskIntoConstraints = NO;
@@ -304,17 +300,13 @@
     self.nameLabel.font = [UIFont systemFontOfSize:nameFont weight:UIFontWeightSemibold];
     self.nameLabel.textColor = [UIColor whiteColor];
     self.nameLabel.numberOfLines = 1;
-    // 关闭动态字体缩放，sp: 已根据屏幕宽度做基准缩放，避免双重缩放导致字体异常。
     self.nameLabel.adjustsFontForContentSizeCategory = NO;
     [self.contentContainer addSubview:self.nameLabel];
 
     self.detailLabel = [[UILabel alloc] init];
     self.detailLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    // 修复字体问题：原 preferredFontForTextStyle: 会按用户系统动态字体大小缩放，
-    // 与 sp: 缩放叠加导致字体异常。改用 systemFontOfSize + sp: 缩放，行为可控。
-    self.detailLabel.font = [UIFont systemFontOfSize:[ScreenUtils sp:11] weight:UIFontWeightRegular];
-    self.detailLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.65];
-    // 修复问题6：副标题（路径名/大小等）自动换行，避免被截断
+    self.detailLabel.font = [UIFont systemFontOfSize:[ScreenUtils sp:10] weight:UIFontWeightRegular];
+    self.detailLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.6];
     self.detailLabel.numberOfLines = 0;
     self.detailLabel.lineBreakMode = NSLineBreakByWordWrapping;
     self.detailLabel.adjustsFontForContentSizeCategory = NO;
@@ -322,33 +314,33 @@
 
     self.selectedBadge = [[UIView alloc] init];
     self.selectedBadge.translatesAutoresizingMaskIntoConstraints = NO;
-    self.selectedBadge.backgroundColor = [UIColor systemGreenColor];
-    self.selectedBadge.layer.cornerRadius = 10;
+    self.selectedBadge.backgroundColor = accentColor();
+    self.selectedBadge.layer.cornerRadius = 9;
     self.selectedBadge.hidden = YES;
     [self.contentContainer addSubview:self.selectedBadge];
 
     UIImageView *checkmark = [[UIImageView alloc] init];
     checkmark.translatesAutoresizingMaskIntoConstraints = NO;
-    checkmark.image = [UIImage systemImageNamed:@"checkmark" withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:9 weight:UIFontWeightBold]];
+    checkmark.image = [UIImage systemImageNamed:@"checkmark" withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:8 weight:UIFontWeightBold]];
     checkmark.tintColor = [UIColor whiteColor];
     [self.selectedBadge addSubview:checkmark];
 
     [NSLayoutConstraint activateConstraints:@[
-        [self.iconView.leadingAnchor constraintEqualToAnchor:self.contentContainer.leadingAnchor constant:12],
+        [self.iconView.leadingAnchor constraintEqualToAnchor:self.contentContainer.leadingAnchor constant:10],
         [self.iconView.centerYAnchor constraintEqualToAnchor:self.contentContainer.centerYAnchor],
         [self.iconView.widthAnchor constraintEqualToConstant:iconSize],
         [self.iconView.heightAnchor constraintEqualToConstant:iconSize],
         [self.nameLabel.leadingAnchor constraintEqualToAnchor:self.iconView.trailingAnchor constant:8],
-        [self.nameLabel.topAnchor constraintEqualToAnchor:self.contentContainer.topAnchor constant:10],
+        [self.nameLabel.topAnchor constraintEqualToAnchor:self.contentContainer.topAnchor constant:8],
         [self.nameLabel.trailingAnchor constraintEqualToAnchor:self.selectedBadge.leadingAnchor constant:-6],
         [self.detailLabel.leadingAnchor constraintEqualToAnchor:self.nameLabel.leadingAnchor],
         [self.detailLabel.topAnchor constraintEqualToAnchor:self.nameLabel.bottomAnchor constant:2],
-        [self.detailLabel.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-12],
-        [self.detailLabel.bottomAnchor constraintLessThanOrEqualToAnchor:self.contentContainer.bottomAnchor constant:-10],
-        [self.selectedBadge.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-12],
+        [self.detailLabel.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-10],
+        [self.detailLabel.bottomAnchor constraintLessThanOrEqualToAnchor:self.contentContainer.bottomAnchor constant:-8],
+        [self.selectedBadge.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-10],
         [self.selectedBadge.centerYAnchor constraintEqualToAnchor:self.contentContainer.centerYAnchor],
-        [self.selectedBadge.widthAnchor constraintEqualToConstant:20],
-        [self.selectedBadge.heightAnchor constraintEqualToConstant:20],
+        [self.selectedBadge.widthAnchor constraintEqualToConstant:18],
+        [self.selectedBadge.heightAnchor constraintEqualToConstant:18],
         [checkmark.centerXAnchor constraintEqualToAnchor:self.selectedBadge.centerXAnchor],
         [checkmark.centerYAnchor constraintEqualToAnchor:self.selectedBadge.centerYAnchor]
     ]];
@@ -373,10 +365,111 @@
     self.nameLabel.text = name;
     self.detailLabel.text = detail ?: @"";
     self.selectedBadge.hidden = !isSelected;
+    self.selectedBadge.backgroundColor = accentColor();
 
     if (isSelected) {
-        self.contentView.layer.borderColor = [UIColor systemGreenColor].CGColor;
+        self.contentView.layer.borderColor = accentColor().CGColor;
         self.contentView.layer.borderWidth = 1.5;
+    } else {
+        self.contentView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.12].CGColor;
+        self.contentView.layer.borderWidth = 0.5;
+    }
+    self.contentView.layer.cornerRadius = 12;
+    self.contentView.layer.masksToBounds = YES;
+}
+
+@end
+
+#pragma mark - Renderer Card Cell (图形 API 选择卡片，FCL 风格)
+
+@interface VMRendererCell : VMTileBaseCell
+@property (nonatomic, strong) UIImageView *iconView;
+@property (nonatomic, strong) UILabel *nameLabel;
+@property (nonatomic, strong) UILabel *descLabel;
+@property (nonatomic, strong) UIView *selectedBadge;
+@end
+
+@implementation VMRendererCell
+
+- (void)setupViews {
+    [super setupViews];
+
+    CGFloat iconSize = [ScreenUtils dp:22];
+
+    self.iconView = [[UIImageView alloc] init];
+    self.iconView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.iconView.contentMode = UIViewContentModeScaleAspectFit;
+    [self.contentContainer addSubview:self.iconView];
+
+    self.nameLabel = [[UILabel alloc] init];
+    self.nameLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.nameLabel.font = [UIFont systemFontOfSize:[ScreenUtils sp:13] weight:UIFontWeightSemibold];
+    self.nameLabel.textColor = [UIColor whiteColor];
+    self.nameLabel.numberOfLines = 1;
+    self.nameLabel.adjustsFontForContentSizeCategory = NO;
+    [self.contentContainer addSubview:self.nameLabel];
+
+    self.descLabel = [[UILabel alloc] init];
+    self.descLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.descLabel.font = [UIFont systemFontOfSize:[ScreenUtils sp:10] weight:UIFontWeightRegular];
+    self.descLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.55];
+    self.descLabel.numberOfLines = 2;
+    self.descLabel.lineBreakMode = NSLineBreakByWordWrapping;
+    self.descLabel.adjustsFontForContentSizeCategory = NO;
+    [self.contentContainer addSubview:self.descLabel];
+
+    self.selectedBadge = [[UIView alloc] init];
+    self.selectedBadge.translatesAutoresizingMaskIntoConstraints = NO;
+    self.selectedBadge.backgroundColor = accentColor();
+    self.selectedBadge.layer.cornerRadius = 8;
+    self.selectedBadge.hidden = YES;
+    [self.contentContainer addSubview:self.selectedBadge];
+
+    UIImageView *checkmark = [[UIImageView alloc] init];
+    checkmark.translatesAutoresizingMaskIntoConstraints = NO;
+    checkmark.image = [UIImage systemImageNamed:@"checkmark" withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:8 weight:UIFontWeightBold]];
+    checkmark.tintColor = [UIColor whiteColor];
+    [self.selectedBadge addSubview:checkmark];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [self.iconView.topAnchor constraintEqualToAnchor:self.contentContainer.topAnchor constant:10],
+        [self.iconView.leadingAnchor constraintEqualToAnchor:self.contentContainer.leadingAnchor constant:10],
+        [self.iconView.widthAnchor constraintEqualToConstant:iconSize],
+        [self.iconView.heightAnchor constraintEqualToConstant:iconSize],
+        [self.nameLabel.topAnchor constraintEqualToAnchor:self.iconView.bottomAnchor constant:6],
+        [self.nameLabel.leadingAnchor constraintEqualToAnchor:self.contentContainer.leadingAnchor constant:10],
+        [self.nameLabel.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-10],
+        [self.descLabel.topAnchor constraintEqualToAnchor:self.nameLabel.bottomAnchor constant:2],
+        [self.descLabel.leadingAnchor constraintEqualToAnchor:self.contentContainer.leadingAnchor constant:10],
+        [self.descLabel.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-10],
+        [self.descLabel.bottomAnchor constraintLessThanOrEqualToAnchor:self.contentContainer.bottomAnchor constant:-8],
+        [self.selectedBadge.topAnchor constraintEqualToAnchor:self.contentContainer.topAnchor constant:8],
+        [self.selectedBadge.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-8],
+        [self.selectedBadge.widthAnchor constraintEqualToConstant:16],
+        [self.selectedBadge.heightAnchor constraintEqualToConstant:16],
+        [checkmark.centerXAnchor constraintEqualToAnchor:self.selectedBadge.centerXAnchor],
+        [checkmark.centerYAnchor constraintEqualToAnchor:self.selectedBadge.centerYAnchor]
+    ]];
+}
+
+- (void)configureWithIcon:(NSString *)iconName
+                     name:(NSString *)name
+                  details:(NSString *)details
+              isSelected:(BOOL)isSelected
+                  isBest:(BOOL)isBest {
+    self.iconView.image = [UIImage systemImageNamed:iconName];
+    self.iconView.tintColor = isBest ? accentColor() : [UIColor systemGrayColor];
+    self.nameLabel.text = name;
+    self.descLabel.text = details;
+    self.selectedBadge.hidden = !isSelected;
+    self.selectedBadge.backgroundColor = accentColor();
+
+    if (isSelected) {
+        self.contentView.layer.borderColor = accentColor().CGColor;
+        self.contentView.layer.borderWidth = 1.5;
+    } else if (isBest) {
+        self.contentView.layer.borderColor = [[accentColor() colorWithAlphaComponent:0.4] CGColor];
+        self.contentView.layer.borderWidth = 1.0;
     } else {
         self.contentView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.12].CGColor;
         self.contentView.layer.borderWidth = 0.5;
@@ -391,6 +484,7 @@
 
 @interface VMSectionHeaderView : UICollectionReusableView
 @property (nonatomic, strong) UILabel *titleLabel;
+@property (nonatomic, strong) UILabel *subtitleLabel;
 @end
 
 @implementation VMSectionHeaderView
@@ -398,8 +492,6 @@
 - (instancetype)initWithFrame:(CGRect)frame {
     self = [super initWithFrame:frame];
     if (self) {
-        // Section header 需要深色背景托底，避免在透明 collectionView 上文字透到父背景。
-        // 与 BackgroundManager 的深色风格保持一致。
         UIBlurEffect *blurEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterialDark];
         UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:blurEffect];
         blurView.translatesAutoresizingMaskIntoConstraints = NO;
@@ -407,18 +499,29 @@
 
         self.titleLabel = [[UILabel alloc] init];
         self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-        self.titleLabel.font = [UIFont systemFontOfSize:[ScreenUtils sp:18] weight:UIFontWeightBold];
+        self.titleLabel.font = [UIFont systemFontOfSize:[ScreenUtils sp:16] weight:UIFontWeightBold];
         self.titleLabel.textColor = [UIColor whiteColor];
         [self addSubview:self.titleLabel];
+
+        self.subtitleLabel = [[UILabel alloc] init];
+        self.subtitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+        self.subtitleLabel.font = [UIFont systemFontOfSize:[ScreenUtils sp:11] weight:UIFontWeightRegular];
+        self.subtitleLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.55];
+        self.subtitleLabel.numberOfLines = 0;
+        self.subtitleLabel.lineBreakMode = NSLineBreakByWordWrapping;
+        [self addSubview:self.subtitleLabel];
 
         [NSLayoutConstraint activateConstraints:@[
             [blurView.topAnchor constraintEqualToAnchor:self.topAnchor],
             [blurView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
             [blurView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
             [blurView.bottomAnchor constraintEqualToAnchor:self.bottomAnchor],
-            [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:20],
-            [self.titleLabel.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-20],
-            [self.titleLabel.centerYAnchor constraintEqualToAnchor:self.centerYAnchor]
+            [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:18],
+            [self.titleLabel.topAnchor constraintEqualToAnchor:self.topAnchor constant:8],
+            [self.subtitleLabel.leadingAnchor constraintEqualToAnchor:self.titleLabel.leadingAnchor],
+            [self.subtitleLabel.topAnchor constraintEqualToAnchor:self.titleLabel.bottomAnchor constant:2],
+            [self.subtitleLabel.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-18],
+            [self.subtitleLabel.bottomAnchor constraintLessThanOrEqualToAnchor:self.bottomAnchor constant:-4]
         ]];
     }
     return self;
@@ -432,8 +535,13 @@
 @property (nonatomic, strong) UICollectionView *collectionView;
 @property (nonatomic, strong) NSArray<NSString *> *profileList;
 @property (nonatomic, strong) NSString *selectedProfile;
-@property (nonatomic, strong) NSMutableArray<NSString *> *gameDirList;       // 游戏目录（实例）列表
-@property (nonatomic, strong) NSString *currentGameDir;                       // 当前选中的游戏目录
+@property (nonatomic, strong) NSMutableArray<NSString *> *gameDirList;
+@property (nonatomic, strong) NSString *currentGameDir;
+// 图形 API section 数据
+@property (nonatomic, strong) NSArray<NSString *> *rendererKeys;
+@property (nonatomic, strong) NSArray<NSString *> *rendererNames;
+@property (nonatomic, strong) NSArray<NSString *> *rendererIcons;
+@property (nonatomic, strong) NSArray<NSString *> *rendererDescs;
 @end
 
 @implementation VersionManagerViewController
@@ -442,11 +550,11 @@
     [super viewDidLoad];
     self.title = @"版本管理";
     self.view.backgroundColor = [UIColor clearColor];
-    // 适配自定义启动器背景：导航栏毛玻璃 + 视图透明
     if (self.navigationController) {
         [[BackgroundManager sharedManager] applyEffectToNavigationBar:self.navigationController.navigationBar];
     }
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
+    [self setupRendererData];
     [self setupCollectionView];
     [self setupNavigationBar];
     [self setupLongPressGesture];
@@ -467,6 +575,11 @@
                                              selector:@selector(handleBackgroundUIEffectChanged:)
                                                  name:@"BackgroundUIEffectChanged"
                                                object:nil];
+
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(handleAccentColorChanged)
+                                                 name:@"LauncherAppearanceChanged"
+                                               object:nil];
 }
 
 /// FCL 风格：导航栏右侧"+"按钮，点击进入下载/新建版本页面
@@ -480,7 +593,7 @@
     self.navigationItem.rightBarButtonItem = addButton;
 }
 
-/// FCL 风格：长按版本卡片弹出操作菜单（选择/编辑/删除）
+/// 长按手势：游戏目录卡片弹出操作菜单（切换/删除），版本卡片弹出选择/编辑/删除
 - (void)setupLongPressGesture {
     UILongPressGestureRecognizer *longPress = [[UILongPressGestureRecognizer alloc]
         initWithTarget:self action:@selector(handleLongPress:)];
@@ -489,7 +602,6 @@
 }
 
 - (void)createNewVersion {
-    // 通知 LauncherRootViewController/LauncherCardLayoutViewController 切换到下载页面
     [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowDownloadPage" object:nil];
 }
 
@@ -498,10 +610,17 @@
     CGPoint point = [gesture locationInView:self.collectionView];
     NSIndexPath *indexPath = [self.collectionView indexPathForItemAtPoint:point];
     if (!indexPath) return;
-    // 仅版本区段（section 2）支持长按菜单
-    if (indexPath.section != 2) return;
-    if (indexPath.item >= (NSInteger)self.profileList.count) return;
-    [self showProfileActions:self.profileList[indexPath.item]];
+
+    if (indexPath.section == kSectionGameDir) {
+        // 游戏目录区段：长按弹出切换/删除菜单（不含"新建目录"按钮项）
+        if (indexPath.item >= (NSInteger)self.gameDirList.count) return;
+        NSString *dirName = self.gameDirList[indexPath.item];
+        [self showGameDirActions:dirName];
+    } else if (indexPath.section == kSectionVersions) {
+        // 版本卡片区段：长按弹出操作菜单
+        if (indexPath.item >= (NSInteger)self.profileList.count) return;
+        [self showProfileActions:self.profileList[indexPath.item]];
+    }
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -529,6 +648,76 @@
     });
 }
 
+- (void)handleAccentColorChanged {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [self.collectionView reloadData];
+    });
+}
+
+#pragma mark - Renderer Data Setup
+
+/// 初始化图形 API 选项数据（针对 MC 26.2+ 的渲染器选择）
+/// 参照 FCL/HMCL 的渲染器选择面板，提供 6 个选项及对应描述
+- (void)setupRendererData {
+    self.rendererKeys = getRendererKeys(NO);
+    self.rendererNames = getRendererNames(NO);
+    self.rendererIcons = @[
+        @"wand.and.stars",
+        @"cpu",
+        @"rectangle.stack.fill",
+        @"bolt.fill",
+        @"circle.hexagongrid.fill",
+        @"flame.fill"
+    ];
+    self.rendererDescs = @[
+        @"自动选择最佳渲染器",
+        @"OpenGL ES 1.14 转译（兼容性最佳）",
+        @"MetalANGLE，Metal 转 GLES",
+        @"MobileGlues，Vulkan 转译",
+        @"Zink，OpenGL 转 Vulkan",
+        @"MoltenVK，原生 Vulkan"
+    ];
+}
+
+/// 判断当前选中 profile 的版本是否为 MC 26.2+（即 1.21.8+ 后的新版本号方案）
+/// 26.x 系列 = 1.21.8 起的快照/正式版采用的新版本号格式
+- (BOOL)isCurrentProfileModernVersion {
+    if (!self.selectedProfile) return NO;
+    NSDictionary *profile = PLProfiles.current.profiles[self.selectedProfile];
+    NSString *versionId = profile[@"lastVersionId"];
+    if (!versionId) return NO;
+    // 匹配 "26.x" / "1.21.8" 及以上版本
+    NSCharacterSet *digits = [NSCharacterSet characterSetWithCharactersInString:@"0123456789."];
+    NSString *prefix = versionId;
+    for (NSUInteger i = 0; i < versionId.length; i++) {
+        unichar c = [versionId characterAtIndex:i];
+        if (![digits characterIsMember:c]) {
+            prefix = [versionId substringToIndex:i];
+            break;
+        }
+    }
+    // 26.x 系列
+    if ([prefix hasPrefix:@"26."]) return YES;
+    // 1.21.8 及以上
+    if ([prefix hasPrefix:@"1.21."]) {
+        NSString *minorStr = [prefix substringFromIndex:5];
+        NSInteger minor = [minorStr integerValue];
+        if (minor >= 8) return YES;
+    }
+    return NO;
+}
+
+/// 获取当前选中 profile 的渲染器（如未设置则回退到全局偏好）
+- (NSString *)currentRendererForSelectedProfile {
+    if (!self.selectedProfile) return @"auto";
+    NSDictionary *profile = PLProfiles.current.profiles[self.selectedProfile];
+    NSString *r = profile[@"renderer"];
+    if (r.length == 0) {
+        r = getPrefObject(@"video.renderer");
+    }
+    return r.length > 0 ? r : @"auto";
+}
+
 #pragma mark - Setup
 
 - (void)setupCollectionView {
@@ -539,13 +728,6 @@
     self.collectionView.dataSource = self;
     self.collectionView.delegate = self;
     self.collectionView.alwaysBounceVertical = YES;
-    // 修复顶部遮挡：VersionManagerViewController 被包在 UINavigationController 中，
-    // nav bar 由 applyEffectToNavigationBar 配置为 transparent + blur（translucent），
-    // 此时 collection view 的内容会延伸到 nav bar 下方被遮挡。
-    // - Never：避免系统叠加 safeArea.top（系统认为 nav bar 在 safeArea 之下，
-    //   但卡片布局中 nav bar 已经在 safeArea 之内，叠加会重复导致顶部空白）
-    // - 手动设置 contentInset.top = nav bar 高度，让 section header 和首行 cell
-    //   从 nav bar 下方开始绘制，避免被 nav bar 遮挡
     self.collectionView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
     CGFloat navBarHeight = 44.0;
     if (self.navigationController && self.navigationController.navigationBar.bounds.size.height > 0) {
@@ -555,6 +737,7 @@
     self.collectionView.scrollIndicatorInsets = UIEdgeInsetsMake(navBarHeight, 0, 0, 0);
 
     [self.collectionView registerClass:[VMGameDirCell class] forCellWithReuseIdentifier:@"GameDirCell"];
+    [self.collectionView registerClass:[VMRendererCell class] forCellWithReuseIdentifier:@"RendererCell"];
     [self.collectionView registerClass:[VMQuickActionCell class] forCellWithReuseIdentifier:@"QuickActionCell"];
     [self.collectionView registerClass:[VMVersionCardCell class] forCellWithReuseIdentifier:@"VersionCell"];
     [self.collectionView registerClass:[VMSectionHeaderView class] forSupplementaryViewOfKind:UICollectionElementKindSectionHeader withReuseIdentifier:@"HeaderView"];
@@ -567,62 +750,74 @@
         CGFloat width = layoutEnvironment.container.contentSize.width;
         BOOL isiPad = width > 700;
 
-        // 通用 header size（FCL 风格：所有 section 都带标题）
         NSCollectionLayoutSize *headerSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0]
-                                                                              heightDimension:[NSCollectionLayoutDimension absoluteDimension:44]];
+                                                                              heightDimension:[NSCollectionLayoutDimension estimatedDimension:48]];
         NSCollectionLayoutBoundarySupplementaryItem *header = [NSCollectionLayoutBoundarySupplementaryItem boundarySupplementaryItemWithLayoutSize:headerSize elementKind:UICollectionElementKindSectionHeader alignment:NSRectAlignmentTop];
+        header.contentInsets = NSDirectionalEdgeInsetsMake(0, 0, 0, 0);
 
-        if (sectionIndex == 0) {
-            // 游戏目录区段（FCL 风格版本隔离）：水平滚动卡片列表
-            NSCollectionLayoutSize *itemSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension absoluteDimension:isiPad ? 180 : 160]
-                                                                                       heightDimension:[NSCollectionLayoutDimension absoluteDimension:72]];
+        if (sectionIndex == kSectionGameDir) {
+            // 游戏目录区段：横向滚动卡片列表
+            CGFloat itemWidth = isiPad ? 170 : 150;
+            NSCollectionLayoutSize *itemSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension absoluteDimension:itemWidth]
+                                                                                       heightDimension:[NSCollectionLayoutDimension absoluteDimension:64]];
             NSCollectionLayoutItem *item = [NSCollectionLayoutItem itemWithLayoutSize:itemSize];
-            item.contentInsets = NSDirectionalEdgeInsetsMake(4, 6, 4, 6);
+            item.contentInsets = NSDirectionalEdgeInsetsMake(3, 5, 3, 5);
 
-            NSCollectionLayoutSize *groupSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension absoluteDimension:isiPad ? 180 : 160]
-                                                                                          heightDimension:[NSCollectionLayoutDimension absoluteDimension:72]];
+            NSCollectionLayoutSize *groupSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension absoluteDimension:itemWidth]
+                                                                                          heightDimension:[NSCollectionLayoutDimension absoluteDimension:64]];
             NSCollectionLayoutGroup *group = [NSCollectionLayoutGroup horizontalGroupWithLayoutSize:groupSize subitems:@[item]];
 
             NSCollectionLayoutSection *section = [NSCollectionLayoutSection sectionWithGroup:group];
             section.orthogonalScrollingBehavior = UICollectionLayoutSectionOrthogonalScrollingBehaviorContinuous;
-            // 修复：顶部 inset 从 8 改为 0，消除导航栏下方的额外空白
-            section.contentInsets = NSDirectionalEdgeInsetsMake(0, 14, 8, 14);
+            section.contentInsets = NSDirectionalEdgeInsetsMake(0, 14, 6, 14);
             section.boundarySupplementaryItems = @[header];
             return section;
-        } else if (sectionIndex == 1) {
-            // 快速操作区段 - 5 个 item（移除了"游戏目录"，因为已独立到 section 0）
-            NSInteger columnCount = isiPad ? 3 : (width > 400 ? 3 : 2);
-            // 使用 5 个 cell：Mod/光影/资源包/数据包/世界
-            // 修复字体上下被裁切：原 100pt 高度不足以容纳 icon(28) + title(sp:15) +
-            // subtitle(sp:11) + 上下 padding(16+12+12)，contentContainer 的 masksToBounds
-            // 会裁掉超出部分。增加到 120pt 让内容完整显示。
+        } else if (sectionIndex == kSectionRenderer) {
+            // 图形 API 区段：3 列网格，紧凑卡片
+            NSInteger columnCount = isiPad ? 3 : (width > 360 ? 3 : 2);
             NSCollectionLayoutSize *itemSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0 / columnCount]
-                                                                                       heightDimension:[NSCollectionLayoutDimension absoluteDimension:120]];
+                                                                                       heightDimension:[NSCollectionLayoutDimension absoluteDimension:104]];
             NSCollectionLayoutItem *item = [NSCollectionLayoutItem itemWithLayoutSize:itemSize];
-            item.contentInsets = NSDirectionalEdgeInsetsMake(6, 6, 6, 6);
+            item.contentInsets = NSDirectionalEdgeInsetsMake(4, 5, 4, 5);
 
             NSCollectionLayoutSize *groupSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0]
-                                                                                          heightDimension:[NSCollectionLayoutDimension absoluteDimension:120]];
+                                                                                          heightDimension:[NSCollectionLayoutDimension absoluteDimension:104]];
             NSCollectionLayoutGroup *group = [NSCollectionLayoutGroup horizontalGroupWithLayoutSize:groupSize subitem:item count:columnCount];
 
             NSCollectionLayoutSection *section = [NSCollectionLayoutSection sectionWithGroup:group];
-            section.contentInsets = NSDirectionalEdgeInsetsMake(4, 14, 8, 14);
+            section.contentInsets = NSDirectionalEdgeInsetsMake(2, 14, 6, 14);
+            section.boundarySupplementaryItems = @[header];
+            return section;
+        } else if (sectionIndex == kSectionQuickAction) {
+            // 快速操作区段：5 个 item
+            NSInteger columnCount = isiPad ? 3 : (width > 400 ? 3 : 2);
+            NSCollectionLayoutSize *itemSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0 / columnCount]
+                                                                                       heightDimension:[NSCollectionLayoutDimension absoluteDimension:108]];
+            NSCollectionLayoutItem *item = [NSCollectionLayoutItem itemWithLayoutSize:itemSize];
+            item.contentInsets = NSDirectionalEdgeInsetsMake(4, 5, 4, 5);
+
+            NSCollectionLayoutSize *groupSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0]
+                                                                                          heightDimension:[NSCollectionLayoutDimension absoluteDimension:108]];
+            NSCollectionLayoutGroup *group = [NSCollectionLayoutGroup horizontalGroupWithLayoutSize:groupSize subitem:item count:columnCount];
+
+            NSCollectionLayoutSection *section = [NSCollectionLayoutSection sectionWithGroup:group];
+            section.contentInsets = NSDirectionalEdgeInsetsMake(2, 14, 6, 14);
             section.boundarySupplementaryItems = @[header];
             return section;
         } else {
-            // 版本卡片区段
+            // 版本卡片区段：紧凑列表
             CGFloat itemWidth = isiPad ? 0.5 : 1.0;
             NSCollectionLayoutSize *itemSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:itemWidth]
-                                                                                       heightDimension:[NSCollectionLayoutDimension absoluteDimension:86]];
+                                                                                       heightDimension:[NSCollectionLayoutDimension absoluteDimension:78]];
             NSCollectionLayoutItem *item = [NSCollectionLayoutItem itemWithLayoutSize:itemSize];
-            item.contentInsets = NSDirectionalEdgeInsetsMake(4, 8, 4, 8);
+            item.contentInsets = NSDirectionalEdgeInsetsMake(3, 7, 3, 7);
 
             NSCollectionLayoutSize *groupSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0]
-                                                                                          heightDimension:[NSCollectionLayoutDimension absoluteDimension:86]];
+                                                                                          heightDimension:[NSCollectionLayoutDimension absoluteDimension:78]];
             NSCollectionLayoutGroup *group = [NSCollectionLayoutGroup horizontalGroupWithLayoutSize:groupSize subitems:@[item]];
 
             NSCollectionLayoutSection *section = [NSCollectionLayoutSection sectionWithGroup:group];
-            section.contentInsets = NSDirectionalEdgeInsetsMake(0, 14, 20, 14);
+            section.contentInsets = NSDirectionalEdgeInsetsMake(0, 14, 18, 14);
             section.boundarySupplementaryItems = @[header];
             return section;
         }
@@ -643,7 +838,7 @@
     self.selectedProfile = PLProfiles.current.selectedProfileName;
 }
 
-/// 加载游戏目录（实例）列表，参照 LauncherPrefGameDirViewController
+/// 加载游戏目录（实例）列表
 - (void)loadGameDirList {
     NSMutableArray *list = [NSMutableArray array];
     [list addObject:@"default"];
@@ -666,15 +861,15 @@
 #pragma mark - UICollectionViewDataSource
 
 - (NSInteger)numberOfSectionsInCollectionView:(UICollectionView *)collectionView {
-    return 3;  // 游戏目录 / 快速操作 / 已安装的版本
+    return 4;  // 游戏目录 / 图形 API / 快速操作 / 已安装的版本
 }
 
 - (NSInteger)collectionView:(UICollectionView *)collectionView numberOfItemsInSection:(NSInteger)section {
-    if (section == 0) {
-        // 游戏目录列表 + 末尾的"新建目录"按钮
-        return self.gameDirList.count + 1;
-    } else if (section == 1) {
-        // 5 个快速操作（Mod/光影/资源包/数据包/世界）
+    if (section == kSectionGameDir) {
+        return self.gameDirList.count + 1;  // 末尾追加"新建目录"按钮
+    } else if (section == kSectionRenderer) {
+        return self.rendererKeys.count;
+    } else if (section == kSectionQuickAction) {
         return 5;
     } else {
         return self.profileList.count;
@@ -682,11 +877,9 @@
 }
 
 - (UICollectionViewCell *)collectionView:(UICollectionView *)collectionView cellForItemAtIndexPath:(NSIndexPath *)indexPath {
-    if (indexPath.section == 0) {
-        // 游戏目录区段
+    if (indexPath.section == kSectionGameDir) {
         VMGameDirCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"GameDirCell" forIndexPath:indexPath];
 
-        // 最后一项是"新建目录"按钮
         if (indexPath.item == (NSInteger)self.gameDirList.count) {
             [cell configureWithName:nil detail:nil isSelected:NO isAddButton:YES];
             return cell;
@@ -700,17 +893,11 @@
         dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
             unsigned long long folderSize = 0;
             NSString *directory = [NSString stringWithFormat:@"%s/instances/%@", getenv("POJAV_HOME"), dirName];
-            // 简易目录大小计算（避免引入 NSFileManager+NRFileManager 依赖）
             [weakSelf calculateFolderSizeAtPath:directory size:&folderSize];
             NSString *sizeStr = [NSByteCountFormatter stringFromByteCount:folderSize countStyle:NSByteCountFormatterCountStyleMemory];
             dispatch_async(dispatch_get_main_queue(), ^{
-                // 重新 dequeue 可能已被复用，需要校验
                 VMGameDirCell *targetCell = (VMGameDirCell *)[collectionView cellForItemAtIndexPath:indexPath];
                 if (targetCell && [targetCell isKindOfClass:[VMGameDirCell class]]) {
-                    // 只更新 detail，避免覆盖选中状态
-                    if (![dirName isEqualToString:weakSelf.currentGameDir] || !isSelected) {
-                        // 当前不是选中项或已变化，更新 detail
-                    }
                     targetCell.detailLabel.text = sizeStr;
                 }
             });
@@ -718,8 +905,26 @@
 
         [cell configureWithName:dirName detail:@"计算中..." isSelected:isSelected isAddButton:NO];
         return cell;
-    } else if (indexPath.section == 1) {
-        // 快速操作区段
+    } else if (indexPath.section == kSectionRenderer) {
+        VMRendererCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"RendererCell" forIndexPath:indexPath];
+
+        NSString *key = self.rendererKeys[indexPath.item];
+        NSString *name = indexPath.item < (NSInteger)self.rendererNames.count ? self.rendererNames[indexPath.item] : key;
+        NSString *icon = indexPath.item < (NSInteger)self.rendererIcons.count ? self.rendererIcons[indexPath.item] : @"questionmark.circle";
+        NSString *desc = indexPath.item < (NSInteger)self.rendererDescs.count ? self.rendererDescs[indexPath.item] : @"";
+
+        NSString *currentRenderer = [self currentRendererForSelectedProfile];
+        BOOL isSelected = [key isEqualToString:currentRenderer];
+
+        // 针对 MC 26.2+ 推荐：Vulkan（libMoltenVK.dylib）和 Zink（libOSMesa.8.dylib）为最佳选择
+        BOOL isBest = NO;
+        if ([self isCurrentProfileModernVersion]) {
+            isBest = [key isEqualToString:@RENDERER_NAME_VULKAN] || [key isEqualToString:@RENDERER_NAME_VK_ZINK];
+        }
+
+        [cell configureWithIcon:icon name:name details:desc isSelected:isSelected isBest:isBest];
+        return cell;
+    } else if (indexPath.section == kSectionQuickAction) {
         VMQuickActionCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"QuickActionCell" forIndexPath:indexPath];
 
         switch (indexPath.item) {
@@ -741,17 +946,14 @@
         }
         return cell;
     } else {
-        // 版本卡片区段
         VMVersionCardCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"VersionCell" forIndexPath:indexPath];
 
         NSString *profileName = self.profileList[indexPath.item];
         NSDictionary *profile = PLProfiles.current.profiles[profileName];
         NSString *versionId = profile[@"lastVersionId"] ?: @"未知版本";
         BOOL isSelected = [profileName isEqualToString:self.selectedProfile];
-        // FCL 风格：gameDir != "." 表示该 profile 启用了版本隔离
         NSString *gameDir = profile[@"gameDir"] ?: @".";
         BOOL isolated = ![gameDir isEqualToString:@"."];
-        // 最后游玩时间（PLProfiles 在启动游戏时写入 lastPlayed 时间戳）
         NSString *lastPlayed = [self formatLastPlayed:profile[@"lastPlayed"]];
 
         [cell configureWithName:profileName version:versionId isSelected:isSelected isolated:isolated lastPlayed:lastPlayed];
@@ -773,7 +975,7 @@
     }
 }
 
-/// 将 lastPlayed 时间戳（NSNumber/NSString）格式化为"最后游玩：xxx"
+/// 将 lastPlayed 时间戳格式化为"最后游玩：xxx"
 - (NSString *)formatLastPlayed:(id)lastPlayedRaw {
     if (!lastPlayedRaw) return @"";
     NSTimeInterval ts;
@@ -798,9 +1000,30 @@
     if (kind == UICollectionElementKindSectionHeader) {
         VMSectionHeaderView *header = [collectionView dequeueReusableSupplementaryViewOfKind:kind withReuseIdentifier:@"HeaderView" forIndexPath:indexPath];
         switch (indexPath.section) {
-            case 0: header.titleLabel.text = @"游戏目录（版本隔离）"; break;
-            case 1: header.titleLabel.text = @"快速操作"; break;
-            case 2: header.titleLabel.text = @"已安装的版本"; break;
+            case kSectionGameDir:
+                header.titleLabel.text = @"游戏目录（版本隔离）";
+                header.subtitleLabel.text = @"点击切换 · 长按删除当前目录";
+                break;
+            case kSectionRenderer:
+                header.titleLabel.text = @"图形 API";
+                if ([self isCurrentProfileModernVersion]) {
+                    header.subtitleLabel.text = @"当前版本 26.2+，推荐使用 Vulkan / Zink";
+                } else {
+                    header.subtitleLabel.text = @"针对当前选中版本，可在启动前调整";
+                }
+                break;
+            case kSectionQuickAction:
+                header.titleLabel.text = @"快速操作";
+                header.subtitleLabel.text = @"";
+                break;
+            case kSectionVersions:
+                header.titleLabel.text = @"已安装的版本";
+                header.subtitleLabel.text = @"点击弹出操作菜单 · 长按同样可弹出";
+                break;
+            default:
+                header.titleLabel.text = @"";
+                header.subtitleLabel.text = @"";
+                break;
         }
         return header;
     }
@@ -812,10 +1035,8 @@
 - (void)collectionView:(UICollectionView *)collectionView didSelectItemAtIndexPath:(NSIndexPath *)indexPath {
     [collectionView deselectItemAtIndexPath:indexPath animated:YES];
 
-    if (indexPath.section == 0) {
-        // 游戏目录区段
+    if (indexPath.section == kSectionGameDir) {
         if (indexPath.item == (NSInteger)self.gameDirList.count) {
-            // 新建目录
             [self showCreateGameDirAlert];
         } else {
             NSString *dirName = self.gameDirList[indexPath.item];
@@ -823,8 +1044,10 @@
                 [self switchGameDirTo:dirName];
             }
         }
-    } else if (indexPath.section == 1) {
-        // 快速操作区段
+    } else if (indexPath.section == kSectionRenderer) {
+        // 切换当前选中 profile 的渲染器
+        [self selectRendererAtIndex:indexPath.item];
+    } else if (indexPath.section == kSectionQuickAction) {
         switch (indexPath.item) {
             case 0: [self openModsManager]; break;
             case 1: [self openShadersManager]; break;
@@ -832,18 +1055,15 @@
             case 3: [self openDataPacksManager]; break;
             case 4: [self openWorldsManager]; break;
         }
-    } else {
-        // 版本卡片区段：点击任意版本都弹出操作菜单（FCL 风格）
-        // 菜单中包含"选择此版本/编辑配置/删除"，用户可一步到位。
-        // 之前需要"先点一次选中，再点一次已选中"才能弹菜单，交互不直观。
+    } else if (indexPath.section == kSectionVersions) {
         NSString *profileName = self.profileList[indexPath.item];
         [self showProfileActions:profileName];
     }
 }
 
-#pragma mark - Game Directory Actions (FCL 风格版本隔离)
+#pragma mark - Game Directory Actions
 
-/// 切换游戏目录（实例），复用 LauncherPrefGameDirViewController 的核心逻辑
+/// 切换游戏目录（实例），重建符号链接
 - (void)switchGameDirTo:(NSString *)name {
     if (getenv("DEMO_LOCK")) return;
 
@@ -874,7 +1094,7 @@
     [self.collectionView reloadData];
 }
 
-/// 弹出新建游戏目录对话框（FCL 风格）
+/// 弹出新建游戏目录对话框
 - (void)showCreateGameDirAlert {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"新建游戏目录"
                                                                    message:@"输入新目录名（用于版本隔离）"
@@ -907,8 +1127,113 @@
         [self showAlert:[NSString stringWithFormat:@"创建目录失败：\n\n%@", error.localizedDescription]];
         return;
     }
-    // 自动切换到新目录
     [self switchGameDirTo:name];
+}
+
+/// 长按游戏目录卡片弹出操作菜单：切换/删除当前目录
+- (void)showGameDirActions:(NSString *)dirName {
+    BOOL isSelected = [dirName isEqualToString:self.currentGameDir];
+    BOOL isDefault = [dirName isEqualToString:@"default"];
+
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:dirName
+                                                                   message:isSelected ? @"当前正在使用此目录" : @"切换到此目录"
+                                                            preferredStyle:UIAlertControllerStyleActionSheet];
+
+    if (!isSelected) {
+        [alert addAction:[UIAlertAction actionWithTitle:@"切换到此目录" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+            [self switchGameDirTo:dirName];
+        }]];
+    }
+
+    // 删除目录（默认目录禁止删除，正在使用的目录需要先切换才能删除）
+    if (!isDefault) {
+        NSString *deleteTitle = isSelected ? @"删除（需先切换到其他目录）" : @"删除此目录";
+        UIAlertActionStyle deleteStyle = isSelected ? UIAlertActionStyleDestructive : UIAlertActionStyleDestructive;
+        [alert addAction:[UIAlertAction actionWithTitle:deleteTitle style:deleteStyle handler:^(UIAlertAction * _Nonnull action) {
+            if (isSelected) {
+                [self showAlert:@"请先切换到其他目录，再删除此目录"];
+                return;
+            }
+            [self confirmDeleteGameDir:dirName];
+        }]];
+    } else {
+        [alert addAction:[UIAlertAction actionWithTitle:@"默认目录不可删除" style:UIAlertActionStyleDisabled handler:nil]];
+    }
+
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+
+    if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
+        alert.popoverPresentationController.sourceView = self.view;
+        alert.popoverPresentationController.sourceRect = CGRectMake(self.view.bounds.size.width / 2, self.view.bounds.size.height / 2, 1, 1);
+        alert.popoverPresentationController.permittedArrowDirections = UIPopoverArrowDirectionAny;
+    }
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+/// 二次确认删除游戏目录
+- (void)confirmDeleteGameDir:(NSString *)dirName {
+    UIAlertController *confirm = [UIAlertController alertControllerWithTitle:@"确认删除目录"
+                                                                     message:[NSString stringWithFormat:@"将删除目录 \"%@\" 及其所有内容（包括存档、Mod、配置等），此操作不可恢复。", dirName]
+                                                              preferredStyle:UIAlertControllerStyleAlert];
+    [confirm addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [confirm addAction:[UIAlertAction actionWithTitle:@"确认删除" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
+        [self deleteGameDir:dirName];
+    }]];
+    [self presentViewController:confirm animated:YES completion:nil];
+}
+
+/// 删除指定游戏目录
+- (void)deleteGameDir:(NSString *)dirName {
+    if ([dirName isEqualToString:@"default"]) {
+        [self showAlert:@"默认目录不可删除"];
+        return;
+    }
+    if ([dirName isEqualToString:self.currentGameDir]) {
+        [self showAlert:@"请先切换到其他目录，再删除此目录"];
+        return;
+    }
+
+    NSString *dest = [NSString stringWithFormat:@"%s/instances/%@", getenv("POJAV_HOME"), dirName];
+    NSError *error = nil;
+    if (![NSFileManager.defaultManager removeItemAtPath:dest error:&error]) {
+        [self showAlert:[NSString stringWithFormat:@"删除目录失败：\n\n%@", error.localizedDescription]];
+        return;
+    }
+
+    [self loadGameDirList];
+    [self.collectionView reloadData];
+    [self showAlert:[NSString stringWithFormat:@"已删除目录 \"%@\"", dirName]];
+}
+
+#pragma mark - Renderer Selection (图形 API 调整)
+
+/// 选择渲染器并保存到当前 profile
+- (void)selectRendererAtIndex:(NSInteger)index {
+    if (!self.selectedProfile) {
+        [self showAlert:@"请先选择一个版本"];
+        return;
+    }
+    if (index >= (NSInteger)self.rendererKeys.count) return;
+
+    NSString *key = self.rendererKeys[index];
+    NSString *displayName = index < (NSInteger)self.rendererNames.count ? self.rendererNames[index] : key;
+
+    // 写入当前 profile 的 renderer 字段
+    NSMutableDictionary *profiles = PLProfiles.current.profiles;
+    NSMutableDictionary *profile = [profiles[self.selectedProfile] mutableCopy];
+    if (!profile) {
+        profile = [NSMutableDictionary dictionary];
+    }
+    profile[@"renderer"] = key;
+    profiles[self.selectedProfile] = profile;
+    [PLProfiles.current save];
+
+    // 同步到全局偏好（保证启动游戏时 LauncherRightPanelViewController 能读到）
+    setPrefString(@"video.renderer", key);
+
+    [self.collectionView reloadData];
+
+    NSLog(@"[VersionMgr] Renderer for profile '%@' set to '%@' (%@)", self.selectedProfile, key, displayName);
 }
 
 #pragma mark - Quick Actions
@@ -998,10 +1323,6 @@
 
     [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
 
-    // 修复：仅在 iPad 上设置 popoverPresentationController，iPhone 上 ActionSheet
-    // 会自动从底部滑出，无需 popover 设置。
-    // 之前无条件设置 1x1 中心点 sourceRect，导致 iPhone 横屏下 ActionSheet
-    // 尝试以极小 popover 形式从屏幕中心弹出，"约等于显示不出来"。
     if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
         alert.popoverPresentationController.sourceView = self.view;
         alert.popoverPresentationController.sourceRect = CGRectMake(self.view.bounds.size.width / 2, self.view.bounds.size.height / 2, 1, 1);
@@ -1011,7 +1332,7 @@
 }
 
 - (void)editProfile:(NSString *)profileName {
-    // 使用 ProfileSettingsViewController（合并后的统一 Edit Profile 页面）
+    // 使用 ProfileSettingsViewController（合并后的统一 Edit Profile 页面，新 UI）
     ProfileSettingsViewController *vc = [[ProfileSettingsViewController alloc] init];
     vc.profileName = profileName;
     [self.navigationController pushViewController:vc animated:YES];
@@ -1053,7 +1374,6 @@
     return YES;
 }
 
-// FCL 风格：支持横屏和竖屏，适配 iPhone 和 iPad
 - (UIInterfaceOrientationMask)supportedInterfaceOrientations {
     if ([ScreenUtils isPad]) {
         return UIInterfaceOrientationMaskAll;
