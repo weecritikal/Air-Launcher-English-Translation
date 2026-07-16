@@ -65,11 +65,12 @@ void init_loadDefaultEnv() {
         //   0 = VK_PRESENT_MODE_IMMEDIATE_KHR（不等 vsync，帧率可超屏幕刷新率）
         //   1 = VK_PRESENT_MODE_MAILBOX_KHR
         //   2 = VK_PRESENT_MODE_FIFO_KHR（默认，等 vsync）
-        // 当前 workspace 附带的 MoltenVK 版本（spec 30 / ~1.1.2）的 MVKConfiguration
-        // 结构体中不含 swapchainPresentMode 成员，此环境变量可能被忽略。
-        // 但设置它无害——若 MoltenVK 版本升级后支持，则自动生效。
+        // 实际运行的 MoltenVK 版本为 1.2.9（从 libMoltenVK.dylib 二进制确认），
+        // 支持此环境变量。仓库中的 vk_mvk_moltenvk.h 头文件是旧版本（1.1.2），
+        // 但实际 dylib 已是 1.2.9，环境变量会生效。
         // 这是 Vulkan 模式帧率解锁的关键：present mode 完全由 vkCreateSwapchainKHR
         // 选择，而 MC 26.2 的 Vulkan 渲染器可能未正确响应 enableVsync=false。
+        // MoltenVK 1.2.9 在 vkCreateSwapchainKHR 时会读取此环境变量覆盖应用的 presentMode。
         setenv("MVK_CONFIG_SWAPCHAIN_PRESENT_MODE", "0", 1);
         NSLog(@"[JavaLauncher] MoltenVK performance tracking + IMMEDIATE present mode requested for VSync diagnosis");
     } else {
@@ -102,24 +103,23 @@ void init_loadDefaultEnv() {
     //    Mesa 21.0 的 zink 不会动态重建 swapchain，导致帧率锁死在屏幕刷新率。
     //
     // 关于 MoltenVK 配置与 Vulkan 帧率解锁研究：
-    //   当前 workspace 附带的 MoltenVK（spec 30 / ~1.1.2）的 MVKConfiguration 结构体
-    //   不含 swapchainPresentMode 成员，但已设置 MVK_CONFIG_SWAPCHAIN_PRESENT_MODE=0
-    //   环境变量作为最佳尝试（MoltenVK 1.2.5+ 支持，旧版本忽略）。
-    //   present mode 完全由应用在 vkCreateSwapchainKHR 时选择。设备是否支持
-    //   IMMEDIATE present mode 由 MVKPhysicalDeviceMetalFeatures.presentModeImmediate
+    //   实际运行的 MoltenVK 版本为 1.2.9（从 libMoltenVK.dylib 二进制确认）。
+    //   仓库中的 vk_mvk_moltenvk.h 头文件是旧版本（1.1.2, spec 30），
+    //   但实际 dylib 已是 1.2.9，支持 MVK_CONFIG_SWAPCHAIN_PRESENT_MODE 环境变量。
+    //   MoltenVK 1.2.9 在 vkCreateSwapchainKHR 时会读取此环境变量覆盖应用的 presentMode，
+    //   这是 Vulkan 模式帧率解锁的关键机制。
+    //   设备是否支持 IMMEDIATE present mode 由 MVKPhysicalDeviceMetalFeatures.presentModeImmediate
     //   自动检测（大多数 iOS 设备支持）。
     //
-    //   Vulkan 模式帧率解锁的限制：
-    //   - MC 26.2 的 Vulkan 渲染器在 vkCreateSwapchainKHR 时选择 present mode，
-    //     可能不检查 enableVsync 选项（与 GL 渲染器行为不同）。
-    //   - pojavSwapInterval 在 Vulkan 模式下 br_swap_interval 为 NULL，无法拦截。
-    //   - 完全解决需要 fishhook 拦截 vkCreateSwapchainKHR 修改 presentMode，
-    //     但 Vulkan 函数通过 vkGetInstanceProcAddr 动态加载，fishhook 无法直接拦截。
-    //   - 替代方案：升级 MoltenVK 到 1.2.5+ 以支持 MVK_CONFIG_SWAPCHAIN_PRESENT_MODE。
+    //   Vulkan 模式帧率解锁的多层机制：
+    //   1. MC 选项层：enableVsync=false + maxFps=260（MC 1.16+ 视 260 为 unlimited）
+    //   2. MoltenVK 配置层：MVK_CONFIG_SWAPCHAIN_PRESENT_MODE=0 → IMMEDIATE present mode
+    //      （MoltenVK 1.2.9 支持，覆盖应用在 vkCreateSwapchainKHR 选择的 presentMode）
+    //   3. MC 26.2 兼容：同时写入 maxFps/maxFramerate/framerateLimit 多种选项名
     //
     // 各渲染器的帧率解锁效果：
     // - zink（GL→Vulkan）：通过 eglSwapInterval(0) → IMMEDIATE present mode 完全解锁
-    // - Vulkan（LWJGL3）：依赖 MC 正确响应 enableVsync=false + MVK_CONFIG_SWAPCHAIN_PRESENT_MODE（若支持）
+    // - Vulkan（LWJGL3）：MVK_CONFIG_SWAPCHAIN_PRESENT_MODE=0 → IMMEDIATE present mode 完全解锁
     // - ANGLE Metal：eglSwapInterval(0) 让 ANGLE 不等 vsync，渲染线程不阻塞
     // - ProMotion 设备：通过 CADisableMinimumFrameDurationOnPhone + preferredFrameRateRange 启用 120Hz
     setenv("POJAV_DISABLE_VSYNC", getPrefBool(@"video.disable_game_vsync") ? "1" : "0", 1);

@@ -25,11 +25,12 @@ typedef uintptr_t VkInstance;
 // 这两个 API 是 MoltenVK 的扩展函数（VK_MVK_moltenvk），不是标准 Vulkan 函数，
 // 需要通过 dlsym 从 libMoltenVK.dylib 中直接获取符号。
 //
-// 注意：当前 MoltenVK 版本（1.1.2, spec 30）的 MVKConfiguration 中没有
-// swapchainPresentMode 成员。MoltenVK 1.2.5+ 新增了 MVK_CONFIG_SWAPCHAIN_PRESENT_MODE
-// 环境变量（0=IMMEDIATE, 2=FIFO），但当前版本不识别该变量。
-// JavaLauncher.m 中已设置 MVK_CONFIG_SWAPCHAIN_PRESENT_MODE=0 作为最佳尝试，
-// 升级 MoltenVK 后自动生效。present mode 实际由应用在 vkCreateSwapchainKHR 时选择。
+// 注意：仓库中的 vk_mvk_moltenvk.h 头文件是旧版本（1.1.2, spec 30），
+// 但实际运行的 libMoltenVK.dylib 已是 1.2.9（从二进制 strings 确认）。
+// MoltenVK 1.2.9 支持 MVK_CONFIG_SWAPCHAIN_PRESENT_MODE 环境变量（0=IMMEDIATE, 2=FIFO），
+// JavaLauncher.m 中已设置 MVK_CONFIG_SWAPCHAIN_PRESENT_MODE=0。
+// MoltenVK 1.2.9 在 vkCreateSwapchainKHR 时会读取此环境变量覆盖应用的 presentMode，
+// 这是 Vulkan 模式帧率解锁的关键机制。
 //
 // 以下成员顺序严格参照 vk_mvk_moltenvk.h 中的 MVKConfiguration 结构体定义。
 // 即使结构体大小与 MoltenVK 实际版本不完全匹配，vkGetMoltenVKConfigurationMVK
@@ -154,23 +155,31 @@ static void logMoltenVKConfiguration() {
 /// 检查并记录 VSync 相关环境变量状态
 /// 这些环境变量影响 Vulkan 渲染器的帧率限制行为：
 /// - POJAV_DISABLE_VSYNC: 启动器偏好，控制是否禁用垂直同步
+/// - MVK_CONFIG_SWAPCHAIN_PRESENT_MODE: MoltenVK 1.2.5+ 支持的环境变量，
+///   强制 swapchain present mode（0=IMMEDIATE, 1=MAILBOX, 2=FIFO）
 ///
-/// 注意：当前 MoltenVK 版本不支持 MVK_CONFIG_PRESENT_MODE_IMMEDIATE 环境变量，
-/// 也不支持通过配置文件设置 swapchainPresentMode。设备是否支持 IMMEDIATE present mode
-/// 由 MVKPhysicalDeviceMetalFeatures.presentModeImmediate 自动检测（大多数 iOS 设备支持）。
-/// present mode 完全由应用在 vkCreateSwapchainKHR 时选择，受 eglSwapInterval/glfwSwapInterval 控制。
+/// 实际运行的 MoltenVK 版本为 1.2.9（从 libMoltenVK.dylib 二进制确认），
+/// 支持 MVK_CONFIG_SWAPCHAIN_PRESENT_MODE 环境变量。
+/// MoltenVK 1.2.9 在 vkCreateSwapchainKHR 时会读取此环境变量覆盖应用的 presentMode。
+/// 设备是否支持 IMMEDIATE present mode 由 MVKPhysicalDeviceMetalFeatures.presentModeImmediate
+/// 自动检测（大多数 iOS 设备支持）。
 static void logVSyncEnvironment() {
     const char* pojavDisableVsync = getenv("POJAV_DISABLE_VSYNC");
     const char* renderer = getenv("AMETHYST_RENDERER");
+    const char* mvkPresentMode = getenv("MVK_CONFIG_SWAPCHAIN_PRESENT_MODE");
 
     NSLog(@"[VKBridge] VSync Environment Check:");
     NSLog(@"[VKBridge]   AMETHYST_RENDERER=%s", renderer ?: "<unset>");
     NSLog(@"[VKBridge]   POJAV_DISABLE_VSYNC=%s", pojavDisableVsync ?: "<unset>");
+    NSLog(@"[VKBridge]   MVK_CONFIG_SWAPCHAIN_PRESENT_MODE=%s", mvkPresentMode ?: "<unset>");
 
     // 判断 VSync 是否应该被禁用
     if (pojavDisableVsync && strcmp(pojavDisableVsync, "1") == 0) {
         s_vsyncDisabled = YES;
         NSLog(@"[VKBridge]   -> VSync is DISABLED (POJAV_DISABLE_VSYNC=1)");
+        if (mvkPresentMode && strcmp(mvkPresentMode, "0") == 0) {
+            NSLog(@"[VKBridge]   -> MoltenVK present mode forced to IMMEDIATE (MVK_CONFIG_SWAPCHAIN_PRESENT_MODE=0)");
+        }
     } else {
         s_vsyncDisabled = NO;
         NSLog(@"[VKBridge]   -> VSync is ENABLED (POJAV_DISABLE_VSYNC!=1)");
