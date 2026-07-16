@@ -221,12 +221,116 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
         return [self parseManifestModpack:archive manifestData:manifestData filePath:filePath error:error];
     }
 
+    // 关键修复（多启动器兼容）：添加 Plain ZIP 整合包支持
+    // Plain ZIP 是 HMCL/FCL/PojavLauncher 等启动器导出的"纯 .minecraft 目录结构"整合包：
+    //   - 无 modrinth.index.json 和 manifest.json
+    //   - zip 根目录直接包含 mods/、config/、versions/、options.txt 等 .minecraft 文件
+    //   - 也兼容 .minecraft/ 前缀的 zip（HMCL 导出格式之一）
+    // 此格式无 mod 下载清单，所有文件直接从 zip 解压，loader 需用户后续手动安装。
+    if ([self isPlainZipModpack:archive]) {
+        NSLog(@"[ModpackImport] 检测到 Plain ZIP 整合包（无 manifest，直接含 .minecraft 目录结构）");
+        return [self parsePlainZipModpack:archive filePath:filePath error:error];
+    }
+
     if (error) {
         *error = [NSError errorWithDomain:@"ModpackImportError"
                                      code:1003
-                                 userInfo:@{NSLocalizedDescriptionKey: @"无效的整合包格式。缺少 modrinth.index.json 或 manifest.json"}];
+                                 userInfo:@{NSLocalizedDescriptionKey: @"无效的整合包格式。缺少 modrinth.index.json、manifest.json 或 .minecraft 目录结构"}];
     }
     return nil;
+}
+
+/// 检测 zip 是否是 Plain ZIP 整合包（无 manifest，直接含 .minecraft 目录结构）
+/// 判断条件：zip 中至少含有一个 .minecraft 风格的顶层目录或文件
+- (BOOL)isPlainZipModpack:(UZKArchive *)archive {
+    // .minecraft 风格的顶层目录/文件特征
+    NSArray<NSString *> *knownTopLevelEntries = @[
+        @"mods/", @"config/", @"versions/", @"saves/", @"resourcepacks/",
+        @"shaderpacks/", @"defaultconfigs/", @"kubejs/", @"scripts/",
+        @"localization/", @"patchouli_books/", @"options.txt",
+        @"optionsof.txt", @"optionsshaders.txt", @"servers.dat",
+        @"launcher_profiles.json", @"hotbar.nbt"
+    ];
+    __block BOOL hasMinecraftStructure = NO;
+    [archive performOnFilesInArchive:^(UZKFileInfo *fileInfo, BOOL *stop) {
+        NSString *filename = fileInfo.filename;
+        // 兼容 .minecraft/ 前缀（HMCL 导出格式）
+        NSString *normalized = filename;
+        if ([normalized hasPrefix:@".minecraft/"]) {
+            normalized = [normalized substringFromIndex:@".minecraft/".length];
+        }
+        // 跳过 macOS 的 __MACOSX 目录和隐藏文件
+        if ([filename hasPrefix:@"__MACOSX/"]) return;
+        if ([filename.lastPathComponent hasPrefix:@"."]) return;
+
+        for (NSString *entry in knownTopLevelEntries) {
+            if ([normalized hasPrefix:entry] || [normalized isEqualToString:[entry stringByDeletingPathExtension]]) {
+                hasMinecraftStructure = YES;
+                *stop = YES;
+                return;
+            }
+        }
+    } error:nil];
+    return hasMinecraftStructure;
+}
+
+/// 解析 Plain ZIP 整合包
+/// Plain ZIP 无 manifest，需要：
+///   1. 从 versions/<version>/<version>.json 推断 minecraft 版本
+///   2. loader 默认 Vanilla（无法从 zip 可靠推断，需用户后续手动安装）
+///   3. 整个 zip 根目录作为 overrides 提取到 gameDir
+- (nullable NSDictionary *)parsePlainZipModpack:(UZKArchive *)archive filePath:(NSString *)filePath error:(NSError **)error {
+    (void)error;
+    NSString *minecraftVersion = [self detectMinecraftVersionFromArchive:archive] ?: @"unknown";
+    NSString *name = [filePath.lastPathComponent stringByDeletingPathExtension];
+    NSString *modpackId = [NSString stringWithFormat:@"plainzip_%@", [[NSUUID UUID] UUIDString]];
+
+    NSLog(@"[ModpackImport] Plain ZIP 整合包：name=%@, 推断 MC 版本=%@", name, minecraftVersion);
+
+    return @{
+        @"id": modpackId,
+        @"name": name,
+        @"version": @"1.0.0",
+        @"minecraftVersion": minecraftVersion,
+        @"loader": @"Vanilla",
+        @"loaderVersion": @"",
+        @"filePath": filePath,
+        @"format": @"plainzip",
+        @"files": @[],
+        @"iconBase64": [self extractIconFromArchive:archive] ?: @""
+    };
+}
+
+/// 从 zip 的 versions/<version>/<version>.json 路径推断 minecraft 版本
+- (nullable NSString *)detectMinecraftVersionFromArchive:(UZKArchive *)archive {
+    __block NSString *detectedVersion = nil;
+    [archive performOnFilesInArchive:^(UZKFileInfo *fileInfo, BOOL *stop) {
+        NSString *filename = fileInfo.filename;
+        // 兼容 .minecraft/ 前缀
+        if ([filename hasPrefix:@".minecraft/"]) {
+            filename = [filename substringFromIndex:@".minecraft/".length];
+        }
+        // 匹配 versions/<version>/<version>.json
+        if ([filename hasPrefix:@"versions/"] && [filename hasSuffix:@".json"]) {
+            NSArray *parts = [filename componentsSeparatedByString:@"/"];
+            if (parts.count >= 3) {
+                NSString *versionFromPath = parts[parts.count - 2];
+                // 优先选择纯 minecraft 版本（不含 -forge-/-neoforge-/-fabric- 等后缀）
+                if (detectedVersion.length == 0) {
+                    detectedVersion = versionFromPath;
+                }
+                // 如果是纯版本号（无 loader 后缀），优先采用
+                if (![versionFromPath containsString:@"-forge-"] &&
+                    ![versionFromPath containsString:@"-neoforge-"] &&
+                    ![versionFromPath containsString:@"-fabric-"] &&
+                    ![versionFromPath containsString:@"-quilt-"]) {
+                    detectedVersion = versionFromPath;
+                    *stop = YES;
+                }
+            }
+        }
+    } error:nil];
+    return detectedVersion;
 }
 
 - (nullable NSDictionary *)parseModrinthModpack:(UZKArchive *)archive indexData:(NSData *)indexData filePath:(NSString *)filePath error:(NSError **)error {
@@ -465,6 +569,7 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
 /// 解压 overrides 目录到 gameDir
 /// Modrinth: overrides + client-overrides
 /// CurseForge: overrides
+/// Plain ZIP: 整个 zip 根目录作为 overrides 提取（兼容 .minecraft/ 前缀）
 - (BOOL)extractOverrides:(NSString *)filePath format:(NSString *)format toDirectory:(NSString *)destDir error:(NSError **)error {
     NSError *archiveError = nil;
     UZKArchive *archive = [[UZKArchive alloc] initWithPath:filePath error:&archiveError];
@@ -475,6 +580,66 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
                                      userInfo:@{NSLocalizedDescriptionKey: @"无法打开整合包压缩文件"}];
         }
         return NO;
+    }
+
+    // Plain ZIP：整个 zip 根目录作为 overrides 提取到 gameDir
+    // 兼容 .minecraft/ 前缀（HMCL 导出格式）和 __MACOSX 目录（macOS 创建的元数据）
+    if ([format isEqualToString:@"plainzip"]) {
+        NSLog(@"[ModpackImport] Plain ZIP：提取整个 zip 根目录到 gameDir");
+        // 关键修复（多启动器兼容）：versions/ 目录特殊处理
+        // Java 端 Tools.java 的 DIR_HOME_VERSION 固定指向 POJAV_GAME_DIR/versions，
+        // 不从 profile gameDir 读取。因此 Plain ZIP 中的 versions/ 必须提取到主目录，
+        // 否则启动时报"找不到版本信息"。
+        const char *pojavGameDir = getenv("POJAV_GAME_DIR");
+        NSString *mainVersionsDir = pojavGameDir ?
+            [NSString stringWithFormat:@"%s/versions", pojavGameDir] :
+            [destDir stringByAppendingPathComponent:@"versions"];
+
+        [archive performOnFilesInArchive:^(UZKFileInfo *fileInfo, BOOL *stop) {
+            NSString *filename = fileInfo.filename;
+            // 兼容 .minecraft/ 前缀
+            if ([filename hasPrefix:@".minecraft/"]) {
+                filename = [filename substringFromIndex:@".minecraft/".length];
+            }
+            // 跳过 macOS 的 __MACOSX 目录和隐藏文件
+            if ([filename hasPrefix:@"__MACOSX/"]) return;
+            if ([filename.lastPathComponent hasPrefix:@"."]) return;
+            if (filename.length == 0) return;
+
+            // versions/ 前缀的文件提取到主目录 POJAV_GAME_DIR/versions/
+            // 其他文件提取到 gameDirAbsolute（保持整合包隔离）
+            NSString *baseDir = destDir;
+            NSString *relativePath = filename;
+            if ([filename hasPrefix:@"versions/"]) {
+                baseDir = mainVersionsDir;
+                relativePath = [filename substringFromIndex:@"versions/".length];
+                // 如果 relativePath 仍以 versions/ 开头（如 versions/1.20.1/1.20.1.json），保留
+                if ([relativePath hasPrefix:@"versions/"]) {
+                    relativePath = [relativePath substringFromIndex:@"versions/".length];
+                }
+            }
+
+            NSString *destItemPath = [baseDir stringByAppendingPathComponent:relativePath];
+            NSString *destDirPath = fileInfo.isDirectory ? destItemPath : destItemPath.stringByDeletingLastPathComponent;
+            BOOL createdDir = [NSFileManager.defaultManager createDirectoryAtPath:destDirPath
+                                                              withIntermediateDirectories:YES
+                                                                              attributes:nil
+                                                                                   error:error];
+            if (!createdDir) {
+                *stop = YES;
+                return;
+            }
+            if (fileInfo.isDirectory) return;
+
+            NSData *data = [archive extractData:fileInfo error:error];
+            BOOL written = [data writeToFile:destItemPath options:NSDataWritingAtomic error:error];
+            *stop = !data || !written;
+        } error:error];
+        if (error && *error) {
+            NSLog(@"[ModpackImport] Plain ZIP 提取失败：%@", *error);
+            return NO;
+        }
+        return YES;
     }
 
     // Modrinth: 解压 overrides 和 client-overrides (后者覆盖前者)
@@ -676,22 +841,23 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
     }
 
     NSLog(@"[ModpackImport] mod 下载完成: %lu/%lu 成功", (unsigned long)successCount, (unsigned long)total);
-    // 关键修复：之前永远 `return YES;`，无论实际成功多少，调用方无法感知失败。
-    // 改为：仅当 successCount == total（或成功数 >= 80% 且无致命错误）时返回 YES。
-    // 失败比例过高时返回 NO，让上层能给出"整合包安装失败"的明确错误。
-    // 但仍允许部分失败（>= 50%）通过，避免单个边缘 mod 导致整个整合包安装失败。
+    // 关键修复（多启动器兼容）：提高成功率门槛，避免依赖严密的整合包因 mod 缺失启动崩溃
+    //   - >= 70% 成功：返回 YES，记录警告（部分可选 mod 缺失不影响核心功能）
+    //   - < 70% 成功：返回 NO，让上层明确报告"整合包模组下载失败过多"
+    // 之前门槛过低（50%），核心 mod 缺失时仍返回 YES，导致用户以为导入成功但启动崩溃。
     if (total == 0) return YES;
     double successRate = (double)successCount / (double)total;
-    if (successRate >= 0.5) {
+    if (successRate >= 0.7) {
         if (successCount < total) {
-            NSLog(@"[ModpackImport] 整合包部分模组下载失败：%lu/%lu 成功（成功率 %.0f%%）", (unsigned long)successCount, (unsigned long)total, successRate * 100);
+            NSLog(@"[ModpackImport] 警告：整合包部分模组下载失败：%lu/%lu 成功（成功率 %.0f%%），可能影响游戏体验",
+                  (unsigned long)successCount, (unsigned long)total, successRate * 100);
         }
         return YES;
     }
     if (error) {
         *error = [NSError errorWithDomain:@"ModpackImportError"
                                      code:5004
-                                 userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"整合包模组下载失败过多：%lu/%lu 成功", (unsigned long)successCount, (unsigned long)total]}];
+                                 userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"整合包模组下载失败过多：%lu/%lu 成功（需 ≥70%%）", (unsigned long)successCount, (unsigned long)total]}];
     }
     return NO;
 }

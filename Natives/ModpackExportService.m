@@ -39,7 +39,9 @@
                        progress:(void (^_Nullable)(double progress, NSString *stageMessage))progress
                           error:(NSError **)error {
     if (error) *error = nil;
-    (void)author;  // 预留字段，CurseForge manifest 已硬编码作者
+    // 关键修复（多启动器兼容）：author 字段传递到 CurseForge manifest，不再硬编码
+    // 这样导出的整合包在其他启动器（FCL/HMCL）中能正确显示作者信息
+    NSString *resolvedAuthor = author.length > 0 ? author : @"Amethyst User";
 
     void (^reportProgress)(double, NSString *) = ^(double p, NSString *msg) {
         NSLog(@"[ModpackExport] Progress: %.2f - %@", p, msg);
@@ -115,6 +117,7 @@
                                       toPath:destPath
                                          name:name
                                       version:version
+                                       author:resolvedAuthor
                                     mcVersion:mcVersion
                                        loader:loader
                                 loaderVersion:loaderVersion
@@ -127,6 +130,7 @@
                                          toPath:destPath
                                             name:name
                                          version:version
+                                          author:resolvedAuthor
                                        mcVersion:mcVersion
                                           loader:loader
                                     loaderVersion:loaderVersion
@@ -153,6 +157,7 @@
                       toPath:(NSString *)destPath
                         name:(NSString *)name
                      version:(NSString *)version
+                      author:(NSString *)author
                    mcVersion:(NSString *)mcVersion
                       loader:(NSString *)loader
               loaderVersion:(NSString *)loaderVersion
@@ -160,6 +165,7 @@
             includeOverrides:(BOOL)includeOverrides
                     progress:(void (^)(double, NSString *))progress
                        error:(NSError **)error {
+    (void)author;  // Modrinth 格式无 author 字段，保留参数以与 CurseForge 格式签名对齐
     progress(0.2, @"正在生成 modrinth.index.json");
     NSFileManager *fm = [NSFileManager defaultManager];
 
@@ -185,7 +191,7 @@
                 @"sha1": modFile[@"sha1"],
                 @"sha512": sha512 ?: @""
             },
-            @"downloads": @[],  // 不填下载链接，导入时走 overrides 还原
+            @"downloads": @[],  // 不填下载链接，导入时走 overrides 还原（与 HMCL 导出策略一致）
             @"fileSize": modFile[@"fileSize"]
         }];
     }
@@ -230,8 +236,19 @@
     // 写入 overrides（mods + config + options.txt 等）
     if (includeOverrides) {
         progress(0.5, @"正在打包 overrides");
-        NSArray *overrideDirs = @[@"mods", @"config", @"defaultconfigs", @"resourcepacks", @"shaderpacks"];
-        NSArray *overrideFiles = @[@"options.txt", @"optionsshaders.txt", @"servers.dat"];
+        // 关键修复（多启动器兼容）：扩展 overrides 白名单
+        // 之前只导出 mods/config/defaultconfigs/resourcepacks/shaderpacks 五个目录，
+        // 缺少 kubejs/scripts/localization 等常见整合包目录，导致其他启动器导入时缺少必要文件。
+        // 现在对齐 HMCL/FCL 导出策略，包含更多常见目录和文件。
+        NSArray *overrideDirs = @[
+            @"mods", @"config", @"defaultconfigs", @"resourcepacks", @"shaderpacks",
+            @"kubejs", @"scripts", @"localization", @"patchouli_books"
+        ];
+        NSArray *overrideFiles = @[
+            @"options.txt", @"optionsof.txt", @"optionsshaders.txt",
+            @"servers.dat", @"servers.dat_old", @"realms_persistence.json",
+            @"launcher_profiles.json", @"hotbar.nbt"
+        ];
 
         NSUInteger totalItems = modFiles.count + overrideDirs.count + overrideFiles.count;
         __block NSUInteger processed = 0;
@@ -281,6 +298,7 @@
                         toPath:(NSString *)destPath
                            name:(NSString *)name
                         version:(NSString *)version
+                         author:(NSString *)author
                       mcVersion:(NSString *)mcVersion
                          loader:(NSString *)loader
                  loaderVersion:(NSString *)loaderVersion
@@ -301,7 +319,8 @@
 
     // 构造 manifest.json
     // 注意：CurseForge 格式需要 projectID/fileID，本地 mod 无法获取。
-    // 简化方案：files 为空，所有 mod 打进 overrides/mods/
+    // 简化方案：files 为空，所有 mod 打进 overrides/mods/（与 HMCL 导出策略一致）
+    // 关键修复（多启动器兼容）：author 字段使用用户输入而非硬编码 "Amethyst Export"
     NSDictionary *manifest = @{
         @"minecraft": @{
             @"version": mcVersion,
@@ -311,7 +330,7 @@
         @"manifestVersion": @(1),
         @"name": name.length > 0 ? name : @"Exported Modpack",
         @"version": version.length > 0 ? version : @"1.0",
-        @"author": @"Amethyst Export",
+        @"author": author.length > 0 ? author : @"Amethyst User",
         @"files": @[],
         @"overrides": @"overrides"
     };
@@ -343,8 +362,16 @@
 
     if (includeOverrides) {
         progress(0.5, @"正在打包 overrides");
-        NSArray *overrideDirs = @[@"mods", @"config", @"defaultconfigs", @"resourcepacks", @"shaderpacks"];
-        NSArray *overrideFiles = @[@"options.txt", @"optionsshaders.txt", @"servers.dat"];
+        // 关键修复（多启动器兼容）：扩展 overrides 白名单，与 Modrinth 导出保持一致
+        NSArray *overrideDirs = @[
+            @"mods", @"config", @"defaultconfigs", @"resourcepacks", @"shaderpacks",
+            @"kubejs", @"scripts", @"localization", @"patchouli_books"
+        ];
+        NSArray *overrideFiles = @[
+            @"options.txt", @"optionsof.txt", @"optionsshaders.txt",
+            @"servers.dat", @"servers.dat_old", @"realms_persistence.json",
+            @"launcher_profiles.json", @"hotbar.nbt"
+        ];
         NSUInteger totalItems = overrideDirs.count + overrideFiles.count;
         __block NSUInteger processed = 0;
 

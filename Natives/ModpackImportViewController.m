@@ -647,9 +647,40 @@
     NSString *exportsDir = [NSHomeDirectory() stringByAppendingPathComponent:@"Documents/Exports"];
     [[NSFileManager defaultManager] createDirectoryAtPath:exportsDir withIntermediateDirectories:YES attributes:nil error:nil];
 
-    // 清理文件名中的非法字符
+    // 清理文件名中的非法字符（关键修复：多启动器兼容）
+    // 之前仅过滤 / \ : * ? " < > | 九个字符，未处理：
+    //   - Windows 保留名（CON/PRN/AUX/NUL/COM1-9/LPT1-9），导出的文件在 Windows 上无法被 FCL/HMCL 识别
+    //   - 首尾空格和点号，Windows 不允许文件名以空格或点号结尾
+    //   - 空名称（用户清空输入），导致导出文件名为 "-v1.0.mrpack"
+    //   - 过长名称（>255 字符），文件系统限制
     NSCharacterSet *invalidChars = [NSCharacterSet characterSetWithCharactersInString:@"/\\:*?\"<>|"];
-    NSString *safeName = [[name componentsSeparatedByCharactersInSet:invalidChars] componentsJoinedByString:@"_"];
+    NSMutableString *safeName = [[[name componentsSeparatedByCharactersInSet:invalidChars] componentsJoinedByString:@"_"] mutableCopy];
+
+    // 去除首尾空格和点号（Windows 文件系统限制）
+    while (safeName.length > 0 && ([safeName hasPrefix:@" "] || [safeName hasPrefix:@"."])) {
+        [safeName deleteCharactersInRange:NSMakeRange(0, 1)];
+    }
+    while (safeName.length > 0 && ([safeName hasSuffix:@" "] || [safeName hasSuffix:@"."])) {
+        [safeName deleteCharactersInRange:NSMakeRange(safeName.length - 1, 1)];
+    }
+
+    // Windows 保留名处理（CON/PRN/AUX/NUL/COM1-9/LPT1-9）
+    NSArray *reservedNames = @[@"CON", @"PRN", @"AUX", @"NUL",
+        @"COM1", @"COM2", @"COM3", @"COM4", @"COM5", @"COM6", @"COM7", @"COM8", @"COM9",
+        @"LPT1", @"LPT2", @"LPT3", @"LPT4", @"LPT5", @"LPT6", @"LPT7", @"LPT8", @"LPT9"];
+    if ([reservedNames containsObject:safeName.uppercaseString]) {
+        [safeName appendString:@"_modpack"];
+    }
+
+    // 长度限制（保留 50 字符以容纳 "-v<version>.<ext>" 后缀，避免总路径超 255 字符）
+    if (safeName.length > 200) {
+        [safeName deleteCharactersInRange:NSMakeRange(200, safeName.length - 200)];
+    }
+
+    // 空名称兜底
+    if (safeName.length == 0) {
+        [safeName setString:@"ExportedModpack"];
+    }
 
     NSString *destPath = [exportsDir stringByAppendingPathComponent:[NSString stringWithFormat:@"%@-v%@.%@", safeName, version, ext]];
 
