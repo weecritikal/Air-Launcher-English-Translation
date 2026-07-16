@@ -969,9 +969,8 @@ static GameSurfaceView* pojavWindow;
     [super viewDidAppear:animated];
     [self setNeedsUpdateOfPrefersPointerLocked];
 
-    // 启动 LAN 端口检测器（用于联机功能自动检测 MC "对局域网开放"端口）
-    // 检测器通过监听 MC 日志输出识别端口，检测到后通过通知 LanPortDetectorDidDetectPort 通知 UI
-    [[LanPortDetector sharedDetector] startDetecting];
+    // LAN 端口检测器已改为手动输入模式（LanPortDetector.h 说明），
+    // 自动检测（startDetecting/stopDetecting）已移除，无需在此启动。
 }
 
 - (void)viewDidLayoutSubviews {
@@ -2200,8 +2199,8 @@ static NSMutableDictionary *s_touchToFingerIdMap = nil;
     self.launchOverlayView = nil;
     self.launchGradientLayer = nil;
 
-    // 停止 LAN 端口检测器（游戏退出时清理）
-    [[LanPortDetector sharedDetector] stopDetecting];
+    // LAN 端口检测器已改为手动输入模式，stopDetecting 已移除，无需调用。
+    // 联机资源（SOCKS5 代理、PortForwarder、ZeroTier）的清理见下方 stopAllMultiplayerServices。
 
     // 关键修复（P0-A）：游戏退出（存档关闭/JVM 结束）时清理联机资源
     // 原代码仅停止 LanPortDetector，不清理联机相关的 SOCKS5 代理、端口转发器、

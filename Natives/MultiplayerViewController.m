@@ -1093,7 +1093,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         // 将端口设置到 LanPortDetector（手动输入），方便其他模块读取
         // 注意：LanPortDetector 的 API 是 sharedInstance + setManualPort:(uint16_t)
         [[LanPortDetector sharedInstance] setManualPort:(uint16_t)portNum];
-        // 生成分享代码
+        // 生成分享代码（内部会启动 PortForwarder 房主模式）
         [strongSelf generateShareCodeWithPort:port];
     }]];
 
