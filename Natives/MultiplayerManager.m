@@ -115,7 +115,6 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     MultiplayerErrorCodeJoinNetworkFailed    = 1009, // 加入网络失败
     MultiplayerErrorCodeNetworkReadyTimeout  = 1010, // 等待网络就绪超时
     MultiplayerErrorCodeSOCKS5ProxyStartFailed = 1011, // SOCKS5 代理启动失败
-    MultiplayerErrorCodePortForwarderStartFailed = 1012, // 端口转发器启动失败（房客场景下致命）
 };
 
 #pragma mark - MultiplayerRoom 实现
@@ -257,9 +256,6 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
 /// 关键修复（M1）：改为 atomic，与头文件声明保持一致
 @property (atomic, copy, readwrite, nullable) NSString *currentLocalIP;
 
-/// 可读写的对端节点连接模式描述
-@property (atomic, copy, readwrite, nullable) NSString *currentPeerConnectionMode;
-
 /// 可读写的端口转发本地端口
 @property (atomic, assign, readwrite) uint16_t currentForwardingPort;
 
@@ -269,6 +265,14 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
 /// 当前正在连接的 Network ID（uint64_t 形式，用于 ZeroTierBridge 查询状态）
 /// 0 表示当前没有正在连接的网络
 @property (nonatomic, assign) uint64_t currentNetworkID;
+
+/// 连接流程取消标志（SubTask 4.2：显式取消机制）
+///
+/// 由 disconnectCurrentRoom 设置为 YES，connectToRoomFlow 在每个步骤前检查。
+/// 这与 M5 的"检查 currentRoom 是否变更"不同：
+///   - M5 检查 room 对象是否被替换（过度防御，已移除）
+///   - 本标志仅在显式断开时设置，是合法的取消机制
+@property (atomic, assign, readwrite) BOOL connectionCancelled;
 @end
 
 @implementation MultiplayerManager
@@ -302,7 +306,6 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
         _currentRoom = nil;
         _currentSOCKS5Port = 0;
         _currentLocalIP = nil;
-        _currentPeerConnectionMode = nil;
         _nodeStarted = NO;
         _currentNetworkID = 0;
 
@@ -356,11 +359,16 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
 }
 
 /// 应用回到前台
-/// 检测 ZeroTier 节点状态，若掉线则触发自动重连和数据平面恢复
+///
+/// 简化策略（参照 spec）：
+///   - 检测节点状态，若仍在线则检查数据平面是否需要恢复
+///   - 若掉线则一次性 stopNode + startNodeWithHomeDirectory: + 重新加入网络，
+///     不做指数退避（原自动重连逻辑已移除）
 - (void)applicationWillEnterForeground {
     [_stateLock lock];
     MultiplayerRoom *room = self.currentRoom;
-    BOOL hasActiveRoom = (room != nil && self.currentNetworkID != 0);
+    uint64_t netID = _currentNetworkID;
+    BOOL hasActiveRoom = (room != nil && netID != 0);
     [_stateLock unlock];
 
     if (!hasActiveRoom) {
@@ -370,30 +378,78 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
 
     NSLog(@"[MultiplayerManager] 应用回到前台：检测到有活跃联机房间（%@），检查 ZeroTier 节点状态", room.name);
 
-    // 关键修复（房主端崩溃根因）：回前台时必须复位 _isAutoReconnecting 标志
-    //
-    // 问题：应用进入后台时，若 _isAutoReconnecting=YES（dispatch_after 重连 block
-    // 在后台被 iOS 挂起未执行），回前台后此标志永远为 YES。
-    // startAutoReconnect 入口 if (_isAutoReconnecting...) 直接 return，自动重连死锁。
-    // 节点状态与定时器状态长期不一致，多次前后台切换累积后导致房主端崩溃。
-    //
-    // 修复：在检测节点状态前，先调用 resetAutoReconnectState 复位标志，
-    // 解除自动重连死锁。不复位 _autoReconnectAttempts / _consecutiveOfflineCount，
-    // 让计数器跨前后台累积，确保 5 次重连上限仍能生效。
-    [[ZeroTierBridge sharedInstance] resetAutoReconnectState];
-
     // 异步检测节点状态，避免阻塞主线程
-    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
         BOOL nodeOnline = [[ZeroTierBridge sharedInstance] isNodeOnline];
         if (nodeOnline) {
             // 节点仍在线，检查数据平面是否需要恢复
             NSLog(@"[MultiplayerManager] 应用回到前台：ZeroTier 节点仍在线，检查数据平面");
             [self ensureDataPlaneRunningForCurrentRoom];
-        } else {
-            // 节点已掉线（iOS 后台杀掉了连接），触发自动重连
-            NSLog(@"[MultiplayerManager] 应用回到前台：ZeroTier 节点已掉线（iOS 后台限制），触发自动重连");
-            [[ZeroTierBridge sharedInstance] startAutoReconnect];
+            return;
         }
+
+        // 节点已掉线（iOS 后台杀掉了连接），一次性 stopNode + startNode + 重新加入网络
+        NSLog(@"[MultiplayerManager] 应用回到前台：ZeroTier 节点已掉线（iOS 后台限制），一次性重启节点");
+        [[ZeroTierBridge sharedInstance] stopNode];
+
+        // 重置节点启动状态标志，确保 ensureNodeStartedWithCompletion 能重新启动
+        [self->_stateLock lock];
+        self->_nodeStarted = NO;
+        [self->_stateLock unlock];
+
+        NSString *homeDir = [self zeroTierHomeDirectory];
+        NSError *startError = nil;
+        BOOL started = [[ZeroTierBridge sharedInstance] startNodeWithHomeDirectory:homeDir
+                                                                             error:&startError];
+        if (!started) {
+            NSLog(@"[MultiplayerManager] 应用回到前台：节点重启失败：%@",
+                  startError.localizedDescription ?: @"未知错误");
+            return;
+        }
+
+        [self->_stateLock lock];
+        self->_nodeStarted = YES;
+        [self->_stateLock unlock];
+
+        // 等待节点上线
+        BOOL online = [[ZeroTierBridge sharedInstance] waitForNodeOnlineWithTimeout:kNodeOnlineTimeout];
+        if (!online) {
+            NSLog(@"[MultiplayerManager] 应用回到前台：节点上线超时（%.0fs）", kNodeOnlineTimeout);
+            return;
+        }
+
+        // 重新加入网络
+        NSError *joinError = nil;
+        if (![[ZeroTierBridge sharedInstance] joinNetwork:netID error:&joinError]) {
+            NSLog(@"[MultiplayerManager] 应用回到前台：重新加入网络失败：%@",
+                  joinError.localizedDescription ?: @"未知错误");
+            return;
+        }
+
+        // 等待网络就绪
+        BOOL ready = [[ZeroTierBridge sharedInstance] waitForNetworkReady:netID
+                                                                  timeout:kNetworkReadyTimeout];
+        if (!ready) {
+            NSLog(@"[MultiplayerManager] 应用回到前台：网络就绪等待失败（%.0fs）", kNetworkReadyTimeout);
+            return;
+        }
+
+        // 更新本地 IP（网络就绪回调可能也会更新，但这里同步更新一次确保状态正确）
+        NSString *localIP = nil;
+        if ([self isAdhocNetworkId:room.networkId]) {
+            localIP = [[ZeroTierBridge sharedInstance] ipv6AddressForNetwork:netID];
+        } else {
+            localIP = [[ZeroTierBridge sharedInstance] ipv4AddressForNetwork:netID];
+        }
+        if (localIP.length > 0) {
+            [self->_stateLock lock];
+            self.currentLocalIP = localIP;
+            [self->_stateLock unlock];
+        }
+
+        // 恢复数据平面（SOCKS5 + PortForwarder）
+        NSLog(@"[MultiplayerManager] 应用回到前台：节点已重新上线，恢复数据平面");
+        [self ensureDataPlaneRunningForCurrentRoom];
     });
 }
 
@@ -957,13 +1013,10 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
         [self connectToRoomFlow:room completion:^(BOOL success, NSError * _Nullable error) {
             if (success) {
                 NSLog(@"[MultiplayerManager] 房间连接成功：%@", room.name);
-                // 关键修复（P1-2）：room.status 修改必须在 _stateLock 内，
-                // 避免与 disconnectCurrentRoom 并发执行时状态被覆盖
-                [self->_stateLock lock];
                 room.status = MultiplayerRoomStatusConnected;
-                [self->_stateLock unlock];
             } else {
                 NSLog(@"[MultiplayerManager] 房间连接失败：%@ - %@", room.name, error.localizedDescription);
+                room.status = MultiplayerRoomStatusError;
 
                 // 关键修复（M4）：连接失败时清空 currentRoom/currentNetworkID 等状态引用。
                 // 之前只更新了 room.status 但未清空 manager 持有的 currentRoom 引用，
@@ -976,16 +1029,12 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
                 // 修复方案：在 _stateLock 内检查 currentRoom 是否仍是同一个 room，
                 // 只有当 currentRoom 仍是 room 时才清空（避免清空用户已切换到的新房间）。
                 [self->_stateLock lock];
-                // 关键修复（P1-2）：room.status 修改必须在 _stateLock 内，
-                // 避免与 disconnectCurrentRoom 并发执行时状态被覆盖
-                room.status = MultiplayerRoomStatusError;
                 if (self.currentRoom && [self.currentRoom.roomId isEqualToString:room.roomId]) {
                     self.currentRoom = nil;
                     self.currentNetworkID = 0;
                     self.currentLocalIP = nil;
                     self.currentSOCKS5Port = 0;
                     self.currentForwardingPort = 0;
-                    self.currentPeerConnectionMode = nil;
                     NSLog(@"[MultiplayerManager] 连接失败，已清空 currentRoom 状态引用");
                 } else {
                     NSLog(@"[MultiplayerManager] 连接失败但 currentRoom 已变更（用户可能切换了房间），不清空状态");
@@ -1019,29 +1068,29 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
 
 /// 房间连接的完整流程（在后台线程执行）
 ///
-/// 步骤：
+/// 6 步流程（参照 spec）：
 ///   1. 启动 ZeroTier 节点（如果尚未启动）
 ///   2. 等待节点上线
 ///   3. 加入 ZeroTier 网络
-///   4. 等待网络就绪（IPv4 地址已分配）
+///   4. 等待网络就绪（IPv4 或 Ad-hoc IPv6 已分配）
 ///   5. 启动本地 SOCKS5 代理
-///   6. 设置 AMETHYST_SOCKS5_PROXY 环境变量
+///   6. 设置 AMETHYST_SOCKS5_PROXY 环境变量 + 端口转发器（仅房客模式启动）
+///
+/// 简化说明（参照 spec）：
+///   - 移除 M5 的"步骤间检查 currentRoom 是否变更"过度防御逻辑，
+///     由 disconnectCurrentRoom 显式取消流程即可。
+///   - 房主模式不启动 PortForwarder，等待 UI 层调用
+///     startHostPortForwarderWithListenPort:localHostPort: 启动房主模式。
 - (void)connectToRoomFlow:(MultiplayerRoom *)room
                completion:(void (^)(BOOL success, NSError * _Nullable error))completion {
+    // SubTask 4.2：重置取消标志，允许本次连接流程正常执行
+    self.connectionCancelled = NO;
+
     // 步骤 1：启动节点
     //
-    // 关键修复（H5）：移除 dispatch_semaphore_wait 对主线程的依赖。
-    // 之前的实现调用 ensureNodeStartedWithCompletion:，该方法会将 completion
-    // 通过 dispatch_async(main_queue) 投递到主线程执行。如果在 connectToRoomFlow
-    // 中用 semaphore 等待该 completion，会出现：
-    //   - 主线程若被 UI 操作（如滑表格、点击按钮）占用，completion 会被延迟执行，
-    //     导致 semaphore 等待时间变长，进而让整个连接流程超时。
-    //   - 极端情况：若上层在主线程同步等待连接流程完成（虽然不推荐），会形成
-    //     主线程等待后台线程、后台线程等待主线程的死锁。
-    //
-    // 修复方案：connectToRoomFlow 已经在后台 utility queue 执行，直接调用
-    // ZeroTierBridge 的 startNodeWithHomeDirectory:error: 同步 API，避免经过
-    // main_queue 分发。framework 可用性检查在 connectToRoom 入口已做，此处不再重复。
+    // 直接调用 ZeroTierBridge 的 startNodeWithHomeDirectory:error: 同步 API，
+    // 避免经过 main_queue 分发（connectToRoomFlow 已在后台 utility queue 执行）。
+    // framework 可用性检查在 connectToRoom 入口已做，此处不再重复。
     if (![self isNodeStarted]) {
         NSLog(@"[MultiplayerManager] [连接流程] 步骤 1：启动 ZeroTier 节点");
         [self notifyConnectionProgress:@"步骤 1/6：正在启动 ZeroTier 节点..."];
@@ -1068,6 +1117,16 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     }
 
     // 步骤 2：等待节点上线
+    // SubTask 4.2：检查取消标志
+    if (self.connectionCancelled) {
+        NSLog(@"[MultiplayerManager] [连接流程] 步骤 2 前检测到取消，退出");
+        if (completion) {
+            completion(NO, [NSError errorWithDomain:kMultiplayerErrorDomain
+                                                code:MultiplayerErrorCodeRoomNotFound
+                                            userInfo:@{NSLocalizedDescriptionKey: @"连接已取消"}]);
+        }
+        return;
+    }
     NSLog(@"[MultiplayerManager] [连接流程] 步骤 2：等待节点上线（超时 %.0fs）", kNodeOnlineTimeout);
     [self notifyConnectionProgress:@"步骤 2/6：正在等待节点上线..."];
     if (![[ZeroTierBridge sharedInstance] isNodeOnline]) {
@@ -1083,25 +1142,10 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     }
     NSLog(@"[MultiplayerManager] [连接流程] 节点已上线");
 
-    // 关键修复（M5）：在关键步骤前检查 self.currentRoom 是否仍是 room。
-    // connectToRoomFlow 在后台线程执行 6 个步骤，全程使用 block 捕获的 room 参数，
-    // 从不检查 self.currentRoom 是否已被并发调用 disconnectCurrentRoom 清空。
-    // 若用户在连接中点击断开：
-    //   1. disconnectCurrentRoom 停止 SOCKS5、清除环境变量、leaveNetwork、清空 currentRoom
-    //   2. connectToRoomFlow 继续执行：重新 joinNetwork（刚被 leave）、重新 startWithPort
-    //      SOCKS5（刚被 stop）、重新 setenv（刚被 unsetenv）
-    //   3. 流程完成后：SOCKS5 代理在运行、环境变量已设置、网络已加入，但 currentRoom 为 nil
-    //   4. 用户再次调用 disconnectCurrentRoom 时因 currentRoom == nil 直接返回，无法清理
-    //      泄漏的代理和环境变量
-    //
-    // 修复方案：在加入网络前、启动 SOCKS5 前检查 currentRoom 是否仍是 room，
-    // 如果不是则中止流程并清理已做的操作。
-    [_stateLock lock];
-    BOOL stillCurrent = (self.currentRoom != nil &&
-                         [self.currentRoom.roomId isEqualToString:room.roomId]);
-    [_stateLock unlock];
-    if (!stillCurrent) {
-        NSLog(@"[MultiplayerManager] [连接流程] 检测到 currentRoom 已变更（用户可能断开或切换了房间），中止连接流程");
+    // 步骤 3：加入网络
+    // SubTask 4.2：检查取消标志
+    if (self.connectionCancelled) {
+        NSLog(@"[MultiplayerManager] [连接流程] 步骤 3 前检测到取消，退出");
         if (completion) {
             completion(NO, [NSError errorWithDomain:kMultiplayerErrorDomain
                                                 code:MultiplayerErrorCodeRoomNotFound
@@ -1109,8 +1153,6 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
         }
         return;
     }
-
-    // 步骤 3：加入网络
     NSLog(@"[MultiplayerManager] [连接流程] 步骤 3：加入 ZeroTier 网络 %@", room.networkId);
     [self notifyConnectionProgress:[NSString stringWithFormat:@"步骤 3/6：正在加入 ZeroTier 网络 %@...", room.networkId]];
     uint64_t netID = [ZeroTierBridge parseNetworkIDFromString:room.networkId];
@@ -1135,20 +1177,24 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
 
     // 步骤 4：等待网络就绪
     //
-    // 关键修复（房客授权卡住问题）：
     // Private 网络中未授权的节点加入时，ZeroTier 控制器会忽略该节点（不分配 IP），
-    // 但不发送 ACCESS_DENIED 事件。导致 waitForNetworkReady 中的 Denied 检查
-    // 永远不触发，持续轮询 30 秒直到超时，用户看到"正在等待网络就绪"卡住。
-    //
-    // 修复方案：
-    //   1. 启动一个 8 秒后的后台定时器，检查网络状态
-    //   2. 如果已加入网络（Joined）但没有 IP，说明节点未授权
-    //      → 发送"正在等待房主授权"的进度通知
-    //   3. 超时后检查网络状态，给出更精确的错误信息
+    // 但可能不立即发送 ACCESS_DENIED 事件。启动一个 8 秒后的后台定时器，
+    // 检查网络状态：如果已 OK 但没有 IP，说明节点未授权，发送提示进度。
+    // SubTask 4.2：检查取消标志
+    if (self.connectionCancelled) {
+        NSLog(@"[MultiplayerManager] [连接流程] 步骤 4 前检测到取消，退出");
+        if (completion) {
+            completion(NO, [NSError errorWithDomain:kMultiplayerErrorDomain
+                                                code:MultiplayerErrorCodeRoomNotFound
+                                            userInfo:@{NSLocalizedDescriptionKey: @"连接已取消"}]);
+        }
+        return;
+    }
     NSLog(@"[MultiplayerManager] [连接流程] 步骤 4：等待网络就绪（超时 %.0fs）", kNetworkReadyTimeout);
     [self notifyConnectionProgress:@"步骤 4/6：正在等待网络就绪..."];
 
-    // 8 秒后检查是否需要授权提示（Private 网络未授权的节点不会收到 ACCESS_DENIED 事件）
+    // 8 秒后检查是否需要授权提示
+    // SubTask 5.7：如果 8 秒内未分配到 IP，显示房客自己的 ZeroTier 节点 ID 供房主查找
     __block BOOL step4Done = NO;
     __weak typeof(self) weakSelf = self;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(8.0 * NSEC_PER_SEC)),
@@ -1159,10 +1205,13 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
         NSString *ipv6 = [[ZeroTierBridge sharedInstance] ipv6AddressForNetwork:netID];
         NSLog(@"[MultiplayerManager] [连接流程] 8秒检查：status=%ld, ipv4=%@, ipv6=%@",
               (long)status, ipv4, ipv6);
-        if (status == ZeroTierNetworkStatusJoined && !ipv4.length && !ipv6.length) {
+        if (status == ZeroTierNetworkStatusOk && !ipv4.length && !ipv6.length) {
             // 已加入网络但没有 IP = Private 网络未授权
-            [weakSelf notifyConnectionProgress:@"仍在等待网络就绪...你的节点可能未被授权，请提醒房主在 central.zerotier.com 后台授权你的设备"];
-        } else if (status == ZeroTierNetworkStatusNotJoined || status == ZeroTierNetworkStatusRequesting) {
+            // 显示房客自己的 ZeroTier 节点 ID，方便房主在 central.zerotier.com 后台查找并授权
+            uint64_t myNodeID = [[ZeroTierBridge sharedInstance] nodeID];
+            NSString *nodeIDStr = (myNodeID != 0) ? [ZeroTierBridge formatNetworkID:myNodeID] : @"（未知）";
+            [weakSelf notifyConnectionProgress:[NSString stringWithFormat:@"仍在等待网络就绪...你的节点可能未被授权。你的 ZeroTier 节点 ID：%@，请将此 ID 发给房主，让房主在 central.zerotier.com 后台的 Member Devices 中勾选 Auth 复选框", nodeIDStr]];
+        } else if (status == ZeroTierNetworkStatusUnknown || status == ZeroTierNetworkStatusRequestingConfig) {
             // 仍在请求加入网络
             [weakSelf notifyConnectionProgress:@"仍在请求加入网络，请稍候..."];
         }
@@ -1173,19 +1222,31 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     step4Done = YES;
 
     if (!ready) {
-        // 关键修复（H4）：网络就绪等待失败时，必须离开已加入的网络，避免资源泄漏。
+        // 网络就绪等待失败时，离开已加入的网络，避免资源泄漏。
         NSLog(@"[MultiplayerManager] [连接流程] 网络就绪等待失败，清理已加入的网络 %@", room.networkId);
         [[ZeroTierBridge sharedInstance] leaveNetwork:netID];
 
         // 检查网络状态，给出更精确的错误信息
+        // SubTask 5.6 + 5.7：房客流程错误细化，在未授权场景下显示房客自己的 ZeroTier 节点 ID 供房主查找
         ZeroTierNetworkStatus failStatus = [[ZeroTierBridge sharedInstance] networkStatus:netID];
+        // 获取房客自己的 ZeroTier 节点 ID（用于未授权场景提示房主查找）
+        uint64_t myNodeID = [[ZeroTierBridge sharedInstance] nodeID];
+        NSString *myNodeIDStr = (myNodeID != 0) ? [ZeroTierBridge formatNetworkID:myNodeID] : nil;
         NSString *failDesc = nil;
-        if (failStatus == ZeroTierNetworkStatusDenied) {
-            failDesc = @"网络访问被拒绝。请联系房主在 central.zerotier.com 后台授权你的设备。";
+        if (failStatus == ZeroTierNetworkStatusAccessDenied) {
+            failDesc = myNodeIDStr
+                ? [NSString stringWithFormat:@"网络访问被拒绝。你的 ZeroTier 节点 ID：%@，请将此 ID 发给房主，让房主在 central.zerotier.com 后台的 Member Devices 中勾选你设备的 Auth 复选框。", myNodeIDStr]
+                : @"网络访问被拒绝。请联系房主在 central.zerotier.com 后台授权你的设备。";
         } else if (failStatus == ZeroTierNetworkStatusNotFound) {
-            failDesc = @"网络不存在，请检查 Network ID 是否正确。";
-        } else if (failStatus == ZeroTierNetworkStatusJoined) {
-            failDesc = @"已加入网络但未分配到 IP 地址。你的节点可能未被授权，请提醒房主在 central.zerotier.com 后台的 Member Devices 中授权你的设备（勾选 Auth 复选框）。";
+            failDesc = @"网络不存在，请检查分享代码是否完整或联系房主确认 Network ID。";
+        } else if (failStatus == ZeroTierNetworkStatusClientTooOld) {
+            failDesc = @"ZeroTier 客户端版本过旧，无法加入网络。请更新 zt.framework 后重试。";
+        } else if (failStatus == ZeroTierNetworkStatusDown) {
+            failDesc = @"网络控制器不可达，请稍后重试或联系房主检查网络状态。";
+        } else if (failStatus == ZeroTierNetworkStatusOk) {
+            failDesc = myNodeIDStr
+                ? [NSString stringWithFormat:@"已加入网络但未分配到 IP 地址。你的 ZeroTier 节点 ID：%@，请将此 ID 发给房主，让房主在 central.zerotier.com 后台的 Member Devices 中勾选你设备的 Auth 复选框。", myNodeIDStr]
+                : @"已加入网络但未分配到 IP 地址。你的节点可能未被授权，请提醒房主在 central.zerotier.com 后台的 Member Devices 中授权你的设备（勾选 Auth 复选框）。";
         } else {
             failDesc = [NSString stringWithFormat:@"等待 ZeroTier 网络就绪超时（%.0fs）。请确认网络 ID 正确且节点已在 central.zerotier.com 后台授权。", kNetworkReadyTimeout];
         }
@@ -1213,7 +1274,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
         NSLog(@"[MultiplayerManager] [连接流程] 标准模式，本机 ZeroTier IPv4：%@", localIP ?: @"（未分配）");
     }
 
-    // 关键修复（H4）：如果获取不到本地 IP，说明网络虽就绪但 IP 分配异常，
+    // 如果获取不到本地 IP，说明网络虽就绪但 IP 分配异常，
     // 此时也应清理已加入的网络，避免后续重连时状态混乱。
     if (!localIP || localIP.length == 0) {
         NSLog(@"[MultiplayerManager] [连接流程] 无法获取本机 ZeroTier IP，清理已加入的网络 %@", room.networkId);
@@ -1227,21 +1288,15 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
         return;
     }
 
-    [_stateLock lock];
-    self.currentLocalIP = localIP;
-    // 关键修复（房客连接失败根因）：只有房主才应将本机 ZeroTier IP 同步到 room.hostIP。
+    // 同步本机 ZeroTier IP 到 currentLocalIP，并在房主模式下同步到 room.hostIP
     //
-    // 之前无条件同步本机 IP 到 hostIP，导致房客连接时 hostIP 被房客自己的 IP 覆盖
-    // （如分享代码中房主 IP=10.138.62.21，房客本机 IP=10.138.62.153，
-    //  同步后 hostIP 变成 10.138.62.153，PortForwarder 转发到房客自己，Connection refused）。
-    //
-    // 区分房主与房客：
+    // 房主与房客区分：
     //   - 房主首次连接：room.hostIP 为空 → 需要填充本机 IP 用于分享
     //   - 房主重连（IP 不变）：room.hostIP == 本机 IP → 无变化，允许同步
     //   - 房客连接：room.hostIP == 房主 IP（来自分享代码）≠ 本机 IP → 不覆盖
-    //   - 房主 IP 变化重连：room.hostIP == 旧本机 IP ≠ 新本机 IP → 不覆盖（房主需重新分享）
-    //     这是边界情况，不影响房客连接，且避免误覆盖房客的房主 IP。
-    if (localIP && localIP.length > 0 && self.currentRoom) {
+    [_stateLock lock];
+    self.currentLocalIP = localIP;
+    if (localIP.length > 0 && self.currentRoom) {
         NSString *existingHostIP = self.currentRoom.hostIP;
         BOOL isHost = (existingHostIP.length == 0) || [existingHostIP isEqualToString:localIP];
         if (isHost) {
@@ -1256,22 +1311,15 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     MultiplayerRoom *roomForIPUpdate = self.currentRoom;
     [_stateLock unlock];
 
-    // 持久化房主 IP 到房间列表（后台异步写入，避免阻塞连接流程）
-    if (roomForIPUpdate && localIP && localIP.length > 0) {
+    // 同步房主 IP 到房间列表
+    if (roomForIPUpdate && localIP.length > 0) {
         [self updateRoom:roomForIPUpdate];
     }
 
-    // 关键修复（M5）：在启动 SOCKS5 代理前再次检查 currentRoom 是否仍是 room。
-    // 步骤 4（等待网络就绪）可能耗时最长 30 秒，期间用户可能点击断开。
-    // 如果用户已断开，currentRoom 已被清空，此时不应继续启动 SOCKS5 代理。
-    // 同时需要清理已加入的网络（leaveNetwork）。
-    [_stateLock lock];
-    BOOL stillCurrentBeforeProxy = (self.currentRoom != nil &&
-                                    [self.currentRoom.roomId isEqualToString:room.roomId]);
-    [_stateLock unlock];
-    if (!stillCurrentBeforeProxy) {
-        NSLog(@"[MultiplayerManager] [连接流程] 步骤 5 前检测到 currentRoom 已变更，中止流程并清理网络");
-        [[ZeroTierBridge sharedInstance] leaveNetwork:netID];
+    // 步骤 5：启动 SOCKS5 代理
+    // SubTask 4.2：检查取消标志
+    if (self.connectionCancelled) {
+        NSLog(@"[MultiplayerManager] [连接流程] 步骤 5 前检测到取消，退出");
         if (completion) {
             completion(NO, [NSError errorWithDomain:kMultiplayerErrorDomain
                                                 code:MultiplayerErrorCodeRoomNotFound
@@ -1279,37 +1327,14 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
         }
         return;
     }
-
-    // 关键修复（多房客优化）：房主不需要 SOCKS5 代理、AMETHYST_SOCKS5_PROXY 环境变量和端口转发器
-    //
-    // 房主自己就是 MC 服务器（通过"对局域网开放"启动），不需要通过代理或转发连接到任何远程主机。
-    // 如果房主也启动 SOCKS5 代理并设置环境变量，会导致房主 MC 的所有 java.net.Socket 出站流量
-    // 走 ZeroTier 虚拟网络，可能影响第三方 Mod 的网络请求（nonProxyHosts 无法覆盖所有域名）。
-    //
-    // 只有房客（room.hostIP 非空且不等于本机 IP）才需要：
-    //   - SOCKS5 代理：转发 MC 登录认证等 java.net.Socket 流量
-    //   - AMETHYST_SOCKS5_PROXY 环境变量：让 JavaLauncher 注入 JVM SOCKS5 参数
-    //   - PortForwarder：转发 MC Netty NioSocketChannel 流量到房主
-    BOOL isHostRole = (room.hostIP.length == 0) || [room.hostIP isEqualToString:localIP];
-
-    if (isHostRole) {
-        NSLog(@"[MultiplayerManager] [连接流程] 房主模式，跳过 SOCKS5 代理、环境变量和端口转发器");
-        [self notifyConnectionProgress:@"联机已就绪，等待在 MC 中开放局域网..."];
-        if (completion) {
-            completion(YES, nil);
-        }
-        return;
-    }
-
-    // 步骤 5：启动 SOCKS5 代理（仅房客需要）
-    NSLog(@"[MultiplayerManager] [连接流程] 步骤 5：启动 SOCKS5 代理（房客模式）");
+    NSLog(@"[MultiplayerManager] [连接流程] 步骤 5：启动 SOCKS5 代理");
     [self notifyConnectionProgress:@"步骤 5/6：正在启动 SOCKS5 代理..."];
     NSError *proxyError = nil;
     BOOL proxyStarted = [[SOCKS5Proxy sharedProxy] startWithPort:kMultiplayerDefaultSOCKS5Port
                                                             error:&proxyError];
     if (!proxyStarted) {
         NSLog(@"[MultiplayerManager] [连接流程] SOCKS5 代理启动失败：%@", proxyError.localizedDescription);
-        // 关键修复（H4）：SOCKS5 代理启动失败时，同样需要离开已加入的网络，
+        // SOCKS5 代理启动失败时，同样需要离开已加入的网络，
         // 否则下一次连接尝试会因为节点已加入网络而出现状态不一致。
         NSLog(@"[MultiplayerManager] [连接流程] 清理已加入的网络 %@", room.networkId);
         [[ZeroTierBridge sharedInstance] leaveNetwork:netID];
@@ -1324,71 +1349,47 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
 
     uint16_t actualPort = [[SOCKS5Proxy sharedProxy] listeningPort];
 
-    // 关键修复（严重2）：SOCKS5 代理启动成功后，再次检查 currentRoom 是否仍是 room。
-    // M5 修复只在 startWithPort 调用前检查，但检查通过后到 startWithPort 返回之间
-    // 仍有时间窗口。如果用户在此期间点击断开：
-    //   - disconnectCurrentRoom 会清空 currentRoom、清除环境变量、leaveNetwork
-    //   - 但 connectToRoomFlow 继续执行，SOCKS5 代理已启动
-    //   - 最终 SOCKS5 代理在运行、环境变量已设置，但 currentRoom == nil
-    //   - 用户再次调用 disconnectCurrentRoom 因 currentRoom == nil 直接返回，无法清理
-    //   - 导致 SOCKS5 代理和环境变量泄漏
-    //
-    // 修复方案：代理启动成功后再次检查，如果不是当前房间则立即停止代理并返回。
     [_stateLock lock];
-    BOOL stillCurrentAfterProxy = (self.currentRoom != nil &&
-                                   [self.currentRoom.roomId isEqualToString:room.roomId]);
-    if (stillCurrentAfterProxy) {
-        self.currentSOCKS5Port = actualPort;
-    }
+    self.currentSOCKS5Port = actualPort;
     [_stateLock unlock];
-
-    if (!stillCurrentAfterProxy) {
-        NSLog(@"[MultiplayerManager] [连接流程] SOCKS5 启动后检测到 currentRoom 已变更，立即停止代理并清理");
-        [[SOCKS5Proxy sharedProxy] stop];
-        unsetenv([kAMETHYSTSOCKS5ProxyEnvVar UTF8String]);
-        [[ZeroTierBridge sharedInstance] leaveNetwork:netID];
-        if (completion) {
-            completion(NO, [NSError errorWithDomain:kMultiplayerErrorDomain
-                                                code:MultiplayerErrorCodeRoomNotFound
-                                            userInfo:@{NSLocalizedDescriptionKey: @"连接已取消"}]);
-        }
-        return;
-    }
 
     NSLog(@"[MultiplayerManager] [连接流程] SOCKS5 代理已启动，监听 127.0.0.1:%u", actualPort);
 
-    // 步骤 6：设置环境变量 + 启动端口转发器
+    // 步骤 6：设置环境变量 + 启动端口转发器（仅房客模式）
     //
     // 端口转发器说明：
     //   SOCKS5 代理只对 java.net.Socket 有效（登录认证等），但 MC 的多人游戏连接
     //   使用 Netty 的 NioSocketChannel（基于 java.nio.channels.SocketChannel），
     //   不走 Java 的 SOCKS5 代理。因此需要额外启动一个本地端口转发器：
-    //     - 在 127.0.0.1:25565（或下一个可用端口）监听 TCP
-    //     - 通过 libzt socket 转发到房主的 ZeroTier IP:MC LAN 端口
-    //     - 房客在 MC 中输入 127.0.0.1:25565 即可连接
-    //
-    //   仅当房间有 hostIP 和 hostPort 时才启动（即房客连接到房主房间时）。
-    //   房主不需要端口转发器（房主自己开 LAN，其他玩家通过 ZeroTier 连过来）。
+    //     - 房客模式：在 127.0.0.1:25565（或下一个可用端口）监听 TCP，
+    //       通过 libzt socket 转发到房主的 ZeroTier IP:MC LAN 端口。
+    //       房客在 MC 中输入 127.0.0.1:25565 即可连接。
+    //     - 房主模式：不在此处启动，等待 UI 层调用
+    //       startHostPortForwarderWithListenPort:localHostPort: 启动房主模式
+    //       （ZeroTier 网络监听 25565 → 转发到本地 MC LAN 端口）。
     [self notifyConnectionProgress:@"步骤 6/6：正在设置代理和端口转发..."];
     NSString *proxyValue = [NSString stringWithFormat:@"127.0.0.1:%u", actualPort];
     setenv([kAMETHYSTSOCKS5ProxyEnvVar UTF8String], [proxyValue UTF8String], 1);
     NSLog(@"[MultiplayerManager] [连接流程] 已设置环境变量 %@=%@", kAMETHYSTSOCKS5ProxyEnvVar, proxyValue);
 
-    // 如果房间有房主 IP 和端口（房客模式），启动端口转发器
+    // 仅当房间有 hostIP 和 hostPort 时启动房客模式端口转发器
+    // 房主模式（hostIP 为空或为本机 IP）不启动，等待 UI 层调用房主模式 API
     NSString *hostIP = room.hostIP;
     NSString *hostPortStr = room.hostPort;
-    if (hostIP.length > 0 && hostPortStr.length > 0) {
+    BOOL isGuestMode = (hostIP.length > 0 &&
+                        hostPortStr.length > 0 &&
+                        ![hostIP isEqualToString:localIP]);  // 房客：hostIP 是房主 IP，不等于本机 IP
+    if (isGuestMode) {
         uint16_t hostPort = (uint16_t)[hostPortStr integerValue];
         if (hostPort > 0) {
-            NSLog(@"[MultiplayerManager] [连接流程] 启动端口转发器：127.0.0.1:%u → %@:%u",
+            NSLog(@"[MultiplayerManager] [连接流程] 房客模式：启动端口转发器 127.0.0.1:%u → %@:%u",
                   PortForwarderDefaultLocalPort, hostIP, hostPort);
 
-            NSError *forwardError = nil;
-            uint16_t forwardPort = [[PortForwarder sharedForwarder] startWithLocalPort:PortForwarderDefaultLocalPort
-                                                                            remoteHost:hostIP
-                                                                            remotePort:hostPort
-                                                                                 error:&forwardError];
-            if (forwardPort > 0) {
+            BOOL forwardStarted = [[PortForwarder sharedForwarder] startGuestModeWithLocalPort:PortForwarderDefaultLocalPort
+                                                                                         hostIP:hostIP
+                                                                                       hostPort:hostPort];
+            if (forwardStarted) {
+                uint16_t forwardPort = [[PortForwarder sharedForwarder] listeningPort];
                 NSLog(@"[MultiplayerManager] [连接流程] 端口转发器已启动：127.0.0.1:%u → %@:%u",
                       forwardPort, hostIP, hostPort);
 
@@ -1396,41 +1397,14 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
                 self.currentForwardingPort = forwardPort;
                 [_stateLock unlock];
             } else {
-                NSLog(@"[MultiplayerManager] [连接流程] 端口转发器启动失败：%@",
-                      forwardError.localizedDescription);
-                // 关键修复（P0-1）：房客场景下 PortForwarder 是必须的，失败应中断
-                // 房主场景下不需要端口转发（房主自己就是服务器），可以继续
-                if (hostIP.length > 0) {
-                    // 房客：端口转发失败，无法连接房主
-                    NSString *errorMsg = [NSString stringWithFormat:@"%@: %@",
-                                          NSLocalizedString(@"mp.connect.port_forward_failed", @"端口转发启动失败"),
-                                          forwardError.localizedDescription ?: @"未知错误"];
-                    NSError *pfError = [NSError errorWithDomain:kMultiplayerErrorDomain
-                                                           code:MultiplayerErrorCodePortForwarderStartFailed
-                                                       userInfo:@{NSLocalizedDescriptionKey: errorMsg}];
-                    // 清理已启动的资源
-                    [[SOCKS5Proxy sharedProxy] stop];
-                    unsetenv([kAMETHYSTSOCKS5ProxyEnvVar UTF8String]);
-                    [[ZeroTierBridge sharedInstance] leaveNetwork:netID];
-                    [_stateLock lock];
-                    self.currentSOCKS5Port = 0;
-                    self.currentRoom = nil;
-                    self.currentNetworkID = 0;
-                    [_stateLock unlock];
-                    if (completion) {
-                        completion(NO, pfError);
-                    }
-                    return;
-                } else {
-                    // 房主：端口转发不是必须的，继续
-                    NSLog(@"[MultiplayerManager] 房主模式，端口转发失败不影响联机");
-                }
+                NSLog(@"[MultiplayerManager] [连接流程] 端口转发器启动失败（不影响 SOCKS5 代理）");
+                // 端口转发器失败不中断整个连接流程（SOCKS5 代理仍然有效）
             }
         } else {
             NSLog(@"[MultiplayerManager] [连接流程] 房主端口无效：%@，跳过端口转发", hostPortStr);
         }
     } else {
-        NSLog(@"[MultiplayerManager] [连接流程] 房间无房主 IP/端口（可能是房主模式），跳过端口转发");
+        NSLog(@"[MultiplayerManager] [连接流程] 房主模式：跳过房客端口转发，等待 UI 调用 startHostPortForwarderWithListenPort:localHostPort:");
     }
 
     if (completion) {
@@ -1439,6 +1413,10 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
 }
 
 - (void)disconnectCurrentRoom {
+    // SubTask 4.2：设置取消标志，通知正在执行的 connectToRoomFlow 停止后续步骤
+    // 这与 M5 的"检查 currentRoom 是否变更"不同——本标志仅在显式断开时设置
+    self.connectionCancelled = YES;
+
     [_stateLock lock];
     MultiplayerRoom *room = self.currentRoom;
     NSString *networkId = room.networkId;
@@ -1457,9 +1435,9 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
         [[SOCKS5Proxy sharedProxy] stop];
     }
 
-    // 1.5 停止端口转发器（房客模式）
+    // 1.5 停止端口转发器（房主模式或房客模式）
     if ([[PortForwarder sharedForwarder] isRunning]) {
-        NSLog(@"[MultiplayerManager] 停止端口转发器");
+        NSLog(@"[MultiplayerManager] 停止端口转发器（mode=%ld）", (long)[[PortForwarder sharedForwarder] mode]);
         [[PortForwarder sharedForwarder] stop];
     }
 
@@ -1467,7 +1445,6 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     self.currentSOCKS5Port = 0;
     self.currentForwardingPort = 0;
     self.currentLocalIP = nil;
-    self.currentPeerConnectionMode = nil;
     [_stateLock unlock];
 
     // 2. 清除环境变量
@@ -1480,11 +1457,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     }
 
     // 4. 更新房间状态为已断开
-    // 关键修复（P1-2）：room.status 修改必须在 _stateLock 内，
-    // 避免与 connectToRoom 并发执行时状态被覆盖
-    [_stateLock lock];
     room.status = MultiplayerRoomStatusDisconnected;
-    [_stateLock unlock];
 
     @synchronized(self) {
         for (MultiplayerRoom *existing in self.internalRooms) {
@@ -1534,22 +1507,26 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     }
 }
 
-/// 关键修复（P0-1）：节点掉线恢复后数据平面（SOCKS5Proxy + PortForwarder）不重启的修复。
+/// 节点掉线恢复后数据平面（SOCKS5Proxy + PortForwarder）不重启的修复。
 ///
 /// 背景：zeroTierNodeOffline 会主动停止 SOCKS5/PortForwarder 以释放资源，
-/// 但当节点恢复上线（libzt 内部重连成功 → NODE_ONLINE → restoreJoinedNetworks → NETWORK_OK）
-/// 时，原实现只更新 currentLocalIP，不重启数据平面。导致：
+/// 但当节点恢复上线时，原实现只更新 currentLocalIP，不重启数据平面。导致：
 ///   - UI 仍显示"已连接"
 ///   - 但 Minecraft 流量无代理可用，连接立即断开
 ///   - 用户必须手动断开房间再重新连接
 ///
-/// 本方法在 zeroTierNetworkReady: 中被调用，仅当当前房间有 currentRoom 且代理未运行时重启。
+/// 本方法在 zeroTierNetworkReady: 和 applicationWillEnterForeground 中被调用，
+/// 仅当当前房间有 currentRoom 且代理未运行时重启。
 /// 首次连接时数据平面已由 connectToRoomFlow 启动，此方法不会重复启动（避免端口冲突）。
+///
+/// 房主模式的 PortForwarder 不在此处自动恢复（需要 MC LAN 端口，由 UI 层调用
+/// startHostPortForwarderWithListenPort:localHostPort: 重新启动）。
 - (void)ensureDataPlaneRunningForCurrentRoom {
     [_stateLock lock];
     MultiplayerRoom *room = self.currentRoom;
     NSString *hostIP = room.hostIP;
     NSString *hostPortStr = room.hostPort;
+    NSString *localIP = self.currentLocalIP;
     uint16_t savedSocksPort = _currentSOCKS5Port;
     uint16_t savedForwardPort = _currentForwardingPort;
     uint64_t currentNetID = _currentNetworkID;
@@ -1560,19 +1537,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
         return;
     }
 
-    // 关键修复（多房客优化）：房主不需要重启 SOCKS5 代理和环境变量
-    // 房主自己就是 MC 服务器，不需要通过代理连接。
-    // 只有房客（hostIP 非空且不等于本机 IP）才需要数据平面恢复。
-    NSString *currentLocalIPNow = self.currentLocalIP;
-    BOOL isHostRoleForRecovery = (hostIP.length == 0) ||
-        (currentLocalIPNow.length > 0 && [hostIP isEqualToString:currentLocalIPNow]);
-
-    if (isHostRoleForRecovery) {
-        NSLog(@"[MultiplayerManager] [数据平面恢复] 房主模式，跳过 SOCKS5 代理和端口转发器重启");
-        return;
-    }
-
-    // SOCKS5 代理重启（仅房客需要，在未运行时）
+    // SOCKS5 代理重启（仅在未运行时）
     if (![[SOCKS5Proxy sharedProxy] isRunning] || savedSocksPort == 0) {
         NSLog(@"[MultiplayerManager] [数据平面恢复] 重启 SOCKS5 代理（房间：%@）", room.name);
         NSError *proxyError = nil;
@@ -1592,28 +1557,31 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
         }
     }
 
-    // PortForwarder 重启（仅在未运行且为房客模式时）
-    // 房主模式不需要端口转发（房主自己开 LAN，其他玩家通过 ZeroTier 连过来）
-    if (hostIP.length > 0 && hostPortStr.length > 0 &&
+    // PortForwarder 房客模式重启（仅在未运行且为房客模式时）
+    // 房客模式判断：hostIP 不为空、hostPort 有效、hostIP 不等于本机 IP
+    // 房主模式的 PortForwarder 不自动恢复（需要 MC LAN 端口，由 UI 层重新启动）
+    BOOL isGuestMode = (hostIP.length > 0 &&
+                        hostPortStr.length > 0 &&
+                        localIP.length > 0 &&
+                        ![hostIP isEqualToString:localIP]);
+    if (isGuestMode &&
         (![[PortForwarder sharedForwarder] isRunning] || savedForwardPort == 0)) {
         uint16_t hostPort = (uint16_t)[hostPortStr integerValue];
         if (hostPort > 0) {
-            NSLog(@"[MultiplayerManager] [数据平面恢复] 重启端口转发器：127.0.0.1:%u → %@:%u",
+            NSLog(@"[MultiplayerManager] [数据平面恢复] 重启端口转发器（房客模式）：127.0.0.1:%u → %@:%u",
                   PortForwarderDefaultLocalPort, hostIP, hostPort);
-            NSError *forwardError = nil;
-            uint16_t forwardPort = [[PortForwarder sharedForwarder] startWithLocalPort:PortForwarderDefaultLocalPort
-                                                                            remoteHost:hostIP
-                                                                            remotePort:hostPort
-                                                                                 error:&forwardError];
-            if (forwardPort > 0) {
+            BOOL forwardStarted = [[PortForwarder sharedForwarder] startGuestModeWithLocalPort:PortForwarderDefaultLocalPort
+                                                                                         hostIP:hostIP
+                                                                                       hostPort:hostPort];
+            if (forwardStarted) {
+                uint16_t forwardPort = [[PortForwarder sharedForwarder] listeningPort];
                 [_stateLock lock];
                 self.currentForwardingPort = forwardPort;
                 [_stateLock unlock];
                 NSLog(@"[MultiplayerManager] [数据平面恢复] 端口转发器已重启：127.0.0.1:%u → %@:%u",
                       forwardPort, hostIP, hostPort);
             } else {
-                NSLog(@"[MultiplayerManager] [数据平面恢复] 端口转发器重启失败：%@",
-                      forwardError.localizedDescription ?: @"未知错误");
+                NSLog(@"[MultiplayerManager] [数据平面恢复] 端口转发器重启失败");
             }
         }
     }
@@ -1634,14 +1602,9 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
         [[SOCKS5Proxy sharedProxy] stop];
     }
 
-    // 关键修复（P0-3）：节点离线时清除环境变量，防止新启动的 MC 走死代理
-    unsetenv([kAMETHYSTSOCKS5ProxyEnvVar UTF8String]);
-    NSLog(@"[MultiplayerManager] 节点离线，已清除 AMETHYST_SOCKS5_PROXY 环境变量");
-
     [_stateLock lock];
     self.currentSOCKS5Port = 0;
     self.currentForwardingPort = 0;
-    self.currentPeerConnectionMode = nil;
     [_stateLock unlock];
 
     if ([self.delegate respondsToSelector:@selector(multiplayerNodeOffline)]) {
@@ -1651,28 +1614,26 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     }
 }
 
-// 关键修复（P1-3）：实现 ZeroTierBridgeDelegate 的 zeroTierNodeFatalError 回调
-// 之前协议定义了该方法但 MultiplayerManager 未实现，节点发生致命错误（如身份冲突）
-// 时 UI 无法感知，会一直显示"连接中"。
-- (void)zeroTierNodeFatalError {
-    NSLog(@"[MultiplayerManager] ZeroTier 节点致命错误");
+- (void)zeroTierNodeDown {
+    NSLog(@"[MultiplayerManager] ZeroTier 节点已关闭（zts_node_stop 完成）");
 
     [_stateLock lock];
-    MultiplayerRoom *room = self.currentRoom;
+    self.currentSOCKS5Port = 0;
+    self.currentForwardingPort = 0;
+    self.currentLocalIP = nil;
+    _nodeStarted = NO;
     [_stateLock unlock];
 
-    if (room && [self.delegate respondsToSelector:@selector(multiplayerRoom:didFailWithError:)]) {
-        NSError *error = [NSError errorWithDomain:kMultiplayerErrorDomain
-                                              code:MultiplayerErrorCodeNodeStartFailed
-                                          userInfo:@{NSLocalizedDescriptionKey: @"ZeroTier 节点发生致命错误，请重启联机核心"}];
-        dispatch_async(dispatch_get_main_queue(), ^{
-            // 再次校验 currentRoom 未变更，避免通知过时的房间状态
-            MultiplayerRoom *currentNow = self.currentRoom;
-            if (currentNow && [currentNow.roomId isEqualToString:room.roomId]) {
-                [self.delegate multiplayerRoom:room didFailWithError:error];
-            }
-        });
+    // 节点已关闭，停止数据平面
+    if ([[PortForwarder sharedForwarder] isRunning]) {
+        NSLog(@"[MultiplayerManager] 节点已关闭，停止端口转发器");
+        [[PortForwarder sharedForwarder] stop];
     }
+    if ([[SOCKS5Proxy sharedProxy] isRunning]) {
+        NSLog(@"[MultiplayerManager] 节点已关闭，停止 SOCKS5 代理");
+        [[SOCKS5Proxy sharedProxy] stop];
+    }
+    unsetenv([kAMETHYSTSOCKS5ProxyEnvVar UTF8String]);
 }
 
 - (void)zeroTierNetworkReady:(uint64_t)networkID
@@ -1771,114 +1732,68 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     }
 }
 
-- (void)zeroTierNetworkJoinFailed:(uint64_t)networkID
-                            error:(NSString *)errorDescription {
-    NSLog(@"[MultiplayerManager] ZeroTier 网络加入失败：networkID=%llu error=%@", networkID, errorDescription);
+/// 通用网络失败处理：将网络失败事件转换为 delegate 通知
+///
+/// @param networkID 失败的网络 ID
+/// @param errorDescription 失败的本地化描述
+- (void)handleNetworkFailure:(uint64_t)networkID
+              errorDescription:(NSString *)errorDescription {
+    NSLog(@"[MultiplayerManager] ZeroTier 网络失败：networkID=%llu desc=%@", networkID, errorDescription);
 
     [_stateLock lock];
     MultiplayerRoom *room = (_currentNetworkID == networkID) ? self.currentRoom : nil;
     [_stateLock unlock];
 
-    if (room) {
-        room.status = MultiplayerRoomStatusError;
-        [self updateRoom:room];
-
-        if ([self.delegate respondsToSelector:@selector(multiplayerRoom:didFailWithError:)]) {
-            // 明确识别 ZeroTier 客户端版本过旧错误，附带清晰描述
-            NSString *finalDescription = errorDescription;
-            if ([errorDescription containsString:@"版本过旧"]) {
-                finalDescription = @"ZeroTier 版本过旧，无法加入网络。请更新 zt.framework 后重试。";
-                NSLog(@"[MultiplayerManager] 检测到 CLIENT_TOO_OLD 错误，已转换为明确提示");
-            }
-            NSError *error = [NSError errorWithDomain:kMultiplayerErrorDomain
-                                                  code:MultiplayerErrorCodeJoinNetworkFailed
-                                              userInfo:@{NSLocalizedDescriptionKey: finalDescription}];
-            // 关键修复（H6）：与 zeroTierNetworkReady 同样的修复——
-            // dispatch_async 到主线程期间，用户可能切换了房间，需要再次校验
-            // currentRoom 仍是同一个 room，避免向 delegate 通知过时的房间状态。
-            dispatch_async(dispatch_get_main_queue(), ^{
-                MultiplayerRoom *currentNow = self.currentRoom;
-                if (currentNow && [currentNow.roomId isEqualToString:room.roomId]) {
-                    [self.delegate multiplayerRoom:room didFailWithError:error];
-                } else {
-                    NSLog(@"[MultiplayerManager] 网络加入失败回调到达主线程时当前房间已变更，跳过通知（roomId=%@）",
-                          room.roomId);
-                }
-            });
-        }
+    if (!room) {
+        return;
     }
+
+    room.status = MultiplayerRoomStatusError;
+    [self updateRoom:room];
+
+    if (![self.delegate respondsToSelector:@selector(multiplayerRoom:didFailWithError:)]) {
+        return;
+    }
+
+    NSError *error = [NSError errorWithDomain:kMultiplayerErrorDomain
+                                          code:MultiplayerErrorCodeJoinNetworkFailed
+                                      userInfo:@{NSLocalizedDescriptionKey: errorDescription}];
+
+    // dispatch_async 到主线程期间，用户可能切换了房间，需要再次校验
+    // currentRoom 仍是同一个 room，避免向 delegate 通知过时的房间状态。
+    dispatch_async(dispatch_get_main_queue(), ^{
+        MultiplayerRoom *currentNow = self.currentRoom;
+        if (currentNow && [currentNow.roomId isEqualToString:room.roomId]) {
+            [self.delegate multiplayerRoom:room didFailWithError:error];
+        } else {
+            NSLog(@"[MultiplayerManager] 网络失败回调到达主线程时当前房间已变更，跳过通知（roomId=%@）",
+                  room.roomId);
+        }
+    });
 }
 
-- (void)zeroTierPeerConnectionModeChanged:(ZeroTierPeerConnectionMode)mode
-                                forPeer:(uint64_t)peerID {
-    NSString *description = [self descriptionForPeerConnectionMode:mode];
-    NSLog(@"[MultiplayerManager] 对端节点连接模式变化：peerID=%016llx mode=%@", peerID, description);
-
-    [_stateLock lock];
-    self.currentPeerConnectionMode = description;
-    [_stateLock unlock];
-
-    if ([self.delegate respondsToSelector:@selector(multiplayerPeerConnectionModeChanged:)]) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [self.delegate multiplayerPeerConnectionModeChanged:description];
-        });
-    }
+- (void)zeroTierNetworkNotFound:(uint64_t)networkID {
+    NSLog(@"[MultiplayerManager] ZeroTier 网络不存在：networkID=%llu", networkID);
+    [self handleNetworkFailure:networkID
+              errorDescription:@"网络不存在，请检查 Network ID 是否正确。"];
 }
 
-/// 将 ZeroTierPeerConnectionMode 转换为人类可读的描述
-/// @param mode 连接模式枚举值
-/// @return 本地化描述字符串
-- (NSString *)descriptionForPeerConnectionMode:(ZeroTierPeerConnectionMode)mode {
-    switch (mode) {
-        case ZeroTierPeerConnectionModeDirect:
-            return @"直连";
-        case ZeroTierPeerConnectionModeRelay:
-            return @"中继";
-        case ZeroTierPeerConnectionModeUnreachable:
-            return @"不可达";
-        case ZeroTierPeerConnectionModeUnknown:
-        default:
-            return @"未知";
-    }
+- (void)zeroTierNetworkAccessDenied:(uint64_t)networkID {
+    NSLog(@"[MultiplayerManager] ZeroTier 网络访问被拒绝：networkID=%llu", networkID);
+    [self handleNetworkFailure:networkID
+              errorDescription:@"网络访问被拒绝。请联系房主在 central.zerotier.com 后台授权你的设备。"];
 }
 
-- (void)zeroTierAddressAssigned:(uint64_t)networkID
-                         family:(int)family
-                        address:(NSString *)address {
-    NSLog(@"[MultiplayerManager] ZeroTier 地址分配：networkID=%llu family=%d address=%@",
-          networkID, family, address);
+- (void)zeroTierNetworkClientTooOld:(uint64_t)networkID {
+    NSLog(@"[MultiplayerManager] ZeroTier 客户端版本过旧：networkID=%llu", networkID);
+    [self handleNetworkFailure:networkID
+              errorDescription:@"ZeroTier 客户端版本过旧，无法加入网络。请更新 zt.framework 后重试。"];
+}
 
-    // 关键修复（M14）：处理 IPv6 地址分配事件。
-    // 之前仅处理 IPv4（AF_INET == 2），完全忽略 IPv6（AF_INET6 == 10）。
-    // Ad-hoc 网络只有 IPv6 地址，若 IPv6 地址后续发生变化（重新分配），
-    // ADDR_ADDED_IP6 事件触发的 zeroTierAddressAssigned: 不会更新 currentLocalIP，
-    // 导致显示的本地 IP 过时。
-    //
-    // 修复方案：
-    //   - IPv4 地址：始终更新 currentLocalIP（标准模式）
-    //   - IPv6 地址：仅当当前网络为 Ad-hoc 网络时更新（Ad-hoc 模式）
-    //     标准网络的 IPv6 地址不更新 currentLocalIP，避免覆盖 IPv4 地址
-    BOOL shouldUpdate = NO;
-    if (family == 2 /* AF_INET */) {
-        shouldUpdate = YES;
-    } else if (family == 10 /* AF_INET6 */) {
-        // IPv6 地址：仅当当前网络为 Ad-hoc 网络时更新
-        [_stateLock lock];
-        MultiplayerRoom *room = (_currentNetworkID == networkID) ? self.currentRoom : nil;
-        [_stateLock unlock];
-        if (room && [self isAdhocNetworkId:room.networkId]) {
-            shouldUpdate = YES;
-        }
-    }
-
-    if (shouldUpdate) {
-        [_stateLock lock];
-        if (_currentNetworkID == networkID) {
-            self.currentLocalIP = address;
-            NSLog(@"[MultiplayerManager] 已更新 currentLocalIP = %@（family=%d）", address, family);
-        }
-        [_stateLock unlock];
-    }
+- (void)zeroTierNetworkDown:(uint64_t)networkID {
+    NSLog(@"[MultiplayerManager] ZeroTier 网络控制器不可达：networkID=%llu", networkID);
+    [self handleNetworkFailure:networkID
+              errorDescription:@"网络控制器不可达，请稍后重试或联系房主检查网络状态。"];
 }
 
 #pragma mark - 分享功能
@@ -2166,16 +2081,13 @@ static NSString * const kShareCodeKeyRoomName = @"r";
 static NSString * const kPresetNetworkIdPrefKey = @"multiplayer.preset_network_id";
 
 - (NSString *)generateShareCodeForRoom:(MultiplayerRoom *)room {
-    // 关键修复（P0-4）：使用 length 校验避免空字符串被写入 JSON
-    if (!room || !room.networkId.length) {
+    if (!room || !room.networkId) {
         return @"";
     }
 
     // 构建 JSON 字典
     NSMutableDictionary *jsonDict = [NSMutableDictionary dictionary];
-    // 关键修复（P2-1）：networkId 写入前规范化为小写，避免房主手动输入大写 ID
-    // 导致分享码与 ZeroTier 网络 ID（规范为小写十六进制）不匹配
-    jsonDict[kShareCodeKeyNetworkId] = [room.networkId lowercaseString];
+    jsonDict[kShareCodeKeyNetworkId] = room.networkId;
     if (room.hostIP && room.hostIP.length > 0) {
         jsonDict[kShareCodeKeyHostIP] = room.hostIP;
     }
@@ -2242,23 +2154,10 @@ static NSString * const kPresetNetworkIdPrefKey = @"multiplayer.preset_network_i
     }
 
     // 提取字段
-    // 关键修复（P0-2）：JSON 值可能是 NSNumber（如手动构造的恶意/异常分享码），
-    // 直接赋给 NSString* 会在后续调用字符串方法时崩溃。每个字段都做类型校验。
-    id rawNetworkId = jsonDict[kShareCodeKeyNetworkId];
-    if (![rawNetworkId isKindOfClass:[NSString class]]) {
-        NSLog(@"[MultiplayerManager] 解析分享代码失败：networkId 类型错误");
-        return nil;
-    }
-    NSString *networkId = rawNetworkId;
-
-    id rawHostIP = jsonDict[kShareCodeKeyHostIP];
-    NSString *hostIP = [rawHostIP isKindOfClass:[NSString class]] ? rawHostIP : @"";
-
-    id rawHostPort = jsonDict[kShareCodeKeyHostPort];
-    NSString *hostPort = [rawHostPort isKindOfClass:[NSString class]] ? rawHostPort : kDefaultMCPort;
-
-    id rawRoomName = jsonDict[kShareCodeKeyRoomName];
-    NSString *roomName = [rawRoomName isKindOfClass:[NSString class]] ? rawRoomName : nil;
+    NSString *networkId = jsonDict[kShareCodeKeyNetworkId];
+    NSString *hostIP = jsonDict[kShareCodeKeyHostIP];
+    NSString *hostPort = jsonDict[kShareCodeKeyHostPort];
+    NSString *roomName = jsonDict[kShareCodeKeyRoomName];
 
     // 校验 Network ID
     if (!networkId || ![self isValidNetworkId:networkId]) {
@@ -2418,15 +2317,6 @@ static NSString * const kPresetNetworkIdPrefKey = @"multiplayer.preset_network_i
     NSLog(@"[MultiplayerManager] 停止 ZeroTier 节点");
     [[ZeroTierBridge sharedInstance] stopNode];
 
-    // 关键修复（P1-1）：更新所有房间的状态为 Disconnected
-    // 之前不更新 internalRooms 中 room 的状态，房间列表会显示僵尸状态（如仍显示"连接中"）
-    // 使用 @synchronized(self) 与 internalRooms 的其他读写保持一致（参见 P1-6 修复）
-    @synchronized(self) {
-        for (MultiplayerRoom *room in self.internalRooms) {
-            room.status = MultiplayerRoomStatusDisconnected;
-        }
-    }
-
     // 6. 重置所有状态（确保下次开房生成新联机码）
     [_stateLock lock];
     self.currentRoom = nil;
@@ -2434,7 +2324,6 @@ static NSString * const kPresetNetworkIdPrefKey = @"multiplayer.preset_network_i
     self.currentLocalIP = nil;
     self.currentSOCKS5Port = 0;
     self.currentForwardingPort = 0;
-    self.currentPeerConnectionMode = nil;
     _nodeStarted = NO;
     [_stateLock unlock];
 
@@ -2453,6 +2342,65 @@ static NSString * const kPresetNetworkIdPrefKey = @"multiplayer.preset_network_i
     }
 
     NSLog(@"[MultiplayerManager] 所有联机服务已停止，状态已重置");
+}
+
+#pragma mark - 房主模式 PortForwarder 启动
+
+/// 启动 PortForwarder 房主模式（反向转发）
+///
+/// 房主在 MC 中"对局域网开放"并手动输入 MC LAN 端口后调用本方法。
+/// PortForwarder 会在 ZeroTier 网络中监听 listenPort，并将连接转发到
+/// 本地 127.0.0.1:localHostPort（MC LAN 端口），使 PC/Mac/Android/iOS
+/// 房客能通过房主的 ZeroTier IP:listenPort 直接连接进入游戏。
+///
+/// 调用前提：当前房间已连接成功（self.currentRoom 非 nil 且 status == Connected）。
+///
+/// @param listenPort 在 ZeroTier 网络中监听的端口（通常为 25565）
+/// @param localHostPort 本地 MC LAN 端口（MC 中"对局域网开放"后聊天框显示的端口号）
+/// @return YES 表示启动成功，NO 表示失败（如未连接房间或 PortForwarder 启动失败）
+- (BOOL)startHostPortForwarderWithListenPort:(uint16_t)listenPort
+                               localHostPort:(uint16_t)localHostPort {
+    // 校验当前已连接房间
+    [_stateLock lock];
+    MultiplayerRoom *room = self.currentRoom;
+    MultiplayerRoomStatus status = room.status;
+    [_stateLock unlock];
+
+    if (!room || status != MultiplayerRoomStatusConnected) {
+        NSLog(@"[MultiplayerManager] startHostPortForwarder 失败：当前未连接房间（room=%@ status=%ld）",
+              room ? room.name : @"nil", (long)status);
+        return NO;
+    }
+
+    // 若 PortForwarder 已在运行，先停止旧模式
+    if ([[PortForwarder sharedForwarder] isRunning]) {
+        NSLog(@"[MultiplayerManager] startHostPortForwarder：PortForwarder 已运行（mode=%ld），先停止",
+              (long)[[PortForwarder sharedForwarder] mode]);
+        [[PortForwarder sharedForwarder] stop];
+
+        [_stateLock lock];
+        self.currentForwardingPort = 0;
+        [_stateLock unlock];
+    }
+
+    NSLog(@"[MultiplayerManager] 启动 PortForwarder 房主模式：ZeroTier 监听 %u → 本地 127.0.0.1:%u",
+          listenPort, localHostPort);
+
+    BOOL started = [[PortForwarder sharedForwarder] startHostModeWithListenPort:listenPort
+                                                                  localHostPort:localHostPort];
+    if (!started) {
+        NSLog(@"[MultiplayerManager] PortForwarder 房主模式启动失败");
+        return NO;
+    }
+
+    uint16_t actualPort = [[PortForwarder sharedForwarder] listeningPort];
+    [_stateLock lock];
+    self.currentForwardingPort = actualPort;
+    [_stateLock unlock];
+
+    NSLog(@"[MultiplayerManager] PortForwarder 房主模式已启动：ZeroTier 监听 %u → 本地 127.0.0.1:%u",
+          actualPort, localHostPort);
+    return YES;
 }
 
 @end

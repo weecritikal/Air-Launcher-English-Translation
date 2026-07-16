@@ -47,6 +47,7 @@
 #import "PLProfiles.h"
 #import "LanPortDetector.h"
 #import "ZeroTierBridge.h"
+#import "PortForwarder.h"
 #import "utils.h"
 
 /// 本地化辅助函数
@@ -161,13 +162,10 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
                                                  name:@"BackgroundUIEffectChanged"
                                                object:nil];
 
-    // 游戏内模式：监听 LAN 端口检测通知（房主流程依赖）
-    if (self.mode == MultiplayerVCModeInGame) {
-        [[NSNotificationCenter defaultCenter] addObserver:self
-                                                 selector:@selector(lanPortDidDetect:)
-                                                     name:LanPortDetectorDidDetectPortNotification
-                                                   object:nil];
-    }
+    // 关键变更（SubTask 5.8）：移除对 LanPortDetector 自动检测通知的监听。
+    // 自动检测已禁用（LanPortDetector 仅保留 setManualPort: 手动输入），
+    // 房主流程改为 showManualPortInputAlert 直接调用 generateShareCodeWithPort:，
+    // 不再依赖通知回调，避免重复触发分享代码生成。
 }
 
 - (void)viewWillAppear:(BOOL)animated {
@@ -880,10 +878,20 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     NSString *presetNetId = [[MultiplayerManager sharedManager] presetNetworkId];
     if (!presetNetId.length) {
         // 未设置：提示用户去启动器设置
+        // SubTask 5.1：弹出引导提示（指向 central.zerotier.com），并提供"前往 ZeroTier 官网"按钮
         UIAlertController *alert = [UIAlertController alertControllerWithTitle:MPLocalized(@"mp.host.no_network_id_title", @"未设置 Network ID")
-                                                                       message:MPLocalized(@"mp.host.no_network_id_msg", @"房主需要先设置预设 ZeroTier Network ID。请在启动器联机界面中设置后再来。")
-                                                                preferredStyle:UIAlertControllerStyleAlert];
-        [alert addAction:[UIAlertAction actionWithTitle:MPLocalized(@"common.ok", @"好") style:UIAlertActionStyleDefault handler:nil]];
+                                                                       message:MPLocalized(@"mp.host.no_network_id_msg", @"房主需要先设置预设 ZeroTier Network ID。\n\n如果你还没有 Network ID：\n1. 访问 central.zerotier.com 注册账号并创建网络\n2. 复制 16 位 Network ID\n3. 在启动器联机界面点击「预设 Network ID」行填入\n\n完成后重新进入游戏点击「当房主」即可。")
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+        // "前往 ZeroTier 官网"按钮：打开 central.zerotier.com（spec 中的"指向 my.zerotier.com"）
+        [alert addAction:[UIAlertAction actionWithTitle:MPLocalized(@"mp.host.open_zerotier_website", @"前往 ZeroTier 官网")
+                                                  style:UIAlertActionStyleDefault
+                                                handler:^(UIAlertAction *action) {
+            NSURL *url = [NSURL URLWithString:@"https://central.zerotier.com/"];
+            if (url && [[UIApplication sharedApplication] canOpenURL:url]) {
+                [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:nil];
+            }
+        }]];
+        [alert addAction:[UIAlertAction actionWithTitle:MPLocalized(@"common.ok", @"好") style:UIAlertActionStyleCancel handler:nil]];
         [self presentViewController:alert animated:YES completion:nil];
         return;
     }
@@ -914,24 +922,9 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         if (currentRoom && [currentRoom.networkId isEqualToString:presetNetId]) {
             // 房间已连接
             if (self.lastShareCode.length) {
-                // 分享代码已存在
-                //
-                // 关键修复（多房客优化）：房主 IP 变化检测
-                // 如果 ZeroTier 重连后房主 IP 已变化，旧分享代码中的 hostIP 已失效，
-                // 房客用旧代码无法加入房间。需要使用当前 IP 重新生成分享代码。
-                // LAN 端口本身不受 ZeroTier IP 变化影响（它绑定在 MC Netty 上），可复用。
-                NSString *currentLocalIP = [[MultiplayerManager sharedManager] currentLocalIP];
-                if (currentLocalIP.length > 0 &&
-                    currentRoom.hostIP.length > 0 &&
-                    ![currentRoom.hostIP isEqualToString:currentLocalIP]) {
-                    NSLog(@"[MultiplayerVC] 房主流程已激活，但检测到 IP 变化：%@ → %@，使用现有端口重新生成分享代码",
-                          currentRoom.hostIP, currentLocalIP);
-                    [self generateShareCodeWithPort:currentRoom.hostPort];
-                } else {
-                    // IP 未变化：直接显示分享代码
-                    NSLog(@"[MultiplayerVC] 房主流程已激活且分享代码已存在，直接显示分享代码");
-                    [self showHostShareCodeAlert];
-                }
+                // 分享代码已存在：直接显示分享代码
+                NSLog(@"[MultiplayerVC] 房主流程已激活且分享代码已存在，直接显示分享代码");
+                [self showHostShareCodeAlert];
             } else {
                 // 分享代码不存在：弹出手动输入端口对话框
                 // 关键修复（端口检测改为手动输入）：不再自动检测端口，改为用户手动输入
@@ -1041,12 +1034,22 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 /// 开放局域网时生成错误代码的问题。
 - (void)showManualPortInputAlert {
     NSString *localIP = [[MultiplayerManager sharedManager] currentLocalIP] ?: @"-";
-    NSString *message = [NSString stringWithFormat:@"%@\n\n%@\n%@\n\n%@: %@",
+
+    // SubTask 5.5：显示房主的 ZeroTier 节点 ID（16 位十六进制）
+    // 房主需要将自己的节点 ID 提供给房客，房客在 central.zerotier.com 后台
+    // 查找此节点 ID 并授权。同时提示房主：如果房客连接失败，需要授权房客设备。
+    uint64_t hostNodeID = [[ZeroTierBridge sharedInstance] nodeID];
+    NSString *hostNodeIDStr = (hostNodeID != 0) ? [ZeroTierBridge formatNetworkID:hostNodeID] : @"（节点尚未上线）";
+
+    NSString *message = [NSString stringWithFormat:@"%@\n\n%@\n%@\n\n%@: %@\n%@: %@\n\n%@",
                          MPLocalized(@"mp.host.connected_msg", @"已连接到联机网络，请在 MC 中开放局域网后输入端口号"),
                          MPLocalized(@"mp.host.tip.create_world", @"请在 MC 中创建世界并点击「对局域网开放」"),
                          MPLocalized(@"mp.host.tip.manual_port", @"开放局域网后，MC 会在聊天框显示端口号，请将其输入下方"),
                          MPLocalized(@"mp.host.local_ip", @"本机 IP"),
-                         localIP];
+                         localIP,
+                         MPLocalized(@"mp.host.node_id", @"你的节点 ID"),
+                         hostNodeIDStr,
+                         MPLocalized(@"mp.host.tip.authorize_guest", @"如果房客连接失败，请在 central.zerotier.com 后台的 Member Devices 中勾选房客设备的 Auth 复选框")];
 
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:MPLocalized(@"mp.host.connected_title", @"联机已开启")
                                                                    message:message
@@ -1092,7 +1095,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         NSLog(@"[MultiplayerVC] 用户手动输入 LAN 端口：%@", port);
         // 将端口设置到 LanPortDetector（source=Manual），方便其他模块读取
         [[LanPortDetector sharedDetector] setManualPort:port];
-        // 生成分享代码
+        // 生成分享代码（内部会启动 PortForwarder 房主模式）
         [strongSelf generateShareCodeWithPort:port];
     }]];
 
@@ -1136,58 +1139,62 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 /// 关键变更（端口检测改为手动输入）：
 /// 之前此方法在 hostButtonTapped 连接成功后由自动检测端口触发，
 /// 现在改为由用户手动输入端口后触发，确保端口来自当前会话的真实 LAN 端口。
+/// 根据用户输入的 LAN 端口生成分享代码并显示
+///
+/// 此方法供以下场景复用：
+///   1. showManualPortInputAlert 中用户手动输入端口后调用（主要场景）
+///   2. hostButtonTapped 幂等检查中复用（通过 showManualPortInputAlert 间接调用）
+///
+/// 关键变更（SubTask 5.3 + 5.4）：
+///   - 调用 MultiplayerManager 的 startHostPortForwarderWithListenPort:localHostPort:
+///     启动 PortForwarder 房主模式（ZeroTier 网络监听 25565 → 本地 MC LAN 端口）
+///   - 分享代码中的端口使用 25565（ZeroTier 网络监听端口），而不是 MC LAN 端口，
+///     支持 PC/Mac/Android/iOS 房客直接连接房主的 ZeroTier IP:25565
 - (void)generateShareCodeWithPort:(NSString *)port {
     MultiplayerRoom *room = self.hostRoom;
     if (!room) {
         return;
     }
 
-    // 更新房间的端口和本机 IP
-    room.hostPort = port;
-    NSString *localIP = [[MultiplayerManager sharedManager] currentLocalIP];
-
-    // 关键修复（多房客优化）：hostIP 非空保护
-    // 如果 currentLocalIP 为空（异常情况），不生成无效分享代码
-    if (!localIP.length) {
-        NSLog(@"[MultiplayerVC] 警告：currentLocalIP 为空，无法生成有效的分享代码");
-        [self showSimpleAlertWithTitle:MPLocalized(@"mp.host.share_code_failed", @"生成分享代码失败")
-                                  message:MPLocalized(@"mp.host.no_local_ip", @"无法获取本机 ZeroTier IP，请检查网络连接后重试")];
+    // 校验端口
+    uint16_t lanPort = (uint16_t)[port integerValue];
+    if (lanPort == 0) {
+        [self showSimpleAlertWithTitle:MPLocalized(@"mp.host.port_invalid_title", @"端口无效")
+                                      message:MPLocalized(@"mp.host.port_invalid_msg", @"端口号必须在 1-65535 之间")];
         return;
     }
 
-    // 关键修复（多房客优化）：房主 IP 变化检测
-    // 如果 room.hostIP 已存在且与当前 localIP 不同，说明房主 ZeroTier IP 已变化
-    // 旧分享代码已失效，需要提示房主重新分享
-    BOOL ipChanged = (room.hostIP.length > 0 && ![room.hostIP isEqualToString:localIP]);
-    if (ipChanged) {
-        NSLog(@"[MultiplayerVC] 检测到房主 IP 变化：%@ → %@，旧分享代码已失效", room.hostIP, localIP);
+    // SubTask 5.3：启动 PortForwarder 房主模式
+    // 在 ZeroTier 网络中监听 25565 端口，转发到本地 MC LAN 端口
+    NSLog(@"[MultiplayerVC] 启动 PortForwarder 房主模式：ZeroTier 监听 25565 → 本地 127.0.0.1:%u", lanPort);
+    BOOL hostStarted = [[MultiplayerManager sharedManager] startHostPortForwarderWithListenPort:PortForwarderDefaultLocalPort
+                                                                                   localHostPort:lanPort];
+    if (!hostStarted) {
+        NSLog(@"[MultiplayerVC] PortForwarder 房主模式启动失败");
+        [self showSimpleAlertWithTitle:MPLocalized(@"mp.host.forward_failed_title", @"端口转发启动失败")
+                                      message:MPLocalized(@"mp.host.forward_failed_msg", @"无法在 ZeroTier 网络中监听端口，请检查网络连接或重启联机功能")];
+        return;
     }
 
-    room.hostIP = localIP;
+    // 更新房间的端口和本机 IP
+    // SubTask 5.4：分享代码中的端口使用 25565（ZeroTier 网络监听端口），
+    // 而不是 MC LAN 端口，支持 PC/Mac/Android/iOS 房客直接连接
+    room.hostPort = [NSString stringWithFormat:@"%u", PortForwarderDefaultLocalPort];
+    NSString *localIP = [[MultiplayerManager sharedManager] currentLocalIP];
+    if (localIP.length) {
+        room.hostIP = localIP;
+    }
     [[MultiplayerManager sharedManager] updateRoom:room];
 
     // 生成分享代码
     self.lastShareCode = [[MultiplayerManager sharedManager] generateShareCodeForRoom:room];
-    // 关键修复（P1-4）：IPv6 地址需要用方括号包裹，否则冒号会与端口分隔符混淆
-    if ([room.hostIP containsString:@":"]) {
-        self.lastServerAddress = [NSString stringWithFormat:@"[%@]:%@", room.hostIP, room.hostPort];
-    } else {
-        self.lastServerAddress = [NSString stringWithFormat:@"%@:%@", room.hostIP, room.hostPort];
-    }
+    self.lastServerAddress = [NSString stringWithFormat:@"%@:%@", room.hostIP, room.hostPort];
 
     // 刷新表格，让 Section 1 显示最新的分享代码
     [self.tableView reloadData];
 
     // 弹出提示告知用户分享代码已生成
     [self showHostShareCodeAlert];
-
-    // 如果 IP 变化，额外提示房主旧代码已失效
-    if (ipChanged) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [self showSimpleAlertWithTitle:MPLocalized(@"mp.host.ip_changed_title", @"房主 IP 已变化")
-                                      message:MPLocalized(@"mp.host.ip_changed_msg", @"你的 ZeroTier IP 已变化，之前分享的旧代码已失效。请将新的分享代码重新发给房客。")];
-        });
-    }
 }
 
 /// 显示房主分享代码 Alert
@@ -1312,14 +1319,6 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
             return;
         }
 
-        // 关键修复（P0-6）：校验分享码中的 hostIP 非空
-        // 房客必须有房主 IP 才能进行端口转发，空 hostIP 的分享码无法使用
-        if (!parsedRoom.hostIP.length) {
-            [strongSelf showSimpleAlertWithTitle:MPLocalized(@"mp.sharecode.invalid", @"分享代码无效")
-                                          message:MPLocalized(@"mp.sharecode.missing_host", @"分享代码缺少房主 IP，请确认代码完整无误")];
-            return;
-        }
-
         [strongSelf performGuestJoinWithRoom:parsedRoom shareCode:code];
     }]];
 
@@ -1392,8 +1391,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 ///   3. 显示清晰的操作引导
 - (void)showGuestConnectedAlert {
     MultiplayerRoom *room = self.guestRoom;
-    // 关键修复（P1-5）：hostIP 为空时显示"未知"，而非用 currentLocalIP 误导用户
-    NSString *hostIP = room.hostIP.length ? room.hostIP : MPLocalized(@"mp.unknown", @"未知");
+    NSString *hostIP = room.hostIP.length ? room.hostIP : ([[MultiplayerManager sharedManager] currentLocalIP] ?: @"-");
     NSString *hostPort = room.hostPort.length ? room.hostPort : @"25565";
 
     // 关键修复：MC 使用 Netty 的 NioSocketChannel，不走 Java 的 SOCKS5 代理。
@@ -1407,23 +1405,19 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         serverAddress = [NSString stringWithFormat:@"127.0.0.1:%u", forwardPort];
         NSLog(@"[MultiplayerVC] 房客使用端口转发地址：%@（转发到 %@:%@）",
               serverAddress, hostIP, hostPort);
-        self.lastServerAddress = serverAddress;
-
-        // 自动将服务器地址写入当前 profile（下次启动 MC 时会自动连接到此服务器）
-        NSString *profileName = [PLProfiles current].selectedProfileName;
-        if (profileName && profileName.length > 0) {
-            [[PLProfiles current] setServerIp:serverAddress forProfile:profileName];
-            NSLog(@"[Multiplayer] 已自动将服务器地址 %@ 写入 profile %@", serverAddress, profileName);
-        }
     } else {
-        // 关键修复（P0-5）：端口转发器未启动，不写入 profile
-        // 房客无法通过 ZeroTier IP 直连（系统无法路由），写入 profile 会导致下次启动 MC 连接失败
+        // 端口转发器未启动（回退到直连，可能失败）
         serverAddress = [NSString stringWithFormat:@"%@:%@", hostIP, hostPort];
-        NSLog(@"[MultiplayerVC] 警告：端口转发器未启动，不写入 profile serverIp");
-        // 显示警告提示而非成功提示
-        [self showSimpleAlertWithTitle:MPLocalized(@"mp.connect.failed", @"连接失败")
-                               message:MPLocalized(@"mp.connect.port_forward_failed_msg", @"端口转发器启动失败，无法连接到房主。请尝试断开重连。")];
-        return;
+        NSLog(@"[MultiplayerVC] 警告：端口转发器未启动，房客直连 %@（可能无法连接）",
+              serverAddress);
+    }
+    self.lastServerAddress = serverAddress;
+
+    // 自动将服务器地址写入当前 profile（下次启动 MC 时会自动连接到此服务器）
+    NSString *profileName = [PLProfiles current].selectedProfileName;
+    if (profileName && profileName.length > 0) {
+        [[PLProfiles current] setServerIp:serverAddress forProfile:profileName];
+        NSLog(@"[Multiplayer] 已自动将服务器地址 %@ 写入 profile %@", serverAddress, profileName);
     }
 
     // 自动复制服务器地址到剪贴板（方便房客在 MC 中"添加服务器"时直接粘贴）

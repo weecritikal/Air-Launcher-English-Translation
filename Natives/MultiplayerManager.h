@@ -82,13 +82,6 @@ typedef NS_ENUM(NSInteger, MultiplayerRoomStatus) {
 /// @param message 进度描述文本（如"步骤 2：等待节点上线..."）
 - (void)multiplayerConnectionProgress:(NSString *)message;
 
-/// ZeroTier 对端节点连接模式发生变化
-///
-/// P2P 直连与中继在延迟和带宽上差异显著，UI 可通过此回调感知当前连接质量。
-///
-/// @param modeDescription 人类可读的连接模式描述（"直连" / "中继" / "不可达" 等）
-- (void)multiplayerPeerConnectionModeChanged:(NSString *)modeDescription;
-
 @end
 
 /// ZeroTier 联机管理器
@@ -149,12 +142,6 @@ typedef NS_ENUM(NSInteger, MultiplayerRoomStatus) {
 ///
 /// 关键修复（M1）：改为 atomic，与 currentRoom 保持一致。
 @property (atomic, copy, readonly, nullable) NSString *currentLocalIP;
-
-/// 当前对端节点的 ZeroTier 连接模式描述
-///
-/// 仅在房间已连接且收到过对端节点的 PEER_* 事件后有效。
-/// 人类可读的描述，如"直连"/"中继"/"不可达"/"未知"，未连接时为 nil。
-@property (atomic, copy, readonly, nullable) NSString *currentPeerConnectionMode;
 
 #pragma mark - 框架检测
 
@@ -265,15 +252,20 @@ typedef NS_ENUM(NSInteger, MultiplayerRoomStatus) {
 
 /// 连接到房间
 ///
-/// 完整流程：
-///   1. 校验 room 非空且 networkId 有效
-///   2. 设置 currentRoom 并更新状态为 Connecting
-///   3. 启动 ZeroTier 节点（如果尚未启动）
+/// 完整流程（6 步）：
+///   1. 检查 framework 可用性（不可用则立即失败）
+///   2. 启动 ZeroTier 节点（如果尚未启动）
+///   3. 等待节点上线（超时 30 秒）
 ///   4. 加入 ZeroTier 网络
-///   5. 等待网络就绪（IPv4 地址已分配）
-///   6. 启动本地 SOCKS5 代理（端口 1080）
-///   7. 设置 AMETHYST_SOCKS5_PROXY 环境变量（供 JavaLauncher 读取）
-///   8. 更新房间状态为 Connected，回调 completion
+///   5. 等待网络就绪（IPv4 或 Ad-hoc IPv6 已分配，超时 30 秒）
+///   6. 启动本地 SOCKS5 代理（端口 1080）+ 端口转发器：
+///      - 房客模式：PortForwarder 房客模式（本地 25565 → 房主 ZeroTier IP:端口）
+///      - 房主模式：不立即启动 PortForwarder，等待用户输入 MC LAN 端口后
+///        调用 startHostPortForwarderWithListenPort:localHostPort: 启动房主模式
+///
+/// 房主与房客的区分：
+///   - 房主首次连接：room.hostIP 为空 → 完成流程后将本机 ZeroTier IP 同步到 room.hostIP
+///   - 房客连接：room.hostIP 已设置为房主 IP（来自分享代码）→ 保留不覆盖
 ///
 /// 任何一步失败都会更新房间状态为 Error 并回调 completion(NO, error)。
 ///
@@ -291,6 +283,21 @@ typedef NS_ENUM(NSInteger, MultiplayerRoomStatus) {
 ///   4. 更新房间状态为 Disconnected
 ///   5. 清空 currentRoom
 - (void)disconnectCurrentRoom;
+
+/// 启动 PortForwarder 房主模式（反向转发）
+///
+/// 房主在 MC 中"对局域网开放"并手动输入 MC LAN 端口后调用本方法。
+/// PortForwarder 会在 ZeroTier 网络中监听 listenPort，并将连接转发到
+/// 本地 127.0.0.1:localHostPort（MC LAN 端口），使 PC/Mac/Android/iOS
+/// 房客能通过房主的 ZeroTier IP:listenPort 直接连接进入游戏。
+///
+/// 调用前提：当前房间已连接成功（self.currentRoom 非 nil 且 status == Connected）。
+///
+/// @param listenPort 在 ZeroTier 网络中监听的端口（通常为 25565）
+/// @param localHostPort 本地 MC LAN 端口（MC 中"对局域网开放"后聊天框显示的端口号）
+/// @return YES 表示启动成功，NO 表示失败（如未连接房间或 PortForwarder 启动失败）
+- (BOOL)startHostPortForwarderWithListenPort:(uint16_t)listenPort
+                               localHostPort:(uint16_t)localHostPort;
 
 /// 停止所有联机服务（彻底清理）
 ///
