@@ -205,6 +205,14 @@ typedef NS_ENUM(NSInteger, ZeroTierPeerConnectionMode) {
 /// 若节点已在线或已在重连中，本方法为空操作。
 - (void)startAutoReconnect;
 
+/// 复位自动重连状态
+///
+/// 在应用回到前台时由 MultiplayerManager 调用，复位 _isAutoReconnecting 标志。
+/// 防止后台期间 dispatch_after 挂起导致 _isAutoReconnecting 永远为 YES，
+/// 进而使 startAutoReconnect 在入口处直接 return，自动重连特性死锁。
+/// 不复位 _autoReconnectAttempts / _consecutiveOfflineCount，让计数器跨前后台累积。
+- (void)resetAutoReconnectState;
+
 /// 节点是否在线
 /// @return YES 如果节点已上线（zts_node_is_online() 返回 1）
 - (BOOL)isNodeOnline;
