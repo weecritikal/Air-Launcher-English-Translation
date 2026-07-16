@@ -1123,12 +1123,26 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         return;
     }
 
-    NSString *port = notification.userInfo[@"port"];
+    // LanPortDetector.setManualPort: 发送的 userInfo 中 port 是 NSNumber（@(port)），
+    // 不是 NSString。这里统一转换成 NSString 再使用。
+    id portValue = notification.userInfo[@"port"];
+    NSString *port = nil;
+    if ([portValue isKindOfClass:[NSString class]]) {
+        port = portValue;
+    } else if ([portValue isKindOfClass:[NSNumber class]]) {
+        port = [(NSNumber *)portValue stringValue];
+    }
     if (!port.length) {
         return;
     }
 
-    [self generateShareCodeWithPort:port];
+    // 关键修复（避免重复生成分享代码）：
+    // 手动输入流程中，showManualPortInputAlert 已经在用户点击"生成"按钮时
+    // 直接调用了 generateShareCodeWithPort: 生成分享代码。
+    // 此时 LanPortDetector.setManualPort: 又会发送通知触发本回调，
+    // 会导致分享代码被生成两次（虽然 PortForwarder 启动是幂等的，但显示会闪烁）。
+    // 因此本回调仅做日志记录，不再重复调用 generateShareCodeWithPort:。
+    NSLog(@"[MultiplayerVC] lanPortDidDetect: 收到端口 %@ 通知（手动输入流程已直接生成分享代码，此处不重复生成）", port);
 }
 
 /// 根据用户输入的 LAN 端口生成分享代码并显示
