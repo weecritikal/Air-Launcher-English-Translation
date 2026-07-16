@@ -914,9 +914,24 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         if (currentRoom && [currentRoom.networkId isEqualToString:presetNetId]) {
             // 房间已连接
             if (self.lastShareCode.length) {
-                // 分享代码已存在：直接显示分享代码
-                NSLog(@"[MultiplayerVC] 房主流程已激活且分享代码已存在，直接显示分享代码");
-                [self showHostShareCodeAlert];
+                // 分享代码已存在
+                //
+                // 关键修复（多房客优化）：房主 IP 变化检测
+                // 如果 ZeroTier 重连后房主 IP 已变化，旧分享代码中的 hostIP 已失效，
+                // 房客用旧代码无法加入房间。需要使用当前 IP 重新生成分享代码。
+                // LAN 端口本身不受 ZeroTier IP 变化影响（它绑定在 MC Netty 上），可复用。
+                NSString *currentLocalIP = [[MultiplayerManager sharedManager] currentLocalIP];
+                if (currentLocalIP.length > 0 &&
+                    currentRoom.hostIP.length > 0 &&
+                    ![currentRoom.hostIP isEqualToString:currentLocalIP]) {
+                    NSLog(@"[MultiplayerVC] 房主流程已激活，但检测到 IP 变化：%@ → %@，使用现有端口重新生成分享代码",
+                          currentRoom.hostIP, currentLocalIP);
+                    [self generateShareCodeWithPort:currentRoom.hostPort];
+                } else {
+                    // IP 未变化：直接显示分享代码
+                    NSLog(@"[MultiplayerVC] 房主流程已激活且分享代码已存在，直接显示分享代码");
+                    [self showHostShareCodeAlert];
+                }
             } else {
                 // 分享代码不存在：弹出手动输入端口对话框
                 // 关键修复（端口检测改为手动输入）：不再自动检测端口，改为用户手动输入
@@ -1130,9 +1145,25 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     // 更新房间的端口和本机 IP
     room.hostPort = port;
     NSString *localIP = [[MultiplayerManager sharedManager] currentLocalIP];
-    if (localIP.length) {
-        room.hostIP = localIP;
+
+    // 关键修复（多房客优化）：hostIP 非空保护
+    // 如果 currentLocalIP 为空（异常情况），不生成无效分享代码
+    if (!localIP.length) {
+        NSLog(@"[MultiplayerVC] 警告：currentLocalIP 为空，无法生成有效的分享代码");
+        [self showSimpleAlertWithTitle:MPLocalized(@"mp.host.share_code_failed", @"生成分享代码失败")
+                                  message:MPLocalized(@"mp.host.no_local_ip", @"无法获取本机 ZeroTier IP，请检查网络连接后重试")];
+        return;
     }
+
+    // 关键修复（多房客优化）：房主 IP 变化检测
+    // 如果 room.hostIP 已存在且与当前 localIP 不同，说明房主 ZeroTier IP 已变化
+    // 旧分享代码已失效，需要提示房主重新分享
+    BOOL ipChanged = (room.hostIP.length > 0 && ![room.hostIP isEqualToString:localIP]);
+    if (ipChanged) {
+        NSLog(@"[MultiplayerVC] 检测到房主 IP 变化：%@ → %@，旧分享代码已失效", room.hostIP, localIP);
+    }
+
+    room.hostIP = localIP;
     [[MultiplayerManager sharedManager] updateRoom:room];
 
     // 生成分享代码
@@ -1149,6 +1180,14 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 
     // 弹出提示告知用户分享代码已生成
     [self showHostShareCodeAlert];
+
+    // 如果 IP 变化，额外提示房主旧代码已失效
+    if (ipChanged) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self showSimpleAlertWithTitle:MPLocalized(@"mp.host.ip_changed_title", @"房主 IP 已变化")
+                                      message:MPLocalized(@"mp.host.ip_changed_msg", @"你的 ZeroTier IP 已变化，之前分享的旧代码已失效。请将新的分享代码重新发给房客。")];
+        });
+    }
 }
 
 /// 显示房主分享代码 Alert

@@ -1268,8 +1268,29 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
         return;
     }
 
-    // 步骤 5：启动 SOCKS5 代理
-    NSLog(@"[MultiplayerManager] [连接流程] 步骤 5：启动 SOCKS5 代理");
+    // 关键修复（多房客优化）：房主不需要 SOCKS5 代理、AMETHYST_SOCKS5_PROXY 环境变量和端口转发器
+    //
+    // 房主自己就是 MC 服务器（通过"对局域网开放"启动），不需要通过代理或转发连接到任何远程主机。
+    // 如果房主也启动 SOCKS5 代理并设置环境变量，会导致房主 MC 的所有 java.net.Socket 出站流量
+    // 走 ZeroTier 虚拟网络，可能影响第三方 Mod 的网络请求（nonProxyHosts 无法覆盖所有域名）。
+    //
+    // 只有房客（room.hostIP 非空且不等于本机 IP）才需要：
+    //   - SOCKS5 代理：转发 MC 登录认证等 java.net.Socket 流量
+    //   - AMETHYST_SOCKS5_PROXY 环境变量：让 JavaLauncher 注入 JVM SOCKS5 参数
+    //   - PortForwarder：转发 MC Netty NioSocketChannel 流量到房主
+    BOOL isHostRole = (room.hostIP.length == 0) || [room.hostIP isEqualToString:localIP];
+
+    if (isHostRole) {
+        NSLog(@"[MultiplayerManager] [连接流程] 房主模式，跳过 SOCKS5 代理、环境变量和端口转发器");
+        [self notifyConnectionProgress:@"联机已就绪，等待在 MC 中开放局域网..."];
+        if (completion) {
+            completion(YES, nil);
+        }
+        return;
+    }
+
+    // 步骤 5：启动 SOCKS5 代理（仅房客需要）
+    NSLog(@"[MultiplayerManager] [连接流程] 步骤 5：启动 SOCKS5 代理（房客模式）");
     [self notifyConnectionProgress:@"步骤 5/6：正在启动 SOCKS5 代理..."];
     NSError *proxyError = nil;
     BOOL proxyStarted = [[SOCKS5Proxy sharedProxy] startWithPort:kMultiplayerDefaultSOCKS5Port
@@ -1527,7 +1548,19 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
         return;
     }
 
-    // SOCKS5 代理重启（仅在未运行时）
+    // 关键修复（多房客优化）：房主不需要重启 SOCKS5 代理和环境变量
+    // 房主自己就是 MC 服务器，不需要通过代理连接。
+    // 只有房客（hostIP 非空且不等于本机 IP）才需要数据平面恢复。
+    NSString *currentLocalIPNow = self.currentLocalIP;
+    BOOL isHostRoleForRecovery = (hostIP.length == 0) ||
+        (currentLocalIPNow.length > 0 && [hostIP isEqualToString:currentLocalIPNow]);
+
+    if (isHostRoleForRecovery) {
+        NSLog(@"[MultiplayerManager] [数据平面恢复] 房主模式，跳过 SOCKS5 代理和端口转发器重启");
+        return;
+    }
+
+    // SOCKS5 代理重启（仅房客需要，在未运行时）
     if (![[SOCKS5Proxy sharedProxy] isRunning] || savedSocksPort == 0) {
         NSLog(@"[MultiplayerManager] [数据平面恢复] 重启 SOCKS5 代理（房间：%@）", room.name);
         NSError *proxyError = nil;
