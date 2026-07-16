@@ -100,9 +100,10 @@ NSString *const PREF_MOD_UPDATE_KEEP_OLD = @"general.mod_update_keep_old";
             @"auto_ram": @(!getEntitlementValue(@"com.apple.private.memorystatus")),
             @"allocated_memory": [NSNumber numberWithFloat:roundf((NSProcessInfo.processInfo.physicalMemory / 1048576) * 0.25)]
         }.mutableCopy,
-        // MobileGlues 渲染器偏好（对齐 Ynnyny 仓库）
-        // 当渲染器为 mobileglues/auto/vulkan 时由 init_loadMobileGluesConfig() 写入
+        // MobileGlues 渲染器偏好
+        // 仅当渲染器显式选择为 MobileGlues 时，由 init_loadMobileGluesConfig() 写入
         // <POJAV_HOME>/MG/config.json，控制 GL 版本、ANGLE 后端、FSR 等。
+        // Auto/Vulkan 渲染器实际使用 ANGLE，不会加载 MobileGlues，这些设置不生效。
         @"mobileglues": @{
             @"enable_angle": @NO,
             @"enable_no_error": @(0),
@@ -232,10 +233,17 @@ NSString *const PREF_MOD_UPDATE_KEEP_OLD = @"general.mod_update_keep_old";
             pref[section] = defaults[section];
             continue;
         }
+        // 关键修复：从 plist 加载的嵌套字典是不可变 NSDictionary（NSMutableDictionary
+        // dictionaryWithContentsOfFile: 只保证顶层可变，嵌套字典仍为 NSDictionary）。
+        // 如果不转为 NSMutableDictionary，后续 setValue:forKeyPath: 调用会抛出异常，
+        // 导致用户修改的设置无法保存（mobileglues、video 等所有 section 均受影响）。
+        if (![pref[section] isKindOfClass:[NSMutableDictionary class]]) {
+            pref[section] = [pref[section] mutableCopy];
+        }
         for (NSString *key in defaults[section].allKeys) {
             if (pref[section][key]) continue;
             id value = defaults[section][key];
-            NSDebugLog(@"[PLPreferences] Set default vaule: %@: %@", key, value);
+            NSDebugLog(@"[PLPreferences] Set default vaule: %@", key, value);
             pref[section][key] = value;
         }
     }

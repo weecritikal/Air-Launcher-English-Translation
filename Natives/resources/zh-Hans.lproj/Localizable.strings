@@ -167,7 +167,7 @@
 "preference.section.video" = "视频设置";
 "preference.section.footer.video" = "自动渲染器允许 Amethyst 选择基于 Minecraft 版本的最佳选项。减少分辨率降低 GPU 工作量以提高性能。";
 "preference.section.mobileglues" = "MobileGlues 渲染器";
-"preference.section.footer.mobileglues" = "这些设置仅在渲染器为 MobileGlues、Auto 或 Vulkan 时生效。配置将在游戏启动时写入 <POJAV_HOME>/MG/config.json。";
+"preference.section.footer.mobileglues" = "这些设置仅在渲染器显式选择为 MobileGlues 时生效。Auto 渲染器会被解析为 ANGLE，Vulkan 渲染器的 OpenGL 回退也使用 ANGLE，两者均不会加载 MobileGlues，因此设置不会生效。配置将在游戏启动时写入 <POJAV_HOME>/MG/config.json。";
 "preference.section.control" = "自定义控制键";
 "preference.section.debug" = "UI设置";
 "preference.section.footer.debug" = "除了调试外，这些设置可能对自定义控件有用。您可能需要重新启动启动器才能使更改生效。";

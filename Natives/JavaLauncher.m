@@ -118,20 +118,41 @@ void init_loadCustomEnv() {
     }
 }
 
-/// 加载 MobileGlues 配置并写入 config.json（对齐 Ynnyny 仓库）
+/// 加载 MobileGlues 配置并写入 config.json
 ///
-/// 当渲染器为 MobileGlues、Auto 或 Vulkan 时，将用户偏好设置写入 <POJAV_HOME>/MG/config.json。
-/// MobileGlues 是 GL-on-Metal/Vulkan 渲染器，需要 config.json 才能正常工作。
-/// Auto 在 JavaLauncher 中虽然被解析为 ANGLE，但写入 config.json 是无害的兜底，
-/// 且 Vulkan 渲染器实际通过 MobileGlues 加载 GL，必须配置。
+/// 将用户偏好设置写入 <POJAV_HOME>/MG/config.json，供 MobileGlues 渲染器读取。
+///
+/// 渲染器与 MobileGlues 的关系（重要）：
+/// - MobileGlues 渲染器（libmobileglues.dylib）：直接加载 MobileGlues，config.json 生效。
+/// - Auto 渲染器：在 launchJVM 中被解析为 ANGLE（libtinygl4angle.dylib），MobileGlues 不会被加载，
+///   config.json 虽然会写入但不会被读取。用户需显式选择 MobileGlues 渲染器才能让设置生效。
+/// - Vulkan 渲染器：Vulkan 模式下 OpenGL 回退库使用 ANGLE（参照 Ynnyny 仓库），MobileGlues 不会被加载。
+///
+/// 为了兜底（用户可能后续切换渲染器），仍然为 auto/vulkan 写入 config.json，但会输出警告日志。
 void init_loadMobileGluesConfig() {
     NSString *renderer = [PLProfiles resolveKeyForCurrentProfile:@"renderer"];
+    NSLog(@"[JavaLauncher] init_loadMobileGluesConfig: renderer=%@", renderer);
+
     BOOL usesMobileGlues = [renderer isEqualToString:@ RENDERER_NAME_MOBILEGLUES] ||
         [renderer isEqualToString:@"auto"] ||
         [renderer isEqualToString:@ RENDERER_NAME_VULKAN];
 
     if (!usesMobileGlues) {
+        NSLog(@"[JavaLauncher] MobileGlues config not written (renderer is not mobileglues/auto/vulkan)");
         return;
+    }
+
+    // 警告：auto 和 vulkan 渲染器实际不会加载 MobileGlues，设置不会生效
+    if ([renderer isEqualToString:@"auto"]) {
+        NSLog(@"[JavaLauncher] WARNING: renderer is 'auto', will be resolved to ANGLE. "
+              @"MobileGlues settings will NOT take effect. "
+              @"Please explicitly select 'MobileGlues' renderer to use these settings.");
+    } else if ([renderer isEqualToString:@ RENDERER_NAME_VULKAN]) {
+        NSLog(@"[JavaLauncher] WARNING: renderer is Vulkan, GL fallback uses ANGLE. "
+              @"MobileGlues settings will NOT take effect. "
+              @"Please explicitly select 'MobileGlues' renderer to use these settings.");
+    } else {
+        NSLog(@"[JavaLauncher] MobileGlues renderer detected, config will take effect.");
     }
 
     NSString *mgDirPath = [NSString stringWithFormat:@"%s/MG", getenv("POJAV_HOME")];
@@ -146,32 +167,57 @@ void init_loadMobileGluesConfig() {
     config[@"customGLVersion"] = @0x030100;
 
     id enableAngle = getPrefObject(@"mobileglues.enable_angle");
-    if (enableAngle) config[@"enableANGLE"] = [enableAngle boolValue] ? @1 : @0;
+    if (enableAngle) {
+        config[@"enableANGLE"] = [enableAngle boolValue] ? @1 : @0;
+        NSLog(@"[JavaLauncher]   mobileglues.enable_angle = %@ -> enableANGLE = %@", enableAngle, config[@"enableANGLE"]);
+    }
 
     id enableNoError = getPrefObject(@"mobileglues.enable_no_error");
-    if (enableNoError) config[@"enableNoError"] = @([enableNoError intValue]);
+    if (enableNoError) {
+        config[@"enableNoError"] = @([enableNoError intValue]);
+        NSLog(@"[JavaLauncher]   mobileglues.enable_no_error = %@ -> enableNoError = %@", enableNoError, config[@"enableNoError"]);
+    }
 
     id enableExtTimerQuery = getPrefObject(@"mobileglues.enable_ext_timer_query");
-    if (enableExtTimerQuery) config[@"enableExtTimerQuery"] = [enableExtTimerQuery boolValue] ? @1 : @0;
+    if (enableExtTimerQuery) {
+        config[@"enableExtTimerQuery"] = [enableExtTimerQuery boolValue] ? @1 : @0;
+        NSLog(@"[JavaLauncher]   mobileglues.enable_ext_timer_query = %@ -> enableExtTimerQuery = %@", enableExtTimerQuery, config[@"enableExtTimerQuery"]);
+    }
 
     id enableExtComputeShader = getPrefObject(@"mobileglues.enable_ext_compute_shader");
-    if (enableExtComputeShader) config[@"enableExtComputeShader"] = [enableExtComputeShader boolValue] ? @1 : @0;
+    if (enableExtComputeShader) {
+        config[@"enableExtComputeShader"] = [enableExtComputeShader boolValue] ? @1 : @0;
+        NSLog(@"[JavaLauncher]   mobileglues.enable_ext_compute_shader = %@ -> enableExtComputeShader = %@", enableExtComputeShader, config[@"enableExtComputeShader"]);
+    }
 
     id enableExtDirectStateAccess = getPrefObject(@"mobileglues.enable_ext_direct_state_access");
-    if (enableExtDirectStateAccess) config[@"enableExtDirectStateAccess"] = [enableExtDirectStateAccess boolValue] ? @1 : @0;
+    if (enableExtDirectStateAccess) {
+        config[@"enableExtDirectStateAccess"] = [enableExtDirectStateAccess boolValue] ? @1 : @0;
+        NSLog(@"[JavaLauncher]   mobileglues.enable_ext_direct_state_access = %@ -> enableExtDirectStateAccess = %@", enableExtDirectStateAccess, config[@"enableExtDirectStateAccess"]);
+    }
 
     id maxGlslCacheSize = getPrefObject(@"mobileglues.max_glsl_cache_size");
-    if (maxGlslCacheSize) config[@"maxGlslCacheSize"] = @([maxGlslCacheSize intValue]);
+    if (maxGlslCacheSize) {
+        config[@"maxGlslCacheSize"] = @([maxGlslCacheSize intValue]);
+        NSLog(@"[JavaLauncher]   mobileglues.max_glsl_cache_size = %@ -> maxGlslCacheSize = %@", maxGlslCacheSize, config[@"maxGlslCacheSize"]);
+    }
 
     id multidrawMode = getPrefObject(@"mobileglues.multidraw_mode");
-    if (multidrawMode) config[@"multidrawMode"] = @([multidrawMode intValue]);
+    if (multidrawMode) {
+        config[@"multidrawMode"] = @([multidrawMode intValue]);
+        NSLog(@"[JavaLauncher]   mobileglues.multidraw_mode = %@ -> multidrawMode = %@", multidrawMode, config[@"multidrawMode"]);
+    }
 
     id angleDepthClearFixMode = getPrefObject(@"mobileglues.angle_depth_clear_fix_mode");
-    if (angleDepthClearFixMode) config[@"angleDepthClearFixMode"] = [angleDepthClearFixMode boolValue] ? @1 : @0;
+    if (angleDepthClearFixMode) {
+        config[@"angleDepthClearFixMode"] = [angleDepthClearFixMode boolValue] ? @1 : @0;
+        NSLog(@"[JavaLauncher]   mobileglues.angle_depth_clear_fix_mode = %@ -> angleDepthClearFixMode = %@", angleDepthClearFixMode, config[@"angleDepthClearFixMode"]);
+    }
 
     id customGlVersion = getPrefObject(@"mobileglues.custom_gl_version");
     if (customGlVersion) {
         NSString *verStr = [customGlVersion description];
+        NSLog(@"[JavaLauncher]   mobileglues.custom_gl_version = %@ (raw)", customGlVersion);
         if ([verStr isEqualToString:@"3.0"]) config[@"customGLVersion"] = @0x030000;
         else if ([verStr isEqualToString:@"3.1"]) config[@"customGLVersion"] = @0x030100;
         else if ([verStr isEqualToString:@"3.2"]) config[@"customGLVersion"] = @0x030200;
@@ -183,10 +229,15 @@ void init_loadMobileGluesConfig() {
         else if ([verStr isEqualToString:@"4.4"]) config[@"customGLVersion"] = @0x040400;
         else if ([verStr isEqualToString:@"4.5"]) config[@"customGLVersion"] = @0x040500;
         else if ([verStr isEqualToString:@"4.6"]) config[@"customGLVersion"] = @0x040600;
+        // verStr == @"0" 时不匹配任何条件，保留默认值 @0x030100（即 GL 3.1）
+        NSLog(@"[JavaLauncher]   -> customGLVersion = 0x%06x", [config[@"customGLVersion"] intValue]);
     }
 
     id fsr1Setting = getPrefObject(@"mobileglues.fsr1_setting");
-    if (fsr1Setting) config[@"fsr1Setting"] = @([fsr1Setting intValue]);
+    if (fsr1Setting) {
+        config[@"fsr1Setting"] = @([fsr1Setting intValue]);
+        NSLog(@"[JavaLauncher]   mobileglues.fsr1_setting = %@ -> fsr1Setting = %@", fsr1Setting, config[@"fsr1Setting"]);
+    }
 
     NSError *error = nil;
     NSData *jsonData = [NSJSONSerialization dataWithJSONObject:config options:NSJSONWritingPrettyPrinted error:&error];
@@ -195,6 +246,7 @@ void init_loadMobileGluesConfig() {
         [fm createDirectoryAtPath:mgDirPath withIntermediateDirectories:YES attributes:nil error:nil];
         [jsonString writeToFile:[mgDirPath stringByAppendingPathComponent:@"config.json"] atomically:YES encoding:NSUTF8StringEncoding error:nil];
         NSLog(@"[JavaLauncher] MobileGlues config written to %@/config.json", mgDirPath);
+        NSLog(@"[JavaLauncher] config.json content:\n%@", jsonString);
     } else {
         NSLog(@"[JavaLauncher] Failed to serialize MobileGlues config: %@", error);
     }

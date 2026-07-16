@@ -167,7 +167,7 @@
 "preference.section.video" = "Video and Audio Settings";
 "preference.section.footer.video" = "Auto renderer allows Amethyst to choose the best option based on Minecraft version. Decreasing resolution reduces GPU workload for better performance.";
 "preference.section.mobileglues" = "MobileGlues Renderer";
-"preference.section.footer.mobileglues" = "Settings only apply when the renderer is MobileGlues, Auto, or Vulkan. The config is written to <POJAV_HOME>/MG/config.json at game launch.";
+"preference.section.footer.mobileglues" = "These settings only take effect when the renderer is explicitly set to MobileGlues. The Auto renderer resolves to ANGLE, and the Vulkan renderer's OpenGL fallback also uses ANGLE — neither loads MobileGlues, so the settings will not apply. The config is written to <POJAV_HOME>/MG/config.json at game launch.";
 "preference.section.control" = "Control customization";
 "preference.section.debug" = "UI Debugging settings";
 "preference.section.footer.debug" = "You may need to restart the launcher for changes to take effect.";
