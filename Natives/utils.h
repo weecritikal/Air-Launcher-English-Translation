@@ -107,6 +107,8 @@ int callback_SurfaceViewController_touchHotbar(CGFloat x, CGFloat y);
 
 // FPS 计数器：在 pojavSwapBuffers() 中累加，调用此函数读取并重置（参照 FCL/ZL2）
 unsigned int pojavGetAndResetFps();
+// 显式递增 FPS 计数器（供 Vulkan 模式 CADisplayLink fallback 使用）
+void pojavIncrementFpsCounter();
 
 void CallbackBridge_nativeSetInputReady(BOOL inputReady);
 BOOL CallbackBridge_nativeSendChar(jchar codepoint /* jint codepoint */);

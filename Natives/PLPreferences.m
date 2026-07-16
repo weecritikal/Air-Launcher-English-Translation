@@ -101,9 +101,10 @@ NSString *const PREF_MOD_UPDATE_KEEP_OLD = @"general.mod_update_keep_old";
             @"allocated_memory": [NSNumber numberWithFloat:roundf((NSProcessInfo.processInfo.physicalMemory / 1048576) * 0.25)]
         }.mutableCopy,
         // MobileGlues 渲染器偏好
-        // 仅当渲染器显式选择为 MobileGlues 时，由 init_loadMobileGluesConfig() 写入
+        // 当渲染器选择为 MobileGlues 或 Vulkan 时，由 init_loadMobileGluesConfig() 写入
         // <POJAV_HOME>/MG/config.json，控制 GL 版本、ANGLE 后端、FSR 等。
-        // Auto/Vulkan 渲染器实际使用 ANGLE，不会加载 MobileGlues，这些设置不生效。
+        // Vulkan 渲染器的 OpenGL 回退使用 MobileGlues（对齐 Ynnyny 仓库），设置生效。
+        // Auto 渲染器实际使用 ANGLE，不会加载 MobileGlues，这些设置不生效。
         @"mobileglues": @{
             @"enable_angle": @NO,
             @"enable_no_error": @(0),

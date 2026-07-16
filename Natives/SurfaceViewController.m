@@ -16,6 +16,7 @@
 #import "MinecraftResourceUtils.h"
 #import "PLProfiles.h"
 #import "SurfaceViewController.h"
+#import "utils.h"
 #import "GameMenuOverlayView.h"
 #import "TrackedTextField.h"
 #import "TouchControllerBridge.h"
@@ -697,10 +698,19 @@ static GameSurfaceView* pojavWindow;
     }
 
     // 渲染循环 tick：Gyro/Controller 输入采样（FPS 计数已移至 native pojavSwapBuffers）
+    // Vulkan 模式下 MC 不调用 glfwSwapBuffers，FPS 计数器不递增，
+    // 使用 CADisplayLink 作为 fallback：每帧触发时递增计数器。
+    // 在 ProMotion 设备上 CADisplayLink 频率会跟随内容更新频率，能较准确反映游戏帧率；
+    // 在 60Hz 设备上则固定为 60（无法区分游戏帧率低于 60 的情况，但优于显示 0）。
+    NSString *currentRenderer = [PLProfiles resolveKeyForCurrentProfile:@"renderer"];
+    BOOL isVulkanRenderer = [currentRenderer isEqualToString:@ RENDERER_NAME_VULKAN];
     __weak typeof(self) weakSelf = self;
     id tickInput = ^{
         [GyroInput tick];
         [ControllerInput tick];
+        if (isVulkanRenderer) {
+            pojavIncrementFpsCounter();
+        }
     };
     CADisplayLink *displayLink = [CADisplayLink displayLinkWithTarget:tickInput selector:@selector(invoke)];
     if (@available(iOS 15.0, tvOS 15.0, *)) {

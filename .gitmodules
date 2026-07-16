@@ -8,10 +8,6 @@
 [submodule "Natives/external/AFNetworking"]
 	path = Natives/external/AFNetworking
 	url = https://github.com/AFNetworking/AFNetworking
-[submodule "Natives/external/MobileGlues"]
-	path = Natives/external/MobileGlues
-	url = https://github.com/MobileGL-Dev/MobileGlues
-	branch = main
 [submodule "Natives/external/ZeroTierFramework"]
 	path = Natives/external/ZeroTierFramework
 	url = https://github.com/zerotier/zerotier-sockets-apple-framework.git

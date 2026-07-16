@@ -65,9 +65,12 @@ jobs:
         # 但并行 agent 操作或本地 index 残留可能反复引入孤立 gitlink，
         # 导致后续 git submodule update --init 因找不到 URL 而 exit 128。
         # checkout 后、submodule 初始化前强制清理。
+        # MobileGlues submodule 同样已移除（源码直接内嵌仓库，对齐 Ynnyny）。
         run: |
           git rm --cached -f Natives/external/MobileGL 2>/dev/null || true
           git config --remove-section submodule.Natives/external/MobileGL 2>/dev/null || true
+          git rm --cached -f Natives/external/MobileGlues 2>/dev/null || true
+          git config --remove-section submodule.Natives/external/MobileGlues 2>/dev/null || true
 
       - name: Checkout repository submodules
         env:

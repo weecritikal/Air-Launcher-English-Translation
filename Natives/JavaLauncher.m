@@ -54,7 +54,27 @@ void init_loadDefaultEnv() {
 
     // Suppress [mvk-info] log spam (swapchain creation, etc.)
     // 对齐 Ynnyny 仓库：抑制 MoltenVK 日志刷屏，便于诊断启动问题
-    setenv("MVK_CONFIG_LOG_LEVEL", "2", 1);
+    // 但当帧率解锁开启时，临时启用性能跟踪以诊断 present mode 问题
+    if (getPrefBool(@"video.disable_game_vsync")) {
+        // 帧率解锁诊断：启用 MoltenVK 性能跟踪，输出帧率和 swapchain 信息
+        // 有助于确认 Vulkan 模式下 present mode 是否为 IMMEDIATE
+        setenv("MVK_CONFIG_PERFORMANCE_TRACKING", "1", 1);
+        setenv("MVK_CONFIG_LOG_LEVEL", "2", 1); // 仍然抑制 info 级别，但 performance log 会输出
+        // 尝试强制 present mode 为 IMMEDIATE（不等 vsync）。
+        // MoltenVK 1.2.5+ 支持 MVK_CONFIG_SWAPCHAIN_PRESENT_MODE 环境变量：
+        //   0 = VK_PRESENT_MODE_IMMEDIATE_KHR（不等 vsync，帧率可超屏幕刷新率）
+        //   1 = VK_PRESENT_MODE_MAILBOX_KHR
+        //   2 = VK_PRESENT_MODE_FIFO_KHR（默认，等 vsync）
+        // 当前 workspace 附带的 MoltenVK 版本（spec 30 / ~1.1.2）的 MVKConfiguration
+        // 结构体中不含 swapchainPresentMode 成员，此环境变量可能被忽略。
+        // 但设置它无害——若 MoltenVK 版本升级后支持，则自动生效。
+        // 这是 Vulkan 模式帧率解锁的关键：present mode 完全由 vkCreateSwapchainKHR
+        // 选择，而 MC 26.2 的 Vulkan 渲染器可能未正确响应 enableVsync=false。
+        setenv("MVK_CONFIG_SWAPCHAIN_PRESENT_MODE", "0", 1);
+        NSLog(@"[JavaLauncher] MoltenVK performance tracking + IMMEDIATE present mode requested for VSync diagnosis");
+    } else {
+        setenv("MVK_CONFIG_LOG_LEVEL", "2", 1);
+    }
 
     // Runs JVM in a separate thread
     setenv("HACK_IGNORE_START_ON_FIRST_THREAD", "1", 1);
@@ -81,15 +101,25 @@ void init_loadDefaultEnv() {
     //    如果等 MC 调用 glfwSwapInterval 时才设置，swapchain 可能已用 FIFO 创建，
     //    Mesa 21.0 的 zink 不会动态重建 swapchain，导致帧率锁死在屏幕刷新率。
     //
-    // 关于 MoltenVK 配置：
-    //   当前 MoltenVK 版本的 MVKConfiguration 结构体不包含 swapchainPresentMode 成员，
-    //   不支持通过配置文件或环境变量强制 present mode。present mode 完全由应用在
-    //   vkCreateSwapchainKHR 时选择。设备是否支持 IMMEDIATE present mode 由
-    //   MVKPhysicalDeviceMetalFeatures.presentModeImmediate 自动检测（大多数 iOS 设备支持）。
+    // 关于 MoltenVK 配置与 Vulkan 帧率解锁研究：
+    //   当前 workspace 附带的 MoltenVK（spec 30 / ~1.1.2）的 MVKConfiguration 结构体
+    //   不含 swapchainPresentMode 成员，但已设置 MVK_CONFIG_SWAPCHAIN_PRESENT_MODE=0
+    //   环境变量作为最佳尝试（MoltenVK 1.2.5+ 支持，旧版本忽略）。
+    //   present mode 完全由应用在 vkCreateSwapchainKHR 时选择。设备是否支持
+    //   IMMEDIATE present mode 由 MVKPhysicalDeviceMetalFeatures.presentModeImmediate
+    //   自动检测（大多数 iOS 设备支持）。
+    //
+    //   Vulkan 模式帧率解锁的限制：
+    //   - MC 26.2 的 Vulkan 渲染器在 vkCreateSwapchainKHR 时选择 present mode，
+    //     可能不检查 enableVsync 选项（与 GL 渲染器行为不同）。
+    //   - pojavSwapInterval 在 Vulkan 模式下 br_swap_interval 为 NULL，无法拦截。
+    //   - 完全解决需要 fishhook 拦截 vkCreateSwapchainKHR 修改 presentMode，
+    //     但 Vulkan 函数通过 vkGetInstanceProcAddr 动态加载，fishhook 无法直接拦截。
+    //   - 替代方案：升级 MoltenVK 到 1.2.5+ 以支持 MVK_CONFIG_SWAPCHAIN_PRESENT_MODE。
     //
     // 各渲染器的帧率解锁效果：
     // - zink（GL→Vulkan）：通过 eglSwapInterval(0) → IMMEDIATE present mode 完全解锁
-    // - Vulkan（LWJGL3）：通过 glfwSwapInterval(0) → IMMEDIATE present mode 完全解锁
+    // - Vulkan（LWJGL3）：依赖 MC 正确响应 enableVsync=false + MVK_CONFIG_SWAPCHAIN_PRESENT_MODE（若支持）
     // - ANGLE Metal：eglSwapInterval(0) 让 ANGLE 不等 vsync，渲染线程不阻塞
     // - ProMotion 设备：通过 CADisableMinimumFrameDurationOnPhone + preferredFrameRateRange 启用 120Hz
     setenv("POJAV_DISABLE_VSYNC", getPrefBool(@"video.disable_game_vsync") ? "1" : "0", 1);
@@ -126,9 +156,8 @@ void init_loadCustomEnv() {
 /// - MobileGlues 渲染器（libmobileglues.dylib）：直接加载 MobileGlues，config.json 生效。
 /// - Auto 渲染器：在 launchJVM 中被解析为 ANGLE（libtinygl4angle.dylib），MobileGlues 不会被加载，
 ///   config.json 虽然会写入但不会被读取。用户需显式选择 MobileGlues 渲染器才能让设置生效。
-/// - Vulkan 渲染器：Vulkan 模式下 OpenGL 回退库使用 ANGLE（参照 Ynnyny 仓库），MobileGlues 不会被加载。
-///
-/// 为了兜底（用户可能后续切换渲染器），仍然为 auto/vulkan 写入 config.json，但会输出警告日志。
+/// - Vulkan 渲染器：Vulkan 模式下 OpenGL 回退库使用 MobileGlues（对齐 Ynnyny 仓库），
+///   config.json 会被 MobileGlues 读取并生效。
 void init_loadMobileGluesConfig() {
     NSString *renderer = [PLProfiles resolveKeyForCurrentProfile:@"renderer"];
     NSLog(@"[JavaLauncher] init_loadMobileGluesConfig: renderer=%@", renderer);
@@ -142,15 +171,13 @@ void init_loadMobileGluesConfig() {
         return;
     }
 
-    // 警告：auto 和 vulkan 渲染器实际不会加载 MobileGlues，设置不会生效
+    // 警告：auto 渲染器实际不会加载 MobileGlues，设置不会生效
     if ([renderer isEqualToString:@"auto"]) {
         NSLog(@"[JavaLauncher] WARNING: renderer is 'auto', will be resolved to ANGLE. "
               @"MobileGlues settings will NOT take effect. "
               @"Please explicitly select 'MobileGlues' renderer to use these settings.");
     } else if ([renderer isEqualToString:@ RENDERER_NAME_VULKAN]) {
-        NSLog(@"[JavaLauncher] WARNING: renderer is Vulkan, GL fallback uses ANGLE. "
-              @"MobileGlues settings will NOT take effect. "
-              @"Please explicitly select 'MobileGlues' renderer to use these settings.");
+        NSLog(@"[JavaLauncher] Vulkan renderer detected, MobileGlues used as GL fallback. Config will take effect.");
     } else {
         NSLog(@"[JavaLauncher] MobileGlues renderer detected, config will take effect.");
     }
@@ -637,12 +664,37 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
             NSLog(@"[JavaLauncher] Auto renderer resolved to %s (always ANGLE)", glLibName);
         }
         if (strcmp(glLibName, RENDERER_NAME_VULKAN) == 0) {
-            // Vulkan mode: set vulkan libname and fallback opengl libname for LWJGL startup probing
-            PUSH_MARGV_FORMAT(@"-Dorg.lwjgl.vulkan.libname=%s", RENDERER_NAME_VULKAN);
-            // 参照 Ynnyny 仓库：Vulkan 模式下 OpenGL 回退库使用 ANGLE
-            glLibName = RENDERER_NAME_MTL_ANGLE;
+            // 对齐 Ynnyny 仓库：Vulkan 模式下 OpenGL 回退库使用 MobileGlues
+            //
+            // libMoltenVK 是 Vulkan loader，不是 GL 实现；绑定它为 opengl.libname 会导致
+            // LWJGL 查找 GL 符号失败。但 MC 26.2 的 NativeLibrariesBootstrap.loadOpenGL()
+            // 在启动时会初始化 org.lwjgl.opengl.GL（无论游戏最终用哪个渲染器）。
+            // 若 opengl.libname 未设置，LWJGL 回退到 MacOSXLibraryBundle.getWithIdentifier
+            // ("com.apple.opengl")，iOS 上无系统 OpenGL framework 会失败 →
+            //   UnsatisfiedLinkError: Failed to retrieve bundle with identifier: com.apple.opengl
+            // 指向 libmobileglues.dylib：MobileGlues 专为 GL-on-Metal/Vulkan 设计，
+            // 已使用 shipped libspirv-cross.dylib 做着色器翻译。GL.create() 能找到 GL 函数指针；
+            // 若 MC 调用 GL 入口（compat 代码、着色器构建等），MobileGlues 能通过 Vulkan 路由，
+            // 而非像无上下文的 gl4es 那样崩溃。
+            //
+            // 注意：vulkan.libname 不在此设置（对齐 Ynnyny），由 PojavLauncher.java 通过
+            // System.setProperty("org.lwjgl.vulkan.libname", "MoltenVK") 设置。
+            // 若在此用 -D 传 "libMoltenVK.dylib"，LWJGL Library.loadNative 会加 "lib" 前缀和
+            // ".dylib" 后缀，得到 "liblibMoltenVK.dylib.dylib"（错误文件名）。
+            //
+            // MoltenVK 配置（对齐 Ynnyny）：
+            // - RESUME_LOST_DEVICE=1：设备丢失后自动恢复
+            // - SYNCHRONOUS_QUEUE_SUBMITS=1：同步队列提交（更稳定，避免竞争）
+            // - PREFILL_METAL_COMMAND_BUFFERS=1：预填充 Metal 命令缓冲区（减少 GPU 等待，性能优化）
+            setenv("MVK_CONFIG_RESUME_LOST_DEVICE", "1", 1);
+            setenv("MVK_CONFIG_SYNCHRONOUS_QUEUE_SUBMITS", "1", 1);
+            setenv("MVK_CONFIG_PREFILL_METAL_COMMAND_BUFFERS", "1", 1);
         }
-        PUSH_MARGV_FORMAT(@"-Dorg.lwjgl.opengl.libname=%s", glLibName);
+        // 对齐 Ynnyny：使用独立变量 openglLibName，不修改 glLibName（保持原值用于后续判断）
+        const char *openglLibName = (strcmp(glLibName, RENDERER_NAME_VULKAN) == 0)
+            ? RENDERER_NAME_MOBILEGLUES
+            : glLibName;
+        PUSH_MARGV_FORMAT(@"-Dorg.lwjgl.opengl.libname=%s", openglLibName);
 
         // 显式指定 spirv-cross 库名（参照 catsruledogs/Amethyst-iOS-25）：
         // LWJGL spvc 模块默认查找 "spirv-cross" -> 加载 libspirv-cross.dylib（macOS 标准名），

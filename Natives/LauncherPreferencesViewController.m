@@ -644,9 +644,10 @@
             },
         ], @[
             // MobileGlues settings
-            // 仅当渲染器显式选择为 MobileGlues 时，init_loadMobileGluesConfig()
-            // 写入的 <POJAV_HOME>/MG/config.json 才会被 MobileGlues 读取并生效。
-            // Auto 渲染器会被解析为 ANGLE，Vulkan 的 GL 回退也使用 ANGLE，均不加载 MobileGlues。
+            // 当渲染器选择为 MobileGlues 或 Vulkan 时，init_loadMobileGluesConfig()
+            // 写入的 <POJAV_HOME>/MG/config.json 会被 MobileGlues 读取并生效。
+            // Vulkan 渲染器的 OpenGL 回退使用 MobileGlues（对齐 Ynnyny 仓库）。
+            // Auto 渲染器会被解析为 ANGLE，不会加载 MobileGlues。
             @{@"icon": @"cpu"},
             @{@"key": @"enable_angle",
               @"hasDetail": @YES,

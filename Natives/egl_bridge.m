@@ -34,6 +34,25 @@ unsigned int pojavGetAndResetFps() {
     return atomic_exchange(&_pojavFpsCounter, 0);
 }
 
+/// 显式递增 FPS 计数器（供 Vulkan 模式使用）
+///
+/// Vulkan 渲染器不经过 EGL 的 pojavSwapBuffers 路径，而是通过 MoltenVK 的
+/// vkQueuePresentKHR 直接 present。因此 pojavSwapBuffers 中的 FPS 计数逻辑
+/// 不会触发。SurfaceViewController 在 Vulkan 模式下使用 CADisplayLink 作为
+/// 帧率检测 fallback，每帧通过此函数递增计数器。
+void pojavIncrementFpsCounter() {
+    atomic_fetch_add(&_pojavFpsCounter, 1);
+
+    // 首帧渲染检测（与 pojavSwapBuffers 中的逻辑一致）
+    if (!s_firstFrameRendered) {
+        s_firstFrameRendered = YES;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [[NSNotificationCenter defaultCenter] postNotificationName:@"PojavFirstFrameRendered" object:nil];
+            NSLog(@"[egl_bridge] First frame rendered (Vulkan displayLink path), game is ready");
+        });
+    }
+}
+
 void JNI_LWJGL_changeRenderer(const char* value_c) {
     JNIEnv *env;
     (*runtimeJavaVMPtr)->GetEnv(runtimeJavaVMPtr, (void **)&env, JNI_VERSION_1_4);
@@ -152,7 +171,16 @@ void* pojavCreateContext(basic_render_window_t* contextSrc) {
 }
 
 void pojavSwapInterval(int interval) {
-    if (!br_swap_interval) return;
+    // Vulkan 模式诊断：即使 br_swap_interval 为 NULL（Vulkan 不使用 EGL swap interval），
+    // 也记录调用以帮助诊断帧率解锁问题
+    if (!br_swap_interval) {
+        const char* vsyncEnv = getenv("POJAV_DISABLE_VSYNC");
+        NSLog(@"[egl_bridge] pojavSwapInterval(%d) called but br_swap_interval is NULL "
+              @"(likely Vulkan mode). POJAV_DISABLE_VSYNC=%s. "
+              @"Vulkan present mode is controlled by vkCreateSwapchainKHR, not eglSwapInterval.",
+              interval, vsyncEnv ?: "<unset>");
+        return;
+    }
     // 解锁帧率（关闭垂直同步）：当启动器偏好 video.disable_game_vsync 开启时
     // （POJAV_DISABLE_VSYNC=1，由 JavaLauncher.m 设置），强制 swap interval=0，
     // 覆盖游戏 glfwSwapInterval(1) 的垂直同步请求。

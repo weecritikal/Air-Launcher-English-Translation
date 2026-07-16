@@ -26,8 +26,10 @@ typedef uintptr_t VkInstance;
 // 需要通过 dlsym 从 libMoltenVK.dylib 中直接获取符号。
 //
 // 注意：当前 MoltenVK 版本（1.1.2, spec 30）的 MVKConfiguration 中没有
-// swapchainPresentMode 成员。swapchainPresentMode 通过 MoltenVKConfig.json
-// 或环境变量控制。
+// swapchainPresentMode 成员。MoltenVK 1.2.5+ 新增了 MVK_CONFIG_SWAPCHAIN_PRESENT_MODE
+// 环境变量（0=IMMEDIATE, 2=FIFO），但当前版本不识别该变量。
+// JavaLauncher.m 中已设置 MVK_CONFIG_SWAPCHAIN_PRESENT_MODE=0 作为最佳尝试，
+// 升级 MoltenVK 后自动生效。present mode 实际由应用在 vkCreateSwapchainKHR 时选择。
 //
 // 以下成员顺序严格参照 vk_mvk_moltenvk.h 中的 MVKConfiguration 结构体定义。
 // 即使结构体大小与 MoltenVK 实际版本不完全匹配，vkGetMoltenVKConfigurationMVK

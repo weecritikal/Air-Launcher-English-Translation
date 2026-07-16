@@ -84,6 +84,13 @@ public class PojavLauncher {
         //   对于 MC 1.8-1.15 旧版本：maxFps 选项不存在或行为不同，此设置会被忽略，
         //   帧率解锁完全依赖 native 层的 eglSwapInterval(0) 拦截。
         //
+        // MC 26.2+ 兼容性（关键修复）：
+        //   MC 26.2 可能重命名了选项。同时写入多种可能的选项名以确保兼容：
+        //   - maxFps（MC 1.16-1.21）：帧率上限
+        //   - maxFramerate（MC 26.2+ 可能的新名称）：帧率上限
+        //   - enableVsync（所有版本）：垂直同步开关
+        //   - framerateLimit（MC 26.2+ 可能的替代名称）：帧率限制
+        //
         // 这样做的效果：
         // - Vulkan 渲染器（MoltenVK）：LWJGL 创建 swapchain 时使用 VK_PRESENT_MODE_IMMEDIATE_KHR，
         //   MoltenVK 不等待 vblank 直接 present，帧率可超过屏幕刷新率（减少输入延迟）
@@ -97,6 +104,15 @@ public class PojavLauncher {
             // maxFps=260：MC 1.16+ 源码中 maxFps>=260 视为 unlimited
             // （之前用 0 会被当作无效值忽略，导致帧率仍被 maxFps=120 限制）
             MCOptionUtils.set("maxFps", "260");
+            // MC 26.2+ 兼容：可能重命名为 maxFramerate 或 framerateLimit
+            MCOptionUtils.set("maxFramerate", "260");
+            MCOptionUtils.set("framerateLimit", "260");
+            // 诊断日志：输出写入的帧率相关选项
+            System.out.println("[PojavLauncher] VSync disabled, maxFps/maxFramerate/framerateLimit set to 260");
+            System.out.println("[PojavLauncher]   enableVsync=" + MCOptionUtils.get("enableVsync"));
+            System.out.println("[PojavLauncher]   maxFps=" + MCOptionUtils.get("maxFps"));
+            System.out.println("[PojavLauncher]   maxFramerate=" + MCOptionUtils.get("maxFramerate"));
+            System.out.println("[PojavLauncher]   framerateLimit=" + MCOptionUtils.get("framerateLimit"));
         }
         // Default settings for performance
         MCOptionUtils.setDefault("mipmapLevels", "0");
