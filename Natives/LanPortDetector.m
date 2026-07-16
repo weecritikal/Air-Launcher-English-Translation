@@ -100,8 +100,20 @@ static NSString *const kLatestLogPath = @"%s/latestlog.txt";
 
 #pragma mark - 检测控制
 
-/// 开始检测
-/// 注册 PLLogOutputLineNotification 通知监听
+/// 开始检测（已禁用自动检测，改为手动输入端口）
+///
+/// 关键修复（端口检测改为手动输入）：
+/// 之前 startDetecting 会：
+///   1. 调用 detectFromLogFile 从 latestlog.txt 检测端口
+///   2. 注册 PLLogOutputLineNotification 通知监听，实时拦截 MC 日志
+/// 这导致以下问题：
+///   - latestlog.txt 可能包含上次会话的 LAN 端口日志，误检测为当前会话的端口
+///   - 自动检测不可靠：不同 MC 版本日志格式差异大，部分版本无法匹配
+///   - 用户在游戏未真正"对局域网开放"时就生成了分享代码
+///
+/// 现在改为手动输入端口：用户在 MC 中"对局域网开放"后，手动输入聊天框显示的端口号。
+/// LanPortDetector 仅保留 setManualPort: 方法供用户手动设置端口。
+/// startDetecting/stopDetecting 保留为 no-op，仅用于 API 兼容性。
 - (void)startDetecting {
     if (self.detecting) {
         NSLog(@"[LanPortDetector] 已在检测中，跳过重复启动");
@@ -109,26 +121,7 @@ static NSString *const kLatestLogPath = @"%s/latestlog.txt";
     }
 
     self.detecting = YES;
-    NSLog(@"[LanPortDetector] 开始检测 LAN 端口");
-
-    // 先从日志文件尝试检测一次（覆盖检测器启动前就开 LAN 的情况）
-    NSString *existingPort = [self detectFromLogFile];
-    if (existingPort) {
-        NSLog(@"[LanPortDetector] 从日志文件检测到已有 LAN 端口：%@", existingPort);
-        [self setPort:existingPort source:LanPortSourceAuto];
-    }
-
-    // 注册日志行通知
-    __weak typeof(self) weakSelf = self;
-    _logObserver = [[NSNotificationCenter defaultCenter] addObserverForName:PLLogOutputLineNotification
-                                                                     object:nil
-                                                                      queue:nil
-                                                                 usingBlock:^(NSNotification *notification) {
-        NSString *line = notification.userInfo[@"line"];
-        if (line) {
-            [weakSelf processLogLine:line];
-        }
-    }];
+    NSLog(@"[LanPortDetector] 自动检测已禁用（改为手动输入端口），startDetecting 为兼容性保留");
 }
 
 /// 停止检测

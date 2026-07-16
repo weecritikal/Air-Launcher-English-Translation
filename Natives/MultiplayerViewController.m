@@ -17,12 +17,21 @@
 //    Section 0「选择角色」：当房主按钮 + 当房客按钮（大卡片样式）
 //    Section 1「联机状态」：当前联机状态 + Network ID + 本地 IP
 //
+//  关键变更（端口检测改为手动输入）：
+//    之前房主流程依赖 LanPortDetector 自动检测 LAN 端口（拦截 MC 日志或读取
+//    latestlog.txt），存在以下问题：
+//      - latestlog.txt 可能包含上次会话的 LAN 端口日志，误检测为当前会话的端口
+//      - 不同 MC 版本日志格式差异大，自动检测不可靠
+//      - 用户在游戏未真正"对局域网开放"时就生成了分享代码
+//    现在改为手动输入端口：连接成功后弹出输入对话框，用户在 MC 中"对局域网开放"
+//    后手动输入聊天框显示的端口号，才会生成分享代码。
 //  房主流程：
 //    1. 检查 ZeroTier 框架可用性 + 预设 Network ID 是否已设置
 //    2. 连接到预设 Network ID 房间（调用 connectToRoom:completion:）
-//    3. 连接成功后监听 LanPortDetectorDidDetectPortNotification
-//    4. 自动检测 LAN 端口并生成分享代码（调用 generateShareCodeForRoom:）
-//    5. 显示分享代码（可复制、可分享）
+//    3. 连接成功后弹出手动输入端口对话框（showManualPortInputAlert）
+//    4. 用户在 MC 中"对局域网开放"后，手动输入聊天框显示的端口号
+//    5. 生成分享代码（调用 generateShareCodeForRoom:）
+//    6. 显示分享代码（可复制、可分享）
 //
 //  房客流程：
 //    1. 弹出输入框（UIAlertController with textField）
@@ -845,10 +854,18 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 ///   1. 检查 ZeroTier 框架可用性
 ///   2. 检查预设 Network ID 是否已设置（未设置则提示去启动器设置）
 ///   3. 自动连接到预设 Network ID 的房间
-///   4. 连接成功后监听 LanPortDetectorDidDetectPortNotification
-///   5. 自动检测 LAN 端口
+///   4. 连接成功后弹出手动输入端口对话框（showManualPortInputAlert）
+///   5. 用户在 MC 中"对局域网开放"后，手动输入聊天框显示的端口号
 ///   6. 生成分享代码（generateShareCodeForRoom:）
 ///   7. 显示分享代码（可复制、可分享）
+///
+/// 关键变更（端口检测改为手动输入）：
+/// 之前流程的第 4-5 步是"监听 LanPortDetectorDidDetectPortNotification +
+/// 自动检测 LAN 端口"，存在以下问题：
+///   - latestlog.txt 可能包含上次会话的 LAN 端口日志，误检测为当前会话的端口
+///   - 不同 MC 版本日志格式差异大，自动检测不可靠
+///   - 用户在游戏未真正"对局域网开放"时就生成了分享代码
+/// 现在改为手动输入端口，确保端口来自当前会话的真实 LAN 端口。
 - (void)hostButtonTapped {
     [self.view endEditing:YES];
 
@@ -901,24 +918,10 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
                 NSLog(@"[MultiplayerVC] 房主流程已激活且分享代码已存在，直接显示分享代码");
                 [self showHostShareCodeAlert];
             } else {
-                // 分享代码不存在：检查 LanPortDetector 是否已检测到端口
-                // 先检查 detectedPort，再尝试从日志文件解析
-                NSString *detectedPort = [[LanPortDetector sharedDetector] detectedPort];
-                if (!detectedPort.length) {
-                    NSLog(@"[MultiplayerVC] 幂等检查：detectedPort 为空，尝试从日志文件重新解析...");
-                    detectedPort = [[LanPortDetector sharedDetector] detectFromLogFile];
-                    if (detectedPort.length) {
-                        [[LanPortDetector sharedDetector] setManualPort:detectedPort];
-                    }
-                }
-                if (detectedPort.length) {
-                    NSLog(@"[MultiplayerVC] 房主流程已激活，检测到端口 %@，生成分享代码", detectedPort);
-                    [self generateShareCodeWithPort:detectedPort];
-                } else {
-                    // LAN 端口尚未检测到：显示"等待检测 LAN 端口"提示
-                    NSLog(@"[MultiplayerVC] 房主流程已激活但 LAN 端口尚未检测到，显示等待提示");
-                    [self showHostConnectedAlert];
-                }
+                // 分享代码不存在：弹出手动输入端口对话框
+                // 关键修复（端口检测改为手动输入）：不再自动检测端口，改为用户手动输入
+                NSLog(@"[MultiplayerVC] 房主流程已激活但分享代码尚未生成，弹出手动输入端口对话框");
+                [self showManualPortInputAlert];
             }
             return;
         }
@@ -962,8 +965,13 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     [self showConnectionProgressWithTitle:MPLocalized(@"mp.host.connecting_title", @"正在开启联机")
                                    message:MPLocalized(@"mp.host.connecting_msg", @"正在连接到 ZeroTier 网络，请稍候...")];
 
-    // 启动 LAN 端口检测器（房主在 MC 中开放局域网后会被自动检测到）
-    [[LanPortDetector sharedDetector] startDetecting];
+    // 关键修复（端口检测改为手动输入）：
+    // 不再启动 LanPortDetector 的自动检测。自动检测存在以下问题：
+    //   - latestlog.txt 可能包含上次会话的 LAN 端口日志，误检测为当前会话的端口
+    //   - 不同 MC 版本日志格式差异大，自动检测不可靠
+    //   - 用户在游戏未真正"对局域网开放"时就生成了分享代码
+    // 现在改为手动输入端口：连接成功后弹出输入框，用户在 MC 中"对局域网开放"后
+    // 手动输入聊天框显示的端口号，才会生成分享代码。
 
     // 连接到预设房间
     __weak typeof(self) weakSelf = self;
@@ -976,38 +984,21 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
             if (success) {
                 // 连接成功
                 //
-                // 关键修复：检查 LanPortDetector 是否已经检测到端口。
-                // 用户可能先在游戏中"对局域网开放"，然后才点"当房主"按钮。
-                // 此时 LanPortDetector 已经检测到端口并发送过通知，但由于
-                // isHostFlowActive 还是 NO，lanPortDidDetect: 回调被忽略。
-                // 之后连接成功时，LanPortDetector 因端口去重不再发通知，
-                // 导致分享代码永远无法生成。
+                // 关键修复（端口检测改为手动输入）：
+                // 之前依赖 LanPortDetector 自动检测 LAN 端口（通过拦截 MC 日志或读取 latestlog.txt），
+                // 存在以下问题：
+                //   1. 自动检测不可靠：不同 MC 版本日志格式差异大，部分版本无法匹配
+                //   2. 误检测旧日志：latestlog.txt 可能包含上次会话的 LAN 端口日志，
+                //      导致 MC 还没真正"对局域网开放"就生成了错误的分享代码
+                //   3. 用户在游戏未进入时就能生成代码：因为 LanPortDetector 从旧日志中
+                //      读取到端口，立即触发分享代码生成
                 //
-                // 修复方案（三层兜底）：
-                //   1. 优先检查 LanPortDetector.detectedPort（实时通知已检测到的端口）
-                //   2. 若为 nil，调用 detectFromLogFile 从日志文件重新搜索
-                //      （覆盖通知丢失或检测器未及时启动的情况）
-                //   3. 若仍为 nil，显示"等待检测 LAN 端口"提示
-                NSString *detectedPort = [[LanPortDetector sharedDetector] detectedPort];
-                if (!detectedPort.length) {
-                    // detectedPort 为空：尝试从日志文件重新解析
-                    NSLog(@"[MultiplayerVC] detectedPort 为空，尝试从日志文件重新解析...");
-                    detectedPort = [[LanPortDetector sharedDetector] detectFromLogFile];
-                    if (detectedPort.length) {
-                        // 从日志文件找到端口，手动设置到 LanPortDetector
-                        NSLog(@"[MultiplayerVC] 从日志文件检测到端口 %@，设置到 LanPortDetector", detectedPort);
-                        [[LanPortDetector sharedDetector] setManualPort:detectedPort];
-                    }
-                }
-
-                if (detectedPort.length && strongSelf.hostRoom) {
-                    NSLog(@"[MultiplayerVC] 连接成功，检测到 LAN 端口 %@，直接生成分享代码", detectedPort);
-                    [strongSelf generateShareCodeWithPort:detectedPort];
-                } else {
-                    // 尚未检测到 LAN 端口：显示等待提示
-                    NSLog(@"[MultiplayerVC] 连接成功但未检测到 LAN 端口，显示等待提示");
-                    [strongSelf showHostConnectedAlert];
-                }
+                // 修复方案：改为手动输入端口。连接成功后弹出手动输入对话框，
+                // 用户必须在 MC 中"对局域网开放"后，手动输入聊天框显示的端口号，
+                // 才会生成分享代码。这样既保证了端口的准确性，也避免了在游戏未真正
+                // 开放局域网时生成错误代码的问题。
+                NSLog(@"[MultiplayerVC] 连接成功，等待用户手动输入 LAN 端口");
+                [strongSelf showManualPortInputAlert];
             } else {
                 // 连接失败
                 strongSelf.isHostFlowActive = NO;
@@ -1021,26 +1012,85 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     [self.tableView reloadData];
 }
 
-/// 显示房主连接成功后的提示
+/// 显示房主连接成功后的手动输入端口对话框
 ///
-/// 对标 FCL 房主开房成功后的引导：
-///   - "请在 MC 中创建世界并开放局域网"
-///   - "系统会自动检测 LAN 端口并生成分享代码"
-- (void)showHostConnectedAlert {
+/// 关键修复（端口检测改为手动输入）：
+/// 之前连接成功后依赖 LanPortDetector 自动检测 LAN 端口，存在以下问题：
+///   - latestlog.txt 可能包含上次会话的 LAN 端口日志，误检测为当前会话的端口
+///   - 不同 MC 版本日志格式差异大，自动检测不可靠
+///   - 用户在游戏未真正"对局域网开放"时就生成了分享代码
+///
+/// 现在改为手动输入端口：连接成功后弹出输入对话框，提示用户在 MC 中
+/// "对局域网开放"后，手动输入聊天框显示的端口号。用户输入端口号后
+/// 才会生成分享代码。这样既保证了端口的准确性，也避免了在游戏未真正
+/// 开放局域网时生成错误代码的问题。
+- (void)showManualPortInputAlert {
     NSString *localIP = [[MultiplayerManager sharedManager] currentLocalIP] ?: @"-";
     NSString *message = [NSString stringWithFormat:@"%@\n\n%@\n%@\n\n%@: %@",
-                         MPLocalized(@"mp.host.connected_msg", @"已连接到联机网络，等待检测 LAN 端口..."),
-                         MPLocalized(@"mp.host.tip.create_world", @"请在 MC 中创建世界并开放局域网"),
-                         MPLocalized(@"mp.host.tip.auto_detect", @"系统会自动检测 LAN 端口并生成分享代码"),
+                         MPLocalized(@"mp.host.connected_msg", @"已连接到联机网络，请在 MC 中开放局域网后输入端口号"),
+                         MPLocalized(@"mp.host.tip.create_world", @"请在 MC 中创建世界并点击「对局域网开放」"),
+                         MPLocalized(@"mp.host.tip.manual_port", @"开放局域网后，MC 会在聊天框显示端口号，请将其输入下方"),
                          MPLocalized(@"mp.host.local_ip", @"本机 IP"),
                          localIP];
-    [self showSimpleAlertWithTitle:MPLocalized(@"mp.host.connected_title", @"联机已开启")
-                           message:message];
+
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:MPLocalized(@"mp.host.connected_title", @"联机已开启")
+                                                                   message:message
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+
+    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
+        textField.placeholder = MPLocalized(@"mp.host.port_placeholder", @"端口号（如 54321）");
+        textField.keyboardType = UIKeyboardTypeNumberPad;
+        textField.autocapitalizationType = UITextAutocapitalizationTypeNone;
+        textField.autocorrectionType = UITextAutocorrectionTypeNo;
+        textField.clearButtonMode = UITextFieldViewModeWhileEditing;
+    }];
+
+    [alert addAction:[UIAlertAction actionWithTitle:MPLocalized(@"common.cancel", @"取消")
+                                              style:UIAlertActionStyleCancel
+                                            handler:nil]];
+
+    __weak typeof(self) weakSelf = self;
+    [alert addAction:[UIAlertAction actionWithTitle:MPLocalized(@"mp.host.generate_code", @"生成分享代码")
+                                              style:UIAlertActionStyleDefault
+                                            handler:^(UIAlertAction *action) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+
+        UITextField *field = alert.textFields.firstObject;
+        NSString *port = [field.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+
+        // 校验：端口非空
+        if (port.length == 0) {
+            [strongSelf showSimpleAlertWithTitle:MPLocalized(@"mp.host.port_empty_title", @"端口为空")
+                                          message:MPLocalized(@"mp.host.port_empty_msg", @"请输入 LAN 端口号")];
+            return;
+        }
+
+        // 校验：端口范围（1-65535）
+        NSInteger portNum = [port integerValue];
+        if (portNum < 1 || portNum > 65535) {
+            [strongSelf showSimpleAlertWithTitle:MPLocalized(@"mp.host.port_invalid_title", @"端口无效")
+                                          message:MPLocalized(@"mp.host.port_invalid_msg", @"端口号必须在 1-65535 之间")];
+            return;
+        }
+
+        NSLog(@"[MultiplayerVC] 用户手动输入 LAN 端口：%@", port);
+        // 将端口设置到 LanPortDetector（source=Manual），方便其他模块读取
+        [[LanPortDetector sharedDetector] setManualPort:port];
+        // 生成分享代码
+        [strongSelf generateShareCodeWithPort:port];
+    }]];
+
+    [self presentViewController:alert animated:YES completion:nil];
 }
 
 #pragma mark - 游戏内模式：LAN 端口检测回调
 
 /// LanPortDetector 检测到端口后的回调
+///
+/// 注意：自动检测已禁用（改为手动输入端口），此回调通常不会被触发。
+/// 保留此方法是为了兼容性：如果未来重新启用自动检测，或外部代码通过
+/// setManualPort: 设置端口后调用此回调，仍能正常生成分享代码。
 ///
 /// 房主流程核心：MC 开放局域网后，LanPortDetector 自动检测到端口号，
 /// 触发本回调。本方法负责：
@@ -1061,17 +1111,16 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     [self generateShareCodeWithPort:port];
 }
 
-/// 根据检测到的 LAN 端口生成分享代码并显示
+/// 根据用户输入的 LAN 端口生成分享代码并显示
 ///
-/// 此方法提取自 lanPortDidDetect:，供以下两个场景复用：
-///   1. lanPortDidDetect: 收到 LanPortDetector 通知时调用
-///   2. hostButtonTapped 连接成功后主动检查 LanPortDetector.detectedPort 时调用
+/// 此方法供以下场景复用：
+///   1. lanPortDidDetect: 收到 LanPortDetector 通知时调用（兼容性保留，通常不触发）
+///   2. showManualPortInputAlert 中用户手动输入端口后调用（主要场景）
+///   3. hostButtonTapped 幂等检查中复用（通过 showManualPortInputAlert 间接调用）
 ///
-/// 第二个场景用于修复"用户先开放局域网再点当房主"的问题：
-///   - 用户先在 MC 中"对局域网开放" → LanPortDetector 检测到端口并发通知
-///   - 但此时 isHostFlowActive=NO，lanPortDidDetect: 忽略通知
-///   - 用户点"当房主"→ 连接成功 → LanPortDetector 因去重不再发通知
-///   - 修复：连接成功后主动检查 detectedPort 并调用此方法
+/// 关键变更（端口检测改为手动输入）：
+/// 之前此方法在 hostButtonTapped 连接成功后由自动检测端口触发，
+/// 现在改为由用户手动输入端口后触发，确保端口来自当前会话的真实 LAN 端口。
 - (void)generateShareCodeWithPort:(NSString *)port {
     MultiplayerRoom *room = self.hostRoom;
     if (!room) {

@@ -45,8 +45,14 @@ typedef NS_ENUM(NSInteger, LanPortSource) {
 
 /// Minecraft "对局域网开放"端口检测器
 ///
-/// 通过拦截 MC 日志输出自动检测 LAN 端口，也支持手动设置。
-/// 检测到端口后通过通知 LanPortDetectorDidDetectPortNotification 通知 UI。
+/// 重要变更：自动检测已禁用，改为手动输入端口。
+/// 之前通过拦截 MC 日志输出自动检测 LAN 端口，但存在以下问题：
+///   - latestlog.txt 可能包含上次会话的日志，导致误检测旧端口
+///   - 不同 MC 版本日志格式差异大，自动检测不可靠
+///   - 用户在游戏未真正"对局域网开放"时就生成了分享代码
+/// 现在改为手动输入：用户在 MC 中"对局域网开放"后，手动输入聊天框显示的端口号。
+/// LanPortDetector 仅保留 setManualPort: 方法供用户手动设置端口。
+/// startDetecting/stopDetecting 保留为 no-op，仅用于 API 兼容性。
 @interface LanPortDetector : NSObject
 
 /// 单例访问
