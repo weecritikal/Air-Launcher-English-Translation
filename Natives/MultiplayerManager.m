@@ -1104,6 +1104,16 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
 ///     startHostPortForwarderWithListenPort:localHostPort: 启动房主模式。
 - (void)connectToRoomFlow:(MultiplayerRoom *)room
                completion:(void (^)(BOOL success, NSError * _Nullable error))completion {
+    // 性能诊断：记录连接流程总耗时与每步耗时，便于优化和问题定位
+    CFAbsoluteTime flowStartTime = CFAbsoluteTimeGetCurrent();
+    CFAbsoluteTime stepStartTime = flowStartTime;
+#define MP_LOG_STEP_TIME(stepName) do { \
+    CFAbsoluteTime _now = CFAbsoluteTimeGetCurrent(); \
+    NSLog(@"[MultiplayerManager] [连接流程] [耗时] %@ 耗时 %.2fs（累计 %.2fs）", \
+          (stepName), _now - stepStartTime, _now - flowStartTime); \
+    stepStartTime = _now; \
+} while(0)
+
     // SubTask 4.2：取消标志已在 connectToRoom: 主线程持锁阶段重置（见下方 connectToRoom:）。
     // 这里不再重置——避免与 disconnectCurrentRoom 设置 YES 的竞态：
     //   - 之前在此处重置：dispatch_async 调度到后台线程开始执行的窗口内，
@@ -1153,6 +1163,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     } else {
         NSLog(@"[MultiplayerManager] [连接流程] 步骤 1：节点已启动，跳过");
     }
+    MP_LOG_STEP_TIME(@"步骤 1：启动节点");
 
     // 步骤 2：等待节点上线
     // SubTask 4.2：检查取消标志
@@ -1179,6 +1190,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
         }
     }
     NSLog(@"[MultiplayerManager] [连接流程] 节点已上线");
+    MP_LOG_STEP_TIME(@"步骤 2：等待节点上线");
 
     // 步骤 3：加入网络
     // SubTask 4.2：检查取消标志
@@ -1212,6 +1224,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
         }
         return;
     }
+    MP_LOG_STEP_TIME(@"步骤 3：加入网络");
 
     // 步骤 4：等待网络就绪
     //
@@ -1331,6 +1344,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
         }
         return;
     }
+    MP_LOG_STEP_TIME(@"步骤 4：等待网络就绪");
 
     // 同步本机 ZeroTier IP 到 currentLocalIP，并在房主模式下同步到 room.hostIP
     //
@@ -1409,6 +1423,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     [_stateLock unlock];
 
     NSLog(@"[MultiplayerManager] [连接流程] SOCKS5 代理已启动，监听 127.0.0.1:%u", actualPort);
+    MP_LOG_STEP_TIME(@"步骤 5：启动 SOCKS5 代理");
 
     // 步骤 6：设置环境变量 + 启动端口转发器（仅房客模式）
     //
@@ -1472,10 +1487,13 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
         NSLog(@"[MultiplayerManager] [连接流程] 房主模式（role=%ld）：跳过房客端口转发，等待 UI 调用 startHostPortForwarderWithListenPort:localHostPort:",
               (long)role);
     }
+    MP_LOG_STEP_TIME(@"步骤 6：环境变量+端口转发");
+    NSLog(@"[MultiplayerManager] [连接流程] 连接流程完成，总耗时 %.2fs", CFAbsoluteTimeGetCurrent() - flowStartTime);
 
     if (completion) {
         completion(YES, nil);
     }
+#undef MP_LOG_STEP_TIME
 }
 
 - (void)disconnectCurrentRoom {

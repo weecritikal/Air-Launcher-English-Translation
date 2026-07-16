@@ -548,6 +548,17 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
     PUSH_MARGV_LITERAL("-Dlog4j2.formatMsgNoLookups=true");
 
     // ============================================================================
+    // 帧率解锁第四层：JVM 系统属性
+    // ============================================================================
+    // 某些 MC 版本/mod 可能通过 System.getProperty 读取帧率限制。
+    // 设置 -Dmax.fps=260 作为 options.txt 之外的额外兜底层。
+    // 不影响不读取此属性的版本。
+    if (getPrefBool(@"video.disable_game_vsync")) {
+        PUSH_MARGV_LITERAL("-Dmax.fps=260");
+        NSLog(@"[JavaLauncher] Added JVM property -Dmax.fps=260 (frame rate unlock layer 4)");
+    }
+
+    // ============================================================================
     // ZeroTier 联机 SOCKS5 代理注入
     // ============================================================================
     // 当用户在联机界面连接到 ZeroTier 房间后，MultiplayerManager 会启动一个本地
@@ -749,6 +760,31 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
     NSString *libjlipath8 = [NSString stringWithFormat:@"%@/lib/jli/libjli.dylib", javaHome]; // java 8
     NSString *libjlipath11 = [NSString stringWithFormat:@"%@/lib/libjli.dylib", javaHome]; // java 11+
     BOOL isJava8 = [fm fileExistsAtPath:libjlipath8];
+
+    // ============================================================================
+    // JVM 性能优化（保守参数，不影响启动稳定性）
+    // ============================================================================
+    // 仅对 Java 17+ 启用 G1GC 调优。Java 8 的 G1GC 不够成熟，保持默认 SerialGC。
+    // 不添加 -XX:+AlwaysPreTouch（延长启动时间）、-XX:TieredStopAtLevel=1（降低 JIT 性能）、
+    // -XX:CICompilerCount=1（减少编译线程）等可能影响游戏体验的参数。
+    // -XX:+UnlockExperimentalVMOptions 已在上方添加，UseStringDeduplication 需要实验模式。
+    if (!isJava8) {
+        // G1GC：Java 9+ 默认 GC，显式启用确保一致性。
+        // 适合大堆内存（MC 通常分配 2-4GB），减少 Full GC 停顿。
+        PUSH_MARGV_LITERAL("-XX:+UseG1GC");
+        // 目标 GC 停顿 50ms（默认 200ms）。
+        // 这是一个软目标，JVM 会尽量满足但不强制，不会导致 OOM。
+        // 对 MC 的实时渲染有益，减少 GC 引起的卡顿。
+        PUSH_MARGV_LITERAL("-XX:MaxGCPauseMillis=50");
+        // 字符串去重：G1GC 特性，自动去重老年代中相同值的 String 对象。
+        // MC 有大量重复字符串（方块名、物品名、I18N key 等），可节省 5-10% 堆内存。
+        // 仅在 G1GC 下生效，开销极小。
+        PUSH_MARGV_LITERAL("-XX:+UseStringDeduplication");
+        NSLog(@"[JavaLauncher] JVM GC optimization: G1GC + MaxGCPauseMillis=50 + StringDeduplication (Java 17+)");
+    } else {
+        NSLog(@"[JavaLauncher] Java 8 detected, skipping G1GC tuning (using default GC)");
+    }
+
     setenv("INTERNAL_JLI_PATH", (isJava8 ? libjlipath8 : libjlipath11).UTF8String, 1);
     void* libjli = dlopen(getenv("INTERNAL_JLI_PATH"), RTLD_GLOBAL);
 

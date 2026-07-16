@@ -107,12 +107,34 @@ public class PojavLauncher {
             // MC 26.2+ 兼容：可能重命名为 maxFramerate 或 framerateLimit
             MCOptionUtils.set("maxFramerate", "260");
             MCOptionUtils.set("framerateLimit", "260");
+            // MC 1.21.8+ 兼容：inactivityFpsLimit 选项（InactivityFpsLimit 枚举）
+            //
+            // 关键修复（帧率解锁无效根因之一）：
+            // MC 1.21.8+ 引入了"不活动帧率限制"功能（inactivityFpsLimit），
+            // 默认值为 "afk"：
+            //   - 无输入 1 分钟后帧率降至 30 FPS
+            //   - 无输入 10 分钟后帧率降至 10 FPS
+            //   - 窗口最小化时帧率降至 10 FPS
+            // 这导致用户在 iOS 上切后台/不操作时帧率被严重限制，
+            // 即使关闭了 VSync 和 maxFps 限制也无济于事。
+            //
+            // InactivityFpsLimit 枚举只有两个值：
+            //   - "afk"（默认）：AFK 模式，不操作时限帧
+            //   - "minimized"：仅最小化时限帧（10 FPS）
+            //
+            // 设置为 "minimized" 后，用户不操作时不会限帧，
+            // 仅在窗口最小化（iOS 上几乎不会发生）时限帧。
+            // 这样配合 VSync 关闭 + maxFps=260 可以真正实现帧率解锁。
+            //
+            // 旧版本 MC（1.21.7 及以下）不识别此选项，会被忽略，无副作用。
+            MCOptionUtils.set("inactivityFpsLimit", "minimized");
             // 诊断日志：输出写入的帧率相关选项
             System.out.println("[PojavLauncher] VSync disabled, maxFps/maxFramerate/framerateLimit set to 260");
             System.out.println("[PojavLauncher]   enableVsync=" + MCOptionUtils.get("enableVsync"));
             System.out.println("[PojavLauncher]   maxFps=" + MCOptionUtils.get("maxFps"));
             System.out.println("[PojavLauncher]   maxFramerate=" + MCOptionUtils.get("maxFramerate"));
             System.out.println("[PojavLauncher]   framerateLimit=" + MCOptionUtils.get("framerateLimit"));
+            System.out.println("[PojavLauncher]   inactivityFpsLimit=" + MCOptionUtils.get("inactivityFpsLimit"));
         }
         // Default settings for performance
         MCOptionUtils.setDefault("mipmapLevels", "0");
