@@ -100,6 +100,21 @@ NSString *const PREF_MOD_UPDATE_KEEP_OLD = @"general.mod_update_keep_old";
             @"auto_ram": @(!getEntitlementValue(@"com.apple.private.memorystatus")),
             @"allocated_memory": [NSNumber numberWithFloat:roundf((NSProcessInfo.processInfo.physicalMemory / 1048576) * 0.25)]
         }.mutableCopy,
+        // MobileGlues 渲染器偏好（对齐 Ynnyny 仓库）
+        // 当渲染器为 mobileglues/auto/vulkan 时由 init_loadMobileGluesConfig() 写入
+        // <POJAV_HOME>/MG/config.json，控制 GL 版本、ANGLE 后端、FSR 等。
+        @"mobileglues": @{
+            @"enable_angle": @NO,
+            @"enable_no_error": @(0),
+            @"enable_ext_timer_query": @YES,
+            @"enable_ext_compute_shader": @NO,
+            @"enable_ext_direct_state_access": @NO,
+            @"max_glsl_cache_size": @(32),
+            @"multidraw_mode": @(0),
+            @"angle_depth_clear_fix_mode": @(0),
+            @"custom_gl_version": @(0),
+            @"fsr1_setting": @(0)
+        }.mutableCopy,
         @"internal": @{
             @"isolated": @NO,
             @"latest_version": [NSDictionary new]

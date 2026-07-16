@@ -258,7 +258,7 @@
     self.hasDetail = YES;
     self.prefDetailVisible = self.navigationController == nil;
     
-    self.prefSections = @[@"general", @"video", @"control", @"java", @"debug"];
+    self.prefSections = @[@"general", @"video", @"mobileglues", @"control", @"java", @"debug"];
 
     self.rendererKeys = getRendererKeys(NO);
     self.rendererList = getRendererNames(NO);
@@ -641,6 +641,103 @@
               @"hasDetail": @YES,
               @"icon": @"mic",
               @"type": self.typeSwitch
+            },
+        ], @[
+            // MobileGlues settings（对齐 Ynnyny 仓库）
+            // 当渲染器为 mobileglues/auto/vulkan 时，init_loadMobileGluesConfig()
+            // 会读取这些键并写入 <POJAV_HOME>/MG/config.json。
+            @{@"icon": @"cpu"},
+            @{@"key": @"enable_angle",
+              @"hasDetail": @YES,
+              @"icon": @"triangle",
+              @"type": self.typeSwitch,
+              @"enableCondition": whenNotInGame
+            },
+            @{@"key": @"enable_no_error",
+              @"hasDetail": @YES,
+              @"icon": @"exclamationmark.triangle",
+              @"type": self.typePickField,
+              @"enableCondition": whenNotInGame,
+              @"pickKeys": @[@"0", @"1", @"2"],
+              @"pickList": @[
+                  localize(@"preference.title.mg_enable_no_error-0", nil),
+                  localize(@"preference.title.mg_enable_no_error-1", nil),
+                  localize(@"preference.title.mg_enable_no_error-2", nil)
+              ]
+            },
+            @{@"key": @"enable_ext_timer_query",
+              @"hasDetail": @YES,
+              @"icon": @"clock",
+              @"type": self.typeSwitch,
+              @"enableCondition": whenNotInGame
+            },
+            @{@"key": @"enable_ext_compute_shader",
+              @"hasDetail": @YES,
+              @"icon": @"cube.transparent",
+              @"type": self.typeSwitch,
+              @"enableCondition": whenNotInGame
+            },
+            @{@"key": @"enable_ext_direct_state_access",
+              @"hasDetail": @YES,
+              @"icon": @"directconnect",
+              @"type": self.typeSwitch,
+              @"enableCondition": whenNotInGame
+            },
+            @{@"key": @"max_glsl_cache_size",
+              @"hasDetail": @YES,
+              @"icon": @"memorychip",
+              @"type": self.typeSlider,
+              @"min": @(0),
+              @"max": @(256),
+              @"enableCondition": whenNotInGame
+            },
+            @{@"key": @"multidraw_mode",
+              @"hasDetail": @YES,
+              @"icon": @"square.stack.3d.down.dottedline",
+              @"type": self.typePickField,
+              @"enableCondition": whenNotInGame,
+              @"pickKeys": @[@"0", @"1", @"2"],
+              @"pickList": @[
+                  localize(@"preference.title.mg_multidraw_mode-0", nil),
+                  localize(@"preference.title.mg_multidraw_mode-1", nil),
+                  localize(@"preference.title.mg_multidraw_mode-2", nil)
+              ]
+            },
+            @{@"key": @"angle_depth_clear_fix_mode",
+              @"hasDetail": @YES,
+              @"icon": @"rectangle.3.group",
+              @"type": self.typeSwitch,
+              @"enableCondition": whenNotInGame
+            },
+            @{@"key": @"custom_gl_version",
+              @"hasDetail": @YES,
+              @"icon": @"number",
+              @"type": self.typePickField,
+              @"enableCondition": whenNotInGame,
+              @"pickKeys": @[@"0", @"4.0", @"4.1", @"4.2", @"4.3", @"4.4", @"4.5", @"4.6"],
+              @"pickList": @[
+                  localize(@"preference.title.mg_custom_gl_version-0", nil),
+                  localize(@"preference.title.mg_custom_gl_version-4.0", nil),
+                  localize(@"preference.title.mg_custom_gl_version-4.1", nil),
+                  localize(@"preference.title.mg_custom_gl_version-4.2", nil),
+                  localize(@"preference.title.mg_custom_gl_version-4.3", nil),
+                  localize(@"preference.title.mg_custom_gl_version-4.4", nil),
+                  localize(@"preference.title.mg_custom_gl_version-4.5", nil),
+                  localize(@"preference.title.mg_custom_gl_version-4.6", nil)
+              ]
+            },
+            @{@"key": @"fsr1_setting",
+              @"hasDetail": @YES,
+              @"icon": @"square.grid.3x2",
+              @"type": self.typePickField,
+              @"enableCondition": whenNotInGame,
+              @"pickKeys": @[@"0", @"1", @"2", @"3"],
+              @"pickList": @[
+                  localize(@"preference.title.mg_fsr1_setting-0", nil),
+                  localize(@"preference.title.mg_fsr1_setting-1", nil),
+                  localize(@"preference.title.mg_fsr1_setting-2", nil),
+                  localize(@"preference.title.mg_fsr1_setting-3", nil)
+              ]
             },
         ], @[
             // Control settings
@@ -1284,6 +1381,8 @@
         return [UIColor systemBlueColor];
     } else if ([sectionKey isEqualToString:@"video"]) {
         return [UIColor systemPurpleColor];
+    } else if ([sectionKey isEqualToString:@"mobileglues"]) {
+        return [UIColor systemIndigoColor];
     } else if ([sectionKey isEqualToString:@"control"]) {
         return [UIColor systemGreenColor];
     } else if ([sectionKey isEqualToString:@"java"]) {
