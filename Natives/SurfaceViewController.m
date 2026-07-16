@@ -144,6 +144,47 @@
 }
 @end
 
+#pragma mark - PLDisplayLinkTarget
+// CADisplayLink 回调 target 类
+//
+// 关键修复（Vulkan FPS 显示无效）：
+// 之前使用 [CADisplayLink displayLinkWithTarget:block selector:@selector(invoke)]
+// 传递 block，但 block 的 invoke 方法签名 -(void)invoke 与 CADisplayLink 期望的
+// -(void)selector:(CADisplayLink*)link 签名不匹配，导致回调不触发。
+// 此类提供正确签名的 displayLinkTick: 方法，确保 CADisplayLink 回调正确触发。
+@interface PLDisplayLinkTarget : NSObject
+@property(nonatomic, assign) BOOL isVulkanMode;  // YES 时递增 FPS 计数器
+@property(nonatomic, assign) NSUInteger tickCount;  // 诊断用：累计 tick 次数
+@end
+
+@implementation PLDisplayLinkTarget
+
+- (instancetype)initWithVulkanMode:(BOOL)isVulkanMode {
+    self = [super init];
+    if (self) {
+        _isVulkanMode = isVulkanMode;
+        _tickCount = 0;
+    }
+    return self;
+}
+
+// CADisplayLink 回调方法（正确签名：带 CADisplayLink* 参数）
+- (void)displayLinkTick:(CADisplayLink *)link {
+    [GyroInput tick];
+    [ControllerInput tick];
+    if (_isVulkanMode) {
+        pojavIncrementFpsCounter();
+    }
+    _tickCount++;
+    // 诊断日志：前 5 次回调输出，确认 CADisplayLink 确实触发
+    if (_tickCount <= 5) {
+        NSLog(@"[PLDisplayLinkTarget] displayLinkTick #%lu (vulkanMode=%d, fpsCounter incremented)",
+              (unsigned long)_tickCount, _isVulkanMode);
+    }
+}
+
+@end
+
 // --- [START] TouchController Static Library Support ---
 // ProxyMessage ç±»åå®ä¹ (åè TouchController-iOSTest)
 #define PROXY_MESSAGE_TYPE_ADD_POINTER 1
@@ -172,6 +213,7 @@ static GameSurfaceView* pojavWindow;
 // FPS/内存监控相关（FPS 在 native pojavSwapBuffers 中计数，参照 FCL/ZL2）
 @property(nonatomic) NSTimer *statsTimer;                 // 低频定时器，1s 一次
 @property(nonatomic) CADisplayLink *statsDisplayLink;     // 渲染循环引用（用于 Gyro/Controller tick 和失效）
+@property(nonatomic, strong) id statsDisplayLinkTarget;   // CADisplayLink 的 target（强引用防释放）
 
 @property(nonatomic) NSDictionary* metadata;
 @property(nonatomic) TrackedTextField *inputTextField;
@@ -700,19 +742,27 @@ static GameSurfaceView* pojavWindow;
     // 渲染循环 tick：Gyro/Controller 输入采样（FPS 计数已移至 native pojavSwapBuffers）
     // Vulkan 模式下 MC 不调用 glfwSwapBuffers，FPS 计数器不递增，
     // 使用 CADisplayLink 作为 fallback：每帧触发时递增计数器。
-    // 在 ProMotion 设备上 CADisplayLink 频率会跟随内容更新频率，能较准确反映游戏帧率；
-    // 在 60Hz 设备上则固定为 60（无法区分游戏帧率低于 60 的情况，但优于显示 0）。
+    //
+    // 关键修复（Vulkan FPS 显示无效）：
+    //   之前使用 [CADisplayLink displayLinkWithTarget:tickInput selector:@selector(invoke)]
+    //   传递 block，但 block 的 invoke 方法签名是 -(void)invoke，而 CADisplayLink 期望的
+    //   selector 签名是 -(void)selector:(CADisplayLink*)link。签名不匹配导致回调不触发，
+    //   FPS 计数器永远不递增，显示为 0。
+    //   修复：使用专门的 target 类 PLDisplayLinkTarget，提供正确签名的回调方法。
+    //
+    //   另一个问题：currentRenderer 在 viewDidLoad 时从 PLProfiles 读取，但 JavaLauncher.m
+    //   可能在启动时修改 AMETHYST_RENDERER 环境变量（如 auto → ANGLE）。
+    //   因此同时检查 PLProfiles 和 AMETHYST_RENDERER 环境变量，任一为 Vulkan 即启用 fallback。
     NSString *currentRenderer = [PLProfiles resolveKeyForCurrentProfile:@"renderer"];
-    BOOL isVulkanRenderer = [currentRenderer isEqualToString:@ RENDERER_NAME_VULKAN];
-    __weak typeof(self) weakSelf = self;
-    id tickInput = ^{
-        [GyroInput tick];
-        [ControllerInput tick];
-        if (isVulkanRenderer) {
-            pojavIncrementFpsCounter();
-        }
-    };
-    CADisplayLink *displayLink = [CADisplayLink displayLinkWithTarget:tickInput selector:@selector(invoke)];
+    NSString *envRenderer = NSProcessInfo.processInfo.environment[@"AMETHYST_RENDERER"];
+    BOOL isVulkanRenderer = [currentRenderer isEqualToString:@ RENDERER_NAME_VULKAN] ||
+                            [envRenderer isEqualToString:@ RENDERER_NAME_VULKAN];
+    NSLog(@"[SurfaceViewController] FPS counter setup: profileRenderer=%@, envRenderer=%@, isVulkan=%d",
+          currentRenderer, envRenderer, isVulkanRenderer);
+
+    PLDisplayLinkTarget *linkTarget = [[PLDisplayLinkTarget alloc] initWithVulkanMode:isVulkanRenderer];
+    CADisplayLink *displayLink = [CADisplayLink displayLinkWithTarget:linkTarget
+                                                            selector:@selector(displayLinkTick:)];
     if (@available(iOS 15.0, tvOS 15.0, *)) {
         // max_framerate 选项已移除：始终采用 30-120Hz 自适应范围。
         // 屏幕硬件决定实际帧率（60Hz 设备仍为 60，120Hz ProMotion 设备可达 120），
@@ -721,6 +771,7 @@ static GameSurfaceView* pojavWindow;
     }
     [displayLink addToRunLoop:NSRunLoop.currentRunLoop forMode:NSRunLoopCommonModes];
     self.statsDisplayLink = displayLink;
+    self.statsDisplayLinkTarget = linkTarget;  // 强引用防止释放
 
     // 低频采样定时器：每 1 秒读取一次 native FPS 计数器和内存占用
     // 参照 FCL/ZL2 的 1Hz 采样策略（FCL_GameMenu.java Thread.sleep(1000)）
@@ -2142,6 +2193,7 @@ static NSMutableDictionary *s_touchToFingerIdMap = nil;
     self.statsTimer = nil;
     [self.statsDisplayLink invalidate];
     self.statsDisplayLink = nil;
+    self.statsDisplayLinkTarget = nil;  // 释放 CADisplayLink target
 
     // 清理启动遮罩层资源
     [[NSNotificationCenter defaultCenter] removeObserver:self name:@"PojavFirstFrameRendered" object:nil];
