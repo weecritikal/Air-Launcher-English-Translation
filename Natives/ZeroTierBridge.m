@@ -2497,14 +2497,32 @@ static NSArray<NSString *> * const kZTIdentityFiles = @[@"identity.secret", @"id
     _keepAliveTimer = nil;
     [_lock unlock];
     if (timer) {
+        // 关键修复（房主端崩溃根因）：NSTimer invalidate 竞态防护
+        //
+        // 问题：performAutoReconnect 在 global queue 调用 stopNode → stopKeepAlive，
+        // invalidate 被 dispatch_async 到主队列。多次 stop/start 循环后（如节点 flapping），
+        // 主队列堆积多个 dispatch_async(invalidate) 块，每个块捕获不同的 timer 局部变量。
+        // NSTimer 被 invalidate 后再次 invalidate 会崩溃（EXC_BAD_INSTRUCTION）。
+        //
+        // 修复：在 invalidate 前检查 timer.isValid，避免对已 invalidate 的 timer 再次操作。
+        // 同时使用 dispatch_sync（仅在非主线程时）确保 invalidate 同步完成，
+        // 避免主队列堆积异步块。dispatch_sync 在主线程调用会死锁，因此需要判断当前线程。
         if ([NSThread isMainThread]) {
-            [timer invalidate];
-        } else {
-            dispatch_async(dispatch_get_main_queue(), ^{
+            if (timer.isValid) {
                 [timer invalidate];
+                NSLog(@"[ZeroTierBridge] 保活定时器已停止（主线程同步）");
+            }
+        } else {
+            // 关键修复：使用 dispatch_sync 而非 dispatch_async，确保 invalidate 同步完成
+            // 避免主队列堆积异步 invalidate 块导致竞态崩溃。
+            // dispatch_sync 到主线程在非主线程调用是安全的（不会死锁）。
+            dispatch_sync(dispatch_get_main_queue(), ^{
+                if (timer.isValid) {
+                    [timer invalidate];
+                }
             });
+            NSLog(@"[ZeroTierBridge] 保活定时器已停止（跨线程同步）");
         }
-        NSLog(@"[ZeroTierBridge] 保活定时器已停止");
     }
 }
 

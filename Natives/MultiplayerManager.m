@@ -370,6 +370,18 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
 
     NSLog(@"[MultiplayerManager] 应用回到前台：检测到有活跃联机房间（%@），检查 ZeroTier 节点状态", room.name);
 
+    // 关键修复（房主端崩溃根因）：回前台时必须复位 _isAutoReconnecting 标志
+    //
+    // 问题：应用进入后台时，若 _isAutoReconnecting=YES（dispatch_after 重连 block
+    // 在后台被 iOS 挂起未执行），回前台后此标志永远为 YES。
+    // startAutoReconnect 入口 if (_isAutoReconnecting...) 直接 return，自动重连死锁。
+    // 节点状态与定时器状态长期不一致，多次前后台切换累积后导致房主端崩溃。
+    //
+    // 修复：在检测节点状态前，先调用 resetAutoReconnectState 复位标志，
+    // 解除自动重连死锁。不复位 _autoReconnectAttempts / _consecutiveOfflineCount，
+    // 让计数器跨前后台累积，确保 5 次重连上限仍能生效。
+    [[ZeroTierBridge sharedInstance] resetAutoReconnectState];
+
     // 异步检测节点状态，避免阻塞主线程
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         BOOL nodeOnline = [[ZeroTierBridge sharedInstance] isNodeOnline];
