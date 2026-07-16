@@ -230,6 +230,11 @@ static ssize_t writeAllWithTimeout(int fd, const void *buf, size_t len, int time
             if (errno == EINTR) {
                 continue;
             }
+            // 关键修复（P0-2）：EAGAIN/EWOULDBLOCK 表示 SO_SNDTIMEO 超时（发送缓冲区暂时不可用），
+            // 不应视为连接断开，重试写入。配合 P1-3 的 300 秒超时，避免正常流量高峰期误断开。
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                continue;
+            }
             NSLog(@"[SOCKS5Proxy] writeAll 错误：errno = %d, fd = %d", errno, fd);
             return -1;
         }
@@ -994,8 +999,10 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
     // ============================================================
 
     // 读取客户端 greeting 头：VER(1) NMETHODS(1)
+    // 关键修复（P1-1）：握手阶段使用 15 秒超时（SOCKS5_HANDSHAKE_TIMEOUT），
+    // 而非依赖 socket 的 30 秒 SO_RCVTIMEO，防止恶意客户端占用线程更久。
     uint8_t greeting[2] = {0};
-    ssize_t n = readAll(clientFD, greeting, 2);
+    ssize_t n = readAllWithTimeout(clientFD, greeting, 2, SOCKS5_HANDSHAKE_TIMEOUT);
     if (n != 2) {
         NSLog(@"[SOCKS5Proxy] 读取 greeting 头失败：n=%zd", n);
         return NO;
@@ -1015,7 +1022,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
 
     // 读取方法列表：METHODS(NMETHODS)
     uint8_t methods[256] = {0};
-    n = readAll(clientFD, methods, nMethods);
+    n = readAllWithTimeout(clientFD, methods, nMethods, SOCKS5_HANDSHAKE_TIMEOUT);
     if (n != nMethods) {
         NSLog(@"[SOCKS5Proxy] 读取方法列表失败：n=%zd, expected=%d", n, nMethods);
         return NO;
@@ -1055,7 +1062,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
 
     // 读取请求头：VER(1) CMD(1) RSV(1) ATYP(1)
     uint8_t requestHeader[4] = {0};
-    n = readAll(clientFD, requestHeader, 4);
+    n = readAllWithTimeout(clientFD, requestHeader, 4, SOCKS5_HANDSHAKE_TIMEOUT);
     if (n != 4) {
         NSLog(@"[SOCKS5Proxy] 读取请求头失败：n=%zd", n);
         return NO;
@@ -1087,7 +1094,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
         case SOCKS5_ATYP_IPV4: {
             // IPv4 地址：4 字节
             uint8_t ipv4[4] = {0};
-            n = readAll(clientFD, ipv4, 4);
+            n = readAllWithTimeout(clientFD, ipv4, 4, SOCKS5_HANDSHAKE_TIMEOUT);
             if (n != 4) {
                 NSLog(@"[SOCKS5Proxy] 读取 IPv4 地址失败：n=%zd", n);
                 return NO;
@@ -1100,13 +1107,13 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
         case SOCKS5_ATYP_DOMAIN: {
             // 域名：1 字节长度 + 域名字符串
             uint8_t domainLen = 0;
-            n = readAll(clientFD, &domainLen, 1);
+            n = readAllWithTimeout(clientFD, &domainLen, 1, SOCKS5_HANDSHAKE_TIMEOUT);
             if (n != 1) {
                 NSLog(@"[SOCKS5Proxy] 读取域名长度失败：n=%zd", n);
                 return NO;
             }
             char domain[256] = {0};
-            n = readAll(clientFD, domain, domainLen);
+            n = readAllWithTimeout(clientFD, domain, domainLen, SOCKS5_HANDSHAKE_TIMEOUT);
             if (n != domainLen) {
                 NSLog(@"[SOCKS5Proxy] 读取域名失败：n=%zd, expected=%d", n, domainLen);
                 return NO;
@@ -1151,7 +1158,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
         case SOCKS5_ATYP_IPV6: {
             // IPv6 地址：16 字节
             uint8_t ipv6[16] = {0};
-            n = readAll(clientFD, ipv6, 16);
+            n = readAllWithTimeout(clientFD, ipv6, 16, SOCKS5_HANDSHAKE_TIMEOUT);
             if (n != 16) {
                 NSLog(@"[SOCKS5Proxy] 读取 IPv6 地址失败：n=%zd", n);
                 return NO;
@@ -1174,7 +1181,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
 
     // 读取目标端口：2 字节，网络字节序（大端）
     uint8_t portBytes[2] = {0};
-    n = readAll(clientFD, portBytes, 2);
+    n = readAllWithTimeout(clientFD, portBytes, 2, SOCKS5_HANDSHAKE_TIMEOUT);
     if (n != 2) {
         NSLog(@"[SOCKS5Proxy] 读取端口失败：n=%zd", n);
         return NO;
@@ -1210,14 +1217,26 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
                                                                   port:destPort
                                                                timeout:SOCKS5_CONNECT_TIMEOUT];
     if (connectResult != 0) {
-        NSLog(@"[SOCKS5Proxy] 通过 ZeroTier 连接目标失败：result=%d, target=%@:%u",
-              connectResult, destHost, destPort);
+        NSLog(@"[SOCKS5Proxy] 通过 ZeroTier 连接目标失败：result=%d, zts_errno=%d, target=%@:%u",
+              connectResult, zts_errno, destHost, destPort);
         [[ZeroTierBridge sharedInstance] closeSocket:ztFD];
 
-        // 根据错误类型选择合适的回复码
-        // 由于 libzt 的错误码与 SOCKS5 回复码不直接对应，这里统一使用 CONNECTION_REFUSED
+        // 关键修复（P1-2）：根据 zts_errno 返回精确的 SOCKS5 错误码
+        // 之前所有 connect 失败统一返回 CONNECTION_REFUSED，客户端无法区分
+        // 超时、主机不可达、网络不可达等不同情况，不利于排查联机问题。
+        uint8_t repCode;
+        int err = zts_errno;
+        if (err == ZTS_ETIMEDOUT) {
+            repCode = SOCKS5_REP_TTL_EXPIRED;           // 0x06
+        } else if (err == ZTS_EHOSTUNREACH) {
+            repCode = SOCKS5_REP_HOST_UNREACHABLE;       // 0x04
+        } else if (err == ZTS_ENETUNREACH) {
+            repCode = SOCKS5_REP_NETWORK_UNREACHABLE;    // 0x03
+        } else {
+            repCode = SOCKS5_REP_CONNECTION_REFUSED;     // 0x05
+        }
         [self sendSocks5Reply:clientFD
-                          rep:SOCKS5_REP_CONNECTION_REFUSED
+                          rep:repCode
                      bindAddr:@"0.0.0.0"
                      bindPort:0
                          atyp:SOCKS5_ATYP_IPV4];
@@ -1226,6 +1245,22 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
 
     NSLog(@"[SOCKS5Proxy] 通过 ZeroTier 连接目标成功：target=%@:%u, ztFD=%d",
           destHost, destPort, ztFD);
+
+    // 关键修复（P0-1）：设置远程 socket keepalive
+    // libzt socket 默认不启用 keepalive，网络中断时无法及时检测半死连接，
+    // 导致转发线程长时间阻塞在 recv 上。启用后能更快检测连接异常。
+    int keepAlive = 1;
+    zts_bsd_setsockopt(ztFD, ZTS_SOL_SOCKET, ZTS_SO_KEEPALIVE, &keepAlive, sizeof(keepAlive));
+
+    // 关键修复（P1-3）：连接成功后重置 IO 超时为 300 秒
+    // connectSocket 内部将 30 秒（SOCKS5_CONNECT_TIMEOUT）同时设为
+    // SO_RCVTIMEO/SO_SNDTIMEO。长时间静默时 EAGAIN 可能被误判为连接断开。
+    // 重置为更长的 300 秒，配合 P0-2 的 EAGAIN 重试逻辑，避免正常静默期误断开。
+    struct zts_timeval ioTv;
+    ioTv.tv_sec = 300;
+    ioTv.tv_usec = 0;
+    zts_bsd_setsockopt(ztFD, ZTS_SOL_SOCKET, ZTS_SO_RCVTIMEO, &ioTv, sizeof(ioTv));
+    zts_bsd_setsockopt(ztFD, ZTS_SOL_SOCKET, ZTS_SO_SNDTIMEO, &ioTv, sizeof(ioTv));
 
     // ============================================================
     // 步骤 4：发送成功回复
@@ -1363,9 +1398,26 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
 
                 // 从客户端读取数据（系统 read）
                 ssize_t n = read(clientFD, buffer, sizeof(buffer));
-                if (n <= 0) {
-                    // n == 0：客户端关闭连接
-                    // n < 0：读取错误
+                if (n == 0) {
+                    // 客户端关闭连接
+                    NSLog(@"[SOCKS5Proxy] client→remote 结束：n=0（客户端关闭）");
+
+                    // 标记客户端已关闭（原子写，自带内存屏障）
+                    atomic_store(&clientClosed, true);
+
+                    // 关闭远程的写端，通知 remote→client 方向退出
+                    // shutdown 会导致另一端的 recv 返回 0
+                    // 关键修复：remoteFD 是 libzt socket，必须使用 zts_bsd_shutdown
+                    [[ZeroTierBridge sharedInstance] shutdownSocket:remoteFD how:SHUT_WR];
+                    break;
+                }
+                if (n < 0) {
+                    // 关键修复（P0-2）：EAGAIN/EWOULDBLOCK 是 SO_RCVTIMEO 超时（无数据到达），
+                    // 不是连接断开，应 continue 重试。EINTR 被信号中断也重试。
+                    // 只有其他错误才视为连接异常并退出转发。
+                    if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) {
+                        continue;
+                    }
                     NSLog(@"[SOCKS5Proxy] client→remote 结束：n=%zd, errno=%d", n, errno);
 
                     // 标记客户端已关闭（原子写，自带内存屏障）
@@ -1415,10 +1467,26 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
                 ssize_t n = [[ZeroTierBridge sharedInstance] recvData:remoteFD
                                                                 buffer:buffer
                                                                 length:sizeof(buffer)];
-                if (n <= 0) {
-                    // n == 0：远程关闭连接
-                    // n < 0：接收错误
-                    NSLog(@"[SOCKS5Proxy] remote→client 结束：n=%zd", n);
+                if (n == 0) {
+                    // 远程关闭连接
+                    NSLog(@"[SOCKS5Proxy] remote→client 结束：n=0（远程关闭）");
+
+                    // 标记远程已关闭（原子写）
+                    atomic_store(&remoteClosed, true);
+
+                    // 关闭客户端的写端，通知 client→remote 方向退出
+                    shutdown(clientFD, SHUT_WR);
+                    break;
+                }
+                if (n < 0) {
+                    // 关键修复（P0-2）：libzt 使用 zts_errno。
+                    // ZTS_EAGAIN/ZTS_EWOULDBLOCK 是 SO_RCVTIMEO 超时（无数据到达），
+                    // 不是连接断开，应 continue 重试。ZTS_EINTR 被信号中断也重试。
+                    // 只有其他错误才视为连接异常并退出转发。
+                    if (zts_errno == ZTS_EINTR || zts_errno == ZTS_EAGAIN || zts_errno == ZTS_EWOULDBLOCK) {
+                        continue;
+                    }
+                    NSLog(@"[SOCKS5Proxy] remote→client 结束：n=%zd, zts_errno=%d", n, zts_errno);
 
                     // 标记远程已关闭（原子写）
                     atomic_store(&remoteClosed, true);

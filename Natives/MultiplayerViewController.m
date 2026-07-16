@@ -1137,7 +1137,12 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 
     // 生成分享代码
     self.lastShareCode = [[MultiplayerManager sharedManager] generateShareCodeForRoom:room];
-    self.lastServerAddress = [NSString stringWithFormat:@"%@:%@", room.hostIP, room.hostPort];
+    // 关键修复（P1-4）：IPv6 地址需要用方括号包裹，否则冒号会与端口分隔符混淆
+    if ([room.hostIP containsString:@":"]) {
+        self.lastServerAddress = [NSString stringWithFormat:@"[%@]:%@", room.hostIP, room.hostPort];
+    } else {
+        self.lastServerAddress = [NSString stringWithFormat:@"%@:%@", room.hostIP, room.hostPort];
+    }
 
     // 刷新表格，让 Section 1 显示最新的分享代码
     [self.tableView reloadData];
@@ -1268,6 +1273,14 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
             return;
         }
 
+        // 关键修复（P0-6）：校验分享码中的 hostIP 非空
+        // 房客必须有房主 IP 才能进行端口转发，空 hostIP 的分享码无法使用
+        if (!parsedRoom.hostIP.length) {
+            [strongSelf showSimpleAlertWithTitle:MPLocalized(@"mp.sharecode.invalid", @"分享代码无效")
+                                          message:MPLocalized(@"mp.sharecode.missing_host", @"分享代码缺少房主 IP，请确认代码完整无误")];
+            return;
+        }
+
         [strongSelf performGuestJoinWithRoom:parsedRoom shareCode:code];
     }]];
 
@@ -1340,7 +1353,8 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 ///   3. 显示清晰的操作引导
 - (void)showGuestConnectedAlert {
     MultiplayerRoom *room = self.guestRoom;
-    NSString *hostIP = room.hostIP.length ? room.hostIP : ([[MultiplayerManager sharedManager] currentLocalIP] ?: @"-");
+    // 关键修复（P1-5）：hostIP 为空时显示"未知"，而非用 currentLocalIP 误导用户
+    NSString *hostIP = room.hostIP.length ? room.hostIP : MPLocalized(@"mp.unknown", @"未知");
     NSString *hostPort = room.hostPort.length ? room.hostPort : @"25565";
 
     // 关键修复：MC 使用 Netty 的 NioSocketChannel，不走 Java 的 SOCKS5 代理。
@@ -1354,19 +1368,23 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         serverAddress = [NSString stringWithFormat:@"127.0.0.1:%u", forwardPort];
         NSLog(@"[MultiplayerVC] 房客使用端口转发地址：%@（转发到 %@:%@）",
               serverAddress, hostIP, hostPort);
-    } else {
-        // 端口转发器未启动（回退到直连，可能失败）
-        serverAddress = [NSString stringWithFormat:@"%@:%@", hostIP, hostPort];
-        NSLog(@"[MultiplayerVC] 警告：端口转发器未启动，房客直连 %@（可能无法连接）",
-              serverAddress);
-    }
-    self.lastServerAddress = serverAddress;
+        self.lastServerAddress = serverAddress;
 
-    // 自动将服务器地址写入当前 profile（下次启动 MC 时会自动连接到此服务器）
-    NSString *profileName = [PLProfiles current].selectedProfileName;
-    if (profileName && profileName.length > 0) {
-        [[PLProfiles current] setServerIp:serverAddress forProfile:profileName];
-        NSLog(@"[Multiplayer] 已自动将服务器地址 %@ 写入 profile %@", serverAddress, profileName);
+        // 自动将服务器地址写入当前 profile（下次启动 MC 时会自动连接到此服务器）
+        NSString *profileName = [PLProfiles current].selectedProfileName;
+        if (profileName && profileName.length > 0) {
+            [[PLProfiles current] setServerIp:serverAddress forProfile:profileName];
+            NSLog(@"[Multiplayer] 已自动将服务器地址 %@ 写入 profile %@", serverAddress, profileName);
+        }
+    } else {
+        // 关键修复（P0-5）：端口转发器未启动，不写入 profile
+        // 房客无法通过 ZeroTier IP 直连（系统无法路由），写入 profile 会导致下次启动 MC 连接失败
+        serverAddress = [NSString stringWithFormat:@"%@:%@", hostIP, hostPort];
+        NSLog(@"[MultiplayerVC] 警告：端口转发器未启动，不写入 profile serverIp");
+        // 显示警告提示而非成功提示
+        [self showSimpleAlertWithTitle:MPLocalized(@"mp.connect.failed", @"连接失败")
+                               message:MPLocalized(@"mp.connect.port_forward_failed_msg", @"端口转发器启动失败，无法连接到房主。请尝试断开重连。")];
+        return;
     }
 
     // 自动复制服务器地址到剪贴板（方便房客在 MC 中"添加服务器"时直接粘贴）

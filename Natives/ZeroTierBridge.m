@@ -37,6 +37,8 @@
 #include <string.h>
 #include <stdlib.h>
 #include <arpa/inet.h>
+#include <sys/stat.h>  // chmod（P1-6：identity.secret 权限设置）
+#include <errno.h>     // errno（P1-6：chmod 失败错误码）
 
 // Security.framework（用于 Keychain 备份/恢复 ZeroTier 身份文件）
 #import <Security/Security.h>
@@ -158,6 +160,11 @@ typedef NS_ENUM(NSInteger, ZeroTierErrorCode) {
 
 /// 新增：停止自动重连
 - (void)stopAutoReconnect;
+
+/// 新增：复位自动重连状态（P1-4 修复）
+/// 供 MultiplayerManager 在应用回到前台时调用，复位因后台 dispatch_after
+/// 挂起而残留的 _isAutoReconnecting 标志，防止自动重连死锁。
+- (void)resetAutoReconnectState;
 
 /// 新增：启动网络保活
 - (void)startKeepAlive;
@@ -1100,10 +1107,26 @@ static void zeroTierEventCallback(void *msgPtr) {
             _nodeID = nodeID;
             _hasBeenOnline = YES; // 标记节点曾经上线，用于 waitForNodeOnlineWithTimeout: 容错
             _ownNodeIdString = nodeIdString;
-            _consecutiveOfflineCount = 0; // 重置连续掉线计数
-            _lastOnlineTime = [NSDate date];
+
+            // 关键修复（P1-3）：Flapping 检测
+            // 如果上次上线到这次下线间隔很短（< 30 秒），说明节点在 flapping，
+            // 不复位计数器，让 5 次重连上限真正生效，避免无限重连循环。
+            // 否则 flapping 节点会反复触发 NODE_OFFLINE/NODE_ONLINE，每次 ONLINE
+            // 都清零计数器，导致 5 次上限形同虚设。
+            NSTimeInterval onlineDuration = 0;
+            if (_lastOnlineTime) {
+                onlineDuration = [[NSDate date] timeIntervalSinceDate:_lastOnlineTime];
+            }
+            if (onlineDuration >= 30.0) {
+                // 上线时间足够长，正常复位
+                _consecutiveOfflineCount = 0;
+                _autoReconnectAttempts = 0;
+            } else {
+                NSLog(@"[ZeroTierBridge] 检测到 flapping（在线 %.1f 秒），保留重连计数 %d", onlineDuration, _autoReconnectAttempts);
+            }
+            _lastOnlineTime = [NSDate date]; // 记录本次上线时间（ARC 自动管理）
+
             _isAutoReconnecting = NO; // 重连成功，重置标志
-            _autoReconnectAttempts = 0; // 重置重连计数
             [_lock unlock];
 
             // 节点上线后，身份文件已被 libzt 写入 homeDir。
@@ -1132,8 +1155,16 @@ static void zeroTierEventCallback(void *msgPtr) {
 
         case ZTS_EVENT_NODE_OFFLINE: {
             // 节点已离线（202）
-            NSLog(@"[ZeroTierBridge] 事件：节点已离线 (NODE_OFFLINE)");
+            // 关键修复（P1-7）：防止重复 NODE_OFFLINE 事件导致计数虚高
+            // libzt 可能重复触发 NODE_OFFLINE，每次都 _consecutiveOfflineCount++ 会导致
+            // 计数远超实际掉线次数，5 次上限过早触发。检查节点是否已处于离线状态。
             [_lock lock];
+            if (_nodeStatus == ZeroTierNodeStatusOffline) {
+                [_lock unlock];
+                NSLog(@"[ZeroTierBridge] 收到重复 NODE_OFFLINE 事件，跳过");
+                break;
+            }
+            NSLog(@"[ZeroTierBridge] 事件：节点已离线 (NODE_OFFLINE)");
             _nodeStatus = ZeroTierNodeStatusOffline;
             _consecutiveOfflineCount++;
             int offlineCount = _consecutiveOfflineCount;
@@ -1846,7 +1877,10 @@ static void zeroTierEventCallback(void *msgPtr) {
 
     // 检测 IP 地址类型（IPv4 或 IPv6）
     // 关键修复（L1）：使用 inet_pton 严格校验，而非简单检查 ':'
-    BOOL isIPv6 = (zts_inet_pton(ZTS_AF_INET6, hostCStr, NULL) == 1);
+    // 关键修复（P0-3）：zts_inet_pton 不允许传 NULL 作为目标缓冲区，
+    // 部分实现会写入结果导致空指针解引用。使用临时缓冲区承接解析结果。
+    struct zts_in6_addr tmpAddr;
+    BOOL isIPv6 = (zts_inet_pton(ZTS_AF_INET6, hostCStr, &tmpAddr) == 1);
     NSLog(@"[ZeroTierBridge] 地址类型：%@", isIPv6 ? @"IPv6" : @"IPv4");
 
     // 准备目标地址结构
@@ -1884,15 +1918,11 @@ static void zeroTierEventCallback(void *msgPtr) {
     // 步骤 1：获取当前 socket 的 flags，设置为非阻塞
     int origFlags = zts_bsd_fcntl(fd, ZTS_F_GETFL, 0);
     if (origFlags < 0) {
-        NSLog(@"[ZeroTierBridge] zts_bsd_fcntl(F_GETFL) 失败：zts_errno = %d", zts_errno);
-        // 如果 fcntl 失败，回退到阻塞模式 connect（超时由系统控制）
-        int result = zts_bsd_connect(fd, (const struct zts_sockaddr *)&addrStorage, addrLen);
-        if (result != ZTS_ERR_OK) {
-            NSLog(@"[ZeroTierBridge] zts_bsd_connect(阻塞模式) 失败：result = %d, zts_errno = %d", result, zts_errno);
-        } else {
-            NSLog(@"[ZeroTierBridge] 连接成功（阻塞模式）");
-        }
-        return result;
+        // 关键修复（P0-2）：fcntl 失败时不要回退到阻塞 connect
+        // 阻塞 connect 在 ZeroTier 网络不通时会卡 75 秒，无法满足超时语义，
+        // 调用方会长时间挂起。直接返回错误让上层进入失败处理流程。
+        NSLog(@"[ZeroTierBridge] zts_bsd_fcntl(F_GETFL) 失败：zts_errno = %d，无法设置非阻塞模式", zts_errno);
+        return ZTS_ERR_SOCKET;
     }
 
     // 设置为非阻塞
@@ -1905,6 +1935,15 @@ static void zeroTierEventCallback(void *msgPtr) {
         NSLog(@"[ZeroTierBridge] 连接立即成功");
         // 恢复原始阻塞模式
         zts_bsd_fcntl(fd, ZTS_F_SETFL, origFlags);
+
+        // 关键修复（P0-1）：立即成功路径同样需要重置 IO 超时为 300 秒，
+        // 避免 connect 阶段的短超时被遗留到数据传输阶段（与 select 成功路径一致）
+        struct zts_timeval ioTv;
+        ioTv.tv_sec = 300;
+        ioTv.tv_usec = 0;
+        zts_bsd_setsockopt(fd, ZTS_SOL_SOCKET, ZTS_SO_RCVTIMEO, &ioTv, sizeof(ioTv));
+        zts_bsd_setsockopt(fd, ZTS_SOL_SOCKET, ZTS_SO_SNDTIMEO, &ioTv, sizeof(ioTv));
+        NSLog(@"[ZeroTierBridge] 已重置 IO 超时为 300 秒（connect 超时=%.1f 秒）", timeout);
         return ZTS_ERR_OK;
     }
 
@@ -1914,6 +1953,28 @@ static void zeroTierEventCallback(void *msgPtr) {
         // 恢复原始阻塞模式
         zts_bsd_fcntl(fd, ZTS_F_SETFL, origFlags);
         return connectResult;
+    }
+
+    // 关键修复（P2-2）：timeout <= 0 表示不设置超时
+    // 此时不应使用 select（select 用 0 超时会立即返回，被误判为超时失败），
+    // 改为恢复阻塞模式让 connect 自然完成。
+    if (timeout <= 0) {
+        // 恢复阻塞模式
+        zts_bsd_fcntl(fd, ZTS_F_SETFL, origFlags);
+        int result = zts_bsd_connect(fd, (const struct zts_sockaddr *)&addrStorage, addrLen);
+        // EINPROGRESS 不应出现在阻塞模式，但兼容性处理；其他错误直接返回
+        if (result != ZTS_ERR_OK && zts_errno != ZTS_EINPROGRESS) {
+            NSLog(@"[ZeroTierBridge] 阻塞 connect 失败：result = %d, zts_errno = %d, host = %@, port = %u", result, zts_errno, host, port);
+            return result;
+        }
+        // 连接成功后重置 IO 超时为 300 秒（与 P0-1 一致）
+        struct zts_timeval ioTv;
+        ioTv.tv_sec = 300;
+        ioTv.tv_usec = 0;
+        zts_bsd_setsockopt(fd, ZTS_SOL_SOCKET, ZTS_SO_RCVTIMEO, &ioTv, sizeof(ioTv));
+        zts_bsd_setsockopt(fd, ZTS_SOL_SOCKET, ZTS_SO_SNDTIMEO, &ioTv, sizeof(ioTv));
+        NSLog(@"[ZeroTierBridge] 阻塞 connect 完成，已重置 IO 超时为 300 秒（timeout=%.1f）", timeout);
+        return ZTS_ERR_OK;
     }
 
     // 步骤 3：使用 select 等待 socket 可写，带超时
@@ -1934,13 +1995,14 @@ static void zeroTierEventCallback(void *msgPtr) {
     zts_bsd_fcntl(fd, ZTS_F_SETFL, origFlags);
 
     if (selectResult < 0) {
-        NSLog(@"[ZeroTierBridge] select 错误：zts_errno = %d", zts_errno);
+        // 关键修复（P2-1）：细分错误日志，打印完整上下文便于排查
+        NSLog(@"[ZeroTierBridge] select 错误：zts_errno = %d, fd = %d, host = %@, port = %u, timeout = %.1f", zts_errno, fd, host, port, timeout);
         return ZTS_ERR_SOCKET;
     }
 
     if (selectResult == 0) {
         // 超时
-        NSLog(@"[ZeroTierBridge] connect 超时（%.1f 秒）：host = %@, port = %u", timeout, host, port);
+        NSLog(@"[ZeroTierBridge] connect 超时（%.1f 秒）：host = %@, port = %u, fd = %d", timeout, host, port, fd);
         return ZTS_ERR_SOCKET;
     }
 
@@ -1949,7 +2011,7 @@ static void zeroTierEventCallback(void *msgPtr) {
     socklen_t errorLen = sizeof(socketError);
     int sockoptResult = zts_bsd_getsockopt(fd, ZTS_SOL_SOCKET, ZTS_SO_ERROR, &socketError, &errorLen);
     if (sockoptResult != ZTS_ERR_OK) {
-        NSLog(@"[ZeroTierBridge] getsockopt(SO_ERROR) 失败：zts_errno = %d", zts_errno);
+        NSLog(@"[ZeroTierBridge] getsockopt(SO_ERROR) 失败：zts_errno = %d, fd = %d, host = %@, port = %u", zts_errno, fd, host, port);
         return ZTS_ERR_SOCKET;
     }
 
@@ -1968,6 +2030,17 @@ static void zeroTierEventCallback(void *msgPtr) {
     } else {
         NSLog(@"[ZeroTierBridge] 已设置 ZTS_TCP_NODELAY（禁用 Nagle 算法）");
     }
+
+    // 关键修复（P0-1）：连接成功后重置 IO 超时为 300 秒
+    // connect 阶段使用短超时（通常 10s）快速失败，连接成功后需要长超时避免
+    // MC keepalive 间隔（15s）期间 EAGAIN 被误判为连接断开。
+    // 300 秒既能在网络真正异常时提供保护，又不会误判正常的 keepalive 间隔。
+    struct zts_timeval ioTv;
+    ioTv.tv_sec = 300;  // 300 秒 IO 超时
+    ioTv.tv_usec = 0;
+    zts_bsd_setsockopt(fd, ZTS_SOL_SOCKET, ZTS_SO_RCVTIMEO, &ioTv, sizeof(ioTv));
+    zts_bsd_setsockopt(fd, ZTS_SOL_SOCKET, ZTS_SO_SNDTIMEO, &ioTv, sizeof(ioTv));
+    NSLog(@"[ZeroTierBridge] 已重置 IO 超时为 300 秒（connect 超时=%.1f 秒）", timeout);
 
     return ZTS_ERR_OK;
 }
@@ -2113,7 +2186,11 @@ static NSArray<NSString *> * const kZTIdentityFiles = @[@"identity.secret", @"id
         (__bridge id)kSecAttrService: kZTIdentityKeychainService,
         (__bridge id)kSecAttrAccount: key,
         (__bridge id)kSecValueData: data,
-        (__bridge id)kSecAttrAccessible: (__bridge id)kSecAttrAccessibleAfterFirstUnlock,
+        // 关键修复（P1-5）：使用 ThisDeviceOnly 变体
+        // kSecAttrAccessibleAfterFirstUnlock 在设备重启后未首次解锁时无法访问，
+        // 且会被 iCloud 备份到其他设备。identity.secret 是节点私钥，绑定本设备，
+        // 改为 ThisDeviceOnly 既保证首次解锁后即可访问，又避免跨设备同步私钥。
+        (__bridge id)kSecAttrAccessible: (__bridge id)kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly,
     };
     OSStatus status = SecItemAdd((__bridge CFDictionaryRef)addQuery, NULL);
     if (status != errSecSuccess) {
@@ -2181,7 +2258,13 @@ static NSArray<NSString *> * const kZTIdentityFiles = @[@"identity.secret", @"id
         if (data && data.length > 0) {
             NSString *filePath = [homeDir stringByAppendingPathComponent:fileName];
             [data writeToFile:filePath atomically:YES];
-            NSLog(@"[ZeroTierBridge] 身份文件 %@ 已从 Keychain 恢复（%lu 字节）",
+            // 关键修复（P1-6）：identity.secret 是节点私钥，必须设置 0600 权限，
+            // 防止其他应用或进程读取私钥导致节点身份被盗用。
+            // identity.public 一并设为 0600 无副作用，统一处理更安全。
+            if (chmod([filePath UTF8String], 0600) != 0) {
+                NSLog(@"[ZeroTierBridge] 警告：设置 %@ 权限 0600 失败（errno=%d）", fileName, errno);
+            }
+            NSLog(@"[ZeroTierBridge] 身份文件 %@ 已从 Keychain 恢复（%lu 字节，权限 0600）",
                   fileName, (unsigned long)data.length);
             restored = YES;
         }
@@ -2208,12 +2291,12 @@ static NSArray<NSString *> * const kZTIdentityFiles = @[@"identity.secret", @"id
     _isAutoReconnecting = YES;
     _autoReconnectAttempts++;
     int attempt = _autoReconnectAttempts;
-    [_lock unlock];
-
-    // 取消之前的待执行重连
+    // 关键修复（P1-1）：_pendingReconnectWork 必须在 _lock 保护下访问，
+    // 否则与 stopAutoReconnect 并发时会产生竞态，导致取消错误的 block 或崩溃
     if (_pendingReconnectWork) {
         dispatch_block_cancel(_pendingReconnectWork);
     }
+    [_lock unlock];
 
     // 指数退避：2秒, 4秒, 8秒, 16秒, 32秒
     NSTimeInterval delay = 2.0 * pow(2, attempt - 1);
@@ -2222,7 +2305,8 @@ static NSArray<NSString *> * const kZTIdentityFiles = @[@"identity.secret", @"id
     NSLog(@"[ZeroTierBridge] 将在%.1f秒后第%d次自动重连", delay, attempt);
 
     __weak typeof(self) weakSelf = self;
-    _pendingReconnectWork = dispatch_block_create(0, ^{
+    // 关键修复（P1-1）：先创建 block，再在 _lock 保护下赋值给 _pendingReconnectWork
+    dispatch_block_t work = dispatch_block_create(0, ^{
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
 
@@ -2314,9 +2398,15 @@ static NSArray<NSString *> * const kZTIdentityFiles = @[@"identity.secret", @"id
         }
     });
 
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay * NSEC_PER_SEC)), 
-                   dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), 
-                   _pendingReconnectWork);
+    // 关键修复（P1-1）：_pendingReconnectWork 赋值必须在 _lock 保护下进行，
+    // 与 stopAutoReconnect 的取消逻辑互斥，避免读到中间状态
+    [self->_lock lock];
+    _pendingReconnectWork = work;
+    [self->_lock unlock];
+
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay * NSEC_PER_SEC)),
+                   dispatch_get_global_queue(QOS_CLASS_UTILITY, 0),
+                   work);
 }
 
 /// startNode 成功后检查节点是否真正上线（P1-C 修复）
@@ -2347,12 +2437,34 @@ static NSArray<NSString *> * const kZTIdentityFiles = @[@"identity.secret", @"id
 - (void)stopAutoReconnect {
     [_lock lock];
     _isAutoReconnecting = NO;
-    [_lock unlock];
-
+    // 关键修复（P1-1）：_pendingReconnectWork 访问必须在 _lock 保护下进行，
+    // 与 startAutoReconnect 的赋值/取消逻辑互斥，避免竞态
     if (_pendingReconnectWork) {
         dispatch_block_cancel(_pendingReconnectWork);
         _pendingReconnectWork = nil;
     }
+    [_lock unlock];
+}
+
+/// 复位自动重连状态（P1-4 修复）
+///
+/// 问题：startAutoReconnect 在 startNode 成功后会用 dispatch_after 调度
+/// checkNodeOnlineAfterStartNode（60 秒后执行）。但 iOS 应用进入后台后，
+/// dispatch_after 会被挂起不再触发，回前台后 _isAutoReconnecting 仍为 YES，
+/// 导致后续所有 startAutoReconnect 在入口处直接 return，自动重连特性死锁。
+///
+/// 修复：MultiplayerManager 在应用回到前台时调用本方法，复位 _isAutoReconnecting。
+/// 不复位 _autoReconnectAttempts / _consecutiveOfflineCount，让计数器跨前后台
+/// 累积，确保 5 次重连上限仍能生效。
+- (void)resetAutoReconnectState {
+    [_lock lock];
+    // 关键修复（P1-4）：回前台时复位自动重连状态
+    // 防止后台期间 dispatch_after 挂起导致 _isAutoReconnecting 永远为 YES
+    if (_isAutoReconnecting) {
+        NSLog(@"[ZeroTierBridge] 回前台复位自动重连状态（之前 _isAutoReconnecting=YES）");
+        _isAutoReconnecting = NO;
+    }
+    [_lock unlock];
 }
 
 /// 启动网络保活定时器
@@ -2360,19 +2472,38 @@ static NSArray<NSString *> * const kZTIdentityFiles = @[@"identity.secret", @"id
     [self stopKeepAlive];
 
     __weak typeof(self) weakSelf = self;
-    _keepAliveTimer = [NSTimer scheduledTimerWithTimeInterval:30.0
+    NSTimer *timer = [NSTimer scheduledTimerWithTimeInterval:30.0
                                                         repeats:YES
                                                           block:^(NSTimer *timer) {
         [weakSelf sendKeepAlivePacket];
     }];
+    // 关键修复（P1-2）：_keepAliveTimer 必须在 _lock 保护下访问，
+    // 与 stopKeepAlive 互斥，避免定时器被并发 invalidate 后又赋值
+    [_lock lock];
+    _keepAliveTimer = timer;
+    [_lock unlock];
     NSLog(@"[ZeroTierBridge] 保活定时器已启动（间隔30秒）");
 }
 
 /// 停止网络保活定时器
 - (void)stopKeepAlive {
-    if (_keepAliveTimer) {
-        [_keepAliveTimer invalidate];
-        _keepAliveTimer = nil;
+    // 关键修复（P1-2）：_keepAliveTimer 在 _lock 保护下取出并置 nil，
+    // 避免 startKeepAlive 与 stopKeepAlive 并发访问产生竞态。
+    // 同时 NSTimer 必须在创建它的线程（主线程）invalidate，
+    // 而本方法可能由非主线程调用（如 NODE_OFFLINE 事件回调线程），
+    // 因此 invalidate 操作派发到主线程执行。
+    [_lock lock];
+    NSTimer *timer = _keepAliveTimer;
+    _keepAliveTimer = nil;
+    [_lock unlock];
+    if (timer) {
+        if ([NSThread isMainThread]) {
+            [timer invalidate];
+        } else {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [timer invalidate];
+            });
+        }
         NSLog(@"[ZeroTierBridge] 保活定时器已停止");
     }
 }
