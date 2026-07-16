@@ -150,6 +150,16 @@ static NSString *const kLatestLogPath = @"%s/latestlog.txt";
 - (void)processLogLine:(NSString *)line {
     if (!line || line.length == 0) return;
 
+    // 关键修复（递归检测导致日志爆炸）：过滤掉 LanPortDetector 自身输出的日志行。
+    // 之前未过滤，导致 LanPortDetector 输出的 "[LanPortDetector] 从日志检测到 LAN 端口：2400"
+    // 等日志被 PLLogOutputLineNotification 通知发回给自己，递归检测。
+    // 而 genericPortRegex 的 "lan\s*(?:port|server)" 匹配了 "LanPortDetector" 中的 "LanPort"，
+    // 导致从自身日志中的数字（如进程 ID 2113242 → 21132、"2400 MB" → 2400）反复提取端口，
+    // 形成无限递归，日志爆炸。
+    if ([line containsString:@"[LanPortDetector]"]) {
+        return;
+    }
+
     NSString *port = [self parsePortFromLogLine:line];
     if (port) {
         NSLog(@"[LanPortDetector] 从日志检测到 LAN 端口：%@（来源：行 '%@'）", port, line);
@@ -210,8 +220,10 @@ static NSString *const kLatestLogPath = @"%s/latestlog.txt";
         // 模式 6：通用兜底模式
         // 匹配包含 "serving"、"hosted"、"lan port"、"lan server" 等关键词
         // 且后面跟着端口号的日志行（支持端口号被方括号包围的变体）
+        // 关键修复：在 "lan" 前加 \b 词边界，"port"/"server" 后加 \b 词边界，
+        // 避免匹配 "LanPortDetector" 中的 "LanPort"（无词边界，Port 后紧跟 Detector）。
         genericPortRegex = [NSRegularExpression regularExpressionWithPattern:
-            @"(?:serving|hosted|lan\\s*(?:port|server)|open.*?lan).*(?::|\\s)+\\[?(\\d{4,5})\\]?"
+            @"(?:serving|hosted|\\blan\\s*(?:port|server)\\b|open.*?lan).*(?::|\\s)+\\[?(\\d{4,5})\\]?"
             options:NSRegularExpressionCaseInsensitive error:nil];
     });
 
@@ -272,6 +284,9 @@ static NSString *const kLatestLogPath = @"%s/latestlog.txt";
 
     for (NSInteger i = lines.count - 1; i >= 0; i--) {
         NSString *line = lines[i];
+        // 跳过 LanPortDetector 自身输出的日志行，避免递归误检测
+        // （genericPortRegex 的 "lan port" 可能匹配 "LanPortDetector" 中的 "LanPort"）
+        if ([line containsString:@"[LanPortDetector]"]) continue;
         NSString *port = [self parsePortFromLogLine:line];
         if (port) {
             NSLog(@"[LanPortDetector] 从日志文件第 %ld 行检测到端口：%@（行内容：%@）", (long)i, port, line);

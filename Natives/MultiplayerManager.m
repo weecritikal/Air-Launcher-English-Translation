@@ -1210,12 +1210,29 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
 
     [_stateLock lock];
     self.currentLocalIP = localIP;
-    // 关键修复（对标 FCL/HMCL）：将本机 ZeroTier IP 同步到 room.hostIP，
-    // 使 shareTextForRoom: 能正确输出房主的服务器地址，而不显示「未知」。
-    // 之前缺失此同步导致分享文本中服务器地址为空，加入者无法直接获取连接地址。
+    // 关键修复（房客连接失败根因）：只有房主才应将本机 ZeroTier IP 同步到 room.hostIP。
+    //
+    // 之前无条件同步本机 IP 到 hostIP，导致房客连接时 hostIP 被房客自己的 IP 覆盖
+    // （如分享代码中房主 IP=10.138.62.21，房客本机 IP=10.138.62.153，
+    //  同步后 hostIP 变成 10.138.62.153，PortForwarder 转发到房客自己，Connection refused）。
+    //
+    // 区分房主与房客：
+    //   - 房主首次连接：room.hostIP 为空 → 需要填充本机 IP 用于分享
+    //   - 房主重连（IP 不变）：room.hostIP == 本机 IP → 无变化，允许同步
+    //   - 房客连接：room.hostIP == 房主 IP（来自分享代码）≠ 本机 IP → 不覆盖
+    //   - 房主 IP 变化重连：room.hostIP == 旧本机 IP ≠ 新本机 IP → 不覆盖（房主需重新分享）
+    //     这是边界情况，不影响房客连接，且避免误覆盖房客的房主 IP。
     if (localIP && localIP.length > 0 && self.currentRoom) {
-        self.currentRoom.hostIP = localIP;
-        NSLog(@"[MultiplayerManager] [连接流程] 已同步房主 ZeroTier IP 到房间 %@：%@", self.currentRoom.name, localIP);
+        NSString *existingHostIP = self.currentRoom.hostIP;
+        BOOL isHost = (existingHostIP.length == 0) || [existingHostIP isEqualToString:localIP];
+        if (isHost) {
+            self.currentRoom.hostIP = localIP;
+            NSLog(@"[MultiplayerManager] [连接流程] 已同步房主 ZeroTier IP 到房间 %@：%@", self.currentRoom.name, localIP);
+        } else {
+            // 房客：保留分享代码中的房主 IP，不覆盖
+            NSLog(@"[MultiplayerManager] [连接流程] 房客模式：保留房主 IP %@，不使用本机 IP %@",
+                  existingHostIP, localIP);
+        }
     }
     MultiplayerRoom *roomForIPUpdate = self.currentRoom;
     [_stateLock unlock];
@@ -1591,13 +1608,24 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     BOOL needsUpdate = NO;
     BOOL needsDataPlaneRestore = (_currentNetworkID == networkID);
     if (room && effectiveIP && effectiveIP.length > 0) {
-        // 仅当 IP 变化时才更新，避免重复写入
-        if (![room.hostIP isEqualToString:effectiveIP]) {
-            room.hostIP = effectiveIP;
-            needsUpdate = YES;
+        // 关键修复（房客连接失败根因）：只有房主才应将本机 ZeroTier IP 同步到 room.hostIP。
+        // 之前无条件同步导致房客的 hostIP 被本机 IP 覆盖，PortForwarder 转发到房客自己。
+        // 房客的 hostIP 来自分享代码（房主 IP），必须保留，不能被本机 IP 覆盖。
+        NSString *existingHostIP = room.hostIP;
+        BOOL isHost = (existingHostIP.length == 0) || [existingHostIP isEqualToString:effectiveIP];
+        if (isHost) {
+            // 房主：更新本机 IP 到 hostIP（用于分享给房客）
+            if (![existingHostIP isEqualToString:effectiveIP]) {
+                room.hostIP = effectiveIP;
+                needsUpdate = YES;
+            }
+            NSLog(@"[MultiplayerManager] 已更新房间 %@ 的本地 IP（%@）：%@",
+                  room.name, isAdhoc ? @"IPv6" : @"IPv4", effectiveIP);
+        } else {
+            // 房客：保留房主 IP，仅更新 currentLocalIP（已在上方更新）
+            NSLog(@"[MultiplayerManager] 房客模式：保留房主 IP %@，本机 IP %@（不覆盖 hostIP）",
+                  existingHostIP, effectiveIP);
         }
-        NSLog(@"[MultiplayerManager] 已更新房间 %@ 的本地 IP（%@）：%@",
-              room.name, isAdhoc ? @"IPv6" : @"IPv4", effectiveIP);
     }
     [_stateLock unlock];
 
