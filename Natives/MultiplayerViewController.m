@@ -626,9 +626,10 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 /// 内部调用 MultiplayerManager 的 connectToRoom:completion:，
 /// 并在主线程更新房间状态和 UI。连接成功后回调 completion。
 - (void)connectToRoom:(MultiplayerRoom *)room completion:(void (^)(BOOL success, NSError *error))completion {
-    // 设置状态为连接中
-    room.status = MultiplayerRoomStatusConnecting;
-    [[MultiplayerManager sharedManager] updateRoom:room];
+    // 关键修复（避免重复设置 status）：
+    // Manager.connectToRoom: 内部已在 _stateLock 内设置 room.status = Connecting，
+    // 这里不再重复设置——状态修改统一由 Manager 负责，VC 只读。
+    // 仅刷新 UI 以反映 Manager 已设置的状态。
     [self refreshRooms];
 
     __weak typeof(self) weakSelf = self;
@@ -637,12 +638,10 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
             __strong typeof(weakSelf) strongSelf = weakSelf;
             if (!strongSelf) return;
 
-            // 根据连接结果更新房间状态
+            // 连接结果状态由 Manager 内部已更新（status = Connected/Error），
+            // 这里仅刷新 UI 与持久化（保持原有的 lastConnectedAt 记录逻辑）。
             if (success) {
-                room.status = MultiplayerRoomStatusConnected;
                 room.lastConnectedAt = [NSDate date];
-            } else {
-                room.status = MultiplayerRoomStatusError;
             }
             [[MultiplayerManager sharedManager] updateRoom:room];
             [strongSelf refreshRooms];
@@ -960,8 +959,13 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         room.roomDescription = @"";
         room.ownerName = @"";
         room.status = MultiplayerRoomStatusDisconnected;
+        // 关键修复：显式标记房主角色，替代 IP 启发式判断
+        room.role = MultiplayerRoomRoleHost;
         room.createdAt = [NSDate date];
         self.hostRoom = room;
+    } else {
+        // 已存在的房间确保 role 正确（兼容旧数据 role=Unknown 的情况）
+        room.role = MultiplayerRoomRoleHost;
     }
 
     // 如果当前已连接到其他房间，先断开

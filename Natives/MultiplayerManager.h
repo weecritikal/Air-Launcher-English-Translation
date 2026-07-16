@@ -11,6 +11,21 @@ typedef NS_ENUM(NSInteger, MultiplayerRoomStatus) {
     MultiplayerRoomStatusError        = 3  // 错误
 };
 
+/// 联机房间角色
+///
+/// 关键修复（替代 IP 启发式）：
+/// 之前通过 `hostIP != localIP` 推断房客身份，存在以下问题：
+///   - 房主分享代码中的 hostIP 与房客被分配的 localIP 在小概率下可能相同
+///     （adhoc 网络 IPv6 几乎不会，但标准网络 IPv4 池小或网络配置异常时可能）
+///   - 房客会被错误识别为房主，PortForwarder 不启动，MC 无法连接且无错误提示
+/// 现在显式声明角色：房主创建房间时设为 Host，房客 parseShareCode 时设为 Guest。
+/// 参与序列化，跨进程/跨会话保留。
+typedef NS_ENUM(NSInteger, MultiplayerRoomRole) {
+    MultiplayerRoomRoleUnknown = 0, // 未知（兼容旧数据）
+    MultiplayerRoomRoleHost    = 1, // 房主
+    MultiplayerRoomRoleGuest   = 2, // 房客
+};
+
 /// 联机房间模型
 @interface MultiplayerRoom : NSObject <NSCoding, NSSecureCoding>
 @property (nonatomic, copy) NSString *roomId;          // 唯一标识（UUID）
@@ -24,7 +39,12 @@ typedef NS_ENUM(NSInteger, MultiplayerRoomStatus) {
 /// shareTextForRoom:、lanPortDidDetect: 等主线程位置无锁读取。
 /// atomic 保证单个 getter/setter 调用的原子性，避免读到中间状态。
 @property (atomic, copy) NSString *hostIP;          // 房主在 ZeroTier 网络中的 IP（如 10.147.17.1）
-@property (nonatomic, copy) NSString *hostPort;        // MC 服务器端口（默认 25565）
+/// MC 服务器端口（默认 25565）。
+///
+/// 关键修复：hostPort 改为 atomic。hostPort 在主线程（generateShareCodeWithPort:
+/// 等位置）被修改，在后台线程（connectToRoomFlow 读取以判断是否房客模式）被读取。
+/// nonatomic 在多线程读写时可能读到中间状态，atomic 保证 getter/setter 的原子性。
+@property (atomic, copy) NSString *hostPort;        // MC 服务器端口（默认 25565）
 @property (nonatomic, copy) NSString *roomDescription; // 房间描述
 /// 连接状态。
 ///
@@ -41,6 +61,12 @@ typedef NS_ENUM(NSInteger, MultiplayerRoomStatus) {
 /// 注意：atomic 不能保证组合操作（如 read-modify-write）的原子性，
 /// 复杂的状态转换仍应由调用方通过锁（如 MultiplayerManager._stateLock）保护。
 @property (atomic, assign) MultiplayerRoomStatus status; // 连接状态
+/// 房间角色（房主/房客）。
+///
+/// 关键修复：替代之前用 IP 比较推断身份的脆弱启发式。
+/// atomic 保证跨线程读写的内存一致性（status 同理）。
+/// 旧数据反序列化时若缺失该字段，默认为 Unknown，回退到 IP 启发式以保持兼容。
+@property (atomic, assign) MultiplayerRoomRole role;   // 房间角色
 @property (nonatomic, copy) NSString *ownerName;       // 房主名称
 @property (nonatomic, strong) NSDate *createdAt;       // 创建时间
 @property (nonatomic, strong) NSDate *lastConnectedAt; // 上次连接时间
@@ -228,7 +254,9 @@ typedef NS_ENUM(NSInteger, MultiplayerRoomStatus) {
 /// 本方法直接在进程内调用 zts_net_leave 离开指定网络。
 ///
 /// @param networkId ZeroTier Network ID
-- (void)leaveNetwork:(NSString *)networkId;
+/// @return YES 离开成功；NO 离开失败（参数无效或底层调用失败）。
+///         调用方可根据返回值决定是否需要强制 stopNode 清理。
+- (BOOL)leaveNetwork:(NSString *)networkId;
 
 #pragma mark - 房间管理（增删改查）
 

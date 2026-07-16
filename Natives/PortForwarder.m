@@ -55,6 +55,7 @@
 #include <errno.h>
 #include <sys/select.h>
 #include <sys/time.h>
+#include <fcntl.h>      // fcntl（非阻塞 connect 用到 F_GETFL/F_SETFL/O_NONBLOCK）
 #include <stdatomic.h>  // C11 原子操作，用于双向转发的标志变量
 
 #pragma mark - 常量定义
@@ -909,21 +910,72 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
         setsockopt(localFD, IPPROTO_TCP, TCP_KEEPCNT, &keepCnt, sizeof(keepCnt));
 
         // ============================================================
-        // 步骤 2：连接到本地 MC LAN 端口
+        // 步骤 2：连接到本地 MC LAN 端口（非阻塞 connect + select 超时控制）
         // ============================================================
+        // 关键修复：之前使用阻塞 connect()，SO_SNDTIMEO/SO_RCVTIMEO 不影响 connect()，
+        // 若本地端口因异常（防火墙、系统状态异常等）导致 SYN 被丢弃，会永久阻塞，
+        // 且 stop() 的 shutdown 不会唤醒正在 connect 中的 socket，导致连接处理线程泄漏。
+        // 现改为非阻塞 connect + select 设置 5 秒超时，超时后关闭 fd 释放线程。
         struct sockaddr_in localAddr;
         memset(&localAddr, 0, sizeof(localAddr));
         localAddr.sin_family = AF_INET;
         localAddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);  // 127.0.0.1
         localAddr.sin_port = htons(localHostPort);
 
-        int connectResult = connect(localFD, (struct sockaddr *)&localAddr, sizeof(localAddr));
-        if (connectResult < 0) {
-            NSLog(@"[PortForwarder] 连接本地 MC LAN 端口失败：127.0.0.1:%u, errno=%d (%s)",
-                  localHostPort, errno, strerror(errno));
-            close(localFD);
-            [[ZeroTierBridge sharedInstance] closeSocket:ztClientFD];
-            return;
+        // 设置 socket 为非阻塞
+        int flags = fcntl(localFD, F_GETFL, 0);
+        if (flags < 0 || fcntl(localFD, F_SETFL, flags | O_NONBLOCK) < 0) {
+            NSLog(@"[PortForwarder] 设置非阻塞失败：errno=%d (%s)，退回阻塞 connect", errno, strerror(errno));
+            // 退回阻塞 connect（loopback 通常立即返回，影响有限）
+            int connectResult = connect(localFD, (struct sockaddr *)&localAddr, sizeof(localAddr));
+            if (connectResult < 0) {
+                NSLog(@"[PortForwarder] 连接本地 MC LAN 端口失败：127.0.0.1:%u, errno=%d (%s)",
+                      localHostPort, errno, strerror(errno));
+                close(localFD);
+                [[ZeroTierBridge sharedInstance] closeSocket:ztClientFD];
+                return;
+            }
+        } else {
+            // 非阻塞 connect：通常立即返回 -1（EINPROGRESS）或 0（loopback 端口开放时）
+            int connectResult = connect(localFD, (struct sockaddr *)&localAddr, sizeof(localAddr));
+            if (connectResult < 0) {
+                if (errno != EINPROGRESS) {
+                    // 立即失败（如 ECONNREFUSED 表示端口未开放）
+                    NSLog(@"[PortForwarder] 连接本地 MC LAN 端口失败：127.0.0.1:%u, errno=%d (%s)",
+                          localHostPort, errno, strerror(errno));
+                    close(localFD);
+                    [[ZeroTierBridge sharedInstance] closeSocket:ztClientFD];
+                    return;
+                }
+                // EINPROGRESS：等待可写（连接完成），使用 select 设置 5 秒超时
+                fd_set writeSet;
+                FD_ZERO(&writeSet);
+                FD_SET(localFD, &writeSet);
+                struct timeval connTimeout;
+                connTimeout.tv_sec = 5;
+                connTimeout.tv_usec = 0;
+                int selRet = select(localFD + 1, NULL, &writeSet, NULL, &connTimeout);
+                if (selRet <= 0) {
+                    // selRet == 0 表示超时；selRet < 0 表示出错
+                    NSLog(@"[PortForwarder] 连接本地 MC LAN 端口超时/失败：127.0.0.1:%u, selRet=%d, errno=%d (%s)",
+                          localHostPort, selRet, errno, strerror(errno));
+                    close(localFD);
+                    [[ZeroTierBridge sharedInstance] closeSocket:ztClientFD];
+                    return;
+                }
+                // 检查 SO_ERROR 确认连接是否真正成功
+                int sockErr = 0;
+                socklen_t errLen = sizeof(sockErr);
+                if (getsockopt(localFD, SOL_SOCKET, SO_ERROR, &sockErr, &errLen) < 0 || sockErr != 0) {
+                    NSLog(@"[PortForwarder] 连接本地 MC LAN 端口失败（SO_ERROR=%d）：127.0.0.1:%u",
+                          sockErr, localHostPort);
+                    close(localFD);
+                    [[ZeroTierBridge sharedInstance] closeSocket:ztClientFD];
+                    return;
+                }
+            }
+            // 恢复阻塞模式（后续 forwardDataBetweenPosixFD 依赖阻塞 read/write 配合 SO_RCVTIMEO）
+            (void)fcntl(localFD, F_SETFL, flags);
         }
 
         NSLog(@"[PortForwarder] 连接本地 MC LAN 端口成功：127.0.0.1:%u, localFD=%d",

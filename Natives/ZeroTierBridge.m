@@ -145,6 +145,20 @@ static void zeroTierEventCallback(void *msgPtr) {
     if (_isStarted) { [_lock unlock]; return YES; }
     [_lock unlock];
 
+    // 关键修复（stopNode 状态同步防御）：
+    // 若 stopNode 在 2 秒超时后仍未完全关闭节点（zts_node_is_online 仍返回 1），
+    // 这里再等待最多 3 秒确保旧节点完全停止，避免 zts_init_from_storage 与旧节点冲突。
+    if (zts_node_is_online() == 1) {
+        NSLog(@"[ZeroTierBridge] startNode：检测到节点仍在线（stop 未完全完成），等待关闭...");
+        NSTimeInterval deadline = [NSDate timeIntervalSinceReferenceDate] + 3.0;
+        while (zts_node_is_online() == 1 && [NSDate timeIntervalSinceReferenceDate] < deadline) {
+            [NSThread sleepForTimeInterval:0.05];
+        }
+        if (zts_node_is_online() == 1) {
+            NSLog(@"[ZeroTierBridge] startNode：节点仍未关闭，强制继续（可能出现状态冲突）");
+        }
+    }
+
     int result = zts_init_from_storage([homeDir UTF8String]);
     if (result != ZTS_ERR_OK) {
         if (error) *error = [NSError errorWithDomain:kZeroTierErrorDomain code:ZeroTierErrorCodeNodeStartFailed userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"初始化存储目录失败 (code=%d)", result]}];
@@ -180,17 +194,18 @@ static void zeroTierEventCallback(void *msgPtr) {
     [_lock unlock];
 
     zts_node_stop();
-    // 后台线程等待节点真正下线（最多 5 秒）；主线程派发到后台等待
-    void (^waitBlock)(void) = ^{
-        NSTimeInterval deadline = [NSDate timeIntervalSinceReferenceDate] + 5.0;
-        while (zts_node_is_online() == 1 && [NSDate timeIntervalSinceReferenceDate] < deadline) {
-            [NSThread sleepForTimeInterval:0.1];
-        }
-    };
-    if ([NSThread isMainThread]) {
-        dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), waitBlock);
-    } else {
-        waitBlock();
+    // 关键修复（stopNode 状态同步）：
+    // 之前主线程调用时把 waitBlock dispatch 到后台异步执行，但状态清理在主线程立即完成。
+    // 调用方看到 _isStarted = NO 后立即调用 startNode，可能与后台仍未完成的停止逻辑并发，
+    // 导致 zts_init_from_storage / zts_node_start 与正在停止的旧节点状态冲突。
+    //
+    // 修复方案：主线程也同步等待节点下线，但把最大等待时间缩短到 2 秒，避免 UI 长时间卡顿。
+    // 2 秒通常足够 libzt 完成节点关闭流程；超过 2 秒则不再等待，但 libzt 自身最终会完成清理。
+    // 调用方（如 disconnectCurrentRoom）在主线程调用时会有最多 2 秒的同步等待，这是可接受的——
+    // disconnectCurrentRoom 通常由用户显式触发（点击断开按钮），短暂等待比状态不一致更可取。
+    NSTimeInterval deadline = [NSDate timeIntervalSinceReferenceDate] + 2.0;
+    while (zts_node_is_online() == 1 && [NSDate timeIntervalSinceReferenceDate] < deadline) {
+        [NSThread sleepForTimeInterval:0.05];
     }
 
     [_lock lock];
@@ -370,7 +385,22 @@ static void zeroTierEventCallback(void *msgPtr) {
             break;
         }
         case ZTS_EVENT_NETWORK_OK: {
-            [_lock lock]; _networkStatuses[@(netID)] = @(ZeroTierNetworkStatusOk); [_lock unlock];
+            // 关键修复（iOS 后台事件堆积缓解）：
+            // iOS 应用进入后台后主 RunLoop 暂停，libzt 事件全部堆积在主队列。
+            // 回到前台时一次性执行，可能多次触发同一网络的 NETWORK_OK 事件。
+            // 这里通过状态去重：若该网络已处于 OK 状态，跳过信号量与 delegate 回调，
+            // 避免上层 waitForNetworkReady 误触发、UI 重复刷新抖动。
+            // 首次 OK 事件（_networkStatuses 中无记录或状态不同）正常处理。
+            [_lock lock];
+            NSNumber *existingStatus = _networkStatuses[@(netID)];
+            BOOL isDuplicate = (existingStatus != nil &&
+                                existingStatus.integerValue == ZeroTierNetworkStatusOk);
+            _networkStatuses[@(netID)] = @(ZeroTierNetworkStatusOk);
+            [_lock unlock];
+            if (isDuplicate) {
+                NSLog(@"[ZeroTierBridge] 收到重复 NETWORK_OK 事件（netID=%llu），跳过信号量与回调", netID);
+                break;
+            }
             dispatch_semaphore_signal(_networkEventSemaphore);
             if ([delegate respondsToSelector:@selector(zeroTierNetworkReady:ipv4:ipv6:)]) {
                 [delegate zeroTierNetworkReady:netID ipv4:[self ipv4AddressForNetwork:netID] ipv6:[self ipv6AddressForNetwork:netID]];
@@ -395,7 +425,18 @@ static void zeroTierEventCallback(void *msgPtr) {
                 case ZTS_EVENT_NETWORK_CLIENT_TOO_OLD: status = ZeroTierNetworkStatusClientTooOld; callback = @selector(zeroTierNetworkClientTooOld:); break;
                 case ZTS_EVENT_NETWORK_DOWN: status = ZeroTierNetworkStatusDown; callback = @selector(zeroTierNetworkDown:); break;
             }
-            [_lock lock]; _networkStatuses[@(netID)] = @(status); [_lock unlock];
+            // 状态去重：与 NETWORK_OK 同理，避免后台堆积的同类失败事件批量触发
+            [_lock lock];
+            NSNumber *existingStatus = _networkStatuses[@(netID)];
+            BOOL isDuplicate = (existingStatus != nil &&
+                                existingStatus.integerValue == (NSInteger)status);
+            _networkStatuses[@(netID)] = @(status);
+            [_lock unlock];
+            if (isDuplicate) {
+                NSLog(@"[ZeroTierBridge] 收到重复网络失败事件（code=%d, netID=%llu），跳过信号量与回调",
+                      eventCode, netID);
+                break;
+            }
             dispatch_semaphore_signal(_networkEventSemaphore);
             if (callback && [delegate respondsToSelector:callback]) {
                 NSInvocation *inv = [NSInvocation invocationWithMethodSignature:[(id)delegate methodSignatureForSelector:callback]];
@@ -411,11 +452,27 @@ static void zeroTierEventCallback(void *msgPtr) {
             uint64_t addrNetID = [eventData[@"addrNetID"] unsignedLongLongValue];
             NSString *addr = eventData[@"addrStr"];
             int family = [eventData[@"addrFamily"] intValue];
+            BOOL addrChanged = NO;
             if (addr) {
                 [_lock lock];
-                if (family == ZTS_AF_INET) _ipv4Addresses[@(addrNetID)] = addr;
-                else if (family == ZTS_AF_INET6) _ipv6Addresses[@(addrNetID)] = addr;
+                if (family == ZTS_AF_INET) {
+                    NSString *old = _ipv4Addresses[@(addrNetID)];
+                    addrChanged = ![addr isEqualToString:old];
+                    _ipv4Addresses[@(addrNetID)] = addr;
+                } else if (family == ZTS_AF_INET6) {
+                    NSString *old = _ipv6Addresses[@(addrNetID)];
+                    addrChanged = ![addr isEqualToString:old];
+                    _ipv6Addresses[@(addrNetID)] = addr;
+                }
                 [_lock unlock];
+            }
+            // 关键修复（iOS 后台事件堆积缓解）：
+            // 若地址未变化（重复 ADDR_ADDED 事件），跳过信号量与 delegate 回调，
+            // 避免后台堆积的同地址事件批量触发 zeroTierNetworkReady: 造成 UI 抖动。
+            // 首次分配地址时 _ipv4Addresses/_ipv6Addresses 中无记录，addrChanged=YES，正常处理。
+            if (!addrChanged) {
+                NSLog(@"[ZeroTierBridge] 收到重复 ADDR_ADDED 事件（netID=%llu），跳过信号量与回调", addrNetID);
+                break;
             }
             dispatch_semaphore_signal(_networkEventSemaphore);
             if ([delegate respondsToSelector:@selector(zeroTierNetworkReady:ipv4:ipv6:)] && [self isNetworkReady:addrNetID]) {

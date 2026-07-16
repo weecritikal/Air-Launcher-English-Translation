@@ -141,6 +141,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
         _hostPort = [hostPort copy] ?: kDefaultMCPort;
         _roomDescription = @"";
         _status = MultiplayerRoomStatusDisconnected;
+        _role = MultiplayerRoomRoleUnknown;
         _ownerName = @"";
         _createdAt = [NSDate date];
         _lastConnectedAt = nil;
@@ -170,6 +171,16 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
             statusValue = MultiplayerRoomStatusDisconnected;
         }
         _status = (MultiplayerRoomStatus)statusValue;
+
+        // 关键修复：role 字段。旧数据可能不含此 key，decodeObjectForKey:ForKey 会返回 0
+        // （NSKeyedArchiver 对未编码的 key 调用 decodeIntegerForKey 返回 0），
+        // 即 MultiplayerRoomRoleUnknown，调用方会回退到 IP 启发式以保持兼容。
+        NSInteger roleValue = [coder decodeIntegerForKey:@"role"];
+        if (roleValue < MultiplayerRoomRoleUnknown ||
+            roleValue > MultiplayerRoomRoleGuest) {
+            roleValue = MultiplayerRoomRoleUnknown;
+        }
+        _role = (MultiplayerRoomRole)roleValue;
     }
     return self;
 }
@@ -185,6 +196,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     [coder encodeObject:self.createdAt forKey:@"createdAt"];
     [coder encodeObject:self.lastConnectedAt forKey:@"lastConnectedAt"];
     [coder encodeInteger:(NSInteger)self.status forKey:@"status"];
+    [coder encodeInteger:(NSInteger)self.role forKey:@"role"];
 }
 
 #pragma mark - 描述方法（便于调试）
@@ -211,6 +223,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     copy.hostPort = [self.hostPort copy];
     copy.roomDescription = [self.roomDescription copy];
     copy.status = self.status;
+    copy.role = self.role;
     copy.ownerName = [self.ownerName copy];
     copy.createdAt = [self.createdAt copy];
     copy.lastConnectedAt = [self.lastConnectedAt copy];
@@ -729,17 +742,17 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     }];
 }
 
-- (void)leaveNetwork:(NSString *)networkId {
+- (BOOL)leaveNetwork:(NSString *)networkId {
     if (!networkId || networkId.length == 0) {
         NSLog(@"[MultiplayerManager] leaveNetwork: networkId 为空");
-        return;
+        return NO;
     }
 
     NSString *trimmedNetworkId = [networkId stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
     uint64_t netID = [ZeroTierBridge parseNetworkIDFromString:trimmedNetworkId];
     if (netID == 0) {
         NSLog(@"[MultiplayerManager] leaveNetwork: Network ID 解析失败：%@", trimmedNetworkId);
-        return;
+        return NO;
     }
 
     BOOL success = [[ZeroTierBridge sharedInstance] leaveNetwork:netID];
@@ -755,6 +768,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
         _currentNetworkID = 0;
     }
     [_stateLock unlock];
+    return success;
 }
 
 #pragma mark - 房间管理（增删改查）
@@ -995,6 +1009,13 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     //   - disconnectCurrentRoom 写 room.status = Disconnected（已释放锁，覆盖）
     //   - 最终 status 与实际状态不符
     [_stateLock lock];
+    // 关键修复（connectionCancelled 重置竞态）：
+    // 在持 _stateLock 期间重置 connectionCancelled = NO。
+    // 此时 currentRoom 尚未设置（下一行才设置），disconnectCurrentRoom 即使能拿到锁，
+    // 也会因为 currentRoom == nil 而提前 return，不会设置 YES。
+    // 这保证了"重置取消标志"与"设置 currentRoom"在锁内原子完成，
+    // 避免了之前在 connectToRoomFlow 后台线程重置导致取消信号被覆盖的竞态。
+    self.connectionCancelled = NO;
     self.currentRoom = room;
     self.currentNetworkID = [ZeroTierBridge parseNetworkIDFromString:room.networkId];
     room.status = MultiplayerRoomStatusConnecting;
@@ -1083,8 +1104,25 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
 ///     startHostPortForwarderWithListenPort:localHostPort: 启动房主模式。
 - (void)connectToRoomFlow:(MultiplayerRoom *)room
                completion:(void (^)(BOOL success, NSError * _Nullable error))completion {
-    // SubTask 4.2：重置取消标志，允许本次连接流程正常执行
-    self.connectionCancelled = NO;
+    // SubTask 4.2：取消标志已在 connectToRoom: 主线程持锁阶段重置（见下方 connectToRoom:）。
+    // 这里不再重置——避免与 disconnectCurrentRoom 设置 YES 的竞态：
+    //   - 之前在此处重置：dispatch_async 调度到后台线程开始执行的窗口内，
+    //     若 disconnectCurrentRoom 设置了 YES，会被本行立即覆盖为 NO，导致取消信号丢失。
+    //   - 现在重置点在 connectToRoom: 设置 currentRoom 之前（主线程持 _stateLock 期间），
+    //     disconnectCurrentRoom 必须先获取 _stateLock 才能读到 currentRoom 并触发取消，
+    //     因此重置与可能的取消设置不会重叠。
+
+    // 步骤 1 前增加取消检查（与步骤 2/3/4/5 保持一致），
+    // 防止 dispatch_async 调度期间用户已显式取消时仍启动节点
+    if (self.connectionCancelled) {
+        NSLog(@"[MultiplayerManager] [连接流程] 步骤 1 前检测到取消，退出");
+        if (completion) {
+            completion(NO, [NSError errorWithDomain:kMultiplayerErrorDomain
+                                                code:MultiplayerErrorCodeRoomNotFound
+                                            userInfo:@{NSLocalizedDescriptionKey: @"连接已取消"}]);
+        }
+        return;
+    }
 
     // 步骤 1：启动节点
     //
@@ -1200,6 +1238,12 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(8.0 * NSEC_PER_SEC)),
                    dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
         if (step4Done) return;
+        // 关键修复：8 秒检查块必须响应取消，否则用户已断开后仍会收到
+        // "你的节点可能未被授权" 等误导性进度提示
+        if (weakSelf.connectionCancelled) {
+            NSLog(@"[MultiplayerManager] [连接流程] 8秒检查：检测到取消，跳过");
+            return;
+        }
         ZeroTierNetworkStatus status = [[ZeroTierBridge sharedInstance] networkStatus:netID];
         NSString *ipv4 = [[ZeroTierBridge sharedInstance] ipv4AddressForNetwork:netID];
         NSString *ipv6 = [[ZeroTierBridge sharedInstance] ipv6AddressForNetwork:netID];
@@ -1290,22 +1334,33 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
 
     // 同步本机 ZeroTier IP 到 currentLocalIP，并在房主模式下同步到 room.hostIP
     //
-    // 房主与房客区分：
-    //   - 房主首次连接：room.hostIP 为空 → 需要填充本机 IP 用于分享
-    //   - 房主重连（IP 不变）：room.hostIP == 本机 IP → 无变化，允许同步
-    //   - 房客连接：room.hostIP == 房主 IP（来自分享代码）≠ 本机 IP → 不覆盖
+    // 房主与房客区分（关键修复：替代 IP 启发式）：
+    //   - 优先使用 room.role：role == Host 即为房主
+    //   - role == Unknown 时回退到 IP 启发式以保持兼容：
+    //     - 房主首次连接：room.hostIP 为空 → 需要填充本机 IP 用于分享
+    //     - 房主重连（IP 不变）：room.hostIP == 本机 IP → 无变化，允许同步
+    //     - 房客连接：room.hostIP == 房主 IP（来自分享代码）≠ 本机 IP → 不覆盖
     [_stateLock lock];
     self.currentLocalIP = localIP;
     if (localIP.length > 0 && self.currentRoom) {
         NSString *existingHostIP = self.currentRoom.hostIP;
-        BOOL isHost = (existingHostIP.length == 0) || [existingHostIP isEqualToString:localIP];
+        MultiplayerRoomRole currentRole = self.currentRoom.role;
+        BOOL isHostByRole = (currentRole == MultiplayerRoomRoleHost);
+        BOOL isHostByIPFallback = (currentRole == MultiplayerRoomRoleUnknown &&
+                                   (existingHostIP.length == 0 || [existingHostIP isEqualToString:localIP]));
+        BOOL isHost = isHostByRole || isHostByIPFallback;
         if (isHost) {
             self.currentRoom.hostIP = localIP;
-            NSLog(@"[MultiplayerManager] [连接流程] 已同步房主 ZeroTier IP 到房间 %@：%@", self.currentRoom.name, localIP);
+            // 房主首次设置时，确保 role 被标记为 Host（兼容旧路径）
+            if (currentRole == MultiplayerRoomRoleUnknown) {
+                self.currentRoom.role = MultiplayerRoomRoleHost;
+            }
+            NSLog(@"[MultiplayerManager] [连接流程] 已同步房主 ZeroTier IP 到房间 %@（role=%ld）：%@",
+                  self.currentRoom.name, (long)self.currentRoom.role, localIP);
         } else {
             // 房客：保留分享代码中的房主 IP，不覆盖
-            NSLog(@"[MultiplayerManager] [连接流程] 房客模式：保留房主 IP %@，不使用本机 IP %@",
-                  existingHostIP, localIP);
+            NSLog(@"[MultiplayerManager] [连接流程] 房客模式（role=%ld）：保留房主 IP %@，不使用本机 IP %@",
+                  (long)currentRole, existingHostIP, localIP);
         }
     }
     MultiplayerRoom *roomForIPUpdate = self.currentRoom;
@@ -1374,16 +1429,26 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
 
     // 仅当房间有 hostIP 和 hostPort 时启动房客模式端口转发器
     // 房主模式（hostIP 为空或为本机 IP）不启动，等待 UI 层调用房主模式 API
+    //
+    // 关键修复（替代 IP 启发式）：
+    // 优先使用 room.role 判断房客身份；若 role == Unknown（旧数据/异常路径），
+    // 回退到 IP 启发式以保持兼容。这样消除了"hostIP 与 localIP 恰好相同"导致
+    // 房客被误判为房主、PortForwarder 不启动、MC 无法连接的脆弱场景。
     NSString *hostIP = room.hostIP;
     NSString *hostPortStr = room.hostPort;
-    BOOL isGuestMode = (hostIP.length > 0 &&
-                        hostPortStr.length > 0 &&
-                        ![hostIP isEqualToString:localIP]);  // 房客：hostIP 是房主 IP，不等于本机 IP
-    if (isGuestMode) {
+    MultiplayerRoomRole role = room.role;
+    BOOL isGuestByRole = (role == MultiplayerRoomRoleGuest);
+    BOOL isGuestByIPFallback = (role == MultiplayerRoomRoleUnknown &&
+                                hostIP.length > 0 &&
+                                hostPortStr.length > 0 &&
+                                localIP.length > 0 &&
+                                ![hostIP isEqualToString:localIP]);
+    BOOL isGuestMode = isGuestByRole || isGuestByIPFallback;
+    if (isGuestMode && hostIP.length > 0 && hostPortStr.length > 0) {
         uint16_t hostPort = (uint16_t)[hostPortStr integerValue];
         if (hostPort > 0) {
-            NSLog(@"[MultiplayerManager] [连接流程] 房客模式：启动端口转发器 127.0.0.1:%u → %@:%u",
-                  PortForwarderDefaultLocalPort, hostIP, hostPort);
+            NSLog(@"[MultiplayerManager] [连接流程] 房客模式（role=%ld）：启动端口转发器 127.0.0.1:%u → %@:%u",
+                  (long)role, PortForwarderDefaultLocalPort, hostIP, hostPort);
 
             BOOL forwardStarted = [[PortForwarder sharedForwarder] startGuestModeWithLocalPort:PortForwarderDefaultLocalPort
                                                                                          hostIP:hostIP
@@ -1404,7 +1469,8 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
             NSLog(@"[MultiplayerManager] [连接流程] 房主端口无效：%@，跳过端口转发", hostPortStr);
         }
     } else {
-        NSLog(@"[MultiplayerManager] [连接流程] 房主模式：跳过房客端口转发，等待 UI 调用 startHostPortForwarderWithListenPort:localHostPort:");
+        NSLog(@"[MultiplayerManager] [连接流程] 房主模式（role=%ld）：跳过房客端口转发，等待 UI 调用 startHostPortForwarderWithListenPort:localHostPort:",
+              (long)role);
     }
 
     if (completion) {
@@ -1452,8 +1518,19 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     NSLog(@"[MultiplayerManager] 已清除环境变量 %@", kAMETHYSTSOCKS5ProxyEnvVar);
 
     // 3. 离开 ZeroTier 网络
+    // 关键修复：检查 leaveNetwork 返回值，失败时强制 stopNode 彻底清理。
+    // 之前不检查返回值，若 leaveNetwork 失败（libzt 内部错误、节点异常等），
+    // 节点实际仍在网络中，但 Manager 状态已清空，后续重连同一网络可能出现状态不一致。
+    // 现在失败时强制 stopNode 重置整个节点状态，确保下次连接从干净状态开始。
     if (networkId && networkId.length > 0) {
-        [self leaveNetwork:networkId];
+        BOOL leaveSuccess = [self leaveNetwork:networkId];
+        if (!leaveSuccess) {
+            NSLog(@"[MultiplayerManager] disconnectCurrentRoom: leaveNetwork 失败，强制 stopNode 彻底清理");
+            [[ZeroTierBridge sharedInstance] stopNode];
+            [_stateLock lock];
+            _nodeStarted = NO;
+            [_stateLock unlock];
+        }
     }
 
     // 4. 更新房间状态为已断开
@@ -1558,12 +1635,18 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     }
 
     // PortForwarder 房客模式重启（仅在未运行且为房客模式时）
-    // 房客模式判断：hostIP 不为空、hostPort 有效、hostIP 不等于本机 IP
+    // 房客模式判断：
+    //   - 优先使用 room.role == Guest
+    //   - role == Unknown 时回退到 IP 启发式（hostIP 不为空、hostPort 有效、hostIP 不等于本机 IP）
     // 房主模式的 PortForwarder 不自动恢复（需要 MC LAN 端口，由 UI 层重新启动）
-    BOOL isGuestMode = (hostIP.length > 0 &&
-                        hostPortStr.length > 0 &&
-                        localIP.length > 0 &&
-                        ![hostIP isEqualToString:localIP]);
+    MultiplayerRoomRole role = room.role;
+    BOOL isGuestByRole = (role == MultiplayerRoomRoleGuest);
+    BOOL isGuestByIPFallback = (role == MultiplayerRoomRoleUnknown &&
+                                hostIP.length > 0 &&
+                                hostPortStr.length > 0 &&
+                                localIP.length > 0 &&
+                                ![hostIP isEqualToString:localIP]);
+    BOOL isGuestMode = isGuestByRole || isGuestByIPFallback;
     if (isGuestMode &&
         (![[PortForwarder sharedForwarder] isRunning] || savedForwardPort == 0)) {
         uint16_t hostPort = (uint16_t)[hostPortStr integerValue];
@@ -1681,20 +1764,26 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
         // 关键修复（房客连接失败根因）：只有房主才应将本机 ZeroTier IP 同步到 room.hostIP。
         // 之前无条件同步导致房客的 hostIP 被本机 IP 覆盖，PortForwarder 转发到房客自己。
         // 房客的 hostIP 来自分享代码（房主 IP），必须保留，不能被本机 IP 覆盖。
+        //
+        // 关键修复（替代 IP 启发式）：
+        // 优先使用 room.role 判断；role == Unknown 时回退到 IP 启发式以保持兼容。
         NSString *existingHostIP = room.hostIP;
-        BOOL isHost = (existingHostIP.length == 0) || [existingHostIP isEqualToString:effectiveIP];
+        BOOL isHostByRole = (room.role == MultiplayerRoomRoleHost);
+        BOOL isHostByIPFallback = (room.role == MultiplayerRoomRoleUnknown &&
+                                   (existingHostIP.length == 0 || [existingHostIP isEqualToString:effectiveIP]));
+        BOOL isHost = isHostByRole || isHostByIPFallback;
         if (isHost) {
             // 房主：更新本机 IP 到 hostIP（用于分享给房客）
             if (![existingHostIP isEqualToString:effectiveIP]) {
                 room.hostIP = effectiveIP;
                 needsUpdate = YES;
             }
-            NSLog(@"[MultiplayerManager] 已更新房间 %@ 的本地 IP（%@）：%@",
-                  room.name, isAdhoc ? @"IPv6" : @"IPv4", effectiveIP);
+            NSLog(@"[MultiplayerManager] 已更新房间 %@ 的本地 IP（%@，role=%ld）：%@",
+                  room.name, isAdhoc ? @"IPv6" : @"IPv4", (long)room.role, effectiveIP);
         } else {
             // 房客：保留房主 IP，仅更新 currentLocalIP（已在上方更新）
-            NSLog(@"[MultiplayerManager] 房客模式：保留房主 IP %@，本机 IP %@（不覆盖 hostIP）",
-                  existingHostIP, effectiveIP);
+            NSLog(@"[MultiplayerManager] 房客模式（role=%ld）：保留房主 IP %@，本机 IP %@（不覆盖 hostIP）",
+                  (long)room.role, existingHostIP, effectiveIP);
         }
     }
     [_stateLock unlock];
@@ -2175,6 +2264,8 @@ static NSString * const kPresetNetworkIdPrefKey = @"multiplayer.preset_network_i
     room.roomDescription = @"";
     room.ownerName = @"";
     room.status = MultiplayerRoomStatusDisconnected;
+    // 关键修复：解析分享代码得到的房间一定是房客角色
+    room.role = MultiplayerRoomRoleGuest;
     room.createdAt = [NSDate date];
 
     NSLog(@"[MultiplayerManager] 已解析分享代码：roomName=%@ networkId=%@ hostIP=%@ hostPort=%@",
