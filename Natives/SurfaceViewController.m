@@ -226,6 +226,10 @@ static GameSurfaceView* pojavWindow;
 
 @property(nonatomic) id mouseConnectCallback, mouseDisconnectCallback;
 @property(nonatomic) id controllerConnectCallback, controllerDisconnectCallback;
+// 关键修复（UI 累积异常）：MousePointerUpdated 块观察者之前未存储，
+// 无法在 dealloc 中移除，导致每次进出游戏都泄漏一个观察者 + 对 self 的强引用。
+// 现存为属性，dealloc 中统一移除。
+@property(nonatomic) id mousePointerUpdatedCallback;
 
 @property(nonatomic) CGFloat screenScale;
 @property(nonatomic) CGFloat mouseSpeed;
@@ -859,7 +863,9 @@ static GameSurfaceView* pojavWindow;
     self.mousePointerView.userInteractionEnabled = NO;
     [self.touchView addSubview:self.mousePointerView];
 
-    [[NSNotificationCenter defaultCenter] addObserverForName:@"MousePointerUpdated" object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification * _Nonnull note) {
+    // 关键修复（UI 累积异常）：将块观察者存为属性，dealloc 中移除。
+    // 之前返回值未存储，导致每次新建 SurfaceViewController 都泄漏一个观察者 + 强引用 self。
+    self.mousePointerUpdatedCallback = [[NSNotificationCenter defaultCenter] addObserverForName:@"MousePointerUpdated" object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification * _Nonnull note) {
         [self reloadMousePointerImage];
     }];
 
@@ -2198,6 +2204,33 @@ static NSMutableDictionary *s_touchToFingerIdMap = nil;
     [[NSNotificationCenter defaultCenter] removeObserver:self name:@"PojavFirstFrameRendered" object:nil];
     self.launchOverlayView = nil;
     self.launchGradientLayer = nil;
+
+    // 关键修复（UI 累积异常）：移除 5 个块式通知观察者。
+    // 之前只移除了 PojavFirstFrameRendered，未移除以下 5 个块观察者，
+    // 导致每次进出游戏都泄漏 5 个观察者 + 5 条对 self 的强引用，
+    // 多次进出后多个"已释放"的 VC 同时收到通知操作 UI，造成 UI 行为错乱。
+    // 块观察者必须通过 removeObserver: 显式移除（removeObserver:self 无效）。
+    id defaultCenter = [NSNotificationCenter defaultCenter];
+    if (self.mousePointerUpdatedCallback) {
+        [defaultCenter removeObserver:self.mousePointerUpdatedCallback];
+        self.mousePointerUpdatedCallback = nil;
+    }
+    if (self.mouseConnectCallback) {
+        [defaultCenter removeObserver:self.mouseConnectCallback];
+        self.mouseConnectCallback = nil;
+    }
+    if (self.mouseDisconnectCallback) {
+        [defaultCenter removeObserver:self.mouseDisconnectCallback];
+        self.mouseDisconnectCallback = nil;
+    }
+    if (self.controllerConnectCallback) {
+        [defaultCenter removeObserver:self.controllerConnectCallback];
+        self.controllerConnectCallback = nil;
+    }
+    if (self.controllerDisconnectCallback) {
+        [defaultCenter removeObserver:self.controllerDisconnectCallback];
+        self.controllerDisconnectCallback = nil;
+    }
 
     // LAN 端口检测器已改为手动输入模式，stopDetecting 已移除，无需调用。
     // 联机资源（SOCKS5 代理、PortForwarder、ZeroTier）的清理见下方 stopAllMultiplayerServices。

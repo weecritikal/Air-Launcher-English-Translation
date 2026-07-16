@@ -282,6 +282,16 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 
 - (void)dealloc {
     [[NSNotificationCenter defaultCenter] removeObserver:self];
+    // 关键修复（KVO 泄漏）：兜底移除 KVO 观察者。
+    // 正常流程中下载完成/出错时已移除，但若 VC 在下载过程中被释放（如退出启动器），
+    // KVO 观察者会指向已释放对象，导致野指针崩溃。
+    if (self.task && self.task.progress) {
+        @try {
+            [self.task.progress removeObserver:self
+                                    forKeyPath:@"fractionCompleted"
+                                       context:ProgressObserverContext];
+        } @catch (NSException *e) {}
+    }
 }
 
 #pragma mark - 下载中心（参照 FCL/ZL2/HMCL 下载进度弹窗）
@@ -502,6 +512,13 @@ static void *ProgressObserverContext = &ProgressObserverContext;
         self.task.handleError = ^{
             dispatch_async(dispatch_get_main_queue(), ^{
                 [weakSelf setInteractionEnabled:YES forDownloading:YES];
+                // 关键修复（KVO 泄漏）：出错时必须先移除 KVO 再置 nil task，
+                // 否则 task.progress 仍持有对 self 的 KVO 观察者，下次下载会重复添加。
+                @try {
+                    [weakSelf.task.progress removeObserver:weakSelf
+                                                forKeyPath:@"fractionCompleted"
+                                                   context:ProgressObserverContext];
+                } @catch (NSException *e) {}
                 weakSelf.task = nil;
                 weakSelf.progressVC = nil;
             });
@@ -584,6 +601,14 @@ static void *ProgressObserverContext = &ProgressObserverContext;
         [self.progressVC dismissViewControllerAnimated:NO completion:nil];
 
         self.progressViewMain.observedProgress = nil;
+        // 关键修复（KVO 泄漏）：下载完成时移除 KVO 观察者。
+        // 之前不移除，导致每次下载都在 self.task.progress 上累积一个观察者，
+        // 多次下载后 progress 变化会触发多次 observeValueForKeyPath，UI 异常。
+        @try {
+            [self.task.progress removeObserver:self
+                                    forKeyPath:@"fractionCompleted"
+                                       context:ProgressObserverContext];
+        } @catch (NSException *e) {}
         if (self.task.metadata) {
             [self invokeAfterJITEnabled:^{
                 UIKit_launchMinecraftSurfaceVC(self.view.window, self.task.metadata);
@@ -608,6 +633,12 @@ static void *ProgressObserverContext = &ProgressObserverContext;
         self.task.handleError = ^{
             dispatch_async(dispatch_get_main_queue(), ^{
                 [weakSelf setInteractionEnabled:YES forDownloading:YES];
+                // 关键修复（KVO 泄漏）：出错时移除 KVO，与 launchMinecraft 流程一致
+                @try {
+                    [weakSelf.task.progress removeObserver:weakSelf
+                                                forKeyPath:@"fractionCompleted"
+                                                   context:ProgressObserverContext];
+                } @catch (NSException *e) {}
                 weakSelf.task = nil;
                 weakSelf.progressVC = nil;
             });

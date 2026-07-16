@@ -219,6 +219,11 @@ void AWTInputBridge_sendKey(int keycode) {
 @property(nonatomic) ControlLayout* ctrlView;
 @property(nonatomic) PLLogOutputView* logOutputView;
 @property(nonatomic) ScrollableSurfaceView* surfaceScrollView;
+// 关键修复（UI 累积异常）：CADisplayLink 与其所在线程的 runloop 之前未持有引用，
+// 无法在 dealloc 中 invalidate，导致每次进入 JavaGUI 界面都泄漏一条线程 +
+// 一个 CADisplayLink + 对 surfaceView 的强引用。多次进入后线程数累积，UI 卡顿。
+@property(nonatomic, strong) CADisplayLink *displayLink;
+@property(nonatomic, strong) NSThread *displayLinkThread;
 
 @end
 
@@ -299,19 +304,33 @@ void AWTInputBridge_sendKey(int keycode) {
     [self.view addSubview:self.logOutputView];
 
     setenv("POJAV_SKIP_JNI_GLFW", "1", 1);
- 
+
     // Register the display loop
-    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        CADisplayLink *displayLink = [CADisplayLink displayLinkWithTarget:surfaceView selector:@selector(refreshBuffer)];
+    // 关键修复（UI 累积异常）：之前用 dispatch_async + [NSRunLoop.currentRunLoop run] 永久阻塞线程，
+    // CADisplayLink 无法被 invalidate，每次进入 JavaGUI 界面都泄漏一条线程 + displayLink + surfaceView。
+    // 现改用 NSThread，在 dealloc 中通过 CFRunLoopStop 停止 runloop 并 invalidate displayLink。
+    __weak typeof(self) weakSelf = self;
+    NSThread *dlThread = [[NSThread alloc] initWithBlock:^{
+        CADisplayLink *dl = [CADisplayLink displayLinkWithTarget:surfaceView selector:@selector(refreshBuffer)];
         if (@available(iOS 15.0, tvOS 15.0, *)) {
             // max_framerate 选项已移除：始终采用 30-120Hz 自适应范围。
             // 屏幕硬件决定实际帧率（60Hz 设备仍为 60，120Hz ProMotion 设备可达 120），
             // 不再人为限制在 60FPS。配合 disable_game_vsync 完整解锁 VSync 后帧率可超过屏幕刷新率。
-            displayLink.preferredFrameRateRange = CAFrameRateRangeMake(30, 120, 120);
+            dl.preferredFrameRateRange = CAFrameRateRangeMake(30, 120, 120);
         }
-        [displayLink addToRunLoop:NSRunLoop.currentRunLoop forMode:NSRunLoopCommonModes];
-        [NSRunLoop.currentRunLoop run];
-    });
+        [dl addToRunLoop:NSRunLoop.currentRunLoop forMode:NSRunLoopCommonModes];
+        // 存到 self 属性供 dealloc invalidate。weak self 在线程 block 内安全。
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (strongSelf) {
+            strongSelf.displayLink = dl;
+        }
+        // runloop 会阻塞直到外部调用 CFRunLoopStop 停止它
+        CFRunLoopRun();
+        // runloop 停止后清理 displayLink
+        [dl invalidate];
+    }];
+    self.displayLinkThread = dlThread;
+    [dlThread start];
 
     
 dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
@@ -343,6 +362,33 @@ dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
 
 - (void)dealloc {
     [[NSNotificationCenter defaultCenter] removeObserver:self];
+
+    // 关键修复（UI 累积异常）：停止 displayLink 线程及其 runloop。
+    // 之前未 invalidate displayLink，且 runloop 用 [NSRunLoop run] 永久阻塞，
+    // 导致每次进入 JavaGUI 界面都泄漏一条线程 + displayLink + surfaceView 强引用。
+    //
+    // 清理步骤：
+    // 1. invalidate displayLink（从 runloop 移除该源）
+    // 2. 在 displayLinkThread 上执行 CFRunLoopStop，让 CFRunLoopRun() 返回，线程 block 结束
+    // 3. 清理静态 surfaceView 引用
+    [self.displayLink invalidate];
+    self.displayLink = nil;
+    if (self.displayLinkThread) {
+        // 在子线程上执行 CFRunLoopStop(CFRunLoopGetCurrent())，让 CFRunLoopRun() 返回
+        [self performSelector:@selector(_stopDisplayLinkRunLoop)
+                     onThread:self.displayLinkThread
+                   withObject:nil
+                waitUntilDone:NO];
+        self.displayLinkThread = nil;
+    }
+    @try {
+        surfaceView = nil;
+    } @catch (NSException *e) {}
+}
+
+/// 在 displayLinkThread 上执行，停止该线程的 runloop
+- (void)_stopDisplayLinkRunLoop {
+    CFRunLoopStop(CFRunLoopGetCurrent());
 }
 
 - (void)loadCustomControls {

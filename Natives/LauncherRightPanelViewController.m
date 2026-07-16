@@ -152,6 +152,14 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 
 - (void)dealloc {
     [[NSNotificationCenter defaultCenter] removeObserver:self];
+    // 关键修复（UI 累积异常）：KVO 兜底移除，防止 task 仍在进行中时 VC 被释放导致野指针。
+    if (self.task && self.task.progress) {
+        @try {
+            [self.task.progress removeObserver:self
+                                    forKeyPath:@"fractionCompleted"
+                                       context:ProgressObserverContext];
+        } @catch (NSException *e) {}
+    }
 }
 
 #pragma mark - UI Setup
@@ -964,6 +972,15 @@ static void *ProgressObserverContext = &ProgressObserverContext;
         weakSelf.task.handleError = ^{
             dispatch_async(dispatch_get_main_queue(), ^{
                 [weakSelf setInteractionEnabled:YES];
+                // 关键修复（UI 累积异常）：handleError 时未移除 KVO 观察者，
+                // task.progress 被释放后 KVO 仍指向已释放对象，多次启动会导致野指针崩溃。
+                // 现在在 task = nil 之前先移除 KVO。
+                @try {
+                    [weakSelf.task.progress removeObserver:weakSelf
+                                                forKeyPath:@"fractionCompleted"
+                                                   context:ProgressObserverContext];
+                } @catch (NSException *e) {}
+                weakSelf.progressView.observedProgress = nil;
                 weakSelf.task = nil;
                 weakSelf.progressVC = nil;
             });
@@ -1076,9 +1093,18 @@ static void *ProgressObserverContext = &ProgressObserverContext;
         }
 
         if (!progress.finished) return;
-        
+
+        // 关键修复（UI 累积异常）：进度完成时未移除 KVO 观察者，
+        // 导致每次下载完成后 KVO 仍挂在已释放的 task.progress 上，多次启动累积后崩溃。
+        // 现在在 task 完成（无论是否启动游戏）后立即移除 KVO。
+        @try {
+            [self.task.progress removeObserver:self
+                                    forKeyPath:@"fractionCompleted"
+                                       context:ProgressObserverContext];
+        } @catch (NSException *e) {}
+
         [self.progressVC dismissViewControllerAnimated:NO completion:nil];
-        
+
         self.progressView.observedProgress = nil;
         
         if (self.task.metadata) {
