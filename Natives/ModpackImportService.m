@@ -1494,15 +1494,40 @@ didFinishDownloadingToURL:(NSURL *)location {
                                         error:(NSError **)error {
     NSString *name = modpackInfo[@"name"];
     NSString *modpackId = modpackInfo[@"id"];
-    NSString *profileName = modpackId;  // 用 modpackId 作为 profile name 避免重名冲突
+
+    // 修复（参照 FCL/HMCL）：profile name 优先使用整合包可读名（name 字段），
+    // 仅在重名时回退到 modpackId 避免冲突。原实现直接用 modpackId 作为 profile name，
+    // 导致用户在版本列表看到 UUID 而非整合包名。
+    NSString *profileName = name.length > 0 ? name : modpackId;
+    // 重名冲突时追加序号
+    if (PLProfiles.current.profiles[profileName]) {
+        NSInteger suffix = 2;
+        NSString *baseName = profileName;
+        while (PLProfiles.current.profiles[profileName]) {
+            profileName = [NSString stringWithFormat:@"%@ (%ld)", baseName, (long)suffix];
+            suffix++;
+        }
+    }
 
     NSMutableDictionary *profile = [@{
-        @"name": name,
+        @"name": name.length > 0 ? name : profileName,
         @"lastVersionId": versionId ?: @"",
         @"gameDir": gameDirRelative,
         @"created": [self iso8601StringFromDate:[NSDate date]],
         @"type": @"modpack"
     } mutableCopy];
+
+    // 修复（参照 FCL/HMCL）：写入 javaVersion 字段
+    // MC 1.18+ 需要 Java 17，1.20.5+ 需要 Java 21，1.16.5- 用 Java 8
+    // 不写此字段时启动器可能用默认 Java 8 启动 MC 1.18+ 导致崩溃
+    NSString *mcVersion = modpackInfo[@"minecraftVersion"];
+    if (mcVersion.length > 0) {
+        NSInteger javaMajor = [self javaMajorVersionForMC:mcVersion];
+        profile[@"javaVersion"] = @{
+            @"component": @"java-runtime",
+            @"majorVersion": @(javaMajor)
+        };
+    }
 
     NSString *iconBase64 = modpackInfo[@"iconBase64"];
     if (iconBase64.length > 0) {
