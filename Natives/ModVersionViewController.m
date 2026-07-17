@@ -661,9 +661,32 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
     // 加载器按字母序排列，"全部"始终在最前
     self.availableLoaders = [[loaders allObjects] sortedArrayUsingSelector:@selector(compare:)];
 
-    // 默认选中"全部"
+    // FCL 风格：默认选中"全部"，但如果 preferredGameVersion/preferredLoader
+    // 在可选列表中，则自动选中匹配项（让用户无需手动筛选）
     self.selectedGameVersion = self.availableGameVersions.firstObject ?: @"全部";
     self.selectedLoader = self.availableLoaders.firstObject ?: @"全部";
+
+    // 自动选中 preferred 版本（大小写不敏感比较）
+    if (self.preferredGameVersion.length > 0) {
+        NSString *preferred = self.preferredGameVersion;
+        for (NSString *gv in self.availableGameVersions) {
+            if ([gv caseInsensitiveCompare:preferred] == NSOrderedSame) {
+                self.selectedGameVersion = gv;
+                break;
+            }
+        }
+    }
+    // 自动选中 preferred 加载器（preferredLoader 是小写如 "fabric"，
+    // availableLoaders 是首字母大写如 "Fabric"）
+    if (self.preferredLoader.length > 0) {
+        NSString *preferredCapitalized = [self.preferredLoader capitalizedString];
+        for (NSString *ld in self.availableLoaders) {
+            if ([ld caseInsensitiveCompare:preferredCapitalized] == NSOrderedSame) {
+                self.selectedLoader = ld;
+                break;
+            }
+        }
+    }
 
     // 重建版本/加载器 chips（从"加载中..."替换为实际数据）
     [self rebuildVersionChips];
@@ -686,7 +709,32 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
     NSArray<ModVersion *> *filtered = [self.allVersions filteredArrayUsingPredicate:predicate];
 
     // ----- 2. 排序：按选中的排序方式 -----
-    self.filteredVersions = [self sortVersions:filtered];
+    NSArray<ModVersion *> *sorted = [self sortVersions:filtered];
+
+    // ----- 3. FCL 风格：把匹配 preferred 版本+加载器的版本置顶 -----
+    // 用户从 profile（如 neoforge + 1.21.1）进入版本列表时，
+    // 自动把完全匹配的版本置顶，避免在长列表中手动查找
+    if (self.preferredGameVersion.length > 0 || self.preferredLoader.length > 0) {
+        NSMutableArray<ModVersion *> *pinned = [NSMutableArray array];
+        NSMutableArray<ModVersion *> *rest = [NSMutableArray array];
+        for (ModVersion *v in sorted) {
+            BOOL versionMatch = (self.preferredGameVersion.length == 0) ||
+                                [v.gameVersions containsObject:self.preferredGameVersion];
+            BOOL loaderMatch = (self.preferredLoader.length == 0) ||
+                               [v.loaders containsObject:self.preferredLoader.lowercaseString];
+            if (versionMatch && loaderMatch) {
+                [pinned addObject:v];
+            } else {
+                [rest addObject:v];
+            }
+        }
+        // 置顶的部分按原排序顺序，其余接在后面
+        if (pinned.count > 0 && pinned.count < sorted.count) {
+            sorted = [pinned arrayByAddingObjectsFromArray:rest];
+        }
+    }
+
+    self.filteredVersions = sorted;
 
     [self.tableView reloadData];
 }

@@ -40,6 +40,7 @@
 #import "installer/ModpackInstallViewController.h"
 #import "ModpackImportViewController.h"
 #import "ModpackImportService.h"
+#import "ModpackExportService.h"
 #import "installer/CurseForgeAPIKeyViewController.h"
 #import "UZKArchive.h"
 #import <QuartzCore/QuartzCore.h>
@@ -861,6 +862,8 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 @property (nonatomic, strong) NSString *currentGameVersion;
 @property (nonatomic, strong) NSString *currentModLoader;
 @property (nonatomic, strong) NSString *currentSortField;
+// FCL 风格：标记用户是否手动改过筛选条件（改过后不再自动覆盖为 profile 的版本）
+@property (nonatomic, assign) BOOL hasUserTouchedFilters;
 
 @property (nonatomic, strong) MinecraftResourceDownloadTask *downloadTask;
 @property (nonatomic, strong) DownloadProgressViewController *progressVC;
@@ -1827,30 +1830,37 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     } else if (index == 1) {
         self.searchBar.placeholder = @"搜索模组...";
         [self updateSourceSwitchButtonsForType:@"mod"];
+        // FCL 风格：首次进入模组 tab 时自动预选当前 profile 的版本和加载器
+        // 让搜索结果自动匹配当前游戏环境（如 neoforge + 1.21.1），无需手动筛选
+        [self autoApplyProfileFiltersIfNeeded];
         if (self.modList.count == 0) {
             [self loadModList];
         }
     } else if (index == 2) {
         self.searchBar.placeholder = @"搜索光影...";
         [self updateSourceSwitchButtonsForType:@"shader"];
+        [self autoApplyProfileFiltersIfNeeded];
         if (self.shaderList.count == 0) {
             [self loadShaderList];
         }
     } else if (index == 3) {
         self.searchBar.placeholder = @"搜索资源包...";
         [self updateSourceSwitchButtonsForType:@"resourcepack"];
+        [self autoApplyProfileFiltersIfNeeded];
         if (self.resourcepackList.count == 0) {
             [self loadResourcePackList];
         }
     } else if (index == 4) {
         self.searchBar.placeholder = @"搜索数据包...";
         [self updateSourceSwitchButtonsForType:@"datapack"];
+        [self autoApplyProfileFiltersIfNeeded];
         if (self.datapackList.count == 0) {
             [self loadDataPackList];
         }
     } else if (index == 5) {
         self.searchBar.placeholder = @"搜索整合包...";
         [self updateSourceSwitchButtonsForType:@"modpack"];
+        [self autoApplyProfileFiltersIfNeeded];
         if (self.modpackList.count == 0) {
             [self loadModpackList];
         }
@@ -2705,7 +2715,42 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                                                                    message:nil
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
 
-    NSArray *versions = @[@"全部版本", @"1.21", @"1.20.4", @"1.20.1", @"1.19.4", @"1.19.2", @"1.18.2", @"1.16.5", @"1.12.2", @"1.8.9"];
+    // 动态构建版本列表：优先使用已加载的 Mojang version_manifest 中的 release 版本，
+    // 这样能自动跟随 MC 版本更新（不再使用硬编码列表）。
+    // 同时把当前 profile 的 MC 版本置顶（如果有）方便快速选择。
+    NSMutableArray<NSString *> *versions = [NSMutableArray arrayWithObject:@"全部版本"];
+
+    // 当前 profile 的 MC 版本（若有）放第二位，便于快速选择
+    NSString *profileMcVersion = [self currentProfileMinecraftVersion];
+    if (profileMcVersion.length > 0 && ![versions containsObject:profileMcVersion]) {
+        [versions addObject:profileMcVersion];
+    }
+
+    // 从 Mojang version_manifest 提取 release 版本
+    if (self.versionList && [self.versionList isKindOfClass:[NSArray class]]) {
+        for (NSDictionary *version in self.versionList) {
+            NSString *type = version[@"type"];
+            if (![type isEqualToString:@"release"]) continue;
+            NSString *versionId = version[@"id"];
+            if (![versionId isKindOfClass:[NSString class]] || versionId.length == 0) continue;
+            // 跳过过于旧的版本（1.8 之前的版本 mod 支持极少）
+            if ([versionId hasPrefix:@"1."] == NO) continue;
+            // 跳过已经在列表中的（避免 profileMcVersion 重复）
+            if ([versions containsObject:versionId]) continue;
+            [versions addObject:versionId];
+        }
+    }
+
+    // 若 versionList 还未加载或为空，使用基础 fallback（保证 picker 至少能弹出）
+    if (versions.count <= 1) {
+        [versions addObjectsFromArray:@[@"1.21", @"1.20.1", @"1.19.2", @"1.18.2", @"1.16.5"]];
+    }
+
+    // 限制列表长度避免 alert 过长（保留最近 30 个版本 + 全部 + profile 版本）
+    if (versions.count > 32) {
+        NSArray *tail = [versions subarrayWithRange:NSMakeRange(0, 32)];
+        versions = [NSMutableArray arrayWithArray:tail];
+    }
 
     for (NSString *version in versions) {
         [alert addAction:[UIAlertAction actionWithTitle:version
@@ -2716,6 +2761,8 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             } else {
                 self.currentGameVersion = version;
             }
+            // 用户手动选择后标记，不再自动覆盖
+            self.hasUserTouchedFilters = YES;
             [self updateSidebarFilterValues];
             [self reloadCurrentList];
         }]];
@@ -2733,6 +2780,55 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     }
 
     [self presentViewController:alert animated:YES completion:nil];
+}
+
+/// 解析当前 profile 的 Minecraft 版本（用于模组下载版本预选）
+/// 复用 ModpackExportService.parseVersionId: 从 lastVersionId 反解
+- (NSString *)currentProfileMinecraftVersion {
+    NSDictionary *profile = PLProfiles.current.selectedProfile;
+    NSString *lastVersionId = profile[@"lastVersionId"];
+    if (lastVersionId.length == 0) return nil;
+    NSDictionary *parsed = [ModpackExportService parseVersionId:lastVersionId];
+    NSString *mcVersion = parsed[@"minecraft"];
+    return mcVersion;
+}
+
+/// 解析当前 profile 的模组加载器（fabric/forge/neoforge/quilt）
+/// 复用 ModpackExportService.parseVersionId: 从 lastVersionId 反解
+- (NSString *)currentProfileLoader {
+    NSDictionary *profile = PLProfiles.current.selectedProfile;
+    NSString *lastVersionId = profile[@"lastVersionId"];
+    if (lastVersionId.length == 0) return nil;
+    NSDictionary *parsed = [ModpackExportService parseVersionId:lastVersionId];
+    NSString *loader = parsed[@"loader"];
+    return loader;
+}
+
+/// FCL 风格：首次进入模组/光影/资源包等 tab 时自动应用当前 profile 的版本和加载器筛选
+/// 让搜索结果自动匹配当前游戏环境（如 neoforge + 1.21.1）
+/// 用户手动改过筛选后不再自动覆盖（通过 hasUserTouchedFilters 标记）
+- (void)autoApplyProfileFiltersIfNeeded {
+    if (self.hasUserTouchedFilters) return;
+
+    NSString *profileMcVersion = [self currentProfileMinecraftVersion];
+    NSString *profileLoader = [self currentProfileLoader];
+
+    BOOL changed = NO;
+    // 仅当当前未设置版本时才自动应用（用户主动选过就保留）
+    if (profileMcVersion.length > 0 && ![self.currentGameVersion isEqualToString:profileMcVersion]) {
+        self.currentGameVersion = profileMcVersion;
+        changed = YES;
+    }
+    // 加载器仅对模组 tab 自动应用（其他 tab 如光影/资源包不一定有加载器概念）
+    // 但 Modrinth 的 facets 中 categories 对所有 project_type 都生效，所以统一应用
+    if (profileLoader.length > 0 && ![self.currentModLoader isEqualToString:profileLoader]) {
+        self.currentModLoader = profileLoader;
+        changed = YES;
+    }
+
+    if (changed) {
+        [self updateSidebarFilterValues];
+    }
 }
 
 - (void)showSortOptions {
@@ -2787,6 +2883,8 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                                                   style:UIAlertActionStyleDefault
                                                 handler:^(UIAlertAction * _Nonnull action) {
             self.currentModLoader = (value == [NSNull null]) ? nil : value;
+            // 用户手动选择后标记，不再自动覆盖
+            self.hasUserTouchedFilters = YES;
             [self updateSidebarFilterValues];
             [self reloadCurrentList];
         }]];
@@ -4540,6 +4638,9 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     versionVC.modItem = modItem;
     versionVC.delegate = self;
     versionVC.title = modItem.displayName;
+    // FCL 风格：传入当前 profile 的偏好版本和加载器，自动选中匹配 chip 并置顶
+    versionVC.preferredGameVersion = [self currentProfileMinecraftVersion];
+    versionVC.preferredLoader = [self currentProfileLoader];
 
     // 标记当前为整合包下载类型，版本选择回调时走整合包安装流程（而非 Mod 下载流程）
     self.pendingDownloadType = @"modpack";
@@ -4577,45 +4678,75 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     NSURL *url = [NSURL URLWithString:downloadURL];
     NSString *downloadSource = getPrefObject(@"general.download_source") ?: @"official";
     __block DownloadTaskItem *taskItem = nil;
-    NSURLSessionDownloadTask *task = [[NSURLSession sharedSession] downloadTaskWithURL:url completionHandler:^(NSURL *location, NSURLResponse *response, NSError *error) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            if (error) {
-                if (error.code == NSURLErrorCancelled) {
-                    [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId state:DownloadTaskStateCancelled];
-                } else {
-                    [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId completedWithError:error];
+
+    // 关键修复（参照 FCL/ZL2 整合包下载容错）：原实现单次下载无重试，
+    // 网络偶发抖动或镜像源 5xx 会导致整个整合包下载失败。改为最多 3 次重试。
+    __block NSInteger downloadAttempt = 0;
+    __block NSURL *downloadLocation = nil;
+    __block NSError *downloadError = nil;
+    __weak typeof(self) weakSelf = self;
+
+    void (^attemptDownload)(void) = ^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+        downloadAttempt++;
+        NSLog(@"[ModpackDownload] 整合包下载第 %ld 次尝试: %@", (long)downloadAttempt, downloadURL);
+        NSURLSessionDownloadTask *task = [[NSURLSession sharedSession] downloadTaskWithURL:url completionHandler:^(NSURL *location, NSURLResponse *response, NSError *error) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                __strong typeof(weakSelf) strongSelf2 = weakSelf;
+                if (!strongSelf2) return;
+                if (error || !location) {
+                    downloadError = error ?: [NSError errorWithDomain:@"DownloadError" code:1 userInfo:@{NSLocalizedDescriptionKey: @"下载返回空数据"}];
+                    NSLog(@"[ModpackDownload] 第 %ld 次失败: %@", (long)downloadAttempt, downloadError.localizedDescription);
+                    if (downloadAttempt < 3) {
+                        // 间隔 1.5s 后重试，避免连续请求触发限流
+                        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                            attemptDownload();
+                        });
+                    } else {
+                        [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId completedWithError:downloadError];
+                        [strongSelf2.navigationController popViewControllerAnimated:YES];
+                        [strongSelf2 showError:[NSString stringWithFormat:@"整合包下载失败（已重试 %ld 次）：%@", (long)downloadAttempt, downloadError.localizedDescription ?: @"未知错误"]];
+                    }
+                    return;
                 }
-                [self.navigationController popViewControllerAnimated:YES];
-                [self showError:error.localizedDescription];
-                return;
-            }
-            // 移动到临时文件
-            NSString *tempPath = [NSTemporaryDirectory() stringByAppendingPathComponent:[NSString stringWithFormat:@"%@_%@.mrpack", modpack[@"id"] ?: @"modpack", [[NSUUID UUID] UUIDString]]];
-            [[NSFileManager defaultManager] removeItemAtPath:tempPath error:nil];
-            NSError *moveError = nil;
-            [[NSFileManager defaultManager] moveItemAtPath:location.path toPath:tempPath error:&moveError];
-            if (moveError) {
-                [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId completedWithError:moveError];
-                [self.navigationController popViewControllerAnimated:YES];
-                [self showError:moveError.localizedDescription];
-                return;
-            }
+                downloadLocation = location;
+                downloadError = nil;
 
-            [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId completedWithError:nil];
+                // 移动到临时文件
+                NSString *tempPath = [NSTemporaryDirectory() stringByAppendingPathComponent:[NSString stringWithFormat:@"%@_%@.mrpack", modpack[@"id"] ?: @"modpack", [[NSUUID UUID] UUIDString]]];
+                [[NSFileManager defaultManager] removeItemAtPath:tempPath error:nil];
+                NSError *moveError = nil;
+                [[NSFileManager defaultManager] moveItemAtPath:downloadLocation.path toPath:tempPath error:&moveError];
+                if (moveError) {
+                    if (downloadAttempt < 3) {
+                        NSLog(@"[ModpackDownload] 移动文件失败，重试: %@", moveError.localizedDescription);
+                        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                            attemptDownload();
+                        });
+                        return;
+                    }
+                    [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId completedWithError:moveError];
+                    [strongSelf2.navigationController popViewControllerAnimated:YES];
+                    [strongSelf2 showError:moveError.localizedDescription];
+                    return;
+                }
 
-            // 复用 ModpackImportService 完成解析和导入
-            progressVC.progress = 0.1;
-            progressVC.stageMessage = @"正在解析整合包...";
-            // 阶段12增强：更新步骤状态（下载完成，解析中）
-            progressVC.stageSteps = @[
-                @{@"title": @"下载整合包文件", @"status": @2},
-                @{@"title": @"解析整合包结构", @"status": @1},
-                @{@"title": @"安装原版 Minecraft", @"status": @0},
-                @{@"title": @"下载 Mod 文件", @"status": @0},
-                @{@"title": @"安装模组加载器", @"status": @0},
-                @{@"title": @"写入配置文件", @"status": @0},
-            ];
-            ModpackImportService *importService = [[ModpackImportService alloc] init];
+                [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId completedWithError:nil];
+
+                // 复用 ModpackImportService 完成解析和导入
+                progressVC.progress = 0.1;
+                progressVC.stageMessage = @"正在解析整合包...";
+                // 阶段12增强：更新步骤状态（下载完成，解析中）
+                progressVC.stageSteps = @[
+                    @{@"title": @"下载整合包文件", @"status": @2},
+                    @{@"title": @"解析整合包结构", @"status": @1},
+                    @{@"title": @"安装原版 Minecraft", @"status": @0},
+                    @{@"title": @"下载 Mod 文件", @"status": @0},
+                    @{@"title": @"安装模组加载器", @"status": @0},
+                    @{@"title": @"写入配置文件", @"status": @0},
+                ];
+                ModpackImportService *importService = [[ModpackImportService alloc] init];
             dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
                 NSError *parseError = nil;
                 NSDictionary *modpackInfo = [importService parseModpackAtURL:[NSURL fileURLWithPath:tempPath] error:&parseError];
@@ -4705,17 +4836,24 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         });
     }];
 
-    taskItem = [[DownloadTaskManager sharedManager]
-        registerTaskWithResourceType:DownloadTaskResourceTypeModpack
-                        resourceName:modpack[@"title"] ?: @"modpack"
-                         displayName:modpack[@"title"] ?: @"整合包"
-                      downloadSource:downloadSource
-                             rawTask:task
-                      supportsResume:YES
-                             iconURL:modpack[@"imageUrl"]];
-    [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId state:DownloadTaskStateDownloading];
+        // 注册到下载任务管理器（每次重试均重新注册，taskId 不变因为 taskItem 是外层 __block）
+        if (!taskItem) {
+            taskItem = [[DownloadTaskManager sharedManager]
+                registerTaskWithResourceType:DownloadTaskResourceTypeModpack
+                                resourceName:modpack[@"title"] ?: @"modpack"
+                                 displayName:modpack[@"title"] ?: @"整合包"
+                              downloadSource:downloadSource
+                                     rawTask:task
+                              supportsResume:YES
+                                     iconURL:modpack[@"imageUrl"]];
+            [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId state:DownloadTaskStateDownloading];
+        }
 
-    [task resume];
+        [task resume];
+    };
+
+    // 启动首次下载尝试
+    attemptDownload();
 }
 
 /// 阶段14：整合包导入辅助方法
@@ -5151,6 +5289,9 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     versionVC.modItem = modItem;
     versionVC.delegate = self;
     versionVC.title = modItem.displayName;
+    // FCL 风格：传入当前 profile 的偏好版本和加载器，自动选中匹配 chip 并置顶
+    versionVC.preferredGameVersion = [self currentProfileMinecraftVersion];
+    versionVC.preferredLoader = [self currentProfileLoader];
 
     // 在中间内容区 push 显示，而非弹窗盖在下载列表之上（与 FCL 安卓一致）
     [self.navigationController pushViewController:versionVC animated:YES];
