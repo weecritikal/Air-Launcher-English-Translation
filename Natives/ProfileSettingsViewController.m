@@ -13,6 +13,7 @@
 #import "ios_uikit_bridge.h" // for showDialog
 #import "utils.h"
 #import "BackgroundManager.h"
+#import "DownloadProgressCardView.h"
 
 @interface ProfileSettingsViewController () <UITextFieldDelegate, UIPickerViewDataSource, UIPickerViewDelegate>
 
@@ -1014,8 +1015,10 @@
 }
 
 - (void)startInstallFabricAPIWithGameVersion:(NSString *)gameVersion {
-    UIAlertController *progress = [self showProgressAlertWithTitle:@"正在安装 Fabric API"
-                                                            message:[NSString stringWithFormat:@"正在搜索适配 %@ 的 Fabric API...", gameVersion]];
+    // 使用统一下载进度卡片（DownloadProgressCardView），删除散落的 alert+spinner
+    UIView *hostView = self.view.window ?: self.view;
+    DownloadProgressCardView *progress = [DownloadProgressCardView showInParentView:hostView title:@"正在安装 Fabric API"];
+    [progress updateProgress:-1 downloaded:0 total:0 speed:0 eta:-1 currentFile:[NSString stringWithFormat:@"正在搜索适配 %@ 的 Fabric API...", gameVersion]];
 
     NSMutableDictionary *filters = [NSMutableDictionary dictionary];
     filters[@"query"] = @"fabric api";
@@ -1028,9 +1031,11 @@
             if (!strongSelf) return;
 
             if (error || results.count == 0) {
-                [progress dismissViewControllerAnimated:YES completion:^{
+                [progress failWithError:[NSError errorWithDomain:@"FabricAPI" code:1 userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"未找到 Fabric API：%@", error.localizedDescription ?: @"无搜索结果"]}]];
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                    [progress dismiss];
                     [strongSelf showComponentAlert:@"安装失败" message:[NSString stringWithFormat:@"未找到 Fabric API：%@", error.localizedDescription ?: @"无搜索结果"]];
-                }];
+                });
                 return;
             }
 
@@ -1044,13 +1049,15 @@
                 }
             }
             if (!fabricAPI) {
-                [progress dismissViewControllerAnimated:YES completion:^{
+                [progress failWithError:[NSError errorWithDomain:@"FabricAPI" code:2 userInfo:@{NSLocalizedDescriptionKey: @"未找到合适的 Fabric API 项目"}]];
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                    [progress dismiss];
                     [strongSelf showComponentAlert:@"安装失败" message:@"未找到合适的 Fabric API 项目"];
-                }];
+                });
                 return;
             }
 
-            [progress setMessage:@"正在获取 Fabric API 版本列表..."];
+            [progress updateProgress:-1 downloaded:0 total:0 speed:0 eta:-1 currentFile:@"正在获取 Fabric API 版本列表..."];
 
             [[ModrinthAPI sharedInstance] getVersionsForModWithID:fabricAPI[@"id"] completion:^(NSArray<ModVersion *> *versions, NSError *versionError) {
                 dispatch_async(dispatch_get_main_queue(), ^{
@@ -1058,9 +1065,11 @@
                     if (!strongSelf2) return;
 
                     if (versionError || versions.count == 0) {
-                        [progress dismissViewControllerAnimated:YES completion:^{
+                        [progress failWithError:[NSError errorWithDomain:@"FabricAPI" code:3 userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"获取 Fabric API 版本失败：%@", versionError.localizedDescription ?: @"无版本"]}]];
+                        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                            [progress dismiss];
                             [strongSelf2 showComponentAlert:@"安装失败" message:[NSString stringWithFormat:@"获取 Fabric API 版本失败：%@", versionError.localizedDescription ?: @"无版本"]];
-                        }];
+                        });
                         return;
                     }
 
@@ -1078,9 +1087,11 @@
 
                     NSDictionary *primaryFile = matchingVersion.primaryFile;
                     if (!primaryFile || ![primaryFile[@"url"] isKindOfClass:[NSString class]]) {
-                        [progress dismissViewControllerAnimated:YES completion:^{
+                        [progress failWithError:[NSError errorWithDomain:@"FabricAPI" code:4 userInfo:@{NSLocalizedDescriptionKey: @"Fabric API 文件信息无效"}]];
+                        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                            [progress dismiss];
                             [strongSelf2 showComponentAlert:@"安装失败" message:@"Fabric API 文件信息无效"];
-                        }];
+                        });
                         return;
                     }
 
@@ -1094,7 +1105,7 @@
     }];
 }
 
-- (void)downloadFabricAPIFile:(NSString *)urlString filename:(NSString *)filename progress:(UIAlertController *)progress modInfo:(NSDictionary *)modInfo {
+- (void)downloadFabricAPIFile:(NSString *)urlString filename:(NSString *)filename progress:(DownloadProgressCardView *)progress modInfo:(NSDictionary *)modInfo {
     __weak typeof(self) weakSelf = self;
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         __strong typeof(weakSelf) strongSelf = weakSelf;
@@ -1109,9 +1120,11 @@
             if (!strongSelf2) return;
 
             if (!data || downloadError) {
-                [progress dismissViewControllerAnimated:YES completion:^{
+                [progress failWithError:downloadError ?: [NSError errorWithDomain:@"FabricAPI" code:5 userInfo:@{NSLocalizedDescriptionKey: @"下载失败"}]];
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                    [progress dismiss];
                     [strongSelf2 showComponentAlert:@"安装失败" message:[NSString stringWithFormat:@"下载 Fabric API 失败：%@", downloadError.localizedDescription ?: @"未知错误"]];
-                }];
+                });
                 return;
             }
 
@@ -1122,20 +1135,28 @@
             NSError *writeError = nil;
             BOOL success = [data writeToFile:savePath options:NSDataWritingAtomic error:&writeError];
 
-            [progress dismissViewControllerAnimated:YES completion:^{
-                if (success) {
+            if (success) {
+                [progress completeWithTitle:@"Fabric API 安装完成"];
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                    [progress dismiss];
                     [strongSelf2 showComponentAlert:@"安装成功" message:[NSString stringWithFormat:@"Fabric API 已安装到 mods 目录：\n%@", saveFilename]];
-                } else {
+                });
+            } else {
+                [progress failWithError:writeError ?: [NSError errorWithDomain:@"FabricAPI" code:6 userInfo:@{NSLocalizedDescriptionKey: @"写入失败"}]];
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                    [progress dismiss];
                     [strongSelf2 showComponentAlert:@"安装失败" message:[NSString stringWithFormat:@"写入文件失败：%@", writeError.localizedDescription ?: @"未知错误"]];
-                }
-            }];
+                });
+            }
         });
     });
 }
 
 - (void)startInstallOptiFineWithGameVersion:(NSString *)gameVersion {
-    UIAlertController *progress = [self showProgressAlertWithTitle:@"正在安装 OptiFine"
-                                                            message:[NSString stringWithFormat:@"正在查询适配 %@ 的 OptiFine 版本...", gameVersion]];
+    // 使用统一下载进度卡片（DownloadProgressCardView），删除散落的 alert+spinner
+    UIView *hostView = self.view.window ?: self.view;
+    DownloadProgressCardView *progress = [DownloadProgressCardView showInParentView:hostView title:@"正在安装 OptiFine"];
+    [progress updateProgress:-1 downloaded:0 total:0 speed:0 eta:-1 currentFile:[NSString stringWithFormat:@"正在查询适配 %@ 的 OptiFine 版本...", gameVersion]];
 
     __weak typeof(self) weakSelf = self;
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
@@ -1169,12 +1190,17 @@
             dispatch_async(dispatch_get_main_queue(), ^{
                 __strong typeof(weakSelf) strongSelf2 = weakSelf;
                 if (!strongSelf2) return;
-                [progress dismissViewControllerAnimated:YES completion:^{
+                [progress failWithError:[NSError errorWithDomain:@"OptiFine" code:1 userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"未找到适配 Minecraft %@ 的 OptiFine 版本", gameVersion]}]];
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                    [progress dismiss];
                     [strongSelf2 showComponentAlert:@"安装失败" message:[NSString stringWithFormat:@"未找到适配 Minecraft %@ 的 OptiFine 版本", gameVersion]];
-                }];
+                });
             });
             return;
         }
+
+        // 切换到下载阶段
+        [progress updateProgress:-1 downloaded:0 total:0 speed:0 eta:-1 currentFile:[NSString stringWithFormat:@"正在下载 OptiFine %@ %@", optiFineType, optiFinePatch]];
 
         // 下载 OptiFine
         NSString *downloadURL = [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/optifine/%@/%@/%@", gameVersion, optiFineType, optiFinePatch];
@@ -1199,9 +1225,11 @@
             if (!strongSelf2) return;
 
             if (!data || downloadError) {
-                [progress dismissViewControllerAnimated:YES completion:^{
+                [progress failWithError:downloadError ?: [NSError errorWithDomain:@"OptiFine" code:2 userInfo:@{NSLocalizedDescriptionKey: @"下载失败"}]];
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                    [progress dismiss];
                     [strongSelf2 showComponentAlert:@"安装失败" message:[NSString stringWithFormat:@"下载 OptiFine 失败：%@", downloadError.localizedDescription ?: @"未知错误"]];
-                }];
+                });
                 return;
             }
 
@@ -1212,13 +1240,19 @@
             NSError *writeError = nil;
             BOOL success = [data writeToFile:savePath options:NSDataWritingAtomic error:&writeError];
 
-            [progress dismissViewControllerAnimated:YES completion:^{
-                if (success) {
+            if (success) {
+                [progress completeWithTitle:@"OptiFine 安装完成"];
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                    [progress dismiss];
                     [strongSelf2 showComponentAlert:@"安装成功" message:[NSString stringWithFormat:@"OptiFine %@ %@ 已安装到 mods 目录", optiFineType, optiFinePatch]];
-                } else {
+                });
+            } else {
+                [progress failWithError:writeError ?: [NSError errorWithDomain:@"OptiFine" code:3 userInfo:@{NSLocalizedDescriptionKey: @"写入失败"}]];
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                    [progress dismiss];
                     [strongSelf2 showComponentAlert:@"安装失败" message:[NSString stringWithFormat:@"写入文件失败：%@", writeError.localizedDescription ?: @"未知错误"]];
-                }
-            }];
+                });
+            }
         });
     });
 }

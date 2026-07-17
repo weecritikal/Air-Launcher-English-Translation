@@ -385,21 +385,23 @@ static void *ProgressObserverContext = &ProgressObserverContext;
         [self.downloadCenterProgressLabel.trailingAnchor constraintEqualToAnchor:self.downloadCenterActivityIndicator.leadingAnchor constant:-6],
         [self.downloadCenterProgressLabel.centerYAnchor constraintEqualToAnchor:self.downloadCenterButton.centerYAnchor],
 
-        // ===== 下方按钮区（自下而上锚定到 safeArea 底部）=====
-        // 执行Jar 按钮（最底部）
+        // ===== 下方按钮区（自下而上锚定到 safeArea 底部，参照 FCL 两按钮一排）=====
+        // 执行Jar 按钮（最底部，左半区）
         [self.executeJarBtn.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-12],
         [self.executeJarBtn.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:12],
-        [self.executeJarBtn.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-12],
         [self.executeJarBtn.heightAnchor constraintEqualToConstant:38],
 
-        // 管理版本按钮
-        [self.manageVersionBtn.bottomAnchor constraintEqualToAnchor:self.executeJarBtn.topAnchor constant:-8],
-        [self.manageVersionBtn.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:12],
+        // 管理版本按钮（最底部，右半区，与执行Jar 同一排）
+        [self.manageVersionBtn.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-12],
+        [self.manageVersionBtn.leadingAnchor constraintEqualToAnchor:self.executeJarBtn.trailingAnchor constant:8],
         [self.manageVersionBtn.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-12],
         [self.manageVersionBtn.heightAnchor constraintEqualToConstant:38],
 
-        // 启动按钮
-        [self.launchButton.bottomAnchor constraintEqualToAnchor:self.manageVersionBtn.topAnchor constant:-8],
+        // 两个按钮宽度相等（各占一半，减去中间 8pt 间距）
+        [self.executeJarBtn.widthAnchor constraintEqualToAnchor:self.manageVersionBtn.widthAnchor],
+
+        // 启动按钮（占满整排，位于两按钮上方）
+        [self.launchButton.bottomAnchor constraintEqualToAnchor:self.executeJarBtn.topAnchor constant:-8],
         [self.launchButton.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:12],
         [self.launchButton.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-12],
         [self.launchButton.heightAnchor constraintEqualToConstant:46],
