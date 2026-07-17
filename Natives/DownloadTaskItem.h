@@ -32,6 +32,13 @@ extern NSString * const DownloadTaskResourceTypeDataPack;
 extern NSString * const DownloadTaskResourceTypeModpack;
 extern NSString * const DownloadTaskResourceTypeWorld;
 
+@class DownloadTaskItem;
+
+/// 重试回调类型：业务方注册任务时设置，DownloadTaskManager.retryTaskWithId: 会调用它重建底层 rawTask。
+/// 业务方在 handler 内创建新的 NSURLSessionTask 并赋值给 item.rawTask，无需移除旧 item（manager 已处理）。
+/// 参数为当前 item（已重置状态），返回新的 rawTask（用于 manager 更新 item.rawTask）。
+typedef id _Nullable (^DownloadRetryHandler)(DownloadTaskItem *item);
+
 /**
  * 统一下载任务数据模型。
  * 每个下载任务（MC 本体、加载器、Mod、资源包等）在 DownloadTaskManager 中对应一个实例。
@@ -71,7 +78,7 @@ extern NSString * const DownloadTaskResourceTypeWorld;
 /// 重试回调：业务方注册任务时设置，DownloadTaskManager.retryTaskWithId: 会调用它重建底层 rawTask。
 /// 业务方在 handler 内创建新的 NSURLSessionTask 并赋值给 item.rawTask，无需移除旧 item（manager 已处理）。
 /// 参数为当前 item（已重置状态），返回新的 rawTask（用于 manager 更新 item.rawTask）。
-@property (nonatomic, copy, nullable) id (^retryHandler)(DownloadTaskItem *item);
+@property (nonatomic, copy, nullable) DownloadRetryHandler retryHandler;
 
 /// 已重试次数（manager 在每次 retryTaskWithId: 时自增）
 @property (nonatomic, assign) NSInteger retryCount;

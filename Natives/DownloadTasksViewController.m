@@ -221,8 +221,10 @@ static const CGFloat kSectionInset = 16.0;
     self.currentTask = nil;
     [self.primaryActionButton setTitle:nil forState:UIControlStateNormal];
     self.primaryActionButton.hidden = YES;
+    self.primaryActionButton.userInteractionEnabled = YES;
     [self.secondaryActionButton setTitle:nil forState:UIControlStateNormal];
     self.secondaryActionButton.hidden = YES;
+    self.secondaryActionButton.userInteractionEnabled = YES;
 }
 
 - (void)configureWithTask:(DownloadTaskItem *)task {
@@ -322,7 +324,7 @@ static const CGFloat kSectionInset = 16.0;
             break;
 
         case DownloadTaskStateFailed:
-        case DownloadTaskStateCancelled:
+        case DownloadTaskStateCancelled: {
             // 主操作：重试（若 retryHandler 可用且未超 maxRetryCount）；次操作：移除
             BOOL canRetry = (task.retryHandler != nil) &&
                             (task.maxRetryCount <= 0 || task.retryCount < task.maxRetryCount);
@@ -351,6 +353,7 @@ static const CGFloat kSectionInset = 16.0;
             self.secondaryActionButton.userInteractionEnabled = YES;
             self.secondaryActionButton.hidden = NO;
             break;
+        }
 
         case DownloadTaskStateCompleted:
             // 主操作：无；次操作：移除
