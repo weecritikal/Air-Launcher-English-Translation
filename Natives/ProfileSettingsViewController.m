@@ -896,13 +896,28 @@
 }
 
 - (BOOL)isOptiFineCompatibleProfile {
+    return [self isVanillaProfile] || [self isForgeProfile];
+}
+
+/// 是否为原版 (Vanilla) profile
+/// lastVersionId 不含 forge/fabric/quilt/neoforge 等加载器标识
+- (BOOL)isVanillaProfile {
     NSString *lastVersionId = self.profile[@"lastVersionId"];
     if (![lastVersionId isKindOfClass:[NSString class]] || lastVersionId.length == 0) return NO;
     NSString *lower = lastVersionId.lowercaseString;
-    // OptiFine 兼容原版/vanilla 和 forge（不兼容 fabric/quilt/neoforge）
-    BOOL isForge = [lower containsString:@"forge"] && ![lower containsString:@"neoforge"];
-    BOOL isVanilla = ![lower containsString:@"forge"] && ![lower containsString:@"fabric"] && ![lower containsString:@"quilt"];
-    return isForge || isVanilla;
+    return ![lower containsString:@"forge"]
+        && ![lower containsString:@"fabric"]
+        && ![lower containsString:@"quilt"];
+}
+
+/// 是否为 Forge profile（排除 NeoForge）
+/// 关键修复：原先用 `containsString:@"forge"` 会误判 neoforge 为 forge，
+/// 现显式排除 neoforge（参照 FCL/HMCL 的 OptiFine 兼容性判断）
+- (BOOL)isForgeProfile {
+    NSString *lastVersionId = self.profile[@"lastVersionId"];
+    if (![lastVersionId isKindOfClass:[NSString class]] || lastVersionId.length == 0) return NO;
+    NSString *lower = lastVersionId.lowercaseString;
+    return [lower containsString:@"forge"] && ![lower containsString:@"neoforge"];
 }
 
 /// 当前 profile 的 mods 目录路径
@@ -1000,12 +1015,37 @@
         return;
     }
 
+    // 关键修复（参照 FCL/HMCL OptiFine 安装流程）：
+    //   - Vanilla profile: 必须以版本补丁方式安装（launchwrapper + tweakClass），
+    //     仅把 jar 放进 mods/ 目录对原版完全无效，因为原版没有 mods 加载机制。
+    //   - Forge profile: Forge 可作为 mod 加载 OptiFine jar，沿用 mods/ 方式。
+    BOOL isVanilla = [self isVanillaProfile];
+    NSString *message = nil;
+    if (isVanilla) {
+        message = [NSString stringWithFormat:
+                   @"OptiFine 是 Minecraft 的优化模组，提供光影支持和高帧率。\n\n"
+                   @"将下载适配 Minecraft %@ 的最新 OptiFine 并以版本补丁方式安装（参照 FCL/HMCL）：\n"
+                   @"  • 创建独立版本：%@-OptiFine_xxx\n"
+                   @"  • 通过 launchwrapper + optifine.OptiFineTweaker 加载\n"
+                   @"  • 安装完成后会自动切换到新版本\n\n"
+                   @"游戏版本：%@", gameVersion, gameVersion, gameVersion];
+    } else {
+        message = [NSString stringWithFormat:
+                   @"OptiFine 是 Minecraft 的优化模组，提供光影支持和高帧率。\n\n"
+                   @"将下载适配 Minecraft %@ 的最新 OptiFine 到 mods 目录（Forge 加载器方式）。\n\n"
+                   @"游戏版本：%@（当前为 Forge 加载器）", gameVersion, gameVersion];
+    }
+
     UIAlertController *confirm = [UIAlertController alertControllerWithTitle:@"安装 OptiFine"
-                                                                     message:[NSString stringWithFormat:@"OptiFine 是 Minecraft 的优化模组，提供光影支持和高帧率。\n\n将下载适配 Minecraft %@ 的最新 OptiFine 到 mods 目录。\n\n游戏版本：%@（仅原版/Forge 有效）", gameVersion, gameVersion]
+                                                                     message:message
                                                               preferredStyle:UIAlertControllerStyleAlert];
     [confirm addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
     [confirm addAction:[UIAlertAction actionWithTitle:@"安装" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-        [self startInstallOptiFineWithGameVersion:gameVersion];
+        if (isVanilla) {
+            [self startInstallOptiFineAsPatch:gameVersion];
+        } else {
+            [self startInstallOptiFineWithGameVersion:gameVersion];
+        }
     }]];
     [self presentViewController:confirm animated:YES completion:nil];
 }
@@ -1271,6 +1311,205 @@
                     [strongSelf2 showComponentAlert:@"安装失败" message:[NSString stringWithFormat:@"写入文件失败：%@", writeError.localizedDescription ?: @"未知错误"]];
                 });
             }
+        });
+    });
+}
+
+#pragma mark - OptiFine 版本补丁安装（Vanilla profile，参照 FCL/HMCL OptiFineInstallTask）
+
+/// 以版本补丁方式安装 OptiFine（适用于 Vanilla profile）
+/// 参照 FCL OptiFineInstallTask 与 HMCL OptiFineInstallTask：
+///   1. 下载 OptiFine jar 到 libraries/optifine/OptiFine/<mcVersion>/<versionId>.jar
+///   2. 创建 versions/<versionId>/<versionId>.json，mainClass 设为
+///      net.minecraft.launchwrapper.Launcher，并附加 --tweakClass optifine.OptiFineTweaker
+///   3. inheritsFrom 指向原版版本（vanilla parent 必须已存在）
+///   4. 创建新 profile 并切换为当前 profile
+- (void)startInstallOptiFineAsPatch:(NSString *)gameVersion {
+    UIView *hostView = self.view.window ?: self.view;
+    DownloadProgressCardView *progress = [DownloadProgressCardView showInParentView:hostView title:@"正在安装 OptiFine"];
+    [progress updateProgress:-1 downloaded:0 total:0 speed:0 eta:-1 currentFile:[NSString stringWithFormat:@"正在查询适配 %@ 的 OptiFine 版本...", gameVersion]];
+
+    __weak typeof(self) weakSelf = self;
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+
+        // 1. BMCL API 查询适配当前游戏版本的 OptiFine 列表
+        NSString *listURL = [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/optifine/%@", gameVersion];
+        NSURL *url = [NSURL URLWithString:listURL];
+        NSError *listError = nil;
+        NSData *listData = [NSData dataWithContentsOfURL:url options:NSDataReadingUncached error:&listError];
+
+        NSString *optiFineType = nil;
+        NSString *optiFinePatch = nil;
+        NSString *filename = nil;
+
+        if (listData && !listError) {
+            NSError *jsonError = nil;
+            NSArray *versions = [NSJSONSerialization JSONObjectWithData:listData options:0 error:&jsonError];
+            if (!jsonError && [versions isKindOfClass:[NSArray class]] && versions.count > 0) {
+                NSDictionary *first = versions.firstObject;
+                if ([first isKindOfClass:[NSDictionary class]]) {
+                    optiFineType = first[@"type"] ?: @"HD_U";
+                    optiFinePatch = first[@"patch"];
+                    filename = first[@"filename"];
+                }
+            }
+        }
+
+        if (!optiFinePatch) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                __strong typeof(weakSelf) strongSelf2 = weakSelf;
+                if (!strongSelf2) return;
+                [progress failWithError:[NSError errorWithDomain:@"OptiFine" code:1 userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"未找到适配 Minecraft %@ 的 OptiFine 版本", gameVersion]}]];
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                    [progress dismiss];
+                    [strongSelf2 showComponentAlert:@"安装失败" message:[NSString stringWithFormat:@"未找到适配 Minecraft %@ 的 OptiFine 版本", gameVersion]];
+                });
+            });
+            return;
+        }
+
+        // 2. 下载 OptiFine jar
+        [progress updateProgress:-1 downloaded:0 total:0 speed:0 eta:-1 currentFile:[NSString stringWithFormat:@"正在下载 OptiFine %@ %@", optiFineType, optiFinePatch]];
+        NSString *downloadURL = [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/optifine/%@/%@/%@", gameVersion, optiFineType, optiFinePatch];
+        NSURL *dlURL = [NSURL URLWithString:downloadURL];
+        NSError *downloadError = nil;
+        NSData *jarData = [NSData dataWithContentsOfURL:dlURL options:NSDataReadingUncached error:&downloadError];
+
+        // fallback: OptiFine 官方源
+        if ((!jarData || downloadError) && filename.length > 0) {
+            NSString *officialURL = [NSString stringWithFormat:@"https://optifine.net/downloadx?f=%@", filename];
+            NSURL *officialURLObject = [NSURL URLWithString:officialURL];
+            NSError *officialError = nil;
+            NSData *officialData = [NSData dataWithContentsOfURL:officialURLObject options:NSDataReadingUncached error:&officialError];
+            if (officialData && !officialError) {
+                jarData = officialData;
+                downloadError = nil;
+            }
+        }
+
+        if (!jarData || downloadError) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                __strong typeof(weakSelf) strongSelf2 = weakSelf;
+                if (!strongSelf2) return;
+                [progress failWithError:downloadError ?: [NSError errorWithDomain:@"OptiFine" code:2 userInfo:@{NSLocalizedDescriptionKey: @"下载失败"}]];
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                    [progress dismiss];
+                    [strongSelf2 showComponentAlert:@"安装失败" message:[NSString stringWithFormat:@"下载 OptiFine 失败：%@", downloadError.localizedDescription ?: @"未知错误"]];
+                });
+            });
+            return;
+        }
+
+        // 3. 检查原版父版本必须已存在（否则 inheritsFrom 会失败）
+        const char *env = getenv("POJAV_GAME_DIR");
+        NSString *gameDir = env ? [NSString stringWithUTF8String:env] : NSHomeDirectory();
+        NSString *parentJsonPath = [gameDir stringByAppendingPathComponent:
+                                    [NSString stringWithFormat:@"versions/%@/%@.json", gameVersion, gameVersion]];
+        if (![[NSFileManager defaultManager] fileExistsAtPath:parentJsonPath]) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                __strong typeof(weakSelf) strongSelf2 = weakSelf;
+                if (!strongSelf2) return;
+                [progress failWithError:[NSError errorWithDomain:@"OptiFine" code:4 userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"未找到原版 %@ 的版本信息", gameVersion]}]];
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                    [progress dismiss];
+                    [strongSelf2 showComponentAlert:@"安装失败" message:[NSString stringWithFormat:@"未找到原版 %@ 的版本信息。\n\n请先在下载页面安装原版 %@，然后再安装 OptiFine。", gameVersion, gameVersion]];
+                });
+            });
+            return;
+        }
+
+        // 4. 写入 jar 到 libraries/optifine/OptiFine/<mcVersion>/<versionId>.jar
+        //    参照 FCL/HMCL：OptiFine jar 作为 launchwrapper 的 tweakClass 输入，
+        //    mainClass 设为 net.minecraft.launchwrapper.Launcher
+        NSString *versionId = [NSString stringWithFormat:@"%@-OptiFine_%@_%@", gameVersion, optiFineType, optiFinePatch];
+        NSString *optifineJarPath = [NSString stringWithFormat:@"optifine/OptiFine/%@/%@.jar", gameVersion, versionId];
+        NSString *optifineJarAbsPath = [NSString stringWithFormat:@"%@/libraries/%@", gameDir, optifineJarPath];
+        NSString *jarDir = [optifineJarAbsPath stringByDeletingLastPathComponent];
+        [[NSFileManager defaultManager] createDirectoryAtPath:jarDir withIntermediateDirectories:YES attributes:nil error:nil];
+        NSError *writeJarError = nil;
+        BOOL jarOk = [jarData writeToFile:optifineJarAbsPath options:NSDataWritingAtomic error:&writeJarError];
+        if (!jarOk) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                __strong typeof(weakSelf) strongSelf2 = weakSelf;
+                if (!strongSelf2) return;
+                [progress failWithError:writeJarError ?: [NSError errorWithDomain:@"OptiFine" code:5 userInfo:@{NSLocalizedDescriptionKey: @"写入 jar 失败"}]];
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                    [progress dismiss];
+                    [strongSelf2 showComponentAlert:@"安装失败" message:[NSString stringWithFormat:@"写入 OptiFine jar 失败：%@", writeJarError.localizedDescription ?: @"未知错误"]];
+                });
+            });
+            return;
+        }
+
+        // 5. 创建 version JSON（launchwrapper + tweakClass + inheritsFrom）
+        NSDictionary *versionJson = @{
+            @"id": versionId,
+            @"inheritsFrom": gameVersion,
+            @"type": @"release",
+            @"mainClass": @"net.minecraft.launchwrapper.Launcher",
+            @"minecraftArguments": @"--username ${auth_player_name} --version ${version_name} --gameDir ${game_directory} --assetsDir ${assets_root} --assetIndex ${assets_index_name} --uuid ${auth_uuid} --accessToken ${auth_access_token} --userType ${user_type} --versionType ${version_type} --tweakClass optifine.OptiFineTweaker",
+            @"libraries": @[
+                @{
+                    @"name": [NSString stringWithFormat:@"optifine:OptiFine:%@", gameVersion],
+                    @"downloads": @{
+                        @"artifact": @{
+                            @"path": optifineJarPath,
+                            @"url": @"",
+                            @"size": @(jarData.length),
+                            @"sha1": @""
+                        }
+                    }
+                }
+            ],
+            @"jar": gameVersion,
+            @"minimumLauncherVersion": @21
+        };
+        NSString *versionDir = [gameDir stringByAppendingPathComponent:[NSString stringWithFormat:@"versions/%@", versionId]];
+        [[NSFileManager defaultManager] createDirectoryAtPath:versionDir withIntermediateDirectories:YES attributes:nil error:nil];
+        NSString *jsonPath = [versionDir stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.json", versionId]];
+        NSData *jsonData = [NSJSONSerialization dataWithJSONObject:versionJson options:NSJSONWritingPrettyPrinted error:nil];
+        NSError *writeJsonError = nil;
+        [jsonData writeToFile:jsonPath options:NSDataWritingAtomic error:&writeJsonError];
+
+        if (writeJsonError) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                __strong typeof(weakSelf) strongSelf2 = weakSelf;
+                if (!strongSelf2) return;
+                [progress failWithError:writeJsonError];
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                    [progress dismiss];
+                    [strongSelf2 showComponentAlert:@"安装失败" message:[NSString stringWithFormat:@"写入版本 JSON 失败：%@", writeJsonError.localizedDescription ?: @"未知错误"]];
+                });
+            });
+            return;
+        }
+
+        // 6. 注册新 profile 并切换为当前 profile（参照 FCL/HMCL 行为）
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) strongSelf2 = weakSelf;
+            if (!strongSelf2) return;
+
+            NSMutableDictionary *profile = [NSMutableDictionary dictionary];
+            profile[@"name"] = versionId;
+            profile[@"lastVersionId"] = versionId;
+            profile[@"gameDir"] = @".";
+            profile[@"type"] = @"custom";
+            profile[@"created"] = [NSDate date].description;
+            [PLProfiles.current saveProfile:profile withName:versionId];
+            PLProfiles.current.selectedProfileName = versionId;
+
+            [[NSNotificationCenter defaultCenter] postNotificationName:@"ReloadProfileList" object:nil];
+
+            [progress completeWithTitle:@"OptiFine 安装完成"];
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                [progress dismiss];
+                [strongSelf2 showComponentAlert:@"安装成功"
+                                         message:[NSString stringWithFormat:
+                                                  @"OptiFine %@ %@ 已安装为独立版本\n\n版本 ID：%@\n\n已自动切换到该版本，可直接启动游戏。",
+                                                  optiFineType, optiFinePatch, versionId]];
+            });
         });
     });
 }
