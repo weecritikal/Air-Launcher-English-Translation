@@ -412,11 +412,20 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
         setenv("AMETHYST_RENDERER", renderer.UTF8String, 1);
         // Setup AMETHYST_GRAPHICS_API（MC 26.2+ Graphics API：default/vulkan/opengl）
         // 仅 MC 26.2+ 识别此选项，旧版本 MC 会忽略 options.txt 中的 graphicsApi 字段。
+        //
+        // 关键修复（更改图形 API 无效）：
+        //   之前仅当 graphicsApi 非空时才设置环境变量，导致：
+        //   1. 用户从未设置过 graphicsApi 时环境变量缺失，Java 端无法清除旧值
+        //   2. 环境变量缺失时 Java 端完全跳过 graphicsApi 处理逻辑
+        //   现在始终设置环境变量（缺省为 "default"），让 Java 端每次启动都能正确处理：
+        //   - "default"：清除 options.txt 中的 graphicsApi 行
+        //   - prefer_vulkan/prefer_opengl：写入对应值
         NSString *graphicsApi = [PLProfiles resolveKeyForCurrentProfile:@"graphicsApi"];
-        if (graphicsApi.length > 0) {
-            setenv("AMETHYST_GRAPHICS_API", graphicsApi.UTF8String, 1);
-            NSLog(@"[JavaLauncher] GRAPHICS_API is set to %@\n", graphicsApi);
+        if (!graphicsApi || graphicsApi.length == 0) {
+            graphicsApi = @"default";
         }
+        setenv("AMETHYST_GRAPHICS_API", graphicsApi.UTF8String, 1);
+        NSLog(@"[JavaLauncher] GRAPHICS_API is set to %@\n", graphicsApi);
         // Setup gameDir
         gameDir = [NSString stringWithFormat:@"%s/instances/%@/%@",
             getenv("POJAV_HOME"), getPrefObject(@"general.game_directory"),

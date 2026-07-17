@@ -181,21 +181,36 @@ public class PojavLauncher {
         // （UI 层会给出推荐，但不强制联动，允许高级用户分开配置）。
         //
         // 旧版本 MC（1.21.7 及以下）不识别 options.txt 中的 graphicsApi 字段，
-        // 会被忽略，无副作用。这里通过 set（而非 setDefault）确保每次启动都写入。
+        // 会被忽略，无副作用。
+        //
+        // 关键修复（更改图形 API 无效）：
+        //   之前当 graphicsApi 为 "default" 时直接跳过，不写入 options.txt。
+        //   这导致用户从 prefer_vulkan/prefer_opengl 切换回 default 时，
+        //   options.txt 中残留的旧值不会被清除，MC 继续使用旧值而非内部默认。
+        //   现在改为：
+        //   - "default"：从 options.txt 中移除 graphicsApi 行，让 MC 使用内部默认
+        //   - prefer_vulkan/prefer_opengl：写入对应值（覆盖旧值）
         String graphicsApi = System.getenv("AMETHYST_GRAPHICS_API");
-        if (graphicsApi != null && !graphicsApi.isEmpty() && !"default".equalsIgnoreCase(graphicsApi)) {
-            String normalized;
-            if ("vulkan".equalsIgnoreCase(graphicsApi) || "prefer_vulkan".equalsIgnoreCase(graphicsApi)) {
-                normalized = "prefer_vulkan";
-            } else if ("opengl".equalsIgnoreCase(graphicsApi) || "prefer_opengl".equalsIgnoreCase(graphicsApi)) {
-                normalized = "prefer_opengl";
-            } else {
-                normalized = graphicsApi.toLowerCase();
-            }
+        if (graphicsApi != null && !graphicsApi.isEmpty()) {
             MCOptionUtils.load();
-            MCOptionUtils.set("graphicsApi", normalized);
+            if ("default".equalsIgnoreCase(graphicsApi)) {
+                // 选择"默认"时移除 options.txt 中的 graphicsApi 行，
+                // 让 MC 26.2+ 使用其内部默认行为（不读取此字段）
+                MCOptionUtils.remove("graphicsApi");
+                System.out.println("[PojavLauncher] MC 26.2+ graphicsApi cleared (default)");
+            } else {
+                String normalized;
+                if ("vulkan".equalsIgnoreCase(graphicsApi) || "prefer_vulkan".equalsIgnoreCase(graphicsApi)) {
+                    normalized = "prefer_vulkan";
+                } else if ("opengl".equalsIgnoreCase(graphicsApi) || "prefer_opengl".equalsIgnoreCase(graphicsApi)) {
+                    normalized = "prefer_opengl";
+                } else {
+                    normalized = graphicsApi.toLowerCase();
+                }
+                MCOptionUtils.set("graphicsApi", normalized);
+                System.out.println("[PojavLauncher] MC 26.2+ graphicsApi set to " + normalized);
+            }
             MCOptionUtils.save();
-            System.out.println("[PojavLauncher] MC 26.2+ graphicsApi set to " + normalized);
         }
 
         MinecraftAccount account = MinecraftAccount.load(args[0]);
