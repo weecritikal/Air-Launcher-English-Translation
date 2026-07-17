@@ -23,6 +23,11 @@ static const CGFloat kSectionInset = 16.0;
 @property (nonatomic, strong) UILabel *progressLabel;
 @property (nonatomic, strong) UIView *separatorView;
 
+// FCL 风格操作按钮区（直接显示在卡片上，无需长按）
+@property (nonatomic, strong) UIButton *primaryActionButton;   // 暂停/继续/重试（主操作，蓝色）
+@property (nonatomic, strong) UIButton *secondaryActionButton; // 取消/移除（次操作，红色）
+@property (nonatomic, weak) DownloadTaskItem *currentTask;
+
 - (void)configureWithTask:(DownloadTaskItem *)task;
 
 @end
@@ -104,22 +109,42 @@ static const CGFloat kSectionInset = 16.0;
     self.separatorView.backgroundColor = [UIColor separatorColor];
     [self.contentView addSubview:self.separatorView];
 
+    // FCL 风格：主操作按钮（暂停/继续/重试），右侧靠齐
+    self.primaryActionButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    self.primaryActionButton.translatesAutoresizingMaskIntoConstraints = NO;
+    self.primaryActionButton.titleLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
+    self.primaryActionButton.contentEdgeInsets = UIEdgeInsetsMake(4, 10, 4, 10);
+    self.primaryActionButton.layer.cornerRadius = 8.0;
+    self.primaryActionButton.layer.masksToBounds = YES;
+    [self.primaryActionButton addTarget:self action:@selector(primaryActionTapped) forControlEvents:UIControlEventTouchUpInside];
+    [self.contentView addSubview:self.primaryActionButton];
+
+    // FCL 风格：次操作按钮（取消/移除）
+    self.secondaryActionButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    self.secondaryActionButton.translatesAutoresizingMaskIntoConstraints = NO;
+    self.secondaryActionButton.titleLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
+    self.secondaryActionButton.contentEdgeInsets = UIEdgeInsetsMake(4, 10, 4, 10);
+    self.secondaryActionButton.layer.cornerRadius = 8.0;
+    self.secondaryActionButton.layer.masksToBounds = YES;
+    [self.secondaryActionButton addTarget:self action:@selector(secondaryActionTapped) forControlEvents:UIControlEventTouchUpInside];
+    [self.contentView addSubview:self.secondaryActionButton];
+
     [NSLayoutConstraint activateConstraints:@[
         [self.iconImageView.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:12],
         [self.iconImageView.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:12],
-        [self.iconImageView.widthAnchor constraintEqualToConstant:48],
-        [self.iconImageView.heightAnchor constraintEqualToConstant:48],
+        [self.iconImageView.widthAnchor constraintEqualToConstant:44],
+        [self.iconImageView.heightAnchor constraintEqualToConstant:44],
 
         [self.nameLabel.leadingAnchor constraintEqualToAnchor:self.iconImageView.trailingAnchor constant:10],
         [self.nameLabel.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:12],
         [self.nameLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.contentView.trailingAnchor constant:-12],
 
         [self.typeTagLabel.leadingAnchor constraintEqualToAnchor:self.nameLabel.leadingAnchor],
-        [self.typeTagLabel.topAnchor constraintEqualToAnchor:self.nameLabel.bottomAnchor constant:6],
-        [self.typeTagLabel.heightAnchor constraintEqualToConstant:18],
-        [self.typeTagLabel.widthAnchor constraintGreaterThanOrEqualToConstant:36],
+        [self.typeTagLabel.topAnchor constraintEqualToAnchor:self.nameLabel.bottomAnchor constant:5],
+        [self.typeTagLabel.heightAnchor constraintEqualToConstant:16],
+        [self.typeTagLabel.widthAnchor constraintGreaterThanOrEqualToConstant:32],
 
-        [self.sourceTagButton.leadingAnchor constraintEqualToAnchor:self.typeTagLabel.trailingAnchor constant:8],
+        [self.sourceTagButton.leadingAnchor constraintEqualToAnchor:self.typeTagLabel.trailingAnchor constant:6],
         [self.sourceTagButton.centerYAnchor constraintEqualToAnchor:self.typeTagLabel.centerYAnchor],
         [self.sourceTagButton.trailingAnchor constraintLessThanOrEqualToAnchor:self.contentView.trailingAnchor constant:-12],
 
@@ -129,19 +154,57 @@ static const CGFloat kSectionInset = 16.0;
 
         [self.separatorView.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:12],
         [self.separatorView.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-12],
-        [self.separatorView.topAnchor constraintEqualToAnchor:self.iconImageView.bottomAnchor constant:12],
+        [self.separatorView.topAnchor constraintEqualToAnchor:self.iconImageView.bottomAnchor constant:10],
         [self.separatorView.heightAnchor constraintEqualToConstant:0.5],
 
+        // 进度区：进度条 + 百分比
         [self.progressView.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:12],
-        [self.progressView.trailingAnchor constraintEqualToAnchor:self.progressLabel.leadingAnchor constant:-10],
-        [self.progressView.centerYAnchor constraintEqualToAnchor:self.progressLabel.centerYAnchor],
+        [self.progressView.topAnchor constraintEqualToAnchor:self.separatorView.bottomAnchor constant:8],
+        [self.progressView.trailingAnchor constraintEqualToAnchor:self.progressLabel.leadingAnchor constant:-8],
 
         [self.progressLabel.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-12],
-        [self.progressLabel.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-12],
-        [self.progressLabel.widthAnchor constraintEqualToConstant:44],
+        [self.progressLabel.centerYAnchor constraintEqualToAnchor:self.progressView.centerYAnchor],
+        [self.progressLabel.widthAnchor constraintEqualToConstant:48],
 
-        [self.progressView.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-18]
+        // 操作按钮区：右对齐，主操作在前（左），次操作在后（右）
+        [self.secondaryActionButton.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-12],
+        [self.secondaryActionButton.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-10],
+        [self.secondaryActionButton.topAnchor constraintEqualToAnchor:self.progressView.bottomAnchor constant:8],
+
+        [self.primaryActionButton.trailingAnchor constraintEqualToAnchor:self.secondaryActionButton.leadingAnchor constant:-8],
+        [self.primaryActionButton.centerYAnchor constraintEqualToAnchor:self.secondaryActionButton.centerYAnchor],
+        [self.primaryActionButton.heightAnchor constraintEqualToAnchor:self.secondaryActionButton.heightAnchor]
     ]];
+}
+
+- (void)primaryActionTapped {
+    if (!self.currentTask) return;
+    DownloadTaskItem *task = self.currentTask;
+    switch (task.state) {
+        case DownloadTaskStateDownloading:
+        case DownloadTaskStatePending:
+            [[DownloadTaskManager sharedManager] pauseTaskWithId:task.taskId];
+            break;
+        case DownloadTaskStatePaused:
+            [[DownloadTaskManager sharedManager] resumeTaskWithId:task.taskId];
+            break;
+        case DownloadTaskStateFailed:
+        case DownloadTaskStateCancelled:
+            [[DownloadTaskManager sharedManager] retryTaskWithId:task.taskId];
+            break;
+        case DownloadTaskStateCompleted:
+            break;
+    }
+}
+
+- (void)secondaryActionTapped {
+    if (!self.currentTask) return;
+    DownloadTaskItem *task = self.currentTask;
+    if (task.state == DownloadTaskStateCompleted || task.state == DownloadTaskStateCancelled || task.state == DownloadTaskStateFailed) {
+        [[DownloadTaskManager sharedManager] removeTaskWithId:task.taskId];
+    } else {
+        [[DownloadTaskManager sharedManager] cancelTaskWithId:task.taskId];
+    }
 }
 
 - (void)prepareForReuse {
@@ -155,9 +218,15 @@ static const CGFloat kSectionInset = 16.0;
     self.progressView.progress = 0.0;
     self.progressLabel.text = nil;
     self.progressView.hidden = NO;
+    self.currentTask = nil;
+    [self.primaryActionButton setTitle:nil forState:UIControlStateNormal];
+    self.primaryActionButton.hidden = YES;
+    [self.secondaryActionButton setTitle:nil forState:UIControlStateNormal];
+    self.secondaryActionButton.hidden = YES;
 }
 
 - (void)configureWithTask:(DownloadTaskItem *)task {
+    self.currentTask = task;
     self.nameLabel.text = task.displayName.length > 0 ? task.displayName : task.resourceName;
     self.typeTagLabel.text = [self displayNameForResourceType:task.resourceType];
     [self.typeTagLabel sizeToFit];
@@ -167,15 +236,12 @@ static const CGFloat kSectionInset = 16.0;
     UIImage *placeholder = [UIImage systemImageNamed:[self iconNameForResourceType:task.resourceType]];
     self.iconImageView.image = placeholder;
     if (task.iconURL.length > 0) {
-        // 使用 IconLoader 统一加载（双层缓存+降采样+CDN镜像+并发控制）
-        // 图标显示尺寸 48x48，降采样到此尺寸避免按原图解码
         [IconLoader loadIconForImageView:self.iconImageView
                                      URL:task.iconURL
                              placeholder:placeholder
                                 fallback:placeholder
-                               targetSize:CGSizeMake(48, 48)];
+                               targetSize:CGSizeMake(44, 44)];
     } else {
-        // 无 URL：取消可能存在的旧请求
         [IconLoader cancelLoadingForImageView:self.iconImageView];
     }
 
@@ -216,6 +282,85 @@ static const CGFloat kSectionInset = 16.0;
             self.progressLabel.text = @"失败";
             self.progressView.progress = 0.0;
             self.progressView.hidden = YES;
+            break;
+    }
+
+    // FCL 风格：按状态配置主/次操作按钮
+    [self configureActionButtonsForTask:task];
+}
+
+- (void)configureActionButtonsForTask:(DownloadTaskItem *)task {
+    UIColor *primaryColor = [UIColor systemBlueColor];
+    UIColor *secondaryColor = [UIColor systemRedColor];
+
+    switch (task.state) {
+        case DownloadTaskStateDownloading:
+        case DownloadTaskStatePending:
+            // 主操作：暂停；次操作：取消
+            [self.primaryActionButton setTitle:@"暂停" forState:UIControlStateNormal];
+            [self.primaryActionButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+            self.primaryActionButton.backgroundColor = primaryColor;
+            self.primaryActionButton.hidden = NO;
+
+            [self.secondaryActionButton setTitle:@"取消" forState:UIControlStateNormal];
+            [self.secondaryActionButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+            self.secondaryActionButton.backgroundColor = secondaryColor;
+            self.secondaryActionButton.hidden = NO;
+            break;
+
+        case DownloadTaskStatePaused:
+            // 主操作：继续；次操作：取消
+            [self.primaryActionButton setTitle:@"继续" forState:UIControlStateNormal];
+            [self.primaryActionButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+            self.primaryActionButton.backgroundColor = primaryColor;
+            self.primaryActionButton.hidden = NO;
+
+            [self.secondaryActionButton setTitle:@"取消" forState:UIControlStateNormal];
+            [self.secondaryActionButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+            self.secondaryActionButton.backgroundColor = secondaryColor;
+            self.secondaryActionButton.hidden = NO;
+            break;
+
+        case DownloadTaskStateFailed:
+        case DownloadTaskStateCancelled:
+            // 主操作：重试（若 retryHandler 可用且未超 maxRetryCount）；次操作：移除
+            BOOL canRetry = (task.retryHandler != nil) &&
+                            (task.maxRetryCount <= 0 || task.retryCount < task.maxRetryCount);
+            if (canRetry) {
+                NSString *retryTitle = task.retryCount > 0
+                    ? [NSString stringWithFormat:@"重试 (%ld/%ld)", (long)task.retryCount, (long)task.maxRetryCount]
+                    : @"重试";
+                [self.primaryActionButton setTitle:retryTitle forState:UIControlStateNormal];
+                [self.primaryActionButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+                self.primaryActionButton.backgroundColor = primaryColor;
+                self.primaryActionButton.hidden = NO;
+            } else if (task.retryHandler != nil && task.retryCount >= task.maxRetryCount && task.maxRetryCount > 0) {
+                // 已达最大重试次数，显示禁用状态
+                [self.primaryActionButton setTitle:@"重试已用尽" forState:UIControlStateNormal];
+                [self.primaryActionButton setTitleColor:[UIColor secondaryLabelColor] forState:UIControlStateNormal];
+                self.primaryActionButton.backgroundColor = [UIColor tertiarySystemBackgroundColor];
+                self.primaryActionButton.userInteractionEnabled = NO;
+                self.primaryActionButton.hidden = NO;
+            } else {
+                self.primaryActionButton.hidden = YES;
+            }
+
+            [self.secondaryActionButton setTitle:@"移除" forState:UIControlStateNormal];
+            [self.secondaryActionButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+            self.secondaryActionButton.backgroundColor = secondaryColor;
+            self.secondaryActionButton.userInteractionEnabled = YES;
+            self.secondaryActionButton.hidden = NO;
+            break;
+
+        case DownloadTaskStateCompleted:
+            // 主操作：无；次操作：移除
+            self.primaryActionButton.hidden = YES;
+
+            [self.secondaryActionButton setTitle:@"移除" forState:UIControlStateNormal];
+            [self.secondaryActionButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+            self.secondaryActionButton.backgroundColor = [UIColor systemGrayColor];
+            self.secondaryActionButton.userInteractionEnabled = YES;
+            self.secondaryActionButton.hidden = NO;
             break;
     }
 }
@@ -728,37 +873,11 @@ static const CGFloat kSectionInset = 16.0;
 }
 
 - (void)showActionsForTask:(DownloadTaskItem *)task {
+    // FCL 风格重构后，常用操作（暂停/继续/取消/重试/移除）已在卡片上直接显示按钮。
+    // 长按仅作为辅助入口，提供"切换下载源"等进阶操作。
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:task.displayName
                                                                    message:nil
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
-
-    if (task.state == DownloadTaskStateDownloading || task.state == DownloadTaskStatePending) {
-        [alert addAction:[UIAlertAction actionWithTitle:@"暂停"
-                                                  style:UIAlertActionStyleDefault
-                                                handler:^(UIAlertAction *action) {
-            [[DownloadTaskManager sharedManager] pauseTaskWithId:task.taskId];
-        }]];
-    } else if (task.state == DownloadTaskStatePaused) {
-        [alert addAction:[UIAlertAction actionWithTitle:@"恢复"
-                                                  style:UIAlertActionStyleDefault
-                                                handler:^(UIAlertAction *action) {
-            [[DownloadTaskManager sharedManager] resumeTaskWithId:task.taskId];
-        }]];
-    }
-
-    if (task.state != DownloadTaskStateCompleted && task.state != DownloadTaskStateCancelled && task.state != DownloadTaskStateFailed) {
-        [alert addAction:[UIAlertAction actionWithTitle:@"取消"
-                                                  style:UIAlertActionStyleDestructive
-                                                handler:^(UIAlertAction *action) {
-            [[DownloadTaskManager sharedManager] cancelTaskWithId:task.taskId];
-        }]];
-    } else {
-        [alert addAction:[UIAlertAction actionWithTitle:@"移除记录"
-                                                  style:UIAlertActionStyleDestructive
-                                                handler:^(UIAlertAction *action) {
-            [[DownloadTaskManager sharedManager] removeTaskWithId:task.taskId];
-        }]];
-    }
 
     [alert addAction:[UIAlertAction actionWithTitle:@"切换下载源"
                                               style:UIAlertActionStyleDefault
@@ -891,7 +1010,7 @@ static const CGFloat kSectionInset = 16.0;
     }
 
     CGFloat width = collectionView.bounds.size.width - kSectionInset * 2;
-    return CGSizeMake(width, 120);
+    return CGSizeMake(width, 152);
 }
 
 - (void)viewWillTransitionToSize:(CGSize)size withTransitionCoordinator:(id<UIViewControllerTransitionCoordinator>)coordinator {

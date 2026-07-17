@@ -237,6 +237,66 @@ NSString * const DownloadTaskManagerTaskKey                             = @"Down
     }
 }
 
+- (void)retryTaskWithId:(NSString *)taskId {
+    if (!taskId) return;
+    [self.lock lock];
+    DownloadTaskItem *item = self.tasks[taskId];
+    [self.lock unlock];
+    if (!item) return;
+
+    // 无 retryHandler 无法重建
+    if (!item.retryHandler) {
+        NSLog(@"[DownloadTaskManager] retryTaskWithId: 任务 %@ 未设置 retryHandler，无法重试", taskId);
+        return;
+    }
+
+    // 超过最大重试次数则不再重试
+    if (item.maxRetryCount > 0 && item.retryCount >= item.maxRetryCount) {
+        NSLog(@"[DownloadTaskManager] retryTaskWithId: 任务 %@ 已达最大重试次数 %ld", taskId, (long)item.maxRetryCount);
+        return;
+    }
+
+    // 1. 取消旧 rawTask（避免悬挂任务继续下载/上报进度）
+    id oldRawTask = item.rawTask;
+    if ([oldRawTask isKindOfClass:[NSOperation class]]) {
+        [(NSOperation *)oldRawTask cancel];
+    } else if ([oldRawTask respondsToSelector:@selector(cancel)]) {
+        [oldRawTask cancel];
+    }
+
+    // 2. 重置 item 状态（保留 taskId/displayName/iconURL/resourceType 等元数据）
+    item.rawTask = nil;
+    item.state = DownloadTaskStatePending;
+    item.progress = -1.0;
+    item.totalSize = -1;
+    item.downloadedSize = 0;
+    item.speed = 0.0;
+    item.estimatedTimeRemaining = 0.0;
+    item.errorInfo = nil;
+    item.retryCount += 1;
+
+    [self postUpdateForTask:item];
+    [self checkAggregateStateChange];
+
+    // 3. 调用业务方 retryHandler 重建底层 rawTask
+    //    业务方需在 handler 内创建新 NSURLSessionTask，将其注册到自己的字典并赋值给 item.rawTask，
+    //    最后调用 setTaskWithId:state:Downloading 启动。
+    @try {
+        id newRawTask = item.retryHandler(item);
+        if (newRawTask) {
+            item.rawTask = newRawTask;
+            [self postUpdateForTask:item];
+        }
+    } @catch (NSException *exception) {
+        NSLog(@"[DownloadTaskManager] retryTaskWithId: retryHandler 抛异常: %@", exception);
+        item.state = DownloadTaskStateFailed;
+        item.errorInfo = [NSError errorWithDomain:@"DownloadTaskManager" code:3
+                                         userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"重试失败: %@", exception.reason ?: @"未知错误"]}];
+        [self postUpdateForTask:item];
+        [self checkAggregateStateChange];
+    }
+}
+
 - (void)switchDownloadSourceForTaskId:(NSString *)taskId
                              toSource:(NSString *)source
                            completion:(void (^)(BOOL shouldRecreate, BOOL supportsResume, NSError * _Nullable error))completion {

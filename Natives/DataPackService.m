@@ -448,8 +448,31 @@
                              rawTask:task
                       supportsResume:YES
                              iconURL:item.iconURL];
+    taskItem.downloadURL = item.selectedVersionDownloadURL;
     self.downloadTaskItems[task] = taskItem;
     [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId state:DownloadTaskStateDownloading];
+
+    // 设置 retryHandler：FCL 风格重新下载
+    __weak typeof(self) weakSelf = self;
+    NSString *capturedDestPath = destinationPath;
+    DataPackDownloadCompletionHandler capturedCompletion = completion;
+    void (^capturedProgress)(NSProgress *) = progress;
+    taskItem.retryHandler = ^id(DownloadTaskItem *taskItemRef) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return nil;
+        NSURL *retryURL = [NSURL URLWithString:taskItemRef.downloadURL] ?: url;
+        if (!retryURL) return nil;
+        NSURLSessionDownloadTask *newTask = [strongSelf.downloadSession downloadTaskWithURL:retryURL];
+        strongSelf.downloadCompletionHandlers[newTask] = capturedCompletion;
+        strongSelf.downloadDestinationPaths[newTask] = capturedDestPath;
+        if (capturedProgress) {
+            strongSelf.downloadProgressHandlers[newTask] = capturedProgress;
+        }
+        strongSelf.downloadTaskItems[newTask] = taskItemRef;
+        [[DownloadTaskManager sharedManager] setTaskWithId:taskItemRef.taskId state:DownloadTaskStateDownloading];
+        [newTask resume];
+        return newTask;
+    };
 
     [task resume];
 

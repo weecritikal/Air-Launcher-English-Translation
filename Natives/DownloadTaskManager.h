@@ -45,6 +45,11 @@ extern NSString * const DownloadTaskManagerTaskKey;
 - (void)resumeTaskWithId:(NSString *)taskId;
 - (void)cancelTaskWithId:(NSString *)taskId;
 
+/// 重新下载（FCL 风格）。
+/// 取消旧 rawTask、重置 item 状态（progress/speed/error）、retryCount++，
+/// 然后调用 item.retryHandler 重建底层 rawTask。若未设置 retryHandler 或超过 maxRetryCount 则无效。
+- (void)retryTaskWithId:(NSString *)taskId;
+
 /// 切换下载源。completion 返回 shouldRecreate：YES 表示调用方需要取消旧任务并重新创建下载。
 - (void)switchDownloadSourceForTaskId:(NSString *)taskId
                              toSource:(NSString *)source

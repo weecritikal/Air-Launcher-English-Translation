@@ -550,8 +550,32 @@
                              rawTask:task
                       supportsResume:YES
                              iconURL:mod.iconURL];
+    taskItem.downloadURL = mod.selectedVersionDownloadURL;
     self.downloadTaskItems[task] = taskItem;
     [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId state:DownloadTaskStateDownloading];
+
+    // 设置 retryHandler：FCL 风格重新下载，复用同一 taskItem，重建底层 NSURLSessionTask
+    __weak typeof(self) weakSelf = self;
+    NSString *capturedDestPath = destinationPath;
+    ModDownloadHandler capturedCompletion = completion;
+    void (^capturedProgress)(NSProgress *) = progress;
+    ModItem *capturedMod = mod;
+    taskItem.retryHandler = ^id(DownloadTaskItem *taskItemRef) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return nil;
+        NSURL *retryURL = [NSURL URLWithString:taskItemRef.downloadURL] ?: [NSURL URLWithString:capturedMod.selectedVersionDownloadURL];
+        if (!retryURL) return nil;
+        NSURLSessionDownloadTask *newTask = [strongSelf.downloadSession downloadTaskWithURL:retryURL];
+        strongSelf.downloadCompletionHandlers[newTask] = capturedCompletion;
+        strongSelf.downloadDestinationPaths[newTask] = capturedDestPath;
+        if (capturedProgress) {
+            strongSelf.downloadProgressHandlers[newTask] = capturedProgress;
+        }
+        strongSelf.downloadTaskItems[newTask] = taskItemRef;
+        [[DownloadTaskManager sharedManager] setTaskWithId:taskItemRef.taskId state:DownloadTaskStateDownloading];
+        [newTask resume];
+        return newTask;
+    };
 
     [task resume];
 }

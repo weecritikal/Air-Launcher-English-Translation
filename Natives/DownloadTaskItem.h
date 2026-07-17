@@ -63,6 +63,22 @@ extern NSString * const DownloadTaskResourceTypeWorld;
 /// 供业务方存放扩展字段
 @property (nonatomic, strong) NSMutableDictionary *userInfo;
 
+#pragma mark - 重试支持（FCL 风格重新下载）
+
+/// 原始下载 URL，便于重试/切换源时在模型层直接重建（可选，业务方可不填）
+@property (nonatomic, copy, nullable) NSString *downloadURL;
+
+/// 重试回调：业务方注册任务时设置，DownloadTaskManager.retryTaskWithId: 会调用它重建底层 rawTask。
+/// 业务方在 handler 内创建新的 NSURLSessionTask 并赋值给 item.rawTask，无需移除旧 item（manager 已处理）。
+/// 参数为当前 item（已重置状态），返回新的 rawTask（用于 manager 更新 item.rawTask）。
+@property (nonatomic, copy, nullable) id (^retryHandler)(DownloadTaskItem *item);
+
+/// 已重试次数（manager 在每次 retryTaskWithId: 时自增）
+@property (nonatomic, assign) NSInteger retryCount;
+
+/// 最大重试次数，默认 3。超过后 UI 不再显示"重试"按钮（仍可"移除"）
+@property (nonatomic, assign) NSInteger maxRetryCount;
+
 - (instancetype)initWithResourceType:(NSString *)resourceType
                         resourceName:(NSString *)resourceName
                          displayName:(NSString *)displayName

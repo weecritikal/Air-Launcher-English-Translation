@@ -37,6 +37,8 @@ NSString * const DownloadTaskResourceTypeWorld        = @"world";
         _rawTask = rawTask;
         _errorInfo = nil;
         _userInfo = [NSMutableDictionary dictionary];
+        _retryCount = 0;
+        _maxRetryCount = 3;
     }
     return self;
 }
