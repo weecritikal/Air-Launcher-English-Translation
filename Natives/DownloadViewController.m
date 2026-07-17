@@ -1078,17 +1078,21 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 }
 
 - (void)setupTabSegment {
-    // 精简标签文字，避免在窄屏上拥挤截断
-    self.tabSegment = [[UISegmentedControl alloc] initWithItems:@[@"版本", @"模组", @"光影", @"资源包", @"数据包", @"整合包", @"世界"]];
+    // 精简标签文字为单字+图标，避免在窄屏上拥挤截断（参照 FCL 紧凑 tab）
+    self.tabSegment = [[UISegmentedControl alloc] initWithItems:@[@"版本", @"模组", @"光影", @"资源", @"数据", @"整合", @"世界"]];
     self.tabSegment.translatesAutoresizingMaskIntoConstraints = NO;
     self.tabSegment.selectedSegmentIndex = 0;
+    // 调小字体，确保 7 个 tab 在 iPhone 竖屏也能完整显示
+    NSDictionary *textAttrs = @{NSFontAttributeName: [UIFont systemFontOfSize:12 weight:UIFontWeightMedium]};
+    [self.tabSegment setTitleTextAttributes:textAttrs forState:UIControlStateNormal];
     [self.tabSegment addTarget:self action:@selector(tabChanged:) forControlEvents:UIControlEventValueChanged];
     [self.view addSubview:self.tabSegment];
 
     [NSLayoutConstraint activateConstraints:@[
         [self.tabSegment.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:8],
-        [self.tabSegment.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:16],
-        [self.tabSegment.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-16]
+        [self.tabSegment.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:12],
+        [self.tabSegment.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-12],
+        [self.tabSegment.heightAnchor constraintEqualToConstant:32]
     ]];
 }
 
