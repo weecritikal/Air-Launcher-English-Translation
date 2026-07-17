@@ -104,11 +104,53 @@ int keycodeTable[UIKeyboardHIDUsageKeyboardRightGUI+1];
     if (key.modifierFlags & UIKeyModifierControl) {
         modifiers |= GLFW_MOD_CONTROL;
     }
+    if (key.modifierFlags & UIKeyModifierCommand) {
+        modifiers |= GLFW_MOD_SUPER;
+    }
 
     // send the keycode
     int keycode = keycodeTable[key.keyCode];
     if (keycode != 0) {
+        // issue #27 修复（参照 FCL commit 08c0716）：
+        // MC 1.21.9+ 不再仅依赖 key 回调中的 mods 参数，而是通过
+        // InputConstants.isKeyDown() 查询 modifier 状态，该状态由 MC 自己
+        // 维护在独立缓存中，必须显式 setModifiers 才能更新。
+        //
+        // 关键修复 1：release 事件中 iOS 的 modifierFlags 仍包含被释放的键，
+        // 导致 mods 与 action 自相矛盾。这里对 modifier 键本身做修正：
+        // 释放时从 mods 中移除该键对应的位，让事件语义自洽。
+        if (!isDown) {
+            switch (keycode) {
+                case GLFW_KEY_LEFT_SHIFT:
+                case GLFW_KEY_RIGHT_SHIFT:
+                    modifiers &= ~GLFW_MOD_SHIFT;
+                    break;
+                case GLFW_KEY_LEFT_CONTROL:
+                case GLFW_KEY_RIGHT_CONTROL:
+                    modifiers &= ~GLFW_MOD_CONTROL;
+                    break;
+                case GLFW_KEY_LEFT_ALT:
+                case GLFW_KEY_RIGHT_ALT:
+                    modifiers &= ~GLFW_MOD_ALT;
+                    break;
+                case GLFW_KEY_LEFT_SUPER:
+                case GLFW_KEY_RIGHT_SUPER:
+                    modifiers &= ~GLFW_MOD_SUPER;
+                    break;
+                case GLFW_KEY_CAPS_LOCK:
+                    modifiers &= ~GLFW_MOD_CAPS_LOCK;
+                    break;
+                default:
+                    break;
+            }
+        }
+
         CallbackBridge_nativeSendKey(keycode, 0 /* scancode */, isDown, modifiers);
+
+        // 关键修复 2：显式同步 MC 1.21.9+ 内部的 modifier 缓存。
+        // 即便某些版本 MC 不使用 setModifiers，调用也是安全的（旧版本无此方法
+        // 会直接 no-op）。这能确保物理键盘的 Shift/Ctrl/Alt 在游戏内生效。
+        CallbackBridge_syncModifiersToMC(modifiers);
     } else {
         NSLog(@"KeyboardInput: Unhandled key %lu", (unsigned long)key.keyCode);
     }

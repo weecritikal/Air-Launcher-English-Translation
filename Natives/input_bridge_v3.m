@@ -431,6 +431,48 @@ void CallbackBridge_nativeSetInputReady(BOOL inputReady) {
     }
 }
 
+// ============================================================================
+// issue #27 修复（参照 FCL commit 08c0716）：物理键盘 modifier 同步
+//
+// MC 1.21.9+ 不再仅依赖 key 回调中的 mods 参数，而是通过
+// InputConstants.isKeyDown(window, GLFW_KEY_LEFT_SHIFT) 查询 modifier 状态。
+// 该状态由 MC 内部缓存维护，仅靠 GLFW key callback 无法同步，
+// 必须显式调用 Java 端 setModifiers 才能更新。
+//
+// 此处通过 JNI 反射调用 com.mojang.blaze3d.platform.InputConstants
+// 的内部方法（如果存在），实现 modifier 缓存的显式同步。
+// 旧版本 MC 没有此机制，调用会安全失败（找不到方法直接返回）。
+//
+// 由 KeyboardInput.m 在物理键盘事件中调用（pressesBegan/pressesEnded），
+// 也可被 Java 端 CallbackBridge.nativeSetModifiers 调用。
+// ============================================================================
+void CallbackBridge_syncModifiersToMC(int mods) {
+    JNIEnv *env = runtimeJNIEnvPtr;
+    if (!env || !isInputReady) return;
+
+    jclass inputConstantsClass = (*env)->FindClass(env, "com/mojang/blaze3d/platform/InputConstants");
+    if (!inputConstantsClass) {
+        if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
+        return;
+    }
+    jmethodID setModifiersMethod = (*env)->GetStaticMethodID(env, inputConstantsClass, "setModifiers", "(I)V");
+    if (!setModifiersMethod) {
+        if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
+        (*env)->DeleteLocalRef(env, inputConstantsClass);
+        return;
+    }
+    (*env)->CallStaticVoidMethod(env, inputConstantsClass, setModifiersMethod, (jint)mods);
+    if ((*env)->ExceptionCheck(env)) {
+        (*env)->ExceptionClear(env);
+    }
+    (*env)->DeleteLocalRef(env, inputConstantsClass);
+}
+
+// JNI wrapper：供 Java 端 CallbackBridge.nativeSetModifiers(int) 调用
+JNIEXPORT void JNICALL Java_org_lwjgl_glfw_CallbackBridge_nativeSetModifiers(JNIEnv* env, jclass clazz, jint mods) {
+    CallbackBridge_syncModifiersToMC(mods);
+}
+
 BOOL CallbackBridge_nativeSendChar(jchar codepoint /* jint codepoint */) {
     if (GLFW_invoke_Char && isInputReady) {
         if (isUseStackQueueCall) {
@@ -500,13 +542,20 @@ char getKeyModifiers(int key, int action) {
     char mod;
     switch (key) {
         case GLFW_KEY_LEFT_SHIFT:
+        case GLFW_KEY_RIGHT_SHIFT:
             mod = GLFW_MOD_SHIFT;
             break;
         case GLFW_KEY_LEFT_CONTROL:
+        case GLFW_KEY_RIGHT_CONTROL:
             mod = GLFW_MOD_CONTROL;
             break;
         case GLFW_KEY_LEFT_ALT:
+        case GLFW_KEY_RIGHT_ALT:
             mod = GLFW_MOD_ALT;
+            break;
+        case GLFW_KEY_LEFT_SUPER:
+        case GLFW_KEY_RIGHT_SUPER:
+            mod = GLFW_MOD_SUPER;
             break;
         case GLFW_KEY_CAPS_LOCK:
             mod = GLFW_MOD_CAPS_LOCK;
