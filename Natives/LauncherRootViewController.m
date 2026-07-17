@@ -49,6 +49,11 @@ static CGFloat LauncherRootLayoutRightPanelWidth(UITraitCollection *trait) {
 @property(nonatomic, strong) NSLayoutConstraint *contentTrailingConstraint;
 @property(nonatomic, strong) NSLayoutConstraint *sidebarWidthConstraint;
 @property(nonatomic, strong) NSLayoutConstraint *rightPanelWidthConstraint;
+// 关键修复（UI 累积异常）：setContentViewController: 之前每次切换都激活 4 个新约束
+// （leading/trailing/top/bottom 到 contentContainer），但旧 VC 的约束未显式 deactivate。
+// 在 tmpRootVC 保留场景下，缓存复用的子 VC 反复激活约束，layout 解算时 leading/trailing
+// 约束叠加导致 contentContainer 内容区左右变宽。现持有当前约束并先 deactivate 再激活。
+@property(nonatomic, strong) NSArray<NSLayoutConstraint *> *currentContentConstraints;
 
 @property(nonatomic, assign) BOOL isShowingProfileEditor;
 @property(nonatomic, strong) ProfileSettingsViewController *profileEditorVC;
@@ -189,23 +194,25 @@ static CGFloat LauncherRootLayoutRightPanelWidth(UITraitCollection *trait) {
     //      形成"前一页面没有及时消失"的视觉残留。
     // "大白条"问题已通过 makeViewControllerTransparent（将 VC view 背景设为 clearColor）
     // + applyEffectToNavigationBar（导航栏毛玻璃）解决，不再需要此 hack。
-    // 这里仅清理可能残留的旧负 inset 值，将其归零。
+    //
+    // 关键修复（UI 累积异常）：之前仅清理 NEGATIVE .top 的 additionalSafeAreaInsets，
+    // 未覆盖 .left/.right/.bottom 与正值累积。在 tmpRootVC 保留场景下，若其他路径
+    // 累加 left/right inset，此方法无法兜底，导致 contentContainer 内容区左右变宽。
+    // 现清理所有方向的非零 inset。
     UIViewController *contentVC = _contentViewController;
     if (!contentVC) return;
     if ([contentVC isKindOfClass:[UINavigationController class]]) {
         UINavigationController *nav = (UINavigationController *)contentVC;
         for (UIViewController *vc in nav.viewControllers) {
-            if (vc.additionalSafeAreaInsets.top < 0) {
-                UIEdgeInsets cleared = vc.additionalSafeAreaInsets;
-                cleared.top = 0;
-                vc.additionalSafeAreaInsets = cleared;
+            UIEdgeInsets insets = vc.additionalSafeAreaInsets;
+            if (insets.top != 0 || insets.left != 0 || insets.right != 0 || insets.bottom != 0) {
+                vc.additionalSafeAreaInsets = UIEdgeInsetsZero;
             }
         }
     } else {
-        if (contentVC.additionalSafeAreaInsets.top < 0) {
-            UIEdgeInsets cleared = contentVC.additionalSafeAreaInsets;
-            cleared.top = 0;
-            contentVC.additionalSafeAreaInsets = cleared;
+        UIEdgeInsets insets = contentVC.additionalSafeAreaInsets;
+        if (insets.top != 0 || insets.left != 0 || insets.right != 0 || insets.bottom != 0) {
+            contentVC.additionalSafeAreaInsets = UIEdgeInsetsZero;
         }
     }
 }
@@ -619,16 +626,20 @@ static CGFloat LauncherRootLayoutRightPanelWidth(UITraitCollection *trait) {
 
 - (void)setContentViewController:(UIViewController *)viewController animated:(BOOL)animated {
     if (!viewController) return;
-    
+
+    // 关键修复（UI 累积异常）：同一实例直接跳过，避免对同一 VC 重复添加约束
+    // 和反复调用 applyEffectToNavigationBar: 导致 hairline UIImageView 累积。
+    if (viewController == _contentViewController) return;
+
     // 检查是否切换到非编辑器页面
     if (![viewController isKindOfClass:[UINavigationController class]] ||
         ![((UINavigationController *)viewController).topViewController isKindOfClass:[ProfileSettingsViewController class]]) {
         self.isShowingProfileEditor = NO;
         self.profileEditorVC = nil;
     }
-    
+
     UIViewController *oldVC = _contentViewController;
-    
+
     // 移除旧的 + 添加新的
     _contentViewController = viewController;
     [self addChildViewController:viewController];
@@ -651,6 +662,20 @@ static CGFloat LauncherRootLayoutRightPanelWidth(UITraitCollection *trait) {
         [[BackgroundManager sharedManager] makeViewControllerTransparent:viewController];
     }
 
+    // 关键修复（UI 累积异常）：deactivate 旧约束，避免在 tmpRootVC 保留场景下
+    // 缓存复用的子 VC 反复激活约束导致 contentContainer 内容区左右变宽。
+    if (self.currentContentConstraints.count > 0) {
+        [NSLayoutConstraint deactivateConstraints:self.currentContentConstraints];
+        self.currentContentConstraints = nil;
+    }
+
+    NSArray<NSLayoutConstraint *> *newConstraints = @[
+        [viewController.view.leadingAnchor constraintEqualToAnchor:self.contentContainer.leadingAnchor],
+        [viewController.view.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor],
+        [viewController.view.topAnchor constraintEqualToAnchor:self.contentContainer.topAnchor],
+        [viewController.view.bottomAnchor constraintEqualToAnchor:self.contentContainer.bottomAnchor]
+    ];
+
     if (animated && oldVC) {
         // 修复问题5：原实现用两个独立的 UIView transitionWithView:（一个移除旧视图、一个添加新视图），
         // 两个 crossDissolve 同时作用于 contentContainer 会导致视觉冲突和残影（旧画面未完全消失就覆盖新界面）。
@@ -663,12 +688,7 @@ static CGFloat LauncherRootLayoutRightPanelWidth(UITraitCollection *trait) {
                             [oldVC willMoveToParentViewController:nil];
                             [oldVC.view removeFromSuperview];
                             [self.contentContainer addSubview:viewController.view];
-                            [NSLayoutConstraint activateConstraints:@[
-                                [viewController.view.leadingAnchor constraintEqualToAnchor:self.contentContainer.leadingAnchor],
-                                [viewController.view.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor],
-                                [viewController.view.topAnchor constraintEqualToAnchor:self.contentContainer.topAnchor],
-                                [viewController.view.bottomAnchor constraintEqualToAnchor:self.contentContainer.bottomAnchor]
-                            ]];
+                            [NSLayoutConstraint activateConstraints:newConstraints];
                         } completion:^(BOOL finished) {
                             [oldVC removeFromParentViewController];
                             [viewController didMoveToParentViewController:self];
@@ -680,14 +700,11 @@ static CGFloat LauncherRootLayoutRightPanelWidth(UITraitCollection *trait) {
             [oldVC removeFromParentViewController];
         }
         [self.contentContainer addSubview:viewController.view];
-        [NSLayoutConstraint activateConstraints:@[
-            [viewController.view.leadingAnchor constraintEqualToAnchor:self.contentContainer.leadingAnchor],
-            [viewController.view.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor],
-            [viewController.view.topAnchor constraintEqualToAnchor:self.contentContainer.topAnchor],
-            [viewController.view.bottomAnchor constraintEqualToAnchor:self.contentContainer.bottomAnchor]
-        ]];
+        [NSLayoutConstraint activateConstraints:newConstraints];
         [viewController didMoveToParentViewController:self];
     }
+
+    self.currentContentConstraints = newConstraints;
 }
 
 #pragma mark - Orientation

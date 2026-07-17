@@ -64,6 +64,9 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
 @property(nonatomic, strong) NSLayoutConstraint *rightPanelWidthConstraint;
 // 存储外边距约束，traitCollection 变化时动态更新
 @property(nonatomic, strong) NSArray<NSLayoutConstraint *> *outerMarginConstraints;
+// 关键修复（UI 累积异常）：同 LauncherRootViewController，持有当前内容 VC 的约束
+// 并先 deactivate 再激活，避免 tmpRootVC 保留场景下缓存复用子 VC 的约束叠加。
+@property(nonatomic, strong) NSArray<NSLayoutConstraint *> *currentContentConstraints;
 
 @property(nonatomic, assign) BOOL isShowingProfileEditor;
 @property(nonatomic, strong) ProfileSettingsViewController *profileEditorVC;
@@ -624,14 +627,18 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
 
 - (void)setContentViewController:(UIViewController *)viewController animated:(BOOL)animated {
     if (!viewController) return;
-    
+
+    // 关键修复（UI 累积异常）：同一实例直接跳过，避免对同一 VC 重复添加约束
+    // 和反复调用 applyEffectToNavigationBar: 导致 hairline UIImageView 累积。
+    if (viewController == _contentViewController) return;
+
     // 检查是否切换到非编辑器页面
     if (![viewController isKindOfClass:[UINavigationController class]] ||
         ![((UINavigationController *)viewController).topViewController isKindOfClass:[ProfileSettingsViewController class]]) {
         self.isShowingProfileEditor = NO;
         self.profileEditorVC = nil;
     }
-    
+
     UIViewController *oldVC = _contentViewController;
 
     // 移除旧的 + 添加新的
@@ -660,6 +667,20 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
         [[BackgroundManager sharedManager] makeViewControllerTransparent:viewController];
     }
 
+    // 关键修复（UI 累积异常）：deactivate 旧约束，避免在 tmpRootVC 保留场景下
+    // 缓存复用的子 VC 反复激活约束导致 contentCard 内容区左右变宽。
+    if (self.currentContentConstraints.count > 0) {
+        [NSLayoutConstraint deactivateConstraints:self.currentContentConstraints];
+        self.currentContentConstraints = nil;
+    }
+
+    NSArray<NSLayoutConstraint *> *newConstraints = @[
+        [viewController.view.leadingAnchor constraintEqualToAnchor:self.contentCard.leadingAnchor],
+        [viewController.view.trailingAnchor constraintEqualToAnchor:self.contentCard.trailingAnchor],
+        [viewController.view.topAnchor constraintEqualToAnchor:self.contentCard.topAnchor],
+        [viewController.view.bottomAnchor constraintEqualToAnchor:self.contentCard.bottomAnchor]
+    ];
+
     if (animated && oldVC) {
         // 修复问题5：原实现用两个独立的 UIView transitionWithView:（一个移除旧视图、一个添加新视图），
         // 两个 crossDissolve 同时作用于 contentCard 会导致视觉冲突和残影（旧画面未完全消失就覆盖新界面）。
@@ -672,12 +693,7 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
                             [oldVC willMoveToParentViewController:nil];
                             [oldVC.view removeFromSuperview];
                             [self.contentCard addSubview:viewController.view];
-                            [NSLayoutConstraint activateConstraints:@[
-                                [viewController.view.leadingAnchor constraintEqualToAnchor:self.contentCard.leadingAnchor],
-                                [viewController.view.trailingAnchor constraintEqualToAnchor:self.contentCard.trailingAnchor],
-                                [viewController.view.topAnchor constraintEqualToAnchor:self.contentCard.topAnchor],
-                                [viewController.view.bottomAnchor constraintEqualToAnchor:self.contentCard.bottomAnchor]
-                            ]];
+                            [NSLayoutConstraint activateConstraints:newConstraints];
                         } completion:^(BOOL finished) {
                             [oldVC removeFromParentViewController];
                             [viewController didMoveToParentViewController:self];
@@ -689,14 +705,11 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
             [oldVC removeFromParentViewController];
         }
         [self.contentCard addSubview:viewController.view];
-        [NSLayoutConstraint activateConstraints:@[
-            [viewController.view.leadingAnchor constraintEqualToAnchor:self.contentCard.leadingAnchor],
-            [viewController.view.trailingAnchor constraintEqualToAnchor:self.contentCard.trailingAnchor],
-            [viewController.view.topAnchor constraintEqualToAnchor:self.contentCard.topAnchor],
-            [viewController.view.bottomAnchor constraintEqualToAnchor:self.contentCard.bottomAnchor]
-        ]];
+        [NSLayoutConstraint activateConstraints:newConstraints];
         [viewController didMoveToParentViewController:self];
     }
+
+    self.currentContentConstraints = newConstraints;
 }
 
 #pragma mark - Orientation

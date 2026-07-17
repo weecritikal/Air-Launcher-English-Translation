@@ -552,21 +552,42 @@ static const NSInteger kDefaultBackgroundTag = 99995;
 }
 
 - (void)applyEffectToNavigationBar:(UINavigationBar *)navigationBar {
+    // 关键修复（UI 累积异常）：之前每次调用都 [[UIImage alloc] init] 创建新的空 UIImage
+    // 实例并重新分配 UINavigationBarAppearance。在 tmpRootVC 保留场景下，该方法被
+    // setContentViewController: 与 navigationControllerDidShow: 反复调用，iOS UINavigationBar
+    // 内部为渲染 hairline 维护的 UIImageView 子视图不会自动移除，多次累积后表现为
+    // "上方一行小白条"。
+    //
+    // 现在使用静态空 UIImage 单例，并在重新分配前手动移除 navigationBar 子视图中
+    // 高度 <= 2px 的 hairline UIImageView，避免累积。
+    static UIImage *emptyImage = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        emptyImage = [UIImage new];
+    });
+
+    // 清理 iOS 内部累积的 hairline UIImageView（高度极小的分割线视图）
+    for (UIView *sub in navigationBar.subviews) {
+        if ([sub isKindOfClass:[UIImageView class]] && sub.bounds.size.height <= 2.0 && sub.bounds.size.height > 0) {
+            [sub removeFromSuperview];
+        }
+    }
+
     if (self.uiEffect == BackgroundUIEffectBlur) {
         // 毛玻璃效果
         if (@available(iOS 13.0, *)) {
             UINavigationBarAppearance *appearance = [[UINavigationBarAppearance alloc] init];
             [appearance configureWithTransparentBackground];
             appearance.backgroundColor = [UIColor clearColor];
-            
+
             UIBlurEffect *blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial];
             appearance.backgroundEffect = blur;
             // 修复"所有界面顶部一行小白条"问题：configureWithTransparentBackground 不会
             // 完全移除底部分隔线（shadow hairline），在 iPhone 上会看到 1px 白线。
             // 显式将 shadowColor 置 nil、shadowImage 置空 UIImage 彻底消除。
             appearance.shadowColor = nil;
-            appearance.shadowImage = [[UIImage alloc] init];
-            
+            appearance.shadowImage = emptyImage;
+
             navigationBar.standardAppearance = appearance;
             navigationBar.scrollEdgeAppearance = appearance;
             navigationBar.compactAppearance = appearance;
@@ -574,7 +595,7 @@ static const NSInteger kDefaultBackgroundTag = 99995;
         navigationBar.barTintColor = [UIColor clearColor];
         navigationBar.backgroundColor = [UIColor clearColor];
         // 兼容 iOS 12 及以下：显式置空 shadowImage 移除底部分隔线
-        navigationBar.shadowImage = [[UIImage alloc] init];
+        navigationBar.shadowImage = emptyImage;
     } else {
         // 半透明效果
         // 修复：使用 secondarySystemBackgroundColor 替代硬编码 0.1 黑色
@@ -589,7 +610,7 @@ static const NSInteger kDefaultBackgroundTag = 99995;
             appearance.backgroundEffect = nil;
             // 同上：显式移除底部分隔线，消除"一行小白条"
             appearance.shadowColor = nil;
-            appearance.shadowImage = [[UIImage alloc] init];
+            appearance.shadowImage = emptyImage;
 
             navigationBar.standardAppearance = appearance;
             navigationBar.scrollEdgeAppearance = appearance;
@@ -599,11 +620,26 @@ static const NSInteger kDefaultBackgroundTag = 99995;
             navigationBar.backgroundColor = [UIColor colorWithWhite:0.1 alpha:self.uiOpacity];
         }
         // 兼容 iOS 12 及以下
-        navigationBar.shadowImage = [[UIImage alloc] init];
+        navigationBar.shadowImage = emptyImage;
     }
 }
 
 - (void)applyEffectToToolbar:(UIToolbar *)toolbar {
+    // 关键修复（UI 累积异常）：同 applyEffectToNavigationBar:，使用静态空 UIImage 单例
+    // 并清理累积的 hairline UIImageView
+    static UIImage *emptyImage = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        emptyImage = [UIImage new];
+    });
+
+    // 清理 iOS 内部累积的 hairline UIImageView
+    for (UIView *sub in toolbar.subviews) {
+        if ([sub isKindOfClass:[UIImageView class]] && sub.bounds.size.height <= 2.0 && sub.bounds.size.height > 0) {
+            [sub removeFromSuperview];
+        }
+    }
+
     if (self.uiEffect == BackgroundUIEffectBlur) {
         // 毛玻璃效果
         if (@available(iOS 13.0, *)) {
@@ -615,7 +651,7 @@ static const NSInteger kDefaultBackgroundTag = 99995;
             appearance.backgroundEffect = blur;
             // 同 nav bar：移除底部分隔线，消除"小白条"
             appearance.shadowColor = nil;
-            appearance.shadowImage = [[UIImage alloc] init];
+            appearance.shadowImage = emptyImage;
 
             toolbar.standardAppearance = appearance;
             toolbar.scrollEdgeAppearance = appearance;
@@ -637,7 +673,7 @@ static const NSInteger kDefaultBackgroundTag = 99995;
             appearance.backgroundEffect = nil;
             // 同 nav bar：移除底部分隔线
             appearance.shadowColor = nil;
-            appearance.shadowImage = [[UIImage alloc] init];
+            appearance.shadowImage = emptyImage;
 
             toolbar.standardAppearance = appearance;
             toolbar.scrollEdgeAppearance = appearance;
