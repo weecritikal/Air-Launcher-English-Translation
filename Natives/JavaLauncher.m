@@ -410,6 +410,13 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
         NSString *renderer = [PLProfiles resolveKeyForCurrentProfile:@"renderer"];
         NSLog(@"[JavaLauncher] RENDERER is set to %@\n", renderer);
         setenv("AMETHYST_RENDERER", renderer.UTF8String, 1);
+        // Setup AMETHYST_GRAPHICS_API（MC 26.2+ Graphics API：default/vulkan/opengl）
+        // 仅 MC 26.2+ 识别此选项，旧版本 MC 会忽略 options.txt 中的 graphicsApi 字段。
+        NSString *graphicsApi = [PLProfiles resolveKeyForCurrentProfile:@"graphicsApi"];
+        if (graphicsApi.length > 0) {
+            setenv("AMETHYST_GRAPHICS_API", graphicsApi.UTF8String, 1);
+            NSLog(@"[JavaLauncher] GRAPHICS_API is set to %@\n", graphicsApi);
+        }
         // Setup gameDir
         gameDir = [NSString stringWithFormat:@"%s/instances/%@/%@",
             getenv("POJAV_HOME"), getPrefObject(@"general.game_directory"),

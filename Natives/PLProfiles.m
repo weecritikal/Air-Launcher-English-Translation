@@ -64,7 +64,10 @@ static PLProfiles* current;
         @"defaultTouchCtrl": @"control.default_ctrl",
         @"defaultGamepadCtrl": @"control.default_gamepad_ctrl",
         @"javaArgs": @"java.java_args",
-        @"renderer": @"video.renderer"
+        @"renderer": @"video.renderer",
+        // MC 26.2+ Graphics API（OpenGL/Vulkan 游戏内切换），缺省为 "default"
+        // 该字段仅在 MC 26.2+ 生效，旧版本会被 MC 忽略，无副作用。
+        @"graphicsApi": @"video.graphics_api"
     };
     return getPrefObject(prefDefaults[key]);
 }

@@ -165,6 +165,39 @@ public class PojavLauncher {
             System.setProperty("org.lwjgl.vulkan.libname", "MoltenVK");
         }
 
+        // MC 26.2+ Graphics API 切换（OpenGL/Vulkan 游戏内图形后端选择）
+        //
+        // Mojang 在 MC 26.2 Snapshot 1 引入了 "Graphics API" 视频设置项，有 3 个值：
+        //   - default        由 Mojang 决定（26.2-snapshot-1~7 为 Vulkan，snapshot-8+ 为 OpenGL）
+        //   - prefer_vulkan  优先使用 Vulkan，失败时回退 OpenGL
+        //   - prefer_opengl  优先使用 OpenGL，失败时回退 Vulkan
+        //
+        // 注意：这里的 graphicsApi 与启动器的 renderer（libgl4es/libMoltenVK 等 native 库选择）
+        // 是两个不同的维度：
+        //   - renderer：启动器加载哪个 native 渲染器库（LWJGL 层）
+        //   - graphicsApi：MC 26.2+ 内部走 OpenGL 路径还是 Vulkan 路径（游戏层）
+        //
+        // 当用户选择 prefer_vulkan 时，建议同步将 renderer 设为 libMoltenVK.dylib
+        // （UI 层会给出推荐，但不强制联动，允许高级用户分开配置）。
+        //
+        // 旧版本 MC（1.21.7 及以下）不识别 options.txt 中的 graphicsApi 字段，
+        // 会被忽略，无副作用。这里通过 set（而非 setDefault）确保每次启动都写入。
+        String graphicsApi = System.getenv("AMETHYST_GRAPHICS_API");
+        if (graphicsApi != null && !graphicsApi.isEmpty() && !"default".equalsIgnoreCase(graphicsApi)) {
+            String normalized;
+            if ("vulkan".equalsIgnoreCase(graphicsApi) || "prefer_vulkan".equalsIgnoreCase(graphicsApi)) {
+                normalized = "prefer_vulkan";
+            } else if ("opengl".equalsIgnoreCase(graphicsApi) || "prefer_opengl".equalsIgnoreCase(graphicsApi)) {
+                normalized = "prefer_opengl";
+            } else {
+                normalized = graphicsApi.toLowerCase();
+            }
+            MCOptionUtils.load();
+            MCOptionUtils.set("graphicsApi", normalized);
+            MCOptionUtils.save();
+            System.out.println("[PojavLauncher] MC 26.2+ graphicsApi set to " + normalized);
+        }
+
         MinecraftAccount account = MinecraftAccount.load(args[0]);
         JMinecraftVersionList.Version version = Tools.getVersionInfo(args[1]);
         System.out.println("Launching Minecraft " + version.id);

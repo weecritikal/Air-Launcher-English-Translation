@@ -1118,7 +1118,15 @@ static void *ProgressObserverContext = &ProgressObserverContext;
                 if (![renderer isEqualToString:@"auto"]) {
                     setPrefString(@"video.renderer", renderer);
                 }
-                
+
+                // 应用图形 API 设置（MC 26.2+ 游戏内 OpenGL/Vulkan 切换）
+                // 由 JavaLauncher.m 读取并设置 AMETHYST_GRAPHICS_API 环境变量，
+                // PojavLauncher.java 写入 options.txt 的 graphicsApi 字段
+                NSString *graphicsApi = profile[@"graphicsApi"];
+                if (graphicsApi.length > 0) {
+                    setPrefString(@"video.graphics_api", graphicsApi);
+                }
+
                 // 应用Java版本设置（兼容旧版直装器写入的 NSDictionary 格式）
                 id javaVerRaw = profile[@"javaVersion"];
                 NSString *javaVer = nil;
