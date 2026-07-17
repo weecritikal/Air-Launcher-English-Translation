@@ -10,12 +10,14 @@
 #import <dlfcn.h>
 #import <os/log.h>
 
-// TouchController 静态库的 JNI 函数声明
-typedef void (*JNI_Init_Func)(void);
-typedef long long (*JNI_New_Func)(const char *name);
-typedef int (*JNI_Receive_Func)(long long handle, void *buffer, int length);
-typedef void (*JNI_Send_Func)(long long handle, const void *buffer, int offset, int length);
-typedef void (*JNI_Destroy_Func)(long long handle);
+// TouchController 静态库的 C API 函数指针类型声明
+// 这些类型匹配 touchcontroller_ios_* 系列函数签名（无 JNIEnv*/jclass 参数），
+// 通过 dlsym 查找 C API 符号名（而非 JNI 命名符号），避免调用约定不匹配导致的崩溃
+typedef void (*JNI_Init_Func)(void);              // touchcontroller_ios_init
+typedef long long (*JNI_New_Func)(const char *name);  // touchcontroller_ios_new
+typedef int (*JNI_Receive_Func)(long long handle, void *buffer, int length);  // touchcontroller_ios_receive
+typedef void (*JNI_Send_Func)(long long handle, const void *buffer, int offset, int length);  // touchcontroller_ios_send
+typedef void (*JNI_Destroy_Func)(long long handle);  // touchcontroller_ios_destroy
 
 // 函数指针
 static JNI_Init_Func g_TouchController_Init = NULL;
@@ -49,11 +51,11 @@ static os_log_t touchControllerLog = NULL;
     // 由于是静态链接，我们直接检查符号是否存在
     // 如果静态库已链接到可执行文件中，dlsym(RTLD_DEFAULT) 应该能找到符号
     
-    g_TouchController_Init = (JNI_Init_Func)dlsym(RTLD_DEFAULT, "Java_top_fifthlight_touchcontroller_common_platform_ios_Transport_init");
-    g_TouchController_New = (JNI_New_Func)dlsym(RTLD_DEFAULT, "Java_top_fifthlight_touchcontroller_common_platform_ios_Transport_new");
-    g_TouchController_Receive = (JNI_Receive_Func)dlsym(RTLD_DEFAULT, "Java_top_fifthlight_touchcontroller_common_platform_ios_Transport_receive");
-    g_TouchController_Send = (JNI_Send_Func)dlsym(RTLD_DEFAULT, "Java_top_fifthlight_touchcontroller_common_platform_ios_Transport_send");
-    g_TouchController_Destroy = (JNI_Destroy_Func)dlsym(RTLD_DEFAULT, "Java_top_fifthlight_touchcontroller_common_platform_ios_Transport_destroy");
+    g_TouchController_Init = (JNI_Init_Func)dlsym(RTLD_DEFAULT, "touchcontroller_ios_init");
+    g_TouchController_New = (JNI_New_Func)dlsym(RTLD_DEFAULT, "touchcontroller_ios_new");
+    g_TouchController_Receive = (JNI_Receive_Func)dlsym(RTLD_DEFAULT, "touchcontroller_ios_receive");
+    g_TouchController_Send = (JNI_Send_Func)dlsym(RTLD_DEFAULT, "touchcontroller_ios_send");
+    g_TouchController_Destroy = (JNI_Destroy_Func)dlsym(RTLD_DEFAULT, "touchcontroller_ios_destroy");
 
     // 检查所有函数是否都找到了
     if (!g_TouchController_Init || !g_TouchController_New || !g_TouchController_Receive || 

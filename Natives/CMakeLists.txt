@@ -81,15 +81,39 @@ target_link_libraries(awt_xawt
 )
 
 # TouchController iOS static library
-# Links to libproxy_server_ios.a (device) or libproxy_server_ios_simulator.a (simulator)
 # Provides JNI interface for touch control communication between Minecraft mod and launcher
+#
+# 三级回退检测逻辑（按优先级从高到低）：
+#   Level 1 — 预编译 XCFramework：检测 TouchController.xcframework/，从 ios-arm64
+#             子目录提取设备静态库链接（由 build_xcframework.sh 生成）
+#   Level 2 — 预编译独立 .a：检测 libproxy_server_ios.a (device) 或
+#             libproxy_server_ios_simulator.a (simulator)，保持向后兼容
+#   Level 3 — 源码编译回退：检测 ios_transport.c 源文件，CMake 直接编译为静态库
+#   禁用   — 以上都不存在时，TOUCHCONTROLLER_LIB 置空并打印警告
 set(TOUCHCONTROLLER_LIB_DIR "${CMAKE_CURRENT_LIST_DIR}/TouchController")
-if(EXISTS "${TOUCHCONTROLLER_LIB_DIR}/libproxy_server_ios.a")
-  message(STATUS "Found TouchController device library")
+set(TOUCHCONTROLLER_XCFW "${TOUCHCONTROLLER_LIB_DIR}/TouchController.xcframework")
+
+# Level 1: 预编译 XCFramework（最高优先级）
+if(EXISTS "${TOUCHCONTROLLER_XCFW}/ios-arm64/libproxy_server_ios.a")
+  message(STATUS "Found TouchController XCFramework (Level 1: prebuilt xcframework)")
+  set(TOUCHCONTROLLER_LIB "${TOUCHCONTROLLER_XCFW}/ios-arm64/libproxy_server_ios.a")
+# Level 2: 预编译独立 .a（现有逻辑，保持兼容）
+elseif(EXISTS "${TOUCHCONTROLLER_LIB_DIR}/libproxy_server_ios.a")
+  message(STATUS "Found TouchController device library (Level 2: prebuilt .a)")
   set(TOUCHCONTROLLER_LIB "${TOUCHCONTROLLER_LIB_DIR}/libproxy_server_ios.a")
 elseif(EXISTS "${TOUCHCONTROLLER_LIB_DIR}/libproxy_server_ios_simulator.a")
-  message(STATUS "Found TouchController simulator library")
+  message(STATUS "Found TouchController simulator library (Level 2: prebuilt .a)")
   set(TOUCHCONTROLLER_LIB "${TOUCHCONTROLLER_LIB_DIR}/libproxy_server_ios_simulator.a")
+# Level 3: 源码编译回退
+elseif(EXISTS "${TOUCHCONTROLLER_LIB_DIR}/ios_transport.c")
+  message(STATUS "Building TouchController from source (Level 3: source compilation)")
+  add_library(proxy_server_ios STATIC
+    ${TOUCHCONTROLLER_LIB_DIR}/ios_transport.c
+    ${TOUCHCONTROLLER_LIB_DIR}/ring_buffer.c
+  )
+  target_include_directories(proxy_server_ios PRIVATE ${TOUCHCONTROLLER_LIB_DIR})
+  set(TOUCHCONTROLLER_LIB proxy_server_ios)
+# 全部未命中：禁用 TouchController 支持
 else()
   message(STATUS "TouchController library not found, TouchController support will be disabled")
   set(TOUCHCONTROLLER_LIB "")
