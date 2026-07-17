@@ -329,7 +329,7 @@
         @{@"key": @(ModpackExportFileResourcePacks),  @"title": @"资源包 (resourcepacks/)",@"default": @YES},
         @{@"key": @(ModpackExportFileShaderPacks),    @"title": @"光影 (shaderpacks/)",    @"default": @YES},
         @{@"key": @(ModpackExportFileScripts),        @"title": @"脚本 (kubejs/scripts)",  @"default": @YES},
-        @{@"key": @(ModpackExportFileOptions),        @"title": @"游戏设置 (options.txt)",  @"default": @YES},
+        @{@"key": @(ModpackExportFileGameSettings),   @"title": @"游戏设置 (options.txt)",  @"default": @YES},
         @{@"key": @(ModpackExportFileSaves),          @"title": @"存档 (saves/)",          @"default": @NO},
         @{@"key": @(ModpackExportFileServers),        @"title": @"服务器列表 (servers.dat)",@"default": @NO},
     ];

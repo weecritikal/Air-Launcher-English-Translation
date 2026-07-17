@@ -12,6 +12,8 @@ typedef NS_ENUM(NSInteger, ModpackExportFormat) {
 };
 
 /// 导出时可选包含的文件类型（位掩码）
+/// 注意：枚举值名称不能与 typedef 名 `ModpackExportFileOptions` 冲突，
+/// 因此表示 options.txt 的标志位使用 `ModpackExportFileGameSettings`。
 typedef NS_OPTIONS(NSInteger, ModpackExportFileOptions) {
     ModpackExportFileNone           = 0,
     ModpackExportFileMods           = 1 << 0,  // mods/ 目录
@@ -19,15 +21,15 @@ typedef NS_OPTIONS(NSInteger, ModpackExportFileOptions) {
     ModpackExportFileResourcePacks  = 1 << 2,  // resourcepacks/
     ModpackExportFileShaderPacks    = 1 << 3,  // shaderpacks/
     ModpackExportFileSaves          = 1 << 4,  // saves/（默认不包含）
-    ModpackExportFileOptions        = 1 << 5,  // options.txt/optionsof.txt/optionsshaders.txt
+    ModpackExportFileGameSettings   = 1 << 5,  // options.txt/optionsof.txt/optionsshaders.txt
     ModpackExportFileServers        = 1 << 6,  // servers.dat（默认不包含，含敏感信息）
     ModpackExportFileScripts        = 1 << 7,  // kubejs/scripts/localization/patchouli_books
     ModpackExportFileDefault        = ModpackExportFileMods | ModpackExportFileConfigs |
                                       ModpackExportFileResourcePacks | ModpackExportFileShaderPacks |
-                                      ModpackExportFileOptions | ModpackExportFileScripts,
+                                      ModpackExportFileGameSettings | ModpackExportFileScripts,
     ModpackExportFileAll            = ModpackExportFileMods | ModpackExportFileConfigs |
                                       ModpackExportFileResourcePacks | ModpackExportFileShaderPacks |
-                                      ModpackExportFileSaves | ModpackExportFileOptions |
+                                      ModpackExportFileSaves | ModpackExportFileGameSettings |
                                       ModpackExportFileServers | ModpackExportFileScripts,
 };
 

@@ -88,7 +88,7 @@
 
 + (NSArray<NSString *> *)overrideFilesForOptions:(ModpackExportFileOptions)options {
     NSMutableArray *files = [NSMutableArray array];
-    if (options & ModpackExportFileOptions) {
+    if (options & ModpackExportFileGameSettings) {
         [files addObject:@"options.txt"];
         [files addObject:@"optionsof.txt"];
         [files addObject:@"optionsshaders.txt"];
@@ -99,7 +99,7 @@
         [files addObject:@"servers.dat_old"];
         [files addObject:@"realms_persistence.json"];
     }
-    if (options & ModpackExportFileOptions) {
+    if (options & ModpackExportFileGameSettings) {
         [files addObject:@"launcher_profiles.json"];
     }
     return [files copy];
