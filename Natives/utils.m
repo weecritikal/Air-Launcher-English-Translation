@@ -7,7 +7,6 @@
 #include <unistd.h>
 #include <dirent.h>
 #include <sys/sysctl.h>
-#include <libproc.h>
 
 #include "utils.h"
 
@@ -47,12 +46,14 @@ BOOL isJITEnabled(BOOL checkCSFlags) {
     // 路径 2：sysctl KERN_PROC 检查 P_TRACED 标志位
     // 覆盖 NB 助手 / SideStore / Stikdebug / JitStream 等"外部调试器附加"型 JIT 工具。
     // 这些工具通过 ptrace(PT_TRACE_ATTACH) 或 task_for_pid 附加到本进程，
-    // 进程的 kinfo_proc.kp_proc.p_flag 会被置上 P_TRACED (0x800)，而 csops 不一定同步置 CS_DEBUGGED。
+    // 进程的 kinfo_proc.kp_proc.p_flag 会被置上 P_TRACED，而 csops 不一定同步置 CS_DEBUGGED。
+    // P_TRACED 在 <sys/proc.h> 中定义为 0x800，部分 iOS SDK 未自动引入该头文件，
+    // 这里直接使用数值避免依赖头文件可见性。
     struct kinfo_proc info = {0};
     size_t size = sizeof(info);
     int mib[4] = {CTL_KERN, KERN_PROC, KERN_PROC_PID, getpid()};
     if (sysctl(mib, 4, &info, &size, NULL, 0) == 0 && size == sizeof(info)) {
-        if (info.kp_proc.p_flag & P_TRACED) {
+        if (info.kp_proc.p_flag & 0x800 /* P_TRACED */) {
             return YES;
         }
     }
