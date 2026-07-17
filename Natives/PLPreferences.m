@@ -81,7 +81,11 @@ NSString *const PREF_MOD_UPDATE_KEEP_OLD = @"general.mod_update_keep_old";
             @"mod_touch_mode": @0,
             @"mod_touch_vibrate_enable": @YES,
             @"mod_touch_vibrate_intensity": @2,
-            @"mod_touch_moveview_enable": @YES
+            @"mod_touch_moveview_enable": @YES,
+            // UI 子面板占位 key（LauncherPreferencesViewController 的 getPreference 回调
+            // 会对每个设置项按 "section.key" 查询，包括 button/childPane 类型）。
+            // 提供空串默认值避免触发 "Getter could not find preference control.custom_controls" 日志。
+            @"custom_controls": @""
         }.mutableCopy,
         @"java": @{
             @"java_homes": @{
@@ -134,7 +138,10 @@ NSString *const PREF_MOD_UPDATE_KEEP_OLD = @"general.mod_update_keep_old";
             @"multi_threaded": @NO,
             // 自定义外观颜色（hex 字符串，空串=使用默认深色毛玻璃/白色文字）
             @"text_color": @"",
-            @"card_color": @""
+            @"card_color": @"",
+            // 主题强调色（hex 字符串，空串=回退到默认蓝 #429CF5，见 LauncherPreferences.m accentColor()）
+            // 提供默认值避免每次访问触发 "Getter could not find preference general.accent_color" 日志
+            @"accent_color": @""
         };
         [defaults[@"general"] addEntriesFromDictionary:general];
 
