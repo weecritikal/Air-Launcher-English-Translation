@@ -13,21 +13,16 @@
 #import "ModLoaderIconHelper.h"
 #import <QuartzCore/QuartzCore.h>
 
-// Section 索引：5 个 section（游戏目录 / 渲染器 / 图形 API / 快速操作 / 已安装版本）
-// 重新设计要点（参照 FCL/HMCL）：
-//   1. 完全不调用旧 UI（LauncherPrefGameDirViewController / LauncherProfileEditorViewController）
-//   2. "渲染器"section：启动器 native 渲染器库选择（libgl4es/libMoltenVK 等，LWJGL 层）
-//   3. "图形 API"section：MC 26.2+ 游戏内 OpenGL/Vulkan 切换（仅 26.2+ 显示，游戏层）
-//      - 与渲染器是两个不同维度：renderer 决定 LWJGL 加载哪个 native 库，
-//        graphicsApi 决定 MC 26.2+ 内部走 OpenGL 路径还是 Vulkan 路径
+// Section 索引：2 个 section（游戏目录 / 已安装版本）
+// 重新设计要点（参照 FCL 100%）：
+//   1. 版本管理界面只展示：游戏目录切换 + 已安装版本列表
+//   2. 渲染器、图形 API、Mod/光影/资源包管理等全部移到"版本专属设置页"（ProfileSettingsViewController）
+//      点击版本卡片直接进入该版本的专属设置页，设置只对该版本生效（FCL 风格）
+//   3. 完全不调用旧 UI（LauncherPrefGameDirViewController / LauncherProfileEditorViewController）
 //   4. 游戏目录卡片支持长按弹出菜单（切换/删除当前目录）
-//   5. 整体卡片更紧凑，避免界面过大
-//   6. 统一使用 accentColor() 与毛玻璃背景，适配启动器新 UI
+//   5. 统一使用 accentColor() 与毛玻璃背景，适配启动器新 UI
 static NSInteger const kSectionGameDir     = 0;
-static NSInteger const kSectionRenderer    = 1;
-static NSInteger const kSectionGraphicsApi = 2;
-static NSInteger const kSectionQuickAction = 3;
-static NSInteger const kSectionVersions    = 4;
+static NSInteger const kSectionVersions    = 1;
 
 #pragma mark - Modern Tile Base Cell
 
@@ -621,14 +616,13 @@ static NSInteger const kSectionVersions    = 4;
     NSIndexPath *indexPath = [self.collectionView indexPathForItemAtPoint:point];
     if (!indexPath) return;
 
-    NSInteger logical = [self logicalSectionForActualSection:indexPath.section];
-    if (logical == kSectionGameDir) {
+    if (indexPath.section == kSectionGameDir) {
         // 游戏目录区段：长按弹出切换/删除菜单（不含"新建目录"按钮项）
         if (indexPath.item >= (NSInteger)self.gameDirList.count) return;
         NSString *dirName = self.gameDirList[indexPath.item];
         [self showGameDirActions:dirName];
-    } else if (logical == kSectionVersions) {
-        // 版本卡片区段：长按弹出操作菜单
+    } else if (indexPath.section == kSectionVersions) {
+        // 版本卡片区段：长按弹出操作菜单（选择/删除）
         if (indexPath.item >= (NSInteger)self.profileList.count) return;
         [self showProfileActions:self.profileList[indexPath.item]];
     }
@@ -793,9 +787,6 @@ static NSInteger const kSectionVersions    = 4;
     self.collectionView.scrollIndicatorInsets = UIEdgeInsetsMake(navBarHeight, 0, 0, 0);
 
     [self.collectionView registerClass:[VMGameDirCell class] forCellWithReuseIdentifier:@"GameDirCell"];
-    [self.collectionView registerClass:[VMRendererCell class] forCellWithReuseIdentifier:@"RendererCell"];
-    [self.collectionView registerClass:[VMRendererCell class] forCellWithReuseIdentifier:@"GraphicsApiCell"];
-    [self.collectionView registerClass:[VMQuickActionCell class] forCellWithReuseIdentifier:@"QuickActionCell"];
     [self.collectionView registerClass:[VMVersionCardCell class] forCellWithReuseIdentifier:@"VersionCell"];
     [self.collectionView registerClass:[VMSectionHeaderView class] forSupplementaryViewOfKind:UICollectionElementKindSectionHeader withReuseIdentifier:@"HeaderView"];
 
@@ -803,10 +794,6 @@ static NSInteger const kSectionVersions    = 4;
 }
 
 - (UICollectionViewLayout *)createLayout {
-    // 图形 API section 仅在 MC 26.2+ 时显示，导致 section 索引需要动态映射
-    // 用 sectionIndexWithoutGraphicsApi 将逻辑 section 索引映射到实际 collectionView section 索引
-    BOOL showGraphicsApi = [self isCurrentProfileModernVersion];
-
     return [[UICollectionViewCompositionalLayout alloc] initWithSectionProvider:^NSCollectionLayoutSection * _Nullable(NSInteger sectionIndex, id<NSCollectionLayoutEnvironment> _Nonnull layoutEnvironment) {
         CGFloat width = layoutEnvironment.container.contentSize.width;
         BOOL isiPad = width > 700;
@@ -816,20 +803,7 @@ static NSInteger const kSectionVersions    = 4;
         NSCollectionLayoutBoundarySupplementaryItem *header = [NSCollectionLayoutBoundarySupplementaryItem boundarySupplementaryItemWithLayoutSize:headerSize elementKind:UICollectionElementKindSectionHeader alignment:NSRectAlignmentTop];
         header.contentInsets = NSDirectionalEdgeInsetsMake(0, 0, 0, 0);
 
-        // 实际 section 索引到逻辑 section 的映射（图形 API 不显示时索引压缩）
-        NSInteger logicalSection;
-        if (showGraphicsApi) {
-            logicalSection = sectionIndex;
-        } else {
-            // 不显示图形 API：>=kSectionGraphicsApi 的实际索引需要 -1 才能得到逻辑索引
-            if (sectionIndex >= kSectionGraphicsApi) {
-                logicalSection = sectionIndex - 1;
-            } else {
-                logicalSection = sectionIndex;
-            }
-        }
-
-        if (logicalSection == kSectionGameDir) {
+        if (sectionIndex == kSectionGameDir) {
             // 游戏目录区段：横向滚动卡片列表
             CGFloat itemWidth = isiPad ? 170 : 150;
             NSCollectionLayoutSize *itemSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension absoluteDimension:itemWidth]
@@ -846,57 +820,8 @@ static NSInteger const kSectionVersions    = 4;
             section.contentInsets = NSDirectionalEdgeInsetsMake(0, 14, 6, 14);
             section.boundarySupplementaryItems = @[header];
             return section;
-        } else if (logicalSection == kSectionRenderer) {
-            // 渲染器区段：3 列网格，紧凑卡片（启动器 native 渲染器库，LWJGL 层）
-            NSInteger columnCount = isiPad ? 3 : (width > 360 ? 3 : 2);
-            NSCollectionLayoutSize *itemSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0 / columnCount]
-                                                                                       heightDimension:[NSCollectionLayoutDimension absoluteDimension:104]];
-            NSCollectionLayoutItem *item = [NSCollectionLayoutItem itemWithLayoutSize:itemSize];
-            item.contentInsets = NSDirectionalEdgeInsetsMake(4, 5, 4, 5);
-
-            NSCollectionLayoutSize *groupSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0]
-                                                                                          heightDimension:[NSCollectionLayoutDimension absoluteDimension:104]];
-            NSCollectionLayoutGroup *group = [NSCollectionLayoutGroup horizontalGroupWithLayoutSize:groupSize subitem:item count:columnCount];
-
-            NSCollectionLayoutSection *section = [NSCollectionLayoutSection sectionWithGroup:group];
-            section.contentInsets = NSDirectionalEdgeInsetsMake(2, 14, 6, 14);
-            section.boundarySupplementaryItems = @[header];
-            return section;
-        } else if (showGraphicsApi && logicalSection == kSectionGraphicsApi) {
-            // 图形 API 区段：3 列网格（MC 26.2+ 游戏内 OpenGL/Vulkan 切换，游戏层）
-            // 复用渲染器卡片的尺寸但稍矮
-            NSInteger columnCount = isiPad ? 3 : (width > 360 ? 3 : 2);
-            NSCollectionLayoutSize *itemSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0 / columnCount]
-                                                                                       heightDimension:[NSCollectionLayoutDimension absoluteDimension:104]];
-            NSCollectionLayoutItem *item = [NSCollectionLayoutItem itemWithLayoutSize:itemSize];
-            item.contentInsets = NSDirectionalEdgeInsetsMake(4, 5, 4, 5);
-
-            NSCollectionLayoutSize *groupSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0]
-                                                                                          heightDimension:[NSCollectionLayoutDimension absoluteDimension:104]];
-            NSCollectionLayoutGroup *group = [NSCollectionLayoutGroup horizontalGroupWithLayoutSize:groupSize subitem:item count:columnCount];
-
-            NSCollectionLayoutSection *section = [NSCollectionLayoutSection sectionWithGroup:group];
-            section.contentInsets = NSDirectionalEdgeInsetsMake(2, 14, 6, 14);
-            section.boundarySupplementaryItems = @[header];
-            return section;
-        } else if (logicalSection == kSectionQuickAction) {
-            // 快速操作区段：5 个 item
-            NSInteger columnCount = isiPad ? 3 : (width > 400 ? 3 : 2);
-            NSCollectionLayoutSize *itemSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0 / columnCount]
-                                                                                       heightDimension:[NSCollectionLayoutDimension absoluteDimension:108]];
-            NSCollectionLayoutItem *item = [NSCollectionLayoutItem itemWithLayoutSize:itemSize];
-            item.contentInsets = NSDirectionalEdgeInsetsMake(4, 5, 4, 5);
-
-            NSCollectionLayoutSize *groupSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0]
-                                                                                          heightDimension:[NSCollectionLayoutDimension absoluteDimension:108]];
-            NSCollectionLayoutGroup *group = [NSCollectionLayoutGroup horizontalGroupWithLayoutSize:groupSize subitem:item count:columnCount];
-
-            NSCollectionLayoutSection *section = [NSCollectionLayoutSection sectionWithGroup:group];
-            section.contentInsets = NSDirectionalEdgeInsetsMake(2, 14, 6, 14);
-            section.boundarySupplementaryItems = @[header];
-            return section;
         } else {
-            // 版本卡片区段：紧凑列表
+            // 版本卡片区段：紧凑列表（iPad 双列，iPhone 单列）
             CGFloat itemWidth = isiPad ? 0.5 : 1.0;
             NSCollectionLayoutSize *itemSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:itemWidth]
                                                                                        heightDimension:[NSCollectionLayoutDimension absoluteDimension:78]];
@@ -952,41 +877,19 @@ static NSInteger const kSectionVersions    = 4;
 #pragma mark - UICollectionViewDataSource
 
 - (NSInteger)numberOfSectionsInCollectionView:(UICollectionView *)collectionView {
-    // 图形 API section 仅在 MC 26.2+ 时显示
-    return [self isCurrentProfileModernVersion] ? 5 : 4;
-}
-
-/// 将实际 collectionView section 索引转换为逻辑 section 索引
-/// （图形 API 不显示时，>=kSectionGraphicsApi 的索引需要 -1）
-- (NSInteger)logicalSectionForActualSection:(NSInteger)section {
-    if ([self isCurrentProfileModernVersion]) {
-        return section;
-    }
-    if (section >= kSectionGraphicsApi) {
-        return section - 1;
-    }
-    return section;
+    return 2;
 }
 
 - (NSInteger)collectionView:(UICollectionView *)collectionView numberOfItemsInSection:(NSInteger)section {
-    NSInteger logical = [self logicalSectionForActualSection:section];
-    if (logical == kSectionGameDir) {
+    if (section == kSectionGameDir) {
         return self.gameDirList.count + 1;  // 末尾追加"新建目录"按钮
-    } else if (logical == kSectionRenderer) {
-        return self.rendererKeys.count;
-    } else if (logical == kSectionGraphicsApi) {
-        return self.graphicsApiKeys.count;
-    } else if (logical == kSectionQuickAction) {
-        return 5;
     } else {
         return self.profileList.count;
     }
 }
 
 - (UICollectionViewCell *)collectionView:(UICollectionView *)collectionView cellForItemAtIndexPath:(NSIndexPath *)indexPath {
-    NSInteger logical = [self logicalSectionForActualSection:indexPath.section];
-
-    if (logical == kSectionGameDir) {
+    if (indexPath.section == kSectionGameDir) {
         VMGameDirCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"GameDirCell" forIndexPath:indexPath];
 
         if (indexPath.item == (NSInteger)self.gameDirList.count) {
@@ -1013,63 +916,6 @@ static NSInteger const kSectionVersions    = 4;
         });
 
         [cell configureWithName:dirName detail:@"计算中..." isSelected:isSelected isAddButton:NO];
-        return cell;
-    } else if (logical == kSectionRenderer) {
-        VMRendererCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"RendererCell" forIndexPath:indexPath];
-
-        NSString *key = self.rendererKeys[indexPath.item];
-        NSString *name = indexPath.item < (NSInteger)self.rendererNames.count ? self.rendererNames[indexPath.item] : key;
-        NSString *icon = indexPath.item < (NSInteger)self.rendererIcons.count ? self.rendererIcons[indexPath.item] : @"questionmark.circle";
-        NSString *desc = indexPath.item < (NSInteger)self.rendererDescs.count ? self.rendererDescs[indexPath.item] : @"";
-
-        NSString *currentRenderer = [self currentRendererForSelectedProfile];
-        BOOL isSelected = [key isEqualToString:currentRenderer];
-
-        // 针对 MC 26.2+ 推荐：Vulkan（libMoltenVK.dylib）和 Zink（libOSMesa.8.dylib）为最佳选择
-        BOOL isBest = NO;
-        if ([self isCurrentProfileModernVersion]) {
-            isBest = [key isEqualToString:@RENDERER_NAME_VULKAN] || [key isEqualToString:@RENDERER_NAME_VK_ZINK];
-        }
-
-        [cell configureWithIcon:icon name:name details:desc isSelected:isSelected isBest:isBest];
-        return cell;
-    } else if (logical == kSectionGraphicsApi) {
-        // 图形 API 卡片（MC 26.2+ 游戏内 OpenGL/Vulkan 切换）
-        VMRendererCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"GraphicsApiCell" forIndexPath:indexPath];
-
-        NSString *key = self.graphicsApiKeys[indexPath.item];
-        NSString *name = indexPath.item < (NSInteger)self.graphicsApiNames.count ? self.graphicsApiNames[indexPath.item] : key;
-        NSString *icon = indexPath.item < (NSInteger)self.graphicsApiIcons.count ? self.graphicsApiIcons[indexPath.item] : @"questionmark.circle";
-        NSString *desc = indexPath.item < (NSInteger)self.graphicsApiDescs.count ? self.graphicsApiDescs[indexPath.item] : @"";
-
-        NSString *currentGraphicsApi = [self currentGraphicsApiForSelectedProfile];
-        BOOL isSelected = [key isEqualToString:currentGraphicsApi];
-
-        // 优先 Vulkan 在 iOS 上为推荐选项（通过 MoltenVK 走 Metal）
-        BOOL isBest = [key isEqualToString:@"prefer_vulkan"];
-
-        [cell configureWithIcon:icon name:name details:desc isSelected:isSelected isBest:isBest];
-        return cell;
-    } else if (logical == kSectionQuickAction) {
-        VMQuickActionCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"QuickActionCell" forIndexPath:indexPath];
-
-        switch (indexPath.item) {
-            case 0:
-                [cell configureWithIcon:@"puzzlepiece.extension.fill" title:@"Mod 管理" subtitle:@"管理已安装的 Mod" color:[UIColor systemOrangeColor]];
-                break;
-            case 1:
-                [cell configureWithIcon:@"paintbrush.fill" title:@"光影管理" subtitle:@"管理光影包" color:[UIColor systemPurpleColor]];
-                break;
-            case 2:
-                [cell configureWithIcon:@"shippingbox.fill" title:@"资源包管理" subtitle:@"管理资源包" color:[UIColor systemGreenColor]];
-                break;
-            case 3:
-                [cell configureWithIcon:@"doc.text.fill" title:@"数据包管理" subtitle:@"管理数据包" color:[UIColor systemPinkColor]];
-                break;
-            case 4:
-                [cell configureWithIcon:@"globe" title:@"世界管理" subtitle:@"管理存档" color:[UIColor systemTealColor]];
-                break;
-        }
         return cell;
     } else {
         VMVersionCardCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"VersionCell" forIndexPath:indexPath];
@@ -1125,31 +971,14 @@ static NSInteger const kSectionVersions    = 4;
 - (UICollectionReusableView *)collectionView:(UICollectionView *)collectionView viewForSupplementaryElementOfKind:(NSString *)kind atIndexPath:(NSIndexPath *)indexPath {
     if (kind == UICollectionElementKindSectionHeader) {
         VMSectionHeaderView *header = [collectionView dequeueReusableSupplementaryViewOfKind:kind withReuseIdentifier:@"HeaderView" forIndexPath:indexPath];
-        NSInteger logical = [self logicalSectionForActualSection:indexPath.section];
-        switch (logical) {
+        switch (indexPath.section) {
             case kSectionGameDir:
                 header.titleLabel.text = @"游戏目录（版本隔离）";
                 header.subtitleLabel.text = @"点击切换 · 长按删除当前目录";
                 break;
-            case kSectionRenderer:
-                header.titleLabel.text = @"渲染器";
-                if ([self isCurrentProfileModernVersion]) {
-                    header.subtitleLabel.text = @"启动器 native 库（LWJGL 层），推荐 Vulkan / Zink";
-                } else {
-                    header.subtitleLabel.text = @"启动器 native 库（LWJGL 层）";
-                }
-                break;
-            case kSectionGraphicsApi:
-                header.titleLabel.text = @"图形 API";
-                header.subtitleLabel.text = @"MC 26.2+ 游戏内 OpenGL/Vulkan 切换（游戏层）";
-                break;
-            case kSectionQuickAction:
-                header.titleLabel.text = @"快速操作";
-                header.subtitleLabel.text = @"";
-                break;
             case kSectionVersions:
                 header.titleLabel.text = @"已安装的版本";
-                header.subtitleLabel.text = @"点击弹出操作菜单 · 长按同样可弹出";
+                header.subtitleLabel.text = @"点击进入版本设置 · 长按弹出操作菜单";
                 break;
             default:
                 header.titleLabel.text = @"";
@@ -1165,9 +994,8 @@ static NSInteger const kSectionVersions    = 4;
 
 - (void)collectionView:(UICollectionView *)collectionView didSelectItemAtIndexPath:(NSIndexPath *)indexPath {
     [collectionView deselectItemAtIndexPath:indexPath animated:YES];
-    NSInteger logical = [self logicalSectionForActualSection:indexPath.section];
 
-    if (logical == kSectionGameDir) {
+    if (indexPath.section == kSectionGameDir) {
         if (indexPath.item == (NSInteger)self.gameDirList.count) {
             [self showCreateGameDirAlert];
         } else {
@@ -1176,23 +1004,10 @@ static NSInteger const kSectionVersions    = 4;
                 [self switchGameDirTo:dirName];
             }
         }
-    } else if (logical == kSectionRenderer) {
-        // 切换当前选中 profile 的渲染器（启动器 native 库，LWJGL 层）
-        [self selectRendererAtIndex:indexPath.item];
-    } else if (logical == kSectionGraphicsApi) {
-        // 切换当前选中 profile 的图形 API（MC 26.2+ 游戏内 OpenGL/Vulkan，游戏层）
-        [self selectGraphicsApiAtIndex:indexPath.item];
-    } else if (logical == kSectionQuickAction) {
-        switch (indexPath.item) {
-            case 0: [self openModsManager]; break;
-            case 1: [self openShadersManager]; break;
-            case 2: [self openResourcePacksManager]; break;
-            case 3: [self openDataPacksManager]; break;
-            case 4: [self openWorldsManager]; break;
-        }
-    } else if (logical == kSectionVersions) {
+    } else if (indexPath.section == kSectionVersions) {
+        // 点击版本卡片直接进入该版本的专属设置页（FCL 风格）
         NSString *profileName = self.profileList[indexPath.item];
-        [self showProfileActions:profileName];
+        [self editProfile:profileName];
     }
 }
 

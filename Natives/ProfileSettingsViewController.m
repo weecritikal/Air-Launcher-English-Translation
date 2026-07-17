@@ -19,6 +19,7 @@
 
 @property (nonatomic, strong) NSArray<NSArray *> *sections;
 @property (nonatomic, strong) NSString *selectedRenderer;
+@property (nonatomic, strong) NSString *selectedGraphicsApi;  // MC 26.2+ 图形 API: default/prefer_vulkan/prefer_opengl
 @property (nonatomic, strong) NSString *selectedJavaVersion;
 @property (nonatomic, assign) NSInteger allocatedMemory;
 @property (nonatomic, assign) NSInteger maxMemory;
@@ -145,6 +146,9 @@
     // 渲染器
     self.selectedRenderer = self.profile[@"renderer"] ?: @"auto";
 
+    // 图形 API（MC 26.2+ 游戏内 OpenGL/Vulkan 切换）
+    self.selectedGraphicsApi = self.profile[@"graphicsApi"] ?: @"default";
+
     // Java版本（兼容旧版直装器写入的 NSDictionary 格式）
     id javaVerRaw = self.profile[@"javaVersion"];
     if ([javaVerRaw isKindOfClass:[NSDictionary class]]) {
@@ -181,11 +185,18 @@
 #pragma mark - Sections
 
 - (void)setupSections {
+    // 高级设置 section：渲染器 + 图形 API（仅 MC 26.2+）+ Java/内存/JVM
+    NSMutableArray *advancedRows = [NSMutableArray arrayWithArray:@[@"渲染器"]];
+    if ([self isCurrentProfileModernVersion]) {
+        [advancedRows addObject:@"图形 API"];
+    }
+    [advancedRows addObjectsFromArray:@[@"Java版本", @"内存分配", @"JVM 启动参数", @"清除JVM参数"]];
+
     self.sections = @[
         @[@"名称", @"游戏版本", @"游戏目录"],
         @[@"模组管理"],
         @[@"光影管理"],
-        @[@"渲染器", @"Java版本", @"内存分配", @"JVM 启动参数", @"清除JVM参数"],
+        [advancedRows copy],
         @[@"服务器地址"],
         @[@"Fabric API", @"OptiFine"],
         @[@"资源包管理"],
@@ -213,6 +224,7 @@
         existing = [NSMutableDictionary dictionary];
     }
     existing[@"renderer"] = self.selectedRenderer;
+    existing[@"graphicsApi"] = self.selectedGraphicsApi;
     existing[@"javaVersion"] = self.selectedJavaVersion;
     existing[@"allocatedMemory"] = @(self.allocatedMemory);
     existing[@"serverIp"] = self.serverIp ?: @"";
@@ -328,6 +340,10 @@
                 cell.imageView.image = [UIImage systemImageNamed:@"cpu"];
                 cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
                 cell.detailTextLabel.text = [self rendererDisplayName:self.selectedRenderer];
+            } else if ([title isEqualToString:@"图形 API"]) {
+                cell.imageView.image = [UIImage systemImageNamed:@"rectangle.dashed"];
+                cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+                cell.detailTextLabel.text = [self graphicsApiDisplayName:self.selectedGraphicsApi];
             } else if ([title isEqualToString:@"Java版本"]) {
                 cell.imageView.image = [UIImage systemImageNamed:@"j.square"];
                 cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
@@ -728,6 +744,8 @@
         case 3: // 高级设置
             if ([title isEqualToString:@"渲染器"]) {
                 [self showRendererSelector];
+            } else if ([title isEqualToString:@"图形 API"]) {
+                [self showGraphicsApiSelector];
             } else if ([title isEqualToString:@"Java版本"]) {
                 [self showJavaVersionSelector];
             } else if ([title isEqualToString:@"内存分配"]) {
@@ -1281,6 +1299,61 @@
 
     if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
         NSIndexPath *indexPath = [NSIndexPath indexPathForRow:0 inSection:3];
+        UITableViewCell *cell = [self.tableView cellForRowAtIndexPath:indexPath];
+        alert.popoverPresentationController.sourceView = cell ?: self.view;
+        alert.popoverPresentationController.sourceRect = cell ? cell.bounds : self.view.bounds;
+    }
+
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+/// 判断当前 profile 的 MC 版本是否为 26.2+（需要图形 API 切换）
+- (BOOL)isCurrentProfileModernVersion {
+    NSString *versionId = self.profile[@"lastVersionId"] ?: @"";
+    // 26.x 版本（26w02a 等快照也匹配）
+    if ([versionId hasPrefix:@"26."]) return YES;
+    if ([versionId hasPrefix:@"26w"]) return YES;
+    // 1.21.8+ 版本（Mojang 在 1.21.8 引入 Vulkan API）
+    if ([versionId hasPrefix:@"1.21."]) {
+        NSString *minorStr = [versionId substringFromIndex:5];
+        NSInteger minor = [minorStr integerValue];
+        if (minor >= 8) return YES;
+    }
+    return NO;
+}
+
+/// 图形 API 显示名
+- (NSString *)graphicsApiDisplayName:(NSString *)api {
+    if ([api isEqualToString:@"prefer_vulkan"]) return @"优先 Vulkan";
+    if ([api isEqualToString:@"prefer_opengl"]) return @"优先 OpenGL";
+    return @"默认";
+}
+
+/// 图形 API 选择器（MC 26.2+ 专用）
+- (void)showGraphicsApiSelector {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"选择图形 API"
+                                                                   message:@"MC 26.2+ 游戏内 OpenGL/Vulkan 切换"
+                                                            preferredStyle:UIAlertControllerStyleActionSheet];
+
+    NSArray *keys = @[@"default", @"prefer_vulkan", @"prefer_opengl"];
+    NSArray *names = @[@"默认", @"优先 Vulkan", @"优先 OpenGL"];
+
+    for (NSInteger i = 0; i < keys.count; i++) {
+        NSString *key = keys[i];
+        NSString *name = i < names.count ? names[i] : key;
+        [alert addAction:[UIAlertAction actionWithTitle:name
+                                                  style:UIAlertActionStyleDefault
+                                                handler:^(UIAlertAction * _Nonnull action) {
+            self.selectedGraphicsApi = key;
+            [self saveSettings];
+            [self.tableView reloadData];
+        }]];
+    }
+
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+
+    if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
+        NSIndexPath *indexPath = [NSIndexPath indexPathForRow:1 inSection:3];
         UITableViewCell *cell = [self.tableView cellForRowAtIndexPath:indexPath];
         alert.popoverPresentationController.sourceView = cell ?: self.view;
         alert.popoverPresentationController.sourceRect = cell ? cell.bounds : self.view.bounds;
