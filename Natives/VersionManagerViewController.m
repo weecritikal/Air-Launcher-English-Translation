@@ -669,9 +669,18 @@ static NSInteger const kSectionVersions    = 4;
 
 /// 初始化渲染器选项数据（启动器 native 渲染器库选择，LWJGL 层）
 /// 参照 FCL/HMCL 的渲染器选择面板，提供 6 个选项及对应描述
+/// 注意：名称使用简短标识，不使用 getRendererNames 返回的长本地化字符串
 - (void)setupRendererData {
     self.rendererKeys = getRendererKeys(NO);
-    self.rendererNames = getRendererNames(NO);
+    // 简短渲染器名称（不使用 getRendererNames 的长本地化字符串）
+    self.rendererNames = @[
+        @"Auto",
+        @"GL4ES",
+        @"ANGLE",
+        @"MobileGlues",
+        @"Zink",
+        @"MoltenVK"
+    ];
     self.rendererIcons = @[
         @"wand.and.stars",
         @"cpu",
@@ -684,9 +693,9 @@ static NSInteger const kSectionVersions    = 4;
         @"自动选择最佳渲染器",
         @"OpenGL ES 1.14 转译（兼容性最佳）",
         @"MetalANGLE，Metal 转 GLES",
-        @"MobileGlues，Vulkan 转译",
-        @"Zink，OpenGL 转 Vulkan",
-        @"MoltenVK，原生 Vulkan"
+        @"Vulkan 转译 OpenGL",
+        @"OpenGL 转 Vulkan",
+        @"原生 Vulkan"
     ];
 }
 
@@ -1274,16 +1283,13 @@ static NSInteger const kSectionVersions    = 4;
     // 删除目录（默认目录禁止删除，正在使用的目录需要先切换才能删除）
     if (!isDefault) {
         NSString *deleteTitle = isSelected ? @"删除（需先切换到其他目录）" : @"删除此目录";
-        UIAlertActionStyle deleteStyle = isSelected ? UIAlertActionStyleDestructive : UIAlertActionStyleDestructive;
-        [alert addAction:[UIAlertAction actionWithTitle:deleteTitle style:deleteStyle handler:^(UIAlertAction * _Nonnull action) {
+        [alert addAction:[UIAlertAction actionWithTitle:deleteTitle style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
             if (isSelected) {
                 [self showAlert:@"请先切换到其他目录，再删除此目录"];
                 return;
             }
             [self confirmDeleteGameDir:dirName];
         }]];
-    } else {
-        [alert addAction:[UIAlertAction actionWithTitle:@"默认目录不可删除" style:UIAlertActionStyleDisabled handler:nil]];
     }
 
     [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
