@@ -32,6 +32,12 @@ $(CLASSES): $(OUTPUTDIR)/%.class: $(SOURCEDIR)/%.java
 	@echo "Compiling $<"
 	@$(BOOTJDK)/javac $(JCFLAGS) -d $(OUTPUTDIR)/classes $<
 	@cp $(@:$(OUTPUTDIR)/$(TARGET)/%.class=$(OUTPUTDIR)/classes/%*.class) $(dir $@)/
+	@# 防御性校验：CI 偶发产生空 class 文件（cp 与 javac/并行任务竞态），
+	@# 复制后若主 class 仍为 0 字节则重试一次，避免 check_empty_classes 误报中断构建。
+	@if [ -e "$@" ] && [ ! -s "$@" ]; then \
+		echo "Warning: $@ is empty after cp, retrying copy"; \
+		cp -f $(@:$(OUTPUTDIR)/$(TARGET)/%.class=$(OUTPUTDIR)/classes/%*.class) $(dir $@)/; \
+	fi
 
 $(OUTPUTDIR)/launcher.jar: $(CLASSES) check_empty_classes
 	@set -e
