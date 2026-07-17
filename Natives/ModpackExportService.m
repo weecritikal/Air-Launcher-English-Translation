@@ -15,7 +15,9 @@
 - (void)addDirectoryToArchive:(UZKArchive *)archive
                       dirPath:(NSString *)dirPath
                   prefixInZip:(NSString *)prefixInZip
-                     progress:(void (^_Nullable)(NSUInteger done))progress;
+                     progress:(void (^_Nullable)(NSUInteger done, NSUInteger total))progress;
+/// 内部使用：检查取消信号
+- (BOOL)checkCancelledWithError:(NSError **)error;
 @end
 
 @implementation ModpackExportService
@@ -29,6 +31,82 @@
     return sharedInstance;
 }
 
+- (instancetype)init {
+    self = [super init];
+    if (self) {
+        _cancelled = NO;
+    }
+    return self;
+}
+
+- (void)resetCancelState {
+    @synchronized(self) {
+        _cancelled = NO;
+    }
+}
+
+- (BOOL)checkCancelledWithError:(NSError **)error {
+    @synchronized(self) {
+        if (_cancelled) {
+            if (error) {
+                *error = [NSError errorWithDomain:@"ModpackExportService"
+                                             code:9999
+                                         userInfo:@{NSLocalizedDescriptionKey: @"导出已取消"}];
+            }
+            return YES;
+        }
+    }
+    return NO;
+}
+
++ (NSArray<NSString *> *)overrideDirectoriesForOptions:(ModpackExportFileOptions)options {
+    NSMutableArray *dirs = [NSMutableArray array];
+    if (options & ModpackExportFileMods) {
+        [dirs addObject:@"mods"];
+    }
+    if (options & ModpackExportFileConfigs) {
+        [dirs addObject:@"config"];
+        [dirs addObject:@"defaultconfigs"];
+    }
+    if (options & ModpackExportFileResourcePacks) {
+        [dirs addObject:@"resourcepacks"];
+    }
+    if (options & ModpackExportFileShaderPacks) {
+        [dirs addObject:@"shaderpacks"];
+    }
+    if (options & ModpackExportFileSaves) {
+        [dirs addObject:@"saves"];
+    }
+    if (options & ModpackExportFileScripts) {
+        [dirs addObject:@"kubejs"];
+        [dirs addObject:@"scripts"];
+        [dirs addObject:@"localization"];
+        [dirs addObject:@"patchouli_books"];
+    }
+    return [dirs copy];
+}
+
++ (NSArray<NSString *> *)overrideFilesForOptions:(ModpackExportFileOptions)options {
+    NSMutableArray *files = [NSMutableArray array];
+    if (options & ModpackExportFileOptions) {
+        [files addObject:@"options.txt"];
+        [files addObject:@"optionsof.txt"];
+        [files addObject:@"optionsshaders.txt"];
+        [files addObject:@"hotbar.nbt"];
+    }
+    if (options & ModpackExportFileServers) {
+        [files addObject:@"servers.dat"];
+        [files addObject:@"servers.dat_old"];
+        [files addObject:@"realms_persistence.json"];
+    }
+    if (options & ModpackExportFileOptions) {
+        [files addObject:@"launcher_profiles.json"];
+    }
+    return [files copy];
+}
+
+#pragma mark - 公开导出 API
+
 - (BOOL)exportModpackForProfile:(NSString *)profileName
                          toPath:(NSString *)destPath
                             name:(NSString *)name
@@ -38,9 +116,28 @@
                 includeOverrides:(BOOL)includeOverrides
                        progress:(void (^_Nullable)(double progress, NSString *stageMessage))progress
                           error:(NSError **)error {
+    ModpackExportFileOptions options = includeOverrides ? ModpackExportFileDefault : ModpackExportFileMods;
+    return [self exportModpackForProfile:profileName
+                                  toPath:destPath
+                                     name:name
+                                  version:version
+                                   author:author
+                                  format:format
+                              fileOptions:options
+                                 progress:progress
+                                    error:error];
+}
+
+- (BOOL)exportModpackForProfile:(NSString *)profileName
+                         toPath:(NSString *)destPath
+                            name:(NSString *)name
+                         version:(NSString *)version
+                          author:(NSString *)author
+                         format:(ModpackExportFormat)format
+                     fileOptions:(ModpackExportFileOptions)fileOptions
+                       progress:(void (^_Nullable)(double progress, NSString *stageMessage))progress
+                          error:(NSError **)error {
     if (error) *error = nil;
-    // 关键修复（多启动器兼容）：author 字段传递到 CurseForge manifest，不再硬编码
-    // 这样导出的整合包在其他启动器（FCL/HMCL）中能正确显示作者信息
     NSString *resolvedAuthor = author.length > 0 ? author : @"Amethyst User";
 
     void (^reportProgress)(double, NSString *) = ^(double p, NSString *msg) {
@@ -49,6 +146,9 @@
     };
 
     reportProgress(0.0, @"开始导出整合包");
+
+    // 取消检查点
+    if ([self checkCancelledWithError:error]) return NO;
 
     // 1. 获取 profile 信息
     NSDictionary *profile = PLProfiles.current.profiles[profileName];
@@ -63,7 +163,6 @@
     NSString *lastVersionId = profile[@"lastVersionId"] ?: @"";
     NSString *gameDirAbsolute = [self resolveAbsoluteGameDirForProfile:profileName];
     if (gameDirAbsolute.length == 0) {
-        // 回退到 POJAV_GAME_DIR
         const char *env = getenv("POJAV_GAME_DIR");
         gameDirAbsolute = env ? [NSString stringWithUTF8String:env] : NSHomeDirectory();
     }
@@ -85,30 +184,40 @@
         return NO;
     }
 
+    // 取消检查点
+    if ([self checkCancelledWithError:error]) return NO;
+
     // 3. 收集 mods 文件列表
     reportProgress(0.1, @"正在扫描 mods 文件");
     NSFileManager *fm = [NSFileManager defaultManager];
     NSString *modsDir = [gameDirAbsolute stringByAppendingPathComponent:@"mods"];
     NSMutableArray<NSDictionary *> *modFiles = [NSMutableArray new];
     if ([fm fileExistsAtPath:modsDir]) {
-        NSArray *entries = [fm contentsOfDirectoryAtPath:modsDir error:nil];
-        for (NSString *entry in entries) {
+        // 嵌套目录扫描（部分整合包 mod 分子目录存放）
+        NSDirectoryEnumerator *enumerator = [fm enumeratorAtPath:modsDir];
+        NSString *relativePath;
+        while ((relativePath = [enumerator nextObject])) {
+            NSString *fullPath = [modsDir stringByAppendingPathComponent:relativePath];
+            BOOL isDir = NO;
+            if (![fm fileExistsAtPath:fullPath isDirectory:&isDir] || isDir) continue;
             // 只包含 .jar 文件（不包含 .disabled）
-            if (![entry hasSuffix:@".jar"]) continue;
-            NSString *fullPath = [modsDir stringByAppendingPathComponent:entry];
+            if (![relativePath hasSuffix:@".jar"]) continue;
             NSDictionary *attrs = [fm attributesOfItemAtPath:fullPath error:nil];
             unsigned long long fileSize = [attrs fileSize];
             NSString *sha1 = [self sha1ForFileAtPath:fullPath];
             [modFiles addObject:@{
-                @"path": [NSString stringWithFormat:@"mods/%@", entry],
+                @"path": [NSString stringWithFormat:@"mods/%@", relativePath],
                 @"fullPath": fullPath,
-                @"fileName": entry,
+                @"fileName": relativePath.lastPathComponent,
                 @"sha1": sha1 ?: @"",
                 @"fileSize": @(fileSize)
             }];
         }
     }
     NSLog(@"[ModpackExport] 找到 %lu 个 mod 文件", (unsigned long)modFiles.count);
+
+    // 取消检查点
+    if ([self checkCancelledWithError:error]) return NO;
 
     // 4. 根据格式导出
     switch (format) {
@@ -122,7 +231,7 @@
                                        loader:loader
                                 loaderVersion:loaderVersion
                                 gameDirAbsolute:gameDirAbsolute
-                                includeOverrides:includeOverrides
+                                  fileOptions:fileOptions
                                       progress:reportProgress
                                          error:error];
         case ModpackExportFormatCurseForge:
@@ -135,9 +244,36 @@
                                           loader:loader
                                     loaderVersion:loaderVersion
                                 gameDirAbsolute:gameDirAbsolute
-                                includeOverrides:includeOverrides
+                                  fileOptions:fileOptions
                                         progress:reportProgress
                                            error:error];
+        case ModpackExportFormatMMC:
+            return [self exportMMCFormat:modFiles
+                                  toPath:destPath
+                                     name:name
+                                  version:version
+                                   author:resolvedAuthor
+                                mcVersion:mcVersion
+                                   loader:loader
+                            loaderVersion:loaderVersion
+                            gameDirAbsolute:gameDirAbsolute
+                              fileOptions:fileOptions
+                                profileName:profileName
+                                  progress:reportProgress
+                                     error:error];
+        case ModpackExportFormatPlainZip:
+            return [self exportPlainZipFormat:modFiles
+                                       toPath:destPath
+                                          name:name
+                                       version:version
+                                        author:resolvedAuthor
+                                     mcVersion:mcVersion
+                                        loader:loader
+                                  loaderVersion:loaderVersion
+                                  gameDirAbsolute:gameDirAbsolute
+                                    fileOptions:fileOptions
+                                      progress:reportProgress
+                                         error:error];
         case ModpackExportFormatLinkList:
             return [self exportLinkListFormat:modFiles
                                        toPath:destPath
@@ -162,10 +298,12 @@
                       loader:(NSString *)loader
               loaderVersion:(NSString *)loaderVersion
             gameDirAbsolute:(NSString *)gameDirAbsolute
-            includeOverrides:(BOOL)includeOverrides
+                fileOptions:(ModpackExportFileOptions)fileOptions
                     progress:(void (^)(double, NSString *))progress
                        error:(NSError **)error {
-    (void)author;  // Modrinth 格式无 author 字段，保留参数以与 CurseForge 格式签名对齐
+    (void)author;
+    if ([self checkCancelledWithError:error]) return NO;
+
     progress(0.2, @"正在生成 modrinth.index.json");
     NSFileManager *fm = [NSFileManager defaultManager];
 
@@ -184,6 +322,7 @@
     // 构造 files 列表
     NSMutableArray *files = [NSMutableArray new];
     for (NSDictionary *modFile in modFiles) {
+        if ([self checkCancelledWithError:error]) return NO;
         NSString *sha512 = [self sha512ForFileAtPath:modFile[@"fullPath"]];
         [files addObject:@{
             @"path": modFile[@"path"],
@@ -215,8 +354,9 @@
         return NO;
     }
 
+    if ([self checkCancelledWithError:error]) return NO;
+
     progress(0.3, @"正在创建 zip 文件");
-    // 删除已存在的目标文件，避免 UZKArchive 读取到旧的 zip 头
     [fm removeItemAtPath:destPath error:nil];
 
     NSError *archiveError = nil;
@@ -233,58 +373,19 @@
         return NO;
     }
 
-    // 写入 overrides（mods + config + options.txt 等）
-    if (includeOverrides) {
-        progress(0.5, @"正在打包 overrides");
-        // 关键修复（多启动器兼容）：扩展 overrides 白名单
-        // 之前只导出 mods/config/defaultconfigs/resourcepacks/shaderpacks 五个目录，
-        // 缺少 kubejs/scripts/localization 等常见整合包目录，导致其他启动器导入时缺少必要文件。
-        // 现在对齐 HMCL/FCL 导出策略，包含更多常见目录和文件。
-        NSArray *overrideDirs = @[
-            @"mods", @"config", @"defaultconfigs", @"resourcepacks", @"shaderpacks",
-            @"kubejs", @"scripts", @"localization", @"patchouli_books"
-        ];
-        NSArray *overrideFiles = @[
-            @"options.txt", @"optionsof.txt", @"optionsshaders.txt",
-            @"servers.dat", @"servers.dat_old", @"realms_persistence.json",
-            @"launcher_profiles.json", @"hotbar.nbt"
-        ];
-
-        NSUInteger totalItems = modFiles.count + overrideDirs.count + overrideFiles.count;
-        __block NSUInteger processed = 0;
-
-        for (NSString *dir in overrideDirs) {
-            NSString *dirPath = [gameDirAbsolute stringByAppendingPathComponent:dir];
-            if (![fm fileExistsAtPath:dirPath]) {
-                processed++;
-                continue;
-            }
-            [self addDirectoryToArchive:archive
-                                dirPath:dirPath
-                            prefixInZip:[NSString stringWithFormat:@"overrides/%@", dir]
-                               progress:^(NSUInteger done) {
-                processed++;
-                progress(0.5 + 0.4 * ((double)processed / (double)totalItems),
-                         [NSString stringWithFormat:@"正在打包 overrides/%@", dir]);
-            }];
-        }
-
-        for (NSString *file in overrideFiles) {
-            NSString *filePath = [gameDirAbsolute stringByAppendingPathComponent:file];
-            if ([fm fileExistsAtPath:filePath]) {
-                NSData *data = [NSData dataWithContentsOfFile:filePath];
-                if (data) {
-                    [archive writeData:data
-                              filePath:[NSString stringWithFormat:@"overrides/%@", file]
-                                 error:nil];
-                }
-            }
-            processed++;
-        }
+    // 写入 overrides
+    if (![self writeOverridesToArchive:archive
+                          gameDirAbsolute:gameDirAbsolute
+                            fileOptions:fileOptions
+                              zipPrefix:@"overrides"
+                          baseProgress:0.5
+                          progressRange:0.4
+                                progress:progress
+                                  error:error]) {
+        return NO;
     }
 
     progress(0.95, @"正在完成导出");
-    // UZKArchive 在 dealloc 时会关闭，但显式释放更安全
     archive = nil;
 
     progress(1.0, @"导出完成");
@@ -303,16 +404,17 @@
                          loader:(NSString *)loader
                  loaderVersion:(NSString *)loaderVersion
                gameDirAbsolute:(NSString *)gameDirAbsolute
-               includeOverrides:(BOOL)includeOverrides
+                   fileOptions:(ModpackExportFileOptions)fileOptions
                        progress:(void (^)(double, NSString *))progress
                           error:(NSError **)error {
+    if ([self checkCancelledWithError:error]) return NO;
+
     progress(0.2, @"正在生成 manifest.json");
     NSFileManager *fm = [NSFileManager defaultManager];
 
     // 构造 modLoaders
     NSMutableArray *modLoaders = [NSMutableArray new];
     if (loader.length > 0 && loaderVersion.length > 0) {
-        // CurseForge 标准的 loader id：fabric/quilt/forge/neoforge
         NSString *loaderId = [NSString stringWithFormat:@"%@-%@", loader, loaderVersion];
         [modLoaders addObject:@{@"id": loaderId, @"primary": @YES}];
     }
@@ -320,7 +422,6 @@
     // 构造 manifest.json
     // 注意：CurseForge 格式需要 projectID/fileID，本地 mod 无法获取。
     // 简化方案：files 为空，所有 mod 打进 overrides/mods/（与 HMCL 导出策略一致）
-    // 关键修复（多启动器兼容）：author 字段使用用户输入而非硬编码 "Amethyst Export"
     NSDictionary *manifest = @{
         @"minecraft": @{
             @"version": mcVersion,
@@ -344,6 +445,8 @@
         return NO;
     }
 
+    if ([self checkCancelledWithError:error]) return NO;
+
     progress(0.3, @"正在创建 zip 文件");
     [fm removeItemAtPath:destPath error:nil];
 
@@ -360,49 +463,15 @@
         return NO;
     }
 
-    if (includeOverrides) {
-        progress(0.5, @"正在打包 overrides");
-        // 关键修复（多启动器兼容）：扩展 overrides 白名单，与 Modrinth 导出保持一致
-        NSArray *overrideDirs = @[
-            @"mods", @"config", @"defaultconfigs", @"resourcepacks", @"shaderpacks",
-            @"kubejs", @"scripts", @"localization", @"patchouli_books"
-        ];
-        NSArray *overrideFiles = @[
-            @"options.txt", @"optionsof.txt", @"optionsshaders.txt",
-            @"servers.dat", @"servers.dat_old", @"realms_persistence.json",
-            @"launcher_profiles.json", @"hotbar.nbt"
-        ];
-        NSUInteger totalItems = overrideDirs.count + overrideFiles.count;
-        __block NSUInteger processed = 0;
-
-        for (NSString *dir in overrideDirs) {
-            NSString *dirPath = [gameDirAbsolute stringByAppendingPathComponent:dir];
-            if (![fm fileExistsAtPath:dirPath]) {
-                processed++;
-                continue;
-            }
-            [self addDirectoryToArchive:archive
-                                dirPath:dirPath
-                            prefixInZip:[NSString stringWithFormat:@"overrides/%@", dir]
-                               progress:^(NSUInteger done) {
-                processed++;
-                progress(0.5 + 0.4 * ((double)processed / (double)totalItems),
-                         [NSString stringWithFormat:@"正在打包 overrides/%@", dir]);
-            }];
-        }
-
-        for (NSString *file in overrideFiles) {
-            NSString *filePath = [gameDirAbsolute stringByAppendingPathComponent:file];
-            if ([fm fileExistsAtPath:filePath]) {
-                NSData *data = [NSData dataWithContentsOfFile:filePath];
-                if (data) {
-                    [archive writeData:data
-                              filePath:[NSString stringWithFormat:@"overrides/%@", file]
-                                 error:nil];
-                }
-            }
-            processed++;
-        }
+    if (![self writeOverridesToArchive:archive
+                          gameDirAbsolute:gameDirAbsolute
+                            fileOptions:fileOptions
+                              zipPrefix:@"overrides"
+                          baseProgress:0.5
+                          progressRange:0.4
+                                progress:progress
+                                  error:error]) {
+        return NO;
     }
 
     progress(0.95, @"正在完成导出");
@@ -410,6 +479,202 @@
 
     progress(1.0, @"导出完成");
     NSLog(@"[ModpackExport] CurseForge 格式导出完成: %@", destPath);
+    return YES;
+}
+
+#pragma mark - MMC (MultiMC/Prism) 格式导出
+
+/// MMC 格式：
+///   mmc-pack.json: 包含 components 数组（net.minecraft + 加载器 component）
+///   instance.cfg: key=value 格式，含 name/JvmArgs/InstanceType 等
+///   .minecraft/: 包含 mods/config/options.txt 等（不放在 overrides/ 下，直接是 .minecraft/）
+- (BOOL)exportMMCFormat:(NSArray<NSDictionary *> *)modFiles
+                 toPath:(NSString *)destPath
+                    name:(NSString *)name
+                 version:(NSString *)version
+                  author:(NSString *)author
+               mcVersion:(NSString *)mcVersion
+                  loader:(NSString *)loader
+          loaderVersion:(NSString *)loaderVersion
+          gameDirAbsolute:(NSString *)gameDirAbsolute
+            fileOptions:(ModpackExportFileOptions)fileOptions
+            profileName:(NSString *)profileName
+                progress:(void (^)(double, NSString *))progress
+                   error:(NSError **)error {
+    if ([self checkCancelledWithError:error]) return NO;
+
+    progress(0.2, @"正在生成 mmc-pack.json");
+    NSFileManager *fm = [NSFileManager defaultManager];
+
+    // 构造 components 数组
+    NSMutableArray *components = [NSMutableArray array];
+    [components addObject:@{
+        @"cachedName": @"Minecraft",
+        @"cachedVersion": mcVersion,
+        @"important": @YES,
+        @"uid": @"net.minecraft",
+        @"version": mcVersion
+    }];
+    if ([loader isEqualToString:@"fabric"] && loaderVersion.length > 0) {
+        [components addObject:@{
+            @"cachedName": @"Fabric Loader",
+            @"uid": @"net.fabricmc.fabric-loader",
+            @"version": loaderVersion
+        }];
+    } else if ([loader isEqualToString:@"quilt"] && loaderVersion.length > 0) {
+        [components addObject:@{
+            @"cachedName": @"Quilt Loader",
+            @"uid": @"org.quiltmc.quilt-loader",
+            @"version": loaderVersion
+        }];
+    } else if ([loader isEqualToString:@"forge"] && loaderVersion.length > 0) {
+        [components addObject:@{
+            @"cachedName": @"Forge",
+            @"uid": @"net.minecraftforge",
+            @"version": loaderVersion
+        }];
+    } else if ([loader isEqualToString:@"neoforge"] && loaderVersion.length > 0) {
+        [components addObject:@{
+            @"cachedName": @"NeoForge",
+            @"uid": @"net.neoforged",
+            @"version": loaderVersion
+        }];
+    }
+
+    NSDictionary *mmcPack = @{
+        @"components": components,
+        @"formatVersion": @(1)
+    };
+
+    NSData *mmcPackData = [NSJSONSerialization dataWithJSONObject:mmcPack options:NSJSONWritingPrettyPrinted error:error];
+    if (!mmcPackData) {
+        if (error && !*error) {
+            *error = [NSError errorWithDomain:@"ModpackExportService" code:5
+                                     userInfo:@{NSLocalizedDescriptionKey: @"生成 mmc-pack.json 失败"}];
+        }
+        return NO;
+    }
+
+    // 构造 instance.cfg（key=value 格式）
+    NSString *instanceName = name.length > 0 ? name : (profileName ?: @"Exported Modpack");
+    NSMutableString *cfgContent = [NSMutableString string];
+    [cfgContent appendFormat:@"InstanceType=OneSix\n"];
+    [cfgContent appendFormat:@"name=%@\n", instanceName];
+    [cfgContent appendFormat:@"%s=%@\n", "notes", [NSString stringWithFormat:@"Exported by Amethyst v%@", version.length > 0 ? version : @"1.0"]];
+    [cfgContent appendFormat:@"%s=%@\n", "iconKey", "default"];
+    [cfgContent appendFormat:@"%s=%@\n", "OverrideCommands", "false"];
+    [cfgContent appendFormat:@"%s=%@\n", "OverrideConsole", "false"];
+    [cfgContent appendFormat:@"%s=%@\n", "OverrideJava", "false"];
+    [cfgContent appendFormat:@"%s=%@\n", "OverrideJavaArgs", "false"];
+    [cfgContent appendFormat:@"%s=%@\n", "OverrideMCLauncher", "false"];
+    [cfgContent appendFormat:@"%s=%@\n", "OverrideWindow", "false"];
+    NSData *cfgData = [cfgContent dataUsingEncoding:NSUTF8StringEncoding];
+
+    if ([self checkCancelledWithError:error]) return NO;
+
+    progress(0.3, @"正在创建 zip 文件");
+    [fm removeItemAtPath:destPath error:nil];
+
+    NSError *archiveError = nil;
+    UZKArchive *archive = [[UZKArchive alloc] initWithPath:destPath error:&archiveError];
+    if (!archive || archiveError) {
+        if (error) *error = archiveError;
+        return NO;
+    }
+
+    progress(0.4, @"正在写入 mmc-pack.json");
+    if (![archive writeData:mmcPackData filePath:@"mmc-pack.json" error:&archiveError]) {
+        if (error) *error = archiveError;
+        return NO;
+    }
+    progress(0.45, @"正在写入 instance.cfg");
+    if (cfgData && ![archive writeData:cfgData filePath:@"instance.cfg" error:&archiveError]) {
+        if (error) *error = archiveError;
+        return NO;
+    }
+
+    // MMC 的 overrides 写入到 .minecraft/ 前缀（MMC 标准结构）
+    if (![self writeOverridesToArchive:archive
+                          gameDirAbsolute:gameDirAbsolute
+                            fileOptions:fileOptions
+                              zipPrefix:@".minecraft"
+                          baseProgress:0.5
+                          progressRange:0.4
+                                progress:progress
+                                  error:error]) {
+        return NO;
+    }
+
+    progress(0.95, @"正在完成导出");
+    archive = nil;
+
+    progress(1.0, @"导出完成");
+    NSLog(@"[ModpackExport] MMC 格式导出完成: %@", destPath);
+    return YES;
+}
+
+#pragma mark - Plain Zip 格式导出（HMCL 兼容）
+
+/// Plain Zip 格式：直接打包 .minecraft 目录，无 manifest/mmc-pack.json
+/// 适合于 PojavLauncher/HMCL 互通：直接将 gameDir 内容打包到 .minecraft/ 前缀下
+- (BOOL)exportPlainZipFormat:(NSArray<NSDictionary *> *)modFiles
+                      toPath:(NSString *)destPath
+                         name:(NSString *)name
+                      version:(NSString *)version
+                       author:(NSString *)author
+                     mcVersion:(NSString *)mcVersion
+                        loader:(NSString *)loader
+                  loaderVersion:(NSString *)loaderVersion
+                  gameDirAbsolute:(NSString *)gameDirAbsolute
+                    fileOptions:(ModpackExportFileOptions)fileOptions
+                      progress:(void (^)(double, NSString *))progress
+                         error:(NSError **)error {
+    (void)name; (void)version; (void)author; (void)loader; (void)loaderVersion;
+    if ([self checkCancelledWithError:error]) return NO;
+
+    progress(0.2, @"正在创建 zip 文件");
+    NSFileManager *fm = [NSFileManager defaultManager];
+    [fm removeItemAtPath:destPath error:nil];
+
+    NSError *archiveError = nil;
+    UZKArchive *archive = [[UZKArchive alloc] initWithPath:destPath error:&archiveError];
+    if (!archive || archiveError) {
+        if (error) *error = archiveError;
+        return NO;
+    }
+
+    // 写入 .minecraft/AMETHYST_INFO.txt 元信息（可选，帮助其他启动器识别来源）
+    NSString *infoContent = [NSString stringWithFormat:
+        @"Amethyst Exported Modpack\n"
+        @"Minecraft: %@\n"
+        @"Loader: %@ %@\n"
+        @"Export Time: %@\n",
+        mcVersion,
+        loader ?: @"vanilla",
+        loaderVersion ?: @"",
+        [[NSDate date] description]];
+    NSData *infoData = [infoContent dataUsingEncoding:NSUTF8StringEncoding];
+    if (infoData) {
+        [archive writeData:infoData filePath:@".minecraft/AMETHYST_INFO.txt" error:nil];
+    }
+
+    // 写入 .minecraft/<...> 前缀
+    if (![self writeOverridesToArchive:archive
+                          gameDirAbsolute:gameDirAbsolute
+                            fileOptions:fileOptions
+                              zipPrefix:@".minecraft"
+                          baseProgress:0.3
+                          progressRange:0.6
+                                progress:progress
+                                  error:error]) {
+        return NO;
+    }
+
+    progress(0.95, @"正在完成导出");
+    archive = nil;
+
+    progress(1.0, @"导出完成");
+    NSLog(@"[ModpackExport] Plain Zip 格式导出完成: %@", destPath);
     return YES;
 }
 
@@ -453,26 +718,148 @@
     return YES;
 }
 
+#pragma mark - 通用 Overrides 写入
+
+/// 通用 overrides 写入：根据 fileOptions 决定哪些目录/文件被打包
+- (BOOL)writeOverridesToArchive:(UZKArchive *)archive
+               gameDirAbsolute:(NSString *)gameDirAbsolute
+                     fileOptions:(ModpackExportFileOptions)fileOptions
+                       zipPrefix:(NSString *)zipPrefix
+                     baseProgress:(double)baseProgress
+                   progressRange:(double)progressRange
+                         progress:(void (^)(double, NSString *))progress
+                            error:(NSError **)error {
+    NSFileManager *fm = [NSFileManager defaultManager];
+    NSArray<NSString *> *overrideDirs = [ModpackExportService overrideDirectoriesForOptions:fileOptions];
+    NSArray<NSString *> *overrideFiles = [ModpackExportService overrideFilesForOptions:fileOptions];
+
+    NSUInteger totalItems = overrideDirs.count + overrideFiles.count;
+    if (totalItems == 0) {
+        progress(baseProgress + progressRange, @"无 overrides 可打包");
+        return YES;
+    }
+
+    __block NSUInteger processed = 0;
+    __block NSError *blockError = nil;
+
+    // 计算每个目录的文件总数，用于精确进度
+    NSUInteger totalFiles = 0;
+    for (NSString *dir in overrideDirs) {
+        NSString *dirPath = [gameDirAbsolute stringByAppendingPathComponent:dir];
+        if (![fm fileExistsAtPath:dirPath]) continue;
+        NSDirectoryEnumerator *e = [fm enumeratorAtPath:dirPath];
+        NSString *rel;
+        while ((rel = [e nextObject])) {
+            NSString *full = [dirPath stringByAppendingPathComponent:rel];
+            BOOL isDir = NO;
+            if ([fm fileExistsAtPath:full isDirectory:&isDir] && !isDir) {
+                totalFiles++;
+            }
+        }
+    }
+    totalFiles += overrideFiles.count;
+    if (totalFiles == 0) {
+        progress(baseProgress + progressRange, @"无 overrides 可打包");
+        return YES;
+    }
+
+    __block NSUInteger processedFiles = 0;
+
+    // 打包目录
+    for (NSString *dir in overrideDirs) {
+        if ([self checkCancelledWithError:error]) return NO;
+        NSString *dirPath = [gameDirAbsolute stringByAppendingPathComponent:dir];
+        if (![fm fileExistsAtPath:dirPath]) {
+            processed++;
+            continue;
+        }
+        NSString *prefixInZip = [NSString stringWithFormat:@"%@/%@", zipPrefix, dir];
+        [self addDirectoryToArchive:archive
+                            dirPath:dirPath
+                        prefixInZip:prefixInZip
+                           progress:^(NSUInteger done, NSUInteger total) {
+            processedFiles = done;
+            double p = baseProgress + progressRange * ((double)processedFiles / (double)totalFiles);
+            progress(p, [NSString stringWithFormat:@"正在打包 %@/%@", zipPrefix, dir]);
+        }];
+        processed++;
+    }
+
+    // 打包单个文件
+    for (NSString *file in overrideFiles) {
+        if ([self checkCancelledWithError:error]) return NO;
+        NSString *filePath = [gameDirAbsolute stringByAppendingPathComponent:file];
+        if ([fm fileExistsAtPath:filePath]) {
+            NSData *data = [NSData dataWithContentsOfFile:filePath];
+            if (data) {
+                NSError *writeErr = nil;
+                [archive writeData:data
+                          filePath:[NSString stringWithFormat:@"%@/%@", zipPrefix, file]
+                             error:&writeErr];
+                if (writeErr) {
+                    NSLog(@"[ModpackExport] 警告：写入 %@/%@ 失败: %@", zipPrefix, file, writeErr.localizedDescription);
+                }
+            }
+        }
+        processedFiles++;
+        double p = baseProgress + progressRange * ((double)processedFiles / (double)totalFiles);
+        progress(p, [NSString stringWithFormat:@"正在打包 %@/%@", zipPrefix, file]);
+        processed++;
+    }
+
+    if (blockError) {
+        if (error) *error = blockError;
+        return NO;
+    }
+    return YES;
+}
+
 #pragma mark - 辅助方法
 
 - (void)addDirectoryToArchive:(UZKArchive *)archive
                       dirPath:(NSString *)dirPath
                   prefixInZip:(NSString *)prefixInZip
-                     progress:(void (^_Nullable)(NSUInteger done))progress {
+                     progress:(void (^_Nullable)(NSUInteger done, NSUInteger total))progress {
     NSFileManager *fileManager = [NSFileManager defaultManager];
+
+    // 先统计文件总数
+    NSUInteger total = 0;
+    NSDirectoryEnumerator *counter = [fileManager enumeratorAtPath:dirPath];
+    NSString *relPath;
+    while ((relPath = [counter nextObject])) {
+        NSString *fullPath = [dirPath stringByAppendingPathComponent:relPath];
+        BOOL isDir = NO;
+        if ([fileManager fileExistsAtPath:fullPath isDirectory:&isDir] && !isDir) {
+            total++;
+        }
+    }
+    if (total == 0) {
+        if (progress) progress(0, 0);
+        return;
+    }
+
     NSDirectoryEnumerator *enumerator = [fileManager enumeratorAtPath:dirPath];
-    NSString *relativePath;
-    while ((relativePath = [enumerator nextObject])) {
-        NSString *fullPath = [dirPath stringByAppendingPathComponent:relativePath];
+    NSUInteger done = 0;
+    while ((relPath = [enumerator nextObject])) {
+        // 取消检查点
+        @synchronized(self) {
+            if (self.cancelled) {
+                if (progress) progress(done, total);
+                return;
+            }
+        }
+
+        NSString *fullPath = [dirPath stringByAppendingPathComponent:relPath];
         BOOL isDir = NO;
         if (![fileManager fileExistsAtPath:fullPath isDirectory:&isDir] || isDir) continue;
 
         NSData *data = [NSData dataWithContentsOfFile:fullPath];
         if (!data) continue;
 
-        NSString *zipPath = [NSString stringWithFormat:@"%@/%@", prefixInZip, relativePath];
+        NSString *zipPath = [NSString stringWithFormat:@"%@/%@", prefixInZip, relPath];
         [archive writeData:data filePath:zipPath error:nil];
-        if (progress) progress(1);
+        done++;
+        if (progress) progress(done, total);
     }
 }
 

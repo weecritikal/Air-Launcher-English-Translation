@@ -74,8 +74,30 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
         _downloadProgressSnapshots = [NSMutableDictionary dictionary];
         _downloadTaskItems = [NSMutableDictionary dictionary];
         _downloadLock = [[NSLock alloc] init];
+        _cancelled = NO;
     }
     return self;
+}
+
+- (void)resetCancelState {
+    @synchronized(self) {
+        _cancelled = NO;
+    }
+}
+
+/// 内部使用：抛出取消错误
+- (BOOL)checkCancelledWithError:(NSError **)error {
+    @synchronized(self) {
+        if (_cancelled) {
+            if (error) {
+                *error = [NSError errorWithDomain:@"ModpackImportError"
+                                             code:9999
+                                         userInfo:@{NSLocalizedDescriptionKey: @"导入已取消"}];
+            }
+            return YES;
+        }
+    }
+    return NO;
 }
 
 #pragma mark - Helpers
@@ -216,6 +238,15 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
         return [self parseModrinthModpack:archive indexData:indexData filePath:filePath error:error];
     }
 
+    // 关键修复（多启动器兼容）：MMC (MultiMC / Prism Launcher) 整合包检测
+    // mmc-pack.json 标志文件包含 components 数组，每个 component 有 uid（net.minecraft / net.fabricmc.fabric-loader 等）
+    // 必须在 manifest.json (CurseForge) 之前检测，因为某些 MMC 整合包可能也含有 manifest.json
+    NSData *mmcPackData = [archive extractDataFromFile:@"mmc-pack.json" error:&archiveError];
+    if (mmcPackData) {
+        NSLog(@"[ModpackImport] 检测到 MMC (MultiMC/Prism) 整合包");
+        return [self parseMMCPack:archive mmcPackData:mmcPackData filePath:filePath error:error];
+    }
+
     NSData *manifestData = [archive extractDataFromFile:@"manifest.json" error:&archiveError];
     if (manifestData) {
         return [self parseManifestModpack:archive manifestData:manifestData filePath:filePath error:error];
@@ -235,9 +266,111 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
     if (error) {
         *error = [NSError errorWithDomain:@"ModpackImportError"
                                      code:1003
-                                 userInfo:@{NSLocalizedDescriptionKey: @"无效的整合包格式。缺少 modrinth.index.json、manifest.json 或 .minecraft 目录结构"}];
+                                 userInfo:@{NSLocalizedDescriptionKey: @"无效的整合包格式。缺少 modrinth.index.json、mmc-pack.json、manifest.json 或 .minecraft 目录结构"}];
     }
     return nil;
+}
+
+/// 解析 MMC (MultiMC / Prism Launcher) 格式整合包
+/// mmc-pack.json 结构：
+///   {
+///     "components": [
+///       {"uid": "net.minecraft", "version": "1.20.1"},
+///       {"uid": "net.fabricmc.fabric-loader", "version": "0.15.7"},
+///       ...
+///     ]
+///   }
+/// instance.cfg（key=value 格式，可选）：
+///   name=My Modpack
+/// MMC 整合包的 .minecraft 目录在 zip 内通常以 .minecraft/ 前缀存在
+- (nullable NSDictionary *)parseMMCPack:(UZKArchive *)archive
+                          mmcPackData:(NSData *)mmcPackData
+                              filePath:(NSString *)filePath
+                                 error:(NSError **)error {
+    NSError *jsonError = nil;
+    NSDictionary *mmcPack = [NSJSONSerialization JSONObjectWithData:mmcPackData options:0 error:&jsonError];
+    if (jsonError || ![mmcPack isKindOfClass:[NSDictionary class]]) {
+        if (error) {
+            *error = [NSError errorWithDomain:@"ModpackImportError"
+                                         code:1006
+                                     userInfo:@{NSLocalizedDescriptionKey: @"无法解析 mmc-pack.json"}];
+        }
+        return nil;
+    }
+
+    NSArray *components = mmcPack[@"components"];
+    if (![components isKindOfClass:[NSArray class]]) {
+        if (error) {
+            *error = [NSError errorWithDomain:@"ModpackImportError"
+                                         code:1007
+                                     userInfo:@{NSLocalizedDescriptionKey: @"mmc-pack.json 缺少 components 数组"}];
+        }
+        return nil;
+    }
+
+    NSString *minecraftVersion = nil;
+    NSString *loader = @"Vanilla";
+    NSString *loaderVersion = @"";
+
+    // 遍历 components 解析 MC 版本和加载器
+    for (NSDictionary *comp in components) {
+        if (![comp isKindOfClass:[NSDictionary class]]) continue;
+        NSString *uid = comp[@"uid"];
+        NSString *version = comp[@"version"];
+        if (![uid isKindOfClass:[NSString class]] || ![version isKindOfClass:[NSString class]]) continue;
+
+        if ([uid isEqualToString:@"net.minecraft"]) {
+            minecraftVersion = version;
+        } else if ([uid isEqualToString:@"net.fabricmc.fabric-loader"]) {
+            loader = @"Fabric";
+            loaderVersion = version;
+        } else if ([uid isEqualToString:@"org.quiltmc.quilt-loader"]) {
+            loader = @"Quilt";
+            loaderVersion = version;
+        } else if ([uid isEqualToString:@"net.minecraftforge"]) {
+            loader = @"Forge";
+            loaderVersion = version;
+        } else if ([uid isEqualToString:@"net.neoforged"]) {
+            loader = @"NeoForge";
+            loaderVersion = version;
+        }
+    }
+
+    // 从 instance.cfg 读取 name（可选）
+    NSString *name = [filePath.lastPathComponent stringByDeletingPathExtension];
+    NSError *cfgError = nil;
+    NSData *cfgData = [archive extractDataFromFile:@"instance.cfg" error:&cfgError];
+    if (cfgData) {
+        NSString *cfgContent = [[NSString alloc] initWithData:cfgData encoding:NSUTF8StringEncoding];
+        for (NSString *line in [cfgContent componentsSeparatedByString:@"\n"]) {
+            if ([line hasPrefix:@"name="]) {
+                NSString *parsedName = [line substringFromIndex:@"name=".length];
+                parsedName = [parsedName stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+                if (parsedName.length > 0) {
+                    name = parsedName;
+                }
+                break;
+            }
+        }
+    }
+
+    NSString *modpackId = [NSString stringWithFormat:@"mmc_%@", [[NSUUID UUID] UUIDString]];
+    NSString *iconBase64 = [self extractIconFromArchive:archive];
+
+    NSLog(@"[ModpackImport] MMC 整合包：name=%@, MC=%@, loader=%@ %@", name, minecraftVersion, loader, loaderVersion);
+
+    return @{
+        @"id": modpackId,
+        @"name": name,
+        @"version": @"1.0.0",
+        @"minecraftVersion": minecraftVersion ?: @"unknown",
+        @"loader": loader,
+        @"loaderVersion": loaderVersion,
+        @"filePath": filePath,
+        @"format": @"mmc",
+        @"files": @[],
+        @"iconBase64": iconBase64 ?: @""
+    };
 }
 
 /// 检测 zip 是否是 Plain ZIP 整合包（无 manifest，直接含 .minecraft 目录结构）
@@ -454,6 +587,10 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
         return NO;
     }
 
+    if ([self checkCancelledWithError:error]) {
+        return NO;
+    }
+
     if (progress) progress(0.05, @"准备整合包目录");
 
     NSString *modpackId = modpackInfo[@"id"];
@@ -481,13 +618,25 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
     NSString *versionsDir = [gameDirAbsolute stringByAppendingPathComponent:@"versions"];
     [fm createDirectoryAtPath:versionsDir withIntermediateDirectories:YES attributes:nil error:nil];
 
-    // 第 1 步: 解压 overrides/client-overrides (Modrinth) 或 overrides (CurseForge) 到 gameDir
+    // 取消检查点
+    if ([self checkCancelledWithError:error]) {
+        [fm removeItemAtPath:gameDirAbsolute error:nil];
+        return NO;
+    }
+
+    // 第 1 步: 解压 overrides/client-overrides (Modrinth) 或 overrides (CurseForge/MMC) 到 gameDir
     if (progress) progress(0.10, @"正在解压 overrides");
     NSError *extractError = nil;
     BOOL extractSuccess = [self extractOverrides:filePath format:format toDirectory:gameDirAbsolute error:&extractError];
     if (!extractSuccess) {
         [fm removeItemAtPath:gameDirAbsolute error:nil];
         if (error) *error = extractError;
+        return NO;
+    }
+
+    // 取消检查点
+    if ([self checkCancelledWithError:error]) {
+        [fm removeItemAtPath:gameDirAbsolute error:nil];
         return NO;
     }
 
@@ -501,6 +650,12 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
             // mod 下载失败不阻断导入，只记录警告
             NSLog(@"[ModpackImport] mod 下载部分失败: %@", downloadError.localizedDescription);
         }
+    }
+
+    // 取消检查点
+    if ([self checkCancelledWithError:error]) {
+        [fm removeItemAtPath:gameDirAbsolute error:nil];
+        return NO;
     }
 
     // 第 3 步: 安装模组加载器
@@ -520,6 +675,12 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
     if (!loaderSuccess) {
         // 加载器安装失败不阻断 (用户可能已经手动安装)
         NSLog(@"[ModpackImport] 加载器安装失败 (用户可能已安装): %@", loaderError.localizedDescription);
+    }
+
+    // 取消检查点
+    if ([self checkCancelledWithError:error]) {
+        [fm removeItemAtPath:gameDirAbsolute error:nil];
+        return NO;
     }
 
     // 第 4 步: 写 profile
@@ -584,11 +745,11 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
 
     // Plain ZIP：整个 zip 根目录作为 overrides 提取到 gameDir
     // 兼容 .minecraft/ 前缀（HMCL 导出格式）和 __MACOSX 目录（macOS 创建的元数据）
-    if ([format isEqualToString:@"plainzip"]) {
-        NSLog(@"[ModpackImport] Plain ZIP：提取整个 zip 根目录到 gameDir");
+    if ([format isEqualToString:@"plainzip"] || [format isEqualToString:@"mmc"]) {
+        NSLog(@"[ModpackImport] %@：提取 zip 根目录到 gameDir", format);
         // 关键修复（多启动器兼容）：versions/ 目录特殊处理
         // Java 端 Tools.java 的 DIR_HOME_VERSION 固定指向 POJAV_GAME_DIR/versions，
-        // 不从 profile gameDir 读取。因此 Plain ZIP 中的 versions/ 必须提取到主目录，
+        // 不从 profile gameDir 读取。因此 Plain ZIP/MMC 中的 versions/ 必须提取到主目录，
         // 否则启动时报"找不到版本信息"。
         const char *pojavGameDir = getenv("POJAV_GAME_DIR");
         NSString *mainVersionsDir = pojavGameDir ?
@@ -596,14 +757,29 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
             [destDir stringByAppendingPathComponent:@"versions"];
 
         [archive performOnFilesInArchive:^(UZKFileInfo *fileInfo, BOOL *stop) {
+            // 取消检查点（在长循环内频繁检查）
+            @synchronized(self) {
+                if (self.cancelled) {
+                    *stop = YES;
+                    return;
+                }
+            }
+
             NSString *filename = fileInfo.filename;
-            // 兼容 .minecraft/ 前缀
+            // 兼容 .minecraft/ 前缀（HMCL/MMC 导出格式）
             if ([filename hasPrefix:@".minecraft/"]) {
                 filename = [filename substringFromIndex:@".minecraft/".length];
             }
             // 跳过 macOS 的 __MACOSX 目录和隐藏文件
             if ([filename hasPrefix:@"__MACOSX/"]) return;
             if ([filename.lastPathComponent hasPrefix:@"."]) return;
+            // 跳过 MMC 的元信息文件（已在 parseMMCPack 中处理过）
+            if ([format isEqualToString:@"mmc"] &&
+                ([filename isEqualToString:@"mmc-pack.json"] ||
+                 [filename isEqualToString:@"instance.cfg"] ||
+                 [filename isEqualToString:@"pack.png"])) {
+                return;
+            }
             if (filename.length == 0) return;
 
             // versions/ 前缀的文件提取到主目录 POJAV_GAME_DIR/versions/
@@ -636,8 +812,19 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
             *stop = !data || !written;
         } error:error];
         if (error && *error) {
-            NSLog(@"[ModpackImport] Plain ZIP 提取失败：%@", *error);
+            NSLog(@"[ModpackImport] %@ 提取失败：%@", format, *error);
             return NO;
+        }
+        // 取消时清理
+        @synchronized(self) {
+            if (self.cancelled) {
+                if (error) {
+                    *error = [NSError errorWithDomain:@"ModpackImportError"
+                                                 code:9999
+                                             userInfo:@{NSLocalizedDescriptionKey: @"导入已取消"}];
+                }
+                return NO;
+            }
         }
         return YES;
     }
@@ -681,6 +868,10 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
         // Modrinth: 直接下载
         NSUInteger skippedOptional = 0;
         for (NSUInteger i = 0; i < total; i++) {
+            // 取消检查点
+            if ([self checkCancelledWithError:error]) {
+                return NO;
+            }
             NSDictionary *fileInfo = files[i];
             NSArray *downloads = fileInfo[@"downloads"];
             NSString *url = downloads.firstObject;
@@ -775,6 +966,10 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
         // CurseForge: 需要 projectID + fileID 通过 API 获取下载链接
         // 这里通过 CurseForgeAPI 获取，避免循环依赖，直接构造 API URL
         for (NSUInteger i = 0; i < total; i++) {
+            // 取消检查点
+            if ([self checkCancelledWithError:error]) {
+                return NO;
+            }
             NSDictionary *fileInfo = files[i];
             NSNumber *projectID = fileInfo[@"projectID"];
             NSNumber *fileID = fileInfo[@"fileID"];

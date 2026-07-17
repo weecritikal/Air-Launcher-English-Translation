@@ -2,22 +2,30 @@
 //  ModpackImportViewController.m
 //  Amethyst
 //
-//  修改：增加异常捕获，彻底防止闪退
-//  重写：参照 FCL 风格，导入时显示进度卡片（百分比+进度条+阶段文案）替代转圈圈
+//  参照 FCL ModpackImportScreen / HMCL ModpackProviderPane / ZL2 ModpackImportScreen 重做
+//
+//  设计要点：
+//    1. 顶部使用 UISegmentedControl 切换 "导入 / 导出"，导出切换时 push 到独立的 ModpackExportViewController
+//    2. 导入流程：选择文件 → 解析（不确定模式进度卡片）→ 预览卡片（mod 信息）→ 导入进度卡片（支持取消）→ 完成提示
+//    3. 真正的取消：通过 [self.importService setCancelled:YES] 触发，service 在检查点抛出错误并清理半成品目录
+//    4. 已导入整合包列表使用现代化的卡片样式
 //
 
 #import "ModpackImportViewController.h"
 #import "BackgroundManager.h"
 #import "ModpackImportService.h"
-#import "ModpackExportService.h"
+#import "ModpackExportViewController.h"
 #import "PLProfiles.h"
 #import "UnzipKit.h"
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
 @interface ModpackImportViewController () <UITableViewDataSource, UITableViewDelegate, UIDocumentPickerDelegate>
+@property (nonatomic, strong) UISegmentedControl *tabSegment;       // 顶部 "导入 | 导出" 切换
+@property (nonatomic, strong) UIView *headerContainerView;          // 顶部说明 + 选择文件按钮
+@property (nonatomic, strong) UILabel *hintLabel;                   // 支持格式说明
+@property (nonatomic, strong) UIButton *importButton;               // 主导入按钮
 @property (nonatomic, strong) UITableView *tableView;
 @property (nonatomic, strong) UILabel *emptyLabel;
-@property (nonatomic, strong) UIButton *importButton;
 @property (nonatomic, strong) NSMutableArray<NSDictionary *> *importedModpacks;
 @property (nonatomic, strong) ModpackImportService *importService;
 @property (nonatomic, strong) NSDictionary *currentImportingModpack;
@@ -39,22 +47,16 @@
     [super viewDidLoad];
     // 适配自定义启动器背景：将当前视图控制器透明化，使全局背景壁纸能够透出
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
-    self.title = @"导入整合包";
+    self.title = @"整合包";
 
     [[BackgroundManager sharedManager] applyEffectToView:self.view];
 
     self.importService = [[ModpackImportService alloc] init];
     self.importedModpacks = [NSMutableArray array];
+
+    [self setupNavigationTab];
     [self setupUI];
     [self loadImportedModpacks];
-
-    // 右上角导出按钮（参照 FCL/HMCL 整合包导出入口）
-    UIBarButtonItem *exportItem = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"square.and.arrow.up"]
-                                                                    style:UIBarButtonItemStylePlain
-                                                                   target:self
-                                                                   action:@selector(showExportProfilePicker)];
-    exportItem.accessibilityLabel = @"导出整合包";
-    self.navigationItem.rightBarButtonItem = exportItem;
 
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(handleBackgroundUIEffectChanged:)
@@ -66,17 +68,68 @@
     [[NSNotificationCenter defaultCenter] removeObserver:self name:@"BackgroundUIEffectChanged" object:nil];
 }
 
+- (void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+    // 回到导入页时，确保 tab 显示"导入"
+    self.tabSegment.selectedSegmentIndex = 0;
+}
+
+#pragma mark - 顶部 Tab 切换（导入 / 导出）
+
+- (void)setupNavigationTab {
+    self.tabSegment = [[UISegmentedControl alloc] initWithItems:@[@"导入", @"导出"]];
+    self.tabSegment.selectedSegmentIndex = 0;
+    [self.tabSegment addTarget:self action:@selector(tabChanged:) forControlEvents:UIControlEventValueChanged];
+
+    // 放置在 navigationItem.titleView，宽度自适应
+    CGSize fittingSize = [self.tabSegment sizeThatFits:CGSizeMake(220, 30)];
+    self.tabSegment.frame = CGRectMake(0, 0, MAX(180, fittingSize.width), 30);
+    self.navigationItem.titleView = self.tabSegment;
+}
+
+- (void)tabChanged:(UISegmentedControl *)sender {
+    if (sender.selectedSegmentIndex == 1) {
+        // 切换到导出：push 到 ModpackExportViewController
+        ModpackExportViewController *exportVC = [[ModpackExportViewController alloc] init];
+        exportVC.preselectedProfileName = PLProfiles.current.selectedProfileName;
+        [self.navigationController pushViewController:exportVC animated:YES];
+        // 立即把 tab 切回"导入"，因为返回时 viewWillAppear 会重置
+        dispatch_async(dispatch_get_main_queue(), ^{
+            sender.selectedSegmentIndex = 0;
+        });
+    }
+}
+
+#pragma mark - UI Setup
+
 - (void)setupUI {
+    // 顶部说明 + 选择文件按钮容器
+    self.headerContainerView = [[UIView alloc] init];
+    self.headerContainerView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.headerContainerView.backgroundColor = [UIColor clearColor];
+    [self.view addSubview:self.headerContainerView];
+
+    self.hintLabel = [[UILabel alloc] init];
+    self.hintLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.hintLabel.textAlignment = NSTextAlignmentCenter;
+    self.hintLabel.textColor = [UIColor secondaryLabelColor];
+    self.hintLabel.font = [UIFont systemFontOfSize:12];
+    self.hintLabel.numberOfLines = 0;
+    self.hintLabel.text = @"支持格式：Modrinth (.mrpack)、CurseForge (.zip)、MMC (MultiMC/Prism)、Plain ZIP（直接含 .minecraft）";
+    [self.headerContainerView addSubview:self.hintLabel];
+
     self.importButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.importButton.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.importButton setTitle:@"选择整合包文件" forState:UIControlStateNormal];
+    [self.importButton setTitle:@"  选择整合包文件" forState:UIControlStateNormal];
     [self.importButton setImage:[UIImage systemImageNamed:@"doc.badge.plus"] forState:UIControlStateNormal];
     self.importButton.backgroundColor = [UIColor systemBlueColor];
     [self.importButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    self.importButton.layer.cornerRadius = 10;
+    self.importButton.tintColor = [UIColor whiteColor];
+    self.importButton.layer.cornerRadius = 12;
+    self.importButton.layer.masksToBounds = YES;
     self.importButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
     [self.importButton addTarget:self action:@selector(selectModpackFile) forControlEvents:UIControlEventTouchUpInside];
-    [self.view addSubview:self.importButton];
+    [self.headerContainerView addSubview:self.importButton];
 
     self.tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
     self.tableView.translatesAutoresizingMaskIntoConstraints = NO;
@@ -95,15 +148,25 @@
     self.emptyLabel.textColor = [UIColor secondaryLabelColor];
     self.emptyLabel.text = @"还没有导入的整合包\n点击上方按钮导入";
     self.emptyLabel.numberOfLines = 0;
+    self.emptyLabel.font = [UIFont systemFontOfSize:14];
     [self.view addSubview:self.emptyLabel];
 
     [NSLayoutConstraint activateConstraints:@[
-        [self.importButton.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:16],
-        [self.importButton.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:16],
-        [self.importButton.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-16],
-        [self.importButton.heightAnchor constraintEqualToConstant:50],
+        [self.headerContainerView.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:12],
+        [self.headerContainerView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:16],
+        [self.headerContainerView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-16],
 
-        [self.tableView.topAnchor constraintEqualToAnchor:self.importButton.bottomAnchor constant:16],
+        [self.hintLabel.topAnchor constraintEqualToAnchor:self.headerContainerView.topAnchor],
+        [self.hintLabel.leadingAnchor constraintEqualToAnchor:self.headerContainerView.leadingAnchor],
+        [self.hintLabel.trailingAnchor constraintEqualToAnchor:self.headerContainerView.trailingAnchor],
+
+        [self.importButton.topAnchor constraintEqualToAnchor:self.hintLabel.bottomAnchor constant:10],
+        [self.importButton.leadingAnchor constraintEqualToAnchor:self.headerContainerView.leadingAnchor],
+        [self.importButton.trailingAnchor constraintEqualToAnchor:self.headerContainerView.trailingAnchor],
+        [self.importButton.heightAnchor constraintEqualToConstant:50],
+        [self.importButton.bottomAnchor constraintEqualToAnchor:self.headerContainerView.bottomAnchor],
+
+        [self.tableView.topAnchor constraintEqualToAnchor:self.headerContainerView.bottomAnchor constant:12],
         [self.tableView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.tableView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [self.tableView.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor],
@@ -121,6 +184,7 @@
     UIView *overlay = [[UIView alloc] init];
     overlay.translatesAutoresizingMaskIntoConstraints = NO;
     overlay.backgroundColor = [UIColor colorWithWhite:0 alpha:0.4];
+    overlay.userInteractionEnabled = YES;
     [self.view addSubview:overlay];
 
     UIView *card = [[UIView alloc] init];
@@ -135,6 +199,7 @@
     titleLabel.text = title;
     titleLabel.font = [UIFont systemFontOfSize:18 weight:UIFontWeightSemibold];
     titleLabel.textAlignment = NSTextAlignmentCenter;
+    titleLabel.numberOfLines = 2;
     [card addSubview:titleLabel];
 
     UILabel *percentLabel = [[UILabel alloc] init];
@@ -166,6 +231,7 @@
     cancelBtn.translatesAutoresizingMaskIntoConstraints = NO;
     [cancelBtn setTitle:@"取消" forState:UIControlStateNormal];
     cancelBtn.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightMedium];
+    [cancelBtn setTitleColor:[UIColor systemRedColor] forState:UIControlStateNormal];
     [cancelBtn addTarget:self action:@selector(cancelImport) forControlEvents:UIControlEventTouchUpInside];
     [card addSubview:cancelBtn];
 
@@ -252,11 +318,14 @@
     }
 }
 
+/// 真正的取消：通过 service.cancelled 信号通知正在进行的导入流程
 - (void)cancelImport {
-    // 简化处理：取消只是隐藏卡片 (后台导入会继续，但结果被忽略)
-    // 真正的取消需要 ModpackImportService 支持取消，这里暂不实现
-    [self hideProgressCard];
-    self.currentImportingModpack = nil;
+    self.importService.cancelled = YES;
+    if (self.progressCancelButton) {
+        [self.progressCancelButton setTitle:@"正在取消..." forState:UIControlStateNormal];
+        [self.progressCancelButton setEnabled:NO];
+    }
+    [self setProgress:-1 stageMessage:@"正在取消，请稍候..."];
 }
 
 - (void)loadImportedModpacks {
@@ -325,26 +394,67 @@
             }
             self.currentImportingModpack = modpackInfo;
             [self hideProgressCard];
-            [self showModpackImportConfirmation:modpackInfo];
+            [self showModpackPreview:modpackInfo fileURL:fileURL];
         });
     });
 }
 
 - (void)documentPickerWasCancelled:(UIDocumentPickerViewController *)controller {}
 
-#pragma mark - 导入确认
+#pragma mark - 整合包预览卡片（参照 FCL ModpackPreviewSheet / HMCL ModpackInfoPage）
 
-- (void)showModpackImportConfirmation:(NSDictionary *)modpackInfo {
+- (void)showModpackPreview:(NSDictionary *)modpackInfo fileURL:(NSURL *)fileURL {
     NSString *name = modpackInfo[@"name"] ?: @"未知";
     NSString *version = modpackInfo[@"version"] ?: @"未知";
+    NSString *author = modpackInfo[@"author"] ?: @"";
     NSString *mcVersion = modpackInfo[@"minecraftVersion"] ?: @"未知";
-    NSString *loader = modpackInfo[@"loader"] ?: @"未知";
+    NSString *loader = modpackInfo[@"loader"] ?: @"Vanilla";
     NSString *loaderVersion = modpackInfo[@"loaderVersion"] ?: @"";
+    NSString *format = modpackInfo[@"format"] ?: @"unknown";
+    NSNumber *modCountNum = modpackInfo[@"modCount"];
+    NSNumber *fileCountNum = modpackInfo[@"fileCount"];
+    NSString *fileName = fileURL.lastPathComponent ?: @"";
 
-    NSString *message = [NSString stringWithFormat:@"名称: %@\n版本: %@\nMinecraft: %@\n加载器: %@ %@\n\n是否导入此整合包？",
-                         name, version, mcVersion, loader, loaderVersion];
+    // 格式映射成中文
+    NSDictionary *formatLabels = @{
+        @"modrinth": @"Modrinth (.mrpack)",
+        @"curseforge": @"CurseForge (.zip)",
+        @"mmc": @"MMC (MultiMC/Prism)",
+        @"plainzip": @"Plain ZIP (.minecraft)"
+    };
+    NSString *formatLabel = formatLabels[format] ?: format;
 
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"导入整合包" message:message preferredStyle:UIAlertControllerStyleAlert];
+    NSMutableString *message = [NSMutableString string];
+    [message appendFormat:@"文件: %@\n", fileName];
+    [message appendFormat:@"格式: %@\n", formatLabel];
+    [message appendFormat:@"名称: %@\n", name];
+    [message appendFormat:@"版本: %@", version];
+    if (author.length > 0) {
+        [message appendFormat:@"   作者: %@", author];
+    }
+    [message appendString:@"\n"];
+    [message appendFormat:@"Minecraft: %@\n", mcVersion];
+    [message appendFormat:@"加载器: %@", loader];
+    if (loaderVersion.length > 0) {
+        [message appendFormat:@" %@", loaderVersion];
+    }
+    [message appendString:@"\n"];
+
+    if (modCountNum && modCountNum.integerValue > 0) {
+        [message appendFormat:@"需下载模组: %ld 个\n", (long)modCountNum.integerValue];
+    }
+    if (fileCountNum && fileCountNum.integerValue > 0) {
+        [message appendFormat:@"需解压文件: %ld 个\n", (long)fileCountNum.integerValue];
+    }
+
+    // Forge/NeoForge 警告
+    if ([loader isEqualToString:@"Forge"] || [loader isEqualToString:@"NeoForge"]) {
+        [message appendFormat:@"\n⚠️ 注意: %@ %@ 加载器需通过下载界面手动安装，否则启动会失败。", loader, loaderVersion];
+    }
+
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"导入整合包"
+                                                                   message:message
+                                                            preferredStyle:UIAlertControllerStyleAlert];
     [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:^(UIAlertAction * _Nonnull action) {
         self.currentImportingModpack = nil;
     }]];
@@ -359,8 +469,15 @@
     [self presentViewController:alert animated:YES completion:nil];
 }
 
+#pragma mark - 导入流程
+
 - (void)startModpackImport:(NSDictionary *)modpackInfo {
-    [self showProgressCardWithTitle:[NSString stringWithFormat:@"正在导入 %@", modpackInfo[@"name"] ?: @"整合包"]];
+    // 重置取消状态
+    [self.importService resetCancelState];
+
+    NSString *name = modpackInfo[@"name"] ?: @"整合包";
+    [self showProgressCardWithTitle:[NSString stringWithFormat:@"正在导入 %@", name]];
+    [self setProgress:-1 stageMessage:@"正在准备..."];
 
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         __block NSError *error = nil;
@@ -379,29 +496,62 @@
         }
 
         dispatch_async(dispatch_get_main_queue(), ^{
-            // 完成时显示 100%
-            [self setProgress:1.0 stageMessage:@"导入完成"];
+            // 检测是否被取消
+            BOOL wasCancelled = [error.domain isEqualToString:@"ModpackImportError"] && error.code == 9999;
+            NSString *localizedDesc = error.localizedDescription ?: @"";
+            if (!wasCancelled && [localizedDesc containsString:@"取消"]) {
+                wasCancelled = YES;
+            }
 
-            // 停留 0.6s 让用户看到完成状态
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.6 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            if (wasCancelled) {
+                // 取消：直接隐藏卡片，不显示 100%
                 [self hideProgressCard];
                 self.currentImportingModpack = nil;
+                [self showAlertWithTitle:@"已取消" message:@"导入已取消"];
+                return;
+            }
 
-                if (success) {
-                    NSString *loader = modpackInfo[@"loader"];
-                    NSString *msg = [NSString stringWithFormat:@"整合包 '%@' 已成功导入。", modpackInfo[@"name"]];
-                    if ([loader isEqualToString:@"Forge"] || [loader isEqualToString:@"NeoForge"]) {
-                        msg = [msg stringByAppendingFormat:@"\n\n注意: 此整合包使用 %@ %@ 加载器，请先通过下载界面手动安装该加载器版本，否则启动会失败。", loader, modpackInfo[@"loaderVersion"]];
-                    }
-                    [self showAlertWithTitle:@"导入成功" message:msg completion:^{
-                        [self loadImportedModpacks];
-                    }];
-                } else {
-                    [self showAlertWithTitle:@"导入失败" message:error.localizedDescription ?: @"未知错误"];
-                }
-            });
+            if (success) {
+                // 完成时显示 100%
+                [self setProgress:1.0 stageMessage:@"导入完成"];
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.6 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                    [self hideProgressCard];
+                    self.currentImportingModpack = nil;
+                    [self showImportSuccess:modpackInfo];
+                });
+            } else {
+                [self hideProgressCard];
+                self.currentImportingModpack = nil;
+                [self showAlertWithTitle:@"导入失败" message:error.localizedDescription ?: @"未知错误"];
+            }
         });
     });
+}
+
+- (void)showImportSuccess:(NSDictionary *)modpackInfo {
+    NSString *loader = modpackInfo[@"loader"];
+    NSString *name = modpackInfo[@"name"];
+    NSString *msg = [NSString stringWithFormat:@"整合包 '%@' 已成功导入。", name];
+    if ([loader isEqualToString:@"Forge"] || [loader isEqualToString:@"NeoForge"]) {
+        msg = [msg stringByAppendingFormat:@"\n\n注意: 此整合包使用 %@ %@ 加载器，请先通过下载界面手动安装该加载器版本，否则启动会失败。", loader, modpackInfo[@"loaderVersion"]];
+    }
+
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"导入成功"
+                                                                   message:msg
+                                                            preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"关闭" style:UIAlertActionStyleCancel handler:^(UIAlertAction * _Nonnull action) {
+        [self loadImportedModpacks];
+    }]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"立即启动" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        [self loadImportedModpacks];
+        [self launchModpack:modpackInfo];
+    }]];
+
+    if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
+        alert.popoverPresentationController.sourceView = self.view;
+        alert.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(self.view.bounds), CGRectGetMidY(self.view.bounds), 0, 0);
+    }
+    [self presentViewController:alert animated:YES completion:nil];
 }
 
 #pragma mark - UITableView DataSource
@@ -532,209 +682,6 @@
         [[BackgroundManager sharedManager] applyEffectToView:self.view];
         [self.tableView reloadData];
     });
-}
-
-#pragma mark - 整合包导出（参照 FCL ExportModpackViewModel / HMCL ModpackHelper）
-
-- (void)showExportProfilePicker {
-    NSDictionary *profiles = PLProfiles.current.profiles;
-    NSArray *profileNames = profiles.allKeys;
-
-    if (profileNames.count == 0) {
-        [self showAlertWithTitle:@"无法导出" message:@"当前没有任何可导出的游戏配置文件"];
-        return;
-    }
-
-    // 优先使用当前选中 profile
-    NSString *selected = PLProfiles.current.selectedProfileName;
-
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"选择要导出的配置文件"
-                                                                   message:nil
-                                                            preferredStyle:UIAlertControllerStyleActionSheet];
-    for (NSString *name in profileNames) {
-        NSString *title = name;
-        if ([name isEqualToString:selected]) {
-            title = [NSString stringWithFormat:@"%@ (当前)", name];
-        }
-        [sheet addAction:[UIAlertAction actionWithTitle:title style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-            [self showExportFormatPickerForProfile:name];
-        }]];
-    }
-    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
-
-    if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
-        sheet.popoverPresentationController.barButtonItem = self.navigationItem.rightBarButtonItem;
-    }
-    [self presentViewController:sheet animated:YES completion:nil];
-}
-
-- (void)showExportFormatPickerForProfile:(NSString *)profileName {
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"选择导出格式"
-                                                                   message:nil
-                                                            preferredStyle:UIAlertControllerStyleActionSheet];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"Modrinth (.mrpack)" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-        [self showExportInfoAlertForProfile:profileName format:ModpackExportFormatModrinth];
-    }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"CurseForge (.zip)" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-        [self showExportInfoAlertForProfile:profileName format:ModpackExportFormatCurseForge];
-    }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"链接列表 (.txt)" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-        [self showExportInfoAlertForProfile:profileName format:ModpackExportFormatLinkList];
-    }]];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
-
-    if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
-        sheet.popoverPresentationController.barButtonItem = self.navigationItem.rightBarButtonItem;
-    }
-    [self presentViewController:sheet animated:YES completion:nil];
-}
-
-- (void)showExportInfoAlertForProfile:(NSString *)profileName format:(ModpackExportFormat)format {
-    // 预填名称和版本
-    NSDictionary *profile = PLProfiles.current.profiles[profileName];
-    NSString *lastVersionId = profile[@"lastVersionId"] ?: @"";
-    NSDictionary *parsed = [ModpackExportService parseVersionId:lastVersionId];
-    NSString *defaultName = profileName;
-    NSString *defaultVersion = @"1.0";
-
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"导出整合包"
-                                                                   message:@"请输入整合包信息"
-                                                            preferredStyle:UIAlertControllerStyleAlert];
-    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
-        textField.placeholder = @"整合包名称";
-        textField.text = defaultName;
-        textField.clearButtonMode = UITextFieldViewModeWhileEditing;
-    }];
-    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
-        textField.placeholder = @"版本号";
-        textField.text = defaultVersion;
-        textField.clearButtonMode = UITextFieldViewModeWhileEditing;
-    }];
-    [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
-        textField.placeholder = @"作者";
-        textField.text = @"Amethyst User";
-        textField.clearButtonMode = UITextFieldViewModeWhileEditing;
-    }];
-
-    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
-    [alert addAction:[UIAlertAction actionWithTitle:@"导出" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-        NSString *name = alert.textFields[0].text ?: @"";
-        NSString *version = alert.textFields[1].text ?: @"1.0";
-        NSString *author = alert.textFields[2].text ?: @"Amethyst User";
-        if (name.length == 0) name = profileName;
-        if (version.length == 0) version = @"1.0";
-        (void)parsed;
-        [self startExportForProfile:profileName name:name version:version author:author format:format];
-    }]];
-
-    [self presentViewController:alert animated:YES completion:nil];
-}
-
-- (void)startExportForProfile:(NSString *)profileName
-                         name:(NSString *)name
-                      version:(NSString *)version
-                       author:(NSString *)author
-                       format:(ModpackExportFormat)format {
-    // 确定文件扩展名
-    NSString *ext = @"mrpack";
-    switch (format) {
-        case ModpackExportFormatModrinth:   ext = @"mrpack"; break;
-        case ModpackExportFormatCurseForge: ext = @"zip";    break;
-        case ModpackExportFormatLinkList:   ext = @"txt";    break;
-    }
-
-    // 构造导出路径到 Documents/Exports/
-    NSString *exportsDir = [NSHomeDirectory() stringByAppendingPathComponent:@"Documents/Exports"];
-    [[NSFileManager defaultManager] createDirectoryAtPath:exportsDir withIntermediateDirectories:YES attributes:nil error:nil];
-
-    // 清理文件名中的非法字符（关键修复：多启动器兼容）
-    // 之前仅过滤 / \ : * ? " < > | 九个字符，未处理：
-    //   - Windows 保留名（CON/PRN/AUX/NUL/COM1-9/LPT1-9），导出的文件在 Windows 上无法被 FCL/HMCL 识别
-    //   - 首尾空格和点号，Windows 不允许文件名以空格或点号结尾
-    //   - 空名称（用户清空输入），导致导出文件名为 "-v1.0.mrpack"
-    //   - 过长名称（>255 字符），文件系统限制
-    NSCharacterSet *invalidChars = [NSCharacterSet characterSetWithCharactersInString:@"/\\:*?\"<>|"];
-    NSMutableString *safeName = [[[name componentsSeparatedByCharactersInSet:invalidChars] componentsJoinedByString:@"_"] mutableCopy];
-
-    // 去除首尾空格和点号（Windows 文件系统限制）
-    while (safeName.length > 0 && ([safeName hasPrefix:@" "] || [safeName hasPrefix:@"."])) {
-        [safeName deleteCharactersInRange:NSMakeRange(0, 1)];
-    }
-    while (safeName.length > 0 && ([safeName hasSuffix:@" "] || [safeName hasSuffix:@"."])) {
-        [safeName deleteCharactersInRange:NSMakeRange(safeName.length - 1, 1)];
-    }
-
-    // Windows 保留名处理（CON/PRN/AUX/NUL/COM1-9/LPT1-9）
-    NSArray *reservedNames = @[@"CON", @"PRN", @"AUX", @"NUL",
-        @"COM1", @"COM2", @"COM3", @"COM4", @"COM5", @"COM6", @"COM7", @"COM8", @"COM9",
-        @"LPT1", @"LPT2", @"LPT3", @"LPT4", @"LPT5", @"LPT6", @"LPT7", @"LPT8", @"LPT9"];
-    if ([reservedNames containsObject:safeName.uppercaseString]) {
-        [safeName appendString:@"_modpack"];
-    }
-
-    // 长度限制（保留 50 字符以容纳 "-v<version>.<ext>" 后缀，避免总路径超 255 字符）
-    if (safeName.length > 200) {
-        [safeName deleteCharactersInRange:NSMakeRange(200, safeName.length - 200)];
-    }
-
-    // 空名称兜底
-    if (safeName.length == 0) {
-        [safeName setString:@"ExportedModpack"];
-    }
-
-    NSString *destPath = [exportsDir stringByAppendingPathComponent:[NSString stringWithFormat:@"%@-v%@.%@", safeName, version, ext]];
-
-    // 显示进度卡片
-    [self showProgressCardWithTitle:@"正在导出整合包"];
-    [self setProgress:0.0 stageMessage:@"准备中..."];
-
-    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        NSError *error = nil;
-        BOOL success = [[ModpackExportService sharedService] exportModpackForProfile:profileName
-                                                                               toPath:destPath
-                                                                                  name:name
-                                                                               version:version
-                                                                                author:author
-                                                                                format:format
-                                                                      includeOverrides:YES
-                                                                             progress:^(double p, NSString *stageMessage) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                [self setProgress:p stageMessage:stageMessage];
-            });
-        }
-                                                                                  error:&error];
-
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [self hideProgressCard];
-            if (success) {
-                [self showExportSuccessWithPath:destPath];
-            } else {
-                NSString *msg = error.localizedDescription ?: @"未知错误";
-                [self showAlertWithTitle:@"导出失败" message:msg];
-            }
-        });
-    });
-}
-
-- (void)showExportSuccessWithPath:(NSString *)path {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"导出成功"
-                                                                   message:[NSString stringWithFormat:@"整合包已保存到：\n%@", path]
-                                                            preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"关闭" style:UIAlertActionStyleCancel handler:nil]];
-    [alert addAction:[UIAlertAction actionWithTitle:@"分享" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-        [self shareExportedFile:path];
-    }]];
-    [self presentViewController:alert animated:YES completion:nil];
-}
-
-- (void)shareExportedFile:(NSString *)path {
-    NSURL *fileURL = [NSURL fileURLWithPath:path];
-    UIActivityViewController *activityVC = [[UIActivityViewController alloc] initWithActivityItems:@[fileURL] applicationActivities:nil];
-
-    if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
-        activityVC.popoverPresentationController.barButtonItem = self.navigationItem.rightBarButtonItem;
-    }
-    [self presentViewController:activityVC animated:YES completion:nil];
 }
 
 @end

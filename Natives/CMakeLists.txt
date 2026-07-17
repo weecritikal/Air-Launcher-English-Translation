@@ -328,6 +328,7 @@ add_executable(AngelAuraAmethyst
   ModpackImportViewController.m
   ModpackImportService.m
   ModpackExportService.m
+  ModpackExportViewController.m
 
   # CurseForge MurmurHash2 fingerprint tool
   MurmurHash2.m
