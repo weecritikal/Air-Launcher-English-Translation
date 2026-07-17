@@ -80,34 +80,49 @@ target_link_libraries(awt_xawt
   awt_headless
 )
 
-# TouchController iOS static library
-# Provides JNI interface for touch control communication between Minecraft mod and launcher
+# TouchController iOS native library
+# Provides JNI / C API for touch control communication between Minecraft mod and launcher
 #
 # 三级回退检测逻辑（按优先级从高到低）：
 #   Level 1 — 预编译 XCFramework：检测 TouchController.xcframework/，从 ios-arm64
 #             子目录提取设备静态库链接（由 build_xcframework.sh 生成）
 #   Level 2 — 预编译独立 .a：检测 libproxy_server_ios.a (device) 或
 #             libproxy_server_ios_simulator.a (simulator)，保持向后兼容
-#   Level 3 — 源码编译回退：检测 ios_transport.c 源文件，CMake 直接编译为静态库
+#   Level 3 — 源码编译回退：检测 ios_transport.c 源文件，CMake 直接编译为对象库
 #   禁用   — 以上都不存在时，TOUCHCONTROLLER_LIB 置空并打印警告
+#
+# 重要：TouchControllerBridge.m 通过 dlsym(RTLD_DEFAULT, "touchcontroller_ios_*")
+# 运行时查找符号，编译期没有任何直接引用。Apple ld 处理静态库（.a）时按需加载，
+# 只提取被直接引用的对象文件——未被引用的对象文件会被丢弃，导致 dlsym 找不到符号。
+# 因此：
+#   - Level 1/2（预编译 .a）：必须用 -Wl,-force_load,<path> 强制加载整个静态库
+#   - Level 3（源码编译）：改用 OBJECT 库，对象文件直接链接到可执行文件，
+#     所有符号自动保留，无需 -force_load
 set(TOUCHCONTROLLER_LIB_DIR "${CMAKE_CURRENT_LIST_DIR}/TouchController")
 set(TOUCHCONTROLLER_XCFW "${TOUCHCONTROLLER_LIB_DIR}/TouchController.xcframework")
+set(TOUCHCONTROLLER_LIB "")
 
 # Level 1: 预编译 XCFramework（最高优先级）
 if(EXISTS "${TOUCHCONTROLLER_XCFW}/ios-arm64/libproxy_server_ios.a")
-  message(STATUS "Found TouchController XCFramework (Level 1: prebuilt xcframework)")
-  set(TOUCHCONTROLLER_LIB "${TOUCHCONTROLLER_XCFW}/ios-arm64/libproxy_server_ios.a")
-# Level 2: 预编译独立 .a（现有逻辑，保持兼容）
+  set(_TC_LIB_PATH "${TOUCHCONTROLLER_XCFW}/ios-arm64/libproxy_server_ios.a")
+  message(STATUS "Found TouchController XCFramework (Level 1: prebuilt xcframework) at ${_TC_LIB_PATH}")
+  # 强制加载整个静态库，确保 dlsym 能找到所有 touchcontroller_ios_* 符号
+  set(TOUCHCONTROLLER_LIB "-Wl,-force_load,${_TC_LIB_PATH}")
+# Level 2: 预编译独立 .a（保持兼容）
 elseif(EXISTS "${TOUCHCONTROLLER_LIB_DIR}/libproxy_server_ios.a")
-  message(STATUS "Found TouchController device library (Level 2: prebuilt .a)")
-  set(TOUCHCONTROLLER_LIB "${TOUCHCONTROLLER_LIB_DIR}/libproxy_server_ios.a")
+  set(_TC_LIB_PATH "${TOUCHCONTROLLER_LIB_DIR}/libproxy_server_ios.a")
+  message(STATUS "Found TouchController device library (Level 2: prebuilt .a) at ${_TC_LIB_PATH}")
+  set(TOUCHCONTROLLER_LIB "-Wl,-force_load,${_TC_LIB_PATH}")
 elseif(EXISTS "${TOUCHCONTROLLER_LIB_DIR}/libproxy_server_ios_simulator.a")
-  message(STATUS "Found TouchController simulator library (Level 2: prebuilt .a)")
-  set(TOUCHCONTROLLER_LIB "${TOUCHCONTROLLER_LIB_DIR}/libproxy_server_ios_simulator.a")
-# Level 3: 源码编译回退
+  set(_TC_LIB_PATH "${TOUCHCONTROLLER_LIB_DIR}/libproxy_server_ios_simulator.a")
+  message(STATUS "Found TouchController simulator library (Level 2: prebuilt .a) at ${_TC_LIB_PATH}")
+  set(TOUCHCONTROLLER_LIB "-Wl,-force_load,${_TC_LIB_PATH}")
+# Level 3: 源码编译回退（使用 OBJECT 库确保所有符号被保留）
 elseif(EXISTS "${TOUCHCONTROLLER_LIB_DIR}/ios_transport.c")
   message(STATUS "Building TouchController from source (Level 3: source compilation)")
-  add_library(proxy_server_ios STATIC
+  # 使用 OBJECT 库而非 STATIC 库：对象文件直接链接到可执行文件，
+  # 所有符号自动保留，避免 dlsym 找不到符号的问题
+  add_library(proxy_server_ios OBJECT
     ${TOUCHCONTROLLER_LIB_DIR}/ios_transport.c
     ${TOUCHCONTROLLER_LIB_DIR}/ring_buffer.c
   )
