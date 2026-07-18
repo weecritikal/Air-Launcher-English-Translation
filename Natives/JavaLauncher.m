@@ -777,37 +777,6 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
             ? RENDERER_NAME_MOBILEGLUES
             : glLibName;
 
-        // 关键修复（用户要求：1.17+ 无论选什么渲染器和图形 API 都加载 MobileGlues）：
-        //
-        // 用户明确要求："选哪个渲染器和哪个图形API都会加载mobileglues这点不变（1.17+）"
-        //
-        // 这意味着对于 MC 1.17+，org.lwjgl.opengl.libname 必须始终是 libmobileglues.dylib，
-        // 无论用户选的是 ANGLE / gl4es / Vulkan / MobileGlues 渲染器。
-        //
-        // 原因：
-        // - MobileGlues 是 GL→Vulkan/Metal 翻译层，专为 iOS 设计
-        // - ANGLE 的 EGL 实现仍然用于上下文管理（gl_bridge.m dlsym_EGL 始终从 ANGLE 加载），
-        //   但 GL 函数调用通过 MobileGlues 路由（GL→Vulkan→MoltenVK→Metal）
-        // - 这样无论 MC 走 OpenGL 还是 Vulkan 路径，都能通过 MobileGlues+MoltenVK 达到高帧率
-        //   （MobileGlues 的 Vulkan 后端使用 IMMEDIATE present mode，可超过屏幕刷新率）
-        //
-        // 注意：
-        // - AMETHYST_RENDERER 环境变量保持原值（用户选的渲染器名），用于 egl_bridge.m 的 bridge 选择
-        // - 这里只覆盖 org.lwjgl.opengl.libname（LWJGL 加载的 GL 库）
-        // - gl4es 仍用于 MC 1.16 及以下（旧版本 GL 调用兼容）
-        //
-        // 1.17+ 检测：MC 版本号 >= "1.17"
-        // mcVersionId 在上方已设置（如 "1.17"、"1.20.1"、"26.2" 等）
-        // 简单字符串比较即可："1.17" <= versionId（注意 "26.2" > "1.17" 也满足）
-        if (mcVersionId && [mcVersionId compare:@"1.17" options:NSNumericSearch] != NSOrderedAscending) {
-            NSLog(@"[JavaLauncher] MC 1.17+ detected (version=%@), forcing org.lwjgl.opengl.libname=libmobileglues.dylib", mcVersionId);
-            openglLibName = RENDERER_NAME_MOBILEGLUES;
-            // 同时写入 MG 配置目录，确保 MobileGlues 读取 config.json
-            // （init_loadMobileGluesConfig 可能因渲染器非 mobileglues/auto/vulkan 而跳过）
-            NSString *mgDirPath = [NSString stringWithFormat:@"%s/MG", getenv("POJAV_HOME")];
-            setenv("MG_DIR_PATH", mgDirPath.UTF8String, 1);
-        }
-
         PUSH_MARGV_FORMAT(@"-Dorg.lwjgl.opengl.libname=%s", openglLibName);
 
         // 显式指定 spirv-cross 库名（参照 catsruledogs/Amethyst-iOS-25）：
