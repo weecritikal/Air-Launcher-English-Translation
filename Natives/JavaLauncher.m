@@ -564,19 +564,13 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
     PUSH_MARGV_LITERAL("-Dlog4j2.formatMsgNoLookups=true");
 
     // ============================================================================
-    // JNA 调试与加载路径
+    // JNA 加载路径
     // ============================================================================
-    // 现象：MC 26.3 启动后日志在 "Platform.isMac called from com.sun.jna.NativeLibrary"
-    //       重复 10 次后中断，无 Java 崩溃报告，疑似 native crash。
-    // 原因：Frameworks 目录缺少 libjnidispatch.dylib（代码注释错误声称存在 5.13.0 版本），
-    //       JNA 回退从 JAR 中提取 macOS arm64 版 libjnidispatch，加载后尝试加载
-    //       Mac 专属 framework 时崩溃。
-    // 启用 JNA 加载调试日志，定位具体崩溃的库。
-    PUSH_MARGV_LITERAL("-Djna.debug_load=true");
-    PUSH_MARGV_LITERAL("-Djna.debug_load.jna=true");
-    // 指定 libjnidispatch 搜索路径为 Frameworks（为后续内置 iOS 版做准备）
+    // JNA 5.13.0 的 darwin-aarch64 libjnidispatch 从 JAR 中提取后能正常加载。
+    // Tools.java / MinecraftResourceUtils.m 已强制将 JNA 替换为 5.13.0
+    // （MC 26.3+ 要求的 5.17.0 在 iOS 上会导致 native crash）。
+    // 保留 boot.library.path 以便未来内置 iOS arm64 版 libjnidispatch。
     PUSH_MARGV_FORMAT(@"-Djna.boot.library.path=%@", frameworksPath);
-    NSLog(@"[JavaLauncher] JNA debug logging enabled, boot.library.path=%@", frameworksPath);
 
     // ============================================================================
     // 帧率解锁第四层：JVM 系统属性
