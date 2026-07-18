@@ -45,6 +45,14 @@ import net.kdt.pojavlaunch.uikit.UIKit;
 
 public final class SDLVideo {
 
+    static {
+        System.out.println("[SDLVideo] class loaded (Amethyst override, commit " + "diag-v1" + ")");
+        System.out.println("[SDLVideo] classloader=" + SDLVideo.class.getClassLoader());
+        System.out.println("[SDLVideo] protection domain=" + SDLVideo.class.getProtectionDomain());
+        // 打印调用栈，确认是谁触发了类加载
+        new Throwable("[SDLVideo] class init stack trace").printStackTrace(System.out);
+    }
+
     // ============================================================================
     // 常量（完整复制自 LWJGL 3.4.1 SDLVideo.class，避免 MC 引用时 NoSuchFieldError）
     // ============================================================================
@@ -262,6 +270,25 @@ public final class SDLVideo {
         if (window == 0) {
             System.out.println("[SDLVideo] FATAL: Window creation failed, MC will likely crash");
         }
+        return window;
+    }
+
+    /**
+     * 覆盖 SDL_CreateWindowWithProperties。
+     *
+     * MC 26.3-snapshot-4+ 可能用此方法创建窗口（而非 SDL_CreateWindow）。
+     * 如果 MC 直接调用原始版本，SDL3 UIKit 后端会创建新 UIWindowScene 导致阻塞。
+     *
+     * 此覆盖忽略传入的 properties，转用我们的 native helper 创建窗口（复用启动器 UIWindowScene）。
+     */
+    public static long SDL_CreateWindowWithProperties(int props) {
+        System.out.println("[SDLVideo] SDL_CreateWindowWithProperties intercepted: props=" + props);
+        // 忽略传入的 props，用默认参数创建窗口
+        // SDL_CreateWindowWithProperties 通常设置 width/height/flags 等，
+        // 我们从 props 中无法轻易读取（需要 native 层 SDL_GetNumberProperty），
+        // 所以用默认尺寸创建，后续 MC 会调用 SDL_SetWindowSize 调整
+        long window = UIKit.sdlCreateWindowWithScene(0, 0, 0);
+        System.out.println("[SDLVideo] SDL_CreateWindowWithProperties returned: 0x" + Long.toHexString(window));
         return window;
     }
 

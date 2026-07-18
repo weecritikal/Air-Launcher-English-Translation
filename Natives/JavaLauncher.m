@@ -101,6 +101,11 @@ void init_loadDefaultEnv() {
         setenv("MVK_CONFIG_LOG_LEVEL", "2", 1);
     }
 
+    // SDL3 诊断日志（临时）：启用 verbose 级别，输出 SDL3 内部初始化/窗口创建流程
+    // 用于诊断 MC 26.3-snapshot-4 SDL3 窗口创建阻塞问题
+    // 格式：*=verbose 表示所有 category 都用 verbose 级别
+    setenv("SDL_LOGGING", "*=verbose", 1);
+
     // Runs JVM in a separate thread
     setenv("HACK_IGNORE_START_ON_FIRST_THREAD", "1", 1);
 
