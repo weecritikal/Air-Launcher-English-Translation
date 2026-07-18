@@ -1024,11 +1024,22 @@ static GameSurfaceView* pojavWindow;
     if (!getEntitlementValue(@"com.apple.private.memorystatus")) {
         return;
     }
-    int limit = getPrefInt(@"java.allocated_memory") + 1024;
+    // 必须与 JavaLauncher.m 中 launchJVM 的 allocmem 计算保持一致，
+    // 否则会出现 Jetsam 上限 < JVM Xmx + native 开销 的情况，
+    // 导致系统在 JVM 启动阶段 SIGKILL 进程（日志表现为 "XPC connection interrupted"）。
+    int allocmem;
+    if (getPrefBool(@"java.auto_ram")) {
+        CGFloat autoRatio = getEntitlementValue(@"com.apple.private.memorystatus") ? 0.4 : 0.25;
+        allocmem = roundf((NSProcessInfo.processInfo.physicalMemory >> 20) * autoRatio);
+    } else {
+        allocmem = (int)getPrefInt(@"java.allocated_memory");
+    }
+    // 1024 MB 留给 JVM native 堆 + UIKit/Metal/EGL 等非 Java 堆开销。
+    int limit = allocmem + 1024;
     if (memorystatus_control(MEMORYSTATUS_CMD_SET_JETSAM_TASK_LIMIT, getpid(), limit, NULL, 0) == -1) {
         NSLog(@"Failed to set Jetsam task limit: error: %s", strerror(errno));
     } else {
-        NSLog(@"Successfully set Jetsam task limit");
+        NSLog(@"Successfully set Jetsam task limit (allocmem=%d MB, limit=%d MB)", allocmem, limit);
     }
 }
 
