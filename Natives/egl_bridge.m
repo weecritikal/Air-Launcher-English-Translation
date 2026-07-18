@@ -228,3 +228,158 @@ void pojavSwapInterval(int interval) {
 
     br_swap_interval(interval);
 }
+
+// ============================================================================
+// SDL3 UIKit 窗口创建桥接（MC 26.3-snapshot-4+ 使用 SDL3 替代 GLFW）
+// ============================================================================
+// 背景：
+//   SDL3 UIKit 后端默认会创建新的 UIWindowScene，与启动器已有的
+//   GameSurfaceView（含 CAMetalLayer）冲突，导致 SDL_CreateWindow 阻塞。
+//
+// 解决方案：
+//   拦截 MC 的 SDL_CreateWindow 调用（通过 SDLVideo.java 覆盖类），
+//   转而调用 SDL_CreateWindowWithProperties，通过 Properties API 把
+//   启动器的 UIWindowScene 指针传给 SDL3，让 SDL3 复用启动器的窗口场景。
+//
+// 调用链：
+//   MC -> SDLVideo.SDL_CreateWindow (Java 覆盖类)
+//       -> UIKit.sdlCreateWindowWithScene (本函数)
+//          1. 遍历 connectedScenes 找到应用类型的 UIWindowScene
+//          2. dlopen libSDL3.dylib (RTLD_NOLOAD 获取已加载句柄)
+//          3. dlsym 获取 SDL3 Properties API 函数指针
+//          4. 创建 properties，设置 windowscene/metal/flags 属性
+//          5. 调用 SDL_CreateWindowWithProperties
+//          6. 失败回退到标准 SDL_CreateWindow
+//
+// 线程安全：
+//   UIApplication.sharedApplication 理论上应在主线程访问，但此处仅读取
+//   connectedScenes 集合（不做修改），且指针值稳定，实践中可从任意线程调用。
+//   SDL3 内部会通过 SDL_RunOnMainThread 调度 UIKit 操作到主线程。
+
+// SDL3 类型定义（避免依赖 SDL3 头文件）
+typedef unsigned int SDL_PropertiesID;      // SDL_PropertiesID = Uint32
+typedef int SDL_bool;                        // SDL_bool = int
+typedef long long SDL_Sint64;                // Sint64 = int64_t
+typedef struct SDL_Window SDL_Window;        // 不透明指针
+
+// SDL3 Properties API 函数指针类型
+typedef SDL_PropertiesID (*SDL_CreateProperties_t)(void);
+typedef SDL_bool (*SDL_SetPointerProperty_t)(SDL_PropertiesID, const char *, void *);
+typedef SDL_bool (*SDL_SetBooleanProperty_t)(SDL_PropertiesID, const char *, SDL_bool);
+typedef SDL_bool (*SDL_SetNumberProperty_t)(SDL_PropertiesID, const char *, SDL_Sint64);
+typedef SDL_Window *(*SDL_CreateWindowWithProperties_t)(SDL_PropertiesID);
+typedef void (*SDL_DestroyProperties_t)(SDL_PropertiesID);
+typedef SDL_Window *(*SDL_CreateWindow_t)(const char *, int, int, unsigned int);
+
+// SDL_WINDOW_METAL = 0x20000000（iOS 上必须用 Metal 渲染）
+#define SDL3_WINDOW_METAL_FLAG 0x20000000u
+
+/**
+ * 创建 SDL3 窗口，复用启动器的 UIWindowScene。
+ *
+ * 由 SDLVideo.java 覆盖类的 SDL_CreateWindow 方法调用。
+ * MC 不再直接调用 SDL3 的 SDL_CreateWindow，而是通过此函数创建窗口。
+ *
+ * @param w 窗口宽度
+ * @param h 窗口高度
+ * @param flags 窗口 flags（会自动添加 SDL_WINDOW_METAL）
+ * @return SDL_Window 指针（成功）或 0（失败）
+ */
+JNIEXPORT jlong JNICALL Java_net_kdt_pojavlaunch_uikit_UIKit_sdlCreateWindowWithScene(JNIEnv* env, jclass clazz, jint w, jint h, jlong flags) {
+    NSLog(@"[SDL3 Bridge] sdlCreateWindowWithScene: w=%d h=%d flags=0x%llx", w, h, flags);
+
+    // ----------------------------------------------------------------
+    // 1. 查找启动器的 UIWindowScene
+    // ----------------------------------------------------------------
+    UIWindowScene *launcherScene = nil;
+    for (UIWindowScene *scene in UIApplication.sharedApplication.connectedScenes.allObjects) {
+        if (scene.session.role == UIWindowSceneSessionRoleApplication) {
+            launcherScene = scene;
+            break;
+        }
+    }
+    if (!launcherScene) {
+        NSLog(@"[SDL3 Bridge] WARNING: No UIWindowScene found, falling back to standard SDL_CreateWindow");
+    } else {
+        NSLog(@"[SDL3 Bridge] Found UIWindowScene: %@", launcherScene);
+    }
+
+    // ----------------------------------------------------------------
+    // 2. 获取 libSDL3.dylib 句柄（已加载）
+    // ----------------------------------------------------------------
+    // RTLD_NOLOAD: 不重新加载，只获取已加载的句柄
+    void *sdl_lib = dlopen("@rpath/libSDL3.dylib", RTLD_NOLOAD | RTLD_GLOBAL);
+    if (!sdl_lib) {
+        // 尝试不带路径
+        sdl_lib = dlopen("libSDL3.dylib", RTLD_NOLOAD | RTLD_GLOBAL);
+    }
+    if (!sdl_lib) {
+        NSLog(@"[SDL3 Bridge] FATAL: libSDL3.dylib not loaded. dlopen error: %s", dlerror());
+        return 0;
+    }
+    NSLog(@"[SDL3 Bridge] libSDL3.dylib handle: %p", sdl_lib);
+
+    // ----------------------------------------------------------------
+    // 3. dlsym 获取 SDL3 Properties API 函数指针
+    // ----------------------------------------------------------------
+    SDL_CreateProperties_t pCreateProperties = (SDL_CreateProperties_t)dlsym(sdl_lib, "SDL_CreateProperties");
+    SDL_SetPointerProperty_t pSetPointerProperty = (SDL_SetPointerProperty_t)dlsym(sdl_lib, "SDL_SetPointerProperty");
+    SDL_SetBooleanProperty_t pSetBooleanProperty = (SDL_SetBooleanProperty_t)dlsym(sdl_lib, "SDL_SetBooleanProperty");
+    SDL_SetNumberProperty_t pSetNumberProperty = (SDL_SetNumberProperty_t)dlsym(sdl_lib, "SDL_SetNumberProperty");
+    SDL_CreateWindowWithProperties_t pCreateWindowWithProperties = (SDL_CreateWindowWithProperties_t)dlsym(sdl_lib, "SDL_CreateWindowWithProperties");
+    SDL_DestroyProperties_t pDestroyProperties = (SDL_DestroyProperties_t)dlsym(sdl_lib, "SDL_DestroyProperties");
+    SDL_CreateWindow_t pCreateWindow = (SDL_CreateWindow_t)dlsym(sdl_lib, "SDL_CreateWindow");
+
+    NSLog(@"[SDL3 Bridge] Function pointers: CreateProperties=%p SetPointer=%p SetBoolean=%p SetNumber=%p CreateWindowWithProps=%p DestroyProps=%p CreateWindow=%p",
+          (void*)pCreateProperties, (void*)pSetPointerProperty, (void*)pSetBooleanProperty,
+          (void*)pSetNumberProperty, (void*)pCreateWindowWithProperties,
+          (void*)pDestroyProperties, (void*)pCreateWindow);
+
+    // ----------------------------------------------------------------
+    // 4. 优先尝试：用 Properties API 传入 UIWindowScene 创建窗口
+    // ----------------------------------------------------------------
+    if (launcherScene && pCreateProperties && pSetPointerProperty && pSetBooleanProperty &&
+        pSetNumberProperty && pCreateWindowWithProperties && pDestroyProperties) {
+
+        NSLog(@"[SDL3 Bridge] Attempting SDL_CreateWindowWithProperties with UIWindowScene...");
+        SDL_PropertiesID props = pCreateProperties();
+        NSLog(@"[SDL3 Bridge] Created properties: %u", props);
+
+        // 设置 UIWindowScene 指针（关键属性，让 SDL3 复用启动器的窗口场景）
+        pSetPointerProperty(props, "SDL.window.create.uikit.windowscene", (__bridge void *)launcherScene);
+        // 强制启用 Metal 渲染（iOS 上必须）
+        pSetBooleanProperty(props, "SDL.window.create.metal", 1);
+        // 设置窗口 flags，自动添加 SDL_WINDOW_METAL
+        unsigned int finalFlags = (unsigned int)flags | SDL3_WINDOW_METAL_FLAG;
+        pSetNumberProperty(props, "SDL.window.create.flags", (SDL_Sint64)finalFlags);
+
+        NSLog(@"[SDL3 Bridge] Calling SDL_CreateWindowWithProperties(props=%u, finalFlags=0x%x)...", props, finalFlags);
+        SDL_Window *window = pCreateWindowWithProperties(props);
+        NSLog(@"[SDL3 Bridge] SDL_CreateWindowWithProperties returned: %p", window);
+
+        pDestroyProperties(props);
+
+        if (window) {
+            NSLog(@"[SDL3 Bridge] SUCCESS: Window created with launcher UIWindowScene");
+            return (jlong)window;
+        }
+        NSLog(@"[SDL3 Bridge] SDL_CreateWindowWithProperties returned NULL, falling back to standard SDL_CreateWindow");
+    } else if (launcherScene) {
+        NSLog(@"[SDL3 Bridge] Missing some Properties API functions, falling back to standard SDL_CreateWindow");
+    }
+
+    // ----------------------------------------------------------------
+    // 5. 回退：标准 SDL_CreateWindow（让 SDL3 自己创建窗口场景）
+    // ----------------------------------------------------------------
+    if (!pCreateWindow) {
+        NSLog(@"[SDL3 Bridge] FATAL: SDL_CreateWindow function not found in libSDL3.dylib");
+        return 0;
+    }
+
+    unsigned int finalFlags = (unsigned int)flags | SDL3_WINDOW_METAL_FLAG;
+    NSLog(@"[SDL3 Bridge] Calling standard SDL_CreateWindow(w=%d, h=%d, flags=0x%x)...", w, h, finalFlags);
+    SDL_Window *window = pCreateWindow(NULL, w, h, finalFlags);
+    NSLog(@"[SDL3 Bridge] SDL_CreateWindow returned: %p", window);
+
+    return (jlong)window;
+}
