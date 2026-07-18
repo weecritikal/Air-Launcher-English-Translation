@@ -98,10 +98,40 @@ int pojavInitOpenGL() {
         setenv("GALLIUM_DRIVER","zink",1);
         set_osm_bridge_tbl();
     } else if ([renderer isEqualToString:@ RENDERER_NAME_VULKAN]) {
-        set_vk_bridge_tbl();
-        // Vulkan mode still may trigger LWJGL OpenGL probing during startup.
-        // Ensure a valid iOS OpenGL shim is available for that probe path.
-        JNI_LWJGL_changeRenderer(RENDERER_NAME_MTL_ANGLE);
+        // 关键修复（MoltenVK + OpenGL 黑屏 + 图形 API 切换无效）：
+        //
+        // 之前 Vulkan 渲染器单向调用 set_vk_bridge_tbl()，一旦设置所有 GL 调用都走
+        // vk_bridge 的 stub（vk_init_context 返回 dummy，vk_make_current 空实现）。
+        // 当 MC 26.2+ 选 prefer_opengl 时仍走 GL 路径（clientAPI != GLFW_NO_API），
+        // 但 bridge 已是 vk stub → 无真实 GL 上下文 → 黑屏。
+        //
+        // 修复策略（参照 FCL/HMCL 的 renderer + graphicsApi 联动逻辑）：
+        //   1. 始终初始化 GL bridge（set_gl_bridge_tbl），让 GL 路径有真实上下文
+        //   2. 同时预加载 libMoltenVK.dylib（Vulkan 路径需要）
+        //   3. pojavCreateContext 根据 clientAPI 动态决定返回值：
+        //      - GLFW_NO_API（Vulkan 路径）→ 返回 CAMetalLayer，MC/LWJGL 自管 Vulkan
+        //      - 其他（GL 路径）→ 调用 br_init_context 创建真实 EGL/GL 上下文
+        //
+        // 这样无论 MC 选 OpenGL 还是 Vulkan 路径都能正常工作：
+        //   - prefer_vulkan：MC 走 Vulkan 路径，glfwWindowHint(GLFW_NO_API) → CAMetalLayer
+        //   - prefer_opengl：MC 走 GL 路径，glfwWindowHint(GLFW_OPENGL_API) → EGL 上下文
+        //   - default：MC 内部决定，两种路径都能处理
+        //
+        // 注意：JavaLauncher.m 已在 Vulkan 模式下设置 org.lwjgl.opengl.libname=libmobileglues.dylib，
+        // 所以 LWJGL 加载的 GL 库是 MobileGlues（GL→Vulkan 翻译层），能通过 Vulkan 后端路由 GL 调用。
+        // 这就是用户说的"用 OpenGL 渲染游戏加用 MoltenVK，帧率才能达到 120"的实现原理：
+        // MC 走 GL 路径 → EGL 上下文（ANGLE Metal）→ MobileGlues 翻译 → Vulkan → MoltenVK → Metal
+        // MobileGlues 的 Vulkan 后端使用 IMMEDIATE present mode，可超过屏幕刷新率。
+        NSLog(@"[egl_bridge] Vulkan renderer: initializing GL bridge for OpenGL path fallback (graphicsApi联动)");
+        set_gl_bridge_tbl();
+        // 预加载 libMoltenVK.dylib（Vulkan 路径需要，GL 路径不影响）
+        dlopen("@rpath/" RENDERER_NAME_VULKAN, RTLD_GLOBAL);
+        // Vulkan 模式下 LWJGL OpenGL 库使用 MobileGlues（由 JavaLauncher.m 设置）
+        // 不再调用 JNI_LWJGL_changeRenderer(RENDERER_NAME_MTL_ANGLE)，
+        // 因为 JavaLauncher.m 已通过 -Dorg.lwjgl.opengl.libname=libmobileglues.dylib 设置
+        JNI_LWJGL_changeRenderer(RENDERER_NAME_MOBILEGLUES);
+        // 跳过下方的统一 JNI_LWJGL_changeRenderer 和 dlopen（已处理）
+        return !br_init();
     }
     if (strcmp(renderer.UTF8String, RENDERER_NAME_VULKAN) != 0) {
         JNI_LWJGL_changeRenderer(renderer.UTF8String);
@@ -162,11 +192,25 @@ void* pojavCreateContext(basic_render_window_t* contextSrc) {
         pojavInitOpenGL();
     }
 
+    const char *renderer = getenv("AMETHYST_RENDERER");
+    const char *graphicsApi = getenv("AMETHYST_GRAPHICS_API");
+    NSLog(@"[egl_bridge] pojavCreateContext: clientAPI=%d (GLFW_NO_API=%d), renderer=%s, graphicsApi=%s",
+          clientAPI, GLFW_NO_API, renderer ?: "<unset>", graphicsApi ?: "<unset>");
+
     if (clientAPI == GLFW_NO_API) {
         // Game has selected Vulkan API to render
+        // MC 26.2+ graphicsApi=prefer_vulkan 或 default（Vulkan 路径）会走这里
+        // 返回 CAMetalLayer 作为 Vulkan surface，MC/LWJGL 通过 libMoltenVK.dylib 自管 Vulkan
+        NSLog(@"[egl_bridge] Vulkan path: returning CAMetalLayer as Vulkan surface");
         return (__bridge void *)SurfaceViewController.surface.layer;
     }
 
+    // GL 路径（clientAPI == GLFW_OPENGL_API 或 GLFW_OPENGL_ES_API）
+    // MC 26.2+ graphicsApi=prefer_opengl 或 default（OpenGL 路径）会走这里
+    // 调用 br_init_context 创建真实 EGL/GL 上下文
+    // 即使 renderer=libMoltenVK.dylib，pojavInitOpenGL 已设置 GL bridge（set_gl_bridge_tbl），
+    // 所以这里会调用 gl_init_context 创建 ANGLE Metal EGL 上下文
+    NSLog(@"[egl_bridge] OpenGL path: creating EGL/GL context via br_init_context");
     return br_init_context(contextSrc);
 }
 

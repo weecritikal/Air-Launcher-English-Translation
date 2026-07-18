@@ -757,14 +757,27 @@ static GameSurfaceView* pojavWindow;
     //   另一个问题：currentRenderer 在 viewDidLoad 时从 PLProfiles 读取，但 JavaLauncher.m
     //   可能在启动时修改 AMETHYST_RENDERER 环境变量（如 auto → ANGLE）。
     //   因此同时检查 PLProfiles 和 AMETHYST_RENDERER 环境变量，任一为 Vulkan 即启用 fallback。
+    //
+    //   关键修复（Vulkan 渲染器 + OpenGL 路径的 FPS 计数）：
+    //   当 renderer=libMoltenVK.dylib 但 MC 26.2+ 选 prefer_opengl 时，MC 走 GL 路径
+    //   （glfwWindowHint(GLFW_OPENGL_API)），pojavSwapBuffers 会被调用（经 eglSwapBuffers）。
+    //   此时不应启用 CADisplayLink fallback，否则会与 pojavSwapBuffers 的 FPS 计数重复。
+    //   只有真正的 Vulkan 路径（graphicsApi=prefer_vulkan 且 renderer=libMoltenVK.dylib）
+    //   才需要 CADisplayLink fallback，因为 Vulkan 路径不调用 pojavSwapBuffers。
     NSString *currentRenderer = [PLProfiles resolveKeyForCurrentProfile:@"renderer"];
     NSString *envRenderer = NSProcessInfo.processInfo.environment[@"AMETHYST_RENDERER"];
+    NSString *graphicsApi = NSProcessInfo.processInfo.environment[@"AMETHYST_GRAPHICS_API"];
     BOOL isVulkanRenderer = [currentRenderer isEqualToString:@ RENDERER_NAME_VULKAN] ||
                             [envRenderer isEqualToString:@ RENDERER_NAME_VULKAN];
-    NSLog(@"[SurfaceViewController] FPS counter setup: profileRenderer=%@, envRenderer=%@, isVulkan=%d",
-          currentRenderer, envRenderer, isVulkanRenderer);
+    // 仅当 renderer 是 Vulkan 且 graphicsApi 不是 prefer_opengl 时，才认为是真正的 Vulkan 渲染路径
+    // graphicsApi=default 时由 MC 内部决定，无法预判，保守起见仍启用 fallback
+    BOOL isActualVulkanPath = isVulkanRenderer &&
+        ![graphicsApi isEqualToString:@"prefer_opengl"] &&
+        ![graphicsApi isEqualToString:@"opengl"];
+    NSLog(@"[SurfaceViewController] FPS counter setup: profileRenderer=%@, envRenderer=%@, graphicsApi=%@, isVulkan=%d, isActualVulkanPath=%d",
+          currentRenderer, envRenderer, graphicsApi, isVulkanRenderer, isActualVulkanPath);
 
-    PLDisplayLinkTarget *linkTarget = [[PLDisplayLinkTarget alloc] initWithVulkanMode:isVulkanRenderer];
+    PLDisplayLinkTarget *linkTarget = [[PLDisplayLinkTarget alloc] initWithVulkanMode:isActualVulkanPath];
     CADisplayLink *displayLink = [CADisplayLink displayLinkWithTarget:linkTarget
                                                             selector:@selector(displayLinkTick:)];
     if (@available(iOS 15.0, tvOS 15.0, *)) {
