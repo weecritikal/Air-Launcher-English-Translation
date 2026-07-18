@@ -109,6 +109,12 @@ int callback_SurfaceViewController_touchHotbar(CGFloat x, CGFloat y);
 unsigned int pojavGetAndResetFps();
 // 显式递增 FPS 计数器（供 Vulkan 模式 CADisplayLink fallback 使用）
 void pojavIncrementFpsCounter();
+// 运行时判定 MC 真实渲染路径是否为 Vulkan（clientAPI == GLFW_NO_API）。
+// 比 SurfaceViewController 在 viewDidLoad 时的静态字符串推断更准确：
+// - 真正 Vulkan 路径（graphicsApi=prefer_vulkan 或 default 走 Vulkan）→ 返回 true
+// - Vulkan 渲染器但 MC 实际选 OpenGL 路径（prefer_opengl）→ 返回 false，避免双重计数
+// 此函数读取 egl_bridge.m 中的 clientAPI 全局变量，由 pojavSetWindowHint(GLFW_CLIENT_API, ...) 写入。
+bool pojavIsActualVulkanPath();
 
 void CallbackBridge_nativeSetInputReady(BOOL inputReady);
 BOOL CallbackBridge_nativeSendChar(jchar codepoint /* jint codepoint */);

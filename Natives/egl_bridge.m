@@ -53,6 +53,26 @@ void pojavIncrementFpsCounter() {
     }
 }
 
+/// 运行时判定 MC 真实渲染路径是否为 Vulkan。
+///
+/// 修复 FPS 显示错误的根本问题：
+/// 之前 SurfaceViewController 在 viewDidLoad 时通过 graphicsApi 字符串静态推断
+/// 是否启用 CADisplayLink fallback 递增 FPS 计数器。但：
+///   - graphicsApi=default 时由 MC 内部决定，无法预判（保守起见启用 fallback）
+///   - 但若 MC 实际选了 GL 路径，pojavSwapBuffers 也会计数，导致双重计数
+///   - 反之若 graphicsApi=prefer_vulkan 但 MC 启动失败回退到 GL，fallback 会错误递增
+///
+/// 通过 clientAPI 运行时信号（由 MC 调用 glfwWindowHint(GLFW_CLIENT_API, ...) 写入）
+/// 可以准确判定 MC 当前实际走的渲染路径：
+///   - GLFW_NO_API（0）→ Vulkan 路径，pojavSwapBuffers 不被调用，需要 fallback
+///   - 其他值（GLFW_OPENGL_API 等）→ GL 路径，pojavSwapBuffers 会计数，禁用 fallback
+///
+/// PLDisplayLinkTarget.displayLinkTick: 每帧动态查询此函数，确保 fallback 启用状态
+/// 与 MC 实际渲染路径一致，避免双重计数或漏计数。
+bool pojavIsActualVulkanPath() {
+    return clientAPI == GLFW_NO_API;
+}
+
 void JNI_LWJGL_changeRenderer(const char* value_c) {
     JNIEnv *env;
     (*runtimeJavaVMPtr)->GetEnv(runtimeJavaVMPtr, (void **)&env, JNI_VERSION_1_4);

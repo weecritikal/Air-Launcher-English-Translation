@@ -153,7 +153,7 @@
 // -(void)selector:(CADisplayLink*)link 签名不匹配，导致回调不触发。
 // 此类提供正确签名的 displayLinkTick: 方法，确保 CADisplayLink 回调正确触发。
 @interface PLDisplayLinkTarget : NSObject
-@property(nonatomic, assign) BOOL isVulkanMode;  // YES 时递增 FPS 计数器
+@property(nonatomic, assign) BOOL isVulkanMode;  // 配置预期 Vulkan 路径（仅诊断日志用，实际决策由 pojavIsActualVulkanPath() 运行时判定）
 @property(nonatomic, assign) NSUInteger tickCount;  // 诊断用：累计 tick 次数
 @end
 
@@ -169,17 +169,30 @@
 }
 
 // CADisplayLink 回调方法（正确签名：带 CADisplayLink* 参数）
+//
+// 关键修复（Vulkan/MoltenVK+OpenGL FPS 显示错误）：
+// 之前用 viewDidLoad 时的静态字符串推断（isVulkanMode）决定是否递增 FPS 计数器，
+// 但 graphicsApi=default 由 MC 内部决定，无法预判；且 MC 实际选择可能与配置不符。
+// 现在每帧动态查询 pojavIsActualVulkanPath()（读 clientAPI == GLFW_NO_API），
+// 与 MC 真实渲染路径一致，避免：
+//   - 双重计数：Vulkan 渲染器但 MC 选 GL 路径，pojavSwapBuffers + displayLink 都计数
+//   - 漏计数：graphicsApi=prefer_opengl 但 MC 走 Vulkan，displayLink 未启用 fallback
 - (void)displayLinkTick:(CADisplayLink *)link {
     [GyroInput tick];
     [ControllerInput tick];
-    if (_isVulkanMode) {
+    // 动态判定：仅当 MC 真实走 Vulkan 路径时才递增 FPS 计数器
+    BOOL actualVulkanPath = pojavIsActualVulkanPath();
+    if (actualVulkanPath) {
         pojavIncrementFpsCounter();
     }
     _tickCount++;
-    // 诊断日志：前 5 次回调输出，确认 CADisplayLink 确实触发
-    if (_tickCount <= 5) {
-        NSLog(@"[PLDisplayLinkTarget] displayLinkTick #%lu (vulkanMode=%d, fpsCounter incremented)",
-              (unsigned long)_tickCount, _isVulkanMode);
+    // 诊断日志：前 5 次回调 + 状态切换时输出，便于追踪 clientAPI 变化
+    static BOOL s_lastActualVulkanPath = NO;
+    BOOL stateChanged = (s_lastActualVulkanPath != actualVulkanPath);
+    if (_tickCount <= 5 || stateChanged) {
+        NSLog(@"[PLDisplayLinkTarget] displayLinkTick #%lu (configuredVulkan=%d, actualVulkanPath=%d, stateChanged=%d)",
+              (unsigned long)_tickCount, _isVulkanMode, actualVulkanPath, stateChanged);
+        s_lastActualVulkanPath = actualVulkanPath;
     }
 }
 
@@ -764,20 +777,23 @@ static GameSurfaceView* pojavWindow;
     //   此时不应启用 CADisplayLink fallback，否则会与 pojavSwapBuffers 的 FPS 计数重复。
     //   只有真正的 Vulkan 路径（graphicsApi=prefer_vulkan 且 renderer=libMoltenVK.dylib）
     //   才需要 CADisplayLink fallback，因为 Vulkan 路径不调用 pojavSwapBuffers。
+    //
+    //   注意（阶段2修复）：此处的 configuredVulkanExpected 仅用于诊断日志（PLDisplayLinkTarget.isVulkanMode），
+    //   实际是否启用 fallback 由 displayLinkTick: 内部每帧动态查询 pojavIsActualVulkanPath()
+    //   （读 clientAPI == GLFW_NO_API）决定，与 MC 真实渲染路径一致。
     NSString *currentRenderer = [PLProfiles resolveKeyForCurrentProfile:@"renderer"];
     NSString *envRenderer = NSProcessInfo.processInfo.environment[@"AMETHYST_RENDERER"];
     NSString *graphicsApi = NSProcessInfo.processInfo.environment[@"AMETHYST_GRAPHICS_API"];
     BOOL isVulkanRenderer = [currentRenderer isEqualToString:@ RENDERER_NAME_VULKAN] ||
                             [envRenderer isEqualToString:@ RENDERER_NAME_VULKAN];
-    // 仅当 renderer 是 Vulkan 且 graphicsApi 不是 prefer_opengl 时，才认为是真正的 Vulkan 渲染路径
-    // graphicsApi=default 时由 MC 内部决定，无法预判，保守起见仍启用 fallback
-    BOOL isActualVulkanPath = isVulkanRenderer &&
+    // 配置预期 Vulkan 路径：仅用于诊断日志，对比"配置预期"与"MC 实际选择"的差异
+    BOOL configuredVulkanExpected = isVulkanRenderer &&
         ![graphicsApi isEqualToString:@"prefer_opengl"] &&
         ![graphicsApi isEqualToString:@"opengl"];
-    NSLog(@"[SurfaceViewController] FPS counter setup: profileRenderer=%@, envRenderer=%@, graphicsApi=%@, isVulkan=%d, isActualVulkanPath=%d",
-          currentRenderer, envRenderer, graphicsApi, isVulkanRenderer, isActualVulkanPath);
+    NSLog(@"[SurfaceViewController] FPS counter setup: profileRenderer=%@, envRenderer=%@, graphicsApi=%@, isVulkan=%d, configuredVulkanExpected=%d (actual path decided at runtime via pojavIsActualVulkanPath)",
+          currentRenderer, envRenderer, graphicsApi, isVulkanRenderer, configuredVulkanExpected);
 
-    PLDisplayLinkTarget *linkTarget = [[PLDisplayLinkTarget alloc] initWithVulkanMode:isActualVulkanPath];
+    PLDisplayLinkTarget *linkTarget = [[PLDisplayLinkTarget alloc] initWithVulkanMode:configuredVulkanExpected];
     CADisplayLink *displayLink = [CADisplayLink displayLinkWithTarget:linkTarget
                                                             selector:@selector(displayLinkTick:)];
     if (@available(iOS 15.0, tvOS 15.0, *)) {
