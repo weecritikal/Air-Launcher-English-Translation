@@ -100,7 +100,10 @@ static WFWorkflowProgressView* currentProgressView;
         [[BackgroundManager sharedManager] applyEffectToNavigationBar:self.navigationController.navigationBar];
     }
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
-    self.tableView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
+    // 修复：使用 Automatic 让系统自动为半透明导航栏添加顶部 contentInset，
+    // 避免第一栏（"1.16及更早版本"）被导航栏覆盖。配合 edgesForExtendedLayout=All
+    // 保留导航栏毛玻璃穿透效果，内容起始位置自动下移到导航栏下方。
+    self.tableView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentAutomatic;
     self.extendedLayoutIncludesOpaqueBars = YES;
     self.edgesForExtendedLayout = UIRectEdgeAll;
 
@@ -225,8 +228,7 @@ static WFWorkflowProgressView* currentProgressView;
     }
 }
 
-/// 修复：为 section header 提供不透明的毛玻璃背景，防止上划时 header 透明导致下方内容透出遮挡。
-/// 参照 HMCL 的设置页 header 样式：毛玻璃背景 + 白色（有自定义背景时）或系统默认色文字。
+/// section header：透明背景，与界面背景一致（可看到背景图）。
 - (UIView *)tableView:(UITableView *)tableView viewForHeaderInSection:(NSInteger)section {
     NSString *title = [self tableView:tableView titleForHeaderInSection:section];
     UITableViewHeaderFooterView *header = [tableView dequeueReusableHeaderFooterViewWithIdentifier:@"JRESectionHeader"];
@@ -237,28 +239,19 @@ static WFWorkflowProgressView* currentProgressView;
     return header;
 }
 
-/// 修复：section header 显示时套上毛玻璃背景，避免透明 header 遮挡内容
+/// section header 透明化：不套毛玻璃，与界面背景融为一体。
+/// 有自定义背景时用白色文字 + 阴影保证可读性；无背景时用系统默认色。
 - (void)tableView:(UITableView *)tableView willDisplayHeaderView:(UIView *)view forSection:(NSInteger)section {
     if (![view isKindOfClass:[UITableViewHeaderFooterView class]]) return;
     UITableViewHeaderFooterView *header = (UITableViewHeaderFooterView *)view;
-    
-    // 有自定义背景时用毛玻璃 + 白色文字；无背景时用系统默认样式
+
+    // 透明背景：不再使用毛玻璃，可看到背景图
+    header.backgroundView = nil;
     if ([[BackgroundManager sharedManager] hasBackground]) {
-        if (@available(iOS 13.0, *)) {
-            UIBlurEffect *blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial];
-            UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:blur];
-            blurView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-            blurView.frame = header.bounds;
-            header.backgroundView = blurView;
-        } else {
-            header.backgroundView = [[UIView alloc] init];
-            header.backgroundView.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.9];
-        }
         header.textLabel.textColor = [UIColor whiteColor];
         header.textLabel.shadowColor = [UIColor blackColor];
         header.textLabel.shadowOffset = CGSizeMake(0, 1);
     } else {
-        header.backgroundView = nil;
         header.textLabel.textColor = [UIColor labelColor];
         header.textLabel.shadowColor = nil;
     }
