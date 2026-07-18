@@ -234,7 +234,7 @@ public class PojavLauncher {
         }
         // For Minecraft 1.0 and earlier, no language option
         MCOptionUtils.save();
-        String configPath;
+        String configPath = null;
         if (version.logging != null) {
             if (version.logging.client.file.id.equals("client-1.12.xml")) {
                 configPath = Tools.DIR_BUNDLE + "/log4j-rce-patch-1.12.xml";
@@ -243,8 +243,14 @@ public class PojavLauncher {
             } else {
                 configPath = Tools.DIR_GAME_NEW + "/" + version.logging.client.file.id;
             }
-            System.setProperty("log4j.configurationFile", configPath);
         }
+        // Fallback：如果 logging 配置缺失或文件不存在，使用 1.12 补丁配置
+        // 确保 MC 日志能输出到 stdout，便于诊断启动崩溃
+        if (configPath == null || !new java.io.File(configPath).exists()) {
+            configPath = Tools.DIR_BUNDLE + "/log4j-rce-patch-1.12.xml";
+            System.out.println("[PojavLauncher] Using fallback log4j config: " + configPath);
+        }
+        System.setProperty("log4j.configurationFile", configPath);
 
         Tools.launchMinecraft(account, version, serverIp);
     }
