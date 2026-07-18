@@ -34,6 +34,30 @@ BOOL validateVirtualMemorySpace(size_t size) {
     return YES;
 }
 
+/// 检测 MC 版本是否使用 SDL3 窗口后端
+/// MC 26.3-snapshot-4 首次从 GLFW 切换到 SDL3（Mojang 官方公告）。
+/// 规则：
+///   - 26.3-snapshot-4 及以上 → SDL3
+///   - 26.3-snapshot-3 及以下 → GLFW
+///   - 26.3 pre/rc/release 及 26.4+ → SDL3
+static BOOL isSDL3Version(NSString *versionId) {
+    if (!versionId || versionId.length == 0) return NO;
+
+    // 26.3-snapshot-N：N >= 4 用 SDL3
+    if ([versionId hasPrefix:@"26.3-snapshot-"]) {
+        NSString *numStr = [versionId substringFromIndex:@"26.3-snapshot-".length];
+        NSInteger n = numStr.integerValue;
+        return n >= 4;
+    }
+    // 26.3 pre/rc/release 及 26.4+ 都用 SDL3
+    if ([versionId hasPrefix:@"26.3-pre"] || [versionId hasPrefix:@"26.3-rc"]
+        || [versionId isEqualToString:@"26.3"]
+        || [versionId compare:@"26.4"] != NSOrderedAscending) {
+        return YES;
+    }
+    return NO;
+}
+
 void init_loadDefaultEnv() {
     /* Define default env */
 
@@ -426,6 +450,28 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
         }
         setenv("AMETHYST_GRAPHICS_API", graphicsApi.UTF8String, 1);
         NSLog(@"[JavaLauncher] GRAPHICS_API is set to %@\n", graphicsApi);
+
+        // ============================================================================
+        // GLFW/SDL3 窗口后端版本适配
+        // ============================================================================
+        // MC 26.3-snapshot-4 首次从 GLFW 切换到 SDL3（Mojang 官方公告）：
+        //   "In today's snapshot we have switched the library used for window
+        //    management, input and platform integration from GLFW to SDL3."
+        //
+        // 规则：
+        //   - 26.3-snapshot-4 及以上 → SDL3（MC 加载 libSDL3.dylib）
+        //   - 26.3-snapshot-3 及以下 → GLFW（MC 加载主二进制 pojav* 函数）
+        //   - 26.3 pre/rc/release 及 26.4+ → SDL3
+        //
+        // 启动器无法强制 MC 切换后端（MC 自己决定加载哪个 LWJGL 模块），
+        // 但可以检测版本并设置环境变量，供 native 层和 Java 层做相应适配。
+        NSString *mcVersionId = [launchTarget isKindOfClass:NSDictionary.class]
+            ? launchTarget[@"id"] : [launchTarget lastPathComponent];
+        BOOL useSDL3 = isSDL3Version(mcVersionId);
+        NSString *windowingBackend = useSDL3 ? @"sdl" : @"glfw";
+        setenv("AMETHYST_WINDOWING_BACKEND", windowingBackend.UTF8String, 1);
+        NSLog(@"[JavaLauncher] WINDOWING_BACKEND is set to %@ (version=%@, useSDL3=%d)",
+            windowingBackend, mcVersionId, useSDL3);
         // Setup gameDir
         gameDir = [NSString stringWithFormat:@"%s/instances/%@/%@",
             getenv("POJAV_HOME"), getPrefObject(@"general.game_directory"),
