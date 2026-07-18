@@ -288,20 +288,16 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
 }
 
 - (void)setupCardContainers {
-    // 左侧菜单卡片 - 仅保留外侧（左上/左下）圆角
+    // 左侧菜单卡片
     self.sidebarCard = [self createCardContainer];
-    self.sidebarCard.layer.maskedCorners = kCALayerMinXMinYCorner | kCALayerMinXMaxYCorner;
     [self.view addSubview:self.sidebarCard];
 
-    // 中间内容卡片 - 四角直角（内部塞入 nav controller + table view，圆角会裁剪内容且无视觉收益）
+    // 中间内容卡片
     self.contentCard = [self createCardContainer];
-    self.contentCard.layer.cornerRadius = 0;
-    self.contentCard.layer.masksToBounds = NO;
     [self.view addSubview:self.contentCard];
 
-    // 右侧信息/启动卡片 - 仅保留外侧（右上/右下）圆角
+    // 右侧信息/启动卡片
     self.rightPanelCard = [self createCardContainer];
-    self.rightPanelCard.layer.maskedCorners = kCALayerMaxXMinYCorner | kCALayerMaxXMaxYCorner;
     [self.view addSubview:self.rightPanelCard];
 
     // 用自适应宽度创建可变宽度约束，便于 traitCollection 变化时更新
