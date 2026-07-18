@@ -29,28 +29,33 @@ static const CGFloat kCardOuterMarginPad = 12.0;   // iPad 卡片到外边缘的
 static const CGFloat kCardOuterMarginPhone = 8.0;  // iPhone 卡片到外边缘的间距（窄屏减小留白）
 static const CGFloat kCardCornerRadius = 16.0;     // 卡片圆角
 
-/// 根据当前 traitCollection 决定卡片外边距
+/// 检测物理设备是否为 iPhone（不受 debug.debug_ipad_ui 的 idiom hook 影响）。
+/// UIKit+hook.m 会把 idiom 强制改成 Pad，导致 trait.userInterfaceIdiom 不可靠。
+/// 这里用 UIDevice.model 检测真实设备类型。
+static BOOL LauncherCardLayoutIsPhysicalPhone(void) {
+    NSString *model = [[UIDevice currentDevice].model lowercaseString];
+    return [model containsString:@"iphone"];
+}
+
+/// 根据物理设备类型决定卡片外边距
 static CGFloat LauncherCardLayoutOuterMargin(UITraitCollection *trait) {
-    if (!trait) return kCardOuterMarginPad;
-    if (trait.userInterfaceIdiom == UIUserInterfaceIdiomPhone) return kCardOuterMarginPhone;
+    if (LauncherCardLayoutIsPhysicalPhone()) return kCardOuterMarginPhone;
     return kCardOuterMarginPad;
 }
 
-/// 根据当前 traitCollection 与屏幕宽度决定侧栏宽度
+/// 根据物理设备类型决定侧栏宽度
 /// - iPhone 横屏（含 SE/8/Plus/X/Pro Max）：56pt（菜单只有图标，56pt 足够）
 /// - iPad：70pt
 static CGFloat LauncherCardLayoutSidebarWidth(UITraitCollection *trait) {
-    if (!trait) return kSidebarWidthPad;
-    if (trait.userInterfaceIdiom == UIUserInterfaceIdiomPhone) return kSidebarWidthPhone;
+    if (LauncherCardLayoutIsPhysicalPhone()) return kSidebarWidthPhone;
     return kSidebarWidthPad;
 }
 
-/// 根据当前 traitCollection 与屏幕宽度决定右侧面板宽度
+/// 根据物理设备类型决定右侧面板宽度
 /// - iPhone 横屏：168pt（保证启动/编辑控件/执行 Jar 按钮文字不截断）
 /// - iPad：220pt
 static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
-    if (!trait) return kRightPanelWidthPad;
-    if (trait.userInterfaceIdiom == UIUserInterfaceIdiomPhone) return kRightPanelWidthPhone;
+    if (LauncherCardLayoutIsPhysicalPhone()) return kRightPanelWidthPhone;
     return kRightPanelWidthPad;
 }
 
@@ -283,16 +288,20 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
 }
 
 - (void)setupCardContainers {
-    // 左侧菜单卡片
+    // 左侧菜单卡片 - 仅保留外侧（左上/左下）圆角
     self.sidebarCard = [self createCardContainer];
+    self.sidebarCard.layer.maskedCorners = kCALayerMinXMinYCorner | kCALayerMinXMaxYCorner;
     [self.view addSubview:self.sidebarCard];
 
-    // 中间内容卡片
+    // 中间内容卡片 - 四角直角（内部塞入 nav controller + table view，圆角会裁剪内容且无视觉收益）
     self.contentCard = [self createCardContainer];
+    self.contentCard.layer.cornerRadius = 0;
+    self.contentCard.layer.masksToBounds = NO;
     [self.view addSubview:self.contentCard];
 
-    // 右侧信息/启动卡片
+    // 右侧信息/启动卡片 - 仅保留外侧（右上/右下）圆角
     self.rightPanelCard = [self createCardContainer];
+    self.rightPanelCard.layer.maskedCorners = kCALayerMaxXMinYCorner | kCALayerMaxXMaxYCorner;
     [self.view addSubview:self.rightPanelCard];
 
     // 用自适应宽度创建可变宽度约束，便于 traitCollection 变化时更新
@@ -569,32 +578,35 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
 
 - (void)showModsManager {
     // 切到版本管理页并直接 push 模组管理
+    // 修复"前一界面未消失"竞态：先构建完整 nav 栈再 setContentViewController，
+    // 这样 setContentViewController 内的 for 循环能一次性透明化栈中所有 VC，
+    // 避免 animated:YES 的 crossDissolve 进行中再 animated:NO push 导致新 VC 未透明化。
     VersionManagerViewController *vm = [[VersionManagerViewController alloc] init];
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vm];
     nav.navigationBar.prefersLargeTitles = NO;
-    [self setContentViewController:nav animated:YES];
     ModsManagerViewController *m = [[ModsManagerViewController alloc] init];
     m.initialMode = ModsManagerModeLocal;
     [nav pushViewController:m animated:NO];
+    [self setContentViewController:nav animated:YES];
 }
 
 - (void)showShadersManager {
     VersionManagerViewController *vm = [[VersionManagerViewController alloc] init];
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vm];
     nav.navigationBar.prefersLargeTitles = NO;
-    [self setContentViewController:nav animated:YES];
     ShadersManagerViewController *s = [[ShadersManagerViewController alloc] init];
     s.initialMode = ShadersManagerModeLocal;
     [nav pushViewController:s animated:NO];
+    [self setContentViewController:nav animated:YES];
 }
 
 - (void)showGameDirectory {
     VersionManagerViewController *vm = [[VersionManagerViewController alloc] init];
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vm];
     nav.navigationBar.prefersLargeTitles = NO;
-    [self setContentViewController:nav animated:YES];
     LauncherPrefGameDirViewController *g = [[LauncherPrefGameDirViewController alloc] init];
     [nav pushViewController:g animated:NO];
+    [self setContentViewController:nav animated:YES];
 }
 
 - (void)showModpackImport {
@@ -602,9 +614,9 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
     DownloadViewController *d = [[DownloadViewController alloc] init];
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:d];
     nav.navigationBar.prefersLargeTitles = NO;
-    [self setContentViewController:nav animated:YES];
     ModpackImportViewController *m = [[ModpackImportViewController alloc] init];
     [nav pushViewController:m animated:NO];
+    [self setContentViewController:nav animated:YES];
 }
 
 - (void)backgroundChanged {

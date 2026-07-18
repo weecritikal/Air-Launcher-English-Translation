@@ -552,132 +552,143 @@ static const NSInteger kDefaultBackgroundTag = 99995;
 }
 
 - (void)applyEffectToNavigationBar:(UINavigationBar *)navigationBar {
-    // 关键修复（UI 累积异常）：之前每次调用都 [[UIImage alloc] init] 创建新的空 UIImage
-    // 实例并重新分配 UINavigationBarAppearance。在 tmpRootVC 保留场景下，该方法被
-    // setContentViewController: 与 navigationControllerDidShow: 反复调用，iOS UINavigationBar
-    // 内部为渲染 hairline 维护的 UIImageView 子视图不会自动移除，多次累积后表现为
-    // "上方一行小白条"。
-    //
-    // 现在使用静态空 UIImage 单例，并在重新分配前手动移除 navigationBar 子视图中
-    // 高度 <= 2px 的 hairline UIImageView，避免累积。
+    // 关键修复（UI 累积异常 + 小白条根治）：
+    // 1. 之前每次调用都重建 UINavigationBarAppearance，iOS 内部会重新生成 hairline
+    //    UIImageView，累积后表现为"上方一行小白条"。现改为静态单例 Appearance，
+    //    同一种效果只构建一次，避免反复触发 iOS 内部 hairline view 重建。
+    // 2. 之前清理 hairline 只遍历 navigationBar.subviews（直接子视图），但 iOS 的
+    //    hairline 常嵌在 _UINavigationBarBackground / _UIBarBackground 等私有子视图
+    //    内部。改为递归遍历所有后代视图，彻底清理累积的 hairline。
     static UIImage *emptyImage = nil;
+    static UINavigationBarAppearance *blurAppearance = nil;
+    static UINavigationBarAppearance *translucentAppearance = nil;
+    static UIColor *translucentBarColor = nil;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         emptyImage = [UIImage new];
+        // 预构建毛玻璃 Appearance（configureWithTransparentBackground + shadowImage 置空）
+        blurAppearance = [[UINavigationBarAppearance alloc] init];
+        [blurAppearance configureWithTransparentBackground];
+        blurAppearance.backgroundColor = [UIColor clearColor];
+        blurAppearance.backgroundEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial];
+        blurAppearance.shadowColor = nil;
+        blurAppearance.shadowImage = emptyImage;
+        // 半透明 Appearance 在首次调用时按当前 uiOpacity 构建（见下方懒加载）
     });
 
-    // 清理 iOS 内部累积的 hairline UIImageView（高度极小的分割线视图）
-    for (UIView *sub in navigationBar.subviews) {
-        if ([sub isKindOfClass:[UIImageView class]] && sub.bounds.size.height <= 2.0 && sub.bounds.size.height > 0) {
-            [sub removeFromSuperview];
+    // 递归清理 iOS 内部累积的 hairline UIImageView（高度极小的分割线视图）
+    // hairline 常嵌在 _UINavigationBarBackground / _UIBarBackground 等私有子视图内部
+    void (^removeHairlines)(UIView *) = ^(UIView *view) {
+        for (UIView *sub in view.subviews) {
+            if ([sub isKindOfClass:[UIImageView class]] &&
+                sub.bounds.size.height > 0 &&
+                sub.bounds.size.height <= 2.0) {
+                [sub removeFromSuperview];
+            } else {
+                removeHairlines(sub);
+            }
         }
-    }
+    };
+    removeHairlines(navigationBar);
 
     if (self.uiEffect == BackgroundUIEffectBlur) {
-        // 毛玻璃效果
+        // 毛玻璃效果 - 复用静态单例
         if (@available(iOS 13.0, *)) {
-            UINavigationBarAppearance *appearance = [[UINavigationBarAppearance alloc] init];
-            [appearance configureWithTransparentBackground];
-            appearance.backgroundColor = [UIColor clearColor];
-
-            UIBlurEffect *blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial];
-            appearance.backgroundEffect = blur;
-            // 修复"所有界面顶部一行小白条"问题：configureWithTransparentBackground 不会
-            // 完全移除底部分隔线（shadow hairline），在 iPhone 上会看到 1px 白线。
-            // 显式将 shadowColor 置 nil、shadowImage 置空 UIImage 彻底消除。
-            appearance.shadowColor = nil;
-            appearance.shadowImage = emptyImage;
-
-            navigationBar.standardAppearance = appearance;
-            navigationBar.scrollEdgeAppearance = appearance;
-            navigationBar.compactAppearance = appearance;
+            navigationBar.standardAppearance = blurAppearance;
+            navigationBar.scrollEdgeAppearance = blurAppearance;
+            navigationBar.compactAppearance = blurAppearance;
         }
         navigationBar.barTintColor = [UIColor clearColor];
         navigationBar.backgroundColor = [UIColor clearColor];
-        // 兼容 iOS 12 及以下：显式置空 shadowImage 移除底部分隔线
         navigationBar.shadowImage = emptyImage;
     } else {
         // 半透明效果
-        // 修复：使用 secondarySystemBackgroundColor 替代硬编码 0.1 黑色
         if (@available(iOS 13.0, *)) {
             UIColor *barColor = [[UIColor secondarySystemBackgroundColor] colorWithAlphaComponent:self.uiOpacity];
             navigationBar.barTintColor = barColor;
             navigationBar.backgroundColor = barColor;
-
-            UINavigationBarAppearance *appearance = [[UINavigationBarAppearance alloc] init];
-            [appearance configureWithTransparentBackground];
-            appearance.backgroundColor = barColor;
-            appearance.backgroundEffect = nil;
-            // 同上：显式移除底部分隔线，消除"一行小白条"
-            appearance.shadowColor = nil;
-            appearance.shadowImage = emptyImage;
-
-            navigationBar.standardAppearance = appearance;
-            navigationBar.scrollEdgeAppearance = appearance;
-            navigationBar.compactAppearance = appearance;
+            // 半透明 Appearance 需要按当前 uiOpacity 构建（uiOpacity 可变，无法像 blur 一样全局单例）
+            // 但同一 uiOpacity 下复用同一实例，避免反复重建
+            if (!translucentAppearance || ![translucentBarColor isEqual:barColor]) {
+                UINavigationBarAppearance *appearance = [[UINavigationBarAppearance alloc] init];
+                [appearance configureWithTransparentBackground];
+                appearance.backgroundColor = barColor;
+                appearance.backgroundEffect = nil;
+                appearance.shadowColor = nil;
+                appearance.shadowImage = emptyImage;
+                translucentAppearance = appearance;
+                translucentBarColor = barColor;
+            }
+            navigationBar.standardAppearance = translucentAppearance;
+            navigationBar.scrollEdgeAppearance = translucentAppearance;
+            navigationBar.compactAppearance = translucentAppearance;
         } else {
             navigationBar.barTintColor = [UIColor colorWithWhite:0.1 alpha:self.uiOpacity];
             navigationBar.backgroundColor = [UIColor colorWithWhite:0.1 alpha:self.uiOpacity];
         }
-        // 兼容 iOS 12 及以下
         navigationBar.shadowImage = emptyImage;
     }
 }
 
 - (void)applyEffectToToolbar:(UIToolbar *)toolbar {
-    // 关键修复（UI 累积异常）：同 applyEffectToNavigationBar:，使用静态空 UIImage 单例
-    // 并清理累积的 hairline UIImageView
+    // 关键修复（同 applyEffectToNavigationBar:）：静态单例 Appearance + 递归清理 hairline
     static UIImage *emptyImage = nil;
+    static UIToolbarAppearance *blurToolbarAppearance = nil;
+    static UIToolbarAppearance *translucentToolbarAppearance = nil;
+    static UIColor *translucentToolbarColor = nil;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         emptyImage = [UIImage new];
+        blurToolbarAppearance = [[UIToolbarAppearance alloc] init];
+        [blurToolbarAppearance configureWithTransparentBackground];
+        blurToolbarAppearance.backgroundColor = [UIColor clearColor];
+        blurToolbarAppearance.backgroundEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial];
+        blurToolbarAppearance.shadowColor = nil;
+        blurToolbarAppearance.shadowImage = emptyImage;
     });
 
-    // 清理 iOS 内部累积的 hairline UIImageView
-    for (UIView *sub in toolbar.subviews) {
-        if ([sub isKindOfClass:[UIImageView class]] && sub.bounds.size.height <= 2.0 && sub.bounds.size.height > 0) {
-            [sub removeFromSuperview];
+    // 递归清理累积的 hairline UIImageView
+    void (^removeHairlines)(UIView *) = ^(UIView *view) {
+        for (UIView *sub in view.subviews) {
+            if ([sub isKindOfClass:[UIImageView class]] &&
+                sub.bounds.size.height > 0 &&
+                sub.bounds.size.height <= 2.0) {
+                [sub removeFromSuperview];
+            } else {
+                removeHairlines(sub);
+            }
         }
-    }
+    };
+    removeHairlines(toolbar);
 
     if (self.uiEffect == BackgroundUIEffectBlur) {
-        // 毛玻璃效果
+        // 毛玻璃效果 - 复用静态单例
         if (@available(iOS 13.0, *)) {
-            UIToolbarAppearance *appearance = [[UIToolbarAppearance alloc] init];
-            [appearance configureWithTransparentBackground];
-            appearance.backgroundColor = [UIColor clearColor];
-
-            UIBlurEffect *blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial];
-            appearance.backgroundEffect = blur;
-            // 同 nav bar：移除底部分隔线，消除"小白条"
-            appearance.shadowColor = nil;
-            appearance.shadowImage = emptyImage;
-
-            toolbar.standardAppearance = appearance;
-            toolbar.scrollEdgeAppearance = appearance;
-            toolbar.compactAppearance = appearance;
+            toolbar.standardAppearance = blurToolbarAppearance;
+            toolbar.scrollEdgeAppearance = blurToolbarAppearance;
+            toolbar.compactAppearance = blurToolbarAppearance;
         }
         toolbar.barTintColor = [UIColor clearColor];
         toolbar.backgroundColor = [UIColor clearColor];
     } else {
         // 半透明效果
-        // 修复：使用 secondarySystemBackgroundColor 替代硬编码 0.1 黑色
         if (@available(iOS 13.0, *)) {
             UIColor *barColor = [[UIColor secondarySystemBackgroundColor] colorWithAlphaComponent:self.uiOpacity];
             toolbar.barTintColor = barColor;
             toolbar.backgroundColor = barColor;
-
-            UIToolbarAppearance *appearance = [[UIToolbarAppearance alloc] init];
-            [appearance configureWithTransparentBackground];
-            appearance.backgroundColor = barColor;
-            appearance.backgroundEffect = nil;
-            // 同 nav bar：移除底部分隔线
-            appearance.shadowColor = nil;
-            appearance.shadowImage = emptyImage;
-
-            toolbar.standardAppearance = appearance;
-            toolbar.scrollEdgeAppearance = appearance;
-            toolbar.compactAppearance = appearance;
+            if (!translucentToolbarAppearance || ![translucentToolbarColor isEqual:barColor]) {
+                UIToolbarAppearance *appearance = [[UIToolbarAppearance alloc] init];
+                [appearance configureWithTransparentBackground];
+                appearance.backgroundColor = barColor;
+                appearance.backgroundEffect = nil;
+                appearance.shadowColor = nil;
+                appearance.shadowImage = emptyImage;
+                translucentToolbarAppearance = appearance;
+                translucentToolbarColor = barColor;
+            }
+            toolbar.standardAppearance = translucentToolbarAppearance;
+            toolbar.scrollEdgeAppearance = translucentToolbarAppearance;
+            toolbar.compactAppearance = translucentToolbarAppearance;
         } else {
             toolbar.barTintColor = [UIColor colorWithWhite:0.1 alpha:self.uiOpacity];
             toolbar.backgroundColor = [UIColor colorWithWhite:0.1 alpha:self.uiOpacity];

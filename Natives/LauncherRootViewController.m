@@ -25,17 +25,23 @@ static const CGFloat kSidebarWidthPhone = 56.0;    // iPhone 左侧边栏宽度�
 static const CGFloat kRightPanelWidthPad = 220.0;  // iPad 右侧面板宽度
 static const CGFloat kRightPanelWidthPhone = 168.0; // iPhone 右侧面板宽度（保证按钮文字可读）
 
-/// 根据当前 traitCollection 决定侧栏宽度（与 LauncherCardLayoutViewController 保持一致）
+/// 检测物理设备是否为 iPhone（不受 debug.debug_ipad_ui 的 idiom hook 影响）。
+/// UIKit+hook.m 会把 idiom 强制改成 Pad，导致 trait.userInterfaceIdiom 不可靠。
+/// 这里用 UIDevice.model 检测真实设备类型。
+static BOOL LauncherRootIsPhysicalPhone(void) {
+    NSString *model = [[UIDevice currentDevice].model lowercaseString];
+    return [model containsString:@"iphone"];
+}
+
+/// 根据物理设备类型决定侧栏宽度（与 LauncherCardLayoutViewController 保持一致）
 static CGFloat LauncherRootLayoutSidebarWidth(UITraitCollection *trait) {
-    if (!trait) return kSidebarWidthPad;
-    if (trait.userInterfaceIdiom == UIUserInterfaceIdiomPhone) return kSidebarWidthPhone;
+    if (LauncherRootIsPhysicalPhone()) return kSidebarWidthPhone;
     return kSidebarWidthPad;
 }
 
-/// 根据当前 traitCollection 决定右侧面板宽度
+/// 根据物理设备类型决定右侧面板宽度
 static CGFloat LauncherRootLayoutRightPanelWidth(UITraitCollection *trait) {
-    if (!trait) return kRightPanelWidthPad;
-    if (trait.userInterfaceIdiom == UIUserInterfaceIdiomPhone) return kRightPanelWidthPhone;
+    if (LauncherRootIsPhysicalPhone()) return kRightPanelWidthPhone;
     return kRightPanelWidthPad;
 }
 
@@ -220,26 +226,26 @@ static CGFloat LauncherRootLayoutRightPanelWidth(UITraitCollection *trait) {
 #pragma mark - Setup
 
 - (void)setupContainers {
-    // 左侧边栏容器 - 半透明（圆角，与 Card 布局保持一致）
+    // 左侧边栏容器 - 半透明，仅保留外侧（左上/左下）圆角，避免与中间容器相邻处形成凹槽
     self.sidebarContainer = [[UIView alloc] init];
     self.sidebarContainer.translatesAutoresizingMaskIntoConstraints = NO;
     self.sidebarContainer.layer.cornerRadius = 16;
+    self.sidebarContainer.layer.maskedCorners = kCALayerMinXMinYCorner | kCALayerMinXMaxYCorner;
     self.sidebarContainer.layer.masksToBounds = YES;
     [[BackgroundManager sharedManager] applyEffectToView:self.sidebarContainer];
     [self.view addSubview:self.sidebarContainer];
 
-    // 中间内容容器 - 完全透明（防御性补 16pt 圆角，保持与左右容器一致）
+    // 中间内容容器 - 完全透明，四角直角（内部塞入 nav controller + table view，圆角会裁剪内容且无视觉收益）
     self.contentContainer = [[UIView alloc] init];
     self.contentContainer.translatesAutoresizingMaskIntoConstraints = NO;
     self.contentContainer.backgroundColor = [UIColor clearColor];
-    self.contentContainer.layer.cornerRadius = 16;
-    self.contentContainer.layer.masksToBounds = YES;
     [self.view addSubview:self.contentContainer];
 
-    // 右侧面板容器 - 半透明（圆角，与 Card 布局保持一致）
+    // 右侧面板容器 - 半透明，仅保留外侧（右上/右下）圆角
     self.rightPanelContainer = [[UIView alloc] init];
     self.rightPanelContainer.translatesAutoresizingMaskIntoConstraints = NO;
     self.rightPanelContainer.layer.cornerRadius = 16;
+    self.rightPanelContainer.layer.maskedCorners = kCALayerMaxXMinYCorner | kCALayerMaxXMaxYCorner;
     self.rightPanelContainer.layer.masksToBounds = YES;
     [[BackgroundManager sharedManager] applyEffectToView:self.rightPanelContainer];
     [self.view addSubview:self.rightPanelContainer];
@@ -482,32 +488,35 @@ static CGFloat LauncherRootLayoutRightPanelWidth(UITraitCollection *trait) {
 
 - (void)showModsManager {
     // 切到版本管理页并直接 push 模组管理
+    // 修复"前一界面未消失"竞态：先构建完整 nav 栈再 setContentViewController，
+    // 这样 setContentViewController 内的 for 循环能一次性透明化栈中所有 VC，
+    // 避免 animated:YES 的 crossDissolve 进行中再 animated:NO push 导致新 VC 未透明化。
     VersionManagerViewController *vm = [[VersionManagerViewController alloc] init];
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vm];
     nav.navigationBar.prefersLargeTitles = NO;
-    [self setContentViewController:nav animated:YES];
     ModsManagerViewController *m = [[ModsManagerViewController alloc] init];
     m.initialMode = ModsManagerModeLocal;
     [nav pushViewController:m animated:NO];
+    [self setContentViewController:nav animated:YES];
 }
 
 - (void)showShadersManager {
     VersionManagerViewController *vm = [[VersionManagerViewController alloc] init];
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vm];
     nav.navigationBar.prefersLargeTitles = NO;
-    [self setContentViewController:nav animated:YES];
     ShadersManagerViewController *s = [[ShadersManagerViewController alloc] init];
     s.initialMode = ShadersManagerModeLocal;
     [nav pushViewController:s animated:NO];
+    [self setContentViewController:nav animated:YES];
 }
 
 - (void)showGameDirectory {
     VersionManagerViewController *vm = [[VersionManagerViewController alloc] init];
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vm];
     nav.navigationBar.prefersLargeTitles = NO;
-    [self setContentViewController:nav animated:YES];
     LauncherPrefGameDirViewController *g = [[LauncherPrefGameDirViewController alloc] init];
     [nav pushViewController:g animated:NO];
+    [self setContentViewController:nav animated:YES];
 }
 
 - (void)showModpackImport {
@@ -515,9 +524,9 @@ static CGFloat LauncherRootLayoutRightPanelWidth(UITraitCollection *trait) {
     DownloadViewController *d = [[DownloadViewController alloc] init];
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:d];
     nav.navigationBar.prefersLargeTitles = NO;
-    [self setContentViewController:nav animated:YES];
     ModpackImportViewController *m = [[ModpackImportViewController alloc] init];
     [nav pushViewController:m animated:NO];
+    [self setContentViewController:nav animated:YES];
 }
 
 /// FCL 风格：账户管理在中间内容区显示（不再 FormSheet 弹窗）
