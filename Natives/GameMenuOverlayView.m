@@ -152,9 +152,10 @@ static const CGFloat kDragThreshold = 10.0;
     CGFloat defaultBtnX = bw - kMenuButtonSize - 20;
     CGFloat defaultBtnY = bh * 0.3;
 
+    // 哨兵值 -1 表示未设置（PLPreferences 默认值），回退到硬编码默认位置
     NSNumber *savedX = getPrefObject(kPrefMenuButtonX);
     NSNumber *savedY = getPrefObject(kPrefMenuButtonY);
-    if (savedX && savedY) {
+    if (savedX && savedY && [savedX floatValue] >= 0 && [savedY floatValue] >= 0) {
         CGFloat x = [savedX floatValue] * bw;
         CGFloat y = [savedY floatValue] * bh;
         self.menuButton.center = CGPointMake(x, y);
@@ -168,7 +169,7 @@ static const CGFloat kDragThreshold = 10.0;
 
     NSNumber *savedLX = getPrefObject(kPrefStatsLabelX);
     NSNumber *savedLY = getPrefObject(kPrefStatsLabelY);
-    if (savedLX && savedLY) {
+    if (savedLX && savedLY && [savedLX floatValue] >= 0 && [savedLY floatValue] >= 0) {
         CGFloat x = [savedLX floatValue] * bw;
         CGFloat y = [savedLY floatValue] * bh;
         self.statsLabel.center = CGPointMake(x, y);

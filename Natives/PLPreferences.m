@@ -40,6 +40,8 @@ NSString *const PREF_MOD_UPDATE_KEEP_OLD = @"general.mod_update_keep_old";
             @"curseforge_api_key": @"",
             // Mod 更新时是否保留旧文件（默认 YES）
             @"mod_update_keep_old": @YES,
+            // profile 写入的强制内存分配，0=使用 java.allocated_memory/auto_ram 逻辑
+            @"ram_allocation": @(0),
         }.mutableCopy,
         @"video": @{ // Video & Audio
             @"renderer": @"auto",
@@ -56,7 +58,9 @@ NSString *const PREF_MOD_UPDATE_KEEP_OLD = @"general.mod_update_keep_old";
             @"silence_other_audio": @NO,
             @"silence_with_switch": @NO,
             @"fix_simple_voice_chat_mod": @NO,
-            @"allow_microphone": @NO
+            @"allow_microphone": @NO,
+            // MC 26.2+ 游戏内 OpenGL/Vulkan 切换，空串=默认（由 JavaLauncher 处理）
+            @"graphics_api": @""
         }.mutableCopy,
         @"control": @{
             @"default_ctrl": @"default.json",
@@ -102,7 +106,9 @@ NSString *const PREF_MOD_UPDATE_KEEP_OLD = @"general.mod_update_keep_old";
             @"java_args": @"",
             @"env_variables": @"",
             @"auto_ram": @(!getEntitlementValue(@"com.apple.private.memorystatus")),
-            @"allocated_memory": [NSNumber numberWithFloat:roundf((NSProcessInfo.processInfo.physicalMemory / 1048576) * 0.25)]
+            @"allocated_memory": [NSNumber numberWithFloat:roundf((NSProcessInfo.processInfo.physicalMemory / 1048576) * 0.25)],
+            // profile 写入的强制 Java 版本，auto=根据游戏版本自动选择
+            @"java_version": @"auto"
         }.mutableCopy,
         // MobileGlues 渲染器偏好
         // 当渲染器选择为 MobileGlues 或 Vulkan 时，由 init_loadMobileGluesConfig() 写入
@@ -120,6 +126,16 @@ NSString *const PREF_MOD_UPDATE_KEEP_OLD = @"general.mod_update_keep_old";
             @"angle_depth_clear_fix_mode": @(0),
             @"custom_gl_version": @(0),
             @"fsr1_setting": @(0)
+        }.mutableCopy,
+        // 游戏内覆盖层（GameMenuOverlayView）的位置持久化与开关
+        // 位置以屏幕宽高百分比存储（0.0~1.0），哨兵值 -1 表示未设置，
+        // GameMenuOverlayView 的 restorePositions 会回退到硬编码默认位置。
+        @"game": @{
+            @"menu_button_x": @(-1.0),
+            @"menu_button_y": @(-1.0),
+            @"stats_label_x": @(-1.0),
+            @"stats_label_y": @(-1.0),
+            @"stats_label_visible": @YES
         }.mutableCopy,
         @"internal": @{
             @"isolated": @NO,
