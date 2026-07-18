@@ -1,37 +1,47 @@
 /*
- * iOS SDL 自定义实现（参照 iOS 自定义 GLFW 的模式）。
+ * Copyright LWJGL. All rights reserved.
+ * License terms: https://www.lwjgl.org/license
  *
- * 背景：MC 26.3+ （1.21.9+ 快照）声明了 lwjgl-sdl 依赖。LWJGL 原始的 SDL.java
- * 静态初始化器会调用 Library.loadNative() 加载 libSDL3.dylib，iOS 上没有该库
- * 会导致 UnsatisfiedLinkError → NoClassDefFoundError → MC 崩溃。
+ * iOS SDL3 库加载（真实动态库版）。
  *
- * 参照 Android feat/lwjgl3ify-sdl-support 分支：
- * - Android 预打包 libSDL3.so 并用 bytehook 拦截 SDL_InitSubSystem 触发 SDL 输入转发
- * - GLFW 和 SDL 并行运行，输入事件双发
+ * 背景：
+ *   MC 26.3+ （1.21.9+ 快照）声明了 lwjgl-sdl 依赖。LWJGL 的 SDL.java
+ *   静态初始化器调用 Library.loadNative() 加载 libSDL3.dylib。
  *
- * iOS 适配方案：
- * - 不加载真正的 SDL3 原生库（iOS 上编译 SDL3 + 输入桥接成本较高）
- * - 提供 SDLDummyLibrary 作为 SharedLibrary stub，所有函数地址返回 0
- * - SDLInit 中的 native 方法被自定义 SDLInit.java 覆盖为 Java stub
- * - MC 继续使用现有的 GLFW 路径进行渲染和输入（已有完整的 iOS GLFW 实现）
- * - 若 MC 调用 SDL 的高级功能（gamepad/events），LWJGL 会抛出有意义的错误
- *   而非原生崩溃，让 MC 能优雅降级
+ *   早期适配方案曾用 SDLDummyLibrary stub 避免加载原生库，但导致
+ *   SDLLog$Functions.<clinit> 查找 SDL_SetLogPriorities 等函数时返回 0，
+ *   抛出 NullPointerException: A required function is missing。
  *
- * 此类覆盖 LWJGL jar 中的 org.lwjgl.sdl.SDL（Makefile 中 JavaApp/src/lwjgl/
- * 编译后的 .class 在 jar 解压后复制，覆盖 jar 中的同名类）。
+ *   现在已在 yitenchen123/SDL fork 仓库构建了 iOS arm64 版 libSDL3.dylib
+ *   （含 UIKit 视频后端、Metal 渲染器、Core Audio 等完整 iOS 适配），
+ *   放在 Natives/resources/Frameworks/libSDL3.dylib，由 Makefile 复制到
+ *   AngelAuraAmethyst.app/Frameworks/，java.library.path 包含该路径。
+ *
+ * 此类恢复为标准 LWJGL 3.4.1 的加载逻辑，覆盖 jar 中的 org.lwjgl.sdl.SDL
+ * （Makefile 中 JavaApp/src/lwjgl/ 编译后的 .class 在 jar 解压后复制，
+ * 覆盖 jar 中的同名类）。
+ *
+ * 注意：SDL_MAIN_HANDLED=ON 在构建 libSDL3.dylib 时已设置，禁用了 SDL 的
+ * main hook，MC 自己管理 main 函数入口。
  */
 package org.lwjgl.sdl;
 
+import org.lwjgl.system.Library;
+import org.lwjgl.system.Platform;
 import org.lwjgl.system.SharedLibrary;
 
 public final class SDL {
 
-    private static final SharedLibrary SDL_LIBRARY = new SDLDummyLibrary();
+    // iOS 适配：iOS 版 Configuration 无 SDL_LIBRARY_NAME 字段（标准 3.4.1 有），
+    // 直接用 Platform.mapLibraryNameBundled("SDL3") 得到 "libSDL3.dylib"。
+    // 库文件位于 AngelAuraAmethyst.app/Frameworks/libSDL3.dylib，
+    // java.library.path 已包含 Frameworks 路径。
+    private static final SharedLibrary SDL_LIBRARY = Library.loadNative(
+        SDL.class,
+        "org.lwjgl.sdl",
+        Platform.mapLibraryNameBundled("SDL3")
+    );
 
-    /**
-     * 返回 SDL SharedLibrary 实例。
-     * iOS 上返回 SDLDummyLibrary（空实现），避免加载 libSDL3.dylib。
-     */
     public static SharedLibrary getLibrary() {
         return SDL_LIBRARY;
     }
