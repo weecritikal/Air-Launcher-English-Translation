@@ -173,7 +173,11 @@ public final class APIUtil {
         if (buffer != null && memAddress(buffer) == mappedAddress && buffer.capacity() == capacity) {
             return buffer;
         }
-        return mappedAddress == NULL ? null : wrapBufferByte(mappedAddress, capacity);
+        // iOS 适配：标准 LWJGL 3.4.1 使用 wrapBufferByte(long, int)，
+        // 但 iOS PojavLauncher 的 MemoryUtil 无此方法。改用 iOS MemoryUtil
+        // 提供的等价调用 wrap(BUFFER_BYTE, ...) + order(NATIVE_ORDER)
+        // （与原 iOS APIUtil.class 反编译出的字节码一致）。
+        return mappedAddress == NULL ? null : ((ByteBuffer)wrap(BUFFER_BYTE, mappedAddress, capacity)).order(NATIVE_ORDER);
     }
 
     public static long apiGetBytes(int elements, int elementShift) {
