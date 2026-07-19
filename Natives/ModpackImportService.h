@@ -29,6 +29,11 @@ typedef NS_ENUM(NSInteger, ModpackImportFormat) {
 /// 取消信号：外部置为 YES 后，正在进行的 importModpack 会在下一个检查点停止
 @property (nonatomic, assign, getter=isCancelled) BOOL cancelled;
 
+/// 阶段5修复（参照 FCL DownloadList）：上次导入过程中下载失败的文件列表
+/// 每条记录格式：@{@"fileName":NSString, @"url":NSString, @"reason":NSString}
+/// 即使 importModpack: 返回 YES，也可能存在部分失败文件，调用方可读取此属性展示给用户。
+@property (nonatomic, copy, readonly) NSArray<NSDictionary *> *failedFiles;
+
 /// 解析整合包文件并返回信息字典
 - (nullable NSDictionary *)parseModpackAtURL:(NSURL *)fileURL error:(NSError **)error;
 

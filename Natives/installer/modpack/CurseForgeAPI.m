@@ -855,11 +855,18 @@ submitDownloadTasksFromPackage:(NSString *)packagePath
         // 关键修复：单文件解析失败时不再中止整个整合包下载，改为记录并跳过该文件。
         // 之前 `finishDownloadWithErrorString:` + `return` 会让整批 mod 全部丢失，
         // 即使只有 1 个文件无法解析。这与 issue 描述的"模组不完整"完全吻合。
+        // 阶段5修复（参照 FCL）：同时将跳过的文件记入 failedFiles，最终汇总报告给用户。
         if (url.length == 0 || fileName.length == 0) {
             NSLog(@"[CurseForgeAPI] 跳过无法解析的整合包文件 projectID=%@ fileID=%@（url 或 fileName 为空），继续下载剩余文件", projectID, fileID);
             skippedCount++;
             // 单文件失败也需推进进度，避免下载卡片卡住
             downloader.progress.completedUnitCount++;
+            @synchronized(downloader.failedFiles) {
+                [downloader.failedFiles addObject:@{
+                    @"name": [NSString stringWithFormat:@"projectID=%@ fileID=%@", projectID, fileID],
+                    @"error": @"无法从 CurseForge API 解析文件信息（url 或 fileName 为空）"
+                }];
+            }
             continue;
         }
         NSString *path = [modsPath stringByAppendingPathComponent:fileName];

@@ -20,6 +20,10 @@ extern NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier;
 @property(nonatomic, readonly) NSInteger currentRetryCount;
 @property(nonatomic, copy) void(^retryCallback)(NSInteger retryCount, NSInteger maxRetryCount);
 
+// 阶段5修复（参照 FCL）：失败的文件列表，单文件下载失败不再取消整批任务，
+// 而是记录到此数组，最终汇总报告给用户。每个元素是 @{@"name": ..., "error": ...}
+@property(nonatomic, strong) NSMutableArray<NSDictionary *> *failedFiles;
+
 // 新增方法声明（用于账户检查）
 - (BOOL)checkAccessWithDialog:(BOOL)show;
 

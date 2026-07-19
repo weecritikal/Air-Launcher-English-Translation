@@ -520,9 +520,26 @@
                     [self showImportSuccess:modpackInfo];
                 });
             } else {
+                // 阶段5修复（参照 FCL）：错误消息中追加失败文件列表（如有），
+                // 让用户清楚知道是哪些 mod 下载失败，而不是只看到一个笼统的错误。
+                NSString *message = error.localizedDescription ?: @"未知错误";
+                NSArray<NSDictionary *> *failed = self.importService.failedFiles;
+                if (failed.count > 0) {
+                    NSMutableString *msg = [NSMutableString stringWithString:message];
+                    [msg appendFormat:@"\n\n失败文件（共 %lu 个）：", (unsigned long)failed.count];
+                    NSUInteger showCount = MIN(failed.count, (NSUInteger)5);
+                    for (NSUInteger k = 0; k < showCount; k++) {
+                        NSString *n = failed[k][@"fileName"] ?: failed[k][@"name"];
+                        [msg appendFormat:@"\n  • %@", n ?: @"(unknown)"];
+                    }
+                    if (failed.count > showCount) {
+                        [msg appendFormat:@"\n  ...等共 %lu 个", (unsigned long)failed.count];
+                    }
+                    message = [msg copy];
+                }
                 [self hideProgressCard];
                 self.currentImportingModpack = nil;
-                [self showAlertWithTitle:@"导入失败" message:error.localizedDescription ?: @"未知错误"];
+                [self showAlertWithTitle:@"导入失败" message:message];
             }
         });
     });
@@ -566,8 +583,10 @@
     cell.textLabel.text = nil;
     cell.detailTextLabel.text = nil;
     cell.imageView.image = nil;
+    // 重置 cell 样式：移除旧的 blurView 和 shadowView（cell 复用）
     for (UIView *subview in cell.contentView.subviews) {
-        if ([subview isKindOfClass:[UIVisualEffectView class]]) {
+        if ([subview isKindOfClass:[UIVisualEffectView class]] ||
+            (subview.layer.shadowOpacity > 0.0f)) {
             [subview removeFromSuperview];
         }
     }
@@ -583,15 +602,35 @@
     cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
     cell.backgroundColor = [UIColor clearColor];
 
+    // 阶段6视觉统一：参照 ModernAssetCell / ModVersionTableViewCell / VersionCardCell 的卡片规范
+    // （cornerRadius 12 + cornerCurve continuous + shadow offset 2/opacity 0.10/radius 4 + leading/trailing 10）
+    // 由于 UIVisualEffectView 的 masksToBounds=YES 会同时裁剪 blur 和 shadow，需要单独的 shadowView
+    // 提供阴影（与 blurView 同 frame），blurView 在上层提供毛玻璃效果。
+    UIView *shadowView = [[UIView alloc] init];
+    shadowView.translatesAutoresizingMaskIntoConstraints = NO;
+    shadowView.layer.cornerRadius = 12;
+    shadowView.layer.cornerCurve = kCACornerCurveContinuous;
+    shadowView.layer.shadowColor = [UIColor blackColor].CGColor;
+    shadowView.layer.shadowOffset = CGSizeMake(0, 2);
+    shadowView.layer.shadowOpacity = 0.10;
+    shadowView.layer.shadowRadius = 4;
+    shadowView.layer.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.08].CGColor;
+    [cell.contentView insertSubview:shadowView atIndex:0];
+
     UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial]];
     blurView.translatesAutoresizingMaskIntoConstraints = NO;
     blurView.layer.cornerRadius = 12;
+    blurView.layer.cornerCurve = kCACornerCurveContinuous;
     blurView.layer.masksToBounds = YES;
-    [cell.contentView insertSubview:blurView atIndex:0];
+    [cell.contentView insertSubview:blurView atIndex:1];
     [NSLayoutConstraint activateConstraints:@[
+        [shadowView.topAnchor constraintEqualToAnchor:cell.contentView.topAnchor constant:4],
+        [shadowView.leadingAnchor constraintEqualToAnchor:cell.contentView.leadingAnchor constant:10],
+        [shadowView.trailingAnchor constraintEqualToAnchor:cell.contentView.trailingAnchor constant:-10],
+        [shadowView.bottomAnchor constraintEqualToAnchor:cell.contentView.bottomAnchor constant:-4],
         [blurView.topAnchor constraintEqualToAnchor:cell.contentView.topAnchor constant:4],
-        [blurView.leadingAnchor constraintEqualToAnchor:cell.contentView.leadingAnchor constant:12],
-        [blurView.trailingAnchor constraintEqualToAnchor:cell.contentView.trailingAnchor constant:-12],
+        [blurView.leadingAnchor constraintEqualToAnchor:cell.contentView.leadingAnchor constant:10],
+        [blurView.trailingAnchor constraintEqualToAnchor:cell.contentView.trailingAnchor constant:-10],
         [blurView.bottomAnchor constraintEqualToAnchor:cell.contentView.bottomAnchor constant:-4]
     ]];
     cell.backgroundView = nil;

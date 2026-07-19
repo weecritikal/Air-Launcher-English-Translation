@@ -642,10 +642,18 @@ submitDownloadTasksFromPackage:(NSString *)packagePath
         NSUInteger size = [indexFile[@"fileSize"] unsignedLongLongValue];
         // 关键修复：URL 为空时不能静默 completedUnitCount++ 跳过，否则用户不会感知缺失，
         // 但又没有可下载的链接。改为记录警告并推进进度（避免卡死），但不视为致命错误。
+        // 阶段5修复（参照 FCL）：同时将缺失 URL 的文件记入 failedFiles，最终汇总报告
+        // 给用户，避免"下载不完全"问题被静默隐藏。
         if (!url || ![url isKindOfClass:[NSString class]] || url.length == 0) {
             skippedEmptyURL++;
             downloader.progress.completedUnitCount++;
             NSLog(@"[ModrinthAPI] 警告：Modrinth 文件 %@ 缺少 download URL，跳过", indexFile[@"path"]);
+            @synchronized(downloader.failedFiles) {
+                [downloader.failedFiles addObject:@{
+                    @"name": indexFile[@"path"] ?: @"(unknown)",
+                    @"error": @"缺少 download URL（modrinth.index.json 中 downloads 为空）"
+                }];
+            }
             continue;
         }
         NSURLSessionDownloadTask *task = [downloader createDownloadTask:url size:size sha:sha altName:nil toPath:path];

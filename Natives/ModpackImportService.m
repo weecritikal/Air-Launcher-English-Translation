@@ -43,6 +43,8 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
 @property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, NSMutableDictionary *> *downloadProgressSnapshots;
 @property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, DownloadTaskItem *> *downloadTaskItems;
 @property (nonatomic, strong) NSLock *downloadLock;
+/// 阶段5修复（参照 FCL）：跟踪本次导入过程中下载失败的文件，便于上层向用户报告
+@property (nonatomic, strong) NSMutableArray<NSDictionary *> *failedFilesInternal;
 
 // 前向声明：将 modpackInfo 中的 iconBase64 解析为可用的文件 URL 字符串
 - (nullable NSString *)resolveIconURLFromModpackInfo:(NSDictionary *)modpackInfo;
@@ -74,9 +76,17 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
         _downloadProgressSnapshots = [NSMutableDictionary dictionary];
         _downloadTaskItems = [NSMutableDictionary dictionary];
         _downloadLock = [[NSLock alloc] init];
+        _failedFilesInternal = [NSMutableArray array];
         _cancelled = NO;
     }
     return self;
+}
+
+/// 阶段5修复：公共只读访问器，返回不可变拷贝防止外部修改
+- (NSArray<NSDictionary *> *)failedFiles {
+    @synchronized(self) {
+        return [self.failedFilesInternal copy];
+    }
 }
 
 - (void)resetCancelState {
@@ -574,6 +584,11 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
 - (BOOL)importModpack:(NSDictionary *)modpackInfo
              progress:(void (^_Nullable)(double progress, NSString *stageMessage))progress
                 error:(NSError **)error {
+    // 阶段5修复：每次导入开始时清空失败列表（参照 FCL DownloadList.reset()）
+    @synchronized(self) {
+        [self.failedFilesInternal removeAllObjects];
+    }
+
     NSString *filePath = modpackInfo[@"filePath"];
     NSString *format = modpackInfo[@"format"];
 
@@ -915,7 +930,14 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
                 destDir = [modsDir.stringByDeletingLastPathComponent stringByAppendingPathComponent:relPath.stringByDeletingLastPathComponent];
             }
             // 处理子目录（如 mods/inner/sub.jar）
-            NSString *relativeUnder = [relPath substringFromIndex:[relPath rangeOfString:@"/"].location + 1];
+            // 阶段5修复（参照 FCL）：relPath 不含 "/" 时 rangeOfString: 返回 NSNotFound，
+            // 直接 +1 会整数溢出，导致 substringFromIndex: 抛出 NSRangeException 崩溃。
+            // 例如某些不规范整合包可能将根目录文件（如 "config.toml"）放入 files[]，
+            // 此时应保留原文件名直接拼到 destDir。
+            NSRange firstSlashRange = [relPath rangeOfString:@"/"];
+            NSString *relativeUnder = (firstSlashRange.location == NSNotFound)
+                ? relPath.lastPathComponent
+                : [relPath substringFromIndex:firstSlashRange.location + 1];
             NSString *fileName = relPath.lastPathComponent;
             NSString *destPath = [destDir stringByAppendingPathComponent:relativeUnder];
 
@@ -930,8 +952,19 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
                     // 清理上次失败可能残留的半成品文件
                     [[NSFileManager defaultManager] removeItemAtPath:destPath error:nil];
                 }
+                // 阶段5修复：[NSURL URLWithString:] 对非法字符串返回 nil，
+                // downloadTaskWithURL:nil 会触发 NSInvalidArgumentException 崩溃。
+                // 即使 url 非空也可能因控制字符/空格等返回 nil，必须显式判断。
+                NSURL *downloadURL = [NSURL URLWithString:url];
+                if (!downloadURL) {
+                    NSLog(@"[ModpackImport] 警告：Modrinth 文件 URL 非法，跳过: %@", url);
+                    dlError = [NSError errorWithDomain:@"ModpackImportError"
+                                                  code:5001
+                                              userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"无效的下载链接: %@", url]}];
+                    break;
+                }
                 // 每次重试都创建新 task（旧 task 已结束）
-                NSURLSessionDownloadTask *task = [self.downloadSession downloadTaskWithURL:[NSURL URLWithString:url]];
+                NSURLSessionDownloadTask *task = [self.downloadSession downloadTaskWithURL:downloadURL];
                 NSString *taskId = nil;
                 {
                     DownloadTaskItem *taskItem = [[DownloadTaskManager sharedManager]
@@ -951,8 +984,20 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
                     NSLog(@"[ModpackImport] mod 下载失败 %@ (第 %ld 次): %@", fileName, (long)retry, dlError.localizedDescription);
                 }
             }
-            if (ok) successCount++;
-            else NSLog(@"[ModpackImport] 模组最终下载失败：%@ (%@)", fileName, url);
+            if (ok) {
+                successCount++;
+            } else {
+                // 阶段5修复（参照 FCL DownloadList）：记录失败文件，让上层可向用户展示哪些 mod 缺失
+                NSLog(@"[ModpackImport] 模组最终下载失败：%@ (%@)", fileName, url);
+                @synchronized(self) {
+                    [self.failedFilesInternal addObject:@{
+                        @"fileName": fileName ?: @"(unknown)",
+                        @"url": url ?: @"",
+                        @"reason": dlError.localizedDescription ?: @"unknown error",
+                        @"format": @"modrinth"
+                    }];
+                }
+            }
 
             if (progress) {
                 double p = 0.15 + 0.70 * ((double)(i + 1) / (double)total);
@@ -980,9 +1025,19 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
 
             // 关键修复：使用 projectID-fileID.jar 作为文件名只是 fallback。
             // 优先使用 manifest 中真实 fileName（若 modpackInfo 解析时已透传），便于用户识别。
+            // 阶段5修复（参照 FCL CurseForgeFileResolver）：manifest 缺失 fileName 时，
+            // 通过 BMCLAPI HEAD 请求获取真实文件名（Content-Disposition 或重定向 URL 末段），
+            // 避免 mods/ 目录里全是 "12345-67890.jar" 这种用户无法识别的文件名。
             NSString *fileName = fileInfo[@"fileName"];
             if (![fileName isKindOfClass:[NSString class]] || fileName.length == 0) {
-                fileName = [NSString stringWithFormat:@"%@-%@.jar", projectID, fileID];
+                NSString *realName = [self fetchCurseForgeRealFileName:projectID.longLongValue fileID:fileID.longLongValue];
+                if (realName.length > 0) {
+                    fileName = realName;
+                    NSLog(@"[ModpackImport] 通过 HEAD 解析到真实文件名：projectID=%@ fileID=%@ → %@",
+                          projectID, fileID, realName);
+                } else {
+                    fileName = [NSString stringWithFormat:@"%@-%@.jar", projectID, fileID];
+                }
             }
             NSString *destPath = [modsDir stringByAppendingPathComponent:fileName];
 
@@ -1005,7 +1060,17 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
                         NSLog(@"[ModpackImport] 切换到备用源下载 %@: %@", fileName, altURL);
                     }
                 }
-                NSURLSessionDownloadTask *task = [self.downloadSession downloadTaskWithURL:[NSURL URLWithString:currentURL]];
+                // 阶段5修复：[NSURL URLWithString:] 对非法字符串返回 nil，
+                // downloadTaskWithURL:nil 会触发 NSInvalidArgumentException 崩溃。
+                NSURL *currentNSURL = [NSURL URLWithString:currentURL];
+                if (!currentNSURL) {
+                    NSLog(@"[ModpackImport] 警告：CurseForge 文件 URL 非法，跳过: %@", currentURL);
+                    dlError = [NSError errorWithDomain:@"ModpackImportError"
+                                                  code:5001
+                                              userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"无效的下载链接: %@", currentURL]}];
+                    break;
+                }
+                NSURLSessionDownloadTask *task = [self.downloadSession downloadTaskWithURL:currentNSURL];
                 NSString *taskId = nil;
                 {
                     DownloadTaskItem *taskItem = [[DownloadTaskManager sharedManager]
@@ -1025,8 +1090,22 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
                     NSLog(@"[ModpackImport] mod 下载失败 %@ (第 %ld 次): %@", fileName, (long)retry, dlError.localizedDescription);
                 }
             }
-            if (ok) successCount++;
-            else NSLog(@"[ModpackImport] 模组最终下载失败：%@", fileName);
+            if (ok) {
+                successCount++;
+            } else {
+                // 阶段5修复（参照 FCL DownloadList）：记录失败文件，让上层可向用户展示哪些 mod 缺失
+                NSLog(@"[ModpackImport] 模组最终下载失败：%@", fileName);
+                @synchronized(self) {
+                    [self.failedFilesInternal addObject:@{
+                        @"fileName": fileName ?: @"(unknown)",
+                        @"url": currentURL ?: @"",
+                        @"reason": dlError.localizedDescription ?: @"unknown error",
+                        @"format": @"curseforge",
+                        @"projectID": projectID ?: @0,
+                        @"fileID": fileID ?: @0
+                    }];
+                }
+            }
 
             if (progress) {
                 double p = 0.15 + 0.70 * ((double)(i + 1) / (double)total);
@@ -1036,23 +1115,46 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
     }
 
     NSLog(@"[ModpackImport] mod 下载完成: %lu/%lu 成功", (unsigned long)successCount, (unsigned long)total);
-    // 关键修复（多启动器兼容）：提高成功率门槛，避免依赖严密的整合包因 mod 缺失启动崩溃
-    //   - >= 70% 成功：返回 YES，记录警告（部分可选 mod 缺失不影响核心功能）
-    //   - < 70% 成功：返回 NO，让上层明确报告"整合包模组下载失败过多"
-    // 之前门槛过低（50%），核心 mod 缺失时仍返回 YES，导致用户以为导入成功但启动崩溃。
+    // 阶段5修复（参照 FCL DownloadList.finishAll）：失败文件已收集到 failedFilesInternal，
+    // 这里不再仅靠 70% 静默阈值隐藏失败信息。任何失败都返回 NO，让上层用 self.failedFiles
+    // 向用户展示具体缺失的 mod 列表，并提供"重试缺失模组"入口。
+    //   - 全部成功：返回 YES
+    //   - 有失败：返回 NO，error 中带失败文件名（最多 5 个），完整列表通过 self.failedFiles 访问
+    // 之前 70% 阈值会让用户以为导入成功，但实际 mod 缺失导致启动崩溃——这是 issue 报告的
+    // "下载不完全"问题的根因。
     if (total == 0) return YES;
-    double successRate = (double)successCount / (double)total;
-    if (successRate >= 0.7) {
-        if (successCount < total) {
-            NSLog(@"[ModpackImport] 警告：整合包部分模组下载失败：%lu/%lu 成功（成功率 %.0f%%），可能影响游戏体验",
-                  (unsigned long)successCount, (unsigned long)total, successRate * 100);
+    if (successCount >= total) return YES;
+
+    // 收集失败文件名（用于错误消息）
+    NSArray<NSDictionary *> *failedSnapshot = self.failedFiles;
+    NSMutableArray<NSString *> *failedNames = [NSMutableArray arrayWithCapacity:failedSnapshot.count];
+    for (NSDictionary *f in failedSnapshot) {
+        NSString *n = f[@"fileName"];
+        if ([n isKindOfClass:[NSString class]] && n.length > 0) {
+            [failedNames addObject:n];
         }
-        return YES;
     }
+    // 错误消息：成功率 + 失败计数 + 前 5 个失败文件名（避免 error 描述过长）
+    NSMutableString *msg = [NSMutableString stringWithFormat:@"整合包模组下载不完整：%lu/%lu 成功，%lu 个失败",
+                            (unsigned long)successCount, (unsigned long)total, (unsigned long)failedNames.count];
+    if (failedNames.count > 0) {
+        NSUInteger showCount = MIN(failedNames.count, (NSUInteger)5);
+        [msg appendString:@"\n失败模组："];
+        for (NSUInteger k = 0; k < showCount; k++) {
+            [msg appendFormat:@"%@\n", failedNames[k]];
+        }
+        if (failedNames.count > showCount) {
+            [msg appendFormat:@"...等共 %lu 个", (unsigned long)failedNames.count];
+        }
+    }
+    NSLog(@"[ModpackImport] 警告：%@", msg);
     if (error) {
         *error = [NSError errorWithDomain:@"ModpackImportError"
                                      code:5004
-                                 userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"整合包模组下载失败过多：%lu/%lu 成功（需 ≥70%%）", (unsigned long)successCount, (unsigned long)total]}];
+                                 userInfo:@{
+                                     NSLocalizedDescriptionKey: [msg copy],
+                                     @"failedFiles": failedSnapshot
+                                 }];
     }
     return NO;
 }
@@ -1252,6 +1354,65 @@ didFinishDownloadingToURL:(NSURL *)location {
     return [NSString stringWithFormat:@"https://cdn.curseforge.com/files/%lld/%lld/download", projectID, fileID];
 }
 
+/// 阶段5修复（参照 FCL CurseForgeFileResolver）：当整合包 manifest 中缺失 fileName 时，
+/// 通过 BMCLAPI 的下载链接做 HEAD 请求，跟随重定向到 CurseForge CDN 的实际文件 URL，
+/// 取其 lastPathComponent 作为真实文件名（如 "jei-1.20.1-15.2.0.27.jar"）。
+/// 这避免了将文件保存为 "12345-67890.jar" 这种用户无法识别的 fallback 名称。
+/// 失败时返回 nil，由调用方继续使用 fallback。
+- (nullable NSString *)fetchCurseForgeRealFileName:(long long)projectID fileID:(long long)fileID {
+    NSString *bmclDownloadURL = [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/curseforge/files/%lld/%lld/download", projectID, fileID];
+    NSURL *url = [NSURL URLWithString:bmclDownloadURL];
+    if (!url) return nil;
+
+    // 使用临时 NSURLSession 不跟随重定向（手工处理），便于拿到 Location 头
+    NSURLSessionConfiguration *cfg = [NSURLSessionConfiguration defaultSessionConfiguration];
+    cfg.timeoutIntervalForRequest = 15;
+    cfg.HTTPAdditionalHeaders = @{
+        @"User-Agent": @"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        @"Accept": @"*/*"
+    };
+    NSURLSession *session = [NSURLSession sessionWithConfiguration:cfg];
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+    request.HTTPMethod = @"HEAD";
+
+    __block NSString *resolvedName = nil;
+    dispatch_semaphore_t sem = dispatch_semaphore_create(0);
+    NSURLSessionDataTask *task = [session dataTaskWithRequest:request
+                                            completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        if (!error && [response isKindOfClass:[NSHTTPURLResponse class]]) {
+            NSHTTPURLResponse *http = (NSHTTPURLResponse *)response;
+            // 优先取 Content-Disposition 头中的 filename（最权威）
+            NSString *contentDisposition = http.allHeaderFields[@"Content-Disposition"];
+            if ([contentDisposition isKindOfClass:[NSString class]] && contentDisposition.length > 0) {
+                NSRange fnRange = [contentDisposition rangeOfString:@"filename=\""
+                                                            options:NSCaseInsensitiveSearch];
+                if (fnRange.location != NSNotFound) {
+                    NSUInteger start = fnRange.location + fnRange.length;
+                    NSUInteger end = [contentDisposition rangeOfString:@"\"" options:0 range:NSMakeRange(start, contentDisposition.length - start)].location;
+                    if (end != NSNotFound && end > start) {
+                        resolvedName = [contentDisposition substringWithRange:NSMakeRange(start, end - start)];
+                    }
+                }
+            }
+            // 没拿到 Content-Disposition，尝试从最终 URL 的 lastPathComponent 取
+            if (!resolvedName && http.URL) {
+                NSString *last = http.URL.lastPathComponent;
+                if (last.length > 0 && ![last isEqualToString:@"download"]) {
+                    resolvedName = last;
+                }
+            }
+        }
+        dispatch_semaphore_signal(sem);
+    }];
+    [task resume];
+    long waitResult = dispatch_semaphore_wait(sem, dispatch_time(DISPATCH_TIME_NOW, 15 * NSEC_PER_SEC));
+    if (waitResult != 0) {
+        [task cancel];
+    }
+    [session finishTasksAndInvalidate];
+    return resolvedName;
+}
+
 /// 安装模组加载器
 /// Fabric/Quilt: 拉取 profile json 并写入 versions/<id>/<id>.json
 /// Forge/NeoForge: 写一个最小的版本 JSON 占位 (依赖用户后续手动安装)
@@ -1296,6 +1457,16 @@ didFinishDownloadingToURL:(NSURL *)location {
         }
         NSString *jsonURL = [NSString stringWithFormat:jsonURLTemplate, minecraftVersion, loaderVersion];
         NSURL *url = [NSURL URLWithString:jsonURL];
+        // 阶段5修复：构造出的 URL 可能因 loaderVersion 含非法字符导致 URLWithString: 返回 nil，
+        // downloadTaskWithURL:nil 会崩溃。此处显式判断并返回明确错误。
+        if (!url) {
+            if (error) {
+                *error = [NSError errorWithDomain:@"ModpackImportError"
+                                             code:4002
+                                         userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"%@ profile JSON URL 非法: %@", loader, jsonURL]}];
+            }
+            return NO;
+        }
 
         NSString *displayName = [NSString stringWithFormat:@"%@ %@ profile", loader, loaderVersion];
         NSURLSessionDownloadTask *task = [self.downloadSession downloadTaskWithURL:url];
@@ -1342,7 +1513,19 @@ didFinishDownloadingToURL:(NSURL *)location {
                                   [NSString stringWithFormat:@"%@-installer.jar", versionId]];
 
     NSString *installerDisplayName = [NSString stringWithFormat:@"%@ %@ installer", loader, loaderVersion];
-    NSURLSessionDownloadTask *installerTask = [self.downloadSession downloadTaskWithURL:[NSURL URLWithString:installerURL]];
+    // 阶段5修复：installerURL 已通过 buildInstallerURLForLoader 返回非空字符串，
+    // 但 [NSURL URLWithString:] 对含空格/特殊字符的字符串仍可能返回 nil，
+    // downloadTaskWithURL:nil 会崩溃。显式判断并返回明确错误。
+    NSURL *installerNSURL = [NSURL URLWithString:installerURL];
+    if (!installerNSURL) {
+        if (error) {
+            *error = [NSError errorWithDomain:@"ModpackImportError"
+                                         code:4003
+                                     userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"%@ installer URL 非法: %@", loader, installerURL]}];
+        }
+        return NO;
+    }
+    NSURLSessionDownloadTask *installerTask = [self.downloadSession downloadTaskWithURL:installerNSURL];
     NSString *installerTaskId = nil;
     {
         DownloadTaskItem *installerItem = [[DownloadTaskManager sharedManager]

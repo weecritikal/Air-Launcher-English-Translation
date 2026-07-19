@@ -64,6 +64,8 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"org.a
     self.manager = [MinecraftResourceDownloadTask sharedBackgroundSessionManager];
     self.fileList = [NSMutableArray new];
     self.progressList = [NSMutableArray new];
+    // 阶段5修复：初始化失败文件列表（参照 FCL 的失败汇总机制）
+    self.failedFiles = [NSMutableArray new];
     return self;
 }
 
@@ -210,6 +212,22 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"org.a
                 });
             } else {
                 [weakSelf finishDownloadWithError:error file:name];
+                // 阶段5修复（参照 FCL）：单文件失败后必须手动推进进度，否则父 progress
+                // 永远不会达到 100%（failed 子 progress 的份额无人填补），
+                // 用户会看到下载条卡住不动，误以为下载未完成。
+                // 注意：destination block 只在下载成功时才会被调用，所以这里 progress
+                // 可能为 nil。需要重新从 manager 取该 task 对应的子 progress。
+                NSProgress *taskProgress = progress ?: [weakSelf.manager downloadProgressForTask:task];
+                if (taskProgress) {
+                    int64_t pending = taskProgress.totalUnitCount - taskProgress.completedUnitCount;
+                    if (pending > 0) {
+                        taskProgress.completedUnitCount = taskProgress.totalUnitCount;
+                    }
+                } else if (weakSelf.progress.totalUnitCount > weakSelf.progress.completedUnitCount) {
+                    // 极端兜底：连子 progress 都拿不到（如 size 未知且 destination 未触发），
+                    // 直接给父 progress 推 1 个单位，避免下载条卡死。
+                    weakSelf.progress.completedUnitCount += 1;
+                }
             }
         } else if (![self checkSHA:sha forFile:path altName:altName]) {
             // SHA1 校验失败也尝试重试
@@ -217,7 +235,7 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"org.a
             if (retryCount < maxRetry) {
                 NSInteger nextRetry = retryCount + 1;
                 NSLog(@"[MCDL] SHA1 mismatch, retrying %@ (attempt %ld/%ld)", name, (long)nextRetry, (long)maxRetry);
-                
+
                 // 删除损坏的文件
                 [NSFileManager.defaultManager removeItemAtPath:path error:nil];
 
@@ -229,7 +247,25 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"org.a
                     }
                 });
             } else {
-                [weakSelf finishDownloadWithErrorString:[NSString stringWithFormat:@"Failed to verify file %@: SHA1 mismatch", path.lastPathComponent]];
+                // 阶段5修复（参照 FCL）：SHA1 校验失败也记录到 failedFiles，不取消整批任务
+                @synchronized(weakSelf.failedFiles) {
+                    [weakSelf.failedFiles addObject:@{
+                        @"name": path.lastPathComponent ?: @"unknown",
+                        @"error": @"SHA1 mismatch"
+                    }];
+                }
+                NSLog(@"[MCDL] SHA1 mismatch for '%@', added to failedFiles (total failed: %lu), other downloads will continue",
+                      path.lastPathComponent, (unsigned long)weakSelf.failedFiles.count);
+                // 阶段5修复：与上面 error 分支一致，推进父 progress 避免卡死
+                NSProgress *taskProgress2 = progress ?: [weakSelf.manager downloadProgressForTask:task];
+                if (taskProgress2) {
+                    int64_t pending = taskProgress2.totalUnitCount - taskProgress2.completedUnitCount;
+                    if (pending > 0) {
+                        taskProgress2.completedUnitCount = taskProgress2.totalUnitCount;
+                    }
+                } else if (weakSelf.progress.totalUnitCount > weakSelf.progress.completedUnitCount) {
+                    weakSelf.progress.completedUnitCount += 1;
+                }
             }
         } else {
             progress.totalUnitCount = progress.completedUnitCount;
@@ -500,6 +536,8 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"org.a
     self.progress.totalUnitCount = 1;
     [self.fileList removeAllObjects];
     [self.progressList removeAllObjects];
+    // 阶段5修复：重置失败文件列表（参照 FCL）
+    [self.failedFiles removeAllObjects];
 
     // 注册/更新到统一下载任务管理器
     [self registerOrUpdateTaskItem];
@@ -572,7 +610,29 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"org.a
 - (void)finishDownloadWithError:(NSError *)error file:(NSString *)file {
     NSString *errorStr = [NSString stringWithFormat:localize(@"launcher.mcl.error_download", NULL), file, error.localizedDescription];
     NSLog(@"[MCDL] Error: %@ %@", errorStr, NSThread.callStackSymbols);
-    [self finishDownloadWithErrorString:errorStr];
+
+    // 阶段5修复（参照 FCL）：单文件下载失败不再取消整批任务。
+    //
+    // 之前调用 finishDownloadWithErrorString: 会：
+    //   1. 取消所有同 taskId 的下载任务（正在下载的其他文件全部被取消）
+    //   2. 弹出错误对话框中断整个下载流程
+    //   3. 导致整合包"下载不完全"——用户报告"下载的模组名称不对、下载不完全"
+    //
+    // FCL 做法：单文件失败记录到 failedFiles 数组，其他文件继续下载，
+    // 最终汇总报告给用户。这与 FCL "单文件失败不影响其他文件"的设计完全一致。
+    //
+    // 注意：仅整合包多文件下载场景适用此容错策略。单文件版本下载（downloadVersion:）
+    // 不应进入此方法（其 completionHandler 已有自己的错误处理路径），但若意外进入，
+    // 由于 failedFiles.count == 0 时 finishDownloadWithErrorString: 不会被触发，
+    // 行为与原逻辑保持兼容。
+    @synchronized(self.failedFiles) {
+        [self.failedFiles addObject:@{
+            @"name": file ?: @"unknown",
+            @"error": error.localizedDescription ?: @"unknown error"
+        }];
+    }
+    NSLog(@"[MCDL] File '%@' added to failedFiles (total failed: %lu), other downloads will continue",
+          file, (unsigned long)self.failedFiles.count);
 }
 
 #pragma mark - Download Task Manager Reporting
@@ -636,7 +696,32 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"org.a
         if (self.currentDownloadTaskItem.state != DownloadTaskStateCompleted &&
             self.currentDownloadTaskItem.state != DownloadTaskStateFailed &&
             self.currentDownloadTaskItem.state != DownloadTaskStateCancelled) {
-            [manager setTaskWithId:self.currentDownloadTaskItem.taskId completedWithError:nil];
+            // 阶段5修复（参照 FCL DownloadList.finishAll）：下载流程结束后，
+            // 若有失败文件，不能简单标记为"成功完成"——这会让用户以为整合包完整。
+            // 应将失败文件信息汇总为 NSError，让 DownloadTaskManager 显示为失败状态，
+            // 用户可在下载任务列表中看到具体缺失的文件。
+            NSArray<NSDictionary *> *failedSnapshot = [self.failedFiles copy];
+            if (failedSnapshot.count > 0) {
+                NSMutableString *msg = [NSMutableString stringWithFormat:@"下载完成但有 %lu 个文件失败：", (unsigned long)failedSnapshot.count];
+                NSUInteger showCount = MIN(failedSnapshot.count, (NSUInteger)5);
+                for (NSUInteger k = 0; k < showCount; k++) {
+                    NSString *n = failedSnapshot[k][@"name"];
+                    [msg appendFormat:@"\n  • %@", n ?: @"(unknown)"];
+                }
+                if (failedSnapshot.count > showCount) {
+                    [msg appendFormat:@"\n  ...等共 %lu 个", (unsigned long)failedSnapshot.count];
+                }
+                NSLog(@"[MCDL] %@", msg);
+                NSError *partialError = [NSError errorWithDomain:@"MinecraftResourceDownloadTask"
+                                                            code:2
+                                                        userInfo:@{
+                                                            NSLocalizedDescriptionKey: [msg copy],
+                                                            @"failedFiles": failedSnapshot
+                                                        }];
+                [manager setTaskWithId:self.currentDownloadTaskItem.taskId completedWithError:partialError];
+            } else {
+                [manager setTaskWithId:self.currentDownloadTaskItem.taskId completedWithError:nil];
+            }
         }
         [self removeProgressObserver];
     }
