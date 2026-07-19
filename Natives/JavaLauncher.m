@@ -784,6 +784,21 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
 
         PUSH_MARGV_FORMAT(@"-Dorg.lwjgl.opengl.libname=%s", openglLibName);
 
+        // 关键修复（参照 FCL，阶段4：26.2 图形 API 切换无效）：
+        // 之前仅在 renderer=libMoltenVK.dylib 时由 PojavLauncher.java 通过 System.setProperty 设置
+        // org.lwjgl.vulkan.libname，导致用户保留默认 renderer=auto（解析为 ANGLE）并切换
+        // graphicsApi=prefer_vulkan 时，LWJGL 找不到 Vulkan 库 → MC 静默回退 OpenGL。
+        //
+        // FCL 做法：在 JVM 启动前通过 -D 系统属性同时确定 OpenGL 和 Vulkan 两条路径的 native 库，
+        // 无论 MC 最终选哪条路都能找到对应的库。
+        //
+        // 传裸名 "MoltenVK"，LWJGL Library.loadNative 会自动加 "lib" 前缀和 ".dylib" 后缀，
+        // 得到 "libMoltenVK.dylib"（正确文件名）。若传 "libMoltenVK.dylib" 会被包装成
+        // "liblibMoltenVK.dylib.dylib"（错误文件名）。
+        //
+        // 安全性：即使 MC 最终走 GL 路径，加载 MoltenVK 也无副作用（GL 路径不调用 Vulkan 入口）。
+        PUSH_MARGV_LITERAL("-Dorg.lwjgl.vulkan.libname=MoltenVK");
+
         // 显式指定 spirv-cross 库名（参照 catsruledogs/Amethyst-iOS-25）：
         // LWJGL spvc 模块默认查找 "spirv-cross" -> 加载 libspirv-cross.dylib（macOS 标准名），
         // 但实际文件名为 libspirv-cross-c-shared.0.dylib（带版本后缀的 SO 名）。

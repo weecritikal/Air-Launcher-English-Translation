@@ -191,6 +191,29 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
     // 之前用 additionalSafeAreaInsets 补偿 safeArea 不对称，但补偿后外边距 =
     // max(safeArea) + kCardOuterMargin 反而更大（"下边和左右两边空隙过大"），
     // 故移除该补偿方案，改用 view.edgeAnchor 直接约束。
+    //
+    // 关键修复（阶段4：Card 布局进入设置崩溃，无日志）：
+    // 与 LauncherRootViewController 对齐：清理 additionalSafeAreaInsets 累积。
+    // 之前此方法体为空，导致 LauncherPreferencesViewController（含 UISearchController）在
+    // nav 栈中时 additionalSafeAreaInsets 可能累积异常，UISearchController.searchBar
+    // （作为 tableHeaderView）frame 计算异常 → EXC_BAD_ACCESS（不被 NSUncaughtExceptionHandler
+    // 捕获，故无日志）。VS 布局不崩溃是因为 Root 的 viewDidLayoutSubviews 持续清理 inset。
+    UIViewController *contentVC = _contentViewController;
+    if (!contentVC) return;
+    if ([contentVC isKindOfClass:[UINavigationController class]]) {
+        UINavigationController *nav = (UINavigationController *)contentVC;
+        for (UIViewController *vc in nav.viewControllers) {
+            UIEdgeInsets insets = vc.additionalSafeAreaInsets;
+            if (insets.top != 0 || insets.left != 0 || insets.right != 0 || insets.bottom != 0) {
+                vc.additionalSafeAreaInsets = UIEdgeInsetsZero;
+            }
+        }
+    } else {
+        UIEdgeInsets insets = contentVC.additionalSafeAreaInsets;
+        if (insets.top != 0 || insets.left != 0 || insets.right != 0 || insets.bottom != 0) {
+            contentVC.additionalSafeAreaInsets = UIEdgeInsetsZero;
+        }
+    }
 }
 
 - (void)traitCollectionDidChange:(UITraitCollection *)previousTraitCollection {
@@ -216,21 +239,14 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
             c.constant = -outerMargin;
         }
     }
-    // 同时通知子视图控制器（右侧面板内的按钮文字大小可能需要适配）
-    [self.childViewControllers enumerateObjectsUsingBlock:^(UIViewController *child, NSUInteger idx, BOOL *stop) {
-        [self adjustChildLayoutForTraitCollection:child];
-    }];
-}
-
-/// 递归调整子视图控制器（主要针对右侧面板的按钮字体/边距）
-- (void)adjustChildLayoutForTraitCollection:(UIViewController *)vc {
-    if (!vc) return;
-    if ([vc respondsToSelector:@selector(viewWillAppear:)]) {
-        // 通知子 VC 重新布局：通过 setNeedsLayout 触发布局更新
-        [vc.view setNeedsLayout];
-    }
-    for (UIViewController *child in vc.childViewControllers) {
-        [self adjustChildLayoutForTraitCollection:child];
+    // 关键修复（阶段4：Card 布局进入设置崩溃，无日志）：
+    // 与 LauncherRootViewController 对齐：仅遍历直接子 VC，避免递归栈溢出风险。
+    // 之前递归遍历所有后代 VC（adjustChildLayoutForTraitCollection:），若 VC 树存在
+    // 循环引用会栈溢出（SIGSEGV，不被 NSUncaughtExceptionHandler 捕获，故无日志）。
+    // respondsToSelector:@selector(viewWillAppear:) 检查永真（所有 UIViewController 都响应），
+    // 属冗余代码，一并删除。
+    for (UIViewController *child in self.childViewControllers) {
+        [child.view setNeedsLayout];
     }
 }
 
