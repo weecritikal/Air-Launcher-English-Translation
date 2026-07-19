@@ -23,13 +23,15 @@
  *   专用的 UIView（含 CAMetalLayer 子层），渲染到启动器的窗口中。
  *
  * 设计说明：
- *   - 此类仅覆盖 SDL_CreateWindow 方法，其他 SDLVideo 方法（如 SDL_DestroyWindow、
- *     SDL_GetWindowFlags 等）未在此提供。若 MC 调用这些方法，将抛出
- *     NoSuchMethodError，可根据日志补齐。
- *   - 所有常量（约 130 个）从 LWJGL 3.4.1 SDLVideo.class 完整复制，
- *     避免 MC 引用常量时出现 NoSuchFieldError。
- *   - 不使用反射（避免覆盖类自身递归调用），所有 SDL3 native 调用都在
- *     native helper 中完成。
+ *   - 此类完整替换 LWJGL 3.4.1 的 SDLVideo.class：
+ *       1) SDL_CreateWindow / SDL_CreateWindowWithProperties 拦截走 native helper；
+ *       2) 其他 SDL3 视频 API（SDL_GL_CreateContext、SDL_GL_MakeCurrent、
+ *          SDL_GL_SwapWindow、SDL_DestroyWindow 等）通过 Functions 表
+ *          委托给 libSDL3.dylib；
+ *       3) 所有常量（约 130 个）从 LWJGL 3.4.1 SDLVideo.class 完整复制，
+ *          避免 MC 引用常量时出现 NoSuchFieldError。
+ *   - 不使用反射（避免覆盖类自身递归调用），所有 SDL3 native 调用都通过
+ *     LWJGL 的 JNI invoke/call helper 间接调用 libffi。
  *
  * 反射递归问题（已修复）：
  *   早期版本使用 Class.forName("org.lwjgl.sdl.SDLVideo") 反射调用
@@ -40,8 +42,13 @@
 package org.lwjgl.sdl;
 
 import java.nio.ByteBuffer;
+import java.nio.IntBuffer;
 
 import net.kdt.pojavlaunch.uikit.UIKit;
+
+import static org.lwjgl.system.APIUtil.*;
+import static org.lwjgl.system.JNI.*;
+import static org.lwjgl.system.MemoryUtil.*;
 
 public final class SDLVideo {
 
@@ -296,6 +303,280 @@ public final class SDLVideo {
     private static ByteBuffer toByteBuffer(CharSequence cs) {
         if (cs == null) return null;
         return org.lwjgl.system.MemoryUtil.memUTF8(cs);
+    }
+
+    // ============================================================================
+    // SDL3 函数指针表（从 libSDL3.dylib 解析）
+    // ============================================================================
+    // 参照 GLFW.java 的 Functions 模式：通过 SDL.getLibrary() 获取 SharedLibrary，
+    // 用 apiGetFunctionAddress 查找 SDL3 native 函数地址，再用 JNI.invoke*/call* helper 调用。
+    //
+    // 关键修复：原版 LWJGL 3.4.1 SDLVideo.class 被本覆盖类完整替换，所有方法都丢失。
+    // MC 26.3-snapshot-4+ 调用 SDL_GL_CreateContext、SDL_GL_MakeCurrent、SDL_GL_SwapWindow
+    // 等方法时会抛 NoSuchMethodError。此处补充所有 MC 启动链路必需的 SDL3 视频 API。
+    private static final org.lwjgl.system.SharedLibrary SDL_LIB = SDL.getLibrary();
+
+    public static final class Functions {
+        private Functions() {}
+        public static final long
+        SDL_DestroyWindow = apiGetFunctionAddress(SDL_LIB, "SDL_DestroyWindow"),
+        SDL_GetWindowID = apiGetFunctionAddress(SDL_LIB, "SDL_GetWindowID"),
+        SDL_GetWindowFromID = apiGetFunctionAddress(SDL_LIB, "SDL_GetWindowFromID"),
+        SDL_GetWindowFlags = apiGetFunctionAddress(SDL_LIB, "SDL_GetWindowFlags"),
+        SDL_SetWindowTitle = apiGetFunctionAddress(SDL_LIB, "SDL_SetWindowTitle"),
+        SDL_GetWindowTitle = apiGetFunctionAddress(SDL_LIB, "SDL_GetWindowTitle"),
+        SDL_SetWindowPosition = apiGetFunctionAddress(SDL_LIB, "SDL_SetWindowPosition"),
+        SDL_GetWindowPosition = apiGetFunctionAddress(SDL_LIB, "SDL_GetWindowPosition"),
+        SDL_SetWindowSize = apiGetFunctionAddress(SDL_LIB, "SDL_SetWindowSize"),
+        SDL_GetWindowSize = apiGetFunctionAddress(SDL_LIB, "SDL_GetWindowSize"),
+        SDL_SetWindowBordered = apiGetFunctionAddress(SDL_LIB, "SDL_SetWindowBordered"),
+        SDL_SetWindowResizable = apiGetFunctionAddress(SDL_LIB, "SDL_SetWindowResizable"),
+        SDL_SetWindowAlwaysOnTop = apiGetFunctionAddress(SDL_LIB, "SDL_SetWindowAlwaysOnTop"),
+        SDL_ShowWindow = apiGetFunctionAddress(SDL_LIB, "SDL_ShowWindow"),
+        SDL_HideWindow = apiGetFunctionAddress(SDL_LIB, "SDL_HideWindow"),
+        SDL_RaiseWindow = apiGetFunctionAddress(SDL_LIB, "SDL_RaiseWindow"),
+        SDL_MaximizeWindow = apiGetFunctionAddress(SDL_LIB, "SDL_MaximizeWindow"),
+        SDL_MinimizeWindow = apiGetFunctionAddress(SDL_LIB, "SDL_MinimizeWindow"),
+        SDL_RestoreWindow = apiGetFunctionAddress(SDL_LIB, "SDL_RestoreWindow"),
+        SDL_SetWindowFullscreen = apiGetFunctionAddress(SDL_LIB, "SDL_SetWindowFullscreen"),
+        SDL_SyncWindow = apiGetFunctionAddress(SDL_LIB, "SDL_SyncWindow"),
+        SDL_WindowHasSurface = apiGetFunctionAddress(SDL_LIB, "SDL_WindowHasSurface"),
+        SDL_ScreenSaverEnabled = apiGetFunctionAddress(SDL_LIB, "SDL_ScreenSaverEnabled"),
+        SDL_EnableScreenSaver = apiGetFunctionAddress(SDL_LIB, "SDL_EnableScreenSaver"),
+        SDL_DisableScreenSaver = apiGetFunctionAddress(SDL_LIB, "SDL_DisableScreenSaver"),
+        SDL_GL_LoadLibrary = apiGetFunctionAddress(SDL_LIB, "SDL_GL_LoadLibrary"),
+        SDL_GL_GetProcAddress = apiGetFunctionAddress(SDL_LIB, "SDL_GL_GetProcAddress"),
+        SDL_GL_UnloadLibrary = apiGetFunctionAddress(SDL_LIB, "SDL_GL_UnloadLibrary"),
+        SDL_GL_ExtensionSupported = apiGetFunctionAddress(SDL_LIB, "SDL_GL_ExtensionSupported"),
+        SDL_GL_ResetAttributes = apiGetFunctionAddress(SDL_LIB, "SDL_GL_ResetAttributes"),
+        SDL_GL_SetAttribute = apiGetFunctionAddress(SDL_LIB, "SDL_GL_SetAttribute"),
+        SDL_GL_GetAttribute = apiGetFunctionAddress(SDL_LIB, "SDL_GL_GetAttribute"),
+        SDL_GL_CreateContext = apiGetFunctionAddress(SDL_LIB, "SDL_GL_CreateContext"),
+        SDL_GL_MakeCurrent = apiGetFunctionAddress(SDL_LIB, "SDL_GL_MakeCurrent"),
+        SDL_GL_GetCurrentWindow = apiGetFunctionAddress(SDL_LIB, "SDL_GL_GetCurrentWindow"),
+        SDL_GL_GetCurrentContext = apiGetFunctionAddress(SDL_LIB, "SDL_GL_GetCurrentContext"),
+        SDL_GL_SetSwapInterval = apiGetFunctionAddress(SDL_LIB, "SDL_GL_SetSwapInterval"),
+        SDL_GL_GetSwapInterval = apiGetFunctionAddress(SDL_LIB, "SDL_GL_GetSwapInterval"),
+        SDL_GL_SwapWindow = apiGetFunctionAddress(SDL_LIB, "SDL_GL_SwapWindow"),
+        SDL_GL_DestroyContext = apiGetFunctionAddress(SDL_LIB, "SDL_GL_DestroyContext");
+    }
+
+    // ============================================================================
+    // SDL3 视频 API 实现（委托给 libSDL3.dylib）
+    // ============================================================================
+
+    // --- 窗口生命周期 ---
+
+    public static int SDL_GetWindowID(long window) {
+        return callPI(window, Functions.SDL_GetWindowID);
+    }
+
+    public static long SDL_GetWindowFromID(int id) {
+        return callP(id, Functions.SDL_GetWindowFromID);
+    }
+
+    public static long SDL_GetWindowFlags(long window) {
+        // SDL3 返回 Uint32，原版 LWJGL 用 invokePJ(long, long)→long 直接返回
+        return invokePJ(window, Functions.SDL_GetWindowFlags);
+    }
+
+    public static boolean SDL_SetWindowTitle(long window, ByteBuffer title) {
+        return callPPZ(window, memAddress(title), Functions.SDL_SetWindowTitle);
+    }
+
+    public static boolean SDL_SetWindowTitle(long window, CharSequence title) {
+        return SDL_SetWindowTitle(window, toByteBuffer(title));
+    }
+
+    public static String SDL_GetWindowTitle(long window) {
+        // SDL_GetWindowTitle 返回 const char* 指针（SDL 内部管理，不需释放）
+        long ptr = callPP(window, Functions.SDL_GetWindowTitle);
+        return memUTF8Safe(ptr);
+    }
+
+    public static boolean SDL_SetWindowPosition(long window, int x, int y) {
+        // 需 invokePZ(long, int, int, long) — callPZ 无此重载
+        return invokePZ(window, x, y, Functions.SDL_SetWindowPosition);
+    }
+
+    public static boolean SDL_GetWindowPosition(long window, IntBuffer x, IntBuffer y) {
+        // 需 invokePPPZ(long, long, long, long) — callPPZ 无 (long,long,long,long) 重载
+        return invokePPPZ(window, memAddress(x), memAddress(y), Functions.SDL_GetWindowPosition);
+    }
+
+    public static boolean SDL_SetWindowSize(long window, int w, int h) {
+        // 需 invokePZ(long, int, int, long) — callPZ 无此重载
+        return invokePZ(window, w, h, Functions.SDL_SetWindowSize);
+    }
+
+    public static boolean SDL_GetWindowSize(long window, IntBuffer w, IntBuffer h) {
+        // 需 invokePPPZ(long, long, long, long) — callPPZ 无 (long,long,long,long) 重载
+        return invokePPPZ(window, memAddress(w), memAddress(h), Functions.SDL_GetWindowSize);
+    }
+
+    public static boolean SDL_SetWindowBordered(long window, boolean bordered) {
+        // 需 invokePZ(long, boolean, long) — callPZ 无此重载
+        return invokePZ(window, bordered, Functions.SDL_SetWindowBordered);
+    }
+
+    public static boolean SDL_SetWindowResizable(long window, boolean resizable) {
+        return invokePZ(window, resizable, Functions.SDL_SetWindowResizable);
+    }
+
+    public static boolean SDL_SetWindowAlwaysOnTop(long window, boolean on_top) {
+        return invokePZ(window, on_top, Functions.SDL_SetWindowAlwaysOnTop);
+    }
+
+    public static boolean SDL_ShowWindow(long window) {
+        return callPZ(window, Functions.SDL_ShowWindow);
+    }
+
+    public static boolean SDL_HideWindow(long window) {
+        return callPZ(window, Functions.SDL_HideWindow);
+    }
+
+    public static boolean SDL_RaiseWindow(long window) {
+        return callPZ(window, Functions.SDL_RaiseWindow);
+    }
+
+    public static boolean SDL_MaximizeWindow(long window) {
+        return callPZ(window, Functions.SDL_MaximizeWindow);
+    }
+
+    public static boolean SDL_MinimizeWindow(long window) {
+        return callPZ(window, Functions.SDL_MinimizeWindow);
+    }
+
+    public static boolean SDL_RestoreWindow(long window) {
+        return callPZ(window, Functions.SDL_RestoreWindow);
+    }
+
+    public static boolean SDL_SetWindowFullscreen(long window, boolean fullscreen) {
+        // 需 invokePZ(long, boolean, long) — callPZ 无此重载
+        return invokePZ(window, fullscreen, Functions.SDL_SetWindowFullscreen);
+    }
+
+    public static boolean SDL_SyncWindow(long window) {
+        return callPZ(window, Functions.SDL_SyncWindow);
+    }
+
+    public static boolean SDL_WindowHasSurface(long window) {
+        return callPZ(window, Functions.SDL_WindowHasSurface);
+    }
+
+    public static void SDL_DestroyWindow(long window) {
+        // SDL3 SDL_DestroyWindow 返回 void，使用 invokePV(long, long)→void
+        invokePV(window, Functions.SDL_DestroyWindow);
+    }
+
+    // --- 屏幕保护 ---
+
+    public static boolean SDL_ScreenSaverEnabled() {
+        return callZ(Functions.SDL_ScreenSaverEnabled);
+    }
+
+    public static boolean SDL_EnableScreenSaver() {
+        return callZ(Functions.SDL_EnableScreenSaver);
+    }
+
+    public static boolean SDL_DisableScreenSaver() {
+        return callZ(Functions.SDL_DisableScreenSaver);
+    }
+
+    // --- GL 库加载 ---
+
+    public static boolean SDL_GL_LoadLibrary(ByteBuffer path) {
+        return callPZ(memAddress(path), Functions.SDL_GL_LoadLibrary);
+    }
+
+    public static boolean SDL_GL_LoadLibrary(CharSequence path) {
+        return SDL_GL_LoadLibrary(toByteBuffer(path));
+    }
+
+    public static long SDL_GL_GetProcAddress(ByteBuffer proc) {
+        return callPP(memAddress(proc), Functions.SDL_GL_GetProcAddress);
+    }
+
+    public static long SDL_GL_GetProcAddress(CharSequence proc) {
+        return SDL_GL_GetProcAddress(toByteBuffer(proc));
+    }
+
+    public static void SDL_GL_UnloadLibrary() {
+        callV(Functions.SDL_GL_UnloadLibrary);
+    }
+
+    public static boolean SDL_GL_ExtensionSupported(ByteBuffer extension) {
+        return callPZ(memAddress(extension), Functions.SDL_GL_ExtensionSupported);
+    }
+
+    public static boolean SDL_GL_ExtensionSupported(CharSequence extension) {
+        return SDL_GL_ExtensionSupported(toByteBuffer(extension));
+    }
+
+    // --- GL 上下文管理 ---
+
+    public static void SDL_GL_ResetAttributes() {
+        callV(Functions.SDL_GL_ResetAttributes);
+    }
+
+    public static boolean SDL_GL_SetAttribute(int attr, int value) {
+        // callZ(int, int, long) — 两个 int 参数 + 函数地址，返回 boolean
+        return callZ(attr, value, Functions.SDL_GL_SetAttribute);
+    }
+
+    public static boolean SDL_GL_GetAttribute(int attr, IntBuffer value) {
+        return callPZ(attr, memAddress(value), Functions.SDL_GL_GetAttribute);
+    }
+
+    public static long SDL_GL_CreateContext(long window) {
+        return callPP(window, Functions.SDL_GL_CreateContext);
+    }
+
+    public static boolean SDL_GL_MakeCurrent(long window, long context) {
+        return callPPZ(window, context, Functions.SDL_GL_MakeCurrent);
+    }
+
+    public static long SDL_GL_GetCurrentWindow() {
+        return callP(Functions.SDL_GL_GetCurrentWindow);
+    }
+
+    public static long SDL_GL_GetCurrentContext() {
+        return callP(Functions.SDL_GL_GetCurrentContext);
+    }
+
+    public static boolean SDL_GL_SetSwapInterval(int interval) {
+        return callZ(interval, Functions.SDL_GL_SetSwapInterval);
+    }
+
+    public static boolean SDL_GL_GetSwapInterval(IntBuffer interval) {
+        return callPZ(memAddress(interval), Functions.SDL_GL_GetSwapInterval);
+    }
+
+    public static boolean SDL_GL_SwapWindow(long window) {
+        return callPZ(window, Functions.SDL_GL_SwapWindow);
+    }
+
+    public static boolean SDL_GL_DestroyContext(long context) {
+        // SDL3 SDL_GL_DestroyContext 返回 bool，使用 callPZ(long, long)→boolean
+        return callPZ(context, Functions.SDL_GL_DestroyContext);
+    }
+
+    // --- 窗口位置辅助常量 ---
+
+    public static int SDL_WINDOWPOS_UNDEFINED_DISPLAY(int display) {
+        return SDL_WINDOWPOS_UNDEFINED_MASK | display;
+    }
+
+    public static boolean SDL_WINDOWPOS_ISUNDEFINED(int x) {
+        return (x & 0xFFFF0000) == SDL_WINDOWPOS_UNDEFINED_MASK;
+    }
+
+    public static int SDL_WINDOWPOS_CENTERED_DISPLAY(int display) {
+        return SDL_WINDOWPOS_CENTERED_MASK | display;
+    }
+
+    public static boolean SDL_WINDOWPOS_ISCENTERED(int x) {
+        return (x & 0xFFFF0000) == SDL_WINDOWPOS_CENTERED_MASK;
     }
 
     private SDLVideo() {

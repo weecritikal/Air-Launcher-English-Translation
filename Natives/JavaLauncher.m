@@ -806,6 +806,51 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
         // 会对 libname 加 "lib" 前缀和 ".dylib" 后缀，得到 "libspirv-cross-c-shared.0.dylib"，
         // 从 library.path（Frameworks）找到该文件。
         PUSH_MARGV_LITERAL("-Dorg.lwjgl.spvc.libname=spirv-cross-c-shared.0");
+
+        // ============================================================================
+        // SDL3 GL/EGL 库重定向（关键修复 26.3-snapshot-4+ SDL3 启动失败）
+        // ============================================================================
+        // 参照 AngelAuraMC/Amethyst-Android feat/lwjgl3ify-sdl-support 分支
+        // (commit 2ebbb3442f "fix(SDL): Set SDL env vars for renderer")：
+        //
+        //   Os.setenv("SDL_OPENGL_LIBRARY", graphicsLib, true);
+        //   Os.setenv("SDL_EGL_LIBRARY", NATIVE_LIB_DIR+"/"+Os.getenv("POJAVEXEC_EGL"), true);
+        //
+        // MC 26.3-snapshot-4+ 使用 SDL3 替代 GLFW。SDL3 的 SDL_GL_CreateContext 会
+        // dlopen 默认的 GL/EGL 库（iOS 上不存在），导致 GL 上下文创建失败。
+        //
+        // 必须在 JVM 启动前设置（早于 MC 调用 SDL_GL_CreateContext）：
+        //   - pojavInitOpenGL() 仅在 MC 走 GLFW 路径（glfwCreateWindow→pojavCreateContext）
+        //     时被调用。SDL3 模式下 MC 不调用 glfwCreateWindow，pojavInitOpenGL 不会执行，
+        //     故 env vars 必须在此处（JVM 启动前）设置。
+        //
+        // 仅对 GL 类渲染器设置：
+        //   - gl4es/ANGLE/MobileGlues: 设置 SDL_OPENGL_LIBRARY + SDL_EGL_LIBRARY
+        //   - Vulkan: 不设置（clientAPI=GLFW_NO_API，SDL3 用 SDL_Vulkan_CreateSurface，
+        //     不走 GL context 路径）
+        //   - OSMesa: 不设置（OSMesa 用自己的 context，不走 EGL）
+        //
+        // SDL3 通过 dlopen(env_var_value, RTLD_GLOBAL|RTLD_NOW) 加载库。iOS 上 dylib
+        // 位于 Frameworks 目录，需用 @rpath/ 前缀（@executable_path/Frameworks 已在
+        // 二进制 LC_RPATH 中）。egl_bridge.m 中也有相同设置（GLFW 路径下的冗余兜底）。
+        if (strcmp(glLibName, RENDERER_NAME_VULKAN) != 0 &&
+            strcmp(glLibName, RENDERER_NAME_VK_ZINK) != 0 &&
+            strstr(glLibName, "libOSMesa") == NULL) {
+            char sdlGlLib[256];
+            snprintf(sdlGlLib, sizeof(sdlGlLib), "@rpath/%s", glLibName);
+            char sdlEglLib[256];
+            snprintf(sdlEglLib, sizeof(sdlEglLib), "@rpath/%s", RENDERER_NAME_MTL_ANGLE);
+            setenv("SDL_OPENGL_LIBRARY", sdlGlLib, 1);
+            setenv("SDL_EGL_LIBRARY", sdlEglLib, 1);
+            NSLog(@"[JavaLauncher] SDL3 GL/EGL library redirect (early): SDL_OPENGL_LIBRARY=%s, SDL_EGL_LIBRARY=%s",
+                  sdlGlLib, sdlEglLib);
+            // 预加载渲染器库（RTLD_GLOBAL），让后续 dlopen 找到符号。
+            // GLFW 路径下 pojavInitOpenGL 也会 dlopen，但 SDL3 路径不会经过那里，
+            // 故在此预加载一次确保 SDL3 dlopen 时库已在内存中。
+            char preloadPath[256];
+            snprintf(preloadPath, sizeof(preloadPath), "@rpath/%s", glLibName);
+            dlopen(preloadPath, RTLD_NOW | RTLD_GLOBAL);
+        }
     }
 
       // 添加authlib-injector参数以支持第三方认证账户的皮肤显示

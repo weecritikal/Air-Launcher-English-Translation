@@ -160,7 +160,7 @@ int pojavInitOpenGL() {
     dlopen([NSString stringWithFormat:@"@rpath/%@", renderer].UTF8String, RTLD_GLOBAL);
 
     // ============================================================================
-    // SDL3 GL/EGL 库重定向（关键修复 26.3-snapshot-4+ SDL3 启动）
+    // SDL3 GL/EGL 库重定向（冗余兜底，主设置在 JavaLauncher.m）
     // ============================================================================
     // 参照 AngelAuraMC/Amethyst-Android feat/lwjgl3ify-sdl-support 分支
     // (commit 2ebbb3442f "fix(SDL): Set SDL env vars for renderer")：
@@ -171,27 +171,27 @@ int pojavInitOpenGL() {
     // MC 26.3-snapshot-4+ 使用 SDL3 替代 GLFW。SDL3 的 SDL_GL_CreateContext 会
     // dlopen 默认的 GL/EGL 库（iOS 上不存在），导致 GL 上下文创建失败。
     //
-    // 通过 SDL_OPENGL_LIBRARY/SDL_EGL_LIBRARY 环境变量告诉 SDL3 用启动器已加载
-    // 的 GL/EGL 库（libgl4es/libtinygl4angle/libmobileglues + libtinygl4angle EGL），
-    // 这样 SDL3 创建的 GL context 实际用的是启动器的 EGL，会自动绑定到 SDL3
-    // UIKit 后端创建的 CAMetalLayer（由 sdlCreateWindowWithScene 传入的
-    // UIWindowScene 提供）。
+    // 重要：此处的设置仅作为 GLFW 路径下的冗余兜底。SDL3 模式下 MC 不调用
+    // glfwCreateWindow → pojavCreateContext → pojavInitOpenGL，故此代码不会执行。
+    // SDL3 模式下的 env vars 由 JavaLauncher.m 在 JVM 启动前设置（早于 SDL_GL_CreateContext）。
     //
     // 仅对 GL 类渲染器设置（Vulkan/OSMesa 不走 SDL3 GL 路径）：
-    //   - gl4es/ANGLE/MobileGlues: SDL_OPENGL_LIBRARY=renderer, SDL_EGL_LIBRARY=libtinygl4angle.dylib
+    //   - gl4es/ANGLE/MobileGlues: SDL_OPENGL_LIBRARY=@rpath/<renderer>, SDL_EGL_LIBRARY=@rpath/libtinygl4angle.dylib
     //   - Vulkan: 不设置（clientAPI=GLFW_NO_API，SDL3 不创建 GL context）
     //   - OSMesa: 不设置（OSMesa 用自己的 context，不走 EGL）
     //
-    // 必须在 SDL3 第一次调用 SDL_GL_CreateContext 之前设置（pojavInitOpenGL 在
-    // MC 启动早期被 pojavCreateContext 触发，早于 SDL_GL_CreateContext）。
+    // 必须用 @rpath/ 前缀（与 JavaLauncher.m 一致），否则 SDL3 dlopen 找不到库。
     if ([renderer isEqualToString:@ RENDERER_NAME_GL4ES] ||
         [renderer isEqualToString:@ RENDERER_NAME_MTL_ANGLE] ||
         [renderer isEqualToString:@ RENDERER_NAME_MOBILEGLUES]) {
-        setenv("SDL_OPENGL_LIBRARY", renderer.UTF8String, 1);
-        // EGL 始终从 ANGLE（libtinygl4angle.dylib）解析（参照 gl_bridge.m dlsym_EGL）
-        setenv("SDL_EGL_LIBRARY", RENDERER_NAME_MTL_ANGLE, 1);
-        NSLog(@"[egl_bridge] SDL3 GL/EGL library redirect: SDL_OPENGL_LIBRARY=%s, SDL_EGL_LIBRARY=%s",
-              renderer.UTF8String, RENDERER_NAME_MTL_ANGLE);
+        char sdlGlLib[256];
+        snprintf(sdlGlLib, sizeof(sdlGlLib), "@rpath/%s", renderer.UTF8String);
+        char sdlEglLib[256];
+        snprintf(sdlEglLib, sizeof(sdlEglLib), "@rpath/%s", RENDERER_NAME_MTL_ANGLE);
+        setenv("SDL_OPENGL_LIBRARY", sdlGlLib, 1);
+        setenv("SDL_EGL_LIBRARY", sdlEglLib, 1);
+        NSLog(@"[egl_bridge] SDL3 GL/EGL library redirect (GLFW backup): SDL_OPENGL_LIBRARY=%s, SDL_EGL_LIBRARY=%s",
+              sdlGlLib, sdlEglLib);
     }
 
     return !br_init();
