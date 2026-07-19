@@ -40,4 +40,6 @@ typedef NS_ENUM(NSInteger, ForgeDirectInstallerErrorCode) {
 
 + (BOOL)isNewFormatInstaller:(NSString *)installerPath;
 
++ (BOOL)ensureParentVersionExists:(NSString *)minecraftVersion error:(NSError **)error;
+
 @end
