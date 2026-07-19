@@ -1171,7 +1171,7 @@
 
         NSURL *url = [NSURL URLWithString:urlString];
         NSError *downloadError = nil;
-        NSData *data = [NSData dataWithContentsOfURL:url options:NSDataReadingUncached error:&downloadError];
+        NSData *data = [self downloadDataWithURL:url error:&downloadError];
 
         dispatch_async(dispatch_get_main_queue(), ^{
             __strong typeof(weakSelf) strongSelf2 = weakSelf;
@@ -1225,7 +1225,7 @@
         NSString *listURL = [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/optifine/%@", gameVersion];
         NSURL *url = [NSURL URLWithString:listURL];
         NSError *listError = nil;
-        NSData *listData = [NSData dataWithContentsOfURL:url options:NSDataReadingUncached error:&listError];
+        NSData *listData = [self downloadDataWithURL:url error:&listError];
 
         NSString *optiFineType = nil;
         NSString *optiFinePatch = nil;
@@ -1264,14 +1264,14 @@
         NSString *downloadURL = [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/optifine/%@/%@/%@", gameVersion, optiFineType, optiFinePatch];
         NSURL *dlURL = [NSURL URLWithString:downloadURL];
         NSError *downloadError = nil;
-        NSData *data = [NSData dataWithContentsOfURL:dlURL options:NSDataReadingUncached error:&downloadError];
+        NSData *data = [self downloadDataWithURL:dlURL error:&downloadError];
 
         // fallback: OptiFine 官方源
         if ((!data || downloadError) && filename) {
             NSString *officialURL = [NSString stringWithFormat:@"https://optifine.net/downloadx?f=%@", filename];
             NSURL *officialURLObject = [NSURL URLWithString:officialURL];
             NSError *officialError = nil;
-            NSData *officialData = [NSData dataWithContentsOfURL:officialURLObject options:NSDataReadingUncached error:&officialError];
+            NSData *officialData = [self downloadDataWithURL:officialURLObject error:&officialError];
             if (officialData && !officialError) {
                 data = officialData;
                 downloadError = nil;
@@ -1338,7 +1338,7 @@
         NSString *listURL = [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/optifine/%@", gameVersion];
         NSURL *url = [NSURL URLWithString:listURL];
         NSError *listError = nil;
-        NSData *listData = [NSData dataWithContentsOfURL:url options:NSDataReadingUncached error:&listError];
+        NSData *listData = [self downloadDataWithURL:url error:&listError];
 
         NSString *optiFineType = nil;
         NSString *optiFinePatch = nil;
@@ -1375,14 +1375,14 @@
         NSString *downloadURL = [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/optifine/%@/%@/%@", gameVersion, optiFineType, optiFinePatch];
         NSURL *dlURL = [NSURL URLWithString:downloadURL];
         NSError *downloadError = nil;
-        NSData *jarData = [NSData dataWithContentsOfURL:dlURL options:NSDataReadingUncached error:&downloadError];
+        NSData *jarData = [self downloadDataWithURL:dlURL error:&downloadError];
 
         // fallback: OptiFine 官方源
         if ((!jarData || downloadError) && filename.length > 0) {
             NSString *officialURL = [NSString stringWithFormat:@"https://optifine.net/downloadx?f=%@", filename];
             NSURL *officialURLObject = [NSURL URLWithString:officialURL];
             NSError *officialError = nil;
-            NSData *officialData = [NSData dataWithContentsOfURL:officialURLObject options:NSDataReadingUncached error:&officialError];
+            NSData *officialData = [self downloadDataWithURL:officialURLObject error:&officialError];
             if (officialData && !officialError) {
                 jarData = officialData;
                 downloadError = nil;
@@ -1750,6 +1750,55 @@
     dispatch_async(dispatch_get_main_queue(), ^{
         [self.tableView reloadData];
     });
+}
+
+#pragma mark - UA-aware download helper
+
+/// 阶段6修复（参照 FCL）：用带浏览器 User-Agent 的 NSURLSession 替代 NSData dataWithContentsOfURL:
+/// 进行同步下载。BMCLAPI 的 optifine/curseforge 转发受 Cloudflare 保护，默认 UA 会被拦截返回 403。
+/// 与 DownloadViewController.downloadDataWithURLString:error: 等价，但接收 NSURL 参数
+/// （本文件调用处均已构造好 NSURL）。
+- (NSData *)downloadDataWithURL:(NSURL *)url error:(NSError **)error {
+    if (!url) {
+        if (error) {
+            *error = [NSError errorWithDomain:@"ProfileSettingsDownload"
+                                         code:1
+                                     userInfo:@{NSLocalizedDescriptionKey: @"nil URL"}];
+        }
+        return nil;
+    }
+    NSURLSessionConfiguration *cfg = [NSURLSessionConfiguration defaultSessionConfiguration];
+    cfg.timeoutIntervalForRequest = 60;
+    cfg.HTTPAdditionalHeaders = @{
+        @"User-Agent": @"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        @"Accept": @"*/*"
+    };
+    __block NSData *result = nil;
+    __block NSError *resultError = nil;
+    dispatch_semaphore_t sem = dispatch_semaphore_create(0);
+    NSURLSession *session = [NSURLSession sessionWithConfiguration:cfg];
+    NSURLSessionDataTask *task = [session dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *response, NSError *err) {
+        if (err) {
+            resultError = err;
+        } else if ([response isKindOfClass:[NSHTTPURLResponse class]]) {
+            NSInteger statusCode = ((NSHTTPURLResponse *)response).statusCode;
+            if (statusCode >= 400) {
+                resultError = [NSError errorWithDomain:@"ProfileSettingsDownload"
+                                                  code:statusCode
+                                              userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"HTTP %ld for %@", (long)statusCode, url.absoluteString]}];
+            } else {
+                result = data;
+            }
+        } else {
+            result = data;
+        }
+        dispatch_semaphore_signal(sem);
+    }];
+    [task resume];
+    dispatch_semaphore_wait(sem, dispatch_time(DISPATCH_TIME_NOW, 70 * NSEC_PER_SEC));
+    if (error) *error = resultError;
+    [session finishTasksAndInvalidate];
+    return result;
 }
 
 @end

@@ -4161,9 +4161,10 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         // 修复: 不再依赖硬编码的版本映射表（容易过期），改用 BMCLAPI 动态查询游戏版本对应的最新 OptiFine 版本
         NSString *listURL = [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/optifine/%@", gameVersion];
-        NSURL *url = [NSURL URLWithString:listURL];
+        // 阶段6修复（参照 FCL）：使用带 User-Agent 的 NSURLSession 同步下载替代 NSData dataWithContentsOfURL:
+        // BMCLAPI/Cloudflare 会拦截无 UA 或默认 UA 的请求，返回 403 或 HTML 错误页
         NSError *listError = nil;
-        NSData *listData = [NSData dataWithContentsOfURL:url options:NSDataReadingUncached error:&listError];
+        NSData *listData = [self downloadDataWithURLString:listURL error:&listError];
         NSString *optiFineType = nil;
         NSString *optiFinePatch = nil;
         NSString *filename = nil;
@@ -4205,16 +4206,16 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         // BMCLAPI OptiFine 下载 URL: /optifine/{mcversion}/{type}/{patch}
         NSString *downloadURL = [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/optifine/%@/%@/%@",
                                  gameVersion, optiFineType, optiFinePatch];
-        NSURL *dlURL = [NSURL URLWithString:downloadURL];
+        // 阶段6修复：使用带 UA 的下载方法
         NSError *downloadError = nil;
-        NSData *data = [NSData dataWithContentsOfURL:dlURL options:NSDataReadingUncached error:&downloadError];
+        NSData *data = [self downloadDataWithURLString:downloadURL error:&downloadError];
 
         // fallback: OptiFine 官方源
         if ((!data || downloadError) && filename) {
             NSString *officialURL = [NSString stringWithFormat:@"https://optifine.net/downloadx?f=%@", filename];
-            NSURL *officialURLObject = [NSURL URLWithString:officialURL];
+            // 阶段6修复：使用带 UA 的下载方法
             NSError *officialError = nil;
-            NSData *officialData = [NSData dataWithContentsOfURL:officialURLObject options:NSDataReadingUncached error:&officialError];
+            NSData *officialData = [self downloadDataWithURLString:officialURL error:&officialError];
             if (officialData && !officialError) {
                 data = officialData;
                 downloadError = nil;
@@ -4339,17 +4340,18 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         // 1. 下载 OptiFine jar
+        // 阶段6修复（参照 FCL）：使用带 User-Agent 的 NSURLSession 同步下载替代 NSData dataWithContentsOfURL:
+        // BMCLAPI 部分镜像源（特别是 CurseForge/optifine 转发）受 Cloudflare 保护，
+        // 默认 UA 会被拦截返回 403。必须使用浏览器 UA。
         NSString *bmclURL = [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/optifine/%@/%@/%@", gameVersion, optiType, optiPatch];
-        NSURL *url = [NSURL URLWithString:bmclURL];
         NSError *downloadError = nil;
-        NSData *jarData = [NSData dataWithContentsOfURL:url options:NSDataReadingUncached error:&downloadError];
+        NSData *jarData = [self downloadDataWithURLString:bmclURL error:&downloadError];
 
         // fallback 官方源
         if ((!jarData || downloadError) && filename.length > 0) {
             NSString *officialURL = [NSString stringWithFormat:@"https://optifine.net/downloadx?f=%@", filename];
-            NSURL *officialURLObject = [NSURL URLWithString:officialURL];
             NSError *officialError = nil;
-            NSData *officialData = [NSData dataWithContentsOfURL:officialURLObject options:NSDataReadingUncached error:&officialError];
+            NSData *officialData = [self downloadDataWithURLString:officialURL error:&officialError];
             if (officialData && !officialError) {
                 jarData = officialData;
                 downloadError = nil;
@@ -5963,6 +5965,72 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 }
 
 #pragma mark - Helper Methods
+
+/// 阶段6修复（参照 FCL）：带 User-Agent 的同步下载工具方法
+///
+/// 之前 OptiFine 下载全程使用 [NSData dataWithContentsOfURL:]，默认不带 User-Agent 或
+/// 使用系统默认 UA，BMCLAPI/Cloudflare 会拦截此类请求返回 403 或 HTML 错误页，
+/// 导致 OptiFine 安装失败。Forge/NeoForge 直装器使用 NSURLSession + 浏览器 UA 是正确的，
+/// 此方法让 OptiFine 下载也使用同样的方式。
+///
+/// 此方法为同步阻塞调用，须在后台线程调用。
+- (NSData *)downloadDataWithURLString:(NSString *)urlString error:(NSError **)error {
+    if (!urlString.length) {
+        if (error) *error = [NSError errorWithDomain:@"DownloadError" code:1 userInfo:@{NSLocalizedDescriptionKey: @"空 URL"}];
+        return nil;
+    }
+    NSURL *url = [NSURL URLWithString:urlString];
+    if (!url) {
+        // 尝试百分号编码后再解析
+        NSString *encoded = [urlString stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLAllowedCharacterSet]];
+        url = [NSURL URLWithString:encoded];
+    }
+    if (!url) {
+        if (error) *error = [NSError errorWithDomain:@"DownloadError" code:1 userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"无效 URL: %@", urlString]}];
+        return nil;
+    }
+
+    NSURLSessionConfiguration *cfg = [NSURLSessionConfiguration defaultSessionConfiguration];
+    cfg.timeoutIntervalForRequest = 60;
+    cfg.timeoutIntervalForResource = 180;
+    // 浏览器 UA（BMCLAPI/Cloudflare 要求非默认 UA，参照 ForgeDirectInstaller.m）
+    cfg.HTTPAdditionalHeaders = @{
+        @"User-Agent": @"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        @"Accept": @"*/*"
+    };
+
+    __block NSData *result = nil;
+    __block NSError *blockError = nil;
+    dispatch_semaphore_t sem = dispatch_semaphore_create(0);
+
+    NSURLSession *session = [NSURLSession sessionWithConfiguration:cfg];
+    NSURLSessionDataTask *task = [session dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *response, NSError *err) {
+        if (err) {
+            blockError = err;
+        } else if ([response isKindOfClass:[NSHTTPURLResponse class]]) {
+            NSHTTPURLResponse *httpResp = (NSHTTPURLResponse *)response;
+            NSInteger statusCode = httpResp.statusCode;
+            if (statusCode >= 400) {
+                blockError = [NSError errorWithDomain:@"DownloadError" code:statusCode userInfo:@{
+                    NSLocalizedDescriptionKey: [NSString stringWithFormat:@"HTTP %ld", (long)statusCode]
+                }];
+            } else {
+                result = data;
+            }
+        } else {
+            result = data;
+        }
+        dispatch_semaphore_signal(sem);
+    }];
+    [task resume];
+
+    // 等待下载完成（60s 超时由 session 配置控制）
+    dispatch_semaphore_wait(sem, DISPATCH_TIME_FOREVER);
+    [session finishTasksAndInvalidate];
+
+    if (error) *error = blockError;
+    return result;
+}
 
 - (NSString *)currentInstanceModsPath {
     // 参考 ModService.m 的 existingModsFolderForProfile: 逻辑：

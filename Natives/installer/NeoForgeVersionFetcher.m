@@ -221,24 +221,26 @@
 
         if (majorIsNum && minorIsNum) {
             NSInteger majorVal = [major integerValue];
-            if (majorVal >= 26) {
-                // New format: 26.1.0.0 -> 1.26.0（NeoForge 26+ 对应 MC 1.26+，未来版本）
-                // 实际约定：NeoForge loader 主版本号 == MC 主版本号（从 21.x 开始）
-                // 但 47.x 是 1.20.1 的特例（已在上面处理）
-                if (components.count >= 3) {
-                    return [NSString stringWithFormat:@"1.%@.%@", major, components[2]];
-                } else {
-                    return [NSString stringWithFormat:@"1.%@.0", major];
-                }
-            } else if (majorVal >= 21) {
-                // 21.x - 25.x: NeoForge loader 版本号 == MC 版本号（21.x → MC 1.21.x）
-                if (components.count >= 3) {
-                    return [NSString stringWithFormat:@"1.%@.%@", major, components[2]];
-                } else {
-                    return [NSString stringWithFormat:@"1.%@.0", major];
-                }
+            // 关键修复（阶段6：NeoForge 直装版本号解析错误，参照 ForgeInstallViewController.m:780）
+            //
+            // NeoForge loader 版本号格式：major.minor.patch[.build]
+            //   - major = MC minor（如 21 → MC 1.21）
+            //   - minor = MC patch（如 1 → MC 1.21.1）
+            //   - patch = NeoForge 自己的 build 号（与 MC 版本无关）
+            //
+            // 之前使用 components[2]（patch）作为 MC patch 号，导致：
+            //   - 21.1.5 被解析为 MC 1.21.5（错误，应为 1.21.1）
+            //   - 26.1.0.0 被解析为 MC 1.26.0（凑巧正确，但逻辑错误）
+            //   - 用户在 UI 中看不到正确分组的 loader 版本，被迫选错 → install_profile.json
+            //     中 maven 坐标版本错误 → 404
+            //
+            // 正确实现：用 minor（components[1]）作为 MC patch 号，与 ForgeInstallViewController.m:780 一致
+            if (majorVal >= 20) {
+                // 20.x+ (NeoForge 20.x 对应 MC 1.20.x)：统一用 minor 作为 MC patch
+                // 覆盖 20.2.88 → 1.20.2、21.1.5 → 1.21.1、26.1.0 → 1.26.1 等所有情况
+                return [NSString stringWithFormat:@"1.%@.%@", major, minor];
             } else {
-                // Old format: 20.2.88 -> 1.20.2
+                // Old format fallback（理论上 NeoForge 不存在 < 20 的版本）
                 return [NSString stringWithFormat:@"1.%@.%@", major, minor];
             }
         }

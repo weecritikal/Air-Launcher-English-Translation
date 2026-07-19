@@ -397,6 +397,55 @@ NSString *const NeoForgeDirectInstallerErrorDomain = @"NeoForgeDirectInstallerEr
     return NSHomeDirectory();
 }
 
+/// 阶段6修复（参照 FCL）：用 NSURLSession 替代已废弃的 NSURLConnection sendSynchronousRequest:
+/// 进行同步 HTTP 下载。原 NSURLConnection 在 iOS 13+ 已废弃，BMCLAPI 等镜像源在某些 iOS 版本
+/// 下表现不稳定（TLS 协商失败、超时不生效、不跟随 302 重定向等），导致 ensureParentVersionExists:
+/// 拉取父版本 JSON 失败 → NeoForge 版本 inheritsFrom 找不到原版 → 启动崩溃。
++ (NSData *)downloadDataForRequest:(NSURLRequest *)request error:(NSError **)error {
+    if (!request) {
+        if (error) {
+            *error = [NSError errorWithDomain:NeoForgeDirectInstallerErrorDomain
+                                         code:NeoForgeDirectInstallerErrorWriteFailed
+                                     userInfo:@{NSLocalizedDescriptionKey: @"nil request"}];
+        }
+        return nil;
+    }
+    __block NSData *resultData = nil;
+    __block NSError *resultError = nil;
+    dispatch_semaphore_t sem = dispatch_semaphore_create(0);
+    NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithRequest:request
+                                                                   completionHandler:^(NSData *data, NSURLResponse *response, NSError *taskError) {
+        if (taskError) {
+            resultError = taskError;
+        } else if ([response isKindOfClass:[NSHTTPURLResponse class]]) {
+            NSInteger statusCode = [(NSHTTPURLResponse *)response statusCode];
+            if (statusCode >= 400) {
+                resultError = [NSError errorWithDomain:NeoForgeDirectInstallerErrorDomain
+                                                   code:statusCode
+                                               userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"HTTP %ld for %@", (long)statusCode, request.URL.absoluteString]}];
+            } else {
+                resultData = data;
+            }
+        } else {
+            resultData = data;
+        }
+        dispatch_semaphore_signal(sem);
+    }];
+    [task resume];
+    long waitResult = dispatch_semaphore_wait(sem, dispatch_time(DISPATCH_TIME_NOW, 60 * NSEC_PER_SEC));
+    if (waitResult != 0) {
+        [task cancel];
+        if (error) {
+            *error = [NSError errorWithDomain:NeoForgeDirectInstallerErrorDomain
+                                         code:NSURLErrorTimedOut
+                                     userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"请求超时（60s）: %@", request.URL.absoluteString]}];
+        }
+        return nil;
+    }
+    if (error) *error = resultError;
+    return resultData;
+}
+
 /// 参照 FCL/HMCL：确保父版本（vanilla MC）的 version JSON 已存在。
 /// NeoForge 的 version.json 含 "inheritsFrom": "1.20.1" 等字段，启动时 Java 端
 /// Tools.getVersionInfo() 会读取 versions/{inheritsFrom}/{inheritsFrom}.json 与当前版本合并。
@@ -443,7 +492,7 @@ NSString *const NeoForgeDirectInstallerErrorDomain = @"NeoForgeDirectInstallerEr
     manifestRequest.cachePolicy = NSURLRequestReloadIgnoringLocalCacheData;
     [manifestRequest setValue:@"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15" forHTTPHeaderField:@"User-Agent"];
 
-    NSData *manifestData = [NSURLConnection sendSynchronousRequest:manifestRequest returningResponse:nil error:error];
+    NSData *manifestData = [self downloadDataForRequest:manifestRequest error:error];
     if (!manifestData) {
         NSLog(@"[NeoForgeDirect] Failed to download version manifest: %@", error ? [*error localizedDescription] : @"unknown");
         return NO;
@@ -503,7 +552,7 @@ NSString *const NeoForgeDirectInstallerErrorDomain = @"NeoForgeDirectInstallerEr
     jsonRequest.cachePolicy = NSURLRequestReloadIgnoringLocalCacheData;
     [jsonRequest setValue:@"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15" forHTTPHeaderField:@"User-Agent"];
 
-    NSData *jsonData = [NSURLConnection sendSynchronousRequest:jsonRequest returningResponse:nil error:error];
+    NSData *jsonData = [self downloadDataForRequest:jsonRequest error:error];
     if (!jsonData) {
         NSLog(@"[NeoForgeDirect] Failed to download parent version JSON: %@", error ? [*error localizedDescription] : @"unknown");
         return NO;
