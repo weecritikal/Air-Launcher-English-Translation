@@ -985,6 +985,8 @@ static GameSurfaceView* pojavWindow;
     self.tapGesture.numberOfTapsRequired = 1;
     self.tapGesture.numberOfTouchesRequired = 1;
     self.tapGesture.cancelsTouchesInView = NO;
+    self.tapGesture.delaysTouchesBegan = NO;
+    self.tapGesture.delaysTouchesEnded = NO;
     [self.touchView addGestureRecognizer:self.tapGesture];
 
     self.doubleTapGesture = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(surfaceOnDoubleClick:)];
@@ -993,21 +995,24 @@ static GameSurfaceView* pojavWindow;
     self.doubleTapGesture.numberOfTapsRequired = 2;
     self.doubleTapGesture.numberOfTouchesRequired = 1;
     self.doubleTapGesture.cancelsTouchesInView = NO;
+    self.doubleTapGesture.delaysTouchesBegan = NO;
+    self.doubleTapGesture.delaysTouchesEnded = NO;
     [self.touchView addGestureRecognizer:self.doubleTapGesture];
 
     self.longPressGesture = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(surfaceOnLongpress:)];
     self.longPressGesture.allowedTouchTypes = @[@(UITouchTypeDirect)];
     self.longPressGesture.cancelsTouchesInView = NO;
+    self.longPressGesture.delaysTouchesBegan = NO;
+    self.longPressGesture.delaysTouchesEnded = NO;
     self.longPressGesture.delegate = self;
-    // è®¾ç½®æå¿ä¾èµå³ç³»ï¼åªæå½åå»ååå»æå¿å¤±è´¥æ¶ï¼é¿ææå¿æä¼è¢«è¯å«
-    [self.longPressGesture requireGestureRecognizerToFail:self.tapGesture];
-    [self.longPressGesture requireGestureRecognizerToFail:self.doubleTapGesture];
     [self.touchView addGestureRecognizer:self.longPressGesture];
 
     self.longPressTwoGesture = [[UILongPressGestureRecognizer alloc]initWithTarget:self action:@selector(keyboardGesture:)];
     self.longPressTwoGesture.numberOfTouchesRequired = 2;
     self.longPressTwoGesture.allowedTouchTypes = @[@(UITouchTypeDirect)];
     self.longPressTwoGesture.cancelsTouchesInView = NO;
+    self.longPressTwoGesture.delaysTouchesBegan = NO;
+    self.longPressTwoGesture.delaysTouchesEnded = NO;
     self.longPressTwoGesture.delegate = self;
     [self.touchView addGestureRecognizer:self.longPressTwoGesture];
 
@@ -1016,6 +1021,9 @@ static GameSurfaceView* pojavWindow;
     self.scrollPanGesture.delegate = self;
     self.scrollPanGesture.minimumNumberOfTouches = 2;
     self.scrollPanGesture.maximumNumberOfTouches = 2;
+    self.scrollPanGesture.cancelsTouchesInView = NO;
+    self.scrollPanGesture.delaysTouchesBegan = NO;
+    self.scrollPanGesture.delaysTouchesEnded = NO;
     [self.touchView addGestureRecognizer:self.scrollPanGesture];
 
     // TouchController 移动视角手势：右半区单指滑动
@@ -1026,6 +1034,8 @@ static GameSurfaceView* pojavWindow;
     self.moveViewPanGesture.minimumNumberOfTouches = 1;
     // 不取消 touches 事件，让 touchesMoved 仍能触发（与 TC AddPointer 并存）
     self.moveViewPanGesture.cancelsTouchesInView = NO;
+    self.moveViewPanGesture.delaysTouchesBegan = NO;
+    self.moveViewPanGesture.delaysTouchesEnded = NO;
     [self.touchView addGestureRecognizer:self.moveViewPanGesture];
 
     virtualMouseEnabled = getPrefBool(@"control.virtmouse_enable");
