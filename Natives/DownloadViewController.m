@@ -94,23 +94,25 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
         // ----- 卡片容器：圆角 + 半透明背景 + 浅阴影（参照 FCL bg_container_white + ZL2 Surface cardColor）-----
         // 替代原来直接 addSubview 到 contentView 的扁平布局，统一与 VersionCardCell 一致的视觉规范
+        // 阶段3 UI 调整：减小圆角和阴影，让卡片更紧凑（rowHeight 92）
         self.contentContainer = [[UIView alloc] init];
         self.contentContainer.translatesAutoresizingMaskIntoConstraints = NO;
         self.contentContainer.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.08];
-        self.contentContainer.layer.cornerRadius = 16;
+        self.contentContainer.layer.cornerRadius = 12;
         self.contentContainer.layer.cornerCurve = kCACornerCurveContinuous;
         self.contentContainer.layer.borderWidth = 0.5;
         self.contentContainer.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.10].CGColor;
         self.contentContainer.layer.shadowColor = [UIColor blackColor].CGColor;
-        self.contentContainer.layer.shadowOffset = CGSizeMake(0, 4);
-        self.contentContainer.layer.shadowOpacity = 0.12;
-        self.contentContainer.layer.shadowRadius = 8;
+        self.contentContainer.layer.shadowOffset = CGSizeMake(0, 2);
+        self.contentContainer.layer.shadowOpacity = 0.10;
+        self.contentContainer.layer.shadowRadius = 4;
         [self.contentView addSubview:self.contentContainer];
 
-        // ----- 左侧图标：56x56 圆角，承载资源主图（项目 icon 或占位 SF Symbol）-----
+        // ----- 左侧图标：44x44 圆角，承载资源主图（项目 icon 或占位 SF Symbol）-----
+        // 阶段3 UI 调整：从 56x56 减小到 44x44，配合 rowHeight 92
         self.iconView = [[UIImageView alloc] init];
         self.iconView.translatesAutoresizingMaskIntoConstraints = NO;
-        self.iconView.layer.cornerRadius = 12;
+        self.iconView.layer.cornerRadius = 10;
         self.iconView.layer.cornerCurve = kCACornerCurveContinuous;
         self.iconView.clipsToBounds = YES;
         // 默认背景：浅灰色圆角方块，图标加载前给一个视觉占位（FCL/ZL2 风格）
@@ -122,7 +124,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         // ----- 标题 -----
         self.titleLabel = [[UILabel alloc] init];
         self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-        self.titleLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
+        self.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
         self.titleLabel.textColor = [UIColor labelColor];
         self.titleLabel.numberOfLines = 1;
         self.titleLabel.adjustsFontSizeToFitWidth = YES;
@@ -131,12 +133,12 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         [self.titleLabel setContentCompressionResistancePriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
         [self.contentContainer addSubview:self.titleLabel];
 
-        // ----- 描述（最多 2 行）-----
+        // ----- 描述（最多 1 行，阶段3 UI 调整：从 2 行减到 1 行配合 rowHeight 92）-----
         self.descLabel = [[UILabel alloc] init];
         self.descLabel.translatesAutoresizingMaskIntoConstraints = NO;
-        self.descLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleCaption1];
+        self.descLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleCaption2];
         self.descLabel.textColor = [UIColor secondaryLabelColor];
-        self.descLabel.numberOfLines = 2;
+        self.descLabel.numberOfLines = 1;
         self.descLabel.lineBreakMode = NSLineBreakByTruncatingTail;
         [self.contentContainer addSubview:self.descLabel];
 
@@ -153,17 +155,18 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         self.tagsStack = [[UIStackView alloc] init];
         self.tagsStack.translatesAutoresizingMaskIntoConstraints = NO;
         self.tagsStack.axis = UILayoutConstraintAxisHorizontal;
-        self.tagsStack.spacing = 6;
+        self.tagsStack.spacing = 4;
         self.tagsStack.distribution = UIStackViewDistributionFill;
         self.tagsStack.alignment = UIStackViewAlignmentCenter;
         [self.contentContainer addSubview:self.tagsStack];
 
         // ----- 下载按钮（圆形图标按钮，FCL 风格）-----
+        // 阶段3 UI 调整：从 40x40 + 28pt symbol 减小到 32x32 + 22pt symbol
         self.downloadButton = [UIButton buttonWithType:UIButtonTypeSystem];
         self.downloadButton.translatesAutoresizingMaskIntoConstraints = NO;
         // 用 UIImageSymbolConfiguration 控制图标大小（iOS 13+），回退到普通 setImage
         UIImage *downloadSymbol = [UIImage systemImageNamed:@"arrow.down.circle.fill"
-                                          withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:28 weight:UIFontWeightRegular]];
+                                          withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:22 weight:UIFontWeightRegular]];
         if (!downloadSymbol) {
             downloadSymbol = [UIImage systemImageNamed:@"arrow.down.circle.fill"];
         }
@@ -176,44 +179,49 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         [self.contentContainer addSubview:self.downloadButton];
 
         [NSLayoutConstraint activateConstraints:@[
-            // 卡片容器充满 contentView，上下留 6pt 间距作为行间分隔
-            [self.contentContainer.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:6],
-            [self.contentContainer.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:16],
-            [self.contentContainer.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-16],
-            [self.contentContainer.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-6],
+            // 卡片容器充满 contentView，上下留 4pt 间距作为行间分隔
+            // 阶段3 UI 调整：从 6pt 减到 4pt，配合 rowHeight 92
+            [self.contentContainer.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:4],
+            [self.contentContainer.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:10],
+            [self.contentContainer.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-10],
+            [self.contentContainer.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-4],
 
-            // 图标：左 14，垂直居中，56x56
-            [self.iconView.leadingAnchor constraintEqualToAnchor:self.contentContainer.leadingAnchor constant:14],
+            // 图标：左 10，垂直居中，44x44（阶段3 UI 调整：从 56x56 减小）
+            [self.iconView.leadingAnchor constraintEqualToAnchor:self.contentContainer.leadingAnchor constant:10],
             [self.iconView.centerYAnchor constraintEqualToAnchor:self.contentContainer.centerYAnchor],
-            [self.iconView.widthAnchor constraintEqualToConstant:56],
-            [self.iconView.heightAnchor constraintEqualToConstant:56],
+            [self.iconView.widthAnchor constraintEqualToConstant:44],
+            [self.iconView.heightAnchor constraintEqualToConstant:44],
 
-            // 标题：紧跟图标右侧 +12，顶部对齐图标顶部，右侧留出下载按钮空间
-            [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.iconView.trailingAnchor constant:12],
+            // 标题：紧跟图标右侧 +10，顶部对齐图标顶部，右侧留出下载按钮空间
+            // 阶段3 UI 调整：从 +12 减到 +10
+            [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.iconView.trailingAnchor constant:10],
             [self.titleLabel.topAnchor constraintEqualToAnchor:self.iconView.topAnchor],
-            [self.titleLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.downloadButton.leadingAnchor constant:-8],
+            [self.titleLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.downloadButton.leadingAnchor constant:-6],
 
-            // 描述：与标题左对齐，紧跟标题下方 +2
+            // 描述：与标题左对齐，紧跟标题下方 +1
+            // 阶段3 UI 调整：从 +2 减到 +1
             [self.descLabel.leadingAnchor constraintEqualToAnchor:self.titleLabel.leadingAnchor],
-            [self.descLabel.topAnchor constraintEqualToAnchor:self.titleLabel.bottomAnchor constant:2],
+            [self.descLabel.topAnchor constraintEqualToAnchor:self.titleLabel.bottomAnchor constant:1],
             [self.descLabel.trailingAnchor constraintEqualToAnchor:self.titleLabel.trailingAnchor],
 
-            // 元信息：紧跟描述下方 +2
+            // 元信息：紧跟描述下方 +1
+            // 阶段3 UI 调整：从 +2 减到 +1
             [self.metaLabel.leadingAnchor constraintEqualToAnchor:self.titleLabel.leadingAnchor],
-            [self.metaLabel.topAnchor constraintEqualToAnchor:self.descLabel.bottomAnchor constant:2],
+            [self.metaLabel.topAnchor constraintEqualToAnchor:self.descLabel.bottomAnchor constant:1],
             [self.metaLabel.trailingAnchor constraintEqualToAnchor:self.titleLabel.trailingAnchor],
 
-            // 标签 stack：紧跟元信息下方 +4
+            // 标签 stack：紧跟元信息下方 +2
+            // 阶段3 UI 调整：从 +4 减到 +2
             [self.tagsStack.leadingAnchor constraintEqualToAnchor:self.titleLabel.leadingAnchor],
-            [self.tagsStack.topAnchor constraintEqualToAnchor:self.metaLabel.bottomAnchor constant:4],
-            [self.tagsStack.trailingAnchor constraintLessThanOrEqualToAnchor:self.downloadButton.leadingAnchor constant:-8],
-            [self.tagsStack.bottomAnchor constraintLessThanOrEqualToAnchor:self.contentContainer.bottomAnchor constant:-10],
+            [self.tagsStack.topAnchor constraintEqualToAnchor:self.metaLabel.bottomAnchor constant:2],
+            [self.tagsStack.trailingAnchor constraintLessThanOrEqualToAnchor:self.downloadButton.leadingAnchor constant:-6],
+            [self.tagsStack.bottomAnchor constraintLessThanOrEqualToAnchor:self.contentContainer.bottomAnchor constant:-6],
 
-            // 下载按钮：右侧 -14，垂直居中，40x40
-            [self.downloadButton.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-14],
+            // 下载按钮：右侧 -10，垂直居中，32x32（阶段3 UI 调整：从 40x40 减小）
+            [self.downloadButton.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-10],
             [self.downloadButton.centerYAnchor constraintEqualToAnchor:self.contentContainer.centerYAnchor],
-            [self.downloadButton.widthAnchor constraintEqualToConstant:40],
-            [self.downloadButton.heightAnchor constraintEqualToConstant:40]
+            [self.downloadButton.widthAnchor constraintEqualToConstant:32],
+            [self.downloadButton.heightAnchor constraintEqualToConstant:32]
         ]];
 
         // 应用毛玻璃背景效果（BackgroundManager 统一管理深浅色与模糊度）
@@ -320,13 +328,14 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     UIImage *fallback = [UIImage systemImageNamed:[self placeholderIconNameForType:type]] ?: placeholder;
 
     // 使用 IconLoader 加载（自动处理：取消旧请求 → 占位 → 内存缓存 → 磁盘缓存 → 降采样解码 → CDN 镜像 → 兜底）
-    // 图标显示尺寸 56x56（在 setupConstraints 中定义），降采样到此尺寸避免按原图解码
+    // 图标显示尺寸 44x44（在 setupConstraints 中定义），降采样到此尺寸避免按原图解码
+    // 阶段3 UI 调整：从 56x56 减小到 44x44，配合 rowHeight 92
     __weak typeof(self) weakSelf = self;
     [IconLoader loadIconForImageView:self.iconView
                                  URL:iconUrl
                          placeholder:placeholder
                             fallback:fallback
-                           targetSize:CGSizeMake(56, 56)
+                           targetSize:CGSizeMake(44, 44)
                               options:IconLoaderOptionsDefault
                            completion:^(UIImage *image) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
@@ -1238,7 +1247,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     self.modTableView.backgroundColor = [UIColor clearColor];
     self.modTableView.dataSource = self;
     self.modTableView.delegate = self;
-    self.modTableView.rowHeight = 112;
+    self.modTableView.rowHeight = 92;
     self.modTableView.separatorStyle = UITableViewCellSeparatorStyleNone;
     [self.modTableView registerClass:[ModernAssetCell class] forCellReuseIdentifier:@"ModCell"];
     self.modTableView.hidden = YES;
@@ -1250,9 +1259,10 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
     // FCL/ZL2 风格：列表 leading 跟随侧边栏 trailing，top 跟随 searchBar
     // 侧边栏隐藏时宽度为 0，trailingAnchor 等于 view.leadingAnchor，列表自动铺满
+    // leading 加 8pt 间距，避免与左侧筛选栏紧贴（视觉呼吸感，阶段3 UI 调整）
     [NSLayoutConstraint activateConstraints:@[
         [self.modTableView.topAnchor constraintEqualToAnchor:self.searchBar.bottomAnchor constant:4],
-        [self.modTableView.leadingAnchor constraintEqualToAnchor:self.filterSidebarContainer.trailingAnchor],
+        [self.modTableView.leadingAnchor constraintEqualToAnchor:self.filterSidebarContainer.trailingAnchor constant:8],
         [self.modTableView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [self.modTableView.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor]
     ]];
@@ -1264,19 +1274,20 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     self.shaderTableView.backgroundColor = [UIColor clearColor];
     self.shaderTableView.dataSource = self;
     self.shaderTableView.delegate = self;
-    self.shaderTableView.rowHeight = 112;
+    self.shaderTableView.rowHeight = 92;
     self.shaderTableView.separatorStyle = UITableViewCellSeparatorStyleNone;
     [self.shaderTableView registerClass:[ModernAssetCell class] forCellReuseIdentifier:@"ShaderCell"];
     self.shaderTableView.hidden = YES;
     [self.view addSubview:self.shaderTableView];
-    
+
     UIRefreshControl *refreshControl = [[UIRefreshControl alloc] init];
     [refreshControl addTarget:self action:@selector(refreshShaderList) forControlEvents:UIControlEventValueChanged];
     self.shaderTableView.refreshControl = refreshControl;
-    
+
+    // leading 加 8pt 间距，避免与左侧筛选栏紧贴（视觉呼吸感，阶段3 UI 调整）
     [NSLayoutConstraint activateConstraints:@[
         [self.shaderTableView.topAnchor constraintEqualToAnchor:self.searchBar.bottomAnchor constant:4],
-        [self.shaderTableView.leadingAnchor constraintEqualToAnchor:self.filterSidebarContainer.trailingAnchor],
+        [self.shaderTableView.leadingAnchor constraintEqualToAnchor:self.filterSidebarContainer.trailingAnchor constant:8],
         [self.shaderTableView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [self.shaderTableView.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor]
     ]];
@@ -1288,7 +1299,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     self.modpackTableView.backgroundColor = [UIColor clearColor];
     self.modpackTableView.dataSource = self;
     self.modpackTableView.delegate = self;
-    self.modpackTableView.rowHeight = 112;
+    self.modpackTableView.rowHeight = 92;
     self.modpackTableView.separatorStyle = UITableViewCellSeparatorStyleNone;
     [self.modpackTableView registerClass:[ModernAssetCell class] forCellReuseIdentifier:@"ModpackCell"];
     self.modpackTableView.hidden = YES;
@@ -1298,9 +1309,10 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     [refreshControl addTarget:self action:@selector(refreshModpackList) forControlEvents:UIControlEventValueChanged];
     self.modpackTableView.refreshControl = refreshControl;
 
+    // leading 加 8pt 间距，避免与左侧筛选栏紧贴（视觉呼吸感，阶段3 UI 调整）
     [NSLayoutConstraint activateConstraints:@[
         [self.modpackTableView.topAnchor constraintEqualToAnchor:self.searchBar.bottomAnchor constant:4],
-        [self.modpackTableView.leadingAnchor constraintEqualToAnchor:self.filterSidebarContainer.trailingAnchor],
+        [self.modpackTableView.leadingAnchor constraintEqualToAnchor:self.filterSidebarContainer.trailingAnchor constant:8],
         [self.modpackTableView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [self.modpackTableView.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor]
     ]];
@@ -1312,7 +1324,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     self.resourcepackTableView.backgroundColor = [UIColor clearColor];
     self.resourcepackTableView.dataSource = self;
     self.resourcepackTableView.delegate = self;
-    self.resourcepackTableView.rowHeight = 112;
+    self.resourcepackTableView.rowHeight = 92;
     self.resourcepackTableView.separatorStyle = UITableViewCellSeparatorStyleNone;
     [self.resourcepackTableView registerClass:[ModernAssetCell class] forCellReuseIdentifier:@"ResourcepackCell"];
     self.resourcepackTableView.hidden = YES;
@@ -1322,9 +1334,10 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     [refreshControl addTarget:self action:@selector(refreshResourcepackList) forControlEvents:UIControlEventValueChanged];
     self.resourcepackTableView.refreshControl = refreshControl;
 
+    // leading 加 8pt 间距，避免与左侧筛选栏紧贴（视觉呼吸感，阶段3 UI 调整）
     [NSLayoutConstraint activateConstraints:@[
         [self.resourcepackTableView.topAnchor constraintEqualToAnchor:self.searchBar.bottomAnchor constant:4],
-        [self.resourcepackTableView.leadingAnchor constraintEqualToAnchor:self.filterSidebarContainer.trailingAnchor],
+        [self.resourcepackTableView.leadingAnchor constraintEqualToAnchor:self.filterSidebarContainer.trailingAnchor constant:8],
         [self.resourcepackTableView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [self.resourcepackTableView.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor]
     ]];
@@ -1336,7 +1349,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     self.datapackTableView.backgroundColor = [UIColor clearColor];
     self.datapackTableView.dataSource = self;
     self.datapackTableView.delegate = self;
-    self.datapackTableView.rowHeight = 112;
+    self.datapackTableView.rowHeight = 92;
     self.datapackTableView.separatorStyle = UITableViewCellSeparatorStyleNone;
     [self.datapackTableView registerClass:[ModernAssetCell class] forCellReuseIdentifier:@"DatapackCell"];
     self.datapackTableView.hidden = YES;
@@ -1346,9 +1359,10 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     [refreshControl addTarget:self action:@selector(refreshDatapackList) forControlEvents:UIControlEventValueChanged];
     self.datapackTableView.refreshControl = refreshControl;
 
+    // leading 加 8pt 间距，避免与左侧筛选栏紧贴（视觉呼吸感，阶段3 UI 调整）
     [NSLayoutConstraint activateConstraints:@[
         [self.datapackTableView.topAnchor constraintEqualToAnchor:self.searchBar.bottomAnchor constant:4],
-        [self.datapackTableView.leadingAnchor constraintEqualToAnchor:self.filterSidebarContainer.trailingAnchor],
+        [self.datapackTableView.leadingAnchor constraintEqualToAnchor:self.filterSidebarContainer.trailingAnchor constant:8],
         [self.datapackTableView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [self.datapackTableView.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor]
     ]];
@@ -1360,7 +1374,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     self.worldTableView.backgroundColor = [UIColor clearColor];
     self.worldTableView.dataSource = self;
     self.worldTableView.delegate = self;
-    self.worldTableView.rowHeight = 112;
+    self.worldTableView.rowHeight = 92;
     self.worldTableView.separatorStyle = UITableViewCellSeparatorStyleNone;
     [self.worldTableView registerClass:[ModernAssetCell class] forCellReuseIdentifier:@"WorldCell"];
     self.worldTableView.hidden = YES;
@@ -1371,9 +1385,10 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     self.worldTableView.refreshControl = refreshControl;
 
     // 世界 tab 不显示侧边栏（强制 CurseForge），列表 leading 直接跟随 view
+    // leading 加 8pt 间距，保持与其他 tab 一致的视觉呼吸感（阶段3 UI 调整）
     [NSLayoutConstraint activateConstraints:@[
         [self.worldTableView.topAnchor constraintEqualToAnchor:self.searchBar.bottomAnchor constant:4],
-        [self.worldTableView.leadingAnchor constraintEqualToAnchor:self.filterSidebarContainer.trailingAnchor],
+        [self.worldTableView.leadingAnchor constraintEqualToAnchor:self.filterSidebarContainer.trailingAnchor constant:8],
         [self.worldTableView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [self.worldTableView.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor]
     ]];
