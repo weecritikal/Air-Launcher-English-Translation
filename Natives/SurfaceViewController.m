@@ -189,12 +189,14 @@
 // ProxyMessage ç±»åå®ä¹ (åè TouchController-iOSTest)
 #define PROXY_MESSAGE_TYPE_ADD_POINTER 1
 #define PROXY_MESSAGE_TYPE_REMOVE_POINTER 2
-#define PROXY_MESSAGE_TYPE_CLEAR_POINTER 3
 #define PROXY_MESSAGE_TYPE_VIBRATE 4
 #define PROXY_MESSAGE_TYPE_INPUT_STATUS 7
 #define PROXY_MESSAGE_TYPE_INPUT_CURSOR 9
 #define PROXY_MESSAGE_TYPE_INPUT_AREA 11
 #define PROXY_MESSAGE_TYPE_MOVE_VIEW 12
+#define PROXY_MESSAGE_TYPE_CAPABILITY 5
+#define PROXY_MESSAGE_TYPE_KEYBOARD_SHOW 8
+#define PROXY_MESSAGE_TYPE_INITIALIZE 10
 
 // Vibrate ç±»å
 #define VIBRATE_KIND_BLOCK_BROKEN 0
@@ -223,6 +225,8 @@ static GameSurfaceView* pojavWindow;
 
 @property(nonatomic) UILongPressGestureRecognizer* longPressGesture, *longPressTwoGesture;
 @property(nonatomic) UITapGestureRecognizer *tapGesture, *doubleTapGesture;
+// TouchController 移动视角手势：右半区单指滑动
+@property(nonatomic) UIPanGestureRecognizer *moveViewPanGesture;
 
 @property(nonatomic) id mouseConnectCallback, mouseDisconnectCallback;
 @property(nonatomic) id controllerConnectCallback, controllerDisconnectCallback;
@@ -569,6 +573,55 @@ static GameSurfaceView* pojavWindow;
     }
 }
 
+#pragma mark - TouchController Capability
+
+// 编码 CapabilityMessage (type=5)
+// 格式: 4B type (big endian) + 1B name_len + N B name (UTF-8) + 1B enabled (0/1)
+- (NSData *)encodeCapabilityMessageWithName:(NSString *)name enabled:(BOOL)enabled {
+    NSData *nameData = [name dataUsingEncoding:NSUTF8StringEncoding];
+    if (!nameData) {
+        NSLog(@"[TouchController] Failed to encode capability name as UTF-8: %@", name);
+        return nil;
+    }
+
+    uint8_t nameLen = (uint8_t)[nameData length];
+    int32_t type = htonl(PROXY_MESSAGE_TYPE_CAPABILITY);
+    uint8_t enabledByte = enabled ? 1 : 0;
+
+    NSMutableData *data = [NSMutableData dataWithCapacity:4 + 1 + nameLen + 1];
+    [data appendBytes:&type length:4];
+    [data appendBytes:&nameLen length:1];
+    [data appendBytes:[nameData bytes] length:nameLen];
+    [data appendBytes:&enabledByte length:1];
+
+    return data;
+}
+
+// 编码 InitializeMessage (type=10)
+// 供未来启动器主动初始化使用，当前未调用
+- (NSData *)encodeInitializeMessage {
+    int32_t type = htonl(PROXY_MESSAGE_TYPE_INITIALIZE);
+    return [NSData dataWithBytes:&type length:4];
+}
+
+// 在收到 InitializeMessage 后调用，向 Mod 声明启动器支持的能力
+- (void)sendCapabilities {
+    if (self.touchControllerTransportHandle < 0) {
+        NSLog(@"[TouchController] Cannot send capabilities: transport not initialized");
+        return;
+    }
+
+    // 发送 text_status 能力：声明启动器会通过 InputStatusMessage 上报文本编辑状态
+    NSData *textStatusCap = [self encodeCapabilityMessageWithName:@"text_status" enabled:YES];
+    [TouchControllerBridge sendToTransport:self.touchControllerTransportHandle data:textStatusCap];
+
+    // 发送 keyboard_show 能力：声明启动器会响应 KeyboardShowMessage 显示/隐藏键盘
+    NSData *keyboardShowCap = [self encodeCapabilityMessageWithName:@"keyboard_show" enabled:YES];
+    [TouchControllerBridge sendToTransport:self.touchControllerTransportHandle data:keyboardShowCap];
+
+    NSLog(@"[TouchController] Sent capabilities: text_status, keyboard_show");
+}
+
 #pragma mark - TouchController MoveView Support
 
 // ç¼ç  MoveViewMessage (type=12)
@@ -653,13 +706,128 @@ static GameSurfaceView* pojavWindow;
             }
             break;
         }
-        default:
-            NSLog(@"[TouchController] Unknown message type: %d", type);
+        case PROXY_MESSAGE_TYPE_INITIALIZE: {
+            NSLog(@"[TouchController] Received InitializeMessage, sending capabilities");
+            dispatch_async(dispatch_get_main_queue(), ^{
+                if (self.view && !self.isBeingDismissed) {
+                    [self sendCapabilities];
+                }
+            });
             break;
+        }
+        case PROXY_MESSAGE_TYPE_KEYBOARD_SHOW: {
+            if (messageData.length >= 5) {
+                uint8_t showByte;
+                [messageData getBytes:&showByte range:NSMakeRange(4, 1)];
+                BOOL show = (showByte != 0);
+                NSLog(@"[TouchController] Received KeyboardShow: show=%d", show);
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    if (self.view && !self.isBeingDismissed) {
+                        if (show) {
+                            [self.touchControllerTextField becomeFirstResponder];
+                        } else {
+                            [self.touchControllerTextField resignFirstResponder];
+                        }
+                    }
+                });
+            } else {
+                NSLog(@"[TouchController] KeyboardShowMessage too short: %lu bytes", (unsigned long)messageData.length);
+            }
+            break;
+        }
+        case PROXY_MESSAGE_TYPE_CAPABILITY: {
+            // Mod → launcher 方向的能力协商（未来扩展点）
+            // 当前启动器不处理 Mod 声明的能力，仅记录日志
+            if (messageData.length >= 6) {
+                uint8_t nameLen;
+                [messageData getBytes:&nameLen range:NSMakeRange(4, 1)];
+                if (messageData.length >= (NSUInteger)(5 + nameLen + 1)) {
+                    NSRange nameRange = NSMakeRange(5, nameLen);
+                    NSString *capabilityName = [[NSString alloc] initWithData:[messageData subdataWithRange:nameRange] encoding:NSUTF8StringEncoding];
+                    uint8_t enabledByte;
+                    [messageData getBytes:&enabledByte range:NSMakeRange(5 + nameLen, 1)];
+                    NSLog(@"[TouchController] Received Capability: name=%@, enabled=%d", capabilityName, enabledByte != 0);
+                } else {
+                    NSLog(@"[TouchController] CapabilityMessage too short for declared name length");
+                }
+            }
+            break;
+        }
+        default: {
+            NSUInteger dumpLen = MIN(messageData.length, (NSUInteger)32);
+            NSMutableString *hexDump = [NSMutableString string];
+            const uint8_t *bytes = (const uint8_t *)[messageData bytes];
+            for (NSUInteger i = 0; i < dumpLen; i++) {
+                [hexDump appendFormat:@"%02x ", bytes[i]];
+            }
+            NSLog(@"[TouchController] Unknown message type: %d, length: %lu, hex: %@",
+                  type, (unsigned long)messageData.length, hexDump);
+            break;
+        }
     }
 }
 
 // åå§åææ¬è¾å¥å­æ®µ
+#pragma mark - GestureRecognizer Delegate
+
+// 仅 moveViewPanGesture 需要特殊判定；其他手势保持默认行为
+- (BOOL)gestureRecognizerShouldBegin:(UIGestureRecognizer *)gestureRecognizer {
+    if (gestureRecognizer == self.moveViewPanGesture) {
+        // 条件 1: TouchController 必须启用
+        if (!getPrefBool(@"control.mod_touch_enable")) return NO;
+        // 条件 2: 必须是静态库模式（mode == 2）
+        NSInteger mode = [getPrefObject(@"control.mod_touch_mode") integerValue];
+        if (mode != 2) return NO;
+        // 条件 3: 移动视角开关必须打开
+        if (!getPrefBool(@"control.mod_touch_moveview_enable")) return NO;
+        // 条件 4: 必须在游戏内（isGrabbing 为 true）
+        if (isGrabbing != JNI_TRUE) return NO;
+        // 条件 5: 触摸起点必须在 touchView 右半区
+        CGPoint location = [gestureRecognizer locationInView:self.touchView];
+        if (location.x < self.touchView.bounds.size.width / 2.0) return NO;
+        return YES;
+    }
+    return YES;
+}
+
+#pragma mark - TouchController MoveView Gesture
+
+// 处理右半区滑动手势，发送 MoveViewMessage 给 TouchController
+- (void)handleMoveViewPanGesture:(UIPanGestureRecognizer *)gesture {
+    // 双重检查（防御性编程，即使 gestureRecognizerShouldBegin 返回 YES 也再次验证）
+    if (!getPrefBool(@"control.mod_touch_enable")) return;
+    if (!getPrefBool(@"control.mod_touch_moveview_enable")) return;
+    if (isGrabbing != JNI_TRUE) return;
+
+    UIPanGestureRecognizer *panGesture = (UIPanGestureRecognizer *)gesture;
+    CGPoint translation = [panGesture translationInView:self.touchView];
+
+    switch (panGesture.state) {
+        case UIGestureRecognizerStateBegan:
+            // 起始位置无需特殊处理，translation 已经是相对起点
+            break;
+        case UIGestureRecognizerStateChanged: {
+            // 计算增量视角变化
+            // 注意：deltaPitch 对应 Y 轴（上下），deltaYaw 对应 X 轴（左右）
+            // 灵敏度系数：将屏幕像素转换为合理的视角变化
+            // 1.0 表示 1:1 映射（screenBased=true 时 Mod 端会乘以 sensitivity）
+            float deltaPitch = (float)translation.y;
+            float deltaYaw = (float)translation.x;
+            [self sendMoveViewWithDeltaPitch:deltaPitch deltaYaw:deltaYaw];
+            // 重置 translation 为零，让下一帧 delta 是增量而非累计
+            [panGesture setTranslation:CGPointZero inView:self.touchView];
+            break;
+        }
+        case UIGestureRecognizerStateEnded:
+        case UIGestureRecognizerStateCancelled:
+        case UIGestureRecognizerStateFailed:
+            // 清理状态（无需特殊操作，translation 已被重置或手势已结束）
+            break;
+        default:
+            break;
+    }
+}
+
 - (void)setupTouchControllerTextInput {
     if (!self.touchControllerTextField) {
         self.touchControllerTextField = [[UITextField alloc] initWithFrame:CGRectZero];
@@ -849,6 +1017,16 @@ static GameSurfaceView* pojavWindow;
     self.scrollPanGesture.minimumNumberOfTouches = 2;
     self.scrollPanGesture.maximumNumberOfTouches = 2;
     [self.touchView addGestureRecognizer:self.scrollPanGesture];
+
+    // TouchController 移动视角手势：右半区单指滑动
+    self.moveViewPanGesture = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handleMoveViewPanGesture:)];
+    self.moveViewPanGesture.allowedTouchTypes = @[@(UITouchTypeDirect)];
+    self.moveViewPanGesture.delegate = self;
+    self.moveViewPanGesture.maximumNumberOfTouches = 1;
+    self.moveViewPanGesture.minimumNumberOfTouches = 1;
+    // 不取消 touches 事件，让 touchesMoved 仍能触发（与 TC AddPointer 并存）
+    self.moveViewPanGesture.cancelsTouchesInView = NO;
+    [self.touchView addGestureRecognizer:self.moveViewPanGesture];
 
     virtualMouseEnabled = getPrefBool(@"control.virtmouse_enable");
     virtualMouseFrame = CGRectMake(self.view.frame.size.width / 2, self.view.frame.size.height / 2, 18, 27);
