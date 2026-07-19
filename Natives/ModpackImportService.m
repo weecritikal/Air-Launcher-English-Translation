@@ -25,6 +25,8 @@
 #import "DownloadTaskManager.h"
 #import "DownloadTaskItem.h"
 #import "LauncherPreferences.h"
+#import "MinecraftResourceDownloadTask.h"
+#import "MinecraftResourceUtils.h"
 
 static NSString * const kImportedModpacksKey = @"ImportedModpacks";
 
@@ -43,7 +45,7 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
 @property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, NSMutableDictionary *> *downloadProgressSnapshots;
 @property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, DownloadTaskItem *> *downloadTaskItems;
 @property (nonatomic, strong) NSLock *downloadLock;
-/// 阶段5修复（参照 FCL）：跟踪本次导入过程中下载失败的文件，便于上层向用户报告
+/// 阶段5修复（参照 FCL DownloadList）：跟踪本次导入过程中下载失败的文件，便于上层向用户报告
 @property (nonatomic, strong) NSMutableArray<NSDictionary *> *failedFilesInternal;
 
 // 前向声明：将 modpackInfo 中的 iconBase64 解析为可用的文件 URL 字符串
@@ -690,6 +692,31 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
     if (!loaderSuccess) {
         // 加载器安装失败不阻断 (用户可能已经手动安装)
         NSLog(@"[ModpackImport] 加载器安装失败 (用户可能已安装): %@", loaderError.localizedDescription);
+    }
+
+    // 阶段5修复（参照 FCL ModpackHelper.ensureCompleteVersion）：
+    // installModLoader 只写入了 loader 的 version.json，但父版本（原版 MC）的
+    // version.json、libraries、assets 都还没下载。之前用户启动整合包时会报
+    // "找不到 net.minecraft.client.main.Main" 或 libraries 缺失，正是因为这一步缺失。
+    // 这里触发完整版本下载，确保启动时所有依赖文件都就位。
+    if (progress) progress(0.86, @"正在下载游戏文件（库 + 资源）");
+    NSError *versionDLError = nil;
+    BOOL versionDLOK = [self ensureCompleteVersionInstalled:versionId
+                                          minecraftVersion:minecraftVersion
+                                                 progress:progress
+                                                    error:&versionDLError];
+    if (!versionDLOK) {
+        NSLog(@"[ModpackImport] 警告：完整版本下载失败: %@", versionDLError.localizedDescription);
+        // 不阻断导入：用户可能已手动下载过原版文件，或者后续启动时按需下载
+        // 但要把失败信息记入 failedFiles 让用户知晓
+        @synchronized(self) {
+            [self.failedFilesInternal addObject:@{
+                @"fileName": [NSString stringWithFormat:@"%@ (游戏文件)", versionId],
+                @"url": @"",
+                @"reason": versionDLError.localizedDescription ?: @"游戏文件下载失败",
+                @"format": @"version"
+            }];
+        }
     }
 
     // 取消检查点
@@ -1616,6 +1643,153 @@ didFinishDownloadingToURL:(NSURL *)location {
     }
 
     NSLog(@"[ModpackImport] %@ 直装成功，version.json 已写入: %@", loader, versionJsonPath);
+    return YES;
+}
+
+/// 阶段5修复（参照 FCL ModpackHelper.ensureCompleteVersion）：
+/// 整合包导入时，installModLoader 只写入了 loader 的 version.json（Fabric profile json
+/// 或 Forge 直装器输出的 version.json），但父版本（原版 MC）的 version.json、libraries、
+/// assets 都还没下载。之前用户启动整合包时会报"找不到 net.minecraft.client.main.Main"
+/// 或 "找不到 libraries"等错误，正是因为这一步缺失。
+///
+/// 本方法：
+/// 1. 确保父版本 JSON 存在（复用 ForgeDirectInstaller.ensureParentVersionExists:，
+///    该方法通用，不依赖 Forge 特定逻辑，对 Fabric/Quilt/原版同样适用）
+/// 2. 创建 MinecraftResourceDownloadTask 触发完整版本下载（libraries + assets），
+///    downloadVersion: 内部会处理 inheritsFrom，对已存在且 SHA1 正确的文件自动跳过
+/// 3. 用 KVO + dispatch_semaphore 同步等待下载完成，向上层报告进度
+- (BOOL)ensureCompleteVersionInstalled:(NSString *)versionId
+                       minecraftVersion:(NSString *)minecraftVersion
+                              progress:(void (^_Nullable)(double progress, NSString *stageMessage))progress
+                                 error:(NSError **)error {
+    if (!versionId || versionId.length == 0) {
+        if (error) {
+            *error = [NSError errorWithDomain:@"ModpackImportError"
+                                         code:4005
+                                     userInfo:@{NSLocalizedDescriptionKey: @"versionId 为空，无法安装完整版本"}];
+        }
+        return NO;
+    }
+
+    NSLog(@"[ModpackImport] 确保完整版本已安装: %@ (父版本: %@)", versionId, minecraftVersion ?: @"(none)");
+
+    // 第 1 步：确保父版本 JSON 存在（仅当 loader version JSON 含 inheritsFrom 时需要）
+    // 这里无条件调用 ensureParentVersionExists:，它内部会检查 JSON 是否已存在并跳过。
+    if (minecraftVersion.length > 0) {
+        NSError *parentError = nil;
+        BOOL parentOK = [ForgeDirectInstaller ensureParentVersionExists:minecraftVersion error:&parentError];
+        if (!parentOK) {
+            NSLog(@"[ModpackImport] 警告：父版本 %@ JSON 下载失败: %@",
+                  minecraftVersion, parentError.localizedDescription);
+            // 不直接 fail：downloadVersion: 内部也会检查父版本，若已存在则继续
+            // 只有当父版本 JSON 真的不存在时才会 fail
+        }
+    }
+
+    if (progress) progress(0.88, [NSString stringWithFormat:@"正在下载 %@ 的游戏文件", versionId]);
+
+    // 第 2 步：创建 MinecraftResourceDownloadTask 触发完整下载
+    // 不注册到 DownloadTaskManager（整合包导入已有自己的进度卡片，避免重复显示）
+    MinecraftResourceDownloadTask *downloader = [MinecraftResourceDownloadTask new];
+    downloader.maxRetryCount = 3;
+
+    // 同步等待：用轮询检查 progress.finished，避免 KVO 悬空问题
+    // （downloadVersion: 内部的 prepareForDownload 会重建 self.progress，
+    //   若在调用前 addObserver，observe 的是旧对象，新 progress 完成时不会触发回调）
+    __block BOOL errorOccurred = NO;
+    __block NSString *failReason = nil;
+
+    // downloader.handleError 在下载流程出错时调用（finishDownloadWithErrorString: 内）
+    downloader.handleError = ^{
+        @synchronized(self) {
+            errorOccurred = YES;
+            failReason = @"下载流程出错（见日志）";
+        }
+    };
+
+    // 启动下载（downloadVersion: 是异步的，内部会 prepareForDownload 重建 progress）
+    NSDictionary *versionArg = @{@"id": versionId};
+    [downloader downloadVersion:versionArg];
+
+    // 轮询等待完成（每 0.5s 检查一次，最长 30 分钟）
+    NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:30 * 60];
+    BOOL downloadSucceeded = NO;
+    while ([deadline timeIntervalSinceNow] > 0) {
+        // 检查错误
+        @synchronized(self) {
+            if (errorOccurred) {
+                break;
+            }
+        }
+        // 检查 progress 完成度（每次访问 downloader.progress 都是最新的）
+        NSProgress *currentProg = downloader.progress;
+        if (currentProg && currentProg.finished) {
+            downloadSucceeded = !currentProg.cancelled;
+            break;
+        }
+        // 检查取消信号
+        if (self.cancelled) {
+            if (currentProg) [currentProg cancel];
+            break;
+        }
+        [NSThread sleepForTimeInterval:0.5];
+    }
+
+    // 最终状态检查
+    NSProgress *finalProg = downloader.progress;
+    if (finalProg && finalProg.finished && !finalProg.cancelled) {
+        downloadSucceeded = YES;
+    } else if (finalProg && !finalProg.finished) {
+        // 超时
+        [finalProg cancel];
+        if (error) {
+            *error = [NSError errorWithDomain:@"ModpackImportError"
+                                         code:4006
+                                     userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"下载 %@ 游戏文件超时（30 分钟）", versionId]}];
+        }
+        return NO;
+    }
+
+    @synchronized(self) {
+        if (errorOccurred) {
+            if (error) {
+                *error = [NSError errorWithDomain:@"ModpackImportError"
+                                             code:4007
+                                         userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"下载 %@ 游戏文件失败: %@", versionId, failReason ?: @"未知错误"]}];
+            }
+            return NO;
+        }
+    }
+
+    if (!downloadSucceeded) {
+        if (error) {
+            *error = [NSError errorWithDomain:@"ModpackImportError"
+                                         code:4007
+                                     userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"下载 %@ 游戏文件失败", versionId]}];
+        }
+        return NO;
+    }
+
+    NSLog(@"[ModpackImport] 完整版本下载完成: %@", versionId);
+
+    // 阶段5修复：即使 progress 完成，也可能有部分库/资源文件下载失败（记录在 downloader.failedFiles）
+    // 将这些失败文件汇总到 ModpackImportService.failedFiles，让上层向用户展示
+    NSArray<NSDictionary *> *versionFailedFiles = [downloader.failedFiles copy];
+    if (versionFailedFiles.count > 0) {
+        NSLog(@"[ModpackImport] 警告：版本 %@ 有 %lu 个文件下载失败",
+              versionId, (unsigned long)versionFailedFiles.count);
+        @synchronized(self) {
+            for (NSDictionary *f in versionFailedFiles) {
+                [self.failedFilesInternal addObject:@{
+                    @"fileName": [NSString stringWithFormat:@"%@: %@", versionId, f[@"name"] ?: @"(unknown)"],
+                    @"url": @"",
+                    @"reason": f[@"error"] ?: @"下载失败",
+                    @"format": @"version"
+                }];
+            }
+        }
+    }
+
     return YES;
 }
 

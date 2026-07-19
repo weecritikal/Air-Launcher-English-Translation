@@ -751,6 +751,12 @@ submitDownloadTasksFromPackage:(NSString *)packagePath
                                                                      error:installError];
                 } else {
                     NSLog(@"[ModrinthAPI] %@ 直装成功，version.json 已写入: %@", loader, versionId);
+                    // 阶段5修复（参照 FCL ModpackHelper.ensureCompleteVersion）：
+                    // 直装器只写入了 loader 的 version.json + Forge/NeoForge 库，
+                    // 但原版 MC 的 libraries 和 assets 还没下载。
+                    // 触发 downloadVersion: 让 MinecraftResourceDownloadTask 下载完整版本文件。
+                    // downloadVersion: 内部会处理 inheritsFrom，对已存在的文件自动跳过。
+                    [downloader downloadVersion:@{@"id": versionId}];
                 }
             });
         }];

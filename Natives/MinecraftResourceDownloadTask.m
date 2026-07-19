@@ -346,7 +346,26 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"org.a
             return;
         } else if (json[@"inheritsFrom"]) {
             version = (id)[MinecraftResourceUtils findVersion:json[@"inheritsFrom"] inList:remoteVersionList];
-            path = [NSString stringWithFormat:@"%1$s/versions/%2$@/%2$@.json", getenv("POJAV_GAME_DIR"), json[@"inheritsFrom"]];
+            if (version) {
+                path = [NSString stringWithFormat:@"%1$s/versions/%2$@/%2$@.json", getenv("POJAV_GAME_DIR"), json[@"inheritsFrom"]];
+            } else {
+                // 阶段5修复（参照 FCL ModpackHelper.ensureCompleteVersion）：
+                // findVersion 失败通常因为 remoteVersionList 尚未加载（整合包导入在后台线程，
+                // 不经过 DownloadViewController 的清单加载流程）。
+                // 此时检查父版本 JSON 是否已由 ensureParentVersionExists 预先下载：
+                //   - 已存在 → 直接走 completionBlock，后续 libraries/assets 下载照常进行
+                //   - 不存在 → 报错（启动器无法继续）
+                NSString *parentJsonPath = [NSString stringWithFormat:@"%1$s/versions/%2$@/%2$@.json",
+                                            getenv("POJAV_GAME_DIR"), json[@"inheritsFrom"]];
+                if ([NSFileManager.defaultManager fileExistsAtPath:parentJsonPath]) {
+                    NSLog(@"[MCDL] remoteVersionList 未加载，但父版本 JSON 已存在：%@", parentJsonPath);
+                    completionBlock();
+                    return;
+                } else {
+                    [self finishDownloadWithErrorString:[NSString stringWithFormat:@"缺少父版本 %@ 的 version.json，且远程版本清单未加载，无法自动下载", json[@"inheritsFrom"]]];
+                    return;
+                }
+            }
         } else {
             completionBlock();
             return;
