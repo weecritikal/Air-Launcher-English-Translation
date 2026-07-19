@@ -39,6 +39,12 @@ typedef NS_ENUM(NSInteger, AssetVersionType) {
 // 代理
 @property (nonatomic, weak, nullable) id<AssetVersionViewControllerDelegate> delegate;
 
+// FCL 风格：传入当前 profile 的偏好版本
+// AssetVersionViewController 会优先选中匹配的 chip，并把匹配的版本置顶
+// 注：资产类型（资源包/数据包/世界）无加载器概念，故无 preferredLoader
+// 阶段3统一：补齐与 ModVersionViewController 不对称的 preferred 属性
+@property (nonatomic, copy, nullable) NSString *preferredGameVersion;
+
 // --- 项目展示信息（用于详情 header，由 DownloadViewController 传入）---
 // 补齐之前版本页缺少的项目封面图/标题/作者/下载量/标签/描述等信息显示
 @property (nonatomic, copy, nullable) NSString *projectIconURL;

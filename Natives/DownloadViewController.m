@@ -5312,6 +5312,10 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     versionVC.shaderItem = shaderItem;
     versionVC.delegate = self;
     versionVC.title = shaderItem.displayName;
+    // FCL 风格：传入当前 profile 的偏好版本和加载器，自动选中匹配 chip 并置顶匹配版本
+    // 补齐与 ModVersionViewController 不对称的 preferred 传参（阶段3统一）
+    versionVC.preferredGameVersion = [self currentProfileMinecraftVersion];
+    versionVC.preferredLoader = [self currentProfileLoader];
 
     [self.navigationController pushViewController:versionVC animated:YES];
 }
@@ -5344,6 +5348,8 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     versionVC.projectDescription = item.resourcePackDescription;
     versionVC.projectCategories = item.categories;
     versionVC.projectLastUpdated = item.lastUpdated;
+    // FCL 风格：传入当前 profile 的偏好版本，自动选中匹配 chip 并置顶匹配版本（阶段3统一）
+    versionVC.preferredGameVersion = [self currentProfileMinecraftVersion];
 
     [self.navigationController pushViewController:versionVC animated:YES];
 }
@@ -5376,6 +5382,8 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     versionVC.projectDescription = item.dataPackDescription;
     versionVC.projectCategories = item.categories;
     versionVC.projectLastUpdated = item.lastUpdated;
+    // FCL 风格：传入当前 profile 的偏好版本，自动选中匹配 chip 并置顶匹配版本（阶段3统一）
+    versionVC.preferredGameVersion = [self currentProfileMinecraftVersion];
 
     [self.navigationController pushViewController:versionVC animated:YES];
 }
@@ -5408,6 +5416,8 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     versionVC.projectDescription = item.worldDescription;
     versionVC.projectCategories = item.categories;
     versionVC.projectLastUpdated = item.lastUpdated;
+    // FCL 风格：传入当前 profile 的偏好版本，自动选中匹配 chip 并置顶匹配版本（阶段3统一）
+    versionVC.preferredGameVersion = [self currentProfileMinecraftVersion];
 
     [self.navigationController pushViewController:versionVC animated:YES];
 }

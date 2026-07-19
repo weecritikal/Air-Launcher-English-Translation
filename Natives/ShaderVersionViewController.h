@@ -23,6 +23,13 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, strong) ShaderItem *shaderItem;
 @property (nonatomic, weak) id<ShaderVersionViewControllerDelegate> delegate;
 
+// FCL 风格：传入当前 profile 的偏好版本和加载器
+// ShaderVersionViewController 会优先选中匹配的 chip，并把匹配的版本置顶
+// 不传则保持原有"全部"默认行为
+// 补齐与 ModVersionViewController 不对称的 preferred 属性（阶段3统一）
+@property (nonatomic, copy, nullable) NSString *preferredGameVersion;
+@property (nonatomic, copy, nullable) NSString *preferredLoader;
+
 @end
 
 NS_ASSUME_NONNULL_END
