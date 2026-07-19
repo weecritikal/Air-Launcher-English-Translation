@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/sysctl.h>
 #include <unistd.h>
 #include <mach/mach.h>
 #include "utils.h"
@@ -32,6 +33,25 @@ BOOL validateVirtualMemorySpace(size_t size) {
     if(map == MAP_FAILED || munmap(map, size) != 0)
         return NO;
     return YES;
+}
+
+/// 读取 sysctl 字符串键值（如 hw.machine）。失败返回 nil。
+/// 用于设备型号检测（A11 = iPhone10,x），不依赖 Obj-C 方法或私有 API。
+static NSString *readSysctlString(NSString *key) {
+    const char *cKey = key.UTF8String;
+    size_t size = 0;
+    if (sysctlbyname(cKey, NULL, &size, NULL, 0) != 0 || size == 0) {
+        return nil;
+    }
+    char *buf = (char *)malloc(size);
+    if (!buf) return nil;
+    if (sysctlbyname(cKey, buf, &size, NULL, 0) != 0) {
+        free(buf);
+        return nil;
+    }
+    NSString *result = [NSString stringWithUTF8String:buf];
+    free(buf);
+    return result;
 }
 
 /// 检测 MC 版本是否使用 SDL3 窗口后端
@@ -438,6 +458,31 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
         // Setup AMETHYST_RENDERER
         NSString *renderer = [PLProfiles resolveKeyForCurrentProfile:@"renderer"];
         NSLog(@"[JavaLauncher] RENDERER is set to %@\n", renderer);
+
+        // 关键修复（liblwjgl_stb SIGILL 崩溃，1.16.5 + libOSMesa + zink + MoltenVK on iPhone X）：
+        //   iPhone X (A11, ARMv8.0/8.1) 不完整支持 ARMv8.2+ 指令集（FP16/ARMv8.2 SIMD 等）。
+        //   Maven 预编译的 liblwjgl_stb.dylib 等 native 库可能用 -march=armv8.2-a+ 编译，
+        //   在 A11 上执行 ARMv8.2+ 指令会触发 SIGILL（项目仅用 vtool 重打 Mach-O platform
+        //   标记，不重编译代码）。
+        //
+        //   zink 链路（libOSMesa + Mesa zink driver + MoltenVK）额外加载大量 native stub，
+        //   与 liblwjgl_stb 字体光栅化叠加，CodeCache 迅速耗尽（Java 8 默认仅 48MB），
+        //   JIT 编译中的方法被部分无效化 → SIGILL at liblwjgl_stb.dylib+0x4d26c。
+        //
+        //   A12 (iPhone XS) 起完整支持 ARMv8.2 + FP16，不受此问题影响。
+        //   检测到 A11 设备 + zink 渲染器时，本次启动强制回退到 GL4ES（GL→GLES，1 层转换，
+        //   A11 上稳定），不修改用户偏好（下次用户可在设置中重新选择）。
+        if ([renderer isEqualToString:@ RENDERER_NAME_VK_ZINK]) {
+            NSString *machineModel = readSysctlString(@"hw.machine");
+            // iPhone10,x = A11 (iPhone X = iPhone10,3 / iPhone10,6, iPhone 8 = iPhone10,1, iPhone 8+ = iPhone10,2 / iPhone10,5)
+            BOOL isA11 = [machineModel hasPrefix:@"iPhone10,"];
+            if (isA11) {
+                NSLog(@"[JavaLauncher] A11 device detected (%@): zink + liblwjgl_stb may SIGILL on ARMv8.2+ instructions. "
+                      @"Falling back to GL4ES for this launch only.", machineModel);
+                renderer = @ RENDERER_NAME_GL4ES;
+            }
+        }
+
         setenv("AMETHYST_RENDERER", renderer.UTF8String, 1);
         // Setup AMETHYST_GRAPHICS_API（MC 26.2+ Graphics API：default/vulkan/opengl）
         // 仅 MC 26.2+ 识别此选项，旧版本 MC 会忽略 options.txt 中的 graphicsApi 字段。
@@ -839,6 +884,25 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
     // Workaround random stack guard allocation crashes
     PUSH_MARGV_LITERAL("-XX:+UnlockExperimentalVMOptions");
     PUSH_MARGV_LITERAL("-XX:+DisablePrimordialThreadGuardPages");
+
+    // 关键修复（liblwjgl_stb SIGILL 崩溃，1.16.5 + libOSMesa + zink + MoltenVK）：
+    //   崩溃日志显示 "CodeCache is full. Compiler has been disabled." 紧接 SIGILL
+    //   at liblwjgl_stb.dylib+0x4d26c。根因是项目从未设置 CodeCache 参数，完全依赖
+    //   JVM 默认值：Java 8 默认 ReservedCodeCacheSize=48MB，Java 17+ 默认 240MB。
+    //
+    //   MC 1.16.5 走 Java 8 路径（JavaLauncher.m:432-436 minVersion<=8 → defaultJRETag
+    //   = "1_16_5_older"），48MB 在 zink + MoltenVK + liblwjgl_stb + libOSMesa 多层
+    //   native 加载链下迅速耗尽。CodeCache 满后 JIT 编译中的方法被部分无效化，
+    //   CPU 执行到损坏的指令序列 → SIGILL。
+    //
+    //   修复：统一设置为 256m（Java 17+ 默认值），对 Java 8/17/21/25 全部生效。
+    //   - InitialCodeCacheSize=32m 避免启动时立即触发 CodeCache 扩容（默认 2.25m
+    //     会多次扩容，每次扩容都触发全局锁）
+    //   - CodeCacheExpansionSize=4m 减少扩容次数（默认 64K 太小）
+    //   - +UnlockExperimentalVMOptions 已在上一行启用，无需重复
+    PUSH_MARGV_LITERAL("-XX:ReservedCodeCacheSize=256m");
+    PUSH_MARGV_LITERAL("-XX:InitialCodeCacheSize=32m");
+    PUSH_MARGV_LITERAL("-XX:CodeCacheExpansionSize=4m");
 
     // On iOS 26, use mirror mapped JIT by default
     if (@available(iOS 26.0, *)) {
