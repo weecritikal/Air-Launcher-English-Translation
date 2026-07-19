@@ -75,14 +75,14 @@
         self.cardContainer = [[UIView alloc] init];
         self.cardContainer.translatesAutoresizingMaskIntoConstraints = NO;
         self.cardContainer.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.08];
-        self.cardContainer.layer.cornerRadius = 16;
+        self.cardContainer.layer.cornerRadius = 12;
         self.cardContainer.layer.cornerCurve = kCACornerCurveContinuous;
         self.cardContainer.layer.borderWidth = 0.5;
         self.cardContainer.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.10].CGColor;
         self.cardContainer.layer.shadowColor = [UIColor blackColor].CGColor;
-        self.cardContainer.layer.shadowOffset = CGSizeMake(0, 4);
-        self.cardContainer.layer.shadowOpacity = 0.12;
-        self.cardContainer.layer.shadowRadius = 8;
+        self.cardContainer.layer.shadowOffset = CGSizeMake(0, 2);
+        self.cardContainer.layer.shadowOpacity = 0.10;
+        self.cardContainer.layer.shadowRadius = 4;
         [self.contentView addSubview:self.cardContainer];
 
         // 应用 BackgroundManager 效果（毛玻璃/半透明自适应），解决过于透明的问题

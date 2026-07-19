@@ -49,18 +49,18 @@
     self.backgroundColor = [UIColor clearColor];
     self.contentView.backgroundColor = [UIColor clearColor];
 
-    // ===== 卡片容器：圆角 + 半透明背景 + 浅阴影（紧凑版：圆角 14，阴影更轻）=====
+    // ===== 卡片容器：圆角 + 半透明背景 + 浅阴影（阶段3 UI 调整：圆角 14→12，阴影更轻）=====
     self.cardContainer = [[UIView alloc] init];
     self.cardContainer.translatesAutoresizingMaskIntoConstraints = NO;
     self.cardContainer.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.08];
-    self.cardContainer.layer.cornerRadius = 14;
+    self.cardContainer.layer.cornerRadius = 12;
     self.cardContainer.layer.cornerCurve = kCACornerCurveContinuous;
     self.cardContainer.layer.borderWidth = 0.5;
     self.cardContainer.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.10].CGColor;
     self.cardContainer.layer.shadowColor = [UIColor blackColor].CGColor;
     self.cardContainer.layer.shadowOffset = CGSizeMake(0, 2);
-    self.cardContainer.layer.shadowOpacity = 0.12;
-    self.cardContainer.layer.shadowRadius = 6;
+    self.cardContainer.layer.shadowOpacity = 0.10;
+    self.cardContainer.layer.shadowRadius = 4;
     [self.contentView addSubview:self.cardContainer];
 
     // ===== 左侧：版本名行（含发布类型徽章）+ 版本号 =====
@@ -147,22 +147,22 @@
     self.rightStackView.translatesAutoresizingMaskIntoConstraints = NO;
     [self.cardContainer addSubview:self.rightStackView];
 
-    // ===== 布局约束（紧凑版：减小 padding）=====
+    // ===== 布局约束（阶段3 UI 调整：减小卡片左右边距 16→10，内部 padding 14→10）=====
     [NSLayoutConstraint activateConstraints:@[
-        // 卡片容器充满 contentView，上下留 4pt 间距（原 6pt）
+        // 卡片容器充满 contentView，上下留 4pt 间距
         [self.cardContainer.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:4],
-        [self.cardContainer.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:16],
-        [self.cardContainer.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-16],
+        [self.cardContainer.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:10],
+        [self.cardContainer.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-10],
         [self.cardContainer.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-4],
 
-        // 左侧 stack：左 14，上下 10（原 12）
-        [self.leftStackView.leadingAnchor constraintEqualToAnchor:self.cardContainer.leadingAnchor constant:14],
-        [self.leftStackView.topAnchor constraintEqualToAnchor:self.cardContainer.topAnchor constant:10],
-        [self.leftStackView.bottomAnchor constraintEqualToAnchor:self.cardContainer.bottomAnchor constant:-10],
-        [self.leftStackView.trailingAnchor constraintLessThanOrEqualToAnchor:self.rightStackView.leadingAnchor constant:-10],
+        // 左侧 stack：左 10，上下 8（阶段3 UI 调整：从 10 减到 8）
+        [self.leftStackView.leadingAnchor constraintEqualToAnchor:self.cardContainer.leadingAnchor constant:10],
+        [self.leftStackView.topAnchor constraintEqualToAnchor:self.cardContainer.topAnchor constant:8],
+        [self.leftStackView.bottomAnchor constraintEqualToAnchor:self.cardContainer.bottomAnchor constant:-8],
+        [self.leftStackView.trailingAnchor constraintLessThanOrEqualToAnchor:self.rightStackView.leadingAnchor constant:-8],
 
-        // 右侧 stack：右 -30（留出 chevron 空间），垂直居中
-        [self.rightStackView.trailingAnchor constraintEqualToAnchor:self.cardContainer.trailingAnchor constant:-30],
+        // 右侧 stack：右 -28（留出 chevron 空间），垂直居中
+        [self.rightStackView.trailingAnchor constraintEqualToAnchor:self.cardContainer.trailingAnchor constant:-28],
         [self.rightStackView.centerYAnchor constraintEqualToAnchor:self.cardContainer.centerYAnchor]
     ]];
 
