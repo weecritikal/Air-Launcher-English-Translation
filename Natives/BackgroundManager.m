@@ -578,7 +578,14 @@ static const NSInteger kDefaultBackgroundTag = 99995;
 
     // 递归清理 iOS 内部累积的 hairline UIImageView（高度极小的分割线视图）
     // hairline 常嵌在 _UINavigationBarBackground / _UIBarBackground 等私有子视图内部
-    void (^removeHairlines)(UIView *) = ^(UIView *view) {
+    //
+    // 关键修复（Card/Root 布局进入所有页闪退加固）：
+    //   block 内引用自身（removeHairlines(sub)）必须用 __block 限定符，否则
+    //   捕获的是 nil（block 字面量赋值还未完成时的栈帧值），递归调用是 no-op，
+    //   只会处理 navigationBar 的直接子视图，无法清理 _UIBarBackground 内层的 hairline。
+    //   累积的 hairline 在 setContentViewController 反复切换时会触发私有子视图
+    //   layout 解算异常，导致 EXC_BAD_ACCESS（不被 NSUncaughtExceptionHandler 捕获）。
+    __block void (^removeHairlines)(UIView *) = ^(UIView *view) {
         for (UIView *sub in view.subviews) {
             if ([sub isKindOfClass:[UIImageView class]] &&
                 sub.bounds.size.height > 0 &&
@@ -648,7 +655,9 @@ static const NSInteger kDefaultBackgroundTag = 99995;
     });
 
     // 递归清理累积的 hairline UIImageView
-    void (^removeHairlines)(UIView *) = ^(UIView *view) {
+    // 关键修复：同 applyEffectToNavigationBar:，block 内引用自身必须用 __block
+    // 限定符，否则递归调用是 no-op，无法清理 _UIBarBackground 内层的 hairline。
+    __block void (^removeHairlines)(UIView *) = ^(UIView *view) {
         for (UIView *sub in view.subviews) {
             if ([sub isKindOfClass:[UIImageView class]] &&
                 sub.bounds.size.height > 0 &&
