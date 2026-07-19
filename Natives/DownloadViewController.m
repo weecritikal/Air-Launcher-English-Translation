@@ -5982,7 +5982,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     NSURL *url = [NSURL URLWithString:urlString];
     if (!url) {
         // 尝试百分号编码后再解析
-        NSString *encoded = [urlString stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLAllowedCharacterSet]];
+        NSString *encoded = [urlString stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
         url = [NSURL URLWithString:encoded];
     }
     if (!url) {
