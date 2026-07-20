@@ -14,6 +14,7 @@
 #import "utils.h"
 #import "BackgroundManager.h"
 #import "DownloadProgressCardView.h"
+#import "ModpackExportService.h" // for parseVersionId:
 
 @interface ProfileSettingsViewController () <UITextFieldDelegate, UIPickerViewDataSource, UIPickerViewDelegate>
 
@@ -1549,12 +1550,20 @@
 /// 判断当前 profile 的 MC 版本是否为 26.2+（需要图形 API 切换）
 - (BOOL)isCurrentProfileModernVersion {
     NSString *versionId = self.profile[@"lastVersionId"] ?: @"";
+    // 修复 Fabric/Quilt/Forge loader profile 的版本号识别：
+    //   原 implementation 用 hasPrefix:@"26." 判断，但 Fabric profile 的 lastVersionId
+    //   形如 "fabric-loader-0.16.0-26.2"，前缀是 "fabric-loader" 不是 "26."，导致
+    //   MC 26.2+ Fabric profile 看不到"图形 API"选项。
+    //   修复：先用 ModpackExportService.parseVersionId 提取 minecraft 版本号，
+    //   再用提取后的版本号判断。也支持 forge/neoforge 形如 "26.2-forge-..."。
+    NSDictionary *parsed = [ModpackExportService parseVersionId:versionId];
+    NSString *mcVersion = parsed[@"minecraft"] ?: versionId;
     // 26.x 版本（26w02a 等快照也匹配）
-    if ([versionId hasPrefix:@"26."]) return YES;
-    if ([versionId hasPrefix:@"26w"]) return YES;
+    if ([mcVersion hasPrefix:@"26."]) return YES;
+    if ([mcVersion hasPrefix:@"26w"]) return YES;
     // 1.21.8+ 版本（Mojang 在 1.21.8 引入 Vulkan API）
-    if ([versionId hasPrefix:@"1.21."]) {
-        NSString *minorStr = [versionId substringFromIndex:5];
+    if ([mcVersion hasPrefix:@"1.21."]) {
+        NSString *minorStr = [mcVersion substringFromIndex:5];
         NSInteger minor = [minorStr integerValue];
         if (minor >= 8) return YES;
     }

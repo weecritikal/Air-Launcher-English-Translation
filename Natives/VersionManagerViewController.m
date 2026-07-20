@@ -11,6 +11,7 @@
 #import "ScreenUtils.h"
 #import "utils.h"
 #import "ModLoaderIconHelper.h"
+#import "ModpackExportService.h" // for parseVersionId:
 #import <QuartzCore/QuartzCore.h>
 
 // Section 索引：2 个 section（游戏目录 / 已安装版本）
@@ -725,21 +726,20 @@ static NSInteger const kSectionVersions    = 1;
     NSDictionary *profile = PLProfiles.current.profiles[self.selectedProfile];
     NSString *versionId = profile[@"lastVersionId"];
     if (!versionId) return NO;
-    // 匹配 "26.x" / "1.21.8" 及以上版本
-    NSCharacterSet *digits = [NSCharacterSet characterSetWithCharactersInString:@"0123456789."];
-    NSString *prefix = versionId;
-    for (NSUInteger i = 0; i < versionId.length; i++) {
-        unichar c = [versionId characterAtIndex:i];
-        if (![digits characterIsMember:c]) {
-            prefix = [versionId substringToIndex:i];
-            break;
-        }
-    }
+    // 修复 Fabric/Quilt/Forge loader profile 的版本号识别：
+    //   原实现用 digits 字符集截取 prefix，但 fabric-loader-0.16.0-26.2 的第 0 个
+    //   字符 'f' 不是数字，prefix 截成空字符串，导致 MC 26.2+ Fabric profile
+    //   看不到"图形 API"选项。
+    //   修复：先用 ModpackExportService.parseVersionId 提取 minecraft 版本号，
+    //   再用提取后的版本号判断。也支持 forge/neoforge 形如 "26.2-forge-..."。
+    NSDictionary *parsed = [ModpackExportService parseVersionId:versionId];
+    NSString *mcVersion = parsed[@"minecraft"] ?: versionId;
     // 26.x 系列
-    if ([prefix hasPrefix:@"26."]) return YES;
+    if ([mcVersion hasPrefix:@"26."]) return YES;
+    if ([mcVersion hasPrefix:@"26w"]) return YES;
     // 1.21.8 及以上
-    if ([prefix hasPrefix:@"1.21."]) {
-        NSString *minorStr = [prefix substringFromIndex:5];
+    if ([mcVersion hasPrefix:@"1.21."]) {
+        NSString *minorStr = [mcVersion substringFromIndex:5];
         NSInteger minor = [minorStr integerValue];
         if (minor >= 8) return YES;
     }
