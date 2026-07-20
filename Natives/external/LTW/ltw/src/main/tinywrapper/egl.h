@@ -95,6 +95,7 @@ typedef struct {
 
 extern context_t *ltw_get_current_context(void);
 extern void ltw_set_current_context(context_t *ctx);
+extern context_t *ltw_ensure_default_context(void);
 #define current_context ltw_get_current_context()
 extern void init_egl();
 extern GLenum get_textarget_query_param(GLenum target);
