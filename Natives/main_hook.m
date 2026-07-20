@@ -18,82 +18,6 @@ int (*orig_open)(const char *path, int oflag, ...);
 static BOOL g_zinkStrideFixActive = NO;
 
 // ============================================================================
-// LTW 渲染器 SDL_GL_GetProcAddress hook（修复 sodium 白屏）
-// ============================================================================
-// 背景：
-//   iOS SDL3 没有 EGL 支持（"SDL was not built with EGL support"），UIKit 后端
-//   用 EAGL（EAGLContext）创建 GL context，完全绕过 LTW 的 EGL wrapper。
-//
-//   MC 通过 LWJGL 调用 SDL_GL_GetProcAddress 获取 GL 函数指针。SDL3 UIKit 后端
-//   的 SDL_GL_GetProcAddress 从 OpenGLES.framework 解析，返回原生 GL 函数指针，
-//   而不是 LTW 的 wrapper。这导致：
-//     1. MC 调用原生 glShaderSource（OpenGLES.framework），而非 LTW wrapper
-//     2. sodium 的 GLSL 460 代码无法转换为 ESSL 300，shader 编译失败
-//     3. sodium 的 glBufferStorage 调用失败（ES3 没有 buffer_storage）
-//     4. 地形无法渲染，一片白屏
-//
-// 修复：
-//   通过 fishhook 拦截 SDL_GL_GetProcAddress。当 LTW 渲染器激活时，对于 LTW
-//   override 的 GL 函数（glShaderSource、glBufferStorage 等），调用 LTW 的
-//   eglGetProcAddress 获取 wrapper 函数指针并返回。LTW wrapper 内部会：
-//     1. 转换 GLSL 460 → ESSL 300（glShaderSource wrapper）
-//     2. 提供 GL_ARB_buffer_storage 兼容（glBufferStorage wrapper）
-//     3. 其他 Core → ES 转换
-//
-//   LTW 的 current_context 通过 ltw_ensure_default_context() 自动初始化
-//   （详见 egl.c），无需 eglMakeCurrent wrapper。
-//
-// 注意：只在 LTW 渲染器激活时才拦截。其他渲染器（zink/gl4es/ANGLE/MobileGlues）
-// 不受影响，直接调用原始 SDL_GL_GetProcAddress。
-static BOOL g_ltw_active = NO;
-static void *(*g_ltw_eglGetProcAddress)(const char *procname) = NULL;
-static void *(*g_orig_sdl_GL_GetProcAddress)(const char *procname) = NULL;
-
-/// 设置 LTW 渲染器激活状态（供 JavaLauncher.m 在 LTW 渲染器选中时调用）
-/// 激活时加载 LTW 的 eglGetProcAddress 函数指针，用于 SDL_GL_GetProcAddress hook
-void amethyst_set_ltw_active(BOOL active) {
-    g_ltw_active = active;
-    if (active && !g_ltw_eglGetProcAddress) {
-        void *ltw_handle = dlopen("@rpath/libltw.dylib", RTLD_NOLOAD | RTLD_GLOBAL);
-        if (!ltw_handle) {
-            ltw_handle = dlopen("@rpath/libltw.dylib", RTLD_LAZY | RTLD_GLOBAL);
-        }
-        if (ltw_handle) {
-            g_ltw_eglGetProcAddress = dlsym(ltw_handle, "eglGetProcAddress");
-            NSLog(@"[LTW Hook] libltw.dylib loaded, eglGetProcAddress=%p", (void*)g_ltw_eglGetProcAddress);
-        } else {
-            NSLog(@"[LTW Hook] WARNING: failed to load libltw.dylib: %s", dlerror());
-        }
-    }
-    NSLog(@"[LTW Hook] amethyst_set_ltw_active(%d), g_ltw_eglGetProcAddress=%p",
-          active, (void*)g_ltw_eglGetProcAddress);
-}
-
-/// fishhook 版本的 SDL_GL_GetProcAddress hook
-/// 签名：void* SDL_GL_GetProcAddress(const char *procname)
-static void *amethyst_fishhook_SDL_GL_GetProcAddress(const char *procname) {
-    // 非 LTW 渲染器：直接调用原始 SDL_GL_GetProcAddress
-    if (!g_ltw_active || !g_ltw_eglGetProcAddress || !procname) {
-        return g_orig_sdl_GL_GetProcAddress ? g_orig_sdl_GL_GetProcAddress(procname) : NULL;
-    }
-
-    // LTW 渲染器激活：对于 GL/EGL 函数，优先从 LTW 获取 wrapper
-    // LTW 的 eglGetProcAddress 对于 override 的函数返回 wrapper，
-    // 对于非 override 的函数 fallback 到 host_eglGetProcAddress
-    // （iOS 上为 OpenGLES.framework dlsym）
-    if ((procname[0] == 'g' && procname[1] == 'l') ||
-        (procname[0] == 'e' && procname[1] == 'g' && procname[2] == 'l')) {
-        void *func = g_ltw_eglGetProcAddress(procname);
-        if (func) {
-            return func;
-        }
-    }
-
-    // fallback：调用原始 SDL_GL_GetProcAddress（OpenGLES.framework dlsym）
-    return g_orig_sdl_GL_GetProcAddress ? g_orig_sdl_GL_GetProcAddress(procname) : NULL;
-}
-
-// ============================================================================
 // SDL3 native hook（关键修复 MC 26.3-snapshot-4+ SDL3 启动崩溃）
 // ============================================================================
 // 背景：
@@ -978,14 +902,10 @@ void init_hookFunctions() {
         {"SDL_CreateWindow", amethyst_fishhook_SDL_CreateWindow, (void *)&g_fishhook_orig_sdl_CreateWindow},
         // SDL_InitSubSystem 通过 fishhook 重绑定（参照 Android 仓库 sdl_hook.c）
         // 拦截 MC 调用 SDL_Init/SDL_InitSubSystem，设置 SDL_RETURN_KEY_HIDES_IME 等 hints
-        {"SDL_InitSubSystem", amethyst_fishhook_SDL_InitSubSystem, NULL},
-        // SDL_GL_GetProcAddress 通过 fishhook 重绑定（LTW 渲染器专用）
-        // 拦截 MC/LWJGL 获取 GL 函数指针的请求，对于 LTW override 的函数
-        // 返回 LTW wrapper，修复 sodium 白屏（详见文件前部 LTW Hook 注释）
-        {"SDL_GL_GetProcAddress", amethyst_fishhook_SDL_GL_GetProcAddress, (void *)&g_orig_sdl_GL_GetProcAddress}
+        {"SDL_InitSubSystem", amethyst_fishhook_SDL_InitSubSystem, NULL}
     };
     rebind_symbols(rebindings, sizeof(rebindings)/sizeof(struct rebinding));
-    NSLog(@"[main_hook] SDL3 dlsym + fishhook hook registered (SDL_CreateWindow + SDL_InitSubSystem + SDL_GL_GetProcAddress)");
+    NSLog(@"[main_hook] SDL3 dlsym + fishhook hook registered (SDL_CreateWindow + SDL_InitSubSystem)");
 
     // 注意：不在此处预加载 libSDL3.dylib。
     //

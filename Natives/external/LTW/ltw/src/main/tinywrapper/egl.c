@@ -20,67 +20,14 @@ static void ltw_make_context_key(void) {
     pthread_key_create(&ltw_context_key, NULL);
 }
 
-// 前向声明：init_context 和 init_incontext 在文件后部定义，
-// ltw_ensure_default_context（iOS 自动初始化路径）需要调用它们
-static bool init_context(context_t* tw_context);
-static void init_incontext(context_t* tw_context);
-
 context_t *ltw_get_current_context(void) {
     pthread_once(&ltw_context_key_once, ltw_make_context_key);
-    context_t *ctx = pthread_getspecific(ltw_context_key);
-    if (!ctx) {
-        // iOS 自动初始化：EAGLContext 已 current 但 LTW 的 eglMakeCurrent 未被调用
-        // （iOS SDL3 UIKit 后端用 EAGL，不走 EGL）。此时创建一个默认 context_t，
-        // 让 LTW 的 GL wrapper 能正常工作。
-        ctx = ltw_ensure_default_context();
-    }
-    return ctx;
+    return pthread_getspecific(ltw_context_key);
 }
 
 void ltw_set_current_context(context_t *ctx) {
     pthread_once(&ltw_context_key_once, ltw_make_context_key);
     pthread_setspecific(ltw_context_key, ctx);
-}
-
-// ============================================================================
-// iOS 自动初始化：当 EAGLContext 已 current 但 LTW 的 eglMakeCurrent 未被调用时
-// （iOS SDL3 UIKit 后端用 EAGL，不走 EGL），创建一个默认 context_t。
-// ============================================================================
-// 背景：iOS SDL3 没有 EGL 支持，UIKit 后端用 EAGLContext 创建 GL context。
-// LTW 的 eglCreateContext/eglMakeCurrent wrapper 永远不会被调用，导致
-// context_map 为空，current_context 永远为 NULL。所有 GL wrapper 内部
-// `if(!current_context) return;` 静默返回，shader source 不被设置，
-// 导致 sodium 白屏。
-//
-// 修复：在 current_context 为 NULL 时自动创建一个默认 context_t 并初始化。
-// 调用时机：MC 第一次通过 SDL_GL_GetProcAddress 获取 LTW wrapper 并调用时，
-// 此时 EAGLContext 一定已 current（否则 MC 的 GL 调用本身会失败）。
-static bool g_default_context_init_failed = false;
-
-context_t *ltw_ensure_default_context(void) {
-    pthread_once(&ltw_context_key_once, ltw_make_context_key);
-    context_t *ctx = pthread_getspecific(ltw_context_key);
-    if (ctx) return ctx;
-    if (g_default_context_init_failed) return NULL;
-
-    // 创建默认 context_t
-    ctx = calloc(1, sizeof(context_t));
-    if (!ctx || !init_context(ctx)) {
-        if (ctx) free(ctx);
-        g_default_context_init_failed = true;
-        printf("LTW: Failed to allocate default context for iOS EAGL\n");
-        return NULL;
-    }
-
-    // 初始化 incontext（调用 es3_functions.glGetIntegerv 等，需要 GL context current）
-    // iOS 上 EAGLContext 应该已 current（否则 GL 调用本身会失败）
-    init_incontext(ctx);
-    ctx->context_rdy = true;
-    ctx->phys_context = EGL_NO_CONTEXT;  // 标记为默认 context（无物理 EGL context）
-
-    pthread_setspecific(ltw_context_key, ctx);
-    printf("LTW: Created default context for iOS EAGL (auto-init)\n");
-    return ctx;
 }
 
 unordered_map* context_map;

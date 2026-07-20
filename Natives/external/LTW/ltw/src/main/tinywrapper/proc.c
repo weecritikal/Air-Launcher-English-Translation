@@ -32,29 +32,6 @@ static void error_init(const char* functionName) {
     abort();
 }
 
-// ============================================================================
-// iOS 专用：从 OpenGLES.framework 加载 GL 函数
-// ============================================================================
-// 背景：iOS SDL3 UIKit 后端用 EAGL（EAGLContext）创建 GL context，完全绕过
-// LTW 的 EGL wrapper（eglCreateContext/eglMakeCurrent）。LTW 的 GL wrapper
-// 内部调用 es3_functions.xxx，这些函数指针必须指向与 EAGLContext 配合的
-// 实现，即 OpenGLES.framework 的原生 ES3 实现。
-//
-// 非 iOS 平台（Android/Linux）仍从 ANGLE EGL 加载（通过 eglGetProcAddress）。
-static void *ios_gles_handle = NULL;
-
-static eglMustCastToProperFunctionPointerType ios_gl_get_proc_address(const char *procname) {
-    if (!ios_gles_handle) {
-        ios_gles_handle = dlopen("/System/Library/Frameworks/OpenGLES.framework/OpenGLES",
-                                 RTLD_LAZY | RTLD_GLOBAL);
-        if (!ios_gles_handle) {
-            fprintf(stderr, "LTWInit: Failed to load OpenGLES.framework: %s\n", dlerror());
-            return NULL;
-        }
-    }
-    return (eglMustCastToProperFunctionPointerType)dlsym(ios_gles_handle, procname);
-}
-
 static void init_es3_proc() {
 #define GLESFUNC(name, type) es3_functions.name = (type)host_eglGetProcAddress(#name); if(es3_functions.name == NULL) error_init(#name);
 #include "es3_functions.h"
@@ -65,45 +42,29 @@ static void init_es3_proc() {
 }
 
 __attribute__((constructor, used)) void proc_init(){
-    // ============================================================================
-    // iOS 路径：从 OpenGLES.framework 加载 GL 函数
-    // ============================================================================
-    // iOS SDL3 UIKit 后端用 EAGL（EAGLContext）创建 GL context，不走 EGL。
-    // LTW 的 GL wrapper 内部调用 es3_functions.xxx，必须指向 OpenGLES.framework
-    // 的原生 ES3 实现，才能与 EAGLContext 配合工作。
-    //
-    // 注意：iOS 上 host_eglCreateContext/Destroy/MakeCurrent 会为 NULL
-    // （OpenGLES.framework 不导出 EGL 函数），但 iOS 上 LTW 的 EGL wrapper
-    // 不会被调用，current_context 通过 ltw_ensure_default_context() 自动初始化。
-    void* glesHandle = dlopen("/System/Library/Frameworks/OpenGLES.framework/OpenGLES",
-                              RTLD_LAZY | RTLD_GLOBAL);
-    if (glesHandle != NULL) {
-        host_eglGetProcAddress = ios_gl_get_proc_address;
-        printf("LTWInit: iOS path active, loading GL functions from OpenGLES.framework\n");
-    } else {
-        // ============================================================================
-        // 非 iOS 路径（Android/Linux）：从 ANGLE EGL 加载（原逻辑）
-        // ============================================================================
-        void* angleHandle = dlopen("@rpath/libtinygl4angle.dylib", RTLD_LAZY | RTLD_LOCAL);
-        if (angleHandle != NULL) {
-            host_eglGetProcAddress = dlsym(angleHandle, "eglGetProcAddress");
+    // On iOS, ANGLE EGL is pre-loaded by the bridge. Get the real eglGetProcAddress
+    // from ANGLE's dylib explicitly, avoiding our own exported eglGetProcAddress.
+    void* angleHandle = dlopen("@rpath/libtinygl4angle.dylib", RTLD_LAZY | RTLD_LOCAL);
+    if (angleHandle != NULL) {
+        host_eglGetProcAddress = dlsym(angleHandle, "eglGetProcAddress");
+    }
+    // Fall back to RTLD_DEFAULT for non-iOS platforms.
+    if (host_eglGetProcAddress == NULL) {
+        host_eglGetProcAddress = dlsym(RTLD_DEFAULT, "eglGetProcAddress");
+    }
+    if (host_eglGetProcAddress == NULL) {
+        // Android/Linux path: try dlopen on system EGL
+        const char* systemEglPath = "libEGL.so";
+        const char* eglPath = getenv("LIBGL_EGL") != NULL ? getenv("LIBGL_EGL") : systemEglPath;
+        int flags = RTLD_LAZY | RTLD_LOCAL;
+        void* eglHandle = dlopen(eglPath, flags);
+        if(eglHandle == NULL){
+            printf("LTWInit: failed loading custom libEGL, using default\n");
+            eglHandle = dlopen(systemEglPath, flags);
+            if(eglHandle == NULL)
+                error_sysegl();
         }
-        if (host_eglGetProcAddress == NULL) {
-            host_eglGetProcAddress = dlsym(RTLD_DEFAULT, "eglGetProcAddress");
-        }
-        if (host_eglGetProcAddress == NULL) {
-            const char* systemEglPath = "libEGL.so";
-            const char* eglPath = getenv("LIBGL_EGL") != NULL ? getenv("LIBGL_EGL") : systemEglPath;
-            int flags = RTLD_LAZY | RTLD_LOCAL;
-            void* eglHandle = dlopen(eglPath, flags);
-            if(eglHandle == NULL){
-                printf("LTWInit: failed loading custom libEGL, using default\n");
-                eglHandle = dlopen(systemEglPath, flags);
-                if(eglHandle == NULL)
-                    error_sysegl();
-            }
-            host_eglGetProcAddress = dlsym(eglHandle, "eglGetProcAddress");
-        }
+        host_eglGetProcAddress = dlsym(eglHandle, "eglGetProcAddress");
     }
     if(host_eglGetProcAddress == NULL) error_sysegl();
     init_egl();

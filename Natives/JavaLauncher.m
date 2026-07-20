@@ -500,12 +500,6 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
         if ([renderer isEqualToString:@ RENDERER_NAME_LTW]) {
             setenv("POJAVEXEC_EGL", RENDERER_NAME_LTW, 1);
             NSLog(@"[JavaLauncher] LTW renderer active: using LTW defaults (same as Android)");
-            // 通知 main_hook.m 激活 SDL_GL_GetProcAddress 拦截（修复 sodium 白屏）
-            // iOS SDL3 无 EGL 支持，UIKit 后端用 EAGL 创建 GL context，绕过 LTW 的
-            // EGL wrapper。必须拦截 SDL_GL_GetProcAddress 让 MC 获取 LTW wrapper，
-            // 否则 sodium 的 GLSL 460 代码无法转换为 ESSL 300，地形白屏。
-            extern void amethyst_set_ltw_active(BOOL active);
-            amethyst_set_ltw_active(YES);
         }
         // Setup AMETHYST_GRAPHICS_API（MC 26.2+ Graphics API：default/vulkan/opengl）
         // 仅 MC 26.2+ 识别此选项，旧版本 MC 会忽略 options.txt 中的 graphicsApi 字段。
