@@ -224,6 +224,7 @@
 "preference.title.renderer.debug.auto" = "自动：gl4es或MobileGlues";
 "preference.title.renderer.debug.gl4es" = "holy gl4es 1.1.4 - OpenGL版本2.1";
 "preference.title.renderer.debug.angle" = "ANGLE（仅支持1.17+）- OpenGL 版本 3.2";
+"preference.title.renderer.debug.mg" = "MobileGlues（1.17+）- OpenGL 版本 4.0，实验性";
 "preference.title.renderer.debug.zink" = "Zink（Mesa 25.0.7）- OpenGL 版本 4.1";
 "preference.title.renderer.debug.ltw" = "LTW - OpenGL Core→ES 转译（完美支持Sodium+光影）";
 "preference.title.renderer.debug.vulkan" = "MoltenVK（26.2+）- 导出 Vulkan 1.4";

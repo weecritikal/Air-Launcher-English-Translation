@@ -229,7 +229,14 @@ int pojavInitOpenGL() {
         char sdlGlLib[256];
         snprintf(sdlGlLib, sizeof(sdlGlLib), "@rpath/%s", renderer.UTF8String);
         char sdlEglLib[256];
-        snprintf(sdlEglLib, sizeof(sdlEglLib), "@rpath/%s", RENDERER_NAME_MTL_ANGLE);
+        // LTW 模式下，SDL3 的 EGL 必须从 libltw.dylib 加载（LTW 实现了自己的 EGL wrapper：
+        // eglCreateContext/eglDestroyContext/eglMakeCurrent，会在内部转发到 ANGLE ES3 context）
+        // 其他 GL 渲染器（gl4es/ANGLE/MobileGlues）直接使用 ANGLE 的 EGL
+        if ([renderer isEqualToString:@ RENDERER_NAME_LTW]) {
+            snprintf(sdlEglLib, sizeof(sdlEglLib), "@rpath/%s", RENDERER_NAME_LTW);
+        } else {
+            snprintf(sdlEglLib, sizeof(sdlEglLib), "@rpath/%s", RENDERER_NAME_MTL_ANGLE);
+        }
         setenv("SDL_OPENGL_LIBRARY", sdlGlLib, 1);
         setenv("SDL_EGL_LIBRARY", sdlEglLib, 1);
         NSLog(@"[egl_bridge] SDL3 GL/EGL library redirect (GLFW backup): SDL_OPENGL_LIBRARY=%s, SDL_EGL_LIBRARY=%s",
