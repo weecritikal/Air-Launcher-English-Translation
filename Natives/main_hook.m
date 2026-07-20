@@ -13,6 +13,10 @@ void* (*orig_dlopen)(const char* path, int mode);
 void* (*orig_dlsym)(void* handle, const char* name);
 int (*orig_open)(const char *path, int oflag, ...);
 
+// 前向声明：zink stride fix 状态变量（定义在文件后部 Vulkan stride fix 区域，
+// 但 hooked_dlopen 在文件前部就需要引用它来检测 libOSMesa 加载）
+static BOOL g_zinkStrideFixActive = NO;
+
 // ============================================================================
 // SDL3 native hook（关键修复 MC 26.3-snapshot-4+ SDL3 启动崩溃）
 // ============================================================================
@@ -238,8 +242,7 @@ typedef VkZResult (*PFN_zkCreateGraphicsPipelines)(
 typedef void* (*PFN_zkGetInstanceProcAddr)(VkZInstance, const char*);
 typedef void* (*PFN_zkGetDeviceProcAddr)(VkZDevice, const char*);
 
-// Stride fix 状态
-static BOOL g_zinkStrideFixActive = NO;
+// Stride fix 状态（g_zinkStrideFixActive 已在文件前部前向声明）
 static PFN_zkGetInstanceProcAddr g_real_vkGetInstanceProcAddr = NULL;
 static PFN_zkGetDeviceProcAddr g_real_vkGetDeviceProcAddr = NULL;
 static PFN_zkCreateGraphicsPipelines g_real_vkCreateGraphicsPipelines = NULL;
@@ -470,16 +473,17 @@ void* hooked_dlsym(void* handle, const char* name) {
         }
 
         if (strcmp(name, "SDL_CreateWindow") == 0) {
-        NSLog(@"[SDL3 Hook] dlsym intercepted: SDL_CreateWindow -> returning hook");
-        // 首次拦截时，用 orig_dlsym 获取原始函数指针并保存
-        // （amethyst_sdl_create_window_with_scene 内部会通过 amethyst_orig_dlsym
-        //  重新获取 SDL3 函数指针，这里保存只是为了诊断/备份用途）
-        if (!g_orig_sdl_CreateWindow && orig_dlsym) {
-            g_orig_sdl_CreateWindow = (SDL_Window *(*)(const char *, int, int, unsigned int))
-                orig_dlsym(handle, name);
-            NSLog(@"[SDL3 Hook] Original SDL_CreateWindow saved: %p", (void *)g_orig_sdl_CreateWindow);
+            NSLog(@"[SDL3 Hook] dlsym intercepted: SDL_CreateWindow -> returning hook");
+            // 首次拦截时，用 orig_dlsym 获取原始函数指针并保存
+            // （amethyst_sdl_create_window_with_scene 内部会通过 amethyst_orig_dlsym
+            //  重新获取 SDL3 函数指针，这里保存只是为了诊断/备份用途）
+            if (!g_orig_sdl_CreateWindow && orig_dlsym) {
+                g_orig_sdl_CreateWindow = (SDL_Window *(*)(const char *, int, int, unsigned int))
+                    orig_dlsym(handle, name);
+                NSLog(@"[SDL3 Hook] Original SDL_CreateWindow saved: %p", (void *)g_orig_sdl_CreateWindow);
+            }
+            return (void *)amethyst_hooked_SDL_CreateWindow;
         }
-        return (void *)amethyst_hooked_SDL_CreateWindow;
     }
     return orig_dlsym(handle, name);
 }
