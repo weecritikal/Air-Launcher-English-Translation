@@ -491,19 +491,23 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
         }
 
         // Apply LTW-specific environment variables if LTW renderer is selected
-        // LTW (Large Thin Wrapper) 完美支持 Sodium + Iris 光影（参照 Android 端 LTW 实现）
+        // LTW (Large Thin Wrapper) OpenGL Core 3.3 → ES 3 转译层
         //   - LIBGL_ES=3：指定 LTW 包装目标为 OpenGL ES 3
-        //   - LTW_NEVER_FLUSH_BUFFERS=1：减少 Sodium buffer 同步开销（main.c constructor 默认 true，这里显式设置便于诊断）
-        //   - LTW_COHERENT_DYNAMIC_STORAGE=1：绕过驱动对 dynamic storage buffer 的 bug（默认 true）
-        //   - LIBGL_NOERROR=1：忽略 GL 错误，提升性能（部分光影 mod 会触发非致命 GL 错误）
+        //   - LTW_NEVER_FLUSH_BUFFERS=1：sodium 的 persistent mapped buffer 自动加 coherent bit
+        //     保证数据可见性，无需 flush（main.c constructor 默认 true）
+        //   - LTW_COHERENT_DYNAMIC_STORAGE=0：禁用 Android 驱动 workaround。LTW 默认会强制给
+        //     sodium 的 GL_DYNAMIC_STORAGE_BIT buffer 加上 GL_MAP_PERSISTENT_BIT |
+        //     GL_MAP_COHERENT_BIT，在 iOS ANGLE/Metal 后端下会破坏 sodium 通过
+        //     glBufferSubData 更新 vertex buffer 的可见性语义，导致地形一片白
+        //   - LIBGL_NOERROR=1：忽略非致命 GL 错误（部分光影 mod 会触发）
         //   - POJAVEXEC_EGL=libltw.dylib：标识当前 EGL 由 LTW 提供（对齐 Android 端语义）
         if ([renderer isEqualToString:@ RENDERER_NAME_LTW]) {
             setenv("LIBGL_ES", "3", 1);
             setenv("LTW_NEVER_FLUSH_BUFFERS", "1", 1);
-            setenv("LTW_COHERENT_DYNAMIC_STORAGE", "1", 1);
+            setenv("LTW_COHERENT_DYNAMIC_STORAGE", "0", 1);
             setenv("LIBGL_NOERROR", "1", 1);
             setenv("POJAVEXEC_EGL", RENDERER_NAME_LTW, 1);
-            NSLog(@"[JavaLauncher] LTW renderer active: LIBGL_ES=3, LTW_NEVER_FLUSH_BUFFERS=1, LTW_COHERENT_DYNAMIC_STORAGE=1, LIBGL_NOERROR=1");
+            NSLog(@"[JavaLauncher] LTW renderer active: LIBGL_ES=3, LTW_NEVER_FLUSH_BUFFERS=1, LTW_COHERENT_DYNAMIC_STORAGE=0, LIBGL_NOERROR=1");
         }
         // Setup AMETHYST_GRAPHICS_API（MC 26.2+ Graphics API：default/vulkan/opengl）
         // 仅 MC 26.2+ 识别此选项，旧版本 MC 会忽略 options.txt 中的 graphicsApi 字段。
