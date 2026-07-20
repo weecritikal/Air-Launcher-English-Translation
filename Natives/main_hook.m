@@ -118,11 +118,25 @@ void* hooked_dlopen(const char* path, int mode) {
     // Only proceed to check if dylib is in the home dir
     char fullpath[PATH_MAX];
     if (!path || !realpath(path, fullpath) || !strstr(fullpath, home)) {
-        return orig_dlopen(path, mode);
+        // 即使 path 不在 home 目录，也检查是否是 libSDL3.dylib
+        // MC 26.3-snapshot-4+ 加载 libSDL3.dylib 后，需要立即对 SDL_CreateWindow
+        // 进行 fishhook 符号重绑定（dlsym hook 对 MC 的 SDL3 调用方式无效）
+        void *handle = orig_dlopen(path, mode);
+        if (handle && path && strstr(path, "libSDL3")) {
+            NSLog(@"[SDL3 Hook] libSDL3.dylib loaded via dlopen, rebinding SDL_CreateWindow via fishhook");
+            // 重新注册所有 hook，包括 SDL_CreateWindow
+            init_hookFunctions();
+        }
+        return handle;
     }
 
     PLPatchMachOPlatformForFile(path);
-    return orig_dlopen(path, mode);
+    void *handle = orig_dlopen(path, mode);
+    if (handle && path && strstr(path, "libSDL3")) {
+        NSLog(@"[SDL3 Hook] libSDL3.dylib loaded via dlopen (home), rebinding SDL_CreateWindow via fishhook");
+        init_hookFunctions();
+    }
+    return handle;
 }
 
 /// dlsym hook：拦截 SDL3 关键函数请求，返回我们的 hook 函数
@@ -161,6 +175,24 @@ int hooked_open(const char *path, int oflag, ...) {
     return orig_open(path, oflag, mode);
 }
 
+// 原始 SDL_CreateWindow 函数指针（fishhook 捕获后保存）
+// 与 g_orig_sdl_CreateWindow 不同，这个是从 fishhook rebind 捕获的
+static SDL_Window *(*g_fishhook_orig_sdl_CreateWindow)(const char *, int, int, unsigned int) = NULL;
+
+/// fishhook 版本的 SDL_CreateWindow hook
+/// 与 dlsym hook 的 amethyst_hooked_SDL_CreateWindow 功能相同，
+/// 但通过 fishhook 的符号重绑定机制拦截，不需要 dlsym。
+/// 这对 MC 26.3-snapshot-4+ 通过 LWJGL SharedLibrary.getFunctionAddress
+/// 或 JNA 直接获取 SDL_CreateWindow 地址的方式有效。
+static SDL_Window *amethyst_fishhook_SDL_CreateWindow(const char *title, int w, int h, unsigned int flags) {
+    NSLog(@"[SDL3 Hook] fishhook SDL_CreateWindow intercepted: title=%s w=%d h=%d flags=0x%x",
+          title ? title : "(null)", w, h, flags);
+    // 调用我们的桥接函数（会用 Properties API 传入 UIWindowScene）
+    SDL_Window *window = amethyst_sdl_create_window_with_scene(w, h, flags);
+    NSLog(@"[SDL3 Hook] fishhook amethyst_sdl_create_window_with_scene returned: %p", window);
+    return window;
+}
+
 void init_hookFunctions() {
     struct rebinding rebindings[] = (struct rebinding[]){
         {"abort", hooked_abort, (void *)&orig_abort},
@@ -168,8 +200,14 @@ void init_hookFunctions() {
         {"exit", hooked_exit, (void *)&orig_exit},
         {"dlopen", hooked_dlopen, (void *)&orig_dlopen},
         {"dlsym", hooked_dlsym, (void *)&orig_dlsym},
-        {"open", hooked_open, (void *)&orig_open}
+        {"open", hooked_open, (void *)&orig_open},
+        // SDL_CreateWindow 通过 fishhook 直接重绑定符号
+        // （MC 26.3-snapshot-4+ 不通过 dlsym 获取 SDL_CreateWindow，
+        //  而是通过 LWJGL SharedLibrary.getFunctionAddress 或 JNA，
+        //  fishhook 可以直接修改符号表引用）
+        {"SDL_CreateWindow", amethyst_fishhook_SDL_CreateWindow, (void *)&g_fishhook_orig_sdl_CreateWindow}
     };
     rebind_symbols(rebindings, sizeof(rebindings)/sizeof(struct rebinding));
-    NSLog(@"[main_hook] SDL3 dlsym hook registered (amethyst_hooked_SDL_CreateWindow=%p)", (void *)amethyst_hooked_SDL_CreateWindow);
+    NSLog(@"[main_hook] SDL3 dlsym + fishhook hook registered (amethyst_hooked_SDL_CreateWindow=%p, amethyst_fishhook_SDL_CreateWindow=%p)",
+          (void *)amethyst_hooked_SDL_CreateWindow, (void *)amethyst_fishhook_SDL_CreateWindow);
 }
