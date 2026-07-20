@@ -336,13 +336,16 @@ typedef void* (*PFN_zkGetInstanceProcAddr)(VkZInstance, const char*);
 typedef void* (*PFN_zkGetDeviceProcAddr)(VkZDevice, const char*);
 
 // vkCmd* 函数指针类型（用于 dummy pipeline skip draws）
+// 参数数量严格匹配 Vulkan 标准签名（vulkan_core.h），避免与函数实现调用不一致
 typedef void (*PFN_zkCmdBindPipeline)(VkZCommandBuffer, VkZPipelineBindPoint, VkZPipeline);
 typedef void (*PFN_zkCmdDraw)(VkZCommandBuffer, uint32_t, uint32_t, uint32_t, uint32_t);
 typedef void (*PFN_zkCmdDrawIndexed)(VkZCommandBuffer, uint32_t, uint32_t, uint32_t, int32_t, uint32_t);
-typedef void (*PFN_zkCmdDrawIndirect)(VkZCommandBuffer, uint64_t, uint32_t, uint32_t);
-typedef void (*PFN_zkCmdDrawIndexedIndirect)(VkZCommandBuffer, uint64_t, uint32_t, uint32_t);
-typedef void (*PFN_zkCmdDrawIndirectCount)(VkZCommandBuffer, uint64_t, uint64_t, uint32_t, uint32_t);
-typedef void (*PFN_zkCmdDrawIndexedIndirectCount)(VkZCommandBuffer, uint64_t, uint64_t, uint32_t, uint32_t);
+// vkCmdDrawIndirect(cmd, buffer, offset, drawCount, stride) — 5 个参数
+typedef void (*PFN_zkCmdDrawIndirect)(VkZCommandBuffer, uint64_t, uint64_t, uint32_t, uint32_t);
+typedef void (*PFN_zkCmdDrawIndexedIndirect)(VkZCommandBuffer, uint64_t, uint64_t, uint32_t, uint32_t);
+// vkCmdDrawIndirectCount(cmd, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride) — 7 个参数
+typedef void (*PFN_zkCmdDrawIndirectCount)(VkZCommandBuffer, uint64_t, uint64_t, uint64_t, uint64_t, uint32_t, uint32_t);
+typedef void (*PFN_zkCmdDrawIndexedIndirectCount)(VkZCommandBuffer, uint64_t, uint64_t, uint64_t, uint64_t, uint32_t, uint32_t);
 
 // Stride fix 状态（g_zinkStrideFixActive 已在文件前部前向声明）
 static PFN_zkGetInstanceProcAddr g_real_vkGetInstanceProcAddr = NULL;
