@@ -47,6 +47,92 @@ extern SDL_Window *amethyst_sdl_create_window_with_scene(int w, int h, unsigned 
 // 原始 SDL_CreateWindow 函数指针（dlsym hook 捕获后保存）
 static SDL_Window *(*g_orig_sdl_CreateWindow)(const char *, int, int, unsigned int) = NULL;
 
+// ============================================================================
+// SDL_InitSubSystem hook（参照 Amethyst-Android feat/lwjgl3ify-sdl-support 分支）
+// ============================================================================
+// 背景：
+//   MC 26.3-snapshot-4+ 用 SDL3 替代 GLFW。MC 启动时调用 SDL_Init / SDL_InitSubSystem
+//   初始化 SDL3 子系统（video/gamepad/joystick/events 等）。
+//
+//   Android 仓库的 sdl_hook.c 在 SDL_InitSubSystem 被调用时：
+//     1. 通过 JNI 调用 CallbackBridge.notifyLauncher(SDL, INIT) 通知启动器
+//     2. 设置 SDL_RETURN_KEY_HIDES_IME=true hint（让 Return 键隐藏软键盘，避免
+//        MC 误处理 IME 事件导致输入异常）
+//     3. 调用原始 SDL_InitSubSystem
+//
+//   iOS 移植：不需要 JNI 通知（iOS 启动器与 MC 在同一进程，直接共享状态），
+//   但 SDL_RETURN_KEY_HIDES_IME hint 必须设置，否则 MC 26.3-snapshot-4 的
+//   软键盘输入会卡住，可能导致启动时输入框阻塞主线程。
+
+// SDL3 函数指针类型
+typedef int SDL_bool;                    // SDL_bool = int (SDL_TRUE=1, SDL_FALSE=0)
+typedef unsigned int SDL_InitFlags;      // SDL_InitFlags = Uint32
+typedef int (*SDL_InitSubSystem_t)(SDL_InitFlags flags);
+typedef SDL_bool (*SDL_SetHint_t)(const char *name, const char *value);
+
+// 原始 SDL_InitSubSystem / SDL_SetHint 函数指针
+static SDL_InitSubSystem_t g_orig_sdl_InitSubSystem = NULL;
+static SDL_SetHint_t g_orig_sdl_SetHint = NULL;
+static BOOL g_sdl3_init_hook_done = NO;
+
+/// hook 函数：替换 SDL_InitSubSystem
+/// 签名：int SDL_InitSubSystem(Uint32 flags)
+static int amethyst_hooked_SDL_InitSubSystem(unsigned int flags) {
+    NSLog(@"[SDL3 Hook] SDL_InitSubSystem intercepted: flags=0x%x", flags);
+
+    // 首次调用时设置 SDL_RETURN_KEY_HIDES_IME hint（参照 Android 仓库 sdl_hook.c）
+    // 这必须在调用原始 SDL_InitSubSystem 之前设置，确保 hint 在 SDL 初始化时生效
+    if (!g_sdl3_init_hook_done) {
+        g_sdl3_init_hook_done = YES;
+        if (g_orig_sdl_SetHint) {
+            // SDL_RETURN_KEY_HIDES_IME=true：按 Return 键隐藏 IME
+            // Android 仓库注释："This is the normal for the launcher, the default in SDL is false."
+            g_orig_sdl_SetHint("SDL_RETURN_KEY_HIDES_IME", "true");
+            NSLog(@"[SDL3 Hook] Set SDL_RETURN_KEY_HIDES_IME=true");
+
+            // 额外设置 iOS 专用 hints
+            // SDL_HINT_IOS_HIDE_HOME_INDICATOR=1：隐藏 home indicator（沉浸式游戏体验）
+            g_orig_sdl_SetHint("SDL_IOS_HIDE_HOME_INDICATOR", "1");
+            // SDL_HINT_MOUSE_TOUCH_EVENTS=0：禁用鼠标模拟触摸事件（避免输入冲突）
+            g_orig_sdl_SetHint("SDL_MOUSE_TOUCH_EVENTS", "0");
+            // SDL_HINT_TOUCH_MOUSE_EVENTS=0：禁用触摸模拟鼠标事件（启动器自己处理触摸）
+            g_orig_sdl_SetHint("SDL_TOUCH_MOUSE_EVENTS", "0");
+            NSLog(@"[SDL3 Hook] Set iOS-specific SDL hints (hide home indicator, disable mouse/touch cross-events)");
+        } else {
+            NSLog(@"[SDL3 Hook] WARNING: SDL_SetHint not available, cannot set SDL_RETURN_KEY_HIDES_IME");
+        }
+    }
+
+    // 调用原始 SDL_InitSubSystem
+    if (!g_orig_sdl_InitSubSystem) {
+        // 首次调用时通过 orig_dlsym 获取原始函数指针
+        void *sdl_lib = dlopen("@rpath/libSDL3.dylib", RTLD_NOLOAD | RTLD_GLOBAL);
+        if (!sdl_lib) {
+            sdl_lib = dlopen("libSDL3.dylib", RTLD_NOLOAD | RTLD_GLOBAL);
+        }
+        if (sdl_lib && orig_dlsym) {
+            g_orig_sdl_InitSubSystem = (SDL_InitSubSystem_t)orig_dlsym(sdl_lib, "SDL_InitSubSystem");
+            g_orig_sdl_SetHint = (SDL_SetHint_t)orig_dlsym(sdl_lib, "SDL_SetHint");
+            NSLog(@"[SDL3 Hook] Resolved original SDL_InitSubSystem=%p, SDL_SetHint=%p",
+                  (void*)g_orig_sdl_InitSubSystem, (void*)g_orig_sdl_SetHint);
+        }
+    }
+
+    if (g_orig_sdl_InitSubSystem) {
+        int result = g_orig_sdl_InitSubSystem(flags);
+        NSLog(@"[SDL3 Hook] Original SDL_InitSubSystem returned: %d", result);
+        return result;
+    }
+
+    NSLog(@"[SDL3 Hook] FATAL: Original SDL_InitSubSystem not found, returning -1");
+    return -1;
+}
+
+/// fishhook 版本的 SDL_InitSubSystem hook
+static int amethyst_fishhook_SDL_InitSubSystem(unsigned int flags) {
+    return amethyst_hooked_SDL_InitSubSystem(flags);
+}
+
 /// 提供给 egl_bridge.m 使用的"绕过 hook"的 dlsym
 /// egl_bridge.m 在获取 SDL3 函数指针时必须调用此函数，否则会被 hooked_dlsym
 /// 拦截（SDL_CreateWindow 请求会返回 hook 函数，导致无限递归）。
@@ -751,6 +837,19 @@ void* hooked_dlsym(void* handle, const char* name) {
             }
             return (void *)amethyst_hooked_SDL_CreateWindow;
         }
+
+        // SDL_InitSubSystem hook（参照 Android 仓库 sdl_hook.c）
+        // MC 26.3-snapshot-4+ 启动时调用 SDL_Init / SDL_InitSubSystem 初始化子系统
+        if (strcmp(name, "SDL_InitSubSystem") == 0) {
+            NSLog(@"[SDL3 Hook] dlsym intercepted: SDL_InitSubSystem -> returning hook");
+            if (!g_orig_sdl_InitSubSystem && orig_dlsym) {
+                g_orig_sdl_InitSubSystem = (SDL_InitSubSystem_t)orig_dlsym(handle, name);
+                g_orig_sdl_SetHint = (SDL_SetHint_t)orig_dlsym(handle, "SDL_SetHint");
+                NSLog(@"[SDL3 Hook] Original SDL_InitSubSystem=%p, SDL_SetHint=%p",
+                      (void*)g_orig_sdl_InitSubSystem, (void*)g_orig_sdl_SetHint);
+            }
+            return (void *)amethyst_hooked_SDL_InitSubSystem;
+        }
     }
     return orig_dlsym(handle, name);
 }
@@ -797,11 +896,13 @@ void init_hookFunctions() {
         // （MC 26.3-snapshot-4+ 不通过 dlsym 获取 SDL_CreateWindow，
         //  而是通过 LWJGL SharedLibrary.getFunctionAddress 或 JNA，
         //  fishhook 可以直接修改符号表引用）
-        {"SDL_CreateWindow", amethyst_fishhook_SDL_CreateWindow, (void *)&g_fishhook_orig_sdl_CreateWindow}
+        {"SDL_CreateWindow", amethyst_fishhook_SDL_CreateWindow, (void *)&g_fishhook_orig_sdl_CreateWindow},
+        // SDL_InitSubSystem 通过 fishhook 重绑定（参照 Android 仓库 sdl_hook.c）
+        // 拦截 MC 调用 SDL_Init/SDL_InitSubSystem，设置 SDL_RETURN_KEY_HIDES_IME 等 hints
+        {"SDL_InitSubSystem", amethyst_fishhook_SDL_InitSubSystem, NULL}
     };
     rebind_symbols(rebindings, sizeof(rebindings)/sizeof(struct rebinding));
-    NSLog(@"[main_hook] SDL3 dlsym + fishhook hook registered (amethyst_hooked_SDL_CreateWindow=%p, amethyst_fishhook_SDL_CreateWindow=%p)",
-          (void *)amethyst_hooked_SDL_CreateWindow, (void *)amethyst_fishhook_SDL_CreateWindow);
+    NSLog(@"[main_hook] SDL3 dlsym + fishhook hook registered (SDL_CreateWindow + SDL_InitSubSystem)");
 
     // 注意：不在此处预加载 libSDL3.dylib。
     //
