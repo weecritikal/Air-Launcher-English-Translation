@@ -400,10 +400,12 @@ static void* amethyst_vkGetDeviceProcAddr(VkZDevice device, const char* pName) {
 /// 内部：执行 fishhook 重绑定（可在新 image 加载后重复调用以捕获新引用）
 /// fishhook 的 rebind_symbols 是幂等的——会遍历所有已加载 image 并重绑定
 /// vkGetInstanceProcAddr / vkGetDeviceProcAddr 的引用到我们的 wrapper。
+/// 使用静态存储的 rebindings 数组（避免栈上局部变量在 future-image 加载时 UAF：
+/// fishhook 会保留 rebindings 用于后续 dlopen 加载的 image）。
 static void zinkStrideFixRebind(void) {
-    struct rebinding rebindings[] = {
-        {"vkGetInstanceProcAddr", amethyst_vkGetInstanceProcAddr, (void**)&g_real_vkGetInstanceProcAddr},
-        {"vkGetDeviceProcAddr", amethyst_vkGetDeviceProcAddr, (void**)&g_real_vkGetDeviceProcAddr},
+    static struct rebinding rebindings[] = {
+        {"vkGetInstanceProcAddr", (void*)amethyst_vkGetInstanceProcAddr, (void**)&g_real_vkGetInstanceProcAddr},
+        {"vkGetDeviceProcAddr", (void*)amethyst_vkGetDeviceProcAddr, (void**)&g_real_vkGetDeviceProcAddr},
     };
     rebind_symbols(rebindings, sizeof(rebindings)/sizeof(struct rebinding));
 }
