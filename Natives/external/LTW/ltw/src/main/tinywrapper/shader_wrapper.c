@@ -8,6 +8,7 @@
 #include "vgpu_shaderconv/shaderconv.h"
 #include "glsl_optimizer/src/code/c_wrapper.h"
 #include <GLES3/gl3.h>
+#include <stdio.h>
 #include <string.h>
 #include "string_utils.h"
 #include "egl.h"

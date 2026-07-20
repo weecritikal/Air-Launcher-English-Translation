@@ -5,6 +5,7 @@
  */
 #include "proc.h"
 #include "egl.h"
+#include <stdio.h>
 #include <stdbool.h>
 #include "swizzle.h"
 void buffer_copier_init(context_t* context) {
