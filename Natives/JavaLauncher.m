@@ -218,15 +218,29 @@ void init_loadMobileGluesConfig() {
     NSMutableDictionary *config = [NSMutableDictionary dictionary];
 
     // 安全默认值
+    // 注意：MobileGlues 的 Version(int code) 构造函数把数字转为字符串后取前 3 位
+    // 作为 Major.Minor.Patch（settings.h 第 102-116 行）。例如 40 → "40" → 4.0.0。
+    // customGLVersion 约束（settings.cpp 第 71-79 行）：>46 截断为 46，<32 且非 0 截断为 32，
+    // 33-39 截断为 33，0 使用默认值 40。
+    // 因此必须写入十进制数（40, 41, 42, ..., 46），不能写入十六进制 0x040000。
     config[@"enableExtGL43"] = @1;
     config[@"enableExtDirectStateAccess"] = @1;
     config[@"maxGlslCacheSize"] = @128;
-    config[@"customGLVersion"] = @0x030100;
+    config[@"customGLVersion"] = @40;  // 十进制 40 = GL 4.0
 
     id enableAngle = getPrefObject(@"mobileglues.enable_angle");
     if (enableAngle) {
-        config[@"enableANGLE"] = [enableAngle boolValue] ? @1 : @0;
-        NSLog(@"[JavaLauncher]   mobileglues.enable_angle = %@ -> enableANGLE = %@", enableAngle, config[@"enableANGLE"]);
+        // MobileGlues AngleConfig 枚举（settings.h）：
+        //   0 = DisableIfPossible
+        //   1 = EnableIfPossible  ← iOS 上 hasVulkan12() 永远返回 0（#ifndef __APPLE__
+        //                            块被跳过），导致 checkIfANGLESupported 返回 false，
+        //                            ANGLE 被禁用。不能使用此值。
+        //   2 = ForceDisable
+        //   3 = ForceEnable       ← 强制启用，绕过 GPU 检测
+        // 用户启用 enable_angle 时写入 3 (ForceEnable)，禁用时写入 0 (DisableIfPossible)
+        config[@"enableANGLE"] = [enableAngle boolValue] ? @3 : @0;
+        NSLog(@"[JavaLauncher]   mobileglues.enable_angle = %@ -> enableANGLE = %@ (3=ForceEnable, 0=DisableIfPossible)",
+              enableAngle, config[@"enableANGLE"]);
     }
 
     id enableNoError = getPrefObject(@"mobileglues.enable_no_error");
@@ -275,19 +289,23 @@ void init_loadMobileGluesConfig() {
     if (customGlVersion) {
         NSString *verStr = [customGlVersion description];
         NSLog(@"[JavaLauncher]   mobileglues.custom_gl_version = %@ (raw)", customGlVersion);
-        if ([verStr isEqualToString:@"3.0"]) config[@"customGLVersion"] = @0x030000;
-        else if ([verStr isEqualToString:@"3.1"]) config[@"customGLVersion"] = @0x030100;
-        else if ([verStr isEqualToString:@"3.2"]) config[@"customGLVersion"] = @0x030200;
-        else if ([verStr isEqualToString:@"3.3"]) config[@"customGLVersion"] = @0x030300;
-        else if ([verStr isEqualToString:@"4.0"]) config[@"customGLVersion"] = @0x040000;
-        else if ([verStr isEqualToString:@"4.1"]) config[@"customGLVersion"] = @0x040100;
-        else if ([verStr isEqualToString:@"4.2"]) config[@"customGLVersion"] = @0x040200;
-        else if ([verStr isEqualToString:@"4.3"]) config[@"customGLVersion"] = @0x040300;
-        else if ([verStr isEqualToString:@"4.4"]) config[@"customGLVersion"] = @0x040400;
-        else if ([verStr isEqualToString:@"4.5"]) config[@"customGLVersion"] = @0x040500;
-        else if ([verStr isEqualToString:@"4.6"]) config[@"customGLVersion"] = @0x040600;
-        // verStr == @"0" 时不匹配任何条件，保留默认值 @0x030100（即 GL 3.1）
-        NSLog(@"[JavaLauncher]   -> customGLVersion = 0x%06x", [config[@"customGLVersion"] intValue]);
+        // MobileGlues 期望十进制数：Version(int code) 把 code 转字符串后取前 3 位作为
+        // Major.Minor.Patch。例如 40 → "40" → 4.0.0，46 → "46" → 4.6.0。
+        // 不能用十六进制 0x040000（=262144），会被截断为 46（4.6.0）。
+        if ([verStr isEqualToString:@"3.0"]) config[@"customGLVersion"] = @30;
+        else if ([verStr isEqualToString:@"3.1"]) config[@"customGLVersion"] = @31;
+        else if ([verStr isEqualToString:@"3.2"]) config[@"customGLVersion"] = @32;
+        else if ([verStr isEqualToString:@"3.3"]) config[@"customGLVersion"] = @33;
+        else if ([verStr isEqualToString:@"4.0"]) config[@"customGLVersion"] = @40;
+        else if ([verStr isEqualToString:@"4.1"]) config[@"customGLVersion"] = @41;
+        else if ([verStr isEqualToString:@"4.2"]) config[@"customGLVersion"] = @42;
+        else if ([verStr isEqualToString:@"4.3"]) config[@"customGLVersion"] = @43;
+        else if ([verStr isEqualToString:@"4.4"]) config[@"customGLVersion"] = @44;
+        else if ([verStr isEqualToString:@"4.5"]) config[@"customGLVersion"] = @45;
+        else if ([verStr isEqualToString:@"4.6"]) config[@"customGLVersion"] = @46;
+        // verStr == @"0" 时不匹配任何条件，保留默认值 @40（即 GL 4.0）
+        NSLog(@"[JavaLauncher]   -> customGLVersion = %d (decimal, MobileGlues Version(int) format)",
+              [config[@"customGLVersion"] intValue]);
     }
 
     id fsr1Setting = getPrefObject(@"mobileglues.fsr1_setting");
