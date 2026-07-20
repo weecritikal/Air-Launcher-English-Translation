@@ -262,62 +262,65 @@ static AppleGPUGeneration _cachedGPUGeneration = AppleGPUGenerationUnknown;
     // GL_ARB_shader_draw_parameters is force-enabled via MESA_EXTENSION_OVERRIDE
     // since Mesa 21.0.0 Zink does not expose it by default on Metal/MoltenVK.
     // If compatibility issues arise, users can set zink.gl_override to 3.3 or 4.0.
-    NSString *extOverrides = @"";
+    //
+    // 关键修复（Mesa 25.0.7 + 光影兼容性）：
+    //   原实现按优化级别禁用 compute/tessellation/geometry/MultiDraw/DSA 等扩展，
+    //   但这些扩展是 Iris/OptiFine 光影渲染植被（草方块、树叶、藤蔓）所必需：
+    //     - compute shader：Iris 阴影、SSAO、bloom 后处理
+    //     - tessellation shader：部分光影的位移映射
+    //     - geometry shader：部分光影的粒子/billboard
+    //   Mesa 25.0.7 升级后用户反馈草方块无法渲染，根因是 Auto 级别在 A9-A13 设备
+    //   推荐为 Low/Medium，禁用了 compute shader，Iris 的植被渲染 pipeline 崩溃。
+    //   修复策略（保守默认 + 显式覆盖）：
+    //     1. 所有优化级别默认保留所有 GL 扩展（仅禁用 MoltenVK 不支持的 Transform Feedback）
+    //     2. 只调整 GLSL cache 大小和 mesa_glthread
+    //     3. 用户可通过 zink.api_features 显式禁用扩展（极端性能优化场景）
+    ZinkAPIFeatures supported = [self supportedAPIFeatures];
+    // 保守默认：保留所有支持的扩展，仅禁用 Transform Feedback（MoltenVK 限制）
+    ZinkAPIFeatures enabledFeatures = supported & ~ZinkAPIFeatureTransformFeedback;
     BOOL enableGLThread = YES;
     int glslCacheSize = 32;
 
-    ZinkAPIFeatures supported = [self supportedAPIFeatures];
-
     switch (level) {
         case ZinkOptimizationLevelOff:
-            extOverrides = [self extensionDisableStringForLevel:
-                            supported & ~ZinkAPIFeatureTransformFeedback];
+            // Off 级别也保守：保留所有光影所需扩展
             glslCacheSize = 128;
             enableGLThread = YES;
             break;
 
         case ZinkOptimizationLevelSafe:
-            extOverrides = [self extensionDisableStringForLevel:ZinkAPIFeatureNone];
+            // Safe 级别：最小缓存，关闭 glthread
             glslCacheSize = 16;
             enableGLThread = NO;
             break;
 
         case ZinkOptimizationLevelLow:
-            extOverrides = [self extensionDisableStringForLevel:
-                            supported & ~(ZinkAPIFeatureTransformFeedback |
-                                          ZinkAPIFeatureComputeShader |
-                                          ZinkAPIFeatureDirectStateAccess)];
             glslCacheSize = 32;
             break;
 
         case ZinkOptimizationLevelMedium:
-            extOverrides = [self extensionDisableStringForLevel:
-                            supported & ~(ZinkAPIFeatureTransformFeedback |
-                                          ZinkAPIFeatureComputeShader)];
             glslCacheSize = 64;
             break;
 
         case ZinkOptimizationLevelHigh:
-            extOverrides = [self extensionDisableStringForLevel:
-                            supported & ~ZinkAPIFeatureTransformFeedback];
             glslCacheSize = 128;
             break;
 
         case ZinkOptimizationLevelUltra:
-            extOverrides = [self extensionDisableStringForLevel:
-                            supported & ~ZinkAPIFeatureTransformFeedback];
             glslCacheSize = 256;
             break;
 
         default:
-            extOverrides = [self extensionDisableStringForLevel:
-                            supported & ~ZinkAPIFeatureTransformFeedback];
             break;
     }
 
     setenv("MESA_GL_VERSION_OVERRIDE", "4.1", 1);
     setenv("MESA_GLSL_VERSION_OVERRIDE", "410", 1);
 
+    // 仅当用户显式设置 zink.api_features 时才覆盖扩展列表，
+    // applyZinkEnvironmentFromPreferences 会处理此情况。
+    // 此处设置保守默认（保留所有扩展 + 强制启用 shader_draw_parameters）。
+    NSString *extOverrides = [self extensionDisableStringForLevel:enabledFeatures];
     if (extOverrides.length > 0) {
         setenv("MESA_EXTENSION_OVERRIDE", extOverrides.UTF8String, 1);
     } else {
