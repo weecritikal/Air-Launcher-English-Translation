@@ -140,6 +140,21 @@ int pojavInitOpenGL() {
         set_gl_bridge_tbl();
     } else if ([renderer isEqualToString:@ RENDERER_NAME_MTL_ANGLE]) {
         set_gl_bridge_tbl();
+    } else if ([renderer isEqualToString:@ RENDERER_NAME_LTW]) {
+        // LTW (Large Thin Wrapper) - OpenGL Core 3.3 → OpenGL ES 3 转译层
+        // 完美支持 Sodium + Iris 光影（参照 Android 端 LTW 实现）
+        //
+        // 关键：LTW 的 constructor（proc.c）需要通过 RTLD_DEFAULT 找到
+        // eglGetProcAddress 等 EGL 函数符号。LTW 自身只导出 eglCreateContext /
+        // eglDestroyContext / eglMakeCurrent 三个 wrapper，其他 EGL 函数直接
+        // 转发给 host EGL（ANGLE）。所以必须先 dlopen ANGLE（RTLD_GLOBAL）让
+        // ANGLE 的 EGL 符号进入全局符号表，LTW constructor 才能成功初始化。
+        //
+        // gl_bridge.m 的 dlsym_EGL() 在 LTW 模式下会从 libltw.dylib 直接 dlsym
+        // 这三个 wrapper 函数，其余 EGL 函数仍从 ANGLE 解析。
+        NSLog(@"[egl_bridge] LTW renderer: preloading ANGLE as host EGL before LTW init");
+        dlopen("@rpath/" RENDERER_NAME_MTL_ANGLE, RTLD_GLOBAL);
+        set_gl_bridge_tbl();
     } else if ([renderer hasPrefix:@"libOSMesa"]) {
         setenv("GALLIUM_DRIVER","zink",1);
         set_osm_bridge_tbl();
@@ -209,7 +224,8 @@ int pojavInitOpenGL() {
     // 必须用 @rpath/ 前缀（与 JavaLauncher.m 一致），否则 SDL3 dlopen 找不到库。
     if ([renderer isEqualToString:@ RENDERER_NAME_GL4ES] ||
         [renderer isEqualToString:@ RENDERER_NAME_MTL_ANGLE] ||
-        [renderer isEqualToString:@ RENDERER_NAME_MOBILEGLUES]) {
+        [renderer isEqualToString:@ RENDERER_NAME_MOBILEGLUES] ||
+        [renderer isEqualToString:@ RENDERER_NAME_LTW]) {
         char sdlGlLib[256];
         snprintf(sdlGlLib, sizeof(sdlGlLib), "@rpath/%s", renderer.UTF8String);
         char sdlEglLib[256];

@@ -40,6 +40,13 @@
 #define RENDERER_NAME_MOBILEGLUES "libmobileglues.dylib"
 #define RENDERER_NAME_VK_ZINK "libOSMesa.8.dylib"
 #define RENDERER_NAME_VULKAN "libMoltenVK.dylib"
+// LTW (Large Thin Wrapper) - OpenGL Core 3.3 → OpenGL ES 3 转译层
+// 完美支持 Sodium + Iris 光影（参照 Android 端 LTW 实现）：
+//   - 伪装成 OpenGL 3.3 Core Profile 让 MC 1.17+ 正常运行
+//   - 主动添加 GL_ARB_buffer_storage / GL_ARB_texture_buffer_object 等 ARB 扩展
+//   - Fragment shader 编译失败时忽略错误（shader_wrapper.c HACK），
+//     让 BSL/Mellow Shader 等光影包能在 ES 上运行
+#define RENDERER_NAME_LTW "libltw.dylib"
 
 #define SPECIALBTN_KEYBOARD -1
 #define SPECIALBTN_TOGGLECTRL -2

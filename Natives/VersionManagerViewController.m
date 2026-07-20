@@ -663,17 +663,19 @@ static NSInteger const kSectionVersions    = 1;
 #pragma mark - Renderer Data Setup
 
 /// 初始化渲染器选项数据（启动器 native 渲染器库选择，LWJGL 层）
-/// 参照 FCL/HMCL 的渲染器选择面板，提供 6 个选项及对应描述
+/// 参照 FCL/HMCL 的渲染器选择面板，提供 7 个选项及对应描述
 /// 注意：名称使用简短标识，不使用 getRendererNames 返回的长本地化字符串
 - (void)setupRendererData {
     self.rendererKeys = getRendererKeys(NO);
     // 简短渲染器名称（不使用 getRendererNames 的长本地化字符串）
+    // 顺序必须与 getRendererKeys() 完全一致（索引配对）
     self.rendererNames = @[
         @"Auto",
         @"GL4ES",
         @"ANGLE",
         @"MobileGlues",
         @"Zink",
+        @"LTW",
         @"MoltenVK"
     ];
     self.rendererIcons = @[
@@ -682,6 +684,7 @@ static NSInteger const kSectionVersions    = 1;
         @"rectangle.stack.fill",
         @"bolt.fill",
         @"circle.hexagongrid.fill",
+        @"square.stack.3d.up.fill",
         @"flame.fill"
     ];
     self.rendererDescs = @[
@@ -690,6 +693,7 @@ static NSInteger const kSectionVersions    = 1;
         @"MetalANGLE，Metal 转 GLES",
         @"Vulkan 转译 OpenGL",
         @"OpenGL 转 Vulkan",
+        @"OpenGL Core→ES 转译（Sodium+光影完美兼容）",
         @"原生 Vulkan"
     ];
 }
