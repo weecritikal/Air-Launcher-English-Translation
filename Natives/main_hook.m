@@ -177,6 +177,7 @@ void* hooked_dlopen(const char* path, int mode) {
 typedef int32_t VkZResult;
 typedef struct VkZInstance_T* VkZInstance;
 typedef struct VkZDevice_T* VkZDevice;
+typedef struct VkZCommandBuffer_T* VkZCommandBuffer;
 typedef struct VkZPipelineCache_T* VkZPipelineCache;
 typedef struct VkZPipeline_T* VkZPipeline;
 typedef struct VkZPipelineLayout_T* VkZPipelineLayout;
@@ -184,6 +185,12 @@ typedef struct VkZRenderPass_T* VkZRenderPass;
 
 #define VK_Z_SUCCESS 0
 #define VK_Z_ERROR_INITIALIZATION_FAILED (-3)
+
+// VkPipelineBindPoint
+typedef enum {
+    VK_Z_PIPELINE_BIND_POINT_GRAPHICS = 0,
+    VK_Z_PIPELINE_BIND_POINT_COMPUTE = 1,
+} VkZPipelineBindPoint;
 
 typedef enum {
     VK_Z_VERTEX_INPUT_RATE_VERTEX = 0,
@@ -242,10 +249,86 @@ typedef VkZResult (*PFN_zkCreateGraphicsPipelines)(
 typedef void* (*PFN_zkGetInstanceProcAddr)(VkZInstance, const char*);
 typedef void* (*PFN_zkGetDeviceProcAddr)(VkZDevice, const char*);
 
+// vkCmd* 函数指针类型（用于 dummy pipeline skip draws）
+typedef void (*PFN_zkCmdBindPipeline)(VkZCommandBuffer, VkZPipelineBindPoint, VkZPipeline);
+typedef void (*PFN_zkCmdDraw)(VkZCommandBuffer, uint32_t, uint32_t, uint32_t, uint32_t);
+typedef void (*PFN_zkCmdDrawIndexed)(VkZCommandBuffer, uint32_t, uint32_t, uint32_t, int32_t, uint32_t);
+typedef void (*PFN_zkCmdDrawIndirect)(VkZCommandBuffer, uint64_t, uint32_t, uint32_t);
+typedef void (*PFN_zkCmdDrawIndexedIndirect)(VkZCommandBuffer, uint64_t, uint32_t, uint32_t);
+typedef void (*PFN_zkCmdDrawIndirectCount)(VkZCommandBuffer, uint64_t, uint64_t, uint32_t, uint32_t);
+typedef void (*PFN_zkCmdDrawIndexedIndirectCount)(VkZCommandBuffer, uint64_t, uint64_t, uint32_t, uint32_t);
+
 // Stride fix 状态（g_zinkStrideFixActive 已在文件前部前向声明）
 static PFN_zkGetInstanceProcAddr g_real_vkGetInstanceProcAddr = NULL;
 static PFN_zkGetDeviceProcAddr g_real_vkGetDeviceProcAddr = NULL;
 static PFN_zkCreateGraphicsPipelines g_real_vkCreateGraphicsPipelines = NULL;
+
+// vkCmd* 真实函数指针（dummy pipeline skip draws 需要）
+static PFN_zkCmdBindPipeline g_real_vkCmdBindPipeline = NULL;
+static PFN_zkCmdDraw g_real_vkCmdDraw = NULL;
+static PFN_zkCmdDrawIndexed g_real_vkCmdDrawIndexed = NULL;
+static PFN_zkCmdDrawIndirect g_real_vkCmdDrawIndirect = NULL;
+static PFN_zkCmdDrawIndexedIndirect g_real_vkCmdDrawIndexedIndirect = NULL;
+static PFN_zkCmdDrawIndirectCount g_real_vkCmdDrawIndirectCount = NULL;
+static PFN_zkCmdDrawIndexedIndirectCount g_real_vkCmdDrawIndexedIndirectCount = NULL;
+
+// ============================================================================
+// Dummy pipeline 机制（修复 zink + Mesa 25.0.7 光影 SIGSEGV）
+// ============================================================================
+// 问题：
+//   Mesa 25.0.7 zink 比 21.0.0 更严格地校验 SPIR-V shader 接口。
+//   当光影包（如 BSL、Mellow Shader）的 fragment shader 声明了 vertex shader
+//   未写入的 input（如 user(locn1_2)），MoltenVK 在 vkCreateGraphicsPipelines
+//   时返回 VK_ERROR_INITIALIZATION_FAILED。
+//
+//   zink 的 update_gfx_pipeline 未正确处理此失败：
+//   Vulkan spec 规定 vkCreateGraphicsPipelines 失败时 pPipelines[i] 设为
+//   VK_NULL_HANDLE，zink 后续使用 NULL pipeline 句柄导致 SIGSEGV。
+//
+// 解决方案（dummy pipeline + skip draws）：
+//   1. 当 vkCreateGraphicsPipelines 失败时，不返回失败，而是返回 VK_SUCCESS
+//      并为每个失败的 pipeline 分配一个 dummy 句柄（非 NULL 的 magic 值）。
+//   2. 维护 dummy pipeline 集合。
+//   3. Hook vkCmdBindPipeline：跟踪当前绑定的 pipeline，如果是 dummy 则跳过绑定。
+//   4. Hook vkCmdDraw*：如果当前绑定的 pipeline 是 dummy，跳过绘制。
+//
+//   这样 zink 认为 pipeline 创建成功，不会 SIGSEGV；
+//   失败的 pipeline 对应的几何体不会被绘制（黑屏/缺失，但不崩溃）。
+//   成功的 pipeline 正常渲染，光影效果保留。
+
+#define ZINK_DUMMY_PIPELINE_MAGIC 0xDEAD0000ULL
+#define ZINK_DUMMY_PIPELINE_MAX 4096
+
+// dummy pipeline 集合（使用简单数组，线性查找；dummy pipeline 数量通常很少）
+static uintptr_t g_dummyPipelines[ZINK_DUMMY_PIPELINE_MAX];
+static uint32_t g_dummyPipelineCount = 0;
+// 当前绑定的 graphics pipeline（用于判断 draw 是否应该跳过）
+// 注意：VkCommandBuffer 可能多个，但 zink 单线程渲染，用全局变量足够
+static VkZPipeline g_currentBoundGraphicsPipeline = NULL;
+
+/// 判断 pipeline 是否为 dummy
+static BOOL isDummyPipeline(VkZPipeline pipeline) {
+    if (!pipeline) return NO;
+    uintptr_t val = (uintptr_t)pipeline;
+    if ((val & 0xFFFF0000ULL) != ZINK_DUMMY_PIPELINE_MAGIC) return NO;
+    // 二分查找或线性查找（dummy pipeline 数量通常 <100，线性查找足够）
+    for (uint32_t i = 0; i < g_dummyPipelineCount; i++) {
+        if (g_dummyPipelines[i] == val) return YES;
+    }
+    return NO;
+}
+
+/// 分配一个新的 dummy pipeline 句柄
+static VkZPipeline allocDummyPipeline(void) {
+    if (g_dummyPipelineCount >= ZINK_DUMMY_PIPELINE_MAX) {
+        // 溢出：复用第一个（极端情况，几乎不会发生）
+        NSLog(@"[ZinkStrideFix] WARNING: dummy pipeline pool exhausted, reusing slot 0");
+        return (VkZPipeline)g_dummyPipelines[0];
+    }
+    uintptr_t handle = ZINK_DUMMY_PIPELINE_MAGIC | (g_dummyPipelineCount + 1);
+    g_dummyPipelines[g_dummyPipelineCount++] = handle;
+    return (VkZPipeline)handle;
+}
 
 // 前向声明（供 hooked_dlsym 使用）
 static void* amethyst_vkGetInstanceProcAddr(VkZInstance instance, const char* pName);
@@ -254,6 +337,13 @@ static VkZResult amethyst_vkCreateGraphicsPipelines(
     VkZDevice device, VkZPipelineCache pipelineCache, uint32_t createInfoCount,
     const VkZGraphicsPipelineCreateInfo* pCreateInfos, const void* pAllocator,
     VkZPipeline* pPipelines);
+static void amethyst_vkCmdBindPipeline(VkZCommandBuffer cmd, VkZPipelineBindPoint bp, VkZPipeline pipeline);
+static void amethyst_vkCmdDraw(VkZCommandBuffer cmd, uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance);
+static void amethyst_vkCmdDrawIndexed(VkZCommandBuffer cmd, uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance);
+static void amethyst_vkCmdDrawIndirect(VkZCommandBuffer cmd, uint64_t buffer, uint64_t offset, uint32_t drawCount, uint32_t stride);
+static void amethyst_vkCmdDrawIndexedIndirect(VkZCommandBuffer cmd, uint64_t buffer, uint64_t offset, uint32_t drawCount, uint32_t stride);
+static void amethyst_vkCmdDrawIndirectCount(VkZCommandBuffer cmd, uint64_t buffer, uint64_t offset, uint64_t countBuffer, uint64_t countBufferOffset, uint32_t maxDrawCount, uint32_t stride);
+static void amethyst_vkCmdDrawIndexedIndirectCount(VkZCommandBuffer cmd, uint64_t buffer, uint64_t offset, uint64_t countBuffer, uint64_t countBufferOffset, uint32_t maxDrawCount, uint32_t stride);
 
 /// vkCreateGraphicsPipelines wrapper：对齐 vertex binding stride 到 4 字节
 static VkZResult amethyst_vkCreateGraphicsPipelines(
@@ -298,7 +388,20 @@ static VkZResult amethyst_vkCreateGraphicsPipelines(
     }
 
     if (!needsAlignment) {
-        return g_real_vkCreateGraphicsPipelines(device, pipelineCache, createInfoCount, pCreateInfos, pAllocator, pPipelines);
+        VkZResult result = g_real_vkCreateGraphicsPipelines(device, pipelineCache, createInfoCount, pCreateInfos, pAllocator, pPipelines);
+        // Dummy pipeline fallback（同上）：pipeline 创建失败时分配 dummy 句柄
+        if (result != VK_Z_SUCCESS) {
+            NSLog(@"[ZinkStrideFix] vkCreateGraphicsPipelines failed (no alignment needed): %d", result);
+            NSLog(@"[ZinkStrideFix] Applying dummy pipeline fallback to prevent SIGSEGV");
+            for (uint32_t i = 0; i < createInfoCount; i++) {
+                if (!pPipelines[i]) {
+                    pPipelines[i] = allocDummyPipeline();
+                    NSLog(@"[ZinkStrideFix] Pipeline %u: allocated dummy handle %p", i, (void*)pPipelines[i]);
+                }
+            }
+            result = VK_Z_SUCCESS;
+        }
+        return result;
     }
 
     // 慢路径：深拷贝并对齐 stride
@@ -345,6 +448,17 @@ static VkZResult amethyst_vkCreateGraphicsPipelines(
 
     if (result != VK_Z_SUCCESS) {
         NSLog(@"[ZinkStrideFix] WARNING: vkCreateGraphicsPipelines still failed after alignment: %d", result);
+        NSLog(@"[ZinkStrideFix] Applying dummy pipeline fallback to prevent SIGSEGV");
+        // Dummy pipeline fallback：为每个失败的 pipeline 分配 dummy 句柄
+        // 让 zink 认为 pipeline 创建成功，避免后续使用 NULL pipeline 导致 SIGSEGV
+        for (uint32_t i = 0; i < createInfoCount; i++) {
+            if (!pPipelines[i]) {  // VK_NULL_HANDLE
+                pPipelines[i] = allocDummyPipeline();
+                NSLog(@"[ZinkStrideFix] Pipeline %u: allocated dummy handle %p", i, (void*)pPipelines[i]);
+            }
+        }
+        // 返回 VK_SUCCESS 让 zink 继续运行，vkCmdDraw* 会被我们的 hook 跳过
+        result = VK_Z_SUCCESS;
     } else {
         NSLog(@"[ZinkStrideFix] vkCreateGraphicsPipelines succeeded after alignment");
     }
@@ -360,7 +474,7 @@ static VkZResult amethyst_vkCreateGraphicsPipelines(
 }
 
 /// vkGetInstanceProcAddr wrapper
-/// 拦截 vkGetDeviceProcAddr 和 vkCreateGraphicsPipelines 请求，返回我们的 hook
+/// 拦截 vkGetDeviceProcAddr、vkCreateGraphicsPipelines、vkCmd* 请求，返回我们的 hook
 static void* amethyst_vkGetInstanceProcAddr(VkZInstance instance, const char* pName) {
     if (pName) {
         if (strcmp(pName, "vkGetDeviceProcAddr") == 0) {
@@ -377,6 +491,56 @@ static void* amethyst_vkGetInstanceProcAddr(VkZInstance instance, const char* pN
             }
             return (void*)amethyst_vkCreateGraphicsPipelines;
         }
+        // vkCmd* hooks（dummy pipeline skip draws）
+        if (strcmp(pName, "vkCmdBindPipeline") == 0) {
+            if (!g_real_vkCmdBindPipeline && g_real_vkGetInstanceProcAddr) {
+                g_real_vkCmdBindPipeline = (PFN_zkCmdBindPipeline)
+                    g_real_vkGetInstanceProcAddr(instance, pName);
+            }
+            return (void*)amethyst_vkCmdBindPipeline;
+        }
+        if (strcmp(pName, "vkCmdDraw") == 0) {
+            if (!g_real_vkCmdDraw && g_real_vkGetInstanceProcAddr) {
+                g_real_vkCmdDraw = (PFN_zkCmdDraw)
+                    g_real_vkGetInstanceProcAddr(instance, pName);
+            }
+            return (void*)amethyst_vkCmdDraw;
+        }
+        if (strcmp(pName, "vkCmdDrawIndexed") == 0) {
+            if (!g_real_vkCmdDrawIndexed && g_real_vkGetInstanceProcAddr) {
+                g_real_vkCmdDrawIndexed = (PFN_zkCmdDrawIndexed)
+                    g_real_vkGetInstanceProcAddr(instance, pName);
+            }
+            return (void*)amethyst_vkCmdDrawIndexed;
+        }
+        if (strcmp(pName, "vkCmdDrawIndirect") == 0) {
+            if (!g_real_vkCmdDrawIndirect && g_real_vkGetInstanceProcAddr) {
+                g_real_vkCmdDrawIndirect = (PFN_zkCmdDrawIndirect)
+                    g_real_vkGetInstanceProcAddr(instance, pName);
+            }
+            return (void*)amethyst_vkCmdDrawIndirect;
+        }
+        if (strcmp(pName, "vkCmdDrawIndexedIndirect") == 0) {
+            if (!g_real_vkCmdDrawIndexedIndirect && g_real_vkGetInstanceProcAddr) {
+                g_real_vkCmdDrawIndexedIndirect = (PFN_zkCmdDrawIndexedIndirect)
+                    g_real_vkGetInstanceProcAddr(instance, pName);
+            }
+            return (void*)amethyst_vkCmdDrawIndexedIndirect;
+        }
+        if (strcmp(pName, "vkCmdDrawIndirectCount") == 0) {
+            if (!g_real_vkCmdDrawIndirectCount && g_real_vkGetInstanceProcAddr) {
+                g_real_vkCmdDrawIndirectCount = (PFN_zkCmdDrawIndirectCount)
+                    g_real_vkGetInstanceProcAddr(instance, pName);
+            }
+            return (void*)amethyst_vkCmdDrawIndirectCount;
+        }
+        if (strcmp(pName, "vkCmdDrawIndexedIndirectCount") == 0) {
+            if (!g_real_vkCmdDrawIndexedIndirectCount && g_real_vkGetInstanceProcAddr) {
+                g_real_vkCmdDrawIndexedIndirectCount = (PFN_zkCmdDrawIndexedIndirectCount)
+                    g_real_vkGetInstanceProcAddr(instance, pName);
+            }
+            return (void*)amethyst_vkCmdDrawIndexedIndirectCount;
+        }
     }
     if (!g_real_vkGetInstanceProcAddr) {
         return amethyst_orig_dlsym(RTLD_DEFAULT, pName);
@@ -385,19 +549,122 @@ static void* amethyst_vkGetInstanceProcAddr(VkZInstance instance, const char* pN
 }
 
 /// vkGetDeviceProcAddr wrapper
-/// 拦截 vkCreateGraphicsPipelines 请求，返回我们的 hook
+/// 拦截 vkCreateGraphicsPipelines、vkCmd* 请求，返回我们的 hook
 static void* amethyst_vkGetDeviceProcAddr(VkZDevice device, const char* pName) {
-    if (pName && strcmp(pName, "vkCreateGraphicsPipelines") == 0) {
-        if (!g_real_vkCreateGraphicsPipelines && g_real_vkGetDeviceProcAddr) {
-            g_real_vkCreateGraphicsPipelines = (PFN_zkCreateGraphicsPipelines)
-                g_real_vkGetDeviceProcAddr(device, pName);
+    if (pName) {
+        if (strcmp(pName, "vkCreateGraphicsPipelines") == 0) {
+            if (!g_real_vkCreateGraphicsPipelines && g_real_vkGetDeviceProcAddr) {
+                g_real_vkCreateGraphicsPipelines = (PFN_zkCreateGraphicsPipelines)
+                    g_real_vkGetDeviceProcAddr(device, pName);
+            }
+            return (void*)amethyst_vkCreateGraphicsPipelines;
         }
-        return (void*)amethyst_vkCreateGraphicsPipelines;
+        // vkCmd* hooks（dummy pipeline skip draws）
+        if (strcmp(pName, "vkCmdBindPipeline") == 0) {
+            if (!g_real_vkCmdBindPipeline && g_real_vkGetDeviceProcAddr) {
+                g_real_vkCmdBindPipeline = (PFN_zkCmdBindPipeline)
+                    g_real_vkGetDeviceProcAddr(device, pName);
+            }
+            return (void*)amethyst_vkCmdBindPipeline;
+        }
+        if (strcmp(pName, "vkCmdDraw") == 0) {
+            if (!g_real_vkCmdDraw && g_real_vkGetDeviceProcAddr) {
+                g_real_vkCmdDraw = (PFN_zkCmdDraw)
+                    g_real_vkGetDeviceProcAddr(device, pName);
+            }
+            return (void*)amethyst_vkCmdDraw;
+        }
+        if (strcmp(pName, "vkCmdDrawIndexed") == 0) {
+            if (!g_real_vkCmdDrawIndexed && g_real_vkGetDeviceProcAddr) {
+                g_real_vkCmdDrawIndexed = (PFN_zkCmdDrawIndexed)
+                    g_real_vkGetDeviceProcAddr(device, pName);
+            }
+            return (void*)amethyst_vkCmdDrawIndexed;
+        }
+        if (strcmp(pName, "vkCmdDrawIndirect") == 0) {
+            if (!g_real_vkCmdDrawIndirect && g_real_vkGetDeviceProcAddr) {
+                g_real_vkCmdDrawIndirect = (PFN_zkCmdDrawIndirect)
+                    g_real_vkGetDeviceProcAddr(device, pName);
+            }
+            return (void*)amethyst_vkCmdDrawIndirect;
+        }
+        if (strcmp(pName, "vkCmdDrawIndexedIndirect") == 0) {
+            if (!g_real_vkCmdDrawIndexedIndirect && g_real_vkGetDeviceProcAddr) {
+                g_real_vkCmdDrawIndexedIndirect = (PFN_zkCmdDrawIndexedIndirect)
+                    g_real_vkGetDeviceProcAddr(device, pName);
+            }
+            return (void*)amethyst_vkCmdDrawIndexedIndirect;
+        }
+        if (strcmp(pName, "vkCmdDrawIndirectCount") == 0) {
+            if (!g_real_vkCmdDrawIndirectCount && g_real_vkGetDeviceProcAddr) {
+                g_real_vkCmdDrawIndirectCount = (PFN_zkCmdDrawIndirectCount)
+                    g_real_vkGetDeviceProcAddr(device, pName);
+            }
+            return (void*)amethyst_vkCmdDrawIndirectCount;
+        }
+        if (strcmp(pName, "vkCmdDrawIndexedIndirectCount") == 0) {
+            if (!g_real_vkCmdDrawIndexedIndirectCount && g_real_vkGetDeviceProcAddr) {
+                g_real_vkCmdDrawIndexedIndirectCount = (PFN_zkCmdDrawIndexedIndirectCount)
+                    g_real_vkGetDeviceProcAddr(device, pName);
+            }
+            return (void*)amethyst_vkCmdDrawIndexedIndirectCount;
+        }
     }
     if (!g_real_vkGetDeviceProcAddr) {
         return amethyst_orig_dlsym(RTLD_DEFAULT, pName);
     }
     return g_real_vkGetDeviceProcAddr(device, pName);
+}
+
+/// vkCmdBindPipeline hook
+/// 跟踪当前绑定的 graphics pipeline，dummy pipeline 跳过实际绑定
+static void amethyst_vkCmdBindPipeline(VkZCommandBuffer cmd, VkZPipelineBindPoint bp, VkZPipeline pipeline) {
+    if (bp == VK_Z_PIPELINE_BIND_POINT_GRAPHICS) {
+        g_currentBoundGraphicsPipeline = pipeline;
+        if (isDummyPipeline(pipeline)) {
+            // Dummy pipeline：跳过实际绑定，避免 MoltenVK 因无效句柄崩溃
+            return;
+        }
+    }
+    if (g_real_vkCmdBindPipeline) {
+        g_real_vkCmdBindPipeline(cmd, bp, pipeline);
+    }
+}
+
+/// vkCmdDraw hook：当前绑定 dummy pipeline 时跳过绘制
+static void amethyst_vkCmdDraw(VkZCommandBuffer cmd, uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance) {
+    if (isDummyPipeline(g_currentBoundGraphicsPipeline)) return;
+    if (g_real_vkCmdDraw) g_real_vkCmdDraw(cmd, vertexCount, instanceCount, firstVertex, firstInstance);
+}
+
+/// vkCmdDrawIndexed hook：当前绑定 dummy pipeline 时跳过绘制
+static void amethyst_vkCmdDrawIndexed(VkZCommandBuffer cmd, uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance) {
+    if (isDummyPipeline(g_currentBoundGraphicsPipeline)) return;
+    if (g_real_vkCmdDrawIndexed) g_real_vkCmdDrawIndexed(cmd, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
+}
+
+/// vkCmdDrawIndirect hook：当前绑定 dummy pipeline 时跳过绘制
+static void amethyst_vkCmdDrawIndirect(VkZCommandBuffer cmd, uint64_t buffer, uint64_t offset, uint32_t drawCount, uint32_t stride) {
+    if (isDummyPipeline(g_currentBoundGraphicsPipeline)) return;
+    if (g_real_vkCmdDrawIndirect) g_real_vkCmdDrawIndirect(cmd, buffer, offset, drawCount, stride);
+}
+
+/// vkCmdDrawIndexedIndirect hook：当前绑定 dummy pipeline 时跳过绘制
+static void amethyst_vkCmdDrawIndexedIndirect(VkZCommandBuffer cmd, uint64_t buffer, uint64_t offset, uint32_t drawCount, uint32_t stride) {
+    if (isDummyPipeline(g_currentBoundGraphicsPipeline)) return;
+    if (g_real_vkCmdDrawIndexedIndirect) g_real_vkCmdDrawIndexedIndirect(cmd, buffer, offset, drawCount, stride);
+}
+
+/// vkCmdDrawIndirectCount hook：当前绑定 dummy pipeline 时跳过绘制
+static void amethyst_vkCmdDrawIndirectCount(VkZCommandBuffer cmd, uint64_t buffer, uint64_t offset, uint64_t countBuffer, uint64_t countBufferOffset, uint32_t maxDrawCount, uint32_t stride) {
+    if (isDummyPipeline(g_currentBoundGraphicsPipeline)) return;
+    if (g_real_vkCmdDrawIndirectCount) g_real_vkCmdDrawIndirectCount(cmd, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride);
+}
+
+/// vkCmdDrawIndexedIndirectCount hook：当前绑定 dummy pipeline 时跳过绘制
+static void amethyst_vkCmdDrawIndexedIndirectCount(VkZCommandBuffer cmd, uint64_t buffer, uint64_t offset, uint64_t countBuffer, uint64_t countBufferOffset, uint32_t maxDrawCount, uint32_t stride) {
+    if (isDummyPipeline(g_currentBoundGraphicsPipeline)) return;
+    if (g_real_vkCmdDrawIndexedIndirectCount) g_real_vkCmdDrawIndexedIndirectCount(cmd, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride);
 }
 
 /// 内部：执行 fishhook 重绑定（可在新 image 加载后重复调用以捕获新引用）
