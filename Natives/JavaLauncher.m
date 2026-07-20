@@ -10,6 +10,7 @@
 #include <unistd.h>
 #include <mach/mach.h>
 #include "utils.h"
+#include "ZinkConfig.h"
 
 // god knows why Copilot was trying to add this.
 #import "authenticator/BaseAuthenticator.h"
@@ -439,6 +440,19 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
         NSString *renderer = [PLProfiles resolveKeyForCurrentProfile:@"renderer"];
         NSLog(@"[JavaLauncher] RENDERER is set to %@\n", renderer);
         setenv("AMETHYST_RENDERER", renderer.UTF8String, 1);
+
+        // Apply Zink-specific environment variables if Zink renderer is selected
+        // Mesa 25.0.7 zink 升级配套：根据设备 GPU 代际自动调优 MESA_GL_VERSION_OVERRIDE、
+        // MESA_GLSL_VERSION_OVERRIDE、MESA_EXTENSION_OVERRIDE、mesa_glthread、shader cache 等。
+        // ZinkConfig 默认 Auto 级别会保留所有光影所需的 GL 扩展（compute/tessellation/geometry
+        // shader 等），仅禁用 MoltenVK 支持不佳的 Transform Feedback，不影响 Iris/OptiFine。
+        if ([renderer hasPrefix:@"libOSMesa"]) {
+            [ZinkConfig applyZinkEnvironmentFromPreferences];
+            NSString *configSummary = [ZinkConfig activeConfigSummary];
+            NSLog(@"[ZinkConfig] ========== Zink Renderer Active (Mesa 25) ==========");
+            NSLog(@"[ZinkConfig] %@", configSummary);
+            setenv("ZINK_ACTIVE_CONFIG", configSummary.UTF8String, 1);
+        }
         // Setup AMETHYST_GRAPHICS_API（MC 26.2+ Graphics API：default/vulkan/opengl）
         // 仅 MC 26.2+ 识别此选项，旧版本 MC 会忽略 options.txt 中的 graphicsApi 字段。
         //
