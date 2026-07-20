@@ -20,7 +20,15 @@
 #include "ctxbridges/osmesa_internal.h"
 #include "utils.h"
 
-int clientAPI;
+// 默认 GL 路径（GLFW_OPENGL_API）而非 0（=GLFW_NO_API）。
+// 关键修复（SDL3 模式 FPS/首帧误报）：
+//   MC 26.3-snapshot-4+ 切换到 SDL3 后不再调用 glfwWindowHint(GLFW_CLIENT_API, ...)，
+//   pojavInit() 也从不被执行（它是 GLFW 入口）。若 clientAPI 默认 0（=GLFW_NO_API），
+//   pojavIsActualVulkanPath() 会错误返回 true，导致 displayLink 走 Vulkan fallback
+//   路径，在游戏真正渲染前就发送 "First frame rendered" 通知，启动器提前移除启动遮罩
+//   显示黑屏。默认 GLFW_OPENGL_API 对所有 GL 渲染器（MobileGlues/ANGLE/gl4es/zink）
+//   正确；SDL3 + Vulkan 渲染器的情况在 pojavIsActualVulkanPath() 中单独判定。
+int clientAPI = GLFW_OPENGL_API;
 
 // FPS 计数器（参照 FCL egl_bridge.c 的 atomic_uint 实现）
 // 在 pojavSwapBuffers() 中累加，在 SurfaceViewController 读取时重置
@@ -70,7 +78,25 @@ void pojavIncrementFpsCounter() {
 /// PLDisplayLinkTarget.displayLinkTick: 每帧动态查询此函数，确保 fallback 启用状态
 /// 与 MC 实际渲染路径一致，避免双重计数或漏计数。
 bool pojavIsActualVulkanPath() {
-    return clientAPI == GLFW_NO_API;
+    // GLFW 模式：clientAPI 由 pojavSetWindowHint(GLFW_CLIENT_API, ...) 写入，
+    // pojavInit() 初始化为 GLFW_OPENGL_API。MC 调用 glfwWindowHint(GLFW_NO_API)
+    // 切换到 Vulkan 路径。
+    if (clientAPI == GLFW_NO_API) return true;
+
+    // SDL3 模式（MC 26.3-snapshot-4+）：MC 不调用 glfwWindowHint，pojavInit() 也
+    // 从不执行，clientAPI 保持默认值 GLFW_OPENGL_API。对于 Vulkan 渲染器
+    // （libMoltenVK.dylib），需要通过渲染器选择判定为 Vulkan 路径。
+    // 注意：这会把 "Vulkan 渲染器 + prefer_opengl" 也判为 Vulkan，但 SDL3 模式下
+    // 无法精确区分（MC 不经过 GLFW clientAPI 信号）。此误判仅影响 FPS 计数器
+    // fallback 路径选择，不影响实际渲染（pojavCreateContext 在 SDL3 模式不被调用）。
+    const char *windowingBackend = getenv("AMETHYST_WINDOWING_BACKEND");
+    if (windowingBackend && strcmp(windowingBackend, "sdl") == 0) {
+        const char *renderer = getenv("AMETHYST_RENDERER");
+        if (renderer && strcmp(renderer, RENDERER_NAME_VULKAN) == 0) {
+            return true;
+        }
+    }
+    return false;
 }
 
 void JNI_LWJGL_changeRenderer(const char* value_c) {
