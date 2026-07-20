@@ -4,6 +4,7 @@
  * For use under LGPL-3.0
  */
 
+#include <stdio.h>
 #include "unordered_map/unordered_map.h"
 #include "vgpu_shaderconv/shaderconv.h"
 #include "glsl_optimizer/src/code/c_wrapper.h"

@@ -3,6 +3,7 @@
  * Copyright (c) 2025 artDev, SerpentSpirale, CADIndie.
  * For use under LGPL-3.0
  */
+#include <stdio.h>
 #include "int_hash.h"
 #include "../libraryinternal.h"
 static size_t intmap_hash(void* key) {

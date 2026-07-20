@@ -8,6 +8,7 @@
  *   - 添加 ltw_get_current_context / ltw_set_current_context 实现
  *   - current_context 宏在 egl.h 中定义为 ltw_get_current_context()
  */
+#include <stdio.h>
 #include "egl.h"
 #include "unordered_map/int_hash.h"
 #include "string_utils.h"
