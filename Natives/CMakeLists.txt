@@ -151,68 +151,6 @@ target_link_libraries(tinygl4angle
   "-framework libGLESv2"
 )
 
-# LTW (Large Thin Wrapper) - OpenGL core-to-ES wrapper
-# 完美支持 Sodium + Iris 光影（参照 Android 端 LTW 实现）：
-#   - 伪装成 OpenGL 3.3 Core Profile 让 MC 1.17+ 正常运行
-#   - 主动添加 GL_ARB_buffer_storage / GL_ARB_texture_buffer_object 等 ARB 扩展
-#     让 Sodium 的 persistent mapped buffers / texture buffers 正常工作
-#   - 主动添加 GL_ARB_draw_buffers_blend（Iris 必需）
-#   - 主动添加 GL_ARB_timer_query（Blaze3D TimerQuery）
-#   - Fragment shader 编译失败时忽略错误（shader_wrapper.c HACK），
-#     让 BSL/Mellow Shader 等光影包能在 ES 上运行
-#   - 默认开启 LTW_NEVER_FLUSH_BUFFERS + LTW_COHERENT_DYNAMIC_STORAGE
-#     降低 Sodium buffer 同步开销
-set(LTW_DIR "${CMAKE_CURRENT_LIST_DIR}/external/LTW/ltw/src/main/tinywrapper")
-set(LTW_INCLUDES
-  "${LTW_DIR}"
-  "${LTW_DIR}/GL"
-  "${CMAKE_CURRENT_LIST_DIR}/cmake/ltw_compat"
-  "${LTW_DIR}/glsl_optimizer/include"
-  "${LTW_DIR}/glsl_optimizer/src"
-  "${LTW_DIR}/vgpu_shaderconv"
-  "${LTW_DIR}/unordered_map"
-  "${CMAKE_CURRENT_LIST_DIR}/external/MobileGlues/src/main/cpp/include"
-)
-
-include(cmake/ltw_sources.cmake)
-
-add_library(glsl_optimizer STATIC ${GLSL_OPTIMIZER_SRC})
-target_include_directories(glsl_optimizer PRIVATE ${LTW_INCLUDES})
-set_target_properties(glsl_optimizer PROPERTIES
-  POSITION_INDEPENDENT_CODE ON
-  CXX_STANDARD 17
-  C_STANDARD 11
-)
-target_compile_definitions(glsl_optimizer PRIVATE
-  _LIB NOMINMAX _USE_MATH_DEFINES __STDC_NO_THREADS__
-  __STDC_LIMIT_MACROS __STDC_FORMAT_MACROS __STDC_CONSTANT_MACROS
-  UTL_ARCH_LITTLE_ENDIAN UNIX
-  HAVE_OPENGL HAVE_OPENGL_ES_1 HAVE_OPENGL_ES_2
-  HAVE_TIMESPEC_GET HAVE_STRUCT_TIMESPEC
-  VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK=VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT
-)
-
-add_library(ltw SHARED ${LTW_CORE_SRC})
-target_include_directories(ltw PRIVATE ${LTW_INCLUDES})
-target_link_libraries(ltw
-  "${GLOBAL_LDFLAGS}"
-  glsl_optimizer
-  "-F'${CMAKE_CURRENT_LIST_DIR}/resources/Frameworks'"
-  "-framework libEGL"
-  "-framework libGLESv2"
-)
-set_target_properties(ltw PROPERTIES
-  C_STANDARD 11
-  C_STANDARD_REQUIRED ON
-)
-target_compile_definitions(ltw PRIVATE
-  _LIB NOMINMAX _USE_MATH_DEFINES __STDC_NO_THREADS__
-  __STDC_LIMIT_MACROS __STDC_FORMAT_MACROS __STDC_CONSTANT_MACROS
-  UTL_ARCH_LITTLE_ENDIAN UNIX
-  HAVE_OPENGL HAVE_OPENGL_ES_1 HAVE_OPENGL_ES_2
-  HAVE_TIMESPEC_GET HAVE_STRUCT_TIMESPEC
-)
-
 # AFNetworking
 add_library(AFNetworking SHARED
   external/AFNetworking/AFNetworking/AFSecurityPolicy.m

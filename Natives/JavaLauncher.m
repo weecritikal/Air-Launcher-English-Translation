@@ -490,17 +490,6 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
             installZinkStrideFix();
         }
 
-        // Apply LTW-specific environment variables if LTW renderer is selected
-        // LTW (Large Thin Wrapper) OpenGL Core 3.3 → ES 3 转译层
-        // 不设置 LTW_* 环境变量，使用 LTW main.c constructor 的默认值（与 Android 端一致）
-        //   - LIBGL_ES：LTW 自动检测 ES 版本
-        //   - LTW_NEVER_FLUSH_BUFFERS：默认 true
-        //   - LTW_COHERENT_DYNAMIC_STORAGE：默认 true
-        // 仅设置 POJAVEXEC_EGL 标识 EGL 由 LTW 提供（对齐 Android 端语义）
-        if ([renderer isEqualToString:@ RENDERER_NAME_LTW]) {
-            setenv("POJAVEXEC_EGL", RENDERER_NAME_LTW, 1);
-            NSLog(@"[JavaLauncher] LTW renderer active: using LTW defaults (same as Android)");
-        }
         // Setup AMETHYST_GRAPHICS_API（MC 26.2+ Graphics API：default/vulkan/opengl）
         // 仅 MC 26.2+ 识别此选项，旧版本 MC 会忽略 options.txt 中的 graphicsApi 字段。
         //
@@ -901,14 +890,7 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
             char sdlGlLib[256];
             snprintf(sdlGlLib, sizeof(sdlGlLib), "@rpath/%s", glLibName);
             char sdlEglLib[256];
-            // LTW 模式下，SDL3 的 EGL 必须从 libltw.dylib 加载（LTW 实现了自己的 EGL wrapper：
-            // eglCreateContext/eglDestroyContext/eglMakeCurrent，会在内部转发到 ANGLE ES3 context）
-            // 其他 GL 渲染器（gl4es/ANGLE/MobileGlues）直接使用 ANGLE 的 EGL
-            if (strcmp(glLibName, RENDERER_NAME_LTW) == 0) {
-                snprintf(sdlEglLib, sizeof(sdlEglLib), "@rpath/%s", RENDERER_NAME_LTW);
-            } else {
-                snprintf(sdlEglLib, sizeof(sdlEglLib), "@rpath/%s", RENDERER_NAME_MTL_ANGLE);
-            }
+            snprintf(sdlEglLib, sizeof(sdlEglLib), "@rpath/%s", RENDERER_NAME_MTL_ANGLE);
             setenv("SDL_OPENGL_LIBRARY", sdlGlLib, 1);
             setenv("SDL_EGL_LIBRARY", sdlEglLib, 1);
             NSLog(@"[JavaLauncher] SDL3 GL/EGL library redirect (early): SDL_OPENGL_LIBRARY=%s, SDL_EGL_LIBRARY=%s",
@@ -919,13 +901,6 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
             char preloadPath[256];
             snprintf(preloadPath, sizeof(preloadPath), "@rpath/%s", glLibName);
             dlopen(preloadPath, RTLD_NOW | RTLD_GLOBAL);
-            // LTW 模式下还需要预加载 ANGLE（作为 LTW 的 host EGL，LTW constructor 会
-            // 通过 dlopen("@rpath/libtinygl4angle.dylib") 查找 eglGetProcAddress）
-            if (strcmp(glLibName, RENDERER_NAME_LTW) == 0) {
-                char anglePath[256];
-                snprintf(anglePath, sizeof(anglePath), "@rpath/%s", RENDERER_NAME_MTL_ANGLE);
-                dlopen(anglePath, RTLD_NOW | RTLD_GLOBAL);
-            }
         }
     }
 

@@ -34,48 +34,12 @@ static bool dlsym_EGL() {
         return false;
     }
 
-    // LTW 模式：eglCreateContext / eglDestroyContext / eglMakeCurrent 三个函数
-    // 必须从 libltw.dylib 直接 dlsym 解析，而非 ANGLE。
-    //
-    // 原因：LTW 是 OpenGL Core 3.3 → OpenGL ES 3 的转译层，它在这三个函数中
-    // 注入 wrapper 逻辑（创建 ES3 上下文 + 安装 GL 函数指针转译表 + 伪装 ARB 扩展）。
-    // 如果直接使用 ANGLE 的 eglCreateContext，创建的是原生 ES3 上下文，MC 1.17+
-    // 检测到 GL_VERSION 不含 "Core Profile" 会拒绝启动；Sodium/Iris 的 ARB 扩展
-    // 查询也会全部失败。LTW 的 wrapper 让 MC 看到的是 OpenGL 3.3 Core Profile，
-    // 且主动声明 GL_ARB_buffer_storage 等 ARB 扩展，让 Sodium 的 persistent mapped
-    // buffers / texture buffers 和 Iris 的 draw_buffers_blend 正常工作。
-    //
-    // 注意：不能用 RTLD_DEFAULT dlsym（iOS 的 flat namespace 中 ANGLE 符号会先命中），
-    // 必须显式 dlopen libltw.dylib 后从其 handle dlsym。
-    //
-    // 其余 EGL 函数（eglChooseConfig / eglCreateWindowSurface / eglSwapBuffers 等）
-    // LTW 不做 wrapper，直接从 ANGLE 解析。
-    BOOL useLTW = renderer && strcmp(renderer, RENDERER_NAME_LTW) == 0;
-    void *ltw_handle = NULL;
-    if (useLTW) {
-        ltw_handle = dlopen("@rpath/" RENDERER_NAME_LTW, RTLD_NOW | RTLD_LOCAL);
-        if (!ltw_handle) {
-            NSLog(@"EGLBridge: LTW renderer selected but failed to load libltw.dylib: %s",
-                  dlerror() ?: "unknown dlopen error");
-            // 致命错误：LTW 模式下没有 LTW 的 wrapper，MC 1.17+ 无法启动
-            return false;
-        }
-        NSLog(@"EGLBridge: LTW mode active, eglCreateContext/Destroy/MakeCurrent resolved from libltw.dylib");
-    }
-
     memset(&handle, 0, sizeof(handle));
     handle.eglBindAPI = load_egl_symbol(dl_handle, "eglBindAPI");
     handle.eglChooseConfig = load_egl_symbol(dl_handle, "eglChooseConfig");
-    if (useLTW && ltw_handle) {
-        // 从 LTW 解析三个 wrapper 函数（关键：让 LTW 的 GL Core→ES 转译逻辑生效）
-        handle.eglCreateContext = load_egl_symbol(ltw_handle, "eglCreateContext");
-        handle.eglDestroyContext = load_egl_symbol(ltw_handle, "eglDestroyContext");
-        handle.eglMakeCurrent = load_egl_symbol(ltw_handle, "eglMakeCurrent");
-    } else {
-        handle.eglCreateContext = load_egl_symbol(dl_handle, "eglCreateContext");
-        handle.eglDestroyContext = load_egl_symbol(dl_handle, "eglDestroyContext");
-        handle.eglMakeCurrent = load_egl_symbol(dl_handle, "eglMakeCurrent");
-    }
+    handle.eglCreateContext = load_egl_symbol(dl_handle, "eglCreateContext");
+    handle.eglDestroyContext = load_egl_symbol(dl_handle, "eglDestroyContext");
+    handle.eglMakeCurrent = load_egl_symbol(dl_handle, "eglMakeCurrent");
     handle.eglCreateWindowSurface = load_egl_symbol(dl_handle, "eglCreateWindowSurface");
     handle.eglDestroySurface = load_egl_symbol(dl_handle, "eglDestroySurface");
     handle.eglGetConfigAttrib = load_egl_symbol(dl_handle, "eglGetConfigAttrib");
