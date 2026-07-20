@@ -536,34 +536,37 @@ void init_hookFunctions() {
     NSLog(@"[main_hook] SDL3 dlsym + fishhook hook registered (amethyst_hooked_SDL_CreateWindow=%p, amethyst_fishhook_SDL_CreateWindow=%p)",
           (void *)amethyst_hooked_SDL_CreateWindow, (void *)amethyst_fishhook_SDL_CreateWindow);
 
-    // 主动预加载 libSDL3.dylib 并立即重绑定
+    // 注意：不在此处预加载 libSDL3.dylib。
     //
-    // 问题：MC 26.3-snapshot-4+ 加载 libSDL3.dylib 的时机不确定，
-    // 可能通过 LWJGL Library.loadNative（内部 dlopen 但绕过 hooked_dlopen）、
-    // JNA 或 MC 自己的 JNI binding。无论哪种方式，加载后 MC 立即调用
-    // SDL_CreateWindow，hooked_dlopen 的检查可能来不及触发。
+    // 历史问题：commit 3a837cc 曾在 init_hookFunctions 中主动 dlopen
+    // libSDL3.dylib。但 init_hookFunctions 在 main() 中于 UIApplicationMain
+    // 之前被调用（main.m 第 324 行）。SDL3 dylib 的 constructor 会初始化
+    // UIKit 后端（注册 SDLUIKitDelegate / SDL main hook），在 UIApplicationMain
+    // 之前加载会干扰 UIApplication / UIScene 的正常初始化，导致：
+    //   1. SceneDelegate.scene:willConnectToSession: 不被正确调用 → 白屏
+    //   2. requestGeometryUpdateWithPreferences 不执行 → 强制横屏失效
     //
-    // 解决：在 init_hookFunctions 中主动 dlopen libSDL3.dylib（RTLD_NOLOAD
-    // 检查是否已加载；如果未加载，用 RTLD_LAZY 加载），然后立即调用
-    // rebind_symbols 对所有当前已加载的 image 重新绑定符号。
-    // 这样无论 MC 何时调用 SDL_CreateWindow，符号引用都已指向我们的 hook。
-    //
-    // 注意：libSDL3.dylib 路径用 @rpath/libSDL3.dylib（主二进制 LC_RPATH
-    // 已配置 @executable_path/Frameworks），与 JavaLauncher.m 设置
-    // SDL_OPENGL_LIBRARY 时使用的路径前缀一致。
+    // 现在依赖 hooked_dlopen 拦截 libSDL3 的加载（无论 MC 通过 LWJGL
+    // Library.loadNative / JNA / 自己的 JNI binding，最终都通过 dlopen
+    // 加载 dylib，会被 hooked_dlopen 拦截并触发 rebind_symbols）。
+    // 如需额外保障，可在 launchMinecraft 中调用 amethyst_preloadSDL3ForHook()。
+}
+
+/// 主动预加载 libSDL3.dylib 并重绑定符号（供启动 MC 时调用）
+/// 必须在 UIApplicationMain 之后调用（例如 SurfaceViewController.launchMinecraft），
+/// 避免在 UIApplication 启动前加载 SDL3 干扰 UIKit 初始化。
+void amethyst_preloadSDL3ForHook(void) {
     void *sdl_lib = dlopen("@rpath/libSDL3.dylib", RTLD_NOLOAD | RTLD_GLOBAL);
     if (!sdl_lib) {
-        // 未加载，主动加载
         sdl_lib = dlopen("@rpath/libSDL3.dylib", RTLD_LAZY | RTLD_GLOBAL);
         if (sdl_lib) {
-            NSLog(@"[SDL3 Hook] libSDL3.dylib preloaded via dlopen in init_hookFunctions, rebinding all images");
-            // 重新调用 rebind_symbols，对新加载的 libSDL3.dylib image 重绑定
-            rebind_symbols(rebindings, sizeof(rebindings)/sizeof(struct rebinding));
+            NSLog(@"[SDL3 Hook] libSDL3.dylib preloaded via amethyst_preloadSDL3ForHook, rebinding all images");
+            init_hookFunctions();
         } else {
-            NSLog(@"[SDL3 Hook] libSDL3.dylib preload failed in init_hookFunctions (will retry on first dlopen): %s", dlerror());
+            NSLog(@"[SDL3 Hook] libSDL3.dylib preload failed in amethyst_preloadSDL3ForHook: %s", dlerror());
         }
     } else {
-        NSLog(@"[SDL3 Hook] libSDL3.dylib already loaded, rebinding all images");
-        rebind_symbols(rebindings, sizeof(rebindings)/sizeof(struct rebinding));
+        NSLog(@"[SDL3 Hook] libSDL3.dylib already loaded in amethyst_preloadSDL3ForHook, rebinding all images");
+        init_hookFunctions();
     }
 }

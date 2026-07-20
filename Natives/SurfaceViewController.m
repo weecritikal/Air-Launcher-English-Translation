@@ -1382,6 +1382,10 @@ static GameSurfaceView* pojavWindow;
 
 - (void)launchMinecraft {
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+        // 主动预加载 libSDL3.dylib 并重绑定符号（MC 26.3-snapshot-4+ 需要）
+        // 必须在 UIApplicationMain 之后调用，避免 SDL3 constructor 干扰 UIKit 初始化
+        amethyst_preloadSDL3ForHook();
+
         // Validate metadata
         if (!self.metadata) {
             NSLog(@"[SurfaceViewController] Error: metadata is nil");
