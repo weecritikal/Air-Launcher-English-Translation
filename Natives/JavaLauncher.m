@@ -452,6 +452,12 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
             NSLog(@"[ZinkConfig] ========== Zink Renderer Active (Mesa 25) ==========");
             NSLog(@"[ZinkConfig] %@", configSummary);
             setenv("ZINK_ACTIVE_CONFIG", configSummary.UTF8String, 1);
+
+            // 安装 zink vertex stride 4 字节对齐 fix
+            // 修复 Mesa 25.0.7 zink + MoltenVK 在启用光影时因 stride 未 4 字节对齐
+            // 导致 vkCreateGraphicsPipelines 失败 → SIGSEGV 的崩溃（详见 main_hook.m）
+            // 必须在 libOSMesa 被 dlopen 之前调用，确保 fishhook 能拦截后续符号引用
+            installZinkStrideFix();
         }
         // Setup AMETHYST_GRAPHICS_API（MC 26.2+ Graphics API：default/vulkan/opengl）
         // 仅 MC 26.2+ 识别此选项，旧版本 MC 会忽略 options.txt 中的 graphicsApi 字段。

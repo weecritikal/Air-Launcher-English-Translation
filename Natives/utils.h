@@ -71,6 +71,14 @@ BOOL DeviceRequiresTXMWorkaround(void);
 // Init functions
 void init_bypassDyldLibValidation();
 void init_hookFunctions();
+
+// Zink (Mesa 25.0.7) + MoltenVK vertex stride 4 字节对齐 fix
+// 仅在 zink 渲染器被选中时激活（需在 AMETHYST_RENDERER 环境变量设置后调用）
+// 详见 main_hook.m 中的实现注释
+void installZinkStrideFix();
+// 在新 image（libOSMesa / libMoltenVK）加载后调用，重新执行 fishhook
+// 捕获新 image 对 Vulkan loader 函数的符号引用
+void rebindZinkStrideFixForNewImage();
 void init_hookUIKitConstructor();
 void init_setupMultiDir();
 
