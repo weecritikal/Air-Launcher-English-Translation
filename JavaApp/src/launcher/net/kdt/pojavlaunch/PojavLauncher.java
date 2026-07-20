@@ -312,12 +312,18 @@ public class PojavLauncher {
                 return false;
             }
         }
-        // 26.3 pre/rc/release 及 26.4+ 都用 SDL3
+        // 26.3 pre/rc/release 用 SDL3
+        if (versionId.startsWith("26.3-pre") || versionId.startsWith("26.3-rc")
+            || versionId.equals("26.3")) {
+            return true;
+        }
+        // 26.4+ 用 SDL3（仅对数字开头的版本字符串做比较，避免 "fabric-loader-..." 误判）
+        // 修复：String.compareTo 是字典序比较，"fabric-loader-..." 的 'f'(102) > '2'(50)，
+        // 会被误判为 >= "26.4"，导致 1.21.1 Fabric 被错误识别为 SDL3 版本。
         // 注意：String.compareTo 对 "26.4" > "26.3" 是正确的（'4' > '3'）
         // 但对 "26.10" < "26.4" 是错误的（'1' < '4'），目前 MC 还没到 26.10
-        if (versionId.startsWith("26.3-pre") || versionId.startsWith("26.3-rc")
-            || versionId.equals("26.3")
-            || versionId.compareTo("26.4") >= 0) {
+        if (!versionId.isEmpty() && Character.isDigit(versionId.charAt(0))
+            && versionId.compareTo("26.4") >= 0) {
             return true;
         }
         return false;

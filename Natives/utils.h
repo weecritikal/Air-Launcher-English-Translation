@@ -77,6 +77,10 @@ void init_hookFunctions();
 // constructor 在 UIApplication 启动前干扰 UIKit 初始化导致白屏
 void amethyst_preloadSDL3ForHook();
 
+// 检测 MC 版本是否使用 SDL3 窗口后端（MC 26.3-snapshot-4+ 从 GLFW 切换到 SDL3）
+// 供 SurfaceViewController 决定是否预加载 SDL3，避免为 GLFW 版本加载 libSDL3.dylib
+BOOL amethyst_isSDL3Version(NSString *versionId);
+
 // Zink (Mesa 25.0.7) + MoltenVK vertex stride 4 字节对齐 fix
 // 仅在 zink 渲染器被选中时激活（需在 AMETHYST_RENDERER 环境变量设置后调用）
 // 详见 main_hook.m 中的实现注释

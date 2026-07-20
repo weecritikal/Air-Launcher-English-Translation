@@ -1382,11 +1382,7 @@ static GameSurfaceView* pojavWindow;
 
 - (void)launchMinecraft {
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        // 主动预加载 libSDL3.dylib 并重绑定符号（MC 26.3-snapshot-4+ 需要）
-        // 必须在 UIApplicationMain 之后调用，避免 SDL3 constructor 干扰 UIKit 初始化
-        amethyst_preloadSDL3ForHook();
-
-        // Validate metadata
+        // Validate metadata first（SDL3 预加载需要版本信息）
         if (!self.metadata) {
             NSLog(@"[SurfaceViewController] Error: metadata is nil");
             dispatch_async(dispatch_get_main_queue(), ^{
@@ -1395,7 +1391,19 @@ static GameSurfaceView* pojavWindow;
             });
             return;
         }
-        
+
+        // 仅对 SDL3 版本（MC 26.3-snapshot-4+）预加载 libSDL3.dylib 并重绑定符号。
+        // GLFW 版本（1.21.1 等）不需要 SDL3，加载它会初始化 SDL3 UIKit 后端，
+        // 与启动器的 GameSurfaceView/UIScene 冲突，可能导致渲染异常。
+        // 必须在 UIApplicationMain 之后调用，避免 SDL3 constructor 干扰 UIKit 初始化。
+        NSString *versionId = self.metadata[@"id"];
+        if (amethyst_isSDL3Version(versionId)) {
+            NSLog(@"[SurfaceViewController] SDL3 version detected (%@), preloading libSDL3.dylib", versionId);
+            amethyst_preloadSDL3ForHook();
+        } else {
+            NSLog(@"[SurfaceViewController] GLFW version detected (%@), skipping SDL3 preload", versionId);
+        }
+
         // Validate window dimensions
         if (windowWidth <= 0 || windowHeight <= 0) {
             NSLog(@"[SurfaceViewController] Error: invalid window size %dx%d", windowWidth, windowHeight);

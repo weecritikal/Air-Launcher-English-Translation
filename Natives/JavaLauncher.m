@@ -41,7 +41,14 @@ BOOL validateVirtualMemorySpace(size_t size) {
 ///   - 26.3-snapshot-4 及以上 → SDL3
 ///   - 26.3-snapshot-3 及以下 → GLFW
 ///   - 26.3 pre/rc/release 及 26.4+ → SDL3
-static BOOL isSDL3Version(NSString *versionId) {
+///
+/// 修复字典序比较 bug：
+///   旧代码 `[versionId compare:@"26.4"] != NSOrderedAscending` 对所有
+///   字典序 >= "26.4" 的字符串返回 YES。但 NSString compare 是按字符 ASCII
+///   比较，"fabric-loader-0.18.4-1.21.1" 的首字符 'f'(102) > '2'(50)，
+///   导致 1.21.1 Fabric 被误判为 SDL3 版本。
+///   修复：仅对首字符为数字的版本字符串做 >= "26.4" 比较。
+BOOL amethyst_isSDL3Version(NSString *versionId) {
     if (!versionId || versionId.length == 0) return NO;
 
     // 26.3-snapshot-N：N >= 4 用 SDL3
@@ -50,10 +57,15 @@ static BOOL isSDL3Version(NSString *versionId) {
         NSInteger n = numStr.integerValue;
         return n >= 4;
     }
-    // 26.3 pre/rc/release 及 26.4+ 都用 SDL3
+    // 26.3 pre/rc/release 用 SDL3
     if ([versionId hasPrefix:@"26.3-pre"] || [versionId hasPrefix:@"26.3-rc"]
-        || [versionId isEqualToString:@"26.3"]
-        || [versionId compare:@"26.4"] != NSOrderedAscending) {
+        || [versionId isEqualToString:@"26.3"]) {
+        return YES;
+    }
+    // 26.4+ 用 SDL3（仅对数字开头的版本字符串做比较，避免 "fabric-loader-..." 误判）
+    unichar firstChar = [versionId characterAtIndex:0];
+    if (firstChar >= '0' && firstChar <= '9'
+        && [versionId compare:@"26.4"] != NSOrderedAscending) {
         return YES;
     }
     return NO;
@@ -510,7 +522,7 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
         // 但可以检测版本并设置环境变量，供 native 层和 Java 层做相应适配。
         NSString *mcVersionId = [launchTarget isKindOfClass:NSDictionary.class]
             ? launchTarget[@"id"] : [launchTarget lastPathComponent];
-        BOOL useSDL3 = isSDL3Version(mcVersionId);
+        BOOL useSDL3 = amethyst_isSDL3Version(mcVersionId);
         NSString *windowingBackend = useSDL3 ? @"sdl" : @"glfw";
         setenv("AMETHYST_WINDOWING_BACKEND", windowingBackend.UTF8String, 1);
         NSLog(@"[JavaLauncher] WINDOWING_BACKEND is set to %@ (version=%@, useSDL3=%d)",
