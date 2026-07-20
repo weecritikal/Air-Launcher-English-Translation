@@ -341,6 +341,19 @@ public final class SDLVideo {
         SDL_SetWindowFullscreen = apiGetFunctionAddress(SDL_LIB, "SDL_SetWindowFullscreen"),
         SDL_SyncWindow = apiGetFunctionAddress(SDL_LIB, "SDL_SyncWindow"),
         SDL_WindowHasSurface = apiGetFunctionAddress(SDL_LIB, "SDL_WindowHasSurface"),
+        // MC 26.3-snapshot-4 Window.class 引用的额外方法（之前缺失，导致 NoSuchMethodError）
+        SDL_GetPrimaryDisplay = apiGetFunctionAddress(SDL_LIB, "SDL_GetPrimaryDisplay"),
+        SDL_GetCurrentVideoDriver = apiGetFunctionAddress(SDL_LIB, "SDL_GetCurrentVideoDriver"),
+        SDL_GetDisplayForWindow = apiGetFunctionAddress(SDL_LIB, "SDL_GetDisplayForWindow"),
+        SDL_GetCurrentDisplayMode = apiGetFunctionAddress(SDL_LIB, "SDL_GetCurrentDisplayMode"),
+        SDL_GetClosestFullscreenDisplayMode = apiGetFunctionAddress(SDL_LIB, "SDL_GetClosestFullscreenDisplayMode"),
+        SDL_GetWindowFullscreenMode = apiGetFunctionAddress(SDL_LIB, "SDL_GetWindowFullscreenMode"),
+        SDL_SetWindowFullscreenMode = apiGetFunctionAddress(SDL_LIB, "SDL_SetWindowFullscreenMode"),
+        SDL_GetWindowSizeInPixels = apiGetFunctionAddress(SDL_LIB, "SDL_GetWindowSizeInPixels"),
+        SDL_GetWindowPixelDensity = apiGetFunctionAddress(SDL_LIB, "SDL_GetWindowPixelDensity"),
+        SDL_SetWindowMinimumSize = apiGetFunctionAddress(SDL_LIB, "SDL_SetWindowMinimumSize"),
+        SDL_SetWindowMaximumSize = apiGetFunctionAddress(SDL_LIB, "SDL_SetWindowMaximumSize"),
+        SDL_SetWindowIcon = apiGetFunctionAddress(SDL_LIB, "SDL_SetWindowIcon"),
         SDL_ScreenSaverEnabled = apiGetFunctionAddress(SDL_LIB, "SDL_ScreenSaverEnabled"),
         SDL_EnableScreenSaver = apiGetFunctionAddress(SDL_LIB, "SDL_EnableScreenSaver"),
         SDL_DisableScreenSaver = apiGetFunctionAddress(SDL_LIB, "SDL_DisableScreenSaver"),
@@ -467,6 +480,80 @@ public final class SDLVideo {
     public static void SDL_DestroyWindow(long window) {
         // SDL3 SDL_DestroyWindow 返回 void，使用 invokePV(long, long)→void
         invokePV(window, Functions.SDL_DestroyWindow);
+    }
+
+    // --- MC 26.3-snapshot-4 Window.class 引用的额外方法 ---
+    // 这些方法之前缺失，导致 MC 调用 SDL_GetPrimaryDisplay 时抛 NoSuchMethodError，
+    // SDLVideo 类初始化失败，整个 SDL3 启动流程卡住。
+
+    /// 返回主显示器 ID（SDL3 SDL_GetPrimaryDisplay 返回 SDL_DisplayID = Uint32）
+    public static int SDL_GetPrimaryDisplay() {
+        return callI(Functions.SDL_GetPrimaryDisplay);
+    }
+
+    /// 返回当前视频驱动名称（const char*），null 表示无驱动
+    public static String SDL_GetCurrentVideoDriver() {
+        long ptr = callP(Functions.SDL_GetCurrentVideoDriver);
+        return memUTF8Safe(ptr);
+    }
+
+    /// 返回窗口所在的显示器 ID
+    public static int SDL_GetDisplayForWindow(long window) {
+        return callPI(window, Functions.SDL_GetDisplayForWindow);
+    }
+
+    /// 返回指定显示器的当前显示模式（SDL_DisplayMode* 指针，由 SDL 内部管理）
+    public static long SDL_GetCurrentDisplayMode(int displayID) {
+        return callP(displayID, Functions.SDL_GetCurrentDisplayMode);
+    }
+
+    /// 查找最接近的 fullscreen 显示模式
+    ///
+    /// 注意：原版 LWJGL 3.4.1 调用 JNI.invokePZ(IIIFZJJ)Z，但本项目的 JNI.class
+    /// （来自 lwjgl-system.jar）未导出此 7 参数重载，运行时会抛 NoSuchMethodError。
+    /// 本项目从窗口模式启动（SurfaceViewController 已配置 CAMetalLayer drawableSize），
+    /// 此方法仅在 MC 主动切换 fullscreen 时才会被调用。stub 返回 false 表示
+    /// "未找到匹配的 fullscreen 模式"，MC 会回退到默认 fullscreen 模式或保持窗口模式，
+    /// 不影响启动流程。如未来需要真正的 fullscreen 模式查找，需在 native 层实现
+    /// 一个 helper（通过 dlsym 调用 SDL_GetClosestFullscreenDisplayMode）。
+    public static boolean SDL_GetClosestFullscreenDisplayMode(int displayID, int w, int h, float refreshRate, boolean includeHighDensityModes, long outMode) {
+        return false;
+    }
+
+    /// 返回窗口的 fullscreen 模式（SDL_DisplayMode* 指针）
+    public static long SDL_GetWindowFullscreenMode(long window) {
+        return callPP(window, Functions.SDL_GetWindowFullscreenMode);
+    }
+
+    /// 设置窗口的 fullscreen 模式
+    public static boolean SDL_SetWindowFullscreenMode(long window, long mode) {
+        return callPPZ(window, mode, Functions.SDL_SetWindowFullscreenMode);
+    }
+
+    /// 获取窗口的像素大小
+    public static boolean SDL_GetWindowSizeInPixels(long window, IntBuffer w, IntBuffer h) {
+        return invokePPPZ(window, memAddress(w), memAddress(h), Functions.SDL_GetWindowSizeInPixels);
+    }
+
+    /// 返回窗口的像素密度（float）
+    public static float SDL_GetWindowPixelDensity(long window) {
+        // SDL3 返回 float，LWJGL invokePF(long, long)→float
+        return invokePF(window, Functions.SDL_GetWindowPixelDensity);
+    }
+
+    /// 设置窗口最小尺寸
+    public static boolean SDL_SetWindowMinimumSize(long window, int minW, int minH) {
+        return invokePZ(window, minW, minH, Functions.SDL_SetWindowMinimumSize);
+    }
+
+    /// 设置窗口最大尺寸
+    public static boolean SDL_SetWindowMaximumSize(long window, int maxW, int maxH) {
+        return invokePZ(window, maxW, maxH, Functions.SDL_SetWindowMaximumSize);
+    }
+
+    /// 设置窗口图标（SDL_Surface* 指针）
+    public static boolean SDL_SetWindowIcon(long window, long icon) {
+        return callPPZ(window, icon, Functions.SDL_SetWindowIcon);
     }
 
     // --- 屏幕保护 ---
