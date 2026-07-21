@@ -305,7 +305,7 @@ static const NSInteger kNewsPageSize = 24;
     config.interSectionSpacing = kNewsCardSpacing;
     config.scrollDirection = UICollectionViewScrollDirectionVertical;
 
-    return [UICollectionViewCompositionalLayout layoutWithConfiguration:config sectionProvider:^UICollectionViewCompositionalLayoutSection *(id<NSCollectionLayoutEnvironment> env) {
+    return [UICollectionViewCompositionalLayout layoutWithConfiguration:config sectionProvider:^NSCollectionLayoutSection *(id<NSCollectionLayoutEnvironment> env) {
         // 双列布局，每列等宽
         NSCollectionLayoutSize *itemSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:0.5]
                                                                             heightDimension:[NSCollectionLayoutDimension estimatedDimension:280]];
