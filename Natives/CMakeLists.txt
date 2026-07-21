@@ -496,6 +496,9 @@ add_executable(AngelAuraAmethyst
   TerracottaManager.m
   SilentAudioPlayer.m
   TerracottaViewController.m
+
+  # Update checker（参考 FCL/ZL2，使用 GitHub Releases API 检查正式版更新）
+  UpdateChecker.m
 )
 
 # Add ModLoaderIcons PNG files into the app bundle Resources/ModLoaderIcons so they are available at runtime.

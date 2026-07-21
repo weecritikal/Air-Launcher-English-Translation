@@ -678,6 +678,18 @@
 "preference.detail.ai_crash_fix" = "配置并使用 AI 助手自动诊断和修复游戏崩溃问题";
 "preference.title.memory_limit_help" = "内存限制说明";
 "preference.detail.memory_limit_help" = "了解 iOS 内存限制导致整合包闪退的原因及解决方法（GetMoreRam）";
+"preference.title.check_update" = "检查更新";
+"preference.detail.check_update" = "检查 GitHub Releases 上是否有最新正式版";
+
+// 检查更新
+"check_update" = "检查更新";
+"check_update.checking" = "正在检查更新…";
+"check_update.failed" = "检查更新失败";
+"check_update.up_to_date" = "已是最新版本";
+"check_update.current_version" = "当前版本 %@，已是最新正式版。";
+"check_update.new_version_title" = "发现新版本 v%@";
+"check_update.new_version_message" = "点击「前往下载」打开 GitHub Releases 页面下载最新版本。";
+"check_update.download" = "前往下载";
 
 // 内存限制帮助弹窗
 "mem_help.title" = "关于内存限制";
