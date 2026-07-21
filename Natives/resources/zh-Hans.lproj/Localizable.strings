@@ -691,6 +691,12 @@
 "check_update.new_version_message" = "点击「前往下载」打开 GitHub Releases 页面下载最新版本。";
 "check_update.download" = "前往下载";
 
+// Minecraft 新闻（参考 PCL-CE）
+"mc_news.title" = "Minecraft 新闻";
+"mc_news.read_more" = "查看详情";
+"mc_news.retry" = "重试";
+"mc_news.load_failed" = "加载失败";
+
 // 内存限制帮助弹窗
 "mem_help.title" = "关于内存限制";
 "mem_help.message" = "iOS 18 / iOS 26 单实例内存上限约为 1440MB，玩大型整合包时可能因内存不足崩溃。\n\n解决方法：\n使用 GetMoreRam (LiveContainer 插件) 解除内存限制。\nGetMoreRam 仓库：github.com/hugeBlack/GetMoreRam\n\n安装后重启启动器即可生效。\n\n如果不使用 LiveContainer，可尝试降低内存分配（设置 > Java > 内存分配），但部分整合包在内存限制下可能无法正常运行。";
