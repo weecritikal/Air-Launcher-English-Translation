@@ -62,6 +62,52 @@ else()
   message(FATAL_ERROR "ZeroTier framework not found at ${ZT_FRAMEWORK_LIB}. Please run: git submodule update --init --recursive")
 endif()
 
+# ============================================================================
+# libterracotta.xcframework 集成（陶瓦联机）
+# ============================================================================
+# 陶瓦联机（Terracotta）是 HMCL/FCL/ZL2/PCL-CE 共用的统一联机协议，底层基于
+# EasyTier P2P 组网。CraftLink 项目（github.com/yitenchen123/CraftLink）通过 CI
+# 构建 iOS 平台的 xcframework 静态库（terracotta_ios_* C ABI），与 HMCL/FCL/ZL2
+# v0.4.2 完全互通。
+#
+# xcframework 获取方式（开发者构建前置）：
+#   1. 访问 CraftLink CI 构建页：https://github.com/yitenchen123/CraftLink/actions
+#      选择最新的 build-terracotta-xcframework 工作流运行
+#   2. 在 Artifacts 中下载 libterracotta-xcframework-v042（约 34MB zip）
+#   3. 解压后将 libterracotta.xcframework 目录放入 Natives/terracotta/
+#      最终路径应为 Natives/terracotta/libterracotta.xcframework/ios-arm64/libterracotta.a
+#   4. 重新执行 make all 即可链接
+#
+# 检测逻辑：
+#   Level 1 — xcframework：检测 libterracotta.xcframework/ios-arm64/libterracotta.a
+#   Level 2 — 独立 .a：检测 libterracotta.a（向后兼容）
+#   未命中 — 警告并禁用联机功能（不阻断编译，方便无联机需求的开发者）
+#
+# 注意：libterracotta 是 Rust 静态库，含未直接引用的 static initializers
+# （如 EasyTier tokio runtime 注册），必须用 -force_load 强制加载整个库。
+# 同时需要链接 Rust 依赖的 libc++ 和 libresolv。
+# terracotta.h 中的 C ABI 函数用 __attribute__((weak)) 声明，库未链接时
+# 符号为 NULL，TerracottaBridge 运行时检查 terracotta_ios_available() 安全降级。
+set(TERRACOTTA_LIB_DIR "${CMAKE_CURRENT_LIST_DIR}/terracotta")
+set(TERRACOTTA_XCFW "${TERRACOTTA_LIB_DIR}/libterracotta.xcframework")
+set(TERRACOTTA_LIB "")
+set(TERRACOTTA_AVAILABLE OFF)
+
+if(EXISTS "${TERRACOTTA_XCFW}/ios-arm64/libterracotta.a")
+  set(_TC_LIB_PATH "${TERRACOTTA_XCFW}/ios-arm64/libterracotta.a")
+  message(STATUS "Found libterracotta XCFramework (Level 1: xcframework) at ${_TC_LIB_PATH}")
+  set(TERRACOTTA_LIB "-Wl,-force_load,${_TC_LIB_PATH}")
+  set(TERRACOTTA_AVAILABLE ON)
+elseif(EXISTS "${TERRACOTTA_LIB_DIR}/libterracotta.a")
+  set(_TC_LIB_PATH "${TERRACOTTA_LIB_DIR}/libterracotta.a")
+  message(STATUS "Found libterracotta static lib (Level 2: standalone .a) at ${_TC_LIB_PATH}")
+  set(TERRACOTTA_LIB "-Wl,-force_load,${_TC_LIB_PATH}")
+  set(TERRACOTTA_AVAILABLE ON)
+else()
+  message(WARNING "libterracotta not found at ${TERRACOTTA_XCFW}. Terracotta multiplayer will be disabled. "
+                  "Download from CraftLink CI: https://github.com/yitenchen123/CraftLink/actions")
+endif()
+
 # For cacio support library
 set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -rpath @loader_path -rpath @executable_path/java_runtimes/java-8-openjdk/lib -rpath /usr/lib/jvm/java-8-openjdk/lib")
 
@@ -440,6 +486,24 @@ add_executable(AngelAuraAmethyst
   # TouchController bridge and preferences
   TouchControllerBridge.m
   TouchControllerPreferencesViewController.m
+
+  # Terracotta multiplayer（陶瓦联机，与 HMCL/FCL/ZL2 互通）
+  # 源文件直接放在 Natives/ 目录（与其他 .m 同级），二进制库放在
+  # Natives/terracotta/libterracotta.xcframework/。
+  # C ABI 符号由 libterracotta.a 提供，未链接时 TerracottaBridge 通过
+  # weak linking 检测 terracotta_ios_available() 安全降级，不影响编译。
+  TerracottaBridge.m
+  TerracottaManager.m
+  SilentAudioPlayer.m
+  TerracottaViewController.m
+
+  # Update checker（参考 FCL/ZL2，使用 GitHub Releases API 检查正式版更新）
+  UpdateChecker.m
+
+  # Minecraft 新闻（参考 PCL-CE，调用 minecraft-services.net 官方新闻 API）
+  MinecraftNewsItem.m
+  MinecraftNewsService.m
+  MinecraftNewsViewController.m
 )
 
 # Add ModLoaderIcons PNG files into the app bundle Resources/ModLoaderIcons so they are available at runtime.
@@ -492,6 +556,10 @@ target_link_libraries(AngelAuraAmethyst
   "-framework WebKit"
   "-weak_framework SafariServices"
   ${TOUCHCONTROLLER_LIB}
+  # Terracotta multiplayer（陶瓦联机）—— libterracotta 是 Rust 静态库，需要 libc++/resolv
+  ${TERRACOTTA_LIB}
+  "-lc++"
+  "-lresolv"
 )
 set_target_properties(AngelAuraAmethyst PROPERTIES
   MACOSX_BUNDLE TRUE

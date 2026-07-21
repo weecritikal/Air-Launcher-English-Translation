@@ -70,6 +70,8 @@
     // 重新设置 tableView 背景为透明，确保背景效果切换后仍透出全局背景
     self.tableView.backgroundColor = [UIColor clearColor];
     self.tableView.backgroundView = nil;
+    // 重新加载 cell，让每个 cell 重新应用 applyEffectToCell:（毛玻璃/半透明）
+    [self.tableView reloadData];
 }
 
 - (void)dealloc {
@@ -648,6 +650,10 @@
     } else {
         [self applyCheckboxToCell:cell selected:NO];
     }
+
+    // 适配自定义启动器背景：为 cell 注入毛玻璃/半透明效果
+    // ModTableViewCell 自身 contentView 背景为 clearColor，由 BackgroundManager 统一注入
+    [[BackgroundManager sharedManager] applyEffectToCell:cell];
 
     return cell;
 }

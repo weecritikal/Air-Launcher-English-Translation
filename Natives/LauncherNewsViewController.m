@@ -10,6 +10,11 @@
 #import "PLProfiles.h"
 #import "utils.h"
 #import "ios_uikit_bridge.h"
+#import "MinecraftNewsService.h"
+#import "MinecraftNewsItem.h"
+#import "MinecraftNewsViewController.h"
+#import "IconLoader.h"
+#import <SafariServices/SafariServices.h>
 #import <QuartzCore/QuartzCore.h>
 
 // MARK: - Shortcut Action Constants
@@ -712,6 +717,10 @@ static NSString *festivalGreeting(void) {
 @property (nonatomic, assign) BOOL hasUpdate;
 @property (nonatomic, strong) NSString *latestVersion;
 
+// MC 新闻（首页 News tile 预览用，展示最新一条）
+@property (nonatomic, strong, nullable) MinecraftNewsItem *latestNewsItem;
+@property (nonatomic, assign) BOOL isLoadingNews;
+
 @end
 
 @implementation LauncherNewsViewController
@@ -748,6 +757,7 @@ static NSString *festivalGreeting(void) {
     [self updateSkinDisplay];
     [self checkMinecraftVersions];
     [self checkForUpdate];
+    [self loadLatestNewsForTile];
 
     // 适配自定义启动器背景：将当前视图控制器透明化，让全局背景（图片/视频）能够透出显示。
     // 本控制器为 UIViewController 子类，其 collectionView 为手动创建，
@@ -1016,9 +1026,35 @@ static NSString *festivalGreeting(void) {
         case HomeTileTypeNews: {
             HomeNewsTileCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"NewsCell" forIndexPath:indexPath];
             [cell setAccentColor:[config accentColor]];
-            cell.titleLabel.text = @"Minecraft 新闻";
-            cell.summaryLabel.text = @"敬请期待新闻功能上线...";
-            cell.placeholderLabel.text = @"即将推出 ✨";
+
+            if (self.latestNewsItem) {
+                // 显示最新一条新闻的标题/摘要/封面
+                cell.titleLabel.text = self.latestNewsItem.title ?: @"Minecraft 新闻";
+                cell.summaryLabel.text = self.latestNewsItem.summary ?: @"";
+                cell.placeholderLabel.text = self.latestNewsItem.formattedDateString ?: @"";
+                // 加载封面图（用 IconLoader，带缓存）
+                [IconLoader cancelLoadingForImageView:cell.thumbnailView];
+                if (self.latestNewsItem.imageURL.length > 0) {
+                    [IconLoader loadIconForImageView:cell.thumbnailView
+                                                 URL:self.latestNewsItem.imageURL
+                                         placeholder:[UIImage systemImageNamed:@"newspaper.fill"]
+                                            fallback:[UIImage systemImageNamed:@"newspaper.fill"]
+                                        targetSize:CGSizeMake(160, 120)];
+                } else {
+                    cell.thumbnailView.image = [UIImage systemImageNamed:@"newspaper.fill"];
+                }
+            } else if (self.isLoadingNews) {
+                cell.titleLabel.text = @"Minecraft 新闻";
+                cell.summaryLabel.text = @"正在加载最新新闻...";
+                cell.placeholderLabel.text = @"加载中...";
+                cell.thumbnailView.image = [UIImage systemImageNamed:@"newspaper.fill"];
+            } else {
+                // 加载失败或未加载
+                cell.titleLabel.text = @"Minecraft 新闻";
+                cell.summaryLabel.text = @"点击查看 Minecraft 官方新闻";
+                cell.placeholderLabel.text = @"点击进入 ✨";
+                cell.thumbnailView.image = [UIImage systemImageNamed:@"newspaper.fill"];
+            }
             return cell;
         }
             
@@ -1040,13 +1076,20 @@ static NSString *festivalGreeting(void) {
 
 - (void)collectionView:(UICollectionView *)collectionView didSelectItemAtIndexPath:(NSIndexPath *)indexPath {
     [collectionView deselectItemAtIndexPath:indexPath animated:YES];
-    
+
     HomeTileConfig *config = self.displaySections[indexPath.section][indexPath.item];
-    
+
     if (config.tileType == HomeTileTypeShortcut) {
         [self handleShortcutAction:config.shortcutAction];
     } else if (config.tileType == HomeTileTypeVersionRelease || config.tileType == HomeTileTypeVersionSnapshot) {
         [self checkMinecraftVersions];
+    } else if (config.tileType == HomeTileTypeNews) {
+        // 跳转到 MC 新闻列表页
+        MinecraftNewsViewController *newsVC = [[MinecraftNewsViewController alloc] init];
+        UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:newsVC];
+        nav.modalPresentationStyle = UIModalPresentationPageSheet;
+        // 适配自定义启动器背景：透明化导航栏，让全局背景透出
+        [self presentViewController:nav animated:YES completion:nil];
     }
 }
 
@@ -1188,6 +1231,34 @@ static NSString *festivalGreeting(void) {
     for (NSInteger s = 0; s < self.displaySections.count; s++) {
         for (HomeTileConfig *tile in self.displaySections[s]) {
             if (tile.tileType == HomeTileTypeProfile) {
+                [self.collectionView reloadSections:[NSIndexSet indexSetWithIndex:s]];
+                return;
+            }
+        }
+    }
+}
+
+- (void)loadLatestNewsForTile {
+    if (self.isLoadingNews) return;
+    self.isLoadingNews = YES;
+    __weak typeof(self) weakSelf = self;
+    [[MinecraftNewsService sharedService] fetchLatestNewsWithCompletion:^(NSArray<MinecraftNewsItem *> *items, NSInteger totalCount, NSError *error) {
+        __strong typeof(weakSelf) strongSelf = weakSelf;
+        if (!strongSelf) return;
+        strongSelf.isLoadingNews = NO;
+        if (items.count > 0) {
+            strongSelf.latestNewsItem = items.firstObject;
+        }
+        // 刷新 News tile 显示最新标题/摘要/封面
+        [strongSelf reloadNewsSection];
+    }];
+}
+
+/// 重新加载 News tile 所在 section
+- (void)reloadNewsSection {
+    for (NSInteger s = 0; s < self.displaySections.count; s++) {
+        for (HomeTileConfig *tile in self.displaySections[s]) {
+            if (tile.tileType == HomeTileTypeNews) {
                 [self.collectionView reloadSections:[NSIndexSet indexSetWithIndex:s]];
                 return;
             }

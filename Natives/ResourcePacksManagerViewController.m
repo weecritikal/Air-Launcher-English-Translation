@@ -69,6 +69,8 @@
     // 重新设置 tableView 背景为透明，确保背景效果切换后仍透出全局背景
     self.tableView.backgroundColor = [UIColor clearColor];
     self.tableView.backgroundView = nil;
+    // 重新加载 cell，让每个 cell 重新应用 applyEffectToCell:（毛玻璃/半透明）
+    [self.tableView reloadData];
 }
 
 - (void)dealloc {
@@ -447,6 +449,8 @@
         downloadButton.contentEdgeInsets = UIEdgeInsetsMake(4, 8, 4, 8);
         cell.accessoryView = downloadButton;
     }
+    // 适配自定义启动器背景：为 cell 注入毛玻璃/半透明效果
+    [[BackgroundManager sharedManager] applyEffectToCell:cell];
     return cell;
 }
 

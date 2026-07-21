@@ -27,7 +27,9 @@
     if (self = [super initWithStyle:style reuseIdentifier:reuseIdentifier]) {
         self.selectionStyle = UITableViewCellSelectionStyleNone;
         self.backgroundColor = [UIColor clearColor];
-        self.contentView.backgroundColor = [UIColor systemBackgroundColor];
+        // contentView 也设为 clearColor：由 BackgroundManager.applyEffectToCell: 统一注入
+        // 毛玻璃 backgroundView 或半透明 backgroundColor，避免遮挡自定义启动器背景
+        self.contentView.backgroundColor = [UIColor clearColor];
 
         // --- Initialization of UI Elements ---
         _shaderIconView = [self createImageViewWithCornerRadius:4];

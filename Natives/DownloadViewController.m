@@ -1075,9 +1075,12 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 - (void)setupUI {
     [self setupTabSegment];
     [self setupVersionFilterSegment];
-    [self setupSearchBar];
+    // 注意：setupSearchBar 内部引用了 filterSidebarContainer.trailingAnchor，
+    // 必须在 setupFilterSidebar 之后调用（否则 filterSidebarContainer 为 nil，
+    // 约束激活时 UIKit 会抛 NSInvalidArgumentException 导致点击下载 tile 立即闪退）。
+    [self setupFilterSidebar];  // FCL/ZL2 风格侧边筛选栏（先创建容器）
+    [self setupSearchBar];      // 再设置搜索框（依赖 filterSidebarContainer）
     [self setupSourceSwitch];
-    [self setupFilterSidebar];  // FCL/ZL2 风格侧边筛选栏
     [self setupVersionCollectionView];
     [self setupModTableView];
     [self setupShaderTableView];
@@ -1164,9 +1167,12 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     [self.view addSubview:self.importModpackButton];
 
     [NSLayoutConstraint activateConstraints:@[
-        // 搜索框放在版本筛选框下方，避免与 versionFilterSegment 重合
+        // 搜索框放在版本筛选框下方，避免与 versionFilterSegment 重合。
+        // 关键修复：searchBar.leading 跟随 filterSidebarContainer.trailing（与各 tab 表格一致），
+        // 这样侧边筛选栏展开时搜索框会自动右移避让，不再被筛选栏遮挡。
+        // 之前 searchBar.leading = view.leading+8，侧栏展开（140/180pt）时水平重叠遮挡搜索框左半部分。
         [self.searchBar.topAnchor constraintEqualToAnchor:self.versionFilterSegment.bottomAnchor constant:8],
-        [self.searchBar.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:8],
+        [self.searchBar.leadingAnchor constraintEqualToAnchor:self.filterSidebarContainer.trailingAnchor constant:8],
         [self.searchBar.trailingAnchor constraintEqualToAnchor:self.importModpackButton.leadingAnchor constant:-8],
 
         [self.importModpackButton.centerYAnchor constraintEqualToAnchor:self.searchBar.centerYAnchor],
@@ -1511,7 +1517,11 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
     [NSLayoutConstraint activateConstraints:@[
         [self.filterSidebarContainer.topAnchor constraintEqualToAnchor:self.tabSegment.bottomAnchor constant:8],
-        [self.filterSidebarContainer.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
+        // 关键修复：leading 留 8pt 间距，避免与左侧菜单栏（LauncherMenuViewController）视觉接触。
+        // 之前 leading = view.leading+0，filterSidebarContainer 紧贴 contentContainer 左边缘，
+        // 而 contentContainer 左边缘就是菜单栏右边缘，视觉上筛选栏与菜单栏"贴在一起"。
+        // 加 8pt 间距后两者之间有清晰分隔，与右侧 tableView 的 8pt 间距对称。
+        [self.filterSidebarContainer.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:8],
         [self.filterSidebarContainer.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor],
         self.sidebarWidthConstraint
     ]];

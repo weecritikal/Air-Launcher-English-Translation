@@ -18,6 +18,7 @@
 #import "CustomIconManager.h"
 #import "BackgroundSettingsViewController.h"
 #import "BackgroundManager.h"
+#import "UpdateChecker.h"
 #import "CurseForgeAPIKeyViewController.h"
 #import "CustomControlsViewController.h"
 
@@ -575,6 +576,14 @@
                       showDialog(localize(@"Error", nil), error.localizedDescription);
                   }
               }
+            },
+            @{@"key": @"check_update",
+              @"hasDetail": @YES,
+              @"icon": @"arrow.triangle.2.circlepath",
+              @"type": self.typeButton,
+              @"action": ^void(){
+                  [self checkForUpdateFromSettings];
+              }
             }
         ], @[
             // Video and renderer settings
@@ -1124,6 +1133,83 @@
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
     self.tableView.backgroundColor = [UIColor clearColor];
     self.tableView.backgroundView = nil;
+}
+
+#pragma mark - Check For Update
+
+/// 设置页"检查更新"入口：调用 UpdateChecker 检查正式版更新，弹窗显示结果。
+- (void)checkForUpdateFromSettings {
+    /* 显示加载中的 alert */
+    UIAlertController *loadingAlert = [UIAlertController
+        alertControllerWithTitle:localize(@"check_update.checking", @"正在检查更新…")
+                         message:nil
+                  preferredStyle:UIAlertControllerStyleAlert];
+    [self presentViewController:loadingAlert animated:YES completion:nil];
+
+    [UpdateChecker checkForUpdateWithCompletion:^(UpdateInfo *info, NSError *error) {
+        [loadingAlert dismissViewControllerAnimated:YES completion:^{
+            if (error || info == nil) {
+                [self showUpdateAlertWithTitle:localize(@"check_update.failed", @"检查更新失败")
+                                         message:error.localizedDescription ?: @"未知错误"
+                                       hasUpdate:NO
+                                          info:nil];
+                return;
+            }
+            if (info.hasUpdate) {
+                [self showUpdateAvailableAlert:info];
+            } else {
+                [self showUpdateAlertWithTitle:localize(@"check_update.up_to_date", @"已是最新版本")
+                                         message:[NSString stringWithFormat:
+                                             localize(@"check_update.current_version", @"当前版本 %@，已是最新正式版。"),
+                                             info.currentVersion]
+                                       hasUpdate:NO
+                                          info:nil];
+            }
+        }];
+    }];
+}
+
+- (void)showUpdateAlertWithTitle:(NSString *)title
+                         message:(NSString *)message
+                       hasUpdate:(BOOL)hasUpdate
+                          info:(nullable UpdateInfo *)info {
+    UIAlertController *alert = [UIAlertController
+        alertControllerWithTitle:title
+                         message:message
+                  preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:localize(@"OK", @"好的")
+                                              style:UIAlertActionStyleDefault
+                                            handler:nil]];
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+/// 发现新版本时显示更新详情弹窗（参考 FCL/ZL2 风格）
+- (void)showUpdateAvailableAlert:(UpdateInfo *)info {
+    NSString *title = [NSString stringWithFormat:localize(@"check_update.new_version_title",
+                                                          @"发现新版本 v%@"), info.latestVersion];
+    /* 更新日志截断显示，太长的话只显示前 500 字符 + 省略号 */
+    NSString *notes = info.releaseNotes ?: @"";
+    if (notes.length > 500) {
+        notes = [[notes substringToIndex:500] stringByAppendingString:@"…"];
+    }
+    NSString *message = [NSString stringWithFormat:@"%@\n\n%@",
+                         localize(@"check_update.new_version_message",
+                                  @"点击「前往下载」打开 GitHub Releases 页面下载最新版本。"),
+                         notes];
+
+    UIAlertController *alert = [UIAlertController
+        alertControllerWithTitle:title
+                         message:message
+                  preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:localize(@"check_update.download", @"前往下载")
+                                              style:UIAlertActionStyleDefault
+                                            handler:^(UIAlertAction *action) {
+        [UpdateChecker openReleasePage];
+    }]];
+    [alert addAction:[UIAlertAction actionWithTitle:localize(@"Cancel", @"取消")
+                                              style:UIAlertActionStyleCancel
+                                            handler:nil]];
+    [self presentViewController:alert animated:YES completion:nil];
 }
 
 #pragma mark - Memory Limit Help

@@ -656,6 +656,24 @@
 "preference.detail.ai_crash_fix" = "Configure and use AI assistant to automatically diagnose and fix game crash issues";
 "preference.title.memory_limit_help" = "Memory Limit Info";
 "preference.detail.memory_limit_help" = "Learn why iOS memory limits cause modpack crashes and how to fix it (GetMoreRam)";
+"preference.title.check_update" = "Check for Updates";
+"preference.detail.check_update" = "Check GitHub Releases for the latest stable version of Amethyst iOS";
+
+// Check for updates
+"check_update" = "Check for Updates";
+"check_update.checking" = "Checking for updates…";
+"check_update.failed" = "Update check failed";
+"check_update.up_to_date" = "Up to date";
+"check_update.current_version" = "Current version %@ is the latest stable release.";
+"check_update.new_version_title" = "New version v%@ available";
+"check_update.new_version_message" = "Tap \"Download\" to open the GitHub Releases page and get the latest version.";
+"check_update.download" = "Download";
+
+// Minecraft news (ref. PCL-CE)
+"mc_news.title" = "Minecraft News";
+"mc_news.read_more" = "Read more";
+"mc_news.retry" = "Retry";
+"mc_news.load_failed" = "Failed to load";
 
 // Memory limit help dialog
 "mem_help.title" = "About Memory Limit";
