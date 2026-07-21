@@ -896,11 +896,15 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
         // 位于 Frameworks 目录，需用 @rpath/ 前缀（@executable_path/Frameworks 已在
         // 二进制 LC_RPATH 中）。
         //
-        // 重要：仅在 SDL3 模式（useSDL3=YES）下设置。GLFW 模式下 MC 不走 SDL3 路径，
+        // 重要：仅在 SDL3 模式下设置。GLFW 模式下 MC 不走 SDL3 路径，
         // 设置这些环境变量会干扰 LWJGL 的 GLFW 加载（日志会显示矛盾的
         // "WINDOWING_BACKEND=glfw but SDL3 GL/EGL redirect"）。
         // GLFW 路径下的渲染器/EGL 加载由 egl_bridge.m 的 pojavInitOpenGL 负责。
-        if (useSDL3 &&
+        // 注意：useSDL3 变量定义在外层作用域（line ~537），此处访问不到，
+        // 改为读取 AMETHYST_WINDOWING_BACKEND 环境变量（由外层设置）。
+        const char *windowingBackendEnv = getenv("AMETHYST_WINDOWING_BACKEND");
+        BOOL isSDL3Backend = (windowingBackendEnv != NULL && strcmp(windowingBackendEnv, "sdl") == 0);
+        if (isSDL3Backend &&
             strcmp(glLibName, RENDERER_NAME_VULKAN) != 0 &&
             strcmp(glLibName, RENDERER_NAME_VK_ZINK) != 0 &&
             strstr(glLibName, "libOSMesa") == NULL) {
@@ -931,7 +935,7 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
                 snprintf(anglePath, sizeof(anglePath), "@rpath/%s", RENDERER_NAME_MTL_ANGLE);
                 dlopen(anglePath, RTLD_NOW | RTLD_GLOBAL);
             }
-        } else if (!useSDL3) {
+        } else if (!isSDL3Backend) {
             NSLog(@"[JavaLauncher] GLFW mode detected, skipping SDL3 GL/EGL library redirect");
         }
     }
