@@ -671,6 +671,25 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
     PUSH_MARGV_FORMAT(@"-Duser.home=%s", getenv("POJAV_HOME"));
     PUSH_MARGV_FORMAT(@"-Duser.timezone=%@", NSTimeZone.localTimeZone.name);
     PUSH_MARGV_FORMAT(@"-DUIScreen.maximumFramesPerSecond=%d", (int)UIScreen.mainScreen.maximumFramesPerSecond);
+
+    // 发布 GameSurfaceView 指针，供 Metallum Metal 后端使用
+    // +[SurfaceViewController surface] 返回静态变量 pojavWindow，该变量在
+    // -[SurfaceViewController viewDidLoad] 中被赋值（早于 launchMinecraft 派发到本后台线程）。
+    // 通过系统属性传递指针，可避免 JVM 渲染线程通过 ObjC runtime 查找 UIView 的不确定性。
+    Class surfaceVCClass = NSClassFromString(@"SurfaceViewController");
+    if (surfaceVCClass && [surfaceVCClass respondsToSelector:@selector(surface)]) {
+        id surfaceView = [surfaceVCClass performSelector:@selector(surface)];
+        if (surfaceView) {
+            PUSH_MARGV_FORMAT(@"-Dmetallum.ios.view.pointer=%p", surfaceView);
+            PUSH_MARGV_FORMAT(@"-Dmetallum.ios.screen.scale=%g", (double)UIScreen.mainScreen.scale);
+            NSLog(@"[JavaLauncher] 已发布 Metallum surface view 指针: %p (scale=%g)", surfaceView, (double)UIScreen.mainScreen.scale);
+        } else {
+            NSLog(@"[JavaLauncher] 警告：+[SurfaceViewController surface] 返回 nil，Metallum 将回退到 ObjC runtime 查找");
+        }
+    } else {
+        NSLog(@"[JavaLauncher] 警告：SurfaceViewController 类不可用，Metallum 将回退到 ObjC runtime 查找");
+    }
+
     PUSH_MARGV_LITERAL("-Dorg.lwjgl.glfw.checkThread0=false");
     PUSH_MARGV_LITERAL("-Dorg.lwjgl.system.allocator=system");
     //PUSH_MARGV_LITERAL("-Dorg.lwjgl.util.NoChecks=true");
