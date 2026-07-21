@@ -2194,7 +2194,8 @@ static NSString * const kPresetNetworkIdPrefKey = @"multiplayer.preset_network_i
 
     // 构建 JSON 字典
     NSMutableDictionary *jsonDict = [NSMutableDictionary dictionary];
-    jsonDict[kShareCodeKeyNetworkId] = room.networkId;
+    // Network ID 大小写归一化：统一用小写，避免大小写不一致导致同一房间产生不同分享码
+    jsonDict[kShareCodeKeyNetworkId] = [room.networkId lowercaseString];
     if (room.hostIP && room.hostIP.length > 0) {
         jsonDict[kShareCodeKeyHostIP] = room.hostIP;
     }
@@ -2217,11 +2218,10 @@ static NSString * const kPresetNetworkIdPrefKey = @"multiplayer.preset_network_i
         return @"";
     }
 
-    // Base64 编码（URL 安全：去掉换行符）
-    NSString *base64String = [jsonData base64EncodedStringWithOptions:0];
-    // 去除可能的换行符和空格
-    base64String = [base64String stringByReplacingOccurrencesOfString:@"\n" withString:@""];
-    base64String = [base64String stringByReplacingOccurrencesOfString:@"\r" withString:@""];
+    // Base64 编码：使用 URL-safe 字符表（- 和 _ 替代 + 和 /）
+    // 避免分享码经过 IM / URL / 邮件传递时 + 被转为空格、/ 被转为 _ 等导致解析失败
+    NSString *base64String = [jsonData base64EncodedStringWithOptions:NSDataBase64EncodingUseURLSafeAlphabet];
+    // URL-safe Base64 不会产生换行（padding 用 = 仍保留），仍去除空格以防万一
     base64String = [base64String stringByReplacingOccurrencesOfString:@" " withString:@""];
 
     NSLog(@"[MultiplayerManager] 已生成分享代码（长度=%lu）：%@...",
@@ -2242,8 +2242,19 @@ static NSString * const kPresetNetworkIdPrefKey = @"multiplayer.preset_network_i
         return nil;
     }
 
-    // Base64 解码
-    NSData *jsonData = [[NSData alloc] initWithBase64EncodedString:cleanCode
+    // 兼容旧版/被 IM 转换过的分享码：
+    // - 新版生成端使用 URL-safe Base64（- 和 _）
+    // - 旧版生成端使用标准 Base64（+ 和 /）
+    // - 某些 IM / URL 处理会自动把 + 转为空格、/ 转为 _ 等
+    // 解析策略：先把空格还原为 +、把 URL-safe 字符（- _）还原为标准字符（+ /），
+    // 然后用标准 Base64 解码。这样可同时兼容新旧格式与被转换过的码。
+    NSMutableString *normalized = [cleanCode mutableCopy];
+    [normalized replaceOccurrencesOfString:@" " withString:@"+" options:0 range:NSMakeRange(0, normalized.length)];
+    [normalized replaceOccurrencesOfString:@"-" withString:@"+" options:0 range:NSMakeRange(0, normalized.length)];
+    [normalized replaceOccurrencesOfString:@"_" withString:@"/" options:0 range:NSMakeRange(0, normalized.length)];
+
+    // Base64 解码（仍用 IgnoreUnknownCharacters 兜底，忽略其他意外字符）
+    NSData *jsonData = [[NSData alloc] initWithBase64EncodedString:normalized
                                                             options:NSDataBase64DecodingIgnoreUnknownCharacters];
     if (!jsonData || jsonData.length == 0) {
         NSLog(@"[MultiplayerManager] 解析分享代码失败：Base64 解码失败");
@@ -2265,6 +2276,11 @@ static NSString * const kPresetNetworkIdPrefKey = @"multiplayer.preset_network_i
     NSString *hostIP = jsonDict[kShareCodeKeyHostIP];
     NSString *hostPort = jsonDict[kShareCodeKeyHostPort];
     NSString *roomName = jsonDict[kShareCodeKeyRoomName];
+
+    // Network ID 大小写归一化：统一转小写，避免大小写不一致影响 ZeroTier 网络加入
+    if (networkId) {
+        networkId = [networkId lowercaseString];
+    }
 
     // 校验 Network ID
     if (!networkId || ![self isValidNetworkId:networkId]) {
