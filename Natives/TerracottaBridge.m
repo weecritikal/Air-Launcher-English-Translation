@@ -40,8 +40,9 @@ static void terracottaCallWithOptionalCString(NSString *s, void (^body)(const ch
     }
     int fd = -1;
     if (loggingPath != nil) {
-        /* O_WRONLY=1, O_CREAT=0o100, O_TRUNC=0o1000, O_APPEND=0o2000, mode=0o644 */
-        fd = open([loggingPath UTF8String], 0o2000 | 0o100 | 0o1000, 0o644);
+        /* C 标准八进制：O_WRONLY=01, O_CREAT=0100, O_TRUNC=01000, O_APPEND=02000, mode=0644
+         * 注意：不能用 C++14 的 0o 前缀（C 语言不支持，AppleClang 会报 invalid suffix） */
+        fd = open([loggingPath UTF8String], 02000 | 0100 | 01000, 0644);
     }
     @try {
         return terracotta_ios_start([workingDirectory UTF8String], fd) == 0 ? YES : NO;
