@@ -3,8 +3,10 @@
 #import "TerracottaBridge.h"
 #import "LauncherPreferences.h"
 #import "utils.h"
+#import "BackgroundManager.h"
+#import "MultiplayerViewController.h"
 
-/// FCL 风格的陶瓦联机界面
+/// FCL 风格的陶瓦联机界面（完美适配自定义启动器背景）
 ///
 /// 布局参考 FoldCraftLauncher 的 multiplayer 模块：
 /// - 顶部：状态卡片（圆形状态图标 + 状态文字 + 阶段描述 + 邀请码/直连地址）
@@ -14,6 +16,12 @@
 /// - 会话进行中：显示「断开连接」按钮 + 玩家列表
 ///
 /// 状态监听通过 TerracottaManagerStateDidChangeNotification 通知刷新 UI。
+///
+/// 背景适配（参照 MultiplayerViewController）：
+/// - viewDidLoad/viewWillAppear 调 makeViewControllerTransparent 透明化 VC
+/// - 所有卡片/玩家行用 applyEffectToView: 注入毛玻璃（半透明模式则注入半透明色）
+/// - 文字颜色根据 hasBackground 区分白字（背景图模式）与 labelColor（系统背景模式）
+/// - 监听 BackgroundUIEffectChanged 通知，背景切换时重新应用
 @interface TerracottaViewController () <UITextFieldDelegate>
 
 /* 顶部状态卡片 */
@@ -60,7 +68,7 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.title = @"陶瓦联机";
-    self.view.backgroundColor = [UIColor systemBackgroundColor];
+    self.view.backgroundColor = [UIColor clearColor];
 
     /* 关闭按钮（modal） */
     UIBarButtonItem *closeItem = [[UIBarButtonItem alloc]
@@ -69,13 +77,103 @@
                             action:@selector(close)];
     self.navigationItem.leftBarButtonItem = closeItem;
 
+    /* 右上角「ZeroTier 联机」入口（两个联机方案都保留，用户可自由切换） */
+    UIBarButtonItem *ztItem = [[UIBarButtonItem alloc]
+        initWithImage:[UIImage systemImageNamed:@"network"]
+                style:UIBarButtonItemStylePlain
+               target:self
+               action:@selector(switchToZeroTier:)];
+    ztItem.accessibilityLabel = @"ZeroTier 联机";
+    [ztItem setTintColor:nil]; // 跟随系统强调色
+    self.navigationItem.rightBarButtonItem = ztItem;
+
+    /* 适配自定义启动器背景：透明化 VC，让全局背景图/毛玻璃透出 */
+    [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
+
     [self setupViews];
     [self registerNotifications];
+    [self applyBackgroundEffects];
     [self refreshUI];
+}
+
+- (void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+    /* 与 MultiplayerViewController 一致：每次出现都重新透明化并应用导航栏毛玻璃 */
+    [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
+    [[BackgroundManager sharedManager] applyEffectToNavigationBar:self.navigationController.navigationBar];
+    [self applyBackgroundEffects];
 }
 
 - (void)dealloc {
     [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
+#pragma mark - Background Adaptation
+
+/// 监听背景效果变化（用户切换背景图/毛玻璃模式/透明度时触发）
+- (void)registerBackgroundNotifications {
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(backgroundEffectChanged:)
+                                                 name:@"BackgroundUIEffectChanged"
+                                               object:nil];
+}
+
+/// 背景效果变化时重新应用所有效果，并刷新玩家列表（让 row 重新读取背景状态）
+- (void)backgroundEffectChanged:(NSNotification *)notification {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
+        [[BackgroundManager sharedManager] applyEffectToNavigationBar:self.navigationController.navigationBar];
+        [self applyBackgroundEffects];
+        [self refreshUI];
+    });
+}
+
+/// 对所有卡片/输入框/玩家行应用毛玻璃或半透明效果
+- (void)applyBackgroundEffects {
+    /* 状态卡片：注入毛玻璃（或半透明色） */
+    [[BackgroundManager sharedManager] applyEffectToView:self.statusCard];
+
+    /* 输入框：背景透明 + 注入毛玻璃（让背景透出） */
+    [[BackgroundManager sharedManager] applyEffectToView:self.portField];
+    [[BackgroundManager sharedManager] applyEffectToView:self.inviteField];
+
+    /* 玩家列表行：每行注入毛玻璃 */
+    for (UIView *row in self.playersList.arrangedSubviews) {
+        [[BackgroundManager sharedManager] applyEffectToView:row];
+    }
+
+    /* 文字颜色：背景图模式下用白字保证对比度；系统背景模式下用 labelColor */
+    BOOL hasBg = [[BackgroundManager sharedManager] hasBackground];
+    UIColor *primaryText = hasBg ? [UIColor whiteColor] : [UIColor labelColor];
+    UIColor *secondaryText = hasBg ? [UIColor colorWithWhite:1.0 alpha:0.8] : [UIColor secondaryLabelColor];
+    UIColor *tertiaryText = hasBg ? [UIColor colorWithWhite:1.0 alpha:0.7] : [UIColor tertiaryLabelColor];
+
+    self.statusLabel.textColor = primaryText;
+    self.stageLabel.textColor = secondaryText;
+    self.inviteCodeLabel.textColor = primaryText;
+    self.directConnectLabel.textColor = secondaryText;
+    self.createHintLabel.textColor = secondaryText;
+    self.joinHintLabel.textColor = secondaryText;
+    self.playersTitleLabel.textColor = primaryText;
+
+    /* 输入框文字颜色（占位符颜色由系统处理） */
+    self.portField.textColor = primaryText;
+    self.inviteField.textColor = primaryText;
+
+    /* 复制按钮：背景图模式下用白字 */
+    self.inviteCopyButton.tintColor = secondaryText;
+    self.directCopyButton.tintColor = secondaryText;
+
+    /* 断开连接按钮边框颜色（背景图模式下用更醒目的白色边框 + 半透明红底） */
+    if (hasBg) {
+        [self.disconnectButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+        self.disconnectButton.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.6].CGColor;
+        self.disconnectButton.backgroundColor = [UIColor colorWithWhite:1.0 alpha:0.15];
+    } else {
+        [self.disconnectButton setTitleColor:[UIColor systemRedColor] forState:UIControlStateNormal];
+        self.disconnectButton.layer.borderColor = [UIColor systemRedColor].CGColor;
+        self.disconnectButton.backgroundColor = [UIColor clearColor];
+    }
 }
 
 #pragma mark - UI Setup
@@ -86,10 +184,12 @@
     self.scrollView.translatesAutoresizingMaskIntoConstraints = NO;
     self.scrollView.alwaysBounceVertical = YES;
     self.scrollView.keyboardDismissMode = UIScrollViewKeyboardDismissModeOnDrag;
+    self.scrollView.backgroundColor = [UIColor clearColor];
     [self.view addSubview:self.scrollView];
 
     self.contentView = [[UIView alloc] init];
     self.contentView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.contentView.backgroundColor = [UIColor clearColor];
     [self.scrollView addSubview:self.contentView];
 
     [NSLayoutConstraint activateConstraints:@[
@@ -114,7 +214,7 @@
 - (void)setupStatusCard {
     self.statusCard = [[UIView alloc] init];
     self.statusCard.translatesAutoresizingMaskIntoConstraints = NO;
-    self.statusCard.backgroundColor = [UIColor secondarySystemBackgroundColor];
+    self.statusCard.backgroundColor = [UIColor clearColor];
     self.statusCard.layer.cornerRadius = 16;
     self.statusCard.layer.masksToBounds = YES;
     [self.contentView addSubview:self.statusCard];
@@ -216,6 +316,7 @@
 - (void)setupCreatePanel {
     self.createPanel = [[UIView alloc] init];
     self.createPanel.translatesAutoresizingMaskIntoConstraints = NO;
+    self.createPanel.backgroundColor = [UIColor clearColor];
     [self.contentView addSubview:self.createPanel];
 
     self.createHintLabel = [self makeLabelWithFont:[UIFont systemFontOfSize:13]
@@ -261,6 +362,7 @@
     self.joinPanel = [[UIView alloc] init];
     self.joinPanel.translatesAutoresizingMaskIntoConstraints = NO;
     self.joinPanel.hidden = YES;
+    self.joinPanel.backgroundColor = [UIColor clearColor];
     [self.contentView addSubview:self.joinPanel];
 
     self.joinHintLabel = [self makeLabelWithFont:[UIFont systemFontOfSize:13]
@@ -363,7 +465,10 @@
     field.borderStyle = UITextBorderStyleRoundedRect;
     field.keyboardType = keyboardType;
     field.font = [UIFont systemFontOfSize:16];
-    field.backgroundColor = [UIColor secondarySystemBackgroundColor];
+    /* 背景透明：由 applyEffectToView: 注入毛玻璃 */
+    field.backgroundColor = [UIColor clearColor];
+    field.layer.cornerRadius = 8;
+    field.clipsToBounds = YES;
     return field;
 }
 
@@ -448,7 +553,40 @@
 }
 
 - (void)close {
-    [self dismissViewControllerAnimated:YES completion:nil];
+    /* 兼容两种容器：push 进 UINavigationController（启动器菜单路径）与 present 弹窗（游戏内菜单路径） */
+    if (self.navigationController && self.navigationController.viewControllers.firstObject != self) {
+        [self.navigationController popViewControllerAnimated:YES];
+    } else {
+        [self dismissViewControllerAnimated:YES completion:nil];
+    }
+}
+
+/// 切换到 ZeroTier 联机界面（两个联机方案都保留，用户可自由切换）
+- (void)switchToZeroTier:(UIBarButtonItem *)sender {
+    /* 弹确认框，避免用户误触中断当前会话 */
+    TerracottaStatus status = [TerracottaManager shared].status;
+    if (status != TerracottaStatusDisconnected) {
+        UIAlertController *alert = [UIAlertController
+            alertControllerWithTitle:@"切换到 ZeroTier 联机"
+                              message:@"当前陶瓦联机正在进行中，切换将断开当前会话。是否继续？"
+                       preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+        [alert addAction:[UIAlertAction actionWithTitle:@"切换" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
+            [[TerracottaManager shared] stopSession];
+            [self presentZeroTierVC];
+        }]];
+        [self presentViewController:alert animated:YES completion:nil];
+        return;
+    }
+    [self presentZeroTierVC];
+}
+
+- (void)presentZeroTierVC {
+    MultiplayerViewController *vc = [[MultiplayerViewController alloc] init];
+    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
+    nav.modalPresentationStyle = UIModalPresentationPageSheet;
+    /* 如果当前是 push 进的 nav 栈，用 present 覆盖；如果是 modal，直接 present */
+    [self presentViewController:nav animated:YES completion:nil];
 }
 
 #pragma mark - Player Name
@@ -467,6 +605,7 @@
                                              selector:@selector(stateDidChange:)
                                                  name:TerracottaManagerStateDidChangeNotification
                                                object:nil];
+    [self registerBackgroundNotifications];
 }
 
 - (void)stateDidChange:(NSNotification *)notification {
@@ -544,13 +683,18 @@
     for (TerracottaPlayerProfile *p in players) {
         [self.playersList addArrangedSubview:[self makePlayerRow:p role:role]];
     }
+    /* 新行也需要注入背景效果 */
+    for (UIView *row in self.playersList.arrangedSubviews) {
+        [[BackgroundManager sharedManager] applyEffectToView:row];
+    }
 }
 
 - (UIView *)makePlayerRow:(TerracottaPlayerProfile *)profile role:(TerracottaRole)role {
     UIView *row = [[UIView alloc] init];
     row.translatesAutoresizingMaskIntoConstraints = NO;
-    row.backgroundColor = [UIColor secondarySystemBackgroundColor];
+    row.backgroundColor = [UIColor clearColor];
     row.layer.cornerRadius = 8;
+    row.layer.masksToBounds = YES;
 
     UIImageView *avatar = [[UIImageView alloc] init];
     avatar.translatesAutoresizingMaskIntoConstraints = NO;

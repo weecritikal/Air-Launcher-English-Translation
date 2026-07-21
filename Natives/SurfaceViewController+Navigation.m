@@ -44,7 +44,7 @@ static const void *kMenuDimViewKey = &kMenuDimViewKey;
         @"game.menu.force_close",          // 强制关闭
         @"game.menu.log_output",            // 日志输出
         @"game.menu.custom_controls",       // 按键布局编辑
-        @"game.menu.multiplayer",           // 联机（ZeroTier）
+        @"game.menu.multiplayer",           // 联机（陶瓦联机 Terracotta，右上角可切换 ZeroTier）
         @"game.menu.toggle_stats",          // FPS/内存显示开关
         @"game.menu.toggle_controls",       // 隐藏/显示控制按钮
         @"game.menu.toggle_virtual_mouse",  // 虚拟鼠标开关
@@ -387,7 +387,7 @@ static const void *kMenuDimViewKey = &kMenuDimViewKey;
         case 2: // 按键布局编辑
             [self actionOpenCustomControls];
             break;
-        case 3: // 联机（ZeroTier）
+        case 3: // 联机（陶瓦联机 Terracotta，与 HMCL/FCL/ZL2 互通；右上角可切换到 ZeroTier）
             [self actionOpenMultiplayer];
             break;
         case 4: // FPS/内存显示开关

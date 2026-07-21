@@ -1075,9 +1075,12 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 - (void)setupUI {
     [self setupTabSegment];
     [self setupVersionFilterSegment];
-    [self setupSearchBar];
+    // 注意：setupSearchBar 内部引用了 filterSidebarContainer.trailingAnchor，
+    // 必须在 setupFilterSidebar 之后调用（否则 filterSidebarContainer 为 nil，
+    // 约束激活时 UIKit 会抛 NSInvalidArgumentException 导致点击下载 tile 立即闪退）。
+    [self setupFilterSidebar];  // FCL/ZL2 风格侧边筛选栏（先创建容器）
+    [self setupSearchBar];      // 再设置搜索框（依赖 filterSidebarContainer）
     [self setupSourceSwitch];
-    [self setupFilterSidebar];  // FCL/ZL2 风格侧边筛选栏
     [self setupVersionCollectionView];
     [self setupModTableView];
     [self setupShaderTableView];
