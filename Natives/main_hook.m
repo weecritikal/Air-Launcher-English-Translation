@@ -888,6 +888,16 @@ static SDL_Window *amethyst_fishhook_SDL_CreateWindow(const char *title, int w, 
 }
 
 void init_hookFunctions() {
+    // 检查窗口后端模式：AMETHYST_WINDOWING_BACKEND 由 JavaLauncher.m 设置
+    //   - "sdl"  → SDL3 模式（MC 26.3-snapshot-4+），需要 SDL_CreateWindow/SDL_InitSubSystem hook
+    //   - "glfw" → GLFW 模式（MC 26.3-snapshot-3 及以下），不需要 SDL3 hook
+    //   - 未设置 → 早期调用（main.m 中 UIApplicationMain 之前），保守注册所有 hook
+    //     （libSDL3 还未加载，SDL3 hook 不会有实际副作用；后续 libSDL3 加载时
+    //      会通过 hooked_dlopen 再次调用 init_hookFunctions 补充注册）
+    const char *windowingBackend = getenv("AMETHYST_WINDOWING_BACKEND");
+    BOOL registerSDL3Hooks = (windowingBackend == NULL) || (strcmp(windowingBackend, "sdl") == 0);
+
+    // 基础 hook（始终注册）
     struct rebinding rebindings[] = (struct rebinding[]){
         {"abort", hooked_abort, (void *)&orig_abort},
         {"__assert_rtn", hooked___assert_rtn, NULL},
@@ -895,17 +905,34 @@ void init_hookFunctions() {
         {"dlopen", hooked_dlopen, (void *)&orig_dlopen},
         {"dlsym", hooked_dlsym, (void *)&orig_dlsym},
         {"open", hooked_open, (void *)&orig_open},
-        // SDL_CreateWindow 通过 fishhook 直接重绑定符号
-        // （MC 26.3-snapshot-4+ 不通过 dlsym 获取 SDL_CreateWindow，
-        //  而是通过 LWJGL SharedLibrary.getFunctionAddress 或 JNA，
-        //  fishhook 可以直接修改符号表引用）
+    };
+    size_t rebindings_count = sizeof(rebindings)/sizeof(struct rebinding);
+
+    // SDL3 hook（仅 SDL3 模式或未确定模式时注册）
+    // SDL_CreateWindow：MC 26.3-snapshot-4+ 不通过 dlsym 获取，而是通过 LWJGL
+    //   SharedLibrary.getFunctionAddress 或 JNA，fishhook 可直接修改符号表引用
+    // SDL_InitSubSystem：参照 Android 仓库 sdl_hook.c，拦截 MC 调用 SDL_Init/
+    //   SDL_InitSubSystem，设置 SDL_RETURN_KEY_HIDES_IME 等 hints
+    struct rebinding sdl3_rebindings[] = (struct rebinding[]){
         {"SDL_CreateWindow", amethyst_fishhook_SDL_CreateWindow, (void *)&g_fishhook_orig_sdl_CreateWindow},
-        // SDL_InitSubSystem 通过 fishhook 重绑定（参照 Android 仓库 sdl_hook.c）
-        // 拦截 MC 调用 SDL_Init/SDL_InitSubSystem，设置 SDL_RETURN_KEY_HIDES_IME 等 hints
         {"SDL_InitSubSystem", amethyst_fishhook_SDL_InitSubSystem, NULL}
     };
-    rebind_symbols(rebindings, sizeof(rebindings)/sizeof(struct rebinding));
-    NSLog(@"[main_hook] SDL3 dlsym + fishhook hook registered (SDL_CreateWindow + SDL_InitSubSystem)");
+    size_t sdl3_rebindings_count = sizeof(sdl3_rebindings)/sizeof(struct rebinding);
+
+    if (registerSDL3Hooks) {
+        // 合并基础 hook 和 SDL3 hook 一起注册
+        struct rebinding all_rebindings[sizeof(rebindings)/sizeof(struct rebinding) +
+                                         sizeof(sdl3_rebindings)/sizeof(struct rebinding)];
+        memcpy(all_rebindings, rebindings, sizeof(rebindings));
+        memcpy(all_rebindings + rebindings_count, sdl3_rebindings, sizeof(sdl3_rebindings));
+        rebind_symbols(all_rebindings, rebindings_count + sdl3_rebindings_count);
+        NSLog(@"[main_hook] fishhook registered: base hooks + SDL3 hooks (SDL_CreateWindow + SDL_InitSubSystem), backend=%s",
+              windowingBackend ? windowingBackend : "<unset>");
+    } else {
+        // GLFW 模式：仅注册基础 hook，不注册 SDL3 hook
+        rebind_symbols(rebindings, rebindings_count);
+        NSLog(@"[main_hook] fishhook registered: base hooks only (GLFW mode, SDL3 hooks skipped)");
+    }
 
     // 注意：不在此处预加载 libSDL3.dylib。
     //

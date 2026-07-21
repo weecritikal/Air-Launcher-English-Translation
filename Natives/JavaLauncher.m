@@ -894,8 +894,14 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
         //
         // SDL3 通过 dlopen(env_var_value, RTLD_GLOBAL|RTLD_NOW) 加载库。iOS 上 dylib
         // 位于 Frameworks 目录，需用 @rpath/ 前缀（@executable_path/Frameworks 已在
-        // 二进制 LC_RPATH 中）。egl_bridge.m 中也有相同设置（GLFW 路径下的冗余兜底）。
-        if (strcmp(glLibName, RENDERER_NAME_VULKAN) != 0 &&
+        // 二进制 LC_RPATH 中）。
+        //
+        // 重要：仅在 SDL3 模式（useSDL3=YES）下设置。GLFW 模式下 MC 不走 SDL3 路径，
+        // 设置这些环境变量会干扰 LWJGL 的 GLFW 加载（日志会显示矛盾的
+        // "WINDOWING_BACKEND=glfw but SDL3 GL/EGL redirect"）。
+        // GLFW 路径下的渲染器/EGL 加载由 egl_bridge.m 的 pojavInitOpenGL 负责。
+        if (useSDL3 &&
+            strcmp(glLibName, RENDERER_NAME_VULKAN) != 0 &&
             strcmp(glLibName, RENDERER_NAME_VK_ZINK) != 0 &&
             strstr(glLibName, "libOSMesa") == NULL) {
             char sdlGlLib[256];
@@ -914,8 +920,7 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
             NSLog(@"[JavaLauncher] SDL3 GL/EGL library redirect (early): SDL_OPENGL_LIBRARY=%s, SDL_EGL_LIBRARY=%s",
                   sdlGlLib, sdlEglLib);
             // 预加载渲染器库（RTLD_GLOBAL），让后续 dlopen 找到符号。
-            // GLFW 路径下 pojavInitOpenGL 也会 dlopen，但 SDL3 路径不会经过那里，
-            // 故在此预加载一次确保 SDL3 dlopen 时库已在内存中。
+            // SDL3 路径不会经过 pojavInitOpenGL，故在此预加载一次确保 SDL3 dlopen 时库已在内存中。
             char preloadPath[256];
             snprintf(preloadPath, sizeof(preloadPath), "@rpath/%s", glLibName);
             dlopen(preloadPath, RTLD_NOW | RTLD_GLOBAL);
@@ -926,6 +931,8 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
                 snprintf(anglePath, sizeof(anglePath), "@rpath/%s", RENDERER_NAME_MTL_ANGLE);
                 dlopen(anglePath, RTLD_NOW | RTLD_GLOBAL);
             }
+        } else if (!useSDL3) {
+            NSLog(@"[JavaLauncher] GLFW mode detected, skipping SDL3 GL/EGL library redirect");
         }
     }
 
