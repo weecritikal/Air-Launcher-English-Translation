@@ -23,9 +23,9 @@
 @property(nonatomic, strong) UILabel *stageLabel;
 @property(nonatomic, strong) UIActivityIndicatorView *activityIndicator;
 @property(nonatomic, strong) UILabel *inviteCodeLabel;
-@property(nonatomic, strong) UIButton *copyInviteButton;
+@property(nonatomic, strong) UIButton *inviteCopyButton;
 @property(nonatomic, strong) UILabel *directConnectLabel;
-@property(nonatomic, strong) UIButton *copyDirectButton;
+@property(nonatomic, strong) UIButton *directCopyButton;
 
 /* Tab 切换 */
 @property(nonatomic, strong) UISegmentedControl *tabControl;
@@ -146,8 +146,8 @@
     self.inviteCodeLabel.numberOfLines = 0;
     [self.statusCard addSubview:self.inviteCodeLabel];
 
-    self.copyInviteButton = [self makeCopyButtonWithSelector:@selector(copyInviteCode:)];
-    [self.statusCard addSubview:self.copyInviteButton];
+    self.inviteCopyButton = [self makeCopyButtonWithSelector:@selector(copyInviteCode:)];
+    [self.statusCard addSubview:self.inviteCopyButton];
 
     /* 直连地址行 */
     self.directConnectLabel = [self makeLabelWithFont:[UIFont fontWithName:@"Menlo" size:13]
@@ -155,8 +155,8 @@
     self.directConnectLabel.numberOfLines = 0;
     [self.statusCard addSubview:self.directConnectLabel];
 
-    self.copyDirectButton = [self makeCopyButtonWithSelector:@selector(copyDirectURL:)];
-    [self.statusCard addSubview:self.copyDirectButton];
+    self.directCopyButton = [self makeCopyButtonWithSelector:@selector(copyDirectURL:)];
+    [self.statusCard addSubview:self.directCopyButton];
 
     [NSLayoutConstraint activateConstraints:@[
         [self.statusCard.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:16],
@@ -181,17 +181,17 @@
 
         [self.inviteCodeLabel.topAnchor constraintEqualToAnchor:self.stageLabel.bottomAnchor constant:8],
         [self.inviteCodeLabel.leadingAnchor constraintEqualToAnchor:self.statusCard.leadingAnchor constant:16],
-        [self.inviteCodeLabel.trailingAnchor constraintEqualToAnchor:self.copyInviteButton.leadingAnchor constant:-8],
+        [self.inviteCodeLabel.trailingAnchor constraintEqualToAnchor:self.inviteCopyButton.leadingAnchor constant:-8],
 
-        [self.copyInviteButton.centerYAnchor constraintEqualToAnchor:self.inviteCodeLabel.centerYAnchor],
-        [self.copyInviteButton.trailingAnchor constraintEqualToAnchor:self.statusCard.trailingAnchor constant:-16],
+        [self.inviteCopyButton.centerYAnchor constraintEqualToAnchor:self.inviteCodeLabel.centerYAnchor],
+        [self.inviteCopyButton.trailingAnchor constraintEqualToAnchor:self.statusCard.trailingAnchor constant:-16],
 
         [self.directConnectLabel.topAnchor constraintEqualToAnchor:self.inviteCodeLabel.bottomAnchor constant:4],
         [self.directConnectLabel.leadingAnchor constraintEqualToAnchor:self.statusCard.leadingAnchor constant:16],
-        [self.directConnectLabel.trailingAnchor constraintEqualToAnchor:self.copyDirectButton.leadingAnchor constant:-8],
+        [self.directConnectLabel.trailingAnchor constraintEqualToAnchor:self.directCopyButton.leadingAnchor constant:-8],
 
-        [self.copyDirectButton.centerYAnchor constraintEqualToAnchor:self.directConnectLabel.centerYAnchor],
-        [self.copyDirectButton.trailingAnchor constraintEqualToAnchor:self.statusCard.trailingAnchor constant:-16],
+        [self.directCopyButton.centerYAnchor constraintEqualToAnchor:self.directConnectLabel.centerYAnchor],
+        [self.directCopyButton.trailingAnchor constraintEqualToAnchor:self.statusCard.trailingAnchor constant:-16],
 
         [self.statusCard.bottomAnchor constraintEqualToAnchor:self.directConnectLabel.bottomAnchor constant:16],
     ]];
@@ -495,19 +495,19 @@
     /* 邀请码 */
     if (mgr.currentInviteCode.length > 0) {
         self.inviteCodeLabel.text = [NSString stringWithFormat:@"邀请码：%@", mgr.currentInviteCode];
-        self.copyInviteButton.hidden = NO;
+        self.inviteCopyButton.hidden = NO;
     } else {
         self.inviteCodeLabel.text = nil;
-        self.copyInviteButton.hidden = YES;
+        self.inviteCopyButton.hidden = YES;
     }
 
     /* 直连地址 */
     if (mgr.directConnectURL.length > 0) {
         self.directConnectLabel.text = [NSString stringWithFormat:@"MC 直连：%@", mgr.directConnectURL];
-        self.copyDirectButton.hidden = NO;
+        self.directCopyButton.hidden = NO;
     } else {
         self.directConnectLabel.text = nil;
-        self.copyDirectButton.hidden = YES;
+        self.directCopyButton.hidden = YES;
     }
 
     /* 会话进行中：隐藏 Tab 和面板，显示断开按钮和玩家列表 */
