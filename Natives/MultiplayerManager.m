@@ -2218,10 +2218,13 @@ static NSString * const kPresetNetworkIdPrefKey = @"multiplayer.preset_network_i
         return @"";
     }
 
-    // Base64 编码：使用 URL-safe 字符表（- 和 _ 替代 + 和 /）
-    // 避免分享码经过 IM / URL / 邮件传递时 + 被转为空格、/ 被转为 _ 等导致解析失败
-    NSString *base64String = [jsonData base64EncodedStringWithOptions:NSDataBase64EncodingUseURLSafeAlphabet];
-    // URL-safe Base64 不会产生换行（padding 用 = 仍保留），仍去除空格以防万一
+    // Base64 编码：iOS NSData 的 Base64EncodingOptions 没有 URL-safe 选项（Swift 6.2+ 才有），
+    // 这里先用标准 Base64 编码，再手动把 + 替换为 -、/ 替换为 _，得到 URL-safe 形式。
+    // 避免分享码经过 IM / URL / 邮件传递时 + 被转为空格、/ 被转为 _ 等导致解析失败。
+    NSString *base64String = [jsonData base64EncodedStringWithOptions:0];
+    base64String = [base64String stringByReplacingOccurrencesOfString:@"+" withString:@"-"];
+    base64String = [base64String stringByReplacingOccurrencesOfString:@"/" withString:@"_"];
+    // 标准编码不会产生换行，仍去除空格以防万一
     base64String = [base64String stringByReplacingOccurrencesOfString:@" " withString:@""];
 
     NSLog(@"[MultiplayerManager] 已生成分享代码（长度=%lu）：%@...",
