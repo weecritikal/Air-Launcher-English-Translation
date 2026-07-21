@@ -86,6 +86,13 @@
     // 两条进入路径（push 和 showProfileEditor modal）都使用 clearColor，
     // 统一由 BackgroundManager 管理背景效果。
     self.tableView.backgroundColor = [UIColor clearColor];
+    // 适配自定义启动器背景：给 tableView 设置毛玻璃 backgroundView，遮挡栈底 VC 内容。
+    // 修复"点击版本管理进入版本设置后前一页面未及时消失"问题：
+    // ProfileSettingsViewController 是 UITableViewController，self.view == self.tableView。
+    // 若 tableView 完全透明，push 后会透出栈底 VersionManagerViewController 的卡片，造成"前一页未消失"。
+    // 这里给 backgroundView 设置 UIVisualEffectView（毛玻璃），既能模糊并透出全局背景图，
+    // 又能遮挡栈底 VC 内容，同时保持视觉一致性。
+    [self applyBackgroundBlurToTableView];
     // 适配自定义启动器背景：导航栏毛玻璃 + 视图透明
     if (self.navigationController) {
         [[BackgroundManager sharedManager] applyEffectToNavigationBar:self.navigationController.navigationBar];
@@ -1757,8 +1764,52 @@
 
 - (void)handleBackgroundUIEffectChanged:(NSNotification *)notification {
     dispatch_async(dispatch_get_main_queue(), ^{
+        // 背景效果切换后重新应用 tableView 毛玻璃 backgroundView，
+        // 否则切换毛玻璃↔半透明后旧 backgroundView 仍存在造成视觉不一致
+        [self applyBackgroundBlurToTableView];
         [self.tableView reloadData];
     });
+}
+
+/// 给 self.tableView 设置底层背景视图，遮挡栈底 VC 内容同时透出全局背景。
+/// - 有自定义启动器背景时：使用 UIVisualEffectView (SystemThinMaterial) 毛玻璃背景，
+///   模糊全局背景图但仍能透出，并遮挡栈底 VersionManager 的卡片。
+/// - 无自定义背景时：使用 systemBackgroundColor，与系统默认外观一致。
+- (void)applyBackgroundBlurToTableView {
+    if (!self.tableView) return;
+    // 清理旧 backgroundView（避免叠加）
+    self.tableView.backgroundView = nil;
+
+    if ([[BackgroundManager sharedManager] hasBackground]) {
+        // 有自定义背景：使用毛玻璃 backgroundView 模糊背景并遮挡栈底 VC
+        UIBlurEffect *blur;
+        if (@available(iOS 13.0, *)) {
+            blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemThinMaterial];
+        } else {
+            blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleLight];
+        }
+        UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:blur];
+        blurView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+        blurView.frame = self.tableView.bounds;
+        // 按 uiEffect 调整透明度：毛玻璃模式保持默认 0.7 通透，半透明模式按 uiOpacity
+        BackgroundUIEffect effect = [BackgroundManager sharedManager].uiEffect;
+        if (effect == BackgroundUIEffectBlur) {
+            blurView.alpha = 0.85;
+        } else {
+            blurView.alpha = MAX(0.5, [BackgroundManager sharedManager].uiOpacity);
+        }
+        self.tableView.backgroundView = blurView;
+    } else {
+        // 无自定义背景：使用系统默认色，保持原 UI 风格
+        if (@available(iOS 13.0, *)) {
+            UIView *bg = [[UIView alloc] initWithFrame:self.tableView.bounds];
+            bg.backgroundColor = [UIColor systemBackgroundColor];
+            bg.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+            self.tableView.backgroundView = bg;
+        }
+    }
+    // tableView 本身保持透明，让 backgroundView 显示
+    self.tableView.backgroundColor = [UIColor clearColor];
 }
 
 #pragma mark - UA-aware download helper

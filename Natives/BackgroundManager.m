@@ -794,7 +794,6 @@ static const NSInteger kDefaultBackgroundTag = 99995;
 
 - (void)applyEffectToCollectionViewCell:(UICollectionViewCell *)cell {
     if (!cell) return;
-    
     if (self.uiEffect == BackgroundUIEffectBlur) {
         // 毛玻璃效果
         for (UIView *subview in cell.contentView.subviews) {
@@ -802,7 +801,7 @@ static const NSInteger kDefaultBackgroundTag = 99995;
                 [subview removeFromSuperview];
             }
         }
-        
+
         UIBlurEffect *blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial];
         UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:blur];
         blurView.tag = kBackgroundBlurTag;
@@ -810,7 +809,7 @@ static const NSInteger kDefaultBackgroundTag = 99995;
         blurView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
         blurView.layer.cornerRadius = cell.contentView.layer.cornerRadius;
         blurView.layer.masksToBounds = YES;
-        
+
         [cell.contentView insertSubview:blurView atIndex:0];
         cell.backgroundColor = [UIColor clearColor];
         cell.contentView.backgroundColor = [UIColor clearColor];
@@ -828,6 +827,68 @@ static const NSInteger kDefaultBackgroundTag = 99995;
             cell.backgroundColor = [UIColor colorWithWhite:0.1 alpha:self.uiOpacity];
         }
         cell.contentView.backgroundColor = [UIColor clearColor];
+    }
+}
+
+- (void)applyEffectToSearchBar:(UISearchBar *)searchBar {
+    if (!searchBar) return;
+
+    // 1. searchBar 整体背景透明，让底层自定义启动器背景透出
+    //    UISearchBar 默认是不透明的 systemBackgroundColor，会遮挡全局背景图/毛玻璃
+    searchBar.barTintColor = [UIColor clearColor];
+    searchBar.backgroundColor = [UIColor clearColor];
+    searchBar.translucent = YES;
+    // Minimal 样式让系统不绘制不透明背景，仅保留输入框背景
+    searchBar.searchBarStyle = UISearchBarStyleMinimal;
+    // 移除系统自动添加的 _UISearchBarBackground 不透明背景视图
+    for (UIView *sub in searchBar.subviews) {
+        for (UIView *inner in sub.subviews) {
+            if ([NSStringFromClass(inner.class) containsString:@"Background"]) {
+                inner.backgroundColor = [UIColor clearColor];
+                inner.hidden = NO;
+            }
+        }
+        if ([NSStringFromClass(sub.class) containsString:@"Background"]) {
+            sub.backgroundColor = [UIColor clearColor];
+        }
+    }
+
+    // 2. 透明化内部 UITextField（搜索输入框）背景
+    //    UITextField 默认带 systemFillColor 浅灰色背景，遮挡自定义背景
+    UITextField *textField = nil;
+    for (UIView *sub in searchBar.subviews) {
+        for (UIView *inner in sub.subviews) {
+            if ([inner isKindOfClass:[UITextField class]]) {
+                textField = (UITextField *)inner;
+                break;
+            }
+        }
+        if (textField) break;
+    }
+    // iOS 13+ 可直接用 -searchTextField
+    if (!textField && [searchBar respondsToSelector:@selector(searchTextField)]) {
+        @try {
+            textField = [searchBar performSelector:@selector(searchTextField)];
+        } @catch (NSException *e) {
+            textField = nil;
+        }
+    }
+    if (textField) {
+        if (self.uiEffect == BackgroundUIEffectBlur) {
+            // 毛玻璃：输入框背景设为浅色半透明，保证文字可读且不挡背景
+            if (@available(iOS 13.0, *)) {
+                textField.backgroundColor = [[UIColor secondarySystemBackgroundColor] colorWithAlphaComponent:0.5];
+            } else {
+                textField.backgroundColor = [UIColor colorWithWhite:0.95 alpha:0.5];
+            }
+        } else {
+            // 半透明效果：输入框背景按 uiOpacity 调整
+            if (@available(iOS 13.0, *)) {
+                textField.backgroundColor = [[UIColor secondarySystemBackgroundColor] colorWithAlphaComponent:MAX(0.3, self.uiOpacity)];
+            } else {
+                textField.backgroundColor = [UIColor colorWithWhite:0.95 alpha:MAX(0.3, self.uiOpacity)];
+            }
+        }
     }
 }
 

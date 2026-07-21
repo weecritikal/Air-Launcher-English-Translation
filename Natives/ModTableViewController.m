@@ -59,7 +59,9 @@
     self.searchBar.delegate = self;
     self.searchBar.barStyle = UIBarStyleDefault;
     self.searchBar.searchBarStyle = UISearchBarStyleMinimal;
-    
+    // 适配自定义启动器背景：透明化 searchBar 默认不透明背景，让全局背景图/毛玻璃透出
+    [[BackgroundManager sharedManager] applyEffectToSearchBar:self.searchBar];
+
     // 将搜索栏添加到tableView的header中
     self.tableView.tableHeaderView = self.searchBar;
     
@@ -80,6 +82,8 @@
     // 背景效果改变时重新透明化当前 VC
     // UITableViewController 的 tableView 背景由 makeViewControllerTransparent 自动处理
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
+    // 重新应用 searchBar 透明化效果（毛玻璃↔半透明切换后输入框背景需刷新）
+    [[BackgroundManager sharedManager] applyEffectToSearchBar:self.searchBar];
 }
 
 - (void)dealloc {

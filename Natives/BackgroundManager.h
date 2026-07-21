@@ -75,6 +75,8 @@ typedef NS_ENUM(NSInteger, BackgroundUIEffect) {
 - (void)applyEffectToView:(UIView *)view;
 - (void)applyEffectToCollectionViewCell:(UICollectionViewCell *)cell;
 - (void)applyEffectToCell:(UITableViewCell *)cell;
+// 适配 UISearchBar：移除默认不透明背景，让 searchBar 透出底层自定义启动器背景
+- (void)applyEffectToSearchBar:(UISearchBar *)searchBar;
 
 // Apply UI effect to navigation bar and toolbar
 - (void)applyEffectToNavigationBar:(UINavigationBar *)navigationBar;

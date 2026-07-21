@@ -122,6 +122,26 @@ static WFWorkflowProgressView* currentProgressView;
 
     // Load WFWorkflowProgressView
     dlopen("/System/Library/PrivateFrameworks/WorkflowUIServices.framework/WorkflowUIServices", RTLD_GLOBAL);
+
+    // 监听背景效果变化通知：切换毛玻璃↔半透明或调整透明度时，
+    // 重新透明化当前 VC 并 reload cell，让每个 cell 重新应用 applyEffectToCell:
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(reapplyBackgroundEffect)
+                                                 name:@"BackgroundUIEffectChanged"
+                                               object:nil];
+}
+
+/// 背景效果变化时重新应用透明化处理，确保 cell 在切换毛玻璃↔半透明后视觉一致
+- (void)reapplyBackgroundEffect {
+    [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
+    if (self.navigationController) {
+        [[BackgroundManager sharedManager] applyEffectToNavigationBar:self.navigationController.navigationBar];
+    }
+    [self.tableView reloadData];
+}
+
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
 + (void)actionCancelImportRuntime {
@@ -288,6 +308,8 @@ static WFWorkflowProgressView* currentProgressView;
     cell.textLabel.text = localize(self.javaRuntimes[@DEFAULT_JRE][indexPath.row], nil);
     cell.detailTextLabel.text = [NSString stringWithFormat:@"Java %@",
         ((NSDictionary *)self.selectedRuntimes[@"0"])[self.selectedRTTags[indexPath.row]]];
+    // 适配自定义启动器背景：cell 应用毛玻璃/半透明效果，避免默认 systemBackgroundColor 遮挡背景
+    [[BackgroundManager sharedManager] applyEffectToCell:cell];
     return cell;
 }
 
@@ -344,6 +366,10 @@ static WFWorkflowProgressView* currentProgressView;
         });
     });
 
+    // 适配自定义启动器背景：cell 应用毛玻璃/半透明效果，避免默认 systemBackgroundColor 遮挡背景
+    // 注意：applyEffectToCell: 只重置 backgroundView/backgroundColor/contentView.backgroundColor，
+    // 不影响 accessoryView（progressView）和 accessoryType（checkmark）
+    [[BackgroundManager sharedManager] applyEffectToCell:cell];
     return cell;
 }
 

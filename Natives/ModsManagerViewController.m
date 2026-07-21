@@ -70,6 +70,8 @@
     // 重新设置 tableView 背景为透明，确保背景效果切换后仍透出全局背景
     self.tableView.backgroundColor = [UIColor clearColor];
     self.tableView.backgroundView = nil;
+    // 重新应用 searchBar 透明化效果（毛玻璃↔半透明切换后输入框背景需刷新）
+    [[BackgroundManager sharedManager] applyEffectToSearchBar:self.searchBar];
     // 重新加载 cell，让每个 cell 重新应用 applyEffectToCell:（毛玻璃/半透明）
     [self.tableView reloadData];
 }
@@ -84,6 +86,8 @@
     self.searchBar.translatesAutoresizingMaskIntoConstraints = NO;
     self.searchBar.delegate = self;
     self.searchBar.placeholder = @"搜索本地 Mod...";
+    // 适配自定义启动器背景：透明化 searchBar 默认不透明背景，让全局背景图/毛玻璃透出
+    [[BackgroundManager sharedManager] applyEffectToSearchBar:self.searchBar];
     [self.view addSubview:self.searchBar];
 
     self.tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
