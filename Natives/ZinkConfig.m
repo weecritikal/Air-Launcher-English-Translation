@@ -478,6 +478,23 @@ static AppleGPUGeneration _cachedGPUGeneration = AppleGPUGenerationUnknown;
         setenv("MVK_CONFIG_PREFILL_METAL_COMMAND_BUFFERS", "0", 1);
     }
 
+    // 关键修复（Mesa 25.0.7 + Iris 光影实体渲染）：
+    //   MoltenVK 编译 pipeline 时，若 fragment shader 声明了 vertex shader 未写入
+    //   的 input（如 `user(locn1_2)`），Metal pipeline 编译失败：
+    //   "Fragment input(s) `user(locn1_2)` mismatching vertex shader output type(s)
+    //    or not written by vertex shader."
+    //   此问题在 Iris 光影 + Mesa 25.0.7 zink 下频发，导致实体渲染 pipeline 创建
+    //   失败，被 dummy pipeline fallback 替换后实体不渲染（黑屏/缺失）。
+    //
+    //   MVK_CONFIG_SHADER_INTERFACE_LINKING=false 让 MoltenVK 放宽 shader 接口
+    //   校验：vertex shader 未写入的 fragment input 会被自动忽略，pipeline 可以
+    //   成功创建。这对大多数光影是安全的——shader 编译器会在 fragment shader 中
+    //   为未写入的 input 提供默认值（通常为 0）。
+    //
+    //   注：MoltenVK 1.2.x 中 vkSetMoltenVKConfigurationMVK() 已废弃，但环境变量
+    //   仍然生效（见日志中的 deprecation warning）。
+    setenv("MVK_CONFIG_SHADER_INTERFACE_LINKING", "false", 1);
+
     // Set shader cache to a writable path (Documents/.mesa_shader_cache)
     NSArray *docPaths = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
     if (docPaths.count > 0) {

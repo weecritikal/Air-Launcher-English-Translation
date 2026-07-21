@@ -440,6 +440,185 @@ static void amethyst_vkCmdDrawIndirectCount(VkZCommandBuffer cmd, uint64_t buffe
 static void amethyst_vkCmdDrawIndexedIndirectCount(VkZCommandBuffer cmd, uint64_t buffer, uint64_t offset, uint64_t countBuffer, uint64_t countBufferOffset, uint32_t maxDrawCount, uint32_t stride);
 static void amethyst_vkDestroyPipeline(VkZDevice device, VkZPipeline pipeline, const void* pAllocator);
 
+// ============================================================================
+// UINT→SINT 顶点属性格式转换（修复 MTLAttributeFormatUShort3 转换失败）
+// ============================================================================
+// 问题：
+//   MoltenVK 编译 pipeline 时，若 vertex attribute 使用 UINT 格式（如
+//   VK_FORMAT_R16G16B16_UINT → MTLAttributeFormatUShort3），但 shader 声明的
+//   input 是有符号整数类型（int/ivec3），Metal 无法自动转换格式，返回
+//   VK_ERROR_INITIALIZATION_FAILED：
+//   "Cannot convert attribute from MTLAttributeFormatUShort3 to a signed integer type."
+//
+//   此问题在 Iris 光影 + Mesa 25.0.7 zink 下频发，导致实体渲染 pipeline 创建
+//   失败，被 dummy pipeline fallback 替换后实体不渲染（黑屏/缺失）。
+//
+// 解决方案：
+//   当 pipeline 首次创建失败时，重试一次：将所有 UINT 格式的 vertex attribute
+//   转换为对应的 SINT 格式（如 R16G16B16_UINT → R16G16B16_SINT）。
+//   Metal 会以有符号方式解析字节，与 shader 期望匹配。
+//   对于大多数顶点属性（骨骼索引、坐标等），值通常很小，signed/unsigned 解析
+//   结果一致，不会引入渲染错误。
+
+/// 判断 Vulkan 格式是否为 UINT 类型
+/// Vulkan 格式枚举值参考 vulkan_core.h：
+///   R8_UINT=9, R8G8_UINT=11, R8G8B8_UINT=13, R8G8B8A8_UINT=42
+///   R16_UINT=76, R16G16_UINT=78, R16G16B16_UINT=80, R16G16B16A16_UINT=82
+///   R32_UINT=96, R32G32_UINT=98, R32G32B32_UINT=100, R32G32B32A32_UINT=102
+static BOOL isVkUIntFormat(int32_t format) {
+    switch (format) {
+        case 9:   // VK_FORMAT_R8_UINT
+        case 11:  // VK_FORMAT_R8G8_UINT
+        case 13:  // VK_FORMAT_R8G8B8_UINT
+        case 42:  // VK_FORMAT_R8G8B8A8_UINT
+        case 76:  // VK_FORMAT_R16_UINT
+        case 78:  // VK_FORMAT_R16G16_UINT
+        case 80:  // VK_FORMAT_R16G16B16_UINT
+        case 82:  // VK_FORMAT_R16G16B16A16_UINT
+        case 96:  // VK_FORMAT_R32_UINT
+        case 98:  // VK_FORMAT_R32G32_UINT
+        case 100: // VK_FORMAT_R32G32B32_UINT
+        case 102: // VK_FORMAT_R32G32B32A32_UINT
+            return YES;
+        default:
+            return NO;
+    }
+}
+
+/// 将 UINT 格式转换为对应的 SINT 格式
+/// Vulkan 格式枚举中，UINT 和 SINT 是连续的（UINT+1 = SINT）：
+///   R8_UINT(9) → R8_SINT(10), R8G8_UINT(11) → R8G8_SINT(12), ...
+static int32_t convertVkUIntToSIntFormat(int32_t format) {
+    switch (format) {
+        case 9:   return 10;   // R8_UINT → R8_SINT
+        case 11:  return 12;   // R8G8_UINT → R8G8_SINT
+        case 13:  return 14;   // R8G8B8_UINT → R8G8B8_SINT
+        case 42:  return 43;   // R8G8B8A8_UINT → R8G8B8A8_SINT
+        case 76:  return 77;   // R16_UINT → R16_SINT
+        case 78:  return 79;   // R16G16_UINT → R16G16_SINT
+        case 80:  return 81;   // R16G16B16_UINT → R16G16B16_SINT
+        case 82:  return 83;   // R16G16B16A16_UINT → R16G16B16A16_SINT
+        case 96:  return 97;   // R32_UINT → R32_SINT
+        case 98:  return 99;   // R32G32_UINT → R32G32_SINT
+        case 100: return 101;  // R32G32B32_UINT → R32G32B32_SINT
+        case 102: return 103;  // R32G32B32A32_UINT → R32G32B32A32_SINT
+        default:  return format;
+    }
+}
+
+/// 检查 pipeline create infos 中是否存在 UINT 格式的 vertex attribute
+static BOOL pipelineCreateInfosHaveUIntFormat(
+    uint32_t createInfoCount,
+    const VkZGraphicsPipelineCreateInfo* pCreateInfos)
+{
+    for (uint32_t i = 0; i < createInfoCount; i++) {
+        const VkZPipelineVertexInputStateCreateInfo* vis = pCreateInfos[i].pVertexInputState;
+        if (!vis || !vis->pVertexAttributeDescriptions) continue;
+        for (uint32_t j = 0; j < vis->vertexAttributeDescriptionCount; j++) {
+            if (isVkUIntFormat(vis->pVertexAttributeDescriptions[j].format)) {
+                return YES;
+            }
+        }
+    }
+    return NO;
+}
+
+/// 重试 pipeline 创建：将 UINT 顶点属性格式转换为 SINT
+/// 可选地对齐 stride（用于与 stride 对齐修复组合使用）
+/// 返回真实函数的调用结果
+static VkZResult retryPipelineWithSIntFormats(
+    VkZDevice device, VkZPipelineCache pipelineCache, uint32_t createInfoCount,
+    const VkZGraphicsPipelineCreateInfo* pCreateInfos, const void* pAllocator,
+    VkZPipeline* pPipelines,
+    BOOL alsoAlignStrides)
+{
+    if (!g_real_vkCreateGraphicsPipelines) {
+        return VK_Z_ERROR_INITIALIZATION_FAILED;
+    }
+
+    // 如果没有 UINT 格式，重试无意义
+    if (!pipelineCreateInfosHaveUIntFormat(createInfoCount, pCreateInfos)) {
+        return VK_Z_ERROR_INITIALIZATION_FAILED;
+    }
+
+    NSLog(@"[ZinkStrideFix] Retrying pipeline creation with UINT→SINT format conversion%s",
+          alsoAlignStrides ? " + stride alignment" : "");
+
+    // 深拷贝并应用格式转换（可选 + stride 对齐）
+    VkZGraphicsPipelineCreateInfo* newCreateInfos = malloc(sizeof(VkZGraphicsPipelineCreateInfo) * createInfoCount);
+    VkZPipelineVertexInputStateCreateInfo* newVIS = malloc(sizeof(VkZPipelineVertexInputStateCreateInfo) * createInfoCount);
+    VkZVertexInputBindingDescription** allocedBindings = calloc(createInfoCount, sizeof(VkZVertexInputBindingDescription*));
+    VkZVertexInputAttributeDescription** allocedAttrs = calloc(createInfoCount, sizeof(VkZVertexInputAttributeDescription*));
+
+    memcpy(newCreateInfos, pCreateInfos, sizeof(VkZGraphicsPipelineCreateInfo) * createInfoCount);
+
+    for (uint32_t i = 0; i < createInfoCount; i++) {
+        const VkZPipelineVertexInputStateCreateInfo* vis = pCreateInfos[i].pVertexInputState;
+        if (!vis) continue;
+
+        newVIS[i] = *vis;
+
+        // 格式转换：UINT → SINT
+        if (vis->pVertexAttributeDescriptions && vis->vertexAttributeDescriptionCount > 0) {
+            uint32_t attrCount = vis->vertexAttributeDescriptionCount;
+            VkZVertexInputAttributeDescription* newAttrs = malloc(sizeof(VkZVertexInputAttributeDescription) * attrCount);
+            memcpy(newAttrs, vis->pVertexAttributeDescriptions, sizeof(VkZVertexInputAttributeDescription) * attrCount);
+            for (uint32_t j = 0; j < attrCount; j++) {
+                if (isVkUIntFormat(newAttrs[j].format)) {
+                    int32_t oldFmt = newAttrs[j].format;
+                    newAttrs[j].format = convertVkUIntToSIntFormat(newAttrs[j].format);
+                    NSLog(@"[ZinkStrideFix] Pipeline %u attr %u: format %d -> %d (UINT→SINT)",
+                          i, j, oldFmt, newAttrs[j].format);
+                }
+            }
+            allocedAttrs[i] = newAttrs;
+            newVIS[i].pVertexAttributeDescriptions = newAttrs;
+        }
+
+        // 可选：stride 对齐
+        if (alsoAlignStrides && vis->pVertexBindingDescriptions) {
+            BOOL pipelineNeedsAlignment = NO;
+            for (uint32_t j = 0; j < vis->vertexBindingDescriptionCount; j++) {
+                if (vis->pVertexBindingDescriptions[j].stride & 3) {
+                    pipelineNeedsAlignment = YES;
+                    break;
+                }
+            }
+            if (pipelineNeedsAlignment) {
+                uint32_t bindingCount = vis->vertexBindingDescriptionCount;
+                VkZVertexInputBindingDescription* newBindings = malloc(sizeof(VkZVertexInputBindingDescription) * bindingCount);
+                memcpy(newBindings, vis->pVertexBindingDescriptions, sizeof(VkZVertexInputBindingDescription) * bindingCount);
+                for (uint32_t j = 0; j < bindingCount; j++) {
+                    uint32_t oldStride = newBindings[j].stride;
+                    uint32_t newStride = (oldStride + 3) & ~3u;
+                    if (newStride != oldStride) {
+                        NSLog(@"[ZinkStrideFix] Pipeline %u binding %u: stride %u -> %u",
+                              i, j, oldStride, newStride);
+                        newBindings[j].stride = newStride;
+                    }
+                }
+                allocedBindings[i] = newBindings;
+                newVIS[i].pVertexBindingDescriptions = newBindings;
+            }
+        }
+
+        newCreateInfos[i].pVertexInputState = &newVIS[i];
+    }
+
+    VkZResult result = g_real_vkCreateGraphicsPipelines(device, pipelineCache, createInfoCount, newCreateInfos, pAllocator, pPipelines);
+
+    for (uint32_t i = 0; i < createInfoCount; i++) {
+        if (allocedBindings[i]) free(allocedBindings[i]);
+        if (allocedAttrs[i]) free(allocedAttrs[i]);
+    }
+    free(allocedAttrs);
+    free(allocedBindings);
+    free(newVIS);
+    free(newCreateInfos);
+
+    return result;
+}
+
 /// vkCreateGraphicsPipelines wrapper：对齐 vertex binding stride 到 4 字节
 static VkZResult amethyst_vkCreateGraphicsPipelines(
     VkZDevice device, VkZPipelineCache pipelineCache, uint32_t createInfoCount,
@@ -484,10 +663,17 @@ static VkZResult amethyst_vkCreateGraphicsPipelines(
 
     if (!needsAlignment) {
         VkZResult result = g_real_vkCreateGraphicsPipelines(device, pipelineCache, createInfoCount, pCreateInfos, pAllocator, pPipelines);
-        // Dummy pipeline fallback（同上）：pipeline 创建失败时分配 dummy 句柄
+        // 失败时先尝试 UINT→SINT 格式转换重试（修复 MTLAttributeFormatUShort3 转换错误），
+        // 重试仍失败才走 dummy pipeline fallback（避免实体渲染被跳过）
         if (result != VK_Z_SUCCESS) {
             NSLog(@"[ZinkStrideFix] vkCreateGraphicsPipelines failed (no alignment needed): %d", result);
-            NSLog(@"[ZinkStrideFix] Applying dummy pipeline fallback to prevent SIGSEGV");
+            VkZResult retryResult = retryPipelineWithSIntFormats(
+                device, pipelineCache, createInfoCount, pCreateInfos, pAllocator, pPipelines, NO);
+            if (retryResult == VK_Z_SUCCESS) {
+                NSLog(@"[ZinkStrideFix] Pipeline creation succeeded after UINT→SINT format conversion");
+                return retryResult;
+            }
+            NSLog(@"[ZinkStrideFix] UINT→SINT retry also failed: %d, applying dummy pipeline fallback", retryResult);
             for (uint32_t i = 0; i < createInfoCount; i++) {
                 if (!pPipelines[i]) {
                     pPipelines[i] = allocDummyPipeline();
@@ -543,17 +729,25 @@ static VkZResult amethyst_vkCreateGraphicsPipelines(
 
     if (result != VK_Z_SUCCESS) {
         NSLog(@"[ZinkStrideFix] WARNING: vkCreateGraphicsPipelines still failed after alignment: %d", result);
-        NSLog(@"[ZinkStrideFix] Applying dummy pipeline fallback to prevent SIGSEGV");
-        // Dummy pipeline fallback：为每个失败的 pipeline 分配 dummy 句柄
-        // 让 zink 认为 pipeline 创建成功，避免后续使用 NULL pipeline 导致 SIGSEGV
-        for (uint32_t i = 0; i < createInfoCount; i++) {
-            if (!pPipelines[i]) {  // VK_NULL_HANDLE
-                pPipelines[i] = allocDummyPipeline();
-                NSLog(@"[ZinkStrideFix] Pipeline %u: allocated dummy handle %p", i, (void*)pPipelines[i]);
+        // stride 对齐后仍失败：尝试 UINT→SINT 格式转换重试（同时再次应用 stride 对齐）
+        VkZResult retryResult = retryPipelineWithSIntFormats(
+            device, pipelineCache, createInfoCount, pCreateInfos, pAllocator, pPipelines, YES);
+        if (retryResult == VK_Z_SUCCESS) {
+            NSLog(@"[ZinkStrideFix] Pipeline creation succeeded after UINT→SINT + stride alignment");
+            result = VK_Z_SUCCESS;
+        } else {
+            NSLog(@"[ZinkStrideFix] UINT→SINT + stride retry also failed: %d, applying dummy pipeline fallback", retryResult);
+            // Dummy pipeline fallback：为每个失败的 pipeline 分配 dummy 句柄
+            // 让 zink 认为 pipeline 创建成功，避免后续使用 NULL pipeline 导致 SIGSEGV
+            for (uint32_t i = 0; i < createInfoCount; i++) {
+                if (!pPipelines[i]) {  // VK_NULL_HANDLE
+                    pPipelines[i] = allocDummyPipeline();
+                    NSLog(@"[ZinkStrideFix] Pipeline %u: allocated dummy handle %p", i, (void*)pPipelines[i]);
+                }
             }
+            // 返回 VK_SUCCESS 让 zink 继续运行，vkCmdDraw* 会被我们的 hook 跳过
+            result = VK_Z_SUCCESS;
         }
-        // 返回 VK_SUCCESS 让 zink 继续运行，vkCmdDraw* 会被我们的 hook 跳过
-        result = VK_Z_SUCCESS;
     } else {
         NSLog(@"[ZinkStrideFix] vkCreateGraphicsPipelines succeeded after alignment");
     }
