@@ -428,42 +428,27 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
     // （不依赖缓存的 mirrorEnabled，避免偏好变更后镜像设置不同步）
     if (![loader shouldMirrorByDefault]) return url;
 
-    // 对应 ZL2 MCIMirror 的 REPLACE_MIRROR_HOLDERS 列表
-    // Modrinth CDN: cdn.modrinth.com → bmclapi2.bangbang93.com/mcim/modrinth
-    // CurseForge CDN: edge.forgecdn.net → bmclapi2.bangbang93.com/mcim/curseforge
-    // 注意：BMCLAPI 的 MCIM 镜像路径前缀与原始路径有差异，这里做完整的路径替换
-    NSString *result = url;
-
-    // Modrinth CDN 替换
-    // 原：https://cdn.modrinth.com/data/xxxx/images/abc.png
-    // 镜像：https://bmclapi2.bangbang93.com/mcim/modrinth/data/xxxx/images/abc.png
-    if ([result containsString:@"cdn.modrinth.com"]) {
-        result = [result stringByReplacingOccurrencesOfString:@"https://cdn.modrinth.com"
-                                                   withString:@"https://bmclapi2.bangbang93.com/mcim/modrinth"];
-        // 处理 http:// 协议的情况
-        result = [result stringByReplacingOccurrencesOfString:@"http://cdn.modrinth.com"
-                                                   withString:@"http://bmclapi2.bangbang93.com/mcim/modrinth"];
-    }
-
-    // CurseForge CDN 替换
-    // 原：https://edge.forgecdn.net/files/xxxx/xxxx/abc.png
-    // 镜像：https://bmclapi2.bangbang93.com/mcim/curseforge/files/xxxx/xxxx/abc.png
-    if ([result containsString:@"edge.forgecdn.net"]) {
-        result = [result stringByReplacingOccurrencesOfString:@"https://edge.forgecdn.net"
-                                                   withString:@"https://bmclapi2.bangbang93.com/mcim/curseforge"];
-        result = [result stringByReplacingOccurrencesOfString:@"http://edge.forgecdn.net"
-                                                   withString:@"http://bmclapi2.bangbang93.com/mcim/curseforge"];
-    }
-
-    // CurseForge 另一 CDN：media.forgecdn.net（部分图标走此域名）
-    if ([result containsString:@"media.forgecdn.net"]) {
-        result = [result stringByReplacingOccurrencesOfString:@"https://media.forgecdn.net"
-                                                   withString:@"https://bmclapi2.bangbang93.com/mcim/curseforge"];
-        result = [result stringByReplacingOccurrencesOfString:@"http://media.forgecdn.net"
-                                                   withString:@"http://bmclapi2.bangbang93.com/mcim/curseforge"];
-    }
-
-    return result;
+    // ⚠️ 关键修复：不对 Modrinth/CurseForge CDN 上的图标资源做 BMCLAPI 镜像替换。
+    //
+    // 原因：BMCLAPI 的 MCIM 镜像路径（/mcim/modrinth/、/mcim/curseforge/）只缓存
+    // API 接口数据和文件下载资源，不缓存 CDN 上的项目图标资源。实测所有
+    // cdn.modrinth.com / edge.forgecdn.net / media.forgecdn.net 的图标 URL
+    // 经 BMCLAPI 镜像后均返回 HTTP 404（Content-Type: text/plain）。
+    //
+    // 此前实现的"镜像 404 → 回退原始 URL"机制虽能恢复加载，但带来两个问题：
+    //   1. 每个图标都要走双倍流程（BMCLAPI 404 约 0.1s + 原始 URL 约 2-4s），
+    //      导致列表图标加载耗时翻倍，用户感知"图标加载不出来"。
+    //   2. 并发限制 15 个 permit 中，部分被"已 404 即将回退"的请求占用，
+    //      新请求被阻塞，加剧其他 tab 图标加载延迟。
+    //
+    // 实测原始 CDN 在国内均可直接访问：
+    //   - cdn.modrinth.com 通过 307 重定向到 cdn-alt.modrinth.com，返回 image/png|webp
+    //   - edge.forgecdn.net / media.forgecdn.net 直连可达
+    // 因此直接走原始 CDN 是更优选择，避免镜像 404 失败 + 回退重试的额外耗时。
+    //
+    // 方法保留（prefetchIconWithURL: 等其他调用方仍可调用），但不再对任何 CDN
+    // 图标做镜像替换。若将来 BMCLAPI 修复了对 CDN 图标的支持，可在此处有选择地恢复。
+    return url;
 }
 
 /// 根据下载源偏好自动判断是否启用镜像
