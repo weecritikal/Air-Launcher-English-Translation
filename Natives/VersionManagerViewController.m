@@ -1190,11 +1190,22 @@ static NSInteger const kSectionVersions    = 1;
 #pragma mark - Graphics API Selection (MC 26.2+ 游戏内 OpenGL/Vulkan)
 
 /// 选择图形 API 并保存到当前 profile
-/// 注意：graphicsApi 与 renderer 是两个不同维度：
+///
+/// graphicsApi 与 renderer 是两个不同维度：
 ///   - renderer：LWJGL 加载哪个 native 库（libgl4es/libMoltenVK 等）
 ///   - graphicsApi：MC 26.2+ 内部走 OpenGL 路径还是 Vulkan 路径
-/// 当用户选择 prefer_vulkan 时建议同步将 renderer 设为 libMoltenVK.dylib，
-/// 但此处不强制联动，允许高级用户分开配置。
+///
+/// 关键修复（iPhone X MobileGlues 崩溃）：
+///   之前 graphicsApi 和 renderer 完全独立，用户可能误配置出
+///   "graphicsApi=prefer_vulkan + renderer=libmobileglues.dylib" 的组合，
+///   导致 MC 走 Vulkan 路径但 LWJGL OpenGL 库指向 MobileGlues，
+///   在 A11 GPU（iPhone X）上 init_target_egl 直接 SIGSEGV 崩溃。
+///
+/// 现在联动选择：
+///   - 选 prefer_vulkan：自动把 renderer 设为 libMoltenVK.dylib（原生 Vulkan）
+///   - 选 prefer_opengl 或 default：自动把 renderer 设为 auto（→ ANGLE）
+///   - 仅当用户当前 renderer 是 auto/MoltenVK 时才自动联动，
+///     避免覆盖用户显式选择的 GL4ES/ANGLE/Zink/LTW/MobileGlues 等具体渲染器
 - (void)selectGraphicsApiAtIndex:(NSInteger)index {
     if (!self.selectedProfile) {
         [self showAlert:@"请先选择一个版本"];
@@ -1212,6 +1223,27 @@ static NSInteger const kSectionVersions    = 1;
         profile = [NSMutableDictionary dictionary];
     }
     profile[@"graphicsApi"] = key;
+
+    // 渲染器联动：仅在用户当前 renderer 是 auto 或 libMoltenVK.dylib 时才自动切换
+    // 避免覆盖用户显式选择的具体渲染器（如 GL4ES/ANGLE/Zink/LTW/MobileGlues）
+    NSString *currentRenderer = profile[@"renderer"] ?: getPrefObject(@"video.renderer") ?: @"auto";
+    BOOL shouldAutoLinkRenderer = [currentRenderer isEqualToString:@"auto"] ||
+                                   [currentRenderer isEqualToString:@ RENDERER_NAME_VULKAN] ||
+                                   [currentRenderer isEqualToString:@ RENDERER_NAME_MOBILEGLUES];
+    NSString *newRenderer = nil;
+    if (shouldAutoLinkRenderer) {
+        if ([key isEqualToString:@"prefer_vulkan"]) {
+            // prefer_vulkan → 自动切到 MoltenVK（避免 MobileGlues 在 A11 GPU 上的 EGL 初始化崩溃）
+            newRenderer = @ RENDERER_NAME_VULKAN;
+        } else {
+            // default / prefer_opengl → 切回 auto（由 JavaLauncher 解析为 ANGLE）
+            newRenderer = @"auto";
+        }
+        profile[@"renderer"] = newRenderer;
+        setPrefString(@"video.renderer", newRenderer);
+        NSLog(@"[VersionMgr] Renderer auto-linked to '%@' for graphicsApi='%@'", newRenderer, key);
+    }
+
     profiles[self.selectedProfile] = profile;
     [PLProfiles.current save];
 
@@ -1219,6 +1251,12 @@ static NSInteger const kSectionVersions    = 1;
     setPrefString(@"video.graphics_api", key);
 
     [self.collectionView reloadData];
+
+    // 显示联动提示（仅在确实切换了 renderer 时）
+    if (shouldAutoLinkRenderer) {
+        NSString *rendererDisplayName = [newRenderer isEqualToString:@ RENDERER_NAME_VULKAN] ? @"MoltenVK" : @"Auto";
+        [self showAlert:[NSString stringWithFormat:@"已切换图形 API 至「%@」\n渲染器已自动联动至「%@」\n\n如需手动指定渲染器，请先在渲染器选项中明确选择", displayName, rendererDisplayName]];
+    }
 
     NSLog(@"[VersionMgr] Graphics API for profile '%@' set to '%@' (%@)", self.selectedProfile, key, displayName);
 }

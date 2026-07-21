@@ -802,15 +802,37 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
     const char *glLibName = getenv("AMETHYST_RENDERER");
     if (glLibName) {
         if (!strcmp(glLibName, "auto")) {
-            // 关键修复（26.2 启动崩溃）：Auto 渲染器始终选 ANGLE（对齐 Ynnyny 仓库）
+            // Auto 渲染器解析：根据 graphicsApi 联动选择
             //
-            // 之前 workspace 在 Java 21+ 优先选 MobileGlues，但 Ynnyny 仓库用 ANGLE 就能正常启动 26.2。
-            // workspace 选 MobileGlues 后又缺少 init_loadMobileGluesConfig() 写 config.json，
-            // 导致 MobileGlues 用不安全默认值初始化 GL 上下文可能崩溃。现对齐 Ynnyny 始终选 ANGLE。
+            // 关键修复（iPhone X MobileGlues 崩溃）：
+            //   之前 Auto 永远解析为 ANGLE，但当用户选 graphicsApi=prefer_vulkan 时，
+            //   MC 26.2+ 会走 Vulkan 路径，LWJGL 需要 libMoltenVK.dylib。
+            //   虽然 JavaLauncher.m 第 862 行无条件设置 vulkan.libname=MoltenVK 让
+            //   Vulkan 路径仍能加载 MoltenVK，但 GL 回退库指向 ANGLE 时与 Vulkan
+            //   路径混合使用容易出问题（特别是 A11 GPU 上 ANGLE Metal 初始化失败）。
+            //
+            // 修复策略：
+            //   - graphicsApi=prefer_vulkan → Auto 解析为 MoltenVK（原生 Vulkan）
+            //   - 其他（default/prefer_opengl）→ Auto 解析为 ANGLE（对齐 Ynnyny 仓库）
+            //
+            // 历史：之前 workspace 在 Java 21+ 优先选 MobileGlues，但 Ynnyny 仓库用 ANGLE
+            // 就能正常启动 26.2。workspace 选 MobileGlues 后又缺少 init_loadMobileGluesConfig()
+            // 写 config.json，导致 MobileGlues 用不安全默认值初始化 GL 上下文可能崩溃。
+            // 现对齐 Ynnyny：Auto + 非 prefer_vulkan 始终选 ANGLE。
             // MobileGlues 仍保留为手动选项（用户可在设置中显式选择）。
-            glLibName = RENDERER_NAME_MTL_ANGLE;
+            const char *graphicsApi = getenv("AMETHYST_GRAPHICS_API");
+            BOOL preferVulkan = (graphicsApi != NULL &&
+                                 (strcmp(graphicsApi, "prefer_vulkan") == 0 ||
+                                  strcmp(graphicsApi, "vulkan") == 0));
+            if (preferVulkan) {
+                glLibName = RENDERER_NAME_VULKAN;
+                NSLog(@"[JavaLauncher] Auto renderer resolved to %s (graphicsApi=prefer_vulkan)", glLibName);
+            } else {
+                glLibName = RENDERER_NAME_MTL_ANGLE;
+                NSLog(@"[JavaLauncher] Auto renderer resolved to %s (graphicsApi=%s, always ANGLE)",
+                      glLibName, graphicsApi ?: "<unset>");
+            }
             setenv("AMETHYST_RENDERER", glLibName, 1);
-            NSLog(@"[JavaLauncher] Auto renderer resolved to %s (always ANGLE)", glLibName);
         }
         if (strcmp(glLibName, RENDERER_NAME_VULKAN) == 0) {
             // 对齐 Ynnyny 仓库：Vulkan 模式下 OpenGL 回退库使用 MobileGlues
