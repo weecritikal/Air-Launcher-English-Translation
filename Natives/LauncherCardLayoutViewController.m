@@ -17,6 +17,9 @@
 #import "LauncherPrefGameDirViewController.h"
 #import "CustomControlsViewController.h"
 #import "MultiplayerViewController.h"
+#import "terracotta/TerracottaViewController.h"
+#import "terracotta/TerracottaManager.h"
+#import "terracotta/TerracottaBridge.h"
 #import "AccountListViewController.h"
 
 // 布局常量（iPad/宽屏基准值；iPhone 上通过 traitCollection 适配后会变窄）
@@ -562,9 +565,18 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
 }
 
 - (void)showMultiplayer {
-    // 在中间内容区显示联机界面（基于 ZeroTier 的 MC 联机功能，参照 FCL/ZL2）
-    // 启动器模式：启用联机开关 + 预设 Network ID 设置 + 房间列表 + 直连
-    MultiplayerViewController *vc = [[MultiplayerViewController alloc] initWithMode:MultiplayerVCModeLauncher];
+    // 在中间内容区显示陶瓦联机界面（与 HMCL/FCL/ZL2 互通）
+    // libterracotta 未链接时弹错误提示，引导用户下载 xcframework
+    if (![TerracottaBridge isAvailable]) {
+        UIAlertController *alert = [UIAlertController
+            alertControllerWithTitle:@"联机功能不可用"
+                              message:@"libterracotta 库未链接，请按 README 中「陶瓦联机集成」章节下载 xcframework 后重新构建。"
+                       preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleDefault handler:nil]];
+        [self presentViewController:alert animated:YES completion:nil];
+        return;
+    }
+    TerracottaViewController *vc = [[TerracottaViewController alloc] init];
     UINavigationController *navVC = [[UINavigationController alloc] initWithRootViewController:vc];
     navVC.navigationBar.prefersLargeTitles = NO;
     [self setContentViewController:navVC animated:YES];

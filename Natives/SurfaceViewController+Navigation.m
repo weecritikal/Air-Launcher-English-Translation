@@ -9,6 +9,7 @@
 #import "ScreenUtils.h"
 #import "MultiplayerViewController.h"
 #import "MultiplayerManager.h"
+#import "terracotta/TerracottaViewController.h"
 #import <objc/runtime.h>
 
 // 暴露 class extension 中的私有属性，供 category 使用
@@ -248,14 +249,14 @@ static const void *kMenuDimViewKey = &kMenuDimViewKey;
     [self presentViewController:vc animated:YES completion:nil];
 }
 
-/// 游戏内打开联机界面（参照 FCL/ZL2，基于 ZeroTier）
+/// 游戏内打开联机界面（陶瓦联机，与 HMCL/FCL/ZL2 互通）
 ///
 /// 对标 FCL 流程：启动游戏后通过悬浮球菜单进入联机界面，
-/// 选择当房主（创建世界→开放局域网→自动检测端口→生成分享代码）
-/// 或当房客（输入分享代码→加入网络→在多人游戏界面看到房间）。
+/// 选择当房主（创建世界→开放局域网→输入端口→生成邀请码）
+/// 或当房客（输入邀请码→加入网络→MC 多人游戏直连 127.0.0.1:25565）。
 - (void)actionOpenMultiplayer {
     [self dismissMenu];
-    MultiplayerViewController *vc = [[MultiplayerViewController alloc] initWithMode:MultiplayerVCModeInGame];
+    TerracottaViewController *vc = [[TerracottaViewController alloc] init];
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
     nav.modalPresentationStyle = UIModalPresentationPageSheet;
     [self presentViewController:nav animated:YES completion:nil];

@@ -5,6 +5,8 @@
 #import "LauncherCardLayoutViewController.h"
 #import "LauncherPreferences.h"
 #import "BackgroundManager.h"
+#import "terracotta/TerracottaManager.h"
+#import "terracotta/TerracottaBridge.h"
 
 extern UIWindow *mainWindow;
 
@@ -70,6 +72,17 @@ extern UIWindow *mainWindow;
     // 延迟会在启动时露出窗口底色形成"黑条"或"黑闪"。BackgroundManager 在其 init
     // 中已 loadSavedBackground/loadUISettings，单例首次访问即完成初始化，无需延迟。
     [[BackgroundManager sharedManager] applyBackgroundToWindow:self.window];
+
+    // 初始化陶瓦联机（Terracotta）：访问 shared 单例会触发 init → initializeTerracotta，
+    // 该方法调 terracotta_ios_start 完成一次性初始化（工作目录在 Documents/terracotta）。
+    // libterracotta.a 未链接时 isAvailable=NO，Bridge 调用会安全降级，initialized 保持 NO。
+    if ([TerracottaBridge isAvailable]) {
+        [[TerracottaManager shared] class]; /* 触发 dispatch_once init */
+        NSLog(@"[SceneDelegate] Terracotta manager initialized: %d",
+              [TerracottaManager shared].initialized);
+    } else {
+        NSLog(@"[SceneDelegate] libterracotta not linked, multiplayer disabled");
+    }
 
     // 监听主题切换通知（设置页"外观模式"切换时实时应用，无需重启）
     [[NSNotificationCenter defaultCenter] addObserver:self

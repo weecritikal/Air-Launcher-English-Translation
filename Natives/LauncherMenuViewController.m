@@ -43,7 +43,7 @@
                                                object:nil];
 
     // 菜单项配置
-    // case 3 为"联机"（基于 ZeroTier Apple Framework 的进程内联机功能）
+    // case 3 为"联机"（陶瓦联机 Terracotta，与 HMCL/FCL/ZL2 互通）
     // case 4 为"设置"
     // 键位调整界面已移到设置页面中
     self.menuItems = @[
@@ -267,7 +267,7 @@
             [self showVersionManager];
             break;
 
-        case 3: // 联机（基于 ZeroTier 的 MC 联机功能，参照 FCL/ZL2）
+        case 3: // 联机（陶瓦联机 Terracotta，与 HMCL/FCL/ZL2 互通）
             [self showMultiplayer];
             break;
 
@@ -283,7 +283,7 @@
 }
 
 - (void)showMultiplayer {
-    // 发送通知让 LauncherRootViewController 显示 ZeroTier 联机界面
+    // 发送通知让 LauncherRootViewController 显示陶瓦联机界面
     [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowMultiplayer" object:nil];
 }
 
