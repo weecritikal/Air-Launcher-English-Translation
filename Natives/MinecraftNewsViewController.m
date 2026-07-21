@@ -305,7 +305,9 @@ static const NSInteger kNewsPageSize = 24;
     config.interSectionSpacing = kNewsCardSpacing;
     config.scrollDirection = UICollectionViewScrollDirectionVertical;
 
-    return [UICollectionViewCompositionalLayout layoutWithConfiguration:config sectionProvider:^NSCollectionLayoutSection *(id<NSCollectionLayoutEnvironment> env) {
+    // section provider block 接收两个参数：sectionIndex 和 layoutEnvironment
+    // 构造方法为 -initWithSectionProvider:configuration:（不是 +layoutWithConfiguration:sectionProvider:）
+    return [[UICollectionViewCompositionalLayout alloc] initWithSectionProvider:^NSCollectionLayoutSection *(NSInteger sectionIndex, id<NSCollectionLayoutEnvironment> env) {
         // 双列布局，每列等宽
         NSCollectionLayoutSize *itemSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:0.5]
                                                                             heightDimension:[NSCollectionLayoutDimension estimatedDimension:280]];
@@ -320,7 +322,7 @@ static const NSInteger kNewsPageSize = 24;
         section.interGroupSpacing = kNewsCardSpacing;
         section.contentInsets = NSDirectionalEdgeInsetsMake(0, 0, 0, 0);
         return section;
-    }];
+    } configuration:config];
 }
 
 #pragma mark - Data Loading
