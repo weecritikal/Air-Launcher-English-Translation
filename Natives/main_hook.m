@@ -346,6 +346,9 @@ typedef void (*PFN_zkCmdDrawIndexedIndirect)(VkZCommandBuffer, uint64_t, uint64_
 // vkCmdDrawIndirectCount(cmd, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride) — 7 个参数
 typedef void (*PFN_zkCmdDrawIndirectCount)(VkZCommandBuffer, uint64_t, uint64_t, uint64_t, uint64_t, uint32_t, uint32_t);
 typedef void (*PFN_zkCmdDrawIndexedIndirectCount)(VkZCommandBuffer, uint64_t, uint64_t, uint64_t, uint64_t, uint32_t, uint32_t);
+// vkDestroyPipeline(device, pipeline, pAllocator) — 3 个参数
+// 必须 hook：zink 销毁 dummy pipeline 时，MoltenVK 解引用 magic handle 会崩溃
+typedef void (*PFN_zkDestroyPipeline)(VkZDevice, VkZPipeline, const void*);
 
 // Stride fix 状态（g_zinkStrideFixActive 已在文件前部前向声明）
 static PFN_zkGetInstanceProcAddr g_real_vkGetInstanceProcAddr = NULL;
@@ -360,6 +363,8 @@ static PFN_zkCmdDrawIndirect g_real_vkCmdDrawIndirect = NULL;
 static PFN_zkCmdDrawIndexedIndirect g_real_vkCmdDrawIndexedIndirect = NULL;
 static PFN_zkCmdDrawIndirectCount g_real_vkCmdDrawIndirectCount = NULL;
 static PFN_zkCmdDrawIndexedIndirectCount g_real_vkCmdDrawIndexedIndirectCount = NULL;
+// vkDestroyPipeline 真实函数指针（dummy pipeline 销毁需要）
+static PFN_zkDestroyPipeline g_real_vkDestroyPipeline = NULL;
 
 // ============================================================================
 // Dummy pipeline 机制（修复 zink + Mesa 25.0.7 光影 SIGSEGV）
@@ -433,6 +438,7 @@ static void amethyst_vkCmdDrawIndirect(VkZCommandBuffer cmd, uint64_t buffer, ui
 static void amethyst_vkCmdDrawIndexedIndirect(VkZCommandBuffer cmd, uint64_t buffer, uint64_t offset, uint32_t drawCount, uint32_t stride);
 static void amethyst_vkCmdDrawIndirectCount(VkZCommandBuffer cmd, uint64_t buffer, uint64_t offset, uint64_t countBuffer, uint64_t countBufferOffset, uint32_t maxDrawCount, uint32_t stride);
 static void amethyst_vkCmdDrawIndexedIndirectCount(VkZCommandBuffer cmd, uint64_t buffer, uint64_t offset, uint64_t countBuffer, uint64_t countBufferOffset, uint32_t maxDrawCount, uint32_t stride);
+static void amethyst_vkDestroyPipeline(VkZDevice device, VkZPipeline pipeline, const void* pAllocator);
 
 /// vkCreateGraphicsPipelines wrapper：对齐 vertex binding stride 到 4 字节
 static VkZResult amethyst_vkCreateGraphicsPipelines(
@@ -630,6 +636,14 @@ static void* amethyst_vkGetInstanceProcAddr(VkZInstance instance, const char* pN
             }
             return (void*)amethyst_vkCmdDrawIndexedIndirectCount;
         }
+        // vkDestroyPipeline hook：dummy pipeline 销毁时跳过，避免 MoltenVK 崩溃
+        if (strcmp(pName, "vkDestroyPipeline") == 0) {
+            if (!g_real_vkDestroyPipeline && g_real_vkGetInstanceProcAddr) {
+                g_real_vkDestroyPipeline = (PFN_zkDestroyPipeline)
+                    g_real_vkGetInstanceProcAddr(instance, pName);
+            }
+            return (void*)amethyst_vkDestroyPipeline;
+        }
     }
     if (!g_real_vkGetInstanceProcAddr) {
         return amethyst_orig_dlsym(RTLD_DEFAULT, pName);
@@ -698,6 +712,14 @@ static void* amethyst_vkGetDeviceProcAddr(VkZDevice device, const char* pName) {
             }
             return (void*)amethyst_vkCmdDrawIndexedIndirectCount;
         }
+        // vkDestroyPipeline hook：dummy pipeline 销毁时跳过，避免 MoltenVK 崩溃
+        if (strcmp(pName, "vkDestroyPipeline") == 0) {
+            if (!g_real_vkDestroyPipeline && g_real_vkGetDeviceProcAddr) {
+                g_real_vkDestroyPipeline = (PFN_zkDestroyPipeline)
+                    g_real_vkGetDeviceProcAddr(device, pName);
+            }
+            return (void*)amethyst_vkDestroyPipeline;
+        }
     }
     if (!g_real_vkGetDeviceProcAddr) {
         return amethyst_orig_dlsym(RTLD_DEFAULT, pName);
@@ -754,6 +776,32 @@ static void amethyst_vkCmdDrawIndirectCount(VkZCommandBuffer cmd, uint64_t buffe
 static void amethyst_vkCmdDrawIndexedIndirectCount(VkZCommandBuffer cmd, uint64_t buffer, uint64_t offset, uint64_t countBuffer, uint64_t countBufferOffset, uint32_t maxDrawCount, uint32_t stride) {
     if (isDummyPipeline(g_currentBoundGraphicsPipeline)) return;
     if (g_real_vkCmdDrawIndexedIndirectCount) g_real_vkCmdDrawIndexedIndirectCount(cmd, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride);
+}
+
+/// vkDestroyPipeline hook：销毁 dummy pipeline 时跳过，避免 MoltenVK 解引用 magic handle 崩溃
+/// 关键修复：切换 shaderpack 时 zink 会销毁所有旧 pipelines，包括 dummy pipeline
+/// 句柄（0xDEAD0001 等）。MoltenVK 的 vkDestroyPipeline 会解引用 pipeline 指针
+/// 查找内部资源，dummy handle 是无效指针，导致 SIGSEGV。
+static void amethyst_vkDestroyPipeline(VkZDevice device, VkZPipeline pipeline, const void* pAllocator) {
+    if (isDummyPipeline(pipeline)) {
+        // Dummy pipeline：跳过销毁，避免 MoltenVK 崩溃
+        // 同时从 dummy pipeline 集合中移除（避免集合无限增长）
+        uintptr_t val = (uintptr_t)pipeline;
+        for (uint32_t i = 0; i < g_dummyPipelineCount; i++) {
+            if (g_dummyPipelines[i] == val) {
+                // 用最后一个元素填补空洞（顺序无关紧要，数组只是用于查找）
+                g_dummyPipelines[i] = g_dummyPipelines[g_dummyPipelineCount - 1];
+                g_dummyPipelineCount--;
+                break;
+            }
+        }
+        // 如果正在销毁的 dummy pipeline 恰好是当前绑定的，清除绑定状态
+        if (g_currentBoundGraphicsPipeline == pipeline) {
+            g_currentBoundGraphicsPipeline = NULL;
+        }
+        return;
+    }
+    if (g_real_vkDestroyPipeline) g_real_vkDestroyPipeline(device, pipeline, pAllocator);
 }
 
 /// 内部：执行 fishhook 重绑定（可在新 image 加载后重复调用以捕获新引用）
