@@ -17,9 +17,9 @@
 #import "LauncherPrefGameDirViewController.h"
 #import "CustomControlsViewController.h"
 #import "MultiplayerViewController.h"
-#import "terracotta/TerracottaViewController.h"
-#import "terracotta/TerracottaManager.h"
-#import "terracotta/TerracottaBridge.h"
+#import "TerracottaViewController.h"
+#import "TerracottaManager.h"
+#import "TerracottaBridge.h"
 #import "AccountListViewController.h"
 
 // 布局常量（iPad 基准值；iPhone 上通过 LauncherRootLayoutWidth 适配后会变窄）

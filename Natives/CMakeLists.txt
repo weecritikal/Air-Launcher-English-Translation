@@ -488,12 +488,14 @@ add_executable(AngelAuraAmethyst
   TouchControllerPreferencesViewController.m
 
   # Terracotta multiplayer（陶瓦联机，与 HMCL/FCL/ZL2 互通）
-  # 源文件始终参与编译；C ABI 符号由 libterracotta 静态库提供，未提供时
-  # TerracottaBridge 调用会在运行时返回错误（dlsym 找不到符号），但不影响编译。
-  terracotta/TerracottaBridge.m
-  terracotta/TerracottaManager.m
-  terracotta/SilentAudioPlayer.m
-  terracotta/TerracottaViewController.m
+  # 源文件直接放在 Natives/ 目录（与其他 .m 同级），二进制库放在
+  # Natives/terracotta/libterracotta.xcframework/。
+  # C ABI 符号由 libterracotta.a 提供，未链接时 TerracottaBridge 通过
+  # weak linking 检测 terracotta_ios_available() 安全降级，不影响编译。
+  TerracottaBridge.m
+  TerracottaManager.m
+  SilentAudioPlayer.m
+  TerracottaViewController.m
 )
 
 # Add ModLoaderIcons PNG files into the app bundle Resources/ModLoaderIcons so they are available at runtime.

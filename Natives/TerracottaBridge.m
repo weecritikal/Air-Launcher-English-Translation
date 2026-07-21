@@ -3,33 +3,22 @@
 #import <fcntl.h>
 #import <unistd.h>
 
+#pragma mark - Data Models
+
 @implementation TerracottaPlayerProfile
 @end
 
 @implementation TerracottaState
 @end
 
-/* 私有 JSON 解码辅助 —— 对应 Rust 侧 terracotta_ios_get_state 的输出 schema */
-@interface TerracottaStatePayload : NSObject
-@property(nonatomic, copy) NSString *state;
-@property(nonatomic, assign) NSInteger index;
-@property(nonatomic, copy, nullable) NSString *room;
-@property(nonatomic, copy, nullable) NSString *url;
-@property(nonatomic, assign) NSInteger profileIndex;
-@property(nonatomic, copy, nullable) NSArray<NSDictionary *> *profiles;
-@property(nonatomic, copy, nullable) NSString *difficulty;
-@property(nonatomic, assign) NSInteger type;
-@end
-@implementation TerracottaStatePayload
-@end
+#pragma mark - Bridge Implementation
 
 @implementation TerracottaBridge
 
 /* 把可选 NSString 当作 const char * 传给 C 函数。nil 转 NULL。 */
 static void terracottaCallWithOptionalCString(NSString *s, void (^body)(const char *)) {
     if (s != nil) {
-        const char *cstr = [s UTF8String];
-        body(cstr);
+        body([s UTF8String]);
     } else {
         body(NULL);
     }
@@ -38,12 +27,10 @@ static void terracottaCallWithOptionalCString(NSString *s, void (^body)(const ch
 #pragma mark - Availability
 
 + (BOOL)isAvailable {
-    /* terracotta_ios_start 是 weak 符号；libterracotta.a 未链接时为 NULL。
-     * 用宏 terracotta_ios_available() 检查（避免每次调用都写 NULL 比较）。 */
     return terracotta_ios_available() ? YES : NO;
 }
 
-#pragma mark - Public API
+#pragma mark - Lifecycle
 
 + (BOOL)startWithWorkingDirectory:(NSString *)workingDirectory
                        loggingPath:(NSString *)loggingPath {
@@ -64,8 +51,7 @@ static void terracottaCallWithOptionalCString(NSString *s, void (^body)(const ch
 }
 
 + (void)setWaiting {
-    if (!terracotta_ios_available()) return;
-    terracotta_ios_set_waiting();
+    if (terracotta_ios_available()) terracotta_ios_set_waiting();
 }
 
 + (void)setScanningWithRoom:(NSString *)room
@@ -94,6 +80,7 @@ static void terracottaCallWithOptionalCString(NSString *s, void (^body)(const ch
 + (BOOL)setGuestingWithRoom:(NSString *)room
                  playerName:(NSString *)playerName {
     if (!terracotta_ios_available()) return NO;
+    if (room == nil || room.length == 0) return NO;
     __block BOOL result = NO;
     terracottaCallWithOptionalCString(room, ^(const char *roomCStr) {
         terracottaCallWithOptionalCString(playerName, ^(const char *playerCStr) {
@@ -108,6 +95,8 @@ static void terracottaCallWithOptionalCString(NSString *s, void (^body)(const ch
     if (code == nil || code.length == 0) return NO;
     return terracotta_ios_verify_room_code([code UTF8String]) == 3 ? YES : NO;
 }
+
+#pragma mark - State Polling
 
 + (TerracottaState *)pollState {
     if (!terracotta_ios_available()) return nil;
@@ -129,6 +118,58 @@ static void terracottaCallWithOptionalCString(NSString *s, void (^body)(const ch
     }
 }
 
++ (TerracottaState *)parseStateFromJSON:(NSDictionary *)json {
+    TerracottaState *state = [[TerracottaState alloc] init];
+    NSString *stateStr = json[@"state"];
+    state.kind = [self stateKindFromString:stateStr];
+    state.index = [json[@"index"] integerValue];
+    state.room = json[@"room"];
+    state.directConnectURL = json[@"url"];
+    state.profileIndex = [json[@"profile_index"] integerValue];
+    state.exceptionType = [json[@"type"] integerValue];
+
+    /* 解析玩家列表 */
+    NSArray *profilesArray = json[@"profiles"];
+    if ([profilesArray isKindOfClass:[NSArray class]]) {
+        NSMutableArray<TerracottaPlayerProfile *> *profiles = [NSMutableArray array];
+        for (NSDictionary *p in profilesArray) {
+            if (![p isKindOfClass:[NSDictionary class]]) continue;
+            TerracottaPlayerProfile *profile = [[TerracottaPlayerProfile alloc] init];
+            profile.name = p[@"name"];
+            profile.machineId = p[@"machine_id"];
+            profile.easytierId = p[@"easytier_id"];
+            profile.vendor = p[@"vendor"];
+            profile.kind = p[@"kind"];
+            [profiles addObject:profile];
+        }
+        state.profiles = profiles;
+    }
+    return state;
+}
+
++ (TerracottaStateKind)stateKindFromString:(NSString *)s {
+    if (s == nil) return TerracottaStateKindWaiting;
+    static NSDictionary<NSString *, NSNumber *> *mapping;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        mapping = @{
+            @"waiting":           @(TerracottaStateKindWaiting),
+            @"host-scanning":     @(TerracottaStateKindHostScanning),
+            @"host-starting":     @(TerracottaStateKindHostStarting),
+            @"host-ok":           @(TerracottaStateKindHostOk),
+            @"guest-connecting":  @(TerracottaStateKindGuestConnecting),
+            @"guest-starting":    @(TerracottaStateKindGuestStarting),
+            @"guest-ok":          @(TerracottaStateKindGuestOk),
+            @"exception":         @(TerracottaStateKindException),
+        };
+    });
+    NSNumber *num = mapping[s];
+    if (num == nil) return TerracottaStateKindWaiting;
+    return (TerracottaStateKind)[num integerValue];
+}
+
+#pragma mark - Metadata
+
 + (NSDictionary<NSString *, id> *)metadata {
     if (!terracotta_ios_available()) return nil;
     char *raw = terracotta_ios_get_metadata();
@@ -145,10 +186,9 @@ static void terracottaCallWithOptionalCString(NSString *s, void (^body)(const ch
             if (ch == 0) nulCount += 1;
             cursor += 1;
         }
-        NSData *buffer = [NSData dataWithBytes:raw length:totalLen];
-        /* 按 \0 切分（末尾的 NUL 会产出空段，过滤掉） */
+        /* 按 \0 切分 */
         NSMutableArray<NSString *> *segments = [NSMutableArray array];
-        const uint8_t *bytes = buffer.bytes;
+        const uint8_t *bytes = (const uint8_t *)raw;
         size_t segStart = 0;
         for (size_t i = 0; i < totalLen; i++) {
             if (bytes[i] == 0) {
@@ -176,6 +216,8 @@ static void terracottaCallWithOptionalCString(NSString *s, void (^body)(const ch
     }
 }
 
+#pragma mark - Exception Description
+
 + (NSString *)describeException:(NSInteger)type {
     switch (type) {
         case 0: return @"无法连接到房主（PingHostFail）";
@@ -186,59 +228,6 @@ static void terracottaCallWithOptionalCString(NSString *s, void (^body)(const ch
         case 5: return @"Scaffolding 协议返回非法数据";
         default: return [NSString stringWithFormat:@"未知错误（type=%ld）", (long)type];
     }
-}
-
-#pragma mark - JSON Parsing
-
-+ (TerracottaState *)parseStateFromJSON:(NSDictionary *)json {
-    TerracottaState *state = [[TerracottaState alloc] init];
-    NSString *stateStr = json[@"state"];
-    state.index = [json[@"index"] integerValue];
-    state.room = json[@"room"];
-    state.url = json[@"url"];
-    state.profileIndex = [json[@"profile_index"] integerValue];
-    state.difficulty = json[@"difficulty"];
-    state.exceptionType = [json[@"type"] integerValue];
-
-    if ([stateStr isEqualToString:@"waiting"]) {
-        state.kind = TerracottaStateWaiting;
-    } else if ([stateStr isEqualToString:@"host-scanning"]) {
-        state.kind = TerracottaStateHostScanning;
-    } else if ([stateStr isEqualToString:@"host-starting"]) {
-        state.kind = TerracottaStateHostStarting;
-    } else if ([stateStr isEqualToString:@"host-ok"]) {
-        state.kind = TerracottaStateHostOk;
-    } else if ([stateStr isEqualToString:@"guest-connecting"]) {
-        state.kind = TerracottaStateGuestConnecting;
-    } else if ([stateStr isEqualToString:@"guest-starting"]) {
-        state.kind = TerracottaStateGuestStarting;
-    } else if ([stateStr isEqualToString:@"guest-ok"]) {
-        state.kind = TerracottaStateGuestOk;
-    } else if ([stateStr isEqualToString:@"exception"]) {
-        state.kind = TerracottaStateException;
-    } else {
-        NSLog(@"[TerracottaBridge] unknown state: %@", stateStr);
-        return nil;
-    }
-
-    /* 解析玩家列表 */
-    NSArray *profilesArray = json[@"profiles"];
-    if (profilesArray != nil && [profilesArray isKindOfClass:[NSArray class]]) {
-        NSMutableArray<TerracottaPlayerProfile *> *profiles = [NSMutableArray array];
-        for (NSDictionary *p in profilesArray) {
-            if (![p isKindOfClass:[NSDictionary class]]) continue;
-            TerracottaPlayerProfile *profile = [[TerracottaPlayerProfile alloc] init];
-            profile.name = p[@"name"] ?: @"";
-            profile.machineId = p[@"machine_id"] ?: @"";
-            profile.easytierId = p[@"easytier_id"];
-            profile.vendor = p[@"vendor"] ?: @"";
-            profile.kind = p[@"kind"] ?: @"";
-            [profiles addObject:profile];
-        }
-        state.profiles = profiles;
-    }
-
-    return state;
 }
 
 @end

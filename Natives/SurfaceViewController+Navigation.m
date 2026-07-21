@@ -9,7 +9,7 @@
 #import "ScreenUtils.h"
 #import "MultiplayerViewController.h"
 #import "MultiplayerManager.h"
-#import "terracotta/TerracottaViewController.h"
+#import "TerracottaViewController.h"
 #import <objc/runtime.h>
 
 // 暴露 class extension 中的私有属性，供 category 使用

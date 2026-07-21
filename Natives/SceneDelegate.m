@@ -5,8 +5,8 @@
 #import "LauncherCardLayoutViewController.h"
 #import "LauncherPreferences.h"
 #import "BackgroundManager.h"
-#import "terracotta/TerracottaManager.h"
-#import "terracotta/TerracottaBridge.h"
+#import "TerracottaManager.h"
+#import "TerracottaBridge.h"
 
 extern UIWindow *mainWindow;
 
@@ -73,13 +73,12 @@ extern UIWindow *mainWindow;
     // 中已 loadSavedBackground/loadUISettings，单例首次访问即完成初始化，无需延迟。
     [[BackgroundManager sharedManager] applyBackgroundToWindow:self.window];
 
-    // 初始化陶瓦联机（Terracotta）：访问 shared 单例会触发 init → initializeTerracotta，
-    // 该方法调 terracotta_ios_start 完成一次性初始化（工作目录在 Documents/terracotta）。
-    // libterracotta.a 未链接时 isAvailable=NO，Bridge 调用会安全降级，initialized 保持 NO。
+    // 初始化陶瓦联机（Terracotta）：访问 shared 单例会触发 init，init 内部自动调用
+    // initializeTerracotta（terracotta_ios_start 一次性初始化，工作目录 Documents/terracotta）。
+    // libterracotta.a 未链接时 isAvailable=NO，init 内部跳过初始化，initialized 保持 NO。
     if ([TerracottaBridge isAvailable]) {
-        [[TerracottaManager shared] class]; /* 触发 dispatch_once init */
-        NSLog(@"[SceneDelegate] Terracotta manager initialized: %d",
-              [TerracottaManager shared].initialized);
+        TerracottaManager *mgr = [TerracottaManager shared];
+        NSLog(@"[SceneDelegate] Terracotta manager initialized: %d", mgr.initialized);
     } else {
         NSLog(@"[SceneDelegate] libterracotta not linked, multiplayer disabled");
     }
