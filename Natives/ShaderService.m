@@ -458,13 +458,15 @@
 totalBytesExpectedToWrite:(int64_t)totalBytesExpectedToWrite {
     void(^progress)(NSProgress *) = self.downloadProgressHandlers[downloadTask];
     DownloadTaskItem *taskItem = self.downloadTaskItems[downloadTask];
+    // speed/eta 声明提到 if (taskItem) 块之前，供下方构造 NSProgress 时引用
+    // （修复编译错误：之前在块内声明，块外使用导致 use of undeclared identifier）
+    double speed = 0.0;
+    NSTimeInterval eta = 0.0;
 
     if (taskItem) {
         double fraction = totalBytesExpectedToWrite > 0 ? (double)totalBytesWritten / (double)totalBytesExpectedToWrite : -1.0;
         NSTimeInterval now = [NSDate date].timeIntervalSince1970;
         NSMutableDictionary *snapshot = self.downloadProgressSnapshots[downloadTask];
-        double speed = 0.0;
-        NSTimeInterval eta = 0.0;
         if (snapshot) {
             NSTimeInterval lastTime = [snapshot[@"lastTime"] doubleValue];
             int64_t lastBytes = [snapshot[@"lastBytes"] longLongValue];
