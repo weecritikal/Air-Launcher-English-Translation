@@ -117,6 +117,9 @@ public final class Tools {
 
         File gameDir = new File(Tools.DIR_GAME_PROFILE);
         gameDir.mkdirs();
+        // 确保 logs 目录存在，防止 Log4j RollingRandomAccessFileAppender
+        // 因 logs/latest.log 路径不存在而抛出 FileNotFoundException
+        new File(gameDir, "logs").mkdirs();
 
         Map<String, String> varArgMap = new ArrayMap<String, String>();
         varArgMap.put("auth_session", profile.accessToken); // For legacy versions of MC
