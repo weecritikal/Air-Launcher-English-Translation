@@ -129,6 +129,15 @@
     [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
+- (void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+    // 修复"前一个页面没有及时消失"：viewDidLoad 时 tableView.bounds 可能为 zero，
+    // 导致 applyBackgroundBlurToTableView 设置的 backgroundView frame 为 zero，
+    // push 转场初期无法遮挡栈底 VersionManagerViewController 的内容。
+    // 在 viewWillAppear 中重新应用，此时 bounds 已正确，确保转场前遮挡到位。
+    [self applyBackgroundBlurToTableView];
+}
+
 - (void)reloadVersionList {
     self.versionList = nil;
     self.versionSelectedAt = -1;

@@ -51,6 +51,9 @@
     self.selectedMods = [NSMutableArray array]; // 初始化已选中 Mod 列表
     self.isSelectMode = NO;
     [self setupUI];
+    // 修复"前一个页面没有及时消失"：给 view 添加毛玻璃遮挡层，
+    // 防止 push 转场时透出栈底 ProfileSettingsViewController 的内容
+    [[BackgroundManager sharedManager] applyEffectToView:self.view];
     // 透明化 tableView 背景，避免遮挡全局背景
     self.tableView.backgroundColor = [UIColor clearColor];
     self.tableView.backgroundView = nil;
@@ -67,6 +70,8 @@
 - (void)reapplyBackgroundEffect {
     // 背景效果改变时重新透明化当前 VC
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
+    // 重新应用 view 毛玻璃遮挡层
+    [[BackgroundManager sharedManager] applyEffectToView:self.view];
     // 重新设置 tableView 背景为透明，确保背景效果切换后仍透出全局背景
     self.tableView.backgroundColor = [UIColor clearColor];
     self.tableView.backgroundView = nil;
