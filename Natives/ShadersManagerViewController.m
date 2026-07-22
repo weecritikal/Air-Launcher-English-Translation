@@ -89,6 +89,17 @@
     [self.tableView reloadData];
 }
 
+- (void)viewWillAppear:(BOOL)animated {
+    [super viewWillAppear:animated];
+    // 修复"前一个页面没有及时消失"：
+    // viewDidLoad 时 self.view.bounds 可能为 zero，applyEffectToView: 插入的 blurView
+    // frame 为 zero，push 转场第一帧无法遮挡栈底 VersionManagerViewController 的卡片。
+    // 在 viewWillAppear 中重新应用（此时 bounds 已正确），确保转场前遮挡到位。
+    [[BackgroundManager sharedManager] applyEffectToView:self.view];
+    self.tableView.backgroundColor = [UIColor clearColor];
+    self.tableView.backgroundView = nil;
+}
+
 - (void)dealloc {
     // 移除通知观察者，避免dealloc后收到通知导致崩溃
     [[NSNotificationCenter defaultCenter] removeObserver:self];
