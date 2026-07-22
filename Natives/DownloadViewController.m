@@ -3109,11 +3109,24 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
 
-        // 先 pop 加载器选择页，再启动安装流程（与 FCL 安卓在中间内容区切换一致）
+        // 修复"前一个页面没有及时消失"：
+        // 之前用 popViewControllerAnimated:YES + dispatch_async(main_queue) 立即执行 proceedWithVersion:，
+        // 但 pop 动画（约 0.35s）还未完成时 proceedWithVersion: 可能 push 新 VC（如 InstallerProgressViewController），
+        // 导致导航控制器在 pop 动画期间收到 push，状态冲突，前一个页面（模组安装器）卡在屏幕上不消失。
+        // 修复：用 CATransaction 包裹 pop，在 pop 动画完成的回调中再执行 proceedWithVersion:，
+        //       确保导航栈状态一致。
+        [CATransaction begin];
+        [CATransaction setCompletionBlock:^{
+            __strong typeof(weakSelf) ss = weakSelf;
+            if (!ss) return;
+            [ss proceedWithVersion:version
+                        loaderType:loaderType
+                  installFabricAPI:installFabricAPI
+                   installOptiFine:installOptiFine
+                      loaderVersion:loaderVersion];
+        }];
         [strongSelf.navigationController popViewControllerAnimated:YES];
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [strongSelf proceedWithVersion:version loaderType:loaderType installFabricAPI:installFabricAPI installOptiFine:installOptiFine loaderVersion:loaderVersion];
-        });
+        [CATransaction commit];
     };
 
     loaderVC.cancelled = ^{
