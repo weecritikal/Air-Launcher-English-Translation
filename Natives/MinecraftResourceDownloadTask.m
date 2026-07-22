@@ -41,8 +41,12 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"org.a
     dispatch_once(&onceToken, ^{
         NSURLSessionConfiguration *configuration = [NSURLSessionConfiguration defaultSessionConfiguration];
         configuration.timeoutIntervalForRequest = 86400;
-        // 提升并发连接数，加快原版下载（数百个 asset 并发）
-        configuration.HTTPMaximumConnectionsPerHost = 16;
+        // 参考 FCL（FoldCraftLauncher）和 ZalithLauncher2：高并发下载加速。
+        // FCL 在 Java 端使用 OkHttp 的线程池并发下载，本项目对应在 NSURLSession
+        // 层面提升 HTTPMaximumConnectionsPerHost。从 16 提升到 24，加速原版数百个
+        // asset 的并发下载。注意 iOS 系统对单 host 实际并发有调度上限，过高的设置
+        // 会被系统降级，24 是经验值。完整性仍由 SHA1 校验保证。
+        configuration.HTTPMaximumConnectionsPerHost = 24;
         manager = [[AFURLSessionManager alloc] initWithSessionConfiguration:configuration];
     });
     return manager;
@@ -71,13 +75,23 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"org.a
 
 // 根据配置选择下载源并替换URL
 - (NSString *)replaceURLWithDownloadSource:(NSString *)originalURL {
+    return [self replaceURLWithDownloadSource:originalURL forceSource:nil];
+}
+
+/// 镜像源替换核心实现。
+/// 参考 FCL（FoldCraftLauncher）和 ZalithLauncher2：支持多镜像源 fallback。
+/// @param originalURL 原始 URL
+/// @param forceSource 强制使用的源（nil=用用户偏好；@"official"=不替换；@"bmclapi"=强制 BMCLAPI）。
+///                    在下载失败重试时，调用方传入对端源以触发镜像源切换，
+///                    避免单一镜像源故障导致整批下载卡死。
+- (NSString *)replaceURLWithDownloadSource:(NSString *)originalURL forceSource:(nullable NSString *)forceSource {
     if (!originalURL) return originalURL;
-    
-    NSString *downloadSource = getPrefObject(@"general.download_source");
+
+    NSString *downloadSource = forceSource ?: getPrefObject(@"general.download_source");
     if (!downloadSource || [downloadSource isEqualToString:@"official"]) {
         return originalURL;
     }
-    
+
     // BMCLAPI镜像源
     if ([downloadSource isEqualToString:@"bmclapi"]) {
         // piston-meta.mojang.com：Mojang 新版版本清单和版本 JSON 域名（1.19+ 起使用）
@@ -98,55 +112,55 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"org.a
             return [originalURL stringByReplacingOccurrencesOfString:@"https://launchermeta.mojang.com"
                                                            withString:@"https://bmclapi2.bangbang93.com"];
         }
-        
+
         // Assets资源
         if ([originalURL containsString:@"resources.download.minecraft.net"]) {
-            return [originalURL stringByReplacingOccurrencesOfString:@"http://resources.download.minecraft.net" 
+            return [originalURL stringByReplacingOccurrencesOfString:@"http://resources.download.minecraft.net"
                                                            withString:@"https://bmclapi2.bangbang93.com/assets"];
         }
-        
+
         // Libraries库文件
         if ([originalURL containsString:@"libraries.minecraft.net"]) {
-            return [originalURL stringByReplacingOccurrencesOfString:@"https://libraries.minecraft.net" 
+            return [originalURL stringByReplacingOccurrencesOfString:@"https://libraries.minecraft.net"
                                                            withString:@"https://bmclapi2.bangbang93.com/maven"];
         }
-        
+
         // Forge
         if ([originalURL containsString:@"files.minecraftforge.net"]) {
-            return [originalURL stringByReplacingOccurrencesOfString:@"https://files.minecraftforge.net" 
+            return [originalURL stringByReplacingOccurrencesOfString:@"https://files.minecraftforge.net"
                                                            withString:@"https://bmclapi2.bangbang93.com"];
         }
-        
+
         // Fabric
         if ([originalURL containsString:@"meta.fabricmc.net"]) {
-            return [originalURL stringByReplacingOccurrencesOfString:@"https://meta.fabricmc.net" 
+            return [originalURL stringByReplacingOccurrencesOfString:@"https://meta.fabricmc.net"
                                                            withString:@"https://bmclapi2.bangbang93.com/fabric-meta"];
         }
-        
+
         if ([originalURL containsString:@"maven.fabricmc.net"]) {
-            return [originalURL stringByReplacingOccurrencesOfString:@"https://maven.fabricmc.net" 
+            return [originalURL stringByReplacingOccurrencesOfString:@"https://maven.fabricmc.net"
                                                            withString:@"https://bmclapi2.bangbang93.com/maven"];
         }
-        
+
         // NeoForge
         if ([originalURL containsString:@"maven.neoforged.net"]) {
-            return [originalURL stringByReplacingOccurrencesOfString:@"https://maven.neoforged.net" 
+            return [originalURL stringByReplacingOccurrencesOfString:@"https://maven.neoforged.net"
                                                            withString:@"https://bmclapi2.bangbang93.com/maven"];
         }
-        
+
         // authlib-injector
         if ([originalURL containsString:@"authlib-injector.yushi.moe"]) {
-            return [originalURL stringByReplacingOccurrencesOfString:@"https://authlib-injector.yushi.moe" 
+            return [originalURL stringByReplacingOccurrencesOfString:@"https://authlib-injector.yushi.moe"
                                                            withString:@"https://bmclapi2.bangbang93.com/mirrors/authlib-injector"];
         }
-        
+
         // Mojang Java运行时
         if ([originalURL containsString:@"launchermeta.mojang.com/v1/products/java-runtime"]) {
-            return [originalURL stringByReplacingOccurrencesOfString:@"https://launchermeta.mojang.com" 
+            return [originalURL stringByReplacingOccurrencesOfString:@"https://launchermeta.mojang.com"
                                                            withString:@"https://bmclapi2.bangbang93.com"];
         }
     }
-    
+
     return originalURL;
 }
 
@@ -167,7 +181,15 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"org.a
 
     NSString *name = altName ?: path.lastPathComponent;
     // 根据配置选择下载源并替换URL
-    NSString *replacedURL = [self replaceURLWithDownloadSource:url];
+    // 参考 FCL（FoldCraftLauncher）和 ZalithLauncher2：重试时切换到对端镜像源，
+    // 避免单一镜像源故障导致整批下载卡死。SHA1 校验仍照常进行，不破坏下载完整性。
+    NSString *forceSource = nil;
+    if (retryCount > 0) {
+        NSString *currentSource = getPrefObject(@"general.download_source") ?: @"bmclapi";
+        forceSource = [currentSource isEqualToString:@"bmclapi"] ? @"official" : @"bmclapi";
+        NSLog(@"[MCDL] Retry %@ with fallback source: %@", name, forceSource);
+    }
+    NSString *replacedURL = [self replaceURLWithDownloadSource:url forceSource:forceSource];
     NSURLRequest *request = [NSURLRequest requestWithURL:[NSURL URLWithString:replacedURL]];
     __block NSProgress *progress;
     __weak MinecraftResourceDownloadTask *weakSelf = self;

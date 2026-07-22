@@ -44,14 +44,16 @@
 
     // 菜单项配置
     // case 3 为"联机"（陶瓦联机 Terracotta，与 HMCL/FCL/ZL2 互通）
-    // case 4 为"设置"
+    // case 4 为"ZeroTier 联机"（独立入口，与陶瓦联机并列，便于用户直接进入 ZeroTier 界面）
+    // case 5 为"设置"
     // 键位调整界面已移到设置页面中
     self.menuItems = @[
         @{@"icon": @"house.fill", @"title": @" ", @"index": @0},
         @{@"icon": @"arrow.down.circle.fill", @"title": @" ", @"index": @1},
         @{@"icon": @"puzzlepiece.fill", @"title": @" ", @"index": @2},
         @{@"icon": @"antenna.radiowaves.left.and.right", @"title": @" ", @"index": @3},
-        @{@"icon": @"gearshape.fill", @"title": @" ", @"index": @4}
+        @{@"icon": @"network", @"title": @" ", @"index": @4},
+        @{@"icon": @"gearshape.fill", @"title": @" ", @"index": @5}
     ];
     
     self.selectedIndex = 0;
@@ -271,7 +273,11 @@
             [self showMultiplayer];
             break;
 
-        case 4: // 设置
+        case 4: // ZeroTier 联机（独立入口）
+            [self showZeroTier];
+            break;
+
+        case 5: // 设置
             [self showSettings];
             break;
     }
@@ -285,6 +291,12 @@
 - (void)showMultiplayer {
     // 发送通知让 LauncherRootViewController 显示陶瓦联机界面
     [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowMultiplayer" object:nil];
+}
+
+- (void)showZeroTier {
+    // 发送通知让 LauncherRootViewController 显示 ZeroTier 联机界面
+    // ZeroTier 与陶瓦联机为并列的两套联机方案，独立菜单入口避免用户先进入陶瓦再切换。
+    [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowZeroTier" object:nil];
 }
 
 - (void)showSettings {

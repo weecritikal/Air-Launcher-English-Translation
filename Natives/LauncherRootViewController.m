@@ -337,6 +337,11 @@ static CGFloat LauncherRootLayoutRightPanelWidth(UITraitCollection *trait) {
                                              selector:@selector(showMultiplayer)
                                                  name:@"ShowMultiplayer"
                                                object:nil];
+    // ZeroTier 联机独立入口（与陶瓦联机并列）：左侧菜单 case 4 触发
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(showZeroTier)
+                                                 name:@"ShowZeroTier"
+                                               object:nil];
     // 首页快捷瓷砖触发：切到对应内容区子页面（不再 FormSheet 弹窗）
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(showModsManager)
@@ -491,6 +496,22 @@ static CGFloat LauncherRootLayoutRightPanelWidth(UITraitCollection *trait) {
         return;
     }
     TerracottaViewController *vc = [[TerracottaViewController alloc] init];
+    UINavigationController *navVC = [[UINavigationController alloc] initWithRootViewController:vc];
+    navVC.navigationBar.prefersLargeTitles = NO;
+    [self setContentViewController:navVC animated:YES];
+}
+
+- (void)showZeroTier {
+    // 在中间内容区显示 ZeroTier 联机界面（独立入口，与陶瓦联机并列）。
+    // 之前 ZeroTier 入口仅嵌在陶瓦联机页面右上角的浮动按钮里，用户需先进入陶瓦再切换，
+    // 不符合"FCL 风格左侧菜单直接进入"的体验。现在左侧菜单 case 4 直接进入。
+    // 使用 MultiplayerVCModeLauncher 模式（启动器模式：联机开关 + 预设 Network ID + 房间列表）。
+    // 若陶瓦会话进行中，先停止陶瓦会话避免端口冲突。
+    if ([TerracottaBridge isAvailable] &&
+        [TerracottaManager shared].status != TerracottaStatusDisconnected) {
+        [[TerracottaManager shared] stopSession];
+    }
+    MultiplayerViewController *vc = [[MultiplayerViewController alloc] initWithMode:MultiplayerVCModeLauncher];
     UINavigationController *navVC = [[UINavigationController alloc] initWithRootViewController:vc];
     navVC.navigationBar.prefersLargeTitles = NO;
     [self setContentViewController:navVC animated:YES];

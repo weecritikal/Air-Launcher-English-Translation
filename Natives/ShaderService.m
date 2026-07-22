@@ -38,14 +38,17 @@
 - (instancetype)init {
     if (self = [super init]) {
         _onlineSearchEnabled = NO;
-        
-        // 使用默认会话配置，避免后台会话限速
+
+        // 使用默认会话配置，避免后台会话限速。
+        // 参考 FCL/ZalithLauncher2：提升并发连接数 6 → 16，与 ModService 对齐，
+        // 在并发下载多个光影资源文件时显著提升吞吐量。完整性仍由下载完成后的
+        // 文件大小/格式校验保证（与原实现一致，未引入分片下载以避免破坏校验流程）。
         NSURLSessionConfiguration *config = [NSURLSessionConfiguration defaultSessionConfiguration];
         config.timeoutIntervalForRequest = 120.0;
         config.timeoutIntervalForResource = 300.0;
         config.allowsCellularAccess = YES;
-        config.HTTPMaximumConnectionsPerHost = 6;
-        
+        config.HTTPMaximumConnectionsPerHost = 16;
+
         _downloadSession = [NSURLSession sessionWithConfiguration:config delegate:self delegateQueue:nil];
         _downloadCompletionHandlers = [NSMutableDictionary dictionary];
         _downloadDestinationPaths = [NSMutableDictionary dictionary];
@@ -89,25 +92,51 @@
 
 #pragma mark - Shaders folder detection & scan
 
+/// 解析 profile 的 gameDir 为绝对路径。
+/// 与 ModService.resolveAbsoluteGameDirForProfile: 对齐：
+/// profile gameDir 通常是相对路径（如 "./custom_gamedir/{name}"），需相对于 POJAV_GAME_DIR 解析。
+/// 之前 ShaderService 直接使用相对路径，导致 shaderpacks 目录找不到（fileExistsAtPath 基于 cwd 解析），
+/// 用户点击下载光影按钮后没反应（实际是 ensureShadersFolderForProfile 创建目录到错误位置，
+/// 下载完成后 moveItem 失败但 handler 已切主线程报错，用户感知"无反应"）。
+- (nullable NSString *)resolveAbsoluteGameDirForProfile:(NSString *)profileName {
+    NSString *profile = profileName.length ? profileName : @"default";
+    @try {
+        NSDictionary *profiles = PLProfiles.current.profiles;
+        NSDictionary *prof = profiles[profile];
+        if (![prof isKindOfClass:[NSDictionary class]]) return nil;
+        NSString *gameDir = prof[@"gameDir"];
+        if (![gameDir isKindOfClass:[NSString class]] || gameDir.length == 0) return nil;
+        if ([gameDir isEqualToString:@"."]) {
+            const char *env = getenv("POJAV_GAME_DIR");
+            return env ? [NSString stringWithUTF8String:env] : NSHomeDirectory();
+        }
+        if ([gameDir isAbsolutePath]) {
+            return gameDir;
+        }
+        const char *env = getenv("POJAV_GAME_DIR");
+        NSString *baseDir = env ? [NSString stringWithUTF8String:env] : NSHomeDirectory();
+        NSString *cleanGameDir = [gameDir hasPrefix:@"./"] ? [gameDir substringFromIndex:2] : gameDir;
+        return [baseDir stringByAppendingPathComponent:cleanGameDir];
+    } @catch (NSException *ex) {
+        return nil;
+    }
+}
+
 - (nullable NSString *)existingShadersFolderForProfile:(NSString *)profileName {
     NSString *profile = profileName.length ? profileName : @"default";
     NSFileManager *fm = [NSFileManager defaultManager];
 
-    @try {
-        NSDictionary *profiles = PLProfiles.current.profiles;
-        NSDictionary *prof = profiles[profile];
-        if ([prof isKindOfClass:[NSDictionary class]]) {
-            NSString *gameDir = prof[@"gameDir"];
-            if ([gameDir isKindOfClass:[NSString class]] && gameDir.length > 0) {
-                NSString *shadersPath = [gameDir stringByAppendingPathComponent:@"shaderpacks"];
-                BOOL isDir = NO;
-                if ([fm fileExistsAtPath:shadersPath isDirectory:&isDir] && isDir) {
-                    return shadersPath;
-                }
-            }
+    // 优先用 profile gameDir（已解析为绝对路径）
+    NSString *resolvedGameDir = [self resolveAbsoluteGameDirForProfile:profile];
+    if (resolvedGameDir.length > 0) {
+        NSString *shadersPath = [resolvedGameDir stringByAppendingPathComponent:@"shaderpacks"];
+        BOOL isDir = NO;
+        if ([fm fileExistsAtPath:shadersPath isDirectory:&isDir] && isDir) {
+            return shadersPath;
         }
-    } @catch (NSException *ex) { }
+    }
 
+    // 回退到 POJAV_GAME_DIR/shaderpacks
     const char *gameDirC = getenv("POJAV_GAME_DIR");
     if (gameDirC) {
         NSString *gameDir = [NSString stringWithUTF8String:gameDirC];
@@ -126,16 +155,11 @@
     NSFileManager *fm = [NSFileManager defaultManager];
     NSString *shadersPath = nil;
 
-    @try {
-        NSDictionary *profiles = PLProfiles.current.profiles;
-        NSDictionary *prof = profiles[profile];
-        if ([prof isKindOfClass:[NSDictionary class]]) {
-            NSString *gameDir = prof[@"gameDir"];
-            if ([gameDir isKindOfClass:[NSString class]] && gameDir.length > 0) {
-                shadersPath = [gameDir stringByAppendingPathComponent:@"shaderpacks"];
-            }
-        }
-    } @catch (NSException *ex) { }
+    // 优先用 profile gameDir（已解析为绝对路径）
+    NSString *resolvedGameDir = [self resolveAbsoluteGameDirForProfile:profile];
+    if (resolvedGameDir.length > 0) {
+        shadersPath = [resolvedGameDir stringByAppendingPathComponent:@"shaderpacks"];
+    }
 
     if (!shadersPath) {
         const char *gameDirC = getenv("POJAV_GAME_DIR");
@@ -271,49 +295,21 @@
     NSFileManager *fm = [NSFileManager defaultManager];
 
     if (!shadersFolder) {
-        NSString *gameDir = nil;
+        // 回退到 ensureShadersFolderForProfile:error:，复用绝对路径解析逻辑
+        // （之前直接读 prof[@"gameDir"] 不做相对路径解析，会导致目录创建到错误位置）
         NSString *profile = profileName.length ? profileName : @"default";
-
-        @try {
-            NSDictionary *profiles = PLProfiles.current.profiles;
-            NSDictionary *prof = profiles[profile];
-            if ([prof isKindOfClass:[NSDictionary class]]) {
-                gameDir = prof[@"gameDir"];
-            }
-        } @catch (NSException *ex) { }
-
-        if (!gameDir) {
-            const char *gameDirC = getenv("POJAV_GAME_DIR");
-            if (gameDirC) {
-                gameDir = [NSString stringWithUTF8String:gameDirC];
-            }
-        }
-
-        if (gameDir) {
-            shadersFolder = [gameDir stringByAppendingPathComponent:@"shaderpacks"];
-            NSError *dirError = nil;
-            BOOL created = [fm createDirectoryAtPath:shadersFolder
-                         withIntermediateDirectories:YES
-                                          attributes:nil
-                                               error:&dirError];
-            if (!created || dirError) {
-                if (completion) {
-                    NSError *error = [NSError errorWithDomain:@"ShaderServiceError"
-                                                         code:1
-                                                     userInfo:@{NSLocalizedDescriptionKey: @"Failed to create shaderpacks folder, please check storage permissions."}];
-                    dispatch_async(dispatch_get_main_queue(), ^{ completion(error); });
-                }
-                return;
-            }
-        } else {
+        NSError *dirError = nil;
+        NSString *created = [self ensureShadersFolderForProfile:profile error:&dirError];
+        if (!created) {
             if (completion) {
                 NSError *error = [NSError errorWithDomain:@"ShaderServiceError"
                                                      code:1
-                                                 userInfo:@{NSLocalizedDescriptionKey: @"Cannot find game directory."}];
+                                                 userInfo:@{NSLocalizedDescriptionKey: dirError.localizedDescription ?: @"Failed to create shaderpacks folder, please check storage permissions."}];
                 dispatch_async(dispatch_get_main_queue(), ^{ completion(error); });
             }
             return;
         }
+        shadersFolder = created;
     }
 
     // Validate URL
@@ -442,7 +438,12 @@
             [self.downloadProgressSnapshots removeObjectForKey:task];
         }
         if (handler) {
-            handler(error);
+            // 防御性切主线程：delegate 默认在 NSURLSession 的 delegateQueue 上执行（非主线程）。
+            // 调用方（DownloadViewController）虽然已切主线程，但接口约定应当安全。
+            NSError *capturedError = error;
+            dispatch_async(dispatch_get_main_queue(), ^{
+                handler(capturedError);
+            });
             [self.downloadCompletionHandlers removeObjectForKey:task];
             [self.downloadDestinationPaths removeObjectForKey:task];
             [self.downloadProgressHandlers removeObjectForKey:task];
@@ -491,8 +492,17 @@ totalBytesExpectedToWrite:(int64_t)totalBytesExpectedToWrite {
 
     if (!progress) return;
 
+    // 在 progress 回调的 NSProgress 上设置 throughput 和 estimatedTimeRemaining，
+    // 供调用方（DownloadViewController）在 FCL 风格的下载进度卡片上显示速度和 ETA。
+    // 与 ModService 对齐，之前 ShaderService 同样存在速度/ETA 永远为 0 的问题。
     NSProgress *downloadProgress = [NSProgress progressWithTotalUnitCount:totalBytesExpectedToWrite];
     downloadProgress.completedUnitCount = totalBytesWritten;
+    if (speed > 0) {
+        downloadProgress.throughput = @(speed);
+    }
+    if (eta > 0) {
+        downloadProgress.estimatedTimeRemaining = @(eta);
+    }
 
     dispatch_async(dispatch_get_main_queue(), ^{
         progress(downloadProgress);

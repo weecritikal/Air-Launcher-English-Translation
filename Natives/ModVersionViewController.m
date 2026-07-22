@@ -630,6 +630,23 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
     [self.activityIndicator stopAnimating];
     if (error) {
         NSLog(@"[ModVersionVC] Error fetching versions (source=%ld): %@", (long)self.selectedSource, error);
+        // 修复"下载版本点击下载按钮后没有反应"：
+        // 之前版本列表拉取失败时仅 NSLog，用户看到空白列表毫无反馈，误以为按钮失灵。
+        // 现在补 UIAlertController 提示（与 ShaderVersionViewController 保持一致）。
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"错误"
+                                                                        message:@"无法获取版本信息，请检查网络连接或切换下载源"
+                                                                 preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
+        [self presentViewController:alert animated:YES completion:nil];
+        return;
+    }
+    if (!versions || versions.count == 0) {
+        // 列表为空时也给出反馈，避免用户误以为"按钮无反应"
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"提示"
+                                                                        message:@"未找到可下载的版本，可尝试切换下载源（Modrinth/CurseForge）或更换筛选条件"
+                                                                 preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
+        [self presentViewController:alert animated:YES completion:nil];
         return;
     }
     self.allVersions = versions;

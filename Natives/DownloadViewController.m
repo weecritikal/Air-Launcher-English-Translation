@@ -5529,27 +5529,65 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 }
 
 - (void)startDownloadForModItem:(ModItem *)item {
-    // FCL 风格：push 进度页（不确定模式），替代 alert 转圈
-    InstallerProgressViewController *progressVC = [[InstallerProgressViewController alloc] init];
-    progressVC.titleText = [NSString stringWithFormat:@"正在下载 %@", item.displayName ?: @""];
-    progressVC.progress = -1;
-    progressVC.stageMessage = @"正在下载模组文件...";
-    // 阶段12增强：模组图标
-    progressVC.categoryIconName = @"puzzlepiece.extension.fill";
-    progressVC.categoryIconColor = [UIColor systemBlueColor];
-    [self.navigationController pushViewController:progressVC animated:YES];
+    // 参照 FCL 风格：使用底部悬浮进度卡片（与 Minecraft 版本下载保持一致），
+    // 替代之前的不确定模式 InstallerProgressViewController。
+    // 之前调用 downloadMod:toProfile:completion: 不带 progress 版本，进度页一直转圈，
+    // 用户感知"卡住/无反应"。现在使用带 progress 的版本，并接 progress 回调到卡片。
+    if (self.progressCardView) {
+        [self.progressCardView dismiss];
+        self.progressCardView = nil;
+    }
+
+    NSString *modTitle = [NSString stringWithFormat:@"正在下载 %@", item.displayName ?: @""];
+    self.progressCardView = [DownloadProgressCardView showInParentView:self.view title:modTitle];
+    [self.progressCardView startDownloadWithTitle:modTitle
+                                          subtitle:@"Minecraft 模组"];
+    // 立即显示不确定模式，等首次 progress 回调后再更新具体百分比
+    [self.progressCardView updateProgress:-1 downloaded:0 total:-1 speed:0 eta:-1 currentFile:@"准备下载..."];
 
     NSString *profileName = PLProfiles.current.selectedProfileName ?: @"default";
 
     __weak typeof(self) weakSelf = self;
-    [[ModService sharedService] downloadMod:item toProfile:profileName completion:^(NSError * _Nullable error) {
+    __weak DownloadProgressCardView *weakCard = self.progressCardView;
+    [[ModService sharedService] downloadMod:item
+                                  toProfile:profileName
+                                    progress:^(NSProgress * _Nullable downloadProgress) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf || !weakCard) return;
+            double fraction = downloadProgress.fractionCompleted;
+            long long total = downloadProgress.totalUnitCount;
+            long long downloaded = downloadProgress.completedUnitCount;
+            long long speed = 0;
+            NSInteger eta = -1;
+            if ([downloadProgress.throughput isKindOfClass:[NSNumber class]]) {
+                speed = [downloadProgress.throughput longLongValue];
+            }
+            if ([downloadProgress.estimatedTimeRemaining isKindOfClass:[NSNumber class]]) {
+                eta = [downloadProgress.estimatedTimeRemaining integerValue];
+            }
+            [weakCard updateProgress:fraction
+                         downloaded:downloaded
+                               total:total
+                              speed:speed
+                                eta:eta
+                        currentFile:item.fileName];
+        });
+    } completion:^(NSError * _Nullable error) {
         dispatch_async(dispatch_get_main_queue(), ^{
             __strong typeof(weakSelf) strongSelf = weakSelf;
             if (!strongSelf) return;
-            [strongSelf.navigationController popViewControllerAnimated:YES];
             if (error) {
+                if (strongSelf.progressCardView) {
+                    [strongSelf.progressCardView failWithError:error];
+                    strongSelf.progressCardView = nil;
+                }
                 [strongSelf showError:error.localizedDescription];
             } else {
+                if (strongSelf.progressCardView) {
+                    [strongSelf.progressCardView completeWithTitle:[NSString stringWithFormat:@"%@ 已安装", item.displayName]];
+                    strongSelf.progressCardView = nil;
+                }
                 [strongSelf showSuccessMessage:[NSString stringWithFormat:@"%@ 已安装", item.displayName]];
             }
         });
@@ -5684,27 +5722,64 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 }
 
 - (void)startDownloadForShaderItem:(ShaderItem *)item {
-    // FCL 风格：push 进度页（不确定模式），替代 alert 转圈
-    InstallerProgressViewController *progressVC = [[InstallerProgressViewController alloc] init];
-    progressVC.titleText = [NSString stringWithFormat:@"正在下载 %@", item.displayName ?: @""];
-    progressVC.progress = -1;
-    progressVC.stageMessage = @"正在下载光影包...";
-    // 阶段12增强：光影包图标
-    progressVC.categoryIconName = @"camera.aperture";
-    progressVC.categoryIconColor = [UIColor systemIndigoColor];
-    [self.navigationController pushViewController:progressVC animated:YES];
+    // 参照 FCL 风格：使用底部悬浮进度卡片（与 Minecraft 版本下载和 Mod 下载保持一致），
+    // 替代之前的不确定模式 InstallerProgressViewController。
+    // 之前调用 downloadShader:toProfile:completion: 不带 progress 版本，进度页一直转圈，
+    // 用户感知"卡住/无反应"。现在使用带 progress 的版本，并接 progress 回调到卡片。
+    if (self.progressCardView) {
+        [self.progressCardView dismiss];
+        self.progressCardView = nil;
+    }
+
+    NSString *shaderTitle = [NSString stringWithFormat:@"正在下载 %@", item.displayName ?: @""];
+    self.progressCardView = [DownloadProgressCardView showInParentView:self.view title:shaderTitle];
+    [self.progressCardView startDownloadWithTitle:shaderTitle
+                                          subtitle:@"Minecraft 光影包"];
+    [self.progressCardView updateProgress:-1 downloaded:0 total:-1 speed:0 eta:-1 currentFile:@"准备下载..."];
 
     NSString *profileName = PLProfiles.current.selectedProfileName ?: @"default";
 
     __weak typeof(self) weakSelf = self;
-    [[ShaderService sharedService] downloadShader:item toProfile:profileName completion:^(NSError * _Nullable error) {
+    __weak DownloadProgressCardView *weakCard = self.progressCardView;
+    [[ShaderService sharedService] downloadShader:item
+                                         toProfile:profileName
+                                           progress:^(NSProgress * _Nullable downloadProgress) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            __strong typeof(weakSelf) strongSelf = weakSelf;
+            if (!strongSelf || !weakCard) return;
+            double fraction = downloadProgress.fractionCompleted;
+            long long total = downloadProgress.totalUnitCount;
+            long long downloaded = downloadProgress.completedUnitCount;
+            long long speed = 0;
+            NSInteger eta = -1;
+            if ([downloadProgress.throughput isKindOfClass:[NSNumber class]]) {
+                speed = [downloadProgress.throughput longLongValue];
+            }
+            if ([downloadProgress.estimatedTimeRemaining isKindOfClass:[NSNumber class]]) {
+                eta = [downloadProgress.estimatedTimeRemaining integerValue];
+            }
+            [weakCard updateProgress:fraction
+                         downloaded:downloaded
+                               total:total
+                              speed:speed
+                                eta:eta
+                        currentFile:item.fileName];
+        });
+    } completion:^(NSError * _Nullable error) {
         dispatch_async(dispatch_get_main_queue(), ^{
             __strong typeof(weakSelf) strongSelf = weakSelf;
             if (!strongSelf) return;
-            [strongSelf.navigationController popViewControllerAnimated:YES];
             if (error) {
+                if (strongSelf.progressCardView) {
+                    [strongSelf.progressCardView failWithError:error];
+                    strongSelf.progressCardView = nil;
+                }
                 [strongSelf showError:error.localizedDescription];
             } else {
+                if (strongSelf.progressCardView) {
+                    [strongSelf.progressCardView completeWithTitle:[NSString stringWithFormat:@"%@ 已安装", item.displayName]];
+                    strongSelf.progressCardView = nil;
+                }
                 [strongSelf showSuccessMessage:[NSString stringWithFormat:@"%@ 已安装", item.displayName]];
             }
         });

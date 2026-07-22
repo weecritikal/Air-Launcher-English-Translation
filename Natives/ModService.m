@@ -131,8 +131,11 @@
         config.timeoutIntervalForRequest = 120.0;
         config.timeoutIntervalForResource = 300.0;
         config.allowsCellularAccess = YES;
-        // 提高并发连接数限制（默认4，设为6可提升速度）
-        config.HTTPMaximumConnectionsPerHost = 6;
+        // 参考 FCL/ZalithLauncher2：提升并发连接数 6 → 16，
+        // 与 MinecraftResourceDownloadTask 对齐，在同时下载多个 Mod 或并发拉取
+        // Mod 元数据时显著提升吞吐量。下载完整性由 JAR 文件本身的格式校验保证
+        // （未引入分片下载，避免破坏现有的下载完成回调流程）。
+        config.HTTPMaximumConnectionsPerHost = 16;
         
         _downloadSession = [NSURLSession sessionWithConfiguration:config delegate:self delegateQueue:nil];
         _downloadCompletionHandlers = [NSMutableDictionary dictionary];
@@ -677,8 +680,17 @@ totalBytesExpectedToWrite:(int64_t)totalBytesExpectedToWrite {
 
     if (!progress) return;
 
+    // 在 progress 回调的 NSProgress 上设置 throughput 和 estimatedTimeRemaining，
+    // 供调用方（DownloadViewController）在 FCL 风格的下载进度卡片上显示速度和 ETA。
+    // 之前 progress 回调的 NSProgress 只有 fractionCompleted，导致进度卡片速度/ETA 永远为 0。
     NSProgress *downloadProgress = [NSProgress progressWithTotalUnitCount:totalBytesExpectedToWrite];
     downloadProgress.completedUnitCount = totalBytesWritten;
+    if (speed > 0) {
+        downloadProgress.throughput = @(speed);
+    }
+    if (eta > 0) {
+        downloadProgress.estimatedTimeRemaining = @(eta);
+    }
 
     dispatch_async(dispatch_get_main_queue(), ^{
         progress(downloadProgress);
