@@ -44,7 +44,7 @@ extern "C"
             if (egl != NULL) {                                                                                         \
                 egl_##name = (name##_PTR)proc_address(egl, #name);                                                     \
             }                                                                                                          \
-            if (egl_##name == NULL) LOG_W("Error: " #name " is NULL\n");                                               \
+            if (egl_##name == NULL) LOG_W_FORCE("Error: " #name " is NULL\n");                                               \
         }                                                                                                              \
     }
 

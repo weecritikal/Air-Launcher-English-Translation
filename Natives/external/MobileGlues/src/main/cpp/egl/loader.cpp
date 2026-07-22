@@ -32,6 +32,17 @@ void init_target_egl() {
   LOAD_EGL(eglTerminate);
   LOAD_EGL(eglGetError);
 
+  // 防御性检查: 若关键 EGL 函数指针为 NULL (如 ANGLE 框架未正确加载到全局作用域),
+  // 直接返回避免空指针解引用崩溃 (SIGSEGV pc=0x0), 而非调用 0x0 地址。
+  if (egl_eglGetDisplay == NULL || egl_eglInitialize == NULL ||
+      egl_eglBindAPI == NULL || egl_eglChooseConfig == NULL ||
+      egl_eglCreateContext == NULL || egl_eglMakeCurrent == NULL ||
+      egl_eglCreatePbufferSurface == NULL || egl_eglGetError == NULL) {
+    LOG_W_FORCE("init_target_egl: 关键 EGL 函数指针为 NULL, ANGLE 框架可能未正确加载, "
+                "中止 EGL 初始化以避免空指针崩溃\n");
+    return;
+  }
+
   EGLint configAttribs[] = {EGL_RED_SIZE,
                             8,
                             EGL_GREEN_SIZE,

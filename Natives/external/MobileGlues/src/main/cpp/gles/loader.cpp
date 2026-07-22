@@ -80,8 +80,36 @@ void load_libs() {
     gles = open_lib(gles3_lib, gles_override);
     egl = open_lib(egl_lib, egl_override);
 #else
-    gles = (void*)(~(uintptr_t)0);
-    egl = (void*)(~(uintptr_t)0);
+    // iOS: libmobileglues.dylib 在编译时已链接 libEGL.framework / libGLESv2.framework,
+    // 但运行时由 Java 端通过 dlopen(RTLD_LOCAL) 加载本库, 导致 ANGLE 框架符号
+    // 不在 RTLD_DEFAULT 全局作用域内, dlsym(RTLD_DEFAULT, "eglGetDisplay") 等调用
+    // 会返回 NULL, 进而在 init_target_egl 中引发空指针解引用崩溃 (SIGSEGV pc=0x0)。
+    // 修复: 通过 dladdr 定位本库所在目录, 显式以 RTLD_GLOBAL 打开框架二进制,
+    // 将其符号提升到全局作用域, 使 dlsym(RTLD_DEFAULT, ...) 能正常解析。
+    Dl_info info;
+    if (dladdr((void*)load_libs, &info) && info.dli_fname) {
+        const char* lastSlash = strrchr(info.dli_fname, '/');
+        if (lastSlash) {
+            size_t dirLen = (size_t)(lastSlash - info.dli_fname) + 1;
+            char egl_path[PATH_MAX + 1];
+            char gles_path[PATH_MAX + 1];
+            memcpy(egl_path, info.dli_fname, dirLen);
+            strcpy(egl_path + dirLen, "libEGL.framework/libEGL");
+            memcpy(gles_path, info.dli_fname, dirLen);
+            strcpy(gles_path + dirLen, "libGLESv2.framework/libGLESv2");
+            egl = dlopen(egl_path, RTLD_GLOBAL | RTLD_NOW);
+            if (egl == NULL) {
+                LOG_W_FORCE("load_libs: dlopen libEGL failed: %s\n", dlerror());
+            }
+            gles = dlopen(gles_path, RTLD_GLOBAL | RTLD_NOW);
+            if (gles == NULL) {
+                LOG_W_FORCE("load_libs: dlopen libGLESv2 failed: %s\n", dlerror());
+            }
+        }
+    }
+    // 回退: 若显式 dlopen 失败 (如路径推断出错), 仍尝试 RTLD_DEFAULT (旧行为)
+    if (egl == NULL) egl = (void*)(~(uintptr_t)0);
+    if (gles == NULL) gles = (void*)(~(uintptr_t)0);
 #endif
 }
 
