@@ -478,21 +478,15 @@ static AppleGPUGeneration _cachedGPUGeneration = AppleGPUGenerationUnknown;
         setenv("MVK_CONFIG_PREFILL_METAL_COMMAND_BUFFERS", "0", 1);
     }
 
-    // 关键修复（Mesa 25.0.7 + Iris 光影实体渲染）：
+    // Iris 光影 fragment shader 接口兼容性：
     //   MoltenVK 编译 pipeline 时，若 fragment shader 声明了 vertex shader 未写入
-    //   的 input（如 `user(locn1_2)`），Metal pipeline 编译失败：
-    //   "Fragment input(s) `user(locn1_2)` mismatching vertex shader output type(s)
-    //    or not written by vertex shader."
-    //   此问题在 Iris 光影 + Mesa 25.0.7 zink 下频发，导致实体渲染 pipeline 创建
-    //   失败，被 dummy pipeline fallback 替换后实体不渲染（黑屏/缺失）。
+    //   的 input（如 `user(locn1_2)`），Metal pipeline 编译可能失败。
+    //   Iris 1.8.8+ 已内置兼容性补丁，会自动为未写入的 fragment input 添加初始化
+    //   （见日志 "compatibility-patched by adding an initialization for it"）。
     //
-    //   MVK_CONFIG_SHADER_INTERFACE_LINKING=false 让 MoltenVK 放宽 shader 接口
-    //   校验：vertex shader 未写入的 fragment input 会被自动忽略，pipeline 可以
-    //   成功创建。这对大多数光影是安全的——shader 编译器会在 fragment shader 中
-    //   为未写入的 input 提供默认值（通常为 0）。
-    //
-    //   注：MoltenVK 1.2.x 中 vkSetMoltenVKConfigurationMVK() 已废弃，但环境变量
-    //   仍然生效（见日志中的 deprecation warning）。
+    //   注：MVK_CONFIG_SHADER_INTERFACE_LINKING 环境变量在 MoltenVK 1.2.9 中
+    //   不存在（已通过 strings 验证），此设置会被忽略。保留作为未来 MoltenVK
+    //   版本的兼容性预留。Iris 的内置补丁已足够处理此问题。
     setenv("MVK_CONFIG_SHADER_INTERFACE_LINKING", "false", 1);
 
     // Set shader cache to a writable path (Documents/.mesa_shader_cache)
