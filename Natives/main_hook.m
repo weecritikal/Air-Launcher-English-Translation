@@ -619,73 +619,17 @@ static VkZResult retryPipelineWithSIntFormats(
     return result;
 }
 
-/// vkCreateGraphicsPipelines wrapper：对齐 vertex binding stride 到 4 字节
-static VkZResult amethyst_vkCreateGraphicsPipelines(
+/// 仅对齐 vertex binding stride 到 4 字节（不做格式转换），调用真实函数
+/// 供 amethyst_vkCreateGraphicsPipelines 在策略 3 中使用
+static VkZResult createPipelinesWithAlignedStrides(
     VkZDevice device, VkZPipelineCache pipelineCache, uint32_t createInfoCount,
     const VkZGraphicsPipelineCreateInfo* pCreateInfos, const void* pAllocator,
     VkZPipeline* pPipelines)
 {
-    // 首次调用时解析真实函数指针
     if (!g_real_vkCreateGraphicsPipelines) {
-        if (g_real_vkGetDeviceProcAddr) {
-            g_real_vkCreateGraphicsPipelines = (PFN_zkCreateGraphicsPipelines)
-                g_real_vkGetDeviceProcAddr(device, "vkCreateGraphicsPipelines");
-        }
-        if (!g_real_vkCreateGraphicsPipelines && g_real_vkGetInstanceProcAddr) {
-            g_real_vkCreateGraphicsPipelines = (PFN_zkCreateGraphicsPipelines)
-                g_real_vkGetInstanceProcAddr((VkZInstance)NULL, "vkCreateGraphicsPipelines");
-        }
-        if (!g_real_vkCreateGraphicsPipelines) {
-            g_real_vkCreateGraphicsPipelines = (PFN_zkCreateGraphicsPipelines)
-                amethyst_orig_dlsym(RTLD_DEFAULT, "vkCreateGraphicsPipelines");
-        }
-        NSLog(@"[ZinkStrideFix] real vkCreateGraphicsPipelines = %p", (void*)g_real_vkCreateGraphicsPipelines);
-    }
-
-    if (!g_real_vkCreateGraphicsPipelines) {
-        NSLog(@"[ZinkStrideFix] FATAL: real vkCreateGraphicsPipelines is NULL");
         return VK_Z_ERROR_INITIALIZATION_FAILED;
     }
 
-    // 快速检查：是否需要对齐
-    BOOL needsAlignment = NO;
-    for (uint32_t i = 0; i < createInfoCount; i++) {
-        const VkZPipelineVertexInputStateCreateInfo* vis = pCreateInfos[i].pVertexInputState;
-        if (!vis || !vis->pVertexBindingDescriptions) continue;
-        for (uint32_t j = 0; j < vis->vertexBindingDescriptionCount; j++) {
-            if (vis->pVertexBindingDescriptions[j].stride & 3) {
-                needsAlignment = YES;
-                break;
-            }
-        }
-        if (needsAlignment) break;
-    }
-
-    if (!needsAlignment) {
-        VkZResult result = g_real_vkCreateGraphicsPipelines(device, pipelineCache, createInfoCount, pCreateInfos, pAllocator, pPipelines);
-        // 失败时先尝试 UINT→SINT 格式转换重试（修复 MTLAttributeFormatUShort3 转换错误），
-        // 重试仍失败才走 dummy pipeline fallback（避免实体渲染被跳过）
-        if (result != VK_Z_SUCCESS) {
-            NSLog(@"[ZinkStrideFix] vkCreateGraphicsPipelines failed (no alignment needed): %d", result);
-            VkZResult retryResult = retryPipelineWithSIntFormats(
-                device, pipelineCache, createInfoCount, pCreateInfos, pAllocator, pPipelines, NO);
-            if (retryResult == VK_Z_SUCCESS) {
-                NSLog(@"[ZinkStrideFix] Pipeline creation succeeded after UINT→SINT format conversion");
-                return retryResult;
-            }
-            NSLog(@"[ZinkStrideFix] UINT→SINT retry also failed: %d, applying dummy pipeline fallback", retryResult);
-            for (uint32_t i = 0; i < createInfoCount; i++) {
-                if (!pPipelines[i]) {
-                    pPipelines[i] = allocDummyPipeline();
-                    NSLog(@"[ZinkStrideFix] Pipeline %u: allocated dummy handle %p", i, (void*)pPipelines[i]);
-                }
-            }
-            result = VK_Z_SUCCESS;
-        }
-        return result;
-    }
-
-    // 慢路径：深拷贝并对齐 stride
     NSLog(@"[ZinkStrideFix] Aligning vertex binding strides for %u pipelines", createInfoCount);
 
     VkZGraphicsPipelineCreateInfo* newCreateInfos = malloc(sizeof(VkZGraphicsPipelineCreateInfo) * createInfoCount);
@@ -727,31 +671,6 @@ static VkZResult amethyst_vkCreateGraphicsPipelines(
 
     VkZResult result = g_real_vkCreateGraphicsPipelines(device, pipelineCache, createInfoCount, newCreateInfos, pAllocator, pPipelines);
 
-    if (result != VK_Z_SUCCESS) {
-        NSLog(@"[ZinkStrideFix] WARNING: vkCreateGraphicsPipelines still failed after alignment: %d", result);
-        // stride 对齐后仍失败：尝试 UINT→SINT 格式转换重试（同时再次应用 stride 对齐）
-        VkZResult retryResult = retryPipelineWithSIntFormats(
-            device, pipelineCache, createInfoCount, pCreateInfos, pAllocator, pPipelines, YES);
-        if (retryResult == VK_Z_SUCCESS) {
-            NSLog(@"[ZinkStrideFix] Pipeline creation succeeded after UINT→SINT + stride alignment");
-            result = VK_Z_SUCCESS;
-        } else {
-            NSLog(@"[ZinkStrideFix] UINT→SINT + stride retry also failed: %d, applying dummy pipeline fallback", retryResult);
-            // Dummy pipeline fallback：为每个失败的 pipeline 分配 dummy 句柄
-            // 让 zink 认为 pipeline 创建成功，避免后续使用 NULL pipeline 导致 SIGSEGV
-            for (uint32_t i = 0; i < createInfoCount; i++) {
-                if (!pPipelines[i]) {  // VK_NULL_HANDLE
-                    pPipelines[i] = allocDummyPipeline();
-                    NSLog(@"[ZinkStrideFix] Pipeline %u: allocated dummy handle %p", i, (void*)pPipelines[i]);
-                }
-            }
-            // 返回 VK_SUCCESS 让 zink 继续运行，vkCmdDraw* 会被我们的 hook 跳过
-            result = VK_Z_SUCCESS;
-        }
-    } else {
-        NSLog(@"[ZinkStrideFix] vkCreateGraphicsPipelines succeeded after alignment");
-    }
-
     for (uint32_t i = 0; i < createInfoCount; i++) {
         if (allocedBindings[i]) free(allocedBindings[i]);
     }
@@ -760,6 +679,137 @@ static VkZResult amethyst_vkCreateGraphicsPipelines(
     free(newCreateInfos);
 
     return result;
+}
+
+/// vkCreateGraphicsPipelines wrapper：尝试多种修复策略确保 pipeline 创建成功
+///
+/// 修复策略（按顺序尝试）：
+///   1. 原始 stride 直接创建（MoltenVK 1.2.9+ 可能已支持未对齐 stride）
+///   2. UINT→SINT 格式转换 + 原始 stride（修复 MTLAttributeFormatUShort3 转换错误）
+///   3. stride 4 字节对齐（修复 Metal API 硬性要求）
+///   4. UINT→SINT 格式转换 + stride 对齐（组合修复）
+///   5. dummy pipeline fallback（避免 NULL pipeline 导致 SIGSEGV）
+///
+/// 关键修复（实体渲染错乱）：
+///   之前的实现总是先做 stride 对齐（54→56），但 vertex buffer 数据仍按原始
+///   stride 54 排列，导致 MoltenVK 按对齐 stride 56 读取数据但数据布局不匹配，
+///   造成实体渲染错乱。
+///   新实现优先尝试原始 stride，只有当 MoltenVK 拒绝未对齐 stride 时才回退到
+///   stride 对齐。这样在支持未对齐 stride 的 MoltenVK 版本上，stride 与数据
+///   布局匹配，渲染正确。
+static VkZResult amethyst_vkCreateGraphicsPipelines(
+    VkZDevice device, VkZPipelineCache pipelineCache, uint32_t createInfoCount,
+    const VkZGraphicsPipelineCreateInfo* pCreateInfos, const void* pAllocator,
+    VkZPipeline* pPipelines)
+{
+    // 首次调用时解析真实函数指针
+    if (!g_real_vkCreateGraphicsPipelines) {
+        if (g_real_vkGetDeviceProcAddr) {
+            g_real_vkCreateGraphicsPipelines = (PFN_zkCreateGraphicsPipelines)
+                g_real_vkGetDeviceProcAddr(device, "vkCreateGraphicsPipelines");
+        }
+        if (!g_real_vkCreateGraphicsPipelines && g_real_vkGetInstanceProcAddr) {
+            g_real_vkCreateGraphicsPipelines = (PFN_zkCreateGraphicsPipelines)
+                g_real_vkGetInstanceProcAddr((VkZInstance)NULL, "vkCreateGraphicsPipelines");
+        }
+        if (!g_real_vkCreateGraphicsPipelines) {
+            g_real_vkCreateGraphicsPipelines = (PFN_zkCreateGraphicsPipelines)
+                amethyst_orig_dlsym(RTLD_DEFAULT, "vkCreateGraphicsPipelines");
+        }
+        NSLog(@"[ZinkStrideFix] real vkCreateGraphicsPipelines = %p", (void*)g_real_vkCreateGraphicsPipelines);
+    }
+
+    if (!g_real_vkCreateGraphicsPipelines) {
+        NSLog(@"[ZinkStrideFix] FATAL: real vkCreateGraphicsPipelines is NULL");
+        return VK_Z_ERROR_INITIALIZATION_FAILED;
+    }
+
+    // 预检查：是否需要 stride 对齐 / 是否有 UINT 格式
+    BOOL needsAlignment = NO;
+    for (uint32_t i = 0; i < createInfoCount; i++) {
+        const VkZPipelineVertexInputStateCreateInfo* vis = pCreateInfos[i].pVertexInputState;
+        if (!vis || !vis->pVertexBindingDescriptions) continue;
+        for (uint32_t j = 0; j < vis->vertexBindingDescriptionCount; j++) {
+            if (vis->pVertexBindingDescriptions[j].stride & 3) {
+                needsAlignment = YES;
+                break;
+            }
+        }
+        if (needsAlignment) break;
+    }
+    BOOL hasUIntFormat = pipelineCreateInfosHaveUIntFormat(createInfoCount, pCreateInfos);
+
+    // ===== 策略 1：原始 stride 直接创建 =====
+    // 优先尝试原始 stride，保持 stride 与 vertex buffer 数据布局匹配。
+    // MoltenVK 1.2.9+ 可能通过 setVertexBuffer:offset:attributeStride:atIndex:
+    // 或其他机制支持未对齐 stride。这是修复实体渲染错乱的关键。
+    {
+        VkZResult result = g_real_vkCreateGraphicsPipelines(device, pipelineCache, createInfoCount, pCreateInfos, pAllocator, pPipelines);
+        if (result == VK_Z_SUCCESS) {
+            if (needsAlignment) {
+                NSLog(@"[ZinkStrideFix] Pipeline created with original (unaligned) stride - MoltenVK accepted");
+            }
+            return result;
+        }
+        NSLog(@"[ZinkStrideFix] Strategy 1 (original stride) failed: %d", result);
+        // 清理 pPipelines（失败时 MoltenVK 可能已部分设置）
+        for (uint32_t i = 0; i < createInfoCount; i++) pPipelines[i] = NULL;
+    }
+
+    // ===== 策略 2：UINT→SINT 格式转换 + 原始 stride =====
+    // 修复 MTLAttributeFormatUShort3 转换错误，保持原始 stride
+    if (hasUIntFormat) {
+        NSLog(@"[ZinkStrideFix] Strategy 2: UINT→SINT format conversion (original stride)");
+        VkZResult retryResult = retryPipelineWithSIntFormats(
+            device, pipelineCache, createInfoCount, pCreateInfos, pAllocator, pPipelines, NO);
+        if (retryResult == VK_Z_SUCCESS) {
+            NSLog(@"[ZinkStrideFix] Strategy 2 succeeded (UINT→SINT, original stride)");
+            return retryResult;
+        }
+        NSLog(@"[ZinkStrideFix] Strategy 2 failed: %d", retryResult);
+        for (uint32_t i = 0; i < createInfoCount; i++) pPipelines[i] = NULL;
+    }
+
+    // ===== 策略 3：stride 4 字节对齐 =====
+    // MoltenVK 拒绝未对齐 stride 时，回退到 stride 对齐。
+    // 注意：这可能导致 stride 与 vertex buffer 数据布局不匹配，引发渲染错乱。
+    // 但可以避免 pipeline 创建失败导致的 SIGSEGV。
+    NSLog(@"[ZinkStrideFix] Strategy 3: stride 4-byte alignment");
+    {
+        VkZResult result = createPipelinesWithAlignedStrides(
+            device, pipelineCache, createInfoCount, pCreateInfos, pAllocator, pPipelines);
+        if (result == VK_Z_SUCCESS) {
+            NSLog(@"[ZinkStrideFix] Strategy 3 succeeded (stride alignment)");
+            return result;
+        }
+        NSLog(@"[ZinkStrideFix] Strategy 3 failed: %d", result);
+        for (uint32_t i = 0; i < createInfoCount; i++) pPipelines[i] = NULL;
+    }
+
+    // ===== 策略 4：UINT→SINT 格式转换 + stride 对齐 =====
+    if (hasUIntFormat) {
+        NSLog(@"[ZinkStrideFix] Strategy 4: UINT→SINT + stride alignment");
+        VkZResult retryResult = retryPipelineWithSIntFormats(
+            device, pipelineCache, createInfoCount, pCreateInfos, pAllocator, pPipelines, YES);
+        if (retryResult == VK_Z_SUCCESS) {
+            NSLog(@"[ZinkStrideFix] Strategy 4 succeeded (UINT→SINT + stride alignment)");
+            return retryResult;
+        }
+        NSLog(@"[ZinkStrideFix] Strategy 4 failed: %d", retryResult);
+        for (uint32_t i = 0; i < createInfoCount; i++) pPipelines[i] = NULL;
+    }
+
+    // ===== 策略 5：dummy pipeline fallback =====
+    // 所有修复策略都失败，分配 dummy pipeline 避免 NULL pipeline 导致 SIGSEGV。
+    // dummy pipeline 的 draw 调用会被我们的 hook 跳过（实体不渲染，但不崩溃）。
+    NSLog(@"[ZinkStrideFix] All strategies failed, applying dummy pipeline fallback");
+    for (uint32_t i = 0; i < createInfoCount; i++) {
+        if (!pPipelines[i]) {
+            pPipelines[i] = allocDummyPipeline();
+            NSLog(@"[ZinkStrideFix] Pipeline %u: allocated dummy handle %p", i, (void*)pPipelines[i]);
+        }
+    }
+    return VK_Z_SUCCESS;
 }
 
 /// vkGetInstanceProcAddr wrapper
