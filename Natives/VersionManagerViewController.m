@@ -553,7 +553,7 @@ static NSInteger const kSectionVersions    = 1;
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.title = @"版本管理";
+    // 不设置 self.title，避免顶部导航栏出现"版本管理"标题黑条（参照 FCL 无 title 风格）
     self.view.backgroundColor = [UIColor clearColor];
     if (self.navigationController) {
         [[BackgroundManager sharedManager] applyEffectToNavigationBar:self.navigationController.navigationBar];

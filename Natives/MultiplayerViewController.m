@@ -136,12 +136,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 - (void)viewDidLoad {
     [super viewDidLoad];
 
-    // 根据模式设置标题
-    if (self.mode == MultiplayerVCModeInGame) {
-        self.title = MPLocalized(@"mp.title.ingame", @"联机");
-    } else {
-        self.title = MPLocalized(@"mp.title", @"联机");
-    }
+    // 不设置 self.title，避免顶部导航栏出现"联机"标题黑条（参照 FCL 无 title 风格）
 
     // 适配自定义启动器背景：透明化当前 VC，让全局背景图/毛玻璃透出
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];

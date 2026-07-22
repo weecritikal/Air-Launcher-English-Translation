@@ -33,7 +33,7 @@
 
 - (id)init {
     self = [super init];
-    self.title = localize(@"Settings", nil);
+    // 不设置 self.title，避免顶部导航栏出现"设置"标题黑条（参照 FCL 无 title 风格）
     return self;
 }
 

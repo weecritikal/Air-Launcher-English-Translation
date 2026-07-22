@@ -728,7 +728,7 @@ static NSString *festivalGreeting(void) {
 - (id)init {
     self = [super init];
     if (self) {
-        self.title = @"主页";
+        // 不设置 self.title，避免顶部导航栏出现"主页"标题黑条（参照 FCL 无 title 风格）
         self.latestRelease = @"检测中...";
         self.latestSnapshot = @"检测中...";
         self.isLoadingVersions = YES;
