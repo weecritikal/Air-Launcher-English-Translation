@@ -408,8 +408,10 @@
     _tableView.estimatedRowHeight = 50;
     _tableView.keyboardDismissMode = UIScrollViewKeyboardDismissModeInteractive;
     _tableView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentAutomatic;
-    _tableView.extendedLayoutIncludesOpaqueBars = YES;
-    _tableView.edgesForExtendedLayout = UIRectEdgeAll;
+    // extendedLayoutIncludesOpaqueBars / edgesForExtendedLayout 是 UIViewController 的属性，
+    // 不能设置到 UITableView 上，否则编译报 "property not found on object of type 'UITableView *'"
+    self.extendedLayoutIncludesOpaqueBars = YES;
+    self.edgesForExtendedLayout = UIRectEdgeAll;
     [_tableView registerClass:[ModLoaderVersionCell class] forCellReuseIdentifier:@"VersionCell"];
     [self.view addSubview:_tableView];
 
@@ -934,8 +936,10 @@
     _tableView.estimatedRowHeight = 54;
     _tableView.keyboardDismissMode = UIScrollViewKeyboardDismissModeInteractive;
     _tableView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentAutomatic;
-    _tableView.extendedLayoutIncludesOpaqueBars = YES;
-    _tableView.edgesForExtendedLayout = UIRectEdgeAll;
+    // extendedLayoutIncludesOpaqueBars / edgesForExtendedLayout 是 UIViewController 的属性，
+    // 不能设置到 UITableView 上，否则编译报 "property not found on object of type 'UITableView *'"
+    self.extendedLayoutIncludesOpaqueBars = YES;
+    self.edgesForExtendedLayout = UIRectEdgeAll;
     _tableView.sectionHeaderTopPadding = 0;
     [_tableView registerClass:[ModLoaderRowCell class] forCellReuseIdentifier:@"LoaderRowCell"];
     [_tableView registerClass:[ModLoaderSwitchCell class] forCellReuseIdentifier:@"SwitchCell"];
