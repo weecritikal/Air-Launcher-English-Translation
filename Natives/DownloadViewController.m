@@ -3140,13 +3140,39 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         //   后者已正确将 piston-meta.mojang.com 替换为 bmclapi2.bangbang93.com。
         // 注意：ensureVanillaInstalled: 在 JSON 已存在时会直接跳过，避免重复下载；
         //   downloadVanillaVersion: 内部也会通过 createDownloadTask: 的 SHA1 校验跳过已下载文件。
+        //
+        // 修复"点击安装按钮没反应"：
+        // 当 version JSON 不存在（首次安装）时，ensureVanillaInstalled: → ensureVanillaVersionJSONExists:
+        // 会在后台线程下载 version manifest + version JSON，期间可能需要数秒到 30 秒。
+        // 在此期间 ModLoaderInstallViewController 已被 pop，用户看到空白页面，感觉"没反应"。
+        // 修复：在调用 ensureVanillaInstalled: 之前先显示进度卡片，让用户立即看到反馈。
+        //      JSON 已存在时 ensureVanillaInstalled: 同步返回，progressCardView 会被
+        //      startVersionDownload: 中清理旧卡片的逻辑正确处理。
+        if (self.progressCardView) {
+            [self.progressCardView dismiss];
+            self.progressCardView = nil;
+        }
+        NSString *vanillaTitle = [NSString stringWithFormat:@"正在安装原版 %@", versionId];
+        self.progressCardView = [DownloadProgressCardView showInParentView:self.view title:vanillaTitle];
+        [self.progressCardView startDownloadWithTitle:vanillaTitle
+                                              subtitle:@"Minecraft 原版"];
+        [self.progressCardView updateProgress:-1 downloaded:0 total:-1 speed:0 eta:-1 currentFile:@"正在获取版本信息..."];
+
         __weak typeof(self) weakSelf = self;
         [self ensureVanillaInstalled:version completion:^(BOOL success) {
             __strong typeof(weakSelf) strongSelf = weakSelf;
             if (!strongSelf) return;
             if (success) {
+                // ensureVanillaInstalled: 完成后，startVersionDownload: 会清理旧卡片并创建新的
                 [strongSelf downloadVanillaVersion:version];
             } else {
+                // 失败时清理进度卡片并显示错误
+                if (strongSelf.progressCardView) {
+                    NSError *err = [NSError errorWithDomain:@"DownloadError" code:-1
+                                                     userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"无法安装原版 %@，请检查网络后重试", versionId]}];
+                    [strongSelf.progressCardView failWithError:err];
+                    strongSelf.progressCardView = nil;
+                }
                 [strongSelf showError:[NSString stringWithFormat:@"无法安装原版 %@，请检查网络后重试", versionId]];
             }
         }];
