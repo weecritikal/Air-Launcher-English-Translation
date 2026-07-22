@@ -189,6 +189,10 @@
 "preference.detail.download_source" = "Choose the download source for game resources. BMCLAPI mirror provides faster download speeds in China.";
 "preference.title.download_source-official" = "Official Source";
 "preference.title.download_source-bmclapi" = "BMCLAPI Mirror";
+"preference.title.mod_mirror" = "Mod Mirror Source";
+"preference.detail.mod_mirror" = "Choose the mirror source for mod/shader/resourcepack/datapack/modpack/world API and file downloads. MCIM mirror (mod.mcimirror.top) provides acceleration in China, compatible with both Modrinth and CurseForge APIs.";
+"preference.title.mod_mirror-official" = "Official Source";
+"preference.title.mod_mirror-mcim" = "MCIM Mirror";
 "preference.title.debug_logging" = "Debug logging";
 "preference.detail.debug_logging" = "Logs internal settings and actions to latestlog.txt. This helps the developers find issues easier, but Minecraft may run slower as the logs will be written to more often.";
 "preference.title.appicon" = "Set app icon";

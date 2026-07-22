@@ -427,6 +427,9 @@ add_executable(AngelAuraAmethyst
   # 统一的项目图标加载器（双层缓存+降采样+并发控制+CDN镜像，参照 FCL Glide + ZL2 Coil）
   IconLoader.m
 
+  # MCIM 模组镜像源工具类（参考 ZalithLauncher 2 MCIMMirror.kt）
+  MCIMMirror.m
+
   # Shader-related sources
   ShaderItem.m
   ShaderService.m

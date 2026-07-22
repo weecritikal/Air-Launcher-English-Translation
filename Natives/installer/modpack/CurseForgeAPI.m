@@ -8,6 +8,7 @@
 #import "UZKArchive.h"
 #import "installer/ForgeDirectInstaller.h"
 #import "installer/NeoForgeDirectInstaller.h"
+#import "MCIMMirror.h"
 
 // CurseForge 静态常量
 static const NSInteger kCurseForgeGameIDMinecraft = 432;
@@ -61,6 +62,12 @@ static NSString *CFACompiledAPIKey(void) {
 @end
 
 @implementation CurseForgeAPI
+
+/// 重写 baseURL getter，根据 MCIMMirror 偏好动态返回官方或镜像 URL
+/// 这样所有使用 self.baseURL 的请求都会自动走镜像
+- (NSString *)baseURL {
+    return [MCIMMirror curseForgeAPIBaseURL];
+}
 
 + (instancetype)sharedInstance {
     static CurseForgeAPI *sharedInstance = nil;
@@ -411,7 +418,7 @@ static NSString *CFACompiledAPIKey(void) {
 - (NSString *)downloadURLForFile:(NSDictionary *)file {
     NSString *url = file[@"downloadUrl"];
     if ([url isKindOfClass:NSString.class] && url.length > 0) {
-        return url;
+        return [MCIMMirror applyToURL:url];
     }
     
     NSString *modId = [file[@"modId"] description];
@@ -422,7 +429,7 @@ static NSString *CFACompiledAPIKey(void) {
     NSDictionary *response = [self getEndpoint:[NSString stringWithFormat:@"mods/%@/files/%@/download-url", modId, fileId] params:nil];
     NSString *fallback = [response isKindOfClass:NSDictionary.class] ? response[@"data"] : nil;
     if ([fallback isKindOfClass:NSString.class] && fallback.length > 0) {
-        return fallback;
+        return [MCIMMirror applyToURL:fallback];
     }
     
     // 最终 fallback：Edge CDN
@@ -432,10 +439,11 @@ static NSString *CFACompiledAPIKey(void) {
         return @"";
     }
     NSString *encodedName = [fileName stringByAddingPercentEncodingWithAllowedCharacters:NSCharacterSet.URLPathAllowedCharacterSet];
-    return [NSString stringWithFormat:@"https://edge.forgecdn.net/files/%ld/%03ld/%@",
+    NSString *cdnURL = [NSString stringWithFormat:@"https://edge.forgecdn.net/files/%ld/%03ld/%@",
             (long)(numericFileId / 1000),
             (long)(numericFileId % 1000),
             encodedName ?: fileName];
+    return [MCIMMirror applyToURL:cdnURL];
 }
 
 - (NSString *)gameVersionSummaryForFile:(NSDictionary *)file {

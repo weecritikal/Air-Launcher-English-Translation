@@ -12,6 +12,8 @@ extern NSString *const PREF_DOWNLOAD_SOURCE_SERVER;
 extern NSString *const PREF_CURSEFORGE_API_KEY;
 // Mod 更新时是否保留旧文件
 extern NSString *const PREF_MOD_UPDATE_KEEP_OLD;
+// 模组镜像源（official / mcim）
+extern NSString *const PREF_MOD_MIRROR;
 
 @interface PLPreferences : NSObject
 

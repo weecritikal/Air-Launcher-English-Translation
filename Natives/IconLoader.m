@@ -26,6 +26,7 @@
 
 #import "IconLoader.h"
 #import "LauncherPreferences.h"
+#import "MCIMMirror.h"
 #import "utils.h"
 #import <CommonCrypto/CommonCrypto.h>
 #import <ImageIO/ImageIO.h>
@@ -423,6 +424,14 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
 
 + (NSString *)applyMirrorToURL:(NSString *)url {
     if (!url || url.length == 0) return url;
+
+    // 优先应用 MCIM 镜像（模组镜像源设置）
+    // MCIM 镜像支持 Modrinth/CurseForge 的 API 和 CDN 图标资源，
+    // 启用后把 cdn.modrinth.com / edge.forgecdn.net / media.forgecdn.net
+    // 替换为 mod.mcimirror.top，加速国内图标加载。
+    NSString *mcimURL = [MCIMMirror rewriteURL:url];
+    if (mcimURL) return mcimURL;
+
     IconLoader *loader = [self sharedLoader];
     // 每次实时读取偏好，确保用户在设置中切换下载源后立即生效
     // （不依赖缓存的 mirrorEnabled，避免偏好变更后镜像设置不同步）

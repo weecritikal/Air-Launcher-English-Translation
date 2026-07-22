@@ -325,6 +325,20 @@
                   localize(@"preference.title.download_source-bmclapi", nil)
               ]
             },
+            @{@"key": @"mod_mirror",
+              @"hasDetail": @YES,
+              @"icon": @"network",
+              @"type": self.typePickField,
+              @"enableCondition": whenNotInGame,
+              @"pickKeys": @[
+                  @"official",
+                  @"mcim"
+              ],
+              @"pickList": @[
+                  localize(@"preference.title.mod_mirror-official", nil),
+                  localize(@"preference.title.mod_mirror-mcim", nil)
+              ]
+            },
             @{@"key": @"ui_layout",
               @"title": @"UI 布局",
               @"hasDetail": @YES,

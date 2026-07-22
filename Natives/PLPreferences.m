@@ -13,6 +13,7 @@ NSString *const PREF_DOWNLOAD_SOURCE_WORLD = @"general.download_source_world";
 NSString *const PREF_DOWNLOAD_SOURCE_SERVER = @"general.download_source_server";
 NSString *const PREF_CURSEFORGE_API_KEY = @"general.curseforge_api_key";
 NSString *const PREF_MOD_UPDATE_KEEP_OLD = @"general.mod_update_keep_old";
+NSString *const PREF_MOD_MIRROR = @"general.mod_mirror";
 
 @interface PLPreferences()
 @end
@@ -40,6 +41,8 @@ NSString *const PREF_MOD_UPDATE_KEEP_OLD = @"general.mod_update_keep_old";
             @"curseforge_api_key": @"",
             // Mod 更新时是否保留旧文件（默认 YES）
             @"mod_update_keep_old": @YES,
+            // 模组镜像源：official（官方源）/ mcim（MCIM 镜像源，国内加速）
+            @"mod_mirror": @"official",
             // profile 写入的强制内存分配，0=使用 java.allocated_memory/auto_ram 逻辑
             @"ram_allocation": @(0),
         }.mutableCopy,

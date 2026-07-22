@@ -5,10 +5,17 @@
 #import "UZKArchive.h"
 #import "installer/ForgeDirectInstaller.h"
 #import "installer/NeoForgeDirectInstaller.h"
+#import "MCIMMirror.h"
 
 @implementation ModrinthAPI
 
 @dynamic reachedLastPage, lastError;
+
+/// 重写 baseURL getter，根据 MCIMMirror 偏好动态返回官方或镜像 URL
+/// 这样所有使用 self.baseURL 的请求（搜索/版本列表/详情）都会自动走镜像
+- (NSString *)baseURL {
+    return [MCIMMirror modrinthAPIBaseURL];
+}
 
 + (instancetype)sharedInstance {
     static ModrinthAPI *sharedInstance = nil;
@@ -194,7 +201,7 @@
             [names addObject:version[@"name"] ?: @"Unknown"];
             NSArray *gameVersions = version[@"game_versions"];
             [mcNames addObject:[gameVersions isKindOfClass:[NSArray class]] ? gameVersions.firstObject : @""];
-            [urls addObject:file[@"url"] ?: @""];
+            [urls addObject:[MCIMMirror applyToURL:file[@"url"] ?: @""]];
             NSDictionary *hashesMap = file[@"hashes"];
             [hashes addObject:hashesMap[@"sha1"] ?: @""];
             [sizes addObject:file[@"size"] ?: @0];
@@ -222,7 +229,7 @@
     if ([file isKindOfClass:[NSDictionary class]]) {
         NSString *url = file[@"url"];
         if ([url isKindOfClass:[NSString class]] && url.length > 0) {
-            return url;
+            return [MCIMMirror applyToURL:url];
         }
     }
     return @"";
@@ -258,7 +265,7 @@
     result[@"projectType"] = projectType ?: @"mod";
     result[@"version"] = response[@"version_number"] ?: @"";
     result[@"fileName"] = response[@"filename"] ?: @"";
-    result[@"downloadUrl"] = [response[@"files"] firstObject][@"url"] ?: @"";
+    result[@"downloadUrl"] = [MCIMMirror applyToURL:[response[@"files"] firstObject][@"url"]] ?: @"";
     return result;
 }
 
@@ -636,7 +643,9 @@ submitDownloadTasksFromPackage:(NSString *)packagePath
             NSLog(@"[ModrinthAPI] 跳过 server-only 文件: %@", indexFile[@"path"]);
             continue;
         }
-        NSString *url = [indexFile[@"downloads"] isKindOfClass:[NSArray class]] ? [indexFile[@"downloads"] firstObject] : nil;
+        NSString *rawUrl = [indexFile[@"downloads"] isKindOfClass:[NSArray class]] ? [indexFile[@"downloads"] firstObject] : nil;
+        // 应用 MCIM 镜像（如果启用），加速国内整合包文件下载
+        NSString *url = [MCIMMirror applyToURL:rawUrl];
         NSString *sha = indexFile[@"hashes"][@"sha1"];
         NSString *path = [destPath stringByAppendingPathComponent:indexFile[@"path"]];
         NSUInteger size = [indexFile[@"fileSize"] unsignedLongLongValue];
