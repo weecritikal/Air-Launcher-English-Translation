@@ -70,22 +70,44 @@
     // 不设置 self.title，避免顶部导航栏出现"陶瓦联机"标题黑条（参照 FCL 无 title 风格）
     self.view.backgroundColor = [UIColor clearColor];
 
-    /* 关闭按钮（modal） */
-    UIBarButtonItem *closeItem = [[UIBarButtonItem alloc]
-        initWithBarButtonSystemItem:UIBarButtonSystemItemClose
-                            target:self
-                            action:@selector(close)];
-    self.navigationItem.leftBarButtonItem = closeItem;
+    // 彻底隐藏导航栏黑条（仅当作为非 modal 根页面且是栈中唯一 VC 时）
+    BOOL navBarHidden = NO;
+    if (self.navigationController &&
+        self.navigationController.viewControllers.firstObject == self &&
+        self.navigationController.presentingViewController == nil &&
+        self.navigationController.viewControllers.count == 1) {
+        self.navigationController.navigationBarHidden = YES;
+        navBarHidden = YES;
+    }
 
-    /* 右上角「ZeroTier 联机」入口（两个联机方案都保留，用户可自由切换） */
-    UIBarButtonItem *ztItem = [[UIBarButtonItem alloc]
-        initWithImage:[UIImage systemImageNamed:@"network"]
-                style:UIBarButtonItemStylePlain
-               target:self
-               action:@selector(switchToZeroTier:)];
-    ztItem.accessibilityLabel = @"ZeroTier 联机";
-    [ztItem setTintColor:nil]; // 跟随系统强调色
-    self.navigationItem.rightBarButtonItem = ztItem;
+    if (!navBarHidden) {
+        /* 关闭按钮（modal 模式） */
+        UIBarButtonItem *closeItem = [[UIBarButtonItem alloc]
+            initWithBarButtonSystemItem:UIBarButtonSystemItemClose
+                                target:self
+                                action:@selector(close)];
+        self.navigationItem.leftBarButtonItem = closeItem;
+    }
+
+    /* ZeroTier 联机入口：始终使用浮动按钮放置在视图右上角
+       （导航栏可见时也保留，确保 modal/pushed 模式下可访问） */
+    UIButton *ztFab = [UIButton buttonWithType:UIButtonTypeSystem];
+    [ztFab setImage:[UIImage systemImageNamed:@"network"] forState:UIControlStateNormal];
+    ztFab.tintColor = [UIColor whiteColor];
+    ztFab.backgroundColor = [UIColor systemBlueColor];
+    ztFab.layer.cornerRadius = 18;
+    ztFab.layer.masksToBounds = YES;
+    ztFab.translatesAutoresizingMaskIntoConstraints = NO;
+    ztFab.accessibilityLabel = @"ZeroTier 联机";
+    [ztFab addTarget:self action:@selector(switchToZeroTier:) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:ztFab];
+    [self.view bringSubviewToFront:ztFab];
+    [NSLayoutConstraint activateConstraints:@[
+        [ztFab.widthAnchor constraintEqualToConstant:36],
+        [ztFab.heightAnchor constraintEqualToConstant:36],
+        [ztFab.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:8],
+        [ztFab.trailingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.trailingAnchor constant:-16],
+    ]];
 
     /* 适配自定义启动器背景：透明化 VC，让全局背景图/毛玻璃透出 */
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
@@ -98,10 +120,27 @@
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
+    /* 重新隐藏导航栏黑条（pop 回根页面时 topViewController == self） */
+    if (self.navigationController &&
+        self.navigationController.viewControllers.firstObject == self &&
+        self.navigationController.presentingViewController == nil &&
+        self.navigationController.topViewController == self) {
+        self.navigationController.navigationBarHidden = YES;
+    }
     /* 与 MultiplayerViewController 一致：每次出现都重新透明化并应用导航栏毛玻璃 */
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
     [[BackgroundManager sharedManager] applyEffectToNavigationBar:self.navigationController.navigationBar];
     [self applyBackgroundEffects];
+}
+
+- (void)viewWillDisappear:(BOOL)animated {
+    [super viewWillDisappear:animated];
+    /* push 子页面时显示导航栏（子页面需要返回按钮） */
+    if (self.navigationController &&
+        self.navigationController.viewControllers.firstObject == self &&
+        self.navigationController.presentingViewController == nil) {
+        self.navigationController.navigationBarHidden = NO;
+    }
 }
 
 - (void)dealloc {

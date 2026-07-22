@@ -980,6 +980,15 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     // 不设置 self.title，避免顶部导航栏出现"下载"标题黑条（参照 FCL 无 title 风格）
     self.view.backgroundColor = [UIColor clearColor];
 
+    // 彻底隐藏导航栏黑条（仅当作为非 modal 根页面且是栈中唯一 VC 时）
+    // 快捷入口（showModpackImport 等）会预 push 子页面，此时 count > 1，不隐藏导航栏
+    if (self.navigationController &&
+        self.navigationController.viewControllers.firstObject == self &&
+        self.navigationController.presentingViewController == nil &&
+        self.navigationController.viewControllers.count == 1) {
+        self.navigationController.navigationBarHidden = YES;
+    }
+
     // 适配自定义启动器背景（参照 LauncherPreferencesViewController / LauncherRightPanelViewController）
     // makeViewControllerTransparent: 会根据 BackgroundUIEffect 设置（毛玻璃/半透明）正确处理 view 背景，
     // 并递归透明化子 VC。之前缺失此调用导致模组下载界面不适配自定义背景。
@@ -1022,6 +1031,13 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
+    // 重新隐藏导航栏黑条（pop 回根页面时 topViewController == self）
+    if (self.navigationController &&
+        self.navigationController.viewControllers.firstObject == self &&
+        self.navigationController.presentingViewController == nil &&
+        self.navigationController.topViewController == self) {
+        self.navigationController.navigationBarHidden = YES;
+    }
     // 重新应用背景透明效果（参照 LauncherPreferencesViewController）
     // 用户可能在外部页面切换了背景设置，回到此页时需重新适配
     if ([[BackgroundManager sharedManager] hasBackground]) {
@@ -1036,6 +1052,16 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         if (self.filterSidebarContainer) {
             [[BackgroundManager sharedManager] applyEffectToView:self.filterSidebarContainer];
         }
+    }
+}
+
+- (void)viewWillDisappear:(BOOL)animated {
+    [super viewWillDisappear:animated];
+    // push 子页面时显示导航栏（子页面需要返回按钮）
+    if (self.navigationController &&
+        self.navigationController.viewControllers.firstObject == self &&
+        self.navigationController.presentingViewController == nil) {
+        self.navigationController.navigationBarHidden = NO;
     }
 }
 

@@ -244,6 +244,15 @@
 
 - (void)viewDidLoad
 {
+    // 彻底隐藏导航栏黑条（仅当作为非 modal 根页面且是栈中唯一 VC 时）
+    // 尽早设置，避免导航栏闪烁
+    if (self.navigationController &&
+        self.navigationController.viewControllers.firstObject == self &&
+        self.navigationController.presentingViewController == nil &&
+        self.navigationController.viewControllers.count == 1) {
+        self.navigationController.navigationBarHidden = YES;
+    }
+
     // 启用设置项搜索（必须在 super viewDidLoad 之前设置，父类据此创建 searchController）
     self.searchEnabled = YES;
 
@@ -1097,7 +1106,15 @@
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
-    
+
+    // 重新隐藏导航栏黑条（pop 回根页面时 topViewController == self）
+    if (self.navigationController &&
+        self.navigationController.viewControllers.firstObject == self &&
+        self.navigationController.presentingViewController == nil &&
+        self.navigationController.topViewController == self) {
+        self.navigationController.navigationBarHidden = YES;
+    }
+
     // Re-apply transparency when appearing (in case background was just set)
     if ([[BackgroundManager sharedManager] hasBackground]) {
         self.view.backgroundColor = [UIColor clearColor];
@@ -1111,6 +1128,12 @@
 
 - (void)viewWillDisappear:(BOOL)animated {
     [super viewWillDisappear:animated];
+    // push 子页面时显示导航栏（子页面需要返回按钮）
+    if (self.navigationController &&
+        self.navigationController.viewControllers.firstObject == self &&
+        self.navigationController.presentingViewController == nil) {
+        self.navigationController.navigationBarHidden = NO;
+    }
     if (self.navigationController == nil) {
         [self.presentingViewController performSelector:@selector(updatePreferenceChanges)];
     }

@@ -555,6 +555,14 @@ static NSInteger const kSectionVersions    = 1;
     [super viewDidLoad];
     // 不设置 self.title，避免顶部导航栏出现"版本管理"标题黑条（参照 FCL 无 title 风格）
     self.view.backgroundColor = [UIColor clearColor];
+    // 彻底隐藏导航栏黑条（仅当作为非 modal 根页面且是栈中唯一 VC 时）
+    // 快捷入口（showModsManager 等）会预 push 子页面，此时 count > 1，不隐藏导航栏
+    if (self.navigationController &&
+        self.navigationController.viewControllers.firstObject == self &&
+        self.navigationController.presentingViewController == nil &&
+        self.navigationController.viewControllers.count == 1) {
+        self.navigationController.navigationBarHidden = YES;
+    }
     if (self.navigationController) {
         [[BackgroundManager sharedManager] applyEffectToNavigationBar:self.navigationController.navigationBar];
     }
@@ -588,15 +596,28 @@ static NSInteger const kSectionVersions    = 1;
                                                object:nil];
 }
 
-/// FCL 风格：导航栏右侧"+"按钮，点击进入下载/新建版本页面
+/// FCL 风格：浮动"+"按钮放置在视图右上角，点击进入下载/新建版本页面
+/// 无论导航栏是否可见都使用浮动按钮，确保按钮在所有模式下都可访问
 - (void)setupNavigationBar {
-    UIBarButtonItem *addButton = [[UIBarButtonItem alloc]
-        initWithImage:[UIImage systemImageNamed:@"plus"]
-                style:UIBarButtonItemStylePlain
-               target:self
-               action:@selector(createNewVersion)];
-    addButton.accessibilityLabel = @"新建版本";
-    self.navigationItem.rightBarButtonItem = addButton;
+    UIButton *fab = [UIButton buttonWithType:UIButtonTypeSystem];
+    UIImage *plusImg = [UIImage systemImageNamed:@"plus"];
+    [fab setImage:plusImg forState:UIControlStateNormal];
+    fab.tintColor = [UIColor whiteColor];
+    fab.backgroundColor = [UIColor systemBlueColor];
+    fab.layer.cornerRadius = 18;
+    fab.layer.masksToBounds = YES;
+    fab.translatesAutoresizingMaskIntoConstraints = NO;
+    fab.accessibilityLabel = @"新建版本";
+    [fab addTarget:self action:@selector(createNewVersion) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:fab];
+    [self.view bringSubviewToFront:fab];
+
+    [NSLayoutConstraint activateConstraints:@[
+        [fab.widthAnchor constraintEqualToConstant:36],
+        [fab.heightAnchor constraintEqualToConstant:36],
+        [fab.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:8],
+        [fab.trailingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.trailingAnchor constant:-16],
+    ]];
 }
 
 /// 长按手势：游戏目录卡片弹出操作菜单（切换/删除），版本卡片弹出选择/编辑/删除
@@ -631,10 +652,30 @@ static NSInteger const kSectionVersions    = 1;
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
+    // 重新隐藏导航栏黑条（pop 回根页面时 topViewController == self）
+    if (self.navigationController &&
+        self.navigationController.viewControllers.firstObject == self &&
+        self.navigationController.presentingViewController == nil &&
+        self.navigationController.topViewController == self) {
+        self.navigationController.navigationBarHidden = YES;
+        // 导航栏隐藏时缩小 collectionView 顶部 inset
+        self.collectionView.contentInset = UIEdgeInsetsMake(8, 0, 0, 0);
+        self.collectionView.scrollIndicatorInsets = UIEdgeInsetsMake(8, 0, 0, 0);
+    }
     [PLProfiles updateCurrent];
     [self loadProfiles];
     [self loadGameDirList];
     [self.collectionView reloadData];
+}
+
+- (void)viewWillDisappear:(BOOL)animated {
+    [super viewWillDisappear:animated];
+    // push 子页面时显示导航栏（子页面需要返回按钮）
+    if (self.navigationController &&
+        self.navigationController.viewControllers.firstObject == self &&
+        self.navigationController.presentingViewController == nil) {
+        self.navigationController.navigationBarHidden = NO;
+    }
 }
 
 - (void)dealloc {
@@ -783,12 +824,18 @@ static NSInteger const kSectionVersions    = 1;
     self.collectionView.delegate = self;
     self.collectionView.alwaysBounceVertical = YES;
     self.collectionView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
-    CGFloat navBarHeight = 44.0;
-    if (self.navigationController && self.navigationController.navigationBar.bounds.size.height > 0) {
-        navBarHeight = self.navigationController.navigationBar.bounds.size.height;
+    // 导航栏隐藏时（根页面模式）顶部留少量间距即可；否则留出导航栏高度
+    CGFloat topInset;
+    if (self.navigationController && self.navigationController.navigationBarHidden) {
+        topInset = 8.0;
+    } else {
+        topInset = 44.0;
+        if (self.navigationController && self.navigationController.navigationBar.bounds.size.height > 0) {
+            topInset = self.navigationController.navigationBar.bounds.size.height;
+        }
     }
-    self.collectionView.contentInset = UIEdgeInsetsMake(navBarHeight, 0, 0, 0);
-    self.collectionView.scrollIndicatorInsets = UIEdgeInsetsMake(navBarHeight, 0, 0, 0);
+    self.collectionView.contentInset = UIEdgeInsetsMake(topInset, 0, 0, 0);
+    self.collectionView.scrollIndicatorInsets = UIEdgeInsetsMake(topInset, 0, 0, 0);
 
     [self.collectionView registerClass:[VMGameDirCell class] forCellWithReuseIdentifier:@"GameDirCell"];
     [self.collectionView registerClass:[VMVersionCardCell class] forCellWithReuseIdentifier:@"VersionCell"];

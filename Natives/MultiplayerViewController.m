@@ -141,6 +141,9 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     // 适配自定义启动器背景：透明化当前 VC，让全局背景图/毛玻璃透出
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
 
+    // 彻底隐藏导航栏黑条（仅当作为根页面时；modal/pushed 仍保留导航栏）
+    [self hideNavBarIfRoot];
+
     // 初始化数据：从 MultiplayerManager 读取已保存的房间列表
     self.rooms = [[MultiplayerManager sharedManager] savedRooms] ?: @[];
 
@@ -167,6 +170,9 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
+
+    // 重新隐藏导航栏黑条（pop 回根页面时）
+    [self hideNavBarIfRoot];
 
     // 进入界面时重新应用背景效果（背景可能在其他界面被修改）
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
@@ -224,6 +230,16 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
                 [self.enableSwitch setOn:NO animated:NO];
             }
         }
+    }
+}
+
+- (void)viewWillDisappear:(BOOL)animated {
+    [super viewWillDisappear:animated];
+    // push 子页面时显示导航栏（子页面需要返回按钮）
+    if (self.navigationController &&
+        self.navigationController.viewControllers.firstObject == self &&
+        self.navigationController.presentingViewController == nil) {
+        self.navigationController.navigationBarHidden = NO;
     }
 }
 
@@ -304,6 +320,23 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         [self.navigationController popViewControllerAnimated:YES];
     } else {
         [self dismissViewControllerAnimated:YES completion:nil];
+    }
+}
+
+/// 当本 VC 是 nav 根、非 modal 呈现且是栈中唯一 VC 时彻底隐藏导航栏黑条
+/// 快捷入口预 push 子页面时 count > 1，不隐藏导航栏
+- (void)hideNavBarIfRoot {
+    if (self.navigationController &&
+        self.navigationController.viewControllers.firstObject == self &&
+        self.navigationController.presentingViewController == nil &&
+        self.navigationController.viewControllers.count == 1) {
+        self.navigationController.navigationBarHidden = YES;
+    } else if (self.navigationController &&
+               self.navigationController.viewControllers.firstObject == self &&
+               self.navigationController.presentingViewController == nil &&
+               self.navigationController.topViewController == self) {
+        // pop 回根页面时重新隐藏
+        self.navigationController.navigationBarHidden = YES;
     }
 }
 
