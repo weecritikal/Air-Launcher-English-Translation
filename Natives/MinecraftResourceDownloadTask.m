@@ -13,7 +13,7 @@
 #import "ios_uikit_bridge.h"
 #import "utils.h"
 
-NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"org.angelauramcremastered.amethyst.MinecraftResourceDownloadTask";
+NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"com.air-devs.air.MinecraftResourceDownloadTask";
 
 @interface MinecraftResourceDownloadTask ()
 @property AFURLSessionManager* manager;
