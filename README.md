@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="Natives/Assets.xcassets/AppIcon-Light.appiconset/1024x1024.png" alt="Air Icon" width="180">
+  <img src="Natives/Assets.xcassets/AppIcon-Light.appiconset/1024x1024.png" alt="Air Icon" width="120" style="border-radius: 24px;">
 </div>
 
 <h1 align="center">Air</h1>
