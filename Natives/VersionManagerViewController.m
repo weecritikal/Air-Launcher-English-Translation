@@ -43,6 +43,7 @@ static NSInteger const kSectionVersions    = 1;
 }
 
 - (void)setupViews {
+    // 阴影：规范 5.2 中阴影档（0.12, 6, (0,3)）
     self.layer.shadowColor = [UIColor blackColor].CGColor;
     self.layer.shadowOffset = CGSizeMake(0, 3);
     self.layer.shadowOpacity = 0.12;
@@ -51,10 +52,18 @@ static NSInteger const kSectionVersions    = 1;
 
     self.contentContainer = [[UIView alloc] initWithFrame:self.contentView.bounds];
     self.contentContainer.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    // 规范 5.1：L2 标准卡片 12pt 圆角 + 连续圆角
     self.contentContainer.layer.cornerRadius = 12;
+    self.contentContainer.layer.cornerCurve = kCACornerCurveContinuous;
     self.contentContainer.layer.masksToBounds = YES;
+    // 规范 6.2：第 1 层浅色半透明基底
+    self.contentContainer.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.08];
+    // 规范 5.3：默认卡片描边 0.5pt 白 0.10
+    self.contentContainer.layer.borderWidth = 0.5;
+    self.contentContainer.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.10].CGColor;
     [self.contentView addSubview:self.contentContainer];
 
+    // 规范 6.2：第 2 层 BackgroundManager 毛玻璃
     [[BackgroundManager sharedManager] applyEffectToCollectionViewCell:self];
 }
 
@@ -145,12 +154,14 @@ static NSInteger const kSectionVersions    = 1;
 #pragma mark - Version Card Cell
 
 @interface VMVersionCardCell : VMTileBaseCell
+@property (nonatomic, strong) UIView *iconContainer;
 @property (nonatomic, strong) UIImageView *iconView;
 @property (nonatomic, strong) UILabel *nameLabel;
 @property (nonatomic, strong) UILabel *versionLabel;
 @property (nonatomic, strong) UILabel *lastPlayedLabel;
 @property (nonatomic, strong) UIView *selectedBadge;
 @property (nonatomic, strong) UILabel *isolatedBadge;
+@property (nonatomic, strong) UIImageView *chevronView;
 @end
 
 @implementation VMVersionCardCell
@@ -158,20 +169,30 @@ static NSInteger const kSectionVersions    = 1;
 - (void)setupViews {
     [super setupViews];
 
-    CGFloat iconSize = [ScreenUtils dp:30];
+    CGFloat iconBoxSize = [ScreenUtils dp:34];
+    CGFloat iconSize = [ScreenUtils dp:20];
     CGFloat nameFont = [ScreenUtils sp:15];
+
+    // 规范 8.2：图标必须放在带类型色的圆角容器内
+    self.iconContainer = [[UIView alloc] init];
+    self.iconContainer.translatesAutoresizingMaskIntoConstraints = NO;
+    self.iconContainer.layer.cornerRadius = 9;
+    self.iconContainer.layer.cornerCurve = kCACornerCurveContinuous;
+    self.iconContainer.backgroundColor = [UIColor systemBlueColor];
+    [self.contentContainer addSubview:self.iconContainer];
 
     self.iconView = [[UIImageView alloc] init];
     self.iconView.translatesAutoresizingMaskIntoConstraints = NO;
     self.iconView.contentMode = UIViewContentModeScaleAspectFit;
     self.iconView.image = [UIImage systemImageNamed:@"cube.box.fill"];
-    self.iconView.tintColor = [UIColor systemBlueColor];
-    [self.contentContainer addSubview:self.iconView];
+    self.iconView.tintColor = [UIColor whiteColor];
+    [self.iconContainer addSubview:self.iconView];
 
     self.nameLabel = [[UILabel alloc] init];
     self.nameLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.nameLabel.font = [UIFont systemFontOfSize:nameFont weight:UIFontWeightSemibold];
-    self.nameLabel.textColor = [UIColor whiteColor];
+    // 规范 2.1：强制使用系统色
+    self.nameLabel.textColor = [UIColor labelColor];
     self.nameLabel.numberOfLines = 1;
     self.nameLabel.adjustsFontForContentSizeCategory = NO;
     [self.contentContainer addSubview:self.nameLabel];
@@ -179,22 +200,26 @@ static NSInteger const kSectionVersions    = 1;
     self.versionLabel = [[UILabel alloc] init];
     self.versionLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.versionLabel.font = [UIFont systemFontOfSize:[ScreenUtils sp:11] weight:UIFontWeightRegular];
-    self.versionLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.65];
+    // 规范 2.1：副文字用 secondaryLabelColor
+    self.versionLabel.textColor = [UIColor secondaryLabelColor];
     self.versionLabel.adjustsFontForContentSizeCategory = NO;
     [self.contentContainer addSubview:self.versionLabel];
 
     self.lastPlayedLabel = [[UILabel alloc] init];
     self.lastPlayedLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.lastPlayedLabel.font = [UIFont systemFontOfSize:[ScreenUtils sp:10] weight:UIFontWeightRegular];
-    self.lastPlayedLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.45];
+    // 规范 2.1：元文字用 tertiaryLabelColor
+    self.lastPlayedLabel.textColor = [UIColor tertiaryLabelColor];
     self.lastPlayedLabel.text = @"";
     self.lastPlayedLabel.adjustsFontForContentSizeCategory = NO;
     [self.contentContainer addSubview:self.lastPlayedLabel];
 
+    // 规范 9.1：选中态徽章（第二层强化）
     self.selectedBadge = [[UIView alloc] init];
     self.selectedBadge.translatesAutoresizingMaskIntoConstraints = NO;
     self.selectedBadge.backgroundColor = accentColor();
     self.selectedBadge.layer.cornerRadius = 10;
+    self.selectedBadge.layer.cornerCurve = kCACornerCurveContinuous;
     self.selectedBadge.hidden = YES;
     [self.contentContainer addSubview:self.selectedBadge];
 
@@ -211,30 +236,46 @@ static NSInteger const kSectionVersions    = 1;
     self.isolatedBadge.backgroundColor = [UIColor systemTealColor];
     self.isolatedBadge.textAlignment = NSTextAlignmentCenter;
     self.isolatedBadge.layer.cornerRadius = 8;
+    self.isolatedBadge.layer.cornerCurve = kCACornerCurveContinuous;
     self.isolatedBadge.layer.masksToBounds = YES;
     self.isolatedBadge.text = @" 隔离 ";
     self.isolatedBadge.hidden = YES;
     [self.contentContainer addSubview:self.isolatedBadge];
 
+    // 规范 9.4：chevron 暗示可点击
+    self.chevronView = [[UIImageView alloc] init];
+    self.chevronView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.chevronView.image = [UIImage systemImageNamed:@"chevron.right" withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:12 weight:UIFontWeightSemibold]];
+    self.chevronView.tintColor = [UIColor tertiaryLabelColor];
+    [self.contentContainer addSubview:self.chevronView];
+
     [NSLayoutConstraint activateConstraints:@[
-        [self.iconView.leadingAnchor constraintEqualToAnchor:self.contentContainer.leadingAnchor constant:14],
-        [self.iconView.centerYAnchor constraintEqualToAnchor:self.contentContainer.centerYAnchor],
+        [self.iconContainer.leadingAnchor constraintEqualToAnchor:self.contentContainer.leadingAnchor constant:14],
+        [self.iconContainer.centerYAnchor constraintEqualToAnchor:self.contentContainer.centerYAnchor],
+        [self.iconContainer.widthAnchor constraintEqualToConstant:iconBoxSize],
+        [self.iconContainer.heightAnchor constraintEqualToConstant:iconBoxSize],
+        [self.iconView.centerXAnchor constraintEqualToAnchor:self.iconContainer.centerXAnchor],
+        [self.iconView.centerYAnchor constraintEqualToAnchor:self.iconContainer.centerYAnchor],
         [self.iconView.widthAnchor constraintEqualToConstant:iconSize],
         [self.iconView.heightAnchor constraintEqualToConstant:iconSize],
-        [self.nameLabel.leadingAnchor constraintEqualToAnchor:self.iconView.trailingAnchor constant:10],
-        [self.nameLabel.topAnchor constraintEqualToAnchor:self.contentContainer.topAnchor constant:12],
-        [self.nameLabel.trailingAnchor constraintEqualToAnchor:self.selectedBadge.leadingAnchor constant:-8],
+        [self.nameLabel.leadingAnchor constraintEqualToAnchor:self.iconContainer.trailingAnchor constant:10],
+        [self.nameLabel.topAnchor constraintEqualToAnchor:self.contentContainer.topAnchor constant:14],
+        [self.nameLabel.trailingAnchor constraintEqualToAnchor:self.chevronView.leadingAnchor constant:-8],
         [self.versionLabel.leadingAnchor constraintEqualToAnchor:self.nameLabel.leadingAnchor],
         [self.versionLabel.topAnchor constraintEqualToAnchor:self.nameLabel.bottomAnchor constant:3],
-        [self.versionLabel.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-14],
+        [self.versionLabel.trailingAnchor constraintEqualToAnchor:self.chevronView.leadingAnchor constant:-8],
         [self.lastPlayedLabel.leadingAnchor constraintEqualToAnchor:self.nameLabel.leadingAnchor],
         [self.lastPlayedLabel.topAnchor constraintEqualToAnchor:self.versionLabel.bottomAnchor constant:2],
         [self.lastPlayedLabel.trailingAnchor constraintEqualToAnchor:self.isolatedBadge.leadingAnchor constant:-6],
         [self.isolatedBadge.centerYAnchor constraintEqualToAnchor:self.lastPlayedLabel.centerYAnchor],
-        [self.isolatedBadge.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-14],
+        [self.isolatedBadge.trailingAnchor constraintEqualToAnchor:self.chevronView.leadingAnchor constant:-8],
         [self.isolatedBadge.heightAnchor constraintEqualToConstant:16],
+        [self.chevronView.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-14],
+        [self.chevronView.centerYAnchor constraintEqualToAnchor:self.contentContainer.centerYAnchor],
+        [self.chevronView.widthAnchor constraintEqualToConstant:12],
+        [self.chevronView.heightAnchor constraintEqualToConstant:12],
         [self.selectedBadge.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-14],
-        [self.selectedBadge.centerYAnchor constraintEqualToAnchor:self.nameLabel.centerYAnchor],
+        [self.selectedBadge.topAnchor constraintEqualToAnchor:self.contentContainer.topAnchor constant:10],
         [self.selectedBadge.widthAnchor constraintEqualToConstant:20],
         [self.selectedBadge.heightAnchor constraintEqualToConstant:20],
         [checkmark.centerXAnchor constraintEqualToAnchor:self.selectedBadge.centerXAnchor],
@@ -255,17 +296,25 @@ static NSInteger const kSectionVersions    = 1;
         [ModLoaderIconHelper configureImageView:self.iconView
                                       forLoader:detectedLoader
                                  traitCollection:self.traitCollection];
+        // 规范 2.6：加载器品牌色作为图标容器背景
+        self.iconContainer.backgroundColor = [ModLoaderIconHelper brandColorForLoader:detectedLoader];
     } else {
         self.iconView.image = [UIImage systemImageNamed:@"cube.box.fill"];
-        self.iconView.tintColor = [UIColor systemBlueColor];
+        self.iconView.tintColor = [UIColor whiteColor];
+        self.iconContainer.backgroundColor = [UIColor systemBlueColor];
     }
 
+    // 规范 9.1：选中态三层强化（边框 + 徽章 + 背景色）
     if (isSelected) {
-        self.contentView.layer.borderColor = accentColor().CGColor;
-        self.contentView.layer.borderWidth = 1.5;
+        self.contentContainer.layer.borderColor = accentColor().CGColor;
+        self.contentContainer.layer.borderWidth = 1.5;
+        self.contentContainer.backgroundColor = [accentColor() colorWithAlphaComponent:0.10];
+        self.chevronView.tintColor = accentColor();
     } else {
-        self.contentView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.12].CGColor;
-        self.contentView.layer.borderWidth = 0.5;
+        self.contentContainer.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.10].CGColor;
+        self.contentContainer.layer.borderWidth = 0.5;
+        self.contentContainer.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.08];
+        self.chevronView.tintColor = [UIColor tertiaryLabelColor];
     }
 }
 
@@ -274,10 +323,12 @@ static NSInteger const kSectionVersions    = 1;
 #pragma mark - Game Directory Cell (FCL 风格版本隔离卡片)
 
 @interface VMGameDirCell : VMTileBaseCell
+@property (nonatomic, strong) UIView *iconContainer;
 @property (nonatomic, strong) UIImageView *iconView;
 @property (nonatomic, strong) UILabel *nameLabel;
 @property (nonatomic, strong) UILabel *detailLabel;
 @property (nonatomic, strong) UIView *selectedBadge;
+@property (nonatomic, strong) UIImageView *chevronView;
 @end
 
 @implementation VMGameDirCell
@@ -285,20 +336,30 @@ static NSInteger const kSectionVersions    = 1;
 - (void)setupViews {
     [super setupViews];
 
-    CGFloat iconSize = [ScreenUtils dp:22];
+    CGFloat iconBoxSize = [ScreenUtils dp:28];
+    CGFloat iconSize = [ScreenUtils dp:16];
     CGFloat nameFont = [ScreenUtils sp:13];
+
+    // 规范 8.2：图标容器
+    self.iconContainer = [[UIView alloc] init];
+    self.iconContainer.translatesAutoresizingMaskIntoConstraints = NO;
+    self.iconContainer.layer.cornerRadius = 8;
+    self.iconContainer.layer.cornerCurve = kCACornerCurveContinuous;
+    self.iconContainer.backgroundColor = [UIColor systemBlueColor];
+    [self.contentContainer addSubview:self.iconContainer];
 
     self.iconView = [[UIImageView alloc] init];
     self.iconView.translatesAutoresizingMaskIntoConstraints = NO;
     self.iconView.contentMode = UIViewContentModeScaleAspectFit;
     self.iconView.image = [UIImage systemImageNamed:@"folder.fill"];
-    self.iconView.tintColor = [UIColor systemBlueColor];
-    [self.contentContainer addSubview:self.iconView];
+    self.iconView.tintColor = [UIColor whiteColor];
+    [self.iconContainer addSubview:self.iconView];
 
     self.nameLabel = [[UILabel alloc] init];
     self.nameLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.nameLabel.font = [UIFont systemFontOfSize:nameFont weight:UIFontWeightSemibold];
-    self.nameLabel.textColor = [UIColor whiteColor];
+    // 规范 2.1：系统色
+    self.nameLabel.textColor = [UIColor labelColor];
     self.nameLabel.numberOfLines = 1;
     self.nameLabel.adjustsFontForContentSizeCategory = NO;
     [self.contentContainer addSubview:self.nameLabel];
@@ -306,7 +367,8 @@ static NSInteger const kSectionVersions    = 1;
     self.detailLabel = [[UILabel alloc] init];
     self.detailLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.detailLabel.font = [UIFont systemFontOfSize:[ScreenUtils sp:10] weight:UIFontWeightRegular];
-    self.detailLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.6];
+    // 规范 2.1：副文字 secondaryLabelColor
+    self.detailLabel.textColor = [UIColor secondaryLabelColor];
     self.detailLabel.numberOfLines = 0;
     self.detailLabel.lineBreakMode = NSLineBreakByWordWrapping;
     self.detailLabel.adjustsFontForContentSizeCategory = NO;
@@ -316,6 +378,7 @@ static NSInteger const kSectionVersions    = 1;
     self.selectedBadge.translatesAutoresizingMaskIntoConstraints = NO;
     self.selectedBadge.backgroundColor = accentColor();
     self.selectedBadge.layer.cornerRadius = 9;
+    self.selectedBadge.layer.cornerCurve = kCACornerCurveContinuous;
     self.selectedBadge.hidden = YES;
     [self.contentContainer addSubview:self.selectedBadge];
 
@@ -325,22 +388,37 @@ static NSInteger const kSectionVersions    = 1;
     checkmark.tintColor = [UIColor whiteColor];
     [self.selectedBadge addSubview:checkmark];
 
+    // 规范 9.4：chevron 暗示可点击
+    self.chevronView = [[UIImageView alloc] init];
+    self.chevronView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.chevronView.image = [UIImage systemImageNamed:@"chevron.right" withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:11 weight:UIFontWeightSemibold]];
+    self.chevronView.tintColor = [UIColor tertiaryLabelColor];
+    [self.contentContainer addSubview:self.chevronView];
+
     [NSLayoutConstraint activateConstraints:@[
-        [self.iconView.leadingAnchor constraintEqualToAnchor:self.contentContainer.leadingAnchor constant:10],
-        [self.iconView.centerYAnchor constraintEqualToAnchor:self.contentContainer.centerYAnchor],
+        [self.iconContainer.leadingAnchor constraintEqualToAnchor:self.contentContainer.leadingAnchor constant:10],
+        [self.iconContainer.centerYAnchor constraintEqualToAnchor:self.contentContainer.centerYAnchor],
+        [self.iconContainer.widthAnchor constraintEqualToConstant:iconBoxSize],
+        [self.iconContainer.heightAnchor constraintEqualToConstant:iconBoxSize],
+        [self.iconView.centerXAnchor constraintEqualToAnchor:self.iconContainer.centerXAnchor],
+        [self.iconView.centerYAnchor constraintEqualToAnchor:self.iconContainer.centerYAnchor],
         [self.iconView.widthAnchor constraintEqualToConstant:iconSize],
         [self.iconView.heightAnchor constraintEqualToConstant:iconSize],
-        [self.nameLabel.leadingAnchor constraintEqualToAnchor:self.iconView.trailingAnchor constant:8],
+        [self.nameLabel.leadingAnchor constraintEqualToAnchor:self.iconContainer.trailingAnchor constant:8],
         [self.nameLabel.topAnchor constraintEqualToAnchor:self.contentContainer.topAnchor constant:8],
-        [self.nameLabel.trailingAnchor constraintEqualToAnchor:self.selectedBadge.leadingAnchor constant:-6],
+        [self.nameLabel.trailingAnchor constraintEqualToAnchor:self.chevronView.leadingAnchor constant:-6],
         [self.detailLabel.leadingAnchor constraintEqualToAnchor:self.nameLabel.leadingAnchor],
         [self.detailLabel.topAnchor constraintEqualToAnchor:self.nameLabel.bottomAnchor constant:2],
-        [self.detailLabel.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-10],
+        [self.detailLabel.trailingAnchor constraintEqualToAnchor:self.chevronView.leadingAnchor constant:-6],
         [self.detailLabel.bottomAnchor constraintLessThanOrEqualToAnchor:self.contentContainer.bottomAnchor constant:-8],
         [self.selectedBadge.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-10],
-        [self.selectedBadge.centerYAnchor constraintEqualToAnchor:self.contentContainer.centerYAnchor],
+        [self.selectedBadge.topAnchor constraintEqualToAnchor:self.contentContainer.topAnchor constant:8],
         [self.selectedBadge.widthAnchor constraintEqualToConstant:18],
         [self.selectedBadge.heightAnchor constraintEqualToConstant:18],
+        [self.chevronView.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-10],
+        [self.chevronView.centerYAnchor constraintEqualToAnchor:self.contentContainer.centerYAnchor],
+        [self.chevronView.widthAnchor constraintEqualToConstant:11],
+        [self.chevronView.heightAnchor constraintEqualToConstant:11],
         [checkmark.centerXAnchor constraintEqualToAnchor:self.selectedBadge.centerXAnchor],
         [checkmark.centerYAnchor constraintEqualToAnchor:self.selectedBadge.centerYAnchor]
     ]];
@@ -348,34 +426,41 @@ static NSInteger const kSectionVersions    = 1;
 
 - (void)configureWithName:(NSString *)name detail:(NSString *)detail isSelected:(BOOL)isSelected isAddButton:(BOOL)isAddButton {
     if (isAddButton) {
-        self.iconView.image = [UIImage systemImageNamed:@"plus.circle.fill"];
-        self.iconView.tintColor = [UIColor systemGreenColor];
+        self.iconView.image = [UIImage systemImageNamed:@"plus"];
+        self.iconView.tintColor = [UIColor whiteColor];
+        self.iconContainer.backgroundColor = [UIColor systemGreenColor];
         self.nameLabel.text = @"新建目录";
         self.detailLabel.text = @"创建新的版本隔离目录";
         self.selectedBadge.hidden = YES;
-        self.contentView.layer.borderColor = [UIColor systemGreenColor].CGColor;
-        self.contentView.layer.borderWidth = 1.0;
-        self.contentView.layer.cornerRadius = 12;
-        self.contentView.layer.masksToBounds = YES;
+        self.chevronView.hidden = YES;
+        // 规范 5.3：推荐态描边 1.0pt accentColor 0.4
+        self.contentContainer.layer.borderColor = [[UIColor systemGreenColor] colorWithAlphaComponent:0.6].CGColor;
+        self.contentContainer.layer.borderWidth = 1.0;
+        self.contentContainer.backgroundColor = [[UIColor systemGreenColor] colorWithAlphaComponent:0.08];
         return;
     }
 
+    self.chevronView.hidden = NO;
     self.iconView.image = [UIImage systemImageNamed:@"folder.fill"];
-    self.iconView.tintColor = [UIColor systemBlueColor];
+    self.iconView.tintColor = [UIColor whiteColor];
+    self.iconContainer.backgroundColor = [UIColor systemBlueColor];
     self.nameLabel.text = name;
     self.detailLabel.text = detail ?: @"";
     self.selectedBadge.hidden = !isSelected;
     self.selectedBadge.backgroundColor = accentColor();
 
+    // 规范 9.1：选中态三层强化
     if (isSelected) {
-        self.contentView.layer.borderColor = accentColor().CGColor;
-        self.contentView.layer.borderWidth = 1.5;
+        self.contentContainer.layer.borderColor = accentColor().CGColor;
+        self.contentContainer.layer.borderWidth = 1.5;
+        self.contentContainer.backgroundColor = [accentColor() colorWithAlphaComponent:0.10];
+        self.chevronView.tintColor = accentColor();
     } else {
-        self.contentView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.12].CGColor;
-        self.contentView.layer.borderWidth = 0.5;
+        self.contentContainer.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.10].CGColor;
+        self.contentContainer.layer.borderWidth = 0.5;
+        self.contentContainer.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.08];
+        self.chevronView.tintColor = [UIColor tertiaryLabelColor];
     }
-    self.contentView.layer.cornerRadius = 12;
-    self.contentView.layer.masksToBounds = YES;
 }
 
 @end
@@ -483,8 +568,13 @@ static NSInteger const kSectionVersions    = 1;
 #pragma mark - Header View
 
 @interface VMSectionHeaderView : UICollectionReusableView
+@property (nonatomic, strong) UIView *accentBar;
+@property (nonatomic, strong) UIImageView *iconView;
 @property (nonatomic, strong) UILabel *titleLabel;
 @property (nonatomic, strong) UILabel *subtitleLabel;
+@property (nonatomic, strong) UILabel *countBadge;
+@property (nonatomic, strong) UIVisualEffectView *blurView;
+- (void)configureWithIcon:(NSString *)iconName title:(NSString *)title subtitle:(NSString *)subtitle count:(NSInteger)count;
 @end
 
 @implementation VMSectionHeaderView
@@ -492,39 +582,109 @@ static NSInteger const kSectionVersions    = 1;
 - (instancetype)initWithFrame:(CGRect)frame {
     self = [super initWithFrame:frame];
     if (self) {
-        UIBlurEffect *blurEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterialDark];
-        UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:blurEffect];
-        blurView.translatesAutoresizingMaskIntoConstraints = NO;
-        [self addSubview:blurView];
+        // 规范 6.2：SystemMaterial 自动适配亮/暗模式（替代原 SystemMaterialDark）
+        UIBlurEffect *blurEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial];
+        self.blurView = [[UIVisualEffectView alloc] initWithEffect:blurEffect];
+        self.blurView.translatesAutoresizingMaskIntoConstraints = NO;
+        [self addSubview:self.blurView];
+
+        // 规范 9.5：前导强调色条（4pt 宽，圆角，accentColor）
+        self.accentBar = [[UIView alloc] init];
+        self.accentBar.translatesAutoresizingMaskIntoConstraints = NO;
+        self.accentBar.backgroundColor = accentColor();
+        self.accentBar.layer.cornerRadius = 2;
+        self.accentBar.layer.cornerCurve = kCACornerCurveContinuous;
+        [self addSubview:self.accentBar];
+
+        // 规范 8.2：图标容器（用 SF Symbol，tint = accentColor）
+        self.iconView = [[UIImageView alloc] init];
+        self.iconView.translatesAutoresizingMaskIntoConstraints = NO;
+        self.iconView.contentMode = UIViewContentModeScaleAspectFit;
+        self.iconView.tintColor = accentColor();
+        [self addSubview:self.iconView];
 
         self.titleLabel = [[UILabel alloc] init];
         self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
         self.titleLabel.font = [UIFont systemFontOfSize:[ScreenUtils sp:16] weight:UIFontWeightBold];
-        self.titleLabel.textColor = [UIColor whiteColor];
+        // 规范 2.1：强制使用系统色
+        self.titleLabel.textColor = [UIColor labelColor];
         [self addSubview:self.titleLabel];
 
         self.subtitleLabel = [[UILabel alloc] init];
         self.subtitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
         self.subtitleLabel.font = [UIFont systemFontOfSize:[ScreenUtils sp:11] weight:UIFontWeightRegular];
-        self.subtitleLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.55];
+        // 规范 2.1：副文字 secondaryLabelColor
+        self.subtitleLabel.textColor = [UIColor secondaryLabelColor];
         self.subtitleLabel.numberOfLines = 0;
         self.subtitleLabel.lineBreakMode = NSLineBreakByWordWrapping;
         [self addSubview:self.subtitleLabel];
 
+        // 规范 7.1：计数 pill 徽章（右上角，accentColor 浅底）
+        self.countBadge = [[UILabel alloc] init];
+        self.countBadge.translatesAutoresizingMaskIntoConstraints = NO;
+        self.countBadge.font = [UIFont systemFontOfSize:[ScreenUtils sp:11] weight:UIFontWeightBold];
+        self.countBadge.textColor = [UIColor whiteColor];
+        self.countBadge.textAlignment = NSTextAlignmentCenter;
+        self.countBadge.backgroundColor = accentColor();
+        self.countBadge.layer.cornerRadius = 9;
+        self.countBadge.layer.cornerCurve = kCACornerCurveContinuous;
+        self.countBadge.layer.masksToBounds = YES;
+        self.countBadge.hidden = YES;
+        [self addSubview:self.countBadge];
+
         [NSLayoutConstraint activateConstraints:@[
-            [blurView.topAnchor constraintEqualToAnchor:self.topAnchor],
-            [blurView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
-            [blurView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
-            [blurView.bottomAnchor constraintEqualToAnchor:self.bottomAnchor],
-            [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:18],
+            [self.blurView.topAnchor constraintEqualToAnchor:self.topAnchor],
+            [self.blurView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
+            [self.blurView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
+            [self.blurView.bottomAnchor constraintEqualToAnchor:self.bottomAnchor],
+            // 前导强调条：左侧 18pt，垂直居中，4pt 宽，18pt 高
+            [self.accentBar.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:18],
+            [self.accentBar.centerYAnchor constraintEqualToAnchor:self.centerYAnchor],
+            [self.accentBar.widthAnchor constraintEqualToConstant:4],
+            [self.accentBar.heightAnchor constraintEqualToConstant:18],
+            // 图标：紧贴强调条右侧 8pt，垂直居中，16x16
+            [self.iconView.leadingAnchor constraintEqualToAnchor:self.accentBar.trailingAnchor constant:8],
+            [self.iconView.centerYAnchor constraintEqualToAnchor:self.titleLabel.centerYAnchor],
+            [self.iconView.widthAnchor constraintEqualToConstant:16],
+            [self.iconView.heightAnchor constraintEqualToConstant:16],
+            // 标题：图标右侧 6pt
+            [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.iconView.trailingAnchor constant:6],
             [self.titleLabel.topAnchor constraintEqualToAnchor:self.topAnchor constant:8],
+            [self.titleLabel.trailingAnchor constraintEqualToAnchor:self.countBadge.leadingAnchor constant:-8],
+            // 副标题：标题下方 2pt
             [self.subtitleLabel.leadingAnchor constraintEqualToAnchor:self.titleLabel.leadingAnchor],
             [self.subtitleLabel.topAnchor constraintEqualToAnchor:self.titleLabel.bottomAnchor constant:2],
             [self.subtitleLabel.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-18],
-            [self.subtitleLabel.bottomAnchor constraintLessThanOrEqualToAnchor:self.bottomAnchor constant:-4]
+            [self.subtitleLabel.bottomAnchor constraintLessThanOrEqualToAnchor:self.bottomAnchor constant:-4],
+            // 计数徽章：右侧 18pt，顶部 8pt，最小宽度 18，高度 18
+            [self.countBadge.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-18],
+            [self.countBadge.centerYAnchor constraintEqualToAnchor:self.titleLabel.centerYAnchor],
+            [self.countBadge.heightAnchor constraintEqualToConstant:18]
         ]];
     }
     return self;
+}
+
+/// 配置 Header（图标 + 标题 + 副标题 + 计数）
+- (void)configureWithIcon:(NSString *)iconName
+                    title:(NSString *)title
+                 subtitle:(NSString *)subtitle
+                    count:(NSInteger)count {
+    UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:14 weight:UIFontWeightSemibold];
+    self.iconView.image = [UIImage systemImageNamed:iconName withConfiguration:config] ?: [UIImage systemImageNamed:iconName];
+    self.iconView.tintColor = accentColor();
+    self.accentBar.backgroundColor = accentColor();
+    self.countBadge.backgroundColor = accentColor();
+
+    self.titleLabel.text = title;
+    self.subtitleLabel.text = subtitle;
+
+    if (count >= 0) {
+        self.countBadge.text = [NSString stringWithFormat:@" %ld ", (long)count];
+        self.countBadge.hidden = NO;
+    } else {
+        self.countBadge.hidden = YES;
+    }
 }
 
 @end
@@ -537,6 +697,8 @@ static NSInteger const kSectionVersions    = 1;
 @property (nonatomic, strong) NSString *selectedProfile;
 @property (nonatomic, strong) NSMutableArray<NSString *> *gameDirList;
 @property (nonatomic, strong) NSString *currentGameDir;
+// 空状态视图（无版本时显示引导）
+@property (nonatomic, strong) UIView *emptyStateView;
 // 渲染器 section 数据（启动器 native 渲染器库选择，LWJGL 层）
 @property (nonatomic, strong) NSArray<NSString *> *rendererKeys;
 @property (nonatomic, strong) NSArray<NSString *> *rendererNames;
@@ -570,10 +732,12 @@ static NSInteger const kSectionVersions    = 1;
     [self setupRendererData];
     [self setupGraphicsApiData];
     [self setupCollectionView];
+    [self setupEmptyStateView];
     [self setupNavigationBar];
     [self setupLongPressGesture];
     [self loadProfiles];
     [self loadGameDirList];
+    [self updateEmptyState];
 
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(profileChanged)
@@ -600,24 +764,78 @@ static NSInteger const kSectionVersions    = 1;
 /// 无论导航栏是否可见都使用浮动按钮，确保按钮在所有模式下都可访问
 - (void)setupNavigationBar {
     UIButton *fab = [UIButton buttonWithType:UIButtonTypeSystem];
-    UIImage *plusImg = [UIImage systemImageNamed:@"plus"];
+    UIImageSymbolConfiguration *plusConfig = [UIImageSymbolConfiguration configurationWithPointSize:18 weight:UIFontWeightBold];
+    UIImage *plusImg = [UIImage systemImageNamed:@"plus" withConfiguration:plusConfig];
     [fab setImage:plusImg forState:UIControlStateNormal];
     fab.tintColor = [UIColor whiteColor];
-    fab.backgroundColor = [UIColor systemBlueColor];
-    fab.layer.cornerRadius = 18;
-    fab.layer.masksToBounds = YES;
+    // 规范 2.6：使用 accentColor() 而非 systemBlueColor
+    fab.backgroundColor = accentColor();
+    // 规范 5.1：FAB 完全圆形（22pt 圆角 = 44/2）
+    fab.layer.cornerRadius = 22;
+    fab.layer.cornerCurve = kCACornerCurveContinuous;
+    // 规范 5.2：FAB 阴影档（0.20, 8, (0,4)）—— 比 L2 卡片阴影更强
+    fab.layer.shadowColor = [UIColor blackColor].CGColor;
+    fab.layer.shadowOffset = CGSizeMake(0, 4);
+    fab.layer.shadowOpacity = 0.20;
+    fab.layer.shadowRadius = 8;
+    // 注意：不能用 masksToBounds=YES，否则会裁掉阴影
+    fab.layer.masksToBounds = NO;
     fab.translatesAutoresizingMaskIntoConstraints = NO;
     fab.accessibilityLabel = @"新建版本";
+    [fab addTarget:self action:@selector(fabTouchDown) forControlEvents:UIControlEventTouchDown];
+    [fab addTarget:self action:@selector(fabTouchUp) forControlEvents:UIControlEventTouchUpInside | UIControlEventTouchUpOutside | UIControlEventTouchCancel];
     [fab addTarget:self action:@selector(createNewVersion) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:fab];
     [self.view bringSubviewToFront:fab];
 
     [NSLayoutConstraint activateConstraints:@[
-        [fab.widthAnchor constraintEqualToConstant:36],
-        [fab.heightAnchor constraintEqualToConstant:36],
+        // 规范 4.1：FAB 44x44（更好的触控目标，符合 iOS HIG）
+        [fab.widthAnchor constraintEqualToConstant:44],
+        [fab.heightAnchor constraintEqualToConstant:44],
         [fab.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:8],
         [fab.trailingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.trailingAnchor constant:-16],
     ]];
+
+    // 规范 15.4：FAB 进场动画（JellyBounce 果冻回弹）
+    fab.transform = CGAffineTransformMakeScale(0.3, 0.3);
+    [UIView animateWithDuration:0.6
+                          delay:0.15
+         usingSpringWithDamping:0.55
+          initialSpringVelocity:0.8
+                         options:UIViewAnimationOptionAllowUserInteraction
+                     animations:^{
+        fab.transform = CGAffineTransformIdentity;
+    } completion:nil];
+}
+
+/// FAB 按下：缩放反馈（规范 9.3）
+- (void)fabTouchDown {
+    [UIView animateWithDuration:0.15 delay:0 usingSpringWithDamping:0.7 initialSpringVelocity:0.8 options:UIViewAnimationOptionAllowUserInteraction animations:^{
+        UIButton *fab = [self findFabButton];
+        fab.transform = CGAffineTransformMakeScale(0.90, 0.90);
+        fab.layer.shadowOpacity = 0.12;
+        fab.layer.shadowRadius = 4;
+    } completion:nil];
+}
+
+/// FAB 抬起：回弹反馈
+- (void)fabTouchUp {
+    [UIView animateWithDuration:0.25 delay:0 usingSpringWithDamping:0.55 initialSpringVelocity:0.9 options:UIViewAnimationOptionAllowUserInteraction animations:^{
+        UIButton *fab = [self findFabButton];
+        fab.transform = CGAffineTransformIdentity;
+        fab.layer.shadowOpacity = 0.20;
+        fab.layer.shadowRadius = 8;
+    } completion:nil];
+}
+
+/// 找到视图中的 FAB 按钮
+- (UIButton *)findFabButton {
+    for (UIView *v in self.view.subviews) {
+        if ([v isKindOfClass:[UIButton class]] && [v.accessibilityLabel isEqualToString:@"新建版本"]) {
+            return (UIButton *)v;
+        }
+    }
+    return nil;
 }
 
 /// 长按手势：游戏目录卡片弹出操作菜单（切换/删除），版本卡片弹出选择/编辑/删除
@@ -630,6 +848,126 @@ static NSInteger const kSectionVersions    = 1;
 
 - (void)createNewVersion {
     [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowDownloadPage" object:nil];
+}
+
+#pragma mark - Empty State
+
+/// 创建空状态视图（无版本时显示引导，参照规范 10.1 空状态）
+- (void)setupEmptyStateView {
+    self.emptyStateView = [[UIView alloc] init];
+    self.emptyStateView.translatesAutoresizingMaskIntoConstraints = NO;
+    self.emptyStateView.hidden = YES;
+    [self.view addSubview:self.emptyStateView];
+    [self.view bringSubviewToFront:self.emptyStateView];
+
+    // 规范 10.1：图标容器（80x80 圆形，accentColor 0.12 浅底）
+    UIView *iconContainer = [[UIView alloc] init];
+    iconContainer.translatesAutoresizingMaskIntoConstraints = NO;
+    iconContainer.backgroundColor = [accentColor() colorWithAlphaComponent:0.12];
+    iconContainer.layer.cornerRadius = 40;
+    iconContainer.layer.cornerCurve = kCACornerCurveContinuous;
+    [self.emptyStateView addSubview:iconContainer];
+
+    UIImageSymbolConfiguration *iconConfig = [UIImageSymbolConfiguration configurationWithPointSize:36 weight:UIFontWeightRegular];
+    UIImageView *iconView = [[UIImageView alloc] init];
+    iconView.translatesAutoresizingMaskIntoConstraints = NO;
+    iconView.contentMode = UIViewContentModeScaleAspectFit;
+    iconView.image = [UIImage systemImageNamed:@"cube.box" withConfiguration:iconConfig];
+    iconView.tintColor = accentColor();
+    [iconContainer addSubview:iconView];
+
+    // 规范 2.1：标题用 labelColor
+    UILabel *titleLabel = [[UILabel alloc] init];
+    titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    titleLabel.font = [UIFont systemFontOfSize:[ScreenUtils sp:18] weight:UIFontWeightBold];
+    titleLabel.textColor = [UIColor labelColor];
+    titleLabel.text = @"还没有安装任何版本";
+    titleLabel.textAlignment = NSTextAlignmentCenter;
+    [self.emptyStateView addSubview:titleLabel];
+
+    // 规范 2.1：副标题用 secondaryLabelColor
+    UILabel *subtitleLabel = [[UILabel alloc] init];
+    subtitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    subtitleLabel.font = [UIFont systemFontOfSize:[ScreenUtils sp:13] weight:UIFontWeightRegular];
+    subtitleLabel.textColor = [UIColor secondaryLabelColor];
+    subtitleLabel.text = @"点击右上角 + 按钮下载你的第一个 Minecraft 版本";
+    subtitleLabel.textAlignment = NSTextAlignmentCenter;
+    subtitleLabel.numberOfLines = 0;
+    [self.emptyStateView addSubview:subtitleLabel];
+
+    // 规范 9.2：CTA 按钮（accentColor 背景 + 白字 + 圆角）
+    UIButton *ctaButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    ctaButton.translatesAutoresizingMaskIntoConstraints = NO;
+    UIImageSymbolConfiguration *btnIconConfig = [UIImageSymbolConfiguration configurationWithPointSize:14 weight:UIFontWeightBold];
+    UIImage *btnIcon = [UIImage systemImageNamed:@"arrow.down.circle.fill" withConfiguration:btnIconConfig];
+    [ctaButton setImage:btnIcon forState:UIControlStateNormal];
+    [ctaButton setTitle:@"  去下载版本" forState:UIControlStateNormal];
+    ctaButton.titleLabel.font = [UIFont systemFontOfSize:[ScreenUtils sp:15] weight:UIFontWeightSemibold];
+    [ctaButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    ctaButton.tintColor = [UIColor whiteColor];
+    ctaButton.backgroundColor = accentColor();
+    ctaButton.layer.cornerRadius = 22;
+    ctaButton.layer.cornerCurve = kCACornerCurveContinuous;
+    ctaButton.layer.shadowColor = [UIColor blackColor].CGColor;
+    ctaButton.layer.shadowOffset = CGSizeMake(0, 3);
+    ctaButton.layer.shadowOpacity = 0.15;
+    ctaButton.layer.shadowRadius = 6;
+    ctaButton.layer.masksToBounds = NO;
+    ctaButton.contentEdgeInsets = UIEdgeInsetsMake(0, 20, 0, 20);
+    [ctaButton addTarget:self action:@selector(createNewVersion) forControlEvents:UIControlEventTouchUpInside];
+    [self.emptyStateView addSubview:ctaButton];
+
+    [NSLayoutConstraint activateConstraints:@[
+        // 空状态视图居中
+        [self.emptyStateView.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+        [self.emptyStateView.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor],
+        [self.emptyStateView.widthAnchor constraintEqualToAnchor:self.view.widthAnchor constant:-64],
+        // 图标容器：顶部对齐，居中，80x80
+        [iconContainer.topAnchor constraintEqualToAnchor:self.emptyStateView.topAnchor],
+        [iconContainer.centerXAnchor constraintEqualToAnchor:self.emptyStateView.centerXAnchor],
+        [iconContainer.widthAnchor constraintEqualToConstant:80],
+        [iconContainer.heightAnchor constraintEqualToConstant:80],
+        // 图标居中
+        [iconView.centerXAnchor constraintEqualToAnchor:iconContainer.centerXAnchor],
+        [iconView.centerYAnchor constraintEqualToAnchor:iconContainer.centerYAnchor],
+        [iconView.widthAnchor constraintEqualToConstant:36],
+        [iconView.heightAnchor constraintEqualToConstant:36],
+        // 标题：图标下方 16pt
+        [titleLabel.topAnchor constraintEqualToAnchor:iconContainer.bottomAnchor constant:16],
+        [titleLabel.leadingAnchor constraintEqualToAnchor:self.emptyStateView.leadingAnchor],
+        [titleLabel.trailingAnchor constraintEqualToAnchor:self.emptyStateView.trailingAnchor],
+        // 副标题：标题下方 6pt
+        [subtitleLabel.topAnchor constraintEqualToAnchor:titleLabel.bottomAnchor constant:6],
+        [subtitleLabel.leadingAnchor constraintEqualToAnchor:self.emptyStateView.leadingAnchor],
+        [subtitleLabel.trailingAnchor constraintEqualToAnchor:self.emptyStateView.trailingAnchor],
+        // CTA 按钮：副标题下方 24pt
+        [ctaButton.topAnchor constraintEqualToAnchor:subtitleLabel.bottomAnchor constant:24],
+        [ctaButton.centerXAnchor constraintEqualToAnchor:self.emptyStateView.centerXAnchor],
+        [ctaButton.heightAnchor constraintEqualToConstant:44],
+        [ctaButton.bottomAnchor constraintEqualToAnchor:self.emptyStateView.bottomAnchor]
+    ]];
+}
+
+/// 根据版本列表数量显示/隐藏空状态视图
+- (void)updateEmptyState {
+    BOOL isEmpty = (self.profileList.count == 0);
+    self.emptyStateView.hidden = !isEmpty;
+    self.collectionView.hidden = isEmpty;
+
+    if (isEmpty) {
+        // 规范 15.4：空状态进场动画（果冻回弹 + 淡入）
+        self.emptyStateView.alpha = 0;
+        self.emptyStateView.transform = CGAffineTransformMakeScale(0.85, 0.85);
+        [UIView animateWithDuration:0.5
+                              delay:0.1
+             usingSpringWithDamping:0.7
+              initialSpringVelocity:0.6
+                             options:UIViewAnimationOptionAllowUserInteraction
+                         animations:^{
+            self.emptyStateView.alpha = 1;
+            self.emptyStateView.transform = CGAffineTransformIdentity;
+        } completion:nil];
+    }
 }
 
 - (void)handleLongPress:(UILongPressGestureRecognizer *)gesture {
@@ -658,14 +996,16 @@ static NSInteger const kSectionVersions    = 1;
         self.navigationController.presentingViewController == nil &&
         self.navigationController.topViewController == self) {
         self.navigationController.navigationBarHidden = YES;
-        // 导航栏隐藏时缩小 collectionView 顶部 inset
-        self.collectionView.contentInset = UIEdgeInsetsMake(8, 0, 0, 0);
-        self.collectionView.scrollIndicatorInsets = UIEdgeInsetsMake(8, 0, 0, 0);
+        // 规范 4.1：导航栏隐藏时，顶部 inset 需为 FAB 留出空间
+        CGFloat topInset = self.view.safeAreaInsets.top + 8 + 44 + 8;
+        self.collectionView.contentInset = UIEdgeInsetsMake(topInset, 0, 24, 0);
+        self.collectionView.scrollIndicatorInsets = UIEdgeInsetsMake(topInset, 0, 24, 0);
     }
     [PLProfiles updateCurrent];
     [self loadProfiles];
     [self loadGameDirList];
     [self.collectionView reloadData];
+    [self updateEmptyState];
 }
 
 - (void)viewWillDisappear:(BOOL)animated {
@@ -687,6 +1027,7 @@ static NSInteger const kSectionVersions    = 1;
     [self loadProfiles];
     [self loadGameDirList];
     [self.collectionView reloadData];
+    [self updateEmptyState];
 }
 
 - (void)handleBackgroundUIEffectChanged:(NSNotification *)notification {
@@ -698,6 +1039,7 @@ static NSInteger const kSectionVersions    = 1;
 - (void)handleAccentColorChanged {
     dispatch_async(dispatch_get_main_queue(), ^{
         [self.collectionView reloadData];
+        [self updateEmptyState];
     });
 }
 
@@ -824,18 +1166,22 @@ static NSInteger const kSectionVersions    = 1;
     self.collectionView.delegate = self;
     self.collectionView.alwaysBounceVertical = YES;
     self.collectionView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
-    // 导航栏隐藏时（根页面模式）顶部留少量间距即可；否则留出导航栏高度
+    // 规范 4.1：顶部 inset 需为 FAB 留出空间（FAB 44pt + 顶部 8pt + 间距 8pt = 60pt）
+    // 避免第一个 section header 的 count badge 被 FAB 遮挡
     CGFloat topInset;
     if (self.navigationController && self.navigationController.navigationBarHidden) {
-        topInset = 8.0;
+        // 导航栏隐藏：FAB 位于 safeAreaTop + 8，高度 44
+        topInset = self.view.safeAreaInsets.top + 8 + 44 + 8;
     } else {
-        topInset = 44.0;
+        // 导航栏可见：FAB 位于 navBar 底部 + 8，高度 44
+        CGFloat navBarHeight = 44.0;
         if (self.navigationController && self.navigationController.navigationBar.bounds.size.height > 0) {
-            topInset = self.navigationController.navigationBar.bounds.size.height;
+            navBarHeight = self.navigationController.navigationBar.bounds.size.height;
         }
+        topInset = navBarHeight + 8 + 44 + 8;
     }
-    self.collectionView.contentInset = UIEdgeInsetsMake(topInset, 0, 0, 0);
-    self.collectionView.scrollIndicatorInsets = UIEdgeInsetsMake(topInset, 0, 0, 0);
+    self.collectionView.contentInset = UIEdgeInsetsMake(topInset, 0, 24, 0);
+    self.collectionView.scrollIndicatorInsets = UIEdgeInsetsMake(topInset, 0, 24, 0);
 
     [self.collectionView registerClass:[VMGameDirCell class] forCellWithReuseIdentifier:@"GameDirCell"];
     [self.collectionView registerClass:[VMVersionCardCell class] forCellWithReuseIdentifier:@"VersionCell"];
@@ -849,6 +1195,7 @@ static NSInteger const kSectionVersions    = 1;
         CGFloat width = layoutEnvironment.container.contentSize.width;
         BOOL isiPad = width > 700;
 
+        // 规范 4.1：Header 估计高度 48pt
         NSCollectionLayoutSize *headerSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0]
                                                                               heightDimension:[NSCollectionLayoutDimension estimatedDimension:48]];
         NSCollectionLayoutBoundarySupplementaryItem *header = [NSCollectionLayoutBoundarySupplementaryItem boundarySupplementaryItemWithLayoutSize:headerSize elementKind:UICollectionElementKindSectionHeader alignment:NSRectAlignmentTop];
@@ -856,35 +1203,46 @@ static NSInteger const kSectionVersions    = 1;
 
         if (sectionIndex == kSectionGameDir) {
             // 游戏目录区段：横向滚动卡片列表
-            CGFloat itemWidth = isiPad ? 170 : 150;
+            // 规范 4.1：卡片宽度 160pt（iPad 180pt），高度 70pt（给图标容器留呼吸空间）
+            CGFloat itemWidth = isiPad ? 180 : 160;
+            CGFloat itemHeight = 70;
             NSCollectionLayoutSize *itemSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension absoluteDimension:itemWidth]
-                                                                                       heightDimension:[NSCollectionLayoutDimension absoluteDimension:64]];
+                                                                                       heightDimension:[NSCollectionLayoutDimension absoluteDimension:itemHeight]];
             NSCollectionLayoutItem *item = [NSCollectionLayoutItem itemWithLayoutSize:itemSize];
-            item.contentInsets = NSDirectionalEdgeInsetsMake(3, 5, 3, 5);
+            // 规范 4.1：卡片间距 8pt（上下各 4pt）
+            item.contentInsets = NSDirectionalEdgeInsetsMake(4, 5, 4, 5);
 
             NSCollectionLayoutSize *groupSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension absoluteDimension:itemWidth]
-                                                                                          heightDimension:[NSCollectionLayoutDimension absoluteDimension:64]];
+                                                                                          heightDimension:[NSCollectionLayoutDimension absoluteDimension:itemHeight]];
             NSCollectionLayoutGroup *group = [NSCollectionLayoutGroup horizontalGroupWithLayoutSize:groupSize subitems:@[item]];
 
             NSCollectionLayoutSection *section = [NSCollectionLayoutSection sectionWithGroup:group];
             section.orthogonalScrollingBehavior = UICollectionLayoutSectionOrthogonalScrollingBehaviorContinuous;
-            section.contentInsets = NSDirectionalEdgeInsetsMake(0, 14, 6, 14);
+            // 规范 4.1：边距 16pt，section 间距 8pt
+            section.contentInsets = NSDirectionalEdgeInsetsMake(0, 16, 8, 16);
             section.boundarySupplementaryItems = @[header];
             return section;
         } else {
             // 版本卡片区段：紧凑列表（iPad 双列，iPhone 单列）
+            // 规范 4.1：iPad 双列时增加列间距
             CGFloat itemWidth = isiPad ? 0.5 : 1.0;
+            // 规范 4.1：卡片高度 84pt（给 34pt 图标容器 + 三行文字留呼吸空间）
+            CGFloat itemHeight = 84;
             NSCollectionLayoutSize *itemSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:itemWidth]
-                                                                                       heightDimension:[NSCollectionLayoutDimension absoluteDimension:78]];
+                                                                                       heightDimension:[NSCollectionLayoutDimension absoluteDimension:itemHeight]];
             NSCollectionLayoutItem *item = [NSCollectionLayoutItem itemWithLayoutSize:itemSize];
-            item.contentInsets = NSDirectionalEdgeInsetsMake(3, 7, 3, 7);
+            // 规范 4.1：卡片间距 8pt（上下各 4pt），左右 8pt
+            item.contentInsets = NSDirectionalEdgeInsetsMake(4, 8, 4, 8);
 
             NSCollectionLayoutSize *groupSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0]
-                                                                                          heightDimension:[NSCollectionLayoutDimension absoluteDimension:78]];
+                                                                                          heightDimension:[NSCollectionLayoutDimension absoluteDimension:itemHeight]];
             NSCollectionLayoutGroup *group = [NSCollectionLayoutGroup horizontalGroupWithLayoutSize:groupSize subitems:@[item]];
 
             NSCollectionLayoutSection *section = [NSCollectionLayoutSection sectionWithGroup:group];
-            section.contentInsets = NSDirectionalEdgeInsetsMake(0, 14, 18, 14);
+            // 规范 4.1：列间距 8pt（iPad 双列时）
+            section.interGroupSpacing = isiPad ? 8 : 0;
+            // 规范 4.1：边距 16pt，底部 24pt（留出底部呼吸空间）
+            section.contentInsets = NSDirectionalEdgeInsetsMake(0, 16, 24, 16);
             section.boundarySupplementaryItems = @[header];
             return section;
         }
@@ -1024,16 +1382,22 @@ static NSInteger const kSectionVersions    = 1;
         VMSectionHeaderView *header = [collectionView dequeueReusableSupplementaryViewOfKind:kind withReuseIdentifier:@"HeaderView" forIndexPath:indexPath];
         switch (indexPath.section) {
             case kSectionGameDir:
-                header.titleLabel.text = @"游戏目录（版本隔离）";
-                header.subtitleLabel.text = @"点击切换 · 长按删除当前目录";
+                [header configureWithIcon:@"folder.badge.gearshape"
+                                     title:@"游戏目录（版本隔离）"
+                                  subtitle:@"点击切换 · 长按删除当前目录"
+                                     count:(NSInteger)self.gameDirList.count];
                 break;
             case kSectionVersions:
-                header.titleLabel.text = @"已安装的版本";
-                header.subtitleLabel.text = @"点击进入版本设置 · 长按弹出操作菜单";
+                [header configureWithIcon:@"cube.box.fill"
+                                     title:@"已安装的版本"
+                                  subtitle:@"点击进入版本设置 · 长按弹出操作菜单"
+                                     count:(NSInteger)self.profileList.count];
                 break;
             default:
-                header.titleLabel.text = @"";
-                header.subtitleLabel.text = @"";
+                [header configureWithIcon:@""
+                                     title:@""
+                                  subtitle:@""
+                                     count:-1];
                 break;
         }
         return header;
@@ -1093,6 +1457,7 @@ static NSInteger const kSectionVersions    = 1;
     [self loadGameDirList];
     [self loadProfiles];
     [self.collectionView reloadData];
+    [self updateEmptyState];
 }
 
 /// 弹出新建游戏目录对话框
@@ -1200,6 +1565,7 @@ static NSInteger const kSectionVersions    = 1;
 
     [self loadGameDirList];
     [self.collectionView reloadData];
+    [self updateEmptyState];
     [self showAlert:[NSString stringWithFormat:@"已删除目录 \"%@\"", dirName]];
 }
 
@@ -1391,6 +1757,7 @@ static NSInteger const kSectionVersions    = 1;
         [PLProfiles.current save];
         [self loadProfiles];
         [self.collectionView reloadData];
+        [self updateEmptyState];
     }]];
 
     [self presentViewController:confirm animated:YES completion:nil];
