@@ -1,3 +1,7 @@
+<div align="center">
+  <img src="Natives/Assets.xcassets/AppIcon-Light.appiconset/1024x1024.png" alt="Air Icon" width="180">
+</div>
+
 <h1 align="center">Air</h1>
 <p align="center"><sub>Amethyst iOS Remastered</sub></p>
 
@@ -33,19 +37,23 @@ A premium Minecraft: Java Edition launcher for iOS and iPadOS, rebuilt from the 
 
 ## Core Features
 
-- **Mod Management** -- Browse, enable, disable, and delete mods with full metadata inspection, rebuilt from the ground up for iOS.
-- **Shader Management** -- Browse, enable, disable, and delete shader packs with integrated Modrinth download support.
+- **Modern UI Redesign** -- The interface has been deeply refined for a contemporary, polished visual style.
+- **Resource Management & Downloads** -- Browse, enable, disable, and delete mods, shader packs, resource packs, and other assets, with integrated Modrinth and CurseForge download support.
 - **Modpack Import** -- Import ZIP-format modpacks directly from the launcher interface.
 - **Smart Download Sources** -- Switch between Mojang Official, BMCLAPI mirror, and other sources on the fly for optimal download speeds.
 - **Complete Chinese Localization** -- Fully translated interface with native-quality Chinese language support.
 - **Unrestricted Accounts** -- Local accounts, demo mode, and third-party authentication all supported; no Microsoft account required to download and play.
 - **Multi-Account** -- Seamlessly switch between Microsoft, local, and third-party authentication accounts.
-- **Auto Renderer Selection** -- Automatically chooses the optimal rendering backend (including MobileGlues) when set to Auto.
+- **Auto Renderer Selection** -- Automatically chooses the optimal rendering backend (including MobileGlues, MoltenVK, and more) when set to Auto.
 - **Auto JVM Selection** -- Automatically selects the correct JVM version (Java 8, 17, 21, or 25) based on the game version.
+- **Minecraft 26.X Support** -- Experimental support for Minecraft 26.x.
 - **Custom Mouse Pointer** -- Customize the virtual mouse pointer skin in settings.
 - **Custom News URL** -- Configure a custom news feed URL for the launcher home screen.
-- **TouchController Support** -- Native UDP local proxy communication with the TouchController mod for full touchscreen control on iOS.
+- **TouchController Support** -- Communicates with the TouchController mod via both UDP local proxy and XCFramework, delivering full touchscreen control on iOS.
+- **AI Integration** -- (In development) The goal is to enable AI to fully manage the launcher, including resource downloads and instance management.
 - **Custom App Icons** -- (In development)
+
+... and much more to explore!
 
 > [!NOTE]
 > There are no plans to port this remastered version to Android. The Android ecosystem already has excellent launchers such as [Zalith Launcher](https://github.com/ZalithLauncher/ZalithLauncher), [Fold Craft Launcher](https://github.com/FCL-Team/FoldCraftLauncher), and ShardLauncher. For the official Android version, visit [Amethyst-Android](https://github.com/AngelAuraMC/Amethyst-Android).
@@ -151,7 +159,7 @@ Additional thanks to [MCHeads](https://mc-heads.net) for Minecraft avatar servic
 
 ## Sponsor
 
-If you find this project valuable, consider supporting development through [Ko-Fi](https://ko-fi.com/herbrine8403).
+If you find this project valuable, consider supporting development through [Ko-Fi](https://ko-fi.com/herbrine8403), [爱发电](https://afdian.com/a/herbrine8403), or [WeChat Reward Code](donate.png).
 
 ## Star History
 

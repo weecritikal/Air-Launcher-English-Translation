@@ -1,3 +1,7 @@
+<div align="center">
+  <img src="Natives/Assets.xcassets/AppIcon-Light.appiconset/1024x1024.png" alt="Air 图标" width="180">
+</div>
+
 <h1 align="center">Air</h1>
 <p align="center"><sub>Amethyst iOS 重制版</sub></p>
 
