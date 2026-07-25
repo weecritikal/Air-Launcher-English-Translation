@@ -177,7 +177,7 @@
             header.frame = CGRectMake(0, 0, headerWidth, 0);
             [header setNeedsLayout];
             [header layoutIfNeeded];
-            CGFloat fittingHeight = [header systemLayoutSizeFittingSize:CGSizeMake(headerWidth, UILayoutFittingCompressedSize)
+            CGFloat fittingHeight = [header systemLayoutSizeFittingSize:CGSizeMake(headerWidth, 0)
                                                     withHorizontalFittingPriority:UILayoutPriorityRequired
                                                           verticalFittingPriority:UILayoutPriorityFittingSizeLevel].height;
             header.frame = CGRectMake(0, 0, headerWidth, fittingHeight);
@@ -234,7 +234,7 @@
     header.frame = CGRectMake(0, 0, width, 0);
     [header setNeedsLayout];
     [header layoutIfNeeded];
-    CGFloat fittingHeight = [header systemLayoutSizeFittingSize:CGSizeMake(width, UILayoutFittingCompressedSize)
+    CGFloat fittingHeight = [header systemLayoutSizeFittingSize:CGSizeMake(width, 0)
                                             withHorizontalFittingPriority:UILayoutPriorityRequired
                                                   verticalFittingPriority:UILayoutPriorityFittingSizeLevel].height;
     header.frame = CGRectMake(0, 0, width, fittingHeight);
@@ -392,7 +392,7 @@
     container.frame = CGRectMake(0, 0, width, 0);
     [container setNeedsLayout];
     [container layoutIfNeeded];
-    CGFloat fittingHeight = [container systemLayoutSizeFittingSize:CGSizeMake(width, UILayoutFittingCompressedSize)
+    CGFloat fittingHeight = [container systemLayoutSizeFittingSize:CGSizeMake(width, 0)
                                                withHorizontalFittingPriority:UILayoutPriorityRequired
                                                      verticalFittingPriority:UILayoutPriorityFittingSizeLevel].height;
     container.frame = CGRectMake(0, 0, width, fittingHeight);
@@ -907,7 +907,7 @@
                 self.versionSelectedAt = [newVersionList indexOfObject:(id)nearest];
             }
         }
-        self.versionSelectedAt = MIN(abs(self.versionSelectedAt), (NSInteger)newVersionList.count - 1);
+        self.versionSelectedAt = MIN(labs(self.versionSelectedAt), (NSInteger)newVersionList.count - 1);
     }
 
     self.versionList = newVersionList;
