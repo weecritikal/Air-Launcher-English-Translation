@@ -43,6 +43,14 @@
 // Hero 卡片（顶部 Profile 信息卡片）
 @property (nonatomic, strong, nullable) UIView *heroCard;
 
+// 双列 tableView（横屏双列布局）
+// leftTableView：竖屏时显示所有 sections（0-4）；横屏时只显示 sections 0,1（版本信息、资源管理）
+// rightTableView：仅横屏时显示，显示 sections 2,3,4（组件安装、高级设置、服务器）
+@property (nonatomic, strong, nullable) UITableView *leftTableView;
+@property (nonatomic, strong, nullable) UITableView *rightTableView;
+// Hero 卡片容器（包含 heroCard，作为 leftTableView 的 tableHeaderView）
+@property (nonatomic, strong, nullable) UIView *heroContainer;
+
 @end
 
 @implementation ProfileSettingsViewController
@@ -78,19 +86,30 @@
     self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone target:self action:@selector(actionDone)];
     self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemClose target:self action:@selector(actionClose)];
 
-    // 设置表格
-    self.tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStyleInsetGrouped];
-    self.tableView.keyboardDismissMode = UIScrollViewKeyboardDismissModeInteractive;
+    // 设置表格（双列布局：leftTableView 主表格，rightTableView 仅横屏时显示）
+    // UIViewController 的 self.view 是容器视图，包含两个 tableView
+    self.leftTableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStyleInsetGrouped];
+    self.leftTableView.keyboardDismissMode = UIScrollViewKeyboardDismissModeInteractive;
+    self.leftTableView.dataSource = self;
+    self.leftTableView.delegate = self;
+    self.leftTableView.backgroundColor = [UIColor clearColor];
+    self.leftTableView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
+    [self.view addSubview:self.leftTableView];
+
+    self.rightTableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStyleInsetGrouped];
+    self.rightTableView.keyboardDismissMode = UIScrollViewKeyboardDismissModeInteractive;
+    self.rightTableView.dataSource = self;
+    self.rightTableView.delegate = self;
+    self.rightTableView.backgroundColor = [UIColor clearColor];
+    self.rightTableView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
+    self.rightTableView.hidden = YES; // 默认隐藏，横屏时显示
+    [self.view addSubview:self.rightTableView];
+
     // 适配自定义启动器背景：透明背景让底层背景毛玻璃透出。
-    // 之前用 systemBackgroundColor 遮挡底层 VersionManagerViewController 的 collection view，
-    // 但现在 VersionManagerViewController 已适配背景透明（viewDidLoad 调用
-    // makeViewControllerTransparent + applyEffectToNavigationBar），不再需要遮挡。
     // 两条进入路径（push 和 showProfileEditor modal）都使用 clearColor，
     // 统一由 BackgroundManager 管理背景效果。
-    self.tableView.backgroundColor = [UIColor clearColor];
     // 适配自定义启动器背景：给 tableView 设置毛玻璃 backgroundView，遮挡栈底 VC 内容。
     // 修复"点击版本管理进入版本设置后前一页面未及时消失"问题：
-    // ProfileSettingsViewController 是 UITableViewController，self.view == self.tableView。
     // 若 tableView 完全透明，push 后会透出栈底 VersionManagerViewController 的卡片，造成"前一页未消失"。
     // 这里给 backgroundView 设置 UIVisualEffectView（毛玻璃），既能模糊并透出全局背景图，
     // 又能遮挡栈底 VC 内容，同时保持视觉一致性。
@@ -100,7 +119,6 @@
         [[BackgroundManager sharedManager] applyEffectToNavigationBar:self.navigationController.navigationBar];
     }
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
-    self.tableView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
     self.extendedLayoutIncludesOpaqueBars = YES;
     self.edgesForExtendedLayout = UIRectEdgeAll;
 
@@ -145,21 +163,92 @@
 
 - (void)viewWillTransitionToSize:(CGSize)size withTransitionCoordinator:(id<UIViewControllerTransitionCoordinator>)coordinator {
     [super viewWillTransitionToSize:size withTransitionCoordinator:coordinator];
-    // 横竖屏切换时，重新计算 tableHeaderView（Hero 卡片）的高度
+    // 横竖屏切换时，重新计算 tableHeaderView（Hero 卡片）的高度，并切换双列布局
     [coordinator animateAlongsideTransition:^(id<UIViewControllerTransitionCoordinatorContext>  _Nonnull context) {
-        UIView *header = self.tableView.tableHeaderView;
-        if (!header) return;
-        CGFloat width = size.width;
-        // 重新计算 fittingHeight
-        header.frame = CGRectMake(0, 0, width, 0);
-        [header setNeedsLayout];
-        [header layoutIfNeeded];
-        CGFloat fittingHeight = [header systemLayoutSizeFittingSize:CGSizeMake(width, UILayoutFittingCompressedSize)
-                                                withHorizontalFittingPriority:UILayoutPriorityRequired
-                                                      verticalFittingPriority:UILayoutPriorityFittingSizeLevel].height;
-        header.frame = CGRectMake(0, 0, width, fittingHeight);
-        self.tableView.tableHeaderView = header;
-    } completion:nil];
+        // 切换 rightTableView 的显示状态（横屏时显示）
+        BOOL landscape = size.width > size.height;
+        self.rightTableView.hidden = !landscape;
+
+        // 重新计算 Hero 卡片高度（仅 leftTableView 显示 Hero 卡片）
+        UIView *header = self.leftTableView.tableHeaderView;
+        if (header) {
+            // 横屏时 leftTableView 宽度是总宽度的一半（减去间距）
+            CGFloat headerWidth = landscape ? (size.width / 2.0 - 8.0) : size.width;
+            header.frame = CGRectMake(0, 0, headerWidth, 0);
+            [header setNeedsLayout];
+            [header layoutIfNeeded];
+            CGFloat fittingHeight = [header systemLayoutSizeFittingSize:CGSizeMake(headerWidth, UILayoutFittingCompressedSize)
+                                                    withHorizontalFittingPriority:UILayoutPriorityRequired
+                                                          verticalFittingPriority:UILayoutPriorityFittingSizeLevel].height;
+            header.frame = CGRectMake(0, 0, headerWidth, fittingHeight);
+            self.leftTableView.tableHeaderView = header;
+        }
+
+        // 重新加载两个 tableView 的数据（visible sections 会根据方向变化）
+        [self.leftTableView reloadData];
+        [self.rightTableView reloadData];
+    } completion:^(id<UIViewControllerTransitionCoordinatorContext>  _Nonnull context) {
+        // 转场完成后再次应用背景模糊（frame 已稳定）
+        [self applyBackgroundBlurToTableView];
+    }];
+}
+
+- (void)viewWillLayoutSubviews {
+    [super viewWillLayoutSubviews];
+    [self layoutDualTableViews];
+}
+
+/// 布局双列 tableView
+/// - 竖屏：leftTableView 占满整个 view，rightTableView 隐藏
+/// - 横屏：leftTableView 占左半部分，rightTableView 占右半部分，中间 16pt 间距
+- (void)layoutDualTableViews {
+    CGRect bounds = self.view.bounds;
+    BOOL landscape = [self isLandscape];
+
+    if (landscape) {
+        // 横屏双列布局
+        CGFloat spacing = 16.0;
+        CGFloat halfWidth = (bounds.size.width - spacing) / 2.0;
+        self.leftTableView.frame = CGRectMake(0, 0, halfWidth, bounds.size.height);
+        self.rightTableView.frame = CGRectMake(halfWidth + spacing, 0, halfWidth, bounds.size.height);
+        self.rightTableView.hidden = NO;
+    } else {
+        // 竖屏单列布局
+        self.leftTableView.frame = bounds;
+        self.rightTableView.hidden = YES;
+    }
+
+    // 重新计算 Hero 卡片（tableHeaderView）的宽度和高度
+    [self relayoutHeroHeader];
+
+    // 同步背景模糊视图的 frame
+    [self syncBackgroundBlurFrames];
+}
+
+/// 重新计算 Hero 卡片（tableHeaderView）的宽度和高度
+- (void)relayoutHeroHeader {
+    UIView *header = self.leftTableView.tableHeaderView;
+    if (!header) return;
+    CGFloat width = self.leftTableView.bounds.size.width;
+    if (width == 0) return;
+    header.frame = CGRectMake(0, 0, width, 0);
+    [header setNeedsLayout];
+    [header layoutIfNeeded];
+    CGFloat fittingHeight = [header systemLayoutSizeFittingSize:CGSizeMake(width, UILayoutFittingCompressedSize)
+                                            withHorizontalFittingPriority:UILayoutPriorityRequired
+                                                  verticalFittingPriority:UILayoutPriorityFittingSizeLevel].height;
+    header.frame = CGRectMake(0, 0, width, fittingHeight);
+    self.leftTableView.tableHeaderView = header;
+}
+
+/// 同步 leftTableView 和 rightTableView 的 backgroundView frame
+- (void)syncBackgroundBlurFrames {
+    for (UITableView *tv in @[self.leftTableView, self.rightTableView]) {
+        if (!tv || tv.hidden) continue;
+        if (tv.backgroundView) {
+            tv.backgroundView.frame = tv.bounds;
+        }
+    }
 }
 
 - (void)reloadVersionList {
@@ -298,7 +387,7 @@
     ]];
 
     // 手动计算 container 高度并设置 tableHeaderView
-    CGFloat width = self.tableView.bounds.size.width;
+    CGFloat width = self.leftTableView.bounds.size.width;
     if (width == 0) width = [UIScreen mainScreen].bounds.size.width;
     container.frame = CGRectMake(0, 0, width, 0);
     [container setNeedsLayout];
@@ -307,7 +396,8 @@
                                                withHorizontalFittingPriority:UILayoutPriorityRequired
                                                      verticalFittingPriority:UILayoutPriorityFittingSizeLevel].height;
     container.frame = CGRectMake(0, 0, width, fittingHeight);
-    self.tableView.tableHeaderView = container;
+    self.heroContainer = container;
+    self.leftTableView.tableHeaderView = container;
 }
 
 /// 更新 Hero 卡片内容（用户修改名称/版本后调用）
@@ -395,14 +485,84 @@
     }
     [advancedRows addObjectsFromArray:@[@"Java版本", @"内存分配", @"JVM 启动参数", @"清除JVM参数"]];
 
-    // 重构（Air-Design v1.2）：4 个 Bento 分组
-    // 资源管理项（模组/光影/资源包/数据包/世界）归拢到"版本信息与资源管理"分组
+    // 重构（Air-Design v1.2）：5 个 Bento 分组
+    // 顺序与横屏布局对应：左侧（0,1）+ 右侧（2,3,4）
+    //   0: 版本信息  - 名称 / 游戏版本 / 游戏目录
+    //   1: 资源管理  - 模组 / 光影 / 资源包 / 数据包 / 世界
+    //   2: 组件安装  - Fabric API / OptiFine
+    //   3: 高级设置  - 渲染器 / 图形 API / Java / 内存 / JVM 参数
+    //   4: 服务器    - 服务器地址
     self.sections = @[
-        @[@"名称", @"游戏版本", @"游戏目录", @"模组管理", @"光影管理", @"资源包管理", @"数据包管理", @"世界管理"],
+        @[@"名称", @"游戏版本", @"游戏目录"],
+        @[@"模组管理", @"光影管理", @"资源包管理", @"数据包管理", @"世界管理"],
+        @[@"Fabric API", @"OptiFine"],
         [advancedRows copy],
-        @[@"服务器地址"],
-        @[@"Fabric API", @"OptiFine"]
+        @[@"服务器地址"]
     ];
+}
+
+#pragma mark - Dual Table View Helpers
+
+/// 是否处于横屏（宽度 > 高度）
+- (BOOL)isLandscape {
+    CGSize size = self.view.bounds.size;
+    return size.width > size.height;
+}
+
+/// 返回指定 tableView 显示的全局 section 索引数组
+/// - leftTableView：竖屏时显示所有 sections (0,1,2,3,4)；横屏时只显示 (0,1)
+/// - rightTableView：仅横屏时显示 (2,3,4)
+- (NSArray<NSNumber *> *)visibleSectionsForTableView:(UITableView *)tableView {
+    if (tableView == self.rightTableView) {
+        return @[@2, @3, @4];
+    }
+    // leftTableView
+    if ([self isLandscape]) {
+        return @[@0, @1];
+    }
+    return @[@0, @1, @2, @3, @4];
+}
+
+/// 将 tableView 的本地 section 索引转换为全局 section 索引
+- (NSInteger)globalSectionForTableView:(UITableView *)tableView localSection:(NSInteger)localSection {
+    NSArray<NSNumber *> *visible = [self visibleSectionsForTableView:tableView];
+    if (localSection < 0 || localSection >= (NSInteger)visible.count) return -1;
+    return visible[localSection].integerValue;
+}
+
+/// 主 tableView（用于与外部代码交互，如 Hero 卡片、背景模糊等）
+- (UITableView *)mainTableView {
+    return self.leftTableView;
+}
+
+/// 重新加载所有 tableView 的数据
+- (void)reloadAllTableViews {
+    [self.leftTableView reloadData];
+    if (self.rightTableView && !self.rightTableView.hidden) {
+        [self.rightTableView reloadData];
+    }
+}
+
+/// 根据全局 section 和 row 查找 cell（用于 popover sourceView 等）
+/// 遍历 leftTableView 和 rightTableView，找到包含该全局 section 的 tableView
+- (UITableViewCell *)cellForGlobalSection:(NSInteger)globalSection row:(NSInteger)row {
+    // 检查 leftTableView
+    NSArray<NSNumber *> *leftVisible = [self visibleSectionsForTableView:self.leftTableView];
+    NSInteger leftLocal = [leftVisible indexOfObject:@(globalSection)];
+    if (leftLocal != NSNotFound) {
+        NSIndexPath *ip = [NSIndexPath indexPathForRow:row inSection:leftLocal];
+        return [self.leftTableView cellForRowAtIndexPath:ip];
+    }
+    // 检查 rightTableView
+    if (self.rightTableView && !self.rightTableView.hidden) {
+        NSArray<NSNumber *> *rightVisible = [self visibleSectionsForTableView:self.rightTableView];
+        NSInteger rightLocal = [rightVisible indexOfObject:@(globalSection)];
+        if (rightLocal != NSNotFound) {
+            NSIndexPath *ip = [NSIndexPath indexPathForRow:row inSection:rightLocal];
+            return [self.rightTableView cellForRowAtIndexPath:ip];
+        }
+    }
+    return nil;
 }
 
 #pragma mark - Save
@@ -454,32 +614,37 @@
 #pragma mark - Table View Data Source
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
-    return self.sections.count;
+    return [[self visibleSectionsForTableView:tableView] count];
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    return [self.sections[section] count];
+    NSInteger globalSection = [self globalSectionForTableView:tableView localSection:section];
+    if (globalSection < 0 || globalSection >= (NSInteger)self.sections.count) return 0;
+    return [self.sections[globalSection] count];
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
-    switch (section) {
-        case 0: return @"版本信息与资源管理";
-        case 1: return @"高级设置";
-        case 2: return @"服务器";
-        case 3: return @"组件安装";
+    NSInteger globalSection = [self globalSectionForTableView:tableView localSection:section];
+    switch (globalSection) {
+        case 0: return @"版本信息";
+        case 1: return @"资源管理";
+        case 2: return @"组件安装";
+        case 3: return @"高级设置";
+        case 4: return @"服务器";
         default: return nil;
     }
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
-    if (section == 2) {
-        return @"启动游戏后自动加入此服务器（参照 FCL）\n格式：host 或 host:port（IPv6 为 [host]:port），留空则不自动加入";
-    }
-    if (section == 0) {
+    NSInteger globalSection = [self globalSectionForTableView:tableView localSection:section];
+    if (globalSection == 0) {
         return @"游戏目录决定存档/模组/配置文件的隔离位置\n\".\" = 使用当前游戏目录切换选中的实例\n点击可修改为相对/绝对路径实现版本隔离";
     }
-    if (section == 3) {
+    if (globalSection == 2) {
         return @"Fabric API：Fabric 模组的依赖库（仅 Fabric 加载器有效）\nOptiFine：OptiFine 优化模组（仅原版/Forge 有效）";
+    }
+    if (globalSection == 4) {
+        return @"启动游戏后自动加入此服务器（参照 FCL）\n格式：host 或 host:port（IPv6 为 [host]:port），留空则不自动加入";
     }
     return nil;
 }
@@ -498,12 +663,18 @@
     cell.imageView.image = nil;
     cell.textLabel.text = nil;
     cell.detailTextLabel.text = nil;
+    // 重置可能被"清除JVM参数"修改过的颜色
+    cell.imageView.tintColor = nil;
+    cell.textLabel.textColor = [UIColor labelColor];
 
-    NSString *title = self.sections[indexPath.section][indexPath.row];
+    NSInteger globalSection = [self globalSectionForTableView:tableView localSection:indexPath.section];
+    if (globalSection < 0 || globalSection >= (NSInteger)self.sections.count) return cell;
+
+    NSString *title = self.sections[globalSection][indexPath.row];
     cell.textLabel.text = title;
 
-    switch (indexPath.section) {
-        case 0: // 版本信息与资源管理
+    switch (globalSection) {
+        case 0: // 版本信息
             if ([title isEqualToString:@"名称"]) {
                 cell.imageView.image = [UIImage systemImageNamed:@"tag"];
                 cell.accessoryView = [self buildNameTextField];
@@ -517,7 +688,11 @@
                 cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
                 NSString *gameDir = self.profile[@"gameDir"] ?: @".";
                 cell.detailTextLabel.text = gameDir;
-            } else if ([title isEqualToString:@"模组管理"]) {
+            }
+            break;
+
+        case 1: // 资源管理
+            if ([title isEqualToString:@"模组管理"]) {
                 cell.imageView.image = [UIImage systemImageNamed:@"puzzlepiece.fill"];
                 cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
             } else if ([title isEqualToString:@"光影管理"]) {
@@ -535,7 +710,21 @@
             }
             break;
 
-        case 1: // 高级设置
+        case 2: // 组件安装
+            if ([title isEqualToString:@"Fabric API"]) {
+                cell.imageView.image = [UIImage systemImageNamed:@"bolt.fill"];
+                cell.imageView.tintColor = [UIColor systemOrangeColor];
+                cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+                cell.detailTextLabel.text = [self isFabricProfile] ? @"点击安装" : @"仅 Fabric 有效";
+            } else if ([title isEqualToString:@"OptiFine"]) {
+                cell.imageView.image = [UIImage systemImageNamed:@"speedometer"];
+                cell.imageView.tintColor = [UIColor systemRedColor];
+                cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+                cell.detailTextLabel.text = [self isOptiFineCompatibleProfile] ? @"点击安装" : @"仅原版/Forge 有效";
+            }
+            break;
+
+        case 3: // 高级设置
             if ([title isEqualToString:@"渲染器"]) {
                 cell.imageView.image = [UIImage systemImageNamed:@"cpu"];
                 cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
@@ -564,23 +753,9 @@
             }
             break;
 
-        case 2: // 服务器地址（FCL 风格）
+        case 4: // 服务器地址（FCL 风格）
             cell.imageView.image = [UIImage systemImageNamed:@"antenna.radiowaves.left.and.right"];
             cell.accessoryView = [self buildServerIpTextField];
-            break;
-
-        case 3: // 组件安装
-            if ([title isEqualToString:@"Fabric API"]) {
-                cell.imageView.image = [UIImage systemImageNamed:@"bolt.fill"];
-                cell.imageView.tintColor = [UIColor systemOrangeColor];
-                cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
-                cell.detailTextLabel.text = [self isFabricProfile] ? @"点击安装" : @"仅 Fabric 有效";
-            } else if ([title isEqualToString:@"OptiFine"]) {
-                cell.imageView.image = [UIImage systemImageNamed:@"speedometer"];
-                cell.imageView.tintColor = [UIColor systemRedColor];
-                cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
-                cell.detailTextLabel.text = [self isOptiFineCompatibleProfile] ? @"点击安装" : @"仅原版/Forge 有效";
-            }
             break;
     }
 
@@ -858,7 +1033,7 @@
         self.javaArgs = @"";
         self.javaArgsTextField.text = @"";
         [self saveSettings];
-        [self.tableView reloadData];
+        [self reloadAllTableViews];
     }]];
     [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
     if (alert.popoverPresentationController) {
@@ -906,10 +1081,13 @@
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
 
-    NSString *title = self.sections[indexPath.section][indexPath.row];
+    NSInteger globalSection = [self globalSectionForTableView:tableView localSection:indexPath.section];
+    if (globalSection < 0 || globalSection >= (NSInteger)self.sections.count) return;
 
-    switch (indexPath.section) {
-        case 0: // 版本信息与资源管理
+    NSString *title = self.sections[globalSection][indexPath.row];
+
+    switch (globalSection) {
+        case 0: // 版本信息
             if ([title isEqualToString:@"名称"]) {
                 // 聚焦名称输入框
                 if (self.nameTextField) [self.nameTextField becomeFirstResponder];
@@ -918,7 +1096,11 @@
                 if (self.versionTextField) [self.versionTextField becomeFirstResponder];
             } else if ([title isEqualToString:@"游戏目录"]) {
                 [self editGameDir];
-            } else if ([title isEqualToString:@"模组管理"]) {
+            }
+            break;
+
+        case 1: // 资源管理
+            if ([title isEqualToString:@"模组管理"]) {
                 [self openModsManager];
             } else if ([title isEqualToString:@"光影管理"]) {
                 [self openShadersManager];
@@ -931,7 +1113,15 @@
             }
             break;
 
-        case 1: // 高级设置
+        case 2: // 组件安装
+            if ([title isEqualToString:@"Fabric API"]) {
+                [self installFabricAPIStandalone];
+            } else if ([title isEqualToString:@"OptiFine"]) {
+                [self installOptiFineStandalone];
+            }
+            break;
+
+        case 3: // 高级设置
             if ([title isEqualToString:@"渲染器"]) {
                 [self showRendererSelector];
             } else if ([title isEqualToString:@"图形 API"]) {
@@ -947,22 +1137,14 @@
             }
             break;
 
-        case 2: // 服务器地址
-            [self focusTextFieldInCellAtIndexPath:indexPath];
-            break;
-
-        case 3: // 组件安装
-            if ([title isEqualToString:@"Fabric API"]) {
-                [self installFabricAPIStandalone];
-            } else if ([title isEqualToString:@"OptiFine"]) {
-                [self installOptiFineStandalone];
-            }
+        case 4: // 服务器地址
+            [self focusTextFieldInCellAtIndexPath:indexPath inTableView:tableView];
             break;
     }
 }
 
-- (void)focusTextFieldInCellAtIndexPath:(NSIndexPath *)indexPath {
-    UITableViewCell *cell = [self.tableView cellForRowAtIndexPath:indexPath];
+- (void)focusTextFieldInCellAtIndexPath:(NSIndexPath *)indexPath inTableView:(UITableView *)tableView {
+    UITableViewCell *cell = [tableView cellForRowAtIndexPath:indexPath];
     if (!cell) return;
     UITextField *textField = [self findTextFieldInView:cell.contentView];
     if ([textField canBecomeFirstResponder]) {
@@ -1011,7 +1193,7 @@
     [alert addAction:[UIAlertAction actionWithTitle:@"恢复默认" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
         self.profile[@"gameDir"] = @".";
         [self saveSettings];
-        [self.tableView reloadData];
+        [self reloadAllTableViews];
         [self updateHeroCard];
     }]];
 
@@ -1025,7 +1207,7 @@
         }
         self.profile[@"gameDir"] = newGameDir;
         [self saveSettings];
-        [self.tableView reloadData];
+        [self reloadAllTableViews];
         [self updateHeroCard];
     }]];
 
@@ -1710,15 +1892,14 @@
                                                 handler:^(UIAlertAction * _Nonnull action) {
             self.selectedRenderer = renderer;
             [self saveSettings];
-            [self.tableView reloadData];
+            [self reloadAllTableViews];
         }]];
     }
 
     [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
 
     if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
-        NSIndexPath *indexPath = [NSIndexPath indexPathForRow:0 inSection:3];
-        UITableViewCell *cell = [self.tableView cellForRowAtIndexPath:indexPath];
+        UITableViewCell *cell = [self cellForGlobalSection:3 row:0];
         alert.popoverPresentationController.sourceView = cell ?: self.view;
         alert.popoverPresentationController.sourceRect = cell ? cell.bounds : self.view.bounds;
     }
@@ -1773,15 +1954,14 @@
                                                 handler:^(UIAlertAction * _Nonnull action) {
             self.selectedGraphicsApi = key;
             [self saveSettings];
-            [self.tableView reloadData];
+            [self reloadAllTableViews];
         }]];
     }
 
     [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
 
     if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
-        NSIndexPath *indexPath = [NSIndexPath indexPathForRow:1 inSection:3];
-        UITableViewCell *cell = [self.tableView cellForRowAtIndexPath:indexPath];
+        UITableViewCell *cell = [self cellForGlobalSection:3 row:1];
         alert.popoverPresentationController.sourceView = cell ?: self.view;
         alert.popoverPresentationController.sourceRect = cell ? cell.bounds : self.view.bounds;
     }
@@ -1813,15 +1993,14 @@
                                                 handler:^(UIAlertAction * _Nonnull action) {
             self.selectedJavaVersion = ver;
             [self saveSettings];
-            [self.tableView reloadData];
+            [self reloadAllTableViews];
         }]];
     }
 
     [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
 
     if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
-        NSIndexPath *indexPath = [NSIndexPath indexPathForRow:1 inSection:3];
-        UITableViewCell *cell = [self.tableView cellForRowAtIndexPath:indexPath];
+        UITableViewCell *cell = [self cellForGlobalSection:3 row:1];
         alert.popoverPresentationController.sourceView = cell ?: self.view;
         alert.popoverPresentationController.sourceRect = cell ? cell.bounds : self.view.bounds;
     }
@@ -1849,15 +2028,14 @@
                                                 handler:^(UIAlertAction * _Nonnull action) {
             self.allocatedMemory = mem;
             [self saveSettings];
-            [self.tableView reloadData];
+            [self reloadAllTableViews];
         }]];
     }
 
     [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
 
     if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
-        NSIndexPath *indexPath = [NSIndexPath indexPathForRow:2 inSection:3];
-        UITableViewCell *cell = [self.tableView cellForRowAtIndexPath:indexPath];
+        UITableViewCell *cell = [self cellForGlobalSection:3 row:2];
         alert.popoverPresentationController.sourceView = cell ?: self.view;
         alert.popoverPresentationController.sourceRect = cell ? cell.bounds : self.view.bounds;
     }
@@ -1939,7 +2117,7 @@
         // 背景效果切换后重新应用 tableView 毛玻璃 backgroundView，
         // 否则切换毛玻璃↔半透明后旧 backgroundView 仍存在造成视觉不一致
         [self applyBackgroundBlurToTableView];
-        [self.tableView reloadData];
+        [self reloadAllTableViews];
     });
 }
 
@@ -1948,40 +2126,43 @@
 ///   模糊全局背景图但仍能透出，并遮挡栈底 VersionManager 的卡片。
 /// - 无自定义背景时：使用 systemBackgroundColor，与系统默认外观一致。
 - (void)applyBackgroundBlurToTableView {
-    if (!self.tableView) return;
-    // 清理旧 backgroundView（避免叠加）
-    self.tableView.backgroundView = nil;
+    // 应用到两个 tableView（leftTableView 和 rightTableView）
+    for (UITableView *tv in @[self.leftTableView, self.rightTableView]) {
+        if (!tv) continue;
+        // 清理旧 backgroundView（避免叠加）
+        tv.backgroundView = nil;
 
-    if ([[BackgroundManager sharedManager] hasBackground]) {
-        // 有自定义背景：使用毛玻璃 backgroundView 模糊背景并遮挡栈底 VC
-        UIBlurEffect *blur;
-        if (@available(iOS 13.0, *)) {
-            blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemThinMaterial];
+        if ([[BackgroundManager sharedManager] hasBackground]) {
+            // 有自定义背景：使用毛玻璃 backgroundView 模糊背景并遮挡栈底 VC
+            UIBlurEffect *blur;
+            if (@available(iOS 13.0, *)) {
+                blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemThinMaterial];
+            } else {
+                blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleLight];
+            }
+            UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:blur];
+            blurView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+            blurView.frame = tv.bounds;
+            // 按 uiEffect 调整透明度：毛玻璃模式保持默认 0.7 通透，半透明模式按 uiOpacity
+            BackgroundUIEffect effect = [BackgroundManager sharedManager].uiEffect;
+            if (effect == BackgroundUIEffectBlur) {
+                blurView.alpha = 0.85;
+            } else {
+                blurView.alpha = MAX(0.5, [BackgroundManager sharedManager].uiOpacity);
+            }
+            tv.backgroundView = blurView;
         } else {
-            blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleLight];
+            // 无自定义背景：使用系统默认色，保持原 UI 风格
+            if (@available(iOS 13.0, *)) {
+                UIView *bg = [[UIView alloc] initWithFrame:tv.bounds];
+                bg.backgroundColor = [UIColor systemBackgroundColor];
+                bg.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+                tv.backgroundView = bg;
+            }
         }
-        UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:blur];
-        blurView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-        blurView.frame = self.tableView.bounds;
-        // 按 uiEffect 调整透明度：毛玻璃模式保持默认 0.7 通透，半透明模式按 uiOpacity
-        BackgroundUIEffect effect = [BackgroundManager sharedManager].uiEffect;
-        if (effect == BackgroundUIEffectBlur) {
-            blurView.alpha = 0.85;
-        } else {
-            blurView.alpha = MAX(0.5, [BackgroundManager sharedManager].uiOpacity);
-        }
-        self.tableView.backgroundView = blurView;
-    } else {
-        // 无自定义背景：使用系统默认色，保持原 UI 风格
-        if (@available(iOS 13.0, *)) {
-            UIView *bg = [[UIView alloc] initWithFrame:self.tableView.bounds];
-            bg.backgroundColor = [UIColor systemBackgroundColor];
-            bg.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-            self.tableView.backgroundView = bg;
-        }
+        // tableView 本身保持透明，让 backgroundView 显示
+        tv.backgroundColor = [UIColor clearColor];
     }
-    // tableView 本身保持透明，让 backgroundView 显示
-    self.tableView.backgroundColor = [UIColor clearColor];
 }
 
 #pragma mark - UA-aware download helper
