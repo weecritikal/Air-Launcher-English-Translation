@@ -1134,7 +1134,13 @@
 - (void)setupHeroHeader {
     // 父类 viewDidLoad 已将 searchController.searchBar 设置为 tableHeaderView
     // 这里取出 searchBar，与 Hero 卡片一起重新包装为新的 tableHeaderView
-    UISearchBar *searchBar = self.searchController.searchBar;
+    // 注意：searchController 是父类 PLPrefTableViewController 的私有属性，子类无法直接访问，
+    // 但父类已将 searchBar 设置为 tableView.tableHeaderView，可直接取出。
+    UISearchBar *searchBar = nil;
+    UIView *currentHeader = self.tableView.tableHeaderView;
+    if ([currentHeader isKindOfClass:[UISearchBar class]]) {
+        searchBar = (UISearchBar *)currentHeader;
+    }
     [searchBar removeFromSuperview];
 
     // 让 searchBar 适配自定义背景（透明、文字色跟随系统）
@@ -1256,7 +1262,7 @@
     container.frame = CGRectMake(0, 0, width, 0);
     [container setNeedsLayout];
     [container layoutIfNeeded];
-    CGFloat fittingHeight = [container systemLayoutSizeFittingSize:CGSizeMake(width, UILayoutFittingCompressedSize)
+    CGFloat fittingHeight = [container systemLayoutSizeFittingSize:CGSizeMake(width, 0)
                                                withHorizontalFittingPriority:UILayoutPriorityRequired
                                                      verticalFittingPriority:UILayoutPriorityFittingSizeLevel].height;
     container.frame = CGRectMake(0, 0, width, fittingHeight);
