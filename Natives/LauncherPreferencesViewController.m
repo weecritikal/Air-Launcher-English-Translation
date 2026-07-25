@@ -27,6 +27,8 @@
 @property(nonatomic) BOOL pickingMousePointer;
 // 当前正在选择的颜色偏好键（general.text_color / general.card_color）
 @property(nonatomic, copy, nullable) NSString *pickingColorPrefKey;
+// 顶部 Hero 卡片视图（App 名 + 版本 + 设备信息），作为 tableHeaderView 的一部分
+@property(nonatomic, strong, nullable) UIView *heroCard;
 @end
 
 @implementation LauncherPreferencesViewController
@@ -815,6 +817,11 @@
                     [self openMousePointerPicker];
                 }
             },
+            @{@"key": @"hardware_hide",
+                @"icon": @"eye.slash",
+                @"hasDetail": @YES,
+                @"type": self.typeSwitch,
+            },
             @{@"key": @"reset_mouse_pointer",
                 @"icon": @"arrow.counterclockwise",
                 @"hasDetail": @YES,
@@ -826,11 +833,6 @@
                     [NSNotificationCenter.defaultCenter postNotificationName:@"MousePointerUpdated" object:nil];
                     [self showSuccessMessage:@"鼠标指针已恢复默认"];
                 }
-            },
-            @{@"key": @"hardware_hide",
-                @"icon": @"eye.slash",
-                @"hasDetail": @YES,
-                @"type": self.typeSwitch,
             },
             @{@"key": @"recording_hide",
                 @"icon": @"eye.slash",
@@ -1074,6 +1076,10 @@
     // 以确保 view 与 tableView 均已就绪。
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
 
+    // 顶部 Hero 卡片：App 名 + 版本 + 设备信息（参照 Air-Design v1.2 L3 大卡片规范）
+    // 与搜索栏一起包装为 tableHeaderView，搜索栏在上、Hero 卡片在下
+    [self setupHeroHeader];
+
     // Apply transparent background if global background is active
     if ([[BackgroundManager sharedManager] hasBackground]) {
         self.view.backgroundColor = [UIColor clearColor];
@@ -1111,6 +1117,151 @@
                                              selector:@selector(openCurseForgeAPIKeySettings)
                                                  name:@"OpenCurseForgeAPIKeySettings"
                                                object:nil];
+}
+
+#pragma mark - Hero Header（顶部 App 信息卡片）
+
+- (NSString *)appName {
+    // 优先使用 CFBundleDisplayName（用户可见名称），其次 CFBundleName，兜底 "Air"
+    NSDictionary *info = NSBundle.mainBundle.infoDictionary;
+    NSString *name = info[@"CFBundleDisplayName"];
+    if (name.length == 0) {
+        name = info[@"CFBundleName"];
+    }
+    return name.length ? name : @"Air";
+}
+
+- (void)setupHeroHeader {
+    // 父类 viewDidLoad 已将 searchController.searchBar 设置为 tableHeaderView
+    // 这里取出 searchBar，与 Hero 卡片一起重新包装为新的 tableHeaderView
+    UISearchBar *searchBar = self.searchController.searchBar;
+    [searchBar removeFromSuperview];
+
+    // 让 searchBar 适配自定义背景（透明、文字色跟随系统）
+    searchBar.barTintColor = [UIColor clearColor];
+    searchBar.tintColor = accentColor();
+    searchBar.backgroundImage = [UIImage new]; // 去掉默认背景
+    if (@available(iOS 13.0, *)) {
+        searchBar.searchTextField.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.08];
+    }
+
+    // ===== Hero 卡片（L3 大卡片：16pt 圆角 + 半透明背景 + 毛玻璃 + 浅边框 + 中阴影）=====
+    UIView *heroCard = [[UIView alloc] init];
+    heroCard.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.14]; // surface-bright
+    heroCard.layer.cornerRadius = 16;
+    heroCard.layer.cornerCurve = kCACornerCurveContinuous;
+    heroCard.layer.borderWidth = 0.5;
+    heroCard.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.10].CGColor;
+    heroCard.layer.shadowColor = [UIColor blackColor].CGColor;
+    heroCard.layer.shadowOpacity = 0.12;
+    heroCard.layer.shadowRadius = 8;
+    heroCard.layer.shadowOffset = CGSizeMake(0, 3);
+    [[BackgroundManager sharedManager] applyEffectToView:heroCard];
+
+    // Hero 图标（56x56，14pt 圆角，accentColor 纯色背景，白色 SF Symbol）
+    UIImageView *iconView = [[UIImageView alloc] init];
+    iconView.image = [UIImage systemImageNamed:@"cube.fill"];
+    iconView.tintColor = [UIColor whiteColor];
+    iconView.contentMode = UIViewContentModeCenter;
+    iconView.backgroundColor = accentColor();
+    iconView.layer.cornerRadius = 14;
+    iconView.layer.cornerCurve = kCACornerCurveContinuous;
+    iconView.layer.masksToBounds = YES;
+    [heroCard addSubview:iconView];
+
+    // 标题（App 名，17pt bold，labelColor）
+    UILabel *titleLabel = [[UILabel alloc] init];
+    titleLabel.text = [self appName];
+    titleLabel.font = [UIFont systemFontOfSize:17 weight:UIFontWeightBold];
+    titleLabel.textColor = [UIColor labelColor];
+    titleLabel.adjustsFontSizeToFitWidth = YES;
+    titleLabel.minimumScaleFactor = 0.8;
+    [heroCard addSubview:titleLabel];
+
+    // 副标题（第一行 App 版本，第二行 设备名 · iOS 系统版本）
+    UILabel *subtitleLabel = [[UILabel alloc] init];
+    NSString *appVersion = NSBundle.mainBundle.infoDictionary[@"CFBundleShortVersionString"] ?: @"1.0";
+    NSString *deviceName = [HostManager GetModelName] ?: UIDevice.currentDevice.name ?: @"iPhone";
+    NSString *systemVersion = UIDevice.currentDevice.systemVersion ?: @"";
+    NSString *subtitle = [NSString stringWithFormat:@"v%@\n%@ · iOS %@", appVersion, deviceName, systemVersion];
+    subtitleLabel.text = subtitle;
+    subtitleLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightRegular];
+    subtitleLabel.textColor = [UIColor secondaryLabelColor];
+    subtitleLabel.numberOfLines = 0;
+    [heroCard addSubview:subtitleLabel];
+
+    // 右侧 chevron（12x12，tertiary-labelColor）
+    UIImageView *chevronView = [[UIImageView alloc] init];
+    chevronView.image = [UIImage systemImageNamed:@"chevron.right"];
+    chevronView.tintColor = [UIColor tertiaryLabelColor];
+    chevronView.contentMode = UIViewContentModeScaleAspectFit;
+    [heroCard addSubview:chevronView];
+
+    self.heroCard = heroCard;
+
+    // ===== 容器视图：searchBar（上）+ heroCard（下）=====
+    UIView *container = [[UIView alloc] init];
+    [container addSubview:searchBar];
+    [container addSubview:heroCard];
+
+    // 启用 AutoLayout
+    searchBar.translatesAutoresizingMaskIntoConstraints = NO;
+    heroCard.translatesAutoresizingMaskIntoConstraints = NO;
+    iconView.translatesAutoresizingMaskIntoConstraints = NO;
+    titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    subtitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    chevronView.translatesAutoresizingMaskIntoConstraints = NO;
+
+    [NSLayoutConstraint activateConstraints:@[
+        // searchBar：贴顶部、左右贴边
+        [searchBar.topAnchor constraintEqualToAnchor:container.topAnchor],
+        [searchBar.leadingAnchor constraintEqualToAnchor:container.leadingAnchor],
+        [searchBar.trailingAnchor constraintEqualToAnchor:container.trailingAnchor],
+
+        // heroCard：左右 16pt 外边距，顶部距 searchBar 8pt，底部距容器 8pt
+        [heroCard.topAnchor constraintEqualToAnchor:searchBar.bottomAnchor constant:8],
+        [heroCard.leadingAnchor constraintEqualToAnchor:container.leadingAnchor constant:16],
+        [heroCard.trailingAnchor constraintEqualToAnchor:container.trailingAnchor constant:-16],
+        [heroCard.bottomAnchor constraintEqualToAnchor:container.bottomAnchor constant:-8],
+
+        // iconView：56x56，左侧 16pt、上下 16pt
+        [iconView.leadingAnchor constraintEqualToAnchor:heroCard.leadingAnchor constant:16],
+        [iconView.topAnchor constraintEqualToAnchor:heroCard.topAnchor constant:16],
+        [iconView.bottomAnchor constraintEqualToAnchor:heroCard.bottomAnchor constant:-16],
+        [iconView.widthAnchor constraintEqualToConstant:56],
+        [iconView.heightAnchor constraintEqualToConstant:56],
+
+        // titleLabel：位于 iconView 右侧 14pt，顶部 18pt
+        [titleLabel.leadingAnchor constraintEqualToAnchor:iconView.trailingAnchor constant:14],
+        [titleLabel.topAnchor constraintEqualToAnchor:heroCard.topAnchor constant:18],
+        [titleLabel.trailingAnchor constraintEqualToAnchor:chevronView.leadingAnchor constant:-8],
+
+        // subtitleLabel：紧跟 titleLabel 下方 2pt
+        [subtitleLabel.leadingAnchor constraintEqualToAnchor:iconView.trailingAnchor constant:14],
+        [subtitleLabel.topAnchor constraintEqualToAnchor:titleLabel.bottomAnchor constant:2],
+        [subtitleLabel.trailingAnchor constraintEqualToAnchor:chevronView.leadingAnchor constant:-8],
+        [subtitleLabel.bottomAnchor constraintEqualToAnchor:heroCard.bottomAnchor constant:-16],
+
+        // chevronView：12x12，右侧 16pt，垂直居中
+        [chevronView.trailingAnchor constraintEqualToAnchor:heroCard.trailingAnchor constant:-16],
+        [chevronView.centerYAnchor constraintEqualToAnchor:heroCard.centerYAnchor],
+        [chevronView.widthAnchor constraintEqualToConstant:12],
+        [chevronView.heightAnchor constraintEqualToConstant:12],
+    ]];
+
+    // UITableView 不会根据 AutoLayout 自动计算 tableHeaderView 高度，
+    // 需要手动布局并设置 frame。使用 systemLayoutSizeFitting 计算合适高度。
+    CGFloat width = self.tableView.bounds.size.width;
+    if (width == 0) width = [UIScreen mainScreen].bounds.size.width;
+    container.frame = CGRectMake(0, 0, width, 0);
+    [container setNeedsLayout];
+    [container layoutIfNeeded];
+    CGFloat fittingHeight = [container systemLayoutSizeFittingSize:CGSizeMake(width, UILayoutFittingCompressedSize)
+                                               withHorizontalFittingPriority:UILayoutPriorityRequired
+                                                     verticalFittingPriority:UILayoutPriorityFittingSizeLevel].height;
+    container.frame = CGRectMake(0, 0, width, fittingHeight);
+
+    self.tableView.tableHeaderView = container;
 }
 
 - (void)dealloc {
