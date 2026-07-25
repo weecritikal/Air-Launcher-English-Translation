@@ -93,7 +93,9 @@
     self.leftTableView.dataSource = self;
     self.leftTableView.delegate = self;
     self.leftTableView.backgroundColor = [UIColor clearColor];
-    self.leftTableView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
+    // 使用 Automatic 让系统自动避开导航栏（修复内容上移被导航栏遮挡）
+    // 配合 edgesForExtendedLayout = UIRectEdgeAll 让背景延伸到导航栏后方
+    self.leftTableView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentAutomatic;
     [self.view addSubview:self.leftTableView];
 
     self.rightTableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStyleInsetGrouped];
@@ -101,7 +103,7 @@
     self.rightTableView.dataSource = self;
     self.rightTableView.delegate = self;
     self.rightTableView.backgroundColor = [UIColor clearColor];
-    self.rightTableView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
+    self.rightTableView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentAutomatic;
     self.rightTableView.hidden = YES; // 默认隐藏，横屏时显示
     [self.view addSubview:self.rightTableView];
 
