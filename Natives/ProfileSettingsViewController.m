@@ -40,6 +40,8 @@
 @property (nonatomic, assign) NSInteger versionSelectedAt;
 // 原始名称，用于重命名检测
 @property (nonatomic, copy) NSString *originalName;
+// Hero 卡片（顶部 Profile 信息卡片）
+@property (nonatomic, strong, nullable) UIView *heroCard;
 
 @end
 
@@ -114,6 +116,9 @@
     // 设置分区
     [self setupSections];
 
+    // 顶部 Hero 卡片（Profile 名 + 当前版本 pill + 游戏目录）
+    [self setupHeroCard];
+
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(handleBackgroundUIEffectChanged:)
                                                  name:@"BackgroundUIEffectChanged"
@@ -138,11 +143,192 @@
     [self applyBackgroundBlurToTableView];
 }
 
+- (void)viewWillTransitionToSize:(CGSize)size withTransitionCoordinator:(id<UIViewControllerTransitionCoordinator>)coordinator {
+    [super viewWillTransitionToSize:size withTransitionCoordinator:coordinator];
+    // 横竖屏切换时，重新计算 tableHeaderView（Hero 卡片）的高度
+    [coordinator animateAlongsideTransition:^(id<UIViewControllerTransitionCoordinatorContext>  _Nonnull context) {
+        UIView *header = self.tableView.tableHeaderView;
+        if (!header) return;
+        CGFloat width = size.width;
+        // 重新计算 fittingHeight
+        header.frame = CGRectMake(0, 0, width, 0);
+        [header setNeedsLayout];
+        [header layoutIfNeeded];
+        CGFloat fittingHeight = [header systemLayoutSizeFittingSize:CGSizeMake(width, UILayoutFittingCompressedSize)
+                                                withHorizontalFittingPriority:UILayoutPriorityRequired
+                                                      verticalFittingPriority:UILayoutPriorityFittingSizeLevel].height;
+        header.frame = CGRectMake(0, 0, width, fittingHeight);
+        self.tableView.tableHeaderView = header;
+    } completion:nil];
+}
+
 - (void)reloadVersionList {
     self.versionList = nil;
     self.versionSelectedAt = -1;
     if (self.versionPickerView && self.versionPickerView.window) {
         [self changeVersionType:nil];
+    }
+}
+
+#pragma mark - Hero Card
+
+/// 顶部 Hero 卡片：Profile 名 + 当前版本 pill + 游戏目录（Air-Design v1.2 L3 大卡片）
+- (void)setupHeroCard {
+    // ===== Hero 卡片容器（L3：16pt 圆角 + 半透明背景 + 毛玻璃 + 浅边框 + 中阴影）=====
+    UIView *heroCard = [[UIView alloc] init];
+    heroCard.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.14]; // surface-bright
+    heroCard.layer.cornerRadius = 16;
+    heroCard.layer.cornerCurve = kCACornerCurveContinuous;
+    heroCard.layer.borderWidth = 0.5;
+    heroCard.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.10].CGColor;
+    heroCard.layer.shadowColor = [UIColor blackColor].CGColor;
+    heroCard.layer.shadowOpacity = 0.12;
+    heroCard.layer.shadowRadius = 8;
+    heroCard.layer.shadowOffset = CGSizeMake(0, 3);
+    [[BackgroundManager sharedManager] applyEffectToView:heroCard];
+
+    // ===== Hero 图标（56x56，14pt 圆角，accentColor 背景，白色 cube.fill SF Symbol）=====
+    UIImageView *iconView = [[UIImageView alloc] init];
+    iconView.image = [UIImage systemImageNamed:@"cube.fill"];
+    iconView.tintColor = [UIColor whiteColor];
+    iconView.contentMode = UIViewContentModeCenter;
+    iconView.backgroundColor = accentColor();
+    iconView.layer.cornerRadius = 14;
+    iconView.layer.cornerCurve = kCACornerCurveContinuous;
+    iconView.layer.masksToBounds = YES;
+    [heroCard addSubview:iconView];
+
+    // ===== 标题（Profile 名，17pt bold，labelColor）=====
+    UILabel *titleLabel = [[UILabel alloc] init];
+    titleLabel.text = self.profile[@"name"] ?: self.originalName ?: @"New Profile";
+    titleLabel.font = [UIFont systemFontOfSize:17 weight:UIFontWeightBold];
+    titleLabel.textColor = [UIColor labelColor];
+    titleLabel.adjustsFontSizeToFitWidth = YES;
+    titleLabel.minimumScaleFactor = 0.8;
+    [heroCard addSubview:titleLabel];
+
+    // ===== 版本 pill（11pt bold，绿底白字，checkmark.circle.fill + 版本号）=====
+    UIView *versionPill = [[UIView alloc] init];
+    versionPill.backgroundColor = [UIColor systemGreenColor];
+    versionPill.layer.cornerRadius = 9;
+    versionPill.layer.cornerCurve = kCACornerCurveContinuous;
+    versionPill.layer.masksToBounds = YES;
+    [heroCard addSubview:versionPill];
+
+    UIImageView *pillIcon = [[UIImageView alloc] init];
+    pillIcon.image = [UIImage systemImageNamed:@"checkmark.circle.fill"];
+    pillIcon.tintColor = [UIColor whiteColor];
+    pillIcon.contentMode = UIViewContentModeScaleAspectFit;
+    [versionPill addSubview:pillIcon];
+
+    UILabel *pillLabel = [[UILabel alloc] init];
+    NSString *currentVersion = self.profile[@"lastVersionId"];
+    pillLabel.text = currentVersion.length > 0 ? currentVersion : @"未选择";
+    pillLabel.font = [UIFont systemFontOfSize:11 weight:UIFontWeightBold];
+    pillLabel.textColor = [UIColor whiteColor];
+    pillLabel.adjustsFontSizeToFitWidth = YES;
+    pillLabel.minimumScaleFactor = 0.7;
+    [versionPill addSubview:pillLabel];
+
+    // ===== 副标题（游戏目录，12pt regular，secondaryLabelColor）=====
+    UILabel *subtitleLabel = [[UILabel alloc] init];
+    NSString *gameDir = self.profile[@"gameDir"] ?: @".";
+    NSString *instanceName = getPrefObject(@"general.game_directory") ?: @"default";
+    subtitleLabel.text = [NSString stringWithFormat:@"%@ → /instances/%@", gameDir, instanceName];
+    subtitleLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightRegular];
+    subtitleLabel.textColor = [UIColor secondaryLabelColor];
+    subtitleLabel.adjustsFontSizeToFitWidth = YES;
+    subtitleLabel.minimumScaleFactor = 0.7;
+    [heroCard addSubview:subtitleLabel];
+
+    self.heroCard = heroCard;
+
+    // ===== 布局：使用 container 包装，设置为 tableHeaderView =====
+    UIView *container = [[UIView alloc] init];
+    [container addSubview:heroCard];
+
+    heroCard.translatesAutoresizingMaskIntoConstraints = NO;
+    iconView.translatesAutoresizingMaskIntoConstraints = NO;
+    titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    versionPill.translatesAutoresizingMaskIntoConstraints = NO;
+    pillIcon.translatesAutoresizingMaskIntoConstraints = NO;
+    pillLabel.translatesAutoresizingMaskIntoConstraints = NO;
+    subtitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
+
+    [NSLayoutConstraint activateConstraints:@[
+        // heroCard：左右 16pt 外边距，上下 8pt
+        [heroCard.topAnchor constraintEqualToAnchor:container.topAnchor constant:8],
+        [heroCard.leadingAnchor constraintEqualToAnchor:container.leadingAnchor constant:16],
+        [heroCard.trailingAnchor constraintEqualToAnchor:container.trailingAnchor constant:-16],
+        [heroCard.bottomAnchor constraintEqualToAnchor:container.bottomAnchor constant:-8],
+
+        // iconView：56x56，左侧 16pt，上下 16pt
+        [iconView.leadingAnchor constraintEqualToAnchor:heroCard.leadingAnchor constant:16],
+        [iconView.topAnchor constraintEqualToAnchor:heroCard.topAnchor constant:16],
+        [iconView.bottomAnchor constraintEqualToAnchor:heroCard.bottomAnchor constant:-16],
+        [iconView.widthAnchor constraintEqualToConstant:56],
+        [iconView.heightAnchor constraintEqualToConstant:56],
+
+        // titleLabel：iconView 右侧 14pt，顶部 16pt
+        [titleLabel.leadingAnchor constraintEqualToAnchor:iconView.trailingAnchor constant:14],
+        [titleLabel.topAnchor constraintEqualToAnchor:heroCard.topAnchor constant:16],
+        [titleLabel.trailingAnchor constraintLessThanOrEqualToAnchor:heroCard.trailingAnchor constant:-16],
+
+        // versionPill：titleLabel 下方 4pt，高度 18pt，左侧对齐 titleLabel
+        [versionPill.leadingAnchor constraintEqualToAnchor:titleLabel.leadingAnchor],
+        [versionPill.topAnchor constraintEqualToAnchor:titleLabel.bottomAnchor constant:4],
+        [versionPill.heightAnchor constraintEqualToConstant:18],
+
+        // pillIcon：8x8，左侧 6pt，垂直居中
+        [pillIcon.leadingAnchor constraintEqualToAnchor:versionPill.leadingAnchor constant:6],
+        [pillIcon.centerYAnchor constraintEqualToAnchor:versionPill.centerYAnchor],
+        [pillIcon.widthAnchor constraintEqualToConstant:10],
+        [pillIcon.heightAnchor constraintEqualToConstant:10],
+
+        // pillLabel：紧跟 pillIcon 右侧 2pt，右侧 6pt，垂直居中
+        [pillLabel.leadingAnchor constraintEqualToAnchor:pillIcon.trailingAnchor constant:2],
+        [pillLabel.centerYAnchor constraintEqualToAnchor:versionPill.centerYAnchor],
+        [pillLabel.trailingAnchor constraintEqualToAnchor:versionPill.trailingAnchor constant:-6],
+
+        // subtitleLabel：versionPill 下方 4pt，底部 16pt
+        [subtitleLabel.leadingAnchor constraintEqualToAnchor:titleLabel.leadingAnchor],
+        [subtitleLabel.topAnchor constraintEqualToAnchor:versionPill.bottomAnchor constant:4],
+        [subtitleLabel.trailingAnchor constraintLessThanOrEqualToAnchor:heroCard.trailingAnchor constant:-16],
+        [subtitleLabel.bottomAnchor constraintEqualToAnchor:heroCard.bottomAnchor constant:-16],
+    ]];
+
+    // 手动计算 container 高度并设置 tableHeaderView
+    CGFloat width = self.tableView.bounds.size.width;
+    if (width == 0) width = [UIScreen mainScreen].bounds.size.width;
+    container.frame = CGRectMake(0, 0, width, 0);
+    [container setNeedsLayout];
+    [container layoutIfNeeded];
+    CGFloat fittingHeight = [container systemLayoutSizeFittingSize:CGSizeMake(width, UILayoutFittingCompressedSize)
+                                               withHorizontalFittingPriority:UILayoutPriorityRequired
+                                                     verticalFittingPriority:UILayoutPriorityFittingSizeLevel].height;
+    container.frame = CGRectMake(0, 0, width, fittingHeight);
+    self.tableView.tableHeaderView = container;
+}
+
+/// 更新 Hero 卡片内容（用户修改名称/版本后调用）
+- (void)updateHeroCard {
+    if (!self.heroCard) return;
+    // 遍历 heroCard 子视图找到 titleLabel/versionPill/subtitleLabel 并更新
+    for (UIView *sub in self.heroCard.subviews) {
+        if ([sub isKindOfClass:[UILabel class]]) {
+            UILabel *label = (UILabel *)sub;
+            // 通过字体特征区分：17pt bold = 标题；12pt regular = 副标题；11pt bold = 版本 pill label
+            if (label.font.pointSize >= 16) {
+                label.text = self.profile[@"name"] ?: self.originalName ?: @"New Profile";
+            } else if (label.font.pointSize <= 11) {
+                NSString *currentVersion = self.profile[@"lastVersionId"];
+                label.text = currentVersion.length > 0 ? currentVersion : @"未选择";
+            } else {
+                NSString *gameDir = self.profile[@"gameDir"] ?: @".";
+                NSString *instanceName = getPrefObject(@"general.game_directory") ?: @"default";
+                label.text = [NSString stringWithFormat:@"%@ → /instances/%@", gameDir, instanceName];
+            }
+        }
     }
 }
 
@@ -209,16 +395,13 @@
     }
     [advancedRows addObjectsFromArray:@[@"Java版本", @"内存分配", @"JVM 启动参数", @"清除JVM参数"]];
 
+    // 重构（Air-Design v1.2）：4 个 Bento 分组
+    // 资源管理项（模组/光影/资源包/数据包/世界）归拢到"版本信息与资源管理"分组
     self.sections = @[
-        @[@"名称", @"游戏版本", @"游戏目录"],
-        @[@"模组管理"],
-        @[@"光影管理"],
+        @[@"名称", @"游戏版本", @"游戏目录", @"模组管理", @"光影管理", @"资源包管理", @"数据包管理", @"世界管理"],
         [advancedRows copy],
         @[@"服务器地址"],
-        @[@"Fabric API", @"OptiFine"],
-        @[@"资源包管理"],
-        @[@"数据包管理"],
-        @[@"世界管理"]
+        @[@"Fabric API", @"OptiFine"]
     ];
 }
 
@@ -280,27 +463,22 @@
 
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
     switch (section) {
-        case 0: return @"版本信息";
-        case 1: return @"模组";
-        case 2: return @"光影";
-        case 3: return @"高级设置";
-        case 4: return @"服务器";
-        case 5: return @"组件安装";
-        case 6: return @"资源包";
-        case 7: return @"数据包";
-        case 8: return @"世界";
+        case 0: return @"版本信息与资源管理";
+        case 1: return @"高级设置";
+        case 2: return @"服务器";
+        case 3: return @"组件安装";
         default: return nil;
     }
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
-    if (section == 4) {
+    if (section == 2) {
         return @"启动游戏后自动加入此服务器（参照 FCL）\n格式：host 或 host:port（IPv6 为 [host]:port），留空则不自动加入";
     }
     if (section == 0) {
         return @"游戏目录决定存档/模组/配置文件的隔离位置\n\".\" = 使用当前游戏目录切换选中的实例\n点击可修改为相对/绝对路径实现版本隔离";
     }
-    if (section == 5) {
+    if (section == 3) {
         return @"Fabric API：Fabric 模组的依赖库（仅 Fabric 加载器有效）\nOptiFine：OptiFine 优化模组（仅原版/Forge 有效）";
     }
     return nil;
@@ -325,7 +503,7 @@
     cell.textLabel.text = title;
 
     switch (indexPath.section) {
-        case 0: // 版本信息
+        case 0: // 版本信息与资源管理
             if ([title isEqualToString:@"名称"]) {
                 cell.imageView.image = [UIImage systemImageNamed:@"tag"];
                 cell.accessoryView = [self buildNameTextField];
@@ -339,20 +517,25 @@
                 cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
                 NSString *gameDir = self.profile[@"gameDir"] ?: @".";
                 cell.detailTextLabel.text = gameDir;
+            } else if ([title isEqualToString:@"模组管理"]) {
+                cell.imageView.image = [UIImage systemImageNamed:@"puzzlepiece.fill"];
+                cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+            } else if ([title isEqualToString:@"光影管理"]) {
+                cell.imageView.image = [UIImage systemImageNamed:@"paintbrush.fill"];
+                cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+            } else if ([title isEqualToString:@"资源包管理"]) {
+                cell.imageView.image = [UIImage systemImageNamed:@"rectangle.stack.fill"];
+                cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+            } else if ([title isEqualToString:@"数据包管理"]) {
+                cell.imageView.image = [UIImage systemImageNamed:@"shippingbox.fill"];
+                cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+            } else if ([title isEqualToString:@"世界管理"]) {
+                cell.imageView.image = [UIImage systemImageNamed:@"globe.asia.australia.fill"];
+                cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
             }
             break;
 
-        case 1: // 模组管理
-            cell.imageView.image = [UIImage systemImageNamed:@"puzzlepiece.fill"];
-            cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
-            break;
-
-        case 2: // 光影管理
-            cell.imageView.image = [UIImage systemImageNamed:@"paintbrush.fill"];
-            cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
-            break;
-
-        case 3: // 高级设置
+        case 1: // 高级设置
             if ([title isEqualToString:@"渲染器"]) {
                 cell.imageView.image = [UIImage systemImageNamed:@"cpu"];
                 cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
@@ -381,12 +564,12 @@
             }
             break;
 
-        case 4: // 服务器地址（FCL 风格）
+        case 2: // 服务器地址（FCL 风格）
             cell.imageView.image = [UIImage systemImageNamed:@"antenna.radiowaves.left.and.right"];
             cell.accessoryView = [self buildServerIpTextField];
             break;
 
-        case 5: // 组件安装
+        case 3: // 组件安装
             if ([title isEqualToString:@"Fabric API"]) {
                 cell.imageView.image = [UIImage systemImageNamed:@"bolt.fill"];
                 cell.imageView.tintColor = [UIColor systemOrangeColor];
@@ -398,21 +581,6 @@
                 cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
                 cell.detailTextLabel.text = [self isOptiFineCompatibleProfile] ? @"点击安装" : @"仅原版/Forge 有效";
             }
-            break;
-
-        case 6: // 资源包管理
-            cell.imageView.image = [UIImage systemImageNamed:@"rectangle.stack.fill"];
-            cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
-            break;
-
-        case 7: // 数据包管理
-            cell.imageView.image = [UIImage systemImageNamed:@"shippingbox.fill"];
-            cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
-            break;
-
-        case 8: // 世界管理
-            cell.imageView.image = [UIImage systemImageNamed:@"globe.asia.australia.fill"];
-            cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
             break;
     }
 
@@ -450,12 +618,14 @@
 
 - (void)nameTextFieldChanged:(UITextField *)textField {
     self.profile[@"name"] = textField.text ?: @"";
+    [self updateHeroCard];
 }
 
 - (void)nameTextFieldDidEnd:(UITextField *)textField {
     NSString *trimmed = [textField.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] ?: @"";
     self.profile[@"name"] = trimmed;
     textField.text = trimmed;
+    [self updateHeroCard];
 }
 
 #pragma mark - 版本选择器
@@ -601,6 +771,7 @@
     self.versionSelectedAt = row;
     self.versionTextField.text = [self pickerView:pickerView titleForRow:row forComponent:component];
     self.profile[@"lastVersionId"] = self.versionTextField.text;
+    [self updateHeroCard];
 }
 
 #pragma mark - 服务器地址输入框
@@ -738,7 +909,7 @@
     NSString *title = self.sections[indexPath.section][indexPath.row];
 
     switch (indexPath.section) {
-        case 0: // 版本信息
+        case 0: // 版本信息与资源管理
             if ([title isEqualToString:@"名称"]) {
                 // 聚焦名称输入框
                 if (self.nameTextField) [self.nameTextField becomeFirstResponder];
@@ -747,18 +918,20 @@
                 if (self.versionTextField) [self.versionTextField becomeFirstResponder];
             } else if ([title isEqualToString:@"游戏目录"]) {
                 [self editGameDir];
+            } else if ([title isEqualToString:@"模组管理"]) {
+                [self openModsManager];
+            } else if ([title isEqualToString:@"光影管理"]) {
+                [self openShadersManager];
+            } else if ([title isEqualToString:@"资源包管理"]) {
+                [self openResourcePacksManager];
+            } else if ([title isEqualToString:@"数据包管理"]) {
+                [self openDataPacksManager];
+            } else if ([title isEqualToString:@"世界管理"]) {
+                [self openWorldsManager];
             }
             break;
 
-        case 1: // 模组管理
-            [self openModsManager];
-            break;
-
-        case 2: // 光影管理
-            [self openShadersManager];
-            break;
-
-        case 3: // 高级设置
+        case 1: // 高级设置
             if ([title isEqualToString:@"渲染器"]) {
                 [self showRendererSelector];
             } else if ([title isEqualToString:@"图形 API"]) {
@@ -774,28 +947,16 @@
             }
             break;
 
-        case 4: // 服务器地址
+        case 2: // 服务器地址
             [self focusTextFieldInCellAtIndexPath:indexPath];
             break;
 
-        case 5: // 组件安装
+        case 3: // 组件安装
             if ([title isEqualToString:@"Fabric API"]) {
                 [self installFabricAPIStandalone];
             } else if ([title isEqualToString:@"OptiFine"]) {
                 [self installOptiFineStandalone];
             }
-            break;
-
-        case 6: // 资源包管理
-            [self openResourcePacksManager];
-            break;
-
-        case 7: // 数据包管理
-            [self openDataPacksManager];
-            break;
-
-        case 8: // 世界管理
-            [self openWorldsManager];
             break;
     }
 }
@@ -851,6 +1012,7 @@
         self.profile[@"gameDir"] = @".";
         [self saveSettings];
         [self.tableView reloadData];
+        [self updateHeroCard];
     }]];
 
     [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
@@ -864,6 +1026,7 @@
         self.profile[@"gameDir"] = newGameDir;
         [self saveSettings];
         [self.tableView reloadData];
+        [self updateHeroCard];
     }]];
 
     [self presentViewController:alert animated:YES completion:nil];
