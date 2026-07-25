@@ -532,13 +532,6 @@
               @"type": self.typeSwitch,
               @"enableCondition": whenNotInGame
             },
-            @{@"key": @"news_url",
-              @"hasDetail": @YES,
-              @"icon": @"link",
-              @"type": self.typeTextField,
-              @"placeholder": @"https://amethyst.ct.ws/api/announcements.json",
-              @"enableCondition": whenNotInGame
-            },
             @{@"key": @"announcement_preview_level",
               @"hasDetail": @YES,
               @"icon": @"megaphone",
@@ -554,14 +547,6 @@
                   @"仅摘要（标题+摘要）",
                   @"仅标题"
               ]
-            },
-            @{@"key": @"reset_news_url",
-              @"icon": @"arrow.counterclockwise",
-              @"type": self.typeButton,
-              @"enableCondition": whenNotInGame,
-              @"action": ^void(){
-                  setPrefObject(@"general.news_url", nil);
-              }
             },
             @{@"key": @"reset_warnings",
               @"icon": @"exclamationmark.triangle",
