@@ -29,7 +29,7 @@ static NSString * const kCachedAnnouncementsTimestampKey = @"cached_announcement
     // 从偏好设置读取 news_url，默认为官网 API 地址
     NSString *url = getPrefObject(@"general.news_url");
     if (url.length == 0) {
-        url = @"https://newamethyst.ct.ws/api/announcements.json";
+        url = @"https://air-api.vercel.app/api/announcements.php";
     }
     return url;
 }
