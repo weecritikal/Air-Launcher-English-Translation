@@ -955,7 +955,14 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
 - (void)dealloc {
     if (self.isObservingProgress) {
-        [self.downloadTask.progress removeObserver:self forKeyPath:@"fractionCompleted"];
+        @try {
+            [self.downloadTask.progress removeObserver:self forKeyPath:@"fractionCompleted"];
+        } @catch (NSException *exception) {
+            // KVO 观察者可能注册在旧的 downloadTask.progress 上，而 downloadTask 已被
+            // 重新赋值为新对象（startVersionDownload: 每次创建新 task），导致从新 progress
+            // 移除时抛出 "not registered as an observer" 异常。忽略此异常即可。
+            NSLog(@"[DownloadVC] dealloc: removeObserver fractionCompleted failed: %@", exception.reason);
+        }
         self.isObservingProgress = NO;
     }
     if (self.downloadTask) {
@@ -964,7 +971,11 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     }
     // 清理原版前置安装的 KVO 观察者，避免 VC 释放后 KVO 回调向已释放对象发送消息导致崩溃
     if (self.isObservingVanillaPreinstall) {
-        [self.vanillaPreinstallTask.progress removeObserver:self forKeyPath:@"fractionCompleted"];
+        @try {
+            [self.vanillaPreinstallTask.progress removeObserver:self forKeyPath:@"fractionCompleted"];
+        } @catch (NSException *exception) {
+            NSLog(@"[DownloadVC] dealloc: removeObserver vanillaPreinstall fractionCompleted failed: %@", exception.reason);
+        }
         self.isObservingVanillaPreinstall = NO;
     }
     if (self.vanillaPreinstallTask) {
@@ -3451,7 +3462,11 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                 if (!ss) return;
                 if (ss.vanillaPreinstallTask) {
                     if (ss.isObservingVanillaPreinstall) {
-                        [ss.vanillaPreinstallTask.progress removeObserver:ss forKeyPath:@"fractionCompleted"];
+                        @try {
+                            [ss.vanillaPreinstallTask.progress removeObserver:ss forKeyPath:@"fractionCompleted"];
+                        } @catch (NSException *exception) {
+                            NSLog(@"[DownloadVC] vanillaPreinstall cancel: removeObserver failed: %@", exception.reason);
+                        }
                         ss.isObservingVanillaPreinstall = NO;
                     }
                     [ss.vanillaPreinstallTask.progress cancel];
@@ -3473,7 +3488,11 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                     __strong typeof(weakSelf) ss = weakSelf;
                     if (!ss) return;
                     if (ss.isObservingVanillaPreinstall) {
-                        [ss.vanillaPreinstallTask.progress removeObserver:ss forKeyPath:@"fractionCompleted"];
+                        @try {
+                            [ss.vanillaPreinstallTask.progress removeObserver:ss forKeyPath:@"fractionCompleted"];
+                        } @catch (NSException *exception) {
+                            NSLog(@"[DownloadVC] vanillaPreinstall handleError: removeObserver failed: %@", exception.reason);
+                        }
                         ss.isObservingVanillaPreinstall = NO;
                     }
                     if (ss.vanillaPreinstallProgressVC && [ss.navigationController.viewControllers containsObject:ss.vanillaPreinstallProgressVC]) {
@@ -3554,6 +3573,18 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     [self.progressCardView startDownloadWithTitle:[NSString stringWithFormat:@"正在下载 %@", versionId]
                                           subtitle:subtitle];
 
+    // 重新赋值 downloadTask 前，先移除旧 task 的 KVO 观察者。
+    // 否则 dealloc 时 self.downloadTask.progress 已是新对象，removeObserver 会抛
+    // "not registered as an observer" 异常。
+    if (self.isObservingProgress && self.downloadTask) {
+        @try {
+            [self.downloadTask.progress removeObserver:self forKeyPath:@"fractionCompleted"];
+        } @catch (NSException *exception) {
+            NSLog(@"[DownloadVC] startVersionDownload: removeObserver on old task failed: %@", exception.reason);
+        }
+        self.isObservingProgress = NO;
+    }
+
     self.downloadTask = [MinecraftResourceDownloadTask new];
     self.downloadTask.maxRetryCount = 3;
 
@@ -3574,7 +3605,11 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     self.downloadTask.handleError = ^{
         dispatch_async(dispatch_get_main_queue(), ^{
             if (weakSelf.isObservingProgress) {
-                [weakSelf.downloadTask.progress removeObserver:weakSelf forKeyPath:@"fractionCompleted"];
+                @try {
+                    [weakSelf.downloadTask.progress removeObserver:weakSelf forKeyPath:@"fractionCompleted"];
+                } @catch (NSException *exception) {
+                    NSLog(@"[DownloadVC] handleError: removeObserver failed: %@", exception.reason);
+                }
                 weakSelf.isObservingProgress = NO;
             }
             weakSelf.view.userInteractionEnabled = YES;
@@ -3596,7 +3631,11 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
         dispatch_async(dispatch_get_main_queue(), ^{
             if (self.isObservingProgress) {
-                [self.downloadTask.progress removeObserver:self forKeyPath:@"fractionCompleted"];
+                @try {
+                    [self.downloadTask.progress removeObserver:self forKeyPath:@"fractionCompleted"];
+                } @catch (NSException *exception) {
+                    NSLog(@"[DownloadVC] re-register: removeObserver failed: %@", exception.reason);
+                }
                 self.isObservingProgress = NO;
             }
             [self.downloadTask.progress addObserver:self
@@ -5914,7 +5953,11 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
         if (progress.finished) {
             if (self.isObservingProgress) {
-                [self.downloadTask.progress removeObserver:self forKeyPath:@"fractionCompleted"];
+                @try {
+                    [self.downloadTask.progress removeObserver:self forKeyPath:@"fractionCompleted"];
+                } @catch (NSException *exception) {
+                    NSLog(@"[DownloadVC] progress.finished: removeObserver failed: %@", exception.reason);
+                }
                 self.isObservingProgress = NO;
             }
 
@@ -6069,7 +6112,11 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             lastCompletedUnitCount = 0;
 
             if (s.isObservingVanillaPreinstall) {
-                [s.vanillaPreinstallTask.progress removeObserver:s forKeyPath:@"fractionCompleted"];
+                @try {
+                    [s.vanillaPreinstallTask.progress removeObserver:s forKeyPath:@"fractionCompleted"];
+                } @catch (NSException *exception) {
+                    NSLog(@"[DownloadVC] vanillaPreinstall progress.finished: removeObserver failed: %@", exception.reason);
+                }
                 s.isObservingVanillaPreinstall = NO;
             }
             if (s.vanillaPreinstallProgressVC && [s.navigationController.viewControllers containsObject:s.vanillaPreinstallProgressVC]) {
