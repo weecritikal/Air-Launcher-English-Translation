@@ -719,7 +719,12 @@
             // 简单降序排序，让最新版本在前
             return [b compare:a options:NSNumericSearch];
         }];
-        [self finishLoadingWithVersions:sorted error:nil];
+        // NSXMLParser 在后台线程（NSURLSession completionHandler）同步执行，
+        // finishLoadingWithVersions: 内部调用 reloadData / stopAnimating 等 UI 操作，
+        // 必须切回主线程，否则触发 AutoLayout 后台线程修改崩溃。
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self finishLoadingWithVersions:sorted error:nil];
+        });
     }
 }
 

@@ -202,13 +202,21 @@ static WFWorkflowProgressView* currentProgressView;
         fileCallback:^(NSString* name) {
             NSString *completedSize = [NSByteCountFormatter stringFromByteCount:fileProgress.completedUnitCount countStyle:NSByteCountFormatterCountStyleMemory];
             NSString *totalSize = [NSByteCountFormatter stringFromByteCount:fileProgress.totalUnitCount countStyle:NSByteCountFormatterCountStyleMemory];
-            nav.progressText.text = [NSString stringWithFormat:@"(%@ / %@) %@", completedSize, totalSize, name];
-            currentProgressView.fractionCompleted = totalProgress.fractionCompleted;
+            NSString *displayText = [NSString stringWithFormat:@"(%@ / %@) %@", completedSize, totalSize, name];
+            double fraction = totalProgress.fractionCompleted;
+            // fileCallback 在 extractTarXZ 内部（后台线程）调用，
+            // UILabel.text 和 fractionCompleted 是 UI 操作，必须切回主线程。
+            dispatch_async(dispatch_get_main_queue(), ^{
+                nav.progressText.text = displayText;
+                currentProgressView.fractionCompleted = fraction;
+            });
         }];
         [url stopAccessingSecurityScopedResource];
 
         if (error) {
-            showDialog(localize(@"Error", nil), error);
+            dispatch_async(dispatch_get_main_queue(), ^{
+                showDialog(localize(@"Error", nil), error);
+            });
         }
 
         dispatch_async(dispatch_get_main_queue(), ^{
