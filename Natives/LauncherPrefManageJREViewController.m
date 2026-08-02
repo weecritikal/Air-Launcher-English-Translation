@@ -767,8 +767,14 @@ styleForMenuWithConfiguration:(UIContextMenuConfiguration *)configuration
                     case '0':
                     case '\0': { // File
                         currFileName = @(currFileHeader.name);
-                        currFileOff = fileProgress.completedUnitCount = 0;
-                        currFileSize = fileProgress.totalUnitCount = strtol(currFileHeader.size, NULL, 8);
+                        currFileOff = 0;
+                        currFileSize = strtol(currFileHeader.size, NULL, 8);
+                        // fileProgress 被 progressViewSub.observedProgress KVO 监听，
+                        // 必须在主线程修改以避免后台线程触发布局引擎崩溃
+                        dispatch_async(dispatch_get_main_queue(), ^{
+                            fileProgress.completedUnitCount = 0;
+                            fileProgress.totalUnitCount = currFileSize;
+                        });
                         NSLog(@"[RuntimeUnpack] Extracting %@", currFileName);
                         dispatch_async(dispatch_get_main_queue(), ^{
                             fileCallback(currFileName);
@@ -802,7 +808,12 @@ styleForMenuWithConfiguration:(UIContextMenuConfiguration *)configuration
             strm.next_out = outbuf;
             strm.avail_out = sizeof(outbuf);
 
-            progress.completedUnitCount = strm.total_in;
+            // progress 被 progressViewMain.observedProgress KVO 监听，
+            // 必须在主线程修改以避免后台线程触发布局引擎崩溃
+            NSUInteger totalIn = (NSUInteger)strm.total_in;
+            dispatch_async(dispatch_get_main_queue(), ^{
+                progress.completedUnitCount = totalIn;
+            });
         }
 
         if (ret == LZMA_STREAM_END) {

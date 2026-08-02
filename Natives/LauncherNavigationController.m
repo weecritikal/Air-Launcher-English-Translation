@@ -246,7 +246,11 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     }
     
     [manager GET:versionManifestURL parameters:nil headers:nil progress:^(NSProgress * _Nonnull progress) {
-        self.progressViewMain.progress = progress.fractionCompleted;
+        // AFNetworking 的 progress 回调在后台线程执行，必须回主线程更新 UI，
+        // 否则会触发 "modifying the autolayout engine from a background thread" 崩溃
+        dispatch_async(dispatch_get_main_queue(), ^{
+            self.progressViewMain.progress = progress.fractionCompleted;
+        });
     } success:^(NSURLSessionTask *task, NSDictionary *responseObject) {
         [remoteVersionList addObjectsFromArray:responseObject[@"versions"]];
         NSDebugLog(@"[VersionList] Got %d versions", remoteVersionList.count);
