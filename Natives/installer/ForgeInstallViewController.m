@@ -442,65 +442,95 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
             fetchFromSource(useBMCLAPI);
         });
     } else {
-        // Forge 分支：并行从 BMCLAPI 和官方源拉取 maven-metadata.xml，按用户偏好顺序解析。
+        // Forge 分支
         //
-        // 背景：BMCLAPI 的 Forge maven-metadata.xml 长期停留在 1.18.2（不镜像 1.19+ 版本），
-        // 而官方源有完整的 5000+ 版本（含 1.21.x / 26.x）。当用户选了 BMCLAPI 并测试 1.19+
-        // 版本时，BMCLAPI 返回的旧版本全部被 gameVersion 过滤掉，versionList 为空。
-        //
-        // 旧实现的 bug：
-        //   1. parserDidEndDocument 在 BMCLAPI 解析完后立即 dispatch_async 到主队列调用
-        //      finalizeVersionList，而此时 fallback 到官方源的请求还没发出。
-        //      finalizeVersionList 会把 isDataLoading 置为 NO 并调用 switchToReadyState，
-        //      导致加载指示器消失，用户在 30s 官方源请求期间看到的是空列表 + Close 按钮，
-        //      误以为"加载不出列表"。
-        //   2. parseErrorOccurred 在 BMCLAPI 返回 HTML 错误页（如 429 限流）时立即弹错误框，
-        //      随后 fallback 成功，用户却已经看到错误提示。
-        //
-        // 修复策略：
-        //   - 网络 I/O 并行（双源同时拉，谁先回来都行），消除串行 30s 等待。
-        //   - 解析串行（共用 NSXMLParser delegate=self，避免并发解析状态错乱）。
-        //   - finalizeVersionList 只在所有源尝试完毕后调用一次，避免提前终结加载状态。
-        //   - parseErrorOccurred 仅记日志，错误提示由 fallback 逻辑统一处理。
+        // 性能优化（参考 ZL2 / PCL2）：
+        //   1. 当 gameVersion 已指定时（DownloadViewController 传入），优先使用 BMCLAPI 按版本
+        //      JSON 接口 /forge/minecraft/<mcVersion>，只返回该 MC 版本的 Forge 列表，数据量极小
+        //      （几十 KB vs 全量 maven-metadata.xml 的几 MB），解析为 JSON 也比 NSXMLParser 快。
+        //   2. 全量 maven-metadata.xml 流程保留作为 fallback（gameVersion 为空或快速路径失败时），
+        //      并改为"主源优先"串行回退：先等主源（用户偏好源），主源拿到有效 XML 立即解析返回；
+        //      主源失败/无匹配再请求备用源，避免之前 dispatch_group_wait 同步等双源最多 90s 的慢路径。
         dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
             NSString *downloadSource = getPrefObject(@"general.download_source");
             BOOL useBMCLAPI = [downloadSource isEqualToString:@"bmclapi"];
-
-            NSString *bmclURLString = @"https://bmclapi2.bangbang93.com/maven/net/minecraftforge/forge/maven-metadata.xml";
-            NSString *officialURLString = @"https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml";
             NSString *userAgent = @"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15";
 
-            // 并行拉取两个源的数据。NSURLSession 默认超时 60s，足够弱网下完成。
-            __block NSData *bmclData = nil;
-            __block NSData *officialData = nil;
-            dispatch_group_t fetchGroup = dispatch_group_create();
+            // 收尾：成功则 finalize，失败则提示并关闭
+            void (^finishSuccess)(void) = ^{
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [self finalizeVersionList];
+                });
+            };
+            void (^finishFailure)(NSString *) = ^(NSString *reason) {
+                NSLog(@"[Forge] All sources failed: %@. versionList.count=%lu",
+                      reason ?: @"unknown", (unsigned long)self.versionList.count);
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    self.isDataLoading = NO;
+                    [self.refreshControl endRefreshing];
+                    showDialog(localize(@"Error", nil), @"无法获取 Forge 版本列表，请检查网络连接或切换下载源");
+                    [self actionClose];
+                });
+            };
 
-            dispatch_group_enter(fetchGroup);
-            {
-                NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:bmclURLString]];
-                req.timeoutInterval = 45.0;
-                [req setValue:userAgent forHTTPHeaderField:@"User-Agent"];
-                NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithRequest:req completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
-                    if (data && !error) bmclData = data;
-                    dispatch_group_leave(fetchGroup);
+            // ========== 快速路径：BMCLAPI 按版本 JSON 接口 ==========
+            // 接口：https://bmclapi2.bangbang93.com/forge/minecraft/<mcVersion>
+            // 返回：[{ "version": "47.2.0", "branch": null, "modified": "...", "files": [...] }, ...]
+            // 每条对应一个 Forge 版本，version 即 Forge 版本号，拼接成 <mcVersion>-<version> 喂给 addVersionToList
+            if (self.gameVersion.length > 0) {
+                NSString *mcVersion = self.gameVersion;
+                NSString *encodedMC = [mcVersion stringByReplacingOccurrencesOfString:@"-" withString:@"_"];
+                NSString *bmclJSONURL = [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/forge/minecraft/%@", encodedMC];
+
+                __block NSData *jsonData = nil;
+                __block NSError *jsonError = nil;
+                dispatch_semaphore_t sem = dispatch_semaphore_create(0);
+                NSMutableURLRequest *jsonReq = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:bmclJSONURL]];
+                jsonReq.timeoutInterval = 20.0;
+                [jsonReq setValue:userAgent forHTTPHeaderField:@"User-Agent"];
+                NSURLSessionDataTask *jsonTask = [[NSURLSession sharedSession] dataTaskWithRequest:jsonReq completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+                    jsonData = data;
+                    jsonError = error;
+                    dispatch_semaphore_signal(sem);
                 }];
-                [task resume];
+                [jsonTask resume];
+                dispatch_semaphore_wait(sem, dispatch_time(DISPATCH_TIME_NOW, 25 * NSEC_PER_SEC));
+
+                if (jsonData && !jsonError) {
+                    NSArray *tokens = [NSJSONSerialization JSONObjectWithData:jsonData options:0 error:nil];
+                    if ([tokens isKindOfClass:[NSArray class]] && tokens.count > 0) {
+                        NSMutableArray *collected = [NSMutableArray new];
+                        for (NSDictionary *token in tokens) {
+                            if (![token isKindOfClass:[NSDictionary class]]) continue;
+                            NSString *ver = token[@"version"];
+                            id branchRaw = token[@"branch"];
+                            // branch 可能为 NSNull（JSON null），需排除后再当字符串用
+                            NSString *branch = [branchRaw isKindOfClass:[NSString class]] ? branchRaw : nil;
+                            if (!ver || ![ver isKindOfClass:[NSString class]] || ver.length == 0) continue;
+                            // 拼成 Forge 标准命名 <mcVersion>-<version>[-<branch>]
+                            NSString *fullVersion = branch.length > 0
+                                ? [NSString stringWithFormat:@"%@-%@-%@", mcVersion, ver, branch]
+                                : [NSString stringWithFormat:@"%@-%@", mcVersion, ver];
+                            [collected addObject:fullVersion];
+                        }
+                        if (collected.count > 0) {
+                            for (NSString *v in collected) {
+                                [self addVersionToList:v];
+                            }
+                            NSLog(@"[Forge] 快速路径成功：BMCLAPI JSON 获取 %@ 个版本 (MC %@)", @(collected.count), mcVersion);
+                            finishSuccess();
+                            return;
+                        }
+                    }
+                }
+                NSLog(@"[Forge] 快速路径失败 (data=%@ error=%@)，回退到全量 maven-metadata.xml",
+                      jsonData ? [NSString stringWithFormat:@"%luB", (unsigned long)jsonData.length] : @"nil",
+                      jsonError.localizedDescription ?: @"nil");
             }
 
-            dispatch_group_enter(fetchGroup);
-            {
-                NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:officialURLString]];
-                req.timeoutInterval = 45.0;
-                [req setValue:userAgent forHTTPHeaderField:@"User-Agent"];
-                NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithRequest:req completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
-                    if (data && !error) officialData = data;
-                    dispatch_group_leave(fetchGroup);
-                }];
-                [task resume];
-            }
-
-            // 等待两个源都返回（最多 90s，覆盖单源 45s 超时 + 余量）
-            dispatch_group_wait(fetchGroup, dispatch_time(DISPATCH_TIME_NOW, 90 * NSEC_PER_SEC));
+            // ========== fallback：全量 maven-metadata.xml（主源优先 + 串行回退）==========
+            NSString *bmclURLString = @"https://bmclapi2.bangbang93.com/maven/net/minecraftforge/forge/maven-metadata.xml";
+            NSString *officialURLString = @"https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml";
 
             // 校验响应是 XML 而非 HTML 错误页（BMCLAPI 限流 429 / 5xx 时可能返回 HTML）
             BOOL (^isValidXML)(NSData *) = ^(NSData *data) {
@@ -512,14 +542,27 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
                 if ([lower containsString:@"<html"] || [lower containsString:@"<!doctype"] || [lower containsString:@"<head"]) {
                     return NO;
                 }
-                // Forge maven-metadata.xml 一定以 <metadata 开头
                 if (![preview containsString:@"<metadata"]) return NO;
                 return YES;
             };
 
-            // 解析指定数据并收集匹配 gameVersion 的 Forge 版本。
-            // 复用 self 作为 NSXMLParserDelegate，addVersionToList: 会把版本加入 versionList/forgeList。
-            // 返回是否成功加载了至少一个匹配版本。
+            // 同步拉取单个源（带超时），返回 data 或 nil
+            NSData *(^fetchSource)(NSString *) = ^NSData *(NSString *urlString) {
+                __block NSData *result = nil;
+                dispatch_semaphore_t s = dispatch_semaphore_create(0);
+                NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:urlString]];
+                req.timeoutInterval = 30.0;
+                [req setValue:userAgent forHTTPHeaderField:@"User-Agent"];
+                NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithRequest:req completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+                    if (data && !error) result = data;
+                    dispatch_semaphore_signal(s);
+                }];
+                [task resume];
+                dispatch_semaphore_wait(s, dispatch_time(DISPATCH_TIME_NOW, 35 * NSEC_PER_SEC));
+                return result;
+            };
+
+            // 解析指定数据并收集匹配 gameVersion 的 Forge 版本
             BOOL (^parseAndCollect)(NSData *) = ^(NSData *data) {
                 if (!isValidXML(data)) return NO;
                 NSXMLParser *parser = [[NSXMLParser alloc] initWithData:data];
@@ -534,48 +577,39 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
                 return NO;
             };
 
-            // 按用户偏好顺序解析：先试偏好的源，无匹配版本再试另一个。
-            // 注意：parseAndCollect 会向 versionList 累加版本。若第一源已产生匹配版本（count>0），
-            // 直接跳过第二源；若第一源无匹配版本（count==0，例如 BMCLAPI 旧数据被 gameVersion 全过滤），
-            // 再解析第二源，此时 versionList 仍为空，不会产生重复。
-            NSData *firstData = useBMCLAPI ? bmclData : officialData;
-            NSData *secondData = useBMCLAPI ? officialData : bmclData;
-            NSString *firstName = useBMCLAPI ? @"BMCLAPI" : @"official";
-            NSString *secondName = useBMCLAPI ? @"official" : @"BMCLAPI";
+            // 主源优先：拉主源 → 解析；失败/无匹配再拉备用源解析
+            NSString *primaryURL = useBMCLAPI ? bmclURLString : officialURLString;
+            NSString *secondaryURL = useBMCLAPI ? officialURLString : bmclURLString;
+            NSString *primaryName = useBMCLAPI ? @"BMCLAPI" : @"official";
+            NSString *secondaryName = useBMCLAPI ? @"official" : @"BMCLAPI";
 
             BOOL success = NO;
-            if (firstData) {
-                success = parseAndCollect(firstData);
+            NSData *primaryData = fetchSource(primaryURL);
+            if (primaryData) {
+                success = parseAndCollect(primaryData);
                 if (success) {
-                    NSLog(@"[Forge] Loaded versions from primary source (%@)", firstName);
+                    NSLog(@"[Forge] Loaded versions from primary source (%@)", primaryName);
                 }
             }
 
-            if (!success && self.versionList.count == 0 && secondData) {
-                NSLog(@"[Forge] Primary source (%@) returned no matching versions, falling back to %@", firstName, secondName);
-                success = parseAndCollect(secondData);
-                if (success) {
-                    NSLog(@"[Forge] Loaded versions from fallback source (%@)", secondName);
+            NSData *secondaryData = nil;
+            if (!success && self.versionList.count == 0) {
+                NSLog(@"[Forge] Primary source (%@) failed/empty, falling back to %@", primaryName, secondaryName);
+                secondaryData = fetchSource(secondaryURL);
+                if (secondaryData) {
+                    success = parseAndCollect(secondaryData);
+                    if (success) {
+                        NSLog(@"[Forge] Loaded versions from fallback source (%@)", secondaryName);
+                    }
                 }
             }
 
             if (success && self.versionList.count > 0) {
-                // 统一在此调用 finalizeVersionList，避免 parserDidEndDocument 提前触发
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    [self finalizeVersionList];
-                });
+                finishSuccess();
             } else {
-                // 双源均失败或无匹配版本
-                NSLog(@"[Forge] All sources failed. bmclData=%@ officialData=%@ versionList.count=%lu",
-                      bmclData ? [NSString stringWithFormat:@"%luB", (unsigned long)bmclData.length] : @"nil",
-                      officialData ? [NSString stringWithFormat:@"%luB", (unsigned long)officialData.length] : @"nil",
-                      (unsigned long)self.versionList.count);
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    self.isDataLoading = NO;
-                    [self.refreshControl endRefreshing];
-                    showDialog(localize(@"Error", nil), @"无法获取 Forge 版本列表，请检查网络连接或切换下载源");
-                    [self actionClose];
-                });
+                finishFailure([NSString stringWithFormat:@"primary(%@)=%@, secondary(%@)=%@",
+                               primaryName, primaryData ? [NSString stringWithFormat:@"%luB", (unsigned long)primaryData.length] : @"nil",
+                               secondaryName, secondaryData ? [NSString stringWithFormat:@"%luB", (unsigned long)secondaryData.length] : @"nil"]);
             }
         });
     }
