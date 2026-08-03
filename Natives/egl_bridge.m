@@ -163,7 +163,7 @@ int pojavInitOpenGL() {
         // 这就是用户说的"用 OpenGL 渲染游戏加用 MoltenVK，帧率才能达到 120"的实现原理：
         // MC 走 GL 路径 → EGL 上下文（ANGLE Metal）→ MobileGlues 翻译 → Vulkan → MoltenVK → Metal
         // MobileGlues 的 Vulkan 后端使用 IMMEDIATE present mode，可超过屏幕刷新率。
-        NSLog(@"[egl_bridge] Vulkan renderer: initializing GL bridge for OpenGL path fallback (graphicsApi联动)");
+        NSLog(@"[egl_bridge] Vulkan renderer: initializing GL bridge for OpenGL path fallback (graphicsApi linkage)");
         set_gl_bridge_tbl();
         // 预加载 libMoltenVK.dylib（Vulkan 路径需要，GL 路径不影响）
         dlopen("@rpath/" RENDERER_NAME_VULKAN, RTLD_GLOBAL);

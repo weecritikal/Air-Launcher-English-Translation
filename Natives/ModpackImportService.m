@@ -255,7 +255,7 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
     // 必须在 manifest.json (CurseForge) 之前检测，因为某些 MMC 整合包可能也含有 manifest.json
     NSData *mmcPackData = [archive extractDataFromFile:@"mmc-pack.json" error:&archiveError];
     if (mmcPackData) {
-        NSLog(@"[ModpackImport] 检测到 MMC (MultiMC/Prism) 整合包");
+        NSLog(@"[ModpackImport] Detected MMC (MultiMC/Prism) modpack");
         return [self parseMMCPack:archive mmcPackData:mmcPackData filePath:filePath error:error];
     }
 
@@ -271,7 +271,7 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
     //   - 也兼容 .minecraft/ 前缀的 zip（HMCL 导出格式之一）
     // 此格式无 mod 下载清单，所有文件直接从 zip 解压，loader 需用户后续手动安装。
     if ([self isPlainZipModpack:archive]) {
-        NSLog(@"[ModpackImport] 检测到 Plain ZIP 整合包（无 manifest，直接含 .minecraft 目录结构）");
+        NSLog(@"[ModpackImport] Detected Plain ZIP modpack (no manifest, direct .minecraft directory structure)");
         return [self parsePlainZipModpack:archive filePath:filePath error:error];
     }
 
@@ -369,7 +369,7 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
     NSString *modpackId = [NSString stringWithFormat:@"mmc_%@", [[NSUUID UUID] UUIDString]];
     NSString *iconBase64 = [self extractIconFromArchive:archive];
 
-    NSLog(@"[ModpackImport] MMC 整合包：name=%@, MC=%@, loader=%@ %@", name, minecraftVersion, loader, loaderVersion);
+    NSLog(@"[ModpackImport] MMC modpack: name=%@, MC=%@, loader=%@ %@", name, minecraftVersion, loader, loaderVersion);
 
     return @{
         @"id": modpackId,
@@ -430,7 +430,7 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
     NSString *name = [filePath.lastPathComponent stringByDeletingPathExtension];
     NSString *modpackId = [NSString stringWithFormat:@"plainzip_%@", [[NSUUID UUID] UUIDString]];
 
-    NSLog(@"[ModpackImport] Plain ZIP 整合包：name=%@, 推断 MC 版本=%@", name, minecraftVersion);
+    NSLog(@"[ModpackImport] Plain ZIP modpack: name=%@, inferred MC version=%@", name, minecraftVersion);
 
     return @{
         @"id": modpackId,
@@ -665,7 +665,7 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
         BOOL downloadSuccess = [self downloadModFiles:modpackInfo toModsDirectory:modsDir progress:progress error:&downloadError];
         if (!downloadSuccess) {
             // mod 下载失败不阻断导入，只记录警告
-            NSLog(@"[ModpackImport] mod 下载部分失败: %@", downloadError.localizedDescription);
+            NSLog(@"[ModpackImport] Mod download partially failed: %@", downloadError.localizedDescription);
         }
     }
 
@@ -691,7 +691,7 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
                                           error:&loaderError];
     if (!loaderSuccess) {
         // 加载器安装失败不阻断 (用户可能已经手动安装)
-        NSLog(@"[ModpackImport] 加载器安装失败 (用户可能已安装): %@", loaderError.localizedDescription);
+        NSLog(@"[ModpackImport] Loader installation failed (user may have already installed): %@", loaderError.localizedDescription);
     }
 
     // 阶段5修复（参照 FCL ModpackHelper.ensureCompleteVersion）：
@@ -706,7 +706,7 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
                                                  progress:progress
                                                     error:&versionDLError];
     if (!versionDLOK) {
-        NSLog(@"[ModpackImport] 警告：完整版本下载失败: %@", versionDLError.localizedDescription);
+        NSLog(@"[ModpackImport] Warning: Full version download failed: %@", versionDLError.localizedDescription);
         // 不阻断导入：用户可能已手动下载过原版文件，或者后续启动时按需下载
         // 但要把失败信息记入 failedFiles 让用户知晓
         @synchronized(self) {
@@ -788,7 +788,7 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
     // Plain ZIP：整个 zip 根目录作为 overrides 提取到 gameDir
     // 兼容 .minecraft/ 前缀（HMCL 导出格式）和 __MACOSX 目录（macOS 创建的元数据）
     if ([format isEqualToString:@"plainzip"] || [format isEqualToString:@"mmc"]) {
-        NSLog(@"[ModpackImport] %@：提取 zip 根目录到 gameDir", format);
+        NSLog(@"[ModpackImport] %@: extracting zip root to gameDir", format);
         // 关键修复（多启动器兼容）：versions/ 目录特殊处理
         // Java 端 Tools.java 的 DIR_HOME_VERSION 固定指向 POJAV_GAME_DIR/versions，
         // 不从 profile gameDir 读取。因此 Plain ZIP/MMC 中的 versions/ 必须提取到主目录，
@@ -854,7 +854,7 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
             *stop = !data || !written;
         } error:error];
         if (error && *error) {
-            NSLog(@"[ModpackImport] %@ 提取失败：%@", format, *error);
+            NSLog(@"[ModpackImport] %@ extraction failed: %@", format, *error);
             return NO;
         }
         // 取消时清理
@@ -881,7 +881,7 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
         [ModpackUtils archive:archive extractDirectory:@"client-overrides" toPath:destDir error:error];
         if (error && *error) {
             // client-overrides 不存在不算错误
-            NSLog(@"[ModpackImport] client-overrides 提取 (可能不存在): %@", *error);
+            NSLog(@"[ModpackImport] client-overrides extract (may not exist): %@", *error);
             *error = nil;
         }
     }
@@ -925,14 +925,14 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
             NSString *clientEnv = env[@"client"];
             if ([clientEnv isKindOfClass:[NSString class]] && [clientEnv isEqualToString:@"unsupported"]) {
                 skippedOptional++;
-                NSLog(@"[ModpackImport] 跳过 server-only 模组: %@", relPath);
+                NSLog(@"[ModpackImport] Skipping server-only mod: %@", relPath);
                 continue;
             }
 
             if (!url || !relPath) {
                 // 关键修复：URL 为空时不应静默跳过而不计数，否则进度条永远卡住、用户也无法感知有缺失。
                 // 之前只 completedUnitCount++ 但不报告失败，造成整合包 mod 不完整。
-                NSLog(@"[ModpackImport] 警告：Modrinth 文件 %@ 缺少 download URL，跳过", relPath);
+                NSLog(@"[ModpackImport] Warning: Modrinth file %@ missing download URL, skipping", relPath);
                 continue;
             }
 
@@ -974,7 +974,7 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
             NSError *dlError = nil;
             for (NSInteger retry = 0; retry < 3 && !ok; retry++) {
                 if (retry > 0) {
-                    NSLog(@"[ModpackImport] 重试下载 %@ (第 %ld 次)", fileName, (long)retry);
+                    NSLog(@"[ModpackImport] Retrying download %@ (attempt %ld)", fileName, (long)retry);
                     [NSThread sleepForTimeInterval:1.0];
                     // 清理上次失败可能残留的半成品文件
                     [[NSFileManager defaultManager] removeItemAtPath:destPath error:nil];
@@ -984,7 +984,7 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
                 // 即使 url 非空也可能因控制字符/空格等返回 nil，必须显式判断。
                 NSURL *downloadURL = [NSURL URLWithString:url];
                 if (!downloadURL) {
-                    NSLog(@"[ModpackImport] 警告：Modrinth 文件 URL 非法，跳过: %@", url);
+                    NSLog(@"[ModpackImport] Warning: Modrinth file URL invalid, skipping: %@", url);
                     dlError = [NSError errorWithDomain:@"ModpackImportError"
                                                   code:5001
                                               userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"无效的下载链接: %@", url]}];
@@ -1008,14 +1008,14 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
                 }
                 ok = [self downloadFileFromURL:url toPath:destPath taskId:taskId task:task error:&dlError];
                 if (!ok) {
-                    NSLog(@"[ModpackImport] mod 下载失败 %@ (第 %ld 次): %@", fileName, (long)retry, dlError.localizedDescription);
+                    NSLog(@"[ModpackImport] mod download failed %@ (attempt %ld): %@", fileName, (long)retry, dlError.localizedDescription);
                 }
             }
             if (ok) {
                 successCount++;
             } else {
                 // 阶段5修复（参照 FCL DownloadList）：记录失败文件，让上层可向用户展示哪些 mod 缺失
-                NSLog(@"[ModpackImport] 模组最终下载失败：%@ (%@)", fileName, url);
+                NSLog(@"[ModpackImport] Mod permanently failed to download: %@ (%@)", fileName, url);
                 @synchronized(self) {
                     [self.failedFilesInternal addObject:@{
                         @"fileName": fileName ?: @"(unknown)",
@@ -1032,7 +1032,7 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
             }
         }
         if (skippedOptional > 0) {
-            NSLog(@"[ModpackImport] Modrinth 整合包：跳过 %lu 个 server-only 模组", (unsigned long)skippedOptional);
+            NSLog(@"[ModpackImport] Modrinth modpack: skipped %lu server-only mods", (unsigned long)skippedOptional);
         }
     } else if ([format isEqualToString:@"curseforge"]) {
         // CurseForge: 需要 projectID + fileID 通过 API 获取下载链接
@@ -1060,7 +1060,7 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
                 NSString *realName = [self fetchCurseForgeRealFileName:projectID.longLongValue fileID:fileID.longLongValue];
                 if (realName.length > 0) {
                     fileName = realName;
-                    NSLog(@"[ModpackImport] 通过 HEAD 解析到真实文件名：projectID=%@ fileID=%@ → %@",
+                    NSLog(@"[ModpackImport] Resolved real filename via HEAD: projectID=%@ fileID=%@ → %@",
                           projectID, fileID, realName);
                 } else {
                     fileName = [NSString stringWithFormat:@"%@-%@.jar", projectID, fileID];
@@ -1075,7 +1075,7 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
             NSString *currentURL = downloadURL;
             for (NSInteger retry = 0; retry < 4 && !ok; retry++) {
                 if (retry > 0) {
-                    NSLog(@"[ModpackImport] 重试下载 %@ (第 %ld 次)", fileName, (long)retry);
+                    NSLog(@"[ModpackImport] Retrying download %@ (attempt %ld)", fileName, (long)retry);
                     [NSThread sleepForTimeInterval:1.0];
                     [[NSFileManager defaultManager] removeItemAtPath:destPath error:nil];
                 }
@@ -1084,14 +1084,14 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
                     NSString *altURL = [self fetchCurseForgeFileURLAlternate:projectID.longLongValue fileID:fileID.longLongValue];
                     if (altURL.length > 0) {
                         currentURL = altURL;
-                        NSLog(@"[ModpackImport] 切换到备用源下载 %@: %@", fileName, altURL);
+                        NSLog(@"[ModpackImport] Switching to fallback source for %@: %@", fileName, altURL);
                     }
                 }
                 // 阶段5修复：[NSURL URLWithString:] 对非法字符串返回 nil，
                 // downloadTaskWithURL:nil 会触发 NSInvalidArgumentException 崩溃。
                 NSURL *currentNSURL = [NSURL URLWithString:currentURL];
                 if (!currentNSURL) {
-                    NSLog(@"[ModpackImport] 警告：CurseForge 文件 URL 非法，跳过: %@", currentURL);
+                    NSLog(@"[ModpackImport] Warning: CurseForge file URL invalid, skipping: %@", currentURL);
                     dlError = [NSError errorWithDomain:@"ModpackImportError"
                                                   code:5001
                                               userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"无效的下载链接: %@", currentURL]}];
@@ -1114,14 +1114,14 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
                 }
                 ok = [self downloadFileFromURL:currentURL toPath:destPath taskId:taskId task:task error:&dlError];
                 if (!ok) {
-                    NSLog(@"[ModpackImport] mod 下载失败 %@ (第 %ld 次): %@", fileName, (long)retry, dlError.localizedDescription);
+                    NSLog(@"[ModpackImport] mod download failed %@ (attempt %ld): %@", fileName, (long)retry, dlError.localizedDescription);
                 }
             }
             if (ok) {
                 successCount++;
             } else {
                 // 阶段5修复（参照 FCL DownloadList）：记录失败文件，让上层可向用户展示哪些 mod 缺失
-                NSLog(@"[ModpackImport] 模组最终下载失败：%@", fileName);
+                NSLog(@"[ModpackImport] Mod permanently failed to download: %@", fileName);
                 @synchronized(self) {
                     [self.failedFilesInternal addObject:@{
                         @"fileName": fileName ?: @"(unknown)",
@@ -1141,7 +1141,7 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
         }
     }
 
-    NSLog(@"[ModpackImport] mod 下载完成: %lu/%lu 成功", (unsigned long)successCount, (unsigned long)total);
+    NSLog(@"[ModpackImport] Mod download completed: %lu/%lu succeeded", (unsigned long)successCount, (unsigned long)total);
     // 阶段5修复（参照 FCL DownloadList.finishAll）：失败文件已收集到 failedFilesInternal，
     // 这里不再仅靠 70% 静默阈值隐藏失败信息。任何失败都返回 NO，让上层用 self.failedFiles
     // 向用户展示具体缺失的 mod 列表，并提供"重试缺失模组"入口。
@@ -1174,7 +1174,7 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
             [msg appendFormat:@"...等共 %lu 个", (unsigned long)failedNames.count];
         }
     }
-    NSLog(@"[ModpackImport] 警告：%@", msg);
+    NSLog(@"[ModpackImport] Warning: %@", msg);
     if (error) {
         *error = [NSError errorWithDomain:@"ModpackImportError"
                                      code:5004
@@ -1572,7 +1572,7 @@ didFinishDownloadingToURL:(NSURL *)location {
     if (![self downloadFileFromURL:installerURL toPath:tmpInstallerPath taskId:installerTaskId task:installerTask error:&dlError]) {
         // installer.jar 下载失败：写显式失败的占位 JSON（mainClass 指向不存在的类，启动时会显式报错，
         // 避免误装作 vanilla MC 让用户以为 mods 生效）
-        NSLog(@"[ModpackImport] %@ installer.jar 下载失败，回退到占位 JSON: %@", loader, installerURL);
+        NSLog(@"[ModpackImport] %@ installer.jar download failed, falling back to placeholder JSON: %@", loader, installerURL);
         NSInteger javaMajor = [self javaMajorVersionForMC:minecraftVersion];
         NSDictionary *placeholderJSON = @{
             @"_comment_": [NSString stringWithFormat:@"此整合包需要 %@ %@ 加载器，自动安装失败。请通过下载界面手动安装。", loader, loaderVersion],
@@ -1591,7 +1591,7 @@ didFinishDownloadingToURL:(NSURL *)location {
         return NO;  // 让调用方感知失败并打印警告
     }
 
-    NSLog(@"[ModpackImport] %@ installer.jar 下载完成: %@", loader, tmpInstallerPath);
+    NSLog(@"[ModpackImport] %@ installer.jar download completed: %@", loader, tmpInstallerPath);
 
     // 调用直装器，写入 modpack 的 gameDirAbsolute（不注册 profile，由 createProfileForModpack 统一注册）
     NSError *installError = nil;
@@ -1617,7 +1617,7 @@ didFinishDownloadingToURL:(NSURL *)location {
     [[NSFileManager defaultManager] removeItemAtPath:tmpInstallerPath error:nil];
 
     if (!installSuccess) {
-        NSLog(@"[ModpackImport] %@ 直装失败，回退到占位 JSON: %@", loader, installError.localizedDescription);
+        NSLog(@"[ModpackImport] %@ direct install failed, falling back to placeholder JSON: %@", loader, installError.localizedDescription);
         // 使用外层作用域的 installerTaskId（installerItem 仅在 floatingBallEnabled 块内声明）
         if (installerTaskId) {
             [[DownloadTaskManager sharedManager] setTaskWithId:installerTaskId completedWithError:installError];
@@ -1642,7 +1642,7 @@ didFinishDownloadingToURL:(NSURL *)location {
         return NO;  // 让调用方感知失败并打印警告
     }
 
-    NSLog(@"[ModpackImport] %@ 直装成功，version.json 已写入: %@", loader, versionJsonPath);
+    NSLog(@"[ModpackImport] %@ direct install succeeded, version.json written to: %@", loader, versionJsonPath);
     return YES;
 }
 
@@ -1671,7 +1671,7 @@ didFinishDownloadingToURL:(NSURL *)location {
         return NO;
     }
 
-    NSLog(@"[ModpackImport] 确保完整版本已安装: %@ (父版本: %@)", versionId, minecraftVersion ?: @"(none)");
+    NSLog(@"[ModpackImport] Ensuring complete version is installed: %@ (parent version: %@)", versionId, minecraftVersion ?: @"(none)");
 
     // 第 1 步：确保父版本 JSON 存在（仅当 loader version JSON 含 inheritsFrom 时需要）
     // 这里无条件调用 ensureParentVersionExists:，它内部会检查 JSON 是否已存在并跳过。
@@ -1679,7 +1679,7 @@ didFinishDownloadingToURL:(NSURL *)location {
         NSError *parentError = nil;
         BOOL parentOK = [ForgeDirectInstaller ensureParentVersionExists:minecraftVersion error:&parentError];
         if (!parentOK) {
-            NSLog(@"[ModpackImport] 警告：父版本 %@ JSON 下载失败: %@",
+            NSLog(@"[ModpackImport] Warning: Parent version %@ JSON download failed: %@",
                   minecraftVersion, parentError.localizedDescription);
             // 不直接 fail：downloadVersion: 内部也会检查父版本，若已存在则继续
             // 只有当父版本 JSON 真的不存在时才会 fail
@@ -1770,13 +1770,13 @@ didFinishDownloadingToURL:(NSURL *)location {
         return NO;
     }
 
-    NSLog(@"[ModpackImport] 完整版本下载完成: %@", versionId);
+    NSLog(@"[ModpackImport] Full version download completed: %@", versionId);
 
     // 阶段5修复：即使 progress 完成，也可能有部分库/资源文件下载失败（记录在 downloader.failedFiles）
     // 将这些失败文件汇总到 ModpackImportService.failedFiles，让上层向用户展示
     NSArray<NSDictionary *> *versionFailedFiles = [downloader.failedFiles copy];
     if (versionFailedFiles.count > 0) {
-        NSLog(@"[ModpackImport] 警告：版本 %@ 有 %lu 个文件下载失败",
+        NSLog(@"[ModpackImport] Warning: Version %@ has %lu files that failed to download",
               versionId, (unsigned long)versionFailedFiles.count);
         @synchronized(self) {
             for (NSDictionary *f in versionFailedFiles) {

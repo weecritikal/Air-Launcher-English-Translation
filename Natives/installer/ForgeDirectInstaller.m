@@ -519,7 +519,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
         // filePath 缺失：universal jar 是老版本 Forge 的核心运行时依赖
         // 若 mavenPath 存在，后续 extractAllMavenEntries 可能会提取到（zip 内 maven/ 路径下）
         // 若 mavenPath 也缺失，启动时可能 NoClassDefFoundError
-        NSLog(@"[ForgeDirect] ⚠️ install.filePath 缺失，universal jar 将依赖 extractAllMavenEntries 或后续 downloadMissingLibraries 补全");
+        NSLog(@"[ForgeDirect] Warning: install.filePath missing, universal jar will rely on extractAllMavenEntries or subsequent downloadMissingLibraries");
     }
     reportProgress(0.7, @"正在提取 libraries (1/1)");
 
@@ -556,7 +556,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
         NSLog(@"[ForgeDirect] Checking parent vanilla version (old format): %@", oldInheritsFrom);
         NSError *parentError = nil;
         if (![self ensureParentVersionExists:oldInheritsFrom error:&parentError]) {
-            NSLog(@"[ForgeDirect] ⚠️ 父版本 %@ 未能自动补全: %@", oldInheritsFrom, parentError.localizedDescription ?: @"未知错误");
+            NSLog(@"[ForgeDirect] Warning: parent version %@ auto-completion failed: %@", oldInheritsFrom, parentError.localizedDescription ?: @"Unknown error");
         } else {
             NSLog(@"[ForgeDirect] Parent vanilla version ensured: %@", oldInheritsFrom);
         }
@@ -699,7 +699,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
         NSString *versionField = installProfile[@"version"];
         if ([versionField isKindOfClass:[NSString class]] && versionField.length > 0) {
             mainPath = [NSString stringWithFormat:@"net.minecraftforge:forge:%@", versionField];
-            NSLog(@"[ForgeDirect] path 字段缺失，用 version 字段兜底拼接: %@", mainPath);
+            NSLog(@"[ForgeDirect] path field missing, falling back to version field: %@", mainPath);
         }
     }
     if ([mainPath isKindOfClass:[NSString class]] && mainPath.length > 0) {
@@ -709,7 +709,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
         }
     } else {
         // path 是 Forge 1.13+ 运行核心依赖，缺失会导致启动时 ClassNotFoundException
-        NSLog(@"[ForgeDirect] install_profile.json 缺少 path/version 字段，无法下载 patched client jar");
+        NSLog(@"[ForgeDirect] install_profile.json missing path/version fields, cannot download patched client jar");
         if (error) {
             *error = [NSError errorWithDomain:ForgeDirectInstallerErrorDomain
                                          code:ForgeDirectInstallerErrorInvalidProfile
@@ -744,7 +744,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
         NSError *parentError = nil;
         if (![self ensureParentVersionExists:inheritsFrom error:&parentError]) {
             // 父版本缺失只发出警告，不阻断安装（用户可能后续手动安装原版）
-            NSLog(@"[ForgeDirect] ⚠️ 父版本 %@ 未能自动补全: %@", inheritsFrom, parentError.localizedDescription ?: @"未知错误");
+            NSLog(@"[ForgeDirect] Warning: parent version %@ auto-completion failed: %@", inheritsFrom, parentError.localizedDescription ?: @"Unknown error");
         } else {
             NSLog(@"[ForgeDirect] Parent vanilla version ensured: %@", inheritsFrom);
         }
@@ -930,7 +930,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
             // 关键库（modlauncher、bootstraplauncher、mixin、asm、forge/neoforged 自家库）失败会启动崩溃，记录警告
             if ([self isCriticalLibrary:name]) {
                 [criticalFailures addObject:name];
-                NSLog(@"[ForgeDirect] ⚠️ 关键库下载失败（启动将崩溃）: %@", name);
+                NSLog(@"[ForgeDirect] Warning: critical library download failed (app will crash on launch): %@", name);
             } else {
                 NSLog(@"[ForgeDirect] Failed to download library %@ (both sources failed)", name);
             }
@@ -942,7 +942,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
     NSLog(@"[ForgeDirect] Library download summary: downloaded=%lu, skipped=%lu, failed=%lu, total=%lu, criticalFailures=%lu",
           (unsigned long)downloaded, (unsigned long)skipped, (unsigned long)failed, (unsigned long)total, (unsigned long)criticalFailures.count);
     if (criticalFailures.count > 0) {
-        NSLog(@"[ForgeDirect] ⚠️ 关键库下载失败清单: %@", criticalFailures);
+        NSLog(@"[ForgeDirect] Warning: critical library download failures: %@", criticalFailures);
     }
 }
 
@@ -1169,7 +1169,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
             // 下载失败：清理可能的部分文件，避免下次误判已存在
             [NSFileManager.defaultManager removeItemAtPath:destPath error:nil];
             lastError = downloadError;
-            NSLog(@"[ForgeDirect] Failed: %@ (%@)", url, downloadError.localizedDescription ?: @"未知错误");
+            NSLog(@"[ForgeDirect] Failed: %@ (%@)", url, downloadError.localizedDescription ?: @"Unknown error");
         }
     }
 

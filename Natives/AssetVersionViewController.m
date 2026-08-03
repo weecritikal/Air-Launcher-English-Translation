@@ -503,7 +503,7 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
 
 - (void)fetchVersions {
     if (!self.projectID.length) {
-        NSLog(@"[AssetVersionVC] 缺少 projectID，无法获取版本列表");
+        NSLog(@"[AssetVersionVC] Missing projectID, cannot fetch version list");
         return;
     }
 
@@ -513,7 +513,7 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
         dispatch_async(dispatch_get_main_queue(), ^{
             [self.activityIndicator stopAnimating];
             if (error) {
-                NSLog(@"[AssetVersionVC] 获取版本列表失败: %@", error);
+                NSLog(@"[AssetVersionVC] Failed to fetch version list: %@", error);
                 UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"错误"
                                                                                 message:@"无法获取版本信息"
                                                                          preferredStyle:UIAlertControllerStyleAlert];

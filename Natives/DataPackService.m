@@ -215,10 +215,10 @@
             if (error) *error = createError;
             return nil;
         }
-        NSLog(@"[DataPackService] 已创建 datapacks 目录: %@", dataPacksPath);
+        NSLog(@"[DataPackService] Created datapacks directory: %@", dataPacksPath);
     } else if (!isDir) {
         if (error) {
-            *error = [NSError errorWithDomain:@"DataPackService" code:2 userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"%@ 不是目录", dataPacksPath]}];
+            *error = [NSError errorWithDomain:@"DataPackService" code:2 userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"%@ is not a directory", dataPacksPath]}];
         }
         return nil;
     }
@@ -275,7 +275,7 @@
         @try {
             [self parsePackMcmetaForItem:item];
         } @catch (NSException *exception) {
-            NSLog(@"[DataPackService] 解析 pack.mcmeta 异常 %@: %@", item.fileName, exception);
+            NSLog(@"[DataPackService] Exception parsing pack.mcmeta for %@: %@", item.fileName, exception);
         }
         if (completion) completion(item, nil);
     });
@@ -293,7 +293,7 @@
         if ([currentPath.lowercaseString hasSuffix:@".zip.disabled"]) {
             newPath = [currentPath substringToIndex:currentPath.length - [@".disabled" length]];
         } else {
-            if (error) *error = [NSError errorWithDomain:@"DataPackServiceError" code:101 userInfo:@{NSLocalizedDescriptionKey:@"文件状态不一致，无法启用。"}];
+            if (error) *error = [NSError errorWithDomain:@"DataPackServiceError" code:101 userInfo:@{NSLocalizedDescriptionKey:@"File status mismatch, cannot enable."}];
             return NO;
         }
     } else {
@@ -342,7 +342,7 @@
             if (completion) {
                 NSError *error = [NSError errorWithDomain:@"DataPackServiceError"
                                                      code:1
-                                                 userInfo:@{NSLocalizedDescriptionKey: @"找不到游戏目录。"}];
+                                                 userInfo:@{NSLocalizedDescriptionKey: @"Cannot find game directory."}];
                 dispatch_async(dispatch_get_main_queue(), ^{ completion(NO, error); });
             }
             return;
@@ -360,7 +360,7 @@
             if (completion) {
                 NSError *error = [NSError errorWithDomain:@"DataPackServiceError"
                                                      code:1
-                                                 userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"创建世界 datapacks 目录失败：%@", dirError.localizedDescription ?: @"未知错误"]}];
+                                                 userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Failed to create world datapacks directory: %@", dirError.localizedDescription ?: @"Unknown error"]}];
                 dispatch_async(dispatch_get_main_queue(), ^{ completion(NO, error); });
             }
             return;
@@ -381,7 +381,7 @@
                     if (completion) {
                         NSError *error = [NSError errorWithDomain:@"DataPackServiceError"
                                                              code:1
-                                                         userInfo:@{NSLocalizedDescriptionKey: @"创建 datapacks 目录失败，请检查存储权限。"}];
+                                                         userInfo:@{NSLocalizedDescriptionKey: @"Failed to create datapacks directory, please check storage permissions."}];
                         dispatch_async(dispatch_get_main_queue(), ^{ completion(NO, error); });
                     }
                     return;
@@ -404,7 +404,7 @@
         if (completion) {
             NSError *error = [NSError errorWithDomain:@"DataPackServiceError"
                                                  code:2
-                                             userInfo:@{NSLocalizedDescriptionKey: @"无效的下载链接。"}];
+                                             userInfo:@{NSLocalizedDescriptionKey: @"Invalid download URL."}];
             dispatch_async(dispatch_get_main_queue(), ^{ completion(NO, error); });
         }
         return;
@@ -476,7 +476,7 @@
 
     [task resume];
 
-    NSLog(@"[DataPackService] 开始下载数据包: %@ -> %@", url, destinationPath);
+    NSLog(@"[DataPackService] Starting datapack download: %@ -> %@", url, destinationPath);
 }
 
 #pragma mark - NSURLSessionDownloadDelegate

@@ -246,13 +246,13 @@ NSString * const DownloadTaskManagerTaskKey                             = @"Down
 
     // 无 retryHandler 无法重建
     if (!item.retryHandler) {
-        NSLog(@"[DownloadTaskManager] retryTaskWithId: 任务 %@ 未设置 retryHandler，无法重试", taskId);
+        NSLog(@"[DownloadTaskManager] retryTaskWithId: task %@ has no retryHandler, cannot retry", taskId);
         return;
     }
 
     // 超过最大重试次数则不再重试
     if (item.maxRetryCount > 0 && item.retryCount >= item.maxRetryCount) {
-        NSLog(@"[DownloadTaskManager] retryTaskWithId: 任务 %@ 已达最大重试次数 %ld", taskId, (long)item.maxRetryCount);
+        NSLog(@"[DownloadTaskManager] retryTaskWithId: task %@ has reached max retry count %ld", taskId, (long)item.maxRetryCount);
         return;
     }
 
@@ -288,10 +288,10 @@ NSString * const DownloadTaskManagerTaskKey                             = @"Down
             [self postUpdateForTask:item];
         }
     } @catch (NSException *exception) {
-        NSLog(@"[DownloadTaskManager] retryTaskWithId: retryHandler 抛异常: %@", exception);
+        NSLog(@"[DownloadTaskManager] retryTaskWithId: retryHandler threw exception: %@", exception);
         item.state = DownloadTaskStateFailed;
         item.errorInfo = [NSError errorWithDomain:@"DownloadTaskManager" code:3
-                                         userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"重试失败: %@", exception.reason ?: @"未知错误"]}];
+                                         userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Retry failed: %@", exception.reason ?: @"Unknown error"]}];
         [self postUpdateForTask:item];
         [self checkAggregateStateChange];
     }

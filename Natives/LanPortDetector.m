@@ -34,7 +34,7 @@ NSString *const LanPortDetectorDidDetectPortNotification = @"LanPortDetectorDidD
 - (void)setManualPort:(uint16_t)port {
     self.detectedPort = port;
 
-    NSLog(@"[LanPortDetector] 手动设置 LAN 端口：%u", port);
+    NSLog(@"[LanPortDetector] Manually set LAN port: %u", port);
 
     // 发送通知，userInfo 包含端口号
     dispatch_async(dispatch_get_main_queue(), ^{

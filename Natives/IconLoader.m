@@ -151,7 +151,7 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
         // 默认根据偏好判断是否启用镜像
         _mirrorEnabled = [self shouldMirrorByDefault];
 
-        NSDebugLog(@"[IconLoader] 初始化完成，磁盘缓存目录: %@，镜像启用: %@", _diskCacheDirectory, _mirrorEnabled ? @"是" : @"否");
+        NSDebugLog(@"[IconLoader] Initialization complete, disk cache directory: %@, mirror enabled: %@", _diskCacheDirectory, _mirrorEnabled ? @"YES" : @"NO");
     }
     return self;
 }
@@ -371,7 +371,7 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
         if ([fm fileExistsAtPath:loader.diskCacheDirectory]) {
             [fm removeItemAtPath:loader.diskCacheDirectory error:&error];
             if (error) {
-                NSDebugLog(@"[IconLoader] 清空磁盘缓存失败: %@", error);
+                NSDebugLog(@"[IconLoader] Failed to clear disk cache: %@", error);
             } else {
                 // 重新创建空目录
                 [fm createDirectoryAtPath:loader.diskCacheDirectory
@@ -632,16 +632,16 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
         BOOL shouldFallbackToOriginal = NO;
 
         if (isNetworkError) {
-            NSLog(@"[IconLoader] 网络错误: %@ - %@", url, error.localizedDescription);
+            NSLog(@"[IconLoader] Network error: %@ - %@", url, error.localizedDescription);
             shouldFallbackToOriginal = YES;
         } else if (isEmptyData) {
-            NSLog(@"[IconLoader] 响应数据为空: %@ (HTTP %ld)", url, (long)statusCode);
+            NSLog(@"[IconLoader] Response data is empty: %@ (HTTP %ld)", url, (long)statusCode);
             shouldFallbackToOriginal = YES;
         } else if (isHTTPError) {
-            NSLog(@"[IconLoader] HTTP 错误: %@ (status=%ld, Content-Type=%@)", url, (long)statusCode, contentType);
+            NSLog(@"[IconLoader] HTTP error: %@ (status=%ld, Content-Type=%@)", url, (long)statusCode, contentType);
             shouldFallbackToOriginal = YES;
         } else if (isNonImageContentType) {
-            NSLog(@"[IconLoader] Content-Type 非图片: %@ (Content-Type=%@)", url, contentType);
+            NSLog(@"[IconLoader] Content-Type is not image: %@ (Content-Type=%@)", url, contentType);
             shouldFallbackToOriginal = YES;
         }
 
@@ -658,7 +658,7 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
             NSString *currentURLString = url.absoluteString;
             // 仅当当前 URL 与原始 URL 不同时才回退（避免无限重试）
             if (![currentURLString isEqualToString:originalURLString]) {
-                NSLog(@"[IconLoader] 回退到原始 URL 重试: %@", originalURLString);
+                NSLog(@"[IconLoader] Falling back to original URL: %@", originalURLString);
                 NSURL *originalURL = [NSURL URLWithString:originalURLString];
                 if (originalURL) {
                     // 递归调用自身，但传入 nil 作为 originalURLString 防止再次回退
@@ -674,7 +674,7 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
 
         if (shouldFallbackToOriginal) {
             // 所有重试都已穷尽，最终失败
-            NSLog(@"[IconLoader] 图标加载最终失败（所有 URL 均不可用）: %@", url);
+            NSLog(@"[IconLoader] Icon loading ultimately failed (all URLs unavailable): %@", url);
             [strongSelf completeRequestWithCacheKey:cacheKey image:nil];
             return;
         }
@@ -695,11 +695,11 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
             } else {
                 // 解码失败：可能是数据损坏或非图片数据伪装成 image Content-Type
                 // 尝试回退到原始 URL（如果尚未回退过）
-                NSLog(@"[IconLoader] 图像解码失败，数据可能损坏或非图片: %@ (data.length=%lu)", url, (unsigned long)data.length);
+                NSLog(@"[IconLoader] Image decoding failed, data may be corrupted or not an image: %@ (data.length=%lu)", url, (unsigned long)data.length);
                 if (originalURLString && originalURLString.length > 0) {
                     NSString *currentURLString = url.absoluteString;
                     if (![currentURLString isEqualToString:originalURLString]) {
-                        NSLog(@"[IconLoader] 解码失败后回退到原始 URL 重试: %@", originalURLString);
+                        NSLog(@"[IconLoader] Decode failure, falling back to original URL: %@", originalURLString);
                         NSURL *originalURL = [NSURL URLWithString:originalURLString];
                         if (originalURL) {
                             [strongSelf downloadFromURL:originalURL
@@ -731,20 +731,20 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
     if (options & IconLoaderOptionsNoDownsample || CGSizeEqualToSize(targetSize, CGSizeZero)) {
         UIImage *directImage = [UIImage imageWithData:data];
         if (!directImage) {
-            NSLog(@"[IconLoader] decodeImageData: UIImage imageWithData: 返回 nil (data.length=%lu)", (unsigned long)data.length);
+            NSLog(@"[IconLoader] decodeImageData: UIImage imageWithData: returned nil (data.length=%lu)", (unsigned long)data.length);
         }
         return directImage;
     }
 
     CGImageSourceRef source = CGImageSourceCreateWithData((__bridge CFDataRef)data, nil);
     if (!source) {
-        NSLog(@"[IconLoader] decodeImageData: CGImageSourceCreateWithData 失败 (data.length=%lu)", (unsigned long)data.length);
+        NSLog(@"[IconLoader] decodeImageData: CGImageSourceCreateWithData failed (data.length=%lu)", (unsigned long)data.length);
         return nil;
     }
 
     CFIndex imageCount = CGImageSourceGetCount(source);
     if (imageCount == 0) {
-        NSLog(@"[IconLoader] decodeImageData: CGImageSourceGetCount 返回 0 (data.length=%lu)", (unsigned long)data.length);
+        NSLog(@"[IconLoader] decodeImageData: CGImageSourceGetCount returned 0 (data.length=%lu)", (unsigned long)data.length);
         CFRelease(source);
         return nil;
     }
@@ -770,7 +770,7 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
         // 降采样失败，退回直接解码（可能数据本身没问题但 thumbnail 创建失败）
         UIImage *fallbackImage = [UIImage imageWithData:data];
         if (!fallbackImage) {
-            NSLog(@"[IconLoader] decodeImageData: 降采样和直接解码均失败 (data.length=%lu)", (unsigned long)data.length);
+            NSLog(@"[IconLoader] decodeImageData: both downsampling and direct decode failed (data.length=%lu)", (unsigned long)data.length);
         }
         return fallbackImage;
     }
@@ -876,13 +876,13 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
 
 - (void)handleMemoryWarning {
     [self clearMemoryCacheInternal];
-    NSDebugLog(@"[IconLoader] 内存警告：已清空内存缓存");
+    NSDebugLog(@"[IconLoader] Memory warning: cleared memory cache");
 }
 
 - (void)handleEnterBackground {
     // 应用进入后台：取消所有进行中的下载（避免后台下载被系统杀掉）
     [IconLoader cancelAllLoadings];
-    NSDebugLog(@"[IconLoader] 应用进入后台：已取消所有进行中的下载");
+    NSDebugLog(@"[IconLoader] App entered background: cancelled all ongoing downloads");
 }
 
 @end

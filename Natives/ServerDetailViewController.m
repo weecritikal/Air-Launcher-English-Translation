@@ -244,7 +244,7 @@
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
         if (error || !server) {
-            NSLog(@"[ServerDetail] 获取详情失败: %@", error.localizedDescription);
+            NSLog(@"[ServerDetail] Failed to fetch details: %@", error.localizedDescription);
             // 详情获取失败不弹错误，保留搜索阶段已有的信息
             return;
         }

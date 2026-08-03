@@ -120,7 +120,7 @@ static void zeroTierEventCallback(void *msgPtr) {
             [NSThread sleepForTimeInterval:0.05];
         }
     }
-    NSLog(@"[ZeroTierBridge] framework 检测：zts_node_start()=%d, available=%@", result, frameworkAvailable ? @"YES" : @"NO");
+    NSLog(@"[ZeroTierBridge] framework check: zts_node_start()=%d, available=%@", result, frameworkAvailable ? @"YES" : @"NO");
 
     [_lock lock];
     _frameworkAvailable = frameworkAvailable;
@@ -149,13 +149,13 @@ static void zeroTierEventCallback(void *msgPtr) {
     // 若 stopNode 在 2 秒超时后仍未完全关闭节点（zts_node_is_online 仍返回 1），
     // 这里再等待最多 3 秒确保旧节点完全停止，避免 zts_init_from_storage 与旧节点冲突。
     if (zts_node_is_online() == 1) {
-        NSLog(@"[ZeroTierBridge] startNode：检测到节点仍在线（stop 未完全完成），等待关闭...");
+        NSLog(@"[ZeroTierBridge] startNode: detected node still online (stop not fully completed), waiting for shutdown...");
         NSTimeInterval deadline = [NSDate timeIntervalSinceReferenceDate] + 3.0;
         while (zts_node_is_online() == 1 && [NSDate timeIntervalSinceReferenceDate] < deadline) {
             [NSThread sleepForTimeInterval:0.05];
         }
         if (zts_node_is_online() == 1) {
-            NSLog(@"[ZeroTierBridge] startNode：节点仍未关闭，强制继续（可能出现状态冲突）");
+            NSLog(@"[ZeroTierBridge] startNode: node still not shut down, forcing continue (may cause state conflict)");
         }
     }
 
@@ -184,7 +184,7 @@ static void zeroTierEventCallback(void *msgPtr) {
     _homeDirectory = [homeDir copy];
     [_lock unlock];
 
-    NSLog(@"[ZeroTierBridge] 节点启动请求已提交，homeDir = %@", homeDir);
+    NSLog(@"[ZeroTierBridge] node start request submitted, homeDir = %@", homeDir);
     return YES;
 }
 
@@ -217,7 +217,7 @@ static void zeroTierEventCallback(void *msgPtr) {
     [_ipv4Addresses removeAllObjects];
     [_ipv6Addresses removeAllObjects];
     [_lock unlock];
-    NSLog(@"[ZeroTierBridge] 节点已停止");
+    NSLog(@"[ZeroTierBridge] node stopped");
 }
 
 - (BOOL)isNodeOnline {
@@ -398,7 +398,7 @@ static void zeroTierEventCallback(void *msgPtr) {
             _networkStatuses[@(netID)] = @(ZeroTierNetworkStatusOk);
             [_lock unlock];
             if (isDuplicate) {
-                NSLog(@"[ZeroTierBridge] 收到重复 NETWORK_OK 事件（netID=%llu），跳过信号量与回调", netID);
+                NSLog(@"[ZeroTierBridge] received duplicate NETWORK_OK event (netID=%llu), skipping signal and callback", netID);
                 break;
             }
             dispatch_semaphore_signal(_networkEventSemaphore);
@@ -433,7 +433,7 @@ static void zeroTierEventCallback(void *msgPtr) {
             _networkStatuses[@(netID)] = @(status);
             [_lock unlock];
             if (isDuplicate) {
-                NSLog(@"[ZeroTierBridge] 收到重复网络失败事件（code=%d, netID=%llu），跳过信号量与回调",
+                NSLog(@"[ZeroTierBridge] received duplicate network failure event (code=%d, netID=%llu), skipping signal and callback",
                       eventCode, netID);
                 break;
             }
@@ -471,7 +471,7 @@ static void zeroTierEventCallback(void *msgPtr) {
             // 避免后台堆积的同地址事件批量触发 zeroTierNetworkReady: 造成 UI 抖动。
             // 首次分配地址时 _ipv4Addresses/_ipv6Addresses 中无记录，addrChanged=YES，正常处理。
             if (!addrChanged) {
-                NSLog(@"[ZeroTierBridge] 收到重复 ADDR_ADDED 事件（netID=%llu），跳过信号量与回调", addrNetID);
+                NSLog(@"[ZeroTierBridge] received duplicate ADDR_ADDED event (netID=%llu), skipping signal and callback", addrNetID);
                 break;
             }
             dispatch_semaphore_signal(_networkEventSemaphore);

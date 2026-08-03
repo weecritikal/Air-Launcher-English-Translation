@@ -4865,14 +4865,14 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
         downloadAttempt++;
-        NSLog(@"[ModpackDownload] 整合包下载第 %ld 次尝试: %@", (long)downloadAttempt, downloadURL);
+        NSLog(@"[ModpackDownload] Modpack download attempt %ld: %@", (long)downloadAttempt, downloadURL);
         NSURLSessionDownloadTask *task = [[NSURLSession sharedSession] downloadTaskWithURL:url completionHandler:^(NSURL *location, NSURLResponse *response, NSError *error) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 __strong typeof(weakSelf) strongSelf2 = weakSelf;
                 if (!strongSelf2) return;
                 if (error || !location) {
-                    downloadError = error ?: [NSError errorWithDomain:@"DownloadError" code:1 userInfo:@{NSLocalizedDescriptionKey: @"下载返回空数据"}];
-                    NSLog(@"[ModpackDownload] 第 %ld 次失败: %@", (long)downloadAttempt, downloadError.localizedDescription);
+                    downloadError = error ?: [NSError errorWithDomain:@"DownloadError" code:1 userInfo:@{NSLocalizedDescriptionKey: @"Download returned empty data"}];
+                    NSLog(@"[ModpackDownload] Attempt %ld failed: %@", (long)downloadAttempt, downloadError.localizedDescription);
                     if (downloadAttempt < 3) {
                         // 间隔 1.5s 后重试，避免连续请求触发限流
                         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
@@ -4881,7 +4881,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                     } else {
                         [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId completedWithError:downloadError];
                         [strongSelf2.navigationController popViewControllerAnimated:YES];
-                        [strongSelf2 showError:[NSString stringWithFormat:@"整合包下载失败（已重试 %ld 次）：%@", (long)downloadAttempt, downloadError.localizedDescription ?: @"未知错误"]];
+                        [strongSelf2 showError:[NSString stringWithFormat:@"Modpack download failed (retried %ld times): %@", (long)downloadAttempt, downloadError.localizedDescription ?: @"Unknown error"]];
                     }
                     return;
                 }
@@ -4895,7 +4895,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                 [[NSFileManager defaultManager] moveItemAtPath:downloadLocation.path toPath:tempPath error:&moveError];
                 if (moveError) {
                     if (downloadAttempt < 3) {
-                        NSLog(@"[ModpackDownload] 移动文件失败，重试: %@", moveError.localizedDescription);
+                        NSLog(@"[ModpackDownload] File move failed, retrying: %@", moveError.localizedDescription);
                         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                             attemptDownload();
                         });

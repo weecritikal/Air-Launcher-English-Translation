@@ -92,7 +92,7 @@ static NSString *CFACompiledAPIKey(void) {
     // 1. 运行时偏好（优先级最高）
     NSString *runtimeKey = [PLPreferences curseForgeAPIKey];
     if ([runtimeKey isKindOfClass:NSString.class] && runtimeKey.length > 0) {
-        NSLog(@"[CurseForgeAPI] 🔑 API Key 来源: 运行时偏好 (长度=%lu, 前缀=%@...)",
+        NSLog(@"[CurseForgeAPI] API Key source: runtime preference (length=%lu, prefix=%@...)",
               (unsigned long)runtimeKey.length,
               runtimeKey.length >= 8 ? [runtimeKey substringToIndex:8] : runtimeKey);
         return runtimeKey;
@@ -100,7 +100,7 @@ static NSString *CFACompiledAPIKey(void) {
     // 2. 编译时宏（使用字符串化宏方案，避免 @nil 边界问题）
     NSString *compiledKey = CFACompiledAPIKey();
     if (compiledKey.length > 0) {
-        NSLog(@"[CurseForgeAPI] 🔑 API Key 来源: 编译时宏 (长度=%lu, 前缀=%@...)",
+        NSLog(@"[CurseForgeAPI] API Key source: compile-time macro (length=%lu, prefix=%@...)",
               (unsigned long)compiledKey.length,
               compiledKey.length >= 8 ? [compiledKey substringToIndex:8] : compiledKey);
         return compiledKey;
@@ -108,12 +108,12 @@ static NSString *CFACompiledAPIKey(void) {
     // 3. Info.plist
     NSString *infoPlistKey = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CurseForgeAPIKey"];
     if ([infoPlistKey isKindOfClass:NSString.class] && infoPlistKey.length > 0) {
-        NSLog(@"[CurseForgeAPI] 🔑 API Key 来源: Info.plist (长度=%lu, 前缀=%@...)",
+        NSLog(@"[CurseForgeAPI] API Key source: Info.plist (length=%lu, prefix=%@...)",
               (unsigned long)infoPlistKey.length,
               infoPlistKey.length >= 8 ? [infoPlistKey substringToIndex:8] : infoPlistKey);
         return infoPlistKey;
     }
-    NSLog(@"[CurseForgeAPI] ⚠️ API Key 未配置！");
+    NSLog(@"[CurseForgeAPI] Warning: API Key not configured!");
     return @"";
 }
 
@@ -628,7 +628,7 @@ static NSString *CFACompiledAPIKey(void) {
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
     NSDictionary *headers = [self headers];
     if (!headers) {
-        NSLog(@"[CurseForgeAPI] ⚠️ searchModWithFilters 失败：API Key 未配置");
+        NSLog(@"[CurseForgeAPI] Warning: searchModWithFilters failed: API Key not configured");
         if (completion) completion(nil, [self missingAPIKeyError]);
         return;
     }
@@ -636,12 +636,12 @@ static NSString *CFACompiledAPIKey(void) {
         [request setValue:headers[key] forHTTPHeaderField:key];
     }
     request.timeoutInterval = 30.0;
-    NSLog(@"[CurseForgeAPI] 🔍 searchModWithFilters 开始请求: %@", urlString);
+    NSLog(@"[CurseForgeAPI] searchModWithFilters starting request: %@", urlString);
 
     NSURLSessionDataTask *task = [self.session dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         if (error) {
             // 网络错误：透传原 NSError 并附带 HTTP 诊断信息（如可获取）
-            NSLog(@"[CurseForgeAPI] 🔴 searchModWithFilters 网络错误: %@", error.localizedDescription);
+            NSLog(@"[CurseForgeAPI] searchModWithFilters network error: %@", error.localizedDescription);
             [self debugLogRequest:request response:response data:data jsonError:nil];
             NSError *diagnosticError = [self errorWithResponse:response data:data originalError:error snippet:nil];
             if (completion) completion(nil, diagnosticError);
@@ -649,7 +649,7 @@ static NSString *CFACompiledAPIKey(void) {
         }
         if (!data || data.length == 0) {
             // 响应数据为空：返回包含 HTTP 状态码的 NSError
-            NSLog(@"[CurseForgeAPI] 🔴 searchModWithFilters 响应为空");
+            NSLog(@"[CurseForgeAPI] searchModWithFilters empty response");
             [self debugLogRequest:request response:response data:data jsonError:nil];
             NSError *emptyError = [NSError errorWithDomain:@"CurseForgeAPI"
                                                       code:2
@@ -663,7 +663,7 @@ static NSString *CFACompiledAPIKey(void) {
         NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
         if (jsonError || ![json isKindOfClass:NSDictionary.class]) {
             // JSON 解析失败：输出完整调试日志，便于诊断 401 HTML 错误页等场景
-            NSLog(@"[CurseForgeAPI] 🔴 searchModWithFilters JSON 解析失败");
+            NSLog(@"[CurseForgeAPI] searchModWithFilters JSON parse failed");
             [self debugLogRequest:request response:response data:data jsonError:jsonError];
             NSError *baseError = jsonError ?: [NSError errorWithDomain:@"CurseForgeAPI"
                                                                    code:3
@@ -689,7 +689,7 @@ static NSString *CFACompiledAPIKey(void) {
         NSUInteger count = [pagination[@"resultCount"] unsignedIntegerValue];
         self.reachedLastPage = total == 0 || idx + count >= total;
 
-        NSLog(@"[CurseForgeAPI] ✅ searchModWithFilters 成功: 返回 %lu 条 (total=%lu)",
+        NSLog(@"[CurseForgeAPI] searchModWithFilters success: returned %lu items (total=%lu)",
               (unsigned long)results.count, (unsigned long)total);
         if (completion) completion(results, nil);
     }];
@@ -790,7 +790,7 @@ static NSString *CFACompiledAPIKey(void) {
         NSDictionary *response = nil;
         for (NSInteger retry = 0; retry < 3 && !response; retry++) {
             if (retry > 0) {
-                NSLog(@"[CurseForgeAPI] filesByFileID 第 %ld 批重试 %ld", (long)index/50 + 1, (long)retry);
+                NSLog(@"[CurseForgeAPI] filesByFileID batch %ld retry %ld", (long)index/50 + 1, (long)retry);
                 [NSThread sleepForTimeInterval:1.0];
             }
             NSDictionary *resp = [self postEndpoint:@"mods/files" params:@{@"fileIds": batch}];
@@ -865,7 +865,7 @@ submitDownloadTasksFromPackage:(NSString *)packagePath
         // 即使只有 1 个文件无法解析。这与 issue 描述的"模组不完整"完全吻合。
         // 阶段5修复（参照 FCL）：同时将跳过的文件记入 failedFiles，最终汇总报告给用户。
         if (url.length == 0 || fileName.length == 0) {
-            NSLog(@"[CurseForgeAPI] 跳过无法解析的整合包文件 projectID=%@ fileID=%@（url 或 fileName 为空），继续下载剩余文件", projectID, fileID);
+            NSLog(@"[CurseForgeAPI] Skipping unresolvable modpack file projectID=%@ fileID=%@ (url or fileName is empty), continuing with remaining files", projectID, fileID);
             skippedCount++;
             // 单文件失败也需推进进度，避免下载卡片卡住
             downloader.progress.completedUnitCount++;
@@ -890,7 +890,7 @@ submitDownloadTasksFromPackage:(NSString *)packagePath
         }
     }
     if (skippedCount > 0) {
-        NSLog(@"[CurseForgeAPI] 整合包下载：共跳过 %lu 个无法解析的文件，已继续下载其余文件", (unsigned long)skippedCount);
+        NSLog(@"[CurseForgeAPI] Modpack download: skipped %lu unresolvable files, continuing with remaining", (unsigned long)skippedCount);
     }
     
     NSString *overrides = manifest[@"overrides"];
@@ -960,14 +960,14 @@ submitDownloadTasksFromPackage:(NSString *)packagePath
                 }
                 [NSFileManager.defaultManager removeItemAtPath:installerPath error:nil];
                 if (!installSuccess) {
-                    NSLog(@"[CurseForgeAPI] %@ 直装失败: %@", loader, installError.localizedDescription);
+                    NSLog(@"[CurseForgeAPI] %@ direct install failed: %@", loader, installError.localizedDescription);
                     [ModpackUtils writePlaceholderVersionJSONForVersionId:versionId
                                                           minecraftVersion:depInfo[@"minecraftVersion"]
                                                                     loader:loader
                                                             loaderVersion:depInfo[@"loaderVersion"]
                                                                      error:installError];
                 } else {
-                    NSLog(@"[CurseForgeAPI] %@ 直装成功，version.json 已写入: %@", loader, versionId);
+                    NSLog(@"[CurseForgeAPI] %@ direct install succeeded, version.json written: %@", loader, versionId);
                     // 阶段5修复（参照 FCL ModpackHelper.ensureCompleteVersion）：
                     // 直装器只写入了 loader 的 version.json + Forge/NeoForge 库，
                     // 但原版 MC 的 libraries 和 assets 还没下载。
@@ -1079,12 +1079,12 @@ submitDownloadTasksFromPackage:(NSString *)packagePath
     [request setValue:[self apiKey] forHTTPHeaderField:@"x-api-key"];
     [request setValue:@"application/json" forHTTPHeaderField:@"Accept"];
     request.timeoutInterval = 30.0;
-    NSLog(@"[CurseForgeAPI] 🔍 loadDetailsOfMod 开始请求 modID=%@: %@", modID, urlStr);
+    NSLog(@"[CurseForgeAPI] loadDetailsOfMod starting request modID=%@: %@", modID, urlStr);
 
     NSURLSessionDataTask *task = [self.session dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         if (error) {
             // 网络错误：透传并附带诊断信息
-            NSLog(@"[CurseForgeAPI] 🔴 loadDetailsOfMod 网络错误: %@", error.localizedDescription);
+            NSLog(@"[CurseForgeAPI] loadDetailsOfMod network error: %@", error.localizedDescription);
             [self debugLogRequest:request response:response data:data jsonError:nil];
             NSError *diagnosticError = [self errorWithResponse:response data:data originalError:error snippet:nil];
             if (completion) dispatch_async(dispatch_get_main_queue(), ^{ completion(diagnosticError); });
@@ -1092,7 +1092,7 @@ submitDownloadTasksFromPackage:(NSString *)packagePath
         }
         if (!data || data.length == 0) {
             // 响应数据为空
-            NSLog(@"[CurseForgeAPI] 🔴 loadDetailsOfMod 响应为空");
+            NSLog(@"[CurseForgeAPI] loadDetailsOfMod empty response");
             [self debugLogRequest:request response:response data:data jsonError:nil];
             NSError *emptyError = [NSError errorWithDomain:@"CurseForgeAPI"
                                                       code:2
@@ -1106,7 +1106,7 @@ submitDownloadTasksFromPackage:(NSString *)packagePath
         NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
         if (jsonError || ![json isKindOfClass:NSDictionary.class]) {
             // JSON 解析失败：输出完整调试日志
-            NSLog(@"[CurseForgeAPI] 🔴 loadDetailsOfMod JSON 解析失败");
+            NSLog(@"[CurseForgeAPI] loadDetailsOfMod JSON parse failed");
             [self debugLogRequest:request response:response data:data jsonError:jsonError];
             NSError *baseError = jsonError ?: [NSError errorWithDomain:@"CurseForgeAPI"
                                                                    code:3
@@ -1125,7 +1125,7 @@ submitDownloadTasksFromPackage:(NSString *)packagePath
             if (mv) [versions addObject:mv];
         }
         item[@"versions"] = versions;
-        NSLog(@"[CurseForgeAPI] ✅ loadDetailsOfMod 成功: modID=%@, %lu 个版本",
+        NSLog(@"[CurseForgeAPI] loadDetailsOfMod success: modID=%@, %lu versions",
               modID, (unsigned long)versions.count);
         if (completion) dispatch_async(dispatch_get_main_queue(), ^{ completion(nil); });
     }];
@@ -1216,7 +1216,7 @@ submitDownloadTasksFromPackage:(NSString *)packagePath
                 @"modpackId": modpackID
             }];
         }
-        NSLog(@"[CurseForgeAPI] ✅ getServerPackFilesForModpack 成功: modpackID=%@, %lu 个 server pack",
+        NSLog(@"[CurseForgeAPI] getServerPackFilesForModpack success: modpackID=%@, %lu server packs",
               modpackID, (unsigned long)serverPacks.count);
         if (completion) dispatch_async(dispatch_get_main_queue(), ^{ completion(serverPacks, nil); });
     }];

@@ -214,7 +214,7 @@
             }];
         }
     }
-    NSLog(@"[ModpackExport] 找到 %lu 个 mod 文件", (unsigned long)modFiles.count);
+    NSLog(@"[ModpackExport] Found %lu mod files", (unsigned long)modFiles.count);
 
     // 取消检查点
     if ([self checkCancelledWithError:error]) return NO;
@@ -389,7 +389,7 @@
     archive = nil;
 
     progress(1.0, @"导出完成");
-    NSLog(@"[ModpackExport] Modrinth 格式导出完成: %@", destPath);
+    NSLog(@"[ModpackExport] Modrinth format export completed: %@", destPath);
     return YES;
 }
 
@@ -478,7 +478,7 @@
     archive = nil;
 
     progress(1.0, @"导出完成");
-    NSLog(@"[ModpackExport] CurseForge 格式导出完成: %@", destPath);
+    NSLog(@"[ModpackExport] CurseForge format export completed: %@", destPath);
     return YES;
 }
 
@@ -609,7 +609,7 @@
     archive = nil;
 
     progress(1.0, @"导出完成");
-    NSLog(@"[ModpackExport] MMC 格式导出完成: %@", destPath);
+    NSLog(@"[ModpackExport] MMC format export completed: %@", destPath);
     return YES;
 }
 
@@ -674,7 +674,7 @@
     archive = nil;
 
     progress(1.0, @"导出完成");
-    NSLog(@"[ModpackExport] Plain Zip 格式导出完成: %@", destPath);
+    NSLog(@"[ModpackExport] Plain Zip format export completed: %@", destPath);
     return YES;
 }
 
@@ -714,7 +714,7 @@
         if (error) *error = writeError;
         return NO;
     }
-    NSLog(@"[ModpackExport] 链接列表格式导出完成: %@", destPath);
+    NSLog(@"[ModpackExport] Link list format export completed: %@", destPath);
     return YES;
 }
 
@@ -797,7 +797,7 @@
                           filePath:[NSString stringWithFormat:@"%@/%@", zipPrefix, file]
                              error:&writeErr];
                 if (writeErr) {
-                    NSLog(@"[ModpackExport] 警告：写入 %@/%@ 失败: %@", zipPrefix, file, writeErr.localizedDescription);
+                    NSLog(@"[ModpackExport] Warning: failed to write %@/%@: %@", zipPrefix, file, writeErr.localizedDescription);
                 }
             }
         }

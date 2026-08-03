@@ -1605,7 +1605,7 @@ static GameSurfaceView* pojavWindow;
     [alert addAction:[UIAlertAction actionWithTitle:localize(@"launch.cancel_confirm_yes", @"确认取消")
                                               style:UIAlertActionStyleDestructive
                                             handler:^(UIAlertAction *action) {
-        NSLog(@"[SurfaceViewController] 用户取消启动");
+        NSLog(@"[SurfaceViewController] User cancelled launch");
         // 移除遮罩层
         [self dismissLaunchOverlayOnError];
         // 返回启动器
@@ -2471,9 +2471,9 @@ static NSMutableDictionary *s_touchToFingerIdMap = nil;
     // 注意：dealloc 可能在异常路径触发，用 @try/@catch 防止二次崩溃。
     @try {
         [[MultiplayerManager sharedManager] stopAllMultiplayerServices];
-        NSLog(@"[SurfaceViewController] dealloc: 联机资源已清理");
+        NSLog(@"[SurfaceViewController] dealloc: Multiplayer resources cleaned up");
     } @catch (NSException *e) {
-        NSLog(@"[SurfaceViewController] dealloc: 清理联机资源异常：%@", e);
+        NSLog(@"[SurfaceViewController] dealloc: Exception while cleaning up multiplayer resources: %@", e);
     }
 
     //æ¸ç TouchController èµæº

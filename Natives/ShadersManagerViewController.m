@@ -343,7 +343,7 @@
         NSError *error = nil;
         BOOL success = [[ShaderService sharedService] deleteShader:shader error:&error];
         if (!success || error) {
-            NSLog(@"[ShadersManager] 批量删除失败：%@ - %@", shader.displayName, error);
+            NSLog(@"[ShadersManager] Batch delete failed: %@ - %@", shader.displayName, error);
             [failedShaders addObject:shader];
         }
     }
@@ -528,7 +528,7 @@
         [self showSimpleAlertWithTitle:[NSString stringWithFormat:@"导入完成（%ld 成功，%ld 失败）", (long)successCount, (long)failedFiles.count]
                                message:[failedFiles componentsJoinedByString:@"\n"]];
     } else {
-        NSLog(@"[ShadersManager] 成功导入 %ld 个光影包", (long)successCount);
+        NSLog(@"[ShadersManager] Successfully imported %ld shader packs", (long)successCount);
     }
 }
 

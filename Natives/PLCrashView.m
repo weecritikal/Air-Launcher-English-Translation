@@ -1072,7 +1072,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
 ///
 /// 现在此方法直接调用 exit(0) 退出进程，不进行 relaunch。
 - (void)exitLauncherAction {
-    NSLog(@"[PLCrashView] 用户点击退出启动器，直接退出进程");
+    NSLog(@"[PLCrashView] User tapped exit launcher, exiting process directly");
     // 先清理崩溃界面
     if (currentCrashVC) {
         [currentCrashVC dismissViewControllerAnimated:NO completion:nil];

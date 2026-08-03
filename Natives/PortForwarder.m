@@ -100,7 +100,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
             // 实际上对于实时游戏流量，超时通常意味着对端处理不过来，应该断开连接让 MC 自动重连，
             // 而不是无限阻塞。这里直接返回 -1 让上层关闭连接。
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                NSLog(@"[PortForwarder] writeAll 超时（fd=%d），关闭连接", fd);
+                NSLog(@"[PortForwarder] writeAll timeout (fd=%d), closing connection", fd);
             }
             // 真正的错误
             return -1;
@@ -240,7 +240,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
         _activePosixFDs = [[NSMutableArray alloc] init];
         _activeZtFDs = [[NSMutableArray alloc] init];
         _acceptGeneration = 0;
-        NSLog(@"[PortForwarder] 单例已初始化");
+        NSLog(@"[PortForwarder] Singleton initialized");
     }
     return self;
 }
@@ -263,12 +263,12 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
     // 步骤 1：参数校验
     // ============================================================
     if (!hostIP || hostIP.length == 0) {
-        NSLog(@"[PortForwarder] 房客模式启动失败：hostIP 为空");
+        NSLog(@"[PortForwarder] Guest mode start failed: hostIP is empty");
         return NO;
     }
 
     if (hostPort == 0) {
-        NSLog(@"[PortForwarder] 房客模式启动失败：hostPort 为 0");
+        NSLog(@"[PortForwarder] Guest mode start failed: hostPort is 0");
         return NO;
     }
 
@@ -278,7 +278,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
     [_lock lock];
     if (_running) {
         [_lock unlock];
-        NSLog(@"[PortForwarder] 房客模式启动失败：转发器已在运行（模式=%ld, 端口 %u）",
+        NSLog(@"[PortForwarder] Guest mode start failed: forwarder already running (mode=%ld, port %u)",
               (long)_mode, _listeningPort);
         return NO;
     }
@@ -288,14 +288,14 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
     // 步骤 3：检查 ZeroTier framework 是否可用
     // ============================================================
     if (![[ZeroTierBridge sharedInstance] isFrameworkAvailable]) {
-        NSLog(@"[PortForwarder] 房客模式启动失败：ZeroTier framework 不可用");
+        NSLog(@"[PortForwarder] Guest mode start failed: ZeroTier framework unavailable");
         return NO;
     }
 
     // ============================================================
     // 步骤 4：创建监听 socket（尝试端口 localPort 到 localPort+9）
     // ============================================================
-    NSLog(@"[PortForwarder] 启动房客模式：本地 %u（或 +1~+9）→ %@:%u",
+    NSLog(@"[PortForwarder] Starting guest mode: local %u (or +1~+9) → %@:%u",
           localPort, hostIP, hostPort);
 
     int listenFD = -1;
@@ -307,7 +307,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
         // 创建 TCP socket
         listenFD = socket(AF_INET, SOCK_STREAM, 0);
         if (listenFD < 0) {
-            NSLog(@"[PortForwarder] socket() 失败：errno=%d (%s)", errno, strerror(errno));
+            NSLog(@"[PortForwarder] socket() failed: errno=%d (%s)", errno, strerror(errno));
             continue;
         }
 
@@ -324,7 +324,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
 
         int bindResult = bind(listenFD, (struct sockaddr *)&bindAddr, sizeof(bindAddr));
         if (bindResult < 0) {
-            NSLog(@"[PortForwarder] bind(%u) 失败：errno=%d (%s)，尝试下一个端口",
+            NSLog(@"[PortForwarder] bind(%u) failed: errno=%d (%s), trying next port",
                   tryPort, errno, strerror(errno));
             close(listenFD);
             listenFD = -1;
@@ -333,16 +333,16 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
 
         // bind 成功
         actualPort = tryPort;
-        NSLog(@"[PortForwarder] bind 成功：端口 %u", actualPort);
+        NSLog(@"[PortForwarder] bind succeeded: port %u", actualPort);
         break;
     }
 
     // 如果所有端口都绑定失败，最后尝试 port=0（系统自动分配）
     if (listenFD < 0) {
-        NSLog(@"[PortForwarder] 所有指定端口都绑定失败，尝试系统自动分配端口...");
+        NSLog(@"[PortForwarder] All specified ports failed to bind, trying system auto-assigned port...");
         listenFD = socket(AF_INET, SOCK_STREAM, 0);
         if (listenFD < 0) {
-            NSLog(@"[PortForwarder] socket() 失败：errno=%d (%s)", errno, strerror(errno));
+            NSLog(@"[PortForwarder] socket() failed: errno=%d (%s)", errno, strerror(errno));
             return NO;
         }
 
@@ -357,7 +357,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
 
         int bindResult = bind(listenFD, (struct sockaddr *)&bindAddr, sizeof(bindAddr));
         if (bindResult < 0) {
-            NSLog(@"[PortForwarder] bind(0) 失败：errno=%d (%s)", errno, strerror(errno));
+            NSLog(@"[PortForwarder] bind(0) failed: errno=%d (%s)", errno, strerror(errno));
             close(listenFD);
             return NO;
         }
@@ -368,7 +368,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
         if (getsockname(listenFD, (struct sockaddr *)&actualAddr, &addrLen) == 0) {
             actualPort = ntohs(actualAddr.sin_port);
         }
-        NSLog(@"[PortForwarder] 系统自动分配端口：%u", actualPort);
+        NSLog(@"[PortForwarder] System auto-assigned port: %u", actualPort);
     }
 
     // ============================================================
@@ -376,7 +376,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
     // ============================================================
     int listenResult = listen(listenFD, PORT_FORWARDER_BACKLOG);
     if (listenResult < 0) {
-        NSLog(@"[PortForwarder] listen() 失败：errno=%d (%s)", errno, strerror(errno));
+        NSLog(@"[PortForwarder] listen() failed: errno=%d (%s)", errno, strerror(errno));
         close(listenFD);
         return NO;
     }
@@ -408,7 +408,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
     _acceptThread.name = @"PortForwarder-GuestAccept";
     [_acceptThread start];
 
-    NSLog(@"[PortForwarder] 房客模式已启动：127.0.0.1:%u → %@:%u",
+    NSLog(@"[PortForwarder] Guest mode started: 127.0.0.1:%u → %@:%u",
           actualPort, hostIP, hostPort);
 
     return YES;
@@ -431,12 +431,12 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
     // 步骤 1：参数校验
     // ============================================================
     if (listenPort == 0) {
-        NSLog(@"[PortForwarder] 房主模式启动失败：listenPort 为 0");
+        NSLog(@"[PortForwarder] Host mode start failed: listenPort is 0");
         return NO;
     }
 
     if (localHostPort == 0) {
-        NSLog(@"[PortForwarder] 房主模式启动失败：localHostPort 为 0");
+        NSLog(@"[PortForwarder] Host mode start failed: localHostPort is 0");
         return NO;
     }
 
@@ -446,7 +446,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
     [_lock lock];
     if (_running) {
         [_lock unlock];
-        NSLog(@"[PortForwarder] 房主模式启动失败：转发器已在运行（模式=%ld, 端口 %u）",
+        NSLog(@"[PortForwarder] Host mode start failed: forwarder already running (mode=%ld, port %u)",
               (long)_mode, _listeningPort);
         return NO;
     }
@@ -456,19 +456,19 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
     // 步骤 3：检查 ZeroTier framework 是否可用
     // ============================================================
     if (![[ZeroTierBridge sharedInstance] isFrameworkAvailable]) {
-        NSLog(@"[PortForwarder] 房主模式启动失败：ZeroTier framework 不可用");
+        NSLog(@"[PortForwarder] Host mode start failed: ZeroTier framework unavailable");
         return NO;
     }
 
     // ============================================================
     // 步骤 4：创建 libzt 监听 socket
     // ============================================================
-    NSLog(@"[PortForwarder] 启动房主模式：ZeroTier 监听 %u → 本地 127.0.0.1:%u",
+    NSLog(@"[PortForwarder] Starting host mode: ZeroTier listening %u → local 127.0.0.1:%u",
           listenPort, localHostPort);
 
     int ztListenFD = [[ZeroTierBridge sharedInstance] createListenSocket];
     if (ztListenFD < 0) {
-        NSLog(@"[PortForwarder] createListenSocket 失败：fd=%d", ztListenFD);
+        NSLog(@"[PortForwarder] createListenSocket failed: fd=%d", ztListenFD);
         return NO;
     }
 
@@ -477,19 +477,19 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
     // ============================================================
     int bindResult = [[ZeroTierBridge sharedInstance] bindSocket:ztListenFD toPort:listenPort];
     if (bindResult != 0) {
-        NSLog(@"[PortForwarder] bindSocket(%u) 失败：result=%d", listenPort, bindResult);
+        NSLog(@"[PortForwarder] bindSocket(%u) failed: result=%d", listenPort, bindResult);
         [[ZeroTierBridge sharedInstance] closeSocket:ztListenFD];
         return NO;
     }
 
     int listenResult = [[ZeroTierBridge sharedInstance] listenOnSocket:ztListenFD];
     if (listenResult != 0) {
-        NSLog(@"[PortForwarder] listenOnSocket 失败：result=%d", listenResult);
+        NSLog(@"[PortForwarder] listenOnSocket failed: result=%d", listenResult);
         [[ZeroTierBridge sharedInstance] closeSocket:ztListenFD];
         return NO;
     }
 
-    NSLog(@"[PortForwarder] libzt 监听成功：ZeroTier 网络端口 %u（fd=%d）", listenPort, ztListenFD);
+    NSLog(@"[PortForwarder] libzt listening succeeded: ZeroTier network port %u (fd=%d)", listenPort, ztListenFD);
 
     // ============================================================
     // 步骤 6：更新状态并启动 accept 线程
@@ -516,7 +516,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
     _acceptThread.name = @"PortForwarder-HostAccept";
     [_acceptThread start];
 
-    NSLog(@"[PortForwarder] 房主模式已启动：ZeroTier :%u → 本地 127.0.0.1:%u",
+    NSLog(@"[PortForwarder] Host mode started: ZeroTier :%u → local 127.0.0.1:%u",
           listenPort, localHostPort);
 
     return YES;
@@ -535,7 +535,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
 /// 错误地接受新 listenFD 上的连接，造成重复 accept 与状态混乱。
 /// 通过代际计数器识别旧线程并使其主动退出。
 - (void)guestAcceptLoopWithGeneration:(int)myGen {
-    NSLog(@"[PortForwarder] 房客模式 Accept 线程已启动（代际=%d）", myGen);
+    NSLog(@"[PortForwarder] Guest mode Accept thread started (generation=%d)", myGen);
 
     while (YES) {
         @autoreleasepool {
@@ -548,13 +548,13 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
             // 关键修复（P1-8）：代际不匹配说明期间发生过 stop→start，
             // 当前 accept 线程属于上一周期，应立即退出，把 listenFD 让给新线程
             if (currentGen != myGen) {
-                NSLog(@"[PortForwarder] 房客 Accept 线程：代际不匹配（my=%d, current=%d），退出循环",
+                NSLog(@"[PortForwarder] Guest Accept thread: generation mismatch (my=%d, current=%d), exiting loop",
                       myGen, currentGen);
                 break;
             }
 
             if (stopping || listenFD < 0) {
-                NSLog(@"[PortForwarder] 房客 Accept 线程：收到停止信号，退出循环");
+                NSLog(@"[PortForwarder] Guest Accept thread: received stop signal, exiting loop");
                 break;
             }
 
@@ -574,7 +574,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
                     // 被信号中断，重试
                     continue;
                 }
-                NSLog(@"[PortForwarder] select() 失败：errno=%d (%s)", errno, strerror(errno));
+                NSLog(@"[PortForwarder] select() failed: errno=%d (%s)", errno, strerror(errno));
                 break;
             }
 
@@ -593,7 +593,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
                     if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) {
                         continue;
                     }
-                    NSLog(@"[PortForwarder] accept() 失败：errno=%d (%s)", errno, strerror(errno));
+                    NSLog(@"[PortForwarder] accept() failed: errno=%d (%s)", errno, strerror(errno));
 
                     // 如果是 EBADF，说明监听 socket 已被关闭（stop 被调用）
                     if (errno == EBADF) {
@@ -606,7 +606,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
                 char clientIP[INET_ADDRSTRLEN] = {0};
                 inet_ntop(AF_INET, &clientAddr.sin_addr, clientIP, sizeof(clientIP));
                 uint16_t clientPort = ntohs(clientAddr.sin_port);
-                NSLog(@"[PortForwarder] 房客模式新客户端连接：%s:%u (fd=%d)", clientIP, clientPort, clientFD);
+                NSLog(@"[PortForwarder] Guest mode new client connection: %s:%u (fd=%d)", clientIP, clientPort, clientFD);
 
                 // 在新线程中处理客户端连接
                 __weak typeof(self) weakSelf = self;
@@ -619,7 +619,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
         }
     }
 
-    NSLog(@"[PortForwarder] 房客模式 Accept 线程已退出");
+    NSLog(@"[PortForwarder] Guest mode Accept thread exited");
 }
 
 #pragma mark - 房主模式 Accept 线程
@@ -631,7 +631,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
 ///
 /// 代际计数器机制与房客模式相同，防止快速 stop→start 时旧线程重复 accept。
 - (void)hostAcceptLoopWithGeneration:(int)myGen {
-    NSLog(@"[PortForwarder] 房主模式 Accept 线程已启动（代际=%d）", myGen);
+    NSLog(@"[PortForwarder] Host mode Accept thread started (generation=%d)", myGen);
 
     while (YES) {
         @autoreleasepool {
@@ -643,13 +643,13 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
 
             // 代际不匹配说明期间发生过 stop→start，当前线程属于上一周期，应退出
             if (currentGen != myGen) {
-                NSLog(@"[PortForwarder] 房主 Accept 线程：代际不匹配（my=%d, current=%d），退出循环",
+                NSLog(@"[PortForwarder] Host Accept thread: generation mismatch (my=%d, current=%d), exiting loop",
                       myGen, currentGen);
                 break;
             }
 
             if (stopping || listenFD < 0) {
-                NSLog(@"[PortForwarder] 房主 Accept 线程：收到停止信号，退出循环");
+                NSLog(@"[PortForwarder] Host Accept thread: received stop signal, exiting loop");
                 break;
             }
 
@@ -665,7 +665,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
 
             int selectResult = zts_bsd_select(listenFD + 1, &readSet, NULL, NULL, &timeout);
             if (selectResult < 0) {
-                NSLog(@"[PortForwarder] zts_bsd_select() 失败：result=%d", selectResult);
+                NSLog(@"[PortForwarder] zts_bsd_select() failed: result=%d", selectResult);
                 // 如果是 EBADF 或服务错误，说明监听 socket 已被关闭（stop 被调用）
                 break;
             }
@@ -681,11 +681,11 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
 
                 if (ztClientFD < 0) {
                     // accept 失败，可能是暂时性错误或监听 socket 已关闭
-                    NSLog(@"[PortForwarder] acceptOnSocket 失败：fd=%d", ztClientFD);
+                    NSLog(@"[PortForwarder] acceptOnSocket failed: fd=%d", ztClientFD);
                     continue;
                 }
 
-                NSLog(@"[PortForwarder] 房主模式新连接通过 ZeroTier 接入（ztClientFD=%d）", ztClientFD);
+                NSLog(@"[PortForwarder] Host mode new connection via ZeroTier (ztClientFD=%d)", ztClientFD);
 
                 // 在新线程中处理连接
                 __weak typeof(self) weakSelf = self;
@@ -698,7 +698,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
         }
     }
 
-    NSLog(@"[PortForwarder] 房主模式 Accept 线程已退出");
+    NSLog(@"[PortForwarder] Host mode Accept thread exited");
 }
 
 #pragma mark - 房客模式客户端处理
@@ -718,12 +718,12 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
         [_lock unlock];
 
         if (!hostIP.length) {
-            NSLog(@"[PortForwarder] handleGuestClient：hostIP 为空，关闭客户端连接");
+            NSLog(@"[PortForwarder] handleGuestClient: hostIP is empty, closing client connection");
             close(clientFD);
             return;
         }
 
-        NSLog(@"[PortForwarder] 处理房客客户端连接 fd=%d，转发到 %@:%u", clientFD, hostIP, hostPort);
+        NSLog(@"[PortForwarder] Handling guest client connection fd=%d, forwarding to %@:%u", clientFD, hostIP, hostPort);
 
         // 对客户端 socket 设置 TCP_NODELAY（禁用 Nagle 算法）
         //
@@ -778,7 +778,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
 
         int ztFD = [[ZeroTierBridge sharedInstance] createTCPSocketForFamily:socketFamily];
         if (ztFD < 0) {
-            NSLog(@"[PortForwarder] 创建 ZeroTier socket(family=%d) 失败：ztFD=%d", socketFamily, ztFD);
+            NSLog(@"[PortForwarder] Creating ZeroTier socket(family=%d) failed: ztFD=%d", socketFamily, ztFD);
             close(clientFD);
             return;
         }
@@ -795,14 +795,14 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
                                                                       port:hostPort
                                                                    timeout:PORT_FORWARDER_CONNECT_TIMEOUT];
         if (connectResult != 0) {
-            NSLog(@"[PortForwarder] 通过 ZeroTier 连接目标失败：result=%d, target=%@:%u",
+            NSLog(@"[PortForwarder] Connecting to target via ZeroTier failed: result=%d, target=%@:%u",
                   connectResult, hostIP, hostPort);
             [[ZeroTierBridge sharedInstance] closeSocket:ztFD];
             close(clientFD);
             return;
         }
 
-        NSLog(@"[PortForwarder] 通过 ZeroTier 连接目标成功：target=%@:%u, ztFD=%d",
+        NSLog(@"[PortForwarder] Connected to target via ZeroTier successfully: target=%@:%u, ztFD=%d",
               hostIP, hostPort, ztFD);
 
         // 将 fd 加入活跃列表（用于 stop 时 shutdown 唤醒阻塞的 read/recv）
@@ -818,7 +818,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
         [_lock unlock];
 
         if (!stillRunning) {
-            NSLog(@"[PortForwarder] handleGuestClient：转发器已停止，关闭新连接 clientFD=%d ztFD=%d",
+            NSLog(@"[PortForwarder] handleGuestClient: forwarder stopped, closing new connection clientFD=%d ztFD=%d",
                   clientFD, ztFD);
             [[ZeroTierBridge sharedInstance] closeSocket:ztFD];
             close(clientFD);
@@ -839,7 +839,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
         // ============================================================
         // 步骤 4：关闭连接
         // ============================================================
-        NSLog(@"[PortForwarder] 房客转发结束，关闭连接：clientFD=%d, ztFD=%d", clientFD, ztFD);
+        NSLog(@"[PortForwarder] Guest forwarding ended, closing connection: clientFD=%d, ztFD=%d", clientFD, ztFD);
         [[ZeroTierBridge sharedInstance] closeSocket:ztFD];
         close(clientFD);
     }
@@ -862,12 +862,12 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
         [_lock unlock];
 
         if (localHostPort == 0) {
-            NSLog(@"[PortForwarder] handleHostConnection：localHostPort 为 0，关闭连接");
+            NSLog(@"[PortForwarder] handleHostConnection: localHostPort is 0, closing connection");
             [[ZeroTierBridge sharedInstance] closeSocket:ztClientFD];
             return;
         }
 
-        NSLog(@"[PortForwarder] 处理房主连接 ztClientFD=%d，转发到本地 127.0.0.1:%u",
+        NSLog(@"[PortForwarder] Handling host connection ztClientFD=%d, forwarding to local 127.0.0.1:%u",
               ztClientFD, localHostPort);
 
         // 对 libzt 客户端 fd 设置 TCP_NODELAY（降低 ZeroTier 虚拟网络的延迟）
@@ -879,7 +879,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
         // ============================================================
         int localFD = socket(AF_INET, SOCK_STREAM, 0);
         if (localFD < 0) {
-            NSLog(@"[PortForwarder] 创建本地 socket 失败：errno=%d (%s)", errno, strerror(errno));
+            NSLog(@"[PortForwarder] Creating local socket failed: errno=%d (%s)", errno, strerror(errno));
             [[ZeroTierBridge sharedInstance] closeSocket:ztClientFD];
             return;
         }
@@ -925,11 +925,11 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
         // 设置 socket 为非阻塞
         int flags = fcntl(localFD, F_GETFL, 0);
         if (flags < 0 || fcntl(localFD, F_SETFL, flags | O_NONBLOCK) < 0) {
-            NSLog(@"[PortForwarder] 设置非阻塞失败：errno=%d (%s)，退回阻塞 connect", errno, strerror(errno));
+            NSLog(@"[PortForwarder] Setting non-blocking failed: errno=%d (%s), falling back to blocking connect", errno, strerror(errno));
             // 退回阻塞 connect（loopback 通常立即返回，影响有限）
             int connectResult = connect(localFD, (struct sockaddr *)&localAddr, sizeof(localAddr));
             if (connectResult < 0) {
-                NSLog(@"[PortForwarder] 连接本地 MC LAN 端口失败：127.0.0.1:%u, errno=%d (%s)",
+                NSLog(@"[PortForwarder] Connecting to local MC LAN port failed: 127.0.0.1:%u, errno=%d (%s)",
                       localHostPort, errno, strerror(errno));
                 close(localFD);
                 [[ZeroTierBridge sharedInstance] closeSocket:ztClientFD];
@@ -941,7 +941,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
             if (connectResult < 0) {
                 if (errno != EINPROGRESS) {
                     // 立即失败（如 ECONNREFUSED 表示端口未开放）
-                    NSLog(@"[PortForwarder] 连接本地 MC LAN 端口失败：127.0.0.1:%u, errno=%d (%s)",
+                    NSLog(@"[PortForwarder] Connecting to local MC LAN port failed: 127.0.0.1:%u, errno=%d (%s)",
                           localHostPort, errno, strerror(errno));
                     close(localFD);
                     [[ZeroTierBridge sharedInstance] closeSocket:ztClientFD];
@@ -957,7 +957,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
                 int selRet = select(localFD + 1, NULL, &writeSet, NULL, &connTimeout);
                 if (selRet <= 0) {
                     // selRet == 0 表示超时；selRet < 0 表示出错
-                    NSLog(@"[PortForwarder] 连接本地 MC LAN 端口超时/失败：127.0.0.1:%u, selRet=%d, errno=%d (%s)",
+                    NSLog(@"[PortForwarder] Connecting to local MC LAN port timeout/failed: 127.0.0.1:%u, selRet=%d, errno=%d (%s)",
                           localHostPort, selRet, errno, strerror(errno));
                     close(localFD);
                     [[ZeroTierBridge sharedInstance] closeSocket:ztClientFD];
@@ -967,7 +967,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
                 int sockErr = 0;
                 socklen_t errLen = sizeof(sockErr);
                 if (getsockopt(localFD, SOL_SOCKET, SO_ERROR, &sockErr, &errLen) < 0 || sockErr != 0) {
-                    NSLog(@"[PortForwarder] 连接本地 MC LAN 端口失败（SO_ERROR=%d）：127.0.0.1:%u",
+                    NSLog(@"[PortForwarder] Connecting to local MC LAN port failed (SO_ERROR=%d): 127.0.0.1:%u",
                           sockErr, localHostPort);
                     close(localFD);
                     [[ZeroTierBridge sharedInstance] closeSocket:ztClientFD];
@@ -978,7 +978,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
             (void)fcntl(localFD, F_SETFL, flags);
         }
 
-        NSLog(@"[PortForwarder] 连接本地 MC LAN 端口成功：127.0.0.1:%u, localFD=%d",
+        NSLog(@"[PortForwarder] Connected to local MC LAN port successfully: 127.0.0.1:%u, localFD=%d",
               localHostPort, localFD);
 
         // 将 fd 加入活跃列表（用于 stop 时 shutdown 唤醒阻塞的 read/recv）
@@ -992,7 +992,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
         [_lock unlock];
 
         if (!stillRunning) {
-            NSLog(@"[PortForwarder] handleHostConnection：转发器已停止，关闭新连接 localFD=%d ztClientFD=%d",
+            NSLog(@"[PortForwarder] handleHostConnection: forwarder stopped, closing new connection localFD=%d ztClientFD=%d",
                   localFD, ztClientFD);
             close(localFD);
             [[ZeroTierBridge sharedInstance] closeSocket:ztClientFD];
@@ -1013,7 +1013,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
         // ============================================================
         // 步骤 4：关闭连接
         // ============================================================
-        NSLog(@"[PortForwarder] 房主转发结束，关闭连接：localFD=%d, ztClientFD=%d",
+        NSLog(@"[PortForwarder] Host forwarding ended, closing connection: localFD=%d, ztClientFD=%d",
               localFD, ztClientFD);
         [[ZeroTierBridge sharedInstance] closeSocket:ztClientFD];
         close(localFD);
@@ -1056,7 +1056,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
             @autoreleasepool {
                 // 检查对端是否已关闭（原子读，自带内存屏障）
                 if (atomic_load(&ztClosed)) {
-                    NSLog(@"[PortForwarder] posix→zt：对端已关闭，退出转发");
+                    NSLog(@"[PortForwarder] posix→zt: peer closed, exiting forwarding");
                     break;
                 }
 
@@ -1065,7 +1065,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
                 if (n <= 0) {
                     // n == 0：POSIX 端关闭连接
                     // n < 0：读取错误
-                    NSLog(@"[PortForwarder] posix→zt 结束：n=%zd, errno=%d", n, errno);
+                    NSLog(@"[PortForwarder] posix→zt ended: n=%zd, errno=%d", n, errno);
 
                     // 标记 POSIX 端已关闭（原子写，自带内存屏障）
                     atomic_store(&posixClosed, true);
@@ -1081,7 +1081,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
                                                                   buffer:buffer
                                                                   length:(size_t)n];
                 if (sent <= 0) {
-                    NSLog(@"[PortForwarder] 发送到 zt 端失败：sent=%zd", sent);
+                    NSLog(@"[PortForwarder] Sending to zt side failed: sent=%zd", sent);
 
                     // 标记 zt 端已关闭（原子写）
                     atomic_store(&ztClosed, true);
@@ -1105,7 +1105,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
             @autoreleasepool {
                 // 检查 POSIX 端是否已关闭（原子读，自带内存屏障）
                 if (atomic_load(&posixClosed)) {
-                    NSLog(@"[PortForwarder] zt→posix：对端已关闭，退出转发");
+                    NSLog(@"[PortForwarder] zt→posix: peer closed, exiting forwarding");
                     break;
                 }
 
@@ -1116,7 +1116,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
                 if (n <= 0) {
                     // n == 0：zt 端关闭连接
                     // n < 0：接收错误
-                    NSLog(@"[PortForwarder] zt→posix 结束：n=%zd", n);
+                    NSLog(@"[PortForwarder] zt→posix ended: n=%zd", n);
 
                     // 标记 zt 端已关闭（原子写）
                     atomic_store(&ztClosed, true);
@@ -1129,7 +1129,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
                 // 发送数据给 POSIX socket（系统 write）
                 ssize_t sent = writeAll(posixFD, buffer, (size_t)n);
                 if (sent <= 0) {
-                    NSLog(@"[PortForwarder] 发送到 POSIX 端失败：sent=%zd", sent);
+                    NSLog(@"[PortForwarder] Sending to POSIX side failed: sent=%zd", sent);
 
                     // 标记 POSIX 端已关闭（原子写）
                     atomic_store(&posixClosed, true);
@@ -1145,7 +1145,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
     // 等待两个方向的转发都结束
     dispatch_group_wait(group, DISPATCH_TIME_FOREVER);
 
-    NSLog(@"[PortForwarder] 双向转发已结束：posixFD=%d, ztFD=%d", posixFD, ztFD);
+    NSLog(@"[PortForwarder] Bidirectional forwarding ended: posixFD=%d, ztFD=%d", posixFD, ztFD);
 }
 
 #pragma mark - 停止端口转发
@@ -1170,14 +1170,14 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
     [_lock lock];
     if (!_running) {
         [_lock unlock];
-        NSLog(@"[PortForwarder] stop：转发器未在运行，跳过");
+        NSLog(@"[PortForwarder] stop: forwarder not running, skipping");
         return;
     }
 
     PortForwarderMode mode = _mode;
     uint16_t listeningPort = _listeningPort;
 
-    NSLog(@"[PortForwarder] 停止端口转发（模式=%ld, 端口 %u，isMainThread=%d）",
+    NSLog(@"[PortForwarder] Stopping port forwarding (mode=%ld, port %u, isMainThread=%d)",
           (long)mode, listeningPort, isMainThread);
 
     _stopping = YES;
@@ -1205,7 +1205,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
     }
 
     // 2. shutdown 所有活跃的 POSIX/libzt fd（唤醒阻塞的 read/recv）
-    NSLog(@"[PortForwarder] shutdown %lu 个 POSIX 连接和 %lu 个 libzt 连接...",
+    NSLog(@"[PortForwarder] Shutting down %lu POSIX connections and %lu libzt connections...",
           (unsigned long)posixFDs.count, (unsigned long)ztFDs.count);
 
     for (NSNumber *fdNum in posixFDs) {
@@ -1235,7 +1235,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
     _stopping = NO;
     [_lock unlock];
 
-    NSLog(@"[PortForwarder] 端口转发已停止");
+    NSLog(@"[PortForwarder] Port forwarding stopped");
 }
 
 @end

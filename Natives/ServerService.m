@@ -192,7 +192,7 @@
     prof[@"serverIp"] = [address copy];
     profiles[profile] = prof;
     [PLProfiles.current save];
-    NSLog(@"[ServerService] 已保存服务器地址 %@ 到 profile %@", address, profile);
+    NSLog(@"[ServerService] Saved server address %@ to profile %@", address, profile);
     return YES;
 }
 

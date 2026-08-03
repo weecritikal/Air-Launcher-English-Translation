@@ -517,13 +517,13 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
                             for (NSString *v in collected) {
                                 [self addVersionToList:v];
                             }
-                            NSLog(@"[Forge] 快速路径成功：BMCLAPI JSON 获取 %@ 个版本 (MC %@)", @(collected.count), mcVersion);
+                            NSLog(@"[Forge] Fast path success: BMCLAPI JSON fetched %@ versions (MC %@)", @(collected.count), mcVersion);
                             finishSuccess();
                             return;
                         }
                     }
                 }
-                NSLog(@"[Forge] 快速路径失败 (data=%@ error=%@)，回退到全量 maven-metadata.xml",
+                NSLog(@"[Forge] Fast path failed (data=%@ error=%@), falling back to full maven-metadata.xml",
                       jsonData ? [NSString stringWithFormat:@"%luB", (unsigned long)jsonData.length] : @"nil",
                       jsonError.localizedDescription ?: @"nil");
             }

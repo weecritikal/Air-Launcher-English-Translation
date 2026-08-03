@@ -204,7 +204,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         // 自动重启节点以恢复联机功能，让用户体验无缝衔接。
         if (enabled && ![[MultiplayerManager sharedManager] isNodeStarted]) {
             if ([[MultiplayerManager sharedManager] isFrameworkAvailable]) {
-                NSLog(@"[MultiplayerVC] 检测到联机已启用但节点未启动，自动重启节点...");
+                NSLog(@"[MultiplayerVC] Multiplayer enabled but node not started, auto-restarting node...");
                 __weak typeof(self) weakSelf = self;
                 [[MultiplayerManager sharedManager] ensureNodeStartedWithCompletion:^(BOOL success, NSError *error) {
                     __strong typeof(weakSelf) strongSelf = weakSelf;
@@ -217,10 +217,10 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
                         // 现在仅回退 UI 开关状态（视觉上关闭），但保留 isMultiplayerEnabled=YES，
                         // 这样用户下次打开启动器时开关会显示 ON 并自动重试启动节点。
                         // 只有 framework 不可用（永久不可用）时才清除意图。
-                        NSLog(@"[MultiplayerVC] 自动重启节点失败（保留用户意图，下次重试）：%@", error.localizedDescription);
+                        NSLog(@"[MultiplayerVC] Auto-restart node failed (preserving user intent, retry next time): %@", error.localizedDescription);
                         [strongSelf.tableView reloadData];
                     } else {
-                        NSLog(@"[MultiplayerVC] 自动重启节点成功");
+                        NSLog(@"[MultiplayerVC] Auto-restart node succeeded");
                         [strongSelf.tableView reloadData];
                     }
                 }];
@@ -951,18 +951,18 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
                 if (currentLocalIP.length > 0 &&
                     currentRoom.hostIP.length > 0 &&
                     ![currentRoom.hostIP isEqualToString:currentLocalIP]) {
-                    NSLog(@"[MultiplayerVC] 房主流程已激活，但检测到 IP 变化：%@ → %@，使用现有端口重新生成分享代码",
+                    NSLog(@"[MultiplayerVC] Host flow active but IP changed: %@ -> %@, regenerating share code with existing port",
                           currentRoom.hostIP, currentLocalIP);
                     [self generateShareCodeWithPort:currentRoom.hostPort];
                 } else {
                     // IP 未变化：直接显示分享代码
-                    NSLog(@"[MultiplayerVC] 房主流程已激活且分享代码已存在，直接显示分享代码");
+                    NSLog(@"[MultiplayerVC] Host flow active and share code exists, displaying directly");
                     [self showHostShareCodeAlert];
                 }
             } else {
                 // 分享代码不存在：弹出手动输入端口对话框
                 // 关键修复（端口检测改为手动输入）：不再自动检测端口，改为用户手动输入
-                NSLog(@"[MultiplayerVC] 房主流程已激活但分享代码尚未生成，弹出手动输入端口对话框");
+                NSLog(@"[MultiplayerVC] Host flow active but share code not yet generated, showing manual port input dialog");
                 [self showManualPortInputAlert];
             }
             return;
@@ -1044,7 +1044,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
                 // 用户必须在 MC 中"对局域网开放"后，手动输入聊天框显示的端口号，
                 // 才会生成分享代码。这样既保证了端口的准确性，也避免了在游戏未真正
                 // 开放局域网时生成错误代码的问题。
-                NSLog(@"[MultiplayerVC] 连接成功，等待用户手动输入 LAN 端口");
+                NSLog(@"[MultiplayerVC] Connection successful, waiting for user to manually enter LAN port");
                 [strongSelf showManualPortInputAlert];
             } else {
                 // 连接失败
@@ -1121,7 +1121,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
             return;
         }
 
-        NSLog(@"[MultiplayerVC] 用户手动输入 LAN 端口：%@", port);
+        NSLog(@"[MultiplayerVC] User manually entered LAN port: %@", port);
         // 将端口设置到 LanPortDetector（手动输入），方便其他模块读取
         // 注意：LanPortDetector 的 API 是 sharedInstance + setManualPort:(uint16_t)
         [[LanPortDetector sharedInstance] setManualPort:(uint16_t)portNum];
@@ -1170,7 +1170,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     // 此时 LanPortDetector.setManualPort: 又会发送通知触发本回调，
     // 会导致分享代码被生成两次（虽然 PortForwarder 启动是幂等的，但显示会闪烁）。
     // 因此本回调仅做日志记录，不再重复调用 generateShareCodeWithPort:。
-    NSLog(@"[MultiplayerVC] lanPortDidDetect: 收到端口 %@ 通知（手动输入流程已直接生成分享代码，此处不重复生成）", port);
+    NSLog(@"[MultiplayerVC] lanPortDidDetect: received port %@ notification (manual input flow already generated share code, skipping duplicate)", port);
 }
 
 /// 根据用户输入的 LAN 端口生成分享代码并显示
@@ -1196,7 +1196,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     // 关键修复（多房客优化）：hostIP 非空保护
     // 如果 currentLocalIP 为空（异常情况），不生成无效分享代码
     if (!localIP.length) {
-        NSLog(@"[MultiplayerVC] 警告：currentLocalIP 为空，无法生成有效的分享代码");
+        NSLog(@"[MultiplayerVC] Warning: currentLocalIP is nil, cannot generate valid share code");
         [self showSimpleAlertWithTitle:MPLocalized(@"mp.host.share_code_failed", @"生成分享代码失败")
                                   message:MPLocalized(@"mp.host.no_local_ip", @"无法获取本机 ZeroTier IP，请检查网络连接后重试")];
         return;
@@ -1207,7 +1207,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     // 旧分享代码已失效，需要提示房主重新分享
     BOOL ipChanged = (room.hostIP.length > 0 && ![room.hostIP isEqualToString:localIP]);
     if (ipChanged) {
-        NSLog(@"[MultiplayerVC] 检测到房主 IP 变化：%@ → %@，旧分享代码已失效", room.hostIP, localIP);
+        NSLog(@"[MultiplayerVC] Host IP changed: %@ -> %@, old share code is invalid", room.hostIP, localIP);
     }
 
     room.hostIP = localIP;
@@ -1452,7 +1452,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     if (forwardPort > 0) {
         // 端口转发器已启动，使用本地地址
         serverAddress = [NSString stringWithFormat:@"127.0.0.1:%u", forwardPort];
-        NSLog(@"[MultiplayerVC] 房客使用端口转发地址：%@（转发到 %@:%@）",
+        NSLog(@"[MultiplayerVC] Guest using port forwarding address: %@ (forwarding to %@:%@)",
               serverAddress, hostIP, hostPort);
         self.lastServerAddress = serverAddress;
 
@@ -1460,13 +1460,13 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         NSString *profileName = [PLProfiles current].selectedProfileName;
         if (profileName && profileName.length > 0) {
             [[PLProfiles current] setServerIp:serverAddress forProfile:profileName];
-            NSLog(@"[Multiplayer] 已自动将服务器地址 %@ 写入 profile %@", serverAddress, profileName);
+            NSLog(@"[Multiplayer] Auto-wrote server address %@ to profile %@", serverAddress, profileName);
         }
     } else {
         // 关键修复（P0-5）：端口转发器未启动，不写入 profile
         // 房客无法通过 ZeroTier IP 直连（系统无法路由），写入 profile 会导致下次启动 MC 连接失败
         serverAddress = [NSString stringWithFormat:@"%@:%@", hostIP, hostPort];
-        NSLog(@"[MultiplayerVC] 警告：端口转发器未启动，不写入 profile serverIp");
+        NSLog(@"[MultiplayerVC] Warning: port forwarder not started, not writing profile serverIp");
         // 显示警告提示而非成功提示
         [self showSimpleAlertWithTitle:MPLocalized(@"mp.connect.failed", @"连接失败")
                                message:MPLocalized(@"mp.connect.port_forward_failed_msg", @"端口转发器启动失败，无法连接到房主。请尝试断开重连。")];
@@ -1541,7 +1541,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         // 系统会自动刷新 UI 显示，无需重新 present。
         self.connectionProgressAlert.message = message;
     }
-    NSLog(@"[MultiplayerVC] 连接进度：%@", message);
+    NSLog(@"[MultiplayerVC] Connection progress: %@", message);
 }
 
 #pragma mark - 工具方法
@@ -1615,7 +1615,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         if (!strongSelf) return;
 
         // 用户取消连接：中止正在进行的连接流程
-        NSLog(@"[MultiplayerVC] 用户取消了连接流程");
+        NSLog(@"[MultiplayerVC] User cancelled the connection flow");
         strongSelf.isHostFlowActive = NO;
         strongSelf.isGuestFlowActive = NO;
         [[MultiplayerManager sharedManager] disconnectCurrentRoom];

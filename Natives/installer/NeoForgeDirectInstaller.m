@@ -332,7 +332,7 @@ NSString *const NeoForgeDirectInstallerErrorDomain = @"NeoForgeDirectInstallerEr
             } else {
                 mainPath = [NSString stringWithFormat:@"net.neoforged:neoforge:%@", versionField];
             }
-            NSLog(@"[NeoForgeDirect] path 字段缺失，用 version 字段兜底拼接: %@", mainPath);
+            NSLog(@"[NeoForgeDirect] path field missing, falling back to version field: %@", mainPath);
         }
     }
     if ([mainPath isKindOfClass:[NSString class]] && mainPath.length > 0) {
@@ -342,7 +342,7 @@ NSString *const NeoForgeDirectInstallerErrorDomain = @"NeoForgeDirectInstallerEr
         }
     } else {
         // path 是 NeoForge 运行核心依赖，缺失会导致启动时 ClassNotFoundException
-        NSLog(@"[NeoForgeDirect] install_profile.json 缺少 path/version 字段，无法下载 patched client jar");
+        NSLog(@"[NeoForgeDirect] install_profile.json missing path/version fields, cannot download patched client jar");
         if (error) {
             *error = [NSError errorWithDomain:NeoForgeDirectInstallerErrorDomain
                                          code:NeoForgeDirectInstallerErrorInvalidProfile
@@ -374,7 +374,7 @@ NSString *const NeoForgeDirectInstallerErrorDomain = @"NeoForgeDirectInstallerEr
         NSLog(@"[NeoForgeDirect] Checking parent vanilla version: %@", inheritsFrom);
         NSError *parentError = nil;
         if (![self ensureParentVersionExists:inheritsFrom error:&parentError]) {
-            NSLog(@"[NeoForgeDirect] ⚠️ 父版本 %@ 未能自动补全: %@", inheritsFrom, parentError.localizedDescription ?: @"未知错误");
+            NSLog(@"[NeoForgeDirect] Warning: parent version %@ auto-completion failed: %@", inheritsFrom, parentError.localizedDescription ?: @"Unknown error");
         } else {
             NSLog(@"[NeoForgeDirect] Parent vanilla version ensured: %@", inheritsFrom);
         }
@@ -849,7 +849,7 @@ NSString *const NeoForgeDirectInstallerErrorDomain = @"NeoForgeDirectInstallerEr
             // 关键库失败会启动崩溃，记录警告
             if ([self isCriticalLibrary:name]) {
                 [criticalFailures addObject:name];
-                NSLog(@"[NeoForgeDirect] ⚠️ 关键库下载失败（启动将崩溃）: %@", name);
+                NSLog(@"[NeoForgeDirect] Warning: critical library download failed (app will crash on launch): %@", name);
             } else {
                 NSLog(@"[NeoForgeDirect] Failed to download library %@ (both sources failed)", name);
             }
@@ -860,7 +860,7 @@ NSString *const NeoForgeDirectInstallerErrorDomain = @"NeoForgeDirectInstallerEr
     NSLog(@"[NeoForgeDirect] Library download summary: downloaded=%lu, skipped=%lu, failed=%lu, total=%lu, criticalFailures=%lu",
           (unsigned long)downloaded, (unsigned long)skipped, (unsigned long)failed, (unsigned long)total, (unsigned long)criticalFailures.count);
     if (criticalFailures.count > 0) {
-        NSLog(@"[NeoForgeDirect] ⚠️ 关键库下载失败清单: %@", criticalFailures);
+        NSLog(@"[NeoForgeDirect] Warning: critical library download failures: %@", criticalFailures);
     }
 }
 
@@ -1040,7 +1040,7 @@ NSString *const NeoForgeDirectInstallerErrorDomain = @"NeoForgeDirectInstallerEr
             // 下载失败：清理可能的部分文件
             [NSFileManager.defaultManager removeItemAtPath:destPath error:nil];
             lastError = downloadError;
-            NSLog(@"[NeoForgeDirect] Failed: %@ (%@)", url, downloadError.localizedDescription ?: @"未知错误");
+            NSLog(@"[NeoForgeDirect] Failed: %@ (%@)", url, downloadError.localizedDescription ?: @"Unknown error");
         }
     }
 

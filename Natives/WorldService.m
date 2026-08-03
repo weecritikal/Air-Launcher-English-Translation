@@ -162,7 +162,7 @@
             if (error) *error = createError;
             return nil;
         }
-        NSLog(@"[WorldService] 已创建 saves 目录: %@", savesPath);
+        NSLog(@"[WorldService] created saves directory: %@", savesPath);
     } else if (!isDir) {
         if (error) {
             *error = [NSError errorWithDomain:@"WorldService" code:2 userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"%@ 不是目录", savesPath]}];
@@ -331,10 +331,10 @@
     NSString *levelDatCheck = [finalWorldDir stringByAppendingPathComponent:@"level.dat"];
     if (![fm fileExistsAtPath:levelDatCheck]) {
         // 有些 zip 即使有顶层目录，level.dat 可能还在更深层。这里只做日志，不阻断
-        NSLog(@"[WorldService] 警告：解压后未在 %@ 找到 level.dat", finalWorldDir);
+        NSLog(@"[WorldService] warning: level.dat not found at %@ after extraction", finalWorldDir);
     }
 
-    NSLog(@"[WorldService] 世界已解压到: %@", finalWorldDir);
+    NSLog(@"[WorldService] world extracted to: %@", finalWorldDir);
     return YES;
 }
 
@@ -429,7 +429,7 @@
 
     [task resume];
 
-    NSLog(@"[WorldService] 开始下载世界: %@ -> %@", url, destinationPath);
+    NSLog(@"[WorldService] started downloading world: %@ -> %@", url, destinationPath);
 }
 
 #pragma mark - 从本地文件导入世界

@@ -184,7 +184,7 @@
             if (error) *error = createError;
             return nil;
         }
-        NSLog(@"[ShaderService] 已创建 shaderpacks 目录: %@", shadersPath);
+        NSLog(@"[ShaderService] Created shaderpacks directory: %@", shadersPath);
     } else if (!isDir) {
         if (error) {
             *error = [NSError errorWithDomain:@"ShaderService" code:2 userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"%@ 不是目录", shadersPath]}];

@@ -193,7 +193,7 @@
             if (error) *error = createError;
             return nil;
         }
-        NSLog(@"[ResourcePackService] 已创建 resourcepacks 目录: %@", resourcePacksPath);
+        NSLog(@"[ResourcePackService] Created resourcepacks directory: %@", resourcePacksPath);
     } else if (!isDir) {
         if (error) {
             *error = [NSError errorWithDomain:@"ResourcePackService" code:2 userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"%@ 不是目录", resourcePacksPath]}];
@@ -253,7 +253,7 @@
         @try {
             [self parsePackMcmetaForItem:item];
         } @catch (NSException *exception) {
-            NSLog(@"[ResourcePackService] 解析 pack.mcmeta 异常 %@: %@", item.fileName, exception);
+            NSLog(@"[ResourcePackService] Exception parsing pack.mcmeta %@: %@", item.fileName, exception);
         }
         if (completion) completion(item, nil);
     });
@@ -429,7 +429,7 @@
 
     [task resume];
 
-    NSLog(@"[ResourcePackService] 开始下载资源包: %@ -> %@", url, destinationPath);
+    NSLog(@"[ResourcePackService] Started downloading resource pack: %@ -> %@", url, destinationPath);
 }
 
 #pragma mark - NSURLSessionDownloadDelegate

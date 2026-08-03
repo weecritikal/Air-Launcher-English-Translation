@@ -147,12 +147,12 @@ static ssize_t readAllWithTimeout(int fd, void *buf, size_t len, int timeoutSec)
                 if (errno == EINTR) {
                     continue;
                 }
-                NSLog(@"[SOCKS5Proxy] readAll select 错误：errno = %d, fd = %d", errno, fd);
+                NSLog(@"[SOCKS5Proxy] readAll select error: errno = %d, fd = %d", errno, fd);
                 return -1;
             }
             if (selectResult == 0) {
                 // 超时
-                NSLog(@"[SOCKS5Proxy] readAll 超时（%d秒），fd = %d, 已读 %zu/%zu 字节",
+                NSLog(@"[SOCKS5Proxy] readAll timeout (%d sec), fd = %d, read %zu/%zu bytes",
                       timeoutSec, fd, totalRead, len);
                 return totalRead > 0 ? (ssize_t)totalRead : -1;
             }
@@ -165,7 +165,7 @@ static ssize_t readAllWithTimeout(int fd, void *buf, size_t len, int timeoutSec)
                 continue;
             }
             // 其他错误
-            NSLog(@"[SOCKS5Proxy] readAll 错误：errno = %d, fd = %d", errno, fd);
+            NSLog(@"[SOCKS5Proxy] readAll error: errno = %d, fd = %d", errno, fd);
             return -1;
         }
         if (n == 0) {
@@ -214,12 +214,12 @@ static ssize_t writeAllWithTimeout(int fd, const void *buf, size_t len, int time
                 if (errno == EINTR) {
                     continue;
                 }
-                NSLog(@"[SOCKS5Proxy] writeAll select 错误：errno = %d, fd = %d", errno, fd);
+                NSLog(@"[SOCKS5Proxy] writeAll select error: errno = %d, fd = %d", errno, fd);
                 return -1;
             }
             if (selectResult == 0) {
                 // 超时
-                NSLog(@"[SOCKS5Proxy] writeAll 超时（%d秒），fd = %d, 已写 %zu/%zu 字节",
+                NSLog(@"[SOCKS5Proxy] writeAll timeout (%d sec), fd = %d, wrote %zu/%zu bytes",
                       timeoutSec, fd, totalWritten, len);
                 return totalWritten > 0 ? (ssize_t)totalWritten : -1;
             }
@@ -230,12 +230,12 @@ static ssize_t writeAllWithTimeout(int fd, const void *buf, size_t len, int time
             if (errno == EINTR) {
                 continue;
             }
-            NSLog(@"[SOCKS5Proxy] writeAll 错误：errno = %d, fd = %d", errno, fd);
+            NSLog(@"[SOCKS5Proxy] writeAll error: errno = %d, fd = %d", errno, fd);
             return -1;
         }
         if (n == 0) {
             // 关键修复（M9）：write 返回 0 通常表示错误（对端已关闭或缓冲区满）
-            NSLog(@"[SOCKS5Proxy] writeAll 返回 0，对端可能已关闭：fd = %d", fd);
+            NSLog(@"[SOCKS5Proxy] writeAll returned 0, peer may have closed: fd = %d", fd);
             return -1;
         }
         totalWritten += (size_t)n;
@@ -333,7 +333,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
         _clientFDs = [[NSMutableArray alloc] init];
         _remoteFDs = [[NSMutableArray alloc] init];
 
-        NSLog(@"[SOCKS5Proxy] 单例已初始化");
+        NSLog(@"[SOCKS5Proxy] Singleton initialized");
     }
     return self;
 }
@@ -360,7 +360,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
     // 或 app 进程崩溃（SIGSEGV）后 _running 标记与实际 socket 状态不一致。
     // 修复方案：启动前先强制停止一次，确保旧的监听 socket 已被关闭，端口被释放。
     if (_running) {
-        NSLog(@"[SOCKS5Proxy] 启动前检测到代理仍在运行，先停止旧代理以释放端口");
+        NSLog(@"[SOCKS5Proxy] Detected proxy still running before startup, stopping old proxy to release port");
         // 临时释放锁以调用 stop（stop 内部会加锁）
         [_lock unlock];
         [self stop];
@@ -369,7 +369,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
         [_lock lock];
     } else if (_listenFD >= 0) {
         // _running 为 NO 但 _listenFD 仍有效（异常状态），强制关闭
-        NSLog(@"[SOCKS5Proxy] 检测到僵尸监听 socket（fd=%d），强制关闭", _listenFD);
+        NSLog(@"[SOCKS5Proxy] Detected zombie listen socket (fd=%d), forcefully closing", _listenFD);
         close(_listenFD);
         _listenFD = -1;
         [NSThread sleepForTimeInterval:0.1];
@@ -378,7 +378,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
     // 检查是否已运行（停止后再次检查）
     if (_running) {
         [_lock unlock];
-        NSLog(@"[SOCKS5Proxy] 代理已在运行，端口 = %u", _listeningPort);
+        NSLog(@"[SOCKS5Proxy] Proxy already running, port = %u", _listeningPort);
         if (error) {
             *error = [NSError errorWithDomain:kSOCKS5ProxyErrorDomain
                                           code:SOCKS5ProxyErrorCodeAlreadyRunning
@@ -391,7 +391,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
     // 检查 ZeroTier framework 是否可用
     // 如果 framework 不可用，代理无法连接到 ZeroTier 网络，启动没有意义
     if (![[ZeroTierBridge sharedInstance] isFrameworkAvailable]) {
-        NSLog(@"[SOCKS5Proxy] 启动失败：ZeroTier framework 不可用");
+        NSLog(@"[SOCKS5Proxy] Startup failed: ZeroTier framework unavailable");
         if (error) {
             *error = [NSError errorWithDomain:kSOCKS5ProxyErrorDomain
                                           code:SOCKS5ProxyErrorCodeFrameworkUnavailable
@@ -400,12 +400,12 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
         return NO;
     }
 
-    NSLog(@"[SOCKS5Proxy] 启动代理服务器，请求端口 = %u", port);
+    NSLog(@"[SOCKS5Proxy] Starting proxy server, requested port = %u", port);
 
     // 步骤 1：创建监听 socket（系统 POSIX socket，不是 libzt socket）
     int fd = socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0) {
-        NSLog(@"[SOCKS5Proxy] 创建 socket 失败：errno = %d", errno);
+        NSLog(@"[SOCKS5Proxy] Failed to create socket: errno = %d", errno);
         if (error) {
             *error = [NSError errorWithDomain:kSOCKS5ProxyErrorDomain
                                           code:SOCKS5ProxyErrorCodeSocketCreateFailed
@@ -418,7 +418,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
     // 避免"Address already in use"错误（前一次运行的 socket 处于 TIME_WAIT 状态）
     int opt = 1;
     if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
-        NSLog(@"[SOCKS5Proxy] 设置 SO_REUSEADDR 失败：errno = %d（忽略，继续）", errno);
+        NSLog(@"[SOCKS5Proxy] Failed to set SO_REUSEADDR: errno = %d (ignoring, continuing)", errno);
     }
 
     // 步骤 3：绑定到 127.0.0.1:port
@@ -466,7 +466,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
                 // 系统自动分配的端口，需要通过 getsockname 查询实际端口
                 socklen_t addrLen = sizeof(addr);
                 if (getsockname(fd, (struct sockaddr *)&addr, &addrLen) < 0) {
-                    NSLog(@"[SOCKS5Proxy] getsockname 失败：errno = %d", errno);
+                    NSLog(@"[SOCKS5Proxy] getsockname failed: errno = %d", errno);
                     close(fd);
                     if (error) {
                         *error = [NSError errorWithDomain:kSOCKS5ProxyErrorDomain
@@ -481,21 +481,21 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
             }
 
             if (tryPort != port) {
-                NSLog(@"[SOCKS5Proxy] 请求端口 %u 被占用，改用端口 %u", port, actualPort);
+                NSLog(@"[SOCKS5Proxy] Requested port %u is in use, using port %u instead", port, actualPort);
             }
             break;
         }
 
         // bind 失败
         lastBindErrno = errno;
-        NSLog(@"[SOCKS5Proxy] bind 端口 %u 失败：errno = %d（尝试下一个端口）", tryPort, errno);
+        NSLog(@"[SOCKS5Proxy] bind port %u failed: errno = %d (trying next port)", tryPort, errno);
 
         // bind 失败后，需要关闭旧 socket 并创建新 socket
         // （bind 失败后 socket 状态不可预测，不能直接复用）
         close(fd);
         fd = socket(AF_INET, SOCK_STREAM, 0);
         if (fd < 0) {
-            NSLog(@"[SOCKS5Proxy] 重新创建 socket 失败：errno = %d", errno);
+            NSLog(@"[SOCKS5Proxy] Failed to recreate socket: errno = %d", errno);
             if (error) {
                 *error = [NSError errorWithDomain:kSOCKS5ProxyErrorDomain
                                               code:SOCKS5ProxyErrorCodeSocketCreateFailed
@@ -510,7 +510,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
     }
 
     if (!bindSuccess) {
-        NSLog(@"[SOCKS5Proxy] 所有端口尝试均失败（最后 errno = %d）", lastBindErrno);
+        NSLog(@"[SOCKS5Proxy] All port attempts failed (last errno = %d)", lastBindErrno);
         close(fd);
         if (error) {
             *error = [NSError errorWithDomain:kSOCKS5ProxyErrorDomain
@@ -523,7 +523,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
     // 步骤 5：开始监听
     // backlog = 16，允许最多 16 个等待接受的连接
     if (listen(fd, 16) < 0) {
-        NSLog(@"[SOCKS5Proxy] listen 失败：errno = %d", errno);
+        NSLog(@"[SOCKS5Proxy] listen failed: errno = %d", errno);
         close(fd);
         if (error) {
             *error = [NSError errorWithDomain:kSOCKS5ProxyErrorDomain
@@ -546,7 +546,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
     [_remoteFDs removeAllObjects];
     [_lock unlock];
 
-    NSLog(@"[SOCKS5Proxy] 代理服务器已启动，监听 127.0.0.1:%u", actualPort);
+    NSLog(@"[SOCKS5Proxy] Proxy server started, listening on 127.0.0.1:%u", actualPort);
 
     // 步骤 6：启动 Accept 线程
     __weak typeof(self) weakSelf = self;
@@ -587,11 +587,11 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
     [_lock lock];
     if (!_running) {
         [_lock unlock];
-        NSLog(@"[SOCKS5Proxy] 代理未运行，无需停止");
+        NSLog(@"[SOCKS5Proxy] Proxy is not running, no need to stop");
         return;
     }
 
-    NSLog(@"[SOCKS5Proxy] 停止代理服务器（isMainThread=%d）...", isMainThread);
+    NSLog(@"[SOCKS5Proxy] Stopping proxy server (isMainThread=%d)...", isMainThread);
     _running = NO;
 
     // 关闭监听 socket，这会导致 accept() 返回错误，accept 线程退出
@@ -613,7 +613,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
     [_remoteFDs removeAllObjects];
     [_lock unlock];
 
-    NSLog(@"[SOCKS5Proxy] 监听已关闭（端口 %u），正在 shutdown %lu 个客户端连接和 %lu 个远程连接...",
+    NSLog(@"[SOCKS5Proxy] Listen socket closed (port %u), shutting down %lu client connections and %lu remote connections...",
           savedPort, (unsigned long)clientFDs.count, (unsigned long)remoteFDs.count);
 
     // 关键修复（C1）：主动 shutdown 所有活跃客户端 fd
@@ -625,7 +625,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
             // shutdown 而不是 close：close 只是减少引用计数，不会立即唤醒阻塞的 read
             // shutdown(SHUT_RDWR) 会立即让所有阻塞在该 fd 上的 read/write 返回
             int rc = shutdown(clientFD, SHUT_RDWR);
-            NSLog(@"[SOCKS5Proxy] shutdown 客户端 fd=%d，结果=%d (errno=%d)", clientFD, rc, errno);
+            NSLog(@"[SOCKS5Proxy] shutdown client fd=%d, result=%d (errno=%d)", clientFD, rc, errno);
         }
     }
 
@@ -637,11 +637,11 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
         int remoteFD = [fdNum intValue];
         if (remoteFD >= 0) {
             int rc = [[ZeroTierBridge sharedInstance] shutdownSocket:remoteFD how:2 /* SHUT_RDWR */];
-            NSLog(@"[SOCKS5Proxy] shutdown 远程 fd=%d，结果=%d", remoteFD, rc);
+            NSLog(@"[SOCKS5Proxy] shutdown remote fd=%d, result=%d", remoteFD, rc);
         }
     }
 
-    NSLog(@"[SOCKS5Proxy] 已 shutdown 所有客户端连接，等待 %lu 个客户端线程退出...",
+    NSLog(@"[SOCKS5Proxy] Shut down all client connections, waiting for %lu client threads to exit...",
           (unsigned long)threads.count);
 
     // 关键修复（N1）：等待客户端线程退出（带超时，避免无限等待）
@@ -651,7 +651,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
     //   下一次 startWithPort:（startWithPort: 内部已检测 _running 标志和 _listenFD，
     //   且强制停止旧代理时也只等待 0.1 秒，不会与异步等待冲突）
     if (threads.count == 0) {
-        NSLog(@"[SOCKS5Proxy] 代理已停止（无活跃客户端线程）");
+        NSLog(@"[SOCKS5Proxy] Proxy stopped (no active client threads)");
         return;
     }
 
@@ -665,12 +665,12 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
                     [NSThread sleepForTimeInterval:0.05];
                 }
                 if (![thread isFinished]) {
-                    NSLog(@"[SOCKS5Proxy] 警告：客户端线程 %@ 未在 2 秒内退出", thread.name);
+                    NSLog(@"[SOCKS5Proxy] Warning: client thread %@ did not exit within 2 seconds", thread.name);
                 }
             }
-            NSLog(@"[SOCKS5Proxy] 代理已停止，所有客户端连接已清理（后台等待完成）");
+            NSLog(@"[SOCKS5Proxy] Proxy stopped, all client connections cleaned up (background wait completed)");
         });
-        NSLog(@"[SOCKS5Proxy] stop 在主线程调用，已派发 %lu 个客户端线程的等待到后台队列",
+        NSLog(@"[SOCKS5Proxy] stop called on main thread, dispatched waiting for %lu client threads to background queue",
               (unsigned long)threads.count);
     } else {
         // 后台线程：同步等待
@@ -680,10 +680,10 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
                 [NSThread sleepForTimeInterval:0.05];
             }
             if (![thread isFinished]) {
-                NSLog(@"[SOCKS5Proxy] 警告：客户端线程 %@ 未在 2 秒内退出", thread.name);
+                NSLog(@"[SOCKS5Proxy] Warning: client thread %@ did not exit within 2 seconds", thread.name);
             }
         }
-        NSLog(@"[SOCKS5Proxy] 代理已停止，所有客户端连接已清理");
+        NSLog(@"[SOCKS5Proxy] Proxy stopped, all client connections cleaned up");
     }
 }
 
@@ -711,7 +711,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
 ///
 /// 循环接受新客户端连接，为每个客户端启动一个处理线程。
 - (void)acceptLoop {
-    NSLog(@"[SOCKS5Proxy] Accept 线程已启动");
+    NSLog(@"[SOCKS5Proxy] Accept thread started");
 
     // 关键修复（M10）：连续 accept 错误计数器，防止无限循环消耗 CPU
     int consecutiveErrors = 0;
@@ -725,7 +725,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
         [_lock unlock];
 
         if (!running || listenFD < 0) {
-            NSLog(@"[SOCKS5Proxy] Accept 线程退出（代理已停止）");
+            NSLog(@"[SOCKS5Proxy] Accept thread exiting (proxy has stopped)");
             break;
         }
 
@@ -741,14 +741,14 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
             [_lock unlock];
 
             if (!stillRunning) {
-                NSLog(@"[SOCKS5Proxy] Accept 返回 -1，代理已停止，退出循环");
+                NSLog(@"[SOCKS5Proxy] accept returned -1, proxy has stopped, exiting loop");
                 break;
             }
 
             // 关键修复（M10）：EBADF 表示 listenFD 无效，直接退出
             // EMFILE/ENFILE 表示文件描述符耗尽，退避后继续
             if (errno == EBADF) {
-                NSLog(@"[SOCKS5Proxy] accept 返回 EBADF（listenFD 无效），退出循环");
+                NSLog(@"[SOCKS5Proxy] accept returned EBADF (listenFD invalid), exiting loop");
                 // 关键修复（M11）：异常退出时必须清理 _running 状态，
                 // 否则 isRunning 仍返回 YES，上层认为代理正常但实际已停止接受连接。
                 [_lock lock];
@@ -763,11 +763,11 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
             }
 
             consecutiveErrors++;
-            NSLog(@"[SOCKS5Proxy] accept 失败：errno = %d（连续 %d 次）", errno, consecutiveErrors);
+            NSLog(@"[SOCKS5Proxy] accept failed: errno = %d (consecutive %d times)", errno, consecutiveErrors);
 
             // 关键修复（M10）：连续错误次数过多，退出避免无限循环
             if (consecutiveErrors >= kMaxConsecutiveErrors) {
-                NSLog(@"[SOCKS5Proxy] 连续 %d 次 accept 错误，退出循环", consecutiveErrors);
+                NSLog(@"[SOCKS5Proxy] %d consecutive accept errors, exiting loop", consecutiveErrors);
                 // 关键修复（M11）：异常退出时清理 _running 状态和 _listenFD，
                 // 让 isRunning 返回 NO，上层（MultiplayerManager）能检测到代理已停止。
                 // 之前不清理导致：
@@ -798,7 +798,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
         char clientIP[INET_ADDRSTRLEN] = {0};
         inet_ntop(AF_INET, &clientAddr.sin_addr, clientIP, sizeof(clientIP));
         uint16_t clientPort = ntohs(clientAddr.sin_port);
-        NSLog(@"[SOCKS5Proxy] 新客户端连接：%s:%u (fd=%d)", clientIP, clientPort, clientFD);
+        NSLog(@"[SOCKS5Proxy] New client connection: %s:%u (fd=%d)", clientIP, clientPort, clientFD);
 
         // 关键修复（H9/C1）：为客户端 socket 设置 SO_RCVTIMEO
         // 防止恶意客户端只发送部分数据后保持连接不发送，导致服务器线程永久阻塞。
@@ -807,7 +807,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
         rcvTimeout.tv_sec = SOCKS5_CLIENT_IO_TIMEOUT;
         rcvTimeout.tv_usec = 0;
         if (setsockopt(clientFD, SOL_SOCKET, SO_RCVTIMEO, &rcvTimeout, sizeof(rcvTimeout)) < 0) {
-            NSLog(@"[SOCKS5Proxy] 设置 SO_RCVTIMEO 失败：errno = %d（忽略，继续）", errno);
+            NSLog(@"[SOCKS5Proxy] Failed to set SO_RCVTIMEO: errno = %d (ignoring, continuing)", errno);
         }
 
         // 关键修复（M14）：设置 SO_KEEPALIVE
@@ -815,7 +815,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
         // 避免长时间阻塞在 read 上不知道连接已断开。
         int keepalive = 1;
         if (setsockopt(clientFD, SOL_SOCKET, SO_KEEPALIVE, &keepalive, sizeof(keepalive)) < 0) {
-            NSLog(@"[SOCKS5Proxy] 设置 SO_KEEPALIVE 失败：errno = %d（忽略，继续）", errno);
+            NSLog(@"[SOCKS5Proxy] Failed to set SO_KEEPALIVE: errno = %d (ignoring, continuing)", errno);
         }
 
         // 关键修复（P1-5）：客户端 socket 设置 SO_SNDTIMEO / SO_NOSIGPIPE
@@ -829,11 +829,11 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
         sndTimeout.tv_sec = SOCKS5_CLIENT_IO_TIMEOUT;
         sndTimeout.tv_usec = 0;
         if (setsockopt(clientFD, SOL_SOCKET, SO_SNDTIMEO, &sndTimeout, sizeof(sndTimeout)) < 0) {
-            NSLog(@"[SOCKS5Proxy] 设置 SO_SNDTIMEO 失败：errno = %d（忽略，继续）", errno);
+            NSLog(@"[SOCKS5Proxy] Failed to set SO_SNDTIMEO: errno = %d (ignoring, continuing)", errno);
         }
         int nosigpipe = 1;
         if (setsockopt(clientFD, SOL_SOCKET, SO_NOSIGPIPE, &nosigpipe, sizeof(nosigpipe)) < 0) {
-            NSLog(@"[SOCKS5Proxy] 设置 SO_NOSIGPIPE 失败：errno = %d（忽略，继续）", errno);
+            NSLog(@"[SOCKS5Proxy] Failed to set SO_NOSIGPIPE: errno = %d (ignoring, continuing)", errno);
         }
 
         // 关键修复（P2-11）：iOS 默认 keepalive 间隔 ~2 小时，无法及时检测半死连接。
@@ -868,13 +868,13 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
             [clientThread start];
         } else {
             // 代理已停止，直接关闭客户端连接
-            NSLog(@"[SOCKS5Proxy] 代理已停止，拒绝新连接 fd=%d", clientFD);
+            NSLog(@"[SOCKS5Proxy] Proxy has stopped, rejecting new connection fd=%d", clientFD);
             close(clientFD);
         }
         [_lock unlock];
     }
 
-    NSLog(@"[SOCKS5Proxy] Accept 线程已退出");
+    NSLog(@"[SOCKS5Proxy] Accept thread exited");
 }
 
 #pragma mark - 客户端处理
@@ -893,7 +893,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
 /// @param clientFD 客户端 socket 文件描述符
 - (void)handleClient:(int)clientFD {
     @autoreleasepool {
-        NSLog(@"[SOCKS5Proxy] 开始处理客户端 fd=%d", clientFD);
+        NSLog(@"[SOCKS5Proxy] Starting to handle client fd=%d", clientFD);
 
         // 用于保存握手结果
         NSString *targetHost = nil;
@@ -908,7 +908,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
                                             remoteFD:&remoteFD];
 
             if (!handshakeOK) {
-                NSLog(@"[SOCKS5Proxy] SOCKS5 握手失败，关闭客户端 fd=%d", clientFD);
+                NSLog(@"[SOCKS5Proxy] SOCKS5 handshake failed, closing client fd=%d", clientFD);
 
                 // 发送客户端断开通知
                 [[NSNotificationCenter defaultCenter] postNotificationName:SOCKS5ProxyClientDisconnectedNotification
@@ -917,7 +917,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
                 return;
             }
 
-            NSLog(@"[SOCKS5Proxy] SOCKS5 握手成功，目标 %@:%u，开始转发 (clientFD=%d, remoteFD=%d)",
+            NSLog(@"[SOCKS5Proxy] SOCKS5 handshake succeeded, target %@:%u, starting forwarding (clientFD=%d, remoteFD=%d)",
                   targetHost, targetPort, clientFD, remoteFD);
 
             // 关键修复（M12）：将远程 fd 加入 _remoteFDs 列表，以便 stop 时能 shutdown 它。
@@ -943,7 +943,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
                                                                 object:self
                                                               userInfo:@{@"reason": @"closed"}];
 
-            NSLog(@"[SOCKS5Proxy] 客户端处理完成 fd=%d", clientFD);
+            NSLog(@"[SOCKS5Proxy] Client handling completed fd=%d", clientFD);
         } @finally {
             // 关键修复（H10）：无论是否异常，都要关闭 fd，避免资源泄漏
             //
@@ -997,19 +997,19 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
     uint8_t greeting[2] = {0};
     ssize_t n = readAll(clientFD, greeting, 2);
     if (n != 2) {
-        NSLog(@"[SOCKS5Proxy] 读取 greeting 头失败：n=%zd", n);
+        NSLog(@"[SOCKS5Proxy] Failed to read greeting header: n=%zd", n);
         return NO;
     }
 
     // 验证 SOCKS 版本
     if (greeting[0] != SOCKS5_VERSION) {
-        NSLog(@"[SOCKS5Proxy] 不支持的 SOCKS 版本：%d", greeting[0]);
+        NSLog(@"[SOCKS5Proxy] Unsupported SOCKS version: %d", greeting[0]);
         return NO;
     }
 
     uint8_t nMethods = greeting[1];
     if (nMethods == 0) {
-        NSLog(@"[SOCKS5Proxy] 客户端未提供任何认证方法");
+        NSLog(@"[SOCKS5Proxy] Client did not provide any authentication methods");
         return NO;
     }
 
@@ -1017,7 +1017,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
     uint8_t methods[256] = {0};
     n = readAll(clientFD, methods, nMethods);
     if (n != nMethods) {
-        NSLog(@"[SOCKS5Proxy] 读取方法列表失败：n=%zd, expected=%d", n, nMethods);
+        NSLog(@"[SOCKS5Proxy] Failed to read methods list: n=%zd, expected=%d", n, nMethods);
         return NO;
     }
 
@@ -1032,7 +1032,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
     }
 
     if (!noAuthSupported) {
-        NSLog(@"[SOCKS5Proxy] 客户端不支持无认证方式，拒绝连接");
+        NSLog(@"[SOCKS5Proxy] Client does not support no-auth method, rejecting connection");
         // 回复无可接受的方法
         uint8_t reply[2] = {SOCKS5_VERSION, SOCKS5_METHOD_NO_ACCEPTABLE};
         writeAll(clientFD, reply, 2);
@@ -1043,11 +1043,11 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
     uint8_t methodReply[2] = {SOCKS5_VERSION, SOCKS5_METHOD_NO_AUTH};
     n = writeAll(clientFD, methodReply, 2);
     if (n != 2) {
-        NSLog(@"[SOCKS5Proxy] 发送 method 回复失败：n=%zd", n);
+        NSLog(@"[SOCKS5Proxy] Failed to send method reply: n=%zd", n);
         return NO;
     }
 
-    NSLog(@"[SOCKS5Proxy] SOCKS5 认证方法协商完成（无认证）");
+    NSLog(@"[SOCKS5Proxy] SOCKS5 authentication method negotiation completed (no-auth)");
 
     // ============================================================
     // 步骤 2：读取客户端请求
@@ -1057,20 +1057,20 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
     uint8_t requestHeader[4] = {0};
     n = readAll(clientFD, requestHeader, 4);
     if (n != 4) {
-        NSLog(@"[SOCKS5Proxy] 读取请求头失败：n=%zd", n);
+        NSLog(@"[SOCKS5Proxy] Failed to read request header: n=%zd", n);
         return NO;
     }
 
     // 验证 SOCKS 版本
     if (requestHeader[0] != SOCKS5_VERSION) {
-        NSLog(@"[SOCKS5Proxy] 请求中的 SOCKS 版本错误：%d", requestHeader[0]);
+        NSLog(@"[SOCKS5Proxy] SOCKS version error in request: %d", requestHeader[0]);
         return NO;
     }
 
     // 检查命令类型（只支持 CONNECT）
     uint8_t cmd = requestHeader[1];
     if (cmd != SOCKS5_CMD_CONNECT) {
-        NSLog(@"[SOCKS5Proxy] 不支持的 CMD：%d（仅支持 CONNECT=1）", cmd);
+        NSLog(@"[SOCKS5Proxy] Unsupported CMD: %d (only CONNECT=1 supported)", cmd);
         [self sendSocks5Reply:clientFD
                           rep:SOCKS5_REP_COMMAND_NOT_SUPPORTED
                      bindAddr:@"0.0.0.0"
@@ -1089,7 +1089,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
             uint8_t ipv4[4] = {0};
             n = readAll(clientFD, ipv4, 4);
             if (n != 4) {
-                NSLog(@"[SOCKS5Proxy] 读取 IPv4 地址失败：n=%zd", n);
+                NSLog(@"[SOCKS5Proxy] Failed to read IPv4 address: n=%zd", n);
                 return NO;
             }
             destHost = [NSString stringWithFormat:@"%d.%d.%d.%d",
@@ -1102,13 +1102,13 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
             uint8_t domainLen = 0;
             n = readAll(clientFD, &domainLen, 1);
             if (n != 1) {
-                NSLog(@"[SOCKS5Proxy] 读取域名长度失败：n=%zd", n);
+                NSLog(@"[SOCKS5Proxy] Failed to read domain name length: n=%zd", n);
                 return NO;
             }
             char domain[256] = {0};
             n = readAll(clientFD, domain, domainLen);
             if (n != domainLen) {
-                NSLog(@"[SOCKS5Proxy] 读取域名失败：n=%zd, expected=%d", n, domainLen);
+                NSLog(@"[SOCKS5Proxy] Failed to read domain name: n=%zd, expected=%d", n, domainLen);
                 return NO;
             }
             NSString *domainStr = [NSString stringWithUTF8String:domain];
@@ -1134,15 +1134,15 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
                 }
                 if (resolvedIP[0] != '\0') {
                     destHost = [NSString stringWithUTF8String:resolvedIP];
-                    NSLog(@"[SOCKS5Proxy] 域名 %@ 解析为 %@", domainStr, destHost);
+                    NSLog(@"[SOCKS5Proxy] Domain %@ resolved to %@", domainStr, destHost);
                 } else {
                     destHost = domainStr;
-                    NSLog(@"[SOCKS5Proxy] 域名 %@ 解析结果为空，回退使用原始域名", domainStr);
+                    NSLog(@"[SOCKS5Proxy] Domain %@ resolved to empty result, falling back to original domain", domainStr);
                 }
                 freeaddrinfo(res);
             } else {
                 destHost = domainStr;
-                NSLog(@"[SOCKS5Proxy] 域名 %@ 解析失败（gaiResult=%d：%s），使用原始域名",
+                NSLog(@"[SOCKS5Proxy] Domain %@ resolution failed (gaiResult=%d: %s), using original domain",
                       domainStr, gaiResult, gai_strerror(gaiResult));
             }
             break;
@@ -1153,7 +1153,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
             uint8_t ipv6[16] = {0};
             n = readAll(clientFD, ipv6, 16);
             if (n != 16) {
-                NSLog(@"[SOCKS5Proxy] 读取 IPv6 地址失败：n=%zd", n);
+                NSLog(@"[SOCKS5Proxy] Failed to read IPv6 address: n=%zd", n);
                 return NO;
             }
             char ipv6Str[INET6_ADDRSTRLEN] = {0};
@@ -1163,7 +1163,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
         }
 
         default:
-            NSLog(@"[SOCKS5Proxy] 不支持的 ATYP：%d", atyp);
+            NSLog(@"[SOCKS5Proxy] Unsupported ATYP: %d", atyp);
             [self sendSocks5Reply:clientFD
                               rep:SOCKS5_REP_ADDRESS_TYPE_NOT_SUPPORTED
                          bindAddr:@"0.0.0.0"
@@ -1176,12 +1176,12 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
     uint8_t portBytes[2] = {0};
     n = readAll(clientFD, portBytes, 2);
     if (n != 2) {
-        NSLog(@"[SOCKS5Proxy] 读取端口失败：n=%zd", n);
+        NSLog(@"[SOCKS5Proxy] Failed to read port: n=%zd", n);
         return NO;
     }
     uint16_t destPort = (uint16_t)((portBytes[0] << 8) | portBytes[1]);
 
-    NSLog(@"[SOCKS5Proxy] 客户端请求连接到 %@:%u", destHost, destPort);
+    NSLog(@"[SOCKS5Proxy] Client requested connection to %@:%u", destHost, destPort);
 
     // ============================================================
     // 步骤 3：通过 ZeroTier 虚拟网络连接目标
@@ -1195,7 +1195,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
     // Ad-hoc 网络只有 IPv6，必须使用 ZTS_AF_INET6 创建 socket
     int ztFD = [[ZeroTierBridge sharedInstance] createTCPSocketForFamily:socketFamily];
     if (ztFD < 0) {
-        NSLog(@"[SOCKS5Proxy] 创建 ZeroTier socket(family=%d) 失败：ztFD=%d", socketFamily, ztFD);
+        NSLog(@"[SOCKS5Proxy] Failed to create ZeroTier socket(family=%d): ztFD=%d", socketFamily, ztFD);
         [self sendSocks5Reply:clientFD
                           rep:SOCKS5_REP_GENERAL_FAILURE
                      bindAddr:@"0.0.0.0"
@@ -1210,7 +1210,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
                                                                   port:destPort
                                                                timeout:SOCKS5_CONNECT_TIMEOUT];
     if (connectResult != 0) {
-        NSLog(@"[SOCKS5Proxy] 通过 ZeroTier 连接目标失败：result=%d, target=%@:%u",
+        NSLog(@"[SOCKS5Proxy] Failed to connect to target via ZeroTier: result=%d, target=%@:%u",
               connectResult, destHost, destPort);
         [[ZeroTierBridge sharedInstance] closeSocket:ztFD];
 
@@ -1224,7 +1224,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
         return NO;
     }
 
-    NSLog(@"[SOCKS5Proxy] 通过 ZeroTier 连接目标成功：target=%@:%u, ztFD=%d",
+    NSLog(@"[SOCKS5Proxy] Connected to target via ZeroTier successfully: target=%@:%u, ztFD=%d",
           destHost, destPort, ztFD);
 
     // ============================================================
@@ -1298,11 +1298,11 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
     // 关键修复（L2）：检查 writeAll 返回值，失败时记录日志
     ssize_t writeResult = writeAll(clientFD, reply.bytes, reply.length);
     if (writeResult < 0 || (size_t)writeResult != reply.length) {
-        NSLog(@"[SOCKS5Proxy] 发送 SOCKS5 回复失败：writeResult=%zd, expected=%lu",
+        NSLog(@"[SOCKS5Proxy] Failed to send SOCKS5 reply: writeResult=%zd, expected=%lu",
               writeResult, (unsigned long)reply.length);
     }
 
-    NSLog(@"[SOCKS5Proxy] 已发送 SOCKS5 回复：rep=%d, addr=%@:%u, atyp=%d",
+    NSLog(@"[SOCKS5Proxy] Sent SOCKS5 reply: rep=%d, addr=%@:%u, atyp=%d",
           rep, bindAddr, bindPort, atyp);
 }
 
@@ -1357,7 +1357,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
             @autoreleasepool {
                 // 检查远程是否已关闭（原子读，自带内存屏障）
                 if (atomic_load(&remoteClosed)) {
-                    NSLog(@"[SOCKS5Proxy] client→remote：远程已关闭，退出转发");
+                    NSLog(@"[SOCKS5Proxy] client→remote: remote already closed, exiting forwarding");
                     break;
                 }
 
@@ -1366,7 +1366,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
                 if (n <= 0) {
                     // n == 0：客户端关闭连接
                     // n < 0：读取错误
-                    NSLog(@"[SOCKS5Proxy] client→remote 结束：n=%zd, errno=%d", n, errno);
+                    NSLog(@"[SOCKS5Proxy] client→remote ended: n=%zd, errno=%d", n, errno);
 
                     // 标记客户端已关闭（原子写，自带内存屏障）
                     atomic_store(&clientClosed, true);
@@ -1383,7 +1383,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
                                                                   buffer:buffer
                                                                   length:(size_t)n];
                 if (sent <= 0) {
-                    NSLog(@"[SOCKS5Proxy] 发送到远程失败：sent=%zd", sent);
+                    NSLog(@"[SOCKS5Proxy] Failed to send to remote: sent=%zd", sent);
 
                     // 标记远程已关闭（原子写）
                     atomic_store(&remoteClosed, true);
@@ -1407,7 +1407,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
             @autoreleasepool {
                 // 检查客户端是否已关闭（原子读，自带内存屏障）
                 if (atomic_load(&clientClosed)) {
-                    NSLog(@"[SOCKS5Proxy] remote→client：客户端已关闭，退出转发");
+                    NSLog(@"[SOCKS5Proxy] remote→client: client already closed, exiting forwarding");
                     break;
                 }
 
@@ -1418,7 +1418,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
                 if (n <= 0) {
                     // n == 0：远程关闭连接
                     // n < 0：接收错误
-                    NSLog(@"[SOCKS5Proxy] remote→client 结束：n=%zd", n);
+                    NSLog(@"[SOCKS5Proxy] remote→client ended: n=%zd", n);
 
                     // 标记远程已关闭（原子写）
                     atomic_store(&remoteClosed, true);
@@ -1431,7 +1431,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
                 // 发送数据给客户端（系统 write）
                 ssize_t sent = writeAll(clientFD, buffer, (size_t)n);
                 if (sent <= 0) {
-                    NSLog(@"[SOCKS5Proxy] 发送到客户端失败：sent=%zd", sent);
+                    NSLog(@"[SOCKS5Proxy] Failed to send to client: sent=%zd", sent);
 
                     // 标记客户端已关闭（原子写）
                     atomic_store(&clientClosed, true);
@@ -1448,7 +1448,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
     // 等待两个方向的转发都完成
     dispatch_group_wait(group, DISPATCH_TIME_FOREVER);
 
-    NSLog(@"[SOCKS5Proxy] 双向转发结束 (clientFD=%d, remoteFD=%d)", clientFD, remoteFD);
+    NSLog(@"[SOCKS5Proxy] Bidirectional forwarding ended (clientFD=%d, remoteFD=%d)", clientFD, remoteFD);
 }
 
 #pragma mark - 辅助方法

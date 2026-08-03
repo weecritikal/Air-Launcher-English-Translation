@@ -206,9 +206,9 @@ static const void *kMenuDimViewKey = &kMenuDimViewKey;
         // 修复：在退出前调用 stopAllMultiplayerServices 彻底清理。
         @try {
             [[MultiplayerManager sharedManager] stopAllMultiplayerServices];
-            NSLog(@"[ForceClose] 联机资源已清理");
+            NSLog(@"[ForceClose] Multiplayer resources cleaned up");
         } @catch (NSException *e) {
-            NSLog(@"[ForceClose] 清理联机资源异常：%@", e);
+            NSLog(@"[ForceClose] Exception while cleaning up multiplayer resources: %@", e);
         }
 
         // FCL 风格：直接退出，不再做缩小动画
