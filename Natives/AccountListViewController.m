@@ -398,8 +398,19 @@
     if (getPrefBool(@"warnings.local_warn")) {
         setPrefBool(@"warnings.local_warn", NO);
         UIAlertController *alert = [UIAlertController alertControllerWithTitle:localize(@"login.warn.title.localmode", nil) message:localize(@"login.warn.message.localmode", nil) preferredStyle:UIAlertControllerStyleActionSheet];
-        alert.popoverPresentationController.sourceView = sender;
-        alert.popoverPresentationController.sourceRect = sender.bounds;
+        // 修复：sender 为 nil 时（从 addAccountTapped -> actionAddAccount:nil 链路进入），
+        // ActionSheet 在 iPad/LiveContainer 等 popover 场景下必须提供 sourceView，
+        // 否则会因 popoverPresentationController.sourceView 为 nil 而崩溃。
+        // 回退顺序：sender -> addAccountButton -> self.view 中心点。
+        UIView *sourceView = sender ?: self.addAccountButton;
+        if (sourceView) {
+            alert.popoverPresentationController.sourceView = sourceView;
+            alert.popoverPresentationController.sourceRect = sourceView.bounds;
+        } else {
+            alert.popoverPresentationController.sourceView = self.view;
+            alert.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(self.view.bounds), CGRectGetMidY(self.view.bounds), 1, 1);
+            alert.popoverPresentationController.permittedArrowDirections = 0;
+        }
         UIAlertAction *ok = [UIAlertAction actionWithTitle:localize(@"OK", nil) style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {[self actionLoginLocal:sender];}];
         [alert addAction:ok];
         [self presentViewController:alert animated:YES completion:nil];
