@@ -337,7 +337,7 @@ void init_loadCustomJvmFlags(int* argc, const char** argv) {
 
         // N3 边界检查：argv 数组大小由调用方决定（margv[1000]），这里做防御性检查
         if (*argc + 1 >= 1000) {
-            NSLog(@"[JavaLauncher] 警告：margv 已达上限（1000），丢弃自定义 JVM flag：-%@", jvmarg);
+            NSLog(@"[JavaLauncher] Warning: margv reached limit (1000), discarding custom JVM flag: -%@", jvmarg);
             continue;
         }
         NSString *flagStr = [@"-" stringByAppendingString:jvmarg];
@@ -568,7 +568,7 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
         if (margc + 1 < 1000) { \
             margv[++margc] = (literal); \
         } else { \
-            NSLog(@"[JavaLauncher] 警告：margv 已达上限（1000），丢弃字面量参数 %s", (literal)); \
+            NSLog(@"[JavaLauncher] Warning: margv reached limit (1000), discarding literal argument %s", (literal)); \
         } \
     } while (0)
 
@@ -582,7 +582,7 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
             [retainedStrings addObject:_tmpStr]; \
             margv[++margc] = _tmpStr.UTF8String; \
         } else { \
-            NSLog(@"[JavaLauncher] 警告：margv 已达上限（1000），丢弃格式化参数"); \
+            NSLog(@"[JavaLauncher] Warning: margv reached limit (1000), discarding formatted argument"); \
         } \
     } while (0)
 
@@ -620,12 +620,12 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
         if (surfaceView) {
             PUSH_MARGV_FORMAT(@"-Dmetallum.ios.view.pointer=%p", surfaceView);
             PUSH_MARGV_FORMAT(@"-Dmetallum.ios.screen.scale=%g", (double)UIScreen.mainScreen.scale);
-            NSLog(@"[JavaLauncher] 已发布 Metallum surface view 指针: %p (scale=%g)", surfaceView, (double)UIScreen.mainScreen.scale);
+            NSLog(@"[JavaLauncher] Published Metallum surface view: %p (scale=%g)", surfaceView, (double)UIScreen.mainScreen.scale);
         } else {
-            NSLog(@"[JavaLauncher] 警告：+[SurfaceViewController surface] 返回 nil，Metallum 将回退到 ObjC runtime 查找");
+            NSLog(@"[JavaLauncher] Warning: +[SurfaceViewController surface] returned nil, Metallum will fall back to ObjC runtime lookup");
         }
     } else {
-        NSLog(@"[JavaLauncher] 警告：SurfaceViewController 类不可用，Metallum 将回退到 ObjC runtime 查找");
+        NSLog(@"[JavaLauncher] Warning: SurfaceViewController class unavailable, Metallum will fall back to ObjC runtime lookup");
     }
 
     PUSH_MARGV_LITERAL("-Dorg.lwjgl.glfw.checkThread0=false");
@@ -745,13 +745,13 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
                                           @"172.29.*|172.30.*|172.31.*";
                 PUSH_MARGV_FORMAT(@"-DsocksNonProxyHosts=%@", nonProxyHosts);
 
-                NSLog(@"[JavaLauncher] 已注入 ZeroTier SOCKS5 代理：%@:%@（同时注入 socksNonProxyHosts 让登录/皮肤/Mod 下载绕过代理）",
+                NSLog(@"[JavaLauncher] Injected ZeroTier SOCKS5 proxy: %@:%@ (also injected socksNonProxyHosts to bypass proxy for login/skin/mod downloads)",
                       proxyHost, proxyPortStr);
             } else {
-                NSLog(@"[JavaLauncher] AMETHYST_SOCKS5_PROXY 端口无效：%@", proxyPortStr);
+                NSLog(@"[JavaLauncher] AMETHYST_SOCKS5_PROXY invalid port: %@", proxyPortStr);
             }
         } else {
-            NSLog(@"[JavaLauncher] AMETHYST_SOCKS5_PROXY 格式无效（应为 host:port）：%@", proxyStr);
+            NSLog(@"[JavaLauncher] AMETHYST_SOCKS5_PROXY invalid format (expected host:port): %@", proxyStr);
         }
     }
 
