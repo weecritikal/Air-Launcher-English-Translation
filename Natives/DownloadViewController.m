@@ -948,6 +948,10 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 @property (nonatomic, strong) InstallerProgressViewController *vanillaPreinstallProgressVC;
 @property (nonatomic, assign) BOOL isObservingVanillaPreinstall;
 @property (nonatomic, copy, nullable) void (^vanillaPreinstallCompletion)(BOOL success);
+// 改进2（参照 ZL2 统一进度流）：YES 表示原版预装是加载器安装的前置步骤，
+// 完成后不 pop 预装 VC，而是转交给 self.installerProgressVC，由后续 install* 方法复用，
+// 实现"原版 + 加载器"在同一进度页连续推进，避免出现两个独立进度页。
+@property (nonatomic, assign) BOOL vanillaPreinstallForLoader;
 
 @end
 
@@ -3176,7 +3180,8 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             [self.progressCardView dismiss];
             self.progressCardView = nil;
         }
-        NSString *vanillaTitle = [NSString stringWithFormat:@"正在安装原版 %@", versionId];
+        // 参照 ZL2：vanilla 分支也用"准备运行环境"文案，与加载器前置预装保持一致
+        NSString *vanillaTitle = [NSString stringWithFormat:@"正在准备运行环境 %@", versionId];
         self.progressCardView = [DownloadProgressCardView showInParentView:self.view title:vanillaTitle];
         [self.progressCardView startDownloadWithTitle:vanillaTitle
                                               subtitle:@"Minecraft 原版"];
@@ -3209,6 +3214,10 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     // 若用户尚未安装原版，启动会因 FileNotFoundException 崩溃；仅下载 JSON 不够，
     // 还需下载 client.jar/资源/库，否则首次启动仍要现下、体验割裂。
     // Forge/NeoForge 直装器内部已有 ensureParentVersionExists 逻辑（仅 JSON），此处补全完整原版。
+    //
+    // 改进2（参照 ZL2 统一进度流）：设置 vanillaPreinstallForLoader=YES，让原版预装完成后
+    // 不 pop 进度页，而是转交给后续 install* 方法复用，实现"原版 + 加载器"在同一进度页连续推进。
+    self.vanillaPreinstallForLoader = YES;
     __weak typeof(self) weakSelf = self;
     [self ensureVanillaInstalled:version completion:^(BOOL success) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
@@ -3409,12 +3418,23 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     NSString *versionJsonPath = [gameDir stringByAppendingPathComponent:
                                  [NSString stringWithFormat:@"versions/%@/%@.json", versionId, versionId]];
 
-    // 1. 原版 JSON 已存在（说明之前已下载过原版），直接返回，避免重复下载。
-    //   downloadVersion: 内部对已存在且 SHA1 正确的库/资源会自动跳过，无需此处逐一检查。
+    // 1. 原版 JSON 已存在（说明之前已下载过原版）。改进3（精细化跳过）：
+    //    JSON 存在不代表安装完整——若上次下载中断，可能只有 JSON 而无 client.jar/库文件。
+    //    参照 ZL2：检查 client.jar 是否存在，jar 缺失则继续预装补全，jar 存在才真正跳过。
+    //    MinecraftResourceDownloadTask 内部对已存在且 SHA1 正确的文件会自动跳过，重复调用安全。
     if ([NSFileManager.defaultManager fileExistsAtPath:versionJsonPath]) {
-        NSLog(@"[DownloadVC] Vanilla %@ already installed (JSON exists), skip preinstall", versionId);
-        if (completion) completion(YES);
-        return;
+        NSString *versionDir = [gameDir stringByAppendingPathComponent:
+                               [NSString stringWithFormat:@"versions/%@", versionId]];
+        NSString *clientJarPath = [versionDir stringByAppendingPathComponent:
+                                   [NSString stringWithFormat:@"%@.jar", versionId]];
+        if ([NSFileManager.defaultManager fileExistsAtPath:clientJarPath]) {
+            NSLog(@"[DownloadVC] Vanilla %@ already installed (JSON + jar exist), skip preinstall", versionId);
+            self.vanillaPreinstallForLoader = NO; // 不会进入 KVO 转交分支，重置标志
+            if (completion) completion(YES);
+            return;
+        }
+        NSLog(@"[DownloadVC] Vanilla %@ JSON exists but client.jar missing, resuming preinstall", versionId);
+        // 继续往下执行：创建下载任务补全缺失文件（已存在的会跳过）
     }
 
     NSLog(@"[DownloadVC] Vanilla %@ not installed, preinstalling...", versionId);
@@ -3431,6 +3451,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             return;
         }
         if (!jsonSuccess) {
+            strongSelf.vanillaPreinstallForLoader = NO; // 重置转交标志
             strongSelf.vanillaPreinstallCompletion = nil;
             if (completion) completion(NO);
             return;
@@ -3444,8 +3465,9 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                 return;
             }
             InstallerProgressViewController *progressVC = [[InstallerProgressViewController alloc] init];
-            progressVC.titleText = [NSString stringWithFormat:@"正在安装原版 %@", versionId];
-            progressVC.stageMessage = @"正在准备下载原版文件...";
+            // 参照 ZL2：原版预装是加载器安装的前置步骤，文案应体现"准备运行环境"而非"安装原版"
+            progressVC.titleText = [NSString stringWithFormat:@"正在准备运行环境 %@", versionId];
+            progressVC.stageMessage = @"正在下载运行所需文件...";
             progressVC.progress = -1; // 初始不确定模式，待拿到总字节数后切换为确定模式
             // 阶段12增强：类别图标 + 阶段步骤列表（参照 FCL 原版安装步骤）
             progressVC.categoryIconName = @"cube.box.fill";
@@ -3472,6 +3494,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                     [ss.vanillaPreinstallTask.progress cancel];
                     ss.vanillaPreinstallTask = nil;
                 }
+                ss.vanillaPreinstallForLoader = NO; // 重置转交标志
                 ss.vanillaPreinstallProgressVC = nil;
                 ss.vanillaPreinstallCompletion = nil;
             };
@@ -3499,6 +3522,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                         [ss.navigationController popViewControllerAnimated:YES];
                     }
                     ss.vanillaPreinstallTask = nil;
+                    ss.vanillaPreinstallForLoader = NO; // 重置转交标志
                     ss.vanillaPreinstallProgressVC = nil;
                     void (^cb)(BOOL) = ss.vanillaPreinstallCompletion;
                     ss.vanillaPreinstallCompletion = nil;
@@ -3667,20 +3691,26 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                                  : @"https://meta.fabricmc.net/v2/versions/loader";
     NSString *loaderTag = isQuilt ? @"quilt" : @"fabric";
 
-    // FCL 风格进度展示：push 一个进度 VC，替代转圈 alert
-    InstallerProgressViewController *progressVC = [[InstallerProgressViewController alloc] init];
-    progressVC.titleText = [NSString stringWithFormat:@"正在安装 %@", displayName];
+    // 改进2（参照 ZL2 统一进度流）：复用原版预装转交的进度 VC（若存在），
+    // 否则创建新 VC；标题统一为"正在准备运行环境"，步骤列表合并展示原版已完成步骤。
+    InstallerProgressViewController *progressVC = [self obtainInstallerProgressVC];
+    progressVC.titleText = [NSString stringWithFormat:@"正在准备运行环境 %@", gameVersion];
     progressVC.progress = -1; // 不确定模式，正在拉取 profile JSON
     progressVC.stageMessage = [NSString stringWithFormat:@"正在获取 %@ profile...\n游戏版本: %@  加载器: %@", displayName, gameVersion, loaderVersion];
     // 阶段12增强：加载器图标 + 阶段步骤列表（使用 ModLoaderIconHelper 统一图标）
     progressVC.categoryIconName = [ModLoaderIconHelper symbolNameForLoader:loaderTag];
     progressVC.categoryIconColor = [ModLoaderIconHelper brandColorForLoader:loaderTag];
+    // 合并步骤列表：原版5步标记完成 + 加载器安装步骤
     progressVC.stageSteps = @[
+        @{@"title": @"获取版本清单", @"status": @2},
+        @{@"title": @"下载版本 JSON", @"status": @2},
+        @{@"title": @"下载游戏库文件", @"status": @2},
+        @{@"title": @"下载资源文件", @"status": @2},
+        @{@"title": @"验证文件完整性", @"status": @2},
         @{@"title": @"获取加载器 profile", @"status": @1},
         @{@"title": @"下载加载器库文件", @"status": @0},
         @{@"title": @"写入版本 JSON", @"status": @0},
     ];
-    self.installerProgressVC = progressVC;
 
     __weak typeof(self) weakSelf = self;
     __block NSURLSessionDataTask *dataTask = nil;
@@ -3693,7 +3723,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         }
     };
 
-    [self.navigationController pushViewController:progressVC animated:YES];
+    // 注：push 已由 obtainInstallerProgressVC 在新建时完成，复用时不重复 push
 
     NSString *urlString = [NSString stringWithFormat:@"%@/%@/%@/profile/json", metaBase, gameVersion, loaderVersion];
     NSURL *url = [NSURL URLWithString:urlString];
@@ -3851,6 +3881,20 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         }
         [strongSelf showError:errorMessage];
     });
+}
+
+/// 改进2（参照 ZL2 统一进度流）：获取加载器安装进度 VC。
+/// 若 self.installerProgressVC 已存在（由原版预装完成后转交而来），直接复用之，
+/// 不再创建新 VC、不再 push，实现"原版 + 加载器"在同一进度页连续推进；
+/// 否则按原逻辑创建新 VC 并 push。
+- (InstallerProgressViewController *)obtainInstallerProgressVC {
+    if (self.installerProgressVC) {
+        return self.installerProgressVC;
+    }
+    InstallerProgressViewController *progressVC = [[InstallerProgressViewController alloc] init];
+    self.installerProgressVC = progressVC;
+    [self.navigationController pushViewController:progressVC animated:YES];
+    return progressVC;
 }
 
 - (void)downloadFabricAPI:(NSString *)gameVersion completion:(void (^)(BOOL success, NSError *error))completion {
@@ -4156,22 +4200,28 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             }
 
             if (selectedScheme == 1 && filePath.length > 0) {
-                // 直装方案：push 进度 VC，由 ForgeDirectInstaller 的 progress 回调驱动
+                // 直装方案：复用/创建进度 VC，由 ForgeDirectInstaller 的 progress 回调驱动
                 NSLog(@"[ForgeDirect] DownloadViewController: starting direct install with progress UI");
-                InstallerProgressViewController *progressVC = [[InstallerProgressViewController alloc] init];
-                progressVC.titleText = @"Forge 直装中";
+                // 改进2（参照 ZL2 统一进度流）：复用原版预装转交的进度 VC（若存在）
+                InstallerProgressViewController *progressVC = [strongSelf2 obtainInstallerProgressVC];
+                progressVC.titleText = [NSString stringWithFormat:@"正在准备运行环境 %@", gameVersion];
                 progressVC.progress = 0.0;
                 progressVC.stageMessage = @"准备中...";
                 // 阶段12增强：Forge 图标 + 阶段步骤列表
                 progressVC.categoryIconName = [ModLoaderIconHelper symbolNameForLoader:@"forge"];
                 progressVC.categoryIconColor = [ModLoaderIconHelper brandColorForLoader:@"forge"];
+                // 合并步骤列表：原版5步标记完成 + Forge 安装步骤
                 progressVC.stageSteps = @[
+                    @{@"title": @"获取版本清单", @"status": @2},
+                    @{@"title": @"下载版本 JSON", @"status": @2},
+                    @{@"title": @"下载游戏库文件", @"status": @2},
+                    @{@"title": @"下载资源文件", @"status": @2},
+                    @{@"title": @"验证文件完整性", @"status": @2},
                     @{@"title": @"解析安装器 JAR", @"status": @1},
                     @{@"title": @"下载 Forge 库文件", @"status": @0},
                     @{@"title": @"写入版本 JSON", @"status": @0},
                 ];
-                strongSelf2.installerProgressVC = progressVC;
-                [strongSelf2.navigationController pushViewController:progressVC animated:YES];
+                // 注：push 已由 obtainInstallerProgressVC 在新建时完成，复用时不重复 push
 
                 dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
                     NSError *directError = nil;
@@ -4396,20 +4446,25 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
     NSString *versionId = [NSString stringWithFormat:@"%@-OptiFine_%@_%@", gameVersion, optiType, optiPatch];
 
-    // push 进度 VC
-    InstallerProgressViewController *progressVC = [[InstallerProgressViewController alloc] init];
-    progressVC.titleText = @"正在安装 OptiFine";
+    // 改进2（参照 ZL2 统一进度流）：复用原版预装转交的进度 VC（若存在）
+    InstallerProgressViewController *progressVC = [self obtainInstallerProgressVC];
+    progressVC.titleText = [NSString stringWithFormat:@"正在准备运行环境 %@", gameVersion];
     progressVC.progress = -1;
     progressVC.stageMessage = [NSString stringWithFormat:@"正在下载 OptiFine %@_%@...", optiType, optiPatch];
     // 阶段12增强：OptiFine 图标 + 阶段步骤列表
     progressVC.categoryIconName = [ModLoaderIconHelper symbolNameForLoader:@"optifine"];
     progressVC.categoryIconColor = [ModLoaderIconHelper brandColorForLoader:@"optifine"];
+    // 合并步骤列表：原版5步标记完成 + OptiFine 安装步骤
     progressVC.stageSteps = @[
+        @{@"title": @"获取版本清单", @"status": @2},
+        @{@"title": @"下载版本 JSON", @"status": @2},
+        @{@"title": @"下载游戏库文件", @"status": @2},
+        @{@"title": @"下载资源文件", @"status": @2},
+        @{@"title": @"验证文件完整性", @"status": @2},
         @{@"title": @"下载 OptiFine JAR", @"status": @1},
         @{@"title": @"安装 OptiFine", @"status": @0},
         @{@"title": @"写入版本 JSON", @"status": @0},
     ];
-    self.installerProgressVC = progressVC;
 
     __weak typeof(self) weakSelf = self;
     progressVC.cancelHandler = ^{
@@ -4420,7 +4475,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         }
     };
 
-    [self.navigationController pushViewController:progressVC animated:YES];
+    // 注：push 已由 obtainInstallerProgressVC 在新建时完成，复用时不重复 push
 
     // 注册到下载任务管理器
     NSString *source = getPrefObject(@"general.download_source") ?: @"official";
@@ -4620,22 +4675,28 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             }
 
             if (selectedScheme == 1 && filePath.length > 0) {
-                // 直装方案：push 进度 VC，由 NeoForgeDirectInstaller 的 progress 回调驱动
+                // 直装方案：复用/创建进度 VC，由 NeoForgeDirectInstaller 的 progress 回调驱动
                 NSLog(@"[NeoForgeDirect] DownloadViewController: starting direct install with progress UI");
-                InstallerProgressViewController *progressVC = [[InstallerProgressViewController alloc] init];
-                progressVC.titleText = @"NeoForge 直装中";
+                // 改进2（参照 ZL2 统一进度流）：复用原版预装转交的进度 VC（若存在）
+                InstallerProgressViewController *progressVC = [strongSelf2 obtainInstallerProgressVC];
+                progressVC.titleText = [NSString stringWithFormat:@"正在准备运行环境 %@", gameVersion];
                 progressVC.progress = 0.0;
                 progressVC.stageMessage = @"准备中...";
                 // 阶段12增强：NeoForge 图标 + 阶段步骤列表
                 progressVC.categoryIconName = [ModLoaderIconHelper symbolNameForLoader:@"neoforge"];
                 progressVC.categoryIconColor = [ModLoaderIconHelper brandColorForLoader:@"neoforge"];
+                // 合并步骤列表：原版5步标记完成 + NeoForge 安装步骤
                 progressVC.stageSteps = @[
+                    @{@"title": @"获取版本清单", @"status": @2},
+                    @{@"title": @"下载版本 JSON", @"status": @2},
+                    @{@"title": @"下载游戏库文件", @"status": @2},
+                    @{@"title": @"下载资源文件", @"status": @2},
+                    @{@"title": @"验证文件完整性", @"status": @2},
                     @{@"title": @"解析安装器 JAR", @"status": @1},
                     @{@"title": @"下载 NeoForge 库文件", @"status": @0},
                     @{@"title": @"写入版本 JSON", @"status": @0},
                 ];
-                strongSelf2.installerProgressVC = progressVC;
-                [strongSelf2.navigationController pushViewController:progressVC animated:YES];
+                // 注：push 已由 obtainInstallerProgressVC 在新建时完成，复用时不重复 push
 
                 dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
                     NSError *directError = nil;
@@ -6119,8 +6180,29 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                 }
                 s.isObservingVanillaPreinstall = NO;
             }
-            if (s.vanillaPreinstallProgressVC && [s.navigationController.viewControllers containsObject:s.vanillaPreinstallProgressVC]) {
-                [s.navigationController popViewControllerAnimated:YES];
+            // 改进2（参照 ZL2 统一进度流）：加载器前置预装场景下不 pop 预装 VC，
+            // 而是转交给 self.installerProgressVC，由后续 install* 方法复用同一进度页，
+            // 实现"原版 + 加载器"在同一进度页连续推进。
+            if (s.vanillaPreinstallForLoader && s.vanillaPreinstallProgressVC) {
+                InstallerProgressViewController *pvc = s.vanillaPreinstallProgressVC;
+                pvc.progress = -1; // 切回不确定模式，等待加载器安装阶段
+                pvc.stageMessage = @"原版文件已就绪，正在准备安装加载器...";
+                // 步骤列表：原版5步全部标记完成 + "安装模组加载器"进行中
+                pvc.stageSteps = @[
+                    @{@"title": @"获取版本清单", @"status": @2},
+                    @{@"title": @"下载版本 JSON", @"status": @2},
+                    @{@"title": @"下载游戏库文件", @"status": @2},
+                    @{@"title": @"下载资源文件", @"status": @2},
+                    @{@"title": @"验证文件完整性", @"status": @2},
+                    @{@"title": @"安装模组加载器", @"status": @1},
+                ];
+                s.installerProgressVC = pvc;
+                s.vanillaPreinstallForLoader = NO;
+            } else {
+                // 非加载器场景（vanilla 直装或整合包预装）：维持原逻辑 pop 预装 VC
+                if (s.vanillaPreinstallProgressVC && [s.navigationController.viewControllers containsObject:s.vanillaPreinstallProgressVC]) {
+                    [s.navigationController popViewControllerAnimated:YES];
+                }
             }
             s.vanillaPreinstallTask = nil;
             s.vanillaPreinstallProgressVC = nil;
