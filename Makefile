@@ -360,13 +360,6 @@ payload: native dep_mg java jre assets
 	if [ -f "$(WORKINGDIR)/AngelAuraAmethyst.app/Frameworks/libspirv-cross-c-shared.0.dylib" ] && [ ! -f "$(WORKINGDIR)/AngelAuraAmethyst.app/Frameworks/libspirv-cross.dylib" ]; then \
 		ln -sf libspirv-cross-c-shared.0.dylib $(WORKINGDIR)/AngelAuraAmethyst.app/Frameworks/libspirv-cross.dylib; \
 	fi
-	# libSDL3 软链接（关键修复 26.3-snapshot-4+ SDL3 启动）：
-	# MC 26.3-snapshot-4+ 使用 SDL3 替代 GLFW。实际 Frameworks 中是 libSDL3.0.dylib（带主版本号），
-	# 但 SDL.java（mapLibraryNameBundled("SDL3")）和 egl_bridge.m（dlopen "@rpath/libSDL3.dylib"）
-	# 期望 libSDL3.dylib（无版本号）。不创建软链接会导致 LWJGL 加载 SDL3 失败，MC 启动崩溃。
-	if [ -f "$(WORKINGDIR)/AngelAuraAmethyst.app/Frameworks/libSDL3.0.dylib" ] && [ ! -f "$(WORKINGDIR)/AngelAuraAmethyst.app/Frameworks/libSDL3.dylib" ]; then \
-		ln -sf libSDL3.0.dylib $(WORKINGDIR)/AngelAuraAmethyst.app/Frameworks/libSDL3.dylib; \
-	fi
 		cp -R $(SOURCEDIR)/JavaApp/libs/others/* $(WORKINGDIR)/AngelAuraAmethyst.app/libs/ || exit 1
 	cp $(SOURCEDIR)/JavaApp/build/*.jar $(WORKINGDIR)/AngelAuraAmethyst.app/libs/ || exit 1
 	cp -R $(SOURCEDIR)/JavaApp/libs/caciocavallo/* $(WORKINGDIR)/AngelAuraAmethyst.app/libs_caciocavallo || exit 1

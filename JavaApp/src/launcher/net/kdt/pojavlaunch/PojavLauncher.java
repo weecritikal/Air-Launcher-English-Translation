@@ -217,36 +217,6 @@ public class PojavLauncher {
         JMinecraftVersionList.Version version = Tools.getVersionInfo(args[1]);
         System.out.println("Launching Minecraft " + version.id);
 
-        // ============================================================================
-        // GLFW/SDL3 窗口后端版本适配
-        // ============================================================================
-        // MC 26.3-snapshot-4 首次从 GLFW 切换到 SDL3（Mojang 官方公告）：
-        //   "In today's snapshot we have switched the library used for window
-        //    management, input and platform integration from GLFW to SDL3."
-        //
-        // 规则：
-        //   - 26.3-snapshot-4 及以上 → SDL3（MC 声明 lwjgl-sdl 依赖，加载 libSDL3.dylib）
-        //   - 26.3-snapshot-3 及以下 → GLFW（MC 声明 lwjgl-glfw 依赖，加载主二进制 pojav* 函数）
-        //   - 26.4+ → SDL3
-        //
-        // 启动器无法强制 MC 切换后端（MC 自己决定加载哪个 LWJGL 模块），
-        // 但可以检测版本并设置环境变量，供 native 层做相应适配。
-        boolean useSDL3 = isSDL3Version(version.id);
-        String windowingBackend = useSDL3 ? "sdl" : "glfw";
-        System.out.println("[PojavLauncher] Windowing backend: " + windowingBackend
-            + " (version=" + version.id + ", useSDL3=" + useSDL3 + ")");
-        // 环境变量已由 JavaLauncher.m 在 native 端设置（更早，供 native 代码使用）
-        // 这里作为备份，确保 Java 端也能读取
-        if (System.getenv("AMETHYST_WINDOWING_BACKEND") == null) {
-            // 不应发生，但作为防御性编程
-            try {
-                java.lang.reflect.Method setenv = System.class.getDeclaredMethod(
-                    "setenv0", String.class, String.class, boolean.class);
-                setenv.setAccessible(true);
-                setenv.invoke(null, "AMETHYST_WINDOWING_BACKEND", windowingBackend, true);
-            } catch (Throwable ignored) {}
-        }
-
         // 第三个参数为服务器地址（FCL 风格）：留空则不自动加入，非空则启动后自动加入
         // 由 JavaLauncher.m 在 NSDictionary 启动分支以 args[2] 传入
         String serverIp = (args.length > 2 && args[2] != null) ? args[2] : "";
@@ -283,49 +253,5 @@ public class PojavLauncher {
         System.setProperty("log4j.configurationFile", configPath);
 
         Tools.launchMinecraft(account, version, serverIp);
-    }
-
-    /**
-     * 检测 MC 版本是否使用 SDL3 窗口后端。
-     *
-     * MC 26.3-snapshot-4 首次从 GLFW 切换到 SDL3（Mojang 官方公告）：
-     *   "In today's snapshot we have switched the library used for window
-     *    management, input and platform integration from GLFW to SDL3."
-     *
-     * 规则：
-     *   - 26.3-snapshot-4 及以上 → SDL3
-     *   - 26.3-snapshot-3 及以下 → GLFW
-     *   - 26.3 pre/rc/release 及 26.4+ → SDL3
-     *
-     * @param versionId MC 版本号，如 "26.3-snapshot-4"、"26.2"、"1.21.8"
-     * @return true 表示该版本使用 SDL3，false 表示使用 GLFW
-     */
-    public static boolean isSDL3Version(String versionId) {
-        if (versionId == null || versionId.isEmpty()) return false;
-
-        // 26.3-snapshot-N：N >= 4 用 SDL3
-        if (versionId.startsWith("26.3-snapshot-")) {
-            try {
-                int n = Integer.parseInt(versionId.substring("26.3-snapshot-".length()));
-                return n >= 4;
-            } catch (NumberFormatException e) {
-                return false;
-            }
-        }
-        // 26.3 pre/rc/release 用 SDL3
-        if (versionId.startsWith("26.3-pre") || versionId.startsWith("26.3-rc")
-            || versionId.equals("26.3")) {
-            return true;
-        }
-        // 26.4+ 用 SDL3（仅对数字开头的版本字符串做比较，避免 "fabric-loader-..." 误判）
-        // 修复：String.compareTo 是字典序比较，"fabric-loader-..." 的 'f'(102) > '2'(50)，
-        // 会被误判为 >= "26.4"，导致 1.21.1 Fabric 被错误识别为 SDL3 版本。
-        // 注意：String.compareTo 对 "26.4" > "26.3" 是正确的（'4' > '3'）
-        // 但对 "26.10" < "26.4" 是错误的（'1' < '4'），目前 MC 还没到 26.10
-        if (!versionId.isEmpty() && Character.isDigit(versionId.charAt(0))
-            && versionId.compareTo("26.4") >= 0) {
-            return true;
-        }
-        return false;
     }
 }

@@ -86,24 +86,4 @@ public class UIKit {
     public static native void showError(String title, String message, boolean exitIfOk);
 
     private static native void updateMCGuiScale(int scale);
-
-    // ============================================================================
-    // SDL3 UIKit 窗口创建桥接（MC 26.3-snapshot-4+ 使用 SDL3 替代 GLFW）
-    // ============================================================================
-    // 由 SDLVideo.java 覆盖类的 SDL_CreateWindow 方法调用。
-    // 在 native 代码中完成 SDL3 Properties API 调用，把启动器的 UIWindowScene
-    // 指针传给 SDL3，让它复用启动器的窗口场景而非创建新的（避免阻塞/冲突）。
-    //
-    // 详见 egl_bridge.m 中 Java_net_kdt_pojavlaunch_uikit_UIKit_sdlCreateWindowWithScene
-    // 的实现说明。
-
-    /**
-     * 创建 SDL3 窗口，复用启动器的 UIWindowScene。
-     *
-     * @param w 窗口宽度
-     * @param h 窗口高度
-     * @param flags 窗口 flags（native 会自动添加 SDL_WINDOW_METAL）
-     * @return SDL_Window 指针（成功）或 0（失败）
-     */
-    public static native long sdlCreateWindowWithScene(int w, int h, long flags);
 }

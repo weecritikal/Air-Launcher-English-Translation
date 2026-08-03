@@ -20,14 +20,7 @@
 #include "ctxbridges/osmesa_internal.h"
 #include "utils.h"
 
-// 默认 GL 路径（GLFW_OPENGL_API）而非 0（=GLFW_NO_API）。
-// 关键修复（SDL3 模式 FPS/首帧误报）：
-//   MC 26.3-snapshot-4+ 切换到 SDL3 后不再调用 glfwWindowHint(GLFW_CLIENT_API, ...)，
-//   pojavInit() 也从不被执行（它是 GLFW 入口）。若 clientAPI 默认 0（=GLFW_NO_API），
-//   pojavIsActualVulkanPath() 会错误返回 true，导致 displayLink 走 Vulkan fallback
-//   路径，在游戏真正渲染前就发送 "First frame rendered" 通知，启动器提前移除启动遮罩
-//   显示黑屏。默认 GLFW_OPENGL_API 对所有 GL 渲染器（MobileGlues/ANGLE/gl4es/zink）
-//   正确；SDL3 + Vulkan 渲染器的情况在 pojavIsActualVulkanPath() 中单独判定。
+// 默认 GL 路径，pojavInit() 会重新设置
 int clientAPI = GLFW_OPENGL_API;
 
 // FPS 计数器（参照 FCL egl_bridge.c 的 atomic_uint 实现）
@@ -83,19 +76,6 @@ bool pojavIsActualVulkanPath() {
     // 切换到 Vulkan 路径。
     if (clientAPI == GLFW_NO_API) return true;
 
-    // SDL3 模式（MC 26.3-snapshot-4+）：MC 不调用 glfwWindowHint，pojavInit() 也
-    // 从不执行，clientAPI 保持默认值 GLFW_OPENGL_API。对于 Vulkan 渲染器
-    // （libMoltenVK.dylib），需要通过渲染器选择判定为 Vulkan 路径。
-    // 注意：这会把 "Vulkan 渲染器 + prefer_opengl" 也判为 Vulkan，但 SDL3 模式下
-    // 无法精确区分（MC 不经过 GLFW clientAPI 信号）。此误判仅影响 FPS 计数器
-    // fallback 路径选择，不影响实际渲染（pojavCreateContext 在 SDL3 模式不被调用）。
-    const char *windowingBackend = getenv("AMETHYST_WINDOWING_BACKEND");
-    if (windowingBackend && strcmp(windowingBackend, "sdl") == 0) {
-        const char *renderer = getenv("AMETHYST_RENDERER");
-        if (renderer && strcmp(renderer, RENDERER_NAME_VULKAN) == 0) {
-            return true;
-        }
-    }
     return false;
 }
 
@@ -199,19 +179,6 @@ int pojavInitOpenGL() {
     }
     // Preload renderer library
     dlopen([NSString stringWithFormat:@"@rpath/%@", renderer].UTF8String, RTLD_GLOBAL);
-
-    // ============================================================================
-    // SDL3 GL/EGL 库重定向说明
-    // ============================================================================
-    // 此函数（pojavInitOpenGL）仅在 GLFW 路径下被调用（glfwCreateWindow →
-    // pojavCreateContext → pojavInitOpenGL）。GLFW 模式下 MC 不走 SDL3 路径，
-    // 不需要设置 SDL_OPENGL_LIBRARY / SDL_EGL_LIBRARY 环境变量。
-    //
-    // SDL3 模式（MC 26.3-snapshot-4+）下 MC 不调用 glfwCreateWindow，此函数不执行，
-    // SDL3 环境变量由 JavaLauncher.m 在 JVM 启动前设置（早于 SDL_GL_CreateContext）。
-    //
-    // 历史代码曾在此处设置 SDL3 环境变量作为"冗余兜底"，但这会导致 GLFW 模式下
-    // 也设置 SDL3 环境变量，干扰 LWJGL 的 GLFW 加载路径。已移除。
 
     return !br_init();
     //return 0;
@@ -347,179 +314,3 @@ void pojavSwapInterval(int interval) {
     br_swap_interval(interval);
 }
 
-// ============================================================================
-// SDL3 UIKit 窗口创建桥接（MC 26.3-snapshot-4+ 使用 SDL3 替代 GLFW）
-// ============================================================================
-// 背景：
-//   SDL3 UIKit 后端默认会创建新的 UIWindowScene，与启动器已有的
-//   GameSurfaceView（含 CAMetalLayer）冲突，导致 SDL_CreateWindow 阻塞。
-//
-// 解决方案：
-//   拦截 MC 的 SDL_CreateWindow 调用（通过 SDLVideo.java 覆盖类），
-//   转而调用 SDL_CreateWindowWithProperties，通过 Properties API 把
-//   启动器的 UIWindowScene 指针传给 SDL3，让 SDL3 复用启动器的窗口场景。
-//
-// 调用链：
-//   MC -> SDLVideo.SDL_CreateWindow (Java 覆盖类)
-//       -> UIKit.sdlCreateWindowWithScene (本函数)
-//          1. 遍历 connectedScenes 找到应用类型的 UIWindowScene
-//          2. dlopen libSDL3.dylib (RTLD_NOLOAD 获取已加载句柄)
-//          3. dlsym 获取 SDL3 Properties API 函数指针
-//          4. 创建 properties，设置 windowscene/metal/flags 属性
-//          5. 调用 SDL_CreateWindowWithProperties
-//          6. 失败回退到标准 SDL_CreateWindow
-//
-// 线程安全：
-//   UIApplication.sharedApplication 理论上应在主线程访问，但此处仅读取
-//   connectedScenes 集合（不做修改），且指针值稳定，实践中可从任意线程调用。
-//   SDL3 内部会通过 SDL_RunOnMainThread 调度 UIKit 操作到主线程。
-
-// SDL3 类型定义（避免依赖 SDL3 头文件）
-typedef unsigned int SDL_PropertiesID;      // SDL_PropertiesID = Uint32
-typedef int SDL_bool;                        // SDL_bool = int
-typedef long long SDL_Sint64;                // Sint64 = int64_t
-typedef struct SDL_Window SDL_Window;        // 不透明指针
-
-// SDL3 Properties API 函数指针类型
-typedef SDL_PropertiesID (*SDL_CreateProperties_t)(void);
-typedef SDL_bool (*SDL_SetPointerProperty_t)(SDL_PropertiesID, const char *, void *);
-typedef SDL_bool (*SDL_SetBooleanProperty_t)(SDL_PropertiesID, const char *, SDL_bool);
-typedef SDL_bool (*SDL_SetNumberProperty_t)(SDL_PropertiesID, const char *, SDL_Sint64);
-typedef SDL_Window *(*SDL_CreateWindowWithProperties_t)(SDL_PropertiesID);
-typedef void (*SDL_DestroyProperties_t)(SDL_PropertiesID);
-typedef SDL_Window *(*SDL_CreateWindow_t)(const char *, int, int, unsigned int);
-
-// SDL_WINDOW_METAL = 0x20000000（iOS 上必须用 Metal 渲染）
-#define SDL3_WINDOW_METAL_FLAG 0x20000000u
-
-/// SDL3 Properties API 函数指针（缓存，避免每次创建窗口都 dlsym）
-static SDL_CreateProperties_t g_pCreateProperties = NULL;
-static SDL_SetPointerProperty_t g_pSetPointerProperty = NULL;
-static SDL_SetBooleanProperty_t g_pSetBooleanProperty = NULL;
-static SDL_SetNumberProperty_t g_pSetNumberProperty = NULL;
-static SDL_CreateWindowWithProperties_t g_pCreateWindowWithProperties = NULL;
-static SDL_DestroyProperties_t g_pDestroyProperties = NULL;
-static SDL_CreateWindow_t g_pCreateWindow = NULL;
-static SDL_CreateWindow_t g_origSDL_CreateWindow = NULL;  // 原始 SDL_CreateWindow（hook 兜底用）
-static BOOL g_sdl3_funcs_loaded = NO;
-
-/// 加载 SDL3 Properties API 函数指针（只加载一次）
-static BOOL amethyst_sdl3_load_functions(void) {
-    if (g_sdl3_funcs_loaded) return YES;
-
-    void *sdl_lib = dlopen("@rpath/libSDL3.dylib", RTLD_NOLOAD | RTLD_GLOBAL);
-    if (!sdl_lib) {
-        sdl_lib = dlopen("libSDL3.dylib", RTLD_NOLOAD | RTLD_GLOBAL);
-    }
-    if (!sdl_lib) {
-        NSLog(@"[SDL3 Bridge] FATAL: libSDL3.dylib not loaded. dlopen error: %s", dlerror());
-        return NO;
-    }
-    NSLog(@"[SDL3 Bridge] libSDL3.dylib handle: %p", sdl_lib);
-
-    // 重要：必须用 amethyst_orig_dlsym 而非 dlsym 获取 SDL3 函数指针。
-    // 因为 main_hook.m 的 hooked_dlsym 会拦截 "SDL_CreateWindow" 请求，
-    // 返回我们的 hook 函数，导致 g_origSDL_CreateWindow 指向 hook 函数自身，
-    // 形成无限递归。amethyst_orig_dlsym 直接调用 orig_dlsym，绕过 hook。
-    extern void *amethyst_orig_dlsym(void *handle, const char *name);
-    g_pCreateProperties = (SDL_CreateProperties_t)amethyst_orig_dlsym(sdl_lib, "SDL_CreateProperties");
-    g_pSetPointerProperty = (SDL_SetPointerProperty_t)amethyst_orig_dlsym(sdl_lib, "SDL_SetPointerProperty");
-    g_pSetBooleanProperty = (SDL_SetBooleanProperty_t)amethyst_orig_dlsym(sdl_lib, "SDL_SetBooleanProperty");
-    g_pSetNumberProperty = (SDL_SetNumberProperty_t)amethyst_orig_dlsym(sdl_lib, "SDL_SetNumberProperty");
-    g_pCreateWindowWithProperties = (SDL_CreateWindowWithProperties_t)amethyst_orig_dlsym(sdl_lib, "SDL_CreateWindowWithProperties");
-    g_pDestroyProperties = (SDL_DestroyProperties_t)amethyst_orig_dlsym(sdl_lib, "SDL_DestroyProperties");
-    g_pCreateWindow = (SDL_CreateWindow_t)amethyst_orig_dlsym(sdl_lib, "SDL_CreateWindow");
-    g_origSDL_CreateWindow = g_pCreateWindow;
-
-    NSLog(@"[SDL3 Bridge] Function pointers: CreateProperties=%p SetPointer=%p SetBoolean=%p SetNumber=%p CreateWindowWithProps=%p DestroyProps=%p CreateWindow=%p",
-          (void*)g_pCreateProperties, (void*)g_pSetPointerProperty, (void*)g_pSetBooleanProperty,
-          (void*)g_pSetNumberProperty, (void*)g_pCreateWindowWithProperties,
-          (void*)g_pDestroyProperties, (void*)g_pCreateWindow);
-
-    g_sdl3_funcs_loaded = YES;
-    return YES;
-}
-
-/// 查找启动器的 UIWindowScene
-static UIWindowScene *amethyst_find_launcher_window_scene(void) {
-    for (UIWindowScene *scene in UIApplication.sharedApplication.connectedScenes.allObjects) {
-        if (scene.session.role == UIWindowSceneSessionRoleApplication) {
-            return scene;
-        }
-    }
-    return nil;
-}
-
-/// 创建 SDL3 窗口，复用启动器的 UIWindowScene（C 接口，供 native hook 和 JNI 调用）
-///
-/// 优先用 Properties API 传入 UIWindowScene，让 SDL3 UIKit 后端复用启动器的窗口场景，
-/// 避免创建新的 UIWindowScene 导致冲突/阻塞。失败回退到标准 SDL_CreateWindow。
-///
-/// @param w 窗口宽度
-/// @param h 窗口高度
-/// @param flags 窗口 flags（会自动添加 SDL_WINDOW_METAL）
-/// @return SDL_Window 指针（成功）或 NULL（失败）
-SDL_Window *amethyst_sdl_create_window_with_scene(int w, int h, unsigned int flags) {
-    NSLog(@"[SDL3 Bridge] amethyst_sdl_create_window_with_scene: w=%d h=%d flags=0x%x", w, h, flags);
-
-    if (!amethyst_sdl3_load_functions()) {
-        return NULL;
-    }
-
-    UIWindowScene *launcherScene = amethyst_find_launcher_window_scene();
-    if (!launcherScene) {
-        NSLog(@"[SDL3 Bridge] WARNING: No UIWindowScene found, falling back to standard SDL_CreateWindow");
-    } else {
-        NSLog(@"[SDL3 Bridge] Found UIWindowScene: %@", launcherScene);
-    }
-
-    // 优先尝试：用 Properties API 传入 UIWindowScene 创建窗口
-    if (launcherScene && g_pCreateProperties && g_pSetPointerProperty && g_pSetBooleanProperty &&
-        g_pSetNumberProperty && g_pCreateWindowWithProperties && g_pDestroyProperties) {
-
-        NSLog(@"[SDL3 Bridge] Attempting SDL_CreateWindowWithProperties with UIWindowScene...");
-        SDL_PropertiesID props = g_pCreateProperties();
-        NSLog(@"[SDL3 Bridge] Created properties: %u", props);
-
-        // 设置 UIWindowScene 指针（关键属性，让 SDL3 复用启动器的窗口场景）
-        g_pSetPointerProperty(props, "SDL.window.create.uikit.windowscene", (__bridge void *)launcherScene);
-        // 强制启用 Metal 渲染（iOS 上必须）
-        g_pSetBooleanProperty(props, "SDL.window.create.metal", 1);
-        // 设置窗口 flags，自动添加 SDL_WINDOW_METAL
-        unsigned int finalFlags = flags | SDL3_WINDOW_METAL_FLAG;
-        g_pSetNumberProperty(props, "SDL.window.create.flags", (SDL_Sint64)finalFlags);
-
-        NSLog(@"[SDL3 Bridge] Calling SDL_CreateWindowWithProperties(props=%u, finalFlags=0x%x)...", props, finalFlags);
-        SDL_Window *window = g_pCreateWindowWithProperties(props);
-        NSLog(@"[SDL3 Bridge] SDL_CreateWindowWithProperties returned: %p", window);
-
-        g_pDestroyProperties(props);
-
-        if (window) {
-            NSLog(@"[SDL3 Bridge] SUCCESS: Window created with launcher UIWindowScene");
-            return window;
-        }
-        NSLog(@"[SDL3 Bridge] SDL_CreateWindowWithProperties returned NULL, falling back to standard SDL_CreateWindow");
-    } else if (launcherScene) {
-        NSLog(@"[SDL3 Bridge] Missing some Properties API functions, falling back to standard SDL_CreateWindow");
-    }
-
-    // 回退：标准 SDL_CreateWindow（让 SDL3 自己创建窗口场景）
-    if (!g_origSDL_CreateWindow) {
-        NSLog(@"[SDL3 Bridge] FATAL: SDL_CreateWindow function not found in libSDL3.dylib");
-        return NULL;
-    }
-
-    unsigned int finalFlags = flags | SDL3_WINDOW_METAL_FLAG;
-    NSLog(@"[SDL3 Bridge] Calling standard SDL_CreateWindow(w=%d, h=%d, flags=0x%x)...", w, h, finalFlags);
-    SDL_Window *window = g_origSDL_CreateWindow(NULL, w, h, finalFlags);
-    NSLog(@"[SDL3 Bridge] SDL_CreateWindow returned: %p", window);
-
-    return window;
-}
-
-/// JNI 入口（保留供 SDLVideo.java 覆盖类调用，也供 dlsym hook 复用）
-JNIEXPORT jlong JNICALL Java_net_kdt_pojavlaunch_uikit_UIKit_sdlCreateWindowWithScene(JNIEnv* env, jclass clazz, jint w, jint h, jlong flags) {
-    SDL_Window *window = amethyst_sdl_create_window_with_scene((int)w, (int)h, (unsigned int)flags);
-    return (jlong)window;
-}

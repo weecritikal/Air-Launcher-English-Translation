@@ -513,16 +513,9 @@ public class GLFW
     public static long mainContext = 0;
 
     static {
-        System.out.println("[GLFW] Loading AngelAuraAmethyst main binary for MC < 26.3-snapshot-4 (GLFW windowing backend)");
-        System.out.println("[GLFW] BUNDLE_PATH=" + System.getenv("BUNDLE_PATH"));
         try {
-            String bundlePath = System.getenv("BUNDLE_PATH");
-            String binaryPath = bundlePath + "/AngelAuraAmethyst";
-            System.out.println("[GLFW] Loading: " + binaryPath);
-            System.load(binaryPath);
-            System.out.println("[GLFW] Main binary loaded successfully (pojav* EGL bridge functions available)");
+            System.load(System.getenv("BUNDLE_PATH") + "/AngelAuraAmethyst");
         } catch (UnsatisfiedLinkError e) {
-            System.out.println("[GLFW] FATAL: Failed to load main binary: " + e);
             e.printStackTrace();
         }
         String[] size = System.getProperty("glfw.windowSize").split("x");

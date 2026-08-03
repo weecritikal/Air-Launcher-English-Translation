@@ -35,42 +35,6 @@ BOOL validateVirtualMemorySpace(size_t size) {
     return YES;
 }
 
-/// 检测 MC 版本是否使用 SDL3 窗口后端
-/// MC 26.3-snapshot-4 首次从 GLFW 切换到 SDL3（Mojang 官方公告）。
-/// 规则：
-///   - 26.3-snapshot-4 及以上 → SDL3
-///   - 26.3-snapshot-3 及以下 → GLFW
-///   - 26.3 pre/rc/release 及 26.4+ → SDL3
-///
-/// 修复字典序比较 bug：
-///   旧代码 `[versionId compare:@"26.4"] != NSOrderedAscending` 对所有
-///   字典序 >= "26.4" 的字符串返回 YES。但 NSString compare 是按字符 ASCII
-///   比较，"fabric-loader-0.18.4-1.21.1" 的首字符 'f'(102) > '2'(50)，
-///   导致 1.21.1 Fabric 被误判为 SDL3 版本。
-///   修复：仅对首字符为数字的版本字符串做 >= "26.4" 比较。
-BOOL amethyst_isSDL3Version(NSString *versionId) {
-    if (!versionId || versionId.length == 0) return NO;
-
-    // 26.3-snapshot-N：N >= 4 用 SDL3
-    if ([versionId hasPrefix:@"26.3-snapshot-"]) {
-        NSString *numStr = [versionId substringFromIndex:@"26.3-snapshot-".length];
-        NSInteger n = numStr.integerValue;
-        return n >= 4;
-    }
-    // 26.3 pre/rc/release 用 SDL3
-    if ([versionId hasPrefix:@"26.3-pre"] || [versionId hasPrefix:@"26.3-rc"]
-        || [versionId isEqualToString:@"26.3"]) {
-        return YES;
-    }
-    // 26.4+ 用 SDL3（仅对数字开头的版本字符串做比较，避免 "fabric-loader-..." 误判）
-    unichar firstChar = [versionId characterAtIndex:0];
-    if (firstChar >= '0' && firstChar <= '9'
-        && [versionId compare:@"26.4"] != NSOrderedAscending) {
-        return YES;
-    }
-    return NO;
-}
-
 void init_loadDefaultEnv() {
     /* Define default env */
 
@@ -113,11 +77,6 @@ void init_loadDefaultEnv() {
     } else {
         setenv("MVK_CONFIG_LOG_LEVEL", "2", 1);
     }
-
-    // SDL3 诊断日志（临时）：启用 verbose 级别，输出 SDL3 内部初始化/窗口创建流程
-    // 用于诊断 MC 26.3-snapshot-4 SDL3 窗口创建阻塞问题
-    // 格式：*=verbose 表示所有 category 都用 verbose 级别
-    setenv("SDL_LOGGING", "*=verbose", 1);
 
     // Runs JVM in a separate thread
     setenv("HACK_IGNORE_START_ON_FIRST_THREAD", "1", 1);
@@ -518,27 +477,6 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
         setenv("AMETHYST_GRAPHICS_API", graphicsApi.UTF8String, 1);
         NSLog(@"[JavaLauncher] GRAPHICS_API is set to %@\n", graphicsApi);
 
-        // ============================================================================
-        // GLFW/SDL3 窗口后端版本适配
-        // ============================================================================
-        // MC 26.3-snapshot-4 首次从 GLFW 切换到 SDL3（Mojang 官方公告）：
-        //   "In today's snapshot we have switched the library used for window
-        //    management, input and platform integration from GLFW to SDL3."
-        //
-        // 规则：
-        //   - 26.3-snapshot-4 及以上 → SDL3（MC 加载 libSDL3.dylib）
-        //   - 26.3-snapshot-3 及以下 → GLFW（MC 加载主二进制 pojav* 函数）
-        //   - 26.3 pre/rc/release 及 26.4+ → SDL3
-        //
-        // 启动器无法强制 MC 切换后端（MC 自己决定加载哪个 LWJGL 模块），
-        // 但可以检测版本并设置环境变量，供 native 层和 Java 层做相应适配。
-        NSString *mcVersionId = [launchTarget isKindOfClass:NSDictionary.class]
-            ? launchTarget[@"id"] : [launchTarget lastPathComponent];
-        BOOL useSDL3 = amethyst_isSDL3Version(mcVersionId);
-        NSString *windowingBackend = useSDL3 ? @"sdl" : @"glfw";
-        setenv("AMETHYST_WINDOWING_BACKEND", windowingBackend.UTF8String, 1);
-        NSLog(@"[JavaLauncher] WINDOWING_BACKEND is set to %@ (version=%@, useSDL3=%d)",
-            windowingBackend, mcVersionId, useSDL3);
         // Setup gameDir
         gameDir = [NSString stringWithFormat:@"%s/instances/%@/%@",
             getenv("POJAV_HOME"), getPrefObject(@"general.game_directory"),
@@ -887,76 +825,6 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
         // 会对 libname 加 "lib" 前缀和 ".dylib" 后缀，得到 "libspirv-cross-c-shared.0.dylib"，
         // 从 library.path（Frameworks）找到该文件。
         PUSH_MARGV_LITERAL("-Dorg.lwjgl.spvc.libname=spirv-cross-c-shared.0");
-
-        // ============================================================================
-        // SDL3 GL/EGL 库重定向（关键修复 26.3-snapshot-4+ SDL3 启动失败）
-        // ============================================================================
-        // 参照 AngelAuraMC/Amethyst-Android feat/lwjgl3ify-sdl-support 分支
-        // (commit 2ebbb3442f "fix(SDL): Set SDL env vars for renderer")：
-        //
-        //   Os.setenv("SDL_OPENGL_LIBRARY", graphicsLib, true);
-        //   Os.setenv("SDL_EGL_LIBRARY", NATIVE_LIB_DIR+"/"+Os.getenv("POJAVEXEC_EGL"), true);
-        //
-        // MC 26.3-snapshot-4+ 使用 SDL3 替代 GLFW。SDL3 的 SDL_GL_CreateContext 会
-        // dlopen 默认的 GL/EGL 库（iOS 上不存在），导致 GL 上下文创建失败。
-        //
-        // 必须在 JVM 启动前设置（早于 MC 调用 SDL_GL_CreateContext）：
-        //   - pojavInitOpenGL() 仅在 MC 走 GLFW 路径（glfwCreateWindow→pojavCreateContext）
-        //     时被调用。SDL3 模式下 MC 不调用 glfwCreateWindow，pojavInitOpenGL 不会执行，
-        //     故 env vars 必须在此处（JVM 启动前）设置。
-        //
-        // 仅对 GL 类渲染器设置：
-        //   - gl4es/ANGLE/MobileGlues: 设置 SDL_OPENGL_LIBRARY + SDL_EGL_LIBRARY
-        //   - Vulkan: 不设置（clientAPI=GLFW_NO_API，SDL3 用 SDL_Vulkan_CreateSurface，
-        //     不走 GL context 路径）
-        //   - OSMesa: 不设置（OSMesa 用自己的 context，不走 EGL）
-        //
-        // SDL3 通过 dlopen(env_var_value, RTLD_GLOBAL|RTLD_NOW) 加载库。iOS 上 dylib
-        // 位于 Frameworks 目录，需用 @rpath/ 前缀（@executable_path/Frameworks 已在
-        // 二进制 LC_RPATH 中）。
-        //
-        // 重要：仅在 SDL3 模式下设置。GLFW 模式下 MC 不走 SDL3 路径，
-        // 设置这些环境变量会干扰 LWJGL 的 GLFW 加载（日志会显示矛盾的
-        // "WINDOWING_BACKEND=glfw but SDL3 GL/EGL redirect"）。
-        // GLFW 路径下的渲染器/EGL 加载由 egl_bridge.m 的 pojavInitOpenGL 负责。
-        // 注意：useSDL3 变量定义在外层作用域（line ~537），此处访问不到，
-        // 改为读取 AMETHYST_WINDOWING_BACKEND 环境变量（由外层设置）。
-        const char *windowingBackendEnv = getenv("AMETHYST_WINDOWING_BACKEND");
-        BOOL isSDL3Backend = (windowingBackendEnv != NULL && strcmp(windowingBackendEnv, "sdl") == 0);
-        if (isSDL3Backend &&
-            strcmp(glLibName, RENDERER_NAME_VULKAN) != 0 &&
-            strcmp(glLibName, RENDERER_NAME_VK_ZINK) != 0 &&
-            strstr(glLibName, "libOSMesa") == NULL) {
-            char sdlGlLib[256];
-            snprintf(sdlGlLib, sizeof(sdlGlLib), "@rpath/%s", glLibName);
-            char sdlEglLib[256];
-            // LTW 模式下，SDL3 的 EGL 必须从 libltw.dylib 加载（LTW 实现了自己的 EGL wrapper：
-            // eglCreateContext/eglDestroyContext/eglMakeCurrent，会在内部转发到 ANGLE ES3 context）
-            // 其他 GL 渲染器（gl4es/ANGLE/MobileGlues）直接使用 ANGLE 的 EGL
-            if (strcmp(glLibName, RENDERER_NAME_LTW) == 0) {
-                snprintf(sdlEglLib, sizeof(sdlEglLib), "@rpath/%s", RENDERER_NAME_LTW);
-            } else {
-                snprintf(sdlEglLib, sizeof(sdlEglLib), "@rpath/%s", RENDERER_NAME_MTL_ANGLE);
-            }
-            setenv("SDL_OPENGL_LIBRARY", sdlGlLib, 1);
-            setenv("SDL_EGL_LIBRARY", sdlEglLib, 1);
-            NSLog(@"[JavaLauncher] SDL3 GL/EGL library redirect (early): SDL_OPENGL_LIBRARY=%s, SDL_EGL_LIBRARY=%s",
-                  sdlGlLib, sdlEglLib);
-            // 预加载渲染器库（RTLD_GLOBAL），让后续 dlopen 找到符号。
-            // SDL3 路径不会经过 pojavInitOpenGL，故在此预加载一次确保 SDL3 dlopen 时库已在内存中。
-            char preloadPath[256];
-            snprintf(preloadPath, sizeof(preloadPath), "@rpath/%s", glLibName);
-            dlopen(preloadPath, RTLD_NOW | RTLD_GLOBAL);
-            // LTW 模式下还需要预加载 ANGLE（作为 LTW 的 host EGL，LTW constructor 会
-            // 通过 dlopen("@rpath/libtinygl4angle.dylib") 查找 eglGetProcAddress）
-            if (strcmp(glLibName, RENDERER_NAME_LTW) == 0) {
-                char anglePath[256];
-                snprintf(anglePath, sizeof(anglePath), "@rpath/%s", RENDERER_NAME_MTL_ANGLE);
-                dlopen(anglePath, RTLD_NOW | RTLD_GLOBAL);
-            }
-        } else if (!isSDL3Backend) {
-            NSLog(@"[JavaLauncher] GLFW mode detected, skipping SDL3 GL/EGL library redirect");
-        }
     }
 
       // 添加authlib-injector参数以支持第三方认证账户的皮肤显示
