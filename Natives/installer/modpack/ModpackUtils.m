@@ -142,7 +142,7 @@
     [NSFileManager.defaultManager createDirectoryAtPath:versionDir withIntermediateDirectories:YES attributes:nil error:nil];
     NSString *versionJsonPath = [versionDir stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.json", versionId]];
     [jsonData writeToFile:versionJsonPath options:NSDataWritingAtomic error:nil];
-    NSLog(@"[ModpackUtils] 占位 version JSON 已写入: %@", versionJsonPath);
+    NSLog(@"[ModpackUtils] Placeholder version JSON written: %@", versionJsonPath);
 }
 
 @end

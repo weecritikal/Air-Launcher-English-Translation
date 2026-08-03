@@ -528,7 +528,7 @@
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (error) {
             // server 类型 API 不可用，直接回退到 modpack 搜索
-            NSLog(@"[ModrinthAPI] Server Projects 搜索失败，回退到 modpack 搜索: %@", error.localizedDescription);
+            NSLog(@"[ModrinthAPI] Server Projects search failed, falling back to modpack search: %@", error.localizedDescription);
             [strongSelf _searchServerWithProjectType:@"modpack" filters:filters completion:completion];
             return;
         }
@@ -537,7 +537,7 @@
             return;
         }
         // server 类型结果为空，回退到 modpack 搜索（作为"服务器整合包"展示）
-        NSLog(@"[ModrinthAPI] Server Projects 结果为空，回退到 modpack 搜索");
+        NSLog(@"[ModrinthAPI] Server Projects result is empty, falling back to modpack search");
         [strongSelf _searchServerWithProjectType:@"modpack" filters:filters completion:completion];
     }];
 }
@@ -640,7 +640,7 @@ submitDownloadTasksFromPackage:(NSString *)packagePath
         if ([clientEnv isKindOfClass:[NSString class]] && [clientEnv isEqualToString:@"unsupported"]) {
             skippedServerOnly++;
             downloader.progress.completedUnitCount++;
-            NSLog(@"[ModrinthAPI] 跳过 server-only 文件: %@", indexFile[@"path"]);
+            NSLog(@"[ModrinthAPI] Skipping server-only file: %@", indexFile[@"path"]);
             continue;
         }
         NSString *rawUrl = [indexFile[@"downloads"] isKindOfClass:[NSArray class]] ? [indexFile[@"downloads"] firstObject] : nil;
@@ -656,7 +656,7 @@ submitDownloadTasksFromPackage:(NSString *)packagePath
         if (!url || ![url isKindOfClass:[NSString class]] || url.length == 0) {
             skippedEmptyURL++;
             downloader.progress.completedUnitCount++;
-            NSLog(@"[ModrinthAPI] 警告：Modrinth 文件 %@ 缺少 download URL，跳过", indexFile[@"path"]);
+            NSLog(@"[ModrinthAPI] Warning: Modrinth file %@ missing download URL, skipping", indexFile[@"path"]);
             @synchronized(downloader.failedFiles) {
                 [downloader.failedFiles addObject:@{
                     @"name": indexFile[@"path"] ?: @"(unknown)",
@@ -676,7 +676,7 @@ submitDownloadTasksFromPackage:(NSString *)packagePath
         }
     }
     if (skippedEmptyURL > 0 || skippedServerOnly > 0) {
-        NSLog(@"[ModrinthAPI] 整合包下载：跳过空 URL %lu 个，server-only %lu 个", (unsigned long)skippedEmptyURL, (unsigned long)skippedServerOnly);
+        NSLog(@"[ModrinthAPI] Modpack download: skipped %lu empty URLs, %lu server-only files", (unsigned long)skippedEmptyURL, (unsigned long)skippedServerOnly);
     }
     
     [ModpackUtils archive:archive extractDirectory:@"overrides" toPath:destPath error:&error];
@@ -751,7 +751,7 @@ submitDownloadTasksFromPackage:(NSString *)packagePath
                 // 清理临时 installer.jar
                 [NSFileManager.defaultManager removeItemAtPath:installerPath error:nil];
                 if (!installSuccess) {
-                    NSLog(@"[ModrinthAPI] %@ 直装失败: %@", loader, installError.localizedDescription);
+                    NSLog(@"[ModrinthAPI] %@ direct install failed: %@", loader, installError.localizedDescription);
                     // 写入占位 JSON，启动时显式报错而非误装作 vanilla
                     [ModpackUtils writePlaceholderVersionJSONForVersionId:versionId
                                                           minecraftVersion:depInfo[@"minecraftVersion"]
@@ -759,7 +759,7 @@ submitDownloadTasksFromPackage:(NSString *)packagePath
                                                             loaderVersion:depInfo[@"loaderVersion"]
                                                                      error:installError];
                 } else {
-                    NSLog(@"[ModrinthAPI] %@ 直装成功，version.json 已写入: %@", loader, versionId);
+                    NSLog(@"[ModrinthAPI] %@ direct install succeeded, version.json written: %@", loader, versionId);
                     // 阶段5修复（参照 FCL ModpackHelper.ensureCompleteVersion）：
                     // 直装器只写入了 loader 的 version.json + Forge/NeoForge 库，
                     // 但原版 MC 的 libraries 和 assets 还没下载。

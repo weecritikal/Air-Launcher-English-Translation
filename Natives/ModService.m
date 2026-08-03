@@ -285,7 +285,7 @@
             if (error) *error = createError;
             return nil;
         }
-        NSLog(@"[ModService] 已创建 mods 目录: %@", modsPath);
+        NSLog(@"[ModService] Created mods directory: %@", modsPath);
     } else if (!isDir) {
         if (error) {
             *error = [NSError errorWithDomain:@"ModService" code:2 userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"%@ 不是目录", modsPath]}];

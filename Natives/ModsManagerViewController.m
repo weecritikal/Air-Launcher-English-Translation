@@ -335,7 +335,7 @@
         NSError *error = nil;
         BOOL success = [[ModService sharedService] deleteMod:mod error:&error];
         if (!success || error) {
-            NSLog(@"[ModsManager] 批量删除失败：%@ - %@", mod.displayName, error);
+            NSLog(@"[ModsManager] Batch delete failed: %@ - %@", mod.displayName, error);
             [failedMods addObject:mod];
         }
     }
@@ -527,7 +527,7 @@
         [self showSimpleAlertWithTitle:[NSString stringWithFormat:@"导入完成（%ld 成功，%ld 失败）", (long)successCount, (long)failedFiles.count]
                                message:[failedFiles componentsJoinedByString:@"\n"]];
     } else {
-        NSLog(@"[ModsManager] 成功导入 %ld 个 Mod", (long)successCount);
+        NSLog(@"[ModsManager] Successfully imported %ld mods", (long)successCount);
     }
 }
 

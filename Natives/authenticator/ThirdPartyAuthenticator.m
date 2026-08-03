@@ -65,7 +65,7 @@ static NSError* createError(NSString *message, NSInteger code) {
     NSURLSessionDataTask *task = [session dataTaskWithRequest:request
         completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
             if (error) {
-                NSLog(@"[ThirdPartyAuthenticator] ALI 解析失败: %@", error.localizedDescription);
+                NSLog(@"[ThirdPartyAuthenticator] ALI resolution failed: %@", error.localizedDescription);
                 // 解析失败回退到原始 URL，登录仍可尝试
                 dispatch_async(dispatch_get_main_queue(), ^{
                     if (completion) completion(inputURL, nil);
@@ -84,7 +84,7 @@ static NSError* createError(NSString *message, NSInteger code) {
                         // 如果 ALI 不指向自身，更新 resolvedURL
                         NSString *aliStr = aliURL.absoluteString;
                         if (![aliStr isEqualToString:httpResponse.URL.absoluteString]) {
-                            NSLog(@"[ThirdPartyAuthenticator] ALI 重定向: %@ -> %@", urlStr, aliStr);
+                            NSLog(@"[ThirdPartyAuthenticator] ALI redirect: %@ -> %@", urlStr, aliStr);
                             resolvedURL = aliStr;
                             // ALI 指向新地址，需要重新请求获取元数据
                             [self fetchMetadataFromURL:aliURL completion:completion originalInput:inputURL];
@@ -103,7 +103,7 @@ static NSError* createError(NSString *message, NSInteger code) {
                                                                    options:kNilOptions
                                                                      error:nil] ? data : nil;
                     if (!check) {
-                        NSLog(@"[ThirdPartyAuthenticator] 响应体非合法 JSON，丢弃元数据");
+                        NSLog(@"[ThirdPartyAuthenticator] Response body is not valid JSON, discarding metadata");
                         metadata = nil;
                     }
                 }
@@ -114,7 +114,7 @@ static NSError* createError(NSString *message, NSInteger code) {
                 resolvedURL = [resolvedURL stringByAppendingString:@"/"];
             }
 
-            NSLog(@"[ThirdPartyAuthenticator] ALI 解析完成: %@ (metadata=%@)", resolvedURL, metadata ? @"YES" : @"NO");
+            NSLog(@"[ThirdPartyAuthenticator] ALI resolution complete: %@ (metadata=%@)", resolvedURL, metadata ? @"YES" : @"NO");
             dispatch_async(dispatch_get_main_queue(), ^{
                 if (completion) completion(resolvedURL, metadata);
             });
@@ -140,12 +140,12 @@ static NSError* createError(NSString *message, NSInteger code) {
             NSString *metadata = nil;
 
             if (error) {
-                NSLog(@"[ThirdPartyAuthenticator] 元数据二次请求失败: %@", error.localizedDescription);
+                NSLog(@"[ThirdPartyAuthenticator] Metadata secondary request failed: %@", error.localizedDescription);
             } else if (data.length > 0) {
                 metadata = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
                 // 校验 JSON 合法性
                 if (![NSJSONSerialization JSONObjectWithData:data options:kNilOptions error:nil]) {
-                    NSLog(@"[ThirdPartyAuthenticator] 二次响应体非合法 JSON，丢弃元数据");
+                    NSLog(@"[ThirdPartyAuthenticator] Secondary response body is not valid JSON, discarding metadata");
                     metadata = nil;
                 }
             }
@@ -154,7 +154,7 @@ static NSError* createError(NSString *message, NSInteger code) {
                 resolvedURL = [resolvedURL stringByAppendingString:@"/"];
             }
 
-            NSLog(@"[ThirdPartyAuthenticator] 元数据二次请求完成: %@ (metadata=%@)", resolvedURL, metadata ? @"YES" : @"NO");
+            NSLog(@"[ThirdPartyAuthenticator] Metadata secondary request complete: %@ (metadata=%@)", resolvedURL, metadata ? @"YES" : @"NO");
             dispatch_async(dispatch_get_main_queue(), ^{
                 if (completion) completion(resolvedURL, metadata);
             });
@@ -182,8 +182,8 @@ static NSError* createError(NSString *message, NSInteger code) {
     NSString *versionPath = [self getAuthlibInjectorVersionPath];
     NSString *downloadedVersion = [NSString stringWithContentsOfFile:versionPath encoding:NSUTF8StringEncoding error:nil];
     if (downloadedVersion.length == 0 || ![downloadedVersion isEqualToString:AUTHLIB_INJECTOR_VERSION]) {
-        NSLog(@"[ThirdPartyAuthenticator] authlib-injector 版本过期 (当前: %@, 需要: %@)，需要重新下载",
-              downloadedVersion.length > 0 ? downloadedVersion : @"未知", AUTHLIB_INJECTOR_VERSION);
+        NSLog(@"[ThirdPartyAuthenticator] authlib-injector version outdated (current: %@, required: %@), needs re-download",
+              downloadedVersion.length > 0 ? downloadedVersion : @"unknown", AUTHLIB_INJECTOR_VERSION);
         return NO;
     }
     return YES;
@@ -224,13 +224,13 @@ static NSError* createError(NSString *message, NSInteger code) {
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:URL];
     request.HTTPShouldUsePipelining = YES;
 
-    NSLog(@"[ThirdPartyAuthenticator] 尝试下载 authlib-injector (第%ld源): %@", (long)attempt, urlString);
+    NSLog(@"[ThirdPartyAuthenticator] Attempting to download authlib-injector (source %ld): %@", (long)attempt, urlString);
 
     NSURLSessionDownloadTask *downloadTask = [manager downloadTaskWithRequest:request progress:nil destination:^NSURL *(NSURL *targetPath, NSURLResponse *response) {
         return [NSURL fileURLWithPath:filePath];
     } completionHandler:^(NSURLResponse *response, NSURL *filePath, NSError *error) {
         if (error) {
-            NSLog(@"[ThirdPartyAuthenticator] 下载失败 (第%ld源): %@", (long)attempt, error.localizedDescription);
+            NSLog(@"[ThirdPartyAuthenticator] Download failed (source %ld): %@", (long)attempt, error.localizedDescription);
             // BMCLAPI 失败后尝试 GitHub 官方源
             if (attempt == 1) {
                 [self downloadAuthlibInjectorFromURL:AUTHLIB_INJECTOR_URL_GITHUB attempt:2 completion:completion];
@@ -238,7 +238,7 @@ static NSError* createError(NSString *message, NSInteger code) {
                 completion(NO, error);
             }
         } else {
-            NSLog(@"[ThirdPartyAuthenticator] 下载成功 (第%ld源)", (long)attempt);
+            NSLog(@"[ThirdPartyAuthenticator] Download succeeded (source %ld)", (long)attempt);
             // 保存版本标记，用于后续版本检查
             [self saveAuthlibInjectorVersion];
             completion(YES, nil);
@@ -251,7 +251,7 @@ static NSError* createError(NSString *message, NSInteger code) {
     if ([self isAuthlibInjectorDownloaded]) {
         completion(YES, nil);
     } else {
-        NSLog(@"[ThirdPartyAuthenticator] Downloading authlib-injector (BMCLAPI 优先，失败回退 GitHub)");
+        NSLog(@"[ThirdPartyAuthenticator] Downloading authlib-injector (BMCLAPI preferred, falls back to GitHub)");
         [self downloadAuthlibInjector:^(BOOL success, NSError *error) {
             if (!success) {
                 NSLog(@"[ThirdPartyAuthenticator] Failed to download authlib-injector: %@", error.localizedDescription);
@@ -307,15 +307,15 @@ static NSError* createError(NSString *message, NSInteger code) {
                 if (base64.length > 0) {
                     NSString *prefetchedArg = [NSString stringWithFormat:@"-Dauthlibinjector.yggdrasil.prefetched=%@", base64];
                     [args addObject:prefetchedArg];
-                    NSLog(@"[ThirdPartyAuthenticator] 已添加 prefetched 元数据参数 (长度=%lu)", (unsigned long)base64.length);
+                    NSLog(@"[ThirdPartyAuthenticator] Added prefetched metadata parameter (length=%lu)", (unsigned long)base64.length);
                 }
             }
         } else {
-            NSLog(@"[ThirdPartyAuthenticator] prefetched 元数据 JSON 解析失败，跳过该参数");
+            NSLog(@"[ThirdPartyAuthenticator] Prefetched metadata JSON parse failed, skipping parameter");
         }
     } else {
         // 登录时未缓存元数据，尝试现场获取（同步，可能阻塞，仅作兜底）
-        NSLog(@"[ThirdPartyAuthenticator] 无缓存元数据，尝试现场获取");
+        NSLog(@"[ThirdPartyAuthenticator] No cached metadata, attempting on-the-fly fetch");
         [self fetchMetadataSynchronouslyForServerURL:serverURL];
         NSString *cachedMeta = self.authData[@"prefetchedMetadata"];
         if (cachedMeta.length > 0) {
@@ -331,7 +331,7 @@ static NSError* createError(NSString *message, NSInteger code) {
                     if (base64.length > 0) {
                         NSString *prefetchedArg = [NSString stringWithFormat:@"-Dauthlibinjector.yggdrasil.prefetched=%@", base64];
                         [args addObject:prefetchedArg];
-                        NSLog(@"[ThirdPartyAuthenticator] 已添加现场获取的 prefetched 元数据参数");
+                        NSLog(@"[ThirdPartyAuthenticator] Added on-the-fly fetched prefetched metadata parameter");
                     }
                 }
             }
@@ -362,14 +362,14 @@ static NSError* createError(NSString *message, NSInteger code) {
                                          returningResponse:&response
                                                      error:&requestError];
     if (requestError || !data || data.length == 0) {
-        NSLog(@"[ThirdPartyAuthenticator] 现场获取元数据失败: %@", requestError.localizedDescription);
+        NSLog(@"[ThirdPartyAuthenticator] On-the-fly metadata fetch failed: %@", requestError.localizedDescription);
         return;
     }
 
     // 校验 JSON 合法性
     id jsonObj = [NSJSONSerialization JSONObjectWithData:data options:kNilOptions error:nil];
     if (!jsonObj) {
-        NSLog(@"[ThirdPartyAuthenticator] 现场获取的元数据非合法 JSON");
+        NSLog(@"[ThirdPartyAuthenticator] On-the-fly fetched metadata is not valid JSON");
         return;
     }
 
@@ -399,7 +399,7 @@ static NSError* createError(NSString *message, NSInteger code) {
     }
 
     self.authData[@"prefetchedMetadata"] = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
-    NSLog(@"[ThirdPartyAuthenticator] 现场获取元数据成功");
+    NSLog(@"[ThirdPartyAuthenticator] On-the-fly metadata fetch succeeded");
 }
 
 // Method to handle re-authentication with two-factor authentication
@@ -490,7 +490,7 @@ static NSError* createError(NSString *message, NSInteger code) {
     AFHTTPSessionManager *manager = AFHTTPSessionManager.manager;
     manager.requestSerializer = AFJSONRequestSerializer.serializer;
 
-    NSLog(@"[ThirdPartyAuthenticator] refresh 绑定角色请求: %@", refreshURL);
+    NSLog(@"[ThirdPartyAuthenticator] Refresh bind profile request: %@", refreshURL);
 
     __weak typeof(self) weakSelf = self;
     [manager POST:refreshURL parameters:data headers:nil progress:nil success:^(NSURLSessionDataTask *task, NSDictionary *response) {
@@ -647,7 +647,7 @@ static NSError* createError(NSString *message, NSInteger code) {
                 NSString *accessToken = response[@"accessToken"];
                 NSString *clientToken = response[@"clientToken"];
                 NSDictionary *profileToSelect = availableProfiles[0];
-                NSLog(@"[ThirdPartyAuthenticator] 多角色场景，refresh 绑定角色: %@", profileToSelect[@"name"]);
+                NSLog(@"[ThirdPartyAuthenticator] Multi-profile scenario, refresh binding profile: %@", profileToSelect[@"name"]);
                 [self refreshToBindProfile:profileToSelect
                                 accessToken:accessToken
                                 clientToken:clientToken

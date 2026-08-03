@@ -380,7 +380,7 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"com.a
                 NSString *parentJsonPath = [NSString stringWithFormat:@"%1$s/versions/%2$@/%2$@.json",
                                             getenv("POJAV_GAME_DIR"), json[@"inheritsFrom"]];
                 if ([NSFileManager.defaultManager fileExistsAtPath:parentJsonPath]) {
-                    NSLog(@"[MCDL] remoteVersionList 未加载，但父版本 JSON 已存在：%@", parentJsonPath);
+                    NSLog(@"[MCDL] remoteVersionList not loaded, but parent version JSON exists: %@", parentJsonPath);
                     completionBlock();
                     return;
                 } else {
