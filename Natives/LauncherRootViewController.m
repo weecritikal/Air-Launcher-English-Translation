@@ -723,14 +723,22 @@ static CGFloat LauncherRootLayoutRightPanelWidth(UITraitCollection *trait) {
         // 两个 crossDissolve 同时作用于 contentContainer 会导致视觉冲突和残影（旧画面未完全消失就覆盖新界面）。
         // 改为单个 transition：在同一个 animations block 内完成"移除旧视图 + 添加新视图"，
         // crossDissolve 会正确抓取前后快照做交叉渐变，completion 中清理旧 VC 父子关系。
+        //
+        // 关键修复（入场动画从左上角弹出）：UIKit 在 animations block 返回后立即对容器做 snapshot，
+        // 此时新视图虽然已 addSubview + activateConstraints，但尚未经历 layout pass，frame 仍是
+        // (0,0,0,0)。配合 contentContainer 子视图（contentCard）的 masksToBounds+圆角裁剪，
+        // crossDissolve 渐变呈现"从左上角小点扩展出来"的怪异效果。
+        // 在 animations block 内显式 layoutIfNeeded 强制立即布局，让 snapshot B 时 frame 已撑满，
+        // crossDissolve 就是标准的淡入淡出。duration 由 0.25 调整为 0.3 让过渡更柔和自然。
         [UIView transitionWithView:self.contentContainer
-                          duration:0.25
+                          duration:0.3
                            options:UIViewAnimationOptionTransitionCrossDissolve
                         animations:^{
                             [oldVC willMoveToParentViewController:nil];
                             [oldVC.view removeFromSuperview];
                             [self.contentContainer addSubview:viewController.view];
                             [NSLayoutConstraint activateConstraints:newConstraints];
+                            [self.contentContainer layoutIfNeeded];
                         } completion:^(BOOL finished) {
                             [oldVC removeFromParentViewController];
                             [viewController didMoveToParentViewController:self];
