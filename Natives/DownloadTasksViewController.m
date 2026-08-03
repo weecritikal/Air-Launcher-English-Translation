@@ -4,6 +4,7 @@
 #import "LauncherPreferences.h"
 #import "BackgroundManager.h"
 #import "IconLoader.h"
+#import "ModLoaderIconHelper.h"
 
 static NSString * const kTaskCellReuseIdentifier = @"DownloadTaskCell";
 static NSString * const kEmptyStateReuseIdentifier = @"DownloadTaskEmptyCell";
@@ -234,18 +235,11 @@ static const CGFloat kSectionInset = 16.0;
     [self.typeTagLabel sizeToFit];
     [self configureSourceTagWithSource:task.downloadSource];
 
-    // 图标
-    UIImage *placeholder = [UIImage systemImageNamed:[self iconNameForResourceType:task.resourceType]];
-    self.iconImageView.image = placeholder;
-    if (task.iconURL.length > 0) {
-        [IconLoader loadIconForImageView:self.iconImageView
-                                     URL:task.iconURL
-                             placeholder:placeholder
-                                fallback:placeholder
-                               targetSize:CGSizeMake(44, 44)];
-    } else {
-        [IconLoader cancelLoadingForImageView:self.iconImageView];
-    }
+    // 图标：Minecraft 本体 / Modloader 使用 ModLoaderIconHelper 加载真实品牌图标
+    // （与下载游戏界面 DownloadViewController 保持一致，避免只显示通用 SF Symbol）
+    // resourceName 通常已带 loader 标识（如 "fabric-1.20.1-0.15.7" / "optifine-..."），
+    // 用 detectLoaderFromVersionId 解析；解析不到则用通用占位符。
+    [self configureIconForTask:task];
 
     // 速度与进度
     switch (task.state) {
@@ -386,7 +380,7 @@ static const CGFloat kSectionInset = 16.0;
 
 - (NSString *)iconNameForResourceType:(NSString *)type {
     NSDictionary *map = @{
-        DownloadTaskResourceTypeMinecraft: @"cube.box",
+        DownloadTaskResourceTypeMinecraft: @"cube.box.fill",
         DownloadTaskResourceTypeModloader: @"wrench.and.screwdriver",
         DownloadTaskResourceTypeMod: @"puzzlepiece.extension",
         DownloadTaskResourceTypeShader: @"sun.max",
@@ -395,6 +389,58 @@ static const CGFloat kSectionInset = 16.0;
         DownloadTaskResourceTypeModpack: @"shippingbox"
     };
     return map[type] ?: @"arrow.down.circle";
+}
+
+/// 为任务配置图标
+/// - Minecraft 本体：使用 ModLoaderIconHelper 的 VanillaIcon 草方块（与 VersionCardCell 一致）
+/// - Modloader：从 resourceName 解析具体加载器（fabric/forge/neoforge/quilt/optifine），
+///   用 ModLoaderIconHelper 加载官方品牌 PNG；解析不到则用通用 SF Symbol
+/// - 其他类型：保持原 SF Symbol 占位符逻辑
+/// - 若 task.iconURL 非空（如整合包有缩略图），用 IconLoader 异步加载网络图标
+- (void)configureIconForTask:(DownloadTaskItem *)task {
+    UIImage *placeholder = nil;
+    NSString *loaderTag = nil;
+
+    if ([task.resourceType isEqualToString:DownloadTaskResourceTypeMinecraft]) {
+        // 原版：用 ModLoaderIconHelper 的 VanillaIcon（与 VersionCardCell 一致）
+        loaderTag = @"vanilla";
+        placeholder = [ModLoaderIconHelper iconImageForLoader:loaderTag
+                                              traitCollection:self.traitCollection];
+        [ModLoaderIconHelper configureImageView:self.iconImageView
+                                       forLoader:loaderTag
+                                  traitCollection:self.traitCollection];
+    } else if ([task.resourceType isEqualToString:DownloadTaskResourceTypeModloader]) {
+        // 加载器：从 resourceName 解析具体 loader
+        // resourceName 格式举例："fabric-1.20.1-0.15.7" / "optifine-1.20.1-..."
+        NSString *candidate = task.resourceName.length > 0 ? task.resourceName : task.displayName;
+        loaderTag = [ModLoaderIconHelper detectLoaderFromVersionId:candidate];
+        if (loaderTag.length > 0) {
+            placeholder = [ModLoaderIconHelper iconImageForLoader:loaderTag
+                                                  traitCollection:self.traitCollection];
+            [ModLoaderIconHelper configureImageView:self.iconImageView
+                                           forLoader:loaderTag
+                                      traitCollection:self.traitCollection];
+        } else {
+            // 未识别的加载器：用通用 SF Symbol
+            placeholder = [UIImage systemImageNamed:[self iconNameForResourceType:task.resourceType]];
+            self.iconImageView.image = placeholder;
+            self.iconImageView.tintColor = [UIColor secondaryLabelColor];
+        }
+    } else {
+        placeholder = [UIImage systemImageNamed:[self iconNameForResourceType:task.resourceType]];
+        self.iconImageView.image = placeholder;
+        self.iconImageView.tintColor = [UIColor secondaryLabelColor];
+    }
+
+    if (task.iconURL.length > 0) {
+        [IconLoader loadIconForImageView:self.iconImageView
+                                     URL:task.iconURL
+                             placeholder:placeholder
+                                fallback:placeholder
+                               targetSize:CGSizeMake(44, 44)];
+    } else {
+        [IconLoader cancelLoadingForImageView:self.iconImageView];
+    }
 }
 
 - (NSString *)formattedSpeed:(double)speed {
