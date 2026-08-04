@@ -30,21 +30,39 @@ BOOL isJITEnabled(BOOL checkCSFlags) {
         return YES;
     }
 
-    // 同步自上游 AngelAuraMC/Amethyst-iOS：仅检查 CS_DEBUGGED 标志位
-    // fork 之前额外加的 CS_GET_TASK_ALLOW 路径是错误的——所有 sideload 工具
-    // （SideStore/AltStore）都会置 CS_GET_TASK_ALLOW，但 JIT 实际未必开启，
-    // 导致右侧栏"检测 JIT"在未开 JIT 时误显示"已开启"。
-    int flags = 0;
-    csops(getpid(), 0, &flags, sizeof(flags));
-    if ((flags & CS_DEBUGGED) == 0) {
-        return NO;
-    }
-    if (!DeviceHasJITFlags(JIT_FLAG_FORCE_MIRRORED | JIT_FLAG_HAS_TXM)) {
-        // iOS 26 以下或无 TXM 的设备到这一步就够了
-        return YES;
-    }
+    // 路径 1：csops 检查 CS_DEBUGGED 标志位
+    // 覆盖 PojavLauncher 自身 ptrace(PT_TRACE_ME) / TrollStore JIT / 越狱场景
     // iOS 26+ 且 TXM 设备需要 debugger 持续附加，JIT script 才能绕过 TXM 限制
-    return JIT26IsLikelyDebuggerKeepAttached();
+    // （同步自上游 AngelAuraMC/Amethyst-iOS）
+    int flags = 0;
+    if (csops(getpid(), 0, &flags, sizeof(flags)) == 0) {
+        if (flags & CS_DEBUGGED) {
+            if (DeviceHasJITFlags(JIT_FLAG_FORCE_MIRRORED | JIT_FLAG_HAS_TXM)) {
+                return JIT26IsLikelyDebuggerKeepAttached();
+            }
+            return YES;
+        }
+    }
+
+    // 路径 2：sysctl KERN_PROC 检查 P_TRACED 标志位
+    // 覆盖 SideStore / NB 助手 / Stikdebug / JitStream 等"外部调试器附加"型 JIT 工具。
+    // 这些工具通过 ptrace(PT_TRACE_ATTACH) 或 task_for_pid 附加到本进程，
+    // 进程的 kinfo_proc.kp_proc.p_flag 会被置上 P_TRACED，而 csops 不一定同步置 CS_DEBUGGED。
+    // 注意：上游没有此路径，但上游针对 iOS 26+ TXM 设备有 JIT26IsLikelyDebuggerKeepAttached
+    // (getppid != 1) 兜底；fork 保留 P_TRACED 是为了覆盖 iOS 26 以下的外部调试器场景，
+    // 这些场景下 CS_DEBUGGED 不一定置位但 JIT 实际已通过 ptrace 附加启用。
+    // P_TRACED 在 <sys/proc.h> 中定义为 0x800，部分 iOS SDK 未自动引入该头文件，
+    // 这里直接使用数值避免依赖头文件可见性。
+    struct kinfo_proc info = {0};
+    size_t size = sizeof(info);
+    int mib[4] = {CTL_KERN, KERN_PROC, KERN_PROC_PID, getpid()};
+    if (sysctl(mib, 4, &info, &size, NULL, 0) == 0 && size == sizeof(info)) {
+        if (info.kp_proc.p_flag & 0x800 /* P_TRACED */) {
+            return YES;
+        }
+    }
+
+    return NO;
 }
 
 void openLink(UIViewController* sender, NSURL* link) {
