@@ -41,9 +41,10 @@ void handle_fatal_exit(int code) {
         return;
     }
 
-    if (![PLLogOutputView handleExitCode:code]) {
-        return;
-    }
+    // 注意：本仓库 PLLogOutputView.handleExitCode: 返回 void（项目自定义的
+    // PLCrashView 集成），不能照搬上游的 if (![PLLogOutputView handleExitCode:code]) return;
+    // 检查。这里直接调用，让 PLCrashView 内部决定是否展示崩溃界面。
+    [PLLogOutputView handleExitCode:code];
 
     if (fatalExitGroup != nil) {
         // Likely other threads are crashing, put them to sleep

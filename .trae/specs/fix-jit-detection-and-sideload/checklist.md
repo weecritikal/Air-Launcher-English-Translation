@@ -22,7 +22,7 @@
 ## LiveContainer 崩溃修复验证
 - [x] `Natives/main.m` 的 `uncaughtExceptionHandler` 在 `usleep(10000)` 之后调用 `handle_fatal_exit(SIGABRT)`
 - [x] `Natives/main.m` 的 `init_checkForJailbreak` 检测 `/systemhook.dylib`（通过 `strstr`）
-- [x] `Natives/main_hook.m` 的 `handle_fatal_exit` 检查 `[PLLogOutputView handleExitCode:code]` 返回值
+- [x] `Natives/main_hook.m` 的 `handle_fatal_exit` 调用 `[PLLogOutputView handleExitCode:code]`（注意：本仓库该方法返回 void，因项目自定义 PLCrashView 集成；不能照搬上游的 `if(![... handleExitCode:]) return` 检查）
 - [x] `Natives/main_hook.m` 的 `hooked_dlopen` 在不需要 Zink rebind 的分支使用 `__attribute__((musttail))`
 - [x] `Natives/main_hook.m` 的 `hooked_dlopen` 在分支前统一调用 `PLPatchMachOPlatformForFile(path)`（包含 26PPL 路径，对齐上游）
 
