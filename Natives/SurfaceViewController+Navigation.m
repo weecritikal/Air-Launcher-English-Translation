@@ -200,17 +200,13 @@ static const void *kMenuDimViewKey = &kMenuDimViewKey;
     [alert addAction:cancelAction];
 
     UIAlertAction* okAction = [UIAlertAction actionWithTitle:localize(@"OK", nil) style:UIAlertActionStyleDestructive handler:^(UIAlertAction * action) {
-        // 关键修复（P0-A）：强制关闭前清理联机资源
-        // 原代码直接 exit(0)，导致 SOCKS5 代理、端口转发器、ZeroTier 网络、
-        // AMETHYST_SOCKS5_PROXY 环境变量、PLProfiles 中的 serverIp 全部残留。
-        // 表现为"存档关闭后端口仍存在"和"下次进游戏仍显示连接服务器"。
-        // 修复：在退出前调用 stopAllMultiplayerServices 彻底清理。
-        @try {
-            [[MultiplayerManager sharedManager] stopAllMultiplayerServices];
-            NSLog(@"[ForceClose] Multiplayer resources cleaned up");
-        } @catch (NSException *e) {
-            NSLog(@"[ForceClose] Exception while cleaning up multiplayer resources: %@", e);
-        }
+        // ZeroTier/Terracotta 联机暂时移除：原 stopAllMultiplayerServices 调用注释掉
+        // @try {
+        //     [[MultiplayerManager sharedManager] stopAllMultiplayerServices];
+        //     NSLog(@"[ForceClose] Multiplayer resources cleaned up");
+        // } @catch (NSException *e) {
+        //     NSLog(@"[ForceClose] Exception while cleaning up multiplayer resources: %@", e);
+        // }
 
         // FCL 风格：直接退出，不再做缩小动画
         if (fatalExitGroup == nil) {
