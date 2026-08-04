@@ -1,0 +1,146 @@
+[Pre-Init] Amethyst iOS Remastered INIT!
+[Pre-Init] GitHub: https://github.com/herbrine8403/Amethyst-iOS-MyRemastered
+[Pre-Init] Please try not to post this log of the remastered launcher to the original GitHub Issues for help.
+[Pre-Init] Version: 5.0.0 Beta
+[Pre-Init] Commit: e98db2f (ui/fcl-versionmgr)
+[Pre-Init] Device: iPad mini (6th generation)
+[Pre-Init] iPadOS 15.3.1 (19D52) (Jailbroken)
+[Pre-init] Entitlements availability:
+* com.apple.developer.kernel.extended-virtual-addressing: YES
+* com.apple.developer.kernel.increased-memory-limit: YES
+* com.apple.private.security.no-sandbox: YES
+[Debugging] Debug log enabled: YES
+[Pre-init] Restored game directory preference (26.1.2)
+[LauncherCardVC] Loaded 904 remote versions
+[MCDL] SHA1 passed for 26.1.2.json
+[MCDL] insertSafety: how to insert assetIndex?
+[MCDL] insertSafety: how to insert assets?
+[MCDL] Replacing JNA 5.17.0 with 5.13.0 for iOS compatibility (required by fabric-loader-0.19.3-26.1.2)
+[MDCL] Skipped library org.lwjgl:lwjgl-freetype:3.4.1
+[MDCL] Skipped library org.lwjgl:lwjgl-freetype:3.4.1:natives-linux
+[MDCL] Skipped library org.lwjgl:lwjgl-freetype:3.4.1:natives-macos
+[MDCL] Skipped library org.lwjgl:lwjgl-freetype:3.4.1:natives-macos-arm64
+[MDCL] Skipped library org.lwjgl:lwjgl-freetype:3.4.1:natives-windows
+[MDCL] Skipped library org.lwjgl:lwjgl-freetype:3.4.1:natives-windows-arm64
+[MDCL] Skipped library org.lwjgl:lwjgl-freetype:3.4.1:natives-windows-x86
+[MDCL] Skipped library org.lwjgl:lwjgl-glfw:3.4.1
+[MDCL] Skipped library org.lwjgl:lwjgl-glfw:3.4.1:natives-linux
+[MDCL] Skipped library org.lwjgl:lwjgl-glfw:3.4.1:natives-macos
+[MDCL] Skipped library org.lwjgl:lwjgl-glfw:3.4.1:natives-macos-arm64
+[MDCL] Skipped library org.lwjgl:lwjgl-glfw:3.4.1:natives-windows
+[MDCL] Skipped library org.lwjgl:lwjgl-glfw:3.4.1:natives-windows-arm64
+[MDCL] Skipped library org.lwjgl:lwjgl-glfw:3.4.1:natives-windows-x86
+[MDCL] Skipped library org.lwjgl:lwjgl-jemalloc:3.4.1
+[MDCL] Skipped library org.lwjgl:lwjgl-jemalloc:3.4.1:natives-linux
+[MDCL] Skipped library org.lwjgl:lwjgl-jemalloc:3.4.1:natives-macos
+[MDCL] Skipped library org.lwjgl:lwjgl-jemalloc:3.4.1:natives-macos-arm64
+[MDCL] Skipped library org.lwjgl:lwjgl-jemalloc:3.4.1:natives-windows
+[MDCL] Skipped library org.lwjgl:lwjgl-jemalloc:3.4.1:natives-windows-arm64
+[MDCL] Skipped library org.lwjgl:lwjgl-jemalloc:3.4.1:natives-windows-x86
+[MDCL] Skipped library org.lwjgl:lwjgl-openal:3.4.1
+[MDCL] Skipped library org.lwjgl:lwjgl-openal:3.4.1:natives-linux
+[MDCL] Skipped library org.lwjgl:lwjgl-openal:3.4.1:natives-macos
+[MDCL] Skipped library org.lwjgl:lwjgl-openal:3.4.1:natives-macos-arm64
+[MDCL] Skipped library org.lwjgl:lwjgl-openal:3.4.1:natives-windows
+[MDCL] Skipped library org.lwjgl:lwjgl-openal:3.4.1:natives-windows-arm64
+[MDCL] Skipped library org.lwjgl:lwjgl-openal:3.4.1:natives-windows-x86
+[MDCL] Skipped library org.lwjgl:lwjgl-opengl:3.4.1
+[MDCL] Skipped library org.lwjgl:lwjgl-opengl:3.4.1:natives-linux
+[MDCL] Skipped library org.lwjgl:lwjgl-opengl:3.4.1:natives-macos
+[MDCL] Skipped library org.lwjgl:lwjgl-opengl:3.4.1:natives-macos-arm64
+[MDCL] Skipped library org.lwjgl:lwjgl-opengl:3.4.1:natives-windows
+[MDCL] Skipped library org.lwjgl:lwjgl-opengl:3.4.1:natives-windows-arm64
+[MDCL] Skipped library org.lwjgl:lwjgl-opengl:3.4.1:natives-windows-x86
+[MDCL] Skipped library org.lwjgl:lwjgl-stb:3.4.1
+[MDCL] Skipped library org.lwjgl:lwjgl-stb:3.4.1:natives-linux
+[MDCL] Skipped library org.lwjgl:lwjgl-stb:3.4.1:natives-macos
+[MDCL] Skipped library org.lwjgl:lwjgl-stb:3.4.1:natives-macos-arm64
+[MDCL] Skipped library org.lwjgl:lwjgl-stb:3.4.1:natives-windows
+[MDCL] Skipped library org.lwjgl:lwjgl-stb:3.4.1:natives-windows-arm64
+[MDCL] Skipped library org.lwjgl:lwjgl-stb:3.4.1:natives-windows-x86
+[MDCL] Skipped library org.lwjgl:lwjgl-tinyfd:3.4.1
+[MDCL] Skipped library org.lwjgl:lwjgl-tinyfd:3.4.1:natives-linux
+[MDCL] Skipped library org.lwjgl:lwjgl-tinyfd:3.4.1:natives-macos
+[MDCL] Skipped library org.lwjgl:lwjgl-tinyfd:3.4.1:natives-macos-arm64
+[MDCL] Skipped library org.lwjgl:lwjgl-tinyfd:3.4.1:natives-windows
+[MDCL] Skipped library org.lwjgl:lwjgl-tinyfd:3.4.1:natives-windows-arm64
+[MDCL] Skipped library org.lwjgl:lwjgl-tinyfd:3.4.1:natives-windows-x86
+[MDCL] Skipped library org.lwjgl:lwjgl:3.4.1
+[MDCL] Skipped library org.lwjgl:lwjgl:3.4.1:natives-linux
+[MDCL] Skipped library org.lwjgl:lwjgl:3.4.1:natives-macos
+[MDCL] Skipped library org.lwjgl:lwjgl:3.4.1:natives-macos-arm64
+[MDCL] Skipped library org.lwjgl:lwjgl:3.4.1:natives-windows
+[MDCL] Skipped library org.lwjgl:lwjgl:3.4.1:natives-windows-arm64
+[MDCL] Skipped library org.lwjgl:lwjgl:3.4.1:natives-windows-x86
+[MCDL] Unknown artifact object for org.ow2.asm:asm:9.10.1, attempting to generate one
+[MCDL] Warning: couldn't find SHA for /private/var/mobile/Containers/Data/Application/4605A02B-CB2F-465F-A1A0-4931D9619150/Documents/Library/Application Support/minecraft/libraries/org/ow2/asm/asm/9.10.1/asm-9.10.1.jar, have to assume it's good.
+[MCDL] Unknown artifact object for org.ow2.asm:asm-analysis:9.10.1, attempting to generate one
+[MCDL] Warning: couldn't find SHA for /private/var/mobile/Containers/Data/Application/4605A02B-CB2F-465F-A1A0-4931D9619150/Documents/Library/Application Support/minecraft/libraries/org/ow2/asm/asm-analysis/9.10.1/asm-analysis-9.10.1.jar, have to assume it's good.
+[MCDL] Unknown artifact object for org.ow2.asm:asm-commons:9.10.1, attempting to generate one
+[MCDL] Warning: couldn't find SHA for /private/var/mobile/Containers/Data/Application/4605A02B-CB2F-465F-A1A0-4931D9619150/Documents/Library/Application Support/minecraft/libraries/org/ow2/asm/asm-commons/9.10.1/asm-commons-9.10.1.jar, have to assume it's good.
+[MCDL] Unknown artifact object for org.ow2.asm:asm-tree:9.10.1, attempting to generate one
+[MCDL] Warning: couldn't find SHA for /private/var/mobile/Containers/Data/Application/4605A02B-CB2F-465F-A1A0-4931D9619150/Documents/Library/Application Support/minecraft/libraries/org/ow2/asm/asm-tree/9.10.1/asm-tree-9.10.1.jar, have to assume it's good.
+[MCDL] Unknown artifact object for org.ow2.asm:asm-util:9.10.1, attempting to generate one
+[MCDL] Warning: couldn't find SHA for /private/var/mobile/Containers/Data/Application/4605A02B-CB2F-465F-A1A0-4931D9619150/Documents/Library/Application Support/minecraft/libraries/org/ow2/asm/asm-util/9.10.1/asm-util-9.10.1.jar, have to assume it's good.
+[MCDL] Unknown artifact object for net.fabricmc:sponge-mixin:0.17.3+mixin.0.8.7, attempting to generate one
+[MCDL] Warning: couldn't find SHA for /private/var/mobile/Containers/Data/Application/4605A02B-CB2F-465F-A1A0-4931D9619150/Documents/Library/Application Support/minecraft/libraries/net/fabricmc/sponge-mixin/0.17.3+mixin.0.8.7/sponge-mixin-0.17.3+mixin.0.8.7.jar, have to assume it's good.
+[MCDL] Unknown artifact object for net.fabricmc:fabric-loader:0.19.3, attempting to generate one
+[MCDL] Warning: couldn't find SHA for /private/var/mobile/Containers/Data/Application/4605A02B-CB2F-465F-A1A0-4931D9619150/Documents/Library/Application Support/minecraft/libraries/net/fabricmc/fabric-loader/0.19.3/fabric-loader-0.19.3.jar, have to assume it's good.
+[MCDL] Downloading net.java.dev.jna:jna:5.13.0
+[SurfaceViewController] FPS counter setup: profileRenderer=libmobileglues.dylib, envRenderer=(null), graphicsApi=(null), isVulkan=0, isActualVulkanPath=0
+Successfully set Jetsam task limit
+[SurfaceVC] CAMetalLayer configured: drawableSize=2266x1488, maximumDrawableCount=3, presentsWithTransaction=0, drawsAsynchronously=1, contentsScale=2.00
+[TouchController] Sender ready on port 12450
+[SurfaceViewController] Launching Minecraft with accountId: 10616779128927031600, version: 25, size: 2266x1488
+[JavaLauncher] Beginning JVM launch
+[DyldLVBypass] init
+[DyldLVBypass] found dyld_mmap at 0x101666b10
+[DyldLVBypass] hook dyld_mmap succeed!
+[DyldLVBypass] found dyld_fcntl at 0x101666e28
+[DyldLVBypass] hook dyld_fcntl succeed!
+[JavaLauncher] MoltenVK performance tracking + IMMEDIATE present mode requested for VSync diagnosis
+[JavaLauncher] Framerate unlock configuration:
+[JavaLauncher]   video.disable_game_vsync=1
+[JavaLauncher]   POJAV_DISABLE_VSYNC=1
+[JavaLauncher]   UIScreen.maximumFramesPerSecond=60
+[JavaLauncher] Reading custom environment variables
+[JavaLauncher] Warning: skipped empty value custom env variable: 
+[JavaLauncher] init_loadMobileGluesConfig: renderer=libmobileglues.dylib
+[JavaLauncher] MobileGlues renderer detected, config will take effect.
+[JavaLauncher]   mobileglues.enable_angle = 0 -> enableANGLE = 0
+[JavaLauncher]   mobileglues.enable_no_error = 0 -> enableNoError = 0
+[JavaLauncher]   mobileglues.enable_ext_timer_query = 1 -> enableExtTimerQuery = 1
+[JavaLauncher]   mobileglues.enable_ext_compute_shader = 0 -> enableExtComputeShader = 0
+[JavaLauncher]   mobileglues.enable_ext_direct_state_access = 0 -> enableExtDirectStateAccess = 0
+[JavaLauncher]   mobileglues.max_glsl_cache_size = 32 -> maxGlslCacheSize = 32
+[JavaLauncher]   mobileglues.multidraw_mode = 0 -> multidrawMode = 0
+[JavaLauncher]   mobileglues.angle_depth_clear_fix_mode = 0 -> angleDepthClearFixMode = 0
+[JavaLauncher]   mobileglues.custom_gl_version = 0 (raw)
+[JavaLauncher]   -> customGLVersion = 0x030100
+[JavaLauncher]   mobileglues.fsr1_setting = 0 -> fsr1Setting = 0
+[JavaLauncher] MobileGlues config written to /private/var/mobile/Containers/Data/Application/4605A02B-CB2F-465F-A1A0-4931D9619150/Documents/MG/config.json
+[JavaLauncher] config.json content:
+{
+  "multidrawMode" : 0,
+  "fsr1Setting" : 0,
+  "enableExtGL43" : 1,
+  "maxGlslCacheSize" : 32,
+  "enableANGLE" : 0,
+  "enableExtDirectStateAccess" : 0,
+  "customGLVersion" : 196864,
+  "enableExtTimerQuery" : 1,
+  "enableExtComputeShader" : 0,
+  "enableNoError" : 0,
+  "angleDepthClearFixMode" : 0
+}
+[PLProfiles] Applying javaVersion (25)
+[JavaLauncher] RENDERER is set to libmobileglues.dylib
+[JavaLauncher] GRAPHICS_API is set to default
+[JavaLauncher] WINDOWING_BACKEND is set to sdl (version=fabric-loader-0.19.3-26.1.2, useSDL3=1)
+[JavaLauncher] Looking for Java 25 or later
+[JavaLauncher] JAVA_HOME has been set to /private/var/containers/Bundle/Application/AD5C8ECA-6675-4374-9592-BF7E33B1A81E/AngelAuraAmethyst.app/java_runtimes/java-25-openjdk
+[JavaLauncher] Max RAM allocation is set to 2560 MB
+[JavaLauncher] library.path = /private/var/containers/Bundle/Application/AD5C8ECA-6675-4374-9592-BF7E33B1A81E/AngelAuraAmethyst.app/Frameworks
+[JavaLauncher] Added JVM property -Dmax.fps=260 (frame rate unlock layer 4)
+[JavaLauncher] JVM GC optimization: G1GC + MaxGCPauseMillis=50 + StringDeduplication (Java 17+)
+2026-07-18 17:00:24.620 AngelAuraAmethyst[87210:23172919] XPC connection interrupted
