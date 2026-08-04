@@ -66,6 +66,8 @@ BOOL debugLogEnabled, isJailbroken;
 #define CS_DEBUGGED 0x10000000
 int csops(pid_t pid, unsigned int ops, void *useraddr, size_t usersize);
 BOOL isJITEnabled(BOOL checkCSOps);
+// legacy method used to check if we're using universal script
+void* JIT26CreateRegionLegacy(size_t len);
 // used for large memory regions
 void* JIT26PrepareRegion(void *addr, size_t len);
 // same as JIT26PrepareRegion, but used for smaller memory regions
@@ -73,7 +75,21 @@ void* JIT26PrepareRegion(void *addr, size_t len);
 void JIT26PrepareRegionForPatching(void *addr, size_t len);
 void JIT26SetDetachAfterFirstBr(BOOL value);
 void JIT26SendJITScript(NSString* script);
-BOOL DeviceRequiresTXMWorkaround(void);
+BOOL JIT26IsLikelyDebuggerKeepAttached(void);
+// 旧版 TXM 检测（仅基于 /private/preboot 路径，iOS 26.6+ 会误判）。
+// 已被 DeviceHasJITFlags(JIT_FLAG_HAS_TXM) 取代，仅 LauncherPreferencesViewController
+// 等少数 UI 逻辑暂时引用，后续将完全移除。
+BOOL DeviceRequiresTXMWorkaround(void) __attribute__((deprecated));
+
+// Device JIT flags（同步自上游 AngelAuraMC/Amethyst-iOS）
+// 支持 iOS 26.6+ / 27 的现代 Preboot 路径 + ChipID 硬件 fallback + capability 查询
+typedef enum {
+    JIT_FLAG_IS_IOS_26 = 1 << 0,
+    JIT_FLAG_FORCE_MIRRORED = 1 << 1,
+    JIT_FLAG_HAS_TXM = 1 << 2,
+} JITFlags;
+JITFlags DeviceGetJITFlags(BOOL refresh);
+BOOL DeviceHasJITFlags(JITFlags flags);
 
 // Init functions
 void init_bypassDyldLibValidation();

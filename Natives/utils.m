@@ -16,12 +16,13 @@ void* SecTaskCreateFromSelf(CFAllocatorRef allocator);
 BOOL getEntitlementValue(NSString *key) {
     void *secTask = SecTaskCreateFromSelf(NULL);
     CFTypeRef value = SecTaskCopyValueForEntitlement(SecTaskCreateFromSelf(NULL), key, nil);
-    if (value != nil) {
-        CFRelease(value);
-    }
     CFRelease(secTask);
-
-    return value != nil && [(__bridge id)value boolValue];
+    if (value == nil) {
+        return NO;
+    }
+    CFRelease(value);
+    // 同步自上游：处理非 NSNumber 类型的 entitlement 值（如 string/bool）
+    return ![(__bridge id)value isKindOfClass:NSNumber.class] || [(__bridge id)value boolValue];
 }
 
 BOOL isJITEnabled(BOOL checkCSFlags) {
@@ -34,6 +35,11 @@ BOOL isJITEnabled(BOOL checkCSFlags) {
     int flags = 0;
     if (csops(getpid(), 0, &flags, sizeof(flags)) == 0) {
         if (flags & CS_DEBUGGED) {
+            // iOS 26+ 且 TXM 设备需要 debugger 持续附加，JIT script 才能绕过 TXM 限制
+            // （同步自上游 AngelAuraMC/Amethyst-iOS）
+            if (DeviceHasJITFlags(JIT_FLAG_FORCE_MIRRORED | JIT_FLAG_HAS_TXM)) {
+                return JIT26IsLikelyDebuggerKeepAttached();
+            }
             return YES;
         }
         // 部分工具（SideStore 等）通过 get-task-allow + dynamic-codesigning 启用 JIT，
@@ -180,6 +186,11 @@ void setButtonPointerInteraction(UIButton *button) {
 }
 
 __attribute__((noinline,optnone,naked))
+void* JIT26CreateRegionLegacy(size_t len) {
+    asm("brk #0x69 \n"
+        "ret");
+}
+__attribute__((noinline,optnone,naked))
 void* JIT26PrepareRegion(void *addr, size_t len) {
     asm("mov x16, #1 \n"
         "brk #0xf00d \n"
@@ -207,6 +218,14 @@ void JIT26SendJITScript(NSString* script) {
     NSCAssert(script, @"Script must not be nil");
     BreakSendJITScript((char*)script.UTF8String, script.length);
 }
+
+// 同步自上游：getppid() 在 debugger 持续附加时返回的不是 launchd(1)
+BOOL JIT26IsLikelyDebuggerKeepAttached(void) {
+    return getppid() != 1;
+}
+
+// 旧版 TXM 检测（deprecated，仅 LauncherPreferencesViewController UI 逻辑暂引用）
+// iOS 26.6+ /private/preboot 不可读会误判返回 NO，请改用 DeviceHasJITFlags(JIT_FLAG_HAS_TXM)
 BOOL DeviceRequiresTXMWorkaround(void) {
     if (@available(iOS 16.0, *)) {
         DIR *d = opendir("/private/preboot");
@@ -223,6 +242,95 @@ BOOL DeviceRequiresTXMWorkaround(void) {
         return access(txmPath, F_OK) == 0;
     }
     return NO;
+}
+
+// ============================================================================
+// 新版 JIT flags 系统（同步自上游 AngelAuraMC/Amethyst-iOS）
+// 旧版 DeviceRequiresTXMWorkaround() 在 iOS 26.6+ 因 /private/preboot 不可读
+// 会误判返回 NO，导致 TXM 设备走错代码路径并触发 SIGSEGV。
+// 新版基于现代 Preboot 路径 + ChipID 硬件 fallback + capability 查询。
+// ============================================================================
+
+// 仅在 JIT 已启用时准确，主要用于 vphone 等内部环境
+BOOL DeviceCanCreateRXMap(void) {
+    uint32_t *map = mmap(NULL, getpagesize(), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED, -1, 0);
+    assert(map != MAP_FAILED);
+    *map = 0xFFFFFFFF;
+    int ret = mprotect(map, getpagesize(), PROT_READ | PROT_EXEC) | mprotect(map, getpagesize(), PROT_READ | PROT_EXEC);
+    munmap(map, getpagesize());
+    return ret == 0;
+}
+
+// 实际 TXM 固件检测（不受 JIT_FLAGS 环境变量覆盖影响）
+BOOL DeviceHasTXMReal(void) {
+    DIR *d = opendir("/private/preboot");
+    if(!d) {
+        // /private/preboot 在 27.0 和 26.6+ 不可访问，fallback 到 ChipID 硬件推测
+        NSUInteger (*MGGetSInt64Answer)(NSString *) = dlsym(RTLD_DEFAULT, "MGGetSInt64Answer");
+        NSUInteger chipID = MGGetSInt64Answer(@"ChipID");
+        switch(chipID) {
+            case 0x8020: // A12
+            case 0x8027: // A12X/Z
+                return NO;
+            case 0x8030: // A13
+            case 0x8101: // A14
+            case 0x8103: // M1
+                if (@available(iOS 27.0, *)) return YES; return NO;
+            default:
+                if (@available(iOS 19.0, *)) return YES; return NO;
+        }
+    }
+    // 17.0-26.5 可确定性检测 TXM
+    struct dirent *dir;
+    char txmPath[PATH_MAX];
+    while ((dir = readdir(d)) != NULL) {
+        if(strlen(dir->d_name) == 96) {
+            snprintf(txmPath, sizeof(txmPath), "/private/preboot/%s/usr/standalone/firmware/FUD/Ap,TrustedExecutionMonitor.img4", dir->d_name);
+            break;
+        }
+    }
+    closedir(d);
+    return access(txmPath, F_OK) == 0;
+}
+
+// Thin wrapper：尊重 JIT_FLAGS 环境变量覆盖
+__exported BOOL DeviceHasTXM(void) {
+    return DeviceHasJITFlags(JIT_FLAG_HAS_TXM);
+}
+
+JITFlags DeviceGetJITFlags(BOOL refresh) {
+    static JITFlags cachedFlags = 0;
+    static dispatch_once_t onceToken;
+    if (refresh) onceToken = 0;
+    dispatch_once(&onceToken, ^{
+        const char *s = getenv("JIT_FLAGS");
+        if (s) {
+            if (s[0] == '0' && tolower(s[1]) == 'b') {
+                cachedFlags = strtoul(s + 2, NULL, 2);
+            } else {
+                cachedFlags = strtoul(s, NULL, 0);
+            }
+            NSLog(@"[JIT] Using overridden JIT flags: 0x%X", cachedFlags);
+            return;
+        }
+
+        if (@available(iOS 26.0, *)) {
+            cachedFlags |= JIT_FLAG_IS_IOS_26;
+            if (!DeviceCanCreateRXMap()) {
+                cachedFlags |= JIT_FLAG_FORCE_MIRRORED;
+            }
+        }
+        if (DeviceHasTXMReal()) {
+            cachedFlags |= JIT_FLAG_HAS_TXM;
+        }
+
+        if (refresh) NSLog(@"[JIT] Using computed JIT flags: 0x%X", cachedFlags);
+    });
+    return cachedFlags;
+}
+
+BOOL DeviceHasJITFlags(JITFlags flags) {
+    return (DeviceGetJITFlags(NO) & flags) == flags;
 }
 
 void dismissModalViewController(UIViewController *viewController) {
