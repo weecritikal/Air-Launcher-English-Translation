@@ -41,7 +41,9 @@ void handle_fatal_exit(int code) {
         return;
     }
 
-    [PLLogOutputView handleExitCode:code];
+    if (![PLLogOutputView handleExitCode:code]) {
+        return;
+    }
 
     if (fatalExitGroup != nil) {
         // Likely other threads are crashing, put them to sleep
@@ -97,25 +99,46 @@ void* hooked_dlopen(const char* path, int mode) {
     BOOL shouldUseDyldBypass = path && realpath(path, fullpath) && (strstr(fullpath, home) || (tmp && strstr(fullpath, tmp)));
     shouldUseDyldBypass26PPL &= shouldUseDyldBypass;
 
-    void *handle;
-    if (shouldUseDyldBypass26PPL) {
-        handle = hooked_dlopen_26_ppl(path, mode);
-    } else if (shouldUseDyldBypass) {
+    // 同步自上游：在分支前统一调用 PLPatchMachOPlatformForFile
+    // （原实现仅在 shouldUseDyldBypass 分支调用，遗漏了 26PPL 路径，
+    //  会导致 iOS 26+ 非 TXM 设备的 dyld bypass 失败）
+    if (shouldUseDyldBypass) {
         PLPatchMachOPlatformForFile(path);
-        // Special case for LiveContainer multitask mode where it hooks dlopen to hook mmap,
-        // which will break this dyld bypass, so we redirect calls to the original dlopen.
-        static void *(*sys_dlopen)(const char *, int);
-        if(!sys_dlopen) sys_dlopen = dlsym(RTLD_NEXT, "dlopen");
-        handle = sys_dlopen(path, mode);
-    } else {
-        handle = orig_dlopen(path, mode);
     }
 
     // fork 自有特性：Zink stride fix——libOSMesa 加载后重新执行 fishhook，
     // 捕获其对 vkGetInstanceProcAddr / vkGetDeviceProcAddr 的符号引用
     // （installZinkStrideFix 在 libOSMesa 加载前调用，初次 rebind 无法
     //  捕获 libOSMesa image 内的引用；必须在其加载后再次 rebind）
-    if (handle && path && strstr(path, "libOSMesa") && g_zinkStrideFixActive) {
+    BOOL needsZinkRebind = path && strstr(path, "libOSMesa") && g_zinkStrideFixActive;
+
+    void *handle;
+    if (shouldUseDyldBypass26PPL) {
+        if (needsZinkRebind) {
+            handle = hooked_dlopen_26_ppl(path, mode);
+        } else {
+            __attribute__((musttail)) return hooked_dlopen_26_ppl(path, mode);
+        }
+    } else if (shouldUseDyldBypass) {
+        // Special case for LiveContainer multitask mode where it hooks dlopen to hook mmap,
+        // which will break this dyld bypass, so we redirect calls to the original dlopen.
+        static void *(*sys_dlopen)(const char *, int);
+        if(!sys_dlopen) sys_dlopen = dlsym(RTLD_NEXT, "dlopen");
+        if (needsZinkRebind) {
+            handle = sys_dlopen(path, mode);
+        } else {
+            __attribute__((musttail)) return sys_dlopen(path, mode);
+        }
+    } else {
+        if (needsZinkRebind) {
+            handle = orig_dlopen(path, mode);
+        } else {
+            __attribute__((musttail)) return orig_dlopen(path, mode);
+        }
+    }
+
+    // Zink stride fix rebind（仅在 needsZinkRebind 时执行）
+    if (handle && needsZinkRebind) {
         NSLog(@"[ZinkStrideFix] libOSMesa loaded via dlopen, re-rebinding Vulkan symbols");
         rebindZinkStrideFixForNewImage();
     }
