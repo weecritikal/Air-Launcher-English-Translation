@@ -338,7 +338,15 @@ static NSString *festivalGreeting(void) {
     self.contentContainer.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     self.contentContainer.backgroundColor = [UIColor clearColor];
     [self.contentView addSubview:self.contentContainer];
-    
+
+    // 圆角：contentView 设置圆角 + masksToBounds，让 BackgroundManager 注入的
+    // 毛玻璃 blurView 也获得一致的圆角（applyEffectToCollectionViewCell: 会读取
+    // cell.contentView.layer.cornerRadius）。self.layer 保持 masksToBounds=NO
+    // 以便显示阴影，阴影路径在 layoutSubviews 中按 cornerRadius:16 生成。
+    self.contentView.layer.cornerRadius = 16;
+    self.contentView.layer.cornerCurve = kCACornerCurveContinuous;
+    self.contentView.layer.masksToBounds = YES;
+
     [[BackgroundManager sharedManager] applyEffectToCollectionViewCell:self];
 }
 
