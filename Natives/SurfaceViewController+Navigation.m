@@ -7,9 +7,10 @@
 #import "TrackedTextField.h"
 #import "utils.h"
 #import "ScreenUtils.h"
-#import "MultiplayerViewController.h"
-#import "MultiplayerManager.h"
-#import "TerracottaViewController.h"
+// ZeroTier/Terracotta 联机暂时移除（排查启动崩溃）
+// #import "MultiplayerViewController.h"
+// #import "MultiplayerManager.h"
+// #import "TerracottaViewController.h"
 #import <objc/runtime.h>
 
 // 暴露 class extension 中的私有属性，供 category 使用
@@ -199,17 +200,13 @@ static const void *kMenuDimViewKey = &kMenuDimViewKey;
     [alert addAction:cancelAction];
 
     UIAlertAction* okAction = [UIAlertAction actionWithTitle:localize(@"OK", nil) style:UIAlertActionStyleDestructive handler:^(UIAlertAction * action) {
-        // 关键修复（P0-A）：强制关闭前清理联机资源
-        // 原代码直接 exit(0)，导致 SOCKS5 代理、端口转发器、ZeroTier 网络、
-        // AMETHYST_SOCKS5_PROXY 环境变量、PLProfiles 中的 serverIp 全部残留。
-        // 表现为"存档关闭后端口仍存在"和"下次进游戏仍显示连接服务器"。
-        // 修复：在退出前调用 stopAllMultiplayerServices 彻底清理。
-        @try {
-            [[MultiplayerManager sharedManager] stopAllMultiplayerServices];
-            NSLog(@"[ForceClose] Multiplayer resources cleaned up");
-        } @catch (NSException *e) {
-            NSLog(@"[ForceClose] Exception while cleaning up multiplayer resources: %@", e);
-        }
+        // ZeroTier/Terracotta 联机暂时移除：原 stopAllMultiplayerServices 调用注释掉
+        // @try {
+        //     [[MultiplayerManager sharedManager] stopAllMultiplayerServices];
+        //     NSLog(@"[ForceClose] Multiplayer resources cleaned up");
+        // } @catch (NSException *e) {
+        //     NSLog(@"[ForceClose] Exception while cleaning up multiplayer resources: %@", e);
+        // }
 
         // FCL 风格：直接退出，不再做缩小动画
         if (fatalExitGroup == nil) {
@@ -255,11 +252,14 @@ static const void *kMenuDimViewKey = &kMenuDimViewKey;
 /// 选择当房主（创建世界→开放局域网→输入端口→生成邀请码）
 /// 或当房客（输入邀请码→加入网络→MC 多人游戏直连 127.0.0.1:25565）。
 - (void)actionOpenMultiplayer {
+    // ZeroTier/Terracotta 联机暂时移除（排查启动崩溃）
     [self dismissMenu];
-    TerracottaViewController *vc = [[TerracottaViewController alloc] init];
-    UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
-    nav.modalPresentationStyle = UIModalPresentationPageSheet;
-    [self presentViewController:nav animated:YES completion:nil];
+    UIAlertController *alert = [UIAlertController
+        alertControllerWithTitle:@"联机功能暂时不可用"
+                          message:@"联机模块（ZeroTier/Terracotta）正在排查启动崩溃问题，暂时禁用，请等待后续版本恢复。"
+                   preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleDefault handler:nil]];
+    [self presentViewController:alert animated:YES completion:nil];
 }
 
 /// FCL 风格：隐藏/显示控制按钮（对应 FCL hide_all 开关）

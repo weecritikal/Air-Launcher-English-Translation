@@ -1030,7 +1030,9 @@
                 @"type": self.typeSwitch,
                 @"requestReload": @YES,
                 @"enableCondition": ^BOOL(){
-                    return DeviceRequiresTXMWorkaround() && whenNotInGame();
+                    // 同步自上游：用 JIT flags 系统替代旧的 DeviceRequiresTXMWorkaround()
+                    // 仅在 iOS 26+ 且需要 mirror mapped + TXM 的设备上显示此开关
+                    return DeviceHasJITFlags(JIT_FLAG_FORCE_MIRRORED | JIT_FLAG_HAS_TXM) && whenNotInGame();
                 },
             },
             @{@"key": @"debug_always_attached_jit",

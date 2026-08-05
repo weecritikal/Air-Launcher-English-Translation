@@ -75,7 +75,12 @@ jmethodID method_SystemClipboardDataReceived;
 #undef ADD_CALLBACK_WWIN
 //};
 
+int guiScale;
 float resolutionScale;
 BOOL virtualMouseEnabled, isControlModifiable;
+
+// 硬件断点重定向数组（同步自上游，用于非 TXM 的 iOS 26+ 设备 dlopen 重定向）
+// 由 redirectFunctionHWBreakpoint 填充，由 catch_mach_exception_raise_state 读取
+uint64_t hwRedirectOrig[6], hwRedirectTarget[6];
 
 #endif //POJAVLAUNCHER_ENVIRON_H

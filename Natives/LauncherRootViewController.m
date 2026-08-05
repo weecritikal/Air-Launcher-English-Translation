@@ -16,10 +16,11 @@
 #import "ModpackImportViewController.h"
 #import "LauncherPrefGameDirViewController.h"
 #import "CustomControlsViewController.h"
-#import "MultiplayerViewController.h"
-#import "TerracottaViewController.h"
-#import "TerracottaManager.h"
-#import "TerracottaBridge.h"
+// ZeroTier/Terracotta 联机暂时移除（排查启动崩溃）
+// #import "MultiplayerViewController.h"
+// #import "TerracottaViewController.h"
+// #import "TerracottaManager.h"
+// #import "TerracottaBridge.h"
 #import "AccountListViewController.h"
 
 // 布局常量（iPad 基准值；iPhone 上通过 LauncherRootLayoutWidth 适配后会变窄）
@@ -333,15 +334,15 @@ static CGFloat LauncherRootLayoutRightPanelWidth(UITraitCollection *trait) {
                                              selector:@selector(showSettings)
                                                  name:@"ShowSettings"
                                                object:nil];
-    [[NSNotificationCenter defaultCenter] addObserver:self
-                                             selector:@selector(showMultiplayer)
-                                                 name:@"ShowMultiplayer"
-                                               object:nil];
-    // ZeroTier 联机独立入口（与陶瓦联机并列）：左侧菜单 case 4 触发
-    [[NSNotificationCenter defaultCenter] addObserver:self
-                                             selector:@selector(showZeroTier)
-                                                 name:@"ShowZeroTier"
-                                               object:nil];
+    // ZeroTier/Terracotta 联机暂时移除（排查启动崩溃）
+    // [[NSNotificationCenter defaultCenter] addObserver:self
+    //                                          selector:@selector(showMultiplayer)
+    //                                              name:@"ShowMultiplayer"
+    //                                            object:nil];
+    // [[NSNotificationCenter defaultCenter] addObserver:self
+    //                                          selector:@selector(showZeroTier)
+    //                                              name:@"ShowZeroTier"
+    //                                            object:nil];
     // 首页快捷瓷砖触发：切到对应内容区子页面（不再 FormSheet 弹窗）
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(showModsManager)
@@ -483,38 +484,22 @@ static CGFloat LauncherRootLayoutRightPanelWidth(UITraitCollection *trait) {
     [self setContentViewController:navVC animated:YES];
 }
 
+// ZeroTier/Terracotta 联机暂时移除（排查启动崩溃）
+// - (void)showMultiplayer { ... TerracottaViewController ... }
+// - (void)showZeroTier { ... MultiplayerViewController ... TerracottaManager ... }
 - (void)showMultiplayer {
-    // 在中间内容区显示陶瓦联机界面（与 HMCL/FCL/ZL2 互通）
-    // libterracotta 未链接时弹错误提示，引导用户下载 xcframework
-    if (![TerracottaBridge isAvailable]) {
-        UIAlertController *alert = [UIAlertController
-            alertControllerWithTitle:@"联机功能不可用"
-                              message:@"libterracotta 库未链接，请按 README 中「陶瓦联机集成」章节下载 xcframework 后重新构建。"
-                       preferredStyle:UIAlertControllerStyleAlert];
-        [alert addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleDefault handler:nil]];
-        [self presentViewController:alert animated:YES completion:nil];
-        return;
-    }
-    TerracottaViewController *vc = [[TerracottaViewController alloc] init];
-    UINavigationController *navVC = [[UINavigationController alloc] initWithRootViewController:vc];
-    navVC.navigationBar.prefersLargeTitles = NO;
-    [self setContentViewController:navVC animated:YES];
+    [self showMultiplayerDisabledAlert];
 }
-
 - (void)showZeroTier {
-    // 在中间内容区显示 ZeroTier 联机界面（独立入口，与陶瓦联机并列）。
-    // 之前 ZeroTier 入口仅嵌在陶瓦联机页面右上角的浮动按钮里，用户需先进入陶瓦再切换，
-    // 不符合"FCL 风格左侧菜单直接进入"的体验。现在左侧菜单 case 4 直接进入。
-    // 使用 MultiplayerVCModeLauncher 模式（启动器模式：联机开关 + 预设 Network ID + 房间列表）。
-    // 若陶瓦会话进行中，先停止陶瓦会话避免端口冲突。
-    if ([TerracottaBridge isAvailable] &&
-        [TerracottaManager shared].status != TerracottaStatusDisconnected) {
-        [[TerracottaManager shared] stopSession];
-    }
-    MultiplayerViewController *vc = [[MultiplayerViewController alloc] initWithMode:MultiplayerVCModeLauncher];
-    UINavigationController *navVC = [[UINavigationController alloc] initWithRootViewController:vc];
-    navVC.navigationBar.prefersLargeTitles = NO;
-    [self setContentViewController:navVC animated:YES];
+    [self showMultiplayerDisabledAlert];
+}
+- (void)showMultiplayerDisabledAlert {
+    UIAlertController *alert = [UIAlertController
+        alertControllerWithTitle:@"联机功能暂时不可用"
+                          message:@"联机模块（ZeroTier/Terracotta）正在排查启动崩溃问题，暂时禁用，请等待后续版本恢复。"
+                   preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleDefault handler:nil]];
+    [self presentViewController:alert animated:YES completion:nil];
 }
 
 #pragma mark - 首页快捷入口 (替换原 FormSheet 弹窗)
