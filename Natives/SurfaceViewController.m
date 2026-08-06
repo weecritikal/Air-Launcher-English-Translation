@@ -1847,27 +1847,25 @@ static GameSurfaceView* pojavWindow;
 }
 
 - (void)pressesBegan:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
-    BOOL handled = NO;
     for (UIPress *press in presses) {
-        if (press.key != nil && [KeyboardInput sendKeyEvent:press.key down:YES]) {
-            handled = YES;
+        if (press.key != nil) {
+            [KeyboardInput sendKeyEvent:press.key down:YES];
         }
     }
-    if (!handled) {
-        [super pressesBegan:presses withEvent:event];
-    }
+    // Always call super so that inputTextField (UITextInput) can receive
+    // key events for text input (e.g., Minecraft chat).
+    [super pressesBegan:presses withEvent:event];
 }
 
 - (void)pressesEnded:(NSSet<UIPress *> *)presses withEvent:(UIPressesEvent *)event {
-    BOOL handled = NO;
     for (UIPress *press in presses) {
-        if (press.key != nil && [KeyboardInput sendKeyEvent:press.key down:NO]) {
-            handled = YES;
+        if (press.key != nil) {
+            [KeyboardInput sendKeyEvent:press.key down:NO];
         }
     }
-    if (!handled) {
-        [super pressesEnded:presses withEvent:event];
-    }
+    // Always call super so that inputTextField (UITextInput) can receive
+    // key-up events properly.
+    [super pressesEnded:presses withEvent:event];
 }
 
 - (BOOL)prefersPointerLocked {
@@ -1877,9 +1875,10 @@ static GameSurfaceView* pojavWindow;
 - (void)registerMouseCallbacks:(GCMouse *)mouse {
     NSLog(@"Input: Got mouse %@", mouse);
     mouse.mouseInput.mouseMovedHandler = ^(GCMouseInput * _Nonnull mouse, float deltaX, float deltaY) {
-        if (!self.view.window.windowScene.pointerLockState.locked) {
-            return;
-        }
+        // Always forward mouse movement to the game.
+        // When pointer is locked (in-game grabbing), deltaX/deltaY are true deltas.
+        // When pointer is NOT locked (menu, or Bluetooth mouse before lock activates),
+        // we still send the delta so the virtual mouse or cursor can move.
         [self sendTouchPoint:CGPointMake(deltaX, -deltaY) withEvent:ACTION_MOVE_MOTION];
     };
 
