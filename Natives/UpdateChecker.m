@@ -22,7 +22,7 @@
 + (NSString *)currentVersion {
     NSString *v = [[[NSBundle mainBundle] infoDictionary] objectForKey:@"CFBundleShortVersionString"];
     if (v == nil) v = @"";
-    /* 当前版本号可能是 "5.0.0 Beta"，提取数字部分用于比较 */
+    /* 当前版本号可能是 "5.0.0 Preview"，提取数字部分用于比较 */
     return v;
 }
 
@@ -121,7 +121,7 @@
         info.assets = assetList;
     }
 
-    /* 版本比较：currentVersion 可能是 "5.0.0 Beta"，先提取数字部分 */
+    /* 版本比较：currentVersion 可能是 "5.0.0 Preview"，先提取数字部分 */
     NSString *currentNum = [self extractVersionNumbers:info.currentVersion];
     NSString *latestNum = [self extractVersionNumbers:info.latestVersion];
     if (currentNum.length > 0 && latestNum.length > 0) {
@@ -144,7 +144,7 @@
     return v;
 }
 
-/// 从版本字符串中提取数字部分（如 "5.0.0 Beta" → "5.0.0"）
+/// 从版本字符串中提取数字部分（如 "5.0.0 Preview" → "5.0.0"）
 + (NSString *)extractVersionNumbers:(NSString *)version {
     if (version.length == 0) return @"";
     NSError *err = nil;
