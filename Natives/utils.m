@@ -2,6 +2,7 @@
 
 #include "jni.h"
 #include <dlfcn.h>
+#include <os/lock.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -30,15 +31,7 @@ BOOL isJITEnabled(BOOL checkCSFlags) {
 
     int flags;
     csops(getpid(), 0, &flags, sizeof(flags));
-    if ((flags & CS_DEBUGGED) == 0) {
-        return NO;
-    }
-    if (!DeviceHasJITFlags(JIT_FLAG_FORCE_MIRRORED | JIT_FLAG_HAS_TXM)) {
-        // Device below iOS 26 or without TXM is sufficient at this point
-        return YES;
-    }
-    // Device with iOS 26+ and TXM requires a debugger attached for JIT script to bypass TXM restrictions
-    return JIT26IsLikelyDebuggerKeepAttached();
+    return (flags & CS_DEBUGGED) != 0;
 }
 
 void openLink(UIViewController* sender, NSURL* link) {
@@ -193,118 +186,123 @@ void JIT26SendJITScript(NSString* script) {
     BreakSendJITScript((char*)script.UTF8String, script.length);
 }
 
-// 同步自上游：getppid() 在 debugger 持续附加时返回的不是 launchd(1)
-BOOL JIT26IsLikelyDebuggerKeepAttached(void) {
-    return getppid() != 1;
-}
-
-// 旧版 TXM 检测（deprecated，仅 LauncherPreferencesViewController UI 逻辑暂引用）
-// iOS 26.6+ /private/preboot 不可读会误判返回 NO，请改用 DeviceHasJITFlags(JIT_FLAG_HAS_TXM)
-BOOL DeviceRequiresTXMWorkaround(void) {
-    if (@available(iOS 16.0, *)) {
-        DIR *d = opendir("/private/preboot");
-        if(!d) return NO;
-        struct dirent *dir;
-        char txmPath[PATH_MAX];
-        while ((dir = readdir(d)) != NULL) {
-            if(strlen(dir->d_name) == 96) {
-                snprintf(txmPath, sizeof(txmPath), "/private/preboot/%s/usr/standalone/firmware/FUD/Ap,TrustedExecutionMonitor.img4", dir->d_name);
-                break;
-            }
-        }
-        closedir(d);
-        return access(txmPath, F_OK) == 0;
-    }
-    return NO;
-}
-
-// ============================================================================
-// 新版 JIT flags 系统（同步自上游 AngelAuraMC/Amethyst-iOS）
-// 旧版 DeviceRequiresTXMWorkaround() 在 iOS 26.6+ 因 /private/preboot 不可读
-// 会误判返回 NO，导致 TXM 设备走错代码路径并触发 SIGSEGV。
-// 新版基于现代 Preboot 路径 + ChipID 硬件 fallback + capability 查询。
-// ============================================================================
-
-// 仅在 JIT 已启用时准确，主要用于 vphone 等内部环境
 BOOL DeviceCanCreateRXMap(void) {
+    // This is only guaranteed to be accurate when JIT is already enabled. Obviously this is only useful for vphone and similar internal environments where JIT is always enabled.
     uint32_t *map = mmap(NULL, getpagesize(), PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_SHARED, -1, 0);
-    assert(map != MAP_FAILED);
+    if (map == MAP_FAILED) {
+        NSLog(@"DeviceCanCreateRXMap: mmap failed: %s", strerror(errno));
+        return NO;
+    }
     *map = 0xFFFFFFFF;
     int ret = mprotect(map, getpagesize(), PROT_READ | PROT_EXEC) | mprotect(map, getpagesize(), PROT_READ | PROT_EXEC);
     munmap(map, getpagesize());
     return ret == 0;
 }
 
-// 实际 TXM 固件检测（不受 JIT_FLAGS 环境变量覆盖影响）
-BOOL DeviceHasTXMReal(void) {
-    DIR *d = opendir("/private/preboot");
-    if(!d) {
-        // /private/preboot 在 27.0 和 26.6+ 不可访问，fallback 到 ChipID 硬件推测
-        NSUInteger (*MGGetSInt64Answer)(NSString *) = dlsym(RTLD_DEFAULT, "MGGetSInt64Answer");
-        NSUInteger chipID = MGGetSInt64Answer(@"ChipID");
-        switch(chipID) {
-            case 0x8020: // A12
-            case 0x8027: // A12X/Z
-                return NO;
-            case 0x8030: // A13
-            case 0x8101: // A14
-            case 0x8103: // M1
-                if (@available(iOS 27.0, *)) return YES; return NO;
-            default:
-                if (@available(iOS 19.0, *)) return YES; return NO;
-        }
+static BOOL DeviceLikelyHasTXMFromChipID(void) {
+    NSUInteger (*MGGetSInt64Answer)(NSString *) = dlsym(RTLD_DEFAULT, "MGGetSInt64Answer");
+    if (MGGetSInt64Answer == NULL) {
+        // Failing closed would select the legacy mapping path on the exact
+        // systems where Apple made Preboot unreadable. Prefer the TXM-safe
+        // path on recent systems when MobileGestalt is unavailable.
+        if (@available(iOS 19.0, *)) return YES;
+        return NO;
     }
-    // 17.0-26.5 可确定性检测 TXM
+
+    switch (MGGetSInt64Answer(@"ChipID")) {
+        case 0x8020: // A12
+        case 0x8027: // A12X/Z
+            return NO;
+        case 0x8030: // A13
+        case 0x8101: // A14
+        case 0x8103: // M1
+            if (@available(iOS 27.0, *)) return YES;
+            return NO;
+        default:
+            if (@available(iOS 19.0, *)) return YES;
+            return NO;
+    }
+}
+
+BOOL DeviceHasTXM(void) {
+    // Try the direct active-Preboot path before falling back to legacy
+    // directory enumeration.
+    static const char *modernTXMPath =
+        "/System/Volumes/Preboot/boot/usr/standalone/firmware/FUD/"
+        "Ap,TrustedExecutionMonitor.img4";
+    if (access(modernTXMPath, F_OK) == 0) return YES;
+
+    DIR *d = opendir("/private/preboot");
+    if (!d) {
+        // /private/preboot is no longer readable on iOS 26.6 and iOS 27.
+        // Fall back to a conservative hardware/OS heuristic.
+        return DeviceLikelyHasTXMFromChipID();
+    }
+
     struct dirent *dir;
-    char txmPath[PATH_MAX];
+    BOOL hasTXM = NO;
     while ((dir = readdir(d)) != NULL) {
         if(strlen(dir->d_name) == 96) {
-            snprintf(txmPath, sizeof(txmPath), "/private/preboot/%s/usr/standalone/firmware/FUD/Ap,TrustedExecutionMonitor.img4", dir->d_name);
-            break;
+            char txmPath[PATH_MAX] = {0};
+            int length = snprintf(txmPath, sizeof(txmPath),
+                "/private/preboot/%s/usr/standalone/firmware/FUD/"
+                "Ap,TrustedExecutionMonitor.img4", dir->d_name);
+            if (length > 0 && (size_t)length < sizeof(txmPath) &&
+                    access(txmPath, F_OK) == 0) {
+                hasTXM = YES;
+                break;
+            }
         }
     }
     closedir(d);
-    return access(txmPath, F_OK) == 0;
-}
-
-// Thin wrapper：尊重 JIT_FLAGS 环境变量覆盖
-__exported BOOL DeviceHasTXM(void) {
-    return DeviceHasJITFlags(JIT_FLAG_HAS_TXM);
+    return hasTXM;
 }
 
 JITFlags DeviceGetJITFlags(BOOL refresh) {
+    static os_unfair_lock cacheLock = OS_UNFAIR_LOCK_INIT;
     static JITFlags cachedFlags = 0;
-    static dispatch_once_t onceToken;
-    if (refresh) onceToken = 0;
-    dispatch_once(&onceToken, ^{
+    static BOOL cacheInitialized = NO;
+
+    os_unfair_lock_lock(&cacheLock);
+    if (refresh || !cacheInitialized) {
+        JITFlags flags = 0;
         const char *s = getenv("JIT_FLAGS");
         if (s) {
             if (s[0] == '0' && tolower(s[1]) == 'b') {
-                cachedFlags = strtoul(s + 2, NULL, 2);
+                flags = strtoul(s + 2, NULL, 2);
             } else {
-                cachedFlags = strtoul(s, NULL, 0);
+                flags = strtoul(s, NULL, 0);
             }
-            NSLog(@"[JIT] Using overridden JIT flags: 0x%X", cachedFlags);
-            return;
+            NSLog(@"[JIT] Using overridden JIT flags: 0x%X", flags);
+        } else {
+            if (@available(iOS 26.0, *)) {
+                flags |= JIT_FLAG_IS_IOS_26;
+                if (!DeviceCanCreateRXMap()) {
+                    flags |= JIT_FLAG_FORCE_MIRRORED;
+                }
+            }
+            if (DeviceHasTXM()) {
+                flags |= JIT_FLAG_HAS_TXM;
+            }
         }
 
-        if (@available(iOS 26.0, *)) {
-            cachedFlags |= JIT_FLAG_IS_IOS_26;
-            if (!DeviceCanCreateRXMap()) {
-                cachedFlags |= JIT_FLAG_FORCE_MIRRORED;
-            }
-        }
-        if (DeviceHasTXMReal()) {
-            cachedFlags |= JIT_FLAG_HAS_TXM;
-        }
-
-        if (refresh) NSLog(@"[JIT] Using computed JIT flags: 0x%X", cachedFlags);
-    });
-    return cachedFlags;
+        cachedFlags = flags;
+        cacheInitialized = YES;
+    }
+    JITFlags result = cachedFlags;
+    os_unfair_lock_unlock(&cacheLock);
+    return result;
 }
 
 BOOL DeviceHasJITFlags(JITFlags flags) {
     return (DeviceGetJITFlags(NO) & flags) == flags;
+}
+
+BOOL DeviceNeedsDebugJITMapping(void) {
+    // This is a capability decision, not a TXM firmware-detection decision.
+    // MirrorMappedCodeCache now means that the Universal JIT script has been
+    // installed and HotSpot may request its RX mapping from the debugger.
+    return DeviceHasJITFlags(JIT_FLAG_IS_IOS_26 | JIT_FLAG_FORCE_MIRRORED);
 }
 
 void dismissModalViewController(UIViewController *viewController) {

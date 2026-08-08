@@ -232,25 +232,27 @@ void init_bypassDyldLibValidation() {
 
     NSDebugLog(@"[DyldLVBypass] init");
     
-    int jitFlags = (int)DeviceGetJITFlags(NO);
-    jitFlags &= ~JIT_FLAG_IS_IOS_26; // don't care about this flag for now
-    switch (jitFlags) {
-        case JIT_FLAG_FORCE_MIRRORED | JIT_FLAG_HAS_TXM:
-            NSDebugLog(@"[DyldLVBypass] Using redirectFunctionMirrored");
-            redirectFunction = redirectFunctionMirrored;
-            break;
-        case JIT_FLAG_FORCE_MIRRORED:
-            // Special special case for non-TXM iOS 26+
-            // We can JIT without script, but we cannot modify existing code in dsc without it.
-            // Therefore, we choose a hook method that avoids patching code in dsc completely, using hardware breakpoint.
-            // The function only stashes the original function pointers, and the breakpoint handler will redirect to our hook
-            NSDebugLog(@"[DyldLVBypass] Using redirectFunctionHWBreakpoint");
-            redirectFunction = redirectFunctionHWBreakpoint;
-            break;
-        default:
-            NSDebugLog(@"[DyldLVBypass] Using redirectFunctionDirect");
-            redirectFunction = redirectFunctionDirect;
-            break;
+    // The original switch used exact bitmask matching, so a device with
+    // IS_IOS_26 + HAS_TXM (no FORCE_MIRRORED) — i.e. a normal iPhone 17 on
+    // iOS 26 with StikDebug-provided JIT — fell through to redirectFunction
+    // Direct, whose vm_protect(RX) call iOS 26 blocks. The half-applied
+    // patch left dyld code pages RW with modified bytes, then dyld faulted
+    // executing non-X memory on the next mmap call → SIGBUS ignored → hang
+    // at dlopen(libjli). Use bitmask checks so iOS 26 + TXM correctly picks
+    // the mirrored variant.
+    if (DeviceHasJITFlags(JIT_FLAG_HAS_TXM) &&
+        (DeviceHasJITFlags(JIT_FLAG_IS_IOS_26) || DeviceHasJITFlags(JIT_FLAG_FORCE_MIRRORED))) {
+        NSDebugLog(@"[DyldLVBypass] Using redirectFunctionMirrored");
+        redirectFunction = redirectFunctionMirrored;
+    } else if (DeviceHasJITFlags(JIT_FLAG_FORCE_MIRRORED)) {
+        // Special special case for non-TXM iOS 26+. We can JIT without
+        // script, but we cannot modify existing code in dsc without it.
+        // Use hardware breakpoint to avoid patching dsc code at all.
+        NSDebugLog(@"[DyldLVBypass] Using redirectFunctionHWBreakpoint");
+        redirectFunction = redirectFunctionHWBreakpoint;
+    } else {
+        NSDebugLog(@"[DyldLVBypass] Using redirectFunctionDirect");
+        redirectFunction = redirectFunctionDirect;
     }
     
     // Modifying exec page during execution may cause SIGBUS, so ignore it now
