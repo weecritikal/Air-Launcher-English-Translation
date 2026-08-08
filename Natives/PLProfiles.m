@@ -89,7 +89,15 @@ static PLProfiles* current;
 }
 
 - (id)profiles {
-    return self.profileDict[@"profiles"];
+    id profiles = self.profileDict[@"profiles"];
+    if (![profiles isKindOfClass:[NSDictionary class]]) {
+        profiles = [NSMutableDictionary dictionary];
+        self.profileDict[@"profiles"] = profiles;
+    } else if (![profiles isKindOfClass:[NSMutableDictionary class]]) {
+        profiles = [profiles mutableCopy];
+        self.profileDict[@"profiles"] = profiles;
+    }
+    return profiles;
 }
 
 - (id)selectedProfile {
