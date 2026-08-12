@@ -1030,9 +1030,9 @@
                 @"type": self.typeSwitch,
                 @"requestReload": @YES,
                 @"enableCondition": ^BOOL(){
-                    // 使用 JIT flags 系统检测 TXM（DeviceRequiresTXMWorkaround 已移除）
-                    // 仅在 iOS 26+ 且需要 mirror mapped + TXM 的设备上显示此开关
-                    return DeviceHasJITFlags(JIT_FLAG_FORCE_MIRRORED | JIT_FLAG_HAS_TXM) && whenNotInGame();
+                    // 同步自 catsruledogs：用 DeviceNeedsDebugJITMapping() 替代旧的 TXM 标志组合
+                    // 基于 JIT_FLAG_IS_IOS_26 | JIT_FLAG_FORCE_MIRRORED，确保 iOS 26+ 无 TXM 设备也显示此开关
+                    return DeviceNeedsDebugJITMapping() && whenNotInGame();
                 },
             },
             @{@"key": @"debug_always_attached_jit",

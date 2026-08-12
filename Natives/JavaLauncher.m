@@ -356,11 +356,13 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
     init_loadDefaultEnv();
     init_loadCustomEnv();
 
-    // 同步自上游 AngelAuraMC/Amethyst-iOS：刷新 JIT flags，决定是否需要 TXM workaround
+    // 同步自 catsruledogs：刷新 JIT flags，决定是否需要 Debug JIT Mapping
+    // 使用 DeviceNeedsDebugJITMapping() 基于 JIT_FLAG_IS_IOS_26 | JIT_FLAG_FORCE_MIRRORED
+    // 而非 TXM 固件检测，确保 iOS 26+ 无 TXM 设备也能正确设置 JIT 脚本
     DeviceGetJITFlags(YES);
-    BOOL requiresTXMWorkaround = DeviceHasJITFlags(JIT_FLAG_FORCE_MIRRORED | JIT_FLAG_HAS_TXM);
+    BOOL requiresDebugJITMapping = DeviceNeedsDebugJITMapping();
     BOOL jit26AlwaysAttached = getPrefBool(@"debug.debug_always_attached_jit");
-    if (requiresTXMWorkaround) {
+    if (requiresDebugJITMapping) {
         // 检测是否在使用 legacy JIT script（brk #0x69 由 UniversalJIT26.js 处理）
         static void *result;
         if(!result) result = JIT26CreateRegionLegacy(getpagesize());
@@ -390,7 +392,7 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
         task_set_exception_ports(mach_task_self(), EXC_MASK_BAD_ACCESS, 0, EXCEPTION_DEFAULT, MACHINE_THREAD_STATE);
     }
 
-    if (!requiresTXMWorkaround || jit26AlwaysAttached) {
+    if (!requiresDebugJITMapping || jit26AlwaysAttached) {
         if (jit26AlwaysAttached) {
             // Only allow StikDebug to catch our breakpoints to prevent any stutters
             task_set_exception_ports(mach_task_self(), EXC_MASK_ALL & ~EXC_MASK_BREAKPOINT, 0,
