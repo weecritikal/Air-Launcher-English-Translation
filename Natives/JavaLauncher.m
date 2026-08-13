@@ -834,13 +834,27 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
     //   → SIGILL（崩溃点落在 liblwjgl_stb 是因为 stb_truetype 字体光栅化是首个
     //   大量 JIT 的 native wrapper，与渲染器无关）。
     //
-    //   修复：统一显式设置为 256m（Java 17+ 默认值），对 Java 8/17/21/25 全部生效。
-    //   - InitialCodeCacheSize=32m 避免启动时立即触发 CodeCache 扩容（默认 2.25m
+    //   修复：设置为 64m，对 Java 8/17/21/25 全部生效。
+    //   - 64m 仍比 Java 8 默认值（48MB）大 33%，足够避免 CodeCache 满导致的 SIGILL
+    //   - InitialCodeCacheSize=16m 避免启动时立即触发 CodeCache 扩容（默认 2.25m
     //     会多次扩容，每次扩容都触发全局锁）
     //   - CodeCacheExpansionSize=4m 减少扩容次数（默认 64K 太小）
     //   - +UnlockExperimentalVMOptions 已在上一行启用，无需重复
-    PUSH_MARGV_LITERAL("-XX:ReservedCodeCacheSize=256m");
-    PUSH_MARGV_LITERAL("-XX:InitialCodeCacheSize=32m");
+    //
+    //   iOS 27 SIGBUS fix (non-TXM devices, e.g. A15):
+    //   On iOS 26+, -XX:+MirrorMappedCodeCache maps JIT code into RX memory
+    //   allocated by the StikDebug debugger. With 256m, the mirrored region
+    //   extends into pages whose executability is unreliable, causing intermittent
+    //   SIGBUS when JIT-compiled code lands on those pages. The crash is
+    //   intermittent because it depends on how much JIT code the JVM generates
+    //   at runtime - if it stays within the safe region, the app exits normally.
+    //   Reducing to 64m constrains the mirror mapping within the debugger's
+    //   reliably allocated RX region, eliminating the SIGBUS.
+    //   Repro: iOS 27 + A15 (no TXM) + StikDebug + Java 21 (MC 1.21.1).
+    //   Java 25 (MC 26.2+) is unaffected - its JIT handles mirror mapping
+    //   more robustly and doesn't trigger the crash even with 256m.
+    PUSH_MARGV_LITERAL("-XX:ReservedCodeCacheSize=64m");
+    PUSH_MARGV_LITERAL("-XX:InitialCodeCacheSize=16m");
     PUSH_MARGV_LITERAL("-XX:CodeCacheExpansionSize=4m");
 
     // On iOS 26, use mirror mapped JIT by default
