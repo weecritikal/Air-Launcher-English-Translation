@@ -457,8 +457,12 @@ void CallbackBridge_queueModifierSync(int mods) {
 // 也可被 Java 端 CallbackBridge.nativeSetModifiers 调用。
 // ============================================================================
 void CallbackBridge_syncModifiersToMC(int mods) {
-    JNIEnv *env = runtimeJNIEnvPtr;
-    if (!env || !isInputReady) return;
+    if (!runtimeJavaVMPtr || !isInputReady) return;
+
+    JNIEnv *env = NULL;
+    jint envStatus = (*runtimeJavaVMPtr)->GetEnv(
+        runtimeJavaVMPtr, (void **)&env, JNI_VERSION_1_4);
+    if (envStatus != JNI_OK || !env) return;
 
     jclass inputConstantsClass = (*env)->FindClass(env, "com/mojang/blaze3d/platform/InputConstants");
     if (!inputConstantsClass) {

@@ -150,7 +150,7 @@ int keycodeTable[UIKeyboardHIDUsageKeyboardRightGUI+1];
         // 关键修复 2：显式同步 MC 1.21.9+ 内部的 modifier 缓存。
         // 即便某些版本 MC 不使用 setModifiers，调用也是安全的（旧版本无此方法
         // 会直接 no-op）。这能确保物理键盘的 Shift/Ctrl/Alt 在游戏内生效。
-        CallbackBridge_syncModifiersToMC(modifiers);
+        CallbackBridge_queueModifierSync(modifiers);
     } else {
         NSLog(@"KeyboardInput: Unhandled key %lu", (unsigned long)key.keyCode);
     }
