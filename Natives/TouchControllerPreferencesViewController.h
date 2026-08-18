@@ -2,8 +2,8 @@
 //  TouchControllerPreferencesViewController.h
 //  Angel Aura Amethyst
 //
-//  TouchController 设置页面
-//  允许用户选择 TouchController 的通信方式（UDP 或静态库）
+//  TouchController settings page
+//  Lets the user choose the TouchController communication method (UDP or static library)
 //
 
 #import <UIKit/UIKit.h>

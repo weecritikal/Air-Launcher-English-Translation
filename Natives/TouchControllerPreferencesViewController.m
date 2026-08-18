@@ -2,7 +2,7 @@
 //  TouchControllerPreferencesViewController.m
 //  Angel Aura Amethyst
 //
-//  TouchController 设置页面实现
+//  TouchController settings page implementation
 //
 
 #import "TouchControllerPreferencesViewController.h"
@@ -12,7 +12,7 @@
 #import "config.h"
 #import "utils.h"
 
-// 定义通信方式枚举
+// Define the communication method enum
 typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
     TouchControllerCommModeDisabled = 0,
     TouchControllerCommModeUDP = 1,
@@ -29,12 +29,12 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
     [super viewDidLoad];
     self.title = localize(@"preference.touchcontroller.title", nil);
 
-    // 添加关闭按钮
+    // Add the close button
     self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemClose target:self action:@selector(actionClose)];
 
     // Adapt to the custom launcher background: make this view controller transparent so the global background (image/video) shows through.
-    // 虽然父类 PLPrefTableViewController 的 viewDidLoad 已调用 makeViewControllerTransparent，
-    // 但此处再次调用以确保本子类的背景设置在所有初始化完成后仍然正确。
+    // Although the superclass PLPrefTableViewController's viewDidLoad already calls makeViewControllerTransparent,
+    // it is called again here to make sure this subclass's background setting is still correct after all initialization completes.
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
 
     // Listen for background UI effect changes: when the user switches between frosted glass and translucent, or adjusts the opacity,
@@ -48,10 +48,10 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
 - (void)initViewCreation {
     __weak typeof(self) weakSelf = self;
 
-    // 确保所有选项都可见
+    // Make sure every option is visible
     self.prefSectionsVisible = YES;
 
-    // 设置偏好获取和保存块
+    // Set the preference getter and setter blocks
     self.getPreference = ^id(NSString *section, NSString *key){
         NSString *keyFull = [NSString stringWithFormat:@"%@.%@", section, key];
         return getPrefObject(keyFull);
@@ -61,10 +61,10 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
         setPrefObject(keyFull, value);
     };
 
-    // 调用父类初始化
+    // Call the superclass initializer
     [super initViewCreation];
 
-    // 通信方式选择
+    // Communication method selection
     self.typeChildPane = ^void(UITableViewCell *cell, NSString *section, NSString *key, NSDictionary *item) {
         cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
         cell.selectionStyle = UITableViewCellSelectionStyleGray;
@@ -83,19 +83,19 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
         }
     };
 
-    // 按钮类型
+    // Button type
     self.typeButton = ^void(UITableViewCell *cell, NSString *section, NSString *key, NSDictionary *item) {
         cell.selectionStyle = UITableViewCellSelectionStyleGray;
         cell.textLabel.text = item[@"title"];
         cell.textLabel.textColor = weakSelf.view.tintColor;
     };
 
-    // 滑块类型（震动强度）
+    // Slider type (vibration strength)
     self.typeSlider = ^void(UITableViewCell *cell, NSString *section, NSString *key, NSDictionary *item) {
         cell.selectionStyle = UITableViewCellSelectionStyleNone;
         cell.textLabel.text = item[@"title"];
 
-        // 创建滑块
+        // Create the slider
         UISlider *slider = [[UISlider alloc] initWithFrame:CGRectMake(0, 0, 200, 30)];
         NSInteger value = [weakSelf.getPreference(section, key) integerValue];
         if (value < 1) value = 1;
@@ -105,7 +105,7 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
         slider.maximumValue = [item[@"max"] floatValue];
         slider.continuous = YES;
 
-        // 设置详细文本
+        // Set the detail text
         switch (value) {
             case 1:
                 cell.detailTextLabel.text = localize(@"preference.touchcontroller.vibrate.intensity.light", nil) ?: @"Light";
@@ -121,14 +121,14 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
                 break;
         }
 
-        // 滑块变化处理
+        // Slider change handling
         [slider addTarget:weakSelf action:@selector(sliderValueChanged:) forControlEvents:UIControlEventValueChanged];
 
-        // 将滑块添加到附件视图
+        // Add the slider to the accessory view
         cell.accessoryView = slider;
     };
 
-    // 开关类型
+    // Switch type
     self.typeSwitch = ^void(UITableViewCell *cell, NSString *section, NSString *key, NSDictionary *item) {
         UISwitch *view = [[UISwitch alloc] init];
         NSArray *customSwitchValue = item[@"customSwitchValue"];
@@ -141,10 +141,10 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
         cell.accessoryView = view;
     };
 
-    // 设置偏好设置部分
+    // Set up the preferences section
     self.prefSections = @[@"control"];
 
-    // 配置设置内容
+    // Configure the settings content
     self.prefContents = @[
         @[
             @{@"key": @"mod_touch_mode",
@@ -189,12 +189,12 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
     ];
 }
 
-// 滑块值变化处理
+// Slider value change handling
 - (void)sliderValueChanged:(UISlider *)slider {
     NSInteger value = (NSInteger)round(slider.value);
     self.setPreference(@"control", @"mod_touch_vibrate_intensity", @(value));
 
-    // 更新详细文本
+    // Update the detail text
     UITableViewCell *cell = (UITableViewCell *)slider.superview;
     while (cell && ![cell isKindOfClass:[UITableViewCell class]]) {
         cell = (UITableViewCell *)cell.superview;
@@ -221,7 +221,7 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
 - (void)updateTouchControllerSetting:(TouchControllerCommMode)mode {
     switch (mode) {
         case TouchControllerCommModeDisabled:
-            // 禁用 TouchController
+            // Disable TouchController
             self.setPreference(@"control", @"mod_touch_enable", @NO);
             self.setPreference(@"control", @"mod_touch_mode", @0);
             [self removeUDPEnvironmentVariable];
@@ -229,7 +229,7 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
             break;
 
         case TouchControllerCommModeUDP:
-            // 启用 UDP 模式
+            // Enable UDP mode
             self.setPreference(@"control", @"mod_touch_enable", @YES);
             self.setPreference(@"control", @"mod_touch_mode", @1);
             [self setUDPEnvironmentVariable];
@@ -237,7 +237,7 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
             break;
 
         case TouchControllerCommModeStaticLib:
-            // 启用静态库模式
+            // Enable static library mode
             self.setPreference(@"control", @"mod_touch_enable", @YES);
             self.setPreference(@"control", @"mod_touch_mode", @2);
             [self removeUDPEnvironmentVariable];
@@ -271,12 +271,12 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
                                                                    message:nil
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
 
-    // 获取当前模式
+    // Get the current mode
     NSInteger currentMode = [self.getPreference(@"control", @"mod_touch_mode") integerValue];
     if (currentMode == 0) currentMode = TouchControllerCommModeDisabled;
     if (![self.getPreference(@"control", @"mod_touch_enable") boolValue]) currentMode = TouchControllerCommModeDisabled;
 
-    // 禁用选项
+    // Disabled option
     UIAlertAction *disableAction = [UIAlertAction actionWithTitle:localize(@"preference.touchcontroller.mode.disabled", nil) ?: @"Disabled"
                                                              style:UIAlertActionStyleDestructive
                                                            handler:^(UIAlertAction * _Nonnull action) {
@@ -288,7 +288,7 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
     }
     [alert addAction:disableAction];
 
-    // UDP 模式选项
+    // UDP mode option
     UIAlertAction *udpAction = [UIAlertAction actionWithTitle:localize(@"preference.touchcontroller.mode.udp", nil) ?: @"UDP Protocol"
                                                          style:UIAlertActionStyleDefault
                                                        handler:^(UIAlertAction * _Nonnull action) {
@@ -301,7 +301,7 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
     }
     [alert addAction:udpAction];
 
-    // 静态库模式选项
+    // Static library mode option
     UIAlertAction *staticLibAction = [UIAlertAction actionWithTitle:localize(@"preference.touchcontroller.mode.staticlib", nil) ?: @"Static Library"
                                                                 style:UIAlertActionStyleDefault
                                                               handler:^(UIAlertAction * _Nonnull action) {
@@ -319,7 +319,7 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
                                               style:UIAlertActionStyleCancel
                                             handler:nil]];
 
-    // iPad 支持
+    // iPad support
     if ([UIDevice currentDevice].userInterfaceIdiom == UIUserInterfaceIdiomPad) {
         alert.popoverPresentationController.sourceView = self.view;
         alert.popoverPresentationController.sourceRect = CGRectMake(self.view.bounds.size.width / 2, self.view.bounds.size.height / 2, 1, 1);

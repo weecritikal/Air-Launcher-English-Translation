@@ -3,7 +3,7 @@
 //  Amethyst
 //
 //  Shader version selection view controller implementation
-//  重构版：参照 FCL/ZL2 风格添加侧边筛选面板（下载源/版本/加载器/排序 chips）
+//  Refactored: added a side filter panel modeled on the FCL/ZL2 style (download source / version / loader / sort chips)
 //
 
 #import "ShaderVersionViewController.h"
@@ -16,7 +16,7 @@
 #import "BackgroundManager.h"
 
 // ============================================================================
-// 下载源常量（与 ShaderVersion.apiSource 字段保持一致：1=Modrinth, 2=CurseForge）
+// Download source constants (kept consistent with the ShaderVersion.apiSource field: 1=Modrinth, 2=CurseForge)
 // ============================================================================
 static const NSInteger kSourceModrinth    = 1;
 static const NSInteger kSourceCurseForge  = 2;
@@ -150,7 +150,7 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
         if (strongSelf) [strongSelf updateTableHeaderHeight];
     };
 
-    // 用搜索阶段已有的 shaderItem 数据填充（无需额外 API 调用）
+    // Fill in using the shaderItem data already obtained during the search phase (no extra API call needed)
     [self.detailHeaderView configureWithIconURL:self.shaderItem.iconURL
                                           title:self.shaderItem.displayName
                                          author:self.shaderItem.author
@@ -243,7 +243,7 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
     }
     [self addChipToStack:self.versionChipStack title:@"Loading..." selected:NO action:NULL];
 
-    // ----- 第 3 行：加载器筛选（动态填充，初始显示"加载中"）-----
+    // ----- Row 3: loader filter (filled dynamically, initially shows "Loading") -----
     {
         UIScrollView *scrollOut = nil;
         UIStackView *chipOut = nil;
@@ -610,20 +610,20 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
 #pragma mark - 数据拉取
 
 /// Fetch the version list from the currently selected download source
-/// Modrinth 源 → ModrinthAPI.getVersionsForShaderWithID
-/// CurseForge 源 → CurseForgeAPI.getVersionsForModWithID（CurseForge 无独立 shader 方法，
-///                 复用 mod 版本接口；ModVersion 与 ShaderVersion 接口完全一致，可安全转换）
+/// Modrinth source → ModrinthAPI.getVersionsForShaderWithID
+/// CurseForge source → CurseForgeAPI.getVersionsForModWithID (CurseForge has no dedicated shader method,
+///                 so the mod version interface is reused; ModVersion and ShaderVersion have identical interfaces, so the cast is safe)
 - (void)fetchVersionsFromCurrentSource {
     [self.activityIndicator startAnimating];
 
     if (self.selectedSource == kSourceCurseForge) {
         // ===== The CurseForge source =====
-        // CurseForgeAPI 没有专门的 shader 版本接口，复用 getVersionsForModWithID:。
-        // 该方法返回 ModVersion 数组，但 ModVersion 与 ShaderVersion 的属性完全一致
+        // CurseForgeAPI has no dedicated shader version interface, so getVersionsForModWithID: is reused.
+        // That method returns an array of ModVersion, but ModVersion and ShaderVersion have identical properties
         // （name/versionNumber/datePublished/gameVersions/loaders/primaryFile/versionType
-        //   /apiSource/fileSize/fileId/projectId），利用 Objective-C 动态消息派发，
-        //   ShaderVersionTableViewCell.configureWithVersion: 调用的所有 selector 在 ModVersion
-        //   上均有实现，运行时可安全工作。
+        //   /apiSource/fileSize/fileId/projectId), and thanks to Objective-C dynamic message dispatch,
+        //   every selector called by ShaderVersionTableViewCell.configureWithVersion: is implemented on
+        //   ModVersion, so it works safely at runtime.
         [[CurseForgeAPI sharedInstance] getVersionsForModWithID:self.shaderItem.onlineID
                                                      completion:^(NSArray<ModVersion *> * _Nullable versions, NSError * _Nullable error) {
             dispatch_async(dispatch_get_main_queue(), ^{
@@ -684,7 +684,7 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
 
     // FCL style: "All" is selected by default, but if preferredGameVersion/preferredLoader
     // are in the list they are selected automatically (so the user does not have to filter by hand)
-    // 补齐与 ModVersionViewController 不对称的 preferred 自动选中逻辑（阶段3统一）
+    // Fill in the preferred auto-selection logic that was asymmetric with ModVersionViewController (phase 3 unification)
     self.selectedGameVersion = self.availableGameVersions.firstObject ?: @"All";
     self.selectedLoader = self.availableLoaders.firstObject ?: @"All";
 
@@ -734,9 +734,9 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
     NSArray<ShaderVersion *> *sorted = [self sortVersions:filtered];
 
     // ----- 3. FCL style: pin the versions matching the preferred version + loader to the top -----
-    // 用户从 profile（如 optifine + 1.21.1）进入版本列表时，
+    // When the user enters the version list from a profile (e.g. optifine + 1.21.1),
     // exact matches are pinned to the top so they do not have to be hunted for in a long list
-    // 补齐与 ModVersionViewController 不对称的 preferred 置顶逻辑（阶段3统一）
+    // Fill in the preferred pin-to-top logic that was asymmetric with ModVersionViewController (phase 3 unification)
     if (self.preferredGameVersion.length > 0 || self.preferredLoader.length > 0) {
         NSMutableArray<ShaderVersion *> *pinned = [NSMutableArray array];
         NSMutableArray<ShaderVersion *> *rest = [NSMutableArray array];
@@ -767,8 +767,8 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
     if (!versions || versions.count <= 1) return versions;
 
     // Relevance / downloads: keep the original API order
-    // （ShaderVersion 模型无单版本下载量字段，下载量排序回退为原始顺序，
-    //   下载量数据仅存在于项目级别 ShaderItem.downloads）
+    // (The ShaderVersion model has no per-version download count field, so sorting by downloads falls back to the original order;
+    //   download data only exists at the project level in ShaderItem.downloads)
     if ([self.selectedSort isEqualToString:kSortRelevance] ||
         [self.selectedSort isEqualToString:kSortDownloads]) {
         return versions;

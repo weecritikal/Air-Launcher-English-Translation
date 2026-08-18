@@ -2,7 +2,7 @@
 //  ResourcePackItem.m
 //  Amethyst
 //
-//  资源包数据模型实现
+//  Resource pack model implementation
 //
 
 #import "ResourcePackItem.h"

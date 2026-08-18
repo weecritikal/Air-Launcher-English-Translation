@@ -146,16 +146,16 @@
 @end
 
 #pragma mark - PLDisplayLinkTarget
-// CADisplayLink 回调 target 类
+// CADisplayLink callback target class
 //
-// 关键修复（Vulkan FPS 显示无效）：
-// 之前使用 [CADisplayLink displayLinkWithTarget:block selector:@selector(invoke)]
-// 传递 block，但 block 的 invoke 方法签名 -(void)invoke 与 CADisplayLink 期望的
-// -(void)selector:(CADisplayLink*)link 签名不匹配，导致回调不触发。
-// 此类提供正确签名的 displayLinkTick: 方法，确保 CADisplayLink 回调正确触发。
+// Key fix (Vulkan FPS display not working):
+// Previously [CADisplayLink displayLinkWithTarget:block selector:@selector(invoke)] was used
+// to pass a block, but the block's invoke method signature -(void)invoke does not match the
+// -(void)selector:(CADisplayLink*)link signature CADisplayLink expects, so the callback never fired.
+// This class provides a displayLinkTick: method with the correct signature, ensuring the CADisplayLink callback fires properly.
 @interface PLDisplayLinkTarget : NSObject
-@property(nonatomic, assign) BOOL isVulkanMode;  // 配置预期 Vulkan 路径（仅诊断日志用，实际决策由 pojavIsActualVulkanPath() 运行时判定）
-@property(nonatomic, assign) NSUInteger tickCount;  // 诊断用：累计 tick 次数
+@property(nonatomic, assign) BOOL isVulkanMode;  // The configured expected Vulkan path (for diagnostic logs only; the real decision is made at runtime by pojavIsActualVulkanPath())
+@property(nonatomic, assign) NSUInteger tickCount;  // Diagnostics: cumulative tick count
 @end
 
 @implementation PLDisplayLinkTarget
@@ -169,25 +169,25 @@
     return self;
 }
 
-// CADisplayLink 回调方法（正确签名：带 CADisplayLink* 参数）
+// CADisplayLink callback method (correct signature: takes a CADisplayLink* parameter)
 //
-// 关键修复（Vulkan/MoltenVK+OpenGL FPS 显示错误）：
-// 之前用 viewDidLoad 时的静态字符串推断（isVulkanMode）决定是否递增 FPS 计数器，
-// 但 graphicsApi=default 由 MC 内部决定，无法预判；且 MC 实际选择可能与配置不符。
-// 现在每帧动态查询 pojavIsActualVulkanPath()（读 clientAPI == GLFW_NO_API），
-// 与 MC 真实渲染路径一致，避免：
-//   - 双重计数：Vulkan 渲染器但 MC 选 GL 路径，pojavSwapBuffers + displayLink 都计数
-//   - 漏计数：graphicsApi=prefer_opengl 但 MC 走 Vulkan，displayLink 未启用 fallback
+// Key fix (incorrect FPS display for Vulkan/MoltenVK+OpenGL):
+// Previously the static string inferred at viewDidLoad time (isVulkanMode) decided whether to increment the FPS counter,
+// but graphicsApi=default is decided internally by MC and cannot be predicted; moreover MC's actual choice may differ from the configuration.
+// Now pojavIsActualVulkanPath() is queried dynamically every frame (reading clientAPI == GLFW_NO_API),
+// which matches MC's real rendering path and avoids:
+//   - Double counting: with a Vulkan renderer but MC choosing the GL path, both pojavSwapBuffers and displayLink would count
+//   - Missed counting: with graphicsApi=prefer_opengl but MC taking the Vulkan path, the displayLink fallback would not be enabled
 - (void)displayLinkTick:(CADisplayLink *)link {
     [GyroInput tick];
     [ControllerInput tick];
-    // 动态判定：仅当 MC 真实走 Vulkan 路径时才递增 FPS 计数器
+    // Dynamic decision: only increment the FPS counter when MC is really taking the Vulkan path
     BOOL actualVulkanPath = pojavIsActualVulkanPath();
     if (actualVulkanPath) {
         pojavIncrementFpsCounter();
     }
     _tickCount++;
-    // 诊断日志：前 5 次回调 + 状态切换时输出，便于追踪 clientAPI 变化
+    // Diagnostic log: emitted for the first 5 callbacks and on state changes, to make clientAPI changes easy to trace
     static BOOL s_lastActualVulkanPath = NO;
     BOOL stateChanged = (s_lastActualVulkanPath != actualVulkanPath);
     if (_tickCount <= 5 || stateChanged) {
@@ -226,10 +226,10 @@ static GameSurfaceView* pojavWindow;
 @interface SurfaceViewController ()<UITextFieldDelegate, UIGestureRecognizerDelegate> {
 }
 
-// FPS/内存监控相关（FPS 在 native pojavSwapBuffers 中计数，参照 FCL/ZL2）
-@property(nonatomic) NSTimer *statsTimer;                 // 低频定时器，1s 一次
-@property(nonatomic) CADisplayLink *statsDisplayLink;     // 渲染循环引用（用于 Gyro/Controller tick 和失效）
-@property(nonatomic, strong) id statsDisplayLinkTarget;   // CADisplayLink 的 target（强引用防释放）
+// FPS/memory monitoring (FPS is counted in the native pojavSwapBuffers, modeled on FCL/ZL2)
+@property(nonatomic) NSTimer *statsTimer;                 // Low-frequency timer, once per second
+@property(nonatomic) CADisplayLink *statsDisplayLink;     // Render loop reference (used for Gyro/Controller ticks and invalidation)
+@property(nonatomic, strong) id statsDisplayLinkTarget;   // The CADisplayLink target (strong reference to prevent deallocation)
 
 @property(nonatomic) NSDictionary* metadata;
 @property(nonatomic) TrackedTextField *inputTextField;
@@ -239,14 +239,14 @@ static GameSurfaceView* pojavWindow;
 
 @property(nonatomic) UILongPressGestureRecognizer* longPressGesture, *longPressTwoGesture;
 @property(nonatomic) UITapGestureRecognizer *tapGesture, *doubleTapGesture;
-// TouchController 移动视角手势：右半区单指滑动
+// TouchController look-around gesture: single-finger swipe on the right half
 @property(nonatomic) UIPanGestureRecognizer *moveViewPanGesture;
 
 @property(nonatomic) id mouseConnectCallback, mouseDisconnectCallback;
 @property(nonatomic) id controllerConnectCallback, controllerDisconnectCallback;
-// 关键修复（UI 累积异常）：MousePointerUpdated 块观察者之前未存储，
-// 无法在 dealloc 中移除，导致每次进出游戏都泄漏一个观察者 + 对 self 的强引用。
-// 现存为属性，dealloc 中统一移除。
+// Key fix (accumulating UI anomaly): the MousePointerUpdated block observer was previously not stored,
+// so it could not be removed in dealloc, leaking one observer plus a strong reference to self every time the game was entered and exited.
+// It is now stored as a property and removed in dealloc.
 @property(nonatomic) id mousePointerUpdatedCallback;
 
 @property(nonatomic) CGFloat screenScale;
@@ -267,35 +267,35 @@ static GameSurfaceView* pojavWindow;
 @property(nonatomic, strong) UITextField *touchControllerTextField;
 @property(nonatomic) BOOL touchControllerTextInputEnabled;
 
-// 阶段13/16：启动遮罩层（参照 FCL/ZL2 的启动进度显示，JVM 启动到首帧渲染期间显示）
+// Phase 13/16: launch overlay layer (modeled on the FCL/ZL2 launch progress display, shown from JVM startup until the first frame is rendered)
 //
-// 重要设计说明（参照 FCL/ZL2）：
-//   launchOverlayView 的 userInteractionEnabled 必须为 NO，使其不拦截触摸事件。
-//   这样视图层级下方的 gameMenuOverlay（悬浮球 + FPS 显示）在启动期间仍可
-//   被用户拖动和点击。这是 FCL/ZL2 的做法——启动遮罩层是纯视觉层，不参与
-//   交互。所有子控件（图标、进度条、文字）均为展示型，不需要接收触摸。
+// Important design notes (modeled on FCL/ZL2):
+//   launchOverlayView.userInteractionEnabled must be NO so that it does not intercept touch events.
+//   That way the gameMenuOverlay below it in the view hierarchy (floating ball + FPS display) can still be
+//   dragged and tapped by the user during launch. This is how FCL/ZL2 do it - the launch overlay is a purely
+//   visual layer that takes no part in interaction. All its subviews (icon, progress bar, text) are presentational and need no touches.
 //
-//   视图层级（从下到上）：
-//     rootView (游戏渲染表面)
-//       → menuView (底部弹出菜单)
-//         → menuDimView (菜单背景遮罩)
-//           → gameMenuOverlay (悬浮球 + FPS 显示) ← 需要可交互
-//             → launchOverlayView (启动遮罩层) ← userInteractionEnabled = NO
+//   View hierarchy (bottom to top):
+//     rootView (game rendering surface)
+//       → menuView (bottom pop-up menu)
+//         → menuDimView (menu background dimming layer)
+//           → gameMenuOverlay (floating ball + FPS display) ← must stay interactive
+//             → launchOverlayView (launch overlay layer) ← userInteractionEnabled = NO
 //
-//   触摸事件流程：
-//     1. 用户触摸屏幕 → UIKit 从最顶层 view 开始 hitTest
-//     2. launchOverlayView.userInteractionEnabled = NO → hitTest 返回 nil
-//     3. 触摸穿透到 gameMenuOverlay
-//     4. gameMenuOverlay.hitTest 检查是否命中 menuButton/statsLabel
-//        - 命中 → 返回对应控件，用户可拖动/点击
-//        - 未命中 → 返回 nil，触摸继续穿透到游戏画面
+//   Touch event flow:
+//     1. The user touches the screen → UIKit starts hitTest from the topmost view
+//     2. launchOverlayView.userInteractionEnabled = NO → hitTest returns nil
+//     3. The touch passes through to gameMenuOverlay
+//     4. gameMenuOverlay.hitTest checks whether menuButton/statsLabel was hit
+//        - Hit → returns that control, and the user can drag/tap it
+//        - Not hit → returns nil and the touch keeps passing through to the game view
 @property(nonatomic, strong) UIView *launchOverlayView;
 @property(nonatomic, strong) CAGradientLayer *launchGradientLayer;
 @property(nonatomic, strong) UIActivityIndicatorView *launchSpinner;
 @property(nonatomic, strong) UILabel *launchTitleLabel;
 @property(nonatomic, assign) NSTimeInterval launchStartTime;
 @property(nonatomic, assign) BOOL launchOverlayDismissed;
-@property(nonatomic, strong) UIButton *launchCancelButton;     // 取消启动按钮
+@property(nonatomic, strong) UIButton *launchCancelButton;     // Cancel launch button
 
 @end
 
@@ -593,8 +593,8 @@ static GameSurfaceView* pojavWindow;
 
 #pragma mark - TouchController Capability
 
-// 编码 CapabilityMessage (type=5)
-// 格式: 4B type (big endian) + 1B name_len + N B name (UTF-8) + 1B enabled (0/1)
+// Encode CapabilityMessage (type=5)
+// Format: 4B type (big endian) + 1B name_len + N B name (UTF-8) + 1B enabled (0/1)
 - (NSData *)encodeCapabilityMessageWithName:(NSString *)name enabled:(BOOL)enabled {
     NSData *nameData = [name dataUsingEncoding:NSUTF8StringEncoding];
     if (!nameData) {
@@ -615,25 +615,25 @@ static GameSurfaceView* pojavWindow;
     return data;
 }
 
-// 编码 InitializeMessage (type=10)
-// 供未来启动器主动初始化使用，当前未调用
+// Encode InitializeMessage (type=10)
+// Reserved for the launcher to initialize proactively in the future; currently not called
 - (NSData *)encodeInitializeMessage {
     int32_t type = htonl(PROXY_MESSAGE_TYPE_INITIALIZE);
     return [NSData dataWithBytes:&type length:4];
 }
 
-// 在收到 InitializeMessage 后调用，向 Mod 声明启动器支持的能力
+// Called after receiving an InitializeMessage, to declare the launcher's capabilities to the mod
 - (void)sendCapabilities {
     if (self.touchControllerTransportHandle < 0) {
         NSLog(@"[TouchController] Cannot send capabilities: transport not initialized");
         return;
     }
 
-    // 发送 text_status 能力：声明启动器会通过 InputStatusMessage 上报文本编辑状态
+    // Send the text_status capability: declares that the launcher will report text editing state via InputStatusMessage
     NSData *textStatusCap = [self encodeCapabilityMessageWithName:@"text_status" enabled:YES];
     [TouchControllerBridge sendToTransport:self.touchControllerTransportHandle data:textStatusCap];
 
-    // 发送 keyboard_show 能力：声明启动器会响应 KeyboardShowMessage 显示/隐藏键盘
+    // Send the keyboard_show capability: declares that the launcher will respond to KeyboardShowMessage to show/hide the keyboard
     NSData *keyboardShowCap = [self encodeCapabilityMessageWithName:@"keyboard_show" enabled:YES];
     [TouchControllerBridge sendToTransport:self.touchControllerTransportHandle data:keyboardShowCap];
 
@@ -754,8 +754,8 @@ static GameSurfaceView* pojavWindow;
             break;
         }
         case PROXY_MESSAGE_TYPE_CAPABILITY: {
-            // Mod → launcher 方向的能力协商（未来扩展点）
-            // 当前启动器不处理 Mod 声明的能力，仅记录日志
+            // Capability negotiation in the mod → launcher direction (future extension point)
+            // The launcher currently does not handle capabilities declared by the mod, it only logs them
             if (messageData.length >= 6) {
                 uint8_t nameLen;
                 [messageData getBytes:&nameLen range:NSMakeRange(4, 1)];
@@ -788,19 +788,19 @@ static GameSurfaceView* pojavWindow;
 // åå§åææ¬è¾å¥å­æ®µ
 #pragma mark - GestureRecognizer Delegate
 
-// 仅 moveViewPanGesture 需要特殊判定；其他手势保持默认行为
+// Only moveViewPanGesture needs special handling; other gestures keep the default behavior
 - (BOOL)gestureRecognizerShouldBegin:(UIGestureRecognizer *)gestureRecognizer {
     if (gestureRecognizer == self.moveViewPanGesture) {
-        // 条件 1: TouchController 必须启用
+        // Condition 1: TouchController must be enabled
         if (!getPrefBool(@"control.mod_touch_enable")) return NO;
-        // 条件 2: 必须是静态库模式（mode == 2）
+        // Condition 2: must be in static library mode (mode == 2)
         NSInteger mode = [getPrefObject(@"control.mod_touch_mode") integerValue];
         if (mode != 2) return NO;
-        // 条件 3: 移动视角开关必须打开
+        // Condition 3: the look-around toggle must be on
         if (!getPrefBool(@"control.mod_touch_moveview_enable")) return NO;
-        // 条件 4: 必须在游戏内（isGrabbing 为 true）
+        // Condition 4: must be in game (isGrabbing is true)
         if (isGrabbing != JNI_TRUE) return NO;
-        // 条件 5: 触摸起点必须在 touchView 右半区
+        // Condition 5: the touch must start in the right half of touchView
         CGPoint location = [gestureRecognizer locationInView:self.touchView];
         if (location.x < self.touchView.bounds.size.width / 2.0) return NO;
         return YES;
@@ -810,9 +810,9 @@ static GameSurfaceView* pojavWindow;
 
 #pragma mark - TouchController MoveView Gesture
 
-// 处理右半区滑动手势，发送 MoveViewMessage 给 TouchController
+// Handle the right-half swipe gesture and send a MoveViewMessage to TouchController
 - (void)handleMoveViewPanGesture:(UIPanGestureRecognizer *)gesture {
-    // 双重检查（防御性编程，即使 gestureRecognizerShouldBegin 返回 YES 也再次验证）
+    // Double check (defensive programming: verify again even though gestureRecognizerShouldBegin returned YES)
     if (!getPrefBool(@"control.mod_touch_enable")) return;
     if (!getPrefBool(@"control.mod_touch_moveview_enable")) return;
     if (isGrabbing != JNI_TRUE) return;
@@ -822,24 +822,24 @@ static GameSurfaceView* pojavWindow;
 
     switch (panGesture.state) {
         case UIGestureRecognizerStateBegan:
-            // 起始位置无需特殊处理，translation 已经是相对起点
+            // The start position needs no special handling; translation is already relative to the start point
             break;
         case UIGestureRecognizerStateChanged: {
-            // 计算增量视角变化
-            // 注意：deltaPitch 对应 Y 轴（上下），deltaYaw 对应 X 轴（左右）
-            // 灵敏度系数：将屏幕像素转换为合理的视角变化
-            // 1.0 表示 1:1 映射（screenBased=true 时 Mod 端会乘以 sensitivity）
+            // Compute the incremental view angle change
+            // Note: deltaPitch corresponds to the Y axis (up/down) and deltaYaw to the X axis (left/right)
+            // Sensitivity factor: converts screen pixels into a reasonable view angle change
+            // 1.0 means a 1:1 mapping (when screenBased=true the mod side multiplies by sensitivity)
             float deltaPitch = (float)translation.y;
             float deltaYaw = (float)translation.x;
             [self sendMoveViewWithDeltaPitch:deltaPitch deltaYaw:deltaYaw];
-            // 重置 translation 为零，让下一帧 delta 是增量而非累计
+            // Reset translation to zero so the next frame's delta is incremental rather than cumulative
             [panGesture setTranslation:CGPointZero inView:self.touchView];
             break;
         }
         case UIGestureRecognizerStateEnded:
         case UIGestureRecognizerStateCancelled:
         case UIGestureRecognizerStateFailed:
-            // 清理状态（无需特殊操作，translation 已被重置或手势已结束）
+            // Clean up state (nothing special needed; translation has been reset or the gesture has ended)
             break;
         default:
             break;
@@ -925,37 +925,37 @@ static GameSurfaceView* pojavWindow;
         [self setNeedsUpdateOfHomeIndicatorAutoHidden];
     }
 
-    // 渲染循环 tick：Gyro/Controller 输入采样（FPS 计数已移至 native pojavSwapBuffers）
-    // Vulkan 模式下 MC 不调用 glfwSwapBuffers，FPS 计数器不递增，
-    // 使用 CADisplayLink 作为 fallback：每帧触发时递增计数器。
+    // Render loop tick: Gyro/Controller input sampling (FPS counting has moved into the native pojavSwapBuffers)
+    // In Vulkan mode MC does not call glfwSwapBuffers, so the FPS counter never increments;
+    // CADisplayLink is used as a fallback: the counter is incremented on every frame trigger.
     //
-    // 关键修复（Vulkan FPS 显示无效）：
-    //   之前使用 [CADisplayLink displayLinkWithTarget:tickInput selector:@selector(invoke)]
-    //   传递 block，但 block 的 invoke 方法签名是 -(void)invoke，而 CADisplayLink 期望的
-    //   selector 签名是 -(void)selector:(CADisplayLink*)link。签名不匹配导致回调不触发，
-    //   FPS 计数器永远不递增，显示为 0。
-    //   修复：使用专门的 target 类 PLDisplayLinkTarget，提供正确签名的回调方法。
+    // Key fix (Vulkan FPS display not working):
+    //   Previously [CADisplayLink displayLinkWithTarget:tickInput selector:@selector(invoke)] was used
+    //   to pass a block, but the block's invoke method signature is -(void)invoke, while the selector
+    //   signature CADisplayLink expects is -(void)selector:(CADisplayLink*)link. The mismatch meant the callback never fired,
+    //   so the FPS counter never incremented and always displayed 0.
+    //   Fix: use a dedicated target class, PLDisplayLinkTarget, that provides a callback method with the correct signature.
     //
-    //   另一个问题：currentRenderer 在 viewDidLoad 时从 PLProfiles 读取，但 JavaLauncher.m
-    //   可能在启动时修改 AMETHYST_RENDERER 环境变量（如 auto → ANGLE）。
-    //   因此同时检查 PLProfiles 和 AMETHYST_RENDERER 环境变量，任一为 Vulkan 即启用 fallback。
+    //   Another problem: currentRenderer is read from PLProfiles at viewDidLoad time, but JavaLauncher.m
+    //   may modify the AMETHYST_RENDERER environment variable at launch (e.g. auto → ANGLE).
+    //   Therefore both PLProfiles and the AMETHYST_RENDERER environment variable are checked, and the fallback is enabled if either is Vulkan.
     //
-    //   关键修复（Vulkan 渲染器 + OpenGL 路径的 FPS 计数）：
-    //   当 renderer=libMoltenVK.dylib 但 MC 26.2+ 选 prefer_opengl 时，MC 走 GL 路径
-    //   （glfwWindowHint(GLFW_OPENGL_API)），pojavSwapBuffers 会被调用（经 eglSwapBuffers）。
-    //   此时不应启用 CADisplayLink fallback，否则会与 pojavSwapBuffers 的 FPS 计数重复。
-    //   只有真正的 Vulkan 路径（graphicsApi=prefer_vulkan 且 renderer=libMoltenVK.dylib）
-    //   才需要 CADisplayLink fallback，因为 Vulkan 路径不调用 pojavSwapBuffers。
+    //   Key fix (FPS counting for the Vulkan renderer + OpenGL path):
+    //   When renderer=libMoltenVK.dylib but MC 26.2+ chooses prefer_opengl, MC takes the GL path
+    //   (glfwWindowHint(GLFW_OPENGL_API)) and pojavSwapBuffers is called (via eglSwapBuffers).
+    //   In that case the CADisplayLink fallback must not be enabled, otherwise it would double count with pojavSwapBuffers' FPS counting.
+    //   Only a genuine Vulkan path (graphicsApi=prefer_vulkan and renderer=libMoltenVK.dylib)
+    //   needs the CADisplayLink fallback, because the Vulkan path does not call pojavSwapBuffers.
     //
-    //   注意（阶段2修复）：此处的 configuredVulkanExpected 仅用于诊断日志（PLDisplayLinkTarget.isVulkanMode），
-    //   实际是否启用 fallback 由 displayLinkTick: 内部每帧动态查询 pojavIsActualVulkanPath()
-    //   （读 clientAPI == GLFW_NO_API）决定，与 MC 真实渲染路径一致。
+    //   Note (phase 2 fix): configuredVulkanExpected here is only used for diagnostic logs (PLDisplayLinkTarget.isVulkanMode);
+    //   whether the fallback is actually enabled is decided inside displayLinkTick: by dynamically querying pojavIsActualVulkanPath() every frame
+    //   (reading clientAPI == GLFW_NO_API), which matches MC's real rendering path.
     NSString *currentRenderer = [PLProfiles resolveKeyForCurrentProfile:@"renderer"];
     NSString *envRenderer = NSProcessInfo.processInfo.environment[@"AMETHYST_RENDERER"];
     NSString *graphicsApi = NSProcessInfo.processInfo.environment[@"AMETHYST_GRAPHICS_API"];
     BOOL isVulkanRenderer = [currentRenderer isEqualToString:@ RENDERER_NAME_VULKAN] ||
                             [envRenderer isEqualToString:@ RENDERER_NAME_VULKAN];
-    // 配置预期 Vulkan 路径：仅用于诊断日志，对比"配置预期"与"MC 实际选择"的差异
+    // Configured expected Vulkan path: used only for diagnostic logs, to compare the "configured expectation" with "what MC actually chose"
     BOOL configuredVulkanExpected = isVulkanRenderer &&
         ![graphicsApi isEqualToString:@"prefer_opengl"] &&
         ![graphicsApi isEqualToString:@"opengl"];
@@ -966,18 +966,18 @@ static GameSurfaceView* pojavWindow;
     CADisplayLink *displayLink = [CADisplayLink displayLinkWithTarget:linkTarget
                                                             selector:@selector(displayLinkTick:)];
     if (@available(iOS 15.0, tvOS 15.0, *)) {
-        // max_framerate 选项已移除：始终采用 30-120Hz 自适应范围。
-        // 屏幕硬件决定实际帧率（60Hz 设备仍为 60，120Hz ProMotion 设备可达 120），
-        // 不再人为限制在 60FPS。配合 disable_game_vsync 完整解锁 VSync 后帧率可超过屏幕刷新率。
+        // The max_framerate option has been removed: an adaptive 30-120Hz range is always used.
+        // The screen hardware determines the actual frame rate (a 60Hz device still runs at 60, a 120Hz ProMotion device can reach 120),
+        // rather than artificially capping at 60 FPS. Combined with disable_game_vsync to fully unlock VSync, the frame rate can exceed the screen refresh rate.
         displayLink.preferredFrameRateRange = CAFrameRateRangeMake(30, 120, 120);
     }
     [displayLink addToRunLoop:NSRunLoop.currentRunLoop forMode:NSRunLoopCommonModes];
     self.statsDisplayLink = displayLink;
-    self.statsDisplayLinkTarget = linkTarget;  // 强引用防止释放
+    self.statsDisplayLinkTarget = linkTarget;  // Strong reference to prevent deallocation
 
-    // 低频采样定时器：每 1 秒读取一次 native FPS 计数器和内存占用
-    // 参照 FCL/ZL2 的 1Hz 采样策略（FCL_GameMenu.java Thread.sleep(1000)）
-    // pojavGetAndResetFps() 读取并重置计数器，1 秒间隔直接返回 FPS 值
+    // Low-frequency sampling timer: reads the native FPS counter and memory usage once per second
+    // Modeled on the FCL/ZL2 1Hz sampling strategy (FCL_GameMenu.java Thread.sleep(1000))
+    // pojavGetAndResetFps() reads and resets the counter, so with a 1 second interval it returns the FPS value directly
     self.statsTimer = [NSTimer scheduledTimerWithTimeInterval:1.0
                                                       target:self
                                                     selector:@selector(updateGameStats)
@@ -1060,13 +1060,13 @@ static GameSurfaceView* pojavWindow;
     self.scrollPanGesture.delaysTouchesEnded = NO;
     [self.touchView addGestureRecognizer:self.scrollPanGesture];
 
-    // TouchController 移动视角手势：右半区单指滑动
+    // TouchController look-around gesture: single-finger swipe on the right half
     self.moveViewPanGesture = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handleMoveViewPanGesture:)];
     self.moveViewPanGesture.allowedTouchTypes = @[@(UITouchTypeDirect)];
     self.moveViewPanGesture.delegate = self;
     self.moveViewPanGesture.maximumNumberOfTouches = 1;
     self.moveViewPanGesture.minimumNumberOfTouches = 1;
-    // 不取消 touches 事件，让 touchesMoved 仍能触发（与 TC AddPointer 并存）
+    // Do not cancel touches events, so touchesMoved can still fire (coexisting with TC AddPointer)
     self.moveViewPanGesture.cancelsTouchesInView = NO;
     self.moveViewPanGesture.delaysTouchesBegan = NO;
     self.moveViewPanGesture.delaysTouchesEnded = NO;
@@ -1081,8 +1081,8 @@ static GameSurfaceView* pojavWindow;
     self.mousePointerView.userInteractionEnabled = NO;
     [self.touchView addSubview:self.mousePointerView];
 
-    // 关键修复（UI 累积异常）：将块观察者存为属性，dealloc 中移除。
-    // 之前返回值未存储，导致每次新建 SurfaceViewController 都泄漏一个观察者 + 强引用 self。
+    // Key fix (accumulating UI anomaly): store the block observer as a property and remove it in dealloc.
+    // Previously the return value was not stored, so every new SurfaceViewController leaked an observer plus a strong reference to self.
     self.mousePointerUpdatedCallback = [[NSNotificationCenter defaultCenter] addObserverForName:@"MousePointerUpdated" object:nil queue:[NSOperationQueue mainQueue] usingBlock:^(NSNotification * _Nonnull note) {
         [self reloadMousePointerImage];
     }];
@@ -1173,7 +1173,7 @@ static GameSurfaceView* pojavWindow;
         [self startTouchControllerMessageLoop];
     }
 
-    // 阶段13：显示启动遮罩层（在 launchMinecraft 之前显示，首帧渲染后自动移除）
+    // Phase 13: show the launch overlay layer (shown before launchMinecraft, removed automatically after the first frame is rendered)
     [self setupLaunchOverlay];
 
     [self launchMinecraft];
@@ -1193,13 +1193,13 @@ static GameSurfaceView* pojavWindow;
     [super viewDidAppear:animated];
     [self setNeedsUpdateOfPrefersPointerLocked];
 
-    // LAN 端口检测器已改为手动输入模式（LanPortDetector.h 说明），
-    // 自动检测（startDetecting/stopDetecting）已移除，无需在此启动。
+    // The LAN port detector has been switched to manual input mode (see LanPortDetector.h),
+    // and automatic detection (startDetecting/stopDetecting) has been removed, so nothing needs to be started here.
 }
 
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
-    // 更新启动遮罩层渐变背景的 frame（旋转/尺寸变化时）
+    // Update the frame of the launch overlay layer's gradient background (on rotation/size changes)
     if (self.launchGradientLayer && self.launchOverlayView) {
         self.launchGradientLayer.frame = self.launchOverlayView.bounds;
     }
@@ -1229,9 +1229,9 @@ static GameSurfaceView* pojavWindow;
     if (!getEntitlementValue(@"com.apple.private.memorystatus")) {
         return;
     }
-    // 必须与 JavaLauncher.m 中 launchJVM 的 allocmem 计算保持一致，
-    // 否则会出现 Jetsam 上限 < JVM Xmx + native 开销 的情况，
-    // 导致系统在 JVM 启动阶段 SIGKILL 进程（日志表现为 "XPC connection interrupted"）。
+    // This must stay consistent with the allocmem calculation in launchJVM in JavaLauncher.m,
+    // otherwise the Jetsam limit can end up below JVM Xmx + native overhead,
+    // causing the system to SIGKILL the process during JVM startup (which shows up in the log as "XPC connection interrupted").
     int allocmem;
     if (getPrefBool(@"java.auto_ram")) {
         CGFloat autoRatio = getEntitlementValue(@"com.apple.private.memorystatus") ? 0.4 : 0.25;
@@ -1239,7 +1239,7 @@ static GameSurfaceView* pojavWindow;
     } else {
         allocmem = (int)getPrefInt(@"java.allocated_memory");
     }
-    // 1024 MB 留给 JVM native 堆 + UIKit/Metal/EGL 等非 Java 堆开销。
+    // 1024 MB is reserved for the JVM native heap plus non-Java-heap overhead such as UIKit/Metal/EGL.
     int limit = allocmem + 1024;
     if (memorystatus_control(MEMORYSTATUS_CMD_SET_JETSAM_TASK_LIMIT, getpid(), limit, NULL, 0) == -1) {
         NSLog(@"Failed to set Jetsam task limit: error: %s", strerror(errno));
@@ -1316,25 +1316,25 @@ static GameSurfaceView* pojavWindow;
     if ([self.surfaceView.layer isKindOfClass:CAMetalLayer.class]) {
         CAMetalLayer *metalLayer = (CAMetalLayer *)self.surfaceView.layer;
         metalLayer.drawableSize = CGSizeMake(MAX(windowWidth, 1), MAX(windowHeight, 1));
-        // 解锁帧率（关闭垂直同步）：三缓冲。
-        // 默认 maximumDrawableCount（通常为 2）下，当两个 drawable 都在等待呈现时，
-        // nextDrawable 会阻塞到 vblank 释放一个 drawable，间接把渲染线程锁在刷新率。
-        // 设为 3（三缓冲）后几乎总有空闲 drawable，渲染线程不再因等待 drawable 而 stall，
-        // 配合 VSync 关闭可让帧率超过屏幕刷新率。该值是 Metal 低延迟/高吞吐渲染的标准设置。
-        // 注：此优化对 GL 类渲染器（经 CAMetalLayer 呈现）最有意义；Vulkan/MoltenVK 自管 swapchain。
+        // Unlock the frame rate (disable vertical sync): triple buffering.
+        // With the default maximumDrawableCount (usually 2), when both drawables are waiting to be presented,
+        // nextDrawable blocks until vblank releases one, indirectly locking the render thread to the refresh rate.
+        // Setting it to 3 (triple buffering) means there is almost always a free drawable, so the render thread no longer stalls waiting for one,
+        // and combined with VSync off the frame rate can exceed the screen refresh rate. This value is the standard setting for low-latency/high-throughput Metal rendering.
+        // Note: this optimization matters most for GL-family renderers (presented via CAMetalLayer); Vulkan/MoltenVK manages its own swapchain.
         metalLayer.maximumDrawableCount = 3;
 
-        // 显式设置 presentsWithTransaction=NO（默认值）。
-        // presentsWithTransaction=YES 会导致 presentDrawable 同步等待 Core Animation 事务提交，
-        // 增加延迟且不会提高帧率。设为 NO 让 presentDrawable 异步提交到 Core Animation，
-        // 渲染线程可以立即继续下一帧渲染，配合 eglSwapInterval(0) 实现帧率解锁。
-        // 这是 Metal 高吞吐渲染的标准配置。
+        // Explicitly set presentsWithTransaction=NO (the default value).
+        // presentsWithTransaction=YES makes presentDrawable wait synchronously for the Core Animation transaction to commit,
+        // which increases latency without improving the frame rate. Setting it to NO lets presentDrawable submit to Core Animation asynchronously,
+        // so the render thread can immediately continue rendering the next frame, which together with eglSwapInterval(0) unlocks the frame rate.
+        // This is the standard configuration for high-throughput Metal rendering.
         metalLayer.presentsWithTransaction = NO;
 
-        // 确保异步绘制开启（GameSurfaceView.initWithFrame 已设置，此处二次确认）
+        // Make sure asynchronous drawing is enabled (GameSurfaceView.initWithFrame already sets it; this is a second confirmation)
         metalLayer.drawsAsynchronously = YES;
 
-        // 记录 Metal 层配置（仅首次），帮助诊断帧率问题
+        // Log the Metal layer configuration (first time only), to help diagnose frame rate problems
         static BOOL s_loggedMetalConfig = NO;
         if (!s_loggedMetalConfig) {
             s_loggedMetalConfig = YES;
@@ -1420,10 +1420,10 @@ static GameSurfaceView* pojavWindow;
             return;
         }
         
-        // Validate accountId（用作账户文件名，传给 Java 端加载对应账户）
+        // Validate accountId (used as the account file name, passed to the Java side to load the corresponding account)
         NSString *accountId = currentAuth.authData[@"accountId"];
         if (!accountId || accountId.length == 0) {
-            // 兜底：极少数情况下 accountId 缺失（如旧账户未迁移），回退到 username
+            // Fallback: in very rare cases accountId is missing (e.g. an old account that was not migrated), so fall back to username
             accountId = currentAuth.authData[@"username"];
             if (!accountId || accountId.length == 0) {
                 accountId = @"Player";
@@ -1433,11 +1433,11 @@ static GameSurfaceView* pojavWindow;
         NSLog(@"[SurfaceViewController] Launching Minecraft with accountId: %@, version: %d, size: %dx%d",
               accountId, minVersion, windowWidth, windowHeight);
 
-        // Launch JVM（args[0] 传 accountId，Java 端 MinecraftAccount.load(accountId) 据此加载账户）
+        // Launch JVM (args[0] carries accountId; the Java side loads the account with MinecraftAccount.load(accountId))
         int launchResult = launchJVM(accountId, self.metadata, windowWidth, windowHeight, minVersion);
 
-        // JVM 启动失败（返回非 0）：移除启动遮罩层，让用户看到错误对话框
-        // launchJVM 内部失败时会调用 showDialog 显示错误，此处仅负责清理遮罩层
+        // JVM launch failed (non-zero return): remove the launch overlay so the user can see the error dialog
+        // launchJVM calls showDialog internally to display the error on failure, so here we only clean up the overlay
         if (launchResult != 0) {
             NSLog(@"[SurfaceViewController] JVM launch failed with code %d", launchResult);
             dispatch_async(dispatch_get_main_queue(), ^{
@@ -1449,63 +1449,63 @@ static GameSurfaceView* pojavWindow;
 
 #pragma mark - 阶段13/16：启动遮罩层（仿 FCL/ZL2 全屏启动进度显示）
 
-/// 创建并显示启动遮罩层（参照 FCL/ZL2 风格重构）：
+/// Create and show the launch overlay layer (refactored in the FCL/ZL2 style):
 ///
-/// 设计理念（参照 FCL/ZalithLauncher2）：
-///   - 启动遮罩层是纯视觉层，不拦截任何触摸事件
-///   - userInteractionEnabled = NO，让下层的 gameMenuOverlay（悬浮球/FPS）可交互
-///   - 深色渐变背景 + 毛玻璃效果，营造沉浸式启动体验
-///   - 居中信息卡片展示启动进度、阶段、Java 版本、内存、渲染器
-///   - 底部取消按钮允许用户中止卡住的启动流程
+/// Design philosophy (modeled on FCL/ZalithLauncher2):
+///   - The launch overlay is a purely visual layer and intercepts no touch events
+///   - userInteractionEnabled = NO, so the gameMenuOverlay underneath (floating ball/FPS) stays interactive
+///   - A dark gradient background plus a frosted glass effect creates an immersive launch experience
+///   - A centered info card shows launch progress, stage, Java version, memory and renderer
+///   - The cancel button at the bottom lets the user abort a stuck launch
 ///
-/// 视觉布局（从上到下）：
+/// Visual layout (top to bottom):
 ///   ┌─────────────────────────────────┐
-///   │         游戏图标 (72pt)          │
-///   │       旋转指示器 (Medium)        │
-///   │     "正在启动 Minecraft"         │
-///   │      当前阶段文案                │
+///   │         Game icon (72pt)         │
+///   │      Spinning indicator (Medium) │
+///   │     "Launching Minecraft"        │
+///   │      Current stage text          │
 ///   │   ━━━━━━━━━━━━━━━━ 45%          │
-///   │         已耗时 12秒              │
+///   │         Elapsed 12s              │
 ///   │  ┌─────────────────────────┐    │
 ///   │  │ Java 17 │ 2048MB │ gl4es │    │
 ///   │  └─────────────────────────┘    │
-///   │        [ 取消启动 ]              │
+///   │        [ Cancel launch ]         │
 ///   └─────────────────────────────────┘
 - (void)setupLaunchOverlay {
     // ============================================================
-    // FCL 风格启动界面：中间转圈圈 + 显示自定义启动器背景
+    // FCL style launch screen: a spinner in the middle over the custom launcher background
     // ============================================================
-    // 参照 FCL (FoldCraftLauncher) 的启动加载界面：
-    //   - 背景显示启动器的自定义壁纸（如果有）
-    //   - 屏幕正中央显示一个大的旋转加载指示器
-    //   - 指示器下方显示简短的标题文字（如"正在启动 Minecraft"）
-    //   - 不显示进度条、百分比、阶段文案、信息卡片等多余元素
-    //   - 底部保留一个小的"取消启动"按钮
+    // Modeled on the launch/loading screen of FCL (FoldCraftLauncher):
+    //   - The background shows the launcher's custom wallpaper (if any)
+    //   - A large spinning loading indicator is shown in the exact center of the screen
+    //   - A short title line is shown under the indicator (e.g. "Launching Minecraft")
+    //   - No progress bar, percentage, stage text, info card or other superfluous elements are shown
+    //   - A small "Cancel launch" button remains at the bottom
     //
-    // 之前的实现包含了图标、进度条、百分比、已耗时、信息卡片、
-    // 阶段轮转文案等大量元素，过于复杂。FCL 的设计理念是简洁：
-    // 用户只需要知道"正在加载"即可，不需要知道详细的阶段和进度。
+    // The previous implementation included the icon, a progress bar, a percentage, elapsed time, an info card,
+    // rotating stage text and many other elements, which was far too complex. FCL's design philosophy is simplicity:
+    // the user only needs to know that "it is loading", not the detailed stage and progress.
     self.launchStartTime = [NSDate timeIntervalSinceReferenceDate];
     self.launchOverlayDismissed = NO;
 
     // ========================================================================
-    // 全屏遮罩容器
+    // Full-screen overlay container
     // ========================================================================
-    // userInteractionEnabled = NO：让触摸穿透到下层的 gameMenuOverlay，
-    // 用户可在启动期间拖动悬浮球、查看 FPS。
-    // 取消按钮单独加到 self.view 上（不受此设置影响）。
+    // userInteractionEnabled = NO: lets touches pass through to the gameMenuOverlay below,
+    // so the user can drag the floating ball and check the FPS during launch.
+    // The cancel button is added to self.view separately (so this setting does not affect it).
     self.launchOverlayView = [[UIView alloc] initWithFrame:self.view.bounds];
     self.launchOverlayView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     self.launchOverlayView.userInteractionEnabled = NO;
     [self.view addSubview:self.launchOverlayView];
 
     // ========================================================================
-    // 背景层：显示自定义启动器背景
+    // Background layer: shows the custom launcher background
     // ========================================================================
-    // 有自定义壁纸时：透明遮罩 + 轻微暗化蒙层（增强文字可读性）
-    // 无自定义壁纸时：使用深色渐变作为回退
+    // When a custom wallpaper exists: transparent overlay + a slight darkening mask (to improve text readability)
+    // When there is no custom wallpaper: fall back to a dark gradient
     if ([[BackgroundManager sharedManager] hasBackground]) {
-        // 有自定义背景：透明遮罩 + 轻微暗化蒙层
+        // Custom background present: transparent overlay + a slight darkening mask
         self.launchOverlayView.backgroundColor = [UIColor clearColor];
         UIView *dimOverlay = [[UIView alloc] initWithFrame:self.launchOverlayView.bounds];
         dimOverlay.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
@@ -1513,7 +1513,7 @@ static GameSurfaceView* pojavWindow;
         dimOverlay.userInteractionEnabled = NO;
         [self.launchOverlayView addSubview:dimOverlay];
     } else {
-        // 无自定义背景：使用深色渐变
+        // No custom background: use a dark gradient
         CAGradientLayer *gradient = [CAGradientLayer layer];
         gradient.frame = self.launchOverlayView.bounds;
         gradient.colors = @[
@@ -1528,21 +1528,21 @@ static GameSurfaceView* pojavWindow;
     }
 
     // ========================================================================
-    // 中央内容容器（居中显示转圈圈 + 标题）
+    // Center content container (shows the spinner + title in the middle)
     // ========================================================================
     UIView *centerContainer = [[UIView alloc] init];
     centerContainer.translatesAutoresizingMaskIntoConstraints = NO;
     centerContainer.userInteractionEnabled = NO;
     [self.launchOverlayView addSubview:centerContainer];
 
-    // 大号旋转指示器（FCL 风格：屏幕正中央的大转圈）
+    // Large spinning indicator (FCL style: a big spinner in the exact center of the screen)
     self.launchSpinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleLarge];
     self.launchSpinner.translatesAutoresizingMaskIntoConstraints = NO;
     self.launchSpinner.color = [UIColor whiteColor];
     [self.launchSpinner startAnimating];
     [centerContainer addSubview:self.launchSpinner];
 
-    // 标题文字（转圈下方，简短提示）
+    // Title text (under the spinner, a short hint)
     self.launchTitleLabel = [[UILabel alloc] init];
     self.launchTitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.launchTitleLabel.text = localize(@"launch.title", @"Starting Minecraft");
@@ -1552,7 +1552,7 @@ static GameSurfaceView* pojavWindow;
     [centerContainer addSubview:self.launchTitleLabel];
 
     // ========================================================================
-    // 取消启动按钮（底部，独立添加到 self.view 不受遮罩穿透影响）
+    // Cancel launch button (at the bottom, added to self.view separately so the overlay pass-through does not affect it)
     // ========================================================================
     self.launchCancelButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.launchCancelButton.translatesAutoresizingMaskIntoConstraints = NO;
@@ -1569,36 +1569,36 @@ static GameSurfaceView* pojavWindow;
     // Layout constraints
     // ========================================================================
     [NSLayoutConstraint activateConstraints:@[
-        // 中央容器：水平居中，垂直居中
+        // Center container: horizontally and vertically centered
         [centerContainer.centerXAnchor constraintEqualToAnchor:self.launchOverlayView.centerXAnchor],
         [centerContainer.centerYAnchor constraintEqualToAnchor:self.launchOverlayView.centerYAnchor],
 
-        // 旋转指示器：容器顶部居中
+        // Spinning indicator: centered at the top of the container
         [self.launchSpinner.topAnchor constraintEqualToAnchor:centerContainer.topAnchor],
         [self.launchSpinner.centerXAnchor constraintEqualToAnchor:centerContainer.centerXAnchor],
 
-        // 标题：转圈下方
+        // Title: under the spinner
         [self.launchTitleLabel.topAnchor constraintEqualToAnchor:self.launchSpinner.bottomAnchor constant:16],
         [self.launchTitleLabel.leadingAnchor constraintEqualToAnchor:centerContainer.leadingAnchor],
         [self.launchTitleLabel.trailingAnchor constraintEqualToAnchor:centerContainer.trailingAnchor],
         [self.launchTitleLabel.bottomAnchor constraintEqualToAnchor:centerContainer.bottomAnchor],
 
-        // 取消按钮：底部安全区域上方
+        // Cancel button: above the bottom safe area
         [self.launchCancelButton.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-24],
         [self.launchCancelButton.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
         [self.launchCancelButton.widthAnchor constraintEqualToConstant:120],
         [self.launchCancelButton.heightAnchor constraintEqualToConstant:36],
     ]];
 
-    // 注册首帧渲染通知（egl_bridge.m 中 pojavSwapBuffers 首次调用时发送）
+    // Register for the first-frame-rendered notification (sent by pojavSwapBuffers in egl_bridge.m on its first call)
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(onFirstFrameRendered)
                                                  name:@"PojavFirstFrameRendered"
                                                object:nil];
 }
 
-/// 取消启动：用户点击"取消启动"按钮时调用。
-/// 终止 JVM 启动流程，移除遮罩层，返回启动器主界面。
+/// Cancel launch: called when the user taps the "Cancel launch" button.
+/// Terminates the JVM launch flow, removes the overlay and returns to the launcher main screen.
 - (void)cancelLaunch {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:localize(@"launch.cancel_confirm_title", @"Cancel launch?")
                                                                    message:localize(@"launch.cancel_confirm_message", @"Cancelling will stop the game from loading and return you to the launcher.")
@@ -1607,9 +1607,9 @@ static GameSurfaceView* pojavWindow;
                                               style:UIAlertActionStyleDestructive
                                             handler:^(UIAlertAction *action) {
         NSLog(@"[SurfaceViewController] User cancelled launch");
-        // 移除遮罩层
+        // Remove the overlay layer
         [self dismissLaunchOverlayOnError];
-        // 返回启动器
+        // Return to the launcher
         [[SurfaceViewController currentInstance].logOutputView dismissAndReturnToLauncher];
     }]];
     [alert addAction:[UIAlertAction actionWithTitle:localize(@"launch.cancel_confirm_no", @"Keep waiting")
@@ -1618,17 +1618,17 @@ static GameSurfaceView* pojavWindow;
     [self presentViewController:alert animated:YES completion:nil];
 }
 
-/// 定时器回调（每 0.5 秒）：
-/// 1. 基于已耗时计算当前阶段索引（每 2.5 秒一个阶段，避免 static 变量在多次启动间不重置）
-/// 2. 推进进度条（基于已耗时，封顶 95%）
-/// 3. 更新已耗时显示
+/// Timer callback (every 0.5 seconds):
+/// 1. Compute the current stage index from the elapsed time (one stage every 2.5 seconds, avoiding static variables that would not reset between launches)
+/// 2. Advance the progress bar (based on elapsed time, capped at 95%)
+/// 3. Update the elapsed time display
 - (void)updateLaunchStage {
-    // FCL 风格启动界面不再需要阶段轮转和进度推进。
-    // 此方法保留为空实现仅为兼容可能的旧调用点（实际上 setupLaunchOverlay
-    // 已不再创建 launchStageTimer，此方法不会被调用）。
+    // The FCL style launch screen no longer needs stage rotation or progress advancement.
+    // This method is kept as an empty implementation only for compatibility with possible old call sites (in fact setupLaunchOverlay
+    // no longer creates launchStageTimer, so this method is never called).
 }
 
-/// 首帧渲染通知回调：淡出并移除启动遮罩层
+/// First-frame-rendered notification callback: fade out and remove the launch overlay
 - (void)onFirstFrameRendered {
     dispatch_async(dispatch_get_main_queue(), ^{
         if (self.launchOverlayDismissed) return;
@@ -1638,10 +1638,10 @@ static GameSurfaceView* pojavWindow;
 
         NSTimeInterval elapsed = [NSDate timeIntervalSinceReferenceDate] - self.launchStartTime;
 
-        // 隐藏取消按钮（淡出动画与遮罩层一起进行）
+        // Hide the cancel button (its fade-out animates together with the overlay)
         [self.launchCancelButton setHidden:YES];
 
-        // 淡出移除遮罩层（FCL 风格：简洁的淡出过渡）
+        // Fade out and remove the overlay (FCL style: a simple fade transition)
         [UIView animateWithDuration:0.4
                               delay:0.1
                             options:UIViewAnimationOptionCurveEaseOut
@@ -1661,7 +1661,7 @@ static GameSurfaceView* pojavWindow;
     });
 }
 
-/// 启动失败时移除遮罩层（JVM 启动失败、metadata 为空等错误路径调用）
+/// Remove the overlay when launch fails (called from error paths such as JVM launch failure or empty metadata)
 - (void)dismissLaunchOverlayOnError {
     dispatch_async(dispatch_get_main_queue(), ^{
         if (self.launchOverlayDismissed) return;
@@ -2366,11 +2366,11 @@ static NSMutableDictionary *s_touchToFingerIdMap = nil;
 
 + (instancetype)currentInstance {
     UIViewController *rootVC = UIWindow.mainWindow.rootViewController;
-    // 情况1：rootViewController 就是 SurfaceViewController
+    // Case 1: the rootViewController is the SurfaceViewController itself
     if ([rootVC isKindOfClass:[SurfaceViewController class]]) {
         return (SurfaceViewController *)rootVC;
     }
-    // 情况2：SurfaceViewController 以模态方式呈现
+    // Case 2: the SurfaceViewController is presented modally
     UIViewController *presentedVC = rootVC.presentedViewController;
     if ([presentedVC isKindOfClass:[SurfaceViewController class]]) {
         return (SurfaceViewController *)presentedVC;
@@ -2385,30 +2385,30 @@ static NSMutableDictionary *s_touchToFingerIdMap = nil;
 #pragma mark - FPS/内存监控（参照 FCL egl_bridge.c 与 ZL2 MemoryUtils.kt）
 
 - (void)updateGameStats {
-    // 1. 读取 native swap buffer 计数器并重置（参照 FCL CallbackBridge.getFps()）
-    // pojavGetAndResetFps() 返回自上次调用以来的渲染帧数
-    // 采样间隔 1 秒（statsTimer 已改为 1s），所以返回值即为 FPS
+    // 1. Read and reset the native swap buffer counter (modeled on FCL CallbackBridge.getFps())
+    // pojavGetAndResetFps() returns the number of frames rendered since the last call
+    // The sampling interval is 1 second (statsTimer has been changed to 1s), so the return value is the FPS
     NSInteger fps = (NSInteger)pojavGetAndResetFps();
 
-    // 2. 获取内存占用（phys_footprint）
-    // 使用 task_vm_info 的 phys_footprint 字段，这是 iOS 上最准确的进程内存占用指标
-    // 包含常驻内存、压缩内存、GPU 内存（UMA 架构下），与 Xcode 内存表盘一致
-    // 参照 ZL2 MemoryUtils.kt 的系统级内存统计理念，在 iOS 上用 phys_footprint 等价
+    // 2. Get the memory usage (phys_footprint)
+    // Uses the phys_footprint field of task_vm_info, the most accurate process memory usage metric on iOS
+    // It includes resident memory, compressed memory and GPU memory (on the UMA architecture), matching the Xcode memory gauge
+    // Modeled on the system-level memory statistics idea of ZL2 MemoryUtils.kt, with phys_footprint as the iOS equivalent
     double memoryMB = [self currentPhysFootprintMB];
 
-    // 3. 更新 UI（GameMenuOverlayView 内部会 dispatch 到主线程）
+    // 3. Update the UI (GameMenuOverlayView dispatches to the main thread internally)
     if ([self.gameMenuOverlay isKindOfClass:[GameMenuOverlayView class]]) {
         [(GameMenuOverlayView *)self.gameMenuOverlay updateFPS:fps memoryUsageMB:memoryMB];
     }
 }
 
 - (double)currentPhysFootprintMB {
-    // 使用 TASK_VM_INFO flavor 读取 phys_footprint
-    // phys_footprint 是 Apple 推荐的进程内存占用指标，包含：
-    // - 常驻物理内存（resident_size）
-    // - 压缩内存
-    // - GPU 内存（iOS UMA 架构下 Metal 缓冲区映射到进程地址空间）
-    // 减去通过 mmap 共享的部分，与 Xcode/Memory Graph 显示的值一致
+    // Read phys_footprint using the TASK_VM_INFO flavor
+    // phys_footprint is Apple's recommended process memory usage metric, and includes:
+    // - Resident physical memory (resident_size)
+    // - Compressed memory
+    // - GPU memory (on the iOS UMA architecture, Metal buffers are mapped into the process address space)
+    // minus the portion shared via mmap, which matches the value shown by Xcode/Memory Graph
     task_vm_info_data_t vmInfo;
     mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
     kern_return_t kr = task_info(mach_task_self(), TASK_VM_INFO,
@@ -2416,28 +2416,28 @@ static NSMutableDictionary *s_touchToFingerIdMap = nil;
     if (kr != KERN_SUCCESS) {
         return 0.0;
     }
-    // phys_footprint 单位是字节
+    // phys_footprint is measured in bytes
     return (double)vmInfo.phys_footprint / (1024.0 * 1024.0);
 }
 
 - (void)dealloc {
-    // 停止 FPS/内存采样定时器与渲染循环
+    // Stop the FPS/memory sampling timer and the render loop
     [self.statsTimer invalidate];
     self.statsTimer = nil;
     [self.statsDisplayLink invalidate];
     self.statsDisplayLink = nil;
-    self.statsDisplayLinkTarget = nil;  // 释放 CADisplayLink target
+    self.statsDisplayLinkTarget = nil;  // Release the CADisplayLink target
 
-    // 清理启动遮罩层资源
+    // Clean up launch overlay resources
     [[NSNotificationCenter defaultCenter] removeObserver:self name:@"PojavFirstFrameRendered" object:nil];
     self.launchOverlayView = nil;
     self.launchGradientLayer = nil;
 
-    // 关键修复（UI 累积异常）：移除 5 个块式通知观察者。
-    // 之前只移除了 PojavFirstFrameRendered，未移除以下 5 个块观察者，
-    // 导致每次进出游戏都泄漏 5 个观察者 + 5 条对 self 的强引用，
-    // 多次进出后多个"已释放"的 VC 同时收到通知操作 UI，造成 UI 行为错乱。
-    // 块观察者必须通过 removeObserver: 显式移除（removeObserver:self 无效）。
+    // Key fix (accumulating UI anomaly): remove the 5 block-based notification observers.
+    // Previously only PojavFirstFrameRendered was removed and the following 5 block observers were not,
+    // which leaked 5 observers plus 5 strong references to self every time the game was entered and exited;
+    // after several rounds, multiple "deallocated" view controllers would all receive the notification and manipulate the UI, causing erratic UI behavior.
+    // Block observers must be removed explicitly via removeObserver: (removeObserver:self does not work).
     id defaultCenter = [NSNotificationCenter defaultCenter];
     if (self.mousePointerUpdatedCallback) {
         [defaultCenter removeObserver:self.mousePointerUpdatedCallback];
@@ -2460,8 +2460,8 @@ static NSMutableDictionary *s_touchToFingerIdMap = nil;
         self.controllerDisconnectCallback = nil;
     }
 
-    // LAN 端口检测器已改为手动输入模式，stopDetecting 已移除，无需调用。
-    // ZeroTier/Terracotta 联机暂时移除：原 stopAllMultiplayerServices 调用注释掉
+    // The LAN port detector has been switched to manual input mode and stopDetecting has been removed, so there is nothing to call.
+    // ZeroTier/Terracotta multiplayer temporarily removed: the original stopAllMultiplayerServices call is commented out
     // [[MultiplayerManager sharedManager] stopAllMultiplayerServices];
 
     //æ¸ç TouchController èµæº

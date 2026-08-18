@@ -2,7 +2,7 @@
 //  ThirdPartyLoginViewController.m
 //  Amethyst
 //
-//  参照 FCL 安卓版：LittleSkin / 自定义第三方登录表单页
+//  Modeled on Android FCL: the LittleSkin / custom third-party login form page
 //
 
 #import "ThirdPartyLoginViewController.h"
@@ -27,7 +27,7 @@
 @property (nonatomic, strong) UIView *passwordCard;
 @property (nonatomic, strong) UITextField *passwordField;
 
-@property (nonatomic, strong) UIView *serverCard; // 仅 Custom 模式显示
+@property (nonatomic, strong) UIView *serverCard; // Shown in Custom mode only
 @property (nonatomic, strong) UITextField *serverField;
 
 @property (nonatomic, strong) UIButton *loginButton;
@@ -50,7 +50,7 @@
     [self setupUI];
     [[BackgroundManager sharedManager] applyBackgroundToView:self.view];
 
-    // 点击空白收起键盘
+    // Tap on empty space to dismiss the keyboard
     UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(dismissKeyboard)];
     tap.cancelsTouchesInView = NO;
     [self.view addGestureRecognizer:tap];
@@ -116,7 +116,7 @@
         [self.contentStack addArrangedSubview:self.serverCard];
     }
 
-    // 错误提示（默认隐藏）
+    // Error notice (hidden by default)
     self.errorLabel = [[UILabel alloc] init];
     self.errorLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.errorLabel.font = [UIFont systemFontOfSize:13];
@@ -129,7 +129,7 @@
     [self buildLoginButton];
     [self.contentStack addArrangedSubview:self.loginButton];
 
-    // 注册键盘事件，滚动避免遮挡
+    // Register for keyboard events and scroll so nothing is covered
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(keyboardWillShow:)
                                                  name:UIKeyboardWillShowNotification
@@ -196,8 +196,8 @@
     ]];
 }
 
-/// 构建统一的输入卡片：左侧 SF Symbol 图标 + 右侧 UITextField
-/// 返回卡片视图，并将创建好的 UITextField 赋值到 outField（可选）
+/// Build a uniform input card: an SF Symbol icon on the left + a UITextField on the right
+/// Returns the card view and assigns the created UITextField to outField (optional)
 - (UIView *)buildInputCardWithIcon:(NSString *)iconName
                        accentColor:(UIColor *)accentColor
                         placeholder:(NSString *)placeholder
@@ -327,7 +327,7 @@
         serverURL = @"https://littleskin.cn/api/yggdrasil";
     }
 
-    // 输入校验
+    // Input validation
     if (username.length == 0 || password.length == 0) {
         [self showError:@"Username and password cannot be empty"];
         return;
@@ -346,8 +346,8 @@
 
     [self setLoginInProgress:YES];
 
-    // 参照 authlib-injector 启动器技术规范：登录前先解析 ALI，将简写地址解析为完整 API Root
-    // 同时预取服务器元数据，用于启动时传 -Dauthlibinjector.yggdrasil.prefetched
+    // Following the authlib-injector launcher technical specification: resolve the ALI before logging in, expanding the shorthand address into a full API root
+    // At the same time prefetch the server metadata, to pass -Dauthlibinjector.yggdrasil.prefetched at launch
     [self showError:@"Resolving the server address..."];
     self.errorLabel.textColor = [UIColor secondaryLabelColor];
 
@@ -361,7 +361,7 @@
         ThirdPartyAuthenticator *auth = [[ThirdPartyAuthenticator alloc] initWithInput:username];
         auth.authData[@"password"] = password;
         auth.authData[@"authserver"] = resolvedURL;
-        // 缓存元数据，供 getJvmArgsForAuthlib 使用
+        // Cache the metadata for getJvmArgsForAuthlib to use
         if (metadata.length > 0) {
             auth.authData[@"prefetchedMetadata"] = metadata;
         }
@@ -371,7 +371,7 @@
                 __strong typeof(weakSelf) sSelf = weakSelf;
                 if (!sSelf) return;
 
-                // 状态码为 0 的"进度"消息（如正在下载 authlib-injector）不算最终结果
+                // "Progress" messages with status code 0 (such as downloading authlib-injector) are not the final result
                 if (success && [status isKindOfClass:[NSError class]] &&
                     [(NSError *)status code] == 0) {
                     NSString *msg = [(NSError *)status localizedDescription];
@@ -397,7 +397,7 @@
                     return;
                 }
 
-                // 失败
+                // Failure
                 NSString *errMsg;
                 if ([status isKindOfClass:[NSError class]]) {
                     errMsg = [(NSError *)status localizedDescription];

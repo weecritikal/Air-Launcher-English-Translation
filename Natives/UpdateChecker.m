@@ -14,7 +14,7 @@
 + (NSString *)repoName { return @"Amethyst-iOS-MyRemastered"; }
 
 + (NSString *)latestReleaseURL {
-    /* /releases/latest 接口自动返回最新的非 pre-release（正式版） */
+    /* The /releases/latest endpoint automatically returns the newest non-pre-release (stable) version */
     return [NSString stringWithFormat:@"https://api.github.com/repos/%@/%@/releases/latest",
             self.repoOwner, self.repoName];
 }
@@ -22,7 +22,7 @@
 + (NSString *)currentVersion {
     NSString *v = [[[NSBundle mainBundle] infoDictionary] objectForKey:@"CFBundleShortVersionString"];
     if (v == nil) v = @"";
-    /* 当前版本号可能是 "5.0.0 Preview"，提取数字部分用于比较 */
+    /* The current version number may be "5.0.0 Preview", so the numeric part is extracted for comparison */
     return v;
 }
 
@@ -43,7 +43,7 @@
                                                             cachePolicy:NSURLRequestReloadIgnoringLocalCacheData
                                                         timeoutInterval:15.0];
     [request setHTTPMethod:@"GET"];
-    /* GitHub API 要求 User-Agent 头，否则可能被拒绝 */
+    /* The GitHub API requires a User-Agent header, otherwise the request may be rejected */
     [request setValue:@"Amethyst-iOS-UpdateChecker" forHTTPHeaderField:@"User-Agent"];
     [request setValue:@"application/vnd.github+json" forHTTPHeaderField:@"Accept"];
 
@@ -65,7 +65,7 @@
             return;
         }
 
-        /* 解析 JSON */
+        /* Parse the JSON */
         NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
         if (![json isKindOfClass:[NSDictionary class]]) {
             if (completion) dispatch_async(dispatch_get_main_queue(), ^{
@@ -90,12 +90,12 @@
     [task resume];
 }
 
-/// 解析 GitHub Releases API 返回的 JSON
+/// Parse the JSON returned by the GitHub Releases API
 + (UpdateInfo *)parseReleaseJSON:(NSDictionary *)json {
     UpdateInfo *info = [[UpdateInfo alloc] init];
     info.currentVersion = self.currentVersion;
 
-    /* tag_name 通常是 "v5.0.1" 或 "5.0.1" */
+    /* tag_name is usually "v5.0.1" or "5.0.1" */
     NSString *tag = json[@"tag_name"];
     if (tag.length == 0) return nil;
     info.latestVersion = [self normalizeVersion:tag];
@@ -105,7 +105,7 @@
     info.htmlURL = json[@"html_url"];
     info.publishedAt = json[@"published_at"];
 
-    /* assets 数组 */
+    /* assets array */
     NSArray *assets = json[@"assets"];
     if ([assets isKindOfClass:[NSArray class]]) {
         NSMutableArray *assetList = [NSMutableArray array];
@@ -121,20 +121,20 @@
         info.assets = assetList;
     }
 
-    /* 版本比较：currentVersion 可能是 "5.0.0 Preview"，先提取数字部分 */
+    /* Version comparison: currentVersion may be "5.0.0 Preview", so extract the numeric part first */
     NSString *currentNum = [self extractVersionNumbers:info.currentVersion];
     NSString *latestNum = [self extractVersionNumbers:info.latestVersion];
     if (currentNum.length > 0 && latestNum.length > 0) {
         NSComparisonResult cmp = [self compareVersion:currentNum withVersion:latestNum];
         info.hasUpdate = (cmp == NSOrderedAscending);
     } else {
-        /* 无法提取版本号时，直接比较 tag 和当前版本字符串 */
+        /* When no version number can be extracted, compare the tag and the current version strings directly */
         info.hasUpdate = ![info.currentVersion isEqualToString:info.latestVersion];
     }
     return info;
 }
 
-/// 去掉版本号前面的 "v" 或 "V" 前缀
+/// Strip a leading "v" or "V" prefix from the version number
 + (NSString *)normalizeVersion:(NSString *)tag {
     if (tag == nil) return @"";
     NSString *v = [tag stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
@@ -144,7 +144,7 @@
     return v;
 }
 
-/// 从版本字符串中提取数字部分（如 "5.0.0 Preview" → "5.0.0"）
+/// Extract the numeric part from a version string (e.g. "5.0.0 Preview" → "5.0.0")
 + (NSString *)extractVersionNumbers:(NSString *)version {
     if (version.length == 0) return @"";
     NSError *err = nil;
@@ -162,7 +162,7 @@
 #pragma mark - Version Comparison
 
 + (NSComparisonResult)compareVersion:(NSString *)v1 withVersion:(NSString *)v2 {
-    /* 容错：nil 或空字符串视为 "0" */
+    /* Fault tolerance: nil or an empty string is treated as "0" */
     if (v1.length == 0) v1 = @"0";
     if (v2.length == 0) v2 = @"0";
 
@@ -171,7 +171,7 @@
     NSInteger max = MAX(c1.count, c2.count);
 
     for (NSInteger i = 0; i < max; i++) {
-        /* 非数字段（如 "Beta"）按 0 处理 */
+        /* Non-numeric segments (such as "Beta") are treated as 0 */
         NSInteger n1 = (i < c1.count) ? [c1[i] integerValue] : 0;
         NSInteger n2 = (i < c2.count) ? [c2[i] integerValue] : 0;
         if (n1 < n2) return NSOrderedAscending;

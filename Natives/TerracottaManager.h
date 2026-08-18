@@ -3,58 +3,58 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-/// 联机会话状态（高层状态机：8 个 Rust 底层状态 → 4 个 UI 状态）
+/// Multiplayer session status (high-level state machine: 8 low-level Rust states → 4 UI states)
 typedef NS_ENUM(NSInteger, TerracottaStatus) {
-    TerracottaStatusDisconnected = 0,  /* 未联机 */
-    TerracottaStatusConnecting   = 1,  /* 连接中（host-scanning/starting, guest-connecting/starting） */
-    TerracottaStatusConnected    = 2,  /* 已连接（host-ok, guest-ok） */
-    TerracottaStatusError        = 3,  /* 错误（exception） */
+    TerracottaStatusDisconnected = 0,  /* Not connected */
+    TerracottaStatusConnecting   = 1,  /* Connecting (host-scanning/starting, guest-connecting/starting) */
+    TerracottaStatusConnected    = 2,  /* Connected (host-ok, guest-ok) */
+    TerracottaStatusError        = 3,  /* Error (exception) */
 };
 
-/// 当前角色
+/// Current role
 typedef NS_ENUM(NSInteger, TerracottaRole) {
     TerracottaRoleNone   = 0,
-    TerracottaRoleHost   = 1,  /* 房主 */
-    TerracottaRoleClient = 2,  /* 访客 */
+    TerracottaRoleHost   = 1,  /* Host */
+    TerracottaRoleClient = 2,  /* Guest */
 };
 
-/// 状态变化通知名。userInfo 为 nil，调用方通过 [TerracottaManager shared] 读取最新状态。
+/// State change notification name. userInfo is nil; callers read the latest state through [TerracottaManager shared].
 extern NSNotificationName TerracottaManagerStateDidChangeNotification;
 
-/// 联机管理器单例
+/// Multiplayer manager singleton
 ///
-/// 封装 TerracottaBridge 的状态轮询、状态机映射、SilentAudioPlayer 后台保活。
-/// UI 通过 KVO 或 TerracottaManagerStateDidChangeNotification 监听状态变化。
+/// Wraps TerracottaBridge state polling, state machine mapping and SilentAudioPlayer background keep-alive.
+/// The UI observes state changes via KVO or TerracottaManagerStateDidChangeNotification.
 @interface TerracottaManager : NSObject
 
 + (instancetype)shared;
 
 @property(nonatomic, readonly) TerracottaStatus status;
 @property(nonatomic, readonly) TerracottaRole role;
-@property(nonatomic, readonly, nullable) NSString *currentInviteCode;  /* 房主的邀请码 */
-@property(nonatomic, readonly) uint16_t currentPort;                   /* 房主的 MC LAN 端口 */
-@property(nonatomic, readonly, nullable) NSString *stageDescription;   /* UI 显示的阶段文字 */
+@property(nonatomic, readonly, nullable) NSString *currentInviteCode;  /* The host's invite code */
+@property(nonatomic, readonly) uint16_t currentPort;                   /* The host's MC LAN port */
+@property(nonatomic, readonly, nullable) NSString *stageDescription;   /* Stage text shown in the UI */
 @property(nonatomic, readonly, nullable) NSArray<TerracottaPlayerProfile *> *players;
-@property(nonatomic, readonly, nullable) NSString *directConnectURL;   /* 访客进 MC 直连地址 */
+@property(nonatomic, readonly, nullable) NSString *directConnectURL;   /* Direct connect address for guests entering MC */
 @property(nonatomic, readonly, nullable) NSString *lastError;
 @property(nonatomic, readonly) BOOL initialized;
 
-/// App 启动时调用一次（由 SceneDelegate 触发）。libterracotta 未链接时为空操作。
+/// Called once at app launch (triggered by SceneDelegate). A no-op when libterracotta is not linked.
 - (void)initializeTerracotta;
 
-/// 房主：创建房间（手动端口模式）。
-/// 流程：reset → setConnecting → startKeepingAlive → startHostWithPort → startPolling
+/// Host: create a room (manual port mode).
+/// Flow: reset → setConnecting → startKeepingAlive → startHostWithPort → startPolling
 - (void)createRoomWithPort:(uint16_t)port
                 inviteCode:(nullable NSString *)inviteCode
                 playerName:(nullable NSString *)playerName;
 
-/// 访客：加入房间。
-/// 流程：verifyRoomCode → reset → setConnecting → startKeepingAlive → setGuesting → startPolling
-/// 返回 NO 表示邀请码格式无效（不会发起加入）。
+/// Guest: join a room.
+/// Flow: verifyRoomCode → reset → setConnecting → startKeepingAlive → setGuesting → startPolling
+/// Returns NO if the invite code format is invalid (no join is attempted).
 - (BOOL)joinRoomWithInviteCode:(NSString *)inviteCode
                     playerName:(nullable NSString *)playerName;
 
-/// 终止当前会话，回到 Disconnected 状态。
+/// Terminate the current session and return to the Disconnected state.
 - (void)stopSession;
 
 @end

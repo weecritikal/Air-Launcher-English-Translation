@@ -2,12 +2,12 @@
 //  ServerDetailViewController.h
 //  Amethyst
 //
-//  服务器详情页：
-//  - 服务器图标、名称、描述
-//  - 服务器地址（可复制）
-//  - "加入服务器"按钮（保存地址到当前 profile）
-//  - "下载关联整合包"按钮（如果有关联 modpack / server pack）
-//  - 使用 InlineMessageView 显示操作结果
+//  The server detail page:
+//  - the server icon, name and description
+//  - the server address (which can be copied)
+//  - a "Join server" button (saving the address into the current profile)
+//  - a "Download the linked modpack" button (when there is a linked modpack / server pack)
+//  - InlineMessageView shows the results
 //
 
 #import <UIKit/UIKit.h>

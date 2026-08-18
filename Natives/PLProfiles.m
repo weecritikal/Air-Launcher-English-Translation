@@ -41,13 +41,13 @@ static PLProfiles* current;
 
 + (id)profile:(NSMutableDictionary *)profile resolveKey:(id)key {
     id rawValue = profile[key];
-    // 兼容 javaVersion 字段：Mojang 规范是 NSDictionary（{component, majorVersion}），
-    // 但部分代码（如 ForgeDirectInstaller）也写入 NSDictionary。PLProfiles 期望返回 NSString。
+    // Handling the javaVersion field: the Mojang spec makes it an NSDictionary ({component, majorVersion}),
+    // and some code (such as ForgeDirectInstaller) writes an NSDictionary too, while PLProfiles expects an NSString.
     if ([rawValue isKindOfClass:[NSDictionary class]]) {
-        // javaVersion: 返回 majorVersion 的字符串值；缺失则落入下方 valueDefaults
+        // javaVersion: return majorVersion as a string; when it is missing, fall through to valueDefaults below
         id major = rawValue[@"majorVersion"];
         if (major) return [major description];
-        // 落入下方 valueDefaults 逻辑，避免返回 nil 破坏调用方
+        // Fall through to the valueDefaults logic below, so nil is never returned to break the caller
     } else if ([rawValue isKindOfClass:[NSString class]] && [(NSString *)rawValue length] > 0) {
         return rawValue;
     }
@@ -65,8 +65,8 @@ static PLProfiles* current;
         @"defaultGamepadCtrl": @"control.default_gamepad_ctrl",
         @"javaArgs": @"java.java_args",
         @"renderer": @"video.renderer",
-        // MC 26.2+ Graphics API（OpenGL/Vulkan 游戏内切换），缺省为 "default"
-        // 该字段仅在 MC 26.2+ 生效，旧版本会被 MC 忽略，无副作用。
+        // The MC 26.2+ graphics API (in-game OpenGL/Vulkan switching), defaulting to "default"
+        // This field only applies on MC 26.2+; older versions ignore it, with no side effects.
         @"graphicsApi": @"video.graphics_api"
     };
     return getPrefObject(prefDefaults[key]);
@@ -115,7 +115,7 @@ static PLProfiles* current;
     [[NSNotificationCenter defaultCenter] postNotificationName:@"SelectedProfileChanged" object:name];
 }
 
-/// 递归清理 NSDate 等非法 JSON 类型，确保保存不崩溃
+/// Recursively strip NSDate and other JSON-invalid types, so saving cannot crash
 - (id)jsonSanitizedObject:(id)obj {
     if ([obj isKindOfClass:[NSDate class]]) {
         static NSDateFormatter *formatter = nil;
@@ -163,18 +163,18 @@ static PLProfiles* current;
 
 #pragma mark - 服务器地址（FCL 风格：启动后自动加入服务器）
 
-// 获取当前选中 profile 的服务器地址，留空返回 @""
+// Get the server address of the selected profile, returning @"" when empty
 - (NSString *)serverIpForCurrentProfile {
     return [self serverIpForProfile:self.selectedProfileName];
 }
 
-// 获取指定 profile 的服务器地址，缺失或为空均返回 @""
+// Get the server address of the given profile, returning @"" when missing or empty
 - (NSString *)serverIpForProfile:(NSString *)profileName {
     NSString *ip = self.profiles[profileName][@"serverIp"];
     return ip ?: @"";
 }
 
-// 设置指定 profile 的服务器地址，nil 转为 @""
+// Set the server address of the given profile, turning nil into @""
 - (void)setServerIp:(NSString *)serverIp forProfile:(NSString *)profileName {
     NSMutableDictionary *profile = [self.profiles[profileName] mutableCopy];
     if (!profile) {

@@ -2,7 +2,7 @@
 //  ResourcePackService.m
 //  Amethyst
 //
-//  资源包服务实现，结构参照 ShaderService/ModService
+//  Resource pack service implementation, structured like ShaderService/ModService
 //  The API consistently takes NSString *profileName
 //  Uses defaultSessionConfiguration + NSURLSessionDownloadTask for better download throughput
 //  Implements pack.mcmeta parsing (pack_format / description)
@@ -120,7 +120,7 @@
 
 #pragma mark - ResourcePacks folder detection & scan
 
-// 查找指定 profile 的 resourcepacks 目录（已存在时返回路径，否则返回 nil）
+// Find the resourcepacks folder of the given profile (returning the path if it exists, otherwise nil)
 - (nullable NSString *)existingResourcePacksFolderForProfile:(NSString *)profileName {
     NSString *profile = profileName.length ? profileName : @"default";
     NSFileManager *fm = [NSFileManager defaultManager];
@@ -153,7 +153,7 @@
     return nil;
 }
 
-/// 获取当前 profile 的 resourcepacks 目录，不存在时自动创建
+/// Return the resourcepacks folder of the current profile, creating it if it does not exist
 - (nullable NSString *)ensureResourcePacksFolderForProfile:(NSString *)profileName error:(NSError **)error {
     NSString *profile = profileName.length ? profileName : @"default";
     NSFileManager *fm = [NSFileManager defaultManager];
@@ -261,7 +261,7 @@
 
 #pragma mark - File operations
 
-// 启用/禁用资源包：通过加/去 .disabled 后缀实现
+// Enable/disable a resource pack by adding or removing the .disabled suffix
 - (BOOL)toggleEnableForResourcePack:(ResourcePackItem *)item error:(NSError **)error {
     NSFileManager *fileManager = [NSFileManager defaultManager];
     NSString *currentPath = item.filePath;
@@ -288,24 +288,24 @@
     return success;
 }
 
-// 删除资源包文件
+// Delete a resource pack file
 - (BOOL)deleteResourcePack:(ResourcePackItem *)item error:(NSError **)error {
     return [[NSFileManager defaultManager] removeItemAtPath:item.filePath error:error];
 }
 
 #pragma mark - Online ResourcePack Downloading (使用 NSURLSessionDownloadTask)
 
-// 带实时进度回调的下载方法
+// The download method with live progress callbacks
 - (void)downloadResourcePack:(ResourcePackItem *)item
                    toProfile:(NSString *)profileName
                     progress:(ResourcePackDownloadProgressHandler _Nullable)progress
                   completion:(ResourcePackDownloadCompletionHandler _Nullable)completion {
-    // 确保 resourcepacks 目录存在
+    // Make sure the resourcepacks folder exists
     NSString *resourcePacksFolder = [self existingResourcePacksFolderForProfile:profileName];
     NSFileManager *fm = [NSFileManager defaultManager];
 
     if (!resourcePacksFolder) {
-        // 目录不存在时尝试创建
+        // Try to create it when it does not exist
         NSString *profile = profileName.length ? profileName : @"default";
         NSString *gameDir = nil;
 

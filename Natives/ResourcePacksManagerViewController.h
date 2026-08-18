@@ -2,7 +2,7 @@
 //  ResourcePacksManagerViewController.h
 //  Amethyst
 //
-//  资源包管理视图控制器，参照 ModsManagerViewController
+//  Resource pack manager view controller, modelled on ModsManagerViewController
 //  Local/online mode switching, search, enable/disable, delete, import
 //
 

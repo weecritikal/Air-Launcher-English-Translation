@@ -10,14 +10,14 @@
 @property (nonatomic, strong) UILabel *versionLabel;
 @property (nonatomic, strong) UILabel *dateLabel;
 @property (nonatomic, strong) UILabel *typeLabel;
-// FCL 风格：已安装标记（绿色 ✓ 徽章，表示该版本已在本地安装）
+// FCL style: installed marker (a green ✓ badge, meaning the version is installed locally)
 @property (nonatomic, strong) UIView *installedBadge;
 
 - (void)configureWithVersionId:(NSString *)versionId
                           date:(NSString *)date
                           type:(NSString *)type;
 
-/// 设置已安装标记的显示状态（YES=显示绿色 ✓ 徽章）
+/// Set the visibility of the installed marker (YES = show the green ✓ badge)
 - (void)setInstalled:(BOOL)installed;
 
 @end

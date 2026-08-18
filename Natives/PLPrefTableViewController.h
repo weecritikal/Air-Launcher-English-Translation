@@ -17,20 +17,20 @@ typedef void (^SetPreferenceBlock)(NSString *, NSString *, id);
 @property(nonatomic) NSArray<NSArray<NSDictionary*>*>* prefContents;
 @property(nonatomic) BOOL prefDetailVisible;
 
-/// 搜索功能：是否启用搜索栏（子类在 viewDidLoad 设置 YES 启用）
+/// Search: whether the search bar is enabled (a subclass sets it to YES in viewDidLoad)
 @property(nonatomic) BOOL searchEnabled;
-/// 当前搜索关键词（仅读，由 searchController 内部更新）
+/// The current search term (read-only, updated internally by searchController)
 @property(nonatomic, readonly) NSString *currentSearchText;
-/// 搜索结果列表（仅读，搜索激活时非 nil，否则为 nil）。
-/// 子类可据此判断当前是否处于搜索模式，并访问过滤后的项数据
-/// （每项含 __origSection / __origRow / __localizedTitle 等内部字段）
+/// The search results (read-only; non-nil while searching and nil otherwise).
+/// A subclass can use it to tell whether search mode is active and to read the filtered items
+/// (each of which carries internal fields such as __origSection / __origRow / __localizedTitle)
 @property(nonatomic, readonly, nullable) NSArray *filteredItems;
 
 - (UIBarButtonItem *)drawHelpButton;
 - (void)initViewCreation;
 
-/// 打开子页面（typeChildPane 类型的设置项触发）
-/// 子类可重写此方法以自定义特定 key 的跳转逻辑，然后调用 super 处理其他项
+/// Open a sub-page (triggered by a typeChildPane setting)
+/// A subclass can override this to customize the navigation for a specific key, then call super for the rest
 - (void)tableView:(UITableView *)tableView openChildPaneAtIndexPath:(NSIndexPath *)indexPath;
 
 @end

@@ -2,35 +2,35 @@
 //  TouchControllerBridge.m
 //  Angel Aura Amethyst
 //
-//  TouchController JNI 桥接实现
-//  实现 Minecraft TouchController Mod 与 iOS 启动器之间的通信
+//  TouchController JNI bridge implementation
+//  Implements the communication between the Minecraft TouchController mod and the iOS launcher
 //
 
 #import "TouchControllerBridge.h"
 #import <dlfcn.h>
 #import <os/log.h>
 
-// TouchController 静态库的 C API 函数指针类型声明
-// 这些类型匹配 touchcontroller_ios_* 系列函数签名（无 JNIEnv*/jclass 参数），
-// 通过 dlsym 查找 C API 符号名（而非 JNI 命名符号），避免调用约定不匹配导致的崩溃
+// C API function pointer type declarations for the TouchController static library
+// These types match the touchcontroller_ios_* family of function signatures (with no JNIEnv*/jclass parameters),
+// and dlsym looks up the C API symbol names (rather than the JNI-mangled ones), avoiding crashes caused by mismatched calling conventions
 typedef void (*JNI_Init_Func)(void);              // touchcontroller_ios_init
 typedef long long (*JNI_New_Func)(const char *name);  // touchcontroller_ios_new
 typedef int (*JNI_Receive_Func)(long long handle, void *buffer, int length);  // touchcontroller_ios_receive
 typedef void (*JNI_Send_Func)(long long handle, const void *buffer, int offset, int length);  // touchcontroller_ios_send
 typedef void (*JNI_Destroy_Func)(long long handle);  // touchcontroller_ios_destroy
 
-// 函数指针
+// Function pointers
 static JNI_Init_Func g_TouchController_Init = NULL;
 static JNI_New_Func g_TouchController_New = NULL;
 static JNI_Receive_Func g_TouchController_Receive = NULL;
 static JNI_Send_Func g_TouchController_Send = NULL;
 static JNI_Destroy_Func g_TouchController_Destroy = NULL;
 
-// 是否已初始化
+// Whether it has been initialized
 static BOOL g_Initialized = NO;
 static void *g_LibraryHandle = NULL;
 
-// 日志
+// Logging
 static os_log_t touchControllerLog = NULL;
 
 @implementation TouchControllerBridge
@@ -47,9 +47,9 @@ static os_log_t touchControllerLog = NULL;
 
     os_log_info(touchControllerLog, "Initializing TouchController bridge...");
 
-    // 尝试加载 TouchController 静态库
-    // 由于是静态链接，我们直接检查符号是否存在
-    // 如果静态库已链接到可执行文件中，dlsym(RTLD_DEFAULT) 应该能找到符号
+    // Try to load the TouchController static library
+    // Since it is statically linked, we simply check whether the symbols exist
+    // If the static library has been linked into the executable, dlsym(RTLD_DEFAULT) should find the symbols
     
     g_TouchController_Init = (JNI_Init_Func)dlsym(RTLD_DEFAULT, "touchcontroller_ios_init");
     g_TouchController_New = (JNI_New_Func)dlsym(RTLD_DEFAULT, "touchcontroller_ios_new");
@@ -57,7 +57,7 @@ static os_log_t touchControllerLog = NULL;
     g_TouchController_Send = (JNI_Send_Func)dlsym(RTLD_DEFAULT, "touchcontroller_ios_send");
     g_TouchController_Destroy = (JNI_Destroy_Func)dlsym(RTLD_DEFAULT, "touchcontroller_ios_destroy");
 
-    // 检查所有函数是否都找到了
+    // Check whether every function was found
     if (!g_TouchController_Init || !g_TouchController_New || !g_TouchController_Receive || 
         !g_TouchController_Send || !g_TouchController_Destroy) {
         const char *error = dlerror();
@@ -66,7 +66,7 @@ static os_log_t touchControllerLog = NULL;
         return NO;
     }
 
-    // 调用初始化函数
+    // Call the initialization function
     if (g_TouchController_Init) {
         g_TouchController_Init();
     }
@@ -109,22 +109,22 @@ static os_log_t touchControllerLog = NULL;
         return -1;
     }
 
-    // 分配缓冲区
+    // Allocate the buffer
     static const int BUFFER_SIZE = 4096;
     uint8_t tempBuffer[BUFFER_SIZE];
 
-    // 调用 JNI 接收函数
+    // Call the JNI receive function
     int result = g_TouchController_Receive(handle, tempBuffer, BUFFER_SIZE);
 
     if (result > 0) {
-        // 成功接收数据
+        // Data received successfully
         [buffer appendBytes:tempBuffer length:result];
         os_log_debug(touchControllerLog, "Received %d bytes from transport %lld", result, handle);
     } else if (result == 0) {
-        // 无数据可用
+        // No data available
         os_log_debug(touchControllerLog, "No data available from transport %lld", handle);
     } else {
-        // 接收失败
+        // Receive failed
         os_log_error(touchControllerLog, "Failed to receive from transport %lld", handle);
     }
 
@@ -147,7 +147,7 @@ static os_log_t touchControllerLog = NULL;
         return NO;
     }
 
-    // 调用 JNI 发送函数
+    // Call the JNI send function
     g_TouchController_Send(handle, [data bytes], 0, (int)[data length]);
 
     os_log_debug(touchControllerLog, "Sent %lu bytes to transport %lld", (unsigned long)[data length], handle);

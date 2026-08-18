@@ -41,7 +41,7 @@ NSNotificationName TerracottaManagerStateDidChangeNotification = @"TerracottaMan
         _role = TerracottaRoleNone;
         _pollQueue = dispatch_queue_create("terracotta.poll", dispatch_queue_attr_make_with_qos_class(
             DISPATCH_QUEUE_SERIAL, QOS_CLASS_UTILITY, 0));
-        /* 单例触发 init 时自动初始化 Terracotta（若库可用） */
+        /* Terracotta is initialized automatically when the singleton triggers init (if the library is available) */
         [self initializeTerracotta];
     }
     return self;
@@ -60,7 +60,7 @@ NSNotificationName TerracottaManagerStateDidChangeNotification = @"TerracottaMan
         NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
     if (docsDir == nil) docsDir = NSTemporaryDirectory();
 
-    /* 用独立的 terracotta/ 子目录存放工作数据 */
+    /* Use a separate terracotta/ subdirectory to hold working data */
     NSString *workDir = [docsDir stringByAppendingPathComponent:@"terracotta"];
     [[NSFileManager defaultManager] createDirectoryAtPath:workDir
                               withIntermediateDirectories:YES
@@ -153,7 +153,7 @@ NSNotificationName TerracottaManagerStateDidChangeNotification = @"TerracottaMan
     self.stageDescription = nil;
     self.players = nil;
     self.directConnectURL = nil;
-    /* lastError 不在此清除，让 UI 能在 stopSession 后仍看到上次错误（如果有） */
+    /* lastError is not cleared here, so the UI can still see the previous error (if any) after stopSession */
     _lastStateKind = -1;
     _lastStateIndex = -1;
 }
@@ -162,7 +162,7 @@ NSNotificationName TerracottaManagerStateDidChangeNotification = @"TerracottaMan
 
 - (void)startPolling {
     [self stopPolling];
-    /* dispatch_source_t 定时器，0.5s 间隔，QOS_CLASS_UTILITY 队列避免阻塞主线程 */
+    /* dispatch_source_t timer, 0.5s interval, on a QOS_CLASS_UTILITY queue to avoid blocking the main thread */
     _pollTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, _pollQueue);
     dispatch_time_t start = dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC));
     dispatch_source_set_timer(_pollTimer, start,
@@ -189,11 +189,11 @@ NSNotificationName TerracottaManagerStateDidChangeNotification = @"TerracottaMan
 
 #pragma mark - State Mapping
 
-/// 把 Rust 侧 8 个底层状态映射到 4 个高层状态，更新所有 @property。
-/// 状态去重：state.kind 和 state.index 都没变时跳过通知。
+/// Map the 8 low-level states on the Rust side to the 4 high-level states and update every @property.
+/// State deduplication: skip the notification when neither state.kind nor state.index changed.
 - (void)applyState:(TerracottaState *)state {
     if (state.kind == _lastStateKind && state.index == _lastStateIndex) {
-        /* 状态没变，但玩家列表可能变化（新玩家加入），仍更新 */
+        /* The state did not change, but the player list may have (a new player joined), so still update */
         if (state.profiles != nil) self.players = state.profiles;
         return;
     }
@@ -233,13 +233,13 @@ NSNotificationName TerracottaManagerStateDidChangeNotification = @"TerracottaMan
             self.status = TerracottaStatusError;
             self.lastError = [TerracottaBridge describeException:state.exceptionType];
             self.stageDescription = self.lastError;
-            /* 异常时停止轮询和保活 */
+            /* Stop polling and keep-alive on an exception */
             [self stopPolling];
             [[SilentAudioPlayer shared] stopKeepingAlive];
             break;
     }
 
-    /* 更新邀请码和直连地址（仅 Rust 侧有值时覆盖） */
+    /* Update the invite code and direct connect address (only overwrite when the Rust side has a value) */
     if (state.room.length > 0) self.currentInviteCode = state.room;
     if (state.directConnectURL.length > 0) self.directConnectURL = state.directConnectURL;
     if (state.profiles != nil) self.players = state.profiles;

@@ -15,7 +15,7 @@
 
 @implementation TerracottaBridge
 
-/* 把可选 NSString 当作 const char * 传给 C 函数。nil 转 NULL。 */
+/* Pass an optional NSString to a C function as a const char *. nil becomes NULL. */
 static void terracottaCallWithOptionalCString(NSString *s, void (^body)(const char *)) {
     if (s != nil) {
         body([s UTF8String]);
@@ -40,8 +40,8 @@ static void terracottaCallWithOptionalCString(NSString *s, void (^body)(const ch
     }
     int fd = -1;
     if (loggingPath != nil) {
-        /* C 标准八进制：O_WRONLY=01, O_CREAT=0100, O_TRUNC=01000, O_APPEND=02000, mode=0644
-         * 注意：不能用 C++14 的 0o 前缀（C 语言不支持，AppleClang 会报 invalid suffix） */
+        /* Standard C octal: O_WRONLY=01, O_CREAT=0100, O_TRUNC=01000, O_APPEND=02000, mode=0644
+         * Note: the C++14 0o prefix cannot be used (C does not support it and AppleClang reports an invalid suffix) */
         fd = open([loggingPath UTF8String], 02000 | 0100 | 01000, 0644);
     }
     @try {
@@ -129,7 +129,7 @@ static void terracottaCallWithOptionalCString(NSString *s, void (^body)(const ch
     state.profileIndex = [json[@"profile_index"] integerValue];
     state.exceptionType = [json[@"type"] integerValue];
 
-    /* 解析玩家列表 */
+    /* Parse the player list */
     NSArray *profilesArray = json[@"profiles"];
     if ([profilesArray isKindOfClass:[NSArray class]]) {
         NSMutableArray<TerracottaPlayerProfile *> *profiles = [NSMutableArray array];
@@ -176,8 +176,8 @@ static void terracottaCallWithOptionalCString(NSString *s, void (^body)(const ch
     char *raw = terracotta_ios_get_metadata();
     if (raw == NULL) return nil;
     @try {
-        /* Rust 侧返回 NUL 分隔的 UTF-8："<version>\0<ts_ms>\0<et_version>\0"
-         * strlen 不能用（内部有 NUL），手动扫描 3 个 NUL 计算总长度 */
+        /* The Rust side returns NUL-separated UTF-8: "<version>\0<ts_ms>\0<et_version>\0"
+         * strlen cannot be used (there are NULs inside), so scan manually for 3 NULs to compute the total length */
         size_t totalLen = 0;
         char *cursor = raw;
         int nulCount = 0;
@@ -187,7 +187,7 @@ static void terracottaCallWithOptionalCString(NSString *s, void (^body)(const ch
             if (ch == 0) nulCount += 1;
             cursor += 1;
         }
-        /* 按 \0 切分 */
+        /* Split on \0 */
         NSMutableArray<NSString *> *segments = [NSMutableArray array];
         const uint8_t *bytes = (const uint8_t *)raw;
         size_t segStart = 0;

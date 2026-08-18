@@ -2,7 +2,7 @@
 //  ResourcePackService.h
 //  Amethyst
 //
-//  资源包本地管理与下载服务，结构参照 ShaderService/ModService
+//  Local management and download service for resource packs, structured like ShaderService/ModService
 //  The API consistently takes NSString *profileName (matching ModService)
 //  Adds pack.mcmeta parsing (pack_format / description)
 //
@@ -12,9 +12,9 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-// 资源包列表回调
+// Resource pack list callback
 typedef void(^ResourcePackListHandler)(NSArray<ResourcePackItem *> *items);
-// 资源包元数据回调
+// Resource pack metadata callback
 typedef void(^ResourcePackMetadataHandler)(ResourcePackItem *item, NSError * _Nullable error);
 // Download completion callback (success indicates whether it worked)
 typedef void(^ResourcePackDownloadCompletionHandler)(BOOL success, NSError * _Nullable error);
@@ -27,18 +27,18 @@ typedef void(^ResourcePackDownloadProgressHandler)(NSProgress * _Nullable downlo
 
 + (instancetype)sharedService;
 
-// --- 本地资源包管理 ---
-// 扫描指定 profile 的 resourcepacks 目录，返回 .zip 和 .zip.disabled 文件列表
+// --- Local resource pack management ---
+// Scan the resourcepacks folder of the given profile and return the .zip and .zip.disabled files
 - (void)scanResourcePacksForProfile:(NSString *)profileName completion:(ResourcePackListHandler)completion;
-// 获取资源包元数据（解析 zip 内的 pack.mcmeta，获取 pack_format 和 description）
+// Read resource pack metadata (parsing pack.mcmeta inside the zip for pack_format and description)
 - (void)fetchMetadataForResourcePack:(ResourcePackItem *)item completion:(ResourcePackMetadataHandler)completion;
-// 启用/禁用资源包（加/去 .disabled 后缀）
+// Enable/disable a resource pack (adding or removing the .disabled suffix)
 - (BOOL)toggleEnableForResourcePack:(ResourcePackItem *)item error:(NSError **)error;
-// 删除资源包文件
+// Delete a resource pack file
 - (BOOL)deleteResourcePack:(ResourcePackItem *)item error:(NSError **)error;
 
-// --- 在线资源包下载 ---
-// 下载资源包到指定 profile 的 resourcepacks 目录，支持实时进度回调
+// --- Online resource pack downloads ---
+// Download a resource pack into the resourcepacks folder of the given profile, with live progress callbacks
 - (void)downloadResourcePack:(ResourcePackItem *)item
                    toProfile:(NSString *)profileName
                     progress:(ResourcePackDownloadProgressHandler _Nullable)progress
@@ -47,7 +47,7 @@ typedef void(^ResourcePackDownloadProgressHandler)(NSProgress * _Nullable downlo
 // --- Helpers ---
 - (NSString *)iconCachePathForURL:(NSString *)urlString;
 
-/// 获取当前 profile 的 resourcepacks 目录，不存在时自动创建
+/// Return the resourcepacks folder of the current profile, creating it if it does not exist
 - (nullable NSString *)ensureResourcePacksFolderForProfile:(NSString *)profileName error:(NSError **)error;
 
 @end

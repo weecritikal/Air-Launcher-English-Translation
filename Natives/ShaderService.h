@@ -29,7 +29,7 @@ typedef void(^ShaderDownloadHandler)(NSError * _Nullable error);
 // --- Online Shader Downloading ---
 - (void)downloadShader:(ShaderItem *)shader toProfile:(NSString *)profileName completion:(ShaderDownloadHandler)completion;
 
-/// 下载光影包并上报进度
+/// Download a shader pack and report its progress
 - (void)downloadShader:(ShaderItem *)shader
              toProfile:(NSString *)profileName
               progress:(void (^)(NSProgress *downloadProgress))progress
@@ -38,7 +38,7 @@ typedef void(^ShaderDownloadHandler)(NSError * _Nullable error);
 // --- Utility ---
 - (NSString *)iconCachePathForURL:(NSString *)urlString;
 
-/// 获取当前 profile 的 shaderpacks 目录，不存在时自动创建
+/// Return the shaderpacks folder of the current profile, creating it if it does not exist
 - (nullable NSString *)ensureShadersFolderForProfile:(NSString *)profileName error:(NSError **)error;
 
 @end

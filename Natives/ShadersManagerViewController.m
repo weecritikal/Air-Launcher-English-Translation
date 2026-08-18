@@ -30,7 +30,7 @@
 
 // ===== Selection mode =====
 @property (nonatomic, assign) BOOL isSelectMode; // Whether selection mode is active
-@property (nonatomic, strong) NSMutableArray<ShaderItem *> *selectedShaders; // 已选中的光影列表
+@property (nonatomic, strong) NSMutableArray<ShaderItem *> *selectedShaders; // List of selected shaders
 @property (nonatomic, strong) UIToolbar *bottomToolbar; // The bottom toolbar (shown in selection mode)
 @property (nonatomic, strong) UIBarButtonItem *selectButtonItem; // The navigation bar "Select" button (entering selection mode from normal mode)
 @property (nonatomic, strong) UIBarButtonItem *doneButtonItem; // The navigation bar "Done" button (leaving selection mode)
@@ -52,11 +52,11 @@
     self.view.backgroundColor = [UIColor systemBackgroundColor];
     // Adapt to the custom launcher background: make this VC transparent so the global background image/blur shows through
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
-    self.currentMode = ShadersManagerModeLocal; // 始终使用本地模式（在线下载入口已移至下载界面）
+    self.currentMode = ShadersManagerModeLocal; // Always use local mode (the online download entry point has moved to the download screen)
     self.localShaders = [NSMutableArray array];
     self.filteredLocalShaders = [NSMutableArray array];
     self.onlineSearchResults = [NSMutableArray array];
-    self.selectedShaders = [NSMutableArray array]; // 初始化已选中光影列表
+    self.selectedShaders = [NSMutableArray array]; // Initialize the selected shader list
     self.isSelectMode = NO;
     [self setupUI];
     // Fix for "the previous page does not disappear in time": add a frosted-glass cover layer to the view
@@ -240,10 +240,10 @@
 
 // Enter selection mode
 - (void)enterSelectMode {
-    if (self.filteredLocalShaders.count == 0) return; // 没有数据时不允许进入选择模式
+    if (self.filteredLocalShaders.count == 0) return; // Do not allow entering selection mode when there is no data
 
     self.isSelectMode = YES;
-    [self.selectedShaders removeAllObjects]; // 进入选择模式时清空已选列表
+    [self.selectedShaders removeAllObjects]; // Clear the selection list when entering selection mode
     // Show the bottom toolbar
     self.bottomToolbar.hidden = NO;
     self.bottomToolbar.items = @[self.toolbarSelectAllButtonItem,
@@ -275,7 +275,7 @@
 // Leave selection mode and clear every selection
 - (void)exitSelectMode {
     self.isSelectMode = NO;
-    [self.selectedShaders removeAllObjects]; // 退出时清除所有选择
+    [self.selectedShaders removeAllObjects]; // Clear all selections on exit
     self.bottomToolbar.hidden = YES;
     self.bottomToolbar.items = nil;
     // Restore the tableView bottom inset
@@ -301,7 +301,7 @@
     }
 }
 
-// 全选：将当前过滤后列表中的所有光影加入已选列表
+// Select all: add every shader in the currently filtered list to the selection list
 - (void)selectAll {
     [self.selectedShaders removeAllObjects];
     [self.selectedShaders addObjectsFromArray:self.filteredLocalShaders];
@@ -316,7 +316,7 @@
     [self reloadVisibleCellsCheckbox];
 }
 
-// 删除选中的光影（带确认弹窗）
+// Delete the selected shaders (with a confirmation dialog)
 - (void)deleteSelectedShaders {
     if (self.selectedShaders.count == 0) {
         [self showSimpleAlertWithTitle:@"Notice" message:@"No shader packs selected yet"];
@@ -348,9 +348,9 @@
         }
     }
 
-    // 从数据源中移除已成功删除的光影
+    // Remove the successfully deleted shaders from the data source
     for (ShaderItem *shader in shadersToDelete) {
-        if ([failedShaders containsObject:shader]) continue; // 跳过删除失败的
+        if ([failedShaders containsObject:shader]) continue; // Skip the ones that failed to delete
         NSUInteger idxInFull = [self.localShaders indexOfObject:shader];
         if (idxInFull != NSNotFound) [self.localShaders removeObjectAtIndex:idxInFull];
         NSUInteger idxInFiltered = [self.filteredLocalShaders indexOfObject:shader];
@@ -374,12 +374,12 @@
     }
 }
 
-// 判断指定光影是否处于选中状态
+// Determine whether the given shader is selected
 - (BOOL)isShaderSelected:(ShaderItem *)shader {
     return [self.selectedShaders containsObject:shader];
 }
 
-// 切换某个光影的选中状态（行点击触发）
+// Toggle the selected state of a shader (triggered by a row tap)
 - (void)toggleSelectionForShader:(ShaderItem *)shader {
     if ([self.selectedShaders containsObject:shader]) {
         [self.selectedShaders removeObject:shader];
@@ -449,7 +449,7 @@
         checkbox.frame = CGRectMake(0, 0, 24, 24);
         cell.accessoryView = checkbox;
         cell.selectionStyle = UITableViewCellSelectionStyleDefault;
-        // 隐藏 openLinkButton，避免与复选框视觉冲突（光影的 enableSwitch 默认已隐藏）
+        // Hide openLinkButton to avoid a visual clash with the checkbox (a shader's enableSwitch is hidden by default)
         if ([cell isKindOfClass:[ShaderTableViewCell class]]) {
             ShaderTableViewCell *shaderCell = (ShaderTableViewCell *)cell;
             shaderCell.openLinkButton.hidden = YES;
@@ -460,7 +460,7 @@
         cell.selectionStyle = UITableViewCellSelectionStyleNone;
         if ([cell isKindOfClass:[ShaderTableViewCell class]]) {
             ShaderTableViewCell *shaderCell = (ShaderTableViewCell *)cell;
-            // openLinkButton 的最终可见性以 configureWithShader 的设置为准
+            // The final visibility of openLinkButton is determined by what configureWithShader sets
             shaderCell.openLinkButton.hidden = NO;
         }
     }
@@ -476,7 +476,7 @@
         return;
     }
 
-    // 光影包通常是 zip 格式
+    // Shader packs are usually in zip format
     UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc] initWithDocumentTypes:@[@"public.zip-archive", @"public.item"] inMode:UIDocumentPickerModeImport];
     picker.allowsMultipleSelection = YES;
     picker.delegate = self;
@@ -537,7 +537,7 @@
 #pragma mark - Check for Updates
 
 - (void)checkForUpdates {
-    // 将本地 ShaderItem 列表转换为 ModItem 列表，适配 ModUpdateViewController
+    // Convert the local ShaderItem list into a ModItem list to fit ModUpdateViewController
     NSArray<ModItem *> *mods = [self convertShadersToMods:self.localShaders];
     if (mods.count == 0) {
         [self showSimpleAlertWithTitle:@"Notice" message:@"There are no local shader packs, so there is nothing to check for updates."];
@@ -687,7 +687,7 @@
     }
 
     // Adapt to the custom launcher background: give the cell a frosted-glass/translucent effect
-    // ShaderTableViewCell 自身 contentView 背景为 clearColor，由 BackgroundManager 统一注入
+    // ShaderTableViewCell sets its own contentView background to clearColor; BackgroundManager injects it uniformly
     [[BackgroundManager sharedManager] applyEffectToCell:cell];
 
     return cell;
@@ -819,7 +819,7 @@
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     if (self.isSelectMode) {
-        // 选择模式下：点击行切换该光影的选中状态
+        // In selection mode: tapping a row toggles that shader's selected state
         ShaderItem *shader = self.filteredLocalShaders[indexPath.row];
         [self toggleSelectionForShader:shader];
         // Update the checkbox of that cell directly, avoiding the flicker of a full reload
@@ -827,7 +827,7 @@
         if (cell) {
             [self applyCheckboxToCell:cell selected:[self isShaderSelected:shader]];
         }
-        // 取消选中高亮
+        // Clear the selection highlight
         [tableView deselectRowAtIndexPath:indexPath animated:YES];
     } else {
         // Normal mode: only clear the highlight, with no other action
@@ -835,9 +835,9 @@
     }
 }
 
-// 禁用光影切换功能 - 光影管理只用于查看和删除
+// Shader toggle feature disabled - shader management is only for viewing and deleting
 - (void)shaderCellDidTapToggle:(UITableViewCell *)cell {
-    // 功能已禁用
+    // Feature disabled
 }
 
 - (void)shaderCellDidTapOpenLink:(UITableViewCell *)cell {

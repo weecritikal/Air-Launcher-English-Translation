@@ -36,19 +36,19 @@ extern bool isUseStackQueueCall;
     for (int i = 0; i < text.length; i++) {
         // Directly convert unichar to jchar since both are in UTF-16 encoding.
         unichar theChar = [text characterAtIndex:i];
-        // 关键修复（虚拟键盘输入无反应）：
-        //   之前用 if-else 二选一：isUseStackQueueCall=true 时只调用 sendCharMods，
-        //   不调用 sendChar。但 MC 1.13+ 已废弃 glfwSetCharModsCallback，只注册
-        //   glfwSetCharCallback，故 GLFW_invoke_CharMods 为 NULL，
-        //   CallbackBridge_nativeSendCharMods 在 `if (GLFW_invoke_CharMods && isInputReady)`
-        //   处直接返回 NO，字符被静默丢弃 → 虚拟键盘输入完全无反应。
+        // Key fix (virtual keyboard input did nothing):
+        //   Previously an if-else picked one of the two: when isUseStackQueueCall=true only sendCharMods was called
+        //   and sendChar was not. But MC 1.13+ has deprecated glfwSetCharModsCallback and only registers
+        //   glfwSetCharCallback, so GLFW_invoke_CharMods is NULL and
+        //   CallbackBridge_nativeSendCharMods returns NO right at `if (GLFW_invoke_CharMods && isInputReady)`,
+        //   silently dropping the character → virtual keyboard input did nothing at all.
         //
-        //   与硬件键盘（input/KeyboardInput.m:162-163）行为对齐：同时发送 CharMods
-        //   和 Char。MC 实际只会响应其注册的那个回调（Char 或 CharMods），
-        //   不会出现重复字符。这样：
-        //   - MC 1.13+（仅 Char）→ sendChar 生效，sendCharMods 静默失败
-        //   - MC pre-1.13（仅 CharMods）→ sendCharMods 生效，sendChar 静默失败
-        //   - 任何 GLFW 后端版本都能正确传递字符
+        //   Now aligned with the hardware keyboard behavior (input/KeyboardInput.m:162-163): send both CharMods
+        //   and Char. MC only responds to the callback it actually registered (Char or CharMods),
+        //   so no duplicate characters appear. This way:
+        //   - MC 1.13+ (Char only) → sendChar takes effect, sendCharMods fails silently
+        //   - MC pre-1.13 (CharMods only) → sendCharMods takes effect, sendChar fails silently
+        //   - Characters are delivered correctly on any GLFW backend version
         if (self.sendCharMods != nil) {
             self.sendCharMods(theChar, 0);
         }

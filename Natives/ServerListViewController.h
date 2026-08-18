@@ -2,12 +2,12 @@
 //  ServerListViewController.h
 //  Amethyst
 //
-//  服务器列表页，参照 ModpackInstallViewController 的 UI 模式：
-//  - 顶部源切换（Modrinth / CurseForge）
-//  - 搜索框
-//  - 列表展示服务器
-//  - 点击进入详情（ServerDetailViewController）
-//  - 使用 InlineMessageView 替代弹窗
+//  The server list page, following the UI pattern of ModpackInstallViewController:
+//  - a source switch at the top (Modrinth / CurseForge)
+//  - a search box
+//  - a list of servers
+//  - tapping one opens the details (ServerDetailViewController)
+//  - InlineMessageView replaces the modal alerts
 //
 
 #import <UIKit/UIKit.h>

@@ -1,10 +1,10 @@
 #import <UIKit/UIKit.h>
 
-/// 陶瓦联机界面（参考 FCL 风格）
+/// Terracotta multiplayer screen (modeled on the FCL style)
 ///
-/// 启动器内由 LauncherRootViewController/LauncherCardLayoutViewController 通过
-/// ShowMultiplayer 通知弹出；游戏内由 SurfaceViewController+Navigation 通过
-/// 悬浮球菜单弹出。两种入口都展示同一个控制器（modal）。
+/// Inside the launcher it is presented by LauncherRootViewController/LauncherCardLayoutViewController via
+/// the ShowMultiplayer notification; in game it is presented by SurfaceViewController+Navigation via
+/// the floating ball menu. Both entry points show the same controller (modally).
 @interface TerracottaViewController : UIViewController
 
 @end

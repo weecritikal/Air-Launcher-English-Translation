@@ -13,7 +13,7 @@
             return self;
         }
 
-        // 来源 API：1=Modrinth，2=CurseForge（默认值根据字段命名风格推断）
+        // The source API: 1=Modrinth, 2=CurseForge (the default is inferred from the field naming style)
         id apiSrc = data[@"apiSource"];
         if ([apiSrc respondsToSelector:@selector(integerValue)]) {
             _apiSource = [apiSrc integerValue];
@@ -23,19 +23,19 @@
             _apiSource = ServerAPISourceCurseForge;
         }
 
-        // 服务器项目 ID
+        // The server project ID
         id sid = data[@"serverID"] ?: data[@"project_id"] ?: data[@"id"] ?: data[@"slug"];
         _serverID = [sid isKindOfClass:[NSString class]] ? sid : [sid description];
 
-        // 标题：Modrinth 用 title，CurseForge 用 name
+        // The title: Modrinth uses title and CurseForge uses name
         id title = data[@"title"] ?: data[@"name"];
         _title = [title isKindOfClass:[NSString class]] ? title : [title description];
 
-        // 描述：Modrinth 用 description，CurseForge 用 summary
+        // The description: Modrinth uses description and CurseForge uses summary
         id desc = data[@"description"] ?: data[@"summary"];
         _serverDescription = [desc isKindOfClass:[NSString class]] ? desc : @"";
 
-        // 图标 URL：Modrinth 用 icon_url / imageUrl，CurseForge 用 logo.thumbnailUrl / logo.url
+        // The icon URL: Modrinth uses icon_url / imageUrl and CurseForge uses logo.thumbnailUrl / logo.url
         NSString *icon = data[@"iconURL"] ?: data[@"icon_url"] ?: data[@"imageUrl"];
         if (![icon isKindOfClass:[NSString class]] || icon.length == 0) {
             NSDictionary *logo = [data[@"logo"] isKindOfClass:[NSDictionary class]] ? data[@"logo"] : nil;
@@ -43,11 +43,11 @@
         }
         _iconURL = [icon isKindOfClass:[NSString class]] ? icon : @"";
 
-        // 作者
+        // The author
         id author = data[@"author"];
         _author = [author isKindOfClass:[NSString class]] ? author : @"";
 
-        // 下载数
+        // The download count
         id dl = data[@"downloads"];
         if ([dl isKindOfClass:[NSNumber class]]) {
             _downloads = dl;
@@ -55,7 +55,7 @@
             _downloads = @([dl longLongValue]);
         }
 
-        // 点赞数：Modrinth 用 follows，CurseForge 用 thumbsUpCount
+        // The like count: Modrinth uses follows and CurseForge uses thumbsUpCount
         id likes = data[@"likes"] ?: data[@"follows"] ?: data[@"thumbsUpCount"];
         if ([likes isKindOfClass:[NSNumber class]]) {
             _likes = likes;
@@ -63,24 +63,24 @@
             _likes = @([likes longLongValue]);
         }
 
-        // 最后更新时间
+        // The last updated time
         id updated = data[@"lastUpdated"] ?: data[@"date_modified"] ?: data[@"dateReleased"];
         _lastUpdated = [updated isKindOfClass:[NSString class]] ? updated : @"";
 
-        // 项目类型：Modrinth 返回 project_type，CurseForge 通过 classId 推断
+        // The project type: Modrinth returns project_type and CurseForge is inferred from classId
         NSString *ptype = data[@"projectType"] ?: data[@"project_type"];
         if ([ptype isKindOfClass:[NSString class]] && ptype.length > 0) {
             _projectType = ptype;
         } else {
-            // 默认：Modrinth 的 server/modpack，CurseForge 的 modpack
+            // Default: server/modpack for Modrinth and modpack for CurseForge
             _projectType = (_apiSource == ServerAPISourceCurseForge) ? @"modpack" : @"server";
         }
 
-        // 分类
+        // Categories
         id cats = data[@"categories"];
         _categories = [cats isKindOfClass:[NSArray class]] ? cats : @[];
 
-        // 主页：Modrinth 用 page_url，CurseForge 用 websiteUrl
+        // The home page: Modrinth uses page_url and CurseForge uses websiteUrl
         NSString *home = data[@"homepage"] ?: data[@"page_url"];
         if (![home isKindOfClass:[NSString class]] || home.length == 0) {
             NSDictionary *links = [data[@"links"] isKindOfClass:[NSDictionary class]] ? data[@"links"] : nil;
@@ -94,17 +94,17 @@
 - (void)applyDetailData:(NSDictionary *)data {
     if (![data isKindOfClass:[NSDictionary class]]) return;
 
-    // 服务器地址：优先取 server_address / serverAddress / ip / address 字段
+    // The server address: prefer the server_address / serverAddress / ip / address fields
     NSString *addr = data[@"server_address"] ?: data[@"serverAddress"] ?: data[@"ip"] ?: data[@"address"];
     if ([addr isKindOfClass:[NSString class]] && addr.length > 0) {
         self.serverAddress = addr;
     } else if (self.serverDescription.length > 0) {
-        // 回退：从描述中解析可能的地址（IP:端口 或 域名:端口）
+        // Fallback: parse a possible address out of the description (IP:port or domain:port)
         NSString *parsed = [self extractAddressFromText:self.serverDescription];
         if (parsed) self.serverAddress = parsed;
     }
 
-    // 关联整合包 ID：Modrinth 用 modpack_project_id，CurseForge 用 modpackId
+    // The linked modpack ID: Modrinth uses modpack_project_id and CurseForge uses modpackId
     NSString *mpID = data[@"modpack_project_id"] ?: data[@"modpackId"] ?: data[@"associatedModpackId"];
     if ([mpID isKindOfClass:[NSString class]] && mpID.length > 0) {
         self.associatedModpackID = mpID;
@@ -112,7 +112,7 @@
         self.associatedModpackID = [mpID description];
     }
 
-    // 服务端整合包文件信息（如果有）
+    // The server modpack file information (when there is any)
     NSString *spURL = data[@"serverPackDownloadURL"] ?: data[@"downloadUrl"];
     if ([spURL isKindOfClass:[NSString class]] && spURL.length > 0) {
         self.serverPackDownloadURL = spURL;
@@ -129,11 +129,11 @@
     }
 }
 
-/// 从文本中提取可能的服务器地址（IP:端口 或 域名:端口 形式）
+/// Extract a possible server address from text (in the IP:port or domain:port form)
 - (nullable NSString *)extractAddressFromText:(NSString *)text {
     if (!text.length) return nil;
     NSError *error = nil;
-    // 匹配：xxx.xxx.xxx.xxx:port 或 domain.example.com:port
+    // Matches xxx.xxx.xxx.xxx:port or domain.example.com:port
     NSRegularExpression *regex = [NSRegularExpression
         regularExpressionWithPattern:@"\\b((?:[a-zA-Z0-9-]+\\.)+[a-zA-Z]{2,}|(?:\\d{1,3}\\.){3}\\d{1,3}):\\d{1,5}\\b"
                              options:0

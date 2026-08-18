@@ -1,19 +1,19 @@
 #import <UIKit/UIKit.h>
 
-// 版本设置 - 管理当前版本的模组/光影/Java/内存/渲染器/服务器/资源包/世界
-// 合并了原 LauncherProfileEditorViewController 的版本选择和重命名功能
-// 参照 FCL 风格，作为统一的 Edit Profile 页面
+// Version settings - manages the mods/shaders/Java/memory/renderer/server/resource packs/worlds of the current version
+// It absorbed the version picker and rename features of the old LauncherProfileEditorViewController
+// Following the FCL style, it is the single Edit Profile page
 //
-// 重构（Air-Design v1.2）：
-//   - 顶部 Hero 卡片：Profile 名 + 当前版本 pill + 游戏目录
-//   - 5 个 Bento 分组：版本信息 / 资源管理 / 组件安装 / 高级设置 / 服务器
-//   - 横屏双列布局：左侧（版本信息、资源管理）+ 右侧（组件安装、高级设置、服务器）
-//   - UIViewController + leftTableView / rightTableView 实现横屏双列
+// Rework (Air-Design v1.2):
+//   - a hero card at the top: the profile name + the current version pill + the game directory
+//   - 5 Bento groups: version info / content / install components / advanced / server
+//   - a two-column landscape layout: left (version info, content) + right (install components, advanced, server)
+//   - UIViewController + leftTableView / rightTableView provide the two landscape columns
 @interface ProfileSettingsViewController : UIViewController <UITableViewDataSource, UITableViewDelegate>
 
-// 编辑现有 profile 时设置 profileName（从 PLProfiles.current.profiles 查找）
+// When editing an existing profile, set profileName (looked up in PLProfiles.current.profiles)
 @property (nonatomic, copy, nullable) NSString *profileName;
-// 新建 profile 时直接传入 profile 字典（与 profileName 二选一）
+// When creating a profile, pass the profile dictionary directly (as an alternative to profileName)
 @property (nonatomic, strong, nullable) NSMutableDictionary *profile;
 
 @end

@@ -1,6 +1,6 @@
 #import <Foundation/Foundation.h>
 
-// 下载源偏好键（按资源类型独立）
+// Download source preference keys (one per asset type)
 extern NSString *const PREF_DOWNLOAD_SOURCE_MOD;
 extern NSString *const PREF_DOWNLOAD_SOURCE_SHADER;
 extern NSString *const PREF_DOWNLOAD_SOURCE_RESOURCEPACK;
@@ -8,11 +8,11 @@ extern NSString *const PREF_DOWNLOAD_SOURCE_DATAPACK;
 extern NSString *const PREF_DOWNLOAD_SOURCE_MODPACK;
 extern NSString *const PREF_DOWNLOAD_SOURCE_WORLD;
 extern NSString *const PREF_DOWNLOAD_SOURCE_SERVER;
-// CurseForge API Key 偏好键
+// The CurseForge API key preference key
 extern NSString *const PREF_CURSEFORGE_API_KEY;
-// Mod 更新时是否保留旧文件
+// Whether to keep the old file when updating a mod
 extern NSString *const PREF_MOD_UPDATE_KEEP_OLD;
-// 模组镜像源（official / mcim）
+// The mod mirror source (official / mcim)
 extern NSString *const PREF_MOD_MIRROR;
 
 @interface PLPreferences : NSObject
@@ -28,13 +28,13 @@ extern NSString *const PREF_MOD_MIRROR;
 - (BOOL)setObject:(NSString *)key value:(id)value;
 - (void)reset;
 
-// 下载源管理（按类型独立）
+// Download source management (per type)
 + (NSString *)currentDownloadSourceForType:(NSString *)type;
 + (void)setDownloadSource:(NSString *)source forType:(NSString *)type;
 // CurseForge API Key
 + (NSString *)curseForgeAPIKey;
 + (void)setCurseForgeAPIKey:(NSString *)key;
-// Mod 更新旧文件保留
+// Keeping the old file on a mod update
 + (BOOL)modUpdateKeepOld;
 + (void)setModUpdateKeepOld:(BOOL)keepOld;
 

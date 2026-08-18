@@ -2,42 +2,42 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-/// 更新信息数据模型
+/// Update information data model
 @interface UpdateInfo : NSObject
-@property(nonatomic, copy, nullable) NSString *latestVersion;    /* 最新版本号（去掉 v 前缀） */
-@property(nonatomic, copy, nullable) NSString *currentVersion;   /* 当前 App 版本号 */
-@property(nonatomic, assign) BOOL hasUpdate;                     /* 是否有新版本 */
-@property(nonatomic, copy, nullable) NSString *releaseName;      /* release 标题 */
-@property(nonatomic, copy, nullable) NSString *releaseNotes;     /* 更新日志（markdown） */
-@property(nonatomic, copy, nullable) NSString *htmlURL;          /* release 页面链接 */
-@property(nonatomic, copy, nullable) NSString *publishedAt;      /* 发布时间（ISO8601） */
-@property(nonatomic, copy, nullable) NSArray<NSDictionary *> *assets; /* 下载资源列表 */
+@property(nonatomic, copy, nullable) NSString *latestVersion;    /* Latest version number (with the v prefix stripped) */
+@property(nonatomic, copy, nullable) NSString *currentVersion;   /* Current app version number */
+@property(nonatomic, assign) BOOL hasUpdate;                     /* Whether a new version is available */
+@property(nonatomic, copy, nullable) NSString *releaseName;      /* Release title */
+@property(nonatomic, copy, nullable) NSString *releaseNotes;     /* Changelog (markdown) */
+@property(nonatomic, copy, nullable) NSString *htmlURL;          /* Link to the release page */
+@property(nonatomic, copy, nullable) NSString *publishedAt;      /* Publication time (ISO8601) */
+@property(nonatomic, copy, nullable) NSArray<NSDictionary *> *assets; /* List of downloadable assets */
 @end
 
-/// 更新检查器（参考 FCL/ZL2，使用 GitHub Releases API）
+/// Update checker (modeled on FCL/ZL2, using the GitHub Releases API)
 ///
-/// 正式版检查：访问 /releases/latest 接口，GitHub 自动返回最新的非 pre-release。
-/// 项目地址：https://github.com/herbrine8403/Amethyst-iOS-MyRemastered
+/// Stable release check: calls the /releases/latest endpoint, and GitHub automatically returns the newest non-pre-release.
+/// Project URL: https://github.com/herbrine8403/Amethyst-iOS-MyRemastered
 @interface UpdateChecker : NSObject
 
-/// 仓库所有者
+/// Repository owner
 @property(nonatomic, class, readonly) NSString *repoOwner;
-/// 仓库名称
+/// Repository name
 @property(nonatomic, class, readonly) NSString *repoName;
-/// 正式版 releases API URL
+/// Stable releases API URL
 @property(nonatomic, class, readonly) NSString *latestReleaseURL;
 
-/// 检查更新（正式版）。网络请求在后台线程，回调在主线程。
-/// @param completion 回调，info 为 nil 表示请求失败（error 不为 nil）或解析失败
+/// Check for updates (stable releases). The network request runs on a background thread and the callback on the main thread.
+/// @param completion callback; info is nil when the request failed (error is non-nil) or parsing failed
 + (void)checkForUpdateWithCompletion:(void(^)(UpdateInfo *_Nullable info, NSError *_Nullable error))completion;
 
-/// 打开 release 页面（跳转 Safari）
+/// Open the release page (in Safari)
 + (void)openReleasePage;
 
-/// 版本比较：v1 < v2 返回 NSOrderedAscending
+/// Version comparison: returns NSOrderedAscending when v1 < v2
 + (NSComparisonResult)compareVersion:(NSString *)v1 withVersion:(NSString *)v2;
 
-/// 获取当前 App 版本号（CFBundleShortVersionString）
+/// Get the current app version number (CFBundleShortVersionString)
 + (NSString *)currentVersion;
 
 @end

@@ -3,7 +3,7 @@
 //  Amethyst
 //
 //  Shader service implementation - Fixed version
-//  修复：统一使用 defaultSessionConfiguration，改用 NSURLSessionDownloadTask 提升下载效率和速度
+//  Fix: use defaultSessionConfiguration consistently, switching to NSURLSessionDownloadTask for better download throughput
 //
 
 #import "ShaderService.h"
@@ -39,10 +39,10 @@
     if (self = [super init]) {
         _onlineSearchEnabled = NO;
 
-        // 使用默认会话配置，避免后台会话限速。
-        // 参考 FCL/ZalithLauncher2：提升并发连接数 6 → 16，与 ModService 对齐，
-        // 在并发下载多个光影资源文件时显著提升吞吐量。完整性仍由下载完成后的
-        // 文件大小/格式校验保证（与原实现一致，未引入分片下载以避免破坏校验流程）。
+        // Use the default session configuration, to avoid background session throttling.
+        // Following FCL/ZalithLauncher2: raise the concurrent connection count from 6 to 16, matching ModService,
+        // which noticeably improves throughput when downloading several shader files at once. Integrity is still guaranteed by the
+        // file size/format check after the download (as in the original implementation; chunked downloading was not introduced, so the check flow is undisturbed).
         NSURLSessionConfiguration *config = [NSURLSessionConfiguration defaultSessionConfiguration];
         config.timeoutIntervalForRequest = 120.0;
         config.timeoutIntervalForResource = 300.0;
@@ -93,11 +93,11 @@
 #pragma mark - Shaders folder detection & scan
 
 /// Resolve the profile gameDir into an absolute path.
-/// 与 ModService.resolveAbsoluteGameDirForProfile: 对齐：
+/// Aligned with ModService.resolveAbsoluteGameDirForProfile::
 /// A profile gameDir is usually relative (such as "./custom_gamedir/{name}") and has to be resolved against POJAV_GAME_DIR.
-/// 之前 ShaderService 直接使用相对路径，导致 shaderpacks 目录找不到（fileExistsAtPath 基于 cwd 解析），
-/// 用户点击下载光影按钮后没反应（实际是 ensureShadersFolderForProfile 创建目录到错误位置，
-/// 下载完成后 moveItem 失败但 handler 已切主线程报错，用户感知"无反应"）。
+/// ShaderService used to use the relative path directly, so the shaderpacks folder could not be found (fileExistsAtPath resolves against the cwd),
+/// and tapping the download shader button appeared to do nothing (in reality ensureShadersFolderForProfile created the folder in the wrong place,
+/// moveItem failed after the download, and the handler reported the error on the main thread, which the user read as "nothing happened").
 - (nullable NSString *)resolveAbsoluteGameDirForProfile:(NSString *)profileName {
     NSString *profile = profileName.length ? profileName : @"default";
     @try {
@@ -136,7 +136,7 @@
         }
     }
 
-    // 回退到 POJAV_GAME_DIR/shaderpacks
+    // Fall back to POJAV_GAME_DIR/shaderpacks
     const char *gameDirC = getenv("POJAV_GAME_DIR");
     if (gameDirC) {
         NSString *gameDir = [NSString stringWithUTF8String:gameDirC];
@@ -149,7 +149,7 @@
     return nil;
 }
 
-/// 获取当前 profile 的 shaderpacks 目录，不存在时自动创建
+/// Return the shaderpacks folder of the current profile, creating it if it does not exist
 - (nullable NSString *)ensureShadersFolderForProfile:(NSString *)profileName error:(NSError **)error {
     NSString *profile = profileName.length ? profileName : @"default";
     NSFileManager *fm = [NSFileManager defaultManager];
@@ -295,8 +295,8 @@
     NSFileManager *fm = [NSFileManager defaultManager];
 
     if (!shadersFolder) {
-        // 回退到 ensureShadersFolderForProfile:error:，复用绝对路径解析逻辑
-        // （之前直接读 prof[@"gameDir"] 不做相对路径解析，会导致目录创建到错误位置）
+        // Fall back to ensureShadersFolderForProfile:error:, reusing the absolute path resolution
+        // (reading prof[@"gameDir"] directly without resolving the relative path created the folder in the wrong place)
         NSString *profile = profileName.length ? profileName : @"default";
         NSError *dirError = nil;
         NSString *created = [self ensureShadersFolderForProfile:profile error:&dirError];
@@ -438,8 +438,8 @@
             [self.downloadProgressSnapshots removeObjectForKey:task];
         }
         if (handler) {
-            // 防御性切主线程：delegate 默认在 NSURLSession 的 delegateQueue 上执行（非主线程）。
-            // 调用方（DownloadViewController）虽然已切主线程，但接口约定应当安全。
+            // Defensively hop to the main thread: the delegate runs on the NSURLSession delegateQueue by default (not the main thread).
+            // The caller (DownloadViewController) has already switched to the main thread, but the interface contract should be safe.
             NSError *capturedError = error;
             dispatch_async(dispatch_get_main_queue(), ^{
                 handler(capturedError);
@@ -496,7 +496,7 @@ totalBytesExpectedToWrite:(int64_t)totalBytesExpectedToWrite {
 
     // Set throughput and estimatedTimeRemaining on the NSProgress passed to the progress callback,
     // so the caller (DownloadViewController) can show the speed and ETA on the FCL-style download progress card.
-    // 与 ModService 对齐，之前 ShaderService 同样存在速度/ETA 永远为 0 的问题。
+    // Aligned with ModService; previously ShaderService had the same problem of speed/ETA always being 0.
     NSProgress *downloadProgress = [NSProgress progressWithTotalUnitCount:totalBytesExpectedToWrite];
     downloadProgress.completedUnitCount = totalBytesWritten;
     if (speed > 0) {

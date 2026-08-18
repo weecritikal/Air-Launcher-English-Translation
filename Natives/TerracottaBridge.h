@@ -2,19 +2,19 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-/// Rust 侧 8 个底层状态枚举（对应 terracotta_ios_get_state 返回 JSON 的 "state" 字段）
+/// The 8 low-level state enums on the Rust side (corresponding to the "state" field of the JSON returned by terracotta_ios_get_state)
 typedef NS_ENUM(NSInteger, TerracottaStateKind) {
-    TerracottaStateKindWaiting          = 0,  /* 空闲，未开始联机 */
-    TerracottaStateKindHostScanning     = 1,  /* 房主：扫描 MC LAN 多播 */
-    TerracottaStateKindHostStarting     = 2,  /* 房主：EasyTier 启动中 */
-    TerracottaStateKindHostOk           = 3,  /* 房主：联机已建立，等待访客 */
-    TerracottaStateKindGuestConnecting  = 4,  /* 访客：连接房主中 */
-    TerracottaStateKindGuestStarting    = 5,  /* 访客：EasyTier 启动中 */
-    TerracottaStateKindGuestOk          = 6,  /* 访客：联机已建立，可进 MC */
-    TerracottaStateKindException        = 7,  /* 异常（参考 type 字段） */
+    TerracottaStateKindWaiting          = 0,  /* Idle, multiplayer not started */
+    TerracottaStateKindHostScanning     = 1,  /* Host: scanning for MC LAN multicast */
+    TerracottaStateKindHostStarting     = 2,  /* Host: EasyTier starting */
+    TerracottaStateKindHostOk           = 3,  /* Host: connection established, waiting for guests */
+    TerracottaStateKindGuestConnecting  = 4,  /* Guest: connecting to the host */
+    TerracottaStateKindGuestStarting    = 5,  /* Guest: EasyTier starting */
+    TerracottaStateKindGuestOk          = 6,  /* Guest: connection established, ready to enter MC */
+    TerracottaStateKindException        = 7,  /* Exception (see the type field) */
 };
 
-/// 玩家资料（房主 + 已加入访客）
+/// Player profile (host + joined guests)
 @interface TerracottaPlayerProfile : NSObject
 @property(nonatomic, copy, nullable) NSString *name;
 @property(nonatomic, copy, nullable) NSString *machineId;
@@ -23,7 +23,7 @@ typedef NS_ENUM(NSInteger, TerracottaStateKind) {
 @property(nonatomic, copy, nullable) NSString *kind;
 @end
 
-/// Rust 侧状态快照
+/// State snapshot from the Rust side
 @interface TerracottaState : NSObject
 @property(nonatomic, assign) TerracottaStateKind kind;
 @property(nonatomic, assign) NSInteger index;
@@ -31,45 +31,45 @@ typedef NS_ENUM(NSInteger, TerracottaStateKind) {
 @property(nonatomic, copy, nullable) NSString *directConnectURL;
 @property(nonatomic, copy, nullable) NSArray<TerracottaPlayerProfile *> *profiles;
 @property(nonatomic, assign) NSInteger profileIndex;
-@property(nonatomic, assign) NSInteger exceptionType;  /* 仅 kind==Exception 时有效 */
+@property(nonatomic, assign) NSInteger exceptionType;  /* Only valid when kind==Exception */
 @end
 
-/// C ABI 封装层。所有方法线程安全。
+/// C ABI wrapper layer. All methods are thread safe.
 @interface TerracottaBridge : NSObject
 
-/// 运行时检查 libterracotta 是否链接。未链接时所有调用安全降级。
+/// Checks at runtime whether libterracotta is linked. When it is not, all calls degrade safely.
 + (BOOL)isAvailable;
 
-/// 初始化 Terracotta。App 启动时调用一次。
+/// Initialize Terracotta. Called once at app launch.
 + (BOOL)startWithWorkingDirectory:(NSString *)workingDirectory
                        loggingPath:(nullable NSString *)loggingPath;
 
-/// 回到 Waiting 状态（终止当前会话）。Idempotent。
+/// Return to the Waiting state (terminating the current session). Idempotent.
 + (void)setWaiting;
 
-/// 房主：开始扫描 MC LAN 多播。
+/// Host: start scanning for MC LAN multicast.
 + (void)setScanningWithRoom:(nullable NSString *)room
                  playerName:(nullable NSString *)playerName;
 
-/// 房主（手动端口模式）：用用户输入的 MC LAN 端口启动 host。
+/// Host (manual port mode): start the host using the MC LAN port entered by the user.
 + (BOOL)startHostWithRoom:(nullable NSString *)room
                      port:(uint16_t)port
                playerName:(nullable NSString *)playerName;
 
-/// 访客：加入房间。
+/// Guest: join a room.
 + (BOOL)setGuestingWithRoom:(NSString *)room
                  playerName:(nullable NSString *)playerName;
 
-/// 校验邀请码格式。返回 YES 表示合法的 Scaffolding 邀请码。
+/// Validate the invite code format. Returns YES for a valid Scaffolding invite code.
 + (BOOL)verifyRoomCode:(NSString *)code;
 
-/// 轮询当前状态。返回 nil 表示解析失败或库不可用。
+/// Poll the current state. Returns nil if parsing failed or the library is unavailable.
 + (nullable TerracottaState *)pollState;
 
-/// 元数据：version / compileTimestamp / easytierVersion。
+/// Metadata: version / compileTimestamp / easytierVersion.
 + (nullable NSDictionary<NSString *, id> *)metadata;
 
-/// 异常类型描述（用于 UI 显示）。
+/// Exception type description (for UI display).
 + (NSString *)describeException:(NSInteger)type;
 
 @end

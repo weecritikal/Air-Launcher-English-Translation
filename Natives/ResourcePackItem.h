@@ -2,7 +2,7 @@
 //  ResourcePackItem.h
 //  Amethyst
 //
-//  资源包数据模型，参照 ShaderItem，新增 packFormat（从 pack.mcmeta 解析）
+//  Resource pack model, modelled on ShaderItem with packFormat added (parsed from pack.mcmeta)
 //
 
 #import <Foundation/Foundation.h>
@@ -12,12 +12,12 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface ResourcePackItem : NSObject
 
-// --- 本地资源包属性 ---
+// --- Local resource pack properties ---
 @property (nonatomic, copy, nullable) NSString *fileName;
 @property (nonatomic, copy, nullable) NSString *filePath;
 @property (nonatomic, assign) BOOL disabled;
 
-// --- 在线资源包属性 ---
+// --- Online resource pack properties ---
 @property (nonatomic, copy, nullable) NSString *onlineID;
 @property (nonatomic, copy, nullable) NSString *author;
 @property (nonatomic, strong, nullable) NSNumber *downloads;

@@ -2,8 +2,8 @@
 //  TouchControllerBridge.h
 //  Angel Aura Amethyst
 //
-//  TouchController JNI 桥接头文件
-//  提供 Minecraft TouchController Mod 与 iOS 启动器之间的通信接口
+//  TouchController JNI bridge header
+//  Provides the communication interface between the Minecraft TouchController mod and the iOS launcher
 //
 
 #ifndef TouchControllerBridge_h
@@ -16,49 +16,49 @@ extern "C" {
 #endif
 
 /**
- * TouchController 桥接类
- * 负责管理 TouchController 静态库的初始化和通信
+ * TouchController bridge class
+ * Responsible for managing initialization of and communication with the TouchController static library
  */
 @interface TouchControllerBridge : NSObject
 
 /**
- * 初始化 TouchController 桥接
- * @return 初始化是否成功
+ * Initialize the TouchController bridge
+ * @return whether initialization succeeded
  */
 + (BOOL)initializeTouchController;
 
 /**
- * 创建新的 TouchController 传输对象
- * @param name 传输对象名称（Unix Domain Socket 路径）
- * @return 传输对象句柄（如果失败返回 -1）
+ * Create a new TouchController transport object
+ * @param name the transport object name (Unix domain socket path)
+ * @return the transport object handle (-1 on failure)
  */
 + (long long)createTransportWithName:(NSString *)name;
 
 /**
- * 从 TouchController 接收数据
- * @param handle 传输对象句柄
- * @param buffer 接收缓冲区
- * @return 接收的字节数（如果无数据返回 0，如果失败返回 -1）
+ * Receive data from TouchController
+ * @param handle the transport object handle
+ * @param buffer the receive buffer
+ * @return the number of bytes received (0 if there is no data, -1 on failure)
  */
 + (int)receiveFromTransport:(long long)handle buffer:(NSMutableData *)buffer;
 
 /**
- * 向 TouchController 发送数据
- * @param handle 传输对象句柄
- * @param data 要发送的数据
- * @return 发送是否成功
+ * Send data to TouchController
+ * @param handle the transport object handle
+ * @param data the data to send
+ * @return whether sending succeeded
  */
 + (BOOL)sendToTransport:(long long)handle data:(NSData *)data;
 
 /**
- * 销毁 TouchController 传输对象
- * @param handle 传输对象句柄
+ * Destroy the TouchController transport object
+ * @param handle the transport object handle
  */
 + (void)destroyTransport:(long long)handle;
 
 /**
- * 检查 TouchController 是否可用
- * @return TouchController 是否已正确初始化
+ * Check whether TouchController is available
+ * @return whether TouchController has been initialized correctly
  */
 + (BOOL)isTouchControllerAvailable;
 

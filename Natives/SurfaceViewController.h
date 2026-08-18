@@ -28,8 +28,8 @@ CGPoint lastVirtualMousePoint;
 
 + (GameSurfaceView *)surface;
 + (BOOL)isRunning;
-// 获取当前显示的 SurfaceViewController 实例
-// 支持作为 rootViewController 或以模态方式呈现两种情况
+// Get the currently displayed SurfaceViewController instance
+// Supports both being the rootViewController and being presented modally
 + (instancetype)currentInstance;
 
 // LogView category
@@ -39,7 +39,7 @@ CGPoint lastVirtualMousePoint;
 @property(nonatomic) NSArray *menuArray;
 @property(nonatomic) UITableView *menuView;
 @property(nonatomic) UIScreenEdgePanGestureRecognizer* edgeGesture;
-@property(nonatomic) UIView *gameMenuOverlay; // FCL 风格悬浮按钮 + FPS/内存显示
+@property(nonatomic) UIView *gameMenuOverlay; // FCL style floating button + FPS/memory display
 
 @end
 
@@ -61,11 +61,11 @@ CGPoint lastVirtualMousePoint;
 - (void)actionOpenNavigationMenu;
 - (void)didSelectMenuItem:(int)item;
 - (void)viewWillTransitionToSize_Navigation:(CGRect)frame;
-// FCL 风格游戏内菜单动作
-- (void)actionToggleControls;        // 隐藏/显示控制按钮
-- (void)actionToggleVirtualMouse;    // 虚拟鼠标开关
-- (void)actionToggleKeyboard;        // 游戏内键盘开关
-- (void)actionAdjustResolution;      // 分辨率调整
-- (void)actionOpenMultiplayer;       // 联机（ZeroTier）
+// FCL style in-game menu actions
+- (void)actionToggleControls;        // Hide/show control buttons
+- (void)actionToggleVirtualMouse;    // Virtual mouse toggle
+- (void)actionToggleKeyboard;        // In-game keyboard toggle
+- (void)actionAdjustResolution;      // Resolution adjustment
+- (void)actionOpenMultiplayer;       // Multiplayer (ZeroTier)
 
 @end

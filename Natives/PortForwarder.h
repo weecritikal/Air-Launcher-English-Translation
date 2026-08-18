@@ -2,74 +2,74 @@
 //  PortForwarder.h
 //  Angel Aura Amethyst
 //
-//  TCP 端口转发器（支持房主模式和房客模式）
+//  TCP port forwarder (supporting both host and guest modes)
 //
 //  ============================================================================
-//  设计说明
+//  Design notes
 //  ============================================================================
 //
-//  本文件实现 TCP 端口转发器，支持两种模式，实现 iOS 与 PC/Mac/Android 的
-//  多端联机：
+//  This file implements a TCP port forwarder with two modes, so iOS can play with
+//  PC/Mac/Android:
 //
-//  1. 房客模式（Guest Mode）：
-//     本地 BSD socket 监听 → 通过 libzt socket 转发到远程 ZeroTier IP
-//     用于 iOS 房客连接房主（PC/Mac/Android/iOS）。
-//     房客在 MC 中输入 127.0.0.1:localPort 即可连接到房主。
+//  1. Guest mode:
+//     a local BSD socket listens -> traffic is forwarded through a libzt socket to the remote ZeroTier IP
+//     Used when an iOS guest connects to a host (PC/Mac/Android/iOS).
+//     The guest enters 127.0.0.1:localPort in Minecraft to reach the host.
 //
-//  2. 房主模式（Host Mode，反向转发）：
-//     ZeroTier 网络监听（libzt socket）→ 转发到本地 MC LAN 端口（BSD socket）
-//     用于 iOS 房主接受 PC/Mac/Android/iOS 房客的连接。
-//     房客在 MC 中直接连接房主的 ZeroTier IP:listenPort 即可进入游戏。
+//  2. Host mode (reverse forwarding):
+//     a libzt socket listens on the ZeroTier network -> traffic is forwarded to the local MC LAN port (a BSD socket)
+//     Used when an iOS host accepts connections from PC/Mac/Android/iOS guests.
+//     A guest joins by connecting straight to the host ZeroTier IP:listenPort in Minecraft.
 //
-//  为什么需要端口转发而不是 SOCKS5 代理？
+//  Why port forwarding rather than a SOCKS5 proxy?
 //
-//  Minecraft 从 1.7.2 开始使用 Netty 作为网络库。Netty 的 NioSocketChannel
-//  底层使用 java.nio.channels.SocketChannel，而 SocketChannel 不检查 Java 的
-//  ProxySelector。这意味着 JVM 参数 -DsocksProxyHost/-DsocksProxyPort 对
-//  Minecraft 的多人游戏连接无效（只对 java.net.Socket 有效，如登录认证等）。
+//  Minecraft has used Netty as its networking library since 1.7.2. The Netty NioSocketChannel
+//  is built on java.nio.channels.SocketChannel, and SocketChannel does not consult the Java
+//  ProxySelector. That means the JVM arguments -DsocksProxyHost/-DsocksProxyPort do nothing for
+//  Minecraft multiplayer connections (they only affect java.net.Socket, as used for login authentication).
 //
-//  因此，当房客在 MC 中输入房主的 ZeroTier IP（如 10.147.17.1:54321）时：
-//    1. MC 的 Netty 创建 NioSocketChannel
-//    2. NioSocketChannel 直接创建 SocketChannel
-//    3. SocketChannel 尝试直接连接 10.147.17.1:54321
-//    4. 系统没有 ZeroTier 网络接口（我们用的是进程内 libzt）
-//    5. 系统无法路由到 10.147.17.1
-//    6. 连接失败，显示"无法连接"
+//  So when a guest enters the host ZeroTier IP (such as 10.147.17.1:54321) in Minecraft:
+//    1. Minecraft Netty creates an NioSocketChannel
+//    2. NioSocketChannel creates a SocketChannel directly
+//    3. SocketChannel tries to connect straight to 10.147.17.1:54321
+//    4. the system has no ZeroTier network interface (we use in-process libzt)
+//    5. the system cannot route to 10.147.17.1
+//    6. the connection fails with "could not connect"
 //
-//  房客模式的端口转发方案：
-//    1. 在本地监听一个 TCP 端口（如 127.0.0.1:25565）
-//    2. 当 MC 连接到 127.0.0.1:25565 时，通过 libzt 的 socket API 连接到
-//       房主的 ZeroTier IP:端口
-//    3. 双向转发数据
-//    4. 房客在 MC 中输入 127.0.0.1:25565 即可连接
+//  The guest-mode port forwarding approach:
+//    1. listen on a local TCP port (such as 127.0.0.1:25565)
+//    2. when Minecraft connects to 127.0.0.1:25565, connect through the libzt socket API to
+//       the host ZeroTier IP:port
+//    3. forward data in both directions
+//    4. the guest enters 127.0.0.1:25565 in Minecraft to connect
 //
-//  房主模式的反向转发方案：
-//    1. 通过 libzt 的 socket API 在 ZeroTier 网络中监听端口（如 0.0.0.0:25565）
-//    2. 当房客通过 ZeroTier 网络连接到房主的 IP:25565 时，接受连接
-//    3. 创建本地 BSD socket 连接到 127.0.0.1:localHostPort（MC LAN 端口）
-//    4. 双向转发数据（libzt socket ↔ 本地 BSD socket）
-//    5. 房客在 MC 中直接输入房主的 ZeroTier IP:25565 即可连接
+//  The host-mode reverse forwarding approach:
+//    1. listen on a port within the ZeroTier network through the libzt socket API (such as 0.0.0.0:25565)
+//    2. accept the connection when a guest reaches the host IP:25565 over the ZeroTier network
+//    3. create a local BSD socket connected to 127.0.0.1:localHostPort (the MC LAN port)
+//    4. forward data in both directions (libzt socket <-> local BSD socket)
+//    5. the guest connects straight to the host ZeroTier IP:25565 in Minecraft
 //
-//  架构说明：
-//    房客模式：
-//      - 监听 socket：系统 POSIX socket（socket/bind/listen/accept）
-//      - 客户端 socket：系统 POSIX socket（accept 返回的 fd）
-//      - 远程 socket：libzt socket（通过 ZeroTierBridge 创建）
-//    房主模式：
-//      - 监听 socket：libzt socket（通过 ZeroTierBridge 创建）
-//      - 客户端 socket：libzt socket（acceptOnSocket: 返回的 fd）
-//      - 本地 socket：系统 POSIX socket（连接到 127.0.0.1:localHostPort）
-//    - 转发使用 GCD 并发队列，两个方向同时转发
+//  The architecture:
+//    Guest mode:
+//      - listening socket: a system POSIX socket (socket/bind/listen/accept)
+//      - client socket: a system POSIX socket (the fd accept returns)
+//      - remote socket: a libzt socket (created through ZeroTierBridge)
+//    Host mode:
+//      - listening socket: a libzt socket (created through ZeroTierBridge)
+//      - client socket: a libzt socket (the fd acceptOnSocket: returns)
+//      - local socket: a system POSIX socket (connected to 127.0.0.1:localHostPort)
+//    - forwarding uses a concurrent GCD queue, with both directions running at once
 //
-//  与 ZeroTierBridge 的关系：
-//    PortForwarder 依赖 ZeroTierBridge 提供的 socket 方法与 ZeroTier 虚拟网络通信。
-//    ZeroTierBridge 必须已启动节点并加入网络后，PortForwarder 才能正常工作。
+//  The relationship with ZeroTierBridge:
+//    PortForwarder relies on the socket methods ZeroTierBridge provides to talk to the ZeroTier virtual network.
+//    ZeroTierBridge must have started the node and joined the network before PortForwarder can work.
 //
-//  注意事项：
-//    - PortForwarder 是单例模式（sharedForwarder）
-//    - 同一时间只能运行一种模式（房主模式或房客模式），启动新模式前应先 stop 旧模式
-//    - accept 循环在后台线程运行，避免阻塞主线程
-//    - 数据转发线程使用 autorelease pool 和 atomic 操作确保线程安全
+//  Notes:
+//    - PortForwarder is a singleton (sharedForwarder)
+//    - only one mode can run at a time (host or guest), so stop the old one before starting a new one
+//    - the accept loop runs on a background thread, so the main thread is not blocked
+//    - the forwarding threads use an autorelease pool and atomic operations for thread safety
 //
 //  =============================================================================
 
@@ -77,20 +77,20 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-/// 端口转发器默认本地监听端口（Minecraft 默认服务器端口）
+/// The default local listening port of the port forwarder (the default Minecraft server port)
 extern const uint16_t PortForwarderDefaultLocalPort;
 
-/// 端口转发模式
+/// Port forwarding modes
 typedef NS_ENUM(NSInteger, PortForwarderMode) {
-    PortForwarderModeNone = 0,   ///< 未运行
-    PortForwarderModeGuest,      ///< 房客模式：本地监听 → 转发到远程 ZeroTier IP
-    PortForwarderModeHost,       ///< 房主模式：ZeroTier 网络监听 → 转发到本地 MC LAN 端口
+    PortForwarderModeNone = 0,   ///< Not running
+    PortForwarderModeGuest,      ///< Guest mode: listen locally -> forward to the remote ZeroTier IP
+    PortForwarderModeHost,       ///< Host mode: listen on the ZeroTier network -> forward to the local MC LAN port
 };
 
-/// TCP 端口转发器（支持房主模式和房客模式）
+/// TCP port forwarder (supporting both host and guest modes)
 ///
-/// 单例模式，通过 +sharedForwarder 获取全局唯一实例。
-/// 同一时间只能运行一种模式，启动新模式前应先 stop 旧模式。
+/// A singleton, reached through +sharedForwarder.
+/// Only one mode can run at a time, so stop the old one before starting a new one.
 @interface PortForwarder : NSObject
 
 /// Singleton accessor
@@ -98,74 +98,74 @@ typedef NS_ENUM(NSInteger, PortForwarderMode) {
 
 #pragma mark - 房客模式
 
-/// 启动房客模式：本地监听 → 转发到远程 ZeroTier IP
+/// Start guest mode: listen locally -> forward to the remote ZeroTier IP
 ///
-/// 创建 POSIX socket 监听 127.0.0.1:localPort，并在后台线程接受客户端连接。
-/// 每个客户端连接后，通过 ZeroTierBridge 创建 libzt socket 连接到
-/// hostIP:hostPort，然后双向转发数据。
+/// Creates a POSIX socket listening on 127.0.0.1:localPort and accepts client connections on a background thread.
+/// For each client, a libzt socket is created through ZeroTierBridge to connect to
+/// hostIP:hostPort, and data is forwarded in both directions.
 ///
-/// 如果 localPort 为 0，则由系统自动分配可用端口。
-/// 如果 localPort 被占用，会尝试 localPort+1 到 localPort+9。
+/// When localPort is 0, the system picks a free port.
+/// When localPort is taken, localPort+1 through localPort+9 are tried.
 ///
-/// @param localPort 本地监听端口（0 表示自动分配）
-/// @param hostIP 远程主机地址（房主的 ZeroTier IP）
-/// @param hostPort 远程端口（房主的 MC LAN 端口）
-/// @return YES 表示启动成功，NO 表示失败
+/// @param localPort The local listening port (0 for automatic)
+/// @param hostIP The remote host address (the host ZeroTier IP)
+/// @param hostPort The remote port (the host MC LAN port)
+/// @return YES when it started successfully, NO on failure
 - (BOOL)startGuestModeWithLocalPort:(uint16_t)localPort
                               hostIP:(NSString *)hostIP
                             hostPort:(uint16_t)hostPort;
 
 #pragma mark - 房主模式
 
-/// 启动房主模式：ZeroTier 网络监听 → 转发到本地 MC LAN 端口
+/// Start host mode: listen on the ZeroTier network -> forward to the local MC LAN port
 ///
-/// 通过 ZeroTierBridge 创建 libzt socket，在 ZeroTier 网络中监听
-/// 0.0.0.0:listenPort，并在后台线程接受客户端连接。
-/// 每个客户端连接后，创建本地 BSD socket 连接到 127.0.0.1:localHostPort，
-/// 然后双向转发数据。
+/// Creates a libzt socket through ZeroTierBridge that listens on 0.0.0.0:listenPort within the
+/// ZeroTier network, and accepts client connections on a background thread.
+/// For each client, a local BSD socket is created connecting to 127.0.0.1:localHostPort,
+/// and data is forwarded in both directions.
 ///
-/// 房客（PC/Mac/Android/iOS）在 MC 中直接连接房主的 ZeroTier IP:listenPort
-/// 即可进入游戏。
+/// A guest (PC/Mac/Android/iOS) joins by connecting straight to the host ZeroTier IP:listenPort
+/// in Minecraft.
 ///
 /// @param listenPort The port to listen on within the ZeroTier network (usually 25565)
 /// @param localHostPort The local MC LAN port (the one Minecraft shows in the chat box after "Open to LAN")
-/// @return YES 表示启动成功，NO 表示失败
+/// @return YES when it started successfully, NO on failure
 - (BOOL)startHostModeWithListenPort:(uint16_t)listenPort
                        localHostPort:(uint16_t)localHostPort;
 
 #pragma mark - 停止
 
-/// 停止端口转发（统一停止房主模式和房客模式）
+/// Stop port forwarding (stopping host and guest mode alike)
 ///
-/// 关闭监听 socket，停止接受新连接。
-/// 已建立的客户端连接会继续处理直到完成，然后自动清理。
+/// Closes the listening socket, so no new connections are accepted.
+/// Existing client connections keep running until they finish and are then cleaned up.
 - (void)stop;
 
 #pragma mark - 状态查询
 
-/// 端口转发器是否正在运行
+/// Whether the port forwarder is running
 @property (nonatomic, readonly, getter=isRunning) BOOL running;
 
-/// 当前运行模式
+/// The current mode
 @property (nonatomic, readonly) PortForwarderMode mode;
 
-/// 当前监听端口
+/// The current listening port
 ///
-/// 房客模式：本地 BSD socket 监听端口
-/// 房主模式：ZeroTier 网络中 libzt socket 监听端口
+/// Guest mode: the local BSD socket listening port
+/// Host mode: the libzt socket listening port within the ZeroTier network
 @property (nonatomic, readonly) uint16_t listeningPort;
 
 #pragma mark - 房客模式属性
 
-/// 房客模式：当前转发的远程主机（房主的 ZeroTier IP）
+/// Guest mode: the remote host currently forwarded to (the host ZeroTier IP)
 @property (nonatomic, readonly, copy, nullable) NSString *hostIP;
 
-/// 房客模式：当前转发的远程端口（房主的 MC LAN 端口）
+/// Guest mode: the remote port currently forwarded to (the host MC LAN port)
 @property (nonatomic, readonly) uint16_t hostPort;
 
 #pragma mark - 房主模式属性
 
-/// 房主模式：本地 MC LAN 端口（MC 中"对局域网开放"后聊天框显示的端口号）
+/// Host mode: the local MC LAN port (the one Minecraft shows in the chat box after "Open to LAN")
 @property (nonatomic, readonly) uint16_t localHostPort;
 
 @end

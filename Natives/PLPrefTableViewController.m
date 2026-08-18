@@ -18,7 +18,7 @@
 @property(nonatomic) UIMenu* currentMenu;
 @property(nonatomic) UIBarButtonItem *helpBtn;
 @property(nonatomic, strong) UISearchController *searchController;
-/// 搜索结果：filteredSections[0] 为扁平化的所有匹配项（忽略 section 归属）
+/// Search results: filteredSections[0] holds every match, flattened (ignoring which section they came from)
 @property(nonatomic, strong) NSArray<NSDictionary *> *filteredItems;
 
 @end
@@ -47,7 +47,7 @@
         self.prefSectionsVisibility = (id)@[@YES];
     }
 
-    // 搜索栏初始化（仅当 searchEnabled=YES 时启用，子类负责设置）
+    // Search bar initialization (only when searchEnabled=YES, which the subclass sets)
     if (self.searchEnabled) {
         self.searchController = [[UISearchController alloc] initWithSearchResultsController:nil];
         self.searchController.searchResultsUpdater = self;
@@ -88,12 +88,12 @@
         return;
     }
 
-    // 扁平化所有 prefContents 中的设置项，按 title/key/icon/localizedTitle 模糊匹配
+    // Flatten every setting in prefContents and fuzzy-match on title/key/icon/localizedTitle
     NSMutableArray *results = [NSMutableArray array];
     NSString *lowerQuery = query.lowercaseString;
     for (int s = 0; s < self.prefContents.count; s++) {
         NSArray *section = self.prefContents[s];
-        // 第 0 项是 section 头，跳过
+        // Item 0 is the section header, so it is skipped
         for (int r = (self.prefSections ? 1 : 0); r < section.count; r++) {
             NSDictionary *item = section[r];
             NSString *title = item[@"title"];
@@ -103,12 +103,12 @@
             NSString *localizedTitle = localize(title, nil);
             NSString *key = item[@"key"] ?: @"";
             NSString *icon = item[@"icon"] ?: @"";
-            // 匹配本地化标题、key、icon 名、原文标题
+            // Match the localized title, the key, the icon name and the original title
             if ([localizedTitle.lowercaseString containsString:lowerQuery] ||
                 [key.lowercaseString containsString:lowerQuery] ||
                 [icon.lowercaseString containsString:lowerQuery] ||
                 [title.lowercaseString containsString:lowerQuery]) {
-                // 记录原始 section 和 row，便于点击时定位
+                // Record the original section and row, so a tap can locate it
                 NSMutableDictionary *matched = [item mutableCopy];
                 matched[@"__origSection"] = @(s);
                 matched[@"__origRow"] = @(r);
@@ -160,13 +160,13 @@
 }
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
-    // 搜索结果为单一扁平 section
+    // The search results form one flat section
     if (self.filteredItems) return 1;
     return self.prefSectionsVisibility.count;
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    // 搜索结果模式
+    // Search results mode
     if (self.filteredItems) {
         return self.filteredItems.count;
     }
@@ -177,7 +177,7 @@
 }
 
 - (UITableViewCell *)tableView:(nonnull UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-    // 搜索结果模式：使用扁平化的 filteredItems
+    // Search results mode: use the flattened filteredItems
     if (self.filteredItems) {
         NSDictionary *item = self.filteredItems[indexPath.row];
         NSString *cellID = @"searchResultCell";
@@ -190,7 +190,7 @@
             cell.selectionStyle = UITableViewCellSelectionStyleDefault;
         }
         cell.textLabel.text = item[@"__localizedTitle"];
-        // 副标题显示所属 section
+        // The subtitle shows which section it belongs to
         NSNumber *origSection = item[@"__origSection"];
         if (origSection && self.prefSections && origSection.intValue < (int)self.prefSections.count) {
             NSString *sectionKey = self.prefSections[origSection.intValue];
@@ -417,29 +417,29 @@
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:NO];
 
-    // 搜索结果模式：跳转到原始 section 并展开该 section
+    // Search results mode: jump to the original section and expand it
     if (self.filteredItems) {
         NSDictionary *item = self.filteredItems[indexPath.row];
         NSNumber *origSection = item[@"__origSection"];
         NSNumber *origRow = item[@"__origRow"];
         if (!origSection || !origRow) return;
 
-        // 关闭搜索并恢复原始布局
-        // 注意：UISearchController 没有 setActive:animated:，用 active 属性替代
+        // Close the search and restore the original layout
+        // Note: UISearchController has no setActive:animated:, so the active property is used instead
         self.searchController.active = NO;
         self.filteredItems = nil;
         _currentSearchText = @"";
 
-        // 展开对应 section
+        // Expand the matching section
         if (origSection.intValue < (int)self.prefSectionsVisibility.count) {
             self.prefSectionsVisibility[origSection.intValue] = @YES;
         }
         [self.tableView reloadData];
 
-        // 跳转到该项并触发原始点击行为
+        // Scroll to the item and trigger its original tap behavior
         NSIndexPath *origIndexPath = [NSIndexPath indexPathForRow:origRow.intValue inSection:origSection.intValue];
         [self.tableView scrollToRowAtIndexPath:origIndexPath atScrollPosition:UITableViewScrollPositionMiddle animated:YES];
-        // 延迟触发，等滚动完成
+        // Trigger it after a delay, once the scroll finishes
         dispatch_async(dispatch_get_main_queue(), ^{
             [self tableView:tableView didSelectRowAtIndexPath:origIndexPath];
         });
@@ -517,12 +517,12 @@
     NSArray *pickKeys = item[@"pickKeys"];
     NSArray *pickList = item[@"pickList"];
 
-    // 修复 iPhone 上选项弹出菜单被过度压缩不可调整的问题。
-    // 根因：UIContextMenuInteraction 紧凑菜单（preferredLayout=3）锚点取自窄小的
-    // cell.detailTextLabel.frame，在 iPhone 窄屏上把多个中文选项挤压到很小的浮动气泡内。
-    // 修复：iPhone 上改用 UIAlertController actionSheet，提供标准尺寸的全宽选择器，
-    // 每个选项有足够空间可正常点击。iPad 上保留 UIContextMenuInteraction 紧凑菜单
-    // （锚点 popover 在大屏上更自然）。
+    // Fix for the option popup menu being squeezed and unusable on iPhone.
+    // The root cause: the compact UIContextMenuInteraction menu (preferredLayout=3) anchors to the narrow
+    // cell.detailTextLabel.frame, which squeezed several options into a tiny floating bubble on a narrow iPhone screen.
+    // The fix: use a UIAlertController action sheet on iPhone, giving a standard full-width picker
+    // where every option has room to be tapped. iPad keeps the compact UIContextMenuInteraction menu
+    // (an anchored popover feels more natural on a large screen).
     if ([UIDevice currentDevice].userInterfaceIdiom == UIUserInterfaceIdiomPhone) {
         UIAlertController *alert = [UIAlertController alertControllerWithTitle:message
                                                                        message:nil
@@ -530,7 +530,7 @@
         for (int i = 0; i < pickList.count; i++) {
             NSString *title = pickList[i];
             NSString *value = pickKeys[i];
-            // 在标题前加 ✓ 标记当前选中项，让用户能直观看到当前值
+            // Prefix the current selection with ✓ so the user can see the current value at a glance
             if ([cell.detailTextLabel.text isEqualToString:value]) {
                 title = [NSString stringWithFormat:@"✓ %@", title];
             }
@@ -549,8 +549,8 @@
         [alert addAction:[UIAlertAction actionWithTitle:localize(@"Cancel", nil)
                                                    style:UIAlertActionStyleCancel
                                                  handler:nil]];
-        // 配置 popoverPresentationController，防御性处理（iPhone 上 actionSheet 从底部弹出，
-        // popoverPresentationController 不会生效，但设置 sourceView 避免 iPad 分屏时崩溃）
+        // Configure popoverPresentationController defensively (an action sheet comes up from the bottom on iPhone,
+        // so popoverPresentationController is unused, but setting sourceView avoids a crash in iPad split view)
         alert.popoverPresentationController.sourceView = cell;
         alert.popoverPresentationController.sourceRect = cell.bounds;
         [self presentViewController:alert animated:YES completion:nil];
@@ -578,7 +578,7 @@
 
     self.currentMenu = [UIMenu menuWithTitle:message children:menuItems];
     UIContextMenuInteraction *interaction = [[UIContextMenuInteraction alloc] initWithDelegate:self];
-    // 挂载到 cell 本身而不是 detailTextLabel，避免 detailTextLabel 尚未进入 window 时触发 UITargetedPreview 断言崩溃
+    // Attach it to the cell itself rather than detailTextLabel, so a UITargetedPreview assertion cannot fire while detailTextLabel is not in a window yet
     [cell addInteraction:interaction];
     CGRect detailFrame = cell.detailTextLabel.frame;
     CGPoint location = CGPointMake(CGRectGetMidX(detailFrame), CGRectGetMidY(detailFrame));
@@ -618,7 +618,7 @@
         invokeAction();
     }
 
-    // 对于typeButton类型的操作，不显示done提示
+    // For typeButton actions, no "done" message is shown
     if (item[@"type"] != self.typeButton) {
         UIView *view = [self.tableView cellForRowAtIndexPath:indexPath];
         NSString *title = localize(([NSString stringWithFormat:@"preference.title.done.%@", key]), nil);

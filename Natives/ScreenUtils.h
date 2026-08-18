@@ -1,72 +1,72 @@
 #import <UIKit/UIKit.h>
 
-/// 屏幕尺寸检测工具类（参照 FCL 的 ScreenUtils 设计）
-/// 极速获取：nativeBounds/nativeScale 使用 dispatch_once 缓存（固定值，O(1)）；
-/// screenSize/safeAreaInsets 实时获取（随方向/安全区域变化）。
-/// 支持 iPhone 和 iPad，自动适配方向。
+/// Screen size helper (following the ScreenUtils design of FCL)
+/// Very fast lookups: nativeBounds/nativeScale are cached with dispatch_once (fixed values, O(1));
+/// screenSize/safeAreaInsets are read live (since they change with the orientation and safe area).
+/// Supports iPhone and iPad, adapting to the orientation automatically.
 @interface ScreenUtils : NSObject
 
-/// 当前屏幕尺寸（点值，考虑当前方向）
+/// The current screen size (in points, for the current orientation)
 + (CGSize)screenSize;
 
-/// 竖屏屏幕尺寸（点值，固定值）
+/// The portrait screen size (in points, a fixed value)
 + (CGSize)screenSizePortrait;
 
-/// 横屏屏幕尺寸（点值，固定值）
+/// The landscape screen size (in points, a fixed value)
 + (CGSize)screenSizeLandscape;
 
-/// 原生屏幕尺寸（像素值，固定值，不随方向变化）
+/// The native screen size (in pixels, a fixed value that does not change with orientation)
 + (CGSize)nativeScreenSize;
 
-/// 屏幕缩放因子（如 2.0 / 3.0）
+/// The screen scale factor (such as 2.0 or 3.0)
 + (CGFloat)screenScale;
 
-/// 原生缩放因子（如 2.0 / 3.0）
+/// The native scale factor (such as 2.0 or 3.0)
 + (CGFloat)nativeScale;
 
-/// 是否 iPad
+/// Whether this is an iPad
 + (BOOL)isPad;
 
-/// 是否 iPhone
+/// Whether this is an iPhone
 + (BOOL)isPhone;
 
-/// 是否横屏（基于 statusBarOrientation，比 UIDevice.orientation 更可靠）
+/// Whether this is landscape (based on statusBarOrientation, which is more reliable than UIDevice.orientation)
 + (BOOL)isLandscape;
 
-/// 是否竖屏
+/// Whether this is portrait
 + (BOOL)isPortrait;
 
-/// 安全区域 insets（基于当前 keyWindow）
+/// The safe area insets (of the current keyWindow)
 + (UIEdgeInsets)safeAreaInsets;
 
-/// 状态栏高度（iOS 13+ 用 statusBarManager，旧版用 statusBarFrame）
+/// The status bar height (statusBarManager on iOS 13+, statusBarFrame on older versions)
 + (CGFloat)statusBarHeight;
 
-/// 导航栏高度（44，横屏 iPhone 可能不同）
+/// The navigation bar height (44, which may differ on an iPhone in landscape)
 + (CGFloat)navigationBarHeight;
 
-/// 标签栏高度（49 + safeAreaBottom）
+/// The tab bar height (49 + safeAreaBottom)
 + (CGFloat)tabBarHeight;
 
-/// 底部安全区域高度（iPhone X+ 为 34，其他为 0）
+/// The bottom safe area height (34 on iPhone X and later, 0 otherwise)
 + (CGFloat)safeAreaBottom;
 
-/// 顶部安全区域高度（iPhone X+ 为 47/44，其他为 20）
+/// The top safe area height (47/44 on iPhone X and later, 20 otherwise)
 + (CGFloat)safeAreaTop;
 
-/// 是否有刘海屏/灵动岛（safeAreaTop > 20）
+/// Whether there is a notch or Dynamic Island (safeAreaTop > 20)
 + (BOOL)hasNotch;
 
-/// 屏幕圆角半径（近似值，用于 UI 设计参考）
+/// The screen corner radius (approximate, as a design reference)
 + (CGFloat)cornerRadius;
 
-/// 适配后的字体大小（基于屏幕宽度缩放，参照 FCL 的 sp() 函数）
+/// A scaled font size (scaled from the screen width, following the sp() function of FCL)
 + (CGFloat)sp:(CGFloat)sp;
 
-/// 适配后的尺寸大小（基于屏幕宽度缩放，参照 FCL 的 dp() 函数）
+/// A scaled dimension (scaled from the screen width, following the dp() function of FCL)
 + (CGFloat)dp:(CGFloat)dp;
 
-/// 当前 keyWindow（兼容 iOS 13+ 和旧版）
+/// The current keyWindow (working on iOS 13+ and older versions)
 + (UIWindow *)keyWindow;
 
 @end

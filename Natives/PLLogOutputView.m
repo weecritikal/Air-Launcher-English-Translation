@@ -140,7 +140,7 @@ static PLLogOutputView* current;
     }];
 }
 
-/// 返回启动器主界面
+/// Return to the launcher main screen
 - (void)dismissAndReturnToLauncher {
     if (fatalErrorOccurred && fatalExitGroup != nil) {
         [UIApplication.sharedApplication performSelector:@selector(suspend)];
@@ -153,9 +153,9 @@ static PLLogOutputView* current;
         return;
     }
 
-    // 通知 LanPortDetector 处理此日志行
-    // LanPortDetector 会检测 MC "对局域网开放"日志中的端口号
-    // 此通知是轻量的，即使 LanPortDetector 未启动也无副作用
+    // Pass this log line to LanPortDetector
+    // LanPortDetector looks for the port in the Minecraft "Open to LAN" log line
+    // This notification is cheap and has no side effects even when LanPortDetector is not running
     [[NSNotificationCenter defaultCenter] postNotificationName:@"PLLogOutputLineNotification"
                                                         object:nil
                                                       userInfo:@{@"line": line}];
@@ -188,7 +188,7 @@ static PLLogOutputView* current;
 + (void)handleExitCode:(int)code {
     if (!current) return;
     
-    // 如果有错误，显示新的崩溃界面
+    // If there is an error, show a new crash screen
     if (code != 0) {
         fatalErrorOccurred = YES;
         canAppendToLog = NO;
@@ -196,7 +196,7 @@ static PLLogOutputView* current;
         return;
     }
     
-    // 退出代码为0时的降级处理（正常退出）
+    // Fallback handling for exit code 0 (a normal exit)
     dispatch_async(dispatch_get_main_queue(), ^(void){
         if (current.hidden) {
             [current actionToggleLogOutput];

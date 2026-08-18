@@ -96,7 +96,7 @@ typedef NS_ENUM(NSInteger, ZeroTierNetworkStatus) {
 
 /// Start the ZeroTier node
 /// @param homeDir 身份文件存储目录
-/// @param error 错误输出（如果失败）
+/// @param error Error output (on failure)
 /// @return YES 如果启动请求已成功提交（不代表节点已上线）
 - (BOOL)startNodeWithHomeDirectory:(NSString *)homeDir
                              error:(NSError **)error;

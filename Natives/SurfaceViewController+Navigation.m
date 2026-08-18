@@ -13,18 +13,18 @@
 // #import "TerracottaViewController.h"
 #import <objc/runtime.h>
 
-// 暴露 class extension 中的私有属性，供 category 使用
+// Expose the private properties from the class extension for use by the category
 @interface SurfaceViewController()
 @property(nonatomic) TrackedTextField *inputTextField;
 @property(nonatomic) BOOL toggleHidden;
 - (void)updateControlHiddenState:(BOOL)hide;
 @end
 
-// category 不能存储 ivar，用 associated object 实现 menuDimView
+// A category cannot store ivars, so menuDimView is implemented with an associated object
 static const void *kMenuDimViewKey = &kMenuDimViewKey;
 
 @interface SurfaceViewController(Navigation)
-// FCL 风格菜单的背景遮罩（半透明黑色，点击关闭菜单）
+// Background dimming layer for the FCL-style menu (translucent black, tap to close the menu)
 @property(nonatomic) UIView *menuDimView;
 @end
 
@@ -39,22 +39,22 @@ static const void *kMenuDimViewKey = &kMenuDimViewKey;
 }
 
 - (void)initCategory_Navigation {
-    // FCL 安卓风格：菜单从底部弹出，游戏画面不缩小
-    // 参照 FCL GameMenu.java / GameMenuView.kt 的底部弹出菜单样式
+    // FCL Android style: the menu pops up from the bottom and the game view is not scaled down
+    // Modeled on the bottom pop-up menu style of FCL GameMenu.java / GameMenuView.kt
     self.menuArray = @[
-        @"game.menu.force_close",          // 强制关闭
-        @"game.menu.log_output",            // 日志输出
-        @"game.menu.custom_controls",       // 按键布局编辑
-        @"game.menu.multiplayer",           // 联机（陶瓦联机 Terracotta，右上角可切换 ZeroTier）
-        @"game.menu.toggle_stats",          // FPS/内存显示开关
-        @"game.menu.toggle_controls",       // 隐藏/显示控制按钮
-        @"game.menu.toggle_virtual_mouse",  // 虚拟鼠标开关
-        @"game.menu.toggle_keyboard",       // 游戏内键盘
-        @"game.menu.resolution",            // 分辨率调整
-        @"Settings"                         // 设置
+        @"game.menu.force_close",          // Force close
+        @"game.menu.log_output",            // Log output
+        @"game.menu.custom_controls",       // Control layout editor
+        @"game.menu.multiplayer",           // Multiplayer (Terracotta; switchable to ZeroTier from the top-right corner)
+        @"game.menu.toggle_stats",          // FPS/memory display toggle
+        @"game.menu.toggle_controls",       // Hide/show control buttons
+        @"game.menu.toggle_virtual_mouse",  // Virtual mouse toggle
+        @"game.menu.toggle_keyboard",       // In-game keyboard
+        @"game.menu.resolution",            // Resolution adjustment
+        @"Settings"                         // Settings
     ];
 
-    // FCL 风格：菜单从底部弹出，宽度为屏幕宽度的 70%（居中），最大高度为屏幕高度的 60%
+    // FCL style: the menu pops up from the bottom, its width is 70% of the screen width (centered), and its maximum height is 60% of the screen height
     CGFloat screenWidth = [ScreenUtils screenSize].width;
     CGFloat screenHeight = [ScreenUtils screenSize].height;
     CGFloat menuWidth = MIN(screenWidth * 0.7, 400);
@@ -64,7 +64,7 @@ static const void *kMenuDimViewKey = &kMenuDimViewKey;
 
     self.menuView = [[UITableView alloc] initWithFrame:CGRectMake(
         (screenWidth - menuWidth) / 2.0,
-        screenHeight,  // 初始放在屏幕底部外（动画时上滑）
+        screenHeight,  // Initially placed off the bottom of the screen (slides up during the animation)
         menuWidth,
         menuHeight
     ) style:UITableViewStylePlain];
@@ -76,18 +76,18 @@ static const void *kMenuDimViewKey = &kMenuDimViewKey;
     self.menuView.clipsToBounds = YES;
     self.menuView.scrollEnabled = YES;
     self.menuView.separatorInset = UIEdgeInsetsMake(0, 16, 0, 16);
-    // FCL 风格：半透明深色背景
+    // FCL style: translucent dark background
     self.menuView.backgroundColor = [UIColor colorWithDynamicProvider:^UIColor * _Nonnull(UITraitCollection * _Nonnull traitCollection) {
         return [UIColor colorWithRed:28.0/255.0 green:28.0/255.0 blue:30.0/255.0 alpha:0.95];
     }];
-    // 添加阴影
+    // Add a shadow
     self.menuView.layer.shadowColor = [UIColor blackColor].CGColor;
     self.menuView.layer.shadowOffset = CGSizeMake(0, -2);
     self.menuView.layer.shadowRadius = 12;
     self.menuView.layer.shadowOpacity = 0.4;
     [self.view addSubview:self.menuView];
 
-    // FCL 风格：半透明背景遮罩（点击关闭菜单）
+    // FCL style: translucent background dimming layer (tap to close the menu)
     self.menuDimView = [[UIView alloc] initWithFrame:self.view.bounds];
     self.menuDimView.backgroundColor = [UIColor colorWithRed:0 green:0 blue:0 alpha:0.4];
     self.menuDimView.alpha = 0;
@@ -96,10 +96,10 @@ static const void *kMenuDimViewKey = &kMenuDimViewKey;
     dimTap.cancelsTouchesInView = YES;
     [self.menuDimView addGestureRecognizer:dimTap];
     [self.view addSubview:self.menuDimView];
-    // 确保菜单在遮罩之上
+    // Make sure the menu sits above the dimming layer
     [self.view bringSubviewToFront:self.menuView];
 
-    // FCL/ZL2 风格悬浮按钮 + FPS/内存显示
+    // FCL/ZL2 style floating button + FPS/memory display
     GameMenuOverlayView *overlay = [[GameMenuOverlayView alloc] initWithParentView:self.view];
     __weak typeof(self) weakSelf = self;
     overlay.onMenuButtonTapped = ^{
@@ -108,7 +108,7 @@ static const void *kMenuDimViewKey = &kMenuDimViewKey;
     self.gameMenuOverlay = overlay;
 }
 
-/// 切换菜单显示状态（悬浮按钮点击触发）
+/// Toggle the menu visibility (triggered by tapping the floating button)
 - (void)toggleMenu {
     if (self.menuView.hidden) {
         [self showMenu];
@@ -117,23 +117,23 @@ static const void *kMenuDimViewKey = &kMenuDimViewKey;
     }
 }
 
-/// FCL 风格：从底部弹出菜单（游戏画面不缩小）
+/// FCL style: pop the menu up from the bottom (the game view is not scaled down)
 - (void)showMenu {
     self.menuView.hidden = NO;
     self.menuDimView.hidden = NO;
 
-    // 准备动画初始状态：菜单在屏幕底部外
+    // Prepare the animation start state: the menu sits off the bottom of the screen
     CGFloat screenHeight = [ScreenUtils screenSize].height;
     CGFloat menuHeight = self.menuView.frame.size.height;
     self.menuView.transform = CGAffineTransformIdentity;
     self.menuView.frame = CGRectMake(
         self.menuView.frame.origin.x,
-        screenHeight,  // 屏幕底部外
+        screenHeight,  // Off the bottom of the screen
         self.menuView.frame.size.width,
         menuHeight
     );
 
-    // 计算目标位置：底部弹出，留出安全区域
+    // Compute the target position: pops up from the bottom, leaving room for the safe area
     CGFloat safeBottom = [ScreenUtils safeAreaBottom];
     CGFloat targetY = screenHeight - menuHeight - safeBottom - 16;
 
@@ -143,14 +143,14 @@ static const void *kMenuDimViewKey = &kMenuDimViewKey;
           initialSpringVelocity:0.5
                         options:UIViewAnimationOptionCurveEaseOut
                      animations:^{
-        // 菜单上滑到目标位置
+        // Slide the menu up to its target position
         self.menuView.frame = CGRectMake(
             self.menuView.frame.origin.x,
             targetY,
             self.menuView.frame.size.width,
             menuHeight
         );
-        // 背景遮罩淡入
+        // Fade in the background dimming layer
         self.menuDimView.alpha = 1.0;
     } completion:^(BOOL finished) {
         [self setNeedsUpdateOfHomeIndicatorAutoHidden];
@@ -159,7 +159,7 @@ static const void *kMenuDimViewKey = &kMenuDimViewKey;
     }];
 }
 
-/// FCL 风格：菜单下滑消失（游戏画面不缩小）
+/// FCL style: the menu slides down and disappears (the game view is not scaled down)
 - (void)dismissMenu {
     CGFloat screenHeight = [ScreenUtils screenSize].height;
 
@@ -167,14 +167,14 @@ static const void *kMenuDimViewKey = &kMenuDimViewKey;
                           delay:0
                         options:UIViewAnimationOptionCurveEaseIn
                      animations:^{
-        // 菜单下滑到屏幕底部外
+        // Slide the menu down to off the bottom of the screen
         self.menuView.frame = CGRectMake(
             self.menuView.frame.origin.x,
             screenHeight,
             self.menuView.frame.size.width,
             self.menuView.frame.size.height
         );
-        // 背景遮罩淡出
+        // Fade out the background dimming layer
         self.menuDimView.alpha = 0.0;
     } completion:^(BOOL finished) {
         self.menuView.hidden = YES;
@@ -186,9 +186,9 @@ static const void *kMenuDimViewKey = &kMenuDimViewKey;
 }
 
 - (void)setupCategory_Navigation {
-    // FCL 风格：完全删除原来的右侧滑动调出菜单的方式
-    // 不再注册 UIScreenEdgePanGestureRecognizer，菜单通过悬浮按钮触发
-    // 保留空方法体，因为 SurfaceViewController.m 中通过 performSelector 调用
+    // FCL style: the old right-edge swipe gesture for opening the menu has been removed entirely
+    // UIScreenEdgePanGestureRecognizer is no longer registered; the menu is triggered by the floating button
+    // The empty method body is kept because SurfaceViewController.m calls it via performSelector
 }
 
 - (void)actionForceClose {
@@ -200,7 +200,7 @@ static const void *kMenuDimViewKey = &kMenuDimViewKey;
     [alert addAction:cancelAction];
 
     UIAlertAction* okAction = [UIAlertAction actionWithTitle:localize(@"OK", nil) style:UIAlertActionStyleDestructive handler:^(UIAlertAction * action) {
-        // ZeroTier/Terracotta 联机暂时移除：原 stopAllMultiplayerServices 调用注释掉
+        // ZeroTier/Terracotta multiplayer temporarily removed: the original stopAllMultiplayerServices call is commented out
         // @try {
         //     [[MultiplayerManager sharedManager] stopAllMultiplayerServices];
         //     NSLog(@"[ForceClose] Multiplayer resources cleaned up");
@@ -208,7 +208,7 @@ static const void *kMenuDimViewKey = &kMenuDimViewKey;
         //     NSLog(@"[ForceClose] Exception while cleaning up multiplayer resources: %@", e);
         // }
 
-        // FCL 风格：直接退出，不再做缩小动画
+        // FCL style: exit directly, no more shrink animation
         if (fatalExitGroup == nil) {
             exit(0);
         } else {
@@ -246,11 +246,11 @@ static const void *kMenuDimViewKey = &kMenuDimViewKey;
     [self presentViewController:vc animated:YES completion:nil];
 }
 
-/// 游戏内打开联机界面（陶瓦联机，与 HMCL/FCL/ZL2 互通）
+/// Open the in-game multiplayer screen (Terracotta multiplayer, interoperable with HMCL/FCL/ZL2)
 ///
-/// 对标 FCL 流程：启动游戏后通过悬浮球菜单进入联机界面，
-/// 选择当房主（创建世界→开放局域网→输入端口→生成邀请码）
-/// 或当房客（输入邀请码→加入网络→MC 多人游戏直连 127.0.0.1:25565）。
+/// Matches the FCL flow: after launching the game, enter the multiplayer screen through the floating ball menu,
+/// then either host (create a world → open to LAN → enter the port → generate an invite code)
+/// or join (enter the invite code → join the network → connect directly to 127.0.0.1:25565 in MC multiplayer).
 - (void)actionOpenMultiplayer {
     // ZeroTier/Terracotta multiplayer temporarily removed (while a startup crash is investigated)
     [self dismissMenu];
@@ -262,13 +262,13 @@ static const void *kMenuDimViewKey = &kMenuDimViewKey;
     [self presentViewController:alert animated:YES completion:nil];
 }
 
-/// FCL 风格：隐藏/显示控制按钮（对应 FCL hide_all 开关）
+/// FCL style: hide/show the control buttons (matches the FCL hide_all toggle)
 - (void)actionToggleControls {
     self.toggleHidden = !self.toggleHidden;
     [self updateControlHiddenState:self.toggleHidden];
 }
 
-/// FCL 风格：切换虚拟鼠标（对应 FCL 鼠标分组 / ZL2 ControlMouse）
+/// FCL style: toggle the virtual mouse (matches the FCL mouse group / ZL2 ControlMouse)
 - (void)actionToggleVirtualMouse {
     if (!isGrabbing) {
         virtualMouseEnabled = !virtualMouseEnabled;
@@ -278,7 +278,7 @@ static const void *kMenuDimViewKey = &kMenuDimViewKey;
     }
 }
 
-/// FCL 风格：打开/关闭游戏内键盘（对应 FCL open_quick_input / ZL2 input_method）
+/// FCL style: open/close the in-game keyboard (matches FCL open_quick_input / ZL2 input_method)
 - (void)actionToggleKeyboard {
     if (self.inputTextField.isFirstResponder) {
         [self.inputTextField resignFirstResponder];
@@ -289,7 +289,7 @@ static const void *kMenuDimViewKey = &kMenuDimViewKey;
     }
 }
 
-/// FCL/ZL2 风格：调整游戏分辨率（对应 FCL window_scale / ZL2 resolutionRatio）
+/// FCL/ZL2 style: adjust the game resolution (matches FCL window_scale / ZL2 resolutionRatio)
 - (void)actionAdjustResolution {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:localize(@"game.menu.resolution", nil)
                                                                    message:localize(@"game.menu.resolution.message", nil)
@@ -309,7 +309,7 @@ static const void *kMenuDimViewKey = &kMenuDimViewKey;
     }
     [alert addAction:[UIAlertAction actionWithTitle:localize(@"Cancel", nil) style:UIAlertActionStyleCancel handler:nil]];
 
-    // iPad 适配
+    // iPad adaptation
     alert.popoverPresentationController.sourceView = self.view;
     alert.popoverPresentationController.sourceRect = CGRectMake(self.view.bounds.size.width / 2, self.view.bounds.size.height / 2, 1, 1);
 
@@ -317,7 +317,7 @@ static const void *kMenuDimViewKey = &kMenuDimViewKey;
 }
 
 - (void)actionOpenNavigationMenu {
-    // FCL 风格：游戏内自定义按键的 SPECIALBTN_MENU 也触发底部弹出菜单
+    // FCL style: the in-game custom control SPECIALBTN_MENU also triggers the bottom pop-up menu
     [self toggleMenu];
 }
 
@@ -348,14 +348,14 @@ static const void *kMenuDimViewKey = &kMenuDimViewKey;
         cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:@"FCLMenuCell"];
         cell.backgroundColor = [UIColor clearColor];
         cell.textLabel.textColor = [UIColor whiteColor];
-        // 修复：游戏内菜单字体不应使用 sp 缩放，使用固定 16pt 保证所有设备一致
-        // 原 [ScreenUtils sp:16] 在 iPad 上会放大到 32pt 导致菜单字体过大
+        // Fix: the in-game menu font should not use sp scaling; a fixed 16pt keeps it consistent across all devices
+        // The original [ScreenUtils sp:16] scaled up to 32pt on iPad, making the menu font too large
         cell.textLabel.font = [UIFont systemFontOfSize:16];
         cell.textLabel.textAlignment = NSTextAlignmentLeft;
-        // FCL 风格：左侧留出图标空间，cell 高度 48
+        // FCL style: leave room for the icon on the left, cell height 48
         cell.separatorInset = UIEdgeInsetsMake(0, 16, 0, 16);
         cell.selectionStyle = UITableViewCellSelectionStyleDefault;
-        // 选中状态背景
+        // Selected state background
         UIView *selectedBg = [[UIView alloc] init];
         selectedBg.backgroundColor = [UIColor colorWithRed:80.0/255.0 green:80.0/255.0 blue:90.0/255.0 alpha:0.6];
         cell.selectedBackgroundView = selectedBg;
@@ -366,8 +366,8 @@ static const void *kMenuDimViewKey = &kMenuDimViewKey;
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
-    // 修复：行高使用固定值 48pt，不随屏幕缩放
-    // 原 [ScreenUtils sp:48] 在 iPad 上会放大到 96pt 导致菜单项过高
+    // Fix: use a fixed row height of 48pt that does not scale with the screen
+    // The original [ScreenUtils sp:48] scaled up to 96pt on iPad, making the menu items too tall
     return 48;
 }
 
@@ -378,43 +378,43 @@ static const void *kMenuDimViewKey = &kMenuDimViewKey;
 
 - (void)didSelectMenuItem:(int)item {
     switch (item) {
-        case 0: // 强制关闭
+        case 0: // Force close
             [self actionForceClose];
             break;
-        case 1: // 日志输出
+        case 1: // Log output
             [self.logOutputView actionToggleLogOutput];
             break;
-        case 2: // 按键布局编辑
+        case 2: // Control layout editor
             [self actionOpenCustomControls];
             break;
-        case 3: // 联机（陶瓦联机 Terracotta，与 HMCL/FCL/ZL2 互通；右上角可切换到 ZeroTier）
+        case 3: // Multiplayer (Terracotta, interoperable with HMCL/FCL/ZL2; switchable to ZeroTier from the top-right corner)
             [self actionOpenMultiplayer];
             break;
-        case 4: // FPS/内存显示开关
+        case 4: // FPS/memory display toggle
             if ([self.gameMenuOverlay isKindOfClass:[GameMenuOverlayView class]]) {
                 [(GameMenuOverlayView *)self.gameMenuOverlay toggleStatsLabel];
             }
             break;
-        case 5: // 隐藏/显示控制按钮
+        case 5: // Hide/show control buttons
             [self actionToggleControls];
             break;
-        case 6: // 虚拟鼠标开关
+        case 6: // Virtual mouse toggle
             [self actionToggleVirtualMouse];
             break;
-        case 7: // 游戏内键盘
+        case 7: // In-game keyboard
             [self actionToggleKeyboard];
             break;
-        case 8: // 分辨率调整
+        case 8: // Resolution adjustment
             [self actionAdjustResolution];
             break;
-        case 9: // 设置
+        case 9: // Settings
             [self actionOpenPreferences];
             break;
     }
 }
 
 - (void)viewWillTransitionToSize_Navigation:(CGRect)frame {
-    // FCL 风格：菜单从底部弹出，旋转时重新计算 frame
+    // FCL style: the menu pops up from the bottom, so recompute the frame on rotation
     CGFloat screenWidth = frame.size.width;
     CGFloat screenHeight = frame.size.height;
     CGFloat menuWidth = MIN(screenWidth * 0.7, 400);
@@ -423,7 +423,7 @@ static const void *kMenuDimViewKey = &kMenuDimViewKey;
     CGFloat menuHeight = MIN(menuEstimatedHeight, menuMaxHeight);
 
     if (!self.menuView.hidden) {
-        // 菜单可见时，更新到新的目标位置
+        // When the menu is visible, update it to the new target position
         CGFloat safeBottom = [ScreenUtils safeAreaBottom];
         CGFloat targetY = screenHeight - menuHeight - safeBottom - 16;
         self.menuView.frame = CGRectMake(
@@ -433,7 +433,7 @@ static const void *kMenuDimViewKey = &kMenuDimViewKey;
             menuHeight
         );
     } else {
-        // 菜单不可见时，保持在屏幕底部外
+        // When the menu is not visible, keep it off the bottom of the screen
         self.menuView.frame = CGRectMake(
             (screenWidth - menuWidth) / 2.0,
             screenHeight,
@@ -441,7 +441,7 @@ static const void *kMenuDimViewKey = &kMenuDimViewKey;
             menuHeight
         );
     }
-    // 更新遮罩 frame
+    // Update the dimming layer frame
     self.menuDimView.frame = CGRectMake(0, 0, screenWidth, screenHeight);
 }
 

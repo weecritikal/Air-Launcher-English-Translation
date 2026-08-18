@@ -2,10 +2,10 @@
 //  ResourcePacksManagerViewController.m
 //  Amethyst
 //
-//  资源包管理视图控制器实现，参照 ModsManagerViewController
-//  使用 ResourcePackService 进行本地扫描与下载
+//  Resource pack manager view controller implementation, modelled on ModsManagerViewController
+//  Uses ResourcePackService for local scanning and downloads
 //  Uses AssetVersionViewController for picking an online version
-//  使用 ModrinthAPI 进行在线搜索（projectType=resourcepack）
+//  Uses ModrinthAPI for online search (projectType=resourcepack)
 //
 
 #import "ResourcePacksManagerViewController.h"
@@ -30,7 +30,7 @@
 
 @property (nonatomic, strong) NSMutableArray<ResourcePackItem *> *localItems;
 @property (nonatomic, strong) NSMutableArray<ResourcePackItem *> *filteredLocalItems;
-// 当前正在等待版本选择/下载的资源包（在线模式）
+// The resource pack currently waiting for a version to be picked/downloaded (online mode)
 @property (nonatomic, strong, nullable) ResourcePackItem *pendingDownloadItem;
 
 @end
@@ -325,7 +325,7 @@
     [self.onlineSearchResults removeAllObjects];
     [self.tableView reloadData];
 
-    // 解析当前 profile 的游戏版本，传给 Modrinth API
+    // Parse the game version of the current profile and pass it to the Modrinth API
     NSString *gameVersion = nil;
     [self resolveCurrentGameVersion:&gameVersion];
 
@@ -353,7 +353,7 @@
     });
 }
 
-// 从当前选中 profile 的 lastVersionId 解析 gameVersion
+// Parse gameVersion out of the lastVersionId of the selected profile
 - (void)resolveCurrentGameVersion:(NSString **)outGameVersion {
     if (outGameVersion) *outGameVersion = nil;
     NSDictionary *selectedProfile = PLProfiles.current.selectedProfile;
@@ -427,7 +427,7 @@
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"ResourcePackCell" forIndexPath:indexPath];
-    // 重置 cell 复用状态
+    // Reset the cell reuse state
     cell.accessoryView = nil;
     cell.accessoryType = UITableViewCellAccessoryNone;
     cell.imageView.image = [UIImage systemImageNamed:@"rectangle.stack.fill"];
@@ -436,7 +436,7 @@
     if (self.currentMode == ResourcePacksManagerModeLocal) {
         ResourcePackItem *item = self.filteredLocalItems[indexPath.row];
         cell.textLabel.text = item.displayName ?: item.fileName;
-        // 详情：pack_format + description
+        // Detail: pack_format + description
         NSMutableArray<NSString *> *parts = [NSMutableArray array];
         if (item.packFormat) {
             [parts addObject:[NSString stringWithFormat:@"Format %@", item.packFormat]];
@@ -448,7 +448,7 @@
         cell.detailTextLabel.textColor = [UIColor secondaryLabelColor];
         cell.contentView.alpha = item.disabled ? 0.5 : 1.0;
 
-        // 启用/禁用开关
+        // The enable/disable switch
         UISwitch *switchView = [[UISwitch alloc] init];
         switchView.tag = indexPath.row;
         [switchView setOn:!item.disabled animated:NO];
@@ -460,7 +460,7 @@
         cell.detailTextLabel.text = data[@"description"] ?: @"";
         cell.detailTextLabel.textColor = [UIColor secondaryLabelColor];
 
-        // 下载按钮
+        // The download button
         UIButton *downloadButton = [UIButton buttonWithType:UIButtonTypeSystem];
         [downloadButton setTitle:@"Download" forState:UIControlStateNormal];
         downloadButton.titleLabel.font = [UIFont boldSystemFontOfSize:13];
@@ -476,7 +476,7 @@
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
-    // 在线模式：点击行也触发版本选择（与点击下载按钮一致）
+    // Online mode: tapping the row also opens the version picker (as tapping the download button does)
     if (self.currentMode == ResourcePacksManagerModeOnline) {
         [self startVersionSelectionForOnlineRow:indexPath.row];
     }
@@ -526,11 +526,11 @@
     ResourcePackItem *item = self.filteredLocalItems[row];
     NSError *error = nil;
     if (![[ResourcePackService sharedService] toggleEnableForResourcePack:item error:&error]) {
-        // 失败时恢复开关状态
+        // Restore the switch state on failure
         sender.on = !sender.on;
         [self showSimpleAlertWithTitle:@"Operation failed" message:error.localizedDescription];
     } else {
-        // 更新 cell 透明度
+        // Update the cell opacity
         NSIndexPath *ip = [NSIndexPath indexPathForRow:row inSection:0];
         UITableViewCell *cell = [self.tableView cellForRowAtIndexPath:ip];
         cell.contentView.alpha = item.disabled ? 0.5 : 1.0;

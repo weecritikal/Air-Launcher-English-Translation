@@ -2,10 +2,10 @@
 
 @implementation ScreenUtils
 
-// 极速缓存：nativeBounds/nativeScale 是固定值，用 dispatch_once 一次性获取
-// UIScreen.main.bounds/nativeBounds 是 O(1) 操作，但 dispatch_once 仍能避免重复调用开销
-// 注意：CGSizeZero 在 iOS SDK 中展开为 compound literal (CGSize){0,0}，不是编译期常量，
-// 不能用于全局变量初始化。改用 plain struct initializer {0,0}。
+// Fast caching: nativeBounds/nativeScale are fixed values read once with dispatch_once
+// UIScreen.main.bounds/nativeBounds are O(1), but dispatch_once still avoids the cost of repeated calls
+// Note: CGSizeZero expands to the compound literal (CGSize){0,0} in the iOS SDK, which is not a compile-time constant
+// and cannot initialize a global. A plain struct initializer {0,0} is used instead.
 static CGSize _cachedNativeBounds = {0, 0};
 static CGFloat _cachedNativeScale = 0;
 static CGFloat _cachedScale = 0;
@@ -21,19 +21,19 @@ static dispatch_once_t _nativeOnceToken;
 }
 
 + (CGSize)screenSize {
-    // UIScreen.main.bounds 在 iOS 13+ 会随方向变化，实时获取
+    // UIScreen.main.bounds changes with the orientation on iOS 13+, so it is read live
     return [UIScreen mainScreen].bounds.size;
 }
 
 + (CGSize)screenSizePortrait {
     [self initializeNativeBounds];
-    // nativeBounds 是固定值，竖屏时 width < height
+    // nativeBounds is a fixed value where width < height in portrait
     CGSize native = _cachedNativeBounds;
     if (native.width <= native.height) {
-        // 原生就是竖屏方向
+        // The native orientation is already portrait
         return CGSizeMake(native.width / _cachedNativeScale, native.height / _cachedNativeScale);
     }
-    // 原生是横屏方向，交换
+    // The native orientation is landscape, so swap them
     return CGSizeMake(native.height / _cachedNativeScale, native.width / _cachedNativeScale);
 }
 
@@ -41,10 +41,10 @@ static dispatch_once_t _nativeOnceToken;
     [self initializeNativeBounds];
     CGSize native = _cachedNativeBounds;
     if (native.width >= native.height) {
-        // 原生就是横屏方向
+        // The native orientation is already landscape
         return CGSizeMake(native.width / _cachedNativeScale, native.height / _cachedNativeScale);
     }
-    // 原生是竖屏方向，交换
+    // The native orientation is portrait, so swap them
     return CGSizeMake(native.height / _cachedNativeScale, native.width / _cachedNativeScale);
 }
 
@@ -64,14 +64,14 @@ static dispatch_once_t _nativeOnceToken;
 }
 
 + (BOOL)isPad {
-    // 优先用 traitCollection.userInterfaceIdiom（受 UIKit+hook 的 _setUserInterfaceIdiom 影响）
-    // 但如果用户没有强制 Phone 模式，用真实 idiom
-    // 注意：UIKit+hook.m 强制 idiom 为 Phone（除非 debug.debug_ipad_ui），
-    // 所以这里用 [UIDevice currentDevice].userInterfaceIdiom 会受 hook 影响。
-    // 为了真实检测 iPad，用 mainScreen.traitCollection.userInterfaceIdiom。
+    // Prefer traitCollection.userInterfaceIdiom (which _setUserInterfaceIdiom in UIKit+hook affects)
+    // but use the real idiom when the user has not forced Phone mode
+    // Note: UIKit+hook.m forces the idiom to Phone (unless debug.debug_ipad_ui is set),
+    // so [UIDevice currentDevice].userInterfaceIdiom here would be affected by the hook.
+    // To detect a real iPad, mainScreen.traitCollection.userInterfaceIdiom is used.
     UIUserInterfaceIdiom idiom = [UIScreen mainScreen].traitCollection.userInterfaceIdiom;
     if (idiom == UIUserInterfaceIdiomPad) return YES;
-    // fallback：用 model 名称检测（不受 hook 影响）
+    // Fallback: detect from the model name (which the hook does not affect)
     NSString *model = [[UIDevice currentDevice].model lowercaseString];
     return [model containsString:@"ipad"];
 }
@@ -81,7 +81,7 @@ static dispatch_once_t _nativeOnceToken;
 }
 
 + (BOOL)isLandscape {
-    // 用 statusBarOrientation 比 UIDevice.orientation 更可靠（早期启动时 UIDevice.orientation 可能未知）
+    // statusBarOrientation is more reliable than UIDevice.orientation (which can be unknown early in startup)
     UIInterfaceOrientation orientation = [[UIApplication sharedApplication] statusBarOrientation];
     return UIInterfaceOrientationIsLandscape(orientation);
 }
@@ -110,7 +110,7 @@ static dispatch_once_t _nativeOnceToken;
 }
 
 + (CGFloat)navigationBarHeight {
-    // 标准 44，横屏 iPhone 可能不同
+    // 44 as standard, which may differ on an iPhone in landscape
     return 44.0;
 }
 
@@ -131,41 +131,41 @@ static dispatch_once_t _nativeOnceToken;
 }
 
 + (CGFloat)cornerRadius {
-    // 近似值：iPhone X+ 约 39pt，iPad 约 18pt
+    // Approximate: about 39pt on iPhone X and later, about 18pt on iPad
     return [self isPad] ? 18.0 : 39.0;
 }
 
 + (CGFloat)sp:(CGFloat)sp {
-    // 参照 FCL 的 sp() 函数：基于屏幕宽度缩放
-    // FCL 用 baseWidth = 360 (Android reference phone width)
-    // 但 iOS 用 pt 而非 px，所以这里用 baseWidth = 375 (iPhone X width)
+    // Following the sp() function of FCL: scaled from the screen width
+    // FCL uses baseWidth = 360 (the Android reference phone width)
+    // but iOS uses points rather than pixels, so baseWidth = 375 here (the iPhone X width)
     CGFloat baseWidth = 375.0;
     CGFloat screenWidth = [self screenSize].width;
     CGFloat scale = screenWidth / baseWidth;
-    // 限制缩放范围，避免极端尺寸
-    // 修复：原 max=2.0 导致 iPad 上字体放大到 2 倍（16pt->32pt），
-    // 菜单/版本管理界面字体严重过大。iPad 宽度 1024+ 时 scale=2.73 被 clamp 到 2.0，
-    // 远超合理范围。将上限降低至 1.15，iPad 上字体仅略大于 iPhone 基准，
-    // 与系统动态字体风格保持一致。
+    // Clamp the scale, so extreme sizes are avoided
+    // Fix: the old max=2.0 doubled the font on iPad (16pt->32pt),
+    // making the text in the menu and version manager far too large. On an iPad 1024+ wide the scale of 2.73 was clamped to 2.0,
+    // well beyond anything sensible. The cap is now 1.15, so iPad text is only slightly larger than the iPhone baseline,
+    // matching the system dynamic type style.
     if (scale < 0.85) scale = 0.85;
     if (scale > 1.15) scale = 1.15;
     return sp * scale;
 }
 
 + (CGFloat)dp:(CGFloat)dp {
-    // 同 sp，基于屏幕宽度缩放
+    // As with sp, scaled from the screen width
     CGFloat baseWidth = 375.0;
     CGFloat screenWidth = [self screenSize].width;
     CGFloat scale = screenWidth / baseWidth;
-    // dp 用于尺寸（icon 大小、间距等），允许比 sp 稍大的缩放范围，
-    // 但仍需限制避免 iPad 上元素过大
+    // dp is used for dimensions (icon sizes, spacing and so on), so it allows a slightly wider scale range than sp,
+    // while still being clamped so elements are not oversized on iPad
     if (scale < 0.85) scale = 0.85;
     if (scale > 1.3) scale = 1.3;
     return dp * scale;
 }
 
 + (UIWindow *)keyWindow {
-    // 兼容 iOS 13+ 和旧版
+    // Works on iOS 13+ and older versions
     if (@available(iOS 13.0, *)) {
         for (UIWindowScene *scene in [UIApplication sharedApplication].connectedScenes) {
             if (scene.activationState == UISceneActivationStateForegroundActive) {
@@ -174,7 +174,7 @@ static dispatch_once_t _nativeOnceToken;
                         return window;
                     }
                 }
-                // 没有 keyWindow 时返回第一个 window
+                // With no keyWindow, return the first window
                 if (scene.windows.count > 0) {
                     return scene.windows.firstObject;
                 }

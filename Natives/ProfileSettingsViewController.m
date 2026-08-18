@@ -20,17 +20,17 @@
 
 @property (nonatomic, strong) NSArray<NSArray *> *sections;
 @property (nonatomic, strong) NSString *selectedRenderer;
-@property (nonatomic, strong) NSString *selectedGraphicsApi;  // MC 26.2+ 图形 API: default/prefer_vulkan/prefer_opengl
+@property (nonatomic, strong) NSString *selectedGraphicsApi;  // The MC 26.2+ graphics API: default/prefer_vulkan/prefer_opengl
 @property (nonatomic, strong) NSString *selectedJavaVersion;
 @property (nonatomic, assign) NSInteger allocatedMemory;
 @property (nonatomic, assign) NSInteger maxMemory;
-// 服务器地址（FCL 风格：留空则不自动加入）
+// The server address (FCL style: leave it empty to skip joining automatically)
 @property (nonatomic, strong) NSString *serverIp;
-// JVM 启动参数（如 -Dfoo=bar -Xnoclassgc 等；Xms/Xmx/d32/d64 由内存分配控制会被过滤）
+// JVM arguments (such as -Dfoo=bar -Xnoclassgc; Xms/Xmx/d32/d64 are filtered out, since the memory allocation controls them)
 @property (nonatomic, strong) NSString *javaArgs;
-// JVM 参数输入框
+// The JVM arguments field
 @property (nonatomic, strong) UITextField *javaArgsTextField;
-// 版本选择器
+// The version picker
 @property (nonatomic, strong) UITextField *versionTextField;
 @property (nonatomic, strong) UITextField *nameTextField;
 @property (nonatomic, strong) UISegmentedControl *versionTypeControl;
@@ -38,17 +38,17 @@
 @property (nonatomic, strong) UIToolbar *versionPickerToolbar;
 @property (nonatomic, strong) NSArray *versionList;
 @property (nonatomic, assign) NSInteger versionSelectedAt;
-// 原始名称，用于重命名检测
+// The original name, used to detect a rename
 @property (nonatomic, copy) NSString *originalName;
-// Hero 卡片（顶部 Profile 信息卡片）
+// The hero card (the profile information card at the top)
 @property (nonatomic, strong, nullable) UIView *heroCard;
 
-// 双列 tableView（横屏双列布局）
-// leftTableView：竖屏时显示所有 sections（0-4）；横屏时只显示 sections 0,1（版本信息、资源管理）
-// rightTableView：仅横屏时显示，显示 sections 2,3,4（组件安装、高级设置、服务器）
+// The two table views (the two-column landscape layout)
+// leftTableView: shows every section (0-4) in portrait; in landscape it only shows sections 0 and 1 (version info, content)
+// rightTableView: only shown in landscape, holding sections 2, 3 and 4 (install components, advanced, server)
 @property (nonatomic, strong, nullable) UITableView *leftTableView;
 @property (nonatomic, strong, nullable) UITableView *rightTableView;
-// Hero 卡片容器（包含 heroCard，作为 leftTableView 的 tableHeaderView）
+// The hero card container (holding heroCard, used as the tableHeaderView of leftTableView)
 @property (nonatomic, strong, nullable) UIView *heroContainer;
 
 @end
@@ -60,7 +60,7 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
 
-    // 如果只传了 profileName 没传 profile，从 PLProfiles 加载
+    // If only profileName was passed and not profile, load it from PLProfiles
     if (!self.profile && self.profileName) {
         self.profile = [PLProfiles.current.profiles[self.profileName] mutableCopy];
         if (!self.profile) {
@@ -68,12 +68,12 @@
             self.profile[@"name"] = self.profileName;
         }
     }
-    // 安全网：如果调用方既没传 profileName 也没传 profile，创建空字典避免后续 nil 写入
+    // Safety net: if the caller passed neither profileName nor profile, create an empty dictionary so nothing is written into nil later
     if (!self.profile) {
         self.profile = [NSMutableDictionary dictionary];
     }
 
-    // 确保 profile 有 name 字段
+    // Make sure the profile has a name field
     self.originalName = self.profile[@"name"];
     if ([self.originalName length] == 0) {
         self.originalName = self.profileName ?: @"New Profile";
@@ -86,15 +86,15 @@
     self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone target:self action:@selector(actionDone)];
     self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemClose target:self action:@selector(actionClose)];
 
-    // 设置表格（双列布局：leftTableView 主表格，rightTableView 仅横屏时显示）
-    // UIViewController 的 self.view 是容器视图，包含两个 tableView
+    // Set up the tables (the two-column layout: leftTableView is the main table and rightTableView appears only in landscape)
+    // self.view of the UIViewController is the container holding both table views
     self.leftTableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStyleInsetGrouped];
     self.leftTableView.keyboardDismissMode = UIScrollViewKeyboardDismissModeInteractive;
     self.leftTableView.dataSource = self;
     self.leftTableView.delegate = self;
     self.leftTableView.backgroundColor = [UIColor clearColor];
-    // 使用 Automatic 让系统自动避开导航栏（修复内容上移被导航栏遮挡）
-    // 配合 edgesForExtendedLayout = UIRectEdgeAll 让背景延伸到导航栏后方
+    // Automatic lets the system avoid the navigation bar (fixing the content sliding up under it)
+    // Together with edgesForExtendedLayout = UIRectEdgeAll, the background extends behind the navigation bar
     self.leftTableView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentAutomatic;
     [self.view addSubview:self.leftTableView];
 
@@ -104,19 +104,19 @@
     self.rightTableView.delegate = self;
     self.rightTableView.backgroundColor = [UIColor clearColor];
     self.rightTableView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentAutomatic;
-    self.rightTableView.hidden = YES; // 默认隐藏，横屏时显示
+    self.rightTableView.hidden = YES; // Hidden by default, shown in landscape
     [self.view addSubview:self.rightTableView];
 
-    // 适配自定义启动器背景：透明背景让底层背景毛玻璃透出。
-    // 两条进入路径（push 和 showProfileEditor modal）都使用 clearColor，
-    // 统一由 BackgroundManager 管理背景效果。
-    // 适配自定义启动器背景：给 tableView 设置毛玻璃 backgroundView，遮挡栈底 VC 内容。
-    // 修复"点击版本管理进入版本设置后前一页面未及时消失"问题：
-    // 若 tableView 完全透明，push 后会透出栈底 VersionManagerViewController 的卡片，造成"前一页未消失"。
-    // 这里给 backgroundView 设置 UIVisualEffectView（毛玻璃），既能模糊并透出全局背景图，
-    // 又能遮挡栈底 VC 内容，同时保持视觉一致性。
+    // Adapt to the custom launcher background: a transparent background lets the frosted glass beneath show through.
+    // Both entry paths (push and the showProfileEditor modal) use clearColor,
+    // with BackgroundManager managing the background effect throughout.
+    // Adapt to the custom launcher background: give the tableView a frosted-glass backgroundView that hides the VC beneath.
+    // Fix for "the previous page does not disappear in time when opening version settings from the version manager":
+    // with a fully transparent tableView, the cards of VersionManagerViewController show through after the push, so the previous page seems to linger.
+    // Setting a UIVisualEffectView (frosted glass) as backgroundView both blurs and reveals the global background image
+    // and hides the VC beneath, while keeping the look consistent.
     [self applyBackgroundBlurToTableView];
-    // 适配自定义启动器背景：导航栏毛玻璃 + 视图透明
+    // Adapt to the custom launcher background: a frosted-glass navigation bar and a transparent view
     if (self.navigationController) {
         [[BackgroundManager sharedManager] applyEffectToNavigationBar:self.navigationController.navigationBar];
     }
@@ -124,19 +124,19 @@
     self.extendedLayoutIncludesOpaqueBars = YES;
     self.edgesForExtendedLayout = UIRectEdgeAll;
 
-    // 计算最大内存
+    // Work out the maximum memory
     [self calculateMaxMemory];
 
-    // 加载设置
+    // Load the settings
     [self loadSettings];
 
-    // 设置版本选择器
+    // Set up the version picker
     [self setupVersionPicker];
 
-    // 设置分区
+    // Set up the sections
     [self setupSections];
 
-    // 顶部 Hero 卡片（Profile 名 + 当前版本 pill + 游戏目录）
+    // The hero card at the top (the profile name + the current version pill + the game directory)
     [self setupHeroCard];
 
     [[NSNotificationCenter defaultCenter] addObserver:self
@@ -156,25 +156,25 @@
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
-    // 修复"前一个页面没有及时消失"：viewDidLoad 时 tableView.bounds 可能为 zero，
-    // 导致 applyBackgroundBlurToTableView 设置的 backgroundView frame 为 zero，
-    // push 转场初期无法遮挡栈底 VersionManagerViewController 的内容。
-    // 在 viewWillAppear 中重新应用，此时 bounds 已正确，确保转场前遮挡到位。
+    // Fix for "the previous page does not disappear in time": tableView.bounds can be zero in viewDidLoad,
+    // so the backgroundView frame applyBackgroundBlurToTableView sets is zero
+    // and cannot hide the VersionManagerViewController content in the first frames of the push.
+    // Re-applying it in viewWillAppear (where bounds are correct) makes sure the cover is in place before the transition.
     [self applyBackgroundBlurToTableView];
 }
 
 - (void)viewWillTransitionToSize:(CGSize)size withTransitionCoordinator:(id<UIViewControllerTransitionCoordinator>)coordinator {
     [super viewWillTransitionToSize:size withTransitionCoordinator:coordinator];
-    // 横竖屏切换时，重新计算 tableHeaderView（Hero 卡片）的高度，并切换双列布局
+    // On rotation, recompute the tableHeaderView (hero card) height and switch the two-column layout
     [coordinator animateAlongsideTransition:^(id<UIViewControllerTransitionCoordinatorContext>  _Nonnull context) {
-        // 切换 rightTableView 的显示状态（横屏时显示）
+        // Show or hide rightTableView (it appears in landscape)
         BOOL landscape = size.width > size.height;
         self.rightTableView.hidden = !landscape;
 
-        // 重新计算 Hero 卡片高度（仅 leftTableView 显示 Hero 卡片）
+        // Recompute the hero card height (only leftTableView shows the hero card)
         UIView *header = self.leftTableView.tableHeaderView;
         if (header) {
-            // 横屏时 leftTableView 宽度是总宽度的一半（减去间距）
+            // In landscape, leftTableView is half the total width (minus the gap)
             CGFloat headerWidth = landscape ? (size.width / 2.0 - 8.0) : size.width;
             header.frame = CGRectMake(0, 0, headerWidth, 0);
             [header setNeedsLayout];
@@ -186,11 +186,11 @@
             self.leftTableView.tableHeaderView = header;
         }
 
-        // 重新加载两个 tableView 的数据（visible sections 会根据方向变化）
+        // Reload both table views (the visible sections change with the orientation)
         [self.leftTableView reloadData];
         [self.rightTableView reloadData];
     } completion:^(id<UIViewControllerTransitionCoordinatorContext>  _Nonnull context) {
-        // 转场完成后再次应用背景模糊（frame 已稳定）
+        // Re-apply the background blur once the transition finishes (the frame has settled)
         [self applyBackgroundBlurToTableView];
     }];
 }
@@ -200,34 +200,34 @@
     [self layoutDualTableViews];
 }
 
-/// 布局双列 tableView
-/// - 竖屏：leftTableView 占满整个 view，rightTableView 隐藏
-/// - 横屏：leftTableView 占左半部分，rightTableView 占右半部分，中间 16pt 间距
+/// Lay out the two table views
+/// - portrait: leftTableView fills the view and rightTableView is hidden
+/// - landscape: leftTableView takes the left half and rightTableView the right, with a 16pt gap
 - (void)layoutDualTableViews {
     CGRect bounds = self.view.bounds;
     BOOL landscape = [self isLandscape];
 
     if (landscape) {
-        // 横屏双列布局
+        // The two-column landscape layout
         CGFloat spacing = 16.0;
         CGFloat halfWidth = (bounds.size.width - spacing) / 2.0;
         self.leftTableView.frame = CGRectMake(0, 0, halfWidth, bounds.size.height);
         self.rightTableView.frame = CGRectMake(halfWidth + spacing, 0, halfWidth, bounds.size.height);
         self.rightTableView.hidden = NO;
     } else {
-        // 竖屏单列布局
+        // The single-column portrait layout
         self.leftTableView.frame = bounds;
         self.rightTableView.hidden = YES;
     }
 
-    // 重新计算 Hero 卡片（tableHeaderView）的宽度和高度
+    // Recompute the width and height of the hero card (the tableHeaderView)
     [self relayoutHeroHeader];
 
-    // 同步背景模糊视图的 frame
+    // Keep the frame of the background blur view in sync
     [self syncBackgroundBlurFrames];
 }
 
-/// 重新计算 Hero 卡片（tableHeaderView）的宽度和高度
+/// Recompute the width and height of the hero card (the tableHeaderView)
 - (void)relayoutHeroHeader {
     UIView *header = self.leftTableView.tableHeaderView;
     if (!header) return;
@@ -243,7 +243,7 @@
     self.leftTableView.tableHeaderView = header;
 }
 
-/// 同步 leftTableView 和 rightTableView 的 backgroundView frame
+/// Keep the backgroundView frames of leftTableView and rightTableView in sync
 - (void)syncBackgroundBlurFrames {
     for (UITableView *tv in @[self.leftTableView, self.rightTableView]) {
         if (!tv || tv.hidden) continue;
@@ -263,9 +263,9 @@
 
 #pragma mark - Hero Card
 
-/// 顶部 Hero 卡片：Profile 名 + 当前版本 pill + 游戏目录（Air-Design v1.2 L3 大卡片）
+/// The hero card at the top: the profile name + the current version pill + the game directory (an Air-Design v1.2 L3 large card)
 - (void)setupHeroCard {
-    // ===== Hero 卡片容器（L3：16pt 圆角 + 半透明背景 + 毛玻璃 + 浅边框 + 中阴影）=====
+    // ===== The hero card container (L3: 16pt radius + translucent background + frosted glass + light border + medium shadow) =====
     UIView *heroCard = [[UIView alloc] init];
     heroCard.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.14]; // surface-bright
     heroCard.layer.cornerRadius = 16;
@@ -278,7 +278,7 @@
     heroCard.layer.shadowOffset = CGSizeMake(0, 3);
     [[BackgroundManager sharedManager] applyEffectToView:heroCard];
 
-    // ===== Hero 图标（56x56，14pt 圆角，accentColor 背景，白色 cube.fill SF Symbol）=====
+    // ===== The hero icon (56x56, 14pt radius, an accentColor background and a white cube.fill SF Symbol) =====
     UIImageView *iconView = [[UIImageView alloc] init];
     iconView.image = [UIImage systemImageNamed:@"cube.fill"];
     iconView.tintColor = [UIColor whiteColor];
@@ -289,7 +289,7 @@
     iconView.layer.masksToBounds = YES;
     [heroCard addSubview:iconView];
 
-    // ===== 标题（Profile 名，17pt bold，labelColor）=====
+    // ===== The title (the profile name, 17pt bold, labelColor) =====
     UILabel *titleLabel = [[UILabel alloc] init];
     titleLabel.text = self.profile[@"name"] ?: self.originalName ?: @"New Profile";
     titleLabel.font = [UIFont systemFontOfSize:17 weight:UIFontWeightBold];
@@ -298,7 +298,7 @@
     titleLabel.minimumScaleFactor = 0.8;
     [heroCard addSubview:titleLabel];
 
-    // ===== 版本 pill（11pt bold，绿底白字，checkmark.circle.fill + 版本号）=====
+    // ===== The version pill (11pt bold, white on green, checkmark.circle.fill + the version number) =====
     UIView *versionPill = [[UIView alloc] init];
     versionPill.backgroundColor = [UIColor systemGreenColor];
     versionPill.layer.cornerRadius = 9;
@@ -321,7 +321,7 @@
     pillLabel.minimumScaleFactor = 0.7;
     [versionPill addSubview:pillLabel];
 
-    // ===== 副标题（游戏目录，12pt regular，secondaryLabelColor）=====
+    // ===== The subtitle (the game directory, 12pt regular, secondaryLabelColor) =====
     UILabel *subtitleLabel = [[UILabel alloc] init];
     NSString *gameDir = self.profile[@"gameDir"] ?: @".";
     NSString *instanceName = getPrefObject(@"general.game_directory") ?: @"default";
@@ -334,7 +334,7 @@
 
     self.heroCard = heroCard;
 
-    // ===== 布局：使用 container 包装，设置为 tableHeaderView =====
+    // ===== Layout: wrapped in a container and set as the tableHeaderView =====
     UIView *container = [[UIView alloc] init];
     [container addSubview:heroCard];
 
@@ -347,48 +347,48 @@
     subtitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
 
     [NSLayoutConstraint activateConstraints:@[
-        // heroCard：左右 16pt 外边距，上下 8pt
+        // heroCard: 16pt margin on each side, 8pt top and bottom
         [heroCard.topAnchor constraintEqualToAnchor:container.topAnchor constant:8],
         [heroCard.leadingAnchor constraintEqualToAnchor:container.leadingAnchor constant:16],
         [heroCard.trailingAnchor constraintEqualToAnchor:container.trailingAnchor constant:-16],
         [heroCard.bottomAnchor constraintEqualToAnchor:container.bottomAnchor constant:-8],
 
-        // iconView：56x56，左侧 16pt，上下 16pt
+        // iconView: 56x56, 16pt from the left, 16pt top and bottom
         [iconView.leadingAnchor constraintEqualToAnchor:heroCard.leadingAnchor constant:16],
         [iconView.topAnchor constraintEqualToAnchor:heroCard.topAnchor constant:16],
         [iconView.bottomAnchor constraintEqualToAnchor:heroCard.bottomAnchor constant:-16],
         [iconView.widthAnchor constraintEqualToConstant:56],
         [iconView.heightAnchor constraintEqualToConstant:56],
 
-        // titleLabel：iconView 右侧 14pt，顶部 16pt
+        // titleLabel: 14pt to the right of iconView, 16pt from the top
         [titleLabel.leadingAnchor constraintEqualToAnchor:iconView.trailingAnchor constant:14],
         [titleLabel.topAnchor constraintEqualToAnchor:heroCard.topAnchor constant:16],
         [titleLabel.trailingAnchor constraintLessThanOrEqualToAnchor:heroCard.trailingAnchor constant:-16],
 
-        // versionPill：titleLabel 下方 4pt，高度 18pt，左侧对齐 titleLabel
+        // versionPill: 4pt below titleLabel, 18pt tall, left-aligned with titleLabel
         [versionPill.leadingAnchor constraintEqualToAnchor:titleLabel.leadingAnchor],
         [versionPill.topAnchor constraintEqualToAnchor:titleLabel.bottomAnchor constant:4],
         [versionPill.heightAnchor constraintEqualToConstant:18],
 
-        // pillIcon：8x8，左侧 6pt，垂直居中
+        // pillIcon: 8x8, 6pt from the left, vertically centered
         [pillIcon.leadingAnchor constraintEqualToAnchor:versionPill.leadingAnchor constant:6],
         [pillIcon.centerYAnchor constraintEqualToAnchor:versionPill.centerYAnchor],
         [pillIcon.widthAnchor constraintEqualToConstant:10],
         [pillIcon.heightAnchor constraintEqualToConstant:10],
 
-        // pillLabel：紧跟 pillIcon 右侧 2pt，右侧 6pt，垂直居中
+        // pillLabel: 2pt to the right of pillIcon, 6pt from the right, vertically centered
         [pillLabel.leadingAnchor constraintEqualToAnchor:pillIcon.trailingAnchor constant:2],
         [pillLabel.centerYAnchor constraintEqualToAnchor:versionPill.centerYAnchor],
         [pillLabel.trailingAnchor constraintEqualToAnchor:versionPill.trailingAnchor constant:-6],
 
-        // subtitleLabel：versionPill 下方 4pt，底部 16pt
+        // subtitleLabel: 4pt below versionPill, 16pt from the bottom
         [subtitleLabel.leadingAnchor constraintEqualToAnchor:titleLabel.leadingAnchor],
         [subtitleLabel.topAnchor constraintEqualToAnchor:versionPill.bottomAnchor constant:4],
         [subtitleLabel.trailingAnchor constraintLessThanOrEqualToAnchor:heroCard.trailingAnchor constant:-16],
         [subtitleLabel.bottomAnchor constraintEqualToAnchor:heroCard.bottomAnchor constant:-16],
     ]];
 
-    // 手动计算 container 高度并设置 tableHeaderView
+    // Compute the container height by hand and set it as the tableHeaderView
     CGFloat width = self.leftTableView.bounds.size.width;
     if (width == 0) width = [UIScreen mainScreen].bounds.size.width;
     container.frame = CGRectMake(0, 0, width, 0);
@@ -402,14 +402,14 @@
     self.leftTableView.tableHeaderView = container;
 }
 
-/// 更新 Hero 卡片内容（用户修改名称/版本后调用）
+/// Update the hero card content (called after the user changes the name or version)
 - (void)updateHeroCard {
     if (!self.heroCard) return;
-    // 遍历 heroCard 子视图找到 titleLabel/versionPill/subtitleLabel 并更新
+    // Walk the heroCard subviews to find titleLabel/versionPill/subtitleLabel and update them
     for (UIView *sub in self.heroCard.subviews) {
         if ([sub isKindOfClass:[UILabel class]]) {
             UILabel *label = (UILabel *)sub;
-            // 通过字体特征区分：17pt bold = 标题；12pt regular = 副标题；11pt bold = 版本 pill label
+            // Told apart by their fonts: 17pt bold = the title, 12pt regular = the subtitle, 11pt bold = the version pill label
             if (label.font.pointSize >= 16) {
                 label.text = self.profile[@"name"] ?: self.originalName ?: @"New Profile";
             } else if (label.font.pointSize <= 11) {
@@ -438,13 +438,13 @@
 #pragma mark - Load Settings
 
 - (void)loadSettings {
-    // 渲染器
+    // Renderer
     self.selectedRenderer = self.profile[@"renderer"] ?: @"auto";
 
-    // 图形 API（MC 26.2+ 游戏内 OpenGL/Vulkan 切换）
+    // Graphics API (in-game OpenGL/Vulkan switching on MC 26.2+)
     self.selectedGraphicsApi = self.profile[@"graphicsApi"] ?: @"default";
 
-    // Java版本（兼容旧版直装器写入的 NSDictionary 格式）
+    // Java version (handling the NSDictionary format written by older direct installers)
     id javaVerRaw = self.profile[@"javaVersion"];
     if ([javaVerRaw isKindOfClass:[NSDictionary class]]) {
         id major = javaVerRaw[@"majorVersion"];
@@ -453,7 +453,7 @@
         self.selectedJavaVersion = [javaVerRaw isKindOfClass:[NSString class]] ? javaVerRaw : @"0";
     }
 
-    // 内存分配 (MB)
+    // Memory allocation (MB)
     self.allocatedMemory = [self.profile[@"allocatedMemory"] integerValue];
     if (self.allocatedMemory == 0) {
         self.allocatedMemory = MIN(self.maxMemory / 2, 2048);
@@ -462,13 +462,13 @@
         self.allocatedMemory = self.maxMemory;
     }
 
-    // 服务器地址（默认空字符串，留空不自动加入）
+    // The server address (an empty string by default; leave it empty to skip joining automatically)
     NSString *profName = self.profile[@"name"] ?: self.profileName;
     self.serverIp = [PLProfiles.current serverIpForProfile:profName] ?: @"";
 
-    // JVM 启动参数：参照 main 分支，仅读取 profile 自身字段；
-    // 为空时 UI 显示 "(default)" placeholder，实际启动时由 PLProfiles.resolveKeyForCurrentProfile
-    // 回退到全局 java.java_args（见 JavaLauncher.init_loadCustomJvmFlags）。
+    // JVM arguments: as on the main branch, only the profile field itself is read;
+    // when it is empty the UI shows the "(default)" placeholder, and at launch PLProfiles.resolveKeyForCurrentProfile
+    // falls back to the global java.java_args (see JavaLauncher.init_loadCustomJvmFlags).
     id rawArgs = self.profile[@"javaArgs"];
     if ([rawArgs isKindOfClass:[NSString class]]) {
         self.javaArgs = rawArgs;
@@ -480,20 +480,20 @@
 #pragma mark - Sections
 
 - (void)setupSections {
-    // 高级设置 section：渲染器 + 图形 API（仅 MC 26.2+）+ Java/内存/JVM
+    // The advanced section: renderer + graphics API (MC 26.2+ only) + Java/memory/JVM
     NSMutableArray *advancedRows = [NSMutableArray arrayWithArray:@[@"Renderer"]];
     if ([self isCurrentProfileModernVersion]) {
         [advancedRows addObject:@"Graphics API"];
     }
     [advancedRows addObjectsFromArray:@[@"Java version", @"Memory allocation", @"JVM arguments", @"Clear JVM arguments"]];
 
-    // 重构（Air-Design v1.2）：5 个 Bento 分组
-    // 顺序与横屏布局对应：左侧（0,1）+ 右侧（2,3,4）
-    //   0: 版本信息  - 名称 / 游戏版本 / 游戏目录
-    //   1: 资源管理  - 模组 / 光影 / 资源包 / 数据包 / 世界
-    //   2: 组件安装  - Fabric API / OptiFine
-    //   3: 高级设置  - 渲染器 / 图形 API / Java / 内存 / JVM 参数
-    //   4: 服务器    - 服务器地址
+    // Rework (Air-Design v1.2): 5 Bento groups
+    // The order matches the landscape layout: left (0,1) + right (2,3,4)
+    //   0: Version info  - name / game version / game directory
+    //   1: Content       - mods / shaders / resource packs / data packs / worlds
+    //   2: Components    - Fabric API / OptiFine
+    //   3: Advanced      - renderer / graphics API / Java / memory / JVM arguments
+    //   4: Server        - the server address
     self.sections = @[
         @[@"Name", @"Game version", @"Game directory"],
         @[@"Mod manager", @"Shader manager", @"Resource pack manager", @"Data pack manager", @"World manager"],
@@ -505,15 +505,15 @@
 
 #pragma mark - Dual Table View Helpers
 
-/// 是否处于横屏（宽度 > 高度）
+/// Whether we are in landscape (wider than tall)
 - (BOOL)isLandscape {
     CGSize size = self.view.bounds.size;
     return size.width > size.height;
 }
 
-/// 返回指定 tableView 显示的全局 section 索引数组
-/// - leftTableView：竖屏时显示所有 sections (0,1,2,3,4)；横屏时只显示 (0,1)
-/// - rightTableView：仅横屏时显示 (2,3,4)
+/// Return the global section indexes shown by a given table view
+/// - leftTableView: every section (0,1,2,3,4) in portrait, and only (0,1) in landscape
+/// - rightTableView: (2,3,4), and only in landscape
 - (NSArray<NSNumber *> *)visibleSectionsForTableView:(UITableView *)tableView {
     if (tableView == self.rightTableView) {
         return @[@2, @3, @4];
@@ -525,19 +525,19 @@
     return @[@0, @1, @2, @3, @4];
 }
 
-/// 将 tableView 的本地 section 索引转换为全局 section 索引
+/// Convert a table view local section index into a global section index
 - (NSInteger)globalSectionForTableView:(UITableView *)tableView localSection:(NSInteger)localSection {
     NSArray<NSNumber *> *visible = [self visibleSectionsForTableView:tableView];
     if (localSection < 0 || localSection >= (NSInteger)visible.count) return -1;
     return visible[localSection].integerValue;
 }
 
-/// 主 tableView（用于与外部代码交互，如 Hero 卡片、背景模糊等）
+/// The main table view (used by external code, such as the hero card and the background blur)
 - (UITableView *)mainTableView {
     return self.leftTableView;
 }
 
-/// 重新加载所有 tableView 的数据
+/// Reload the data of every table view
 - (void)reloadAllTableViews {
     [self.leftTableView reloadData];
     if (self.rightTableView && !self.rightTableView.hidden) {
@@ -545,17 +545,17 @@
     }
 }
 
-/// 根据全局 section 和 row 查找 cell（用于 popover sourceView 等）
-/// 遍历 leftTableView 和 rightTableView，找到包含该全局 section 的 tableView
+/// Find the cell for a global section and row (used for a popover sourceView and the like)
+/// Walks leftTableView and rightTableView to find the one holding that global section
 - (UITableViewCell *)cellForGlobalSection:(NSInteger)globalSection row:(NSInteger)row {
-    // 检查 leftTableView
+    // Check leftTableView
     NSArray<NSNumber *> *leftVisible = [self visibleSectionsForTableView:self.leftTableView];
     NSInteger leftLocal = [leftVisible indexOfObject:@(globalSection)];
     if (leftLocal != NSNotFound) {
         NSIndexPath *ip = [NSIndexPath indexPathForRow:row inSection:leftLocal];
         return [self.leftTableView cellForRowAtIndexPath:ip];
     }
-    // 检查 rightTableView
+    // Check rightTableView
     if (self.rightTableView && !self.rightTableView.hidden) {
         NSArray<NSNumber *> *rightVisible = [self visibleSectionsForTableView:self.rightTableView];
         NSInteger rightLocal = [rightVisible indexOfObject:@(globalSection)];
@@ -570,14 +570,14 @@
 #pragma mark - Save
 
 - (void)saveSettings {
-    // 仅保存渲染器/Java/内存/服务器等设置项，不处理重命名
-    // 重命名逻辑在 actionDone 中处理
-    // 注意：必须使用 originalName 作为 key，且不能把用户正在编辑的 name 写入 PLProfiles
-    // 否则用户改名后关闭（不点 Done），PLProfiles 中的 profile.name 会变成新名但 key 仍是旧名
+    // Only the renderer/Java/memory/server settings are saved here; renaming is not handled
+    // The rename logic lives in actionDone
+    // Note: originalName must be used as the key, and the name the user is editing must not be written into PLProfiles,
+    // otherwise closing after a rename (without tapping Done) leaves profile.name in PLProfiles as the new name while the key is still the old one
     NSString *profName = self.originalName ?: self.profile[@"name"];
     if (!profName) return;
 
-    // 保存用户正在编辑的字段（name 和 lastVersionId 可能在编辑中，尚未确认）
+    // Save the fields the user is editing (name and lastVersionId may be mid-edit and unconfirmed)
     NSString *userInputName = self.profile[@"name"];
     NSString *userInputVersion = self.profile[@"lastVersionId"];
 
@@ -590,20 +590,20 @@
     existing[@"javaVersion"] = self.selectedJavaVersion;
     existing[@"allocatedMemory"] = @(self.allocatedMemory);
     existing[@"serverIp"] = self.serverIp ?: @"";
-    // 参照 main 分支：javaArgs 为空时移除 key，让 profile 回退到全局 java.java_args
+    // As on the main branch: when javaArgs is empty the key is removed, so the profile falls back to the global java.java_args
     if (self.javaArgs.length > 0) {
         existing[@"javaArgs"] = self.javaArgs;
     } else {
         [existing removeObjectForKey:@"javaArgs"];
     }
-    // 保存游戏目录（版本隔离用）：gameDir 为 nil 时默认 "."，与 main 分支行为一致
+    // Save the game directory (used for version isolation): a nil gameDir defaults to ".", matching the main branch
     existing[@"gameDir"] = self.profile[@"gameDir"] ?: @".";
-    // existing 中的 name 和 lastVersionId 字段保持原始值不变
+    // The name and lastVersionId fields in existing keep their original values
     PLProfiles.current.profiles[profName] = existing;
     [PLProfiles.current save];
 
-    // 同步到 working copy（深拷贝，避免与 PLProfiles 共享对象）
-    // 恢复用户正在编辑的 name 和 lastVersionId，这样 actionDone 仍能拿到用户改的值
+    // Sync to the working copy (a deep copy, so nothing is shared with PLProfiles)
+    // Restore the name and lastVersionId the user is editing, so actionDone still sees their changes
     self.profile = [existing mutableCopy];
     if (userInputName.length > 0) {
         self.profile[@"name"] = userInputName;
@@ -659,13 +659,13 @@
         [[BackgroundManager sharedManager] applyEffectToCell:cell];
     }
 
-    // 重置复用 cell 的状态
+    // Reset the state of a reused cell
     cell.accessoryView = nil;
     cell.accessoryType = UITableViewCellAccessoryNone;
     cell.imageView.image = nil;
     cell.textLabel.text = nil;
     cell.detailTextLabel.text = nil;
-    // 重置可能被"清除JVM参数"修改过的颜色
+    // Reset the color "Clear JVM arguments" may have changed
     cell.imageView.tintColor = nil;
     cell.textLabel.textColor = [UIColor labelColor];
 
@@ -676,7 +676,7 @@
     cell.textLabel.text = title;
 
     switch (globalSection) {
-        case 0: // 版本信息
+        case 0: // Version info
             if ([title isEqualToString:@"Name"]) {
                 cell.imageView.image = [UIImage systemImageNamed:@"tag"];
                 cell.accessoryView = [self buildNameTextField];
@@ -693,7 +693,7 @@
             }
             break;
 
-        case 1: // 资源管理
+        case 1: // Content
             if ([title isEqualToString:@"Mod manager"]) {
                 cell.imageView.image = [UIImage systemImageNamed:@"puzzlepiece.fill"];
                 cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
@@ -712,7 +712,7 @@
             }
             break;
 
-        case 2: // 组件安装
+        case 2: // Components
             if ([title isEqualToString:@"Fabric API"]) {
                 cell.imageView.image = [UIImage systemImageNamed:@"bolt.fill"];
                 cell.imageView.tintColor = [UIColor systemOrangeColor];
@@ -726,7 +726,7 @@
             }
             break;
 
-        case 3: // 高级设置
+        case 3: // Advanced
             if ([title isEqualToString:@"Renderer"]) {
                 cell.imageView.image = [UIImage systemImageNamed:@"cpu"];
                 cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
@@ -755,7 +755,7 @@
             }
             break;
 
-        case 4: // 服务器地址（FCL 风格）
+        case 4: // The server address (FCL style)
             cell.imageView.image = [UIImage systemImageNamed:@"antenna.radiowaves.left.and.right"];
             cell.accessoryView = [self buildServerIpTextField];
             break;
@@ -767,9 +767,9 @@
 #pragma mark - 名称输入框
 
 - (UITextField *)buildNameTextField {
-    // 复用已有 textField
+    // Reuse the existing textField
     if (self.nameTextField) {
-        // 检查是否已被其他 cell 持有（复用机制下需要重新添加）
+        // Check whether another cell already holds it (it has to be re-added under cell reuse)
         if (!self.nameTextField.superview || self.nameTextField.superview == self.view) {
             return self.nameTextField;
         }
@@ -823,7 +823,7 @@
         [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone target:self action:@selector(versionClosePicker)]
     ];
 
-    // 自动选择版本类型
+    // Choose the version type automatically
     NSString *currentVersion = self.profile[@"lastVersionId"];
     if (currentVersion) {
         if ([MinecraftResourceUtils findVersion:currentVersion inList:localVersionList]) {
@@ -866,13 +866,13 @@
     [textField addTarget:self action:@selector(versionTextFieldDidEnd:) forControlEvents:UIControlEventEditingDidEnd];
     self.versionTextField = textField;
 
-    // 初始化版本列表
+    // Initialize the version list
     [self changeVersionType:nil];
     return textField;
 }
 
 - (void)versionTextFieldDidEnd:(UITextField *)textField {
-    // 更新 profile 中的版本
+    // Update the version in the profile
     self.profile[@"lastVersionId"] = textField.text ?: @"";
 }
 
@@ -885,11 +885,11 @@
     NSArray *newVersionList = self.versionList;
     if (sender || !self.versionList) {
         if (self.versionTypeControl.selectedSegmentIndex == 0) {
-            // nil 安全：启动器刚启动时 localVersionList 可能尚未加载
+            // nil-safe: localVersionList may not have loaded yet just after the launcher starts
             newVersionList = localVersionList ?: @[];
         } else {
             NSString *type = @[@"installed", @"release", @"snapshot", @"old_beta", @"old_alpha"][self.versionTypeControl.selectedSegmentIndex];
-            // nil 安全：remoteVersionList 为 nil 时用空数组，避免 filteredArrayUsingPredicate 崩溃
+            // nil-safe: use an empty array when remoteVersionList is nil, so filteredArrayUsingPredicate cannot crash
             NSArray *remote = remoteVersionList ?: @[];
             newVersionList = [remote filteredArrayUsingPredicate:[NSPredicate predicateWithFormat:@"(type == %@)", type]];
         }
@@ -981,10 +981,10 @@
         }
     }
     UITextField *textField = [[UITextField alloc] initWithFrame:CGRectMake(0, 0, 200, 30)];
-    // 参照 main 分支 LauncherProfileEditorViewController：placeholder 为 "(default)"，
-    // 表示未设置时回退到全局 java.java_args。
+    // As in LauncherProfileEditorViewController on the main branch: the placeholder is "(default)",
+    // meaning it falls back to the global java.java_args when unset.
     textField.placeholder = @"(default)";
-    // 仅当 profile 显式设置了 javaArgs 时才显示，否则留空显示 placeholder
+    // Only shown when the profile sets javaArgs explicitly; otherwise it is left empty to show the placeholder
     textField.text = self.profile[@"javaArgs"] ?: @"";
     textField.font = [UIFont systemFontOfSize:13];
     textField.adjustsFontSizeToFitWidth = YES;
@@ -1006,7 +1006,7 @@
 }
 
 - (void)javaArgsTextFieldEditingDidEnd:(UITextField *)textField {
-    // 参照 main 分支：空串或 "(default)" 视为未设置，保存时移除 key 以回退全局 java.java_args
+    // As on the main branch: an empty string or "(default)" counts as unset, and the key is removed on save so it falls back to the global java.java_args
     NSString *trimmed = [textField.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] ?: @"";
     if (trimmed.length == 0 || [trimmed isEqualToString:@"(default)"]) {
         self.javaArgs = @"";
@@ -1018,7 +1018,7 @@
     [self saveSettings];
 }
 
-/// 一键清除当前版本已设置的 JVM 启动参数
+/// Clear the JVM arguments set for this version in one tap
 - (void)clearJavaArgs {
     if (self.javaArgs.length == 0) {
         UIAlertController *tip = [UIAlertController alertControllerWithTitle:@"Notice"
@@ -1089,19 +1089,19 @@
     NSString *title = self.sections[globalSection][indexPath.row];
 
     switch (globalSection) {
-        case 0: // 版本信息
+        case 0: // Version info
             if ([title isEqualToString:@"Name"]) {
-                // 聚焦名称输入框
+                // Focus the name field
                 if (self.nameTextField) [self.nameTextField becomeFirstResponder];
             } else if ([title isEqualToString:@"Game version"]) {
-                // 聚焦版本选择器
+                // Focus the version picker
                 if (self.versionTextField) [self.versionTextField becomeFirstResponder];
             } else if ([title isEqualToString:@"Game directory"]) {
                 [self editGameDir];
             }
             break;
 
-        case 1: // 资源管理
+        case 1: // Content
             if ([title isEqualToString:@"Mod manager"]) {
                 [self openModsManager];
             } else if ([title isEqualToString:@"Shader manager"]) {
@@ -1115,7 +1115,7 @@
             }
             break;
 
-        case 2: // 组件安装
+        case 2: // Components
             if ([title isEqualToString:@"Fabric API"]) {
                 [self installFabricAPIStandalone];
             } else if ([title isEqualToString:@"OptiFine"]) {
@@ -1123,7 +1123,7 @@
             }
             break;
 
-        case 3: // 高级设置
+        case 3: // Advanced
             if ([title isEqualToString:@"Renderer"]) {
                 [self showRendererSelector];
             } else if ([title isEqualToString:@"Graphics API"]) {
@@ -1139,7 +1139,7 @@
             }
             break;
 
-        case 4: // 服务器地址
+        case 4: // The server address
             [self focusTextFieldInCellAtIndexPath:indexPath inTableView:tableView];
             break;
     }
@@ -1167,9 +1167,9 @@
 
 #pragma mark - Actions
 
-/// 编辑游戏目录（仿 main 分支 LauncherProfileEditorViewController 的 gameDir 文本框）
-/// gameDir="." 表示使用当前 POJAV_GAME_DIR（即"游戏目录切换"选中的实例目录）
-/// 也可以输入相对路径（相对于 POJAV_GAME_DIR）或绝对路径来实现版本隔离
+/// Edit the game directory (mirroring the gameDir text field of LauncherProfileEditorViewController on the main branch)
+/// gameDir="." means the current POJAV_GAME_DIR (the instance folder selected by "switch game directory")
+/// A relative path (against POJAV_GAME_DIR) or an absolute path can also be entered, for version isolation
 - (void)editGameDir {
     NSString *currentGameDir = self.profile[@"gameDir"] ?: @".";
     NSString *currentInstance = getPrefObject(@"general.game_directory") ?: @"default";
@@ -1254,8 +1254,8 @@
 - (BOOL)isFabricProfile {
     NSString *lastVersionId = self.profile[@"lastVersionId"];
     if (![lastVersionId isKindOfClass:[NSString class]] || lastVersionId.length == 0) return NO;
-    // Fabric profile id 形如 "fabric-loader-0.16.0-1.21"，含 "fabric"
-    // Quilt profile id 含 "quilt"
+    // A Fabric profile id looks like "fabric-loader-0.16.0-1.21" and contains "fabric"
+    // A Quilt profile id contains "quilt"
     return [lastVersionId.lowercaseString containsString:@"fabric"];
 }
 
@@ -1263,8 +1263,8 @@
     return [self isVanillaProfile] || [self isForgeProfile];
 }
 
-/// 是否为原版 (Vanilla) profile
-/// lastVersionId 不含 forge/fabric/quilt/neoforge 等加载器标识
+/// Whether this is a vanilla profile
+/// lastVersionId contains no forge/fabric/quilt/neoforge loader marker
 - (BOOL)isVanillaProfile {
     NSString *lastVersionId = self.profile[@"lastVersionId"];
     if (![lastVersionId isKindOfClass:[NSString class]] || lastVersionId.length == 0) return NO;
@@ -1274,9 +1274,9 @@
         && ![lower containsString:@"quilt"];
 }
 
-/// 是否为 Forge profile（排除 NeoForge）
-/// 关键修复：原先用 `containsString:@"forge"` 会误判 neoforge 为 forge，
-/// 现显式排除 neoforge（参照 FCL/HMCL 的 OptiFine 兼容性判断）
+/// Whether this is a Forge profile (excluding NeoForge)
+/// Key fix: `containsString:@"forge"` used to treat neoforge as forge,
+/// so neoforge is now excluded explicitly (following the OptiFine compatibility test of FCL/HMCL)
 - (BOOL)isForgeProfile {
     NSString *lastVersionId = self.profile[@"lastVersionId"];
     if (![lastVersionId isKindOfClass:[NSString class]] || lastVersionId.length == 0) return NO;
@@ -1284,7 +1284,7 @@
     return [lower containsString:@"forge"] && ![lower containsString:@"neoforge"];
 }
 
-/// 当前 profile 的 mods 目录路径
+/// The mods folder path of the current profile
 - (NSString *)currentProfileModsPath {
     NSString *gameDir = self.profile[@"gameDir"];
     NSString *baseDir;
@@ -1311,11 +1311,11 @@
     return modsDir;
 }
 
-/// 当前 profile 的游戏版本（从 lastVersionId 解析）
+/// The game version of the current profile (parsed from lastVersionId)
 - (NSString *)currentGameVersion {
     NSString *lastVersionId = self.profile[@"lastVersionId"];
     if (![lastVersionId isKindOfClass:[NSString class]] || lastVersionId.length == 0) return nil;
-    // 解析 loader 前的游戏版本：1.21.1-forge-47.3.0 → 1.21.1
+    // The game version before the loader: 1.21.1-forge-47.3.0 -> 1.21.1
     // fabric-loader-0.16.0-1.21 → 1.21
     NSArray<NSString *> *loaders = @[@"forge", @"fabric", @"neoforge", @"quilt", @"fabric-loader"];
     NSString *result = lastVersionId;
@@ -1326,12 +1326,12 @@
             result = [result substringToIndex:range.location];
             break;
         }
-        // 处理 "fabric-loader-0.16.0-1.21" 形式：取最后一个版本号
+        // Handling the "fabric-loader-0.16.0-1.21" form: take the last version number
         if ([result.lowercaseString hasPrefix:[NSString stringWithFormat:@"%@-", loader]]) {
-            // fabric-loader-0.16.0-1.21 → 取最后的 "1.21"
+            // fabric-loader-0.16.0-1.21 -> take the trailing "1.21"
             NSArray *parts = [result componentsSeparatedByString:@"-"];
             if (parts.count >= 2) {
-                // 找到形如 1.x.x 的部分
+                // Find the part shaped like 1.x.x
                 for (NSString *part in [parts reverseObjectEnumerator]) {
                     if ([part hasPrefix:@"1."]) {
                         return part;
@@ -1379,10 +1379,10 @@
         return;
     }
 
-    // 关键修复（参照 FCL/HMCL OptiFine 安装流程）：
-    //   - Vanilla profile: 必须以版本补丁方式安装（launchwrapper + tweakClass），
-    //     仅把 jar 放进 mods/ 目录对原版完全无效，因为原版没有 mods 加载机制。
-    //   - Forge profile: Forge 可作为 mod 加载 OptiFine jar，沿用 mods/ 方式。
+    // Key fix (following the OptiFine install flows of FCL/HMCL):
+    //   - a vanilla profile: OptiFine must be installed as a version patch (launchwrapper + tweakClass),
+    //     since dropping the jar into mods/ does nothing on vanilla, which has no mod loading at all.
+    //   - a Forge profile: Forge can load the OptiFine jar as a mod, so the mods/ approach still applies.
     BOOL isVanilla = [self isVanillaProfile];
     NSString *message = nil;
     if (isVanilla) {
@@ -1437,7 +1437,7 @@
 }
 
 - (void)startInstallFabricAPIWithGameVersion:(NSString *)gameVersion {
-    // 使用统一下载进度卡片（DownloadProgressCardView），删除散落的 alert+spinner
+    // Use the shared download progress card (DownloadProgressCardView) instead of the scattered alerts and spinners
     UIView *hostView = self.view.window ?: self.view;
     DownloadProgressCardView *progress = [DownloadProgressCardView showInParentView:hostView title:@"Installing Fabric API"];
     [progress updateProgress:-1 downloaded:0 total:0 speed:0 eta:-1 currentFile:[NSString stringWithFormat:@"Searching for a Fabric API build for %@...", gameVersion]];
@@ -1461,7 +1461,7 @@
                 return;
             }
 
-            // 找到标题包含 "fabric api" 且不包含 "kotlin" 的项目
+            // Find the project whose title contains "fabric api" and not "kotlin"
             NSDictionary *fabricAPI = nil;
             for (NSDictionary *mod in results) {
                 NSString *title = mod[@"title"] ?: @"";
@@ -1495,7 +1495,7 @@
                         return;
                     }
 
-                    // 找到匹配当前 gameVersion 的版本
+                    // Find the version matching the current gameVersion
                     ModVersion *matchingVersion = nil;
                     for (ModVersion *ver in versions) {
                         if ([ver.gameVersions containsObject:gameVersion]) {
@@ -1575,7 +1575,7 @@
 }
 
 - (void)startInstallOptiFineWithGameVersion:(NSString *)gameVersion {
-    // 使用统一下载进度卡片（DownloadProgressCardView），删除散落的 alert+spinner
+    // Use the shared download progress card (DownloadProgressCardView) instead of the scattered alerts and spinners
     UIView *hostView = self.view.window ?: self.view;
     DownloadProgressCardView *progress = [DownloadProgressCardView showInParentView:hostView title:@"Installing OptiFine"];
     [progress updateProgress:-1 downloaded:0 total:0 speed:0 eta:-1 currentFile:[NSString stringWithFormat:@"Looking up OptiFine versions for %@...", gameVersion]];
@@ -1585,7 +1585,7 @@
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
 
-        // BMCL API 列表查询
+        // Query the BMCL API list
         NSString *listURL = [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/optifine/%@", gameVersion];
         NSURL *url = [NSURL URLWithString:listURL];
         NSError *listError = nil;
@@ -1621,10 +1621,10 @@
             return;
         }
 
-        // 切换到下载阶段
+        // Switch to the download stage
         [progress updateProgress:-1 downloaded:0 total:0 speed:0 eta:-1 currentFile:[NSString stringWithFormat:@"Downloading OptiFine %@ %@", optiFineType, optiFinePatch]];
 
-        // 下载 OptiFine
+        // Download OptiFine
         NSString *downloadURL = [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/optifine/%@/%@/%@", gameVersion, optiFineType, optiFinePatch];
         NSURL *dlURL = [NSURL URLWithString:downloadURL];
         NSError *downloadError = nil;
@@ -1681,13 +1681,13 @@
 
 #pragma mark - OptiFine 版本补丁安装（Vanilla profile，参照 FCL/HMCL OptiFineInstallTask）
 
-/// 以版本补丁方式安装 OptiFine（适用于 Vanilla profile）
-/// 参照 FCL OptiFineInstallTask 与 HMCL OptiFineInstallTask：
-///   1. 下载 OptiFine jar 到 libraries/optifine/OptiFine/<mcVersion>/<versionId>.jar
-///   2. 创建 versions/<versionId>/<versionId>.json，mainClass 设为
-///      net.minecraft.launchwrapper.Launcher，并附加 --tweakClass optifine.OptiFineTweaker
-///   3. inheritsFrom 指向原版版本（vanilla parent 必须已存在）
-///   4. 创建新 profile 并切换为当前 profile
+/// Install OptiFine as a version patch (for a vanilla profile)
+/// Following FCL OptiFineInstallTask and HMCL OptiFineInstallTask:
+///   1. download the OptiFine jar to libraries/optifine/OptiFine/<mcVersion>/<versionId>.jar
+///   2. create versions/<versionId>/<versionId>.json with mainClass set to
+///      net.minecraft.launchwrapper.Launcher, adding --tweakClass optifine.OptiFineTweaker
+///   3. point inheritsFrom at the vanilla version (whose parent must already exist)
+///   4. create the new profile and make it the current one
 - (void)startInstallOptiFineAsPatch:(NSString *)gameVersion {
     UIView *hostView = self.view.window ?: self.view;
     DownloadProgressCardView *progress = [DownloadProgressCardView showInParentView:hostView title:@"Installing OptiFine"];
@@ -1698,7 +1698,7 @@
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
 
-        // 1. BMCL API 查询适配当前游戏版本的 OptiFine 列表
+        // 1. Query the BMCL API for the OptiFine builds matching the current game version
         NSString *listURL = [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/optifine/%@", gameVersion];
         NSURL *url = [NSURL URLWithString:listURL];
         NSError *listError = nil;
@@ -1734,7 +1734,7 @@
             return;
         }
 
-        // 2. 下载 OptiFine jar
+        // 2. Download the OptiFine jar
         [progress updateProgress:-1 downloaded:0 total:0 speed:0 eta:-1 currentFile:[NSString stringWithFormat:@"Downloading OptiFine %@ %@", optiFineType, optiFinePatch]];
         NSString *downloadURL = [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/optifine/%@/%@/%@", gameVersion, optiFineType, optiFinePatch];
         NSURL *dlURL = [NSURL URLWithString:downloadURL];
@@ -1766,7 +1766,7 @@
             return;
         }
 
-        // 3. 检查原版父版本必须已存在（否则 inheritsFrom 会失败）
+        // 3. Check that the vanilla parent version exists (otherwise inheritsFrom fails)
         const char *env = getenv("POJAV_GAME_DIR");
         NSString *gameDir = env ? [NSString stringWithUTF8String:env] : NSHomeDirectory();
         NSString *parentJsonPath = [gameDir stringByAppendingPathComponent:
@@ -1784,9 +1784,9 @@
             return;
         }
 
-        // 4. 写入 jar 到 libraries/optifine/OptiFine/<mcVersion>/<versionId>.jar
-        //    参照 FCL/HMCL：OptiFine jar 作为 launchwrapper 的 tweakClass 输入，
-        //    mainClass 设为 net.minecraft.launchwrapper.Launcher
+        // 4. Write the jar to libraries/optifine/OptiFine/<mcVersion>/<versionId>.jar
+        //    Following FCL/HMCL: the OptiFine jar is the tweakClass input for launchwrapper,
+        //    with mainClass set to net.minecraft.launchwrapper.Launcher
         NSString *versionId = [NSString stringWithFormat:@"%@-OptiFine_%@_%@", gameVersion, optiFineType, optiFinePatch];
         NSString *optifineJarPath = [NSString stringWithFormat:@"optifine/OptiFine/%@/%@.jar", gameVersion, versionId];
         NSString *optifineJarAbsPath = [NSString stringWithFormat:@"%@/libraries/%@", gameDir, optifineJarPath];
@@ -1807,7 +1807,7 @@
             return;
         }
 
-        // 5. 创建 version JSON（launchwrapper + tweakClass + inheritsFrom）
+        // 5. Write the version JSON (launchwrapper + tweakClass + inheritsFrom)
         NSDictionary *versionJson = @{
             @"id": versionId,
             @"inheritsFrom": gameVersion,
@@ -1850,7 +1850,7 @@
             return;
         }
 
-        // 6. 注册新 profile 并切换为当前 profile（参照 FCL/HMCL 行为）
+        // 6. Register the new profile and make it current (matching FCL/HMCL)
         dispatch_async(dispatch_get_main_queue(), ^{
             __strong typeof(weakSelf) strongSelf2 = weakSelf;
             if (!strongSelf2) return;
@@ -1909,21 +1909,21 @@
     [self presentViewController:alert animated:YES completion:nil];
 }
 
-/// 判断当前 profile 的 MC 版本是否为 26.2+（需要图形 API 切换）
+/// Whether the MC version of the current profile is 26.2+ (which needs graphics API switching)
 - (BOOL)isCurrentProfileModernVersion {
     NSString *versionId = self.profile[@"lastVersionId"] ?: @"";
-    // 修复 Fabric/Quilt/Forge loader profile 的版本号识别：
-    //   原 implementation 用 hasPrefix:@"26." 判断，但 Fabric profile 的 lastVersionId
-    //   形如 "fabric-loader-0.16.0-26.2"，前缀是 "fabric-loader" 不是 "26."，导致
-    //   MC 26.2+ Fabric profile 看不到"图形 API"选项。
-    //   修复：先用 ModpackExportService.parseVersionId 提取 minecraft 版本号，
-    //   再用提取后的版本号判断。也支持 forge/neoforge 形如 "26.2-forge-..."。
+    // Fix for recognizing the version number of Fabric/Quilt/Forge loader profiles:
+    //   the original implementation tested hasPrefix:@"26.", but the lastVersionId of a Fabric profile
+    //   looks like "fabric-loader-0.16.0-26.2", whose prefix is "fabric-loader" rather than "26.", so
+    //   an MC 26.2+ Fabric profile never showed the "graphics API" option.
+    //   The fix: extract the Minecraft version with ModpackExportService.parseVersionId first,
+    //   then test the extracted version. That also handles the forge/neoforge form "26.2-forge-...".
     NSDictionary *parsed = [ModpackExportService parseVersionId:versionId];
     NSString *mcVersion = parsed[@"minecraft"] ?: versionId;
-    // 26.x 版本（26w02a 等快照也匹配）
+    // 26.x versions (snapshots such as 26w02a match too)
     if ([mcVersion hasPrefix:@"26."]) return YES;
     if ([mcVersion hasPrefix:@"26w"]) return YES;
-    // 1.21.8+ 版本（Mojang 在 1.21.8 引入 Vulkan API）
+    // 1.21.8+ versions (Mojang introduced the Vulkan API in 1.21.8)
     if ([mcVersion hasPrefix:@"1.21."]) {
         NSString *minorStr = [mcVersion substringFromIndex:5];
         NSInteger minor = [minorStr integerValue];
@@ -1932,14 +1932,14 @@
     return NO;
 }
 
-/// 图形 API 显示名
+/// The graphics API display name
 - (NSString *)graphicsApiDisplayName:(NSString *)api {
     if ([api isEqualToString:@"prefer_vulkan"]) return @"Prefer Vulkan";
     if ([api isEqualToString:@"prefer_opengl"]) return @"Prefer OpenGL";
     return @"Default";
 }
 
-/// 图形 API 选择器（MC 26.2+ 专用）
+/// The graphics API picker (MC 26.2+ only)
 - (void)showGraphicsApiSelector {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Choose graphics API"
                                                                    message:@"In-game OpenGL/Vulkan switching on MC 26.2+"
@@ -1976,16 +1976,16 @@
                                                                    message:nil
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
 
-    // 从 java.java_homes 偏好动态获取已安装的 Java 版本列表
+    // Read the installed Java versions from the java.java_homes preference
     NSMutableDictionary *javaHomes = [getPrefObject(@"java.java_homes") mutableCopy];
     if (!javaHomes) {
         javaHomes = [NSMutableDictionary dictionary];
     }
     NSMutableArray *versions = [[javaHomes allKeys] mutableCopy];
-    // "0" 表示自动选择，单独处理
+    // "0" means automatic, so it is handled separately
     [versions removeObject:@"0"];
     [versions sortUsingSelector:@selector(compare:)];
-    // 自动选项放最前
+    // The automatic option goes first
     [versions insertObject:@"0" atIndex:0];
 
     for (NSString *ver in versions) {
@@ -2048,9 +2048,9 @@
 #pragma mark - Done / Close
 
 - (void)actionClose {
-    // 收起键盘
+    // Dismiss the keyboard
     [self.view endEditing:YES];
-    // 直接关闭，不保存（设置项在编辑过程中已自动保存）
+    // Close without saving (the settings are saved automatically as they are edited)
     if (self.navigationController) {
         if (self.navigationController.viewControllers.firstObject == self) {
             [self dismissViewControllerAnimated:YES completion:nil];
@@ -2063,35 +2063,35 @@
 }
 
 - (void)actionDone {
-    // 收起键盘，触发 EditingDidEnd
+    // Dismiss the keyboard, which fires EditingDidEnd
     [self.view endEditing:YES];
 
     NSString *newName = self.profile[@"name"];
     if ([newName length] == 0) {
-        // 名称为空，恢复原名
+        // The name is empty, so restore the original
         self.profile[@"name"] = self.originalName;
         newName = self.originalName;
     }
 
-    // 检查重命名冲突
+    // Check for a rename conflict
     if (![self.originalName isEqualToString:newName]) {
-        // 名称变了，检查新名是否已存在
+        // The name changed, so check whether the new one is taken
         if (PLProfiles.current.profiles[newName]) {
-            // 重名，提示并取消
+            // A duplicate name: warn and cancel
             showDialog(@"Error", @"A profile with this name already exists, please use a different one");
             return;
         }
-        // 删除旧名，添加新名
+        // Remove the old name and add the new one
         if (self.originalName.length > 0) {
             [PLProfiles.current.profiles removeObjectForKey:self.originalName];
         }
         PLProfiles.current.profiles[newName] = self.profile;
-        // 如果原来选中的是被重命名的 profile，更新选中
+        // If the renamed profile was the selected one, update the selection
         if ([PLProfiles.current.selectedProfileName isEqualToString:self.originalName]) {
             PLProfiles.current.selectedProfileName = newName;
         }
     } else {
-        // 名称没变，直接保存
+        // The name did not change, so just save
         PLProfiles.current.profiles[newName] = self.profile;
     }
 
@@ -2100,7 +2100,7 @@
     // Post a notification to refresh the profile list
     [[NSNotificationCenter defaultCenter] postNotificationName:@"SelectedProfileChanged" object:newName];
 
-    // 关闭
+    // Close
     [self actionClose];
 }
 
@@ -2116,26 +2116,26 @@
 
 - (void)handleBackgroundUIEffectChanged:(NSNotification *)notification {
     dispatch_async(dispatch_get_main_queue(), ^{
-        // 背景效果切换后重新应用 tableView 毛玻璃 backgroundView，
-        // 否则切换毛玻璃↔半透明后旧 backgroundView 仍存在造成视觉不一致
+        // Re-apply the frosted-glass tableView backgroundView after the background effect changes,
+        // otherwise the old backgroundView lingers after a frosted glass <-> translucent switch and looks inconsistent
         [self applyBackgroundBlurToTableView];
         [self reloadAllTableViews];
     });
 }
 
-/// 给 self.tableView 设置底层背景视图，遮挡栈底 VC 内容同时透出全局背景。
-/// - 有自定义启动器背景时：使用 UIVisualEffectView (SystemThinMaterial) 毛玻璃背景，
-///   模糊全局背景图但仍能透出，并遮挡栈底 VersionManager 的卡片。
-/// - 无自定义背景时：使用 systemBackgroundColor，与系统默认外观一致。
+/// Give self.tableView a background view that hides the VC beneath while still showing the global background.
+/// - with a custom launcher background: use a UIVisualEffectView (SystemThinMaterial) frosted-glass background,
+///   which blurs the global background image but still lets it through, hiding the VersionManager cards beneath.
+/// - with no custom background: use systemBackgroundColor, matching the default system look.
 - (void)applyBackgroundBlurToTableView {
-    // 应用到两个 tableView（leftTableView 和 rightTableView）
+    // Apply it to both table views (leftTableView and rightTableView)
     for (UITableView *tv in @[self.leftTableView, self.rightTableView]) {
         if (!tv) continue;
-        // 清理旧 backgroundView（避免叠加）
+        // Clear the old backgroundView (so they do not stack)
         tv.backgroundView = nil;
 
         if ([[BackgroundManager sharedManager] hasBackground]) {
-            // 有自定义背景：使用毛玻璃 backgroundView 模糊背景并遮挡栈底 VC
+            // With a custom background: use a frosted-glass backgroundView to blur it and hide the VC beneath
             UIBlurEffect *blur;
             if (@available(iOS 13.0, *)) {
                 blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemThinMaterial];
@@ -2145,7 +2145,7 @@
             UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:blur];
             blurView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
             blurView.frame = tv.bounds;
-            // 按 uiEffect 调整透明度：毛玻璃模式保持默认 0.7 通透，半透明模式按 uiOpacity
+            // Adjust the opacity from uiEffect: frosted glass keeps the default 0.7 translucency, and translucent mode follows uiOpacity
             BackgroundUIEffect effect = [BackgroundManager sharedManager].uiEffect;
             if (effect == BackgroundUIEffectBlur) {
                 blurView.alpha = 0.85;
@@ -2154,7 +2154,7 @@
             }
             tv.backgroundView = blurView;
         } else {
-            // 无自定义背景：使用系统默认色，保持原 UI 风格
+            // With no custom background: use the system default color, keeping the original look
             if (@available(iOS 13.0, *)) {
                 UIView *bg = [[UIView alloc] initWithFrame:tv.bounds];
                 bg.backgroundColor = [UIColor systemBackgroundColor];
@@ -2162,17 +2162,17 @@
                 tv.backgroundView = bg;
             }
         }
-        // tableView 本身保持透明，让 backgroundView 显示
+        // The tableView itself stays transparent, so the backgroundView shows
         tv.backgroundColor = [UIColor clearColor];
     }
 }
 
 #pragma mark - UA-aware download helper
 
-/// 阶段6修复（参照 FCL）：用带浏览器 User-Agent 的 NSURLSession 替代 NSData dataWithContentsOfURL:
-/// 进行同步下载。BMCLAPI 的 optifine/curseforge 转发受 Cloudflare 保护，默认 UA 会被拦截返回 403。
-/// 与 DownloadViewController.downloadDataWithURLString:error: 等价，但接收 NSURL 参数
-/// （本文件调用处均已构造好 NSURL）。
+/// Phase 6 fix (following FCL): a synchronous download using an NSURLSession with a browser User-Agent,
+/// replacing NSData dataWithContentsOfURL:. The optifine/curseforge forwarders of BMCLAPI sit behind Cloudflare, which blocks the default UA with a 403.
+/// Equivalent to DownloadViewController.downloadDataWithURLString:error:, but taking an NSURL
+/// (every call site in this file already has one).
 - (NSData *)downloadDataWithURL:(NSURL *)url error:(NSError **)error {
     if (!url) {
         if (error) {

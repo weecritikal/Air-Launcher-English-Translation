@@ -2,37 +2,37 @@
 //  SOCKS5Proxy.m
 //  Angel Aura Amethyst
 //
-//  本地 SOCKS5 代理服务器实现
+//  Local SOCKS5 proxy server implementation
 //
 //  ============================================================================
-//  实现说明
+//  Implementation notes
 //  ============================================================================
 //
-//  本文件实现 SOCKS5Proxy.h 中定义的本地 SOCKS5 代理服务器。
+//  This file implements the local SOCKS5 proxy server declared in SOCKS5Proxy.h.
 //
-//  关键实现点：
-//    1. 监听 socket 使用系统 POSIX socket（socket/bind/listen/accept）
-//    2. 客户端连接后，在新线程中处理 SOCKS5 握手和数据转发
-//    3. SOCKS5 协议实现遵循 RFC 1928，支持无认证方式和 CONNECT 命令
-//    4. 目标地址支持 IPv4、IPv6 和域名三种类型
-//    5. 远程连接通过 ZeroTierBridge 的 libzt socket API 建立
-//    6. 双向转发使用 GCD 并发队列，两个方向同时转发
-//    7. 所有在 block 内赋值的局部变量使用 __block 修饰符
+//  Key implementation points:
+//    1. the listening socket is a system POSIX socket (socket/bind/listen/accept)
+//    2. once a client connects, the SOCKS5 handshake and data forwarding run on a new thread
+//    3. the SOCKS5 implementation follows RFC 1928, supporting the no-auth method and the CONNECT command
+//    4. the destination address can be IPv4, IPv6 or a domain name
+//    5. the remote connection is made through the libzt socket API of ZeroTierBridge
+//    6. bidirectional forwarding uses a concurrent GCD queue, with both directions running at once
+//    7. every local variable assigned inside a block carries the __block qualifier
 //
-//  线程模型：
-//    - 主线程：startWithPort:error: / stop
-//    - Accept 线程：NSThread，循环 accept 新连接
-//    - 客户端处理线程：NSThread，每个客户端一个
-//    - 转发任务：GCD 并发队列，每个连接两个任务（client→remote、remote→client）
+//  The threading model:
+//    - main thread: startWithPort:error: / stop
+//    - accept thread: an NSThread looping over new connections
+//    - client handling threads: an NSThread per client
+//    - forwarding tasks: a concurrent GCD queue with two tasks per connection (client->remote and remote->client)
 //
-//  SOCKS5 协议常量（RFC 1928）：
-//    VER = 0x05（SOCKS 版本 5）
-//    METHOD_NO_AUTH = 0x00（无认证）
-//    METHOD_NO_ACCEPTABLE = 0xFF（无可接受的认证方法）
-//    CMD_CONNECT = 0x01（CONNECT 命令）
-//    ATYP_IPV4 = 0x01（IPv4 地址）
-//    ATYP_DOMAIN = 0x03（域名）
-//    ATYP_IPV6 = 0x04（IPv6 地址）
+//  The SOCKS5 protocol constants (RFC 1928):
+//    VER = 0x05 (SOCKS version 5)
+//    METHOD_NO_AUTH = 0x00 (no authentication)
+//    METHOD_NO_ACCEPTABLE = 0xFF (no acceptable authentication method)
+//    CMD_CONNECT = 0x01 (the CONNECT command)
+//    ATYP_IPV4 = 0x01 (an IPv4 address)
+//    ATYP_DOMAIN = 0x03 (a domain name)
+//    ATYP_IPV6 = 0x04 (an IPv6 address)
 //
 //  ============================================================================
 
@@ -40,7 +40,7 @@
 #import "ZeroTierBridge.h"
 #import "utils.h"
 
-// POSIX socket 头文件
+// POSIX socket headers
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>  // TCP_NODELAY
@@ -50,18 +50,18 @@
 #include <errno.h>
 #include <sys/select.h>
 #include <sys/time.h>
-#include <stdatomic.h>  // C11 原子操作
-#include <netdb.h>      // getaddrinfo（域名解析，用于 P0-2）
+#include <stdatomic.h>  // C11 atomics
+#include <netdb.h>      // getaddrinfo (domain name resolution, used by P0-2)
 
 #pragma mark - 常量定义
 
-/// SOCKS5 代理默认监听端口
+/// The default SOCKS5 proxy listening port
 const uint16_t SOCKS5ProxyDefaultPort = 1080;
 
-/// 客户端连接通知名
+/// The client connected notification name
 NSNotificationName const SOCKS5ProxyClientConnectedNotification = @"SOCKS5ProxyClientConnectedNotification";
 
-/// 客户端断开通知名
+/// The client disconnected notification name
 NSNotificationName const SOCKS5ProxyClientDisconnectedNotification = @"SOCKS5ProxyClientDisconnectedNotification";
 
 /// Error domain
@@ -69,14 +69,14 @@ static NSString * const kSOCKS5ProxyErrorDomain = @"SOCKS5ProxyErrorDomain";
 
 /// Error codes
 typedef NS_ENUM(NSInteger, SOCKS5ProxyErrorCode) {
-    SOCKS5ProxyErrorCodeAlreadyRunning        = 1, // 代理已在运行
-    SOCKS5ProxyErrorCodeSocketCreateFailed    = 2, // 创建 socket 失败
-    SOCKS5ProxyErrorCodeBindFailed            = 3, // 绑定端口失败
-    SOCKS5ProxyErrorCodeListenFailed          = 4, // 监听失败
-    SOCKS5ProxyErrorCodeFrameworkUnavailable  = 5, // ZeroTier framework 不可用
+    SOCKS5ProxyErrorCodeAlreadyRunning        = 1, // The proxy is already running
+    SOCKS5ProxyErrorCodeSocketCreateFailed    = 2, // Creating the socket failed
+    SOCKS5ProxyErrorCodeBindFailed            = 3, // Binding the port failed
+    SOCKS5ProxyErrorCodeListenFailed          = 4, // Listening failed
+    SOCKS5ProxyErrorCodeFrameworkUnavailable  = 5, // The ZeroTier framework is unavailable
 };
 
-/// SOCKS5 协议常量（RFC 1928）
+/// The SOCKS5 protocol constants (RFC 1928)
 #define SOCKS5_VERSION                 0x05
 #define SOCKS5_METHOD_NO_AUTH          0x00
 #define SOCKS5_METHOD_USER_PASS        0x02
@@ -88,7 +88,7 @@ typedef NS_ENUM(NSInteger, SOCKS5ProxyErrorCode) {
 #define SOCKS5_ATYP_DOMAIN             0x03
 #define SOCKS5_ATYP_IPV6               0x04
 
-/// SOCKS5 回复码（RFC 1928 第 6 节）
+/// The SOCKS5 reply codes (RFC 1928 section 6)
 #define SOCKS5_REP_SUCCESS                    0x00
 #define SOCKS5_REP_GENERAL_FAILURE            0x01
 #define SOCKS5_REP_NOT_ALLOWED                0x02
@@ -99,40 +99,40 @@ typedef NS_ENUM(NSInteger, SOCKS5ProxyErrorCode) {
 #define SOCKS5_REP_COMMAND_NOT_SUPPORTED      0x07
 #define SOCKS5_REP_ADDRESS_TYPE_NOT_SUPPORTED 0x08
 
-/// 数据转发缓冲区大小（64KB）
+/// The data forwarding buffer size (64KB)
 #define SOCKS5_BUFFER_SIZE 65536
 
-/// 连接远程主机的超时时间（秒）
+/// The timeout for connecting to a remote host (seconds)
 #define SOCKS5_CONNECT_TIMEOUT 30.0
 
-/// 客户端 socket 读写超时（秒）
-/// 防止恶意客户端只发送部分数据后保持连接不发送，导致服务器线程永久阻塞
+/// The client socket read/write timeout (seconds)
+/// Stops a malicious client sending part of the data and then holding the connection open, blocking a server thread forever
 #define SOCKS5_CLIENT_IO_TIMEOUT 30
 
-/// 客户端握手阶段的读写超时（秒）
+/// The client handshake read/write timeout (seconds)
 #define SOCKS5_HANDSHAKE_TIMEOUT 15
 
 #pragma mark - 辅助函数
 
-/// 完整读取指定长度的数据（带超时）
+/// Read exactly the given number of bytes (with a timeout)
 ///
-/// read() 系统调用可能不会一次性返回所有请求的字节，需要循环读取。
-/// 本函数会阻塞直到读取到指定长度或连接关闭。
+/// The read() system call may not return every requested byte at once, so it has to loop.
+/// This function blocks until it has read the requested length or the connection closes.
 ///
-/// 关键修复（H9）：使用 select 实现超时，防止恶意客户端只发送部分数据后
-/// 保持连接但不发送更多数据，导致服务器线程永久阻塞。
+/// Key fix (H9): select provides the timeout, so a malicious client cannot send part of the data
+/// and then hold the connection open without sending more, blocking a server thread forever.
 ///
-/// @param fd socket 文件描述符
-/// @param buf 接收缓冲区
-/// @param len 需要读取的长度
-/// @param timeoutSec 超时秒数（≤0 表示阻塞模式，无超时）
-/// @return 实际读取的字节数（< len 表示连接已关闭或出错，-1 表示错误或超时）
+/// @param fd The socket file descriptor
+/// @param buf The receive buffer
+/// @param len The number of bytes to read
+/// @param timeoutSec The timeout in seconds (<=0 means blocking mode with no timeout)
+/// @return The number of bytes actually read (< len means the connection closed or errored, and -1 means an error or a timeout)
 static ssize_t readAllWithTimeout(int fd, void *buf, size_t len, int timeoutSec) {
     size_t totalRead = 0;
     uint8_t *p = (uint8_t *)buf;
 
     while (totalRead < len) {
-        // 使用 select 检查 socket 可读，带超时
+        // Use select to check whether the socket is readable, with a timeout
         if (timeoutSec > 0) {
             fd_set readFds;
             FD_ZERO(&readFds);
@@ -151,7 +151,7 @@ static ssize_t readAllWithTimeout(int fd, void *buf, size_t len, int timeoutSec)
                 return -1;
             }
             if (selectResult == 0) {
-                // 超时
+                // Timed out
                 NSLog(@"[SOCKS5Proxy] readAll timeout (%d sec), fd = %d, read %zu/%zu bytes",
                       timeoutSec, fd, totalRead, len);
                 return totalRead > 0 ? (ssize_t)totalRead : -1;
@@ -160,16 +160,16 @@ static ssize_t readAllWithTimeout(int fd, void *buf, size_t len, int timeoutSec)
 
         ssize_t n = read(fd, p + totalRead, len - totalRead);
         if (n < 0) {
-            // 被信号中断，重试
+            // Interrupted by a signal, so retry
             if (errno == EINTR) {
                 continue;
             }
-            // 其他错误
+            // Another error
             NSLog(@"[SOCKS5Proxy] readAll error: errno = %d, fd = %d", errno, fd);
             return -1;
         }
         if (n == 0) {
-            // 连接已关闭
+            // The connection has closed
             return (ssize_t)totalRead;
         }
         totalRead += (size_t)n;
@@ -178,28 +178,28 @@ static ssize_t readAllWithTimeout(int fd, void *buf, size_t len, int timeoutSec)
     return (ssize_t)totalRead;
 }
 
-/// 兼容旧调用：无超时的 readAll（用于已经设置 SO_RCVTIMEO 的 socket）
+/// Compatibility with older callers: readAll with no timeout (for a socket that already has SO_RCVTIMEO set)
 static ssize_t readAll(int fd, void *buf, size_t len) {
     return readAllWithTimeout(fd, buf, len, 0);
 }
 
-/// 完整写入指定长度的数据（带超时）
+/// Write exactly the given number of bytes (with a timeout)
 ///
-/// write() 系统调用可能不会一次性写入所有字节，需要循环写入。
+/// The write() system call may not write every byte at once, so it has to loop.
 ///
-/// 关键修复（M9）：write 返回 0 视为错误（对端可能已关闭）。
+/// Key fix (M9): a write returning 0 counts as an error (the peer may have closed).
 ///
-/// @param fd socket 文件描述符
-/// @param buf 写入缓冲区
-/// @param len 需要写入的长度
-/// @param timeoutSec 超时秒数（≤0 表示阻塞模式，无超时）
-/// @return 实际写入的字节数（< len 表示出错，-1 表示错误或超时）
+/// @param fd The socket file descriptor
+/// @param buf The write buffer
+/// @param len The number of bytes to write
+/// @param timeoutSec The timeout in seconds (<=0 means blocking mode with no timeout)
+/// @return The number of bytes actually written (< len means an error, and -1 means an error or a timeout)
 static ssize_t writeAllWithTimeout(int fd, const void *buf, size_t len, int timeoutSec) {
     size_t totalWritten = 0;
     const uint8_t *p = (const uint8_t *)buf;
 
     while (totalWritten < len) {
-        // 使用 select 检查 socket 可写，带超时
+        // Use select to check whether the socket is writable, with a timeout
         if (timeoutSec > 0) {
             fd_set writeFds;
             FD_ZERO(&writeFds);
@@ -218,7 +218,7 @@ static ssize_t writeAllWithTimeout(int fd, const void *buf, size_t len, int time
                 return -1;
             }
             if (selectResult == 0) {
-                // 超时
+                // Timed out
                 NSLog(@"[SOCKS5Proxy] writeAll timeout (%d sec), fd = %d, wrote %zu/%zu bytes",
                       timeoutSec, fd, totalWritten, len);
                 return totalWritten > 0 ? (ssize_t)totalWritten : -1;
@@ -234,7 +234,7 @@ static ssize_t writeAllWithTimeout(int fd, const void *buf, size_t len, int time
             return -1;
         }
         if (n == 0) {
-            // 关键修复（M9）：write 返回 0 通常表示错误（对端已关闭或缓冲区满）
+            // Key fix (M9): a write returning 0 usually means an error (the peer has closed, or the buffer is full)
             NSLog(@"[SOCKS5Proxy] writeAll returned 0, peer may have closed: fd = %d", fd);
             return -1;
         }
@@ -244,7 +244,7 @@ static ssize_t writeAllWithTimeout(int fd, const void *buf, size_t len, int time
     return (ssize_t)totalWritten;
 }
 
-/// 兼容旧调用：无超时的 writeAll
+/// Compatibility with older callers: writeAll with no timeout
 static ssize_t writeAll(int fd, const void *buf, size_t len) {
     return writeAllWithTimeout(fd, buf, len, 0);
 }
@@ -252,43 +252,43 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
 #pragma mark - SOCKS5Proxy 类扩展
 
 @interface SOCKS5Proxy () {
-    /// 监听 socket 文件描述符（受 _lock 保护）
+    /// The listening socket file descriptor (guarded by _lock)
     int _listenFD;
 
-    /// 实际监听端口（受 _lock 保护）
+    /// The actual listening port (guarded by _lock)
     uint16_t _listeningPort;
 
-    /// 是否正在运行（受 _lock 保护）
+    /// Whether it is running (guarded by _lock)
     BOOL _running;
 
-    /// Accept 线程（接受新客户端连接）
+    /// The accept thread (accepting new client connections)
     NSThread *_acceptThread;
 
-    /// 线程锁，保护所有内部状态变量
+    /// The lock guarding every internal state variable
     NSLock *_lock;
 
-    /// 活跃的客户端处理线程列表（受 _lock 保护）
+    /// The list of active client handling threads (guarded by _lock)
     NSMutableArray<NSThread *> *_clientThreads;
 
-    /// 关键修复（C1）：活跃的客户端 socket fd 列表（受 _lock 保护）
-    /// 用于在 stop 时主动 shutdown 所有客户端连接，强制 read/write 返回，
-    /// 避免客户端处理线程因阻塞 IO 无法退出导致线程泄漏。
+    /// Key fix (C1): the list of active client socket fds (guarded by _lock)
+    /// Used by stop to shut every client connection down, forcing read/write to return,
+    /// so a client thread blocked on IO cannot hang around and leak.
     NSMutableArray<NSNumber *> *_clientFDs;
 
-    /// 关键修复（M12）：活跃的远程（libzt）socket fd 列表（受 _lock 保护）
-    /// 用于在 stop 时主动 shutdown 所有远程连接，强制 recv/send 返回，
-    /// 避免客户端线程在 forwardDataBetweenClientFD: 中阻塞在 recvData:remoteFD: 上
-    /// 最长 30 秒（SOCKS5_CONNECT_TIMEOUT 设置的 SO_RCVTIMEO）。
+    /// Key fix (M12): the list of active remote (libzt) socket fds (guarded by _lock)
+    /// Used by stop to shut every remote connection down, forcing recv/send to return,
+    /// so a client thread inside forwardDataBetweenClientFD: does not sit blocked in recvData:remoteFD:
+    /// for up to 30 seconds (the SO_RCVTIMEO set by SOCKS5_CONNECT_TIMEOUT).
     ///
-    /// 之前 stop 仅 shutdown 客户端 fd，不处理远程 fd：
-    ///   1. client→remote 任务因 read(clientFD) 返回 0 而退出
-    ///   2. remote→client 任务仍阻塞在 recvData:remoteFD: 中
-    ///      （shutdown(clientFD, SHUT_WR) 只关闭客户端 fd 的写端，不影响远程 fd 的读端）
-    ///   3. dispatch_group_wait(group, DISPATCH_TIME_FOREVER) 等待两个方向都完成
-    ///   4. 客户端线程在 stop 返回后继续存活最长 30 秒，造成线程和 fd 临时泄漏
+    /// stop used to shut down only the client fds and ignore the remote ones:
+    ///   1. the client->remote task exited because read(clientFD) returned 0
+    ///   2. the remote->client task stayed blocked in recvData:remoteFD:
+    ///      (shutdown(clientFD, SHUT_WR) only closes the write side of the client fd and does not affect the read side of the remote fd)
+    ///   3. dispatch_group_wait(group, DISPATCH_TIME_FOREVER) waited for both directions to finish
+    ///   4. so the client thread lived on for up to 30 seconds after stop returned, temporarily leaking a thread and an fd
     ///
-    /// 修复方案：跟踪所有远程 fd，在 stop 时对每个远程 fd 执行 shutdown(SHUT_RDWR)，
-    /// 强制 recvData: 立即返回，让客户端线程快速退出。
+    /// The fix: track every remote fd and call shutdown(SHUT_RDWR) on each of them in stop,
+    /// forcing recvData: to return immediately so the client thread exits quickly.
     NSMutableArray<NSNumber *> *_remoteFDs;
 }
 @end
@@ -299,8 +299,8 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
 
 #pragma mark - 单例模式
 
-/// 获取共享的 SOCKS5Proxy 单例实例
-/// 使用 dispatch_once 保证线程安全的单次初始化
+/// Get the shared SOCKS5Proxy singleton
+/// dispatch_once guarantees thread-safe one-time initialization
 + (instancetype)sharedProxy {
     static SOCKS5Proxy *shared = nil;
     static dispatch_once_t onceToken;
@@ -310,7 +310,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
     return shared;
 }
 
-/// 重写 allocWithZone: 防止通过 alloc/init 创建第二个实例
+/// allocWithZone: is overridden so alloc/init cannot create a second instance
 + (instancetype)allocWithZone:(struct _NSZone *)zone {
     static SOCKS5Proxy *shared = nil;
     static dispatch_once_t onceToken;
@@ -320,7 +320,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
     return shared;
 }
 
-/// 私有初始化方法
+/// The private initializer
 - (instancetype)init {
     self = [super init];
     if (self) {
@@ -340,42 +340,42 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
 
 #pragma mark - 启动与停止
 
-/// 启动代理服务器
+/// Start the proxy server
 ///
 /// The flow:
-///   1. 检查是否已运行
-///   2. 检查 ZeroTier framework 可用性
-///   3. 创建 POSIX socket
-///   4. 设置 SO_REUSEADDR
-///   5. 绑定到 127.0.0.1:port
-///   6. 获取实际绑定端口
-///   7. 开始监听
-///   8. 启动 Accept 线程
+///   1. check whether it is already running
+///   2. check that the ZeroTier framework is available
+///   3. create the POSIX socket
+///   4. set SO_REUSEADDR
+///   5. bind to 127.0.0.1:port
+///   6. read back the port actually bound
+///   7. start listening
+///   8. start the accept thread
 - (BOOL)startWithPort:(uint16_t)port
                 error:(NSError **)error {
-    // 关键修复（H8）：整个启动流程用锁保护，避免并发调用导致状态混乱
+    // Key fix (H8): the whole startup runs under the lock, so concurrent calls cannot confuse the state
     [_lock lock];
 
-    // 关键修复（C1/H8）：bind 失败 (errno=48 EADDRINUSE) 的根因是上次断开时 socket 未被正确关闭，
-    // 或 app 进程崩溃（SIGSEGV）后 _running 标记与实际 socket 状态不一致。
-    // 修复方案：启动前先强制停止一次，确保旧的监听 socket 已被关闭，端口被释放。
+    // Key fix (C1/H8): a bind failure (errno=48 EADDRINUSE) is caused by the socket not being closed properly on the last disconnect,
+    // or by _running being out of step with the real socket state after the app crashed (SIGSEGV).
+    // The fix: force a stop before starting, making sure the old listening socket is closed and the port is free.
     if (_running) {
         NSLog(@"[SOCKS5Proxy] Detected proxy still running before startup, stopping old proxy to release port");
-        // 临时释放锁以调用 stop（stop 内部会加锁）
+        // Release the lock temporarily to call stop (which takes the lock itself)
         [_lock unlock];
         [self stop];
-        // 给系统一点时间释放端口（TIME_WAIT 状态）
+        // Give the system a moment to release the port (the TIME_WAIT state)
         [NSThread sleepForTimeInterval:0.1];
         [_lock lock];
     } else if (_listenFD >= 0) {
-        // _running 为 NO 但 _listenFD 仍有效（异常状态），强制关闭
+        // _running is NO but _listenFD is still valid (an inconsistent state), so force it closed
         NSLog(@"[SOCKS5Proxy] Detected zombie listen socket (fd=%d), forcefully closing", _listenFD);
         close(_listenFD);
         _listenFD = -1;
         [NSThread sleepForTimeInterval:0.1];
     }
 
-    // 检查是否已运行（停止后再次检查）
+    // Check whether it is running (checked again after stopping)
     if (_running) {
         [_lock unlock];
         NSLog(@"[SOCKS5Proxy] Proxy already running, port = %u", _listeningPort);
@@ -388,8 +388,8 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
     }
     [_lock unlock];
 
-    // 检查 ZeroTier framework 是否可用
-    // 如果 framework 不可用，代理无法连接到 ZeroTier 网络，启动没有意义
+    // Check whether the ZeroTier framework is available
+    // With no framework the proxy cannot reach the ZeroTier network, so starting it is pointless
     if (![[ZeroTierBridge sharedInstance] isFrameworkAvailable]) {
         NSLog(@"[SOCKS5Proxy] Startup failed: ZeroTier framework unavailable");
         if (error) {
@@ -402,7 +402,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
 
     NSLog(@"[SOCKS5Proxy] Starting proxy server, requested port = %u", port);
 
-    // 步骤 1：创建监听 socket（系统 POSIX socket，不是 libzt socket）
+    // Step 1: create the listening socket (a system POSIX socket, not a libzt one)
     int fd = socket(AF_INET, SOCK_STREAM, 0);
     if (fd < 0) {
         NSLog(@"[SOCKS5Proxy] Failed to create socket: errno = %d", errno);
@@ -414,42 +414,42 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
         return NO;
     }
 
-    // 步骤 2：设置 SO_REUSEADDR，允许端口重用
-    // 避免"Address already in use"错误（前一次运行的 socket 处于 TIME_WAIT 状态）
+    // Step 2: set SO_REUSEADDR to allow the port to be reused
+    // This avoids the "Address already in use" error (from the previous run's socket sitting in TIME_WAIT)
     int opt = 1;
     if (setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
         NSLog(@"[SOCKS5Proxy] Failed to set SO_REUSEADDR: errno = %d (ignoring, continuing)", errno);
     }
 
-    // 步骤 3：绑定到 127.0.0.1:port
-    // 只监听本地回环地址，避免暴露到外部网络
+    // Step 3: bind to 127.0.0.1:port
+    // Only the loopback address is listened on, so nothing is exposed to the outside network
     //
-    // 关键修复（端口冲突处理）：bind 失败时自动尝试下一个端口。
+    // Key fix (port conflict handling): try the next port when bind fails.
     //
-    // errno=48 (EADDRINUSE) 表示端口被占用，可能原因：
-    //   1. 上一次启动器进程的 socket 处于 TIME_WAIT 状态（SO_REUSEADDR 在 iOS 上
-    //      某些情况下对 127.0.0.1 bind 行为不一致，仍可能拒绝 bind）
-    //   2. iOS jailbreak 设备上端口被其他进程占用（如越狱环境下的 VPN 工具、
-    //      SSH 动态转发等常使用 1080 端口）
-    //   3. 同一进程内上一次 SOCKS5 代理未正确关闭（虽然 startWithPort: 入口
-    //      已有 stop 检查，但极端情况下仍可能残留）
+    // errno=48 (EADDRINUSE) means the port is taken, which can happen because:
+    //   1. the socket of the previous launcher process is in TIME_WAIT (SO_REUSEADDR behaves inconsistently
+    //      for a 127.0.0.1 bind on iOS in some cases and can still refuse the bind)
+    //   2. another process on a jailbroken iOS device holds the port (VPN tools and
+    //      SSH dynamic forwarding on jailbroken setups often use port 1080)
+    //   3. the previous SOCKS5 proxy in this process was not closed properly (startWithPort:
+    //      does check and stop at its entry point, but something can still linger in an edge case)
     //
     // The fix:
-    //   - 先尝试用户指定的端口（通常是 1080）
-    //   - 如果 bind 失败，依次尝试 port+1, port+2, ..., port+9（共 10 个端口）
-    //   - 如果 10 个端口都失败，最后使用 port=0 让系统自动分配可用端口
-    //   - 实际使用的端口通过 listeningPort 属性和 currentSOCKS5Port 暴露给
-    //     JavaLauncher，确保 JVM 参数 -DsocksProxyPort 使用正确端口
+    //   - try the port the user asked for first (usually 1080)
+    //   - if bind fails, try port+1, port+2, ..., port+9 in turn (10 ports in all)
+    //   - if all 10 fail, use port=0 and let the system pick a free one
+    //   - the port actually used is exposed to JavaLauncher through the listeningPort property and currentSOCKS5Port,
+    //     so the JVM argument -DsocksProxyPort gets the right port
     //
-    // 这样既能尽量使用固定端口（方便用户调试和防火墙配置），又能避免端口
-    // 冲突导致联机功能完全不可用。
+    // This keeps a fixed port where possible (which helps with debugging and firewall rules) while stopping a port
+    // conflict from breaking multiplayer entirely.
 
     uint16_t actualPort = 0;
     BOOL bindSuccess = NO;
     int lastBindErrno = 0;
 
     for (int attempt = 0; attempt < 11; attempt++) {
-        // 前 10 次尝试 port+0 到 port+9，第 11 次使用 port=0（系统自动分配）
+        // The first 10 attempts use port+0 through port+9, and the 11th uses port=0 (letting the system choose)
         uint16_t tryPort = (attempt < 10) ? (port + attempt) : 0;
 
         struct sockaddr_in addr;
@@ -459,11 +459,11 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
         addr.sin_addr.s_addr = inet_addr("127.0.0.1");
 
         if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) == 0) {
-            // bind 成功
+            // bind succeeded
             bindSuccess = YES;
 
             if (tryPort == 0) {
-                // 系统自动分配的端口，需要通过 getsockname 查询实际端口
+                // With a system-assigned port, getsockname reports the real one
                 socklen_t addrLen = sizeof(addr);
                 if (getsockname(fd, (struct sockaddr *)&addr, &addrLen) < 0) {
                     NSLog(@"[SOCKS5Proxy] getsockname failed: errno = %d", errno);
@@ -486,12 +486,12 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
             break;
         }
 
-        // bind 失败
+        // bind failed
         lastBindErrno = errno;
         NSLog(@"[SOCKS5Proxy] bind port %u failed: errno = %d (trying next port)", tryPort, errno);
 
-        // bind 失败后，需要关闭旧 socket 并创建新 socket
-        // （bind 失败后 socket 状态不可预测，不能直接复用）
+        // After a failed bind the old socket has to be closed and a new one created
+        // (the socket state is unpredictable after a failed bind, so it cannot be reused)
         close(fd);
         fd = socket(AF_INET, SOCK_STREAM, 0);
         if (fd < 0) {
@@ -504,7 +504,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
             return NO;
         }
 
-        // 重新设置 SO_REUSEADDR（新 socket 需要重新设置）
+        // Set SO_REUSEADDR again (a new socket needs it set again)
         int reuseOpt = 1;
         setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuseOpt, sizeof(reuseOpt));
     }
@@ -520,8 +520,8 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
         return NO;
     }
 
-    // 步骤 5：开始监听
-    // backlog = 16，允许最多 16 个等待接受的连接
+    // Step 5: start listening
+    // backlog = 16, allowing up to 16 pending connections
     if (listen(fd, 16) < 0) {
         NSLog(@"[SOCKS5Proxy] listen failed: errno = %d", errno);
         close(fd);
@@ -533,22 +533,22 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
         return NO;
     }
 
-    // 更新内部状态
+    // Update the internal state
     [_lock lock];
     _listenFD = fd;
     _listeningPort = actualPort;
     _running = YES;
     [_clientFDs removeAllObjects];
     [_clientThreads removeAllObjects];
-    // 关键修复（P1-9）：start 时未清理 _remoteFDs，重启后残留的旧 remoteFD
-    // 会在下一次 stop() 时被 shutdownSocket:，可能误关闭已被系统复用的新 fd。
-    // 与 _clientFDs / _clientThreads 同步清理，保证 fd 列表一致。
+    // Key fix (P1-9): start did not clear _remoteFDs, so an old remoteFD left over from a restart
+    // would be shutdownSocket:-ed by the next stop(), possibly closing a new fd the system had reused.
+    // It is cleared alongside _clientFDs / _clientThreads, keeping the fd lists consistent.
     [_remoteFDs removeAllObjects];
     [_lock unlock];
 
     NSLog(@"[SOCKS5Proxy] Proxy server started, listening on 127.0.0.1:%u", actualPort);
 
-    // 步骤 6：启动 Accept 线程
+    // Step 6: start the accept thread
     __weak typeof(self) weakSelf = self;
     _acceptThread = [[NSThread alloc] initWithBlock:^{
         [weakSelf acceptLoop];
@@ -559,29 +559,29 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
     return YES;
 }
 
-/// 停止代理服务器
+/// Stop the proxy server
 ///
-/// 关键修复（C1）：关闭监听 socket 后，主动 shutdown 所有活跃客户端连接，
-/// 强制阻塞在 read/recv 上的客户端线程返回，避免线程泄漏。
+/// Key fix (C1): after closing the listening socket, shut down every active client connection,
+/// forcing the client threads blocked on read/recv to return, so no thread leaks.
 ///
-/// 关键修复（M4）：stop 后短暂等待，让客户端线程有机会清理资源，
-/// 然后再由调用方离开 ZeroTier 网络。
+/// Key fix (M4): wait briefly after stopping, so the client threads have a chance to clean up
+/// before the caller leaves the ZeroTier network.
 - (void)stop {
-    // 关键修复（N1）：stop 在主线程被调用时会阻塞 UI 最长 2 秒。
+    // Key fix (N1): calling stop on the main thread blocked the UI for up to 2 seconds.
     //
-    // 触发链路：用户点击「断开连接」按钮 → MultiplayerManager.disconnectCurrentRoom
-    // （主线程）→ SOCKS5Proxy.stop（主线程）→ 等待客户端线程退出（2 秒）→ UI 卡死。
+    // The chain: the user taps "Disconnect" -> MultiplayerManager.disconnectCurrentRoom
+    // (main thread) -> SOCKS5Proxy.stop (main thread) -> waiting for the client threads to exit (2 seconds) -> a frozen UI.
     //
     // The fix:
-    //   1. 所有立即性的清理工作（关闭监听 socket、shutdown 客户端/远程 fd、清空列表、
-    //      设置 _running=NO）都在当前线程同步执行，确保 stop 返回后代理不再接受
-    //      新连接、不再转发数据，状态对调用方立即可见
-    //   2. 「等待客户端线程退出」这一耗时操作改为：主线程异步派发到后台队列执行，
-    //      不阻塞 UI；后台线程则同步等待（disconnectCurrentRoom 通常在主线程，
-    //      但若在后台线程调用则同步等待无影响）
+    //   1. every immediate cleanup step (closing the listening socket, shutting down the client/remote fds, clearing the lists,
+    //      setting _running=NO) runs synchronously on the current thread, so once stop returns the proxy accepts
+    //      no new connections and forwards nothing, and the state is immediately visible to the caller
+    //   2. the slow part, "wait for the client threads to exit", now runs asynchronously on a background queue when called
+    //      from the main thread, so the UI is not blocked; on a background thread it still waits synchronously
+    //      (disconnectCurrentRoom is usually on the main thread, and waiting synchronously off it is harmless)
     //
-    // 这样 stop 在主线程调用时几乎立即返回（仅耗时 shutdown 系统调用），UI 不卡顿；
-    // 客户端线程在后台线程被等待退出，资源仍会被正确清理。
+    // So stop returns almost immediately on the main thread (costing only the shutdown syscalls) and the UI does not stall,
+    // while the client threads are still waited on in the background and their resources are cleaned up correctly.
     BOOL isMainThread = [NSThread isMainThread];
 
     [_lock lock];
@@ -594,17 +594,17 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
     NSLog(@"[SOCKS5Proxy] Stopping proxy server (isMainThread=%d)...", isMainThread);
     _running = NO;
 
-    // 关闭监听 socket，这会导致 accept() 返回错误，accept 线程退出
+    // Close the listening socket, which makes accept() return an error and the accept thread exit
     if (_listenFD >= 0) {
         close(_listenFD);
         _listenFD = -1;
     }
 
-    // 保存当前端口用于日志，然后清除
+    // Save the current port for the log, then clear it
     uint16_t savedPort = _listeningPort;
     _listeningPort = 0;
 
-    // 复制客户端线程列表和 fd 列表（不阻塞太久）
+    // Copy the client thread and fd lists (so the lock is not held for long)
     NSArray<NSThread *> *threads = [_clientThreads copy];
     NSArray<NSNumber *> *clientFDs = [_clientFDs copy];
     NSArray<NSNumber *> *remoteFDs = [_remoteFDs copy];
@@ -616,23 +616,23 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
     NSLog(@"[SOCKS5Proxy] Listen socket closed (port %u), shutting down %lu client connections and %lu remote connections...",
           savedPort, (unsigned long)clientFDs.count, (unsigned long)remoteFDs.count);
 
-    // 关键修复（C1）：主动 shutdown 所有活跃客户端 fd
-    // shutdown(SHUT_RDWR) 会强制 read/recv 返回 0 或错误，唤醒阻塞的客户端线程
-    // 这是解决线程泄漏的核心：只有唤醒阻塞的 read，客户端线程才能退出
+    // Key fix (C1): shut down every active client fd
+    // shutdown(SHUT_RDWR) forces read/recv to return 0 or an error, waking the blocked client threads
+    // This is the core of the thread leak fix: only waking a blocked read lets a client thread exit
     for (NSNumber *fdNum in clientFDs) {
         int clientFD = [fdNum intValue];
         if (clientFD >= 0) {
-            // shutdown 而不是 close：close 只是减少引用计数，不会立即唤醒阻塞的 read
-            // shutdown(SHUT_RDWR) 会立即让所有阻塞在该 fd 上的 read/write 返回
+            // shutdown rather than close: close only decrements the reference count and does not wake a blocked read
+            // shutdown(SHUT_RDWR) makes every read/write blocked on that fd return immediately
             int rc = shutdown(clientFD, SHUT_RDWR);
             NSLog(@"[SOCKS5Proxy] shutdown client fd=%d, result=%d (errno=%d)", clientFD, rc, errno);
         }
     }
 
-    // 关键修复（M12）：主动 shutdown 所有活跃远程 fd（libzt socket）
-    // 之前不 shutdown 远程 fd，导致客户端线程在 forwardDataBetweenClientFD: 中
-    // 阻塞在 recvData:remoteFD: 上最长 30 秒（SO_RCVTIMEO 超时）。
-    // shutdown 远程 fd 的 SHUT_RDWR 会立即让 recv 返回，让客户端线程快速退出。
+    // Key fix (M12): shut down every active remote fd (a libzt socket)
+    // Without shutting them down, a client thread inside forwardDataBetweenClientFD:
+    // sat blocked in recvData:remoteFD: for up to 30 seconds (the SO_RCVTIMEO timeout).
+    // A SHUT_RDWR on the remote fd makes recv return immediately, so the client thread exits quickly.
     for (NSNumber *fdNum in remoteFDs) {
         int remoteFD = [fdNum intValue];
         if (remoteFD >= 0) {
@@ -644,19 +644,19 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
     NSLog(@"[SOCKS5Proxy] Shut down all client connections, waiting for %lu client threads to exit...",
           (unsigned long)threads.count);
 
-    // 关键修复（N1）：等待客户端线程退出（带超时，避免无限等待）
-    // - 后台线程：同步等待，调用方已不在主线程，阻塞无 UI 影响
-    // - 主线程：异步派发到后台队列执行等待，避免 UI 卡死
-    //   客户端线程被 shutdown 唤醒后会很快退出，等待逻辑即使异步执行也不会延迟
-    //   下一次 startWithPort:（startWithPort: 内部已检测 _running 标志和 _listenFD，
-    //   且强制停止旧代理时也只等待 0.1 秒，不会与异步等待冲突）
+    // Key fix (N1): wait for the client threads to exit (with a timeout, so it cannot wait forever)
+    // - on a background thread: wait synchronously, since the caller is off the main thread and blocking does not affect the UI
+    // - on the main thread: dispatch the wait to a background queue, so the UI does not freeze
+    //   The client threads exit quickly once woken by the shutdown, so waiting asynchronously does not delay
+    //   the next startWithPort: (which checks the _running flag and _listenFD itself,
+    //   and only waits 0.1 seconds when force-stopping an old proxy, so it cannot clash with the asynchronous wait)
     if (threads.count == 0) {
         NSLog(@"[SOCKS5Proxy] Proxy stopped (no active client threads)");
         return;
     }
 
     if (isMainThread) {
-        // 主线程：异步派发到后台队列等待，不阻塞 UI
+        // Main thread: dispatch the wait to a background queue, so the UI is not blocked
         NSArray<NSThread *> *threadsToWait = [threads copy];
         dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
             NSTimeInterval waitDeadline = [NSDate timeIntervalSinceReferenceDate] + 2.0;
@@ -673,7 +673,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
         NSLog(@"[SOCKS5Proxy] stop called on main thread, dispatched waiting for %lu client threads to background queue",
               (unsigned long)threads.count);
     } else {
-        // 后台线程：同步等待
+        // Background thread: wait synchronously
         NSTimeInterval waitDeadline = [NSDate timeIntervalSinceReferenceDate] + 2.0;
         for (NSThread *thread in threads) {
             while (![thread isFinished] && [NSDate timeIntervalSinceReferenceDate] < waitDeadline) {
@@ -687,8 +687,8 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
     }
 }
 
-/// 代理服务器是否正在运行
-/// @return YES 如果正在运行
+/// Whether the proxy server is running
+/// @return YES when it is running
 - (BOOL)isRunning {
     [_lock lock];
     BOOL running = _running;
@@ -696,8 +696,8 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
     return running;
 }
 
-/// 当前监听端口
-/// @return 监听端口（未运行时返回 0）
+/// The current listening port
+/// @return The listening port (0 when it is not running)
 - (uint16_t)listeningPort {
     [_lock lock];
     uint16_t port = _listeningPort;
@@ -707,18 +707,18 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
 
 #pragma mark - Accept 循环
 
-/// Accept 循环（在 _acceptThread 线程中运行）
+/// The accept loop (running on the _acceptThread)
 ///
-/// 循环接受新客户端连接，为每个客户端启动一个处理线程。
+/// Accepts new client connections in a loop, starting a handling thread for each one.
 - (void)acceptLoop {
     NSLog(@"[SOCKS5Proxy] Accept thread started");
 
-    // 关键修复（M10）：连续 accept 错误计数器，防止无限循环消耗 CPU
+    // Key fix (M10): a consecutive accept error counter, so a runaway loop cannot burn CPU
     int consecutiveErrors = 0;
     static const int kMaxConsecutiveErrors = 20;
 
     while (YES) {
-        // 检查运行状态
+        // Check the running state
         [_lock lock];
         BOOL running = _running;
         int listenFD = _listenFD;
@@ -729,13 +729,13 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
             break;
         }
 
-        // 接受新连接
+        // Accept a new connection
         struct sockaddr_in clientAddr;
         socklen_t clientLen = sizeof(clientAddr);
         int clientFD = accept(listenFD, (struct sockaddr *)&clientAddr, &clientLen);
 
         if (clientFD < 0) {
-            // 检查是否是因为代理已停止
+            // Check whether it is because the proxy has stopped
             [_lock lock];
             BOOL stillRunning = _running;
             [_lock unlock];
@@ -745,12 +745,12 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
                 break;
             }
 
-            // 关键修复（M10）：EBADF 表示 listenFD 无效，直接退出
-            // EMFILE/ENFILE 表示文件描述符耗尽，退避后继续
+            // Key fix (M10): EBADF means listenFD is invalid, so exit outright
+            // EMFILE/ENFILE mean file descriptors are exhausted, so back off and continue
             if (errno == EBADF) {
                 NSLog(@"[SOCKS5Proxy] accept returned EBADF (listenFD invalid), exiting loop");
-                // 关键修复（M11）：异常退出时必须清理 _running 状态，
-                // 否则 isRunning 仍返回 YES，上层认为代理正常但实际已停止接受连接。
+                // Key fix (M11): the _running state must be cleared on an abnormal exit,
+                // otherwise isRunning still returns YES and the caller believes the proxy is fine while it has stopped accepting.
                 [_lock lock];
                 _running = NO;
                 if (_listenFD >= 0) {
@@ -765,16 +765,16 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
             consecutiveErrors++;
             NSLog(@"[SOCKS5Proxy] accept failed: errno = %d (consecutive %d times)", errno, consecutiveErrors);
 
-            // 关键修复（M10）：连续错误次数过多，退出避免无限循环
+            // Key fix (M10): too many consecutive errors, so exit rather than loop forever
             if (consecutiveErrors >= kMaxConsecutiveErrors) {
                 NSLog(@"[SOCKS5Proxy] %d consecutive accept errors, exiting loop", consecutiveErrors);
-                // 关键修复（M11）：异常退出时清理 _running 状态和 _listenFD，
-                // 让 isRunning 返回 NO，上层（MultiplayerManager）能检测到代理已停止。
-                // 之前不清理导致：
-                //   - isRunning 仍返回 YES
-                //   - MultiplayerManager.isSOCKS5ProxyRunning 报告代理在运行
-                //   - 但实际不再接受新连接，Minecraft 的 SOCKS5 连接请求被静默丢弃
-                //   - 系统进入不一致状态
+                // Key fix (M11): clear the _running state and _listenFD on an abnormal exit,
+                // so isRunning returns NO and the caller (MultiplayerManager) can tell the proxy has stopped.
+                // Not clearing them meant:
+                //   - isRunning still returned YES
+                //   - MultiplayerManager.isSOCKS5ProxyRunning reported the proxy as running
+                //   - while it no longer accepted connections, so Minecraft SOCKS5 requests were silently dropped
+                //   - leaving the system in an inconsistent state
                 [_lock lock];
                 _running = NO;
                 if (_listenFD >= 0) {
@@ -786,23 +786,23 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
                 break;
             }
 
-            // 退避，避免 CPU 空转
+            // Back off, so the CPU does not spin
             [NSThread sleepForTimeInterval:0.1];
             continue;
         }
 
-        // 重置错误计数器
+        // Reset the error counter
         consecutiveErrors = 0;
 
-        // 获取客户端 IP 和端口
+        // Get the client IP and port
         char clientIP[INET_ADDRSTRLEN] = {0};
         inet_ntop(AF_INET, &clientAddr.sin_addr, clientIP, sizeof(clientIP));
         uint16_t clientPort = ntohs(clientAddr.sin_port);
         NSLog(@"[SOCKS5Proxy] New client connection: %s:%u (fd=%d)", clientIP, clientPort, clientFD);
 
-        // 关键修复（H9/C1）：为客户端 socket 设置 SO_RCVTIMEO
-        // 防止恶意客户端只发送部分数据后保持连接不发送，导致服务器线程永久阻塞。
-        // 超时后 read 返回 -1 且 errno=EAGAIN/EWOULDBLOCK，客户端线程可以退出。
+        // Key fix (H9/C1): set SO_RCVTIMEO on the client socket
+        // So a malicious client cannot send part of the data and then hold the connection open, blocking a server thread forever.
+        // After the timeout read returns -1 with errno=EAGAIN/EWOULDBLOCK and the client thread can exit.
         struct timeval rcvTimeout;
         rcvTimeout.tv_sec = SOCKS5_CLIENT_IO_TIMEOUT;
         rcvTimeout.tv_usec = 0;
@@ -810,21 +810,21 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
             NSLog(@"[SOCKS5Proxy] Failed to set SO_RCVTIMEO: errno = %d (ignoring, continuing)", errno);
         }
 
-        // 关键修复（M14）：设置 SO_KEEPALIVE
-        // 如果对端异常断开（如网络中断、进程崩溃），本端能及时检测到，
-        // 避免长时间阻塞在 read 上不知道连接已断开。
+        // Key fix (M14): set SO_KEEPALIVE
+        // If the peer disappears abruptly (a network drop, a crashed process), this end notices promptly
+        // instead of sitting blocked on read unaware the connection is gone.
         int keepalive = 1;
         if (setsockopt(clientFD, SOL_SOCKET, SO_KEEPALIVE, &keepalive, sizeof(keepalive)) < 0) {
             NSLog(@"[SOCKS5Proxy] Failed to set SO_KEEPALIVE: errno = %d (ignoring, continuing)", errno);
         }
 
-        // 关键修复（P1-5）：客户端 socket 设置 SO_SNDTIMEO / SO_NOSIGPIPE
+        // Key fix (P1-5): set SO_SNDTIMEO / SO_NOSIGPIPE on the client socket
         //
-        // 问题：与 PortForwarder 同源问题——writeAll 调用 writeAllWithTimeout(fd, buf, len, 0)
-        // 时 timeoutSec=0 表示无超时。MC 接收缓冲区满时 write 永久阻塞，转发线程泄漏。
+        // The problem is the same as in PortForwarder: writeAll calls writeAllWithTimeout(fd, buf, len, 0),
+        // and timeoutSec=0 means no timeout. When the Minecraft receive buffer fills, write blocks forever and the forwarding thread leaks.
         //
-        // 修复：设置 30 秒发送超时，超时后 write 返回 -1 且 errno=EAGAIN，转发循环退出。
-        // SO_NOSIGPIPE 防止 write 对已关闭连接触发 SIGPIPE 崩溃。
+        // The fix: a 30-second send timeout, after which write returns -1 with errno=EAGAIN and the forwarding loop exits.
+        // SO_NOSIGPIPE stops a write to a closed connection raising SIGPIPE and crashing.
         struct timeval sndTimeout;
         sndTimeout.tv_sec = SOCKS5_CLIENT_IO_TIMEOUT;
         sndTimeout.tv_usec = 0;
@@ -836,8 +836,8 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
             NSLog(@"[SOCKS5Proxy] Failed to set SO_NOSIGPIPE: errno = %d (ignoring, continuing)", errno);
         }
 
-        // 关键修复（P2-11）：iOS 默认 keepalive 间隔 ~2 小时，无法及时检测半死连接。
-        // 改为更激进：空闲 30s 探测，每 10s 一次，3 次失败判定死亡。
+        // Key fix (P2-11): the iOS default keepalive interval is about 2 hours, too slow to detect a half-dead connection.
+        // Made more aggressive: probing after 30s idle, every 10s, with 3 failures meaning it is dead.
         int keepIdle = 30;
         setsockopt(clientFD, IPPROTO_TCP, TCP_KEEPALIVE, &keepIdle, sizeof(keepIdle));
         int keepIntvl = 10;
@@ -845,7 +845,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
         int keepCnt = 3;
         setsockopt(clientFD, IPPROTO_TCP, TCP_KEEPCNT, &keepCnt, sizeof(keepCnt));
 
-        // 发送客户端连接通知
+        // Post the client connected notification
         [[NSNotificationCenter defaultCenter] postNotificationName:SOCKS5ProxyClientConnectedNotification
                                                             object:self
                                                           userInfo:@{
@@ -853,7 +853,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
                                                               @"clientPort": @(clientPort)
                                                           }];
 
-        // 启动客户端处理线程
+        // Start the client handling thread
         __weak typeof(self) weakSelf = self;
         NSThread *clientThread = [[NSThread alloc] initWithBlock:^{
             [weakSelf handleClient:clientFD];
@@ -863,11 +863,11 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
         [_lock lock];
         if (_running) {
             [_clientThreads addObject:clientThread];
-            // 关键修复（C1）：将客户端 fd 加入数组，stop 时可以主动 shutdown
+            // Key fix (C1): add the client fd to the array, so stop can shut it down
             [_clientFDs addObject:@(clientFD)];
             [clientThread start];
         } else {
-            // 代理已停止，直接关闭客户端连接
+            // The proxy has stopped, so close the client connection straight away
             NSLog(@"[SOCKS5Proxy] Proxy has stopped, rejecting new connection fd=%d", clientFD);
             close(clientFD);
         }
@@ -879,29 +879,29 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
 
 #pragma mark - 客户端处理
 
-/// 处理单个客户端连接（在客户端处理线程中运行）
+/// Handle one client connection (running on a client handling thread)
 ///
 /// The flow:
-///   1. SOCKS5 握手（认证协商 + 请求解析）
-///   2. 通过 ZeroTierBridge 连接目标主机
-///   3. 双向转发数据
-///   4. 清理资源
+///   1. the SOCKS5 handshake (method negotiation + request parsing)
+///   2. connect to the destination host through ZeroTierBridge
+///   3. forward data in both directions
+///   4. clean up
 ///
-/// 关键修复（H10）：使用 @try @finally 确保 fd 在所有路径下都被正确关闭，
-/// 即使握手或转发过程中抛出异常也不会泄漏 fd。
+/// Key fix (H10): @try @finally makes sure the fds are closed on every path,
+/// so nothing leaks even if the handshake or forwarding throws.
 ///
-/// @param clientFD 客户端 socket 文件描述符
+/// @param clientFD The client socket file descriptor
 - (void)handleClient:(int)clientFD {
     @autoreleasepool {
         NSLog(@"[SOCKS5Proxy] Starting to handle client fd=%d", clientFD);
 
-        // 用于保存握手结果
+        // Holds the handshake result
         NSString *targetHost = nil;
         uint16_t targetPort = 0;
         int remoteFD = -1;
 
         @try {
-            // 步骤 1：SOCKS5 握手
+            // Step 1: the SOCKS5 handshake
             BOOL handshakeOK = [self socks5Handshake:clientFD
                                           targetHost:&targetHost
                                           targetPort:&targetPort
@@ -910,7 +910,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
             if (!handshakeOK) {
                 NSLog(@"[SOCKS5Proxy] SOCKS5 handshake failed, closing client fd=%d", clientFD);
 
-                // 发送客户端断开通知
+                // Post the client disconnected notification
                 [[NSNotificationCenter defaultCenter] postNotificationName:SOCKS5ProxyClientDisconnectedNotification
                                                                     object:self
                                                                   userInfo:@{@"reason": @"handshake_failed"}];
@@ -920,53 +920,53 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
             NSLog(@"[SOCKS5Proxy] SOCKS5 handshake succeeded, target %@:%u, starting forwarding (clientFD=%d, remoteFD=%d)",
                   targetHost, targetPort, clientFD, remoteFD);
 
-            // 关键修复（M12）：将远程 fd 加入 _remoteFDs 列表，以便 stop 时能 shutdown 它。
-            // 否则 stop 时只 shutdown 客户端 fd，远程 fd 仍阻塞 recv，客户端线程无法退出。
+            // Key fix (M12): add the remote fd to _remoteFDs, so stop can shut it down.
+            // Otherwise stop only shuts down the client fd, the remote fd stays blocked in recv, and the client thread cannot exit.
             [_lock lock];
             [_remoteFDs addObject:@(remoteFD)];
             [_lock unlock];
 
-            // 关键修复：对客户端 socket 设置 TCP_NODELAY（禁用 Nagle 算法）
-            // Minecraft 是实时交互游戏，延迟比带宽更重要
+            // Key fix: set TCP_NODELAY on the client socket (disabling the Nagle algorithm)
+            // Minecraft is a real-time game, where latency matters more than bandwidth
             int clientNoDelay = 1;
             setsockopt(clientFD, IPPROTO_TCP, TCP_NODELAY, &clientNoDelay, sizeof(clientNoDelay));
 
-            // 关键修复：对 libzt socket 设置 TCP_NODELAY（降低 ZeroTier 虚拟网络延迟）
+            // Key fix: set TCP_NODELAY on the libzt socket (lowering ZeroTier virtual network latency)
             int ztNoDelay = 1;
             zts_bsd_setsockopt(remoteFD, ZTS_IPPROTO_TCP, ZTS_TCP_NODELAY, &ztNoDelay, sizeof(ztNoDelay));
 
-            // 步骤 2：双向转发数据
+            // Step 2: forward data in both directions
             [self forwardDataBetweenClientFD:clientFD remoteFD:remoteFD];
 
-            // 发送客户端断开通知
+            // Post the client disconnected notification
             [[NSNotificationCenter defaultCenter] postNotificationName:SOCKS5ProxyClientDisconnectedNotification
                                                                 object:self
                                                               userInfo:@{@"reason": @"closed"}];
 
             NSLog(@"[SOCKS5Proxy] Client handling completed fd=%d", clientFD);
         } @finally {
-            // 关键修复（H10）：无论是否异常，都要关闭 fd，避免资源泄漏
+            // Key fix (H10): close the fds whether or not something threw, so nothing leaks
             //
-            // 关键修复（M10）：先从 _clientFDs 移除 fd，再 close(fd)。
-            // 之前先 close(clientFD) 再 removeCurrentThreadAndFD:，存在 fd 复用竞争：
-            //   1. close(clientFD) 后 fd 编号可被新 accept 调用复用
-            //   2. 若在 close 和 removeCurrentThreadAndFD: 之间发生了新的 start 周期且
-            //      accept 返回了相同的 fd 编号
-            //   3. removeCurrentThreadAndFD: 中的 indexOfObject:@(clientFD) 会匹配到
-            //      新连接的条目并将其错误移除
-            //   4. 后续 stop 调用时不会 shutdown 这个新连接的 fd，导致线程泄漏
-            // 修复方案：先在 _lock 内从 _clientFDs 移除 fd，然后在锁外 close(fd)。
-            // 这样 fd 编号在被复用前已从列表中移除，不会误删新连接的条目。
+            // Key fix (M10): remove the fd from _clientFDs before calling close(fd).
+            // Calling close(clientFD) before removeCurrentThreadAndFD: raced with fd reuse:
+            //   1. after close(clientFD) the fd number can be reused by a new accept
+            //   2. if a new start cycle began between the close and removeCurrentThreadAndFD: and
+            //      accept returned the same fd number
+            //   3. the indexOfObject:@(clientFD) inside removeCurrentThreadAndFD: would match
+            //      the new connection's entry and remove it by mistake
+            //   4. so a later stop would not shut down that new connection's fd, leaking the thread
+            // The fix: remove the fd from _clientFDs inside _lock first, then close(fd) outside the lock.
+            // The fd number is then out of the list before it can be reused, so no new entry is removed by mistake.
             //
-            // 关键修复（M12）：同时从 _remoteFDs 移除 remoteFD，避免 stop 时
-            // shutdown 已关闭的 remoteFD。
+            // Key fix (M12): remove remoteFD from _remoteFDs at the same time, so stop cannot
+            // shut down an already-closed remoteFD.
             [self removeCurrentThreadAndClientFD:clientFD remoteFD:remoteFD];
 
-            // 关闭客户端 socket（系统 POSIX socket）
+            // Close the client socket (a system POSIX socket)
             if (clientFD >= 0) {
                 close(clientFD);
             }
-            // 关闭远程 socket（libzt socket，通过 ZeroTierBridge 关闭）
+            // Close the remote socket (a libzt socket, closed through ZeroTierBridge)
             if (remoteFD >= 0) {
                 [[ZeroTierBridge sharedInstance] closeSocket:remoteFD];
             }
@@ -976,24 +976,24 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
 
 #pragma mark - SOCKS5 协议实现
 
-/// SOCKS5 握手
+/// The SOCKS5 handshake
 ///
-/// 完成认证协商和请求解析，并通过 ZeroTierBridge 连接目标主机。
+/// Completes the method negotiation and request parsing, then connects to the destination through ZeroTierBridge.
 ///
-/// @param clientFD 客户端 socket 文件描述符
-/// @param targetHost 输出：目标主机地址
-/// @param targetPort 输出：目标端口
-/// @param remoteFD 输出：远程 socket 文件描述符（libzt socket）
-/// @return YES 如果握手成功
+/// @param clientFD The client socket file descriptor
+/// @param targetHost Output: the destination host address
+/// @param targetPort Output: the destination port
+/// @param remoteFD Output: the remote socket file descriptor (a libzt socket)
+/// @return YES when the handshake succeeded
 - (BOOL)socks5Handshake:(int)clientFD
              targetHost:(NSString **)targetHost
              targetPort:(uint16_t *)targetPort
                remoteFD:(int *)remoteFD {
     // ============================================================
-    // 步骤 1：认证方法协商
+    // Step 1: negotiate the authentication method
     // ============================================================
 
-    // 读取客户端 greeting 头：VER(1) NMETHODS(1)
+    // Read the client greeting header: VER(1) NMETHODS(1)
     uint8_t greeting[2] = {0};
     ssize_t n = readAll(clientFD, greeting, 2);
     if (n != 2) {
@@ -1001,7 +1001,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
         return NO;
     }
 
-    // 验证 SOCKS 版本
+    // Validate the SOCKS version
     if (greeting[0] != SOCKS5_VERSION) {
         NSLog(@"[SOCKS5Proxy] Unsupported SOCKS version: %d", greeting[0]);
         return NO;
@@ -1013,7 +1013,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
         return NO;
     }
 
-    // 读取方法列表：METHODS(NMETHODS)
+    // Read the method list: METHODS(NMETHODS)
     uint8_t methods[256] = {0};
     n = readAll(clientFD, methods, nMethods);
     if (n != nMethods) {
@@ -1021,8 +1021,8 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
         return NO;
     }
 
-    // 检查是否支持无认证方式（METHOD_NO_AUTH = 0x00）
-    // 本代理不支持用户名/密码认证
+    // Check whether the no-auth method is supported (METHOD_NO_AUTH = 0x00)
+    // This proxy does not support username/password authentication
     BOOL noAuthSupported = NO;
     for (int i = 0; i < nMethods; i++) {
         if (methods[i] == SOCKS5_METHOD_NO_AUTH) {
@@ -1033,13 +1033,13 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
 
     if (!noAuthSupported) {
         NSLog(@"[SOCKS5Proxy] Client does not support no-auth method, rejecting connection");
-        // 回复无可接受的方法
+        // Reply that no method is acceptable
         uint8_t reply[2] = {SOCKS5_VERSION, SOCKS5_METHOD_NO_ACCEPTABLE};
         writeAll(clientFD, reply, 2);
         return NO;
     }
 
-    // 回复选择无认证方式：VER(1) METHOD(1)
+    // Reply selecting the no-auth method: VER(1) METHOD(1)
     uint8_t methodReply[2] = {SOCKS5_VERSION, SOCKS5_METHOD_NO_AUTH};
     n = writeAll(clientFD, methodReply, 2);
     if (n != 2) {
@@ -1050,10 +1050,10 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
     NSLog(@"[SOCKS5Proxy] SOCKS5 authentication method negotiation completed (no-auth)");
 
     // ============================================================
-    // 步骤 2：读取客户端请求
+    // Step 2: read the client request
     // ============================================================
 
-    // 读取请求头：VER(1) CMD(1) RSV(1) ATYP(1)
+    // Read the request header: VER(1) CMD(1) RSV(1) ATYP(1)
     uint8_t requestHeader[4] = {0};
     n = readAll(clientFD, requestHeader, 4);
     if (n != 4) {
@@ -1061,13 +1061,13 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
         return NO;
     }
 
-    // 验证 SOCKS 版本
+    // Validate the SOCKS version
     if (requestHeader[0] != SOCKS5_VERSION) {
         NSLog(@"[SOCKS5Proxy] SOCKS version error in request: %d", requestHeader[0]);
         return NO;
     }
 
-    // 检查命令类型（只支持 CONNECT）
+    // Check the command (only CONNECT is supported)
     uint8_t cmd = requestHeader[1];
     if (cmd != SOCKS5_CMD_CONNECT) {
         NSLog(@"[SOCKS5Proxy] Unsupported CMD: %d (only CONNECT=1 supported)", cmd);
@@ -1079,13 +1079,13 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
         return NO;
     }
 
-    // 解析目标地址
+    // Parse the destination address
     uint8_t atyp = requestHeader[3];
     NSString *destHost = nil;
 
     switch (atyp) {
         case SOCKS5_ATYP_IPV4: {
-            // IPv4 地址：4 字节
+            // An IPv4 address: 4 bytes
             uint8_t ipv4[4] = {0};
             n = readAll(clientFD, ipv4, 4);
             if (n != 4) {
@@ -1098,7 +1098,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
         }
 
         case SOCKS5_ATYP_DOMAIN: {
-            // 域名：1 字节长度 + 域名字符串
+            // A domain name: a 1-byte length plus the name
             uint8_t domainLen = 0;
             n = readAll(clientFD, &domainLen, 1);
             if (n != 1) {
@@ -1113,14 +1113,14 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
             }
             NSString *domainStr = [NSString stringWithUTF8String:domain];
 
-            // 关键修复（P0-2）：libzt 的 zts_bsd_connect 不支持域名解析
-            // （zts_inet_pton 遇到非数字 IP 直接返回 0），需要先用系统
-            // getaddrinfo 把域名解析为 IP，再传给 ZeroTierBridge.connectSocket。
-            // 否则用户在 MC 中填入域名时联机会直接失败。
-            // 解析失败时回退使用原始域名，保持与旧行为兼容（由上层报错）。
+            // Key fix (P0-2): zts_bsd_connect in libzt cannot resolve domain names
+            // (zts_inet_pton returns 0 for anything that is not a numeric IP), so the system
+            // getaddrinfo has to resolve the name into an IP before passing it to ZeroTierBridge.connectSocket.
+            // Otherwise entering a domain name in Minecraft made multiplayer fail outright.
+            // On a resolution failure it falls back to the original domain, matching the old behavior (with the caller reporting the error).
             struct addrinfo hints, *res = NULL;
             memset(&hints, 0, sizeof(hints));
-            hints.ai_family = AF_UNSPEC;       // 同时接受 IPv4 / IPv6
+            hints.ai_family = AF_UNSPEC;       // Accept both IPv4 and IPv6
             hints.ai_socktype = SOCK_STREAM;
             int gaiResult = getaddrinfo(domain, NULL, &hints, &res);
             if (gaiResult == 0 && res != NULL) {
@@ -1149,7 +1149,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
         }
 
         case SOCKS5_ATYP_IPV6: {
-            // IPv6 地址：16 字节
+            // An IPv6 address: 16 bytes
             uint8_t ipv6[16] = {0};
             n = readAll(clientFD, ipv6, 16);
             if (n != 16) {
@@ -1172,7 +1172,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
             return NO;
     }
 
-    // 读取目标端口：2 字节，网络字节序（大端）
+    // Read the destination port: 2 bytes in network byte order (big endian)
     uint8_t portBytes[2] = {0};
     n = readAll(clientFD, portBytes, 2);
     if (n != 2) {
@@ -1184,15 +1184,15 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
     NSLog(@"[SOCKS5Proxy] Client requested connection to %@:%u", destHost, destPort);
 
     // ============================================================
-    // 步骤 3：通过 ZeroTier 虚拟网络连接目标
+    // Step 3: connect to the destination over the ZeroTier virtual network
     // ============================================================
 
-    // 检测目标地址类型：IPv6 地址包含 ':'，IPv4 地址包含 '.'
+    // Detect the address type: an IPv6 address contains ':' and an IPv4 address contains '.'
     BOOL isIPv6Target = ([destHost rangeOfString:@":"].location != NSNotFound);
     int socketFamily = isIPv6Target ? ZTS_AF_INET6 : ZTS_AF_INET;
 
-    // 创建 libzt socket（根据目标地址类型选择 IPv4 或 IPv6）
-    // Ad-hoc 网络只有 IPv6，必须使用 ZTS_AF_INET6 创建 socket
+    // Create the libzt socket (choosing IPv4 or IPv6 from the destination address type)
+    // An ad-hoc network is IPv6-only, so the socket must be created with ZTS_AF_INET6
     int ztFD = [[ZeroTierBridge sharedInstance] createTCPSocketForFamily:socketFamily];
     if (ztFD < 0) {
         NSLog(@"[SOCKS5Proxy] Failed to create ZeroTier socket(family=%d): ztFD=%d", socketFamily, ztFD);
@@ -1204,7 +1204,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
         return NO;
     }
 
-    // 连接目标主机
+    // Connect to the destination host
     int connectResult = [[ZeroTierBridge sharedInstance] connectSocket:ztFD
                                                                 toHost:destHost
                                                                   port:destPort
@@ -1214,8 +1214,8 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
               connectResult, destHost, destPort);
         [[ZeroTierBridge sharedInstance] closeSocket:ztFD];
 
-        // 根据错误类型选择合适的回复码
-        // 由于 libzt 的错误码与 SOCKS5 回复码不直接对应，这里统一使用 CONNECTION_REFUSED
+        // Choose the right reply code for the error
+        // Since the libzt error codes do not map onto the SOCKS5 reply codes, CONNECTION_REFUSED is used throughout
         [self sendSocks5Reply:clientFD
                           rep:SOCKS5_REP_CONNECTION_REFUSED
                      bindAddr:@"0.0.0.0"
@@ -1228,7 +1228,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
           destHost, destPort, ztFD);
 
     // ============================================================
-    // 步骤 4：发送成功回复
+    // Step 4: send the success reply
     // ============================================================
 
     [self sendSocks5Reply:clientFD
@@ -1237,7 +1237,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
                  bindPort:0
                      atyp:SOCKS5_ATYP_IPV4];
 
-    // 输出握手结果
+    // Return the handshake result
     if (targetHost) {
         *targetHost = destHost;
     }
@@ -1251,28 +1251,28 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
     return YES;
 }
 
-/// 发送 SOCKS5 回复
+/// Send a SOCKS5 reply
 ///
-/// 回复格式：VER(1) REP(1) RSV(1) ATYP(1) BND.ADDR(?) BND.PORT(2)
+/// The reply format: VER(1) REP(1) RSV(1) ATYP(1) BND.ADDR(?) BND.PORT(2)
 ///
-/// @param clientFD 客户端 socket 文件描述符
-/// @param rep 回复码（SOCKS5_REP_*）
-/// @param bindAddr 绑定地址（BND.ADDR）
-/// @param bindPort 绑定端口（BND.PORT）
-/// @param atyp 地址类型（SOCKS5_ATYP_*）
+/// @param clientFD The client socket file descriptor
+/// @param rep The reply code (SOCKS5_REP_*)
+/// @param bindAddr The bound address (BND.ADDR)
+/// @param bindPort The bound port (BND.PORT)
+/// @param atyp The address type (SOCKS5_ATYP_*)
 - (void)sendSocks5Reply:(int)clientFD
                     rep:(uint8_t)rep
               bindAddr:(NSString *)bindAddr
               bindPort:(uint16_t)bindPort
                   atyp:(uint8_t)atyp {
-    // 构建回复数据
+    // Build the reply data
     NSMutableData *reply = [NSMutableData data];
 
     // VER(1) REP(1) RSV(1) ATYP(1)
     uint8_t header[4] = {SOCKS5_VERSION, rep, 0x00, atyp};
     [reply appendBytes:header length:4];
 
-    // BND.ADDR（根据 ATYP 不同长度不同）
+    // BND.ADDR (whose length depends on ATYP)
     if (atyp == SOCKS5_ATYP_IPV4) {
         uint8_t ipv4[4] = {0, 0, 0, 0};
         if (bindAddr && bindAddr.length > 0) {
@@ -1287,15 +1287,15 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
         [reply appendBytes:ipv6 length:16];
     }
 
-    // BND.PORT（2 字节，网络字节序）
+    // BND.PORT (2 bytes, in network byte order)
     uint8_t portBytes[2] = {
         (uint8_t)((bindPort >> 8) & 0xFF),
         (uint8_t)(bindPort & 0xFF)
     };
     [reply appendBytes:portBytes length:2];
 
-    // 发送回复
-    // 关键修复（L2）：检查 writeAll 返回值，失败时记录日志
+    // Send the reply
+    // Key fix (L2): check the writeAll return value and log a failure
     ssize_t writeResult = writeAll(clientFD, reply.bytes, reply.length);
     if (writeResult < 0 || (size_t)writeResult != reply.length) {
         NSLog(@"[SOCKS5Proxy] Failed to send SOCKS5 reply: writeResult=%zd, expected=%lu",
@@ -1308,87 +1308,87 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
 
 #pragma mark - 双向数据转发
 
-/// 在客户端和远程主机之间双向转发数据
+/// Forward data in both directions between the client and the remote host
 ///
-/// 使用 GCD 并发队列，启动两个任务分别处理两个方向的数据转发：
-///   - client → remote：从客户端读取数据，通过 ZeroTier 发送到远程
-///   - remote → client：从 ZeroTier 接收数据，发送给客户端
+/// A concurrent GCD queue runs two tasks, one per direction:
+///   - client -> remote: read from the client and send to the remote over ZeroTier
+///   - remote -> client: receive from ZeroTier and send to the client
 ///
-/// 当任一方向结束时，通过 shutdown() 通知另一端，使其 read/recv 返回 0 并退出。
+/// When either direction ends, shutdown() tells the other end, so its read/recv returns 0 and it exits.
 ///
-/// @param clientFD 客户端 socket 文件描述符（系统 POSIX socket）
-/// @param remoteFD 远程 socket 文件描述符（libzt socket）
+/// @param clientFD The client socket file descriptor (a system POSIX socket)
+/// @param remoteFD The remote socket file descriptor (a libzt socket)
 - (void)forwardDataBetweenClientFD:(int)clientFD
                           remoteFD:(int)remoteFD {
-    // 关键修复（N2）：使用 atomic_bool 替代 __block BOOL，确保跨线程内存可见性。
+    // Key fix (N2): atomic_bool replaces __block BOOL, guaranteeing memory visibility across threads.
     //
-    // 问题：__block 修饰符只是让变量可以在 block 内被修改，但不提供内存屏障。
-    // 在 ARM64（iPhone）等弱内存模型架构上，一个线程对 __block 变量的写入
-    // 可能不会被另一个线程立即看到，导致：
-    //   - 一个方向已关闭，但另一个方向的循环没有及时看到标志变化
-    //   - 继续阻塞在 read/recvData 上，直到对端 FIN 到达或 IO 超时才退出
-    //   - 转发任务延迟退出（最坏情况下需要等待对端关闭或 IO 超时）
+    // The problem: the __block qualifier only lets a variable be modified inside a block; it provides no memory barrier.
+    // On a weak memory model such as ARM64 (iPhone), a write to a __block variable by one thread
+    // may not be seen promptly by another, so:
+    //   - one direction closes, but the loop in the other does not notice the flag change in time
+    //   - it stays blocked on read/recvData until the peer FIN arrives or the IO times out
+    //   - the forwarding task exits late (in the worst case only after the peer closes or the IO times out)
     //
-    // 修复方案：使用 C11 atomic_bool，原子操作自带合适的内存屏障
-    // （memory_order_seq_cst），保证一个线程的写入对另一个线程立即可见。
+    // The fix: use a C11 atomic_bool, whose atomic operations carry the right memory barriers
+    // (memory_order_seq_cst), so one thread's write is immediately visible to the other.
     //
-    // 关键修复（N2 验证发现）：必须同时使用 __block 和 atomic。
-    // - __block：让变量被 block 按引用捕获（两个 block 共享同一变量），而不是按值捕获
-    //   （按值捕获会导致每个 block 有独立副本，原子操作在各自副本上执行，完全失效）
-    // - atomic_bool：提供内存屏障，保证跨线程可见性
-    // 两者缺一不可：只有 __block 无内存屏障，只有 atomic 会被按值捕获。
-    // 关键修复：使用 atomic_bool 替代 _Atomic(BOOL)，确保跨平台兼容性
-    // _Atomic(BOOL) 在 Objective-C 中可能不被支持（BOOL 是 signed char 的 typedef）
+    // Key fix (found while verifying N2): both __block and atomic are required.
+    // - __block: makes the block capture the variable by reference (so both blocks share one variable) rather than by value
+    //   (capturing by value would give each block its own copy, so the atomic operations would act on separate copies and do nothing)
+    // - atomic_bool: provides the memory barrier that makes it visible across threads
+    // Neither alone is enough: __block without atomics has no barrier, and atomics alone would be captured by value.
+    // Key fix: atomic_bool replaces _Atomic(BOOL) for portability
+    // _Atomic(BOOL) may not be supported in Objective-C (BOOL is a typedef for signed char)
     __block atomic_bool clientClosed = ATOMIC_VAR_INIT(false);
     __block atomic_bool remoteClosed = ATOMIC_VAR_INIT(false);
 
-    // 创建并发队列用于双向转发
+    // Create the concurrent queue used for bidirectional forwarding
     dispatch_queue_t forwardQueue = dispatch_queue_create("com.angelaura.socks5.forward", DISPATCH_QUEUE_CONCURRENT);
     dispatch_group_t group = dispatch_group_create();
 
     // ============================================================
-    // 方向 1：client → remote
-    // 从客户端（POSIX socket）读取数据，通过 ZeroTier（libzt socket）发送
+    // Direction 1: client -> remote
+    // Read from the client (a POSIX socket) and send over ZeroTier (a libzt socket)
     // ============================================================
     dispatch_group_async(group, forwardQueue, ^{
         uint8_t buffer[SOCKS5_BUFFER_SIZE];
 
         while (YES) {
             @autoreleasepool {
-                // 检查远程是否已关闭（原子读，自带内存屏障）
+                // Check whether the remote has closed (an atomic read, which carries a memory barrier)
                 if (atomic_load(&remoteClosed)) {
                     NSLog(@"[SOCKS5Proxy] client→remote: remote already closed, exiting forwarding");
                     break;
                 }
 
-                // 从客户端读取数据（系统 read）
+                // Read from the client (system read)
                 ssize_t n = read(clientFD, buffer, sizeof(buffer));
                 if (n <= 0) {
-                    // n == 0：客户端关闭连接
-                    // n < 0：读取错误
+                    // n == 0: the client closed the connection
+                    // n < 0: a read error
                     NSLog(@"[SOCKS5Proxy] client→remote ended: n=%zd, errno=%d", n, errno);
 
-                    // 标记客户端已关闭（原子写，自带内存屏障）
+                    // Mark the client as closed (an atomic write, which carries a memory barrier)
                     atomic_store(&clientClosed, true);
 
-                    // 关闭远程的写端，通知 remote→client 方向退出
-                    // shutdown 会导致另一端的 recv 返回 0
-                    // 关键修复：remoteFD 是 libzt socket，必须使用 zts_bsd_shutdown
+                    // Shut down the write side of the remote, telling the remote->client direction to exit
+                    // The shutdown makes recv on the other side return 0
+                    // Key fix: remoteFD is a libzt socket, so zts_bsd_shutdown must be used
                     [[ZeroTierBridge sharedInstance] shutdownSocket:remoteFD how:SHUT_WR];
                     break;
                 }
 
-                // 通过 ZeroTier 发送数据（libzt send）
+                // Send the data over ZeroTier (a libzt send)
                 ssize_t sent = [[ZeroTierBridge sharedInstance] sendData:remoteFD
                                                                   buffer:buffer
                                                                   length:(size_t)n];
                 if (sent <= 0) {
                     NSLog(@"[SOCKS5Proxy] Failed to send to remote: sent=%zd", sent);
 
-                    // 标记远程已关闭（原子写）
+                    // Mark the remote as closed (an atomic write)
                     atomic_store(&remoteClosed, true);
 
-                    // 关闭客户端的写端
+                    // Shut down the write side of the client
                     shutdown(clientFD, SHUT_WR);
                     break;
                 }
@@ -1397,47 +1397,47 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
     });
 
     // ============================================================
-    // 方向 2：remote → client
-    // 从 ZeroTier（libzt socket）接收数据，发送给客户端（POSIX socket）
+    // Direction 2: remote -> client
+    // Receive from ZeroTier (a libzt socket) and send to the client (a POSIX socket)
     // ============================================================
     dispatch_group_async(group, forwardQueue, ^{
         uint8_t buffer[SOCKS5_BUFFER_SIZE];
 
         while (YES) {
             @autoreleasepool {
-                // 检查客户端是否已关闭（原子读，自带内存屏障）
+                // Check whether the client has closed (an atomic read, which carries a memory barrier)
                 if (atomic_load(&clientClosed)) {
                     NSLog(@"[SOCKS5Proxy] remote→client: client already closed, exiting forwarding");
                     break;
                 }
 
-                // 通过 ZeroTier 接收数据（libzt recv）
+                // Receive over ZeroTier (a libzt recv)
                 ssize_t n = [[ZeroTierBridge sharedInstance] recvData:remoteFD
                                                                 buffer:buffer
                                                                 length:sizeof(buffer)];
                 if (n <= 0) {
-                    // n == 0：远程关闭连接
-                    // n < 0：接收错误
+                    // n == 0: the remote closed the connection
+                    // n < 0: a receive error
                     NSLog(@"[SOCKS5Proxy] remote→client ended: n=%zd", n);
 
-                    // 标记远程已关闭（原子写）
+                    // Mark the remote as closed (an atomic write)
                     atomic_store(&remoteClosed, true);
 
-                    // 关闭客户端的写端，通知 client→remote 方向退出
+                    // Shut down the write side of the client, telling the client->remote direction to exit
                     shutdown(clientFD, SHUT_WR);
                     break;
                 }
 
-                // 发送数据给客户端（系统 write）
+                // Send the data to the client (system write)
                 ssize_t sent = writeAll(clientFD, buffer, (size_t)n);
                 if (sent <= 0) {
                     NSLog(@"[SOCKS5Proxy] Failed to send to client: sent=%zd", sent);
 
-                    // 标记客户端已关闭（原子写）
+                    // Mark the client as closed (an atomic write)
                     atomic_store(&clientClosed, true);
 
-                    // 关闭远程的写端
-                    // 关键修复：remoteFD 是 libzt socket，必须使用 zts_bsd_shutdown
+                    // Shut down the write side of the remote
+                    // Key fix: remoteFD is a libzt socket, so zts_bsd_shutdown must be used
                     [[ZeroTierBridge sharedInstance] shutdownSocket:remoteFD how:SHUT_WR];
                     break;
                 }
@@ -1445,7 +1445,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
         }
     });
 
-    // 等待两个方向的转发都完成
+    // Wait for both directions to finish forwarding
     dispatch_group_wait(group, DISPATCH_TIME_FOREVER);
 
     NSLog(@"[SOCKS5Proxy] Bidirectional forwarding ended (clientFD=%d, remoteFD=%d)", clientFD, remoteFD);
@@ -1453,16 +1453,16 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
 
 #pragma mark - 辅助方法
 
-/// 从客户端线程列表、客户端 fd 列表和远程 fd 列表中移除当前线程和对应的 fd
+/// Remove the current thread and its fds from the client thread list, the client fd list and the remote fd list
 ///
-/// 关键修复（C1）：同时移除客户端 fd，避免 stop 时 shutdown 已关闭的 fd
-/// 关键修复（M12）：同时移除远程 fd，避免 stop 时 shutdown 已关闭的 remoteFD
+/// Key fix (C1): the client fd is removed too, so stop cannot shut down an already-closed fd
+/// Key fix (M12): the remote fd is removed too, so stop cannot shut down an already-closed remoteFD
 - (void)removeCurrentThreadAndClientFD:(int)clientFD remoteFD:(int)remoteFD {
     NSThread *current = [NSThread currentThread];
     [_lock lock];
     [_clientThreads removeObject:current];
 
-    // 移除客户端 fd（使用 indexOfObject: 找到对应的 NSNumber）
+    // Remove the client fd (found with indexOfObject: on the matching NSNumber)
     if (clientFD >= 0) {
         NSNumber *clientFDNum = @(clientFD);
         NSUInteger clientIndex = [_clientFDs indexOfObject:clientFDNum];
@@ -1471,7 +1471,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
         }
     }
 
-    // 关键修复（M12）：移除远程 fd
+    // Key fix (M12): remove the remote fd
     if (remoteFD >= 0) {
         NSNumber *remoteFDNum = @(remoteFD);
         NSUInteger remoteIndex = [_remoteFDs indexOfObject:remoteFDNum];

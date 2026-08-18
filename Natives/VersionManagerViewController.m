@@ -14,14 +14,14 @@
 #import "ModpackExportService.h" // for parseVersionId:
 #import <QuartzCore/QuartzCore.h>
 
-// Section 索引：2 个 section（游戏目录 / 已安装版本）
-// 重新设计要点（参照 FCL 100%）：
-//   1. 版本管理界面只展示：游戏目录切换 + 已安装版本列表
-//   2. 渲染器、图形 API、Mod/光影/资源包管理等全部移到"版本专属设置页"（ProfileSettingsViewController）
-//      点击版本卡片直接进入该版本的专属设置页，设置只对该版本生效（FCL 风格）
-//   3. 完全不调用旧 UI（LauncherPrefGameDirViewController / LauncherProfileEditorViewController）
-//   4. 游戏目录卡片支持长按弹出菜单（切换/删除当前目录）
-//   5. 统一使用 accentColor() 与毛玻璃背景，适配启动器新 UI
+// Section indices: 2 sections (game directory / installed versions)
+// Redesign highlights (modeled 100% on FCL):
+//   1. The version management screen only shows: the game directory switcher + the installed version list
+//   2. Renderer, graphics API, mod/shader/resource pack management and so on have all moved to the "per-version settings page" (ProfileSettingsViewController)
+//      Tapping a version card goes straight to that version's dedicated settings page, and the settings apply only to that version (FCL style)
+//   3. The old UI (LauncherPrefGameDirViewController / LauncherProfileEditorViewController) is never invoked
+//   4. The game directory card supports a long-press context menu (switch/delete the current directory)
+//   5. accentColor() and a frosted glass background are used consistently, matching the launcher's new UI
 static NSInteger const kSectionGameDir     = 0;
 static NSInteger const kSectionVersions    = 1;
 
@@ -43,7 +43,7 @@ static NSInteger const kSectionVersions    = 1;
 }
 
 - (void)setupViews {
-    // 阴影：规范 5.2 中阴影档（0.12, 6, (0,3)）
+    // Shadow: the shadow tier from spec 5.2 (0.12, 6, (0,3))
     self.layer.shadowColor = [UIColor blackColor].CGColor;
     self.layer.shadowOffset = CGSizeMake(0, 3);
     self.layer.shadowOpacity = 0.12;
@@ -52,18 +52,18 @@ static NSInteger const kSectionVersions    = 1;
 
     self.contentContainer = [[UIView alloc] initWithFrame:self.contentView.bounds];
     self.contentContainer.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-    // 规范 5.1：L2 标准卡片 12pt 圆角 + 连续圆角
+    // Spec 5.1: L2 standard card with a 12pt corner radius + continuous corners
     self.contentContainer.layer.cornerRadius = 12;
     self.contentContainer.layer.cornerCurve = kCACornerCurveContinuous;
     self.contentContainer.layer.masksToBounds = YES;
-    // 规范 6.2：第 1 层浅色半透明基底
+    // Spec 6.2: layer 1, a light translucent base
     self.contentContainer.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.08];
-    // 规范 5.3：默认卡片描边 0.5pt 白 0.10
+    // Spec 5.3: default card stroke, 0.5pt white at 0.10
     self.contentContainer.layer.borderWidth = 0.5;
     self.contentContainer.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.10].CGColor;
     [self.contentView addSubview:self.contentContainer];
 
-    // 规范 6.2：第 2 层 BackgroundManager 毛玻璃
+    // Spec 6.2: layer 2, BackgroundManager frosted glass
     [[BackgroundManager sharedManager] applyEffectToCollectionViewCell:self];
 }
 
@@ -173,7 +173,7 @@ static NSInteger const kSectionVersions    = 1;
     CGFloat iconSize = [ScreenUtils dp:20];
     CGFloat nameFont = [ScreenUtils sp:15];
 
-    // 规范 8.2：图标必须放在带类型色的圆角容器内
+    // Spec 8.2: the icon must sit inside a rounded container with the type color
     self.iconContainer = [[UIView alloc] init];
     self.iconContainer.translatesAutoresizingMaskIntoConstraints = NO;
     self.iconContainer.layer.cornerRadius = 9;
@@ -191,7 +191,7 @@ static NSInteger const kSectionVersions    = 1;
     self.nameLabel = [[UILabel alloc] init];
     self.nameLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.nameLabel.font = [UIFont systemFontOfSize:nameFont weight:UIFontWeightSemibold];
-    // 规范 2.1：强制使用系统色
+    // Spec 2.1: system colors are mandatory
     self.nameLabel.textColor = [UIColor labelColor];
     self.nameLabel.numberOfLines = 1;
     self.nameLabel.adjustsFontForContentSizeCategory = NO;
@@ -200,7 +200,7 @@ static NSInteger const kSectionVersions    = 1;
     self.versionLabel = [[UILabel alloc] init];
     self.versionLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.versionLabel.font = [UIFont systemFontOfSize:[ScreenUtils sp:11] weight:UIFontWeightRegular];
-    // 规范 2.1：副文字用 secondaryLabelColor
+    // Spec 2.1: secondary text uses secondaryLabelColor
     self.versionLabel.textColor = [UIColor secondaryLabelColor];
     self.versionLabel.adjustsFontForContentSizeCategory = NO;
     [self.contentContainer addSubview:self.versionLabel];
@@ -208,13 +208,13 @@ static NSInteger const kSectionVersions    = 1;
     self.lastPlayedLabel = [[UILabel alloc] init];
     self.lastPlayedLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.lastPlayedLabel.font = [UIFont systemFontOfSize:[ScreenUtils sp:10] weight:UIFontWeightRegular];
-    // 规范 2.1：元文字用 tertiaryLabelColor
+    // Spec 2.1: meta text uses tertiaryLabelColor
     self.lastPlayedLabel.textColor = [UIColor tertiaryLabelColor];
     self.lastPlayedLabel.text = @"";
     self.lastPlayedLabel.adjustsFontForContentSizeCategory = NO;
     [self.contentContainer addSubview:self.lastPlayedLabel];
 
-    // 规范 9.1：选中态徽章（第二层强化）
+    // Spec 9.1: selected state badge (second reinforcement layer)
     self.selectedBadge = [[UIView alloc] init];
     self.selectedBadge.translatesAutoresizingMaskIntoConstraints = NO;
     self.selectedBadge.backgroundColor = accentColor();
@@ -242,7 +242,7 @@ static NSInteger const kSectionVersions    = 1;
     self.isolatedBadge.hidden = YES;
     [self.contentContainer addSubview:self.isolatedBadge];
 
-    // 规范 9.4：chevron 暗示可点击
+    // Spec 9.4: the chevron hints that it is tappable
     self.chevronView = [[UIImageView alloc] init];
     self.chevronView.translatesAutoresizingMaskIntoConstraints = NO;
     self.chevronView.image = [UIImage systemImageNamed:@"chevron.right" withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:12 weight:UIFontWeightSemibold]];
@@ -296,7 +296,7 @@ static NSInteger const kSectionVersions    = 1;
         [ModLoaderIconHelper configureImageView:self.iconView
                                       forLoader:detectedLoader
                                  traitCollection:self.traitCollection];
-        // 规范 2.6：加载器品牌色作为图标容器背景
+        // Spec 2.6: the loader brand color is used as the icon container background
         self.iconContainer.backgroundColor = [ModLoaderIconHelper brandColorForLoader:detectedLoader];
     } else {
         self.iconView.image = [UIImage systemImageNamed:@"cube.box.fill"];
@@ -304,7 +304,7 @@ static NSInteger const kSectionVersions    = 1;
         self.iconContainer.backgroundColor = [UIColor systemBlueColor];
     }
 
-    // 规范 9.1：选中态三层强化（边框 + 徽章 + 背景色）
+    // Spec 9.1: three-layer reinforcement of the selected state (border + badge + background color)
     if (isSelected) {
         self.contentContainer.layer.borderColor = accentColor().CGColor;
         self.contentContainer.layer.borderWidth = 1.5;
@@ -340,7 +340,7 @@ static NSInteger const kSectionVersions    = 1;
     CGFloat iconSize = [ScreenUtils dp:16];
     CGFloat nameFont = [ScreenUtils sp:13];
 
-    // 规范 8.2：图标容器
+    // Spec 8.2: icon container
     self.iconContainer = [[UIView alloc] init];
     self.iconContainer.translatesAutoresizingMaskIntoConstraints = NO;
     self.iconContainer.layer.cornerRadius = 8;
@@ -358,7 +358,7 @@ static NSInteger const kSectionVersions    = 1;
     self.nameLabel = [[UILabel alloc] init];
     self.nameLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.nameLabel.font = [UIFont systemFontOfSize:nameFont weight:UIFontWeightSemibold];
-    // 规范 2.1：系统色
+    // Spec 2.1: system colors
     self.nameLabel.textColor = [UIColor labelColor];
     self.nameLabel.numberOfLines = 1;
     self.nameLabel.adjustsFontForContentSizeCategory = NO;
@@ -367,7 +367,7 @@ static NSInteger const kSectionVersions    = 1;
     self.detailLabel = [[UILabel alloc] init];
     self.detailLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.detailLabel.font = [UIFont systemFontOfSize:[ScreenUtils sp:10] weight:UIFontWeightRegular];
-    // 规范 2.1：副文字 secondaryLabelColor
+    // Spec 2.1: secondary text uses secondaryLabelColor
     self.detailLabel.textColor = [UIColor secondaryLabelColor];
     self.detailLabel.numberOfLines = 0;
     self.detailLabel.lineBreakMode = NSLineBreakByWordWrapping;
@@ -388,7 +388,7 @@ static NSInteger const kSectionVersions    = 1;
     checkmark.tintColor = [UIColor whiteColor];
     [self.selectedBadge addSubview:checkmark];
 
-    // 规范 9.4：chevron 暗示可点击
+    // Spec 9.4: the chevron hints that it is tappable
     self.chevronView = [[UIImageView alloc] init];
     self.chevronView.translatesAutoresizingMaskIntoConstraints = NO;
     self.chevronView.image = [UIImage systemImageNamed:@"chevron.right" withConfiguration:[UIImageSymbolConfiguration configurationWithPointSize:11 weight:UIFontWeightSemibold]];
@@ -433,7 +433,7 @@ static NSInteger const kSectionVersions    = 1;
         self.detailLabel.text = @"Create a new isolated version directory";
         self.selectedBadge.hidden = YES;
         self.chevronView.hidden = YES;
-        // 规范 5.3：推荐态描边 1.0pt accentColor 0.4
+        // Spec 5.3: recommended state stroke, 1.0pt accentColor at 0.4
         self.contentContainer.layer.borderColor = [[UIColor systemGreenColor] colorWithAlphaComponent:0.6].CGColor;
         self.contentContainer.layer.borderWidth = 1.0;
         self.contentContainer.backgroundColor = [[UIColor systemGreenColor] colorWithAlphaComponent:0.08];
@@ -449,7 +449,7 @@ static NSInteger const kSectionVersions    = 1;
     self.selectedBadge.hidden = !isSelected;
     self.selectedBadge.backgroundColor = accentColor();
 
-    // 规范 9.1：选中态三层强化
+    // Spec 9.1: three-layer reinforcement of the selected state
     if (isSelected) {
         self.contentContainer.layer.borderColor = accentColor().CGColor;
         self.contentContainer.layer.borderWidth = 1.5;
@@ -582,13 +582,13 @@ static NSInteger const kSectionVersions    = 1;
 - (instancetype)initWithFrame:(CGRect)frame {
     self = [super initWithFrame:frame];
     if (self) {
-        // 规范 6.2：SystemMaterial 自动适配亮/暗模式（替代原 SystemMaterialDark）
+        // Spec 6.2: SystemMaterial adapts to light/dark mode automatically (replacing the original SystemMaterialDark)
         UIBlurEffect *blurEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial];
         self.blurView = [[UIVisualEffectView alloc] initWithEffect:blurEffect];
         self.blurView.translatesAutoresizingMaskIntoConstraints = NO;
         [self addSubview:self.blurView];
 
-        // 规范 9.5：前导强调色条（4pt 宽，圆角，accentColor）
+        // Spec 9.5: leading accent bar (4pt wide, rounded, accentColor)
         self.accentBar = [[UIView alloc] init];
         self.accentBar.translatesAutoresizingMaskIntoConstraints = NO;
         self.accentBar.backgroundColor = accentColor();
@@ -596,7 +596,7 @@ static NSInteger const kSectionVersions    = 1;
         self.accentBar.layer.cornerCurve = kCACornerCurveContinuous;
         [self addSubview:self.accentBar];
 
-        // 规范 8.2：图标容器（用 SF Symbol，tint = accentColor）
+        // Spec 8.2: icon container (uses an SF Symbol, tint = accentColor)
         self.iconView = [[UIImageView alloc] init];
         self.iconView.translatesAutoresizingMaskIntoConstraints = NO;
         self.iconView.contentMode = UIViewContentModeScaleAspectFit;
@@ -606,20 +606,20 @@ static NSInteger const kSectionVersions    = 1;
         self.titleLabel = [[UILabel alloc] init];
         self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
         self.titleLabel.font = [UIFont systemFontOfSize:[ScreenUtils sp:16] weight:UIFontWeightBold];
-        // 规范 2.1：强制使用系统色
+        // Spec 2.1: system colors are mandatory
         self.titleLabel.textColor = [UIColor labelColor];
         [self addSubview:self.titleLabel];
 
         self.subtitleLabel = [[UILabel alloc] init];
         self.subtitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
         self.subtitleLabel.font = [UIFont systemFontOfSize:[ScreenUtils sp:11] weight:UIFontWeightRegular];
-        // 规范 2.1：副文字 secondaryLabelColor
+        // Spec 2.1: secondary text uses secondaryLabelColor
         self.subtitleLabel.textColor = [UIColor secondaryLabelColor];
         self.subtitleLabel.numberOfLines = 0;
         self.subtitleLabel.lineBreakMode = NSLineBreakByWordWrapping;
         [self addSubview:self.subtitleLabel];
 
-        // 规范 7.1：计数 pill 徽章（右上角，accentColor 浅底）
+        // Spec 7.1: count pill badge (top right, light accentColor background)
         self.countBadge = [[UILabel alloc] init];
         self.countBadge.translatesAutoresizingMaskIntoConstraints = NO;
         self.countBadge.font = [UIFont systemFontOfSize:[ScreenUtils sp:11] weight:UIFontWeightBold];
@@ -637,26 +637,26 @@ static NSInteger const kSectionVersions    = 1;
             [self.blurView.leadingAnchor constraintEqualToAnchor:self.leadingAnchor],
             [self.blurView.trailingAnchor constraintEqualToAnchor:self.trailingAnchor],
             [self.blurView.bottomAnchor constraintEqualToAnchor:self.bottomAnchor],
-            // 前导强调条：左侧 18pt，垂直居中，4pt 宽，18pt 高
+            // Leading accent bar: 18pt from the left, vertically centered, 4pt wide, 18pt tall
             [self.accentBar.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:18],
             [self.accentBar.centerYAnchor constraintEqualToAnchor:self.centerYAnchor],
             [self.accentBar.widthAnchor constraintEqualToConstant:4],
             [self.accentBar.heightAnchor constraintEqualToConstant:18],
-            // 图标：紧贴强调条右侧 8pt，垂直居中，16x16
+            // Icon: 8pt to the right of the accent bar, vertically centered, 16x16
             [self.iconView.leadingAnchor constraintEqualToAnchor:self.accentBar.trailingAnchor constant:8],
             [self.iconView.centerYAnchor constraintEqualToAnchor:self.titleLabel.centerYAnchor],
             [self.iconView.widthAnchor constraintEqualToConstant:16],
             [self.iconView.heightAnchor constraintEqualToConstant:16],
-            // 标题：图标右侧 6pt
+            // Title: 6pt to the right of the icon
             [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.iconView.trailingAnchor constant:6],
             [self.titleLabel.topAnchor constraintEqualToAnchor:self.topAnchor constant:8],
             [self.titleLabel.trailingAnchor constraintEqualToAnchor:self.countBadge.leadingAnchor constant:-8],
-            // 副标题：标题下方 2pt
+            // Subtitle: 2pt below the title
             [self.subtitleLabel.leadingAnchor constraintEqualToAnchor:self.titleLabel.leadingAnchor],
             [self.subtitleLabel.topAnchor constraintEqualToAnchor:self.titleLabel.bottomAnchor constant:2],
             [self.subtitleLabel.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-18],
             [self.subtitleLabel.bottomAnchor constraintLessThanOrEqualToAnchor:self.bottomAnchor constant:-4],
-            // 计数徽章：右侧 18pt，顶部 8pt，最小宽度 18，高度 18
+            // Count badge: 18pt from the right, 8pt from the top, minimum width 18, height 18
             [self.countBadge.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-18],
             [self.countBadge.centerYAnchor constraintEqualToAnchor:self.titleLabel.centerYAnchor],
             [self.countBadge.heightAnchor constraintEqualToConstant:18]
@@ -665,7 +665,7 @@ static NSInteger const kSectionVersions    = 1;
     return self;
 }
 
-/// 配置 Header（图标 + 标题 + 副标题 + 计数）
+/// Configure the header (icon + title + subtitle + count)
 - (void)configureWithIcon:(NSString *)iconName
                     title:(NSString *)title
                  subtitle:(NSString *)subtitle
@@ -697,14 +697,14 @@ static NSInteger const kSectionVersions    = 1;
 @property (nonatomic, strong) NSString *selectedProfile;
 @property (nonatomic, strong) NSMutableArray<NSString *> *gameDirList;
 @property (nonatomic, strong) NSString *currentGameDir;
-// 空状态视图（无版本时显示引导）
+// Empty state view (guidance shown when there are no versions)
 @property (nonatomic, strong) UIView *emptyStateView;
-// 渲染器 section 数据（启动器 native 渲染器库选择，LWJGL 层）
+// Renderer section data (the launcher's native renderer library selection, the LWJGL layer)
 @property (nonatomic, strong) NSArray<NSString *> *rendererKeys;
 @property (nonatomic, strong) NSArray<NSString *> *rendererNames;
 @property (nonatomic, strong) NSArray<NSString *> *rendererIcons;
 @property (nonatomic, strong) NSArray<NSString *> *rendererDescs;
-// 图形 API section 数据（MC 26.2+ 游戏内 OpenGL/Vulkan 切换，游戏层）
+// Graphics API section data (the in-game OpenGL/Vulkan switch of MC 26.2+, the game layer)
 @property (nonatomic, strong) NSArray<NSString *> *graphicsApiKeys;
 @property (nonatomic, strong) NSArray<NSString *> *graphicsApiNames;
 @property (nonatomic, strong) NSArray<NSString *> *graphicsApiIcons;
@@ -715,10 +715,10 @@ static NSInteger const kSectionVersions    = 1;
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    // 不设置 self.title，避免顶部导航栏出现"版本管理"标题黑条（参照 FCL 无 title 风格）
+    // self.title is deliberately not set, to avoid a black "Version management" title bar at the top (modeled on FCL's title-less style)
     self.view.backgroundColor = [UIColor clearColor];
     // Hide the navigation bar band completely (only when this is a non-modal root page and the only VC on the stack)
-    // 快捷入口（showModsManager 等）会预 push 子页面，此时 count > 1，不隐藏导航栏
+    // Shortcut entry points (such as showModsManager) pre-push a child page, so count > 1 there and the navigation bar is not hidden
     if (self.navigationController &&
         self.navigationController.viewControllers.firstObject == self &&
         self.navigationController.presentingViewController == nil &&
@@ -760,25 +760,25 @@ static NSInteger const kSectionVersions    = 1;
                                                object:nil];
 }
 
-/// FCL 风格：浮动"+"按钮放置在视图右上角，点击进入下载/新建版本页面
-/// 无论导航栏是否可见都使用浮动按钮，确保按钮在所有模式下都可访问
+/// FCL style: a floating "+" button at the top right of the view; tapping it opens the download/create version page
+/// A floating button is used whether or not the navigation bar is visible, so the button is reachable in every mode
 - (void)setupNavigationBar {
     UIButton *fab = [UIButton buttonWithType:UIButtonTypeSystem];
     UIImageSymbolConfiguration *plusConfig = [UIImageSymbolConfiguration configurationWithPointSize:18 weight:UIFontWeightBold];
     UIImage *plusImg = [UIImage systemImageNamed:@"plus" withConfiguration:plusConfig];
     [fab setImage:plusImg forState:UIControlStateNormal];
     fab.tintColor = [UIColor whiteColor];
-    // 规范 2.6：使用 accentColor() 而非 systemBlueColor
+    // Spec 2.6: use accentColor() rather than systemBlueColor
     fab.backgroundColor = accentColor();
-    // 规范 5.1：FAB 完全圆形（22pt 圆角 = 44/2）
+    // Spec 5.1: the FAB is a perfect circle (22pt corner radius = 44/2)
     fab.layer.cornerRadius = 22;
     fab.layer.cornerCurve = kCACornerCurveContinuous;
-    // 规范 5.2：FAB 阴影档（0.20, 8, (0,4)）—— 比 L2 卡片阴影更强
+    // Spec 5.2: FAB shadow tier (0.20, 8, (0,4)) - stronger than the L2 card shadow
     fab.layer.shadowColor = [UIColor blackColor].CGColor;
     fab.layer.shadowOffset = CGSizeMake(0, 4);
     fab.layer.shadowOpacity = 0.20;
     fab.layer.shadowRadius = 8;
-    // 注意：不能用 masksToBounds=YES，否则会裁掉阴影
+    // Note: masksToBounds=YES must not be used, or the shadow would be clipped away
     fab.layer.masksToBounds = NO;
     fab.translatesAutoresizingMaskIntoConstraints = NO;
     fab.accessibilityLabel = @"New version";
@@ -789,14 +789,14 @@ static NSInteger const kSectionVersions    = 1;
     [self.view bringSubviewToFront:fab];
 
     [NSLayoutConstraint activateConstraints:@[
-        // 规范 4.1：FAB 44x44（更好的触控目标，符合 iOS HIG）
+        // Spec 4.1: FAB is 44x44 (a better touch target, matching the iOS HIG)
         [fab.widthAnchor constraintEqualToConstant:44],
         [fab.heightAnchor constraintEqualToConstant:44],
         [fab.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:8],
         [fab.trailingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.trailingAnchor constant:-16],
     ]];
 
-    // 规范 15.4：FAB 进场动画（JellyBounce 果冻回弹）
+    // Spec 15.4: FAB entrance animation (JellyBounce)
     fab.transform = CGAffineTransformMakeScale(0.3, 0.3);
     [UIView animateWithDuration:0.6
                           delay:0.15
@@ -808,7 +808,7 @@ static NSInteger const kSectionVersions    = 1;
     } completion:nil];
 }
 
-/// FAB 按下：缩放反馈（规范 9.3）
+/// FAB press: scale feedback (spec 9.3)
 - (void)fabTouchDown {
     [UIView animateWithDuration:0.15 delay:0 usingSpringWithDamping:0.7 initialSpringVelocity:0.8 options:UIViewAnimationOptionAllowUserInteraction animations:^{
         UIButton *fab = [self findFabButton];
@@ -818,7 +818,7 @@ static NSInteger const kSectionVersions    = 1;
     } completion:nil];
 }
 
-/// FAB 抬起：回弹反馈
+/// FAB release: bounce-back feedback
 - (void)fabTouchUp {
     [UIView animateWithDuration:0.25 delay:0 usingSpringWithDamping:0.55 initialSpringVelocity:0.9 options:UIViewAnimationOptionAllowUserInteraction animations:^{
         UIButton *fab = [self findFabButton];
@@ -828,7 +828,7 @@ static NSInteger const kSectionVersions    = 1;
     } completion:nil];
 }
 
-/// 找到视图中的 FAB 按钮
+/// Find the FAB button in the view
 - (UIButton *)findFabButton {
     for (UIView *v in self.view.subviews) {
         if ([v isKindOfClass:[UIButton class]] && [v.accessibilityLabel isEqualToString:@"New version"]) {
@@ -838,7 +838,7 @@ static NSInteger const kSectionVersions    = 1;
     return nil;
 }
 
-/// 长按手势：游戏目录卡片弹出操作菜单（切换/删除），版本卡片弹出选择/编辑/删除
+/// Long press gesture: the game directory card shows an action menu (switch/delete) and the version card shows select/edit/delete
 - (void)setupLongPressGesture {
     UILongPressGestureRecognizer *longPress = [[UILongPressGestureRecognizer alloc]
         initWithTarget:self action:@selector(handleLongPress:)];
@@ -852,7 +852,7 @@ static NSInteger const kSectionVersions    = 1;
 
 #pragma mark - Empty State
 
-/// 创建空状态视图（无版本时显示引导，参照规范 10.1 空状态）
+/// Create the empty state view (guidance shown when there are no versions, modeled on the empty state in spec 10.1)
 - (void)setupEmptyStateView {
     self.emptyStateView = [[UIView alloc] init];
     self.emptyStateView.translatesAutoresizingMaskIntoConstraints = NO;
@@ -860,7 +860,7 @@ static NSInteger const kSectionVersions    = 1;
     [self.view addSubview:self.emptyStateView];
     [self.view bringSubviewToFront:self.emptyStateView];
 
-    // 规范 10.1：图标容器（80x80 圆形，accentColor 0.12 浅底）
+    // Spec 10.1: icon container (80x80 circle, accentColor at 0.12 as a light background)
     UIView *iconContainer = [[UIView alloc] init];
     iconContainer.translatesAutoresizingMaskIntoConstraints = NO;
     iconContainer.backgroundColor = [accentColor() colorWithAlphaComponent:0.12];
@@ -876,7 +876,7 @@ static NSInteger const kSectionVersions    = 1;
     iconView.tintColor = accentColor();
     [iconContainer addSubview:iconView];
 
-    // 规范 2.1：标题用 labelColor
+    // Spec 2.1: the title uses labelColor
     UILabel *titleLabel = [[UILabel alloc] init];
     titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     titleLabel.font = [UIFont systemFontOfSize:[ScreenUtils sp:18] weight:UIFontWeightBold];
@@ -885,7 +885,7 @@ static NSInteger const kSectionVersions    = 1;
     titleLabel.textAlignment = NSTextAlignmentCenter;
     [self.emptyStateView addSubview:titleLabel];
 
-    // 规范 2.1：副标题用 secondaryLabelColor
+    // Spec 2.1: the subtitle uses secondaryLabelColor
     UILabel *subtitleLabel = [[UILabel alloc] init];
     subtitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     subtitleLabel.font = [UIFont systemFontOfSize:[ScreenUtils sp:13] weight:UIFontWeightRegular];
@@ -895,7 +895,7 @@ static NSInteger const kSectionVersions    = 1;
     subtitleLabel.numberOfLines = 0;
     [self.emptyStateView addSubview:subtitleLabel];
 
-    // 规范 9.2：CTA 按钮（accentColor 背景 + 白字 + 圆角）
+    // Spec 9.2: CTA button (accentColor background + white text + rounded corners)
     UIButton *ctaButton = [UIButton buttonWithType:UIButtonTypeSystem];
     ctaButton.translatesAutoresizingMaskIntoConstraints = NO;
     UIImageSymbolConfiguration *btnIconConfig = [UIImageSymbolConfiguration configurationWithPointSize:14 weight:UIFontWeightBold];
@@ -918,29 +918,29 @@ static NSInteger const kSectionVersions    = 1;
     [self.emptyStateView addSubview:ctaButton];
 
     [NSLayoutConstraint activateConstraints:@[
-        // 空状态视图居中
+        // The empty state view is centered
         [self.emptyStateView.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
         [self.emptyStateView.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor],
         [self.emptyStateView.widthAnchor constraintEqualToAnchor:self.view.widthAnchor constant:-64],
-        // 图标容器：顶部对齐，居中，80x80
+        // Icon container: top aligned, centered, 80x80
         [iconContainer.topAnchor constraintEqualToAnchor:self.emptyStateView.topAnchor],
         [iconContainer.centerXAnchor constraintEqualToAnchor:self.emptyStateView.centerXAnchor],
         [iconContainer.widthAnchor constraintEqualToConstant:80],
         [iconContainer.heightAnchor constraintEqualToConstant:80],
-        // 图标居中
+        // The icon is centered
         [iconView.centerXAnchor constraintEqualToAnchor:iconContainer.centerXAnchor],
         [iconView.centerYAnchor constraintEqualToAnchor:iconContainer.centerYAnchor],
         [iconView.widthAnchor constraintEqualToConstant:36],
         [iconView.heightAnchor constraintEqualToConstant:36],
-        // 标题：图标下方 16pt
+        // Title: 16pt below the icon
         [titleLabel.topAnchor constraintEqualToAnchor:iconContainer.bottomAnchor constant:16],
         [titleLabel.leadingAnchor constraintEqualToAnchor:self.emptyStateView.leadingAnchor],
         [titleLabel.trailingAnchor constraintEqualToAnchor:self.emptyStateView.trailingAnchor],
-        // 副标题：标题下方 6pt
+        // Subtitle: 6pt below the title
         [subtitleLabel.topAnchor constraintEqualToAnchor:titleLabel.bottomAnchor constant:6],
         [subtitleLabel.leadingAnchor constraintEqualToAnchor:self.emptyStateView.leadingAnchor],
         [subtitleLabel.trailingAnchor constraintEqualToAnchor:self.emptyStateView.trailingAnchor],
-        // CTA 按钮：副标题下方 24pt
+        // CTA button: 24pt below the subtitle
         [ctaButton.topAnchor constraintEqualToAnchor:subtitleLabel.bottomAnchor constant:24],
         [ctaButton.centerXAnchor constraintEqualToAnchor:self.emptyStateView.centerXAnchor],
         [ctaButton.heightAnchor constraintEqualToConstant:44],
@@ -948,14 +948,14 @@ static NSInteger const kSectionVersions    = 1;
     ]];
 }
 
-/// 根据版本列表数量显示/隐藏空状态视图
+/// Show/hide the empty state view depending on the number of versions in the list
 - (void)updateEmptyState {
     BOOL isEmpty = (self.profileList.count == 0);
     self.emptyStateView.hidden = !isEmpty;
     self.collectionView.hidden = isEmpty;
 
     if (isEmpty) {
-        // 规范 15.4：空状态进场动画（果冻回弹 + 淡入）
+        // Spec 15.4: empty state entrance animation (jelly bounce + fade in)
         self.emptyStateView.alpha = 0;
         self.emptyStateView.transform = CGAffineTransformMakeScale(0.85, 0.85);
         [UIView animateWithDuration:0.5
@@ -977,12 +977,12 @@ static NSInteger const kSectionVersions    = 1;
     if (!indexPath) return;
 
     if (indexPath.section == kSectionGameDir) {
-        // 游戏目录区段：长按弹出切换/删除菜单（不含"新建目录"按钮项）
+        // Game directory section: long press shows the switch/delete menu (excluding the "New directory" button item)
         if (indexPath.item >= (NSInteger)self.gameDirList.count) return;
         NSString *dirName = self.gameDirList[indexPath.item];
         [self showGameDirActions:dirName];
     } else if (indexPath.section == kSectionVersions) {
-        // 版本卡片区段：长按弹出操作菜单（选择/删除）
+        // Version card section: long press shows the action menu (select/delete)
         if (indexPath.item >= (NSInteger)self.profileList.count) return;
         [self showProfileActions:self.profileList[indexPath.item]];
     }
@@ -996,7 +996,7 @@ static NSInteger const kSectionVersions    = 1;
         self.navigationController.presentingViewController == nil &&
         self.navigationController.topViewController == self) {
         self.navigationController.navigationBarHidden = YES;
-        // 规范 4.1：导航栏隐藏时，顶部 inset 需为 FAB 留出空间
+        // Spec 4.1: when the navigation bar is hidden, the top inset must leave room for the FAB
         CGFloat topInset = self.view.safeAreaInsets.top + 8 + 44 + 8;
         self.collectionView.contentInset = UIEdgeInsetsMake(topInset, 0, 24, 0);
         self.collectionView.scrollIndicatorInsets = UIEdgeInsetsMake(topInset, 0, 24, 0);
@@ -1045,13 +1045,13 @@ static NSInteger const kSectionVersions    = 1;
 
 #pragma mark - Renderer Data Setup
 
-/// 初始化渲染器选项数据（启动器 native 渲染器库选择，LWJGL 层）
-/// 参照 FCL/HMCL 的渲染器选择面板，提供 7 个选项及对应描述
-/// 注意：名称使用简短标识，不使用 getRendererNames 返回的长本地化字符串
+/// Initialize the renderer option data (the launcher's native renderer library selection, the LWJGL layer)
+/// Modeled on the renderer selection panel of FCL/HMCL, offering 7 options with matching descriptions
+/// Note: the names are short identifiers rather than the long localized strings returned by getRendererNames
 - (void)setupRendererData {
     self.rendererKeys = getRendererKeys(NO);
-    // 简短渲染器名称（不使用 getRendererNames 的长本地化字符串）
-    // 顺序必须与 getRendererKeys() 完全一致（索引配对）
+    // Short renderer names (not the long localized strings from getRendererNames)
+    // The order must match getRendererKeys() exactly (paired by index)
     self.rendererNames = @[
         @"Auto",
         @"GL4ES",
@@ -1083,14 +1083,14 @@ static NSInteger const kSectionVersions    = 1;
 
 #pragma mark - Graphics API Data Setup (MC 26.2+)
 
-/// 初始化图形 API 选项数据（MC 26.2+ 游戏内 OpenGL/Vulkan 切换，游戏层）
+/// Initialize the graphics API option data (the in-game OpenGL/Vulkan switch of MC 26.2+, the game layer)
 ///
-/// Mojang 在 MC 26.2 Snapshot 1 引入了 "Graphics API" 视频设置项，有 3 个值：
-///   - default        由 Mojang 决定（snapshot-1~7 为 Vulkan，snapshot-8+ 为 OpenGL）
-///   - prefer_vulkan  优先使用 Vulkan，失败时回退 OpenGL
-///   - prefer_opengl  优先使用 OpenGL，失败时回退 Vulkan
+/// Mojang introduced the "Graphics API" video setting in MC 26.2 Snapshot 1, with 3 values:
+///   - default        decided by Mojang (Vulkan for snapshots 1-7, OpenGL for snapshot 8+)
+///   - prefer_vulkan  prefer Vulkan, falling back to OpenGL on failure
+///   - prefer_opengl  prefer OpenGL, falling back to Vulkan on failure
 ///
-/// 注意：与渲染器（renderer）是两个不同维度
+/// Note: this is a different dimension from the renderer
 - (void)setupGraphicsApiData {
     self.graphicsApiKeys = @[@"default", @"prefer_vulkan", @"prefer_opengl"];
     self.graphicsApiNames = @[@"Default", @"Prefer Vulkan", @"Prefer OpenGL"];
@@ -1106,25 +1106,25 @@ static NSInteger const kSectionVersions    = 1;
     ];
 }
 
-/// 判断当前选中 profile 的版本是否为 MC 26.2+（即 1.21.8+ 后的新版本号方案）
-/// 26.x 系列 = 1.21.8 起的快照/正式版采用的新版本号格式
+/// Determine whether the currently selected profile's version is MC 26.2+ (i.e. the new version numbering scheme after 1.21.8)
+/// The 26.x series = the new version number format adopted by snapshots/releases from 1.21.8 onwards
 - (BOOL)isCurrentProfileModernVersion {
     if (!self.selectedProfile) return NO;
     NSDictionary *profile = PLProfiles.current.profiles[self.selectedProfile];
     NSString *versionId = profile[@"lastVersionId"];
     if (!versionId) return NO;
-    // 修复 Fabric/Quilt/Forge loader profile 的版本号识别：
-    //   原实现用 digits 字符集截取 prefix，但 fabric-loader-0.16.0-26.2 的第 0 个
-    //   字符 'f' 不是数字，prefix 截成空字符串，导致 MC 26.2+ Fabric profile
-    //   看不到"图形 API"选项。
-    //   修复：先用 ModpackExportService.parseVersionId 提取 minecraft 版本号，
-    //   再用提取后的版本号判断。也支持 forge/neoforge 形如 "26.2-forge-..."。
+    // Fix for recognizing the version number of Fabric/Quilt/Forge loader profiles:
+    //   The original implementation extracted the prefix using a digit character set, but the character at index 0
+    //   of fabric-loader-0.16.0-26.2 is 'f', which is not a digit, so the prefix was cut down to an empty string and MC 26.2+ Fabric profiles
+    //   could not see the "Graphics API" option.
+    //   The fix: extract the Minecraft version with ModpackExportService.parseVersionId first,
+    //   then test the extracted version. That also handles the forge/neoforge form "26.2-forge-...".
     NSDictionary *parsed = [ModpackExportService parseVersionId:versionId];
     NSString *mcVersion = parsed[@"minecraft"] ?: versionId;
-    // 26.x 系列
+    // The 26.x series
     if ([mcVersion hasPrefix:@"26."]) return YES;
     if ([mcVersion hasPrefix:@"26w"]) return YES;
-    // 1.21.8 及以上
+    // 1.21.8 and above
     if ([mcVersion hasPrefix:@"1.21."]) {
         NSString *minorStr = [mcVersion substringFromIndex:5];
         NSInteger minor = [minorStr integerValue];
@@ -1133,7 +1133,7 @@ static NSInteger const kSectionVersions    = 1;
     return NO;
 }
 
-/// 获取当前选中 profile 的渲染器（如未设置则回退到全局偏好）
+/// Get the renderer of the currently selected profile (falling back to the global preference if unset)
 - (NSString *)currentRendererForSelectedProfile {
     if (!self.selectedProfile) return @"auto";
     NSDictionary *profile = PLProfiles.current.profiles[self.selectedProfile];
@@ -1144,7 +1144,7 @@ static NSInteger const kSectionVersions    = 1;
     return r.length > 0 ? r : @"auto";
 }
 
-/// 获取当前选中 profile 的图形 API（MC 26.2+，如未设置则回退到全局偏好，再回退到 default）
+/// Get the graphics API of the currently selected profile (MC 26.2+; falls back to the global preference if unset, then to default)
 - (NSString *)currentGraphicsApiForSelectedProfile {
     if (!self.selectedProfile) return @"default";
     NSDictionary *profile = PLProfiles.current.profiles[self.selectedProfile];
@@ -1166,14 +1166,14 @@ static NSInteger const kSectionVersions    = 1;
     self.collectionView.delegate = self;
     self.collectionView.alwaysBounceVertical = YES;
     self.collectionView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
-    // 规范 4.1：顶部 inset 需为 FAB 留出空间（FAB 44pt + 顶部 8pt + 间距 8pt = 60pt）
-    // 避免第一个 section header 的 count badge 被 FAB 遮挡
+    // Spec 4.1: the top inset must leave room for the FAB (FAB 44pt + 8pt from the top + 8pt spacing = 60pt)
+    // This keeps the count badge of the first section header from being covered by the FAB
     CGFloat topInset;
     if (self.navigationController && self.navigationController.navigationBarHidden) {
-        // 导航栏隐藏：FAB 位于 safeAreaTop + 8，高度 44
+        // Navigation bar hidden: the FAB sits at safeAreaTop + 8, height 44
         topInset = self.view.safeAreaInsets.top + 8 + 44 + 8;
     } else {
-        // 导航栏可见：FAB 位于 navBar 底部 + 8，高度 44
+        // Navigation bar visible: the FAB sits at the bottom of the navBar + 8, height 44
         CGFloat navBarHeight = 44.0;
         if (self.navigationController && self.navigationController.navigationBar.bounds.size.height > 0) {
             navBarHeight = self.navigationController.navigationBar.bounds.size.height;
@@ -1195,21 +1195,21 @@ static NSInteger const kSectionVersions    = 1;
         CGFloat width = layoutEnvironment.container.contentSize.width;
         BOOL isiPad = width > 700;
 
-        // 规范 4.1：Header 估计高度 48pt
+        // Spec 4.1: estimated header height 48pt
         NSCollectionLayoutSize *headerSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0]
                                                                               heightDimension:[NSCollectionLayoutDimension estimatedDimension:48]];
         NSCollectionLayoutBoundarySupplementaryItem *header = [NSCollectionLayoutBoundarySupplementaryItem boundarySupplementaryItemWithLayoutSize:headerSize elementKind:UICollectionElementKindSectionHeader alignment:NSRectAlignmentTop];
         header.contentInsets = NSDirectionalEdgeInsetsMake(0, 0, 0, 0);
 
         if (sectionIndex == kSectionGameDir) {
-            // 游戏目录区段：横向滚动卡片列表
-            // 规范 4.1：卡片宽度 160pt（iPad 180pt），高度 70pt（给图标容器留呼吸空间）
+            // Game directory section: a horizontally scrolling card list
+            // Spec 4.1: card width 160pt (180pt on iPad), height 70pt (leaving breathing room for the icon container)
             CGFloat itemWidth = isiPad ? 180 : 160;
             CGFloat itemHeight = 70;
             NSCollectionLayoutSize *itemSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension absoluteDimension:itemWidth]
                                                                                        heightDimension:[NSCollectionLayoutDimension absoluteDimension:itemHeight]];
             NSCollectionLayoutItem *item = [NSCollectionLayoutItem itemWithLayoutSize:itemSize];
-            // 规范 4.1：卡片间距 8pt（上下各 4pt）
+            // Spec 4.1: card spacing 8pt (4pt above and below)
             item.contentInsets = NSDirectionalEdgeInsetsMake(4, 5, 4, 5);
 
             NSCollectionLayoutSize *groupSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension absoluteDimension:itemWidth]
@@ -1218,20 +1218,20 @@ static NSInteger const kSectionVersions    = 1;
 
             NSCollectionLayoutSection *section = [NSCollectionLayoutSection sectionWithGroup:group];
             section.orthogonalScrollingBehavior = UICollectionLayoutSectionOrthogonalScrollingBehaviorContinuous;
-            // 规范 4.1：边距 16pt，section 间距 8pt
+            // Spec 4.1: 16pt margins, 8pt between sections
             section.contentInsets = NSDirectionalEdgeInsetsMake(0, 16, 8, 16);
             section.boundarySupplementaryItems = @[header];
             return section;
         } else {
-            // 版本卡片区段：紧凑列表（iPad 双列，iPhone 单列）
-            // 规范 4.1：iPad 双列时增加列间距
+            // Version card section: a compact list (two columns on iPad, one on iPhone)
+            // Spec 4.1: increase the column spacing for the two-column iPad layout
             CGFloat itemWidth = isiPad ? 0.5 : 1.0;
-            // 规范 4.1：卡片高度 84pt（给 34pt 图标容器 + 三行文字留呼吸空间）
+            // Spec 4.1: card height 84pt (leaving breathing room for the 34pt icon container + three lines of text)
             CGFloat itemHeight = 84;
             NSCollectionLayoutSize *itemSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:itemWidth]
                                                                                        heightDimension:[NSCollectionLayoutDimension absoluteDimension:itemHeight]];
             NSCollectionLayoutItem *item = [NSCollectionLayoutItem itemWithLayoutSize:itemSize];
-            // 规范 4.1：卡片间距 8pt（上下各 4pt），左右 8pt
+            // Spec 4.1: card spacing 8pt (4pt above and below), 8pt left and right
             item.contentInsets = NSDirectionalEdgeInsetsMake(4, 8, 4, 8);
 
             NSCollectionLayoutSize *groupSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:1.0]
@@ -1239,9 +1239,9 @@ static NSInteger const kSectionVersions    = 1;
             NSCollectionLayoutGroup *group = [NSCollectionLayoutGroup horizontalGroupWithLayoutSize:groupSize subitems:@[item]];
 
             NSCollectionLayoutSection *section = [NSCollectionLayoutSection sectionWithGroup:group];
-            // 规范 4.1：列间距 8pt（iPad 双列时）
+            // Spec 4.1: column spacing 8pt (for the two-column iPad layout)
             section.interGroupSpacing = isiPad ? 8 : 0;
-            // 规范 4.1：边距 16pt，底部 24pt（留出底部呼吸空间）
+            // Spec 4.1: 16pt margins, 24pt at the bottom (leaving breathing room below)
             section.contentInsets = NSDirectionalEdgeInsetsMake(0, 16, 24, 16);
             section.boundarySupplementaryItems = @[header];
             return section;
@@ -1263,7 +1263,7 @@ static NSInteger const kSectionVersions    = 1;
     self.selectedProfile = PLProfiles.current.selectedProfileName;
 }
 
-/// 加载游戏目录（实例）列表
+/// Load the list of game directories (instances)
 - (void)loadGameDirList {
     NSMutableArray *list = [NSMutableArray array];
     [list addObject:@"default"];
@@ -1291,7 +1291,7 @@ static NSInteger const kSectionVersions    = 1;
 
 - (NSInteger)collectionView:(UICollectionView *)collectionView numberOfItemsInSection:(NSInteger)section {
     if (section == kSectionGameDir) {
-        return self.gameDirList.count + 1;  // 末尾追加"新建目录"按钮
+        return self.gameDirList.count + 1;  // A "New directory" button is appended at the end
     } else {
         return self.profileList.count;
     }
@@ -1309,7 +1309,7 @@ static NSInteger const kSectionVersions    = 1;
         NSString *dirName = self.gameDirList[indexPath.item];
         BOOL isSelected = [dirName isEqualToString:self.currentGameDir];
 
-        // 异步计算目录大小
+        // Compute the directory size asynchronously
         __weak typeof(self) weakSelf = self;
         dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
             unsigned long long folderSize = 0;
@@ -1342,7 +1342,7 @@ static NSInteger const kSectionVersions    = 1;
     }
 }
 
-/// 简易目录大小计算（递归）
+/// Simple recursive directory size calculation
 - (void)calculateFolderSizeAtPath:(NSString *)path size:(unsigned long long *)size {
     NSFileManager *fm = [NSFileManager defaultManager];
     NSDirectoryEnumerator *enumerator = [fm enumeratorAtPath:path];
@@ -1356,7 +1356,7 @@ static NSInteger const kSectionVersions    = 1;
     }
 }
 
-/// 将 lastPlayed 时间戳格式化为"最后游玩：xxx"
+/// Format the lastPlayed timestamp as "Last played: xxx"
 - (NSString *)formatLastPlayed:(id)lastPlayedRaw {
     if (!lastPlayedRaw) return @"";
     NSTimeInterval ts;
@@ -1420,7 +1420,7 @@ static NSInteger const kSectionVersions    = 1;
             }
         }
     } else if (indexPath.section == kSectionVersions) {
-        // 点击版本卡片直接进入该版本的专属设置页（FCL 风格）
+        // Tapping a version card goes straight to that version's dedicated settings page (FCL style)
         NSString *profileName = self.profileList[indexPath.item];
         [self editProfile:profileName];
     }
@@ -1428,7 +1428,7 @@ static NSInteger const kSectionVersions    = 1;
 
 #pragma mark - Game Directory Actions
 
-/// 切换游戏目录（实例），重建符号链接
+/// Switch the game directory (instance) and rebuild the symbolic links
 - (void)switchGameDirTo:(NSString *)name {
     if (getenv("DEMO_LOCK")) return;
 
@@ -1460,7 +1460,7 @@ static NSInteger const kSectionVersions    = 1;
     [self updateEmptyState];
 }
 
-/// 弹出新建游戏目录对话框
+/// Show the new game directory dialog
 - (void)showCreateGameDirAlert {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"New game directory"
                                                                    message:@"Enter a new directory name (used for version isolation)"
@@ -1496,7 +1496,7 @@ static NSInteger const kSectionVersions    = 1;
     [self switchGameDirTo:name];
 }
 
-/// 长按游戏目录卡片弹出操作菜单：切换/删除当前目录
+/// Long press on a game directory card shows the action menu: switch/delete the current directory
 - (void)showGameDirActions:(NSString *)dirName {
     BOOL isSelected = [dirName isEqualToString:self.currentGameDir];
     BOOL isDefault = [dirName isEqualToString:@"default"];
@@ -1511,7 +1511,7 @@ static NSInteger const kSectionVersions    = 1;
         }]];
     }
 
-    // 删除目录（默认目录禁止删除，正在使用的目录需要先切换才能删除）
+    // Delete the directory (the default directory cannot be deleted, and the directory in use must be switched away from before it can be deleted)
     if (!isDefault) {
         NSString *deleteTitle = isSelected ? @"Delete (switch to another directory first)" : @"Delete this directory";
         [alert addAction:[UIAlertAction actionWithTitle:deleteTitle style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
@@ -1533,7 +1533,7 @@ static NSInteger const kSectionVersions    = 1;
     [self presentViewController:alert animated:YES completion:nil];
 }
 
-/// 二次确认删除游戏目录
+/// Confirm deletion of a game directory
 - (void)confirmDeleteGameDir:(NSString *)dirName {
     UIAlertController *confirm = [UIAlertController alertControllerWithTitle:@"Confirm directory deletion"
                                                                      message:[NSString stringWithFormat:@"This will delete the directory \"%@\" and everything in it (saves, mods, configs, and so on). This cannot be undone.", dirName]
@@ -1545,7 +1545,7 @@ static NSInteger const kSectionVersions    = 1;
     [self presentViewController:confirm animated:YES completion:nil];
 }
 
-/// 删除指定游戏目录
+/// Delete the specified game directory
 - (void)deleteGameDir:(NSString *)dirName {
     if ([dirName isEqualToString:@"default"]) {
         [self showAlert:@"The default directory cannot be deleted"];
@@ -1571,7 +1571,7 @@ static NSInteger const kSectionVersions    = 1;
 
 #pragma mark - Renderer Selection (启动器 native 库选择)
 
-/// 选择渲染器并保存到当前 profile
+/// Select a renderer and save it to the current profile
 - (void)selectRendererAtIndex:(NSInteger)index {
     if (!self.selectedProfile) {
         [self showAlert:@"Select a version first"];
@@ -1582,7 +1582,7 @@ static NSInteger const kSectionVersions    = 1;
     NSString *key = self.rendererKeys[index];
     NSString *displayName = index < (NSInteger)self.rendererNames.count ? self.rendererNames[index] : key;
 
-    // 写入当前 profile 的 renderer 字段
+    // Write to the renderer field of the current profile
     NSMutableDictionary *profiles = PLProfiles.current.profiles;
     NSMutableDictionary *profile = [profiles[self.selectedProfile] mutableCopy];
     if (!profile) {
@@ -1592,7 +1592,7 @@ static NSInteger const kSectionVersions    = 1;
     profiles[self.selectedProfile] = profile;
     [PLProfiles.current save];
 
-    // 同步到全局偏好（保证启动游戏时 LauncherRightPanelViewController 能读到）
+    // Sync to the global preference (so LauncherRightPanelViewController can read it when the game launches)
     setPrefString(@"video.renderer", key);
 
     [self.collectionView reloadData];
@@ -1602,12 +1602,12 @@ static NSInteger const kSectionVersions    = 1;
 
 #pragma mark - Graphics API Selection (MC 26.2+ 游戏内 OpenGL/Vulkan)
 
-/// 选择图形 API 并保存到当前 profile
-/// 注意：graphicsApi 与 renderer 是两个不同维度：
-///   - renderer：LWJGL 加载哪个 native 库（libgl4es/libMoltenVK 等）
-///   - graphicsApi：MC 26.2+ 内部走 OpenGL 路径还是 Vulkan 路径
-/// 当用户选择 prefer_vulkan 时建议同步将 renderer 设为 libMoltenVK.dylib，
-/// 但此处不强制联动，允许高级用户分开配置。
+/// Select a graphics API and save it to the current profile
+/// Note: graphicsApi and renderer are two different dimensions:
+///   - renderer: which native library LWJGL loads (libgl4es/libMoltenVK etc.)
+///   - graphicsApi: whether MC 26.2+ internally takes the OpenGL path or the Vulkan path
+/// When the user selects prefer_vulkan it is advisable to also set renderer to libMoltenVK.dylib,
+/// but they are deliberately not linked here, so advanced users can configure them separately.
 - (void)selectGraphicsApiAtIndex:(NSInteger)index {
     if (!self.selectedProfile) {
         [self showAlert:@"Select a version first"];
@@ -1618,7 +1618,7 @@ static NSInteger const kSectionVersions    = 1;
     NSString *key = self.graphicsApiKeys[index];
     NSString *displayName = index < (NSInteger)self.graphicsApiNames.count ? self.graphicsApiNames[index] : key;
 
-    // 写入当前 profile 的 graphicsApi 字段
+    // Write to the graphicsApi field of the current profile
     NSMutableDictionary *profiles = PLProfiles.current.profiles;
     NSMutableDictionary *profile = [profiles[self.selectedProfile] mutableCopy];
     if (!profile) {
@@ -1628,7 +1628,7 @@ static NSInteger const kSectionVersions    = 1;
     profiles[self.selectedProfile] = profile;
     [PLProfiles.current save];
 
-    // 同步到全局偏好
+    // Sync to the global preference
     setPrefString(@"video.graphics_api", key);
 
     [self.collectionView reloadData];
@@ -1732,7 +1732,7 @@ static NSInteger const kSectionVersions    = 1;
 }
 
 - (void)editProfile:(NSString *)profileName {
-    // 使用 ProfileSettingsViewController（合并后的统一 Edit Profile 页面，新 UI）
+    // Use ProfileSettingsViewController (the merged, unified Edit Profile page, new UI)
     ProfileSettingsViewController *vc = [[ProfileSettingsViewController alloc] init];
     vc.profileName = profileName;
     [self.navigationController pushViewController:vc animated:YES];

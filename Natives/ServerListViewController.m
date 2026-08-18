@@ -44,7 +44,7 @@
     self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
     self.tableView.rowHeight = 88;
 
-    // 顶部源切换（放在导航栏 titleView 位置，固定每段宽度避免被系统拉伸/压缩）
+    // The source switch at the top (placed in navigationItem.titleView, with a fixed segment width so the system cannot stretch or squeeze it)
     self.sourceSegment = [[UISegmentedControl alloc] initWithItems:@[@"Modrinth", @"CurseForge"]];
     [self.sourceSegment setWidth:90 forSegmentAtIndex:0];
     [self.sourceSegment setWidth:90 forSegmentAtIndex:1];
@@ -52,7 +52,7 @@
     [self.sourceSegment addTarget:self action:@selector(sourceChanged:) forControlEvents:UIControlEventValueChanged];
     self.navigationItem.titleView = self.sourceSegment;
 
-    // 搜索控制器
+    // The search controller
     self.searchController = [[UISearchController alloc] initWithSearchResultsController:nil];
     self.searchController.searchResultsUpdater = self;
     self.searchController.obscuresBackgroundDuringPresentation = NO;
@@ -65,7 +65,7 @@
                                                                                           target:self
                                                                                           action:@selector(actionClose)];
 
-    // 加载指示器（导航栏右侧）
+    // The loading indicator (on the right of the navigation bar)
     self.loadingIndicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
     self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithCustomView:self.loadingIndicator];
 
@@ -105,7 +105,7 @@
 - (void)sourceChanged:(UISegmentedControl *)sender {
     ServerDownloadAPI newAPI = (sender.selectedSegmentIndex == 1) ? ServerDownloadAPICurseForge : ServerDownloadAPIModrinth;
 
-    // CurseForge 切换前校验 API Key
+    // Validate the API key before switching to CurseForge
     if (newAPI == ServerDownloadAPICurseForge && ![CurseForgeAPI isAPIKeyConfigured]) {
         InlineMessageView *msg = [InlineMessageView showInViewController:self
                                                                   title:@"CurseForge API key required"
@@ -113,7 +113,7 @@
                                                                   type:InlineMessageTypeInfo];
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             [msg dismiss];
-            // 恢复选择到 Modrinth
+            // Restore the selection to Modrinth
             [sender setSelectedSegmentIndex:0];
             [self openCurseForgeAPIKeySettings];
         });
@@ -226,7 +226,7 @@
         cell.contentView.backgroundColor = [UIColor clearColor];
         cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
 
-        // 毛玻璃卡片
+        // The frosted-glass card
         UIVisualEffectView *blur = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial]];
         blur.translatesAutoresizingMaskIntoConstraints = NO;
         blur.layer.cornerRadius = 12;
@@ -249,7 +249,7 @@
     cell.textLabel.text = title;
     cell.textLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
 
-    // 副标题：来源 + 项目类型 + 下载量
+    // The subtitle: source + project type + downloads
     NSString *sourceTag = (item.apiSource == ServerAPISourceCurseForge) ? @"CurseForge" : @"Modrinth";
     NSString *typeTag = item.projectType ?: @"server";
     NSString *downloads = [item formattedDownloads];
@@ -264,7 +264,7 @@
     cell.imageView.clipsToBounds = YES;
     cell.imageView.contentMode = UIViewContentModeScaleAspectFill;
 
-    // 触底加载更多
+    // Load more when the list reaches the bottom
     if (self.hasMore && indexPath.row == self.serverList.count - 1) {
         [self loadServerList];
     }

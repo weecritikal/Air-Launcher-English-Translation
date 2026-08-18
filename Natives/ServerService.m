@@ -88,7 +88,7 @@
             ServerItem *item = [[ServerItem alloc] initWithSearchData:dict];
             item.apiSource = api;
             if (item.associatedModpackID.length == 0 && [item.projectType isEqualToString:@"modpack"]) {
-                // CurseForge/Modrinth modpack 回退场景：服务器自身即整合包
+                // The CurseForge/Modrinth modpack fallback: the server is itself the modpack
                 item.associatedModpackID = item.serverID;
                 item.associatedModpackSource = api;
             }
@@ -127,7 +127,7 @@
             ServerItem *item = [[ServerItem alloc] initWithSearchData:details];
             item.apiSource = ServerDownloadAPIModrinth;
             [item applyDetailData:details];
-            // modpack 回退场景：服务器自身即整合包
+            // The modpack fallback: the server is itself the modpack
             if (item.associatedModpackID.length == 0 && [item.projectType isEqualToString:@"modpack"]) {
                 item.associatedModpackID = item.serverID;
                 item.associatedModpackSource = ServerDownloadAPIModrinth;
@@ -137,7 +137,7 @@
         return;
     }
 
-    // CurseForge：复用 modpack 详情接口，并额外尝试拉取 server pack 文件
+    // CurseForge: reuse the modpack detail endpoint and additionally try to fetch the server pack file
     NSMutableDictionary *itemDict = [@{@"id": serverID, @"projectType": @"modpack"} mutableCopy];
     [[CurseForgeAPI sharedInstance] loadDetailsOfMod:itemDict completion:^(NSError * _Nullable error) {
         if (error) {
@@ -155,7 +155,7 @@
         item.associatedModpackID = serverID;
         item.associatedModpackSource = ServerDownloadAPICurseForge;
 
-        // 进一步拉取 server pack 文件列表，填充 downloadURL
+        // Also fetch the server pack file list, to fill in downloadURL
         [[CurseForgeAPI sharedInstance] getServerPackFilesForModpack:serverID completion:^(NSArray * _Nullable files, NSError * _Nullable spError) {
             if (!spError && files.count > 0) {
                 NSDictionary *sp = files.firstObject;
@@ -182,8 +182,8 @@
         return NO;
     }
 
-    // 直接写入 profile 字典（serverIp 字段可能由另一个任务添加到 PLProfiles.h，
-    // 此处使用通用字典写入，兼容已有结构）
+    // Write into the profile dictionary directly (the serverIp field may be added to PLProfiles.h by another task,
+    // so a generic dictionary write is used here, which works with the existing structure)
     NSMutableDictionary *profiles = PLProfiles.current.profiles;
     NSMutableDictionary *prof = [profiles[profile] mutableCopy];
     if (!prof) {
@@ -209,7 +209,7 @@
         return;
     }
 
-    // 目标目录：缓存目录下的 server_packs（服务端整合包不放入 client mods 目录）
+    // The target folder: server_packs inside the cache directory (a server modpack does not go into the client mods folder)
     NSString *cacheDir = [NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES) firstObject];
     NSString *destDir = [cacheDir stringByAppendingPathComponent:@"server_packs"];
     NSFileManager *fm = [NSFileManager defaultManager];
@@ -241,7 +241,7 @@
         self.downloadProgressHandlers[task] = progress;
     }
 
-    // 注册到 DownloadTaskManager（统一进度跟踪）
+    // Register with DownloadTaskManager (for unified progress tracking)
     DownloadTaskItem *taskItem = [[DownloadTaskManager sharedManager]
         registerTaskWithResourceType:DownloadTaskResourceTypeModpack
                        resourceName:fileName

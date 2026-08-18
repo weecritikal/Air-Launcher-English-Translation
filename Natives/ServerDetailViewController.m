@@ -48,7 +48,7 @@
     [self setupUI];
     [self populateUI];
 
-    // 自动加载详情（补充服务器地址、关联整合包信息）
+    // Load the details automatically (filling in the server address and linked modpack information)
     [self loadServerDetails];
 
     // Listen for background UI effect changes so transparency is re-applied when the user switches effect (translucent/frosted)
@@ -107,7 +107,7 @@
     self.titleLabel.numberOfLines = 2;
     [content addSubview:self.titleLabel];
 
-    // 元信息（来源/类型/下载量）
+    // Meta information (source/type/downloads)
     self.metaLabel = [[UILabel alloc] init];
     self.metaLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.metaLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
@@ -115,7 +115,7 @@
     self.metaLabel.numberOfLines = 0;
     [content addSubview:self.metaLabel];
 
-    // 描述
+    // Description
     self.descTextView = [[UITextView alloc] init];
     self.descTextView.translatesAutoresizingMaskIntoConstraints = NO;
     self.descTextView.editable = NO;
@@ -126,7 +126,7 @@
     self.descTextView.textContainer.lineFragmentPadding = 0;
     [content addSubview:self.descTextView];
 
-    // 服务器地址标签
+    // The server address label
     self.addressLabel = [[UILabel alloc] init];
     self.addressLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.addressLabel.font = [UIFont fontWithName:@"Menlo" size:15] ?: [UIFont monospacedSystemFontOfSize:15 weight:UIFontWeightRegular];
@@ -134,7 +134,7 @@
     self.addressLabel.textColor = [UIColor labelColor];
     [content addSubview:self.addressLabel];
 
-    // 复制地址按钮
+    // The copy address button
     self.addressCopyButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.addressCopyButton.translatesAutoresizingMaskIntoConstraints = NO;
     [self.addressCopyButton setImage:[UIImage systemImageNamed:@"doc.on.doc"] forState:UIControlStateNormal];
@@ -143,7 +143,7 @@
     [self.addressCopyButton addTarget:self action:@selector(copyAddress) forControlEvents:UIControlEventTouchUpInside];
     [content addSubview:self.addressCopyButton];
 
-    // 加入服务器按钮
+    // The join server button
     self.joinButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.joinButton.translatesAutoresizingMaskIntoConstraints = NO;
     [self.joinButton setTitle:@"Join server" forState:UIControlStateNormal];
@@ -154,7 +154,7 @@
     [self.joinButton addTarget:self action:@selector(joinServer) forControlEvents:UIControlEventTouchUpInside];
     [content addSubview:self.joinButton];
 
-    // 下载服务端文件包按钮
+    // The download server pack button
     self.downloadPackButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.downloadPackButton.translatesAutoresizingMaskIntoConstraints = NO;
     [self.downloadPackButton setTitle:@"Download server pack" forState:UIControlStateNormal];
@@ -224,12 +224,12 @@
     NSString *addr = item.serverAddress.length ? item.serverAddress : @"(no address provided, waiting for details to load)";
     self.addressLabel.text = addr;
 
-    // 没有关联整合包时禁用下载按钮
+    // Disable the download button when there is no linked modpack
     BOOL hasModpack = (item.associatedModpackID.length > 0) || (item.serverPackDownloadURL.length > 0);
     self.downloadPackButton.enabled = hasModpack;
     self.downloadPackButton.alpha = hasModpack ? 1.0 : 0.5;
 
-    // 没有地址时禁用加入按钮
+    // Disable the join button when there is no address
     BOOL hasAddr = item.serverAddress.length > 0;
     self.joinButton.enabled = hasAddr;
     self.joinButton.alpha = hasAddr ? 1.0 : 0.5;
@@ -245,10 +245,10 @@
         if (!strongSelf) return;
         if (error || !server) {
             NSLog(@"[ServerDetail] Failed to fetch details: %@", error.localizedDescription);
-            // 详情获取失败不弹错误，保留搜索阶段已有的信息
+            // A failed detail fetch does not show an error; the information from the search stage is kept
             return;
         }
-        // 合并详情字段（不覆盖已有的标题/描述，只补充地址和整合包信息）
+        // Merge the detail fields (without overwriting the existing title/description, only filling in the address and modpack information)
         if (server.serverAddress.length > 0) {
             strongSelf.serverItem.serverAddress = server.serverAddress;
         }
@@ -316,7 +316,7 @@
 - (void)downloadServerPack {
     ServerItem *item = self.serverItem;
     if (item.serverPackDownloadURL.length == 0) {
-        // 如果有关联整合包 ID 但没有直接下载链接，提示先查看关联整合包
+        // When there is a linked modpack ID but no direct download link, point the user at the linked modpack
         if (item.associatedModpackID.length > 0) {
             NSString *msg = [NSString stringWithFormat:@"This server is linked to a modpack (ID: %@) but provides no direct server pack download link.\nSearch for that ID on the modpack download page.", item.associatedModpackID];
             self.currentMessageView = [InlineMessageView showInViewController:self

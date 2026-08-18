@@ -212,7 +212,7 @@ static inline BOOL MurmurHash2_ShouldSkipByte(uint8_t b) {
             break;
     }
 
-    // 最终混合（finalizer）
+    // The final mix (finalizer)
     h ^= (h >> 13);
     h = (h * kMurmurHash2_M) & 0xFFFFFFFFu;
     h ^= (h >> 15);

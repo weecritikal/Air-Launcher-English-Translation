@@ -1,8 +1,8 @@
 // ShaderVersionTableViewCell.m
-// 参照 FCL/ZL2 的版本列表行设计，增强视觉层次（与 ModVersionTableViewCell 统一）：
-// - 圆角卡片容器（14pt 圆角 + 浅阴影 + 半透明背景）
+// Modeled on the FCL/ZL2 version list row design for stronger visual hierarchy (consistent with ModVersionTableViewCell):
+// - Rounded card container (14pt corner radius + light shadow + translucent background)
 // - left: the version name (15pt semibold) + version number (12pt secondary)
-// - 加载器徽章行：fabric/iris/optifine 等彩色 pill 标签（参照 ZL2 LittleTextLabel）
+// - Loader badge row: colored pill labels for fabric/iris/optifine etc. (modeled on ZL2 LittleTextLabel)
 // - right: publication date + file size + game version (right-aligned vertically)
 // - a chevron showing it can be tapped to download
 //
@@ -18,7 +18,7 @@
 @property (nonatomic, strong) UIView *cardContainer;
 // Left information area (the version name row + version number + loader badge row)
 @property (nonatomic, strong) UIStackView *leftStackView;
-// 版本名行（水平：nameLabel + releaseTypeBadge）
+// Version name row (horizontal: nameLabel + releaseTypeBadge)
 @property (nonatomic, strong) UIStackView *nameRowStack;
 // Loader badge container (colored pills laid out horizontally)
 @property (nonatomic, strong) UIStackView *loaderBadgeStack;
@@ -179,7 +179,7 @@
 #pragma mark - 加载器徽章
 
 /// Build one loader badge label (pill style, colored by loader type)
-/// 光影包常见加载器：iris/optifine/vanilla，参照 ZL2 LittleTextLabel 配色
+/// Common shader pack loaders: iris/optifine/vanilla, colors modeled on ZL2 LittleTextLabel
 /// Compact variant: 16pt tall (was 18pt), 9pt font (was 10pt), 7pt radius (was 8)
 - (UILabel *)createLoaderBadge:(NSString *)loaderName {
     UILabel *badge = [[UILabel alloc] init];
@@ -283,7 +283,7 @@
         self.datePublishedLabel.text = @"Unknown date";
     }
 
-    // 文件大小（优先 primaryFile[@"size"]，其次 fileSize 属性，最后回退未知）
+    // File size (prefer primaryFile[@"size"], then the fileSize property, finally fall back to unknown)
     if (version.primaryFile && [version.primaryFile[@"size"] longValue] > 0) {
         self.fileSizeLabel.text = [NSByteCountFormatter stringFromByteCount:[version.primaryFile[@"size"] longValue] countStyle:NSByteCountFormatterCountStyleFile];
     } else if (version.fileSize && [version.fileSize longValue] > 0) {

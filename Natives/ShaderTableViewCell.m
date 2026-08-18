@@ -190,7 +190,7 @@
     _nameLabel.text = shader.displayName ?: shader.fileName;
 
     if (shader.icon) {
-        // 本地已加载的图标：直接显示，无需网络加载
+        // Icon already loaded locally: display directly, no network load needed
         [IconLoader cancelLoadingForImageView:_shaderIconView];
         _shaderIconView.image = shader.icon;
     } else if (shader.iconURL) {
@@ -224,7 +224,7 @@
 
     // Show local elements
     _openLinkButton.hidden = NO;
-    _enableSwitch.hidden = YES; // 禁用光影切换功能
+    _enableSwitch.hidden = YES; // Disable the shader toggle feature
     _shaderVersionLabel.hidden = NO;
     _gameVersionLabel.hidden = NO;
 

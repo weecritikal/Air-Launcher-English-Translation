@@ -2,11 +2,11 @@
 //  ThirdPartyLoginViewController.h
 //  Amethyst
 //
-//  参照 FCL (Fold Craft Launcher) 安卓版：
-//  LittleSkin 与自定义 Yggdrasil 第三方登录共用一个卡片式登录表单页，
-//  替代原来的 UIAlertController 双字段输入。
-//  - LittleSkin 模式：预设 authserver，仅显示用户名/密码
-//  - 自定义模式：额外提供服务器地址输入框
+//  Modeled on the Android FCL (Fold Craft Launcher):
+//  LittleSkin and custom Yggdrasil third-party logins share a single card-style login form page,
+//  replacing the original two-field UIAlertController input.
+//  - LittleSkin mode: authserver is preset, only username/password are shown
+//  - Custom mode: an additional server address input field is provided
 //
 
 #import <UIKit/UIKit.h>
@@ -14,16 +14,16 @@
 NS_ASSUME_NONNULL_BEGIN
 
 typedef NS_ENUM(NSInteger, ThirdPartyLoginMode) {
-    ThirdPartyLoginModeLittleSkin = 0, // 预设 LittleSkin 皮肤站
-    ThirdPartyLoginModeCustom,         // 任意 Yggdrasil 兼容服务器
+    ThirdPartyLoginModeLittleSkin = 0, // Preset LittleSkin skin site
+    ThirdPartyLoginModeCustom,         // Any Yggdrasil-compatible server
 };
 
 @interface ThirdPartyLoginViewController : UIViewController
 
-/// 登录模式（决定是否显示服务器地址输入框及预设 authserver）
+/// Login mode (determines whether the server address field is shown and whether authserver is preset)
 @property (nonatomic, assign) ThirdPartyLoginMode mode;
 
-/// 登录完成回调：success=YES 时调用方应 pop 当前 VC 并触发账户列表刷新
+/// Login completion callback: when success=YES the caller should pop the current VC and trigger an account list refresh
 @property (nonatomic, copy) void (^onLoginComplete)(BOOL success, NSString *_Nullable errorMessage);
 
 @end

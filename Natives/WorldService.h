@@ -2,9 +2,9 @@
 //  WorldService.h
 //  Amethyst
 //
-//  世界存档管理与下载服务，结构参照 ResourcePackService/DataPackService
+//  World save management and download service, structured after ResourcePackService/DataPackService
 //  The API consistently takes NSString *profileName
-//  扫描 saves/ 目录，下载世界 zip 后做健壮解压（检测顶层目录）
+//  Scans the saves/ directory and robustly extracts downloaded world zips (detecting a top-level directory)
 //  Uses defaultSessionConfiguration + NSURLSessionDownloadTask for better download throughput
 //
 
@@ -13,9 +13,9 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-// 世界列表回调
+// World list callback
 typedef void(^WorldListHandler)(NSArray<WorldItem *> *items);
-// 下载完成回调（success 表示是否成功，error 为失败原因）
+// Download completion callback (success indicates whether it succeeded, error carries the failure reason)
 typedef void(^WorldDownloadCompletionHandler)(BOOL success, NSError * _Nullable error);
 // Download progress callback (runs on the main thread, so UI updates are safe)
 typedef void(^WorldDownloadProgressHandler)(NSProgress * _Nullable downloadProgress);
@@ -24,23 +24,23 @@ typedef void(^WorldDownloadProgressHandler)(NSProgress * _Nullable downloadProgr
 
 + (instancetype)sharedService;
 
-// --- 本地世界管理 ---
-// 扫描指定 profile 的 saves 目录，返回每个含 level.dat 的子目录作为一个 WorldItem
+// --- Local world management ---
+// Scan the saves directory of the given profile and return each subdirectory containing a level.dat as a WorldItem
 - (void)scanWorldsForProfile:(NSString *)profileName completion:(WorldListHandler)completion;
-// 删除世界目录（递归删除）
+// Delete a world directory (recursively)
 - (BOOL)deleteWorld:(WorldItem *)item error:(NSError **)error;
 
-// --- 在线世界下载 ---
-// 下载世界 zip 到指定 profile 的 saves 目录，下载完成后自动解压（健壮解压逻辑）
-// progress 回调实时上报下载进度（不含解压阶段）
-// completion 在主线程回调，success 表示下载并解压是否成功
+// --- Online world downloads ---
+// Download a world zip into the saves directory of the given profile and extract it automatically once downloaded (robust extraction logic)
+// The progress callback reports download progress in real time (not covering the extraction phase)
+// completion is invoked on the main thread; success indicates whether downloading and extracting succeeded
 - (void)downloadWorld:(WorldItem *)item
             toProfile:(NSString *)profileName
              progress:(WorldDownloadProgressHandler _Nullable)progress
            completion:(WorldDownloadCompletionHandler _Nullable)completion;
 
-// 从本地文件 URL 导入世界 zip（如 UIDocumentPicker 选择的文件）
-// 同样做健壮解压，导入完成后可删除临时 zip
+// Import a world zip from a local file URL (such as a file chosen with UIDocumentPicker)
+// Robust extraction is used here too, and the temporary zip can be deleted once the import completes
 - (void)importWorldFromURL:(NSURL *)sourceURL
                 toProfile:(NSString *)profileName
                  progress:(WorldDownloadProgressHandler _Nullable)progress

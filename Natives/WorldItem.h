@@ -2,8 +2,8 @@
 //  WorldItem.h
 //  Amethyst
 //
-//  世界存档数据模型，参照 ShaderItem，新增 worldName、levelDatPath 等世界特有属性
-//  本地扫描 saves/ 目录下的子目录（每个含 level.dat 的子目录是一个世界）
+//  World save data model, modeled on ShaderItem, with world-specific properties such as worldName and levelDatPath added
+//  Locally scans the subdirectories of saves/ (each subdirectory containing a level.dat is one world)
 //
 
 #import <Foundation/Foundation.h>
@@ -13,19 +13,19 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface WorldItem : NSObject
 
-// --- 本地世界属性 ---
-// 世界目录名（saves/ 下的子目录名）
+// --- Local world properties ---
+// World directory name (the subdirectory name under saves/)
 @property (nonatomic, copy, nullable) NSString *worldName;
-// 世界目录完整路径（saves/<worldName>）
+// Full path of the world directory (saves/<worldName>)
 @property (nonatomic, copy, nullable) NSString *filePath;
-// level.dat 文件路径
+// Path of the level.dat file
 @property (nonatomic, copy, nullable) NSString *levelDatPath;
-// level.dat 最后修改时间（用于显示"上次游玩"）
+// Last modification time of level.dat (used to display "Last played")
 @property (nonatomic, copy, nullable) NSString *lastPlayed;
-// 世界大小（字节，递归计算目录大小）
+// World size (in bytes, computed by recursing over the directory)
 @property (nonatomic, strong, nullable) NSNumber *worldSize;
 
-// --- 在线世界属性（用于在线下载） ---
+// --- Online world properties (used for online downloads) ---
 @property (nonatomic, copy, nullable) NSString *onlineID;
 @property (nonatomic, copy, nullable) NSString *author;
 @property (nonatomic, strong, nullable) NSNumber *downloads;
@@ -46,9 +46,9 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, copy, nullable) NSString *sources;
 
 // --- Initializers ---
-// 从本地世界目录路径初始化（path 指向 saves/<worldName>）
+// Initialize from a local world directory path (path points at saves/<worldName>)
 - (instancetype)initWithFilePath:(NSString *)path;
-// 从在线搜索结果初始化
+// Initialize from an online search result
 - (instancetype)initWithOnlineData:(NSDictionary *)data;
 
 // --- Helpers ---

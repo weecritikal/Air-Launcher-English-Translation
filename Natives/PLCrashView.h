@@ -1,32 +1,32 @@
 #import <UIKit/UIKit.h>
 
-// FCL 风格重构：PLCrashView 现为 UIViewController 子类（不再是 UIView）。
-// 类名保留为 PLCrashView 以保持向后兼容（PLLogOutputView 的调用点不变）。
-// 内部采用左右分栏布局（左日志 + 右按钮）+ Auto Layout + UIStackView，
-// 参照 FCL 的崩溃界面设计。
-//   1. OOM 卡片高度被 layoutSubviews 硬编码 140 覆盖
-//   2. 窄屏左右分栏挤压（iPhone 上右栏过窄）
-//   3. layoutSubviews 反复重算导致按钮错位
+// FCL-style rework: PLCrashView is now a UIViewController subclass (no longer a UIView).
+// The class name is kept as PLCrashView for backward compatibility (the PLLogOutputView call sites are unchanged).
+// It uses a two-column layout inside (the log on the left, the buttons on the right) with Auto Layout and UIStackView,
+// following the crash screen design of FCL.
+//   1. the OOM card height was overridden by a hardcoded 140 in layoutSubviews
+//   2. the two columns were squeezed on a narrow screen (the right column was too narrow on iPhone)
+//   3. repeated recalculation in layoutSubviews misplaced the buttons
 @interface PLCrashView : UIViewController
 
-/// 显示崩溃界面并处理退出代码
-/// @param exitCode 游戏退出代码
-/// @param customTitle 自定义错误标题（可选）
-/// @param customReason 自定义错误原因（可选）
+/// Show the crash screen and handle the exit code
+/// @param exitCode The game exit code
+/// @param customTitle A custom error title (optional)
+/// @param customReason A custom error reason (optional)
 + (void)showWithExitCode:(int)exitCode customTitle:(NSString *)customTitle customReason:(NSString *)customReason;
 
-/// 显示崩溃界面（仅退出代码）
-/// @param exitCode 游戏退出代码
+/// Show the crash screen (with only an exit code)
+/// @param exitCode The game exit code
 + (void)showWithExitCode:(int)exitCode;
 
-/// 隐藏崩溃界面并返回启动器
+/// Hide the crash screen and return to the launcher
 - (void)dismissAndReturnToLauncher;
 
-/// 重启启动器（类方法，可从其他 VC 安全调用）
-/// 会清理当前崩溃界面并重启应用进程
+/// Restart the launcher (a class method, safe to call from another VC)
+/// It tears down the current crash screen and restarts the app process
 + (void)restartLauncher;
 
-/// 隐藏崩溃界面并返回启动器（类方法，可从其他 VC 安全调用）
+/// Hide the crash screen and return to the launcher (a class method, safe to call from another VC)
 + (void)dismissAndReturnToLauncher;
 
 @end

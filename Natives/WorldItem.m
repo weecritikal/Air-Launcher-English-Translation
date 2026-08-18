@@ -2,7 +2,7 @@
 //  WorldItem.m
 //  Amethyst
 //
-//  世界存档数据模型实现
+//  World save data model implementation
 //
 
 #import "WorldItem.h"
@@ -15,12 +15,12 @@
         _worldName = [[path lastPathComponent] copy];
         _displayName = [_worldName copy];
 
-        // 检测 level.dat 是否存在
+        // Check whether level.dat exists
         NSString *levelDat = [path stringByAppendingPathComponent:@"level.dat"];
         NSFileManager *fm = [NSFileManager defaultManager];
         if ([fm fileExistsAtPath:levelDat]) {
             _levelDatPath = [levelDat copy];
-            // 读取 level.dat 修改时间作为 lastPlayed
+            // Read the level.dat modification time as lastPlayed
             NSError *err = nil;
             NSDictionary *attrs = [fm attributesOfItemAtPath:levelDat error:&err];
             if (!err && attrs[NSFileModificationDate]) {
@@ -32,7 +32,7 @@
             }
         }
 
-        // 计算世界目录大小
+        // Compute the world directory size
         _worldSize = [self directorySizeAtPath:path];
     }
     return self;
@@ -40,7 +40,7 @@
 
 - (instancetype)initWithOnlineData:(NSDictionary *)data {
     if (self = [super init]) {
-        // 来自 Modrinth/CurseForge 搜索结果
+        // From Modrinth/CurseForge search results
         _onlineID = data[@"id"] ? [data[@"id"] description] : nil;
         _displayName = data[@"title"] ?: @"";
         _worldDescription = data[@"description"] ?: @"";
@@ -78,7 +78,7 @@
     return _worldName ?: _displayName ?: @"";
 }
 
-// 递归计算目录大小
+// Compute the directory size recursively
 - (NSNumber *)directorySizeAtPath:(NSString *)path {
     if (!path) return @0;
     NSFileManager *fm = [NSFileManager defaultManager];

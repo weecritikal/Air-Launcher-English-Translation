@@ -29,7 +29,7 @@ NSString *const PREF_MOD_MIRROR = @"general.mod_mirror";
             @"debug_logging": @(!CONFIG_RELEASE),
             @"news_url": @"https://air-api.vercel.app/api/announcements.php",
             @"download_source": @"bmclapi",
-            // 各资源类型独立下载源（未显式设置时回退到 modrinth）
+            // A separate download source per asset type (falling back to modrinth when unset)
             @"download_source_mod": @"modrinth",
             @"download_source_shader": @"modrinth",
             @"download_source_resourcepack": @"modrinth",
@@ -37,26 +37,26 @@ NSString *const PREF_MOD_MIRROR = @"general.mod_mirror";
             @"download_source_modpack": @"modrinth",
             @"download_source_world": @"modrinth",
             @"download_source_server": @"modrinth",
-            // CurseForge API Key：空串代表使用编译时内置的默认 key
+            // The CurseForge API key: an empty string means the compile-time default key is used
             @"curseforge_api_key": @"",
-            // Mod 更新时是否保留旧文件（默认 YES）
+            // Whether to keep the old file when updating a mod (YES by default)
             @"mod_update_keep_old": @YES,
-            // 模组镜像源：official（官方源）/ mcim（MCIM 镜像源，国内加速）
+            // The mod mirror source: official (the official source) / mcim (the MCIM mirror, faster from mainland China)
             @"mod_mirror": @"official",
-            // profile 写入的强制内存分配，0=使用 java.allocated_memory/auto_ram 逻辑
+            // The forced memory allocation written into the profile; 0 = use the java.allocated_memory/auto_ram logic
             @"ram_allocation": @(0),
-            // 首页公告磁贴预览级别：full（标题+日期+摘要）/ summary（标题+摘要）/ title_only（仅标题）
+            // The preview level of the home announcement tile: full (title + date + summary) / summary (title + summary) / title_only
             @"announcement_preview_level": @"summary",
         }.mutableCopy,
         @"video": @{ // Video & Audio
             @"renderer": @"auto",
             @"resolution": @(100),
-            // max_framerate 选项已移除：CADisplayLink 始终采用 30-120Hz 自适应范围，
-            // 由屏幕硬件能力决定实际帧率。保留 disable_game_vsync 作为唯一帧率解锁开关。
-            // 解锁帧率（关闭垂直同步）：默认开启。
-            // MC 默认 enableVsync=true，会把帧率锁在屏幕刷新率（60Hz 锁 60、120Hz ProMotion 锁 120）。
-            // 开启后启动器会在三层联动关闭 VSync：options.txt 强制 enableVsync=false、
-            // pojavSwapInterval 强制 interval=0、CAMetalLayer 三缓冲。详见各修改点注释。
+            // The max_framerate option has been removed: CADisplayLink always uses the adaptive 30-120Hz range,
+            // and the screen hardware decides the real frame rate. disable_game_vsync is kept as the only frame rate unlock switch.
+            // Unlock the frame rate (disable vertical sync): on by default.
+            // Minecraft defaults to enableVsync=true, which locks the frame rate to the refresh rate (60 on 60Hz, 120 on 120Hz ProMotion).
+            // When on, the launcher disables VSync at three layers: forcing enableVsync=false in options.txt,
+            // forcing interval=0 in pojavSwapInterval, and triple-buffering the CAMetalLayer. See the comments at each site.
             @"disable_game_vsync": @YES,
             @"performance_hud": @NO,
             @"fullscreen_airplay": @YES,
@@ -64,7 +64,7 @@ NSString *const PREF_MOD_MIRROR = @"general.mod_mirror";
             @"silence_with_switch": @NO,
             @"fix_simple_voice_chat_mod": @NO,
             @"allow_microphone": @NO,
-            // MC 26.2+ 游戏内 OpenGL/Vulkan 切换，空串=默认（由 JavaLauncher 处理）
+            // In-game OpenGL/Vulkan switching on MC 26.2+; an empty string = default (handled by JavaLauncher)
             @"graphics_api": @""
         }.mutableCopy,
         @"control": @{
@@ -91,9 +91,9 @@ NSString *const PREF_MOD_MIRROR = @"general.mod_mirror";
             @"mod_touch_vibrate_enable": @YES,
             @"mod_touch_vibrate_intensity": @2,
             @"mod_touch_moveview_enable": @YES,
-            // UI 子面板占位 key（LauncherPreferencesViewController 的 getPreference 回调
-            // 会对每个设置项按 "section.key" 查询，包括 button/childPane 类型）。
-            // 提供空串默认值避免触发 "Getter could not find preference control.custom_controls" 日志。
+            // A placeholder key for a UI sub-panel (the getPreference callback of LauncherPreferencesViewController
+            // queries every setting by "section.key", including the button/childPane types).
+            // An empty-string default avoids the "Getter could not find preference control.custom_controls" log line.
             @"custom_controls": @""
         }.mutableCopy,
         @"java": @{
@@ -112,14 +112,14 @@ NSString *const PREF_MOD_MIRROR = @"general.mod_mirror";
             @"env_variables": @"",
             @"auto_ram": @(!getEntitlementValue(@"com.apple.private.memorystatus")),
             @"allocated_memory": [NSNumber numberWithFloat:roundf((NSProcessInfo.processInfo.physicalMemory / 1048576) * 0.25)],
-            // profile 写入的强制 Java 版本，auto=根据游戏版本自动选择
+            // The forced Java version written into the profile; auto = chosen from the game version
             @"java_version": @"auto"
         }.mutableCopy,
-        // MobileGlues 渲染器偏好
-        // 当渲染器选择为 MobileGlues 或 Vulkan 时，由 init_loadMobileGluesConfig() 写入
-        // <POJAV_HOME>/MG/config.json，控制 GL 版本、ANGLE 后端、FSR 等。
-        // Vulkan 渲染器的 OpenGL 回退使用 MobileGlues（对齐 Ynnyny 仓库），设置生效。
-        // Auto 渲染器实际使用 ANGLE，不会加载 MobileGlues，这些设置不生效。
+        // MobileGlues renderer preferences
+        // When the renderer is MobileGlues or Vulkan, init_loadMobileGluesConfig() writes
+        // <POJAV_HOME>/MG/config.json, controlling the GL version, the ANGLE backend, FSR and so on.
+        // The OpenGL fallback of the Vulkan renderer is MobileGlues (aligned with the Ynnyny repo), so these settings apply.
+        // The Auto renderer really uses ANGLE and never loads MobileGlues, so these settings do not apply.
         @"mobileglues": @{
             @"enable_angle": @NO,
             @"enable_no_error": @(0),
@@ -132,9 +132,9 @@ NSString *const PREF_MOD_MIRROR = @"general.mod_mirror";
             @"custom_gl_version": @(0),
             @"fsr1_setting": @(0)
         }.mutableCopy,
-        // 游戏内覆盖层（GameMenuOverlayView）的位置持久化与开关
-        // 位置以屏幕宽高百分比存储（0.0~1.0），哨兵值 -1 表示未设置，
-        // GameMenuOverlayView 的 restorePositions 会回退到硬编码默认位置。
+        // Position persistence and the switch for the in-game overlay (GameMenuOverlayView)
+        // The position is stored as a percentage of the screen width/height (0.0~1.0), with the sentinel -1 meaning unset,
+        // in which case restorePositions in GameMenuOverlayView falls back to the hardcoded default position.
         @"game": @{
             @"menu_button_x": @(-1.0),
             @"menu_button_y": @(-1.0),
@@ -157,11 +157,11 @@ NSString *const PREF_MOD_MIRROR = @"general.mod_mirror";
             @"ui_layout": @"vs",
             @"ui_theme": @"dark",
             @"multi_threaded": @NO,
-            // 自定义外观颜色（hex 字符串，空串=使用默认深色毛玻璃/白色文字）
+            // The custom appearance colors (hex strings; an empty string = the default dark frosted glass / white text)
             @"text_color": @"",
             @"card_color": @"",
-            // 主题强调色（hex 字符串，空串=回退到默认蓝 #429CF5，见 LauncherPreferences.m accentColor()）
-            // 提供默认值避免每次访问触发 "Getter could not find preference general.accent_color" 日志
+            // The theme accent color (a hex string; an empty string = the default blue #429CF5, see accentColor() in LauncherPreferences.m)
+            // A default is provided so accessing it does not log "Getter could not find preference general.accent_color" every time
             @"accent_color": @""
         };
         [defaults[@"general"] addEntriesFromDictionary:general];
@@ -262,10 +262,10 @@ NSString *const PREF_MOD_MIRROR = @"general.mod_mirror";
             pref[section] = defaults[section];
             continue;
         }
-        // 关键修复：从 plist 加载的嵌套字典是不可变 NSDictionary（NSMutableDictionary
-        // dictionaryWithContentsOfFile: 只保证顶层可变，嵌套字典仍为 NSDictionary）。
-        // 如果不转为 NSMutableDictionary，后续 setValue:forKeyPath: 调用会抛出异常，
-        // 导致用户修改的设置无法保存（mobileglues、video 等所有 section 均受影响）。
+        // Key fix: nested dictionaries loaded from a plist are immutable NSDictionary objects (NSMutableDictionary
+        // dictionaryWithContentsOfFile: only guarantees the top level is mutable, and nested dictionaries stay NSDictionary).
+        // Without converting them to NSMutableDictionary, a later setValue:forKeyPath: throws,
+        // so the user's settings cannot be saved (affecting every section, including mobileglues and video).
         if (![pref[section] isKindOfClass:[NSMutableDictionary class]]) {
             pref[section] = [pref[section] mutableCopy];
         }
@@ -356,7 +356,7 @@ NSString *const PREF_MOD_MIRROR = @"general.mod_mirror";
     [self.instancePref writeToFile:self.instancePath atomically:YES];
 }
 
-// 下载源管理（按类型独立持久化）
+// Download source management (persisted per type)
 + (NSString *)currentDownloadSourceForType:(NSString *)type {
     NSString *key = [self downloadSourceKeyForType:type];
     NSString *source = getPrefObject(key);
@@ -379,7 +379,7 @@ NSString *const PREF_MOD_MIRROR = @"general.mod_mirror";
     return PREF_DOWNLOAD_SOURCE_MOD;
 }
 
-// CurseForge API Key（运行时配置，覆盖编译时默认值）
+// The CurseForge API key (set at runtime, overriding the compile-time default)
 + (NSString *)curseForgeAPIKey {
     return getPrefObject(PREF_CURSEFORGE_API_KEY);
 }
@@ -388,13 +388,13 @@ NSString *const PREF_MOD_MIRROR = @"general.mod_mirror";
     if (key && key.length > 0) {
         setPrefObject(PREF_CURSEFORGE_API_KEY, key);
     } else {
-        // 注意：传 nil 会被 setValue:forKeyPath: 当作 remove，导致下次再写时
-        // setObject:value: 因键不存在而静默失败。这里改写为空串以保留键。
+        // Note: passing nil makes setValue:forKeyPath: remove the key, so the next write with
+        // setObject:value: fails silently because the key does not exist. An empty string is written instead, keeping the key.
         setPrefObject(PREF_CURSEFORGE_API_KEY, @"");
     }
 }
 
-// Mod 更新旧文件保留（默认 YES）
+// Keeping the old file on a mod update (YES by default)
 + (BOOL)modUpdateKeepOld {
     NSNumber *value = getPrefObject(PREF_MOD_UPDATE_KEEP_OLD);
     return value ? value.boolValue : YES;

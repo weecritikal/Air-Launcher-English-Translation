@@ -5,7 +5,7 @@
 #import "LauncherCardLayoutViewController.h"
 #import "LauncherPreferences.h"
 #import "BackgroundManager.h"
-// Terracotta 暂时移除（排查启动崩溃）
+// Terracotta temporarily removed (while a startup crash is investigated)
 // #import "TerracottaManager.h"
 // #import "TerracottaBridge.h"
 
@@ -19,7 +19,7 @@ extern UIWindow *mainWindow;
 - (void)scene:(UIScene *)scene willConnectToSession:(UISceneSession *)session options:(UISceneConnectionOptions *)connectionOptions {
     UIWindowScene *windowScene = (UIWindowScene *)scene;
     
-    // 强制横屏 (iOS 16+)
+    // Force landscape (iOS 16+)
     if (@available(iOS 16.0, *)) {
         UIWindowSceneGeometryPreferencesIOS *geometryPreferences = [[UIWindowSceneGeometryPreferencesIOS alloc] init];
         geometryPreferences.interfaceOrientations = UIInterfaceOrientationMaskLandscape;
@@ -33,7 +33,7 @@ extern UIWindow *mainWindow;
     // Fix: use systemBackgroundColor so it adapts to light/dark mode.
     // The previously hardcoded dark gray (0.08) made the middle "a block of black" in light mode.
     // systemBackgroundColor is white in light mode and black in dark mode, adapting automatically.
-    // BackgroundManager.applyBackgroundToWindow 会根据用户是否设置自定义壁纸覆盖此颜色。
+    // BackgroundManager.applyBackgroundToWindow overrides this color when the user has set a custom wallpaper.
     if (@available(iOS 13.0, *)) {
         self.window.backgroundColor = [UIColor systemBackgroundColor];
     } else {
@@ -41,7 +41,7 @@ extern UIWindow *mainWindow;
     }
     mainWindow = self.window;
 
-    // 根据设置选择布局：默认 VS 三栏布局，可切换为卡片式便当盒布局
+    // Choose the layout from the settings: the VS three-column layout by default, switchable to the bento card layout
     NSString *layout = getPrefObject(@"general.ui_layout");
     UIViewController *rootVC;
     if ([layout isEqualToString:@"card"]) {
@@ -51,11 +51,11 @@ extern UIWindow *mainWindow;
     }
     self.window.rootViewController = rootVC;
 
-    // 外观模式（浅色/深色/跟随系统）：读 general.ui_theme 偏好。
+    // Appearance (light/dark/match system): read from the general.ui_theme preference.
     //   light  -> UIUserInterfaceStyleLight
-    //   dark   -> UIUserInterfaceStyleDark（默认，保持与原行为一致）
-    //   auto   -> UIUserInterfaceStyleUnspecified（跟随系统）
-    // iOS 13+ 支持 overrideUserInterfaceStyle。仅设置 window 级别，不触碰账号/偏好。
+    //   dark   -> UIUserInterfaceStyleDark (the default, matching the original behavior)
+    //   auto   -> UIUserInterfaceStyleUnspecified (matching the system)
+    // overrideUserInterfaceStyle is available on iOS 13+. Only the window level is set; accounts and preferences are untouched.
     if (@available(iOS 13.0, *)) {
         NSString *theme = getPrefObject(@"general.ui_theme");
         if ([theme isEqualToString:@"light"]) {
@@ -69,12 +69,12 @@ extern UIWindow *mainWindow;
 
     [self.window makeKeyAndVisible];
 
-    // 立即应用背景（移除原来的 0.1s 延迟）：
-    // 延迟会在启动时露出窗口底色形成"黑条"或"黑闪"。BackgroundManager 在其 init
-    // 中已 loadSavedBackground/loadUISettings，单例首次访问即完成初始化，无需延迟。
+    // Apply the background immediately (the old 0.1s delay has been removed):
+    // the delay exposed the window base color at startup as a "black band" or a flash. BackgroundManager already calls
+    // loadSavedBackground/loadUISettings in its init, so the singleton is fully initialized on first access and no delay is needed.
     [[BackgroundManager sharedManager] applyBackgroundToWindow:self.window];
 
-    // Terracotta 暂时移除（排查启动崩溃）
+    // Terracotta temporarily removed (while a startup crash is investigated)
     // if ([TerracottaBridge isAvailable]) {
     //     TerracottaManager *mgr = [TerracottaManager shared];
     //     NSLog(@"[SceneDelegate] Terracotta manager initialized: %d", mgr.initialized);
@@ -83,7 +83,7 @@ extern UIWindow *mainWindow;
     // }
     NSLog(@"[SceneDelegate] Terracotta temporarily disabled for crash investigation");
 
-    // 监听主题切换通知（设置页"外观模式"切换时实时应用，无需重启）
+    // Listen for the theme change notification (so switching "Appearance" in settings applies live, with no restart)
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(applyUITheme:)
                                                  name:@"UIThemeChanged"
@@ -91,8 +91,8 @@ extern UIWindow *mainWindow;
 }
 
 - (void)applyUITheme:(NSNotification *)notification {
-    // 实时切换外观模式。仅修改 window.overrideUserInterfaceStyle，
-    // 不触碰 PLPreferences 重置逻辑、不读写账号数据，确保切换主题不会导致账号退出。
+    // Switch the appearance live. Only window.overrideUserInterfaceStyle is changed;
+    // the PLPreferences reset logic is untouched and no account data is read or written, so switching theme cannot sign the user out.
     NSString *theme = notification.object ?: getPrefObject(@"general.ui_theme");
     if (@available(iOS 13.0, *)) {
         if ([theme isEqualToString:@"light"]) {

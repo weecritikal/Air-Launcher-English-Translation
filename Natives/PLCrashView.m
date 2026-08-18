@@ -11,25 +11,25 @@
 @property (nonatomic, copy) NSString *customTitle;
 @property (nonatomic, copy) NSString *customReason;
 
-// 崩溃类型分析（参照 HMCL 的崩溃分析器，提供更精确的崩溃分类和建议）
+// Crash type analysis (following the HMCL crash analyzer, for more precise classification and advice)
 typedef NS_ENUM(NSInteger, CrashType) {
-    CrashTypeNormal = 0,         // 正常退出
-    CrashTypeOOM,                // 内存不足
-    CrashTypeSegfault,           // 段错误（JNI/原生库）
-    CrashTypeAbort,              // 程序异常终止
-    CrashTypeTerminated,         // 被外部信号终止
-    CrashTypeModConflict,        // Mod 冲突
-    CrashTypeMissingLibrary,     // 缺失库文件
-    CrashTypeJavaVersionMismatch,// Java 版本不匹配
-    CrashTypeRendererError,      // 渲染器错误
-    CrashTypeModLoadingFailure,  // Mod 加载失败
-    CrashTypeJavaException,      // Java 异常
-    CrashTypeUnknown             // 未知错误
+    CrashTypeNormal = 0,         // Exited normally
+    CrashTypeOOM,                // Out of memory
+    CrashTypeSegfault,           // Segmentation fault (JNI/a native library)
+    CrashTypeAbort,              // The program aborted
+    CrashTypeTerminated,         // Terminated by an external signal
+    CrashTypeModConflict,        // A mod conflict
+    CrashTypeMissingLibrary,     // A missing library file
+    CrashTypeJavaVersionMismatch,// A Java version mismatch
+    CrashTypeRendererError,      // A renderer error
+    CrashTypeModLoadingFailure,  // A mod failed to load
+    CrashTypeJavaException,      // A Java exception
+    CrashTypeUnknown             // An unknown error
 };
 @property (nonatomic, assign) CrashType crashType;
-@property (nonatomic, strong, nullable) NSString *crashDetail; // 崩溃详情（从日志提取的关键行）
+@property (nonatomic, strong, nullable) NSString *crashDetail; // Crash details (the key lines extracted from the log)
 
-// UI 组件
+// UI components
 @property (nonatomic, strong) UIScrollView *mainScrollView;
 @property (nonatomic, strong) UIStackView *mainStackView;
 @property (nonatomic, strong) UIView *errorCardView;
@@ -38,7 +38,7 @@ typedef NS_ENUM(NSInteger, CrashType) {
 @property (nonatomic, strong) UILabel *errorCodeLabel;
 @property (nonatomic, strong) UILabel *reasonLabel;
 @property (nonatomic, strong) UILabel *oomSuggestionLabel;
-// 快速修复建议卡片（参照 FCL/HMCL 的"快速修复"面板）
+// The quick fix card (following the "quick fix" panel of FCL/HMCL)
 @property (nonatomic, strong) UIView *suggestionsCardView;
 @property (nonatomic, strong) UILabel *suggestionsTitleLabel;
 @property (nonatomic, strong) UIStackView *suggestionsStackView;
@@ -51,17 +51,17 @@ typedef NS_ENUM(NSInteger, CrashType) {
 @property (nonatomic, strong) UIButton *githubButton;
 @property (nonatomic, strong) UIButton *fullLogButton;
 @property (nonatomic, strong) UIButton *exitButton;
-// 错误卡片顶部红色 accent 条
+// The red accent bar at the top of the error card
 @property (nonatomic, strong) CAGradientLayer *accentGradientLayer;
-// 建议卡片顶部黄色 accent 条
+// The yellow accent bar at the top of the suggestion card
 @property (nonatomic, strong) CAGradientLayer *suggestionAccentLayer;
-// 日志卡片高度约束（根据屏幕高度动态调整）
+// The log card height constraint (adjusted dynamically from the screen height)
 @property (nonatomic, strong) NSLayoutConstraint *logCardHeightConstraint;
 @end
 
 @implementation PLCrashView
 
-// 当前正在显示的崩溃 VC 实例（单例）
+// The crash VC instance currently on screen (a singleton)
 static PLCrashView *currentCrashVC = nil;
 static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amethyst-iOS-MyRemastered/issues";
 
@@ -73,7 +73,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
 
 + (void)showWithExitCode:(int)exitCode customTitle:(NSString *)customTitle customReason:(NSString *)customReason {
     dispatch_async(dispatch_get_main_queue(), ^{
-        // 如果已经存在崩溃界面，先 dismiss，避免叠加
+        // If a crash screen already exists, dismiss it first so they do not stack
         if (currentCrashVC) {
             [currentCrashVC dismissViewControllerAnimated:NO completion:nil];
             currentCrashVC = nil;
@@ -98,9 +98,9 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
 
         if (!keyWindow) return;
 
-        // 找到最顶层的 presented VC 来 present 崩溃界面。
-        // 旧实现把 UIView 直接 addSubview 到 keyWindow，存在生命周期无人管理、
-        // 旋转/安全区不跟随等问题。改为 UIViewController 后由系统管理生命周期。
+        // Find the topmost presented VC to present the crash screen from.
+        // The old implementation added a UIView straight onto keyWindow, so nothing managed its lifecycle
+        // and it did not follow rotation or the safe area. As a UIViewController, the system manages its lifecycle.
         UIViewController *rootVC = keyWindow.rootViewController;
         while (rootVC.presentedViewController) {
             rootVC = rootVC.presentedViewController;
@@ -134,7 +134,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     [super viewDidLoad];
     self.view.backgroundColor = [UIColor clearColor];
     [self setupBackground];
-    // 先分析崩溃类型，setupUI 中的建议卡片依赖此结果
+    // Analyze the crash type first, since the suggestion card in setupUI depends on the result
     [self analyzeCrashType];
     [self setupUI];
     [self loadLogContent];
@@ -142,13 +142,13 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
 
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
-    // 根据屏幕高度动态调整日志卡片高度，避免小屏挤压按钮或大屏浪费空间
+    // Adjust the log card height from the screen height, so buttons are not squeezed on a small screen and space is not wasted on a large one
     [self adjustLogCardHeight];
-    // 更新错误卡片顶部红色 accent 条的 frame
+    // Update the frame of the red accent bar at the top of the error card
     if (_accentGradientLayer) {
         _accentGradientLayer.frame = CGRectMake(0, 0, _errorCardView.bounds.size.width, 2);
     }
-    // 更新建议卡片顶部黄色 accent 条的 frame
+    // Update the frame of the yellow accent bar at the top of the suggestion card
     if (_suggestionAccentLayer && _suggestionsCardView) {
         _suggestionAccentLayer.frame = CGRectMake(0, 0, _suggestionsCardView.bounds.size.width, 2);
     }
@@ -157,11 +157,11 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
 #pragma mark - Background
 
 - (void)setupBackground {
-    // 适配自定义背景壁纸：让 BackgroundManager 的全局背景透出
+    // Adapt to the custom background wallpaper: let the global background from BackgroundManager show through
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
     self.view.backgroundColor = [UIColor clearColor];
 
-    // 如果没有自定义背景，使用系统材质毛玻璃作为回退（自适应深浅色）
+    // With no custom background, fall back to a system material blur (which adapts to light/dark)
     if (![[BackgroundManager sharedManager] hasBackground]) {
         UIBlurEffect *blurEffect;
         if (@available(iOS 13.0, *)) {
@@ -187,25 +187,25 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
 
 - (void)setupUI {
     // ============================================================
-    // FCL 风格崩溃界面：左边大日志框 + 右边按钮列
+    // The FCL-style crash screen: a large log box on the left with a button column on the right
     // ============================================================
-    // 参照 FCL (FoldCraftLauncher) 的崩溃界面布局：
-    //   - 顶部：简洁的错误信息卡片（图标 + 标题 + 错误代码）
-    //   - 下方水平分栏：
-    //     - 左侧（占 65% 宽度）：大日志文本框，显示崩溃日志内容
-    //     - 右侧（占 35% 宽度）：垂直排列的按钮列
-    //       - 重启启动器（蓝色强调）
-    //       - 退出启动器（退出进程，不重启）
-    //       - 分享日志
-    //       - 前往 GitHub Issues
-    //       - 查看完整日志
+    // Following the crash screen layout of FCL (FoldCraftLauncher):
+    //   - top: a compact error card (icon + title + error code)
+    //   - below, split horizontally:
+    //     - left (about 65% of the width): a large log text box showing the crash log
+    //     - right (about 35% of the width): a vertical column of buttons
+    //       - Restart launcher (highlighted in blue)
+    //       - Quit launcher (quits the process without restarting)
+    //       - Share log
+    //       - Open GitHub Issues
+    //       - View the full log
     //
-    // 关键修复：之前"重启启动器"和"退出启动器"按钮功能相同
-    // （都是返回启动器主界面），现在明确区分：
-    //   - 重启启动器：exit(0) + openURL 拉起应用（重启整个启动器）
-    //   - 退出启动器：exit(0) 直接退出进程（不重启）
+    // Key fix: "Restart launcher" and "Quit launcher" used to do the same thing
+    // (both returned to the launcher main screen). They are now clearly different:
+    //   - Restart launcher: exit(0) + openURL to relaunch the app (restarting the whole launcher)
+    //   - Quit launcher: exit(0) to quit the process outright (without restarting)
 
-    // 主滚动视图（内容超出屏幕时可滚动）
+    // The main scroll view (scrollable when the content is taller than the screen)
     _mainScrollView = [[UIScrollView alloc] init];
     _mainScrollView.translatesAutoresizingMaskIntoConstraints = NO;
     _mainScrollView.alwaysBounceVertical = YES;
@@ -214,7 +214,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     _mainScrollView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
     [self.view addSubview:_mainScrollView];
 
-    // 主垂直 StackView（错误卡片 + 水平分栏）
+    // The main vertical StackView (the error card + the horizontal split)
     _mainStackView = [[UIStackView alloc] init];
     _mainStackView.axis = UILayoutConstraintAxisVertical;
     _mainStackView.spacing = 16;
@@ -235,17 +235,17 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
         [_mainStackView.widthAnchor constraintEqualToAnchor:_mainScrollView.frameLayoutGuide.widthAnchor],
     ]];
 
-    // StackView 左右留白
+    // Margins on each side of the StackView
     _mainStackView.layoutMargins = UIEdgeInsetsMake(16, 20, 16, 20);
     _mainStackView.layoutMarginsRelativeArrangement = YES;
 
-    // 1. 错误信息卡片（顶部）
+    // 1. The error card (at the top)
     [self setupErrorCard];
 
-    // 2. 快速修复建议卡片（可选，有建议时才显示）
+    // 2. The quick fix card (optional, shown only when there are suggestions)
     [self setupSuggestionsCard];
 
-    // 3. 水平分栏容器：左日志 + 右按钮
+    // 3. The horizontal split container: the log on the left, the buttons on the right
     UIStackView *horizontalSplit = [[UIStackView alloc] init];
     horizontalSplit.axis = UILayoutConstraintAxisHorizontal;
     horizontalSplit.spacing = 12;
@@ -254,12 +254,12 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     horizontalSplit.translatesAutoresizingMaskIntoConstraints = NO;
     [_mainStackView addArrangedSubview:horizontalSplit];
 
-    // 3a. 左侧：日志卡片
+    // 3a. Left: the log card
     [self setupLogCard];
-    // 将日志卡片添加到水平分栏的左侧
+    // Add the log card to the left of the horizontal split
     [horizontalSplit addArrangedSubview:_logCardView];
 
-    // 3b. 右侧：按钮列容器
+    // 3b. Right: the button column container
     UIStackView *buttonColumn = [[UIStackView alloc] init];
     buttonColumn.axis = UILayoutConstraintAxisVertical;
     buttonColumn.spacing = 10;
@@ -268,15 +268,15 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     buttonColumn.translatesAutoresizingMaskIntoConstraints = NO;
     [horizontalSplit addArrangedSubview:buttonColumn];
 
-    // 设置左侧日志卡片占据约 65% 宽度，右侧按钮列占据约 35%
+    // Give the log card on the left about 65% of the width and the button column on the right about 35%
     NSLayoutConstraint *logWidthConstraint = [_logCardView.widthAnchor constraintEqualToAnchor:horizontalSplit.widthAnchor multiplier:0.65];
     logWidthConstraint.priority = UILayoutPriorityDefaultHigh;
     logWidthConstraint.active = YES;
 
-    // 按钮列最小宽度（确保按钮文字不被截断）
+    // A minimum width for the button column (so the button text is not truncated)
     [buttonColumn.widthAnchor constraintGreaterThanOrEqualToConstant:140].active = YES;
 
-    // 4. 创建按钮并添加到右侧按钮列
+    // 4. Create the buttons and add them to the column on the right
     [self setupButtonsIntoContainer:buttonColumn];
 }
 
@@ -293,10 +293,10 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     _errorCardView.layer.shadowRadius = 8;
     _errorCardView.translatesAutoresizingMaskIntoConstraints = NO;
     [_mainStackView addArrangedSubview:_errorCardView];
-    // 应用毛玻璃效果（适配自定义背景壁纸）
+    // Apply the frosted-glass effect (adapting to the custom background wallpaper)
     [[BackgroundManager sharedManager] applyEffectToView:_errorCardView];
 
-    // 顶部红色 accent 条（2pt 高的渐变层，从红色到透明）
+    // The red accent bar at the top (a 2pt gradient layer, from red to transparent)
     _accentGradientLayer = [CAGradientLayer layer];
     _accentGradientLayer.colors = @[
         (__bridge id)[UIColor systemRedColor].CGColor,
@@ -309,7 +309,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     _accentGradientLayer.maskedCorners = kCALayerMinXMinYCorner | kCALayerMaxXMinYCorner;
     [_errorCardView.layer addSublayer:_accentGradientLayer];
 
-    // 错误图标
+    // Error icon
     _errorIconView = [[UIImageView alloc] init];
     _errorIconView.translatesAutoresizingMaskIntoConstraints = NO;
     if (@available(iOS 13.0, *)) {
@@ -320,7 +320,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     _errorIconView.contentMode = UIViewContentModeScaleAspectFit;
     [_errorCardView addSubview:_errorIconView];
 
-    // 错误标题
+    // Error title
     _errorTitleLabel = [[UILabel alloc] init];
     _errorTitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     _errorTitleLabel.text = _customTitle ?: localize(@"crash.error_title", nil);
@@ -330,7 +330,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     _errorTitleLabel.numberOfLines = 0;
     [_errorCardView addSubview:_errorTitleLabel];
 
-    // 错误代码
+    // Error code
     _errorCodeLabel = [[UILabel alloc] init];
     _errorCodeLabel.translatesAutoresizingMaskIntoConstraints = NO;
     _errorCodeLabel.text = [NSString stringWithFormat:@"%@%d", localize(@"crash.error_code", nil), _exitCode];
@@ -339,7 +339,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     _errorCodeLabel.textAlignment = NSTextAlignmentCenter;
     [_errorCardView addSubview:_errorCodeLabel];
 
-    // 可能原因
+    // Possible causes
     _reasonLabel = [[UILabel alloc] init];
     _reasonLabel.translatesAutoresizingMaskIntoConstraints = NO;
     _reasonLabel.text = [self crashReasonText];
@@ -349,7 +349,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     _reasonLabel.numberOfLines = 0;
     [_errorCardView addSubview:_reasonLabel];
 
-    // 通用约束（图标/标题/代码/原因）
+    // The shared constraints (icon/title/code/reason)
     NSMutableArray<NSLayoutConstraint *> *constraints = [NSMutableArray arrayWithArray:@[
         [_errorIconView.topAnchor constraintEqualToAnchor:_errorCardView.topAnchor constant:16],
         [_errorIconView.centerXAnchor constraintEqualToAnchor:_errorCardView.centerXAnchor],
@@ -369,7 +369,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
         [_reasonLabel.trailingAnchor constraintEqualToAnchor:_errorCardView.trailingAnchor constant:-16],
     ]];
 
-    // OOM 崩溃时显示建议标签，errorCardView 底部锚定到 oomSuggestionLabel 底部
+    // On an OOM crash the suggestion label is shown, so the bottom of errorCardView is anchored to the bottom of oomSuggestionLabel
     if ([self isOOMCrash]) {
         _oomSuggestionLabel = [[UILabel alloc] init];
         _oomSuggestionLabel.translatesAutoresizingMaskIntoConstraints = NO;
@@ -390,7 +390,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
             [_oomSuggestionLabel.bottomAnchor constraintEqualToAnchor:_errorCardView.bottomAnchor constant:-16],
         ]];
     } else {
-        // 非 OOM 时，errorCardView 底部直接锚定到 reasonLabel 底部
+        // Otherwise the bottom of errorCardView is anchored directly to the bottom of reasonLabel
         [constraints addObject:[_reasonLabel.bottomAnchor constraintEqualToAnchor:_errorCardView.bottomAnchor constant:-16]];
     }
 
@@ -399,22 +399,22 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
 
 #pragma mark - Suggestions Card (快速修复建议卡片)
 
-/// 创建快速修复建议卡片（参照 FCL/HMCL 的"快速修复"面板）
+/// Build the quick fix card (following the "quick fix" panel of FCL/HMCL)
 ///
-/// 根据 analyzeCrashType 分析的崩溃类型，显示对应的修复建议：
-/// - OOM: 降低内存分配、移除重量级 Mod、使用 GetMoreRam
-/// - Segfault: 切换渲染器、检查原生库兼容性
-/// - ModConflict: 移除最近添加的 Mod、检查 Mod 兼容性
-/// - MissingLibrary: 重新安装游戏版本、检查库文件
-/// - JavaVersionMismatch: 切换 Java 版本
-/// - RendererError: 切换渲染器、禁用光影
-/// - ModLoadingFailure: 检查 Mod 加载器版本、移除问题 Mod
+/// It shows the fixes matching the crash type analyzeCrashType found:
+/// - OOM: lower the memory allocation, remove heavy mods, use GetMoreRam
+/// - Segfault: switch renderer, check native library compatibility
+/// - ModConflict: remove recently added mods, check mod compatibility
+/// - MissingLibrary: reinstall the game version, check the library files
+/// - JavaVersionMismatch: switch Java version
+/// - RendererError: switch renderer, disable shaders
+/// - ModLoadingFailure: check the mod loader version, remove the problem mod
 ///
-/// 每条建议以一行带图标的文字展示，点击可复制到剪贴板。
+/// Each suggestion is one line of text with an icon, and tapping it copies it to the clipboard.
 - (void)setupSuggestionsCard {
-    // 获取当前崩溃类型的建议列表
+    // Get the suggestions for the current crash type
     NSArray<NSDictionary *> *suggestions = [self suggestionsForCrashType];
-    if (suggestions.count == 0) return; // 无建议时不显示卡片
+    if (suggestions.count == 0) return; // With no suggestions, the card is not shown
 
     _suggestionsCardView = [[UIView alloc] init];
     _suggestionsCardView.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.06];
@@ -424,10 +424,10 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     _suggestionsCardView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.10].CGColor;
     _suggestionsCardView.translatesAutoresizingMaskIntoConstraints = NO;
     [_mainStackView addArrangedSubview:_suggestionsCardView];
-    // 应用毛玻璃效果（适配自定义背景壁纸）
+    // Apply the frosted-glass effect (adapting to the custom background wallpaper)
     [[BackgroundManager sharedManager] applyEffectToView:_suggestionsCardView];
 
-    // 顶部黄色 accent 条（提示性质，非致命错误）
+    // The yellow accent bar at the top (advisory rather than fatal)
     CAGradientLayer *suggestionAccent = [CAGradientLayer layer];
     suggestionAccent.colors = @[
         (__bridge id)[UIColor systemYellowColor].CGColor,
@@ -440,9 +440,9 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     suggestionAccent.maskedCorners = kCALayerMinXMinYCorner | kCALayerMaxXMinYCorner;
     [_suggestionsCardView.layer addSublayer:suggestionAccent];
     self.suggestionAccentLayer = suggestionAccent;
-    // accent 条 frame 在 viewDidLayoutSubviews 中设置
+    // The accent bar frame is set in viewDidLayoutSubviews
 
-    // 标题行：图标 + "快速修复建议"
+    // The title row: an icon plus "Quick fixes"
     UIView *titleRow = [[UIView alloc] init];
     titleRow.translatesAutoresizingMaskIntoConstraints = NO;
     [_suggestionsCardView addSubview:titleRow];
@@ -464,7 +464,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     _suggestionsTitleLabel.textColor = [UIColor labelColor];
     [titleRow addSubview:_suggestionsTitleLabel];
 
-    // 建议列表（垂直 StackView）
+    // The suggestion list (a vertical StackView)
     _suggestionsStackView = [[UIStackView alloc] init];
     _suggestionsStackView.axis = UILayoutConstraintAxisVertical;
     _suggestionsStackView.spacing = 8;
@@ -473,7 +473,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     _suggestionsStackView.translatesAutoresizingMaskIntoConstraints = NO;
     [_suggestionsCardView addSubview:_suggestionsStackView];
 
-    // 为每条建议创建一行
+    // Build one row per suggestion
     for (NSDictionary *suggestion in suggestions) {
         NSString *icon = suggestion[@"icon"];
         NSString *text = suggestion[@"text"];
@@ -504,7 +504,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     ]];
 }
 
-/// 创建单条建议行（图标 + 文字）
+/// Build one suggestion row (an icon plus text)
 - (UIView *)createSuggestionRowWithIcon:(NSString *)iconName text:(NSString *)text {
     UIView *row = [[UIView alloc] init];
     row.translatesAutoresizingMaskIntoConstraints = NO;
@@ -542,7 +542,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     return row;
 }
 
-/// 根据崩溃类型返回对应的修复建议列表
+/// Return the list of fixes for a crash type
 - (NSArray<NSDictionary *> *)suggestionsForCrashType {
     NSMutableArray *result = [NSMutableArray array];
 
@@ -595,7 +595,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
         case CrashTypeNormal:
         case CrashTypeTerminated:
         case CrashTypeUnknown:
-            // 这些类型不显示建议卡片
+            // These types show no suggestion card
             break;
     }
 
@@ -604,32 +604,32 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
 
 #pragma mark - Crash Type Analysis (崩溃类型分析，参照 HMCL)
 
-/// 分析崩溃类型（基于 exitCode 和日志关键词）
+/// Analyze the crash type (from the exitCode and log keywords)
 ///
-/// 参照 HMCL 的崩溃分析器，通过 exitCode 和日志中的异常关键词，
-/// 将崩溃分类为 OOM/段错误/Mod 冲突/缺失库/Java 版本不匹配/渲染器错误等类型。
-/// 分析结果用于：
-/// 1. 在错误卡片中显示更精确的原因描述
-/// 2. 在建议卡片中显示对应的修复建议
+/// Following the HMCL crash analyzer, the exitCode and the exception keywords in the log
+/// classify the crash as OOM / segfault / mod conflict / missing library / Java version mismatch / renderer error and so on.
+/// The result is used to:
+/// 1. show a more precise cause on the error card
+/// 2. show the matching fixes on the suggestion card
 - (void)analyzeCrashType {
     NSString *logContent = [self readLatestLogForAnalysis];
     NSString *lowerLog = logContent.length > 0 ? [logContent lowercaseString] : @"";
 
-    // 1. 正常退出
+    // 1. Exited normally
     if (_exitCode == 0) {
         self.crashType = CrashTypeNormal;
         self.crashDetail = nil;
         return;
     }
 
-    // 2. OOM（SIGKILL 或日志含 OOM 关键词）
+    // 2. OOM (SIGKILL, or OOM keywords in the log)
     if ([self isOOMCrash]) {
         self.crashType = CrashTypeOOM;
         self.crashDetail = [self extractLineContaining:@"outofmemory" fromLog:lowerLog] ?: [self extractLineContaining:@"cannot allocate" fromLog:lowerLog];
         return;
     }
 
-    // 3. SIGSEGV 段错误
+    // 3. SIGSEGV segmentation fault
     if (_exitCode == 11) {
         self.crashType = CrashTypeSegfault;
         self.crashDetail = nil;
@@ -638,7 +638,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
 
     // 4. SIGABRT
     if (_exitCode == 6) {
-        // 检查是否为 Mod 冲突导致
+        // Check whether a mod conflict caused it
         if ([lowerLog containsString:@"nosuchmethoderror"] || [lowerLog containsString:@"classcastexception"] ||
             [lowerLog containsString:@"illegalaccessexception"] || [lowerLog containsString:@"nosuchfielderror"]) {
             self.crashType = CrashTypeModConflict;
@@ -663,8 +663,8 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
         return;
     }
 
-    // 6. 基于日志关键词分析（其他 exitCode）
-    // Mod 冲突
+    // 6. Analyze by log keywords (for other exit codes)
+    // Mod conflict
     if ([lowerLog containsString:@"nosuchmethoderror"] || [lowerLog containsString:@"classcastexception"] ||
         [lowerLog containsString:@"illegalaccessexception"] || [lowerLog containsString:@"nosuchfielderror"] ||
         [lowerLog containsString:@"duplicate mod"]) {
@@ -673,7 +673,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
         return;
     }
 
-    // 缺失库
+    // Missing library
     if ([lowerLog containsString:@"unsatisfiedlinkerror"] || [lowerLog containsString:@"noclassdeffounderror"] ||
         [lowerLog containsString:@"filenotfoundexception"] && [lowerLog containsString:@"library"]) {
         self.crashType = CrashTypeMissingLibrary;
@@ -681,14 +681,14 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
         return;
     }
 
-    // Java 版本不匹配
+    // Java version mismatch
     if ([lowerLog containsString:@"unsupportedclassversionerror"] || [lowerLog containsString:@"unsupported major.minor version"]) {
         self.crashType = CrashTypeJavaVersionMismatch;
         self.crashDetail = [self extractLineContaining:@"unsupportedclassversion" fromLog:lowerLog] ?: [self extractLineContaining:@"unsupported major" fromLog:lowerLog];
         return;
     }
 
-    // 渲染器错误
+    // Renderer error
     if ([lowerLog containsString:@"gl_invalid"] || [lowerLog containsString:@"egl_error"] ||
         [lowerLog containsString:@"opengl error"] || [lowerLog containsString:@"failed to create context"] ||
         [lowerLog containsString:@"glgeterror"] || [lowerLog containsString:@"metal:"]) {
@@ -697,7 +697,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
         return;
     }
 
-    // Mod 加载失败
+    // A mod failed to load
     if ([lowerLog containsString:@"fml"] && [lowerLog containsString:@"error"] ||
         [lowerLog containsString:@"forge"] && [lowerLog containsString:@"modloading"] ||
         [lowerLog containsString:@"fabric"] && [lowerLog containsString:@"error"] ||
@@ -707,19 +707,19 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
         return;
     }
 
-    // Java 异常
+    // A Java exception
     if ([lowerLog containsString:@"exception"] || [lowerLog containsString:@"stacktrace"]) {
         self.crashType = CrashTypeJavaException;
         self.crashDetail = [self extractLineContaining:@"exception" fromLog:lowerLog];
         return;
     }
 
-    // 兜底：未知
+    // Fallback: unknown
     self.crashType = CrashTypeUnknown;
     self.crashDetail = nil;
 }
 
-/// 从日志中提取包含指定关键词的第一行（用于崩溃详情展示）
+/// Extract the first line containing a given keyword from the log (for the crash details)
 - (NSString *)extractLineContaining:(NSString *)keyword fromLog:(NSString *)lowerLog {
     if (lowerLog.length == 0) return nil;
     NSArray *lines = [lowerLog componentsSeparatedByCharactersInSet:[NSCharacterSet newlineCharacterSet]];
@@ -740,11 +740,11 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     _logCardView.layer.borderWidth = 0.5;
     _logCardView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.10].CGColor;
     _logCardView.translatesAutoresizingMaskIntoConstraints = NO;
-    // 注意：不在此处添加到 _mainStackView，由 setupUI 中的水平分栏容器管理
-    // 应用毛玻璃效果（适配自定义背景壁纸）
+    // Note: nothing is added to _mainStackView here; the horizontal split container in setupUI owns it
+    // Apply the frosted-glass effect (adapting to the custom background wallpaper)
     [[BackgroundManager sharedManager] applyEffectToView:_logCardView];
 
-    // 日志标题
+    // Log title
     _logTitleLabel = [[UILabel alloc] init];
     _logTitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     _logTitleLabel.text = localize(@"crash.log_info", nil);
@@ -752,7 +752,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     _logTitleLabel.textColor = [UIColor labelColor];
     [_logCardView addSubview:_logTitleLabel];
 
-    // 日志文本视图（可内部滚动）
+    // The log text view (which scrolls internally)
     _logTextView = [[UITextView alloc] init];
     _logTextView.translatesAutoresizingMaskIntoConstraints = NO;
     _logTextView.backgroundColor = [UIColor clearColor];
@@ -763,7 +763,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     _logTextView.indicatorStyle = UIScrollViewIndicatorStyleWhite;
     [_logCardView addSubview:_logTextView];
 
-    // 占位符（日志为空时显示，居中放大文字）
+    // Placeholder (shown when the log is empty, with larger centered text)
     _logPlaceholderLabel = [[UILabel alloc] init];
     _logPlaceholderLabel.translatesAutoresizingMaskIntoConstraints = NO;
     _logPlaceholderLabel.text = localize(@"crash.log_info", nil);
@@ -772,7 +772,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     _logPlaceholderLabel.textAlignment = NSTextAlignmentCenter;
     [_logCardView addSubview:_logPlaceholderLabel];
 
-    // 日志卡片高度约束（初始 240，viewDidLayoutSubviews 中根据屏幕高度调整）
+    // The log card height constraint (240 initially, adjusted from the screen height in viewDidLayoutSubviews)
     self.logCardHeightConstraint = [_logCardView.heightAnchor constraintEqualToConstant:240];
     self.logCardHeightConstraint.priority = UILayoutPriorityDefaultHigh;
 
@@ -797,23 +797,23 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
 
 - (void)setupButtonsIntoContainer:(UIStackView *)container {
     // ============================================================
-    // FCL 风格按钮列（右侧垂直排列）
+    // The FCL-style button column (arranged vertically on the right)
     // ============================================================
-    // 按钮顺序（从上到下）：
-    //   1. 重启启动器（蓝色强调）— exit(0) + openURL 拉起应用
-    //   2. 退出启动器（红色）— exit(0) 直接退出进程，不重启
-    //   3. 分享日志
-    //   4. 前往 GitHub Issues
-    //   5. 查看完整日志
+    // Button order (top to bottom):
+    //   1. Restart launcher (highlighted in blue) — exit(0) + openURL to relaunch the app
+    //   2. Quit launcher (red) — exit(0) to quit the process outright, without restarting
+    //   3. Share log
+    //   4. Open GitHub Issues
+    //   5. View the full log
     //
-    // 关键修复：之前"重启启动器"和"退出启动器"功能相同
-    //   - 重启：调用 +restartLauncher（exit + relaunch）
-    //   - 退出：调用 dismissAndReturnToLauncher（仅返回启动器主界面，不退出进程）
-    // 用户反馈两个按钮效果一样（都回到启动器），不符合 FCL 行为。
-    // 现在"退出启动器"改为调用 exitLauncherAction（exit(0) 直接退出，不重启）。
+    // Key fix: "Restart launcher" and "Quit launcher" used to do the same thing
+    //   - Restart: calls +restartLauncher (exit + relaunch)
+    //   - Quit: called dismissAndReturnToLauncher (which only returned to the launcher main screen without quitting)
+    // Users reported both buttons behaving identically (both returning to the launcher), unlike FCL.
+    // "Quit launcher" now calls exitLauncherAction (exit(0) outright, with no restart).
 
-    // 1. 重启启动器按钮（蓝色强调）
-    // 参照 FCL：很多崩溃是临时加载失败（JIT/dylib/内存碎片），重启即可解决。
+    // 1. The restart launcher button (highlighted in blue)
+    // Following FCL: many crashes are transient load failures (JIT/dylib/memory fragmentation) that a restart fixes.
     _restartButton = [self createButtonWithTitle:localize(@"crash.restart_launcher", @"Restart launcher")
                                             icon:@"arrow.clockwise"
                                    backgroundColor:[UIColor colorWithRed:0.2 green:0.6 blue:0.95 alpha:1.0]
@@ -822,10 +822,10 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
                                           action:@selector(restartLauncherAction)];
     [container addArrangedSubview:_restartButton];
 
-    // 2. 退出启动器按钮（红色强调）
-    // 关键修复：之前此按钮调用 dismissAndReturnToLauncher（返回启动器主界面），
-    // 与"重启启动器"效果一样（都是回到启动器）。现在改为直接 exit(0) 退出进程，
-    // 不重启应用，与 FCL 的"退出"行为一致。
+    // 2. The quit launcher button (highlighted in red)
+    // Key fix: this button used to call dismissAndReturnToLauncher (returning to the launcher main screen),
+    // which was the same as "Restart launcher" (both returning to the launcher). It now calls exit(0) to quit the process outright,
+    // with no relaunch, matching the FCL "quit" behavior.
     _exitButton = [self createButtonWithTitle:localize(@"crash.return_launcher", @"Quit launcher")
                                          icon:@"xmark.circle.fill"
                                 backgroundColor:[UIColor colorWithRed:0.85 green:0.2 blue:0.2 alpha:1.0]
@@ -834,7 +834,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
                                        action:@selector(exitLauncherAction)];
     [container addArrangedSubview:_exitButton];
 
-    // 3. 分享日志按钮
+    // 3. The share log button
     _shareButton = [self createButtonWithTitle:localize(@"crash.share_log", @"Share log")
                                           icon:@"square.and.arrow.up"
                                  backgroundColor:[[UIColor whiteColor] colorWithAlphaComponent:0.15]
@@ -843,7 +843,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
                                         action:@selector(shareLog)];
     [container addArrangedSubview:_shareButton];
 
-    // 4. GitHub Issues 按钮
+    // 4. The GitHub Issues button
     _githubButton = [self createButtonWithTitle:localize(@"crash.github_issue", @"Open GitHub Issues")
                                            icon:@"link"
                                   backgroundColor:[[UIColor colorWithRed:0.3 green:0.5 blue:0.9 alpha:1.0] colorWithAlphaComponent:0.3]
@@ -852,7 +852,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
                                          action:@selector(openGitHubIssues)];
     [container addArrangedSubview:_githubButton];
 
-    // 5. 查看完整日志按钮（透明文字按钮）
+    // 5. The view full log button (a plain text button)
     _fullLogButton = [UIButton buttonWithType:UIButtonTypeSystem];
     _fullLogButton.translatesAutoresizingMaskIntoConstraints = NO;
     [_fullLogButton setTitle:localize(@"crash.view_log", @"View log details") forState:UIControlStateNormal];
@@ -883,7 +883,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     [button setTitle:title forState:UIControlStateNormal];
     [button addTarget:self action:action forControlEvents:UIControlEventTouchUpInside];
 
-    // 固定按钮高度
+    // A fixed button height
     [button.heightAnchor constraintEqualToConstant:48].active = YES;
 
     return button;
@@ -891,9 +891,9 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
 
 - (void)adjustLogCardHeight {
     CGFloat screenHeight = self.view.bounds.size.height;
-    // 根据屏幕高度调整日志卡片高度：
-    //   小屏幕（iPhone SE）日志区较矮，给按钮留空间
-    //   大屏幕（iPad）日志区较高，充分利用空间
+    // Adjust the log card height from the screen height:
+    //   on a small screen (iPhone SE) the log area is shorter, leaving room for the buttons
+    //   on a large screen (iPad) it is taller, making full use of the space
     CGFloat logHeight;
     if (screenHeight < 600) {
         logHeight = 160;
@@ -917,7 +917,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
         return;
     }
 
-    // 获取最后150行
+    // Get the last 150 lines
     NSArray *lines = [logContent componentsSeparatedByCharactersInSet:[NSCharacterSet newlineCharacterSet]];
     NSInteger startIndex = MAX(0, (NSInteger)lines.count - 150);
     NSMutableArray *lastLines = [NSMutableArray array];
@@ -931,7 +931,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     _logTextView.text = [lastLines componentsJoinedByString:@"\n"];
     _logPlaceholderLabel.hidden = _logTextView.text.length > 0;
 
-    // 滚动到底部
+    // Scroll to the bottom
     dispatch_async(dispatch_get_main_queue(), ^{
         [self.logTextView scrollRangeToVisible:NSMakeRange(self.logTextView.text.length, 0)];
     });
@@ -939,7 +939,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
 
 #pragma mark - Crash Analysis
 
-/// 读取 latestlog.txt 的内容（用于崩溃原因分析）
+/// Read the contents of latestlog.txt (for the crash cause analysis)
 - (NSString *)readLatestLogForAnalysis {
     static NSString *cachedLog = nil;
     static dispatch_once_t onceToken;
@@ -950,12 +950,12 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     return cachedLog;
 }
 
-/// 判断是否为 OOM（内存不足）崩溃
+/// Whether this was an OOM (out of memory) crash
 - (BOOL)isOOMCrash {
-    // SIGKILL (信号 9) 通常是系统因内存不足强制终止进程
+    // SIGKILL (signal 9) usually means the system killed the process because it ran out of memory
     if (_exitCode == 9) return YES;
 
-    // 检查日志中是否包含 OOM 相关关键词
+    // Check whether the log contains OOM-related keywords
     NSString *logContent = [self readLatestLogForAnalysis];
     if (logContent.length > 0) {
         NSString *lowerLog = [logContent lowercaseString];
@@ -975,12 +975,12 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     return NO;
 }
 
-/// 根据 analyzeCrashType 分析的崩溃类型，返回本地化的原因描述
+/// Return the localized cause description for the crash type analyzeCrashType found
 ///
-/// 参照 HMCL 的崩溃分析器，提供更精确的崩溃原因描述。
-/// 新增的崩溃类型：Mod 冲突、缺失库、Java 版本不匹配、渲染器错误、Mod 加载失败。
+/// Following the HMCL crash analyzer, for a more precise description of the cause.
+/// The crash types added: mod conflict, missing library, Java version mismatch, renderer error and mod loading failure.
 - (NSString *)crashReasonText {
-    // 优先使用自定义原因
+    // Prefer the custom reason
     if (_customReason.length > 0) {
         return [NSString stringWithFormat:@"%@%@", localize(@"crash.possible_reason", nil), _customReason];
     }
@@ -1026,7 +1026,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
             break;
     }
 
-    // 如果有崩溃详情，追加到原因后面
+    // If there are crash details, append them to the reason
     if (self.crashDetail.length > 0) {
         reason = [NSString stringWithFormat:@"%@\n%@", reason, self.crashDetail];
     }
@@ -1047,7 +1047,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
 }
 
 - (void)showFullLog {
-    // 显示完整的 PLLogOutputView
+    // Show the full PLLogOutputView
     if ([SurfaceViewController currentInstance]) {
         [[SurfaceViewController currentInstance].logOutputView actionToggleLogOutput];
     }
@@ -1060,34 +1060,34 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     }
 }
 
-/// 退出启动器：直接 exit(0) 退出进程，不重启应用。
+/// Quit the launcher: exit(0) outright, with no relaunch.
 ///
-/// 关键修复：之前"退出启动器"按钮调用 dismissAndReturnToLauncher，
-/// 该方法仅返回启动器主界面（不退出进程），与"重启启动器"按钮效果一样
-/// （都是回到启动器）。用户反馈两个按钮功能相同，不符合 FCL 行为。
+/// Key fix: the "Quit launcher" button used to call dismissAndReturnToLauncher,
+/// which only returned to the launcher main screen (without quitting), so it behaved exactly like "Restart launcher"
+/// (both returning to the launcher). Users reported the two buttons doing the same thing, unlike FCL.
 ///
-/// FCL 的行为：
-///   - 重启启动器 = exit(0) + relaunch（重新拉起应用）
-///   - 退出启动器 = exit(0)（直接退出，不重启）
+/// What FCL does:
+///   - Restart launcher = exit(0) + relaunch (bringing the app back up)
+///   - Quit launcher = exit(0) (quitting outright, with no restart)
 ///
-/// 现在此方法直接调用 exit(0) 退出进程，不进行 relaunch。
+/// This method now calls exit(0) directly, with no relaunch.
 - (void)exitLauncherAction {
     NSLog(@"[PLCrashView] User tapped exit launcher, exiting process directly");
-    // 先清理崩溃界面
+    // Tear down the crash screen first
     if (currentCrashVC) {
         [currentCrashVC dismissViewControllerAnimated:NO completion:nil];
         currentCrashVC = nil;
     }
-    // 通知 SurfaceViewController 释放游戏资源
+    // Tell SurfaceViewController to release the game resources
     if ([SurfaceViewController currentInstance]) {
         [[SurfaceViewController currentInstance].logOutputView dismissAndReturnToLauncher];
     }
-    // 直接退出进程，不重启
+    // Quit the process outright, with no restart
     exit(0);
 }
 
 - (void)dismissAndReturnToLauncher {
-    // 调用 PLLogOutputView 的返回逻辑
+    // Call the return logic of PLLogOutputView
     if ([SurfaceViewController currentInstance]) {
         [[SurfaceViewController currentInstance].logOutputView dismissAndReturnToLauncher];
     }
@@ -1097,15 +1097,15 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     }];
 }
 
-/// 重启启动器按钮的实例回调，委托给类方法 +restartLauncher
+/// The instance handler of the restart launcher button, delegating to the +restartLauncher class method
 - (void)restartLauncherAction {
     [PLCrashView restartLauncher];
 }
 
 #pragma mark - Class Methods for External Callers
 
-/// 类方法：隐藏崩溃界面并返回启动器。
-/// 供外部 VC 安全调用，避免直接对类对象 performSelector 实例方法导致的崩溃。
+/// Class method: hide the crash screen and return to the launcher.
+/// Safe for external VCs to call, avoiding the crash from performSelector-ing an instance method on the class object.
 + (void)dismissAndReturnToLauncher {
     dispatch_async(dispatch_get_main_queue(), ^{
         if (currentCrashVC) {
@@ -1116,28 +1116,28 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     });
 }
 
-/// 重启启动器：清理崩溃界面与游戏 surface，通过 exit(0) + relaunch 触发系统重启。
-/// 参照 FCL 的"重启软件"按钮：很多崩溃是临时加载失败，重启即可解决。
+/// Restart the launcher: tear down the crash screen and the game surface, then trigger a system restart with exit(0) + relaunch.
+/// Following the FCL "restart app" button: many crashes are transient load failures that a restart fixes.
 + (void)restartLauncher {
     dispatch_async(dispatch_get_main_queue(), ^{
-        // 1. 清理崩溃界面
+        // 1. Tear down the crash screen
         if (currentCrashVC) {
             [currentCrashVC dismissViewControllerAnimated:NO completion:nil];
             currentCrashVC = nil;
         }
 
-        // 2. 通知 SurfaceViewController 释放游戏资源
+        // 2. Tell SurfaceViewController to release the game resources
         if ([SurfaceViewController currentInstance]) {
             [[SurfaceViewController currentInstance].logOutputView dismissAndReturnToLauncher];
         }
 
-        // 3. 通过 NSURL relaunch 触发系统重新拉起应用（TrollStore/越狱环境支持）
-        //    若 relaunch 失败则回退到 exit(0)，系统在 10 秒内会重新唤起前台 App
+        // 3. Trigger a relaunch through an NSURL (supported on TrollStore/jailbroken setups)
+        //    If the relaunch fails it falls back to exit(0), and the system brings the foreground app back within 10 seconds
         NSString *bundlePath = [NSBundle mainBundle].bundlePath;
         NSURL *appURL = [NSURL fileURLWithPath:bundlePath];
         NSLog(@"[PLCrashView] Restarting launcher from %@", bundlePath);
 
-        // 尝试通过 openURL 拉起（需要 UIApplication.openURL，越狱/TrollStore 可用）
+        // Try to relaunch through openURL (which needs UIApplication.openURL, available on jailbroken/TrollStore setups)
         if (@available(iOS 10.0, *)) {
             [[UIApplication sharedApplication] openURL:appURL
                                                options:@{}
@@ -1145,7 +1145,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
                 if (!success) {
                     NSLog(@"[PLCrashView] openURL failed, falling back to exit(0)");
                 }
-                // 无论如何都退出当前进程，让系统重新拉起
+                // Quit the current process either way, so the system brings it back
                 exit(0);
             }];
         } else {

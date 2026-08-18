@@ -1,18 +1,18 @@
 // VersionCardCell.m
-// 参照 FCL (item_remote_version.xml) 与 ZL2 (VersionItemLayout) 的单列横向列表行设计：
-// - 左侧：类型图标容器（40x40 圆角方块，类型色背景 + 白色 SF Symbol）
-// - 中间：版本号（16pt semibold）+ 类型小标签（pill） 在同一行 / 发布日期（12pt secondary）在下一行
-// - 右侧：chevron 指示可点击
-// - 已安装标记：图标容器右上角的绿色小圆点徽章（ZL2 风格，不遮挡右侧 chevron）
-// 替代原 100x120 纵向网格卡片，信息密度更高、更接近 FCL/ZL2 视觉。
+// Modeled on the single-column horizontal list row design of FCL (item_remote_version.xml) and ZL2 (VersionItemLayout):
+// - Left: type icon container (40x40 rounded square, type-colored background + white SF Symbol)
+// - Middle: version number (16pt semibold) + small type label (pill) on one line / release date (12pt secondary) on the next
+// - Right: a chevron indicating it is tappable
+// - Installed marker: a small green dot badge at the top right of the icon container (ZL2 style, so it does not cover the chevron on the right)
+// It replaces the old 100x120 vertical grid card, with higher information density and visuals closer to FCL/ZL2.
 
 #import "VersionCardCell.h"
 #import "BackgroundManager.h"
 
-// 修复问题3：带内边距的 UILabel 子类，让"正式版/测试版"等类型标签文字
-// 在背景块内完美居中，不再与背景边缘重叠。
-// 通过重写 textRectForBounds: 和 drawTextInRect: 注入左右 8pt / 上下 0pt 内边距，
-// 同时保持 UILabel 接口不变，VersionCardCell.h 中的 typeLabel 声明无需修改。
+// Fix for problem 3: a UILabel subclass with inner padding, so that type label text such as "Release/Snapshot"
+// is perfectly centered inside the background block and no longer overlaps the background edges.
+// Overriding textRectForBounds: and drawTextInRect: injects 8pt horizontal / 0pt vertical padding
+// while keeping the UILabel interface unchanged, so the typeLabel declaration in VersionCardCell.h needs no modification.
 @interface InsetTypeLabel : UILabel
 @property (nonatomic, assign) UIEdgeInsets textInsets;
 @end
@@ -21,10 +21,10 @@
 - (instancetype)init {
     self = [super init];
     if (self) {
-        // 修复"正式版/测试版"文字变成"……"的问题：
-        // 字号从 13pt 减小到 11pt，内边距从 (3,10,3,10) 减小到 (2,6,2,6)，
-        // 让 pill 标签更紧凑，减少与 versionLabel 的空间竞争。
-        // 同时设置 adjustsFontSizeToFitWidth 确保极端情况下也不会被截断。
+        // Fix for the problem of "Release/Snapshot" text turning into "…":
+        // the font size was reduced from 13pt to 11pt and the padding from (3,10,3,10) to (2,6,2,6),
+        // making the pill label more compact and reducing its competition for space with versionLabel.
+        // adjustsFontSizeToFitWidth is also set to make sure it is never truncated even in extreme cases.
         _textInsets = UIEdgeInsetsMake(2, 6, 2, 6);
     }
     return self;
@@ -42,13 +42,13 @@
 @end
 
 @interface VersionCardCell ()
-// 容器视图：整张卡片的圆角背景（毛玻璃 + 半透明）
+// Container view: the rounded background of the whole card (frosted glass + translucent)
 @property (nonatomic, strong) UIView *cardContainer;
-// 左侧类型图标容器（带圆角与类型色背景）
+// Left type icon container (with rounded corners and a type-colored background)
 @property (nonatomic, strong) UIView *iconContainer;
-// 顶行水平 stack：装 versionLabel + typeLabel，自动处理间距与裁剪
+// Top row horizontal stack: holds versionLabel + typeLabel, handling spacing and clipping automatically
 @property (nonatomic, strong) UIStackView *topRowStack;
-// 右侧 chevron 指示
+// Chevron indicator on the right
 @property (nonatomic, strong) UIImageView *chevronView;
 @end
 
@@ -57,21 +57,21 @@
 - (instancetype)initWithFrame:(CGRect)frame {
     self = [super initWithFrame:frame];
     if (self) {
-        // 外层 cell 透明，由 cardContainer 提供视觉
+        // The outer cell is transparent; cardContainer provides the visuals
         self.backgroundColor = [UIColor clearColor];
         self.contentView.backgroundColor = [UIColor clearColor];
         self.layer.masksToBounds = NO;
 
-        // ----- 卡片容器：圆角 + 背景 + 浅阴影（与 VMTileBaseCell 阴影标准一致）-----
+        // ----- Card container: rounded corners + background + light shadow (matching the VMTileBaseCell shadow standard) -----
         //
-        // 关键修复（卡片过于透明）：
-        // 之前使用硬编码的白色 8% alpha 半透明背景，在更换某些自定义背景壁纸后
-        // 卡片几乎不可见，文字与背景对比度极低，严重影响可读性。
-        // 现在通过 BackgroundManager.applyEffectToView: 应用与启动器其他卡片
-        // （如 Mod/光影资源卡片、版本管理磁贴）一致的效果：
-        //   - 毛玻璃模式：插入 UIBlurEffect（SystemThinMaterial），自适应深浅色
-        //   - 半透明模式：使用 secondarySystemBackgroundColor + 用户自定义透明度
-        // 这样卡片背景会随用户的背景设置自适应，不再过于透明。
+        // Key fix (card too transparent):
+        // A hardcoded white 8% alpha translucent background used to be used, which made the card almost invisible
+        // after switching to certain custom background wallpapers, leaving extremely low text/background contrast and badly hurting readability.
+        // Now BackgroundManager.applyEffectToView: applies the same effect as the launcher's other cards
+        // (such as mod/shader resource cards and version management tiles):
+        //   - Frosted glass mode: insert a UIBlurEffect (SystemThinMaterial), adapting to light/dark mode
+        //   - Translucent mode: use secondarySystemBackgroundColor + the user's custom opacity
+        // This way the card background adapts to the user's background settings and is no longer too transparent.
         self.cardContainer = [[UIView alloc] init];
         self.cardContainer.translatesAutoresizingMaskIntoConstraints = NO;
         self.cardContainer.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.08];
@@ -85,10 +85,10 @@
         self.cardContainer.layer.shadowRadius = 4;
         [self.contentView addSubview:self.cardContainer];
 
-        // 应用 BackgroundManager 效果（毛玻璃/半透明自适应），解决过于透明的问题
+        // Apply the BackgroundManager effect (frosted glass/translucent, adaptive), fixing the too-transparent problem
         [[BackgroundManager sharedManager] applyEffectToView:self.cardContainer];
 
-        // ----- 左侧图标容器：40x40 圆角方块，类型色背景 -----
+        // ----- Left icon container: 40x40 rounded square with a type-colored background -----
         self.iconContainer = [[UIView alloc] init];
         self.iconContainer.translatesAutoresizingMaskIntoConstraints = NO;
         self.iconContainer.layer.cornerRadius = 10;
@@ -97,7 +97,7 @@
         self.iconContainer.backgroundColor = [UIColor systemGreenColor];
         [self.cardContainer addSubview:self.iconContainer];
 
-        // 图标本体：白色 SF Symbol，居中
+        // The icon itself: a white SF Symbol, centered
         self.iconImageView = [[UIImageView alloc] init];
         self.iconImageView.translatesAutoresizingMaskIntoConstraints = NO;
         self.iconImageView.contentMode = UIViewContentModeScaleAspectFit;
@@ -105,7 +105,7 @@
         self.iconImageView.image = [UIImage systemImageNamed:@"cube.fill"];
         [self.iconContainer addSubview:self.iconImageView];
 
-        // ----- 版本号 -----
+        // ----- Version number -----
         self.versionLabel = [[UILabel alloc] init];
         self.versionLabel.translatesAutoresizingMaskIntoConstraints = NO;
         self.versionLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
@@ -113,15 +113,15 @@
         self.versionLabel.adjustsFontSizeToFitWidth = YES;
         self.versionLabel.minimumScaleFactor = 0.7;
         self.versionLabel.lineBreakMode = NSLineBreakByTruncatingTail;
-        // 版本号 hugging 高（不主动拉伸），compression 低（空间不足时优先被压缩→触发字号缩小）
+        // The version number has high hugging (does not stretch on its own) and low compression resistance (it is compressed first when space runs out → triggering the font size reduction)
         [self.versionLabel setContentHuggingPriority:UILayoutPriorityDefaultHigh forAxis:UILayoutConstraintAxisHorizontal];
         [self.versionLabel setContentCompressionResistancePriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
 
-        // ----- 类型标签（pill 样式，修复"正式版/测试版"文字变"……"的问题） -----
-        // 字号从 13pt 减小到 11pt，内边距从 (3,10,3,10) 减小到 (2,6,2,6)，
-        // cornerRadius 从 10 减小到 8，让 pill 更紧凑。
-        // 设置 adjustsFontSizeToFitWidth + minimumScaleFactor=0.8 作为兜底，
-        // 确保任何情况下文字都不会被截断成"……"。
+        // ----- Type label (pill style, fixing the problem of "Release/Snapshot" text turning into "…") -----
+        // the font size was reduced from 13pt to 11pt and the padding from (3,10,3,10) to (2,6,2,6),
+        // cornerRadius was reduced from 10 to 8 to make the pill more compact.
+        // adjustsFontSizeToFitWidth + minimumScaleFactor=0.8 are set as a fallback,
+        // making sure the text is never truncated to "…" under any circumstances.
         self.typeLabel = [[InsetTypeLabel alloc] init];
         self.typeLabel.translatesAutoresizingMaskIntoConstraints = NO;
         self.typeLabel.font = [UIFont systemFontOfSize:11 weight:UIFontWeightBold];
@@ -133,14 +133,14 @@
         self.typeLabel.layer.cornerRadius = 8;
         self.typeLabel.layer.cornerCurve = kCACornerCurveContinuous;
         self.typeLabel.layer.masksToBounds = YES;
-        // 类型标签 hugging 高、compression 也高（保持完整 pill 形状，不被压缩）
+        // The type label has both high hugging and high compression resistance (keeping the full pill shape uncompressed)
         [self.typeLabel setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
         [self.typeLabel setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
 
-        // ----- 顶行 stack：版本号 + 类型标签 水平排列 -----
-        // 修复"位置不对"问题：alignment 从 FirstBaseline 改为 Center，
-        // 避免 InsetTypeLabel 上下内边距导致 typeLabel 视觉偏移。
-        // distribution 改为 Fill 使 versionLabel 优先被压缩，typeLabel 保持完整。
+        // ----- Top row stack: version number + type label laid out horizontally -----
+        // Fix for the "wrong position" problem: alignment changed from FirstBaseline to Center,
+        // avoiding the visual offset of typeLabel caused by InsetTypeLabel's vertical padding.
+        // distribution changed to Fill so that versionLabel is compressed first while typeLabel stays intact.
         self.topRowStack = [[UIStackView alloc] initWithArrangedSubviews:@[self.versionLabel, self.typeLabel]];
         self.topRowStack.translatesAutoresizingMaskIntoConstraints = NO;
         self.topRowStack.axis = UILayoutConstraintAxisHorizontal;
@@ -149,7 +149,7 @@
         self.topRowStack.spacing = 8;
         [self.cardContainer addSubview:self.topRowStack];
 
-        // ----- 日期 -----
+        // ----- Date -----
         self.dateLabel = [[UILabel alloc] init];
         self.dateLabel.translatesAutoresizingMaskIntoConstraints = NO;
         self.dateLabel.font = [UIFont systemFontOfSize:12];
@@ -159,19 +159,19 @@
         self.dateLabel.lineBreakMode = NSLineBreakByTruncatingTail;
         [self.cardContainer addSubview:self.dateLabel];
 
-        // ----- 右侧 chevron：提示可点击进入加载器选择 -----
+        // ----- Chevron on the right: hints that tapping enters loader selection -----
         self.chevronView = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:@"chevron.right"]];
         self.chevronView.translatesAutoresizingMaskIntoConstraints = NO;
         self.chevronView.tintColor = [UIColor tertiaryLabelColor];
         self.chevronView.contentMode = UIViewContentModeScaleAspectFit;
-        // chevron 固定尺寸，不被拉伸
+        // The chevron has a fixed size and is not stretched
         [self.chevronView setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
         [self.chevronView setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
         [self.cardContainer addSubview:self.chevronView];
 
-        // ----- 已安装徽章：图标容器右上角的绿色小圆点（ZL2 风格）-----
-        // 不再用大块绿色 ✓ 占据卡片右上角，改用 14pt 小圆点贴在 iconContainer 右上角，
-        // 既保留"已安装"指示，又不遮挡右侧 chevron 与版本号。
+        // ----- Installed badge: a small green dot at the top right of the icon container (ZL2 style) -----
+        // Instead of a large green ✓ occupying the top-right corner of the card, a 14pt dot is placed at the top right of iconContainer,
+        // which keeps the "installed" indication without covering the chevron and the version number on the right.
         self.installedBadge = [[UIView alloc] init];
         self.installedBadge.translatesAutoresizingMaskIntoConstraints = NO;
         self.installedBadge.backgroundColor = [UIColor systemGreenColor];
@@ -182,7 +182,7 @@
         self.installedBadge.hidden = YES;
         [self.cardContainer addSubview:self.installedBadge];
 
-        // 内部小 ✓（白色，居中）
+        // The small ✓ inside (white, centered)
         UIImageView *checkmark = [[UIImageView alloc] init];
         checkmark.translatesAutoresizingMaskIntoConstraints = NO;
         checkmark.image = [UIImage systemImageNamed:@"checkmark"
@@ -190,45 +190,45 @@
         checkmark.tintColor = [UIColor whiteColor];
         [self.installedBadge addSubview:checkmark];
 
-        // ----- 布局约束 -----
+        // ----- Layout constraints -----
         [NSLayoutConstraint activateConstraints:@[
-            // cardContainer 充满 contentView（留 0 外边距，间距由 collection layout 的 sectionInset 控制）
+            // cardContainer fills contentView (0 outer margin; spacing is controlled by the collection layout's sectionInset)
             [self.cardContainer.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:4],
             [self.cardContainer.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:0],
             [self.cardContainer.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:0],
             [self.cardContainer.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-4],
 
-            // 图标容器：左 14，垂直居中，40x40
+            // Icon container: 14 from the left, vertically centered, 40x40
             [self.iconContainer.leadingAnchor constraintEqualToAnchor:self.cardContainer.leadingAnchor constant:14],
             [self.iconContainer.centerYAnchor constraintEqualToAnchor:self.cardContainer.centerYAnchor],
             [self.iconContainer.widthAnchor constraintEqualToConstant:40],
             [self.iconContainer.heightAnchor constraintEqualToConstant:40],
 
-            // 图标在容器内居中，22x22
+            // The icon is centered in the container, 22x22
             [self.iconImageView.centerXAnchor constraintEqualToAnchor:self.iconContainer.centerXAnchor],
             [self.iconImageView.centerYAnchor constraintEqualToAnchor:self.iconContainer.centerYAnchor],
             [self.iconImageView.widthAnchor constraintEqualToConstant:22],
             [self.iconImageView.heightAnchor constraintEqualToConstant:22],
 
-            // 顶行 stack：紧跟图标容器右侧 +14，顶部对齐 cardContainer 顶部 +14
-            // 右侧到 chevron 之间留 8pt，stack 内部自动分配 versionLabel/typeLabel 宽度
+            // Top row stack: +14 to the right of the icon container, top aligned to the top of cardContainer +14
+            // 8pt of room is left between it and the chevron on the right; the stack distributes the versionLabel/typeLabel widths automatically
             [self.topRowStack.leadingAnchor constraintEqualToAnchor:self.iconContainer.trailingAnchor constant:14],
             [self.topRowStack.topAnchor constraintEqualToAnchor:self.cardContainer.topAnchor constant:14],
             [self.topRowStack.trailingAnchor constraintEqualToAnchor:self.chevronView.leadingAnchor constant:-8],
 
-            // 日期：与顶行 stack 左对齐，紧跟顶行下方 +3
+            // Date: left aligned with the top row stack, +3 below it
             [self.dateLabel.leadingAnchor constraintEqualToAnchor:self.topRowStack.leadingAnchor],
             [self.dateLabel.topAnchor constraintEqualToAnchor:self.topRowStack.bottomAnchor constant:3],
             [self.dateLabel.trailingAnchor constraintEqualToAnchor:self.topRowStack.trailingAnchor],
             [self.dateLabel.bottomAnchor constraintLessThanOrEqualToAnchor:self.cardContainer.bottomAnchor constant:-12],
 
-            // chevron：右侧 -14，垂直居中，14x14
+            // chevron: -14 from the right, vertically centered, 14x14
             [self.chevronView.trailingAnchor constraintEqualToAnchor:self.cardContainer.trailingAnchor constant:-14],
             [self.chevronView.centerYAnchor constraintEqualToAnchor:self.cardContainer.centerYAnchor],
             [self.chevronView.widthAnchor constraintEqualToConstant:14],
             [self.chevronView.heightAnchor constraintEqualToConstant:14],
 
-            // 已安装徽章：贴在 iconContainer 右上角，14x14
+            // Installed badge: attached to the top right of iconContainer, 14x14
             [self.installedBadge.topAnchor constraintEqualToAnchor:self.iconContainer.topAnchor constant:-4],
             [self.installedBadge.trailingAnchor constraintEqualToAnchor:self.iconContainer.trailingAnchor constant:4],
             [self.installedBadge.widthAnchor constraintEqualToConstant:14],
@@ -246,11 +246,11 @@
     self.versionLabel.text = versionId;
     self.dateLabel.text = date;
 
-    // 类型 → 图标 + 配色映射（参照 ZL2 的 VersionIconPreview 按版本类型切换图标）：
-    // release → cube.fill + systemGreen（稳定版）
-    // snapshot → hammer.fill + systemOrange（测试版/开发中）
-    // old_alpha → clock.fill + systemPurple（远古 alpha）
-    // old_beta  → clock.fill + systemPurple（远古 beta）
+    // Type → icon + color mapping (modeled on ZL2's VersionIconPreview, which switches the icon by version type):
+    // release → cube.fill + systemGreen (stable release)
+    // snapshot → hammer.fill + systemOrange (snapshot/in development)
+    // old_alpha → clock.fill + systemPurple (ancient alpha)
+    // old_beta  → clock.fill + systemPurple (ancient beta)
     NSString *iconName = @"cube.fill";
     UIColor *typeColor = [UIColor systemGreenColor];
     NSString *typeText = @"Release";
@@ -272,7 +272,7 @@
         typeColor = [UIColor systemPurpleColor];
         typeText = @"Beta";
     } else {
-        // 兜底：远古版（合并 old_alpha + old_beta 时使用）
+        // Fallback: ancient versions (used when old_alpha and old_beta are merged)
         iconName = @"clock.fill";
         typeColor = [UIColor systemPurpleColor];
         typeText = @"Ancient";
@@ -284,24 +284,24 @@
     }
     self.iconImageView.tintColor = [UIColor whiteColor];
 
-    // 修复问题4：使用 HMCL 仓库自带的标准草方块图标（grass.png/grass@2x.png），
-    // 已导入 Assets.xcassets 的 VanillaIcon 图片集，与 FCL/ZL2/HMCL 等主流启动器视觉完全一致。
-    // 图标铺满容器（AspectFill），背景透明以保留草方块纹理本色。
+    // Fix for problem 4: use the standard grass block icon shipped with the HMCL repository (grass.png/grass@2x.png),
+    // which has been imported into the VanillaIcon image set in Assets.xcassets, matching mainstream launchers such as FCL/ZL2/HMCL exactly.
+    // The icon fills the container (AspectFill) and the background is transparent to preserve the grass block texture's own colors.
     UIImage *vanillaIcon = [UIImage imageNamed:@"VanillaIcon"];
     if (vanillaIcon) {
         self.iconImageView.image = vanillaIcon;
         self.iconImageView.contentMode = UIViewContentModeScaleAspectFill;
-        self.iconImageView.tintColor = nil; // 取消着色，显示草方块原色
-        // 草方块图标自带色彩，图标容器背景设为透明
+        self.iconImageView.tintColor = nil; // Remove the tint so the grass block's original colors show
+        // The grass block icon has its own colors, so the icon container background is set to transparent
         self.iconContainer.backgroundColor = [UIColor clearColor];
     } else {
-        // 兜底：图片集加载失败时回退 SF Symbol + 类型色背景
+        // Fallback: revert to the SF Symbol + type-colored background if the image set fails to load
         self.iconImageView.contentMode = UIViewContentModeScaleAspectFit;
         self.iconImageView.tintColor = [UIColor whiteColor];
         self.iconContainer.backgroundColor = [typeColor colorWithAlphaComponent:0.85];
     }
 
-    // 类型标签：类型色背景 + 白字
+    // Type label: type-colored background + white text
     self.typeLabel.text = typeText;
     self.typeLabel.backgroundColor = typeColor;
 }
@@ -312,7 +312,7 @@
 
 - (void)prepareForReuse {
     [super prepareForReuse];
-    // 重置为 SF Symbol 默认状态（configureWithVersionId 会再次加载 VanillaIcon 覆盖）
+    // Reset to the SF Symbol default state (configureWithVersionId will load VanillaIcon again and override it)
     self.iconImageView.image = [UIImage systemImageNamed:@"cube.fill"];
     self.iconImageView.tintColor = [UIColor whiteColor];
     self.iconImageView.contentMode = UIViewContentModeScaleAspectFit;

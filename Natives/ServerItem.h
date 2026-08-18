@@ -2,10 +2,10 @@
 //  ServerItem.h
 //  Amethyst
 //
-//  服务器项目数据模型，参照 ModItem 的设计：
-//  既可以承载 Modrinth Server Projects（project_type=server），
-//  也可以承载 CurseForge modpack 的 server pack 信息。
-//  当 Modrinth Server Projects API 不可用时，回退使用 modpack 搜索结果。
+//  The server project model, following the design of ModItem:
+//  it can carry either Modrinth server projects (project_type=server)
+//  or the server pack information of a CurseForge modpack.
+//  When the Modrinth server projects API is unavailable, it falls back to modpack search results.
 //
 
 #import <Foundation/Foundation.h>
@@ -13,66 +13,66 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-/// 服务器项目来源 API
+/// The source API of a server project
 typedef NS_ENUM(NSInteger, ServerAPISource) {
-    ServerAPISourceModrinth = 1, // Modrinth（project_type=server 或 modpack）
-    ServerAPISourceCurseForge = 2, // CurseForge（modpack 的 server pack）
+    ServerAPISourceModrinth = 1, // Modrinth (project_type=server or modpack)
+    ServerAPISourceCurseForge = 2, // CurseForge (the server pack of a modpack)
 };
 
 @interface ServerItem : NSObject
 
-/// 服务器项目 ID（Modrinth project_id 或 CurseForge project id 字符串）
+/// The server project ID (a Modrinth project_id or a CurseForge project id as a string)
 @property (nonatomic, copy, nullable) NSString *serverID;
-/// 显示名称
+/// The display name
 @property (nonatomic, copy, nullable) NSString *title;
-/// 简介/描述
+/// The summary/description
 @property (nonatomic, copy, nullable) NSString *serverDescription;
-/// 图标 URL
+/// The icon URL
 @property (nonatomic, copy, nullable) NSString *iconURL;
-/// 图标（缓存后的 UIImage）
+/// The icon (the cached UIImage)
 @property (nonatomic, strong, nullable) UIImage *icon;
-/// 下载数
+/// The download count
 @property (nonatomic, strong, nullable) NSNumber *downloads;
-/// 关注/点赞数
+/// The follow/like count
 @property (nonatomic, strong, nullable) NSNumber *likes;
-/// 最后更新时间
+/// The last updated time
 @property (nonatomic, copy, nullable) NSString *lastUpdated;
-/// 项目类型（"server" 或 "modpack"）
+/// The project type ("server" or "modpack")
 @property (nonatomic, copy, nullable) NSString *projectType;
-/// 来源 API
+/// The source API
 @property (nonatomic, assign) ServerAPISource apiSource;
 /// Author
 @property (nonatomic, copy, nullable) NSString *author;
-/// 分类标签
+/// The category tags
 @property (nonatomic, strong, nullable) NSArray<NSString *> *categories;
 
-/// 服务器地址（IP/域名:端口），从项目详情或描述中解析得到，可能为空
+/// The server address (IP/domain:port), parsed from the project details or description; it may be empty
 @property (nonatomic, copy, nullable) NSString *serverAddress;
-/// 关联的整合包 ID（若该服务器关联了 modpack，则记录其 project ID）
+/// The linked modpack ID (the project ID, when the server is linked to a modpack)
 @property (nonatomic, copy, nullable) NSString *associatedModpackID;
-/// 关联整合包的来源 API（与 associatedModpackID 配套，1=Modrinth, 2=CurseForge）
+/// The source API of the linked modpack (paired with associatedModpackID; 1=Modrinth, 2=CurseForge)
 @property (nonatomic, assign) ServerAPISource associatedModpackSource;
 
-/// 详情页所需：服务器关联整合包的下载 URL（如果有可直接下载的服务端整合包文件）
+/// For the detail page: the download URL of the server's linked modpack (when a server modpack file can be downloaded directly)
 @property (nonatomic, copy, nullable) NSString *serverPackDownloadURL;
-/// 详情页所需：服务端整合包文件名
+/// For the detail page: the server modpack file name
 @property (nonatomic, copy, nullable) NSString *serverPackFileName;
-/// 详情页所需：服务端整合包文件大小（字节）
+/// For the detail page: the server modpack file size (bytes)
 @property (nonatomic, strong, nullable) NSNumber *serverPackFileSize;
 
-/// 项目主页 URL
+/// The project home page URL
 @property (nonatomic, copy, nullable) NSString *homepage;
 
-/// 通过 API 返回的字典构造（统一适配 Modrinth 与 CurseForge 字段）
+/// Build from the dictionary the API returns (handling both the Modrinth and CurseForge fields)
 - (instancetype)initWithSearchData:(NSDictionary *)data;
 
-/// 通过详情 API 返回的字典补充字段（地址、关联整合包等）
+/// Fill in the extra fields from the detail API response (the address, the linked modpack and so on)
 - (void)applyDetailData:(NSDictionary *)data;
 
-/// 格式化的下载数（如 1.2k）
+/// The formatted download count (such as 1.2k)
 - (NSString *)formattedDownloads;
 
-/// 格式化的点赞数
+/// The formatted like count
 - (NSString *)formattedLikes;
 
 @end

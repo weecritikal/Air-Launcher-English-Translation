@@ -6,25 +6,25 @@
 #import "BackgroundManager.h"
 #import "MultiplayerViewController.h"
 
-/// FCL 风格的陶瓦联机界面（完美适配自定义启动器背景）
+/// FCL style Terracotta multiplayer screen (fully adapted to the custom launcher background)
 ///
-/// 布局参考 FoldCraftLauncher 的 multiplayer 模块：
-/// - 顶部：状态卡片（圆形状态图标 + 状态文字 + 阶段描述 + 邀请码/直连地址）
-/// - 中部：UISegmentedControl 切换「创建房间」/「加入房间」
-/// - 创建房间面板：端口输入框 + 大按钮
-/// - 加入房间面板：邀请码输入框 + 大按钮
-/// - 会话进行中：显示「断开连接」按钮 + 玩家列表
+/// The layout is modeled on the multiplayer module of FoldCraftLauncher:
+/// - Top: status card (round status icon + status text + stage description + invite code/direct connect address)
+/// - Middle: a UISegmentedControl to switch between "Create room" and "Join room"
+/// - Create room panel: port input field + large button
+/// - Join room panel: invite code input field + large button
+/// - Session in progress: shows a "Disconnect" button + the player list
 ///
-/// 状态监听通过 TerracottaManagerStateDidChangeNotification 通知刷新 UI。
+/// State observation refreshes the UI through the TerracottaManagerStateDidChangeNotification notification.
 ///
-/// 背景适配（参照 MultiplayerViewController）：
-/// - viewDidLoad/viewWillAppear 调 makeViewControllerTransparent 透明化 VC
-/// - 所有卡片/玩家行用 applyEffectToView: 注入毛玻璃（半透明模式则注入半透明色）
-/// - 文字颜色根据 hasBackground 区分白字（背景图模式）与 labelColor（系统背景模式）
-/// - 监听 BackgroundUIEffectChanged 通知，背景切换时重新应用
+/// Background adaptation (modeled on MultiplayerViewController):
+/// - viewDidLoad/viewWillAppear call makeViewControllerTransparent to make the VC transparent
+/// - Every card/player row uses applyEffectToView: to inject frosted glass (or a translucent color in translucent mode)
+/// - Text color switches between white (background image mode) and labelColor (system background mode) based on hasBackground
+/// - Listens for the BackgroundUIEffectChanged notification and reapplies when the background changes
 @interface TerracottaViewController () <UITextFieldDelegate>
 
-/* 顶部状态卡片 */
+/* Top status card */
 @property(nonatomic, strong) UIView *statusCard;
 @property(nonatomic, strong) UIImageView *statusIcon;
 @property(nonatomic, strong) UILabel *statusLabel;
@@ -35,27 +35,27 @@
 @property(nonatomic, strong) UILabel *directConnectLabel;
 @property(nonatomic, strong) UIButton *directCopyButton;
 
-/* Tab 切换 */
+/* Tab switching */
 @property(nonatomic, strong) UISegmentedControl *tabControl;
 @property(nonatomic, strong) UIView *createPanel;
 @property(nonatomic, strong) UIView *joinPanel;
 
-/* 创建房间面板 */
+/* Create room panel */
 @property(nonatomic, strong) UILabel *createHintLabel;
 @property(nonatomic, strong) UITextField *portField;
 @property(nonatomic, strong) UIButton *createButton;
 
-/* 加入房间面板 */
+/* Join room panel */
 @property(nonatomic, strong) UILabel *joinHintLabel;
 @property(nonatomic, strong) UITextField *inviteField;
 @property(nonatomic, strong) UIButton *joinButton;
 
-/* 会话中底部 */
+/* Bottom area during a session */
 @property(nonatomic, strong) UIButton *disconnectButton;
 @property(nonatomic, strong) UILabel *playersTitleLabel;
 @property(nonatomic, strong) UIStackView *playersList;
 
-/* 容器滚动视图（小屏适配） */
+/* Container scroll view (for small screens) */
 @property(nonatomic, strong) UIScrollView *scrollView;
 @property(nonatomic, strong) UIView *contentView;
 
@@ -67,7 +67,7 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    // 不设置 self.title，避免顶部导航栏出现"陶瓦联机"标题黑条（参照 FCL 无 title 风格）
+    // self.title is deliberately not set, to avoid a black "Terracotta multiplayer" title bar at the top (modeled on FCL's title-less style)
     self.view.backgroundColor = [UIColor clearColor];
 
     // Hide the navigation bar band completely (only when this is a non-modal root page and the only VC on the stack)
@@ -81,7 +81,7 @@
     }
 
     if (!navBarHidden) {
-        /* 关闭按钮（modal 模式） */
+        /* Close button (modal mode) */
         UIBarButtonItem *closeItem = [[UIBarButtonItem alloc]
             initWithBarButtonSystemItem:UIBarButtonSystemItemClose
                                 target:self
@@ -89,8 +89,8 @@
         self.navigationItem.leftBarButtonItem = closeItem;
     }
 
-    /* ZeroTier 联机入口：始终使用浮动按钮放置在视图右上角
-       （导航栏可见时也保留，确保 modal/pushed 模式下可访问） */
+    /* ZeroTier multiplayer entry point: always a floating button placed at the top right of the view
+       (kept even when the navigation bar is visible, to guarantee it is reachable in both modal and pushed modes) */
     UIButton *ztFab = [UIButton buttonWithType:UIButtonTypeSystem];
     [ztFab setImage:[UIImage systemImageNamed:@"network"] forState:UIControlStateNormal];
     ztFab.tintColor = [UIColor whiteColor];
@@ -109,7 +109,7 @@
         [ztFab.trailingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.trailingAnchor constant:-16],
     ]];
 
-    /* 适配自定义启动器背景：透明化 VC，让全局背景图/毛玻璃透出 */
+    /* Adapt to the custom launcher background: make the VC transparent so the global background image/frosted glass shows through */
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
 
     [self setupViews];
@@ -120,14 +120,14 @@
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
-    /* 重新隐藏导航栏黑条（pop 回根页面时 topViewController == self） */
+    /* Hide the navigation bar strip again (topViewController == self when popping back to the root page) */
     if (self.navigationController &&
         self.navigationController.viewControllers.firstObject == self &&
         self.navigationController.presentingViewController == nil &&
         self.navigationController.topViewController == self) {
         self.navigationController.navigationBarHidden = YES;
     }
-    /* 与 MultiplayerViewController 一致：每次出现都重新透明化并应用导航栏毛玻璃 */
+    /* Consistent with MultiplayerViewController: re-apply transparency and the navigation bar frosted glass on every appearance */
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
     [[BackgroundManager sharedManager] applyEffectToNavigationBar:self.navigationController.navigationBar];
     [self applyBackgroundEffects];
@@ -135,7 +135,7 @@
 
 - (void)viewWillDisappear:(BOOL)animated {
     [super viewWillDisappear:animated];
-    /* push 子页面时显示导航栏（子页面需要返回按钮） */
+    /* Show the navigation bar when pushing a child page (the child page needs a back button) */
     if (self.navigationController &&
         self.navigationController.viewControllers.firstObject == self &&
         self.navigationController.presentingViewController == nil) {
@@ -149,7 +149,7 @@
 
 #pragma mark - Background Adaptation
 
-/// 监听背景效果变化（用户切换背景图/毛玻璃模式/透明度时触发）
+/// Listen for background effect changes (triggered when the user changes the background image/frosted glass mode/opacity)
 - (void)registerBackgroundNotifications {
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(backgroundEffectChanged:)
@@ -157,7 +157,7 @@
                                                object:nil];
 }
 
-/// 背景效果变化时重新应用所有效果，并刷新玩家列表（让 row 重新读取背景状态）
+/// Reapply all effects when the background effect changes, and refresh the player list (so rows re-read the background state)
 - (void)backgroundEffectChanged:(NSNotification *)notification {
     dispatch_async(dispatch_get_main_queue(), ^{
         [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
@@ -167,21 +167,21 @@
     });
 }
 
-/// 对所有卡片/输入框/玩家行应用毛玻璃或半透明效果
+/// Apply the frosted glass or translucent effect to every card/input field/player row
 - (void)applyBackgroundEffects {
-    /* 状态卡片：注入毛玻璃（或半透明色） */
+    /* Status card: inject frosted glass (or a translucent color) */
     [[BackgroundManager sharedManager] applyEffectToView:self.statusCard];
 
-    /* 输入框：背景透明 + 注入毛玻璃（让背景透出） */
+    /* Input fields: transparent background + injected frosted glass (so the background shows through) */
     [[BackgroundManager sharedManager] applyEffectToView:self.portField];
     [[BackgroundManager sharedManager] applyEffectToView:self.inviteField];
 
-    /* 玩家列表行：每行注入毛玻璃 */
+    /* Player list rows: inject frosted glass into each row */
     for (UIView *row in self.playersList.arrangedSubviews) {
         [[BackgroundManager sharedManager] applyEffectToView:row];
     }
 
-    /* 文字颜色：背景图模式下用白字保证对比度；系统背景模式下用 labelColor */
+    /* Text color: white in background image mode to guarantee contrast; labelColor in system background mode */
     BOOL hasBg = [[BackgroundManager sharedManager] hasBackground];
     UIColor *primaryText = hasBg ? [UIColor whiteColor] : [UIColor labelColor];
     UIColor *secondaryText = hasBg ? [UIColor colorWithWhite:1.0 alpha:0.8] : [UIColor secondaryLabelColor];
@@ -195,15 +195,15 @@
     self.joinHintLabel.textColor = secondaryText;
     self.playersTitleLabel.textColor = primaryText;
 
-    /* 输入框文字颜色（占位符颜色由系统处理） */
+    /* Input field text color (the placeholder color is handled by the system) */
     self.portField.textColor = primaryText;
     self.inviteField.textColor = primaryText;
 
-    /* 复制按钮：背景图模式下用白字 */
+    /* Copy button: white text in background image mode */
     self.inviteCopyButton.tintColor = secondaryText;
     self.directCopyButton.tintColor = secondaryText;
 
-    /* 断开连接按钮边框颜色（背景图模式下用更醒目的白色边框 + 半透明红底） */
+    /* Disconnect button border color (a more prominent white border + translucent red fill in background image mode) */
     if (hasBg) {
         [self.disconnectButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
         self.disconnectButton.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.6].CGColor;
@@ -218,7 +218,7 @@
 #pragma mark - UI Setup
 
 - (void)setupViews {
-    /* ScrollView 容器（小屏适配） */
+    /* ScrollView container (for small screens) */
     self.scrollView = [[UIScrollView alloc] init];
     self.scrollView.translatesAutoresizingMaskIntoConstraints = NO;
     self.scrollView.alwaysBounceVertical = YES;
@@ -279,7 +279,7 @@
     self.stageLabel.numberOfLines = 0;
     [self.statusCard addSubview:self.stageLabel];
 
-    /* 邀请码行 */
+    /* Invite code row */
     self.inviteCodeLabel = [self makeLabelWithFont:[UIFont fontWithName:@"Menlo" size:14]
                                         textColor:[UIColor labelColor]];
     self.inviteCodeLabel.numberOfLines = 0;
@@ -288,7 +288,7 @@
     self.inviteCopyButton = [self makeCopyButtonWithSelector:@selector(copyInviteCode:)];
     [self.statusCard addSubview:self.inviteCopyButton];
 
-    /* 直连地址行 */
+    /* Direct connect address row */
     self.directConnectLabel = [self makeLabelWithFont:[UIFont fontWithName:@"Menlo" size:13]
                                           textColor:[UIColor secondaryLabelColor]];
     self.directConnectLabel.numberOfLines = 0;
@@ -504,7 +504,7 @@
     field.borderStyle = UITextBorderStyleRoundedRect;
     field.keyboardType = keyboardType;
     field.font = [UIFont systemFontOfSize:16];
-    /* 背景透明：由 applyEffectToView: 注入毛玻璃 */
+    /* Transparent background: frosted glass is injected by applyEffectToView: */
     field.backgroundColor = [UIColor clearColor];
     field.layer.cornerRadius = 8;
     field.clipsToBounds = YES;
@@ -592,7 +592,7 @@
 }
 
 - (void)close {
-    /* 兼容两种容器：push 进 UINavigationController（启动器菜单路径）与 present 弹窗（游戏内菜单路径） */
+    /* Compatible with both containers: pushed into a UINavigationController (the launcher menu path) and presented modally (the in-game menu path) */
     if (self.navigationController && self.navigationController.viewControllers.firstObject != self) {
         [self.navigationController popViewControllerAnimated:YES];
     } else {
@@ -600,9 +600,9 @@
     }
 }
 
-/// 切换到 ZeroTier 联机界面（两个联机方案都保留，用户可自由切换）
+/// Switch to the ZeroTier multiplayer screen (both multiplayer solutions are kept and the user can switch freely)
 - (void)switchToZeroTier:(UIBarButtonItem *)sender {
-    /* 弹确认框，避免用户误触中断当前会话 */
+    /* Show a confirmation dialog so the user does not interrupt the current session by accident */
     TerracottaStatus status = [TerracottaManager shared].status;
     if (status != TerracottaStatusDisconnected) {
         UIAlertController *alert = [UIAlertController
@@ -624,14 +624,14 @@
     MultiplayerViewController *vc = [[MultiplayerViewController alloc] init];
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
     nav.modalPresentationStyle = UIModalPresentationPageSheet;
-    /* 如果当前是 push 进的 nav 栈，用 present 覆盖；如果是 modal，直接 present */
+    /* If it was pushed onto a nav stack, cover it with present; if it is modal, present directly */
     [self presentViewController:nav animated:YES completion:nil];
 }
 
 #pragma mark - Player Name
 
 - (NSString *)currentPlayerName {
-    /* 优先用启动器当前账户名，否则用设备名 */
+    /* Prefer the launcher's current account name, otherwise use the device name */
     NSString *name = getPrefObject(@"launcher.account_selected_name");
     if (name.length > 0) return name;
     return [UIDevice currentDevice].name ?: @"iOSPlayer";
@@ -654,23 +654,23 @@
 - (void)refreshUI {
     TerracottaManager *mgr = [TerracottaManager shared];
 
-    /* 状态文字 + 图标 */
+    /* Status text + icon */
     NSString *statusText = [self statusDisplayText:mgr.status role:mgr.role];
     self.statusLabel.text = statusText;
     self.statusIcon.image = [UIImage systemImageNamed:[self statusIconName:mgr.status]];
     self.statusIcon.tintColor = [self statusColor:mgr.status];
 
-    /* 活动指示器 */
+    /* Activity indicator */
     if (mgr.status == TerracottaStatusConnecting) {
         [self.activityIndicator startAnimating];
     } else {
         [self.activityIndicator stopAnimating];
     }
 
-    /* 阶段描述 */
+    /* Stage description */
     self.stageLabel.text = mgr.stageDescription ?: @"";
 
-    /* 邀请码 */
+    /* Invite code */
     if (mgr.currentInviteCode.length > 0) {
         self.inviteCodeLabel.text = [NSString stringWithFormat:@"Invite code: %@", mgr.currentInviteCode];
         self.inviteCopyButton.hidden = NO;
@@ -679,7 +679,7 @@
         self.inviteCopyButton.hidden = YES;
     }
 
-    /* 直连地址 */
+    /* Direct connect address */
     if (mgr.directConnectURL.length > 0) {
         self.directConnectLabel.text = [NSString stringWithFormat:@"Direct connect: %@", mgr.directConnectURL];
         self.directCopyButton.hidden = NO;
@@ -688,7 +688,7 @@
         self.directCopyButton.hidden = YES;
     }
 
-    /* 会话进行中：隐藏 Tab 和面板，显示断开按钮和玩家列表 */
+    /* Session in progress: hide the tabs and panels, show the disconnect button and the player list */
     BOOL sessionActive = (mgr.status != TerracottaStatusDisconnected);
     self.tabControl.hidden = sessionActive;
     self.createPanel.hidden = sessionActive ?: (self.tabControl.selectedSegmentIndex != 0);
@@ -696,10 +696,10 @@
     self.disconnectButton.hidden = !sessionActive;
     self.playersTitleLabel.hidden = !sessionActive;
 
-    /* 玩家列表 */
+    /* Player list */
     [self refreshPlayersList:mgr.players role:mgr.role];
 
-    /* 错误提示（仅首次出现错误时弹 toast） */
+    /* Error notice (a toast is shown only the first time an error occurs) */
     if (mgr.status == TerracottaStatusError && mgr.lastError.length > 0) {
         self.stageLabel.text = mgr.lastError;
     }
@@ -707,7 +707,7 @@
 
 - (void)refreshPlayersList:(NSArray<TerracottaPlayerProfile *> *)players
                       role:(TerracottaRole)role {
-    /* 清空旧条目 */
+    /* Clear the old entries */
     for (UIView *v in self.playersList.arrangedSubviews) {
         [self.playersList removeArrangedSubview:v];
         [v removeFromSuperview];
@@ -722,7 +722,7 @@
     for (TerracottaPlayerProfile *p in players) {
         [self.playersList addArrangedSubview:[self makePlayerRow:p role:role]];
     }
-    /* 新行也需要注入背景效果 */
+    /* New rows also need the background effect injected */
     for (UIView *row in self.playersList.arrangedSubviews) {
         [[BackgroundManager sharedManager] applyEffectToView:row];
     }
@@ -775,7 +775,7 @@
     NSString *kind = profile.kind;
     if ([kind isEqualToString:@"host"]) return @"Host";
     if ([kind isEqualToString:@"guest"]) return @"Guest";
-    /* 没有 kind 字段时用 profile_index == 0 推断房主 */
+    /* When there is no kind field, infer the host from profile_index == 0 */
     return @"Player";
 }
 

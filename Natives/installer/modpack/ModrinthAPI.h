@@ -33,7 +33,7 @@ NS_ASSUME_NONNULL_BEGIN
 #pragma mark - Server Projects (Modrinth Server Projects API)
 
 /// 异步搜索服务器项目：优先使用 project_type=server，若结果为空则回退到 project_type=modpack
-/// @param filters 搜索过滤条件（query/limit/offset/mcVersion/loader 等）
+/// @param filters The search filters (query/limit/offset/mcVersion/loader and so on)
 /// @param completion 完成回调，返回字典数组（含 apiSource=1, projectType 字段）
 - (void)searchServersWithFilters:(NSDictionary *)filters
                       completion:(void (^)(NSArray * _Nullable results, NSError * _Nullable error))completion;

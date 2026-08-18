@@ -1,19 +1,19 @@
 #import "SilentAudioPlayer.h"
 #import <AVFoundation/AVFoundation.h>
 
-/// 后台保活音频播放器实现
+/// Background keep-alive audio player implementation
 ///
-/// 设计要点（重写版）：
-/// 1. 处理 AVAudioSession 中断通知（来电、闹钟等），中断结束后自动恢复播放
-/// 2. 处理 AVAudioSession 路由变化（耳机插拔、蓝牙连接），保证播放连续
-/// 3. 用 mixWithOthers 选项避免打断用户当前播放的音乐
-/// 4. 静音 WAV 在内存中生成，不依赖外部资源文件
-/// 5. 单例 + NSLock 保证线程安全
+/// Design notes (rewritten version):
+/// 1. Handles AVAudioSession interruption notifications (incoming calls, alarms, etc.) and resumes playback automatically after the interruption ends
+/// 2. Handles AVAudioSession route changes (headphones plugged/unplugged, Bluetooth connected) to keep playback continuous
+/// 3. Uses the mixWithOthers option to avoid interrupting music the user is currently playing
+/// 4. The silent WAV is generated in memory, with no dependency on external resource files
+/// 5. Singleton + NSLock guarantee thread safety
 @implementation SilentAudioPlayer {
     AVAudioPlayer *_player;
     BOOL _active;
     NSLock *_lock;
-    BOOL _interruptionPaused;  /* 被系统中断后暂停，等待恢复 */
+    BOOL _interruptionPaused;  /* Paused by a system interruption, waiting to resume */
 }
 
 #pragma mark - Singleton
@@ -58,11 +58,11 @@
         return;
     }
 
-    /* 配置 AudioSession：
-     * - playback：允许后台播放
-     * - mixWithOthers：与其他 App 音频混合，不打断用户当前音乐
-     * - duckOthers：可选，这里不用（duck 会降低其他 App 音量，干扰用户）
-     * 用 try/catch 防止 iOS 13 以下设备某些选项不支持 */
+    /* Configure the AudioSession:
+     * - playback: allows background playback
+     * - mixWithOthers: mixes with other apps' audio instead of interrupting the user's music
+     * - duckOthers: optional, not used here (ducking lowers other apps' volume and disturbs the user)
+     * try/catch is used in case some options are unsupported on devices below iOS 13 */
     NSError *error = nil;
     AVAudioSession *session = [AVAudioSession sharedInstance];
     AVAudioSessionCategoryOptions options = AVAudioSessionCategoryOptionMixWithOthers;
@@ -71,16 +71,16 @@
                       options:options
                         error:&error]) {
         NSLog(@"[SilentAudioPlayer] setCategory failed: %@", error);
-        /* 降级：不带 options 再试一次（iOS 14 以下某些设备兼容） */
+        /* Fallback: try again without options (compatibility with some devices below iOS 14) */
         [session setCategory:AVAudioSessionCategoryPlayback error:&error];
     }
     if (![session setActive:YES error:&error]) {
         NSLog(@"[SilentAudioPlayer] activate session failed: %@", error);
-        /* 即使 activate 失败也尝试 play，有些场景下仍可工作 */
+        /* Try to play even if activation failed; it still works in some scenarios */
     }
 
-    _player.numberOfLoops = -1;  /* 无限循环 */
-    _player.volume = 0.01f;       /* 极低音量（0 会被 iOS 优化掉） */
+    _player.numberOfLoops = -1;  /* Infinite loop */
+    _player.volume = 0.01f;       /* Extremely low volume (0 would be optimized away by iOS) */
 
     if (![_player prepareToPlay]) {
         NSLog(@"[SilentAudioPlayer] prepareToPlay failed");
@@ -109,8 +109,8 @@
     _interruptionPaused = NO;
     [_lock unlock];
 
-    /* 释放 AudioSession（在锁外执行，避免阻塞主线程太久）
-     * NotifyOthersOnDeactivation 让其他 App（如 MC 自身的 OpenAL）能重新获取音频设备 */
+    /* Release the AudioSession (done outside the lock to avoid blocking the main thread for too long)
+     * NotifyOthersOnDeactivation lets other apps (such as MC's own OpenAL) reacquire the audio device */
     NSError *error = nil;
     if (![[AVAudioSession sharedInstance] setActive:NO
                                         withOptions:AVAudioSessionSetActiveOptionNotifyOthersOnDeactivation
@@ -122,9 +122,9 @@
 
 #pragma mark - Silent WAV Generation
 
-/// 生成 200ms 静音 WAV 数据（44100Hz, 16-bit, mono）。
-/// 总字节 = 44(WAV头) + 44100*0.2*2 = 44 + 17640 = 17684 字节。
-/// 不依赖外部资源文件，避免打包丢失。
+/// Generate 200ms of silent WAV data (44100Hz, 16-bit, mono).
+/// Total bytes = 44 (WAV header) + 44100*0.2*2 = 44 + 17640 = 17684 bytes.
+/// Does not depend on external resource files, avoiding packaging loss.
 - (AVAudioPlayer *)buildSilentPlayer {
     NSUInteger sampleRate = 44100;
     NSUInteger durationMs = 200;
@@ -158,7 +158,7 @@
     [wav appendBytes:"data" length:4];
     uint32_t dataLen = (uint32_t)dataSize;
     [wav appendBytes:&dataLen length:4];
-    /* 静音数据（全零，NSMutableData 已经 zero-fill） */
+    /* Silent data (all zeros; NSMutableData is already zero-filled) */
     [wav increaseLengthBy:dataSize];
 
     NSError *error = nil;
@@ -172,15 +172,15 @@
 
 #pragma mark - AVAudioSession Notifications
 
-/// 监听音频中断和路由变化通知，确保后台保活在系统事件后仍可恢复。
+/// Listen for audio interruption and route change notifications so background keep-alive can recover after system events.
 - (void)registerNotifications {
     NSNotificationCenter *nc = [NSNotificationCenter defaultCenter];
-    /* 音频中断（来电、闹钟、Siri 等） */
+    /* Audio interruptions (incoming calls, alarms, Siri, etc.) */
     [nc addObserver:self
            selector:@selector(handleInterruption:)
                name:AVAudioSessionInterruptionNotification
              object:nil];
-    /* 路由变化（耳机插拔、蓝牙连接） */
+    /* Route changes (headphones plugged/unplugged, Bluetooth connected) */
     [nc addObserver:self
            selector:@selector(handleRouteChange:)
                name:AVAudioSessionRouteChangeNotification
@@ -194,7 +194,7 @@
     [_lock lock];
     switch (type) {
         case AVAudioSessionInterruptionTypeBegan: {
-            /* 系统开始中断（如来电），音频被强制暂停 */
+            /* The system began an interruption (e.g. an incoming call) and audio was forcibly paused */
             if (_active) {
                 _interruptionPaused = YES;
                 NSLog(@"[SilentAudioPlayer] interruption began");
@@ -202,7 +202,7 @@
             break;
         }
         case AVAudioSessionInterruptionTypeEnded: {
-            /* 中断结束，尝试恢复播放 */
+            /* Interruption ended, try to resume playback */
             if (_active && _interruptionPaused) {
                 NSUInteger options = [info[AVAudioSessionInterruptionOptionKey] unsignedIntegerValue];
                 NSError *error = nil;
@@ -230,7 +230,7 @@
     NSUInteger reason = [info[AVAudioSessionRouteChangeReasonKey] unsignedIntegerValue];
 
     [_lock lock];
-    /* 老设备断开（如拔耳机）时，系统会自动暂停播放；这里在新设备连接后恢复 */
+    /* When an old device disconnects (e.g. headphones unplugged), the system automatically pauses playback; resume here after the new device connects */
     if (reason == AVAudioSessionRouteChangeReasonNewDeviceAvailable
         || reason == AVAudioSessionRouteChangeReasonOverride) {
         if (_active && !_player.playing) {
