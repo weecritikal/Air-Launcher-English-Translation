@@ -1,0 +1,114 @@
+name: Build English IPA
+
+# Manual only: this never fires on push, so it cannot surprise you with a build or a release.
+# Run it from the Actions tab with "Run workflow".
+on:
+  workflow_dispatch:
+    inputs:
+      publish_release:
+        description: 'Also publish the IPA/TIPA as a GitHub Release (otherwise they are build artifacts only)'
+        type: boolean
+        default: false
+      release_tag:
+        description: 'Tag for the release (only used when publish_release is true)'
+        type: string
+        default: '5.0.0-Preview-en'
+
+concurrency:
+  group: english-ipa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build English IPA (iOS)
+    runs-on: macos-14
+    permissions:
+      contents: write
+
+    steps:
+      - name: Select Xcode 15.4
+        run: |
+          sudo xcode-select -s /Applications/Xcode_15.4.app/Contents/Developer
+          xcodebuild -version || true
+
+      - name: Install build dependencies
+        run: |
+          brew update
+          brew install make ldid
+          brew install --cask temurin@8 || true
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Remove stale submodule gitlinks
+        # MobileGL and MobileGlues are no longer submodules, but a stale index entry can
+        # reintroduce an orphaned gitlink and make submodule update exit 128.
+        run: |
+          git rm --cached -f Natives/external/MobileGL 2>/dev/null || true
+          git config --remove-section submodule.Natives/external/MobileGL 2>/dev/null || true
+          git rm --cached -f Natives/external/MobileGlues 2>/dev/null || true
+          git config --remove-section submodule.Natives/external/MobileGlues 2>/dev/null || true
+
+      - name: Checkout submodules
+        env:
+          GIT_LFS_SKIP_SMUDGE: "1"
+        run: git submodule update --init --recursive
+
+      - name: Report the version being built
+        run: |
+          echo "CFBundleShortVersionString:"
+          grep -A1 'CFBundleShortVersionString' Natives/Info.plist | tail -1
+
+      - name: Build IPA and TIPA
+        env:
+          IPHONEOS_DEPLOYMENT_TARGET: 14.0
+          CONFIG_CURSEFORGE_API_KEY: ${{ secrets.CONFIG_CURSEFORGE_API_KEY }}
+        run: |
+          set -o pipefail
+          export PATH=/opt/homebrew/bin:$PATH
+          export SLIMMED=0
+          gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=2
+          gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=2 TROLLSTORE_JIT_ENT=1
+
+      - name: List build output
+        if: always()
+        run: ls -lh artifacts/ || true
+
+      - name: Upload IPA
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: air-english-ios-ipa
+          path: artifacts/com.air-devs.air-*-ios.ipa
+
+      - name: Upload TrollStore TIPA
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: air-english-ios-trollstore-tipa
+          path: artifacts/com.air-devs.air-*-ios-trollstore.tipa
+
+      - name: Upload dSYM
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: AngelAuraAmethyst.dSYM
+          path: artifacts/AngelAuraAmethyst.dSYM
+
+      - name: Publish GitHub Release
+        # Only when you explicitly ticked publish_release when starting the run.
+        if: success() && inputs.publish_release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.release_tag }}
+          name: ${{ inputs.release_tag }}
+          body: |
+            Air Launcher 5.0.0 Preview - English translation.
+
+            Built from `${{ github.ref_name }}` at `${{ github.sha }}`.
+
+            - `.ipa` - install with AltStore / SideStore / Sideloadly
+            - `.tipa` - install with TrollStore
+          files: |
+            artifacts/com.air-devs.air-*-ios.ipa
+            artifacts/com.air-devs.air-*-ios-trollstore.tipa
