@@ -138,7 +138,7 @@ METHOD_CHANGE_PLAT = \
 	fi \
 	
 # Function to package the application
-# 修复：使用统一的命名格式 amethystremastered
+# Fix: use the unified naming format amethystremastered
 METHOD_PACKAGE = \
 	if [ '$(TROLLSTORE_JIT_ENT)' == '1' ]; then \
 		IPA_SUFFIX="-trollstore.tipa"; \
@@ -325,11 +325,11 @@ dep_mg:
 	echo '[Amethyst v$(VERSION)] dep_mg - end'
 
 dep_mobilegl:
-	# MobileGL（Vulkan/GLES 后端渲染器）集成已完全移除：
-	# - 构建链中的 perl 补丁（Range1D/BufferChange/is_aggregate_v）不再需要
-	# - libMobileGL.dylib / libMobileGL-gles.dylib 不再构建/打包
-	# - 运行时不再提供 MobileGL 渲染器选项
-	# 保留空目标避免外部 make 调用报错（payload 不再依赖此目标）
+	# MobileGL (the Vulkan/GLES backend renderer) integration has been removed entirely:
+	# - the perl patches in the build chain (Range1D/BufferChange/is_aggregate_v) are no longer needed
+	# - libMobileGL.dylib / libMobileGL-gles.dylib are no longer built or packaged
+	# - the MobileGL renderer option is no longer offered at runtime
+	# The empty target is kept so external make invocations do not error out (payload no longer depends on it)
 	@echo '[Amethyst v$(VERSION)] dep_mobilegl - skipped (MobileGL removed)'
 
 assets:
@@ -355,8 +355,8 @@ payload: native dep_mg java jre assets
 	cp -R $(SOURCEDIR)/Natives/resources/en.lproj/LaunchScreen.storyboardc $(WORKINGDIR)/AngelAuraAmethyst.app/Base.lproj/ || exit 1
 	cp -R $(SOURCEDIR)/Natives/resources/* $(WORKINGDIR)/AngelAuraAmethyst.app/ || exit 1
 	cp $(WORKINGDIR)/*.dylib $(WORKINGDIR)/AngelAuraAmethyst.app/Frameworks/ || exit 1
-	# spirv-cross 软链接（防御性兜底）：若 MobileGlues 构建产出 libspirv-cross-c-shared.0.dylib，
-	# 创建 libspirv-cross.dylib 软链接，兼容按 macOS 默认名加载的 native 代码。
+	# spirv-cross symlink (a defensive fallback): if the MobileGlues build produces libspirv-cross-c-shared.0.dylib,
+	# create a libspirv-cross.dylib symlink for native code that loads it under the default macOS name.
 	if [ -f "$(WORKINGDIR)/AngelAuraAmethyst.app/Frameworks/libspirv-cross-c-shared.0.dylib" ] && [ ! -f "$(WORKINGDIR)/AngelAuraAmethyst.app/Frameworks/libspirv-cross.dylib" ]; then \
 		ln -sf libspirv-cross-c-shared.0.dylib $(WORKINGDIR)/AngelAuraAmethyst.app/Frameworks/libspirv-cross.dylib; \
 	fi
@@ -390,11 +390,11 @@ payload: native dep_mg java jre assets
 		ldid -S$(SOURCEDIR)/entitlements.sideload.xml $(OUTPUTDIR)/Payload/AngelAuraAmethyst.app/AngelAuraAmethyst; \
 	fi
 	chmod -R 755 $(OUTPUTDIR)/Payload
-	# 总是运行平台重打标（对齐 Ynnyny 仓库）—— 对已 iOS 标记的 Mach-O 是幂等的，
-	# 但能捕获从 Maven 直接拉取的新 dylib（如 3.3.5 lwjgl-stb），它们 ship 时
-	# platform=macos，iOS dyld 会静默拒绝加载，导致 LWJGL 抛 UnsatisfiedLinkError。
-	# 原本用 [ PLATFORM != 2 ] 守卫的假设是所有 commit 的 dylib 都已 iOS 标记，
-	# 这个假设在同步 Ynnyny 顶层 dylib 时被打破。
+	# Always re-tag the platform (aligned with the Ynnyny repository) - this is idempotent for Mach-O binaries already tagged for iOS,
+	# but it catches new dylibs pulled straight from Maven (such as 3.3.5 lwjgl-stb), which ship with
+	# platform=macos; iOS dyld silently refuses to load those, making LWJGL throw an UnsatisfiedLinkError.
+	# The [ PLATFORM != 2 ] guard used originally assumed every committed dylib was already tagged for iOS,
+	# and that assumption broke when the top-level dylibs from Ynnyny were synced in.
 	$(call METHOD_MACHO,$(OUTPUTDIR)/Payload/AngelAuraAmethyst.app,$(call METHOD_CHANGE_PLAT,$(PLATFORM),$$file)); \
 	$(call METHOD_MACHO,$(OUTPUTDIR)/java_runtimes,$(call METHOD_CHANGE_PLAT,$(PLATFORM),$$file));
 	echo '[Amethyst v$(VERSION)] payload - end'

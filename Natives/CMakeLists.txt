@@ -1,10 +1,10 @@
 cmake_minimum_required(VERSION 3.6)
 project(AngelAuraAmethyst)
 
-# 从环境变量读取 CurseForge API Key
-# 不能通过 Makefile 的 -D 参数传递，因为 Make 会对环境变量值进行递归展开，
-# 导致 bcrypt 哈希格式（$2a$10$...）中的 $2、$1、$Q 被 Make 解释为变量引用并替换为空，
-# 最终生成损坏的 Key（如 a06bVFEP... 而非 $2a$10$Q6bVFEP...）
+# Read the CurseForge API key from an environment variable
+# It cannot be passed through the Makefile with -D, because Make expands environment variable values recursively,
+# so $2, $1 and $Q inside a bcrypt hash ($2a$10$...) are interpreted as variable references and replaced with nothing,
+# producing a corrupted key (a06bVFEP... instead of $2a$10$Q6bVFEP...)
 if(DEFINED ENV{CONFIG_CURSEFORGE_API_KEY})
     set(CONFIG_CURSEFORGE_API_KEY "$ENV{CONFIG_CURSEFORGE_API_KEY}")
 endif()
@@ -35,11 +35,11 @@ include_directories(
   "external/ballpa1n"
   "external/ballpa1n/wrapped"
   "external/mach"
-  # "external/ZeroTierFramework/ios-example-app/zt.framework/Headers"  # ZeroTier 暂时移除
+  # "external/ZeroTierFramework/ios-example-app/zt.framework/Headers"  # ZeroTier temporarily removed
 )
 
 # ============================================================================
-# ZeroTier Apple Framework 集成 —— 暂时移除（注释掉以排查启动崩溃）
+# ZeroTier Apple Framework integration - temporarily removed (commented out while investigating a launch crash)
 # ============================================================================
 # set(ZT_FRAMEWORK_DIR "${CMAKE_CURRENT_LIST_DIR}/external/ZeroTierFramework/ios-example-app")
 # set(ZT_FRAMEWORK_LIB "${ZT_FRAMEWORK_DIR}/zt.framework/zt")
@@ -56,7 +56,7 @@ set(ZT_FRAMEWORK_LINK "")
 set(ZT_CXX_LIB "")
 
 # ============================================================================
-# libterracotta.xcframework 集成（陶瓦联机）—— 暂时移除（注释掉以排查启动崩溃）
+# libterracotta.xcframework integration (Terracotta multiplayer) - temporarily removed (commented out while investigating a launch crash)
 # ============================================================================
 # set(TERRACOTTA_LIB_DIR "${CMAKE_CURRENT_LIST_DIR}/terracotta")
 # set(TERRACOTTA_XCFW "${TERRACOTTA_LIB_DIR}/libterracotta.xcframework")
@@ -95,32 +95,32 @@ target_link_libraries(awt_xawt
 # TouchController iOS native library
 # Provides JNI / C API for touch control communication between Minecraft mod and launcher
 #
-# 三级回退检测逻辑（按优先级从高到低）：
-#   Level 1 — 预编译 XCFramework：检测 TouchController.xcframework/，从 ios-arm64
-#             子目录提取设备静态库链接（由 build_xcframework.sh 生成）
-#   Level 2 — 预编译独立 .a：检测 libproxy_server_ios.a (device) 或
-#             libproxy_server_ios_simulator.a (simulator)，保持向后兼容
-#   Level 3 — 源码编译回退：检测 ios_transport.c 源文件，CMake 直接编译为对象库
-#   禁用   — 以上都不存在时，TOUCHCONTROLLER_LIB 置空并打印警告
+# Three-level fallback detection logic (highest priority first):
+#   Level 1 - prebuilt XCFramework: detects TouchController.xcframework/ and links the device static library
+#             from the ios-arm64 subdirectory (produced by build_xcframework.sh)
+#   Level 2 - prebuilt standalone .a: detects libproxy_server_ios.a (device) or
+#             libproxy_server_ios_simulator.a (simulator), for backward compatibility
+#   Level 3 - source build fallback: detects the ios_transport.c source file and lets CMake compile it into an object library
+#   Disabled - when none of the above exist, TOUCHCONTROLLER_LIB is left empty and a warning is printed
 #
-# 重要：TouchControllerBridge.m 通过 dlsym(RTLD_DEFAULT, "touchcontroller_ios_*")
-# 运行时查找符号，编译期没有任何直接引用。Apple ld 处理静态库（.a）时按需加载，
-# 只提取被直接引用的对象文件——未被引用的对象文件会被丢弃，导致 dlsym 找不到符号。
-# 因此：
-#   - Level 1/2（预编译 .a）：必须用 -Wl,-force_load,<path> 强制加载整个静态库
-#   - Level 3（源码编译）：改用 OBJECT 库，对象文件直接链接到可执行文件，
-#     所有符号自动保留，无需 -force_load
+# Important: TouchControllerBridge.m looks the symbols up at runtime with dlsym(RTLD_DEFAULT, "touchcontroller_ios_*")
+# and has no direct references at compile time. Apple ld loads static libraries (.a) on demand and only
+# extracts the object files that are referenced directly - unreferenced object files are dropped, so dlsym cannot find the symbols.
+# Therefore:
+#   - Level 1/2 (prebuilt .a): -Wl,-force_load,<path> must be used to load the whole static library
+#   - Level 3 (built from source): an OBJECT library is used instead, so the object files link straight into the executable
+#     and every symbol is preserved automatically, with no need for -force_load
 set(TOUCHCONTROLLER_LIB_DIR "${CMAKE_CURRENT_LIST_DIR}/TouchController")
 set(TOUCHCONTROLLER_XCFW "${TOUCHCONTROLLER_LIB_DIR}/TouchController.xcframework")
 set(TOUCHCONTROLLER_LIB "")
 
-# Level 1: 预编译 XCFramework（最高优先级）
+# Level 1: prebuilt XCFramework (highest priority)
 if(EXISTS "${TOUCHCONTROLLER_XCFW}/ios-arm64/libproxy_server_ios.a")
   set(_TC_LIB_PATH "${TOUCHCONTROLLER_XCFW}/ios-arm64/libproxy_server_ios.a")
   message(STATUS "Found TouchController XCFramework (Level 1: prebuilt xcframework) at ${_TC_LIB_PATH}")
-  # 强制加载整个静态库，确保 dlsym 能找到所有 touchcontroller_ios_* 符号
+  # Force the whole static library to load, so dlsym can find every touchcontroller_ios_* symbol
   set(TOUCHCONTROLLER_LIB "-Wl,-force_load,${_TC_LIB_PATH}")
-# Level 2: 预编译独立 .a（保持兼容）
+# Level 2: prebuilt standalone .a (kept for compatibility)
 elseif(EXISTS "${TOUCHCONTROLLER_LIB_DIR}/libproxy_server_ios.a")
   set(_TC_LIB_PATH "${TOUCHCONTROLLER_LIB_DIR}/libproxy_server_ios.a")
   message(STATUS "Found TouchController device library (Level 2: prebuilt .a) at ${_TC_LIB_PATH}")
@@ -129,18 +129,18 @@ elseif(EXISTS "${TOUCHCONTROLLER_LIB_DIR}/libproxy_server_ios_simulator.a")
   set(_TC_LIB_PATH "${TOUCHCONTROLLER_LIB_DIR}/libproxy_server_ios_simulator.a")
   message(STATUS "Found TouchController simulator library (Level 2: prebuilt .a) at ${_TC_LIB_PATH}")
   set(TOUCHCONTROLLER_LIB "-Wl,-force_load,${_TC_LIB_PATH}")
-# Level 3: 源码编译回退（使用 OBJECT 库确保所有符号被保留）
+# Level 3: source build fallback (an OBJECT library is used so every symbol is preserved)
 elseif(EXISTS "${TOUCHCONTROLLER_LIB_DIR}/ios_transport.c")
   message(STATUS "Building TouchController from source (Level 3: source compilation)")
-  # 使用 OBJECT 库而非 STATIC 库：对象文件直接链接到可执行文件，
-  # 所有符号自动保留，避免 dlsym 找不到符号的问题
+  # An OBJECT library is used rather than a STATIC one: the object files link straight into the executable
+  # and every symbol is preserved automatically, avoiding the problem of dlsym not finding the symbols
   add_library(proxy_server_ios OBJECT
     ${TOUCHCONTROLLER_LIB_DIR}/ios_transport.c
     ${TOUCHCONTROLLER_LIB_DIR}/ring_buffer.c
   )
   target_include_directories(proxy_server_ios PRIVATE ${TOUCHCONTROLLER_LIB_DIR})
   set(TOUCHCONTROLLER_LIB proxy_server_ios)
-# 全部未命中：禁用 TouchController 支持
+# Nothing matched: TouchController support is disabled
 else()
   message(STATUS "TouchController library not found, TouchController support will be disabled")
   set(TOUCHCONTROLLER_LIB "")
@@ -163,20 +163,20 @@ target_link_libraries(tinygl4angle
   "-framework libGLESv2"
 )
 
-# LTW (Large Thin Wrapper) - OpenGL Core 3.3 → OpenGL ES 3 转译层
-# 复刻自官方 MojoLauncher/LTW 仓库（master 分支），iOS 移植修改：
-#   - proc.c: 从 libtinygl4angle.dylib 加载 eglGetProcAddress（替代 libEGL.so）
-#   - egl.c/egl.h: thread_local → pthread_key_t（更可靠的 TLS）
-#   - shader_wrapper.c: 修复 offset 未递增 bug（count > 1 时 shader 源码损坏）
-#   - ltw_compat/threads.h: 提供 C11 <threads.h> 兼容（iOS SDK 不提供）
-# 功能：
-#   - 伪装成 OpenGL 3.3 Core Profile 让 MC 1.17+ 正常运行
-#   - 主动声明 GL_ARB_buffer_storage / GL_ARB_texture_buffer_object 等 ARB 扩展
-#     让 Sodium 的 persistent mapped buffers / texture buffers 正常工作
-#   - 主动声明 GL_ARB_draw_buffers_blend（Iris 必需）
-#   - 主动声明 GL_ARB_timer_query（Blaze3D TimerQuery）
-#   - Fragment shader 编译失败时忽略错误（shader_wrapper.c HACK），
-#     让 BSL/Mellow Shader 等光影包能在 ES 上运行
+# LTW (Large Thin Wrapper) - an OpenGL Core 3.3 → OpenGL ES 3 translation layer
+# Ported from the official MojoLauncher/LTW repository (the master branch), with these iOS porting changes:
+#   - proc.c: loads eglGetProcAddress from libtinygl4angle.dylib (instead of libEGL.so)
+#   - egl.c/egl.h: thread_local → pthread_key_t (more reliable TLS)
+#   - shader_wrapper.c: fixes a bug where offset was not incremented (which corrupted the shader source when count > 1)
+#   - ltw_compat/threads.h: provides C11 <threads.h> compatibility (the iOS SDK does not ship it)
+# What it does:
+#   - Pretends to be an OpenGL 3.3 Core Profile so MC 1.17+ runs correctly
+#   - Proactively advertises ARB extensions such as GL_ARB_buffer_storage / GL_ARB_texture_buffer_object
+#     so Sodium's persistent mapped buffers / texture buffers work
+#   - Proactively advertises GL_ARB_draw_buffers_blend (required by Iris)
+#   - Proactively advertises GL_ARB_timer_query (Blaze3D TimerQuery)
+#   - Ignores fragment shader compilation errors (the HACK in shader_wrapper.c),
+#     so shader packs such as BSL/Mellow Shader can run on ES
 set(LTW_DIR "${CMAKE_CURRENT_LIST_DIR}/external/LTW/ltw/src/main/tinywrapper")
 set(LTW_INCLUDES
   "${LTW_DIR}"
@@ -333,7 +333,7 @@ add_executable(AngelAuraAmethyst
   FileListViewController.m
   GameSurfaceView.m
   JavaGUIViewController.m
-  # ZeroTier 联机暂时移除（排查启动崩溃）
+  # ZeroTier multiplayer temporarily removed (while investigating a launch crash)
   # MultiplayerManager.m
   # MultiplayerViewController.m
   # LanPortDetector.m
@@ -394,16 +394,16 @@ add_executable(AngelAuraAmethyst
   ModVersionViewController.m
   ModVersionTableViewCell.m
 
-  # 通用资源详情页头部视图（Mod/Shader/Asset 版本页共用，展示项目封面图/信息/标签/描述）
+  # Shared resource detail page header view (used by the Mod/Shader/Asset version pages to show the project cover image/information/tags/description)
   AssetDetailHeaderView.m
 
-  # 模组加载器图标统一工具类（优先 bundle PNG，回退 SF Symbol，统一全项目加载器品牌色与图标）
+  # Unified mod loader icon helper class (bundle PNG first, falling back to an SF Symbol, unifying loader brand colors and icons project-wide)
   ModLoaderIconHelper.m
 
-  # 统一的项目图标加载器（双层缓存+降采样+并发控制+CDN镜像，参照 FCL Glide + ZL2 Coil）
+  # Unified project icon loader (two-level cache + downsampling + concurrency control + CDN mirror, modeled on FCL Glide + ZL2 Coil)
   IconLoader.m
 
-  # MCIM 模组镜像源工具类（参考 ZalithLauncher 2 MCIMMirror.kt）
+  # MCIM mod mirror source helper class (modeled on ZalithLauncher 2 MCIMMirror.kt)
   MCIMMirror.m
 
   # Shader-related sources
@@ -466,21 +466,21 @@ add_executable(AngelAuraAmethyst
   TouchControllerBridge.m
   TouchControllerPreferencesViewController.m
 
-  # Terracotta multiplayer（陶瓦联机）—— 暂时移除（排查启动崩溃）
+  # Terracotta multiplayer - temporarily removed (while investigating a launch crash)
   # TerracottaBridge.m
   # TerracottaManager.m
   # SilentAudioPlayer.m
   # TerracottaViewController.m
 
-  # Update checker（参考 FCL/ZL2，使用 GitHub Releases API 检查正式版更新）
+  # Update checker (modeled on FCL/ZL2, using the GitHub Releases API to check for stable updates)
   UpdateChecker.m
 
-  # Minecraft 新闻（参考 PCL-CE，调用 minecraft-services.net 官方新闻 API）
+  # Minecraft news (modeled on PCL-CE, calling the official minecraft-services.net news API)
   MinecraftNewsItem.m
   MinecraftNewsService.m
   MinecraftNewsViewController.m
 
-  # 公告系统（从官网拉取 JSON，支持 Markdown 渲染）
+  # Announcement system (fetches JSON from the official site, with Markdown rendering)
   AnnouncementItem.m
   AnnouncementService.m
   MarkdownParser.m
@@ -516,7 +516,7 @@ target_link_libraries(AngelAuraAmethyst
   lzma
   "-F'${CMAKE_CURRENT_LIST_DIR}/build'"
   "-F'${CMAKE_CURRENT_LIST_DIR}/resources/Frameworks'"
-  # ZeroTier 暂时移除："${ZT_FRAMEWORK_SEARCH_PATH}" "${ZT_FRAMEWORK_LINK}" "${ZT_CXX_LIB}"
+  # ZeroTier temporarily removed: "${ZT_FRAMEWORK_SEARCH_PATH}" "${ZT_FRAMEWORK_LINK}" "${ZT_CXX_LIB}"
   "-framework AltKit"
   "-framework AuthenticationServices"
   "-framework AVFoundation"
@@ -536,7 +536,7 @@ target_link_libraries(AngelAuraAmethyst
   "-framework WebKit"
   "-weak_framework SafariServices"
   ${TOUCHCONTROLLER_LIB}
-  # Terracotta multiplayer 暂时移除：${TERRACOTTA_LIB} "-lc++" "-lresolv"
+  # Terracotta multiplayer temporarily removed: ${TERRACOTTA_LIB} "-lc++" "-lresolv"
 )
 set_target_properties(AngelAuraAmethyst PROPERTIES
   MACOSX_BUNDLE TRUE

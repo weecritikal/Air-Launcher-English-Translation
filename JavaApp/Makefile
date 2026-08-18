@@ -14,8 +14,8 @@ JCFLAGS := -cp "$(subst $() $(),:,$(wildcard $(SOURCEDIR)/*/):$(wildcard libs/*/
 all: $(TARGETS)
 
 # Sometimes the CI produces empty class file resulting in broken jar, so we check and abort here
-# 改进：发现空 class 文件时先从 classes/ 目录重新复制（修复 cp 与 javac 并行竞态
-# 导致次级 class 文件如 NarratorDummy.class 为空的偶发问题），重试后仍为空才报错。
+# Improvement: when an empty class file is found, copy it again from the classes/ directory first (fixing the intermittent
+# problem where secondary class files such as NarratorDummy.class were empty because cp raced javac); only report an error if it is still empty after the retry.
 check_empty_classes:
 	@set -e
 	@echo "Checking for empty class files"
@@ -44,8 +44,8 @@ $(CLASSES): $(OUTPUTDIR)/%.class: $(SOURCEDIR)/%.java
 	@echo "Compiling $<"
 	@$(BOOTJDK)/javac $(JCFLAGS) -d $(OUTPUTDIR)/classes $<
 	@cp $(@:$(OUTPUTDIR)/$(TARGET)/%.class=$(OUTPUTDIR)/classes/%*.class) $(dir $@)/
-	@# 防御性校验：CI 偶发产生空 class 文件（cp 与 javac/并行任务竞态），
-	@# 复制后若主 class 仍为 0 字节则重试一次，避免 check_empty_classes 误报中断构建。
+	@# Defensive check: CI occasionally produces empty class files (cp racing javac/parallel tasks),
+	@# so if the main class is still 0 bytes after the copy, retry once to keep check_empty_classes from falsely aborting the build.
 	@if [ -e "$@" ] && [ ! -s "$@" ]; then \
 		echo "Warning: $@ is empty after cp, retrying copy"; \
 		cp -f $(@:$(OUTPUTDIR)/$(TARGET)/%.class=$(OUTPUTDIR)/classes/%*.class) $(dir $@)/; \
