@@ -7,9 +7,9 @@
 #include "vk_bridge.h"
 #include "utils.h"
 
-// Vulkan 基础类型定义（参照 vulkan_core.h）
-// 为避免引入完整的 vulkan_core.h 依赖链，在此处自行定义所需的最小类型集合。
-// 这些类型与 Vulkan/MoltenVK 头文件中的定义完全一致。
+// Basic Vulkan type definitions (modeled on vulkan_core.h)
+// To avoid pulling in the full vulkan_core.h dependency chain, the minimal set of types needed is defined here.
+// These types match the definitions in the Vulkan/MoltenVK headers exactly.
 typedef uint32_t VkFlags;
 typedef uint32_t VkBool32;
 typedef int32_t VkResult;
@@ -19,83 +19,83 @@ typedef uintptr_t VkInstance;
 #define VK_INCOMPLETE 5
 #define VK_NULL_HANDLE 0
 
-// MoltenVK 配置 API 类型定义（参照 vk_mvk_moltenvk.h）
-// vkGetMoltenVKConfigurationMVK 和 vkSetMoltenVKConfigurationMVK 可以在 VkInstance 创建之前
-// 调用（传入 VK_NULL_HANDLE），用于读取/修改 MoltenVK 的运行时配置。
-// 这两个 API 是 MoltenVK 的扩展函数（VK_MVK_moltenvk），不是标准 Vulkan 函数，
-// 需要通过 dlsym 从 libMoltenVK.dylib 中直接获取符号。
+// MoltenVK configuration API type definitions (modeled on vk_mvk_moltenvk.h)
+// vkGetMoltenVKConfigurationMVK and vkSetMoltenVKConfigurationMVK can be called before a VkInstance is created
+// (by passing VK_NULL_HANDLE), to read/modify MoltenVK's runtime configuration.
+// These two APIs are MoltenVK extension functions (VK_MVK_moltenvk) rather than standard Vulkan functions,
+// so their symbols must be obtained straight from libMoltenVK.dylib with dlsym.
 //
-// 注意：仓库中的 vk_mvk_moltenvk.h 头文件是旧版本（1.1.2, spec 30），
-// 但实际运行的 libMoltenVK.dylib 已是 1.2.9（从二进制 strings 确认）。
-// MoltenVK 1.2.9 支持 MVK_CONFIG_SWAPCHAIN_PRESENT_MODE 环境变量（0=IMMEDIATE, 2=FIFO），
-// JavaLauncher.m 中已设置 MVK_CONFIG_SWAPCHAIN_PRESENT_MODE=0。
-// MoltenVK 1.2.9 在 vkCreateSwapchainKHR 时会读取此环境变量覆盖应用的 presentMode，
-// 这是 Vulkan 模式帧率解锁的关键机制。
+// Note: the vk_mvk_moltenvk.h header in this repository is an old version (1.1.2, spec 30),
+// but the libMoltenVK.dylib actually in use is already 1.2.9 (confirmed from the binary with strings).
+// MoltenVK 1.2.9 supports the MVK_CONFIG_SWAPCHAIN_PRESENT_MODE environment variable (0=IMMEDIATE, 2=FIFO),
+// and JavaLauncher.m already sets MVK_CONFIG_SWAPCHAIN_PRESENT_MODE=0.
+// MoltenVK 1.2.9 reads that environment variable in vkCreateSwapchainKHR and overrides the application's presentMode,
+// which is the key mechanism for unlocking the frame rate in Vulkan mode.
 //
-// 以下成员顺序严格参照 vk_mvk_moltenvk.h 中的 MVKConfiguration 结构体定义。
-// 即使结构体大小与 MoltenVK 实际版本不完全匹配，vkGetMoltenVKConfigurationMVK
-// 会通过 configSize 参数限制写入大小，不会导致越界访问。
+// The member order below follows the MVKConfiguration struct definition in vk_mvk_moltenvk.h exactly.
+// Even if the struct size does not exactly match the MoltenVK version in use, vkGetMoltenVKConfigurationMVK
+// limits how much it writes via the configSize parameter, so no out-of-bounds access occurs.
 typedef struct {
-    VkBool32 debugMode;                              // 行 112
-    VkBool32 shaderConversionFlipVertexY;            // 行 132
-    VkBool32 synchronousQueueSubmits;                // 行 151
-    VkBool32 prefillMetalCommandBuffers;             // 行 198
-    uint32_t maxActiveMetalCommandBuffersPerQueue;   // 行 216
-    VkBool32 supportLargeQueryPools;                 // 行 236
-    VkBool32 presentWithCommandBuffer;               // 行 239 (已废弃)
-    VkBool32 swapchainMagFilterUseNearest;           // 行 257
-    uint64_t metalCompileTimeout;                    // 行 273 (uint64_t!)
-    VkBool32 performanceTracking;                    // 行 290
-    uint32_t performanceLoggingFrameCount;           // 行 306
-    VkBool32 displayWatermark;                       // 行 320
-    VkBool32 specializedQueueFamilies;               // 行 347
-    VkBool32 switchSystemGPU;                        // 行 379
-    VkBool32 fullImageViewSwizzle;                   // 行 432
-    uint32_t defaultGPUCaptureScopeQueueFamilyIndex; // 行 446
-    uint32_t defaultGPUCaptureScopeQueueIndex;       // 行 461
-    VkBool32 fastMathEnabled;                        // 行 475
-    uint32_t logLevel;                               // 行 491
-    uint32_t traceVulkanCalls;                       // 行 512
-    VkBool32 forceLowPowerGPU;                       // 行 526
-    VkBool32 semaphoreUseMTLFence;                   // 行 549
-    VkBool32 semaphoreUseMTLEvent;                   // 行 572
-    uint32_t autoGPUCaptureScope;                    // 行 596
-    char* autoGPUCaptureOutputFilepath;              // 行 616
-    VkBool32 texture1DAs2D;                          // 行 632
-    VkBool32 preallocateDescriptors;                 // 行 652
-    VkBool32 useCommandPooling;                      // 行 671
-    VkBool32 useMTLHeap;                             // 行 694
-    VkBool32 logActivityPerformanceInline;           // 行 711
+    VkBool32 debugMode;                              // line 112
+    VkBool32 shaderConversionFlipVertexY;            // line 132
+    VkBool32 synchronousQueueSubmits;                // line 151
+    VkBool32 prefillMetalCommandBuffers;             // line 198
+    uint32_t maxActiveMetalCommandBuffersPerQueue;   // line 216
+    VkBool32 supportLargeQueryPools;                 // line 236
+    VkBool32 presentWithCommandBuffer;               // line 239 (deprecated)
+    VkBool32 swapchainMagFilterUseNearest;           // line 257
+    uint64_t metalCompileTimeout;                    // line 273 (uint64_t!)
+    VkBool32 performanceTracking;                    // line 290
+    uint32_t performanceLoggingFrameCount;           // line 306
+    VkBool32 displayWatermark;                       // line 320
+    VkBool32 specializedQueueFamilies;               // line 347
+    VkBool32 switchSystemGPU;                        // line 379
+    VkBool32 fullImageViewSwizzle;                   // line 432
+    uint32_t defaultGPUCaptureScopeQueueFamilyIndex; // line 446
+    uint32_t defaultGPUCaptureScopeQueueIndex;       // line 461
+    VkBool32 fastMathEnabled;                        // line 475
+    uint32_t logLevel;                               // line 491
+    uint32_t traceVulkanCalls;                       // line 512
+    VkBool32 forceLowPowerGPU;                       // line 526
+    VkBool32 semaphoreUseMTLFence;                   // line 549
+    VkBool32 semaphoreUseMTLEvent;                   // line 572
+    uint32_t autoGPUCaptureScope;                    // line 596
+    char* autoGPUCaptureOutputFilepath;              // line 616
+    VkBool32 texture1DAs2D;                          // line 632
+    VkBool32 preallocateDescriptors;                 // line 652
+    VkBool32 useCommandPooling;                      // line 671
+    VkBool32 useMTLHeap;                             // line 694
+    VkBool32 logActivityPerformanceInline;           // line 711
 } MVKConfigurationLocal;
 
 typedef VkResult (*PFN_vkGetMoltenVKConfigurationMVKLocal)(VkInstance ignored, MVKConfigurationLocal* pConfiguration, size_t* pConfigurationSize);
 typedef VkResult (*PFN_vkSetMoltenVKConfigurationMVKLocal)(VkInstance ignored, MVKConfigurationLocal* pConfiguration, size_t* pConfigurationSize);
 
-// Vulkan 渲染绕过桥接层：Minecraft 自管 swapchain 和 queue，直接通过 libMoltenVK 提交。
-// 这些 stub 存在是为了让 pojavInitOpenGL() 能安装一个非 NULL 的桥接表，
-// 避免任何 GL 形状的 GLFW 调用在 Vulkan 路径接管前/后到达 dispatcher 时崩溃。
+// Vulkan rendering bypass bridge layer: Minecraft manages the swapchain and queue itself and submits straight through libMoltenVK.
+// These stubs exist so that pojavInitOpenGL() can install a non-NULL bridge table,
+// preventing a crash if any GL-shaped GLFW call reaches the dispatcher before or after the Vulkan path takes over.
 
 static vk_render_window_t g_dummy;
 
-// MoltenVK 配置 API 函数指针（在 vk_init 中通过 dlsym 加载）
+// MoltenVK configuration API function pointers (loaded with dlsym in vk_init)
 static PFN_vkGetMoltenVKConfigurationMVKLocal s_vkGetMoltenVKConfigurationMVK = NULL;
 static PFN_vkSetMoltenVKConfigurationMVKLocal s_vkSetMoltenVKConfigurationMVK = NULL;
 
-// VSync 状态：记录当前是否禁用了垂直同步
+// VSync state: records whether vertical sync is currently disabled
 static BOOL s_vsyncDisabled = NO;
 
-/// 从 libMoltenVK.dylib 中加载 MoltenVK 配置 API
-/// 这两个 API 可以在 VkInstance 创建之前调用，用于读取和修改 MoltenVK 运行时配置。
+/// Load the MoltenVK configuration API from libMoltenVK.dylib
+/// These two APIs can be called before a VkInstance is created, to read and modify MoltenVK's runtime configuration.
 static void loadMoltenVKConfigAPIs(void* dl_handle) {
     if (!dl_handle) {
         NSLog(@"[VKBridge] loadMoltenVKConfigAPIs: dl_handle is NULL, skipping");
         return;
     }
 
-    // 清除之前的错误状态
+    // Clear any earlier error state
     dlerror();
 
-    // 加载 vkGetMoltenVKConfigurationMVK
+    // Load vkGetMoltenVKConfigurationMVK
     s_vkGetMoltenVKConfigurationMVK = (PFN_vkGetMoltenVKConfigurationMVKLocal)dlsym(dl_handle, "vkGetMoltenVKConfigurationMVK");
     const char* getError = dlerror();
     if (getError || !s_vkGetMoltenVKConfigurationMVK) {
@@ -105,7 +105,7 @@ static void loadMoltenVKConfigAPIs(void* dl_handle) {
         NSLog(@"[VKBridge] Successfully loaded vkGetMoltenVKConfigurationMVK");
     }
 
-    // 加载 vkSetMoltenVKConfigurationMVK
+    // Load vkSetMoltenVKConfigurationMVK
     dlerror();
     s_vkSetMoltenVKConfigurationMVK = (PFN_vkSetMoltenVKConfigurationMVKLocal)dlsym(dl_handle, "vkSetMoltenVKConfigurationMVK");
     const char* setError = dlerror();
@@ -117,9 +117,9 @@ static void loadMoltenVKConfigAPIs(void* dl_handle) {
     }
 }
 
-/// 读取并记录当前 MoltenVK 配置
-/// 通过 vkGetMoltenVKConfigurationMVK 获取配置并打印关键参数，
-/// 帮助诊断 Vulkan 渲染器的帧率限制问题。
+/// Read and log the current MoltenVK configuration
+/// Reads the configuration with vkGetMoltenVKConfigurationMVK and prints the key parameters,
+/// to help diagnose frame rate limits with the Vulkan renderer.
 static void logMoltenVKConfiguration() {
     if (!s_vkGetMoltenVKConfigurationMVK) {
         NSLog(@"[VKBridge] vkGetMoltenVKConfigurationMVK not available, skipping config logging");
@@ -130,7 +130,7 @@ static void logMoltenVKConfiguration() {
     memset(&config, 0, sizeof(config));
     size_t configSize = sizeof(config);
 
-    // 传入 VK_NULL_HANDLE（第一个参数被忽略），可以在 VkInstance 创建之前调用
+    // Passing VK_NULL_HANDLE (the first parameter is ignored) allows this to be called before a VkInstance is created
     VkResult result = s_vkGetMoltenVKConfigurationMVK(VK_NULL_HANDLE, &config, &configSize);
     if (result == VK_SUCCESS || result == VK_INCOMPLETE) {
         NSLog(@"[VKBridge] MoltenVK Configuration (configSize=%zu, result=%d):", configSize, result);
@@ -152,17 +152,17 @@ static void logMoltenVKConfiguration() {
     }
 }
 
-/// 检查并记录 VSync 相关环境变量状态
-/// 这些环境变量影响 Vulkan 渲染器的帧率限制行为：
-/// - POJAV_DISABLE_VSYNC: 启动器偏好，控制是否禁用垂直同步
-/// - MVK_CONFIG_SWAPCHAIN_PRESENT_MODE: MoltenVK 1.2.5+ 支持的环境变量，
-///   强制 swapchain present mode（0=IMMEDIATE, 1=MAILBOX, 2=FIFO）
+/// Check and log the state of the VSync-related environment variables
+/// These environment variables affect how the Vulkan renderer limits the frame rate:
+/// - POJAV_DISABLE_VSYNC: the launcher preference controlling whether vertical sync is disabled
+/// - MVK_CONFIG_SWAPCHAIN_PRESENT_MODE: an environment variable supported by MoltenVK 1.2.5+ that
+///   forces the swapchain present mode (0=IMMEDIATE, 1=MAILBOX, 2=FIFO)
 ///
-/// 实际运行的 MoltenVK 版本为 1.2.9（从 libMoltenVK.dylib 二进制确认），
-/// 支持 MVK_CONFIG_SWAPCHAIN_PRESENT_MODE 环境变量。
-/// MoltenVK 1.2.9 在 vkCreateSwapchainKHR 时会读取此环境变量覆盖应用的 presentMode。
-/// 设备是否支持 IMMEDIATE present mode 由 MVKPhysicalDeviceMetalFeatures.presentModeImmediate
-/// 自动检测（大多数 iOS 设备支持）。
+/// The MoltenVK version actually in use is 1.2.9 (confirmed from the libMoltenVK.dylib binary),
+/// which supports the MVK_CONFIG_SWAPCHAIN_PRESENT_MODE environment variable.
+/// MoltenVK 1.2.9 reads that environment variable in vkCreateSwapchainKHR and overrides the application's presentMode.
+/// Whether the device supports the IMMEDIATE present mode is detected automatically through
+/// MVKPhysicalDeviceMetalFeatures.presentModeImmediate (most iOS devices do).
 static void logVSyncEnvironment() {
     const char* pojavDisableVsync = getenv("POJAV_DISABLE_VSYNC");
     const char* renderer = getenv("AMETHYST_RENDERER");
@@ -173,7 +173,7 @@ static void logVSyncEnvironment() {
     NSLog(@"[VKBridge]   POJAV_DISABLE_VSYNC=%s", pojavDisableVsync ?: "<unset>");
     NSLog(@"[VKBridge]   MVK_CONFIG_SWAPCHAIN_PRESENT_MODE=%s", mvkPresentMode ?: "<unset>");
 
-    // 判断 VSync 是否应该被禁用
+    // Decide whether VSync should be disabled
     if (pojavDisableVsync && strcmp(pojavDisableVsync, "1") == 0) {
         s_vsyncDisabled = YES;
         NSLog(@"[VKBridge]   -> VSync is DISABLED (POJAV_DISABLE_VSYNC=1)");
@@ -197,13 +197,13 @@ static bool vk_init(void) {
 
     NSLog(@"[VKBridge] Successfully loaded %s", RENDERER_NAME_VULKAN);
 
-    // 加载 MoltenVK 配置 API
+    // Load the MoltenVK configuration API
     loadMoltenVKConfigAPIs(h);
 
-    // 记录 VSync 环境变量状态
+    // Log the state of the VSync environment variables
     logVSyncEnvironment();
 
-    // 读取并记录当前 MoltenVK 配置
+    // Read and log the current MoltenVK configuration
     logMoltenVKConfiguration();
 
     return true;
@@ -214,14 +214,14 @@ static vk_render_window_t* vk_init_context(vk_render_window_t* share) {
 }
 
 static void vk_make_current(vk_render_window_t* bundle) {
-    // Vulkan 渲染器由 Minecraft/LWJGL 直接管理 Vulkan context，
-    // 桥接层无需做任何事。
+    // With the Vulkan renderer, Minecraft/LWJGL manage the Vulkan context directly,
+    // so the bridge layer has nothing to do.
 }
 
 static void vk_swap_buffers(void) {
-    // Vulkan 渲染器由 Minecraft/LWJGL 直接调用 vkQueuePresentKHR，
-    // 桥接层的 swap_buffers 不会被调用（除非有 GL 形状的残留调用）。
-    // 如果被调用，记录日志帮助诊断。
+    // With the Vulkan renderer, Minecraft/LWJGL call vkQueuePresentKHR directly,
+    // so the bridge layer's swap_buffers is never called (unless some leftover GL-shaped call arrives).
+    // If it is called, log it to help with diagnosis.
     static int s_swapBufferWarnCount = 0;
     if (s_swapBufferWarnCount < 3) {
         s_swapBufferWarnCount++;
@@ -230,21 +230,21 @@ static void vk_swap_buffers(void) {
 }
 
 static void vk_swap_interval(int interval) {
-    // Vulkan 渲染器由 Minecraft/LWJGL 直接管理 swapchain 的 present mode，
-    // 桥接层的 swap_interval 不会直接影响 Vulkan 的 VSync 行为。
+    // With the Vulkan renderer, Minecraft/LWJGL manage the swapchain present mode directly,
+    // so the bridge layer's swap_interval has no direct effect on Vulkan's VSync behavior.
     //
-    // 但我们在此处记录日志，帮助诊断 VSync 请求：
-    // - interval=0 表示请求禁用 VSync（解锁帧率）
-    // - interval=1 表示请求启用 VSync（锁屏刷新率）
+    // It is logged here anyway, to help diagnose VSync requests:
+    // - interval=0 means a request to disable VSync (unlocking the frame rate)
+    // - interval=1 means a request to enable VSync (locking to the screen refresh rate)
     //
-    // 对于 Vulkan 渲染器，VSync 控制通过以下机制实现：
-    // 1. PojavLauncher.java 写 enableVsync=false 到 options.txt（让 MC 不请求 VSync）
-    // 2. LWJGL 在 vkCreateSwapchainKHR 时选择 VK_PRESENT_MODE_IMMEDIATE_KHR
-    // （设备是否支持 IMMEDIATE 由 MoltenVK 自动检测，无需环境变量声明）
+    // For the Vulkan renderer, VSync is controlled through the following mechanisms:
+    // 1. PojavLauncher.java writes enableVsync=false into options.txt (so MC does not request VSync)
+    // 2. LWJGL selects VK_PRESENT_MODE_IMMEDIATE_KHR in vkCreateSwapchainKHR
+    // (whether the device supports IMMEDIATE is detected automatically by MoltenVK, with no environment variable needed)
 
-    // 拦截 VSync 请求：当 POJAV_DISABLE_VSYNC=1 时，强制 interval=0
-    // 虽然这对 Vulkan 渲染器没有直接效果（Minecraft 自管 swapchain），
-    // 但记录此拦截行为有助于诊断问题。
+    // Intercept the VSync request: force interval=0 when POJAV_DISABLE_VSYNC=1
+    // This has no direct effect on the Vulkan renderer (Minecraft manages the swapchain itself),
+    // but logging the interception helps with diagnosis.
     if (getenv("POJAV_DISABLE_VSYNC") && strcmp(getenv("POJAV_DISABLE_VSYNC"), "1") == 0) {
         if (interval != 0) {
             NSLog(@"[VKBridge] vk_swap_interval: intercepted VSync request interval=%d -> 0 (POJAV_DISABLE_VSYNC=1)", interval);
@@ -255,7 +255,7 @@ static void vk_swap_interval(int interval) {
         s_vsyncDisabled = NO;
     }
 
-    // 记录前几次的 swap_interval 调用，帮助诊断
+    // Log the first few swap_interval calls, to help with diagnosis
     static int s_swapIntervalLogCount = 0;
     if (s_swapIntervalLogCount < 5) {
         s_swapIntervalLogCount++;
@@ -265,7 +265,7 @@ static void vk_swap_interval(int interval) {
 
 static void vk_terminate(void) {
     NSLog(@"[VKBridge] vk_terminate: cleaning up Vulkan bridge");
-    // 清理配置 API 函数指针
+    // Clear the configuration API function pointers
     s_vkGetMoltenVKConfigurationMVK = NULL;
     s_vkSetMoltenVKConfigurationMVK = NULL;
     s_vsyncDisabled = NO;

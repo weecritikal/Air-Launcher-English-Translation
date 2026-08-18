@@ -2,14 +2,14 @@
  * Copyright LWJGL. All rights reserved.
  * License terms: https://www.lwjgl.org/license
  *
- * iOS 适配版：基于 LWJGL 3.4.1 标准 APIUtil.java，移除了 iOS 不支持的两个依赖：
- *   1. org.jspecify.annotations（iOS classpath 无此包，移除所有 @Nullable 注解）
- *   2. org.lwjgl.system.freebsd（iOS classpath 无此包，移除 FreeBSD 分支）
+ * iOS-adapted version: based on the standard APIUtil.java from LWJGL 3.4.1, with two dependencies iOS does not support removed:
+ *   1. org.jspecify.annotations (absent from the iOS classpath, so every @Nullable annotation was removed)
+ *   2. org.lwjgl.system.freebsd (absent from the iOS classpath, so the FreeBSD branch was removed)
  *
- * 关键修复：添加 LWJGL 3.4.1 新增的两个 apiCreateCIF / apiCreateCIFVar 重载
- * （无 abi 参数版本）。MC 26.3+ 的 SDL callback 接口（如 SDL_LogOutputFunctionI）
- * 期望调用 apiCreateCIF(FFIType, FFIType...)，而 PojavLauncher 的 iOS 精简版
- * APIUtil 仅有 apiCreateCIF(int, FFIType, FFIType...)，导致 NoSuchMethodError。
+ * Key fix: the two apiCreateCIF / apiCreateCIFVar overloads added in LWJGL 3.4.1 were added
+ * (the versions without an abi parameter). The SDL callback interfaces of MC 26.3+ (such as SDL_LogOutputFunctionI)
+ * expect to call apiCreateCIF(FFIType, FFIType...), while the slimmed-down iOS APIUtil of PojavLauncher
+ * only had apiCreateCIF(int, FFIType, FFIType...), producing a NoSuchMethodError.
  */
 package org.lwjgl.system;
 
@@ -131,7 +131,7 @@ public final class APIUtil {
 
     public static SharedLibrary apiCreateLibrary(String name) {
         switch (Platform.get()) {
-            // iOS 适配：移除 FreeBSD 分支（iOS classpath 无 org.lwjgl.system.freebsd 包）
+            // iOS adaptation: the FreeBSD branch was removed (the iOS classpath has no org.lwjgl.system.freebsd package)
             case LINUX:
                 return new LinuxLibrary(name);
             case MACOSX:
@@ -173,10 +173,10 @@ public final class APIUtil {
         if (buffer != null && memAddress(buffer) == mappedAddress && buffer.capacity() == capacity) {
             return buffer;
         }
-        // iOS 适配：标准 LWJGL 3.4.1 使用 wrapBufferByte(long, int)，
-        // 但 iOS PojavLauncher 的 MemoryUtil 无此方法。改用 iOS MemoryUtil
-        // 提供的等价调用 wrap(BUFFER_BYTE, ...) + order(NATIVE_ORDER)
-        // （与原 iOS APIUtil.class 反编译出的字节码一致）。
+        // iOS adaptation: standard LWJGL 3.4.1 uses wrapBufferByte(long, int),
+        // but the MemoryUtil of iOS PojavLauncher has no such method. The equivalent call provided by the iOS MemoryUtil
+        // is used instead: wrap(BUFFER_BYTE, ...) + order(NATIVE_ORDER)
+        // (matching the bytecode decompiled from the original iOS APIUtil.class).
         return mappedAddress == NULL ? null : ((ByteBuffer)wrap(BUFFER_BYTE, mappedAddress, capacity)).order(NATIVE_ORDER);
     }
 

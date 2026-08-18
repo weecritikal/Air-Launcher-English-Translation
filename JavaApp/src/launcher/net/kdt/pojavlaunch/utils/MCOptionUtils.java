@@ -48,9 +48,9 @@ public class MCOptionUtils
     }
 
     /**
-     * 移除 options.txt 中指定 key 的行（如果存在）。
-     * 用于在用户选择"默认"时清除之前写入的值，让 MC 使用内部默认行为。
-     * 注意：调用前必须先 load()。
+     * Remove the line with the given key from options.txt (if it is present).
+     * Used to clear a previously written value when the user selects "Default", so MC uses its internal default behavior.
+     * Note: load() must be called first.
      */
     public static void remove(String key) {
         if (mLineList == null) return;

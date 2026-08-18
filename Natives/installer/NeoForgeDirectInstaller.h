@@ -29,7 +29,7 @@ typedef NS_ENUM(NSInteger, NeoForgeDirectInstallerErrorCode) {
                             progress:(void (^)(double progress, NSString *stageMessage))progress
                                error:(NSError **)error;
 
-// 整合包导入专用：支持自定义 gameDir
+// Dedicated to modpack imports: supports a custom gameDir
 + (BOOL)installNeoForgeFromInstaller:(NSString *)installerPath
                            versionId:(NSString *)versionId
                        customGameDir:(nullable NSString *)customGameDir

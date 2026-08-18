@@ -111,7 +111,7 @@ void UIKit_launchMinecraftSurfaceVC(UIWindow* window, NSDictionary* metadata) {
     // Leave this pref, might be useful later for launching with Quick Actions/Shortcuts/URL Scheme
     //setPreference(@"internal_launch_on_boot", getPreference(@"restart_before_launch"));
     BaseAuthenticator *currentAuth = BaseAuthenticator.current;
-    // selected_account 存储 accountId（唯一标识），确保重启后能按 accountId 恢复登录状态
+    // selected_account stores the accountId (the unique identifier), so the login state can be restored by accountId after a restart
     setPrefObject(@"internal.selected_account", currentAuth.authData[@"accountId"]);
     dispatch_async(dispatch_get_main_queue(), ^{
         tmpRootVC = window.rootViewController;

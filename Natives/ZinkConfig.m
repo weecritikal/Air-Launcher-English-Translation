@@ -263,33 +263,33 @@ static AppleGPUGeneration _cachedGPUGeneration = AppleGPUGenerationUnknown;
     // since Mesa 21.0.0 Zink does not expose it by default on Metal/MoltenVK.
     // If compatibility issues arise, users can set zink.gl_override to 3.3 or 4.0.
     //
-    // 关键修复（Mesa 25.0.7 + 光影兼容性）：
-    //   原实现按优化级别禁用 compute/tessellation/geometry/MultiDraw/DSA 等扩展，
-    //   但这些扩展是 Iris/OptiFine 光影渲染植被（草方块、树叶、藤蔓）所必需：
-    //     - compute shader：Iris 阴影、SSAO、bloom 后处理
-    //     - tessellation shader：部分光影的位移映射
-    //     - geometry shader：部分光影的粒子/billboard
-    //   Mesa 25.0.7 升级后用户反馈草方块无法渲染，根因是 Auto 级别在 A9-A13 设备
-    //   推荐为 Low/Medium，禁用了 compute shader，Iris 的植被渲染 pipeline 崩溃。
-    //   修复策略（保守默认 + 显式覆盖）：
-    //     1. 所有优化级别默认保留所有 GL 扩展（仅禁用 MoltenVK 不支持的 Transform Feedback）
-    //     2. 只调整 GLSL cache 大小和 mesa_glthread
-    //     3. 用户可通过 zink.api_features 显式禁用扩展（极端性能优化场景）
+    // Key fix (Mesa 25.0.7 + shader compatibility):
+    //   The original implementation disabled extensions such as compute/tessellation/geometry/MultiDraw/DSA depending on the optimization level,
+    //   but those extensions are required for Iris/OptiFine shaders to render vegetation (grass blocks, leaves, vines):
+    //     - compute shader: Iris shadows, SSAO and bloom post-processing
+    //     - tessellation shader: displacement mapping in some shader packs
+    //     - geometry shader: particles/billboards in some shader packs
+    //   After the Mesa 25.0.7 upgrade users reported that grass blocks would not render; the root cause was that the Auto level
+    //   recommends Low/Medium on A9-A13 devices, which disabled the compute shader and broke Iris's vegetation rendering pipeline.
+    //   Fix strategy (conservative defaults + explicit override):
+    //     1. Every optimization level keeps all GL extensions by default (only Transform Feedback, which MoltenVK does not support, is disabled)
+    //     2. Only the GLSL cache size and mesa_glthread are adjusted
+    //     3. Users can disable extensions explicitly through zink.api_features (for extreme performance tuning)
     ZinkAPIFeatures supported = [self supportedAPIFeatures];
-    // 保守默认：保留所有支持的扩展，仅禁用 Transform Feedback（MoltenVK 限制）
+    // Conservative default: keep every supported extension and only disable Transform Feedback (a MoltenVK limitation)
     ZinkAPIFeatures enabledFeatures = supported & ~ZinkAPIFeatureTransformFeedback;
     BOOL enableGLThread = YES;
     int glslCacheSize = 32;
 
     switch (level) {
         case ZinkOptimizationLevelOff:
-            // Off 级别也保守：保留所有光影所需扩展
+            // The Off level is conservative too: keep every extension the shaders need
             glslCacheSize = 128;
             enableGLThread = YES;
             break;
 
         case ZinkOptimizationLevelSafe:
-            // Safe 级别：最小缓存，关闭 glthread
+            // Safe level: minimal cache, glthread off
             glslCacheSize = 16;
             enableGLThread = NO;
             break;
@@ -317,9 +317,9 @@ static AppleGPUGeneration _cachedGPUGeneration = AppleGPUGenerationUnknown;
     setenv("MESA_GL_VERSION_OVERRIDE", "4.1", 1);
     setenv("MESA_GLSL_VERSION_OVERRIDE", "410", 1);
 
-    // 仅当用户显式设置 zink.api_features 时才覆盖扩展列表，
-    // applyZinkEnvironmentFromPreferences 会处理此情况。
-    // 此处设置保守默认（保留所有扩展 + 强制启用 shader_draw_parameters）。
+    // The extension list is only overridden when the user explicitly sets zink.api_features,
+    // which applyZinkEnvironmentFromPreferences handles.
+    // Conservative defaults are set here (keep all extensions + force shader_draw_parameters on).
     NSString *extOverrides = [self extensionDisableStringForLevel:enabledFeatures];
     if (extOverrides.length > 0) {
         setenv("MESA_EXTENSION_OVERRIDE", extOverrides.UTF8String, 1);
@@ -478,15 +478,15 @@ static AppleGPUGeneration _cachedGPUGeneration = AppleGPUGenerationUnknown;
         setenv("MVK_CONFIG_PREFILL_METAL_COMMAND_BUFFERS", "0", 1);
     }
 
-    // Iris 光影 fragment shader 接口兼容性：
-    //   MoltenVK 编译 pipeline 时，若 fragment shader 声明了 vertex shader 未写入
-    //   的 input（如 `user(locn1_2)`），Metal pipeline 编译可能失败。
-    //   Iris 1.8.8+ 已内置兼容性补丁，会自动为未写入的 fragment input 添加初始化
-    //   （见日志 "compatibility-patched by adding an initialization for it"）。
+    // Iris shader fragment shader interface compatibility:
+    //   When MoltenVK compiles the pipeline, if the fragment shader declares an input the vertex shader never writes
+    //   (such as `user(locn1_2)`), Metal pipeline compilation may fail.
+    //   Iris 1.8.8+ ships a built-in compatibility patch that automatically adds an initialization for unwritten fragment inputs
+    //   (see the log line "compatibility-patched by adding an initialization for it").
     //
-    //   注：MVK_CONFIG_SHADER_INTERFACE_LINKING 环境变量在 MoltenVK 1.2.9 中
-    //   不存在（已通过 strings 验证），此设置会被忽略。保留作为未来 MoltenVK
-    //   版本的兼容性预留。Iris 的内置补丁已足够处理此问题。
+    //   Note: the MVK_CONFIG_SHADER_INTERFACE_LINKING environment variable does not exist in MoltenVK 1.2.9
+    //   (verified with strings), so this setting is ignored. It is kept as a placeholder for future MoltenVK
+    //   versions. Iris's built-in patch already handles the problem adequately.
     setenv("MVK_CONFIG_SHADER_INTERFACE_LINKING", "false", 1);
 
     // Set shader cache to a writable path (Documents/.mesa_shader_cache)

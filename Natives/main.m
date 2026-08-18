@@ -183,18 +183,18 @@ void init_redirectStdio() {
                 }
             }
             if (canAppendToLog) {
-                // canAppendToLog=YES 时，通过 appendToLog: 同时更新 UI 表格和发送通知
+                // When canAppendToLog=YES, appendToLog: both updates the UI table and posts the notification
                 [PLLogOutputView appendToLog:@(buf)];
             } else {
-                // canAppendToLog=NO 时（默认状态，用户未打开日志面板），
-                // PLLogOutputView 不会更新 UI，但 LanPortDetector 仍需要实时检测
-                // MC "对局域网开放"端口。直接在后台线程发送通知，
-                // LanPortDetector 的处理是线程安全的（processLogLine: 是无状态的，
-                // setPort:source: 内部 dispatch_async 到主线程）。
+                // When canAppendToLog=NO (the default state, with the log panel not opened by the user),
+                // PLLogOutputView does not update the UI, but LanPortDetector still needs to detect the
+                // MC "Open to LAN" port in real time. The notification is therefore posted directly from the background thread;
+                // LanPortDetector's handling is thread safe (processLogLine: is stateless and
+                // setPort:source: dispatches asynchronously to the main thread internally).
                 //
-                // 关键修复：之前 canAppendToLog=NO 时完全不发送通知，
-                // 导致 LanPortDetector 无法实时检测端口，用户先"对局域网开放"
-                // 再点"当房主"时无法生成分享代码。
+                // Key fix: previously no notification was posted at all when canAppendToLog=NO,
+                // so LanPortDetector could not detect the port in real time and no share code could be generated
+                // when the user opened to LAN first and then tapped "Host".
                 NSString *logString = @(buf);
                 NSArray *lines = [logString componentsSeparatedByCharactersInSet:
                     [NSCharacterSet newlineCharacterSet]];

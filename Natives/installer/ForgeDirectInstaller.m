@@ -4,16 +4,16 @@
 //
 //  Direct Forge installer (old + new format) based on FCL logic.
 //
-//  本直装器采用"下载预打补丁 PATCHED artifact"方案，不执行 install_profile.json 的 processors。
-//  原因：iOS 沙箱禁止 fork/exec，无法 spawn 子 JVM 执行 processor 工具（binarypatcher、
-//  jarsplitter、SpecialSource 等）。社区启动器在受限平台的通用做法是直接从 maven 下载
-//  Forge/NeoForge 已发布的预打补丁 client jar（如 forge-{mc}-{loader}-client.jar），
-//  这等同于 processor 的输出产物，运行时直接可用。
+//  This direct installer downloads the pre-patched PATCHED artifact instead of running the processors from install_profile.json.
+//  Reason: the iOS sandbox forbids fork/exec, so a child JVM cannot be spawned to run the processor tools (binarypatcher,
+//  jarsplitter, SpecialSource and so on). The common approach for community launchers on restricted platforms is to download
+//  the pre-patched client jar Forge/NeoForge already publish to maven (such as forge-{mc}-{loader}-client.jar),
+//  which is equivalent to the processors' output and usable as is at runtime.
 //
-//  JarJar（JarInJar）机制是运行期由 modlauncher 的 JarInJarDependencyLocator 处理，
-//  安装期无需任何 processor 介入。
+//  The JarJar (JarInJar) mechanism is handled at runtime by modlauncher's JarInJarDependencyLocator,
+//  so no processor is needed at install time.
 //
-//  1.12.2 及以下旧格式 Forge 没有 processors，直装直接放 universal jar + version.json 即可。
+//  Forge in the old format (1.12.2 and earlier) has no processors, so a direct install just drops in the universal jar + version.json.
 //
 
 #import "ForgeDirectInstaller.h"
@@ -114,21 +114,21 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
             return NO;
         }
 
-        // 整合包导入时使用自定义 gameDir；否则使用默认 POJAV_GAME_DIR
-        // 注意：gameDir（user.dir，mods/saves/configs 隔离目录）用 customGameDir，
-        // 但 versionDir 和 librariesDir 必须始终用 POJAV_GAME_DIR（主目录）。
-        // 原因：Minecraft 启动器（Java 端 Tools.java）的 DIR_HOME_VERSION 和 DIR_HOME_LIBRARY
-        // 固定指向 POJAV_GAME_DIR/versions 和 POJAV_GAME_DIR/libraries，不从 profile gameDir 读取。
-        // 之前把 versionDir/librariesDir 放到 customGameDir 下会导致启动时"找不到版本信息"。
+        // Use the custom gameDir when importing a modpack; otherwise use the default POJAV_GAME_DIR
+        // Note: gameDir (user.dir, the isolated directory for mods/saves/configs) uses customGameDir,
+        // but versionDir and librariesDir must always use POJAV_GAME_DIR (the main directory).
+        // Reason: DIR_HOME_VERSION and DIR_HOME_LIBRARY in the Minecraft launcher (Tools.java on the Java side)
+        // always point at POJAV_GAME_DIR/versions and POJAV_GAME_DIR/libraries and are not read from the profile gameDir.
+        // Putting versionDir/librariesDir under customGameDir used to cause "version information not found" at launch.
         NSString *gameDir = customGameDir.length > 0 ? customGameDir : [self gameDirectory];
-        NSString *mainGameDir = [self gameDirectory];  // 始终用主目录存放 versions 和 libraries
+        NSString *mainGameDir = [self gameDirectory];  // Always use the main directory to store versions and libraries
         NSString *librariesDir = [mainGameDir stringByAppendingPathComponent:@"libraries"];
         NSLog(@"[ForgeDirect] Game directory (user.dir): %@", gameDir);
         NSLog(@"[ForgeDirect] Main game directory (versions/libraries): %@", mainGameDir);
         NSLog(@"[ForgeDirect] Libraries directory: %@", librariesDir);
         reportProgress(0.15, @"Preparing the version folder");
 
-        // 提前创建 libraries 目录，避免后续下载/解压失败
+        // Create the libraries directory up front, so later downloads/extractions do not fail
         [[NSFileManager defaultManager] createDirectoryAtPath:librariesDir
                                   withIntermediateDirectories:YES
                                                    attributes:nil
@@ -161,7 +161,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
         }
 
         // Step 7: Register version in launcher_profiles.json (must run on main thread)
-        // 整合包导入时跳过（由 ModpackImportService.createProfileForModpack 统一注册）
+        // Skipped when importing a modpack (ModpackImportService.createProfileForModpack registers it centrally)
         if (!skipRegisterVersion) {
             NSLog(@"[ForgeDirect] Registering version on main thread");
             reportProgress(0.95, @"Registering version");
@@ -210,9 +210,9 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
 
 #pragma mark - Helpers
 
-// 游戏目录：与 JavaLauncher.m 中 [launchTarget isKindOfClass:NSDictionary.class] 分支保持一致
-// 即 $POJAV_HOME/instances/<general.game_directory>/<profile.gameDir>
-// 但直装时还没有 profile，无法读 gameDir，使用默认 "."
+// Game directory: consistent with the [launchTarget isKindOfClass:NSDictionary.class] branch in JavaLauncher.m
+// i.e. $POJAV_HOME/instances/<general.game_directory>/<profile.gameDir>
+// But there is no profile yet during a direct install, so gameDir cannot be read and the default "." is used
 + (NSString *)gameDirectory {
     const char *env = getenv("POJAV_GAME_DIR");
     if (env) {
@@ -221,11 +221,11 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
     return NSHomeDirectory();
 }
 
-/// 阶段6修复（参照 FCL）：用 NSURLSession 替代已废弃的 NSURLConnection sendSynchronousRequest:
-/// 进行同步 HTTP 下载。原 NSURLConnection 在 iOS 13+ 已废弃，BMCLAPI 等镜像源在某些 iOS 版本
-/// 下表现不稳定（TLS 协商失败、超时不生效、不跟随 302 重定向等），导致 ensureParentVersionExists:
-/// 拉取父版本 JSON 失败 → Forge/NeoForge 版本 inheritsFrom 找不到原版 → 启动崩溃。
-/// 这里复用 downloadFileFromURL: 中已验证可用的 NSURLSession + 信号量模式。
+/// Phase 6 fix (modeled on FCL): use NSURLSession instead of the deprecated NSURLConnection sendSynchronousRequest:
+/// for synchronous HTTP downloads. NSURLConnection has been deprecated since iOS 13, and mirrors such as BMCLAPI behaved
+/// unreliably on some iOS versions (TLS negotiation failures, timeouts having no effect, 302 redirects not being followed),
+/// making ensureParentVersionExists: fail to fetch the parent version JSON → the Forge/NeoForge version could not find the vanilla version named in inheritsFrom → the launch crashed.
+/// This reuses the NSURLSession + semaphore pattern already proven in downloadFileFromURL:.
 + (NSData *)downloadDataForRequest:(NSURLRequest *)request error:(NSError **)error {
     if (!request) {
         if (error) {
@@ -271,13 +271,13 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
     return resultData;
 }
 
-/// 参照 FCL/HMCL：确保父版本（vanilla MC）的 version JSON 已存在。
-/// Forge/NeoForge 的 version.json 含 "inheritsFrom": "1.20.1" 等字段，启动时 Java 端
-/// Tools.getVersionInfo() 会读取 versions/{inheritsFrom}/{inheritsFrom}.json 与当前版本合并。
-/// 若用户尚未安装原版，启动会因 FileNotFoundException 崩溃。
-/// 本方法仅下载父版本的 version JSON（不下载原版 client.jar，因为 iOS 启动器使用
-/// 自有渲染管线，不需要原版 client.jar；但需要 JSON 以提供 mainClass、arguments、
-/// assetIndex、vanilla libraries 等元数据）。
+/// Modeled on FCL/HMCL: make sure the version JSON of the parent version (vanilla MC) exists.
+/// The version.json of Forge/NeoForge contains fields such as "inheritsFrom": "1.20.1", and at launch
+/// Tools.getVersionInfo() on the Java side reads versions/{inheritsFrom}/{inheritsFrom}.json and merges it with the current version.
+/// If the user has not installed the vanilla version yet, the launch crashes with a FileNotFoundException.
+/// This method only downloads the parent version's version JSON (not the vanilla client.jar, because the iOS launcher uses
+/// its own rendering pipeline and does not need the vanilla client.jar; the JSON is needed for metadata such as mainClass, arguments,
+/// assetIndex and the vanilla libraries).
 + (BOOL)ensureParentVersionExists:(NSString *)parentVersionId error:(NSError **)error {
     if (parentVersionId.length == 0) return YES;
 
@@ -287,7 +287,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
     NSString *parentJsonPath = [parentVersionDir stringByAppendingPathComponent:
                                 [NSString stringWithFormat:@"%@.json", parentVersionId]];
 
-    // 1. 父版本 JSON 已存在，无需下载
+    // 1. The parent version JSON already exists, so there is nothing to download
     if ([NSFileManager.defaultManager fileExistsAtPath:parentJsonPath]) {
         NSLog(@"[ForgeDirect] Parent version JSON already exists: %@", parentJsonPath);
         return YES;
@@ -295,7 +295,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
 
     NSLog(@"[ForgeDirect] Parent version JSON missing, downloading: %@", parentVersionId);
 
-    // 2. 拉取 Mojang 版本清单
+    // 2. Fetch the Mojang version manifest
     NSString *downloadSource = getPrefObject(@"general.download_source");
     BOOL useBMCLAPI = [downloadSource isEqualToString:@"bmclapi"];
     NSString *manifestURL = useBMCLAPI
@@ -334,7 +334,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
         return NO;
     }
 
-    // 3. 查找匹配的版本条目，获取 version JSON URL
+    // 3. Find the matching version entry and get its version JSON URL
     NSString *versionJSONURL = nil;
     for (NSDictionary *v in versions) {
         if ([v isKindOfClass:[NSDictionary class]] && [v[@"id"] isEqualToString:parentVersionId]) {
@@ -351,7 +351,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
         return NO;
     }
 
-    // BMCLAPI 镜像：替换 Mojang 官方域名为 BMCLAPI 域名
+    // BMCLAPI mirror: replace the official Mojang domain with the BMCLAPI domain
     if (useBMCLAPI) {
         versionJSONURL = [versionJSONURL stringByReplacingOccurrencesOfString:@"piston-meta.mojang.com"
                                                                     withString:@"bmclapi2.bangbang93.com"];
@@ -361,7 +361,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
 
     NSLog(@"[ForgeDirect] Downloading parent version JSON from: %@", versionJSONURL);
 
-    // 4. 下载 version JSON
+    // 4. Download the version JSON
     NSURL *jsonURL = [NSURL URLWithString:versionJSONURL];
     if (!jsonURL) {
         if (error) {
@@ -383,7 +383,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
         return NO;
     }
 
-    // 5. 创建父版本目录并写入 JSON
+    // 5. Create the parent version directory and write the JSON
     NSError *dirError = nil;
     [NSFileManager.defaultManager createDirectoryAtPath:parentVersionDir
                             withIntermediateDirectories:YES
@@ -418,22 +418,22 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
     profileDict[@"gameDir"] = @".";
     profileDict[@"type"] = @"custom";
     profileDict[@"created"] = [NSDate date].description;
-    // 推断 Java 版本：Forge 1.20.5+ 需 Java 21，1.18+ 需 Java 17，1.17 需 Java 16，其他 Java 8
-    // versionId 形如 "1.20.1-forge-47.3.0" 或 "Forge-1.20.1-47.3.0"，提取 MC 版本
+    // Infer the Java version: Forge 1.20.5+ needs Java 21, 1.18+ needs Java 17, 1.17 needs Java 16, everything else Java 8
+    // versionId looks like "1.20.1-forge-47.3.0" or "Forge-1.20.1-47.3.0", so extract the MC version
     NSInteger javaMajor = [self inferJavaMajorVersionFromVersionId:versionId];
-    // 写入 NSString 而非 NSDictionary，与 ProfileSettingsViewController 等所有读取方一致
-    // JavaLauncher 通过 .intValue 读取，"17".intValue = 17
+    // Write an NSString rather than an NSDictionary, consistent with every reader such as ProfileSettingsViewController
+    // JavaLauncher reads it with .intValue, and "17".intValue = 17
     profileDict[@"javaVersion"] = [NSString stringWithFormat:@"%ld", (long)javaMajor];
     [profiles saveProfile:profileDict withName:versionId];
-    // 与 Fabric / Vanilla 安装路径保持一致：自动选中新建的 profile，避免用户回到主界面仍启动旧版本
+    // Consistent with the Fabric / Vanilla installation paths: select the newly created profile automatically, so the user does not return to the main screen and still launch the old version
     profiles.selectedProfileName = versionId;
     NSLog(@"[ForgeDirect] Profile saved and selected (javaVersion=%ld, gameDir=%@)", (long)javaMajor, profileDict[@"gameDir"]);
 }
 
-/// 从 versionId 中推断所需 Java 主版本号
-/// versionId 形如 "1.20.1-forge-47.3.0"、"Forge-1.20.1-47.3.0"、"1.18.2-forge-40.2.0"
+/// Infer the required Java major version from the versionId
+/// versionId looks like "1.20.1-forge-47.3.0", "Forge-1.20.1-47.3.0" or "1.18.2-forge-40.2.0"
 + (NSInteger)inferJavaMajorVersionFromVersionId:(NSString *)versionId {
-    // 提取 1.x.x 格式的 MC 版本（锚定开头或分隔符，避免误匹配 loader 版本号中的 "1.x"）
+    // Extract the MC version in 1.x.x form (anchored at the start or at a separator, to avoid matching a "1.x" inside the loader version)
     NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:@"(?:^|[-_])1\\.(\\d+)(?:\\.(\\d+))?"
                                                                            options:0
                                                                              error:nil];
@@ -448,8 +448,8 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
     if (minor >= 21) return 21;                  // 1.21+
     if (minor >= 20 && patch >= 5) return 21;    // 1.20.5+
     if (minor >= 18) return 17;                  // 1.18+
-    if (minor >= 17) return 17;                  // 1.17（项目未捆绑 Java 16，Java 17 可向后兼容运行 1.17）
-    return 8;                                     // 1.16.5 及以下
+    if (minor >= 17) return 17;                  // 1.17 (the project does not bundle Java 16, and Java 17 can run 1.17 in a backward-compatible way)
+    return 8;                                     // 1.16.5 and below
 }
 
 #pragma mark - Old format (Forge 1.12.2-)
@@ -483,8 +483,8 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
     mutableVersionInfo[@"id"] = versionId;
 
     // Prepare version directory
-    // 版本 JSON 必须写入 POJAV_GAME_DIR/versions/（主目录），而非 profile gameDir。
-    // Minecraft 启动器 Java 端固定从 POJAV_GAME_DIR/versions 加载版本 JSON。
+    // The version JSON must be written into POJAV_GAME_DIR/versions/ (the main directory) rather than the profile gameDir.
+    // The Java side of the Minecraft launcher always loads version JSONs from POJAV_GAME_DIR/versions.
     NSString *versionDir = [[self gameDirectory] stringByAppendingPathComponent:[NSString stringWithFormat:@"versions/%@", versionId]];
     NSString *versionJsonPath = [versionDir stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.json", versionId]];
     NSLog(@"[ForgeDirect] Version directory: %@", versionDir);
@@ -516,19 +516,19 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
         }
         NSLog(@"[ForgeDirect] Universal jar extracted successfully");
     } else {
-        // filePath 缺失：universal jar 是老版本 Forge 的核心运行时依赖
-        // 若 mavenPath 存在，后续 extractAllMavenEntries 可能会提取到（zip 内 maven/ 路径下）
-        // 若 mavenPath 也缺失，启动时可能 NoClassDefFoundError
+        // filePath missing: the universal jar is the core runtime dependency of older Forge versions
+        // If mavenPath exists, extractAllMavenEntries later may still extract it (from the maven/ path inside the zip)
+        // If mavenPath is missing too, launching may fail with NoClassDefFoundError
         NSLog(@"[ForgeDirect] Warning: install.filePath missing, universal jar will rely on extractAllMavenEntries or subsequent downloadMissingLibraries");
     }
     reportProgress(0.7, @"Extracting libraries (1/1)");
 
-    // 老格式也需要解压 installer.jar 内 maven/ 下的所有依赖
-    // 老版本 Forge 通常 libraries 是运行时从 Maven 下载的，但 installer.jar 内可能也带了一部分
+    // The old format also needs every dependency under maven/ inside installer.jar to be extracted
+    // Older Forge versions usually download libraries from Maven at runtime, but installer.jar may ship some of them too
     reportProgress(0.75, @"Extracting the embedded maven dependencies");
     [self extractAllMavenEntries:installerPath toLibrariesDir:librariesDir];
 
-    // 下载 versionInfo.libraries 中缺失的库（老格式也可能有 libraries 数组）
+    // Download the libraries missing from versionInfo.libraries (the old format may have a libraries array as well)
     NSArray *libs = mutableVersionInfo[@"libraries"];
     if ([libs isKindOfClass:[NSArray class]] && libs.count > 0) {
         reportProgress(0.8, @"Downloading missing libraries");
@@ -549,8 +549,8 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
     }
     NSLog(@"[ForgeDirect] Version JSON written successfully");
 
-    // 参照 FCL/HMCL：老格式 Forge 1.12- 的 versionInfo 也可能含 inheritsFrom，
-    // 确保父版本（vanilla MC）的 version JSON 已存在。
+    // Modeled on FCL/HMCL: the versionInfo of old-format Forge 1.12- may also contain inheritsFrom,
+    // so make sure the version JSON of the parent version (vanilla MC) exists.
     NSString *oldInheritsFrom = [mutableVersionInfo[@"inheritsFrom"] isKindOfClass:[NSString class]] ? mutableVersionInfo[@"inheritsFrom"] : nil;
     if (oldInheritsFrom.length > 0 && ![oldInheritsFrom isEqualToString:versionId]) {
         NSLog(@"[ForgeDirect] Checking parent vanilla version (old format): %@", oldInheritsFrom);
@@ -589,7 +589,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
     if (!versionJsonEntry || ![versionJsonEntry isKindOfClass:[NSString class]]) {
         versionJsonEntry = @"version.json";
     }
-    // version.json 路径可能以 "/" 开头，统一去掉
+    // The version.json path may start with "/", which is stripped uniformly
     if ([versionJsonEntry hasPrefix:@"/"]) {
         versionJsonEntry = [versionJsonEntry substringFromIndex:1];
     }
@@ -661,8 +661,8 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
     }
 
     // Prepare version directory
-    // 版本 JSON 必须写入 POJAV_GAME_DIR/versions/（主目录），而非 profile gameDir。
-    // Minecraft 启动器 Java 端固定从 POJAV_GAME_DIR/versions 加载版本 JSON。
+    // The version JSON must be written into POJAV_GAME_DIR/versions/ (the main directory) rather than the profile gameDir.
+    // The Java side of the Minecraft launcher always loads version JSONs from POJAV_GAME_DIR/versions.
     NSString *versionDir = [[self gameDirectory] stringByAppendingPathComponent:[NSString stringWithFormat:@"versions/%@", versionId]];
     NSString *versionJsonPath = [versionDir stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.json", versionId]];
     NSLog(@"[ForgeDirect] Version directory: %@", versionDir);
@@ -671,16 +671,16 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
                                                attributes:nil
                                                     error:nil];
 
-    // Step A: 解压 installer.jar 内 maven/ 下的所有依赖到 libraries 目录
-    // 这是 installer 自带的依赖，必装
+    // Step A: extract every dependency under maven/ inside installer.jar into the libraries directory
+    // These are the dependencies the installer ships and they must be installed
     NSLog(@"[ForgeDirect] Extracting all maven entries from installer jar");
     reportProgress(0.2, @"Extracting the embedded maven dependencies");
     NSUInteger extractedCount = [self extractAllMavenEntries:installerPath toLibrariesDir:librariesDir];
     NSLog(@"[ForgeDirect] Extracted %lu maven entries", (unsigned long)extractedCount);
 
-    // Step B: 下载 versionJson.libraries 中未在 installer.jar 内的库
-    // version.json 的 libraries 包含 vanilla mc、modlauncher、bootstraplauncher 等
-    // 这些不在 installer.jar 内，必须从 maven 下载
+    // Step B: download the libraries from versionJson.libraries that are not inside installer.jar
+    // The libraries in version.json include vanilla mc, modlauncher, bootstraplauncher and so on
+    // Those are not inside installer.jar and must be downloaded from maven
     NSLog(@"[ForgeDirect] Downloading missing libraries from maven");
     reportProgress(0.3, @"Downloading missing libraries");
     NSArray *allLibraries = versionJson[@"libraries"];
@@ -688,13 +688,13 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
         [self downloadMissingLibraries:allLibraries librariesDir:librariesDir progress:progress baseProgress:0.3 progressSpan:0.4];
     }
 
-    // Step C: 关键步骤——下载预打补丁的 PATCHED artifact
-    // install_profile.json 的 processors 会生成 :client 这个 jar，但 iOS 不能跑 processor。
-    // Forge/NeoForge 已将这个预打补丁 jar 发布到 maven，直接下载即可。
+    // Step C: the key step - download the pre-patched PATCHED artifact
+    // The processors in install_profile.json would produce the :client jar, but iOS cannot run processors.
+    // Forge/NeoForge already publish that pre-patched jar to maven, so it can simply be downloaded.
     NSLog(@"[ForgeDirect] Downloading pre-patched client artifact");
     reportProgress(0.75, @"Downloading the pre-patched core jar");
     NSString *mainPath = installProfile[@"path"];
-    // 兜底：path 字段缺失时用 version 字段拼接标准 Forge 坐标
+    // Fallback: build the standard Forge coordinates from the version field when the path field is missing
     if (![mainPath isKindOfClass:[NSString class]] || mainPath.length == 0) {
         NSString *versionField = installProfile[@"version"];
         if ([versionField isKindOfClass:[NSString class]] && versionField.length > 0) {
@@ -708,7 +708,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
             return NO;
         }
     } else {
-        // path 是 Forge 1.13+ 运行核心依赖，缺失会导致启动时 ClassNotFoundException
+        // path is a core runtime dependency of Forge 1.13+, and its absence causes a ClassNotFoundException at launch
         NSLog(@"[ForgeDirect] install_profile.json missing path/version fields, cannot download patched client jar");
         if (error) {
             *error = [NSError errorWithDomain:ForgeDirectInstallerErrorDomain
@@ -732,18 +732,18 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
     }
     NSLog(@"[ForgeDirect] Version JSON written successfully");
 
-    // 参照 FCL/HMCL：确保父版本（vanilla MC）的 version JSON 已存在。
-    // Forge 1.13+ 的 version.json 含 "inheritsFrom": "1.20.1" 等字段，启动时 Java 端会
-    // 读取 versions/{inheritsFrom}/{inheritsFrom}.json 与 Forge 版本合并。
-    // 若用户尚未安装原版，启动会因 FileNotFoundException 崩溃。
-    // 这里在直装完成后自动补全缺失的父版本 JSON（仅下载 JSON，不下载原版客户端 jar，
-    // 因为 iOS 启动器使用自有渲染管线，不需要原版 client.jar）。
+    // Modeled on FCL/HMCL: make sure the version JSON of the parent version (vanilla MC) exists.
+    // The version.json of Forge 1.13+ contains fields such as "inheritsFrom": "1.20.1", and at launch the Java side
+    // reads versions/{inheritsFrom}/{inheritsFrom}.json and merges it with the Forge version.
+    // If the user has not installed the vanilla version yet, the launch crashes with a FileNotFoundException.
+    // The missing parent version JSON is therefore filled in automatically after the direct install (only the JSON is downloaded, not the vanilla client jar,
+    // because the iOS launcher uses its own rendering pipeline and does not need the vanilla client.jar).
     NSString *inheritsFrom = [versionJson[@"inheritsFrom"] isKindOfClass:[NSString class]] ? versionJson[@"inheritsFrom"] : nil;
     if (inheritsFrom.length > 0 && ![inheritsFrom isEqualToString:versionId]) {
         NSLog(@"[ForgeDirect] Checking parent vanilla version: %@", inheritsFrom);
         NSError *parentError = nil;
         if (![self ensureParentVersionExists:inheritsFrom error:&parentError]) {
-            // 父版本缺失只发出警告，不阻断安装（用户可能后续手动安装原版）
+            // A missing parent version only produces a warning and does not block the installation (the user may install the vanilla version manually later)
             NSLog(@"[ForgeDirect] Warning: parent version %@ auto-completion failed: %@", inheritsFrom, parentError.localizedDescription ?: @"Unknown error");
         } else {
             NSLog(@"[ForgeDirect] Parent vanilla version ensured: %@", inheritsFrom);
@@ -756,8 +756,8 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
 
 #pragma mark - Maven entry Extraction
 
-// 解压 installer.jar 内 maven/ 目录下所有文件到 libraries 目录
-// 返回成功解压的文件数
+// Extract every file under the maven/ directory inside installer.jar into the libraries directory
+// Returns the number of files extracted successfully
 + (NSUInteger)extractAllMavenEntries:(NSString *)installerPath toLibrariesDir:(NSString *)librariesDir {
     NSError *openError = nil;
     UZKArchive *archive = [[UZKArchive alloc] initWithPath:installerPath error:&openError];
@@ -776,23 +776,23 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
     NSUInteger count = 0;
     NSFileManager *fm = [NSFileManager defaultManager];
     for (NSString *name in filenames) {
-        // 只处理 maven/ 前缀的文件
+        // Only handle files with the maven/ prefix
         if (![name hasPrefix:@"maven/"]) continue;
-        // 跳过目录条目（以 / 结尾），避免 extractDataFromFile 返回空数据产生误报日志
+        // Skip directory entries (those ending in /), so extractDataFromFile returning empty data does not produce misleading log lines
         if ([name hasSuffix:@"/"]) continue;
 
-        // 转换为相对路径：去掉 "maven/" 前缀
+        // Convert to a relative path by stripping the "maven/" prefix
         NSString *relativePath = [name substringFromIndex:@"maven/".length];
         if (relativePath.length == 0) continue;
 
         NSString *destPath = [librariesDir stringByAppendingPathComponent:relativePath];
-        // 已存在的文件跳过，避免重复解压（重复安装场景）
+        // Skip files that already exist, to avoid extracting them twice (in the reinstall case)
         if ([fm fileExistsAtPath:destPath]) {
             count++;
             continue;
         }
 
-        // 直接用已打开的 archive 实例提取，避免每个文件都重新打开 zip（性能优化）
+        // Extract using the already opened archive instance, instead of reopening the zip for every file (a performance optimization)
         NSError *extractError = nil;
         NSData *data = [archive extractDataFromFile:name error:&extractError];
         if (!data || extractError) {
@@ -800,11 +800,11 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
             continue;
         }
 
-        // 创建目标目录（处理同名文件冲突）
+        // Create the target directory (handling collisions with a file of the same name)
         NSString *destDir = [destPath stringByDeletingLastPathComponent];
         [self ensureDirectoryExists:destDir error:nil];
 
-        // 写入文件
+        // Write the file
         NSError *writeError = nil;
         if (![data writeToFile:destPath options:NSDataWritingAtomic error:&writeError]) {
             NSLog(@"[ForgeDirect] extractAllMavenEntries: failed to write %@: %@", destPath, writeError.localizedDescription ?: @"unknown");
@@ -817,8 +817,8 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
 
 #pragma mark - Library Download
 
-// 下载 version.json.libraries 中尚未存在的库
-// 优先用 library.downloads.artifact.url；若没有则用 maven 仓库拼接
+// Download the libraries from version.json.libraries that do not exist yet
+// library.downloads.artifact.url is preferred; if it is absent the maven repository URL is assembled instead
 + (void)downloadMissingLibraries:(NSArray *)libraries
                    librariesDir:(NSString *)librariesDir
                        progress:(void (^)(double, NSString *))progress
@@ -831,8 +831,8 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
     NSUInteger downloaded = 0;
     NSUInteger skipped = 0;
     NSUInteger failed = 0;
-    NSUInteger processed = 0;  // 已处理数（用于进度计算，包含成功/跳过/失败）
-    NSMutableArray<NSString *> *criticalFailures = [NSMutableArray array];  // 关键库失败清单
+    NSUInteger processed = 0;  // Number processed (used for the progress calculation, counting successes/skips/failures)
+    NSMutableArray<NSString *> *criticalFailures = [NSMutableArray array];  // List of failed critical libraries
 
     for (NSDictionary *library in libraries) {
         if (![library isKindOfClass:[NSDictionary class]]) continue;
@@ -840,9 +840,9 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
         NSString *name = [library[@"name"] isKindOfClass:[NSString class]] ? library[@"name"] : nil;
         if (!name) continue;
 
-        // 参照 FCL/HMCL：评估库的 OS rules，iOS 视为 osx。
-        // 跳过仅在 Windows/Linux 上启用的库（如 natives-windows、twitch 平台库等），
-        // 避免下载无用的二进制 natives 和潜在的 404 失败。
+        // Modeled on FCL/HMCL: evaluate the library's OS rules, treating iOS as osx.
+        // Skip libraries enabled only on Windows/Linux (such as natives-windows and Twitch platform libraries),
+        // to avoid downloading useless native binaries and running into 404s.
         id rulesObj = library[@"rules"];
         if ([rulesObj isKindOfClass:[NSArray class]] && [(NSArray *)rulesObj count] > 0) {
             if (![MinecraftResourceUtils evaluateRules:(NSArray *)rulesObj]) {
@@ -853,7 +853,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
             }
         }
 
-        // 解析目标路径
+        // Resolve the target path
         NSString *relativePath = nil;
         NSDictionary *downloads = library[@"downloads"];
         if ([downloads isKindOfClass:[NSDictionary class]]) {
@@ -872,14 +872,14 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
 
         NSString *destPath = [librariesDir stringByAppendingPathComponent:relativePath];
 
-        // 已存在则跳过
+        // Skip it if it already exists
         if ([fm fileExistsAtPath:destPath]) {
             skipped++;
             processed++;
             continue;
         }
 
-        // 拼 URL
+        // Assemble the URL
         NSString *url = nil;
         if ([downloads isKindOfClass:[NSDictionary class]]) {
             NSDictionary *artifact = downloads[@"artifact"];
@@ -891,7 +891,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
             }
         }
         if (!url) {
-            // 用 maven 仓库拼接（Forge 库走 maven.minecraftforge.net，其他走 libraries.minecraft.net）
+            // Assemble it from the maven repository (Forge libraries come from maven.minecraftforge.net, everything else from libraries.minecraft.net)
             url = [self buildMavenURLForLibrary:name relativePath:relativePath];
         }
 
@@ -902,7 +902,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
             continue;
         }
 
-        // 用 processed 计算进度（避免失败时进度停滞）
+        // Compute progress from processed (so progress does not stall on failures)
         if (progress) {
             double p = base + span * ((double)processed / (double)total);
             progress(p, [NSString stringWithFormat:@"Downloading libraries (%lu/%lu): %@", (unsigned long)(processed + 1), (unsigned long)total, name]);
@@ -913,7 +913,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
             downloaded++;
             NSLog(@"[ForgeDirect] Downloaded library: %@", name);
         } else {
-            // 主源失败：尝试 fallback 源（BMCLAPI ↔ 官方源）
+            // The primary source failed: try the fallback source (BMCLAPI ↔ the official source)
             NSLog(@"[ForgeDirect] Primary source failed for %@, trying fallback: %@", name, downloadError.localizedDescription ?: @"unknown");
             NSString *fallbackURL = [self buildFallbackURLForLibrary:name relativePath:relativePath];
             if (fallbackURL && ![fallbackURL isEqualToString:url]) {
@@ -927,14 +927,14 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
                 NSLog(@"[ForgeDirect] Fallback also failed for %@: %@", name, fallbackError.localizedDescription ?: @"unknown");
             }
             failed++;
-            // 关键库（modlauncher、bootstraplauncher、mixin、asm、forge/neoforged 自家库）失败会启动崩溃，记录警告
+            // A failed critical library (modlauncher, bootstraplauncher, mixin, asm, or Forge/NeoForge's own libraries) crashes the launch, so log a warning
             if ([self isCriticalLibrary:name]) {
                 [criticalFailures addObject:name];
                 NSLog(@"[ForgeDirect] Warning: critical library download failed (app will crash on launch): %@", name);
             } else {
                 NSLog(@"[ForgeDirect] Failed to download library %@ (both sources failed)", name);
             }
-            // 不中断流程，部分库可能不重要或可由游戏启动时再次下载
+            // Do not abort the flow; some libraries may be unimportant or may be downloaded again when the game launches
         }
         processed++;
     }
@@ -946,10 +946,10 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
     }
 }
 
-/// 判断是否为关键库（缺失会导致启动崩溃）
+/// Determine whether this is a critical library (one whose absence crashes the launch)
 + (BOOL)isCriticalLibrary:(NSString *)name {
     if (!name.length) return NO;
-    // modlauncher、bootstraplauncher、mixin、asm、forge/neoforged 自家库、jimfs 等核心运行时依赖
+    // Core runtime dependencies such as modlauncher, bootstraplauncher, mixin, asm, Forge/NeoForge's own libraries and jimfs
     NSArray<NSString *> *criticalPrefixes = @[
         @"cpw.mods:modlauncher",
         @"net.minecraftforge.bootstraplauncher",
@@ -977,13 +977,13 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
     return NO;
 }
 
-// 为 library 构建 maven URL
-// 优化路由：根据 groupId 精确匹配到正确的 maven 仓库，避免 404
+// Build the maven URL for a library
+// Optimized routing: match the groupId precisely to the correct maven repository, to avoid 404s
 + (NSString *)buildMavenURLForLibrary:(NSString *)name relativePath:(NSString *)relativePath {
     NSString *downloadSource = getPrefObject(@"general.download_source");
     BOOL useBMCLAPI = [downloadSource isEqualToString:@"bmclapi"];
 
-    // Forge 自家库走 maven.minecraftforge.net
+    // Forge's own libraries come from maven.minecraftforge.net
     if ([name hasPrefix:@"net.minecraftforge:"]) {
         if (useBMCLAPI) {
             return [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/maven/%@", relativePath];
@@ -991,7 +991,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
         return [NSString stringWithFormat:@"https://maven.minecraftforge.net/%@", relativePath];
     }
 
-    // NeoForge 自家库走 maven.neoforged.net
+    // NeoForge's own libraries come from maven.neoforged.net
     if ([name hasPrefix:@"net.neoforged:"] || [name hasPrefix:@"net.neoforged."]) {
         if (useBMCLAPI) {
             return [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/maven/%@", relativePath];
@@ -999,7 +999,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
         return [NSString stringWithFormat:@"https://maven.neoforged.net/releases/%@", relativePath];
     }
 
-    // cpw.mods:modlauncher 是 Forge 1.13+ 核心依赖，主源是 Forge maven
+    // cpw.mods:modlauncher is a core dependency of Forge 1.13+, and its primary source is the Forge maven
     if ([name hasPrefix:@"cpw.mods:"]) {
         if (useBMCLAPI) {
             return [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/maven/%@", relativePath];
@@ -1007,7 +1007,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
         return [NSString stringWithFormat:@"https://maven.minecraftforge.net/%@", relativePath];
     }
 
-    // SpongePowered (mixin、asm 等) 走 repo.spongepowered.org
+    // SpongePowered (mixin, asm and so on) comes from repo.spongepowered.org
     if ([name hasPrefix:@"org.spongepowered:"]) {
         if (useBMCLAPI) {
             return [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/maven/%@", relativePath];
@@ -1015,7 +1015,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
         return [NSString stringWithFormat:@"https://repo.spongepowered.org/repository/maven-public/%@", relativePath];
     }
 
-    // oceanlabs (mcp_config、mcp_mappings 等) 走 maven.minecraftforge.net（Forge 镜像了这些）
+    // oceanlabs (mcp_config, mcp_mappings and so on) comes from maven.minecraftforge.net (Forge mirrors these)
     if ([name hasPrefix:@"de.oceanlabs.mcp:"]) {
         if (useBMCLAPI) {
             return [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/maven/%@", relativePath];
@@ -1023,7 +1023,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
         return [NSString stringWithFormat:@"https://maven.minecraftforge.net/%@", relativePath];
     }
 
-    // asm (ow2 asm) 走 maven.minecraftforge.net（Forge 镜像了 asm）
+    // asm (ow2 asm) comes from maven.minecraftforge.net (Forge mirrors asm)
     if ([name hasPrefix:@"org.ow2.asm:"]) {
         if (useBMCLAPI) {
             return [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/maven/%@", relativePath];
@@ -1031,7 +1031,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
         return [NSString stringWithFormat:@"https://maven.minecraftforge.net/%@", relativePath];
     }
 
-    // MojoHaus (bootstraplauncher、installertools 等) 优先走 maven.minecraftforge.net
+    // MojoHaus (bootstraplauncher, installertools and so on) comes from maven.minecraftforge.net first
     if ([name hasPrefix:@"net.minecraftforge.installertools:"] ||
         [name hasPrefix:@"net.minecraftforge.bootstraplauncher:"]) {
         if (useBMCLAPI) {
@@ -1040,7 +1040,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
         return [NSString stringWithFormat:@"https://maven.minecraftforge.net/%@", relativePath];
     }
 
-    // JitPack (部分 modlauncher 依赖)
+    // JitPack (some modlauncher dependencies)
     if ([name hasPrefix:@"com.machinezoo.noexception:"] ||
         [name hasPrefix:@"org.codehaus.mojo:"]) {
         if (useBMCLAPI) {
@@ -1049,21 +1049,21 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
         return [NSString stringWithFormat:@"https://maven.minecraftforge.net/%@", relativePath];
     }
 
-    // 其他库（Mojang、lwjgl、gson 等）走 libraries.minecraft.net（BMCLAPI 镜像）
+    // Other libraries (Mojang, lwjgl, gson and so on) come from libraries.minecraft.net (the BMCLAPI mirror)
     if (useBMCLAPI) {
         return [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/maven/%@", relativePath];
     }
     return [NSString stringWithFormat:@"https://libraries.minecraft.net/%@", relativePath];
 }
 
-/// 构建 fallback URL（当主源失败时切换到 BMCLAPI 镜像，或反之）
+/// Build the fallback URL (switching to the BMCLAPI mirror when the primary source fails, or vice versa)
 + (NSString *)buildFallbackURLForLibrary:(NSString *)name relativePath:(NSString *)relativePath {
     NSString *downloadSource = getPrefObject(@"general.download_source");
     BOOL useBMCLAPI = [downloadSource isEqualToString:@"bmclapi"];
 
-    // 主源是 BMCLAPI 时，fallback 到官方源；主源是官方源时，fallback 到 BMCLAPI
+    // When the primary source is BMCLAPI, fall back to the official source; when it is the official source, fall back to BMCLAPI
     if (useBMCLAPI) {
-        // 从 BMCLAPI 失败，尝试官方源
+        // BMCLAPI failed, so try the official source
         if ([name hasPrefix:@"net.minecraftforge:"] || [name hasPrefix:@"de.oceanlabs.mcp:"] || [name hasPrefix:@"org.ow2.asm:"] || [name hasPrefix:@"cpw.mods:"]) {
             return [NSString stringWithFormat:@"https://maven.minecraftforge.net/%@", relativePath];
         }
@@ -1075,17 +1075,17 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
         }
         return [NSString stringWithFormat:@"https://libraries.minecraft.net/%@", relativePath];
     }
-    // 从官方源失败，尝试 BMCLAPI 镜像
+    // The official source failed, so try the BMCLAPI mirror
     return [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/maven/%@", relativePath];
 }
 
-// 下载预打补丁的 PATCHED artifact
-// mainPath 格式："net.minecraftforge:forge:1.20.1-47.3.0"
-// 对应 maven 上的 :client classifier jar：
-//   官方源: https://maven.minecraftforge.net/net/minecraftforge/forge/1.20.1-47.3.0/forge-1.20.1-47.3.0-client.jar
+// Download the pre-patched PATCHED artifact
+// mainPath format: "net.minecraftforge:forge:1.20.1-47.3.0"
+// which maps to the :client classifier jar on maven:
+//   Official source: https://maven.minecraftforge.net/net/minecraftforge/forge/1.20.1-47.3.0/forge-1.20.1-47.3.0-client.jar
 //   BMCLAPI: https://bmclapi2.bangbang93.com/maven/net/minecraftforge/forge/1.20.1-47.3.0/forge-1.20.1-47.3.0-client.jar
 + (BOOL)downloadPatchedArtifact:(NSString *)mainPath librariesDir:(NSString *)librariesDir error:(NSError **)error {
-    // 拆分 maven 坐标
+    // Split the maven coordinates
     NSArray *parts = [mainPath componentsSeparatedByString:@":"];
     if (parts.count < 3) {
         if (error) {
@@ -1102,18 +1102,18 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
 
     NSString *groupPath = [groupId stringByReplacingOccurrencesOfString:@"." withString:@"/"];
 
-    // 参照 FCL/HMCL：尝试多个 classifier。
-    // 实测 Forge maven（如 1.21.11-61.0.x）通常只发布 -universal（HTTP 200），
-    // -client 和无 classifier 均 404。早期 Forge（1.7-1.12）也主要用 -universal。
-    // 调整顺序为 universal -> client -> 无 classifier，优先尝试成功率最高的 universal，
-    // 避免先尝试必定 404 的 client 浪费时间（每次 404 仍需等待响应）。
+    // Modeled on FCL/HMCL: try several classifiers.
+    // In practice the Forge maven (for example 1.21.11-61.0.x) usually publishes only -universal (HTTP 200),
+    // while -client and the classifier-less form both 404. Early Forge (1.7-1.12) also mostly used -universal.
+    // The order was therefore changed to universal -> client -> no classifier, trying the most likely universal first
+    // instead of wasting time on the client form that is bound to 404 (every 404 still costs a round trip).
     NSArray *classifiers = @[@"universal", @"client", @""];
     NSString *downloadSource = getPrefObject(@"general.download_source");
     BOOL useBMCLAPI = [downloadSource isEqualToString:@"bmclapi"];
 
-    // 源 URL 构造：官方源 + BMCLAPI + HMCL 镜像
-    // 注意：腾讯云镜像（mirrors.cloud.tencent.com/maven）不镜像 Forge/NeoForge maven，
-    // 之前作为 fallback 是错误配置，已替换为 HMCL 镜像（mirror.hua-u.me）。
+    // Source URL construction: the official source + BMCLAPI + the HMCL mirror
+    // Note: the Tencent Cloud mirror (mirrors.cloud.tencent.com/maven) does not mirror the Forge/NeoForge maven,
+    // so using it as a fallback was a misconfiguration; it has been replaced with the HMCL mirror (mirror.hua-u.me).
     NSMutableArray *baseURLs = [NSMutableArray array];
     if ([groupId hasPrefix:@"net.neoforged"]) {
         if (useBMCLAPI) {
@@ -1132,7 +1132,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
             [baseURLs addObject:@"https://bmclapi2.bangbang93.com/maven"];
         }
     }
-    // HMCL 镜像作为最后兜底（国内可用性较好，且镜像了 Forge maven）
+    // The HMCL mirror is the last resort (it is reasonably available in mainland China and mirrors the Forge maven)
     if ([groupId hasPrefix:@"net.neoforged"]) {
         [baseURLs addObject:@"https://mirror.hua-u.me/neoforge"];
     } else {
@@ -1151,7 +1151,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
         NSString *relativePath = [NSString stringWithFormat:@"%@/%@/%@/%@", groupPath, artifactId, version, jarName];
         NSString *destPath = [librariesDir stringByAppendingPathComponent:relativePath];
 
-        // 已存在则跳过
+        // Skip it if it already exists
         if ([NSFileManager.defaultManager fileExistsAtPath:destPath]) {
             NSLog(@"[ForgeDirect] Patched artifact already exists: %@", destPath);
             return YES;
@@ -1166,7 +1166,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
                 NSLog(@"[ForgeDirect] Patched artifact downloaded: %@ (classifier=%@)", destPath, classifier);
                 return YES;
             }
-            // 下载失败：清理可能的部分文件，避免下次误判已存在
+            // Download failed: clean up any partial file, so it is not mistaken for an existing one next time
             [NSFileManager.defaultManager removeItemAtPath:destPath error:nil];
             lastError = downloadError;
             NSLog(@"[ForgeDirect] Failed: %@ (%@)", url, downloadError.localizedDescription ?: @"Unknown error");
@@ -1185,14 +1185,14 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
     return NO;
 }
 
-// 安全创建目录：若路径上存在同名普通文件（之前安装失败残留），先删除再创建。
-// APFS 不允许同名文件和目录共存，直接 createDirectoryAtPath 会失败。
+// Create a directory safely: if a regular file of the same name exists on the path (left over from a failed install), delete it first.
+// APFS does not allow a file and a directory with the same name to coexist, so createDirectoryAtPath would fail outright.
 + (BOOL)ensureDirectoryExists:(NSString *)path error:(NSError **)error {
     NSFileManager *fm = NSFileManager.defaultManager;
     BOOL isDir = NO;
     if ([fm fileExistsAtPath:path isDirectory:&isDir]) {
-        if (isDir) return YES; // 目录已存在
-        // 存在同名普通文件，删除它
+        if (isDir) return YES; // The directory already exists
+        // A regular file of the same name exists, so delete it
         NSError *removeError = nil;
         if (![fm removeItemAtPath:path error:&removeError]) {
             if (error) {
@@ -1212,7 +1212,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
     return YES;
 }
 
-// 同步下载文件到指定路径（带 60 秒超时）
+// Download a file synchronously to the given path (with a 60 second timeout)
 + (BOOL)downloadFileFromURL:(NSString *)urlString toPath:(NSString *)destPath error:(NSError **)error {
     if (error) *error = nil;
 
@@ -1226,7 +1226,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
         return NO;
     }
 
-    // 创建目标目录（处理同名文件冲突）
+    // Create the target directory (handling collisions with a file of the same name)
     NSString *destDir = [destPath stringByDeletingLastPathComponent];
     NSError *dirError = nil;
     if (![self ensureDirectoryExists:destDir error:&dirError]) {
@@ -1238,12 +1238,12 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
         return NO;
     }
 
-    // 用 NSURLSession 同步下载，带 60 秒超时（避免弱网下 dataWithContentsOfURL 挂死）
+    // Download synchronously with NSURLSession and a 60 second timeout (so dataWithContentsOfURL does not hang on a weak connection)
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
     request.timeoutInterval = 60.0;
     request.cachePolicy = NSURLRequestReloadIgnoringLocalCacheData;
-    // 添加 User-Agent：部分 maven 仓库（BMCLAPI/Cloudflare 保护的源）会拒绝非浏览器 UA（403/WAF）。
-    // 参照 FCL 使用浏览器风格 UA 提升兼容性。
+    // Add a User-Agent: some maven repositories (BMCLAPI and Cloudflare-protected sources) reject non-browser user agents (403/WAF).
+    // Modeled on FCL, a browser-style user agent is used to improve compatibility.
     [request setValue:@"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15" forHTTPHeaderField:@"User-Agent"];
     [request setValue:@"application/java-archive,*/*;q=0.9" forHTTPHeaderField:@"Accept"];
 
@@ -1272,7 +1272,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
     [task resume];
     long waitResult = dispatch_semaphore_wait(semaphore, dispatch_time(DISPATCH_TIME_NOW, 70 * NSEC_PER_SEC));
     if (waitResult != 0) {
-        // 信号量超时：取消 task 释放网络资源，避免后台 task 持续运行导致临时内存泄漏
+        // Semaphore timeout: cancel the task to release network resources, so a background task does not keep running and leak memory temporarily
         [task cancel];
         if (error) {
             *error = [NSError errorWithDomain:ForgeDirectInstallerErrorDomain
@@ -1326,7 +1326,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
     NSError *extractError = nil;
     NSData *result = [archive extractDataFromFile:entryPath error:&extractError];
     if (!result) {
-        // 部分版本 entry 路径带前导 "/"，尝试兼容
+        // Some version entry paths have a leading "/", which is handled for compatibility
         if ([entryPath hasPrefix:@"/"]) {
             NSString *altPath = [entryPath substringFromIndex:1];
             result = [archive extractDataFromFile:altPath error:&extractError];

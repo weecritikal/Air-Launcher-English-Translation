@@ -2,31 +2,31 @@
  * Copyright LWJGL. All rights reserved.
  * License terms: https://www.lwjgl.org/license
  *
- * iOS 适配版：基于 iOS PojavLauncher 的 Callback.class（LWJGL 3.3.x 旧版）反编译重写，
- * 并添加 LWJGL 3.4.1 新增的 Descriptor 内部类和 Callback(Descriptor) 构造函数。
+ * iOS-adapted version: rewritten from the decompiled Callback.class of iOS PojavLauncher (the older LWJGL 3.3.x version),
+ * with the Descriptor inner class and the Callback(Descriptor) constructor added in LWJGL 3.4.1.
  *
- * 背景：
- *   iOS PojavLauncher 的 LWJGL 模块（GLFW/OpenGL/STB 等）使用旧版 3.3.x API，
- *   Callback 构造函数接受 FFICIF。
- *   但 MC 26.3+ 的 SDL 模块（lwjgl-sdl.jar）使用标准 3.4.1 API，
- *   SDL_LogOutputFunction 的构造函数调用 super(DESCRIPTOR)，即
- *   Callback.<init>(Callback$Descriptor)。iOS 旧版 Callback 无此构造函数，
- *   会导致 NoSuchMethodError。
+ * Background:
+ *   The LWJGL modules of iOS PojavLauncher (GLFW/OpenGL/STB and so on) use the older 3.3.x API,
+ *   where the Callback constructor takes an FFICIF.
+ *   But the SDL module of MC 26.3+ (lwjgl-sdl.jar) uses the standard 3.4.1 API, and
+ *   the constructor of SDL_LogOutputFunction calls super(DESCRIPTOR), i.e.
+ *   Callback.<init>(Callback$Descriptor). The older iOS Callback has no such constructor,
+ *   which produces a NoSuchMethodError.
  *
- *   同时，标准 3.4.1 的 SDL_LogOutputFunctionI 覆盖 getDescriptor() 返回
- *   Callback$Descriptor 类型。如果 CallbackI 接口的 getDescriptor() 返回类型
- *   与之不匹配，JVM 会抛 AbstractMethodError。故 Callback.Descriptor 类型
- *   必须在编译期可识别，需要在此源码中声明。
+ *   At the same time, the standard 3.4.1 SDL_LogOutputFunctionI overrides getDescriptor() to return
+ *   the Callback$Descriptor type. If the return type of the CallbackI interface's getDescriptor()
+ *   does not match, the JVM throws an AbstractMethodError. The Callback.Descriptor type
+ *   must therefore be recognizable at compile time, so it is declared in this source file.
  *
- * 保留的 iOS 旧版逻辑：
- *   - native 方法 getCallbackHandler(Method) 由 liblwjgl.dylib 提供
- *   - create(FFICIF, Object) 使用 ffi_closure_alloc + ffi_prep_closure_loc
- *   - ClosureRegistry 两种实现（Simple / ConcurrentHashMap）
- *   - static {} 检测 closure 地址布局并初始化 CALLBACK_HANDLER
+ * Legacy iOS logic that was kept:
+ *   - the native method getCallbackHandler(Method), provided by liblwjgl.dylib
+ *   - create(FFICIF, Object), which uses ffi_closure_alloc + ffi_prep_closure_loc
+ *   - the two ClosureRegistry implementations (Simple / ConcurrentHashMap)
+ *   - the static {} block that detects the closure address layout and initializes CALLBACK_HANDLER
  *
- * 新增的 3.4.1 兼容：
- *   - Descriptor 内部类（public static final，含 lookup + cif 字段）
- *   - Callback(Descriptor) 构造函数（从 descriptor 取 cif 委托给 Callback(FFICIF)）
+ * 3.4.1 compatibility that was added:
+ *   - the Descriptor inner class (public static final, with lookup + cif fields)
+ *   - the Callback(Descriptor) constructor (which takes cif from the descriptor and delegates to Callback(FFICIF))
  */
 package org.lwjgl.system;
 
@@ -48,7 +48,7 @@ public abstract class Callback implements Pointer, NativeResource {
 
     private long address;
 
-    // === LWJGL 3.4.1 新增：Descriptor 内部类 ===
+    // === Added in LWJGL 3.4.1: the Descriptor inner class ===
     public static final class Descriptor {
         final MethodHandles.Lookup lookup;
         final FFICIF cif;
@@ -59,12 +59,12 @@ public abstract class Callback implements Pointer, NativeResource {
         }
     }
 
-    // === LWJGL 3.4.1 新增：Callback(Descriptor) 构造函数 ===
+    // === Added in LWJGL 3.4.1: the Callback(Descriptor) constructor ===
     protected Callback(Descriptor descriptor) {
         this(descriptor.cif);
     }
 
-    // === iOS 旧版：Callback(FFICIF) 构造函数 ===
+    // === Legacy iOS: the Callback(FFICIF) constructor ===
     protected Callback(FFICIF cif) {
         this.address = create(cif, this);
     }
@@ -150,18 +150,18 @@ public abstract class Callback implements Pointer, NativeResource {
         return String.format("%s pointer [0x%X]", getClass().getSimpleName(), address);
     }
 
-    // === ClosureRegistry 接口及两种实现（与 iOS 旧版字节码一致） ===
+    // === The ClosureRegistry interface and its two implementations (matching the legacy iOS bytecode) ===
     interface ClosureRegistry {
         void put(long address, FFIClosure closure);
         FFIClosure get(long address);
         FFIClosure remove(long address);
     }
 
-    // Simple 实现：closure 地址 == Java FFIClosure 包装对象地址时使用
+    // The Simple implementation: used when the closure address == the address of the Java FFIClosure wrapper object
     static final class SimpleClosureRegistry implements ClosureRegistry {
         @Override
         public void put(long address, FFIClosure closure) {
-            // 空实现：依赖 FFIClosure 内部布局，无需维护映射
+            // Empty implementation: it relies on FFIClosure's internal layout, so no mapping needs to be maintained
         }
 
         @Override
@@ -175,7 +175,7 @@ public abstract class Callback implements Pointer, NativeResource {
         }
     }
 
-    // ConcurrentHashMap 实现：通用方案
+    // The ConcurrentHashMap implementation: the general-purpose approach
     static final class ConcurrentHashMapClosureRegistry implements ClosureRegistry {
         private final ConcurrentHashMap<Long, FFIClosure> map = new ConcurrentHashMap<>();
 
@@ -196,10 +196,10 @@ public abstract class Callback implements Pointer, NativeResource {
     }
 
     static {
-        // 1. 读取 DEBUG_MEMORY_ALLOCATOR 配置
+        // 1. Read the DEBUG_MEMORY_ALLOCATOR configuration
         DEBUG_ALLOCATOR = Configuration.DEBUG_MEMORY_ALLOCATOR.get(false);
 
-        // 2. 检测 closure 地址布局，选择 Registry 实现
+        // 2. Detect the closure address layout and choose a Registry implementation
         MemoryStack stack = MemoryStack.stackPush();
         FFIClosure testClosure;
         try {
@@ -221,7 +221,7 @@ public abstract class Callback implements Pointer, NativeResource {
             stack.close();
         }
 
-        // 3. 初始化 native callback handler
+        // 3. Initialize the native callback handler
         try {
             Method callbackMethod = CallbackI.class.getDeclaredMethod("callback", long.class, long.class);
             CALLBACK_HANDLER = getCallbackHandler(callbackMethod);
@@ -229,7 +229,7 @@ public abstract class Callback implements Pointer, NativeResource {
             throw new IllegalStateException("Failed to initialize the native callback handler.", e);
         }
 
-        // 4. 触发 MemoryUtil 类初始化（与 iOS 旧版一致）
+        // 4. Trigger MemoryUtil class initialization (matching the legacy iOS version)
         MemoryUtil.getAllocator();
     }
 }

@@ -2,34 +2,34 @@
  * Copyright LWJGL. All rights reserved.
  * License terms: https://www.lwjgl.org/license
  *
- * iOS 适配版：兼容 LWJGL 3.3.x（iOS 旧版）和 3.4.1（标准新版）两种 Callback API。
+ * iOS-adapted version: compatible with both the LWJGL 3.3.x (legacy iOS) and 3.4.1 (standard, newer) Callback APIs.
  *
- * 背景：
- *   iOS PojavLauncher 的 LWJGL 模块（GLFW/OpenGL/STB 等）使用旧版 3.3.x API，
- *   CallbackI 接口要求实现 getCallInterface() 返回 FFICIF。
- *   但 MC 26.3+ 的 SDL 模块（lwjgl-sdl.jar）使用标准 3.4.1 API，
- *   CallbackI 接口要求实现 getDescriptor() 返回 Callback.Descriptor。
- *   两者在运行时类路径上共存，导致 SDL callback 触发 AbstractMethodError。
+ * Background:
+ *   The LWJGL modules of iOS PojavLauncher (GLFW/OpenGL/STB and so on) use the older 3.3.x API,
+ *   The CallbackI interface requires implementing getCallInterface() to return an FFICIF.
+ *   But the SDL module of MC 26.3+ (lwjgl-sdl.jar) uses the standard 3.4.1 API, and
+ *   The CallbackI interface requires implementing getDescriptor() to return a Callback.Descriptor.
+ *   The two coexist on the runtime classpath, so an SDL callback triggers an AbstractMethodError.
  *
- * 崩溃链（修复前）：
+ * The crash chain (before the fix):
  *   SdlDebug.<clinit> → SDL_LogOutputFunction.create(I) → i.address()
- *   → CallbackI.address() default → this.getCallInterface()  // 旧版 API
- *   → SDL_LogOutputFunctionI 没实现此方法 → AbstractMethodError
+ *   → CallbackI.address() default → this.getCallInterface()  // the old API
+ *   → SDL_LogOutputFunctionI does not implement that method → AbstractMethodError
  *
- * 兼容策略：
- *   1. getCallInterface() 改为 default，默认从 getDescriptor().cif 取 FFICIF
- *      - 旧版 callback 覆盖 getCallInterface() 返回静态 CIF（保持原行为）
- *      - 新版 callback 覆盖 getDescriptor() 返回静态 DESCRIPTOR，
- *        getCallInterface() 默认实现自动从中取 cif
- *   2. getDescriptor() 改为 default，默认把 getCallInterface() 包装为 Descriptor
- *      - 新版 callback 覆盖此方法
- *      - 旧版 callback 用默认实现（但实际不会被调用，因为 address() 走 getCallInterface()）
- *   3. address() default 保持调用 getCallInterface()（与 iOS 旧版一致）
+ * Compatibility strategy:
+ *   1. getCallInterface() becomes a default method that takes the FFICIF from getDescriptor().cif
+ *      - legacy callbacks override getCallInterface() to return a static CIF (preserving the original behavior)
+ *      - newer callbacks override getDescriptor() to return a static DESCRIPTOR, and
+ *        the default getCallInterface() implementation takes cif from it automatically
+ *   2. getDescriptor() becomes a default method that wraps getCallInterface() into a Descriptor
+ *      - newer callbacks override this method
+ *      - legacy callbacks use the default implementation (which is never actually called, because address() goes through getCallInterface())
+ *   3. The address() default still calls getCallInterface() (matching the legacy iOS version)
  *
- * 编译期要求：
- *   Callback.Descriptor 类型必须可识别。Callback.java 源码中已声明 Descriptor
- *   内部类（public static final），javac 编译时会生成 Callback$Descriptor.class，
- *   覆盖 lwjgl-callback-descriptor.jar 中的版本。
+ * Compile-time requirement:
+ *   The Callback.Descriptor type must be recognizable. The Callback.java source already declares the Descriptor
+ *   inner class (public static final), so javac generates Callback$Descriptor.class,
+ *   overriding the version in lwjgl-callback-descriptor.jar.
  */
 package org.lwjgl.system;
 
@@ -40,35 +40,35 @@ import java.lang.invoke.MethodHandles;
 public interface CallbackI extends Pointer {
 
     /**
-     * 旧版 API（LWJGL 3.3.x）：返回 FFICIF。
-     * iOS GLFW/OpenGL/STB 等模块覆盖此方法返回静态 CIF。
-     * 新版 SDL 等模块不覆盖此方法，默认实现从 getDescriptor().cif 取值。
+     * The old API (LWJGL 3.3.x): returns an FFICIF.
+     * The iOS GLFW/OpenGL/STB modules and friends override this method to return a static CIF.
+     * Newer modules such as SDL do not override it, and the default implementation takes the value from getDescriptor().cif.
      */
     default FFICIF getCallInterface() {
         return getDescriptor().cif;
     }
 
     /**
-     * 新版 API（LWJGL 3.4.1）：返回 Callback.Descriptor。
-     * 标准 3.4.1 的 SDL 等模块覆盖此方法返回静态 DESCRIPTOR。
-     * 默认实现：把旧版 getCallInterface() 的 FFICIF 包装为 Descriptor。
-     * 注意：旧版 callback 走到此处会递归调用 getCallInterface()，
-     * 但实际旧版 callback 会覆盖 getCallInterface()，不会走到默认实现，
-     * 因此不会递归。仅当某 callback 既没覆盖 getCallInterface() 也没覆盖
-     * getDescriptor() 时才会无限递归（这种实现是错误的）。
+     * The new API (LWJGL 3.4.1): returns a Callback.Descriptor.
+     * Standard 3.4.1 modules such as SDL override this method to return a static DESCRIPTOR.
+     * Default implementation: wraps the FFICIF from the old getCallInterface() into a Descriptor.
+     * Note: a legacy callback reaching this point would call getCallInterface() recursively,
+     * but legacy callbacks do override getCallInterface() and never reach the default implementation,
+     * so there is no recursion. Infinite recursion only happens when a callback overrides neither getCallInterface()
+     * nor getDescriptor() (which is an incorrect implementation).
      */
     default Callback.Descriptor getDescriptor() {
         return new Callback.Descriptor(MethodHandles.lookup(), getCallInterface());
     }
 
     /**
-     * 创建并返回 native closure 的地址。
-     * 直接用 getCallInterface() 获取 FFICIF（兼容新旧两种 CallbackI 实现）。
+     * Create the native closure and return its address.
+     * getCallInterface() is used directly to obtain the FFICIF (compatible with both CallbackI implementations).
      */
     default long address() {
         return Callback.create(getCallInterface(), this);
     }
 
-    /** 由具体 callback 实现的 native 调用入口。 */
+    /** The native call entry point implemented by the concrete callback. */
     void callback(long ret, long args);
 }

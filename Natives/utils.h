@@ -40,12 +40,12 @@
 #define RENDERER_NAME_MOBILEGLUES "libmobileglues.dylib"
 #define RENDERER_NAME_VK_ZINK "libOSMesa.8.dylib"
 #define RENDERER_NAME_VULKAN "libMoltenVK.dylib"
-// LTW (Large Thin Wrapper) - OpenGL Core 3.3 → OpenGL ES 3 转译层
-// 复刻自官方 MojoLauncher/LTW 仓库，完美支持 Sodium + Iris 光影：
-//   - 伪装成 OpenGL 3.3 Core Profile 让 MC 1.17+ 正常运行
-//   - 主动声明 GL_ARB_buffer_storage 等 ARB 扩展，让 Sodium 的
-//     persistent mapped buffers / texture buffers 正常工作
-//   - Fragment shader 编译失败时忽略错误，让 BSL/Mellow 等光影包能运行
+// LTW (Large Thin Wrapper) - an OpenGL Core 3.3 → OpenGL ES 3 translation layer
+// Ported from the official MojoLauncher/LTW repository, with full support for Sodium + Iris shaders:
+//   - Pretends to be an OpenGL 3.3 Core Profile so MC 1.17+ runs correctly
+//   - Proactively advertises ARB extensions such as GL_ARB_buffer_storage so that Sodium's
+//     persistent mapped buffers / texture buffers work
+//   - Ignores fragment shader compilation errors so shader packs such as BSL/Mellow can run
 #define RENDERER_NAME_LTW "libltw.dylib"
 
 #define SPECIALBTN_KEYBOARD -1
@@ -76,8 +76,8 @@ void JIT26PrepareRegionForPatching(void *addr, size_t len);
 void JIT26SetDetachAfterFirstBr(BOOL value);
 void JIT26SendJITScript(NSString* script);
 
-// Device JIT flags（同步自上游 AngelAuraMC/Amethyst-iOS）
-// 支持 iOS 26.6+ / 27 的现代 Preboot 路径 + ChipID 硬件 fallback + capability 查询
+// Device JIT flags (synced from upstream AngelAuraMC/Amethyst-iOS)
+// Supports the modern Preboot path of iOS 26.6+ / 27 plus a ChipID hardware fallback and capability queries
 typedef enum {
     JIT_FLAG_IS_IOS_26 = 1 << 0,
     JIT_FLAG_FORCE_MIRRORED = 1 << 1,
@@ -91,12 +91,12 @@ BOOL DeviceNeedsDebugJITMapping(void);
 void init_bypassDyldLibValidation();
 void init_hookFunctions();
 
-// Zink (Mesa 25.0.7) + MoltenVK vertex stride 4 字节对齐 fix
-// 仅在 zink 渲染器被选中时激活（需在 AMETHYST_RENDERER 环境变量设置后调用）
-// 详见 main_hook.m 中的实现注释
+// Zink (Mesa 25.0.7) + MoltenVK vertex stride 4-byte alignment fix
+// Only active when the zink renderer is selected (it must be called after the AMETHYST_RENDERER environment variable is set)
+// See the implementation comments in main_hook.m for details
 void installZinkStrideFix();
-// 在新 image（libOSMesa / libMoltenVK）加载后调用，重新执行 fishhook
-// 捕获新 image 对 Vulkan loader 函数的符号引用
+// Called after a new image (libOSMesa / libMoltenVK) is loaded, to run fishhook again
+// and capture that image's symbol references to the Vulkan loader functions
 void rebindZinkStrideFixForNewImage();
 void init_hookUIKitConstructor();
 void init_setupMultiDir();
@@ -133,15 +133,15 @@ void callback_LauncherViewController_installMinecraft();
 void callback_SurfaceViewController_launchMinecraft(int width, int height);
 int callback_SurfaceViewController_touchHotbar(CGFloat x, CGFloat y);
 
-// FPS 计数器：在 pojavSwapBuffers() 中累加，调用此函数读取并重置（参照 FCL/ZL2）
+// FPS counter: incremented in pojavSwapBuffers(), and this function reads and resets it (modeled on FCL/ZL2)
 unsigned int pojavGetAndResetFps();
-// 显式递增 FPS 计数器（供 Vulkan 模式 CADisplayLink fallback 使用）
+// Increment the FPS counter explicitly (for the CADisplayLink fallback used in Vulkan mode)
 void pojavIncrementFpsCounter();
-// 运行时判定 MC 真实渲染路径是否为 Vulkan（clientAPI == GLFW_NO_API）。
-// 比 SurfaceViewController 在 viewDidLoad 时的静态字符串推断更准确：
-// - 真正 Vulkan 路径（graphicsApi=prefer_vulkan 或 default 走 Vulkan）→ 返回 true
-// - Vulkan 渲染器但 MC 实际选 OpenGL 路径（prefer_opengl）→ 返回 false，避免双重计数
-// 此函数读取 egl_bridge.m 中的 clientAPI 全局变量，由 pojavSetWindowHint(GLFW_CLIENT_API, ...) 写入。
+// Determine at runtime whether MC's real rendering path is Vulkan (clientAPI == GLFW_NO_API).
+// More accurate than the static string inference SurfaceViewController did at viewDidLoad time:
+// - A genuine Vulkan path (graphicsApi=prefer_vulkan, or default resolving to Vulkan) → returns true
+// - A Vulkan renderer where MC actually chose the OpenGL path (prefer_opengl) → returns false, avoiding double counting
+// This function reads the clientAPI global in egl_bridge.m, which is written by pojavSetWindowHint(GLFW_CLIENT_API, ...).
 bool pojavIsActualVulkanPath();
 
 void CallbackBridge_nativeSetInputReady(BOOL inputReady);
@@ -154,7 +154,7 @@ void CallbackBridge_nativeSendScreenSize(int width, int height);
 void CallbackBridge_nativeSendScroll(CGFloat xoffset, CGFloat yoffset);
 void CallbackBridge_sendKeycode(int keycode, jchar keychar, int scancode, int modifiers, BOOL isDown);
 void CallbackBridge_pauseGameIfNeed();
-// issue #27 修复（参照 FCL commit 08c0716）：物理键盘 modifier 同步
-// 显式同步 MC 1.21.9+ 内部的 InputConstants modifier 缓存。
-// 由 KeyboardInput.m 在物理键盘按下/释放事件中调用。
+// Fix for issue #27 (modeled on FCL commit 08c0716): physical keyboard modifier synchronization
+// Explicitly synchronize the InputConstants modifier cache inside MC 1.21.9+.
+// It is called by KeyboardInput.m from physical keyboard press/release events.
 void CallbackBridge_syncModifiersToMC(int mods);

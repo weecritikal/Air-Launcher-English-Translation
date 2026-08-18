@@ -2,15 +2,15 @@
  * Copyright LWJGL. All rights reserved.
  * License terms: https://www.lwjgl.org/license
  *
- * iOS 兼容性补丁：
- * LWJGL 3.4.1 将 nstbir_resize_uint8（返回 int）拆分为
- * nstbir_resize_uint8_srgb / nstbir_resize_uint8_linear（返回 long）。
- * MC 1.21.1（编译于 LWJGL 3.3.3-SNAPSHOT）仍调用旧方法签名
+ * iOS compatibility patch:
+ * LWJGL 3.4.1 split nstbir_resize_uint8 (which returned int) into
+ * nstbir_resize_uint8_srgb / nstbir_resize_uint8_linear (which return long).
+ * MC 1.21.1 (compiled against LWJGL 3.3.3-SNAPSHOT) still calls the old method signature,
  * int nstbir_resize_uint8(long, int, int, int, long, int, int, int, int)，
- * 导致 NoSuchMethodError 每秒刷屏数百次。
+ * producing hundreds of NoSuchMethodError lines per second.
  *
- * 本类完整复制上游 LWJGL 3.4.1 的 STBImageResize，并添加兼容方法
- * nstbir_resize_uint8 委托给 nstbir_resize_uint8_srgb。
+ * This class copies upstream LWJGL 3.4.1's STBImageResize verbatim and adds the compatibility method
+ * nstbir_resize_uint8, which delegates to nstbir_resize_uint8_srgb.
  */
 package org.lwjgl.stb;
 
@@ -73,10 +73,10 @@ public class STBImageResize {
     }
 
     // ========================================================================
-    // 兼容性方法：MC 1.21.1 调用的旧 API 签名
-    // 旧 LWJGL: int nstbir_resize_uint8(long, int, int, int, long, int, int, int, int)
-    // 新 LWJGL 3.4.1: long nstbir_resize_uint8_srgb(同参数)
-    // 委托给 srgb 变体，将 long 指针返回值转为 int（0=失败, 1=成功）
+    // Compatibility method: the old API signature MC 1.21.1 calls
+    // Old LWJGL: int nstbir_resize_uint8(long, int, int, int, long, int, int, int, int)
+    // New LWJGL 3.4.1: long nstbir_resize_uint8_srgb(same parameters)
+    // Delegates to the srgb variant, converting the long pointer return value into an int (0=failure, 1=success)
     // ========================================================================
     public static int nstbir_resize_uint8(long input_pixels, int input_w, int input_h, int input_stride_in_bytes,
                                            long output_pixels, int output_w, int output_h, int output_stride_in_bytes,
@@ -88,7 +88,7 @@ public class STBImageResize {
     }
 
     // ========================================================================
-    // 上游 LWJGL 3.4.1 native 方法（保持原样）
+    // Upstream LWJGL 3.4.1 native methods (kept as they are)
     // ========================================================================
 
     public static native long nstbir_resize_uint8_srgb(long var0, int var2, int var3, int var4, long var5, int var7, int var8, int var9, int var10);

@@ -2,11 +2,11 @@
 //  WorldsManagerViewController.m
 //  Amethyst
 //
-//  世界存档管理视图控制器实现，参照 ModsManagerViewController
-//  使用 WorldService 进行本地扫描与下载（含健壮解压）
+//  World save management view controller implementation, modeled on ModsManagerViewController
+//  Uses WorldService for local scanning and downloading (with robust extraction)
 //  Uses AssetVersionViewController for picking an online version
-//  使用 ModrinthAPI 进行在线搜索（projectType=world）
-//  支持通过 UIDocumentPicker 导入本地世界 zip
+//  Uses ModrinthAPI for online search (projectType=world)
+//  Supports importing a local world zip via UIDocumentPicker
 //
 
 #import "WorldsManagerViewController.h"
@@ -224,7 +224,7 @@
         return;
     }
 
-    // 仅允许选择 zip 文件
+    // Only allow zip files to be selected
     UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc] initWithDocumentTypes:@[@"public.zip", @"public.item"] inMode:UIDocumentPickerModeImport];
     picker.allowsMultipleSelection = YES;
     picker.delegate = self;
@@ -235,13 +235,13 @@
 - (void)documentPicker:(UIDocumentPickerViewController *)controller didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls {
     if (urls.count == 0) return;
 
-    // 第一个文件先导入，后续文件依次排队（每次导入都需要解压，避免并发冲突）
+    // The first file is imported first and the rest are queued (each import needs extraction, so concurrency conflicts are avoided)
     [self importNextURLFromQueue:[urls mutableCopy] index:0];
 }
 
 - (void)importNextURLFromQueue:(NSMutableArray<NSURL *> *)queue index:(NSInteger)index {
     if (index >= (NSInteger)queue.count) {
-        // 全部导入完成，刷新列表
+        // All imports finished, refresh the list
         [self refreshLocalList];
         return;
     }
@@ -249,7 +249,7 @@
     NSURL *url = queue[index];
     __weak typeof(self) weakSelf = self;
 
-    // 显示导入中提示
+    // Show the importing indicator
     UIAlertController *importingAlert = [UIAlertController alertControllerWithTitle:@"Importing"
                                                                              message:[NSString stringWithFormat:@"%@ (%ld/%ld)...", url.lastPathComponent, (long)(index + 1), (long)queue.count]
                                                                       preferredStyle:UIAlertControllerStyleAlert];
@@ -273,7 +273,7 @@
                     [weakSelf showSimpleAlertWithTitle:@"Import failed"
                                                 message:[NSString stringWithFormat:@"%@: %@", url.lastPathComponent, error.localizedDescription ?: @"Unknown error"]];
                 }
-                // 继续处理下一个文件
+                // Move on to the next file
                 [weakSelf importNextURLFromQueue:queue index:index + 1];
             }];
         });
@@ -438,7 +438,7 @@
         WorldItem *item = self.filteredLocalItems[indexPath.row];
         cell.textLabel.text = item.worldName ?: item.displayName;
 
-        // 详情：上次游玩 + 世界大小
+        // Details: last played + world size
         NSMutableArray<NSString *> *parts = [NSMutableArray array];
         if (item.lastPlayed.length > 0) {
             [parts addObject:[NSString stringWithFormat:@"Last played %@", item.lastPlayed]];

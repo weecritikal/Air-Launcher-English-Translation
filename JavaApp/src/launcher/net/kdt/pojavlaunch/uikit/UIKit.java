@@ -31,7 +31,7 @@ public class UIKit {
 
     public static void callback_JavaGUIViewController_launchJarFile(final String filepath, String[] args) throws Throwable {
         // Launch the JAR file
-        // 用 try-with-resources 确保 JarFile 关闭，避免文件描述符泄漏
+        // try-with-resources makes sure the JarFile is closed, so no file descriptor leaks
         String mainClass;
         try (JarFile jarfile = new JarFile(filepath)) {
             if (jarfile.getManifest() == null) {
@@ -46,8 +46,8 @@ public class UIKit {
         // LabyMod Installer uses FlatLAF which has some macOS-specific codes, so we make it think it's running on Linux.
         patch_FlatLAF_setLinux();
 
-        // 用 URLClassLoader 加载 JAR，支持 JarInJar（Forge/NeoForge 部分版本 installer 内嵌 JAR 依赖）
-        // 父 ClassLoader 为系统 ClassLoader，确保 PojavLauncher/UIKit bridge 类仍可加载
+        // A URLClassLoader loads the JAR, supporting JarInJar (the installers of some Forge/NeoForge versions embed JAR dependencies)
+        // The parent ClassLoader is the system ClassLoader, so the PojavLauncher/UIKit bridge classes can still be loaded
         java.net.URL[] urls = new java.net.URL[]{new java.io.File(filepath).toURI().toURL()};
         ClassLoader loader = new java.net.URLClassLoader(urls, ClassLoader.getSystemClassLoader());
         Class<?> clazz = loader.loadClass(mainClass);
@@ -55,7 +55,7 @@ public class UIKit {
         try {
             method.invoke(null, new Object[]{args});
         } catch (java.lang.reflect.InvocationTargetException ite) {
-            // 解包 InvocationTargetException，暴露 installer main 方法的真实异常
+            // Unwrap the InvocationTargetException to expose the real exception from the installer's main method
             Throwable cause = ite.getCause();
             if (cause != null) {
                 throw cause;

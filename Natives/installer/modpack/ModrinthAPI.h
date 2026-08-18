@@ -8,19 +8,19 @@ NS_ASSUME_NONNULL_BEGIN
 @interface ModrinthAPI : ModpackAPI
 + (instancetype)sharedInstance;
 
-// 同步方法
+// Synchronous methods
 - (NSMutableArray *)searchModWithFilters:(NSDictionary<NSString *, NSString *> *)searchFilters 
                       previousPageResult:(NSMutableArray *)modrinthSearchResult;
 
-// 异步方法（推荐）
+// Asynchronous methods (recommended)
 - (void)searchModWithFilters:(NSDictionary *)filters
                   completion:(void (^)(NSArray * _Nullable results, NSError * _Nullable error))completion;
 
 - (void)getVersionsForModWithID:(NSString *)modID
                      completion:(void (^)(NSArray<ModVersion *> * _Nullable versions, NSError * _Nullable error))completion;
 
-/// 异步加载整合包版本详情（修复点击整合包后加载列表过慢的问题）
-/// 直接使用 NSURLSession，避免 dispatch_group_wait 同步阻塞
+/// Asynchronously load the modpack version details (fixing the slow list load after tapping a modpack)
+/// Uses NSURLSession directly, avoiding the synchronous dispatch_group_wait
 - (void)loadDetailsOfModAsync:(NSMutableDictionary *)item
                    completion:(void (^)(BOOL success, NSError * _Nullable error))completion;
 
@@ -32,18 +32,18 @@ NS_ASSUME_NONNULL_BEGIN
 
 #pragma mark - Server Projects (Modrinth Server Projects API)
 
-/// 异步搜索服务器项目：优先使用 project_type=server，若结果为空则回退到 project_type=modpack
+/// Asynchronously search for server projects: prefer project_type=server, falling back to project_type=modpack when the result is empty
 /// @param filters The search filters (query/limit/offset/mcVersion/loader and so on)
-/// @param completion 完成回调，返回字典数组（含 apiSource=1, projectType 字段）
+/// @param completion the completion callback, returning an array of dictionaries (with apiSource=1 and a projectType field)
 - (void)searchServersWithFilters:(NSDictionary *)filters
                       completion:(void (^)(NSArray * _Nullable results, NSError * _Nullable error))completion;
 
-/// 异步获取服务器项目详情（含 server_address、关联整合包等字段）
-/// @param serverID Modrinth 项目 ID
+/// Asynchronously fetch the details of a server project (including fields such as server_address and the associated modpack)
+/// @param serverID the Modrinth project ID
 - (void)getServerDetailsForID:(NSString *)serverID
                    completion:(void (^)(NSDictionary * _Nullable details, NSError * _Nullable error))completion;
 
-// 工具方法（供下载器调用）
+// Utility methods (called by the downloader)
 - (NSString *)downloadURLForFile:(NSDictionary *)file;
 - (BOOL)file:(NSDictionary *)file matchesProjectType:(NSString *)projectType;
 - (NSMutableDictionary *)projectForFileHash:(NSString *)sha1 projectType:(NSString *)projectType;

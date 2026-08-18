@@ -2,11 +2,11 @@
 //  ZeroTierBridge.m
 //  Angel Aura Amethyst
 //
-//  ZeroTier libzt C API 的 Objective-C 封装层实现（精简版）
+//  Implementation of the Objective-C wrapper layer for the ZeroTier libzt C API (slimmed-down version)
 //
-//  实现要点：单例 + NSLock 保护状态；静态 C 函数在回调线程同步提取数据
-//  为 NSDictionary，通过 dispatch_async 转发到主线程；框架检测通过
-//  zts_node_start() 返回值检测；等待操作使用 dispatch_semaphore_t。
+//  Implementation highlights: a singleton with state protected by NSLock; static C functions extract data synchronously on the callback thread
+//  into an NSDictionary, which is forwarded to the main thread with dispatch_async; framework detection is done via
+//  the zts_node_start() return value; waiting operations use dispatch_semaphore_t.
 //
 
 #import "ZeroTierBridge.h"
@@ -44,7 +44,7 @@ typedef NS_ENUM(NSInteger, ZeroTierErrorCode) {
 
 #pragma mark - 事件回调（静态 C 函数）
 
-/// libzt 事件回调入口：在回调线程同步提取数据，封装为 NSDictionary 后转发到主线程
+/// libzt event callback entry point: extracts data synchronously on the callback thread, wraps it in an NSDictionary and forwards it to the main thread
 static void zeroTierEventCallback(void *msgPtr) {
     zts_event_msg_t *msg = (zts_event_msg_t *)msgPtr;
     if (!msg) return;
@@ -101,8 +101,8 @@ static void zeroTierEventCallback(void *msgPtr) {
 
 #pragma mark - 框架检测
 
-/// 首次调用通过 zts_node_start() 返回值检测：ZTS_ERR_OK 为真实 framework，
-/// ZTS_ERR_SERVICE 为 stub。检测后清理状态并缓存结果。
+/// The first call detects it from the zts_node_start() return value: ZTS_ERR_OK means the real framework,
+/// ZTS_ERR_SERVICE means a stub. After detection the state is cleaned up and the result cached.
 - (BOOL)isFrameworkAvailable {
     [_lock lock];
     BOOL cached = _frameworkChecked;
@@ -113,7 +113,7 @@ static void zeroTierEventCallback(void *msgPtr) {
     int result = zts_node_start();
     BOOL frameworkAvailable = (result == ZTS_ERR_OK);
     if (frameworkAvailable) {
-        // 真实 framework，清理启动的节点
+        // The real framework, so clean up the node that was started
         zts_node_stop();
         NSTimeInterval deadline = [NSDate timeIntervalSinceReferenceDate] + 2.0;
         while (zts_node_is_online() == 1 && [NSDate timeIntervalSinceReferenceDate] < deadline) {
@@ -140,14 +140,14 @@ static void zeroTierEventCallback(void *msgPtr) {
         if (error) *error = [NSError errorWithDomain:kZeroTierErrorDomain code:ZeroTierErrorCodeFrameworkUnavailable userInfo:@{NSLocalizedDescriptionKey: @"The ZeroTier framework is unavailable (stub mode)"}];
         return NO;
     }
-    // 已启动则直接返回 YES
+    // Return YES immediately if it is already started
     [_lock lock];
     if (_isStarted) { [_lock unlock]; return YES; }
     [_lock unlock];
 
-    // 关键修复（stopNode 状态同步防御）：
-    // 若 stopNode 在 2 秒超时后仍未完全关闭节点（zts_node_is_online 仍返回 1），
-    // 这里再等待最多 3 秒确保旧节点完全停止，避免 zts_init_from_storage 与旧节点冲突。
+    // Key fix (defensive state synchronization for stopNode):
+    // If stopNode still has not fully shut the node down after its 2 second timeout (zts_node_is_online still returns 1),
+    // wait here for up to 3 more seconds to make sure the old node has fully stopped, avoiding a conflict between zts_init_from_storage and the old node.
     if (zts_node_is_online() == 1) {
         NSLog(@"[ZeroTierBridge] startNode: detected node still online (stop not fully completed), waiting for shutdown...");
         NSTimeInterval deadline = [NSDate timeIntervalSinceReferenceDate] + 3.0;
@@ -194,15 +194,15 @@ static void zeroTierEventCallback(void *msgPtr) {
     [_lock unlock];
 
     zts_node_stop();
-    // 关键修复（stopNode 状态同步）：
-    // 之前主线程调用时把 waitBlock dispatch 到后台异步执行，但状态清理在主线程立即完成。
-    // 调用方看到 _isStarted = NO 后立即调用 startNode，可能与后台仍未完成的停止逻辑并发，
-    // 导致 zts_init_from_storage / zts_node_start 与正在停止的旧节点状态冲突。
+    // Key fix (stopNode state synchronization):
+    // Previously, when called on the main thread, waitBlock was dispatched to run asynchronously in the background while the state cleanup completed immediately on the main thread.
+    // A caller that saw _isStarted = NO would immediately call startNode, potentially running concurrently with stop logic that had not finished in the background,
+    // making zts_init_from_storage / zts_node_start conflict with the state of the old node that was still stopping.
     //
-    // 修复方案：主线程也同步等待节点下线，但把最大等待时间缩短到 2 秒，避免 UI 长时间卡顿。
-    // 2 秒通常足够 libzt 完成节点关闭流程；超过 2 秒则不再等待，但 libzt 自身最终会完成清理。
-    // 调用方（如 disconnectCurrentRoom）在主线程调用时会有最多 2 秒的同步等待，这是可接受的——
-    // disconnectCurrentRoom 通常由用户显式触发（点击断开按钮），短暂等待比状态不一致更可取。
+    // The fix: the main thread also waits synchronously for the node to go offline, but the maximum wait is shortened to 2 seconds so the UI does not freeze for long.
+    // 2 seconds is usually enough for libzt to finish shutting the node down; beyond that we stop waiting, and libzt finishes its own cleanup eventually anyway.
+    // Callers (such as disconnectCurrentRoom) that call from the main thread face at most a 2 second synchronous wait, which is acceptable -
+    // disconnectCurrentRoom is normally triggered explicitly by the user (tapping the disconnect button), and a brief wait is preferable to inconsistent state.
     NSTimeInterval deadline = [NSDate timeIntervalSinceReferenceDate] + 2.0;
     while (zts_node_is_online() == 1 && [NSDate timeIntervalSinceReferenceDate] < deadline) {
         [NSThread sleepForTimeInterval:0.05];
@@ -348,7 +348,7 @@ static void zeroTierEventCallback(void *msgPtr) {
     return NO;
 }
 
-/// 网络就绪判定：传输层就绪且对应地址族已分配（Ad-hoc 网络用 IPv6）
+/// Network readiness test: the transport layer is ready and an address of the matching family has been assigned (ad-hoc networks use IPv6)
 - (BOOL)isNetworkReady:(uint64_t)networkID {
     if (zts_net_transport_is_ready(networkID) != 1) return NO;
     uint8_t highByte = (uint8_t)((networkID >> 56) & 0xFF);
@@ -385,12 +385,12 @@ static void zeroTierEventCallback(void *msgPtr) {
             break;
         }
         case ZTS_EVENT_NETWORK_OK: {
-            // 关键修复（iOS 后台事件堆积缓解）：
-            // iOS 应用进入后台后主 RunLoop 暂停，libzt 事件全部堆积在主队列。
-            // 回到前台时一次性执行，可能多次触发同一网络的 NETWORK_OK 事件。
-            // 这里通过状态去重：若该网络已处于 OK 状态，跳过信号量与 delegate 回调，
-            // 避免上层 waitForNetworkReady 误触发、UI 重复刷新抖动。
-            // 首次 OK 事件（_networkStatuses 中无记录或状态不同）正常处理。
+            // Key fix (mitigating iOS background event pile-up):
+            // After the app enters the background on iOS the main RunLoop is suspended and all libzt events pile up on the main queue.
+            // They all run at once when returning to the foreground, which can fire the NETWORK_OK event for the same network several times.
+            // State deduplication is used here: if the network is already in the OK state, the semaphore and the delegate callback are skipped,
+            // which avoids spuriously triggering waitForNetworkReady higher up and repeated UI refresh flicker.
+            // The first OK event (no record in _networkStatuses, or a different status) is handled normally.
             [_lock lock];
             NSNumber *existingStatus = _networkStatuses[@(netID)];
             BOOL isDuplicate = (existingStatus != nil &&
@@ -412,7 +412,7 @@ static void zeroTierEventCallback(void *msgPtr) {
             dispatch_semaphore_signal(_networkEventSemaphore);
             break;
         }
-        // 网络失败事件统一处理：更新状态 + 触发信号量 + 调用对应回调
+        // Unified handling of network failure events: update the status + signal the semaphore + invoke the matching callback
         case ZTS_EVENT_NETWORK_ACCESS_DENIED:
         case ZTS_EVENT_NETWORK_NOT_FOUND:
         case ZTS_EVENT_NETWORK_CLIENT_TOO_OLD:
@@ -425,7 +425,7 @@ static void zeroTierEventCallback(void *msgPtr) {
                 case ZTS_EVENT_NETWORK_CLIENT_TOO_OLD: status = ZeroTierNetworkStatusClientTooOld; callback = @selector(zeroTierNetworkClientTooOld:); break;
                 case ZTS_EVENT_NETWORK_DOWN: status = ZeroTierNetworkStatusDown; callback = @selector(zeroTierNetworkDown:); break;
             }
-            // 状态去重：与 NETWORK_OK 同理，避免后台堆积的同类失败事件批量触发
+            // State deduplication: as with NETWORK_OK, this avoids a batch of identical failure events piling up in the background from all firing
             [_lock lock];
             NSNumber *existingStatus = _networkStatuses[@(netID)];
             BOOL isDuplicate = (existingStatus != nil &&
@@ -466,10 +466,10 @@ static void zeroTierEventCallback(void *msgPtr) {
                 }
                 [_lock unlock];
             }
-            // 关键修复（iOS 后台事件堆积缓解）：
-            // 若地址未变化（重复 ADDR_ADDED 事件），跳过信号量与 delegate 回调，
-            // 避免后台堆积的同地址事件批量触发 zeroTierNetworkReady: 造成 UI 抖动。
-            // 首次分配地址时 _ipv4Addresses/_ipv6Addresses 中无记录，addrChanged=YES，正常处理。
+            // Key fix (mitigating iOS background event pile-up):
+            // If the address has not changed (a repeated ADDR_ADDED event), skip the semaphore and the delegate callback,
+            // so that a batch of same-address events piled up in the background does not fire zeroTierNetworkReady: repeatedly and make the UI flicker.
+            // On the first address assignment there is no record in _ipv4Addresses/_ipv6Addresses, so addrChanged=YES and it is handled normally.
             if (!addrChanged) {
                 NSLog(@"[ZeroTierBridge] received duplicate ADDR_ADDED event (netID=%llu), skipping signal and callback", addrNetID);
                 break;
@@ -498,7 +498,7 @@ static void zeroTierEventCallback(void *msgPtr) {
 - (int)connectSocket:(int)fd toHost:(NSString *)host port:(uint16_t)port timeout:(NSTimeInterval)timeout {
     if (!host.length || fd < 0) return ZTS_ERR_ARG;
 
-    // 设置 recv/send 超时
+    // Set the recv/send timeouts
     if (timeout > 0) {
         struct zts_timeval tv;
         tv.tv_sec = (long)timeout;
@@ -508,7 +508,7 @@ static void zeroTierEventCallback(void *msgPtr) {
         zts_bsd_setsockopt(fd, ZTS_SOL_SOCKET, ZTS_SO_SNDTIMEO, &tv, sizeof(tv));
     }
 
-    // 准备目标地址
+    // Prepare the target address
     const char *hostCStr = [host UTF8String];
     struct zts_sockaddr_storage addrStorage;
     memset(&addrStorage, 0, sizeof(addrStorage));
@@ -531,7 +531,7 @@ static void zeroTierEventCallback(void *msgPtr) {
         addrLen = sizeof(struct zts_sockaddr_in);
     }
 
-    // 非阻塞 connect + select 实现超时控制
+    // Non-blocking connect + select to implement the timeout
     int origFlags = zts_bsd_fcntl(fd, ZTS_F_GETFL, 0);
     if (origFlags < 0) {
         return zts_bsd_connect(fd, (const struct zts_sockaddr *)&addrStorage, addrLen);
@@ -565,7 +565,7 @@ static void zeroTierEventCallback(void *msgPtr) {
     if (zts_bsd_getsockopt(fd, ZTS_SOL_SOCKET, ZTS_SO_ERROR, &socketError, &errorLen) != ZTS_ERR_OK) return ZTS_ERR_SOCKET;
     if (socketError != 0) return ZTS_ERR_SOCKET;
 
-    // 设置 TCP_NODELAY 降低实时交互延迟
+    // Set TCP_NODELAY to lower interactive latency
     int noDelay = 1;
     zts_bsd_setsockopt(fd, ZTS_IPPROTO_TCP, ZTS_TCP_NODELAY, &noDelay, sizeof(noDelay));
     return ZTS_ERR_OK;

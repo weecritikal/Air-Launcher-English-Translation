@@ -66,69 +66,69 @@ public class PojavLauncher {
         MCOptionUtils.set("fullscreen", "false");
         MCOptionUtils.set("overrideWidth", size[0]);
         MCOptionUtils.set("overrideHeight", size[1]);
-        // 解锁帧率（关闭垂直同步 + 解除 maxFps 限制）：
-        // MC 默认 enableVsync=true，会把帧率锁在屏幕刷新率（60Hz 锁 60、120Hz ProMotion 锁 120）。
-        // 同时 MC 默认 maxFps=120，即使关闭 VSync 也会被 maxFps 限制。
+        // Unlock the frame rate (disable vertical sync + lift the maxFps limit):
+        // MC defaults to enableVsync=true, which locks the frame rate to the screen refresh rate (60 on a 60Hz screen, 120 on a 120Hz ProMotion screen).
+        // MC also defaults to maxFps=120, so even with VSync off the frame rate is capped by maxFps.
         //
-        // 当启动器偏好 video.disable_game_vsync 开启时（通过环境变量 POJAV_DISABLE_VSYNC=1 传入）：
-        // 1. 强制写 enableVsync=false → MC 不再调用 glfwSwapInterval(1) 请求垂直同步
-        // 2. 强制写 maxFps=260 → MC 1.16+ 的源码中 maxFps>=260 时视为"无限制"（unlimited）
+        // When the launcher preference video.disable_game_vsync is on (passed in through the environment variable POJAV_DISABLE_VSYNC=1):
+        // 1. enableVsync=false is written by force → MC no longer calls glfwSwapInterval(1) to request vertical sync
+        // 2. maxFps=260 is written by force → in the MC 1.16+ source, maxFps>=260 is treated as "unlimited"
         //
-        // 关键修复（FPS 解锁无效问题）：
-        //   之前使用 maxFps=0，但 MC 的 maxFps 有效值范围是 10-260（默认 120）。
-        //   maxFps=0 不是"无限制"——MC 1.16+ 源码中 0 会被当作无效值而忽略，MC 继续使用
-        //   options.txt 中的旧值或默认值 120，导致帧率被锁在 120。
-        //   MC 1.16+ 源码中有一个特殊判断：if (maxFps >= 260) treat as unlimited。
-        //   因此正确的"无限制"设置是 maxFps=260（或更高）。
+        // Key fix (frame rate unlocking not working):
+        //   maxFps=0 used to be written, but MC's valid maxFps range is 10-260 (the default is 120).
+        //   maxFps=0 does not mean "unlimited" - in the MC 1.16+ source 0 is treated as invalid and ignored, so MC keeps using
+        //   the old value in options.txt or the default of 120, locking the frame rate at 120.
+        //   The MC 1.16+ source has a special check: if (maxFps >= 260) treat as unlimited.
+        //   So the correct "unlimited" setting is maxFps=260 (or higher).
         //
-        //   对于 MC 1.8-1.15 旧版本：maxFps 选项不存在或行为不同，此设置会被忽略，
-        //   帧率解锁完全依赖 native 层的 eglSwapInterval(0) 拦截。
+        //   On older MC 1.8-1.15 versions the maxFps option does not exist or behaves differently, so this setting is ignored
+        //   and unlocking the frame rate relies entirely on the native layer intercepting eglSwapInterval(0).
         //
-        // MC 26.2+ 兼容性（关键修复）：
-        //   MC 26.2 可能重命名了选项。同时写入多种可能的选项名以确保兼容：
-        //   - maxFps（MC 1.16-1.21）：帧率上限
-        //   - maxFramerate（MC 26.2+ 可能的新名称）：帧率上限
-        //   - enableVsync（所有版本）：垂直同步开关
-        //   - framerateLimit（MC 26.2+ 可能的替代名称）：帧率限制
+        // MC 26.2+ compatibility (key fix):
+        //   MC 26.2 may have renamed the options. Several possible option names are written for compatibility:
+        //   - maxFps (MC 1.16-1.21): the frame rate cap
+        //   - maxFramerate (a possible new name in MC 26.2+): the frame rate cap
+        //   - enableVsync (every version): the vertical sync toggle
+        //   - framerateLimit (a possible alternative name in MC 26.2+): the frame rate limit
         //
-        // 这样做的效果：
-        // - Vulkan 渲染器（MoltenVK）：LWJGL 创建 swapchain 时使用 VK_PRESENT_MODE_IMMEDIATE_KHR，
-        //   MoltenVK 不等待 vblank 直接 present，帧率可超过屏幕刷新率（减少输入延迟）
-        // - GL 类渲染器（ANGLE Metal）：eglSwapInterval(0) 让渲染线程不阻塞，
-        //   但 Core Animation 仍按屏幕刷新率合成（实际帧率不超过屏幕刷新率，但渲染线程吞吐量提高）
+        // What this achieves:
+        // - Vulkan renderer (MoltenVK): LWJGL creates the swapchain with VK_PRESENT_MODE_IMMEDIATE_KHR,
+        //   so MoltenVK presents without waiting for vblank and the frame rate can exceed the screen refresh rate (reducing input latency)
+        // - GL-family renderers (ANGLE Metal): eglSwapInterval(0) keeps the render thread unblocked,
+        //   although Core Animation still composites at the screen refresh rate (so the actual frame rate does not exceed it, but render thread throughput improves)
         //
-        // 用 set（而非 setDefault）覆盖：每次启动都强制关闭，确保生效；
-        // 用户若想恢复游戏内垂直同步和帧率限制，可在启动器设置关闭该开关。
+        // set (rather than setDefault) is used to override: it is forced off on every launch to make sure it takes effect;
+        // a user who wants the in-game vertical sync and frame rate limit back can turn the toggle off in the launcher settings.
         if ("1".equals(System.getenv("POJAV_DISABLE_VSYNC"))) {
             MCOptionUtils.set("enableVsync", "false");
-            // maxFps=260：MC 1.16+ 源码中 maxFps>=260 视为 unlimited
-            // （之前用 0 会被当作无效值忽略，导致帧率仍被 maxFps=120 限制）
+            // maxFps=260: in the MC 1.16+ source, maxFps>=260 counts as unlimited
+            // (0 used to be written, but it was treated as invalid and ignored, so the frame rate stayed capped at maxFps=120)
             MCOptionUtils.set("maxFps", "260");
-            // MC 26.2+ 兼容：可能重命名为 maxFramerate 或 framerateLimit
+            // MC 26.2+ compatibility: it may have been renamed to maxFramerate or framerateLimit
             MCOptionUtils.set("maxFramerate", "260");
             MCOptionUtils.set("framerateLimit", "260");
-            // MC 1.21.8+ 兼容：inactivityFpsLimit 选项（InactivityFpsLimit 枚举）
+            // MC 1.21.8+ compatibility: the inactivityFpsLimit option (the InactivityFpsLimit enum)
             //
-            // 关键修复（帧率解锁无效根因之一）：
-            // MC 1.21.8+ 引入了"不活动帧率限制"功能（inactivityFpsLimit），
-            // 默认值为 "afk"：
-            //   - 无输入 1 分钟后帧率降至 30 FPS
-            //   - 无输入 10 分钟后帧率降至 10 FPS
-            //   - 窗口最小化时帧率降至 10 FPS
-            // 这导致用户在 iOS 上切后台/不操作时帧率被严重限制，
-            // 即使关闭了 VSync 和 maxFps 限制也无济于事。
+            // Key fix (one root cause of frame rate unlocking not working):
+            // MC 1.21.8+ introduced an "inactivity frame rate limit" feature (inactivityFpsLimit),
+            // whose default value is "afk":
+            //   - after 1 minute without input the frame rate drops to 30 FPS
+            //   - after 10 minutes without input it drops to 10 FPS
+            //   - when the window is minimized it drops to 10 FPS
+            // On iOS this severely limits the frame rate whenever the user backgrounds the app or stops interacting,
+            // no matter whether VSync and the maxFps cap have been turned off.
             //
-            // InactivityFpsLimit 枚举只有两个值：
-            //   - "afk"（默认）：AFK 模式，不操作时限帧
-            //   - "minimized"：仅最小化时限帧（10 FPS）
+            // The InactivityFpsLimit enum has only two values:
+            //   - "afk" (the default): AFK mode, limiting the frame rate while idle
+            //   - "minimized": limit the frame rate only while minimized (10 FPS)
             //
-            // 设置为 "minimized" 后，用户不操作时不会限帧，
-            // 仅在窗口最小化（iOS 上几乎不会发生）时限帧。
-            // 这样配合 VSync 关闭 + maxFps=260 可以真正实现帧率解锁。
+            // With it set to "minimized" the frame rate is not limited while the user is idle,
+            // only while the window is minimized (which almost never happens on iOS).
+            // Combined with VSync off and maxFps=260, this genuinely unlocks the frame rate.
             //
-            // 旧版本 MC（1.21.7 及以下）不识别此选项，会被忽略，无副作用。
+            // Older MC versions (1.21.7 and below) do not recognize this option and ignore it, with no side effects.
             MCOptionUtils.set("inactivityFpsLimit", "minimized");
-            // 诊断日志：输出写入的帧率相关选项
+            // Diagnostic log: print the frame-rate-related options that were written
             System.out.println("[PojavLauncher] VSync disabled, maxFps/maxFramerate/framerateLimit set to 260");
             System.out.println("[PojavLauncher]   enableVsync=" + MCOptionUtils.get("enableVsync"));
             System.out.println("[PojavLauncher]   maxFps=" + MCOptionUtils.get("maxFps"));
@@ -155,47 +155,47 @@ public class PojavLauncher {
             }
         }
 
-        // 仅在显式选择 Vulkan 渲染器时设置 LWJGL Vulkan native 库名称，
-        // 避免覆盖 JavaLauncher.m 为 ANGLE/MobileGlues/GL4ES 设置的 OpenGL libname。
-        // 注意：LWJGL Library.loadNative 在 macOS 上会自动加 "lib" 前缀和 ".dylib" 后缀，
-        // 所以这里必须传裸名 "MoltenVK"，否则 "libMoltenVK.dylib" 会被二次包装成
-        // "liblibMoltenVK.dylib.dylib" 导致 UnsatisfiedLinkError。
+        // The LWJGL Vulkan native library name is only set when the Vulkan renderer is explicitly selected,
+        // so it does not override the OpenGL libname JavaLauncher.m sets for ANGLE/MobileGlues/GL4ES.
+        // Note: on macOS, LWJGL's Library.loadNative adds the "lib" prefix and the ".dylib" suffix automatically,
+        // so the bare name "MoltenVK" must be passed here, otherwise "libMoltenVK.dylib" would be wrapped again into
+        // "liblibMoltenVK.dylib.dylib" and produce an UnsatisfiedLinkError.
         String renderer = System.getenv("AMETHYST_RENDERER");
         if ("libMoltenVK.dylib".equals(renderer) || "vulkan".equals(renderer)) {
             System.setProperty("org.lwjgl.vulkan.libname", "MoltenVK");
         }
 
-        // MC 26.2+ Graphics API 切换（OpenGL/Vulkan 游戏内图形后端选择）
+        // MC 26.2+ Graphics API switching (choosing the in-game OpenGL/Vulkan graphics backend)
         //
-        // Mojang 在 MC 26.2 Snapshot 1 引入了 "Graphics API" 视频设置项，有 3 个值：
-        //   - default        由 Mojang 决定（26.2-snapshot-1~7 为 Vulkan，snapshot-8+ 为 OpenGL）
-        //   - prefer_vulkan  优先使用 Vulkan，失败时回退 OpenGL
-        //   - prefer_opengl  优先使用 OpenGL，失败时回退 Vulkan
+        // Mojang introduced the "Graphics API" video setting in MC 26.2 Snapshot 1, with 3 values:
+        //   - default        decided by Mojang (Vulkan for 26.2-snapshot-1 through 7, OpenGL for snapshot-8+)
+        //   - prefer_vulkan  prefer Vulkan, falling back to OpenGL on failure
+        //   - prefer_opengl  prefer OpenGL, falling back to Vulkan on failure
         //
-        // 注意：这里的 graphicsApi 与启动器的 renderer（libgl4es/libMoltenVK 等 native 库选择）
-        // 是两个不同的维度：
-        //   - renderer：启动器加载哪个 native 渲染器库（LWJGL 层）
-        //   - graphicsApi：MC 26.2+ 内部走 OpenGL 路径还是 Vulkan 路径（游戏层）
+        // Note: graphicsApi here and the launcher's renderer (which native library to use: libgl4es/libMoltenVK and so on)
+        // are two different dimensions:
+        //   - renderer: which native renderer library the launcher loads (the LWJGL layer)
+        //   - graphicsApi: whether MC 26.2+ internally takes the OpenGL or the Vulkan path (the game layer)
         //
-        // 当用户选择 prefer_vulkan 时，建议同步将 renderer 设为 libMoltenVK.dylib
-        // （UI 层会给出推荐，但不强制联动，允许高级用户分开配置）。
+        // When the user selects prefer_vulkan it is advisable to also set renderer to libMoltenVK.dylib
+        // (the UI recommends it but does not force the pairing, so advanced users can configure them separately).
         //
-        // 旧版本 MC（1.21.7 及以下）不识别 options.txt 中的 graphicsApi 字段，
-        // 会被忽略，无副作用。
+        // Older MC versions (1.21.7 and below) do not recognize the graphicsApi field in options.txt
+        // and ignore it, with no side effects.
         //
         // Key fix (changing the graphics API had no effect):
-        //   之前当 graphicsApi 为 "default" 时直接跳过，不写入 options.txt。
-        //   这导致用户从 prefer_vulkan/prefer_opengl 切换回 default 时，
-        //   options.txt 中残留的旧值不会被清除，MC 继续使用旧值而非内部默认。
-        //   现在改为：
-        //   - "default"：从 options.txt 中移除 graphicsApi 行，让 MC 使用内部默认
-        //   - prefer_vulkan/prefer_opengl：写入对应值（覆盖旧值）
+        //   Previously a graphicsApi of "default" was skipped entirely and nothing was written to options.txt.
+        //   That meant when the user switched back to default from prefer_vulkan/prefer_opengl,
+        //   the stale value left in options.txt was never cleared and MC kept using it rather than its internal default.
+        //   It now does the following:
+        //   - "default": remove the graphicsApi line from options.txt, so MC uses its internal default
+        //   - prefer_vulkan/prefer_opengl: write the matching value (overwriting the old one)
         String graphicsApi = System.getenv("AMETHYST_GRAPHICS_API");
         if (graphicsApi != null && !graphicsApi.isEmpty()) {
             MCOptionUtils.load();
             if ("default".equalsIgnoreCase(graphicsApi)) {
-                // 选择"默认"时移除 options.txt 中的 graphicsApi 行，
-                // 让 MC 26.2+ 使用其内部默认行为（不读取此字段）
+                // When "Default" is selected, remove the graphicsApi line from options.txt
+                // so MC 26.2+ uses its internal default behavior (it does not read the field)
                 MCOptionUtils.remove("graphicsApi");
                 System.out.println("[PojavLauncher] MC 26.2+ graphicsApi cleared (default)");
             } else {
@@ -217,8 +217,8 @@ public class PojavLauncher {
         JMinecraftVersionList.Version version = Tools.getVersionInfo(args[1]);
         System.out.println("Launching Minecraft " + version.id);
 
-        // 第三个参数为服务器地址（FCL 风格）：留空则不自动加入，非空则启动后自动加入
-        // 由 JavaLauncher.m 在 NSDictionary 启动分支以 args[2] 传入
+        // The third argument is the server address (FCL style): leave it empty to not auto-join, or set it to auto-join after launch
+        // It is passed in by JavaLauncher.m as args[2] in the NSDictionary launch branch
         String serverIp = (args.length > 2 && args[2] != null) ? args[2] : "";
 
         // Set language to Chinese on first launch
@@ -244,8 +244,8 @@ public class PojavLauncher {
                 configPath = Tools.DIR_GAME_NEW + "/" + version.logging.client.file.id;
             }
         }
-        // Fallback：如果 logging 配置缺失或文件不存在，使用 1.12 补丁配置
-        // 确保 MC 日志能输出到 stdout，便于诊断启动崩溃
+        // Fallback: use the 1.12 patched configuration when the logging configuration is missing or the file does not exist
+        // This makes sure MC logs reach stdout, which helps diagnose launch crashes
         if (configPath == null || !new java.io.File(configPath).exists()) {
             configPath = Tools.DIR_BUNDLE + "/log4j-rce-patch-1.12.xml";
             System.out.println("[PojavLauncher] Using fallback log4j config: " + configPath);

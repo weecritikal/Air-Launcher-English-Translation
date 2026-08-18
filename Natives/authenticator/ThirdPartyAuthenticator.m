@@ -3,14 +3,14 @@
 #import "../ios_uikit_bridge.h"
 #import "../utils.h"
 
-// authlib-injector 下载源：BMCLAPI 镜像优先，失败后回退到官方源
-// 修复：从 1.2.6 升级到 1.2.7（build 55），1.2.7 修复了 Java 25 兼容性问题。
-// 说明：26.x 默认使用 Java 21 启动（Mojang 元数据 javaVersion.majorVersion=21），
-// 但若用户在 PLProfiles 中为 26.x 显式设置 javaVersion=25，则 26.x 会使用 Java 25，
-// 此时 authlib-injector 1.2.6 的 ASM 字节码处理无法识别 Java 25 class file version 69，
-// 导致 javaagent 加载失败、游戏无法启动。升级到 1.2.7 后同时兼容 Java 17/21/25。
-// 另：authlib-injector 1.2.7 对 Java 25 的支持也用于 execute_jar 路径
-// （如某些 Mod 安装器 JAR 编译目标为 Java 25）。
+// authlib-injector download sources: the BMCLAPI mirror first, falling back to the official source on failure
+// Fix: upgraded from 1.2.6 to 1.2.7 (build 55); 1.2.7 fixes the Java 25 compatibility problem.
+// Note: 26.x launches with Java 21 by default (Mojang metadata javaVersion.majorVersion=21),
+// but if the user explicitly sets javaVersion=25 for 26.x in PLProfiles, 26.x uses Java 25,
+// and then the ASM bytecode processing of authlib-injector 1.2.6 cannot recognize Java 25 class file version 69,
+// so the javaagent fails to load and the game will not start. After the upgrade to 1.2.7, Java 17/21/25 are all supported.
+// Also: authlib-injector 1.2.7's Java 25 support is used by the execute_jar path as well
+// (some mod installer JARs, for example, target Java 25).
 #define AUTHLIB_INJECTOR_URL_BMCL  @"https://bmclapi2.bangbang93.com/mirrors/authlib-injector/artifact/55/authlib-injector-1.2.7.jar"
 #define AUTHLIB_INJECTOR_URL_GITHUB @"https://authlib-injector.yushi.moe/artifact/55/authlib-injector-1.2.7.jar"
 #define AUTHLIB_INJECTOR_FILE @"authlib-injector.jar"
@@ -33,7 +33,7 @@ static NSError* createError(NSString *message, NSInteger code) {
         return;
     }
 
-    // 1. 缺协议时补 HTTPS（规范要求不允许降级到 HTTP）
+    // 1. Add HTTPS when the scheme is missing (the specification forbids downgrading to HTTP)
     NSString *urlStr = inputURL;
     if (![urlStr hasPrefix:@"http://"] && ![urlStr hasPrefix:@"https://"]) {
         urlStr = [@"https://" stringByAppendingString:urlStr];
@@ -41,22 +41,22 @@ static NSError* createError(NSString *message, NSInteger code) {
 
     NSURL *url = [NSURL URLWithString:urlStr];
     if (!url || !url.scheme || !url.host) {
-        // URL 非法，回退返回原始输入
+        // Invalid URL, so fall back to returning the original input
         if (completion) completion(inputURL, nil);
         return;
     }
 
-    // 2. GET 请求该 URL，检查 X-Authlib-Injector-API-Location 响应头
+    // 2. Send a GET request to that URL and check the X-Authlib-Injector-API-Location response header
     NSURLSessionConfiguration *config = [NSURLSessionConfiguration defaultSessionConfiguration];
     config.timeoutIntervalForRequest = 15;
     config.timeoutIntervalForResource = 30;
-    // 允许跟随重定向（GitHub releases 等 302 跳转）
+    // Allow redirects to be followed (302 hops such as GitHub releases)
     config.HTTPShouldUsePipelining = YES;
     NSURLSession *session = [NSURLSession sessionWithConfiguration:config];
 
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
     request.HTTPMethod = @"GET";
-    // 不缓存，避免 ALI 头被缓存层吞掉
+    // Do not cache, so the ALI header is not swallowed by a caching layer
     request.cachePolicy = NSURLRequestReloadIgnoringLocalCacheData;
 
     __block NSString *resolvedURL = urlStr;
@@ -66,7 +66,7 @@ static NSError* createError(NSString *message, NSInteger code) {
         completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
             if (error) {
                 NSLog(@"[ThirdPartyAuthenticator] ALI resolution failed: %@", error.localizedDescription);
-                // 解析失败回退到原始 URL，登录仍可尝试
+                // Fall back to the original URL if resolution fails; login can still be attempted
                 dispatch_async(dispatch_get_main_queue(), ^{
                     if (completion) completion(inputURL, nil);
                 });
@@ -75,18 +75,18 @@ static NSError* createError(NSString *message, NSInteger code) {
 
             NSHTTPURLResponse *httpResponse = (NSHTTPURLResponse *)response;
             if ([httpResponse isKindOfClass:[NSHTTPURLResponse class]]) {
-                // 3. 检查 ALI 头
+                // 3. Check the ALI header
                 NSString *ali = httpResponse.allHeaderFields[@"X-Authlib-Injector-API-Location"];
                 if (ali.length > 0) {
-                    // 解析 ALI 为绝对 URL
+                    // Resolve the ALI into an absolute URL
                     NSURL *aliURL = [NSURL URLWithString:ali relativeToURL:httpResponse.URL];
                     if (aliURL) {
-                        // 如果 ALI 不指向自身，更新 resolvedURL
+                        // If the ALI does not point at itself, update resolvedURL
                         NSString *aliStr = aliURL.absoluteString;
                         if (![aliStr isEqualToString:httpResponse.URL.absoluteString]) {
                             NSLog(@"[ThirdPartyAuthenticator] ALI redirect: %@ -> %@", urlStr, aliStr);
                             resolvedURL = aliStr;
-                            // ALI 指向新地址，需要重新请求获取元数据
+                            // The ALI points at a new address, so the metadata must be requested again
                             [self fetchMetadataFromURL:aliURL completion:completion originalInput:inputURL];
                             return;
                         }
@@ -94,10 +94,10 @@ static NSError* createError(NSString *message, NSInteger code) {
                 }
             }
 
-            // 4. 无 ALI 头或 ALI 指向自身：当前 URL 即为 API Root，复用响应体作为元数据
+            // 4. No ALI header, or the ALI points at itself: the current URL is the API root, so reuse the response body as the metadata
             if (data.length > 0) {
                 metadata = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
-                // 校验是否为合法 JSON（元数据必须是 JSON）
+                // Check that it is valid JSON (the metadata must be JSON)
                 if (metadata) {
                     NSData *check = [NSJSONSerialization JSONObjectWithData:data
                                                                    options:kNilOptions
@@ -109,7 +109,7 @@ static NSError* createError(NSString *message, NSInteger code) {
                 }
             }
 
-            // 规范化：确保末尾带斜杠（与 buildAuthURLForServer 的处理一致）
+            // Normalize: make sure it ends with a slash (matching how buildAuthURLForServer handles it)
             if (![resolvedURL hasSuffix:@"/"]) {
                 resolvedURL = [resolvedURL stringByAppendingString:@"/"];
             }
@@ -122,7 +122,7 @@ static NSError* createError(NSString *message, NSInteger code) {
     [task resume];
 }
 
-/// 辅助方法：从指定 URL 获取服务器元数据（ALI 重定向后的二次请求）
+/// Helper method: fetch the server metadata from a given URL (the second request after an ALI redirect)
 + (void)fetchMetadataFromURL:(NSURL *)url
                   completion:(void (^)(NSString *, NSString *_Nullable))completion
                originalInput:(NSString *)originalInput {
@@ -143,7 +143,7 @@ static NSError* createError(NSString *message, NSInteger code) {
                 NSLog(@"[ThirdPartyAuthenticator] Metadata secondary request failed: %@", error.localizedDescription);
             } else if (data.length > 0) {
                 metadata = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
-                // 校验 JSON 合法性
+                // Check that the JSON is valid
                 if (![NSJSONSerialization JSONObjectWithData:data options:kNilOptions error:nil]) {
                     NSLog(@"[ThirdPartyAuthenticator] Secondary response body is not valid JSON, discarding metadata");
                     metadata = nil;
@@ -177,8 +177,8 @@ static NSError* createError(NSString *message, NSInteger code) {
     if (![[NSFileManager defaultManager] fileExistsAtPath:path]) {
         return NO;
     }
-    // 版本检查：已下载的 jar 版本必须与当前期望版本一致
-    // 修复：旧版 1.2.6 jar 与 Java 25 不兼容，必须升级到 1.2.7
+    // Version check: the already downloaded jar version must match the currently expected version
+    // Fix: the old 1.2.6 jar is incompatible with Java 25, so it must be upgraded to 1.2.7
     NSString *versionPath = [self getAuthlibInjectorVersionPath];
     NSString *downloadedVersion = [NSString stringWithContentsOfFile:versionPath encoding:NSUTF8StringEncoding error:nil];
     if (downloadedVersion.length == 0 || ![downloadedVersion isEqualToString:AUTHLIB_INJECTOR_VERSION]) {
@@ -189,7 +189,7 @@ static NSError* createError(NSString *message, NSInteger code) {
     return YES;
 }
 
-/// 下载成功后保存版本标记
+/// Save the version marker after a successful download
 - (void)saveAuthlibInjectorVersion {
     NSString *versionPath = [self getAuthlibInjectorVersionPath];
     [AUTHLIB_INJECTOR_VERSION writeToFile:versionPath atomically:YES encoding:NSUTF8StringEncoding error:nil];
@@ -199,7 +199,7 @@ static NSError* createError(NSString *message, NSInteger code) {
     [self downloadAuthlibInjectorFromURL:AUTHLIB_INJECTOR_URL_BMCL attempt:1 completion:completion];
 }
 
-/// 逐个尝试下载源：BMCLAPI 失败后回退到 GitHub 官方源
+/// Try the download sources one by one: fall back to the official GitHub source after BMCLAPI fails
 - (void)downloadAuthlibInjectorFromURL:(NSString *)urlString
                                attempt:(NSInteger)attempt
                             completion:(void (^)(BOOL success, NSError *error))completion {
@@ -220,7 +220,7 @@ static NSError* createError(NSString *message, NSInteger code) {
     AFURLSessionManager *manager = [[AFURLSessionManager alloc] initWithSessionConfiguration:configuration];
 
     NSURL *URL = [NSURL URLWithString:urlString];
-    // 使用 NSMutableURLRequest 以允许重定向跟随（GitHub releases 会 302 跳转）
+    // NSMutableURLRequest is used so redirects can be followed (GitHub releases responds with a 302)
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:URL];
     request.HTTPShouldUsePipelining = YES;
 
@@ -231,7 +231,7 @@ static NSError* createError(NSString *message, NSInteger code) {
     } completionHandler:^(NSURLResponse *response, NSURL *filePath, NSError *error) {
         if (error) {
             NSLog(@"[ThirdPartyAuthenticator] Download failed (source %ld): %@", (long)attempt, error.localizedDescription);
-            // BMCLAPI 失败后尝试 GitHub 官方源
+            // Try the official GitHub source after BMCLAPI fails
             if (attempt == 1) {
                 [self downloadAuthlibInjectorFromURL:AUTHLIB_INJECTOR_URL_GITHUB attempt:2 completion:completion];
             } else {
@@ -239,7 +239,7 @@ static NSError* createError(NSString *message, NSInteger code) {
             }
         } else {
             NSLog(@"[ThirdPartyAuthenticator] Download succeeded (source %ld)", (long)attempt);
-            // 保存版本标记，用于后续版本检查
+            // Save the version marker for later version checks
             [self saveAuthlibInjectorVersion];
             completion(YES, nil);
         }
@@ -288,12 +288,12 @@ static NSError* createError(NSString *message, NSInteger code) {
 
     NSMutableArray *args = [NSMutableArray arrayWithArray:@[jvmArg, @"-Dauthlibinjector.side=client"]];
 
-    // 参照 HMCL AuthlibInjectorAuthInfo：传递 prefetched 元数据
-    // 将服务器元数据 base64 编码后通过 -Dauthlibinjector.yggdrasil.prefetched 传入，
-    // 避免游戏运行时再次请求服务器元数据，提升皮肤加载可靠性
+    // Modeled on HMCL AuthlibInjectorAuthInfo: pass the prefetched metadata
+    // The server metadata is base64 encoded and passed in via -Dauthlibinjector.yggdrasil.prefetched,
+    // so the game does not have to request the server metadata again at runtime, making skin loading more reliable
     NSString *metadata = self.authData[@"prefetchedMetadata"];
     if (metadata.length > 0) {
-        // 去除 JSON 多余空白（规范要求紧凑形式，减少参数长度）
+        // Strip superfluous whitespace from the JSON (the specification calls for the compact form, which also shortens the argument)
         NSData *jsonData = [metadata dataUsingEncoding:NSUTF8StringEncoding];
         NSError *jsonError = nil;
         id jsonObj = [NSJSONSerialization JSONObjectWithData:jsonData options:kNilOptions error:&jsonError];
@@ -314,7 +314,7 @@ static NSError* createError(NSString *message, NSInteger code) {
             NSLog(@"[ThirdPartyAuthenticator] Prefetched metadata JSON parse failed, skipping parameter");
         }
     } else {
-        // 登录时未缓存元数据，尝试现场获取（同步，可能阻塞，仅作兜底）
+        // The metadata was not cached at login time, so try to fetch it on the spot (synchronously, potentially blocking; only a fallback)
         NSLog(@"[ThirdPartyAuthenticator] No cached metadata, attempting on-the-fly fetch");
         [self fetchMetadataSynchronouslyForServerURL:serverURL];
         NSString *cachedMeta = self.authData[@"prefetchedMetadata"];
@@ -341,14 +341,14 @@ static NSError* createError(NSString *message, NSInteger code) {
     return args;
 }
 
-/// 同步获取服务器元数据并缓存到 authData（getJvmArgsForAuthlib 兜底用）
+/// Fetch the server metadata synchronously and cache it in authData (a fallback for getJvmArgsForAuthlib)
 - (void)fetchMetadataSynchronouslyForServerURL:(NSString *)serverURL {
     if (serverURL.length == 0) return;
     NSString *urlStr = serverURL;
     if (![urlStr hasSuffix:@"/"]) {
         urlStr = [urlStr stringByAppendingString:@"/"];
     }
-    // 元数据在 API Root 直接 GET 获取
+    // The metadata is fetched with a plain GET on the API root
     NSURL *url = [NSURL URLWithString:urlStr];
     if (!url) return;
 
@@ -366,20 +366,20 @@ static NSError* createError(NSString *message, NSInteger code) {
         return;
     }
 
-    // 校验 JSON 合法性
+    // Check that the JSON is valid
     id jsonObj = [NSJSONSerialization JSONObjectWithData:data options:kNilOptions error:nil];
     if (!jsonObj) {
         NSLog(@"[ThirdPartyAuthenticator] On-the-fly fetched metadata is not valid JSON");
         return;
     }
 
-    // 检查 ALI 头，若指向其他地址则需二次请求
+    // Check the ALI header, and make a second request if it points elsewhere
     if ([response isKindOfClass:[NSHTTPURLResponse class]]) {
         NSString *ali = response.allHeaderFields[@"X-Authlib-Injector-API-Location"];
         if (ali.length > 0) {
             NSURL *aliURL = [NSURL URLWithString:ali relativeToURL:response.URL];
             if (aliURL && ![aliURL.absoluteString isEqualToString:response.URL.absoluteString]) {
-                // ALI 指向其他地址，二次请求
+                // The ALI points elsewhere, so make a second request
                 NSMutableURLRequest *aliRequest = [NSMutableURLRequest requestWithURL:aliURL];
                 aliRequest.HTTPMethod = @"GET";
                 aliRequest.timeoutInterval = 10;
@@ -465,8 +465,8 @@ static NSError* createError(NSString *message, NSInteger code) {
 }
 
 // Helper method to send authentication request
-/// 多角色场景：调用 refresh 把选定角色绑定到 token
-/// 参照 HMCL YggdrasilService.refresh：请求体含 accessToken/clientToken/selectedProfile/requestUser
+/// Multi-character case: call refresh to bind the selected character to the token
+/// Modeled on HMCL YggdrasilService.refresh: the request body contains accessToken/clientToken/selectedProfile/requestUser
 - (void)refreshToBindProfile:(NSDictionary *)profileToSelect
                   accessToken:(NSString *)accessToken
                   clientToken:(NSString *)clientToken
@@ -504,7 +504,7 @@ static NSError* createError(NSString *message, NSInteger code) {
             }
 
             NSDictionary *boundProfile = response[@"selectedProfile"];
-            // 校验绑定的角色与请求选择的角色一致
+            // Check that the bound character matches the one the request selected
             if (![boundProfile[@"id"] isEqualToString:profileToSelect[@"id"]]) {
                 NSError *error = createError(@"Failed to bind the character: the server returned a different character than requested", 1021);
                 callback(error, NO);
@@ -517,7 +517,7 @@ static NSError* createError(NSString *message, NSInteger code) {
             weakSelf.authData[@"uuid"] = boundProfile[@"id"];
             weakSelf.authData[@"profileId"] = boundProfile[@"id"];
 
-            // 格式化 UUID（补连字符）
+            // Format the UUID (adding the hyphens)
             NSString *uuid = boundProfile[@"id"];
             if (uuid.length == 32) {
                 weakSelf.authData[@"profileId"] = [NSString stringWithFormat:@"%@-%@-%@-%@-%@",
@@ -528,10 +528,10 @@ static NSError* createError(NSString *message, NSInteger code) {
                     [uuid substringWithRange:NSMakeRange(20, 12)]
                 ];
             }
-            // 第三方账户用 profileId（角色 UUID）作为 accountId，使同名账户可共存
+            // Third-party accounts use the profileId (the character UUID) as the accountId, letting accounts with the same name coexist
             weakSelf.authData[@"accountId"] = weakSelf.authData[@"profileId"];
 
-            // 异步获取头像（与单角色路径一致）
+            // Fetch the avatar asynchronously (as in the single-character path)
             [weakSelf fetchProfileTextureWithCallback:callback];
         } @catch (NSException *exception) {
             NSError *error = createError([NSString stringWithFormat:@"Exception while parsing the refresh response: %@", exception.reason], 1022);
@@ -544,7 +544,7 @@ static NSError* createError(NSString *message, NSInteger code) {
     }];
 }
 
-/// 异步获取角色纹理并设置头像 URL，完成后触发 callback
+/// Fetch the character textures asynchronously, set the avatar URL, and invoke the callback when done
 - (void)fetchProfileTextureWithCallback:(Callback)callback {
     NSString *serverURL = self.authData[@"authserver"] ?: @"https://authserver.ely.by";
     if (![serverURL hasSuffix:@"/"]) {
@@ -590,7 +590,7 @@ static NSError* createError(NSString *message, NSInteger code) {
     }];
 }
 
-/// 从 AFNetworking 错误中解析 Yggdrasil 服务器返回的 errorMessage
+/// Parse the errorMessage returned by the Yggdrasil server out of an AFNetworking error
 - (NSString *)parseErrorMessageFromError:(NSError *)error {
     NSData *data = error.userInfo[AFNetworkingOperationFailingURLResponseDataErrorKey];
     if (data) {
@@ -631,10 +631,10 @@ static NSError* createError(NSString *message, NSInteger code) {
                 return;
             }
 
-            // Yggdrasil 规范：当用户有且仅有一个角色时返回 selectedProfile；
-            // 有多个角色时只返回 availableProfiles；无角色时两者都缺失。
-            // 参照 HMCL：多角色场景下需要调用 refresh 把选定角色绑定到 token，
-            // 否则 token 处于"无 profile"状态，游戏 join server 会失败。
+            // Yggdrasil specification: selectedProfile is returned when the user has exactly one character;
+            // when there are several, only availableProfiles is returned; when there are none, both are missing.
+            // Modeled on HMCL: with several characters, refresh must be called to bind the selected character to the token,
+            // otherwise the token stays in a "no profile" state and joining a server in game fails.
             NSDictionary *selectedProfile = response[@"selectedProfile"];
             NSArray *availableProfiles = response[@"availableProfiles"];
             if (![availableProfiles isKindOfClass:[NSArray class]]) {
@@ -642,8 +642,8 @@ static NSError* createError(NSString *message, NSInteger code) {
             }
 
             if (!selectedProfile && availableProfiles.count > 0) {
-                // 多角色场景：先保存 token，再 refresh 绑定第一个角色
-                // （HMCL 这里会弹出角色选择器；移动端简化为选第一个）
+                // Multi-character case: save the token first, then refresh to bind the first character
+                // (HMCL shows a character picker here; on mobile this is simplified to picking the first)
                 NSString *accessToken = response[@"accessToken"];
                 NSString *clientToken = response[@"clientToken"];
                 NSDictionary *profileToSelect = availableProfiles[0];
@@ -656,7 +656,7 @@ static NSError* createError(NSString *message, NSInteger code) {
             }
 
             if (!selectedProfile) {
-                // 有 token 但无任何角色：账户未创建游戏角色
+                // A token but no characters at all: the account has not created a game character
                 NSString *errMsg = @"This account has no game character yet. Create one on the skin site before signing in";
                 NSError *error = createError(errMsg, 1019);
                 callback(error, NO);
@@ -683,12 +683,12 @@ static NSError* createError(NSString *message, NSInteger code) {
                     [uuid substringWithRange:NSMakeRange(20, 12)]
                 ];
             }
-            // 第三方账户用 profileId（角色 UUID）作为 accountId，使同名账户可共存
+            // Third-party accounts use the profileId (the character UUID) as the accountId, letting accounts with the same name coexist
             self.authData[@"accountId"] = self.authData[@"profileId"];
 
-            // 尝试使用Yggdrasil API获取头像
+            // Try to fetch the avatar using the Yggdrasil API
             NSString *serverURL = self.authData[@"authserver"] ?: @"https://authserver.ely.by";
-            // 确保serverURL以斜杠结尾
+            // Make sure serverURL ends with a slash
             if (![serverURL hasSuffix:@"/"]) {
                 serverURL = [serverURL stringByAppendingString:@"/"];
             }
@@ -697,7 +697,7 @@ static NSError* createError(NSString *message, NSInteger code) {
             manager.requestSerializer = AFJSONRequestSerializer.serializer;
             NSString *profileURL = [NSString stringWithFormat:@"%@sessionserver/session/minecraft/profile/%@", serverURL, self.authData[@"profileId"]];
             
-            // 保存当前的authData，以便在异步回调中使用
+            // Save the current authData so it can be used in the asynchronous callback
             __block NSMutableDictionary *localAuthData = [self.authData mutableCopy];
             __weak typeof(self) weakSelf = self;
             
@@ -706,20 +706,20 @@ static NSError* createError(NSString *message, NSInteger code) {
                     NSArray *properties = response[@"properties"];
                     for (NSDictionary *property in properties) {
                         if ([property[@"name"] isEqualToString:@"textures"]) {
-                            // 解析皮肤数据
+                            // Parse the skin data
                             NSString *textures = property[@"value"];
                             NSData *decodedData = [[NSData alloc] initWithBase64EncodedString:textures options:0];
                             if (decodedData) {
                                 NSError *error = nil;
                                 NSDictionary *texturesDict = [NSJSONSerialization JSONObjectWithData:decodedData options:kNilOptions error:&error];
                                 if (texturesDict && !error) {
-                                    // 获取皮肤URL
+                                    // Get the skin URL
                                     NSString *skinURL = texturesDict[@"textures"][@"SKIN"][@"url"];
                                     if (skinURL) {
-                                        // 设置头像URL为皮肤URL的头盔版本
+                                        // Set the avatar URL to the helm version of the skin URL
                                         NSString *headURL = [skinURL stringByReplacingOccurrencesOfString:@".png" withString:@"/helm.png"];
                                         weakSelf.authData[@"profilePicURL"] = headURL;
-                                        // 异步更新头像后再次保存，避免账户列表读到失效的占位 URL
+                                        // Save again after updating the avatar asynchronously, so the account list does not read a stale placeholder URL
                                         [weakSelf saveChanges];
                                         return;
                                     }
@@ -729,16 +729,16 @@ static NSError* createError(NSString *message, NSInteger code) {
                     }
                 }
 
-                // 如果Yggdrasil API失败，使用 mc-heads.net 头像服务作为回退
+                // If the Yggdrasil API fails, fall back to the mc-heads.net avatar service
                 weakSelf.authData[@"profilePicURL"] = [NSString stringWithFormat:@"https://mc-heads.net/avatar/%@/100", weakSelf.authData[@"username"]];
                 [weakSelf saveChanges];
             } failure:^(NSURLSessionDataTask *task, NSError *error) {
-                // 如果请求失败，使用 mc-heads.net 头像服务作为回退
+                // If the request fails, fall back to the mc-heads.net avatar service
                 weakSelf.authData[@"profilePicURL"] = [NSString stringWithFormat:@"https://mc-heads.net/avatar/%@/100", weakSelf.authData[@"username"]];
                 [weakSelf saveChanges];
             }];
 
-            // 设置默认头像，避免UI显示问题（异步获取真实皮肤URL后会覆盖并再次保存）
+            // Set a default avatar to avoid UI problems (it is overwritten and saved again once the real skin URL is fetched asynchronously)
             self.authData[@"profilePicURL"] = [NSString stringWithFormat:@"https://mc-heads.net/avatar/%@/100", self.authData[@"username"]];
 
             // Token expiration time (24 hours)
@@ -966,12 +966,12 @@ static NSError* createError(NSString *message, NSInteger code) {
                     } else {
                         self.authData[@"profileId"] = uuid;
                     }
-                    // 第三方账户用 profileId（角色 UUID）作为 accountId，使同名账户可共存
+                    // Third-party accounts use the profileId (the character UUID) as the accountId, letting accounts with the same name coexist
                     self.authData[@"accountId"] = self.authData[@"profileId"];
 
-                    // 尝试使用Yggdrasil API获取头像
+                    // Try to fetch the avatar using the Yggdrasil API
                     NSString *serverURL = self.authData[@"authserver"] ?: @"https://authserver.ely.by";
-                    // 确保serverURL以斜杠结尾
+                    // Make sure serverURL ends with a slash
                     if (![serverURL hasSuffix:@"/"]) {
                         serverURL = [serverURL stringByAppendingString:@"/"];
                     }
@@ -980,7 +980,7 @@ static NSError* createError(NSString *message, NSInteger code) {
                     manager.requestSerializer = AFJSONRequestSerializer.serializer;
                     NSString *profileURL = [NSString stringWithFormat:@"%@sessionserver/session/minecraft/profile/%@", serverURL, self.authData[@"profileId"]];
                     
-                    // 保存当前的authData，以便在异步回调中使用
+                    // Save the current authData so it can be used in the asynchronous callback
                     __block NSMutableDictionary *localAuthData = [self.authData mutableCopy];
                     __weak typeof(self) weakSelf = self;
                     
@@ -989,20 +989,20 @@ static NSError* createError(NSString *message, NSInteger code) {
                             NSArray *properties = response[@"properties"];
                             for (NSDictionary *property in properties) {
                                 if ([property[@"name"] isEqualToString:@"textures"]) {
-                                    // 解析皮肤数据
+                                    // Parse the skin data
                                     NSString *textures = property[@"value"];
                                     NSData *decodedData = [[NSData alloc] initWithBase64EncodedString:textures options:0];
                                     if (decodedData) {
                                         NSError *error = nil;
                                         NSDictionary *texturesDict = [NSJSONSerialization JSONObjectWithData:decodedData options:kNilOptions error:&error];
                                         if (texturesDict && !error) {
-                                            // 获取皮肤URL
+                                            // Get the skin URL
                                             NSString *skinURL = texturesDict[@"textures"][@"SKIN"][@"url"];
                                             if (skinURL) {
-                                                // 设置头像URL为皮肤URL的头盔版本
+                                                // Set the avatar URL to the helm version of the skin URL
                                                 NSString *headURL = [skinURL stringByReplacingOccurrencesOfString:@".png" withString:@"/helm.png"];
                                                 weakSelf.authData[@"profilePicURL"] = headURL;
-                                                // 异步更新头像后再次保存，避免账户列表读到失效的占位 URL
+                                                // Save again after updating the avatar asynchronously, so the account list does not read a stale placeholder URL
                                                 [weakSelf saveChanges];
                                                 return;
                                             }
@@ -1012,16 +1012,16 @@ static NSError* createError(NSString *message, NSInteger code) {
                             }
                         }
 
-                        // 如果Yggdrasil API失败，使用 mc-heads.net 头像服务作为回退
+                        // If the Yggdrasil API fails, fall back to the mc-heads.net avatar service
                         weakSelf.authData[@"profilePicURL"] = [NSString stringWithFormat:@"https://mc-heads.net/avatar/%@/100", weakSelf.authData[@"username"]];
                         [weakSelf saveChanges];
                     } failure:^(NSURLSessionDataTask *task, NSError *error) {
-                        // 如果请求失败，使用 mc-heads.net 头像服务作为回退
+                        // If the request fails, fall back to the mc-heads.net avatar service
                         weakSelf.authData[@"profilePicURL"] = [NSString stringWithFormat:@"https://mc-heads.net/avatar/%@/100", weakSelf.authData[@"username"]];
                         [weakSelf saveChanges];
                     }];
 
-                    // 设置默认头像，避免UI显示问题（异步获取真实皮肤URL后会覆盖并再次保存）
+                    // Set a default avatar to avoid UI problems (it is overwritten and saved again once the real skin URL is fetched asynchronously)
                     self.authData[@"profilePicURL"] = [NSString stringWithFormat:@"https://mc-heads.net/avatar/%@/100", self.authData[@"username"]];
                 }
                 

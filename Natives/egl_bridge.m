@@ -20,31 +20,31 @@
 #include "ctxbridges/osmesa_internal.h"
 #include "utils.h"
 
-// 默认 GL 路径，pojavInit() 会重新设置
+// Default GL path; pojavInit() will set it again
 int clientAPI = GLFW_OPENGL_API;
 
-// FPS 计数器（参照 FCL egl_bridge.c 的 atomic_uint 实现）
-// 在 pojavSwapBuffers() 中累加，在 SurfaceViewController 读取时重置
+// FPS counter (modeled on the atomic_uint implementation in FCL egl_bridge.c)
+// It is incremented in pojavSwapBuffers() and reset when SurfaceViewController reads it
 static atomic_uint _pojavFpsCounter = 0;
 
-// 阶段13：首帧渲染检测标志（参照 FCL 的 game_ready 回调）
-// pojavSwapBuffers() 首次调用时置为 YES 并发送通知，SurfaceViewController 据此移除启动遮罩
+// Phase 13: first-frame-rendered detection flag (modeled on FCL's game_ready callback)
+// It is set to YES and a notification is posted on the first call to pojavSwapBuffers(), which SurfaceViewController uses to remove the launch overlay
 static BOOL s_firstFrameRendered = NO;
 
 unsigned int pojavGetAndResetFps() {
     return atomic_exchange(&_pojavFpsCounter, 0);
 }
 
-/// 显式递增 FPS 计数器（供 Vulkan 模式使用）
+/// Increment the FPS counter explicitly (for use in Vulkan mode)
 ///
-/// Vulkan 渲染器不经过 EGL 的 pojavSwapBuffers 路径，而是通过 MoltenVK 的
-/// vkQueuePresentKHR 直接 present。因此 pojavSwapBuffers 中的 FPS 计数逻辑
-/// 不会触发。SurfaceViewController 在 Vulkan 模式下使用 CADisplayLink 作为
-/// 帧率检测 fallback，每帧通过此函数递增计数器。
+/// The Vulkan renderer does not go through EGL's pojavSwapBuffers path but presents directly through
+/// MoltenVK's vkQueuePresentKHR. As a result the FPS counting logic in pojavSwapBuffers
+/// never runs. In Vulkan mode SurfaceViewController uses CADisplayLink as a frame rate
+/// detection fallback and increments the counter through this function every frame.
 void pojavIncrementFpsCounter() {
     atomic_fetch_add(&_pojavFpsCounter, 1);
 
-    // 首帧渲染检测（与 pojavSwapBuffers 中的逻辑一致）
+    // First-frame-rendered detection (matching the logic in pojavSwapBuffers)
     if (!s_firstFrameRendered) {
         s_firstFrameRendered = YES;
         dispatch_async(dispatch_get_main_queue(), ^{
@@ -54,26 +54,26 @@ void pojavIncrementFpsCounter() {
     }
 }
 
-/// 运行时判定 MC 真实渲染路径是否为 Vulkan。
+/// Determine at runtime whether MC's real rendering path is Vulkan.
 ///
-/// 修复 FPS 显示错误的根本问题：
-/// 之前 SurfaceViewController 在 viewDidLoad 时通过 graphicsApi 字符串静态推断
-/// 是否启用 CADisplayLink fallback 递增 FPS 计数器。但：
-///   - graphicsApi=default 时由 MC 内部决定，无法预判（保守起见启用 fallback）
-///   - 但若 MC 实际选了 GL 路径，pojavSwapBuffers 也会计数，导致双重计数
-///   - 反之若 graphicsApi=prefer_vulkan 但 MC 启动失败回退到 GL，fallback 会错误递增
+/// This fixes the root cause of the incorrect FPS display:
+/// SurfaceViewController used to infer statically from the graphicsApi string at viewDidLoad time
+/// whether to enable the CADisplayLink fallback that increments the FPS counter. But:
+///   - with graphicsApi=default the decision is made inside MC and cannot be predicted (so the fallback was enabled to be safe)
+///   - yet if MC actually chose the GL path, pojavSwapBuffers counts too, causing double counting
+///   - conversely, if graphicsApi=prefer_vulkan but MC failed to start and fell back to GL, the fallback would increment incorrectly
 ///
-/// 通过 clientAPI 运行时信号（由 MC 调用 glfwWindowHint(GLFW_CLIENT_API, ...) 写入）
-/// 可以准确判定 MC 当前实际走的渲染路径：
-///   - GLFW_NO_API（0）→ Vulkan 路径，pojavSwapBuffers 不被调用，需要 fallback
-///   - 其他值（GLFW_OPENGL_API 等）→ GL 路径，pojavSwapBuffers 会计数，禁用 fallback
+/// The clientAPI runtime signal (written when MC calls glfwWindowHint(GLFW_CLIENT_API, ...))
+/// makes it possible to determine exactly which rendering path MC is currently taking:
+///   - GLFW_NO_API (0) → the Vulkan path; pojavSwapBuffers is not called, so the fallback is needed
+///   - any other value (GLFW_OPENGL_API etc.) → the GL path; pojavSwapBuffers counts, so the fallback is disabled
 ///
-/// PLDisplayLinkTarget.displayLinkTick: 每帧动态查询此函数，确保 fallback 启用状态
-/// 与 MC 实际渲染路径一致，避免双重计数或漏计数。
+/// PLDisplayLinkTarget.displayLinkTick: queries this function dynamically every frame, keeping the fallback state
+/// consistent with MC's real rendering path and avoiding double or missed counting.
 bool pojavIsActualVulkanPath() {
-    // GLFW 模式：clientAPI 由 pojavSetWindowHint(GLFW_CLIENT_API, ...) 写入，
-    // pojavInit() 初始化为 GLFW_OPENGL_API。MC 调用 glfwWindowHint(GLFW_NO_API)
-    // 切换到 Vulkan 路径。
+    // GLFW mode: clientAPI is written by pojavSetWindowHint(GLFW_CLIENT_API, ...),
+    // and pojavInit() initializes it to GLFW_OPENGL_API. MC calls glfwWindowHint(GLFW_NO_API)
+    // to switch to the Vulkan path.
     if (clientAPI == GLFW_NO_API) return true;
 
     return false;
@@ -121,17 +121,17 @@ int pojavInitOpenGL() {
     } else if ([renderer isEqualToString:@ RENDERER_NAME_MTL_ANGLE]) {
         set_gl_bridge_tbl();
     } else if ([renderer isEqualToString:@ RENDERER_NAME_LTW]) {
-        // LTW (Large Thin Wrapper) - OpenGL Core 3.3 → OpenGL ES 3 转译层
-        // 复刻自官方 MojoLauncher/LTW 仓库，完美支持 Sodium + Iris 光影。
+        // LTW (Large Thin Wrapper) - an OpenGL Core 3.3 → OpenGL ES 3 translation layer
+        // Ported from the official MojoLauncher/LTW repository, with full support for Sodium + Iris shaders.
         //
-        // 关键：LTW 的 constructor（proc.c）需要通过 dlsym 找到 eglGetProcAddress
-        // 等 EGL 函数符号。LTW 自身只导出 eglCreateContext / eglDestroyContext /
-        // eglMakeCurrent 三个 wrapper，其他 EGL 函数直接转发给 host EGL（ANGLE）。
-        // 所以必须先 dlopen ANGLE（RTLD_GLOBAL）让 ANGLE 的 EGL 符号进入全局符号表，
-        // LTW constructor 才能成功初始化。
+        // Key point: LTW's constructor (proc.c) needs to find EGL function symbols such as eglGetProcAddress
+        // via dlsym. LTW itself only exports the three wrappers eglCreateContext / eglDestroyContext /
+        // eglMakeCurrent, and forwards every other EGL function straight to the host EGL (ANGLE).
+        // So ANGLE must be dlopen'ed first (RTLD_GLOBAL) so that ANGLE's EGL symbols enter the global symbol table
+        // before LTW's constructor can initialize successfully.
         //
-        // gl_bridge.m 的 dlsym_EGL() 在 LTW 模式下会从 libltw.dylib 直接 dlsym
-        // 这三个 wrapper 函数，其余 EGL 函数仍从 ANGLE 解析。
+        // In LTW mode, dlsym_EGL() in gl_bridge.m dlsyms those three wrapper functions straight from libltw.dylib
+        // and still resolves the remaining EGL functions from ANGLE.
         NSLog(@"[egl_bridge] LTW renderer: preloading ANGLE as host EGL before LTW init");
         dlopen("@rpath/" RENDERER_NAME_MTL_ANGLE, RTLD_GLOBAL);
         set_gl_bridge_tbl();
@@ -139,39 +139,39 @@ int pojavInitOpenGL() {
         setenv("GALLIUM_DRIVER","zink",1);
         set_osm_bridge_tbl();
     } else if ([renderer isEqualToString:@ RENDERER_NAME_VULKAN]) {
-        // 关键修复（MoltenVK + OpenGL 黑屏 + 图形 API 切换无效）：
+        // Key fix (MoltenVK + OpenGL black screen + graphics API switching having no effect):
         //
-        // 之前 Vulkan 渲染器单向调用 set_vk_bridge_tbl()，一旦设置所有 GL 调用都走
-        // vk_bridge 的 stub（vk_init_context 返回 dummy，vk_make_current 空实现）。
-        // 当 MC 26.2+ 选 prefer_opengl 时仍走 GL 路径（clientAPI != GLFW_NO_API），
-        // 但 bridge 已是 vk stub → 无真实 GL 上下文 → 黑屏。
+        // Previously the Vulkan renderer called set_vk_bridge_tbl() one-way, and once that was set every GL call went through
+        // the vk_bridge stubs (vk_init_context returns a dummy, vk_make_current is empty).
+        // When MC 26.2+ chose prefer_opengl it still took the GL path (clientAPI != GLFW_NO_API),
+        // but the bridge was already the vk stub → no real GL context → black screen.
         //
-        // 修复策略（参照 FCL/HMCL 的 renderer + graphicsApi 联动逻辑）：
-        //   1. 始终初始化 GL bridge（set_gl_bridge_tbl），让 GL 路径有真实上下文
-        //   2. 同时预加载 libMoltenVK.dylib（Vulkan 路径需要）
-        //   3. pojavCreateContext 根据 clientAPI 动态决定返回值：
-        //      - GLFW_NO_API（Vulkan 路径）→ 返回 CAMetalLayer，MC/LWJGL 自管 Vulkan
-        //      - 其他（GL 路径）→ 调用 br_init_context 创建真实 EGL/GL 上下文
+        // Fix strategy (modeled on the renderer + graphicsApi interplay in FCL/HMCL):
+        //   1. Always initialize the GL bridge (set_gl_bridge_tbl) so the GL path has a real context
+        //   2. Preload libMoltenVK.dylib at the same time (needed by the Vulkan path)
+        //   3. pojavCreateContext decides its return value dynamically from clientAPI:
+        //      - GLFW_NO_API (Vulkan path) → return a CAMetalLayer and let MC/LWJGL manage Vulkan themselves
+        //      - otherwise (GL path) → call br_init_context to create a real EGL/GL context
         //
-        // 这样无论 MC 选 OpenGL 还是 Vulkan 路径都能正常工作：
-        //   - prefer_vulkan：MC 走 Vulkan 路径，glfwWindowHint(GLFW_NO_API) → CAMetalLayer
-        //   - prefer_opengl：MC 走 GL 路径，glfwWindowHint(GLFW_OPENGL_API) → EGL 上下文
-        //   - default：MC 内部决定，两种路径都能处理
+        // This works whether MC picks the OpenGL or the Vulkan path:
+        //   - prefer_vulkan: MC takes the Vulkan path, glfwWindowHint(GLFW_NO_API) → CAMetalLayer
+        //   - prefer_opengl: MC takes the GL path, glfwWindowHint(GLFW_OPENGL_API) → EGL context
+        //   - default: MC decides internally, and both paths are handled
         //
-        // 注意：JavaLauncher.m 已在 Vulkan 模式下设置 org.lwjgl.opengl.libname=libmobileglues.dylib，
-        // 所以 LWJGL 加载的 GL 库是 MobileGlues（GL→Vulkan 翻译层），能通过 Vulkan 后端路由 GL 调用。
-        // 这就是用户说的"用 OpenGL 渲染游戏加用 MoltenVK，帧率才能达到 120"的实现原理：
-        // MC 走 GL 路径 → EGL 上下文（ANGLE Metal）→ MobileGlues 翻译 → Vulkan → MoltenVK → Metal
-        // MobileGlues 的 Vulkan 后端使用 IMMEDIATE present mode，可超过屏幕刷新率。
+        // Note: JavaLauncher.m already sets org.lwjgl.opengl.libname=libmobileglues.dylib in Vulkan mode,
+        // so the GL library LWJGL loads is MobileGlues (a GL→Vulkan translation layer), which can route GL calls through the Vulkan backend.
+        // This is how what users describe as "rendering the game with OpenGL plus MoltenVK to reach 120 FPS" actually works:
+        // MC takes the GL path → EGL context (ANGLE Metal) → MobileGlues translation → Vulkan → MoltenVK → Metal
+        // MobileGlues's Vulkan backend uses the IMMEDIATE present mode, which can exceed the screen refresh rate.
         NSLog(@"[egl_bridge] Vulkan renderer: initializing GL bridge for OpenGL path fallback (graphicsApi linkage)");
         set_gl_bridge_tbl();
-        // 预加载 libMoltenVK.dylib（Vulkan 路径需要，GL 路径不影响）
+        // Preload libMoltenVK.dylib (needed by the Vulkan path, harmless for the GL path)
         dlopen("@rpath/" RENDERER_NAME_VULKAN, RTLD_GLOBAL);
-        // Vulkan 模式下 LWJGL OpenGL 库使用 MobileGlues（由 JavaLauncher.m 设置）
-        // 不再调用 JNI_LWJGL_changeRenderer(RENDERER_NAME_MTL_ANGLE)，
-        // 因为 JavaLauncher.m 已通过 -Dorg.lwjgl.opengl.libname=libmobileglues.dylib 设置
+        // In Vulkan mode the LWJGL OpenGL library is MobileGlues (set by JavaLauncher.m)
+        // JNI_LWJGL_changeRenderer(RENDERER_NAME_MTL_ANGLE) is no longer called,
+        // because JavaLauncher.m already set it via -Dorg.lwjgl.opengl.libname=libmobileglues.dylib
         JNI_LWJGL_changeRenderer(RENDERER_NAME_MOBILEGLUES);
-        // 跳过下方的统一 JNI_LWJGL_changeRenderer 和 dlopen（已处理）
+        // Skip the shared JNI_LWJGL_changeRenderer and dlopen below (already handled)
         return !br_init();
     }
     if (strcmp(renderer.UTF8String, RENDERER_NAME_VULKAN) != 0) {
@@ -204,11 +204,11 @@ void pojavSetWindowHint(int hint, int value) {
 }
 
 void pojavSwapBuffers() {
-    // FPS 计数（参照 FCL/ZL2 在 native swap buffer 入口计数，反映真实渲染帧率）
+    // FPS counting (modeled on FCL/ZL2, which count at the native swap buffer entry point to reflect the real rendering frame rate)
     atomic_fetch_add(&_pojavFpsCounter, 1);
 
-    // 阶段13：首帧渲染检测（参照 FCL 的 game_ready 回调）
-    // 首次调用 pojavSwapBuffers 表示游戏已渲染第一帧，发送通知移除启动遮罩
+    // Phase 13: first-frame-rendered detection (modeled on FCL's game_ready callback)
+    // The first call to pojavSwapBuffers means the game has rendered its first frame, so post the notification to remove the launch overlay
     if (!s_firstFrameRendered) {
         s_firstFrameRendered = YES;
         dispatch_async(dispatch_get_main_queue(), ^{
@@ -240,24 +240,24 @@ void* pojavCreateContext(basic_render_window_t* contextSrc) {
 
     if (clientAPI == GLFW_NO_API) {
         // Game has selected Vulkan API to render
-        // MC 26.2+ graphicsApi=prefer_vulkan 或 default（Vulkan 路径）会走这里
-        // 返回 CAMetalLayer 作为 Vulkan surface，MC/LWJGL 通过 libMoltenVK.dylib 自管 Vulkan
+        // MC 26.2+ with graphicsApi=prefer_vulkan or default (the Vulkan path) ends up here
+        // Return a CAMetalLayer as the Vulkan surface; MC/LWJGL manage Vulkan themselves through libMoltenVK.dylib
         NSLog(@"[egl_bridge] Vulkan path: returning CAMetalLayer as Vulkan surface");
         return (__bridge void *)SurfaceViewController.surface.layer;
     }
 
-    // GL 路径（clientAPI == GLFW_OPENGL_API 或 GLFW_OPENGL_ES_API）
-    // MC 26.2+ graphicsApi=prefer_opengl 或 default（OpenGL 路径）会走这里
-    // 调用 br_init_context 创建真实 EGL/GL 上下文
-    // 即使 renderer=libMoltenVK.dylib，pojavInitOpenGL 已设置 GL bridge（set_gl_bridge_tbl），
-    // 所以这里会调用 gl_init_context 创建 ANGLE Metal EGL 上下文
+    // GL path (clientAPI == GLFW_OPENGL_API or GLFW_OPENGL_ES_API)
+    // MC 26.2+ with graphicsApi=prefer_opengl or default (the OpenGL path) ends up here
+    // Call br_init_context to create a real EGL/GL context
+    // Even with renderer=libMoltenVK.dylib, pojavInitOpenGL has already set the GL bridge (set_gl_bridge_tbl),
+    // so this calls gl_init_context to create an ANGLE Metal EGL context
     NSLog(@"[egl_bridge] OpenGL path: creating EGL/GL context via br_init_context");
     return br_init_context(contextSrc);
 }
 
 void pojavSwapInterval(int interval) {
-    // Vulkan 模式诊断：即使 br_swap_interval 为 NULL（Vulkan 不使用 EGL swap interval），
-    // 也记录调用以帮助诊断帧率解锁问题
+    // Vulkan mode diagnostics: even when br_swap_interval is NULL (Vulkan does not use the EGL swap interval),
+    // the call is logged to help diagnose frame rate unlocking problems
     if (!br_swap_interval) {
         const char* vsyncEnv = getenv("POJAV_DISABLE_VSYNC");
         NSLog(@"[egl_bridge] pojavSwapInterval(%d) called but br_swap_interval is NULL "
@@ -266,43 +266,43 @@ void pojavSwapInterval(int interval) {
               interval, vsyncEnv ?: "<unset>");
         return;
     }
-    // 解锁帧率（关闭垂直同步）：当启动器偏好 video.disable_game_vsync 开启时
-    // （POJAV_DISABLE_VSYNC=1，由 JavaLauncher.m 设置），强制 swap interval=0，
-    // 覆盖游戏 glfwSwapInterval(1) 的垂直同步请求。
+    // Unlock the frame rate (disable vertical sync): when the launcher preference video.disable_game_vsync is on
+    // (POJAV_DISABLE_VSYNC=1, set by JavaLauncher.m), force swap interval=0,
+    // overriding the game's glfwSwapInterval(1) vertical sync request.
     //
-    // 这是 GL 类渲染器（gl4es/ANGLE/MobileGlues）真正生效 VSync 的落点
+    // This is where VSync actually takes effect for GL-family renderers (gl4es/ANGLE/MobileGlues)
     // （gl_bridge.m gl_swap_interval → eglSwapInterval）。
     //
-    // ANGLE Metal 后端对 eglSwapInterval 的处理：
-    // - interval=0：eglSwapBuffers 不等待 vblank，渲染线程可立即继续下一帧渲染。
-    //   虽然 Core Animation 仍按屏幕刷新率合成（60/120Hz），但渲染线程不被阻塞，
-    //   可保持高吞吐量。多余的帧会被 Core Animation 丢弃，但 FPS 计数器反映渲染帧率。
-    // - interval=1：eglSwapBuffers 等待 vblank，渲染线程被锁在屏幕刷新率。
+    // How the ANGLE Metal backend handles eglSwapInterval:
+    // - interval=0: eglSwapBuffers does not wait for vblank, so the render thread can immediately start the next frame.
+    //   Core Animation still composites at the screen refresh rate (60/120Hz), but the render thread is not blocked
+    //   and can keep its throughput high. Surplus frames are dropped by Core Animation, but the FPS counter reflects the rendering frame rate.
+    // - interval=1: eglSwapBuffers waits for vblank and the render thread is locked to the screen refresh rate.
     //
-    // 与 PojavLauncher.java 写 enableVsync=false 互为兜底：即便游戏在运行时再次请求
-    // VSync（某些 mod/版本会重设），native 层也会拦截。
+    // This backs up PojavLauncher.java writing enableVsync=false: even if the game requests
+    // VSync again at runtime (some mods/versions reset it), the native layer intercepts it.
     //
-    // 与 Vulkan 渲染器的区别：
-    // - GL 类渲染器（含 zink）：VSync 通过 eglSwapInterval 控制（此处生效）
-    //   zink 创建 swapchain 时根据 eglSwapInterval 选择 present mode：
-    //   interval=0 → IMMEDIATE（不等 vsync），interval=1 → FIFO（等 vsync）
-    // - Vulkan 渲染器：VSync 通过 vkCreateSwapchainKHR 的 presentMode 控制
-    //   （由 LWJGL 根据 glfwSwapInterval 选择，设备能力由 MoltenVK 自动检测）
+    // Difference from the Vulkan renderer:
+    // - GL-family renderers (including zink): VSync is controlled through eglSwapInterval (which takes effect here)
+    //   When zink creates the swapchain it picks the present mode from eglSwapInterval:
+    //   interval=0 → IMMEDIATE (no vsync wait), interval=1 → FIFO (wait for vsync)
+    // - The Vulkan renderer: VSync is controlled by the presentMode of vkCreateSwapchainKHR
+    //   (chosen by LWJGL from glfwSwapInterval, with device capabilities detected automatically by MoltenVK)
 
     const char* vsyncEnv = getenv("POJAV_DISABLE_VSYNC");
     const char* renderer = getenv("AMETHYST_RENDERER");
 
     if (vsyncEnv && strcmp(vsyncEnv, "1") == 0) {
         if (interval != 0) {
-            // 关键修复（FPS 解锁无效问题）：记录每次 VSync 拦截
-            // 某些 mod（如 OptiFine、Sodium）或 MC 版本会在运行时反复调用 glfwSwapInterval(1)
-            // 重新启用 VSync。记录每次拦截帮助诊断"帧率被重新锁定"的问题。
-            // 之前只记录前几次，无法发现运行中被 mod 重新启用的情况。
+            // Key fix (frame rate unlocking not working): log every VSync interception
+            // Some mods (such as OptiFine and Sodium) or MC versions repeatedly call glfwSwapInterval(1) at runtime
+            // to re-enable VSync. Logging every interception helps diagnose the "frame rate got locked again" problem.
+            // Previously only the first few were logged, so a mod re-enabling it during play went unnoticed.
             NSLog(@"[egl_bridge] pojavSwapInterval: intercepted VSync request interval=%d -> 0 (POJAV_DISABLE_VSYNC=1, renderer=%s)", interval, renderer ?: "<unset>");
         }
         interval = 0;
     } else {
-        // 仅记录前几次调用，帮助诊断
+        // Only log the first few calls, to help with diagnosis
         static int s_logCount = 0;
         if (s_logCount < 3) {
             s_logCount++;

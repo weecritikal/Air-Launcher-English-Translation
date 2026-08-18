@@ -79,8 +79,8 @@ int guiScale;
 float resolutionScale;
 BOOL virtualMouseEnabled, isControlModifiable;
 
-// 硬件断点重定向数组（同步自上游，用于非 TXM 的 iOS 26+ 设备 dlopen 重定向）
-// 由 redirectFunctionHWBreakpoint 填充，由 catch_mach_exception_raise_state 读取
+// Hardware breakpoint redirection array (synced from upstream, used for dlopen redirection on non-TXM iOS 26+ devices)
+// It is filled in by redirectFunctionHWBreakpoint and read by catch_mach_exception_raise_state
 uint64_t hwRedirectOrig[6], hwRedirectTarget[6];
 
 #endif //POJAVLAUNCHER_ENVIRON_H

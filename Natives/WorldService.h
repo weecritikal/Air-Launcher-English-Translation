@@ -48,10 +48,10 @@ typedef void(^WorldDownloadProgressHandler)(NSProgress * _Nullable downloadProgr
 
 // --- Helpers ---
 
-/// 获取当前 profile 的 saves 目录，不存在时自动创建
+/// Get the saves directory of the current profile, creating it automatically if it does not exist
 - (nullable NSString *)ensureWorldsFolderForProfile:(NSString *)profileName error:(NSError **)error;
 
-/// 查找当前 profile 的 saves 目录（已存在时返回路径，否则返回 nil）
+/// Look up the saves directory of the current profile (returns the path if it exists, otherwise nil)
 - (nullable NSString *)existingWorldsFolderForProfile:(NSString *)profileName;
 
 @end

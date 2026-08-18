@@ -37,11 +37,11 @@
     NSMutableDictionary *info = [NSMutableDictionary new];
     NSString *minecraftVersion = dependency[@"minecraft"];
     if (dependency[@"forge"]) {
-        // Forge 没有独立的 version JSON 下载 URL，version JSON 嵌入在 installer.jar 中。
-        // 设置 installer URL 和 loader 类型，让 ModrinthAPI/CurseForgeAPI 在整合包安装时
-        // 下载 installer.jar 并调用 ForgeDirectInstaller 写入完整的 version.json + 下载 Forge 库。
-        // 之前不设置任何字段会导致整合包安装后只设置 profile 但不下载版本 JSON，
-        // 启动时报"找不到版本信息"。
+        // Forge has no separate version JSON download URL; the version JSON is embedded in installer.jar.
+        // The installer URL and the loader type are set so that ModrinthAPI/CurseForgeAPI, during modpack installation,
+        // download installer.jar and call ForgeDirectInstaller to write the full version.json and download the Forge libraries.
+        // Setting no fields used to mean that after a modpack install only the profile was set and no version JSON was downloaded,
+        // so launching reported "version information not found".
         info[@"id"] = [NSString stringWithFormat:@"%@-forge-%@", minecraftVersion, dependency[@"forge"]];
         info[@"loader"] = @"Forge";
         info[@"loaderVersion"] = dependency[@"forge"];
@@ -55,8 +55,8 @@
         info[@"id"] = [NSString stringWithFormat:@"quilt-loader-%@-%@", dependency[@"quilt-loader"], minecraftVersion];
         info[@"json"] = [NSString stringWithFormat:FabricUtils.endpoints[@"Quilt"][@"json"], minecraftVersion, dependency[@"quilt-loader"]];
     } else if (dependency[@"neoforge"]) {
-        // NeoForge 同 Forge，version JSON 嵌入在 installer.jar 中。
-        // 设置 installer URL 和 loader 类型，让整合包安装时调用 NeoForgeDirectInstaller。
+        // NeoForge is like Forge: the version JSON is embedded in installer.jar.
+        // The installer URL and the loader type are set so NeoForgeDirectInstaller is called during modpack installation.
         NSString *neoforgeVer = dependency[@"neoforge"];
         info[@"id"] = [NSString stringWithFormat:@"%@-neoforge-%@", minecraftVersion, neoforgeVer];
         info[@"loader"] = @"NeoForge";
@@ -119,8 +119,8 @@
                                          loader:(NSString *)loader
                                  loaderVersion:(NSString *)loaderVersion
                                           error:(NSError *)error {
-    // 占位 JSON：mainClass 指向不存在的类，启动时显式报错
-    // 避免 Forge/NeoForge 直装失败后误装作 vanilla MC 让用户以为 mods 生效
+    // Placeholder JSON: mainClass points at a nonexistent class, so launching reports an error explicitly
+    // This keeps a failed Forge/NeoForge direct install from being mistaken for vanilla MC and making the user believe their mods are active
     NSInteger javaMajor = [self javaMajorVersionForMC:minecraftVersion];
     NSString *comment = error.localizedDescription.length > 0
         ? [NSString stringWithFormat:@"This modpack needs the %@ %@ loader and the automatic install failed: %@. Please install it manually from the download screen.", loader, loaderVersion, error.localizedDescription]
@@ -136,8 +136,8 @@
     NSData *jsonData = [NSJSONSerialization dataWithJSONObject:placeholderJSON options:NSJSONWritingPrettyPrinted error:nil];
     if (!jsonData) return;
 
-    // 占位 JSON 写入 POJAV_GAME_DIR/versions/{versionId}/{versionId}.json
-    // 原因：Java 端固定从 POJAV_GAME_DIR/versions 加载版本 JSON
+    // The placeholder JSON is written to POJAV_GAME_DIR/versions/{versionId}/{versionId}.json
+    // Reason: the Java side always loads version JSONs from POJAV_GAME_DIR/versions
     NSString *versionDir = [NSString stringWithFormat:@"%s/versions/%@", getenv("POJAV_GAME_DIR"), versionId];
     [NSFileManager.defaultManager createDirectoryAtPath:versionDir withIntermediateDirectories:YES attributes:nil error:nil];
     NSString *versionJsonPath = [versionDir stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.json", versionId]];

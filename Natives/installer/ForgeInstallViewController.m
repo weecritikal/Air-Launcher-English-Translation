@@ -67,7 +67,7 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
     self = [super initWithReuseIdentifier:reuseIdentifier];
     if (self) {
         UIView *containerView = [[UIView alloc] init];
-        // 适配自定义启动器背景：透明背景让底层毛玻璃透出
+        // Adapt to the custom launcher background: a transparent background lets the frosted glass underneath show through
         containerView.backgroundColor = [UIColor clearColor];
         containerView.translatesAutoresizingMaskIntoConstraints = NO;
         [self.contentView addSubview:containerView];
@@ -162,7 +162,7 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
 - (void)viewDidLoad {
     [super viewDidLoad];
 
-    // FCL 风格：适配自定义启动器背景，应用毛玻璃到导航栏 + 透明化视图
+    // FCL style: adapt to the custom launcher background by applying frosted glass to the navigation bar and making the view transparent
     if (self.navigationController) {
         [[BackgroundManager sharedManager] applyEffectToNavigationBar:self.navigationController.navigationBar];
     }
@@ -172,9 +172,9 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
         self.tableView.sectionHeaderTopPadding = 0;
     }
 
-    // 使用 Never 而非 Automatic：Automatic 会自动为导航栏/状态栏添加顶部 contentInset，
-    // 在透明导航栏下形成可见的"空白条"。配合 edgesForExtendedLayout = UIRectEdgeAll
-    // 让 tableView 延伸到导航栏下方，与毛玻璃导航栏视觉融合。
+    // Never is used rather than Automatic: Automatic adds a top contentInset for the navigation/status bar automatically,
+    // which shows up as a visible "blank strip" under a transparent navigation bar. Together with edgesForExtendedLayout = UIRectEdgeAll
+    // it lets the tableView extend under the navigation bar and blend visually with the frosted glass navigation bar.
     self.tableView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentNever;
 
     self.extendedLayoutIncludesOpaqueBars = YES;
@@ -229,12 +229,12 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
     self.searchQueue = dispatch_queue_create("com.amethyst.forge.search", DISPATCH_QUEUE_SERIAL);
 
     if (self.presetVersionString.length > 0) {
-        // 由上游（LoaderSelectionViewController）已选好版本，跳过版本列表加载，直接进入方案选择
+        // The version was already chosen upstream (by LoaderSelectionViewController), so skip loading the version list and go straight to option selection
         self.selectedVersionString = self.presetVersionString;
-        // 切换到就绪状态，避免列表显示 Loading...
+        // Switch to the ready state, so the list does not show Loading...
         self.isDataLoading = NO;
         [self.tableView reloadData];
-        // weakSelf 防御：用户在 dispatch_async 期间快速返回（pop VC）时避免 present 作用于已不在栈中的 VC
+        // weakSelf defense: keeps present from acting on a VC no longer on the stack if the user goes back quickly (pops the VC) during the dispatch_async
         __weak typeof(self) weakSelf = self;
         dispatch_async(dispatch_get_main_queue(), ^{
             __strong typeof(weakSelf) strongSelf = weakSelf;
@@ -283,7 +283,7 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
                                                userInfo:@{NSLocalizedDescriptionKey: @"The user cancelled the installation"}];
         self.completionHandler(NO, nil, cancelError);
     }
-    // 兼容两种呈现方式：push 到中间内容区时用 pop，模态呈现时用 dismiss
+    // Compatible with both presentation styles: pop when pushed into the middle content area, dismiss when presented modally
     if (self.navigationController.viewControllers.count > 1) {
         [self.navigationController popViewControllerAnimated:YES];
     } else {
@@ -330,7 +330,7 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
             NSString *downloadSource = getPrefObject(@"general.download_source");
             BOOL useBMCLAPI = [downloadSource isEqualToString:@"bmclapi"];
 
-            // 内部方法：从指定源获取版本列表
+            // Internal method: fetch the version list from a given source
             void (^fetchFromSource)(BOOL) = ^(BOOL useBMCL) {
                 NSString *neoURLString = useBMCL ?
                     @"https://bmclapi2.bangbang93.com/neoforge/meta/api/maven/details/releases/net/neoforged/neoforge" :
@@ -442,21 +442,21 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
             fetchFromSource(useBMCLAPI);
         });
     } else {
-        // Forge 分支
+        // Forge branch
         //
-        // 性能优化（参考 ZL2 / PCL2）：
-        //   1. 当 gameVersion 已指定时（DownloadViewController 传入），优先使用 BMCLAPI 按版本
-        //      JSON 接口 /forge/minecraft/<mcVersion>，只返回该 MC 版本的 Forge 列表，数据量极小
-        //      （几十 KB vs 全量 maven-metadata.xml 的几 MB），解析为 JSON 也比 NSXMLParser 快。
-        //   2. 全量 maven-metadata.xml 流程保留作为 fallback（gameVersion 为空或快速路径失败时），
-        //      并改为"主源优先"串行回退：先等主源（用户偏好源），主源拿到有效 XML 立即解析返回；
-        //      主源失败/无匹配再请求备用源，避免之前 dispatch_group_wait 同步等双源最多 90s 的慢路径。
+        // Performance optimization (modeled on ZL2 / PCL2):
+        //   1. When gameVersion is already specified (passed in by DownloadViewController), prefer BMCLAPI's per-version
+        //      JSON endpoint /forge/minecraft/<mcVersion>, which returns only the Forge list for that MC version and is tiny
+        //      (tens of KB versus several MB for the full maven-metadata.xml), and parsing JSON is also faster than NSXMLParser.
+        //   2. The full maven-metadata.xml flow is kept as a fallback (when gameVersion is empty or the fast path fails),
+        //      and it now falls back serially with the "primary source first" rule: wait for the primary source (the user's preferred source) and parse and return as soon as it yields valid XML;
+        //      only request the backup source if the primary fails or has no match, avoiding the old slow path where dispatch_group_wait waited on both sources for up to 90s.
         dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
             NSString *downloadSource = getPrefObject(@"general.download_source");
             BOOL useBMCLAPI = [downloadSource isEqualToString:@"bmclapi"];
             NSString *userAgent = @"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15";
 
-            // 收尾：成功则 finalize，失败则提示并关闭
+            // Wrap up: finalize on success, show a message and close on failure
             void (^finishSuccess)(void) = ^{
                 dispatch_async(dispatch_get_main_queue(), ^{
                     [self finalizeVersionList];
@@ -473,10 +473,10 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
                 });
             };
 
-            // ========== 快速路径：BMCLAPI 按版本 JSON 接口 ==========
-            // 接口：https://bmclapi2.bangbang93.com/forge/minecraft/<mcVersion>
-            // 返回：[{ "version": "47.2.0", "branch": null, "modified": "...", "files": [...] }, ...]
-            // 每条对应一个 Forge 版本，version 即 Forge 版本号，拼接成 <mcVersion>-<version> 喂给 addVersionToList
+            // ========== Fast path: the BMCLAPI per-version JSON endpoint ==========
+            // Endpoint: https://bmclapi2.bangbang93.com/forge/minecraft/<mcVersion>
+            // Returns: [{ "version": "47.2.0", "branch": null, "modified": "...", "files": [...] }, ...]
+            // Each entry is one Forge version, where version is the Forge version number, joined as <mcVersion>-<version> and fed to addVersionToList
             if (self.gameVersion.length > 0) {
                 NSString *mcVersion = self.gameVersion;
                 NSString *encodedMC = [mcVersion stringByReplacingOccurrencesOfString:@"-" withString:@"_"];
@@ -504,10 +504,10 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
                             if (![token isKindOfClass:[NSDictionary class]]) continue;
                             NSString *ver = token[@"version"];
                             id branchRaw = token[@"branch"];
-                            // branch 可能为 NSNull（JSON null），需排除后再当字符串用
+                            // branch may be NSNull (JSON null), so it must be excluded before being used as a string
                             NSString *branch = [branchRaw isKindOfClass:[NSString class]] ? branchRaw : nil;
                             if (!ver || ![ver isKindOfClass:[NSString class]] || ver.length == 0) continue;
-                            // 拼成 Forge 标准命名 <mcVersion>-<version>[-<branch>]
+                            // Assemble the standard Forge name <mcVersion>-<version>[-<branch>]
                             NSString *fullVersion = branch.length > 0
                                 ? [NSString stringWithFormat:@"%@-%@-%@", mcVersion, ver, branch]
                                 : [NSString stringWithFormat:@"%@-%@", mcVersion, ver];
@@ -528,11 +528,11 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
                       jsonError.localizedDescription ?: @"nil");
             }
 
-            // ========== fallback：全量 maven-metadata.xml（主源优先 + 串行回退）==========
+            // ========== Fallback: the full maven-metadata.xml (primary source first + serial fallback) ==========
             NSString *bmclURLString = @"https://bmclapi2.bangbang93.com/maven/net/minecraftforge/forge/maven-metadata.xml";
             NSString *officialURLString = @"https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml";
 
-            // 校验响应是 XML 而非 HTML 错误页（BMCLAPI 限流 429 / 5xx 时可能返回 HTML）
+            // Check that the response is XML and not an HTML error page (BMCLAPI may return HTML when rate limiting with 429 / on 5xx)
             BOOL (^isValidXML)(NSData *) = ^(NSData *data) {
                 if (!data || data.length == 0) return NO;
                 NSUInteger previewLen = MIN(256, data.length);
@@ -546,7 +546,7 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
                 return YES;
             };
 
-            // 同步拉取单个源（带超时），返回 data 或 nil
+            // Fetch a single source synchronously (with a timeout) and return the data or nil
             NSData *(^fetchSource)(NSString *) = ^NSData *(NSString *urlString) {
                 __block NSData *result = nil;
                 dispatch_semaphore_t s = dispatch_semaphore_create(0);
@@ -562,7 +562,7 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
                 return result;
             };
 
-            // 解析指定数据并收集匹配 gameVersion 的 Forge 版本
+            // Parse the given data and collect the Forge versions matching gameVersion
             BOOL (^parseAndCollect)(NSData *) = ^(NSData *data) {
                 if (!isValidXML(data)) return NO;
                 NSXMLParser *parser = [[NSXMLParser alloc] initWithData:data];
@@ -577,7 +577,7 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
                 return NO;
             };
 
-            // 主源优先：拉主源 → 解析；失败/无匹配再拉备用源解析
+            // Primary source first: fetch the primary source → parse; only fetch and parse the backup source on failure or when there is no match
             NSString *primaryURL = useBMCLAPI ? bmclURLString : officialURLString;
             NSString *secondaryURL = useBMCLAPI ? officialURLString : bmclURLString;
             NSString *primaryName = useBMCLAPI ? @"BMCLAPI" : @"official";
@@ -760,7 +760,7 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
 
 - (NSString *)extractMinecraftVersionFromNeoForgeVersion:(NSString *)version {
     // 1.20.1 special versions: 1.20.1-47.1.3 -> 1.20.1
-    // 同时覆盖 47.x.y 系列（1.20.1 NeoForge release 版本号，不含 "1.20.1" 子串）
+    // Also covers the 47.x.y series (the 1.20.1 NeoForge release version numbers, which do not contain the substring "1.20.1")
     if ([version containsString:@"1.20.1"] || [version hasPrefix:@"47."]) {
         return @"1.20.1";
     }
@@ -776,7 +776,7 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
         if (lastDot.location != NSNotFound) {
             part = [part substringToIndex:lastDot.location];
         }
-        // 仅当 part 匹配快照版本号格式（如 25w14craftmine）才返回，避免误判
+        // Only return when part matches the snapshot version format (such as 25w14craftmine), to avoid false positives
         NSRegularExpression *snapshotRegex = [NSRegularExpression regularExpressionWithPattern:@"^\\d{2}w\\d{2}[a-z]+"
                                                                                        options:0
                                                                                          error:nil];
@@ -803,14 +803,14 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
         if (majorIsNum && minorIsNum) {
             NSInteger majorVal = [major integerValue];
             if (majorVal >= 21) {
-                // 21.x - 25.x: NeoForge loader 版本号 == MC 版本号（21.x → MC 1.21.x）
-                // NeoForge 版本格式: major.minor.patch[.build]
-                //   - major 对应 MC 的 minor（21 → MC 1.21）
-                //   - minor 对应 MC 的 patch（21.1 → MC 1.21.1）
-                //   - patch 是 NeoForge 自己的 build 号（与 MC 版本无关）
-                // 因此 MC 版本 = 1.<major>.<minor>，而非 1.<major>.<patch>。
-                // 修复前错误取 components[2]（patch），导致 21.1.5 被解析为 MC 1.21.5
-                // 而非正确的 1.21.1，版本被错误分组。
+                // 21.x - 25.x: the NeoForge loader version number == the MC version number (21.x → MC 1.21.x)
+                // NeoForge version format: major.minor.patch[.build]
+                //   - major maps to MC's minor (21 → MC 1.21)
+                //   - minor maps to MC's patch (21.1 → MC 1.21.1)
+                //   - patch is NeoForge's own build number (unrelated to the MC version)
+                // So the MC version is 1.<major>.<minor>, not 1.<major>.<patch>.
+                // Before the fix components[2] (patch) was used by mistake, so 21.1.5 was parsed as MC 1.21.5
+                // instead of the correct 1.21.1 and versions were grouped incorrectly.
                 return [NSString stringWithFormat:@"1.%@.%@", major, minor];
             } else {
                 // Old format: 20.2.88 -> 1.20.2
@@ -1053,7 +1053,7 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
 
 - (void)schemeViewController:(ForgeInstallSchemeViewController *)controller didSelectScheme:(NSInteger)scheme {
     if (scheme < 0) {
-        // 用户点关闭按钮取消，回调失败避免上游永久阻塞
+        // The user cancelled with the close button, so report failure in the callback to keep the caller from blocking forever
         if (self.completionHandler) {
             NSError *cancelError = [NSError errorWithDomain:ForgeInstallerFlowErrorDomain
                                                        code:ForgeInstallerFlowErrorCodeCancelled
@@ -1063,8 +1063,8 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
         return;
     }
     if (scheme == 0) {
-        // 原版方案在 iOS 上对 Forge 1.13+/NeoForge 不可用（processors 需要 fork/exec）
-        // 弹窗告知用户风险，让用户决定是否继续或改用直装方案
+        // The vanilla option does not work for Forge 1.13+/NeoForge on iOS (the processors need fork/exec)
+        // Show a dialog explaining the risk and let the user decide whether to continue or switch to the direct install
         if ([self isOriginalSchemeIncompatible]) {
             UIAlertController *alert = [UIAlertController
                 alertControllerWithTitle:@"The vanilla method may not work"
@@ -1089,17 +1089,17 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
     }
 }
 
-/// 判断原版方案（运行 installer.jar）对当前选中的版本是否不可用
-/// NeoForge 全版本、Forge 1.13+ 的 installer.jar 内含 processors，需要 fork/exec 子进程
+/// Determine whether the vanilla option (running installer.jar) is unusable for the currently selected version
+/// Every NeoForge version and Forge 1.13+ ship processors inside installer.jar, which need a forked/exec'ed subprocess
 - (BOOL)isOriginalSchemeIncompatible {
     if ([self.currentVendor isEqualToString:@"NeoForge"]) {
-        return YES;  // 所有 NeoForge 版本都依赖 processors
+        return YES;  // Every NeoForge version relies on processors
     }
-    // Forge：检查 MC 版本是否 1.13+
-    // versionString 形如 "1.20.1-47.3.0"、"1.12.2-14.23.5.2860"
+    // Forge: check whether the MC version is 1.13+
+    // versionString looks like "1.20.1-47.3.0" or "1.12.2-14.23.5.2860"
     NSString *version = self.selectedVersionString;
     if (![version hasPrefix:@"1."]) {
-        // 非 "1." 开头的版本号（纯 loader 版本）通常对应 1.13+ 的新格式
+        // A version number that does not start with "1." (a bare loader version) usually corresponds to the new 1.13+ format
         return YES;
     }
     NSArray *parts = [version componentsSeparatedByString:@"."];
@@ -1183,7 +1183,7 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
             NSString *profileName = [NSString stringWithFormat:@"%@-%@", self.currentVendor, versionString];
 
             if (self.completionHandler) {
-                // 将安装方案和文件路径一起打包，避免外部依赖 weak 引用的生命周期
+                // Bundle the installation option together with the file path, so nothing depends on the lifetime of an external weak reference
                 NSDictionary *result = @{
                     @"filePath": outPath,
                     @"selectedScheme": @(self.selectedScheme)
@@ -1242,8 +1242,8 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
             return;
         }
         
-        // 当 gameVersion 已设置时（例如由 DownloadViewController 传入），仅加载对应 MC 版本的加载器版本
-        // 避免一次性把所有 MC 版本的 Forge/NeoForge 全部加载出来
+        // When gameVersion is set (for example passed in by DownloadViewController), load only the loader versions for that MC version
+        // so that the Forge/NeoForge versions for every MC version are not loaded at once
         if (self.gameVersion.length > 0 && ![minecraftVersion isEqualToString:self.gameVersion]) {
             NSLog(@"[ForgeInstall] Skipping NeoForge version (gameVersion filter): %@ (MC %@ != %@)", version, minecraftVersion, self.gameVersion);
             [self.dataLock unlock];
@@ -1296,8 +1296,8 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
     
         NSString *minecraftVersion = [version substringToIndex:hyphenRange.location];
         
-        // 当 gameVersion 已设置时（例如由 DownloadViewController 传入），仅加载对应 MC 版本的加载器版本
-        // 避免一次性把所有 MC 版本的 Forge 全部加载出来
+        // When gameVersion is set (for example passed in by DownloadViewController), load only the loader versions for that MC version
+        // so that the Forge versions for every MC version are not loaded at once
         if (self.gameVersion.length > 0 && ![minecraftVersion isEqualToString:self.gameVersion]) {
             NSLog(@"[ForgeInstall] Skipping Forge version (gameVersion filter): %@ (MC %@ != %@)", version, minecraftVersion, self.gameVersion);
             [self.dataLock unlock];
@@ -1338,19 +1338,19 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
         [indices addObject:@(i)];
     }
     
-    // 完善版本排序逻辑
+    // Refine the version sorting logic
     [indices sortUsingComparator:^NSComparisonResult(NSNumber *a, NSNumber *b) {
         NSString *va = self.versionList[a.integerValue];
         NSString *vb = self.versionList[b.integerValue];
         
-        // 快照版本排在后面
+        // Snapshot versions are sorted last
         BOOL vaIsSnapshot = [self isSnapshotVersion:va];
         BOOL vbIsSnapshot = [self isSnapshotVersion:vb];
         if (vaIsSnapshot != vbIsSnapshot) {
             return vaIsSnapshot ? NSOrderedDescending : NSOrderedAscending;
         }
         
-        // 按版本号降序排列（新版本在前）
+        // Sort by version number in descending order (newest first)
         NSArray *pa = [va componentsSeparatedByString:@"."];
         NSArray *pb = [vb componentsSeparatedByString:@"."];
         NSInteger aMajor = pa.count > 0 ? [pa[0] integerValue] : 0;
@@ -1372,7 +1372,7 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
     NSMutableArray *newVersionList = [NSMutableArray new];
     NSMutableArray *newForgeList = [NSMutableArray new];
     for (NSNumber *idx in indices) {
-        // 修复：防止越界
+        // Fix: guard against going out of bounds
         NSInteger index = idx.integerValue;
         if (index < self.visibilityList.count && index < self.versionList.count && index < self.forgeList.count) {
             [newVisibility addObject:self.visibilityList[index]];
@@ -1384,10 +1384,10 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
     self.versionList = newVersionList;
     self.forgeList = newForgeList;
 
-    // 修复：自动展开分区。原实现所有 visibilityList 默认为 NO（折叠），用户只看到
-    // MC 版本标题但看不到任何 Forge 版本，误以为"加载不出任何版本"。
-    // 策略：若指定了 gameVersion，展开匹配该版本的分区；否则展开第一个分区。
-    // 分区数 <= 5 时全部展开（常见场景，避免用户逐个点击）。
+    // Fix: expand the sections automatically. In the original implementation every visibilityList entry defaulted to NO (collapsed), so the user only saw
+    // the MC version headings and no Forge versions at all, and assumed "no versions could be loaded".
+    // Strategy: if a gameVersion was given, expand the section matching it; otherwise expand the first section.
+    // When there are 5 sections or fewer, expand them all (the common case, sparing the user from tapping through them).
     if (self.versionList.count > 0) {
         BOOL expandAll = (self.versionList.count <= 5);
         BOOL foundMatchingSection = NO;
@@ -1399,7 +1399,7 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
                 foundMatchingSection = YES;
             }
         }
-        // 若未找到匹配 gameVersion 的分区，至少展开第一个（最新版本）
+        // If no section matching gameVersion was found, at least expand the first one (the newest version)
         if (!expandAll && !foundMatchingSection) {
             self.visibilityList[0] = @YES;
         }
@@ -1456,12 +1456,12 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
 }
 
 - (void)parserDidEndDocument:(NSXMLParser *)parser {
-    // 不在此触发 finalizeVersionList。
-    // Forge 分支已在 loadMetadataFromVendor: 中，等双源解析 + fallback 全部完成后再统一调用
-    // finalizeVersionList。若在此 dispatch_async，会在第一源（如 BMCLAPI 旧数据被 gameVersion
-    // 全过滤后 versionList 为空）解析完成时立即终结加载状态（isDataLoading=NO + switchToReadyState），
-    // 导致 fallback 到官方源的 30s 请求期间用户看到空列表 + Close 按钮，误以为"加载不出列表"。
-    // NeoForge 分支用 JSON 不走 NSXMLParser，不受影响。
+    // finalizeVersionList is deliberately not triggered here.
+    // The Forge branch is inside loadMetadataFromVendor: and calls finalizeVersionList once both source parses and the fallback have completed.
+    // Dispatching it asynchronously here would end the loading state (isDataLoading=NO + switchToReadyState) as soon as the first source finished parsing
+    // (for instance when stale BMCLAPI data is filtered out entirely by gameVersion and versionList ends up empty),
+    // leaving the user looking at an empty list plus a Close button for the 30s the official-source fallback takes, and assuming "the list will not load".
+    // The NeoForge branch uses JSON rather than NSXMLParser and is unaffected.
 }
 
 - (void)parser:(NSXMLParser *)parser didStartElement:(NSString *)elementName namespaceURI:(NSString *)namespaceURI qualifiedName:(NSString *)qualifiedName attributes:(NSDictionary *)attributeDict {
@@ -1488,10 +1488,10 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
 }
 
 - (void)parser:(NSXMLParser *)parser parseErrorOccurred:(NSError *)parseError {
-    // 仅记录日志，不弹错误框。
-    // Forge 分支的双源 fallback 逻辑会在所有源都失败时统一弹出错误提示。
-    // 若在此弹框，BMCLAPI 返回 HTML 错误页（如 429 限流）导致解析失败时会立即弹框，
-    // 随后 fallback 到官方源成功，用户却已经看到错误提示，体验混乱。
+    // Only log it, without showing an error dialog.
+    // The dual-source fallback logic of the Forge branch shows a single error message once every source has failed.
+    // Showing a dialog here would pop one up the moment BMCLAPI returned an HTML error page (such as a 429 rate limit) and parsing failed,
+    // and then the fallback to the official source would succeed while the user had already seen an error, which is confusing.
     NSLog(@"[ForgeInstall] XML parse error: %@", parseError.localizedDescription);
 }
 

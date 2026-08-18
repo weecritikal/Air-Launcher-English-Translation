@@ -7,10 +7,10 @@
 - (void)refreshTokenWithCallback:(Callback)callback;
 - (NSArray *)getJvmArgsForAuthlib;
 
-/// 参照 authlib-injector 启动器技术规范解析 ALI（API Location Indication）
-/// 将用户输入的简写地址解析为完整 API Root，并预取服务器元数据
-/// completion 在主线程回调，resolvedURL 为最终 API Root（解析失败返回原始输入）
-/// metadata 为服务器元数据 JSON 字符串（用于 prefetched 参数，失败为 nil）
+/// Resolve the ALI (API Location Indication) following the authlib-injector launcher technical specification
+/// Expands the shorthand address entered by the user into a full API root and prefetches the server metadata
+/// completion is invoked on the main thread; resolvedURL is the final API root (the original input is returned if resolution fails)
+/// metadata is the server metadata JSON string (used for the prefetched parameter, nil on failure)
 + (void)resolveAuthserverURL:(NSString *)inputURL
                   completion:(void (^)(NSString *resolvedURL, NSString *_Nullable metadata))completion;
 

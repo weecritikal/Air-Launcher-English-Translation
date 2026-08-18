@@ -13,8 +13,8 @@ typedef NS_ENUM(NSInteger, ForgeInstallerFlowErrorCode) {
 @property (nonatomic, assign) BOOL isNeoForge;
 @property (nonatomic, assign) NSInteger selectedScheme;
 @property (nonatomic, copy) void (^completionHandler)(BOOL success, NSString *profileName, id resultOrError);
-// 预设版本：由 LoaderSelectionViewController 选中后传入，避免用户在 ForgeInstallVC 里重复选版本
-// 非空时 viewDidLoad 跳过 metadata 拉取，直接进入方案选择
+// Preset version: passed in after LoaderSelectionViewController selects one, so the user does not have to pick the version again in ForgeInstallVC
+// When it is non-empty, viewDidLoad skips fetching the metadata and goes straight to option selection
 @property (nonatomic, copy) NSString *presetVersionString;
 
 @end

@@ -55,13 +55,13 @@
         if (useBMCLAPI) {
             return [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/maven/net/neoforged/forge/%@/forge-%@-installer.jar", version, version];
         }
-        // 官方 maven 路径必须包含 /releases/，否则 404
+        // The official maven path must include /releases/, otherwise it 404s
         return [NSString stringWithFormat:@"https://maven.neoforged.net/releases/net/neoforged/forge/%@/forge-%@-installer.jar", version, version];
     }
     if (useBMCLAPI) {
         return [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/maven/net/neoforged/neoforge/%@/neoforge-%@-installer.jar", version, version];
     }
-    // 官方 maven 路径必须包含 /releases/，否则 404
+    // The official maven path must include /releases/, otherwise it 404s
     return [NSString stringWithFormat:@"https://maven.neoforged.net/releases/net/neoforged/neoforge/%@/neoforge-%@-installer.jar", version, version];
 }
 
@@ -185,7 +185,7 @@
 
 + (NSString *)extractMinecraftVersionFromNeoForgeVersion:(NSString *)version {
     // 1.20.1 special versions: 1.20.1-47.1.3 -> 1.20.1
-    // 同时覆盖 47.x.y 系列（1.20.1 NeoForge release 版本号，不含 "1.20.1" 子串）
+    // Also covers the 47.x.y series (the 1.20.1 NeoForge release version numbers, which do not contain the substring "1.20.1")
     if ([version containsString:@"1.20.1"] || [version hasPrefix:@"47."]) {
         return @"1.20.1";
     }
@@ -221,26 +221,26 @@
 
         if (majorIsNum && minorIsNum) {
             NSInteger majorVal = [major integerValue];
-            // 关键修复（阶段6：NeoForge 直装版本号解析错误，参照 ForgeInstallViewController.m:780）
+            // Key fix (phase 6: NeoForge direct install version number parsing error, modeled on ForgeInstallViewController.m:780)
             //
-            // NeoForge loader 版本号格式：major.minor.patch[.build]
-            //   - major = MC minor（如 21 → MC 1.21）
-            //   - minor = MC patch（如 1 → MC 1.21.1）
-            //   - patch = NeoForge 自己的 build 号（与 MC 版本无关）
+            // NeoForge loader version number format: major.minor.patch[.build]
+            //   - major = MC minor (e.g. 21 → MC 1.21)
+            //   - minor = MC patch (e.g. 1 → MC 1.21.1)
+            //   - patch = NeoForge's own build number (unrelated to the MC version)
             //
-            // 之前使用 components[2]（patch）作为 MC patch 号，导致：
-            //   - 21.1.5 被解析为 MC 1.21.5（错误，应为 1.21.1）
-            //   - 26.1.0.0 被解析为 MC 1.26.0（凑巧正确，但逻辑错误）
-            //   - 用户在 UI 中看不到正确分组的 loader 版本，被迫选错 → install_profile.json
-            //     中 maven 坐标版本错误 → 404
+            // Previously components[2] (patch) was used as the MC patch number, which meant:
+            //   - 21.1.5 was parsed as MC 1.21.5 (wrong, it should be 1.21.1)
+            //   - 26.1.0.0 was parsed as MC 1.26.0 (right by coincidence, but for the wrong reason)
+            //   - the user could not see correctly grouped loader versions in the UI and was forced to pick the wrong one → the maven
+            //     coordinate version in install_profile.json was wrong → 404
             //
-            // 正确实现：用 minor（components[1]）作为 MC patch 号，与 ForgeInstallViewController.m:780 一致
+            // The correct implementation: use minor (components[1]) as the MC patch number, consistent with ForgeInstallViewController.m:780
             if (majorVal >= 20) {
-                // 20.x+ (NeoForge 20.x 对应 MC 1.20.x)：统一用 minor 作为 MC patch
-                // 覆盖 20.2.88 → 1.20.2、21.1.5 → 1.21.1、26.1.0 → 1.26.1 等所有情况
+                // 20.x+ (NeoForge 20.x corresponds to MC 1.20.x): always use minor as the MC patch
+                // This covers every case: 20.2.88 → 1.20.2, 21.1.5 → 1.21.1, 26.1.0 → 1.26.1 and so on
                 return [NSString stringWithFormat:@"1.%@.%@", major, minor];
             } else {
-                // Old format fallback（理论上 NeoForge 不存在 < 20 的版本）
+                // Old format fallback (in theory NeoForge has no versions below 20)
                 return [NSString stringWithFormat:@"1.%@.%@", major, minor];
             }
         }

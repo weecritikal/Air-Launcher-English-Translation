@@ -10,7 +10,7 @@
 #include <pthread.h>
 #include "external/fishhook/fishhook.h"
 
-// 硬件断点异常端口（同步自上游，用于非 TXM 的 iOS 26+ 设备 dlopen 重定向）
+// Hardware breakpoint exception port (synced from upstream, used for dlopen redirection on non-TXM iOS 26+ devices)
 mach_port_t excPort;
 void *hooked_dlopen_26_ppl(const char *path, int mode);
 
@@ -20,20 +20,20 @@ void* (*orig_dlopen)(const char* path, int mode);
 void* (*orig_dlsym)(void* handle, const char* name);
 int (*orig_open)(const char *path, int oflag, ...);
 
-/// 提供给 zink stride fix 使用的"绕过 hook"的 dlsym
-/// amethyst_vkGetInstanceProcAddr / amethyst_vkGetDeviceProcAddr 内部查找
-/// 真实 Vulkan 函数指针时必须调用此函数，否则会被 hooked_dlsym 拦截（返回
-/// 我们的 wrapper），导致无限递归。
+/// A dlsym that "bypasses the hook", provided for the zink stride fix
+/// amethyst_vkGetInstanceProcAddr / amethyst_vkGetDeviceProcAddr must call this function when looking up
+/// the real Vulkan function pointers, otherwise hooked_dlsym would intercept them (returning
+/// our wrapper) and cause infinite recursion.
 void *amethyst_orig_dlsym(void *handle, const char *name) {
     if (orig_dlsym) {
         return orig_dlsym(handle, name);
     }
-    // fallback：如果 hook 尚未初始化（不应发生），用普通 dlsym
+    // Fallback: use plain dlsym if the hook has not been initialized yet (which should not happen)
     return dlsym(handle, name);
 }
 
-// 前向声明：zink stride fix 状态变量（定义在文件后部 Vulkan stride fix 区域，
-// 但 hooked_dlopen 在文件前部就需要引用它来检测 libOSMesa 加载）
+// Forward declaration: the zink stride fix state variable (defined later in the file in the Vulkan stride fix section,
+// but hooked_dlopen earlier in the file needs to reference it to detect that libOSMesa has been loaded)
 static BOOL g_zinkStrideFixActive = NO;
 
 void handle_fatal_exit(int code) {
@@ -41,9 +41,9 @@ void handle_fatal_exit(int code) {
         return;
     }
 
-    // 注意：本仓库 PLLogOutputView.handleExitCode: 返回 void（项目自定义的
-    // PLCrashView 集成），不能照搬上游的 if (![PLLogOutputView handleExitCode:code]) return;
-    // 检查。这里直接调用，让 PLCrashView 内部决定是否展示崩溃界面。
+    // Note: PLLogOutputView.handleExitCode: in this repository returns void (a project-specific
+    // PLCrashView integration), so upstream's if (![PLLogOutputView handleExitCode:code]) return;
+    // check cannot be copied verbatim. It is called directly here and PLCrashView decides internally whether to show the crash screen.
     [PLLogOutputView handleExitCode:code];
 
     if (fatalExitGroup != nil) {
@@ -87,7 +87,7 @@ void hooked_exit(int code) {
 }
 
 void* hooked_dlopen(const char* path, int mode) {
-    // 同步自上游：非 TXM 的 iOS 26+ 设备需要硬件断点重定向（hooked_dlopen_26_ppl）
+    // Synced from upstream: non-TXM iOS 26+ devices need hardware breakpoint redirection (hooked_dlopen_26_ppl)
     BOOL shouldUseDyldBypass26PPL = NO;
     if (DeviceHasJITFlags(JIT_FLAG_FORCE_MIRRORED)) {
         shouldUseDyldBypass26PPL = hwRedirectOrig[0] && !DeviceHasJITFlags(JIT_FLAG_HAS_TXM);
@@ -100,17 +100,17 @@ void* hooked_dlopen(const char* path, int mode) {
     BOOL shouldUseDyldBypass = path && realpath(path, fullpath) && (strstr(fullpath, home) || (tmp && strstr(fullpath, tmp)));
     shouldUseDyldBypass26PPL &= shouldUseDyldBypass;
 
-    // 同步自上游：在分支前统一调用 PLPatchMachOPlatformForFile
-    // （原实现仅在 shouldUseDyldBypass 分支调用，遗漏了 26PPL 路径，
-    //  会导致 iOS 26+ 非 TXM 设备的 dyld bypass 失败）
+    // Synced from upstream: call PLPatchMachOPlatformForFile uniformly before the branch
+    // (the original implementation only called it in the shouldUseDyldBypass branch and missed the 26PPL path,
+    //  which made the dyld bypass fail on non-TXM iOS 26+ devices)
     if (shouldUseDyldBypass) {
         PLPatchMachOPlatformForFile(path);
     }
 
-    // fork 自有特性：Zink stride fix——libOSMesa 加载后重新执行 fishhook，
-    // 捕获其对 vkGetInstanceProcAddr / vkGetDeviceProcAddr 的符号引用
-    // （installZinkStrideFix 在 libOSMesa 加载前调用，初次 rebind 无法
-    //  捕获 libOSMesa image 内的引用；必须在其加载后再次 rebind）
+    // Fork-specific feature: the zink stride fix - re-run fishhook after libOSMesa is loaded
+    // to capture its symbol references to vkGetInstanceProcAddr / vkGetDeviceProcAddr
+    // (installZinkStrideFix runs before libOSMesa is loaded, so the initial rebind cannot
+    //  capture references inside the libOSMesa image; a second rebind after it loads is required)
     BOOL needsZinkRebind = path && strstr(path, "libOSMesa") && g_zinkStrideFixActive;
 
     void *handle;
@@ -138,7 +138,7 @@ void* hooked_dlopen(const char* path, int mode) {
         }
     }
 
-    // Zink stride fix rebind（仅在 needsZinkRebind 时执行）
+    // Zink stride fix rebind (only performed when needsZinkRebind is set)
     if (handle && needsZinkRebind) {
         NSLog(@"[ZinkStrideFix] libOSMesa loaded via dlopen, re-rebinding Vulkan symbols");
         rebindZinkStrideFixForNewImage();
@@ -147,9 +147,9 @@ void* hooked_dlopen(const char* path, int mode) {
 }
 
 // ============================================================================
-// 硬件断点 dlopen 重定向（同步自上游，用于非 TXM 的 iOS 26+ 设备）
-// 当 redirectFunctionHWBreakpoint 被选中时，dlopen 需要通过硬件断点 + Mach 异常
-// 来重定向 dyld 内的 mmap/fcntl 调用，因为此时无法直接修改 dyld 代码段。
+// Hardware breakpoint dlopen redirection (synced from upstream, for non-TXM iOS 26+ devices)
+// When redirectFunctionHWBreakpoint is chosen, dlopen must redirect the mmap/fcntl calls inside dyld
+// using hardware breakpoints + Mach exceptions, because dyld's code section cannot be modified directly in that case.
 // ============================================================================
 void *exception_handler(void *unused) {
     mach_msg_server(mach_exc_server, sizeof(union __RequestUnion__catch_mach_exc_subsystem), excPort, MACH_MSG_OPTION_NONE);
@@ -233,22 +233,22 @@ kern_return_t catch_mach_exception_raise_state_identity(mach_port_t exception_po
 // ============================================================================
 // Vulkan vertex stride alignment fix（zink + MoltenVK + Mesa 25.0.7）
 // ============================================================================
-// 问题：
-//   Metal API 硬性要求 vertex attribute binding stride 必须 4 字节对齐。
-//   Mesa 25.0.7 zink 移除了 Mesa 21.0.0 中存在的 stride 对齐 workaround。
-//   当光影包（如 BSL）触发管线重建且 stride 非 4 对齐时，MoltenVK 返回
-//   VK_ERROR_INITIALIZATION_FAILED，zink 的 update_gfx_pipeline 未处理该
-//   错误，使用 NULL pipeline 句柄导致 SIGSEGV。
+// The problem:
+//   The Metal API strictly requires the vertex attribute binding stride to be 4-byte aligned.
+//   Mesa 25.0.7 zink removed the stride alignment workaround that existed in Mesa 21.0.0.
+//   When a shader pack (such as BSL) triggers a pipeline rebuild with a stride that is not 4-aligned, MoltenVK returns
+//   VK_ERROR_INITIALIZATION_FAILED; zink's update_gfx_pipeline does not handle that
+//   error and uses a NULL pipeline handle, causing a SIGSEGV.
 //
-// 解决方案：
-//   通过 dlsym 拦截 + fishhook 双重机制 hook vkGetInstanceProcAddr /
-//   vkGetDeviceProcAddr。当 zink 请求 vkCreateGraphicsPipelines 时返回
-//   我们的 wrapper。wrapper 在调用真实函数前将 vertex binding stride
-//   向上对齐到 4 字节边界。
+// The solution:
+//   Hook vkGetInstanceProcAddr / vkGetDeviceProcAddr through the dual mechanism of dlsym interception
+//   plus fishhook. When zink asks for vkCreateGraphicsPipelines, our wrapper is returned instead.
+//   Before calling the real function, the wrapper rounds the vertex binding stride up
+//   to a 4-byte boundary.
 //
-//   此 fix 仅在 zink 渲染器（libOSMesa）被选中时激活。
+//   This fix is only active when the zink renderer (libOSMesa) is selected.
 
-// 最小 Vulkan 类型定义（布局严格匹配 vulkan_core.h，64 位平台）
+// Minimal Vulkan type definitions (the layout matches vulkan_core.h exactly on 64-bit platforms)
 typedef int32_t VkZResult;
 typedef struct VkZInstance_T* VkZInstance;
 typedef struct VkZDevice_T* VkZDevice;
@@ -295,7 +295,7 @@ typedef struct {
     const VkZVertexInputAttributeDescription* pVertexAttributeDescriptions;
 } VkZPipelineVertexInputStateCreateInfo;
 
-// VkGraphicsPipelineCreateInfo 完整布局（匹配 vulkan_core.h，64 位）
+// Full VkGraphicsPipelineCreateInfo layout (matching vulkan_core.h, 64-bit)
 typedef struct {
     int32_t sType;                   // VkStructureType
     const void* pNext;
@@ -324,27 +324,27 @@ typedef VkZResult (*PFN_zkCreateGraphicsPipelines)(
 typedef void* (*PFN_zkGetInstanceProcAddr)(VkZInstance, const char*);
 typedef void* (*PFN_zkGetDeviceProcAddr)(VkZDevice, const char*);
 
-// vkCmd* 函数指针类型（用于 dummy pipeline skip draws）
-// 参数数量严格匹配 Vulkan 标准签名（vulkan_core.h），避免与函数实现调用不一致
+// vkCmd* function pointer types (used to skip draws for dummy pipelines)
+// The parameter counts match the standard Vulkan signatures (vulkan_core.h) exactly, to avoid disagreeing with the function implementations
 typedef void (*PFN_zkCmdBindPipeline)(VkZCommandBuffer, VkZPipelineBindPoint, VkZPipeline);
 typedef void (*PFN_zkCmdDraw)(VkZCommandBuffer, uint32_t, uint32_t, uint32_t, uint32_t);
 typedef void (*PFN_zkCmdDrawIndexed)(VkZCommandBuffer, uint32_t, uint32_t, uint32_t, int32_t, uint32_t);
-// vkCmdDrawIndirect(cmd, buffer, offset, drawCount, stride) — 5 个参数
+// vkCmdDrawIndirect(cmd, buffer, offset, drawCount, stride) - 5 parameters
 typedef void (*PFN_zkCmdDrawIndirect)(VkZCommandBuffer, uint64_t, uint64_t, uint32_t, uint32_t);
 typedef void (*PFN_zkCmdDrawIndexedIndirect)(VkZCommandBuffer, uint64_t, uint64_t, uint32_t, uint32_t);
-// vkCmdDrawIndirectCount(cmd, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride) — 7 个参数
+// vkCmdDrawIndirectCount(cmd, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride) - 7 parameters
 typedef void (*PFN_zkCmdDrawIndirectCount)(VkZCommandBuffer, uint64_t, uint64_t, uint64_t, uint64_t, uint32_t, uint32_t);
 typedef void (*PFN_zkCmdDrawIndexedIndirectCount)(VkZCommandBuffer, uint64_t, uint64_t, uint64_t, uint64_t, uint32_t, uint32_t);
-// vkDestroyPipeline(device, pipeline, pAllocator) — 3 个参数
-// 必须 hook：zink 销毁 dummy pipeline 时，MoltenVK 解引用 magic handle 会崩溃
+// vkDestroyPipeline(device, pipeline, pAllocator) - 3 parameters
+// Must be hooked: when zink destroys a dummy pipeline, MoltenVK dereferences the magic handle and crashes
 typedef void (*PFN_zkDestroyPipeline)(VkZDevice, VkZPipeline, const void*);
 
-// Stride fix 状态（g_zinkStrideFixActive 已在文件前部前向声明）
+// Stride fix state (g_zinkStrideFixActive is forward declared earlier in the file)
 static PFN_zkGetInstanceProcAddr g_real_vkGetInstanceProcAddr = NULL;
 static PFN_zkGetDeviceProcAddr g_real_vkGetDeviceProcAddr = NULL;
 static PFN_zkCreateGraphicsPipelines g_real_vkCreateGraphicsPipelines = NULL;
 
-// vkCmd* 真实函数指针（dummy pipeline skip draws 需要）
+// Real vkCmd* function pointers (needed to skip draws for dummy pipelines)
 static PFN_zkCmdBindPipeline g_real_vkCmdBindPipeline = NULL;
 static PFN_zkCmdDraw g_real_vkCmdDraw = NULL;
 static PFN_zkCmdDrawIndexed g_real_vkCmdDrawIndexed = NULL;
@@ -352,59 +352,59 @@ static PFN_zkCmdDrawIndirect g_real_vkCmdDrawIndirect = NULL;
 static PFN_zkCmdDrawIndexedIndirect g_real_vkCmdDrawIndexedIndirect = NULL;
 static PFN_zkCmdDrawIndirectCount g_real_vkCmdDrawIndirectCount = NULL;
 static PFN_zkCmdDrawIndexedIndirectCount g_real_vkCmdDrawIndexedIndirectCount = NULL;
-// vkDestroyPipeline 真实函数指针（dummy pipeline 销毁需要）
+// Real vkDestroyPipeline function pointer (needed to destroy dummy pipelines)
 static PFN_zkDestroyPipeline g_real_vkDestroyPipeline = NULL;
 
 // ============================================================================
-// Dummy pipeline 机制（修复 zink + Mesa 25.0.7 光影 SIGSEGV）
+// The dummy pipeline mechanism (fixes the zink + Mesa 25.0.7 shader SIGSEGV)
 // ============================================================================
-// 问题：
-//   Mesa 25.0.7 zink 比 21.0.0 更严格地校验 SPIR-V shader 接口。
-//   当光影包（如 BSL、Mellow Shader）的 fragment shader 声明了 vertex shader
-//   未写入的 input（如 user(locn1_2)），MoltenVK 在 vkCreateGraphicsPipelines
-//   时返回 VK_ERROR_INITIALIZATION_FAILED。
+// The problem:
+//   Mesa 25.0.7 zink validates the SPIR-V shader interface more strictly than 21.0.0 did.
+//   When the fragment shader of a shader pack (such as BSL or Mellow Shader) declares an input the vertex shader
+//   never writes (such as user(locn1_2)), MoltenVK returns VK_ERROR_INITIALIZATION_FAILED from
+//   vkCreateGraphicsPipelines.
 //
-//   zink 的 update_gfx_pipeline 未正确处理此失败：
-//   Vulkan spec 规定 vkCreateGraphicsPipelines 失败时 pPipelines[i] 设为
-//   VK_NULL_HANDLE，zink 后续使用 NULL pipeline 句柄导致 SIGSEGV。
+//   zink's update_gfx_pipeline does not handle that failure correctly:
+//   the Vulkan spec says pPipelines[i] is set to VK_NULL_HANDLE when vkCreateGraphicsPipelines fails,
+//   and zink then uses the NULL pipeline handle, causing a SIGSEGV.
 //
-// 解决方案（dummy pipeline + skip draws）：
-//   1. 当 vkCreateGraphicsPipelines 失败时，不返回失败，而是返回 VK_SUCCESS
-//      并为每个失败的 pipeline 分配一个 dummy 句柄（非 NULL 的 magic 值）。
-//   2. 维护 dummy pipeline 集合。
-//   3. Hook vkCmdBindPipeline：跟踪当前绑定的 pipeline，如果是 dummy 则跳过绑定。
-//   4. Hook vkCmdDraw*：如果当前绑定的 pipeline 是 dummy，跳过绘制。
+// The solution (dummy pipeline + skipped draws):
+//   1. When vkCreateGraphicsPipelines fails, do not report failure: return VK_SUCCESS
+//      and hand out a dummy handle (a non-NULL magic value) for each failed pipeline.
+//   2. Maintain a set of dummy pipelines.
+//   3. Hook vkCmdBindPipeline: track the currently bound pipeline and skip the bind if it is a dummy.
+//   4. Hook vkCmdDraw*: skip the draw if the currently bound pipeline is a dummy.
 //
-//   这样 zink 认为 pipeline 创建成功，不会 SIGSEGV；
-//   失败的 pipeline 对应的几何体不会被绘制（黑屏/缺失，但不崩溃）。
-//   成功的 pipeline 正常渲染，光影效果保留。
+//   This way zink believes pipeline creation succeeded and does not SIGSEGV,
+//   and the geometry belonging to the failed pipeline is simply not drawn (black/missing, but no crash).
+//   Pipelines that were created successfully render normally and the shader effects are preserved.
 
 #define ZINK_DUMMY_PIPELINE_MAGIC 0xDEAD0000ULL
 #define ZINK_DUMMY_PIPELINE_MAX 4096
 
-// dummy pipeline 集合（使用简单数组，线性查找；dummy pipeline 数量通常很少）
+// The dummy pipeline set (a simple array with a linear search; the number of dummy pipelines is usually very small)
 static uintptr_t g_dummyPipelines[ZINK_DUMMY_PIPELINE_MAX];
 static uint32_t g_dummyPipelineCount = 0;
-// 当前绑定的 graphics pipeline（用于判断 draw 是否应该跳过）
-// 注意：VkCommandBuffer 可能多个，但 zink 单线程渲染，用全局变量足够
+// The currently bound graphics pipeline (used to decide whether a draw should be skipped)
+// Note: there may be several VkCommandBuffers, but zink renders single-threaded so a global variable is sufficient
 static VkZPipeline g_currentBoundGraphicsPipeline = NULL;
 
-/// 判断 pipeline 是否为 dummy
+/// Determine whether a pipeline is a dummy
 static BOOL isDummyPipeline(VkZPipeline pipeline) {
     if (!pipeline) return NO;
     uintptr_t val = (uintptr_t)pipeline;
     if ((val & 0xFFFF0000ULL) != ZINK_DUMMY_PIPELINE_MAGIC) return NO;
-    // 二分查找或线性查找（dummy pipeline 数量通常 <100，线性查找足够）
+    // Binary or linear search (there are usually <100 dummy pipelines, so a linear search is enough)
     for (uint32_t i = 0; i < g_dummyPipelineCount; i++) {
         if (g_dummyPipelines[i] == val) return YES;
     }
     return NO;
 }
 
-/// 分配一个新的 dummy pipeline 句柄
+/// Allocate a new dummy pipeline handle
 static VkZPipeline allocDummyPipeline(void) {
     if (g_dummyPipelineCount >= ZINK_DUMMY_PIPELINE_MAX) {
-        // 溢出：复用第一个（极端情况，几乎不会发生）
+        // Overflow: reuse the first one (an extreme case that almost never happens)
         NSLog(@"[ZinkStrideFix] WARNING: dummy pipeline pool exhausted, reusing slot 0");
         return (VkZPipeline)g_dummyPipelines[0];
     }
@@ -413,7 +413,7 @@ static VkZPipeline allocDummyPipeline(void) {
     return (VkZPipeline)handle;
 }
 
-// 前向声明（供 zinkStrideFixRebind 使用）
+// Forward declaration (used by zinkStrideFixRebind)
 static void* amethyst_vkGetInstanceProcAddr(VkZInstance instance, const char* pName);
 static void* amethyst_vkGetDeviceProcAddr(VkZDevice device, const char* pName);
 static VkZResult amethyst_vkCreateGraphicsPipelines(
@@ -430,27 +430,27 @@ static void amethyst_vkCmdDrawIndexedIndirectCount(VkZCommandBuffer cmd, uint64_
 static void amethyst_vkDestroyPipeline(VkZDevice device, VkZPipeline pipeline, const void* pAllocator);
 
 // ============================================================================
-// UINT→SINT 顶点属性格式转换（修复 MTLAttributeFormatUShort3 转换失败）
+// UINT→SINT vertex attribute format conversion (fixes MTLAttributeFormatUShort3 conversion failures)
 // ============================================================================
-// 问题：
-//   MoltenVK 编译 pipeline 时，若 vertex attribute 使用 UINT 格式（如
-//   VK_FORMAT_R16G16B16_UINT → MTLAttributeFormatUShort3），但 shader 声明的
-//   input 是有符号整数类型（int/ivec3），Metal 无法自动转换格式，返回
+// The problem:
+//   When MoltenVK compiles a pipeline, if a vertex attribute uses a UINT format (such as
+//   VK_FORMAT_R16G16B16_UINT → MTLAttributeFormatUShort3) while the input declared by the shader
+//   is a signed integer type (int/ivec3), Metal cannot convert the format automatically and returns an error.
 //   VK_ERROR_INITIALIZATION_FAILED：
 //   "Cannot convert attribute from MTLAttributeFormatUShort3 to a signed integer type."
 //
-//   此问题在 Iris 光影 + Mesa 25.0.7 zink 下频发，导致实体渲染 pipeline 创建
-//   失败，被 dummy pipeline fallback 替换后实体不渲染（黑屏/缺失）。
+//   This happens frequently with Iris shaders + Mesa 25.0.7 zink, making entity rendering pipeline creation
+//   fail; after the dummy pipeline fallback replaces it, entities are not rendered (black/missing).
 //
-// 解决方案：
-//   当 pipeline 首次创建失败时，重试一次：将所有 UINT 格式的 vertex attribute
-//   转换为对应的 SINT 格式（如 R16G16B16_UINT → R16G16B16_SINT）。
-//   Metal 会以有符号方式解析字节，与 shader 期望匹配。
-//   对于大多数顶点属性（骨骼索引、坐标等），值通常很小，signed/unsigned 解析
-//   结果一致，不会引入渲染错误。
+// The solution:
+//   When pipeline creation fails the first time, it is retried once with every UINT vertex attribute
+//   converted to the matching SINT format (e.g. R16G16B16_UINT → R16G16B16_SINT).
+//   Metal then parses the bytes as signed, matching what the shader expects.
+//   For most vertex attributes (bone indices, coordinates and so on) the values are small, so signed and unsigned parsing
+//   give the same result and no rendering errors are introduced.
 
-/// 判断 Vulkan 格式是否为 UINT 类型
-/// Vulkan 格式枚举值参考 vulkan_core.h：
+/// Determine whether a Vulkan format is a UINT type
+/// The Vulkan format enum values come from vulkan_core.h:
 ///   R8_UINT=9, R8G8_UINT=11, R8G8B8_UINT=13, R8G8B8A8_UINT=42
 ///   R16_UINT=76, R16G16_UINT=78, R16G16B16_UINT=80, R16G16B16A16_UINT=82
 ///   R32_UINT=96, R32G32_UINT=98, R32G32B32_UINT=100, R32G32B32A32_UINT=102
@@ -474,8 +474,8 @@ static BOOL isVkUIntFormat(int32_t format) {
     }
 }
 
-/// 将 UINT 格式转换为对应的 SINT 格式
-/// Vulkan 格式枚举中，UINT 和 SINT 是连续的（UINT+1 = SINT）：
+/// Convert a UINT format to the matching SINT format
+/// In the Vulkan format enum, UINT and SINT are adjacent (UINT+1 = SINT):
 ///   R8_UINT(9) → R8_SINT(10), R8G8_UINT(11) → R8G8_SINT(12), ...
 static int32_t convertVkUIntToSIntFormat(int32_t format) {
     switch (format) {
@@ -495,7 +495,7 @@ static int32_t convertVkUIntToSIntFormat(int32_t format) {
     }
 }
 
-/// 检查 pipeline create infos 中是否存在 UINT 格式的 vertex attribute
+/// Check whether the pipeline create infos contain any vertex attribute with a UINT format
 static BOOL pipelineCreateInfosHaveUIntFormat(
     uint32_t createInfoCount,
     const VkZGraphicsPipelineCreateInfo* pCreateInfos)
@@ -512,9 +512,9 @@ static BOOL pipelineCreateInfosHaveUIntFormat(
     return NO;
 }
 
-/// 重试 pipeline 创建：将 UINT 顶点属性格式转换为 SINT
-/// 可选地对齐 stride（用于与 stride 对齐修复组合使用）
-/// 返回真实函数的调用结果
+/// Retry pipeline creation with the UINT vertex attribute formats converted to SINT
+/// Optionally align the stride as well (for use in combination with the stride alignment fix)
+/// Returns the result of calling the real function
 static VkZResult retryPipelineWithSIntFormats(
     VkZDevice device, VkZPipelineCache pipelineCache, uint32_t createInfoCount,
     const VkZGraphicsPipelineCreateInfo* pCreateInfos, const void* pAllocator,
@@ -525,7 +525,7 @@ static VkZResult retryPipelineWithSIntFormats(
         return VK_Z_ERROR_INITIALIZATION_FAILED;
     }
 
-    // 如果没有 UINT 格式，重试无意义
+    // Retrying is pointless if there is no UINT format
     if (!pipelineCreateInfosHaveUIntFormat(createInfoCount, pCreateInfos)) {
         return VK_Z_ERROR_INITIALIZATION_FAILED;
     }
@@ -533,7 +533,7 @@ static VkZResult retryPipelineWithSIntFormats(
     NSLog(@"[ZinkStrideFix] Retrying pipeline creation with UINT→SINT format conversion%s",
           alsoAlignStrides ? " + stride alignment" : "");
 
-    // 深拷贝并应用格式转换（可选 + stride 对齐）
+    // Deep copy and apply the format conversion (plus optional stride alignment)
     VkZGraphicsPipelineCreateInfo* newCreateInfos = malloc(sizeof(VkZGraphicsPipelineCreateInfo) * createInfoCount);
     VkZPipelineVertexInputStateCreateInfo* newVIS = malloc(sizeof(VkZPipelineVertexInputStateCreateInfo) * createInfoCount);
     VkZVertexInputBindingDescription** allocedBindings = calloc(createInfoCount, sizeof(VkZVertexInputBindingDescription*));
@@ -547,7 +547,7 @@ static VkZResult retryPipelineWithSIntFormats(
 
         newVIS[i] = *vis;
 
-        // 格式转换：UINT → SINT
+        // Format conversion: UINT → SINT
         if (vis->pVertexAttributeDescriptions && vis->vertexAttributeDescriptionCount > 0) {
             uint32_t attrCount = vis->vertexAttributeDescriptionCount;
             VkZVertexInputAttributeDescription* newAttrs = malloc(sizeof(VkZVertexInputAttributeDescription) * attrCount);
@@ -564,7 +564,7 @@ static VkZResult retryPipelineWithSIntFormats(
             newVIS[i].pVertexAttributeDescriptions = newAttrs;
         }
 
-        // 可选：stride 对齐
+        // Optional: stride alignment
         if (alsoAlignStrides && vis->pVertexBindingDescriptions) {
             BOOL pipelineNeedsAlignment = NO;
             for (uint32_t j = 0; j < vis->vertexBindingDescriptionCount; j++) {
@@ -608,8 +608,8 @@ static VkZResult retryPipelineWithSIntFormats(
     return result;
 }
 
-/// 仅对齐 vertex binding stride 到 4 字节（不做格式转换），调用真实函数
-/// 供 amethyst_vkCreateGraphicsPipelines 在策略 3 中使用
+/// Only align the vertex binding stride to 4 bytes (without converting formats) and call the real function
+/// Used by amethyst_vkCreateGraphicsPipelines in strategy 3
 static VkZResult createPipelinesWithAlignedStrides(
     VkZDevice device, VkZPipelineCache pipelineCache, uint32_t createInfoCount,
     const VkZGraphicsPipelineCreateInfo* pCreateInfos, const void* pAllocator,
@@ -670,28 +670,28 @@ static VkZResult createPipelinesWithAlignedStrides(
     return result;
 }
 
-/// vkCreateGraphicsPipelines wrapper：尝试多种修复策略确保 pipeline 创建成功
+/// vkCreateGraphicsPipelines wrapper: tries several fix strategies to make pipeline creation succeed
 ///
-/// 修复策略（按顺序尝试）：
-///   1. 原始 stride 直接创建（MoltenVK 1.2.9+ 可能已支持未对齐 stride）
-///   2. UINT→SINT 格式转换 + 原始 stride（修复 MTLAttributeFormatUShort3 转换错误）
-///   3. stride 4 字节对齐（修复 Metal API 硬性要求）
-///   4. UINT→SINT 格式转换 + stride 对齐（组合修复）
-///   5. dummy pipeline fallback（避免 NULL pipeline 导致 SIGSEGV）
+/// Fix strategies (tried in order):
+///   1. Create with the original stride (MoltenVK 1.2.9+ may already support unaligned strides)
+///   2. UINT→SINT format conversion + the original stride (fixes MTLAttributeFormatUShort3 conversion errors)
+///   3. 4-byte stride alignment (satisfies the strict Metal API requirement)
+///   4. UINT→SINT format conversion + stride alignment (combined fix)
+///   5. Dummy pipeline fallback (avoids the SIGSEGV a NULL pipeline would cause)
 ///
-/// 关键修复（实体渲染错乱）：
-///   之前的实现总是先做 stride 对齐（54→56），但 vertex buffer 数据仍按原始
-///   stride 54 排列，导致 MoltenVK 按对齐 stride 56 读取数据但数据布局不匹配，
-///   造成实体渲染错乱。
-///   新实现优先尝试原始 stride，只有当 MoltenVK 拒绝未对齐 stride 时才回退到
-///   stride 对齐。这样在支持未对齐 stride 的 MoltenVK 版本上，stride 与数据
-///   布局匹配，渲染正确。
+/// Key fix (garbled entity rendering):
+///   The previous implementation always aligned the stride first (54→56), but the vertex buffer data was still laid out
+///   with the original stride of 54, so MoltenVK read the data with the aligned stride of 56 while the data layout did not match,
+///   producing garbled entity rendering.
+///   The new implementation tries the original stride first and only falls back to stride alignment when MoltenVK
+///   rejects the unaligned stride. That way, on MoltenVK versions that support unaligned strides, the stride matches the data
+///   layout and rendering is correct.
 static VkZResult amethyst_vkCreateGraphicsPipelines(
     VkZDevice device, VkZPipelineCache pipelineCache, uint32_t createInfoCount,
     const VkZGraphicsPipelineCreateInfo* pCreateInfos, const void* pAllocator,
     VkZPipeline* pPipelines)
 {
-    // 首次调用时解析真实函数指针
+    // Resolve the real function pointers on the first call
     if (!g_real_vkCreateGraphicsPipelines) {
         if (g_real_vkGetDeviceProcAddr) {
             g_real_vkCreateGraphicsPipelines = (PFN_zkCreateGraphicsPipelines)
@@ -702,8 +702,8 @@ static VkZResult amethyst_vkCreateGraphicsPipelines(
                 g_real_vkGetInstanceProcAddr((VkZInstance)NULL, "vkCreateGraphicsPipelines");
         }
         if (!g_real_vkCreateGraphicsPipelines) {
-            // 通过 amethyst_orig_dlsym 绕过 hook（虽然 hooked_dlsym 不拦截此函数名，
-            // 但保持一致性，避免未来扩展 hook 列表时引入递归）
+            // Use amethyst_orig_dlsym to bypass the hook (hooked_dlsym does not intercept this function name,
+            // but keeping it consistent avoids introducing recursion if the hook list is extended in the future)
             g_real_vkCreateGraphicsPipelines = (PFN_zkCreateGraphicsPipelines)
                 amethyst_orig_dlsym(RTLD_DEFAULT, "vkCreateGraphicsPipelines");
         }
@@ -715,7 +715,7 @@ static VkZResult amethyst_vkCreateGraphicsPipelines(
         return VK_Z_ERROR_INITIALIZATION_FAILED;
     }
 
-    // 预检查：是否需要 stride 对齐 / 是否有 UINT 格式
+    // Pre-check: is stride alignment needed / is there a UINT format
     BOOL needsAlignment = NO;
     for (uint32_t i = 0; i < createInfoCount; i++) {
         const VkZPipelineVertexInputStateCreateInfo* vis = pCreateInfos[i].pVertexInputState;
@@ -730,10 +730,10 @@ static VkZResult amethyst_vkCreateGraphicsPipelines(
     }
     BOOL hasUIntFormat = pipelineCreateInfosHaveUIntFormat(createInfoCount, pCreateInfos);
 
-    // ===== 策略 1：原始 stride 直接创建 =====
-    // 优先尝试原始 stride，保持 stride 与 vertex buffer 数据布局匹配。
-    // MoltenVK 1.2.9+ 可能通过 setVertexBuffer:offset:attributeStride:atIndex:
-    // 或其他机制支持未对齐 stride。这是修复实体渲染错乱的关键。
+    // ===== Strategy 1: create with the original stride =====
+    // Try the original stride first, keeping the stride matched to the vertex buffer data layout.
+    // MoltenVK 1.2.9+ may support unaligned strides through setVertexBuffer:offset:attributeStride:atIndex:
+    // or another mechanism. This is the key to fixing the garbled entity rendering.
     {
         VkZResult result = g_real_vkCreateGraphicsPipelines(device, pipelineCache, createInfoCount, pCreateInfos, pAllocator, pPipelines);
         if (result == VK_Z_SUCCESS) {
@@ -743,12 +743,12 @@ static VkZResult amethyst_vkCreateGraphicsPipelines(
             return result;
         }
         NSLog(@"[ZinkStrideFix] Strategy 1 (original stride) failed: %d", result);
-        // 清理 pPipelines（失败时 MoltenVK 可能已部分设置）
+        // Clear pPipelines (MoltenVK may have partially populated it on failure)
         for (uint32_t i = 0; i < createInfoCount; i++) pPipelines[i] = NULL;
     }
 
-    // ===== 策略 2：UINT→SINT 格式转换 + 原始 stride =====
-    // 修复 MTLAttributeFormatUShort3 转换错误，保持原始 stride
+    // ===== Strategy 2: UINT→SINT format conversion + the original stride =====
+    // Fixes MTLAttributeFormatUShort3 conversion errors while keeping the original stride
     if (hasUIntFormat) {
         NSLog(@"[ZinkStrideFix] Strategy 2: UINT→SINT format conversion (original stride)");
         VkZResult retryResult = retryPipelineWithSIntFormats(
@@ -761,10 +761,10 @@ static VkZResult amethyst_vkCreateGraphicsPipelines(
         for (uint32_t i = 0; i < createInfoCount; i++) pPipelines[i] = NULL;
     }
 
-    // ===== 策略 3：stride 4 字节对齐 =====
-    // MoltenVK 拒绝未对齐 stride 时，回退到 stride 对齐。
-    // 注意：这可能导致 stride 与 vertex buffer 数据布局不匹配，引发渲染错乱。
-    // 但可以避免 pipeline 创建失败导致的 SIGSEGV。
+    // ===== Strategy 3: 4-byte stride alignment =====
+    // When MoltenVK rejects the unaligned stride, fall back to stride alignment.
+    // Note: this can leave the stride mismatched with the vertex buffer data layout and garble the rendering,
+    // but it avoids the SIGSEGV caused by pipeline creation failure.
     NSLog(@"[ZinkStrideFix] Strategy 3: stride 4-byte alignment");
     {
         VkZResult result = createPipelinesWithAlignedStrides(
@@ -777,7 +777,7 @@ static VkZResult amethyst_vkCreateGraphicsPipelines(
         for (uint32_t i = 0; i < createInfoCount; i++) pPipelines[i] = NULL;
     }
 
-    // ===== 策略 4：UINT→SINT 格式转换 + stride 对齐 =====
+    // ===== Strategy 4: UINT→SINT format conversion + stride alignment =====
     if (hasUIntFormat) {
         NSLog(@"[ZinkStrideFix] Strategy 4: UINT→SINT + stride alignment");
         VkZResult retryResult = retryPipelineWithSIntFormats(
@@ -790,9 +790,9 @@ static VkZResult amethyst_vkCreateGraphicsPipelines(
         for (uint32_t i = 0; i < createInfoCount; i++) pPipelines[i] = NULL;
     }
 
-    // ===== 策略 5：dummy pipeline fallback =====
-    // 所有修复策略都失败，分配 dummy pipeline 避免 NULL pipeline 导致 SIGSEGV。
-    // dummy pipeline 的 draw 调用会被我们的 hook 跳过（实体不渲染，但不崩溃）。
+    // ===== Strategy 5: dummy pipeline fallback =====
+    // Every fix strategy failed, so hand out a dummy pipeline to avoid the SIGSEGV a NULL pipeline would cause.
+    // Draw calls for a dummy pipeline are skipped by our hooks (entities are not rendered, but nothing crashes).
     NSLog(@"[ZinkStrideFix] All strategies failed, applying dummy pipeline fallback");
     for (uint32_t i = 0; i < createInfoCount; i++) {
         if (!pPipelines[i]) {
@@ -804,7 +804,7 @@ static VkZResult amethyst_vkCreateGraphicsPipelines(
 }
 
 /// vkGetInstanceProcAddr wrapper
-/// 拦截 vkGetDeviceProcAddr、vkCreateGraphicsPipelines、vkCmd* 请求，返回我们的 hook
+/// Intercepts vkGetDeviceProcAddr, vkCreateGraphicsPipelines and vkCmd* requests and returns our hooks
 static void* amethyst_vkGetInstanceProcAddr(VkZInstance instance, const char* pName) {
     if (pName) {
         if (strcmp(pName, "vkGetDeviceProcAddr") == 0) {
@@ -871,7 +871,7 @@ static void* amethyst_vkGetInstanceProcAddr(VkZInstance instance, const char* pN
             }
             return (void*)amethyst_vkCmdDrawIndexedIndirectCount;
         }
-        // vkDestroyPipeline hook：dummy pipeline 销毁时跳过，避免 MoltenVK 崩溃
+        // vkDestroyPipeline hook: skip destruction of dummy pipelines to avoid crashing MoltenVK
         if (strcmp(pName, "vkDestroyPipeline") == 0) {
             if (!g_real_vkDestroyPipeline && g_real_vkGetInstanceProcAddr) {
                 g_real_vkDestroyPipeline = (PFN_zkDestroyPipeline)
@@ -881,15 +881,15 @@ static void* amethyst_vkGetInstanceProcAddr(VkZInstance instance, const char* pN
         }
     }
     if (!g_real_vkGetInstanceProcAddr) {
-        // 关键：必须用 amethyst_orig_dlsym 绕过 hooked_dlsym，否则 pName
-        // 恰好是 "vkGetInstanceProcAddr" 时会触发无限递归
+        // Key point: amethyst_orig_dlsym must be used to bypass hooked_dlsym, otherwise a pName
+        // that happens to be "vkGetInstanceProcAddr" would trigger infinite recursion
         return amethyst_orig_dlsym(RTLD_DEFAULT, pName);
     }
     return g_real_vkGetInstanceProcAddr(instance, pName);
 }
 
 /// vkGetDeviceProcAddr wrapper
-/// 拦截 vkCreateGraphicsPipelines、vkCmd* 请求，返回我们的 hook
+/// Intercepts vkCreateGraphicsPipelines and vkCmd* requests and returns our hooks
 static void* amethyst_vkGetDeviceProcAddr(VkZDevice device, const char* pName) {
     if (pName) {
         if (strcmp(pName, "vkCreateGraphicsPipelines") == 0) {
@@ -949,7 +949,7 @@ static void* amethyst_vkGetDeviceProcAddr(VkZDevice device, const char* pName) {
             }
             return (void*)amethyst_vkCmdDrawIndexedIndirectCount;
         }
-        // vkDestroyPipeline hook：dummy pipeline 销毁时跳过，避免 MoltenVK 崩溃
+        // vkDestroyPipeline hook: skip destruction of dummy pipelines to avoid crashing MoltenVK
         if (strcmp(pName, "vkDestroyPipeline") == 0) {
             if (!g_real_vkDestroyPipeline && g_real_vkGetDeviceProcAddr) {
                 g_real_vkDestroyPipeline = (PFN_zkDestroyPipeline)
@@ -959,20 +959,20 @@ static void* amethyst_vkGetDeviceProcAddr(VkZDevice device, const char* pName) {
         }
     }
     if (!g_real_vkGetDeviceProcAddr) {
-        // 关键：必须用 amethyst_orig_dlsym 绕过 hooked_dlsym，否则 pName
-        // 恰好是 "vkGetDeviceProcAddr" 时会触发无限递归
+        // Key point: amethyst_orig_dlsym must be used to bypass hooked_dlsym, otherwise a pName
+        // that happens to be "vkGetDeviceProcAddr" would trigger infinite recursion
         return amethyst_orig_dlsym(RTLD_DEFAULT, pName);
     }
     return g_real_vkGetDeviceProcAddr(device, pName);
 }
 
 /// vkCmdBindPipeline hook
-/// 跟踪当前绑定的 graphics pipeline，dummy pipeline 跳过实际绑定
+/// Tracks the currently bound graphics pipeline and skips the actual bind for dummy pipelines
 static void amethyst_vkCmdBindPipeline(VkZCommandBuffer cmd, VkZPipelineBindPoint bp, VkZPipeline pipeline) {
     if (bp == VK_Z_PIPELINE_BIND_POINT_GRAPHICS) {
         g_currentBoundGraphicsPipeline = pipeline;
         if (isDummyPipeline(pipeline)) {
-            // Dummy pipeline：跳过实际绑定，避免 MoltenVK 因无效句柄崩溃
+            // Dummy pipeline: skip the actual bind so MoltenVK does not crash on the invalid handle
             return;
         }
     }
@@ -981,60 +981,60 @@ static void amethyst_vkCmdBindPipeline(VkZCommandBuffer cmd, VkZPipelineBindPoin
     }
 }
 
-/// vkCmdDraw hook：当前绑定 dummy pipeline 时跳过绘制
+/// vkCmdDraw hook: skip the draw when a dummy pipeline is currently bound
 static void amethyst_vkCmdDraw(VkZCommandBuffer cmd, uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance) {
     if (isDummyPipeline(g_currentBoundGraphicsPipeline)) return;
     if (g_real_vkCmdDraw) g_real_vkCmdDraw(cmd, vertexCount, instanceCount, firstVertex, firstInstance);
 }
 
-/// vkCmdDrawIndexed hook：当前绑定 dummy pipeline 时跳过绘制
+/// vkCmdDrawIndexed hook: skip the draw when a dummy pipeline is currently bound
 static void amethyst_vkCmdDrawIndexed(VkZCommandBuffer cmd, uint32_t indexCount, uint32_t instanceCount, uint32_t firstIndex, int32_t vertexOffset, uint32_t firstInstance) {
     if (isDummyPipeline(g_currentBoundGraphicsPipeline)) return;
     if (g_real_vkCmdDrawIndexed) g_real_vkCmdDrawIndexed(cmd, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
 }
 
-/// vkCmdDrawIndirect hook：当前绑定 dummy pipeline 时跳过绘制
+/// vkCmdDrawIndirect hook: skip the draw when a dummy pipeline is currently bound
 static void amethyst_vkCmdDrawIndirect(VkZCommandBuffer cmd, uint64_t buffer, uint64_t offset, uint32_t drawCount, uint32_t stride) {
     if (isDummyPipeline(g_currentBoundGraphicsPipeline)) return;
     if (g_real_vkCmdDrawIndirect) g_real_vkCmdDrawIndirect(cmd, buffer, offset, drawCount, stride);
 }
 
-/// vkCmdDrawIndexedIndirect hook：当前绑定 dummy pipeline 时跳过绘制
+/// vkCmdDrawIndexedIndirect hook: skip the draw when a dummy pipeline is currently bound
 static void amethyst_vkCmdDrawIndexedIndirect(VkZCommandBuffer cmd, uint64_t buffer, uint64_t offset, uint32_t drawCount, uint32_t stride) {
     if (isDummyPipeline(g_currentBoundGraphicsPipeline)) return;
     if (g_real_vkCmdDrawIndexedIndirect) g_real_vkCmdDrawIndexedIndirect(cmd, buffer, offset, drawCount, stride);
 }
 
-/// vkCmdDrawIndirectCount hook：当前绑定 dummy pipeline 时跳过绘制
+/// vkCmdDrawIndirectCount hook: skip the draw when a dummy pipeline is currently bound
 static void amethyst_vkCmdDrawIndirectCount(VkZCommandBuffer cmd, uint64_t buffer, uint64_t offset, uint64_t countBuffer, uint64_t countBufferOffset, uint32_t maxDrawCount, uint32_t stride) {
     if (isDummyPipeline(g_currentBoundGraphicsPipeline)) return;
     if (g_real_vkCmdDrawIndirectCount) g_real_vkCmdDrawIndirectCount(cmd, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride);
 }
 
-/// vkCmdDrawIndexedIndirectCount hook：当前绑定 dummy pipeline 时跳过绘制
+/// vkCmdDrawIndexedIndirectCount hook: skip the draw when a dummy pipeline is currently bound
 static void amethyst_vkCmdDrawIndexedIndirectCount(VkZCommandBuffer cmd, uint64_t buffer, uint64_t offset, uint64_t countBuffer, uint64_t countBufferOffset, uint32_t maxDrawCount, uint32_t stride) {
     if (isDummyPipeline(g_currentBoundGraphicsPipeline)) return;
     if (g_real_vkCmdDrawIndexedIndirectCount) g_real_vkCmdDrawIndexedIndirectCount(cmd, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride);
 }
 
-/// vkDestroyPipeline hook：销毁 dummy pipeline 时跳过，避免 MoltenVK 解引用 magic handle 崩溃
-/// 关键修复：切换 shaderpack 时 zink 会销毁所有旧 pipelines，包括 dummy pipeline
-/// 句柄（0xDEAD0001 等）。MoltenVK 的 vkDestroyPipeline 会解引用 pipeline 指针
-/// 查找内部资源，dummy handle 是无效指针，导致 SIGSEGV。
+/// vkDestroyPipeline hook: skip destroying dummy pipelines so MoltenVK does not crash dereferencing the magic handle
+/// Key fix: when switching shader packs, zink destroys every old pipeline, including the dummy pipeline
+/// handles (0xDEAD0001 and friends). MoltenVK's vkDestroyPipeline dereferences the pipeline pointer
+/// to find internal resources, and a dummy handle is an invalid pointer, causing a SIGSEGV.
 static void amethyst_vkDestroyPipeline(VkZDevice device, VkZPipeline pipeline, const void* pAllocator) {
     if (isDummyPipeline(pipeline)) {
-        // Dummy pipeline：跳过销毁，避免 MoltenVK 崩溃
-        // 同时从 dummy pipeline 集合中移除（避免集合无限增长）
+        // Dummy pipeline: skip the destruction so MoltenVK does not crash
+        // Also remove it from the dummy pipeline set (to keep the set from growing forever)
         uintptr_t val = (uintptr_t)pipeline;
         for (uint32_t i = 0; i < g_dummyPipelineCount; i++) {
             if (g_dummyPipelines[i] == val) {
-                // 用最后一个元素填补空洞（顺序无关紧要，数组只是用于查找）
+                // Fill the hole with the last element (the order does not matter, the array is only used for lookups)
                 g_dummyPipelines[i] = g_dummyPipelines[g_dummyPipelineCount - 1];
                 g_dummyPipelineCount--;
                 break;
             }
         }
-        // 如果正在销毁的 dummy pipeline 恰好是当前绑定的，清除绑定状态
+        // If the dummy pipeline being destroyed happens to be the currently bound one, clear the bound state
         if (g_currentBoundGraphicsPipeline == pipeline) {
             g_currentBoundGraphicsPipeline = NULL;
         }
@@ -1043,11 +1043,11 @@ static void amethyst_vkDestroyPipeline(VkZDevice device, VkZPipeline pipeline, c
     if (g_real_vkDestroyPipeline) g_real_vkDestroyPipeline(device, pipeline, pAllocator);
 }
 
-/// 内部：执行 fishhook 重绑定（可在新 image 加载后重复调用以捕获新引用）
-/// fishhook 的 rebind_symbols 是幂等的——会遍历所有已加载 image 并重绑定
-/// vkGetInstanceProcAddr / vkGetDeviceProcAddr 的引用到我们的 wrapper。
-/// 使用静态存储的 rebindings 数组（避免栈上局部变量在 future-image 加载时 UAF：
-/// fishhook 会保留 rebindings 用于后续 dlopen 加载的 image）。
+/// Internal: perform the fishhook rebinding (can be called again after a new image is loaded, to capture new references)
+/// fishhook's rebind_symbols is idempotent - it walks every loaded image and rebinds
+/// references to vkGetInstanceProcAddr / vkGetDeviceProcAddr to our wrappers.
+/// A statically stored rebindings array is used (to avoid a use-after-free of a stack local when a future image loads:
+/// fishhook keeps the rebindings around for images loaded by later dlopen calls).
 static void zinkStrideFixRebind(void) {
     static struct rebinding rebindings[] = {
         {"vkGetInstanceProcAddr", (void*)amethyst_vkGetInstanceProcAddr, (void**)&g_real_vkGetInstanceProcAddr},
@@ -1056,9 +1056,9 @@ static void zinkStrideFixRebind(void) {
     rebind_symbols(rebindings, sizeof(rebindings)/sizeof(struct rebinding));
 }
 
-/// 安装 zink vertex stride 对齐 fix
-/// 仅在 zink 渲染器被选中时激活。通过 fishhook 重绑定符号引用，
-/// 并通过 hooked_dlsym 拦截 dlsym 查找（双重机制确保覆盖所有调用路径）。
+/// Install the zink vertex stride alignment fix
+/// Only active when the zink renderer is selected. It rebinds symbol references with fishhook
+/// and intercepts dlsym lookups through hooked_dlsym (a dual mechanism that covers every call path).
 void installZinkStrideFix(void) {
     if (g_zinkStrideFixActive) return;
 
@@ -1071,30 +1071,30 @@ void installZinkStrideFix(void) {
 
     g_zinkStrideFixActive = YES;
 
-    // 初次重绑定（捕获当前已加载 image 的引用，主要是启动器主二进制）
+    // Initial rebind (captures references from the currently loaded images, mainly the launcher's main binary)
     zinkStrideFixRebind();
 
     NSLog(@"[ZinkStrideFix] Installed vertex stride alignment hooks for zink (Mesa 25.0.7 + MoltenVK)");
 }
 
-/// 在新 image（特别是 libOSMesa / libMoltenVK）加载后调用，重新执行 fishhook
-/// 以捕获新 image 对 vkGetInstanceProcAddr / vkGetDeviceProcAddr 的符号引用。
-/// 由 hooked_dlopen 在检测到 libOSMesa 加载时调用。
+/// Called after a new image (particularly libOSMesa / libMoltenVK) is loaded, to run fishhook again
+/// and capture that image's symbol references to vkGetInstanceProcAddr / vkGetDeviceProcAddr.
+/// It is called by hooked_dlopen when it detects that libOSMesa has been loaded.
 void rebindZinkStrideFixForNewImage(void) {
     if (!g_zinkStrideFixActive) return;
     zinkStrideFixRebind();
     NSLog(@"[ZinkStrideFix] Re-rebound Vulkan symbols for newly loaded image");
 }
 
-/// dlsym hook：拦截 Vulkan loader 函数请求，返回我们的 wrapper
+/// dlsym hook: intercepts Vulkan loader function requests and returns our wrappers
 ///
-/// 仅拦截 zink stride fix 相关函数：
-///   - vkGetInstanceProcAddr → 返回 amethyst_vkGetInstanceProcAddr
-///     （拦截 vkCreateGraphicsPipelines 调用，强制 stride 4 字节对齐）
-///   - vkGetDeviceProcAddr → 返回 amethyst_vkGetDeviceProcAddr
-///     （拦截 vkCmd* / vkDestroyPipeline 调用，跟踪 dummy pipeline）
+/// Only functions related to the zink stride fix are intercepted:
+///   - vkGetInstanceProcAddr → returns amethyst_vkGetInstanceProcAddr
+///     (intercepting vkCreateGraphicsPipelines calls to force 4-byte stride alignment)
+///   - vkGetDeviceProcAddr → returns amethyst_vkGetDeviceProcAddr
+///     (intercepting vkCmd* / vkDestroyPipeline calls to track dummy pipelines)
 ///
-/// 其他函数正常返回 orig_dlsym 的结果，避免日志爆炸。
+/// Every other function returns the orig_dlsym result as usual, to avoid flooding the log.
 void* hooked_dlsym(void* handle, const char* name) {
     if (name != NULL && g_zinkStrideFixActive) {
         if (strcmp(name, "vkGetInstanceProcAddr") == 0) {

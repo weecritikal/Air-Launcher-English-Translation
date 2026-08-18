@@ -2,10 +2,10 @@
 //  WorldService.m
 //  Amethyst
 //
-//  世界存档服务实现，结构参照 ResourcePackService/DataPackService
+//  World save service implementation, structured after ResourcePackService/DataPackService
 //  The API consistently takes NSString *profileName
 //  Uses defaultSessionConfiguration + NSURLSessionDownloadTask for better download throughput
-//  实现健壮解压逻辑：检测 zip 内是否含顶层目录，若无则创建子目录再解压
+//  Implements robust extraction logic: detect whether the zip contains a top-level directory, and if not create a subdirectory before extracting
 //
 
 #import "WorldService.h"
@@ -28,7 +28,7 @@
 @property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, NSProgress *> *downloadProgresses;
 @property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, DownloadTaskItem *> *downloadTaskItems;
 @property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, NSMutableDictionary *> *downloadProgressSnapshots;
-// 导入任务专用字典（不通过 NSURLSession 下载，但同样需要进度上报）
+// Dictionary dedicated to import tasks (they are not downloaded via NSURLSession but still need progress reporting)
 @property (nonatomic, strong) NSMutableDictionary<NSString *, WorldDownloadCompletionHandler> *importCompletionHandlers;
 @end
 
@@ -48,7 +48,7 @@
         // Use the default session configuration to avoid background-session throttling
         NSURLSessionConfiguration *config = [NSURLSessionConfiguration defaultSessionConfiguration];
         config.timeoutIntervalForRequest = 120.0;
-        config.timeoutIntervalForResource = 600.0; // 世界包通常较大，超时设长一些
+        config.timeoutIntervalForResource = 600.0; // World packs are usually large, so use a longer timeout
         config.allowsCellularAccess = YES;
         config.HTTPMaximumConnectionsPerHost = 6;
 
@@ -89,7 +89,7 @@
 
 #pragma mark - Saves folder detection & scan
 
-// 查找指定 profile 的 saves 目录（已存在时返回路径，否则返回 nil）
+// Look up the saves directory of the given profile (returns the path if it exists, otherwise nil)
 - (nullable NSString *)existingWorldsFolderForProfile:(NSString *)profileName {
     NSString *profile = profileName.length ? profileName : @"default";
     NSFileManager *fm = [NSFileManager defaultManager];
@@ -122,7 +122,7 @@
     return nil;
 }
 
-/// 获取当前 profile 的 saves 目录，不存在时自动创建
+/// Get the saves directory of the current profile, creating it automatically if it does not exist
 - (nullable NSString *)ensureWorldsFolderForProfile:(NSString *)profileName error:(NSError **)error {
     NSString *profile = profileName.length ? profileName : @"default";
     NSFileManager *fm = [NSFileManager defaultManager];
@@ -200,7 +200,7 @@
             if (![fm fileExistsAtPath:fullPath isDirectory:&isDir] || !isDir) {
                 continue;
             }
-            // 检测 level.dat 是否存在，以确认这是一个有效的世界存档
+            // Check whether level.dat exists, to confirm this is a valid world save
             NSString *levelDat = [fullPath stringByAppendingPathComponent:@"level.dat"];
             if ([fm fileExistsAtPath:levelDat]) {
                 WorldItem *world = [[WorldItem alloc] initWithFilePath:fullPath];
@@ -208,11 +208,11 @@
             }
         }
 
-        // 按上次游玩时间倒序排序（无时间的排末尾）
+        // Sort by last played time in descending order (entries without a time go last)
         [items sortUsingComparator:^NSComparisonResult(WorldItem *obj1, WorldItem *obj2) {
             NSString *t1 = obj1.lastPlayed ?: @"";
             NSString *t2 = obj2.lastPlayed ?: @"";
-            return [t2 compare:t1]; // 倒序
+            return [t2 compare:t1]; // Descending order
         }];
 
         if (completion) {
@@ -221,7 +221,7 @@
     });
 }
 
-// 删除世界目录（递归）
+// Delete a world directory (recursively)
 - (BOOL)deleteWorld:(WorldItem *)item error:(NSError **)error {
     if (!item.filePath) {
         if (error) {
@@ -234,8 +234,8 @@
 
 #pragma mark - 健壮解压逻辑
 
-// 检测 zip 内是否存在顶层目录（即所有条目都以同一个目录名开头）
-// 若存在，返回该顶层目录名；否则返回 nil（说明 zip 直接散装了 level.dat 等文件）
+// Detect whether the zip contains a top-level directory (i.e. every entry starts with the same directory name)
+// If it does, return that top-level directory name; otherwise return nil (meaning the zip holds level.dat and friends loose at the root)
 - (nullable NSString *)detectTopLevelDirectoryInZip:(NSString *)zipPath {
     NSError *err = nil;
     UZKArchive *archive = [[UZKArchive alloc] initWithPath:zipPath error:&err];
@@ -247,25 +247,25 @@
     NSMutableSet<NSString *> *topLevels = [NSMutableSet set];
     for (NSString *name in fileNames) {
         if (name.length == 0) continue;
-        // 跳过 macOS 元数据文件（如 __MACOSX/...）
+        // Skip macOS metadata files (such as __MACOSX/...)
         if ([name hasPrefix:@"__MACOSX/"]) continue;
-        // 取第一段作为顶层目录候选
+        // Take the first path segment as the top-level directory candidate
         NSString *firstComponent = [name componentsSeparatedByString:@"/"].firstObject;
         if (firstComponent.length == 0) continue;
         [topLevels addObject:firstComponent];
     }
 
-    // 仅当所有条目共享同一个顶层目录时，才认为 zip 内有顶层目录
+    // Only treat the zip as having a top-level directory when every entry shares the same one
     if (topLevels.count == 1) {
         return [topLevels anyObject];
     }
     return nil;
 }
 
-// 健壮解压：
-// - 若 zip 内有顶层目录，直接解压到 saves/
-// - 若 zip 内无顶层目录（散装），先用世界名创建子目录，再解压到该子目录
-// - worldName 用于无顶层目录时命名新世界目录
+// Robust extraction:
+// - If the zip has a top-level directory, extract straight into saves/
+// - If the zip has no top-level directory (loose files), first create a subdirectory named after the world, then extract into it
+// - worldName is used to name the new world directory when there is no top-level directory
 - (BOOL)extractWorldZipAt:(NSString *)zipPath
                 toSavesDir:(NSString *)savesDir
                 worldName:(NSString *)worldName
@@ -277,17 +277,17 @@
     NSString *finalWorldDir = nil;
 
     if (topLevelDir) {
-        // zip 内有顶层目录，直接解压到 saves/
+        // The zip has a top-level directory, so extract straight into saves/
         extractTargetDir = savesDir;
         finalWorldDir = [savesDir stringByAppendingPathComponent:topLevelDir];
     } else {
-        // zip 内无顶层目录，需要创建子目录后再解压
+        // The zip has no top-level directory, so a subdirectory must be created before extracting
         NSString *baseName = worldName.length > 0 ? worldName : [zipPath lastPathComponent];
-        // 去除可能的 .zip 后缀
+        // Strip any .zip suffix
         if ([baseName.lowercaseString hasSuffix:@".zip"]) {
             baseName = [baseName substringToIndex:baseName.length - @".zip".length];
         }
-        // 若 saves/<baseName> 已存在，则追加数字后缀避免覆盖
+        // If saves/<baseName> already exists, append a numeric suffix to avoid overwriting it
         NSString *candidate = [savesDir stringByAppendingPathComponent:baseName];
         NSInteger suffix = 1;
         while ([fm fileExistsAtPath:candidate]) {
@@ -297,7 +297,7 @@
         extractTargetDir = candidate;
         finalWorldDir = candidate;
 
-        // 创建目标子目录
+        // Create the target subdirectory
         NSError *createError = nil;
         if (![fm createDirectoryAtPath:extractTargetDir withIntermediateDirectories:YES attributes:nil error:&createError]) {
             if (error) *error = createError;
@@ -305,7 +305,7 @@
         }
     }
 
-    // 使用 UnzipKit 解压到目标目录
+    // Extract into the target directory with UnzipKit
     NSError *archiveError = nil;
     UZKArchive *archive = [[UZKArchive alloc] initWithPath:zipPath error:&archiveError];
     if (!archive || archiveError) {
@@ -317,7 +317,7 @@
     BOOL success = [archive extractFilesTo:extractTargetDir overwrite:YES error:&extractError];
     if (!success || extractError) {
         if (error) *error = extractError;
-        // 解压失败时若我们创建了子目录，清理掉空目录
+        // If extraction failed and we created the subdirectory, clean up the empty directory
         if (!topLevelDir && [fm fileExistsAtPath:extractTargetDir]) {
             NSArray<NSString *> *leftover = [fm contentsOfDirectoryAtPath:extractTargetDir error:nil];
             if (leftover.count == 0) {
@@ -327,10 +327,10 @@
         return NO;
     }
 
-    // 校验解压结果：必须存在 level.dat（可能在 finalWorldDir 直接下，也可能在更深一层）
+    // Validate the extraction result: level.dat must exist (either directly under finalWorldDir or one level deeper)
     NSString *levelDatCheck = [finalWorldDir stringByAppendingPathComponent:@"level.dat"];
     if (![fm fileExistsAtPath:levelDatCheck]) {
-        // 有些 zip 即使有顶层目录，level.dat 可能还在更深层。这里只做日志，不阻断
+        // Some zips have a top-level directory but still keep level.dat deeper down. This is only logged, not treated as a failure
         NSLog(@"[WorldService] warning: level.dat not found at %@ after extraction", finalWorldDir);
     }
 
@@ -344,7 +344,7 @@
             toProfile:(NSString *)profileName
              progress:(WorldDownloadProgressHandler _Nullable)progress
            completion:(WorldDownloadCompletionHandler _Nullable)completion {
-    // 确保 saves 目录存在
+    // Make sure the saves directory exists
     NSError *ensureError = nil;
     NSString *savesFolder = [self ensureWorldsFolderForProfile:profileName error:&ensureError];
     if (!savesFolder) {
@@ -369,18 +369,18 @@
         return;
     }
 
-    // 下载到临时 zip 路径，解压后再删除
+    // Download to a temporary zip path and delete it after extraction
     NSString *tempZipName = [NSString stringWithFormat:@"world_%@.zip", [[NSUUID UUID] UUIDString]];
     NSString *destinationPath = [NSTemporaryDirectory() stringByAppendingPathComponent:tempZipName];
-    // 同时记录预期世界名（用于无顶层目录时的子目录命名）
+    // Also record the expected world name (used to name the subdirectory when there is no top-level directory)
     NSString *worldNameForExtract = item.displayName ?: item.worldName ?: [url lastPathComponent];
 
     // Create the download task (default session configuration, no background throttling)
     NSURLSessionDownloadTask *task = [self.downloadSession downloadTaskWithURL:url];
     self.downloadCompletionHandlers[task] = completion;
     self.downloadDestinationPaths[task] = destinationPath;
-    // 用 taskDescription 暂存世界名和 saves 目录（用于解压阶段）
-    // 格式："worldName\nsavesFolder"
+    // Use taskDescription to stash the world name and the saves directory (for the extraction phase)
+    // Format: "worldName\nsavesFolder"
     task.taskDescription = [NSString stringWithFormat:@"%@\n%@", worldNameForExtract, savesFolder];
     if (progress) {
         NSProgress *progressObj = [NSProgress progressWithTotalUnitCount:-1];
@@ -439,7 +439,7 @@
                  progress:(WorldDownloadProgressHandler _Nullable)progress
                completion:(WorldDownloadCompletionHandler _Nullable)completion {
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
-        // 确保 saves 目录存在
+        // Make sure the saves directory exists
         NSError *ensureError = nil;
         NSString *savesFolder = [self ensureWorldsFolderForProfile:profileName error:&ensureError];
         if (!savesFolder) {
@@ -452,7 +452,7 @@
             return;
         }
 
-        // 安全访问文件（UIDocumentPicker 返回的 URL 需要 startAccessingSecurityScopedResource）
+        // Access the file securely (URLs returned by UIDocumentPicker require startAccessingSecurityScopedResource)
         BOOL needsStopAccessing = NO;
         if ([sourceURL isKindOfClass:[NSURL class]] && sourceURL.isFileURL) {
             needsStopAccessing = [sourceURL startAccessingSecurityScopedResource];
@@ -470,7 +470,7 @@
                 return;
             }
 
-            // 复制到临时文件以便 UnzipKit 安全读取（避免安全作用域限制）
+            // Copy to a temporary file so UnzipKit can read it safely (avoiding security scope restrictions)
             NSString *tempZipPath = [NSTemporaryDirectory() stringByAppendingPathComponent:
                                      [NSString stringWithFormat:@"world_import_%@.zip", [[NSUUID UUID] UUIDString]]];
             NSError *copyError = nil;
@@ -484,27 +484,27 @@
                 return;
             }
 
-            // 本地导入可直接上报 100% 进度（无网络下载阶段）
+            // A local import can report 100% progress immediately (there is no network download phase)
             if (progress) {
                 NSProgress *prog = [NSProgress progressWithTotalUnitCount:1];
                 prog.completedUnitCount = 1;
                 dispatch_async(dispatch_get_main_queue(), ^{ progress(prog); });
             }
 
-            // 推导世界名（去除 .zip 后缀）
+            // Derive the world name (stripping the .zip suffix)
             NSString *worldName = [sourceURL lastPathComponent];
             if ([worldName.lowercaseString hasSuffix:@".zip"]) {
                 worldName = [worldName substringToIndex:worldName.length - @".zip".length];
             }
 
-            // 解压
+            // Extract
             NSError *extractError = nil;
             BOOL success = [self extractWorldZipAt:tempZipPath
                                         toSavesDir:savesFolder
                                         worldName:worldName
                                             error:&extractError];
 
-            // 删除临时文件
+            // Delete the temporary file
             [[NSFileManager defaultManager] removeItemAtPath:tempZipPath error:nil];
 
             if (completion) {
@@ -621,7 +621,7 @@ totalBytesExpectedToWrite:(int64_t)totalBytesExpectedToWrite {
         [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId state:DownloadTaskStateCompleted];
     }
 
-    // 解析 taskDescription：worldName 与 savesFolder
+    // Parse taskDescription: worldName and savesFolder
     NSString *worldName = nil;
     NSString *savesFolder = nil;
     if (taskDescription.length > 0) {
@@ -630,7 +630,7 @@ totalBytesExpectedToWrite:(int64_t)totalBytesExpectedToWrite {
         if (parts.count >= 2) savesFolder = parts[1];
     }
     if (!savesFolder) {
-        // 无 saves 目录信息，回退：删除临时 zip 并报错
+        // No saves directory information, so fall back to deleting the temporary zip and reporting an error
         [fm removeItemAtPath:destinationPath error:nil];
         dispatch_async(dispatch_get_main_queue(), ^{
             handler(NO, [NSError errorWithDomain:@"WorldServiceError"
@@ -640,7 +640,7 @@ totalBytesExpectedToWrite:(int64_t)totalBytesExpectedToWrite {
         return;
     }
 
-    // 在后台线程做解压
+    // Extract on a background thread
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         NSError *extractError = nil;
         BOOL success = [self extractWorldZipAt:destinationPath
@@ -648,7 +648,7 @@ totalBytesExpectedToWrite:(int64_t)totalBytesExpectedToWrite {
                                     worldName:worldName ?: @"imported_world"
                                         error:&extractError];
 
-        // 解压完成后删除临时 zip
+        // Delete the temporary zip once extraction completes
         [fm removeItemAtPath:destinationPath error:nil];
 
         dispatch_async(dispatch_get_main_queue(), ^{

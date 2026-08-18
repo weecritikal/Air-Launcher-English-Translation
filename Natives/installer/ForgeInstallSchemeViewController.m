@@ -19,7 +19,7 @@
 
     // Adapt to the custom launcher background: make this VC transparent so the global background image/blur shows through
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
-    // 应用毛玻璃效果到根视图
+    // Apply the frosted glass effect to the root view
     [[BackgroundManager sharedManager] applyEffectToView:self.view];
 
     [self setupContentContainer];
@@ -74,15 +74,15 @@
 }
 
 - (void)setupCards {
-    // 直装方案放首位并标注"推荐"：在 iOS 上无需 JIT、无需 AWT、无子进程限制
+    // The direct install option comes first and is marked "Recommended": on iOS it needs no JIT, no AWT and has no subprocess restrictions
     self.directCard = [self createCardWithTitle:@"Direct install (recommended)"
                                        subtitle:@"Installs by parsing directly, without launching the installer"
                                            icon:@"bolt.fill"
                                           color:[UIColor systemGreenColor]
                                          scheme:1];
 
-    // 原版方案降级为"高级选项"：依赖 AWT GUI + JIT + 子进程，iOS 上多数场景不可用
-    // 仅保留作为某些边缘版本（极老 Forge / 第三方 jar 安装器）的兜底
+    // The vanilla option is demoted to an "advanced option": it depends on an AWT GUI + JIT + subprocesses, which are unusable in most cases on iOS
+    // It is kept only as a fallback for certain edge versions (very old Forge / third-party jar installers)
     self.originalCard = [self createCardWithTitle:@"Vanilla method (advanced)"
                                          subtitle:@"Runs the Forge installer (AWT GUI); requires JIT"
                                              icon:@"gearshape"
@@ -207,18 +207,18 @@
 
 - (void)actionClose:(UIButton *)sender {
     [self dismissViewControllerAnimated:YES completion:^{
-        // 通知 delegate 用户取消，避免上游 completionHandler 永久阻塞
+        // Notify the delegate that the user cancelled, so the upstream completionHandler does not block forever
         if ([self.delegate respondsToSelector:@selector(schemeViewController:didSelectScheme:)]) {
             [self.delegate schemeViewController:self didSelectScheme:-1];
         }
     }];
 }
 
-/// 背景效果变化时重新应用透明化处理与毛玻璃效果，确保背景切换后仍透出全局背景
+/// Reapply the transparency treatment and the frosted glass effect when the background effect changes, so the global background still shows through after a background switch
 - (void)reapplyBackgroundEffect {
     // Make this VC transparent again
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
-    // 重新应用毛玻璃效果到根视图
+    // Reapply the frosted glass effect to the root view
     [[BackgroundManager sharedManager] applyEffectToView:self.view];
 }
 

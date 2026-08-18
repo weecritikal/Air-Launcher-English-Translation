@@ -11,8 +11,8 @@
 
 @dynamic reachedLastPage, lastError;
 
-/// 重写 baseURL getter，根据 MCIMMirror 偏好动态返回官方或镜像 URL
-/// 这样所有使用 self.baseURL 的请求（搜索/版本列表/详情）都会自动走镜像
+/// Override the baseURL getter to return the official or the mirror URL dynamically, based on the MCIMMirror preference
+/// This way every request that uses self.baseURL (search/version list/details) goes through the mirror automatically
 - (NSString *)baseURL {
     return [MCIMMirror modrinthAPIBaseURL];
 }
@@ -46,12 +46,12 @@
     int limit = 50;
     NSString *projectType = searchFilters[@"projectType"];
     if (projectType.length == 0) {
-        // 防御性回退：未指定 projectType 但声明 isModpack 时按整合包搜索，避免误搜 Mod
+        // Defensive fallback: search as a modpack when projectType is unspecified but isModpack is declared, so mods are not searched by mistake
         projectType = [searchFilters[@"isModpack"] boolValue] ? @"modpack" : @"mod";
     }
 
-    // 修复 #50: 必须把 loader（categories facet）传给 Modrinth API，否则筛选 neoforge/fabric 不生效
-    // Modrinth 的 loader 类别：fabric / quilt / forge / neoforge / liteloader / rift 等
+    // Fix #50: the loader (the categories facet) must be passed to the Modrinth API, otherwise filtering by neoforge/fabric has no effect
+    // Modrinth loader categories: fabric / quilt / forge / neoforge / liteloader / rift and so on
     NSMutableString *facetString = [NSMutableString new];
     [facetString appendString:@"["];
     [facetString appendFormat:@"[\"project_type:%@\"]", projectType];
@@ -136,7 +136,7 @@
     item[@"versionDetailsLoaded"] = @(YES);
 }
 
-/// 异步加载整合包版本详情，避免 dispatch_group_wait 同步阻塞主线程/卡 UI
+/// Asynchronously load the modpack version details, so a synchronous dispatch_group_wait does not block the main thread and freeze the UI
 - (void)loadDetailsOfModAsync:(NSMutableDictionary *)item
                    completion:(void (^)(BOOL success, NSError * _Nullable error))completion {
     NSString *modID = item[@"id"];
@@ -275,7 +275,7 @@
                   completion:(void (^)(NSArray * _Nullable results, NSError * _Nullable error))completion {
     NSString *projectType = filters[@"projectType"];
     if (projectType.length == 0) {
-        // 防御性回退：未指定 projectType 但声明 isModpack 时按整合包搜索，避免误搜 Mod
+        // Defensive fallback: search as a modpack when projectType is unspecified but isModpack is declared, so mods are not searched by mistake
         projectType = [filters[@"isModpack"] boolValue] ? @"modpack" : @"mod";
     }
     NSString *query = filters[@"query"] ?: filters[@"name"] ?: @"";
@@ -291,7 +291,7 @@
     if (mcVersion.length > 0) {
         [facetString appendFormat:@", [\"versions:%@\"]", mcVersion];
     }
-    // 修复 #50: 必须把 loader（categories facet）传给 Modrinth API，否则筛选 neoforge/fabric 不生效
+    // Fix #50: the loader (the categories facet) must be passed to the Modrinth API, otherwise filtering by neoforge/fabric has no effect
     NSString *loader = filters[@"loader"] ?: filters[@"categories"];
     if (loader.length > 0) {
         [facetString appendFormat:@", [\"categories:%@\"]", loader];
@@ -443,7 +443,7 @@
 
 #pragma mark - Server Projects 搜索
 
-/// 内部工具：发起一次 server 或 modpack 的搜索请求
+/// Internal helper: issue one server or modpack search request
 - (void)_searchServerWithProjectType:(NSString *)projectType
                               filters:(NSDictionary *)filters
                            completion:(void (^)(NSArray * _Nullable, NSError * _Nullable))completion {
@@ -522,12 +522,12 @@
 
 - (void)searchServersWithFilters:(NSDictionary *)filters
                       completion:(void (^)(NSArray * _Nullable, NSError * _Nullable))completion {
-    // 优先使用 project_type=server（Modrinth Server Projects，2026 年新功能）
+    // Prefer project_type=server (Modrinth Server Projects, a 2026 feature)
     __weak typeof(self) weakSelf = self;
     [self _searchServerWithProjectType:@"server" filters:filters completion:^(NSArray * _Nullable serverResults, NSError * _Nullable error) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (error) {
-            // server 类型 API 不可用，直接回退到 modpack 搜索
+            // The server type API is unavailable, so fall back to the modpack search directly
             NSLog(@"[ModrinthAPI] Server Projects search failed, falling back to modpack search: %@", error.localizedDescription);
             [strongSelf _searchServerWithProjectType:@"modpack" filters:filters completion:completion];
             return;
@@ -536,7 +536,7 @@
             if (completion) completion(serverResults, nil);
             return;
         }
-        // server 类型结果为空，回退到 modpack 搜索（作为"服务器整合包"展示）
+        // The server type result is empty, so fall back to the modpack search (presenting them as "server modpacks")
         NSLog(@"[ModrinthAPI] Server Projects result is empty, falling back to modpack search");
         [strongSelf _searchServerWithProjectType:@"modpack" filters:filters completion:completion];
     }];
@@ -572,7 +572,7 @@
             return;
         }
 
-        // 提取关键字段，统一字段命名以便 ServerItem.applyDetailData: 处理
+        // Extract the key fields and normalize the field names so ServerItem.applyDetailData: can handle them
         NSMutableDictionary *details = [NSMutableDictionary dictionary];
         details[@"serverID"] = json[@"id"] ?: json[@"slug"] ?: @"";
         details[@"title"] = json[@"title"] ?: @"";
@@ -584,7 +584,7 @@
         details[@"likes"] = json[@"followers"] ?: @0;
         details[@"date_modified"] = json[@"updated"] ?: @"";
 
-        // Server Projects 详情可能直接包含 server_address 字段
+        // The details of a Server Project may include a server_address field directly
         id addrObj = json[@"server_address"] ?: json[@"ip"] ?: json[@"address"];
         if ([addrObj isKindOfClass:[NSString class]]) {
             NSString *addr = (NSString *)addrObj;
@@ -592,7 +592,7 @@
                 details[@"serverAddress"] = addr;
             }
         }
-        // 关联整合包 ID
+        // The associated modpack ID
         id mpIDObj = json[@"modpack_project_id"] ?: json[@"modpack_id"];
         if ([mpIDObj isKindOfClass:[NSString class]]) {
             NSString *mpID = (NSString *)mpIDObj;
@@ -634,7 +634,7 @@ submitDownloadTasksFromPackage:(NSString *)packagePath
             downloader.progress.completedUnitCount++;
             continue;
         }
-        // env 字段过滤：与 ModpackImportService 一致，跳过 env.client=="unsupported" 的服务端专用文件。
+        // env field filtering: consistent with ModpackImportService, skip server-only files with env.client=="unsupported".
         NSDictionary *env = indexFile[@"env"];
         NSString *clientEnv = env[@"client"];
         if ([clientEnv isKindOfClass:[NSString class]] && [clientEnv isEqualToString:@"unsupported"]) {
@@ -644,15 +644,15 @@ submitDownloadTasksFromPackage:(NSString *)packagePath
             continue;
         }
         NSString *rawUrl = [indexFile[@"downloads"] isKindOfClass:[NSArray class]] ? [indexFile[@"downloads"] firstObject] : nil;
-        // 应用 MCIM 镜像（如果启用），加速国内整合包文件下载
+        // Apply the MCIM mirror (when enabled) to speed up modpack file downloads in mainland China
         NSString *url = [MCIMMirror applyToURL:rawUrl];
         NSString *sha = indexFile[@"hashes"][@"sha1"];
         NSString *path = [destPath stringByAppendingPathComponent:indexFile[@"path"]];
         NSUInteger size = [indexFile[@"fileSize"] unsignedLongLongValue];
-        // 关键修复：URL 为空时不能静默 completedUnitCount++ 跳过，否则用户不会感知缺失，
-        // 但又没有可下载的链接。改为记录警告并推进进度（避免卡死），但不视为致命错误。
-        // 阶段5修复（参照 FCL）：同时将缺失 URL 的文件记入 failedFiles，最终汇总报告
-        // 给用户，避免"下载不完全"问题被静默隐藏。
+        // Key fix: an empty URL must not silently completedUnitCount++ and skip, because the user would not notice the file was missing
+        // even though there was no link to download. It is logged as a warning and progress advances (so nothing hangs), but it is not treated as fatal.
+        // Phase 5 fix (modeled on FCL): files with a missing URL are also recorded in failedFiles and reported in the final summary
+        // to the user, so an "incomplete download" is not silently hidden.
         if (!url || ![url isKindOfClass:[NSString class]] || url.length == 0) {
             skippedEmptyURL++;
             downloader.progress.completedUnitCount++;
@@ -700,7 +700,7 @@ submitDownloadTasksFromPackage:(NSString *)packagePath
     NSString *iconBase64 = [NSString stringWithFormat:@"data:image/png;base64,%@",
                             [[NSData dataWithContentsOfFile:tmpIconPath] base64EncodedStringWithOptions:0]];
 
-    // 立即设置 profile，确保整合包安装后能从 profile 列表中看到（即使加载器安装失败）
+    // Set the profile immediately, so the modpack shows up in the profile list after installation (even if the loader installation fails)
     PLProfiles.current.profiles[profileName] = @{
         @"gameDir": gameDirRelative,
         @"name": profileName,
@@ -710,26 +710,26 @@ submitDownloadTasksFromPackage:(NSString *)packagePath
     PLProfiles.current.selectedProfileName = profileName;
 
     if (depInfo[@"json"]) {
-        // Fabric/Quilt：直接下载 version JSON 并触发版本完整下载
+        // Fabric/Quilt: download the version JSON directly and trigger the full version download
         NSString *jsonPath = [NSString stringWithFormat:@"%1$s/versions/%2$@/%2$@.json", getenv("POJAV_GAME_DIR"), depInfo[@"id"]];
         NSURLSessionDownloadTask *task = [downloader createDownloadTask:depInfo[@"json"] size:0 sha:nil altName:nil toPath:jsonPath success:^{
             [downloader downloadVersion:@{@"id": depInfo[@"id"]}];
         }];
         [task resume];
     } else if (depInfo[@"installer"] && [(NSString *)depInfo[@"installer"] length] > 0) {
-        // Forge/NeoForge：下载 installer.jar 并调用直装器写入完整的 version.json + 下载库
-        // 之前不处理这个分支会导致整合包安装后只设置 profile 但不下载版本 JSON，
-        // 启动时报"找不到版本信息"。
+        // Forge/NeoForge: download installer.jar and call the direct installer to write the full version.json and download the libraries
+        // Not handling this branch used to mean that after a modpack install only the profile was set and no version JSON was downloaded,
+        // so launching reported "version information not found".
         NSString *versionId = depInfo[@"id"];
         NSString *loader = depInfo[@"loader"];
-        NSString *customGameDir = destPath;  // 整合包隔离目录（mods/saves/configs）
+        NSString *customGameDir = destPath;  // The modpack's isolated directory (mods/saves/configs)
         NSString *installerPath = [NSTemporaryDirectory() stringByAppendingPathComponent:
                                    [NSString stringWithFormat:@"%@-installer.jar", versionId]];
 
         NSURLSessionDownloadTask *task = [downloader createDownloadTask:depInfo[@"installer"]
                                                                    size:0 sha:nil altName:nil
                                                                  toPath:installerPath success:^{
-            // 直装器是同步且耗时的，放到后台线程执行，避免阻塞主线程
+            // The direct installer is synchronous and slow, so it runs on a background thread to avoid blocking the main thread
             dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
                 NSError *installError = nil;
                 BOOL installSuccess = NO;
@@ -748,11 +748,11 @@ submitDownloadTasksFromPackage:(NSString *)packagePath
                                                                             progress:nil
                                                                                error:&installError];
                 }
-                // 清理临时 installer.jar
+                // Clean up the temporary installer.jar
                 [NSFileManager.defaultManager removeItemAtPath:installerPath error:nil];
                 if (!installSuccess) {
                     NSLog(@"[ModrinthAPI] %@ direct install failed: %@", loader, installError.localizedDescription);
-                    // 写入占位 JSON，启动时显式报错而非误装作 vanilla
+                    // Write the placeholder JSON, so launching reports an error explicitly instead of being mistaken for vanilla
                     [ModpackUtils writePlaceholderVersionJSONForVersionId:versionId
                                                           minecraftVersion:depInfo[@"minecraftVersion"]
                                                                     loader:loader
@@ -760,11 +760,11 @@ submitDownloadTasksFromPackage:(NSString *)packagePath
                                                                      error:installError];
                 } else {
                     NSLog(@"[ModrinthAPI] %@ direct install succeeded, version.json written: %@", loader, versionId);
-                    // 阶段5修复（参照 FCL ModpackHelper.ensureCompleteVersion）：
-                    // 直装器只写入了 loader 的 version.json + Forge/NeoForge 库，
-                    // 但原版 MC 的 libraries 和 assets 还没下载。
-                    // 触发 downloadVersion: 让 MinecraftResourceDownloadTask 下载完整版本文件。
-                    // downloadVersion: 内部会处理 inheritsFrom，对已存在的文件自动跳过。
+                    // Phase 5 fix (modeled on FCL ModpackHelper.ensureCompleteVersion):
+                    // the direct installer only wrote the loader's version.json and the Forge/NeoForge libraries,
+                    // while vanilla MC's libraries and assets have not been downloaded yet.
+                    // downloadVersion: is triggered so MinecraftResourceDownloadTask downloads the complete version files.
+                    // downloadVersion: handles inheritsFrom internally and skips files that already exist automatically.
                     [downloader downloadVersion:@{@"id": versionId}];
                 }
             });

@@ -54,35 +54,35 @@ public final class Tools {
 
     public static void launchMinecraft(MinecraftAccount profile, final JMinecraftVersionList.Version versionInfo, String serverIp) throws Throwable {
         // --- BEGIN AMETHYST UPSTREAM LWJGL 3.4.1 COMPLIANCE OVERRIDE ---
-        // 关闭 native libffi 检查（防止 LibFFI <clinit> 中的 NoSuchFieldError）
-        // 注意：allocator 由 JavaLauncher.m 通过 -Dorg.lwjgl.system.allocator=system 统一配置，
-        // 这里不再重复设置。原代码 System.setProperty("org.lwjgl.system.Allocator", "Custom")
-        // 存在两个致命问题导致其从未生效，且会误导调试：
-        //   1) 属性名大小写错误：LWJGL 实际读取小写 org.lwjgl.system.allocator，大写 Allocator 被忽略
-        //   2) "Custom" 不是 LWJGL 有效 allocator 值（有效值仅 system/jemalloc/rpmalloc）
+        // Turn off the native libffi check (preventing a NoSuchFieldError inside LibFFI's <clinit>)
+        // Note: the allocator is configured centrally by JavaLauncher.m via -Dorg.lwjgl.system.allocator=system,
+        // so it is not set again here. The original System.setProperty("org.lwjgl.system.Allocator", "Custom")
+        // had two fatal problems that meant it never took effect and misled debugging:
+        //   1) The property name had the wrong case: LWJGL actually reads the lowercase org.lwjgl.system.allocator, and the capitalized Allocator was ignored
+        //   2) "Custom" is not a valid LWJGL allocator value (only system/jemalloc/rpmalloc are valid)
         System.setProperty("org.lwjgl.system.libffi.enabled", "false");
         System.setProperty("org.lwjgl.system.libffi.initialize", "false"); // Prevents NoSuchFieldError in LibFFI <clinit>
 
-        // spvc / openal 库加载说明：
-        // spvc 库名由 JavaLauncher.m 显式设置 -Dorg.lwjgl.spvc.libname=spirv-cross-c-shared.0
-        // （参照 catsruledogs/Amethyst-iOS-25，能正常启动 26.2 + Java 25）。
-        // LWJGL Library.loadNative 在 macOS 上对 libname 的处理：
-        //   - 若 libname 已含 "lib" 前缀和 ".dylib" 后缀，直接使用
-        //   - 否则加 "lib" 前缀和 ".dylib" 后缀
-        // "spirv-cross-c-shared.0" -> "libspirv-cross-c-shared.0.dylib"（正确，不会二次包装）。
-        // spirv-cross 作为共享 dylib 放在根目录 Frameworks/，从 library.path
-        // （Frameworks:Frameworks/lwjglXX）的根目录 Frameworks/ 加载。
+        // Notes on loading the spvc / openal libraries:
+        // The spvc library name is set explicitly by JavaLauncher.m with -Dorg.lwjgl.spvc.libname=spirv-cross-c-shared.0
+        // (modeled on catsruledogs/Amethyst-iOS-25, which starts 26.2 + Java 25 correctly).
+        // How LWJGL's Library.loadNative treats libname on macOS:
+        //   - if libname already has the "lib" prefix and the ".dylib" suffix, it is used as is
+        //   - otherwise the "lib" prefix and ".dylib" suffix are added
+        // "spirv-cross-c-shared.0" -> "libspirv-cross-c-shared.0.dylib" (correct, with no double wrapping).
+        // spirv-cross ships as a shared dylib in the root Frameworks/ directory and is loaded from the root Frameworks/
+        // of library.path (Frameworks:Frameworks/lwjglXX).
         //
-        // openal 用 LWJGL 默认名加载 libopenal.dylib（libopenal.dylib 直接存在于根目录 Frameworks/），
-        // 无需 override。
+        // openal is loaded as libopenal.dylib under LWJGL's default name (libopenal.dylib is present directly in the root Frameworks/),
+        // so no override is needed.
         //
-        // 历史教训：曾尝试移除 spvc.libname override 改用 Makefile 软链接
-        // （libspirv-cross.dylib -> libspirv-cross-c-shared.0.dylib）+ LWJGL 默认名 "spirv-cross"，
-        // 但 26.2 启动时在 "Now starting game" 阶段 SIGSEGV at get_method_id。根因：软链接方案
-        // 依赖构建阶段正确创建符号链接，一旦构建环境差异导致软链接缺失或指向错误，spvc 加载
-        // 进入异常状态，JNI 注册状态不一致，get_method_id 访问已损坏类元数据导致 SIGSEGV
-        // （而非抛出 UnsatisfiedLinkError）。显式指定完整 SO 名直接定位实际文件，无需软链接，
-        // 是最稳妥的方案。
+        // A lesson from history: removing the spvc.libname override was tried once, in favor of a Makefile symlink
+        // (libspirv-cross.dylib -> libspirv-cross-c-shared.0.dylib) plus LWJGL's default name "spirv-cross",
+        // but 26.2 then hit a SIGSEGV at get_method_id during the "Now starting game" phase. The root cause: the symlink approach
+        // depends on the build stage creating the symlink correctly, and once a build environment difference leaves the symlink missing or pointing at the wrong file, spvc loading
+        // enters a bad state, the JNI registration state becomes inconsistent, and get_method_id accesses corrupted class metadata and SIGSEGVs
+        // (instead of throwing an UnsatisfiedLinkError). Naming the full shared object explicitly locates the real file directly, needs no symlink,
+        // and is the most robust approach.
         // --- END AMETHYST UPSTREAM LWJGL 3.4.1 COMPLIANCE OVERRIDE ---
 
         String[] launchArgs = getMinecraftArgs(profile, versionInfo, serverIp);
@@ -117,8 +117,8 @@ public final class Tools {
 
         File gameDir = new File(Tools.DIR_GAME_PROFILE);
         gameDir.mkdirs();
-        // 确保 logs 目录存在，防止 Log4j RollingRandomAccessFileAppender
-        // 因 logs/latest.log 路径不存在而抛出 FileNotFoundException
+        // Make sure the logs directory exists, so the Log4j RollingRandomAccessFileAppender does not
+        // throw a FileNotFoundException because the logs/latest.log path does not exist
         new File(gameDir, "logs").mkdirs();
 
         Map<String, String> varArgMap = new ArrayMap<String, String>();
@@ -141,20 +141,20 @@ public final class Tools {
         List<String> minecraftArgs = new ArrayList<String>();
         if (versionInfo.arguments != null) {
             // Support Minecraft 1.13+
-            // 检测当前账户是否为第三方认证账户（authlib-injector / Yggdrasil）
-            // 第三方账户的特征：clientToken 非 "0" 且 xuid 为 null 或 "0"
-            // （Microsoft 账户有 xuid，本地账户 clientToken 为 "0"）
-            // 对第三方账户，即使版本 JSON 含 --xuid 参数，user_type 也必须保持 "mojang"
-            // 而不能改为 "msa"，否则 Minecraft 26.x 内部会按 MSA 流程处理
-            // 导致认证失败（无法加载皮肤 / 无法加入服务器 / 崩溃）
+            // Detect whether the current account uses third-party authentication (authlib-injector / Yggdrasil)
+            // The signature of a third-party account: clientToken is not "0" and xuid is null or "0"
+            // (Microsoft accounts have an xuid, and local accounts have clientToken "0")
+            // For a third-party account, user_type must stay "mojang" even when the version JSON contains the --xuid argument
+            // and must not be changed to "msa", otherwise Minecraft 26.x internally follows the MSA flow
+            // and authentication fails (skins do not load / servers cannot be joined / it crashes)
             boolean isThirdPartyAccount = !"0".equals(profile.clientToken)
                 && (profile.xuid == null || "0".equals(profile.xuid));
             for (Object arg : versionInfo.arguments.game) {
                 if (arg instanceof String) {
                     minecraftArgs.add((String) arg);
                     if (arg.equals("--xuid") && !isThirdPartyAccount) {
-                        // 仅对 Microsoft 账户（有 xuid）设置 user_type=msa
-                        // 第三方账户保持 "mojang"，避免 26.x 认证流程错误
+                        // Only set user_type=msa for Microsoft accounts (the ones with an xuid)
+                        // Third-party accounts keep "mojang", so the 26.x authentication flow is not taken by mistake
                         varArgMap.put("user_type", "msa");
                     }
                 } else {
@@ -183,9 +183,9 @@ public final class Tools {
             ), varArgMap
         );
 
-        // FCL 风格：启动后自动加入服务器。serverIp 为空时不追加任何参数，
-        // 行为与原启动流程完全一致。版本判定使用解析后的基础 MC 版本号
-        // （versionName 优先取 inheritsFrom，避免 modded 版本 id 干扰比较）
+        // FCL style: join a server automatically after launch. When serverIp is empty no argument is appended,
+        // so the behavior matches the original launch flow exactly. The version check uses the resolved base MC version number
+        // (versionName prefers inheritsFrom, so a modded version id does not interfere with the comparison)
         argsFromJson = appendServerArgs(argsFromJson, serverIp, versionName);
 
         // Tools.dialogOnUiThread(this, "Result args", Arrays.asList(argsFromJson).toString());
@@ -193,12 +193,12 @@ public final class Tools {
     }
 
     /**
-     * 根据 serverIp 和 MC 版本追加服务器加入参数（FCL/ZL2 风格）。
-     * - MC < 1.20：--server <host> --port <port>（端口缺省补 25565）
-     * - MC >= 1.20：--quickPlayMultiplayer <host:port>（端口缺省补 :25565）
-     * - 地址格式：host / host:port / [ipv6]:port
-     * - 解析失败仅告警不加入，不抛出异常
-     * - serverIp 为 null 或空字符串时直接返回原参数
+     * Append the server-join arguments based on serverIp and the MC version (FCL/ZL2 style).
+     * - MC < 1.20: --server <host> --port <port> (defaulting the port to 25565)
+     * - MC >= 1.20: --quickPlayMultiplayer <host:port> (defaulting the port to :25565)
+     * - Address formats: host / host:port / [ipv6]:port
+     * - A parse failure only warns and skips joining, without throwing
+     * - When serverIp is null or an empty string the original arguments are returned unchanged
      */
     private static String[] appendServerArgs(String[] args, String serverIp, String versionId) {
         if (serverIp == null || serverIp.isEmpty()) {
@@ -210,11 +210,11 @@ public final class Tools {
         }
 
         String host = null;
-        String port = "25565"; // 默认端口
+        String port = "25565"; // The default port
 
-        // 地址解析：支持 host / host:port / [ipv6]:port
+        // Address parsing: supports host / host:port / [ipv6]:port
         if (trimmed.startsWith("[")) {
-            // IPv6 形如 [::1]:25565 或 [::1]
+            // IPv6 takes the form [::1]:25565 or [::1]
             int close = trimmed.indexOf("]");
             if (close <= 0) {
                 System.err.println("[Tools] Invalid server address (unterminated IPv6 bracket): " + serverIp);
@@ -222,7 +222,7 @@ public final class Tools {
             }
             host = trimmed.substring(1, close);
             if (close + 1 < trimmed.length()) {
-                // 括号后应跟 :port
+                // The bracket should be followed by :port
                 String rest = trimmed.substring(close + 1);
                 if (rest.startsWith(":")) {
                     String portStr = rest.substring(1);
@@ -235,7 +235,7 @@ public final class Tools {
                 }
             }
         } else {
-            // 普通地址：以最后一个 : 分割端口
+            // A normal address: split off the port at the last :
             int lastColon = trimmed.lastIndexOf(":");
             if (lastColon > 0) {
                 host = trimmed.substring(0, lastColon);
@@ -254,7 +254,7 @@ public final class Tools {
         }
 
         List<String> argList = new ArrayList<String>(Arrays.asList(args));
-        // 版本判定：MC < 1.20 用 --server/--port，MC >= 1.20 用 --quickPlayMultiplayer
+        // Version check: MC < 1.20 uses --server/--port, MC >= 1.20 uses --quickPlayMultiplayer
         if (versionId.compareTo("1.20") < 0) {
             argList.add("--server");
             argList.add(host);
@@ -396,11 +396,11 @@ public final class Tools {
 
             String[] version = libItem.name.split(":")[2].split("\\.");
             if (libItem.name.startsWith("net.java.dev.jna:jna:")) {
-                // 强制将 JNA 替换为 5.13.0 以保证 iOS 兼容性。
-                // MC 26.3+ 要求 JNA 5.17.0，但其 darwin-aarch64 libjnidispatch 在 iOS 上
-                // 加载 IOKit/CoreFoundation 后会导致 native crash/卡死（26.2 + JNA 5.13.0 正常）。
-                // MC 不直接使用 JNA API（通过 oshi 间接使用），5.13.0 的 API 完全兼容。
-                // PatchJNAAgent 会替换 Platform.class，与 JNA jar 版本无关。
+                // Force JNA to 5.13.0 to guarantee iOS compatibility.
+                // MC 26.3+ requires JNA 5.17.0, but its darwin-aarch64 libjnidispatch causes a native crash/hang on iOS
+                // once IOKit/CoreFoundation are loaded (26.2 + JNA 5.13.0 works fine).
+                // MC does not use the JNA API directly (it uses it indirectly through oshi), and 5.13.0's API is fully compatible.
+                // PatchJNAAgent replaces Platform.class regardless of the JNA jar version.
                 if (Integer.parseInt(version[0]) == 5 && Integer.parseInt(version[1]) == 13 && Integer.parseInt(version[2]) == 0) continue;
                 System.out.println("[Tools] Replacing JNA " + version[0] + "." + version[1] + "." + version[2] + " with 5.13.0 for iOS compatibility");
 

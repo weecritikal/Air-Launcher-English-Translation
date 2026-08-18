@@ -111,14 +111,14 @@ int keycodeTable[UIKeyboardHIDUsageKeyboardRightGUI+1];
     // send the keycode
     int keycode = keycodeTable[key.keyCode];
     if (keycode != 0) {
-        // issue #27 修复（参照 FCL commit 08c0716）：
-        // MC 1.21.9+ 不再仅依赖 key 回调中的 mods 参数，而是通过
-        // InputConstants.isKeyDown() 查询 modifier 状态，该状态由 MC 自己
-        // 维护在独立缓存中，必须显式 setModifiers 才能更新。
+        // Fix for issue #27 (modeled on FCL commit 08c0716):
+        // MC 1.21.9+ no longer relies solely on the mods parameter in the key callback, but queries modifier state through
+        // InputConstants.isKeyDown(); MC maintains that state itself
+        // in a separate cache, which only an explicit setModifiers can update.
         //
-        // 关键修复 1：release 事件中 iOS 的 modifierFlags 仍包含被释放的键，
-        // 导致 mods 与 action 自相矛盾。这里对 modifier 键本身做修正：
-        // 释放时从 mods 中移除该键对应的位，让事件语义自洽。
+        // Key fix 1: on a release event iOS's modifierFlags still contain the key being released,
+        // making mods and action contradict each other. The modifier key itself is therefore corrected here:
+        // on release its bit is removed from mods, so the event is self-consistent.
         if (!isDown) {
             switch (keycode) {
                 case GLFW_KEY_LEFT_SHIFT:
@@ -147,9 +147,9 @@ int keycodeTable[UIKeyboardHIDUsageKeyboardRightGUI+1];
 
         CallbackBridge_nativeSendKey(keycode, 0 /* scancode */, isDown, modifiers);
 
-        // 关键修复 2：显式同步 MC 1.21.9+ 内部的 modifier 缓存。
-        // 即便某些版本 MC 不使用 setModifiers，调用也是安全的（旧版本无此方法
-        // 会直接 no-op）。这能确保物理键盘的 Shift/Ctrl/Alt 在游戏内生效。
+        // Key fix 2: explicitly synchronize the modifier cache inside MC 1.21.9+.
+        // Even in versions where MC does not use setModifiers the call is safe (older versions lack the method
+        // and it is simply a no-op). This makes Shift/Ctrl/Alt on a physical keyboard work in game.
         CallbackBridge_syncModifiersToMC(modifiers);
     } else {
         NSLog(@"KeyboardInput: Unhandled key %lu", (unsigned long)key.keyCode);

@@ -23,7 +23,7 @@ static void* load_egl_symbol(void *dl_handle, const char *symbol) {
 }
 
 static bool dlsym_EGL() {
-    // MobileGL 已移除，EGL 符号始终从 ANGLE（libtinygl4angle.dylib）解析。
+    // MobileGL has been removed, so EGL symbols are always resolved from ANGLE (libtinygl4angle.dylib).
     const char *renderer = getenv("AMETHYST_RENDERER");
     const char *eglLibrary = RENDERER_NAME_MTL_ANGLE;
     NSString *eglPath = [NSString stringWithFormat:@"@rpath/%s", eglLibrary ?: ""];
@@ -34,22 +34,22 @@ static bool dlsym_EGL() {
         return false;
     }
 
-    // LTW 模式：eglCreateContext / eglDestroyContext / eglMakeCurrent 三个函数
-    // 必须从 libltw.dylib 直接 dlsym 解析，而非 ANGLE。
+    // LTW mode: the three functions eglCreateContext / eglDestroyContext / eglMakeCurrent
+    // must be dlsym'ed straight from libltw.dylib rather than from ANGLE.
     //
-    // 原因：LTW 是 OpenGL Core 3.3 → OpenGL ES 3 的转译层，它在这三个函数中
-    // 注入 wrapper 逻辑（创建 ES3 上下文 + 安装 GL 函数指针转译表 + 伪装 ARB 扩展）。
-    // 如果直接使用 ANGLE 的 eglCreateContext，创建的是原生 ES3 上下文，MC 1.17+
-    // 检测到 GL_VERSION 不含 "Core Profile" 会拒绝启动；Sodium/Iris 的 ARB 扩展
-    // 查询也会全部失败。LTW 的 wrapper 让 MC 看到的是 OpenGL 3.3 Core Profile，
-    // 且主动声明 GL_ARB_buffer_storage 等 ARB 扩展，让 Sodium 的 persistent mapped
-    // buffers / texture buffers 和 Iris 的 draw_buffers_blend 正常工作。
+    // Reason: LTW is an OpenGL Core 3.3 → OpenGL ES 3 translation layer and injects wrapper logic
+    // into those three functions (creating an ES3 context + installing the GL function pointer translation table + faking ARB extensions).
+    // If ANGLE's eglCreateContext were used directly, a native ES3 context would be created and MC 1.17+
+    // would refuse to start on finding that GL_VERSION does not contain "Core Profile"; every ARB extension
+    // query from Sodium/Iris would fail too. LTW's wrapper makes MC see an OpenGL 3.3 Core Profile
+    // and proactively advertises ARB extensions such as GL_ARB_buffer_storage, so Sodium's persistent mapped
+    // buffers / texture buffers and Iris's draw_buffers_blend work.
     //
-    // 注意：不能用 RTLD_DEFAULT dlsym（iOS 的 flat namespace 中 ANGLE 符号会先命中），
-    // 必须显式 dlopen libltw.dylib 后从其 handle dlsym。
+    // Note: dlsym with RTLD_DEFAULT cannot be used (in iOS's flat namespace the ANGLE symbols would match first);
+    // libltw.dylib must be dlopen'ed explicitly and the symbols dlsym'ed from its handle.
     //
-    // 其余 EGL 函数（eglChooseConfig / eglCreateWindowSurface / eglSwapBuffers 等）
-    // LTW 不做 wrapper，直接从 ANGLE 解析。
+    // The remaining EGL functions (eglChooseConfig / eglCreateWindowSurface / eglSwapBuffers etc.)
+    // are not wrapped by LTW and are resolved straight from ANGLE.
     BOOL useLTW = renderer && strcmp(renderer, RENDERER_NAME_LTW) == 0;
     void *ltw_handle = NULL;
     if (useLTW) {
@@ -57,7 +57,7 @@ static bool dlsym_EGL() {
         if (!ltw_handle) {
             NSLog(@"EGLBridge: LTW renderer selected but failed to load libltw.dylib: %s",
                   dlerror() ?: "unknown dlopen error");
-            // 致命错误：LTW 模式下没有 LTW 的 wrapper，MC 1.17+ 无法启动
+            // Fatal error: without LTW's wrappers in LTW mode, MC 1.17+ cannot start
             return false;
         }
         NSLog(@"EGLBridge: LTW mode active, eglCreateContext/Destroy/MakeCurrent resolved from libltw.dylib");
@@ -67,7 +67,7 @@ static bool dlsym_EGL() {
     handle.eglBindAPI = load_egl_symbol(dl_handle, "eglBindAPI");
     handle.eglChooseConfig = load_egl_symbol(dl_handle, "eglChooseConfig");
     if (useLTW && ltw_handle) {
-        // 从 LTW 解析三个 wrapper 函数（关键：让 LTW 的 GL Core→ES 转译逻辑生效）
+        // Resolve the three wrapper functions from LTW (the key to making LTW's GL Core→ES translation work)
         handle.eglCreateContext = load_egl_symbol(ltw_handle, "eglCreateContext");
         handle.eglDestroyContext = load_egl_symbol(ltw_handle, "eglDestroyContext");
         handle.eglMakeCurrent = load_egl_symbol(ltw_handle, "eglMakeCurrent");
@@ -192,25 +192,25 @@ void gl_make_current(gl_render_window_t* bundle) {
     if(handle.eglMakeCurrent(g_EglDisplay, bundle->surface, bundle->surface, bundle->context)) {
         currentBundle = (basic_render_window_t *)bundle;
 
-        // 帧率解锁关键点：在 EGL context 首次变为 current 后立即设置 swap interval=0。
+        // The key to unlocking the frame rate: set swap interval=0 as soon as the EGL context first becomes current.
         //
-        // 为什么必须在这里设置（而不是等 MC 调用 glfwSwapInterval 时才设置）：
+        // Why it must be set here (rather than waiting until MC calls glfwSwapInterval):
         //
-        // 对于 zink 渲染器（Mesa 21.0），Vulkan swapchain 是延迟创建的——
-        // 在第一次 eglSwapBuffers 或需要 swapchain 时才创建。
-        // zink 创建 swapchain 时会根据当前 eglSwapInterval 的值选择 present mode：
-        //   - interval=0 → VK_PRESENT_MODE_IMMEDIATE_KHR（不等 vsync，帧率可超 60）
-        //   - interval=1 → VK_PRESENT_MODE_FIFO_KHR（等 vsync，锁在屏幕刷新率）
+        // for the zink renderer (Mesa 21.0) the Vulkan swapchain is created lazily -
+        // only on the first eglSwapBuffers, or whenever a swapchain is needed.
+        // When zink creates the swapchain it picks the present mode from the current eglSwapInterval value:
+        //   - interval=0 → VK_PRESENT_MODE_IMMEDIATE_KHR (no vsync wait, the frame rate can exceed 60)
+        //   - interval=1 → VK_PRESENT_MODE_FIFO_KHR (waits for vsync, locked to the screen refresh rate)
         //
-        // 如果等 MC 调用 glfwSwapInterval(1) → pojavSwapInterval(0) → eglSwapInterval(0)
-        // 时才设置，swapchain 可能已经用默认的 FIFO 创建了。
-        // Mesa 21.0 的 zink 不会在 eglSwapInterval 变化时重建 swapchain，
-        // 导致 present mode 固定为 FIFO，帧率被锁死在屏幕刷新率（60Hz/120Hz）。
+        // If it were only set when MC calls glfwSwapInterval(1) → pojavSwapInterval(0) → eglSwapInterval(0),
+        // the swapchain may already have been created with the default FIFO mode.
+        // zink in Mesa 21.0 does not rebuild the swapchain when eglSwapInterval changes,
+        // so the present mode stays FIFO and the frame rate is locked to the screen refresh rate (60Hz/120Hz).
         //
-        // 在 gl_make_current 中提前设置 eglSwapInterval(0)，可确保 zink 创建
-        // swapchain 时读到 interval=0，从而选择 IMMEDIATE present mode。
+        // Setting eglSwapInterval(0) early in gl_make_current guarantees that zink reads interval=0 when it creates
+        // the swapchain and therefore chooses the IMMEDIATE present mode.
         //
-        // 这对 ANGLE Metal 后端也有效（ANGLE 在 interval=0 时不等 vsync）。
+        // This works for the ANGLE Metal backend too (ANGLE does not wait for vsync when interval=0).
         if (getenv("POJAV_DISABLE_VSYNC") && strcmp(getenv("POJAV_DISABLE_VSYNC"), "1") == 0) {
             static BOOL s_loggedInitialSwapInterval = NO;
             handle.eglSwapInterval(g_EglDisplay, 0);

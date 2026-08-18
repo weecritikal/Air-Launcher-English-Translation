@@ -1,35 +1,35 @@
 #ifndef TERRACOTTA_H
 #define TERRACOTTA_H
 
-/* libterracotta C ABI —— 与 HMCL/FCL/ZL2 v0.4.2 同源
+/* libterracotta C ABI - the same source as HMCL/FCL/ZL2 v0.4.2
  *
- * 来源：burningtnt/Terracotta + iOS 移植补丁（terracotta_ios_start_host_with_port）
- * 二进制位置：Natives/terracotta/libterracotta.xcframework/
+ * Origin: burningtnt/Terracotta + an iOS porting patch (terracotta_ios_start_host_with_port)
+ * Binary location: Natives/terracotta/libterracotta.xcframework/
  *
- * 线程安全：所有函数内部用 Mutex 保护，可从任意线程调用。
- * 字符串所有权：返回的 char* 必须用 terracotta_ios_free_string 释放。
+ * Thread safety: every function is protected internally by a mutex and may be called from any thread.
+ * String ownership: a returned char* must be freed with terracotta_ios_free_string.
  *
- * Weak linking：所有函数用 TERRACOTTA_API 弱符号声明。libterracotta.a 不存在时，
- * 链接器把这些符号当作 undefined weak，运行时函数指针为 NULL。
- * TerracottaBridge.m 在调用前必须检查 terracotta_ios_available()。
+ * Weak linking: every function is declared as a weak symbol with TERRACOTTA_API. When libterracotta.a is absent,
+ * the linker treats these symbols as undefined weak and the function pointers are NULL at runtime.
+ * TerracottaBridge.m must check terracotta_ios_available() before calling them.
  */
 
 #include <stdint.h>
 
-/* Weak symbol 宏：让链接器在符号未定义时不报错（运行时为 NULL） */
+/* Weak symbol macro: keeps the linker from erroring out when the symbol is undefined (it is NULL at runtime) */
 #define TERRACOTTA_API __attribute__((weak))
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* 初始化 Terracotta。整个进程生命周期调用一次。
- *   dir        工作目录（machine-id 持久化）
- *   logging_fd 日志文件描述符（-1 表示不写文件）
- * 返回 0 表示成功。 */
+/* Initialize Terracotta. Called once per process lifetime.
+ *   dir        the working directory (where the machine-id is persisted)
+ *   logging_fd the log file descriptor (-1 means do not write a file)
+ * Returns 0 on success. */
 TERRACOTTA_API int terracotta_ios_start(const char *dir, int logging_fd);
 
-/* 读取当前状态（JSON 字符串）。调用方负责 free_string。
+/* Read the current state (a JSON string). The caller is responsible for free_string.
  * JSON schema：
  *   {"state":"waiting|host-scanning|host-starting|host-ok|guest-connecting|guest-starting|guest-ok|exception",
  *    "index":int, "room":string?, "url":string?,
@@ -37,39 +37,39 @@ TERRACOTTA_API int terracotta_ios_start(const char *dir, int logging_fd);
  *    "difficulty":string?, "type":int?} */
 TERRACOTTA_API char *terracotta_ios_get_state(void);
 
-/* 回到 Waiting 状态（终止当前会话）。Idempotent。 */
+/* Return to the Waiting state (terminating the current session). Idempotent. */
 TERRACOTTA_API void terracotta_ios_set_waiting(void);
 
-/* 房主：开始扫描本地 MC 的「对局域网开放」多播广播。 */
+/* Host: start scanning for the local MC "Open to LAN" multicast broadcast. */
 TERRACOTTA_API void terracotta_ios_set_scanning(const char *room, const char *player);
 
-/* 房主（手动端口模式）：绕过多播扫描，直接用用户输入的 MC LAN 端口启动 host。
- * 返回 1 表示已开始启动；0 表示当前不在 Waiting 状态。 */
+/* Host (manual port mode): skip the multicast scan and start the host directly with the MC LAN port entered by the user.
+ * Returns 1 when startup has begun; 0 when not currently in the Waiting state. */
 TERRACOTTA_API int terracotta_ios_start_host_with_port(const char *room, uint16_t port, const char *player);
 
-/* 访客：加入房间。
- * 返回 1 表示已开始加入；0 表示邀请码无效或当前不在 Waiting 状态。 */
+/* Guest: join a room.
+ * Returns 1 when joining has begun; 0 when the invite code is invalid or not currently in the Waiting state. */
 TERRACOTTA_API int terracotta_ios_set_guesting(const char *room, const char *player);
 
-/* 仅校验邀请码格式，不加入。
- * 返回 3 表示合法的 Scaffolding 邀请码；其他值表示非法。 */
+/* Only validates the invite code format, without joining.
+ * Returns 3 for a valid Scaffolding invite code; any other value means it is invalid. */
 TERRACOTTA_API int terracotta_ios_verify_room_code(const char *code);
 
-/* 元数据：(version, compile_timestamp_ms, easytier_version)。
- * 返回 NUL 分隔的 UTF-8 字符串。调用方负责 free_string。 */
+/* Metadata: (version, compile_timestamp_ms, easytier_version).
+ * Returns a NUL-separated UTF-8 string. The caller is responsible for free_string. */
 TERRACOTTA_API char *terracotta_ios_get_metadata(void);
 
-/* 释放 terracotta_ios_get_state / _get_metadata 返回的字符串。 */
+/* Free the string returned by terracotta_ios_get_state / _get_metadata. */
 TERRACOTTA_API void terracotta_ios_free_string(char *ptr);
 
-/* 仅供调试：触发 Rust 侧 panic（不应被调用）。 */
+/* Debugging only: trigger a panic on the Rust side (should never be called). */
 TERRACOTTA_API void terracotta_ios_panic(void);
 
 #ifdef __cplusplus
 }
 #endif
 
-/* 运行时检查 libterracotta 是否可用 */
+/* Check at runtime whether libterracotta is available */
 #define terracotta_ios_available() (terracotta_ios_start != NULL)
 
 #endif /* TERRACOTTA_H */

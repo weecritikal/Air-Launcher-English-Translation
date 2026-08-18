@@ -12,7 +12,7 @@
 #import "utils.h"
 #include <objc/runtime.h>
 
-// 添加外部全局变量声明
+// Add the external global variable declarations
 extern NSMutableArray *localVersionList;
 
 @interface FabricInstallViewController()
@@ -42,7 +42,7 @@ extern NSMutableArray *localVersionList;
     if (self.navigationController) {
         [[BackgroundManager sharedManager] applyEffectToNavigationBar:self.navigationController.navigationBar];
     }
-    // 监听背景效果变化通知，实时刷新毛玻璃
+    // Listen for background effect change notifications and refresh the frosted glass in real time
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(refreshBackgroundEffect)
                                                  name:@"BackgroundUIEffectChanged"
@@ -60,7 +60,7 @@ extern NSMutableArray *localVersionList;
     self.localKVO = @{
         @"gameVersion": initialGameVersion,
         @"loaderVendor": @"Fabric",
-        @"loaderVersion": @"" // 初始为空，等待网络获取后填充
+        @"loaderVersion": @"" // Empty initially, filled in once fetched from the network
     }.mutableCopy;
     self.getPreference = ^id(NSString *section, NSString *key){
         return weakSelf.localKVO[key];
@@ -212,8 +212,8 @@ extern NSMutableArray *localVersionList;
 
         strongSelf.installedProfileName = response[@"id"];
 
-        // 关键：在拉取 Fabric API 之前先注册并选中新 profile，
-        // 否则 installFabricAPIWithCompletion 会读到旧 profile 的 gameDir，把 Fabric API 放到错误目录
+        // Key point: register and select the new profile before fetching the Fabric API,
+        // otherwise installFabricAPIWithCompletion would read the old profile's gameDir and put the Fabric API in the wrong directory
         NSMutableDictionary *profile = [NSMutableDictionary dictionary];
         profile[@"name"] = response[@"id"];
         profile[@"lastVersionId"] = response[@"id"];
@@ -255,11 +255,11 @@ extern NSMutableArray *localVersionList;
     }
 
     if (self.completionHandler) {
-        // New mode: profile 已在 actionDone: 中注册并选中，直接回调调用方
+        // New mode: the profile has already been registered and selected in actionDone:, so call the caller back directly
         self.completionHandler(YES, profileId, nil);
         [self.navigationController dismissViewControllerAnimated:YES completion:nil];
     } else {
-        // Legacy mode: jump to profile editor (使用 ProfileSettingsViewController)
+        // Legacy mode: jump to profile editor (using ProfileSettingsViewController)
         ProfileSettingsViewController *vc = [ProfileSettingsViewController new];
         vc.profileName = profileId;
         [self.navigationController pushViewController:vc animated:YES];
@@ -269,7 +269,7 @@ extern NSMutableArray *localVersionList;
 - (void)installFabricAPIWithCompletion:(void (^)(BOOL success, NSError *error))completion {
     NSString *gameVersion = self.localKVO[@"gameVersion"];
     
-    // Fabric API download URL from Modrinth（应用 MCIM 镜像）
+    // Fabric API download URL from Modrinth (with the MCIM mirror applied)
     NSString *apiUrl = [MCIMMirror applyToURL:[NSString stringWithFormat:@"https://api.modrinth.com/v2/project/fabric-api/version?game_versions=[\"%@\"]&loaders=[\"fabric\"]", gameVersion]];
     
     AFHTTPSessionManager *manager = [AFHTTPSessionManager manager];
@@ -298,9 +298,9 @@ extern NSMutableArray *localVersionList;
         NSString *downloadUrl = primaryFile[@"url"];
         NSString *fileName = primaryFile[@"filename"];
         
-        // 获取 mods 文件夹路径（参考 ModService.m 的 existingModsFolderForProfile: 逻辑）
-        // 1. 优先读取 profile 的 gameDir，拼接 /mods
-        // 2. 若 profile 无 gameDir 或 gameDir 为 "."，回退到 $POJAV_GAME_DIR/mods
+        // Get the mods folder path (following the existingModsFolderForProfile: logic in ModService.m)
+        // 1. Prefer the profile's gameDir, with /mods appended
+        // 2. If the profile has no gameDir, or gameDir is ".", fall back to $POJAV_GAME_DIR/mods
         NSString *instanceName = PLProfiles.current.selectedProfileName ?: @"default";
         NSString *modsPath = nil;
 
@@ -365,7 +365,7 @@ extern NSMutableArray *localVersionList;
         }
         [list addObject:version[@"version"]];
     }
-    // 按版本号降序排序（新版本在前）
+    // Sort by version number in descending order (newest first)
     [list sortUsingComparator:^NSComparisonResult(NSString *v1, NSString *v2) {
         return [v2 compare:v1 options:NSNumericSearch];
     }];

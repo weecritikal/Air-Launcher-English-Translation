@@ -10,7 +10,7 @@
 #import "installer/NeoForgeDirectInstaller.h"
 #import "MCIMMirror.h"
 
-// CurseForge 静态常量
+// CurseForge static constants
 static const NSInteger kCurseForgeGameIDMinecraft = 432;
 static const NSInteger kCurseForgeClassIDBukkitPlugins = 5;
 static const NSInteger kCurseForgeClassIDMods = 6;
@@ -25,19 +25,19 @@ static const NSInteger kCurseForgeCategoryIDServerUtility = 435;
 NSString *const CurseForgeResponseContentTypeKey = @"CurseForgeResponseContentTypeKey";
 NSString *const CurseForgeResponseSnippetKey = @"CurseForgeResponseSnippetKey";
 
-/// 安全获取编译时 CurseForge API Key（避免 @nil 非法表达式）
-/// 参考 CurseForgeAPIKeyViewController.m 中的 CFKCompiledAPIKey() 实现
+/// Safely obtain the compile-time CurseForge API key (avoiding the invalid expression @nil)
+/// See the CFKCompiledAPIKey() implementation in CurseForgeAPIKeyViewController.m
 static NSString *CFACompiledAPIKey(void) {
 #define CFA_STR_INNER(x) #x
 #define CFA_STR(x) CFA_STR_INNER(x)
     NSString *compiledKey = [NSString stringWithUTF8String:CFA_STR(CONFIG_CURSEFORGE_API_KEY)];
 #undef CFA_STR
 #undef CFA_STR_INNER
-    // 处理字符串字面量两端的引号（CONFIG_CURSEFORGE_API_KEY 宏定义为 "actual_key" 时，字符串化后为 "\"actual_key\""）
+    // Handle the quotes around the string literal (when the CONFIG_CURSEFORGE_API_KEY macro is defined as "actual_key", stringifying it yields "\"actual_key\"")
     if (compiledKey.length >= 2 && [compiledKey hasPrefix:@"\""] && [compiledKey hasSuffix:@"\""]) {
         compiledKey = [compiledKey substringWithRange:NSMakeRange(1, compiledKey.length - 2)];
     }
-    // 宏未定义时预处理器字符串化后得到宏名本身 "CONFIG_CURSEFORGE_API_KEY"，或为 nil 时得到 "nil"
+    // When the macro is undefined, stringifying it in the preprocessor yields the macro name itself, "CONFIG_CURSEFORGE_API_KEY", or "nil" when it is nil
     if ([compiledKey isEqualToString:@"nil"] || compiledKey.length == 0 ||
         [compiledKey isEqualToString:@"CONFIG_CURSEFORGE_API_KEY"]) {
         return @"";
@@ -46,25 +46,25 @@ static NSString *CFACompiledAPIKey(void) {
 }
 
 @interface CurseForgeAPI ()
-@property (nonatomic, strong) NSURLSession *session;   // 用于异步请求
-// 错误诊断辅助方法：将 HTTP 响应信息封装进 NSError userInfo
+@property (nonatomic, strong) NSURLSession *session;   // Used for asynchronous requests
+// Error diagnostics helper: wrap the HTTP response information into the NSError userInfo
 - (NSError *)errorWithResponse:(NSURLResponse *)response
                           data:(NSData *)data
                  originalError:(NSError *)originalError
                        snippet:(NSString *)snippet;
-// 调试日志辅助方法：输出请求/响应/JSON 解析错误的完整信息
+// Debug logging helper: print the full details of a request/response/JSON parse error
 - (void)debugLogRequest:(NSURLRequest *)request
                response:(NSURLResponse *)response
                    data:(NSData *)data
               jsonError:(NSError *)jsonError;
-// 将 NSData 转为可打印字符串（处理非 UTF-8 内容，最多 maxLen 字节）
+// Convert NSData into a printable string (handling non-UTF-8 content, up to maxLen bytes)
 - (NSString *)printableStringFromData:(NSData *)data maxLen:(NSUInteger)maxLen;
 @end
 
 @implementation CurseForgeAPI
 
-/// 重写 baseURL getter，根据 MCIMMirror 偏好动态返回官方或镜像 URL
-/// 这样所有使用 self.baseURL 的请求都会自动走镜像
+/// Override the baseURL getter to return the official or the mirror URL dynamically, based on the MCIMMirror preference
+/// This way every request that uses self.baseURL goes through the mirror automatically
 - (NSString *)baseURL {
     return [MCIMMirror curseForgeAPIBaseURL];
 }
@@ -89,7 +89,7 @@ static NSString *CFACompiledAPIKey(void) {
 #pragma mark - API Key 和 Headers
 
 - (NSString *)apiKey {
-    // 1. 运行时偏好（优先级最高）
+    // 1. Runtime preference (the highest priority)
     NSString *runtimeKey = [PLPreferences curseForgeAPIKey];
     if ([runtimeKey isKindOfClass:NSString.class] && runtimeKey.length > 0) {
         NSLog(@"[CurseForgeAPI] API Key source: runtime preference (length=%lu, prefix=%@...)",
@@ -97,7 +97,7 @@ static NSString *CFACompiledAPIKey(void) {
               runtimeKey.length >= 8 ? [runtimeKey substringToIndex:8] : runtimeKey);
         return runtimeKey;
     }
-    // 2. 编译时宏（使用字符串化宏方案，避免 @nil 边界问题）
+    // 2. Compile-time macro (using the stringification approach, to avoid the @nil edge case)
     NSString *compiledKey = CFACompiledAPIKey();
     if (compiledKey.length > 0) {
         NSLog(@"[CurseForgeAPI] API Key source: compile-time macro (length=%lu, prefix=%@...)",
@@ -129,7 +129,7 @@ static NSString *CFACompiledAPIKey(void) {
 }
 
 + (BOOL)isAPIKeyConfigured {
-    // 与 apiKey getter 保持一致的三层 fallback，避免 UI 门控与实际请求判断不一致
+    // The same three-level fallback as the apiKey getter, so the UI gating and the actual request check cannot disagree
     NSString *runtimeKey = [PLPreferences curseForgeAPIKey];
     if ([runtimeKey isKindOfClass:NSString.class] && runtimeKey.length > 0) {
         return YES;
@@ -161,12 +161,12 @@ static NSString *CFACompiledAPIKey(void) {
     NSInteger statusCode = httpResponse.statusCode;
     NSString *contentType = httpResponse.allHeaderFields[@"Content-Type"];
 
-    // 取响应体前 1024 字节作为 snippet（如果调用方未提供）
+    // Take the first 1024 bytes of the response body as the snippet (if the caller did not supply one)
     if (!snippet && data.length > 0) {
         snippet = [self printableStringFromData:data maxLen:1024];
     }
 
-    // 构造 userInfo
+    // Build the userInfo
     NSMutableDictionary *userInfo = [NSMutableDictionary dictionary];
     if (originalError) {
         [userInfo addEntriesFromDictionary:originalError.userInfo];
@@ -186,7 +186,7 @@ static NSString *CFACompiledAPIKey(void) {
         userInfo[CurseForgeResponseSnippetKey] = snippet;
     }
 
-    // 打印诊断日志
+    // Print the diagnostic log
     NSLog(@"[CurseForgeAPI] ❌ Request failed - statusCode=%ld, contentType=%@, error=%@, snippet=%@",
           (long)statusCode, contentType, originalError.localizedDescription, snippet);
 
@@ -197,18 +197,18 @@ static NSString *CFACompiledAPIKey(void) {
 
 #pragma mark - 调试日志辅助
 
-// 将 NSData 转为可打印字符串（处理非 UTF-8 内容，最多 maxLen 字节）
+// Convert NSData into a printable string (handling non-UTF-8 content, up to maxLen bytes)
 - (NSString *)printableStringFromData:(NSData *)data maxLen:(NSUInteger)maxLen {
     if (!data || data.length == 0) return @"";
     NSUInteger len = MIN(data.length, maxLen);
     NSData *subData = [data subdataWithRange:NSMakeRange(0, len)];
-    // 尝试 UTF-8
+    // Try UTF-8
     NSString *str = [[NSString alloc] initWithData:subData encoding:NSUTF8StringEncoding];
     if (str) return str;
-    // 尝试 ISO-8859-1（Latin-1，能解码任意字节）
+    // Try ISO-8859-1 (Latin-1, which can decode any byte sequence)
     str = [[NSString alloc] initWithData:subData encoding:NSISOLatin1StringEncoding];
     if (str) return str;
-    // 兜底：十六进制
+    // Last resort: hexadecimal
     NSMutableString *hex = [NSMutableString stringWithCapacity:len * 3];
     const char *bytes = subData.bytes;
     for (NSUInteger i = 0; i < len; i++) {
@@ -217,7 +217,7 @@ static NSString *CFACompiledAPIKey(void) {
     return [NSString stringWithFormat:@"(non-text data, hex) %@", hex];
 }
 
-// 输出请求/响应/JSON 解析错误的完整调试日志
+// Print the full debug log for a request/response/JSON parse error
 - (void)debugLogRequest:(NSURLRequest *)request
                response:(NSURLResponse *)response
                    data:(NSData *)data
@@ -234,12 +234,12 @@ static NSString *CFACompiledAPIKey(void) {
           "📍 Request Headers:",
           method, url.absoluteString ?: @"<nil URL>");
 
-    // 打印请求头（脱敏 API Key）
+    // Print the request headers (with the API key redacted)
     NSDictionary *reqHeaders = request.allHTTPHeaderFields ?: @{};
     for (NSString *key in reqHeaders) {
         NSString *value = reqHeaders[key];
         if ([key.lowercaseString containsString:@"api"] || [key.lowercaseString containsString:@"key"]) {
-            // 只显示前 8 位 + 长度
+            // Show only the first 8 characters plus the length
             if (value.length > 8) {
                 NSLog(@"    %@: %@... (len=%lu)", key, [value substringToIndex:8], (unsigned long)value.length);
             } else {
@@ -254,7 +254,7 @@ static NSString *CFACompiledAPIKey(void) {
           (long)statusCode, contentType ?: @"<none>", (unsigned long)(data.length));
 
     if (httpResponse) {
-        // 打印响应头（最多 20 项）
+        // Print the response headers (at most 20 of them)
         NSDictionary *respHeaders = httpResponse.allHeaderFields;
         NSUInteger i = 0;
         for (NSString *key in respHeaders) {
@@ -432,7 +432,7 @@ static NSString *CFACompiledAPIKey(void) {
         return [MCIMMirror applyToURL:fallback];
     }
     
-    // 最终 fallback：Edge CDN
+    // Final fallback: the Edge CDN
     NSString *fileName = [file[@"fileName"] isKindOfClass:NSString.class] ? file[@"fileName"] : @"";
     NSInteger numericFileId = fileId.integerValue;
     if (numericFileId <= 0 || fileName.length == 0) {
@@ -565,7 +565,7 @@ static NSString *CFACompiledAPIKey(void) {
     item[@"versionDetailsLoaded"] = @(YES);
 }
 
-// 辅助：添加单个文件信息到数组（供 loadDetailsOfMod 内部调用）
+// Helper: append a single file's information to the array (called internally by loadDetailsOfMod)
 - (void)addFile:(NSDictionary *)file toNames:(NSMutableArray *)names mcNames:(NSMutableArray *)mcNames urls:(NSMutableArray *)urls hashes:(NSMutableArray *)hashes sizes:(NSMutableArray *)sizes fileNames:(NSMutableArray *)fileNames fileTypes:(NSMutableArray *)fileTypes projectType:(NSString *)projectType {
     if (![self file:file matchesProjectType:projectType]) return;
     NSString *url = [self downloadURLForFile:file];
@@ -595,7 +595,7 @@ static NSString *CFACompiledAPIKey(void) {
                   completion:(void (^)(NSArray * _Nullable, NSError * _Nullable))completion {
     NSString *projectType = filters[@"projectType"];
     if (projectType.length == 0) {
-        // 防御性回退：与同步版本一致，未指定 projectType 但声明 isModpack 时按整合包搜索
+        // Defensive fallback: consistent with the synchronous version, search as a modpack when projectType is unspecified but isModpack is declared
         projectType = [filters[@"isModpack"] boolValue] ? @"modpack" : @"mod";
     }
     NSString *query = filters[@"query"] ?: filters[@"name"] ?: @"";
@@ -605,7 +605,7 @@ static NSString *CFACompiledAPIKey(void) {
     int offset = [offsetNum intValue];
     NSString *mcVersion = filters[@"mcVersion"] ?: filters[@"version"];
     
-    // 构造 URL
+    // Build the URL
     NSMutableString *urlString = [NSMutableString stringWithFormat:@"%@/mods/search?gameId=%ld&classId=%@&pageSize=%d&index=%d",
                                   self.baseURL,
                                   (long)kCurseForgeGameIDMinecraft,
@@ -640,7 +640,7 @@ static NSString *CFACompiledAPIKey(void) {
 
     NSURLSessionDataTask *task = [self.session dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         if (error) {
-            // 网络错误：透传原 NSError 并附带 HTTP 诊断信息（如可获取）
+            // Network error: pass the original NSError through, with the HTTP diagnostics attached when available
             NSLog(@"[CurseForgeAPI] searchModWithFilters network error: %@", error.localizedDescription);
             [self debugLogRequest:request response:response data:data jsonError:nil];
             NSError *diagnosticError = [self errorWithResponse:response data:data originalError:error snippet:nil];
@@ -648,7 +648,7 @@ static NSString *CFACompiledAPIKey(void) {
             return;
         }
         if (!data || data.length == 0) {
-            // 响应数据为空：返回包含 HTTP 状态码的 NSError
+            // Empty response data: return an NSError containing the HTTP status code
             NSLog(@"[CurseForgeAPI] searchModWithFilters empty response");
             [self debugLogRequest:request response:response data:data jsonError:nil];
             NSError *emptyError = [NSError errorWithDomain:@"CurseForgeAPI"
@@ -662,7 +662,7 @@ static NSString *CFACompiledAPIKey(void) {
         NSError *jsonError = nil;
         NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
         if (jsonError || ![json isKindOfClass:NSDictionary.class]) {
-            // JSON 解析失败：输出完整调试日志，便于诊断 401 HTML 错误页等场景
+            // JSON parse failure: print the full debug log, to make cases such as a 401 HTML error page easy to diagnose
             NSLog(@"[CurseForgeAPI] searchModWithFilters JSON parse failed");
             [self debugLogRequest:request response:response data:data jsonError:jsonError];
             NSError *baseError = jsonError ?: [NSError errorWithDomain:@"CurseForgeAPI"
@@ -682,7 +682,7 @@ static NSString *CFACompiledAPIKey(void) {
             [results addObject:[self projectFromCurseForgeProject:project projectType:projectType]];
         }
 
-        // 更新分页状态
+        // Update the pagination state
         NSDictionary *pagination = json[@"pagination"] ?: @{};
         NSUInteger total = [pagination[@"totalCount"] unsignedIntegerValue];
         NSUInteger idx = [pagination[@"index"] unsignedIntegerValue];
@@ -705,7 +705,7 @@ static NSString *CFACompiledAPIKey(void) {
         return;
     }
 
-    // 直接异步调用 loadDetailsOfMod:completion:，避免阻塞调用线程
+    // Call loadDetailsOfMod:completion: asynchronously and directly, so the calling thread is not blocked
     NSMutableDictionary *item = [@{@"id": modID, @"projectType": @"mod"} mutableCopy];
     [self loadDetailsOfMod:item completion:^(NSError * _Nullable error) {
         if (error) {
@@ -749,9 +749,9 @@ static NSString *CFACompiledAPIKey(void) {
     } else if ([loaderName isEqualToString:@"quilt"]) {
         dependencies[@"quilt-loader"] = loaderVersion;
     } else if ([loaderName isEqualToString:@"neoforge"]) {
-        // 修复：之前错误地映射到 @"forge"，导致版本 ID 格式错误（用 forge 而非 neoforge），
-        // 且 ModpackUtils.infoForDependencies: 不下载 NeoForge 版本 JSON。
-        // 正确映射到 @"neoforge"，与 Modrinth 格式保持一致。
+        // Fix: this used to map to @"forge" by mistake, which produced the wrong version ID format (forge rather than neoforge)
+        // and meant ModpackUtils.infoForDependencies: did not download the NeoForge version JSON.
+        // It now maps correctly to @"neoforge", consistent with the Modrinth format.
         dependencies[@"neoforge"] = loaderVersion;
     }
     
@@ -783,10 +783,10 @@ static NSString *CFACompiledAPIKey(void) {
     while (index < uniqueFileIDs.count) {
         NSUInteger count = MIN((NSUInteger)50, uniqueFileIDs.count - index);
         NSArray *batch = [uniqueFileIDs subarrayWithRange:NSMakeRange(index, count)];
-        // 关键修复：批量指纹接口偶发失败/超时，导致整批 fileIDs 在 filesByID 中缺失，
-        // 后续循环中每个缺失的文件会触发 fileForProjectID:fileID: 单文件回退（增加 API 调用），
-        // 极端情况下回退也失败就会被跳过 → 整合包模组数量不全。
-        // 增加重试：每批最多重试 3 次（间隔 1s）。
+        // Key fix: the bulk fingerprint endpoint occasionally fails or times out, leaving a whole batch of fileIDs missing from filesByID,
+        // so each missing file in the following loop triggered the single-file fileForProjectID:fileID: fallback (adding API calls),
+        // and in the worst case the fallback failed too and the file was skipped → the modpack ended up with missing mods.
+        // A retry was added: up to 3 attempts per batch (1s apart).
         NSDictionary *response = nil;
         for (NSInteger retry = 0; retry < 3 && !response; retry++) {
             if (retry > 0) {
@@ -834,10 +834,10 @@ submitDownloadTasksFromPackage:(NSString *)packagePath
     NSMutableArray *requiredFileIDs = [NSMutableArray new];
     for (NSDictionary *manifestFile in manifestFiles) {
         if (![manifestFile isKindOfClass:NSDictionary.class]) continue;
-        // 关键修复：部分整合包 manifest 不写 required 字段（或写为非布尔值），
-        // 之前 `![manifestFile[@"required"] boolValue]` 会把缺失/非布尔字段当作 NO 跳过，
-        // 导致整批 mod 丢失。这里改为：缺失 required 字段时按必需处理（与 CF 官方约定一致）。
-        // 仅显式为 NO 的才跳过。
+        // Key fix: some modpack manifests omit the required field (or write a non-boolean value),
+        // and `![manifestFile[@"required"] boolValue]` used to treat a missing/non-boolean field as NO and skip it,
+        // losing a whole batch of mods. It now treats a missing required field as required (matching CurseForge's official convention).
+        // Only an explicit NO is skipped.
         id requiredValue = manifestFile[@"required"];
         if (requiredValue != nil && [requiredValue isKindOfClass:[NSNumber class]] && ![requiredValue boolValue]) {
             continue;
@@ -854,20 +854,20 @@ submitDownloadTasksFromPackage:(NSString *)packagePath
         NSString *projectID = [manifestFile[@"projectID"] description] ?: @"";
         NSString *fileID = [manifestFile[@"fileID"] description] ?: @"";
         NSDictionary *file = fileID.length > 0 ? filesByID[fileID] : nil;
-        // 单文件解析失败时回退到逐个查询接口
+        // Fall back to the per-file lookup endpoint when parsing a single file fails
         if (!file && projectID.length > 0 && fileID.length > 0) {
             file = [self fileForProjectID:projectID fileID:fileID];
         }
         NSString *url = file ? [self downloadURLForFile:file] : @"";
         NSString *fileName = [file[@"fileName"] isKindOfClass:NSString.class] ? file[@"fileName"] : @"";
-        // 关键修复：单文件解析失败时不再中止整个整合包下载，改为记录并跳过该文件。
-        // 之前 `finishDownloadWithErrorString:` + `return` 会让整批 mod 全部丢失，
-        // 即使只有 1 个文件无法解析。这与 issue 描述的"模组不完整"完全吻合。
-        // 阶段5修复（参照 FCL）：同时将跳过的文件记入 failedFiles，最终汇总报告给用户。
+        // Key fix: a single file failing to parse no longer aborts the whole modpack download; it is logged and skipped instead.
+        // `finishDownloadWithErrorString:` + `return` used to lose the entire batch of mods
+        // even when only 1 file could not be parsed. That matches the "incomplete mods" problem described in the issue exactly.
+        // Phase 5 fix (modeled on FCL): the skipped files are also recorded in failedFiles and reported to the user in the final summary.
         if (url.length == 0 || fileName.length == 0) {
             NSLog(@"[CurseForgeAPI] Skipping unresolvable modpack file projectID=%@ fileID=%@ (url or fileName is empty), continuing with remaining files", projectID, fileID);
             skippedCount++;
-            // 单文件失败也需推进进度，避免下载卡片卡住
+            // Progress must advance even when a single file fails, so the download card does not get stuck
             downloader.progress.completedUnitCount++;
             @synchronized(downloader.failedFiles) {
                 [downloader.failedFiles addObject:@{
@@ -912,7 +912,7 @@ submitDownloadTasksFromPackage:(NSString *)packagePath
     NSString *iconBase64 = [NSString stringWithFormat:@"data:image/png;base64,%@",
                             [[NSData dataWithContentsOfFile:tmpIconPath] base64EncodedStringWithOptions:0]];
 
-    // 立即设置 profile，确保整合包安装后能从 profile 列表中看到（即使加载器安装失败）
+    // Set the profile immediately, so the modpack shows up in the profile list after installation (even if the loader installation fails)
     PLProfiles.current.profiles[profileName] = @{
         @"gameDir": gameDirRelative,
         @"name": profileName,
@@ -922,24 +922,24 @@ submitDownloadTasksFromPackage:(NSString *)packagePath
     PLProfiles.current.selectedProfileName = profileName;
 
     if (depInfo[@"json"]) {
-        // Fabric/Quilt：直接下载 version JSON
+        // Fabric/Quilt: download the version JSON directly
         NSString *jsonPath = [NSString stringWithFormat:@"%1$s/versions/%2$@/%2$@.json", getenv("POJAV_GAME_DIR"), depInfo[@"id"]];
         NSURLSessionDownloadTask *task = [downloader createDownloadTask:depInfo[@"json"] size:0 sha:nil altName:nil toPath:jsonPath];
         [task resume];
     } else if (depInfo[@"installer"] && [(NSString *)depInfo[@"installer"] length] > 0) {
-        // Forge/NeoForge：下载 installer.jar 并调用直装器写入完整的 version.json + 下载库
-        // 之前不处理这个分支会导致整合包安装后只设置 profile 但不下载版本 JSON，
-        // 启动时报"找不到版本信息"。
+        // Forge/NeoForge: download installer.jar and call the direct installer to write the full version.json and download the libraries
+        // Not handling this branch used to mean that after a modpack install only the profile was set and no version JSON was downloaded,
+        // so launching reported "version information not found".
         NSString *versionId = depInfo[@"id"];
         NSString *loader = depInfo[@"loader"];
-        NSString *customGameDir = destPath;  // 整合包隔离目录（mods/saves/configs）
+        NSString *customGameDir = destPath;  // The modpack's isolated directory (mods/saves/configs)
         NSString *installerPath = [NSTemporaryDirectory() stringByAppendingPathComponent:
                                    [NSString stringWithFormat:@"%@-installer.jar", versionId]];
 
         NSURLSessionDownloadTask *task = [downloader createDownloadTask:depInfo[@"installer"]
                                                                    size:0 sha:nil altName:nil
                                                                  toPath:installerPath success:^{
-            // 直装器是同步且耗时的，放到后台线程执行，避免阻塞主线程
+            // The direct installer is synchronous and slow, so it runs on a background thread to avoid blocking the main thread
             dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
                 NSError *installError = nil;
                 BOOL installSuccess = NO;
@@ -968,10 +968,10 @@ submitDownloadTasksFromPackage:(NSString *)packagePath
                                                                      error:installError];
                 } else {
                     NSLog(@"[CurseForgeAPI] %@ direct install succeeded, version.json written: %@", loader, versionId);
-                    // 阶段5修复（参照 FCL ModpackHelper.ensureCompleteVersion）：
-                    // 直装器只写入了 loader 的 version.json + Forge/NeoForge 库，
-                    // 但原版 MC 的 libraries 和 assets 还没下载。
-                    // 触发 downloadVersion: 让 MinecraftResourceDownloadTask 下载完整版本文件。
+                    // Phase 5 fix (modeled on FCL ModpackHelper.ensureCompleteVersion):
+                    // the direct installer only wrote the loader's version.json and the Forge/NeoForge libraries,
+                    // while vanilla MC's libraries and assets have not been downloaded yet.
+                    // downloadVersion: is triggered so MinecraftResourceDownloadTask downloads the complete version files.
                     [downloader downloadVersion:@{@"id": versionId}];
                 }
             });
@@ -1083,7 +1083,7 @@ submitDownloadTasksFromPackage:(NSString *)packagePath
 
     NSURLSessionDataTask *task = [self.session dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         if (error) {
-            // 网络错误：透传并附带诊断信息
+            // Network error: pass it through with the diagnostics attached
             NSLog(@"[CurseForgeAPI] loadDetailsOfMod network error: %@", error.localizedDescription);
             [self debugLogRequest:request response:response data:data jsonError:nil];
             NSError *diagnosticError = [self errorWithResponse:response data:data originalError:error snippet:nil];
@@ -1091,7 +1091,7 @@ submitDownloadTasksFromPackage:(NSString *)packagePath
             return;
         }
         if (!data || data.length == 0) {
-            // 响应数据为空
+            // Empty response data
             NSLog(@"[CurseForgeAPI] loadDetailsOfMod empty response");
             [self debugLogRequest:request response:response data:data jsonError:nil];
             NSError *emptyError = [NSError errorWithDomain:@"CurseForgeAPI"
@@ -1105,7 +1105,7 @@ submitDownloadTasksFromPackage:(NSString *)packagePath
         NSError *jsonError = nil;
         NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
         if (jsonError || ![json isKindOfClass:NSDictionary.class]) {
-            // JSON 解析失败：输出完整调试日志
+            // JSON parse failure: print the full debug log
             NSLog(@"[CurseForgeAPI] loadDetailsOfMod JSON parse failed");
             [self debugLogRequest:request response:response data:data jsonError:jsonError];
             NSError *baseError = jsonError ?: [NSError errorWithDomain:@"CurseForgeAPI"
@@ -1136,16 +1136,16 @@ submitDownloadTasksFromPackage:(NSString *)packagePath
 
 - (void)searchServersWithFilters:(NSDictionary *)filters
                       completion:(void (^)(NSArray * _Nullable, NSError * _Nullable))completion {
-    // CurseForge 没有独立的 server 类型，使用 modpack（classId=4471）作为"服务器整合包"展示
+    // CurseForge has no separate server type, so modpacks (classId=4471) are presented as "server modpacks"
     NSMutableDictionary *serverFilters = [filters mutableCopy] ?: [NSMutableDictionary dictionary];
     serverFilters[@"projectType"] = @"modpack";
-    // 复用现有的异步 modpack 搜索逻辑
+    // Reuse the existing asynchronous modpack search logic
     [self searchModWithFilters:serverFilters completion:^(NSArray * _Nullable results, NSError * _Nullable error) {
         if (error) {
             if (completion) completion(nil, error);
             return;
         }
-        // 在每个结果中追加 serverID 字段，便于 ServerItem 统一识别
+        // Append a serverID field to each result, so ServerItem can recognize them uniformly
         NSMutableArray *serverResults = [NSMutableArray array];
         for (NSDictionary *item in results) {
             if (![item isKindOfClass:[NSDictionary class]]) continue;
@@ -1165,7 +1165,7 @@ submitDownloadTasksFromPackage:(NSString *)packagePath
         return;
     }
 
-    // 拉取该 modpack 的所有文件，筛选 isServerPack=true 的文件
+    // Fetch every file of that modpack and keep the ones with isServerPack=true
     NSString *urlStr = [NSString stringWithFormat:@"%@/mods/%@/files?pageSize=10000", self.baseURL, modpackID];
     NSURL *url = [NSURL URLWithString:urlStr];
     if (!url) {
@@ -1201,9 +1201,9 @@ submitDownloadTasksFromPackage:(NSString *)packagePath
         NSMutableArray *serverPacks = [NSMutableArray array];
         for (NSDictionary *file in files) {
             if (![file isKindOfClass:[NSDictionary class]]) continue;
-            // 筛选 isServerPack=true 的文件（与 loadDetailsOfMod 中排除 server pack 的逻辑相反）
+            // Keep the files with isServerPack=true (the inverse of the logic in loadDetailsOfMod, which excludes server packs)
             if (![file[@"isServerPack"] boolValue]) continue;
-            // 解析下载 URL 和文件名
+            // Parse the download URL and the file name
             NSString *dlURL = [self downloadURLForFile:file];
             NSString *fileName = [file[@"fileName"] isKindOfClass:[NSString class]] ? file[@"fileName"] : @"";
             NSString *displayName = [file[@"displayName"] isKindOfClass:[NSString class]] ? file[@"displayName"] : fileName;

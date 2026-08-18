@@ -8,70 +8,70 @@ NS_ASSUME_NONNULL_BEGIN
 extern NSString *const CurseForgeResponseContentTypeKey;
 extern NSString *const CurseForgeResponseSnippetKey;
 
-/// CurseForge API 实现，支持模组、资源包、光影、数据包、整合包等
+/// CurseForge API implementation, supporting mods, resource packs, shaders, data packs, modpacks and more
 @interface CurseForgeAPI : ModpackAPI
 
 + (instancetype)sharedInstance;
 
-/// 判断 CurseForge API Key 是否已配置（运行时偏好 + 编译时宏 + Info.plist 三层 fallback）
-/// 用于 UI 门控判断，与实际请求时的 apiKey getter 保持一致
+/// Determine whether the CurseForge API key has been configured (a three-level fallback: runtime preference + compile-time macro + Info.plist)
+/// Used to gate the UI, and kept consistent with the apiKey getter used for the actual requests
 + (BOOL)isAPIKeyConfigured;
 
-// ========== 同步方法（兼容旧代码，注意会阻塞线程） ==========
-/// 搜索项目（同步，内部使用 dispatch_group_wait，建议在后台队列调用）
+// ========== Synchronous methods (kept for older code; note that they block the thread) ==========
+/// Search for projects (synchronous, uses dispatch_group_wait internally, so it should be called on a background queue)
 - (NSMutableArray *)searchModWithFilters:(NSDictionary<NSString *, NSString *> *)searchFilters
                      previousPageResult:(nullable NSMutableArray *)previousPageResult;
 
-/// 加载项目详情（同步，会填充 item 的版本信息）
+/// Load project details (synchronous, fills in the item's version information)
 - (void)loadDetailsOfMod:(NSMutableDictionary *)item;
 
-// ========== 异步方法（推荐，不阻塞 UI） ==========
-/// 异步搜索（推荐），支持 projectType = @"resourcepack" / @"mod" / @"shader" 等
+// ========== Asynchronous methods (recommended, they do not block the UI) ==========
+/// Asynchronous search (recommended), supporting projectType = @"resourcepack" / @"mod" / @"shader" and so on
 - (void)searchModWithFilters:(NSDictionary *)filters
                   completion:(void (^)(NSArray * _Nullable results, NSError * _Nullable error))completion;
 
-/// 异步获取某个项目的所有版本
+/// Asynchronously fetch every version of a project
 - (void)getVersionsForModWithID:(NSString *)modID
                      completion:(void (^)(NSArray<ModVersion *> * _Nullable versions, NSError * _Nullable error))completion;
 
-// ========== 异步详情加载 ==========
-/// 异步加载项目详情（不阻塞调用线程）
+// ========== Asynchronous detail loading ==========
+/// Load project details asynchronously (without blocking the calling thread)
 - (void)loadDetailsOfMod:(NSMutableDictionary *)item
               completion:(void (^)(NSError * _Nullable error))completion;
 
 #pragma mark - Server Packs（CurseForge 服务端整合包）
 
-/// 异步搜索服务器整合包：搜索 classId=4471（modpack）项目，作为服务器整合包展示
-/// @param filters 搜索过滤条件（query/limit/offset/mcVersion 等）
-/// @param completion 完成回调，返回字典数组（含 apiSource=2, projectType=modpack, serverID 字段）
+/// Asynchronously search for server modpacks: search classId=4471 (modpack) projects and present them as server modpacks
+/// @param filters the search filter conditions (query/limit/offset/mcVersion and so on)
+/// @param completion the completion callback, returning an array of dictionaries (with apiSource=2, projectType=modpack and a serverID field)
 - (void)searchServersWithFilters:(NSDictionary *)filters
                       completion:(void (^)(NSArray * _Nullable results, NSError * _Nullable error))completion;
 
-/// 异步获取指定 modpack 项目的服务端整合包文件列表（isServerPack=true 的文件）
+/// Asynchronously fetch the server pack file list of a given modpack project (the files with isServerPack=true)
 /// @param modpackID CurseForge project id
-/// @param completion 完成回调，返回 server pack 文件字典数组
+/// @param completion the completion callback, returning an array of server pack file dictionaries
 - (void)getServerPackFilesForModpack:(NSString *)modpackID
                           completion:(void (^)(NSArray * _Nullable files, NSError * _Nullable error))completion;
 
-// ========== 下载工具方法 ==========
-/// 获取文件的直接下载链接（CurseForge 需要二次请求）
+// ========== Download helper methods ==========
+/// Get the direct download link for a file (CurseForge requires a second request)
 - (NSString *)downloadURLForFile:(NSDictionary *)file;
 
-/// 检查文件是否匹配项目类型（如资源包只允许 zip）
+/// Check whether a file matches the project type (for example resource packs only allow zip)
 - (BOOL)file:(NSDictionary *)file matchesProjectType:(NSString *)projectType;
 
-/// 获取项目类型对应的推荐文件后缀（jar/zip）
+/// Get the recommended file extension for a project type (jar/zip)
 - (NSArray<NSString *> *)preferredFileExtensionsForProjectType:(NSString *)projectType;
 
-// ========== 指纹反查 ==========
-/// 通过 MurmurHash2 文件指纹反查 CurseForge 项目（单个）
+// ========== Fingerprint lookup ==========
+/// Look up a CurseForge project from a MurmurHash2 file fingerprint (single file)
 - (nullable NSMutableDictionary *)projectForFileHash:(NSString *)murmurHash projectType:(NSString *)projectType;
 
-/// 批量指纹反查（用于批量更新检查）
+/// Bulk fingerprint lookup (used for bulk update checks)
 - (NSArray<NSMutableDictionary *> *)fileFingerprints:(NSArray<NSNumber *> *)fingerprints;
 
-// ========== 整合包处理 ==========
-/// 解析 CurseForge 整合包（manifest.json），批量提交下载任务
+// ========== Modpack handling ==========
+/// Parse a CurseForge modpack (manifest.json) and submit the download tasks in bulk
 - (void)downloader:(MinecraftResourceDownloadTask *)downloader
 submitDownloadTasksFromPackage:(NSString *)packagePath
             toPath:(NSString *)destPath;

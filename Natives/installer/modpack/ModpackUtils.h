@@ -6,8 +6,8 @@
 + (void)archive:(UZKArchive *)archive extractDirectory:(NSString *)dir toPath:(NSString *)path error:(NSError **)error;
 + (NSDictionary *)infoForDependencies:(NSDictionary *)dependency;
 
-/// 根据 loader 类型构造 installer.jar 下载 URL（Forge/NeoForge）
-/// 提取自 ModpackImportService，供 ModrinthAPI/CurseForgeAPI 整合包安装复用
+/// Build the installer.jar download URL for a loader type (Forge/NeoForge)
+/// Extracted from ModpackImportService, so ModrinthAPI/CurseForgeAPI modpack installation can reuse it
 + (nullable NSString *)installerURLForLoader:(NSString *)loader
                                loaderVersion:(NSString *)loaderVersion
                             minecraftVersion:(NSString *)minecraftVersion;
@@ -15,8 +15,8 @@
 /// Infer the required major Java version from the MC version
 + (NSInteger)javaMajorVersionForMC:(NSString *)mcVersion;
 
-/// 写入显式失败的占位 version JSON（mainClass 指向不存在的类，启动时显式报错）
-/// 避免 Forge/NeoForge 直装失败后误装作 vanilla MC 让用户以为 mods 生效
+/// Write a placeholder version JSON that fails explicitly (mainClass points at a nonexistent class, so launching reports an error explicitly)
+/// This keeps a failed Forge/NeoForge direct install from being mistaken for vanilla MC and making the user believe their mods are active
 + (void)writePlaceholderVersionJSONForVersionId:(NSString *)versionId
                                minecraftVersion:(NSString *)minecraftVersion
                                          loader:(NSString *)loader

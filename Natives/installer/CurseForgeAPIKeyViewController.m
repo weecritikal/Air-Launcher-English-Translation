@@ -20,7 +20,7 @@
 #import "modpack/CurseForgeAPI.h"
 #import "config.h"
 
-/// 安全获取编译时 CurseForge API Key（避免 @nil 非法表达式）
+/// Safely obtain the compile-time CurseForge API key (avoiding the invalid expression @nil)
 static NSString *CFKCompiledAPIKey(void) {
 #define AAA_STR_INNER(x) #x
 #define AAA_STR(x) AAA_STR_INNER(x)
@@ -30,7 +30,7 @@ static NSString *CFKCompiledAPIKey(void) {
     if (compiledKey.length >= 2 && [compiledKey hasPrefix:@"\""] && [compiledKey hasSuffix:@"\""]) {
         compiledKey = [compiledKey substringWithRange:NSMakeRange(1, compiledKey.length - 2)];
     }
-    // 宏未定义时预处理器字符串化后得到宏名本身 "CONFIG_CURSEFORGE_API_KEY"
+    // When the macro is undefined, stringifying it in the preprocessor yields the macro name itself, "CONFIG_CURSEFORGE_API_KEY"
     if ([compiledKey isEqualToString:@"nil"] || compiledKey.length == 0 ||
         [compiledKey isEqualToString:@"CONFIG_CURSEFORGE_API_KEY"]) {
         return @"";
@@ -166,9 +166,9 @@ static UIColor *CFKErrorColor(void) {
 
 // State
 @property (nonatomic, assign) BOOL isTesting;
-// 记录上次安装约束时的宽度，避免 viewDidLayoutSubviews 重复安装
+// Records the width at the last constraint installation, so viewDidLayoutSubviews does not install them repeatedly
 @property (nonatomic, assign) CGFloat lastInstalledWidth;
-// 标记约束是否已首次安装（viewDidLoad 阶段用全屏宽度安装一次，viewDidLayoutSubviews 修正）
+// Flags whether the constraints have been installed once (they are installed with the full screen width during viewDidLoad and corrected in viewDidLayoutSubviews)
 @property (nonatomic, assign) BOOL hasInstalledConstraints;
 
 @end
@@ -181,8 +181,8 @@ static UIColor *CFKErrorColor(void) {
     [super viewDidLoad];
 
     self.title = @"CurseForge API Key";
-    // 强制深色风格，与 App 其他界面（BackgroundManager 始终深色）保持一致，
-    // 避免浅色模式下此页变浅色实色背景与其他页面深色毛玻璃割裂。
+    // Force the dark style, consistent with the rest of the app (BackgroundManager is always dark),
+    // so this page does not end up with a light solid background in light mode, clashing with the dark frosted glass elsewhere.
     if (@available(iOS 13.0, *)) {
         self.view.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
     }
@@ -203,10 +203,10 @@ static UIColor *CFKErrorColor(void) {
 
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
-    // 修复错位：viewDidLoad 时 self.view.bounds.size.width 在 FormSheet 模式下
-    // 可能是全屏宽度（尚未完成 modal 布局），导致 horizontalPadding 计算错误
-    // （大屏居中限宽逻辑 MAX(16, (width - 600) / 2.0) 会产生过大边距）。
-    // 在 viewDidLayoutSubviews 中用真实宽度重新安装约束。
+    // Misalignment fix: at viewDidLoad time self.view.bounds.size.width may still be the full screen width
+    // in FormSheet mode (the modal layout has not finished), which makes the horizontalPadding calculation wrong
+    // (the large-screen centering width limit MAX(16, (width - 600) / 2.0) produces an excessive margin).
+    // The constraints are therefore reinstalled with the real width in viewDidLayoutSubviews.
     CGFloat currentWidth = self.view.bounds.size.width;
     if (currentWidth > 0 && currentWidth != _lastInstalledWidth) {
         _lastInstalledWidth = currentWidth;
@@ -471,15 +471,15 @@ static UIColor *CFKErrorColor(void) {
 }
 
 - (void)removeConstraintsOnContentView {
-    // 修复错位：原实现 removeFromSuperview 后重新 addSubview 会丢失所有约束，
-    // 且 _contentView 上引用这些子视图的约束不会被移除，导致约束冲突。
-    // 正确做法：仅移除 _contentView 及各卡片视图上的约束，不改变视图层级。
+    // Misalignment fix: the original implementation called removeFromSuperview and then addSubview again, which lost every constraint,
+    // while the constraints on _contentView referencing those subviews were not removed, causing constraint conflicts.
+    // The correct approach: only remove the constraints on _contentView and on each card view, without changing the view hierarchy.
     NSArray<UIView *> *related = @[_infoCardView, _infoDescLabel, _infoTitleLabel,
                                     _inputCardView, _inputCardTitleLabel, _apiKeyTextField, _sourceHintLabel,
                                     _actionCardView, _saveButton, _testButton, _clearButton, _testActivityIndicator,
                                     _statusLabel, _contentView];
     for (UIView *v in related) {
-        // 移除该视图自身持有的约束（firstItem == v）
+        // Remove the constraints the view itself holds (firstItem == v)
         NSArray<NSLayoutConstraint *> *toRemove = [v.constraints copy];
         for (NSLayoutConstraint *c in toRemove) {
             if (c.firstAttribute != NSLayoutAttributeWidth && c.firstAttribute != NSLayoutAttributeHeight) {
@@ -487,8 +487,8 @@ static UIColor *CFKErrorColor(void) {
             }
         }
     }
-    // 同时移除 _contentView 上引用各子视图的约束（firstItem == _contentView, secondItem == 子视图）
-    // _contentView 的约束已在上面循环中移除（因为 _contentView 在 related 数组中）
+    // Also remove the constraints on _contentView that reference the subviews (firstItem == _contentView, secondItem == the subview)
+    // _contentView's constraints were already removed in the loop above (because _contentView is in the related array)
 }
 
 - (void)updateLayoutForWidth:(CGFloat)width {

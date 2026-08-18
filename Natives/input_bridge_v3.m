@@ -77,10 +77,10 @@ void openURLGlobal(NSString *path) {
  * Hooked version of java.lang.UNIXProcess.forkAndExec()
  * which is used to handle the "open" command.
  *
- * iOS 沙箱禁止 fork/exec，原生 forkAndExec 必然失败并可能导致进程崩溃。
- * 此处对非 "open" 命令不再透传给原生实现，而是抛出明确的 Java IOException，
- * 让调用方（如 Forge/NeoForge installer.jar 的 processor 步骤）能优雅失败而非原生崩溃。
- * "open" 命令仍走 URL scheme 转发到 Files/Filza 等外部应用。
+ * The iOS sandbox forbids fork/exec, so the native forkAndExec is bound to fail and may crash the process.
+ * Commands other than "open" are therefore no longer passed through to the native implementation; an explicit Java IOException is thrown instead,
+ * so that callers (such as the processor step of the Forge/NeoForge installer.jar) can fail gracefully rather than crashing natively.
+ * The "open" command still goes through URL scheme forwarding to external apps such as Files/Filza.
  */
 jint
 hooked_ProcessImpl_forkAndExec(JNIEnv *env, jobject process, jint mode, jbyteArray helperpath, jbyteArray prog, jbyteArray argBlock, jint argc, jbyteArray envBlock, jint envc, jbyteArray dir, jintArray std_fds, jboolean redirectErrorStream) {
@@ -88,8 +88,8 @@ hooked_ProcessImpl_forkAndExec(JNIEnv *env, jobject process, jint mode, jbyteArr
 
     // Here we only handle the "open" command
     if (strcmp(basename(pProg), "open")) {
-        // 非 "open" 命令：iOS 沙箱禁止 fork/exec，透传给原生实现会导致
-        // "Operation not permitted" 或直接崩溃。改为抛 IOException 让上层优雅失败。
+        // Commands other than "open": the iOS sandbox forbids fork/exec, so passing them through to the native implementation causes
+        // "Operation not permitted" or an outright crash. An IOException is thrown instead so callers can fail gracefully.
         NSLog(@"[input_bridge] Blocked fork/exec of '%s' (iOS sandbox forbids fork/exec)", pProg);
         (*env)->ReleaseByteArrayElements(env, prog, (jbyte *)pProg, 0);
         jclass exClass = (*env)->FindClass(env, "java/io/IOException");
@@ -432,19 +432,19 @@ void CallbackBridge_nativeSetInputReady(BOOL inputReady) {
 }
 
 // ============================================================================
-// issue #27 修复（参照 FCL commit 08c0716）：物理键盘 modifier 同步
+// Fix for issue #27 (modeled on FCL commit 08c0716): physical keyboard modifier synchronization
 //
-// MC 1.21.9+ 不再仅依赖 key 回调中的 mods 参数，而是通过
-// InputConstants.isKeyDown(window, GLFW_KEY_LEFT_SHIFT) 查询 modifier 状态。
-// 该状态由 MC 内部缓存维护，仅靠 GLFW key callback 无法同步，
-// 必须显式调用 Java 端 setModifiers 才能更新。
+// MC 1.21.9+ no longer relies solely on the mods parameter in the key callback, but queries modifier state through
+// InputConstants.isKeyDown(window, GLFW_KEY_LEFT_SHIFT).
+// That state is maintained by an internal MC cache which the GLFW key callback alone cannot keep in sync;
+// setModifiers on the Java side must be called explicitly to update it.
 //
-// 此处通过 JNI 反射调用 com.mojang.blaze3d.platform.InputConstants
-// 的内部方法（如果存在），实现 modifier 缓存的显式同步。
-// 旧版本 MC 没有此机制，调用会安全失败（找不到方法直接返回）。
+// Here JNI reflection is used to call the internal method of com.mojang.blaze3d.platform.InputConstants
+// (if it exists), synchronizing the modifier cache explicitly.
+// Older MC versions have no such mechanism, and the call fails safely (returning immediately when the method is not found).
 //
-// 由 KeyboardInput.m 在物理键盘事件中调用（pressesBegan/pressesEnded），
-// 也可被 Java 端 CallbackBridge.nativeSetModifiers 调用。
+// It is called by KeyboardInput.m from physical keyboard events (pressesBegan/pressesEnded),
+// and can also be called from the Java side via CallbackBridge.nativeSetModifiers.
 // ============================================================================
 void CallbackBridge_syncModifiersToMC(int mods) {
     JNIEnv *env = runtimeJNIEnvPtr;
@@ -468,7 +468,7 @@ void CallbackBridge_syncModifiersToMC(int mods) {
     (*env)->DeleteLocalRef(env, inputConstantsClass);
 }
 
-// JNI wrapper：供 Java 端 CallbackBridge.nativeSetModifiers(int) 调用
+// JNI wrapper: called from the Java side by CallbackBridge.nativeSetModifiers(int)
 JNIEXPORT void JNICALL Java_org_lwjgl_glfw_CallbackBridge_nativeSetModifiers(JNIEnv* env, jclass clazz, jint mods) {
     CallbackBridge_syncModifiersToMC(mods);
 }

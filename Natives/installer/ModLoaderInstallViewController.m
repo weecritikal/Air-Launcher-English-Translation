@@ -2,13 +2,13 @@
 //  ModLoaderInstallViewController.m
 //  Amethyst
 //
-//  参照 FCL (FoldCraftLauncher) page_installer.xml + view_installer_item.xml 重构。
-//  - 顶部紧凑 toolbar：版本名输入框 + 右上角下载图标按钮（替代原底部 72pt 大按钮）
-//  - 加载器列表用 UITableView InsetGrouped 扁平条目（每行 ~54pt，无阴影/无卡片边框）
-//  - 每行：左侧 28pt 图标 + 中间名称/状态双行 + 右侧 chevron/选中标记
-//  - 附加选项（Fabric API / OptiFine 共存）作为独立 section 的开关行
-//  - 版本选择子页面也改为 UITableView 扁平条目
-//  - 互斥逻辑与 FCL 完全一致
+//  Rebuilt after FCL (FoldCraftLauncher) page_installer.xml + view_installer_item.xml.
+//  - A compact toolbar at the top: the version name field + a download icon button in the top-right corner (replacing the old 72pt button at the bottom)
+//  - The loader list uses flat UITableView InsetGrouped rows (about 54pt each, with no shadow and no card border)
+//  - Each row: a 28pt icon on the left + a two-line name/status in the middle + a chevron/checkmark on the right
+//  - Extra options (Fabric API / OptiFine coexistence) are switch rows in their own section
+//  - The version selection subpage also uses flat UITableView rows
+//  - The mutual exclusion rules match FCL exactly
 //
 
 #import "ModLoaderInstallViewController.h"
@@ -21,15 +21,15 @@
 
 #pragma mark - Data Models
 
-/// 加载器元数据
+/// Loader metadata
 @interface ModLoaderRow : NSObject
 @property (nonatomic, copy) NSString *identifier;   // "vanilla"/"fabric"/"forge"/"neoforge"/"quilt"/"optifine"
-@property (nonatomic, copy) NSString *name;         // 显示名
-@property (nonatomic, copy) NSString *desc;         // 描述
-@property (nonatomic, copy) NSString *iconName;     // SF Symbol 名（PNG 缺失时回退用）
-@property (nonatomic, strong) UIColor *iconColor;   // 图标主色
-@property (nonatomic, assign) BOOL compatible;      // 与当前游戏版本是否兼容
-@property (nonatomic, copy, nullable) NSString *selectedVersion; // 选中版本（nil 表示未选）
+@property (nonatomic, copy) NSString *name;         // Display name
+@property (nonatomic, copy) NSString *desc;         // Description
+@property (nonatomic, copy) NSString *iconName;     // SF Symbol name (used as a fallback when the PNG is missing)
+@property (nonatomic, strong) UIColor *iconColor;   // Primary icon color
+@property (nonatomic, assign) BOOL compatible;      // Whether it is compatible with the current game version
+@property (nonatomic, copy, nullable) NSString *selectedVersion; // The selected version (nil means none)
 @end
 @implementation ModLoaderRow
 @end
@@ -54,7 +54,7 @@
 }
 
 - (void)setupViews {
-    // 扁平条目：无阴影、无边框，仅依赖 BackgroundManager.applyEffectToCell: 提供毛玻璃/半透明
+    // Flat rows: no shadow and no border, relying solely on BackgroundManager.applyEffectToCell: for the frosted glass/translucency
     self.selectionStyle = UITableViewCellSelectionStyleDefault;
     self.accessoryType = UITableViewCellAccessoryNone;
 
@@ -314,7 +314,7 @@
 }
 
 - (void)configureWithVersion:(NSString *)version isSelected:(BOOL)isSelected {
-    // OptiFine packed 格式：type\x1fpatch\x1ffilename\x1fdisplay
+    // OptiFine packed format: type\x1fpatch\x1ffilename\x1fdisplay
     NSString *display = version;
     if ([version containsString:@"\x1f"]) {
         NSArray *parts = [version componentsSeparatedByString:@"\x1f"];
@@ -344,11 +344,11 @@
 @property (nonatomic, strong) UILabel *emptyLabel;
 @property (nonatomic, strong) UILabel *errorLabel;
 @property (nonatomic, strong) NSArray *versions;
-// Forge XML 解析
+// Forge XML parsing
 @property (nonatomic, strong) NSMutableArray *forgeVersionList;
 @property (nonatomic, strong) NSMutableString *currentVersionValue;
 @property (nonatomic, assign) BOOL isParsingForge;
-// 网络任务
+// Network task
 @property (nonatomic, strong) NSURLSessionDataTask *currentTask;
 @property (nonatomic, strong) NSURLSessionDataTask *bmclTask;
 @end
@@ -384,7 +384,7 @@
 }
 
 - (void)refreshBackgroundEffect {
-    // 背景效果切换时刷新 cell 毛玻璃外观
+    // Refresh the cells' frosted glass appearance when the background effect changes
     [_tableView reloadData];
 }
 
@@ -408,8 +408,8 @@
     _tableView.estimatedRowHeight = 50;
     _tableView.keyboardDismissMode = UIScrollViewKeyboardDismissModeInteractive;
     _tableView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentAutomatic;
-    // extendedLayoutIncludesOpaqueBars / edgesForExtendedLayout 是 UIViewController 的属性，
-    // 不能设置到 UITableView 上，否则编译报 "property not found on object of type 'UITableView *'"
+    // extendedLayoutIncludesOpaqueBars / edgesForExtendedLayout are UIViewController properties
+    // and cannot be set on a UITableView, or the compiler reports "property not found on object of type 'UITableView *'"
     self.extendedLayoutIncludesOpaqueBars = YES;
     self.edgesForExtendedLayout = UIRectEdgeAll;
     [_tableView registerClass:[ModLoaderVersionCell class] forCellReuseIdentifier:@"VersionCell"];
@@ -532,7 +532,7 @@
 #pragma mark Forge (并发竞速，参照原 loadForgeVersionsReal)
 
 - (void)loadForgeVersions {
-    // 参照 FCL/HMCL：并发竞速同时发起官方源和 BMCL API 请求，谁先成功用谁
+    // Modeled on FCL/HMCL: race the official source and the BMCL API concurrently and use whichever succeeds first
     NSString *bmclURL = @"https://bmclapi2.bangbang93.com/maven/net/minecraftforge/forge/maven-metadata.xml";
     NSString *officialURL = @"https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml";
 
@@ -572,7 +572,7 @@
     _currentTask = [[NSURLSession sharedSession] dataTaskWithRequest:officialRequest completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         if (error || !data) {
             @synchronized(weakSelf) { if (settled) return; }
-            // 给 BMCLAPI 5s 宽限期
+            // Give BMCLAPI a 5s grace period
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                 @synchronized(weakSelf) {
                     if (settled) return;
@@ -638,12 +638,12 @@
                 NSString *patch = item[@"patch"] ?: @"";
                 NSString *filename = item[@"filename"] ?: @"";
                 if (patch.length == 0) continue;
-                // 显示格式：HD_U_I6 (filename)
+                // Display format: HD_U_I6 (filename)
                 NSString *display = [NSString stringWithFormat:@"%@_%@", type, patch];
                 if (filename.length > 0) {
                     display = [NSString stringWithFormat:@"%@_%@ (%@)", type, patch, filename];
                 }
-                // 把完整信息打包进 version 字符串，用 \x1f 分隔（unit separator）
+                // Pack the full information into the version string, separated by \x1f (unit separator)
                 NSString *packed = [NSString stringWithFormat:@"%@\x1f%@\x1f%@\x1f%@", type, patch, filename, display];
                 [versions addObject:packed];
             }
@@ -669,7 +669,7 @@
     }
     [_tableView reloadData];
 
-    // 若当前已选中版本，滚动到选中行
+    // If a version is already selected, scroll to the selected row
     if (_selectedVersion.length > 0 && _versions.count > 0) {
         NSUInteger idx = [_versions indexOfObject:_selectedVersion];
         if (idx != NSNotFound) {
@@ -696,8 +696,8 @@
     if ([elementName isEqualToString:@"version"]) {
         NSString *raw = [_currentVersionValue stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
         if (raw.length > 0 && [_forgeVersionList indexOfObject:raw] == NSNotFound) {
-            // Forge 版本格式：<mcver>-<forgever>，例如 "1.20.1-47.2.0"
-            // 按 FCL/HMCL 做法：只保留与当前 gameVersion 匹配的版本
+            // Forge version format: <mcver>-<forgever>, for example "1.20.1-47.2.0"
+            // Following FCL/HMCL: keep only the versions matching the current gameVersion
             NSString *prefix = [NSString stringWithFormat:@"%@-", _gameVersion];
             if ([raw hasPrefix:prefix]) {
                 NSString *forgeVer = [raw substringFromIndex:prefix.length];
@@ -705,7 +705,7 @@
                     [_forgeVersionList addObject:forgeVer];
                 }
             } else if ([raw hasPrefix:_gameVersion] && [raw isEqualToString:_gameVersion]) {
-                // 极少数情况：版本号就是 gameVersion 本身
+                // A very rare case: the version number is gameVersion itself
                 if (![_forgeVersionList containsObject:raw]) {
                     [_forgeVersionList addObject:raw];
                 }
@@ -714,14 +714,14 @@
         _currentVersionValue = nil;
     } else if ([elementName isEqualToString:@"metadata"]) {
         _isParsingForge = NO;
-        // 解析完成
+        // Parsing finished
         NSArray *sorted = [_forgeVersionList sortedArrayUsingComparator:^NSComparisonResult(NSString *a, NSString *b) {
-            // 简单降序排序，让最新版本在前
+            // A simple descending sort, so the newest version comes first
             return [b compare:a options:NSNumericSearch];
         }];
-        // NSXMLParser 在后台线程（NSURLSession completionHandler）同步执行，
-        // finishLoadingWithVersions: 内部调用 reloadData / stopAnimating 等 UI 操作，
-        // 必须切回主线程，否则触发 AutoLayout 后台线程修改崩溃。
+        // NSXMLParser runs synchronously on a background thread (the NSURLSession completionHandler),
+        // and finishLoadingWithVersions: performs UI operations such as reloadData / stopAnimating internally,
+        // so it must switch back to the main thread, otherwise AutoLayout crashes on background-thread mutation.
         dispatch_async(dispatch_get_main_queue(), ^{
             [self finishLoadingWithVersions:sorted error:nil];
         });
@@ -743,7 +743,7 @@
     NSString *version = _versions[indexPath.row];
     BOOL isSelected = [_selectedVersion isEqualToString:version];
     [cell configureWithVersion:version isSelected:isSelected];
-    // 适配自定义启动器背景：cell 应用毛玻璃/半透明效果
+    // Adapt to the custom launcher background: apply the frosted glass/translucent effect to the cell
     [[BackgroundManager sharedManager] applyEffectToCell:cell];
     return cell;
 }
@@ -752,11 +752,11 @@
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
     NSString *raw = _versions[indexPath.row];
 
-    // 立即更新选中状态视觉反馈
+    // Update the selection visual feedback immediately
     _selectedVersion = raw;
     [tableView reloadData];
 
-    // 短暂展示选中状态后 pop
+    // Pop after briefly showing the selected state
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         if (self.onSelected) self.onSelected(raw);
         if (self.navigationController.viewControllers.count > 1) {
@@ -784,15 +784,15 @@
 @property (nonatomic, copy) NSString *selectedNeoForgeVersion;
 @property (nonatomic, copy) NSString *selectedQuiltVersion;
 @property (nonatomic, copy) NSString *selectedOptiFineVersion;
-@property (nonatomic, copy) NSString *selectedOptiFineType;     // HD_U 等
+@property (nonatomic, copy) NSString *selectedOptiFineType;     // HD_U and the like
 @property (nonatomic, copy) NSString *selectedOptiFinePatch;
 @property (nonatomic, copy) NSString *selectedOptiFineFilename;
 
-// 选项
+// Options
 @property (nonatomic, assign) BOOL installFabricAPI;
-@property (nonatomic, assign) BOOL installOptiFine;  // 仅 forge 选中时显示
+@property (nonatomic, assign) BOOL installOptiFine;  // Shown only when forge is selected
 
-// 用户是否手动修改过版本名
+// Whether the user has edited the version name manually
 @property (nonatomic, assign) BOOL nameManuallyModified;
 @end
 
@@ -816,7 +816,7 @@
                                                                              target:self
                                                                              action:@selector(backTapped)];
 
-    // FCL 风格：右上角下载图标按钮（替代原底部 72pt 大按钮）
+    // FCL style: a download icon button in the top-right corner (replacing the old 72pt button at the bottom)
     UIBarButtonItem *installItem = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"arrow.down.circle.fill"]
                                                                       style:UIBarButtonItemStyleDone
                                                                      target:self
@@ -824,7 +824,7 @@
     installItem.tintColor = [UIColor systemGreenColor];
     self.navigationItem.rightBarButtonItem = installItem;
 
-    _installFabricAPI = YES;  // Fabric 默认勾选 Fabric API（与 FCL 默认行为一致）
+    _installFabricAPI = YES;  // Fabric ticks Fabric API by default (matching FCL's default behavior)
 
     [self setupLoaders];
     [self setupNameBar];
@@ -834,7 +834,7 @@
 }
 
 - (void)refreshBackgroundEffect {
-    // 背景效果切换时刷新 cell 与 nameBar 的毛玻璃外观
+    // Refresh the frosted glass appearance of the cells and the nameBar when the background effect changes
     [_tableView reloadData];
 }
 
@@ -849,7 +849,7 @@
     BOOL neoForgeCompatible = [self isNeoForgeCompatible];
     BOOL optiFineCompatible = [self isOptiFineCompatible];
 
-    // 通过 ModLoaderIconHelper 统一获取加载器图标和品牌色（优先 PNG，回退 SF Symbol）
+    // Get the loader icon and brand color uniformly through ModLoaderIconHelper (PNG first, falling back to an SF Symbol)
     NSArray *defs = @[
         @{ @"id": @"vanilla",  @"name": @"Vanilla", @"desc": @"Pure Minecraft, without any mod loader", @"compatible": @YES },
         @{ @"id": @"fabric",   @"name": @"Fabric",        @"desc": @"A lightweight mod loader, good for smaller mods",      @"compatible": @(fabricCompatible) },
@@ -864,7 +864,7 @@
         row.identifier = d[@"id"];
         row.name = d[@"name"];
         row.desc = d[@"desc"];
-        // 通过 ModLoaderIconHelper 统一获取图标符号名和品牌色（PNG 缺失时回退用）
+        // Get the icon symbol name and brand color uniformly through ModLoaderIconHelper (used as a fallback when the PNG is missing)
         row.iconName = [ModLoaderIconHelper symbolNameForLoader:d[@"id"]];
         row.compatible = [d[@"compatible"] boolValue];
         row.iconColor = [ModLoaderIconHelper brandColorForLoader:d[@"id"]];
@@ -873,10 +873,10 @@
 }
 
 - (void)setupNameBar {
-    // FCL 风格 name_bar：紧凑横向条目（"版本名" label + 输入框），高度 40pt
+    // FCL style name_bar: a compact horizontal row ("Version name" label + text field), 40pt tall
     _nameBar = [[UIView alloc] init];
     _nameBar.translatesAutoresizingMaskIntoConstraints = NO;
-    // 适配自定义启动器背景：有全局背景时用毛玻璃，否则用默认实色
+    // Adapt to the custom launcher background: use frosted glass when a global background is set, otherwise the default solid color
     if ([[BackgroundManager sharedManager] hasBackground]) {
         _nameBar.backgroundColor = [UIColor clearColor];
         [[BackgroundManager sharedManager] applyEffectToView:_nameBar];
@@ -930,7 +930,7 @@
 }
 
 - (void)setupTableView {
-    // FCL 风格：扁平 UITableView InsetGrouped，加载器列表 + 附加选项 section
+    // FCL style: a flat UITableView InsetGrouped with a loader list section and an extra options section
     _tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStyleInsetGrouped];
     _tableView.translatesAutoresizingMaskIntoConstraints = NO;
     _tableView.backgroundColor = [UIColor clearColor];
@@ -941,8 +941,8 @@
     _tableView.estimatedRowHeight = 54;
     _tableView.keyboardDismissMode = UIScrollViewKeyboardDismissModeInteractive;
     _tableView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentAutomatic;
-    // extendedLayoutIncludesOpaqueBars / edgesForExtendedLayout 是 UIViewController 的属性，
-    // 不能设置到 UITableView 上，否则编译报 "property not found on object of type 'UITableView *'"
+    // extendedLayoutIncludesOpaqueBars / edgesForExtendedLayout are UIViewController properties
+    // and cannot be set on a UITableView, or the compiler reports "property not found on object of type 'UITableView *'"
     self.extendedLayoutIncludesOpaqueBars = YES;
     self.edgesForExtendedLayout = UIRectEdgeAll;
     _tableView.sectionHeaderTopPadding = 0;
@@ -1007,7 +1007,7 @@
 }
 
 - (BOOL)isOptiFineCompatible {
-    // OptiFine 1.14+ 与 Forge 兼容，1.13 及以下独立装为版本补丁
+    // OptiFine 1.14+ is compatible with Forge; 1.13 and earlier are installed separately as a version patch
     if (!_gameVersion) return YES;
     NSArray *c = [_gameVersion componentsSeparatedByString:@"."];
     if (c.count < 2) return YES;
@@ -1021,9 +1021,9 @@
 #pragma mark Compatibility (互斥逻辑，参照 FCL InstallerItemGroup)
 
 - (NSString *)incompatibleReasonForLoaderId:(NSString *)loaderId {
-    // fabricApi 与 forge/optifine/neoforge 互斥
-    // optifine 与 fabric/quilt/neoforge 互斥（与 forge 可共存）
-    // forge/fabric/quilt/neoforge 互斥
+    // fabricApi excludes forge/optifine/neoforge
+    // optifine excludes fabric/quilt/neoforge (but can coexist with forge)
+    // forge/fabric/quilt/neoforge are mutually exclusive
 
     if ([loaderId isEqualToString:@"vanilla"]) return nil;
 
@@ -1035,12 +1035,12 @@
 
     if ([loaderId isEqualToString:@"fabric"] || [loaderId isEqualToString:@"forge"] ||
         [loaderId isEqualToString:@"neoforge"] || [loaderId isEqualToString:@"quilt"]) {
-        // 加载器组互斥
+        // Loader group mutual exclusion
         if (fabricSelected  && ![loaderId isEqualToString:@"fabric"])  return @"Conflicts with Fabric";
         if (forgeSelected   && ![loaderId isEqualToString:@"forge"])   return @"Conflicts with Forge";
         if (neoSelected     && ![loaderId isEqualToString:@"neoforge"]) return @"Conflicts with NeoForge";
         if (quiltSelected   && ![loaderId isEqualToString:@"quilt"])   return @"Conflicts with Quilt";
-        // optifine 与 fabric/quilt/neoforge 互斥
+        // optifine excludes fabric/quilt/neoforge
         if (optiSelected) {
             if ([loaderId isEqualToString:@"fabric"])  return @"Conflicts with OptiFine";
             if ([loaderId isEqualToString:@"quilt"])   return @"Conflicts with OptiFine";
@@ -1058,7 +1058,7 @@
 }
 
 - (void)refreshIncompatibilities {
-    // 重新渲染所有行，互斥/兼容状态在 cellForRowAtIndexPath 中计算
+    // Re-render every row; the exclusion/compatibility state is computed in cellForRowAtIndexPath
     [_tableView reloadData];
 }
 
@@ -1068,7 +1068,7 @@
     if (!_gameVersion) return @"";
     NSMutableString *name = [NSMutableString stringWithString:_gameVersion];
 
-    // 已选加载器追加 -loaderName
+    // Append -loaderName for the selected loader
     NSString *loaderId = _selectedLoaderId;
     if (loaderId.length > 0 && ![loaderId isEqualToString:@"vanilla"]) {
         NSString *loaderName = nil;
@@ -1080,7 +1080,7 @@
         if (loaderName) [name appendFormat:@"-%@", loaderName];
     }
 
-    // 若同时勾选了 OptiFine（与 Forge 共存），追加 -OptiFine
+    // If OptiFine is also ticked (coexisting with Forge), append -OptiFine
     if (_installOptiFine && [loaderId isEqualToString:@"forge"]) {
         if (![_selectedLoaderId isEqualToString:@"optifine"]) {
             [name appendString:@"-OptiFine"];
@@ -1092,9 +1092,9 @@
 
 - (void)refreshVersionName {
     if (_nameManuallyModified) return;
-    // 注意：变量名不能使用 "auto"，因为 auto 是 C/C++/Objective-C 的保留关键字
-    // （存储类说明符），作为标识符会导致 "expected identifier or '('" 编译错误。
-    // 改用 autoGeneratedName 以避免与关键字冲突。
+    // Note: the variable cannot be named "auto", because auto is a reserved keyword in C/C++/Objective-C
+    // (a storage class specifier), and using it as an identifier causes an "expected identifier or '('" compile error.
+    // autoGeneratedName is used instead, to avoid clashing with the keyword.
     NSString *autoGeneratedName = [self generateVersionName];
     if (![autoGeneratedName isEqualToString:_versionNameField.text]) {
         // programmatic edit, ignore text change notification
@@ -1127,7 +1127,7 @@
         }
     }
 
-    // OptiFine 单独安装时必须有选中版本
+    // A version must be selected when installing OptiFine on its own
     if ([_selectedLoaderId isEqualToString:@"optifine"] && _selectedOptiFineVersion.length == 0) {
         [self showAlert:@"Please choose an OptiFine version" message:nil];
         return;
@@ -1142,9 +1142,9 @@
     } else if ([_selectedLoaderId isEqualToString:@"forge"]) {
         installOptiFine = _installOptiFine;
     } else if ([_selectedLoaderId isEqualToString:@"optifine"]) {
-        // 单独安装 OptiFine：作为版本补丁
+        // Installing OptiFine on its own: as a version patch
         installOptiFine = YES;
-        // 单独 optifine 时 loaderVersion 为 OptiFine 完整描述（type\x1fpatch\x1ffilename\x1fdisplay）
+        // For a standalone optifine install, loaderVersion is the full OptiFine description (type\x1fpatch\x1ffilename\x1fdisplay)
         loaderVersion = _selectedOptiFineVersion;
     }
 
@@ -1169,7 +1169,7 @@
     else if ([loaderId isEqualToString:@"quilt"])    self.selectedQuiltVersion = version;
     else if ([loaderId isEqualToString:@"optifine"]) {
         self.selectedOptiFineVersion = version;
-        // 解析 packed 格式：type\x1fpatch\x1ffilename\x1fdisplay
+        // Parse the packed format: type\x1fpatch\x1ffilename\x1fdisplay
         if ([version containsString:@"\x1f"]) {
             NSArray *parts = [version componentsSeparatedByString:@"\x1f"];
             if (parts.count >= 3) {
@@ -1195,13 +1195,13 @@
 }
 
 - (void)textFieldDidBeginEditing:(UITextField *)textField {
-    // 用户开始手动编辑
+    // The user has started editing manually
 }
 
 - (void)textFieldDidEndEditing:(UITextField *)textField {
-    // 注意：变量名不能使用 "auto"，因为 auto 是 C/C++/Objective-C 的保留关键字
-    // （存储类说明符），作为标识符会导致 "expected identifier or '('" 编译错误。
-    // 改用 autoGeneratedName 以避免与关键字冲突。
+    // Note: the variable cannot be named "auto", because auto is a reserved keyword in C/C++/Objective-C
+    // (a storage class specifier), and using it as an identifier causes an "expected identifier or '('" compile error.
+    // autoGeneratedName is used instead, to avoid clashing with the keyword.
     NSString *autoGeneratedName = [self generateVersionName];
     if (textField.text.length == 0) {
         _nameManuallyModified = NO;
@@ -1214,14 +1214,14 @@
 #pragma mark - TableView
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
-    return 2;  // 0: 加载器列表, 1: 附加选项
+    return 2;  // 0: loader list, 1: extra options
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     if (section == 0) {
         return _loaders.count;
     }
-    // section 1: 附加选项
+    // section 1: extra options
     return [self currentOptions].count;
 }
 
@@ -1248,7 +1248,7 @@
 
         BOOL isSelected = [_selectedLoaderId isEqualToString:row.identifier];
 
-        // 计算选中版本的显示文本（OptiFine packed 格式提取 display）
+        // Compute the display text of the selected version (extracting display from the OptiFine packed format)
         NSString *versionDisplay = nil;
         if (isSelected && ![row.identifier isEqualToString:@"vanilla"]) {
             NSString *selVer = [self selectedVersionForLoader:row.identifier];
@@ -1262,7 +1262,7 @@
             }
         }
 
-        // 兼容性 + 互斥判断
+        // Compatibility + mutual exclusion checks
         BOOL incompatible = NO;
         NSString *reason = nil;
         if (!row.compatible) {
@@ -1278,11 +1278,11 @@
           selectedVersionDisplay:versionDisplay
                     incompatible:incompatible
                          reason:reason];
-        // 适配自定义启动器背景：cell 应用毛玻璃/半透明效果
+        // Adapt to the custom launcher background: apply the frosted glass/translucent effect to the cell
         [[BackgroundManager sharedManager] applyEffectToCell:cell];
         return cell;
     } else {
-        // section 1: 附加选项（Fabric API / OptiFine 共存开关）
+        // section 1: extra options (the Fabric API / OptiFine coexistence switches)
         ModLoaderSwitchCell *cell = [tableView dequeueReusableCellWithIdentifier:@"SwitchCell" forIndexPath:indexPath];
         NSMutableArray *opts = [self currentOptions];
         NSDictionary *opt = opts[indexPath.row];
@@ -1306,7 +1306,7 @@
         }
         [cell.switchControl removeTarget:nil action:NULL forControlEvents:UIControlEventAllEvents];
         [cell.switchControl addTarget:self action:@selector(switchChanged:) forControlEvents:UIControlEventValueChanged];
-        // 适配自定义启动器背景：cell 应用毛玻璃/半透明效果
+        // Adapt to the custom launcher background: apply the frosted glass/translucent effect to the cell
         [[BackgroundManager sharedManager] applyEffectToCell:cell];
         return cell;
     }
@@ -1319,7 +1319,7 @@
         _installOptiFine = sender.on;
     }
     [self refreshVersionName];
-    // 重新加载 section 0 让行选中状态和互斥状态同步刷新
+    // Reload section 0 so the row selection and mutual exclusion states refresh together
     [self.tableView reloadSections:[NSIndexSet indexSetWithIndex:0] withRowAnimation:UITableViewRowAnimationNone];
 }
 
@@ -1338,7 +1338,7 @@
 
     if ([row.identifier isEqualToString:@"vanilla"]) {
         _selectedLoaderId = @"vanilla";
-        // 清空加载器版本（vanilla 无需版本号）
+        // Clear the loader version (vanilla needs no version number)
         _installOptiFine = NO;
         _installFabricAPI = NO;
         [self refreshVersionName];
@@ -1346,16 +1346,16 @@
         return;
     }
 
-    // 切换加载器
+    // Switch the loader
     _selectedLoaderId = row.identifier;
-    // 重置互斥选项
+    // Reset the mutually exclusive options
     if (![row.identifier isEqualToString:@"fabric"])  _installFabricAPI = NO;
     if (![row.identifier isEqualToString:@"forge"])   _installOptiFine = NO;
     if ([row.identifier isEqualToString:@"fabric"])   _installFabricAPI = YES;
 
     [self refreshVersionName];
 
-    // 直接 push 版本选择页
+    // Push the version selection page directly
     [self pushVersionPickerForLoader:row.identifier];
     [tableView reloadData];
 }
