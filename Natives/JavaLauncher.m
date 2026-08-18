@@ -12,10 +12,8 @@
 #include "utils.h"
 #include "ZinkConfig.h"
 
-// god knows why Copilot was trying to add this.
 #import "authenticator/BaseAuthenticator.h"
 #import "authenticator/ThirdPartyAuthenticator.h"
-// God knows why Copilot decided to add this thing in here...
 
 #import "ios_uikit_bridge.h"
 #import "JavaLauncher.h"

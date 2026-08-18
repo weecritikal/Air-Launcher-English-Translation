@@ -2,7 +2,6 @@
 //  ModTableViewController.m
 //  AmethystMods
 //
-//  Created by Copilot on 2025-08-22.
 //  Updated: ensure the web search switch is placed directly left of refresh and visible reliably.
 //
 

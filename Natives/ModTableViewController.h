@@ -2,7 +2,6 @@
 //  ModTableViewController.h
 //  AmethystMods
 //
-//  Created by Copilot on 2025-08-22.
 //
 
 #import <UIKit/UIKit.h>

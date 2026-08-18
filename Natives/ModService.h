@@ -2,7 +2,6 @@
 //  ModService.h
 //  AmethystMods
 //
-//  Created by Copilot on 2025-08-22.
 //
 
 #import <Foundation/Foundation.h>
