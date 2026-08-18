@@ -25,9 +25,9 @@
 @interface LauncherPreferencesViewController()
 @property(nonatomic) NSArray<NSString*> *rendererKeys, *rendererList;
 @property(nonatomic) BOOL pickingMousePointer;
-// 当前正在选择的颜色偏好键（general.text_color / general.card_color）
+// The color preference key currently being edited (general.text_color / general.card_color)
 @property(nonatomic, copy, nullable) NSString *pickingColorPrefKey;
-// 顶部 Hero 卡片视图（App 名 + 版本 + 设备信息），作为 tableHeaderView 的一部分
+// The hero card at the top (app name + version + device info), part of the tableHeaderView
 @property(nonatomic, strong, nullable) UIView *heroCard;
 @end
 
@@ -35,7 +35,7 @@
 
 - (id)init {
     self = [super init];
-    // 不设置 self.title，避免顶部导航栏出现"设置"标题黑条（参照 FCL 无 title 风格）
+    // self.title is deliberately not set, to avoid a black "Settings" title band in the navigation bar (matching the title-less FCL style)
     return self;
 }
 
@@ -44,7 +44,7 @@
 }
 
 - (void)openImagePicker {
-    // 检查是否已经显示了图片选择器
+    // Check whether the image picker is already showing
     for (UIWindow *window in UIApplication.sharedApplication.windows) {
         for (UIWindowScene *scene in UIApplication.sharedApplication.connectedScenes) {
             if ([scene isKindOfClass:[UIWindowScene class]]) {
@@ -52,7 +52,7 @@
                     for (UIView *view in window.subviews) {
                         if ([view isKindOfClass:[UIAlertController class]] || 
                             [view isKindOfClass:[UIImagePickerController class]]) {
-                            // 如果已经显示了相关控制器，直接返回
+                            // Return straight away if the relevant controller is already showing
                             return;
                         }
                     }
@@ -65,7 +65,7 @@
     imagePicker.sourceType = UIImagePickerControllerSourceTypePhotoLibrary;
     imagePicker.delegate = self;
     
-    // 延迟显示图片选择器，避免与UIAlertController冲突
+    // Show the image picker after a delay, so it does not clash with the UIAlertController
     dispatch_async(dispatch_get_main_queue(), ^{
         [self presentViewController:imagePicker animated:YES completion:nil];
     });
@@ -88,7 +88,7 @@
         UIColorPickerViewController *picker = [[UIColorPickerViewController alloc] init];
         picker.title = title;
         picker.delegate = self;
-        // 预选当前已保存的颜色
+        // Preselect the color that is already saved
         NSString *hex = getPrefObject(fullKey);
         UIColor *current = [self colorFromHexString:hex];
         if (current) {
@@ -136,7 +136,7 @@
 
 - (void)imagePickerController:(UIImagePickerController *)picker didFinishPickingMediaWithInfo:(NSDictionary<UIImagePickerControllerInfoKey,id> *)info {
     [picker dismissViewControllerAnimated:YES completion:^{
-        // 在图片选择器完全关闭后再处理图片
+        // Handle the image only after the picker has fully dismissed
         dispatch_async(dispatch_get_main_queue(), ^{
             UIImage *selectedImage = info[UIImagePickerControllerOriginalImage];
             if (!selectedImage) {
@@ -157,22 +157,22 @@
                 }
                 return;
             }
-            // 显示处理中的提示
+            // Show the processing message
             [self showProcessingIndicator];
             
-            // 检查图片是否为正方形
+            // Check whether the image is square
             if (selectedImage.size.width != selectedImage.size.height) {
-                // 如果不是正方形，打开裁剪界面
+                // If it is not square, open the cropper
                 ImageCropperViewController *cropperVC = [[ImageCropperViewController alloc] initWithImage:selectedImage];
                 __weak typeof(self) weakSelf = self;
                 cropperVC.completionHandler = ^(UIImage * _Nullable croppedImage) {
                     if (croppedImage) {
-                        // 保存裁剪后的图片
+                        // Save the cropped image
                         [[CustomIconManager sharedManager] saveCustomIcon:croppedImage withCompletion:^(BOOL success, NSError * _Nullable error) {
                             dispatch_async(dispatch_get_main_queue(), ^{
                                 if (success) {
                                     [weakSelf showSuccessMessage:@"Image saved. You can now pick it under the app icon settings"];
-                                    // 更新应用图标选择器的显示
+                                    // Update the app icon picker display
                                     [weakSelf.tableView reloadData];
                                 } else {
                                     NSString *errorMessage = error.localizedDescription ?: @"Failed to save the custom icon";
@@ -188,12 +188,12 @@
                 };
                 [weakSelf.navigationController pushViewController:cropperVC animated:YES];
             } else {
-                // 如果是正方形，直接保存
+                // If it is square, save it directly
                 [[CustomIconManager sharedManager] saveCustomIcon:selectedImage withCompletion:^(BOOL success, NSError * _Nullable error) {
                     dispatch_async(dispatch_get_main_queue(), ^{
                         if (success) {
                             [self showSuccessMessage:@"Image saved. You can now pick it under the app icon settings"];
-                            // 更新应用图标选择器的显示
+                            // Update the app icon picker display
                             [self.tableView reloadData];
                         } else {
                             NSString *errorMessage = error.localizedDescription ?: @"Failed to save the custom icon";
@@ -224,7 +224,7 @@
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Processing" message:@"Processing the image you selected..." preferredStyle:UIAlertControllerStyleAlert];
     [self presentViewController:alert animated:YES completion:nil];
     
-    // 2秒后自动关闭提示
+    // Dismiss the message automatically after 2 seconds
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         [alert dismissViewControllerAnimated:YES completion:nil];
     });
@@ -247,7 +247,7 @@
 - (void)viewDidLoad
 {
     // Hide the navigation bar band completely (only when this is a non-modal root page and the only VC on the stack)
-    // 尽早设置，避免导航栏闪烁
+    // Set it as early as possible, to avoid the navigation bar flickering
     if (self.navigationController &&
         self.navigationController.viewControllers.firstObject == self &&
         self.navigationController.presentingViewController == nil &&
@@ -255,7 +255,7 @@
         self.navigationController.navigationBarHidden = YES;
     }
 
-    // 启用设置项搜索（必须在 super viewDidLoad 之前设置，父类据此创建 searchController）
+    // Enable settings search (this must be set before super viewDidLoad, since the superclass creates the searchController from it)
     self.searchEnabled = YES;
 
     self.getPreference = ^id(NSString *section, NSString *key){
@@ -275,16 +275,16 @@
     self.rendererKeys = getRendererKeys(NO);
     self.rendererList = getRendererNames(NO);
     
-    // 检查是否在游戏中：如果当前可见视图控制器是 SurfaceViewController，则在游戏中
+    // Check whether we are in game: if the visible view controller is SurfaceViewController, the game is running
     BOOL(^whenNotInGame)() = ^BOOL(){
         UIViewController *visibleVC = currentVC();
         return ![visibleVC isKindOfClass:NSClassFromString(@"SurfaceViewController")];
     };
 
-    // --- 定义弹窗显示的 Block，防止循环引用使用 weakSelf ---
+    // --- Define the block that shows the popup, using weakSelf to avoid a retain cycle ---
     __weak typeof(self) weakSelf = self;
     void (^showTouchInfoAlert)(BOOL) = ^(BOOL enabled) {
-        // 这个 Block 仅用于显示说明，不再负责逻辑判断
+        // This block only shows the explanation and no longer makes any decisions
         dispatch_async(dispatch_get_main_queue(), ^{
             UIAlertController *alert = [UIAlertController alertControllerWithTitle:localize(@"preference.popup.touch_info.title", nil)
                                                                            message:localize(@"preference.popup.touch_info.message", nil)
@@ -373,9 +373,9 @@
                   @"Match system"
               ],
               @"action": ^(NSString *value){
-                  // 实时应用主题，发通知由 SceneDelegate 处理。
-                  // 不调用 loadPreferences(YES) 等会重置账号偏好的操作，
-                  // 仅设置 window.overrideUserInterfaceStyle，账号数据不受影响。
+                  // Apply the theme live; SceneDelegate handles the notification.
+                  // Operations that would reset the account preferences, such as loadPreferences(YES), are not called;
+                  // only window.overrideUserInterfaceStyle is set, so the account data is untouched.
                   [[NSNotificationCenter defaultCenter] postNotificationName:@"UIThemeChanged" object:value];
               }
             },
@@ -629,11 +629,11 @@
               @"min": @(25),
               @"max": @(150)
             },
-            // 帧率限制选项已移除：CADisplayLink 始终采用 30-120Hz 自适应范围，
-            // 由屏幕硬件能力决定实际帧率（60Hz 设备仍为 60，120Hz ProMotion 设备可达 120）。
-            // 不再提供"最大帧率限制 60FPS"开关，避免用户误关闭导致帧率被人为锁死。
-            // 解锁帧率（关闭垂直同步）：三层联动关闭 VSync，让游戏帧率可超过屏幕刷新率。
-            // 不限制 ProMotion 设备：60Hz 设备同样会被 VSync 锁在 60，也需要解锁。
+            // The frame rate cap option has been removed: CADisplayLink always uses the adaptive 30-120Hz range,
+            // and the screen hardware decides the real frame rate (60Hz devices stay at 60, 120Hz ProMotion devices reach 120).
+            // There is no "cap the frame rate at 60FPS" switch any more, so a user cannot lock the frame rate down by mistake.
+            // Unlock the frame rate (disabling vertical sync): three layers disable VSync together, letting the game exceed the refresh rate.
+            // This is not limited to ProMotion devices: a 60Hz device is locked to 60 by VSync too and needs unlocking as well.
             @{@"key": @"disable_game_vsync",
               @"hasDetail": @YES,
               @"icon": @"hare",
@@ -679,10 +679,10 @@
             },
         ], @[
             // MobileGlues settings
-            // 当渲染器选择为 MobileGlues 或 Vulkan 时，init_loadMobileGluesConfig()
-            // 写入的 <POJAV_HOME>/MG/config.json 会被 MobileGlues 读取并生效。
-            // Vulkan 渲染器的 OpenGL 回退使用 MobileGlues（对齐 Ynnyny 仓库）。
-            // Auto 渲染器会被解析为 ANGLE，不会加载 MobileGlues。
+            // When the renderer is MobileGlues or Vulkan, the <POJAV_HOME>/MG/config.json written by
+            // init_loadMobileGluesConfig() is read by MobileGlues and takes effect.
+            // The OpenGL fallback of the Vulkan renderer is MobileGlues (aligned with the Ynnyny repo).
+            // The Auto renderer resolves to ANGLE and never loads MobileGlues.
             @{@"icon": @"cpu"},
             @{@"key": @"enable_angle",
               @"hasDetail": @YES,
@@ -780,9 +780,9 @@
             // Control settings
             @{@"icon": @"gamecontroller"},
             
-            // --- [修改] TouchController 模组支持 ---
+            // --- [Change] TouchController mod support ---
             @{@"key": @"mod_touch_enable",
-              @"icon": @"hand.point.up.left", // SF Symbols 图标
+              @"icon": @"hand.point.up.left", // SF Symbols icon
               @"hasDetail": @YES,
               @"type": self.typeChildPane,
               @"enableCondition": whenNotInGame,
@@ -791,7 +791,7 @@
             },
             // ------------------------------------------
 
-            // --- [新增] 键位调整（从左侧菜单移到设置中） ---
+            // --- [New] Custom controls (moved here from the left menu) ---
             @{@"key": @"custom_controls",
               @"icon": @"gamecontroller.fill",
               @"hasDetail": @YES,
@@ -841,20 +841,20 @@
                 @"type": self.typeSwitch,
             },
             
-            // --- [重构] 双指呼出键盘控制 ---
-            // 同样改为按钮+弹窗模式，彻底解决开关回弹问题
+            // --- [Rework] Two-finger keyboard control ---
+            // Also changed to the button + popup pattern, which finally fixes the switch springing back
             @{@"key": @"two_finger_keyboard", 
-              @"icon": @"keyboard", // 键盘图标
+              @"icon": @"keyboard", // Keyboard icon
               @"hasDetail": @YES,
-              @"type": self.typeButton, // 关键：改为 Button 类型
+              @"type": self.typeButton, // Important: changed to the Button type
               
               @"action": ^void() {
-                  // 1. 获取当前状态
+                  // 1. Read the current state
                   BOOL isOn = getPrefBool(@"control.two_finger_keyboard");
                   
-                  // 2. 构建弹窗
+                  // 2. Build the popup
                   NSString *title = localize(@"preference.title.two_finger_keyboard", nil);
-                  // 如果没有 localization，设置默认标题
+                  // Set a default title when there is no localization
                   if (!title || [title isEqualToString:@"preference.title.two_finger_keyboard"]) {
                       title = @"Two-finger keyboard";
                   }
@@ -864,21 +864,21 @@
                   
                   UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:msg preferredStyle:UIAlertControllerStyleAlert];
                   
-                  // 3. 根据当前状态显示不同的按钮
+                  // 3. Show different buttons depending on the current state
                   if (!isOn) {
                       [alert addAction:[UIAlertAction actionWithTitle:@"Enable" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-                          // 强制开启
+                          // Force it on
                           setPrefBool(@"control.two_finger_keyboard", YES);
                           [weakSelf showSuccessMessage:@"Two-finger keyboard turned on"];
-                          // 刷新界面
+                          // Refresh the screen
                           [weakSelf.tableView reloadData];
                       }]];
                   } else {
                       [alert addAction:[UIAlertAction actionWithTitle:@"Disable" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
-                          // 强制关闭
+                          // Force it off
                           setPrefBool(@"control.two_finger_keyboard", NO);
                           [weakSelf showSuccessMessage:@"Two-finger keyboard turned off"];
-                          // 刷新界面
+                          // Refresh the screen
                           [weakSelf.tableView reloadData];
                       }]];
                   }
@@ -909,9 +909,9 @@
                 @"hasDetail": @YES,
                 @"icon": @"slider.horizontal.below.rectangle",
                 @"type": self.typeSwitch,
-                // --- [修改] 添加禁用条件 ---
+                // --- [Change] Add the disable condition ---
                 @"enableCondition": ^BOOL(){
-                    // 当 TouchController 启用时，禁用此选项（返回 NO 表示禁用/变灰）
+                    // Disable this option while TouchController is enabled (returning NO disables/grays it out)
                     return ![self.getPreference(@"control", @"mod_touch_enable") boolValue];
                 }
             },
@@ -1030,8 +1030,8 @@
                 @"type": self.typeSwitch,
                 @"requestReload": @YES,
                 @"enableCondition": ^BOOL(){
-                    // 同步自 catsruledogs：用 DeviceNeedsDebugJITMapping() 替代旧的 TXM 标志组合
-                    // 基于 JIT_FLAG_IS_IOS_26 | JIT_FLAG_FORCE_MIRRORED，确保 iOS 26+ 无 TXM 设备也显示此开关
+                    // Synced from catsruledogs: DeviceNeedsDebugJITMapping() replaces the old TXM flag combination
+                    // Based on JIT_FLAG_IS_IOS_26 | JIT_FLAG_FORCE_MIRRORED, so this switch also appears on iOS 26+ devices without TXM
                     return DeviceNeedsDebugJITMapping() && whenNotInGame();
                 },
             },
@@ -1074,13 +1074,13 @@
     ];
 
     [super viewDidLoad];
-    // 适配自定义启动器背景：通过 BackgroundManager 将当前视图控制器透明化，
-    // 让全局背景容器（图片/视频）能够透出显示。必须在 super viewDidLoad 之后调用，
-    // 以确保 view 与 tableView 均已就绪。
+    // Adapt to the custom launcher background: make this view controller transparent through BackgroundManager,
+    // so the global background container (image/video) shows through. It must be called after super viewDidLoad,
+    // to make sure both the view and the tableView exist.
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
 
-    // 顶部 Hero 卡片：App 名 + 版本 + 设备信息（参照 Air-Design v1.2 L3 大卡片规范）
-    // 与搜索栏一起包装为 tableHeaderView，搜索栏在上、Hero 卡片在下
+    // Hero card at the top: app name + version + device info (following the L3 large-card spec of Air-Design v1.2)
+    // Wrapped together with the search bar as the tableHeaderView, search bar on top and hero card below
     [self setupHeroHeader];
 
     // Apply transparent background if global background is active
@@ -1125,7 +1125,7 @@
 #pragma mark - Hero Header（顶部 App 信息卡片）
 
 - (NSString *)appName {
-    // 优先使用 CFBundleDisplayName（用户可见名称），其次 CFBundleName，兜底 "Air"
+    // Prefer CFBundleDisplayName (the user-visible name), then CFBundleName, falling back to "Air"
     NSDictionary *info = NSBundle.mainBundle.infoDictionary;
     NSString *name = info[@"CFBundleDisplayName"];
     if (name.length == 0) {
@@ -1135,10 +1135,10 @@
 }
 
 - (void)setupHeroHeader {
-    // 父类 viewDidLoad 已将 searchController.searchBar 设置为 tableHeaderView
-    // 这里取出 searchBar，与 Hero 卡片一起重新包装为新的 tableHeaderView
-    // 注意：searchController 是父类 PLPrefTableViewController 的私有属性，子类无法直接访问，
-    // 但父类已将 searchBar 设置为 tableView.tableHeaderView，可直接取出。
+    // The superclass viewDidLoad has already set searchController.searchBar as the tableHeaderView
+    // Here the searchBar is taken back out and rewrapped, together with the hero card, into a new tableHeaderView
+    // Note: searchController is a private property of the superclass PLPrefTableViewController and cannot be reached directly by subclasses,
+    // but the superclass has set its searchBar as tableView.tableHeaderView, so it can be read from there.
     UISearchBar *searchBar = nil;
     UIView *currentHeader = self.tableView.tableHeaderView;
     if ([currentHeader isKindOfClass:[UISearchBar class]]) {
@@ -1146,15 +1146,15 @@
     }
     [searchBar removeFromSuperview];
 
-    // 让 searchBar 适配自定义背景（透明、文字色跟随系统）
+    // Make the searchBar adapt to the custom background (transparent, with the text color following the system)
     searchBar.barTintColor = [UIColor clearColor];
     searchBar.tintColor = accentColor();
-    searchBar.backgroundImage = [UIImage new]; // 去掉默认背景
+    searchBar.backgroundImage = [UIImage new]; // Remove the default background
     if (@available(iOS 13.0, *)) {
         searchBar.searchTextField.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.08];
     }
 
-    // ===== Hero 卡片（L3 大卡片：16pt 圆角 + 半透明背景 + 毛玻璃 + 浅边框 + 中阴影）=====
+    // ===== Hero card (an L3 large card: 16pt radius + translucent background + frosted glass + light border + medium shadow) =====
     UIView *heroCard = [[UIView alloc] init];
     heroCard.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.14]; // surface-bright
     heroCard.layer.cornerRadius = 16;
@@ -1167,7 +1167,7 @@
     heroCard.layer.shadowOffset = CGSizeMake(0, 3);
     [[BackgroundManager sharedManager] applyEffectToView:heroCard];
 
-    // Hero 图标（56x56，14pt 圆角，accentColor 纯色背景，白色 SF Symbol）
+    // Hero icon (56x56, 14pt radius, solid accentColor background, white SF Symbol)
     UIImageView *iconView = [[UIImageView alloc] init];
     iconView.image = [UIImage systemImageNamed:@"cube.fill"];
     iconView.tintColor = [UIColor whiteColor];
@@ -1178,7 +1178,7 @@
     iconView.layer.masksToBounds = YES;
     [heroCard addSubview:iconView];
 
-    // 标题（App 名，17pt bold，labelColor）
+    // Title (the app name, 17pt bold, labelColor)
     UILabel *titleLabel = [[UILabel alloc] init];
     titleLabel.text = [self appName];
     titleLabel.font = [UIFont systemFontOfSize:17 weight:UIFontWeightBold];
@@ -1187,7 +1187,7 @@
     titleLabel.minimumScaleFactor = 0.8;
     [heroCard addSubview:titleLabel];
 
-    // 副标题（第一行 App 版本，第二行 设备名 · iOS 系统版本）
+    // Subtitle (first line: the app version; second line: the device name · the iOS version)
     UILabel *subtitleLabel = [[UILabel alloc] init];
     NSString *appVersion = NSBundle.mainBundle.infoDictionary[@"CFBundleShortVersionString"] ?: @"1.0";
     NSString *deviceName = [HostManager GetModelName] ?: UIDevice.currentDevice.name ?: @"iPhone";
@@ -1199,7 +1199,7 @@
     subtitleLabel.numberOfLines = 0;
     [heroCard addSubview:subtitleLabel];
 
-    // 右侧 chevron（12x12，tertiary-labelColor）
+    // Chevron on the right (12x12, tertiary labelColor)
     UIImageView *chevronView = [[UIImageView alloc] init];
     chevronView.image = [UIImage systemImageNamed:@"chevron.right"];
     chevronView.tintColor = [UIColor tertiaryLabelColor];
@@ -1208,12 +1208,12 @@
 
     self.heroCard = heroCard;
 
-    // ===== 容器视图：searchBar（上）+ heroCard（下）=====
+    // ===== Container view: searchBar (top) + heroCard (bottom) =====
     UIView *container = [[UIView alloc] init];
     [container addSubview:searchBar];
     [container addSubview:heroCard];
 
-    // 启用 AutoLayout
+    // Enable AutoLayout
     searchBar.translatesAutoresizingMaskIntoConstraints = NO;
     heroCard.translatesAutoresizingMaskIntoConstraints = NO;
     iconView.translatesAutoresizingMaskIntoConstraints = NO;
@@ -1222,44 +1222,44 @@
     chevronView.translatesAutoresizingMaskIntoConstraints = NO;
 
     [NSLayoutConstraint activateConstraints:@[
-        // searchBar：贴顶部、左右贴边
+        // searchBar: flush with the top and both sides
         [searchBar.topAnchor constraintEqualToAnchor:container.topAnchor],
         [searchBar.leadingAnchor constraintEqualToAnchor:container.leadingAnchor],
         [searchBar.trailingAnchor constraintEqualToAnchor:container.trailingAnchor],
 
-        // heroCard：左右 16pt 外边距，顶部距 searchBar 8pt，底部距容器 8pt
+        // heroCard: 16pt margin on each side, 8pt below the searchBar, 8pt above the bottom of the container
         [heroCard.topAnchor constraintEqualToAnchor:searchBar.bottomAnchor constant:8],
         [heroCard.leadingAnchor constraintEqualToAnchor:container.leadingAnchor constant:16],
         [heroCard.trailingAnchor constraintEqualToAnchor:container.trailingAnchor constant:-16],
         [heroCard.bottomAnchor constraintEqualToAnchor:container.bottomAnchor constant:-8],
 
-        // iconView：56x56，左侧 16pt、上下 16pt
+        // iconView: 56x56, 16pt from the left and 16pt top and bottom
         [iconView.leadingAnchor constraintEqualToAnchor:heroCard.leadingAnchor constant:16],
         [iconView.topAnchor constraintEqualToAnchor:heroCard.topAnchor constant:16],
         [iconView.bottomAnchor constraintEqualToAnchor:heroCard.bottomAnchor constant:-16],
         [iconView.widthAnchor constraintEqualToConstant:56],
         [iconView.heightAnchor constraintEqualToConstant:56],
 
-        // titleLabel：位于 iconView 右侧 14pt，顶部 18pt
+        // titleLabel: 14pt to the right of iconView, 18pt from the top
         [titleLabel.leadingAnchor constraintEqualToAnchor:iconView.trailingAnchor constant:14],
         [titleLabel.topAnchor constraintEqualToAnchor:heroCard.topAnchor constant:18],
         [titleLabel.trailingAnchor constraintEqualToAnchor:chevronView.leadingAnchor constant:-8],
 
-        // subtitleLabel：紧跟 titleLabel 下方 2pt
+        // subtitleLabel: 2pt below titleLabel
         [subtitleLabel.leadingAnchor constraintEqualToAnchor:iconView.trailingAnchor constant:14],
         [subtitleLabel.topAnchor constraintEqualToAnchor:titleLabel.bottomAnchor constant:2],
         [subtitleLabel.trailingAnchor constraintEqualToAnchor:chevronView.leadingAnchor constant:-8],
         [subtitleLabel.bottomAnchor constraintEqualToAnchor:heroCard.bottomAnchor constant:-16],
 
-        // chevronView：12x12，右侧 16pt，垂直居中
+        // chevronView: 12x12, 16pt from the right, vertically centered
         [chevronView.trailingAnchor constraintEqualToAnchor:heroCard.trailingAnchor constant:-16],
         [chevronView.centerYAnchor constraintEqualToAnchor:heroCard.centerYAnchor],
         [chevronView.widthAnchor constraintEqualToConstant:12],
         [chevronView.heightAnchor constraintEqualToConstant:12],
     ]];
 
-    // UITableView 不会根据 AutoLayout 自动计算 tableHeaderView 高度，
-    // 需要手动布局并设置 frame。使用 systemLayoutSizeFitting 计算合适高度。
+    // UITableView does not size the tableHeaderView from AutoLayout automatically,
+    // so it has to be laid out and given a frame by hand. systemLayoutSizeFitting computes a suitable height.
     CGFloat width = self.tableView.bounds.size.width;
     if (width == 0) width = [UIScreen mainScreen].bounds.size.width;
     container.frame = CGRectMake(0, 0, width, 0);
@@ -1325,7 +1325,7 @@
 
 /// Re-apply the background effect: called when the BackgroundUIEffectChanged notification arrives.
 /// Re-applies the opacity/frosted-glass effect to this view controller via BackgroundManager,
-/// 并将 tableView 背景置为透明、移除默认 backgroundView，确保全局背景能够正常透出。
+/// and set the tableView background to transparent and remove the default backgroundView, so the global background shows through.
 - (void)reapplyBackgroundEffect {
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
     self.tableView.backgroundColor = [UIColor clearColor];
@@ -1334,9 +1334,9 @@
 
 #pragma mark - Check For Update
 
-/// 设置页"检查更新"入口：调用 UpdateChecker 检查正式版更新，弹窗显示结果。
+/// The "Check for updates" entry on the settings page: calls UpdateChecker to check for a stable release and shows the result in an alert.
 - (void)checkForUpdateFromSettings {
-    /* 显示加载中的 alert */
+    /* Show a loading alert */
     UIAlertController *loadingAlert = [UIAlertController
         alertControllerWithTitle:localize(@"check_update.checking", @"Checking for updates…")
                          message:nil
@@ -1380,11 +1380,11 @@
     [self presentViewController:alert animated:YES completion:nil];
 }
 
-/// 发现新版本时显示更新详情弹窗（参考 FCL/ZL2 风格）
+/// Show the update details popup when a new version is found (following the FCL/ZL2 style)
 - (void)showUpdateAvailableAlert:(UpdateInfo *)info {
     NSString *title = [NSString stringWithFormat:localize(@"check_update.new_version_title",
                                                           @"New version available: v%@"), info.latestVersion];
-    /* 更新日志截断显示，太长的话只显示前 500 字符 + 省略号 */
+    /* Truncate the changelog: if it is very long, show only the first 500 characters plus an ellipsis */
     NSString *notes = info.releaseNotes ?: @"";
     if (notes.length > 500) {
         notes = [[notes substringToIndex:500] stringByAppendingString:@"…"];
@@ -1444,7 +1444,7 @@
 
 - (void)openCurseForgeAPIKeySettings {
     dispatch_async(dispatch_get_main_queue(), ^{
-        // 通过 UIScene 获取顶层 VC（不使用 keyWindow）
+        // Get the top VC through UIScene (rather than keyWindow)
         UIViewController *topVC = nil;
         for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
             if ([scene isKindOfClass:[UIWindowScene class]] && scene.activationState == UISceneActivationStateForegroundActive) {
@@ -1456,7 +1456,7 @@
             }
         }
         if (!topVC) {
-            // 退而求其次：取任意一个 UIWindowScene
+            // Second best: take any UIWindowScene
             for (UIScene *scene in UIApplication.sharedApplication.connectedScenes) {
                 if ([scene isKindOfClass:[UIWindowScene class]]) {
                     UIWindowScene *windowScene = (UIWindowScene *)scene;
@@ -1487,12 +1487,12 @@
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     UITableViewCell *cell = [super tableView:tableView cellForRowAtIndexPath:indexPath];
 
-    // ===== iOS 设置 App 风格：彩色圆角图标背景 =====
-    // 参照 iOS 设置应用：每个设置项左侧图标用带颜色的圆角方块背景包裹，
-    // 图标本身渲染为白色 SF Symbol。不同 section 用不同颜色区分：
-    //   general=蓝 / video=紫 / control=绿 / java=橙 / debug=红
-    // destructive（危险操作）项统一用红色背景。
-    // 搜索结果模式下用蓝灰色背景。
+    // ===== iOS Settings app style: colored rounded icon backgrounds =====
+    // Following the iOS Settings app: the icon on the left of each row sits on a colored rounded square,
+    // with the icon itself rendered as a white SF Symbol. Each section gets its own color:
+    //   general=blue / video=purple / control=green / java=orange / debug=red
+    // Destructive rows always use a red background.
+    // Search results use a blue-gray background.
     [self applySettingsAppStyleToCell:cell indexPath:indexPath];
 
     // Apply background styling if global background is active
@@ -1510,7 +1510,7 @@
         cell.detailTextLabel.shadowColor = [UIColor blackColor];
         cell.detailTextLabel.shadowOffset = CGSizeMake(0, 1);
 
-        // Tint color for icons and accessories：使用主题强调色（accentColor）
+        // Tint color for icons and accessories: the theme accent color (accentColor)
         cell.tintColor = accentColor();
 
         // Handle specific cell types
@@ -1565,30 +1565,30 @@
     return cell;
 }
 
-/// iOS 设置 App 风格图标背景：给 cell.imageView 加圆角彩色背景 + 白色图标
-/// 参照 iOS 设置应用（General=灰、Display=蓝、Privacy=蓝 等彩色圆角图标）
-/// 在 cellForRow 中调用，仅做视觉装饰，不改变 cell 数据或交互逻辑
+/// iOS Settings app style icon background: give cell.imageView a rounded colored background and a white icon
+/// Following the iOS Settings app (General=gray, Display=blue, Privacy=blue and so on)
+/// Called from cellForRow; purely decorative, changing neither the cell data nor its behavior
 - (void)applySettingsAppStyleToCell:(UITableViewCell *)cell indexPath:(NSIndexPath *)indexPath {
     UIImageView *iconView = cell.imageView;
     if (!iconView) return;
 
-    // 判断是否为 section header 行（row 0 且有 prefSections）
-    // section header 行不加彩色背景，保持原始样式（避免与组内项视觉混淆）
+    // Work out whether this is a section header row (row 0 with prefSections)
+    // Section header rows get no colored background and keep their original style (so they are not confused with the rows inside a group)
     BOOL isSectionHeader = (indexPath.row == 0 && self.prefSections && !self.filteredItems);
     if (isSectionHeader) {
-        // section header：恢复默认 tint（不加背景），让图标保持系统默认外观
+        // Section header: restore the default tint (no background), so the icon keeps the system look
         iconView.backgroundColor = [UIColor clearColor];
         iconView.layer.cornerRadius = 0;
         iconView.layer.masksToBounds = NO;
-        // section header 图标用主题强调色（accentColor），与启动按钮/菜单选中态统一
+        // Section header icons use the theme accent color (accentColor), matching the play button and the selected menu state
         iconView.tintColor = accentColor();
         return;
     }
 
-    // 获取当前项的数据
+    // Read the data for this row
     NSDictionary *item = nil;
     if (self.filteredItems) {
-        // 搜索结果模式
+        // Search results mode
         item = self.filteredItems[indexPath.row];
     } else if (self.prefSections && indexPath.section < (NSInteger)self.prefContents.count) {
         NSArray *sectionItems = self.prefContents[indexPath.section];
@@ -1597,15 +1597,15 @@
         }
     }
 
-    // 判断是否为危险操作项
+    // Work out whether this is a destructive row
     BOOL destructive = [item[@"destructive"] boolValue];
 
-    // 获取图标名，用 UIImageSymbolConfiguration 重新渲染为白色、合适大小的 SF Symbol
+    // Get the icon name and re-render it with UIImageSymbolConfiguration as a white SF Symbol at a suitable size
     NSString *iconName = item[@"icon"];
     UIImage *styledIcon = nil;
     if (iconName.length > 0) {
-        // 用 UIImageSymbolConfiguration 控制图标大小和颜色
-        // pointSize 16 适配默认 UITableViewCell imageView 的 29pt 尺寸（留出内边距）
+        // Use UIImageSymbolConfiguration to control the icon size and color
+        // pointSize 16 suits the 29pt imageView of a default UITableViewCell (leaving room for padding)
         UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:16
                                                                                             weight:UIFontWeightMedium];
         styledIcon = [UIImage systemImageNamed:iconName withConfiguration:config];
@@ -1614,9 +1614,9 @@
         }
     }
 
-    // 设置图标：白色模板渲染，在彩色背景上显示
+    // Set the icon: rendered white as a template, so it shows on the colored background
     if (styledIcon) {
-        // withTintColor 让 SF Symbol 以白色渲染（模板模式），与背景色搭配
+        // withTintColor renders the SF Symbol white (template mode) to match the background color
         UIImage *whiteIcon = [styledIcon imageWithTintColor:[UIColor whiteColor]
                                                renderingMode:UIImageRenderingModeAlwaysOriginal];
         iconView.image = whiteIcon;
@@ -1624,7 +1624,7 @@
     iconView.tintColor = [UIColor whiteColor];
     iconView.contentMode = UIViewContentModeCenter;
 
-    // 设置彩色圆角背景
+    // Set the colored rounded background
     UIColor *bgColor = [self iconBackgroundColorForItem:item indexPath:indexPath destructive:destructive];
     iconView.backgroundColor = bgColor;
     iconView.layer.cornerRadius = 7;
@@ -1632,17 +1632,17 @@
     iconView.layer.masksToBounds = YES;
 }
 
-/// 根据设置项所属 section 与图标名返回 iOS 设置 App 风格的彩色背景
-/// 参照 iOS 设置应用：不同功能模块用不同颜色区分，一眼可辨识归属
+/// Return the iOS Settings app style background color for a row, from its section and icon name
+/// Following the iOS Settings app: each feature area gets its own color, so the grouping is obvious at a glance
 - (UIColor *)iconBackgroundColorForItem:(NSDictionary *)item
                               indexPath:(NSIndexPath *)indexPath
                              destructive:(BOOL)destructive {
-    // 危险操作项统一红色背景
+    // Destructive rows always get a red background
     if (destructive) {
         return [UIColor systemRedColor];
     }
 
-    // 搜索结果模式：统一用蓝灰色背景
+    // Search results mode: always a blue-gray background
     if (self.filteredItems) {
         NSNumber *origSection = item[@"__origSection"];
         if (origSection) {
@@ -1651,12 +1651,12 @@
         return [UIColor systemBlueColor];
     }
 
-    // 正常模式：按 section 着色
+    // Normal mode: colored by section
     return [self colorForPreferenceSection:indexPath.section];
 }
 
-/// section 索引 → 配色映射（参照 iOS 设置应用的模块色系）
-/// general=蓝（通用设置）/ video=紫（显示）/ control=绿（控制）/ java=橙（运行时）/ debug=红（调试）
+/// Section index -> color mapping (following the module colors of the iOS Settings app)
+/// general=blue (general settings) / video=purple (display) / control=green (controls) / java=orange (runtime) / debug=red (debugging)
 - (UIColor *)colorForPreferenceSection:(NSInteger)section {
     if (!self.prefSections || section >= (NSInteger)self.prefSections.count) {
         return [UIColor systemGrayColor];
@@ -1716,11 +1716,11 @@
     }
 }
 
-/// 重写子页面跳转：为 CustomControlsViewController 设置必需的回调块
+/// Override the sub-page navigation to give CustomControlsViewController the callback blocks it needs
 - (void)tableView:(UITableView *)tableView openChildPaneAtIndexPath:(NSIndexPath *)indexPath {
     NSDictionary *item = self.prefContents[indexPath.section][indexPath.row];
 
-    // 特殊处理：键位调整界面需要 setDefaultCtrl / getDefaultCtrl 回调
+    // Special case: the custom controls screen needs the setDefaultCtrl / getDefaultCtrl callbacks
     if ([item[@"key"] isEqualToString:@"custom_controls"]) {
         CustomControlsViewController *vc = [[CustomControlsViewController alloc] init];
         vc.modalPresentationStyle = UIModalPresentationOverFullScreen;
@@ -1737,7 +1737,7 @@
         return;
     }
 
-    // 其他设置项走父类默认逻辑
+    // Every other row takes the default superclass path
     [super tableView:tableView openChildPaneAtIndexPath:indexPath];
 }
 

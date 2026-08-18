@@ -2,10 +2,10 @@
 #import "LauncherPreferences.h"
 #import "utils.h"
 
-/// MCIM 镜像根地址（参考 ZalithLauncher 2 MCIMMirror.kt）
+/// MCIM mirror root address (see MCIMMirror.kt in ZalithLauncher 2)
 static NSString *const kMCIMRootURL = @"https://mod.mcimirror.top";
 
-/// 偏好键
+/// Preference key
 static NSString *const kPrefModMirror = @"general.mod_mirror";
 
 @implementation MCIMMirror
@@ -46,7 +46,7 @@ static NSString *const kPrefModMirror = @"general.mod_mirror";
         return [NSString stringWithFormat:@"%@/curseforge%@", kMCIMRootURL, path];
     }
     // Modrinth CDN: https://cdn.modrinth.com/... → https://mod.mcimirror.top/...
-    // （参考 ZalithLauncher 2 MCIMMirror.kt：CDN 链接做简单主机替换，不加平台前缀）
+    // (Following MCIMMirror.kt in ZalithLauncher 2: CDN links get a simple host substitution with no platform prefix)
     if ([originalURL hasPrefix:@"https://cdn.modrinth.com/"]) {
         NSString *path = [originalURL substringFromIndex:@"https://cdn.modrinth.com".length];
         return [NSString stringWithFormat:@"%@%@", kMCIMRootURL, path];

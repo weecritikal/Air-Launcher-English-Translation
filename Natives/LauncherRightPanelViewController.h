@@ -1,13 +1,13 @@
 #import <UIKit/UIKit.h>
 
-// FCL风格右侧面板 - 显示账户信息、版本选择和启动按钮
+// FCL-style right panel - shows the account information, version picker and play button
 
 @interface LauncherRightPanelViewController : UIViewController
 
-// 更新账户信息显示
+// Update the account information display
 - (void)updateAccountInfo;
 
-// 更新版本信息显示
+// Update the version display
 - (void)updateVersionInfo;
 
 @end

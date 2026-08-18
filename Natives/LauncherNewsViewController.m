@@ -100,7 +100,7 @@ static UIColor *colorFromHex(NSString *hex) {
 
 - (UIColor *)accentColor {
     if (_accentColorHex) return colorFromHex(_accentColorHex);
-    // 默认颜色基于磁贴类型
+    // The default color depends on the tile type
     switch (_tileType) {
         case HomeTileTypeProfile:        return colorFromHex(@"#8B5CF6");
         case HomeTileTypeAnnouncement:   return colorFromHex(@"#3B82F6");
@@ -115,7 +115,7 @@ static UIColor *colorFromHex(NSString *hex) {
 + (NSArray<HomeTileConfig *> *)defaultTileConfigs {
     NSMutableArray *tiles = [NSMutableArray array];
     
-    // 0. 用户资料 (全宽)
+    // 0. Profile (full width)
     HomeTileConfig *profile = [[HomeTileConfig alloc] init];
     profile.tileId = @"profile";
     profile.tileType = HomeTileTypeProfile;
@@ -125,7 +125,7 @@ static UIColor *colorFromHex(NSString *hex) {
     profile.accentColorHex = @"#8B5CF6";
     [tiles addObject:profile];
     
-    // 1. 公告 (全宽) — 位于版本信息之前
+    // 1. Announcements (full width) — placed before the version info
     HomeTileConfig *announcement = [[HomeTileConfig alloc] init];
     announcement.tileId = @"announcement";
     announcement.tileType = HomeTileTypeAnnouncement;
@@ -135,7 +135,7 @@ static UIColor *colorFromHex(NSString *hex) {
     announcement.accentColorHex = @"#3B82F6";
     [tiles addObject:announcement];
     
-    // 2. 最新正式版 (半宽)
+    // 2. Latest release (half width)
     HomeTileConfig *release = [[HomeTileConfig alloc] init];
     release.tileId = @"latest_release";
     release.tileType = HomeTileTypeVersionRelease;
@@ -145,7 +145,7 @@ static UIColor *colorFromHex(NSString *hex) {
     release.accentColorHex = @"#10B981";
     [tiles addObject:release];
     
-    // 3. 最新快照 (半宽)
+    // 3. Latest snapshot (half width)
     HomeTileConfig *snapshot = [[HomeTileConfig alloc] init];
     snapshot.tileId = @"latest_snapshot";
     snapshot.tileType = HomeTileTypeVersionSnapshot;
@@ -155,7 +155,7 @@ static UIColor *colorFromHex(NSString *hex) {
     snapshot.accentColorHex = @"#F59E0B";
     [tiles addObject:snapshot];
     
-    // 4. 新闻 (全宽)
+    // 4. News (full width)
     HomeTileConfig *news = [[HomeTileConfig alloc] init];
     news.tileId = @"news";
     news.tileType = HomeTileTypeNews;
@@ -165,7 +165,7 @@ static UIColor *colorFromHex(NSString *hex) {
     news.accentColorHex = @"#EF4444";
     [tiles addObject:news];
     
-    // 5. 快捷入口: Mod管理 (半宽)
+    // 5. Shortcut: mod manager (half width)
     HomeTileConfig *mods = [[HomeTileConfig alloc] init];
     mods.tileId = @"shortcut_mods";
     mods.tileType = HomeTileTypeShortcut;
@@ -177,7 +177,7 @@ static UIColor *colorFromHex(NSString *hex) {
     mods.accentColorHex = @"#14B8A6";
     [tiles addObject:mods];
     
-    // 6. 快捷入口: 光影管理 (半宽)
+    // 6. Shortcut: shader manager (half width)
     HomeTileConfig *shaders = [[HomeTileConfig alloc] init];
     shaders.tileId = @"shortcut_shaders";
     shaders.tileType = HomeTileTypeShortcut;
@@ -189,7 +189,7 @@ static UIColor *colorFromHex(NSString *hex) {
     shaders.accentColorHex = @"#F97316";
     [tiles addObject:shaders];
     
-    // 7. 快捷入口: 整合包 (半宽)
+    // 7. Shortcut: modpacks (half width)
     HomeTileConfig *modpack = [[HomeTileConfig alloc] init];
     modpack.tileId = @"shortcut_modpack";
     modpack.tileType = HomeTileTypeShortcut;
@@ -201,7 +201,7 @@ static UIColor *colorFromHex(NSString *hex) {
     modpack.accentColorHex = @"#8B5CF6";
     [tiles addObject:modpack];
     
-    // 8. 快捷入口: 壁纸设置 (半宽)
+    // 8. Shortcut: wallpaper settings (half width)
     HomeTileConfig *bg = [[HomeTileConfig alloc] init];
     bg.tileId = @"shortcut_bg";
     bg.tileType = HomeTileTypeShortcut;
@@ -251,7 +251,7 @@ static NSString *festivalGreeting(void) {
     NSInteger month = solar.month;
     NSInteger day = solar.day;
     
-    // 公历节日
+    // Gregorian holidays
     if (month == 1  && day == 1)  return @"Happy New Year! 🎊";
     if (month == 4  && (day >= 4 && day <= 6)) return @"Peaceful Qingming Festival! 🌿";
     if (month == 5  && day == 1)  return @"Happy Labor Day! 💪";
@@ -261,7 +261,7 @@ static NSString *festivalGreeting(void) {
     if (month == 12 && day == 24) return @"Happy Christmas Eve! 🌟";
     if (month == 12 && day == 25) return @"Merry Christmas! 🎄";
     
-    // 农历节日 (使用中国日历)
+    // Lunar holidays (using the Chinese calendar)
     NSCalendar *chineseCalendar = [[NSCalendar alloc] initWithCalendarIdentifier:NSCalendarIdentifierChinese];
     NSDateComponents *lunar = [chineseCalendar components:(NSCalendarUnitMonth | NSCalendarUnitDay) fromDate:now];
     NSInteger lunarMonth = lunar.month;
@@ -277,7 +277,7 @@ static NSString *festivalGreeting(void) {
     if (lunarMonth == 9  && lunarDay == 9)  return @"Peaceful Double Ninth Festival! 🏔️";
     if (lunarMonth == 12 && (lunarDay == 29 || lunarDay == 30)) return @"Happy New Year's Eve! 🎇";
     
-    // 非节日 - 按时段随机问候
+    // Not a holiday - a random greeting for the time of day
     NSInteger hour = [gregorian component:NSCalendarUnitHour fromDate:now];
     if (hour < 6)       return @"It's late — get some rest 🌙";
     if (hour < 12)      return @"Good morning! A great day begins ☀️";
@@ -318,14 +318,14 @@ static NSString *festivalGreeting(void) {
 }
 
 - (void)setupBaseViews {
-    // 阴影
+    // Shadow
     self.layer.shadowColor = [UIColor blackColor].CGColor;
     self.layer.shadowOffset = CGSizeMake(0, 4);
     self.layer.shadowOpacity = 0.15;
     self.layer.shadowRadius = 10;
     self.layer.masksToBounds = NO;
     
-    // 渐变装饰条
+    // Gradient accent bar
     self.accentBar = [CAGradientLayer layer];
     self.accentBar.frame = CGRectMake(0, 0, self.contentView.bounds.size.width, 3);
     self.accentBar.startPoint = CGPointMake(0, 0.5);
@@ -339,10 +339,10 @@ static NSString *festivalGreeting(void) {
     self.contentContainer.backgroundColor = [UIColor clearColor];
     [self.contentView addSubview:self.contentContainer];
 
-    // 圆角：contentView 设置圆角 + masksToBounds，让 BackgroundManager 注入的
-    // 毛玻璃 blurView 也获得一致的圆角（applyEffectToCollectionViewCell: 会读取
-    // cell.contentView.layer.cornerRadius）。self.layer 保持 masksToBounds=NO
-    // 以便显示阴影，阴影路径在 layoutSubviews 中按 cornerRadius:16 生成。
+    // Corner radius: contentView gets the corner radius plus masksToBounds, so the frosted-glass blurView
+    // injected by BackgroundManager picks up the same radius (applyEffectToCollectionViewCell: reads
+    // cell.contentView.layer.cornerRadius). self.layer keeps masksToBounds=NO
+    // so the shadow shows, and the shadow path is built in layoutSubviews from cornerRadius:16.
     self.contentView.layer.cornerRadius = 16;
     self.contentView.layer.cornerCurve = kCACornerCurveContinuous;
     self.contentView.layer.masksToBounds = YES;
@@ -363,7 +363,7 @@ static NSString *festivalGreeting(void) {
     self.layer.shadowPath = [UIBezierPath bezierPathWithRoundedRect:self.contentView.bounds cornerRadius:16].CGPath;
 }
 
-// 弹簧按压动画
+// Spring press animation
 - (void)touchesBegan:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event {
     [super touchesBegan:touches withEvent:event];
     [UIView animateWithDuration:0.35 delay:0 usingSpringWithDamping:0.6 initialSpringVelocity:0.8 options:UIViewAnimationOptionAllowUserInteraction animations:^{
@@ -401,7 +401,7 @@ static NSString *festivalGreeting(void) {
 - (void)setupBaseViews {
     [super setupBaseViews];
     
-    // 皮肤全身预览
+    // Full-body skin preview
     self.skinImageView = [[UIImageView alloc] init];
     self.skinImageView.translatesAutoresizingMaskIntoConstraints = NO;
     self.skinImageView.contentMode = UIViewContentModeScaleAspectFit;
@@ -411,7 +411,7 @@ static NSString *festivalGreeting(void) {
     self.skinImageView.layer.shadowRadius = 6;
     [self.contentContainer addSubview:self.skinImageView];
     
-    // 头像 (圆形)
+    // Avatar (circular)
     self.avatarImageView = [[UIImageView alloc] init];
     self.avatarImageView.translatesAutoresizingMaskIntoConstraints = NO;
     self.avatarImageView.contentMode = UIViewContentModeScaleAspectFill;
@@ -424,7 +424,7 @@ static NSString *festivalGreeting(void) {
     self.avatarImageView.tintColor = [UIColor systemGrayColor];
     [self.contentContainer addSubview:self.avatarImageView];
     
-    // 欢迎文本
+    // Welcome text
     self.welcomeLabel = [[UILabel alloc] init];
     self.welcomeLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.welcomeLabel.font = [UIFont systemFontOfSize:21 weight:UIFontWeightBold];
@@ -434,7 +434,7 @@ static NSString *festivalGreeting(void) {
     self.welcomeLabel.minimumScaleFactor = 0.7;
     [self.contentContainer addSubview:self.welcomeLabel];
     
-    // 节日/时段问候
+    // Holiday / time-of-day greeting
     self.greetingLabel = [[UILabel alloc] init];
     self.greetingLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.greetingLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
@@ -443,24 +443,24 @@ static NSString *festivalGreeting(void) {
     [self.contentContainer addSubview:self.greetingLabel];
     
     [NSLayoutConstraint activateConstraints:@[
-        // 皮肤预览 (左侧)
+        // Skin preview (on the left)
         [self.skinImageView.leadingAnchor constraintEqualToAnchor:self.contentContainer.leadingAnchor constant:18],
         [self.skinImageView.topAnchor constraintEqualToAnchor:self.contentContainer.topAnchor constant:10],
         [self.skinImageView.bottomAnchor constraintEqualToAnchor:self.contentContainer.bottomAnchor constant:-8],
         [self.skinImageView.widthAnchor constraintEqualToAnchor:self.skinImageView.heightAnchor multiplier:0.55],
         
-        // 头像 (皮肤右侧)
+        // Avatar (to the right of the skin)
         [self.avatarImageView.leadingAnchor constraintEqualToAnchor:self.skinImageView.trailingAnchor constant:18],
         [self.avatarImageView.centerYAnchor constraintEqualToAnchor:self.contentContainer.centerYAnchor constant:-14],
         [self.avatarImageView.widthAnchor constraintEqualToConstant:52],
         [self.avatarImageView.heightAnchor constraintEqualToConstant:52],
         
-        // 欢迎文本
+        // Welcome text
         [self.welcomeLabel.leadingAnchor constraintEqualToAnchor:self.avatarImageView.trailingAnchor constant:14],
         [self.welcomeLabel.centerYAnchor constraintEqualToAnchor:self.avatarImageView.centerYAnchor constant:-10],
         [self.welcomeLabel.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-18],
         
-        // 问候语
+        // Greeting
         [self.greetingLabel.leadingAnchor constraintEqualToAnchor:self.welcomeLabel.leadingAnchor],
         [self.greetingLabel.topAnchor constraintEqualToAnchor:self.welcomeLabel.bottomAnchor constant:4],
         [self.greetingLabel.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-18],
@@ -591,7 +591,7 @@ static NSString *festivalGreeting(void) {
 - (void)setupBaseViews {
     [super setupBaseViews];
     
-    // 左侧缩略图占位
+    // Thumbnail placeholder on the left
     self.thumbnailView = [[UIImageView alloc] init];
     self.thumbnailView.translatesAutoresizingMaskIntoConstraints = NO;
     self.thumbnailView.contentMode = UIViewContentModeScaleAspectFill;
@@ -603,7 +603,7 @@ static NSString *festivalGreeting(void) {
     self.thumbnailView.tintColor = [UIColor colorWithWhite:0.4 alpha:1.0];
     [self.contentContainer addSubview:self.thumbnailView];
     
-    // 标题
+    // Title
     self.titleLabel = [[UILabel alloc] init];
     self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
@@ -611,7 +611,7 @@ static NSString *festivalGreeting(void) {
     self.titleLabel.numberOfLines = 2;
     [self.contentContainer addSubview:self.titleLabel];
     
-    // 摘要
+    // Summary
     self.summaryLabel = [[UILabel alloc] init];
     self.summaryLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.summaryLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightRegular];
@@ -619,7 +619,7 @@ static NSString *festivalGreeting(void) {
     self.summaryLabel.numberOfLines = 2;
     [self.contentContainer addSubview:self.summaryLabel];
     
-    // 占位提示
+    // Placeholder hint
     self.placeholderLabel = [[UILabel alloc] init];
     self.placeholderLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.placeholderLabel.font = [UIFont systemFontOfSize:11 weight:UIFontWeightMedium];
@@ -711,11 +711,11 @@ static NSString *festivalGreeting(void) {
 @property (nonatomic, strong) UILabel *headerTitleLabel;
 @property (nonatomic, strong) UIButton *customizeButton;
 
-// 磁贴配置
+// Tile configuration
 @property (nonatomic, strong) NSMutableArray<HomeTileConfig *> *allTileConfigs;
 @property (nonatomic, strong) NSArray<NSArray<HomeTileConfig *> *> *displaySections;
 
-// 数据
+// Data
 @property (nonatomic, strong) NSString *latestRelease;
 @property (nonatomic, strong) NSString *latestSnapshot;
 @property (nonatomic, strong) NSString *currentUsername;
@@ -723,14 +723,14 @@ static NSString *festivalGreeting(void) {
 @property (nonatomic, strong) UIImage *currentAvatar;
 @property (nonatomic, assign) BOOL isLoadingVersions;
 
-// 公告/更新检测
+// Announcement / update checking
 @property (nonatomic, strong) NSString *announcementText;
 @property (nonatomic, assign) BOOL hasUpdate;
 @property (nonatomic, strong) NSString *latestVersion;
-// 公告系统（从官网拉取 JSON 的最新一条公告）
+// Announcement system (the latest announcement pulled as JSON from the website)
 @property (nonatomic, strong, nullable) AnnouncementItem *latestAnnouncement;
 
-// MC 新闻（首页 News tile 预览用，展示最新一条）
+// MC news (for the home News tile preview, showing the latest item)
 @property (nonatomic, strong, nullable) MinecraftNewsItem *latestNewsItem;
 @property (nonatomic, assign) BOOL isLoadingNews;
 
@@ -741,7 +741,7 @@ static NSString *festivalGreeting(void) {
 - (id)init {
     self = [super init];
     if (self) {
-        // 不设置 self.title，避免顶部导航栏出现"主页"标题黑条（参照 FCL 无 title 风格）
+        // self.title is deliberately not set, to avoid a black "Home" title band in the navigation bar (matching the title-less FCL style)
         self.latestRelease = @"Checking...";
         self.latestSnapshot = @"Checking...";
         self.isLoadingVersions = YES;
@@ -761,7 +761,7 @@ static NSString *festivalGreeting(void) {
     self.view.backgroundColor = [UIColor clearColor];
     self.navigationController.navigationBarHidden = YES;
     
-    // 加载磁贴配置
+    // Load the tile configuration
     self.allTileConfigs = [[HomeTileConfig loadSavedConfigs] mutableCopy];
     [self rebuildDisplaySections];
     
@@ -774,8 +774,8 @@ static NSString *festivalGreeting(void) {
     [self loadAnnouncementsForTile];
 
     // Adapt to the custom launcher background: make this view controller transparent so the global background (image/video) shows through.
-    // 本控制器为 UIViewController 子类，其 collectionView 为手动创建，
-    // makeViewControllerTransparent 会设置 view 背景透明；collectionView 背景已在 setupCollectionView 中清空。
+    // This controller subclasses UIViewController and creates its collectionView by hand,
+    // so makeViewControllerTransparent clears the view background; the collectionView background is already cleared in setupCollectionView.
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
 
     // Listen for background UI effect changes: when the user switches between frosted glass and translucent, or adjusts the opacity,
@@ -930,7 +930,7 @@ static NSString *festivalGreeting(void) {
         CGFloat height = [weakSelf heightForTileConfig:firstTile];
         
         if (isCompact && sectionTiles.count >= 2) {
-            // 双列紧凑布局
+            // Two-column compact layout
             NSCollectionLayoutSize *itemSize = [NSCollectionLayoutSize
                 sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:0.5]
                 heightDimension:[NSCollectionLayoutDimension fractionalHeightDimension:1.0]];
@@ -948,7 +948,7 @@ static NSString *festivalGreeting(void) {
             return section;
             
         } else {
-            // 全宽 / 单个紧凑磁贴
+            // Full width / a single compact tile
             CGFloat wFrac = isCompact ? 0.5 : 1.0;
             NSCollectionLayoutSize *itemSize = [NSCollectionLayoutSize
                 sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:wFrac]
@@ -1028,17 +1028,17 @@ static NSString *festivalGreeting(void) {
                 NSString *previewLevel = getPrefObject(@"general.announcement_preview_level") ?: @"summary";
 
                 if ([previewLevel isEqualToString:@"title_only"]) {
-                    // 仅标题
+                    // Title only
                     cell.messageLabel.text = ann.title;
                 } else if ([previewLevel isEqualToString:@"full"]) {
-                    // 完整：标题 + 日期 + 摘要
+                    // Full: title + date + summary
                     cell.messageLabel.text = [NSString stringWithFormat:@"%@\n%@\n%@", ann.title, ann.formattedDateString, ann.summary];
                 } else {
-                    // summary（默认）：标题 + 摘要
+                    // summary (the default): title + summary
                     cell.messageLabel.text = [NSString stringWithFormat:@"%@\n%@", ann.title, ann.summary];
                 }
 
-                // 如果有 actionURL，显示按钮
+                // Show the button if there is an actionURL
                 if (ann.actionURL.length > 0 && ann.actionTitle.length > 0) {
                     cell.actionButton.hidden = NO;
                     [cell.actionButton setTitle:ann.actionTitle forState:UIControlStateNormal];
@@ -1050,7 +1050,7 @@ static NSString *festivalGreeting(void) {
                     cell.actionButton.hidden = YES;
                 }
             } else {
-                // 无公告数据时显示更新检测结果
+                // Show the update check result when there is no announcement data
                 cell.messageLabel.text = self.announcementText;
 
                 if (self.hasUpdate) {
@@ -1072,11 +1072,11 @@ static NSString *festivalGreeting(void) {
             [cell setAccentColor:[config accentColor]];
 
             if (self.latestNewsItem) {
-                // 显示最新一条新闻的标题/摘要/封面
+                // Show the title/summary/cover of the latest news item
                 cell.titleLabel.text = self.latestNewsItem.title ?: @"Minecraft news";
                 cell.summaryLabel.text = self.latestNewsItem.summary ?: @"";
                 cell.placeholderLabel.text = self.latestNewsItem.formattedDateString ?: @"";
-                // 加载封面图（用 IconLoader，带缓存）
+                // Load the cover image (via IconLoader, with caching)
                 [IconLoader cancelLoadingForImageView:cell.thumbnailView];
                 if (self.latestNewsItem.imageURL.length > 0) {
                     [IconLoader loadIconForImageView:cell.thumbnailView
@@ -1093,7 +1093,7 @@ static NSString *festivalGreeting(void) {
                 cell.placeholderLabel.text = @"Loading...";
                 cell.thumbnailView.image = [UIImage systemImageNamed:@"newspaper.fill"];
             } else {
-                // 加载失败或未加载
+                // Failed to load, or not loaded yet
                 cell.titleLabel.text = @"Minecraft news";
                 cell.summaryLabel.text = @"Tap to read official Minecraft news";
                 cell.placeholderLabel.text = @"Tap to open ✨";
@@ -1128,14 +1128,14 @@ static NSString *festivalGreeting(void) {
     } else if (config.tileType == HomeTileTypeVersionRelease || config.tileType == HomeTileTypeVersionSnapshot) {
         [self checkMinecraftVersions];
     } else if (config.tileType == HomeTileTypeNews) {
-        // 跳转到 MC 新闻列表页
+        // Open the MC news list page
         MinecraftNewsViewController *newsVC = [[MinecraftNewsViewController alloc] init];
         UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:newsVC];
         nav.modalPresentationStyle = UIModalPresentationPageSheet;
-        // 适配自定义启动器背景：透明化导航栏，让全局背景透出
+        // Adapt to the custom launcher background: make the navigation bar transparent so the global background shows through
         [self presentViewController:nav animated:YES completion:nil];
     } else if (config.tileType == HomeTileTypeAnnouncement) {
-        // 跳转到公告列表页
+        // Open the announcement list page
         AnnouncementListViewController *listVC = [[AnnouncementListViewController alloc] init];
         UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:listVC];
         nav.modalPresentationStyle = UIModalPresentationPageSheet;
@@ -1147,7 +1147,7 @@ static NSString *festivalGreeting(void) {
 
 - (void)handleShortcutAction:(NSString *)action {
     if ([action isEqualToString:kShortcutActionMods]) {
-        // 切到中间内容区版本管理页并直接展开模组管理（参照 FCL 安卓，不再 FormSheet 弹窗）
+        // Switch the middle content area to the version manager and expand mod management straight away (as FCL for Android does, with no FormSheet)
         [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowModsManager" object:nil];
 
     } else if ([action isEqualToString:kShortcutActionShaders]) {
@@ -1179,7 +1179,7 @@ static NSString *festivalGreeting(void) {
         [HomeTileConfig saveConfigs:newConfigs];
         [weakSelf rebuildDisplaySections];
         
-        // 重建布局并刷新
+        // Rebuild the layout and refresh
         weakSelf.collectionView.collectionViewLayout = [weakSelf createLayout];
         [weakSelf.collectionView reloadData];
     };
@@ -1187,7 +1187,7 @@ static NSString *festivalGreeting(void) {
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:customVC];
     nav.modalPresentationStyle = UIModalPresentationFormSheet;
     
-    // 毛玻璃背景
+    // Frosted-glass background
     if ([[BackgroundManager sharedManager] hasBackground]) {
         nav.view.backgroundColor = [UIColor clearColor];
     }
@@ -1211,7 +1211,7 @@ static NSString *festivalGreeting(void) {
             self.currentUsername = @"Player";
         }
         
-        // 加载头像 (与右侧面板相同来源)
+        // Load the avatar (from the same source as the right panel)
         NSString *avatarURL = auth.authData[@"profilePicURL"];
         if (avatarURL) {
             avatarURL = [avatarURL stringByReplacingOccurrencesOfString:@"\\/" withString:@"/"];
@@ -1227,7 +1227,7 @@ static NSString *festivalGreeting(void) {
             });
         }
         
-        // 加载皮肤全身图 (原有API)
+        // Load the full-body skin image (the existing API)
         NSString *uuid = auth.authData[@"uuid"];
         if (uuid) {
             [self loadSkinForUUID:uuid];
@@ -1277,7 +1277,7 @@ static NSString *festivalGreeting(void) {
 }
 
 - (void)reloadProfileSection {
-    // 找到 Profile 类型的 section 并刷新
+    // Find the Profile section and refresh it
     for (NSInteger s = 0; s < self.displaySections.count; s++) {
         for (HomeTileConfig *tile in self.displaySections[s]) {
             if (tile.tileType == HomeTileTypeProfile) {
@@ -1299,12 +1299,12 @@ static NSString *festivalGreeting(void) {
         if (items.count > 0) {
             strongSelf.latestNewsItem = items.firstObject;
         }
-        // 刷新 News tile 显示最新标题/摘要/封面
+        // Refresh the News tile with the latest title/summary/cover
         [strongSelf reloadNewsSection];
     }];
 }
 
-/// 重新加载 News tile 所在 section
+/// Reload the section containing the News tile
 - (void)reloadNewsSection {
     for (NSInteger s = 0; s < self.displaySections.count; s++) {
         for (HomeTileConfig *tile in self.displaySections[s]) {
@@ -1433,9 +1433,9 @@ static NSString *festivalGreeting(void) {
     }
 }
 
-// MARK: - Announcements (官网 JSON 公告)
+// MARK: - Announcements (the JSON announcements from the website)
 
-/// 为首页公告磁贴拉取最新公告（取首条），失败时回退到更新检测文案
+/// Fetch the latest announcement for the home announcement tile (taking the first item), falling back to the update check text on failure
 - (void)loadAnnouncementsForTile {
     __weak typeof(self) weakSelf = self;
     [[AnnouncementService sharedService] fetchAnnouncementsWithCompletion:^(NSArray<AnnouncementItem *> *items, NSError *error) {
@@ -1448,7 +1448,7 @@ static NSString *festivalGreeting(void) {
     }];
 }
 
-/// 打开公告磁贴上 actionURL 指向的链接（SFSafariViewController 内嵌打开）
+/// Open the link the announcement tile actionURL points at (inline, via SFSafariViewController)
 - (void)openAnnouncementActionURL {
     if (self.latestAnnouncement.actionURL.length > 0) {
         NSURL *url = [NSURL URLWithString:self.latestAnnouncement.actionURL];
@@ -1524,8 +1524,8 @@ static NSString *festivalGreeting(void) {
 
 /// Re-apply the background effect: called when the BackgroundUIEffectChanged notification arrives.
 /// Re-applies the opacity/frosted-glass effect to this view controller via BackgroundManager,
-/// 并手动清空 collectionView 背景色（UICollectionView 无 backgroundView 属性），
-/// 确保全局背景能够正常透出。
+/// and clear the collectionView background color by hand (UICollectionView has no backgroundView property),
+/// so the global background shows through correctly.
 - (void)reapplyBackgroundEffect {
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
     self.collectionView.backgroundColor = [UIColor clearColor];

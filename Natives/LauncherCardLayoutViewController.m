@@ -350,15 +350,15 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
                                     contentTop, contentBottom];
 
     [NSLayoutConstraint activateConstraints:@[
-        // 左侧菜单卡片
+        // Left menu card
         sidebarLeading, sidebarTop, sidebarBottom,
         self.sidebarWidthConstraint,
 
-        // 右侧面板卡片
+        // Right panel card
         rightTrailing, rightTop, rightBottom,
         self.rightPanelWidthConstraint,
 
-        // 中间内容卡片——填满侧栏与右面板之间的空间，两侧间距均等为 kCardSpacing
+        // Middle content card — fills the space between the sidebar and the right panel, with an equal kCardSpacing gap on each side
         [self.contentCard.leadingAnchor constraintEqualToAnchor:self.sidebarCard.trailingAnchor constant:kCardSpacing],
         [self.contentCard.trailingAnchor constraintEqualToAnchor:self.rightPanelCard.leadingAnchor constant:-kCardSpacing],
         contentTop, contentBottom
@@ -366,7 +366,7 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
 }
 
 - (void)setupChildViewControllers {
-    // 左侧边栏 - 功能菜单
+    // Left sidebar - the feature menu
     LauncherMenuViewController *sidebarVC = [[LauncherMenuViewController alloc] init];
     [self addChildViewController:sidebarVC];
     sidebarVC.view.translatesAutoresizingMaskIntoConstraints = NO;
@@ -380,11 +380,11 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
     [sidebarVC didMoveToParentViewController:self];
     _sidebarViewController = sidebarVC;
     
-    // 中间内容 - 默认显示新闻页
+    // Middle content - shows the news page by default
     LauncherNewsViewController *newsVC = [[LauncherNewsViewController alloc] init];
     [self setContentViewController:newsVC animated:NO];
     
-    // 右侧面板 - 账户和启动
+    // Right panel - account and play
     LauncherRightPanelViewController *rightPanelVC = [[LauncherRightPanelViewController alloc] init];
     [self addChildViewController:rightPanelVC];
     rightPanelVC.view.translatesAutoresizingMaskIntoConstraints = NO;
@@ -398,7 +398,7 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
     [rightPanelVC didMoveToParentViewController:self];
     _rightPanelViewController = rightPanelVC;
     
-    // 注册通知监听
+    // Register the notification observers
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(showHomePage)
                                                  name:@"ShowHomePage"
@@ -419,7 +419,7 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
                                              selector:@selector(showSettings)
                                                  name:@"ShowSettings"
                                                object:nil];
-    // ZeroTier/Terracotta 联机暂时移除（排查启动崩溃）
+    // ZeroTier/Terracotta multiplayer temporarily removed (while a startup crash is investigated)
     // [[NSNotificationCenter defaultCenter] addObserver:self
     //                                          selector:@selector(showMultiplayer)
     //                                              name:@"ShowMultiplayer"
@@ -428,13 +428,13 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
     //                                          selector:@selector(showZeroTier)
     //                                              name:@"ShowZeroTier"
     //                                            object:nil];
-    // 账户管理：右侧面板点击头像会发 ShowAccountManager 通知。
-    // 原实现遗漏此监听，导致卡片布局下点头像无反应、无法登录账号。
+    // Account management: tapping the avatar in the right panel posts a ShowAccountManager notification.
+    // The original implementation missed this observer, so tapping the avatar in the card layout did nothing and no account could be signed in.
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(showAccountManager)
                                                  name:@"ShowAccountManager"
                                                object:nil];
-    // 首页快捷瓷砖触发：切到对应内容区子页面（不再 FormSheet 弹窗）
+    // Home shortcut tile taps: switch the content area to the matching sub-page (no more FormSheet modals)
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(showModsManager)
                                                  name:@"ShowModsManager"
@@ -459,17 +459,17 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
                                              selector:@selector(uiEffectChanged:)
                                                  name:@"BackgroundUIEffectChanged"
                                                object:nil];
-    // 监听版本切换，重新加载编辑器
+    // Listen for version switches and reload the editor
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(reloadProfileEditorIfNeeded)
                                                  name:@"SelectedProfileChanged"
                                                object:nil];
-    // 监听游戏目录切换，重新加载版本列表
+    // Listen for game directory switches and reload the version list
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(reloadVersionLists)
                                                  name:@"ReloadProfileList"
                                                object:nil];
-    // 监听查找版本请求
+    // Listen for find-version requests
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(findVersionInRemoteList:)
                                                  name:@"FindVersionInRemoteList"
@@ -485,7 +485,7 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
         return;
     }
     
-    // 在远程版本列表中查找
+    // Look in the remote version list
     NSDictionary *versionObject = nil;
     for (NSDictionary *version in remoteVersionList) {
         if ([version[@"id"] isEqualToString:versionId]) {
@@ -494,7 +494,7 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
         }
     }
     
-    // 如果在远程列表中找不到，检查是否是本地版本
+    // If it is not in the remote list, check whether it is a local version
     if (!versionObject) {
         for (NSDictionary *version in localVersionList) {
             if ([version[@"id"] isEqualToString:versionId]) {
@@ -508,9 +508,9 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
 }
 
 - (void)reloadVersionLists {
-    // 重新加载版本列表
+    // Reload the version list
     [self initializeVersionLists];
-    // 通知右侧面板刷新版本显示
+    // Tell the right panel to refresh the version display
     [[NSNotificationCenter defaultCenter] postNotificationName:@"SelectedProfileChanged" object:nil];
 }
 
@@ -520,7 +520,7 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
 }
 
 - (void)showDownloadPage {
-    // 在中间内容区显示下载页面，包在 NavigationController 中以便子流程（版本选择/安装器）push 显示
+    // Show the download page in the middle content area, wrapped in a NavigationController so sub-flows (version picker/installer) can push
     DownloadViewController *downloadVC = [[DownloadViewController alloc] init];
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:downloadVC];
     nav.navigationBar.prefersLargeTitles = NO;
@@ -528,7 +528,7 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
 }
 
 - (void)showVersionManager {
-    // 在中间内容区显示版本管理页面，包在 NavigationController 中以便子流程（模组/光影/游戏目录管理）push
+    // Show the version manager in the middle content area, wrapped in a NavigationController so sub-flows (mod/shader/game directory management) can push
     VersionManagerViewController *vc = [[VersionManagerViewController alloc] init];
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
     nav.navigationBar.prefersLargeTitles = NO;
@@ -536,13 +536,13 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
 }
 
 - (void)showProfileEditor:(NSNotification *)notification {
-    // 在中间内容区显示版本编辑器页面（使用 ProfileSettingsViewController）
+    // Show the version editor in the middle content area (using ProfileSettingsViewController)
     NSString *profileName = notification.object;
 
     ProfileSettingsViewController *vc = [[ProfileSettingsViewController alloc] init];
     vc.profileName = profileName;
 
-    // 包装在导航控制器中
+    // Wrap it in a navigation controller
     UINavigationController *navVC = [[UINavigationController alloc] initWithRootViewController:vc];
     navVC.navigationBar.prefersLargeTitles = NO;
 
@@ -552,7 +552,7 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
 }
 
 - (void)reloadProfileEditorIfNeeded {
-    // 如果当前正在显示编辑器页面，重新加载
+    // If the editor page is currently showing, reload it
     if (self.isShowingProfileEditor) {
         NSString *currentProfile = PLProfiles.current.selectedProfileName;
         if (currentProfile) {
@@ -562,9 +562,9 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
 }
 
 - (void)showSettings {
-    // 在中间内容区显示设置页面
+    // Show the settings page in the middle content area
     LauncherPreferencesViewController *vc = [[LauncherPreferencesViewController alloc] init];
-    // 包装在导航控制器中，使其子页面能够正常导航
+    // Wrap it in a navigation controller so its sub-pages can navigate normally
     UINavigationController *navVC = [[UINavigationController alloc] initWithRootViewController:vc];
     navVC.navigationBar.prefersLargeTitles = YES;
     [self setContentViewController:navVC animated:YES];
@@ -589,9 +589,9 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
 }
 
 - (void)showAccountManager {
-    // 卡片布局下账户管理在中间内容区显示（与 VS 布局 LauncherRootViewController 行为一致）。
-    // 右侧面板点击头像发 ShowAccountManager 通知触发此方法。
-    // 使用 insetGrouped 样式让账户列表呈现圆角分组卡片（原默认 plain 为直角行）。
+    // In the card layout, account management is shown in the middle content area (matching LauncherRootViewController in the VS layout).
+    // Tapping the avatar in the right panel posts ShowAccountManager, which calls this method.
+    // The insetGrouped style gives the account list rounded grouped cards (the default plain style had square-edged rows).
     AccountListViewController *vc = [[AccountListViewController alloc] initWithStyle:UITableViewStyleInsetGrouped];
     vc.whenItemSelected = ^void() {
         [[NSNotificationCenter defaultCenter] postNotificationName:@"UpdateAccountInfo" object:nil];
@@ -607,10 +607,10 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
 #pragma mark - 首页快捷入口 (替换原 FormSheet 弹窗)
 
 - (void)showModsManager {
-    // 切到版本管理页并直接 push 模组管理
-    // 修复"前一界面未消失"竞态：先构建完整 nav 栈再 setContentViewController，
-    // 这样 setContentViewController 内的 for 循环能一次性透明化栈中所有 VC，
-    // 避免 animated:YES 的 crossDissolve 进行中再 animated:NO push 导致新 VC 未透明化。
+    // Switch to the version manager page and push mod management straight away
+    // Fix for the "previous screen did not disappear" race: build the full nav stack first, then call setContentViewController,
+    // so the loop inside setContentViewController can make every VC on the stack transparent in one pass,
+    // instead of pushing animated:NO while the animated:YES crossDissolve is still running and leaving the new VC opaque.
     VersionManagerViewController *vm = [[VersionManagerViewController alloc] init];
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vm];
     nav.navigationBar.prefersLargeTitles = NO;
@@ -640,7 +640,7 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
 }
 
 - (void)showModpackImport {
-    // 切到下载页并直接 push 整合包导入界面
+    // Switch to the download page and push the modpack import screen straight away
     DownloadViewController *d = [[DownloadViewController alloc] init];
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:d];
     nav.navigationBar.prefersLargeTitles = NO;
@@ -650,12 +650,12 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
 }
 
 - (void)backgroundChanged {
-    // 重新应用背景
+    // Re-apply the background
     [[BackgroundManager sharedManager] applyBackgroundToView:self.view];
 }
 
 - (void)uiEffectChanged:(NSNotification *)notification {
-    // 重新应用毛玻璃/半透明效果到卡片容器视图
+    // Re-apply the frosted-glass/translucent effect to the card container views
     [[BackgroundManager sharedManager] applyEffectToView:self.sidebarCard];
     [[BackgroundManager sharedManager] applyEffectToView:self.contentCard];
     [[BackgroundManager sharedManager] applyEffectToView:self.rightPanelCard];
@@ -670,11 +670,11 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
 - (void)setContentViewController:(UIViewController *)viewController animated:(BOOL)animated {
     if (!viewController) return;
 
-    // 关键修复（UI 累积异常）：同一实例直接跳过，避免对同一 VC 重复添加约束
-    // 和反复调用 applyEffectToNavigationBar: 导致 hairline UIImageView 累积。
+    // Key fix (cumulative UI glitch): skip immediately for the same instance, so constraints are not added twice to one VC
+    // and applyEffectToNavigationBar: is not called repeatedly, which would accumulate hairline UIImageViews.
     if (viewController == _contentViewController) return;
 
-    // 检查是否切换到非编辑器页面
+    // Check whether we are switching to a page other than the editor
     if (![viewController isKindOfClass:[UINavigationController class]] ||
         ![((UINavigationController *)viewController).topViewController isKindOfClass:[ProfileSettingsViewController class]]) {
         self.isShowingProfileEditor = NO;
@@ -683,25 +683,25 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
 
     UIViewController *oldVC = _contentViewController;
 
-    // 移除旧的 + 添加新的
+    // Remove the old one and add the new one
     _contentViewController = viewController;
     [self addChildViewController:viewController];
     viewController.view.translatesAutoresizingMaskIntoConstraints = NO;
 
-    // 修复：对齐 LauncherRootViewController 的 nav bar 透明化处理。
-    // 原卡片布局缺失此逻辑，导致 VersionManagerViewController 等被 UINavigationController
-    // 包裹的子页面顶部出现默认不透明 nav bar（白条），与卡片背景不融合。
+    // Fix: align with the nav bar transparency handling of LauncherRootViewController.
+    // The card layout was missing this logic, so sub-pages wrapped in a UINavigationController (such as
+    // VersionManagerViewController) showed the default opaque nav bar (a white band) that clashed with the card background.
     //
-    // 统一参照 RootVC 的完整处理（setContentViewController 中对 nav 栈所有 VC 透明化 +
-    // 设置 nav.delegate + didShowViewController 回调中重新透明化）：
-    // 1. 透明化 nav 栈中所有 VC（不仅是 topViewController），防止 push 后子页面样式被重置
-    // 2. 设置 nav.delegate = self，在 didShowViewController 回调中重新应用 nav bar 效果
-    // 3. 重新应用 nav bar 效果，确保 push/pop 后样式一致
+    // Follow the complete handling of RootVC (make every VC on the nav stack transparent in setContentViewController +
+    // set nav.delegate + re-apply transparency in the didShowViewController callback):
+    // 1. make every VC on the nav stack transparent (not just topViewController), so a pushed sub-page does not have its style reset
+    // 2. set nav.delegate = self and re-apply the nav bar effect in the didShowViewController callback
+    // 3. re-apply the nav bar effect, so the style stays consistent after a push/pop
     if ([viewController isKindOfClass:[UINavigationController class]]) {
         UINavigationController *nav = (UINavigationController *)viewController;
         nav.delegate = self;
         [[BackgroundManager sharedManager] applyEffectToNavigationBar:nav.navigationBar];
-        // 透明化栈中所有 VC（与 RootVC 一致），防止 push 后子页面背景不透明
+        // Make every VC on the stack transparent (as RootVC does), so a pushed sub-page does not have an opaque background
         for (UIViewController *vc in nav.viewControllers) {
             [[BackgroundManager sharedManager] makeViewControllerTransparent:vc];
         }
@@ -709,8 +709,8 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
         [[BackgroundManager sharedManager] makeViewControllerTransparent:viewController];
     }
 
-    // 关键修复（UI 累积异常）：deactivate 旧约束，避免在 tmpRootVC 保留场景下
-    // 缓存复用的子 VC 反复激活约束导致 contentCard 内容区左右变宽。
+    // Key fix (cumulative UI glitch): deactivate the old constraints, so a cached and reused child VC does not activate
+    // its constraints repeatedly and widen the contentCard content area when tmpRootVC is retained.
     if (self.currentContentConstraints.count > 0) {
         [NSLayoutConstraint deactivateConstraints:self.currentContentConstraints];
         self.currentContentConstraints = nil;
@@ -724,17 +724,17 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
     ];
 
     if (animated && oldVC) {
-        // 修复问题5：原实现用两个独立的 UIView transitionWithView:（一个移除旧视图、一个添加新视图），
-        // 两个 crossDissolve 同时作用于 contentCard 会导致视觉冲突和残影（旧画面未完全消失就覆盖新界面）。
-        // 改为单个 transition：在同一个 animations block 内完成"移除旧视图 + 添加新视图"，
-        // crossDissolve 会正确抓取前后快照做交叉渐变，completion 中清理旧 VC 父子关系。
+        // Fix for issue 5: the original implementation used two separate UIView transitionWithView: calls (one to remove the old view, one to add the new),
+        // and two crossDissolves acting on contentCard at once caused visual conflicts and ghosting (the old frame covering the new screen before it faded out).
+        // It now uses a single transition: "remove the old view + add the new view" happen in the same animations block,
+        // so crossDissolve captures the before and after snapshots correctly, and the completion block tears down the old VC parent/child relationship.
         //
-        // 关键修复（入场动画从左上角弹出）：UIKit 在 animations block 返回后立即对容器做 snapshot，
-        // 此时新视图虽然已 addSubview + activateConstraints，但尚未经历 layout pass，frame 仍是
-        // (0,0,0,0)。配合 contentCard 的 masksToBounds=YES + 圆角裁剪，crossDissolve 渐变呈现
-        // "从左上角小点扩展出来"的怪异效果。在 animations block 内显式 layoutIfNeeded 强制立即
-        // 布局，让 snapshot B 时 frame 已撑满，crossDissolve 就是标准的淡入淡出。
-        // duration 由 0.25 调整为 0.3 让过渡更柔和自然（与 LauncherRootViewController 一致）。
+        // Key fix (the entry animation popped out of the top-left corner): UIKit snapshots the container as soon as the animations block returns,
+        // and at that point the new view has been addSubview-ed and had its constraints activated but has not been through a layout pass, so its frame is still
+        // (0,0,0,0). Combined with masksToBounds=YES and the rounded corners of contentCard, the crossDissolve looked like it was
+        // "expanding out of a dot in the top-left corner". Calling layoutIfNeeded explicitly inside the animations block forces an immediate
+        // layout, so snapshot B already has a full-size frame and the crossDissolve is an ordinary fade.
+        // The duration was raised from 0.25 to 0.3 for a softer, more natural transition (matching LauncherRootViewController).
         [UIView transitionWithView:self.contentCard
                           duration:0.3
                            options:UIViewAnimationOptionTransitionCrossDissolve
@@ -774,18 +774,18 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
 
 #pragma mark - UINavigationControllerDelegate
 
-/// nav push/pop 后重新透明化所有 VC 并重新应用 nav bar 效果
-/// 参照 RootVC 的同名实现，确保 push 后子页面样式与卡片背景一致
+/// Re-apply transparency to every VC and re-apply the nav bar effect after a nav push/pop
+/// Mirrors the method of the same name in RootVC, keeping pushed sub-pages consistent with the card background
 - (void)navigationController:(UINavigationController *)navigationController
        didShowViewController:(UIViewController *)viewController
                     animated:(BOOL)animated {
-    // 透明化刚显示的 VC
+    // Make the VC that just appeared transparent
     [[BackgroundManager sharedManager] makeViewControllerTransparent:viewController];
-    // 同时透明化栈中所有 VC（防止前一个页面透出残留，解决"前一页面未及时消失"问题）
+    // Make every VC on the stack transparent too (so the previous page cannot show through, fixing "the previous page did not disappear in time")
     for (UIViewController *stackVC in navigationController.viewControllers) {
         [[BackgroundManager sharedManager] makeViewControllerTransparent:stackVC];
     }
-    // 重新应用导航栏毛玻璃效果（防止 push 后 nav bar 样式被重置）
+    // Re-apply the frosted-glass navigation bar effect (so a push does not reset the nav bar style)
     [[BackgroundManager sharedManager] applyEffectToNavigationBar:navigationController.navigationBar];
 }
 

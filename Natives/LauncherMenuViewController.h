@@ -1,13 +1,13 @@
 #import <UIKit/UIKit.h>
 
-// FCL风格左侧边栏 - 功能菜单
+// FCL-style left sidebar - the feature menu
 
 @interface LauncherMenuViewController : UIViewController
 
-// 菜单项点击回调
+// Menu item tap callback
 @property(nonatomic, copy) void (^onMenuItemSelected)(NSInteger index, NSString *title);
 
-// 刷新账户信息
+// Refresh the account information
 - (void)updateAccountInfo;
 
 @end

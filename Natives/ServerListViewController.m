@@ -60,7 +60,7 @@
     self.navigationItem.searchController = self.searchController;
     self.navigationItem.hidesSearchBarWhenScrolling = NO;
 
-    // 关闭按钮
+    // Close button
     self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemClose
                                                                                           target:self
                                                                                           action:@selector(actionClose)];
@@ -93,7 +93,7 @@
 
 - (void)handleBackgroundUIEffectChanged:(NSNotification *)notification {
     dispatch_async(dispatch_get_main_queue(), ^{
-        // 重新应用透明化，确保背景效果切换后视图仍能透出全局背景
+        // Re-apply transparency, so the view still shows the global background after an effect switch
         [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
         [[BackgroundManager sharedManager] applyEffectToView:self.view];
         [self.tableView reloadData];

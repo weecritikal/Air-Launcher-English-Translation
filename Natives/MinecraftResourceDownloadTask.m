@@ -27,25 +27,25 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"com.a
 @implementation MinecraftResourceDownloadTask
 
 + (AFURLSessionManager *)sharedBackgroundSessionManager {
-    // 参照 main 分支：使用前台 defaultSessionConfiguration 而非后台 backgroundSessionConfiguration。
+    // Following the main branch: use the foreground defaultSessionConfiguration rather than backgroundSessionConfiguration.
     //
-    // 为什么不用后台 URLSession：
-    // 1. 后台会话由系统守护进程 nsurlsessiond 调度，会限流并发数、串行化任务，
-    //    导致原版下载（数百个 asset + 数十个 library）极慢，"转圈不下载"。
-    // 2. 后台会话的未完成任务会被系统持久化，失败/取消不干净时残留 task 卡住新下载。
-    // 3. 前台会话 resume 即立即并发执行，适合启动器这种前台活跃下载场景。
+    // Why not a background URLSession:
+    // 1. A background session is scheduled by the nsurlsessiond system daemon, which throttles concurrency and serializes tasks,
+    //    making a vanilla download (hundreds of assets + dozens of libraries) extremely slow — "spinning without downloading".
+    // 2. Unfinished background session tasks are persisted by the system, so a failure/cancellation that is not clean leaves a task behind that blocks new downloads.
+    // 3. A foreground session runs concurrently as soon as resume is called, which suits a launcher downloading in the foreground.
     //
-    // 保留单例模式（避免每次 init 都创建新会话），但使用前台配置。
+    // The singleton pattern is kept (so a new session is not created on every init), but with the foreground configuration.
     static AFURLSessionManager *manager = nil;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         NSURLSessionConfiguration *configuration = [NSURLSessionConfiguration defaultSessionConfiguration];
         configuration.timeoutIntervalForRequest = 86400;
-        // 参考 FCL（FoldCraftLauncher）和 ZalithLauncher2：高并发下载加速。
-        // FCL 在 Java 端使用 OkHttp 的线程池并发下载，本项目对应在 NSURLSession
-        // 层面提升 HTTPMaximumConnectionsPerHost。从 16 提升到 24，加速原版数百个
-        // asset 的并发下载。注意 iOS 系统对单 host 实际并发有调度上限，过高的设置
-        // 会被系统降级，24 是经验值。完整性仍由 SHA1 校验保证。
+        // Following FCL (FoldCraftLauncher) and ZalithLauncher2: high-concurrency download acceleration.
+        // FCL uses the OkHttp thread pool on the Java side to download concurrently; the equivalent here is raising
+        // HTTPMaximumConnectionsPerHost on NSURLSession. Raised from 16 to 24, speeding up the concurrent download of the
+        // hundreds of vanilla assets. Note that iOS caps the real per-host concurrency, so setting it too high
+        // is downgraded by the system; 24 is an empirical value. Integrity is still guaranteed by the SHA1 check.
         configuration.HTTPMaximumConnectionsPerHost = 24;
         manager = [[AFURLSessionManager alloc] initWithSessionConfiguration:configuration];
     });
@@ -68,22 +68,22 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"com.a
     self.manager = [MinecraftResourceDownloadTask sharedBackgroundSessionManager];
     self.fileList = [NSMutableArray new];
     self.progressList = [NSMutableArray new];
-    // 阶段5修复：初始化失败文件列表（参照 FCL 的失败汇总机制）
+    // Phase 5 fix: initialize the failed file list (following the failure summary mechanism of FCL)
     self.failedFiles = [NSMutableArray new];
     return self;
 }
 
-// 根据配置选择下载源并替换URL
+// Pick the download source from the settings and rewrite the URL
 - (NSString *)replaceURLWithDownloadSource:(NSString *)originalURL {
     return [self replaceURLWithDownloadSource:originalURL forceSource:nil];
 }
 
-/// 镜像源替换核心实现。
-/// 参考 FCL（FoldCraftLauncher）和 ZalithLauncher2：支持多镜像源 fallback。
-/// @param originalURL 原始 URL
-/// @param forceSource 强制使用的源（nil=用用户偏好；@"official"=不替换；@"bmclapi"=强制 BMCLAPI）。
-///                    在下载失败重试时，调用方传入对端源以触发镜像源切换，
-///                    避免单一镜像源故障导致整批下载卡死。
+/// The core mirror substitution implementation.
+/// Following FCL (FoldCraftLauncher) and ZalithLauncher2: multiple mirror sources with fallback.
+/// @param originalURL The original URL
+/// @param forceSource The source to force (nil = use the user preference; @"official" = no substitution; @"bmclapi" = force BMCLAPI).
+///                    On a retry after a failed download, the caller passes the opposite source to switch mirrors,
+///                    so one failing mirror cannot stall the whole batch.
 - (NSString *)replaceURLWithDownloadSource:(NSString *)originalURL forceSource:(nullable NSString *)forceSource {
     if (!originalURL) return originalURL;
 
@@ -92,34 +92,34 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"com.a
         return originalURL;
     }
 
-    // BMCLAPI镜像源
+    // The BMCLAPI mirror
     if ([downloadSource isEqualToString:@"bmclapi"]) {
-        // piston-meta.mojang.com：Mojang 新版版本清单和版本 JSON 域名（1.19+ 起使用）
-        // 修复：原版安装时 version.json 直连此域名，国内超时导致转圈不下载
+        // piston-meta.mojang.com: the Mojang domain for the newer version manifest and version JSON (used from 1.19 onwards)
+        // Fix: version.json connected directly to this domain during a vanilla install, which timed out in mainland China and left it spinning without downloading
         if ([originalURL containsString:@"piston-meta.mojang.com"]) {
             originalURL = [originalURL stringByReplacingOccurrencesOfString:@"https://piston-meta.mojang.com"
                                                                 withString:@"https://bmclapi2.bangbang93.com"];
         }
-        // piston-data.mojang.com：Mojang 新版 client.jar 和资源下载域名
+        // piston-data.mojang.com: the Mojang domain for the newer client.jar and asset downloads
         if ([originalURL containsString:@"piston-data.mojang.com"]) {
             originalURL = [originalURL stringByReplacingOccurrencesOfString:@"https://piston-data.mojang.com"
                                                                 withString:@"https://bmclapi2.bangbang93.com"];
         }
 
-        // 版本清单和版本JSON（旧域名，向后兼容）
+        // Version manifest and version JSON (the old domain, kept for backward compatibility)
         if ([originalURL containsString:@"launchermeta.mojang.com"] ||
             [originalURL containsString:@"launcher.mojang.com"]) {
             return [originalURL stringByReplacingOccurrencesOfString:@"https://launchermeta.mojang.com"
                                                            withString:@"https://bmclapi2.bangbang93.com"];
         }
 
-        // Assets资源
+        // Assets
         if ([originalURL containsString:@"resources.download.minecraft.net"]) {
             return [originalURL stringByReplacingOccurrencesOfString:@"http://resources.download.minecraft.net"
                                                            withString:@"https://bmclapi2.bangbang93.com/assets"];
         }
 
-        // Libraries库文件
+        // Library files
         if ([originalURL containsString:@"libraries.minecraft.net"]) {
             return [originalURL stringByReplacingOccurrencesOfString:@"https://libraries.minecraft.net"
                                                            withString:@"https://bmclapi2.bangbang93.com/maven"];
@@ -154,7 +154,7 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"com.a
                                                            withString:@"https://bmclapi2.bangbang93.com/mirrors/authlib-injector"];
         }
 
-        // Mojang Java运行时
+        // The Mojang Java runtime
         if ([originalURL containsString:@"launchermeta.mojang.com/v1/products/java-runtime"]) {
             return [originalURL stringByReplacingOccurrencesOfString:@"https://launchermeta.mojang.com"
                                                            withString:@"https://bmclapi2.bangbang93.com"];
@@ -180,9 +180,9 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"com.a
     }
 
     NSString *name = altName ?: path.lastPathComponent;
-    // 根据配置选择下载源并替换URL
-    // 参考 FCL（FoldCraftLauncher）和 ZalithLauncher2：重试时切换到对端镜像源，
-    // 避免单一镜像源故障导致整批下载卡死。SHA1 校验仍照常进行，不破坏下载完整性。
+    // Pick the download source from the settings and rewrite the URL
+    // Following FCL (FoldCraftLauncher) and ZalithLauncher2: switch to the opposite mirror on a retry,
+    // so one failing mirror cannot stall the whole batch. The SHA1 check still runs, so download integrity is unaffected.
     NSString *forceSource = nil;
     if (retryCount > 0) {
         NSString *currentSource = getPrefObject(@"general.download_source") ?: @"bmclapi";
@@ -213,7 +213,7 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"com.a
         if (self.progress.cancelled) {
             // Ignore any further errors
         } else if (error != nil) {
-            // 重试机制
+            // Retry mechanism
             NSInteger maxRetry = weakSelf.maxRetryCount > 0 ? weakSelf.maxRetryCount : 3;
             if (retryCount < maxRetry) {
                 NSInteger nextRetry = retryCount + 1;
@@ -225,7 +225,7 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"com.a
                     });
                 }
                 
-                // 延迟重试（缩短到 0.5 秒，避免数百个文件重试时累加延迟过长）
+                // Retry after a delay (shortened to 0.5 seconds, so retrying hundreds of files does not add up to a long wait)
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                     NSURLSessionDownloadTask *retryTask = [weakSelf createDownloadTask:url size:size sha:sha altName:altName toPath:path retryCount:nextRetry success:success];
                     if (retryTask) {
@@ -234,11 +234,11 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"com.a
                 });
             } else {
                 [weakSelf finishDownloadWithError:error file:name];
-                // 阶段5修复（参照 FCL）：单文件失败后必须手动推进进度，否则父 progress
-                // 永远不会达到 100%（failed 子 progress 的份额无人填补），
-                // 用户会看到下载条卡住不动，误以为下载未完成。
-                // 注意：destination block 只在下载成功时才会被调用，所以这里 progress
-                // 可能为 nil。需要重新从 manager 取该 task 对应的子 progress。
+                // Phase 5 fix (following FCL): the progress must be advanced by hand after a single file fails, otherwise the parent progress
+                // never reaches 100% (nothing fills in the share of the failed child progress),
+                // and the user sees the download bar stuck and assumes the download did not finish.
+                // Note: the destination block is only invoked on a successful download, so progress
+                // may be nil here. The child progress for this task has to be fetched from the manager again.
                 NSProgress *taskProgress = progress ?: [weakSelf.manager downloadProgressForTask:task];
                 if (taskProgress) {
                     int64_t pending = taskProgress.totalUnitCount - taskProgress.completedUnitCount;
@@ -246,22 +246,22 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"com.a
                         taskProgress.completedUnitCount = taskProgress.totalUnitCount;
                     }
                 } else if (weakSelf.progress.totalUnitCount > weakSelf.progress.completedUnitCount) {
-                    // 极端兜底：连子 progress 都拿不到（如 size 未知且 destination 未触发），
-                    // 直接给父 progress 推 1 个单位，避免下载条卡死。
+                    // Last resort: if even the child progress cannot be obtained (e.g. the size is unknown and destination never fired),
+                    // push one unit into the parent progress directly, so the download bar does not freeze.
                     weakSelf.progress.completedUnitCount += 1;
                 }
             }
         } else if (![self checkSHA:sha forFile:path altName:altName]) {
-            // SHA1 校验失败也尝试重试
+            // A failed SHA1 check is retried too
             NSInteger maxRetry = weakSelf.maxRetryCount > 0 ? weakSelf.maxRetryCount : 3;
             if (retryCount < maxRetry) {
                 NSInteger nextRetry = retryCount + 1;
                 NSLog(@"[MCDL] SHA1 mismatch, retrying %@ (attempt %ld/%ld)", name, (long)nextRetry, (long)maxRetry);
 
-                // 删除损坏的文件
+                // Delete the corrupted file
                 [NSFileManager.defaultManager removeItemAtPath:path error:nil];
 
-                // SHA 失败重试延迟缩短到 0.3 秒
+                // The retry delay after a SHA failure is shortened to 0.3 seconds
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                     NSURLSessionDownloadTask *retryTask = [weakSelf createDownloadTask:url size:size sha:sha altName:altName toPath:path retryCount:nextRetry success:success];
                     if (retryTask) {
@@ -269,7 +269,7 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"com.a
                     }
                 });
             } else {
-                // 阶段5修复（参照 FCL）：SHA1 校验失败也记录到 failedFiles，不取消整批任务
+                // Phase 5 fix (following FCL): a failed SHA1 check is also recorded in failedFiles rather than cancelling the batch
                 @synchronized(weakSelf.failedFiles) {
                     [weakSelf.failedFiles addObject:@{
                         @"name": path.lastPathComponent ?: @"unknown",
@@ -278,7 +278,7 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"com.a
                 }
                 NSLog(@"[MCDL] SHA1 mismatch for '%@', added to failedFiles (total failed: %lu), other downloads will continue",
                       path.lastPathComponent, (unsigned long)weakSelf.failedFiles.count);
-                // 阶段5修复：与上面 error 分支一致，推进父 progress 避免卡死
+                // Phase 5 fix: as in the error branch above, advance the parent progress so it cannot freeze
                 NSProgress *taskProgress2 = progress ?: [weakSelf.manager downloadProgressForTask:task];
                 if (taskProgress2) {
                     int64_t pending = taskProgress2.totalUnitCount - taskProgress2.completedUnitCount;
@@ -345,13 +345,13 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"com.a
         }
         if (self.metadata[@"inheritsFrom"]) {
             NSMutableDictionary *inheritsFromDict = parseJSONFromFile([NSString stringWithFormat:@"%1$s/versions/%2$@/%2$@.json", getenv("POJAV_GAME_DIR"), self.metadata[@"inheritsFrom"]]);
-            if (inheritsFromDict && !inheritsFromDict[@"NSErrorObject"]) {  // 添加错误字典检测
-                // 修复：parseJSONFromFile 返回错误字典而非 nil，
-                //   导致 inheritsFrom 父版本缺失时错误字典被当作 metadata
+            if (inheritsFromDict && !inheritsFromDict[@"NSErrorObject"]) {  // Add the error dictionary check
+                // Fix: parseJSONFromFile returns an error dictionary rather than nil,
+                //   so a missing inheritsFrom parent version had its error dictionary treated as metadata
                 [MinecraftResourceUtils processVersion:self.metadata inheritsFrom:inheritsFromDict];
                 self.metadata = inheritsFromDict;
             } else {
-                // 父版本不存在或损坏，报错
+                // The parent version is missing or corrupt, so report an error
                 [self finishDownloadWithErrorString:[NSString stringWithFormat:@"Missing version.json for the parent version %@", self.metadata[@"inheritsFrom"]]];
                 return;
             }
@@ -371,12 +371,12 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"com.a
             if (version) {
                 path = [NSString stringWithFormat:@"%1$s/versions/%2$@/%2$@.json", getenv("POJAV_GAME_DIR"), json[@"inheritsFrom"]];
             } else {
-                // 阶段5修复（参照 FCL ModpackHelper.ensureCompleteVersion）：
-                // findVersion 失败通常因为 remoteVersionList 尚未加载（整合包导入在后台线程，
-                // 不经过 DownloadViewController 的清单加载流程）。
-                // 此时检查父版本 JSON 是否已由 ensureParentVersionExists 预先下载：
-                //   - 已存在 → 直接走 completionBlock，后续 libraries/assets 下载照常进行
-                //   - 不存在 → 报错（启动器无法继续）
+                // Phase 5 fix (following FCL ModpackHelper.ensureCompleteVersion):
+                // findVersion usually fails because remoteVersionList has not loaded yet (modpack import runs on a background thread,
+                // rather than through the manifest loading flow of DownloadViewController).
+                // At this point, check whether the parent version JSON was already downloaded by ensureParentVersionExists:
+                //   - present     -> go straight to completionBlock, and the libraries/assets download continues as usual
+                //   - not present -> report an error (the launcher cannot continue)
                 NSString *parentJsonPath = [NSString stringWithFormat:@"%1$s/versions/%2$@/%2$@.json",
                                             getenv("POJAV_GAME_DIR"), json[@"inheritsFrom"]];
                 if ([NSFileManager.defaultManager fileExistsAtPath:parentJsonPath]) {
@@ -549,9 +549,9 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"com.a
 #pragma mark - Utilities
 
 - (void)prepareForDownload {
-    // 清理单例会话上残留的上一次下载任务（前台会话单例模式下必须清理，
-    // 否则上一次失败/取消的 task 残留在会话中可能影响新下载）。
-    // 注意：不能 invalidate 单例会话（会破坏后续所有下载），只取消任务。
+    // Clean up leftover tasks from the previous download on the shared session (required with a foreground shared session,
+    // otherwise a failed/cancelled task left in the session can interfere with a new download).
+    // Note: the shared session must not be invalidated (that would break every later download); only the tasks are cancelled.
     NSString *oldTaskId = self.currentDownloadTaskItem.taskId;
     if (oldTaskId.length > 0) {
         [self.manager.session getTasksWithCompletionHandler:^(NSArray<NSURLSessionDataTask *> *dataTasks,
@@ -577,13 +577,13 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"com.a
     self.progress.totalUnitCount = 1;
     [self.fileList removeAllObjects];
     [self.progressList removeAllObjects];
-    // 阶段5修复：重置失败文件列表（参照 FCL）
+    // Phase 5 fix: reset the failed file list (following FCL)
     [self.failedFiles removeAllObjects];
 
-    // 注册/更新到统一下载任务管理器
+    // Register/update with the shared download task manager
     [self registerOrUpdateTaskItem];
 
-    // 监听总体进度
+    // Observe the overall progress
     if (!self.isObservingTaskProgress) {
         [self.progress addObserver:self
                         forKeyPath:@"fractionCompleted"
@@ -596,7 +596,7 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"com.a
 }
 
 - (void)registerOrUpdateTaskItem {
-    // 悬浮球已移除，始终注册到统一下载任务管理器，以便下载任务列表跟踪
+    // The floating button is gone, but tasks are always registered with the shared download task manager so the task list stays accurate
     NSString *displayName = self.currentVersionId ?: (self.metadata[@"id"] ?: @"Minecraft");
     NSString *downloadSource = getPrefObject(@"general.download_source") ?: @"official";
 
@@ -632,7 +632,7 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"com.a
 
     [self.progress cancel];
 
-    // 取消属于当前任务的所有后台下载任务，避免失败后继续浪费流量
+    // Cancel every background download belonging to this task, so a failure does not keep wasting bandwidth
     NSString *taskId = self.currentDownloadTaskItem.taskId;
     [self.manager.session getTasksWithCompletionHandler:^(NSArray<NSURLSessionDataTask *> *dataTasks,
                                                           NSArray<NSURLSessionUploadTask *> *uploadTasks,
@@ -652,20 +652,20 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"com.a
     NSString *errorStr = [NSString stringWithFormat:localize(@"launcher.mcl.error_download", NULL), file, error.localizedDescription];
     NSLog(@"[MCDL] Error: %@ %@", errorStr, NSThread.callStackSymbols);
 
-    // 阶段5修复（参照 FCL）：单文件下载失败不再取消整批任务。
+    // Phase 5 fix (following FCL): one failed file no longer cancels the whole batch.
     //
-    // 之前调用 finishDownloadWithErrorString: 会：
-    //   1. 取消所有同 taskId 的下载任务（正在下载的其他文件全部被取消）
-    //   2. 弹出错误对话框中断整个下载流程
-    //   3. 导致整合包"下载不完全"——用户报告"下载的模组名称不对、下载不完全"
+    // Calling finishDownloadWithErrorString: used to:
+    //   1. cancel every download with the same taskId (so all the other files in flight were cancelled too)
+    //   2. show an error dialog that aborted the whole download
+    //   3. leave the modpack incomplete — users reported "the downloaded mod names are wrong and the download is incomplete"
     //
-    // FCL 做法：单文件失败记录到 failedFiles 数组，其他文件继续下载，
-    // 最终汇总报告给用户。这与 FCL "单文件失败不影响其他文件"的设计完全一致。
+    // What FCL does: record the failed file in the failedFiles array, let the other files carry on downloading,
+    // and report a summary at the end. This matches the FCL design of "one failed file does not affect the others" exactly.
     //
-    // 注意：仅整合包多文件下载场景适用此容错策略。单文件版本下载（downloadVersion:）
-    // 不应进入此方法（其 completionHandler 已有自己的错误处理路径），但若意外进入，
-    // 由于 failedFiles.count == 0 时 finishDownloadWithErrorString: 不会被触发，
-    // 行为与原逻辑保持兼容。
+    // Note: this tolerance only applies to multi-file modpack downloads. A single-file version download (downloadVersion:)
+    // should never reach this method (its completionHandler has its own error path), but if it somehow does,
+    // finishDownloadWithErrorString: is not triggered while failedFiles.count == 0,
+    // so the behavior stays compatible with the original logic.
     @synchronized(self.failedFiles) {
         [self.failedFiles addObject:@{
             @"name": file ?: @"unknown",
@@ -691,7 +691,7 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"com.a
     int64_t total = progress.totalUnitCount;
     int64_t completed = (int64_t)(total * fraction);
 
-    // 速度 / 预计剩余时间（每秒计算一次）
+    // Speed / estimated time remaining (computed once per second)
     struct timeval tv;
     gettimeofday(&tv, NULL);
     NSTimeInterval now = tv.tv_sec + tv.tv_usec / 1000000.0;
@@ -737,10 +737,10 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"com.a
         if (self.currentDownloadTaskItem.state != DownloadTaskStateCompleted &&
             self.currentDownloadTaskItem.state != DownloadTaskStateFailed &&
             self.currentDownloadTaskItem.state != DownloadTaskStateCancelled) {
-            // 阶段5修复（参照 FCL DownloadList.finishAll）：下载流程结束后，
-            // 若有失败文件，不能简单标记为"成功完成"——这会让用户以为整合包完整。
-            // 应将失败文件信息汇总为 NSError，让 DownloadTaskManager 显示为失败状态，
-            // 用户可在下载任务列表中看到具体缺失的文件。
+            // Phase 5 fix (following FCL DownloadList.finishAll): once the download flow ends,
+            // failed files must not simply be reported as "finished successfully" — that would leave the user thinking the modpack was complete.
+            // The failed files are summarized into an NSError so DownloadTaskManager shows a failed state,
+            // and the user can see exactly which files are missing in the download task list.
             NSArray<NSDictionary *> *failedSnapshot = [self.failedFiles copy];
             if (failedSnapshot.count > 0) {
                 NSMutableString *msg = [NSMutableString stringWithFormat:@"Download finished, but %lu file(s) failed:", (unsigned long)failedSnapshot.count];
@@ -779,9 +779,9 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"com.a
     }
 }
 
-// 关键修改：移除本地账户下载限制和提示
+// Key change: remove the download restriction and prompt for local accounts
 - (BOOL)checkAccessWithDialog:(BOOL)show {
-    // 无条件允许所有下载请求
+    // Allow every download request unconditionally
     return YES;
 }
 
@@ -823,9 +823,9 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"com.a
     if (getPrefBool(@"general.check_sha")) {
         return [self checkSHAIgnorePref:sha forFile:path altName:altName logSuccess:logSuccess];
     } else {
-        // 不仅检查文件存在性，还要检查文件大小 > 0（防止空文件被误判为已下载）
-        // 修复：原版安装时若文件被错误创建为 0 字节，会被视为已下载，
-        //   导致 totalUnitCount 从 1 变 0，触发强制完成（0 字节下载）
+        // Check not only that the file exists but also that its size is > 0 (so an empty file is not mistaken for a completed download)
+        // Fix: during a vanilla install a file wrongly created as 0 bytes was treated as already downloaded,
+        //   so totalUnitCount went from 1 to 0 and forced completion (a 0-byte download)
         if (![NSFileManager.defaultManager fileExistsAtPath:path]) return NO;
         NSDictionary *attrs = [NSFileManager.defaultManager attributesOfItemAtPath:path error:nil];
         unsigned long long fileSize = [attrs fileSize];

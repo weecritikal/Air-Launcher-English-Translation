@@ -92,9 +92,9 @@
 
 #pragma mark - Shaders folder detection & scan
 
-/// 解析 profile 的 gameDir 为绝对路径。
+/// Resolve the profile gameDir into an absolute path.
 /// 与 ModService.resolveAbsoluteGameDirForProfile: 对齐：
-/// profile gameDir 通常是相对路径（如 "./custom_gamedir/{name}"），需相对于 POJAV_GAME_DIR 解析。
+/// A profile gameDir is usually relative (such as "./custom_gamedir/{name}") and has to be resolved against POJAV_GAME_DIR.
 /// 之前 ShaderService 直接使用相对路径，导致 shaderpacks 目录找不到（fileExistsAtPath 基于 cwd 解析），
 /// 用户点击下载光影按钮后没反应（实际是 ensureShadersFolderForProfile 创建目录到错误位置，
 /// 下载完成后 moveItem 失败但 handler 已切主线程报错，用户感知"无反应"）。
@@ -126,7 +126,7 @@
     NSString *profile = profileName.length ? profileName : @"default";
     NSFileManager *fm = [NSFileManager defaultManager];
 
-    // 优先用 profile gameDir（已解析为绝对路径）
+    // Prefer the profile gameDir (already resolved to an absolute path)
     NSString *resolvedGameDir = [self resolveAbsoluteGameDirForProfile:profile];
     if (resolvedGameDir.length > 0) {
         NSString *shadersPath = [resolvedGameDir stringByAppendingPathComponent:@"shaderpacks"];
@@ -155,7 +155,7 @@
     NSFileManager *fm = [NSFileManager defaultManager];
     NSString *shadersPath = nil;
 
-    // 优先用 profile gameDir（已解析为绝对路径）
+    // Prefer the profile gameDir (already resolved to an absolute path)
     NSString *resolvedGameDir = [self resolveAbsoluteGameDirForProfile:profile];
     if (resolvedGameDir.length > 0) {
         shadersPath = [resolvedGameDir stringByAppendingPathComponent:@"shaderpacks"];
@@ -362,7 +362,7 @@
     self.downloadTaskItems[task] = taskItem;
     [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId state:DownloadTaskStateDownloading];
 
-    // 设置 retryHandler：FCL 风格重新下载，复用同一 taskItem，重建底层 NSURLSessionTask
+    // Set retryHandler: an FCL-style re-download that reuses the same taskItem and rebuilds the underlying NSURLSessionTask
     __weak typeof(self) weakSelf = self;
     NSString *capturedDestPath = destinationPath;
     ShaderDownloadHandler capturedCompletion = completion;
@@ -458,8 +458,8 @@
 totalBytesExpectedToWrite:(int64_t)totalBytesExpectedToWrite {
     void(^progress)(NSProgress *) = self.downloadProgressHandlers[downloadTask];
     DownloadTaskItem *taskItem = self.downloadTaskItems[downloadTask];
-    // speed/eta 声明提到 if (taskItem) 块之前，供下方构造 NSProgress 时引用
-    // （修复编译错误：之前在块内声明，块外使用导致 use of undeclared identifier）
+    // speed/eta are declared before the if (taskItem) block so the NSProgress built below can reference them
+    // (fixing a compile error: they were previously declared inside the block and used outside it, giving "use of undeclared identifier")
     double speed = 0.0;
     NSTimeInterval eta = 0.0;
 
@@ -494,8 +494,8 @@ totalBytesExpectedToWrite:(int64_t)totalBytesExpectedToWrite {
 
     if (!progress) return;
 
-    // 在 progress 回调的 NSProgress 上设置 throughput 和 estimatedTimeRemaining，
-    // 供调用方（DownloadViewController）在 FCL 风格的下载进度卡片上显示速度和 ETA。
+    // Set throughput and estimatedTimeRemaining on the NSProgress passed to the progress callback,
+    // so the caller (DownloadViewController) can show the speed and ETA on the FCL-style download progress card.
     // 与 ModService 对齐，之前 ShaderService 同样存在速度/ETA 永远为 0 的问题。
     NSProgress *downloadProgress = [NSProgress progressWithTotalUnitCount:totalBytesExpectedToWrite];
     downloadProgress.completedUnitCount = totalBytesWritten;

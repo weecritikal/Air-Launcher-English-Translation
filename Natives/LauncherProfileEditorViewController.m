@@ -29,10 +29,10 @@
     self.navigationController.modalInPresentation = YES;
     self.prefSectionsVisible = YES;
     
-    // 设置半透明背景
+    // Set a translucent background
     [[BackgroundManager sharedManager] applyEffectToView:self.view];
     
-    // 设置导航栏半透明样式
+    // Set the translucent navigation bar style
     [[BackgroundManager sharedManager] applyEffectToNavigationBar:self.navigationController.navigationBar];
     self.navigationController.navigationBar.tintColor = [UIColor systemBlueColor];
 
@@ -40,7 +40,7 @@
     __weak LauncherProfileEditorViewController *weakSelf = self;
     self.getPreference = ^id(NSString *section, NSString *key){
         id rawValue = weakSelf.profile[key];
-        // 兼容 NSDictionary 类型的 javaVersion（旧版直装器写入）
+        // Handle a javaVersion of dictionary type (written by older direct installers)
         if ([rawValue isKindOfClass:[NSDictionary class]]) {
             id major = rawValue[@"majorVersion"];
             return major ? [major description] : @"(default)";
@@ -163,11 +163,11 @@
 
     [super viewDidLoad];
     // Adapt to the custom launcher background: make this view controller transparent so the global background (image/video) shows through.
-    // 此处在上方已通过 applyEffectToView 为视图添加了毛玻璃/半透明效果，
-    // 这里再调用 makeViewControllerTransparent 以确保 tableView 背景也被置为透明。
+    // applyEffectToView above has already given the view its frosted-glass/translucent effect,
+    // and makeViewControllerTransparent is called here as well to make sure the tableView background is cleared too.
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
 
-    // 监听版本列表刷新通知
+    // Listen for the version list refresh notification
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(reloadVersionList)
                                                  name:@"ReloadProfileList"
@@ -187,17 +187,17 @@
 
 /// Re-apply the background effect: called when the BackgroundUIEffectChanged notification arrives.
 /// Re-applies the opacity/frosted-glass effect to this view controller via BackgroundManager,
-/// 确保 tableView 背景透明、全局背景能够正常透出。
+/// so the tableView background is transparent and the global background shows through.
 - (void)reapplyBackgroundEffect {
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
 }
 
 - (void)reloadVersionList {
-    // 清除当前版本列表缓存，下次打开选择器时会重新加载
+    // Clear the cached version list, so the picker reloads it next time it opens
     self.versionList = nil;
     self.versionSelectedAt = -1;
     
-    // 如果版本选择器正在显示，立即刷新
+    // Refresh immediately if the version picker is currently showing
     if (self.versionPickerView && self.versionPickerView.window) {
         [self changeVersionType:nil];
     }
@@ -241,7 +241,7 @@
 
     [PLProfiles.current save];
     
-    // 发送通知刷新配置文件列表
+    // Post a notification to refresh the profile list
     [[NSNotificationCenter defaultCenter] postNotificationName:@"SelectedProfileChanged" object:self.profile[@"name"]];
     
     [self actionClose];

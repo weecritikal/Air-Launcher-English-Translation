@@ -1,7 +1,7 @@
 #import <UIKit/UIKit.h>
 
-// FCL风格启动器根视图控制器 - 管理三栏布局
-// 左侧：功能菜单 | 中间：内容区 | 右侧：账户和启动
+// FCL-style launcher root view controller - manages the three-column layout
+// Left: the feature menu | Middle: the content area | Right: account and play
 
 @interface LauncherRootViewController : UIViewController <UINavigationControllerDelegate>
 

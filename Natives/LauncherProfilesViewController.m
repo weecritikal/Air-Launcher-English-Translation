@@ -6,7 +6,7 @@
 #import "ProfileSettingsViewController.h"
 #import "LauncherProfilesViewController.h"
 #import "PLProfiles.h"
-#import "VersionCardCell.h"  // 新增：导入独立的 VersionCardCell
+#import "VersionCardCell.h"  // New: import the standalone VersionCardCell
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunguarded-availability-new"
 #import "UIKit+AFNetworking.h"
@@ -25,7 +25,7 @@
 #import "AccountListViewController.h"
 #import "BackgroundManager.h"
 
-// 版本类型
+// Version type
 typedef NS_ENUM(NSInteger, VersionType) {
     VersionTypeRelease,
     VersionTypeSnapshot,
@@ -59,25 +59,25 @@ typedef NS_ENUM(NSInteger, VersionType) {
 
     self.view.backgroundColor = [UIColor systemBackgroundColor];
     // Adapt to the custom launcher background: make this view controller transparent so the global background (image/video) shows through.
-    // 放在 view.backgroundColor 设置之后调用，确保透明效果不会被不透明背景色覆盖。
+    // Called after view.backgroundColor is set, so an opaque background color cannot override the transparency.
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
 
-    // 设置导航栏
+    // Set up the navigation bar
     [self setupNavigationBar];
 
-    // 设置筛选器
+    // Set up the filters
     [self setupFilterSegment];
 
-    // 设置集合视图
+    // Set up the collection view
     [self setupCollectionView];
-    // 确保 collectionView 背景透明，让全局背景能够透出
-    // （UICollectionView 没有 backgroundView 属性，仅需清空 backgroundColor）
+    // Make sure the collectionView background is transparent so the global background shows through
+    // (UICollectionView has no backgroundView property, so clearing backgroundColor is enough)
     self.collectionView.backgroundColor = [UIColor clearColor];
 
-    // 设置加载指示器
+    // Set up the loading indicator
     [self setupLoadingIndicator];
 
-    // 加载版本列表
+    // Load the version list
     [self loadVersionList];
 
     // Listen for background UI effect changes: when the user switches between frosted glass and translucent, or adjusts the opacity,
@@ -89,7 +89,7 @@ typedef NS_ENUM(NSInteger, VersionType) {
 }
 
 - (void)setupNavigationBar {
-    // 添加按钮
+    // Add button
     UIMenu *createMenu = [UIMenu menuWithTitle:@"New" image:nil identifier:nil
     options:UIMenuOptionsDisplayInline
     children:@[
@@ -122,8 +122,8 @@ typedef NS_ENUM(NSInteger, VersionType) {
 - (void)setupCollectionView {
     UICollectionViewFlowLayout *layout = [[UICollectionViewFlowLayout alloc] init];
     layout.scrollDirection = UICollectionViewScrollDirectionVertical;
-    // 与 DownloadViewController 一致：单列横向列表行，行高 64pt
-    // （VersionCardCell 已改为 FCL/ZL2 风格横向行布局，不再使用 100x140 网格卡片）
+    // Matching DownloadViewController: a single-column list of horizontal rows, 64pt tall
+    // (VersionCardCell now uses the FCL/ZL2 horizontal row layout rather than 100x140 grid cards)
     layout.minimumInteritemSpacing = 0;
     layout.minimumLineSpacing = 4;
     layout.itemSize = CGSizeMake(self.view.bounds.size.width - 32, 64);
@@ -149,8 +149,8 @@ typedef NS_ENUM(NSInteger, VersionType) {
     ]];
 }
 
-// 动态更新 itemSize 宽度，使其填满 collectionView（减去 sectionInset 左右各 16pt）。
-// 与 DownloadViewController 的 viewDidLayoutSubviews 保持一致，避免横竖屏切换时 cell 宽度滞后。
+// Update the itemSize width dynamically so it fills the collectionView (minus 16pt of sectionInset on each side).
+// Matching viewDidLayoutSubviews in DownloadViewController, so the cell width does not lag behind on rotation.
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
     if (!self.collectionView) return;
@@ -180,7 +180,7 @@ typedef NS_ENUM(NSInteger, VersionType) {
 - (void)loadVersionList {
     [self.loadingIndicator startAnimating];
     
-    // 根据配置选择下载源
+    // Pick the download source from the settings
     NSString *downloadSource = getPrefObject(@"general.download_source");
     NSString *versionManifestURL;
     
@@ -261,17 +261,17 @@ typedef NS_ENUM(NSInteger, VersionType) {
     NSString *releaseTime = version[@"releaseTime"];
     NSString *versionType = version[@"type"];
     
-    // 格式化日期
+    // Format the date
     NSString *formattedDate = [self formatDate:releaseTime];
     
-    // 使用新的配置方法
+    // Use the new configuration method
     [cell configureWithVersionId:versionId date:formattedDate type:versionType];
     
     return cell;
 }
 
 - (NSString *)formatDate:(NSString *)dateString {
-    // 简化日期显示
+    // Simplified date display
     if (dateString.length >= 10) {
         return [dateString substringToIndex:10];
     }
@@ -284,7 +284,7 @@ typedef NS_ENUM(NSInteger, VersionType) {
     NSDictionary *version = self.filteredVersions[indexPath.row];
     NSString *versionId = version[@"id"];
     
-    // 显示确认对话框
+    // Show the confirmation dialog
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:versionId
                                                                    message:@"Choose an action"
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
@@ -299,7 +299,7 @@ typedef NS_ENUM(NSInteger, VersionType) {
                                               style:UIAlertActionStyleCancel
                                             handler:nil]];
     
-    // iPad支持
+    // iPad support
     if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
         VersionCardCell *cell = (VersionCardCell *)[collectionView cellForItemAtIndexPath:indexPath];
         alert.popoverPresentationController.sourceView = cell;
@@ -312,24 +312,24 @@ typedef NS_ENUM(NSInteger, VersionType) {
 - (void)downloadVersion:(NSDictionary *)version {
     NSString *versionId = version[@"id"];
     
-    // 创建新的配置文件
+    // Create the new profile
     NSMutableDictionary *profile = [NSMutableDictionary dictionary];
     profile[@"name"] = versionId;
     profile[@"lastVersionId"] = versionId;
     profile[@"type"] = @"custom";
     profile[@"created"] = [NSDate date].description;
     
-    // 保存配置
+    // Save the profile
     [PLProfiles.current saveProfile:profile withName:versionId];
     PLProfiles.current.selectedProfileName = versionId;
     
-    // 显示下载进度
+    // Show the download progress
     UIAlertController *progressAlert = [UIAlertController alertControllerWithTitle:@"Downloading"
                                                                            message:[NSString stringWithFormat:@"Downloading %@...", versionId]
                                                                     preferredStyle:UIAlertControllerStyleAlert];
     [self presentViewController:progressAlert animated:YES completion:nil];
     
-    // 模拟下载完成
+    // Simulate the download completing
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         [progressAlert dismissViewControllerAnimated:YES completion:^{
             UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"Download complete"
@@ -344,7 +344,7 @@ typedef NS_ENUM(NSInteger, VersionType) {
 #pragma mark - Actions
 
 - (void)actionCreateVanillaProfile {
-    // 创建原版配置
+    // Create the vanilla profile
     [self showVersionSelectorForType:@"vanilla"];
 }
 
@@ -360,7 +360,7 @@ typedef NS_ENUM(NSInteger, VersionType) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
 
-        // 用户取消：ForgeInstallerFlowErrorDomain/Cancelled 时静默
+        // User cancelled: stay silent for ForgeInstallerFlowErrorDomain/Cancelled
         if (!success) {
             if ([resultOrError isKindOfClass:[NSError class]]) {
                 NSError *err = (NSError *)resultOrError;
@@ -372,7 +372,7 @@ typedef NS_ENUM(NSInteger, VersionType) {
             return;
         }
 
-        // 解析 ForgeInstallVC 打包的结果
+        // Parse the result packed by ForgeInstallVC
         NSInteger selectedScheme = 0;
         NSString *filePath = nil;
         if ([resultOrError isKindOfClass:[NSDictionary class]]) {
@@ -386,7 +386,7 @@ typedef NS_ENUM(NSInteger, VersionType) {
         BOOL isNeoForge = vc.isNeoForge;
 
         if (selectedScheme == 1 && filePath.length > 0) {
-            // 直装方案：纯文件操作，不依赖 LauncherNavigationController
+            // Direct install: pure file operations, with no dependency on LauncherNavigationController
             dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
                 NSError *directError = nil;
                 BOOL installed = NO;
@@ -406,7 +406,7 @@ typedef NS_ENUM(NSInteger, VersionType) {
             return;
         }
 
-        // 原版方案：通过 keyWindow.rootViewController 递归找到 LauncherNavigationController 启动 AWT 安装器
+        // Vanilla method: walk down from keyWindow.rootViewController to find LauncherNavigationController and start the AWT installer
         LauncherNavigationController *launcherNav = [strongSelf findLauncherNavigationController];
         if (launcherNav && filePath.length > 0) {
             [launcherNav enterModInstallerWithPath:filePath hitEnterAfterWindowShown:YES];
@@ -418,7 +418,7 @@ typedef NS_ENUM(NSInteger, VersionType) {
     [self presentNavigatedViewController:vc];
 }
 
-// 从 keyWindow.rootViewController 递归查找 LauncherNavigationController
+// Recursively find LauncherNavigationController from keyWindow.rootViewController
 - (LauncherNavigationController *)findLauncherNavigationController {
     UIWindow *keyWindow = nil;
     if (@available(iOS 13.0, *)) {
@@ -476,7 +476,7 @@ typedef NS_ENUM(NSInteger, VersionType) {
 }
 
 - (void)showVersionSelectorForType:(NSString *)type {
-    // 显示版本选择器
+    // Show the version picker
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Select version"
                                                                    message:nil
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
@@ -533,7 +533,7 @@ typedef NS_ENUM(NSInteger, VersionType) {
 
 /// Re-apply the background effect: called when the BackgroundUIEffectChanged notification arrives.
 /// Re-applies the opacity/frosted-glass effect to this view controller via BackgroundManager,
-/// 并将 collectionView 背景置为透明，确保全局背景能够正常透出。
+/// and set the collectionView background to transparent, so the global background shows through.
 - (void)reapplyBackgroundEffect {
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
     self.collectionView.backgroundColor = [UIColor clearColor];

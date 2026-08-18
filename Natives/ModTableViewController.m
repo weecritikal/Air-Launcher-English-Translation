@@ -3,7 +3,7 @@
 //  AmethystMods
 //
 //  Created by Copilot on 2025-08-22.
-//  Updated: ensure 上网搜索 switch is placed directly left of refresh and visible reliably.
+//  Updated: ensure the web search switch is placed directly left of refresh and visible reliably.
 //
 
 #import "ModTableViewController.h"
@@ -14,9 +14,9 @@
 
 @interface ModTableViewController () <ModTableViewCellDelegate, UISearchBarDelegate>
 @property (nonatomic, strong) NSArray<ModItem *> *mods;
-@property (nonatomic, strong) NSArray<ModItem *> *filteredMods; // 用于存储搜索结果
+@property (nonatomic, strong) NSArray<ModItem *> *filteredMods; // Holds the search results
 @property (nonatomic, strong) UISwitch *onlineSearchSwitch;
-@property (nonatomic, strong) UISearchBar *searchBar; // 搜索栏
+@property (nonatomic, strong) UISearchBar *searchBar; // Search bar
 @end
 
 @implementation ModTableViewController
@@ -24,7 +24,7 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     // Adapt to the custom launcher background: make this VC transparent so the global background image/blur shows through
-    // ModTableViewController 是 UITableViewController 子类，makeViewControllerTransparent 会自动处理 tableView 背景透明化
+    // ModTableViewController subclasses UITableViewController, so makeViewControllerTransparent handles the tableView background automatically
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
     self.title = @"Mods";
     [self.tableView registerClass:[ModTableViewCell class] forCellReuseIdentifier:@"ModCell"];
@@ -53,7 +53,7 @@
     // Put refresh as rightmost, switch container to its left
     self.navigationItem.rightBarButtonItems = @[refresh, switchContainerItem];
 
-    // 创建搜索栏
+    // Create the search bar
     self.searchBar = [[UISearchBar alloc] initWithFrame:CGRectMake(0, 0, self.view.frame.size.width, 44)];
     self.searchBar.placeholder = @"Search mods...";
     self.searchBar.delegate = self;
@@ -62,10 +62,10 @@
     // Adapt to the custom launcher background: clear the searchBar's opaque default background so the global image/blur shows through
     [[BackgroundManager sharedManager] applyEffectToSearchBar:self.searchBar];
 
-    // 将搜索栏添加到tableView的header中
+    // Add the search bar to the tableView header
     self.tableView.tableHeaderView = self.searchBar;
     
-    // 初始化filteredMods
+    // Initialize filteredMods
     self.filteredMods = @[];
     
     // Ensure switch reflects current state when view appears
@@ -80,7 +80,7 @@
 
 - (void)reapplyBackgroundEffect {
     // Re-apply transparency to this VC when the background effect changes
-    // UITableViewController 的 tableView 背景由 makeViewControllerTransparent 自动处理
+    // The tableView background of a UITableViewController is handled automatically by makeViewControllerTransparent
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
     // Re-apply the searchBar transparency (the text field background needs refreshing after a frosted glass <-> translucent switch)
     [[BackgroundManager sharedManager] applyEffectToSearchBar:self.searchBar];
@@ -104,7 +104,7 @@
 - (void)refreshTapped {
     [[ModService sharedService] scanModsForProfile:self.profileName completion:^(NSArray<ModItem *> *mods) {
         self.mods = mods ?: @[];
-        // 如果没有进行搜索，则显示所有Mod；否则显示搜索结果
+        // With no search running, show every mod; otherwise show the search results
         if (self.searchBar.text.length == 0) {
             self.filteredMods = self.mods;
         } else {
@@ -149,15 +149,15 @@
 
 - (void)filterModsForSearchText:(NSString *)searchText {
     if (searchText.length == 0) {
-        // 如果搜索文本为空，则显示所有Mod
+        // With empty search text, show every mod
         self.filteredMods = self.mods;
     } else {
-        // 根据搜索文本过滤Mod
+        // Filter the mods by the search text
         NSPredicate *predicate = [NSPredicate predicateWithFormat:@"displayName CONTAINS[cd] %@ OR modDescription CONTAINS[cd] %@", searchText, searchText];
         self.filteredMods = [self.mods filteredArrayUsingPredicate:predicate];
     }
     
-    // 更新表格视图
+    // Refresh the table view
     [self.tableView reloadData];
 }
 
@@ -203,7 +203,7 @@
     [ac addAction:[UIAlertAction actionWithTitle:@"Delete" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
         NSError *err = nil;
         if ([[ModService sharedService] deleteMod:m error:&err]) {
-            // 从filteredMods和mods中移除
+            // Remove it from filteredMods and mods
             NSMutableArray *newFiltered = [self.filteredMods mutableCopy];
             [newFiltered removeObjectAtIndex:ip.row];
             self.filteredMods = [newFiltered copy];

@@ -2,8 +2,8 @@
 //  ModLoaderIconHelper.m
 //  Amethyst
 //
-//  模组加载器图标统一工具类实现
-// 参照 FCL/ZL2 的加载器图标体系，统一项目中三套并行的加载器视觉表示
+//  Implementation of the unified mod loader icon helper
+// Following the loader icon systems of FCL/ZL2, unifying the three parallel loader representations in this project
 //
 
 #import "ModLoaderIconHelper.h"
@@ -12,106 +12,106 @@
 
 #pragma mark - 品牌色
 
-/// 统一的加载器品牌色映射（全项目共用，消除多文件间配色不一致问题）
-/// 配色参照各加载器官方品牌指南，与 FCL/ZL2 使用的官方色保持一致
+/// The unified loader brand color map (shared across the project, removing the color inconsistencies between files)
+/// The colors follow each loader's official brand guidelines and match the official colors used by FCL/ZL2
 + (UIColor *)brandColorForLoader:(NSString *)loader {
     if (!loader || loader.length == 0) {
         return [UIColor tertiaryLabelColor];
     }
     NSString *lower = loader.lowercaseString;
 
-    // 注意判断顺序：neoforge 必须在 forge 之前（neoforge 包含 forge 子串）
-    // optifabric 必须在 optifine 之前（optifabric 包含 optifine 子串）
+    // Mind the order: neoforge must come before forge (neoforge contains forge as a substring)
+    // and optifabric must come before optifine (optifabric contains optifine as a substring)
     if ([lower containsString:@"neoforge"]) {
-        // NeoForge 官方橙 #E0732B
+        // NeoForge official orange #E0732B
         return [UIColor colorWithRed:0.88 green:0.45 blue:0.17 alpha:1.0];
     }
     if ([lower containsString:@"forge"]) {
-        // Forge 官方棕 #8B5A2B
+        // Forge official brown #8B5A2B
         return [UIColor colorWithRed:0.55 green:0.35 blue:0.20 alpha:1.0];
     }
     if ([lower containsString:@"optifabric"]) {
-        // OptiFabric 与 OptiFine 同色系
+        // OptiFabric shares the OptiFine color family
         return [UIColor colorWithRed:0.90 green:0.60 blue:0.10 alpha:1.0];
     }
     if ([lower containsString:@"optifine"]) {
-        // OptiFine 官方黄 #E6991A
+        // OptiFine official yellow #E6991A
         return [UIColor colorWithRed:0.90 green:0.60 blue:0.10 alpha:1.0];
     }
     if ([lower containsString:@"quilt"]) {
-        // Quilt 官方紫粉 #D668AC
+        // Quilt official purple-pink #D668AC
         return [UIColor colorWithRed:0.84 green:0.41 blue:0.67 alpha:1.0];
     }
     if ([lower containsString:@"fabric"]) {
-        // Fabric 官方蓝 #5B8DF9
+        // Fabric official blue #5B8DF9
         return [UIColor colorWithRed:0.18 green:0.55 blue:0.95 alpha:1.0];
     }
     if ([lower containsString:@"iris"]) {
-        // Iris 官方浅蓝 #4DA6F2
+        // Iris official light blue #4DA6F2
         return [UIColor colorWithRed:0.30 green:0.65 blue:0.95 alpha:1.0];
     }
     if ([lower containsString:@"rift"]) {
-        // Rift 官方绿 #33B280
+        // Rift official green #33B280
         return [UIColor colorWithRed:0.20 green:0.70 blue:0.50 alpha:1.0];
     }
     if ([lower containsString:@"vanilla"]) {
-        // 原版绿 #66CC66
+        // Vanilla green #66CC66
         return [UIColor colorWithRed:0.40 green:0.80 blue:0.40 alpha:1.0];
     }
-    // 未识别：返回系统次级标签色（灰色，作为兜底）
+    // Unrecognized: return the system secondary label color (gray) as a fallback
     return [UIColor tertiaryLabelColor];
 }
 
 #pragma mark - SF Symbol 名称
 
-/// 加载器对应的 SF Symbol 名称（与官方 logo 形状相近）
-/// 仅在 bundle 中无对应 PNG 时作为回退使用
+/// The SF Symbol name for a loader (a symbol shaped like the official logo)
+/// Used only as a fallback when the bundle has no matching PNG
 + (NSString *)symbolNameForLoader:(NSString *)loader {
     if (!loader || loader.length == 0) {
         return @"cube.box.fill";
     }
     NSString *lower = loader.lowercaseString;
 
-    // 注意判断顺序与 brandColorForLoader 一致
+    // The order matches brandColorForLoader
     if ([lower containsString:@"neoforge"]) {
-        // NeoForge: 锤子形状（官方 logo 是锤子）
+        // NeoForge: a hammer shape (the official logo is a hammer)
         return @"hammer.fill";
     }
     if ([lower containsString:@"forge"]) {
-        // Forge: 铁砧形状（官方 logo 是铁砧）
+        // Forge: an anvil shape (the official logo is an anvil)
         return @"anvil.fill";
     }
     if ([lower containsString:@"optifabric"] || [lower containsString:@"optifine"]) {
-        // OptiFine: 眼睛形状（官方 logo 是眼睛）
+        // OptiFine: an eye shape (the official logo is an eye)
         return @"eye.fill";
     }
     if ([lower containsString:@"quilt"]) {
-        // Quilt: 六边形网格（官方 logo 是拼布图案）
+        // Quilt: a hexagonal grid (the official logo is a patchwork pattern)
         return @"circle.hexagongrid.fill";
     }
     if ([lower containsString:@"fabric"]) {
-        // Fabric: 闪电/星星（官方 logo 是织布针，SF Symbol 无完全匹配，用相近的）
+        // Fabric: a bolt/star (the official logo is a weaving needle, which no SF Symbol matches exactly, so a close one is used)
         return @"wand.and.stars";
     }
     if ([lower containsString:@"iris"]) {
-        // Iris: 彩虹/圆形（官方 logo 是彩虹眼睛）
+        // Iris: a rainbow/circle (the official logo is a rainbow eye)
         return @"circle.lefthalf.filled";
     }
     if ([lower containsString:@"rift"]) {
-        // Rift: 闪电（官方 logo 是裂缝/闪电）
+        // Rift: a bolt (the official logo is a rift/bolt)
         return @"bolt.fill";
     }
     if ([lower containsString:@"vanilla"]) {
-        // Vanilla: 立方体（原版方块）
+        // Vanilla: a cube (a vanilla block)
         return @"cube.fill";
     }
-    // 默认：立方体盒子
+    // Default: a cube box
     return @"cube.box.fill";
 }
 
 #pragma mark - 显示名
 
-/// 加载器的本地化显示名（用于徽章文字）
+/// The localized display name of a loader (for the badge text)
 + (NSString *)displayNameForLoader:(NSString *)loader {
     if (!loader || loader.length == 0) {
         return @"Unknown";
@@ -128,7 +128,7 @@
     if ([lower containsString:@"rift"])       return @"Rift";
     if ([lower containsString:@"vanilla"])    return @"Vanilla";
 
-    // 未知加载器：首字母大写返回
+    // Unknown loader: return it capitalized
     if (loader.length > 0) {
         NSString *firstChar = [[loader substringToIndex:1] uppercaseString];
         NSString *rest = [loader substringFromIndex:1];
@@ -139,35 +139,35 @@
 
 #pragma mark - 图标加载
 
-/// 加载加载器图标（优先 bundle PNG，回退 SF Symbol）
-/// 加载顺序：
-///   1. ModLoaderIcons/{key}.png（HMCL 官方标准单文件，不区分深浅色，品牌色透明 PNG）
-///   2. ModLoaderIcons/{key}_{light|dark}.png（旧格式兼容，区分主题）
-///   3. SF Symbol + 品牌色着色（兜底）
+/// Load a loader icon (preferring a bundled PNG, falling back to an SF Symbol)
+/// Load order:
+///   1. ModLoaderIcons/{key}.png (the HMCL official standard single file, with no light/dark variants, a transparent PNG in brand colors)
+///   2. ModLoaderIcons/{key}_{light|dark}.png (the old format, kept for compatibility, with per-theme files)
+///   3. An SF Symbol tinted with the brand color (the fallback)
 + (UIImage *)iconImageForLoader:(NSString *)loader
                  traitCollection:(UITraitCollection *)traitCollection {
     if (!loader || loader.length == 0) {
         return [UIImage systemImageNamed:@"cube.box.fill"];
     }
 
-    // Vanilla 原版：使用 Assets.xcassets 中的 VanillaIcon 草方块图标
-    // 与 VersionCardCell 中版本卡片的原版图标保持一致（HMCL 仓库自带的标准草方块）
+    // Vanilla: use the VanillaIcon grass block from Assets.xcassets
+    // matching the vanilla icon on the version cards in VersionCardCell (the standard grass block that ships with the HMCL repo)
     if ([loader.lowercaseString containsString:@"vanilla"]) {
         UIImage *vanillaIcon = [UIImage imageNamed:@"VanillaIcon"];
         if (vanillaIcon) {
             return vanillaIcon;
         }
-        // 如果 VanillaIcon 加载失败，回退到 SF Symbol
+        // If VanillaIcon fails to load, fall back to an SF Symbol
         return [UIImage systemImageNamed:@"cube.fill"];
     }
 
-    // 提取加载器的规范化名称（用于 PNG 文件名匹配）
+    // Extract the normalized loader name (used to match the PNG file name)
     NSString *pngKey = [self pngKeyForLoader:loader];
     if (pngKey) {
         NSBundle *bundle = [NSBundle mainBundle];
         NSString *resourcePath = [bundle resourcePath];
 
-        // 1. 优先加载 HMCL 官方标准单文件（不区分深浅色主题）
+        // 1. Prefer the HMCL official standard single file (with no light/dark variants)
         NSString *standardPath = [resourcePath stringByAppendingPathComponent:
                                   [NSString stringWithFormat:@"ModLoaderIcons/%@.png", pngKey]];
         UIImage *image = [UIImage imageWithContentsOfFile:standardPath];
@@ -175,7 +175,7 @@
             return image;
         }
 
-        // 2. 回退到旧格式（区分 light/dark 主题）
+        // 2. Fall back to the old format (with light/dark themes)
         BOOL isDarkMode = NO;
         if (traitCollection) {
             isDarkMode = (traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark);
@@ -187,7 +187,7 @@
         if (image) {
             return image;
         }
-        // 尝试相反主题
+        // Try the opposite theme
         theme = isDarkMode ? @"light" : @"dark";
         themedPath = [resourcePath stringByAppendingPathComponent:
                       [NSString stringWithFormat:@"ModLoaderIcons/%@_%@.png", pngKey, theme]];
@@ -197,35 +197,35 @@
         }
     }
 
-    // 3. 无 PNG 或加载失败：回退到 SF Symbol
+    // 3. No PNG, or loading failed: fall back to an SF Symbol
     NSString *symbolName = [self symbolNameForLoader:loader];
     UIImage *symbolImage = [UIImage systemImageNamed:symbolName];
     return symbolImage ?: [UIImage systemImageNamed:@"cube.box.fill"];
 }
 
-/// 将加载器名称转换为 PNG 文件名 key（如 "fabric-loader" → "fabric"）
-/// 用于匹配 ModLoaderIcons/ 目录下的 PNG 文件
+/// Convert a loader name into the PNG file name key (such as "fabric-loader" -> "fabric")
+/// Used to match the PNG files in the ModLoaderIcons/ folder
 + (nullable NSString *)pngKeyForLoader:(NSString *)loader {
     if (!loader || loader.length == 0) return nil;
     NSString *lower = loader.lowercaseString;
 
-    // 注意顺序：neoforge 在 forge 之前，optifabric 在 optifine 之前
+    // Mind the order: neoforge before forge, and optifabric before optifine
     if ([lower containsString:@"neoforge"])   return @"neoforge";
     if ([lower containsString:@"forge"])      return @"forge";
-    if ([lower containsString:@"optifabric"]) return @"optifine"; // 与 OptiFine 共用图标
-    if ([lower containsString:@"optifine"])   return @"optifine"; // HMCL 官方 PNG
-    if ([lower containsString:@"quilt"])      return @"quilt";    // HMCL 官方 PNG
+    if ([lower containsString:@"optifabric"]) return @"optifine"; // Shares the OptiFine icon
+    if ([lower containsString:@"optifine"])   return @"optifine"; // The official HMCL PNG
+    if ([lower containsString:@"quilt"])      return @"quilt";    // The official HMCL PNG
     if ([lower containsString:@"fabric"])     return @"fabric";
-    if ([lower containsString:@"iris"])       return nil; // 暂无官方 PNG，回退 SF Symbol
-    if ([lower containsString:@"rift"])       return nil; // 暂无官方 PNG，回退 SF Symbol
-    if ([lower containsString:@"vanilla"])    return nil; // 用 Assets.xcassets 的 VanillaIcon
+    if ([lower containsString:@"iris"])       return nil; // No official PNG yet, so fall back to an SF Symbol
+    if ([lower containsString:@"rift"])       return nil; // No official PNG yet, so fall back to an SF Symbol
+    if ([lower containsString:@"vanilla"])    return nil; // Uses VanillaIcon from Assets.xcassets
     return nil;
 }
 
 #pragma mark - UIImageView 配置
 
-/// 配置 UIImageView 显示加载器图标
-/// PNG 图标保持原色不着色，SF Symbol 用品牌色着色
+/// Configure a UIImageView to show a loader icon
+/// PNG icons keep their own colors and are not tinted; SF Symbols are tinted with the brand color
 + (void)configureImageView:(UIImageView *)imageView
                 forLoader:(NSString *)loader
            traitCollection:(UITraitCollection *)traitCollection {
@@ -235,26 +235,26 @@
     imageView.image = image;
     imageView.contentMode = UIViewContentModeScaleAspectFit;
 
-    // 判断是否为 PNG 或 VanillaIcon（不着色），SF Symbol 着色
-    // Vanilla 使用 Assets.xcassets 的草方块图标，保持原色不着色
+    // Work out whether this is a PNG or VanillaIcon (not tinted) or an SF Symbol (tinted)
+    // Vanilla uses the grass block icon from Assets.xcassets and keeps its own colors
     if ([loader.lowercaseString containsString:@"vanilla"]) {
         imageView.tintColor = nil;
         return;
     }
 
-    // 与 iconImageForLoader 的加载顺序一致：先标准单文件，再主题文件
+    // The load order matches iconImageForLoader: the standard single file first, then the theme files
     NSString *pngKey = [self pngKeyForLoader:loader];
     BOOL hasPng = NO;
     if (pngKey) {
         NSBundle *bundle = [NSBundle mainBundle];
         NSString *resourcePath = [bundle resourcePath];
-        // 1. 先检查 HMCL 官方标准单文件
+        // 1. Check the HMCL official standard single file first
         NSString *standardPath = [resourcePath stringByAppendingPathComponent:
                                   [NSString stringWithFormat:@"ModLoaderIcons/%@.png", pngKey]];
         if ([NSFileManager.defaultManager fileExistsAtPath:standardPath]) {
             hasPng = YES;
         } else {
-            // 2. 再检查旧格式主题文件
+            // 2. Then check the old-format theme file
             BOOL isDarkMode = traitCollection ? (traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark) : NO;
             NSString *theme = isDarkMode ? @"dark" : @"light";
             NSString *themedPath = [resourcePath stringByAppendingPathComponent:
@@ -273,18 +273,18 @@
     }
 
     if (hasPng) {
-        // PNG 图标：保持原色，不着色
+        // PNG icon: keep its own colors, do not tint
         imageView.tintColor = nil;
     } else {
-        // SF Symbol：用品牌色着色
+        // SF Symbol: tint with the brand color
         imageView.tintColor = [self brandColorForLoader:loader];
     }
 }
 
 #pragma mark - 徽章视图
 
-/// 创建加载器徽章视图（图标 + 文字 pill，参照 FCL/ZL2 的加载器标签）
-/// 圆角背景使用品牌色半透明，图标 + 白色文字
+/// Build a loader badge view (an icon + text pill, following the loader tags of FCL/ZL2)
+/// The rounded background uses a translucent brand color, with the icon plus white text
 + (UIView *)createBadgeViewForLoader:(NSString *)loader
                       traitCollection:(UITraitCollection *)traitCollection {
     UIView *container = [[UIView alloc] init];
@@ -292,20 +292,20 @@
 
     UIColor *brandColor = [self brandColorForLoader:loader];
 
-    // 圆角背景
+    // Rounded background
     container.backgroundColor = [brandColor colorWithAlphaComponent:0.18];
     container.layer.cornerRadius = 8;
     container.layer.cornerCurve = kCACornerCurveContinuous;
     container.layer.borderWidth = 0.5;
     container.layer.borderColor = [brandColor colorWithAlphaComponent:0.35].CGColor;
 
-    // 图标
+    // Icon
     UIImageView *iconView = [[UIImageView alloc] init];
     iconView.translatesAutoresizingMaskIntoConstraints = NO;
     [self configureImageView:iconView forLoader:loader traitCollection:traitCollection];
     [container addSubview:iconView];
 
-    // 文字
+    // Text
     UILabel *label = [[UILabel alloc] init];
     label.translatesAutoresizingMaskIntoConstraints = NO;
     label.text = [self displayNameForLoader:loader];
@@ -332,8 +332,8 @@
     return container;
 }
 
-/// 创建纯图标徽章（无文字，仅图标 + 品牌色背景圆角）
-/// 用于空间紧凑的场景（如版本行右侧的加载器小图标）
+/// Build an icon-only badge (no text, just the icon on a rounded brand-colored background)
+/// For tight spaces, such as the small loader icon on the right of a version row
 + (UIView *)createIconBadgeForLoader:(NSString *)loader
                       traitCollection:(UITraitCollection *)traitCollection
                                 size:(CGFloat)size {
@@ -342,12 +342,12 @@
 
     UIColor *brandColor = [self brandColorForLoader:loader];
 
-    // 圆角背景
+    // Rounded background
     container.backgroundColor = [brandColor colorWithAlphaComponent:0.15];
     container.layer.cornerRadius = size / 3.0;
     container.layer.cornerCurve = kCACornerCurveContinuous;
 
-    // 图标
+    // Icon
     UIImageView *iconView = [[UIImageView alloc] init];
     iconView.translatesAutoresizingMaskIntoConstraints = NO;
     [self configureImageView:iconView forLoader:loader traitCollection:traitCollection];
@@ -369,7 +369,7 @@
 
 #pragma mark - 工具方法
 
-/// 判断加载器名称是否为已知加载器（用于过滤显示）
+/// Whether a loader name is a known loader (used to filter what is shown)
 + (BOOL)isKnownLoader:(NSString *)loader {
     if (!loader || loader.length == 0) return NO;
     NSString *lower = loader.lowercaseString;
@@ -385,13 +385,13 @@
     return NO;
 }
 
-/// 从版本 ID 字符串中识别加载器类型
-/// 例如 "1.20.1-Fabric-0.15.7" → "fabric"，"1.20.1-forge-47.2.0" → "forge"
+/// Detect the loader type from a version ID string
+/// For example "1.20.1-Fabric-0.15.7" -> "fabric" and "1.20.1-forge-47.2.0" -> "forge"
 + (NSString *)detectLoaderFromVersionId:(NSString *)versionId {
     if (!versionId || versionId.length == 0) return nil;
     NSString *lower = [versionId lowercaseString];
 
-    // 注意顺序：neoforge 在 forge 之前
+    // Mind the order: neoforge before forge
     if ([lower containsString:@"neoforge"])   return @"neoforge";
     if ([lower containsString:@"forge"])      return @"forge";
     if ([lower containsString:@"optifabric"]) return @"optifabric";

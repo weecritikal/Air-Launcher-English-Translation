@@ -776,7 +776,7 @@
 @property (nonatomic, strong) UITextField *versionNameField;
 @property (nonatomic, strong) UIView *nameBar;
 
-// 数据
+// Data
 @property (nonatomic, strong) NSMutableArray<ModLoaderRow *> *loaders;
 @property (nonatomic, copy) NSString *selectedLoaderId;       // "vanilla"/"fabric"/"forge"/"neoforge"/"quilt"/"optifine"
 @property (nonatomic, copy) NSString *selectedFabricVersion;

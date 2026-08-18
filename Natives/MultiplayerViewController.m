@@ -2,42 +2,42 @@
 //  MultiplayerViewController.m
 //  Amethyst
 //
-//  MC 联机界面实现（FCL 风格重制版）
+//  Implementation of the Minecraft multiplayer screen (the FCL-style rebuild)
 //
-//  本文件参照 FCL (FoldCraftLauncher) 的联机流程重新设计：
+//  This file was redesigned after the multiplayer flow of FCL (FoldCraftLauncher):
 //
-//  模式 1：启动器模式（MultiplayerVCModeLauncher）
-//    用户在启动游戏前在此界面启用联机、设置预设 Network ID、管理房间、配置直连。
-//    Section 0「联机设置」：UISwitch 启用联机开关 + 预设 Network ID 显示/编辑
-//    Section 1「我的房间」：保存的房间列表（每行显示 房间名 + Network ID + 状态 + 连接/断开按钮）
-//    Section 2「直连」：IP+端口输入 + 加入游戏按钮（写入 PLProfiles）
+//  Mode 1: launcher mode (MultiplayerVCModeLauncher)
+//    Before launching the game, the user enables multiplayer here, sets the preset network ID, manages rooms and configures direct connections.
+//    Section 0 "Multiplayer settings": a UISwitch to enable multiplayer + the preset network ID display/editor
+//    Section 1 "My rooms": the saved room list (each row showing the room name + network ID + status + a connect/disconnect button)
+//    Section 2 "Direct connect": IP+port input + a join button (written into PLProfiles)
 //
-//  模式 2：游戏内模式（MultiplayerVCModeInGame）
-//    用户启动游戏后通过悬浮球菜单进入，选择当房主或房客。
-//    Section 0「选择角色」：当房主按钮 + 当房客按钮（大卡片样式）
-//    Section 1「联机状态」：当前联机状态 + Network ID + 本地 IP
+//  Mode 2: in-game mode (MultiplayerVCModeInGame)
+//    Reached from the floating button menu after launching, where the user chooses to host or join.
+//    Section 0 "Choose a role": a Host button + a Guest button (large card style)
+//    Section 1 "Multiplayer status": the current status + network ID + local IP
 //
-//  关键变更（端口检测改为手动输入）：
-//    之前房主流程依赖 LanPortDetector 自动检测 LAN 端口（拦截 MC 日志或读取
-//    latestlog.txt），存在以下问题：
-//      - latestlog.txt 可能包含上次会话的 LAN 端口日志，误检测为当前会话的端口
-//      - 不同 MC 版本日志格式差异大，自动检测不可靠
-//      - 用户在游戏未真正"对局域网开放"时就生成了分享代码
-//    现在改为手动输入端口：连接成功后弹出输入对话框，用户在 MC 中"对局域网开放"
-//    后手动输入聊天框显示的端口号，才会生成分享代码。
-//  房主流程：
-//    1. 检查 ZeroTier 框架可用性 + 预设 Network ID 是否已设置
-//    2. 连接到预设 Network ID 房间（调用 connectToRoom:completion:）
-//    3. 连接成功后弹出手动输入端口对话框（showManualPortInputAlert）
-//    4. 用户在 MC 中"对局域网开放"后，手动输入聊天框显示的端口号
-//    5. 生成分享代码（调用 generateShareCodeForRoom:）
-//    6. 显示分享代码（可复制、可分享）
+//  Key change (port detection replaced by manual entry):
+//    The host flow used to rely on LanPortDetector detecting the LAN port automatically (by intercepting the Minecraft log or reading
+//    latestlog.txt), which had these problems:
+//      - latestlog.txt could contain the LAN port from a previous session and be mistaken for the current one
+//      - log formats vary widely between Minecraft versions, so automatic detection was unreliable
+//      - a share code could be generated before the game had really been opened to LAN
+//    The port is now entered by hand: once connected, an input dialog appears, and only after the user opens the world to LAN in Minecraft
+//    and enters the port from the chat box is a share code generated.
+//  The host flow:
+//    1. check that the ZeroTier framework is available and that a preset network ID is set
+//    2. connect to the room for the preset network ID (calling connectToRoom:completion:)
+//    3. show the manual port input dialog once connected (showManualPortInputAlert)
+//    4. the user opens the world to LAN in Minecraft and enters the port from the chat box
+//    5. generate the share code (calling generateShareCodeForRoom:)
+//    6. show the share code (which can be copied and shared)
 //
-//  房客流程：
-//    1. 弹出输入框（UIAlertController with textField）
-//    2. 解析分享代码（调用 parseShareCode:）
-//    3. 连接到房间（调用 connectToRoom:completion:）
-//    4. 连接成功后提示并显示服务器地址（房主 IP:端口）
+//  The guest flow:
+//    1. show an input dialog (a UIAlertController with a text field)
+//    2. parse the share code (calling parseShareCode:)
+//    3. connect to the room (calling connectToRoom:completion:)
+//    4. confirm on success and show the server address (the host IP:port)
 //
 
 #import "MultiplayerViewController.h"
@@ -49,9 +49,9 @@
 #import "ZeroTierBridge.h"
 #import "utils.h"
 
-/// 本地化辅助函数
-/// 优先通过 localize() 查找本地化文本；若未找到（返回值等于 key），则使用传入的 fallback。
-/// 这样既满足"所有新增文本需要本地化"的要求，又避免 key 未注册时用户看到原始 key。
+/// Localization helper
+/// It looks the text up with localize() first, and uses the fallback passed in when nothing is found (the return value equals the key).
+/// This satisfies the "every new string must be localizable" rule while making sure the user never sees a raw key for an unregistered one.
 NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     NSString *value = localize(key, nil);
     return [value isEqualToString:key] ? (fallback ?: key) : value;
@@ -59,55 +59,55 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 
 @interface MultiplayerViewController () <UITableViewDataSource, UITableViewDelegate, UITextFieldDelegate, MultiplayerManagerDelegate>
 
-/// 当前界面模式（启动器 / 游戏内）
+/// The current screen mode (launcher / in-game)
 @property (nonatomic, assign) MultiplayerVCMode mode;
 
-/// 主表格视图（InsetGrouped 风格）
+/// The main table view (InsetGrouped style)
 @property (nonatomic, strong) UITableView *tableView;
 
-/// 当前已保存的房间列表
+/// The saved room list
 @property (nonatomic, strong) NSArray<MultiplayerRoom *> *rooms;
 
 #pragma mark - 启动器模式专用控件
 
-/// Section 0 Row 0 的"启用联机"开关
+/// The "Enable multiplayer" switch at section 0, row 0
 @property (nonatomic, strong) UISwitch *enableSwitch;
 
-/// Section 2 Row 0 的 IP 地址输入框（强引用，确保跨 cell 复用时数据不丢失）
+/// The IP address field at section 2, row 0 (held strongly, so the data is not lost when cells are reused)
 @property (nonatomic, strong) UITextField *directIPField;
 
-/// Section 2 Row 0 的端口输入框（强引用）
+/// The port field at section 2, row 0 (held strongly)
 @property (nonatomic, strong) UITextField *directPortField;
 
 #pragma mark - 游戏内模式专用状态
 
-/// 房主流程是否激活（已点击"当房主"且正在等待/已连接）
+/// Whether the host flow is active (the user tapped "Host" and is waiting or connected)
 @property (nonatomic, assign) BOOL isHostFlowActive;
 
-/// 房客流程是否激活（已点击"当房客"且正在等待/已连接）
+/// Whether the guest flow is active (the user tapped "Guest" and is waiting or connected)
 @property (nonatomic, assign) BOOL isGuestFlowActive;
 
-/// 房主流程中最新生成的分享代码（用于显示与复制）
+/// The most recent share code generated in the host flow (for display and copying)
 @property (nonatomic, copy, nullable) NSString *lastShareCode;
 
-/// 房客流程中最新解析出的服务器地址（hostIP:hostPort，用于显示给用户）
+/// The most recent server address parsed in the guest flow (hostIP:hostPort, shown to the user)
 @property (nonatomic, copy, nullable) NSString *lastServerAddress;
 
-/// 房主流程中正在使用的房间对象（用于生成分享代码）
+/// The room object in use in the host flow (used to generate the share code)
 @property (nonatomic, strong, nullable) MultiplayerRoom *hostRoom;
 
-/// 房客流程中正在连接的房间对象（用于显示连接状态）
+/// The room object connecting in the guest flow (used to show the connection state)
 @property (nonatomic, strong, nullable) MultiplayerRoom *guestRoom;
 
-/// 连接进度提示 Alert（用于动态更新进度文本）
+/// The connection progress alert (whose progress text is updated live)
 ///
-/// 当房主或房客流程开始连接时，会 present 此 Alert 并在其中显示进度文本。
-/// multiplayerConnectionProgress: 回调会更新此 Alert 的 message 属性，
-/// 让用户实时看到"步骤 1/6：正在启动 ZeroTier 节点..."等进度。
+/// When the host or guest flow starts connecting, this alert is presented and shows the progress text.
+/// The multiplayerConnectionProgress: callback updates its message property,
+/// so the user sees live progress such as "Step 1/6: starting the ZeroTier node...".
 ///
-/// 关键修复：之前连接流程只显示一个静态的"正在连接到 ZeroTier 网络"提示，
-/// 用户无法知道后台进度，只能干等 15-30 秒直到成功或失败。
-/// 现在通过此 Alert 实时更新进度，让用户看到详细的步骤信息。
+/// Key fix: the connection flow used to show a single static "Connecting to the ZeroTier network" message,
+/// leaving the user with no idea of the progress and simply waiting 15-30 seconds for success or failure.
+/// This alert now updates live, so the user sees the detailed steps.
 @property (nonatomic, strong, nullable) UIAlertController *connectionProgressAlert;
 
 @end
@@ -116,8 +116,8 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 
 #pragma mark - Init
 
-/// 通过模式初始化联机界面
-/// @param mode 界面模式（启动器 / 游戏内）
+/// Initialize the multiplayer screen with a mode
+/// @param mode The screen mode (launcher / in-game)
 - (instancetype)initWithMode:(MultiplayerVCMode)mode {
     self = [super initWithNibName:nil bundle:nil];
     if (self) {
@@ -126,7 +126,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     return self;
 }
 
-/// 兜底初始化：未指定模式时默认使用启动器模式
+/// Fallback initializer: launcher mode is used when no mode is given
 - (instancetype)init {
     return [self initWithMode:MultiplayerVCModeLauncher];
 }
@@ -136,30 +136,30 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 - (void)viewDidLoad {
     [super viewDidLoad];
 
-    // 不设置 self.title，避免顶部导航栏出现"联机"标题黑条（参照 FCL 无 title 风格）
+    // self.title is deliberately not set, to avoid a black "Multiplayer" title band in the navigation bar (matching the title-less FCL style)
 
     // Adapt to the custom launcher background: make this VC transparent so the global background image/blur shows through
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
 
-    // 彻底隐藏导航栏黑条（仅当作为根页面时；modal/pushed 仍保留导航栏）
+    // Hide the navigation bar band completely (only as a root page; it is kept when presented modally or pushed)
     [self hideNavBarIfRoot];
 
-    // 初始化数据：从 MultiplayerManager 读取已保存的房间列表
+    // Initialize the data: read the saved room list from MultiplayerManager
     self.rooms = [[MultiplayerManager sharedManager] savedRooms] ?: @[];
 
-    // 构建 UI
+    // Build the UI
     [self setupUI];
 
-    // 注册为 MultiplayerManager 代理，接收节点/网络状态变化的实时回调
+    // Register as the MultiplayerManager delegate, to receive live node/network state callbacks
     [MultiplayerManager sharedManager].delegate = self;
 
-    // 监听背景效果变化通知，背景切换时重新应用透明效果并刷新表格
+    // Listen for background effect changes, re-applying transparency and refreshing the table when the background switches
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(backgroundEffectChanged)
                                                  name:@"BackgroundUIEffectChanged"
                                                object:nil];
 
-    // 游戏内模式：监听 LAN 端口检测通知（房主流程依赖）
+    // In-game mode: listen for the LAN port detection notification (which the host flow depends on)
     if (self.mode == MultiplayerVCModeInGame) {
         [[NSNotificationCenter defaultCenter] addObserver:self
                                                  selector:@selector(lanPortDidDetect:)
@@ -171,37 +171,37 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
 
-    // 重新隐藏导航栏黑条（pop 回根页面时）
+    // Hide the navigation bar band again (when popping back to the root page)
     [self hideNavBarIfRoot];
 
-    // 进入界面时重新应用背景效果（背景可能在其他界面被修改）
+    // Re-apply the background effect on entry (the background may have been changed elsewhere)
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
     self.tableView.backgroundColor = [UIColor clearColor];
     self.tableView.backgroundView = nil;
 
-    // 重新应用导航栏毛玻璃效果
+    // Re-apply the frosted-glass navigation bar effect
     [[BackgroundManager sharedManager] applyEffectToNavigationBar:self.navigationController.navigationBar];
 
-    // 刷新房间列表（可能在其他界面修改过）
+    // Refresh the room list (it may have been changed elsewhere)
     [self refreshRooms];
 
-    // 启动器模式：根据持久化的用户意图恢复开关状态
+    // Launcher mode: restore the switch state from the persisted user intent
     //
-    // 关键修复（开关状态不同步）：
-    // 之前使用 isNodeStarted（运行时状态）恢复开关，存在以下问题：
-    //   - 用户点击开关 ON → 后台开始启动节点（耗时 5+ 秒）→ 用户关闭 VC →
-    //     重新打开 VC → 此时节点可能仍在启动中（isNodeStarted=NO）→ 开关显示 OFF
-    //   - 用户点击开关 ON → 节点启动成功 → 用户关闭启动器（杀进程）→
-    //     重新打开启动器 → isNodeStarted=NO（进程重启后状态丢失）→ 开关显示 OFF
+    // Key fix (the switch state going out of sync):
+    // isNodeStarted (the runtime state) used to restore the switch, which had these problems:
+    //   - the user turns the switch ON -> the node starts in the background (taking 5+ seconds) -> the user closes the VC ->
+    //     reopens the VC -> the node may still be starting (isNodeStarted=NO) -> the switch reads OFF
+    //   - the user turns the switch ON -> the node starts successfully -> the user closes the launcher (killing the process) ->
+    //     reopens the launcher -> isNodeStarted=NO (the state was lost with the process) -> the switch reads OFF
     //
-    // 修复方案：使用 isMultiplayerEnabled（持久化到 NSUserDefaults）恢复开关状态，
-    // 表示用户的意图而非节点实际状态。即使关闭启动器再重新打开，开关也能正确显示。
+    // The fix: restore the switch from isMultiplayerEnabled (persisted to NSUserDefaults),
+    // which reflects the user's intent rather than the node state. The switch is then right even after closing and reopening the launcher.
     if (self.mode == MultiplayerVCModeLauncher) {
         BOOL enabled = [[MultiplayerManager sharedManager] isMultiplayerEnabled];
         [self.enableSwitch setOn:enabled animated:NO];
 
-        // 如果用户之前启用了联机但节点未启动（如关闭启动器后重新打开），
-        // 自动重启节点以恢复联机功能，让用户体验无缝衔接。
+        // If the user had enabled multiplayer but the node is not running (after closing and reopening the launcher),
+        // restart the node automatically so the experience is seamless.
         if (enabled && ![[MultiplayerManager sharedManager] isNodeStarted]) {
             if ([[MultiplayerManager sharedManager] isFrameworkAvailable]) {
                 NSLog(@"[MultiplayerVC] Multiplayer enabled but node not started, auto-restarting node...");
@@ -211,12 +211,12 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
                     if (!strongSelf) return;
 
                     if (!success) {
-                        // 关键修复（严重5）：节点启动失败时不应清除用户的持久化意图。
-                        // 之前的实现会调用 setMultiplayerEnabled:NO，导致用户下次打开启动器
-                        // 开关已自动变为 OFF，需要重新手动启用。
-                        // 现在仅回退 UI 开关状态（视觉上关闭），但保留 isMultiplayerEnabled=YES，
-                        // 这样用户下次打开启动器时开关会显示 ON 并自动重试启动节点。
-                        // 只有 framework 不可用（永久不可用）时才清除意图。
+                        // Key fix (critical 5): a failed node start must not clear the user's persisted intent.
+                        // The old implementation called setMultiplayerEnabled:NO, so the switch was already OFF
+                        // the next time the launcher opened and had to be enabled by hand again.
+                        // Only the UI switch is reverted now (visually off) while isMultiplayerEnabled stays YES,
+                        // so next time the launcher opens the switch reads ON and starting the node is retried automatically.
+                        // The intent is only cleared when the framework is unavailable (a permanent condition).
                         NSLog(@"[MultiplayerVC] Auto-restart node failed (preserving user intent, retry next time): %@", error.localizedDescription);
                         [strongSelf.tableView reloadData];
                     } else {
@@ -225,7 +225,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
                     }
                 }];
             } else {
-                // framework 不可用是永久性故障，清除用户意图
+                // An unavailable framework is a permanent failure, so the user intent is cleared
                 [[MultiplayerManager sharedManager] setMultiplayerEnabled:NO];
                 [self.enableSwitch setOn:NO animated:NO];
             }
@@ -244,22 +244,22 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 }
 
 - (void)backgroundEffectChanged {
-    // 背景效果改变时重新透明化当前 VC 并刷新表格，让所有 cell 重新适配文字颜色
+    // When the background effect changes, make this VC transparent again and refresh the table so every cell picks up the new text color
     dispatch_async(dispatch_get_main_queue(), ^{
         [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
         self.tableView.backgroundColor = [UIColor clearColor];
         self.tableView.backgroundView = nil;
-        // 重新应用导航栏毛玻璃效果
+        // Re-apply the frosted-glass navigation bar effect
         [[BackgroundManager sharedManager] applyEffectToNavigationBar:self.navigationController.navigationBar];
-        // 刷新表格，让所有 cell 重新读取背景状态并适配颜色
+        // Refresh the table so every cell re-reads the background state and adapts its colors
         [self.tableView reloadData];
     });
 }
 
 - (void)dealloc {
-    // 移除通知观察者，避免 dealloc 后收到通知导致崩溃
+    // Remove the notification observers, so a notification after dealloc cannot crash
     [[NSNotificationCenter defaultCenter] removeObserver:self];
-    // 清除代理引用，避免悬空指针
+    // Clear the delegate reference, to avoid a dangling pointer
     if ([MultiplayerManager sharedManager].delegate == self) {
         [MultiplayerManager sharedManager].delegate = nil;
     }
@@ -268,17 +268,17 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 #pragma mark - UI Setup
 
 - (void)setupUI {
-    // 使用 InsetGrouped 风格，卡片式布局，与系统设置界面一致
+    // The InsetGrouped style gives a card layout, matching the system Settings app
     self.tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStyleInsetGrouped];
     self.tableView.translatesAutoresizingMaskIntoConstraints = NO;
     self.tableView.dataSource = self;
     self.tableView.delegate = self;
     self.tableView.backgroundColor = [UIColor clearColor];
     self.tableView.backgroundView = nil;
-    // 启用自动尺寸计算
+    // Enable automatic sizing
     self.tableView.rowHeight = UITableViewAutomaticDimension;
     self.tableView.estimatedRowHeight = 56;
-    // 注册复用的 cell 类型
+    // Register the reusable cell types
     [self.tableView registerClass:[UITableViewCell class] forCellReuseIdentifier:@"DefaultCell"];
     [self.tableView registerClass:[UITableViewCell class] forCellReuseIdentifier:@"ButtonCell"];
     [self.tableView registerClass:[UITableViewCell class] forCellReuseIdentifier:@"EmptyCell"];
@@ -296,7 +296,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         [self.tableView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
     ]];
 
-    // 导航栏左上角：关闭按钮（xmark），两种模式都需要
+    // Top left of the navigation bar: the close button (xmark), needed in both modes
     UIBarButtonItem *closeButton = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"xmark"]
                                                                      style:UIBarButtonItemStylePlain
                                                                     target:self
@@ -304,16 +304,16 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     closeButton.accessibilityLabel = MPLocalized(@"mp.close", @"Close");
     self.navigationItem.leftBarButtonItem = closeButton;
 
-    // 注意：启动器模式右上角不需要按钮（Network ID 通过 Section 0 设置）
-    // 注意：游戏内模式右上角也不需要按钮（房主/房客通过 Section 0 选择）
+    // Note: launcher mode needs no button on the right (the network ID is set from section 0)
+    // Note: in-game mode needs no button on the right either (host/guest are chosen from section 0)
 
-    // 应用导航栏毛玻璃效果
+    // Apply the frosted-glass navigation bar effect
     [[BackgroundManager sharedManager] applyEffectToNavigationBar:self.navigationController.navigationBar];
 }
 
 #pragma mark - Navigation Actions
 
-/// 关闭按钮回调：兼容 push 和 present 两种容器
+/// Close button handler: works whether this was pushed or presented
 - (void)closeTapped {
     [self.view endEditing:YES];
     if (self.navigationController && self.navigationController.viewControllers.firstObject != self) {
@@ -323,8 +323,8 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     }
 }
 
-/// 当本 VC 是 nav 根、非 modal 呈现且是栈中唯一 VC 时彻底隐藏导航栏黑条
-/// 快捷入口预 push 子页面时 count > 1，不隐藏导航栏
+/// Hide the navigation bar band completely when this VC is the nav root, was not presented modally and is the only VC on the stack
+/// Shortcuts pre-push a child page, so count > 1 and the navigation bar stays visible
 - (void)hideNavBarIfRoot {
     if (self.navigationController &&
         self.navigationController.viewControllers.firstObject == self &&
@@ -335,25 +335,25 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
                self.navigationController.viewControllers.firstObject == self &&
                self.navigationController.presentingViewController == nil &&
                self.navigationController.topViewController == self) {
-        // pop 回根页面时重新隐藏
+        // Hide it again when popping back to the root page
         self.navigationController.navigationBarHidden = YES;
     }
 }
 
 #pragma mark - 启动器模式：启用联机开关
 
-/// "启用联机"开关状态变化回调
+/// Handler for the "Enable multiplayer" switch
 ///
-/// 对标 FCL 启动器界面顶部的联机总开关：
-///   - 打开：调用 ensureNodeStartedWithCompletion: 启动 ZeroTier 节点
-///   - 关闭：调用 disconnectCurrentRoom 停止所有联机活动（节点保持运行，可再次打开）
+/// Equivalent to the master multiplayer switch at the top of the FCL launcher screen:
+///   - on: call ensureNodeStartedWithCompletion: to start the ZeroTier node
+///   - off: call disconnectCurrentRoom to stop all multiplayer activity (the node keeps running and can be switched on again)
 ///
-/// 关键修复（开关状态不同步）：
-/// 打开/关闭时通过 setMultiplayerEnabled: 持久化用户意图到 NSUserDefaults，
-/// 这样即使关闭启动器再重新打开，开关状态也能正确恢复。
+/// Key fix (the switch state going out of sync):
+/// setMultiplayerEnabled: persists the user intent to NSUserDefaults on both on and off,
+/// so the switch state is restored correctly even after closing and reopening the launcher.
 - (void)enableSwitchChanged:(UISwitch *)sender {
     if (sender.on) {
-        // 检查 ZeroTier 框架可用性
+        // Check that the ZeroTier framework is available
         if (![[MultiplayerManager sharedManager] isFrameworkAvailable]) {
             [sender setOn:NO animated:YES];
             [self showSimpleAlertWithTitle:MPLocalized(@"mp.core.unavailable_title", @"Multiplayer core unavailable")
@@ -361,32 +361,32 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
             return;
         }
 
-        // 持久化用户启用联机的意图
+        // Persist the user's intent to enable multiplayer
         [[MultiplayerManager sharedManager] setMultiplayerEnabled:YES];
 
-        // 启动 ZeroTier 节点
+        // Start the ZeroTier node
         __weak typeof(self) weakSelf = self;
         [[MultiplayerManager sharedManager] ensureNodeStartedWithCompletion:^(BOOL success, NSError *error) {
             __strong typeof(weakSelf) strongSelf = weakSelf;
             if (!strongSelf) return;
 
             if (!success) {
-                // 关键修复（严重5）：节点启动失败时保留用户意图，仅回退 UI 开关。
-                // 这样下次打开启动器时开关仍会显示 ON 并自动重试。
-                // 之前会调用 setMultiplayerEnabled:NO，导致用户需要每次重新手动启用。
+                // Key fix (critical 5): keep the user intent when the node fails to start and only revert the UI switch.
+                // The switch then still reads ON next time the launcher opens and starting is retried automatically.
+                // setMultiplayerEnabled:NO used to be called, forcing the user to re-enable it every time.
                 [strongSelf.enableSwitch setOn:NO animated:YES];
                 [strongSelf showSimpleAlertWithTitle:MPLocalized(@"mp.node.start_failed_title", @"Failed to start")
                                               message:error.localizedDescription ?: MPLocalized(@"mp.node.start_failed_msg", @"The ZeroTier node failed to start, please try again.")];
             } else {
-                // 启动成功：刷新表格以更新开关行的辅助文字
+                // Started successfully: refresh the table to update the detail text on the switch row
                 [strongSelf.tableView reloadData];
             }
         }];
     } else {
-        // 持久化用户关闭联机的意图
+        // Persist the user's intent to disable multiplayer
         [[MultiplayerManager sharedManager] setMultiplayerEnabled:NO];
 
-        // 关闭联机：断开当前房间（如有）
+        // Disabling multiplayer: disconnect from the current room (if any)
         if ([[MultiplayerManager sharedManager] currentRoom]) {
             [[MultiplayerManager sharedManager] disconnectCurrentRoom];
         }
@@ -396,14 +396,14 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 
 #pragma mark - 启动器模式：预设 Network ID 编辑
 
-/// 点击 Network ID 行：弹出 UIAlertController 让用户输入预设 Network ID
+/// Tapping the network ID row: show a UIAlertController for entering the preset network ID
 ///
-/// 对标 FCL：房主首次设置一次 Network ID（在 central.zerotier.com 创建后填入），
-/// 之后每次开房自动使用，分享代码中自动包含此 Network ID。
+/// Equivalent to FCL: the host sets the network ID once (after creating it at central.zerotier.com),
+/// after which it is used automatically every time they host, and the share code carries it.
 - (void)networkIdCellTapped {
     [self.view endEditing:YES];
 
-    // 检查 ZeroTier 框架可用性
+    // Check that the ZeroTier framework is available
     if (![[MultiplayerManager sharedManager] isFrameworkAvailable]) {
         [self showSimpleAlertWithTitle:MPLocalized(@"mp.core.unavailable_title", @"Multiplayer core unavailable")
                                 message:MPLocalized(@"mp.core.unavailable_msg", @"The ZeroTier multiplayer core is not loaded, so the network ID cannot be set.")];
@@ -429,7 +429,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
                                               style:UIAlertActionStyleCancel
                                             handler:nil]];
 
-    // 快速模式按钮：自动生成 Ad-hoc 网络 ID，无需注册账号
+    // The quick mode button: generate an ad-hoc network ID automatically, with no account needed
     __weak typeof(self) weakSelf = self;
     [alert addAction:[UIAlertAction actionWithTitle:MPLocalized(@"mp.network_id.use_adhoc", @"Use quick mode (no account needed)")
                                               style:UIAlertActionStyleDefault
@@ -437,14 +437,14 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
 
-        // 检查 ZeroTier 框架可用性
+        // Check that the ZeroTier framework is available
         if (![[MultiplayerManager sharedManager] isFrameworkAvailable]) {
             [strongSelf showSimpleAlertWithTitle:MPLocalized(@"mp.core.unavailable_title", @"Multiplayer core unavailable")
                                           message:MPLocalized(@"mp.core.unavailable_msg", @"The ZeroTier multiplayer core is not loaded, so quick mode is unavailable.")];
             return;
         }
 
-        // 生成 Ad-hoc 网络 ID
+        // Generate the ad-hoc network ID
         NSString *adhocNetId = [[MultiplayerManager sharedManager] generateAdhocNetworkId];
         if (!adhocNetId.length) {
             [strongSelf showSimpleAlertWithTitle:MPLocalized(@"mp.network_id.adhoc_failed_title", @"Generation failed")
@@ -452,11 +452,11 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
             return;
         }
 
-        // 保存为预设 Network ID
+        // Save it as the preset network ID
         [[MultiplayerManager sharedManager] setPresetNetworkId:adhocNetId];
         [strongSelf.tableView reloadData];
 
-        // 提示用户
+        // Tell the user
         [strongSelf showSimpleAlertWithTitle:MPLocalized(@"mp.network_id.adhoc_success_title", @"Quick mode enabled")
                                       message:[NSString stringWithFormat:@"%@\n\n%@",
                                                MPLocalized(@"mp.network_id.adhoc_success_msg", @"A network ID was generated automatically, so you can play together without an account. Note that quick mode is less stable than standard mode and the IP may change."),
@@ -473,13 +473,13 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         NSString *value = [field.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 
         if (value.length == 0) {
-            // 空字符串：清除预设
+            // An empty string: clear the preset
             [[MultiplayerManager sharedManager] setPresetNetworkId:nil];
             [strongSelf.tableView reloadData];
             return;
         }
 
-        // 校验格式
+        // Validate the format
         if (![[MultiplayerManager sharedManager] isValidNetworkId:value]) {
             [strongSelf showSimpleAlertWithTitle:MPLocalized(@"mp.network_id.invalid_title", @"Invalid format")
                                           message:MPLocalized(@"mp.network_id.invalid_msg", @"The network ID must be a 16-digit hexadecimal string")];
@@ -495,21 +495,21 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 
 #pragma mark - 启动器模式：ZeroTier 网络创建教程
 
-/// 显示 ZeroTier 网络创建教程
+/// Show the guide to creating a ZeroTier network
 ///
-/// 对标 FCL 的"联机帮助"功能：说明两种联机模式的区别和使用方法。
+/// Equivalent to the FCL "multiplayer help" feature: explains the two multiplayer modes and how to use them.
 ///
-/// 两种模式：
-///   1. 标准模式（稳定）：在 central.zerotier.com 注册账号创建网络
-///      - 优点：IP 固定、支持 Private 授权、每人独立网络
-///      - 缺点：需要注册账号、配置较复杂
-///   2. 快速模式（不稳定）：使用 Ad-hoc 网络自动分配
-///      - 优点：无需注册账号、即开即用
-///      - 缺点：只有 IPv6、公开网络、IP 可能变化
+/// The two modes:
+///   1. standard mode (stable): register at central.zerotier.com and create a network
+///      - pros: a fixed IP, private authorization support, a separate network per person
+///      - cons: an account is needed and the setup is more involved
+///   2. quick mode (unstable): use an automatically assigned ad-hoc network
+///      - pros: no account needed, works immediately
+///      - cons: IPv6 only, a public network, and the IP may change
 - (void)showZeroTierGuide {
     [self.view endEditing:YES];
 
-    // 构建教程内容：两种模式对比
+    // Build the guide content: a comparison of the two modes
     NSString *modeStandard = [NSString stringWithFormat:@"%@（%@）\n%@",
                               MPLocalized(@"mp.guide.mode_standard", @"Standard mode"),
                               MPLocalized(@"mp.guide.stable", @"Stable"),
@@ -520,7 +520,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
                           MPLocalized(@"mp.guide.unstable", @"Unstable"),
                           MPLocalized(@"mp.guide.mode_fast_desc", @"Generates a network ID automatically using an ad-hoc network, with no account needed. However it is IPv6-only, a public network is less secure, and the IP may change.")];
 
-    // 标准模式步骤
+    // The standard mode steps
     NSString *standardTitle = [NSString stringWithFormat:@"\n【%@】", MPLocalized(@"mp.guide.mode_standard", @"Standard mode")];
 
     NSString *step1 = [NSString stringWithFormat:@"1. %@\n   %@",
@@ -551,7 +551,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
                        MPLocalized(@"mp.guide.step7_title", @"Start playing together"),
                        MPLocalized(@"mp.guide.step7_desc", @"After launching the game, open the multiplayer screen from the floating button and choose \"Host\" to open a room")];
 
-    // 快速模式步骤
+    // The quick mode steps
     NSString *fastTitle = [NSString stringWithFormat:@"\n【%@】", MPLocalized(@"mp.guide.mode_fast", @"Quick mode")];
 
     NSString *fastStep1 = [NSString stringWithFormat:@"1. %@\n   %@",
@@ -572,7 +572,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
                          modeFast,
                          standardTitle, step1];
 
-    // 使用多行格式拼接所有步骤（标准模式 7 步 + 快速模式 3 步）
+    // Join every step into a multi-line string (7 standard mode steps + 3 quick mode steps)
     message = [NSString stringWithFormat:@"%@\n\n%@\n\n%@\n\n%@\n\n%@\n\n%@\n\n%@\n\n%@\n\n%@",
                message,
                step2,
@@ -584,7 +584,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
                fastTitle,
                [NSString stringWithFormat:@"%@\n%@\n%@", fastStep1, fastStep2, fastStep3]];
 
-    // 添加注意事项
+    // Add the notes
     message = [NSString stringWithFormat:@"%@\n\n%@",
                message,
                MPLocalized(@"mp.guide.note", @"Note: the host and guests must use the same network ID. In standard mode you either authorize members in the dashboard (Private) or set the network to Public. In quick mode everyone shares one public network.")];
@@ -593,9 +593,9 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
                                                                    message:message
                                                             preferredStyle:UIAlertControllerStyleAlert];
 
-    // 「打开 central.zerotier.com」按钮：直接跳转到浏览器（标准模式需要）
-    // 新版 Central：central.zerotier.com（推荐新用户使用）
-    // 旧版 Central：my.zerotier.com（老用户继续使用）
+    // The "Open central.zerotier.com" button: go straight to the browser (needed for standard mode)
+    // The new Central: central.zerotier.com (recommended for new users)
+    // The old Central: my.zerotier.com (for existing users)
     [alert addAction:[UIAlertAction actionWithTitle:MPLocalized(@"mp.guide.open_website", @"Open central.zerotier.com (standard mode)")
                                               style:UIAlertActionStyleDefault
                                             handler:^(UIAlertAction *action) {
@@ -605,7 +605,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         }
     }]];
 
-    // 「使用快速模式」按钮：直接生成 Ad-hoc 网络 ID
+    // The "Use quick mode" button: generate an ad-hoc network ID straight away
     __weak typeof(self) weakSelf = self;
     [alert addAction:[UIAlertAction actionWithTitle:MPLocalized(@"mp.guide.use_fast_mode", @"Use quick mode")
                                               style:UIAlertActionStyleDefault
@@ -613,14 +613,14 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
 
-        // 检查 ZeroTier 框架可用性
+        // Check that the ZeroTier framework is available
         if (![[MultiplayerManager sharedManager] isFrameworkAvailable]) {
             [strongSelf showSimpleAlertWithTitle:MPLocalized(@"mp.core.unavailable_title", @"Multiplayer core unavailable")
                                           message:MPLocalized(@"mp.core.unavailable_msg", @"The ZeroTier multiplayer core is not loaded, so quick mode is unavailable.")];
             return;
         }
 
-        // 生成 Ad-hoc 网络 ID
+        // Generate the ad-hoc network ID
         NSString *adhocNetId = [[MultiplayerManager sharedManager] generateAdhocNetworkId];
         if (!adhocNetId.length) {
             [strongSelf showSimpleAlertWithTitle:MPLocalized(@"mp.network_id.adhoc_failed_title", @"Generation failed")
@@ -628,18 +628,18 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
             return;
         }
 
-        // 保存为预设 Network ID
+        // Save it as the preset network ID
         [[MultiplayerManager sharedManager] setPresetNetworkId:adhocNetId];
         [strongSelf.tableView reloadData];
 
-        // 提示用户
+        // Tell the user
         [strongSelf showSimpleAlertWithTitle:MPLocalized(@"mp.network_id.adhoc_success_title", @"Quick mode enabled")
                                       message:[NSString stringWithFormat:@"%@\n\n%@",
                                                MPLocalized(@"mp.network_id.adhoc_success_msg", @"A network ID was generated automatically, so you can play together without an account. Note that quick mode is less stable than standard mode and the IP may change."),
                                                [NSString stringWithFormat:@"Network ID: %@", adhocNetId]]];
     }]];
 
-    // 「我知道了」按钮
+    // The "Got it" button
     [alert addAction:[UIAlertAction actionWithTitle:MPLocalized(@"common.ok", @"Got it")
                                               style:UIAlertActionStyleCancel
                                             handler:nil]];
@@ -649,15 +649,15 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 
 #pragma mark - 房间连接
 
-/// 连接到指定房间
+/// Connect to the given room
 ///
-/// 内部调用 MultiplayerManager 的 connectToRoom:completion:，
-/// 并在主线程更新房间状态和 UI。连接成功后回调 completion。
+/// Calls connectToRoom:completion: on MultiplayerManager internally
+/// and updates the room state and the UI on the main thread. completion fires once connected.
 - (void)connectToRoom:(MultiplayerRoom *)room completion:(void (^)(BOOL success, NSError *error))completion {
-    // 关键修复（避免重复设置 status）：
-    // Manager.connectToRoom: 内部已在 _stateLock 内设置 room.status = Connecting，
-    // 这里不再重复设置——状态修改统一由 Manager 负责，VC 只读。
-    // 仅刷新 UI 以反映 Manager 已设置的状态。
+    // Key fix (do not set status twice):
+    // Manager.connectToRoom: already sets room.status = Connecting inside _stateLock,
+    // so it is not set again here — the manager owns the state and the VC only reads it.
+    // The UI is simply refreshed to show the state the manager already set.
     [self refreshRooms];
 
     __weak typeof(self) weakSelf = self;
@@ -666,8 +666,8 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
             __strong typeof(weakSelf) strongSelf = weakSelf;
             if (!strongSelf) return;
 
-            // 连接结果状态由 Manager 内部已更新（status = Connected/Error），
-            // 这里仅刷新 UI 与持久化（保持原有的 lastConnectedAt 记录逻辑）。
+            // The connection result state has already been updated by the manager (status = Connected/Error),
+            // so only the UI and persistence are handled here (keeping the existing lastConnectedAt bookkeeping).
             if (success) {
                 room.lastConnectedAt = [NSDate date];
             }
@@ -681,7 +681,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     }];
 }
 
-/// 断开当前房间连接
+/// Disconnect from the current room
 - (void)disconnectRoom:(MultiplayerRoom *)room {
     [[MultiplayerManager sharedManager] disconnectCurrentRoom];
     room.status = MultiplayerRoomStatusDisconnected;
@@ -691,9 +691,9 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 
 #pragma mark - 房间行按钮回调
 
-/// 房间行的"连接/断开"按钮回调
+/// Handler for the "Connect/Disconnect" button on a room row
 ///
-/// 通过 button.tag 找到对应的房间索引
+/// The room index comes from button.tag
 - (void)roomButtonTapped:(UIButton *)button {
     NSInteger row = button.tag;
     if (row < 0 || row >= (NSInteger)self.rooms.count) {
@@ -702,16 +702,16 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 
     MultiplayerRoom *room = self.rooms[row];
 
-    // 防止连接中重复点击
+    // Prevent repeated taps while connecting
     if (room.status == MultiplayerRoomStatusConnecting) {
         return;
     }
 
     if (room.status == MultiplayerRoomStatusConnected) {
-        // 已连接则断开
+        // Already connected, so disconnect
         [self disconnectRoom:room];
     } else {
-        // 未连接则连接
+        // Not connected, so connect
         [self connectToRoom:room completion:^(BOOL success, NSError *error) {
             if (!success) {
                 [self showSimpleAlertWithTitle:MPLocalized(@"mp.connect.failed", @"Connection failed")
@@ -723,12 +723,12 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 
 #pragma mark - 房间详情 ActionSheet
 
-/// 显示房间详情 ActionSheet
+/// Show the room detail action sheet
 ///
-/// 提供以下操作：
-///   - 连接 / 断开（根据当前状态显示）
-///   - 分享房间（生成分享文本，调用系统分享面板）
-///   - 删除房间（二次确认后删除）
+/// It offers:
+///   - Connect / Disconnect (depending on the current state)
+///   - Share room (generating the share text and opening the system share sheet)
+///   - Delete room (after a confirmation)
 - (void)showRoomActionsForRoom:(MultiplayerRoom *)room {
     [self.view endEditing:YES];
 
@@ -741,7 +741,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
                                                                    message:message
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
 
-    // 连接 / 断开按钮（根据当前状态切换标题）
+    // The connect/disconnect button (whose title follows the current state)
     NSString *connectTitle = (room.status == MultiplayerRoomStatusConnected)
         ? MPLocalized(@"mp.room.action.disconnect", @"Disconnect")
         : MPLocalized(@"mp.room.action.connect", @"Connect to room");
@@ -763,7 +763,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         }
     }]];
 
-    // 分享房间按钮（使用 shareTextForRoom: 生成可读分享文本）
+    // The share room button (using shareTextForRoom: to build readable share text)
     [sheet addAction:[UIAlertAction actionWithTitle:MPLocalized(@"mp.room.action.share", @"Share room")
                                               style:UIAlertActionStyleDefault
                                             handler:^(UIAlertAction *action) {
@@ -773,7 +773,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         NSString *shareText = [[MultiplayerManager sharedManager] shareTextForRoom:room];
         UIActivityViewController *activityVC = [[UIActivityViewController alloc] initWithActivityItems:@[shareText] applicationActivities:nil];
 
-        // iPad 适配：popover 指向屏幕中央
+        // iPad support: point the popover at the center of the screen
         if (activityVC.popoverPresentationController) {
             activityVC.popoverPresentationController.sourceView = strongSelf.view;
             activityVC.popoverPresentationController.sourceRect = CGRectMake(strongSelf.view.bounds.size.width / 2.0,
@@ -783,14 +783,14 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         [strongSelf presentViewController:activityVC animated:YES completion:nil];
     }]];
 
-    // 删除房间按钮（destructive 红色）
+    // The delete room button (destructive, in red)
     [sheet addAction:[UIAlertAction actionWithTitle:MPLocalized(@"mp.room.action.delete", @"Delete room")
                                               style:UIAlertActionStyleDestructive
                                             handler:^(UIAlertAction *action) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
 
-        // 二次确认对话框
+        // A confirmation dialog
         UIAlertController *confirm = [UIAlertController alertControllerWithTitle:MPLocalized(@"mp.room.delete.confirm_title", @"Confirm delete")
                                                                          message:[NSString stringWithFormat:@"%@「%@」？\n%@",
                                                                                   MPLocalized(@"mp.room.delete.confirm_prefix", @"Delete the room"),
@@ -802,7 +802,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
             __strong typeof(weakSelf) strongSelf = weakSelf;
             if (!strongSelf) return;
 
-            // 如果该房间已连接，先断开连接
+            // If that room is connected, disconnect first
             if (room.status == MultiplayerRoomStatusConnected) {
                 [[MultiplayerManager sharedManager] disconnectCurrentRoom];
             }
@@ -812,10 +812,10 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         [strongSelf presentViewController:confirm animated:YES completion:nil];
     }]];
 
-    // 取消按钮
+    // Cancel button
     [sheet addAction:[UIAlertAction actionWithTitle:MPLocalized(@"common.cancel", @"Cancel") style:UIAlertActionStyleCancel handler:nil]];
 
-    // iPad 适配：popover 指向屏幕中央
+    // iPad support: point the popover at the center of the screen
     if (sheet.popoverPresentationController) {
         sheet.popoverPresentationController.sourceView = self.view;
         sheet.popoverPresentationController.sourceRect = CGRectMake(self.view.bounds.size.width / 2.0,
@@ -828,36 +828,36 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 
 #pragma mark - 启动器模式：直连
 
-/// 点击"加入游戏"按钮：将 IP:端口 写入当前 profile，启动游戏后自动加入
+/// Tapping "Join game": write the IP:port into the current profile so the game joins automatically at launch
 - (void)joinDirectConnect {
     [self.view endEditing:YES];
 
     NSString *ip = [self.directIPField.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
     NSString *port = [self.directPortField.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 
-    // 校验：IP 非空
+    // Check: the IP is not empty
     if (ip.length == 0) {
         [self showSimpleAlertWithTitle:MPLocalized(@"mp.direct.error_title", @"Notice")
                                 message:MPLocalized(@"mp.direct.error.ip_empty", @"Please enter the server IP address")];
         return;
     }
 
-    // 端口默认值
+    // The default port
     if (port.length == 0) {
         port = @"25565";
     }
 
-    // 校验：IP 格式
+    // Check: the IP format
     if (![[MultiplayerManager sharedManager] isValidIPAddress:ip]) {
         [self showSimpleAlertWithTitle:MPLocalized(@"mp.direct.error_title", @"Notice")
                                 message:MPLocalized(@"mp.direct.error.ip_invalid", @"The IP address format is invalid, please check your input")];
         return;
     }
 
-    // 拼接服务器地址 "IP:端口"
+    // Join them into the server address "IP:port"
     NSString *serverAddress = [NSString stringWithFormat:@"%@:%@", ip, port];
 
-    // 将服务器地址写入当前 profile
+    // Write the server address into the current profile
     NSString *profileName = [PLProfiles current].selectedProfileName;
     if (!profileName || profileName.length == 0) {
         [self showSimpleAlertWithTitle:MPLocalized(@"mp.direct.error_title", @"Notice")
@@ -866,7 +866,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     }
     [[PLProfiles current] setServerIp:serverAddress forProfile:profileName];
 
-    // 显示成功提示
+    // Show the success message
     [self showSimpleAlertWithTitle:MPLocalized(@"mp.direct.success_title", @"Server added")
                            message:[NSString stringWithFormat:@"%@ %@",
                                     MPLocalized(@"mp.direct.success_msg_prefix", @"Server added"),
@@ -875,38 +875,38 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 
 #pragma mark - 游戏内模式：房主流程
 
-/// 点击"当房主"按钮：进入房主流程
+/// Tapping "Host": start the host flow
 ///
-/// 对标 FCL 房主流程：
-///   1. 检查 ZeroTier 框架可用性
-///   2. 检查预设 Network ID 是否已设置（未设置则提示去启动器设置）
-///   3. 自动连接到预设 Network ID 的房间
-///   4. 连接成功后弹出手动输入端口对话框（showManualPortInputAlert）
-///   5. 用户在 MC 中"对局域网开放"后，手动输入聊天框显示的端口号
-///   6. 生成分享代码（generateShareCodeForRoom:）
-///   7. 显示分享代码（可复制、可分享）
+/// Matching the FCL host flow:
+///   1. check that the ZeroTier framework is available
+///   2. check that a preset network ID is set (telling the user to set one in the launcher if not)
+///   3. connect automatically to the room for the preset network ID
+///   4. show the manual port input dialog once connected (showManualPortInputAlert)
+///   5. the user opens the world to LAN in Minecraft and enters the port from the chat box
+///   6. generate the share code (generateShareCodeForRoom:)
+///   7. show the share code (which can be copied and shared)
 ///
-/// 关键变更（端口检测改为手动输入）：
-/// 之前流程的第 4-5 步是"监听 LanPortDetectorDidDetectPortNotification +
-/// 自动检测 LAN 端口"，存在以下问题：
-///   - latestlog.txt 可能包含上次会话的 LAN 端口日志，误检测为当前会话的端口
-///   - 不同 MC 版本日志格式差异大，自动检测不可靠
-///   - 用户在游戏未真正"对局域网开放"时就生成了分享代码
-/// 现在改为手动输入端口，确保端口来自当前会话的真实 LAN 端口。
+/// Key change (port detection replaced by manual entry):
+/// Steps 4-5 used to be "observe LanPortDetectorDidDetectPortNotification and
+/// detect the LAN port automatically", which had these problems:
+///   - latestlog.txt could contain the LAN port from a previous session and be mistaken for the current one
+///   - log formats vary widely between Minecraft versions, so automatic detection was unreliable
+///   - a share code could be generated before the game had really been opened to LAN
+/// The port is now entered by hand, so it is always the real LAN port of the current session.
 - (void)hostButtonTapped {
     [self.view endEditing:YES];
 
-    // 检查 1：ZeroTier 框架可用性
+    // Check 1: the ZeroTier framework is available
     if (![[MultiplayerManager sharedManager] isFrameworkAvailable]) {
         [self showSimpleAlertWithTitle:MPLocalized(@"mp.core.unavailable_title", @"Multiplayer core unavailable")
                                 message:MPLocalized(@"mp.core.unavailable_msg", @"The ZeroTier multiplayer core is not loaded, so you cannot host a room. Please use a build that includes the real zt.framework.")];
         return;
     }
 
-    // 检查 2：预设 Network ID 是否已设置
+    // Check 2: a preset network ID is set
     NSString *presetNetId = [[MultiplayerManager sharedManager] presetNetworkId];
     if (!presetNetId.length) {
-        // 未设置：提示用户去启动器设置
+        // Not set: tell the user to set one in the launcher
         UIAlertController *alert = [UIAlertController alertControllerWithTitle:MPLocalized(@"mp.host.no_network_id_title", @"No network ID set")
                                                                        message:MPLocalized(@"mp.host.no_network_id_msg", @"The host must set a preset ZeroTier network ID first. Set one on the launcher's multiplayer screen and come back.")
                                                                 preferredStyle:UIAlertControllerStyleAlert];
@@ -915,7 +915,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         return;
     }
 
-    // 校验 Network ID 格式
+    // Validate the network ID format
     if (![[MultiplayerManager sharedManager] isValidNetworkId:presetNetId]) {
         [self showSimpleAlertWithTitle:MPLocalized(@"mp.network_id.invalid_title", @"Invalid network ID format")
                                 message:MPLocalized(@"mp.network_id.invalid_msg", @"Set a valid 16-digit hexadecimal network ID on the launcher's multiplayer screen")];
@@ -923,30 +923,30 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     }
 
     // ============================================================
-    // 幂等性检查：房主流程已激活时的短路处理
+    // Idempotency: short-circuit when the host flow is already active
     // ============================================================
-    // 关键修复：之前再次点击"当房主"按钮会重新走整个连接流程，
-    // 即使已经连接成功且 LAN 端口已检测到，也会：
-    //   1. 清空 lastShareCode/lastServerAddress（丢失已生成的分享代码）
-    //   2. 重新显示"正在开启联机"进度提示
-    //   3. 重新调用 connectToRoom（把 status 重置为 Connecting）
-    //   4. 连接成功后再次显示"等待检测 LAN 端口..."提示（误导）
-    //   5. 由于 LanPortDetector 对相同端口去重，不会再次触发 lanPortDidDetect:
-    //      导致用户无法重新看到分享代码
+    // Key fix: tapping "Host" again used to run the whole connection flow from scratch,
+    // and even with a successful connection and a detected LAN port it would:
+    //   1. clear lastShareCode/lastServerAddress (losing the share code already generated)
+    //   2. show the "Starting multiplayer" progress message again
+    //   3. call connectToRoom again (resetting status to Connecting)
+    //   4. show "waiting to detect the LAN port..." again once connected (which is misleading)
+    //   5. and because LanPortDetector deduplicates the same port, lanPortDidDetect: never fired again,
+    //      so the user could not get back to the share code
     //
-    // 修复方案：如果房主流程已激活且房间已连接，根据是否已有分享代码
-    // 直接显示对应提示，不重新走连接流程。
+    // The fix: when the host flow is already active and the room is connected, show the matching message
+    // depending on whether a share code exists, without running the connection flow again.
     if (self.isHostFlowActive) {
         MultiplayerRoom *currentRoom = [[MultiplayerManager sharedManager] currentRoom];
         if (currentRoom && [currentRoom.networkId isEqualToString:presetNetId]) {
-            // 房间已连接
+            // The room is connected
             if (self.lastShareCode.length) {
-                // 分享代码已存在
+                // A share code already exists
                 //
-                // 关键修复（多房客优化）：房主 IP 变化检测
-                // 如果 ZeroTier 重连后房主 IP 已变化，旧分享代码中的 hostIP 已失效，
-                // 房客用旧代码无法加入房间。需要使用当前 IP 重新生成分享代码。
-                // LAN 端口本身不受 ZeroTier IP 变化影响（它绑定在 MC Netty 上），可复用。
+                // Key fix (multi-guest improvement): detect a change in the host IP
+                // If the host IP changed after a ZeroTier reconnect, the hostIP in the old share code is stale
+                // and guests cannot join with it, so the share code has to be regenerated from the current IP.
+                // The LAN port itself is unaffected by a ZeroTier IP change (it is bound to Minecraft Netty), so it can be reused.
                 NSString *currentLocalIP = [[MultiplayerManager sharedManager] currentLocalIP];
                 if (currentLocalIP.length > 0 &&
                     currentRoom.hostIP.length > 0 &&
@@ -955,27 +955,27 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
                           currentRoom.hostIP, currentLocalIP);
                     [self generateShareCodeWithPort:currentRoom.hostPort];
                 } else {
-                    // IP 未变化：直接显示分享代码
+                    // The IP has not changed: show the share code directly
                     NSLog(@"[MultiplayerVC] Host flow active and share code exists, displaying directly");
                     [self showHostShareCodeAlert];
                 }
             } else {
-                // 分享代码不存在：弹出手动输入端口对话框
-                // 关键修复（端口检测改为手动输入）：不再自动检测端口，改为用户手动输入
+                // No share code yet: show the manual port input dialog
+                // Key fix (port detection replaced by manual entry): the port is no longer detected automatically but entered by the user
                 NSLog(@"[MultiplayerVC] Host flow active but share code not yet generated, showing manual port input dialog");
                 [self showManualPortInputAlert];
             }
             return;
         }
-        // 房间未连接或 networkId 不匹配：继续走完整流程（会先断开旧连接）
+        // The room is not connected, or the networkId does not match: run the full flow (disconnecting the old connection first)
     }
 
-    // 标记房主流程激活
+    // Mark the host flow as active
     self.isHostFlowActive = YES;
     self.lastShareCode = nil;
     self.lastServerAddress = nil;
 
-    // 构建/复用房主房间对象
+    // Build or reuse the host room object
     MultiplayerRoom *room = self.hostRoom;
     if (!room || ![room.networkId isEqualToString:presetNetId]) {
         room = [[MultiplayerRoom alloc] init];
@@ -987,67 +987,67 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         room.roomDescription = @"";
         room.ownerName = @"";
         room.status = MultiplayerRoomStatusDisconnected;
-        // 关键修复：显式标记房主角色，替代 IP 启发式判断
+        // Key fix: mark the host role explicitly, replacing the IP heuristic
         room.role = MultiplayerRoomRoleHost;
         room.createdAt = [NSDate date];
         self.hostRoom = room;
     } else {
-        // 已存在的房间确保 role 正确（兼容旧数据 role=Unknown 的情况）
+        // Make sure role is right on an existing room too (handling old data with role=Unknown)
         room.role = MultiplayerRoomRoleHost;
     }
 
-    // 如果当前已连接到其他房间，先断开
+    // If another room is connected, disconnect first
     MultiplayerRoom *currentRoom = [[MultiplayerManager sharedManager] currentRoom];
     if (currentRoom && ![currentRoom.networkId isEqualToString:presetNetId]) {
         [[MultiplayerManager sharedManager] disconnectCurrentRoom];
     }
 
-    // 显示"正在连接"进度提示（可动态更新进度文本）
+    // Show the "connecting" progress message (whose text updates live)
     //
-    // 关键修复（前台无反馈）：
-    // 之前只显示一个静态的"正在连接到 ZeroTier 网络，请稍候..."提示，
-    // 用户无法知道后台进度，连接流程耗时 15-30 秒期间用户只能干等。
-    // 现在使用 showConnectionProgressWithTitle:message: 显示一个带 Cancel 按钮的 Alert，
-    // 并通过 multiplayerConnectionProgress: 回调实时更新 message 为"步骤 1/6：..."等进度。
+    // Key fix (no feedback in the foreground):
+    // a single static "Connecting to the ZeroTier network, please wait..." message used to be shown,
+    // leaving the user with no idea of the progress through a 15-30 second connection.
+    // showConnectionProgressWithTitle:message: now shows an alert with a Cancel button,
+    // and the multiplayerConnectionProgress: callback updates its message live with "Step 1/6: ..." and so on.
     [self showConnectionProgressWithTitle:MPLocalized(@"mp.host.connecting_title", @"Starting multiplayer")
                                    message:MPLocalized(@"mp.host.connecting_msg", @"Connecting to the ZeroTier network, please wait...")];
 
-    // 关键修复（端口检测改为手动输入）：
-    // 不再启动 LanPortDetector 的自动检测。自动检测存在以下问题：
-    //   - latestlog.txt 可能包含上次会话的 LAN 端口日志，误检测为当前会话的端口
-    //   - 不同 MC 版本日志格式差异大，自动检测不可靠
-    //   - 用户在游戏未真正"对局域网开放"时就生成了分享代码
-    // 现在改为手动输入端口：连接成功后弹出输入框，用户在 MC 中"对局域网开放"后
-    // 手动输入聊天框显示的端口号，才会生成分享代码。
+    // Key fix (port detection replaced by manual entry):
+    // The automatic LanPortDetector detection is no longer started. It had these problems:
+    //   - latestlog.txt could contain the LAN port from a previous session and be mistaken for the current one
+    //   - log formats vary widely between Minecraft versions, so automatic detection was unreliable
+    //   - a share code could be generated before the game had really been opened to LAN
+    // The port is now entered by hand: an input dialog appears once connected, and only after the user opens the world to LAN
+    // and enters the port from the chat box is a share code generated.
 
-    // 连接到预设房间
+    // Connect to the preset room
     __weak typeof(self) weakSelf = self;
     [self connectToRoom:room completion:^(BOOL success, NSError *error) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
 
-        // 先关闭进度提示 Alert，再显示结果
+        // Dismiss the progress alert first, then show the result
         [strongSelf dismissConnectionProgressAlertWithCompletion:^{
             if (success) {
-                // 连接成功
+                // Connected successfully
                 //
-                // 关键修复（端口检测改为手动输入）：
-                // 之前依赖 LanPortDetector 自动检测 LAN 端口（通过拦截 MC 日志或读取 latestlog.txt），
-                // 存在以下问题：
-                //   1. 自动检测不可靠：不同 MC 版本日志格式差异大，部分版本无法匹配
-                //   2. 误检测旧日志：latestlog.txt 可能包含上次会话的 LAN 端口日志，
-                //      导致 MC 还没真正"对局域网开放"就生成了错误的分享代码
-                //   3. 用户在游戏未进入时就能生成代码：因为 LanPortDetector 从旧日志中
-                //      读取到端口，立即触发分享代码生成
+                // Key fix (port detection replaced by manual entry):
+                // It used to rely on LanPortDetector finding the LAN port automatically (by intercepting the Minecraft log or reading latestlog.txt),
+                // which had these problems:
+                //   1. unreliable detection: log formats vary widely between Minecraft versions and some never match
+                //   2. stale logs: latestlog.txt could contain the LAN port from a previous session,
+                //      so a wrong share code was generated before Minecraft had really been opened to LAN
+                //   3. a code could be generated before the game had even started, because LanPortDetector read the port
+                //      from an old log and immediately triggered share code generation
                 //
-                // 修复方案：改为手动输入端口。连接成功后弹出手动输入对话框，
-                // 用户必须在 MC 中"对局域网开放"后，手动输入聊天框显示的端口号，
-                // 才会生成分享代码。这样既保证了端口的准确性，也避免了在游戏未真正
-                // 开放局域网时生成错误代码的问题。
+                // The fix: enter the port by hand. Once connected, an input dialog appears, and only after the user opens the world
+                // to LAN in Minecraft and enters the port from the chat box is a share code generated.
+                // That keeps the port accurate and stops a wrong code being generated before the world is
+                // really open to LAN.
                 NSLog(@"[MultiplayerVC] Connection successful, waiting for user to manually enter LAN port");
                 [strongSelf showManualPortInputAlert];
             } else {
-                // 连接失败
+                // Connection failed
                 strongSelf.isHostFlowActive = NO;
                 [strongSelf showSimpleAlertWithTitle:MPLocalized(@"mp.connect.failed", @"Connection failed")
                                               message:error.localizedDescription ?: MPLocalized(@"mp.connect.failed_msg", @"Could not connect to the ZeroTier network. Check that the network ID is correct and that your connection is working.")];
@@ -1059,18 +1059,18 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     [self.tableView reloadData];
 }
 
-/// 显示房主连接成功后的手动输入端口对话框
+/// Show the manual port input dialog after the host connects
 ///
-/// 关键修复（端口检测改为手动输入）：
-/// 之前连接成功后依赖 LanPortDetector 自动检测 LAN 端口，存在以下问题：
-///   - latestlog.txt 可能包含上次会话的 LAN 端口日志，误检测为当前会话的端口
-///   - 不同 MC 版本日志格式差异大，自动检测不可靠
-///   - 用户在游戏未真正"对局域网开放"时就生成了分享代码
+/// Key fix (port detection replaced by manual entry):
+/// LanPortDetector used to find the LAN port automatically once connected, which had these problems:
+///   - latestlog.txt could contain the LAN port from a previous session and be mistaken for the current one
+///   - log formats vary widely between Minecraft versions, so automatic detection was unreliable
+///   - a share code could be generated before the game had really been opened to LAN
 ///
-/// 现在改为手动输入端口：连接成功后弹出输入对话框，提示用户在 MC 中
-/// "对局域网开放"后，手动输入聊天框显示的端口号。用户输入端口号后
-/// 才会生成分享代码。这样既保证了端口的准确性，也避免了在游戏未真正
-/// 开放局域网时生成错误代码的问题。
+/// The port is now entered by hand: once connected, an input dialog appears asking the user to open the world
+/// to LAN in Minecraft and enter the port from the chat box. Only after they enter it
+/// is a share code generated. That keeps the port accurate and stops a wrong code being generated
+/// before the world is really open to LAN.
 - (void)showManualPortInputAlert {
     NSString *localIP = [[MultiplayerManager sharedManager] currentLocalIP] ?: @"-";
     NSString *message = [NSString stringWithFormat:@"%@\n\n%@\n%@\n\n%@: %@",
@@ -1106,14 +1106,14 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         UITextField *field = alert.textFields.firstObject;
         NSString *port = [field.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 
-        // 校验：端口非空
+        // Check: the port is not empty
         if (port.length == 0) {
             [strongSelf showSimpleAlertWithTitle:MPLocalized(@"mp.host.port_empty_title", @"Port is empty")
                                           message:MPLocalized(@"mp.host.port_empty_msg", @"Please enter the LAN port number")];
             return;
         }
 
-        // 校验：端口范围（1-65535）
+        // Check: the port range (1-65535)
         NSInteger portNum = [port integerValue];
         if (portNum < 1 || portNum > 65535) {
             [strongSelf showSimpleAlertWithTitle:MPLocalized(@"mp.host.port_invalid_title", @"Invalid port")
@@ -1122,10 +1122,10 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         }
 
         NSLog(@"[MultiplayerVC] User manually entered LAN port: %@", port);
-        // 将端口设置到 LanPortDetector（手动输入），方便其他模块读取
-        // 注意：LanPortDetector 的 API 是 sharedInstance + setManualPort:(uint16_t)
+        // Set the port on LanPortDetector (manual entry), so other modules can read it
+        // Note: the LanPortDetector API is sharedInstance + setManualPort:(uint16_t)
         [[LanPortDetector sharedInstance] setManualPort:(uint16_t)portNum];
-        // 生成分享代码（内部会启动 PortForwarder 房主模式）
+        // Generate the share code (which starts PortForwarder in host mode internally)
         [strongSelf generateShareCodeWithPort:port];
     }]];
 
@@ -1134,25 +1134,25 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 
 #pragma mark - 游戏内模式：LAN 端口检测回调
 
-/// LanPortDetector 检测到端口后的回调
+/// Callback for LanPortDetector detecting a port
 ///
-/// 注意：自动检测已禁用（改为手动输入端口），此回调通常不会被触发。
-/// 保留此方法是为了兼容性：如果未来重新启用自动检测，或外部代码通过
-/// setManualPort: 设置端口后调用此回调，仍能正常生成分享代码。
+/// Note: automatic detection is disabled (the port is entered by hand), so this normally never fires.
+/// It is kept for compatibility: if automatic detection is ever re-enabled, or external code calls it after
+/// setting the port with setManualPort:, a share code is still generated correctly.
 ///
-/// 房主流程核心：MC 开放局域网后，LanPortDetector 自动检测到端口号，
-/// 触发本回调。本方法负责：
-///   1. 将检测到的端口写入房主房间对象
-///   2. 生成分享代码（generateShareCodeForRoom:）
-///   3. 刷新 UI 显示分享代码
+/// The core of the host flow: once Minecraft opens the world to LAN, LanPortDetector finds the port
+/// and fires this callback, which:
+///   1. writes the detected port into the host room object
+///   2. generates the share code (generateShareCodeForRoom:)
+///   3. refreshes the UI to show the share code
 - (void)lanPortDidDetect:(NSNotification *)notification {
-    // 仅在房主流程激活时处理
+    // Only handled while the host flow is active
     if (!self.isHostFlowActive) {
         return;
     }
 
-    // LanPortDetector.setManualPort: 发送的 userInfo 中 port 是 NSNumber（@(port)），
-    // 不是 NSString。这里统一转换成 NSString 再使用。
+    // The port in the userInfo posted by LanPortDetector.setManualPort: is an NSNumber (@(port)),
+    // not an NSString, so it is converted to an NSString here.
     id portValue = notification.userInfo[@"port"];
     NSString *port = nil;
     if ([portValue isKindOfClass:[NSString class]]) {
@@ -1164,37 +1164,37 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         return;
     }
 
-    // 关键修复（避免重复生成分享代码）：
-    // 手动输入流程中，showManualPortInputAlert 已经在用户点击"生成"按钮时
-    // 直接调用了 generateShareCodeWithPort: 生成分享代码。
-    // 此时 LanPortDetector.setManualPort: 又会发送通知触发本回调，
-    // 会导致分享代码被生成两次（虽然 PortForwarder 启动是幂等的，但显示会闪烁）。
-    // 因此本回调仅做日志记录，不再重复调用 generateShareCodeWithPort:。
+    // Key fix (avoid generating the share code twice):
+    // in the manual entry flow, showManualPortInputAlert already calls generateShareCodeWithPort:
+    // directly when the user taps "Generate".
+    // LanPortDetector.setManualPort: then posts a notification that fires this callback too,
+    // so the share code was generated twice (PortForwarder starting is idempotent, but the display flickered).
+    // This callback therefore only logs and no longer calls generateShareCodeWithPort: again.
     NSLog(@"[MultiplayerVC] lanPortDidDetect: received port %@ notification (manual input flow already generated share code, skipping duplicate)", port);
 }
 
-/// 根据用户输入的 LAN 端口生成分享代码并显示
+/// Generate and show the share code from the LAN port the user entered
 ///
-/// 此方法供以下场景复用：
-///   1. lanPortDidDetect: 收到 LanPortDetector 通知时调用（兼容性保留，通常不触发）
-///   2. showManualPortInputAlert 中用户手动输入端口后调用（主要场景）
-///   3. hostButtonTapped 幂等检查中复用（通过 showManualPortInputAlert 间接调用）
+/// This method is reused in the following cases:
+///   1. from lanPortDidDetect: when a LanPortDetector notification arrives (kept for compatibility, normally never fired)
+///   2. from showManualPortInputAlert once the user enters a port by hand (the main case)
+///   3. from the hostButtonTapped idempotency check (indirectly, through showManualPortInputAlert)
 ///
-/// 关键变更（端口检测改为手动输入）：
-/// 之前此方法在 hostButtonTapped 连接成功后由自动检测端口触发，
-/// 现在改为由用户手动输入端口后触发，确保端口来自当前会话的真实 LAN 端口。
+/// Key change (port detection replaced by manual entry):
+/// It used to be triggered by automatic port detection after hostButtonTapped connected,
+/// and is now triggered once the user enters the port, so it is always the real LAN port of the current session.
 - (void)generateShareCodeWithPort:(NSString *)port {
     MultiplayerRoom *room = self.hostRoom;
     if (!room) {
         return;
     }
 
-    // 更新房间的端口和本机 IP
+    // Update the room port and this device IP
     room.hostPort = port;
     NSString *localIP = [[MultiplayerManager sharedManager] currentLocalIP];
 
-    // 关键修复（多房客优化）：hostIP 非空保护
-    // 如果 currentLocalIP 为空（异常情况），不生成无效分享代码
+    // Key fix (multi-guest improvement): guard against an empty hostIP
+    // If currentLocalIP is empty (an unusual case), do not generate an invalid share code
     if (!localIP.length) {
         NSLog(@"[MultiplayerVC] Warning: currentLocalIP is nil, cannot generate valid share code");
         [self showSimpleAlertWithTitle:MPLocalized(@"mp.host.share_code_failed", @"Failed to generate the share code")
@@ -1202,9 +1202,9 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         return;
     }
 
-    // 关键修复（多房客优化）：房主 IP 变化检测
-    // 如果 room.hostIP 已存在且与当前 localIP 不同，说明房主 ZeroTier IP 已变化
-    // 旧分享代码已失效，需要提示房主重新分享
+    // Key fix (multi-guest improvement): detect a change in the host IP
+    // If room.hostIP is already set and differs from the current localIP, the host ZeroTier IP has changed,
+    // the old share code is stale, and the host has to be told to share again
     BOOL ipChanged = (room.hostIP.length > 0 && ![room.hostIP isEqualToString:localIP]);
     if (ipChanged) {
         NSLog(@"[MultiplayerVC] Host IP changed: %@ -> %@, old share code is invalid", room.hostIP, localIP);
@@ -1213,22 +1213,22 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     room.hostIP = localIP;
     [[MultiplayerManager sharedManager] updateRoom:room];
 
-    // 生成分享代码
+    // Generate the share code
     self.lastShareCode = [[MultiplayerManager sharedManager] generateShareCodeForRoom:room];
-    // 关键修复（P1-4）：IPv6 地址需要用方括号包裹，否则冒号会与端口分隔符混淆
+    // Key fix (P1-4): an IPv6 address must be wrapped in square brackets, or its colons are confused with the port separator
     if ([room.hostIP containsString:@":"]) {
         self.lastServerAddress = [NSString stringWithFormat:@"[%@]:%@", room.hostIP, room.hostPort];
     } else {
         self.lastServerAddress = [NSString stringWithFormat:@"%@:%@", room.hostIP, room.hostPort];
     }
 
-    // 刷新表格，让 Section 1 显示最新的分享代码
+    // Refresh the table so section 1 shows the latest share code
     [self.tableView reloadData];
 
-    // 弹出提示告知用户分享代码已生成
+    // Tell the user the share code has been generated
     [self showHostShareCodeAlert];
 
-    // 如果 IP 变化，额外提示房主旧代码已失效
+    // If the IP changed, also tell the host that the old code is stale
     if (ipChanged) {
         dispatch_async(dispatch_get_main_queue(), ^{
             [self showSimpleAlertWithTitle:MPLocalized(@"mp.host.ip_changed_title", @"The host's IP has changed")
@@ -1237,11 +1237,11 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     }
 }
 
-/// 显示房主分享代码 Alert
+/// Show the host share code alert
 ///
-/// 提供以下操作：
-///   - 复制分享代码到剪贴板
-///   - 通过系统分享面板分享
+/// It offers:
+///   - copy the share code to the clipboard
+///   - share it through the system share sheet
 - (void)showHostShareCodeAlert {
     NSString *shareCode = self.lastShareCode ?: @"";
     NSString *serverAddr = self.lastServerAddress ?: @"-";
@@ -1257,7 +1257,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
                                                                    message:message
                                                             preferredStyle:UIAlertControllerStyleAlert];
 
-    // 复制按钮
+    // Copy button
     [alert addAction:[UIAlertAction actionWithTitle:MPLocalized(@"mp.host.copy_code", @"Copy code")
                                               style:UIAlertActionStyleDefault
                                             handler:^(UIAlertAction *action) {
@@ -1265,7 +1265,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         pasteboard.string = shareCode;
     }]];
 
-    // 分享按钮
+    // Share button
     __weak typeof(self) weakSelf = self;
     [alert addAction:[UIAlertAction actionWithTitle:MPLocalized(@"mp.host.share_button", @"Share...")
                                               style:UIAlertActionStyleDefault
@@ -1283,7 +1283,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         [strongSelf presentViewController:activityVC animated:YES completion:nil];
     }]];
 
-    // 关闭按钮
+    // Close button
     [alert addAction:[UIAlertAction actionWithTitle:MPLocalized(@"common.ok", @"OK")
                                               style:UIAlertActionStyleCancel
                                             handler:nil]];
@@ -1293,18 +1293,18 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 
 #pragma mark - 游戏内模式：房客流程
 
-/// 点击"当房客"按钮：进入房客流程
+/// Tapping "Guest": start the guest flow
 ///
-/// 对标 FCL 房客流程：
-///   1. 弹出输入框（UIAlertController with textField）
-///   2. 用户输入分享代码
-///   3. 解析代码（parseShareCode:）
-///   4. 连接到房间（connectToRoom:completion:）
-///   5. 连接成功后提示并显示服务器地址
+/// Matching the FCL guest flow:
+///   1. show an input dialog (a UIAlertController with a text field)
+///   2. the user enters the share code
+///   3. parse the code (parseShareCode:)
+///   4. connect to the room (connectToRoom:completion:)
+///   5. confirm on success and show the server address
 - (void)guestButtonTapped {
     [self.view endEditing:YES];
 
-    // 检查 ZeroTier 框架可用性
+    // Check that the ZeroTier framework is available
     if (![[MultiplayerManager sharedManager] isFrameworkAvailable]) {
         [self showSimpleAlertWithTitle:MPLocalized(@"mp.core.unavailable_title", @"Multiplayer core unavailable")
                                 message:MPLocalized(@"mp.core.unavailable_msg", @"The ZeroTier multiplayer core is not loaded, so you cannot join as a guest. Please use a build that includes the real zt.framework.")];
@@ -1337,14 +1337,14 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         UITextField *field = alert.textFields.firstObject;
         NSString *code = [field.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
 
-        // 校验：代码非空
+        // Check: the code is not empty
         if (code.length == 0) {
             [strongSelf showSimpleAlertWithTitle:MPLocalized(@"mp.guest.error_title", @"Input is empty")
                                           message:MPLocalized(@"mp.guest.error.empty", @"Enter the share code the host gave you")];
             return;
         }
 
-        // 解析分享代码
+        // Parse the share code
         MultiplayerRoom *parsedRoom = [[MultiplayerManager sharedManager] parseShareCode:code];
         if (!parsedRoom) {
             [strongSelf showSimpleAlertWithTitle:MPLocalized(@"mp.guest.error_title", @"Invalid code")
@@ -1352,15 +1352,15 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
             return;
         }
 
-        // 校验解析出的 Network ID
+        // Validate the parsed network ID
         if (!parsedRoom.networkId.length || ![[MultiplayerManager sharedManager] isValidNetworkId:parsedRoom.networkId]) {
             [strongSelf showSimpleAlertWithTitle:MPLocalized(@"mp.guest.error_title", @"Invalid code")
                                           message:MPLocalized(@"mp.guest.error.invalid_network_id", @"The network ID in the share code is invalid")];
             return;
         }
 
-        // 关键修复（P0-6）：校验分享码中的 hostIP 非空
-        // 房客必须有房主 IP 才能进行端口转发，空 hostIP 的分享码无法使用
+        // Key fix (P0-6): check that the hostIP in the share code is not empty
+        // A guest needs the host IP for port forwarding, so a share code with an empty hostIP is unusable
         if (!parsedRoom.hostIP.length) {
             [strongSelf showSimpleAlertWithTitle:MPLocalized(@"mp.sharecode.invalid", @"Invalid share code")
                                           message:MPLocalized(@"mp.sharecode.missing_host", @"The share code is missing the host IP — check that the code is complete")];
@@ -1373,46 +1373,46 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     [self presentViewController:alert animated:YES completion:nil];
 }
 
-/// 房客流程：执行加入房间
+/// The guest flow: join the room
 ///
-/// @param parsedRoom 从分享代码解析出的房间对象
-/// @param shareCode 原始分享代码（用于显示）
+/// @param parsedRoom The room object parsed out of the share code
+/// @param shareCode The original share code (for display)
 - (void)performGuestJoinWithRoom:(MultiplayerRoom *)parsedRoom shareCode:(NSString *)shareCode {
-    // 标记房客流程激活
+    // Mark the guest flow as active
     self.isGuestFlowActive = YES;
     self.lastShareCode = shareCode;
-    // 临时设置房主地址，连接成功后会在 showGuestConnectedAlert 中更新为端口转发地址
+    // Set the host address temporarily; once connected, showGuestConnectedAlert updates it to the port-forwarded address
     self.lastServerAddress = [NSString stringWithFormat:@"%@:%@", parsedRoom.hostIP, parsedRoom.hostPort];
 
-    // 设置房客房间对象（保存以便显示状态）
+    // Set the guest room object (kept so the state can be shown)
     self.guestRoom = parsedRoom;
 
-    // 如果当前已连接到其他房间，先断开
+    // If another room is connected, disconnect first
     MultiplayerRoom *currentRoom = [[MultiplayerManager sharedManager] currentRoom];
     if (currentRoom && ![currentRoom.networkId isEqualToString:parsedRoom.networkId]) {
         [[MultiplayerManager sharedManager] disconnectCurrentRoom];
     }
 
-    // 显示"正在连接"进度提示（可动态更新进度文本）
+    // Show the "connecting" progress message (whose text updates live)
     //
-    // 关键修复（前台无反馈）：
-    // 与 hostButtonTapped 相同，使用可更新进度的 Alert 替代静态提示。
+    // Key fix (no feedback in the foreground):
+    // As in hostButtonTapped, an alert whose progress can be updated replaces the static message.
     [self showConnectionProgressWithTitle:MPLocalized(@"mp.guest.connecting_title", @"Joining multiplayer")
                                    message:MPLocalized(@"mp.guest.connecting_msg", @"Connecting to the host's ZeroTier network, please wait...")];
 
-    // 连接到房间
+    // Connect to the room
     __weak typeof(self) weakSelf = self;
     [self connectToRoom:parsedRoom completion:^(BOOL success, NSError *error) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
 
-        // 先关闭进度提示 Alert，再显示结果
+        // Dismiss the progress alert first, then show the result
         [strongSelf dismissConnectionProgressAlertWithCompletion:^{
             if (success) {
-                // 连接成功：显示房客加入成功提示
+                // Connected successfully: show the guest joined message
                 [strongSelf showGuestConnectedAlert];
             } else {
-                // 连接失败
+                // Connection failed
                 strongSelf.isGuestFlowActive = NO;
                 [strongSelf showSimpleAlertWithTitle:MPLocalized(@"mp.connect.failed", @"Connection failed")
                                               message:error.localizedDescription ?: MPLocalized(@"mp.connect.failed_msg", @"Could not connect to the host's network. Check that the share code is correct and that your connection is working.")];
@@ -1424,60 +1424,60 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     [self.tableView reloadData];
 }
 
-/// 显示房客连接成功后的提示
+/// Show the message after a guest connects
 ///
-/// 对标 FCL 房客加入成功后的引导：
-///   - "已连接到房主的联机网络"
-///   - 自动将服务器地址写入当前 profile（下次启动 MC 自动连接）
-///   - 自动将服务器地址复制到剪贴板（方便在 MC 中粘贴）
-///   - 显示操作引导和服务器地址
+/// Matching the FCL guidance after a guest joins:
+///   - "Connected to the host's multiplayer network"
+///   - write the server address into the current profile automatically (so Minecraft connects on the next launch)
+///   - copy the server address to the clipboard automatically (so it can be pasted into Minecraft)
+///   - show the instructions and the server address
 ///
-/// 由于我们使用进程内 libzt（不创建系统网络接口），MC 的 UDP 局域网广播
-/// 无法通过 ZeroTier 网络，因此"自动发现房间"不可行。替代方案是：
-///   1. 自动写入 profile 的 serverIp（下次启动 MC 时自动连接）
-///   2. 自动复制服务器地址到剪贴板（方便房客在 MC 中"添加服务器"时粘贴）
-///   3. 显示清晰的操作引导
+/// Because libzt runs in-process (creating no system network interface), the Minecraft UDP LAN broadcast
+/// cannot travel over the ZeroTier network, so "discover rooms automatically" is not possible. Instead:
+///   1. write the profile serverIp automatically (so Minecraft connects on the next launch)
+///   2. copy the server address to the clipboard automatically (ready to paste into "Add Server" in Minecraft)
+///   3. show clear instructions
 - (void)showGuestConnectedAlert {
     MultiplayerRoom *room = self.guestRoom;
-    // 关键修复（P1-5）：hostIP 为空时显示"未知"，而非用 currentLocalIP 误导用户
+    // Key fix (P1-5): show "unknown" when hostIP is empty, rather than misleading the user with currentLocalIP
     NSString *hostIP = room.hostIP.length ? room.hostIP : MPLocalized(@"mp.unknown", @"Unknown");
     NSString *hostPort = room.hostPort.length ? room.hostPort : @"25565";
 
-    // 关键修复：MC 使用 Netty 的 NioSocketChannel，不走 Java 的 SOCKS5 代理。
-    // 房客不能直接输入房主的 ZeroTier IP（系统无法路由），必须通过本地端口转发器。
-    // PortForwarder 在 127.0.0.1:25565（或下一个可用端口）监听，转发到房主的 ZeroTier IP:端口。
-    // 房客在 MC 中输入 127.0.0.1:转发端口 即可连接。
+    // Key fix: Minecraft uses the Netty NioSocketChannel and does not go through the Java SOCKS5 proxy.
+    // A guest cannot enter the host ZeroTier IP directly (the system cannot route to it) and must go through the local port forwarder.
+    // PortForwarder listens on 127.0.0.1:25565 (or the next free port) and forwards to the host ZeroTier IP:port.
+    // The guest enters 127.0.0.1:<forwarded port> in Minecraft to connect.
     uint16_t forwardPort = [[MultiplayerManager sharedManager] currentForwardingPort];
     NSString *serverAddress;
     if (forwardPort > 0) {
-        // 端口转发器已启动，使用本地地址
+        // The port forwarder is running, so use the local address
         serverAddress = [NSString stringWithFormat:@"127.0.0.1:%u", forwardPort];
         NSLog(@"[MultiplayerVC] Guest using port forwarding address: %@ (forwarding to %@:%@)",
               serverAddress, hostIP, hostPort);
         self.lastServerAddress = serverAddress;
 
-        // 自动将服务器地址写入当前 profile（下次启动 MC 时会自动连接到此服务器）
+        // Write the server address into the current profile automatically (so Minecraft connects to it on the next launch)
         NSString *profileName = [PLProfiles current].selectedProfileName;
         if (profileName && profileName.length > 0) {
             [[PLProfiles current] setServerIp:serverAddress forProfile:profileName];
             NSLog(@"[Multiplayer] Auto-wrote server address %@ to profile %@", serverAddress, profileName);
         }
     } else {
-        // 关键修复（P0-5）：端口转发器未启动，不写入 profile
-        // 房客无法通过 ZeroTier IP 直连（系统无法路由），写入 profile 会导致下次启动 MC 连接失败
+        // Key fix (P0-5): with the port forwarder not running, do not write the profile
+        // A guest cannot reach the ZeroTier IP directly (the system cannot route to it), so writing it would make the next Minecraft launch fail to connect
         serverAddress = [NSString stringWithFormat:@"%@:%@", hostIP, hostPort];
         NSLog(@"[MultiplayerVC] Warning: port forwarder not started, not writing profile serverIp");
-        // 显示警告提示而非成功提示
+        // Show a warning rather than a success message
         [self showSimpleAlertWithTitle:MPLocalized(@"mp.connect.failed", @"Connection failed")
                                message:MPLocalized(@"mp.connect.port_forward_failed_msg", @"The port forwarder failed to start, so the host cannot be reached. Try disconnecting and reconnecting.")];
         return;
     }
 
-    // 自动复制服务器地址到剪贴板（方便房客在 MC 中"添加服务器"时直接粘贴）
+    // Copy the server address to the clipboard automatically (ready to paste into "Add Server" in Minecraft)
     UIPasteboard *pasteboard = [UIPasteboard generalPasteboard];
     pasteboard.string = serverAddress;
 
-    // 构建提示信息
+    // Build the message
     NSString *message = [NSString stringWithFormat:@"%@\n\n%@\n%@\n\n%@: %@\n\n%@",
                          MPLocalized(@"mp.guest.connected_msg", @"Connected to the host's multiplayer network"),
                          MPLocalized(@"mp.guest.tip.add_server", @"On Minecraft's multiplayer screen tap \"Add Server\" and paste the address below to join"),
@@ -1492,53 +1492,53 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 
 #pragma mark - MultiplayerManagerDelegate
 
-/// ZeroTier 节点已上线：刷新房间列表与状态
+/// The ZeroTier node came online: refresh the room list and state
 - (void)multiplayerNodeOnline {
     [self refreshRooms];
     [self.tableView reloadData];
 }
 
-/// ZeroTier 节点已离线：刷新房间列表与状态
+/// The ZeroTier node went offline: refresh the room list and state
 - (void)multiplayerNodeOffline {
     [self refreshRooms];
     [self.tableView reloadData];
 }
 
-/// 指定房间已连接成功：刷新房间列表与状态
+/// The given room connected: refresh the room list and state
 - (void)multiplayerRoomConnected:(MultiplayerRoom *)room {
     [self refreshRooms];
     [self.tableView reloadData];
 }
 
-/// 指定房间连接失败：刷新房间列表与状态
+/// The given room failed to connect: refresh the room list and state
 - (void)multiplayerRoom:(MultiplayerRoom *)room didFailWithError:(NSError *)error {
     [self refreshRooms];
     [self.tableView reloadData];
 }
 
-/// ZeroTier 框架可用性检测结果：刷新房间列表
+/// The ZeroTier framework availability result: refresh the room list
 - (void)multiplayerFrameworkAvailabilityChecked:(BOOL)available {
     [self refreshRooms];
     [self.tableView reloadData];
 }
 
-/// 连接流程进度更新
+/// Connection flow progress update
 ///
-/// 由 MultiplayerManager 的 notifyConnectionProgress: 在主线程调用。
-/// 更新 connectionProgressAlert 的 message 属性，让用户实时看到当前连接步骤。
+/// Called on the main thread by notifyConnectionProgress: on MultiplayerManager.
+/// It updates the message of connectionProgressAlert, so the user sees the current connection step live.
 ///
-/// 关键修复（前台无反馈）：
-/// 之前连接流程只显示静态"正在连接到 ZeroTier 网络"提示，
-/// 用户无法知道后台进度（启动节点、等待上线、加入网络、等待就绪、启动代理...）。
-/// 现在通过此回调实时更新进度文本，让用户看到详细的步骤信息。
+/// Key fix (no feedback in the foreground):
+/// the connection flow used to show a static "Connecting to the ZeroTier network" message,
+/// leaving the user unaware of the progress (starting the node, waiting for it to come online, joining the network, waiting for it to be ready, starting the proxy...).
+/// This callback now updates the progress text live, so the user sees the detailed steps.
 ///
-/// @param message 进度描述文本（如"步骤 2/6：正在等待节点上线..."）
+/// @param message The progress text (such as "Step 2/6: waiting for the node to come online...")
 - (void)multiplayerConnectionProgress:(NSString *)message {
-    // 此方法已在主线程调用（由 MultiplayerManager.notifyConnectionProgress: 保证）
+    // This method is already on the main thread (guaranteed by MultiplayerManager.notifyConnectionProgress:)
     if (self.connectionProgressAlert) {
-        // 更新已显示的进度 Alert 的 message
-        // UIAlertController 的 message 属性可以在 present 后动态更新，
-        // 系统会自动刷新 UI 显示，无需重新 present。
+        // Update the message of the progress alert already on screen
+        // The message property of a UIAlertController can be updated after presenting,
+        // and the system refreshes the UI itself, so it does not have to be presented again.
         self.connectionProgressAlert.message = message;
     }
     NSLog(@"[MultiplayerVC] Connection progress: %@", message);
@@ -1546,7 +1546,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 
 #pragma mark - 工具方法
 
-/// 刷新房间列表（主线程）
+/// Refresh the room list (main thread)
 - (void)refreshRooms {
     dispatch_async(dispatch_get_main_queue(), ^{
         self.rooms = [[MultiplayerManager sharedManager] savedRooms] ?: @[];
@@ -1554,14 +1554,14 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     });
 }
 
-/// 显示简单的 Alert 提示
+/// Show a simple alert
 - (void)showSimpleAlertWithTitle:(NSString *)title message:(NSString *)message {
     dispatch_async(dispatch_get_main_queue(), ^{
-        // 关键修复：显示新 Alert 前清除进度 Alert 引用（如果存在）
+        // Key fix: clear the progress alert reference (if any) before showing a new alert
         self.connectionProgressAlert = nil;
         UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:message preferredStyle:UIAlertControllerStyleAlert];
         [alert addAction:[UIAlertAction actionWithTitle:MPLocalized(@"common.ok", @"OK") style:UIAlertActionStyleDefault handler:nil]];
-        // 避免重复 present
+        // so nothing is presented twice
         if (self.presentedViewController) {
             [self.presentedViewController dismissViewControllerAnimated:NO completion:^{
                 [self presentViewController:alert animated:YES completion:nil];
@@ -1572,25 +1572,25 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     });
 }
 
-/// 显示连接进度 Alert（可动态更新 message）
+/// Show the connection progress alert (whose message can be updated live)
 ///
-/// 此 Alert 包含一个"取消"按钮，允许用户在连接过程中取消连接。
-/// 取消时会调用 disconnectCurrentRoom 中止连接流程。
+/// This alert has a "Cancel" button, so the user can cancel while connecting.
+/// Cancelling calls disconnectCurrentRoom to abort the connection flow.
 ///
-/// 显示后，通过 multiplayerConnectionProgress: 回调更新 self.connectionProgressAlert.message
-/// 即可实时更新 Alert 中显示的进度文本，无需重新 present。
+/// Once shown, the multiplayerConnectionProgress: callback updates self.connectionProgressAlert.message
+/// to change the progress text live, with no need to present it again.
 ///
-/// @param title   Alert 标题（如"正在开启联机"）
-/// @param message 初始进度文本（如"正在连接到 ZeroTier 网络，请稍候..."）
+/// @param title   The alert title (such as "Starting multiplayer")
+/// @param message The initial progress text (such as "Connecting to the ZeroTier network, please wait...")
 - (void)showConnectionProgressWithTitle:(NSString *)title message:(NSString *)message {
     dispatch_async(dispatch_get_main_queue(), ^{
-        // 如果已有进度 Alert 在显示，先关闭它
+        // If a progress alert is already on screen, dismiss it first
         if (self.connectionProgressAlert && self.presentedViewController == self.connectionProgressAlert) {
             [self dismissViewControllerAnimated:NO completion:^{
                 [self presentNewConnectionProgressAlertWithTitle:title message:message];
             }];
         } else if (self.presentedViewController) {
-            // 有其他 VC 在显示（如之前的简单 Alert），先关闭
+            // Another VC is showing (such as an earlier simple alert), so dismiss it first
             [self.presentedViewController dismissViewControllerAnimated:NO completion:^{
                 [self presentNewConnectionProgressAlertWithTitle:title message:message];
             }];
@@ -1600,13 +1600,13 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     });
 }
 
-/// 内部方法：创建并 present 新的连接进度 Alert
+/// Internal: create and present a new connection progress alert
 - (void)presentNewConnectionProgressAlertWithTitle:(NSString *)title message:(NSString *)message {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:title
                                                                     message:message
                                                              preferredStyle:UIAlertControllerStyleAlert];
 
-    // 添加"取消"按钮：用户可在连接过程中取消
+    // Add a "Cancel" button, so the user can cancel while connecting
     __weak typeof(self) weakSelf = self;
     [alert addAction:[UIAlertAction actionWithTitle:MPLocalized(@"common.cancel", @"Cancel")
                                               style:UIAlertActionStyleCancel
@@ -1614,7 +1614,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
 
-        // 用户取消连接：中止正在进行的连接流程
+        // The user cancelled: abort the connection flow in progress
         NSLog(@"[MultiplayerVC] User cancelled the connection flow");
         strongSelf.isHostFlowActive = NO;
         strongSelf.isGuestFlowActive = NO;
@@ -1627,33 +1627,33 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     [self presentViewController:alert animated:YES completion:nil];
 }
 
-/// 关闭连接进度 Alert
+/// Dismiss the connection progress alert
 ///
-/// 在连接完成（成功或失败）后调用，关闭进度提示 Alert，
-/// 然后在 completion 中显示结果 Alert（成功提示或错误提示）。
+/// Called once the connection finishes (successfully or not) to dismiss the progress alert,
+/// after which completion shows the result alert (a success message or an error).
 ///
-/// @param completion Alert 关闭后的回调
+/// @param completion Called once the alert is dismissed
 - (void)dismissConnectionProgressAlertWithCompletion:(void (^)(void))completion {
     dispatch_async(dispatch_get_main_queue(), ^{
         if (self.connectionProgressAlert && self.presentedViewController == self.connectionProgressAlert) {
-            // 进度 Alert 正在显示：关闭它，然后在 completion 中执行后续操作
+            // The progress alert is on screen: dismiss it and continue in completion
             self.connectionProgressAlert = nil;
             [self dismissViewControllerAnimated:YES completion:^{
                 if (completion) completion();
             }];
         } else {
-            // 进度 Alert 不在显示（可能已被用户取消或未创建）：
-            // 清除引用，直接执行 completion
+            // The progress alert is not on screen (the user may have cancelled it, or it was never created):
+            // clear the reference and run completion straight away
             self.connectionProgressAlert = nil;
             if (completion) completion();
         }
     });
 }
 
-/// 生成纯色圆形小图标（用于状态指示点）
-/// @param color 圆形颜色
-/// @param size 圆形直径（pt）
-/// @return 圆形 UIImage
+/// Build a small solid circular icon (used as a status dot)
+/// @param color The circle color
+/// @param size The circle diameter (in points)
+/// @return The circular UIImage
 - (UIImage *)circleImageWithColor:(UIColor *)color size:(CGFloat)size {
     CGRect rect = CGRectMake(0, 0, size, size);
     UIGraphicsBeginImageContextWithOptions(rect.size, NO, [UIScreen mainScreen].scale);
@@ -1665,9 +1665,9 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     return image;
 }
 
-/// 获取房间状态对应的颜色
-/// @param status 房间状态
-/// @return 状态颜色（连接中=橙、已连接=绿、断开=灰、错误=红）
+/// Get the color for a room status
+/// @param status The room status
+/// @return The status color (connecting=orange, connected=green, disconnected=gray, error=red)
 - (UIColor *)colorForRoomStatus:(MultiplayerRoomStatus)status {
     switch (status) {
         case MultiplayerRoomStatusDisconnected:
@@ -1682,9 +1682,9 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     return [UIColor systemGrayColor];
 }
 
-/// 获取房间状态对应的本地化文本
-/// @param status 房间状态
-/// @return 状态文本（"未连接" / "连接中" / "已连接" / "错误"）
+/// Get the localized text for a room status
+/// @param status The room status
+/// @return The status text ("Not connected" / "Connecting" / "Connected" / "Error")
 - (NSString *)textForRoomStatus:(MultiplayerRoomStatus)status {
     switch (status) {
         case MultiplayerRoomStatusDisconnected:
@@ -1699,15 +1699,15 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     return @"";
 }
 
-/// 创建房间行的连接/断开按钮
+/// Build the connect/disconnect button for a room row
 ///
-/// 按钮样式：圆角矩形，宽 64pt 高 32pt
-/// - 已连接：显示"断开"，红色背景
-/// - 连接中：显示"连接中"，灰色背景，禁用点击
-/// - 其他：显示"连接"，蓝色背景
+/// Button style: a rounded rectangle, 64pt wide and 32pt tall
+/// - connected: reads "Disconnect", with a red background
+/// - connecting: reads "Connecting", with a gray background, and is disabled
+/// - otherwise: reads "Connect", with a blue background
 ///
-/// @param room 房间对象
-/// @return 配置好的按钮
+/// @param room The room object
+/// @return The configured button
 - (UIButton *)makeActionButtonForRoom:(MultiplayerRoom *)room {
     UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
     button.frame = CGRectMake(0, 0, 64, 32);
@@ -1741,10 +1741,10 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 
 #pragma mark - UITextFieldDelegate
 
-/// 点击 Return 键时收起键盘
+/// Dismiss the keyboard when Return is pressed
 - (BOOL)textFieldShouldReturn:(UITextField *)textField {
     if (textField == self.directIPField) {
-        // 在 IP 输入框按 Return 切换到端口输入框
+        // Pressing Return in the IP field moves to the port field
         [self.directPortField becomeFirstResponder];
     } else {
         [textField resignFirstResponder];
@@ -1754,47 +1754,47 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 
 #pragma mark - UITableViewDataSource
 
-/// Section 数量：根据模式返回
+/// Number of sections: depends on the mode
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
     if (self.mode == MultiplayerVCModeInGame) {
-        // 游戏内模式：选择角色 + 联机状态
+        // In-game mode: choose a role + multiplayer status
         return 2;
     }
-    // 启动器模式：联机设置 + 我的房间 + 直连
+    // Launcher mode: multiplayer settings + my rooms + direct connect
     return 3;
 }
 
-/// 每个 Section 的行数：根据模式和 Section 返回
+/// Rows per section: depends on the mode and the section
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     if (self.mode == MultiplayerVCModeInGame) {
         switch (section) {
             case 0:
-                // 选择角色：当房主 + 当房客
+                // Choose a role: Host + Guest
                 return 2;
             case 1:
-                // 联机状态：1 行综合状态
+                // Multiplayer status: one combined status row
                 return 1;
             default:
                 return 0;
         }
     }
-    // 启动器模式
+    // Launcher mode
     switch (section) {
         case 0:
-            // 联机设置：启用联机开关 + Network ID + ZeroTier 创建教程
+            // Multiplayer settings: the enable switch + network ID + the ZeroTier setup guide
             return 3;
         case 1:
-            // 我的房间：至少 1 行（空状态提示）
+            // My rooms: at least 1 row (the empty state message)
             return MAX(1, (NSInteger)self.rooms.count);
         case 2:
-            // 直连：IP+端口输入 + 加入游戏按钮
+            // Direct connect: IP+port input + the join button
             return 2;
         default:
             return 0;
     }
 }
 
-/// Section 标题：根据模式返回
+/// Section title: depends on the mode
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
     if (self.mode == MultiplayerVCModeInGame) {
         switch (section) {
@@ -1818,7 +1818,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     }
 }
 
-/// Section 脚注：根据模式返回
+/// Section footer: depends on the mode
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
     if (self.mode == MultiplayerVCModeInGame) {
         switch (section) {
@@ -1840,7 +1840,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     }
 }
 
-/// 根据 IndexPath 配置对应的 cell
+/// Configure the cell for the given index path
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     if (self.mode == MultiplayerVCModeInGame) {
         return [self cellForInGameSection:indexPath];
@@ -1850,7 +1850,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 
 #pragma mark - 启动器模式 Cell 配置
 
-/// 启动器模式 cell 配置分发
+/// Launcher mode cell configuration dispatch
 - (UITableViewCell *)cellForLauncherSection:(NSIndexPath *)indexPath {
     switch (indexPath.section) {
         case 0:
@@ -1864,31 +1864,31 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     }
 }
 
-/// Section 0「联机设置」的 cell 配置
-/// @param row 行号（0=启用联机开关，1=预设 Network ID，2=ZeroTier 创建教程）
+/// Cell configuration for section 0, "Multiplayer settings"
+/// @param row The row number (0=the enable switch, 1=the preset network ID, 2=the ZeroTier setup guide)
 - (UITableViewCell *)cellForSettingsSectionAtRow:(NSInteger)row {
     if (row == 2) {
-        // ZeroTier 网络创建教程入口
+        // The ZeroTier network setup guide entry
         return [self cellForGuideSection];
     }
     if (row == 0) {
-        // 启用联机开关行
+        // The enable multiplayer row
         UITableViewCell *cell = [self.tableView dequeueReusableCellWithIdentifier:@"SwitchCell"];
         cell.selectionStyle = UITableViewCellSelectionStyleNone;
         cell.textLabel.text = MPLocalized(@"mp.settings.enable_multiplayer", @"Enable multiplayer");
         cell.textLabel.font = [UIFont systemFontOfSize:16];
 
-        // 懒初始化 UISwitch
+        // Lazily initialize the UISwitch
         if (!self.enableSwitch) {
             self.enableSwitch = [[UISwitch alloc] init];
             [self.enableSwitch addTarget:self action:@selector(enableSwitchChanged:) forControlEvents:UIControlEventValueChanged];
         }
-        // 初始状态：根据持久化的用户意图设置开关（与 viewWillAppear: 保持一致）
+        // Initial state: set from the persisted user intent (matching viewWillAppear:)
         BOOL enabled = [[MultiplayerManager sharedManager] isMultiplayerEnabled];
         [self.enableSwitch setOn:enabled animated:NO];
         cell.accessoryView = self.enableSwitch;
 
-        // 辅助文字：显示节点的实际运行状态（而非用户意图）
+        // Detail text: shows the real node state (rather than the user intent)
         BOOL started = [[MultiplayerManager sharedManager] isNodeStarted];
         if (started) {
             if ([[MultiplayerManager sharedManager] isNodeOnline]) {
@@ -1897,7 +1897,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
                 cell.detailTextLabel.text = MPLocalized(@"mp.settings.node_starting", @"Node starting...");
             }
         } else {
-            // 节点未启动：如果用户已启用（等待自动重启），显示"启动中"
+            // The node has not started: if the user has enabled it (waiting for the automatic restart), show "Starting"
             if (enabled) {
                 cell.detailTextLabel.text = MPLocalized(@"mp.settings.node_starting", @"Node starting...");
             } else {
@@ -1906,7 +1906,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         }
         cell.detailTextLabel.font = [UIFont systemFontOfSize:12];
 
-        // 适配自定义背景
+        // Adapt to the custom background
         if ([[BackgroundManager sharedManager] hasBackground]) {
             cell.textLabel.textColor = [UIColor whiteColor];
             cell.detailTextLabel.textColor = [UIColor whiteColor];
@@ -1918,13 +1918,13 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         [[BackgroundManager sharedManager] applyEffectToCell:cell];
         return cell;
     } else {
-        // 预设 Network ID 行
+        // The preset network ID row
         UITableViewCell *cell = [self.tableView dequeueReusableCellWithIdentifier:@"NetworkIdCell"];
         cell.selectionStyle = UITableViewCellSelectionStyleDefault;
         cell.textLabel.text = MPLocalized(@"mp.settings.preset_network_id", @"Preset network ID");
         cell.textLabel.font = [UIFont systemFontOfSize:16];
 
-        // 显示当前预设的 Network ID（脱敏显示：前 4 + ... + 后 4）
+        // Show the current preset network ID (masked: the first 4 + ... + the last 4)
         NSString *presetNetId = [[MultiplayerManager sharedManager] presetNetworkId];
         NSString *displayValue;
         if (presetNetId.length >= 16) {
@@ -1937,17 +1937,17 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
             displayValue = MPLocalized(@"mp.settings.not_set", @"Not set");
         }
 
-        // 使用 detailTextLabel 显示值
+        // Use detailTextLabel for the value
         cell.detailTextLabel.text = displayValue;
         cell.detailTextLabel.font = [UIFont systemFontOfSize:14];
         cell.detailTextLabel.numberOfLines = 1;
         cell.detailTextLabel.adjustsFontSizeToFitWidth = YES;
         cell.detailTextLabel.minimumScaleFactor = 0.7;
 
-        // 右侧显示编辑图标
+        // Show the edit icon on the right
         cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
 
-        // 适配自定义背景
+        // Adapt to the custom background
         if ([[BackgroundManager sharedManager] hasBackground]) {
             cell.textLabel.textColor = [UIColor whiteColor];
             cell.detailTextLabel.textColor = [UIColor whiteColor];
@@ -1961,29 +1961,29 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     }
 }
 
-/// Section 0「联机设置」的教程入口 cell（row == 2）
+/// The guide entry cell in section 0, "Multiplayer settings" (row == 2)
 ///
-/// 对标 FCL 的"联机帮助"入口：引导房主完成 ZeroTier 网络的创建和配置。
-/// 点击后弹出详细的图文教程，包含注册账号、创建网络、获取 Network ID、
-/// 设置网络可见性等步骤，并提供"打开 central.zerotier.com"快捷按钮。
+/// Equivalent to the FCL "multiplayer help" entry: it walks the host through creating and configuring a ZeroTier network.
+/// Tapping it shows a detailed illustrated guide covering registering an account, creating a network, getting the network ID
+/// and setting the network visibility, with a shortcut button for "Open central.zerotier.com".
 - (UITableViewCell *)cellForGuideSection {
     UITableViewCell *cell = [self.tableView dequeueReusableCellWithIdentifier:@"DefaultCell"];
     cell.selectionStyle = UITableViewCellSelectionStyleDefault;
     cell.textLabel.text = MPLocalized(@"mp.settings.zt_guide", @"How to create a ZeroTier network");
     cell.textLabel.font = [UIFont systemFontOfSize:16];
 
-    // 左侧图标：问号圆圈
+    // Icon on the left: a question mark in a circle
     cell.imageView.image = [UIImage systemImageNamed:@"questionmark.circle"];
     cell.imageView.tintColor = [UIColor systemBlueColor];
 
     // Chevron on the right
     cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
 
-    // 辅助文字：简短说明
+    // Detail text: a short explanation
     cell.detailTextLabel.text = MPLocalized(@"mp.settings.zt_guide_desc", @"Not sure how to create a network? Tap here");
     cell.detailTextLabel.font = [UIFont systemFontOfSize:12];
 
-    // 适配自定义背景
+    // Adapt to the custom background
     if ([[BackgroundManager sharedManager] hasBackground]) {
         cell.textLabel.textColor = [UIColor whiteColor];
         cell.detailTextLabel.textColor = [UIColor whiteColor];
@@ -1996,17 +1996,17 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     return cell;
 }
 
-/// Section 1「我的房间」的 cell 配置
-/// @param row 行号
+/// Cell configuration for section 1, "My rooms"
+/// @param row The row number
 - (UITableViewCell *)cellForRoomsSectionAtRow:(NSInteger)row {
-    // 空状态：显示提示文字
+    // Empty state: show the message
     if (self.rooms.count == 0) {
         UITableViewCell *cell = [self.tableView dequeueReusableCellWithIdentifier:@"EmptyCell"];
         cell.selectionStyle = UITableViewCellSelectionStyleNone;
         cell.textLabel.text = MPLocalized(@"mp.rooms.empty", @"No rooms (rooms are only kept for this session)");
         cell.textLabel.textAlignment = NSTextAlignmentCenter;
         cell.textLabel.font = [UIFont systemFontOfSize:14];
-        // 适配自定义背景
+        // Adapt to the custom background
         if ([[BackgroundManager sharedManager] hasBackground]) {
             cell.textLabel.textColor = [UIColor whiteColor];
         } else {
@@ -2016,20 +2016,20 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         return cell;
     }
 
-    // 有房间：使用 subtitle 风格的标准 UITableViewCell
+    // With rooms: use a standard subtitle-style UITableViewCell
     MultiplayerRoom *room = self.rooms[row];
-    // 不注册 RoomCell，使用 dequeueReusableCellWithIdentifier: 手工创建 subtitle 风格的 cell
+    // RoomCell is not registered; a subtitle-style cell is built by hand with dequeueReusableCellWithIdentifier:
     UITableViewCell *cell = [self.tableView dequeueReusableCellWithIdentifier:@"RoomCell"];
     if (!cell) {
         cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:@"RoomCell"];
     }
     cell.selectionStyle = UITableViewCellSelectionStyleDefault;
 
-    // 房间名
+    // Room name
     cell.textLabel.text = room.name.length ? room.name : MPLocalized(@"mp.room.unnamed", @"Untitled room");
     cell.textLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightMedium];
 
-    // 详情：Network ID + 状态 + 服务器地址（已连接时显示完整地址方便分享）
+    // Detail: network ID + status + server address (the full address is shown when connected, for easy sharing)
     NSString *statusText = [self textForRoomStatus:room.status];
     NSMutableString *detail = [NSMutableString string];
     [detail appendFormat:@"%@: %@",
@@ -2037,7 +2037,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         room.networkId ?: @"-"];
     [detail appendFormat:@"\n%@", statusText];
     if (room.status == MultiplayerRoomStatusConnected) {
-        // 已连接时显示完整服务器地址
+        // Show the full server address when connected
         NSString *hostIP = room.hostIP.length ? room.hostIP : [[MultiplayerManager sharedManager] currentLocalIP];
         NSString *hostPort = room.hostPort.length ? room.hostPort : @"25565";
         if (hostIP.length) {
@@ -2050,18 +2050,18 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     cell.detailTextLabel.font = [UIFont systemFontOfSize:12];
     cell.detailTextLabel.numberOfLines = 0;
 
-    // 状态指示点（imageView 显示彩色小圆点）
+    // Status dot (imageView shows a small colored circle)
     UIColor *statusColor = [self colorForRoomStatus:room.status];
     UIImage *dotImage = [self circleImageWithColor:statusColor size:10];
     cell.imageView.image = dotImage;
 
-    // 连接 / 断开按钮（accessoryView）
+    // The connect/disconnect button (accessoryView)
     UIButton *actionButton = [self makeActionButtonForRoom:room];
     [actionButton addTarget:self action:@selector(roomButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
     actionButton.tag = row;
     cell.accessoryView = actionButton;
 
-    // 适配自定义背景
+    // Adapt to the custom background
     if ([[BackgroundManager sharedManager] hasBackground]) {
         cell.textLabel.textColor = [UIColor whiteColor];
         cell.detailTextLabel.textColor = [UIColor whiteColor];
@@ -2074,15 +2074,15 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     return cell;
 }
 
-/// Section 2「直连」的 cell 配置
-/// @param row 行号（0=IP+端口输入，1=加入游戏按钮）
+/// Cell configuration for section 2, "Direct connect"
+/// @param row The row number (0=IP+port input, 1=the join button)
 - (UITableViewCell *)cellForDirectSectionAtRow:(NSInteger)row {
     if (row == 0) {
-        // IP + 端口输入行
+        // The IP + port input row
         UITableViewCell *cell = [self.tableView dequeueReusableCellWithIdentifier:@"DirectInputCell"];
         cell.selectionStyle = UITableViewCellSelectionStyleNone;
 
-        // 懒初始化 IP 输入框
+        // Lazily initialize the IP field
         if (!self.directIPField) {
             self.directIPField = [[UITextField alloc] init];
             self.directIPField.placeholder = MPLocalized(@"mp.direct.ip_placeholder", @"Server IP");
@@ -2096,7 +2096,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
             self.directIPField.translatesAutoresizingMaskIntoConstraints = NO;
         }
 
-        // 懒初始化端口输入框
+        // Lazily initialize the port field
         if (!self.directPortField) {
             self.directPortField = [[UITextField alloc] init];
             self.directPortField.placeholder = @"25565";
@@ -2110,7 +2110,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
             self.directPortField.translatesAutoresizingMaskIntoConstraints = NO;
         }
 
-        // 懒初始化冒号分隔标签
+        // Lazily initialize the colon separator label
         UILabel *colonLabel = (UILabel *)[cell.contentView viewWithTag:9528];
         if (!colonLabel) {
             colonLabel = [[UILabel alloc] init];
@@ -2121,7 +2121,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
             [cell.contentView addSubview:colonLabel];
         }
 
-        // 如果 textField 已在别的 cell 上（cell 复用场景），先移除
+        // If the textField is already on another cell (the cell reuse case), remove it first
         if (self.directIPField.superview && self.directIPField.superview != cell.contentView) {
             [self.directIPField removeFromSuperview];
         }
@@ -2139,7 +2139,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
             needsNewConstraints = YES;
         }
 
-        // 仅在 textField 首次添加到 cell 时设置约束（避免重复激活导致冲突）
+        // Only set the constraints the first time the textField is added to a cell (activating them twice would conflict)
         if (needsNewConstraints) {
             [NSLayoutConstraint activateConstraints:@[
                 [self.directIPField.leadingAnchor constraintEqualToAnchor:cell.contentView.leadingAnchor constant:16],
@@ -2157,7 +2157,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
             ]];
         }
 
-        // 适配自定义背景
+        // Adapt to the custom background
         BOOL hasBackground = [[BackgroundManager sharedManager] hasBackground];
         if (hasBackground) {
             self.directIPField.textColor = [UIColor whiteColor];
@@ -2172,13 +2172,13 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         [[BackgroundManager sharedManager] applyEffectToCell:cell];
         return cell;
     } else {
-        // 加入游戏按钮行
+        // The join game button row
         UITableViewCell *cell = [self.tableView dequeueReusableCellWithIdentifier:@"ButtonCell"];
         cell.selectionStyle = UITableViewCellSelectionStyleNone;
         cell.textLabel.text = MPLocalized(@"mp.direct.join_button", @"Join game");
         cell.textLabel.textAlignment = NSTextAlignmentCenter;
         cell.textLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
-        // 适配自定义背景
+        // Adapt to the custom background
         if ([[BackgroundManager sharedManager] hasBackground]) {
             cell.textLabel.textColor = [UIColor whiteColor];
         } else {
@@ -2191,7 +2191,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 
 #pragma mark - 游戏内模式 Cell 配置
 
-/// 游戏内模式 cell 配置分发
+/// In-game mode cell configuration dispatch
 - (UITableViewCell *)cellForInGameSection:(NSIndexPath *)indexPath {
     switch (indexPath.section) {
         case 0:
@@ -2203,15 +2203,15 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     }
 }
 
-/// Section 0「选择角色」的 cell 配置
-/// @param row 行号（0=当房主，1=当房客）
+/// Cell configuration for section 0, "Choose a role"
+/// @param row The row number (0=Host, 1=Guest)
 - (UITableViewCell *)cellForRoleSectionAtRow:(NSInteger)row {
     UITableViewCell *cell = [self.tableView dequeueReusableCellWithIdentifier:@"RoleCardCell"];
     cell.selectionStyle = UITableViewCellSelectionStyleNone;
 
-    // 自定义卡片式布局：左侧大图标 + 右侧标题和说明
+    // A custom card layout: a large icon on the left with the title and description on the right
     if (row == 0) {
-        // 当房主
+        // Host
         cell.imageView.image = [UIImage systemImageNamed:@"crown"];
         cell.imageView.tintColor = [UIColor systemOrangeColor];
         cell.textLabel.text = MPLocalized(@"mp.ingame.host_title", @"Host");
@@ -2220,14 +2220,14 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         cell.detailTextLabel.font = [UIFont systemFontOfSize:13];
         cell.detailTextLabel.numberOfLines = 0;
 
-        // 房主流程激活时显示状态指示
+        // Show a status indicator while the host flow is active
         if (self.isHostFlowActive) {
             cell.accessoryType = UITableViewCellAccessoryCheckmark;
         } else {
             cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
         }
     } else {
-        // 当房客
+        // Guest
         cell.imageView.image = [UIImage systemImageNamed:@"person.2"];
         cell.imageView.tintColor = [UIColor systemBlueColor];
         cell.textLabel.text = MPLocalized(@"mp.ingame.guest_title", @"Guest");
@@ -2236,7 +2236,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         cell.detailTextLabel.font = [UIFont systemFontOfSize:13];
         cell.detailTextLabel.numberOfLines = 0;
 
-        // 房客流程激活时显示状态指示
+        // Show a status indicator while the guest flow is active
         if (self.isGuestFlowActive) {
             cell.accessoryType = UITableViewCellAccessoryCheckmark;
         } else {
@@ -2244,7 +2244,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         }
     }
 
-    // 适配自定义背景
+    // Adapt to the custom background
     if ([[BackgroundManager sharedManager] hasBackground]) {
         cell.textLabel.textColor = [UIColor whiteColor];
         cell.detailTextLabel.textColor = [UIColor whiteColor];
@@ -2257,14 +2257,14 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     return cell;
 }
 
-/// Section 1「联机状态」的 cell 配置
+/// Cell configuration for section 1, "Multiplayer status"
 ///
-/// 综合显示：
-///   - 当前联机状态（已连接/未连接）
+/// Shows everything together:
+///   - the current multiplayer status (connected/not connected)
 ///   - Network ID
-///   - 本地 IP
-///   - 房主流程：分享代码
-///   - 房客流程：服务器地址
+///   - the local IP
+///   - the host flow: the share code
+///   - the guest flow: the server address
 - (UITableViewCell *)cellForInGameStatusSection {
     UITableViewCell *cell = [self.tableView dequeueReusableCellWithIdentifier:@"StatusCell"];
     cell.selectionStyle = UITableViewCellSelectionStyleNone;
@@ -2273,14 +2273,14 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     MultiplayerRoom *currentRoom = manager.currentRoom;
     BOOL connected = (currentRoom != nil) && (currentRoom.status == MultiplayerRoomStatusConnected);
 
-    // 标题：联机状态
+    // Title: multiplayer status
     cell.textLabel.text = connected ? MPLocalized(@"mp.ingame.status.connected", @"Connected") : MPLocalized(@"mp.ingame.status.disconnected", @"Not connected");
     cell.textLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightMedium];
 
-    // 详情：Network ID + 本地 IP + （房主）分享代码 / （房客）服务器地址
+    // Detail: network ID + local IP + (host) the share code / (guest) the server address
     NSMutableString *detail = [NSMutableString string];
 
-    // 状态指示
+    // Status indicator
     if (self.isHostFlowActive) {
         [detail appendString:MPLocalized(@"mp.ingame.status.host_mode", @"Host mode")];
     } else if (self.isGuestFlowActive) {
@@ -2297,20 +2297,20 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         [detail appendFormat:@"\n%@: %@", MPLocalized(@"mp.ingame.status.network_id", @"Network ID"), MPLocalized(@"mp.settings.not_set", @"Not set")];
     }
 
-    // 本地 IP
+    // Local IP
     NSString *localIP = manager.currentLocalIP;
     if (localIP.length) {
         [detail appendFormat:@"\n%@: %@", MPLocalized(@"mp.ingame.status.local_ip", @"Local IP"), localIP];
     }
 
-    // 房主流程：显示分享代码
+    // Host flow: show the share code
     if (self.isHostFlowActive && self.lastShareCode.length) {
         [detail appendFormat:@"\n%@: %@",
             MPLocalized(@"mp.ingame.status.share_code", @"Share code"),
             self.lastShareCode];
     }
 
-    // 房客流程：显示服务器地址
+    // Guest flow: show the server address
     if (self.isGuestFlowActive && self.lastServerAddress.length) {
         [detail appendFormat:@"\n%@: %@",
             MPLocalized(@"mp.ingame.status.server_address", @"Server address"),
@@ -2321,12 +2321,12 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     cell.detailTextLabel.font = [UIFont systemFontOfSize:13];
     cell.detailTextLabel.numberOfLines = 0;
 
-    // 状态指示点
+    // Status dot
     UIColor *statusColor = connected ? [UIColor systemGreenColor] : [UIColor systemGrayColor];
     UIImage *dotImage = [self circleImageWithColor:statusColor size:10];
     cell.imageView.image = dotImage;
 
-    // 适配自定义背景
+    // Adapt to the custom background
     if ([[BackgroundManager sharedManager] hasBackground]) {
         cell.textLabel.textColor = [UIColor whiteColor];
         cell.detailTextLabel.textColor = [UIColor whiteColor];
@@ -2341,7 +2341,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 
 #pragma mark - UITableViewDelegate
 
-/// 点击行回调：根据模式和 Section 分发
+/// Row tap handler: dispatched by mode and section
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
 
@@ -2352,38 +2352,38 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     [self handleLauncherSelectionAtIndexPath:indexPath];
 }
 
-/// 启动器模式点击处理
+/// Launcher mode tap handling
 - (void)handleLauncherSelectionAtIndexPath:(NSIndexPath *)indexPath {
     switch (indexPath.section) {
         case 0:
             if (indexPath.row == 0) {
-                // 点击开关行：让开关获得焦点（切换开关状态）
-                // 不做处理，开关自身会响应
+                // Tapping the switch row: give the switch focus (toggling it)
+                // Nothing to do; the switch responds itself
             } else if (indexPath.row == 1) {
-                // 点击 Network ID 行：弹出编辑对话框
+                // Tapping the network ID row: show the edit dialog
                 [self networkIdCellTapped];
             } else if (indexPath.row == 2) {
-                // 点击教程入口：弹出 ZeroTier 网络创建教程
+                // Tapping the guide entry: show the ZeroTier network setup guide
                 [self showZeroTierGuide];
             }
             break;
         case 1:
             if (self.rooms.count == 0) {
-                // 空状态：提示用户先设置 Network ID 或直接加入房间
+                // Empty state: tell the user to set a network ID first, or to join a room directly
                 [self showSimpleAlertWithTitle:MPLocalized(@"mp.rooms.empty_title", @"No rooms")
                                          message:MPLocalized(@"mp.rooms.empty_msg", @"Set a network ID in Section 0 first, then choose Host or Guest in the in-game mode")];
             } else {
-                // 点击房间行：弹出 ActionSheet
+                // Tapping a room row: show the action sheet
                 MultiplayerRoom *room = self.rooms[indexPath.row];
                 [self showRoomActionsForRoom:room];
             }
             break;
         case 2:
             if (indexPath.row == 0) {
-                // 点击直连输入行：让 IP 输入框获得焦点
+                // Tapping the direct connect input row: give the IP field focus
                 [self.directIPField becomeFirstResponder];
             } else if (indexPath.row == 1) {
-                // 点击加入游戏按钮
+                // Tapping the join game button
                 [self joinDirectConnect];
             }
             break;
@@ -2392,21 +2392,21 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     }
 }
 
-/// 游戏内模式点击处理
+/// In-game mode tap handling
 - (void)handleInGameSelectionAtIndexPath:(NSIndexPath *)indexPath {
     switch (indexPath.section) {
         case 0:
             if (indexPath.row == 0) {
-                // 当房主
+                // Host
                 [self hostButtonTapped];
             } else if (indexPath.row == 1) {
-                // 当房客
+                // Guest
                 [self guestButtonTapped];
             }
             break;
         case 1:
-            // 联机状态行：无操作（仅显示信息）
-            // 房主流程激活时点击可重新显示分享代码
+            // The multiplayer status row: no action (it only shows information)
+            // While the host flow is active, tapping it shows the share code again
             if (self.isHostFlowActive && self.lastShareCode.length) {
                 [self showHostShareCodeAlert];
             }
@@ -2416,34 +2416,34 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     }
 }
 
-/// 行高：根据模式和 IndexPath 返回
+/// Row height: depends on the mode and the index path
 - (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
     if (self.mode == MultiplayerVCModeInGame) {
         if (indexPath.section == 0) {
-            // 选择角色卡片行：大卡片样式，更高
+            // The role card rows: a large card style, so they are taller
             return 76;
         }
         if (indexPath.section == 1) {
-            // 联机状态行：动态高度（多行详情）
+            // The multiplayer status row: a dynamic height (multi-line detail)
             return UITableViewAutomaticDimension;
         }
         return 56;
     }
-    // 启动器模式
+    // Launcher mode
     if (indexPath.section == 0) {
-        // 联机设置行
+        // The multiplayer settings rows
         return 56;
     }
     if (indexPath.section == 1) {
         if (self.rooms.count == 0) {
-            // 空状态提示行
+            // The empty state row
             return 60;
         }
-        // 房间行：subtitle 显示 2-3 行，需要更多空间
+        // Room rows: the subtitle takes 2-3 lines and needs more space
         return 76;
     }
     if (indexPath.section == 2) {
-        // IP+端口输入行 / 加入按钮行
+        // The IP+port input row / the join button row
         return 48;
     }
     return UITableViewAutomaticDimension;

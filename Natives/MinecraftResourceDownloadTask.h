@@ -15,16 +15,16 @@ extern NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier;
 @property(nonatomic, copy) void(^handleError)(void);
 @property(nonatomic, copy) void(^modpackDownloadCompletion)(void);
 
-// 重试相关属性
+// Retry-related properties
 @property(nonatomic) NSInteger maxRetryCount;
 @property(nonatomic, readonly) NSInteger currentRetryCount;
 @property(nonatomic, copy) void(^retryCallback)(NSInteger retryCount, NSInteger maxRetryCount);
 
-// 阶段5修复（参照 FCL）：失败的文件列表，单文件下载失败不再取消整批任务，
-// 而是记录到此数组，最终汇总报告给用户。每个元素是 @{@"name": ..., "error": ...}
+// Phase 5 fix (following FCL): a list of failed files. One failed download no longer cancels the whole batch;
+// it is recorded in this array and reported to the user in a summary at the end. Each element is @{@"name": ..., "error": ...}
 @property(nonatomic, strong) NSMutableArray<NSDictionary *> *failedFiles;
 
-// 新增方法声明（用于账户检查）
+// New method declaration (for the account check)
 - (BOOL)checkAccessWithDialog:(BOOL)show;
 
 - (void)prepareForDownload;
@@ -32,7 +32,7 @@ extern NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier;
 - (NSURLSessionDownloadTask *)createDownloadTask:(NSString *)url size:(NSUInteger)size sha:(NSString *)sha altName:(NSString *)altName toPath:(NSString *)path;
 - (NSURLSessionDownloadTask *)createDownloadTask:(NSString *)url size:(NSUInteger)size sha:(NSString *)sha altName:(NSString *)altName toPath:(NSString *)path success:(void (^)())success;
 
-// 带重试的下载任务创建
+// Create a download task with retries
 - (NSURLSessionDownloadTask *)createDownloadTask:(NSString *)url size:(NSUInteger)size sha:(NSString *)sha altName:(NSString *)altName toPath:(NSString *)path retryCount:(NSInteger)retryCount success:(void (^)())success;
 
 - (void)finishDownloadWithErrorString:(NSString *)error;

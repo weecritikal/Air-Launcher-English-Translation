@@ -13,7 +13,7 @@
 
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunguarded-availability-new"
-// 注意：UIKit+AFNetworking 已移除，改用 IconLoader 统一加载器
+// Note: UIKit+AFNetworking has been removed in favor of the unified IconLoader
 // (AFNetworking only caches in memory and does not downsample; IconLoader adds a two-level cache, downsampling, CDN mirrors and concurrency control)
 #pragma clang diagnostic pop
 
@@ -27,8 +27,8 @@
     if (self = [super initWithStyle:style reuseIdentifier:reuseIdentifier]) {
         self.selectionStyle = UITableViewCellSelectionStyleNone;
         self.backgroundColor = [UIColor clearColor];
-        // contentView 也设为 clearColor：由 BackgroundManager.applyEffectToCell: 统一注入
-        // 毛玻璃 backgroundView 或半透明 backgroundColor，避免遮挡自定义启动器背景
+        // contentView is set to clearColor too: BackgroundManager.applyEffectToCell: injects either
+        // a frosted-glass backgroundView or a translucent backgroundColor, so the custom launcher background is not hidden
         self.contentView.backgroundColor = [UIColor clearColor];
 
         // --- Initialization of UI Elements ---
@@ -194,8 +194,8 @@
         [IconLoader cancelLoadingForImageView:_shaderIconView];
         _shaderIconView.image = shader.icon;
     } else if (shader.iconURL) {
-        // 在线图标：使用 IconLoader 加载（双层缓存 + 降采样 + CDN 镜像）
-        // 图标显示尺寸 36x36（在 setupConstraints 中定义），降采样到此尺寸避免按原图解码
+        // An online icon: loaded via IconLoader (two-level cache + downsampling + CDN mirror)
+        // The icon is displayed at 36x36 (defined in setupConstraints), so downsample to that size instead of decoding the full image
         UIImage *placeholder = [UIImage systemImageNamed:@"photo"];
         [IconLoader loadIconForImageView:_shaderIconView
                                      URL:shader.iconURL

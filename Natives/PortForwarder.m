@@ -63,7 +63,7 @@
 /// 端口转发器默认本地监听端口（Minecraft 默认服务器端口）
 const uint16_t PortForwarderDefaultLocalPort = 25565;
 
-/// 错误域名
+/// Error domain
 static NSString * const kPortForwarderErrorDomain = @"PortForwarderErrorDomain";
 
 /// 数据转发缓冲区大小（64KB）
@@ -705,7 +705,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
 
 /// 房客模式：处理客户端连接
 ///
-/// 流程：
+/// The flow:
 ///   1. 通过 ZeroTierBridge 创建 libzt socket
 ///   2. 连接到远程主机 hostIP:hostPort
 ///   3. 双向转发数据
@@ -849,7 +849,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
 
 /// 房主模式：处理通过 ZeroTier 接受的连接
 ///
-/// 流程：
+/// The flow:
 ///   1. 对 libzt 客户端 fd 设置 TCP_NODELAY
 ///   2. 创建本地 BSD socket
 ///   3. 连接到 127.0.0.1:localHostPort（MC LAN 端口）
@@ -1152,7 +1152,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
 
 /// 停止端口转发（统一停止房主模式和房客模式）
 ///
-/// 流程：
+/// The flow:
 ///   1. 设置停止标志
 ///   2. 关闭监听 socket（唤醒 accept 线程的 select）
 ///      - 房客模式：POSIX close()

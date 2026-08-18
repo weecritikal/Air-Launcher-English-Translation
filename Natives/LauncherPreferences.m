@@ -17,12 +17,12 @@ void loadPreferences(BOOL reset) {
 }
 
 void toggleIsolatedPref(BOOL forceEnable) {
-    // 总是基于当前 POJAV_GAME_DIR 重新计算 instancePath。
-    // POJAV_GAME_DIR 是符号链接（指向 $POJAV_HOME/instances/<current>），
-    // 切换游戏目录时 changeSelectionTo 已更新该符号链接的目标。
-    // 之前用 `if (!pref.instancePath)` 缓存了第一次设置的旧路径，
-    // 导致切换目录后仍读取旧实例的 launcher_preferences.plist，
-    // 用户必须重启启动器才能让 instancePath 重新计算。这里改为每次都刷新。
+    // Always recompute instancePath from the current POJAV_GAME_DIR.
+    // POJAV_GAME_DIR is a symbolic link (pointing at $POJAV_HOME/instances/<current>),
+    // and changeSelectionTo updates that link when the game directory is switched.
+    // `if (!pref.instancePath)` used to cache the path from the first time it was set,
+    // so after switching directories the launcher_preferences.plist of the old instance was still read
+    // and the user had to restart the launcher for instancePath to be recomputed. It now refreshes every time.
     pref.instancePath = [NSString stringWithFormat:@"%s/launcher_preferences.plist", getenv("POJAV_GAME_DIR")];
     [pref toggleIsolationForced:forceEnable];
 }
@@ -52,7 +52,7 @@ void setPrefFloat(NSString *key, float value) {
 void setPrefInt(NSString *key, NSInteger value) {
     setPrefObject(key, @(value));
 }
-void setPrefString(NSString *key, NSString *value) {  // 新增
+void setPrefString(NSString *key, NSString *value) {  // Newly added
     setPrefObject(key, value);
 }
 
@@ -65,7 +65,7 @@ void resetWarnings() {
 
 #pragma mark Accent Color
 
-/// 将 hex 字符串（如 "429CF5" 或 "#429CF5"）解析为 UIColor，失败返回 nil
+/// Parse a hex string (such as "429CF5" or "#429CF5") into a UIColor, returning nil on failure
 static UIColor *colorFromHex(NSString *hex) {
     if (![hex isKindOfClass:[NSString class]] || hex.length == 0) return nil;
     NSString *clean = [hex stringByReplacingOccurrencesOfString:@"#" withString:@""];
@@ -79,11 +79,11 @@ static UIColor *colorFromHex(NSString *hex) {
 }
 
 UIColor *accentColor(void) {
-    // 优先读取用户自定义主题强调色，未设置则回退到默认蓝 #429CF5
+    // Prefer the user-defined theme accent color, falling back to the default blue #429CF5 when unset
     NSString *hex = getPrefObject(@"general.accent_color");
     UIColor *custom = colorFromHex(hex);
     if (custom) return custom;
-    // 默认蓝 RGB(0.26, 0.63, 0.96) = #429CF5
+    // The default blue, RGB(0.26, 0.63, 0.96) = #429CF5
     return [UIColor colorWithRed:0.26 green:0.63 blue:0.96 alpha:1.0];
 }
 
@@ -144,8 +144,8 @@ NSString* getSelectedJavaHome(NSString* defaultJRETag, int minVersion) {
                 break;
             }
         }
-        // 修复：原代码在找不到满足 minVersion 的 runtime 时 selectedVer 仍为初始值（如 "17"），
-        // 导致 if (!selectedVer) 永远为假，静默降级到 Java 17 启动 26.x 等新版本时必然崩溃。
+        // Fix: the original code left selectedVer at its initial value (such as "17") when no runtime satisfied minVersion,
+        // so if (!selectedVer) was never true and it silently fell back to Java 17, which always crashes on 26.x and later.
         if (!found) {
             NSLog(@"Error: requested Java >= %d was not installed! (available: %@)", minVersion, sortedVersions);
             return nil;

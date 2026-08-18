@@ -2,18 +2,18 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-/// 整合包导出控制器（参照 FCL ExportModpackViewModel / HMCL ExportModpackPanel / ZL2 ModpackExportScreen）
+/// Modpack export controller (following FCL ExportModpackViewModel / HMCL ExportModpackPanel / ZL2 ModpackExportScreen)
 ///
-/// 独立的导出界面，提供：
-///   - Profile 选择（含 gameDir 预览、loader 信息）
-///   - 5 种格式选择（Modrinth / CurseForge / MMC / Plain Zip / 链接列表）
-///   - 名称 / 版本号 / 作者 输入
-///   - 文件过滤选项（mods / configs / resourcepacks / shaderpacks / saves / options / servers / scripts）
-///   - 进度卡片（百分比 + 阶段文案 + 取消按钮）
-///   - 完成后分享按钮
+/// A dedicated export screen offering:
+///   - profile selection (with a gameDir preview and loader information)
+///   - a choice of 5 formats (Modrinth / CurseForge / MMC / Plain Zip / link list)
+///   - name / version / author input
+///   - file filtering options (mods / configs / resourcepacks / shaderpacks / saves / options / servers / scripts)
+///   - a progress card (percentage + stage text + a cancel button)
+///   - a share button once it finishes
 @interface ModpackExportViewController : UIViewController
 
-/// 初始化时预选的 profile 名称（可空，空时取 currentProfile）
+/// The profile name preselected at initialization (may be nil, in which case currentProfile is used)
 @property (nonatomic, copy, nullable) NSString *preselectedProfileName;
 
 @end

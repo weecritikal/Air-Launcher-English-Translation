@@ -17,9 +17,9 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, strong) ModItem *modItem;
 @property (nonatomic, weak) id<ModVersionViewControllerDelegate> delegate;
 
-// FCL 风格：传入当前 profile 的偏好版本和加载器
-// ModVersionViewController 会优先选中匹配的 chip，并把匹配的版本置顶
-// 不传则保持原有"全部"默认行为
+// FCL style: pass in the preferred version and loader of the current profile
+// ModVersionViewController preselects the matching chip and pins the matching version to the top
+// Without them it keeps the original "All" default
 @property (nonatomic, copy, nullable) NSString *preferredGameVersion;
 @property (nonatomic, copy, nullable) NSString *preferredLoader;
 

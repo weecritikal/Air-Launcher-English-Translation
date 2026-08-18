@@ -2097,7 +2097,7 @@
 
     [PLProfiles.current save];
 
-    // 发送通知刷新配置文件列表
+    // Post a notification to refresh the profile list
     [[NSNotificationCenter defaultCenter] postNotificationName:@"SelectedProfileChanged" object:newName];
 
     // 关闭

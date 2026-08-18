@@ -2,7 +2,7 @@
 //  ModUpdateViewController.m
 //  Amethyst
 //
-//  Mod 更新/降级多阶段任务流页面（Bento Grid + Material Design 3 风格）
+//  Multi-stage task flow page for mod updates/downgrades (Bento Grid + Material Design 3 style)
 //
 
 #import "ModUpdateViewController.h"
@@ -13,29 +13,29 @@
 #import "BackgroundManager.h"
 #import <objc/runtime.h>
 
-/// 关联对象 key：下载任务对应的 ModDownloadTaskInfo
+/// Associated object key: the ModDownloadTaskInfo for a download task
 static void *kDownloadTaskInfoKey = &kDownloadTaskInfoKey;
-/// 关联对象 key：下载任务对应的并发信号量
+/// Associated object key: the concurrency semaphore for a download task
 static void *kDownloadSemaphoreKey = &kDownloadSemaphoreKey;
 
-/// 多阶段任务流的阶段定义
+/// The stages of the multi-stage task flow
 typedef NS_ENUM(NSInteger, ModUpdatePhase) {
-    ModUpdatePhasePrepare  = 0, // 阶段 0：准备（过滤 mods）
-    ModUpdatePhaseCheck    = 1, // 阶段 1：并发检查更新（限流 3）
-    ModUpdatePhaseConfirm  = 2, // 阶段 2：用户确认（可勾选 + 降级选择）
-    ModUpdatePhaseDownload = 3, // 阶段 3：并发下载（限流 16，失败重试一次）
-    ModUpdatePhaseReplace  = 4, // 阶段 4：替换文件（依据 modUpdateKeepOld 偏好）
-    ModUpdatePhaseDone     = 5, // 阶段 5：完成（结果汇总）
+    ModUpdatePhasePrepare  = 0, // Stage 0: preparation (filtering the mods)
+    ModUpdatePhaseCheck    = 1, // Stage 1: check for updates concurrently (limited to 3)
+    ModUpdatePhaseConfirm  = 2, // Stage 2: user confirmation (with checkboxes and a downgrade picker)
+    ModUpdatePhaseDownload = 3, // Stage 3: download concurrently (limited to 16, with one retry on failure)
+    ModUpdatePhaseReplace  = 4, // Stage 4: replace the files (honoring the modUpdateKeepOld preference)
+    ModUpdatePhaseDone     = 5, // Stage 5: done (the result summary)
 };
 
 #pragma mark - 辅助模型：用户确认阶段的选中项
 
-/// 用于阶段 2 用户确认阶段的可勾选项
+/// A selectable entry used in the stage 2 user confirmation step
 @interface ModUpdateSelection : NSObject
 @property (nonatomic, strong, nullable) ModUpdateResult *result;
-@property (nonatomic, assign) BOOL selected;                       // 是否选中（默认 YES）
-@property (nonatomic, assign) BOOL expanded;                       // 是否展开版本列表
-@property (nonatomic, strong, nullable) ModVersion *chosenVersion; // 用户选择的目标版本（默认 candidateVersions.firstObject）
+@property (nonatomic, assign) BOOL selected;                       // Whether it is selected (YES by default)
+@property (nonatomic, assign) BOOL expanded;                       // Whether the version list is expanded
+@property (nonatomic, strong, nullable) ModVersion *chosenVersion; // The target version the user picked (candidateVersions.firstObject by default)
 @end
 
 @implementation ModUpdateSelection
@@ -43,15 +43,15 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
 
 #pragma mark - 辅助模型：下载任务跟踪
 
-/// 用于阶段 3 并发下载的任务跟踪
+/// Task tracking for the concurrent downloads in stage 3
 @interface ModDownloadTaskInfo : NSObject
 @property (nonatomic, copy, nullable) NSString *fileName;
 @property (nonatomic, strong, nullable) ModUpdateResult *result;
 @property (nonatomic, strong, nullable) ModVersion *targetVersion;
 @property (nonatomic, strong, nullable) NSProgress *progress;
-@property (nonatomic, copy, nullable) NSString *tempFilePath; // 下载完成后的临时文件路径
+@property (nonatomic, copy, nullable) NSString *tempFilePath; // Path of the temporary file once the download finishes
 @property (nonatomic, assign) BOOL succeeded;
-@property (nonatomic, assign) BOOL retried;                   // 是否已重试过一次
+@property (nonatomic, assign) BOOL retried;                   // Whether it has already been retried once
 @property (nonatomic, strong, nullable) NSURLSessionDownloadTask *task;
 @end
 
@@ -62,27 +62,27 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
 
 @interface ModUpdateViewController () <UITableViewDataSource, UITableViewDelegate, NSURLSessionDownloadDelegate>
 
-// 输入参数
+// Input parameters
 @property (nonatomic, copy) NSArray<ModItem *> *inputMods;
 @property (nonatomic, copy) NSString *gameVersion;
 @property (nonatomic, copy, nullable) NSString *loader;
 @property (nonatomic, copy) NSString *projectType;
 
-// 阶段 0 产出：过滤后的 mods（去掉无 filePath 的项）
+// Stage 0 output: the filtered mods (with entries lacking a filePath removed)
 @property (nonatomic, copy) NSArray<ModItem *> *filteredMods;
 
-// 当前阶段
+// The current stage
 @property (nonatomic, assign) ModUpdatePhase currentPhase;
 
-// 阶段 1：检查结果
+// Stage 1: the check results
 @property (nonatomic, copy) NSArray<ModUpdateResult *> *checkResults;
 @property (nonatomic, assign) NSInteger checkCompleted;
 @property (nonatomic, assign) NSInteger checkTotal;
 
-// 阶段 2：用户确认阶段的选中项
+// Stage 2: the entries selected during user confirmation
 @property (nonatomic, strong) NSMutableArray<ModUpdateSelection *> *selections;
 
-// 阶段 3：下载任务列表
+// Stage 3: the download task list
 @property (nonatomic, strong) NSMutableArray<ModDownloadTaskInfo *> *downloadTasks;
 @property (nonatomic, strong, nullable) NSURLSession *session;
 @property (nonatomic, strong) dispatch_queue_t callbackQueue;
@@ -90,33 +90,33 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
 @property (nonatomic, assign) NSInteger downloadCompleted;
 @property (nonatomic, assign) NSInteger downloadTotal;
 
-// 阶段 4/5：结果统计
+// Stages 4/5: the result statistics
 @property (nonatomic, assign) NSInteger successCount;
 @property (nonatomic, assign) NSInteger failureCount;
 @property (nonatomic, copy) NSMutableArray<NSString *> *failedFileNames;
 
-// UI：Bento Grid 容器
+// UI: the Bento Grid container
 @property (nonatomic, strong) UIScrollView *scrollView;
 @property (nonatomic, strong) UIStackView *bentoStack;
 
-// UI：顶部头卡片
+// UI: the header card at the top
 @property (nonatomic, strong) UIView *headerCard;
 @property (nonatomic, strong) UILabel *titleLabel;
 @property (nonatomic, strong) UIButton *closeButton;
 
-// UI：阶段状态卡片
+// UI: the stage status card
 @property (nonatomic, strong) UIView *phaseCard;
 @property (nonatomic, strong) UILabel *phaseTitleLabel;
 @property (nonatomic, strong) UIProgressView *progressView;
 @property (nonatomic, strong) UILabel *currentFileLabel;
 
-// UI：内容卡片（表格 / 空态）
+// UI: the content card (table / empty state)
 @property (nonatomic, strong) UIView *contentCard;
 @property (nonatomic, strong) UITableView *tableView;
 @property (nonatomic, strong) UIView *emptyStateView;
 @property (nonatomic, strong) UILabel *emptyLabel;
 
-// UI：操作按钮卡片
+// UI: the action button card
 @property (nonatomic, strong) UIView *actionCard;
 @property (nonatomic, strong) UIButton *primaryButton;
 @property (nonatomic, strong) UIButton *secondaryButton;
@@ -147,11 +147,11 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
 }
 
 - (void)dealloc {
-    // 清理临时目录
+    // Clean up the temporary directory
     if (self.tempDir) {
         [[NSFileManager defaultManager] removeItemAtPath:self.tempDir error:nil];
     }
-    // 取消并销毁 session
+    // Cancel and tear down the session
     [self.session invalidateAndCancel];
     self.session = nil;
     // Remove the background-effect notification observer so a notification after dealloc cannot crash on a dangling pointer
@@ -189,7 +189,7 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
 
 #pragma mark - Bento Grid 布局
 
-/// 搭建 Bento Grid 风格的整体布局：滚动容器 + 垂直卡片堆叠
+/// Build the overall Bento Grid layout: a scroll container with a vertical stack of cards
 - (void)setupBentoLayout {
     self.scrollView = [[UIScrollView alloc] init];
     self.scrollView.translatesAutoresizingMaskIntoConstraints = NO;
@@ -225,7 +225,7 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
     [self setupActionCard];
 }
 
-/// 创建一个 Bento 风格的卡片视图（16pt 圆角，浅色背景，适配深浅色）
+/// Build one Bento-style card view (16pt corner radius, a light background, adapting to light/dark)
 - (UIView *)makeBentoCard {
     UIView *card = [[UIView alloc] init];
     card.translatesAutoresizingMaskIntoConstraints = NO;
@@ -235,7 +235,7 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
     return card;
 }
 
-/// 顶部头卡片：标题 + 关闭按钮
+/// Header card at the top: title + close button
 - (void)setupHeaderCard {
     self.headerCard = [self makeBentoCard];
     [self.bentoStack addArrangedSubview:self.headerCard];
@@ -269,7 +269,7 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
     ]];
 }
 
-/// 阶段状态卡片：阶段名称 + 进度条 + 当前文件名
+/// Stage status card: the stage name + a progress bar + the current file name
 - (void)setupPhaseCard {
     self.phaseCard = [self makeBentoCard];
     [self.bentoStack addArrangedSubview:self.phaseCard];
@@ -314,7 +314,7 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
     ]];
 }
 
-/// 内容卡片：包含表格和空态视图
+/// Content card: holds the table and the empty state view
 - (void)setupContentCard {
     self.contentCard = [self makeBentoCard];
     [self.bentoStack addArrangedSubview:self.contentCard];
@@ -366,7 +366,7 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
     ]];
 }
 
-/// 操作按钮卡片：主按钮 + 次按钮（Material Design 3 风格）
+/// Action button card: a primary and a secondary button (Material Design 3 style)
 - (void)setupActionCard {
     self.actionCard = [self makeBentoCard];
     [self.bentoStack addArrangedSubview:self.actionCard];
@@ -395,7 +395,7 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
     ]];
 }
 
-/// Material Design 3 填充主按钮
+/// Material Design 3 filled primary button
 - (UIButton *)makeFilledButtonWithTitle:(NSString *)title {
     UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
     button.translatesAutoresizingMaskIntoConstraints = NO;
@@ -410,7 +410,7 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
     return button;
 }
 
-/// Material Design 3 描边次按钮
+/// Material Design 3 outlined secondary button
 - (UIButton *)makeOutlinedButtonWithTitle:(NSString *)title {
     UIButton *button = [UIButton buttonWithType:UIButtonTypeSystem];
     button.translatesAutoresizingMaskIntoConstraints = NO;
@@ -429,7 +429,7 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
 
 #pragma mark - 阶段流转
 
-/// 切换到指定阶段并刷新 UI
+/// Move to the given stage and refresh the UI
 - (void)transitionToPhase:(ModUpdatePhase)phase {
     self.currentPhase = phase;
     dispatch_async(dispatch_get_main_queue(), ^{
@@ -458,7 +458,7 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
     }
 }
 
-/// 根据当前阶段刷新 UI 元素
+/// Refresh the UI elements for the current stage
 - (void)refreshUIForCurrentPhase {
     [self updatePhaseCardForCurrentPhase];
     [self updateActionCardForCurrentPhase];
@@ -466,7 +466,7 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
     [self.tableView reloadData];
 }
 
-/// 更新阶段状态卡片
+/// Update the stage status card
 - (void)updatePhaseCardForCurrentPhase {
     switch (self.currentPhase) {
         case ModUpdatePhasePrepare:
@@ -504,20 +504,20 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
     }
 }
 
-/// 更新操作按钮卡片
+/// Update the action button card
 - (void)updateActionCardForCurrentPhase {
     switch (self.currentPhase) {
         case ModUpdatePhasePrepare:
         case ModUpdatePhaseCheck:
         case ModUpdatePhaseDownload:
         case ModUpdatePhaseReplace:
-            // 自动执行阶段，隐藏操作按钮
+            // An automatic stage, so hide the action buttons
             self.actionCard.hidden = YES;
             break;
         case ModUpdatePhaseConfirm: {
             self.actionCard.hidden = NO;
             if (self.selections.count == 0) {
-                // 无可用更新
+                // No updates available
                 [self.primaryButton setTitle:@"Close" forState:UIControlStateNormal];
                 self.primaryButton.userInteractionEnabled = YES;
                 self.secondaryButton.hidden = YES;
@@ -540,7 +540,7 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
     }
 }
 
-/// 更新内容卡片显示
+/// Update the content card display
 - (void)updateContentCardForCurrentPhase {
     BOOL showEmpty = NO;
     NSString *emptyText = @"";
@@ -588,7 +588,7 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
 #pragma mark - 阶段 0：准备
 
 - (void)startPhase0Prepare {
-    // 过滤掉无 filePath 的项
+    // Filter out entries with no filePath
     NSMutableArray<ModItem *> *filtered = [NSMutableArray array];
     for (ModItem *mod in self.inputMods) {
         if (mod.filePath.length > 0) {
@@ -598,10 +598,10 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
     self.filteredMods = [filtered copy];
     self.checkCompleted = 0;
 
-    // 短暂延时，让用户看到准备阶段
+    // A brief delay so the user sees the preparation stage
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         if (self.filteredMods.count == 0) {
-            // 没有可检查的 Mod，直接进入完成阶段
+            // There are no mods to check, so go straight to the done stage
             self.successCount = 0;
             self.failureCount = 0;
             [self.failedFileNames removeAllObjects];
@@ -648,7 +648,7 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
 #pragma mark - 阶段 2：用户确认
 
 - (void)startPhase2Confirm {
-    // 根据 checkResults 构建选中项列表，默认全选
+    // Build the selection list from checkResults, with everything selected by default
     [self.selections removeAllObjects];
     for (ModUpdateResult *result in self.checkResults) {
         if (![result hasUpdate]) continue;
@@ -662,7 +662,7 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
     [self refreshUIForCurrentPhase];
 }
 
-/// 当前选中的项数
+/// The number of entries currently selected
 - (NSInteger)selectedCount {
     NSInteger count = 0;
     for (ModUpdateSelection *sel in self.selections) {
@@ -674,14 +674,14 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
 #pragma mark - 阶段 3：并发下载（限流 16，失败重试一次）
 
 - (void)startPhase3Download {
-    // 收集选中的项
+    // Collect the selected entries
     NSArray<ModUpdateSelection *> *selected = [self.selections filteredArrayUsingPredicate:
         [NSPredicate predicateWithBlock:^BOOL(ModUpdateSelection *sel, NSDictionary *_) {
             return sel.selected && sel.result && sel.chosenVersion;
         }]];
 
     if (selected.count == 0) {
-        // 没有选中的项，直接进入完成阶段
+        // Nothing is selected, so go straight to the done stage
         self.successCount = 0;
         self.failureCount = 0;
         [self.failedFileNames removeAllObjects];
@@ -698,7 +698,7 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
                                                attributes:nil
                                                     error:&mkError];
     if (mkError) {
-        // 临时目录创建失败，全部标记为失败
+        // The temporary directory could not be created, so mark everything as failed
         self.successCount = 0;
         self.failureCount = (NSInteger)selected.count;
         [self.failedFileNames removeAllObjects];
@@ -709,13 +709,13 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
         return;
     }
 
-    // 创建 NSURLSession（由本控制器作为 delegate）
+    // Create the NSURLSession (with this controller as its delegate)
     NSURLSessionConfiguration *config = [NSURLSessionConfiguration defaultSessionConfiguration];
     config.HTTPMaximumConnectionsPerHost = 16;
     config.timeoutIntervalForRequest = 60;
     self.session = [NSURLSession sessionWithConfiguration:config delegate:self delegateQueue:nil];
 
-    // 初始化下载任务列表
+    // Initialize the download task list
     [self.downloadTasks removeAllObjects];
     for (ModUpdateSelection *sel in selected) {
         ModDownloadTaskInfo *info = [[ModDownloadTaskInfo alloc] init];
@@ -733,7 +733,7 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
     self.progressView.progress = 0;
     [self refreshUIForCurrentPhase];
 
-    // 并发限流 16，使用信号量控制
+    // Concurrency limited to 16, controlled by a semaphore
     dispatch_semaphore_t semaphore = dispatch_semaphore_create(16);
     dispatch_queue_t workQueue = dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0);
     __weak typeof(self) weakSelf = self;
@@ -741,7 +741,7 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
     for (ModDownloadTaskInfo *info in self.downloadTasks) {
         dispatch_async(workQueue, ^{
             dispatch_semaphore_wait(semaphore, DISPATCH_TIME_FOREVER);
-            // 在主线程创建并启动下载任务
+            // Create and start the download task on the main thread
             dispatch_async(dispatch_get_main_queue(), ^{
                 __strong typeof(weakSelf) strongSelf = weakSelf;
                 if (!strongSelf) {
@@ -754,12 +754,12 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
     }
 }
 
-/// 为指定 info 创建并启动下载任务
+/// Create and start the download task for the given info
 - (void)createAndStartDownloadTaskForInfo:(ModDownloadTaskInfo *)info
                                 semaphore:(dispatch_semaphore_t)semaphore {
     NSString *urlString = [self downloadURLStringForVersion:info.targetVersion];
     if (urlString.length == 0) {
-        // 无效下载链接，标记为失败
+        // An invalid download link, so mark it as failed
         info.succeeded = NO;
         [self onDownloadTaskFinished:info semaphore:semaphore];
         return;
@@ -774,24 +774,24 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
 
     NSURLSessionDownloadTask *task = [self.session downloadTaskWithURL:url];
     info.task = task;
-    // 通过关联对象把 info 绑定到 task，便于在 delegate 回调中取回
+    // Bind info to the task through an associated object, so it can be read back in the delegate callbacks
     objc_setAssociatedObject(task, &kDownloadTaskInfoKey, info, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     objc_setAssociatedObject(task, &kDownloadSemaphoreKey, semaphore, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     [task resume];
 
-    // 更新当前文件名显示
+    // Update the current file name display
     self.currentFileLabel.text = info.fileName;
 }
 
-/// 单个下载任务结束（成功或失败）的统一处理
-/// 注意：本方法可能从 NSURLSession 的后台 delegate 队列调用，UI 更新必须派发到主线程
+/// Shared handling for one download task finishing (successfully or not)
+/// Note: this may be called from the background delegate queue of NSURLSession, so UI updates must be dispatched to the main thread
 - (void)onDownloadTaskFinished:(ModDownloadTaskInfo *)info
                      semaphore:(dispatch_semaphore_t)semaphore {
     self.downloadCompleted += 1;
     NSInteger completed = self.downloadCompleted;
     NSInteger total = self.downloadTotal;
 
-    // UI 更新派发到主线程
+    // Dispatch the UI update to the main thread
     dispatch_async(dispatch_get_main_queue(), ^{
         if (total > 0) {
             self.progressView.progress = (float)completed / (float)total;
@@ -800,10 +800,10 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
         [self.tableView reloadData];
     });
 
-    // 释放信号量，允许下一个任务进入
+    // Release the semaphore so the next task can start
     dispatch_semaphore_signal(semaphore);
 
-    // 全部完成则进入替换阶段
+    // Move to the replace stage once everything is done
     if (completed >= total) {
         [self transitionToPhase:ModUpdatePhaseReplace];
     }
@@ -814,7 +814,7 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
 - (void)URLSession:(NSURLSession *)session
       downloadTask:(NSURLSessionDownloadTask *)downloadTask
 didFinishDownloadingToURL:(NSURL *)location {
-    // 下载完成，把文件移动到我们的临时目录
+    // The download finished, so move the file into our temporary directory
     ModDownloadTaskInfo *info = objc_getAssociatedObject(downloadTask, &kDownloadTaskInfoKey);
     if (!info) return;
 
@@ -822,13 +822,13 @@ didFinishDownloadingToURL:(NSURL *)location {
         [NSString stringWithFormat:@"%@.jar", [[NSUUID UUID] UUIDString]];
     NSString *destPath = [self.tempDir stringByAppendingPathComponent:destName];
 
-    // 若目标已存在则先移除（同名时覆盖）
+    // Remove the destination first if it already exists (overwriting a same-named file)
     [[NSFileManager defaultManager] removeItemAtPath:destPath error:nil];
 
     NSError *moveError = nil;
     [[NSFileManager defaultManager] moveItemAtURL:location toURL:[NSURL fileURLWithPath:destPath] error:&moveError];
     if (moveError) {
-        // 移动失败，标记为未成功
+        // The move failed, so mark it as unsuccessful
         info.succeeded = NO;
         info.tempFilePath = nil;
         return;
@@ -849,10 +849,10 @@ totalBytesExpectedToWrite:(int64_t)totalBytesExpectedToWrite {
         info.progress.totalUnitCount = totalBytesExpectedToWrite;
         info.progress.completedUnitCount = totalBytesWritten;
     }
-    // 节流地刷新表格（在串行队列上派发到主线程）
+    // Refresh the table with throttling (dispatched to the main thread from the serial queue)
     dispatch_async(self.callbackQueue, ^{
         dispatch_async(dispatch_get_main_queue(), ^{
-            // 仅更新可见行，避免频繁全量刷新
+            // Only update the visible rows, to avoid frequent full reloads
             if (self.currentPhase == ModUpdatePhaseDownload) {
                 [self.tableView reloadData];
             }
@@ -871,28 +871,28 @@ didCompleteWithError:(NSError *)error {
     if (!info) return;
 
     if (error == nil) {
-        // 成功（tempFilePath 已在 didFinishDownloadingToURL 中设置）
+        // Success (tempFilePath was set in didFinishDownloadingToURL)
         if (!info.succeeded) {
-            // 极少数情况下 didFinish 未设置成功状态，这里兜底判定为失败
+            // In the rare case where didFinish did not set the success state, treat it as a failure here
             info.succeeded = NO;
         }
         [self onDownloadTaskFinished:info semaphore:semaphore];
         return;
     }
 
-    // 失败：若未重试过，则自动重试一次
+    // Failure: retry once automatically if it has not been retried yet
     if (!info.retried) {
         info.retried = YES;
         info.succeeded = NO;
         info.tempFilePath = nil;
-        // 重新创建并启动下载任务（重试不重新获取信号量，复用原有的并发槽位）
+        // Recreate and start the download task (a retry does not take a new semaphore slot; it reuses the existing one)
         dispatch_async(dispatch_get_main_queue(), ^{
             [self createAndStartDownloadTaskForInfo:info semaphore:semaphore];
         });
         return;
     }
 
-    // 已重试过仍失败，标记为失败
+    // Already retried and still failing, so mark it as failed
     info.succeeded = NO;
     [self onDownloadTaskFinished:info semaphore:semaphore];
 }
@@ -900,7 +900,7 @@ didCompleteWithError:(NSError *)error {
 #pragma mark - 阶段 4：替换文件
 
 - (void)startPhase4Replace {
-    // 根据 modUpdateKeepOld 偏好决定旧文件处理方式
+    // Decide what to do with the old file from the modUpdateKeepOld preference
     BOOL keepOld = [PLPreferences modUpdateKeepOld];
 
     self.successCount = 0;
@@ -923,31 +923,31 @@ didCompleteWithError:(NSError *)error {
         NSString *newPath = [oldDir stringByAppendingPathComponent:fileName];
 
         @try {
-            // 处理旧文件
+            // Handle the old file
             if ([fm fileExistsAtPath:oldPath]) {
                 if (keepOld) {
-                    // 保留旧文件：重命名为 <原名>.old
+                    // Keep the old file: rename it to <original name>.old
                     NSString *oldBackupPath = [oldPath stringByAppendingString:@".old"];
-                    // 若 .old 已存在则先删除
+                    // If the .old file already exists, delete it first
                     [fm removeItemAtPath:oldBackupPath error:nil];
                     NSError *renameError = nil;
                     [fm moveItemAtPath:oldPath toPath:oldBackupPath error:&renameError];
                     if (renameError) {
-                        // 重命名失败则尝试删除
+                        // If renaming fails, try deleting instead
                         [fm removeItemAtPath:oldPath error:nil];
                     }
                 } else {
-                    // 不保留：直接删除旧文件
+                    // Do not keep it: delete the old file outright
                     [fm removeItemAtPath:oldPath error:nil];
                 }
             }
 
-            // 若目标路径已存在同名文件（与旧文件不同名的情况），先移除
+            // If a file with the same name already exists at the destination (when it differs from the old file name), remove it first
             if (![newPath isEqualToString:oldPath] && [fm fileExistsAtPath:newPath]) {
                 [fm removeItemAtPath:newPath error:nil];
             }
 
-            // 把临时目录的新文件移动到 mods 目录
+            // Move the new file from the temporary directory into the mods folder
             NSError *moveError = nil;
             [fm moveItemAtPath:info.tempFilePath toPath:newPath error:&moveError];
             if (moveError) {
@@ -955,7 +955,7 @@ didCompleteWithError:(NSError *)error {
                 [self.failedFileNames addObject:fileName];
             } else {
                 self.successCount += 1;
-                info.tempFilePath = nil; // 已移走，清空避免后续误删
+                info.tempFilePath = nil; // Already moved, so clear it to avoid deleting it by mistake later
             }
         } @catch (NSException *exception) {
             self.failureCount += 1;
@@ -963,14 +963,14 @@ didCompleteWithError:(NSError *)error {
         }
     }
 
-    // 进入完成阶段
+    // Move to the done stage
     [self transitionToPhase:ModUpdatePhaseDone];
 }
 
 #pragma mark - 阶段 5：完成
 
 - (void)startPhase5Done {
-    // 无额外操作；UI 刷新由 transitionToPhase: 派发到主线程执行
+    // Nothing extra to do; the UI refresh is dispatched to the main thread by transitionToPhase:
 }
 
 #pragma mark - UITableViewDataSource / UITableViewDelegate
@@ -1023,7 +1023,7 @@ didCompleteWithError:(NSError *)error {
     }
 }
 
-/// 阶段 1：检查中的文件列表 cell
+/// Stage 1: the cell for the list of files being checked
 - (UITableViewCell *)checkCellForRowAtIndexPath:(NSIndexPath *)indexPath {
     UITableViewCell *cell = [self.tableView dequeueReusableCellWithIdentifier:@"PlainCell" forIndexPath:indexPath];
     cell.selectionStyle = UITableViewCellSelectionStyleNone;
@@ -1033,7 +1033,7 @@ didCompleteWithError:(NSError *)error {
     if (indexPath.row >= (NSInteger)self.filteredMods.count) return cell;
     ModItem *mod = self.filteredMods[indexPath.row];
 
-    // 使用真实动画指示器作为 accessoryView
+    // Use a real animated indicator as the accessoryView
     UIActivityIndicatorView *spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
     [spinner startAnimating];
     cell.accessoryView = spinner;
@@ -1046,7 +1046,7 @@ didCompleteWithError:(NSError *)error {
     return cell;
 }
 
-/// 阶段 2：用户确认 cell（首行摘要 / 后续行为版本选项）
+/// Stage 2: the user confirmation cell (a summary on the first row, version options on the rest)
 - (UITableViewCell *)confirmCellForRowAtIndexPath:(NSIndexPath *)indexPath {
     UITableViewCell *cell = [self.tableView dequeueReusableCellWithIdentifier:@"PlainCell" forIndexPath:indexPath];
     cell.selectionStyle = UITableViewCellSelectionStyleNone;
@@ -1059,20 +1059,20 @@ didCompleteWithError:(NSError *)error {
     ModUpdateResult *result = sel.result;
 
     if (indexPath.row == 0) {
-        // 摘要行：勾选开关 + 文件名 + 版本变化 + 来源 + 展开指示
+        // Summary row: the checkbox + file name + version change + source + expand indicator
         NSString *fileName = result.localFilePath.lastPathComponent ?: @"Unknown file";
         NSString *currentVer = result.currentVersion.versionNumber ?: @"Unknown version";
         NSString *targetVer = sel.chosenVersion.versionNumber ?: @"Latest version";
         NSString *source = [self sourceNameForResult:result];
 
-        // 使用 UISwitch 作为 accessoryView
+        // Use a UISwitch as the accessoryView
         UISwitch *sw = [[UISwitch alloc] init];
         sw.on = sel.selected;
         sw.tag = indexPath.section;
         [sw addTarget:self action:@selector(switchChanged:) forControlEvents:UIControlEventValueChanged];
         cell.accessoryView = sw;
 
-        // 展开指示图标
+        // Expand indicator icon
         UIImage *chevron = [UIImage systemImageNamed:sel.expanded ? @"chevron.up" : @"chevron.down"];
         cell.imageView.image = chevron;
         cell.imageView.tintColor = [UIColor secondaryLabelColor];
@@ -1089,7 +1089,7 @@ didCompleteWithError:(NSError *)error {
         return cell;
     }
 
-    // 版本选项行：单选指示 + 版本号 + 发布日期
+    // Version option row: the selection indicator + version number + publication date
     NSInteger versionIndex = indexPath.row - 1;
     if (versionIndex >= (NSInteger)result.allVersions.count) return cell;
     ModVersion *version = result.allVersions[versionIndex];
@@ -1111,7 +1111,7 @@ didCompleteWithError:(NSError *)error {
     return cell;
 }
 
-/// 阶段 3：下载进度列表 cell
+/// Stage 3: the download progress list cell
 - (UITableViewCell *)downloadCellForRowAtIndexPath:(NSIndexPath *)indexPath {
     UITableViewCell *cell = [self.tableView dequeueReusableCellWithIdentifier:@"PlainCell" forIndexPath:indexPath];
     cell.selectionStyle = UITableViewCellSelectionStyleNone;
@@ -1121,19 +1121,19 @@ didCompleteWithError:(NSError *)error {
     if (indexPath.row >= (NSInteger)self.downloadTasks.count) return cell;
     ModDownloadTaskInfo *info = self.downloadTasks[indexPath.row];
 
-    // 判定任务是否已经结束（成功或最终失败）
+    // Work out whether the task has finished (successfully or with a final failure)
     BOOL finished = info.succeeded || (info.retried && !info.succeeded && info.task == nil);
     if (info.succeeded) {
         cell.imageView.image = [UIImage systemImageNamed:@"checkmark.circle.fill"];
         cell.imageView.tintColor = [UIColor systemGreenColor];
         cell.accessoryView = nil;
     } else if (finished) {
-        // 已结束但未成功
+        // Finished but unsuccessful
         cell.imageView.image = [UIImage systemImageNamed:@"xmark.circle.fill"];
         cell.imageView.tintColor = [UIColor systemRedColor];
         cell.accessoryView = nil;
     } else {
-        // 进行中：使用真实动画指示器
+        // In progress: use a real animated indicator
         cell.imageView.image = nil;
         UIActivityIndicatorView *spinner = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
         [spinner startAnimating];
@@ -1145,7 +1145,7 @@ didCompleteWithError:(NSError *)error {
     cell.textLabel.numberOfLines = 1;
     cell.textLabel.lineBreakMode = NSLineBreakByTruncatingMiddle;
 
-    // 进度文本
+    // Progress text
     int64_t completed = info.progress.completedUnitCount;
     int64_t total = info.progress.totalUnitCount;
     NSString *progressText = nil;
@@ -1168,7 +1168,7 @@ didCompleteWithError:(NSError *)error {
     return cell;
 }
 
-/// 阶段 5：完成阶段失败项 cell
+/// Stage 5: the cell for a failed entry in the done stage
 - (UITableViewCell *)doneCellForRowAtIndexPath:(NSIndexPath *)indexPath {
     UITableViewCell *cell = [self.tableView dequeueReusableCellWithIdentifier:@"PlainCell" forIndexPath:indexPath];
     cell.selectionStyle = UITableViewCellSelectionStyleNone;
@@ -1197,12 +1197,12 @@ didCompleteWithError:(NSError *)error {
     ModUpdateSelection *sel = self.selections[indexPath.section];
 
     if (indexPath.row == 0) {
-        // 点击摘要行：切换展开/收起
+        // Tapping the summary row toggles expanded/collapsed
         sel.expanded = !sel.expanded;
         NSIndexSet *indexSet = [NSIndexSet indexSetWithIndex:indexPath.section];
         [tableView reloadSections:indexSet withRowAnimation:UITableViewRowAnimationAutomatic];
     } else {
-        // 点击版本行：选择降级目标版本
+        // Tapping a version row picks that downgrade target
         NSInteger versionIndex = indexPath.row - 1;
         if (versionIndex < (NSInteger)sel.result.allVersions.count) {
             sel.chosenVersion = sel.result.allVersions[versionIndex];
@@ -1216,7 +1216,7 @@ didCompleteWithError:(NSError *)error {
 
 #pragma mark - 交互事件
 
-/// 勾选开关变化
+/// The checkbox switch changed
 - (void)switchChanged:(UISwitch *)sw {
     if (sw.tag >= (NSInteger)self.selections.count) return;
     ModUpdateSelection *sel = self.selections[sw.tag];
@@ -1253,7 +1253,7 @@ didCompleteWithError:(NSError *)error {
 
 #pragma mark - 工具方法
 
-/// 从 ModVersion 中提取下载 URL
+/// Extract the download URL from a ModVersion
 - (nullable NSString *)downloadURLStringForVersion:(ModVersion *)version {
     if (!version) return nil;
     NSDictionary *pf = version.primaryFile;
@@ -1262,7 +1262,7 @@ didCompleteWithError:(NSError *)error {
     return url.length > 0 ? url : nil;
 }
 
-/// 从 ModVersion 中提取文件名
+/// Extract the file name from a ModVersion
 - (nullable NSString *)fileNameForVersion:(ModVersion *)version {
     if (!version) return nil;
     NSDictionary *pf = version.primaryFile;
@@ -1271,14 +1271,14 @@ didCompleteWithError:(NSError *)error {
     return name.length > 0 ? name : nil;
 }
 
-/// 选中项的显示文件名
+/// The display file name of a selected entry
 - (NSString *)fileNameForSelection:(ModUpdateSelection *)sel {
     NSString *name = [self fileNameForVersion:sel.chosenVersion];
     if (name.length > 0) return name;
     return sel.result.localFilePath.lastPathComponent ?: @"Unknown file";
 }
 
-/// 返回来源名称
+/// Return the source name
 - (NSString *)sourceNameForResult:(ModUpdateResult *)result {
     NSNumber *src = result.apiSource;
     if (src && [src isKindOfClass:[NSNumber class]] && [src integerValue] == 2) {

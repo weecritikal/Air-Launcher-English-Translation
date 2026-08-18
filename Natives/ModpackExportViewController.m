@@ -2,15 +2,15 @@
 //  ModpackExportViewController.m
 //  Amethyst
 //
-//  参照 FCL ExportModpackViewModel / HMCL ModpackExportPanel / ZL2 ModpackExportScreen 重做
+//  Reworked after FCL ExportModpackViewModel / HMCL ModpackExportPanel / ZL2 ModpackExportScreen
 //
-//  功能：
-//    1. Profile 选择（含 gameDir 预览、loader 信息）
-//    2. 5 种格式选择（Modrinth / CurseForge / MMC / Plain Zip / 链接列表）
-//    3. 名称 / 版本号 / 作者 输入
-//    4. 文件过滤选项（mods / configs / resourcepacks / shaderpacks / saves / options / servers / scripts）
-//    5. 进度卡片（百分比 + 阶段文案 + 取消按钮）
-//    6. 完成后分享按钮
+//  Features:
+//    1. Profile selection (with a gameDir preview and loader information)
+//    2. A choice of 5 formats (Modrinth / CurseForge / MMC / Plain Zip / link list)
+//    3. Name / version / author input
+//    4. File filtering options (mods / configs / resourcepacks / shaderpacks / saves / options / servers / scripts)
+//    5. A progress card (percentage + stage text + a cancel button)
+//    6. A share button once it finishes
 //
 
 #import "ModpackExportViewController.h"
@@ -20,36 +20,36 @@
 
 @interface ModpackExportViewController () <UITextFieldDelegate, UITableViewDataSource, UITableViewDelegate>
 
-// 数据
+// Data
 @property (nonatomic, strong) NSArray<NSString *> *profileNames;
 @property (nonatomic, copy) NSString *selectedProfileName;
 @property (nonatomic, assign) ModpackExportFormat selectedFormat;
 @property (nonatomic, assign) ModpackExportFileOptions fileOptions;
 
-// UI - 表单
+// UI - the form
 @property (nonatomic, strong) UIScrollView *scrollView;
 @property (nonatomic, strong) UIStackView *formStackView;
 
-// Profile 选择
+// Profile selection
 @property (nonatomic, strong) UIButton *profileButton;
 @property (nonatomic, strong) UILabel *profileInfoLabel;
 
-// 格式选择
+// Format selection
 @property (nonatomic, strong) UISegmentedControl *formatSegment;
 
-// 名称/版本/作者
+// Name/version/author
 @property (nonatomic, strong) UITextField *nameField;
 @property (nonatomic, strong) UITextField *versionField;
 @property (nonatomic, strong) UITextField *authorField;
 
-// 文件选项
+// File options
 @property (nonatomic, strong) UITableView *fileOptionsTableView;
 @property (nonatomic, strong) NSArray<NSDictionary *> *fileOptionItems;
 
-// 导出按钮
+// Export button
 @property (nonatomic, strong) UIButton *exportButton;
 
-// 进度卡片
+// Progress card
 @property (nonatomic, strong) UIView *progressOverlay;
 @property (nonatomic, strong) UIView *progressCard;
 @property (nonatomic, strong) UILabel *progressTitleLabel;
@@ -93,10 +93,10 @@
     NSDictionary *profiles = PLProfiles.current.profiles;
     self.profileNames = [profiles.allKeys sortedArrayUsingSelector:@selector(localizedCaseInsensitiveCompare:)];
     if (self.profileNames.count == 0) {
-        // 没有 profile，禁用导出
+        // No profiles, so disable exporting
         return;
     }
-    // 预选 profile
+    // Preselect the profile
     if (self.preselectedProfileName && [self.profileNames containsObject:self.preselectedProfileName]) {
         self.selectedProfileName = self.preselectedProfileName;
     } else {
@@ -125,15 +125,15 @@
     self.formStackView.alignment = UIStackViewAlignmentFill;
     [self.scrollView addSubview:self.formStackView];
 
-    // Profile 选择区
+    // Profile selection area
     [self.formStackView addArrangedSubview:[self createProfileSection]];
-    // 格式选择区
+    // Format selection area
     [self.formStackView addArrangedSubview:[self createFormatSection]];
-    // 信息输入区
+    // Information input area
     [self.formStackView addArrangedSubview:[self createInfoFieldsSection]];
-    // 文件选项区
+    // File options area
     [self.formStackView addArrangedSubview:[self createFileOptionsSection]];
-    // 导出按钮
+    // Export button
     [self.formStackView addArrangedSubview:[self createExportButtonSection]];
 
     [NSLayoutConstraint activateConstraints:@[
@@ -150,7 +150,7 @@
     ]];
 }
 
-/// 创建带标题的卡片容器
+/// Build a card container with a title
 - (UIView *)createCardContainerWithTitle:(NSString *)title {
     UIView *card = [[UIView alloc] init];
     card.translatesAutoresizingMaskIntoConstraints = NO;
@@ -169,7 +169,7 @@
     contentStack.translatesAutoresizingMaskIntoConstraints = NO;
     contentStack.axis = UILayoutConstraintAxisVertical;
     contentStack.spacing = 10;
-    // 用 tag 标记 contentStack，便于后续从 card 取回，避免使用 KVC（UIView 无 contentStack 属性会抛 NSUndefinedKeyException）
+    // contentStack is marked with a tag so it can be fetched back from the card without KVC (a UIView has no contentStack property and would throw NSUndefinedKeyException)
     contentStack.tag = 9527;
     [card addSubview:contentStack];
 
@@ -289,7 +289,7 @@
     self.versionField = [self createTextFieldWithPlaceholder:@"Version number (e.g. 1.0)"];
     self.authorField = [self createTextFieldWithPlaceholder:@"Author"];
 
-    // 预填
+    // Prefill
     self.versionField.text = @"1.0";
     self.authorField.text = @"Amethyst User";
     if (self.selectedProfileName) {
@@ -322,7 +322,7 @@
     UIView *card = [self createCardContainerWithTitle:@"Contents to include"];
     UIStackView *stack = [self contentStackOfCard:card];
 
-    // 文件选项数据
+    // File option data
     self.fileOptionItems = @[
         @{@"key": @(ModpackExportFileMods),           @"title": @"Mods (mods/)",            @"default": @YES},
         @{@"key": @(ModpackExportFileConfigs),        @"title": @"Config (config/)",         @"default": @YES},
@@ -344,7 +344,7 @@
     self.fileOptionsTableView.scrollEnabled = NO;
     [self.fileOptionsTableView registerClass:[UITableViewCell class] forCellReuseIdentifier:@"FileOptionCell"];
 
-    // UITableView 高度自适应：根据行数计算
+    // Self-sizing UITableView height: computed from the row count
     NSLayoutConstraint *heightConstraint = [self.fileOptionsTableView.heightAnchor constraintEqualToConstant:self.fileOptionItems.count * 44];
     heightConstraint.priority = UILayoutPriorityRequired;
     heightConstraint.active = YES;
@@ -467,7 +467,7 @@
     if (name.length == 0) name = self.selectedProfileName;
     if (version.length == 0) version = @"1.0";
 
-    // 确定扩展名
+    // Decide the extension
     NSString *ext = @"zip";
     switch (self.selectedFormat) {
         case ModpackExportFormatModrinth:   ext = @"mrpack"; break;
@@ -477,13 +477,13 @@
         case ModpackExportFormatLinkList:   ext = @"txt";    break;
     }
 
-    // 文件名清理
+    // Sanitize the file name
     NSString *destPath = [self buildExportPathWithName:name version:version ext:ext];
 
     [self showProgressCardWithTitle:@"Exporting modpack"];
     [self setProgress:0.0 stageMessage:@"Preparing..."];
 
-    // 重置取消状态
+    // Reset the cancellation state
     [[ModpackExportService sharedService] resetCancelState];
 
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
@@ -542,7 +542,7 @@
         [safeName setString:@"ExportedModpack"];
     }
 
-    // 版本号也清理
+    // Sanitize the version number too
     NSMutableString *safeVersion = [[[version componentsSeparatedByCharactersInSet:invalidChars] componentsJoinedByString:@"_"] mutableCopy];
     if (safeVersion.length == 0) {
         [safeVersion setString:@"1.0"];
@@ -690,7 +690,7 @@
 }
 
 - (void)cancelExport {
-    // 真正取消：通过 service 的 cancel 信号
+    // The real cancellation: through the cancel signal on the service
     [ModpackExportService sharedService].cancelled = YES;
     [self setProgress:-1 stageMessage:@"Cancelling..."];
 }

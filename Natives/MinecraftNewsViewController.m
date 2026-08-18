@@ -10,7 +10,7 @@
 #import "IconLoader.h"
 #import <SafariServices/SafariServices.h>
 
-/// 缩略图目标尺寸（用于 IconLoader 降采样）
+/// Target thumbnail size (used for IconLoader downsampling)
 static const CGFloat kNewsThumbnailTargetWidth = 400.0;
 /// Spacing between cards
 static const CGFloat kNewsCardSpacing = 12.0;
@@ -18,9 +18,9 @@ static const CGFloat kNewsCardSpacing = 12.0;
 static const CGFloat kNewsCardPadding = 12.0;
 /// Card corner radius
 static const CGFloat kNewsCardCornerRadius = 12.0;
-/// 缩略图圆角
+/// Thumbnail corner radius
 static const CGFloat kNewsThumbnailCornerRadius = 8.0;
-/// 每页条数
+/// Items per page
 static const NSInteger kNewsPageSize = 24;
 
 #pragma mark - MCNewsCollectionViewCell
@@ -28,9 +28,9 @@ static const NSInteger kNewsPageSize = 24;
 @interface MCNewsCollectionViewCell : UICollectionViewCell
 @property (nonatomic, strong) UIImageView *thumbnailView;
 @property (nonatomic, strong) UILabel *titleLabel;
-@property (nonatomic, strong) UILabel *metaLabel;     // 作者 + 时间
+@property (nonatomic, strong) UILabel *metaLabel;     // Author + time
 @property (nonatomic, strong) UILabel *summaryLabel;
-@property (nonatomic, strong) UILabel *readMoreLabel; // "查看详情"按钮
+@property (nonatomic, strong) UILabel *readMoreLabel; // The "View details" button
 @property (nonatomic, strong) UIActivityIndicatorView *loadingIndicator;
 @property (nonatomic, copy) NSString *currentImageURL;
 @property (nonatomic, copy) NSString *currentArticleURL;
@@ -55,17 +55,17 @@ static const NSInteger kNewsPageSize = 24;
     if (self) {
         self.contentView.backgroundColor = [UIColor clearColor];
 
-        // 卡片背景：设为 clearColor，由 BackgroundManager.applyEffectToCollectionViewCell: 注入毛玻璃/半透明
+        // Card background: set to clearColor, with BackgroundManager.applyEffectToCollectionViewCell: injecting the frosted glass/translucency
         self.backgroundColor = [UIColor clearColor];
         self.layer.cornerRadius = kNewsCardCornerRadius;
         self.layer.cornerCurve = kCACornerCurveContinuous;
         self.clipsToBounds = YES;
-        // contentView 也要圆角匹配，让注入的 blurView 圆角一致
+        // contentView needs the same corner radius, so the injected blurView matches
         self.contentView.layer.cornerRadius = kNewsCardCornerRadius;
         self.contentView.layer.cornerCurve = kCACornerCurveContinuous;
         self.contentView.clipsToBounds = YES;
 
-        // 缩略图
+        // Thumbnail
         _thumbnailView = [[UIImageView alloc] init];
         _thumbnailView.translatesAutoresizingMaskIntoConstraints = NO;
         _thumbnailView.contentMode = UIViewContentModeScaleAspectFill;
@@ -77,7 +77,7 @@ static const NSInteger kNewsPageSize = 24;
         _thumbnailView.tintColor = [UIColor secondaryLabelColor];
         [self.contentView addSubview:_thumbnailView];
 
-        // 加载指示器（封面图加载时显示）
+        // Loading indicator (shown while the cover image loads)
         _loadingIndicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
         _loadingIndicator.translatesAutoresizingMaskIntoConstraints = NO;
         _loadingIndicator.hidesWhenStopped = YES;
@@ -207,11 +207,11 @@ static const NSInteger kNewsPageSize = 24;
     self.hasMore = YES;
 
     [self setupUI];
-    // 透明化 collectionView 背景与 cell 背景，避免遮挡全局背景
+    // Make the collectionView and cell backgrounds transparent, so they do not hide the global background
     self.collectionView.backgroundColor = [UIColor clearColor];
     self.collectionView.backgroundView = nil;
 
-    // 监听背景效果变化通知
+    // Listen for background effect changes
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(reapplyBackgroundEffect)
                                                  name:@"BackgroundUIEffectChanged"
@@ -232,7 +232,7 @@ static const NSInteger kNewsPageSize = 24;
 }
 
 - (void)setupUI {
-    // 双列瀑布流布局（用 CompositionalLayout 的 estimateSize 实现 PCL-CE WaterfallPanel 类似效果）
+    // Two-column waterfall layout (using the estimated size of CompositionalLayout for an effect like the PCL-CE WaterfallPanel)
     UICollectionViewLayout *layout = [self createCompositionalLayout];
     self.collectionView = [[UICollectionView alloc] initWithFrame:CGRectZero collectionViewLayout:layout];
     self.collectionView.translatesAutoresizingMaskIntoConstraints = NO;
@@ -268,7 +268,7 @@ static const NSInteger kNewsPageSize = 24;
     self.retryButton.hidden = YES;
     [self.view addSubview:self.retryButton];
 
-    // 底部加载更多指示器
+    // Load-more indicator at the bottom
     self.footerLoadingView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, self.view.bounds.size.width, 50)];
     UIActivityIndicatorView *footerIndicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
     footerIndicator.translatesAutoresizingMaskIntoConstraints = NO;
@@ -299,16 +299,16 @@ static const NSInteger kNewsPageSize = 24;
     ]];
 }
 
-/// 双列自适应瀑布流布局（每列宽度相同，cell 高度由内容估算）
+/// Two-column self-sizing waterfall layout (equal column widths, with the cell height estimated from the content)
 - (UICollectionViewLayout *)createCompositionalLayout {
     UICollectionViewCompositionalLayoutConfiguration *config = [[UICollectionViewCompositionalLayoutConfiguration alloc] init];
     config.interSectionSpacing = kNewsCardSpacing;
     config.scrollDirection = UICollectionViewScrollDirectionVertical;
 
-    // section provider block 接收两个参数：sectionIndex 和 layoutEnvironment
-    // 构造方法为 -initWithSectionProvider:configuration:（不是 +layoutWithConfiguration:sectionProvider:）
+    // The section provider block takes two parameters: sectionIndex and layoutEnvironment
+    // The initializer is -initWithSectionProvider:configuration: (not +layoutWithConfiguration:sectionProvider:)
     return [[UICollectionViewCompositionalLayout alloc] initWithSectionProvider:^NSCollectionLayoutSection *(NSInteger sectionIndex, id<NSCollectionLayoutEnvironment> env) {
-        // 双列布局，每列等宽
+        // Two columns of equal width
         NSCollectionLayoutSize *itemSize = [NSCollectionLayoutSize sizeWithWidthDimension:[NSCollectionLayoutDimension fractionalWidthDimension:0.5]
                                                                             heightDimension:[NSCollectionLayoutDimension estimatedDimension:280]];
         NSCollectionLayoutItem *item = [NSCollectionLayoutItem itemWithLayoutSize:itemSize];
@@ -391,7 +391,7 @@ static const NSInteger kNewsPageSize = 24;
         strongSelf.currentPage = nextPage;
         strongSelf.hasMore = (strongSelf.items.count < totalCount);
 
-        // 增量插入新行
+        // Insert the new rows incrementally
         NSMutableArray<NSIndexPath *> *indexPaths = [NSMutableArray array];
         for (NSInteger i = oldCount; i < strongSelf.items.count; i++) {
             [indexPaths addObject:[NSIndexPath indexPathForItem:i inSection:0]];
@@ -427,7 +427,7 @@ static const NSInteger kNewsPageSize = 24;
     [self openArticleURL:item.articleURL];
 }
 
-/// 滚动接近底部时自动加载下一页
+/// Load the next page automatically when scrolling near the bottom
 - (void)scrollViewDidScroll:(UIScrollView *)scrollView {
     CGFloat offsetY = scrollView.contentOffset.y;
     CGFloat contentHeight = scrollView.contentSize.height;
@@ -437,11 +437,11 @@ static const NSInteger kNewsPageSize = 24;
     }
 }
 
-/// 用 SFSafariViewController 内嵌打开文章页（不跳出 App）
+/// Open the article inline in an SFSafariViewController (without leaving the app)
 - (void)openArticleURL:(NSString *)urlString {
     if (urlString.length == 0) return;
     if (![MinecraftNewsService isSafeNewsLink:urlString]) {
-        // 非白名单链接直接忽略（参考 PCL-CE IsSafeNewsLink 安全过滤）
+        // Links outside the allowlist are ignored (see the IsSafeNewsLink safety filter in PCL-CE)
         return;
     }
     NSURL *url = [NSURL URLWithString:urlString];

@@ -76,7 +76,7 @@
     BOOL useBMCLAPI = [downloadSource isEqualToString:@"bmclapi"];
 
     if ([loader isEqualToString:@"Forge"]) {
-        // Forge versionString = "<mc>-<loaderVersion>"，例如 "1.20.1-47.3.0"
+        // The Forge versionString is "<mc>-<loaderVersion>", for example "1.20.1-47.3.0"
         NSString *versionString = [NSString stringWithFormat:@"%@-%@", minecraftVersion, loaderVersion];
         if (useBMCLAPI) {
             return [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/maven/net/minecraftforge/forge/%@/forge-%@-installer.jar", versionString, versionString];
@@ -85,8 +85,8 @@
     }
 
     if ([loader isEqualToString:@"NeoForge"]) {
-        // NeoForge 1.20.1 早期版本 artifactId 是 net.neoforged:forge，之后是 net.neoforged:neoforge
-        // loaderVersion 例如 "47.1.0"（1.20.1）或 "20.6.119-beta"（1.20.6+）
+        // Early NeoForge 1.20.1 versions use the artifactId net.neoforged:forge, and later ones net.neoforged:neoforge
+        // loaderVersion is for example "47.1.0" (1.20.1) or "20.6.119-beta" (1.20.6+)
         BOOL isLegacyForgeArtifact = [minecraftVersion isEqualToString:@"1.20.1"];
         if (isLegacyForgeArtifact) {
             if (useBMCLAPI) {
@@ -110,8 +110,8 @@
     if (major >= 21) return 21;       // 1.21+
     if (major >= 20 && parts.count >= 3 && [parts[2] integerValue] >= 5) return 21; // 1.20.5+
     if (major >= 18) return 17;       // 1.18+
-    if (major >= 17) return 17;       // 1.17（项目未捆绑 Java 16，Java 17 可向后兼容运行 1.17）
-    return 8;                          // 1.16.5 及以下
+    if (major >= 17) return 17;       // 1.17 (Java 16 is not bundled, and Java 17 runs 1.17 fine)
+    return 8;                          // 1.16.5 and earlier
 }
 
 + (void)writePlaceholderVersionJSONForVersionId:(NSString *)versionId

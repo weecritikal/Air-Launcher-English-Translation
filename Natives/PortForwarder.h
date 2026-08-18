@@ -127,8 +127,8 @@ typedef NS_ENUM(NSInteger, PortForwarderMode) {
 /// 房客（PC/Mac/Android/iOS）在 MC 中直接连接房主的 ZeroTier IP:listenPort
 /// 即可进入游戏。
 ///
-/// @param listenPort 在 ZeroTier 网络中监听的端口（通常为 25565）
-/// @param localHostPort 本地 MC LAN 端口（MC 中"对局域网开放"后聊天框显示的端口号）
+/// @param listenPort The port to listen on within the ZeroTier network (usually 25565)
+/// @param localHostPort The local MC LAN port (the one Minecraft shows in the chat box after "Open to LAN")
 /// @return YES 表示启动成功，NO 表示失败
 - (BOOL)startHostModeWithListenPort:(uint16_t)listenPort
                        localHostPort:(uint16_t)localHostPort;

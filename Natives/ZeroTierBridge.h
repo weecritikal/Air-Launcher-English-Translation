@@ -94,7 +94,7 @@ typedef NS_ENUM(NSInteger, ZeroTierNetworkStatus) {
 
 #pragma mark - 节点管理
 
-/// 启动 ZeroTier 节点
+/// Start the ZeroTier node
 /// @param homeDir 身份文件存储目录
 /// @param error 错误输出（如果失败）
 /// @return YES 如果启动请求已成功提交（不代表节点已上线）
@@ -118,7 +118,7 @@ typedef NS_ENUM(NSInteger, ZeroTierNetworkStatus) {
 /// 加入 ZeroTier 网络
 - (BOOL)joinNetwork:(uint64_t)networkID error:(NSError **)error;
 
-/// 离开 ZeroTier 网络
+/// Leave a ZeroTier network
 - (BOOL)leaveNetwork:(uint64_t)networkID;
 
 /// 获取网络状态

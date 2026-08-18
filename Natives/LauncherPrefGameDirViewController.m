@@ -38,7 +38,7 @@
     }
 
     // Adapt to the custom launcher background: make this view controller transparent so the global background (image/video) shows through.
-    // 放在 tableView 重新创建之后调用，确保 makeViewControllerTransparent 处理的是最终的 tableView。
+    // Called after the tableView is recreated, so makeViewControllerTransparent operates on the final tableView.
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
 
     // Listen for background UI effect changes: when the user switches between frosted glass and translucent, or adjusts the opacity,
@@ -57,37 +57,37 @@
     NSString *lasmPath = @(getenv("POJAV_GAME_DIR"));
     NSError *removeError = nil;
     [NSFileManager.defaultManager removeItemAtPath:lasmPath error:&removeError];
-    // removeItem 失败不一定是致命的（首次切换时 lasmPath 可能不存在），忽略并继续
+    // A removeItem failure is not necessarily fatal (lasmPath may not exist on the first switch), so it is ignored
 
     NSError *linkError = nil;
     BOOL linkOK = [NSFileManager.defaultManager createSymbolicLinkAtPath:lasmPath
                                                        withDestinationPath:multidirPath
                                                                      error:&linkError];
     if (!linkOK) {
-        // 符号链接创建失败：POJAV_GAME_DIR 仍是断链，后续所有路径都会失败。
-        // 提示用户并尽早返回，避免把状态搞得更乱。
+        // The symbolic link could not be created: POJAV_GAME_DIR is still a broken link and every later path will fail.
+        // Tell the user and return early, rather than making the state worse.
         NSLog(@"[GameDir] createSymbolicLink failed: %@", linkError.localizedDescription);
         showDialog(localize(@"Error", nil),
                    [NSString stringWithFormat:@"Could not switch the game directory: failed to create a symbolic link\n\n%@", linkError.localizedDescription]);
         return;
     }
     [NSFileManager.defaultManager changeCurrentDirectoryPath:lasmPath];
-    // 切换 pref.instancePath 到新目录的 launcher_preferences.plist
-    // （内部会基于 POJAV_GAME_DIR 重新计算，已修复之前需重启启动器的 bug）
+    // Point pref.instancePath at the launcher_preferences.plist of the new directory
+    // (it recomputes from POJAV_GAME_DIR internally; the bug that required restarting the launcher has been fixed)
     toggleIsolatedPref(NO);
 
-    // 刷新 PLProfiles 缓存，确保后续读取的是新游戏目录的 launcher_profiles.json
+    // Refresh the PLProfiles cache, so later reads use the launcher_profiles.json of the new game directory
     [PLProfiles updateCurrent];
 
-    // 尝试直接调用 reloadProfileList，如果 navigationController 响应该选择器
+    // Try calling reloadProfileList directly if navigationController responds to that selector
     if ([self.navigationController respondsToSelector:@selector(reloadProfileList)]) {
         [self.navigationController performSelector:@selector(reloadProfileList)];
     } else {
-        // 否则发送通知
+        // Otherwise post a notification
         [[NSNotificationCenter defaultCenter] postNotificationName:@"ReloadProfileList" object:nil];
     }
 
-    // 发送通知刷新版本配置和编辑 profile 界面
+    // Post a notification to refresh the version profiles and the profile editor screen
     [[NSNotificationCenter defaultCenter] postNotificationName:@"SelectedProfileChanged" object:nil];
 }
 
@@ -343,7 +343,7 @@ viewForFooterInSection:(NSInteger)section
 
 /// Re-apply the background effect: called when the BackgroundUIEffectChanged notification arrives.
 /// Re-applies the opacity/frosted-glass effect to this view controller via BackgroundManager,
-/// 确保 tableView 背景透明、全局背景能够正常透出。
+/// so the tableView background is transparent and the global background shows through.
 - (void)reapplyBackgroundEffect {
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
 }

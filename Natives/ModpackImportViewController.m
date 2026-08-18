@@ -2,13 +2,13 @@
 //  ModpackImportViewController.m
 //  Amethyst
 //
-//  参照 FCL ModpackImportScreen / HMCL ModpackProviderPane / ZL2 ModpackImportScreen 重做
+//  Reworked after FCL ModpackImportScreen / HMCL ModpackProviderPane / ZL2 ModpackImportScreen
 //
-//  设计要点：
-//    1. 顶部使用 UISegmentedControl 切换 "导入 / 导出"，导出切换时 push 到独立的 ModpackExportViewController
-//    2. 导入流程：选择文件 → 解析（不确定模式进度卡片）→ 预览卡片（mod 信息）→ 导入进度卡片（支持取消）→ 完成提示
-//    3. 真正的取消：通过 [self.importService setCancelled:YES] 触发，service 在检查点抛出错误并清理半成品目录
-//    4. 已导入整合包列表使用现代化的卡片样式
+//  Design points:
+//    1. A UISegmentedControl at the top switches between "Import / Export", with Export pushing the separate ModpackExportViewController
+//    2. The import flow: choose a file -> parse (an indeterminate progress card) -> preview card (mod information) -> import progress card (cancellable) -> completion message
+//    3. Real cancellation: triggered by [self.importService setCancelled:YES]; the service throws at a checkpoint and cleans up the half-finished folder
+//    4. The list of imported modpacks uses a modern card style
 //
 
 #import "ModpackImportViewController.h"
@@ -20,25 +20,25 @@
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
 @interface ModpackImportViewController () <UITableViewDataSource, UITableViewDelegate, UIDocumentPickerDelegate>
-@property (nonatomic, strong) UISegmentedControl *tabSegment;       // 顶部 "导入 | 导出" 切换
-@property (nonatomic, strong) UIView *headerContainerView;          // 顶部说明 + 选择文件按钮
-@property (nonatomic, strong) UILabel *hintLabel;                   // 支持格式说明
-@property (nonatomic, strong) UIButton *importButton;               // 主导入按钮
+@property (nonatomic, strong) UISegmentedControl *tabSegment;       // The "Import | Export" switch at the top
+@property (nonatomic, strong) UIView *headerContainerView;          // The header text + the choose file button
+@property (nonatomic, strong) UILabel *hintLabel;                   // The supported formats note
+@property (nonatomic, strong) UIButton *importButton;               // The main import button
 @property (nonatomic, strong) UITableView *tableView;
 @property (nonatomic, strong) UILabel *emptyLabel;
 @property (nonatomic, strong) NSMutableArray<NSDictionary *> *importedModpacks;
 @property (nonatomic, strong) ModpackImportService *importService;
 @property (nonatomic, strong) NSDictionary *currentImportingModpack;
 
-// FCL 风格进度卡片
-@property (nonatomic, strong) UIView *progressOverlay;       // 半透明遮罩
-@property (nonatomic, strong) UIView *progressCard;          // 居中卡片
-@property (nonatomic, strong) UILabel *progressTitleLabel;   // 标题
-@property (nonatomic, strong) UILabel *progressPercentLabel; // 百分比 (36pt 大字)
-@property (nonatomic, strong) UIProgressView *progressBar;   // 进度条
-@property (nonatomic, strong) UILabel *progressStageLabel;   // 阶段文案
-@property (nonatomic, strong) UIActivityIndicatorView *progressSpinner; // 不确定模式转圈
-@property (nonatomic, strong) UIButton *progressCancelButton; // 取消按钮
+// FCL-style progress card
+@property (nonatomic, strong) UIView *progressOverlay;       // Translucent scrim
+@property (nonatomic, strong) UIView *progressCard;          // The centered card
+@property (nonatomic, strong) UILabel *progressTitleLabel;   // Title
+@property (nonatomic, strong) UILabel *progressPercentLabel; // Percentage (36pt, large)
+@property (nonatomic, strong) UIProgressView *progressBar;   // Progress bar
+@property (nonatomic, strong) UILabel *progressStageLabel;   // Stage text
+@property (nonatomic, strong) UIActivityIndicatorView *progressSpinner; // The spinner for indeterminate mode
+@property (nonatomic, strong) UIButton *progressCancelButton; // Cancel button
 @end
 
 @implementation ModpackImportViewController
@@ -70,7 +70,7 @@
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
-    // 回到导入页时，确保 tab 显示"导入"
+    // On returning to the import page, make sure the tab shows "Import"
     self.tabSegment.selectedSegmentIndex = 0;
 }
 
@@ -81,7 +81,7 @@
     self.tabSegment.selectedSegmentIndex = 0;
     [self.tabSegment addTarget:self action:@selector(tabChanged:) forControlEvents:UIControlEventValueChanged];
 
-    // 放置在 navigationItem.titleView，宽度自适应
+    // Placed in navigationItem.titleView, with a self-sizing width
     CGSize fittingSize = [self.tabSegment sizeThatFits:CGSizeMake(220, 30)];
     self.tabSegment.frame = CGRectMake(0, 0, MAX(180, fittingSize.width), 30);
     self.navigationItem.titleView = self.tabSegment;
@@ -89,11 +89,11 @@
 
 - (void)tabChanged:(UISegmentedControl *)sender {
     if (sender.selectedSegmentIndex == 1) {
-        // 切换到导出：push 到 ModpackExportViewController
+        // Switching to Export: push ModpackExportViewController
         ModpackExportViewController *exportVC = [[ModpackExportViewController alloc] init];
         exportVC.preselectedProfileName = PLProfiles.current.selectedProfileName;
         [self.navigationController pushViewController:exportVC animated:YES];
-        // 立即把 tab 切回"导入"，因为返回时 viewWillAppear 会重置
+        // Switch the tab straight back to "Import", since viewWillAppear resets it on return
         dispatch_async(dispatch_get_main_queue(), ^{
             sender.selectedSegmentIndex = 0;
         });
@@ -103,7 +103,7 @@
 #pragma mark - UI Setup
 
 - (void)setupUI {
-    // 顶部说明 + 选择文件按钮容器
+    // Container for the header text and the choose file button
     self.headerContainerView = [[UIView alloc] init];
     self.headerContainerView.translatesAutoresizingMaskIntoConstraints = NO;
     self.headerContainerView.backgroundColor = [UIColor clearColor];
@@ -278,7 +278,7 @@
     self.progressSpinner = spinner;
     self.progressCancelButton = cancelBtn;
 
-    // 初始不确定模式 (只显示转圈)
+    // Indeterminate at first (showing only the spinner)
     [self setProgress:-1 stageMessage:@"Preparing..."];
 }
 
@@ -286,7 +286,7 @@
     if (!self.progressCard) return;
 
     if (progress < 0) {
-        // 不确定模式
+        // Indeterminate mode
         self.progressBar.hidden = YES;
         self.progressPercentLabel.hidden = YES;
         self.progressSpinner.hidden = NO;
@@ -318,7 +318,7 @@
     }
 }
 
-/// 真正的取消：通过 service.cancelled 信号通知正在进行的导入流程
+/// Real cancellation: the service.cancelled signal tells the import in progress to stop
 - (void)cancelImport {
     self.importService.cancelled = YES;
     if (self.progressCancelButton) {
@@ -369,7 +369,7 @@
         return;
     }
 
-    // 解析阶段：显示不确定模式进度卡片
+    // Parse stage: show the indeterminate progress card
     [self showProgressCardWithTitle:@"Parsing the modpack"];
     [self setProgress:-1 stageMessage:@"Reading modpack information..."];
 
@@ -415,7 +415,7 @@
     NSNumber *fileCountNum = modpackInfo[@"fileCount"];
     NSString *fileName = fileURL.lastPathComponent ?: @"";
 
-    // 格式映射成中文
+    // Map the format to display text
     NSDictionary *formatLabels = @{
         @"modrinth": @"Modrinth (.mrpack)",
         @"curseforge": @"CurseForge (.zip)",
@@ -447,7 +447,7 @@
         [message appendFormat:@"Files to extract: %ld\n", (long)fileCountNum.integerValue];
     }
 
-    // Forge/NeoForge 警告
+    // Forge/NeoForge warning
     if ([loader isEqualToString:@"Forge"] || [loader isEqualToString:@"NeoForge"]) {
         [message appendFormat:@"\n⚠️ Note: the %@ %@ loader must be installed manually from the download screen, or launching will fail.", loader, loaderVersion];
     }
@@ -472,7 +472,7 @@
 #pragma mark - 导入流程
 
 - (void)startModpackImport:(NSDictionary *)modpackInfo {
-    // 重置取消状态
+    // Reset the cancellation state
     [self.importService resetCancelState];
 
     NSString *name = modpackInfo[@"name"] ?: @"Modpack";
@@ -496,7 +496,7 @@
         }
 
         dispatch_async(dispatch_get_main_queue(), ^{
-            // 检测是否被取消
+            // Detect whether it was cancelled
             BOOL wasCancelled = [error.domain isEqualToString:@"ModpackImportError"] && error.code == 9999;
             NSString *localizedDesc = error.localizedDescription ?: @"";
             if (!wasCancelled && [localizedDesc localizedCaseInsensitiveContainsString:@"cancel"]) {
@@ -504,7 +504,7 @@
             }
 
             if (wasCancelled) {
-                // 取消：直接隐藏卡片，不显示 100%
+                // Cancelled: hide the card without showing 100%
                 [self hideProgressCard];
                 self.currentImportingModpack = nil;
                 [self showAlertWithTitle:@"Cancelled" message:@"Import cancelled"];
@@ -512,7 +512,7 @@
             }
 
             if (success) {
-                // 完成时显示 100%
+                // Show 100% on completion
                 [self setProgress:1.0 stageMessage:@"Import complete"];
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.6 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                     [self hideProgressCard];
@@ -520,8 +520,8 @@
                     [self showImportSuccess:modpackInfo];
                 });
             } else {
-                // 阶段5修复（参照 FCL）：错误消息中追加失败文件列表（如有），
-                // 让用户清楚知道是哪些 mod 下载失败，而不是只看到一个笼统的错误。
+                // Phase 5 fix (following FCL): append the list of failed files to the error message (when there is one),
+                // so the user knows exactly which mods failed instead of seeing one vague error.
                 NSString *message = error.localizedDescription ?: @"Unknown error";
                 NSArray<NSDictionary *> *failed = self.importService.failedFiles;
                 if (failed.count > 0) {
@@ -579,11 +579,11 @@
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"ModpackCell" forIndexPath:indexPath];
-    // 重置 cell 样式
+    // Reset the cell style
     cell.textLabel.text = nil;
     cell.detailTextLabel.text = nil;
     cell.imageView.image = nil;
-    // 重置 cell 样式：移除旧的 blurView 和 shadowView（cell 复用）
+    // Reset the cell style: remove the old blurView and shadowView (cell reuse)
     for (UIView *subview in cell.contentView.subviews) {
         if ([subview isKindOfClass:[UIVisualEffectView class]] ||
             (subview.layer.shadowOpacity > 0.0f)) {
@@ -602,10 +602,10 @@
     cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
     cell.backgroundColor = [UIColor clearColor];
 
-    // 阶段6视觉统一：参照 ModernAssetCell / ModVersionTableViewCell / VersionCardCell 的卡片规范
+    // Phase 6 visual alignment: following the card spec of ModernAssetCell / ModVersionTableViewCell / VersionCardCell
     // （cornerRadius 12 + cornerCurve continuous + shadow offset 2/opacity 0.10/radius 4 + leading/trailing 10）
-    // 由于 UIVisualEffectView 的 masksToBounds=YES 会同时裁剪 blur 和 shadow，需要单独的 shadowView
-    // 提供阴影（与 blurView 同 frame），blurView 在上层提供毛玻璃效果。
+    // Since masksToBounds=YES on a UIVisualEffectView clips both the blur and the shadow, a separate shadowView is needed
+    // to provide the shadow (with the same frame as blurView), while blurView provides the frosted glass on top.
     UIView *shadowView = [[UIView alloc] init];
     shadowView.translatesAutoresizingMaskIntoConstraints = NO;
     shadowView.layer.cornerRadius = 12;
@@ -714,7 +714,7 @@
 
 - (void)handleBackgroundUIEffectChanged:(NSNotification *)notification {
     dispatch_async(dispatch_get_main_queue(), ^{
-        // 重新应用透明化，确保背景效果切换后视图仍能透出全局背景
+        // Re-apply transparency, so the view still shows the global background after an effect switch
         [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
         self.tableView.backgroundColor = [UIColor clearColor];
         self.tableView.backgroundView = nil;

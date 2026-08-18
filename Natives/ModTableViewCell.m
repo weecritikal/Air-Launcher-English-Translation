@@ -6,7 +6,7 @@
 
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunguarded-availability-new"
-// 注意：UIKit+AFNetworking 已移除，改用 IconLoader 统一加载器
+// Note: UIKit+AFNetworking has been removed in favor of the unified IconLoader
 // (AFNetworking only caches in memory and does not downsample; IconLoader adds a two-level cache, downsampling, CDN mirrors and concurrency control)
 #pragma clang diagnostic pop
 
@@ -21,8 +21,8 @@
     if (self = [super initWithStyle:style reuseIdentifier:reuseIdentifier]) {
         self.selectionStyle = UITableViewCellSelectionStyleNone;
         self.backgroundColor = [UIColor clearColor]; // Use clear color for custom background view
-        // contentView 也设为 clearColor：由 BackgroundManager.applyEffectToCell: 统一注入
-        // 毛玻璃 backgroundView 或半透明 backgroundColor，避免遮挡自定义启动器背景
+        // contentView is set to clearColor too: BackgroundManager.applyEffectToCell: injects either
+        // a frosted-glass backgroundView or a translucent backgroundColor, so the custom launcher background is not hidden
         self.contentView.backgroundColor = [UIColor clearColor];
 
         // --- Initialization of UI Elements ---
@@ -134,13 +134,13 @@
     NSBundle *bundle = [NSBundle mainBundle];
     NSString *resourcePath = [bundle resourcePath];
 
-    // 修复模组加载器图标不显示：原实现只查找 ModLoaderIcons/{name}_{light|dark}.png 主题文件，
-    // 但 HMCL 官方图标是标准单文件 ModLoaderIcons/{name}.png（不区分深浅色），
-    // 导致 fabric/forge/neoforge/quilt/optifine 的 PNG 永远找不到，回退到空白或自编图标。
-    // 现在改为：优先加载标准单文件 → 再尝试主题文件 → 最后返回 nil。
-    // 与 ModLoaderIconHelper 的 iconImageForLoader: 加载顺序保持一致。
+    // Fix for the mod loader icons not showing: the original implementation only looked for the ModLoaderIcons/{name}_{light|dark}.png theme files,
+    // but the official HMCL icons are standard single files, ModLoaderIcons/{name}.png (with no light/dark variants),
+    // so the fabric/forge/neoforge/quilt/optifine PNGs were never found and it fell back to a blank or hand-made icon.
+    // It now loads the standard single file first, then tries the theme file, and finally returns nil.
+    // This matches the load order of iconImageForLoader: in ModLoaderIconHelper.
 
-    // 1. 优先加载 HMCL 官方标准单文件（不区分深浅色主题）
+    // 1. Prefer the HMCL official standard single file (with no light/dark variants)
     NSString *standardPath = [resourcePath stringByAppendingPathComponent:
                               [NSString stringWithFormat:@"ModLoaderIcons/%@.png", imageName]];
     UIImage *image = [UIImage imageWithContentsOfFile:standardPath];
@@ -148,14 +148,14 @@
         return image;
     }
 
-    // 2. 回退到旧格式主题文件（区分 light/dark）
+    // 2. Fall back to the old-format theme file (light/dark)
     BOOL isDarkMode = self.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark;
     NSString *theme = isDarkMode ? @"dark" : @"light";
     NSString *themedPath = [resourcePath stringByAppendingPathComponent:
                             [NSString stringWithFormat:@"ModLoaderIcons/%@_%@.png", imageName, theme]];
     image = [UIImage imageWithContentsOfFile:themedPath];
     if (!image) {
-        // 3. 尝试相反主题
+        // 3. Try the opposite theme
         theme = isDarkMode ? @"light" : @"dark";
         themedPath = [resourcePath stringByAppendingPathComponent:
                       [NSString stringWithFormat:@"ModLoaderIcons/%@_%@.png", imageName, theme]];
@@ -256,7 +256,7 @@
     _authorLabel.text = nil;
     _statsLabel.text = nil;
 
-    // 清除旧的 loader badges
+    // Clear the old loader badges
     for (UIView *view in self.loaderBadgesStackView.arrangedSubviews) {
         [self.loaderBadgesStackView removeArrangedSubview:view];
         [view removeFromSuperview];
@@ -269,12 +269,12 @@
     _nameLabel.text = mod.displayName ?: mod.fileName;
 
     if (mod.icon) {
-        // 本地已加载的图标（如从 jar 内解析的 pack.png）：直接显示，无需网络加载
+        // An icon already loaded locally (such as a pack.png parsed out of the jar): shown directly, with no network load needed
         [IconLoader cancelLoadingForImageView:_modIconView];
         _modIconView.image = mod.icon;
     } else if (mod.iconURL) {
-        // 在线图标：使用 IconLoader 加载（双层缓存 + 降采样 + CDN 镜像）
-        // 图标显示尺寸 36x36（在 setupConstraints 中定义），降采样到此尺寸避免按原图解码
+        // An online icon: loaded via IconLoader (two-level cache + downsampling + CDN mirror)
+        // The icon is displayed at 36x36 (defined in setupConstraints), so downsample to that size instead of decoding the full image
         UIImage *placeholder = [UIImage systemImageNamed:@"puzzlepiece.extension"];
         [IconLoader loadIconForImageView:_modIconView
                                      URL:mod.iconURL

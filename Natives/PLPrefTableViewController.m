@@ -61,7 +61,7 @@
     }
 
     // Adapt to the custom launcher background: make this view controller transparent so the global background (image/video) shows through.
-    // 放在 tableView 重新创建之后调用，确保 makeViewControllerTransparent 处理的是最终的 tableView。
+    // Called after the tableView is recreated, so makeViewControllerTransparent operates on the final tableView.
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
 
     // Listen for background UI effect changes: when the user switches between frosted glass and translucent, or adjusts the opacity,
@@ -557,7 +557,7 @@
         return;
     }
 
-    // iPad：保留 UIContextMenuInteraction 紧凑菜单
+    // iPad: keep the compact UIContextMenuInteraction menu
     NSMutableArray<UIAction *> *menuItems = [[NSMutableArray alloc] init];
     for (int i = 0; i < pickList.count; i++) {
         [menuItems addObject:[UIAction
@@ -638,7 +638,7 @@
 
 /// Re-apply the background effect: called when the BackgroundUIEffectChanged notification arrives.
 /// Re-applies the opacity/frosted-glass effect to this view controller via BackgroundManager,
-/// 确保 tableView 背景透明、全局背景能够正常透出。
+/// so the tableView background is transparent and the global background shows through.
 - (void)reapplyBackgroundEffect {
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
 }

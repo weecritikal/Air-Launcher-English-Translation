@@ -6,7 +6,7 @@
 #import "BackgroundManager.h"
 
 @interface PLCrashView ()
-// 数据
+// Data
 @property (nonatomic, assign) int exitCode;
 @property (nonatomic, copy) NSString *customTitle;
 @property (nonatomic, copy) NSString *customReason;

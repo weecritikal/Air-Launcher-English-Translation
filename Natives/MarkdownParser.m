@@ -5,7 +5,7 @@
 
 #import "MarkdownParser.h"
 
-/// 私有方法前向声明（避免同文件内类方法调用产生"找不到方法"警告）
+/// Forward declarations of the private methods (so calling a class method within this file does not warn about a missing method)
 @interface MarkdownParser ()
 + (void)appendHeaderToResult:(NSMutableAttributedString *)result
                         text:(NSString *)text
@@ -35,7 +35,7 @@
         baseFont = [UIFont systemFontOfSize:15];
     }
 
-    // 各级标题字体
+    // Fonts for each heading level
     UIFont *h1Font = [UIFont systemFontOfSize:24 weight:UIFontWeightBold];
     UIFont *h2Font = [UIFont systemFontOfSize:20 weight:UIFontWeightBold];
     UIFont *h3Font = [UIFont systemFontOfSize:17 weight:UIFontWeightBold];
@@ -54,13 +54,13 @@
         NSString *line = lines[i];
         NSString *trimmed = [line stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
 
-        // 围栏代码块 ``` 或 ~~~
+        // A fenced code block, ``` or ~~~
         if ([trimmed hasPrefix:@"```"] || [trimmed hasPrefix:@"~~~"]) {
-            NSString *fence = [trimmed substringToIndex:3]; // ``` 或 ~~~
+            NSString *fence = [trimmed substringToIndex:3]; // ``` or ~~~
             NSUInteger codeStart = i + 1;
             NSUInteger codeEnd = codeStart;
             BOOL foundClosing = NO;
-            // 找到闭合围栏
+            // Find the closing fence
             for (NSUInteger j = codeStart; j < lines.count; j++) {
                 NSString *codeTrimmed = [lines[j] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
                 if ([codeTrimmed hasPrefix:fence]) {
@@ -70,9 +70,9 @@
                 }
             }
             if (!foundClosing) {
-                codeEnd = lines.count; // 未闭合则到末尾
+                codeEnd = lines.count; // Unclosed, so run to the end
             }
-            // 拼接代码块内容
+            // Join the code block content
             NSMutableArray *codeLines = [NSMutableArray array];
             for (NSUInteger j = codeStart; j < codeEnd; j++) {
                 [codeLines addObject:lines[j]];
@@ -104,7 +104,7 @@
             continue;
         }
 
-        // 空行 → 段落间距（跳过，避免堆积过多换行）
+        // A blank line -> paragraph spacing (skipped, to avoid piling up newlines)
         if (trimmed.length == 0) {
             if (result.length > 0) {
                 [result appendAttributedString:[[NSAttributedString alloc] initWithString:@"\n"
@@ -114,7 +114,7 @@
             continue;
         }
 
-        // 分隔线 --- / *** / ___
+        // A horizontal rule --- / *** / ___
         if ([trimmed isEqualToString:@"---"] || [trimmed isEqualToString:@"***"] || [trimmed isEqualToString:@"___"]) {
             [result appendAttributedString:[[NSAttributedString alloc] initWithString:@"\n"
                                                                             attributes:@{NSFontAttributeName: baseFont}]];
@@ -130,7 +130,7 @@
             continue;
         }
 
-        // 标题：### 优先于 ## 优先于 #
+        // Headings: ### takes priority over ##, which takes priority over #
         if ([trimmed hasPrefix:@"### "]) {
             [self appendHeaderToResult:result
                                   text:[trimmed substringFromIndex:4]
@@ -165,7 +165,7 @@
             continue;
         }
 
-        // 引用块 > text
+        // Block quote > text
         if ([trimmed hasPrefix:@"> "]) {
             NSString *content = [trimmed substringFromIndex:2];
             NSMutableParagraphStyle *para = [[NSMutableParagraphStyle alloc] init];
@@ -180,7 +180,7 @@
                                                 codeBgColor:codeBgColor];
             NSMutableAttributedString *mutableQuote = [inlineText mutableCopy];
             [mutableQuote addAttribute:NSParagraphStyleAttributeName value:para range:NSMakeRange(0, mutableQuote.length)];
-            // 左侧条：用首字符背景色模拟（仅作视觉提示）
+            // Left bar: simulated with a background color on the first character (purely a visual hint)
             if (mutableQuote.length > 0) {
                 [mutableQuote addAttribute:NSBackgroundColorAttributeName value:separatorColor range:NSMakeRange(0, 1)];
             }
@@ -191,7 +191,7 @@
             continue;
         }
 
-        // 无序列表 - item / * item
+        // Unordered list - item / * item
         if ([trimmed hasPrefix:@"- "] || [trimmed hasPrefix:@"* "]) {
             NSString *content = [trimmed substringFromIndex:2];
             NSMutableParagraphStyle *para = [[NSMutableParagraphStyle alloc] init];
@@ -219,7 +219,7 @@
             continue;
         }
 
-        // 有序列表 1. item / 2. item / ...
+        // Ordered list 1. item / 2. item / ...
         NSRange orderedRange = [trimmed rangeOfString:@"^\\d+\\.\\s" options:NSRegularExpressionSearch];
         if (orderedRange.location == 0 && orderedRange.length > 0) {
             NSString *prefix = [trimmed substringToIndex:orderedRange.length];
@@ -249,7 +249,7 @@
             continue;
         }
 
-        // 图片 ![alt](url) — 在行内解析中处理为带链接的占位文本
+        // Image ![alt](url) — handled during inline parsing as placeholder text with a link
         if ([trimmed hasPrefix:@"!["]) {
             NSRange closeBracket = [trimmed rangeOfString:@"]("];
             if (closeBracket.location != NSNotFound) {
@@ -257,7 +257,7 @@
                 if (endParen.location != NSNotFound && endParen.location > closeBracket.location) {
                     NSString *altText = [trimmed substringWithRange:NSMakeRange(2, closeBracket.location - 2)];
                     NSString *imgURL = [trimmed substringWithRange:NSMakeRange(NSMaxRange(closeBracket), endParen.location - NSMaxRange(closeBracket))];
-                    // 显示 [图片: altText] 作为占位（iOS UITextView 远程图片加载需额外处理）
+                    // Show [Image: altText] as a placeholder (loading remote images in an iOS UITextView needs extra work)
                     NSString *placeholder = altText.length > 0 ? [NSString stringWithFormat:@"[Image: %@]", altText] : @"[Image]";
                     NSURL *url = [NSURL URLWithString:imgURL];
                     NSMutableDictionary *attrs = [@{
@@ -275,7 +275,7 @@
             }
         }
 
-        // 普通段落
+        // An ordinary paragraph
         NSAttributedString *para = [self parseInline:trimmed
                                             baseFont:baseFont
                                            textColor:textColor
@@ -292,7 +292,7 @@
 
 #pragma mark - Helpers
 
-/// 追加标题行
+/// Append a heading line
 + (void)appendHeaderToResult:(NSMutableAttributedString *)result
                         text:(NSString *)text
                         font:(UIFont *)font
@@ -315,8 +315,8 @@
                                                                     attributes:@{NSFontAttributeName: baseFont}]];
 }
 
-/// 行内格式解析（递归处理粗体/斜体内部）
-/// 合并正则一次扫描：行内代码 > 链接 > 粗体 > 斜体
+/// Inline formatting parser (recursing into the contents of bold/italic)
+/// One combined regex per scan: inline code > links > bold > italic
 + (NSAttributedString *)parseInline:(NSString *)text
                            baseFont:(UIFont *)baseFont
                           textColor:(UIColor *)textColor
@@ -326,7 +326,7 @@
         return [[NSAttributedString alloc] initWithString:@""];
     }
 
-    // 合并正则：1=code, 2=link text, 3=link url, 4=bold, 5=italic
+    // Combined regex: 1=code, 2=link text, 3=link url, 4=bold, 5=italic
     NSString *pattern = @"(?:`([^`]+)`)"
                         @"|(?:\\[([^\\]]+)\\]\\(([^\\)]+)\\))"
                         @"|(?:\\*\\*([^*]+)\\*\\*)"
@@ -334,7 +334,7 @@
     NSRegularExpression *regex = [NSRegularExpression regularExpressionWithPattern:pattern options:0 error:nil];
     NSArray<NSTextCheckingResult *> *matches = [regex matchesInString:text options:0 range:NSMakeRange(0, text.length)];
 
-    // 无任何行内标记，直接返回普通文本
+    // No inline markup at all, so return the plain text
     if (matches.count == 0) {
         return [[NSAttributedString alloc] initWithString:text
                                                attributes:@{
@@ -347,7 +347,7 @@
     NSUInteger lastEnd = 0;
 
     for (NSTextCheckingResult *m in matches) {
-        // 匹配之前的普通文本
+        // The plain text before the match
         if (m.range.location > lastEnd) {
             NSString *plain = [text substringWithRange:NSMakeRange(lastEnd, m.range.location - lastEnd)];
             [result appendAttributedString:[[NSAttributedString alloc] initWithString:plain
@@ -358,11 +358,11 @@
         }
 
         if ([m rangeAtIndex:1].location != NSNotFound) {
-            // 行内代码 `code`
+            // Inline code `code`
             NSString *code = [text substringWithRange:[m rangeAtIndex:1]];
             UIFont *codeFont = [UIFont fontWithName:@"Menlo" size:baseFont.pointSize];
             if (!codeFont) {
-                // iOS 13+ 提供 monospacedSystemFontOfSize:weight:
+                // iOS 13+ provides monospacedSystemFontOfSize:weight:
                 codeFont = [UIFont monospacedSystemFontOfSize:baseFont.pointSize weight:UIFontWeightRegular];
             }
             [result appendAttributedString:[[NSAttributedString alloc] initWithString:code
@@ -372,7 +372,7 @@
                                                                                NSBackgroundColorAttributeName: codeBgColor
                                                                            }]];
         } else if ([m rangeAtIndex:2].location != NSNotFound) {
-            // 链接 [text](url)
+            // Link [text](url)
             NSString *linkText = [text substringWithRange:[m rangeAtIndex:2]];
             NSString *linkURLStr = [text substringWithRange:[m rangeAtIndex:3]];
             NSURL *url = [NSURL URLWithString:linkURLStr];
@@ -384,7 +384,7 @@
             [result appendAttributedString:[[NSAttributedString alloc] initWithString:linkText
                                                                            attributes:attrs]];
         } else if ([m rangeAtIndex:4].location != NSNotFound) {
-            // 粗体 **text**
+            // Bold **text**
             NSString *boldText = [text substringWithRange:[m rangeAtIndex:4]];
             UIFont *boldFont = [UIFont boldSystemFontOfSize:baseFont.pointSize];
             NSAttributedString *inner = [self parseInline:boldText
@@ -394,7 +394,7 @@
                                               codeBgColor:codeBgColor];
             [result appendAttributedString:inner];
         } else if ([m rangeAtIndex:5].location != NSNotFound) {
-            // 斜体 *text*
+            // Italic *text*
             NSString *italicText = [text substringWithRange:[m rangeAtIndex:5]];
             UIFont *italicFont = [UIFont italicSystemFontOfSize:baseFont.pointSize];
             NSAttributedString *inner = [self parseInline:italicText
@@ -408,7 +408,7 @@
         lastEnd = m.range.location + m.range.length;
     }
 
-    // 末尾的普通文本
+    // The plain text at the end
     if (lastEnd < text.length) {
         NSString *plain = [text substringFromIndex:lastEnd];
         [result appendAttributedString:[[NSAttributedString alloc] initWithString:plain

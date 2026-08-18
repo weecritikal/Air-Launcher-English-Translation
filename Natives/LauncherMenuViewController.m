@@ -26,7 +26,7 @@
     self.view.backgroundColor = [UIColor clearColor];
 
     // Adapt to the custom launcher background: make this view controller transparent so the global background (image/video) shows through.
-    // 即使本控制器在 LauncherRootViewController 中作为子 VC 添加，仍需在自身 viewDidLoad 中调用。
+    // Even though this controller is added as a child VC of LauncherRootViewController, this still has to be called from its own viewDidLoad.
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
 
     // Listen for background UI effect changes: when the user switches between frosted glass and translucent, or adjusts the opacity,
@@ -36,23 +36,23 @@
                                                  name:@"BackgroundUIEffectChanged"
                                                object:nil];
 
-    // 监听外观变更（字体颜色变化时刷新菜单按钮颜色）
+    // Listen for appearance changes (refreshing the menu button colors when the text color changes)
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(applyCustomAppearance)
                                                  name:@"LauncherAppearanceChanged"
                                                object:nil];
 
-    // 菜单项配置
-    // 联机相关入口暂不显示（需进一步完善）
-    // case 3 为"联机"（陶瓦联机 Terracotta，与 HMCL/FCL/ZL2 互通）
-    // case 4 为"ZeroTier 联机"（独立入口，与陶瓦联机并列，便于用户直接进入 ZeroTier 界面）
-    // case 5 为"设置"
-    // 键位调整界面已移到设置页面中
+    // Menu item configuration
+    // The multiplayer entry points are hidden for now (they need more work)
+    // case 3 is "Multiplayer" (Terracotta, interoperable with HMCL/FCL/ZL2)
+    // case 4 is "ZeroTier multiplayer" (a separate entry alongside Terracotta, so users can go straight to the ZeroTier screen)
+    // case 5 is "Settings"
+    // The control layout screen has moved into the settings page
     self.menuItems = @[
         @{@"icon": @"house.fill", @"title": @" ", @"index": @0},
         @{@"icon": @"arrow.down.circle.fill", @"title": @" ", @"index": @1},
         @{@"icon": @"puzzlepiece.fill", @"title": @" ", @"index": @2},
-        // 暂时移除两个联机图标，恢复时取消下方两行注释并将设置项 index 改回 @5
+        // The two multiplayer icons are removed for now; to restore them, uncomment the two lines below and change the settings index back to @5
         // @{@"icon": @"antenna.radiowaves.left.and.right", @"title": @" ", @"index": @3},
         // @{@"icon": @"network", @"title": @" ", @"index": @4},
         @{@"icon": @"gearshape.fill", @"title": @" ", @"index": @3}
@@ -78,12 +78,12 @@
         [self.sidebarView.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor]
     ]];
 
-    // 创建垂直均分的 UIStackView，替代固定偏移布局。
-    // 之前用 startY=60 + 固定间距 15，5 个按钮总高 370pt，在 iPhone 横屏（卡片高度不足）
-    // 时第 5 个按钮（设置）被卡片 masksToBounds 裁剪，且按钮只锚定 top 无 bottom 约束，
-    // 下方留出大块空白加剧"下面空隙大"的观感。
-    // 改用 UIStackView EqualSpacing 让按钮在可用空间内垂直均匀分布，上下留白相同，
-    // 无论卡片高度如何都能完整显示所有按钮，且消除固定 startY 导致的下方空白。
+    // Use a vertically distributed UIStackView instead of a fixed-offset layout.
+    // Previously startY=60 with a fixed 15pt gap made 5 buttons 370pt tall, so on iPhone in landscape (where the card is not tall enough)
+    // the 5th button (Settings) was clipped by the card masksToBounds, and since the buttons were only anchored at the top with no bottom constraint,
+    // the large empty area below made "the gap at the bottom is too big" even more obvious.
+    // A UIStackView with EqualSpacing distributes the buttons evenly through the available space with equal padding above and below,
+    // so every button is fully visible whatever the card height, and the empty area caused by the fixed startY is gone.
     self.menuStackView = [[UIStackView alloc] init];
     self.menuStackView.translatesAutoresizingMaskIntoConstraints = NO;
     self.menuStackView.axis = UILayoutConstraintAxisVertical;
@@ -117,13 +117,13 @@
     btn.translatesAutoresizingMaskIntoConstraints = NO;
     btn.tag = index;
 
-    // 设置图标
+    // Set the icon
     UIImage *icon = [UIImage systemImageNamed:item[@"icon"]];
     [btn setImage:icon forState:UIControlStateNormal];
 
-    // 设置颜色 - 选中项高亮
-    // 支持自定义字体颜色：用户在设置中配置 general.text_color 后，
-    // 未选中项使用自定义颜色，选中项保持高亮蓝色
+    // Set the color - the selected item is highlighted
+    // Custom text color support: once the user sets general.text_color in settings,
+    // unselected items use that color while the selected one stays highlight blue
     UIColor *normalColor = [self menuNormalColor];
     UIColor *accent = accentColor();
     if (index == self.selectedIndex) {
@@ -132,12 +132,12 @@
         btn.tintColor = normalColor;
     }
 
-    // 设置标题（在图标下方）
+    // Set the title (below the icon)
     btn.titleLabel.font = [UIFont systemFontOfSize:10];
     [btn setTitle:item[@"title"] forState:UIControlStateNormal];
     [btn setTitleColor:(index == self.selectedIndex) ? accent : normalColor forState:UIControlStateNormal];
     
-    // 垂直布局：图标在上，文字在下
+    // Vertical layout: icon on top, text underneath
     btn.contentHorizontalAlignment = UIControlContentHorizontalAlignmentCenter;
     btn.contentVerticalAlignment = UIControlContentVerticalAlignmentCenter;
     btn.titleEdgeInsets = UIEdgeInsetsMake(30, -30, 0, 0);
@@ -145,7 +145,7 @@
     
     [btn addTarget:self action:@selector(menuButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
 
-    // 统一圆角：防御性设置 10pt，避免后续给选中态加背景高亮时出现直角方块
+    // Uniform corner radius: 10pt set defensively, so adding a highlight background to the selected state later does not produce square blocks
     btn.layer.cornerRadius = 10;
     btn.layer.masksToBounds = YES;
 
@@ -157,7 +157,7 @@
 - (void)menuButtonTapped:(UIButton *)sender {
     NSInteger index = sender.tag;
 
-    // FCL 风格：选中菜单项时添加弹跳动画（ScaleX/ScaleY 弹跳，OvershootInterpolator 效果）
+    // FCL style: add a bounce animation when a menu item is selected (a ScaleX/ScaleY bounce, like an OvershootInterpolator)
     [UIView animateWithDuration:0.3
                           delay:0
          usingSpringWithDamping:0.5
@@ -174,24 +174,24 @@
         } completion:nil];
     }];
 
-    // 更新选中状态
+    // Update the selected state
     self.selectedIndex = index;
     [self updateButtonColors];
 
-    // 回调
+    // Callback
     NSString *title = self.menuItems[index][@"title"];
     if (self.onMenuItemSelected) {
         self.onMenuItemSelected(index, title);
     }
 
-    // 处理导航
+    // Handle the navigation
     [self handleMenuSelection:index];
 }
 
 - (void)updateButtonColors {
     UIColor *normalColor = [self menuNormalColor];
     UIColor *accent = accentColor();
-    // 按钮现在在 menuStackView.arrangedSubviews 中（UIStackView 重构后）
+    // The buttons now live in menuStackView.arrangedSubviews (after the UIStackView rework)
     for (UIView *view in self.menuStackView.arrangedSubviews) {
         if ([view isKindOfClass:[UIButton class]]) {
             UIButton *btn = (UIButton *)view;
@@ -200,7 +200,7 @@
             if (index == self.selectedIndex) {
                 btn.tintColor = accent;
                 [btn setTitleColor:accent forState:UIControlStateNormal];
-                // FCL 风格：选中项添加半透明背景高亮
+                // FCL style: give the selected item a translucent background highlight
                 btn.backgroundColor = [accent colorWithAlphaComponent:0.15];
             } else {
                 btn.tintColor = normalColor;
@@ -211,14 +211,14 @@
     }
 }
 
-// 字体颜色变更时刷新所有菜单按钮
+// Refresh every menu button when the text color changes
 - (void)applyCustomAppearance {
     [self updateButtonColors];
 }
 
 /// Re-apply the background effect: called when the BackgroundUIEffectChanged notification arrives.
 /// Re-applies the opacity/frosted-glass effect to this view controller via BackgroundManager,
-/// 确保全局背景能够正常透出。
+/// so the global background shows through correctly.
 - (void)reapplyBackgroundEffect {
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
 }
@@ -227,7 +227,7 @@
     [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
-// 未选中菜单项的颜色：优先使用用户自定义的 general.text_color，否则默认 systemGray
+// Color of unselected menu items: the user-defined general.text_color when set, otherwise systemGray
 - (UIColor *)menuNormalColor {
     NSString *hex = getPrefObject(@"general.text_color");
     if (hex.length > 0) {
@@ -258,50 +258,50 @@
 
 - (void)handleMenuSelection:(NSInteger)index {
     switch (index) {
-        case 0: // 主页
-            // 通知父控制器切换到新闻页
+        case 0: // Home
+            // Tell the parent controller to switch to the news page
             [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowHomePage" object:nil];
             break;
 
-        case 1: // 下载
+        case 1: // Download
             [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowDownloadPage" object:nil];
             break;
 
-        case 2: // 版本管理（合并了原"当前版本设置"功能）
+        case 2: // Version manager (which absorbed the old "current version settings" feature)
             [self showVersionManager];
             break;
 
-        case 3: // 设置（联机入口暂时移除，恢复时将本 case 改回 case 5）
+        case 3: // Settings (the multiplayer entry is removed for now; change this back to case 5 when restoring it)
             [self showSettings];
             break;
     }
 }
 
 - (void)showVersionManager {
-    // 发送通知让 LauncherRootViewController 在中间内容区显示
+    // Post a notification so LauncherRootViewController shows it in the middle content area
     [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowVersionManager" object:nil];
 }
 
 - (void)showMultiplayer {
-    // 发送通知让 LauncherRootViewController 显示陶瓦联机界面
+    // Post a notification so LauncherRootViewController shows the Terracotta multiplayer screen
     [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowMultiplayer" object:nil];
 }
 
 - (void)showZeroTier {
-    // 发送通知让 LauncherRootViewController 显示 ZeroTier 联机界面
-    // ZeroTier 与陶瓦联机为并列的两套联机方案，独立菜单入口避免用户先进入陶瓦再切换。
+    // Post a notification so LauncherRootViewController shows the ZeroTier multiplayer screen
+    // ZeroTier and Terracotta are two parallel multiplayer options, so a separate menu entry saves the user going through Terracotta first.
     [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowZeroTier" object:nil];
 }
 
 - (void)showSettings {
-    // 发送通知让 LauncherRootViewController 在中间内容区显示
+    // Post a notification so LauncherRootViewController shows it in the middle content area
     [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowSettings" object:nil];
 }
 
 #pragma mark - Data Updates
 
 - (void)updateAccountInfo {
-    // 账户信息在右侧面板显示，这里不需要处理
+    // The account information is shown in the right panel, so nothing is needed here
 }
 
 #pragma mark - Orientation

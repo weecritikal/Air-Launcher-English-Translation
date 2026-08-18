@@ -22,7 +22,7 @@
 
 #include <sys/time.h>
 
-// 添加 C 函数声明 - 这些函数在 LauncherPreferences.m 或其他地方定义
+// C function declarations - these are defined in LauncherPreferences.m or elsewhere
 extern void setPrefString(NSString *key, NSString *value);
 extern void setPrefInt(NSString *key, NSInteger value);
 
@@ -36,32 +36,32 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 @property(nonatomic, strong) UIButton *launchButton;
 @property(nonatomic, strong) UIButton *manageVersionBtn;
 @property(nonatomic, strong) UIButton *executeJarBtn;
-// JIT 状态指示标签（启动游戏按钮上方）
+// JIT status label (above the play button)
 @property(nonatomic, strong) UILabel *jitStatusLabel;
 
-// 下载相关属性
+// Download-related properties
 @property(nonatomic, strong) MinecraftResourceDownloadTask *task;
 @property(nonatomic, strong) DownloadProgressViewController *progressVC;
 @property(nonatomic, strong) UIProgressView *progressView;
 @property(nonatomic, strong) UILabel *progressLabel;
 
-// ===== 下载中心入口（参照 FCL/ZL2/HMCL 的统一下载进度弹窗入口）=====
-// FCL/ZL2/HMCL 都在启动器主界面提供一个"下载管理/下载中心"入口按钮，
-// 点击后弹出下载进度对话框，集中显示所有下载任务（MC本体/模组/光影/资源包等）的实时进度。
-// 本按钮即对应这个入口：当 DownloadTaskManager 中存在任何下载任务时显示，
-// 点击以 FormSheet 方式弹出 DownloadTasksViewController（全任务列表 + 进度详情）。
+// ===== Download center entry point (modelled on the unified download progress modal of FCL/ZL2/HMCL) =====
+// FCL, ZL2 and HMCL all put a "download manager/download center" button on the launcher main screen,
+// which opens a progress dialog showing live progress for every download (the MC client/mods/shaders/resource packs and so on).
+// This button is that entry point: it appears whenever DownloadTaskManager has any download,
+// and presents DownloadTasksViewController (the full task list plus progress details) as a FormSheet.
 @property(nonatomic, strong) UIButton *downloadCenterButton;
-// 按钮上的活动指示器（下载进行中时旋转，表示有活跃任务）
+// Activity indicator on the button (spinning while a download runs, to show there is something active)
 @property(nonatomic, strong) UIActivityIndicatorView *downloadCenterActivityIndicator;
-// 按钮上的进度百分比标签（实时显示所有活动任务的聚合进度）
+// Progress percentage label on the button (showing the live aggregate progress of every active task)
 @property(nonatomic, strong) UILabel *downloadCenterProgressLabel;
-// 当前弹出的下载中心 VC（弱引用，避免循环持有）
+// The download center VC currently presented (weak, to avoid a retain cycle)
 @property(nonatomic, weak) DownloadTasksViewController *presentedDownloadCenterVC;
-// 标记用户是否手动关闭了下载中心（避免下载任务更新时反复自动弹出）
+// Tracks whether the user closed the download center by hand (so it does not keep reopening on every download update)
 @property(nonatomic, assign) BOOL userDismissedDownloadCenter;
 
-// FCL 风格：无账号时点击启动游戏跳转添加账号界面，登录完成后自动继续启动。
-// pendingLaunchAfterLogin=YES 表示用户从启动按钮进入账号登录，登录成功后应自动触发 launchGame。
+// FCL style: with no account, tapping play opens the add-account screen and the launch continues automatically after signing in.
+// pendingLaunchAfterLogin=YES means the user reached account sign-in from the play button, so launchGame should fire once sign-in succeeds.
 @property(nonatomic, assign) BOOL pendingLaunchAfterLogin;
 
 @end
@@ -76,50 +76,50 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     self.view.backgroundColor = [UIColor clearColor];
 
     // Adapt to the custom launcher background: make this view controller transparent so the global background (image/video) shows through.
-    // 即使本控制器在 LauncherRootViewController 中作为子 VC 添加，仍需在自身 viewDidLoad 中调用。
+    // Even though this controller is added as a child VC of LauncherRootViewController, this still has to be called from its own viewDidLoad.
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
 
     [self setupUI];
     [self updateAccountInfo];
     [self updateVersionInfo];
     
-    // 监听账户信息更新通知
+    // Listen for account information updates
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(updateAccountInfo)
                                                  name:@"UpdateAccountInfo"
                                                object:nil];
-    // 监听版本/配置切换通知
+    // Listen for version/profile switches
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(updateVersionInfo)
                                                  name:@"SelectedProfileChanged"
                                                object:nil];
 
-    // 监听统一下载任务聚合状态变化，以更新启动按钮
+    // Listen for changes to the aggregate download state, so the play button can be updated
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(updateLaunchButtonState)
                                                  name:DownloadTaskManagerAggregateStateDidChangeNotification
                                                object:nil];
 
-    // ===== 下载中心入口通知监听 =====
-    // 监听下载任务更新通知（进度变化、新任务注册等），实时更新下载中心按钮的显示状态和进度百分比。
-    // 这确保了模组、光影、资源包、数据包、世界存档等所有通过 DownloadTaskManager 注册的下载任务
-    // 都能在下载中心按钮上反映出来，用户点击即可查看详情（参照 FCL/ZL2/HMCL 的下载进度弹窗）。
+    // ===== Download center notification observers =====
+    // Listen for download task updates (progress changes, new registrations and so on) to keep the download center button state and percentage live.
+    // This makes sure every download registered with DownloadTaskManager — mods, shaders, resource packs, data packs, world saves —
+    // is reflected on the download center button, where the user can tap for details (as in the download progress modals of FCL/ZL2/HMCL).
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(handleDownloadTaskUpdate:)
                                                  name:DownloadTaskManagerDidUpdateTaskNotification
                                                object:nil];
-    // 监听任务完成通知，更新按钮状态并在全部完成时隐藏活动指示器
+    // Listen for task completion, to update the button state and hide the activity indicator once everything is done
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(handleDownloadTaskCompleted:)
                                                  name:DownloadTaskManagerTaskCompletedNotification
                                                object:nil];
-    // 监听下载中心被用户手动关闭的通知，设置标记避免反复自动弹出
+    // Listen for the download center being closed by hand, and set the flag so it does not keep reopening
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(handleDownloadCenterDismissed)
                                                  name:@"DownloadCenterDidDismiss"
                                                object:nil];
 
-    // 监听启动器外观变化（自定义字体/卡片颜色），刷新文字颜色
+    // Listen for launcher appearance changes (custom font/card color) and refresh the text colors
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(applyCustomAppearance)
                                                  name:@"LauncherAppearanceChanged"
@@ -145,14 +145,14 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 
 /// Re-apply the background effect: called when the BackgroundUIEffectChanged notification arrives.
 /// Re-applies the opacity/frosted-glass effect to this view controller via BackgroundManager,
-/// 确保全局背景能够正常透出。
+/// so the global background shows through correctly.
 - (void)reapplyBackgroundEffect {
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
 }
 
 - (void)dealloc {
     [[NSNotificationCenter defaultCenter] removeObserver:self];
-    // 关键修复（UI 累积异常）：KVO 兜底移除，防止 task 仍在进行中时 VC 被释放导致野指针。
+    // Key fix (cumulative UI glitch): remove the KVO observer as a safety net, so a VC released mid-task cannot leave a dangling pointer.
     if (self.task && self.task.progress) {
         @try {
             [self.task.progress removeObserver:self
@@ -165,7 +165,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 #pragma mark - UI Setup
 
 - (void)setupUI {
-    // 头像
+    // Avatar
     self.avatarImageView = [[UIImageView alloc] init];
     self.avatarImageView.translatesAutoresizingMaskIntoConstraints = NO;
     self.avatarImageView.contentMode = UIViewContentModeScaleAspectFit;
@@ -176,26 +176,26 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     self.avatarImageView.tintColor = [UIColor systemGrayColor];
     self.avatarImageView.userInteractionEnabled = YES;
     [self.avatarImageView addGestureRecognizer:[[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(selectAccount:)]];
-    // 长按头像：弹出自定义头像导入/清除菜单
+    // Long-press the avatar: show the import/clear custom avatar menu
     UILongPressGestureRecognizer *longPress = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(showAvatarMenu:)];
     longPress.minimumPressDuration = 0.5;
     [self.avatarImageView addGestureRecognizer:longPress];
     [self.view addSubview:self.avatarImageView];
     
-    // 用户名标签
+    // Username label
     self.usernameLabel = [[UILabel alloc] init];
     self.usernameLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.usernameLabel.font = [UIFont boldSystemFontOfSize:16];
     self.usernameLabel.textColor = [UIColor labelColor];
     self.usernameLabel.textAlignment = NSTextAlignmentCenter;
-    // iPhone 上侧栏宽度更窄，开启字号自适应避免长用户名被截断
+    // The sidebar is narrower on iPhone, so automatic font scaling stops a long username being truncated
     self.usernameLabel.adjustsFontSizeToFitWidth = YES;
     self.usernameLabel.minimumScaleFactor = 0.7;
     self.usernameLabel.lineBreakMode = NSLineBreakByTruncatingTail;
     self.usernameLabel.text = @"Not signed in";
     [self.view addSubview:self.usernameLabel];
 
-    // 版本标签
+    // Version label
     self.versionLabel = [[UILabel alloc] init];
     self.versionLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.versionLabel.font = [UIFont systemFontOfSize:13];
@@ -205,12 +205,12 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     self.versionLabel.minimumScaleFactor = 0.7;
     self.versionLabel.lineBreakMode = NSLineBreakByTruncatingTail;
     self.versionLabel.text = @"No version selected";
-    // FCL 风格：点击版本标签也能弹出选择器
+    // FCL style: tapping the version label also opens the picker
     self.versionLabel.userInteractionEnabled = YES;
     [self.versionLabel addGestureRecognizer:[[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(showVersionPicker)]];
     [self.view addSubview:self.versionLabel];
     
-    // 进度标签
+    // Progress label
     self.progressLabel = [[UILabel alloc] init];
     self.progressLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.progressLabel.font = [UIFont systemFontOfSize:12];
@@ -226,14 +226,14 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     self.progressView.hidden = YES;
     [self.view addSubview:self.progressView];
 
-    // ===== 下载中心入口按钮（参照 FCL/ZL2/HMCL 下载进度弹窗入口）=====
-    // 设计理念：FCL 和 ZL2 在启动器主界面提供一个"下载管理"按钮，点击后弹出下载进度对话框；
-    // HMCL 在下载页面显示所有下载任务的进度。本按钮综合三者风格：
-    // - 按钮样式：圆角卡片式，与启动器其他按钮统一
-    // - 左侧：下载图标 + 活动指示器（下载中时旋转）
-    // - 中间："下载中心"文字 + 进度百分比
-    // - 右侧：箭头图标（表示点击可查看详情）
-    // - 当 DownloadTaskManager 中存在任何下载任务时显示，无任务时隐藏
+    // ===== Download center entry button (modelled on the download progress modals of FCL/ZL2/HMCL) =====
+    // Design rationale: FCL and ZL2 put a "download manager" button on the launcher main screen that opens a progress dialog,
+    // while HMCL shows the progress of every download on the download page. This button combines all three:
+    // - button style: a rounded card, matching the other launcher buttons
+    // - left: the download icon + an activity indicator (spinning while downloading)
+    // - middle: the "Download center" text + the progress percentage
+    // - right: a chevron (showing it can be tapped for details)
+    // - shown whenever DownloadTaskManager has any download, hidden when there are none
     self.downloadCenterButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.downloadCenterButton.translatesAutoresizingMaskIntoConstraints = NO;
     [self.downloadCenterButton setTitle:@"Download center" forState:UIControlStateNormal];
@@ -245,7 +245,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     self.downloadCenterButton.backgroundColor = [UIColor colorWithWhite:0.2 alpha:1.0];
     self.downloadCenterButton.layer.cornerRadius = 10;
     self.downloadCenterButton.layer.masksToBounds = YES;
-    // 左侧下载图标
+    // Download icon on the left
     UIImage *downloadIcon = [UIImage systemImageNamed:@"arrow.down.circle"];
     [self.downloadCenterButton setImage:downloadIcon forState:UIControlStateNormal];
     self.downloadCenterButton.tintColor = accentColor();
@@ -254,17 +254,17 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     self.downloadCenterButton.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeft;
     self.downloadCenterButton.contentEdgeInsets = UIEdgeInsetsMake(0, 12, 0, 12);
     [self.downloadCenterButton addTarget:self action:@selector(openDownloadCenter) forControlEvents:UIControlEventTouchUpInside];
-    self.downloadCenterButton.hidden = YES; // 默认隐藏，有下载任务时显示
+    self.downloadCenterButton.hidden = YES; // Hidden by default, shown when there are downloads
     [self.view addSubview:self.downloadCenterButton];
 
-    // 活动指示器（下载中时旋转，叠加在按钮右侧）
+    // Activity indicator (spinning while downloading, overlaid on the right of the button)
     self.downloadCenterActivityIndicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
     self.downloadCenterActivityIndicator.translatesAutoresizingMaskIntoConstraints = NO;
     self.downloadCenterActivityIndicator.color = accentColor();
     self.downloadCenterActivityIndicator.hidesWhenStopped = YES;
     [self.downloadCenterButton addSubview:self.downloadCenterActivityIndicator];
 
-    // 进度百分比标签（叠加在按钮右侧，显示聚合进度）
+    // Progress percentage label (overlaid on the right of the button, showing the aggregate progress)
     self.downloadCenterProgressLabel = [[UILabel alloc] init];
     self.downloadCenterProgressLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.downloadCenterProgressLabel.font = [UIFont monospacedDigitSystemFontOfSize:12 weight:UIFontWeightMedium];
@@ -273,36 +273,36 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     self.downloadCenterProgressLabel.text = @"0%";
     [self.downloadCenterButton addSubview:self.downloadCenterProgressLabel];
     
-    // 启动游戏按钮（FCL 复合布局 + ZL2 按压动画风格）
+    // Play button (an FCL composite layout with the ZL2 press animation)
     self.launchButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.launchButton.translatesAutoresizingMaskIntoConstraints = NO;
     [self.launchButton setTitle:@"Play" forState:UIControlStateNormal];
     [self.launchButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     self.launchButton.titleLabel.font = [UIFont boldSystemFontOfSize:18];
-    // iPhone 右侧面板更窄：标题字号自适应，避免"下载中..."等长文案被截断
+    // The right panel is narrower on iPhone: the title font scales so long text such as "Downloading..." is not truncated
     self.launchButton.titleLabel.adjustsFontSizeToFitWidth = YES;
     self.launchButton.titleLabel.minimumScaleFactor = 0.6;
     self.launchButton.titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
     self.launchButton.backgroundColor = accentColor();
     self.launchButton.layer.cornerRadius = 10;
     self.launchButton.layer.masksToBounds = YES;
-    // FCL 风格：按钮阴影（elevation 效果），增强层次感
+    // FCL style: a button shadow (an elevation effect) to add depth
     self.launchButton.layer.shadowColor = [UIColor blackColor].CGColor;
     self.launchButton.layer.shadowOffset = CGSizeMake(0, 2);
     self.launchButton.layer.shadowRadius = 4;
     self.launchButton.layer.shadowOpacity = 0.3;
-    // masksToBounds 会裁剪阴影，改用 backgroundColor + cornerRadius 不裁剪
-    // 但 masksToBounds=YES 是为了让背景色圆角生效，阴影需要单独的容器视图
-    // 权衡：保留 masksToBounds=YES（圆角更重要），放弃阴影（iOS 上 UIButton 本身有高亮效果）
+    // masksToBounds clips the shadow, so backgroundColor + cornerRadius is used instead, which does not clip
+    // but masksToBounds=YES is what makes the rounded background color work, so the shadow would need its own container view
+    // Trade-off: keep masksToBounds=YES (the rounded corners matter more) and drop the shadow (UIButton has its own highlight on iOS)
     self.launchButton.layer.masksToBounds = YES;
 
     [self.launchButton addTarget:self action:@selector(launchButtonTapped) forControlEvents:UIControlEventTouchUpInside];
-    // ZL2 风格按压动画：按下时缩放到 0.95，松开时恢复
+    // ZL2-style press animation: scale to 0.95 on press and back on release
     [self.launchButton addTarget:self action:@selector(launchButtonTouchDown) forControlEvents:UIControlEventTouchDown];
     [self.launchButton addTarget:self action:@selector(launchButtonTouchUp) forControlEvents:UIControlEventTouchUpOutside | UIControlEventTouchCancel];
     [self.view addSubview:self.launchButton];
 
-    // JIT 状态指示标签（位于启动游戏按钮上方）
+    // JIT status label (above the play button)
     self.jitStatusLabel = [[UILabel alloc] init];
     self.jitStatusLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.jitStatusLabel.font = [UIFont systemFontOfSize:11 weight:UIFontWeightMedium];
@@ -312,7 +312,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     self.jitStatusLabel.text = @"JIT: checking...";
     [self.view addSubview:self.jitStatusLabel];
 
-    // 选择版本按钮（FCL 风格：右侧版本选择入口；控制设置已挪到左侧菜单 case 3）
+    // Version picker button (FCL style: the version picker lives on the right; control settings moved to the left menu, case 3)
     self.manageVersionBtn = [UIButton buttonWithType:UIButtonTypeSystem];
     self.manageVersionBtn.translatesAutoresizingMaskIntoConstraints = NO;
     [self.manageVersionBtn setTitle:@"Select version" forState:UIControlStateNormal];
@@ -326,7 +326,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     [self.manageVersionBtn addTarget:self action:@selector(showVersionPicker) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.manageVersionBtn];
 
-    // 执行JAR按钮
+    // Execute JAR button
     self.executeJarBtn = [UIButton buttonWithType:UIButtonTypeSystem];
     self.executeJarBtn.translatesAutoresizingMaskIntoConstraints = NO;
     [self.executeJarBtn setTitle:@"Execute Jar" forState:UIControlStateNormal];
@@ -339,81 +339,81 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     [self.executeJarBtn addTarget:self action:@selector(executeJar) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:self.executeJarBtn];
     
-    // 约束布局：
-    // - 上半部分（头像/用户名/版本/进度）自上而下锚定在顶部
-    // - 下半部分（执行Jar/选择版本/JIT/启动按钮）自下而上锚定在底部
-    // 这样 JIT 显示和启动游戏按钮位于右侧面板下方，与头像区分离，避免拥挤。
+    // Constraint layout:
+    // - the upper half (avatar/username/version/progress) is anchored downwards from the top
+    // - the lower half (Execute Jar/version picker/JIT/play button) is anchored upwards from the bottom
+    // so the JIT display and the play button sit at the bottom of the right panel, away from the avatar area and not crowded.
     [NSLayoutConstraint activateConstraints:@[
-        // 头像（顶部）
+        // Avatar (top)
         [self.avatarImageView.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:16],
         [self.avatarImageView.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
         [self.avatarImageView.widthAnchor constraintEqualToConstant:72],
         [self.avatarImageView.heightAnchor constraintEqualToConstant:72],
 
-        // 用户名
+        // Username
         [self.usernameLabel.topAnchor constraintEqualToAnchor:self.avatarImageView.bottomAnchor constant:8],
         [self.usernameLabel.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:12],
         [self.usernameLabel.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-12],
 
-        // 版本
+        // Version
         [self.versionLabel.topAnchor constraintEqualToAnchor:self.usernameLabel.bottomAnchor constant:4],
         [self.versionLabel.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:12],
         [self.versionLabel.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-12],
 
-        // 进度标签
+        // Progress label
         [self.progressLabel.topAnchor constraintEqualToAnchor:self.versionLabel.bottomAnchor constant:8],
         [self.progressLabel.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:12],
         [self.progressLabel.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-12],
 
-        // 进度条
+        // Progress bar
         [self.progressView.topAnchor constraintEqualToAnchor:self.progressLabel.bottomAnchor constant:4],
         [self.progressView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:12],
         [self.progressView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-12],
 
-        // ===== 下载中心入口按钮（进度条下方）=====
-        // 当有下载任务时显示，点击弹出 DownloadTasksViewController（参照 FCL/ZL2/HMCL 下载进度弹窗）
+        // ===== Download center entry button (below the progress bar) =====
+        // Shown when there are downloads; tapping it presents DownloadTasksViewController (as in the download progress modals of FCL/ZL2/HMCL)
         [self.downloadCenterButton.topAnchor constraintEqualToAnchor:self.progressView.bottomAnchor constant:8],
         [self.downloadCenterButton.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:12],
         [self.downloadCenterButton.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-12],
         [self.downloadCenterButton.heightAnchor constraintEqualToConstant:36],
 
-        // 活动指示器（按钮右侧，垂直居中）
+        // Activity indicator (on the right of the button, vertically centered)
         [self.downloadCenterActivityIndicator.trailingAnchor constraintEqualToAnchor:self.downloadCenterButton.trailingAnchor constant:-12],
         [self.downloadCenterActivityIndicator.centerYAnchor constraintEqualToAnchor:self.downloadCenterButton.centerYAnchor],
 
-        // 进度百分比标签（指示器左侧，垂直居中）
+        // Progress percentage label (to the left of the indicator, vertically centered)
         [self.downloadCenterProgressLabel.trailingAnchor constraintEqualToAnchor:self.downloadCenterActivityIndicator.leadingAnchor constant:-6],
         [self.downloadCenterProgressLabel.centerYAnchor constraintEqualToAnchor:self.downloadCenterButton.centerYAnchor],
 
-        // ===== 下方按钮区（自下而上锚定到 safeArea 底部，参照 FCL 两按钮一排）=====
-        // 执行Jar 按钮（最底部，左半区）
+        // ===== Lower button area (anchored upwards from the bottom of the safe area, as in the two-button row of FCL) =====
+        // Execute Jar button (bottom row, left half)
         [self.executeJarBtn.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-12],
         [self.executeJarBtn.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:12],
         [self.executeJarBtn.heightAnchor constraintEqualToConstant:38],
 
-        // 管理版本按钮（最底部，右半区，与执行Jar 同一排）
+        // Manage versions button (bottom row, right half, on the same row as Execute Jar)
         [self.manageVersionBtn.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor constant:-12],
         [self.manageVersionBtn.leadingAnchor constraintEqualToAnchor:self.executeJarBtn.trailingAnchor constant:8],
         [self.manageVersionBtn.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-12],
         [self.manageVersionBtn.heightAnchor constraintEqualToConstant:38],
 
-        // 两个按钮宽度相等（各占一半，减去中间 8pt 间距）
+        // The two buttons are equally wide (half each, minus the 8pt gap between them)
         [self.executeJarBtn.widthAnchor constraintEqualToAnchor:self.manageVersionBtn.widthAnchor],
 
-        // 启动按钮（占满整排，位于两按钮上方）
+        // Play button (full width, above the two buttons)
         [self.launchButton.bottomAnchor constraintEqualToAnchor:self.executeJarBtn.topAnchor constant:-8],
         [self.launchButton.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:12],
         [self.launchButton.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-12],
         [self.launchButton.heightAnchor constraintEqualToConstant:46],
 
-        // JIT 状态标签（启动按钮上方）
+        // JIT status label (above the play button)
         [self.jitStatusLabel.bottomAnchor constraintEqualToAnchor:self.launchButton.topAnchor constant:-8],
         [self.jitStatusLabel.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:12],
         [self.jitStatusLabel.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-12],
         [self.jitStatusLabel.heightAnchor constraintEqualToConstant:20],
     ]];
 
-    // 进度条底部需留出空间避免与下方 JIT 标签重叠（弱约束，允许中间留白）
+    // Leave room below the progress bar so it does not overlap the JIT label underneath (a weak constraint, so a gap is allowed)
     [NSLayoutConstraint constraintWithItem:self.jitStatusLabel
                                 attribute:NSLayoutAttributeTop
                                 relatedBy:NSLayoutRelationGreaterThanOrEqual
@@ -426,37 +426,37 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 #pragma mark - Actions
 
 - (void)selectAccount:(UITapGestureRecognizer *)gesture {
-    // 用户主动管理账号（非启动入口），取消任何"待启动"意图，
-    // 避免登录后意外自动启动游戏。
+    // The user is managing accounts deliberately (not coming from the play button), so any "pending launch" intent is cancelled,
+    // to avoid unexpectedly launching the game after signing in.
     self.pendingLaunchAfterLogin = NO;
-    // FCL 风格：账户管理在中间内容区显示，发送通知让 LauncherRootViewController 切换内容
+    // FCL style: account management is shown in the middle content area, so a notification tells LauncherRootViewController to switch content
     [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowAccountManager" object:nil];
 }
 
 #pragma mark - 下载中心（参照 FCL/ZL2/HMCL 下载进度弹窗）
 
-/// 打开下载中心弹窗
-/// 参照 FCL/ZL2/HMCL 的下载进度显示方式：以 FormSheet 方式弹出 DownloadTasksViewController，
-/// 集中显示所有下载任务（MC本体/模组/光影/资源包/数据包/世界存档/整合包）的实时进度。
-/// 所有通过 DownloadTaskManager 注册的下载任务都会在这里显示，实现统一的下载进度管理。
+/// Open the download center modal
+/// Following how FCL/ZL2/HMCL show download progress: present DownloadTasksViewController as a FormSheet,
+/// showing live progress for every download (the MC client/mods/shaders/resource packs/data packs/world saves/modpacks).
+/// Everything registered with DownloadTaskManager appears here, giving one place to manage download progress.
 - (void)openDownloadCenter {
-    // 如果已经弹出了下载中心，直接返回避免重复弹出
+    // If the download center is already up, return so it is not presented twice
     if (self.presentedDownloadCenterVC) {
         return;
     }
 
-    // 用户主动打开了下载中心，重置"用户已关闭"标记
+    // The user opened the download center deliberately, so reset the "user closed it" flag
     self.userDismissedDownloadCenter = NO;
 
     DownloadTasksViewController *downloadCenterVC = [[DownloadTasksViewController alloc] init];
     downloadCenterVC.modalPresentationStyle = UIModalPresentationFormSheet;
-    // 弹出时不要覆盖全屏，FormSheet 方式在 iPad 上居中显示，在 iPhone 上接近全屏
+    // Do not cover the whole screen when presenting; a FormSheet is centered on iPad and near full-screen on iPhone
     downloadCenterVC.preferredContentSize = CGSizeMake(500, 600);
 
-    // 弱引用持有，避免循环持有
+    // Held weakly, to avoid a retain cycle
     self.presentedDownloadCenterVC = downloadCenterVC;
 
-    // 获取最顶层的视图控制器来 present
+    // Get the topmost view controller to present from
     UIViewController *topVC = self;
     while (topVC.presentedViewController) {
         topVC = topVC.presentedViewController;
@@ -465,57 +465,57 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     [topVC presentViewController:downloadCenterVC animated:YES completion:nil];
 }
 
-/// 处理下载任务更新通知（进度变化、新任务注册等）
-/// 当收到通知时仅更新下载中心按钮的状态，不再自动弹出下载中心界面。
+/// Handle a download task update notification (a progress change, a new task registering, and so on)
+/// On receiving one, only the download center button state is updated; the download center is no longer presented automatically.
 ///
-/// 修改说明（修复下载版本时出现两个进度显示的问题）：
-///   之前此方法会在检测到活跃下载任务时自动弹出 DownloadTasksViewController（下载中心界面），
-///   同时启动器自身在 startDownloadWithVersion: 中会自动弹出 DownloadProgressViewController
-///   （FCL/ZL2 风格单任务进度），导致两个进度显示同时出现。
-///   现在统一为 FCL/ZL2/HMCL 风格：版本下载开始时自动弹出 DownloadProgressViewController，
-///   DownloadTasksViewController 仅保留为手动打开（通过下载中心按钮）。
+/// Why this changed (fixing two progress displays appearing during a version download):
+///   this method used to present DownloadTasksViewController (the download center) as soon as an active download was detected,
+///   while the launcher itself presented DownloadProgressViewController from startDownloadWithVersion:
+///   (the FCL/ZL2-style single-task progress), so both appeared at once.
+///   It now follows FCL/ZL2/HMCL: DownloadProgressViewController appears automatically when a version download starts,
+///   and DownloadTasksViewController is only opened manually (via the download center button).
 - (void)handleDownloadTaskUpdate:(NSNotification *)notification {
     dispatch_async(dispatch_get_main_queue(), ^{
         [self updateDownloadCenterButton];
     });
 }
 
-/// 处理下载任务完成通知
-/// 当任务完成时更新按钮状态；如果所有任务都已完成，延迟隐藏下载中心按钮
+/// Handle a download task completion notification
+/// Update the button state when a task completes; once every task is done, hide the download center button after a delay
 - (void)handleDownloadTaskCompleted:(NSNotification *)notification {
     dispatch_async(dispatch_get_main_queue(), ^{
         [self updateDownloadCenterButton];
     });
 }
 
-/// 处理下载中心被用户手动关闭的通知
-/// 设置 userDismissedDownloadCenter=YES，避免后续下载任务更新时反复自动弹出下载中心。
-/// 用户可以通过点击启动器上的"下载中心"按钮重新打开（会重置此标记）。
+/// Handle the download center being closed by the user
+/// Sets userDismissedDownloadCenter=YES, so later download updates do not keep reopening it.
+/// The user can reopen it with the "Download center" button in the launcher (which resets the flag).
 - (void)handleDownloadCenterDismissed {
     self.userDismissedDownloadCenter = YES;
     self.presentedDownloadCenterVC = nil;
 }
 
-/// 更新下载中心按钮的显示状态和进度百分比
-/// 根据 DownloadTaskManager 的当前状态：
-/// - 无任务：隐藏按钮
-/// - 有活跃任务（downloading/pending）：显示按钮 + 活动指示器旋转 + 显示聚合进度百分比
-/// - 全部完成：显示按钮 + 活动指示器停止 + 显示"已完成"
+/// Update the download center button state and progress percentage
+/// Based on the current state of DownloadTaskManager:
+/// - no tasks: hide the button
+/// - active tasks (downloading/pending): show the button + spin the activity indicator + show the aggregate percentage
+/// - all complete: show the button + stop the activity indicator + show "Completed"
 - (void)updateDownloadCenterButton {
     DownloadTaskManager *manager = [DownloadTaskManager sharedManager];
     NSArray<DownloadTaskItem *> *allTasks = [manager allTasks];
 
     if (allTasks.count == 0) {
-        // 无任何下载任务，隐藏下载中心按钮
+        // No downloads at all, so hide the download center button
         self.downloadCenterButton.hidden = YES;
         [self.downloadCenterActivityIndicator stopAnimating];
         return;
     }
 
-    // 有下载任务，显示按钮
+    // There are downloads, so show the button
     self.downloadCenterButton.hidden = NO;
 
-    // 计算聚合进度（所有活动任务的平均进度）
+    // Compute the aggregate progress (the average across every active task)
     BOOL hasActive = NO;
     BOOL allCompleted = YES;
     double totalProgress = 0.0;
@@ -533,18 +533,18 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     }
 
     if (hasActive) {
-        // 有活跃下载任务
+        // There are active downloads
         double avgProgress = activeCount > 0 ? totalProgress / activeCount : 0.0;
         NSInteger percent = (NSInteger)(avgProgress * 100.0 + 0.5);
         percent = MAX(0, MIN(100, percent));
         self.downloadCenterProgressLabel.text = [NSString stringWithFormat:@"%ld%%", (long)percent];
         [self.downloadCenterActivityIndicator startAnimating];
     } else if (allCompleted) {
-        // 全部完成
+        // All complete
         self.downloadCenterProgressLabel.text = @"Completed";
         [self.downloadCenterActivityIndicator stopAnimating];
     } else {
-        // 有暂停/失败/取消的任务但没有活跃任务
+        // There are paused/failed/cancelled tasks but nothing active
         self.downloadCenterProgressLabel.text = @"Paused";
         [self.downloadCenterActivityIndicator stopAnimating];
     }
@@ -578,7 +578,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     }
     [sheet addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
 
-    // iPad 适配：用 popover 锚定到头像
+    // iPad support: anchor the popover to the avatar
     if (sheet.popoverPresentationController) {
         sheet.popoverPresentationController.sourceView = self.avatarImageView;
         sheet.popoverPresentationController.sourceRect = self.avatarImageView.bounds;
@@ -587,7 +587,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 }
 
 - (void)openAvatarImagePicker {
-    // 防止重复弹出
+    // Prevent it being presented twice
     for (UIWindow *window in UIApplication.sharedApplication.windows) {
         for (UIView *view in window.subviews) {
             if ([view isKindOfClass:[UIImagePickerController class]]) return;
@@ -607,7 +607,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
                 [self showAlert:@"Error" message:@"Could not read the selected image"];
                 return;
             }
-            // 头像需要正方形，非正方形则裁剪
+            // The avatar has to be square, so a non-square image is cropped
             if (selectedImage.size.width != selectedImage.size.height) {
                 ImageCropperViewController *cropperVC = [[ImageCropperViewController alloc] initWithImage:selectedImage];
                 __weak typeof(self) weakSelf = self;
@@ -618,8 +618,8 @@ static void *ProgressObserverContext = &ProgressObserverContext;
                         }
                     }];
                 };
-                // 本 VC 为 child view controller，self.navigationController 可能为 nil，
-                // 故用 present 方式呈现裁剪器（包装在 NavigationController 中以保留其导航栏样式）
+                // This VC is a child view controller, so self.navigationController may be nil,
+                // and the cropper is therefore presented (wrapped in a NavigationController to keep its navigation bar style)
                 UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:cropperVC];
                 nav.modalPresentationStyle = UIModalPresentationFullScreen;
                 [self presentViewController:nav animated:YES completion:nil];
@@ -672,11 +672,11 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 
 #pragma mark - 自定义外观（字体颜色）
 
-/// 读取 general.text_color 偏好并应用到右侧面板的主要文字。
-/// 卡片背景始终深色（BackgroundManager），用户若设置浅色 card_color 则需同时设置 text_color。
-/// 同时读取 general.accent_color 刷新启动按钮主题色（FCL 风格主题强调色）。
+/// Read the general.text_color preference and apply it to the main text of the right panel.
+/// The card background is always dark (BackgroundManager), so a user who sets a light card_color should set text_color too.
+/// general.accent_color is also read here to refresh the play button theme color (the FCL-style theme accent).
 - (void)applyCustomAppearance {
-    // 主题强调色：刷新启动按钮背景，使用户自选的主题色立即生效
+    // Theme accent color: refresh the play button background so the user's chosen color applies immediately
     self.launchButton.backgroundColor = accentColor();
 
     NSString *hex = getPrefObject(@"general.text_color");
@@ -689,13 +689,13 @@ static void *ProgressObserverContext = &ProgressObserverContext;
         [self.manageVersionBtn setTitleColor:customColor forState:UIControlStateNormal];
         [self.executeJarBtn setTitleColor:customColor forState:UIControlStateNormal];
     } else {
-        // 未设置自定义字体颜色时，恢复系统自适应颜色
+        // With no custom text color set, restore the system adaptive color
         self.usernameLabel.textColor = [UIColor labelColor];
         self.versionLabel.textColor = [UIColor secondaryLabelColor];
         self.progressLabel.textColor = [UIColor secondaryLabelColor];
         [self.manageVersionBtn setTitleColor:[UIColor labelColor] forState:UIControlStateNormal];
         [self.executeJarBtn setTitleColor:[UIColor labelColor] forState:UIControlStateNormal];
-        // JIT 状态颜色由 updateJITStatus 单独管理，不在此重置
+        // The JIT status color is managed separately by updateJITStatus and is not reset here
     }
 }
 
@@ -724,7 +724,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 }
 
 - (void)showVersionPicker {
-    // FCL 风格：在右侧面板弹出 ActionSheet 让用户选择已安装的版本
+    // FCL style: show an ActionSheet in the right panel so the user can pick an installed version
     NSDictionary *profiles = PLProfiles.current.profiles;
     NSArray *sortedNames = [[profiles allKeys] sortedArrayUsingSelector:@selector(localizedCaseInsensitiveCompare:)];
     NSString *currentSelected = PLProfiles.current.selectedProfileName;
@@ -741,7 +741,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     for (NSString *profileName in sortedNames) {
         NSDictionary *profile = profiles[profileName];
         NSString *versionId = profile[@"lastVersionId"] ?: @"";
-        // 检测是否启用版本隔离（gameDir != "."）
+        // Detect whether version isolation is enabled (gameDir != ".")
         NSString *gameDir = profile[@"gameDir"] ?: @".";
         BOOL isolated = ![gameDir isEqualToString:@"."];
         NSMutableString *title = [NSMutableString string];
@@ -761,13 +761,13 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     }
     
     [alert addAction:[UIAlertAction actionWithTitle:@"Manage versions" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
-        // 跳转到版本管理页面
+        // Go to the version manager page
         [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowVersionManager" object:nil];
     }]];
     
     [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
     
-    // iPad 上 ActionSheet 必须指定 popoverPresentationController
+    // On iPad an ActionSheet must be given a popoverPresentationController
     alert.popoverPresentationController.sourceView = self.manageVersionBtn;
     alert.popoverPresentationController.sourceRect = self.manageVersionBtn.bounds;
     [self presentViewController:alert animated:YES completion:nil];
@@ -776,18 +776,18 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 - (void)selectProfile:(NSString *)profileName {
     PLProfiles.current.selectedProfileName = profileName;
     [PLProfiles.current save];
-    // SelectedProfileChanged 通知已由 setSelectedProfileName 内部发送
+    // The SelectedProfileChanged notification is already posted inside setSelectedProfileName
     [self updateVersionInfo];
 }
 
 - (void)showVersionManager {
-    // 兼容旧调用方：跳转到版本管理页面
+    // Compatibility with older callers: go to the version manager page
     [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowVersionManager" object:nil];
 }
 
 - (void)executeJar {
-    // 执行JAR功能 - 打开文件选择器选择JAR文件
-    // 使用 asCopy:YES 保证文件被复制到应用沙盒，避免安全作用域 URL 导致 UZKArchive 读取失败
+    // Execute JAR: open the file picker to choose a JAR file
+    // asCopy:YES makes sure the file is copied into the app sandbox, so a security-scoped URL cannot make UZKArchive fail to read it
     UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc]
         initForOpeningContentTypes:@[[UTType typeWithMIMEType:@"application/java-archive"]]
         asCopy:YES];
@@ -811,10 +811,10 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     JavaGUIViewController *vc = [[JavaGUIViewController alloc] init];
     vc.filepath = path;
     vc.hitEnterAfterWindowShown = hitEnter;
-    // requiredJavaVersion 会读取 JAR 的 MANIFEST.MF 解析主类
+    // requiredJavaVersion reads the MANIFEST.MF of the JAR to resolve the main class
     int javaVersion = vc.requiredJavaVersion;
     if (!javaVersion) {
-        // JAR 解析失败：vc 还没 present，showDialog 不会显示，这里在 self 上弹明确提示
+        // JAR parsing failed: vc has not been presented yet so showDialog would not appear, hence an explicit alert on self here
         [self showAlert:@"Cannot execute the JAR"
                   message:[NSString stringWithFormat:@"Could not parse the JAR file: %@\n\nPossible causes:\n• The file is not a valid Java archive\n• META-INF/MANIFEST.MF is missing\n• The Main-Class attribute is missing\n• The file is corrupted", path.lastPathComponent ?: @""]];
         return;
@@ -842,7 +842,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     }];
 }
 
-/// 显示简单的提示弹窗
+/// Show a simple alert
 - (void)showAlert:(NSString *)title message:(NSString *)message {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:title
                                                                     message:message
@@ -853,7 +853,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 
 #pragma mark - Launch Game
 
-/// ZL2 风格按压动画：按下时缩放到 0.95
+/// ZL2-style press animation: scale to 0.95 on press
 - (void)launchButtonTouchDown {
     [UIView animateWithDuration:0.1
                           delay:0
@@ -863,7 +863,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     } completion:nil];
 }
 
-/// ZL2 风格按压动画：松开时恢复到 1.0
+/// ZL2-style press animation: back to 1.0 on release
 - (void)launchButtonTouchUp {
     [UIView animateWithDuration:0.1
                           delay:0
@@ -874,7 +874,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 }
 
 - (void)launchButtonTapped {
-    // 恢复按压动画（TouchUpInside 不触发 launchButtonTouchUp）
+    // Restore the press animation (TouchUpInside does not fire launchButtonTouchUp)
     [UIView animateWithDuration:0.1
                           delay:0
                         options:UIViewAnimationOptionCurveEaseOut
@@ -883,7 +883,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     } completion:nil];
 
     if (self.task) {
-        // 正在下载，显示详情（悬浮球已移除）
+        // A download is running, so show the details (the floating button is gone)
         if (!self.progressVC) {
             self.progressVC = [[DownloadProgressViewController alloc] initWithTask:self.task];
         }
@@ -891,9 +891,9 @@ static void *ProgressObserverContext = &ProgressObserverContext;
         nav.modalPresentationStyle = UIModalPresentationFormSheet;
         [self presentViewController:nav animated:YES completion:nil];
     } else if ([[DownloadTaskManager sharedManager] hasActiveTasks]) {
-        // 下载中仍允许启动游戏（不再硬阻断），仅提示用户有进行中的下载。
-        // 原实现在此处 return 导致"开了下载球后任意下载未完成就永远无法启动游戏"，
-        // 且某些下载任务状态机异常会卡住导致永久无法启动。
+        // Launching is still allowed during a download (no hard block), the user is just told a download is in progress.
+        // The original implementation returned here, so "once the download ball was enabled, any unfinished download blocked launching forever",
+        // and a stuck download state machine could make launching impossible permanently.
         [self showAlert:@"Notice" message:@"A download is in progress, which may affect launching the game."];
         [self launchGame];
     } else {
@@ -902,20 +902,20 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 }
 
 - (void)launchGame {
-    // 下载任务不再阻断启动。某些下载（如 Mod/光影）与游戏本体启动无依赖关系，
-    // 强制等待会造成"启动游戏过慢或无法启动"的体验问题。
+    // Downloads no longer block launching. Some downloads (mods, shaders) have nothing to do with starting the game itself,
+    // so forcing the user to wait made launching feel slow or impossible.
     BaseAuthenticator *currentAuth = BaseAuthenticator.current;
     if (!currentAuth) {
-        // FCL 风格：无账号时跳转到账号管理界面，登录完成后自动继续启动。
-        // 之前的行为是弹 alert 提示"请先登录账户"然后 return，用户需手动去登录再回来启动，
-        // 体验不友好。改为设置 pendingLaunchAfterLogin 标记后发送 ShowAccountManager 通知，
-        // 账号添加成功后 UpdateAccountInfo 通知回到此处时自动触发 launchGame 继续启动。
+        // FCL style: with no account, go to the account management screen and continue launching once sign-in finishes.
+        // The old behavior was an alert saying "Please sign in first" followed by a return, so the user had to sign in and come back,
+        // which was unfriendly. It now sets the pendingLaunchAfterLogin flag and posts a ShowAccountManager notification,
+        // so when the UpdateAccountInfo notification comes back here after a successful sign-in, launchGame fires automatically.
         self.pendingLaunchAfterLogin = YES;
         [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowAccountManager" object:nil];
         return;
     }
 
-    // 正常启动，清除待启动标记
+    // A normal launch, so clear the pending-launch flag
     self.pendingLaunchAfterLogin = NO;
 
     NSString *selectedProfile = PLProfiles.current.selectedProfileName;
@@ -930,7 +930,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
         return;
     }
 
-    // FCL 风格：记录最后游玩时间戳到 profile，供版本管理页显示
+    // FCL style: record the last-played timestamp in the profile, for the version manager page to show
     NSMutableDictionary *profiles = PLProfiles.current.profiles;
     NSMutableDictionary *profile = [profiles[selectedProfile] mutableCopy];
     if (profile) {
@@ -939,22 +939,22 @@ static void *ProgressObserverContext = &ProgressObserverContext;
         [PLProfiles.current save];
     }
 
-    // 设置UI为下载状态
+    // Put the UI into the downloading state
     [self setInteractionEnabled:NO];
     
-    // 查找版本对象
+    // Find the version object
     NSDictionary *versionObject = nil;
     
-    // 从远程版本列表中查找（通过 LauncherRootViewController 的 remoteVersionList）
-    // 由于 remoteVersionList 在 LauncherRootViewController 中，我们需要通过其他方式获取
-    // 这里使用通知来请求版本信息
+    // Look in the remote version list (through remoteVersionList on LauncherRootViewController)
+    // Since remoteVersionList lives on LauncherRootViewController, it has to be reached another way
+    // A notification is used here to request the version information
     NSMutableDictionary *userInfo = [NSMutableDictionary dictionary];
     userInfo[@"versionId"] = versionId;
     userInfo[@"callback"] = ^(NSDictionary *version) {
         if (version) {
             [self startDownloadWithVersion:version profileName:selectedProfile];
         } else {
-            // 如果在远程列表中找不到，可能是本地版本
+            // If it is not in the remote list, it may be a local version
             dispatch_async(dispatch_get_main_queue(), ^{
                 [self setInteractionEnabled:YES];
                 [self showAlert:@"Version information not found. Check that the version is correct"];
@@ -974,9 +974,9 @@ static void *ProgressObserverContext = &ProgressObserverContext;
         weakSelf.task.handleError = ^{
             dispatch_async(dispatch_get_main_queue(), ^{
                 [weakSelf setInteractionEnabled:YES];
-                // 关键修复（UI 累积异常）：handleError 时未移除 KVO 观察者，
-                // task.progress 被释放后 KVO 仍指向已释放对象，多次启动会导致野指针崩溃。
-                // 现在在 task = nil 之前先移除 KVO。
+                // Key fix (cumulative UI glitch): handleError did not remove the KVO observer,
+                // so after task.progress was freed the KVO still pointed at a dead object and repeated launches crashed on a dangling pointer.
+                // The KVO is now removed before task = nil.
                 @try {
                     [weakSelf.task.progress removeObserver:weakSelf
                                                 forKeyPath:@"fractionCompleted"
@@ -997,15 +997,15 @@ static void *ProgressObserverContext = &ProgressObserverContext;
                                        options:NSKeyValueObservingOptionInitial
                                        context:ProgressObserverContext];
 
-            // 自动弹出 FCL/ZL2 风格的单任务进度对话框（参照 FCL 启动下载时自动显示进度对话框）
-            // 之前通过 DownloadTaskManager 通知自动弹出 DownloadTasksViewController（下载中心界面），
-            // 导致两个进度显示同时出现。现在统一使用 DownloadProgressViewController。
+            // Present the FCL/ZL2-style single-task progress dialog automatically (as FCL does when a download starts)
+            // DownloadTasksViewController (the download center) used to be presented automatically from a DownloadTaskManager notification,
+            // so two progress displays appeared at once. DownloadProgressViewController is now used consistently.
             if (!weakSelf.progressVC) {
                 weakSelf.progressVC = [[DownloadProgressViewController alloc] initWithTask:weakSelf.task];
             }
             UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:weakSelf.progressVC];
             nav.modalPresentationStyle = UIModalPresentationFormSheet;
-            // 检查是否已有模态视图弹出，避免覆盖重要弹窗（如账号登录）
+            // Check whether a modal is already up, so an important one (such as account sign-in) is not covered
             UIViewController *topVC = weakSelf;
             while (topVC.presentedViewController) {
                 topVC = topVC.presentedViewController;
@@ -1021,9 +1021,9 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     self.manageVersionBtn.enabled = enabled;
     self.executeJarBtn.enabled = enabled;
 
-    // 启动游戏的完整性检查/下载：始终显示进度（HMCL 风格进度条+文本），
-    // 不再被悬浮球设置隐藏。悬浮球（球心百分比）与此处进度条互为补充，
-    // 确保用户在启动前能"一模一样"地看到完整性检查进度。
+    // The integrity check/download before launching always shows progress (an HMCL-style progress bar plus text),
+    // It is no longer hidden by the floating button setting. The floating button (the percentage in its center) and this progress bar complement each other,
+    // so the user sees exactly the same integrity check progress before launching.
     BOOL showProgressUI = YES;
     if (enabled) {
         self.progressView.hidden = YES;
@@ -1044,9 +1044,9 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     BOOL hasAccount = (BaseAuthenticator.current != nil);
     NSString *selectedProfile = PLProfiles.current.selectedProfileName;
     BOOL hasVersion = selectedProfile && PLProfiles.current.profiles[selectedProfile][@"lastVersionId"] != nil;
-    // FCL 风格：无账号时按钮仍可点击，点击后跳转账号管理界面（登录后自动继续启动）。
-    // 之前 hasAccount 参与禁用判断导致无账号时按钮完全不可点，用户"点击启动游戏完全没有反应"。
-    // 现在无账号时按钮可点，标题改为"登录并启动"提示用户点击后会先登录。
+    // FCL style: the button stays tappable with no account, and tapping it opens account management (the launch continues automatically after signing in).
+    // hasAccount used to take part in the disabled check, so with no account the button was completely untappable and "tapping play did nothing at all".
+    // The button is now tappable with no account and its title changes to "Sign in and play", telling the user they will sign in first.
     BOOL enabled = hasVersion && !self.task;
 
     self.launchButton.enabled = enabled;
@@ -1067,7 +1067,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
         return;
     }
     
-    // 计算下载速度和剩余时间
+    // Compute the download speed and time remaining
     static CGFloat lastMsTime;
     static NSUInteger lastSecTime, lastCompletedUnitCount;
     NSProgress *progress = self.task.textProgress;
@@ -1086,9 +1086,9 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     }
     
     dispatch_async(dispatch_get_main_queue(), ^{
-        // 启动游戏的完整性检查/下载：始终显示进度（HMCL 风格进度条+文本），
-        // 不再被悬浮球设置隐藏。悬浮球（球心百分比）与此处进度条互为补充，
-        // 确保用户在启动前能"一模一样"地看到完整性检查进度。
+        // The integrity check/download before launching always shows progress (an HMCL-style progress bar plus text),
+        // and is no longer hidden by the floating button setting. The floating button (the percentage in its center) and this progress bar complement each other,
+        // so the user sees exactly the same integrity check progress before launching.
         BOOL showProgressUI = YES;
         if (showProgressUI) {
             self.progressLabel.text = progress.localizedAdditionalDescription;
@@ -1096,9 +1096,9 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 
         if (!progress.finished) return;
 
-        // 关键修复（UI 累积异常）：进度完成时未移除 KVO 观察者，
-        // 导致每次下载完成后 KVO 仍挂在已释放的 task.progress 上，多次启动累积后崩溃。
-        // 现在在 task 完成（无论是否启动游戏）后立即移除 KVO。
+        // Key fix (cumulative UI glitch): the KVO observer was not removed when the progress finished,
+        // so after each download it stayed attached to a freed task.progress and repeated launches eventually crashed.
+        // The KVO is now removed as soon as the task finishes (whether or not the game launches).
         @try {
             [self.task.progress removeObserver:self
                                     forKeyPath:@"fractionCompleted"
@@ -1110,26 +1110,26 @@ static void *ProgressObserverContext = &ProgressObserverContext;
         self.progressView.observedProgress = nil;
         
         if (self.task.metadata) {
-            // 应用配置特定的设置
+            // Apply the profile-specific settings
             NSString *profileName = PLProfiles.current.selectedProfileName;
             NSDictionary *profile = PLProfiles.current.profiles[profileName];
             
             if (profile) {
-                // 应用渲染器设置
+                // Apply the renderer setting
                 NSString *renderer = profile[@"renderer"] ?: @"auto";
                 if (![renderer isEqualToString:@"auto"]) {
                     setPrefString(@"video.renderer", renderer);
                 }
 
-                // 应用图形 API 设置（MC 26.2+ 游戏内 OpenGL/Vulkan 切换）
-                // 由 JavaLauncher.m 读取并设置 AMETHYST_GRAPHICS_API 环境变量，
-                // PojavLauncher.java 写入 options.txt 的 graphicsApi 字段
+                // Apply the graphics API setting (in-game OpenGL/Vulkan switching on MC 26.2+)
+                // JavaLauncher.m reads it and sets the AMETHYST_GRAPHICS_API environment variable,
+                // and PojavLauncher.java writes the graphicsApi field into options.txt
                 NSString *graphicsApi = profile[@"graphicsApi"];
                 if (graphicsApi.length > 0) {
                     setPrefString(@"video.graphics_api", graphicsApi);
                 }
 
-                // 应用Java版本设置（兼容旧版直装器写入的 NSDictionary 格式）
+                // Apply the Java version setting (handling the NSDictionary format written by older direct installers)
                 id javaVerRaw = profile[@"javaVersion"];
                 NSString *javaVer = nil;
                 if ([javaVerRaw isKindOfClass:[NSDictionary class]]) {
@@ -1144,7 +1144,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
                     setPrefString(@"java.java_version", javaVer);
                 }
                 
-                // 应用内存设置
+                // Apply the memory setting
                 NSInteger allocatedMemory = [profile[@"allocatedMemory"] integerValue];
                 if (allocatedMemory > 0) {
                     setPrefInt(@"general.ram_allocation", (int)allocatedMemory);
@@ -1157,7 +1157,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
         } else {
             self.task = nil;
             [self setInteractionEnabled:YES];
-            // 通知刷新版本列表
+            // Notify listeners to refresh the version list
             [[NSNotificationCenter defaultCenter] postNotificationName:@"ReloadProfileList" object:nil];
         }
     });
@@ -1227,8 +1227,8 @@ static void *ProgressObserverContext = &ProgressObserverContext;
             self.usernameLabel.text = username;
         }
 
-        // 加载头像：本地自定义头像优先，回退到在线 URL
-        // 头像文件名使用 accountId（唯一标识），同名账户头像不再冲突
+        // Load the avatar: a local custom avatar wins, falling back to the online URL
+        // The avatar file name uses accountId (a unique identifier), so accounts with the same name no longer clash
         UIImage *localAvatar = [[AvatarManager sharedManager] avatarForAccount:currentAuth.authData[@"accountId"]];
         if (localAvatar) {
             self.avatarImageView.image = localAvatar;
@@ -1254,8 +1254,8 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 
     [self updateLaunchButtonState];
 
-    // FCL 风格：若用户从"启动游戏"进来登录（pendingLaunchAfterLogin=YES），
-    // 且账号已就绪，自动继续启动游戏。
+    // FCL style: if the user reached sign-in from "Play" (pendingLaunchAfterLogin=YES)
+    // and the account is ready, continue launching automatically.
     if (self.pendingLaunchAfterLogin && BaseAuthenticator.current != nil) {
         self.pendingLaunchAfterLogin = NO;
         [self launchGame];
@@ -1268,7 +1268,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
         NSDictionary *profile = PLProfiles.current.profiles[selectedProfile];
         if (profile) {
             NSString *versionId = profile[@"lastVersionId"] ?: @"unknown";
-            // 显示版本隔离状态：gameDir != "." 表示已隔离
+            // Show the version isolation state: gameDir != "." means it is isolated
             NSString *gameDir = profile[@"gameDir"] ?: @".";
             BOOL isolated = ![gameDir isEqualToString:@"."];
             if (isolated) {

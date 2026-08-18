@@ -252,7 +252,7 @@ static const void *kMenuDimViewKey = &kMenuDimViewKey;
 /// 选择当房主（创建世界→开放局域网→输入端口→生成邀请码）
 /// 或当房客（输入邀请码→加入网络→MC 多人游戏直连 127.0.0.1:25565）。
 - (void)actionOpenMultiplayer {
-    // ZeroTier/Terracotta 联机暂时移除（排查启动崩溃）
+    // ZeroTier/Terracotta multiplayer temporarily removed (while a startup crash is investigated)
     [self dismissMenu];
     UIAlertController *alert = [UIAlertController
         alertControllerWithTitle:@"Multiplayer is temporarily unavailable"

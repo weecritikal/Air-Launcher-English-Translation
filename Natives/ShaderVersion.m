@@ -20,7 +20,7 @@
             return nil;
         }
 
-        // CurseForge file 格式适配（识别 gameVersions/downloadUrl/fileLength/fileDate/id/modId 字段）
+        // Adapt the CurseForge file shape (recognizing the gameVersions/downloadUrl/fileLength/fileDate/id/modId fields)
         if (dictionary[@"gameVersions"] != nil && dictionary[@"downloadUrl"] != nil) {
             return [self parseCurseForgeDictionary:dictionary];
         }
@@ -30,7 +30,7 @@
         _datePublished = [dictionary[@"date_published"] isKindOfClass:[NSString class]] ? dictionary[@"date_published"] : @"";
         _gameVersions = [dictionary[@"game_versions"] isKindOfClass:[NSArray class]] ? dictionary[@"game_versions"] : @[];
         _loaders = [dictionary[@"loaders"] isKindOfClass:[NSArray class]] ? dictionary[@"loaders"] : @[];
-        // 发布类型（Modrinth: release/beta/alpha）
+        // Release type (Modrinth: release/beta/alpha)
         _versionType = [dictionary[@"version_type"] isKindOfClass:[NSString class]] ? dictionary[@"version_type"] : @"release";
 
         NSArray *files = [dictionary[@"files"] isKindOfClass:[NSArray class]] ? dictionary[@"files"] : @[];
@@ -41,9 +41,9 @@
 
 - (instancetype)parseCurseForgeDictionary:(NSDictionary *)dictionary {
     _apiSource = 2; // CurseForge
-    // 文件名
+    // File name
     NSString *fileName = dictionary[@"fileName"];
-    // 发布类型（CurseForge: 1=release, 2=beta, 3=alpha）
+    // Release type (CurseForge: 1=release, 2=beta, 3=alpha)
     NSInteger releaseType = [dictionary[@"releaseType"] integerValue];
     if (releaseType == 2) {
         _versionType = @"beta";
@@ -52,19 +52,19 @@
     } else {
         _versionType = @"release";
     }
-    // 文件大小
+    // File size
     if (dictionary[@"fileLength"]) {
         _fileSize = dictionary[@"fileLength"];
     }
-    // 发布时间（fileDate 格式：ISO8601，存储为字符串以与 Modrinth 路径保持一致）
+    // Publication time (the fileDate format is ISO8601, stored as a string to match the Modrinth path)
     NSString *dateStr = dictionary[@"fileDate"];
     if (dateStr) {
         _datePublished = dateStr;
     }
-    // file ID 和 project ID
+    // File ID and project ID
     _fileId = [dictionary[@"id"] stringValue];
     _projectId = [dictionary[@"modId"] stringValue];
-    // gameVersions 数组（包含游戏版本和加载器）
+    // The gameVersions array (containing both game versions and loaders)
     NSArray *gameVersions = dictionary[@"gameVersions"];
     NSString *gameVer = nil;
     NSMutableArray *loaders = [NSMutableArray array];
@@ -91,7 +91,7 @@
             sha1 = h[@"value"];
         }
     }
-    // 构造 primaryFile 以兼容 Modrinth 格式读取（url/filename/hashes）
+    // Build a primaryFile so it can be read in the Modrinth format too (url/filename/hashes)
     NSMutableDictionary *pf = [NSMutableDictionary dictionary];
     if (dictionary[@"downloadUrl"]) {
         pf[@"url"] = dictionary[@"downloadUrl"];

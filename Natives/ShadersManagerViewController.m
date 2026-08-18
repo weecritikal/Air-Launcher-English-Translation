@@ -28,18 +28,18 @@
 @property (nonatomic, strong) NSMutableArray<ShaderItem *> *localShaders;
 @property (nonatomic, strong) NSMutableArray<ShaderItem *> *filteredLocalShaders;
 
-// ===== 选择模式相关 =====
-@property (nonatomic, assign) BOOL isSelectMode; // 是否处于选择模式
+// ===== Selection mode =====
+@property (nonatomic, assign) BOOL isSelectMode; // Whether selection mode is active
 @property (nonatomic, strong) NSMutableArray<ShaderItem *> *selectedShaders; // 已选中的光影列表
-@property (nonatomic, strong) UIToolbar *bottomToolbar; // 底部工具栏（选择模式下显示）
-@property (nonatomic, strong) UIBarButtonItem *selectButtonItem; // 导航栏"选择"按钮（普通模式进入选择模式）
-@property (nonatomic, strong) UIBarButtonItem *doneButtonItem; // 导航栏"完成"按钮（退出选择模式）
-@property (nonatomic, strong) UIBarButtonItem *navSelectAllButtonItem; // 导航栏左侧"全选"按钮
-@property (nonatomic, strong) UIBarButtonItem *toolbarSelectAllButtonItem; // 底部工具栏"全选"按钮
-@property (nonatomic, strong) UIBarButtonItem *toolbarDeselectAllButtonItem; // 底部工具栏"取消全选"按钮
-@property (nonatomic, strong) UIBarButtonItem *toolbarDeleteButtonItem; // 底部工具栏"删除选中"按钮
-@property (nonatomic, strong) UIBarButtonItem *flexibleSpaceItem; // 工具栏弹性间距
-@property (nonatomic, copy) NSString *originalTitle; // 进入选择模式前的原始标题，用于退出时恢复
+@property (nonatomic, strong) UIToolbar *bottomToolbar; // The bottom toolbar (shown in selection mode)
+@property (nonatomic, strong) UIBarButtonItem *selectButtonItem; // The navigation bar "Select" button (entering selection mode from normal mode)
+@property (nonatomic, strong) UIBarButtonItem *doneButtonItem; // The navigation bar "Done" button (leaving selection mode)
+@property (nonatomic, strong) UIBarButtonItem *navSelectAllButtonItem; // The "Select all" button on the left of the navigation bar
+@property (nonatomic, strong) UIBarButtonItem *toolbarSelectAllButtonItem; // The "Select all" button in the bottom toolbar
+@property (nonatomic, strong) UIBarButtonItem *toolbarDeselectAllButtonItem; // The "Deselect all" button in the bottom toolbar
+@property (nonatomic, strong) UIBarButtonItem *toolbarDeleteButtonItem; // The "Delete selected" button in the bottom toolbar
+@property (nonatomic, strong) UIBarButtonItem *flexibleSpaceItem; // Flexible spacing in the toolbar
+@property (nonatomic, copy) NSString *originalTitle; // The title before entering selection mode, restored on exit
 
 @end
 
@@ -48,7 +48,7 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.title = @"Manage shader packs";
-    self.originalTitle = self.title; // 保存原始标题，退出选择模式时恢复
+    self.originalTitle = self.title; // Save the original title, restored when leaving selection mode
     self.view.backgroundColor = [UIColor systemBackgroundColor];
     // Adapt to the custom launcher background: make this VC transparent so the global background image/blur shows through
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
@@ -149,7 +149,7 @@
     self.importButton = [[UIBarButtonItem alloc] initWithImage:importImage style:UIBarButtonItemStylePlain target:self action:@selector(importShaderTapped)];
     self.importButton.accessibilityLabel = @"Import shader pack";
 
-    // 选择模式相关按钮初始化
+    // Initialize the selection mode buttons
     UIImage *selectImage = [UIImage systemImageNamed:@"checklist"] ?: [UIImage systemImageNamed:@"checkmark.circle"];
     self.selectButtonItem = [[UIBarButtonItem alloc] initWithImage:selectImage style:UIBarButtonItemStylePlain target:self action:@selector(enterSelectMode)];
     self.selectButtonItem.accessibilityLabel = @"Select";
@@ -164,10 +164,10 @@
     self.toolbarDeleteButtonItem.tintColor = [UIColor systemRedColor];
     self.flexibleSpaceItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace target:nil action:nil];
 
-    // 底部工具栏（选择模式下显示）
+    // Bottom toolbar (shown in selection mode)
     self.bottomToolbar = [[UIToolbar alloc] initWithFrame:CGRectZero];
     self.bottomToolbar.translatesAutoresizingMaskIntoConstraints = NO;
-    self.bottomToolbar.hidden = YES; // 初始隐藏，进入选择模式时显示
+    self.bottomToolbar.hidden = YES; // Hidden at first, shown on entering selection mode
     [self.view addSubview:self.bottomToolbar];
 
     [self updateNavigationButtons];
@@ -180,8 +180,8 @@
         [self.tableView.topAnchor constraintEqualToAnchor:self.searchBar.bottomAnchor],
         [self.tableView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.tableView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        // tableView 底部根据是否选择模式动态绑定到工具栏顶部或安全区底部
-        // 这里默认绑定安全区底部；进入选择模式时通过代码调整
+        // The tableView bottom binds either to the top of the toolbar or to the bottom of the safe area, depending on selection mode
+        // It binds to the safe area bottom by default and is adjusted in code when selection mode starts
         [self.tableView.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor],
 
         [self.activityIndicator.centerXAnchor constraintEqualToAnchor:self.tableView.centerXAnchor],
@@ -190,7 +190,7 @@
         [self.emptyLabel.centerXAnchor constraintEqualToAnchor:self.tableView.centerXAnchor],
         [self.emptyLabel.centerYAnchor constraintEqualToAnchor:self.tableView.centerYAnchor],
 
-        // 底部工具栏布局：贴底显示，左右贴边
+        // Bottom toolbar layout: flush with the bottom and both sides
         [self.bottomToolbar.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.bottomToolbar.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [self.bottomToolbar.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor]
@@ -208,17 +208,17 @@
 
 - (void)updateNavigationButtons {
     if (self.isSelectMode) {
-        // 选择模式：左侧"全选"，右侧"完成"，标题显示已选数量
+        // Selection mode: "Select all" on the left, "Done" on the right, with the count in the title
         [self updateSelectAllButtonTitle];
         self.navigationItem.leftBarButtonItem = self.navSelectAllButtonItem;
         self.navigationItem.rightBarButtonItems = @[self.doneButtonItem];
         [self updateSelectModeTitle];
     } else {
-        // 普通模式：左侧关闭按钮，右侧依次为：选择、导入、刷新、检查更新
+        // Normal mode: the close button on the left, and on the right: Select, Import, Refresh, Check for updates
         UIBarButtonItem *closeButton = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone target:self action:@selector(closeTapped)];
-        // 列表为空时禁用"选择"按钮
+        // Disable the "Select" button when the list is empty
         self.selectButtonItem.enabled = self.filteredLocalShaders.count > 0;
-        // rightBarButtonItems 从右到左显示：导入、刷新、检查更新、选择
+        // rightBarButtonItems are shown right to left: Import, Refresh, Check for updates, Select
         self.navigationItem.rightBarButtonItems = @[self.importButton, self.refreshButton, self.checkUpdateButton, self.selectButtonItem];
         self.navigationItem.leftBarButtonItem = closeButton;
         self.title = self.originalTitle;
@@ -227,7 +227,7 @@
 
 - (void)closeTapped {
     // Works in both containers:
-    // - push 进 UINavigationController（卡片式布局/版本管理跳转）：pop 回上一级
+    // - pushed onto a UINavigationController (from the card layout/version manager): pop back
     // - presented modally (the old call path): dismiss
     if (self.navigationController && self.navigationController.viewControllers.firstObject != self) {
         [self.navigationController popViewControllerAnimated:YES];
@@ -238,23 +238,23 @@
 
 #pragma mark - Select Mode (选择模式)
 
-// 进入选择模式
+// Enter selection mode
 - (void)enterSelectMode {
     if (self.filteredLocalShaders.count == 0) return; // 没有数据时不允许进入选择模式
 
     self.isSelectMode = YES;
     [self.selectedShaders removeAllObjects]; // 进入选择模式时清空已选列表
-    // 显示底部工具栏
+    // Show the bottom toolbar
     self.bottomToolbar.hidden = NO;
     self.bottomToolbar.items = @[self.toolbarSelectAllButtonItem,
                                   self.flexibleSpaceItem,
                                   self.toolbarDeselectAllButtonItem,
                                   self.flexibleSpaceItem,
                                   self.toolbarDeleteButtonItem];
-    // 调整 tableView 底部内边距，避免最后一行被工具栏遮挡
+    // Adjust the tableView bottom inset, so the last row is not hidden behind the toolbar
     CGFloat toolbarHeight = self.bottomToolbar.bounds.size.height;
     if (toolbarHeight <= 0) {
-        // 工具栏尚未完成布局时使用估算值
+        // Use an estimate while the toolbar has not been laid out yet
         [self.bottomToolbar layoutIfNeeded];
         toolbarHeight = self.bottomToolbar.bounds.size.height;
         if (toolbarHeight <= 0) toolbarHeight = 44.0;
@@ -272,13 +272,13 @@
     [self.tableView reloadData];
 }
 
-// 退出选择模式，清除所有选择
+// Leave selection mode and clear every selection
 - (void)exitSelectMode {
     self.isSelectMode = NO;
     [self.selectedShaders removeAllObjects]; // 退出时清除所有选择
     self.bottomToolbar.hidden = YES;
     self.bottomToolbar.items = nil;
-    // 恢复 tableView 底部内边距
+    // Restore the tableView bottom inset
     {
         UIEdgeInsets inset = self.tableView.contentInset;
         inset.bottom = 0;
@@ -292,7 +292,7 @@
     [self.tableView reloadData];
 }
 
-// 切换全选/取消全选（导航栏左侧按钮使用）
+// Toggle select all / deselect all (used by the button on the left of the navigation bar)
 - (void)toggleSelectAll {
     if (self.selectedShaders.count == self.filteredLocalShaders.count) {
         [self deselectAll];
@@ -309,7 +309,7 @@
     [self reloadVisibleCellsCheckbox];
 }
 
-// 取消全选：清空已选列表
+// Deselect all: clear the selection
 - (void)deselectAll {
     [self.selectedShaders removeAllObjects];
     [self updateNavigationButtons];
@@ -334,7 +334,7 @@
     [self presentViewController:alert animated:YES completion:nil];
 }
 
-// 执行批量删除
+// Perform the bulk delete
 - (void)performDeleteSelectedShaders {
     NSArray<ShaderItem *> *shadersToDelete = [self.selectedShaders copy];
     NSMutableArray<ShaderItem *> *failedShaders = [NSMutableArray array];
@@ -357,11 +357,11 @@
         if (idxInFiltered != NSNotFound) [self.filteredLocalShaders removeObjectAtIndex:idxInFiltered];
     }
 
-    // 清空已选列表（失败的项目不再标记为选中）
+    // Clear the selection (the failed entries are no longer marked as selected)
     [self.selectedShaders removeAllObjects];
 
     if (failedShaders.count > 0) {
-        // 部分失败时保留选择模式，提示用户哪些失败
+        // On a partial failure, stay in selection mode and tell the user which ones failed
         NSMutableArray<NSString *> *names = [NSMutableArray array];
         for (ShaderItem *s in failedShaders) [names addObject:s.displayName];
         [self showSimpleAlertWithTitle:[NSString stringWithFormat:@"Deletion finished, %ld item(s) failed", (long)failedShaders.count]
@@ -369,7 +369,7 @@
         [self updateNavigationButtons];
         [self.tableView reloadData];
     } else {
-        // 全部删除成功，退出选择模式
+        // Everything was deleted, so leave selection mode
         [self exitSelectMode];
     }
 }
@@ -389,14 +389,14 @@
     [self updateNavigationButtons];
 }
 
-// 更新导航栏标题，显示已选数量
+// Update the navigation bar title with the number selected
 - (void)updateSelectModeTitle {
     if (self.isSelectMode) {
         self.title = [NSString stringWithFormat:@"%ld selected", (long)self.selectedShaders.count];
     }
 }
 
-// 更新"全选"按钮的标题（已全选时显示"取消全选"）
+// Update the title of the "Select all" button (showing "Deselect all" when everything is selected)
 - (void)updateSelectAllButtonTitle {
     if (self.selectedShaders.count > 0 && self.selectedShaders.count == self.filteredLocalShaders.count && self.filteredLocalShaders.count > 0) {
         self.navSelectAllButtonItem.title = @"Deselect all";
@@ -411,7 +411,7 @@
         self.toolbarSelectAllButtonItem.enabled = YES;
         self.toolbarDeselectAllButtonItem.enabled = YES;
     }
-    // 没有任何数据时禁用全选相关按钮
+    // Disable the select-all buttons when there is no data
     if (self.filteredLocalShaders.count == 0) {
         self.navSelectAllButtonItem.enabled = NO;
         self.toolbarSelectAllButtonItem.enabled = NO;
@@ -419,11 +419,11 @@
     } else {
         self.navSelectAllButtonItem.enabled = YES;
     }
-    // 删除按钮：未选中时禁用
+    // Delete button: disabled when nothing is selected
     self.toolbarDeleteButtonItem.enabled = self.selectedShaders.count > 0;
 }
 
-// 刷新所有可见 Cell 的复选框状态（避免整表 reloadData 引起闪烁）
+// Refresh the checkbox state of every visible cell (avoiding the flicker of a full reloadData)
 - (void)reloadVisibleCellsCheckbox {
     for (NSIndexPath *indexPath in [self.tableView indexPathsForVisibleRows]) {
         UITableViewCell *cell = [self.tableView cellForRowAtIndexPath:indexPath];
@@ -433,10 +433,10 @@
     }
 }
 
-// 为 Cell 应用复选框（选择模式下显示，普通模式下隐藏）
+// Apply a checkbox to a cell (shown in selection mode, hidden in normal mode)
 - (void)applyCheckboxToCell:(UITableViewCell *)cell selected:(BOOL)selected {
     if (self.isSelectMode) {
-        // 创建复选框 ImageView 作为 accessoryView
+        // Create the checkbox ImageView as the accessoryView
         UIImageView *checkbox = [[UIImageView alloc] init];
         UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:22 weight:UIImageSymbolWeightMedium];
         if (selected) {
@@ -455,7 +455,7 @@
             shaderCell.openLinkButton.hidden = YES;
         }
     } else {
-        // 普通模式：清除复选框，恢复原有控件可见性
+        // Normal mode: clear the checkbox and restore the original controls
         cell.accessoryView = nil;
         cell.selectionStyle = UITableViewCellSelectionStyleNone;
         if ([cell isKindOfClass:[ShaderTableViewCell class]]) {
@@ -544,7 +544,7 @@
         return;
     }
 
-    // 从当前 profile 的 lastVersionId 解析 gameVersion 和 loader
+    // Parse gameVersion and loader out of the lastVersionId of the current profile
     NSString *lastVersionId = PLProfiles.current.selectedProfile[@"lastVersionId"];
     if (!lastVersionId || lastVersionId.length == 0) {
         [self showSimpleAlertWithTitle:@"Notice" message:@"Could not read the current version information."];
@@ -564,7 +564,7 @@
         }
     }
     if (!gameVersion) {
-        // 纯 <mc> 格式，无 loader
+        // A plain <mc> form, with no loader
         gameVersion = lastVersionId;
         loader = nil;
     }
@@ -596,7 +596,7 @@
 #pragma mark - Data Loading
 
 - (void)handleRefresh:(id)sender {
-    // 刷新前若处于选择模式，先退出（数据即将更新，避免选择状态与新数据不一致）
+    // If selection mode is active, leave it before refreshing (the data is about to change, so the selection would not match)
     if (self.isSelectMode) {
         [self exitSelectMode];
     }
@@ -661,7 +661,7 @@
     if (!self.emptyLabel.hidden) {
         self.emptyLabel.text = @"No local shader packs found";
     }
-    // 更新导航按钮状态（"选择"按钮的可用性、"全选"按钮标题等）
+    // Update the navigation button state (whether "Select" is enabled, the "Select all" title and so on)
     [self updateNavigationButtons];
     [self.tableView reloadData];
 }
@@ -679,7 +679,7 @@
     ShaderItem *shader = self.filteredLocalShaders[indexPath.row];
     [cell configureWithShader:shader displayMode:ShaderTableViewCellDisplayModeLocal];
 
-    // 根据选择模式应用复选框显示
+    // Show or hide the checkboxes according to selection mode
     if (self.isSelectMode) {
         [self applyCheckboxToCell:cell selected:[self isShaderSelected:shader]];
     } else {
@@ -694,7 +694,7 @@
 }
 
 - (UISwipeActionsConfiguration *)tableView:(UITableView *)tableView trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
-    // 选择模式下禁用滑动删除，避免误操作
+    // Disable swipe-to-delete in selection mode, to avoid mistakes
     if (self.isSelectMode) return nil;
 
     UIContextualAction *deleteAction = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleDestructive title:@"Delete" handler:^(UIContextualAction * _Nonnull action, __kindof UIView * _Nonnull sourceView, void (^ _Nonnull completionHandler)(BOOL)) {
@@ -741,7 +741,7 @@
 #pragma mark - ShaderTableViewCellDelegate (Download Implementation)
 
 - (void)shaderCellDidTapDownload:(UITableViewCell *)cell {
-    // 在线下载入口已移除（请使用下载界面），此方法保留以实现协议
+    // The online download entry has been removed (use the download screen); this method is kept to satisfy the protocol
 }
 
 #pragma mark - ShaderVersionViewControllerDelegate
@@ -822,7 +822,7 @@
         // 选择模式下：点击行切换该光影的选中状态
         ShaderItem *shader = self.filteredLocalShaders[indexPath.row];
         [self toggleSelectionForShader:shader];
-        // 直接更新对应 Cell 的复选框，避免整表刷新造成闪烁
+        // Update the checkbox of that cell directly, avoiding the flicker of a full reload
         UITableViewCell *cell = [tableView cellForRowAtIndexPath:indexPath];
         if (cell) {
             [self applyCheckboxToCell:cell selected:[self isShaderSelected:shader]];
@@ -830,7 +830,7 @@
         // 取消选中高亮
         [tableView deselectRowAtIndexPath:indexPath animated:YES];
     } else {
-        // 普通模式：仅取消高亮，无具体动作
+        // Normal mode: only clear the highlight, with no other action
         [tableView deselectRowAtIndexPath:indexPath animated:YES];
     }
 }

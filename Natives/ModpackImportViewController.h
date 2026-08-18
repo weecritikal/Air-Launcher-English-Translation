@@ -2,7 +2,7 @@
 //  ModpackImportViewController.h
 //  Amethyst
 //
-//  整合包导入视图控制器
+//  Modpack import view controller
 //
 
 #import <UIKit/UIKit.h>

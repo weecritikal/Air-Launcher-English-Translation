@@ -12,7 +12,7 @@
                                loaderVersion:(NSString *)loaderVersion
                             minecraftVersion:(NSString *)minecraftVersion;
 
-/// 根据 MC 版本推断所需 Java 主版本号
+/// Infer the required major Java version from the MC version
 + (NSInteger)javaMajorVersionForMC:(NSString *)mcVersion;
 
 /// 写入显式失败的占位 version JSON（mainClass 指向不存在的类，启动时显式报错）

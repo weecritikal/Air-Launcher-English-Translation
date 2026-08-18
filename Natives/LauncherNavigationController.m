@@ -37,15 +37,15 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 @property(nonatomic) UITextField* versionTextField;
 @property(nonatomic) int profileSelectedAt;
 
-// ===== 下载中心入口（参照 FCL/ZL2/HMCL 下载进度弹窗入口）=====
-// 在工具栏上添加"下载中心"按钮，点击后弹出 DownloadTasksViewController，
-// 集中显示所有下载任务的进度（MC本体/模组/光影/资源包/数据包/世界存档/整合包）。
-// 所有通过 DownloadTaskManager 注册的下载任务都统一由这个弹窗显示进度。
+// ===== Download center entry point (modelled on the download progress modals of FCL/ZL2/HMCL) =====
+// Adds a "Download center" button to the toolbar which opens DownloadTasksViewController,
+// showing the progress of every download in one place (the MC client/mods/shaders/resource packs/data packs/world saves/modpacks).
+// Every download registered with DownloadTaskManager reports its progress through this modal.
 @property(nonatomic, strong) UIButton *downloadCenterButton;
 @property(nonatomic, strong) UIActivityIndicatorView *downloadCenterActivityIndicator;
 @property(nonatomic, strong) UILabel *downloadCenterProgressLabel;
 @property(nonatomic, weak) DownloadTasksViewController *presentedDownloadCenterVC;
-// 标记用户是否手动关闭了下载中心（避免下载任务更新时反复自动弹出）
+// Tracks whether the user closed the download center by hand (so it does not keep reopening on every download update)
 @property(nonatomic, assign) BOOL userDismissedDownloadCenter;
 
 @end
@@ -78,7 +78,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 
     [self reloadProfileList];
 
-    // 监听配置文件列表刷新通知
+    // Listen for the profile list refresh notification
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(reloadProfileList)
                                                  name:@"ReloadProfileList"
@@ -118,28 +118,28 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     self.progressText.userInteractionEnabled = NO;
     [targetToolbar addSubview:self.progressText];
 
-    // ===== 下载中心入口按钮（参照 FCL/ZL2/HMCL 下载进度弹窗入口）=====
-    // 在工具栏左侧添加一个"下载中心"按钮，当有下载任务时显示，
-    // 点击弹出 DownloadTasksViewController（FormSheet 方式），集中显示所有下载任务进度。
-    // 按钮布局：[图标] [进度百分比] [活动指示器]
+    // ===== Download center entry button (modelled on the download progress modals of FCL/ZL2/HMCL) =====
+    // Add a "Download center" button on the left of the toolbar, shown whenever there are downloads;
+    // tapping it presents DownloadTasksViewController (as a FormSheet) with the progress of every download.
+    // Button layout: [icon] [progress percentage] [activity indicator]
     CGFloat dcBtnWidth = 72.0;
     CGFloat dcBtnHeight = self.toolbar.frame.size.height - 8;
     self.downloadCenterButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    // 不使用按钮的 title 显示文字，改用独立的 progressLabel 避免与图标布局冲突
+    // The button title is not used for the text; a separate progressLabel avoids clashing with the icon layout
     self.downloadCenterButton.tintColor = [UIColor whiteColor];
     self.downloadCenterButton.backgroundColor = [UIColor colorWithRed:121/255.0 green:56/255.0 blue:162/255.0 alpha:0.85];
     self.downloadCenterButton.layer.cornerRadius = 5;
     self.downloadCenterButton.frame = CGRectMake(4, 4, dcBtnWidth, dcBtnHeight);
     self.downloadCenterButton.autoresizingMask = UIViewAutoresizingFlexibleRightMargin;
     [self.downloadCenterButton setImage:[UIImage systemImageNamed:@"arrow.down.circle"] forState:UIControlStateNormal];
-    // 图标固定在按钮左侧
+    // The icon is pinned to the left of the button
     CGFloat iconSize = 22.0;
     [self.downloadCenterButton setImageEdgeInsets:UIEdgeInsetsMake(0, 4, 0, dcBtnWidth - iconSize - 4)];
     [self.downloadCenterButton addTarget:self action:@selector(openDownloadCenter) forControlEvents:UIControlEventTouchUpInside];
     self.downloadCenterButton.hidden = YES;
     [targetToolbar addSubview:self.downloadCenterButton];
 
-    // 活动指示器（按钮右侧，下载中时旋转）
+    // Activity indicator (on the right of the button, spinning while downloading)
     self.downloadCenterActivityIndicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
     self.downloadCenterActivityIndicator.color = [UIColor whiteColor];
     self.downloadCenterActivityIndicator.hidesWhenStopped = YES;
@@ -148,7 +148,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     self.downloadCenterActivityIndicator.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin;
     [self.downloadCenterButton addSubview:self.downloadCenterActivityIndicator];
 
-    // 进度百分比标签（按钮中间，显示聚合进度百分比）
+    // Progress percentage label (in the middle of the button, showing the aggregate progress)
     self.downloadCenterProgressLabel = [[UILabel alloc] init];
     self.downloadCenterProgressLabel.font = [UIFont monospacedDigitSystemFontOfSize:11 weight:UIFontWeightBold];
     self.downloadCenterProgressLabel.textColor = [UIColor whiteColor];
@@ -164,11 +164,11 @@ static void *ProgressObserverContext = &ProgressObserverContext;
         name:@"InstallModpack"
         object:nil];
 
-    // ===== 下载中心入口通知监听 =====
-    // 监听 DownloadTaskManager 的通知，当有新下载任务注册或进度更新时：
-    // 1. 更新下载中心按钮的显示状态和进度百分比
-    // 2. 自动弹出下载中心弹窗（如果用户未手动关闭且没有其他模态视图）
-    // 这确保了模组、光影、资源包等所有下载都能通过下载中心统一显示进度。
+    // ===== Download center notification observers =====
+    // Listen for DownloadTaskManager notifications, so that when a new download registers or progress updates:
+    // 1. the download center button state and progress percentage are updated
+    // 2. the download center is presented automatically (unless the user closed it by hand or another modal is showing)
+    // This makes sure mods, shaders, resource packs and every other download report progress through the download center.
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(handleDownloadTaskUpdate:)
                                                  name:DownloadTaskManagerDidUpdateTaskNotification
@@ -177,7 +177,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
                                              selector:@selector(handleDownloadTaskCompleted:)
                                                  name:DownloadTaskManagerTaskCompletedNotification
                                                object:nil];
-    // 监听下载中心被用户手动关闭的通知，设置标记避免反复自动弹出
+    // Listen for the download center being closed by hand, and set the flag so it does not keep reopening
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(handleDownloadCenterDismissed)
                                                  name:@"DownloadCenterDidDismiss"
@@ -232,7 +232,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     ].mutableCopy;
 
     AFHTTPSessionManager *manager = [AFHTTPSessionManager manager];
-    // 配置响应序列化器以接受application/octet-stream
+    // Configure the response serializer to accept application/octet-stream
     AFJSONResponseSerializer *serializer = [AFJSONResponseSerializer serializer];
     [serializer setAcceptableContentTypes:[NSSet setWithObjects:@"application/json", @"text/json", @"text/javascript", @"application/octet-stream", nil]];
     manager.responseSerializer = serializer;
@@ -246,8 +246,8 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     }
     
     [manager GET:versionManifestURL parameters:nil headers:nil progress:^(NSProgress * _Nonnull progress) {
-        // AFNetworking 的 progress 回调在后台线程执行，必须回主线程更新 UI，
-        // 否则会触发 "modifying the autolayout engine from a background thread" 崩溃
+        // The AFNetworking progress callback runs on a background thread, so UI updates must be dispatched to the main thread,
+        // otherwise it triggers the "modifying the autolayout engine from a background thread" crash
         dispatch_async(dispatch_get_main_queue(), ^{
             self.progressViewMain.progress = progress.fractionCompleted;
         });
@@ -263,7 +263,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 }
 
 - (void)fetchRemoteVersionListForce:(BOOL)force {
-    // 直接调用 fetchRemoteVersionList，忽略 force 参数
+    // Call fetchRemoteVersionList directly, ignoring the force parameter
     [self fetchRemoteVersionList];
 }
 
@@ -286,9 +286,9 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 
 - (void)dealloc {
     [[NSNotificationCenter defaultCenter] removeObserver:self];
-    // 关键修复（KVO 泄漏）：兜底移除 KVO 观察者。
-    // 正常流程中下载完成/出错时已移除，但若 VC 在下载过程中被释放（如退出启动器），
-    // KVO 观察者会指向已释放对象，导致野指针崩溃。
+    // Key fix (KVO leak): remove the KVO observer as a safety net.
+    // In the normal flow it is removed when the download completes or errors, but if the VC is released mid-download (e.g. leaving the launcher),
+    // the KVO observer points at a freed object and crashes on a dangling pointer.
     if (self.task && self.task.progress) {
         @try {
             [self.task.progress removeObserver:self
@@ -300,27 +300,27 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 
 #pragma mark - 下载中心（参照 FCL/ZL2/HMCL 下载进度弹窗）
 
-/// 打开下载中心弹窗
-/// 参照 FCL/ZL2/HMCL 的下载进度显示方式：以 FormSheet 方式弹出 DownloadTasksViewController，
-/// 集中显示所有下载任务（MC本体/模组/光影/资源包/数据包/世界存档/整合包）的实时进度。
-/// 所有通过 DownloadTaskManager 注册的下载任务都会在这里显示，实现统一的下载进度管理。
+/// Open the download center modal
+/// Following how FCL/ZL2/HMCL show download progress: present DownloadTasksViewController as a FormSheet,
+/// showing live progress for every download (the MC client/mods/shaders/resource packs/data packs/world saves/modpacks).
+/// Everything registered with DownloadTaskManager appears here, giving one place to manage download progress.
 - (void)openDownloadCenter {
-    // 如果已经弹出了下载中心，直接返回避免重复弹出
+    // If the download center is already up, return so it is not presented twice
     if (self.presentedDownloadCenterVC) {
         return;
     }
 
-    // 用户主动打开了下载中心，重置"用户已关闭"标记
+    // The user opened the download center deliberately, so reset the "user closed it" flag
     self.userDismissedDownloadCenter = NO;
 
     DownloadTasksViewController *downloadCenterVC = [[DownloadTasksViewController alloc] init];
     downloadCenterVC.modalPresentationStyle = UIModalPresentationFormSheet;
     downloadCenterVC.preferredContentSize = CGSizeMake(500, 600);
 
-    // 弱引用持有，避免循环持有
+    // Held weakly, to avoid a retain cycle
     self.presentedDownloadCenterVC = downloadCenterVC;
 
-    // 获取最顶层的视图控制器来 present
+    // Get the topmost view controller to present from
     UIViewController *topVC = self;
     while (topVC.presentedViewController) {
         topVC = topVC.presentedViewController;
@@ -329,37 +329,37 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     [topVC presentViewController:downloadCenterVC animated:YES completion:nil];
 }
 
-/// 处理下载任务更新通知（进度变化、新任务注册等）
-/// 当收到通知时仅更新下载中心按钮的状态，不再自动弹出下载中心界面。
+/// Handle a download task update notification (a progress change, a new task registering, and so on)
+/// On receiving one, only the download center button state is updated; the download center is no longer presented automatically.
 ///
-/// 修改说明（修复下载版本时出现两个进度显示的问题）：
-///   之前此方法会在检测到活跃下载任务时自动弹出 DownloadTasksViewController（下载中心界面），
-///   同时启动器自身在 launchMinecraft: 中会自动弹出 DownloadProgressViewController
-///   （FCL/ZL2 风格单任务进度），导致两个进度显示同时出现。
-///   现在统一为 FCL/ZL2/HMCL 风格：版本下载开始时自动弹出 DownloadProgressViewController，
-///   DownloadTasksViewController 仅保留为手动打开（通过下载中心按钮）。
+/// Why this changed (fixing two progress displays appearing during a version download):
+///   this method used to present DownloadTasksViewController (the download center) as soon as an active download was detected,
+///   while the launcher itself presented DownloadProgressViewController in launchMinecraft:
+///   (the FCL/ZL2-style single-task progress), so both appeared at once.
+///   It now follows FCL/ZL2/HMCL: DownloadProgressViewController appears automatically when a version download starts,
+///   and DownloadTasksViewController is only opened manually (via the download center button).
 - (void)handleDownloadTaskUpdate:(NSNotification *)notification {
     dispatch_async(dispatch_get_main_queue(), ^{
         [self updateDownloadCenterButton];
     });
 }
 
-/// 处理下载任务完成通知
+/// Handle a download task completion notification
 - (void)handleDownloadTaskCompleted:(NSNotification *)notification {
     dispatch_async(dispatch_get_main_queue(), ^{
         [self updateDownloadCenterButton];
     });
 }
 
-/// 处理下载中心被用户手动关闭的通知
-/// 设置 userDismissedDownloadCenter=YES，避免后续下载任务更新时反复自动弹出下载中心。
-/// 用户可以通过点击启动器上的"下载中心"按钮重新打开（会重置此标记）。
+/// Handle the download center being closed by the user
+/// Sets userDismissedDownloadCenter=YES, so later download updates do not keep reopening it.
+/// The user can reopen it with the "Download center" button in the launcher (which resets the flag).
 - (void)handleDownloadCenterDismissed {
     self.userDismissedDownloadCenter = YES;
     self.presentedDownloadCenterVC = nil;
 }
 
-/// 更新下载中心按钮的显示状态和进度百分比
+/// Update the download center button state and progress percentage
 - (void)updateDownloadCenterButton {
     DownloadTaskManager *manager = [DownloadTaskManager sharedManager];
     NSArray<DownloadTaskItem *> *allTasks = [manager allTasks];
@@ -470,8 +470,8 @@ static void *ProgressObserverContext = &ProgressObserverContext;
             view.enabled = enabled;
         }
     }
-    // 启动游戏的完整性检查/下载：始终显示进度（HMCL 风格进度条+文本），
-    // 不再被悬浮球设置隐藏，确保用户在启动前能"一模一样"地看到完整性检查进度。
+    // The integrity check/download before launching always shows progress (an HMCL-style progress bar plus text),
+    // and is no longer hidden by the floating button setting, so the user sees the whole integrity check before launch.
     BOOL showProgressUI = YES;
     self.progressViewMain.hidden = enabled || !showProgressUI;
     if (!showProgressUI) {
@@ -516,8 +516,8 @@ static void *ProgressObserverContext = &ProgressObserverContext;
         self.task.handleError = ^{
             dispatch_async(dispatch_get_main_queue(), ^{
                 [weakSelf setInteractionEnabled:YES forDownloading:YES];
-                // 关键修复（KVO 泄漏）：出错时必须先移除 KVO 再置 nil task，
-                // 否则 task.progress 仍持有对 self 的 KVO 观察者，下次下载会重复添加。
+                // Key fix (KVO leak): on error the KVO observer must be removed before the task is set to nil,
+                // otherwise task.progress still holds a KVO observer on self and the next download adds a duplicate.
                 @try {
                     [weakSelf.task.progress removeObserver:weakSelf
                                                 forKeyPath:@"fractionCompleted"
@@ -535,15 +535,15 @@ static void *ProgressObserverContext = &ProgressObserverContext;
                 options:NSKeyValueObservingOptionInitial
                 context:ProgressObserverContext];
 
-            // 自动弹出 FCL/ZL2 风格的单任务进度对话框（参照 FCL 启动下载时自动显示进度对话框）
-            // 之前通过 DownloadTaskManager 通知自动弹出 DownloadTasksViewController（下载中心界面），
-            // 导致两个进度显示同时出现。现在统一使用 DownloadProgressViewController。
+            // Present the FCL/ZL2-style single-task progress dialog automatically (as FCL does when a download starts)
+            // DownloadTasksViewController (the download center) used to be presented automatically from a DownloadTaskManager notification,
+            // so two progress displays appeared at once. DownloadProgressViewController is now used consistently.
             if (!weakSelf.progressVC) {
                 weakSelf.progressVC = [[DownloadProgressViewController alloc] initWithTask:weakSelf.task];
             }
             UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:weakSelf.progressVC];
             nav.modalPresentationStyle = UIModalPresentationFormSheet;
-            // 检查是否已有模态视图弹出，避免覆盖重要弹窗（如账号登录）
+            // Check whether a modal is already up, so an important one (such as account sign-in) is not covered
             UIViewController *topVC = weakSelf;
             while (topVC.presentedViewController) {
                 topVC = topVC.presentedViewController;
@@ -557,7 +557,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 
 - (void)performInstallOrShowDetails:(UIButton *)sender {
     if (self.task) {
-        // 显示下载进度详情（悬浮球已移除）
+        // Show the download progress details (the floating button is gone)
         if (!self.progressVC) {
             self.progressVC = [[DownloadProgressViewController alloc] initWithTask:self.task];
         }
@@ -595,7 +595,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     }
 
     dispatch_async(dispatch_get_main_queue(), ^{
-        // 启动游戏的完整性检查/下载：始终显示进度（HMCL 风格进度条+文本）
+        // The integrity check/download before launching always shows progress (an HMCL-style progress bar plus text)
         BOOL showProgressUI = YES;
         if (showProgressUI) {
             self.progressText.text = progress.localizedAdditionalDescription;
@@ -605,9 +605,9 @@ static void *ProgressObserverContext = &ProgressObserverContext;
         [self.progressVC dismissViewControllerAnimated:NO completion:nil];
 
         self.progressViewMain.observedProgress = nil;
-        // 关键修复（KVO 泄漏）：下载完成时移除 KVO 观察者。
-        // 之前不移除，导致每次下载都在 self.task.progress 上累积一个观察者，
-        // 多次下载后 progress 变化会触发多次 observeValueForKeyPath，UI 异常。
+        // Key fix (KVO leak): remove the KVO observer when the download completes.
+        // It was not removed before, so every download piled another observer onto self.task.progress,
+        // and after several downloads a progress change fired observeValueForKeyPath repeatedly and the UI misbehaved.
         @try {
             [self.task.progress removeObserver:self
                                     forKeyPath:@"fractionCompleted"
@@ -637,7 +637,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
         self.task.handleError = ^{
             dispatch_async(dispatch_get_main_queue(), ^{
                 [weakSelf setInteractionEnabled:YES forDownloading:YES];
-                // 关键修复（KVO 泄漏）：出错时移除 KVO，与 launchMinecraft 流程一致
+                // Key fix (KVO leak): remove the KVO observer on error too, matching the launchMinecraft flow
                 @try {
                     [weakSelf.task.progress removeObserver:weakSelf
                                                 forKeyPath:@"fractionCompleted"
@@ -659,9 +659,9 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 }
 
 - (void)invokeAfterJITEnabled:(void(^)(void))handler {
-    // 注意：不要在此清空 localVersionList/remoteVersionList
-    // 该方法既被 JAR 执行调用，也被正常启动游戏调用；清空会导致用户返回后版本列表为空、
-    // buttonInstall 短暂不可用。版本列表的生命周期应由 reloadProfileList 统一管理。
+    // Note: do not clear localVersionList/remoteVersionList here.
+    // This method is called both by JAR execution and by a normal game launch; clearing them would leave the user with an empty version list
+    // and briefly disable buttonInstall after returning. The lifetime of the version list belongs to reloadProfileList.
     BOOL hasTrollStoreJIT = getEntitlementValue(@"jb.pmap_cs.custom_trust");
 
     if (isJITEnabled(false)) {
@@ -757,7 +757,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
-    // 发送通知更新账户信息
+    // Post a notification to update the account information
     [[NSNotificationCenter defaultCenter] postNotificationName:@"UpdateAccountInfo" object:nil];
 }
 

@@ -91,7 +91,7 @@
         [content.widthAnchor constraintEqualToAnchor:self.scrollView.widthAnchor]
     ]];
 
-    // 图标
+    // Icon
     self.iconView = [[UIImageView alloc] init];
     self.iconView.translatesAutoresizingMaskIntoConstraints = NO;
     self.iconView.layer.cornerRadius = 16;
@@ -100,7 +100,7 @@
     self.iconView.backgroundColor = [UIColor secondarySystemBackgroundColor];
     [content addSubview:self.iconView];
 
-    // 标题
+    // Title
     self.titleLabel = [[UILabel alloc] init];
     self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.titleLabel.font = [UIFont systemFontOfSize:22 weight:UIFontWeightBold];

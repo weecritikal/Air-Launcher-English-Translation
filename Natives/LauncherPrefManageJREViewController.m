@@ -44,24 +44,24 @@ static WFWorkflowProgressView* currentProgressView;
 @implementation LauncherPrefManageJREViewController
 
 + (LauncherPrefManageJREViewController *)currentInstance {
-    // 修复 #41: currentVC() 不一定是 UISplitViewController（在设置子页面里它会返回
-    // 当前可见 VC 本身），直接强转并访问 viewControllers 会触发
-    // "unrecognized selector viewControllers" 崩溃。这里做严格类型校验。
+    // Fix #41: currentVC() is not necessarily a UISplitViewController (inside a settings sub-page it returns
+    // the visible VC itself), so casting it and accessing viewControllers triggered an
+    // "unrecognized selector viewControllers" crash. The type is now checked strictly.
     UIViewController *current = currentVC();
     if (!current) return nil;
 
-    // 常见路径：当前 VC 是 LauncherPrefManageJREViewController 自身（在导航栈顶）
+    // Common path: the current VC is LauncherPrefManageJREViewController itself (at the top of the nav stack)
     if ([current isKindOfClass:LauncherPrefManageJREViewController.class]) {
         return (LauncherPrefManageJREViewController *)current;
     }
 
-    // 走 splitVC 路径：先尝试从 current 往上找 splitVC
+    // Take the splitVC path: first try walking up from current to find the splitVC
     UISplitViewController *splitVC = nil;
     if ([current isKindOfClass:UISplitViewController.class]) {
         splitVC = (UISplitViewController *)current;
     } else if ([current.navigationController isKindOfClass:LauncherNavigationController.class]) {
-        // current 的 navigationController 是 LauncherNavigationController
-        // LauncherNavigationController 的 presenting/splitViewController 才是 splitVC
+        // The navigationController of current is LauncherNavigationController
+        // and the presenting/splitViewController of LauncherNavigationController is the splitVC
         splitVC = current.navigationController.splitViewController;
     } else {
         splitVC = current.splitViewController;
@@ -95,14 +95,14 @@ static WFWorkflowProgressView* currentProgressView;
     self.tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStyleInsetGrouped];
     self.tableView.keyboardDismissMode = UIScrollViewKeyboardDismissModeInteractive;
 
-    // 适配自定义启动器背景：透明化 tableView + 导航栏毛玻璃
+    // Adapt to the custom launcher background: transparent tableView + a frosted-glass navigation bar
     if (self.navigationController) {
         [[BackgroundManager sharedManager] applyEffectToNavigationBar:self.navigationController.navigationBar];
     }
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
-    // 修复：使用 Automatic 让系统自动为半透明导航栏添加顶部 contentInset，
-    // 避免第一栏（"1.16及更早版本"）被导航栏覆盖。配合 edgesForExtendedLayout=All
-    // 保留导航栏毛玻璃穿透效果，内容起始位置自动下移到导航栏下方。
+    // Fix: use Automatic so the system adds a top contentInset for the translucent navigation bar,
+    // stopping the first section ("1.16 and earlier") being covered by it. Together with edgesForExtendedLayout=All
+    // this keeps the navigation bar blur showing through while the content starts below the bar.
     self.tableView.contentInsetAdjustmentBehavior = UIScrollViewContentInsetAdjustmentAutomatic;
     self.extendedLayoutIncludesOpaqueBars = YES;
     self.edgesForExtendedLayout = UIRectEdgeAll;
@@ -123,15 +123,15 @@ static WFWorkflowProgressView* currentProgressView;
     // Load WFWorkflowProgressView
     dlopen("/System/Library/PrivateFrameworks/WorkflowUIServices.framework/WorkflowUIServices", RTLD_GLOBAL);
 
-    // 监听背景效果变化通知：切换毛玻璃↔半透明或调整透明度时，
-    // 重新透明化当前 VC 并 reload cell，让每个 cell 重新应用 applyEffectToCell:
+    // Listen for background effect changes: when switching frosted glass <-> translucent or adjusting the opacity,
+    // make this VC transparent again and reload the cells so each one re-applies applyEffectToCell:
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(reapplyBackgroundEffect)
                                                  name:@"BackgroundUIEffectChanged"
                                                object:nil];
 }
 
-/// 背景效果变化时重新应用透明化处理，确保 cell 在切换毛玻璃↔半透明后视觉一致
+/// Re-apply transparency when the background effect changes, so cells stay consistent after a frosted glass <-> translucent switch
 - (void)reapplyBackgroundEffect {
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
     if (self.navigationController) {
@@ -145,7 +145,7 @@ static WFWorkflowProgressView* currentProgressView;
 }
 
 + (void)actionCancelImportRuntime {
-    // 修复 #41: 同 currentInstance 的类型校验问题，避免 currentVC() 不是 splitVC 时崩溃
+    // Fix #41: the same type-check problem as currentInstance, avoiding a crash when currentVC() is not the splitVC
     LauncherPrefManageJREViewController *instance = [self currentInstance];
     if (instance) {
         LauncherNavigationController *nav = (LauncherNavigationController *)instance.navigationController;
@@ -154,7 +154,7 @@ static WFWorkflowProgressView* currentProgressView;
         }
         return;
     }
-    // 兜底：尝试走 splitVC 路径
+    // Fallback: try the splitVC path
     UIViewController *current = currentVC();
     UISplitViewController *splitVC = nil;
     if ([current isKindOfClass:UISplitViewController.class]) {
@@ -204,8 +204,8 @@ static WFWorkflowProgressView* currentProgressView;
             NSString *totalSize = [NSByteCountFormatter stringFromByteCount:fileProgress.totalUnitCount countStyle:NSByteCountFormatterCountStyleMemory];
             NSString *displayText = [NSString stringWithFormat:@"(%@ / %@) %@", completedSize, totalSize, name];
             double fraction = totalProgress.fractionCompleted;
-            // fileCallback 在 extractTarXZ 内部（后台线程）调用，
-            // UILabel.text 和 fractionCompleted 是 UI 操作，必须切回主线程。
+            // fileCallback is invoked inside extractTarXZ (on a background thread),
+            // and UILabel.text and fractionCompleted are UI operations, so they must go back to the main thread.
             dispatch_async(dispatch_get_main_queue(), ^{
                 nav.progressText.text = displayText;
                 currentProgressView.fractionCompleted = fraction;
@@ -256,7 +256,7 @@ static WFWorkflowProgressView* currentProgressView;
     }
 }
 
-/// section header：透明背景，与界面背景一致（可看到背景图）。
+/// Section header: a transparent background matching the screen background (so the background image shows).
 - (UIView *)tableView:(UITableView *)tableView viewForHeaderInSection:(NSInteger)section {
     NSString *title = [self tableView:tableView titleForHeaderInSection:section];
     UITableViewHeaderFooterView *header = [tableView dequeueReusableHeaderFooterViewWithIdentifier:@"JRESectionHeader"];
@@ -267,13 +267,13 @@ static WFWorkflowProgressView* currentProgressView;
     return header;
 }
 
-/// section header 透明化：不套毛玻璃，与界面背景融为一体。
-/// 有自定义背景时用白色文字 + 阴影保证可读性；无背景时用系统默认色。
+/// Transparent section header: no frosted glass, blending into the screen background.
+/// With a custom background it uses white text plus a shadow for readability; without one it uses the system default color.
 - (void)tableView:(UITableView *)tableView willDisplayHeaderView:(UIView *)view forSection:(NSInteger)section {
     if (![view isKindOfClass:[UITableViewHeaderFooterView class]]) return;
     UITableViewHeaderFooterView *header = (UITableViewHeaderFooterView *)view;
 
-    // 透明背景：不再使用毛玻璃，可看到背景图
+    // Transparent background: no frosted glass any more, so the background image shows
     header.backgroundView = nil;
     if ([[BackgroundManager sharedManager] hasBackground]) {
         header.textLabel.textColor = [UIColor whiteColor];
@@ -316,7 +316,7 @@ static WFWorkflowProgressView* currentProgressView;
     cell.textLabel.text = localize(self.javaRuntimes[@DEFAULT_JRE][indexPath.row], nil);
     cell.detailTextLabel.text = [NSString stringWithFormat:@"Java %@",
         ((NSDictionary *)self.selectedRuntimes[@"0"])[self.selectedRTTags[indexPath.row]]];
-    // 适配自定义启动器背景：cell 应用毛玻璃/半透明效果，避免默认 systemBackgroundColor 遮挡背景
+    // Adapt to the custom launcher background: give the cell a frosted-glass/translucent effect, so the default systemBackgroundColor does not hide the background
     [[BackgroundManager sharedManager] applyEffectToCell:cell];
     return cell;
 }
@@ -374,9 +374,9 @@ static WFWorkflowProgressView* currentProgressView;
         });
     });
 
-    // 适配自定义启动器背景：cell 应用毛玻璃/半透明效果，避免默认 systemBackgroundColor 遮挡背景
-    // 注意：applyEffectToCell: 只重置 backgroundView/backgroundColor/contentView.backgroundColor，
-    // 不影响 accessoryView（progressView）和 accessoryType（checkmark）
+    // Adapt to the custom launcher background: give the cell a frosted-glass/translucent effect, so the default systemBackgroundColor does not hide the background
+    // Note: applyEffectToCell: only resets backgroundView/backgroundColor/contentView.backgroundColor
+    // and does not affect accessoryView (progressView) or accessoryType (checkmark)
     [[BackgroundManager sharedManager] applyEffectToCell:cell];
     return cell;
 }
@@ -420,7 +420,7 @@ static WFWorkflowProgressView* currentProgressView;
 - (void)tableView:(UITableView *)tableView openPickerAtIndexPath:(NSIndexPath *)indexPath minVersion:(NSInteger)minVer {
     UITableViewCell *cell = [tableView cellForRowAtIndexPath:indexPath];
 
-    // 收集可选的 Java 版本
+    // Collect the available Java versions
     NSMutableArray<NSString *> *versionTitles = [NSMutableArray new];
     NSMutableArray<NSNumber *> *versionNumbers = [NSMutableArray new];
     for (int i = 1; i < self.sortedJavaVersions.count; i++) {
@@ -433,7 +433,7 @@ static WFWorkflowProgressView* currentProgressView;
         [versionNumbers addObject:self.sortedJavaVersions[i]];
     }
 
-    // iPhone 上改用 UIAlertController actionSheet，避免紧凑菜单被压缩不可调整
+    // Use a UIAlertController action sheet on iPhone, so the compact menu is not squeezed and unadjustable
     if ([UIDevice currentDevice].userInterfaceIdiom == UIUserInterfaceIdiomPhone) {
         UIAlertController *alert = [UIAlertController alertControllerWithTitle:cell.textLabel.text
                                                                        message:nil
@@ -446,7 +446,7 @@ static WFWorkflowProgressView* currentProgressView;
             for (int i = 0; i < versionTitles.count; i++) {
                 NSString *version = versionTitles[i];
                 NSNumber *verNum = versionNumbers[i];
-                // 当前选中项前加 ✓ 标记
+                // Mark the currently selected item with a leading ✓
                 NSString *title = version;
                 if ([cell.detailTextLabel.text isEqualToString:version]) {
                     title = [NSString stringWithFormat:@"✓ %@", version];
@@ -469,7 +469,7 @@ static WFWorkflowProgressView* currentProgressView;
         return;
     }
 
-    // iPad：保留 UIContextMenuInteraction 紧凑菜单
+    // iPad: keep the compact UIContextMenuInteraction menu
     NSMutableArray *menuItems = [NSMutableArray new];
     for (int i = 0; i < versionTitles.count; i++) {
         NSString *version = versionTitles[i];
@@ -777,8 +777,8 @@ styleForMenuWithConfiguration:(UIContextMenuConfiguration *)configuration
                         currFileName = @(currFileHeader.name);
                         currFileOff = 0;
                         currFileSize = strtol(currFileHeader.size, NULL, 8);
-                        // fileProgress 被 progressViewSub.observedProgress KVO 监听，
-                        // 必须在主线程修改以避免后台线程触发布局引擎崩溃
+                        // fileProgress is observed via KVO by progressViewSub.observedProgress,
+                        // so it must be modified on the main thread to avoid a background-thread layout engine crash
                         dispatch_async(dispatch_get_main_queue(), ^{
                             fileProgress.completedUnitCount = 0;
                             fileProgress.totalUnitCount = currFileSize;
@@ -816,8 +816,8 @@ styleForMenuWithConfiguration:(UIContextMenuConfiguration *)configuration
             strm.next_out = outbuf;
             strm.avail_out = sizeof(outbuf);
 
-            // progress 被 progressViewMain.observedProgress KVO 监听，
-            // 必须在主线程修改以避免后台线程触发布局引擎崩溃
+            // progress is observed via KVO by progressViewMain.observedProgress,
+            // so it must be modified on the main thread to avoid a background-thread layout engine crash
             NSUInteger totalIn = (NSUInteger)strm.total_in;
             dispatch_async(dispatch_get_main_queue(), ^{
                 progress.completedUnitCount = totalIn;

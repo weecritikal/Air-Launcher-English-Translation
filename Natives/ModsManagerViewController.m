@@ -20,18 +20,18 @@
 @property (nonatomic, strong) NSMutableArray<ModItem *> *localMods;
 @property (nonatomic, strong) NSMutableArray<ModItem *> *filteredLocalMods;
 
-// ===== 选择模式相关 =====
-@property (nonatomic, assign) BOOL isSelectMode; // 是否处于选择模式
-@property (nonatomic, strong) NSMutableArray<ModItem *> *selectedMods; // 已选中的 Mod 列表
-@property (nonatomic, strong) UIToolbar *bottomToolbar; // 底部工具栏（选择模式下显示）
-@property (nonatomic, strong) UIBarButtonItem *selectButtonItem; // 导航栏"选择"按钮（普通模式进入选择模式）
-@property (nonatomic, strong) UIBarButtonItem *doneButtonItem; // 导航栏"完成"按钮（退出选择模式）
-@property (nonatomic, strong) UIBarButtonItem *navSelectAllButtonItem; // 导航栏左侧"全选"按钮
-@property (nonatomic, strong) UIBarButtonItem *toolbarSelectAllButtonItem; // 底部工具栏"全选"按钮
-@property (nonatomic, strong) UIBarButtonItem *toolbarDeselectAllButtonItem; // 底部工具栏"取消全选"按钮
-@property (nonatomic, strong) UIBarButtonItem *toolbarDeleteButtonItem; // 底部工具栏"删除选中"按钮
-@property (nonatomic, strong) UIBarButtonItem *flexibleSpaceItem; // 工具栏弹性间距
-@property (nonatomic, copy) NSString *originalTitle; // 进入选择模式前的原始标题，用于退出时恢复
+// ===== Selection mode =====
+@property (nonatomic, assign) BOOL isSelectMode; // Whether selection mode is active
+@property (nonatomic, strong) NSMutableArray<ModItem *> *selectedMods; // The list of selected mods
+@property (nonatomic, strong) UIToolbar *bottomToolbar; // The bottom toolbar (shown in selection mode)
+@property (nonatomic, strong) UIBarButtonItem *selectButtonItem; // The navigation bar "Select" button (entering selection mode from normal mode)
+@property (nonatomic, strong) UIBarButtonItem *doneButtonItem; // The navigation bar "Done" button (leaving selection mode)
+@property (nonatomic, strong) UIBarButtonItem *navSelectAllButtonItem; // The "Select all" button on the left of the navigation bar
+@property (nonatomic, strong) UIBarButtonItem *toolbarSelectAllButtonItem; // The "Select all" button in the bottom toolbar
+@property (nonatomic, strong) UIBarButtonItem *toolbarDeselectAllButtonItem; // The "Deselect all" button in the bottom toolbar
+@property (nonatomic, strong) UIBarButtonItem *toolbarDeleteButtonItem; // The "Delete selected" button in the bottom toolbar
+@property (nonatomic, strong) UIBarButtonItem *flexibleSpaceItem; // Flexible spacing in the toolbar
+@property (nonatomic, copy) NSString *originalTitle; // The title before entering selection mode, restored on exit
 
 @end
 
@@ -40,15 +40,15 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.title = @"Manage mods";
-    self.originalTitle = self.title; // 保存原始标题，退出选择模式时恢复
+    self.originalTitle = self.title; // Save the original title, restored when leaving selection mode
     self.view.backgroundColor = [UIColor systemBackgroundColor];
     // Adapt to the custom launcher background: make this VC transparent so the global background image/blur shows through
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
-    self.currentMode = ModsManagerModeLocal; // 始终使用本地模式（在线下载入口已移至下载界面）
+    self.currentMode = ModsManagerModeLocal; // Always local mode (the online download entry has moved to the download screen)
     self.localMods = [NSMutableArray array];
     self.filteredLocalMods = [NSMutableArray array];
     self.onlineSearchResults = [NSMutableArray array];
-    self.selectedMods = [NSMutableArray array]; // 初始化已选中 Mod 列表
+    self.selectedMods = [NSMutableArray array]; // Initialize the selected mod list
     self.isSelectMode = NO;
     [self setupUI];
     // Fix for "the previous page does not disappear in time": add a frosted-glass cover layer to the view
@@ -141,7 +141,7 @@
     self.importButton = [[UIBarButtonItem alloc] initWithImage:importImage style:UIBarButtonItemStylePlain target:self action:@selector(importModTapped)];
     self.importButton.accessibilityLabel = @"Import mod";
 
-    // 选择模式相关按钮初始化
+    // Initialize the selection mode buttons
     UIImage *selectImage = [UIImage systemImageNamed:@"checklist"] ?: [UIImage systemImageNamed:@"checkmark.circle"];
     self.selectButtonItem = [[UIBarButtonItem alloc] initWithImage:selectImage style:UIBarButtonItemStylePlain target:self action:@selector(enterSelectMode)];
     self.selectButtonItem.accessibilityLabel = @"Select";
@@ -156,10 +156,10 @@
     self.toolbarDeleteButtonItem.tintColor = [UIColor systemRedColor];
     self.flexibleSpaceItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace target:nil action:nil];
 
-    // 底部工具栏（选择模式下显示）
+    // Bottom toolbar (shown in selection mode)
     self.bottomToolbar = [[UIToolbar alloc] initWithFrame:CGRectZero];
     self.bottomToolbar.translatesAutoresizingMaskIntoConstraints = NO;
-    self.bottomToolbar.hidden = YES; // 初始隐藏，进入选择模式时显示
+    self.bottomToolbar.hidden = YES; // Hidden at first, shown on entering selection mode
     [self.view addSubview:self.bottomToolbar];
 
     [self updateNavigationButtons];
@@ -172,8 +172,8 @@
         [self.tableView.topAnchor constraintEqualToAnchor:self.searchBar.bottomAnchor],
         [self.tableView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.tableView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
-        // tableView 底部根据是否选择模式动态绑定到工具栏顶部或安全区底部
-        // 这里默认绑定安全区底部；进入选择模式时通过代码调整
+        // The tableView bottom binds either to the top of the toolbar or to the bottom of the safe area, depending on selection mode
+        // It binds to the safe area bottom by default and is adjusted in code when selection mode starts
         [self.tableView.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor],
 
         [self.activityIndicator.centerXAnchor constraintEqualToAnchor:self.tableView.centerXAnchor],
@@ -182,7 +182,7 @@
         [self.emptyLabel.centerXAnchor constraintEqualToAnchor:self.tableView.centerXAnchor],
         [self.emptyLabel.centerYAnchor constraintEqualToAnchor:self.tableView.centerYAnchor],
 
-        // 底部工具栏布局：贴底显示，左右贴边
+        // Bottom toolbar layout: flush with the bottom and both sides
         [self.bottomToolbar.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.bottomToolbar.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
         [self.bottomToolbar.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor]
@@ -200,17 +200,17 @@
 
 - (void)updateNavigationButtons {
     if (self.isSelectMode) {
-        // 选择模式：左侧"全选"，右侧"完成"，标题显示已选数量
+        // Selection mode: "Select all" on the left, "Done" on the right, with the count in the title
         [self updateSelectAllButtonTitle];
         self.navigationItem.leftBarButtonItem = self.navSelectAllButtonItem;
         self.navigationItem.rightBarButtonItems = @[self.doneButtonItem];
         [self updateSelectModeTitle];
     } else {
-        // 普通模式：左侧关闭按钮，右侧依次为：选择、导入、刷新、检查更新
+        // Normal mode: the close button on the left, and on the right: Select, Import, Refresh, Check for updates
         UIBarButtonItem *closeButton = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone target:self action:@selector(closeTapped)];
-        // 列表为空时禁用"选择"按钮
+        // Disable the "Select" button when the list is empty
         self.selectButtonItem.enabled = self.filteredLocalMods.count > 0;
-        // rightBarButtonItems 从右到左显示：导入、刷新、检查更新、选择
+        // rightBarButtonItems are shown right to left: Import, Refresh, Check for updates, Select
         self.navigationItem.rightBarButtonItems = @[self.importButton, self.refreshButton, self.checkUpdateButton, self.selectButtonItem];
         self.navigationItem.leftBarButtonItem = closeButton;
         self.title = self.originalTitle;
@@ -219,7 +219,7 @@
 
 - (void)closeTapped {
     // Works in both containers:
-    // - push 进 UINavigationController（卡片式布局/版本管理跳转）：pop 回上一级
+    // - pushed onto a UINavigationController (from the card layout/version manager): pop back
     // - presented modally (the old call path): dismiss
     if (self.navigationController && self.navigationController.viewControllers.firstObject != self) {
         [self.navigationController popViewControllerAnimated:YES];
@@ -230,23 +230,23 @@
 
 #pragma mark - Select Mode (选择模式)
 
-// 进入选择模式
+// Enter selection mode
 - (void)enterSelectMode {
-    if (self.filteredLocalMods.count == 0) return; // 没有数据时不允许进入选择模式
+    if (self.filteredLocalMods.count == 0) return; // Selection mode is not allowed with no data
 
     self.isSelectMode = YES;
-    [self.selectedMods removeAllObjects]; // 进入选择模式时清空已选列表
-    // 显示底部工具栏
+    [self.selectedMods removeAllObjects]; // Clear the selection when entering selection mode
+    // Show the bottom toolbar
     self.bottomToolbar.hidden = NO;
     self.bottomToolbar.items = @[self.toolbarSelectAllButtonItem,
                                   self.flexibleSpaceItem,
                                   self.toolbarDeselectAllButtonItem,
                                   self.flexibleSpaceItem,
                                   self.toolbarDeleteButtonItem];
-    // 调整 tableView 底部内边距，避免最后一行被工具栏遮挡
+    // Adjust the tableView bottom inset, so the last row is not hidden behind the toolbar
     CGFloat toolbarHeight = self.bottomToolbar.bounds.size.height;
     if (toolbarHeight <= 0) {
-        // 工具栏尚未完成布局时使用估算值
+        // Use an estimate while the toolbar has not been laid out yet
         [self.bottomToolbar layoutIfNeeded];
         toolbarHeight = self.bottomToolbar.bounds.size.height;
         if (toolbarHeight <= 0) toolbarHeight = 44.0;
@@ -264,13 +264,13 @@
     [self.tableView reloadData];
 }
 
-// 退出选择模式，清除所有选择
+// Leave selection mode and clear every selection
 - (void)exitSelectMode {
     self.isSelectMode = NO;
-    [self.selectedMods removeAllObjects]; // 退出时清除所有选择
+    [self.selectedMods removeAllObjects]; // Clear the selection on exit
     self.bottomToolbar.hidden = YES;
     self.bottomToolbar.items = nil;
-    // 恢复 tableView 底部内边距
+    // Restore the tableView bottom inset
     {
         UIEdgeInsets inset = self.tableView.contentInset;
         inset.bottom = 0;
@@ -284,7 +284,7 @@
     [self.tableView reloadData];
 }
 
-// 切换全选/取消全选（导航栏左侧按钮使用）
+// Toggle select all / deselect all (used by the button on the left of the navigation bar)
 - (void)toggleSelectAll {
     if (self.selectedMods.count == self.filteredLocalMods.count) {
         [self deselectAll];
@@ -293,7 +293,7 @@
     }
 }
 
-// 全选：将当前过滤后列表中的所有 Mod 加入已选列表
+// Select all: add every mod in the current filtered list to the selection
 - (void)selectAll {
     [self.selectedMods removeAllObjects];
     [self.selectedMods addObjectsFromArray:self.filteredLocalMods];
@@ -301,14 +301,14 @@
     [self reloadVisibleCellsCheckbox];
 }
 
-// 取消全选：清空已选列表
+// Deselect all: clear the selection
 - (void)deselectAll {
     [self.selectedMods removeAllObjects];
     [self updateNavigationButtons];
     [self reloadVisibleCellsCheckbox];
 }
 
-// 删除选中的 Mod（带确认弹窗）
+// Delete the selected mods (with a confirmation dialog)
 - (void)deleteSelectedMods {
     if (self.selectedMods.count == 0) {
         [self showSimpleAlertWithTitle:@"Notice" message:@"No mods selected yet"];
@@ -326,7 +326,7 @@
     [self presentViewController:alert animated:YES completion:nil];
 }
 
-// 执行批量删除
+// Perform the bulk delete
 - (void)performDeleteSelectedMods {
     NSArray<ModItem *> *modsToDelete = [self.selectedMods copy];
     NSMutableArray<ModItem *> *failedMods = [NSMutableArray array];
@@ -340,20 +340,20 @@
         }
     }
 
-    // 从数据源中移除已成功删除的 Mod
+    // Remove the successfully deleted mods from the data source
     for (ModItem *mod in modsToDelete) {
-        if ([failedMods containsObject:mod]) continue; // 跳过删除失败的
+        if ([failedMods containsObject:mod]) continue; // Skip the ones that failed to delete
         NSUInteger idxInFull = [self.localMods indexOfObject:mod];
         if (idxInFull != NSNotFound) [self.localMods removeObjectAtIndex:idxInFull];
         NSUInteger idxInFiltered = [self.filteredLocalMods indexOfObject:mod];
         if (idxInFiltered != NSNotFound) [self.filteredLocalMods removeObjectAtIndex:idxInFiltered];
     }
 
-    // 清空已选列表（失败的项目不再标记为选中）
+    // Clear the selection (the failed entries are no longer marked as selected)
     [self.selectedMods removeAllObjects];
 
     if (failedMods.count > 0) {
-        // 部分失败时保留选择模式，提示用户哪些失败
+        // On a partial failure, stay in selection mode and tell the user which ones failed
         NSMutableArray<NSString *> *names = [NSMutableArray array];
         for (ModItem *m in failedMods) [names addObject:m.displayName];
         [self showSimpleAlertWithTitle:[NSString stringWithFormat:@"Deletion finished, %ld item(s) failed", (long)failedMods.count]
@@ -361,17 +361,17 @@
         [self updateNavigationButtons];
         [self.tableView reloadData];
     } else {
-        // 全部删除成功，退出选择模式
+        // Everything was deleted, so leave selection mode
         [self exitSelectMode];
     }
 }
 
-// 判断指定 Mod 是否处于选中状态
+// Whether the given mod is selected
 - (BOOL)isModSelected:(ModItem *)mod {
     return [self.selectedMods containsObject:mod];
 }
 
-// 切换某个 Mod 的选中状态（行点击触发）
+// Toggle the selection of one mod (triggered by a row tap)
 - (void)toggleSelectionForMod:(ModItem *)mod {
     if ([self.selectedMods containsObject:mod]) {
         [self.selectedMods removeObject:mod];
@@ -381,14 +381,14 @@
     [self updateNavigationButtons];
 }
 
-// 更新导航栏标题，显示已选数量
+// Update the navigation bar title with the number selected
 - (void)updateSelectModeTitle {
     if (self.isSelectMode) {
         self.title = [NSString stringWithFormat:@"%ld selected", (long)self.selectedMods.count];
     }
 }
 
-// 更新"全选"按钮的标题（已全选时显示"取消全选"）
+// Update the title of the "Select all" button (showing "Deselect all" when everything is selected)
 - (void)updateSelectAllButtonTitle {
     if (self.selectedMods.count > 0 && self.selectedMods.count == self.filteredLocalMods.count && self.filteredLocalMods.count > 0) {
         self.navSelectAllButtonItem.title = @"Deselect all";
@@ -403,7 +403,7 @@
         self.toolbarSelectAllButtonItem.enabled = YES;
         self.toolbarDeselectAllButtonItem.enabled = YES;
     }
-    // 没有任何数据时禁用全选相关按钮
+    // Disable the select-all buttons when there is no data
     if (self.filteredLocalMods.count == 0) {
         self.navSelectAllButtonItem.enabled = NO;
         self.toolbarSelectAllButtonItem.enabled = NO;
@@ -411,11 +411,11 @@
     } else {
         self.navSelectAllButtonItem.enabled = YES;
     }
-    // 删除按钮：未选中时禁用
+    // Delete button: disabled when nothing is selected
     self.toolbarDeleteButtonItem.enabled = self.selectedMods.count > 0;
 }
 
-// 刷新所有可见 Cell 的复选框状态（避免整表 reloadData 引起闪烁）
+// Refresh the checkbox state of every visible cell (avoiding the flicker of a full reloadData)
 - (void)reloadVisibleCellsCheckbox {
     for (NSIndexPath *indexPath in [self.tableView indexPathsForVisibleRows]) {
         UITableViewCell *cell = [self.tableView cellForRowAtIndexPath:indexPath];
@@ -425,10 +425,10 @@
     }
 }
 
-// 为 Cell 应用复选框（选择模式下显示，普通模式下隐藏）
+// Apply a checkbox to a cell (shown in selection mode, hidden in normal mode)
 - (void)applyCheckboxToCell:(UITableViewCell *)cell selected:(BOOL)selected {
     if (self.isSelectMode) {
-        // 创建复选框 ImageView 作为 accessoryView
+        // Create the checkbox ImageView as the accessoryView
         UIImageView *checkbox = [[UIImageView alloc] init];
         UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:22 weight:UIImageSymbolWeightMedium];
         if (selected) {
@@ -441,20 +441,20 @@
         checkbox.frame = CGRectMake(0, 0, 24, 24);
         cell.accessoryView = checkbox;
         cell.selectionStyle = UITableViewCellSelectionStyleDefault;
-        // 隐藏 enableSwitch 和 openLinkButton，避免与复选框视觉冲突
+        // Hide enableSwitch and openLinkButton, so they do not clash visually with the checkbox
         if ([cell isKindOfClass:[ModTableViewCell class]]) {
             ModTableViewCell *modCell = (ModTableViewCell *)cell;
             modCell.enableSwitch.hidden = YES;
             modCell.openLinkButton.hidden = YES;
         }
     } else {
-        // 普通模式：清除复选框，恢复原有控件可见性
+        // Normal mode: clear the checkbox and restore the original controls
         cell.accessoryView = nil;
         cell.selectionStyle = UITableViewCellSelectionStyleNone;
         if ([cell isKindOfClass:[ModTableViewCell class]]) {
             ModTableViewCell *modCell = (ModTableViewCell *)cell;
-            // 仅在配置时（已调用 configureWithMod:）恢复可见性，避免重复设置不一致
-            // enableSwitch/openLinkButton 的最终可见性以 configureWithMod 的设置为准
+            // Only restore visibility once configured (after configureWithMod: has been called), to avoid setting it inconsistently
+            // The final visibility of enableSwitch/openLinkButton is decided by configureWithMod
             modCell.enableSwitch.hidden = NO;
             modCell.openLinkButton.hidden = NO;
         }
@@ -464,7 +464,7 @@
 #pragma mark - Import Mod
 
 - (void)importModTapped {
-    // 确保目录存在
+    // Make sure the folder exists
     NSError *dirError = nil;
     NSString *modsDir = [[ModService sharedService] ensureModsFolderForProfile:nil error:&dirError];
     if (!modsDir) {
@@ -472,7 +472,7 @@
         return;
     }
 
-    // 弹出文件选择器，允许 jar（Forge/NeoForge/Fabric/Quilt 都用 jar）
+    // Show the file picker, allowing jar files (Forge/NeoForge/Fabric/Quilt all use jar)
     UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc] initWithDocumentTypes:@[@"com.sun.java.jar", @"public.item"] inMode:UIDocumentPickerModeImport];
     picker.allowsMultipleSelection = YES;
     picker.delegate = self;
@@ -495,13 +495,13 @@
     NSMutableArray<NSString *> *failedFiles = [NSMutableArray array];
 
     for (NSURL *url in urls) {
-        // 开始访问安全资源
+        // Start accessing the security-scoped resource
         BOOL accessing = [url startAccessingSecurityScopedResource];
         @try {
             NSString *fileName = url.lastPathComponent;
             NSString *destPath = [modsDir stringByAppendingPathComponent:fileName];
 
-            // 同名文件处理
+            // Handle a file with the same name
             if ([fm fileExistsAtPath:destPath]) {
                 NSString *baseName = [fileName stringByDeletingPathExtension];
                 NSString *ext = [fileName pathExtension];
@@ -520,7 +520,7 @@
         }
     }
 
-    // 刷新列表
+    // Refresh the list
     [self refreshLocalModsList];
 
     if (failedFiles.count > 0) {
@@ -536,14 +536,14 @@
 #pragma mark - Check for Updates
 
 - (void)checkForUpdates {
-    // 获取当前 profile 的本地 Mod 列表
+    // Get the local mod list of the current profile
     NSMutableArray<ModItem *> *mods = [self.localMods mutableCopy];
     if (mods.count == 0) {
         [self showSimpleAlertWithTitle:@"Notice" message:@"There are no local mods, so there is nothing to check for updates."];
         return;
     }
 
-    // 从当前 profile 的 lastVersionId 解析 gameVersion 和 loader
+    // Parse gameVersion and loader out of the lastVersionId of the current profile
     NSString *lastVersionId = PLProfiles.current.selectedProfile[@"lastVersionId"];
     if (!lastVersionId || lastVersionId.length == 0) {
         [self showSimpleAlertWithTitle:@"Notice" message:@"Could not read the current version information."];
@@ -563,7 +563,7 @@
         }
     }
     if (!gameVersion) {
-        // 纯 <mc> 格式，无 loader
+        // A plain <mc> form, with no loader
         gameVersion = lastVersionId;
         loader = nil;
     }
@@ -581,7 +581,7 @@
 #pragma mark - Data Loading
 
 - (void)handleRefresh:(id)sender {
-    // 刷新前若处于选择模式，先退出（数据即将更新，避免选择状态与新数据不一致）
+    // If selection mode is active, leave it before refreshing (the data is about to change, so the selection would not match)
     if (self.isSelectMode) {
         [self exitSelectMode];
     }
@@ -646,7 +646,7 @@
     if (!self.emptyLabel.hidden) {
         self.emptyLabel.text = @"No local mods found";
     }
-    // 更新导航按钮状态（"选择"按钮的可用性、"全选"按钮标题等）
+    // Update the navigation button state (whether "Select" is enabled, the "Select all" title and so on)
     [self updateNavigationButtons];
     [self.tableView reloadData];
 }
@@ -664,7 +664,7 @@
     ModItem *mod = self.filteredLocalMods[indexPath.row];
     [cell configureWithMod:mod displayMode:ModTableViewCellDisplayModeLocal];
 
-    // 根据选择模式应用复选框显示
+    // Show or hide the checkboxes according to selection mode
     if (self.isSelectMode) {
         [self applyCheckboxToCell:cell selected:[self isModSelected:mod]];
     } else {
@@ -672,14 +672,14 @@
     }
 
     // Adapt to the custom launcher background: give the cell a frosted-glass/translucent effect
-    // ModTableViewCell 自身 contentView 背景为 clearColor，由 BackgroundManager 统一注入
+    // The contentView background of ModTableViewCell is clearColor, with BackgroundManager injecting the effect
     [[BackgroundManager sharedManager] applyEffectToCell:cell];
 
     return cell;
 }
 
 - (UISwipeActionsConfiguration *)tableView:(UITableView *)tableView trailingSwipeActionsConfigurationForRowAtIndexPath:(NSIndexPath *)indexPath {
-    // 选择模式下禁用滑动删除，避免误操作
+    // Disable swipe-to-delete in selection mode, to avoid mistakes
     if (self.isSelectMode) return nil;
 
     UIContextualAction *deleteAction = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleDestructive title:@"Delete" handler:^(UIContextualAction * _Nonnull action, __kindof UIView * _Nonnull sourceView, void (^ _Nonnull completionHandler)(BOOL)) {
@@ -729,7 +729,7 @@
 #pragma mark - ModTableViewCellDelegate (Download Implementation)
 
 - (void)modCellDidTapDownload:(UITableViewCell *)cell {
-    // 在线下载入口已移除（请使用下载界面），此方法保留以实现协议
+    // The online download entry has been removed (use the download screen); this method is kept to satisfy the protocol
 }
 
 #pragma mark - ModVersionViewControllerDelegate
@@ -808,18 +808,18 @@
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
     if (self.isSelectMode) {
-        // 选择模式下：点击行切换该 Mod 的选中状态
+        // In selection mode: tapping a row toggles that mod's selection
         ModItem *mod = self.filteredLocalMods[indexPath.row];
         [self toggleSelectionForMod:mod];
-        // 直接更新对应 Cell 的复选框，避免整表刷新造成闪烁
+        // Update the checkbox of that cell directly, avoiding the flicker of a full reload
         UITableViewCell *cell = [tableView cellForRowAtIndexPath:indexPath];
         if (cell) {
             [self applyCheckboxToCell:cell selected:[self isModSelected:mod]];
         }
-        // 不取消选中高亮，让用户看到当前选中行；但视觉上更轻
+        // The highlight is left in place so the user can see the current row, but toned down visually
         [tableView deselectRowAtIndexPath:indexPath animated:YES];
     } else {
-        // 普通模式：仅取消高亮，无具体动作
+        // Normal mode: only clear the highlight, with no other action
         [tableView deselectRowAtIndexPath:indexPath animated:YES];
     }
 }

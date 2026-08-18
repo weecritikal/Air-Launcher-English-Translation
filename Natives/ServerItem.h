@@ -41,7 +41,7 @@ typedef NS_ENUM(NSInteger, ServerAPISource) {
 @property (nonatomic, copy, nullable) NSString *projectType;
 /// 来源 API
 @property (nonatomic, assign) ServerAPISource apiSource;
-/// 作者
+/// Author
 @property (nonatomic, copy, nullable) NSString *author;
 /// 分类标签
 @property (nonatomic, strong, nullable) NSArray<NSString *> *categories;

@@ -314,7 +314,7 @@ typedef NS_ENUM(NSInteger, TouchControllerCommMode) {
     }
     [alert addAction:staticLibAction];
 
-    // 取消按钮
+    // Cancel button
     [alert addAction:[UIAlertAction actionWithTitle:localize(@"preference.touchcontroller.cancel", nil) ?: @"Cancel"
                                               style:UIAlertActionStyleCancel
                                             handler:nil]];

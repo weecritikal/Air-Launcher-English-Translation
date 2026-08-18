@@ -2,57 +2,57 @@
 //  ModpackImportService.h
 //  Amethyst
 //
-//  整合包导入服务 - 支持 .zip 和 .mrpack 格式
+//  Modpack import service - supports the .zip and .mrpack formats
 //
-//  支持的格式：
+//  Supported formats:
 //    1. Modrinth (.mrpack)       - modrinth.index.json
 //    2. CurseForge (.zip)         - manifest.json
 //    3. MMC (.zip)                - mmc-pack.json + instance.cfg
-//    4. Plain ZIP (.zip)          - 直接含 .minecraft 目录结构（HMCL/FCL 导出格式）
+//    4. Plain ZIP (.zip)          - containing the .minecraft folder structure directly (the HMCL/FCL export format)
 //
 
 #import <Foundation/Foundation.h>
 
 NS_ASSUME_NONNULL_BEGIN
 
-/// 整合包格式（导入用）
+/// Modpack format (for import)
 typedef NS_ENUM(NSInteger, ModpackImportFormat) {
     ModpackImportFormatUnknown = 0,
     ModpackImportFormatModrinth,   // .mrpack
     ModpackImportFormatCurseForge, // .zip + manifest.json
     ModpackImportFormatMMC,        // .zip + mmc-pack.json + instance.cfg
-    ModpackImportFormatPlainZip,   // .zip + 直接 .minecraft 目录
+    ModpackImportFormatPlainZip,   // .zip with a direct .minecraft folder
 };
 
 @interface ModpackImportService : NSObject
 
-/// 取消信号：外部置为 YES 后，正在进行的 importModpack 会在下一个检查点停止
+/// Cancellation signal: once set to YES from outside, an importModpack in progress stops at the next checkpoint
 @property (nonatomic, assign, getter=isCancelled) BOOL cancelled;
 
-/// 阶段5修复（参照 FCL DownloadList）：上次导入过程中下载失败的文件列表
-/// 每条记录格式：@{@"fileName":NSString, @"url":NSString, @"reason":NSString}
-/// 即使 importModpack: 返回 YES，也可能存在部分失败文件，调用方可读取此属性展示给用户。
+/// Phase 5 fix (following FCL DownloadList): the files that failed to download during the last import
+/// Each record has the shape @{@"fileName":NSString, @"url":NSString, @"reason":NSString}
+/// Even when importModpack: returns YES some files may have failed, so the caller can read this property and show it to the user.
 @property (nonatomic, copy, readonly) NSArray<NSDictionary *> *failedFiles;
 
-/// 解析整合包文件并返回信息字典
+/// Parse a modpack file and return its information dictionary
 - (nullable NSDictionary *)parseModpackAtURL:(NSURL *)fileURL error:(NSError **)error;
 
-/// 导入整合包到游戏目录
+/// Import a modpack into the game directory
 - (BOOL)importModpack:(NSDictionary *)modpackInfo error:(NSError **)error;
 
-/// 导入整合包到游戏目录 (带进度回调)
-/// progress: 0.0 ~ 1.0, stageMessage 是当前阶段的描述文案
+/// Import a modpack into the game directory (with progress callbacks)
+/// progress: 0.0 ~ 1.0, with stageMessage describing the current stage
 - (BOOL)importModpack:(NSDictionary *)modpackInfo
              progress:(void (^_Nullable)(double progress, NSString *stageMessage))progress
                 error:(NSError **)error;
 
-/// 获取已导入的整合包列表
+/// Get the list of imported modpacks
 - (NSArray<NSDictionary *> *)getImportedModpacks;
 
-/// 删除已导入的整合包
+/// Delete an imported modpack
 - (BOOL)deleteModpack:(NSDictionary *)modpackInfo error:(NSError **)error;
 
-/// 重置取消状态（在开始新导入前调用）
+/// Reset the cancellation state (called before starting a new import)
 - (void)resetCancelState;
 
 @end

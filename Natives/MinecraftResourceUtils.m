@@ -17,18 +17,18 @@
         @"mainClass", @"minecraftArguments",
         @"optifineLib", @"releaseTime", @"time", @"type"
     ]];
-    // 合并 arguments 而非覆盖（参照 HMCL 的合并逻辑）
-    // 修复：原代码 inheritsFrom[@"arguments"] = json[@"arguments"] 会无条件用子版本 arguments
-    //   覆盖父版本，当子版本没有 arguments 字段时会把父版本的 arguments 清空为 nil，
-    //   导致父版本的 arguments.jvm（可能包含 26.x 新增强制 --add-opens/--add-exports）被完全忽略，
-    //   引发反射访问失败崩溃。
+    // Merge arguments rather than overwriting them (following the merge logic of HMCL)
+    // Fix: the original inheritsFrom[@"arguments"] = json[@"arguments"] unconditionally overwrote the parent version arguments
+    //   with the child's, so when the child had no arguments field the parent's were cleared to nil,
+    //   making the parent arguments.jvm (which may contain the mandatory --add-opens/--add-exports added in 26.x) be ignored entirely
+    //   and causing a crash from failed reflective access.
     if (json[@"arguments"]) {
         NSMutableDictionary *mergedArgs = [NSMutableDictionary dictionary];
-        // 先保留父版本的 arguments
+        // Keep the parent version arguments first
         if (inheritsFrom[@"arguments"]) {
             [mergedArgs addEntriesFromDictionary:inheritsFrom[@"arguments"]];
         }
-        // 再用子版本的 arguments 覆盖（但保留父版本中子版本没有的键）
+        // Then overwrite with the child version arguments (keeping the parent keys the child does not have)
         if ([json[@"arguments"] isKindOfClass:[NSDictionary class]]) {
             for (NSString *key in json[@"arguments"]) {
                 mergedArgs[key] = json[@"arguments"][key];
@@ -81,18 +81,18 @@
     } else if ([arg hasPrefix:@"-XX:HeapDumpPath"]) {
         return 1;
     } else if ([arg hasPrefix:@"-XstartOnFirstThread"]) {
-        // 已由启动器硬编码设置，跳过避免重复
+        // Already hardcoded by the launcher, so skip it to avoid duplication
         return 1;
     } else if ([arg hasPrefix:@"-Djava.system.class.loader="]) {
-        // 已由启动器硬编码设置
+        // Already hardcoded by the launcher
         return 1;
     } else {
         return 0;
     }
 }
 
-// 评估 Mojang 版本 JSON 中的 OS 规则。
-// iOS 视作 osx（Apple 平台），因为 JVM 在 iOS 上以 macOS 兼容方式运行。
+// Evaluate the OS rules in the Mojang version JSON.
+// iOS is treated as osx (an Apple platform), because the JVM runs on iOS in a macOS-compatible way.
 + (BOOL)evaluateRules:(NSArray *)rules {
     if (rules.count == 0) return YES;
     BOOL allowed = NO;
@@ -100,14 +100,14 @@
         NSString *action = rule[@"action"];
         NSDictionary *os = rule[@"os"];
         NSDictionary *features = rule[@"features"];
-        // 带 features 的规则（如 is_demo_user）本启动器不支持，跳过
+        // Rules with features (such as is_demo_user) are not supported by this launcher, so they are skipped
         if (features.count > 0) {
             allowed = NO;
             continue;
         }
         BOOL match = YES;
         if (os[@"name"]) {
-            // iOS 上 JVM 视为 osx 环境
+            // On iOS the JVM is treated as an osx environment
             match = [os[@"name"] isEqualToString:@"osx"];
         }
         if (match) {
@@ -117,7 +117,7 @@
     return allowed;
 }
 
-// 将规则化的 JVM 参数项展开为字符串数组
+// Expand the rule-based JVM argument entries into an array of strings
 + (NSArray<NSString *> *)flattenJvmArg:(id)arg {
     if ([arg isKindOfClass:NSString.class]) {
         return @[arg];
@@ -144,11 +144,11 @@
         NSString *versionStr = [library[@"name"] componentsSeparatedByString:@":"][2];
         NSArray<NSString *> *version = [versionStr componentsSeparatedByString:@"."];
         if ([library[@"name"] hasPrefix:@"net.java.dev.jna:jna:"]) {
-            // 强制将 JNA 替换为 5.13.0 以保证 iOS 兼容性。
-            // MC 26.3+ 要求 JNA 5.17.0，但其 darwin-aarch64 libjnidispatch 在 iOS 上
-            // 加载 IOKit/CoreFoundation 后会导致 native crash/卡死（26.2 + JNA 5.13.0 正常）。
-            // MC 不直接使用 JNA API（通过 oshi 间接使用），5.13.0 的 API 完全兼容。
-            // PatchJNAAgent 会替换 Platform.class，与 JNA jar 版本无关。
+            // Force JNA down to 5.13.0 for iOS compatibility.
+            // MC 26.3+ requires JNA 5.17.0, but its darwin-aarch64 libjnidispatch causes a native crash/hang on iOS
+            // once IOKit/CoreFoundation are loaded (26.2 + JNA 5.13.0 works fine).
+            // MC does not use the JNA API directly (only indirectly through oshi), and the 5.13.0 API is fully compatible.
+            // PatchJNAAgent replaces Platform.class regardless of the JNA jar version.
             if (version.count >= 3 && version[0].intValue == 5 && version[1].intValue == 13 && version[2].intValue == 0) {
                 continue;
             }
@@ -182,10 +182,10 @@
     client[@"name"] = [NSString stringWithFormat:@"%@.jar", json[@"id"]];
     [json[@"libraries"] addObject:client];
 
-    // 解析所有版本的官方 JVM Arguments（包括 vanilla 26.x）。
-    // 原代码仅在 inheritsFrom 存在时解析，导致 vanilla 版本的 arguments.jvm
-    // （可能包含 26.x 新增强制 --add-opens/--add-exports）被完全忽略，
-    // 引发反射访问失败崩溃。
+    // Parse the official JVM arguments of every version (including vanilla 26.x).
+    // The original code only parsed them when inheritsFrom was present, so the arguments.jvm of a vanilla version
+    // (which may contain the mandatory --add-opens/--add-exports added in 26.x) was ignored entirely,
+    // causing a crash from failed reflective access.
     if (json[@"arguments"][@"jvm"] == nil) {
         return;
     }
@@ -197,7 +197,7 @@
     };
     int argsToSkip = 0;
     for (id rawArg in json[@"arguments"][@"jvm"]) {
-        // 展开规则化参数（dict with rules），iOS 视为 osx
+        // Expand the rule-based arguments (a dict with rules), treating iOS as osx
         NSArray<NSString *> *expanded = [self flattenJvmArg:rawArg];
         if (expanded.count == 0) continue;
         for (NSString *arg in expanded) {

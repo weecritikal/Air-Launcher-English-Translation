@@ -4,14 +4,14 @@
 //
 //  Modpack import service implementation
 //
-//  参照 FCL (Fold Craft Launcher) 的整合包导入流程重写:
-//  1. 正确解析 Modrinth (.mrpack) 和 CurseForge (manifest.json) 两种格式
-//  2. 解压 overrides/client-overrides 到 gameDir (而非 modpackDir 根目录)
-//  3. 下载 manifest/files 列出的所有 mod 到 gameDir/mods
-//  4. 对 Fabric/Quilt 整合包自动拉取 loader profile json 写入版本目录
-//  5. 对 Forge/NeoForge 整合包下载 installer.jar 并调用直装器写入 modpack gameDir
-//  6. gameDir 使用相对路径 (./custom_gamedir/<id>) 与启动器 POJAV_GAME_DIR 对齐
-//  7. 写完整 profile (含 gameDir、lastVersionId、icon)
+//  Rewritten after the modpack import flow of FCL (Fold Craft Launcher):
+//  1. Parse both the Modrinth (.mrpack) and CurseForge (manifest.json) formats correctly
+//  2. Extract overrides/client-overrides into gameDir (rather than the modpackDir root)
+//  3. Download every mod listed in manifest/files into gameDir/mods
+//  4. For Fabric/Quilt modpacks, fetch the loader profile json automatically and write it into the version folder
+//  5. For Forge/NeoForge modpacks, download installer.jar and call the direct installer to write into the modpack gameDir
+//  6. gameDir uses a relative path (./custom_gamedir/<id>), aligned with the launcher POJAV_GAME_DIR
+//  7. Write a complete profile (with gameDir, lastVersionId and icon)
 //
 
 #import "ModpackImportService.h"
@@ -31,13 +31,13 @@
 static NSString * const kImportedModpacksKey = @"ImportedModpacks";
 
 @interface ModpackImportService () <NSURLSessionDownloadDelegate>
-/// 整合包工作区根目录: <POJAV_GAME_DIR>/custom_gamedir
+/// The modpack workspace root: <POJAV_GAME_DIR>/custom_gamedir
 @property (nonatomic, strong) NSString *customGameDir;
-/// 用于下载 mod 文件、加载器 installer/profile json 的会话
+/// The session used to download mod files and the loader installer/profile json
 @property (nonatomic, strong) NSURLSession *downloadSession;
 /// task -> { success, location, error }
 @property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, NSMutableDictionary *> *downloadResults;
-/// task -> dispatch_semaphore_t，用于同步等待单个下载完成
+/// task -> dispatch_semaphore_t, used to wait for one download to finish
 @property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, dispatch_semaphore_t> *downloadSemaphores;
 /// task -> DownloadTaskItem.taskId
 @property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, NSString *> *downloadTaskIds;
@@ -45,10 +45,10 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
 @property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, NSMutableDictionary *> *downloadProgressSnapshots;
 @property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, DownloadTaskItem *> *downloadTaskItems;
 @property (nonatomic, strong) NSLock *downloadLock;
-/// 阶段5修复（参照 FCL DownloadList）：跟踪本次导入过程中下载失败的文件，便于上层向用户报告
+/// Phase 5 fix (following FCL DownloadList): tracks the files that failed during this import, so the caller can report them to the user
 @property (nonatomic, strong) NSMutableArray<NSDictionary *> *failedFilesInternal;
 
-// 前向声明：将 modpackInfo 中的 iconBase64 解析为可用的文件 URL 字符串
+// Forward declaration: resolve the iconBase64 in modpackInfo into a usable file URL string
 - (nullable NSString *)resolveIconURLFromModpackInfo:(NSDictionary *)modpackInfo;
 @end
 
@@ -57,8 +57,8 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
 - (instancetype)init {
     self = [super init];
     if (self) {
-        // 整合包目录直接用 POJAV_GAME_DIR 下的 custom_gamedir，gameDir 字段写相对路径
-        // 这样启动器读取 profile 时会拼成 <POJAV_GAME_DIR>/custom_gamedir/<id>
+        // The modpack folder is custom_gamedir under POJAV_GAME_DIR, with a relative path in the gameDir field,
+        // so when the launcher reads the profile it resolves to <POJAV_GAME_DIR>/custom_gamedir/<id>
         const char *gameDirEnv = getenv("POJAV_GAME_DIR");
         self.customGameDir = [@(gameDirEnv ?: ".") stringByAppendingPathComponent:@"custom_gamedir"];
         NSFileManager *fm = [NSFileManager defaultManager];
@@ -84,7 +84,7 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
     return self;
 }
 
-/// 阶段5修复：公共只读访问器，返回不可变拷贝防止外部修改
+/// Phase 5 fix: a public read-only accessor returning an immutable copy, so it cannot be modified from outside
 - (NSArray<NSDictionary *> *)failedFiles {
     @synchronized(self) {
         return [self.failedFilesInternal copy];
@@ -97,7 +97,7 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
     }
 }
 
-/// 内部使用：抛出取消错误
+/// Internal: throw a cancellation error
 - (BOOL)checkCancelledWithError:(NSError **)error {
     @synchronized(self) {
         if (_cancelled) {
@@ -114,15 +114,15 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
 
 #pragma mark - Helpers
 
-/// 将 modpackInfo 中的 iconBase64 字段解析为可用的图标 URL。
-/// modrinth.index.json 中 iconBase64 是 base64 编码的图片数据（如 "data:image/png;base64,...." 或纯 base64 字符串），
-/// 不能直接作为 URL 使用。该方法将其解码为 UIImage，保存到临时文件，返回文件 URL 字符串。
-/// 如果解析失败或无图标，返回 nil（调用方使用默认图标）。
+/// Resolve the iconBase64 field of modpackInfo into a usable icon URL.
+/// In modrinth.index.json, iconBase64 is base64-encoded image data (such as "data:image/png;base64,...." or a bare base64 string),
+/// which cannot be used as a URL directly. This method decodes it into a UIImage, saves it to a temporary file and returns that file URL string.
+/// Returns nil if parsing fails or there is no icon (the caller then uses the default icon).
 - (nullable NSString *)resolveIconURLFromModpackInfo:(NSDictionary *)modpackInfo {
     NSString *iconBase64 = modpackInfo[@"iconBase64"];
     if (!iconBase64 || iconBase64.length == 0) return nil;
 
-    // 去除可能的 data URI 前缀（如 "data:image/png;base64,"）
+    // Strip any data URI prefix (such as "data:image/png;base64,")
     NSString *base64String = iconBase64;
     NSString *prefix = @"base64,";
     NSRange prefixRange = [iconBase64 rangeOfString:prefix];
@@ -130,26 +130,26 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
         base64String = [iconBase64 substringFromIndex:prefixRange.location + prefixRange.length];
     }
 
-    // 解码 base64
+    // Decode the base64
     NSData *imageData = [[NSData alloc] initWithBase64EncodedString:base64String
                                                              options:NSDataBase64DecodingIgnoreUnknownCharacters];
     if (!imageData || imageData.length == 0) return nil;
 
-    // 保存到临时文件
+    // Save to a temporary file
     NSString *tempDir = NSTemporaryDirectory();
     NSString *iconFileName = [NSString stringWithFormat:@"modpack_icon_%@.png",
                               modpackInfo[@"id"] ?: modpackInfo[@"name"] ?: @"unknown"];
     NSString *iconPath = [tempDir stringByAppendingPathComponent:iconFileName];
     NSError *writeError = nil;
     if ([imageData writeToFile:iconPath options:NSDataWritingAtomic error:&writeError]) {
-        // 返回文件 URL 字符串（AFNetworking 的 setImageWithURL: 支持文件 URL）
+        // Return the file URL string (the AFNetworking setImageWithURL: supports file URLs)
         NSURL *fileURL = [NSURL fileURLWithPath:iconPath];
         return fileURL.absoluteString;
     }
     return nil;
 }
 
-/// 将 NSDate 转为 ISO8601 字符串，确保 JSON 序列化安全
+/// Convert an NSDate into an ISO8601 string, so JSON serialization is safe
 - (NSString *)iso8601StringFromDate:(NSDate *)date {
     static NSDateFormatter *formatter = nil;
     static dispatch_once_t onceToken;
@@ -162,17 +162,17 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
     return [formatter stringFromDate:date];
 }
 
-/// 给定 modpack id，返回 gameDir 的绝对路径 (用于本地文件操作)
+/// Given a modpack id, return the absolute gameDir path (for local file operations)
 - (NSString *)absoluteGameDirForModpackId:(NSString *)modpackId {
     return [self.customGameDir stringByAppendingPathComponent:modpackId];
 }
 
-/// 给定 modpack id，返回 gameDir 的相对路径 (写入 profile 的 gameDir 字段)
+/// Given a modpack id, return the relative gameDir path (written into the profile gameDir field)
 - (NSString *)relativeGameDirForModpackId:(NSString *)modpackId {
     return [NSString stringWithFormat:@"./custom_gamedir/%@", modpackId];
 }
 
-/// 把 Modrinth dependencies 解析成 loader 信息
+/// Parse the Modrinth dependencies into loader information
 - (void)resolveModrinthDependencies:(NSDictionary *)dependencies
                             loader:(NSString **)outLoader
                      loaderVersion:(NSString **)outLoaderVersion
@@ -196,7 +196,7 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
     }
 }
 
-/// 把 CurseForge manifest.modLoaders 解析成 loader 信息
+/// Parse the CurseForge manifest.modLoaders into loader information
 - (void)resolveCurseForgeLoader:(NSArray *)modLoaders
                         loader:(NSString **)outLoader
                  loaderVersion:(NSString **)outLoaderVersion {
@@ -250,9 +250,9 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
         return [self parseModrinthModpack:archive indexData:indexData filePath:filePath error:error];
     }
 
-    // 关键修复（多启动器兼容）：MMC (MultiMC / Prism Launcher) 整合包检测
-    // mmc-pack.json 标志文件包含 components 数组，每个 component 有 uid（net.minecraft / net.fabricmc.fabric-loader 等）
-    // 必须在 manifest.json (CurseForge) 之前检测，因为某些 MMC 整合包可能也含有 manifest.json
+    // Key fix (cross-launcher compatibility): MMC (MultiMC / Prism Launcher) modpack detection
+    // The mmc-pack.json marker file holds a components array where each component has a uid (net.minecraft / net.fabricmc.fabric-loader and so on)
+    // It must be checked before manifest.json (CurseForge), because some MMC modpacks also contain a manifest.json
     NSData *mmcPackData = [archive extractDataFromFile:@"mmc-pack.json" error:&archiveError];
     if (mmcPackData) {
         NSLog(@"[ModpackImport] Detected MMC (MultiMC/Prism) modpack");
@@ -264,12 +264,12 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
         return [self parseManifestModpack:archive manifestData:manifestData filePath:filePath error:error];
     }
 
-    // 关键修复（多启动器兼容）：添加 Plain ZIP 整合包支持
-    // Plain ZIP 是 HMCL/FCL/PojavLauncher 等启动器导出的"纯 .minecraft 目录结构"整合包：
-    //   - 无 modrinth.index.json 和 manifest.json
-    //   - zip 根目录直接包含 mods/、config/、versions/、options.txt 等 .minecraft 文件
-    //   - 也兼容 .minecraft/ 前缀的 zip（HMCL 导出格式之一）
-    // 此格式无 mod 下载清单，所有文件直接从 zip 解压，loader 需用户后续手动安装。
+    // Key fix (cross-launcher compatibility): add Plain ZIP modpack support
+    // A Plain ZIP is the "bare .minecraft folder structure" modpack exported by launchers such as HMCL/FCL/PojavLauncher:
+    //   - it has neither modrinth.index.json nor manifest.json
+    //   - the zip root holds mods/, config/, versions/, options.txt and other .minecraft files directly
+    //   - zips with a .minecraft/ prefix are handled too (one of the HMCL export formats)
+    // This format has no mod download manifest: every file comes straight out of the zip, and the loader must be installed by the user afterwards.
     if ([self isPlainZipModpack:archive]) {
         NSLog(@"[ModpackImport] Detected Plain ZIP modpack (no manifest, direct .minecraft directory structure)");
         return [self parsePlainZipModpack:archive filePath:filePath error:error];
@@ -283,8 +283,8 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
     return nil;
 }
 
-/// 解析 MMC (MultiMC / Prism Launcher) 格式整合包
-/// mmc-pack.json 结构：
+/// Parse an MMC (MultiMC / Prism Launcher) format modpack
+/// The mmc-pack.json structure:
 ///   {
 ///     "components": [
 ///       {"uid": "net.minecraft", "version": "1.20.1"},
@@ -292,9 +292,9 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
 ///       ...
 ///     ]
 ///   }
-/// instance.cfg（key=value 格式，可选）：
+/// instance.cfg (key=value format, optional):
 ///   name=My Modpack
-/// MMC 整合包的 .minecraft 目录在 zip 内通常以 .minecraft/ 前缀存在
+/// The .minecraft folder of an MMC modpack usually sits under a .minecraft/ prefix inside the zip
 - (nullable NSDictionary *)parseMMCPack:(UZKArchive *)archive
                           mmcPackData:(NSData *)mmcPackData
                               filePath:(NSString *)filePath
@@ -324,7 +324,7 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
     NSString *loader = @"Vanilla";
     NSString *loaderVersion = @"";
 
-    // 遍历 components 解析 MC 版本和加载器
+    // Walk the components to find the MC version and the loader
     for (NSDictionary *comp in components) {
         if (![comp isKindOfClass:[NSDictionary class]]) continue;
         NSString *uid = comp[@"uid"];
@@ -348,7 +348,7 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
         }
     }
 
-    // 从 instance.cfg 读取 name（可选）
+    // Read name from instance.cfg (optional)
     NSString *name = [filePath.lastPathComponent stringByDeletingPathExtension];
     NSError *cfgError = nil;
     NSData *cfgData = [archive extractDataFromFile:@"instance.cfg" error:&cfgError];
@@ -385,10 +385,10 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
     };
 }
 
-/// 检测 zip 是否是 Plain ZIP 整合包（无 manifest，直接含 .minecraft 目录结构）
-/// 判断条件：zip 中至少含有一个 .minecraft 风格的顶层目录或文件
+/// Detect whether a zip is a Plain ZIP modpack (no manifest, containing the .minecraft folder structure directly)
+/// The test: the zip contains at least one top-level folder or file typical of .minecraft
 - (BOOL)isPlainZipModpack:(UZKArchive *)archive {
-    // .minecraft 风格的顶层目录/文件特征
+    // The top-level folders/files that identify a .minecraft layout
     NSArray<NSString *> *knownTopLevelEntries = @[
         @"mods/", @"config/", @"versions/", @"saves/", @"resourcepacks/",
         @"shaderpacks/", @"defaultconfigs/", @"kubejs/", @"scripts/",
@@ -399,12 +399,12 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
     __block BOOL hasMinecraftStructure = NO;
     [archive performOnFilesInArchive:^(UZKFileInfo *fileInfo, BOOL *stop) {
         NSString *filename = fileInfo.filename;
-        // 兼容 .minecraft/ 前缀（HMCL 导出格式）
+        // Handle the .minecraft/ prefix too (the HMCL export format)
         NSString *normalized = filename;
         if ([normalized hasPrefix:@".minecraft/"]) {
             normalized = [normalized substringFromIndex:@".minecraft/".length];
         }
-        // 跳过 macOS 的 __MACOSX 目录和隐藏文件
+        // Skip the macOS __MACOSX folder and hidden files
         if ([filename hasPrefix:@"__MACOSX/"]) return;
         if ([filename.lastPathComponent hasPrefix:@"."]) return;
 
@@ -419,11 +419,11 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
     return hasMinecraftStructure;
 }
 
-/// 解析 Plain ZIP 整合包
-/// Plain ZIP 无 manifest，需要：
-///   1. 从 versions/<version>/<version>.json 推断 minecraft 版本
-///   2. loader 默认 Vanilla（无法从 zip 可靠推断，需用户后续手动安装）
-///   3. 整个 zip 根目录作为 overrides 提取到 gameDir
+/// Parse a Plain ZIP modpack
+/// A Plain ZIP has no manifest, so it needs:
+///   1. the Minecraft version inferred from versions/<version>/<version>.json
+///   2. the loader defaulting to vanilla (it cannot be inferred reliably from the zip, so the user installs it afterwards)
+///   3. the whole zip root treated as overrides and extracted into gameDir
 - (nullable NSDictionary *)parsePlainZipModpack:(UZKArchive *)archive filePath:(NSString *)filePath error:(NSError **)error {
     (void)error;
     NSString *minecraftVersion = [self detectMinecraftVersionFromArchive:archive] ?: @"unknown";
@@ -446,25 +446,25 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
     };
 }
 
-/// 从 zip 的 versions/<version>/<version>.json 路径推断 minecraft 版本
+/// Infer the Minecraft version from the versions/<version>/<version>.json path in the zip
 - (nullable NSString *)detectMinecraftVersionFromArchive:(UZKArchive *)archive {
     __block NSString *detectedVersion = nil;
     [archive performOnFilesInArchive:^(UZKFileInfo *fileInfo, BOOL *stop) {
         NSString *filename = fileInfo.filename;
-        // 兼容 .minecraft/ 前缀
+        // Handle the .minecraft/ prefix too
         if ([filename hasPrefix:@".minecraft/"]) {
             filename = [filename substringFromIndex:@".minecraft/".length];
         }
-        // 匹配 versions/<version>/<version>.json
+        // Match versions/<version>/<version>.json
         if ([filename hasPrefix:@"versions/"] && [filename hasSuffix:@".json"]) {
             NSArray *parts = [filename componentsSeparatedByString:@"/"];
             if (parts.count >= 3) {
                 NSString *versionFromPath = parts[parts.count - 2];
-                // 优先选择纯 minecraft 版本（不含 -forge-/-neoforge-/-fabric- 等后缀）
+                // Prefer a pure Minecraft version (without a -forge-/-neoforge-/-fabric- suffix)
                 if (detectedVersion.length == 0) {
                     detectedVersion = versionFromPath;
                 }
-                // 如果是纯版本号（无 loader 后缀），优先采用
+                // If it is a plain version number (with no loader suffix), take it
                 if (![versionFromPath containsString:@"-forge-"] &&
                     ![versionFromPath containsString:@"-neoforge-"] &&
                     ![versionFromPath containsString:@"-fabric-"] &&
@@ -502,7 +502,7 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
     NSString *version = indexDict[@"versionId"] ?: @"1.0.0";
     NSString *modpackId = [NSString stringWithFormat:@"modrinth_%@", [[NSUUID UUID] UUIDString]];
 
-    // 提取 icon.png (如果有)
+    // Extract icon.png (if there is one)
     NSString *iconBase64 = [self extractIconFromArchive:archive];
 
     return @{
@@ -545,7 +545,7 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
     NSString *version = manifestDict[@"version"] ?: @"1.0.0";
     NSString *modpackId = [NSString stringWithFormat:@"curseforge_%@", [[NSUUID UUID] UUIDString]];
 
-    // 提取 icon (CurseForge 整合包通常没有，尝试 modpack.png 或 pack.png)
+    // Extract the icon (CurseForge modpacks usually have none, so modpack.png or pack.png is tried)
     NSString *iconBase64 = [self extractIconFromArchive:archive];
 
     return @{
@@ -563,7 +563,7 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
     };
 }
 
-/// 从整合包内尝试提取 icon.png/modpack.png/pack.png，返回 base64 data URI
+/// Try to extract icon.png/modpack.png/pack.png from the modpack and return a base64 data URI
 - (nullable NSString *)extractIconFromArchive:(UZKArchive *)archive {
     NSArray<NSString *> *iconCandidates = @[@"icon.png", @"modpack.png", @"pack.png"];
     for (NSString *name in iconCandidates) {
@@ -586,7 +586,7 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
 - (BOOL)importModpack:(NSDictionary *)modpackInfo
              progress:(void (^_Nullable)(double progress, NSString *stageMessage))progress
                 error:(NSError **)error {
-    // 阶段5修复：每次导入开始时清空失败列表（参照 FCL DownloadList.reset()）
+    // Phase 5 fix: clear the failure list at the start of every import (following FCL DownloadList.reset())
     @synchronized(self) {
         [self.failedFilesInternal removeAllObjects];
     }
@@ -614,7 +614,7 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
     NSString *gameDirAbsolute = [self absoluteGameDirForModpackId:modpackId];
     NSString *gameDirRelative = [self relativeGameDirForModpackId:modpackId];
 
-    // 清理可能存在的旧目录
+    // Clean up any old folder that may exist
     if ([fm fileExistsAtPath:gameDirAbsolute]) {
         [fm removeItemAtPath:gameDirAbsolute error:nil];
     }
@@ -627,21 +627,21 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
         return NO;
     }
 
-    // 创建 mods 目录
+    // Create the mods folder
     NSString *modsDir = [gameDirAbsolute stringByAppendingPathComponent:@"mods"];
     [fm createDirectoryAtPath:modsDir withIntermediateDirectories:YES attributes:nil error:nil];
 
-    // 创建 versions 目录
+    // Create the versions folder
     NSString *versionsDir = [gameDirAbsolute stringByAppendingPathComponent:@"versions"];
     [fm createDirectoryAtPath:versionsDir withIntermediateDirectories:YES attributes:nil error:nil];
 
-    // 取消检查点
+    // Cancellation checkpoint
     if ([self checkCancelledWithError:error]) {
         [fm removeItemAtPath:gameDirAbsolute error:nil];
         return NO;
     }
 
-    // 第 1 步: 解压 overrides/client-overrides (Modrinth) 或 overrides (CurseForge/MMC) 到 gameDir
+    // Step 1: extract overrides/client-overrides (Modrinth) or overrides (CurseForge/MMC) into gameDir
     if (progress) progress(0.10, @"Extracting overrides");
     NSError *extractError = nil;
     BOOL extractSuccess = [self extractOverrides:filePath format:format toDirectory:gameDirAbsolute error:&extractError];
@@ -651,31 +651,31 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
         return NO;
     }
 
-    // 取消检查点
+    // Cancellation checkpoint
     if ([self checkCancelledWithError:error]) {
         [fm removeItemAtPath:gameDirAbsolute error:nil];
         return NO;
     }
 
-    // 第 2 步: 下载 mod 文件列表
+    // Step 2: download the mod file list
     NSArray *modFiles = modpackInfo[@"files"];
     if (modFiles.count > 0) {
         if (progress) progress(0.15, [NSString stringWithFormat:@"Downloading %lu mod file(s)", (unsigned long)modFiles.count]);
         NSError *downloadError = nil;
         BOOL downloadSuccess = [self downloadModFiles:modpackInfo toModsDirectory:modsDir progress:progress error:&downloadError];
         if (!downloadSuccess) {
-            // mod 下载失败不阻断导入，只记录警告
+            // A failed mod download does not abort the import; it is only logged as a warning
             NSLog(@"[ModpackImport] Mod download partially failed: %@", downloadError.localizedDescription);
         }
     }
 
-    // 取消检查点
+    // Cancellation checkpoint
     if ([self checkCancelledWithError:error]) {
         [fm removeItemAtPath:gameDirAbsolute error:nil];
         return NO;
     }
 
-    // 第 3 步: 安装模组加载器
+    // Step 3: install the mod loader
     if (progress) progress(0.85, @"Installing the mod loader");
     NSString *loader = modpackInfo[@"loader"];
     NSString *loaderVersion = modpackInfo[@"loaderVersion"];
@@ -690,15 +690,15 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
                                    gameDirAbsolute:gameDirAbsolute
                                           error:&loaderError];
     if (!loaderSuccess) {
-        // 加载器安装失败不阻断 (用户可能已经手动安装)
+        // A failed loader install does not abort the import (the user may have installed it by hand)
         NSLog(@"[ModpackImport] Loader installation failed (user may have already installed): %@", loaderError.localizedDescription);
     }
 
-    // 阶段5修复（参照 FCL ModpackHelper.ensureCompleteVersion）：
-    // installModLoader 只写入了 loader 的 version.json，但父版本（原版 MC）的
-    // version.json、libraries、assets 都还没下载。之前用户启动整合包时会报
-    // "找不到 net.minecraft.client.main.Main" 或 libraries 缺失，正是因为这一步缺失。
-    // 这里触发完整版本下载，确保启动时所有依赖文件都就位。
+    // Phase 5 fix (following FCL ModpackHelper.ensureCompleteVersion):
+    // installModLoader only writes the version.json of the loader, while the version.json, libraries and assets of
+    // the parent (vanilla MC) version are still missing. Users launching a modpack used to see
+    // "net.minecraft.client.main.Main not found" or missing libraries precisely because this step was absent.
+    // The full version download is triggered here, so every dependency is in place at launch.
     if (progress) progress(0.86, @"Downloading game files (libraries + assets)");
     NSError *versionDLError = nil;
     BOOL versionDLOK = [self ensureCompleteVersionInstalled:versionId
@@ -707,8 +707,8 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
                                                     error:&versionDLError];
     if (!versionDLOK) {
         NSLog(@"[ModpackImport] Warning: Full version download failed: %@", versionDLError.localizedDescription);
-        // 不阻断导入：用户可能已手动下载过原版文件，或者后续启动时按需下载
-        // 但要把失败信息记入 failedFiles 让用户知晓
+        // Do not abort the import: the user may already have downloaded the vanilla files, or they will be fetched on demand at launch
+        // But record the failure in failedFiles so the user knows
         @synchronized(self) {
             [self.failedFilesInternal addObject:@{
                 @"fileName": [NSString stringWithFormat:@"%@ (game files)", versionId],
@@ -719,13 +719,13 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
         }
     }
 
-    // 取消检查点
+    // Cancellation checkpoint
     if ([self checkCancelledWithError:error]) {
         [fm removeItemAtPath:gameDirAbsolute error:nil];
         return NO;
     }
 
-    // 第 4 步: 写 profile
+    // Step 4: write the profile
     if (progress) progress(0.95, @"Writing the profile");
     NSString *profileName = [self createProfileForModpack:modpackInfo
                                           gameDirRelative:gameDirRelative
@@ -736,7 +736,7 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
         return NO;
     }
 
-    // 第 5 步: 持久化整合包元信息
+    // Step 5: persist the modpack metadata
     NSMutableDictionary *savedModpack = [modpackInfo mutableCopy];
     savedModpack[@"gameDirAbsolute"] = gameDirAbsolute;
     savedModpack[@"gameDirRelative"] = gameDirRelative;
@@ -748,7 +748,7 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
     return YES;
 }
 
-/// 根据 modpackInfo 计算 lastVersionId
+/// Work out lastVersionId from modpackInfo
 - (NSString *)versionIdForModpack:(NSDictionary *)modpackInfo {
     NSString *loader = modpackInfo[@"loader"];
     NSString *loaderVersion = modpackInfo[@"loaderVersion"];
@@ -761,18 +761,18 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
     } else if ([loader isEqualToString:@"Forge"]) {
         return [NSString stringWithFormat:@"%@-forge-%@", minecraftVersion, loaderVersion];
     } else if ([loader isEqualToString:@"NeoForge"]) {
-        // NeoForge 版本号本身已包含 MC 版本信息，例如 47.1.0 (对应 1.20.1)
-        // 但在版本目录里仍用 <mc>-neoforge-<loader> 形式以便区分
+        // A NeoForge version number already encodes the MC version, e.g. 47.1.0 (which is 1.20.1)
+        // but the version folder still uses the <mc>-neoforge-<loader> form so they can be told apart
         return [NSString stringWithFormat:@"%@-neoforge-%@", minecraftVersion, loaderVersion];
     } else {
         return minecraftVersion ?: @"";
     }
 }
 
-/// 解压 overrides 目录到 gameDir
+/// Extract the overrides folder into gameDir
 /// Modrinth: overrides + client-overrides
 /// CurseForge: overrides
-/// Plain ZIP: 整个 zip 根目录作为 overrides 提取（兼容 .minecraft/ 前缀）
+/// Plain ZIP: the whole zip root is treated as overrides (handling the .minecraft/ prefix too)
 - (BOOL)extractOverrides:(NSString *)filePath format:(NSString *)format toDirectory:(NSString *)destDir error:(NSError **)error {
     NSError *archiveError = nil;
     UZKArchive *archive = [[UZKArchive alloc] initWithPath:filePath error:&archiveError];
@@ -785,21 +785,21 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
         return NO;
     }
 
-    // Plain ZIP：整个 zip 根目录作为 overrides 提取到 gameDir
-    // 兼容 .minecraft/ 前缀（HMCL 导出格式）和 __MACOSX 目录（macOS 创建的元数据）
+    // Plain ZIP: the whole zip root is extracted into gameDir as overrides
+    // Handling both the .minecraft/ prefix (the HMCL export format) and the __MACOSX folder (metadata created by macOS)
     if ([format isEqualToString:@"plainzip"] || [format isEqualToString:@"mmc"]) {
         NSLog(@"[ModpackImport] %@: extracting zip root to gameDir", format);
-        // 关键修复（多启动器兼容）：versions/ 目录特殊处理
-        // Java 端 Tools.java 的 DIR_HOME_VERSION 固定指向 POJAV_GAME_DIR/versions，
-        // 不从 profile gameDir 读取。因此 Plain ZIP/MMC 中的 versions/ 必须提取到主目录，
-        // 否则启动时报"找不到版本信息"。
+        // Key fix (cross-launcher compatibility): the versions/ folder is a special case
+        // DIR_HOME_VERSION in Tools.java on the Java side always points at POJAV_GAME_DIR/versions
+        // and is not read from the profile gameDir. The versions/ folder in a Plain ZIP/MMC must therefore go to the main directory,
+        // otherwise launching reports "version information not found".
         const char *pojavGameDir = getenv("POJAV_GAME_DIR");
         NSString *mainVersionsDir = pojavGameDir ?
             [NSString stringWithFormat:@"%s/versions", pojavGameDir] :
             [destDir stringByAppendingPathComponent:@"versions"];
 
         [archive performOnFilesInArchive:^(UZKFileInfo *fileInfo, BOOL *stop) {
-            // 取消检查点（在长循环内频繁检查）
+            // Cancellation checkpoint (checked often inside a long loop)
             @synchronized(self) {
                 if (self.cancelled) {
                     *stop = YES;
@@ -808,14 +808,14 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
             }
 
             NSString *filename = fileInfo.filename;
-            // 兼容 .minecraft/ 前缀（HMCL/MMC 导出格式）
+            // Handle the .minecraft/ prefix too (the HMCL/MMC export format)
             if ([filename hasPrefix:@".minecraft/"]) {
                 filename = [filename substringFromIndex:@".minecraft/".length];
             }
-            // 跳过 macOS 的 __MACOSX 目录和隐藏文件
+            // Skip the macOS __MACOSX folder and hidden files
             if ([filename hasPrefix:@"__MACOSX/"]) return;
             if ([filename.lastPathComponent hasPrefix:@"."]) return;
-            // 跳过 MMC 的元信息文件（已在 parseMMCPack 中处理过）
+            // Skip the MMC metadata files (already handled in parseMMCPack)
             if ([format isEqualToString:@"mmc"] &&
                 ([filename isEqualToString:@"mmc-pack.json"] ||
                  [filename isEqualToString:@"instance.cfg"] ||
@@ -824,14 +824,14 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
             }
             if (filename.length == 0) return;
 
-            // versions/ 前缀的文件提取到主目录 POJAV_GAME_DIR/versions/
-            // 其他文件提取到 gameDirAbsolute（保持整合包隔离）
+            // Files under the versions/ prefix are extracted into the main POJAV_GAME_DIR/versions/
+            // Everything else is extracted into gameDirAbsolute (keeping the modpack isolated)
             NSString *baseDir = destDir;
             NSString *relativePath = filename;
             if ([filename hasPrefix:@"versions/"]) {
                 baseDir = mainVersionsDir;
                 relativePath = [filename substringFromIndex:@"versions/".length];
-                // 如果 relativePath 仍以 versions/ 开头（如 versions/1.20.1/1.20.1.json），保留
+                // If relativePath still starts with versions/ (such as versions/1.20.1/1.20.1.json), keep it
                 if ([relativePath hasPrefix:@"versions/"]) {
                     relativePath = [relativePath substringFromIndex:@"versions/".length];
                 }
@@ -857,7 +857,7 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
             NSLog(@"[ModpackImport] %@ extraction failed: %@", format, *error);
             return NO;
         }
-        // 取消时清理
+        // Clean up on cancellation
         @synchronized(self) {
             if (self.cancelled) {
                 if (error) {
@@ -871,7 +871,7 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
         return YES;
     }
 
-    // Modrinth: 解压 overrides 和 client-overrides (后者覆盖前者)
+    // Modrinth: extract overrides and client-overrides (the latter overriding the former)
     [ModpackUtils archive:archive extractDirectory:@"overrides" toPath:destDir error:error];
     if (error && *error) {
         return NO;
@@ -880,7 +880,7 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
     if ([format isEqualToString:@"modrinth"]) {
         [ModpackUtils archive:archive extractDirectory:@"client-overrides" toPath:destDir error:error];
         if (error && *error) {
-            // client-overrides 不存在不算错误
+            // A missing client-overrides is not an error
             NSLog(@"[ModpackImport] client-overrides extract (may not exist): %@", *error);
             *error = nil;
         }
@@ -889,9 +889,9 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
     return YES;
 }
 
-/// 下载 mod 文件列表
-/// Modrinth 格式: files[].downloads[0] 是直接 URL，files[].path 是相对路径
-/// CurseForge 格式: files[].projectID + fileID 需要通过 CurseForge API 解析下载 URL
+/// Download the mod file list
+/// The Modrinth format: files[].downloads[0] is a direct URL and files[].path is a relative path
+/// The CurseForge format: files[].projectID + fileID have to be resolved into a download URL through the CurseForge API
 - (BOOL)downloadModFiles:(NSDictionary *)modpackInfo toModsDirectory:(NSString *)modsDir progress:(void (^_Nullable)(double progress, NSString *stageMessage))progress error:(NSError **)error {
     NSString *format = modpackInfo[@"format"];
     NSArray *files = modpackInfo[@"files"];
@@ -900,17 +900,17 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
     NSUInteger total = files.count;
     NSUInteger successCount = 0;
     NSString *downloadSource = getPrefObject(@"general.download_source") ?: @"official";
-    // 修复整合包图标不显示：原实现将 modpackInfo[@"iconBase64"]（base64 编码的图片数据字符串）
-    // 直接赋给 iconURL 字段，传给 setImageWithURL: 时 NSURL URLWithString: 返回 nil（base64 不是合法 URL），
-    // 导致整合包下载任务的图标永远不显示。
-    // 正确做法：将 base64 数据解码为 UIImage，保存到临时文件，使用文件 URL。
+    // Fix for modpack icons not showing: the original implementation assigned modpackInfo[@"iconBase64"] (a base64-encoded image data string)
+    // straight to the iconURL field, and NSURL URLWithString: returned nil when it was passed to setImageWithURL: (base64 is not a valid URL),
+    // so the icon of a modpack download task never appeared.
+    // The correct approach: decode the base64 into a UIImage, save it to a temporary file and use that file URL.
     NSString *iconURL = [self resolveIconURLFromModpackInfo:modpackInfo];
 
     if ([format isEqualToString:@"modrinth"]) {
-        // Modrinth: 直接下载
+        // Modrinth: download directly
         NSUInteger skippedOptional = 0;
         for (NSUInteger i = 0; i < total; i++) {
-            // 取消检查点
+            // Cancellation checkpoint
             if ([self checkCancelledWithError:error]) {
                 return NO;
             }
@@ -918,9 +918,9 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
             NSArray *downloads = fileInfo[@"downloads"];
             NSString *url = downloads.firstObject;
             NSString *relPath = fileInfo[@"path"];
-            // env 字段过滤：Modrinth 文件可声明仅 server 或仅 client 适用。
-            // 启动器是客户端，跳过 env.client=="unsupported" 的文件（避免下载服务端专用 mod）。
-            // env 缺失或 env.client=="required"/"optional" 时正常下载。
+            // env field filtering: a Modrinth file can declare itself server-only or client-only.
+            // The launcher is a client, so files with env.client=="unsupported" are skipped (avoiding server-only mods).
+            // Files are downloaded normally when env is missing or env.client is "required"/"optional".
             NSDictionary *env = fileInfo[@"env"];
             NSString *clientEnv = env[@"client"];
             if ([clientEnv isKindOfClass:[NSString class]] && [clientEnv isEqualToString:@"unsupported"]) {
@@ -930,18 +930,18 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
             }
 
             if (!url || !relPath) {
-                // 关键修复：URL 为空时不应静默跳过而不计数，否则进度条永远卡住、用户也无法感知有缺失。
-                // 之前只 completedUnitCount++ 但不报告失败，造成整合包 mod 不完整。
+                // Key fix: an empty URL must not be skipped silently without counting, otherwise the progress bar sticks forever and the user cannot tell anything is missing.
+                // completedUnitCount++ used to happen without reporting a failure, leaving the modpack mods incomplete.
                 NSLog(@"[ModpackImport] Warning: Modrinth file %@ missing download URL, skipping", relPath);
                 continue;
             }
 
-            // 关键修复：之前 `if (![relPath hasPrefix:@"mods/"]) continue;` 会丢弃所有非 mods/ 前缀的文件，
-            // 包括 shaderpacks/、resourcepacks/、datapacks/ 等用户自定义资源。
-            // 这与 issue 描述的"模组不完整"密切相关——很多整合包除 mod 外还含 shaderpack、资源包等。
-            // 正确做法：根据 path 前缀分发到 modsDir 之外的对应目录。
-            // 注意：overrides 目录已通过 extractModpackOverrides 解压，这里只处理 mods/、shaderpacks/、
-            // resourcepacks/、datapacks/ 等具体子目录前缀。
+            // Key fix: `if (![relPath hasPrefix:@"mods/"]) continue;` used to discard every file without a mods/ prefix,
+            // including shaderpacks/, resourcepacks/, datapacks/ and other user resources.
+            // That is closely tied to the reported "incomplete mods" issue — many modpacks ship shader packs and resource packs alongside mods.
+            // The correct approach: dispatch to the matching folder outside modsDir based on the path prefix.
+            // Note: the overrides folder is already extracted by extractModpackOverrides, so only the mods/, shaderpacks/,
+            // resourcepacks/ and datapacks/ subfolder prefixes are handled here.
             NSString *destDir = nil;
             if ([relPath hasPrefix:@"mods/"]) {
                 destDir = modsDir;
@@ -952,15 +952,15 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
             } else if ([relPath hasPrefix:@"datapacks/"]) {
                 destDir = [modsDir.stringByDeletingLastPathComponent stringByAppendingPathComponent:@"datapacks"];
             } else {
-                // 其他前缀（如 config/、defaultconfigs/）通常在 overrides 中，但 modrinth.index.json
-                // 的 files 数组理论上不应重复列出 overrides 内容；若出现，按相对路径完整写入 gameDir 根。
+                // Other prefixes (such as config/ and defaultconfigs/) usually live in overrides, and the files array of
+                // modrinth.index.json should not repeat the overrides contents; if it does, the relative path is written into the gameDir root as-is.
                 destDir = [modsDir.stringByDeletingLastPathComponent stringByAppendingPathComponent:relPath.stringByDeletingLastPathComponent];
             }
-            // 处理子目录（如 mods/inner/sub.jar）
-            // 阶段5修复（参照 FCL）：relPath 不含 "/" 时 rangeOfString: 返回 NSNotFound，
-            // 直接 +1 会整数溢出，导致 substringFromIndex: 抛出 NSRangeException 崩溃。
-            // 例如某些不规范整合包可能将根目录文件（如 "config.toml"）放入 files[]，
-            // 此时应保留原文件名直接拼到 destDir。
+            // Handle subfolders (such as mods/inner/sub.jar)
+            // Phase 5 fix (following FCL): when relPath contains no "/", rangeOfString: returns NSNotFound,
+            // so adding 1 overflows and substringFromIndex: throws NSRangeException and crashes.
+            // Some malformed modpacks put root files (such as "config.toml") into files[],
+            // in which case the original file name should simply be appended to destDir.
             NSRange firstSlashRange = [relPath rangeOfString:@"/"];
             NSString *relativeUnder = (firstSlashRange.location == NSNotFound)
                 ? relPath.lastPathComponent
@@ -968,20 +968,20 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
             NSString *fileName = relPath.lastPathComponent;
             NSString *destPath = [destDir stringByAppendingPathComponent:relativeUnder];
 
-            // 关键修复：原 downloadFileFromURL 无重试。整合包中单个 mod 下载偶发失败会直接被跳过，
-            // 造成最终 mods 目录缺文件。增加最多 3 次重试（间隔 1s）。
+            // Key fix: downloadFileFromURL had no retries. An occasional failure on a single mod in a modpack was simply skipped,
+            // leaving files missing from the mods folder. Up to 3 retries (1s apart) have been added.
             BOOL ok = NO;
             NSError *dlError = nil;
             for (NSInteger retry = 0; retry < 3 && !ok; retry++) {
                 if (retry > 0) {
                     NSLog(@"[ModpackImport] Retrying download %@ (attempt %ld)", fileName, (long)retry);
                     [NSThread sleepForTimeInterval:1.0];
-                    // 清理上次失败可能残留的半成品文件
+                    // Clean up the partial file a previous failure may have left behind
                     [[NSFileManager defaultManager] removeItemAtPath:destPath error:nil];
                 }
-                // 阶段5修复：[NSURL URLWithString:] 对非法字符串返回 nil，
-                // downloadTaskWithURL:nil 会触发 NSInvalidArgumentException 崩溃。
-                // 即使 url 非空也可能因控制字符/空格等返回 nil，必须显式判断。
+                // Phase 5 fix: [NSURL URLWithString:] returns nil for an invalid string,
+                // and downloadTaskWithURL:nil throws NSInvalidArgumentException and crashes.
+                // Even a non-empty url can return nil because of control characters or spaces, so it must be checked explicitly.
                 NSURL *downloadURL = [NSURL URLWithString:url];
                 if (!downloadURL) {
                     NSLog(@"[ModpackImport] Warning: Modrinth file URL invalid, skipping: %@", url);
@@ -990,7 +990,7 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
                                               userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Invalid download link: %@", url]}];
                     break;
                 }
-                // 每次重试都创建新 task（旧 task 已结束）
+                // Each retry creates a new task (the old one has finished)
                 NSURLSessionDownloadTask *task = [self.downloadSession downloadTaskWithURL:downloadURL];
                 NSString *taskId = nil;
                 {
@@ -1014,7 +1014,7 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
             if (ok) {
                 successCount++;
             } else {
-                // 阶段5修复（参照 FCL DownloadList）：记录失败文件，让上层可向用户展示哪些 mod 缺失
+                // Phase 5 fix (following FCL DownloadList): record the failed file, so the caller can show the user which mods are missing
                 NSLog(@"[ModpackImport] Mod permanently failed to download: %@ (%@)", fileName, url);
                 @synchronized(self) {
                     [self.failedFilesInternal addObject:@{
@@ -1035,10 +1035,10 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
             NSLog(@"[ModpackImport] Modrinth modpack: skipped %lu server-only mods", (unsigned long)skippedOptional);
         }
     } else if ([format isEqualToString:@"curseforge"]) {
-        // CurseForge: 需要 projectID + fileID 通过 API 获取下载链接
-        // 这里通过 CurseForgeAPI 获取，避免循环依赖，直接构造 API URL
+        // CurseForge: projectID + fileID have to be resolved into a download link through the API
+        // This goes through CurseForgeAPI; to avoid a circular dependency the API URL is built directly
         for (NSUInteger i = 0; i < total; i++) {
-            // 取消检查点
+            // Cancellation checkpoint
             if ([self checkCancelledWithError:error]) {
                 return NO;
             }
@@ -1050,11 +1050,11 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
             NSString *downloadURL = [self fetchCurseForgeFileURL:projectID.longLongValue fileID:fileID.longLongValue];
             if (!downloadURL) continue;
 
-            // 关键修复：使用 projectID-fileID.jar 作为文件名只是 fallback。
-            // 优先使用 manifest 中真实 fileName（若 modpackInfo 解析时已透传），便于用户识别。
-            // 阶段5修复（参照 FCL CurseForgeFileResolver）：manifest 缺失 fileName 时，
-            // 通过 BMCLAPI HEAD 请求获取真实文件名（Content-Disposition 或重定向 URL 末段），
-            // 避免 mods/ 目录里全是 "12345-67890.jar" 这种用户无法识别的文件名。
+            // Key fix: using projectID-fileID.jar as the file name is only a fallback.
+            // The real fileName from the manifest is preferred (when modpackInfo passed it through), so the user can recognize it.
+            // Phase 5 fix (following FCL CurseForgeFileResolver): when the manifest has no fileName,
+            // fetch the real one with a BMCLAPI HEAD request (from Content-Disposition or the last segment of the redirect URL),
+            // so the mods/ folder is not full of unrecognizable names like "12345-67890.jar".
             NSString *fileName = fileInfo[@"fileName"];
             if (![fileName isKindOfClass:[NSString class]] || fileName.length == 0) {
                 NSString *realName = [self fetchCurseForgeRealFileName:projectID.longLongValue fileID:fileID.longLongValue];
@@ -1068,8 +1068,8 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
             }
             NSString *destPath = [modsDir stringByAppendingPathComponent:fileName];
 
-            // 关键修复：与 Modrinth 路径一致，增加最多 3 次重试。
-            // 第 3 次失败后切换到备用源（CurseForge 官方 CDN）再试 1 次。
+            // Key fix: as on the Modrinth path, up to 3 retries have been added.
+            // After the 3rd failure it switches to the backup source (the official CurseForge CDN) and tries once more.
             BOOL ok = NO;
             NSError *dlError = nil;
             NSString *currentURL = downloadURL;
@@ -1079,7 +1079,7 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
                     [NSThread sleepForTimeInterval:1.0];
                     [[NSFileManager defaultManager] removeItemAtPath:destPath error:nil];
                 }
-                // 第 4 次重试切换到备用源（CurseForge 官方 CDN）
+                // The 4th retry switches to the backup source (the official CurseForge CDN)
                 if (retry == 3) {
                     NSString *altURL = [self fetchCurseForgeFileURLAlternate:projectID.longLongValue fileID:fileID.longLongValue];
                     if (altURL.length > 0) {
@@ -1087,8 +1087,8 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
                         NSLog(@"[ModpackImport] Switching to fallback source for %@: %@", fileName, altURL);
                     }
                 }
-                // 阶段5修复：[NSURL URLWithString:] 对非法字符串返回 nil，
-                // downloadTaskWithURL:nil 会触发 NSInvalidArgumentException 崩溃。
+                // Phase 5 fix: [NSURL URLWithString:] returns nil for an invalid string,
+                // and downloadTaskWithURL:nil throws NSInvalidArgumentException and crashes.
                 NSURL *currentNSURL = [NSURL URLWithString:currentURL];
                 if (!currentNSURL) {
                     NSLog(@"[ModpackImport] Warning: CurseForge file URL invalid, skipping: %@", currentURL);
@@ -1120,7 +1120,7 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
             if (ok) {
                 successCount++;
             } else {
-                // 阶段5修复（参照 FCL DownloadList）：记录失败文件，让上层可向用户展示哪些 mod 缺失
+                // Phase 5 fix (following FCL DownloadList): record the failed file, so the caller can show the user which mods are missing
                 NSLog(@"[ModpackImport] Mod permanently failed to download: %@", fileName);
                 @synchronized(self) {
                     [self.failedFilesInternal addObject:@{
@@ -1142,17 +1142,17 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
     }
 
     NSLog(@"[ModpackImport] Mod download completed: %lu/%lu succeeded", (unsigned long)successCount, (unsigned long)total);
-    // 阶段5修复（参照 FCL DownloadList.finishAll）：失败文件已收集到 failedFilesInternal，
-    // 这里不再仅靠 70% 静默阈值隐藏失败信息。任何失败都返回 NO，让上层用 self.failedFiles
-    // 向用户展示具体缺失的 mod 列表，并提供"重试缺失模组"入口。
-    //   - 全部成功：返回 YES
-    //   - 有失败：返回 NO，error 中带失败文件名（最多 5 个），完整列表通过 self.failedFiles 访问
-    // 之前 70% 阈值会让用户以为导入成功，但实际 mod 缺失导致启动崩溃——这是 issue 报告的
-    // "下载不完全"问题的根因。
+    // Phase 5 fix (following FCL DownloadList.finishAll): the failed files are now collected in failedFilesInternal,
+    // so failures are no longer hidden behind a silent 70% threshold. Any failure returns NO, so the caller can use self.failedFiles
+    // to show the user exactly which mods are missing and offer a "retry the missing mods" entry point.
+    //   - everything succeeded: return YES
+    //   - something failed: return NO, with the failed file names in the error (at most 5); the full list is available through self.failedFiles
+    // The old 70% threshold left users thinking the import succeeded while missing mods crashed the game at launch — that was the root cause of the
+    // reported "incomplete download" problem.
     if (total == 0) return YES;
     if (successCount >= total) return YES;
 
-    // 收集失败文件名（用于错误消息）
+    // Collect the failed file names (for the error message)
     NSArray<NSDictionary *> *failedSnapshot = self.failedFiles;
     NSMutableArray<NSString *> *failedNames = [NSMutableArray arrayWithCapacity:failedSnapshot.count];
     for (NSDictionary *f in failedSnapshot) {
@@ -1161,7 +1161,7 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
             [failedNames addObject:n];
         }
     }
-    // 错误消息：成功率 + 失败计数 + 前 5 个失败文件名（避免 error 描述过长）
+    // Error message: the success rate + the failure count + the first 5 failed file names (so the error description does not get too long)
     NSMutableString *msg = [NSMutableString stringWithFormat:@"The modpack's mods did not fully download: %lu/%lu succeeded, %lu failed",
                             (unsigned long)successCount, (unsigned long)total, (unsigned long)failedNames.count];
     if (failedNames.count > 0) {
@@ -1186,9 +1186,9 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
     return NO;
 }
 
-/// 同步下载单个文件，并关联到已注册的 DownloadTaskItem(taskId)。
-/// 如果传入 existingTask，则直接使用该任务；否则内部创建新的下载任务。
-/// 返回 YES 表示文件已成功保存到 destPath；NO 表示下载或保存失败。
+/// Download one file synchronously and associate it with the registered DownloadTaskItem(taskId).
+/// When existingTask is passed in it is used directly; otherwise a new download task is created internally.
+/// Returns YES when the file was saved to destPath successfully, and NO when the download or the save failed.
 - (BOOL)downloadFileFromURL:(NSString *)urlString
                      toPath:(NSString *)destPath
                      taskId:(nullable NSString *)taskId
@@ -1340,7 +1340,7 @@ didFinishDownloadingToURL:(NSURL *)location {
                 [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId completedWithError:error];
             }
         } else if (!alreadySuccessful) {
-            // 没有文件数据但流程结束，标记为失败
+            // No file data even though the flow finished, so mark it as failed
             NSError *unknownError = [NSError errorWithDomain:@"ModpackImportError"
                                                         code:5003
                                                     userInfo:@{NSLocalizedDescriptionKey: @"The download did not finish"}];
@@ -1363,35 +1363,35 @@ didFinishDownloadingToURL:(NSURL *)location {
     if (sema) dispatch_semaphore_signal(sema);
 }
 
-/// 通过 CurseForge API 获取 mod 文件的下载链接
+/// Get the download link for a mod file through the CurseForge API
 - (nullable NSString *)fetchCurseForgeFileURL:(long long)projectID fileID:(long long)fileID {
-    // 关键修复：原实现只走 BMCLAPI 镜像，BMCLAPI 偶发不可达（CDN 抖动、镜像源切换、文件未同步）
-    // 时整批 mod 全部下载失败。改为返回一个"主-备双源"组合：优先 BMCLAPI，
-    // 失败时由下载层重试 - 此处仅返回主源 URL，下载层 fetchCurseForgeFileURL 的调用方
-    // 在 3 次重试都失败后会再调用 fetchCurseForgeFileURLAlternate 获取备用源。
+    // Key fix: the original implementation only used the BMCLAPI mirror, and when BMCLAPI was briefly unreachable (CDN jitter, a mirror switch, an unsynced file)
+    // the whole batch of mods failed. It now returns a "primary + backup" pair: BMCLAPI first,
+    // with the download layer retrying on failure — only the primary URL is returned here, and the caller of fetchCurseForgeFileURL in the download layer
+    // calls fetchCurseForgeFileURLAlternate for the backup source once all 3 retries have failed.
     NSString *apiURL = [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/curseforge/files/%lld/%lld/download", projectID, fileID];
     return apiURL;
 }
 
-/// 备用 CurseForge 下载链接（在主源重试失败后使用）
-/// 优先尝试 CurseForge 官方 CDN 直链（format: cdn.curseforge.com/files/<id4>/<id4id>.jar），
-/// 失败再回退到 curseforge.com 的 file detail 页（让 NSURLSession 跟随重定向）。
+/// The backup CurseForge download link (used once retries on the primary source have failed)
+/// It first tries the official CurseForge CDN direct link (format: cdn.curseforge.com/files/<id4>/<id4id>.jar),
+/// and falls back to the curseforge.com file detail page (letting NSURLSession follow the redirect).
 - (nullable NSString *)fetchCurseForgeFileURLAlternate:(long long)projectID fileID:(long long)fileID {
-    // CurseForge 官方 CDN 直链（无需 API Key，但可能在国内不可达，作为 BMCLAPI 不可用时的备用）
+    // The official CurseForge CDN direct link (no API key needed, but it may be unreachable from mainland China, so it is the backup when BMCLAPI is unavailable)
     return [NSString stringWithFormat:@"https://cdn.curseforge.com/files/%lld/%lld/download", projectID, fileID];
 }
 
-/// 阶段5修复（参照 FCL CurseForgeFileResolver）：当整合包 manifest 中缺失 fileName 时，
-/// 通过 BMCLAPI 的下载链接做 HEAD 请求，跟随重定向到 CurseForge CDN 的实际文件 URL，
-/// 取其 lastPathComponent 作为真实文件名（如 "jei-1.20.1-15.2.0.27.jar"）。
-/// 这避免了将文件保存为 "12345-67890.jar" 这种用户无法识别的 fallback 名称。
-/// 失败时返回 nil，由调用方继续使用 fallback。
+/// Phase 5 fix (following FCL CurseForgeFileResolver): when the modpack manifest has no fileName,
+/// a HEAD request against the BMCLAPI download link follows the redirect to the real file URL on the CurseForge CDN
+/// and takes its lastPathComponent as the real file name (such as "jei-1.20.1-15.2.0.27.jar").
+/// This avoids saving files under an unrecognizable fallback name like "12345-67890.jar".
+/// Returns nil on failure, leaving the caller to use the fallback.
 - (nullable NSString *)fetchCurseForgeRealFileName:(long long)projectID fileID:(long long)fileID {
     NSString *bmclDownloadURL = [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/curseforge/files/%lld/%lld/download", projectID, fileID];
     NSURL *url = [NSURL URLWithString:bmclDownloadURL];
     if (!url) return nil;
 
-    // 使用临时 NSURLSession 不跟随重定向（手工处理），便于拿到 Location 头
+    // Use a temporary NSURLSession that does not follow redirects (handled by hand), so the Location header can be read
     NSURLSessionConfiguration *cfg = [NSURLSessionConfiguration defaultSessionConfiguration];
     cfg.timeoutIntervalForRequest = 15;
     cfg.HTTPAdditionalHeaders = @{
@@ -1408,7 +1408,7 @@ didFinishDownloadingToURL:(NSURL *)location {
                                             completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         if (!error && [response isKindOfClass:[NSHTTPURLResponse class]]) {
             NSHTTPURLResponse *http = (NSHTTPURLResponse *)response;
-            // 优先取 Content-Disposition 头中的 filename（最权威）
+            // Prefer the filename from the Content-Disposition header (the most authoritative source)
             NSString *contentDisposition = http.allHeaderFields[@"Content-Disposition"];
             if ([contentDisposition isKindOfClass:[NSString class]] && contentDisposition.length > 0) {
                 NSRange fnRange = [contentDisposition rangeOfString:@"filename=\""
@@ -1421,7 +1421,7 @@ didFinishDownloadingToURL:(NSURL *)location {
                     }
                 }
             }
-            // 没拿到 Content-Disposition，尝试从最终 URL 的 lastPathComponent 取
+            // With no Content-Disposition, try the lastPathComponent of the final URL
             if (!resolvedName && http.URL) {
                 NSString *last = http.URL.lastPathComponent;
                 if (last.length > 0 && ![last isEqualToString:@"download"]) {
@@ -1440,10 +1440,10 @@ didFinishDownloadingToURL:(NSURL *)location {
     return resolvedName;
 }
 
-/// 安装模组加载器
-/// Fabric/Quilt: 拉取 profile json 并写入 versions/<id>/<id>.json
-/// Forge/NeoForge: 写一个最小的版本 JSON 占位 (依赖用户后续手动安装)
-///                或者引导用户安装。这里先写占位，避免 profile 引用不存在的版本时崩溃
+/// Install the mod loader
+/// Fabric/Quilt: fetch the profile json and write it to versions/<id>/<id>.json
+/// Forge/NeoForge: write a minimal placeholder version JSON (relying on the user to install it manually afterwards)
+///                or guide the user through installing it. A placeholder is written for now, so the profile does not crash by referencing a missing version
 - (BOOL)installModLoader:(NSString *)loader
           loaderVersion:(NSString *)loaderVersion
          minecraftVersion:(NSString *)minecraftVersion
@@ -1460,17 +1460,17 @@ didFinishDownloadingToURL:(NSURL *)location {
     }
 
     NSString *downloadSource = getPrefObject(@"general.download_source") ?: @"official";
-    // 版本 JSON 必须写入 POJAV_GAME_DIR/versions/（主目录），而非 gameDirAbsolute（整合包隔离目录）。
-    // Minecraft 启动器 Java 端 Tools.java 的 DIR_HOME_VERSION 固定指向 POJAV_GAME_DIR/versions，
-    // 不从 profile gameDir 读取。之前写入 gameDirAbsolute/versions/ 会导致启动时"找不到版本信息"。
-    // gameDirAbsolute 仅用于 mods/saves/configs 等用户数据隔离（通过 profile gameDir=user.dir 实现）。
+    // The version JSON must be written into POJAV_GAME_DIR/versions/ (the main directory) rather than gameDirAbsolute (the isolated modpack folder).
+    // DIR_HOME_VERSION in Tools.java on the Java side always points at POJAV_GAME_DIR/versions
+    // and is not read from the profile gameDir. Writing into gameDirAbsolute/versions/ used to give "version information not found" at launch.
+    // gameDirAbsolute is only for isolating user data such as mods/saves/configs (through the profile gameDir=user.dir).
     NSString *mainVersionDir = [NSString stringWithFormat:@"%s/versions/%@", getenv("POJAV_GAME_DIR"), versionId];
     NSString *versionDir = mainVersionDir;
     NSString *versionJsonPath = [versionDir stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.json", versionId]];
     NSFileManager *fm = [NSFileManager defaultManager];
     [fm createDirectoryAtPath:versionDir withIntermediateDirectories:YES attributes:nil error:nil];
 
-    // Fabric/Quilt: 直接从 meta API 拉 profile json
+    // Fabric/Quilt: fetch the profile json straight from the meta API
     if ([loader isEqualToString:@"Fabric"] || [loader isEqualToString:@"Quilt"]) {
         NSDictionary *endpoints = FabricUtils.endpoints[loader];
         NSString *jsonURLTemplate = endpoints[@"json"];
@@ -1484,8 +1484,8 @@ didFinishDownloadingToURL:(NSURL *)location {
         }
         NSString *jsonURL = [NSString stringWithFormat:jsonURLTemplate, minecraftVersion, loaderVersion];
         NSURL *url = [NSURL URLWithString:jsonURL];
-        // 阶段5修复：构造出的 URL 可能因 loaderVersion 含非法字符导致 URLWithString: 返回 nil，
-        // downloadTaskWithURL:nil 会崩溃。此处显式判断并返回明确错误。
+        // Phase 5 fix: the URL built here can make URLWithString: return nil when loaderVersion contains invalid characters,
+        // and downloadTaskWithURL:nil crashes. This is checked explicitly and returns a clear error.
         if (!url) {
             if (error) {
                 *error = [NSError errorWithDomain:@"ModpackImportError"
@@ -1520,9 +1520,9 @@ didFinishDownloadingToURL:(NSURL *)location {
         return YES;
     }
 
-    // Forge/NeoForge: 下载 installer.jar 并调用直装器写入 modpack 的 gameDir
-    // 直装器会写完整的 version.json（含正确的 mainClass、arguments、libraries）+ 下载 Forge 库
-    // 这样整合包启动时能正确加载 Forge，不再因占位 JSON 缺库/缺参数而崩溃
+    // Forge/NeoForge: download installer.jar and call the direct installer to write into the modpack gameDir
+    // The direct installer writes a complete version.json (with the right mainClass, arguments and libraries) and downloads the Forge libraries,
+    // so the modpack loads Forge correctly at launch instead of crashing on a placeholder JSON with missing libraries or arguments
     NSString *installerURL = [self buildInstallerURLForLoader:loader
                                                loaderVersion:loaderVersion
                                               minecraftVersion:minecraftVersion];
@@ -1535,14 +1535,14 @@ didFinishDownloadingToURL:(NSURL *)location {
         return NO;
     }
 
-    // 下载 installer.jar 到临时目录
+    // Download installer.jar into a temporary folder
     NSString *tmpInstallerPath = [NSTemporaryDirectory() stringByAppendingPathComponent:
                                   [NSString stringWithFormat:@"%@-installer.jar", versionId]];
 
     NSString *installerDisplayName = [NSString stringWithFormat:@"%@ %@ installer", loader, loaderVersion];
-    // 阶段5修复：installerURL 已通过 buildInstallerURLForLoader 返回非空字符串，
-    // 但 [NSURL URLWithString:] 对含空格/特殊字符的字符串仍可能返回 nil，
-    // downloadTaskWithURL:nil 会崩溃。显式判断并返回明确错误。
+    // Phase 5 fix: buildInstallerURLForLoader already returns a non-empty string for installerURL,
+    // but [NSURL URLWithString:] can still return nil for a string containing spaces or special characters,
+    // and downloadTaskWithURL:nil crashes. This is checked explicitly and returns a clear error.
     NSURL *installerNSURL = [NSURL URLWithString:installerURL];
     if (!installerNSURL) {
         if (error) {
@@ -1570,8 +1570,8 @@ didFinishDownloadingToURL:(NSURL *)location {
 
     NSError *dlError = nil;
     if (![self downloadFileFromURL:installerURL toPath:tmpInstallerPath taskId:installerTaskId task:installerTask error:&dlError]) {
-        // installer.jar 下载失败：写显式失败的占位 JSON（mainClass 指向不存在的类，启动时会显式报错，
-        // 避免误装作 vanilla MC 让用户以为 mods 生效）
+        // The installer.jar download failed: write a placeholder JSON that fails explicitly (with a mainClass pointing at a missing class, so launching reports it clearly
+        // rather than quietly behaving like vanilla MC and leaving the user thinking their mods are active)
         NSLog(@"[ModpackImport] %@ installer.jar download failed, falling back to placeholder JSON: %@", loader, installerURL);
         NSInteger javaMajor = [self javaMajorVersionForMC:minecraftVersion];
         NSDictionary *placeholderJSON = @{
@@ -1579,7 +1579,7 @@ didFinishDownloadingToURL:(NSURL *)location {
             @"id": versionId,
             @"inheritsFrom": minecraftVersion,
             @"type": @"release",
-            @"mainClass": @"net.angelaura.installer.MissingLoader",  // 故意指向不存在的类，启动时显式报错
+            @"mainClass": @"net.angelaura.installer.MissingLoader",  // Deliberately a missing class, so launching reports the problem explicitly
             @"javaVersion": @{@"component": @"java-runtime", @"majorVersion": @(javaMajor)}
         };
         NSData *jsonData = [NSJSONSerialization dataWithJSONObject:placeholderJSON options:NSJSONWritingPrettyPrinted error:nil];
@@ -1588,12 +1588,12 @@ didFinishDownloadingToURL:(NSURL *)location {
             *error = [NSError errorWithDomain:@"ModpackImportService" code:1001
                                      userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Failed to download the %@ installer.jar; a placeholder JSON was written instead. Please install the loader manually.", loader]}];
         }
-        return NO;  // 让调用方感知失败并打印警告
+        return NO;  // Let the caller see the failure and log a warning
     }
 
     NSLog(@"[ModpackImport] %@ installer.jar download completed: %@", loader, tmpInstallerPath);
 
-    // 调用直装器，写入 modpack 的 gameDirAbsolute（不注册 profile，由 createProfileForModpack 统一注册）
+    // Call the direct installer, writing into the modpack gameDirAbsolute (without registering a profile; createProfileForModpack does that)
     NSError *installError = nil;
     BOOL installSuccess = NO;
     if ([loader isEqualToString:@"NeoForge"]) {
@@ -1613,24 +1613,24 @@ didFinishDownloadingToURL:(NSURL *)location {
                                                                    error:&installError];
     }
 
-    // 清理临时 installer.jar
+    // Clean up the temporary installer.jar
     [[NSFileManager defaultManager] removeItemAtPath:tmpInstallerPath error:nil];
 
     if (!installSuccess) {
         NSLog(@"[ModpackImport] %@ direct install failed, falling back to placeholder JSON: %@", loader, installError.localizedDescription);
-        // 使用外层作用域的 installerTaskId（installerItem 仅在 floatingBallEnabled 块内声明）
+        // Use installerTaskId from the outer scope (installerItem is only declared inside the floatingBallEnabled block)
         if (installerTaskId) {
             [[DownloadTaskManager sharedManager] setTaskWithId:installerTaskId completedWithError:installError];
         }
-        // 直装失败：写显式失败的占位 JSON（mainClass 指向不存在的类，启动时会显式报错，
-        // 避免误装作 vanilla MC 让用户以为 mods 生效）
+        // The direct install failed: write a placeholder JSON that fails explicitly (with a mainClass pointing at a missing class, so launching reports it clearly,
+        // rather than quietly behaving like vanilla MC and leaving the user thinking their mods are active)
         NSInteger javaMajor = [self javaMajorVersionForMC:minecraftVersion];
         NSDictionary *placeholderJSON = @{
             @"_comment_": [NSString stringWithFormat:@"This modpack needs the %@ %@ loader and the automatic install failed: %@. Please install it manually from the download screen.", loader, loaderVersion, installError.localizedDescription ?: @"Unknown error"],
             @"id": versionId,
             @"inheritsFrom": minecraftVersion,
             @"type": @"release",
-            @"mainClass": @"net.angelaura.installer.MissingLoader",  // 故意指向不存在的类，启动时显式报错
+            @"mainClass": @"net.angelaura.installer.MissingLoader",  // Deliberately a missing class, so launching reports the problem explicitly
             @"javaVersion": @{@"component": @"java-runtime", @"majorVersion": @(javaMajor)}
         };
         NSData *jsonData = [NSJSONSerialization dataWithJSONObject:placeholderJSON options:NSJSONWritingPrettyPrinted error:nil];
@@ -1639,25 +1639,25 @@ didFinishDownloadingToURL:(NSURL *)location {
             *error = [NSError errorWithDomain:@"ModpackImportService" code:1002
                                      userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Direct %@ install failed: %@. A placeholder JSON was written instead. Please install the loader manually.", loader, installError.localizedDescription ?: @"Unknown error"]}];
         }
-        return NO;  // 让调用方感知失败并打印警告
+        return NO;  // Let the caller see the failure and log a warning
     }
 
     NSLog(@"[ModpackImport] %@ direct install succeeded, version.json written to: %@", loader, versionJsonPath);
     return YES;
 }
 
-/// 阶段5修复（参照 FCL ModpackHelper.ensureCompleteVersion）：
-/// 整合包导入时，installModLoader 只写入了 loader 的 version.json（Fabric profile json
-/// 或 Forge 直装器输出的 version.json），但父版本（原版 MC）的 version.json、libraries、
-/// assets 都还没下载。之前用户启动整合包时会报"找不到 net.minecraft.client.main.Main"
-/// 或 "找不到 libraries"等错误，正是因为这一步缺失。
+/// Phase 5 fix (following FCL ModpackHelper.ensureCompleteVersion):
+/// During a modpack import, installModLoader only writes the version.json of the loader (the Fabric profile json
+/// or the version.json produced by the Forge direct installer), while the version.json, libraries and
+/// assets of the parent (vanilla MC) version are still missing. Users launching a modpack used to see
+/// "net.minecraft.client.main.Main not found" or "libraries not found" precisely because this step was absent.
 ///
-/// 本方法：
-/// 1. 确保父版本 JSON 存在（复用 ForgeDirectInstaller.ensureParentVersionExists:，
-///    该方法通用，不依赖 Forge 特定逻辑，对 Fabric/Quilt/原版同样适用）
-/// 2. 创建 MinecraftResourceDownloadTask 触发完整版本下载（libraries + assets），
-///    downloadVersion: 内部会处理 inheritsFrom，对已存在且 SHA1 正确的文件自动跳过
-/// 3. 用 KVO + dispatch_semaphore 同步等待下载完成，向上层报告进度
+/// This method:
+/// 1. makes sure the parent version JSON exists (reusing ForgeDirectInstaller.ensureParentVersionExists:,
+///    which is generic and has no Forge-specific logic, so it works for Fabric/Quilt/vanilla too)
+/// 2. creates a MinecraftResourceDownloadTask to trigger the full version download (libraries + assets);
+///    downloadVersion: handles inheritsFrom internally and skips files that already exist with the right SHA1
+/// 3. waits for the download with KVO + dispatch_semaphore, reporting progress upwards
 - (BOOL)ensureCompleteVersionInstalled:(NSString *)versionId
                        minecraftVersion:(NSString *)minecraftVersion
                               progress:(void (^_Nullable)(double progress, NSString *stageMessage))progress
@@ -1673,33 +1673,33 @@ didFinishDownloadingToURL:(NSURL *)location {
 
     NSLog(@"[ModpackImport] Ensuring complete version is installed: %@ (parent version: %@)", versionId, minecraftVersion ?: @"(none)");
 
-    // 第 1 步：确保父版本 JSON 存在（仅当 loader version JSON 含 inheritsFrom 时需要）
-    // 这里无条件调用 ensureParentVersionExists:，它内部会检查 JSON 是否已存在并跳过。
+    // Step 1: make sure the parent version JSON exists (only needed when the loader version JSON has an inheritsFrom)
+    // ensureParentVersionExists: is called unconditionally here; it checks whether the JSON already exists and skips if so.
     if (minecraftVersion.length > 0) {
         NSError *parentError = nil;
         BOOL parentOK = [ForgeDirectInstaller ensureParentVersionExists:minecraftVersion error:&parentError];
         if (!parentOK) {
             NSLog(@"[ModpackImport] Warning: Parent version %@ JSON download failed: %@",
                   minecraftVersion, parentError.localizedDescription);
-            // 不直接 fail：downloadVersion: 内部也会检查父版本，若已存在则继续
-            // 只有当父版本 JSON 真的不存在时才会 fail
+            // Do not fail outright: downloadVersion: checks the parent version too and carries on if it is already there
+            // It only fails when the parent version JSON really is missing
         }
     }
 
     if (progress) progress(0.88, [NSString stringWithFormat:@"Downloading the game files for %@", versionId]);
 
-    // 第 2 步：创建 MinecraftResourceDownloadTask 触发完整下载
-    // 不注册到 DownloadTaskManager（整合包导入已有自己的进度卡片，避免重复显示）
+    // Step 2: create a MinecraftResourceDownloadTask to trigger the full download
+    // It is not registered with DownloadTaskManager (the modpack import has its own progress card, so this would show twice)
     MinecraftResourceDownloadTask *downloader = [MinecraftResourceDownloadTask new];
     downloader.maxRetryCount = 3;
 
-    // 同步等待：用轮询检查 progress.finished，避免 KVO 悬空问题
-    // （downloadVersion: 内部的 prepareForDownload 会重建 self.progress，
-    //   若在调用前 addObserver，observe 的是旧对象，新 progress 完成时不会触发回调）
+    // Wait synchronously by polling progress.finished, avoiding a dangling KVO observer
+    // (prepareForDownload inside downloadVersion: rebuilds self.progress,
+    //  so an addObserver before the call would observe the old object and never fire when the new progress completes)
     __block BOOL errorOccurred = NO;
     __block NSString *failReason = nil;
 
-    // downloader.handleError 在下载流程出错时调用（finishDownloadWithErrorString: 内）
+    // downloader.handleError is called when the download flow errors (inside finishDownloadWithErrorString:)
     downloader.handleError = ^{
         @synchronized(self) {
             errorOccurred = YES;
@@ -1707,27 +1707,27 @@ didFinishDownloadingToURL:(NSURL *)location {
         }
     };
 
-    // 启动下载（downloadVersion: 是异步的，内部会 prepareForDownload 重建 progress）
+    // Start the download (downloadVersion: is asynchronous and rebuilds progress in prepareForDownload)
     NSDictionary *versionArg = @{@"id": versionId};
     [downloader downloadVersion:versionArg];
 
-    // 轮询等待完成（每 0.5s 检查一次，最长 30 分钟）
+    // Poll until it finishes (checking every 0.5s, for at most 30 minutes)
     NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:30 * 60];
     BOOL downloadSucceeded = NO;
     while ([deadline timeIntervalSinceNow] > 0) {
-        // 检查错误
+        // Check for errors
         @synchronized(self) {
             if (errorOccurred) {
                 break;
             }
         }
-        // 检查 progress 完成度（每次访问 downloader.progress 都是最新的）
+        // Check how far progress has got (every read of downloader.progress gets the latest object)
         NSProgress *currentProg = downloader.progress;
         if (currentProg && currentProg.finished) {
             downloadSucceeded = !currentProg.cancelled;
             break;
         }
-        // 检查取消信号
+        // Check the cancellation signal
         if (self.cancelled) {
             if (currentProg) [currentProg cancel];
             break;
@@ -1735,12 +1735,12 @@ didFinishDownloadingToURL:(NSURL *)location {
         [NSThread sleepForTimeInterval:0.5];
     }
 
-    // 最终状态检查
+    // Final state check
     NSProgress *finalProg = downloader.progress;
     if (finalProg && finalProg.finished && !finalProg.cancelled) {
         downloadSucceeded = YES;
     } else if (finalProg && !finalProg.finished) {
-        // 超时
+        // Timed out
         [finalProg cancel];
         if (error) {
             *error = [NSError errorWithDomain:@"ModpackImportError"
@@ -1772,8 +1772,8 @@ didFinishDownloadingToURL:(NSURL *)location {
 
     NSLog(@"[ModpackImport] Full version download completed: %@", versionId);
 
-    // 阶段5修复：即使 progress 完成，也可能有部分库/资源文件下载失败（记录在 downloader.failedFiles）
-    // 将这些失败文件汇总到 ModpackImportService.failedFiles，让上层向用户展示
+    // Phase 5 fix: even when progress completes, some library/asset files may have failed (recorded in downloader.failedFiles)
+    // Those failures are merged into ModpackImportService.failedFiles so the caller can show them to the user
     NSArray<NSDictionary *> *versionFailedFiles = [downloader.failedFiles copy];
     if (versionFailedFiles.count > 0) {
         NSLog(@"[ModpackImport] Warning: Version %@ has %lu files that failed to download",
@@ -1793,11 +1793,11 @@ didFinishDownloadingToURL:(NSURL *)location {
     return YES;
 }
 
-/// 根据 loader 类型构造 installer.jar 下载 URL
+/// Build the installer.jar download URL for a loader type
 /// Forge: https://maven.minecraftforge.net/net/minecraftforge/forge/<mc>-<loader>/forge-<mc>-<loader>-installer.jar
 /// NeoForge 1.20.1: https://maven.neoforged.net/releases/net/neoforged/forge/<loader>/forge-<loader>-installer.jar
-/// NeoForge 其他: https://maven.neoforged.net/releases/net/neoforged/neoforge/<loader>/neoforge-<loader>-installer.jar
-/// BMCLAPI 镜像优先（若用户选了 bmclapi 源）
+/// Other NeoForge versions: https://maven.neoforged.net/releases/net/neoforged/neoforge/<loader>/neoforge-<loader>-installer.jar
+/// The BMCLAPI mirror takes priority (when the user picked the bmclapi source)
 - (nullable NSString *)buildInstallerURLForLoader:(NSString *)loader
                                     loaderVersion:(NSString *)loaderVersion
                                    minecraftVersion:(NSString *)minecraftVersion {
@@ -1805,7 +1805,7 @@ didFinishDownloadingToURL:(NSURL *)location {
     BOOL useBMCLAPI = [downloadSource isEqualToString:@"bmclapi"];
 
     if ([loader isEqualToString:@"Forge"]) {
-        // Forge versionString = "<mc>-<loaderVersion>"，例如 "1.20.1-47.3.0"
+        // The Forge versionString is "<mc>-<loaderVersion>", for example "1.20.1-47.3.0"
         NSString *versionString = [NSString stringWithFormat:@"%@-%@", minecraftVersion, loaderVersion];
         if (useBMCLAPI) {
             return [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/maven/net/minecraftforge/forge/%@/forge-%@-installer.jar", versionString, versionString];
@@ -1814,8 +1814,8 @@ didFinishDownloadingToURL:(NSURL *)location {
     }
 
     if ([loader isEqualToString:@"NeoForge"]) {
-        // NeoForge 1.20.1 早期版本 artifactId 是 net.neoforged:forge，之后是 net.neoforged:neoforge
-        // loaderVersion 例如 "47.1.0"（1.20.1）或 "20.6.119-beta"（1.20.6+）
+        // Early NeoForge 1.20.1 versions use the artifactId net.neoforged:forge, and later ones net.neoforged:neoforge
+        // loaderVersion is for example "47.1.0" (1.20.1) or "20.6.119-beta" (1.20.6+)
         BOOL isLegacyForgeArtifact = [minecraftVersion isEqualToString:@"1.20.1"];
         if (isLegacyForgeArtifact) {
             if (useBMCLAPI) {
@@ -1832,8 +1832,8 @@ didFinishDownloadingToURL:(NSURL *)location {
     return nil;
 }
 
-/// 根据 MC 版本推断所需 Java 主版本号
-/// 1.20.5+ → 21, 1.18+ → 17, 1.17 → 17（项目未捆绑 Java 16，Java 17 可向后兼容），1.16.5- → 8
+/// Infer the required major Java version from the MC version
+/// 1.20.5+ -> 21, 1.18+ -> 17, 1.17 -> 17 (Java 16 is not bundled, and Java 17 is backward compatible), 1.16.5 and earlier -> 8
 - (NSInteger)javaMajorVersionForMC:(NSString *)mcVersion {
     NSArray *parts = [mcVersion componentsSeparatedByString:@"."];
     if (parts.count < 2) return 8;
@@ -1841,8 +1841,8 @@ didFinishDownloadingToURL:(NSURL *)location {
     if (major >= 21) return 21;       // 1.21+
     if (major >= 20 && parts.count >= 3 && [parts[2] integerValue] >= 5) return 21; // 1.20.5+
     if (major >= 18) return 17;       // 1.18+
-    if (major >= 17) return 17;       // 1.17（项目未捆绑 Java 16，Java 17 可向后兼容运行 1.17）
-    return 8;                          // 1.16.5 及以下
+    if (major >= 17) return 17;       // 1.17 (Java 16 is not bundled, and Java 17 runs 1.17 fine)
+    return 8;                          // 1.16.5 and earlier
 }
 
 - (nullable NSString *)createProfileForModpack:(NSDictionary *)modpackInfo
@@ -1852,11 +1852,11 @@ didFinishDownloadingToURL:(NSURL *)location {
     NSString *name = modpackInfo[@"name"];
     NSString *modpackId = modpackInfo[@"id"];
 
-    // 修复（参照 FCL/HMCL）：profile name 优先使用整合包可读名（name 字段），
-    // 仅在重名时回退到 modpackId 避免冲突。原实现直接用 modpackId 作为 profile name，
-    // 导致用户在版本列表看到 UUID 而非整合包名。
+    // Fix (following FCL/HMCL): the profile name now prefers the readable modpack name (the name field),
+    // falling back to modpackId only when that name is taken. The original implementation used modpackId as the profile name,
+    // so users saw a UUID rather than the modpack name in the version list.
     NSString *profileName = name.length > 0 ? name : modpackId;
-    // 重名冲突时追加序号
+    // Append a number when the name is taken
     if (PLProfiles.current.profiles[profileName]) {
         NSInteger suffix = 2;
         NSString *baseName = profileName;
@@ -1874,9 +1874,9 @@ didFinishDownloadingToURL:(NSURL *)location {
         @"type": @"modpack"
     } mutableCopy];
 
-    // 修复（参照 FCL/HMCL）：写入 javaVersion 字段
-    // MC 1.18+ 需要 Java 17，1.20.5+ 需要 Java 21，1.16.5- 用 Java 8
-    // 不写此字段时启动器可能用默认 Java 8 启动 MC 1.18+ 导致崩溃
+    // Fix (following FCL/HMCL): write the javaVersion field
+    // MC 1.18+ needs Java 17, 1.20.5+ needs Java 21, and 1.16.5 and earlier use Java 8
+    // Without this field the launcher may start MC 1.18+ on the default Java 8 and crash
     NSString *mcVersion = modpackInfo[@"minecraftVersion"];
     if (mcVersion.length > 0) {
         NSInteger javaMajor = [self javaMajorVersionForMC:mcVersion];
@@ -1918,7 +1918,7 @@ didFinishDownloadingToURL:(NSURL *)location {
 - (BOOL)deleteModpack:(NSDictionary *)modpackInfo error:(NSError **)error {
     NSString *gameDirAbsolute = modpackInfo[@"gameDirAbsolute"];
     if (!gameDirAbsolute) {
-        // 兼容旧数据: 尝试从 modpackDir 字段获取
+        // Compatibility with old data: try reading it from the modpackDir field
         gameDirAbsolute = modpackInfo[@"modpackDir"];
     }
     NSString *profileName = modpackInfo[@"profileName"];

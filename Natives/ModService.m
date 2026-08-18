@@ -2,8 +2,8 @@
 //  ModService.m
 //  AmethystMods
 //
-//  修改：增加文件修改时间缓存，大幅提升扫描速度
-//  修改：将下载会话改为默认配置，解决后台会话限速导致的下载缓慢问题
+//  Change: added a file modification time cache, greatly speeding up scanning
+//  Change: switched the download session to the default configuration, fixing the slow downloads caused by background session throttling
 //
 
 #import "ModService.h"
@@ -24,7 +24,7 @@
 @property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, DownloadTaskItem *> *downloadTaskItems;
 @property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, NSMutableDictionary *> *downloadProgressSnapshots;
 
-// 缓存
+// Cache
 @property (nonatomic, strong) NSMutableDictionary<NSString *, ModItem *> *metadataCache;
 @property (nonatomic, strong) NSMutableDictionary<NSString *, NSDate *> *checkpointTimes;
 @property (nonatomic, strong) dispatch_queue_t cacheQueue;
@@ -32,7 +32,7 @@
 
 @implementation ModService
 
-// ---------- TOML 解析（未修改）----------
+// ---------- TOML parsing (unchanged) ----------
 - (nullable id)parseTomlValue:(NSString *)valPart inLines:(NSArray<NSString *> *)lines atIndex:(NSUInteger *)i {
     NSString *trimmedVal = [valPart stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
     NSString *delimiter = nil;
@@ -110,7 +110,7 @@
     return root;
 }
 
-// ---------- 初始化 ----------
+// ---------- Initialization ----------
 + (instancetype)sharedService {
     static ModService *s;
     static dispatch_once_t onceToken;
@@ -124,17 +124,17 @@
     if (self = [super init]) {
         _onlineSearchEnabled = NO;
         
-        // 修复：使用 defaultSessionConfiguration 替代 backgroundSessionConfiguration
-        // 后台会话会对下载进行限速，导致用户主动下载模组时速度很慢
-        // 默认会话无带宽限制，适合前台下载任务
+        // Fix: use defaultSessionConfiguration instead of backgroundSessionConfiguration
+        // A background session throttles downloads, making a user-initiated mod download very slow
+        // The default session has no bandwidth limit and suits foreground downloads
         NSURLSessionConfiguration *config = [NSURLSessionConfiguration defaultSessionConfiguration];
         config.timeoutIntervalForRequest = 120.0;
         config.timeoutIntervalForResource = 300.0;
         config.allowsCellularAccess = YES;
-        // 参考 FCL/ZalithLauncher2：提升并发连接数 6 → 16，
-        // 与 MinecraftResourceDownloadTask 对齐，在同时下载多个 Mod 或并发拉取
-        // Mod 元数据时显著提升吞吐量。下载完整性由 JAR 文件本身的格式校验保证
-        // （未引入分片下载，避免破坏现有的下载完成回调流程）。
+        // Following FCL/ZalithLauncher2: raise the concurrent connection count from 6 to 16,
+        // matching MinecraftResourceDownloadTask, which noticeably improves throughput when downloading several mods
+        // or fetching mod metadata concurrently. Download integrity is guaranteed by the JAR format check itself
+        // (chunked downloading was deliberately not introduced, so the existing completion callback flow is not disturbed).
         config.HTTPMaximumConnectionsPerHost = 16;
         
         _downloadSession = [NSURLSession sessionWithConfiguration:config delegate:self delegateQueue:nil];
@@ -144,7 +144,7 @@
         _downloadTaskItems = [NSMutableDictionary dictionary];
         _downloadProgressSnapshots = [NSMutableDictionary dictionary];
 
-        // 初始化缓存
+        // Initialize the cache
         _metadataCache = [NSMutableDictionary dictionary];
         _checkpointTimes = [NSMutableDictionary dictionary];
         _cacheQueue = dispatch_queue_create("com.amethyst.modcache", DISPATCH_QUEUE_CONCURRENT);
@@ -152,7 +152,7 @@
     return self;
 }
 
-// ---------- 辅助方法 ----------
+// ---------- Helpers ----------
 - (nullable NSString *)sha1ForFileAtPath:(NSString *)path {
     NSData *d = [NSData dataWithContentsOfFile:path];
     if (!d) return nil;
@@ -191,10 +191,10 @@
     return data;
 }
 
-/// 解析 profile 的 gameDir 为绝对路径。
-/// profile gameDir 通常是相对路径（如 "./custom_gamedir/{name}"），需相对于 POJAV_GAME_DIR 解析。
-/// 之前直接使用相对路径会导致 mods 文件夹找不到（fileExistsAtPath 对相对路径基于 cwd 解析，
-/// 而 cwd 不一定是 POJAV_GAME_DIR）。
+/// Resolve the profile gameDir into an absolute path.
+/// A profile gameDir is usually relative (such as "./custom_gamedir/{name}") and has to be resolved against POJAV_GAME_DIR.
+/// Using the relative path directly used to make the mods folder unfindable (fileExistsAtPath resolves a relative path against the cwd,
+/// and the cwd is not necessarily POJAV_GAME_DIR).
 - (nullable NSString *)resolveAbsoluteGameDirForProfile:(NSString *)profileName {
     NSString *profile = profileName.length ? profileName : @"default";
     @try {
@@ -204,17 +204,17 @@
         NSString *gameDir = prof[@"gameDir"];
         if (![gameDir isKindOfClass:[NSString class]] || gameDir.length == 0) return nil;
         if ([gameDir isEqualToString:@"."]) {
-            // "." 表示主目录
+            // "." means the main directory
             const char *env = getenv("POJAV_GAME_DIR");
             return env ? [NSString stringWithUTF8String:env] : NSHomeDirectory();
         }
         if ([gameDir isAbsolutePath]) {
             return gameDir;
         }
-        // 相对路径，相对于 POJAV_GAME_DIR 解析
+        // A relative path, resolved against POJAV_GAME_DIR
         const char *env = getenv("POJAV_GAME_DIR");
         NSString *baseDir = env ? [NSString stringWithUTF8String:env] : NSHomeDirectory();
-        // 去掉 "./" 前缀（如果有），stringByAppendingPathComponent 能正确处理
+        // Strip the leading "./" (if any); stringByAppendingPathComponent handles the rest correctly
         NSString *cleanGameDir = [gameDir hasPrefix:@"./"] ? [gameDir substringFromIndex:2] : gameDir;
         return [baseDir stringByAppendingPathComponent:cleanGameDir];
     } @catch (NSException *ex) {
@@ -226,7 +226,7 @@
     NSString *profile = profileName.length ? profileName : @"default";
     NSFileManager *fm = [NSFileManager defaultManager];
 
-    // 优先用 profile gameDir（已解析为绝对路径）
+    // Prefer the profile gameDir (already resolved to an absolute path)
     NSString *resolvedGameDir = [self resolveAbsoluteGameDirForProfile:profile];
     if (resolvedGameDir.length > 0) {
         NSString *modsPath = [resolvedGameDir stringByAppendingPathComponent:@"mods"];
@@ -236,7 +236,7 @@
         }
     }
 
-    // 回退到 POJAV_GAME_DIR/mods
+    // Fall back to POJAV_GAME_DIR/mods
     const char *gameDirC = getenv("POJAV_GAME_DIR");
     if (gameDirC) {
         NSString *gameDir = [NSString stringWithUTF8String:gameDirC];
@@ -249,13 +249,13 @@
     return nil;
 }
 
-/// 获取当前 profile 的 mods 目录，不存在时自动创建
+/// Return the mods folder of the current profile, creating it if it does not exist
 - (nullable NSString *)ensureModsFolderForProfile:(NSString *)profileName error:(NSError **)error {
     NSString *profile = profileName.length ? profileName : @"default";
     NSFileManager *fm = [NSFileManager defaultManager];
     NSString *modsPath = nil;
 
-    // 优先用 profile gameDir（已解析为绝对路径）
+    // Prefer the profile gameDir (already resolved to an absolute path)
     NSString *resolvedGameDir = [self resolveAbsoluteGameDirForProfile:profile];
     if (resolvedGameDir.length > 0) {
         modsPath = [resolvedGameDir stringByAppendingPathComponent:@"mods"];
@@ -278,7 +278,7 @@
 
     BOOL isDir = NO;
     if (![fm fileExistsAtPath:modsPath isDirectory:&isDir]) {
-        // 目录不存在，创建
+        // The directory does not exist, so create it
         NSError *createError = nil;
         [fm createDirectoryAtPath:modsPath withIntermediateDirectories:YES attributes:nil error:&createError];
         if (createError) {
@@ -295,7 +295,7 @@
     return modsPath;
 }
 
-// ---------- 缓存方法 ----------
+// ---------- Cache methods ----------
 - (BOOL)needsRescanForPath:(NSString *)path {
     __block BOOL needs = YES;
     dispatch_sync(self.cacheQueue, ^{
@@ -335,7 +335,7 @@
     });
 }
 
-// ---------- 扫描模组（核心优化）----------
+// ---------- Mod scanning (the core optimization) ----------
 - (void)scanModsForProfile:(NSString *)profileName completion:(ModListHandler)completion {
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         NSString *modsFolder = [self existingModsFolderForProfile:profileName];
@@ -355,7 +355,7 @@
             if ([fileName.lowercaseString hasSuffix:@".jar"] || [fileName.lowercaseString hasSuffix:@".jar.disabled"]) {
                 NSString *fullPath = [modsFolder stringByAppendingPathComponent:fileName];
 
-                // 检查缓存
+                // Check the cache
                 if (![self needsRescanForPath:fullPath]) {
                     ModItem *cached = [self cachedModForPath:fullPath];
                     if (cached) {
@@ -389,7 +389,7 @@
     });
 }
 
-// ---------- 元数据获取（原逻辑，仅被上面调用）----------
+// ---------- Metadata retrieval (the original logic, only called from above) ----------
 - (void)fetchMetadataForMod:(ModItem *)mod completion:(ModMetadataHandler)completion {
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         @try {
@@ -475,7 +475,7 @@
     });
 }
 
-// ---------- 文件操作（启用/禁用、删除）----------
+// ---------- File operations (enable/disable, delete) ----------
 - (BOOL)toggleEnableForMod:(ModItem *)mod error:(NSError **)error {
     NSFileManager *fileManager = [NSFileManager defaultManager];
     NSString *currentPath = mod.filePath;
@@ -505,12 +505,12 @@
     return [[NSFileManager defaultManager] removeItemAtPath:mod.filePath error:error];
 }
 
-// ---------- 下载（关键修复已应用：使用 defaultSessionConfiguration）----------
+// ---------- Downloading (with the key fix applied: defaultSessionConfiguration) ----------
 - (void)downloadMod:(ModItem *)mod toProfile:(NSString *)profileName completion:(ModDownloadHandler)completion {
     [self downloadMod:mod toProfile:profileName progress:nil completion:completion];
 }
 
-// ---------- 带进度回调的下载 ----------
+// ---------- Downloading with progress callbacks ----------
 - (void)downloadMod:(ModItem *)mod
           toProfile:(NSString *)profileName
             progress:(void (^)(NSProgress *downloadProgress))progress
@@ -557,7 +557,7 @@
     self.downloadTaskItems[task] = taskItem;
     [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId state:DownloadTaskStateDownloading];
 
-    // 设置 retryHandler：FCL 风格重新下载，复用同一 taskItem，重建底层 NSURLSessionTask
+    // Set retryHandler: an FCL-style re-download that reuses the same taskItem and rebuilds the underlying NSURLSessionTask
     __weak typeof(self) weakSelf = self;
     NSString *capturedDestPath = destinationPath;
     ModDownloadHandler capturedCompletion = completion;
@@ -646,8 +646,8 @@
 totalBytesExpectedToWrite:(int64_t)totalBytesExpectedToWrite {
     void(^progress)(NSProgress *) = self.downloadProgressHandlers[downloadTask];
     DownloadTaskItem *taskItem = self.downloadTaskItems[downloadTask];
-    // speed/eta 声明提到 if (taskItem) 块之前，供下方构造 NSProgress 时引用
-    // （修复编译错误：之前在块内声明，块外使用导致 use of undeclared identifier）
+    // speed/eta are declared before the if (taskItem) block so the NSProgress built below can reference them
+    // (fixing a compile error: they were previously declared inside the block and used outside it, giving "use of undeclared identifier")
     double speed = 0.0;
     NSTimeInterval eta = 0.0;
 
@@ -682,9 +682,9 @@ totalBytesExpectedToWrite:(int64_t)totalBytesExpectedToWrite {
 
     if (!progress) return;
 
-    // 在 progress 回调的 NSProgress 上设置 throughput 和 estimatedTimeRemaining，
-    // 供调用方（DownloadViewController）在 FCL 风格的下载进度卡片上显示速度和 ETA。
-    // 之前 progress 回调的 NSProgress 只有 fractionCompleted，导致进度卡片速度/ETA 永远为 0。
+    // Set throughput and estimatedTimeRemaining on the NSProgress passed to the progress callback,
+    // so the caller (DownloadViewController) can show the speed and ETA on the FCL-style download progress card.
+    // The NSProgress in the progress callback used to have only fractionCompleted, so the card always showed a speed and ETA of 0.
     NSProgress *downloadProgress = [NSProgress progressWithTotalUnitCount:totalBytesExpectedToWrite];
     downloadProgress.completedUnitCount = totalBytesWritten;
     if (speed > 0) {

@@ -3,434 +3,434 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-/// 联机房间状态
+/// Multiplayer room status
 typedef NS_ENUM(NSInteger, MultiplayerRoomStatus) {
-    MultiplayerRoomStatusDisconnected = 0, // 未连接
-    MultiplayerRoomStatusConnecting   = 1, // 连接中
-    MultiplayerRoomStatusConnected    = 2, // 已连接
-    MultiplayerRoomStatusError        = 3  // 错误
+    MultiplayerRoomStatusDisconnected = 0, // Not connected
+    MultiplayerRoomStatusConnecting   = 1, // Connecting
+    MultiplayerRoomStatusConnected    = 2, // Connected
+    MultiplayerRoomStatusError        = 3  // Error
 };
 
-/// 联机房间角色
+/// Multiplayer room role
 ///
-/// 关键修复（替代 IP 启发式）：
-/// 之前通过 `hostIP != localIP` 推断房客身份，存在以下问题：
-///   - 房主分享代码中的 hostIP 与房客被分配的 localIP 在小概率下可能相同
-///     （adhoc 网络 IPv6 几乎不会，但标准网络 IPv4 池小或网络配置异常时可能）
-///   - 房客会被错误识别为房主，PortForwarder 不启动，MC 无法连接且无错误提示
-/// 现在显式声明角色：房主创建房间时设为 Host，房客 parseShareCode 时设为 Guest。
-/// 参与序列化，跨进程/跨会话保留。
+/// Key fix (replacing the IP heuristic):
+/// Guest identity used to be inferred from `hostIP != localIP`, which had these problems:
+///   - the hostIP in the host's share code and the localIP assigned to the guest could, rarely, be the same
+///     (almost never with adhoc IPv6, but possible on a standard network with a small IPv4 pool or an unusual configuration)
+///   - a guest was then wrongly identified as the host, PortForwarder never started, and MC could not connect with no error shown
+/// The role is now declared explicitly: the host sets Host when creating a room, and the guest sets Guest in parseShareCode.
+/// It is serialized, so it survives across processes and sessions.
 typedef NS_ENUM(NSInteger, MultiplayerRoomRole) {
-    MultiplayerRoomRoleUnknown = 0, // 未知（兼容旧数据）
-    MultiplayerRoomRoleHost    = 1, // 房主
-    MultiplayerRoomRoleGuest   = 2, // 房客
+    MultiplayerRoomRoleUnknown = 0, // Unknown (for compatibility with old data)
+    MultiplayerRoomRoleHost    = 1, // Host
+    MultiplayerRoomRoleGuest   = 2, // Guest
 };
 
-/// 联机房间模型
+/// Multiplayer room model
 @interface MultiplayerRoom : NSObject <NSCoding, NSSecureCoding>
-@property (nonatomic, copy) NSString *roomId;          // 唯一标识（UUID）
-@property (nonatomic, copy) NSString *name;            // 房间名称
-@property (nonatomic, copy) NSString *networkId;       // ZeroTier Network ID（16位十六进制）
-/// 房主在 ZeroTier 网络中的 IP（如 10.147.17.1，Ad-hoc 模式下为 IPv6 地址）。
+@property (nonatomic, copy) NSString *roomId;          // Unique identifier (a UUID)
+@property (nonatomic, copy) NSString *name;            // Room name
+@property (nonatomic, copy) NSString *networkId;       // The ZeroTier network ID (16 hexadecimal digits)
+/// The host IP on the ZeroTier network (such as 10.147.17.1, or an IPv6 address in ad-hoc mode).
 ///
-/// 关键修复（M13）：hostIP 改为 atomic，与 status（H12 修复）保持一致。
-/// hostIP 在 connectToRoomFlow:（后台 utility queue，在 _stateLock 内）和
-/// zeroTierNetworkReady:（主线程，在 _stateLock 内）被写入，但在 UI cell、
-/// shareTextForRoom:、lanPortDidDetect: 等主线程位置无锁读取。
-/// atomic 保证单个 getter/setter 调用的原子性，避免读到中间状态。
-@property (atomic, copy) NSString *hostIP;          // 房主在 ZeroTier 网络中的 IP（如 10.147.17.1）
-/// MC 服务器端口（默认 25565）。
+/// Key fix (M13): hostIP is now atomic, matching status (the H12 fix).
+/// hostIP is written in connectToRoomFlow: (a background utility queue, inside _stateLock) and
+/// zeroTierNetworkReady: (the main thread, inside _stateLock), but read without a lock on the main thread
+/// in UI cells, shareTextForRoom:, lanPortDidDetect: and elsewhere.
+/// atomic makes each getter/setter call atomic, so no intermediate state can be read.
+@property (atomic, copy) NSString *hostIP;          // The host IP on the ZeroTier network (such as 10.147.17.1)
+/// The MC server port (25565 by default).
 ///
-/// 关键修复：hostPort 改为 atomic。hostPort 在主线程（generateShareCodeWithPort:
-/// 等位置）被修改，在后台线程（connectToRoomFlow 读取以判断是否房客模式）被读取。
-/// nonatomic 在多线程读写时可能读到中间状态，atomic 保证 getter/setter 的原子性。
-@property (atomic, copy) NSString *hostPort;        // MC 服务器端口（默认 25565）
-@property (nonatomic, copy) NSString *roomDescription; // 房间描述
-/// 连接状态。
+/// Key fix: hostPort is now atomic. It is modified on the main thread (in generateShareCodeWithPort:
+/// and similar) and read on a background thread (connectToRoomFlow reads it to decide whether this is guest mode).
+/// A nonatomic property can be read mid-write across threads, while atomic makes each getter/setter atomic.
+@property (atomic, copy) NSString *hostPort;        // The MC server port (25565 by default)
+@property (nonatomic, copy) NSString *roomDescription; // Room description
+/// Connection status.
 ///
-/// 关键修复（H12）：status 改为 atomic，保证多线程读写的内存一致性。
-/// 之前为 nonatomic assign，存在以下问题：
-///   - 后台连接线程（MultiplayerManager.connectToRoomFlow）会写入 status
-///   - 主线程（MultiplayerViewController）会读取 status 用于 UI 显示
-///   - 主线程也会写入 status（如点击断开按钮时）
-///   - 多线程同时读写 nonatomic 属性会导致读到部分写入的值或脏数据
+/// Key fix (H12): status is now atomic, guaranteeing memory consistency across threads.
+/// It was previously nonatomic assign, which had these problems:
+///   - the background connection thread (MultiplayerManager.connectToRoomFlow) writes status
+///   - the main thread (MultiplayerViewController) reads status for the UI
+///   - the main thread also writes status (such as when the disconnect button is tapped)
+///   - reading and writing a nonatomic property from several threads can read a partially written or stale value
 ///
-/// atomic 属性会通过底层锁机制保证单个 getter/setter 调用的原子性，
-/// 避免读到中间状态。对于状态机这种「单一值」属性，atomic 已足够。
+/// An atomic property uses an underlying lock to make each getter/setter call atomic,
+/// so no intermediate state can be read. For a single-value property like a state machine, atomic is enough.
 ///
-/// 注意：atomic 不能保证组合操作（如 read-modify-write）的原子性，
-/// 复杂的状态转换仍应由调用方通过锁（如 MultiplayerManager._stateLock）保护。
-@property (atomic, assign) MultiplayerRoomStatus status; // 连接状态
-/// 房间角色（房主/房客）。
+/// Note: atomic does not make compound operations (such as read-modify-write) atomic,
+/// so complex state transitions must still be protected by the caller with a lock (such as MultiplayerManager._stateLock).
+@property (atomic, assign) MultiplayerRoomStatus status; // Connection status
+/// The room role (host/guest).
 ///
-/// 关键修复：替代之前用 IP 比较推断身份的脆弱启发式。
-/// atomic 保证跨线程读写的内存一致性（status 同理）。
-/// 旧数据反序列化时若缺失该字段，默认为 Unknown，回退到 IP 启发式以保持兼容。
-@property (atomic, assign) MultiplayerRoomRole role;   // 房间角色
-@property (nonatomic, copy) NSString *ownerName;       // 房主名称
-@property (nonatomic, strong) NSDate *createdAt;       // 创建时间
-@property (nonatomic, strong) NSDate *lastConnectedAt; // 上次连接时间
+/// Key fix: replaces the fragile heuristic that inferred identity by comparing IPs.
+/// atomic guarantees memory consistency across threads (as it does for status).
+/// When old data is deserialized without this field it defaults to Unknown and falls back to the IP heuristic for compatibility.
+@property (atomic, assign) MultiplayerRoomRole role;   // Room role
+@property (nonatomic, copy) NSString *ownerName;       // Host name
+@property (nonatomic, strong) NSDate *createdAt;       // Creation time
+@property (nonatomic, strong) NSDate *lastConnectedAt; // Last connection time
 @end
 
-/// 联机状态变化通知代理
+/// Delegate for multiplayer state changes
 ///
-/// 当 ZeroTier 节点状态、网络状态发生变化时，会通过代理回调通知上层。
-/// 所有回调方法都在主线程调用。
+/// When the ZeroTier node or network state changes, the delegate is notified.
+/// Every callback runs on the main thread.
 @protocol MultiplayerManagerDelegate <NSObject>
 @optional
 
-/// ZeroTier 节点已上线
+/// The ZeroTier node came online
 - (void)multiplayerNodeOnline;
 
-/// ZeroTier 节点已离线
+/// The ZeroTier node went offline
 - (void)multiplayerNodeOffline;
 
-/// 指定房间已连接成功（网络已就绪且 SOCKS5 代理已启动）
-/// @param room 连接成功的房间
+/// The given room connected successfully (the network is ready and the SOCKS5 proxy has started)
+/// @param room The room that connected
 - (void)multiplayerRoomConnected:(MultiplayerRoom *)room;
 
-/// 指定房间连接失败
-/// @param room 连接失败的房间
+/// The given room failed to connect
+/// @param room The room that failed to connect
 /// @param error Error information
 - (void)multiplayerRoom:(MultiplayerRoom *)room
    didFailWithError:(NSError *)error;
 
-/// ZeroTier 框架可用性检测结果
-/// @param available YES 表示 zt.framework 已加载（非 stub）
+/// The result of the ZeroTier framework availability check
+/// @param available YES means zt.framework is loaded (and not a stub)
 - (void)multiplayerFrameworkAvailabilityChecked:(BOOL)available;
 
-/// 连接流程进度更新
+/// Connection flow progress update
 ///
-/// 在 connectToRoomFlow: 的各个步骤中调用，通知 UI 当前进度。
-/// 用于让用户看到"正在启动节点"、"正在加入网络"等详细进度，
-/// 而不是只显示一个静态的"正在连接..."提示。
+/// Called at each step of connectToRoomFlow: to report progress to the UI.
+/// It lets the user see detailed progress such as "starting the node" and "joining the network",
+/// rather than a static "Connecting..." message.
 ///
-/// @param message 进度描述文本（如"步骤 2：等待节点上线..."）
+/// @param message The progress text (such as "Step 2: waiting for the node to come online...")
 - (void)multiplayerConnectionProgress:(NSString *)message;
 
 @end
 
-/// ZeroTier 联机管理器
+/// ZeroTier multiplayer manager
 ///
-/// 参照 FCL 的 MultiplayerManager 和 ZL2 的 LanServerManager 设计：
-/// 1. 管理本地联机房间列表（增删改查）
-/// 2. 通过 ZeroTier Apple Framework (zt.framework) 在进程内加入/离开 ZeroTier 网络
-/// 3. 启动本地 SOCKS5 代理，将 Minecraft 流量转发到 ZeroTier 虚拟网络
-/// 4. 检测 zt.framework 是否可用（非 stub）
-/// 5. 管理当前连接状态
-/// 6. 生成分享信息（房间名 + Network ID + IP + 端口）
+/// Modelled on the MultiplayerManager of FCL and the LanServerManager of ZL2:
+/// 1. manages the local room list (create/read/update/delete)
+/// 2. joins/leaves a ZeroTier network in-process through the ZeroTier Apple Framework (zt.framework)
+/// 3. starts a local SOCKS5 proxy that forwards Minecraft traffic onto the ZeroTier virtual network
+/// 4. detects whether zt.framework is available (and not a stub)
+/// 5. manages the current connection state
+/// 6. generates the share information (room name + network ID + IP + port)
 ///
-/// 与旧的基于 URL Scheme 的实现不同，本版本完全在 App 进程内运行 ZeroTier 节点，
-/// 无需依赖外部的 ZeroTier One app，也不需要 NetworkExtension 权限。
-/// 流量通过本地 SOCKS5 代理（127.0.0.1:1080）转发，Minecraft 通过 JVM 的
-/// -DsocksProxyHost/-DsocksProxyPort 参数走代理。
+/// Unlike the older URL-scheme-based implementation, this version runs the ZeroTier node entirely inside the app process,
+/// so it needs neither the external ZeroTier One app nor NetworkExtension entitlements.
+/// Traffic is forwarded through the local SOCKS5 proxy (127.0.0.1:1080), with Minecraft using the proxy via the JVM
+/// -DsocksProxyHost/-DsocksProxyPort arguments.
 @interface MultiplayerManager : NSObject
 
 + (instancetype)sharedManager;
 
-/// 代理对象（弱引用）
+/// The delegate (a weak reference)
 @property (nonatomic, weak, nullable) id<MultiplayerManagerDelegate> delegate;
 
-/// 当前连接的房间（nil 表示未连接任何房间）
+/// The room currently connected (nil means nothing is connected)
 ///
-/// 关键修复（M1）：改为 atomic，保证多线程读写的内存一致性。
-/// currentRoom 在 connectToRoom（主线程）、connectToRoomFlow（后台 utility queue）、
-/// disconnectCurrentRoom（任意线程）中被写入，在 UI、delegate 回调等多处被读取。
-/// atomic 保证 getter/setter 的原子性，避免读到中间状态。
+/// Key fix (M1): now atomic, guaranteeing memory consistency across threads.
+/// currentRoom is accessed in connectToRoom (the main thread), connectToRoomFlow (a background utility queue),
+/// and disconnectCurrentRoom (any thread), and read from the UI, the delegate callbacks and elsewhere.
+/// atomic makes each getter/setter call atomic, so no intermediate state can be read.
 @property (atomic, strong, readonly, nullable) MultiplayerRoom *currentRoom;
 
-/// 所有已保存的房间列表
+/// Every saved room
 @property (nonatomic, strong, readonly) NSArray<MultiplayerRoom *> *savedRooms;
 
-/// 当前 SOCKS5 代理监听端口（代理未运行时返回 0）
+/// The port the SOCKS5 proxy is listening on (0 when the proxy is not running)
 ///
-/// 关键修复（M1）：改为 atomic，与 currentRoom 保持一致。
+/// Key fix (M1): now atomic, matching currentRoom.
 @property (atomic, assign, readonly) uint16_t currentSOCKS5Port;
 
-/// 当前 SOCKS5 代理是否正在运行
+/// Whether the SOCKS5 proxy is running
 @property (nonatomic, assign, readonly) BOOL isSOCKS5ProxyRunning;
 
-/// 当前端口转发器监听的本地端口（未运行时返回 0）
+/// The local port the port forwarder is listening on (0 when it is not running)
 ///
-/// 房客连接成功后，PortForwarder 在本地监听一个端口（如 25565），
-/// 转发到房主的 ZeroTier IP:MC LAN 端口。房客在 MC 中输入
-/// 127.0.0.1:此端口 即可连接到房主的游戏。
+/// Once a guest connects, PortForwarder listens on a local port (such as 25565)
+/// and forwards to the host ZeroTier IP and MC LAN port. The guest can then enter
+/// 127.0.0.1:<that port> in Minecraft to join the host's game.
 @property (atomic, assign, readonly) uint16_t currentForwardingPort;
 
-/// 当前端口转发器是否正在运行
+/// Whether the port forwarder is running
 @property (nonatomic, assign, readonly) BOOL isPortForwarderRunning;
 
-/// ZeroTier 节点是否已上线
+/// Whether the ZeroTier node is online
 @property (nonatomic, assign, readonly) BOOL isNodeOnline;
 
-/// 当前房间在 ZeroTier 网络中分配到的本地 IP（可用于显示给用户）
-/// 仅在房间已连接且 ZeroTier 分配了 IP 后才有效
+/// The local IP assigned to the current room on the ZeroTier network (which can be shown to the user)
+/// Only valid once the room is connected and ZeroTier has assigned an IP
 ///
-/// 关键修复（M1）：改为 atomic，与 currentRoom 保持一致。
+/// Key fix (M1): now atomic, matching currentRoom.
 @property (atomic, copy, readonly, nullable) NSString *currentLocalIP;
 
 #pragma mark - 框架检测
 
-/// 检测 zt.framework 是否可用（非 stub 实现）
+/// Detect whether zt.framework is available (and not a stub implementation)
 ///
-/// 本方法委托给 ZeroTierBridge 的 isFrameworkAvailable，结果会被缓存。
-/// ZeroTier Apple Framework 通过 git submodule 引入，构建时链接 submodule 中的
-/// 预编译 zt.framework。若 submodule 未初始化，则构建失败。
+/// This delegates to isFrameworkAvailable on ZeroTierBridge, and the result is cached.
+/// The ZeroTier Apple Framework comes in as a git submodule, and the build links the prebuilt
+/// zt.framework inside it. If the submodule is not initialized, the build fails.
 ///
-/// @return YES 如果 framework 可用
+/// @return YES when the framework is available
 - (BOOL)isFrameworkAvailable;
 
-/// 用户是否启用了联机（持久化到 NSUserDefaults）
+/// Whether the user has enabled multiplayer (persisted to NSUserDefaults)
 ///
-/// 此属性独立于 isNodeStarted，表示用户的意图而非节点实际状态。
-/// 用于在 ViewController 重新加载时恢复联机开关状态。
+/// This is independent of isNodeStarted and reflects the user's intent rather than the actual node state.
+/// It is used to restore the multiplayer switch when the view controller reloads.
 ///
-/// 场景：用户点击联机开关 ON → 后台开始启动 ZeroTier 节点（耗时数秒）→
-/// 用户关闭联机 ViewController → 用户重新打开联机 ViewController →
-/// 此时节点可能仍在启动中（isNodeStarted=NO），但用户已表达启用意图
-/// （isMultiplayerEnabled=YES），开关应显示为 ON。
+/// The scenario: the user turns the multiplayer switch ON -> the ZeroTier node starts in the background (taking several seconds) ->
+/// the user closes the multiplayer view controller -> the user reopens it ->
+/// the node may still be starting (isNodeStarted=NO), but the user has already expressed the intent
+/// (isMultiplayerEnabled=YES), so the switch should read ON.
 ///
-/// 节点启动成功后，如果 isMultiplayerEnabled=YES，开关保持 ON；
-/// 节点启动失败时，调用方应将 isMultiplayerEnabled 设为 NO 并回退开关。
+/// Once the node starts successfully the switch stays ON while isMultiplayerEnabled=YES;
+/// if the node fails to start, the caller should set isMultiplayerEnabled to NO and revert the switch.
 ///
-/// 此属性持久化到 NSUserDefaults，即使关闭启动器（杀进程）再重新打开，
-/// 也能恢复用户的联机启用状态（但节点不会自动启动，需要用户再次操作开关）。
+/// This property is persisted to NSUserDefaults, so the multiplayer setting survives closing the launcher (killing the process)
+/// and reopening it (though the node does not start automatically; the user has to use the switch again).
 ///
-/// @return YES 如果用户已启用联机
+/// @return YES when the user has enabled multiplayer
 - (BOOL)isMultiplayerEnabled;
 
-/// 设置联机启用状态（持久化到 NSUserDefaults）
-/// @param enabled YES 表示用户启用了联机
+/// Set the multiplayer enabled state (persisted to NSUserDefaults)
+/// @param enabled YES means the user has enabled multiplayer
 - (void)setMultiplayerEnabled:(BOOL)enabled;
 
-/// ZeroTier 节点是否已启动
-/// @return YES 如果节点已启动（不要求已上线）
+/// Whether the ZeroTier node has started
+/// @return YES when the node has started (it need not be online yet)
 - (BOOL)isNodeStarted;
 
-/// 启动 ZeroTier 节点
+/// Start the ZeroTier node
 ///
-/// 如果节点尚未启动，则在后台线程启动节点。
-/// 节点启动后会异步触发 ZTS_EVENT_NODE_ONLINE 事件。
+/// If the node has not started yet, it is started on a background thread.
+/// Once started, it fires the ZTS_EVENT_NODE_ONLINE event asynchronously.
 ///
-/// @param completion 完成回调（主线程，YES 表示启动请求已成功提交）
+/// @param completion Completion callback (main thread; YES means the start request was submitted successfully)
 - (void)ensureNodeStartedWithCompletion:(void (^)(BOOL success, NSError * _Nullable error))completion;
 
 #pragma mark - 兼容旧 API（已废弃，仅用于平滑过渡）
 
-/// 检测 ZeroTier One app 是否已安装（已废弃）
+/// Detect whether the ZeroTier One app is installed (deprecated)
 ///
-/// 旧的基于 URL Scheme 的实现需要检测外部 ZeroTier One app 是否安装。
-/// 新版本使用进程内 zt.framework，不再依赖外部 app。
-/// 本方法现在返回 isFrameworkAvailable 的结果，保持 API 兼容性。
+/// The old URL-scheme-based implementation had to detect whether the external ZeroTier One app was installed.
+/// Newer versions use the in-process zt.framework and no longer depend on an external app.
+/// This method now returns the result of isFrameworkAvailable, keeping the API compatible.
 ///
-/// @return YES 如果 zt.framework 可用
+/// @return YES when zt.framework is available
 - (BOOL)isZeroTierAppInstalled __attribute__((deprecated("Use isFrameworkAvailable instead")));
 
-/// 设置 ZeroTier 安装状态覆盖（已废弃，新版本为空操作）
-/// @param installed 已废弃参数，无实际效果
+/// Override the ZeroTier install state (deprecated; a no-op in newer versions)
+/// @param installed A deprecated parameter with no effect
 - (void)setZeroTierInstalledOverride:(BOOL)installed __attribute__((deprecated("Newer versions do not need the install state overridden manually")));
 
-/// 用户是否已手动覆盖 ZeroTier 安装状态（已废弃）
-/// @return 始终返回 NO
+/// Whether the user has overridden the ZeroTier install state by hand (deprecated)
+/// @return Always NO
 - (BOOL)isZeroTierInstallOverridden __attribute__((deprecated("Newer versions always return NO")));
 
-/// 打开 ZeroTier One app（已废弃，新版本为空操作）
+/// Open the ZeroTier One app (deprecated; a no-op in newer versions)
 - (void)openZeroTierApp __attribute__((deprecated("Newer versions use an in-process framework, so there is no external app to open")));
 
 #pragma mark - 网络加入与离开
 
-/// 通过 Network ID 加入 ZeroTier 网络
+/// Join a ZeroTier network by network ID
 ///
-/// 本方法直接在进程内调用 zts_net_join 加入指定网络。
-/// 如果节点尚未启动，会先启动节点。
+/// This calls zts_net_join in-process to join the given network.
+/// If the node has not started, it is started first.
 ///
-/// @param networkId ZeroTier Network ID（16位十六进制）
-/// @param completion 完成回调（主线程，YES 表示加入请求已成功提交，不代表网络已就绪）
+/// @param networkId The ZeroTier network ID (16 hexadecimal digits)
+/// @param completion Completion callback (main thread; YES means the join request was submitted, not that the network is ready)
 - (void)joinNetwork:(NSString *)networkId
          completion:(nullable void (^)(BOOL success, NSError * _Nullable error))completion;
 
-/// 离开 ZeroTier 网络
+/// Leave a ZeroTier network
 ///
-/// 本方法直接在进程内调用 zts_net_leave 离开指定网络。
+/// This calls zts_net_leave in-process to leave the given network.
 ///
 /// @param networkId ZeroTier Network ID
-/// @return YES 离开成功；NO 离开失败（参数无效或底层调用失败）。
-///         调用方可根据返回值决定是否需要强制 stopNode 清理。
+/// @return YES when leaving succeeded; NO when it failed (an invalid parameter or a failing underlying call).
+///         The caller can use the return value to decide whether to force a stopNode cleanup.
 - (BOOL)leaveNetwork:(NSString *)networkId;
 
 #pragma mark - 房间管理（增删改查）
 
-/// 添加房间到本地列表
-/// @param room 房间对象
+/// Add a room to the local list
+/// @param room The room object
 - (void)addRoom:(MultiplayerRoom *)room;
 
-/// 删除房间
-/// @param roomId 房间 ID
+/// Delete a room
+/// @param roomId The room ID
 - (void)removeRoom:(NSString *)roomId;
 
-/// 更新房间信息
-/// @param room 更新后的房间对象
+/// Update a room
+/// @param room The updated room object
 - (void)updateRoom:(MultiplayerRoom *)room;
 
-/// 获取指定房间
-/// @param roomId 房间 ID
+/// Get a room
+/// @param roomId The room ID
 - (nullable MultiplayerRoom *)roomWithId:(NSString *)roomId;
 
 #pragma mark - 连接管理
 
-/// 连接到房间
+/// Connect to a room
 ///
-/// 完整流程（6 步）：
-///   1. 检查 framework 可用性（不可用则立即失败）
-///   2. 启动 ZeroTier 节点（如果尚未启动）
-///   3. 等待节点上线（超时 30 秒）
-///   4. 加入 ZeroTier 网络
-///   5. 等待网络就绪（IPv4 或 Ad-hoc IPv6 已分配，超时 30 秒）
-///   6. 启动本地 SOCKS5 代理（端口 1080）+ 端口转发器：
-///      - 房客模式：PortForwarder 房客模式（本地 25565 → 房主 ZeroTier IP:端口）
-///      - 房主模式：不立即启动 PortForwarder，等待用户输入 MC LAN 端口后
-///        调用 startHostPortForwarderWithListenPort:localHostPort: 启动房主模式
+/// The full flow (6 steps):
+///   1. check that the framework is available (failing immediately if it is not)
+///   2. start the ZeroTier node (if it has not started)
+///   3. wait for the node to come online (30 second timeout)
+///   4. join the ZeroTier network
+///   5. wait for the network to be ready (an IPv4 or ad-hoc IPv6 address assigned, 30 second timeout)
+///   6. start the local SOCKS5 proxy (port 1080) and the port forwarder:
+///      - guest mode: PortForwarder in guest mode (local 25565 -> the host ZeroTier IP:port)
+///      - host mode: PortForwarder is not started immediately; once the user enters the MC LAN port,
+///        startHostPortForwarderWithListenPort:localHostPort: starts host mode
 ///
-/// 房主与房客的区分：
-///   - 房主首次连接：room.hostIP 为空 → 完成流程后将本机 ZeroTier IP 同步到 room.hostIP
-///   - 房客连接：room.hostIP 已设置为房主 IP（来自分享代码）→ 保留不覆盖
+/// Telling host and guest apart:
+///   - the host connecting for the first time: room.hostIP is empty -> this device's ZeroTier IP is copied into room.hostIP at the end of the flow
+///   - a guest connecting: room.hostIP is already the host IP (from the share code) -> it is left untouched
 ///
-/// 任何一步失败都会更新房间状态为 Error 并回调 completion(NO, error)。
+/// A failure at any step sets the room status to Error and calls completion(NO, error).
 ///
-/// @param room       房间对象
-/// @param completion 完成回调（主线程）
+/// @param room       The room object
+/// @param completion Completion callback (main thread)
 - (void)connectToRoom:(MultiplayerRoom *)room
            completion:(void (^)(BOOL success, NSError * _Nullable error))completion;
 
-/// 断开当前房间连接
+/// Disconnect from the current room
 ///
-/// 流程：
-///   1. 停止本地 SOCKS5 代理
-///   2. 清除 AMETHYST_SOCKS5_PROXY 环境变量
-///   3. 离开 ZeroTier 网络
-///   4. 更新房间状态为 Disconnected
-///   5. 清空 currentRoom
+/// The flow:
+///   1. stop the local SOCKS5 proxy
+///   2. clear the AMETHYST_SOCKS5_PROXY environment variable
+///   3. leave the ZeroTier network
+///   4. set the room status to Disconnected
+///   5. clear currentRoom
 - (void)disconnectCurrentRoom;
 
-/// 启动 PortForwarder 房主模式（反向转发）
+/// Start PortForwarder in host mode (reverse forwarding)
 ///
-/// 房主在 MC 中"对局域网开放"并手动输入 MC LAN 端口后调用本方法。
-/// PortForwarder 会在 ZeroTier 网络中监听 listenPort，并将连接转发到
-/// 本地 127.0.0.1:localHostPort（MC LAN 端口），使 PC/Mac/Android/iOS
-/// 房客能通过房主的 ZeroTier IP:listenPort 直接连接进入游戏。
+/// The host calls this after opening the world to LAN in Minecraft and entering the MC LAN port.
+/// PortForwarder listens on listenPort on the ZeroTier network and forwards connections to
+/// the local 127.0.0.1:localHostPort (the MC LAN port), so PC/Mac/Android/iOS guests
+/// can join the game directly through the host ZeroTier IP:listenPort.
 ///
-/// 调用前提：当前房间已连接成功（self.currentRoom 非 nil 且 status == Connected）。
+/// Precondition: the current room is connected (self.currentRoom is non-nil and status == Connected).
 ///
-/// @param listenPort 在 ZeroTier 网络中监听的端口（通常为 25565）
-/// @param localHostPort 本地 MC LAN 端口（MC 中"对局域网开放"后聊天框显示的端口号）
-/// @return YES 表示启动成功，NO 表示失败（如未连接房间或 PortForwarder 启动失败）
+/// @param listenPort The port to listen on within the ZeroTier network (usually 25565)
+/// @param localHostPort The local MC LAN port (the one Minecraft shows in the chat box after "Open to LAN")
+/// @return YES when it started successfully, NO on failure (such as no connected room, or PortForwarder failing to start)
 - (BOOL)startHostPortForwarderWithListenPort:(uint16_t)listenPort
                                localHostPort:(uint16_t)localHostPort;
 
-/// 停止所有联机服务（彻底清理）
+/// Stop every multiplayer service (a full cleanup)
 ///
-/// 在存档关闭、游戏退出、应用进入后台或被终止时调用，确保所有资源被彻底释放：
-///   1. 停止 SOCKS5 代理
-///   2. 停止端口转发器
-///   3. 清除 AMETHYST_SOCKS5_PROXY 环境变量
-///   4. 离开所有 ZeroTier 网络
-///   5. 停止 ZeroTier 节点
-///   6. 重置所有状态
-///   7. 清除 PLProfiles 中残留的 serverIp
+/// Called when the world closes, the game quits, or the app goes to the background or is terminated, so every resource is released:
+///   1. stop the SOCKS5 proxy
+///   2. stop the port forwarder
+///   3. clear the AMETHYST_SOCKS5_PROXY environment variable
+///   4. leave every ZeroTier network
+///   5. stop the ZeroTier node
+///   6. reset every piece of state
+///   7. clear any leftover serverIp in PLProfiles
 - (void)stopAllMultiplayerServices;
 
 #pragma mark - 分享与导入
 
-/// 生成房间的分享文本
-/// @param room 房间对象
-/// @return 分享文本
+/// Generate the share text for a room
+/// @param room The room object
+/// @return The share text
 - (NSString *)shareTextForRoom:(MultiplayerRoom *)room;
 
-/// 从分享文本解析房间信息
-/// @param text 分享文本
-/// @return 解析出的房间对象（解析失败返回 nil）
+/// Parse room information out of share text
+/// @param text The share text
+/// @return The parsed room object (nil when parsing fails)
 - (nullable MultiplayerRoom *)parseRoomFromShareText:(NSString *)text;
 
-/// 生成新的 ZeroTier 风格房间 ID（UUID）
+/// Generate a new ZeroTier-style room ID (a UUID)
 - (NSString *)generateRoomId;
 
 #pragma mark - 分享代码（FCL 风格 Base64 编码）
 
-/// 生成房间的分享代码（Base64 编码的 JSON）
+/// Generate the share code for a room (base64-encoded JSON)
 ///
-/// 对标 FCL 的联机分享码：房主开放局域网后自动生成一段代码，
-/// 房客输入代码即可加入房间。
+/// Equivalent to the FCL multiplayer share code: the host opens the world to LAN, a code is generated automatically,
+/// and a guest joins the room by entering it.
 ///
-/// 代码格式：Base64(JSON)，JSON 包含：
+/// Code format: Base64(JSON), where the JSON holds:
 ///   - networkId: ZeroTier Network ID
-///   - hostIP: 房主在 ZeroTier 网络中的 IP
-///   - hostPort: MC 服务器端口（LAN 端口或 25565）
-///   - roomName: 房间名称
+///   - hostIP: the host IP on the ZeroTier network
+///   - hostPort: the MC server port (the LAN port or 25565)
+///   - roomName: the room name
 ///
-/// @param room 房间对象
-/// @return Base64 编码的分享代码
+/// @param room The room object
+/// @return The base64-encoded share code
 - (NSString *)generateShareCodeForRoom:(MultiplayerRoom *)room;
 
-/// 从分享代码解析房间信息（Base64 编码的 JSON）
+/// Parse room information out of a share code (base64-encoded JSON)
 ///
-/// @param code Base64 编码的分享代码
-/// @return 解析出的房间对象（解析失败返回 nil）
+/// @param code The base64-encoded share code
+/// @return The parsed room object (nil when parsing fails)
 - (nullable MultiplayerRoom *)parseShareCode:(NSString *)code;
 
 #pragma mark - 预设 Network ID 管理（FCL 风格）
 
-/// 获取用户预设的 ZeroTier Network ID
+/// Get the ZeroTier network ID the user preset
 ///
-/// 对标 FCL：房主首次设置一次 Network ID（在 my.zerotier.com 创建后填入），
-/// 之后每次开房自动使用这个 Network ID，无需重复输入。
+/// Equivalent to FCL: the host sets a network ID once (after creating it at my.zerotier.com)
+/// and it is reused automatically every time they host, with no re-entering.
 ///
-/// @return 预设的 Network ID（未设置时返回 nil）
+/// @return The preset network ID (nil when unset)
 - (nullable NSString *)presetNetworkId;
 
-/// 设置预设的 ZeroTier Network ID
-/// @param networkId Network ID（传入 nil 或空字符串则清除）
+/// Set the preset ZeroTier network ID
+/// @param networkId The network ID (passing nil or an empty string clears it)
 - (void)setPresetNetworkId:(nullable NSString *)networkId;
 
 #pragma mark - Ad-hoc 网络（快速模式，无需注册账号）
 
-/// 生成 Ad-hoc 网络 ID（快速模式）
+/// Generate an ad-hoc network ID (quick mode)
 ///
-/// 对标 FCL 的"无需注册直接联机"体验：
-///   - 调用 zts_net_compute_adhoc_id 生成一个无需网络控制器的公开网络 ID
-///   - 房主和房客使用相同的端口范围即可加入同一网络
-///   - 无需在 my.zerotier.com 注册账号、创建网络、授权成员
+/// Equivalent to the FCL "play together with no registration" experience:
+///   - zts_net_compute_adhoc_id generates a public network ID that needs no network controller
+///   - the host and guests join the same network simply by using the same port range
+///   - there is no need to register at my.zerotier.com, create a network or authorize members
 ///
-/// 注意：
-///   1. Ad-hoc 网络只有 IPv6 地址（无 IPv4）
-///   2. 网络是公开的，任何人都能加入（安全性弱）
-///   3. IP 基于节点 ID 自动分配，可能变化（稳定性不如标准模式）
-///   4. 端口范围限制：MC 服务器端口和 LAN 端口需在范围内
+/// Notes:
+///   1. an ad-hoc network only has IPv6 addresses (no IPv4)
+///   2. the network is public and anyone can join (so it is less secure)
+///   3. the IP is assigned automatically from the node ID and may change (less stable than standard mode)
+///   4. the port range is limited: the MC server port and LAN port must fall inside it
 ///
-/// 为兼容 MC 的所有端口（25565 和 LAN 随机端口 49152-65535），
-/// 本方法使用 0-65535 的全端口范围。
+/// To cover every port Minecraft may use (25565 and the random LAN ports 49152-65535),
+/// this method uses the full 0-65535 range.
 ///
-/// @return 16 位十六进制的 Ad-hoc 网络 ID 字符串
+/// @return The ad-hoc network ID as a 16-digit hexadecimal string
 - (NSString *)generateAdhocNetworkId;
 
-/// 判断 Network ID 是否为 Ad-hoc 网络
+/// Whether a network ID belongs to an ad-hoc network
 ///
-/// Ad-hoc 网络 ID 以 "ff" 开头（如 ff0000ffff000000）。
-/// 用于在连接流程中区分标准模式和快速模式。
+/// Ad-hoc network IDs start with "ff" (such as ff0000ffff000000).
+/// Used to tell standard mode from quick mode during the connection flow.
 ///
-/// @param networkId 待判断的 Network ID
-/// @return YES 如果是 Ad-hoc 网络
+/// @param networkId The network ID to test
+/// @return YES when it is an ad-hoc network
 - (BOOL)isAdhocNetworkId:(NSString *)networkId;
 
 #pragma mark - 校验工具
 
-/// 验证 ZeroTier Network ID 格式
-/// @param networkId 待校验的 Network ID 字符串
-/// @return YES 如果格式有效
+/// Validate the format of a ZeroTier network ID
+/// @param networkId The network ID string to check
+/// @return YES when the format is valid
 - (BOOL)isValidNetworkId:(NSString *)networkId;
 
-/// 验证 IP 地址格式
-/// @param ipAddress 待校验的 IP 地址字符串
-/// @return YES 如果格式有效
+/// Validate the format of an IP address
+/// @param ipAddress The IP address string to check
+/// @return YES when the format is valid
 - (BOOL)isValidIPAddress:(NSString *)ipAddress;
 
 @end

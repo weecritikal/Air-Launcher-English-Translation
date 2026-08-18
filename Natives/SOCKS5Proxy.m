@@ -64,10 +64,10 @@ NSNotificationName const SOCKS5ProxyClientConnectedNotification = @"SOCKS5ProxyC
 /// 客户端断开通知名
 NSNotificationName const SOCKS5ProxyClientDisconnectedNotification = @"SOCKS5ProxyClientDisconnectedNotification";
 
-/// 错误域名
+/// Error domain
 static NSString * const kSOCKS5ProxyErrorDomain = @"SOCKS5ProxyErrorDomain";
 
-/// 错误码
+/// Error codes
 typedef NS_ENUM(NSInteger, SOCKS5ProxyErrorCode) {
     SOCKS5ProxyErrorCodeAlreadyRunning        = 1, // 代理已在运行
     SOCKS5ProxyErrorCodeSocketCreateFailed    = 2, // 创建 socket 失败
@@ -342,7 +342,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
 
 /// 启动代理服务器
 ///
-/// 流程：
+/// The flow:
 ///   1. 检查是否已运行
 ///   2. 检查 ZeroTier framework 可用性
 ///   3. 创建 POSIX socket
@@ -434,7 +434,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
     //   3. 同一进程内上一次 SOCKS5 代理未正确关闭（虽然 startWithPort: 入口
     //      已有 stop 检查，但极端情况下仍可能残留）
     //
-    // 修复方案：
+    // The fix:
     //   - 先尝试用户指定的端口（通常是 1080）
     //   - 如果 bind 失败，依次尝试 port+1, port+2, ..., port+9（共 10 个端口）
     //   - 如果 10 个端口都失败，最后使用 port=0 让系统自动分配可用端口
@@ -572,7 +572,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
     // 触发链路：用户点击「断开连接」按钮 → MultiplayerManager.disconnectCurrentRoom
     // （主线程）→ SOCKS5Proxy.stop（主线程）→ 等待客户端线程退出（2 秒）→ UI 卡死。
     //
-    // 修复方案：
+    // The fix:
     //   1. 所有立即性的清理工作（关闭监听 socket、shutdown 客户端/远程 fd、清空列表、
     //      设置 _running=NO）都在当前线程同步执行，确保 stop 返回后代理不再接受
     //      新连接、不再转发数据，状态对调用方立即可见
@@ -881,7 +881,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
 
 /// 处理单个客户端连接（在客户端处理线程中运行）
 ///
-/// 流程：
+/// The flow:
 ///   1. SOCKS5 握手（认证协商 + 请求解析）
 ///   2. 通过 ZeroTierBridge 连接目标主机
 ///   3. 双向转发数据
