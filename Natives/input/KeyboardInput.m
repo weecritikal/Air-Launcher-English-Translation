@@ -109,7 +109,10 @@ int keycodeTable[UIKeyboardHIDUsageKeyboardRightGUI+1];
     }
 
     // send the keycode
-    int keycode = keycodeTable[key.keyCode];
+    NSUInteger hidUsage = (NSUInteger)key.keyCode;
+    int keycode = hidUsage <= UIKeyboardHIDUsageKeyboardRightGUI
+        ? keycodeTable[hidUsage]
+        : 0;
     if (keycode != 0) {
         // issue #27 修复（参照 FCL commit 08c0716）：
         // MC 1.21.9+ 不再仅依赖 key 回调中的 mods 参数，而是通过
