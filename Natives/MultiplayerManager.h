@@ -169,7 +169,7 @@ typedef NS_ENUM(NSInteger, MultiplayerRoomRole) {
 /// Key fix (M1): now atomic, matching currentRoom.
 @property (atomic, copy, readonly, nullable) NSString *currentLocalIP;
 
-#pragma mark - 框架检测
+#pragma mark - Framework detection
 
 /// Detect whether zt.framework is available (and not a stub implementation)
 ///
@@ -215,7 +215,7 @@ typedef NS_ENUM(NSInteger, MultiplayerRoomRole) {
 /// @param completion Completion callback (main thread; YES means the start request was submitted successfully)
 - (void)ensureNodeStartedWithCompletion:(void (^)(BOOL success, NSError * _Nullable error))completion;
 
-#pragma mark - 兼容旧 API（已废弃，仅用于平滑过渡）
+#pragma mark - Legacy API compatibility (deprecated, kept only for a smooth transition)
 
 /// Detect whether the ZeroTier One app is installed (deprecated)
 ///
@@ -237,7 +237,7 @@ typedef NS_ENUM(NSInteger, MultiplayerRoomRole) {
 /// Open the ZeroTier One app (deprecated; a no-op in newer versions)
 - (void)openZeroTierApp __attribute__((deprecated("Newer versions use an in-process framework, so there is no external app to open")));
 
-#pragma mark - 网络加入与离开
+#pragma mark - Joining and leaving networks
 
 /// Join a ZeroTier network by network ID
 ///
@@ -258,7 +258,7 @@ typedef NS_ENUM(NSInteger, MultiplayerRoomRole) {
 ///         The caller can use the return value to decide whether to force a stopNode cleanup.
 - (BOOL)leaveNetwork:(NSString *)networkId;
 
-#pragma mark - 房间管理（增删改查）
+#pragma mark - Room management (create/read/update/delete)
 
 /// Add a room to the local list
 /// @param room The room object
@@ -276,7 +276,7 @@ typedef NS_ENUM(NSInteger, MultiplayerRoomRole) {
 /// @param roomId The room ID
 - (nullable MultiplayerRoom *)roomWithId:(NSString *)roomId;
 
-#pragma mark - 连接管理
+#pragma mark - Connection management
 
 /// Connect to a room
 ///
@@ -339,7 +339,7 @@ typedef NS_ENUM(NSInteger, MultiplayerRoomRole) {
 ///   7. clear any leftover serverIp in PLProfiles
 - (void)stopAllMultiplayerServices;
 
-#pragma mark - 分享与导入
+#pragma mark - Sharing and importing
 
 /// Generate the share text for a room
 /// @param room The room object
@@ -354,7 +354,7 @@ typedef NS_ENUM(NSInteger, MultiplayerRoomRole) {
 /// Generate a new ZeroTier-style room ID (a UUID)
 - (NSString *)generateRoomId;
 
-#pragma mark - 分享代码（FCL 风格 Base64 编码）
+#pragma mark - Share codes (FCL style base64 encoding)
 
 /// Generate the share code for a room (base64-encoded JSON)
 ///
@@ -377,7 +377,7 @@ typedef NS_ENUM(NSInteger, MultiplayerRoomRole) {
 /// @return The parsed room object (nil when parsing fails)
 - (nullable MultiplayerRoom *)parseShareCode:(NSString *)code;
 
-#pragma mark - 预设 Network ID 管理（FCL 风格）
+#pragma mark - Preset network ID management (FCL style)
 
 /// Get the ZeroTier network ID the user preset
 ///
@@ -391,7 +391,7 @@ typedef NS_ENUM(NSInteger, MultiplayerRoomRole) {
 /// @param networkId The network ID (passing nil or an empty string clears it)
 - (void)setPresetNetworkId:(nullable NSString *)networkId;
 
-#pragma mark - Ad-hoc 网络（快速模式，无需注册账号）
+#pragma mark - Ad-hoc networks (quick mode, no account registration needed)
 
 /// Generate an ad-hoc network ID (quick mode)
 ///
@@ -421,7 +421,7 @@ typedef NS_ENUM(NSInteger, MultiplayerRoomRole) {
 /// @return YES when it is an ad-hoc network
 - (BOOL)isAdhocNetworkId:(NSString *)networkId;
 
-#pragma mark - 校验工具
+#pragma mark - Validation helpers
 
 /// Validate the format of a ZeroTier network ID
 /// @param networkId The network ID string to check

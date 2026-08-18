@@ -695,7 +695,7 @@
     [self setProgress:-1 stageMessage:@"Cancelling..."];
 }
 
-#pragma mark - 完成提示
+#pragma mark - Completion messages
 
 - (void)showExportSuccessWithPath:(NSString *)path {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Export complete"

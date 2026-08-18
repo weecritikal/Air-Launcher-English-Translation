@@ -136,7 +136,7 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
     [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
-#pragma mark - Detail Header（项目信息展示）
+#pragma mark - Detail Header (project information display)
 
 /// Build and configure the project detail header view and set it as tableView.tableHeaderView
 /// Fills the gap where earlier version pages showed no project cover image, title, author, downloads, tags or description
@@ -189,7 +189,7 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
     }
 }
 
-#pragma mark - 侧边筛选面板（参照 FCL/ZL2 水平滚动 chips）
+#pragma mark - Side filter panel (modeled on the horizontally scrolling chips of FCL/ZL2)
 
 /// Build the side filter panel: 4 rows of horizontally scrolling chips (download source / game version / loader / sort)
 /// Following the filter bar design of FCL for Android: one row per category, with an icon and label prefix, chips scrolling horizontally,
@@ -408,7 +408,7 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
     [stack.arrangedSubviews makeObjectsPerformSelector:@selector(removeFromSuperview)];
 }
 
-#pragma mark - 重建各筛选行 chips
+#pragma mark - Rebuilding the chips of each filter row
 
 /// Rebuild the download source chips (Modrinth / CurseForge)
 - (void)rebuildSourceChips {
@@ -497,7 +497,7 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
     }
 }
 
-#pragma mark - Chip 点击事件处理
+#pragma mark - Chip tap handling
 
 /// Download source chip tapped: switch between Modrinth / CurseForge and fetch the version list again
 - (void)sourceChipTapped:(UIButton *)sender {
@@ -572,7 +572,7 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
     [self presentViewController:alert animated:YES completion:nil];
 }
 
-#pragma mark - TableView 设置
+#pragma mark - TableView setup
 
 - (void)setupTableView {
     self.tableView = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
@@ -607,7 +607,7 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
     ]];
 }
 
-#pragma mark - 数据拉取
+#pragma mark - Data fetching
 
 /// Fetch the version list from the currently selected download source
 /// Modrinth source → ModrinthAPI.getVersionsForShaderWithID
@@ -715,7 +715,7 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
     [self rebuildLoaderChips];
 }
 
-#pragma mark - 筛选 + 排序
+#pragma mark - Filtering + sorting
 
 /// Apply the filters and sorting, then refresh the table
 /// Filter by game version/loader first, then sort

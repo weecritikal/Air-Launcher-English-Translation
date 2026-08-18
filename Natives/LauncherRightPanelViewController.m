@@ -433,7 +433,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowAccountManager" object:nil];
 }
 
-#pragma mark - 下载中心（参照 FCL/ZL2/HMCL 下载进度弹窗）
+#pragma mark - Download center (modeled on the download progress dialogs of FCL/ZL2/HMCL)
 
 /// Open the download center modal
 /// Following how FCL/ZL2/HMCL show download progress: present DownloadTasksViewController as a FormSheet,
@@ -550,7 +550,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     }
 }
 
-#pragma mark - 自定义头像导入
+#pragma mark - Custom avatar import
 
 - (void)showAvatarMenu:(UILongPressGestureRecognizer *)gesture {
     if (gesture.state != UIGestureRecognizerStateBegan) return;
@@ -654,7 +654,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     }];
 }
 
-#pragma mark - JIT 状态显示
+#pragma mark - JIT status display
 
 - (void)updateJITStatus {
     if (!self.jitStatusLabel) return;
@@ -670,7 +670,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     }
 }
 
-#pragma mark - 自定义外观（字体颜色）
+#pragma mark - Custom appearance (font color)
 
 /// Read the general.text_color preference and apply it to the main text of the right panel.
 /// The card background is always dark (BackgroundManager), so a user who sets a light card_color should set text_color too.

@@ -2,7 +2,7 @@
 #import "installer/modpack/ModrinthAPI.h"
 #import "installer/modpack/CurseForgeAPI.h"
 
-#pragma mark - ModUpdateResult 实现
+#pragma mark - ModUpdateResult implementation
 
 @implementation ModUpdateResult
 
@@ -23,7 +23,7 @@
 
 @end
 
-#pragma mark - ModUpdateService 实现
+#pragma mark - ModUpdateService implementation
 
 @interface ModUpdateService ()
 /// The serial queue used for concurrent lookups (only to isolate the dispatch of the two-source tasks)
@@ -50,7 +50,7 @@
     return self;
 }
 
-#pragma mark - 单个 Mod 更新检查（双源抢答）
+#pragma mark - Single mod update check (racing both sources)
 
 - (void)checkUpdateForMod:(ModItem *)mod
               gameVersion:(NSString *)gameVersion
@@ -157,7 +157,7 @@
     });
 }
 
-#pragma mark - 拉取版本列表并构建结果
+#pragma mark - Fetching the version list and building the result
 
 - (void)fetchVersionsAndBuildResultWithProjectDict:(NSMutableDictionary *)projectDict
                                             source:(NSNumber *)source
@@ -199,7 +199,7 @@
     }];
 }
 
-#pragma mark - 版本筛选与结果构建
+#pragma mark - Version filtering and result construction
 
 - (ModUpdateResult *)buildResultWithMod:(ModItem *)mod
                               projectID:(NSString *)projectID
@@ -278,7 +278,7 @@
     return result;
 }
 
-#pragma mark - 当前版本识别
+#pragma mark - Current version detection
 
 /// Identify the current version in the full version list (the one the lookup matched)
 /// Priority: fileId (CurseForge) > fileSHA1 (the Modrinth primaryFile) > versionNumber > the newest version as a fallback
@@ -349,7 +349,7 @@
     return sorted.firstObject;
 }
 
-#pragma mark - 加载器智能回退
+#pragma mark - Smart loader fallback
 
 /// Work out the loader set used to filter versions
 /// Strategy:
@@ -388,7 +388,7 @@
     return @[];
 }
 
-#pragma mark - 工具方法
+#pragma mark - Utility methods
 
 /// Extract the project ID from the project dictionary the lookup returned
 - (nullable NSString *)extractProjectIDFromDict:(NSDictionary *)dict source:(NSNumber *)source {
@@ -445,7 +445,7 @@
     }
 }
 
-#pragma mark - 批量检查更新（并发限流 3）
+#pragma mark - Bulk update check (concurrency limited to 3)
 
 - (void)checkUpdatesForMods:(NSArray<ModItem *> *)mods
                gameVersion:(NSString *)gameVersion

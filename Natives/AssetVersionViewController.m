@@ -119,7 +119,7 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
     [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
-#pragma mark - Detail Header（项目信息展示）
+#pragma mark - Detail Header (project information display)
 
 /// Build and configure the project detail header view and set it as tableView.tableHeaderView
 /// Fills the gap where earlier version pages showed no project cover image, title, author, downloads, tags or description
@@ -200,7 +200,7 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
     return @"Select version";
 }
 
-#pragma mark - 侧边筛选面板（chips 筛选条，阶段3统一）
+#pragma mark - Side filter panel (the chip filter bar, unified in phase 3)
 
 /// Build the filter panel container plus the 2 chip rows (game version + sort)
 /// Modelled on setupSideFilterPanel in ModVersionViewController, minus the download source and loader rows
@@ -499,7 +499,7 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
     ]];
 }
 
-#pragma mark - 数据获取
+#pragma mark - Data retrieval
 
 - (void)fetchVersions {
     if (!self.projectID.length) {
@@ -528,7 +528,7 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
     }];
 }
 
-#pragma mark - 筛选 + 排序
+#pragma mark - Filtering + sorting
 
 - (void)processFilters {
     NSMutableSet<NSString *> *gameVersions = [NSMutableSet setWithObject:@"All"];

@@ -161,7 +161,7 @@ static PLProfiles* current;
     [self save];
 }
 
-#pragma mark - 服务器地址（FCL 风格：启动后自动加入服务器）
+#pragma mark - Server address (FCL style: join a server automatically after launch)
 
 // Get the server address of the selected profile, returning @"" when empty
 - (NSString *)serverIpForCurrentProfile {

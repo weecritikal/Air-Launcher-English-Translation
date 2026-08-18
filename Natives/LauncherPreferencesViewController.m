@@ -81,7 +81,7 @@
     });
 }
 
-#pragma mark - 自定义颜色选择（字体/卡片颜色）
+#pragma mark - Custom color selection (font/card colors)
 
 - (void)openColorPickerForKey:(NSString *)fullKey title:(NSString *)title {
     if (@available(iOS 14.0, *)) {
@@ -1122,7 +1122,7 @@
                                                object:nil];
 }
 
-#pragma mark - Hero Header（顶部 App 信息卡片）
+#pragma mark - Hero Header (the app information card at the top)
 
 - (NSString *)appName {
     // Prefer CFBundleDisplayName (the user-visible name), then CFBundleName, falling back to "Air"

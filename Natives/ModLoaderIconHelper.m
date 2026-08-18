@@ -10,7 +10,7 @@
 
 @implementation ModLoaderIconHelper
 
-#pragma mark - 品牌色
+#pragma mark - Brand colors
 
 /// The unified loader brand color map (shared across the project, removing the color inconsistencies between files)
 /// The colors follow each loader's official brand guidelines and match the official colors used by FCL/ZL2
@@ -62,7 +62,7 @@
     return [UIColor tertiaryLabelColor];
 }
 
-#pragma mark - SF Symbol 名称
+#pragma mark - SF Symbol names
 
 /// The SF Symbol name for a loader (a symbol shaped like the official logo)
 /// Used only as a fallback when the bundle has no matching PNG
@@ -109,7 +109,7 @@
     return @"cube.box.fill";
 }
 
-#pragma mark - 显示名
+#pragma mark - Display names
 
 /// The localized display name of a loader (for the badge text)
 + (NSString *)displayNameForLoader:(NSString *)loader {
@@ -137,7 +137,7 @@
     return @"Unknown";
 }
 
-#pragma mark - 图标加载
+#pragma mark - Icon loading
 
 /// Load a loader icon (preferring a bundled PNG, falling back to an SF Symbol)
 /// Load order:
@@ -222,7 +222,7 @@
     return nil;
 }
 
-#pragma mark - UIImageView 配置
+#pragma mark - UIImageView configuration
 
 /// Configure a UIImageView to show a loader icon
 /// PNG icons keep their own colors and are not tinted; SF Symbols are tinted with the brand color
@@ -281,7 +281,7 @@
     }
 }
 
-#pragma mark - 徽章视图
+#pragma mark - Badge views
 
 /// Build a loader badge view (an icon + text pill, following the loader tags of FCL/ZL2)
 /// The rounded background uses a translucent brand color, with the icon plus white text
@@ -367,7 +367,7 @@
     return container;
 }
 
-#pragma mark - 工具方法
+#pragma mark - Utility methods
 
 /// Whether a loader name is a known loader (used to filter what is shown)
 + (BOOL)isKnownLoader:(NSString *)loader {

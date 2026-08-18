@@ -92,7 +92,7 @@ typedef NS_ENUM(NSInteger, ZeroTierNetworkStatus) {
 /// Delegate object (a weak reference, to avoid a retain cycle)
 @property (nonatomic, weak, nullable) id<ZeroTierBridgeDelegate> delegate;
 
-#pragma mark - 节点管理
+#pragma mark - Node management
 
 /// Start the ZeroTier node
 /// @param homeDir the directory where identity files are stored
@@ -113,7 +113,7 @@ typedef NS_ENUM(NSInteger, ZeroTierNetworkStatus) {
 /// Get the node status
 - (ZeroTierNodeStatus)nodeStatus;
 
-#pragma mark - 网络管理
+#pragma mark - Network management
 
 /// Join a ZeroTier network
 - (BOOL)joinNetwork:(uint64_t)networkID error:(NSError **)error;
@@ -130,7 +130,7 @@ typedef NS_ENUM(NSInteger, ZeroTierNetworkStatus) {
 /// Get the IPv6 address assigned by the network (nil if none was assigned)
 - (nullable NSString *)ipv6AddressForNetwork:(uint64_t)networkID;
 
-#pragma mark - 框架检测与等待
+#pragma mark - Framework detection and waiting
 
 /// Detect whether zt.framework is available (i.e. not a stub)
 ///
@@ -143,7 +143,7 @@ typedef NS_ENUM(NSInteger, ZeroTierNetworkStatus) {
 /// Wait for the network to become ready (waits on a semaphore for the event, returning NO on timeout)
 - (BOOL)waitForNetworkReady:(uint64_t)networkID timeout:(NSTimeInterval)timeout;
 
-#pragma mark - Socket 客户端操作（供 SOCKS5Proxy 和 PortForwarder 房客模式使用）
+#pragma mark - Socket client operations (used by SOCKS5Proxy and PortForwarder guest mode)
 
 /// Create a TCP socket (wraps zts_bsd_socket, IPv4)
 - (int)createTCPSocket;
@@ -173,7 +173,7 @@ typedef NS_ENUM(NSInteger, ZeroTierNetworkStatus) {
              buffer:(void *)buf
               length:(size_t)len;
 
-#pragma mark - Socket 服务端 API（供 PortForwarder 房主模式使用）
+#pragma mark - Socket server API (used by PortForwarder host mode)
 
 /// Create a libzt TCP socket and return the fd (< 0 means failure)
 - (int)createListenSocket;
@@ -187,7 +187,7 @@ typedef NS_ENUM(NSInteger, ZeroTierNetworkStatus) {
 /// Accept a connection and return the client fd (< 0 means failure)
 - (int)acceptOnSocket:(int)fd;
 
-#pragma mark - 工具方法
+#pragma mark - Utility methods
 
 /// Parse a network ID from a hexadecimal string (returns 0 if parsing fails)
 + (uint64_t)parseNetworkIDFromString:(NSString *)networkIDStr;

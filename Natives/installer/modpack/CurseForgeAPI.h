@@ -39,7 +39,7 @@ extern NSString *const CurseForgeResponseSnippetKey;
 - (void)loadDetailsOfMod:(NSMutableDictionary *)item
               completion:(void (^)(NSError * _Nullable error))completion;
 
-#pragma mark - Server Packs（CurseForge 服务端整合包）
+#pragma mark - Server Packs (CurseForge server modpacks)
 
 /// Asynchronously search for server modpacks: search classId=4471 (modpack) projects and present them as server modpacks
 /// @param filters the search filter conditions (query/limit/offset/mcVersion and so on)

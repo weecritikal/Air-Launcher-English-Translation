@@ -58,7 +58,7 @@
 #include <fcntl.h>      // fcntl (F_GETFL/F_SETFL/O_NONBLOCK, used by the non-blocking connect)
 #include <stdatomic.h>  // C11 atomics, used for the bidirectional forwarding flags
 
-#pragma mark - 常量定义
+#pragma mark - Constant definitions
 
 /// The default local listening port of the port forwarder (the default Minecraft server port)
 const uint16_t PortForwarderDefaultLocalPort = 25565;
@@ -78,7 +78,7 @@ static NSString * const kPortForwarderErrorDomain = @"PortForwarderErrorDomain";
 /// The maximum number of port conflict retries
 #define PORT_FORWARDER_MAX_PORT_RETRIES 10
 
-#pragma mark - 辅助函数
+#pragma mark - Helper functions
 
 /// Write every byte to an fd (looping over write until everything is written or it errors)
 /// @param fd The file descriptor
@@ -114,7 +114,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
     return (ssize_t)totalWritten;
 }
 
-#pragma mark - PortForwarder 类扩展
+#pragma mark - PortForwarder class extension
 
 @interface PortForwarder () {
     /// The listening socket file descriptor (-1 when none has been created)
@@ -166,7 +166,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
 /// Host mode: the local MC LAN port
 @property (nonatomic, assign, readwrite) uint16_t localHostPort;
 
-#pragma mark - 房客模式私有方法
+#pragma mark - Guest mode private methods
 
 /// The main loop of the guest-mode accept thread
 /// @param myGen The generation captured at startup
@@ -176,7 +176,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
 /// @param clientFD The client socket file descriptor (a POSIX socket)
 - (void)handleGuestClient:(int)clientFD;
 
-#pragma mark - 房主模式私有方法
+#pragma mark - Host mode private methods
 
 /// The main loop of the host-mode accept thread
 /// @param myGen The generation captured at startup
@@ -186,7 +186,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
 /// @param ztClientFD The libzt client socket file descriptor
 - (void)handleHostConnection:(int)ztClientFD;
 
-#pragma mark - 共享私有方法
+#pragma mark - Shared private methods
 
 /// Forward data in both directions
 /// @param posixFD The POSIX socket (the client in guest mode, the local connection in host mode)
@@ -196,11 +196,11 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
 
 @end
 
-#pragma mark - PortForwarder 实现
+#pragma mark - PortForwarder implementation
 
 @implementation PortForwarder
 
-#pragma mark - 单例模式
+#pragma mark - Singleton
 
 /// Get the shared PortForwarder singleton
 /// dispatch_once guarantees thread-safe one-time initialization
@@ -245,7 +245,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
     return self;
 }
 
-#pragma mark - 启动房客模式
+#pragma mark - Starting guest mode
 
 /// Start guest mode
 ///
@@ -414,7 +414,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
     return YES;
 }
 
-#pragma mark - 启动房主模式
+#pragma mark - Starting host mode
 
 /// Start host mode
 ///
@@ -522,7 +522,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
     return YES;
 }
 
-#pragma mark - 房客模式 Accept 线程
+#pragma mark - Guest mode accept thread
 
 /// The main loop of the guest-mode accept thread
 ///
@@ -622,7 +622,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
     NSLog(@"[PortForwarder] Guest mode Accept thread exited");
 }
 
-#pragma mark - 房主模式 Accept 线程
+#pragma mark - Host mode accept thread
 
 /// The main loop of the host-mode accept thread
 ///
@@ -701,7 +701,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
     NSLog(@"[PortForwarder] Host mode Accept thread exited");
 }
 
-#pragma mark - 房客模式客户端处理
+#pragma mark - Guest mode client handling
 
 /// Guest mode: handle a client connection
 ///
@@ -845,7 +845,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
     }
 }
 
-#pragma mark - 房主模式连接处理
+#pragma mark - Host mode connection handling
 
 /// Host mode: handle a connection accepted over ZeroTier
 ///
@@ -1020,7 +1020,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
     }
 }
 
-#pragma mark - 双向数据转发
+#pragma mark - Bidirectional data forwarding
 
 /// Forward data in both directions
 ///
@@ -1148,7 +1148,7 @@ static ssize_t writeAll(int fd, const uint8_t *buffer, size_t length) {
     NSLog(@"[PortForwarder] Bidirectional forwarding ended: posixFD=%d, ztFD=%d", posixFD, ztFD);
 }
 
-#pragma mark - 停止端口转发
+#pragma mark - Stopping port forwarding
 
 /// Stop port forwarding (stopping host and guest mode alike)
 ///

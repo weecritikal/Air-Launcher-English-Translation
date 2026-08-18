@@ -64,7 +64,7 @@
     return self;
 }
 
-#pragma mark - 工具方法
+#pragma mark - Utility methods
 
 // Resolve the gameDir of a profile, returning it or nil
 - (nullable NSString *)gameDirForProfile:(NSString *)profileName {
@@ -232,7 +232,7 @@
     return [[NSFileManager defaultManager] removeItemAtPath:item.filePath error:error];
 }
 
-#pragma mark - 健壮解压逻辑
+#pragma mark - Robust extraction logic
 
 // Detect whether the zip contains a top-level directory (i.e. every entry starts with the same directory name)
 // If it does, return that top-level directory name; otherwise return nil (meaning the zip holds level.dat and friends loose at the root)
@@ -338,7 +338,7 @@
     return YES;
 }
 
-#pragma mark - 在线世界下载（含健壮解压）
+#pragma mark - Online world downloads (with robust extraction)
 
 - (void)downloadWorld:(WorldItem *)item
             toProfile:(NSString *)profileName
@@ -432,7 +432,7 @@
     NSLog(@"[WorldService] started downloading world: %@ -> %@", url, destinationPath);
 }
 
-#pragma mark - 从本地文件导入世界
+#pragma mark - Importing a world from a local file
 
 - (void)importWorldFromURL:(NSURL *)sourceURL
                 toProfile:(NSString *)profileName

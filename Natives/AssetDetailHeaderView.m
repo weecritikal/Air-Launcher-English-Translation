@@ -352,7 +352,7 @@
     return item;
 }
 
-#pragma mark - Categories (标签 pill)
+#pragma mark - Categories (tag pills)
 
 /// Rebuild the tag row (wrapping automatically: one horizontal stack per row, wrapping when the container width is exceeded)
 - (void)rebuildCategoriesStackWithCategories:(nullable NSArray<NSString *> *)categories {

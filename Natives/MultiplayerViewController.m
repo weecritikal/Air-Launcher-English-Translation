@@ -68,7 +68,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 /// The saved room list
 @property (nonatomic, strong) NSArray<MultiplayerRoom *> *rooms;
 
-#pragma mark - 启动器模式专用控件
+#pragma mark - Controls specific to launcher mode
 
 /// The "Enable multiplayer" switch at section 0, row 0
 @property (nonatomic, strong) UISwitch *enableSwitch;
@@ -79,7 +79,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 /// The port field at section 2, row 0 (held strongly)
 @property (nonatomic, strong) UITextField *directPortField;
 
-#pragma mark - 游戏内模式专用状态
+#pragma mark - State specific to in-game mode
 
 /// Whether the host flow is active (the user tapped "Host" and is waiting or connected)
 @property (nonatomic, assign) BOOL isHostFlowActive;
@@ -340,7 +340,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     }
 }
 
-#pragma mark - 启动器模式：启用联机开关
+#pragma mark - Launcher mode: the multiplayer enable switch
 
 /// Handler for the "Enable multiplayer" switch
 ///
@@ -394,7 +394,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     }
 }
 
-#pragma mark - 启动器模式：预设 Network ID 编辑
+#pragma mark - Launcher mode: editing the preset network ID
 
 /// Tapping the network ID row: show a UIAlertController for entering the preset network ID
 ///
@@ -493,7 +493,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     [self presentViewController:alert animated:YES completion:nil];
 }
 
-#pragma mark - 启动器模式：ZeroTier 网络创建教程
+#pragma mark - Launcher mode: the ZeroTier network creation tutorial
 
 /// Show the guide to creating a ZeroTier network
 ///
@@ -647,7 +647,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     [self presentViewController:alert animated:YES completion:nil];
 }
 
-#pragma mark - 房间连接
+#pragma mark - Room connection
 
 /// Connect to the given room
 ///
@@ -689,7 +689,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     [self refreshRooms];
 }
 
-#pragma mark - 房间行按钮回调
+#pragma mark - Room row button callbacks
 
 /// Handler for the "Connect/Disconnect" button on a room row
 ///
@@ -721,7 +721,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     }
 }
 
-#pragma mark - 房间详情 ActionSheet
+#pragma mark - Room detail action sheet
 
 /// Show the room detail action sheet
 ///
@@ -826,7 +826,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     [self presentViewController:sheet animated:YES completion:nil];
 }
 
-#pragma mark - 启动器模式：直连
+#pragma mark - Launcher mode: direct connect
 
 /// Tapping "Join game": write the IP:port into the current profile so the game joins automatically at launch
 - (void)joinDirectConnect {
@@ -873,7 +873,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
                                     serverAddress]];
 }
 
-#pragma mark - 游戏内模式：房主流程
+#pragma mark - In-game mode: the host flow
 
 /// Tapping "Host": start the host flow
 ///
@@ -1132,7 +1132,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     [self presentViewController:alert animated:YES completion:nil];
 }
 
-#pragma mark - 游戏内模式：LAN 端口检测回调
+#pragma mark - In-game mode: the LAN port detection callback
 
 /// Callback for LanPortDetector detecting a port
 ///
@@ -1291,7 +1291,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     [self presentViewController:alert animated:YES completion:nil];
 }
 
-#pragma mark - 游戏内模式：房客流程
+#pragma mark - In-game mode: the guest flow
 
 /// Tapping "Guest": start the guest flow
 ///
@@ -1544,7 +1544,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     NSLog(@"[MultiplayerVC] Connection progress: %@", message);
 }
 
-#pragma mark - 工具方法
+#pragma mark - Utility methods
 
 /// Refresh the room list (main thread)
 - (void)refreshRooms {
@@ -1848,7 +1848,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     return [self cellForLauncherSection:indexPath];
 }
 
-#pragma mark - 启动器模式 Cell 配置
+#pragma mark - Launcher mode cell configuration
 
 /// Launcher mode cell configuration dispatch
 - (UITableViewCell *)cellForLauncherSection:(NSIndexPath *)indexPath {
@@ -2189,7 +2189,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     }
 }
 
-#pragma mark - 游戏内模式 Cell 配置
+#pragma mark - In-game mode cell configuration
 
 /// In-game mode cell configuration dispatch
 - (UITableViewCell *)cellForInGameSection:(NSIndexPath *)indexPath {

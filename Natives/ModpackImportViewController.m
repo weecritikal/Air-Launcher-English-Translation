@@ -74,7 +74,7 @@
     self.tabSegment.selectedSegmentIndex = 0;
 }
 
-#pragma mark - 顶部 Tab 切换（导入 / 导出）
+#pragma mark - Top tab switching (import / export)
 
 - (void)setupNavigationTab {
     self.tabSegment = [[UISegmentedControl alloc] initWithItems:@[@"Import", @"Export"]];
@@ -176,7 +176,7 @@
     ]];
 }
 
-#pragma mark - FCL 风格进度卡片
+#pragma mark - FCL style progress card
 
 - (void)showProgressCardWithTitle:(NSString *)title {
     [self hideProgressCard];
@@ -338,7 +338,7 @@
     });
 }
 
-#pragma mark - 文件选择
+#pragma mark - File selection
 
 - (void)selectModpackFile {
     NSArray<UTType *> *contentTypes = @[
@@ -401,7 +401,7 @@
 
 - (void)documentPickerWasCancelled:(UIDocumentPickerViewController *)controller {}
 
-#pragma mark - 整合包预览卡片（参照 FCL ModpackPreviewSheet / HMCL ModpackInfoPage）
+#pragma mark - Modpack preview card (modeled on FCL ModpackPreviewSheet / HMCL ModpackInfoPage)
 
 - (void)showModpackPreview:(NSDictionary *)modpackInfo fileURL:(NSURL *)fileURL {
     NSString *name = modpackInfo[@"name"] ?: @"Unknown";
@@ -469,7 +469,7 @@
     [self presentViewController:alert animated:YES completion:nil];
 }
 
-#pragma mark - 导入流程
+#pragma mark - Import flow
 
 - (void)startModpackImport:(NSDictionary *)modpackInfo {
     // Reset the cancellation state
@@ -694,7 +694,7 @@
     [self presentViewController:confirm animated:YES completion:nil];
 }
 
-#pragma mark - 辅助方法
+#pragma mark - Helper methods
 
 - (void)showAlertWithTitle:(NSString *)title message:(NSString *)message {
     [self showAlertWithTitle:title message:message completion:nil];

@@ -176,7 +176,7 @@
     [self.loaderBadgeStack.arrangedSubviews makeObjectsPerformSelector:@selector(removeFromSuperview)];
 }
 
-#pragma mark - 加载器徽章
+#pragma mark - Loader badges
 
 /// Build one loader badge label (pill style, colored by loader type)
 /// Following ZL2 LittleTextLabel: fabric=blue / forge=brown / quilt=red / neoforge=orange / optifine=yellow
@@ -244,7 +244,7 @@
     }
 }
 
-#pragma mark - 配置
+#pragma mark - Configuration
 
 - (void)configureWithVersion:(ModVersion *)version {
     self.nameLabel.text = version.name;

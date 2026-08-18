@@ -298,7 +298,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     }
 }
 
-#pragma mark - 下载中心（参照 FCL/ZL2/HMCL 下载进度弹窗）
+#pragma mark - Download center (modeled on the download progress dialogs of FCL/ZL2/HMCL)
 
 /// Open the download center modal
 /// Following how FCL/ZL2/HMCL show download progress: present DownloadTasksViewController as a FormSheet,

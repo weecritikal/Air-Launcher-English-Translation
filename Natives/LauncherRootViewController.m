@@ -502,7 +502,7 @@ static CGFloat LauncherRootLayoutRightPanelWidth(UITraitCollection *trait) {
     [self presentViewController:alert animated:YES completion:nil];
 }
 
-#pragma mark - 首页快捷入口 (替换原 FormSheet 弹窗)
+#pragma mark - Home screen shortcuts (replacing the old FormSheet dialog)
 
 - (void)showModsManager {
     // Switch to the version manager page and push mod management straight away
@@ -578,7 +578,7 @@ static CGFloat LauncherRootLayoutRightPanelWidth(UITraitCollection *trait) {
     [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
-#pragma mark - Custom Appearance（字体颜色 / 卡片颜色，与 Card 布局一致）
+#pragma mark - Custom Appearance (font color / card color, consistent with the Card layout)
 
 - (void)applyCustomAppearance {
     // Apply the custom card color (a translucent overlay on the BackgroundManager frosted glass, rather than replacing it)

@@ -71,7 +71,7 @@
     return [folder stringByAppendingPathComponent:hex];
 }
 
-#pragma mark - 搜索服务器
+#pragma mark - Server search
 
 - (void)searchServersWithAPI:(ServerDownloadAPI)api
                      filters:(NSDictionary *)filters
@@ -104,7 +104,7 @@
     }
 }
 
-#pragma mark - 获取服务器详情
+#pragma mark - Fetching server details
 
 - (void)getServerDetailsWithAPI:(ServerDownloadAPI)api
                        serverID:(NSString *)serverID
@@ -166,7 +166,7 @@
     }];
 }
 
-#pragma mark - 加入服务器（写入 profile 配置）
+#pragma mark - Joining a server (writing the profile configuration)
 
 - (BOOL)joinServer:(NSString *)address
         forProfile:(NSString *)profileName
@@ -196,7 +196,7 @@
     return YES;
 }
 
-#pragma mark - 下载服务端整合包
+#pragma mark - Downloading server modpacks
 
 - (void)downloadServerPack:(ServerItem *)serverItem
                  toProfile:(NSString *)profileName

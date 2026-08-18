@@ -64,7 +64,7 @@
     return self;
 }
 
-#pragma mark - 工具方法
+#pragma mark - Utility methods
 
 // SHA1 of the URL string, used as the icon cache file name
 - (NSString *)iconCachePathForURL:(NSString *)urlString {
@@ -315,7 +315,7 @@
     return [[NSFileManager defaultManager] removeItemAtPath:item.filePath error:error];
 }
 
-#pragma mark - Online DataPack Downloading (使用 NSURLSessionDownloadTask)
+#pragma mark - Online DataPack Downloading (using NSURLSessionDownloadTask)
 
 // Download a data pack into the default datapacks folder (no worldName)
 - (void)downloadDataPack:(DataPackItem *)item

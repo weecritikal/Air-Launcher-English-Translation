@@ -83,7 +83,7 @@ static inline BOOL MurmurHash2_ShouldSkipByte(uint8_t b) {
     return hash;
 }
 
-#pragma mark - 内部辅助方法
+#pragma mark - Internal helper methods
 
 + (uint32_t)_filteredLengthOfFile:(NSString *)filePath error:(NSError *_Nullable *_Nullable)error {
     uint32_t totalLen = 0;

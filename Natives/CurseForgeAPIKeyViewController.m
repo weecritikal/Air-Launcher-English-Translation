@@ -154,7 +154,7 @@ static UIColor *CFKErrorColor(void) {
 
 @implementation CurseForgeAPIKeyViewController
 
-#pragma mark - 生命周期
+#pragma mark - Lifecycle
 
 - (void)viewDidLoad {
     [super viewDidLoad];
@@ -188,7 +188,7 @@ static UIColor *CFKErrorColor(void) {
     } completion:nil];
 }
 
-#pragma mark - UI 搭建
+#pragma mark - UI construction
 
 - (void)setupUI {
     [self setupScrollView];
@@ -321,7 +321,7 @@ static UIColor *CFKErrorColor(void) {
     [_contentView addSubview:_statusLabel];
 }
 
-#pragma mark - 卡片与按钮工厂
+#pragma mark - Card and button factories
 
 - (UIView *)makeCardView {
     UIView *card = [[UIView alloc] init];
@@ -360,7 +360,7 @@ static UIColor *CFKErrorColor(void) {
     return button;
 }
 
-#pragma mark - 布局
+#pragma mark - Layout
 
 - (void)installLayoutConstraintsForWidth:(CGFloat)width {
     // Remove the old constraints (in case of a rebuild)
@@ -481,7 +481,7 @@ static UIColor *CFKErrorColor(void) {
     [self installLayoutConstraintsForWidth:width];
 }
 
-#pragma mark - 初始值加载
+#pragma mark - Initial value loading
 
 - (void)loadInitialValue {
     // Priority: runtime preference -> compile-time macro -> Info.plist
@@ -511,7 +511,7 @@ static UIColor *CFKErrorColor(void) {
     _sourceHintLabel.text = sourceHint;
 }
 
-#pragma mark - 按钮事件
+#pragma mark - Button events
 
 - (void)saveButtonTapped {
     NSString *key = [_apiKeyTextField.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
@@ -578,7 +578,7 @@ static UIColor *CFKErrorColor(void) {
     }];
 }
 
-#pragma mark - 测试状态
+#pragma mark - Test state
 
 - (void)beginTesting {
     _isTesting = YES;
@@ -624,7 +624,7 @@ static UIColor *CFKErrorColor(void) {
     [self loadInitialValue];
 }
 
-#pragma mark - 键盘适配
+#pragma mark - Keyboard adaptation
 
 - (void)registerKeyboardNotifications {
     [[NSNotificationCenter defaultCenter] addObserver:self

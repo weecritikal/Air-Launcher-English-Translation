@@ -116,7 +116,7 @@ static const CGFloat kDragThreshold = 10.0;
     [self addSubview:self.statsLabel];
 }
 
-#pragma mark - hitTest 穿透（关键：让触摸穿透到游戏画面）
+#pragma mark - hitTest pass-through (key: lets touches reach the game view)
 
 /// Override hitTest:withEvent: so only the menuButton and statsLabel areas capture touches
 /// and everything else returns nil, letting touches pass through to the game below (surfaceView/ctrlView)
@@ -142,7 +142,7 @@ static const CGFloat kDragThreshold = 10.0;
     return nil;
 }
 
-#pragma mark - 位置持久化
+#pragma mark - Position persistence
 
 - (void)restorePositions {
     CGFloat bw = self.bounds.size.width;
@@ -216,7 +216,7 @@ static const CGFloat kDragThreshold = 10.0;
     self.statsLabel.center = CGPointMake(labelX, labelY);
 }
 
-#pragma mark - 设置按钮手势
+#pragma mark - Settings button gestures
 
 - (void)handleMenuButtonPan:(UIPanGestureRecognizer *)sender {
     CGPoint translation = [sender translationInView:self];
@@ -273,7 +273,7 @@ static const CGFloat kDragThreshold = 10.0;
     }
 }
 
-#pragma mark - 统计标签手势
+#pragma mark - Stats label gestures
 
 - (void)handleStatsLabelPan:(UIPanGestureRecognizer *)sender {
     CGPoint translation = [sender translationInView:self];
@@ -298,7 +298,7 @@ static const CGFloat kDragThreshold = 10.0;
     }
 }
 
-#pragma mark - 公共方法
+#pragma mark - Public methods
 
 - (void)setOverlayHidden:(BOOL)overlayHidden {
     _overlayHidden = overlayHidden;

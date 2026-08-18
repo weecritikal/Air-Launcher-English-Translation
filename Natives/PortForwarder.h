@@ -96,7 +96,7 @@ typedef NS_ENUM(NSInteger, PortForwarderMode) {
 /// Singleton accessor
 + (instancetype)sharedForwarder;
 
-#pragma mark - 房客模式
+#pragma mark - Guest mode
 
 /// Start guest mode: listen locally -> forward to the remote ZeroTier IP
 ///
@@ -115,7 +115,7 @@ typedef NS_ENUM(NSInteger, PortForwarderMode) {
                               hostIP:(NSString *)hostIP
                             hostPort:(uint16_t)hostPort;
 
-#pragma mark - 房主模式
+#pragma mark - Host mode
 
 /// Start host mode: listen on the ZeroTier network -> forward to the local MC LAN port
 ///
@@ -133,7 +133,7 @@ typedef NS_ENUM(NSInteger, PortForwarderMode) {
 - (BOOL)startHostModeWithListenPort:(uint16_t)listenPort
                        localHostPort:(uint16_t)localHostPort;
 
-#pragma mark - 停止
+#pragma mark - Stopping
 
 /// Stop port forwarding (stopping host and guest mode alike)
 ///
@@ -141,7 +141,7 @@ typedef NS_ENUM(NSInteger, PortForwarderMode) {
 /// Existing client connections keep running until they finish and are then cleaned up.
 - (void)stop;
 
-#pragma mark - 状态查询
+#pragma mark - State queries
 
 /// Whether the port forwarder is running
 @property (nonatomic, readonly, getter=isRunning) BOOL running;
@@ -155,7 +155,7 @@ typedef NS_ENUM(NSInteger, PortForwarderMode) {
 /// Host mode: the libzt socket listening port within the ZeroTier network
 @property (nonatomic, readonly) uint16_t listeningPort;
 
-#pragma mark - 房客模式属性
+#pragma mark - Guest mode properties
 
 /// Guest mode: the remote host currently forwarded to (the host ZeroTier IP)
 @property (nonatomic, readonly, copy, nullable) NSString *hostIP;
@@ -163,7 +163,7 @@ typedef NS_ENUM(NSInteger, PortForwarderMode) {
 /// Guest mode: the remote port currently forwarded to (the host MC LAN port)
 @property (nonatomic, readonly) uint16_t hostPort;
 
-#pragma mark - 房主模式属性
+#pragma mark - Host mode properties
 
 /// Host mode: the local MC LAN port (the one Minecraft shows in the chat box after "Open to LAN")
 @property (nonatomic, readonly) uint16_t localHostPort;

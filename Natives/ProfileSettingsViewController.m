@@ -764,7 +764,7 @@
     return cell;
 }
 
-#pragma mark - 名称输入框
+#pragma mark - Name text field
 
 - (UITextField *)buildNameTextField {
     // Reuse the existing textField
@@ -805,7 +805,7 @@
     [self updateHeroCard];
 }
 
-#pragma mark - 版本选择器
+#pragma mark - Version picker
 
 - (void)setupVersionPicker {
     self.versionPickerView = [[UIPickerView alloc] init];
@@ -951,7 +951,7 @@
     [self updateHeroCard];
 }
 
-#pragma mark - 服务器地址输入框
+#pragma mark - Server address text field
 
 - (UITextField *)buildServerIpTextField {
     UITextField *textField = [[UITextField alloc] initWithFrame:CGRectMake(0, 0, 220, 30)];
@@ -972,7 +972,7 @@
     return textField;
 }
 
-#pragma mark - JVM 启动参数输入框
+#pragma mark - JVM launch argument text field
 
 - (UITextField *)buildJavaArgsTextField {
     if (self.javaArgsTextField) {
@@ -1249,7 +1249,7 @@
     [self.navigationController pushViewController:vc animated:YES];
 }
 
-#pragma mark - 组件独立安装（Fabric API / OptiFine）
+#pragma mark - Standalone component installation (Fabric API / OptiFine)
 
 - (BOOL)isFabricProfile {
     NSString *lastVersionId = self.profile[@"lastVersionId"];
@@ -1679,7 +1679,7 @@
     });
 }
 
-#pragma mark - OptiFine 版本补丁安装（Vanilla profile，参照 FCL/HMCL OptiFineInstallTask）
+#pragma mark - OptiFine version patch installation (vanilla profile, modeled on FCL/HMCL OptiFineInstallTask)
 
 /// Install OptiFine as a version patch (for a vanilla profile)
 /// Following FCL OptiFineInstallTask and HMCL OptiFineInstallTask:

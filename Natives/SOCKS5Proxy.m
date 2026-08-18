@@ -53,7 +53,7 @@
 #include <stdatomic.h>  // C11 atomics
 #include <netdb.h>      // getaddrinfo (domain name resolution, used by P0-2)
 
-#pragma mark - 常量定义
+#pragma mark - Constant definitions
 
 /// The default SOCKS5 proxy listening port
 const uint16_t SOCKS5ProxyDefaultPort = 1080;
@@ -112,7 +112,7 @@ typedef NS_ENUM(NSInteger, SOCKS5ProxyErrorCode) {
 /// The client handshake read/write timeout (seconds)
 #define SOCKS5_HANDSHAKE_TIMEOUT 15
 
-#pragma mark - 辅助函数
+#pragma mark - Helper functions
 
 /// Read exactly the given number of bytes (with a timeout)
 ///
@@ -249,7 +249,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
     return writeAllWithTimeout(fd, buf, len, 0);
 }
 
-#pragma mark - SOCKS5Proxy 类扩展
+#pragma mark - SOCKS5Proxy class extension
 
 @interface SOCKS5Proxy () {
     /// The listening socket file descriptor (guarded by _lock)
@@ -293,11 +293,11 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
 }
 @end
 
-#pragma mark - SOCKS5Proxy 实现
+#pragma mark - SOCKS5Proxy implementation
 
 @implementation SOCKS5Proxy
 
-#pragma mark - 单例模式
+#pragma mark - Singleton
 
 /// Get the shared SOCKS5Proxy singleton
 /// dispatch_once guarantees thread-safe one-time initialization
@@ -338,7 +338,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
     return self;
 }
 
-#pragma mark - 启动与停止
+#pragma mark - Starting and stopping
 
 /// Start the proxy server
 ///
@@ -705,7 +705,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
     return port;
 }
 
-#pragma mark - Accept 循环
+#pragma mark - Accept loop
 
 /// The accept loop (running on the _acceptThread)
 ///
@@ -877,7 +877,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
     NSLog(@"[SOCKS5Proxy] Accept thread exited");
 }
 
-#pragma mark - 客户端处理
+#pragma mark - Client handling
 
 /// Handle one client connection (running on a client handling thread)
 ///
@@ -974,7 +974,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
     }
 }
 
-#pragma mark - SOCKS5 协议实现
+#pragma mark - SOCKS5 protocol implementation
 
 /// The SOCKS5 handshake
 ///
@@ -1306,7 +1306,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
           rep, bindAddr, bindPort, atyp);
 }
 
-#pragma mark - 双向数据转发
+#pragma mark - Bidirectional data forwarding
 
 /// Forward data in both directions between the client and the remote host
 ///
@@ -1451,7 +1451,7 @@ static ssize_t writeAll(int fd, const void *buf, size_t len) {
     NSLog(@"[SOCKS5Proxy] Bidirectional forwarding ended (clientFD=%d, remoteFD=%d)", clientFD, remoteFD);
 }
 
-#pragma mark - 辅助方法
+#pragma mark - Helper methods
 
 /// Remove the current thread and its fds from the client thread list, the client fd list and the remote fd list
 ///

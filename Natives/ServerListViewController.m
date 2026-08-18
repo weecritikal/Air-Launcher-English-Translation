@@ -100,7 +100,7 @@
     });
 }
 
-#pragma mark - 源切换
+#pragma mark - Source switching
 
 - (void)sourceChanged:(UISegmentedControl *)sender {
     ServerDownloadAPI newAPI = (sender.selectedSegmentIndex == 1) ? ServerDownloadAPICurseForge : ServerDownloadAPIModrinth;
@@ -136,7 +136,7 @@
     [self presentViewController:nav animated:YES completion:nil];
 }
 
-#pragma mark - 搜索
+#pragma mark - Search
 
 - (void)updateSearchResultsForSearchController:(UISearchController *)searchController {
     [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(reloadSearch) object:nil];
@@ -152,7 +152,7 @@
     [self loadServerList];
 }
 
-#pragma mark - 数据加载
+#pragma mark - Data loading
 
 - (void)loadServerList {
     if (self.isLoading) return;

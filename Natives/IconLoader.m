@@ -57,7 +57,7 @@ static NSMutableDictionary<NSString *, NSMutableArray<void(^)(UIImage * _Nullabl
 /// Used to cancel the old request on cell reuse (equivalent to Glide clear())
 static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
 
-#pragma mark - 内部加载上下文
+#pragma mark - Internal loading context
 
 @interface IconLoader ()
 /// Memory cache
@@ -79,7 +79,7 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
 
 @implementation IconLoader
 
-#pragma mark - 单例
+#pragma mark - Singleton
 
 + (instancetype)sharedLoader {
     static dispatch_once_t onceToken;
@@ -160,7 +160,7 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
     [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
-#pragma mark - 公共接口：加载图标
+#pragma mark - Public interface: loading icons
 
 + (void)loadIconForImageView:(nullable UIImageView *)imageView
                          URL:(nullable NSString *)url
@@ -289,7 +289,7 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
                      completion:nil];
 }
 
-#pragma mark - 公共接口：预取
+#pragma mark - Public interface: prefetching
 
 + (void)prefetchIconWithURL:(NSString *)url targetSize:(CGSize)targetSize {
     if (!url || url.length == 0) return;
@@ -331,7 +331,7 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
                         options:IconLoaderOptionsDefault];
 }
 
-#pragma mark - 公共接口：取消
+#pragma mark - Public interface: cancellation
 
 + (void)cancelLoadingForImageView:(UIImageView *)imageView {
     if (!imageView) return;
@@ -356,7 +356,7 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
     }];
 }
 
-#pragma mark - 公共接口：缓存管理
+#pragma mark - Public interface: cache management
 
 + (void)clearMemoryCache {
     IconLoader *loader = [self sharedLoader];
@@ -415,7 +415,7 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
     return count;
 }
 
-#pragma mark - 公共接口：CDN 镜像
+#pragma mark - Public interface: CDN mirror
 
 + (void)setMirrorEnabled:(BOOL)enabled {
     IconLoader *loader = [self sharedLoader];
@@ -477,7 +477,7 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
     return NO;
 }
 
-#pragma mark - 内部：缓存 key 与磁盘路径
+#pragma mark - Internal: cache keys and disk paths
 
 /// Build the cache key: MD5(url + targetSize + options)
 - (NSString *)cacheKeyForURL:(NSString *)url targetSize:(CGSize)targetSize options:(IconLoaderOptions)options {
@@ -504,7 +504,7 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
             result[12], result[13], result[14], result[15]];
 }
 
-#pragma mark - 内部：进行中请求管理（同 URL 去重）
+#pragma mark - Internal: in-flight request management (deduplicating identical URLs)
 
 /// Add a callback to the in-flight request dictionary
 /// @return YES if this is the first request for that URL (so a download must start), NO if one is already in flight (the callback is merely merged in)
@@ -534,7 +534,7 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
     return result;
 }
 
-#pragma mark - 内部：下载与解码
+#pragma mark - Internal: downloading and decoding
 
 - (void)startDownloadForURL:(NSString *)urlString
                originalURL:(NSString *)originalURLString
@@ -718,7 +718,7 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
     [task resume];
 }
 
-#pragma mark - 内部：降采样解码（对应 ZL2 .size(pxSize)）
+#pragma mark - Internal: downsampled decoding (the equivalent of ZL2 .size(pxSize))
 
 /// Decode the image data, downsampling to the target size
 /// Uses CGImageSourceCreateThumbnailAtIndex to decode on demand, so the full-resolution original never has to be loaded into memory
@@ -781,7 +781,7 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
     return result;
 }
 
-#pragma mark - 内部：完成请求分发
+#pragma mark - Internal: dispatching completed requests
 
 - (void)completeRequestWithCacheKey:(NSString *)cacheKey image:(nullable UIImage *)image {
     NSArray<void(^)(UIImage * _Nullable)> *callbacks = [self popCallbacksForCacheKey:cacheKey];
@@ -793,7 +793,7 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
     }
 }
 
-#pragma mark - 内部：磁盘缓存写入与 LRU 清理
+#pragma mark - Internal: disk cache writes and LRU eviction
 
 - (void)writeDataToDisk:(NSData *)data cacheKey:(NSString *)cacheKey {
     if (!data || data.length == 0) return;
@@ -847,7 +847,7 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
     }
 }
 
-#pragma mark - 内部：辅助
+#pragma mark - Internal: helpers
 
 - (NSUInteger)costForImage:(UIImage *)image {
     // Estimate the memory footprint: width * height * 4 bytes (RGBA)
@@ -872,7 +872,7 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
     });
 }
 
-#pragma mark - 通知处理
+#pragma mark - Notification handling
 
 - (void)handleMemoryWarning {
     [self clearMemoryCacheInternal];

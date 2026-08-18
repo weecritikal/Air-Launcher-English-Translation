@@ -39,7 +39,7 @@
     return NO;
 }
 
-#pragma mark - Sync Search (支持 projectType)
+#pragma mark - Sync Search (with projectType support)
 
 - (NSMutableArray *)searchModWithFilters:(NSDictionary<NSString *, NSString *> *)searchFilters
                      previousPageResult:(NSMutableArray *)modrinthSearchResult {
@@ -96,7 +96,7 @@
     return result;
 }
 
-#pragma mark - Sync Load Details (修复数组赋值)
+#pragma mark - Sync Load Details (array assignment fix)
 
 - (void)loadDetailsOfMod:(NSMutableDictionary *)item {
     NSArray *response = [self getEndpoint:[NSString stringWithFormat:@"project/%@/version", item[@"id"]] params:nil];
@@ -223,7 +223,7 @@
     [task resume];
 }
 
-#pragma mark - 补充：ModpackAPI 协议方法（支持所有下载）
+#pragma mark - Additional: ModpackAPI protocol methods (supporting all downloads)
 
 - (NSString *)downloadURLForFile:(NSDictionary *)file {
     if ([file isKindOfClass:[NSDictionary class]]) {
@@ -269,7 +269,7 @@
     return result;
 }
 
-#pragma mark - Async Mod Search (推荐使用)
+#pragma mark - Async Mod Search (recommended)
 
 - (void)searchModWithFilters:(NSDictionary *)filters
                   completion:(void (^)(NSArray * _Nullable results, NSError * _Nullable error))completion {
@@ -391,7 +391,7 @@
     [task resume];
 }
 
-#pragma mark - Shader Search (专用方法)
+#pragma mark - Shader Search (dedicated methods)
 
 - (void)searchShaderWithFilters:(NSDictionary *)filters
                      completion:(void (^)(NSArray * _Nullable, NSError * _Nullable))completion {
@@ -441,7 +441,7 @@
     [task resume];
 }
 
-#pragma mark - Server Projects 搜索
+#pragma mark - Server Projects search
 
 /// Internal helper: issue one server or modpack search request
 - (void)_searchServerWithProjectType:(NSString *)projectType
@@ -606,7 +606,7 @@
     [task resume];
 }
 
-#pragma mark - 整合包下载 (完整处理)
+#pragma mark - Modpack download (full handling)
 
 - (void)downloader:(MinecraftResourceDownloadTask *)downloader
 submitDownloadTasksFromPackage:(NSString *)packagePath

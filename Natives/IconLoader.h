@@ -62,7 +62,7 @@ typedef NS_OPTIONS(NSUInteger, IconLoaderOptions) {
 /// Singleton accessor
 + (instancetype)sharedLoader;
 
-#pragma mark - 核心加载接口
+#pragma mark - Core loading interface
 
 /// Load an icon into the given UIImageView (mirroring the unified interface of ZL2 AssetsIcon)
 ///
@@ -95,13 +95,13 @@ typedef NS_OPTIONS(NSUInteger, IconLoaderOptions) {
                     fallback:(nullable UIImage *)fallback
                    targetSize:(CGSize)targetSize;
 
-#pragma mark - 预取（参照 ZL2 imageLoader.enqueue）
+#pragma mark - Prefetching (modeled on ZL2 imageLoader.enqueue)
 
 /// Prefetch an icon into the cache (without binding an imageView; it only downloads, decodes and caches)
 /// Used to fetch icons just before they scroll into view, so they hit the cache and appear instantly when the user gets there.
 + (void)prefetchIconWithURL:(NSString *)url targetSize:(CGSize)targetSize;
 
-#pragma mark - 取消
+#pragma mark - Cancellation
 
 /// Cancel the icon load in flight on the given imageView
 /// Call this in cell prepareForReuse or viewController dealloc, so pointless requests do not hold the network
@@ -110,7 +110,7 @@ typedef NS_OPTIONS(NSUInteger, IconLoaderOptions) {
 /// Cancel every in-flight request (called when the app goes to the background or on a memory warning)
 + (void)cancelAllLoadings;
 
-#pragma mark - 缓存管理
+#pragma mark - Cache management
 
 /// Clear the memory cache (called on a memory warning)
 + (void)clearMemoryCache;
@@ -124,7 +124,7 @@ typedef NS_OPTIONS(NSUInteger, IconLoaderOptions) {
 /// Number of icons currently cached (in memory)
 + (NSUInteger)memoryCacheCount;
 
-#pragma mark - CDN 镜像（参照 ZL2 MCIMirror）
+#pragma mark - CDN mirror (modeled on ZL2 MCIMirror)
 
 /// Enable or disable CDN mirror substitution (decided automatically from the general.download_source preference by default)
 /// When enabled, cdn.modrinth.com / edge.forgecdn.net are rewritten to mirror domains reachable from mainland China

@@ -60,7 +60,7 @@
 #import "PLProfiles.h"
 #import <UIKit/UIKit.h>  // For UIApplicationDidEnterBackgroundNotification and friends (the P0-B lifecycle observers)
 
-#pragma mark - 常量定义
+#pragma mark - Constant definitions
 
 /// The NSUserDefaults key that stored the room list
 ///
@@ -117,7 +117,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     MultiplayerErrorCodeSOCKS5ProxyStartFailed = 1011, // The SOCKS5 proxy failed to start
 };
 
-#pragma mark - MultiplayerRoom 实现
+#pragma mark - MultiplayerRoom implementation
 
 @implementation MultiplayerRoom
 
@@ -199,7 +199,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     [coder encodeInteger:(NSInteger)self.role forKey:@"role"];
 }
 
-#pragma mark - 描述方法（便于调试）
+#pragma mark - Description methods (to make debugging easier)
 
 - (NSString *)description {
     return [NSString stringWithFormat:@"<MultiplayerRoom: %p roomId=%@ name=%@ networkId=%@ host=%@:%@ status=%ld>",
@@ -212,7 +212,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
             (long)self.status];
 }
 
-#pragma mark - 复制与相等性（便于去重和比较）
+#pragma mark - Copying and equality (to make deduplication and comparison easy)
 
 - (id)copyWithZone:(NSZone *)zone {
     MultiplayerRoom *copy = [[MultiplayerRoom alloc] init];
@@ -243,7 +243,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
 
 @end
 
-#pragma mark - MultiplayerManager 实现
+#pragma mark - MultiplayerManager implementation
 
 @interface MultiplayerManager () <ZeroTierBridgeDelegate>
 {
@@ -290,7 +290,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
 
 @implementation MultiplayerManager
 
-#pragma mark - 单例模式
+#pragma mark - Singleton
 
 + (instancetype)sharedManager {
     static MultiplayerManager *shared = nil;
@@ -350,7 +350,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     return self;
 }
 
-#pragma mark - iOS 应用生命周期处理
+#pragma mark - iOS app lifecycle handling
 
 /// The app entered the background
 /// The iOS backgrounding strategy:
@@ -466,7 +466,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     });
 }
 
-#pragma mark - 对外暴露的只读属性
+#pragma mark - Publicly exposed read-only properties
 
 - (NSArray<MultiplayerRoom *> *)savedRooms {
     // Key fix (C2): remove dispatch_sync(dispatch_get_main_queue()),
@@ -491,7 +491,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     return [[ZeroTierBridge sharedInstance] isNodeOnline];
 }
 
-#pragma mark - 联机启用状态管理
+#pragma mark - Multiplayer enable state management
 
 /// Whether the user has enabled multiplayer (read from NSUserDefaults)
 ///
@@ -513,7 +513,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     NSLog(@"[MultiplayerManager] Multiplayer enabled state set to %d", enabled);
 }
 
-#pragma mark - 数据持久化（已禁用）
+#pragma mark - Data persistence (disabled)
 
 /// Clear the old saved room data (a one-off migration)
 ///
@@ -555,7 +555,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     // The room list lives purely in memory and is cleared when the launcher closes
 }
 
-#pragma mark - 框架检测与节点管理
+#pragma mark - Framework detection and node management
 
 - (BOOL)isFrameworkAvailable {
     return [[ZeroTierBridge sharedInstance] isFrameworkAvailable];
@@ -639,7 +639,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     });
 }
 
-#pragma mark - 兼容旧 API（已废弃）
+#pragma mark - Legacy API compatibility (deprecated)
 
 - (BOOL)isZeroTierAppInstalled {
     // The old API: detect whether the external ZeroTier One app is installed
@@ -665,7 +665,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     NSLog(@"[MultiplayerManager] openZeroTierApp is deprecated, new version uses in-process framework");
 }
 
-#pragma mark - 网络加入与离开
+#pragma mark - Joining and leaving networks
 
 - (void)joinNetwork:(NSString *)networkId
          completion:(void (^)(BOOL, NSError * _Nullable))completion {
@@ -771,7 +771,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     return success;
 }
 
-#pragma mark - 房间管理（增删改查）
+#pragma mark - Room management (create/read/update/delete)
 
 - (void)addRoom:(MultiplayerRoom *)room {
     if (!room) {
@@ -952,7 +952,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     }];
 }
 
-#pragma mark - 连接管理
+#pragma mark - Connection management
 
 - (void)connectToRoom:(MultiplayerRoom *)room
            completion:(void (^)(BOOL success, NSError * _Nullable error))completion {
@@ -1903,7 +1903,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
               errorDescription:@"The network controller is unreachable. Try again later or ask the host to check the network status."];
 }
 
-#pragma mark - 分享功能
+#pragma mark - Sharing
 
 - (NSString *)shareTextForRoom:(MultiplayerRoom *)room {
     if (!room) {
@@ -2113,7 +2113,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     return room;
 }
 
-#pragma mark - 辅助方法
+#pragma mark - Helper methods
 
 - (NSString *)generateRoomId {
     return [[NSUUID UUID] UUIDString];
@@ -2176,7 +2176,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     return YES;
 }
 
-#pragma mark - 分享代码（FCL 风格 Base64 编码）
+#pragma mark - Share codes (FCL style base64 encoding)
 
 /// The JSON key constants of the share code
 static NSString * const kShareCodeKeyNetworkId = @"n";
@@ -2311,7 +2311,7 @@ static NSString * const kPresetNetworkIdPrefKey = @"multiplayer.preset_network_i
     return room;
 }
 
-#pragma mark - 预设 Network ID 管理（FCL 风格）
+#pragma mark - Preset network ID management (FCL style)
 
 - (nullable NSString *)presetNetworkId {
     NSString *networkId = [[NSUserDefaults standardUserDefaults] stringForKey:kPresetNetworkIdPrefKey];
@@ -2339,7 +2339,7 @@ static NSString * const kPresetNetworkIdPrefKey = @"multiplayer.preset_network_i
     NSLog(@"[MultiplayerManager] Saved preset Network ID: %@", networkId);
 }
 
-#pragma mark - Ad-hoc 网络（快速模式，无需注册账号）
+#pragma mark - Ad-hoc networks (quick mode, no account registration needed)
 
 - (NSString *)generateAdhocNetworkId {
     // Generate the ad-hoc network ID with zts_net_compute_adhoc_id
@@ -2393,7 +2393,7 @@ static NSString * const kPresetNetworkIdPrefKey = @"multiplayer.preset_network_i
 }
 
 
-#pragma mark - 存档关闭彻底清理
+#pragma mark - Full cleanup when the world is closed
 
 /// Stop every multiplayer service
 /// Called when the world closes, the app quits or the connection drops, so every resource is released
@@ -2472,7 +2472,7 @@ static NSString * const kPresetNetworkIdPrefKey = @"multiplayer.preset_network_i
     NSLog(@"[MultiplayerManager] All multiplayer services stopped, state reset");
 }
 
-#pragma mark - 房主模式 PortForwarder 启动
+#pragma mark - Starting the PortForwarder in host mode
 
 /// Start PortForwarder in host mode (reverse forwarding)
 ///

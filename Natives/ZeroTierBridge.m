@@ -42,7 +42,7 @@ typedef NS_ENUM(NSInteger, ZeroTierErrorCode) {
 - (BOOL)isNetworkReady:(uint64_t)networkID;
 @end
 
-#pragma mark - 事件回调（静态 C 函数）
+#pragma mark - Event callbacks (static C functions)
 
 /// libzt event callback entry point: extracts data synchronously on the callback thread, wraps it in an NSDictionary and forwards it to the main thread
 static void zeroTierEventCallback(void *msgPtr) {
@@ -74,7 +74,7 @@ static void zeroTierEventCallback(void *msgPtr) {
     });
 }
 
-#pragma mark - ZeroTierBridge 实现
+#pragma mark - ZeroTierBridge implementation
 
 @implementation ZeroTierBridge
 
@@ -99,7 +99,7 @@ static void zeroTierEventCallback(void *msgPtr) {
     return self;
 }
 
-#pragma mark - 框架检测
+#pragma mark - Framework detection
 
 /// The first call detects it from the zts_node_start() return value: ZTS_ERR_OK means the real framework,
 /// ZTS_ERR_SERVICE means a stub. After detection the state is cleaned up and the result cached.
@@ -129,7 +129,7 @@ static void zeroTierEventCallback(void *msgPtr) {
     return frameworkAvailable;
 }
 
-#pragma mark - 节点管理
+#pragma mark - Node management
 
 - (BOOL)startNodeWithHomeDirectory:(NSString *)homeDir error:(NSError **)error {
     if (!homeDir.length) {
@@ -248,7 +248,7 @@ static void zeroTierEventCallback(void *msgPtr) {
     return status;
 }
 
-#pragma mark - 网络管理
+#pragma mark - Network management
 
 - (BOOL)joinNetwork:(uint64_t)networkID error:(NSError **)error {
     [_lock lock];
@@ -315,7 +315,7 @@ static void zeroTierEventCallback(void *msgPtr) {
     return nil;
 }
 
-#pragma mark - 等待操作
+#pragma mark - Wait operations
 
 - (BOOL)waitForNodeOnlineWithTimeout:(NSTimeInterval)timeout {
     if ([self isNodeOnline]) return YES;
@@ -358,7 +358,7 @@ static void zeroTierEventCallback(void *msgPtr) {
     return zts_addr_is_assigned(networkID, ZTS_AF_INET) == 1;
 }
 
-#pragma mark - 事件处理（主线程）
+#pragma mark - Event handling (main thread)
 
 - (void)handleEventData:(NSDictionary *)eventData {
     int eventCode = [eventData[@"eventCode"] intValue];
@@ -485,7 +485,7 @@ static void zeroTierEventCallback(void *msgPtr) {
     }
 }
 
-#pragma mark - Socket 客户端操作
+#pragma mark - Socket client operations
 
 - (int)createTCPSocket {
     return zts_bsd_socket(ZTS_AF_INET, ZTS_SOCK_STREAM, ZTS_IPPROTO_TCP);
@@ -576,7 +576,7 @@ static void zeroTierEventCallback(void *msgPtr) {
 - (ssize_t)sendData:(int)fd buffer:(const void *)buf length:(size_t)len { return zts_bsd_send(fd, buf, len, 0); }
 - (ssize_t)recvData:(int)fd buffer:(void *)buf length:(size_t)len { return zts_bsd_recv(fd, buf, len, 0); }
 
-#pragma mark - Socket 服务端 API（供 PortForwarder 房主模式使用）
+#pragma mark - Socket server API (used by PortForwarder host mode)
 
 - (int)createListenSocket {
     return zts_bsd_socket(ZTS_AF_INET, ZTS_SOCK_STREAM, ZTS_IPPROTO_TCP);
@@ -605,7 +605,7 @@ static void zeroTierEventCallback(void *msgPtr) {
     return zts_bsd_accept(fd, NULL, NULL);
 }
 
-#pragma mark - 工具方法
+#pragma mark - Utility methods
 
 + (uint64_t)parseNetworkIDFromString:(NSString *)networkIDStr {
     if (!networkIDStr.length) return 0;

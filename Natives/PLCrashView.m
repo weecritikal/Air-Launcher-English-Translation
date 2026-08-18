@@ -397,7 +397,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     [NSLayoutConstraint activateConstraints:constraints];
 }
 
-#pragma mark - Suggestions Card (快速修复建议卡片)
+#pragma mark - Suggestions Card (quick fix suggestion card)
 
 /// Build the quick fix card (following the "quick fix" panel of FCL/HMCL)
 ///
@@ -602,7 +602,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     return result;
 }
 
-#pragma mark - Crash Type Analysis (崩溃类型分析，参照 HMCL)
+#pragma mark - Crash Type Analysis (modeled on HMCL)
 
 /// Analyze the crash type (from the exitCode and log keywords)
 ///

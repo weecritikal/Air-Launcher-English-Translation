@@ -83,7 +83,7 @@ typedef NS_ENUM(NSInteger, DownloadCardState) {
     DownloadCardStateCancelled   = 5,  // Cancelled
 };
 
-#pragma mark - 自定义进度条视图
+#pragma mark - Custom progress bar view
 
 /// Custom progress bar view supporting smooth animation and color changes.
 /// Compared with UIProgressView, this gives finer control over corner radius, color and animation curve,
@@ -218,7 +218,7 @@ typedef NS_ENUM(NSInteger, DownloadCardState) {
 
 @end
 
-#pragma mark - 主视图私有接口
+#pragma mark - Main view private interface
 
 @interface DownloadProgressCardView ()
 
@@ -538,7 +538,7 @@ typedef NS_ENUM(NSInteger, DownloadCardState) {
     ]];
 }
 
-#pragma mark - 背景适配
+#pragma mark - Background adaptation
 
 /// Apply the background style: frosted glass when there is a custom background, otherwise a solid color
 - (void)applyBackgroundStyle {
@@ -572,7 +572,7 @@ typedef NS_ENUM(NSInteger, DownloadCardState) {
     // The status icon color is driven by the state, so it is not adjusted here
 }
 
-#pragma mark - 通知
+#pragma mark - Notifications
 
 - (void)registerNotifications {
     [[NSNotificationCenter defaultCenter] addObserver:self
@@ -786,7 +786,7 @@ typedef NS_ENUM(NSInteger, DownloadCardState) {
     });
 }
 
-#pragma mark - 状态切换
+#pragma mark - State transitions
 
 /// Apply the state: update the icon, colors and visibility
 - (void)applyState:(DownloadCardState)state {
@@ -891,7 +891,7 @@ typedef NS_ENUM(NSInteger, DownloadCardState) {
     [self.statusIconView.layer addAnimation:pulse forKey:@"pulseAnimation"];
 }
 
-#pragma mark - 显示/隐藏动画
+#pragma mark - Show/hide animations
 
 /// Show animation: slide up from the bottom + fade in (spring)
 - (void)showAnimated:(BOOL)animated {
@@ -979,7 +979,7 @@ typedef NS_ENUM(NSInteger, DownloadCardState) {
     }];
 }
 
-#pragma mark - 格式化工具
+#pragma mark - Formatting helpers
 
 /// Format a byte count (using NSByteCountFormatter)
 - (NSString *)formatBytes:(long long)bytes {

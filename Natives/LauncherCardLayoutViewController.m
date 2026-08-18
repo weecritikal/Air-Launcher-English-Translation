@@ -604,7 +604,7 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
     [self setContentViewController:nav animated:YES];
 }
 
-#pragma mark - 首页快捷入口 (替换原 FormSheet 弹窗)
+#pragma mark - Home screen shortcuts (replacing the old FormSheet dialog)
 
 - (void)showModsManager {
     // Switch to the version manager page and push mod management straight away

@@ -70,7 +70,7 @@ typedef id _Nullable (^DownloadRetryHandler)(DownloadTaskItem *item);
 /// For callers to stash extra fields
 @property (nonatomic, strong) NSMutableDictionary *userInfo;
 
-#pragma mark - 重试支持（FCL 风格重新下载）
+#pragma mark - Retry support (FCL style re-download)
 
 /// The original download URL, so a retry/source switch can rebuild it straight from the model (optional; callers may leave it empty)
 @property (nonatomic, copy, nullable) NSString *downloadURL;

@@ -17,7 +17,7 @@ NSString *const LanPortDetectorDidDetectPortNotification = @"LanPortDetectorDidD
 
 @implementation LanPortDetector
 
-#pragma mark - 单例
+#pragma mark - Singleton
 
 + (instancetype)sharedInstance {
     static LanPortDetector *shared = nil;
@@ -28,7 +28,7 @@ NSString *const LanPortDetectorDidDetectPortNotification = @"LanPortDetectorDidD
     return shared;
 }
 
-#pragma mark - 手动设置端口
+#pragma mark - Setting the port manually
 
 /// Set the Minecraft LAN port manually
 - (void)setManualPort:(uint16_t)port {

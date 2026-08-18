@@ -214,7 +214,7 @@
     }
 }
 
-#pragma mark - 导入世界 zip
+#pragma mark - Importing a world zip
 
 - (void)importTapped {
     NSError *dirError = nil;
@@ -280,7 +280,7 @@
     }];
 }
 
-#pragma mark - 数据加载
+#pragma mark - Data loading
 
 - (void)handleRefresh:(id)sender {
     if (self.currentMode == WorldsManagerModeLocal) {
@@ -519,7 +519,7 @@
     return [UISwipeActionsConfiguration configurationWithActions:@[deleteAction]];
 }
 
-#pragma mark - 在线下载
+#pragma mark - Online downloads
 
 - (void)downloadButtonTapped:(UIButton *)sender {
     [self startVersionSelectionForOnlineRow:sender.tag];
@@ -605,7 +605,7 @@
     }];
 }
 
-#pragma mark - 工具方法
+#pragma mark - Utility methods
 
 - (void)showSimpleAlertWithTitle:(NSString *)title message:(NSString *)message {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:message preferredStyle:UIAlertControllerStyleAlert];

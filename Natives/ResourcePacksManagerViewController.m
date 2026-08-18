@@ -215,7 +215,7 @@
     }
 }
 
-#pragma mark - 导入资源包
+#pragma mark - Importing resource packs
 
 - (void)importTapped {
     NSError *dirError = nil;
@@ -276,7 +276,7 @@
     }
 }
 
-#pragma mark - 数据加载
+#pragma mark - Data loading
 
 - (void)handleRefresh:(id)sender {
     if (self.currentMode == ResourcePacksManagerModeLocal) {
@@ -518,7 +518,7 @@
     return [UISwipeActionsConfiguration configurationWithActions:@[deleteAction]];
 }
 
-#pragma mark - 本地启用/禁用切换
+#pragma mark - Local enable/disable toggle
 
 - (void)toggleSwitchChanged:(UISwitch *)sender {
     NSInteger row = sender.tag;
@@ -537,7 +537,7 @@
     }
 }
 
-#pragma mark - 在线下载
+#pragma mark - Online downloads
 
 - (void)downloadButtonTapped:(UIButton *)sender {
     [self startVersionSelectionForOnlineRow:sender.tag];
@@ -624,7 +624,7 @@
     }];
 }
 
-#pragma mark - 工具方法
+#pragma mark - Utility methods
 
 - (void)showSimpleAlertWithTitle:(NSString *)title message:(NSString *)message {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:message preferredStyle:UIAlertControllerStyleAlert];

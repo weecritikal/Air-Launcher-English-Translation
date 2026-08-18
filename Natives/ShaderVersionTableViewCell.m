@@ -176,7 +176,7 @@
     [self.loaderBadgeStack.arrangedSubviews makeObjectsPerformSelector:@selector(removeFromSuperview)];
 }
 
-#pragma mark - 加载器徽章
+#pragma mark - Loader badges
 
 /// Build one loader badge label (pill style, colored by loader type)
 /// Common shader pack loaders: iris/optifine/vanilla, colors modeled on ZL2 LittleTextLabel
@@ -244,7 +244,7 @@
     }
 }
 
-#pragma mark - 配置
+#pragma mark - Configuration
 
 - (void)configureWithVersion:(ShaderVersion *)version {
     self.nameLabel.text = version.name;

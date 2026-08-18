@@ -105,7 +105,7 @@
     return [files copy];
 }
 
-#pragma mark - 公开导出 API
+#pragma mark - Public export API
 
 - (BOOL)exportModpackForProfile:(NSString *)profileName
                          toPath:(NSString *)destPath
@@ -287,7 +287,7 @@
     return NO;
 }
 
-#pragma mark - Modrinth 格式导出
+#pragma mark - Modrinth format export
 
 - (BOOL)exportModrinthFormat:(NSArray<NSDictionary *> *)modFiles
                       toPath:(NSString *)destPath
@@ -393,7 +393,7 @@
     return YES;
 }
 
-#pragma mark - CurseForge 格式导出
+#pragma mark - CurseForge format export
 
 - (BOOL)exportCurseForgeFormat:(NSArray<NSDictionary *> *)modFiles
                         toPath:(NSString *)destPath
@@ -482,7 +482,7 @@
     return YES;
 }
 
-#pragma mark - MMC (MultiMC/Prism) 格式导出
+#pragma mark - MMC (MultiMC/Prism) format export
 
 /// The MMC format:
 ///   mmc-pack.json: holds a components array (net.minecraft + the loader component)
@@ -613,7 +613,7 @@
     return YES;
 }
 
-#pragma mark - Plain Zip 格式导出（HMCL 兼容）
+#pragma mark - Plain zip format export (HMCL compatible)
 
 /// The Plain Zip format: package the .minecraft folder directly, with no manifest/mmc-pack.json
 /// Good for interoperating with PojavLauncher/HMCL: the gameDir contents are packed straight under the .minecraft/ prefix
@@ -678,7 +678,7 @@
     return YES;
 }
 
-#pragma mark - 链接列表格式导出（FCL 支持的简单格式）
+#pragma mark - Link list format export (the simple format FCL supports)
 
 - (BOOL)exportLinkListFormat:(NSArray<NSDictionary *> *)modFiles
                       toPath:(NSString *)destPath
@@ -718,7 +718,7 @@
     return YES;
 }
 
-#pragma mark - 通用 Overrides 写入
+#pragma mark - Writing the shared overrides
 
 /// Shared overrides writing: fileOptions decides which folders/files are packaged
 - (BOOL)writeOverridesToArchive:(UZKArchive *)archive
@@ -814,7 +814,7 @@
     return YES;
 }
 
-#pragma mark - 辅助方法
+#pragma mark - Helper methods
 
 - (void)addDirectoryToArchive:(UZKArchive *)archive
                       dirPath:(NSString *)dirPath

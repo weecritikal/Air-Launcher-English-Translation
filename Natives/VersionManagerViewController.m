@@ -320,7 +320,7 @@ static NSInteger const kSectionVersions    = 1;
 
 @end
 
-#pragma mark - Game Directory Cell (FCL 风格版本隔离卡片)
+#pragma mark - Game Directory Cell (FCL style version isolation card)
 
 @interface VMGameDirCell : VMTileBaseCell
 @property (nonatomic, strong) UIView *iconContainer;
@@ -465,7 +465,7 @@ static NSInteger const kSectionVersions    = 1;
 
 @end
 
-#pragma mark - Renderer Card Cell (图形 API 选择卡片，FCL 风格)
+#pragma mark - Renderer Card Cell (graphics API selection card, FCL style)
 
 @interface VMRendererCell : VMTileBaseCell
 @property (nonatomic, strong) UIImageView *iconView;
@@ -1569,7 +1569,7 @@ static NSInteger const kSectionVersions    = 1;
     [self showAlert:[NSString stringWithFormat:@"Deleted the directory \"%@\"", dirName]];
 }
 
-#pragma mark - Renderer Selection (启动器 native 库选择)
+#pragma mark - Renderer Selection (the launcher's native library choice)
 
 /// Select a renderer and save it to the current profile
 - (void)selectRendererAtIndex:(NSInteger)index {
@@ -1600,7 +1600,7 @@ static NSInteger const kSectionVersions    = 1;
     NSLog(@"[VersionMgr] Renderer for profile '%@' set to '%@' (%@)", self.selectedProfile, key, displayName);
 }
 
-#pragma mark - Graphics API Selection (MC 26.2+ 游戏内 OpenGL/Vulkan)
+#pragma mark - Graphics API Selection (in-game OpenGL/Vulkan for MC 26.2+)
 
 /// Select a graphics API and save it to the current profile
 /// Note: graphicsApi and renderer are two different dimensions:

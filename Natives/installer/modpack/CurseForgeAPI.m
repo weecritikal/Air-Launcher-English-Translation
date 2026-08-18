@@ -86,7 +86,7 @@ static NSString *CFACompiledAPIKey(void) {
     return self;
 }
 
-#pragma mark - API Key 和 Headers
+#pragma mark - API key and headers
 
 - (NSString *)apiKey {
     // 1. Runtime preference (the highest priority)
@@ -151,7 +151,7 @@ static NSString *CFACompiledAPIKey(void) {
                            userInfo:@{NSLocalizedDescriptionKey: @"CurseForge API key is missing. Set CURSEFORGE_API_KEY before building."}];
 }
 
-#pragma mark - 错误诊断辅助
+#pragma mark - Error diagnostics helpers
 
 - (NSError *)errorWithResponse:(NSURLResponse *)response
                           data:(NSData *)data
@@ -195,7 +195,7 @@ static NSString *CFACompiledAPIKey(void) {
                            userInfo:[userInfo copy]];
 }
 
-#pragma mark - 调试日志辅助
+#pragma mark - Debug logging helpers
 
 // Convert NSData into a printable string (handling non-UTF-8 content, up to maxLen bytes)
 - (NSString *)printableStringFromData:(NSData *)data maxLen:(NSUInteger)maxLen {
@@ -278,7 +278,7 @@ static NSString *CFACompiledAPIKey(void) {
     NSLog(@"========== [CurseForgeAPI] END DEBUG ==========");
 }
 
-#pragma mark - 同步网络请求（原有 AFNetworking 实现，保持兼容）
+#pragma mark - Synchronous network requests (the original AFNetworking implementation, kept for compatibility)
 
 - (id)getEndpoint:(NSString *)endpoint params:(NSDictionary *)params {
     NSDictionary *headers = [self headers];
@@ -329,7 +329,7 @@ static NSString *CFACompiledAPIKey(void) {
     return result;
 }
 
-#pragma mark - 项目类型映射
+#pragma mark - Project type mapping
 
 - (NSNumber *)classIDForProjectType:(NSString *)projectType {
     if ([projectType isEqualToString:@"modpack"]) {
@@ -364,7 +364,7 @@ static NSString *CFACompiledAPIKey(void) {
     return @[@"jar"];
 }
 
-#pragma mark - 文件校验与 URL 构造
+#pragma mark - File validation and URL construction
 
 - (BOOL)file:(NSDictionary *)file matchesProjectType:(NSString *)projectType {
     if (![file isKindOfClass:NSDictionary.class]) return NO;
@@ -469,7 +469,7 @@ static NSString *CFACompiledAPIKey(void) {
     return mcVersion.length > 0 ? mcVersion : loader;
 }
 
-#pragma mark - 同步搜索（原始实现）
+#pragma mark - Synchronous search (the original implementation)
 
 - (NSMutableArray *)searchModWithFilters:(NSDictionary<NSString *, NSString *> *)searchFilters
                      previousPageResult:(NSMutableArray *)previousPageResult {
@@ -514,7 +514,7 @@ static NSString *CFACompiledAPIKey(void) {
     return result;
 }
 
-#pragma mark - 同步加载详情
+#pragma mark - Synchronous detail loading
 
 - (void)loadDetailsOfMod:(NSMutableDictionary *)item {
     NSString *projectId = [item[@"id"] description];
@@ -589,7 +589,7 @@ static NSString *CFACompiledAPIKey(void) {
     [fileTypes addObject:@""];
 }
 
-#pragma mark - 异步搜索（新增，推荐）
+#pragma mark - Asynchronous search (new, recommended)
 
 - (void)searchModWithFilters:(NSDictionary *)filters
                   completion:(void (^)(NSArray * _Nullable, NSError * _Nullable))completion {
@@ -696,7 +696,7 @@ static NSString *CFACompiledAPIKey(void) {
     [task resume];
 }
 
-#pragma mark - 异步获取版本
+#pragma mark - Fetching versions asynchronously
 
 - (void)getVersionsForModWithID:(NSString *)modID
                      completion:(void (^)(NSArray<ModVersion *> * _Nullable, NSError * _Nullable))completion {
@@ -716,7 +716,7 @@ static NSString *CFACompiledAPIKey(void) {
     }];
 }
 
-#pragma mark - 整合包下载支持
+#pragma mark - Modpack download support
 
 - (NSDictionary *)modpackDependencyInfoFromManifest:(NSDictionary *)manifest {
     NSDictionary *minecraft = [manifest[@"minecraft"] isKindOfClass:NSDictionary.class] ? manifest[@"minecraft"] : @{};
@@ -1016,7 +1016,7 @@ submitDownloadTasksFromPackage:(NSString *)packagePath
     return result;
 }
 
-#pragma mark - 批量指纹反查
+#pragma mark - Bulk fingerprint lookup
 
 - (NSArray<NSMutableDictionary *> *)fileFingerprints:(NSArray<NSNumber *> *)fingerprints {
     if (!fingerprints || fingerprints.count == 0) return @[];
@@ -1057,7 +1057,7 @@ submitDownloadTasksFromPackage:(NSString *)packagePath
     return results;
 }
 
-#pragma mark - 异步详情加载
+#pragma mark - Asynchronous detail loading
 
 - (void)loadDetailsOfMod:(NSMutableDictionary *)item completion:(void (^)(NSError * _Nullable error))completion {
     NSString *modID = [item[@"id"] description];
@@ -1132,7 +1132,7 @@ submitDownloadTasksFromPackage:(NSString *)packagePath
     [task resume];
 }
 
-#pragma mark - Server Packs（服务端整合包）
+#pragma mark - Server Packs (server modpacks)
 
 - (void)searchServersWithFilters:(NSDictionary *)filters
                       completion:(void (^)(NSArray * _Nullable, NSError * _Nullable))completion {

@@ -28,7 +28,7 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
     ModUpdatePhaseDone     = 5, // Stage 5: done (the result summary)
 };
 
-#pragma mark - 辅助模型：用户确认阶段的选中项
+#pragma mark - Helper model: the items selected during the user confirmation stage
 
 /// A selectable entry used in the stage 2 user confirmation step
 @interface ModUpdateSelection : NSObject
@@ -41,7 +41,7 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
 @implementation ModUpdateSelection
 @end
 
-#pragma mark - 辅助模型：下载任务跟踪
+#pragma mark - Helper model: download task tracking
 
 /// Task tracking for the concurrent downloads in stage 3
 @interface ModDownloadTaskInfo : NSObject
@@ -58,7 +58,7 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
 @implementation ModDownloadTaskInfo
 @end
 
-#pragma mark - ModUpdateViewController 类扩展
+#pragma mark - ModUpdateViewController class extension
 
 @interface ModUpdateViewController () <UITableViewDataSource, UITableViewDelegate, NSURLSessionDownloadDelegate>
 
@@ -125,7 +125,7 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
 
 @implementation ModUpdateViewController
 
-#pragma mark - 初始化
+#pragma mark - Initialization
 
 - (instancetype)initWithMods:(NSArray<ModItem *> *)mods
                 gameVersion:(NSString *)gameVersion
@@ -158,7 +158,7 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
     [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
-#pragma mark - 视图加载
+#pragma mark - View loading
 
 - (void)viewDidLoad {
     [super viewDidLoad];
@@ -187,7 +187,7 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
     self.tableView.backgroundView = nil;
 }
 
-#pragma mark - Bento Grid 布局
+#pragma mark - Bento grid layout
 
 /// Build the overall Bento Grid layout: a scroll container with a vertical stack of cards
 - (void)setupBentoLayout {
@@ -427,7 +427,7 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
     return button;
 }
 
-#pragma mark - 阶段流转
+#pragma mark - Stage transitions
 
 /// Move to the given stage and refresh the UI
 - (void)transitionToPhase:(ModUpdatePhase)phase {
@@ -585,7 +585,7 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
     self.tableView.hidden = showEmpty;
 }
 
-#pragma mark - 阶段 0：准备
+#pragma mark - Stage 0: preparation
 
 - (void)startPhase0Prepare {
     // Filter out entries with no filePath
@@ -612,7 +612,7 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
     });
 }
 
-#pragma mark - 阶段 1：并发检查更新
+#pragma mark - Stage 1: concurrent update checks
 
 - (void)startPhase1Check {
     self.progressView.progress = 0;
@@ -645,7 +645,7 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
     }];
 }
 
-#pragma mark - 阶段 2：用户确认
+#pragma mark - Stage 2: user confirmation
 
 - (void)startPhase2Confirm {
     // Build the selection list from checkResults, with everything selected by default
@@ -671,7 +671,7 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
     return count;
 }
 
-#pragma mark - 阶段 3：并发下载（限流 16，失败重试一次）
+#pragma mark - Stage 3: concurrent downloads (limited to 16, with one retry on failure)
 
 - (void)startPhase3Download {
     // Collect the selected entries
@@ -897,7 +897,7 @@ didCompleteWithError:(NSError *)error {
     [self onDownloadTaskFinished:info semaphore:semaphore];
 }
 
-#pragma mark - 阶段 4：替换文件
+#pragma mark - Stage 4: replacing the files
 
 - (void)startPhase4Replace {
     // Decide what to do with the old file from the modUpdateKeepOld preference
@@ -967,7 +967,7 @@ didCompleteWithError:(NSError *)error {
     [self transitionToPhase:ModUpdatePhaseDone];
 }
 
-#pragma mark - 阶段 5：完成
+#pragma mark - Stage 5: completion
 
 - (void)startPhase5Done {
     // Nothing extra to do; the UI refresh is dispatched to the main thread by transitionToPhase:
@@ -1214,7 +1214,7 @@ didCompleteWithError:(NSError *)error {
     }
 }
 
-#pragma mark - 交互事件
+#pragma mark - Interaction events
 
 /// The checkbox switch changed
 - (void)switchChanged:(UISwitch *)sw {
@@ -1251,7 +1251,7 @@ didCompleteWithError:(NSError *)error {
     }
 }
 
-#pragma mark - 工具方法
+#pragma mark - Utility methods
 
 /// Extract the download URL from a ModVersion
 - (nullable NSString *)downloadURLStringForVersion:(ModVersion *)version {

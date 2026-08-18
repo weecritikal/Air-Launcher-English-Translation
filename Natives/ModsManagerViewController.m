@@ -228,7 +228,7 @@
     }
 }
 
-#pragma mark - Select Mode (选择模式)
+#pragma mark - Select Mode
 
 // Enter selection mode
 - (void)enterSelectMode {

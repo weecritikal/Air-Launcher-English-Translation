@@ -34,7 +34,7 @@
 @implementation ModLoaderRow
 @end
 
-#pragma mark - Loader Row Cell (扁平条目，参照 FCL view_installer_item.xml)
+#pragma mark - Loader Row Cell (flat row, modeled on FCL view_installer_item.xml)
 
 @interface ModLoaderRowCell : UITableViewCell
 @property (nonatomic, strong) UIImageView *iconView;
@@ -195,7 +195,7 @@
 
 @end
 
-#pragma mark - Switch Row Cell (Fabric API / OptiFine 选项开关行)
+#pragma mark - Switch Row Cell (the Fabric API / OptiFine option switch rows)
 
 @interface ModLoaderSwitchCell : UITableViewCell
 @property (nonatomic, strong) UILabel *titleLabel;
@@ -256,7 +256,7 @@
 
 @end
 
-#pragma mark - Version Row Cell (版本选择子页面扁平条目)
+#pragma mark - Version Row Cell (the flat rows of the version selection subpage)
 
 @interface ModLoaderVersionCell : UITableViewCell
 @property (nonatomic, strong) UILabel *versionLabel;
@@ -328,7 +328,7 @@
 
 @end
 
-#pragma mark - Version Picker View Controller (版本选择子页面，扁平 UITableView)
+#pragma mark - Version Picker View Controller (the version selection subpage, a flat UITableView)
 
 @interface ModLoaderVersionPickerViewController : UIViewController <UITableViewDataSource, UITableViewDelegate, NSXMLParserDelegate>
 @property (nonatomic, copy) NSString *loaderId;
@@ -529,7 +529,7 @@
     [_currentTask resume];
 }
 
-#pragma mark Forge (并发竞速，参照原 loadForgeVersionsReal)
+#pragma mark Forge (concurrent race, modeled on the original loadForgeVersionsReal)
 
 - (void)loadForgeVersions {
     // Modeled on FCL/HMCL: race the official source and the BMCL API concurrently and use whichever succeeds first
@@ -606,7 +606,7 @@
     }];
 }
 
-#pragma mark OptiFine (BMCLAPI 列表)
+#pragma mark OptiFine (the BMCLAPI list)
 
 - (void)loadOptiFineVersions {
     NSString *urlString = [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/optifine/%@", _gameVersion];
@@ -958,7 +958,7 @@
     ]];
 }
 
-#pragma mark Compatibility checks (与原 LoaderSelectionViewController 一致)
+#pragma mark Compatibility checks (consistent with the original LoaderSelectionViewController)
 
 - (BOOL)isFabricCompatible {
     if (!_gameVersion) return YES;
@@ -1018,7 +1018,7 @@
     return NO;
 }
 
-#pragma mark Compatibility (互斥逻辑，参照 FCL InstallerItemGroup)
+#pragma mark Compatibility (mutual exclusion logic, modeled on FCL InstallerItemGroup)
 
 - (NSString *)incompatibleReasonForLoaderId:(NSString *)loaderId {
     // fabricApi excludes forge/optifine/neoforge
@@ -1062,7 +1062,7 @@
     [_tableView reloadData];
 }
 
-#pragma mark Version name (参照 FCL VersionInstallInfoPage.generateVersionName)
+#pragma mark Version name (modeled on FCL VersionInstallInfoPage.generateVersionName)
 
 - (NSString *)generateVersionName {
     if (!_gameVersion) return @"";

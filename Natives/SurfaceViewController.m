@@ -1447,7 +1447,7 @@ static GameSurfaceView* pojavWindow;
     });
 }
 
-#pragma mark - 阶段13/16：启动遮罩层（仿 FCL/ZL2 全屏启动进度显示）
+#pragma mark - Phase 13/16: the launch overlay (modeled on the full-screen launch progress display of FCL/ZL2)
 
 /// Create and show the launch overlay layer (refactored in the FCL/ZL2 style):
 ///
@@ -2382,7 +2382,7 @@ static NSMutableDictionary *s_touchToFingerIdMap = nil;
     return pojavWindow;
 }
 
-#pragma mark - FPS/内存监控（参照 FCL egl_bridge.c 与 ZL2 MemoryUtils.kt）
+#pragma mark - FPS/memory monitoring (modeled on FCL egl_bridge.c and ZL2 MemoryUtils.kt)
 
 - (void)updateGameStats {
     // 1. Read and reset the native swap buffer counter (modeled on FCL CallbackBridge.getFps())

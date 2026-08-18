@@ -222,7 +222,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     [self.downloadButton removeTarget:nil action:NULL forControlEvents:UIControlEventAllEvents];
 }
 
-#pragma mark - 占位图标与配色（按资源类型）
+#pragma mark - Placeholder icons and colors (by resource type)
 
 /// Return the default placeholder SF Symbol name for an asset type
 - (NSString *)placeholderIconNameForType:(ModernAssetType)type {
@@ -264,7 +264,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     self.iconView.contentMode = UIViewContentModeScaleAspectFit;
 }
 
-#pragma mark - 通用配置辅助
+#pragma mark - Shared configuration helpers
 
 /// Format a download count: 1234 -> "1.2K", 1234567 -> "1.2M"
 - (NSString *)formatDownloadCount:(NSNumber *)downloads {
@@ -387,7 +387,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     return label;
 }
 
-#pragma mark - 各资源类型配置入口
+#pragma mark - Configuration entry points per resource type
 
 - (void)configureWithMod:(NSDictionary *)mod {
     self.assetType = ModernAssetTypeMod;
@@ -451,7 +451,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 // Reworked after the InstallerListPage + VersionInstallInfoPage of FCL (FoldCraftLauncher)
 
 
-#pragma mark - Installer Progress View Controller (FCL 风格进度展示)
+#pragma mark - Installer Progress View Controller (FCL style progress display)
 
 @interface InstallerProgressViewController : UIViewController
 // Progress 0.0~1.0; <0 means indeterminate mode (only a spinner, for network stages where progress cannot be measured)
@@ -1501,7 +1501,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     self.sourceSwitchHeightConstraint.active = YES;
 }
 
-#pragma mark - FCL/ZL2 风格侧边筛选栏
+#pragma mark - FCL/ZL2 style side filter bar
 
 /// Build the side filter bar (modelled on the mod/shader download screens of FCL/ZL2)
 ///
@@ -2035,7 +2035,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     [self reloadCurrentList];
 }
 
-#pragma mark - 侧边栏下载源点击事件
+#pragma mark - Sidebar download source tap handling
 
 /// Sidebar Modrinth source button tapped
 - (void)sidebarModrinthClicked:(UIButton *)sender {
@@ -2072,7 +2072,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     [self reloadCurrentList];
 }
 
-#pragma mark - 侧边栏筛选按钮点击事件
+#pragma mark - Sidebar filter button tap handling
 
 /// Sidebar game version button tapped
 - (void)sidebarVersionButtonClicked:(UIButton *)sender {
@@ -2594,7 +2594,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     [self loadDataPackList];
 }
 
-#pragma mark - World 加载
+#pragma mark - World loading
 
 - (void)refreshWorldList {
     self.currentWorldOffset = 0;
@@ -3113,7 +3113,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     [self showLoaderSelectionForVersion:version];
 }
 
-#pragma mark - Loader Selection (push 到中间内容区)
+#pragma mark - Loader Selection (pushed into the middle content area)
 
 - (void)showLoaderSelectionForVersion:(NSDictionary *)version {
     ModLoaderInstallViewController *loaderVC = [[ModLoaderInstallViewController alloc] init];
@@ -4439,7 +4439,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     return nil;
 }
 
-#pragma mark - OptiFine as Patch Installation (单独安装，参照 FCL OptiFineInstallTask)
+#pragma mark - OptiFine as Patch Installation (standalone install, modeled on FCL OptiFineInstallTask)
 
 /// Install OptiFine on its own as a version patch (without Forge)
 /// loaderVersion is in the packed format: type\x1fpatch\x1ffilename\x1fdisplay
