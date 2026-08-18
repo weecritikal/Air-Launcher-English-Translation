@@ -59,6 +59,17 @@ jobs:
           echo "CFBundleShortVersionString:"
           grep -A1 'CFBundleShortVersionString' Natives/Info.plist | tail -1
 
+      - name: Check CurseForge key wiring
+        env:
+          CONFIG_CURSEFORGE_API_KEY: ${{ secrets.CONFIG_CURSEFORGE_API_KEY }}
+        run: |
+          # Reports presence and length only - never the value itself.
+          if [ -n "$CONFIG_CURSEFORGE_API_KEY" ]; then
+            echo "CurseForge API key: present (${#CONFIG_CURSEFORGE_API_KEY} chars), will be compiled in"
+          else
+            echo "::warning::CurseForge API key not set - CurseForge will be unavailable in this build"
+          fi
+
       - name: Build IPA and TIPA
         env:
           IPHONEOS_DEPLOYMENT_TARGET: 14.0
@@ -69,6 +80,16 @@ jobs:
           export SLIMMED=0
           gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=2
           gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=2 TROLLSTORE_JIT_ENT=1
+
+      - name: Confirm key was compiled in
+        if: success()
+        run: |
+          # Presence check only. Never print config.h - it contains the key.
+          if grep -q '^#define CONFIG_CURSEFORGE_API_KEY "' Natives/config.h 2>/dev/null; then
+            echo "config.h: CurseForge key compiled in"
+          else
+            echo "::warning::config.h: no CurseForge key compiled in (app will fall back to a runtime key)"
+          fi
 
       - name: Rename build output
         # The Makefile emits com.air-devs.air-<ver>-ios.ipa. Rename to short,

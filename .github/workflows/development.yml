@@ -79,6 +79,17 @@ jobs:
           GIT_LFS_SKIP_SMUDGE: "1"
         run: git submodule update --init --recursive
 
+      - name: Check CurseForge key wiring
+        env:
+          CONFIG_CURSEFORGE_API_KEY: ${{ secrets.CONFIG_CURSEFORGE_API_KEY }}
+        run: |
+          # Reports presence and length only - never the value itself.
+          if [ -n "$CONFIG_CURSEFORGE_API_KEY" ]; then
+            echo "CurseForge API key: present (${#CONFIG_CURSEFORGE_API_KEY} chars), will be compiled in"
+          else
+            echo "::warning::CurseForge API key not set - CurseForge will be unavailable in this build"
+          fi
+
       - name: Build for ${{ matrix.platform_name }}
         env:
           IPHONEOS_DEPLOYMENT_TARGET: 14.0
@@ -98,6 +109,16 @@ jobs:
 
           else
             gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }}
+          fi
+
+      - name: Confirm key was compiled in
+        if: success()
+        run: |
+          # Presence check only. Never print config.h - it contains the key.
+          if grep -q '^#define CONFIG_CURSEFORGE_API_KEY "' Natives/config.h 2>/dev/null; then
+            echo "config.h: CurseForge key compiled in"
+          else
+            echo "::warning::config.h: no CurseForge key compiled in (app will fall back to a runtime key)"
           fi
 
       - name: Rename build output
