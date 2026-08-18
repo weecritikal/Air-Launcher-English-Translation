@@ -31,6 +31,7 @@
 #define EVENT_TYPE_SCROLL 1007
 #define EVENT_TYPE_WINDOW_POS 1008
 #define EVENT_TYPE_WINDOW_SIZE 1009
+#define EVENT_TYPE_MODIFIERS 1010
 
 #define GLFW_FOCUSED 0x00020001
 #define GLFW_VISIBLE 0x00020004
@@ -158,3 +159,4 @@ void CallbackBridge_pauseGameIfNeed();
 // 显式同步 MC 1.21.9+ 内部的 InputConstants modifier 缓存。
 // 由 KeyboardInput.m 在物理键盘按下/释放事件中调用。
 void CallbackBridge_syncModifiersToMC(int mods);
+void CallbackBridge_queueModifierSync(int mods);
