@@ -12,11 +12,11 @@
 
 /// 缩略图目标尺寸（用于 IconLoader 降采样）
 static const CGFloat kNewsThumbnailTargetWidth = 400.0;
-/// 卡片间距
+/// Spacing between cards
 static const CGFloat kNewsCardSpacing = 12.0;
-/// 卡片内边距
+/// Card padding
 static const CGFloat kNewsCardPadding = 12.0;
-/// 卡片圆角
+/// Card corner radius
 static const CGFloat kNewsCardCornerRadius = 12.0;
 /// 缩略图圆角
 static const CGFloat kNewsThumbnailCornerRadius = 8.0;
@@ -199,7 +199,7 @@ static const NSInteger kNewsPageSize = 24;
     self.title = NSLocalizedString(@"mc_news.title", @"Minecraft news");
     self.view.backgroundColor = [UIColor systemBackgroundColor];
 
-    // 适配自定义启动器背景
+    // Adapt to the custom launcher background
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
 
     self.items = [NSMutableArray array];
@@ -414,7 +414,7 @@ static const NSInteger kNewsPageSize = 24;
     MCNewsCollectionViewCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"NewsCell" forIndexPath:indexPath];
     MinecraftNewsItem *item = self.items[indexPath.item];
     [cell configureWithItem:item];
-    // 适配自定义启动器背景：为 cell 注入毛玻璃/半透明效果
+    // Adapt to the custom launcher background: give the cell a frosted-glass/translucent effect
     [[BackgroundManager sharedManager] applyEffectToCollectionViewCell:cell];
     return cell;
 }

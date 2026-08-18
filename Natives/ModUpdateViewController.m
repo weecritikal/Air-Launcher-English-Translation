@@ -154,7 +154,7 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
     // 取消并销毁 session
     [self.session invalidateAndCancel];
     self.session = nil;
-    // 移除背景效果变化通知的观察者，避免 dealloc 后收到通知导致野指针崩溃
+    // Remove the background-effect notification observer so a notification after dealloc cannot crash on a dangling pointer
     [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
@@ -163,16 +163,16 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
 - (void)viewDidLoad {
     [super viewDidLoad];
     self.view.backgroundColor = [UIColor systemBackgroundColor];
-    // 适配自定义启动器背景：透明化当前 VC，让全局背景图/毛玻璃透出
+    // Adapt to the custom launcher background: make this VC transparent so the global background image/blur shows through
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
 
     [self setupBentoLayout];
-    // 透明化 tableView 背景，避免遮挡全局背景
+    // Make the tableView background transparent so it does not hide the global background
     self.tableView.backgroundColor = [UIColor clearColor];
     self.tableView.backgroundView = nil;
     [self transitionToPhase:ModUpdatePhasePrepare];
 
-    // 监听背景效果变化通知，背景切换时重新应用透明效果
+    // Listen for background effect changes so transparency is re-applied when the background is switched
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(reapplyBackgroundEffect)
                                                  name:@"BackgroundUIEffectChanged"
@@ -180,9 +180,9 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
 }
 
 - (void)reapplyBackgroundEffect {
-    // 背景效果改变时重新透明化当前 VC
+    // Re-apply transparency to this VC when the background effect changes
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
-    // 重新设置 tableView 背景为透明，确保背景效果切换后仍透出全局背景
+    // Reset the tableView background to transparent so the global background still shows after an effect switch
     self.tableView.backgroundColor = [UIColor clearColor];
     self.tableView.backgroundView = nil;
 }
@@ -689,7 +689,7 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
         return;
     }
 
-    // 创建临时目录
+    // Create a temporary directory
     self.tempDir = [NSTemporaryDirectory() stringByAppendingPathComponent:
         [NSString stringWithFormat:@"ModUpdate_%@", [[NSUUID UUID] UUIDString]]];
     NSError *mkError = nil;

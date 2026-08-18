@@ -3,8 +3,8 @@
 //  Amethyst
 //
 //  资源包本地管理与下载服务，结构参照 ShaderService/ModService
-//  API 签名统一使用 NSString *profileName（与 ModService 一致）
-//  新增 pack.mcmeta 解析（pack_format / description）
+//  The API consistently takes NSString *profileName (matching ModService)
+//  Adds pack.mcmeta parsing (pack_format / description)
 //
 
 #import <Foundation/Foundation.h>
@@ -16,9 +16,9 @@ NS_ASSUME_NONNULL_BEGIN
 typedef void(^ResourcePackListHandler)(NSArray<ResourcePackItem *> *items);
 // 资源包元数据回调
 typedef void(^ResourcePackMetadataHandler)(ResourcePackItem *item, NSError * _Nullable error);
-// 下载完成回调（success 表示是否成功）
+// Download completion callback (success indicates whether it worked)
 typedef void(^ResourcePackDownloadCompletionHandler)(BOOL success, NSError * _Nullable error);
-// 下载进度回调（在主线程执行，UI 更新安全）
+// Download progress callback (runs on the main thread, so UI updates are safe)
 typedef void(^ResourcePackDownloadProgressHandler)(NSProgress * _Nullable downloadProgress);
 
 @interface ResourcePackService : NSObject
@@ -44,7 +44,7 @@ typedef void(^ResourcePackDownloadProgressHandler)(NSProgress * _Nullable downlo
                     progress:(ResourcePackDownloadProgressHandler _Nullable)progress
                   completion:(ResourcePackDownloadCompletionHandler _Nullable)completion;
 
-// --- 工具方法 ---
+// --- Helpers ---
 - (NSString *)iconCachePathForURL:(NSString *)urlString;
 
 /// 获取当前 profile 的 resourcepacks 目录，不存在时自动创建

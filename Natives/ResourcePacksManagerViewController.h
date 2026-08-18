@@ -3,7 +3,7 @@
 //  Amethyst
 //
 //  资源包管理视图控制器，参照 ModsManagerViewController
-//  本地/在线模式切换、搜索、启用/禁用、删除、导入
+//  Local/online mode switching, search, enable/disable, delete, import
 //
 
 #import <UIKit/UIKit.h>

@@ -246,7 +246,7 @@
 
 - (void)viewDidLoad
 {
-    // 彻底隐藏导航栏黑条（仅当作为非 modal 根页面且是栈中唯一 VC 时）
+    // Hide the navigation bar band completely (only when this is a non-modal root page and the only VC on the stack)
     // 尽早设置，避免导航栏闪烁
     if (self.navigationController &&
         self.navigationController.viewControllers.firstObject == self &&
@@ -1109,8 +1109,8 @@
                                                  name:@"BackgroundUIEffectChanged"
                                                object:nil];
 
-    // 监听背景 UI 效果变化通知：当用户在背景设置中切换毛玻璃/半透明或调整透明度时，
-    // 重新调用 makeViewControllerTransparent 以应用最新的视觉效果，保证背景始终正确透出。
+    // Listen for background UI effect changes: when the user switches between frosted glass and translucent, or adjusts the opacity,
+    // call makeViewControllerTransparent again to apply the latest look and keep the background showing correctly.
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(reapplyBackgroundEffect)
                                                  name:@"BackgroundUIEffectChanged"
@@ -1281,7 +1281,7 @@
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
 
-    // 重新隐藏导航栏黑条（pop 回根页面时 topViewController == self）
+    // Hide the navigation bar band again (topViewController == self after popping back to the root page)
     if (self.navigationController &&
         self.navigationController.viewControllers.firstObject == self &&
         self.navigationController.presentingViewController == nil &&
@@ -1302,7 +1302,7 @@
 
 - (void)viewWillDisappear:(BOOL)animated {
     [super viewWillDisappear:animated];
-    // push 子页面时显示导航栏（子页面需要返回按钮）
+    // Show the navigation bar when a child page is pushed (it needs a back button)
     if (self.navigationController &&
         self.navigationController.viewControllers.firstObject == self &&
         self.navigationController.presentingViewController == nil) {
@@ -1323,8 +1323,8 @@
     });
 }
 
-/// 重新应用背景效果：当 BackgroundUIEffectChanged 通知到达时调用，
-/// 通过 BackgroundManager 重新设置当前视图控制器的透明度/毛玻璃效果，
+/// Re-apply the background effect: called when the BackgroundUIEffectChanged notification arrives.
+/// Re-applies the opacity/frosted-glass effect to this view controller via BackgroundManager,
 /// 并将 tableView 背景置为透明、移除默认 backgroundView，确保全局背景能够正常透出。
 - (void)reapplyBackgroundEffect {
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];

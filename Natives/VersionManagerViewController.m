@@ -717,7 +717,7 @@ static NSInteger const kSectionVersions    = 1;
     [super viewDidLoad];
     // 不设置 self.title，避免顶部导航栏出现"版本管理"标题黑条（参照 FCL 无 title 风格）
     self.view.backgroundColor = [UIColor clearColor];
-    // 彻底隐藏导航栏黑条（仅当作为非 modal 根页面且是栈中唯一 VC 时）
+    // Hide the navigation bar band completely (only when this is a non-modal root page and the only VC on the stack)
     // 快捷入口（showModsManager 等）会预 push 子页面，此时 count > 1，不隐藏导航栏
     if (self.navigationController &&
         self.navigationController.viewControllers.firstObject == self &&
@@ -990,7 +990,7 @@ static NSInteger const kSectionVersions    = 1;
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
-    // 重新隐藏导航栏黑条（pop 回根页面时 topViewController == self）
+    // Hide the navigation bar band again (topViewController == self after popping back to the root page)
     if (self.navigationController &&
         self.navigationController.viewControllers.firstObject == self &&
         self.navigationController.presentingViewController == nil &&
@@ -1010,7 +1010,7 @@ static NSInteger const kSectionVersions    = 1;
 
 - (void)viewWillDisappear:(BOOL)animated {
     [super viewWillDisappear:animated];
-    // push 子页面时显示导航栏（子页面需要返回按钮）
+    // Show the navigation bar when a child page is pushed (it needs a back button)
     if (self.navigationController &&
         self.navigationController.viewControllers.firstObject == self &&
         self.navigationController.presentingViewController == nil) {

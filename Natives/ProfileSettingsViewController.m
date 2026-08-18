@@ -82,7 +82,7 @@
 
     self.title = [NSString stringWithFormat:@"%@ settings", self.originalName];
 
-    // 导航栏按钮
+    // Navigation bar buttons
     self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone target:self action:@selector(actionDone)];
     self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemClose target:self action:@selector(actionClose)];
 
@@ -1630,7 +1630,7 @@
         NSError *downloadError = nil;
         NSData *data = [self downloadDataWithURL:dlURL error:&downloadError];
 
-        // fallback: OptiFine 官方源
+        // Fallback: the official OptiFine source
         if ((!data || downloadError) && filename) {
             NSString *officialURL = [NSString stringWithFormat:@"https://optifine.net/downloadx?f=%@", filename];
             NSURL *officialURLObject = [NSURL URLWithString:officialURL];
@@ -1741,7 +1741,7 @@
         NSError *downloadError = nil;
         NSData *jarData = [self downloadDataWithURL:dlURL error:&downloadError];
 
-        // fallback: OptiFine 官方源
+        // Fallback: the official OptiFine source
         if ((!jarData || downloadError) && filename.length > 0) {
             NSString *officialURL = [NSString stringWithFormat:@"https://optifine.net/downloadx?f=%@", filename];
             NSURL *officialURLObject = [NSURL URLWithString:officialURL];

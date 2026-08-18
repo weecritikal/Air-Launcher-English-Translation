@@ -9,8 +9,8 @@ extern NSString * const DownloadTaskManagerTaskCompletedNotification;
 extern NSString * const DownloadTaskManagerTaskKey;
 
 /**
- * 统一下载任务管理器（单例）。
- * 负责集中管理所有下载任务的生命周期、状态聚合与操作。
+ * Unified download task manager (singleton).
+ * Owns the lifecycle, aggregate state and operations of every download task.
  */
 @interface DownloadTaskManager : NSObject
 
@@ -36,7 +36,7 @@ extern NSString * const DownloadTaskManagerTaskKey;
 #pragma mark - Aggregate State
 
 - (DownloadTaskAggregateState)currentAggregateState;
-- (BOOL)hasActiveTasks;                       // 存在 downloading / pending
+- (BOOL)hasActiveTasks;                       // Whether any task is downloading / pending
 - (BOOL)hasTasksInStates:(NSArray<NSNumber *> *)states;
 
 #pragma mark - Actions
@@ -45,12 +45,12 @@ extern NSString * const DownloadTaskManagerTaskKey;
 - (void)resumeTaskWithId:(NSString *)taskId;
 - (void)cancelTaskWithId:(NSString *)taskId;
 
-/// 重新下载（FCL 风格）。
-/// 取消旧 rawTask、重置 item 状态（progress/speed/error）、retryCount++，
-/// 然后调用 item.retryHandler 重建底层 rawTask。若未设置 retryHandler 或超过 maxRetryCount 则无效。
+/// Re-download (FCL style).
+/// Cancels the old rawTask, resets the item state (progress/speed/error), increments retryCount,
+/// then calls item.retryHandler to rebuild the underlying rawTask. Does nothing if retryHandler is unset or maxRetryCount has been exceeded.
 - (void)retryTaskWithId:(NSString *)taskId;
 
-/// 切换下载源。completion 返回 shouldRecreate：YES 表示调用方需要取消旧任务并重新创建下载。
+/// Switch the download source. completion returns shouldRecreate: YES means the caller must cancel the old task and start the download again.
 - (void)switchDownloadSourceForTaskId:(NSString *)taskId
                              toSource:(NSString *)source
                            completion:(void (^)(BOOL shouldRecreate,
@@ -70,10 +70,10 @@ extern NSString * const DownloadTaskManagerTaskKey;
 
 - (void)setTaskWithId:(NSString *)taskId state:(DownloadTaskState)state;
 
-/// 标记任务完成或失败；error 为 nil 表示成功
+/// Mark a task complete or failed; a nil error means success
 - (void)setTaskWithId:(NSString *)taskId completedWithError:(nullable NSError *)error;
 
-/// 更新任务错误信息（不修改状态）
+/// Update a task's error information (without changing its state)
 - (void)updateTaskWithId:(NSString *)taskId error:(nullable NSError *)error;
 
 @end

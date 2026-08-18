@@ -301,7 +301,7 @@
         "dynamicY" : "0.0 * ${screen_height} + (px(40.0) \/100.0 * ${preferred_scale}) + ${margin}",
         "passThruEnabled" : false,
         "cornerRadius" : 40,
-        "name" : "数字\n按键",
+        "name" : "Number\nKeys",
         "isSwipeable" : false
       },
       "orientation" : "FREE"
@@ -330,7 +330,7 @@
           "dynamicY" : "0.38922715 * ${screen_height} - (px(45.0) \/100.0 * ${preferred_scale}) - ${margin} - ${height} - ${margin}",
           "passThruEnabled" : false,
           "cornerRadius" : 40,
-          "name" : "保持\n左键",
+          "name" : "Hold\nLeft",
           "isSwipeable" : false
         },
         {
@@ -355,7 +355,7 @@
           "dynamicY" : "0.38922715 * ${screen_height} - (px(45.0) \/100.0 * ${preferred_scale}) - ${margin} - ${height} - ${margin}",
           "passThruEnabled" : false,
           "cornerRadius" : 40,
-          "name" : "保持\n右键",
+          "name" : "Hold\nRight",
           "isSwipeable" : false
         },
         {
@@ -380,7 +380,7 @@
           "dynamicY" : "0.38922715 * ${screen_height} - (px(45.000000) \/ 101.000000 * ${preferred_scale}) - ${margin} + (px(45.000000) \/ 101.000000 * ${preferred_scale}) + ${margin}",
           "passThruEnabled" : false,
           "cornerRadius" : 40,
-          "name" : "显示\n区块",
+          "name" : "Show\nChunks",
           "isSwipeable" : false
         },
         {
@@ -405,7 +405,7 @@
           "dynamicY" : "0.38922715 * ${screen_height} - (px(45.0) \/100.0 * ${preferred_scale}) - ${margin} + (px(45.000000) \/ 101.000000 * ${preferred_scale}) + ${margin}",
           "passThruEnabled" : false,
           "cornerRadius" : 40,
-          "name" : "清空\n聊天栏",
+          "name" : "Clear\nChat",
           "isSwipeable" : false
         },
         {
@@ -430,7 +430,7 @@
           "dynamicY" : "0.38922715 * ${screen_height} - (px(45.0) \/100.0 * ${preferred_scale}) - ${margin}",
           "passThruEnabled" : false,
           "cornerRadius" : 40,
-          "name" : "显示\n判定箱",
+          "name" : "Show\nHitboxes",
           "isSwipeable" : false
         },
         {
@@ -455,7 +455,7 @@
           "dynamicY" : "0.38922715 * ${screen_height} - (px(45.0) \/100.0 * ${preferred_scale}) - ${margin} - ${height} - ${margin}",
           "passThruEnabled" : false,
           "cornerRadius" : 40,
-          "name" : "保持\nCTRL",
+          "name" : "Hold\nCTRL",
           "isSwipeable" : false
         },
         {
@@ -480,7 +480,7 @@
           "dynamicY" : "0.38922715 * ${screen_height} - (px(45.0) \/100.0 * ${preferred_scale}) - ${margin}",
           "passThruEnabled" : false,
           "cornerRadius" : 40,
-          "name" : "重载\n资源包",
+          "name" : "Reload\nPacks",
           "isSwipeable" : false
         },
         {
@@ -505,7 +505,7 @@
           "dynamicY" : "0.38922715 * ${screen_height} - ${height} - ${margin}",
           "passThruEnabled" : false,
           "cornerRadius" : 40,
-          "name" : "重载\n区块",
+          "name" : "Reload\nChunks",
           "isSwipeable" : false
         },
         {
@@ -530,7 +530,7 @@
           "dynamicY" : "0.38922715 * ${screen_height} - ${height} - ${margin}",
           "passThruEnabled" : false,
           "cornerRadius" : 40,
-          "name" : "模式\n切换器",
+          "name" : "Mode\nSwitcher",
           "isSwipeable" : false
         },
         {
@@ -555,7 +555,7 @@
           "dynamicY" : "0.38922715 * ${screen_height} - (px(45.0) \/100.0 * ${preferred_scale}) - ${margin} - ${height} - ${margin}",
           "passThruEnabled" : false,
           "cornerRadius" : 40,
-          "name" : "保持\nSHIFT",
+          "name" : "Hold\nSHIFT",
           "isSwipeable" : false
         },
         {
@@ -580,7 +580,7 @@
           "dynamicY" : "0.38922715 * ${screen_height} - (px(45.000000) \/ 101.000000 * ${preferred_scale}) - ${margin} + (px(45.000000) \/ 101.000000 * ${preferred_scale}) + ${margin}",
           "passThruEnabled" : false,
           "cornerRadius" : 40,
-          "name" : "复制指\n令坐标",
+          "name" : "Copy\nCoords",
           "isSwipeable" : false
         },
         {
@@ -605,7 +605,7 @@
           "dynamicY" : "0.38922715 * ${screen_height} - (px(45.000000) \/ 101.000000 * ${preferred_scale}) - ${margin} + (px(45.000000) \/ 101.000000 * ${preferred_scale}) + ${margin}",
           "passThruEnabled" : false,
           "cornerRadius" : 40,
-          "name" : "切换\n旁观者",
+          "name" : "Toggle\nSpectator",
           "isSwipeable" : false
         }
       ],
@@ -631,7 +631,7 @@
         "dynamicY" : "0.0 * ${screen_height} + (px(40.0) \/100.0 * ${preferred_scale}) + ${margin} + (px(43.333332) \/100.0 * ${preferred_scale}) + ${margin} + (px(43.333332) \/100.0 * ${preferred_scale}) + ${margin} - (px(43.333332) \/100.0 * ${preferred_scale}) - ${margin} + (px(43.333332) \/100.0 * ${preferred_scale}) + ${margin} + (px(43.333332) \/100.0 * ${preferred_scale}) + ${margin}",
         "passThruEnabled" : false,
         "cornerRadius" : 40,
-        "name" : "按键\n工具",
+        "name" : "Key\nTools",
         "isSwipeable" : false
       },
       "orientation" : "FREE"
@@ -786,7 +786,7 @@
         "dynamicY" : "0.0 * ${screen_height} + (px(40.0) \/100.0 * ${preferred_scale}) + ${margin} + (px(43.333332) \/100.0 * ${preferred_scale}) + ${margin} + (px(43.333332) \/100.0 * ${preferred_scale}) + ${margin} - (px(43.333332) \/100.0 * ${preferred_scale}) - ${margin} + (px(43.333332) \/100.0 * ${preferred_scale}) + ${margin}",
         "passThruEnabled" : false,
         "cornerRadius" : 40,
-        "name" : "方向\n按键",
+        "name" : "Arrow\nKeys",
         "isSwipeable" : false
       },
       "orientation" : "FREE"
@@ -940,7 +940,7 @@
           "dynamicY" : "0.38922715 * ${screen_height} - (px(45.000000) \/ 100.000000 * ${preferred_scale}) - ${margin} + (px(45.000000) \/ 100.000000 * ${preferred_scale}) + ${margin} + (px(77.000000) \/ 101.000000 * ${preferred_scale}) + ${margin}",
           "passThruEnabled" : false,
           "cornerRadius" : 40,
-          "name" : "右SHIFT",
+          "name" : "R SHIFT",
           "isSwipeable" : false
         },
         {
@@ -991,7 +991,7 @@
         "dynamicY" : "1.0 * ${screen_height} - (px(40.0) \/100.0 * ${preferred_scale}) - (px(40.0) \/100.0 * ${preferred_scale}) - ${margin} + (px(40.0) \/100.0 * ${preferred_scale}) + ${margin}",
         "passThruEnabled" : false,
         "cornerRadius" : 40,
-        "name" : "常用\n操作键",
+        "name" : "Common\nKeys",
         "isSwipeable" : false
       },
       "orientation" : "FREE"
@@ -1045,7 +1045,7 @@
           "dynamicY" : "0.0 * ${screen_height} + (px(40.0) \/100.0 * ${preferred_scale}) + ${margin} - (px(40.000000) \/ 100.000000 * ${preferred_scale}) - ${margin}",
           "passThruEnabled" : false,
           "cornerRadius" : 40,
-          "name" : "中",
+          "name" : "Mid",
           "isSwipeable" : false
         },
         {
@@ -1096,7 +1096,7 @@
         "dynamicY" : "0.0 * ${screen_height} + (px(40.0) \/100.0 * ${preferred_scale}) + ${margin} + (px(43.333332) \/100.0 * ${preferred_scale}) + ${margin} + (px(43.333332) \/100.0 * ${preferred_scale}) + ${margin} - (px(43.333332) \/100.0 * ${preferred_scale}) - ${margin} + (px(43.333332) \/100.0 * ${preferred_scale}) + ${margin} - ${height} - ${margin}",
         "passThruEnabled" : false,
         "cornerRadius" : 40,
-        "name" : "鼠标\n滚轮",
+        "name" : "Mouse\nWheel",
         "isSwipeable" : false
       },
       "orientation" : "FREE"
@@ -2150,7 +2150,7 @@
           "dynamicY" : "0.01110777 * ${screen_height} + (px(26.666666) \/100.0 * ${preferred_scale}) + ${margin} + (px(26.666666) \/100.0 * ${preferred_scale}) + ${margin} + (px(28.333334) \/100.0 * ${preferred_scale}) + ${margin}",
           "passThruEnabled" : false,
           "cornerRadius" : 40,
-          "name" : "大写锁定",
+          "name" : "Caps Lock",
           "isSwipeable" : false
         },
         {
@@ -2175,7 +2175,7 @@
           "dynamicY" : "0.01110777 * ${screen_height} + (px(26.666666) \/100.0 * ${preferred_scale}) + ${margin} + (px(26.666666) \/100.0 * ${preferred_scale}) + ${margin} + (px(28.333334) \/100.0 * ${preferred_scale}) + ${margin} + (px(28.333334) \/100.0 * ${preferred_scale}) + ${margin}",
           "passThruEnabled" : false,
           "cornerRadius" : 40,
-          "name" : "右SHIFT",
+          "name" : "R SHIFT",
           "isSwipeable" : false
         },
         {
@@ -2425,7 +2425,7 @@
           "dynamicY" : "0.01110777 * ${screen_height} + (px(26.666666) \/100.0 * ${preferred_scale}) + ${margin} + (px(26.666666) \/100.0 * ${preferred_scale}) + ${margin} + (px(28.333334) \/100.0 * ${preferred_scale}) + ${margin} + (px(28.333334) \/100.0 * ${preferred_scale}) + ${margin} - (px(28.333334) \/100.0 * ${preferred_scale}) - ${margin} + (px(28.333334) \/100.0 * ${preferred_scale}) + ${margin}",
           "passThruEnabled" : false,
           "cornerRadius" : 40,
-          "name" : "左ALT",
+          "name" : "L ALT",
           "isSwipeable" : false
         },
         {
@@ -2450,7 +2450,7 @@
           "dynamicY" : "0.01110777 * ${screen_height} + (px(26.666666) \/100.0 * ${preferred_scale}) + ${margin} + (px(26.666666) \/100.0 * ${preferred_scale}) + ${margin} + (px(28.333334) \/100.0 * ${preferred_scale}) + ${margin} + (px(28.333334) \/100.0 * ${preferred_scale}) + ${margin} - (px(28.333334) \/100.0 * ${preferred_scale}) - ${margin} + (px(28.333334) \/100.0 * ${preferred_scale}) + ${margin}",
           "passThruEnabled" : false,
           "cornerRadius" : 40,
-          "name" : "右ALT",
+          "name" : "R ALT",
           "isSwipeable" : false
         },
         {
@@ -2950,7 +2950,7 @@
       "dynamicY" : "0.0 * ${screen_height}",
       "passThruEnabled" : false,
       "cornerRadius" : 40,
-      "name" : "⚙\n主菜单",
+      "name" : "⚙\nMenu",
       "isSwipeable" : false
     },
     {
@@ -3000,7 +3000,7 @@
       "dynamicY" : "1.0 * ${screen_height} - (px(40.0) \/100.0 * ${preferred_scale}) - (px(40.0) \/100.0 * ${preferred_scale}) - ${margin} + (px(40.0) \/100.0 * ${preferred_scale}) + ${margin}",
       "passThruEnabled" : false,
       "cornerRadius" : 40,
-      "name" : "虚拟\n鼠标",
+      "name" : "Virtual\nMouse",
       "isSwipeable" : false
     },
     {
@@ -3100,7 +3100,7 @@
       "dynamicY" : "0.0 * ${screen_height} + (px(40.0) \/100.0 * ${preferred_scale}) + ${margin} - ${height} - ${margin}",
       "passThruEnabled" : false,
       "cornerRadius" : 40,
-      "name" : "✎\n输入法",
+      "name" : "✎\nInput",
       "isSwipeable" : false
     },
     {
@@ -3175,7 +3175,7 @@
       "dynamicY" : "0.707975  * ${screen_height} - ${height}",
       "passThruEnabled" : false,
       "cornerRadius" : 40,
-      "name" : "左键",
+      "name" : "Left",
       "isSwipeable" : false
     },
     {
@@ -3200,7 +3200,7 @@
       "dynamicY" : "0.603094  * ${screen_height} - ${height}",
       "passThruEnabled" : false,
       "cornerRadius" : 40,
-      "name" : "右键",
+      "name" : "Right",
       "isSwipeable" : false
     },
     {
@@ -3297,7 +3297,7 @@
       "dynamicY" : "0.622213  * ${screen_height} - ${height}",
       "passThruEnabled" : false,
       "cornerRadius" : 65,
-      "name" : "持续     奔跑",
+      "name" : "Always     Sprint",
       "isSwipeable" : false
     }
   ],

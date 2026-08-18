@@ -14,7 +14,7 @@
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunguarded-availability-new"
 // 注意：UIKit+AFNetworking 已移除，改用 IconLoader 统一加载器
-// （AFNetworking 仅内存缓存无降采样，IconLoader 提供双层缓存+降采样+CDN镜像+并发控制）
+// (AFNetworking only caches in memory and does not downsample; IconLoader adds a two-level cache, downsampling, CDN mirrors and concurrency control)
 #pragma clang diagnostic pop
 
 @interface ShaderTableViewCell ()
@@ -172,8 +172,8 @@
 
 - (void)prepareForReuse {
     [super prepareForReuse];
-    // 取消该 cell 上正在进行的图标加载请求（cell 复用时旧请求不应继续占用网络与回调）
-    // 对应 Glide 的 clear() + ZL2 Compose 组合自动取消
+    // Cancel the icon load in flight for this cell (an old request should not keep using the network and firing callbacks after reuse)
+    // Equivalent to Glide's clear() and the automatic cancellation of ZL2 Compose composition
     [IconLoader cancelLoadingForImageView:_shaderIconView];
     _shaderIconView.image = [UIImage systemImageNamed:@"photo"];
     _nameLabel.text = nil;

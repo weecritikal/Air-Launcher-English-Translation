@@ -2,27 +2,27 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-// 下载任务状态
+// Download task state
 typedef NS_ENUM(NSInteger, DownloadTaskState) {
-    DownloadTaskStatePending = 0,    // 等待中
-    DownloadTaskStateDownloading,    // 下载中
-    DownloadTaskStatePaused,         // 已暂停
-    DownloadTaskStateCompleted,      // 已完成
-    DownloadTaskStateCancelled,      // 已取消
-    DownloadTaskStateFailed          // 失败
+    DownloadTaskStatePending = 0,    // Waiting
+    DownloadTaskStateDownloading,    // Downloading
+    DownloadTaskStatePaused,         // Paused
+    DownloadTaskStateCompleted,      // Completed
+    DownloadTaskStateCancelled,      // Cancelled
+    DownloadTaskStateFailed          // Failed
 };
 
-// 聚合状态（用于悬浮球、启动保护等）
+// Aggregate state (used by the floating button, launch guarding, etc.)
 typedef NS_ENUM(NSInteger, DownloadTaskAggregateState) {
-    DownloadTaskAggregateStateNone = 0,   // 无任务
-    DownloadTaskAggregateStateIdle,       // 全部暂停/等待中但无活动
-    DownloadTaskAggregateStateActive,     // 存在下载中任务
-    DownloadTaskAggregateStatePaused,     // 至少有一个暂停且无活动任务
-    DownloadTaskAggregateStateCompleted,  // 全部完成
-    DownloadTaskAggregateStateFailed      // 全部失败/取消后仍有失败记录（可选）
+    DownloadTaskAggregateStateNone = 0,   // No tasks
+    DownloadTaskAggregateStateIdle,       // All paused/waiting with nothing active
+    DownloadTaskAggregateStateActive,     // At least one task is downloading
+    DownloadTaskAggregateStatePaused,     // At least one is paused and nothing is active
+    DownloadTaskAggregateStateCompleted,  // All complete
+    DownloadTaskAggregateStateFailed      // Failures remain after everything failed/was cancelled (optional)
 };
 
-// 资源类型常量
+// Resource type constants
 extern NSString * const DownloadTaskResourceTypeMinecraft;
 extern NSString * const DownloadTaskResourceTypeModloader;
 extern NSString * const DownloadTaskResourceTypeMod;
@@ -34,14 +34,14 @@ extern NSString * const DownloadTaskResourceTypeWorld;
 
 @class DownloadTaskItem;
 
-/// 重试回调类型：业务方注册任务时设置，DownloadTaskManager.retryTaskWithId: 会调用它重建底层 rawTask。
-/// 业务方在 handler 内创建新的 NSURLSessionTask 并赋值给 item.rawTask，无需移除旧 item（manager 已处理）。
-/// 参数为当前 item（已重置状态），返回新的 rawTask（用于 manager 更新 item.rawTask）。
+/// Retry callback type: set by the caller when registering a task; DownloadTaskManager.retryTaskWithId: invokes it to rebuild the underlying rawTask.
+/// Inside the handler the caller creates a new NSURLSessionTask and assigns it to item.rawTask; the old item does not need removing (the manager handles that).
+/// The parameter is the current item (already reset), and the return value is the new rawTask (used by the manager to update item.rawTask).
 typedef id _Nullable (^DownloadRetryHandler)(DownloadTaskItem *item);
 
 /**
- * 统一下载任务数据模型。
- * 每个下载任务（MC 本体、加载器、Mod、资源包等）在 DownloadTaskManager 中对应一个实例。
+ * Unified download task model.
+ * Every download (the Minecraft client, a loader, a mod, a resource pack, and so on) maps to one instance in DownloadTaskManager.
  */
 @interface DownloadTaskItem : NSObject
 
@@ -52,7 +52,7 @@ typedef id _Nullable (^DownloadRetryHandler)(DownloadTaskItem *item);
 @property (nonatomic, copy) NSString *downloadSource;
 @property (nonatomic, assign) DownloadTaskState state;
 
-/// 0.0 ~ 1.0；< 0 表示未知/不确定
+/// 0.0 ~ 1.0; < 0 means unknown/indeterminate
 @property (nonatomic, assign) double progress;
 @property (nonatomic, assign) int64_t totalSize;
 @property (nonatomic, assign) int64_t downloadedSize;
@@ -63,27 +63,27 @@ typedef id _Nullable (^DownloadRetryHandler)(DownloadTaskItem *item);
 @property (nonatomic, assign) BOOL supportsResume;
 @property (nonatomic, strong) NSDate *createdDate;
 
-/// 底层任务对象，弱引用以避免循环持有（MinecraftResourceDownloadTask / NSURLSessionTask 等）
+/// The underlying task object, held weakly to avoid a retain cycle (MinecraftResourceDownloadTask / NSURLSessionTask, etc.)
 @property (nonatomic, weak, nullable) id rawTask;
 @property (nonatomic, strong, nullable) NSError *errorInfo;
 
-/// 供业务方存放扩展字段
+/// For callers to stash extra fields
 @property (nonatomic, strong) NSMutableDictionary *userInfo;
 
 #pragma mark - 重试支持（FCL 风格重新下载）
 
-/// 原始下载 URL，便于重试/切换源时在模型层直接重建（可选，业务方可不填）
+/// The original download URL, so a retry/source switch can rebuild it straight from the model (optional; callers may leave it empty)
 @property (nonatomic, copy, nullable) NSString *downloadURL;
 
-/// 重试回调：业务方注册任务时设置，DownloadTaskManager.retryTaskWithId: 会调用它重建底层 rawTask。
-/// 业务方在 handler 内创建新的 NSURLSessionTask 并赋值给 item.rawTask，无需移除旧 item（manager 已处理）。
-/// 参数为当前 item（已重置状态），返回新的 rawTask（用于 manager 更新 item.rawTask）。
+/// Retry callback: set by the caller when registering a task; DownloadTaskManager.retryTaskWithId: invokes it to rebuild the underlying rawTask.
+/// Inside the handler the caller creates a new NSURLSessionTask and assigns it to item.rawTask; the old item does not need removing (the manager handles that).
+/// The parameter is the current item (already reset), and the return value is the new rawTask (used by the manager to update item.rawTask).
 @property (nonatomic, copy, nullable) DownloadRetryHandler retryHandler;
 
-/// 已重试次数（manager 在每次 retryTaskWithId: 时自增）
+/// Number of retries so far (incremented by the manager on each retryTaskWithId:)
 @property (nonatomic, assign) NSInteger retryCount;
 
-/// 最大重试次数，默认 3。超过后 UI 不再显示"重试"按钮（仍可"移除"）
+/// Maximum retry count, 3 by default. Past this the UI stops offering "Retry" (but "Remove" is still available)
 @property (nonatomic, assign) NSInteger maxRetryCount;
 
 - (instancetype)initWithResourceType:(NSString *)resourceType

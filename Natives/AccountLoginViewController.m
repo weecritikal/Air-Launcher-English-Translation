@@ -2,12 +2,12 @@
 //  AccountLoginViewController.m
 //  Amethyst
 //
-//  参照 FCL (Fold Craft Launcher) 与 HMCL 的账户登录界面：
-//  - 顶部标题区（大标题 + 副标题）
-//  - 四张可点击的登录方式卡片（微软 / LittleSkin / 自定义第三方 / 本地）
-//  - 每张卡片：左侧彩色图标圆 + 中间标题/描述 + 右侧箭头
-//  - 适配自定义启动器背景（透明 view + 卡片毛玻璃）
-//  - 使用 UIButton 替代 UIControl，避免触摸拦截问题
+//  Modelled on the account login screens of FCL (Fold Craft Launcher) and HMCL:
+//  - Title area at the top (large title + subtitle)
+//  - Four tappable login-method cards (Microsoft / LittleSkin / custom third-party / local)
+//  - Each card: colored icon circle on the left + title/description in the middle + chevron on the right
+//  - Adapts to the custom launcher background (transparent view + frosted-glass cards)
+//  - Uses UIButton instead of UIControl to avoid touch-interception problems
 //
 
 #import "AccountLoginViewController.h"
@@ -29,24 +29,24 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    // 适配自定义启动器背景：将当前视图控制器透明化，使全局背景壁纸能够透出
+    // Adapt to the custom launcher background: make this view controller transparent so the global wallpaper shows through
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
     self.title = @"Add account";
-    // 透明背景，让自定义启动器背景透出（applyBackgroundToView 会把背景加到 window/splitVC 底层）
+    // Transparent background so the custom launcher background shows through (applyBackgroundToView adds it beneath the window/splitVC)
     self.view.backgroundColor = [UIColor clearColor];
 
     [self setupUI];
-    // 应用背景（遍历 responder chain 找到 splitVC/window，在最底层加背景）
+    // Apply the background (walk the responder chain to find splitVC/window and insert the background at the very bottom)
     [[BackgroundManager sharedManager] applyBackgroundToView:self.view];
 
-    // 监听背景 UI 效果变化通知，当用户切换背景效果（半透明/毛玻璃）时重新应用透明化
+    // Listen for background UI effect changes so transparency is re-applied when the user switches effect (translucent/frosted)
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(reapplyBackgroundEffect)
                                                  name:@"BackgroundUIEffectChanged"
                                                object:nil];
 }
 
-/// 背景效果改变时重新应用透明化（由 BackgroundUIEffectChanged 通知触发）
+/// Re-apply transparency when the background effect changes (triggered by the BackgroundUIEffectChanged notification)
 - (void)reapplyBackgroundEffect {
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
 }
@@ -57,14 +57,14 @@
 
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
-    // 确保 scrollView contentSize 正确
+    // Make sure the scrollView contentSize is correct
     [self.scrollView layoutIfNeeded];
 }
 
 #pragma mark - Setup
 
 - (void)setupUI {
-    // ScrollView 容器
+    // ScrollView container
     self.scrollView = [[UIScrollView alloc] init];
     self.scrollView.translatesAutoresizingMaskIntoConstraints = NO;
     self.scrollView.alwaysBounceVertical = YES;
@@ -73,7 +73,7 @@
     self.scrollView.showsVerticalScrollIndicator = NO;
     [self.view addSubview:self.scrollView];
 
-    // 卡片堆栈
+    // Card stack
     self.cardStack = [[UIStackView alloc] init];
     self.cardStack.translatesAutoresizingMaskIntoConstraints = NO;
     self.cardStack.axis = UILayoutConstraintAxisVertical;
@@ -94,13 +94,13 @@
         [self.cardStack.widthAnchor constraintEqualToAnchor:self.scrollView.frameLayoutGuide.widthAnchor constant:-[ScreenUtils dp:40]],
     ]];
 
-    // 标题区
+    // Title area
     [self setupHeader];
 
-    // 间距
+    // Spacing
     [self.cardStack addArrangedSubview:[self spacerViewWithHeight:[ScreenUtils dp:8]]];
 
-    // 四张登录卡片
+    // The four login cards
     [self.cardStack addArrangedSubview:[self createLoginCardWithType:AccountLoginTypeMicrosoft
                                                                 title:@"Microsoft account"
                                                           description:@"Sign in with a Microsoft account (genuine copy)"
@@ -127,7 +127,7 @@
                                                           accentColor:[UIColor colorWithRed:0.50 green:0.55 blue:0.60 alpha:1.0]]];
 }
 
-/// 顶部标题区（FCL/HMCL 风格：大标题 + 副标题）
+/// Title area at the top (FCL/HMCL style: large title + subtitle)
 - (void)setupHeader {
     self.headerContainer = [[UIView alloc] init];
     self.headerContainer.translatesAutoresizingMaskIntoConstraints = NO;
@@ -161,29 +161,29 @@
     ]];
 }
 
-/// 创建一张登录方式卡片（FCL/HMCL 风格）
-/// 使用 UIButton 替代 UIControl，确保 touch 事件可靠触发
+/// Build one login-method card (FCL/HMCL style)
+/// Uses UIButton instead of UIControl so touch events fire reliably
 - (UIView *)createLoginCardWithType:(AccountLoginType)type
                               title:(NSString *)title
                         description:(NSString *)description
                          iconName:(NSString *)iconName
                      fallbackIcon:(NSString *)fallbackIcon
                         accentColor:(UIColor *)accentColor {
-    // 卡片容器（UIView + 手势），不直接用 UIButton 是因为需要复杂内部布局
-    // 用 UIView + UITapGestureRecognizer 替代 UIControl，避免 UIVisualEffectView 拦截
+    // Card container (UIView + gesture); a plain UIButton is not used because the internal layout is complex
+    // UIView + UITapGestureRecognizer instead of UIControl, to avoid UIVisualEffectView intercepting touches
     UIView *card = [[UIView alloc] init];
     card.translatesAutoresizingMaskIntoConstraints = NO;
     card.layer.cornerRadius = [ScreenUtils dp:16];
     card.layer.cornerCurve = kCACornerCurveContinuous;
     card.layer.borderWidth = 0.5;
     card.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.12].CGColor;
-    // 启用触摸交互
+    // Enable touch interaction
     card.userInteractionEnabled = YES;
 
-    // 毛玻璃背景（blurView.userInteractionEnabled = NO 由 applyEffectToView 保证）
+    // Frosted-glass background (applyEffectToView guarantees blurView.userInteractionEnabled = NO)
     [[BackgroundManager sharedManager] applyEffectToView:card];
 
-    // 左侧图标圆（accentColor 轻底色 + SF Symbol）
+    // Icon circle on the left (light accentColor fill + SF Symbol)
     UIView *iconCircle = [[UIView alloc] init];
     iconCircle.translatesAutoresizingMaskIntoConstraints = NO;
     iconCircle.backgroundColor = [accentColor colorWithAlphaComponent:0.18];
@@ -200,7 +200,7 @@
     iconView.userInteractionEnabled = NO;
     [iconCircle addSubview:iconView];
 
-    // 中间标题
+    // Title in the middle
     UILabel *titleLabel = [[UILabel alloc] init];
     titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     titleLabel.text = title;
@@ -210,7 +210,7 @@
     titleLabel.userInteractionEnabled = NO;
     [card addSubview:titleLabel];
 
-    // 中间描述
+    // Description in the middle
     UILabel *descLabel = [[UILabel alloc] init];
     descLabel.translatesAutoresizingMaskIntoConstraints = NO;
     descLabel.text = description;
@@ -220,7 +220,7 @@
     descLabel.userInteractionEnabled = NO;
     [card addSubview:descLabel];
 
-    // 右侧箭头
+    // Chevron on the right
     UIImageView *chevron = [[UIImageView alloc] init];
     chevron.translatesAutoresizingMaskIntoConstraints = NO;
     chevron.image = [UIImage systemImageNamed:@"chevron.right"];
@@ -229,7 +229,7 @@
     chevron.userInteractionEnabled = NO;
     [card addSubview:chevron];
 
-    // 布局约束
+    // Layout constraints
     CGFloat padding = [ScreenUtils dp:16];
     CGFloat iconSize = [ScreenUtils dp:48];
     CGFloat iconInset = [ScreenUtils dp:24];
@@ -260,9 +260,9 @@
         [chevron.heightAnchor constraintEqualToConstant:[ScreenUtils dp:20]],
     ]];
 
-    // 使用 UITapGestureRecognizer 处理点击（比 UIControlEventTouchUpInside 更可靠，
-    // 不会被 UIVisualEffectView 的 contentView 拦截）
-    // tag 从 1 开始，避免 0 被 UIKit 视为"未设置 tag"
+    // Use UITapGestureRecognizer for taps (more reliable than UIControlEventTouchUpInside,
+    // and not intercepted by the contentView of UIVisualEffectView)
+    // Tags start at 1 so that 0 is not treated by UIKit as "no tag set"
     card.tag = type + 1;
     UITapGestureRecognizer *tapGesture = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(cardTapped:)];
     tapGesture.cancelsTouchesInView = NO;
@@ -280,14 +280,14 @@
 
 #pragma mark - Actions
 
-/// 卡片点击处理（由 UITapGestureRecognizer 触发）
+/// Card tap handler (fired by the UITapGestureRecognizer)
 - (void)cardTapped:(UITapGestureRecognizer *)gesture {
     UIView *card = gesture.view;
     if (!card) return;
-    // 还原 tag 偏移（createLoginCardWithType 中存储时 +1）
+    // Undo the tag offset (createLoginCardWithType stores it +1)
     AccountLoginType type = (AccountLoginType)(card.tag - 1);
 
-    // 轻微高亮反馈（FCL 风格）
+    // Subtle highlight feedback (FCL style)
     [UIView animateWithDuration:0.1 animations:^{
         card.alpha = 0.65;
     } completion:^(BOOL finished) {

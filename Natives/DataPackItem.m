@@ -2,7 +2,7 @@
 //  DataPackItem.m
 //  Amethyst
 //
-//  数据包数据模型实现
+//  Data pack model implementation
 //
 
 #import "DataPackItem.h"
@@ -29,14 +29,14 @@
 
 - (instancetype)initWithOnlineData:(NSDictionary *)data {
     if (self = [super init]) {
-        // 来自 Modrinth 搜索结果
+        // From the Modrinth search results
         _onlineID = data[@"id"] ? [data[@"id"] description] : nil;
         _displayName = data[@"title"] ?: @"";
         _dataPackDescription = data[@"description"] ?: @"";
         _iconURL = data[@"imageUrl"] ?: @"";
         _author = data[@"author"] ?: @"";
 
-        // 处理数字类型
+        // Handle numeric types
         id downloadsValue = data[@"downloads"];
         if ([downloadsValue isKindOfClass:[NSNumber class]]) {
             _downloads = downloadsValue;
@@ -51,11 +51,11 @@
             _likes = @([likesValue longLongValue]);
         }
 
-        // 日期与分类
+        // Date and categories
         _lastUpdated = data[@"lastUpdated"] ?: @"";
         _categories = data[@"categories"] ?: @[];
 
-        // 这些属性在选定下载版本前为 nil
+        // These properties are nil until a download version is chosen
         _filePath = nil;
         _fileName = nil;
     }

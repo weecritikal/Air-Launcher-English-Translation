@@ -64,7 +64,7 @@ extern NSNotificationName const SOCKS5ProxyClientDisconnectedNotification;
 /// 代理服务器监听 127.0.0.1，将客户端流量通过 ZeroTier 虚拟网络转发到目标主机。
 @interface SOCKS5Proxy : NSObject
 
-/// 单例访问
+/// Singleton accessor
 + (instancetype)sharedProxy;
 
 /// 启动代理服务器

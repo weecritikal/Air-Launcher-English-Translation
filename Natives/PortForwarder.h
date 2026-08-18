@@ -93,7 +93,7 @@ typedef NS_ENUM(NSInteger, PortForwarderMode) {
 /// 同一时间只能运行一种模式，启动新模式前应先 stop 旧模式。
 @interface PortForwarder : NSObject
 
-/// 单例访问
+/// Singleton accessor
 + (instancetype)sharedForwarder;
 
 #pragma mark - 房客模式

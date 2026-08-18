@@ -24,7 +24,7 @@
 
 - (NSString *)formattedDateString {
     if (self.date.length == 0) return @"";
-    // 解析 ISO 日期 "2026-07-23"
+    // Parse the ISO date "2026-07-23"
     NSDateFormatter *fmt = [[NSDateFormatter alloc] init];
     fmt.locale = [NSLocale localeWithLocaleIdentifier:@"zh_CN"];
     fmt.dateFormat = @"yyyy-MM-dd";

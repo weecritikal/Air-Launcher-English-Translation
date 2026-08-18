@@ -254,7 +254,7 @@
     self.downloadTaskIDs[task] = taskItem.taskId;
     [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId state:DownloadTaskStateDownloading];
 
-    // 设置 retryHandler：FCL 风格重新下载
+    // Set retryHandler: FCL-style re-download
     __weak typeof(self) weakSelf = self;
     NSString *capturedDestPath = destPath;
     ServerDownloadHandler capturedCompletion = completion;

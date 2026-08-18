@@ -1,32 +1,32 @@
 // ============================================================================
 // DownloadProgressViewController.m
-// 下载进度显示界面（参照 FCL/ZL2 风格重构）
+// Download progress screen (reworked in the FCL/ZL2 style)
 // ============================================================================
 //
-// 设计理念
+// Design rationale
 // ============================================================================
-// 本控制器用于展示 Minecraft 资源下载的实时进度，综合参考了 FCL（FoldCraftLauncher）
-// 和 ZL2（ZalithLauncher）的下载进度界面设计：
+// This controller shows live progress while Minecraft assets download, drawing on the download progress
+// screens of FCL (FoldCraftLauncher) and ZL2 (ZalithLauncher):
 //
-// 1. FCL 风格：
-//    - 顶部摘要卡片同时展示：进度百分比 + 进度条 + 下载速度 + 剩余时间（ETA）
-//    - 信息密度高，用户一眼掌握全部关键信息
-//    - 速度可视化：实时速度迷你图表，直观反映速度波动
+// 1. FCL style:
+//    - the summary card at the top shows progress percentage + progress bar + download speed + time remaining (ETA) together
+//    - high information density, so the user takes in everything at a glance
+//    - speed visualization: a live mini speed chart that makes fluctuations obvious
 //
-// 2. ZL2 风格：
-//    - 圆角毛玻璃卡片背景，与下方内容形成层次感
-//    - 彩色进度条（主题色），平滑动画过渡
-//    - 16pt 圆角 + 0.5pt 边框 + 半透明背景 + 毛玻璃
+// 2. ZL2 style:
+//    - a rounded frosted-glass card background that layers over the content below
+//    - a colored progress bar (theme color) with smooth animated transitions
+//    - 16pt radius + 0.5pt border + translucent background + frosted glass
 //
-// 3. HMCL 风格：
-//    - 单文件列表清晰展示每个文件的独立进度
-//    - 文件类型图标 + 文件大小 + 速度信息分层展示
+// 3. HMCL style:
+//    - a per-file list that clearly shows the progress of each individual file
+//    - file-type icon + file size + speed information laid out in clear layers
 //
-// 视觉规范（与项目其他卡片统一）：
-//    - 圆角：16pt
-//    - 边框：0.5pt（UIColor.separatorColor）
-//    - 背景：半透明白色 8% + 毛玻璃效果（通过 BackgroundManager）
-//    - 进度条：主题色（tintColor），圆角胶囊形
+// Visual spec (matching the other cards in the project):
+//    - corner radius: 16pt
+//    - border: 0.5pt (UIColor.separatorColor)
+//    - background: 8% translucent white + frosted glass (via BackgroundManager)
+//    - progress bar: theme color (tintColor), capsule-shaped
 // ============================================================================
 
 #import <objc/runtime.h>
@@ -36,50 +36,50 @@
 #import "utils.h"
 
 // ============================================================================
-// 视觉常量
+// Visual constants
 // ============================================================================
 
-/// 卡片圆角半径（与项目其他卡片统一）
+/// Card corner radius (matching the other cards in the project)
 static const CGFloat kCardCornerRadius     = 16.0;
-/// 卡片边框宽度
+/// Card border width
 static const CGFloat kCardBorderWidth      = 0.5;
-/// 摘要头部视图总高度
+/// Total height of the summary header view
 static const CGFloat kSummaryHeaderHeight  = 210.0;
-/// 单文件 Cell 高度
+/// Height of a single-file cell
 static const CGFloat kCellHeight           = 80.0;
-/// 线性进度条高度
+/// Height of the linear progress bar
 static const CGFloat kProgressBarHeight    = 8.0;
-/// 速度迷你图表高度
+/// Height of the mini speed chart
 static const CGFloat kSpeedSparklineHeight = 36.0;
-/// 速度迷你图表最大样本数（超过后滚动移除最旧样本）
+/// Maximum number of samples in the mini speed chart (older samples scroll off beyond this)
 static const NSInteger kMaxSpeedSamples    = 40;
-/// 进度条动画时长
+/// Progress bar animation duration
 static const NSTimeInterval kProgressAnimDuration = 0.3;
-/// 文件类型图标尺寸
+/// File-type icon size
 static const CGFloat kFileIconSize         = 28.0;
-/// 圆形进度视图尺寸
+/// Circular progress view size
 static const CGFloat kCircularProgressSize = 34.0;
-/// 摘要头部图标尺寸
+/// Summary header icon size
 static const CGFloat kSummaryIconSize      = 32.0;
 
-// KVO 观察上下文（区分单文件进度与总进度）
+// KVO observation contexts (distinguishing per-file progress from total progress)
 static void *CellProgressObserverContext = &CellProgressObserverContext;
 static void *TotalProgressObserverContext = &TotalProgressObserverContext;
 
 // ============================================================================
-// 自定义线性进度条（参照 DPCProgressBar，支持平滑动画 + 主题色）
+// Custom linear progress bar (modelled on DPCProgressBar, with smooth animation + theme color)
 // ============================================================================
-// 相比系统 UIProgressView，本视图可以更精细地控制圆角、颜色和动画曲线，
-// 以匹配 ZL2 风格的胶囊形进度条视觉效果。
+// Compared with the system UIProgressView, this gives finer control over corner radius, color and animation curve,
+// so it can match the capsule-shaped progress bar of ZL2.
 
 @interface DPVCProgressBar : UIView
-/// 进度值 0.0 ~ 1.0
+/// Progress value from 0.0 to 1.0
 @property (nonatomic, assign) CGFloat progress;
-/// 填充颜色（进度条已填充部分）
+/// Fill color (the filled part of the bar)
 @property (nonatomic, strong) UIColor *fillColor;
-/// 轨道颜色（进度条未填充部分）
+/// Track color (the unfilled part of the bar)
 @property (nonatomic, strong) UIColor *trackColor;
-/// 设置进度，可选择是否带动画
+/// Set the progress, optionally animated
 - (void)setProgress:(CGFloat)progress animated:(BOOL)animated;
 @end
 
@@ -96,26 +96,26 @@ static void *TotalProgressObserverContext = &TotalProgressObserverContext;
     return self;
 }
 
-/// 初始化轨道和填充图层
+/// Initialize the track and fill layers
 - (void)setupLayers {
-    // 轨道：铺满整个视图，圆角胶囊形
+    // Track: fills the whole view, capsule-shaped
     _trackLayer = [CAShapeLayer layer];
     _trackLayer.fillColor = [UIColor systemGray5Color].CGColor;
     _trackLayer.lineWidth = 0;
     [self.layer addSublayer:_trackLayer];
 
-    // 填充：宽度按进度计算，圆角胶囊形
+    // Fill: width derived from the progress, capsule-shaped
     _fillLayer = [CAShapeLayer layer];
     _fillLayer.fillColor = [UIColor systemBlueColor].CGColor;
     _fillLayer.lineWidth = 0;
     [self.layer addSublayer:_fillLayer];
 
-    // 默认值
+    // Defaults
     _progress = 0.0;
     _fillColor = [UIColor systemBlueColor];
     _trackColor = [UIColor systemGray5Color];
 
-    // 裁剪填充图层，避免超出圆角
+    // Clip the fill layer so it does not spill past the rounded corners
     self.layer.masksToBounds = YES;
     self.backgroundColor = _trackColor;
 }
@@ -125,19 +125,19 @@ static void *TotalProgressObserverContext = &TotalProgressObserverContext;
     [self updateLayerFrames];
 }
 
-/// 更新图层 frame（圆角矩形路径）
+/// Update the layer frames (rounded-rectangle paths)
 - (void)updateLayerFrames {
     CGRect bounds = self.bounds;
     CGFloat cornerRadius = bounds.size.height / 2.0;
 
-    // 轨道铺满整个视图
+    // The track fills the whole view
     UIBezierPath *trackPath =
         [UIBezierPath bezierPathWithRoundedRect:bounds
                                   cornerRadius:cornerRadius];
     _trackLayer.path = trackPath.CGPath;
     _trackLayer.frame = bounds;
 
-    // 填充宽度按进度计算
+    // The fill width is derived from the progress
     CGFloat fillWidth = MAX(0.0, bounds.size.width * _progress);
     CGRect fillRect = CGRectMake(0, 0, fillWidth, bounds.size.height);
     UIBezierPath *fillPath =
@@ -152,12 +152,12 @@ static void *TotalProgressObserverContext = &TotalProgressObserverContext;
 }
 
 - (void)setProgress:(CGFloat)progress animated:(BOOL)animated {
-    // 限制在 0.0 ~ 1.0 范围
+    // Clamp to the 0.0 ~ 1.0 range
     progress = MAX(0.0, MIN(1.0, progress));
     _progress = progress;
 
     if (animated) {
-        // 使用 CABasicAnimation 让填充宽度平滑过渡
+        // Use CABasicAnimation to transition the fill width smoothly
         [CATransaction begin];
         [CATransaction setAnimationDuration:kProgressAnimDuration];
         [CATransaction setAnimationTimingFunction:
@@ -193,18 +193,18 @@ static void *TotalProgressObserverContext = &TotalProgressObserverContext;
 @end
 
 // ============================================================================
-// 速度迷你图表（实时速度可视化）
+// Mini speed chart (live speed visualization)
 // ============================================================================
-// 在摘要卡片中展示最近 N 次速度采样的柱状图，让用户直观感知速度波动趋势。
-// 采样值会被归一化到 0.0~1.0 范围（基于历史最大值）， newest 在最右侧。
+// Shows a bar chart of the last N speed samples in the summary card, so the user can see the trend at a glance.
+// Samples are normalized to 0.0~1.0 (against the historical maximum), with the newest on the right.
 
 @interface DPVCSpeedSparkline : UIView
 
-/// 添加一个速度采样（归一化值 0.0~1.0，超出范围会被 clamp）
+/// Add a speed sample (normalized 0.0~1.0; out-of-range values are clamped)
 - (void)addSpeedSample:(CGFloat)normalizedSpeed;
-/// 清空所有采样
+/// Clear every sample
 - (void)reset;
-/// 设置柱状图颜色
+/// Set the bar color
 @property (nonatomic, strong) UIColor *barColor;
 
 @end
@@ -216,7 +216,7 @@ static void *TotalProgressObserverContext = &TotalProgressObserverContext;
 - (instancetype)initWithFrame:(CGRect)frame {
     self = [super initWithFrame:frame];
     if (self) {
-        // 预分配容量，避免频繁扩容
+        // Preallocate capacity to avoid repeated growth
         _samples = [[NSMutableArray alloc] initWithCapacity:kMaxSpeedSamples];
         _barColor = [UIColor systemBlueColor];
         self.backgroundColor = [UIColor clearColor];
@@ -225,10 +225,10 @@ static void *TotalProgressObserverContext = &TotalProgressObserverContext;
 }
 
 - (void)addSpeedSample:(CGFloat)normalizedSpeed {
-    // clamp 到 0.0 ~ 1.0
+    // Clamp to 0.0 ~ 1.0
     normalizedSpeed = MAX(0.0, MIN(1.0, normalizedSpeed));
 
-    // 超过最大样本数时移除最旧的
+    // Drop the oldest sample once the maximum is exceeded
     if (_samples.count >= kMaxSpeedSamples) {
         [_samples removeObjectAtIndex:0];
     }
@@ -248,7 +248,7 @@ static void *TotalProgressObserverContext = &TotalProgressObserverContext;
 
     NSInteger count = _samples.count;
     if (count == 0) {
-        // 无数据时绘制占位底线
+        // Draw a placeholder baseline when there is no data
         CGContextSetStrokeColorWithColor(ctx, [[UIColor systemGray4Color] CGColor]);
         CGContextSetLineWidth(ctx, 1.0);
         CGFloat y = rect.size.height - 1.0;
@@ -258,11 +258,11 @@ static void *TotalProgressObserverContext = &TotalProgressObserverContext;
         return;
     }
 
-    // 计算每个柱子的宽度和间距
+    // Work out the width and spacing of each bar
     CGFloat totalWidth = rect.size.width;
     CGFloat spacing = 2.0;
     CGFloat barWidth = MAX(1.0, (totalWidth - spacing * (count - 1)) / count);
-    CGFloat minHeight = 2.0; // 最小高度，确保至少可见
+    CGFloat minHeight = 2.0; // Minimum height so a bar is always visible
 
     for (NSInteger i = 0; i < count; i++) {
         CGFloat value = _samples[i].floatValue;
@@ -271,14 +271,14 @@ static void *TotalProgressObserverContext = &TotalProgressObserverContext;
         CGFloat y = rect.size.height - barHeight;
 
         CGRect barRect = CGRectMake(x, y, barWidth, barHeight);
-        // 圆角柱子（顶部圆角）
+        // Rounded bars (rounded at the top)
         CGFloat cornerR = MIN(barWidth / 2.0, 2.0);
         UIBezierPath *barPath =
             [UIBezierPath bezierPathWithRoundedRect:barRect
                                    byRoundingCorners:UIRectCornerTopLeft | UIRectCornerTopRight
                                          cornerRadii:CGSizeMake(cornerR, cornerR)];
 
-        // 最右侧（最新）的柱子使用不透明颜色，其余使用半透明以区分新旧
+        // The rightmost (newest) bar uses an opaque color and the rest are translucent, to separate new from old
         BOOL isLatest = (i == count - 1);
         UIColor *color = isLatest ? _barColor : [_barColor colorWithAlphaComponent:0.5];
         CGContextSetFillColorWithColor(ctx, color.CGColor);
@@ -290,7 +290,7 @@ static void *TotalProgressObserverContext = &TotalProgressObserverContext;
 @end
 
 // ============================================================================
-// 自定义圆形进度视图（保留原有设计，增强完成态动画）
+// Custom circular progress view (keeping the original design, with an enhanced completion animation)
 // ============================================================================
 
 @interface CircularProgressView : UIView
@@ -305,7 +305,7 @@ static void *TotalProgressObserverContext = &TotalProgressObserverContext;
 @implementation CircularProgressView {
     CAShapeLayer *_trackLayer;
     CAShapeLayer *_progressLayer;
-    CAShapeLayer *_completedLayer; // 完成时的对勾
+    CAShapeLayer *_completedLayer; // The checkmark shown on completion
     BOOL _completedVisible;
     BOOL _runningVisible;
 }
@@ -329,7 +329,7 @@ static void *TotalProgressObserverContext = &TotalProgressObserverContext;
                                                                 endAngle:-M_PI_2 + 2.0 * M_PI
                                                                clockwise:YES];
 
-        // 轨道层（灰色背景圆环）
+        // Track layer (the gray background ring)
         _trackLayer = [CAShapeLayer layer];
         _trackLayer.path = circlePath.CGPath;
         _trackLayer.fillColor = nil;
@@ -339,7 +339,7 @@ static void *TotalProgressObserverContext = &TotalProgressObserverContext;
         _trackLayer.strokeEnd = 1.0;
         [self.layer addSublayer:_trackLayer];
 
-        // 进度层（主题色进度圆环）
+        // Progress layer (the theme-colored progress ring)
         _progressLayer = [CAShapeLayer layer];
         _progressLayer.path = circlePath.CGPath;
         _progressLayer.fillColor = nil;
@@ -350,7 +350,7 @@ static void *TotalProgressObserverContext = &TotalProgressObserverContext;
         _progressLayer.strokeEnd = 0.0;
         [self.layer addSublayer:_progressLayer];
 
-        // 完成对勾（默认隐藏）
+        // Completion checkmark (hidden by default)
         UIBezierPath *checkPath = [UIBezierPath bezierPath];
         CGFloat checkSize = radius * 0.7;
         CGPoint checkCenter = center;
@@ -415,7 +415,7 @@ static void *TotalProgressObserverContext = &TotalProgressObserverContext;
     [CATransaction begin];
     [CATransaction setAnimationDuration:animated ? 0.25 : 0.0];
     if (!visible && !_completedVisible) {
-        // 隐藏运行中状态但未完成：显示暂停状态
+        // Hidden while running but not complete: show the paused state
         _progressLayer.opacity = 0.5;
     } else {
         _progressLayer.opacity = visible ? 1.0 : 0.5;
@@ -426,23 +426,23 @@ static void *TotalProgressObserverContext = &TotalProgressObserverContext;
 @end
 
 // ============================================================================
-// 文件类型图标工具（根据文件扩展名返回对应的 SF Symbol 图标和颜色）
+// File-type icon helper (returns the matching SF Symbol and color for a file extension)
 // ============================================================================
 
-/// 从文件名中提取小写扩展名（不含点）
+/// Extract the lowercase extension from a file name (without the dot)
 static NSString *dpvc_fileExtension(NSString *fileName) {
     if (!fileName || fileName.length == 0) return @"";
     NSString *ext = [[fileName pathExtension] lowercaseString];
     return ext ?: @"";
 }
 
-/// 根据文件扩展名返回对应的 SF Symbol 图标名称
-/// 参照 FCL 的文件列表图标设计，不同类型文件使用不同图标便于快速识别
+/// Return the SF Symbol name matching a file extension
+/// Modelled on the file list icons of FCL, where different file types get different icons for quick recognition
 static UIImage *dpvc_fileTypeIcon(NSString *fileName) {
     NSString *ext = dpvc_fileExtension(fileName);
 
-    // 图标映射表：扩展名 → SF Symbol 名称
-    // 所有符号均为 iOS 13+ 可用，确保兼容性
+    // Icon map: extension -> SF Symbol name
+    // Every symbol here is available on iOS 13+, for compatibility
     NSDictionary<NSString *, NSString *> *iconMap = @{
         @"jar":    @"shippingbox",
         @"json":   @"doc.text",
@@ -467,19 +467,19 @@ static UIImage *dpvc_fileTypeIcon(NSString *fileName) {
     NSString *symbolName = iconMap[ext] ?: @"doc";
     UIImage *image = [UIImage systemImageNamed:symbolName];
 
-    // 兜底：如果指定符号不存在（极端情况），使用通用的 doc 图标
+    // Fallback: if the given symbol does not exist (an edge case), use the generic doc icon
     if (!image) {
         image = [UIImage systemImageNamed:@"doc"];
     }
     return image;
 }
 
-/// 根据文件扩展名返回对应的主题颜色
-/// 颜色与文件类型对应，便于视觉快速区分
+/// Return the theme color matching a file extension
+/// The colors correspond to file types, making them easy to tell apart visually
 static UIColor *dpvc_fileTypeColor(NSString *fileName) {
     NSString *ext = dpvc_fileExtension(fileName);
 
-    // 颜色映射表：扩展名 → UIColor
+    // Color map: extension -> UIColor
     NSDictionary<NSString *, UIColor *> *colorMap = @{
         @"jar":    [UIColor systemOrangeColor],
         @"json":   [UIColor systemTealColor],
@@ -505,27 +505,27 @@ static UIColor *dpvc_fileTypeColor(NSString *fileName) {
 }
 
 // ============================================================================
-// 自定义下载文件 Cell（卡片式布局：图标 + 文件名 + 大小/速度 + 圆形进度）
+// Custom download file cell (card layout: icon + file name + size/speed + circular progress)
 // ============================================================================
 
 @interface DPVCDownloadCell : UITableViewCell
 
-/// 卡片容器视图（承载毛玻璃/边框/圆角样式）
+/// Card container view (carrying the frosted glass/border/corner radius styling)
 @property (nonatomic, strong) UIView *cardView;
-/// 文件类型图标
+/// File-type icon
 @property (nonatomic, strong) UIImageView *fileIconView;
-/// 文件名标签
+/// File name label
 @property (nonatomic, strong) UILabel *fileNameLabel;
-/// 详情标签（已下载/总大小 • 速度）
+/// Detail label (downloaded/total size • speed)
 @property (nonatomic, strong) UILabel *detailLabel;
-/// 圆形进度视图
+/// Circular progress view
 @property (nonatomic, strong) CircularProgressView *progressView;
 
-/// 配置 Cell 的文件名（设置图标和文件名）
+/// Configure the cell's file name (setting the icon and file name)
 - (void)configureWithFileName:(NSString *)fileName;
-/// 用 NSProgress 更新 Cell 的进度、大小、速度显示
+/// Update the cell's progress, size and speed display from an NSProgress
 - (void)updateWithProgress:(NSProgress *)progress;
-/// 应用卡片样式（根据是否有全局背景调整毛玻璃/纯色）
+/// Apply the card style (using frosted glass or a solid color depending on whether a global background is set)
 - (void)applyCardStyle;
 
 @end
@@ -545,9 +545,9 @@ static UIColor *dpvc_fileTypeColor(NSString *fileName) {
     return self;
 }
 
-/// 创建并添加所有子视图
+/// Create and add every subview
 - (void)setupViews {
-    // 卡片容器：16pt 圆角 + 0.5pt 边框 + 半透明背景
+    // Card container: 16pt radius + 0.5pt border + translucent background
     self.cardView = [[UIView alloc] init];
     self.cardView.translatesAutoresizingMaskIntoConstraints = NO;
     self.cardView.layer.cornerRadius = kCardCornerRadius;
@@ -557,7 +557,7 @@ static UIColor *dpvc_fileTypeColor(NSString *fileName) {
     self.cardView.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.08];
     [self.contentView addSubview:self.cardView];
 
-    // 文件类型图标
+    // File-type icon
     self.fileIconView = [[UIImageView alloc] init];
     self.fileIconView.translatesAutoresizingMaskIntoConstraints = NO;
     self.fileIconView.contentMode = UIViewContentModeScaleAspectFit;
@@ -566,7 +566,7 @@ static UIColor *dpvc_fileTypeColor(NSString *fileName) {
         [UIImageSymbolConfiguration configurationWithPointSize:16 weight:UIFontWeightMedium];
     [self.cardView addSubview:self.fileIconView];
 
-    // 文件名标签
+    // File name label
     self.fileNameLabel = [[UILabel alloc] init];
     self.fileNameLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.fileNameLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
@@ -575,7 +575,7 @@ static UIColor *dpvc_fileTypeColor(NSString *fileName) {
     self.fileNameLabel.lineBreakMode = NSLineBreakByTruncatingMiddle;
     [self.cardView addSubview:self.fileNameLabel];
 
-    // 详情标签（已下载/总大小 • 速度）
+    // Detail label (downloaded/total size • speed)
     self.detailLabel = [[UILabel alloc] init];
     self.detailLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.detailLabel.font = [UIFont systemFontOfSize:11];
@@ -584,60 +584,60 @@ static UIColor *dpvc_fileTypeColor(NSString *fileName) {
     self.detailLabel.lineBreakMode = NSLineBreakByTruncatingTail;
     [self.cardView addSubview:self.detailLabel];
 
-    // 圆形进度视图
+    // Circular progress view
     self.progressView = [[CircularProgressView alloc] initWithFrame:CGRectMake(0, 0, kCircularProgressSize, kCircularProgressSize)];
     self.progressView.translatesAutoresizingMaskIntoConstraints = NO;
     self.progressView.resolvedTintColor = [UIColor systemBlueColor];
     [self.cardView addSubview:self.progressView];
 }
 
-/// 设置 Auto Layout 约束
+/// Set up the Auto Layout constraints
 - (void)setupConstraints {
     [NSLayoutConstraint activateConstraints:@[
-        // 卡片容器：左右各 16pt，上下各 4pt
+        // Card container: 16pt on each side, 4pt top and bottom
         [self.cardView.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:4],
         [self.cardView.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:16],
         [self.cardView.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-16],
         [self.cardView.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-4],
 
-        // 文件类型图标：左侧固定尺寸
+        // File-type icon: fixed size on the left
         [self.fileIconView.leadingAnchor constraintEqualToAnchor:self.cardView.leadingAnchor constant:12],
         [self.fileIconView.centerYAnchor constraintEqualToAnchor:self.cardView.centerYAnchor],
         [self.fileIconView.widthAnchor constraintEqualToConstant:kFileIconSize],
         [self.fileIconView.heightAnchor constraintEqualToConstant:kFileIconSize],
 
-        // 圆形进度视图：右侧固定尺寸
+        // Circular progress view: fixed size on the right
         [self.progressView.trailingAnchor constraintEqualToAnchor:self.cardView.trailingAnchor constant:-12],
         [self.progressView.centerYAnchor constraintEqualToAnchor:self.cardView.centerYAnchor],
         [self.progressView.widthAnchor constraintEqualToConstant:kCircularProgressSize],
         [self.progressView.heightAnchor constraintEqualToConstant:kCircularProgressSize],
 
-        // 文件名标签：图标右侧 → 进度视图左侧
+        // File name label: from the right of the icon to the left of the progress view
         [self.fileNameLabel.leadingAnchor constraintEqualToAnchor:self.fileIconView.trailingAnchor constant:10],
         [self.fileNameLabel.trailingAnchor constraintEqualToAnchor:self.progressView.leadingAnchor constant:-10],
         [self.fileNameLabel.topAnchor constraintEqualToAnchor:self.cardView.topAnchor constant:14],
 
-        // 详情标签：文件名下方
+        // Detail label: below the file name
         [self.detailLabel.leadingAnchor constraintEqualToAnchor:self.fileIconView.trailingAnchor constant:10],
         [self.detailLabel.trailingAnchor constraintEqualToAnchor:self.progressView.leadingAnchor constant:-10],
         [self.detailLabel.topAnchor constraintEqualToAnchor:self.fileNameLabel.bottomAnchor constant:3],
     ]];
 }
 
-/// 应用卡片样式（根据是否有全局背景调整）
+/// Apply the card style (depending on whether a global background is set)
 - (void)applyCardStyle {
     BOOL hasBg = [[BackgroundManager sharedManager] hasBackground];
 
     if (hasBg) {
-        // 有全局背景：半透明白色 + 毛玻璃效果
+        // Global background present: translucent white + frosted glass
         self.cardView.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.08];
         [[BackgroundManager sharedManager] applyEffectToView:self.cardView];
     } else {
-        // 无全局背景：使用系统纯色保证可读性
+        // No global background: use a solid system color for readability
         self.cardView.backgroundColor = [UIColor secondarySystemGroupedBackgroundColor];
     }
 
-    // 文字颜色随背景调整
+    // Text color follows the background
     UIColor *titleColor = hasBg ? [UIColor whiteColor] : [UIColor labelColor];
     UIColor *detailColor = hasBg ?
         [UIColor colorWithWhite:1.0 alpha:0.7] : [UIColor secondaryLabelColor];
@@ -646,27 +646,27 @@ static UIColor *dpvc_fileTypeColor(NSString *fileName) {
     self.detailLabel.textColor = detailColor;
 }
 
-/// 配置 Cell 的文件名和图标
+/// Configure the cell's file name and icon
 - (void)configureWithFileName:(NSString *)fileName {
     self.fileNameLabel.text = fileName.lastPathComponent ?: fileName;
     self.fileIconView.image = dpvc_fileTypeIcon(fileName);
     self.fileIconView.tintColor = dpvc_fileTypeColor(fileName);
 }
 
-/// 用 NSProgress 更新进度、大小、速度显示
+/// Update the progress, size and speed display from an NSProgress
 - (void)updateWithProgress:(NSProgress *)progress {
-    // 更新圆形进度
+    // Update the circular progress
     self.progressView.fractionCompleted = progress.fractionCompleted;
 
-    // 完成态切换
+    // Switch to the completed state
     if (progress.finished) {
         [self.progressView transitionCompletedLayerToVisible:YES animated:YES haptic:NO];
     }
 
-    // 构建详情文本：已下载/总大小 • 速度
+    // Build the detail text: downloaded/total size • speed
     NSMutableString *detail = [NSMutableString string];
 
-    // 已下载/总大小
+    // Downloaded/total size
     if (progress.totalUnitCount > 0) {
         int64_t completed = progress.completedUnitCount;
         int64_t total = progress.totalUnitCount;
@@ -676,13 +676,13 @@ static UIColor *dpvc_fileTypeColor(NSString *fileName) {
                                                            countStyle:NSByteCountFormatterCountStyleFile];
         [detail appendFormat:@"%@ / %@", completedStr, totalStr];
     } else if (progress.completedUnitCount > 0) {
-        // 总大小未知，只显示已下载
+        // Total size unknown, so only show what has been downloaded
         NSString *completedStr = [NSByteCountFormatter stringFromByteCount:progress.completedUnitCount
                                                                countStyle:NSByteCountFormatterCountStyleFile];
         [detail appendFormat:@"%@ / ?", completedStr];
     }
 
-    // 速度
+    // Speed
     if (progress.throughput) {
         NSInteger speed = [progress.throughput integerValue];
         if (speed > 1024 * 1024) {
@@ -708,13 +708,13 @@ static UIColor *dpvc_fileTypeColor(NSString *fileName) {
 @end
 
 // ============================================================================
-// 主控制器实现
+// Main controller implementation
 // ============================================================================
 
 @interface DownloadProgressViewController ()
-// 文件列表计数（用于检测文件列表变化并刷新表格）
+// File list count (used to detect list changes and refresh the table)
 @property NSInteger fileListCount;
-// 摘要卡片子视图
+// Summary card subviews
 @property (nonatomic, strong) UIView *summaryHeaderView;
 @property (nonatomic, strong) UIView *summaryCardView;
 @property (nonatomic, strong) UIImageView *summaryIconView;
@@ -729,10 +729,10 @@ static UIColor *dpvc_fileTypeColor(NSString *fileName) {
 @end
 
 @implementation DownloadProgressViewController {
-    // 速度采样相关：用于计算实时速度并更新迷你图表
+    // Speed sampling: used to compute the live speed and update the mini chart
     CGFloat _lastSpeedSampleTime;
     int64_t _lastCompletedBytes;
-    CGFloat _maxObservedSpeed; // 用于归一化速度采样
+    CGFloat _maxObservedSpeed; // Used to normalize the speed samples
 }
 
 - (instancetype)initWithTask:(MinecraftResourceDownloadTask *)task {
@@ -743,46 +743,46 @@ static UIColor *dpvc_fileTypeColor(NSString *fileName) {
 
 - (void)loadView {
     [super loadView];
-    // 适配自定义启动器背景
+    // Adapt to the custom launcher background
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
     self.tableView.backgroundColor = [UIColor clearColor];
 
     self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemClose target:self action:@selector(actionClose)];
     self.tableView.allowsSelection = NO;
 
-    // 初始化字节格式化器（复用，避免频繁创建）
+    // Initialize the byte formatter (reused, to avoid creating it repeatedly)
     _byteFormatter = [[NSByteCountFormatter alloc] init];
     _byteFormatter.allowedUnits = NSByteCountFormatterUseAll;
     _byteFormatter.countStyle = NSByteCountFormatterCountStyleFile;
     _byteFormatter.includesUnit = YES;
 
-    // 初始化速度采样状态
+    // Initialize the speed sampling state
     _lastSpeedSampleTime = 0;
     _lastCompletedBytes = 0;
-    _maxObservedSpeed = 1.0; // 避免除零，初始给一个最小值
+    _maxObservedSpeed = 1.0; // A small initial value, to avoid dividing by zero
 
-    // 创建表头摘要卡片（参照 FCL 下载页顶部的总进度摘要）
+    // Build the table header summary card (modelled on the total-progress summary at the top of the FCL download page)
     [self setupSummaryHeader];
 }
 
 // ============================================================================
-// 表头摘要卡片构建
+// Building the table header summary card
 // ============================================================================
 
-/// 创建表头摘要视图：文件图标 + 百分比 + 进度条 + 速度图表 + 大小/速度/ETA
-/// 布局结构：
+/// Build the header summary view: file icon + percentage + progress bar + speed chart + size/speed/ETA
+/// Layout:
 /// ┌─────────────────────────────────────┐
-/// │ [icon] 正在下载...           [45%] │
+/// | [icon] Downloading...        [45%] |
 /// │ Minecraft 1.20.4                    │
 /// │ ████████████░░░░░░░░░░░░░░          │
-/// │ ▁▂▃▅▇▅▃▂▃▅▇█▇▅▃▂ (速度图表)        │
-/// │ 1.2 GB / 2.5 GB   3.4 MB/s   约2分 │
+/// | ▁▂▃▅▇▅▃▂▃▅▇█▇▅▃▂ (speed chart)     |
+/// | 1.2 GB / 2.5 GB  3.4 MB/s  ~2 min  |
 /// └─────────────────────────────────────┘
 - (void)setupSummaryHeader {
     self.summaryHeaderView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, CGRectGetWidth(self.view.bounds), kSummaryHeaderHeight)];
     self.summaryHeaderView.backgroundColor = [UIColor clearColor];
 
-    // 卡片容器：16pt 圆角 + 0.5pt 边框 + 半透明背景 + 毛玻璃
+    // Card container: 16pt radius + 0.5pt border + translucent background + frosted glass
     self.summaryCardView = [[UIView alloc] init];
     self.summaryCardView.translatesAutoresizingMaskIntoConstraints = NO;
     self.summaryCardView.layer.cornerRadius = kCardCornerRadius;
@@ -793,7 +793,7 @@ static UIColor *dpvc_fileTypeColor(NSString *fileName) {
     [[BackgroundManager sharedManager] applyEffectToView:self.summaryCardView];
     [self.summaryHeaderView addSubview:self.summaryCardView];
 
-    // 文件/下载图标（左上角，下载中带呼吸动画）
+    // File/download icon (top left, with a breathing animation while downloading)
     self.summaryIconView = [[UIImageView alloc] init];
     self.summaryIconView.translatesAutoresizingMaskIntoConstraints = NO;
     self.summaryIconView.contentMode = UIViewContentModeScaleAspectFit;
@@ -803,7 +803,7 @@ static UIColor *dpvc_fileTypeColor(NSString *fileName) {
         [UIImageSymbolConfiguration configurationWithPointSize:24 weight:UIFontWeightMedium];
     [self.summaryCardView addSubview:self.summaryIconView];
 
-    // 百分比标签（右上角，大字体醒目显示）
+    // Percentage label (top right, in a large prominent font)
     self.summaryPercentLabel = [[UILabel alloc] init];
     self.summaryPercentLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.summaryPercentLabel.font = [UIFont systemFontOfSize:22 weight:UIFontWeightBold];
@@ -812,7 +812,7 @@ static UIColor *dpvc_fileTypeColor(NSString *fileName) {
     self.summaryPercentLabel.text = @"0%";
     [self.summaryCardView addSubview:self.summaryPercentLabel];
 
-    // 标题标签（图标下方，显示状态文本）
+    // Title label (below the icon, showing the status text)
     self.summaryTitleLabel = [[UILabel alloc] init];
     self.summaryTitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.summaryTitleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
@@ -820,20 +820,20 @@ static UIColor *dpvc_fileTypeColor(NSString *fileName) {
     self.summaryTitleLabel.text = localize(@"download.progress.downloading", @"Downloading...");
     [self.summaryCardView addSubview:self.summaryTitleLabel];
 
-    // 自定义线性进度条（主题色，胶囊形，平滑动画）
+    // Custom linear progress bar (theme color, capsule-shaped, smoothly animated)
     self.summaryProgressBar = [[DPVCProgressBar alloc] init];
     self.summaryProgressBar.translatesAutoresizingMaskIntoConstraints = NO;
     self.summaryProgressBar.fillColor = self.view.tintColor ?: [UIColor systemBlueColor];
     self.summaryProgressBar.trackColor = [[UIColor whiteColor] colorWithAlphaComponent:0.12];
     [self.summaryCardView addSubview:self.summaryProgressBar];
 
-    // 速度迷你图表（实时速度可视化）
+    // Mini speed chart (live speed visualization)
     self.speedSparkline = [[DPVCSpeedSparkline alloc] init];
     self.speedSparkline.translatesAutoresizingMaskIntoConstraints = NO;
     self.speedSparkline.barColor = self.view.tintColor ?: [UIColor systemBlueColor];
     [self.summaryCardView addSubview:self.speedSparkline];
 
-    // 底部信息行：大小（左）+ 速度（中）+ ETA（右）
+    // Bottom info row: size (left) + speed (middle) + ETA (right)
     self.summarySizeLabel = [[UILabel alloc] init];
     self.summarySizeLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.summarySizeLabel.font = [UIFont systemFontOfSize:12];
@@ -857,43 +857,43 @@ static UIColor *dpvc_fileTypeColor(NSString *fileName) {
     self.summaryETALabel.text = @"";
     [self.summaryCardView addSubview:self.summaryETALabel];
 
-    // 激活所有约束
+    // Activate every constraint
     [NSLayoutConstraint activateConstraints:@[
-        // 卡片容器：左右各 16pt，上下各 8pt
+        // Card container: 16pt on each side, 8pt top and bottom
         [self.summaryCardView.topAnchor constraintEqualToAnchor:self.summaryHeaderView.topAnchor constant:8],
         [self.summaryCardView.leadingAnchor constraintEqualToAnchor:self.summaryHeaderView.leadingAnchor constant:16],
         [self.summaryCardView.trailingAnchor constraintEqualToAnchor:self.summaryHeaderView.trailingAnchor constant:-16],
         [self.summaryCardView.bottomAnchor constraintEqualToAnchor:self.summaryHeaderView.bottomAnchor constant:-8],
 
-        // 图标：左上角
+        // Icon: top left
         [self.summaryIconView.topAnchor constraintEqualToAnchor:self.summaryCardView.topAnchor constant:16],
         [self.summaryIconView.leadingAnchor constraintEqualToAnchor:self.summaryCardView.leadingAnchor constant:16],
         [self.summaryIconView.widthAnchor constraintEqualToConstant:kSummaryIconSize],
         [self.summaryIconView.heightAnchor constraintEqualToConstant:kSummaryIconSize],
 
-        // 百分比标签：右上角，与图标垂直居中对齐
+        // Percentage label: top right, vertically centered with the icon
         [self.summaryPercentLabel.topAnchor constraintEqualToAnchor:self.summaryCardView.topAnchor constant:14],
         [self.summaryPercentLabel.trailingAnchor constraintEqualToAnchor:self.summaryCardView.trailingAnchor constant:-16],
         [self.summaryPercentLabel.leadingAnchor constraintEqualToAnchor:self.summaryIconView.trailingAnchor constant:8],
 
-        // 标题标签：图标下方
+        // Title label: below the icon
         [self.summaryTitleLabel.topAnchor constraintEqualToAnchor:self.summaryIconView.bottomAnchor constant:8],
         [self.summaryTitleLabel.leadingAnchor constraintEqualToAnchor:self.summaryCardView.leadingAnchor constant:16],
         [self.summaryTitleLabel.trailingAnchor constraintEqualToAnchor:self.summaryCardView.trailingAnchor constant:-16],
 
-        // 进度条：标题下方
+        // Progress bar: below the title
         [self.summaryProgressBar.topAnchor constraintEqualToAnchor:self.summaryTitleLabel.bottomAnchor constant:10],
         [self.summaryProgressBar.leadingAnchor constraintEqualToAnchor:self.summaryCardView.leadingAnchor constant:16],
         [self.summaryProgressBar.trailingAnchor constraintEqualToAnchor:self.summaryCardView.trailingAnchor constant:-16],
         [self.summaryProgressBar.heightAnchor constraintEqualToConstant:kProgressBarHeight],
 
-        // 速度迷你图表：进度条下方
+        // Mini speed chart: below the progress bar
         [self.speedSparkline.topAnchor constraintEqualToAnchor:self.summaryProgressBar.bottomAnchor constant:10],
         [self.speedSparkline.leadingAnchor constraintEqualToAnchor:self.summaryCardView.leadingAnchor constant:16],
         [self.speedSparkline.trailingAnchor constraintEqualToAnchor:self.summaryCardView.trailingAnchor constant:-16],
         [self.speedSparkline.heightAnchor constraintEqualToConstant:kSpeedSparklineHeight],
 
-        // 底部信息行：大小（左）+ 速度（中）+ ETA（右）
+        // Bottom info row: size (left) + speed (middle) + ETA (right)
         [self.summarySizeLabel.topAnchor constraintEqualToAnchor:self.speedSparkline.bottomAnchor constant:10],
         [self.summarySizeLabel.leadingAnchor constraintEqualToAnchor:self.summaryCardView.leadingAnchor constant:16],
         [self.summarySizeLabel.bottomAnchor constraintEqualToAnchor:self.summaryCardView.bottomAnchor constant:-14],
@@ -909,11 +909,11 @@ static UIColor *dpvc_fileTypeColor(NSString *fileName) {
 
     self.tableView.tableHeaderView = self.summaryHeaderView;
 
-    // 启动下载图标的呼吸动画（表示下载进行中）
+    // Start the breathing animation on the download icon (indicating a download in progress)
     [self startIconPulseAnimation];
 }
 
-/// 给摘要图标添加呼吸动画（缩放脉动，表示下载进行中）
+/// Add a breathing animation to the summary icon (a scale pulse indicating a download in progress)
 - (void)startIconPulseAnimation {
     [self.summaryIconView.layer removeAllAnimations];
     CAKeyframeAnimation *pulse = [CAKeyframeAnimation animationWithKeyPath:@"transform.scale"];
@@ -926,7 +926,7 @@ static UIColor *dpvc_fileTypeColor(NSString *fileName) {
 }
 
 // ============================================================================
-// KVO 观察
+// KVO observation
 // ============================================================================
 
 - (void)viewDidAppear:(BOOL)animated {
@@ -951,39 +951,39 @@ static UIColor *dpvc_fileTypeColor(NSString *fileName) {
 - (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary *)change context:(void *)context {
     NSProgress *progress = object;
     if (context == CellProgressObserverContext) {
-        // 单文件进度更新：更新对应 Cell 的显示
+        // Per-file progress update: refresh the matching cell
         DPVCDownloadCell *cell = objc_getAssociatedObject(progress, @"cell");
         if (!cell) return;
         dispatch_async(dispatch_get_main_queue(), ^{
             [cell updateWithProgress:progress];
         });
     } else if (context == TotalProgressObserverContext) {
-        // 总进度更新：更新摘要卡片
+        // Total progress update: refresh the summary card
         dispatch_async(dispatch_get_main_queue(), ^{
             self.title = progress.localizedDescription;
 
             double fraction = progress.fractionCompleted;
 
-            // 更新百分比
+            // Update the percentage
             NSInteger percent = (NSInteger)(fraction * 100.0 + 0.5);
             percent = MAX(0, MIN(100, percent));
             self.summaryPercentLabel.text = [NSString stringWithFormat:@"%ld%%", (long)percent];
 
-            // 更新标题
+            // Update the title
             if (progress.finished) {
                 self.summaryTitleLabel.text = localize(@"download.progress.completed", @"Download complete");
                 self.summaryIconView.image = [UIImage systemImageNamed:@"checkmark.circle.fill"];
                 self.summaryIconView.tintColor = [UIColor systemGreenColor];
-                [self.summaryIconView.layer removeAllAnimations]; // 停止呼吸动画
+                [self.summaryIconView.layer removeAllAnimations]; // Stop the breathing animation
                 self.summaryProgressBar.fillColor = [UIColor systemGreenColor];
             } else {
                 self.summaryTitleLabel.text = localize(@"download.progress.downloading", @"Downloading...");
             }
 
-            // 更新进度条
+            // Update the progress bar
             [self.summaryProgressBar setProgress:(CGFloat)fraction animated:YES];
 
-            // 更新大小标签：已下载 / 总大小
+            // Update the size label: downloaded / total
             NSMutableString *sizeText = [NSMutableString string];
             if (progress.totalUnitCount > 0) {
                 int64_t completed = progress.completedUnitCount;
@@ -994,13 +994,13 @@ static UIColor *dpvc_fileTypeColor(NSString *fileName) {
             }
             self.summarySizeLabel.text = sizeText.length > 0 ? sizeText : @"";
 
-            // 更新速度标签 + 速度迷你图表
+            // Update the speed label and the mini speed chart
             double currentSpeed = 0.0;
             if (progress.throughput) {
                 currentSpeed = [progress.throughput doubleValue];
             }
 
-            // 计算瞬时速度（基于 completedUnitCount 的时间差，作为 throughput 的补充/回退）
+            // Compute the instantaneous speed (from the time delta of completedUnitCount, complementing/backing up throughput)
             struct timeval tv;
             gettimeofday(&tv, NULL);
             CGFloat nowMs = (CGFloat)(tv.tv_sec * 1000.0 + tv.tv_usec / 1000.0);
@@ -1009,17 +1009,17 @@ static UIColor *dpvc_fileTypeColor(NSString *fileName) {
                 int64_t deltaBytes = progress.completedUnitCount - _lastCompletedBytes;
                 if (deltaBytes > 0 && elapsedSec > 0) {
                     double instantSpeed = deltaBytes / elapsedSec;
-                    // 取 throughput 和瞬时速度的较大值（throughput 有时更新滞后）
+                    // Take the larger of throughput and the instantaneous speed (throughput sometimes lags)
                     currentSpeed = MAX(currentSpeed, instantSpeed);
                 }
             }
             _lastSpeedSampleTime = nowMs;
             _lastCompletedBytes = progress.completedUnitCount;
 
-            // 格式化并显示速度
+            // Format and display the speed
             self.summarySpeedLabel.text = [self formatSpeed:currentSpeed];
 
-            // 更新速度迷你图表
+            // Update the mini speed chart
             if (currentSpeed > _maxObservedSpeed) {
                 _maxObservedSpeed = currentSpeed;
             }
@@ -1028,12 +1028,12 @@ static UIColor *dpvc_fileTypeColor(NSString *fileName) {
                 : 0.0;
             [self.speedSparkline addSpeedSample:normalizedSpeed];
 
-            // 更新 ETA 标签（友好格式："约 2 分钟" 而非 "120s"）
+            // Update the ETA label (in a friendly format: "About 2 min" rather than "120s")
             NSInteger etaSeconds = 0;
             if (progress.estimatedTimeRemaining) {
                 etaSeconds = [progress.estimatedTimeRemaining integerValue];
             } else if (currentSpeed > 0 && progress.totalUnitCount > 0) {
-                // throughput 的 ETA 不可用时，手动计算
+                // Compute it manually when the throughput ETA is unavailable
                 int64_t remaining = progress.totalUnitCount - progress.completedUnitCount;
                 if (remaining > 0) {
                     etaSeconds = (NSInteger)(remaining / currentSpeed);
@@ -1041,7 +1041,7 @@ static UIColor *dpvc_fileTypeColor(NSString *fileName) {
             }
             self.summaryETALabel.text = [self formatETA:etaSeconds];
 
-            // 文件列表变化时刷新表格
+            // Refresh the table when the file list changes
             if (self.fileListCount != self.task.fileList.count) {
                 [self.tableView reloadData];
             }
@@ -1053,10 +1053,10 @@ static UIColor *dpvc_fileTypeColor(NSString *fileName) {
 }
 
 // ============================================================================
-// 格式化工具
+// Formatting helpers
 // ============================================================================
 
-/// 格式化下载速度（bytes/s → B/s / KB/s / MB/s）
+/// Format the download speed (bytes/s -> B/s / KB/s / MB/s)
 - (NSString *)formatSpeed:(double)bytesPerSec {
     if (bytesPerSec <= 0) return @"0 B/s";
     if (bytesPerSec < 1024.0) {
@@ -1068,12 +1068,12 @@ static UIColor *dpvc_fileTypeColor(NSString *fileName) {
     return [NSString stringWithFormat:@"%.2f MB/s", bytesPerSec / (1024.0 * 1024.0)];
 }
 
-/// 格式化剩余时间（ETA），使用友好的中文表达
-/// 规则：
-///   0 秒或负值 → "即将完成"
-///   < 60 秒   → "约 X 秒"
-///   < 3600 秒  → "约 X 分钟"（四舍五入到分钟）
-///   >= 3600 秒 → "约 X 小时 Y 分"
+/// Format the time remaining (ETA) in friendly wording
+/// Rules:
+///   0 or negative -> "Almost done"
+///   < 60 s        -> "About X sec"
+///   < 3600 s      -> "About X min" (rounded to the nearest minute)
+///   >= 3600 s     -> "About X hr Y min"
 - (NSString *)formatETA:(NSInteger)etaSeconds {
     if (etaSeconds <= 0) {
         return localize(@"download.progress.eta.soon", @"Almost done");
@@ -1084,12 +1084,12 @@ static UIColor *dpvc_fileTypeColor(NSString *fileName) {
     }
 
     if (etaSeconds < 3600) {
-        // 四舍五入到分钟（< 60 秒部分 > 30 秒则进位）
+        // Round to the nearest minute (the remainder rounds up when it is over 30 seconds)
         NSInteger minutes = (etaSeconds + 30) / 60;
         return [NSString stringWithFormat:localize(@"download.progress.eta.about_minutes", @"About %ld min"), (long)minutes];
     }
 
-    // >= 1 小时
+    // >= 1 hour
     NSInteger hours = etaSeconds / 3600;
     NSInteger minutes = (etaSeconds % 3600) / 60;
     if (minutes > 0) {
@@ -1099,7 +1099,7 @@ static UIColor *dpvc_fileTypeColor(NSString *fileName) {
 }
 
 // ============================================================================
-// UITableView 数据源与代理
+// UITableView data source and delegate
 // ============================================================================
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
@@ -1118,7 +1118,7 @@ static UIColor *dpvc_fileTypeColor(NSString *fileName) {
         cell.progressView.resolvedTintColor = self.view.tintColor ?: [UIColor systemBlueColor];
     }
 
-    // 清除上一个 Cell 关联的进度观察
+    // Clear the progress observation attached to the previous cell
     NSProgress *lastProgress = objc_getAssociatedObject(cell, @"progress");
     if (lastProgress) {
         objc_setAssociatedObject(lastProgress, @"cell", nil, OBJC_ASSOCIATION_ASSIGN);
@@ -1127,11 +1127,11 @@ static UIColor *dpvc_fileTypeColor(NSString *fileName) {
         } @catch(id anException) {}
     }
 
-    // 配置当前 Cell 的文件名和图标
+    // Configure the current cell's file name and icon
     NSString *fileName = self.task.fileList[indexPath.row];
     [cell configureWithFileName:fileName];
 
-    // 关联当前文件进度并添加 KVO 观察
+    // Attach the current file progress and register the KVO observer
     NSProgress *progress = self.task.progressList[indexPath.row];
     objc_setAssociatedObject(cell, @"progress", progress, OBJC_ASSOCIATION_ASSIGN);
     objc_setAssociatedObject(progress, @"cell", cell, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
@@ -1140,7 +1140,7 @@ static UIColor *dpvc_fileTypeColor(NSString *fileName) {
         options:NSKeyValueObservingOptionInitial
         context:CellProgressObserverContext];
 
-    // 重置圆形进度视图状态
+    // Reset the circular progress view state
     CircularProgressView *progressView = cell.progressView;
     if (lastProgress && lastProgress.finished) {
         [progressView reset];

@@ -34,7 +34,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, strong, nullable) NSArray<NSString *> *categories;
 @property (nonatomic, copy, nullable) NSString *selectedVersionDownloadURL;
 
-// --- 通用/元数据属性 ---
+// --- Shared/metadata properties ---
 @property (nonatomic, copy, nullable) NSString *displayName;
 @property (nonatomic, copy, nullable) NSString *worldDescription;
 @property (nonatomic, copy, nullable) NSString *iconURL;
@@ -45,13 +45,13 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, copy, nullable) NSString *homepage;
 @property (nonatomic, copy, nullable) NSString *sources;
 
-// --- 初始化方法 ---
+// --- Initializers ---
 // 从本地世界目录路径初始化（path 指向 saves/<worldName>）
 - (instancetype)initWithFilePath:(NSString *)path;
 // 从在线搜索结果初始化
 - (instancetype)initWithOnlineData:(NSDictionary *)data;
 
-// --- 工具方法 ---
+// --- Helpers ---
 - (NSString *)basename;
 
 @end

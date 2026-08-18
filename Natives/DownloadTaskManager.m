@@ -244,19 +244,19 @@ NSString * const DownloadTaskManagerTaskKey                             = @"Down
     [self.lock unlock];
     if (!item) return;
 
-    // 无 retryHandler 无法重建
+    // Without a retryHandler there is nothing to rebuild
     if (!item.retryHandler) {
         NSLog(@"[DownloadTaskManager] retryTaskWithId: task %@ has no retryHandler, cannot retry", taskId);
         return;
     }
 
-    // 超过最大重试次数则不再重试
+    // Stop retrying once the maximum retry count is exceeded
     if (item.maxRetryCount > 0 && item.retryCount >= item.maxRetryCount) {
         NSLog(@"[DownloadTaskManager] retryTaskWithId: task %@ has reached max retry count %ld", taskId, (long)item.maxRetryCount);
         return;
     }
 
-    // 1. 取消旧 rawTask（避免悬挂任务继续下载/上报进度）
+    // 1. Cancel the old rawTask (so a dangling task does not keep downloading/reporting progress)
     id oldRawTask = item.rawTask;
     if ([oldRawTask isKindOfClass:[NSOperation class]]) {
         [(NSOperation *)oldRawTask cancel];
@@ -264,7 +264,7 @@ NSString * const DownloadTaskManagerTaskKey                             = @"Down
         [oldRawTask cancel];
     }
 
-    // 2. 重置 item 状态（保留 taskId/displayName/iconURL/resourceType 等元数据）
+    // 2. Reset the item state (keeping metadata such as taskId/displayName/iconURL/resourceType)
     item.rawTask = nil;
     item.state = DownloadTaskStatePending;
     item.progress = -1.0;
@@ -278,9 +278,9 @@ NSString * const DownloadTaskManagerTaskKey                             = @"Down
     [self postUpdateForTask:item];
     [self checkAggregateStateChange];
 
-    // 3. 调用业务方 retryHandler 重建底层 rawTask
-    //    业务方需在 handler 内创建新 NSURLSessionTask，将其注册到自己的字典并赋值给 item.rawTask，
-    //    最后调用 setTaskWithId:state:Downloading 启动。
+    // 3. Call the caller's retryHandler to rebuild the underlying rawTask
+    //    The handler must create a new NSURLSessionTask, register it in its own dictionary, assign it to item.rawTask,
+    //    and finally call setTaskWithId:state:Downloading to start it.
     @try {
         id newRawTask = item.retryHandler(item);
         if (newRawTask) {
@@ -320,8 +320,8 @@ NSString * const DownloadTaskManagerTaskKey                             = @"Down
     }
 
     [self postUpdateForTask:item];
-    // 当前实现下，运行中的任务无法直接切换 URL，需要调用方重新创建下载。
-    // supportsResume 为 YES 时，业务方可尝试断点续传；为 NO 时则需从头开始。
+    // In the current implementation a running task cannot change URL directly, so the caller has to recreate the download.
+    // When supportsResume is YES the caller may try to resume; when it is NO the download must start over.
     completion(YES, supportsResume, nil);
 }
 

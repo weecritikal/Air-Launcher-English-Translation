@@ -23,7 +23,7 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    // 适配自定义启动器背景：将当前视图控制器透明化，使全局背景壁纸能够透出
+    // Adapt to the custom launcher background: make this view controller transparent so the global wallpaper shows through
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
 
     self.title = localize(@"login.title", @"Account management");
@@ -48,31 +48,31 @@
         }
     }
 
-    // 参照 FCL：卡片式账户列表，去除默认分割线，圆角卡片自带视觉分隔
+    // Following FCL: card-style account list, no default separators — the rounded cards provide the visual separation
     self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
     self.tableView.backgroundColor = [UIColor clearColor];
     self.tableView.estimatedRowHeight = 88;
     self.tableView.rowHeight = UITableViewAutomaticDimension;
-    // 底部内边距避免最后一个 cell 被浮动按钮遮挡
+    // Bottom inset so the last cell is not hidden behind the floating button
     self.tableView.contentInset = UIEdgeInsetsMake(8, 0, 80, 0);
     self.tableView.scrollIndicatorInsets = self.tableView.contentInset;
-    // 注册卡片 cell
+    // Register the card cell
     [self.tableView registerClass:UITableViewCell.class forCellReuseIdentifier:@"accountCardCell"];
 
-    // 添加底部"添加账户"浮动按钮（FCL 风格）
+    // Add the bottom "Add account" floating button (FCL style)
     [self setupAddAccountButton];
 
-    // 应用背景
+    // Apply the background
     [[BackgroundManager sharedManager] applyBackgroundToView:self.view];
 
-    // 监听背景 UI 效果变化通知，当用户切换背景效果（半透明/毛玻璃）时重新应用透明化
+    // Listen for background UI effect changes so transparency is re-applied when the user switches effect (translucent/frosted)
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(reapplyBackgroundEffect)
                                                  name:@"BackgroundUIEffectChanged"
                                                object:nil];
 }
 
-/// 背景效果改变时重新应用透明化（由 BackgroundUIEffectChanged 通知触发）
+/// Re-apply transparency when the background effect changes (triggered by the BackgroundUIEffectChanged notification)
 - (void)reapplyBackgroundEffect {
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
 }
@@ -93,15 +93,15 @@
     addBtn.layer.cornerCurve = kCACornerCurveContinuous;
     addBtn.titleEdgeInsets = UIEdgeInsetsMake(0, 6, 0, 0);
     addBtn.imageEdgeInsets = UIEdgeInsetsMake(0, -6, 0, 0);
-    // 投影增强浮动感（FCL 风格）
+    // Shadow to enhance the floating look (FCL style)
     addBtn.layer.shadowColor = [UIColor blackColor].CGColor;
     addBtn.layer.shadowOpacity = 0.35;
     addBtn.layer.shadowOffset = CGSizeMake(0, 4);
     addBtn.layer.shadowRadius = 10;
     [addBtn addTarget:self action:@selector(addAccountTapped) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:addBtn];
-    // 使用 frameLayoutGuide（UITableView 的可见区域锚点）而非 safeAreaLayoutGuide，
-    // 确保按钮随可见区域底部浮动，不会跟随 cell 滚动
+    // Use frameLayoutGuide (the visible-area anchor of UITableView) rather than safeAreaLayoutGuide,
+    // so the button floats at the bottom of the visible area instead of scrolling with the cells
     [NSLayoutConstraint activateConstraints:@[
         [addBtn.bottomAnchor constraintEqualToAnchor:self.tableView.frameLayoutGuide.bottomAnchor constant:-16],
         [addBtn.centerXAnchor constraintEqualToAnchor:self.tableView.frameLayoutGuide.centerXAnchor],
@@ -117,11 +117,11 @@
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section
 {
-    // FCL 风格：列表只显示已有账户，添加账户改由底部浮动按钮触发
+    // FCL style: the list only shows existing accounts; adding one is triggered by the bottom floating button
     return self.accountList.count;
 }
 
-/// 计算账户类型标签文字与配色（参照 FCL：微软=蓝、第三方=橙、本地=灰、Demo=紫）
+/// Work out the account-type badge text and colors (following FCL: Microsoft=blue, third-party=orange, local=gray, Demo=purple)
 - (void)applyAccountTypeBadgeForAccount:(NSDictionary *)accountData
                               badgeLabel:(UILabel *)badgeLabel {
     NSString *username = accountData[@"username"];
@@ -135,26 +135,26 @@
         badgeLabel.text = localize(@"login.option.local", @"Local");
         badgeLabel.backgroundColor = [UIColor colorWithWhite:0.45 alpha:1.0];
     } else {
-        // 微软账户
+        // Microsoft account
         badgeLabel.text = @"Microsoft";
         badgeLabel.backgroundColor = [UIColor colorWithRed:0.20 green:0.55 blue:0.95 alpha:1.0];
     }
 }
 
-/// 当前选中的账户 accountId（用于卡片显示选中状态）
-/// 使用 accountId 而非 username，确保同名账户也能正确区分选中状态
+/// accountId of the currently selected account (used to show the selected state on the card)
+/// Use accountId rather than username so accounts with the same name are still distinguished correctly
 - (NSString *)currentSelectedAccountId {
-    // BaseAuthenticator.current 保存当前活跃账户的 authData
+    // BaseAuthenticator.current holds the authData of the active account
     BaseAuthenticator *currentAuth = BaseAuthenticator.current;
     return currentAuth.authData[@"accountId"];
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath
 {
-    // FCL 风格卡片 cell：圆角 + 毛玻璃 + 左侧头像 + 中间用户名/副标题 + 右侧类型徽章/选中勾
+    // FCL-style card cell: rounded corners + frosted glass + avatar on the left + username/subtitle in the middle + type badge/check on the right
     UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"accountCardCell" forIndexPath:indexPath];
 
-    // 重置 cell：移除上一次复用残留的 contentView 子视图
+    // Reset the cell: remove leftover contentView subviews from the previous reuse
     for (UIView *sub in cell.contentView.subviews) {
         [sub removeFromSuperview];
     }
@@ -168,12 +168,12 @@
     NSString *displayName = accountData[@"username"];
     NSString *subtitle = @"";
 
-    // 副标题：Demo 账户显示"演示账户"，第三方显示服务器名，微软显示 Xbox gamertag，本地显示"离线模式"
+    // Subtitle: Demo accounts show "Demo account", third-party ones show the server name, Microsoft shows the Xbox gamertag, local shows "Offline mode"
     if ([displayName hasPrefix:@"Demo."]) {
         displayName = [displayName substringFromIndex:5];
         subtitle = localize(@"login.option.demo", @"Demo account");
     } else if (accountData[@"clientToken"] != nil) {
-        // 第三方账户：显示其 authserver 地址
+        // Third-party account: show its authserver address
         subtitle = accountData[@"authserver"] ?: localize(@"login.option.3rdparty", @"Third-party account");
     } else if (accountData[@"xboxGamertag"] == nil) {
         subtitle = localize(@"login.option.local", @"Offline mode");
@@ -181,7 +181,7 @@
         subtitle = accountData[@"xboxGamertag"] ?: @"Microsoft";
     }
 
-    // 卡片容器（圆角 + 半透明背景 + 毛玻璃）
+    // Card container (rounded corners + translucent background + frosted glass)
     UIView *cardView = [[UIView alloc] init];
     cardView.translatesAutoresizingMaskIntoConstraints = NO;
     cardView.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.10];
@@ -196,7 +196,7 @@
     [cell.contentView addSubview:cardView];
     [[BackgroundManager sharedManager] applyEffectToView:cardView];
 
-    // 左侧头像
+    // Avatar on the left
     UIImageView *avatarView = [[UIImageView alloc] init];
     avatarView.translatesAutoresizingMaskIntoConstraints = NO;
     avatarView.contentMode = UIViewContentModeScaleAspectFill;
@@ -211,7 +211,7 @@
         [avatarView setImageWithURL:[NSURL URLWithString:picURLStr] placeholderImage:[UIImage imageNamed:@"DefaultAccount"]];
     }
 
-    // 用户名
+    // Username
     UILabel *usernameLabel = [[UILabel alloc] init];
     usernameLabel.translatesAutoresizingMaskIntoConstraints = NO;
     usernameLabel.text = displayName;
@@ -222,7 +222,7 @@
     usernameLabel.lineBreakMode = NSLineBreakByTruncatingTail;
     [cardView addSubview:usernameLabel];
 
-    // 副标题
+    // Subtitle
     UILabel *subtitleLabel = [[UILabel alloc] init];
     subtitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     subtitleLabel.text = subtitle;
@@ -233,7 +233,7 @@
     subtitleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
     [cardView addSubview:subtitleLabel];
 
-    // 右侧账户类型徽章
+    // Account-type badge on the right
     UILabel *badgeLabel = [[UILabel alloc] init];
     badgeLabel.translatesAutoresizingMaskIntoConstraints = NO;
     badgeLabel.font = [UIFont systemFontOfSize:10 weight:UIFontWeightBold];
@@ -245,7 +245,7 @@
     [cardView addSubview:badgeLabel];
     [self applyAccountTypeBadgeForAccount:accountData badgeLabel:badgeLabel];
 
-    // 选中状态指示
+    // Selected-state indicator
     UIImageView *checkmark = [[UIImageView alloc] init];
     checkmark.translatesAutoresizingMaskIntoConstraints = NO;
     checkmark.image = [UIImage systemImageNamed:@"checkmark.circle.fill"];
@@ -258,7 +258,7 @@
                               [selectedAccountId isEqualToString:accountData[@"accountId"]]);
     checkmark.hidden = !isCurrentSelected;
 
-    // 卡片内边距与子视图布局约束
+    // Card padding and subview layout constraints
     [NSLayoutConstraint activateConstraints:@[
         [cardView.topAnchor constraintEqualToAnchor:cell.contentView.topAnchor constant:6],
         [cardView.leadingAnchor constraintEqualToAnchor:cell.contentView.leadingAnchor constant:16],
@@ -309,7 +309,7 @@
 
     // Check if this is a third party account
     NSDictionary *accountData = self.accountList[indexPath.row];
-    // 优先用 accountId 加载；若 accountId 缺失（旧格式账户未迁移），回退到 username 触发迁移
+    // Prefer loading by accountId; if it is missing (old-format account not yet migrated), fall back to username to trigger migration
     NSString *loadKey = accountData[@"accountId"];
     if (loadKey.length == 0) {
         loadKey = accountData[@"username"];
@@ -327,8 +327,8 @@
     if (editingStyle == UITableViewCellEditingStyleDelete) {
         // TODO: invalidate token
 
-        // 用 accountId 作为文件名（唯一标识），同名账户删除互不影响
-        // 若 accountId 缺失（旧格式账户未迁移），回退到 username
+        // Use accountId as the file name (a unique identifier) so deleting one account does not affect another with the same name
+        // If accountId is missing (old-format account not yet migrated), fall back to username
         NSString *accountId = self.accountList[indexPath.row][@"accountId"];
         if (accountId.length == 0) {
             accountId = self.accountList[indexPath.row][@"username"];
@@ -343,7 +343,7 @@
             [MicrosoftAuthenticator clearTokenDataOfProfile:xuid];
         }
         [fm removeItemAtPath:path error:nil];
-        // 若删除的正是当前选中账户，清空 selected_account，避免下次启动尝试加载已删除的账户
+        // If the deleted account was the selected one, clear selected_account so the next launch does not try to load a deleted account
         if ([getPrefObject(@"internal.selected_account") isEqualToString:accountId]) {
             setPrefObject(@"internal.selected_account", @"");
             [BaseAuthenticator setCurrent:nil];
@@ -355,7 +355,7 @@
 
 - (UITableViewCellEditingStyle)tableView:(UITableView *)tableView editingStyleForRowAtIndexPath:(NSIndexPath *)indexPath
 {
-    // 所有账户行都可滑动删除
+    // Every account row supports swipe-to-delete
     return UITableViewCellEditingStyleDelete;
 }
 
@@ -369,10 +369,10 @@
 }
 
 - (void)actionAddAccount:(UIView *)sender {
-    // 参照 FCL：push 卡片式登录方式选择页（替代原来的 ActionSheet）
+    // Following FCL: push a card-style login-method page (replacing the old ActionSheet)
     AccountLoginViewController *loginVC = [[AccountLoginViewController alloc] init];
     loginVC.onSelectLoginType = ^(AccountLoginType type) {
-        // 选完登录方式后 pop 回账户列表，再触发对应登录流程
+        // After picking a login method, pop back to the account list and start the matching login flow
         [self.navigationController popViewControllerAnimated:YES];
         dispatch_async(dispatch_get_main_queue(), ^{
             switch (type) {
@@ -398,10 +398,10 @@
     if (getPrefBool(@"warnings.local_warn")) {
         setPrefBool(@"warnings.local_warn", NO);
         UIAlertController *alert = [UIAlertController alertControllerWithTitle:localize(@"login.warn.title.localmode", nil) message:localize(@"login.warn.message.localmode", nil) preferredStyle:UIAlertControllerStyleActionSheet];
-        // 修复：sender 为 nil 时（从 addAccountTapped -> actionAddAccount:nil 链路进入），
-        // ActionSheet 在 iPad/LiveContainer 等 popover 场景下必须提供 sourceView，
-        // 否则会因 popoverPresentationController.sourceView 为 nil 而崩溃。
-        // 回退顺序：sender -> addAccountButton -> self.view 中心点。
+        // Fix: when sender is nil (reached via addAccountTapped -> actionAddAccount:nil),
+        // the ActionSheet must be given a sourceView in popover contexts such as iPad/LiveContainer,
+        // otherwise it crashes because popoverPresentationController.sourceView is nil.
+        // Fallback order: sender -> addAccountButton -> the center of self.view.
         UIView *sourceView = sender ?: self.addAccountButton;
         if (sourceView) {
             alert.popoverPresentationController.sourceView = sourceView;
@@ -441,7 +441,7 @@
 }
 
 - (void)actionLoginThirdParty:(UIView *)sender {
-    // 参照 FCL：push 卡片式第三方登录表单页（替代原 UIAlertController 三字段输入）
+    // Following FCL: push a card-style third-party login form (replacing the old three-field UIAlertController)
     ThirdPartyLoginViewController *vc = [[ThirdPartyLoginViewController alloc] init];
     vc.mode = ThirdPartyLoginModeCustom;
     __weak typeof(self) weakSelf = self;
@@ -455,8 +455,8 @@
 }
 
 - (void)actionLoginLittleSkin:(UIView *)sender {
-    // 参照 FCL：push 卡片式 LittleSkin 登录表单页（替代原 UIAlertController 双字段输入）
-    // LittleSkin 端点固定为 https://littleskin.cn/api/yggdrasil，由 VC 内部预设
+    // Following FCL: push a card-style LittleSkin login form (replacing the old two-field UIAlertController)
+    // The LittleSkin endpoint is fixed at https://littleskin.cn/api/yggdrasil and preset inside the VC
     ThirdPartyLoginViewController *vc = [[ThirdPartyLoginViewController alloc] init];
     vc.mode = ThirdPartyLoginModeLittleSkin;
     __weak typeof(self) weakSelf = self;
@@ -490,7 +490,7 @@
             dispatch_async(dispatch_get_main_queue(), ^(){
                 self.modalInPresentation = YES;
                 self.tableView.userInteractionEnabled = NO;
-                // 仅当 sender 是 UITableViewCell 时才显示加载指示器
+                // Only show the loading indicator when sender is a UITableViewCell
                 if ([sender isKindOfClass:[UITableViewCell class]]) {
                     [self addActivityIndicatorTo:(UITableViewCell *)sender];
                 }
@@ -539,7 +539,7 @@
 - (void)callbackMicrosoftAuth:(id)status success:(BOOL)success forCell:(UITableViewCell *)cell {
     if (status != nil) {
         if (success) {
-            // 登录成功并伴随状态信息
+            // Login succeeded with an accompanying status message
             if ([status isKindOfClass:[NSError class]]) {
                 showDialog(localize(@"login.title", @"Account"), [status localizedDescription]);
             } else {
@@ -549,7 +549,7 @@
                     showDialog(localize(@"login.title", @"Account"), status);
                 }
             }
-            // 登录成功后刷新列表以显示新账户
+            // Refresh the list after a successful login so the new account appears
             if (cell) [self removeActivityIndicatorFrom:cell];
             self.modalInPresentation = NO;
             self.tableView.userInteractionEnabled = YES;
@@ -557,7 +557,7 @@
             if (self.whenItemSelected) self.whenItemSelected();
             [self dismissViewControllerAnimated:YES completion:nil];
         } else {
-            // 认证失败：恢复交互并展示错误
+            // Authentication failed: restore interaction and show the error
             self.modalInPresentation = NO;
             self.tableView.userInteractionEnabled = YES;
             if (cell) [self removeActivityIndicatorFrom:cell];
@@ -578,7 +578,7 @@
             }
         }
     } else if (success) {
-        // 成功登录，无消息
+        // Logged in successfully, no message
         if (cell) [self removeActivityIndicatorFrom:cell];
         self.modalInPresentation = NO;
         self.tableView.userInteractionEnabled = YES;
@@ -588,7 +588,7 @@
     }
 }
 
-/// 重新加载账户列表并刷新表格（FCL 风格：登录/删除后刷新卡片视图）
+/// Reload the account list and refresh the table (FCL style: refresh the card view after login/delete)
 - (void)reloadAccountList {
     if (self.accountList == nil) {
         self.accountList = [NSMutableArray array];

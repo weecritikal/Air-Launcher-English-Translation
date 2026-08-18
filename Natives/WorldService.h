@@ -3,9 +3,9 @@
 //  Amethyst
 //
 //  世界存档管理与下载服务，结构参照 ResourcePackService/DataPackService
-//  API 签名统一使用 NSString *profileName
+//  The API consistently takes NSString *profileName
 //  扫描 saves/ 目录，下载世界 zip 后做健壮解压（检测顶层目录）
-//  使用 defaultSessionConfiguration + NSURLSessionDownloadTask 提升下载效率和速度
+//  Uses defaultSessionConfiguration + NSURLSessionDownloadTask for better download throughput
 //
 
 #import <Foundation/Foundation.h>
@@ -17,7 +17,7 @@ NS_ASSUME_NONNULL_BEGIN
 typedef void(^WorldListHandler)(NSArray<WorldItem *> *items);
 // 下载完成回调（success 表示是否成功，error 为失败原因）
 typedef void(^WorldDownloadCompletionHandler)(BOOL success, NSError * _Nullable error);
-// 下载进度回调（在主线程执行，UI 更新安全）
+// Download progress callback (runs on the main thread, so UI updates are safe)
 typedef void(^WorldDownloadProgressHandler)(NSProgress * _Nullable downloadProgress);
 
 @interface WorldService : NSObject
@@ -46,7 +46,7 @@ typedef void(^WorldDownloadProgressHandler)(NSProgress * _Nullable downloadProgr
                  progress:(WorldDownloadProgressHandler _Nullable)progress
                completion:(WorldDownloadCompletionHandler _Nullable)completion;
 
-// --- 工具方法 ---
+// --- Helpers ---
 
 /// 获取当前 profile 的 saves 目录，不存在时自动创建
 - (nullable NSString *)ensureWorldsFolderForProfile:(NSString *)profileName error:(NSError **)error;

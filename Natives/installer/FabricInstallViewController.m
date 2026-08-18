@@ -37,7 +37,7 @@ extern NSMutableArray *localVersionList;
     self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone target:self action:@selector(actionDone:)];
     self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemClose target:self action:@selector(actionClose)];
 
-    // 适配自定义启动器背景（参照 ForgeInstallViewController）
+    // Adapt to the custom launcher background (as in ForgeInstallViewController)
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
     if (self.navigationController) {
         [[BackgroundManager sharedManager] applyEffectToNavigationBar:self.navigationController.navigationBar];

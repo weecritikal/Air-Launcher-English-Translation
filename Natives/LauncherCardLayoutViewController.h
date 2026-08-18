@@ -1,16 +1,16 @@
 #import <UIKit/UIKit.h>
 
-// 卡片式（便当盒）启动器根视图控制器
-// 左侧：功能菜单卡片 | 中间：内容卡片 | 右侧：账户和启动卡片
+// Card-style (bento box) launcher root view controller
+// Left: the feature menu card | Middle: the content card | Right: the account and play card
 
 @interface LauncherCardLayoutViewController : UIViewController <UINavigationControllerDelegate>
 
-// 三个主要区域
-@property(nonatomic, strong, readonly) UIViewController *sidebarViewController;      // 左侧边栏
-@property(nonatomic, strong, readonly) UIViewController *contentViewController;      // 中间内容
-@property(nonatomic, strong, readonly) UIViewController *rightPanelViewController;   // 右侧面板
+// The three main areas
+@property(nonatomic, strong, readonly) UIViewController *sidebarViewController;      // Left sidebar
+@property(nonatomic, strong, readonly) UIViewController *contentViewController;      // Middle content
+@property(nonatomic, strong, readonly) UIViewController *rightPanelViewController;   // Right panel
 
-// 切换中间内容
+// Switch the middle content
 - (void)setContentViewController:(UIViewController *)viewController animated:(BOOL)animated;
 
 @end

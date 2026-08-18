@@ -1,8 +1,8 @@
 #import "DownloadViewController.h"
 #import "BackgroundManager.h"
-// IconLoader：统一的项目图标加载器（双层缓存 + 降采样 + 并发控制 + CDN 镜像），
-// 替代 UIImageView+AFNetworking（仅内存缓存，无降采样，无镜像）
-// 参照 FCL Glide + ZL2 Coil 的最佳实践
+// IconLoader: the unified project icon loader (two-level cache + downsampling + concurrency control + CDN mirrors),
+// replacing UIImageView+AFNetworking (memory cache only, no downsampling, no mirrors)
+// Modelled on the best practices of FCL Glide and ZL2 Coil
 #import "IconLoader.h"
 #import "DownloadTaskManager.h"
 #import "DownloadTaskItem.h"
@@ -57,15 +57,15 @@
 
 #pragma mark - Modern Asset Cell
 
-// 资源类型枚举：决定占位图标与配色，区分 6 类资源（mod/shader/resourcepack/datapack/world/modpack）
-// 参照 FCL CategoryBox 与 ZL2 AddonListLayout 的图标体系，使用 SF Symbols 替代项目自有 PNG
+// Asset type enum: decides the placeholder icon and colors for the 6 asset kinds (mod/shader/resourcepack/datapack/world/modpack)
+// Modelled on the icon systems of FCL CategoryBox and ZL2 AddonListLayout, using SF Symbols instead of bundled PNGs
 typedef NS_ENUM(NSInteger, ModernAssetType) {
-    ModernAssetTypeMod = 0,           // 模组：puzzlepiece.fill + 橙
-    ModernAssetTypeShader,            // 光影：paintbrush.fill + 紫
-    ModernAssetTypeResourcepack,      // 资源包：photo.stack.fill + 蓝
-    ModernAssetTypeDatapack,          // 数据包：doc.text.fill + 青
-    ModernAssetTypeWorld,             // 世界：globe.asia.australia.fill + 绿
-    ModernAssetTypeModpack            // 整合包：shippingbox.fill + 粉
+    ModernAssetTypeMod = 0,           // Mod: puzzlepiece.fill + orange
+    ModernAssetTypeShader,            // Shader: paintbrush.fill + purple
+    ModernAssetTypeResourcepack,      // Resource pack: photo.stack.fill + blue
+    ModernAssetTypeDatapack,          // Data pack: doc.text.fill + cyan
+    ModernAssetTypeWorld,             // World: globe.asia.australia.fill + green
+    ModernAssetTypeModpack            // Modpack: shippingbox.fill + pink
 };
 
 @interface ModernAssetCell : UITableViewCell
@@ -76,9 +76,9 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 @property (nonatomic, strong) UILabel *metaLabel;
 @property (nonatomic, strong) UIStackView *tagsStack;
 @property (nonatomic, strong) UIButton *downloadButton;
-// 当前资源类型（用于在 prepareForReuse 时重置占位图标与配色）
+// Current asset type (used to reset the placeholder icon and colors in prepareForReuse)
 @property (nonatomic, assign) ModernAssetType assetType;
-// 缓存当前正在加载图片的 URL，避免复用时旧请求覆盖新请求（cell 复用竞态）
+// Caches the URL of the image currently loading, so an old request cannot overwrite a newer one on reuse (a cell-reuse race)
 @property (nonatomic, copy, nullable) NSString *currentIconURL;
 @end
 
@@ -92,19 +92,19 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         self.contentView.backgroundColor = [UIColor clearColor];
         self.assetType = ModernAssetTypeMod;
 
-        // FCL view_installer_item.xml 风格：扁平条目，无卡片容器、无阴影、无边框
-        // 仅依赖 BackgroundManager.applyEffectToView: 提供毛玻璃/半透明背景
-        // 行间分隔通过 rowHeight 内的上下 padding 实现（参照 FCL marginBottom 10dp）
+        // FCL view_installer_item.xml style: a flat row with no card container, shadow or border
+        // It relies solely on BackgroundManager.applyEffectToView: for the frosted-glass/translucent background
+        // Row separation comes from the vertical padding inside rowHeight (mirroring FCL marginBottom 10dp)
         self.contentContainer = [[UIView alloc] init];
         self.contentContainer.translatesAutoresizingMaskIntoConstraints = NO;
-        // FCL bg_container_white_clickable 的等效：浅色半透明背景 + 圆角
+        // Equivalent of FCL bg_container_white_clickable: a light translucent background + rounded corners
         self.contentContainer.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.06];
         self.contentContainer.layer.cornerRadius = 8;
         self.contentContainer.layer.cornerCurve = kCACornerCurveContinuous;
-        // 移除阴影/边框（FCL 扁平风格不需要）
+        // No shadow or border (the flat FCL style does not need them)
         [self.contentView addSubview:self.contentContainer];
 
-        // ----- 左侧图标：26x26（FCL 标准 30dp，紧凑模式略小）-----
+        // ----- Icon on the left: 26x26 (FCL uses 30dp; slightly smaller in compact mode) -----
         self.iconView = [[UIImageView alloc] init];
         self.iconView.translatesAutoresizingMaskIntoConstraints = NO;
         self.iconView.layer.cornerRadius = 5;
@@ -115,7 +115,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         self.iconView.tintColor = [UIColor systemOrangeColor];
         [self.contentContainer addSubview:self.iconView];
 
-        // ----- 标题：13pt Medium（FCL title 14sp，紧凑模式略小）-----
+        // ----- Title: 13pt Medium (FCL title is 14sp; slightly smaller in compact mode) -----
         self.titleLabel = [[UILabel alloc] init];
         self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
         self.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightMedium];
@@ -125,7 +125,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         [self.titleLabel setContentCompressionResistancePriority:UILayoutPriorityDefaultLow forAxis:UILayoutConstraintAxisHorizontal];
         [self.contentContainer addSubview:self.titleLabel];
 
-        // ----- 第二行：下载次数 + 描述（FCL download_count 12sp + description 12sp）-----
+        // ----- Second line: download count + description (FCL download_count 12sp + description 12sp) -----
         self.descLabel = [[UILabel alloc] init];
         self.descLabel.translatesAutoresizingMaskIntoConstraints = NO;
         self.descLabel.font = [UIFont systemFontOfSize:11];
@@ -134,13 +134,13 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         self.descLabel.lineBreakMode = NSLineBreakByTruncatingTail;
         [self.contentContainer addSubview:self.descLabel];
 
-        // ----- 元信息隐藏（已合并到 descLabel 第二行）-----
+        // ----- Meta info hidden (merged into the second line of descLabel) -----
         self.metaLabel = [[UILabel alloc] init];
         self.metaLabel.translatesAutoresizingMaskIntoConstraints = NO;
         self.metaLabel.hidden = YES;
         [self.contentContainer addSubview:self.metaLabel];
 
-        // ----- 标签 stack：融入第二行右侧（FCL tag 11sp padding 4dp/2dp）-----
+        // ----- Tag stack: sits at the right of the second line (FCL tag 11sp, padding 4dp/2dp) -----
         self.tagsStack = [[UIStackView alloc] init];
         self.tagsStack.translatesAutoresizingMaskIntoConstraints = NO;
         self.tagsStack.axis = UILayoutConstraintAxisHorizontal;
@@ -149,7 +149,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         self.tagsStack.alignment = UIStackViewAlignmentCenter;
         [self.contentContainer addSubview:self.tagsStack];
 
-        // ----- 下载按钮：右侧 24x24（FCL 风格紧凑按钮）-----
+        // ----- Download button: 24x24 on the right (compact FCL-style button) -----
         self.downloadButton = [UIButton buttonWithType:UIButtonTypeSystem];
         self.downloadButton.translatesAutoresizingMaskIntoConstraints = NO;
         UIImage *downloadSymbol = [UIImage systemImageNamed:@"arrow.down.circle.fill"
@@ -165,41 +165,41 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         [self.contentContainer addSubview:self.downloadButton];
 
         [NSLayoutConstraint activateConstraints:@[
-            // FCL marginBottom 10dp / padding 8dp,10dp 等效：上下 3pt + 左右 8pt（紧凑）
+            // Equivalent of FCL marginBottom 10dp / padding 8dp,10dp: 3pt top and bottom + 8pt left and right (compact)
             [self.contentContainer.topAnchor constraintEqualToAnchor:self.contentView.topAnchor constant:3],
             [self.contentContainer.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:8],
             [self.contentContainer.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-8],
             [self.contentContainer.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-3],
 
-            // 图标：左 8，垂直居中，26x26
+            // Icon: 8 from the left, vertically centered, 26x26
             [self.iconView.leadingAnchor constraintEqualToAnchor:self.contentContainer.leadingAnchor constant:8],
             [self.iconView.centerYAnchor constraintEqualToAnchor:self.contentContainer.centerYAnchor],
             [self.iconView.widthAnchor constraintEqualToConstant:26],
             [self.iconView.heightAnchor constraintEqualToConstant:26],
 
-            // 标题：紧跟图标右侧 +8，顶部对齐容器顶部 +6
+            // Title: 8 to the right of the icon, 6 below the top of the container
             [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.iconView.trailingAnchor constant:8],
             [self.titleLabel.topAnchor constraintEqualToAnchor:self.contentContainer.topAnchor constant:6],
             [self.titleLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.downloadButton.leadingAnchor constant:-4],
 
-            // 第二行 descLabel：紧跟标题下方 +2，左侧对齐标题
+            // Second line descLabel: 2 below the title, left-aligned with it
             [self.descLabel.leadingAnchor constraintEqualToAnchor:self.titleLabel.leadingAnchor],
             [self.descLabel.topAnchor constraintEqualToAnchor:self.titleLabel.bottomAnchor constant:2],
             [self.descLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.tagsStack.leadingAnchor constant:-4],
             [self.descLabel.bottomAnchor constraintLessThanOrEqualToAnchor:self.contentContainer.bottomAnchor constant:-6],
 
-            // 标签 stack：与 descLabel 同行，右侧紧贴下载按钮
+            // Tag stack: on the same line as descLabel, flush against the download button
             [self.tagsStack.centerYAnchor constraintEqualToAnchor:self.descLabel.centerYAnchor],
             [self.tagsStack.trailingAnchor constraintLessThanOrEqualToAnchor:self.downloadButton.leadingAnchor constant:-4],
 
-            // 下载按钮：右侧 -6，垂直居中，24x24
+            // Download button: -6 from the right, vertically centered, 24x24
             [self.downloadButton.trailingAnchor constraintEqualToAnchor:self.contentContainer.trailingAnchor constant:-6],
             [self.downloadButton.centerYAnchor constraintEqualToAnchor:self.contentContainer.centerYAnchor],
             [self.downloadButton.widthAnchor constraintEqualToConstant:24],
             [self.downloadButton.heightAnchor constraintEqualToConstant:24]
         ]];
 
-        // 应用毛玻璃背景效果（BackgroundManager 统一管理深浅色与模糊度）
+        // Apply the frosted-glass background effect (BackgroundManager handles light/dark and blur amount centrally)
         [[BackgroundManager sharedManager] applyEffectToView:self.contentContainer];
     }
     return self;
@@ -207,24 +207,24 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
 - (void)prepareForReuse {
     [super prepareForReuse];
-    // 取消该 cell 上正在进行的图标加载请求（cell 复用时旧请求不应继续占用网络与回调）
-    // 对应 Glide 的 clear() + ZL2 Compose 组合自动取消
+    // Cancel the icon load in flight for this cell (an old request should not keep using the network and firing callbacks after reuse)
+    // Equivalent to Glide's clear() and the automatic cancellation of ZL2 Compose composition
     [IconLoader cancelLoadingForImageView:self.iconView];
-    // 重置图标状态：避免复用时旧图残留导致显示错乱
+    // Reset the icon state, so a stale image from a previous use does not show up in the wrong row
     self.iconView.image = nil;
     self.iconView.tintColor = [UIColor systemOrangeColor];
     self.iconView.contentMode = UIViewContentModeScaleAspectFit;
     self.iconView.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.06];
     self.currentIconURL = nil;
-    // 移除所有标签
+    // Remove every tag
     [self.tagsStack.arrangedSubviews makeObjectsPerformSelector:@selector(removeFromSuperview)];
-    // 重置下载按钮 target（防止复用后旧 target 残留触发错误下载）
+    // Reset the download button target (so a stale target after reuse cannot trigger the wrong download)
     [self.downloadButton removeTarget:nil action:NULL forControlEvents:UIControlEventAllEvents];
 }
 
 #pragma mark - 占位图标与配色（按资源类型）
 
-/// 根据资源类型返回默认占位 SF Symbol 名称
+/// Return the default placeholder SF Symbol name for an asset type
 - (NSString *)placeholderIconNameForType:(ModernAssetType)type {
     switch (type) {
         case ModernAssetTypeMod:          return @"puzzlepiece.fill";
@@ -237,7 +237,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     return @"puzzlepiece.fill";
 }
 
-/// 根据资源类型返回占位图标主色（用作 iconView.tintColor，与 FCL/ZL2 各资源类型的视觉色一致）
+/// Return the primary placeholder icon color for an asset type (used as iconView.tintColor, matching the FCL/ZL2 colors per asset type)
 - (UIColor *)placeholderColorForType:(ModernAssetType)type {
     switch (type) {
         case ModernAssetTypeMod:          return [UIColor systemOrangeColor];
@@ -250,7 +250,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     return [UIColor systemOrangeColor];
 }
 
-/// 应用占位图标：先显示类型对应的 SF Symbol，等异步加载完成后替换为项目图标
+/// Apply the placeholder icon: show the SF Symbol for the type first, then swap in the project icon once it loads
 - (void)applyPlaceholderIconForType:(ModernAssetType)type {
     NSString *iconName = [self placeholderIconNameForType:type];
     UIColor *iconColor = [self placeholderColorForType:type];
@@ -266,7 +266,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
 #pragma mark - 通用配置辅助
 
-/// 格式化下载量数字：1234 → "1.2K"，1234567 → "1.2M"
+/// Format a download count: 1234 -> "1.2K", 1234567 -> "1.2M"
 - (NSString *)formatDownloadCount:(NSNumber *)downloads {
     if (!downloads) return @"0";
     NSInteger dl = [downloads integerValue];
@@ -279,31 +279,31 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     }
 }
 
-/// 格式化日期字符串："2024-01-15T12:34:56Z" → "2024-01-15"，失败返回空串
+/// Format a date string: "2024-01-15T12:34:56Z" -> "2024-01-15"; returns an empty string on failure
 - (NSString *)formatDateString:(NSString *)dateString {
     if (![dateString isKindOfClass:[NSString class]] || dateString.length < 10) return @"";
     return [dateString substringToIndex:10];
 }
 
-/// 异步加载项目图标（使用 IconLoader 统一加载器）
-/// 对应 ZL2 AssetsIcon 的 loadIcon 逻辑：双层缓存 + 降采样 + CDN 镜像 + 占位/兜底
+/// Load the project icon asynchronously (using the unified IconLoader)
+/// Mirrors the loadIcon logic of ZL2 AssetsIcon: two-level cache + downsampling + CDN mirror + placeholder/fallback
 - (void)loadIconFromURL:(NSString *)iconUrl placeholderType:(ModernAssetType)type {
-    // 先显示占位图标（加载期间显示类型对应的 SF Symbol）
+    // Show the placeholder icon first (the SF Symbol for the type, shown while loading)
     [self applyPlaceholderIconForType:type];
 
     if (![iconUrl isKindOfClass:[NSString class]] || iconUrl.length == 0) {
         return;
     }
 
-    // 记录当前正在加载的 URL，防止 cell 复用后旧请求覆盖新请求
+    // Record the URL currently loading, so an old request cannot overwrite a newer one after cell reuse
     self.currentIconURL = [iconUrl copy];
 
-    // 构造兜底图：与占位图标相同，加载失败时也显示类型对应的 SF Symbol
+    // Build the fallback image: the same as the placeholder, so the type SF Symbol also shows if loading fails
     UIImage *placeholder = self.iconView.image;
     UIImage *fallback = [UIImage systemImageNamed:[self placeholderIconNameForType:type]] ?: placeholder;
 
-    // 使用 IconLoader 加载（自动处理：取消旧请求 → 占位 → 内存缓存 → 磁盘缓存 → 降采样解码 → CDN 镜像 → 兜底）
-    // 图标显示尺寸 26x26（FCL 标准 30dp，紧凑模式略小），降采样到此尺寸避免按原图解码
+    // Load via IconLoader (which handles cancelling the old request, placeholder, memory cache, disk cache, downsampled decode, CDN mirror and fallback)
+    // The icon is displayed at 26x26 (FCL uses 30dp; slightly smaller in compact mode), so downsample to that size instead of decoding the full image
     __weak typeof(self) weakSelf = self;
     [IconLoader loadIconForImageView:self.iconView
                                  URL:iconUrl
@@ -314,17 +314,17 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                            completion:^(UIImage *image) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf || !image) return;
-        // 校验：cell 复用后 currentIconURL 可能已变，避免旧图覆盖新 cell
-        // （IconLoader 内部已通过关联对象做了校验，这里二次校验更稳妥）
+        // Check: currentIconURL may have changed after cell reuse, so a stale image does not land on the new cell
+        // (IconLoader already checks this internally via associated objects; checking again here is safer)
         if (![strongSelf.currentIconURL isEqualToString:iconUrl]) return;
-        // 真实项目图标使用 AspectFill 填充，覆盖占位 SF Symbol 的 AspectFit 样式
+        // The real project icon uses AspectFill, overriding the AspectFit style of the placeholder SF Symbol
         strongSelf.iconView.contentMode = UIViewContentModeScaleAspectFill;
         strongSelf.iconView.tintColor = [UIColor clearColor];
     }];
 }
 
-/// 配置标签 stack：从 categories 数组取最多 3 个，按 loader/类别配色
-/// 参照 ZL2 LittleTextLabel：mod loader 用品牌色，普通类别用中性色
+/// Configure the tag stack: take at most 3 entries from categories, colored by loader/category
+/// Modelled on ZL2 LittleTextLabel: mod loaders use their brand color, ordinary categories use neutral colors
 - (void)configureTagsWithCategories:(NSArray *)categories {
     [self.tagsStack.arrangedSubviews makeObjectsPerformSelector:@selector(removeFromSuperview)];
     if (![categories isKindOfClass:[NSArray class]]) return;
@@ -335,7 +335,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         if ([catObj isKindOfClass:[NSString class]]) {
             cat = catObj;
         } else if ([catObj isKindOfClass:[NSDictionary class]]) {
-            // CurseForge 的 categories 是 dict，取 name 字段
+            // CurseForge categories are dictionaries, so read the name field
             cat = catObj[@"name"];
         }
         if (![cat isKindOfClass:[NSString class]] || cat.length == 0) continue;
@@ -345,28 +345,28 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     }
 }
 
-/// 根据类别名返回配色：加载器品牌色统一委托 ModLoaderIconHelper，类别色保持本地映射
+/// Return the color for a category name: loader brand colors are delegated to ModLoaderIconHelper, category colors stay local
 - (UIColor *)colorForCategory:(NSString *)category {
     NSString *lower = category.lowercaseString;
-    // 加载器品牌色：统一委托 ModLoaderIconHelper（优先 PNG 图标的官方配色）
+    // Loader brand colors: delegated to ModLoaderIconHelper (which prefers the official colors of the PNG icons)
     if ([ModLoaderIconHelper isKnownLoader:category]) {
         return [ModLoaderIconHelper brandColorForLoader:category];
     }
-    // 常见模组类别配色
+    // Colors for the common mod categories
     if ([lower containsString:@"magic"])     return [UIColor systemPurpleColor];
     if ([lower containsString:@"tech"])      return [UIColor systemOrangeColor];
     if ([lower containsString:@"adventure"]) return [UIColor systemTealColor];
     if ([lower containsString:@"decoration"]) return [UIColor systemPinkColor];
     if ([lower containsString:@"utility"])   return [UIColor systemBlueColor];
     if ([lower containsString:@"world"])     return [UIColor systemGreenColor];
-    // 兜底
+    // Fallback
     return [UIColor tertiaryLabelColor];
 }
 
 - (UILabel *)createTagLabel:(NSString *)text {
     UILabel *label = [[UILabel alloc] init];
     label.text = text;
-    // FCL tag 11sp Medium（紧凑模式 10pt）
+    // FCL tag 11sp Medium (10pt in compact mode)
     label.font = [UIFont systemFontOfSize:10 weight:UIFontWeightMedium];
     label.textColor = [UIColor whiteColor];
     label.backgroundColor = [self colorForCategory:text];
@@ -376,7 +376,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     label.textAlignment = NSTextAlignmentCenter;
     [label setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
     [label setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
-    // 内边距：左右 5，上下 1（FCL padding 4dp/2dp 等效，紧凑模式略小）
+    // Padding: 5 left and right, 1 top and bottom (equivalent to FCL padding 4dp/2dp, slightly smaller in compact mode)
     label.translatesAutoresizingMaskIntoConstraints = NO;
     [NSLayoutConstraint activateConstraints:@[
         [label.heightAnchor constraintEqualToConstant:14]
@@ -419,70 +419,70 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     [self configureCommonWithData:modpack type:ModernAssetTypeModpack];
 }
 
-/// 6 类资源共用的配置逻辑：标题/描述/元信息/图标/标签
-/// FCL 风格：标题 14sp + 第二行（下载次数 + 描述），元信息（作者/日期）合并到 descLabel
+/// Shared configuration for all 6 asset types: title/description/meta/icon/tags
+/// FCL style: 14sp title + a second line (download count + description), with meta info (author/date) merged into descLabel
 - (void)configureCommonWithData:(NSDictionary *)data type:(ModernAssetType)type {
     self.titleLabel.text = data[@"title"] ?: data[@"slug"] ?: @"Unknown";
 
-    // 第二行：下载次数 + 描述（FCL download_count + description 同行）
+    // Second line: download count + description (FCL puts download_count and description on one line)
     NSString *downloadsStr = [self formatDownloadCount:data[@"downloads"]];
     NSString *description = data[@"description"] ?: @"";
-    // 截断描述，避免太长挤压下载次数显示
+    // Truncate the description so it does not squeeze out the download count
     NSString *truncatedDesc = description;
     if (truncatedDesc.length > 40) {
         truncatedDesc = [[description substringToIndex:40] stringByAppendingString:@"…"];
     }
     self.descLabel.text = [NSString stringWithFormat:@"%@ downloads  •  %@", downloadsStr, truncatedDesc];
 
-    // metaLabel 已隐藏（保留属性兼容旧代码），不再设置
+    // metaLabel is now hidden (the property is kept for compatibility with older code) and no longer set
     self.metaLabel.text = @"";
 
-    // 图标：先占位，再异步加载项目图标
+    // Icon: placeholder first, then load the project icon asynchronously
     NSString *iconUrl = data[@"imageUrl"] ?: data[@"icon_url"];
     [self loadIconFromURL:iconUrl placeholderType:type];
 
-    // 标签
+    // Tags
     [self configureTagsWithCategories:data[@"categories"]];
 }
 
 @end
 
-// LoaderCell 与 LoaderSelectionViewController 已迁移至 installer/ModLoaderInstallViewController.m
-// 参照 FCL (FoldCraftLauncher) 的 InstallerListPage + VersionInstallInfoPage 重构
+// LoaderCell and LoaderSelectionViewController have moved to installer/ModLoaderInstallViewController.m
+// Reworked after the InstallerListPage + VersionInstallInfoPage of FCL (FoldCraftLauncher)
 
 
 #pragma mark - Installer Progress View Controller (FCL 风格进度展示)
 
 @interface InstallerProgressViewController : UIViewController
-// 进度 0.0~1.0；<0 表示不确定模式（仅显示转圈，用于无法测算进度的网络请求阶段）
+// Progress 0.0~1.0; <0 means indeterminate mode (only a spinner, for network stages where progress cannot be measured)
 @property (nonatomic, assign) double progress;
 @property (nonatomic, copy, nullable) NSString *stageMessage;
 @property (nonatomic, copy, nullable) NSString *titleText;
 @property (nonatomic, copy, nullable) void (^cancelHandler)(void);
 
-// ===== 阶段12新增：FCL/ZL2 风格增强字段 =====
-// 类别图标（SF Symbol 名称），如 "cube.box.fill"=原版 / "wand.and.stars"=Fabric / "archivebox.fill"=整合包
+// ===== Added in phase 12: FCL/ZL2-style enhanced fields =====
+// Category icon (SF Symbol name), e.g. "cube.box.fill"=vanilla / "wand.and.stars"=Fabric / "archivebox.fill"=modpack
 @property (nonatomic, copy, nullable) NSString *categoryIconName;
-// 类别图标颜色（不设则使用 accentColor）
+// Category icon color (falls back to accentColor when unset)
 @property (nonatomic, strong, nullable) UIColor *categoryIconColor;
-// 详情信息行（如 "42.3 MB / 102.5 MB • 3.2 MB/s"），不设则隐藏
+// Detail info line (e.g. "42.3 MB / 102.5 MB • 3.2 MB/s"); hidden when unset
 @property (nonatomic, copy, nullable) NSString *detailInfoText;
-// 剩余时间文本（如 "剩余 18秒"），不设则隐藏
+// Time-remaining text (e.g. "18s left"); hidden when unset
 @property (nonatomic, copy, nullable) NSString *etaText;
-// 阶段步骤列表：每个元素为 NSDictionary，含 @"title"(NSString) 和 @"status"(NSNumber: 0=未开始 1=进行中 2=已完成)
+// Stage list: each element is an NSDictionary with @"title" (NSString) and @"status" (NSNumber: 0=not started, 1=in progress, 2=done)
 @property (nonatomic, copy, nullable) NSArray<NSDictionary *> *stageSteps;
 @end
 
 @interface InstallerProgressViewController ()
 @property (nonatomic, strong) UIView *cardView;
-@property (nonatomic, strong) UIImageView *iconView; // 类别图标（48x48）
+@property (nonatomic, strong) UIImageView *iconView; // Category icon (48x48)
 @property (nonatomic, strong) UILabel *titleLabel;
 @property (nonatomic, strong) UILabel *percentLabel;
 @property (nonatomic, strong) UIProgressView *progressBar;
-@property (nonatomic, strong) UILabel *detailInfoLabel; // 文件大小 + 速度
-@property (nonatomic, strong) UILabel *etaLabel; // 剩余时间
-@property (nonatomic, strong) UIView *stagesContainer; // 阶段步骤容器
-@property (nonatomic, strong) UIStackView *stagesStack; // 阶段步骤垂直排列
+@property (nonatomic, strong) UILabel *detailInfoLabel; // File size + speed
+@property (nonatomic, strong) UILabel *etaLabel; // Time remaining
+@property (nonatomic, strong) UIView *stagesContainer; // Container for the stage list
+@property (nonatomic, strong) UIStackView *stagesStack; // Stages arranged vertically
 @property (nonatomic, strong) UILabel *stageLabel;
 @property (nonatomic, strong) UIActivityIndicatorView *indeterminateIndicator;
 @end
@@ -491,14 +491,14 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    // 适配自定义启动器背景（参照 ForgeInstallViewController）
+    // Adapt to the custom launcher background (as in ForgeInstallViewController)
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(refreshBackgroundEffect)
                                                  name:@"BackgroundUIEffectChanged"
                                                object:nil];
 
-    // 取消按钮（替代返回按钮，避免误以为已完成）
+    // Cancel button (instead of a back button, so it does not look like the install already finished)
     self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemCancel
                                                                                           target:self
                                                                                           action:@selector(cancelTapped)];
@@ -509,7 +509,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 }
 
 - (void)refreshBackgroundEffect {
-    // 透明背景下无需额外操作
+    // Nothing extra is needed against a transparent background
 }
 
 - (void)dealloc {
@@ -525,13 +525,13 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     self.cardView.layer.masksToBounds = YES;
     [self.view addSubview:self.cardView];
 
-    // ===== 类别图标（48x48，参照 FCL 安装页顶部的类别图标）=====
+    // ===== Category icon (48x48, modelled on the category icon at the top of the FCL install page) =====
     self.iconView = [[UIImageView alloc] init];
     self.iconView.translatesAutoresizingMaskIntoConstraints = NO;
     self.iconView.contentMode = UIViewContentModeScaleAspectFit;
     self.iconView.tintColor = accentColor();
     self.iconView.image = [UIImage systemImageNamed:@"cube.box.fill"];
-    self.iconView.hidden = YES; // 默认隐藏，设置了 categoryIconName 后显示
+    self.iconView.hidden = YES; // Hidden by default, shown once categoryIconName is set
     [self.cardView addSubview:self.iconView];
 
     self.titleLabel = [[UILabel alloc] init];
@@ -546,8 +546,8 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     self.percentLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.percentLabel.font = [UIFont systemFontOfSize:36 weight:UIFontWeightHeavy];
     self.percentLabel.textAlignment = NSTextAlignmentCenter;
-    // 使用启动器主题强调色（accentColor），与启动按钮/菜单选中态保持一致。
-    // 用户在设置中切换主题色后，进度百分比会同步变色（FCL auto_tint 风格）。
+    // Use the launcher theme accent color (accentColor), matching the play button and selected menu items.
+    // When the user changes the theme color in settings, the progress percentage changes with it (FCL auto_tint style).
     self.percentLabel.textColor = accentColor();
     self.percentLabel.text = @"0%";
     [self.cardView addSubview:self.percentLabel];
@@ -561,32 +561,32 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     self.progressBar = [[UIProgressView alloc] initWithProgressViewStyle:UIProgressViewStyleDefault];
     self.progressBar.translatesAutoresizingMaskIntoConstraints = NO;
     self.progressBar.progress = 0.0;
-    // 进度条填充色跟随主题强调色（accentColor），与百分比数字、启动按钮统一
+    // The progress bar fill follows the theme accent color too, matching the percentage text and the play button
     self.progressBar.progressTintColor = accentColor();
     [self.cardView addSubview:self.progressBar];
 
-    // ===== 详情信息行（文件大小 + 速度，参照 FCL 安装页的文件信息行）=====
+    // ===== Detail info line (file size + speed, modelled on the file info line of the FCL install page) =====
     self.detailInfoLabel = [[UILabel alloc] init];
     self.detailInfoLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.detailInfoLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightMedium];
     self.detailInfoLabel.textAlignment = NSTextAlignmentCenter;
     self.detailInfoLabel.textColor = [UIColor secondaryLabelColor];
-    self.detailInfoLabel.hidden = YES; // 默认隐藏，设置了 detailInfoText 后显示
+    self.detailInfoLabel.hidden = YES; // Hidden by default, shown once detailInfoText is set
     [self.cardView addSubview:self.detailInfoLabel];
 
-    // ===== 剩余时间（ETA，参照 FCL 安装页的剩余时间显示）=====
+    // ===== Time remaining (ETA, modelled on the time remaining shown on the FCL install page) =====
     self.etaLabel = [[UILabel alloc] init];
     self.etaLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.etaLabel.font = [UIFont systemFontOfSize:12];
     self.etaLabel.textAlignment = NSTextAlignmentCenter;
     self.etaLabel.textColor = [UIColor tertiaryLabelColor];
-    self.etaLabel.hidden = YES; // 默认隐藏，设置了 etaText 后显示
+    self.etaLabel.hidden = YES; // Hidden by default, shown once etaText is set
     [self.cardView addSubview:self.etaLabel];
 
-    // ===== 阶段步骤容器（参照 FCL 的安装步骤列表，显示 ✓/◐/○ 状态）=====
+    // ===== Stage container (modelled on the FCL install step list, showing ✓/◐/○ states) =====
     self.stagesContainer = [[UIView alloc] init];
     self.stagesContainer.translatesAutoresizingMaskIntoConstraints = NO;
-    self.stagesContainer.hidden = YES; // 默认隐藏，设置了 stageSteps 后显示
+    self.stagesContainer.hidden = YES; // Hidden by default, shown once stageSteps is set
     [self.cardView addSubview:self.stagesContainer];
 
     self.stagesStack = [[UIStackView alloc] init];
@@ -606,21 +606,21 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     self.stageLabel.text = @"Preparing...";
     [self.cardView addSubview:self.stageLabel];
 
-    // 使用容器视图 + 垂直 stack 来组织所有内容，使 stagesContainer 可动态显隐
-    // 布局策略：从上到下依次排列，stagesContainer 底部约束到 stageLabel 顶部
-    // cardView 底部约束到 stageLabel 底部，stagesContainer 隐藏时高度自动为 0
+    // A container view plus a vertical stack organizes everything, so stagesContainer can be shown/hidden dynamically
+    // Layout strategy: everything is stacked top to bottom, with the bottom of stagesContainer constrained to the top of stageLabel
+    // The bottom of cardView is constrained to the bottom of stageLabel, so the height collapses to 0 when stagesContainer is hidden
     [NSLayoutConstraint activateConstraints:@[
         [self.cardView.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor],
         [self.cardView.leadingAnchor constraintEqualToAnchor:self.view.layoutMarginsGuide.leadingAnchor],
         [self.cardView.trailingAnchor constraintEqualToAnchor:self.view.layoutMarginsGuide.trailingAnchor],
 
-        // 类别图标：顶部 24pt，居中，48x48
+        // Category icon: 24pt from the top, centered, 48x48
         [self.iconView.topAnchor constraintEqualToAnchor:self.cardView.topAnchor constant:24],
         [self.iconView.centerXAnchor constraintEqualToAnchor:self.cardView.centerXAnchor],
         [self.iconView.widthAnchor constraintEqualToConstant:48],
         [self.iconView.heightAnchor constraintEqualToConstant:48],
 
-        // titleLabel：图标下方 12pt（图标隐藏时通过约束仍正常布局）
+        // titleLabel: 12pt below the icon (the constraints still lay out correctly when the icon is hidden)
         [self.titleLabel.topAnchor constraintEqualToAnchor:self.iconView.bottomAnchor constant:12],
         [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.cardView.leadingAnchor constant:16],
         [self.titleLabel.trailingAnchor constraintEqualToAnchor:self.cardView.trailingAnchor constant:-16],
@@ -637,28 +637,28 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         [self.progressBar.trailingAnchor constraintEqualToAnchor:self.cardView.trailingAnchor constant:-16],
         [self.progressBar.heightAnchor constraintEqualToConstant:8],
 
-        // 详情信息行：进度条下方 10pt
+        // Detail info line: 10pt below the progress bar
         [self.detailInfoLabel.topAnchor constraintEqualToAnchor:self.progressBar.bottomAnchor constant:10],
         [self.detailInfoLabel.leadingAnchor constraintEqualToAnchor:self.cardView.leadingAnchor constant:16],
         [self.detailInfoLabel.trailingAnchor constraintEqualToAnchor:self.cardView.trailingAnchor constant:-16],
 
-        // ETA：详情信息行下方 4pt
+        // ETA: 4pt below the detail info line
         [self.etaLabel.topAnchor constraintEqualToAnchor:self.detailInfoLabel.bottomAnchor constant:4],
         [self.etaLabel.leadingAnchor constraintEqualToAnchor:self.cardView.leadingAnchor constant:16],
         [self.etaLabel.trailingAnchor constraintEqualToAnchor:self.cardView.trailingAnchor constant:-16],
 
-        // 阶段步骤容器：ETA 下方 12pt
+        // Stage container: 12pt below the ETA
         [self.stagesContainer.topAnchor constraintEqualToAnchor:self.etaLabel.bottomAnchor constant:12],
         [self.stagesContainer.leadingAnchor constraintEqualToAnchor:self.cardView.leadingAnchor constant:20],
         [self.stagesContainer.trailingAnchor constraintEqualToAnchor:self.cardView.trailingAnchor constant:-20],
 
-        // stagesStack 充满 stagesContainer
+        // stagesStack fills stagesContainer
         [self.stagesStack.topAnchor constraintEqualToAnchor:self.stagesContainer.topAnchor],
         [self.stagesStack.leadingAnchor constraintEqualToAnchor:self.stagesContainer.leadingAnchor],
         [self.stagesStack.trailingAnchor constraintEqualToAnchor:self.stagesContainer.trailingAnchor],
         [self.stagesStack.bottomAnchor constraintEqualToAnchor:self.stagesContainer.bottomAnchor],
 
-        // stageLabel：阶段步骤容器下方 12pt
+        // stageLabel: 12pt below the stage container
         [self.stageLabel.topAnchor constraintEqualToAnchor:self.stagesContainer.bottomAnchor constant:12],
         [self.stageLabel.leadingAnchor constraintEqualToAnchor:self.cardView.leadingAnchor constant:16],
         [self.stageLabel.trailingAnchor constraintEqualToAnchor:self.cardView.trailingAnchor constant:-16],
@@ -722,10 +722,10 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     [self rebuildStagesStack];
 }
 
-/// 重建阶段步骤列表（参照 FCL 的安装步骤列表）
-/// 每行包含状态图标（✓/◐/○）+ 步骤标题，状态用不同颜色区分
+/// Rebuild the stage list (modelled on the FCL install step list)
+/// Each row has a status icon (✓/◐/○) plus the step title, with a different color per status
 - (void)rebuildStagesStack {
-    // 清除旧的步骤行
+    // Remove the old step rows
     [self.stagesStack.arrangedSubviews makeObjectsPerformSelector:@selector(removeFromSuperview)];
 
     if (!self.stageSteps || self.stageSteps.count == 0) {
@@ -736,7 +736,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     self.stagesContainer.hidden = NO;
     for (NSDictionary *step in self.stageSteps) {
         NSString *title = [step[@"title"] isKindOfClass:[NSString class]] ? step[@"title"] : @"";
-        NSInteger status = [step[@"status"] integerValue]; // 0=未开始 1=进行中 2=已完成
+        NSInteger status = [step[@"status"] integerValue]; // 0=not started, 1=in progress, 2=done
 
         UILabel *stepLabel = [[UILabel alloc] init];
         stepLabel.translatesAutoresizingMaskIntoConstraints = NO;
@@ -746,21 +746,21 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         NSString *symbolName;
         UIColor *statusColor;
         switch (status) {
-            case 2: // 已完成
+            case 2: // Done
                 symbolName = @"checkmark.circle.fill";
                 statusColor = [UIColor systemGreenColor];
                 break;
-            case 1: // 进行中
+            case 1: // In progress
                 symbolName = @"circle.dotted";
                 statusColor = accentColor();
                 break;
-            default: // 未开始
+            default: // Not started
                 symbolName = @"circle";
                 statusColor = [UIColor tertiaryLabelColor];
                 break;
         }
 
-        // 使用 NSAttributedString 构建带图标的步骤行
+        // Build the step row with its icon using NSAttributedString
         NSTextAttachment *attachment = [[NSTextAttachment alloc] init];
         attachment.image = [[UIImage systemImageNamed:symbolName] imageWithTintColor:statusColor renderingMode:UIImageRenderingModeAlwaysOriginal];
         attachment.bounds = CGRectMake(0, -2, 16, 16);
@@ -778,7 +778,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
 - (void)updateUI {
     if (self.progress < 0) {
-        // 不确定模式：隐藏进度条与百分比，只显示转圈
+        // Indeterminate mode: hide the progress bar and percentage, showing only the spinner
         self.progressBar.hidden = YES;
         self.percentLabel.hidden = YES;
         self.indeterminateIndicator.hidden = NO;
@@ -812,12 +812,12 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
 @property (nonatomic, strong) UISegmentedControl *tabSegment;
 @property (nonatomic, strong) UISegmentedControl *versionFilterSegment;
-// versionFilterSegment 高度约束：版本 tab 显示（约 32pt），其他 tab 设为 0，
-// 避免 hidden=YES 时仍占空间导致 tabSegment 与 searchBar 之间出现"大白条"。
+// Height constraint of versionFilterSegment: about 32pt on the version tab and 0 on the others,
+// so that hidden=YES does not still take up space and leave "a big white band" between tabSegment and searchBar.
 @property (nonatomic, strong) NSLayoutConstraint *versionFilterHeightConstraint;
 @property (nonatomic, strong) UISearchBar *searchBar;
 @property (nonatomic, strong) UIButton *filterButton;
-@property (nonatomic, strong) UIButton *importModpackButton;  // 整合包 tab 专用导入按钮（参照 FCL）
+@property (nonatomic, strong) UIButton *importModpackButton;  // Import button used only on the modpack tab (as in FCL)
 @property (nonatomic, strong) NSLayoutConstraint *importModpackButtonWidthConstraint;
 @property (nonatomic, strong) UICollectionView *versionCollectionView;
 @property (nonatomic, strong) UITableView *modTableView;
@@ -830,7 +830,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 @property (nonatomic, strong) NSMutableArray *modList;
 @property (nonatomic, strong) NSMutableArray *shaderList;
 
-// 版本 tab 搜索关键词（按版本号前缀过滤，例如输入 "1.2" 匹配 1.20.x / 1.2.x）
+// Search term on the version tab (filters by version number prefix, e.g. "1.2" matches 1.20.x / 1.2.x)
 @property (nonatomic, strong) NSString *versionSearchQuery;
 
 @property (nonatomic, assign) NSInteger currentModOffset;
@@ -842,18 +842,18 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 @property (nonatomic, strong) NSString *currentGameVersion;
 @property (nonatomic, strong) NSString *currentModLoader;
 @property (nonatomic, strong) NSString *currentSortField;
-// FCL 风格：标记用户是否手动改过筛选条件（改过后不再自动覆盖为 profile 的版本）
+// FCL style: tracks whether the user has changed the filters by hand (after which they are no longer overwritten by the profile version)
 @property (nonatomic, assign) BOOL hasUserTouchedFilters;
 
 @property (nonatomic, strong) MinecraftResourceDownloadTask *downloadTask;
 @property (nonatomic, strong) DownloadProgressViewController *progressVC;
 @property (nonatomic, strong) InlineMessageView *downloadingAlert;
-// 参照 FCL/ZL2/HMCL 的下载进度卡片，替代转圈圈的 loadingIndicator
+// Modelled on the download progress cards of FCL/ZL2/HMCL, replacing the spinning loadingIndicator
 @property (nonatomic, strong) DownloadProgressCardView *progressCardView;
 
 @property (nonatomic, assign) BOOL isObservingProgress;
 
-// 整合包相关属性
+// Modpack-related properties
 @property (nonatomic, strong) UITableView *modpackTableView;
 @property (nonatomic, strong) NSMutableArray *modpackList;
 @property (nonatomic, assign) NSInteger currentModpackOffset;
@@ -861,7 +861,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 @property (nonatomic, assign) BOOL isLoadingModpacks;
 @property (nonatomic, strong) NSString *modpackSearchQuery;
 
-// 资源包相关属性
+// Resource pack-related properties
 @property (nonatomic, strong) UITableView *resourcepackTableView;
 @property (nonatomic, strong) NSMutableArray *resourcepackList;
 @property (nonatomic, assign) NSInteger currentResourcepackOffset;
@@ -869,7 +869,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 @property (nonatomic, assign) BOOL isLoadingResourcepacks;
 @property (nonatomic, strong) NSString *resourcepackSearchQuery;
 
-// 数据包相关属性
+// Data pack-related properties
 @property (nonatomic, strong) UITableView *datapackTableView;
 @property (nonatomic, strong) NSMutableArray *datapackList;
 @property (nonatomic, assign) NSInteger currentDatapackOffset;
@@ -877,7 +877,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 @property (nonatomic, assign) BOOL isLoadingDatapacks;
 @property (nonatomic, strong) NSString *datapackSearchQuery;
 
-// 世界相关属性（仿 FCL 安卓新增世界下载分类）
+// World-related properties (mirroring the world download category added in FCL for Android)
 @property (nonatomic, strong) UITableView *worldTableView;
 @property (nonatomic, strong) NSMutableArray *worldList;
 @property (nonatomic, assign) NSInteger currentWorldOffset;
@@ -885,26 +885,26 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 @property (nonatomic, assign) BOOL isLoadingWorlds;
 @property (nonatomic, strong) NSString *worldSearchQuery;
 
-// 源切换 UI（仿 FCL 安卓风格的圆角胶囊切换器：Modrinth 绿 / CurseForge 橙）
+// Source switch UI (an FCL-for-Android-style rounded capsule switch: Modrinth green / CurseForge orange)
 @property (nonatomic, strong) UIView *sourceSwitchContainer;
-@property (nonatomic, strong) UIView *sourceSwitchTrack;        // 圆角胶囊背景轨道
-@property (nonatomic, strong) UIView *sourceSwitchSlider;       // 选中项的彩色滑块
+@property (nonatomic, strong) UIView *sourceSwitchTrack;        // Rounded capsule background track
+@property (nonatomic, strong) UIView *sourceSwitchSlider;       // Colored slider for the selected item
 @property (nonatomic, strong) UIButton *modrinthSourceButton;
 @property (nonatomic, strong) UIButton *curseforgeSourceButton;
 @property (nonatomic, strong) NSLayoutConstraint *sourceSwitchHeightConstraint;
-@property (nonatomic, strong) NSLayoutConstraint *sliderLeftPosConstraint;   // 滑块贴左（Modrinth）
-@property (nonatomic, strong) NSLayoutConstraint *sliderRightPosConstraint;  // 滑块贴右（CurseForge）
+@property (nonatomic, strong) NSLayoutConstraint *sliderLeftPosConstraint;   // Slider on the left (Modrinth)
+@property (nonatomic, strong) NSLayoutConstraint *sliderRightPosConstraint;  // Slider on the right (CurseForge)
 
-// ===== FCL/ZL2 风格侧边筛选栏 =====
-// 参照 FCL（FoldCraftLauncher）和 ZL2（ZalithLauncher）的模组/光影下载界面布局：
-// 左侧是筛选面板（下载源、游戏版本、模组加载器、排序方式），右侧是搜索框+列表。
-// 侧边栏在模组/光影/资源包/数据包/整合包 tab 显示，版本 tab 和世界 tab 隐藏。
-// 窄屏（iPhone 竖屏）时侧边栏宽度自动缩小为 140pt，宽屏（iPad）时为 180pt。
-@property (nonatomic, strong) UIView *filterSidebarContainer;      // 侧边栏容器
-@property (nonatomic, strong) NSLayoutConstraint *sidebarWidthConstraint;  // 侧边栏宽度约束（隐藏时为 0）
-@property (nonatomic, strong) NSLayoutConstraint *sidebarLeadingConstraint; // 侧边栏 leading（隐藏时贴左，列表不偏移）
+// ===== FCL/ZL2-style side filter bar =====
+// Modelled on the mod/shader download screens of FCL (FoldCraftLauncher) and ZL2 (ZalithLauncher):
+// a filter panel on the left (download source, game version, mod loader, sort) with the search box and list on the right.
+// The sidebar is shown on the mod/shader/resource pack/data pack/modpack tabs and hidden on the version and world tabs.
+// On narrow screens (iPhone portrait) it shrinks to 140pt; on wide screens (iPad) it is 180pt.
+@property (nonatomic, strong) UIView *filterSidebarContainer;      // Sidebar container
+@property (nonatomic, strong) NSLayoutConstraint *sidebarWidthConstraint;  // Sidebar width constraint (0 when hidden)
+@property (nonatomic, strong) NSLayoutConstraint *sidebarLeadingConstraint; // Sidebar leading (flush left when hidden, so the list does not shift)
 
-// 侧边栏内的下载源选择（从顶部移到侧边栏）
+// Download source picker inside the sidebar (moved down from the top)
 @property (nonatomic, strong) UIView *sidebarSourceContainer;
 @property (nonatomic, strong) UIButton *sidebarModrinthButton;
 @property (nonatomic, strong) UIButton *sidebarCurseforgeButton;
@@ -913,44 +913,44 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 @property (nonatomic, strong) UIView *sidebarSourceTrack;
 @property (nonatomic, strong) UIView *sidebarSourceSlider;
 
-// 侧边栏内的游戏版本选择按钮（点击弹出 ActionSheet 选择版本）
+// Game version button inside the sidebar (opens an ActionSheet to pick a version)
 @property (nonatomic, strong) UIButton *sidebarVersionButton;
 @property (nonatomic, strong) UILabel *sidebarVersionTitleLabel;
 @property (nonatomic, strong) UILabel *sidebarVersionValueLabel;
 
-// 侧边栏内的模组加载器选择按钮（点击弹出 ActionSheet 选择加载器）
+// Mod loader button inside the sidebar (opens an ActionSheet to pick a loader)
 @property (nonatomic, strong) UIButton *sidebarLoaderButton;
 @property (nonatomic, strong) UILabel *sidebarLoaderTitleLabel;
 @property (nonatomic, strong) UILabel *sidebarLoaderValueLabel;
 
-// 侧边栏内的排序方式选择按钮
+// Sort button inside the sidebar
 @property (nonatomic, strong) UIButton *sidebarSortButton;
 @property (nonatomic, strong) UILabel *sidebarSortTitleLabel;
 @property (nonatomic, strong) UILabel *sidebarSortValueLabel;
 
-// 侧边栏重置筛选按钮
+// Reset filters button in the sidebar
 @property (nonatomic, strong) UIButton *sidebarResetButton;
 
-// 当前待下载资源类型（mod/resourcepack/datapack/world/modpack），用于版本选择回调中决定下载目录
+// The asset type currently queued for download (mod/resourcepack/datapack/world/modpack), used by the version-picker callback to choose the download folder
 @property (nonatomic, copy) NSString *pendingDownloadType;
-// 在线选择版本时临时持有的资源包/数据包/世界对象（AssetVersionViewController 回调使用）
+// Temporarily holds the resource pack/data pack/world object while an online version is being picked (used by the AssetVersionViewController callback)
 @property (nonatomic, strong, nullable) ResourcePackItem *pendingResourcePackItem;
 @property (nonatomic, strong, nullable) DataPackItem *pendingDataPackItem;
 @property (nonatomic, strong, nullable) WorldItem *pendingWorldItem;
-// 整合包版本选择回调时临时持有的整合包字典（ModVersionViewController 回调使用，与 Mod 共用 VC 但下载流程不同）
+// Temporarily holds the modpack dictionary during the modpack version callback (it shares the VC with mods but has a different download flow)
 @property (nonatomic, strong, nullable) NSDictionary *pendingModpackDict;
 
-// 模组加载器安装进度 VC（FCL 风格进度展示，替代转圈 alert）
+// Mod loader install progress VC (FCL-style progress display, replacing the spinner alert)
 @property (nonatomic, strong) InstallerProgressViewController *installerProgressVC;
 
-// 原版前置安装（FCL 风格：安装模组加载器前先装好对应原版）
+// Vanilla prerequisite install (FCL style: install the matching vanilla version before the mod loader)
 @property (nonatomic, strong) MinecraftResourceDownloadTask *vanillaPreinstallTask;
 @property (nonatomic, strong) InstallerProgressViewController *vanillaPreinstallProgressVC;
 @property (nonatomic, assign) BOOL isObservingVanillaPreinstall;
 @property (nonatomic, copy, nullable) void (^vanillaPreinstallCompletion)(BOOL success);
-// 改进2（参照 ZL2 统一进度流）：YES 表示原版预装是加载器安装的前置步骤，
-// 完成后不 pop 预装 VC，而是转交给 self.installerProgressVC，由后续 install* 方法复用，
-// 实现"原版 + 加载器"在同一进度页连续推进，避免出现两个独立进度页。
+// Improvement 2 (following the unified progress flow of ZL2): YES means the vanilla preinstall is a prerequisite step of the loader install,
+// so the preinstall VC is not popped when it finishes but handed over to self.installerProgressVC for the later install* methods to reuse,
+// letting "vanilla + loader" run continuously on one progress page instead of two separate ones.
 @property (nonatomic, assign) BOOL vanillaPreinstallForLoader;
 
 @end
@@ -962,9 +962,9 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         @try {
             [self.downloadTask.progress removeObserver:self forKeyPath:@"fractionCompleted"];
         } @catch (NSException *exception) {
-            // KVO 观察者可能注册在旧的 downloadTask.progress 上，而 downloadTask 已被
-            // 重新赋值为新对象（startVersionDownload: 每次创建新 task），导致从新 progress
-            // 移除时抛出 "not registered as an observer" 异常。忽略此异常即可。
+            // The KVO observer may be registered on the old downloadTask.progress while downloadTask has already been
+            // reassigned to a new object (startVersionDownload: creates a new task each time), so removing it from the new
+            // progress throws a "not registered as an observer" exception. It is safe to ignore.
             NSLog(@"[DownloadVC] dealloc: removeObserver fractionCompleted failed: %@", exception.reason);
         }
         self.isObservingProgress = NO;
@@ -973,7 +973,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         [self.downloadTask.progress cancel];
         self.downloadTask = nil;
     }
-    // 清理原版前置安装的 KVO 观察者，避免 VC 释放后 KVO 回调向已释放对象发送消息导致崩溃
+    // Clean up the KVO observer of the vanilla preinstall, so a KVO callback after the VC is freed cannot message a dead object and crash
     if (self.isObservingVanillaPreinstall) {
         @try {
             [self.vanillaPreinstallTask.progress removeObserver:self forKeyPath:@"fractionCompleted"];
@@ -992,11 +992,11 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 - (void)viewDidLoad {
     [super viewDidLoad];
 
-    // 不设置 self.title，避免顶部导航栏出现"下载"标题黑条（参照 FCL 无 title 风格）
+    // self.title is deliberately not set, to avoid a black "Download" title band in the navigation bar (matching the title-less FCL style)
     self.view.backgroundColor = [UIColor clearColor];
 
-    // 彻底隐藏导航栏黑条（仅当作为非 modal 根页面且是栈中唯一 VC 时）
-    // 快捷入口（showModpackImport 等）会预 push 子页面，此时 count > 1，不隐藏导航栏
+    // Hide the navigation bar band completely (only when this is a non-modal root page and the only VC on the stack)
+    // Shortcuts (showModpackImport and friends) pre-push a child page, so count > 1 and the navigation bar stays visible
     if (self.navigationController &&
         self.navigationController.viewControllers.firstObject == self &&
         self.navigationController.presentingViewController == nil &&
@@ -1004,18 +1004,18 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         self.navigationController.navigationBarHidden = YES;
     }
 
-    // 适配自定义启动器背景（参照 LauncherPreferencesViewController / LauncherRightPanelViewController）
-    // makeViewControllerTransparent: 会根据 BackgroundUIEffect 设置（毛玻璃/半透明）正确处理 view 背景，
-    // 并递归透明化子 VC。之前缺失此调用导致模组下载界面不适配自定义背景。
+    // Adapt to the custom launcher background (as in LauncherPreferencesViewController / LauncherRightPanelViewController)
+    // makeViewControllerTransparent: handles the view background correctly for the current BackgroundUIEffect (frosted glass/translucent)
+    // and makes child VCs transparent recursively. Its absence previously stopped the mod download screen adapting to the custom background.
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
 
-    // CurseForge API Key 入口已统一移到设置页（LauncherPreferencesViewController），
-    // 下载页不再保留，避免导航栏右侧按钮挤占空间。
-    // World tab 强制使用 CurseForge，缺 key 时通过 emptyLabel/InlineMessageView 引导用户去设置页配置。
+    // The CurseForge API key entry point now lives in the settings page (LauncherPreferencesViewController),
+    // so it is no longer kept here, freeing up space on the right of the navigation bar.
+    // The World tab always uses CurseForge; when the key is missing, emptyLabel/InlineMessageView point the user to the settings page.
 
     self.modList = [NSMutableArray array];
     self.shaderList = [NSMutableArray array];
-    self.modpackList = [NSMutableArray array]; // 新增
+    self.modpackList = [NSMutableArray array]; // Newly added
     self.resourcepackList = [NSMutableArray array];
     self.datapackList = [NSMutableArray array];
     self.worldList = [NSMutableArray array];
@@ -1046,24 +1046,24 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
-    // 重新隐藏导航栏黑条（pop 回根页面时 topViewController == self）
+    // Hide the navigation bar band again (topViewController == self after popping back to the root page)
     if (self.navigationController &&
         self.navigationController.viewControllers.firstObject == self &&
         self.navigationController.presentingViewController == nil &&
         self.navigationController.topViewController == self) {
         self.navigationController.navigationBarHidden = YES;
     }
-    // 重新应用背景透明效果（参照 LauncherPreferencesViewController）
-    // 用户可能在外部页面切换了背景设置，回到此页时需重新适配
+    // Re-apply the transparent background effect (as in LauncherPreferencesViewController)
+    // The user may have changed the background settings elsewhere, so it has to be reapplied on return
     if ([[BackgroundManager sharedManager] hasBackground]) {
         self.view.backgroundColor = [UIColor clearColor];
-        // 对导航栏应用效果（DownloadViewController 被包在 UINavigationController 中）
+        // Apply the effect to the navigation bar (DownloadViewController is wrapped in a UINavigationController)
         UINavigationController *nav = self.navigationController;
         if (nav) {
             nav.view.backgroundColor = [UIColor clearColor];
             [[BackgroundManager sharedManager] applyEffectToNavigationBar:nav.navigationBar];
         }
-        // 重新应用侧边栏效果
+        // Re-apply the sidebar effect
         if (self.filterSidebarContainer) {
             [[BackgroundManager sharedManager] applyEffectToView:self.filterSidebarContainer];
         }
@@ -1072,7 +1072,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
 - (void)viewWillDisappear:(BOOL)animated {
     [super viewWillDisappear:animated];
-    // push 子页面时显示导航栏（子页面需要返回按钮）
+    // Show the navigation bar when a child page is pushed (it needs a back button)
     if (self.navigationController &&
         self.navigationController.viewControllers.firstObject == self &&
         self.navigationController.presentingViewController == nil) {
@@ -1083,16 +1083,16 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 - (void)setupUI {
     [self setupTabSegment];
     [self setupVersionFilterSegment];
-    // 注意：setupSearchBar 内部引用了 filterSidebarContainer.trailingAnchor，
-    // 必须在 setupFilterSidebar 之后调用（否则 filterSidebarContainer 为 nil，
-    // 约束激活时 UIKit 会抛 NSInvalidArgumentException 导致点击下载 tile 立即闪退）。
-    [self setupFilterSidebar];  // FCL/ZL2 风格侧边筛选栏（先创建容器）
-    [self setupSearchBar];      // 再设置搜索框（依赖 filterSidebarContainer）
+    // Note: setupSearchBar refers to filterSidebarContainer.trailingAnchor internally,
+    // so it must be called after setupFilterSidebar (otherwise filterSidebarContainer is nil and
+    // UIKit throws NSInvalidArgumentException when the constraints activate, crashing as soon as the download tile is tapped).
+    [self setupFilterSidebar];  // FCL/ZL2-style side filter bar (create the container first)
+    [self setupSearchBar];      // Then the search box (which depends on filterSidebarContainer)
     [self setupSourceSwitch];
     [self setupVersionCollectionView];
     [self setupModTableView];
     [self setupShaderTableView];
-    [self setupModpackTableView]; // 新增
+    [self setupModpackTableView]; // Newly added
     [self setupResourcepackTableView];
     [self setupDatapackTableView];
     [self setupWorldTableView];
@@ -1101,11 +1101,11 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 }
 
 - (void)setupTabSegment {
-    // 精简标签文字为单字+图标，避免在窄屏上拥挤截断（参照 FCL 紧凑 tab）
+    // Shorten the tab labels to one word plus an icon, so they are not cramped or truncated on narrow screens (matching the compact FCL tabs)
     self.tabSegment = [[UISegmentedControl alloc] initWithItems:@[@"Version", @"Mods", @"Shaders", @"Resources", @"Data", @"Modpacks", @"Worlds"]];
     self.tabSegment.translatesAutoresizingMaskIntoConstraints = NO;
     self.tabSegment.selectedSegmentIndex = 0;
-    // 调小字体，确保 7 个 tab 在 iPhone 竖屏也能完整显示
+    // Reduce the font size so all 7 tabs fit in iPhone portrait
     NSDictionary *textAttrs = @{NSFontAttributeName: [UIFont systemFontOfSize:12 weight:UIFontWeightMedium]};
     [self.tabSegment setTitleTextAttributes:textAttrs forState:UIControlStateNormal];
     [self.tabSegment addTarget:self action:@selector(tabChanged:) forControlEvents:UIControlEventValueChanged];
@@ -1126,8 +1126,8 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     [self.versionFilterSegment addTarget:self action:@selector(versionFilterChanged:) forControlEvents:UIControlEventValueChanged];
     [self.view addSubview:self.versionFilterSegment];
 
-    // 高度约束：版本 tab 时设为 32（系统默认 UISegmentedControl 高度），其他 tab 设为 0
-    // 避免 hidden=YES 仍占空间导致 tabSegment 与 searchBar 之间出现"大白条"
+    // Height constraint: 32 on the version tab (the default UISegmentedControl height) and 0 on the others
+    // This avoids hidden=YES still taking up space and leaving "a big white band" between tabSegment and searchBar
     self.versionFilterHeightConstraint = [self.versionFilterSegment.heightAnchor constraintEqualToConstant:32];
 
     [NSLayoutConstraint activateConstraints:@[
@@ -1144,7 +1144,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     self.searchBar.placeholder = @"Search versions...";
     self.searchBar.delegate = self;
     self.searchBar.searchBarStyle = UISearchBarStyleMinimal;
-    // 搜索框对所有 tab 都显示（版本 tab 用于按版本号前缀过滤）
+    // The search box is shown on every tab (on the version tab it filters by version number prefix)
     self.searchBar.hidden = NO;
     [self.view addSubview:self.searchBar];
 
@@ -1155,10 +1155,10 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     self.filterButton.hidden = YES;
     [self.view addSubview:self.filterButton];
 
-    // 整合包 tab 专用"导入本地整合包"按钮（参照 FCL 安卓在整合包列表上方提供显眼导入入口）
+    // "Import local modpack" button used only on the modpack tab (FCL for Android puts a prominent import entry above the modpack list)
     self.importModpackButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.importModpackButton.translatesAutoresizingMaskIntoConstraints = NO;
-    // square.and.arrow.down.on.square 是 iOS 14+ 符号，加 fallback 避免显示成方块
+    // square.and.arrow.down.on.square is an iOS 14+ symbol, so there is a fallback to avoid rendering an empty box
     UIImage *importIcon = [UIImage systemImageNamed:@"square.and.arrow.down.on.square"]
                           ?: [UIImage systemImageNamed:@"square.and.arrow.down"]
                           ?: [UIImage systemImageNamed:@"tray.and.arrow.down"];
@@ -1175,10 +1175,10 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     [self.view addSubview:self.importModpackButton];
 
     [NSLayoutConstraint activateConstraints:@[
-        // 搜索框放在版本筛选框下方，避免与 versionFilterSegment 重合。
-        // 关键修复：searchBar.leading 跟随 filterSidebarContainer.trailing（与各 tab 表格一致），
-        // 这样侧边筛选栏展开时搜索框会自动右移避让，不再被筛选栏遮挡。
-        // 之前 searchBar.leading = view.leading+8，侧栏展开（140/180pt）时水平重叠遮挡搜索框左半部分。
+        // The search box sits below the version filter so it does not overlap versionFilterSegment.
+        // Key fix: searchBar.leading follows filterSidebarContainer.trailing (matching every tab table),
+        // so the search box moves right out of the way when the side filter bar expands instead of being covered by it.
+        // Previously searchBar.leading = view.leading+8, so an expanded sidebar (140/180pt) overlapped the left half of the search box.
         [self.searchBar.topAnchor constraintEqualToAnchor:self.versionFilterSegment.bottomAnchor constant:8],
         [self.searchBar.leadingAnchor constraintEqualToAnchor:self.filterSidebarContainer.trailingAnchor constant:8],
         [self.searchBar.trailingAnchor constraintEqualToAnchor:self.importModpackButton.leadingAnchor constant:-8],
@@ -1193,20 +1193,20 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         [self.filterButton.heightAnchor constraintEqualToConstant:44]
     ]];
 
-    // 默认宽度 0（隐藏时不占空间），整合包 tab 切换时设为 80
+    // Width defaults to 0 (taking no space when hidden) and becomes 80 when switching to the modpack tab
     self.importModpackButtonWidthConstraint = [self.importModpackButton.widthAnchor constraintEqualToConstant:0];
     self.importModpackButtonWidthConstraint.active = YES;
 }
 
 - (void)setupVersionCollectionView {
-    // 参照 FCL (item_remote_version.xml 单列列表) 与 ZL2 (LazyColumn VersionItemLayout)：
-    // 改为单列横向列表行布局，每行一个全宽卡片，行高 64pt（cell 内部再留 4pt 上下边距，实际卡片 56pt）。
-    // itemSize.width 在 viewDidLayoutSubviews 里按 collectionView 实际宽度动态更新，避免横竖屏切换错位。
+    // Modelled on FCL (the single-column list of item_remote_version.xml) and ZL2 (LazyColumn VersionItemLayout):
+    // changed to a single-column list of horizontal rows, one full-width card per row, 64pt row height (the cell adds 4pt of vertical padding, so the card is 56pt).
+    // itemSize.width is updated dynamically in viewDidLayoutSubviews from the real collectionView width, so rotation does not misalign it.
     UICollectionViewFlowLayout *layout = [[UICollectionViewFlowLayout alloc] init];
     layout.scrollDirection = UICollectionViewScrollDirectionVertical;
-    layout.minimumInteritemSpacing = 0;  // 单列，无横向间距
-    layout.minimumLineSpacing = 4;       // 行间小间距，卡片自带阴影做视觉分隔
-    layout.itemSize = CGSizeMake(360, 64); // 默认宽度，viewDidLayoutSubviews 会覆盖
+    layout.minimumInteritemSpacing = 0;  // Single column, so no horizontal spacing
+    layout.minimumLineSpacing = 4;       // Small gap between rows; the card shadows provide the visual separation
+    layout.itemSize = CGSizeMake(360, 64); // Default width; viewDidLayoutSubviews overrides it
     layout.sectionInset = UIEdgeInsetsMake(8, 16, 8, 16);
 
     self.versionCollectionView = [[UICollectionView alloc] initWithFrame:CGRectZero collectionViewLayout:layout];
@@ -1214,14 +1214,14 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     self.versionCollectionView.backgroundColor = [UIColor clearColor];
     self.versionCollectionView.dataSource = self;
     self.versionCollectionView.delegate = self;
-    // 选中态反馈：点击单元格时短暂高亮（FCL/ZL2 都有按压视觉反馈）
+    // Selection feedback: briefly highlight the cell on tap (both FCL and ZL2 give press feedback)
     self.versionCollectionView.allowsSelection = YES;
     self.versionCollectionView.alwaysBounceVertical = YES;
     [self.versionCollectionView registerClass:[VersionCardCell class] forCellWithReuseIdentifier:@"VersionCard"];
     [self.view addSubview:self.versionCollectionView];
 
     [NSLayoutConstraint activateConstraints:@[
-        // 版本列表放在搜索框下方，避免与搜索框重合
+        // The version list sits below the search box so they do not overlap
         [self.versionCollectionView.topAnchor constraintEqualToAnchor:self.searchBar.bottomAnchor constant:4],
         [self.versionCollectionView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
         [self.versionCollectionView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
@@ -1229,8 +1229,8 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     ]];
 }
 
-// 动态更新版本列表 itemSize 宽度，使其填满 collectionView 宽度（减去 sectionInset 左右各 16pt）。
-// 横屏切换或分屏尺寸变化时由系统自动调用，无需手动注册通知。
+// Update the version list itemSize width dynamically so it fills the collectionView width (minus 16pt of sectionInset on each side).
+// The system calls this automatically on rotation or a split-view size change, so no notification needs registering.
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
     if (!self.versionCollectionView) return;
@@ -1241,14 +1241,14 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     CGSize target = CGSizeMake(availableWidth, 64);
     if (!CGSizeEqualToSize(layout.itemSize, target)) {
         layout.itemSize = target;
-        // invalidateLayout 触发重新排版，避免 cell 复用时宽度滞后
+        // invalidateLayout forces a re-layout, so the width does not lag behind during cell reuse
         [layout invalidateLayout];
     }
 
-    // 动态调整侧边栏宽度（横竖屏切换时）
+    // Adjust the sidebar width dynamically (on rotation)
     if (self.filterSidebarContainer && !self.filterSidebarContainer.hidden) {
-        // FCL page_download.xml：search_layout 用 layout_constraintWidth_percent="0.3"
-        // 这里按 view 宽度 30% 计算，并加上下限避免极端尺寸（iPhone SE 最小 120pt，iPad 最大 280pt）
+        // FCL page_download.xml: search_layout uses layout_constraintWidth_percent="0.3"
+        // Here it is 30% of the view width, clamped to avoid extremes (minimum 120pt on iPhone SE, maximum 280pt on iPad)
         CGFloat screenWidth = self.view.bounds.size.width;
         CGFloat newWidth = screenWidth * 0.3;
         newWidth = MAX(120.0, MIN(280.0, newWidth));
@@ -1264,8 +1264,8 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     self.modTableView.backgroundColor = [UIColor clearColor];
     self.modTableView.dataSource = self;
     self.modTableView.delegate = self;
-    // FCL view_installer_item.xml：item 高度 ~46dp + marginBottom 10dp
-    // 这里 54pt（图标 26pt + 双行文字 + 上下 padding 4pt），每屏显示更多
+    // FCL view_installer_item.xml: item height ~46dp + marginBottom 10dp
+    // Here it is 54pt (26pt icon + two lines of text + 4pt of vertical padding), fitting more rows per screen
     self.modTableView.rowHeight = 54;
     self.modTableView.separatorStyle = UITableViewCellSeparatorStyleNone;
     [self.modTableView registerClass:[ModernAssetCell class] forCellReuseIdentifier:@"ModCell"];
@@ -1276,9 +1276,9 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     [refreshControl addTarget:self action:@selector(refreshModList) forControlEvents:UIControlEventValueChanged];
     self.modTableView.refreshControl = refreshControl;
 
-    // FCL/ZL2 风格：列表 leading 跟随侧边栏 trailing，top 跟随 searchBar
-    // 侧边栏隐藏时宽度为 0，trailingAnchor 等于 view.leadingAnchor，列表自动铺满
-    // leading 加 8pt 间距，避免与左侧筛选栏紧贴（视觉呼吸感，阶段3 UI 调整）
+    // FCL/ZL2 style: the list leading follows the sidebar trailing and its top follows searchBar
+    // When the sidebar is hidden its width is 0, so trailingAnchor equals view.leadingAnchor and the list fills the screen
+    // 8pt of leading spacing so the list is not flush against the filter bar (visual breathing room, phase 3 UI tweak)
     [NSLayoutConstraint activateConstraints:@[
         [self.modTableView.topAnchor constraintEqualToAnchor:self.searchBar.bottomAnchor constant:4],
         [self.modTableView.leadingAnchor constraintEqualToAnchor:self.filterSidebarContainer.trailingAnchor constant:8],
@@ -1293,7 +1293,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     self.shaderTableView.backgroundColor = [UIColor clearColor];
     self.shaderTableView.dataSource = self;
     self.shaderTableView.delegate = self;
-    // FCL 风格扁平条目：行高 54pt
+    // FCL-style flat rows: 54pt row height
     self.shaderTableView.rowHeight = 54;
     self.shaderTableView.separatorStyle = UITableViewCellSeparatorStyleNone;
     [self.shaderTableView registerClass:[ModernAssetCell class] forCellReuseIdentifier:@"ShaderCell"];
@@ -1304,7 +1304,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     [refreshControl addTarget:self action:@selector(refreshShaderList) forControlEvents:UIControlEventValueChanged];
     self.shaderTableView.refreshControl = refreshControl;
 
-    // leading 加 8pt 间距，避免与左侧筛选栏紧贴（视觉呼吸感，阶段3 UI 调整）
+    // 8pt of leading spacing so the list is not flush against the filter bar (visual breathing room, phase 3 UI tweak)
     [NSLayoutConstraint activateConstraints:@[
         [self.shaderTableView.topAnchor constraintEqualToAnchor:self.searchBar.bottomAnchor constant:4],
         [self.shaderTableView.leadingAnchor constraintEqualToAnchor:self.filterSidebarContainer.trailingAnchor constant:8],
@@ -1319,7 +1319,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     self.modpackTableView.backgroundColor = [UIColor clearColor];
     self.modpackTableView.dataSource = self;
     self.modpackTableView.delegate = self;
-    // FCL 风格扁平条目：行高 54pt
+    // FCL-style flat rows: 54pt row height
     self.modpackTableView.rowHeight = 54;
     self.modpackTableView.separatorStyle = UITableViewCellSeparatorStyleNone;
     [self.modpackTableView registerClass:[ModernAssetCell class] forCellReuseIdentifier:@"ModpackCell"];
@@ -1330,7 +1330,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     [refreshControl addTarget:self action:@selector(refreshModpackList) forControlEvents:UIControlEventValueChanged];
     self.modpackTableView.refreshControl = refreshControl;
 
-    // leading 加 8pt 间距，避免与左侧筛选栏紧贴（视觉呼吸感，阶段3 UI 调整）
+    // 8pt of leading spacing so the list is not flush against the filter bar (visual breathing room, phase 3 UI tweak)
     [NSLayoutConstraint activateConstraints:@[
         [self.modpackTableView.topAnchor constraintEqualToAnchor:self.searchBar.bottomAnchor constant:4],
         [self.modpackTableView.leadingAnchor constraintEqualToAnchor:self.filterSidebarContainer.trailingAnchor constant:8],
@@ -1345,7 +1345,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     self.resourcepackTableView.backgroundColor = [UIColor clearColor];
     self.resourcepackTableView.dataSource = self;
     self.resourcepackTableView.delegate = self;
-    // FCL 风格扁平条目：行高 54pt
+    // FCL-style flat rows: 54pt row height
     self.resourcepackTableView.rowHeight = 54;
     self.resourcepackTableView.separatorStyle = UITableViewCellSeparatorStyleNone;
     [self.resourcepackTableView registerClass:[ModernAssetCell class] forCellReuseIdentifier:@"ResourcepackCell"];
@@ -1356,7 +1356,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     [refreshControl addTarget:self action:@selector(refreshResourcepackList) forControlEvents:UIControlEventValueChanged];
     self.resourcepackTableView.refreshControl = refreshControl;
 
-    // leading 加 8pt 间距，避免与左侧筛选栏紧贴（视觉呼吸感，阶段3 UI 调整）
+    // 8pt of leading spacing so the list is not flush against the filter bar (visual breathing room, phase 3 UI tweak)
     [NSLayoutConstraint activateConstraints:@[
         [self.resourcepackTableView.topAnchor constraintEqualToAnchor:self.searchBar.bottomAnchor constant:4],
         [self.resourcepackTableView.leadingAnchor constraintEqualToAnchor:self.filterSidebarContainer.trailingAnchor constant:8],
@@ -1371,7 +1371,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     self.datapackTableView.backgroundColor = [UIColor clearColor];
     self.datapackTableView.dataSource = self;
     self.datapackTableView.delegate = self;
-    // FCL 风格扁平条目：行高 54pt
+    // FCL-style flat rows: 54pt row height
     self.datapackTableView.rowHeight = 54;
     self.datapackTableView.separatorStyle = UITableViewCellSeparatorStyleNone;
     [self.datapackTableView registerClass:[ModernAssetCell class] forCellReuseIdentifier:@"DatapackCell"];
@@ -1382,7 +1382,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     [refreshControl addTarget:self action:@selector(refreshDatapackList) forControlEvents:UIControlEventValueChanged];
     self.datapackTableView.refreshControl = refreshControl;
 
-    // leading 加 8pt 间距，避免与左侧筛选栏紧贴（视觉呼吸感，阶段3 UI 调整）
+    // 8pt of leading spacing so the list is not flush against the filter bar (visual breathing room, phase 3 UI tweak)
     [NSLayoutConstraint activateConstraints:@[
         [self.datapackTableView.topAnchor constraintEqualToAnchor:self.searchBar.bottomAnchor constant:4],
         [self.datapackTableView.leadingAnchor constraintEqualToAnchor:self.filterSidebarContainer.trailingAnchor constant:8],
@@ -1397,7 +1397,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     self.worldTableView.backgroundColor = [UIColor clearColor];
     self.worldTableView.dataSource = self;
     self.worldTableView.delegate = self;
-    // FCL 风格扁平条目：行高 54pt
+    // FCL-style flat rows: 54pt row height
     self.worldTableView.rowHeight = 54;
     self.worldTableView.separatorStyle = UITableViewCellSeparatorStyleNone;
     [self.worldTableView registerClass:[ModernAssetCell class] forCellReuseIdentifier:@"WorldCell"];
@@ -1408,8 +1408,8 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     [refreshControl addTarget:self action:@selector(refreshWorldList) forControlEvents:UIControlEventValueChanged];
     self.worldTableView.refreshControl = refreshControl;
 
-    // 世界 tab 不显示侧边栏（强制 CurseForge），列表 leading 直接跟随 view
-    // leading 加 8pt 间距，保持与其他 tab 一致的视觉呼吸感（阶段3 UI 调整）
+    // The world tab has no sidebar (it always uses CurseForge), so the list leading follows the view directly
+    // 8pt of leading spacing to match the breathing room of the other tabs (phase 3 UI tweak)
     [NSLayoutConstraint activateConstraints:@[
         [self.worldTableView.topAnchor constraintEqualToAnchor:self.searchBar.bottomAnchor constant:4],
         [self.worldTableView.leadingAnchor constraintEqualToAnchor:self.filterSidebarContainer.trailingAnchor constant:8],
@@ -1419,13 +1419,13 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 }
 
 - (void)setupSourceSwitch {
-    // 仿 FCL 安卓风格：居中的圆角胶囊切换器，带彩色滑块与品牌色
+    // FCL-for-Android style: a centered rounded capsule switch with a colored slider and brand colors
     self.sourceSwitchContainer = [[UIView alloc] init];
     self.sourceSwitchContainer.translatesAutoresizingMaskIntoConstraints = NO;
     self.sourceSwitchContainer.hidden = YES;
     [self.view addSubview:self.sourceSwitchContainer];
 
-    // 圆角胶囊背景轨道
+    // Rounded capsule background track
     self.sourceSwitchTrack = [[UIView alloc] init];
     self.sourceSwitchTrack.translatesAutoresizingMaskIntoConstraints = NO;
     self.sourceSwitchTrack.backgroundColor = [UIColor tertiarySystemFillColor];
@@ -1433,19 +1433,19 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     self.sourceSwitchTrack.layer.masksToBounds = YES;
     [self.sourceSwitchContainer addSubview:self.sourceSwitchTrack];
 
-    // 选中项滑块（初始为 Modrinth 绿）
+    // Slider for the selected item (Modrinth green initially)
     self.sourceSwitchSlider = [[UIView alloc] init];
     self.sourceSwitchSlider.translatesAutoresizingMaskIntoConstraints = NO;
     self.sourceSwitchSlider.backgroundColor = [UIColor systemGreenColor];
     self.sourceSwitchSlider.layer.cornerRadius = 14;
-    // 阴影提升层次感
+    // A shadow to add depth
     self.sourceSwitchSlider.layer.shadowColor = [UIColor blackColor].CGColor;
     self.sourceSwitchSlider.layer.shadowOpacity = 0.15;
     self.sourceSwitchSlider.layer.shadowOffset = CGSizeMake(0, 1);
     self.sourceSwitchSlider.layer.shadowRadius = 3;
     [self.sourceSwitchTrack addSubview:self.sourceSwitchSlider];
 
-    // Modrinth 按钮
+    // Modrinth button
     self.modrinthSourceButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.modrinthSourceButton.translatesAutoresizingMaskIntoConstraints = NO;
     [self.modrinthSourceButton setTitle:@"Modrinth" forState:UIControlStateNormal];
@@ -1453,7 +1453,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     [self.modrinthSourceButton addTarget:self action:@selector(modrinthSourceButtonClicked:) forControlEvents:UIControlEventTouchUpInside];
     [self.sourceSwitchTrack addSubview:self.modrinthSourceButton];
 
-    // CurseForge 按钮
+    // CurseForge button
     self.curseforgeSourceButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.curseforgeSourceButton.translatesAutoresizingMaskIntoConstraints = NO;
     [self.curseforgeSourceButton setTitle:@"CurseForge" forState:UIControlStateNormal];
@@ -1461,10 +1461,10 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     [self.curseforgeSourceButton addTarget:self action:@selector(curseforgeSourceButtonClicked:) forControlEvents:UIControlEventTouchUpInside];
     [self.sourceSwitchTrack addSubview:self.curseforgeSourceButton];
 
-    // 容器约束：居中、固定宽度、固定高度
+    // Container constraints: centered, fixed width, fixed height
     self.sliderLeftPosConstraint = [self.sourceSwitchSlider.leadingAnchor constraintEqualToAnchor:self.sourceSwitchTrack.leadingAnchor constant:2];
     self.sliderRightPosConstraint = [self.sourceSwitchSlider.trailingAnchor constraintEqualToAnchor:self.sourceSwitchTrack.trailingAnchor constant:-2];
-    self.sliderRightPosConstraint.active = NO; // 初始 Modrinth 在左
+    self.sliderRightPosConstraint.active = NO; // Modrinth is on the left initially
 
     [NSLayoutConstraint activateConstraints:@[
         [self.sourceSwitchContainer.topAnchor constraintEqualToAnchor:self.searchBar.bottomAnchor constant:6],
@@ -1472,19 +1472,19 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         [self.sourceSwitchContainer.widthAnchor constraintEqualToConstant:220],
         [self.sourceSwitchContainer.heightAnchor constraintEqualToConstant:36],
 
-        // 轨道铺满容器
+        // The track fills the container
         [self.sourceSwitchTrack.topAnchor constraintEqualToAnchor:self.sourceSwitchContainer.topAnchor],
         [self.sourceSwitchTrack.leadingAnchor constraintEqualToAnchor:self.sourceSwitchContainer.leadingAnchor],
         [self.sourceSwitchTrack.trailingAnchor constraintEqualToAnchor:self.sourceSwitchContainer.trailingAnchor],
         [self.sourceSwitchTrack.bottomAnchor constraintEqualToAnchor:self.sourceSwitchContainer.bottomAnchor],
 
-        // 滑块高度/宽度（宽度 = 轨道一半 - 2pt 边距），位置由 left/right 约束二选一定位
+        // Slider height/width (width = half the track - 2pt of margin); its position comes from one of the left/right constraints
         [self.sourceSwitchSlider.topAnchor constraintEqualToAnchor:self.sourceSwitchTrack.topAnchor constant:2],
         [self.sourceSwitchSlider.bottomAnchor constraintEqualToAnchor:self.sourceSwitchTrack.bottomAnchor constant:-2],
         [self.sourceSwitchSlider.widthAnchor constraintEqualToAnchor:self.sourceSwitchTrack.widthAnchor multiplier:0.5 constant:-2],
         self.sliderLeftPosConstraint,
 
-        // 两个按钮各占一半
+        // The two buttons take half each
         [self.modrinthSourceButton.topAnchor constraintEqualToAnchor:self.sourceSwitchTrack.topAnchor],
         [self.modrinthSourceButton.bottomAnchor constraintEqualToAnchor:self.sourceSwitchTrack.bottomAnchor],
         [self.modrinthSourceButton.leadingAnchor constraintEqualToAnchor:self.sourceSwitchTrack.leadingAnchor],
@@ -1496,32 +1496,32 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         [self.curseforgeSourceButton.widthAnchor constraintEqualToAnchor:self.sourceSwitchTrack.widthAnchor multiplier:0.5]
     ]];
 
-    // 动态高度约束（隐藏时为 0，显示时为 36）
+    // Dynamic height constraint (0 when hidden, 36 when shown)
     self.sourceSwitchHeightConstraint = [self.sourceSwitchContainer.heightAnchor constraintEqualToConstant:0];
     self.sourceSwitchHeightConstraint.active = YES;
 }
 
 #pragma mark - FCL/ZL2 风格侧边筛选栏
 
-/// 创建侧边筛选栏（参照 FCL/ZL2 的模组/光影下载界面布局）
+/// Build the side filter bar (modelled on the mod/shader download screens of FCL/ZL2)
 ///
-/// 布局结构（侧边栏内从上到下）：
-/// 1. 下载源选择器（Modrinth / CurseForge 圆角胶囊切换器）
-/// 2. 游戏版本选择按钮（点击弹出 ActionSheet 选择版本）
-/// 3. 模组加载器选择按钮（点击弹出 ActionSheet 选择加载器，仅模组 tab 显示）
-/// 4. 排序方式选择按钮（点击弹出 ActionSheet 选择排序方式）
-/// 5. 重置筛选按钮
+/// Layout (top to bottom inside the sidebar):
+/// 1. Download source picker (a Modrinth / CurseForge rounded capsule switch)
+/// 2. Game version button (opens an ActionSheet to pick a version)
+/// 3. Mod loader button (opens an ActionSheet to pick a loader; shown only on the mod tab)
+/// 4. Sort button (opens an ActionSheet to pick a sort order)
+/// 5. Reset filters button
 ///
-/// 侧边栏在模组/光影/资源包/数据包/整合包 tab 显示，版本 tab 和世界 tab 隐藏。
-/// 隐藏时宽度为 0，不占空间；显示时宽度 180pt（宽屏）或 140pt（窄屏）。
+/// The sidebar is shown on the mod/shader/resource pack/data pack/modpack tabs and hidden on the version and world tabs.
+/// When hidden its width is 0 and it takes no space; when shown it is 180pt (wide screens) or 140pt (narrow screens).
 - (void)setupFilterSidebar {
     self.filterSidebarContainer = [[UIView alloc] init];
     self.filterSidebarContainer.translatesAutoresizingMaskIntoConstraints = NO;
-    // 适配自定义启动器背景：使用 BackgroundManager 的 applyEffectToView: 而非不透明的
-    // secondarySystemBackgroundColor。之前用 secondarySystemBackgroundColor（完全不透明）
-    // 会遮挡自定义背景，导致模组/光影下载界面不适配自定义启动器背景。
-    // applyEffectToView: 会根据 BackgroundUIEffect 设置（毛玻璃/半透明）正确处理，
-    // 参照 LauncherRootViewController.m 中对 sidebarContainer 的处理方式。
+    // Adapt to the custom launcher background: use BackgroundManager's applyEffectToView: rather than the opaque
+    // secondarySystemBackgroundColor. The previous secondarySystemBackgroundColor (fully opaque)
+    // hid the custom background, so the mod/shader download screens did not adapt to it.
+    // applyEffectToView: handles the current BackgroundUIEffect setting (frosted glass/translucent) correctly,
+    // mirroring how sidebarContainer is handled in LauncherRootViewController.m.
     self.filterSidebarContainer.backgroundColor = [UIColor clearColor];
     self.filterSidebarContainer.layer.cornerRadius = 12;
     self.filterSidebarContainer.layer.masksToBounds = YES;
@@ -1529,27 +1529,27 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     self.filterSidebarContainer.hidden = YES;
     [self.view addSubview:self.filterSidebarContainer];
 
-    // 侧边栏宽度约束：隐藏时为 0，显示时为 180（宽屏）或 140（窄屏）
-    // 在 viewDidLayoutSubviews 中根据屏幕宽度动态调整
+    // Sidebar width constraint: 0 when hidden, 180 (wide screen) or 140 (narrow screen) when shown
+    // Adjusted dynamically from the screen width in viewDidLayoutSubviews
     self.sidebarWidthConstraint = [self.filterSidebarContainer.widthAnchor constraintEqualToConstant:0];
 
     [NSLayoutConstraint activateConstraints:@[
         [self.filterSidebarContainer.topAnchor constraintEqualToAnchor:self.tabSegment.bottomAnchor constant:8],
-        // 关键修复：leading 留 8pt 间距，避免与左侧菜单栏（LauncherMenuViewController）视觉接触。
-        // 之前 leading = view.leading+0，filterSidebarContainer 紧贴 contentContainer 左边缘，
-        // 而 contentContainer 左边缘就是菜单栏右边缘，视觉上筛选栏与菜单栏"贴在一起"。
-        // 加 8pt 间距后两者之间有清晰分隔，与右侧 tableView 的 8pt 间距对称。
+        // Key fix: leave 8pt of leading spacing so it does not visually touch the menu bar on the left (LauncherMenuViewController).
+        // Previously leading = view.leading+0, so filterSidebarContainer sat flush against the left edge of contentContainer,
+        // and that edge is the right edge of the menu bar, making the filter bar look "glued" to it.
+        // With 8pt of spacing there is a clear gap, symmetric with the 8pt gap to the tableView on the right.
         [self.filterSidebarContainer.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:8],
         [self.filterSidebarContainer.bottomAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.bottomAnchor],
         self.sidebarWidthConstraint
     ]];
 
-    // ===== 1. 下载源选择器（从顶部移到侧边栏）=====
+    // ===== 1. Download source picker (moved down from the top) =====
     self.sidebarSourceContainer = [[UIView alloc] init];
     self.sidebarSourceContainer.translatesAutoresizingMaskIntoConstraints = NO;
     [self.filterSidebarContainer addSubview:self.sidebarSourceContainer];
 
-    // 下载源标题
+    // Download source title
     UILabel *sourceTitleLabel = [[UILabel alloc] init];
     sourceTitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     sourceTitleLabel.text = @"Download source";
@@ -1557,7 +1557,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     sourceTitleLabel.textColor = [UIColor secondaryLabelColor];
     [self.filterSidebarContainer addSubview:sourceTitleLabel];
 
-    // 下载源轨道
+    // Download source track
     self.sidebarSourceTrack = [[UIView alloc] init];
     self.sidebarSourceTrack.translatesAutoresizingMaskIntoConstraints = NO;
     self.sidebarSourceTrack.backgroundColor = [UIColor tertiarySystemFillColor];
@@ -1565,7 +1565,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     self.sidebarSourceTrack.layer.masksToBounds = YES;
     [self.sidebarSourceContainer addSubview:self.sidebarSourceTrack];
 
-    // 下载源滑块
+    // Download source slider
     self.sidebarSourceSlider = [[UIView alloc] init];
     self.sidebarSourceSlider.translatesAutoresizingMaskIntoConstraints = NO;
     self.sidebarSourceSlider.backgroundColor = [UIColor systemGreenColor];
@@ -1576,7 +1576,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     self.sidebarSourceSlider.layer.shadowRadius = 3;
     [self.sidebarSourceTrack addSubview:self.sidebarSourceSlider];
 
-    // Modrinth 按钮
+    // Modrinth button
     self.sidebarModrinthButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.sidebarModrinthButton.translatesAutoresizingMaskIntoConstraints = NO;
     [self.sidebarModrinthButton setTitle:@"Mod" forState:UIControlStateNormal];
@@ -1584,7 +1584,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     [self.sidebarModrinthButton addTarget:self action:@selector(sidebarModrinthClicked:) forControlEvents:UIControlEventTouchUpInside];
     [self.sidebarSourceTrack addSubview:self.sidebarModrinthButton];
 
-    // CurseForge 按钮
+    // CurseForge button
     self.sidebarCurseforgeButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.sidebarCurseforgeButton.translatesAutoresizingMaskIntoConstraints = NO;
     [self.sidebarCurseforgeButton setTitle:@"CF" forState:UIControlStateNormal];
@@ -1592,36 +1592,36 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     [self.sidebarCurseforgeButton addTarget:self action:@selector(sidebarCurseforgeClicked:) forControlEvents:UIControlEventTouchUpInside];
     [self.sidebarSourceTrack addSubview:self.sidebarCurseforgeButton];
 
-    // 下载源滑块位置约束
+    // Download source slider position constraints
     self.sidebarSliderLeftConstraint = [self.sidebarSourceSlider.leadingAnchor constraintEqualToAnchor:self.sidebarSourceTrack.leadingAnchor constant:2];
     self.sidebarSliderRightConstraint = [self.sidebarSourceSlider.trailingAnchor constraintEqualToAnchor:self.sidebarSourceTrack.trailingAnchor constant:-2];
     self.sidebarSliderRightConstraint.active = NO;
 
     [NSLayoutConstraint activateConstraints:@[
-        // 下载源标题
+        // Download source title
         [sourceTitleLabel.topAnchor constraintEqualToAnchor:self.filterSidebarContainer.topAnchor constant:12],
         [sourceTitleLabel.leadingAnchor constraintEqualToAnchor:self.filterSidebarContainer.leadingAnchor constant:12],
         [sourceTitleLabel.trailingAnchor constraintEqualToAnchor:self.filterSidebarContainer.trailingAnchor constant:-12],
 
-        // 下载源容器
+        // Download source container
         [self.sidebarSourceContainer.topAnchor constraintEqualToAnchor:sourceTitleLabel.bottomAnchor constant:4],
         [self.sidebarSourceContainer.leadingAnchor constraintEqualToAnchor:self.filterSidebarContainer.leadingAnchor constant:8],
         [self.sidebarSourceContainer.trailingAnchor constraintEqualToAnchor:self.filterSidebarContainer.trailingAnchor constant:-8],
         [self.sidebarSourceContainer.heightAnchor constraintEqualToConstant:32],
 
-        // 轨道铺满容器
+        // The track fills the container
         [self.sidebarSourceTrack.topAnchor constraintEqualToAnchor:self.sidebarSourceContainer.topAnchor],
         [self.sidebarSourceTrack.leadingAnchor constraintEqualToAnchor:self.sidebarSourceContainer.leadingAnchor],
         [self.sidebarSourceTrack.trailingAnchor constraintEqualToAnchor:self.sidebarSourceContainer.trailingAnchor],
         [self.sidebarSourceTrack.bottomAnchor constraintEqualToAnchor:self.sidebarSourceContainer.bottomAnchor],
 
-        // 滑块
+        // Slider
         [self.sidebarSourceSlider.topAnchor constraintEqualToAnchor:self.sidebarSourceTrack.topAnchor constant:2],
         [self.sidebarSourceSlider.bottomAnchor constraintEqualToAnchor:self.sidebarSourceTrack.bottomAnchor constant:-2],
         [self.sidebarSourceSlider.widthAnchor constraintEqualToAnchor:self.sidebarSourceTrack.widthAnchor multiplier:0.5 constant:-2],
         self.sidebarSliderLeftConstraint,
 
-        // 两个按钮各占一半
+        // The two buttons take half each
         [self.sidebarModrinthButton.topAnchor constraintEqualToAnchor:self.sidebarSourceTrack.topAnchor],
         [self.sidebarModrinthButton.bottomAnchor constraintEqualToAnchor:self.sidebarSourceTrack.bottomAnchor],
         [self.sidebarModrinthButton.leadingAnchor constraintEqualToAnchor:self.sidebarSourceTrack.leadingAnchor],
@@ -1633,7 +1633,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         [self.sidebarCurseforgeButton.widthAnchor constraintEqualToAnchor:self.sidebarSourceTrack.widthAnchor multiplier:0.5]
     ]];
 
-    // ===== 2. 游戏版本选择按钮 =====
+    // ===== 2. Game version button =====
     self.sidebarVersionButton = [self createSidebarSelectButtonWithTitle:@"Game version"
                                                                     value:@"All versions"
                                                                   selector:@selector(sidebarVersionButtonClicked:)];
@@ -1647,7 +1647,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         [self.sidebarVersionButton.heightAnchor constraintEqualToConstant:44]
     ]];
 
-    // ===== 3. 模组加载器选择按钮 =====
+    // ===== 3. Mod loader button =====
     self.sidebarLoaderButton = [self createSidebarSelectButtonWithTitle:@"Mod loader"
                                                                    value:@"All"
                                                                  selector:@selector(sidebarLoaderButtonClicked:)];
@@ -1661,7 +1661,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         [self.sidebarLoaderButton.heightAnchor constraintEqualToConstant:44]
     ]];
 
-    // ===== 4. 排序方式选择按钮 =====
+    // ===== 4. Sort button =====
     self.sidebarSortButton = [self createSidebarSelectButtonWithTitle:@"Sort by"
                                                                  value:@"Relevance"
                                                                selector:@selector(sidebarSortButtonClicked:)];
@@ -1675,7 +1675,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         [self.sidebarSortButton.heightAnchor constraintEqualToConstant:44]
     ]];
 
-    // ===== 5. 重置筛选按钮 =====
+    // ===== 5. Reset filters button =====
     self.sidebarResetButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.sidebarResetButton.translatesAutoresizingMaskIntoConstraints = NO;
     [self.sidebarResetButton setTitle:@"Reset filters" forState:UIControlStateNormal];
@@ -1696,7 +1696,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         [self.sidebarResetButton.heightAnchor constraintEqualToConstant:32]
     ]];
 
-    // 底部分隔线
+    // Separator at the bottom
     UIView *sidebarSeparator = [[UIView alloc] init];
     sidebarSeparator.translatesAutoresizingMaskIntoConstraints = NO;
     sidebarSeparator.backgroundColor = [UIColor separatorColor];
@@ -1709,9 +1709,9 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     ]];
 }
 
-/// 创建侧边栏的选择按钮（标题 + 当前值 + 箭头）
-/// 按钮内子视图通过 tag 标记：titleTag=100, valueTag=101, arrowTag=102
-/// 创建后可通过 findSubviewInButton:withTag: 取出对应的 label
+/// Build a sidebar picker button (title + current value + chevron)
+/// The subviews are marked with tags: titleTag=100, valueTag=101, arrowTag=102
+/// After creation the labels can be fetched with findSubviewInButton:withTag:
 - (UIButton *)createSidebarSelectButtonWithTitle:(NSString *)title
                                            value:(NSString *)value
                                          selector:(SEL)selector {
@@ -1766,7 +1766,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     return button;
 }
 
-/// 从按钮中按 tag 取出子视图（用于 createSidebarSelectButtonWithTitle: 创建的按钮）
+/// Fetch a subview from a button by tag (for buttons created by createSidebarSelectButtonWithTitle:)
 - (UILabel *)findSubviewInButton:(UIButton *)button withTag:(NSInteger)tag {
     for (UIView *sub in button.subviews) {
         if (sub.tag == tag && [sub isKindOfClass:[UILabel class]]) {
@@ -1812,13 +1812,13 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 }
 
 - (void)switchToTab:(NSInteger)index {
-    // 列表切换使用淡入淡出，避免生硬的瞬间 hidden 切换
+    // Switch lists with a cross-fade, avoiding a harsh instant hidden toggle
     [UIView transitionWithView:self.view duration:0.2 options:UIViewAnimationOptionTransitionCrossDissolve animations:^{
         self.versionFilterSegment.hidden = (index != 0);
         self.versionCollectionView.hidden = (index != 0);
-        // 搜索框对所有 tab 都显示（版本 tab 用于按版本号前缀过滤本地+远程版本列表）
+        // The search box is shown on every tab (on the version tab it filters the local and remote version lists by version number prefix)
         self.searchBar.hidden = NO;
-        // 过滤按钮仅在版本 tab 显示（用于调出版本类型筛选/排序选项）
+        // The filter button is shown only on the version tab (for the version type filter/sort options)
         self.filterButton.hidden = (index != 0);
         self.modTableView.hidden = (index != 1);
         self.shaderTableView.hidden = (index != 2);
@@ -1828,20 +1828,20 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         self.worldTableView.hidden = (index != 6);
     } completion:nil];
 
-    // 源切换仅在非版本 tab 显示；世界 tab 强制 CurseForge，无需切换
-    // 注意：顶部 sourceSwitchContainer 现在已弃用（下载源已移到侧边栏），始终隐藏
-    // 保留属性避免其他方法引用时崩溃，但高度始终为 0
+    // The source switch is shown only on non-version tabs; the world tab always uses CurseForge, so it needs no switch
+    // Note: the top sourceSwitchContainer is deprecated (the download source moved into the sidebar) and is always hidden
+    // The property is kept so other methods referencing it do not crash, but its height stays 0
     BOOL showSourceSwitch = (index != 0 && index != 6);
     self.sourceSwitchContainer.hidden = YES;
     self.sourceSwitchHeightConstraint.constant = 0;
 
-    // ===== FCL/ZL2 风格侧边栏显示/隐藏 =====
-    // FCL page_download.xml：5 个资产 tab（mod/modpack/resourcepack/world/shaderpack）共用
-    // 左侧 30% 筛选栏。版本 tab 是独立布局（versionFilterSegment + collectionView），无 sidebar。
-    // 这里 100% 对齐 FCL：所有非版本 tab 都显示 sidebar（含世界 tab）。
+    // ===== Showing/hiding the FCL/ZL2-style sidebar =====
+    // FCL page_download.xml: the 5 asset tabs (mod/modpack/resourcepack/world/shaderpack) share
+    // a 30% filter bar on the left. The version tab has its own layout (versionFilterSegment + collectionView) with no sidebar.
+    // This matches FCL exactly: every non-version tab shows the sidebar (including the world tab).
     BOOL showSidebar = (index != 0);
     self.filterSidebarContainer.hidden = !showSidebar;
-    // 根据屏幕宽度按 30% 比例计算侧边栏宽度（FCL constraintWidth_percent=0.3）
+    // Compute the sidebar width as 30% of the screen width (FCL constraintWidth_percent=0.3)
     CGFloat screenWidth = self.view.bounds.size.width;
     CGFloat sidebarWidth = 0;
     if (showSidebar) {
@@ -1850,20 +1850,20 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     }
     self.sidebarWidthConstraint.constant = sidebarWidth;
 
-    // 模组加载器选择按钮仅在模组 tab 显示（其他 tab 无加载器概念）
+    // The mod loader button is shown only on the mod tab (the other tabs have no concept of a loader)
     self.sidebarLoaderButton.hidden = (index != 1);
     self.sidebarLoaderTitleLabel.hidden = (index != 1);
     self.sidebarLoaderValueLabel.hidden = (index != 1);
 
-    // 下载源切换：世界 tab 强制 CurseForge，隐藏源切换；其他非版本 tab 显示
-    // FCL page_download.xml：仅当有多个来源时才显示 source Spinner
+    // Download source switch: the world tab always uses CurseForge and hides it; the other non-version tabs show it
+    // FCL page_download.xml: the source spinner is only shown when there is more than one source
     self.sidebarSourceContainer.hidden = (index == 0 || index == 6);
 
-    // versionFilterSegment 高度同步切换：版本 tab 显示 32pt，其他 tab 设为 0 不占空间，
-    // 避免 hidden=YES 仍占空间导致 tabSegment 与 searchBar 之间出现"大白条"
+    // The versionFilterSegment height switches with it: 32pt on the version tab and 0 on the others so it takes no space,
+    // This avoids hidden=YES still taking up space and leaving "a big white band" between tabSegment and searchBar
     self.versionFilterHeightConstraint.constant = (index == 0) ? 32 : 0;
 
-    // 整合包 tab 显示"导入本地整合包"按钮（参照 FCL 安卓），其他 tab 隐藏且宽度归零不占空间
+    // The modpack tab shows the "Import local modpack" button (as in FCL for Android); the other tabs hide it and collapse its width to 0
     BOOL showImportButton = (index == 5);
     self.importModpackButton.hidden = !showImportButton;
     self.importModpackButtonWidthConstraint.constant = showImportButton ? 80 : 0;
@@ -1873,14 +1873,14 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     }];
 
     if (index == 0) {
-        // 版本 tab：按版本号前缀过滤版本列表
+        // Version tab: filter the version list by version number prefix
         self.searchBar.placeholder = @"Search versions...";
-        // 版本 tab 不需要源切换
+        // The version tab does not need the source switch
     } else if (index == 1) {
         self.searchBar.placeholder = @"Search mods...";
         [self updateSourceSwitchButtonsForType:@"mod"];
-        // FCL 风格：首次进入模组 tab 时自动预选当前 profile 的版本和加载器
-        // 让搜索结果自动匹配当前游戏环境（如 neoforge + 1.21.1），无需手动筛选
+        // FCL style: preselect the current profile's version and loader the first time the mod tab is opened
+        // so search results match the current game setup (e.g. neoforge + 1.21.1) without manual filtering
         [self autoApplyProfileFiltersIfNeeded];
         if (self.modList.count == 0) {
             [self loadModList];
@@ -1921,7 +1921,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         }
     }
 
-    // 更新侧边栏各筛选项的当前值显示
+    // Update the current value shown for each sidebar filter
     [self updateSidebarFilterValues];
 }
 
@@ -1931,11 +1931,11 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     NSString *currentSource = [PLPreferences currentDownloadSourceForType:type];
     BOOL isModrinth = [currentSource isEqualToString:@"modrinth"];
 
-    // 选中项文字白色，未选中项使用 labelColor（顶部 sourceSwitch，已弃用但保留同步）
+    // Selected item text is white and unselected uses labelColor (the top sourceSwitch is deprecated but kept in sync)
     [self.modrinthSourceButton setTitleColor:isModrinth ? [UIColor whiteColor] : [UIColor labelColor] forState:UIControlStateNormal];
     [self.curseforgeSourceButton setTitleColor:isModrinth ? [UIColor labelColor] : [UIColor whiteColor] forState:UIControlStateNormal];
 
-    // 滑块位置：通过激活 left/right 约束二选一切换，配合颜色动画
+    // Slider position: switched by activating either the left or right constraint, alongside a color animation
     self.sliderLeftPosConstraint.active = isModrinth;
     self.sliderRightPosConstraint.active = !isModrinth;
     UIColor *sliderColor = isModrinth ? [UIColor systemGreenColor] : [UIColor systemOrangeColor];
@@ -1948,7 +1948,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     self.modrinthSourceButton.tag = [self tagForType:type];
     self.curseforgeSourceButton.tag = [self tagForType:type];
 
-    // ===== 同步更新侧边栏的下载源选择器 =====
+    // ===== Keep the sidebar download source picker in sync =====
     [self.sidebarModrinthButton setTitleColor:isModrinth ? [UIColor whiteColor] : [UIColor labelColor] forState:UIControlStateNormal];
     [self.sidebarCurseforgeButton setTitleColor:isModrinth ? [UIColor labelColor] : [UIColor whiteColor] forState:UIControlStateNormal];
 
@@ -1961,7 +1961,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         [self.sidebarSourceTrack layoutIfNeeded];
     } completion:nil];
 
-    // 记录当前类型到侧边栏按钮的 tag，用于点击事件中获取类型
+    // Record the current type in the sidebar button tag, so the tap handler can read it back
     self.sidebarModrinthButton.tag = [self tagForType:type];
     self.sidebarCurseforgeButton.tag = [self tagForType:type];
 }
@@ -2016,13 +2016,13 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     NSString *currentSource = [PLPreferences currentDownloadSourceForType:type];
     if ([currentSource isEqualToString:@"curseforge"]) return;
 
-    // API Key 未配置时在内容区显示提示（替代弹窗）
+    // Show a hint in the content area when no API key is configured (instead of an alert)
     if (![CurseForgeAPI isAPIKeyConfigured]) {
         InlineMessageView *msgView = [InlineMessageView showInViewController:self
                                                                        title:@"CurseForge API key required"
                                                                     message:@"No CurseForge API key is configured. Tap to open Settings"
                                                                        type:InlineMessageTypeInfo];
-        // 2 秒后自动跳转设置页
+        // Jump to the settings page automatically after 2 seconds
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             [msgView dismiss];
             [self openCurseForgeAPIKeySettings];
@@ -2037,7 +2037,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
 #pragma mark - 侧边栏下载源点击事件
 
-/// 侧边栏 Modrinth 源按钮点击
+/// Sidebar Modrinth source button tapped
 - (void)sidebarModrinthClicked:(UIButton *)sender {
     NSString *type = [self typeForTag:sender.tag];
     NSString *currentSource = [PLPreferences currentDownloadSourceForType:type];
@@ -2048,13 +2048,13 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     [self reloadCurrentList];
 }
 
-/// 侧边栏 CurseForge 源按钮点击
+/// Sidebar CurseForge source button tapped
 - (void)sidebarCurseforgeClicked:(UIButton *)sender {
     NSString *type = [self typeForTag:sender.tag];
     NSString *currentSource = [PLPreferences currentDownloadSourceForType:type];
     if ([currentSource isEqualToString:@"curseforge"]) return;
 
-    // API Key 未配置时提示
+    // Hint shown when no API key is configured
     if (![CurseForgeAPI isAPIKeyConfigured]) {
         InlineMessageView *msgView = [InlineMessageView showInViewController:self
                                                                        title:@"CurseForge API key required"
@@ -2074,38 +2074,38 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
 #pragma mark - 侧边栏筛选按钮点击事件
 
-/// 侧边栏游戏版本选择按钮点击
+/// Sidebar game version button tapped
 - (void)sidebarVersionButtonClicked:(UIButton *)sender {
     [self showGameVersionPicker];
 }
 
-/// 侧边栏模组加载器选择按钮点击
+/// Sidebar mod loader button tapped
 - (void)sidebarLoaderButtonClicked:(UIButton *)sender {
     [self showModLoaderPicker];
 }
 
-/// 侧边栏排序方式选择按钮点击
+/// Sidebar sort button tapped
 - (void)sidebarSortButtonClicked:(UIButton *)sender {
     [self showSortOptions];
 }
 
-/// 侧边栏重置筛选按钮点击
+/// Sidebar reset filters button tapped
 - (void)sidebarResetButtonClicked:(UIButton *)sender {
     [self resetFilters];
 }
 
-/// 更新侧边栏各筛选项的当前值显示
+/// Update the current value shown for each sidebar filter
 - (void)updateSidebarFilterValues {
-    // 游戏版本
+    // Game version
     if (self.currentGameVersion.length > 0) {
         self.sidebarVersionValueLabel.text = self.currentGameVersion;
     } else {
         self.sidebarVersionValueLabel.text = @"All versions";
     }
 
-    // 模组加载器
+    // Mod loader
     if (self.currentModLoader.length > 0) {
-        // 首字母大写显示
+        // Display it capitalized
         NSString *loader = self.currentModLoader;
         NSString *capitalized = [[loader substringToIndex:1].uppercaseString stringByAppendingString:[loader substringFromIndex:1]];
         self.sidebarLoaderValueLabel.text = capitalized;
@@ -2113,9 +2113,9 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         self.sidebarLoaderValueLabel.text = @"All";
     }
 
-    // 排序方式
+    // Sort
     if (self.currentSortField.length > 0) {
-        // 转换排序字段为中文显示
+        // Convert the sort field into its display text
         NSDictionary *sortDisplayMap = @{
             @"relevance": @"Relevance",
             @"downloads": @"Downloads",
@@ -2131,8 +2131,8 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 }
 
 - (id)currentAPIForTabType:(NSString *)type {
-    // Modrinth 不支持 project_type:world facet (其 project_type 仅 mod/modpack/shader/resourcepack/plugin)
-    // 世界 tab 强制走 CurseForge (classID 17 = Worlds 真实存在)
+    // Modrinth has no project_type:world facet (its project_type is only mod/modpack/shader/resourcepack/plugin)
+    // The world tab therefore always uses CurseForge (classID 17 = Worlds, which does exist)
     if ([type isEqualToString:@"world"]) {
         return [CurseForgeAPI sharedInstance];
     }
@@ -2143,7 +2143,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     return [ModrinthAPI sharedInstance];
 }
 
-// 导航栏 API Key 入口：直接 push 配置页，不再走 alert 通知绕路
+// API key entry point in the navigation bar: push the settings page directly, without the alert detour
 - (void)openCurseForgeAPIKeySettings {
     CurseForgeAPIKeyViewController *vc = [[CurseForgeAPIKeyViewController alloc] init];
     UINavigationController *nav = [[UINavigationController alloc] initWithRootViewController:vc];
@@ -2200,7 +2200,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     if (!self.versionList) return;
     
     NSInteger filterIndex = self.versionFilterSegment.selectedSegmentIndex;
-    // 搜索关键词：忽略大小写与首尾空格，按版本号前缀匹配
+    // Search term: case-insensitive, trimmed, matched against the version number prefix
     NSString *query = [self.versionSearchQuery stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
     NSString *lowerQuery = query.lowercaseString;
     BOOL hasQuery = (lowerQuery.length > 0);
@@ -2222,7 +2222,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         }
         if (!typeMatch) continue;
         
-        // 应用搜索关键词过滤（按 id 前缀匹配，例如 "1.2" 命中 "1.20.4"）
+        // Apply the search term filter (matching the id prefix, e.g. "1.2" matches "1.20.4")
         if (hasQuery) {
             NSString *versionId = version[@"id"];
             if (![versionId isKindOfClass:[NSString class]] || versionId.length == 0) continue;
@@ -2611,7 +2611,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         [self.loadingIndicator startAnimating];
     }
 
-    // 世界 tab 强制 CurseForge，但需 API Key（与实际请求一致的三层 fallback 判断）；缺失时给出明确入口提示
+    // The world tab always uses CurseForge but needs an API key (checked through the same three-level fallback as the real request); when it is missing, point the user at where to set it
     if (![CurseForgeAPI isAPIKeyConfigured]) {
         [self.loadingIndicator stopAnimating];
         [self.worldTableView.refreshControl endRefreshing];
@@ -2728,7 +2728,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             [self refreshModpackList];
         }]];
     } else if (tabIndex == 6) {
-        // 世界 tab: 强制 CurseForge，提供 API Key 入口与版本筛选
+        // World tab: always CurseForge, offering the API key entry point and a version filter
         [alert addAction:[UIAlertAction actionWithTitle:@"Set CurseForge API key"
                                                   style:UIAlertActionStyleDefault
                                                 handler:^(UIAlertAction * _Nonnull action) {
@@ -2764,38 +2764,38 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                                                                    message:nil
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
 
-    // 动态构建版本列表：优先使用已加载的 Mojang version_manifest 中的 release 版本，
-    // 这样能自动跟随 MC 版本更新（不再使用硬编码列表）。
-    // 同时把当前 profile 的 MC 版本置顶（如果有）方便快速选择。
+    // Build the version list dynamically, preferring the release versions from the already-loaded Mojang version_manifest,
+    // so it follows Minecraft updates automatically (no more hardcoded list).
+    // The current profile's Minecraft version (if any) is pinned to the top for quick selection.
     NSMutableArray<NSString *> *versions = [NSMutableArray arrayWithObject:@"All versions"];
 
-    // 当前 profile 的 MC 版本（若有）放第二位，便于快速选择
+    // The current profile's Minecraft version (if any) goes second, for quick selection
     NSString *profileMcVersion = [self currentProfileMinecraftVersion];
     if (profileMcVersion.length > 0 && ![versions containsObject:profileMcVersion]) {
         [versions addObject:profileMcVersion];
     }
 
-    // 从 Mojang version_manifest 提取 release 版本
+    // Extract the release versions from the Mojang version_manifest
     if (self.versionList && [self.versionList isKindOfClass:[NSArray class]]) {
         for (NSDictionary *version in self.versionList) {
             NSString *type = version[@"type"];
             if (![type isEqualToString:@"release"]) continue;
             NSString *versionId = version[@"id"];
             if (![versionId isKindOfClass:[NSString class]] || versionId.length == 0) continue;
-            // 跳过过于旧的版本（1.8 之前的版本 mod 支持极少）
+            // Skip very old versions (mods rarely support anything before 1.8)
             if ([versionId hasPrefix:@"1."] == NO) continue;
-            // 跳过已经在列表中的（避免 profileMcVersion 重复）
+            // Skip versions already in the list (so profileMcVersion is not duplicated)
             if ([versions containsObject:versionId]) continue;
             [versions addObject:versionId];
         }
     }
 
-    // 若 versionList 还未加载或为空，使用基础 fallback（保证 picker 至少能弹出）
+    // If versionList has not loaded yet or is empty, use a basic fallback (so the picker can at least appear)
     if (versions.count <= 1) {
         [versions addObjectsFromArray:@[@"1.21", @"1.20.1", @"1.19.2", @"1.18.2", @"1.16.5"]];
     }
 
-    // 限制列表长度避免 alert 过长（保留最近 30 个版本 + 全部 + profile 版本）
+    // Cap the list length so the alert does not get too long (the 30 most recent versions + All + the profile version)
     if (versions.count > 32) {
         NSArray *tail = [versions subarrayWithRange:NSMakeRange(0, 32)];
         versions = [NSMutableArray arrayWithArray:tail];
@@ -2810,7 +2810,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             } else {
                 self.currentGameVersion = version;
             }
-            // 用户手动选择后标记，不再自动覆盖
+            // Mark it once the user chooses manually, so it is no longer overwritten automatically
             self.hasUserTouchedFilters = YES;
             [self updateSidebarFilterValues];
             [self reloadCurrentList];
@@ -2821,7 +2821,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                                               style:UIAlertActionStyleCancel
                                             handler:nil]];
 
-    // iPad popover sourceView 优先使用侧边栏按钮（filterButton 在非版本 tab 隐藏）
+    // For the iPad popover sourceView, prefer the sidebar button (filterButton is hidden on non-version tabs)
     UIView *sourceView = self.sidebarVersionButton.hidden ? self.filterButton : self.sidebarVersionButton;
     if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
         alert.popoverPresentationController.sourceView = sourceView;
@@ -2831,8 +2831,8 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     [self presentViewController:alert animated:YES completion:nil];
 }
 
-/// 解析当前 profile 的 Minecraft 版本（用于模组下载版本预选）
-/// 复用 ModpackExportService.parseVersionId: 从 lastVersionId 反解
+/// Resolve the Minecraft version of the current profile (used to preselect the mod download version)
+/// Reuses ModpackExportService.parseVersionId: to decode it from lastVersionId
 - (NSString *)currentProfileMinecraftVersion {
     NSDictionary *profile = PLProfiles.current.selectedProfile;
     NSString *lastVersionId = profile[@"lastVersionId"];
@@ -2842,8 +2842,8 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     return mcVersion;
 }
 
-/// 解析当前 profile 的模组加载器（fabric/forge/neoforge/quilt）
-/// 复用 ModpackExportService.parseVersionId: 从 lastVersionId 反解
+/// Resolve the mod loader of the current profile (fabric/forge/neoforge/quilt)
+/// Reuses ModpackExportService.parseVersionId: to decode it from lastVersionId
 - (NSString *)currentProfileLoader {
     NSDictionary *profile = PLProfiles.current.selectedProfile;
     NSString *lastVersionId = profile[@"lastVersionId"];
@@ -2853,9 +2853,9 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     return loader;
 }
 
-/// FCL 风格：首次进入模组/光影/资源包等 tab 时自动应用当前 profile 的版本和加载器筛选
-/// 让搜索结果自动匹配当前游戏环境（如 neoforge + 1.21.1）
-/// 用户手动改过筛选后不再自动覆盖（通过 hasUserTouchedFilters 标记）
+/// FCL style: apply the current profile's version and loader filters the first time the mod/shader/resource pack tabs are opened
+/// so search results match the current game setup (e.g. neoforge + 1.21.1)
+/// Once the user changes the filters by hand they are no longer overwritten (tracked by hasUserTouchedFilters)
 - (void)autoApplyProfileFiltersIfNeeded {
     if (self.hasUserTouchedFilters) return;
 
@@ -2863,13 +2863,13 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     NSString *profileLoader = [self currentProfileLoader];
 
     BOOL changed = NO;
-    // 仅当当前未设置版本时才自动应用（用户主动选过就保留）
+    // Only apply automatically when no version is set yet (a user choice is preserved)
     if (profileMcVersion.length > 0 && ![self.currentGameVersion isEqualToString:profileMcVersion]) {
         self.currentGameVersion = profileMcVersion;
         changed = YES;
     }
-    // 加载器仅对模组 tab 自动应用（其他 tab 如光影/资源包不一定有加载器概念）
-    // 但 Modrinth 的 facets 中 categories 对所有 project_type 都生效，所以统一应用
+    // The loader is only applied automatically on the mod tab (other tabs such as shaders/resource packs may have no loader concept)
+    // However Modrinth facets apply categories to every project_type, so it is applied uniformly
     if (profileLoader.length > 0 && ![self.currentModLoader isEqualToString:profileLoader]) {
         self.currentModLoader = profileLoader;
         changed = YES;
@@ -2932,7 +2932,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                                                   style:UIAlertActionStyleDefault
                                                 handler:^(UIAlertAction * _Nonnull action) {
             self.currentModLoader = (value == [NSNull null]) ? nil : value;
-            // 用户手动选择后标记，不再自动覆盖
+            // Mark it once the user chooses manually, so it is no longer overwritten automatically
             self.hasUserTouchedFilters = YES;
             [self updateSidebarFilterValues];
             [self reloadCurrentList];
@@ -2966,7 +2966,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
 - (void)reloadCurrentList {
     NSInteger tabIndex = self.tabSegment.selectedSegmentIndex;
-    // 切换 API 源时对当前列表做淡出→加载→淡入，避免瞬间清空的生硬感
+    // Fade the current list out, load, then fade back in when switching API source, avoiding an abrupt blank
     UITableView *targetTable = nil;
     if (tabIndex == 1) {
         targetTable = self.modTableView;
@@ -3012,7 +3012,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 }
 
 - (void)showError:(NSString *)message {
-    // 在内容区显示错误，替代弹窗
+    // Show the error in the content area instead of an alert
     [InlineMessageView showInViewController:self
                                        title:@"Error"
                                     message:message
@@ -3026,8 +3026,8 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
     NSInteger tabIndex = self.tabSegment.selectedSegmentIndex;
     if (tabIndex == 0) {
-        // 版本 tab：搜索过滤已在 textDidChange 实时执行，此处仅收起键盘
-        // 不再重复调用 applyVersionFilter
+        // Version tab: search filtering already runs live in textDidChange, so this only dismisses the keyboard
+        // applyVersionFilter is not called again
     } else if (tabIndex == 1) {
         [self searchMods:searchBar.text];
     } else if (tabIndex == 2) {
@@ -3058,7 +3058,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 - (void)searchBar:(UISearchBar *)searchBar textDidChange:(NSString *)searchText {
     NSInteger tabIndex = self.tabSegment.selectedSegmentIndex;
     if (tabIndex == 0) {
-        // 版本 tab：实时按版本号前缀过滤（无需点击搜索按钮）
+        // Version tab: filter live by version number prefix (no need to tap the search button)
         self.versionSearchQuery = searchText;
         [self applyVersionFilter];
     }
@@ -3081,13 +3081,13 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     NSString *formattedDate = [self formatDate:releaseTime];
     [cell configureWithVersionId:versionId date:formattedDate type:versionType];
 
-    // FCL 风格：标记已安装的版本（遍历 PLProfiles，匹配 lastVersionId）
+    // FCL style: mark the installed versions (walking PLProfiles and matching lastVersionId)
     [cell setInstalled:[self isVersionInstalled:versionId]];
 
     return cell;
 }
 
-/// 检查指定 versionId 是否已安装在本地（任一 profile 的 lastVersionId 匹配即视为已安装）
+/// Check whether the given versionId is installed locally (a match on any profile's lastVersionId counts as installed)
 - (BOOL)isVersionInstalled:(NSString *)versionId {
     if (!versionId.length) return NO;
     NSDictionary *profiles = PLProfiles.current.profiles;
@@ -3124,12 +3124,12 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
 
-        // 修复"前一个页面没有及时消失"：
-        // 之前用 popViewControllerAnimated:YES + dispatch_async(main_queue) 立即执行 proceedWithVersion:，
-        // 但 pop 动画（约 0.35s）还未完成时 proceedWithVersion: 可能 push 新 VC（如 InstallerProgressViewController），
-        // 导致导航控制器在 pop 动画期间收到 push，状态冲突，前一个页面（模组安装器）卡在屏幕上不消失。
-        // 修复：用 CATransaction 包裹 pop，在 pop 动画完成的回调中再执行 proceedWithVersion:，
-        //       确保导航栈状态一致。
+        // Fix for "the previous page does not disappear in time":
+        // this previously used popViewControllerAnimated:YES + dispatch_async(main_queue) to run proceedWithVersion: immediately,
+        // but proceedWithVersion: could push a new VC (such as InstallerProgressViewController) before the pop animation (~0.35s) finished,
+        // so the navigation controller received a push mid-pop, its state conflicted, and the previous page (the mod installer) stayed stuck on screen.
+        // Fix: wrap the pop in a CATransaction and run proceedWithVersion: in the completion block of the pop animation,
+        //      keeping the navigation stack consistent.
         [CATransaction begin];
         [CATransaction setCompletionBlock:^{
             __strong typeof(weakSelf) ss = weakSelf;
@@ -3151,7 +3151,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         }
     };
 
-    // 已在 DownloadVC 的导航栈中，直接 push，不再用 FormSheet 弹窗
+    // Already inside the DownloadVC navigation stack, so push directly rather than presenting a FormSheet
     [self.navigationController pushViewController:loaderVC animated:YES];
 }
 
@@ -3161,26 +3161,26 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     NSString *versionId = version[@"id"];
 
     if ([loaderType isEqualToString:@"vanilla"]) {
-        // 原版也经过 ensureVanillaInstalled，确保 version.json 正确下载和 BMCLAPI 替换
-        // 修复：原先直接调用 downloadVanillaVersion: 不经过 ensureVanillaInstalled:，
-        //   在 BMCLAPI 模式下 version.json 直连 piston-meta.mojang.com 会国内超时，
-        //   导致一直转圈不下载。ensureVanillaInstalled: 内部会调用 ensureVanillaVersionJSONExists:，
-        //   后者已正确将 piston-meta.mojang.com 替换为 bmclapi2.bangbang93.com。
-        // 注意：ensureVanillaInstalled: 在 JSON 已存在时会直接跳过，避免重复下载；
-        //   downloadVanillaVersion: 内部也会通过 createDownloadTask: 的 SHA1 校验跳过已下载文件。
+        // Vanilla also goes through ensureVanillaInstalled, so version.json is downloaded correctly with the BMCLAPI substitution
+        // Fix: this previously called downloadVanillaVersion: directly without ensureVanillaInstalled:,
+        //   so in BMCLAPI mode version.json went straight to piston-meta.mojang.com and timed out in mainland China,
+        //   leaving the spinner up with no download. ensureVanillaInstalled: calls ensureVanillaVersionJSONExists: internally,
+        //   which correctly rewrites piston-meta.mojang.com to bmclapi2.bangbang93.com.
+        // Note: ensureVanillaInstalled: returns immediately when the JSON already exists, so nothing is downloaded twice;
+        //   downloadVanillaVersion: also skips already-downloaded files via the SHA1 check in createDownloadTask:.
         //
-        // 修复"点击安装按钮没反应"：
-        // 当 version JSON 不存在（首次安装）时，ensureVanillaInstalled: → ensureVanillaVersionJSONExists:
-        // 会在后台线程下载 version manifest + version JSON，期间可能需要数秒到 30 秒。
-        // 在此期间 ModLoaderInstallViewController 已被 pop，用户看到空白页面，感觉"没反应"。
-        // 修复：在调用 ensureVanillaInstalled: 之前先显示进度卡片，让用户立即看到反馈。
-        //      JSON 已存在时 ensureVanillaInstalled: 同步返回，progressCardView 会被
-        //      startVersionDownload: 中清理旧卡片的逻辑正确处理。
+        // Fix for "nothing happens when the install button is tapped":
+        // when the version JSON does not exist (a first install), ensureVanillaInstalled: -> ensureVanillaVersionJSONExists:
+        // downloads the version manifest and version JSON on a background thread, which can take several seconds up to 30.
+        // Meanwhile ModLoaderInstallViewController has already been popped, so the user stares at a blank page and thinks "nothing happened".
+        // Fix: show the progress card before calling ensureVanillaInstalled: so the user gets immediate feedback.
+        //      When the JSON already exists ensureVanillaInstalled: returns synchronously, and progressCardView is handled
+        //      correctly by the old-card cleanup inside startVersionDownload:.
         if (self.progressCardView) {
             [self.progressCardView dismiss];
             self.progressCardView = nil;
         }
-        // 参照 ZL2：vanilla 分支也用"准备运行环境"文案，与加载器前置预装保持一致
+        // Following ZL2: the vanilla branch also says "preparing the runtime environment", matching the loader prerequisite preinstall
         NSString *vanillaTitle = [NSString stringWithFormat:@"Preparing the runtime environment %@", versionId];
         self.progressCardView = [DownloadProgressCardView showInParentView:self.view title:vanillaTitle];
         [self.progressCardView startDownloadWithTitle:vanillaTitle
@@ -3192,10 +3192,10 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             __strong typeof(weakSelf) strongSelf = weakSelf;
             if (!strongSelf) return;
             if (success) {
-                // ensureVanillaInstalled: 完成后，startVersionDownload: 会清理旧卡片并创建新的
+                // Once ensureVanillaInstalled: finishes, startVersionDownload: clears the old card and creates a new one
                 [strongSelf downloadVanillaVersion:version];
             } else {
-                // 失败时清理进度卡片并显示错误
+                // Clear the progress card and show the error on failure
                 if (strongSelf.progressCardView) {
                     NSError *err = [NSError errorWithDomain:@"DownloadError" code:-1
                                                      userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Could not install vanilla %@. Check your network connection and try again", versionId]}];
@@ -3208,15 +3208,15 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         return;
     }
 
-    // 参照 FCL：安装模组加载器前，先完整安装对应的原版（client.jar + libraries + assets）。
-    // Fabric/Quilt/OptiFine 的版本 JSON 含 "inheritsFrom" 字段，启动时 Java 端
-    // Tools.getVersionInfo() 会读取 versions/{inheritsFrom}/{inheritsFrom}.json 合并。
-    // 若用户尚未安装原版，启动会因 FileNotFoundException 崩溃；仅下载 JSON 不够，
-    // 还需下载 client.jar/资源/库，否则首次启动仍要现下、体验割裂。
-    // Forge/NeoForge 直装器内部已有 ensureParentVersionExists 逻辑（仅 JSON），此处补全完整原版。
+    // Following FCL: fully install the matching vanilla version (client.jar + libraries + assets) before installing a mod loader.
+    // The version JSON of Fabric/Quilt/OptiFine contains an "inheritsFrom" field, and at launch the Java side
+    // Tools.getVersionInfo() reads versions/{inheritsFrom}/{inheritsFrom}.json and merges it.
+    // Without the vanilla version installed, launching crashes with FileNotFoundException; downloading the JSON alone is not enough,
+    // client.jar/assets/libraries are needed too, otherwise the first launch still has to fetch them and the experience is disjointed.
+    // The Forge/NeoForge direct installers already have ensureParentVersionExists (JSON only); this fills in the complete vanilla install.
     //
-    // 改进2（参照 ZL2 统一进度流）：设置 vanillaPreinstallForLoader=YES，让原版预装完成后
-    // 不 pop 进度页，而是转交给后续 install* 方法复用，实现"原版 + 加载器"在同一进度页连续推进。
+    // Improvement 2 (following the unified progress flow of ZL2): setting vanillaPreinstallForLoader=YES means the progress page is not
+    // popped when the vanilla preinstall finishes but handed to the later install* methods, so "vanilla + loader" run on one progress page.
     self.vanillaPreinstallForLoader = YES;
     __weak typeof(self) weakSelf = self;
     [self ensureVanillaInstalled:version completion:^(BOOL success) {
@@ -3244,16 +3244,16 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     }];
 }
 
-/// 参照 FCL：确保原版版本的 version JSON 已存在。
-/// 若 versions/{versionId}/{versionId}.json 不存在，从 Mojang/BMCLAPI 版本清单下载。
-/// 仅下载 version JSON（不下载 client.jar/assets/libraries，这些在游戏首次启动时由 Java 端自动下载）。
-/// Forge/NeoForge 直装器内部也有相同逻辑（ensureParentVersionExists），但 Fabric/Quilt/OptiFine 没有，
-/// 因此在 proceedWithVersion 中统一前置调用。
+/// Following FCL: make sure the version JSON of the vanilla version exists.
+/// If versions/{versionId}/{versionId}.json is missing, download it from the Mojang/BMCLAPI version manifest.
+/// Only the version JSON is downloaded (client.jar/assets/libraries are fetched by the Java side on first launch).
+/// The Forge/NeoForge direct installers have the same logic internally (ensureParentVersionExists), but Fabric/Quilt/OptiFine do not,
+/// so proceedWithVersion calls this for all of them up front.
 - (void)ensureVanillaVersionJSONExists:(NSString *)versionId completion:(void (^)(BOOL success))completion {
-    // 修复：必须使用 POJAV_GAME_DIR（与 ensureVanillaInstalled: 和 MinecraftResourceDownloadTask 一致），
-    // 而非 POJAV_HOME。POJAV_GAME_DIR 是 Minecraft 实际读取 versions/ 的目录。
-    // 若用 POJAV_HOME，version JSON 会存到错误位置，导致 MinecraftResourceDownloadTask
-    // 找不到 JSON 而崩溃，且游戏启动时 Java 端 Tools.getVersionInfo() 也会 FileNotFoundException。
+    // Fix: POJAV_GAME_DIR must be used (matching ensureVanillaInstalled: and MinecraftResourceDownloadTask),
+    // not POJAV_HOME. POJAV_GAME_DIR is the directory Minecraft actually reads versions/ from.
+    // With POJAV_HOME the version JSON lands in the wrong place, so MinecraftResourceDownloadTask
+    // cannot find the JSON and crashes, and at launch the Java side Tools.getVersionInfo() also throws FileNotFoundException.
     NSString *gameDir = @(getenv("POJAV_GAME_DIR"));
     if (gameDir.length == 0) {
         gameDir = @(getenv("POJAV_HOME"));
@@ -3263,7 +3263,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     NSString *versionJsonPath = [versionDir stringByAppendingPathComponent:
                                  [NSString stringWithFormat:@"%@.json", versionId]];
 
-    // 1. 版本 JSON 已存在，无需下载
+    // 1. The version JSON already exists, so there is nothing to download
     if ([NSFileManager.defaultManager fileExistsAtPath:versionJsonPath]) {
         if (completion) completion(YES);
         return;
@@ -3271,7 +3271,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
     NSLog(@"[DownloadVC] Vanilla version JSON missing, downloading: %@", versionId);
 
-    // 2. 在后台线程拉取 Mojang 版本清单并下载 version JSON
+    // 2. Fetch the Mojang version manifest and download the version JSON on a background thread
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         NSString *downloadSource = getPrefObject(@"general.download_source") ?: @"official";
         BOOL useBMCLAPI = [downloadSource isEqualToString:@"bmclapi"];
@@ -3290,7 +3290,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         manifestRequest.cachePolicy = NSURLRequestReloadIgnoringLocalCacheData;
         [manifestRequest setValue:@"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15" forHTTPHeaderField:@"User-Agent"];
 
-        // 使用 NSURLSession 替代已废弃的 NSURLConnection sendSynchronousRequest
+        // Use NSURLSession instead of the deprecated NSURLConnection sendSynchronousRequest
         dispatch_semaphore_t manifestSem = dispatch_semaphore_create(0);
         __block NSData *manifestData = nil;
         NSURLSessionDataTask *manifestTask = [[NSURLSession sharedSession] dataTaskWithRequest:manifestRequest
@@ -3315,7 +3315,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             return;
         }
 
-        // 3. 查找匹配的版本条目，获取 version JSON URL
+        // 3. Find the matching version entry and get the version JSON URL
         NSString *versionJSONURL = nil;
         for (NSDictionary *v in versions) {
             if ([v isKindOfClass:[NSDictionary class]] && [v[@"id"] isEqualToString:versionId]) {
@@ -3329,7 +3329,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             return;
         }
 
-        // BMCLAPI 镜像：替换 Mojang 官方域名
+        // BMCLAPI mirror: rewrite the official Mojang domain
         if (useBMCLAPI) {
             versionJSONURL = [versionJSONURL stringByReplacingOccurrencesOfString:@"piston-meta.mojang.com"
                                                                         withString:@"bmclapi2.bangbang93.com"];
@@ -3337,7 +3337,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                                                                         withString:@"bmclapi2.bangbang93.com"];
         }
 
-        // 4. 下载 version JSON（使用 NSURLSession 替代已废弃的 NSURLConnection）
+        // 4. Download the version JSON (using NSURLSession instead of the deprecated NSURLConnection)
         NSURL *jsonURL = [NSURL URLWithString:versionJSONURL];
         if (!jsonURL) {
             if (completion) dispatch_async(dispatch_get_main_queue(), ^{ completion(NO); });
@@ -3349,8 +3349,8 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         jsonRequest.cachePolicy = NSURLRequestReloadIgnoringLocalCacheData;
         [jsonRequest setValue:@"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15" forHTTPHeaderField:@"User-Agent"];
 
-        // 使用 NSURLSession dataTaskWithCompletionHandler 替代已废弃的 NSURLConnection sendSynchronousRequest
-        // 已在外层 dispatch_async 到后台队列，此处用信号量等待结果
+        // Use NSURLSession dataTaskWithCompletionHandler instead of the deprecated NSURLConnection sendSynchronousRequest
+        // Already dispatched to a background queue above, so a semaphore is used to wait for the result here
         dispatch_semaphore_t sem = dispatch_semaphore_create(0);
         __block NSData *jsonData = nil;
         NSURLSessionDataTask *jsonTask = [[NSURLSession sharedSession] dataTaskWithRequest:jsonRequest
@@ -3359,7 +3359,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             dispatch_semaphore_signal(sem);
         }];
         [jsonTask resume];
-        // 等待最多 30 秒（与 timeoutInterval 一致）
+        // Wait at most 30 seconds (matching timeoutInterval)
         dispatch_semaphore_wait(sem, dispatch_time(DISPATCH_TIME_NOW, (int64_t)(30 * NSEC_PER_SEC)));
 
         if (!jsonData) {
@@ -3368,7 +3368,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             return;
         }
 
-        // 5. 创建版本目录并写入 JSON
+        // 5. Create the version directory and write the JSON
         NSError *dirError = nil;
         [NSFileManager.defaultManager createDirectoryAtPath:versionDir
                                 withIntermediateDirectories:YES
@@ -3392,12 +3392,12 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     });
 }
 
-/// 参照 FCL：安装模组加载器前，先完整安装对应的原版（version JSON + libraries + assets）。
-/// 若原版已安装（versions/{id}/{id}.json 存在于 POJAV_GAME_DIR），直接 completion(YES)。
-/// 否则：1) 确保 version JSON 存在；2) 用 MinecraftResourceDownloadTask 下载完整原版文件（库+资源）；
-/// 3) 通过 InstallerProgressViewController 显示 FCL 风格进度。
-/// 注：client.jar 由 Java 端启动时按需下载，此处不检查；MinecraftResourceDownloadTask
-/// 下载时会对已存在且 SHA1 正确的文件跳过，因此重复调用安全。
+/// Following FCL: fully install the matching vanilla version (version JSON + libraries + assets) before installing a mod loader.
+/// If vanilla is already installed (versions/{id}/{id}.json exists under POJAV_GAME_DIR), call completion(YES) straight away.
+/// Otherwise: 1) make sure the version JSON exists; 2) download the full vanilla files (libraries + assets) with MinecraftResourceDownloadTask;
+/// 3) show FCL-style progress through InstallerProgressViewController.
+/// Note: client.jar is downloaded on demand by the Java side at launch and is not checked here; MinecraftResourceDownloadTask
+/// skips files that already exist with the right SHA1, so calling this repeatedly is safe.
 - (void)ensureVanillaInstalled:(NSDictionary *)version completion:(void (^)(BOOL success))completion {
     if (![version isKindOfClass:[NSDictionary class]]) {
         if (completion) completion(NO);
@@ -3409,19 +3409,19 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         return;
     }
 
-    // 用 POJAV_GAME_DIR（与 MinecraftResourceDownloadTask 一致），而非 POJAV_HOME
+    // Use POJAV_GAME_DIR (matching MinecraftResourceDownloadTask), not POJAV_HOME
     NSString *gameDir = @(getenv("POJAV_GAME_DIR"));
     if (gameDir.length == 0) {
-        // 极端情况下环境变量缺失，回退到 POJAV_HOME
+        // In the edge case where the environment variable is missing, fall back to POJAV_HOME
         gameDir = @(getenv("POJAV_HOME"));
     }
     NSString *versionJsonPath = [gameDir stringByAppendingPathComponent:
                                  [NSString stringWithFormat:@"versions/%@/%@.json", versionId, versionId]];
 
-    // 1. 原版 JSON 已存在（说明之前已下载过原版）。改进3（精细化跳过）：
-    //    JSON 存在不代表安装完整——若上次下载中断，可能只有 JSON 而无 client.jar/库文件。
-    //    参照 ZL2：检查 client.jar 是否存在，jar 缺失则继续预装补全，jar 存在才真正跳过。
-    //    MinecraftResourceDownloadTask 内部对已存在且 SHA1 正确的文件会自动跳过，重复调用安全。
+    // 1. The vanilla JSON already exists (so vanilla was downloaded before). Improvement 3 (finer-grained skipping):
+    //    the JSON existing does not mean the install is complete — an interrupted download may leave the JSON without client.jar or libraries.
+    //    Following ZL2: check whether client.jar exists; if it is missing, continue the preinstall to fill in the gaps, and only truly skip when it is there.
+    //    MinecraftResourceDownloadTask skips files that already exist with the right SHA1, so calling it again is safe.
     if ([NSFileManager.defaultManager fileExistsAtPath:versionJsonPath]) {
         NSString *versionDir = [gameDir stringByAppendingPathComponent:
                                [NSString stringWithFormat:@"versions/%@", versionId]];
@@ -3429,21 +3429,21 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                                    [NSString stringWithFormat:@"%@.jar", versionId]];
         if ([NSFileManager.defaultManager fileExistsAtPath:clientJarPath]) {
             NSLog(@"[DownloadVC] Vanilla %@ already installed (JSON + jar exist), skip preinstall", versionId);
-            self.vanillaPreinstallForLoader = NO; // 不会进入 KVO 转交分支，重置标志
+            self.vanillaPreinstallForLoader = NO; // The KVO handover branch will not be reached, so reset the flag
             if (completion) completion(YES);
             return;
         }
         NSLog(@"[DownloadVC] Vanilla %@ JSON exists but client.jar missing, resuming preinstall", versionId);
-        // 继续往下执行：创建下载任务补全缺失文件（已存在的会跳过）
+        // Carry on: create a download task to fill in the missing files (existing ones are skipped)
     }
 
     NSLog(@"[DownloadVC] Vanilla %@ not installed, preinstalling...", versionId);
 
-    // 保存 completion，KVO 完成时调用
+    // Save the completion so it can be called when KVO reports completion
     __weak typeof(self) weakSelf = self;
     self.vanillaPreinstallCompletion = completion;
 
-    // 2. 先确保 version JSON 存在（复用已有逻辑）
+    // 2. Make sure the version JSON exists first (reusing the existing logic)
     [self ensureVanillaVersionJSONExists:versionId completion:^(BOOL jsonSuccess) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) {
@@ -3451,13 +3451,13 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             return;
         }
         if (!jsonSuccess) {
-            strongSelf.vanillaPreinstallForLoader = NO; // 重置转交标志
+            strongSelf.vanillaPreinstallForLoader = NO; // Reset the handover flag
             strongSelf.vanillaPreinstallCompletion = nil;
             if (completion) completion(NO);
             return;
         }
 
-        // 3. 创建 FCL 风格进度 VC 并 push
+        // 3. Create and push the FCL-style progress VC
         dispatch_async(dispatch_get_main_queue(), ^{
             __strong typeof(weakSelf) s = weakSelf;
             if (!s) {
@@ -3465,11 +3465,11 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                 return;
             }
             InstallerProgressViewController *progressVC = [[InstallerProgressViewController alloc] init];
-            // 参照 ZL2：原版预装是加载器安装的前置步骤，文案应体现"准备运行环境"而非"安装原版"
+            // Following ZL2: the vanilla preinstall is a prerequisite of the loader install, so the wording says "preparing the runtime environment" rather than "installing vanilla"
             progressVC.titleText = [NSString stringWithFormat:@"Preparing the runtime environment %@", versionId];
             progressVC.stageMessage = @"Downloading required files...";
-            progressVC.progress = -1; // 初始不确定模式，待拿到总字节数后切换为确定模式
-            // 阶段12增强：类别图标 + 阶段步骤列表（参照 FCL 原版安装步骤）
+            progressVC.progress = -1; // Indeterminate at first, switching to determinate once the total byte count is known
+            // Phase 12 enhancement: category icon + stage list (modelled on the FCL vanilla install steps)
             progressVC.categoryIconName = @"cube.box.fill";
             progressVC.categoryIconColor = [UIColor systemGreenColor];
             progressVC.stageSteps = @[
@@ -3494,14 +3494,14 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                     [ss.vanillaPreinstallTask.progress cancel];
                     ss.vanillaPreinstallTask = nil;
                 }
-                ss.vanillaPreinstallForLoader = NO; // 重置转交标志
+                ss.vanillaPreinstallForLoader = NO; // Reset the handover flag
                 ss.vanillaPreinstallProgressVC = nil;
                 ss.vanillaPreinstallCompletion = nil;
             };
             s.vanillaPreinstallProgressVC = progressVC;
             [s.navigationController pushViewController:progressVC animated:YES];
 
-            // 4. 创建下载任务
+            // 4. Create the download task
             MinecraftResourceDownloadTask *task = [MinecraftResourceDownloadTask new];
             task.maxRetryCount = 3;
             s.vanillaPreinstallTask = task;
@@ -3522,7 +3522,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                         [ss.navigationController popViewControllerAnimated:YES];
                     }
                     ss.vanillaPreinstallTask = nil;
-                    ss.vanillaPreinstallForLoader = NO; // 重置转交标志
+                    ss.vanillaPreinstallForLoader = NO; // Reset the handover flag
                     ss.vanillaPreinstallProgressVC = nil;
                     void (^cb)(BOOL) = ss.vanillaPreinstallCompletion;
                     ss.vanillaPreinstallCompletion = nil;
@@ -3530,14 +3530,14 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                 });
             };
 
-            // 5. KVO 监听进度（用独立 context 与主下载流程区分）
+            // 5. Observe the progress via KVO (with its own context, to distinguish it from the main download flow)
             [task.progress addObserver:s
                             forKeyPath:@"fractionCompleted"
                                options:NSKeyValueObservingOptionInitial
                                context:(void *)@"VanillaPreinstallContext"];
             s.isObservingVanillaPreinstall = YES;
 
-            // 6. 后台线程启动下载
+            // 6. Start the download on a background thread
             dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
                 __strong typeof(weakSelf) ss = weakSelf;
                 if (!ss) return;
@@ -3560,8 +3560,8 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     NSMutableDictionary *profile = [NSMutableDictionary dictionary];
     profile[@"name"] = versionId;
     profile[@"lastVersionId"] = versionId;
-    // 改回原来的"游戏目录切换"机制：所有版本共享根目录（gameDir="."）
-    // 用户通过设置中的"游戏目录切换"功能手动切换不同的 gameDir
+    // Back to the original "switch game directory" model: every version shares the root directory (gameDir=".")
+    // The user switches between game directories manually with the "Switch game directory" feature in settings
     profile[@"gameDir"] = @".";
     profile[@"type"] = @"custom";
     profile[@"created"] = [NSDate date].description;
@@ -3575,8 +3575,8 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 - (void)startVersionDownload:(NSDictionary *)version {
     __weak DownloadViewController *weakSelf = self;
 
-    // 参照 FCL/ZL2/HMCL：使用下载进度卡片替代转圈圈和纯文字进度
-    // 清理旧的进度卡片（如果存在）
+    // Following FCL/ZL2/HMCL: use a download progress card instead of a spinner and plain text progress
+    // Clear the old progress card (if there is one)
     if (self.progressCardView) {
         [self.progressCardView dismiss];
         self.progressCardView = nil;
@@ -3591,15 +3591,15 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     NSString *subtitle = [versionType isEqualToString:@"release"] ? @"Minecraft release" :
                          [versionType isEqualToString:@"snapshot"] ? @"Minecraft snapshot" : @"Minecraft";
 
-    // 创建并显示下载进度卡片
+    // Create and show the download progress card
     self.progressCardView = [DownloadProgressCardView showInParentView:self.view
                                                                  title:[NSString stringWithFormat:@"Downloading %@", versionId]];
     [self.progressCardView startDownloadWithTitle:[NSString stringWithFormat:@"Downloading %@", versionId]
                                           subtitle:subtitle];
 
-    // 重新赋值 downloadTask 前，先移除旧 task 的 KVO 观察者。
-    // 否则 dealloc 时 self.downloadTask.progress 已是新对象，removeObserver 会抛
-    // "not registered as an observer" 异常。
+    // Remove the KVO observer from the old task before reassigning downloadTask.
+    // Otherwise self.downloadTask.progress is already the new object at dealloc time, and removeObserver throws
+    // "not registered as an observer".
     if (self.isObservingProgress && self.downloadTask) {
         @try {
             [self.downloadTask.progress removeObserver:self forKeyPath:@"fractionCompleted"];
@@ -3615,7 +3615,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     self.downloadTask.retryCallback = ^(NSInteger retryCount, NSInteger maxRetryCount) {
         dispatch_async(dispatch_get_main_queue(), ^{
             if (weakSelf.progressCardView) {
-                // 重试时显示不确定模式（转圈），提示用户正在重试
+                // Show indeterminate mode (a spinner) while retrying, so the user knows a retry is under way
                 [weakSelf.progressCardView updateProgress:-1
                                                downloaded:0
                                                      total:-1
@@ -3638,7 +3638,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             }
             weakSelf.view.userInteractionEnabled = YES;
 
-            // 使用进度卡片显示失败状态
+            // Show the failure state on the progress card
             if (weakSelf.progressCardView) {
                 NSError *error = [NSError errorWithDomain:@"DownloadError" code:-1
                                                  userInfo:@{NSLocalizedDescriptionKey: @"Version download failed. Please check your network connection"}];
@@ -3678,12 +3678,12 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 }
 
 - (void)installQuilt:(NSString *)gameVersion loaderVersion:(NSString *)loaderVersion {
-    // Quilt 不安装 Fabric API（用 QSL/QFAPI），强制 installAPI=NO
+    // Quilt does not install Fabric API (it uses QSL/QFAPI), so installAPI is forced to NO
     [self installFabricLikeLoader:gameVersion loaderVersion:loaderVersion installAPI:NO vendor:@"quilt"];
 }
 
-/// Fabric/Quilt 共用的 meta API 安装实现
-/// - vendor: @"fabric" 或 @"quilt"，决定 meta URL 与显示文案
+/// The shared meta API install implementation for Fabric/Quilt
+/// - vendor: @"fabric" or @"quilt", which decides the meta URL and the display text
 - (void)installFabricLikeLoader:(NSString *)gameVersion loaderVersion:(NSString *)loaderVersion installAPI:(BOOL)installAPI vendor:(NSString *)vendor {
     BOOL isQuilt = [vendor isEqualToString:@"quilt"];
     NSString *displayName = isQuilt ? @"Quilt" : @"Fabric";
@@ -3691,16 +3691,16 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                                  : @"https://meta.fabricmc.net/v2/versions/loader";
     NSString *loaderTag = isQuilt ? @"quilt" : @"fabric";
 
-    // 改进2（参照 ZL2 统一进度流）：复用原版预装转交的进度 VC（若存在），
-    // 否则创建新 VC；标题统一为"正在准备运行环境"，步骤列表合并展示原版已完成步骤。
+    // Improvement 2 (following the unified progress flow of ZL2): reuse the progress VC handed over by the vanilla preinstall (if there is one),
+    // otherwise create a new one; the title is always "Preparing the runtime environment", and the step list merges in the completed vanilla steps.
     InstallerProgressViewController *progressVC = [self obtainInstallerProgressVC];
     progressVC.titleText = [NSString stringWithFormat:@"Preparing the runtime environment %@", gameVersion];
-    progressVC.progress = -1; // 不确定模式，正在拉取 profile JSON
+    progressVC.progress = -1; // Indeterminate mode while the profile JSON is being fetched
     progressVC.stageMessage = [NSString stringWithFormat:@"Fetching the %@ profile...\nGame version: %@  Loader: %@", displayName, gameVersion, loaderVersion];
-    // 阶段12增强：加载器图标 + 阶段步骤列表（使用 ModLoaderIconHelper 统一图标）
+    // Phase 12 enhancement: loader icon + stage list (using ModLoaderIconHelper for consistent icons)
     progressVC.categoryIconName = [ModLoaderIconHelper symbolNameForLoader:loaderTag];
     progressVC.categoryIconColor = [ModLoaderIconHelper brandColorForLoader:loaderTag];
-    // 合并步骤列表：原版5步标记完成 + 加载器安装步骤
+    // Merged step list: the 5 vanilla steps marked complete + the loader install steps
     progressVC.stageSteps = @[
         @{@"title": @"Fetch version manifest", @"status": @2},
         @{@"title": @"Download version JSON", @"status": @2},
@@ -3723,12 +3723,12 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         }
     };
 
-    // 注：push 已由 obtainInstallerProgressVC 在新建时完成，复用时不重复 push
+    // Note: obtainInstallerProgressVC already pushes it on creation, so a reused VC is not pushed again
 
     NSString *urlString = [NSString stringWithFormat:@"%@/%@/%@/profile/json", metaBase, gameVersion, loaderVersion];
     NSURL *url = [NSURL URLWithString:urlString];
 
-    // 注册到统一下载任务管理器
+    // Register with the shared download task manager
     NSString *source = getPrefObject(@"general.download_source") ?: @"official";
     NSString *fabricTaskName = [NSString stringWithFormat:@"%@-%@-%@", loaderTag, gameVersion, loaderVersion];
     DownloadTaskItem *fabricTaskItem = [[DownloadTaskManager sharedManager]
@@ -3741,7 +3741,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                              iconURL:nil];
     __block NSString *fabricTaskId = fabricTaskItem.taskId;
 
-    // profile JSON 较小，使用 dataTask；进度通过阶段驱动（无法精确测算）
+    // The profile JSON is small, so a dataTask is used; progress is driven by stages (it cannot be measured precisely)
     dataTask = [[NSURLSession sharedSession] dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         dispatch_async(dispatch_get_main_queue(), ^{
             __strong typeof(weakSelf) strongSelf = weakSelf;
@@ -3768,7 +3768,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
             [[DownloadTaskManager sharedManager] updateTaskWithId:fabricTaskId progress:0.5 totalBytes:-1 downloadedBytes:0];
 
-            // 解析 JSON
+            // Parse the JSON
             strongSelf.installerProgressVC.progress = 0.5;
             strongSelf.installerProgressVC.stageMessage = [NSString stringWithFormat:@"Parsing the %@ profile...", displayName];
 
@@ -3783,7 +3783,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
             [[DownloadTaskManager sharedManager] updateTaskWithId:fabricTaskId progress:0.7 totalBytes:-1 downloadedBytes:0];
 
-            // 写入版本 JSON
+            // Write the version JSON
             strongSelf.installerProgressVC.progress = 0.7;
             strongSelf.installerProgressVC.stageMessage = @"Writing version files...";
 
@@ -3806,22 +3806,22 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
             [[DownloadTaskManager sharedManager] updateTaskWithId:fabricTaskId progress:0.85 totalBytes:-1 downloadedBytes:0];
 
-            // 注册 profile
+            // Register the profile
             strongSelf.installerProgressVC.progress = 0.85;
             strongSelf.installerProgressVC.stageMessage = @"Registering profile...";
 
             NSMutableDictionary *profile = [NSMutableDictionary dictionary];
             profile[@"name"] = versionId;
             profile[@"lastVersionId"] = versionId;
-            // 改回原来的"游戏目录切换"机制：所有版本共享根目录（gameDir="."）
-            // 用户通过设置中的"游戏目录切换"功能手动切换不同的 gameDir
+            // Back to the original "switch game directory" model: every version shares the root directory (gameDir=".")
+            // The user switches between game directories manually with the "Switch game directory" feature in settings
             profile[@"gameDir"] = @".";
             profile[@"type"] = @"custom";
             profile[@"created"] = [NSDate date].description;
             [PLProfiles.current saveProfile:profile withName:versionId];
             PLProfiles.current.selectedProfileName = versionId;
 
-            // 仅 Fabric 安装 Fabric API；Quilt 用 QSL/QFAPI，不安装
+            // Only Fabric installs Fabric API; Quilt uses QSL/QFAPI and skips it
             if (installAPI && !isQuilt) {
                 strongSelf.installerProgressVC.progress = 0.9;
                 strongSelf.installerProgressVC.stageMessage = @"Downloading Fabric API...";
@@ -3850,7 +3850,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     [dataTask resume];
 }
 
-// 安装进度 VC 完成时的统一处理：进度满 → 短暂展示 → pop 并显示成功提示
+// Shared handling when the install progress VC succeeds: fill the progress bar -> show it briefly -> pop and show the success message
 - (void)finishInstallerProgressWithSuccess:(NSString *)message {
     if (!self.installerProgressVC) return;
     self.installerProgressVC.progress = 1.0;
@@ -3862,14 +3862,14 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         [strongSelf.navigationController popViewControllerAnimated:YES];
         strongSelf.installerProgressVC = nil;
         [strongSelf showSuccessMessage:message];
-        // 关键修复（issue #61）：Fabric/Forge/NeoForge/OptiFine 安装完成后未发送 ReloadProfileList 通知，
-        // 导致"已安装的版本"列表不刷新、新版本卡片不显示、加载器图标也不显示。
-        // 此处统一在安装完成后发通知，触发 LauncherRootViewController / VersionManagerViewController 等监听者重新加载版本列表。
+        // Key fix (issue #61): Fabric/Forge/NeoForge/OptiFine did not post the ReloadProfileList notification after installing,
+        // so the "Installed versions" list did not refresh, new version cards did not appear, and loader icons were missing.
+        // The notification is now posted here after every install, prompting listeners such as LauncherRootViewController / VersionManagerViewController to reload the version list.
         [[NSNotificationCenter defaultCenter] postNotificationName:@"ReloadProfileList" object:nil];
     });
 }
 
-// 安装进度 VC 失败时的统一处理：显示错误 → pop
+// Shared handling when the install progress VC fails: show the error -> pop
 - (void)finishInstallerProgressWithError:(NSString *)errorMessage {
     __weak typeof(self) weakSelf = self;
     dispatch_async(dispatch_get_main_queue(), ^{
@@ -3883,10 +3883,10 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     });
 }
 
-/// 改进2（参照 ZL2 统一进度流）：获取加载器安装进度 VC。
-/// 若 self.installerProgressVC 已存在（由原版预装完成后转交而来），直接复用之，
-/// 不再创建新 VC、不再 push，实现"原版 + 加载器"在同一进度页连续推进；
-/// 否则按原逻辑创建新 VC 并 push。
+/// Improvement 2 (following the unified progress flow of ZL2): obtain the loader install progress VC.
+/// If self.installerProgressVC already exists (handed over after the vanilla preinstall), reuse it directly
+/// without creating or pushing a new VC, so "vanilla + loader" run continuously on one progress page;
+/// otherwise create and push a new VC as before.
 - (InstallerProgressViewController *)obtainInstallerProgressVC {
     if (self.installerProgressVC) {
         return self.installerProgressVC;
@@ -4040,19 +4040,19 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     vc.filepath = path;
     vc.hitEnterAfterWindowShown = hitEnter;
     if (!vc.requiredJavaVersion) {
-        // 解析失败（manifest 缺失/主类非法）时明确提示，避免静默 return 让用户以为安装器已启动
+        // Report parse failures (a missing manifest or an invalid main class) explicitly, instead of returning silently and letting the user think the installer started
         showDialog(localize(@"Error", nil),
             [NSString stringWithFormat:@"Could not determine the installer main class or Java version: %@", path.lastPathComponent]);
         return;
     }
-    // execute_jar 路径：Caciocavallo17 jar 现已统一为 Java 17 编译版本，
-    // Java 17/21 均可加载，不再需要强制提升 requiredJavaVersion 到 25。
-    // - Java 8 JAR（如 OptiFine 安装器）走 Caciocavallo（非 17）路径，用 Java 8
-    // - Java 17+ JAR 走 Caciocavallo17 路径，用 Java 17/21 即可
-    // 与 JavaLauncher.m launchJar 分支保持一致。
+    // The execute_jar path: the Caciocavallo17 jar is now consistently compiled for Java 17,
+    // so both Java 17 and 21 can load it and requiredJavaVersion no longer has to be forced up to 25.
+    // - Java 8 JARs (such as the OptiFine installer) take the Caciocavallo (non-17) path and use Java 8
+    // - Java 17+ JARs take the Caciocavallo17 path and can use Java 17 or 21
+    // This matches the launchJar branch in JavaLauncher.m.
     int requiredJavaVersion = vc.requiredJavaVersion;
-    // 预检 execute_jar 标签的 JRE 是否已配置，避免 present 后才发现没 JRE 导致黑屏
-    // 与 LauncherRightPanelViewController.enterModInstallerWithPath: 行为一致
+    // Check up front whether a JRE is configured for the execute_jar tag, so a missing JRE is not discovered after presenting and left as a black screen
+    // This matches the behavior of LauncherRightPanelViewController.enterModInstallerWithPath:
     NSString *javaHome = getSelectedJavaHome(@"execute_jar", requiredJavaVersion);
     if (!javaHome) {
         showDialog(localize(@"Error", nil),
@@ -4092,7 +4092,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         [UIApplication.sharedApplication openURL:[NSURL URLWithString:[NSString stringWithFormat:@"sidestore://sidejit-enable?pid=%d", getpid()]] options:@{} completionHandler:nil];
     }
     
-    // 在内容区显示 JIT 等待提示，替代弹窗
+    // Show the JIT waiting hint in the content area instead of an alert
     InlineMessageView *jitAlert = [InlineMessageView showInViewController:self
                                                                     title:localize(@"launcher.wait_jit.title", nil)
                                                                  message:hasTrollStoreJIT ? localize(@"launcher.wait_jit_trollstore.message", nil) : localize(@"launcher.wait_jit.message", nil)
@@ -4153,7 +4153,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     };
     
     void (^showAlertAndLaunch)(void) = ^{
-        // 在内容区显示下载完成提示，替代弹窗
+        // Show the download-complete hint in the content area instead of an alert
         InlineMessageView *msgView = [InlineMessageView showInViewController:self
                                                                        title:@"Download complete"
                                                                     message:message
@@ -4175,7 +4175,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 - (void)installForge:(NSString *)gameVersion installOptiFine:(BOOL)installOptiFine loaderVersion:(NSString *)loaderVersion {
     ForgeInstallViewController *forgeVC = [[ForgeInstallViewController alloc] init];
     forgeVC.gameVersion = gameVersion;
-    // ModLoaderInstallViewController 已选好版本，传入以跳过重复的版本列表 UI
+    // ModLoaderInstallViewController has already picked a version, which is passed in to skip the duplicate version list UI
     forgeVC.presetVersionString = loaderVersion;
 
     __weak typeof(self) weakSelf = self;
@@ -4183,7 +4183,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
 
-        // 解析 ForgeInstallViewController 打包的回调结果（无论成败都需要先解析）
+        // Parse the callback result packed by ForgeInstallViewController (it has to be parsed either way)
         NSInteger selectedScheme = 0;
         NSString *filePath = nil;
         if ([resultOrError isKindOfClass:[NSDictionary class]]) {
@@ -4194,8 +4194,8 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             filePath = (NSString *)resultOrError;
         }
 
-        // 先 pop 掉 ForgeInstallViewController；pop 完成后再走后续流程，
-        // 否则在 pop 动画期间 present alert / push 进度页会失败或弹错 VC
+        // Pop ForgeInstallViewController first and continue once the pop completes,
+        // otherwise presenting an alert / pushing the progress page during the pop animation fails or shows the wrong VC
         void (^continuation)(void) = ^{
             __strong typeof(weakSelf) strongSelf2 = weakSelf;
             if (!strongSelf2) return;
@@ -4210,17 +4210,17 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             }
 
             if (selectedScheme == 1 && filePath.length > 0) {
-                // 直装方案：复用/创建进度 VC，由 ForgeDirectInstaller 的 progress 回调驱动
+                // Direct install: reuse or create the progress VC, driven by the progress callback of ForgeDirectInstaller
                 NSLog(@"[ForgeDirect] DownloadViewController: starting direct install with progress UI");
-                // 改进2（参照 ZL2 统一进度流）：复用原版预装转交的进度 VC（若存在）
+                // Improvement 2 (following the unified progress flow of ZL2): reuse the progress VC handed over by the vanilla preinstall (if there is one)
                 InstallerProgressViewController *progressVC = [strongSelf2 obtainInstallerProgressVC];
                 progressVC.titleText = [NSString stringWithFormat:@"Preparing the runtime environment %@", gameVersion];
                 progressVC.progress = 0.0;
                 progressVC.stageMessage = @"Preparing...";
-                // 阶段12增强：Forge 图标 + 阶段步骤列表
+                // Phase 12 enhancement: Forge icon + stage list
                 progressVC.categoryIconName = [ModLoaderIconHelper symbolNameForLoader:@"forge"];
                 progressVC.categoryIconColor = [ModLoaderIconHelper brandColorForLoader:@"forge"];
-                // 合并步骤列表：原版5步标记完成 + Forge 安装步骤
+                // Merged step list: the 5 vanilla steps marked complete + the Forge install steps
                 progressVC.stageSteps = @[
                     @{@"title": @"Fetch version manifest", @"status": @2},
                     @{@"title": @"Download version JSON", @"status": @2},
@@ -4231,7 +4231,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                     @{@"title": @"Download Forge libraries", @"status": @0},
                     @{@"title": @"Write version JSON", @"status": @0},
                 ];
-                // 注：push 已由 obtainInstallerProgressVC 在新建时完成，复用时不重复 push
+                // Note: obtainInstallerProgressVC already pushes it on creation, so a reused VC is not pushed again
 
                 dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
                     NSError *directError = nil;
@@ -4255,10 +4255,10 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                             [strongSelf3 finishInstallerProgressWithError:[NSString stringWithFormat:@"Direct Forge install failed: %@", directError.localizedDescription ?: @"Unknown error"]];
                             return;
                         }
-                        // 直装成功后，若用户勾选了 OptiFine，继续下载（之前的实现这里直接 return 漏掉了 OptiFine）
+                        // After a successful direct install, continue downloading OptiFine if the user ticked it (the previous implementation returned here and skipped OptiFine)
                         if (installOptiFine) {
                             strongSelf3.installerProgressVC.stageMessage = @"Downloading OptiFine...";
-                            strongSelf3.installerProgressVC.progress = -1; // OptiFine 下载无法精确测算，进入不确定模式
+                            strongSelf3.installerProgressVC.progress = -1; // The OptiFine download cannot be measured precisely, so switch to indeterminate mode
                             [strongSelf3 downloadOptiFine:gameVersion completion:^(BOOL optiSuccess, NSError *optiError) {
                                 dispatch_async(dispatch_get_main_queue(), ^{
                                     __strong typeof(weakSelf) strongSelf4 = weakSelf;
@@ -4278,7 +4278,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                 return;
             }
 
-            // 原版方案（运行安装器）：进入 AWT 安装器 GUI 流程
+            // Vanilla method (running the installer): enter the AWT installer GUI flow
             [strongSelf2 handleInstallerDownloadResultWithVendorName:@"Forge"
                                                           gameVersion:gameVersion
                                                           profileName:profileName
@@ -4302,7 +4302,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
         if (strongSelf.navigationController.topViewController != strongSelf) {
             [strongSelf.navigationController popViewControllerAnimated:YES];
-            // 等待 pop 动画结束后再触发后续 present / push，避免动画冲突
+            // Wait for the pop animation to finish before presenting/pushing, to avoid animation conflicts
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.35 * NSEC_PER_SEC)), dispatch_get_main_queue(), continuation);
         } else {
             continuation();
@@ -4310,16 +4310,16 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     };
     forgeVC.completionHandler = completion;
 
-    // 直接 push 到中间内容区，不再用 FormSheet 弹窗
+    // Push straight into the middle content area rather than presenting a FormSheet
     [self.navigationController pushViewController:forgeVC animated:YES];
 }
 
 - (void)downloadOptiFine:(NSString *)gameVersion completion:(void (^)(BOOL success, NSError *error))completion {
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        // 修复: 不再依赖硬编码的版本映射表（容易过期），改用 BMCLAPI 动态查询游戏版本对应的最新 OptiFine 版本
+        // Fix: no longer rely on a hardcoded version map (which goes stale); query BMCLAPI dynamically for the newest OptiFine version for the game version
         NSString *listURL = [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/optifine/%@", gameVersion];
-        // 阶段6修复（参照 FCL）：使用带 User-Agent 的 NSURLSession 同步下载替代 NSData dataWithContentsOfURL:
-        // BMCLAPI/Cloudflare 会拦截无 UA 或默认 UA 的请求，返回 403 或 HTML 错误页
+        // Phase 6 fix (following FCL): use a synchronous NSURLSession download with a User-Agent instead of NSData dataWithContentsOfURL:
+        // BMCLAPI/Cloudflare block requests with no UA or the default UA, returning 403 or an HTML error page
         NSError *listError = nil;
         NSData *listData = [self downloadDataWithURLString:listURL error:&listError];
         NSString *optiFineType = nil;
@@ -4330,7 +4330,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             NSError *jsonError = nil;
             NSArray *versions = [NSJSONSerialization JSONObjectWithData:listData options:0 error:&jsonError];
             if (!jsonError && [versions isKindOfClass:[NSArray class]] && versions.count > 0) {
-                // 取列表中第一个（通常为最新发布版本）
+                // Take the first entry in the list (usually the newest release)
                 NSDictionary *first = versions.firstObject;
                 if ([first isKindOfClass:[NSDictionary class]]) {
                     optiFineType = first[@"type"] ?: @"HD_U";
@@ -4340,11 +4340,11 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             }
         }
 
-        // fallback: 列表 API 失败时回退到本地硬编码映射
+        // Fallback: fall back to the local hardcoded map when the list API fails
         if (!optiFinePatch) {
             NSString *mapped = [self mapGameVersionToOptiFine:gameVersion];
             if (mapped) {
-                // 映射表里是 "HD_U_I6" 形式，拆出 type=HD_U, patch=I6
+                // The map stores entries like "HD_U_I6", so split it into type=HD_U and patch=I6
                 NSRange range = [mapped rangeOfString:@"_"];
                 if (range.location != NSNotFound) {
                     optiFineType = [mapped substringToIndex:range.location];
@@ -4360,17 +4360,17 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             return;
         }
 
-        // BMCLAPI OptiFine 下载 URL: /optifine/{mcversion}/{type}/{patch}
+        // BMCLAPI OptiFine download URL: /optifine/{mcversion}/{type}/{patch}
         NSString *downloadURL = [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/optifine/%@/%@/%@",
                                  gameVersion, optiFineType, optiFinePatch];
-        // 阶段6修复：使用带 UA 的下载方法
+        // Phase 6 fix: use the download method that sends a UA
         NSError *downloadError = nil;
         NSData *data = [self downloadDataWithURLString:downloadURL error:&downloadError];
 
-        // fallback: OptiFine 官方源
+        // Fallback: the official OptiFine source
         if ((!data || downloadError) && filename) {
             NSString *officialURL = [NSString stringWithFormat:@"https://optifine.net/downloadx?f=%@", filename];
-            // 阶段6修复：使用带 UA 的下载方法
+            // Phase 6 fix: use the download method that sends a UA
             NSError *officialError = nil;
             NSData *officialData = [self downloadDataWithURLString:officialURL error:&officialError];
             if (officialData && !officialError) {
@@ -4391,7 +4391,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         }
 
         NSString *modsDir = [self currentInstanceModsPath];
-        // 优先用 API 返回的 filename；否则用 type_patch 构造
+        // Prefer the filename returned by the API; otherwise build it from type_patch
         NSString *saveFilename = filename ?: [NSString stringWithFormat:@"OptiFine_%@_%@_%@.jar", gameVersion, optiFineType, optiFinePatch];
         NSString *savePath = [modsDir stringByAppendingPathComponent:saveFilename];
 
@@ -4441,10 +4441,10 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
 #pragma mark - OptiFine as Patch Installation (单独安装，参照 FCL OptiFineInstallTask)
 
-/// 单独安装 OptiFine 作为版本补丁（不依赖 Forge）
-/// loaderVersion 是 packed 格式：type\x1fpatch\x1ffilename\x1fdisplay
+/// Install OptiFine on its own as a version patch (without Forge)
+/// loaderVersion is in the packed format: type\x1fpatch\x1ffilename\x1fdisplay
 - (void)installOptiFineAsPatch:(NSString *)gameVersion loaderVersion:(NSString *)loaderVersion {
-    // 解析 packed 格式
+    // Parse the packed format
     NSArray *parts = [loaderVersion componentsSeparatedByString:@"\x1f"];
     if (parts.count < 3) {
         [self showError:@"OptiFine version information is invalid"];
@@ -4456,15 +4456,15 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
     NSString *versionId = [NSString stringWithFormat:@"%@-OptiFine_%@_%@", gameVersion, optiType, optiPatch];
 
-    // 改进2（参照 ZL2 统一进度流）：复用原版预装转交的进度 VC（若存在）
+    // Improvement 2 (following the unified progress flow of ZL2): reuse the progress VC handed over by the vanilla preinstall (if there is one)
     InstallerProgressViewController *progressVC = [self obtainInstallerProgressVC];
     progressVC.titleText = [NSString stringWithFormat:@"Preparing the runtime environment %@", gameVersion];
     progressVC.progress = -1;
     progressVC.stageMessage = [NSString stringWithFormat:@"Downloading OptiFine %@_%@...", optiType, optiPatch];
-    // 阶段12增强：OptiFine 图标 + 阶段步骤列表
+    // Phase 12 enhancement: OptiFine icon + stage list
     progressVC.categoryIconName = [ModLoaderIconHelper symbolNameForLoader:@"optifine"];
     progressVC.categoryIconColor = [ModLoaderIconHelper brandColorForLoader:@"optifine"];
-    // 合并步骤列表：原版5步标记完成 + OptiFine 安装步骤
+    // Merged step list: the 5 vanilla steps marked complete + the OptiFine install steps
     progressVC.stageSteps = @[
         @{@"title": @"Fetch version manifest", @"status": @2},
         @{@"title": @"Download version JSON", @"status": @2},
@@ -4485,9 +4485,9 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         }
     };
 
-    // 注：push 已由 obtainInstallerProgressVC 在新建时完成，复用时不重复 push
+    // Note: obtainInstallerProgressVC already pushes it on creation, so a reused VC is not pushed again
 
-    // 注册到下载任务管理器
+    // Register with the download task manager
     NSString *source = getPrefObject(@"general.download_source") ?: @"official";
     NSString *taskName = [NSString stringWithFormat:@"optifine-%@-%@-%@", gameVersion, optiType, optiPatch];
     DownloadTaskItem *taskItem = [[DownloadTaskManager sharedManager]
@@ -4501,15 +4501,15 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     __block NSString *taskId = taskItem.taskId;
 
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        // 1. 下载 OptiFine jar
-        // 阶段6修复（参照 FCL）：使用带 User-Agent 的 NSURLSession 同步下载替代 NSData dataWithContentsOfURL:
-        // BMCLAPI 部分镜像源（特别是 CurseForge/optifine 转发）受 Cloudflare 保护，
-        // 默认 UA 会被拦截返回 403。必须使用浏览器 UA。
+        // 1. Download the OptiFine jar
+        // Phase 6 fix (following FCL): use a synchronous NSURLSession download with a User-Agent instead of NSData dataWithContentsOfURL:
+        // Some BMCLAPI mirrors (especially the CurseForge/optifine forwarders) sit behind Cloudflare,
+        // which blocks the default UA with a 403. A browser UA is required.
         NSString *bmclURL = [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/optifine/%@/%@/%@", gameVersion, optiType, optiPatch];
         NSError *downloadError = nil;
         NSData *jarData = [self downloadDataWithURLString:bmclURL error:&downloadError];
 
-        // fallback 官方源
+        // Fall back to the official source
         if ((!jarData || downloadError) && filename.length > 0) {
             NSString *officialURL = [NSString stringWithFormat:@"https://optifine.net/downloadx?f=%@", filename];
             NSError *officialError = nil;
@@ -4539,22 +4539,22 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             strongSelf.installerProgressVC.stageMessage = @"Writing version files...";
         });
 
-        // 2. 创建版本目录
+        // 2. Create the version directory
         const char *env = getenv("POJAV_GAME_DIR");
         NSString *gameDir = env ? [NSString stringWithUTF8String:env] : NSHomeDirectory();
         NSString *versionDir = [gameDir stringByAppendingPathComponent:[NSString stringWithFormat:@"versions/%@", versionId]];
         [[NSFileManager defaultManager] createDirectoryAtPath:versionDir withIntermediateDirectories:YES attributes:nil error:nil];
 
-        // 3. 写入 jar 文件到 libraries 目录（参照 FCL OptiFineInstallTask / HMCL OptiFineInstallTask）
-        // OptiFine 使用 launchwrapper 作为入口，通过 tweaker 加载，jar 不再作为 client.jar
-        // 而是作为普通库条目写入 libraries/optifine/OptiFine/{gameVersion}/{versionId}.jar
-        // 这样做的目的：
-        //   1. 让原版 client.jar 仍可被 inheritsFrom 引用（保留原版 jar）
-        //   2. OptiFine jar 作为 launchwrapper 的 tweakClass 输入
-        //   3. mainClass 设为 net.minecraft.launchwrapper.Launcher，通过 --tweakClass optifine.OptiFineTweaker 加载
+        // 3. Write the jar into the libraries directory (modelled on FCL OptiFineInstallTask / HMCL OptiFineInstallTask)
+        // OptiFine uses launchwrapper as its entry point and is loaded through a tweaker, so the jar is no longer used as client.jar
+        // but written as an ordinary library entry at libraries/optifine/OptiFine/{gameVersion}/{versionId}.jar
+        // The reasons are:
+        //   1. the vanilla client.jar can still be referenced through inheritsFrom (keeping the vanilla jar)
+        //   2. the OptiFine jar becomes the tweakClass input for launchwrapper
+        //   3. mainClass is set to net.minecraft.launchwrapper.Launcher and loaded via --tweakClass optifine.OptiFineTweaker
         NSString *optifineJarPath = [NSString stringWithFormat:@"optifine/OptiFine/%@/%@.jar", gameVersion, versionId];
         NSString *optifineJarAbsPath = [NSString stringWithFormat:@"%s/libraries/%@", getenv("POJAV_GAME_DIR"), optifineJarPath];
-        // 确保 jar 文件写入到正确的 libraries 路径
+        // Make sure the jar is written to the correct libraries path
         NSString *jarDir = [optifineJarAbsPath stringByDeletingLastPathComponent];
         [[NSFileManager defaultManager] createDirectoryAtPath:jarDir withIntermediateDirectories:YES attributes:nil error:nil];
         NSError *writeError = nil;
@@ -4570,11 +4570,11 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             return;
         }
 
-        // 4. 创建 version.json（参照 FCL OptiFineInstallTask / HMCL OptiFineInstallTask）
-        // OptiFine 使用 launchwrapper 作为入口，通过 tweaker 加载
-        // 关键：mainClass 必须是 net.minecraft.launchwrapper.Launcher
-        //       必须添加 --tweakClass optifine.OptiFineTweaker
-        //       OptiFine jar 必须加入 libraries 列表
+        // 4. Create version.json (modelled on FCL OptiFineInstallTask / HMCL OptiFineInstallTask)
+        // OptiFine uses launchwrapper as its entry point and is loaded through a tweaker
+        // Crucially: mainClass must be net.minecraft.launchwrapper.Launcher,
+        //            --tweakClass optifine.OptiFineTweaker must be added,
+        //            and the OptiFine jar must be in the libraries list
         NSDictionary *versionJson = @{
             @"id": versionId,
             @"inheritsFrom": gameVersion,
@@ -4587,25 +4587,25 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                     @"downloads": @{
                         @"artifact": @{
                             @"path": optifineJarPath,
-                            @"url": @"",  // 已下载，URL 留空
+                            @"url": @"",  // Already downloaded, so the URL is left empty
                             @"size": @(jarData.length),
                             @"sha1": @""
                         }
                     }
                 }
             ],
-            @"jar": gameVersion,  // 使用原版 jar
+            @"jar": gameVersion,  // Use the vanilla jar
             @"minimumLauncherVersion": @21
         };
         NSString *jsonPath = [versionDir stringByAppendingPathComponent:[NSString stringWithFormat:@"%@.json", versionId]];
         NSData *jsonData = [NSJSONSerialization dataWithJSONObject:versionJson options:NSJSONWritingPrettyPrinted error:nil];
         [jsonData writeToFile:jsonPath options:NSDataWritingAtomic error:nil];
 
-        // 4.1 确保父版本（vanilla）的 version JSON 已存在
+        // 4.1 Make sure the version JSON of the parent (vanilla) version exists
         NSString *parentJsonPath = [gameDir stringByAppendingPathComponent:
                                     [NSString stringWithFormat:@"versions/%@/%@.json", gameVersion, gameVersion]];
         if (![[NSFileManager defaultManager] fileExistsAtPath:parentJsonPath]) {
-            // 父版本不存在，提示用户先安装原版
+            // The parent version is missing, so tell the user to install vanilla first
             NSError *err = [NSError errorWithDomain:@"OptiFineInstall" code:3
                                          userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"No version information found for vanilla %@. Install vanilla %@ from the download page first, then install OptiFine.", gameVersion, gameVersion]}];
             [[DownloadTaskManager sharedManager] setTaskWithId:taskId completedWithError:err];
@@ -4625,7 +4625,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             strongSelf.installerProgressVC.stageMessage = @"Registering profile...";
         });
 
-        // 5. 注册 profile
+        // 5. Register the profile
         dispatch_async(dispatch_get_main_queue(), ^{
             __strong typeof(weakSelf) strongSelf = weakSelf;
             if (!strongSelf) return;
@@ -4651,7 +4651,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     ForgeInstallViewController *neoForgeVC = [[ForgeInstallViewController alloc] init];
     neoForgeVC.gameVersion = gameVersion;
     neoForgeVC.isNeoForge = YES;
-    // ModLoaderInstallViewController 已选好版本，传入以跳过重复的版本列表 UI
+    // ModLoaderInstallViewController has already picked a version, which is passed in to skip the duplicate version list UI
     neoForgeVC.presetVersionString = loaderVersion;
 
     __weak typeof(self) weakSelf = self;
@@ -4659,7 +4659,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
 
-        // 解析 ForgeInstallViewController 打包的回调结果（无论成败都需要先解析）
+        // Parse the callback result packed by ForgeInstallViewController (it has to be parsed either way)
         NSInteger selectedScheme = 0;
         NSString *filePath = nil;
         if ([resultOrError isKindOfClass:[NSDictionary class]]) {
@@ -4670,7 +4670,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             filePath = (NSString *)resultOrError;
         }
 
-        // 先 pop 掉 NeoForge 安装器选择页；pop 完成后再走后续流程，避免动画期间 present/push 失败
+        // Pop the NeoForge installer picker first and continue once the pop completes, so presenting/pushing does not fail mid-animation
         void (^continuation)(void) = ^{
             __strong typeof(weakSelf) strongSelf2 = weakSelf;
             if (!strongSelf2) return;
@@ -4685,17 +4685,17 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             }
 
             if (selectedScheme == 1 && filePath.length > 0) {
-                // 直装方案：复用/创建进度 VC，由 NeoForgeDirectInstaller 的 progress 回调驱动
+                // Direct install: reuse or create the progress VC, driven by the progress callback of NeoForgeDirectInstaller
                 NSLog(@"[NeoForgeDirect] DownloadViewController: starting direct install with progress UI");
-                // 改进2（参照 ZL2 统一进度流）：复用原版预装转交的进度 VC（若存在）
+                // Improvement 2 (following the unified progress flow of ZL2): reuse the progress VC handed over by the vanilla preinstall (if there is one)
                 InstallerProgressViewController *progressVC = [strongSelf2 obtainInstallerProgressVC];
                 progressVC.titleText = [NSString stringWithFormat:@"Preparing the runtime environment %@", gameVersion];
                 progressVC.progress = 0.0;
                 progressVC.stageMessage = @"Preparing...";
-                // 阶段12增强：NeoForge 图标 + 阶段步骤列表
+                // Phase 12 enhancement: NeoForge icon + stage list
                 progressVC.categoryIconName = [ModLoaderIconHelper symbolNameForLoader:@"neoforge"];
                 progressVC.categoryIconColor = [ModLoaderIconHelper brandColorForLoader:@"neoforge"];
-                // 合并步骤列表：原版5步标记完成 + NeoForge 安装步骤
+                // Merged step list: the 5 vanilla steps marked complete + the NeoForge install steps
                 progressVC.stageSteps = @[
                     @{@"title": @"Fetch version manifest", @"status": @2},
                     @{@"title": @"Download version JSON", @"status": @2},
@@ -4706,7 +4706,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                     @{@"title": @"Download NeoForge libraries", @"status": @0},
                     @{@"title": @"Write version JSON", @"status": @0},
                 ];
-                // 注：push 已由 obtainInstallerProgressVC 在新建时完成，复用时不重复 push
+                // Note: obtainInstallerProgressVC already pushes it on creation, so a reused VC is not pushed again
 
                 dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
                     NSError *directError = nil;
@@ -4736,7 +4736,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                 return;
             }
 
-            // 原版方案（运行安装器）
+            // Vanilla method (running the installer)
             [strongSelf2 handleInstallerDownloadResultWithVendorName:@"NeoForge"
                                                           gameVersion:gameVersion
                                                           profileName:profileName
@@ -4748,7 +4748,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
         if (strongSelf.navigationController.topViewController != strongSelf) {
             [strongSelf.navigationController popViewControllerAnimated:YES];
-            // 等待 pop 动画结束后再触发后续 present / push，避免动画冲突
+            // Wait for the pop animation to finish before presenting/pushing, to avoid animation conflicts
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.35 * NSEC_PER_SEC)), dispatch_get_main_queue(), continuation);
         } else {
             continuation();
@@ -4756,12 +4756,12 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     };
     neoForgeVC.completionHandler = completion;
 
-    // 直接 push 到中间内容区，不再用 FormSheet 弹窗
+    // Push straight into the middle content area rather than presenting a FormSheet
     [self.navigationController pushViewController:neoForgeVC animated:YES];
 }
 
 - (void)showSuccessMessage:(NSString *)message {
-    // 在内容区显示成功提示，替代弹窗
+    // Show the success message in the content area instead of an alert
     [InlineMessageView showInViewController:self
                                        title:@"Installation successful"
                                     message:message
@@ -4802,7 +4802,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 #pragma mark - Modpack Installation
 
 - (void)openImportModpackView {
-    // 修复: 改为 push 到中间内容区，与其他下载子流程一致，不再 FormSheet 弹窗
+    // Fix: push into the middle content area, consistent with the other download sub-flows, instead of presenting a FormSheet
     ModpackImportViewController *importVC = [[ModpackImportViewController alloc] init];
     [self.navigationController pushViewController:importVC animated:YES];
 }
@@ -4815,23 +4815,23 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 - (void)installModpackAtIndexPath:(NSIndexPath *)indexPath {
     NSDictionary *modpack = self.modpackList[indexPath.row];
 
-    // 仿 FCL/ZL2：整合包也使用独立的版本选择页（复用 ModVersionViewController + AssetDetailHeaderView）
-    // 替代原有的 ActionSheet 选版本方式，补齐项目封面图/描述/作者/下载量/标签等信息显示
+    // Mirroring FCL/ZL2: modpacks also get their own version picker page (reusing ModVersionViewController + AssetDetailHeaderView)
+    // replacing the old ActionSheet version picker and adding the project cover image, description, author, downloads and tags
     ModItem *modItem = [[ModItem alloc] initWithOnlineData:modpack];
 
     ModVersionViewController *versionVC = [[ModVersionViewController alloc] init];
     versionVC.modItem = modItem;
     versionVC.delegate = self;
     versionVC.title = modItem.displayName;
-    // FCL 风格：传入当前 profile 的偏好版本和加载器，自动选中匹配 chip 并置顶
+    // FCL style: pass in the preferred version and loader of the current profile, so the matching chip is selected and pinned to the top
     versionVC.preferredGameVersion = [self currentProfileMinecraftVersion];
     versionVC.preferredLoader = [self currentProfileLoader];
 
-    // 标记当前为整合包下载类型，版本选择回调时走整合包安装流程（而非 Mod 下载流程）
+    // Mark this as a modpack download, so the version callback runs the modpack install flow (rather than the mod download flow)
     self.pendingDownloadType = @"modpack";
     self.pendingModpackDict = modpack;
 
-    // 在中间内容区 push 显示，与 Mod/Shader/ResourcePack 等保持一致的交互
+    // Push it into the middle content area, matching the interaction of mods/shaders/resource packs
     [self.navigationController pushViewController:versionVC animated:YES];
 }
 
@@ -4842,12 +4842,12 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         return;
     }
 
-    // 修复: 改为 push 进度 VC (FCL 风格)，替代转圈 alert
+    // Fix: push a progress VC (FCL style) instead of a spinner alert
     InstallerProgressViewController *progressVC = [[InstallerProgressViewController alloc] init];
     progressVC.titleText = [NSString stringWithFormat:@"Downloading modpack %@", modpack[@"title"] ?: @""];
     progressVC.progress = -1;
     progressVC.stageMessage = @"Downloading modpack files...";
-    // 阶段12增强：整合包图标 + 阶段步骤列表（参照 FCL 整合包安装流程）
+    // Phase 12 enhancement: modpack icon + stage list (modelled on the FCL modpack install flow)
     progressVC.categoryIconName = @"archivebox.fill";
     progressVC.categoryIconColor = [UIColor systemOrangeColor];
     progressVC.stageSteps = @[
@@ -4864,8 +4864,8 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     NSString *downloadSource = getPrefObject(@"general.download_source") ?: @"official";
     __block DownloadTaskItem *taskItem = nil;
 
-    // 关键修复（参照 FCL/ZL2 整合包下载容错）：原实现单次下载无重试，
-    // 网络偶发抖动或镜像源 5xx 会导致整个整合包下载失败。改为最多 3 次重试。
+    // Key fix (following the modpack download resilience of FCL/ZL2): the original implementation downloaded once with no retry,
+    // so a brief network hiccup or a 5xx from a mirror failed the whole modpack download. It now retries up to 3 times.
     __block NSInteger downloadAttempt = 0;
     __block NSURL *downloadLocation = nil;
     __block NSError *downloadError = nil;
@@ -4884,7 +4884,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                     downloadError = error ?: [NSError errorWithDomain:@"DownloadError" code:1 userInfo:@{NSLocalizedDescriptionKey: @"Download returned empty data"}];
                     NSLog(@"[ModpackDownload] Attempt %ld failed: %@", (long)downloadAttempt, downloadError.localizedDescription);
                     if (downloadAttempt < 3) {
-                        // 间隔 1.5s 后重试，避免连续请求触发限流
+                        // Retry after 1.5s, so back-to-back requests do not trip rate limiting
                         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                             attemptDownload();
                         });
@@ -4898,7 +4898,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                 downloadLocation = location;
                 downloadError = nil;
 
-                // 移动到临时文件
+                // Move it to a temporary file
                 NSString *tempPath = [NSTemporaryDirectory() stringByAppendingPathComponent:[NSString stringWithFormat:@"%@_%@.mrpack", modpack[@"id"] ?: @"modpack", [[NSUUID UUID] UUIDString]]];
                 [[NSFileManager defaultManager] removeItemAtPath:tempPath error:nil];
                 NSError *moveError = nil;
@@ -4919,10 +4919,10 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
                 [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId completedWithError:nil];
 
-                // 复用 ModpackImportService 完成解析和导入
+                // Reuse ModpackImportService to parse and import it
                 progressVC.progress = 0.1;
                 progressVC.stageMessage = @"Parsing modpack...";
-                // 阶段12增强：更新步骤状态（下载完成，解析中）
+                // Phase 12 enhancement: update the step state (download complete, parsing)
                 progressVC.stageSteps = @[
                     @{@"title": @"Download modpack files", @"status": @2},
                     @{@"title": @"Parse modpack structure", @"status": @1},
@@ -4942,25 +4942,25 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                     });
                     return;
                 }
-                // 用在线 modpack 信息补充 (title、icon 等)
+                // Fill in the online modpack information (title, icon, etc.)
                 NSMutableDictionary *mutableInfo = [modpackInfo mutableCopy];
                 if (!mutableInfo[@"name"] || [mutableInfo[@"name"] isEqualToString:[tempPath.lastPathComponent stringByDeletingPathExtension]]) {
                     mutableInfo[@"name"] = modpack[@"title"] ?: mutableInfo[@"name"];
                 }
                 if (modpack[@"imageUrl"]) {
-                    // 不强制下载 icon，保留原整合包内的
+                    // Do not force the icon to download; keep the one inside the modpack
                 }
 
-                // 阶段14增强：参照 FCL/ZL2/HMCL，安装整合包前先安装对应的原版 Minecraft
-                // ModpackImportService 只下载 mod 文件和安装加载器，不下载原版 client.jar/libraries/assets
-                // 若不预装原版，启动时 Java 端 Tools.getVersionInfo() 会因 FileNotFoundException 崩溃
+                // Phase 14 enhancement: following FCL/ZL2/HMCL, install the matching vanilla Minecraft before installing the modpack
+                // ModpackImportService only downloads mod files and installs the loader; it does not fetch the vanilla client.jar/libraries/assets
+                // Without the vanilla preinstall, the Java side Tools.getVersionInfo() crashes with FileNotFoundException at launch
                 NSString *mcVersion = mutableInfo[@"minecraftVersion"];
                 if (![mcVersion isKindOfClass:[NSString class]] || mcVersion.length == 0) {
                     mcVersion = mutableInfo[@"dependencies"][@"minecraft"];
                 }
                 if ([mcVersion isKindOfClass:[NSString class]] && mcVersion.length > 0) {
                     dispatch_async(dispatch_get_main_queue(), ^{
-                        // 更新进度：解析完成，准备安装原版
+                        // Update the progress: parsing done, about to install vanilla
                         progressVC.stageSteps = @[
                             @{@"title": @"Download modpack files", @"status": @2},
                             @{@"title": @"Parse modpack structure", @"status": @2},
@@ -4971,7 +4971,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                         ];
                         progressVC.stageMessage = [NSString stringWithFormat:@"Installing vanilla Minecraft %@...", mcVersion];
 
-                        // 调用原版预安装（ensureVanillaInstalled 会检查是否已安装，已安装则直接跳过）
+                        // Run the vanilla preinstall (ensureVanillaInstalled checks whether it is already installed and skips if so)
                         NSDictionary *vanillaVersion = @{@"id": mcVersion};
                         __weak typeof(self) weakSelf = self;
                         [self ensureVanillaInstalled:vanillaVersion completion:^(BOOL vanillaSuccess) {
@@ -4984,7 +4984,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                                 });
                                 return;
                             }
-                            // 原版安装完成，继续导入整合包
+                            // Vanilla installed, so continue importing the modpack
                             dispatch_async(dispatch_get_main_queue(), ^{
                                 progressVC.stageSteps = @[
                                     @{@"title": @"Download modpack files", @"status": @2},
@@ -4996,14 +4996,14 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                                 ];
                                 progressVC.stageMessage = @"Downloading mod files...";
                             });
-                            // 在后台线程执行整合包导入
+                            // Run the modpack import on a background thread
                             dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
                                 [strongSelf importModpackWithService:importService info:mutableInfo progressVC:progressVC tempPath:tempPath];
                             });
                         }];
                     });
                 } else {
-                    // 无法提取游戏版本，跳过原版预安装，直接导入
+                    // The game version could not be determined, so skip the vanilla preinstall and import directly
                     dispatch_async(dispatch_get_main_queue(), ^{
                         progressVC.stageMessage = @"No game version detected, skipping the vanilla install and importing the modpack...";
                         progressVC.stageSteps = @[
@@ -5021,7 +5021,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         });
     }];
 
-        // 注册到下载任务管理器（每次重试均重新注册，taskId 不变因为 taskItem 是外层 __block）
+        // Register with the download task manager (re-registered on every retry; taskId stays the same because taskItem is a __block in the outer scope)
         if (!taskItem) {
             taskItem = [[DownloadTaskManager sharedManager]
                 registerTaskWithResourceType:DownloadTaskResourceTypeModpack
@@ -5037,16 +5037,16 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         [task resume];
     };
 
-    // 启动首次下载尝试
+    // Start the first download attempt
     attemptDownload();
 }
 
-/// 阶段14：整合包导入辅助方法
-/// 参照 FCL/ZL2/HMCL：原版预安装完成后（或跳过后），执行实际的整合包导入流程。
-/// 包含：调用 ModpackImportService 下载 mod 文件、安装加载器、写入配置，
-/// 并通过 progressVC 实时展示 6 步进度（含原版安装步骤标记为已完成）。
-/// 导入完成后清理临时文件，并在主线程展示成功/失败结果。
-/// 注：此方法应在后台线程调用（QOS_CLASS_USER_INITIATED），进度回调内部自行 dispatch 到主线程。
+/// Phase 14: modpack import helper method
+/// Following FCL/ZL2/HMCL: run the actual modpack import once the vanilla preinstall finishes (or is skipped).
+/// This calls ModpackImportService to download the mod files, install the loader and write the profile,
+/// showing the 6 steps live through progressVC (with the vanilla install step marked complete).
+/// Temporary files are cleaned up afterwards and the success/failure result is shown on the main thread.
+/// Note: this must be called on a background thread (QOS_CLASS_USER_INITIATED); the progress callbacks dispatch to the main thread themselves.
 - (void)importModpackWithService:(ModpackImportService *)importService
                             info:(NSDictionary *)info
                       progressVC:(InstallerProgressViewController *)progressVC
@@ -5060,8 +5060,8 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         dispatch_async(dispatch_get_main_queue(), ^{
             progressVC.progress = p;
             progressVC.stageMessage = stage;
-            // 阶段14增强：6 步进度列表（含"安装原版 Minecraft"标记为已完成）
-            // ModpackImportService 进度区间：0.1-0.3=下载mods, 0.3-0.7=安装加载器, 0.7-1.0=写配置
+            // Phase 14 enhancement: a 6-step progress list (with "Install vanilla Minecraft" marked complete)
+            // ModpackImportService progress ranges: 0.1-0.3 = downloading mods, 0.3-0.7 = installing the loader, 0.7-1.0 = writing the profile
             NSArray *steps;
             if (p < 0.3) {
                 steps = @[
@@ -5104,7 +5104,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         });
     } error:&importError];
 
-    // 清理临时文件
+    // Clean up the temporary files
     [[NSFileManager defaultManager] removeItemAtPath:tempPath error:nil];
 
     dispatch_async(dispatch_get_main_queue(), ^{
@@ -5140,13 +5140,13 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 }
 
 - (void)installModpackFromFile:(NSString *)filePath modpack:(NSDictionary *)modpack {
-    // 修复: 此方法已废弃，在线下载流程改用 startModpackInstallation:modpack: 统一走 ModpackImportService
-    // 保留以防其他地方调用，但内部也走 ModpackImportService
+    // Fix: this method is deprecated; the online download flow now uses startModpackInstallation:modpack: and goes through ModpackImportService
+    // Kept in case something else calls it, but it goes through ModpackImportService internally too
     InstallerProgressViewController *progressVC = [[InstallerProgressViewController alloc] init];
     progressVC.titleText = @"Importing modpack";
     progressVC.progress = -1;
     progressVC.stageMessage = @"Parsing modpack...";
-    // 阶段12增强：整合包导入图标 + 阶段步骤列表
+    // Phase 12 enhancement: modpack import icon + stage list
     progressVC.categoryIconName = @"archivebox.fill";
     progressVC.categoryIconColor = [UIColor systemOrangeColor];
     progressVC.stageSteps = @[
@@ -5174,7 +5174,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 progressVC.progress = p;
                 progressVC.stageMessage = stage;
-                // 阶段12增强：根据进度动态更新步骤状态
+                // Phase 12 enhancement: update the step state as the progress advances
                 NSArray *steps;
                 if (p < 0.3) {
                     steps = @[
@@ -5370,18 +5370,18 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         [self loadWorldList];
     }
 
-    // ===== 图标预取（参照 FCL Glide 的 prefetch + ZL2 Coil 的 enqueue）=====
-    // 在 cell 即将显示时，预取后续 5 个 cell 的图标到磁盘缓存。
-    // 这样用户滚动列表时，后续 cell 的图标已经在缓存中，可以立即显示，显著减少"图标加载过慢"的感觉。
-    // 预取仅下载+缓存，不绑定 imageView，不影响当前显示。
+    // ===== Icon prefetching (modelled on FCL Glide prefetch + ZL2 Coil enqueue) =====
+    // When a cell is about to appear, prefetch the icons of the next 5 cells into the disk cache.
+    // As the user scrolls, those icons are already cached and appear instantly, which greatly reduces the "icons load too slowly" feeling.
+    // Prefetching only downloads and caches; it does not bind to an imageView and does not affect what is on screen.
     [self prefetchIconsForTableView:tableView currentIndex:indexPath.row];
 }
 
-/// 预取后续 cell 的图标到缓存
-/// @param tableView 当前 tableView
-/// @param currentIndex 当前显示的 cell 索引
+/// Prefetch the icons of the upcoming cells into the cache
+/// @param tableView The current tableView
+/// @param currentIndex Index of the cell being shown
 - (void)prefetchIconsForTableView:(UITableView *)tableView currentIndex:(NSInteger)currentIndex {
-    // 预取后续 5 个 cell 的图标
+    // Prefetch the icons of the next 5 cells
     NSInteger prefetchCount = 5;
     NSInteger startIndex = currentIndex + 1;
     NSInteger endIndex = currentIndex + prefetchCount;
@@ -5474,11 +5474,11 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     versionVC.modItem = modItem;
     versionVC.delegate = self;
     versionVC.title = modItem.displayName;
-    // FCL 风格：传入当前 profile 的偏好版本和加载器，自动选中匹配 chip 并置顶
+    // FCL style: pass in the preferred version and loader of the current profile, so the matching chip is selected and pinned to the top
     versionVC.preferredGameVersion = [self currentProfileMinecraftVersion];
     versionVC.preferredLoader = [self currentProfileLoader];
 
-    // 在中间内容区 push 显示，而非弹窗盖在下载列表之上（与 FCL 安卓一致）
+    // Push it into the middle content area instead of a modal over the download list (matching FCL for Android)
     [self.navigationController pushViewController:versionVC animated:YES];
 }
 
@@ -5497,8 +5497,8 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     versionVC.shaderItem = shaderItem;
     versionVC.delegate = self;
     versionVC.title = shaderItem.displayName;
-    // FCL 风格：传入当前 profile 的偏好版本和加载器，自动选中匹配 chip 并置顶匹配版本
-    // 补齐与 ModVersionViewController 不对称的 preferred 传参（阶段3统一）
+    // FCL style: pass in the preferred version and loader of the current profile, so the matching chip is selected and the matching version pinned to the top
+    // Add the preferred parameters that were missing compared with ModVersionViewController (phase 3 alignment)
     versionVC.preferredGameVersion = [self currentProfileMinecraftVersion];
     versionVC.preferredLoader = [self currentProfileLoader];
 
@@ -5525,7 +5525,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     versionVC.projectDisplayName = item.displayName;
     versionVC.delegate = self;
     versionVC.title = item.displayName;
-    // 传入项目展示信息（用于详情 header 显示封面图/作者/下载量/标签/描述）
+    // Pass in the project display information (for the detail header: cover image, author, downloads, tags, description)
     versionVC.projectIconURL = item.iconURL;
     versionVC.projectAuthor = item.author;
     versionVC.projectDownloads = item.downloads;
@@ -5533,7 +5533,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     versionVC.projectDescription = item.resourcePackDescription;
     versionVC.projectCategories = item.categories;
     versionVC.projectLastUpdated = item.lastUpdated;
-    // FCL 风格：传入当前 profile 的偏好版本，自动选中匹配 chip 并置顶匹配版本（阶段3统一）
+    // FCL style: pass in the preferred version of the current profile, so the matching chip is selected and the matching version pinned to the top (phase 3 alignment)
     versionVC.preferredGameVersion = [self currentProfileMinecraftVersion];
 
     [self.navigationController pushViewController:versionVC animated:YES];
@@ -5559,7 +5559,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     versionVC.projectDisplayName = item.displayName;
     versionVC.delegate = self;
     versionVC.title = item.displayName;
-    // 传入项目展示信息（用于详情 header 显示封面图/作者/下载量/标签/描述）
+    // Pass in the project display information (for the detail header: cover image, author, downloads, tags, description)
     versionVC.projectIconURL = item.iconURL;
     versionVC.projectAuthor = item.author;
     versionVC.projectDownloads = item.downloads;
@@ -5567,7 +5567,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     versionVC.projectDescription = item.dataPackDescription;
     versionVC.projectCategories = item.categories;
     versionVC.projectLastUpdated = item.lastUpdated;
-    // FCL 风格：传入当前 profile 的偏好版本，自动选中匹配 chip 并置顶匹配版本（阶段3统一）
+    // FCL style: pass in the preferred version of the current profile, so the matching chip is selected and the matching version pinned to the top (phase 3 alignment)
     versionVC.preferredGameVersion = [self currentProfileMinecraftVersion];
 
     [self.navigationController pushViewController:versionVC animated:YES];
@@ -5593,7 +5593,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     versionVC.projectDisplayName = item.displayName;
     versionVC.delegate = self;
     versionVC.title = item.displayName;
-    // 传入项目展示信息（用于详情 header 显示封面图/作者/下载量/标签/描述）
+    // Pass in the project display information (for the detail header: cover image, author, downloads, tags, description)
     versionVC.projectIconURL = item.iconURL;
     versionVC.projectAuthor = item.author;
     versionVC.projectDownloads = item.downloads;
@@ -5601,7 +5601,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     versionVC.projectDescription = item.worldDescription;
     versionVC.projectCategories = item.categories;
     versionVC.projectLastUpdated = item.lastUpdated;
-    // FCL 风格：传入当前 profile 的偏好版本，自动选中匹配 chip 并置顶匹配版本（阶段3统一）
+    // FCL style: pass in the preferred version of the current profile, so the matching chip is selected and the matching version pinned to the top (phase 3 alignment)
     versionVC.preferredGameVersion = [self currentProfileMinecraftVersion];
 
     [self.navigationController pushViewController:versionVC animated:YES];
@@ -5616,12 +5616,12 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         return;
     }
 
-    // 整合包走独立安装流程（下载+解析+导入），与普通 Mod 下载不同
+    // Modpacks use their own install flow (download + parse + import), unlike an ordinary mod download
     if ([self.pendingDownloadType isEqualToString:@"modpack"]) {
         NSDictionary *modpack = self.pendingModpackDict;
         self.pendingDownloadType = nil;
         self.pendingModpackDict = nil;
-        // 子页面已 push 到导航栈，选完版本后 pop 回下载列表
+        // The child page is already on the navigation stack, so it pops back to the download list once a version is chosen
         [self.navigationController popViewControllerAnimated:YES];
         [self startModpackInstallation:version modpack:modpack];
         return;
@@ -5631,10 +5631,10 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     itemToDownload.selectedVersionDownloadURL = primaryFile[@"url"];
     itemToDownload.fileName = primaryFile[@"filename"] ?: [NSString stringWithFormat:@"%@.jar", itemToDownload.displayName];
 
-    // 模组下载走 ModService（resourcepack/datapack/world 已改走 AssetVersionViewController）
+    // Mod downloads go through ModService (resourcepack/datapack/world now use AssetVersionViewController)
     self.pendingDownloadType = nil;
 
-    // 子页面已 push 到导航栈，选完版本后 pop 回下载列表
+    // The child page is already on the navigation stack, so it pops back to the download list once a version is chosen
     [self.navigationController popViewControllerAnimated:YES];
     [self startDownloadForModItem:itemToDownload];
 }
@@ -5651,7 +5651,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     NSString *downloadType = self.pendingDownloadType;
     self.pendingDownloadType = nil;
 
-    // 子页面已 push 到导航栈，选完版本后 pop 回下载列表
+    // The child page is already on the navigation stack, so it pops back to the download list once a version is chosen
     [self.navigationController popViewControllerAnimated:YES];
 
     if ([downloadType isEqualToString:@"resourcepack"]) {
@@ -5678,10 +5678,10 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 }
 
 - (void)startDownloadForModItem:(ModItem *)item {
-    // 参照 FCL 风格：使用底部悬浮进度卡片（与 Minecraft 版本下载保持一致），
-    // 替代之前的不确定模式 InstallerProgressViewController。
-    // 之前调用 downloadMod:toProfile:completion: 不带 progress 版本，进度页一直转圈，
-    // 用户感知"卡住/无反应"。现在使用带 progress 的版本，并接 progress 回调到卡片。
+    // FCL style: use the floating bottom progress card (consistent with Minecraft version downloads),
+    // replacing the earlier indeterminate InstallerProgressViewController.
+    // Previously downloadMod:toProfile:completion: was called without the progress variant, so the progress page spun forever
+    // and the user felt it was "stuck". It now uses the variant with progress and feeds the callback into the card.
     if (self.progressCardView) {
         [self.progressCardView dismiss];
         self.progressCardView = nil;
@@ -5691,7 +5691,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     self.progressCardView = [DownloadProgressCardView showInParentView:self.view title:modTitle];
     [self.progressCardView startDownloadWithTitle:modTitle
                                           subtitle:@"Minecraft mod"];
-    // 立即显示不确定模式，等首次 progress 回调后再更新具体百分比
+    // Show indeterminate mode immediately and switch to a real percentage after the first progress callback
     [self.progressCardView updateProgress:-1 downloaded:0 total:-1 speed:0 eta:-1 currentFile:@"Preparing download..."];
 
     NSString *profileName = PLProfiles.current.selectedProfileName ?: @"default";
@@ -5743,13 +5743,13 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     }];
 }
 
-// 下载资源包（使用 ResourcePackService，NSString profileName）
+// Download a resource pack (using ResourcePackService, NSString profileName)
 - (void)startDownloadForResourcePackItem:(ResourcePackItem *)item {
     InstallerProgressViewController *progressVC = [[InstallerProgressViewController alloc] init];
     progressVC.titleText = [NSString stringWithFormat:@"Downloading %@", item.displayName ?: @""];
     progressVC.progress = -1;
     progressVC.stageMessage = @"Downloading resource pack...";
-    // 阶段12增强：资源包图标
+    // Phase 12 enhancement: resource pack icon
     progressVC.categoryIconName = @"paintpalette.fill";
     progressVC.categoryIconColor = [UIColor systemPurpleColor];
     [self.navigationController pushViewController:progressVC animated:YES];
@@ -5779,13 +5779,13 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     }];
 }
 
-// 下载数据包（使用 DataPackService，NSString profileName）
+// Download a data pack (using DataPackService, NSString profileName)
 - (void)startDownloadForDataPackItem:(DataPackItem *)item {
     InstallerProgressViewController *progressVC = [[InstallerProgressViewController alloc] init];
     progressVC.titleText = [NSString stringWithFormat:@"Downloading %@", item.displayName ?: @""];
     progressVC.progress = -1;
     progressVC.stageMessage = @"Downloading data pack...";
-    // 阶段12增强：数据包图标
+    // Phase 12 enhancement: data pack icon
     progressVC.categoryIconName = @"doc.text.fill";
     progressVC.categoryIconColor = [UIColor systemTealColor];
     [self.navigationController pushViewController:progressVC animated:YES];
@@ -5815,13 +5815,13 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     }];
 }
 
-// 下载世界存档并解压到 saves 目录（使用 WorldService，含进度回调与健壮解压）
+// Download a world save and extract it into the saves folder (using WorldService, with progress callbacks and robust extraction)
 - (void)startDownloadForWorldItem:(WorldItem *)item {
     InstallerProgressViewController *progressVC = [[InstallerProgressViewController alloc] init];
     progressVC.titleText = [NSString stringWithFormat:@"Downloading %@", item.displayName ?: @""];
     progressVC.progress = -1;
     progressVC.stageMessage = @"Downloading world save...";
-    // 阶段12增强：世界图标
+    // Phase 12 enhancement: world icon
     progressVC.categoryIconName = @"globe.asia.australia.fill";
     progressVC.categoryIconColor = [UIColor systemGreenColor];
     [self.navigationController pushViewController:progressVC animated:YES];
@@ -5865,16 +5865,16 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     itemToDownload.selectedVersionDownloadURL = primaryFile[@"url"];
     itemToDownload.fileName = primaryFile[@"filename"] ?: [NSString stringWithFormat:@"%@.zip", itemToDownload.displayName];
 
-    // 子页面已 push 到导航栈，选完版本后 pop 回下载列表
+    // The child page is already on the navigation stack, so it pops back to the download list once a version is chosen
     [self.navigationController popViewControllerAnimated:YES];
     [self startDownloadForShaderItem:itemToDownload];
 }
 
 - (void)startDownloadForShaderItem:(ShaderItem *)item {
-    // 参照 FCL 风格：使用底部悬浮进度卡片（与 Minecraft 版本下载和 Mod 下载保持一致），
-    // 替代之前的不确定模式 InstallerProgressViewController。
-    // 之前调用 downloadShader:toProfile:completion: 不带 progress 版本，进度页一直转圈，
-    // 用户感知"卡住/无反应"。现在使用带 progress 的版本，并接 progress 回调到卡片。
+    // FCL style: use the floating bottom progress card (consistent with Minecraft version and mod downloads),
+    // replacing the earlier indeterminate InstallerProgressViewController.
+    // Previously downloadShader:toProfile:completion: was called without the progress variant, so the progress page spun forever,
+    // and the user felt it was "stuck". It now uses the variant with progress and feeds the callback into the card.
     if (self.progressCardView) {
         [self.progressCardView dismiss];
         self.progressCardView = nil;
@@ -5954,7 +5954,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 }
 
 - (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary *)change context:(void *)context {
-    // 原版前置安装进度（独立 context，避免与主下载流程冲突）
+    // Progress of the vanilla prerequisite install (its own context, so it does not clash with the main download flow)
     if ([(__bridge NSString *)context isEqualToString:@"VanillaPreinstallContext"]) {
         [self handleVanillaPreinstallProgress];
         return;
@@ -5994,7 +5994,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     }
     
     dispatch_async(dispatch_get_main_queue(), ^{
-        // 参照 FCL/ZL2/HMCL：使用下载进度卡片显示进度
+        // Following FCL/ZL2/HMCL: show the progress on a download progress card
         if (self.progressCardView) {
             long long totalBytes = progress.totalUnitCount;
             long long downloadedBytes = completedUnitCount;
@@ -6008,7 +6008,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                 eta = [textProgress.estimatedTimeRemaining integerValue];
             }
 
-            // 获取当前下载文件名（从 textProgress 的 description 中提取）
+            // Get the name of the file currently downloading (extracted from the description of textProgress)
             NSString *currentFile = nil;
             if (textProgress.localizedDescription && textProgress.localizedDescription.length > 0) {
                 currentFile = textProgress.localizedDescription;
@@ -6038,7 +6038,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
             self.view.userInteractionEnabled = YES;
 
-            // 使用进度卡片显示完成状态
+            // Show the completed state on the progress card
             if (self.progressCardView) {
                 NSString *completeTitle = [NSString stringWithFormat:@"%@ download complete",
                                            self.downloadTask.metadata[@"id"] ?: @"Version"];
@@ -6053,17 +6053,17 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
             self.downloadTask = nil;
 
-            // 关键修复（issue #61）：Vanilla 版本下载完成后未发送 ReloadProfileList 通知，
-            // 导致"已安装的版本"列表不刷新、新版本卡片不显示。
-            // downloadVanillaVersion: 中已 saveProfile + setSelectedProfileName（会发 SelectedProfileChanged），
-            // 但版本卡片列表（LauncherRootViewController/VersionManagerViewController）监听的是 ReloadProfileList，
-            // 不补发此通知则 UI 永远不刷新。
+            // Key fix (issue #61): the ReloadProfileList notification was not posted after a vanilla version finished downloading,
+            // so the "Installed versions" list did not refresh and the new version card did not appear.
+            // downloadVanillaVersion: already calls saveProfile + setSelectedProfileName (which posts SelectedProfileChanged),
+            // but the version card lists (LauncherRootViewController/VersionManagerViewController) listen for ReloadProfileList,
+            // so without posting it too the UI never refreshes.
             [[NSNotificationCenter defaultCenter] postNotificationName:@"ReloadProfileList" object:nil];
         }
     });
 }
 
-/// 原版前置安装的进度处理：更新 FCL 风格进度 VC，完成时弹出 VC 并触发后续模组加载器安装。
+/// Progress handling for the vanilla prerequisite install: update the FCL-style progress VC, and on completion pop it and start the mod loader install.
 - (void)handleVanillaPreinstallProgress {
     MinecraftResourceDownloadTask *task = self.vanillaPreinstallTask;
     if (!task) return;
@@ -6071,7 +6071,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     NSProgress *textProgress = task.textProgress;
     double fraction = progress.fractionCompleted;
 
-    // 计算 speed / ETA（与主下载流程一致）
+    // Compute speed / ETA (as in the main download flow)
     static CGFloat lastMsTime = 0;
     static NSUInteger lastSecTime = 0;
     static NSInteger lastCompletedUnitCount = 0;
@@ -6104,10 +6104,10 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             if (fraction >= 0.0 && progress.totalUnitCount > 1) {
                 pvc.progress = fraction;
             } else {
-                pvc.progress = -1; // 不确定模式
+                pvc.progress = -1; // Indeterminate mode
             }
 
-            // 阶段12增强：详情信息行（已下载 / 总大小 • 速度）
+            // Phase 12 enhancement: detail info line (downloaded / total • speed)
             NSInteger completedBytes = progress.totalUnitCount * fraction;
             NSString *sizeInfo = [NSString stringWithFormat:@"%@ / %@",
                                   [NSByteCountFormatter stringFromByteCount:completedBytes countStyle:NSByteCountFormatterCountStyleFile],
@@ -6125,7 +6125,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             }
             pvc.detailInfoText = [NSString stringWithFormat:@"%@%@", sizeInfo, speedInfo];
 
-            // 阶段12增强：剩余时间（ETA）单独显示
+            // Phase 12 enhancement: time remaining (ETA) shown separately
             if (textProgress.estimatedTimeRemaining) {
                 NSInteger eta = [textProgress.estimatedTimeRemaining integerValue];
                 if (eta > 3600) {
@@ -6141,9 +6141,9 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                 pvc.etaText = nil;
             }
 
-            // 阶段12增强：根据进度百分比动态更新阶段步骤状态
-            // 原版安装步骤：获取版本清单(✓) → 下载版本JSON(✓) → 下载游戏库文件 → 下载资源文件 → 验证文件
-            // 大致按进度划分：0-30%=下载库文件, 30-90%=下载资源, 90-100%=验证
+            // Phase 12 enhancement: update the stage states from the progress percentage
+            // Vanilla install steps: fetch version manifest (✓) -> download version JSON (✓) -> download game libraries -> download assets -> verify files
+            // Roughly split by progress: 0-30% = libraries, 30-90% = assets, 90-100% = verification
             NSArray *steps;
             if (fraction < 0.3) {
                 steps = @[
@@ -6172,12 +6172,12 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             }
             pvc.stageSteps = steps;
 
-            // 阶段文案：当前正在下载的文件名（简化显示百分比）
+            // Stage text: the name of the file currently downloading (with a simplified percentage)
             pvc.stageMessage = [NSString stringWithFormat:@"Downloading vanilla files... %.1f%%", fraction * 100.0];
         }
 
         if (progress.finished) {
-            // 重置速度统计静态变量
+            // Reset the static variables used for the speed statistics
             lastMsTime = 0;
             lastSecTime = 0;
             lastCompletedUnitCount = 0;
@@ -6190,14 +6190,14 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                 }
                 s.isObservingVanillaPreinstall = NO;
             }
-            // 改进2（参照 ZL2 统一进度流）：加载器前置预装场景下不 pop 预装 VC，
-            // 而是转交给 self.installerProgressVC，由后续 install* 方法复用同一进度页，
-            // 实现"原版 + 加载器"在同一进度页连续推进。
+            // Improvement 2 (following the unified progress flow of ZL2): in the loader prerequisite case the preinstall VC is not popped
+            // but handed to self.installerProgressVC, so the later install* methods reuse the same progress page
+            // and "vanilla + loader" advance continuously on one page.
             if (s.vanillaPreinstallForLoader && s.vanillaPreinstallProgressVC) {
                 InstallerProgressViewController *pvc = s.vanillaPreinstallProgressVC;
-                pvc.progress = -1; // 切回不确定模式，等待加载器安装阶段
+                pvc.progress = -1; // Back to indeterminate mode while waiting for the loader install stage
                 pvc.stageMessage = @"Vanilla files are ready, preparing to install the loader...";
-                // 步骤列表：原版5步全部标记完成 + "安装模组加载器"进行中
+                // Step list: all 5 vanilla steps marked complete + "Install mod loader" in progress
                 pvc.stageSteps = @[
                     @{@"title": @"Fetch version manifest", @"status": @2},
                     @{@"title": @"Download version JSON", @"status": @2},
@@ -6209,15 +6209,15 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                 s.installerProgressVC = pvc;
                 s.vanillaPreinstallForLoader = NO;
             } else {
-                // 非加载器场景（vanilla 直装或整合包预装）：维持原逻辑 pop 预装 VC
+                // Non-loader cases (a direct vanilla install or a modpack preinstall): keep the original behavior and pop the preinstall VC
                 if (s.vanillaPreinstallProgressVC && [s.navigationController.viewControllers containsObject:s.vanillaPreinstallProgressVC]) {
                     [s.navigationController popViewControllerAnimated:YES];
                 }
             }
             s.vanillaPreinstallTask = nil;
             s.vanillaPreinstallProgressVC = nil;
-            // 关键修复（issue #61）：原版前置安装完成后也需发送 ReloadProfileList 通知，
-            // 让"已安装的版本"列表及时显示已就绪的原版版本。
+            // Key fix (issue #61): the ReloadProfileList notification must also be posted after the vanilla prerequisite install,
+            // so the "Installed versions" list shows the newly ready vanilla version promptly.
             [[NSNotificationCenter defaultCenter] postNotificationName:@"ReloadProfileList" object:nil];
             void (^cb)(BOOL) = s.vanillaPreinstallCompletion;
             s.vanillaPreinstallCompletion = nil;
@@ -6238,14 +6238,14 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
 #pragma mark - Helper Methods
 
-/// 阶段6修复（参照 FCL）：带 User-Agent 的同步下载工具方法
+/// Phase 6 fix (following FCL): a synchronous download helper that sends a User-Agent
 ///
-/// 之前 OptiFine 下载全程使用 [NSData dataWithContentsOfURL:]，默认不带 User-Agent 或
-/// 使用系统默认 UA，BMCLAPI/Cloudflare 会拦截此类请求返回 403 或 HTML 错误页，
-/// 导致 OptiFine 安装失败。Forge/NeoForge 直装器使用 NSURLSession + 浏览器 UA 是正确的，
-/// 此方法让 OptiFine 下载也使用同样的方式。
+/// OptiFine downloads previously used [NSData dataWithContentsOfURL:] throughout, which sends no User-Agent or
+/// the system default, and BMCLAPI/Cloudflare block such requests with a 403 or an HTML error page,
+/// making the OptiFine install fail. The Forge/NeoForge direct installers correctly use NSURLSession with a browser UA,
+/// and this method makes OptiFine downloads do the same.
 ///
-/// 此方法为同步阻塞调用，须在后台线程调用。
+/// This call blocks, so it must be made on a background thread.
 - (NSData *)downloadDataWithURLString:(NSString *)urlString error:(NSError **)error {
     if (!urlString.length) {
         if (error) *error = [NSError errorWithDomain:@"DownloadError" code:1 userInfo:@{NSLocalizedDescriptionKey: @"Empty URL"}];
@@ -6253,7 +6253,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     }
     NSURL *url = [NSURL URLWithString:urlString];
     if (!url) {
-        // 尝试百分号编码后再解析
+        // Try again after percent-encoding it
         NSString *encoded = [urlString stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
         url = [NSURL URLWithString:encoded];
     }
@@ -6265,7 +6265,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     NSURLSessionConfiguration *cfg = [NSURLSessionConfiguration defaultSessionConfiguration];
     cfg.timeoutIntervalForRequest = 60;
     cfg.timeoutIntervalForResource = 180;
-    // 浏览器 UA（BMCLAPI/Cloudflare 要求非默认 UA，参照 ForgeDirectInstaller.m）
+    // Browser UA (BMCLAPI/Cloudflare require a non-default UA; see ForgeDirectInstaller.m)
     cfg.HTTPAdditionalHeaders = @{
         @"User-Agent": @"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         @"Accept": @"*/*"
@@ -6296,7 +6296,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     }];
     [task resume];
 
-    // 等待下载完成（60s 超时由 session 配置控制）
+    // Wait for the download to finish (the 60s timeout comes from the session configuration)
     dispatch_semaphore_wait(sem, DISPATCH_TIME_FOREVER);
     [session finishTasksAndInvalidate];
 
@@ -6305,9 +6305,9 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 }
 
 - (NSString *)currentInstanceModsPath {
-    // 参考 ModService.m 的 existingModsFolderForProfile: 逻辑：
-    // 1. 优先读取 profile 的 gameDir，拼接 /mods
-    // 2. 若 profile 无 gameDir 或 gameDir 为 "."，回退到 $POJAV_GAME_DIR/mods
+    // Mirrors the existingModsFolderForProfile: logic in ModService.m:
+    // 1. Prefer the profile gameDir, with /mods appended
+    // 2. If the profile has no gameDir, or gameDir is ".", fall back to $POJAV_GAME_DIR/mods
     NSString *instanceName = PLProfiles.current.selectedProfileName;
     if (!instanceName) instanceName = @"default";
 
@@ -6319,7 +6319,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         if ([prof isKindOfClass:[NSDictionary class]]) {
             NSString *gameDir = prof[@"gameDir"];
             if ([gameDir isKindOfClass:[NSString class]] && gameDir.length > 0 && ![gameDir isEqualToString:@"."]) {
-                // gameDir 是相对路径时，相对于 POJAV_GAME_DIR 解析
+                // A relative gameDir is resolved against POJAV_GAME_DIR
                 NSString *baseDir;
                 const char *env = getenv("POJAV_GAME_DIR");
                 if (env) {
@@ -6338,7 +6338,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     } @catch (NSException *ex) { }
 
     if (!modsDir) {
-        // 回退到 $POJAV_GAME_DIR/mods（与 FCL 默认行为一致）
+        // Fall back to $POJAV_GAME_DIR/mods (matching the FCL default)
         const char *env = getenv("POJAV_GAME_DIR");
         NSString *gameDir = env ? [NSString stringWithUTF8String:env] : NSHomeDirectory();
         modsDir = [gameDir stringByAppendingPathComponent:@"mods"];
@@ -6350,19 +6350,19 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
 - (void)handleBackgroundUIEffectChanged:(NSNotification *)notification {
     dispatch_async(dispatch_get_main_queue(), ^{
-        // 重新应用背景透明效果（参照 LauncherRightPanelViewController.reapplyBackgroundEffect）
+        // Re-apply the transparent background effect (as in LauncherRightPanelViewController.reapplyBackgroundEffect)
         [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
-        // 重新应用侧边栏效果（filterSidebarContainer 的毛玻璃/半透明效果需要随设置更新）
+        // Re-apply the sidebar effect (the frosted-glass/translucent effect of filterSidebarContainer has to follow the settings)
         if (self.filterSidebarContainer) {
             [[BackgroundManager sharedManager] applyEffectToView:self.filterSidebarContainer];
         }
-        // 对导航栏应用效果
+        // Apply the effect to the navigation bar
         UINavigationController *nav = self.navigationController;
         if (nav) {
             nav.view.backgroundColor = [UIColor clearColor];
             [[BackgroundManager sharedManager] applyEffectToNavigationBar:nav.navigationBar];
         }
-        // 刷新所有列表以更新 cell 的背景效果
+        // Refresh every list so the cells pick up the new background effect
         [self.versionCollectionView reloadData];
         [self.modTableView reloadData];
         [self.shaderTableView reloadData];

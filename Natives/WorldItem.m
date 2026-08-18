@@ -47,7 +47,7 @@
         _iconURL = data[@"imageUrl"] ?: @"";
         _author = data[@"author"] ?: @"";
 
-        // 处理数字类型
+        // Handle numeric types
         id downloadsValue = data[@"downloads"];
         if ([downloadsValue isKindOfClass:[NSNumber class]]) {
             _downloads = downloadsValue;
@@ -62,11 +62,11 @@
             _likes = @([likesValue longLongValue]);
         }
 
-        // 日期与分类
+        // Date and categories
         _lastUpdated = data[@"lastUpdated"] ?: @"";
         _categories = data[@"categories"] ?: @[];
 
-        // 这些属性在选定下载版本前为 nil
+        // These properties are nil until a download version is chosen
         _filePath = nil;
         _worldName = nil;
         _levelDatPath = nil;

@@ -2,26 +2,26 @@
 //  IconLoader.m
 //  Amethyst
 //
-//  统一的项目图标加载器实现（参照 FCL Glide + ZL2 Coil 的最佳实践）
+//  Implementation of the unified project icon loader (modelled on the best practices of FCL Glide + ZL2 Coil)
 //
-//  实现要点：
-//    1. 双层缓存：
-//       - 内存：NSCache（自动响应内存警告，线程安全），容量 20MB / 200 个
-//       - 磁盘：Library/Caches/IconLoader/，按 url+size 的 MD5 命名，容量上限 256MB
-//       （对应 FCL 250MB + ZL2 512MB 的折中值，移动端 256MB 更保守）
-//    2. 降采样：使用 CGImageSourceCreateThumbnailAtIndex，按目标尺寸解码
-//       （对应 ZL2 .size(pxSize)，避免按 1024x1024 原图解码后缩放显示）
-//    3. 异步解码：在 dispatch_get_global_queue 后台线程解码，主线程仅渲染
-//    4. 并发上限：dispatch_semaphore 限制最多 6 个并发下载
-//       （对应 Glide/Coil 的线程池上限，避免列表滚动时数十并发请求）
-//    5. 同 URL 去重：inFlightRequests 字典合并同 URL 的多个回调
-//       （对应 Glide 的 RequestCoordinator + Coil 的 shared flow）
-//    6. CDN 镜像：cdn.modrinth.com / edge.forgecdn.net → BMCLAPI 镜像
-//       （对应 ZL2 MCIMirror）
-//    7. 取消机制：每个 imageView 关联一个 token，cell 复用时旧 token 失效
-//       （对应 Glide 的 clear() + ZL2 的 Compose 组合取消）
-//    8. 预取：prefetchIconWithURL: 接口，仅触发下载+缓存写入，不绑定 imageView
-//       （对应 ZL2 imageLoader.enqueue）
+//  Key points:
+//    1. Two-level cache:
+//       - memory: NSCache (which responds to memory warnings automatically and is thread-safe), 20MB / 200 entries
+//       - disk: Library/Caches/IconLoader/, named by the MD5 of url+size, capped at 256MB
+//       (a compromise between the 250MB of FCL and the 512MB of ZL2; 256MB is more conservative for mobile)
+//    2. Downsampling: CGImageSourceCreateThumbnailAtIndex decodes at the target size
+//       (equivalent to ZL2 .size(pxSize), avoiding decoding a 1024x1024 original just to shrink it)
+//    3. Async decoding: decoded on a dispatch_get_global_queue background thread, with the main thread only rendering
+//    4. Concurrency cap: a dispatch_semaphore limits downloads to 6 at a time
+//       (equivalent to the thread pool caps of Glide/Coil, avoiding dozens of concurrent requests while scrolling)
+//    5. Same-URL coalescing: the inFlightRequests dictionary merges multiple callbacks for one URL
+//       (equivalent to the RequestCoordinator of Glide and the shared flow of Coil)
+//    6. CDN mirrors: cdn.modrinth.com / edge.forgecdn.net -> BMCLAPI mirrors
+//       (equivalent to ZL2 MCIMirror)
+//    7. Cancellation: each imageView is associated with a token, which is invalidated on cell reuse
+//       (equivalent to Glide clear() and the composition cancellation of ZL2)
+//    8. Prefetching: the prefetchIconWithURL: interface only downloads and caches, without binding an imageView
+//       (equivalent to ZL2 imageLoader.enqueue)
 //
 
 #import "IconLoader.h"
@@ -32,48 +32,48 @@
 #import <ImageIO/ImageIO.h>
 #import <objc/runtime.h>
 
-/// 内存缓存上限：20MB（对应 ZL2 的 20MB 配置）
+/// Memory cache cap: 20MB (matching the ZL2 configuration)
 static const NSUInteger kMemoryCacheCostLimit = 20 * 1024 * 1024;
 static const NSUInteger kMemoryCacheCountLimit = 200;
 
-/// 磁盘缓存上限：256MB（FCL 250MB 与 ZL2 512MB 的折中）
+/// Disk cache cap: 256MB (a compromise between the 250MB of FCL and the 512MB of ZL2)
 static const unsigned long long kDiskCacheSizeLimit = 256ULL * 1024 * 1024;
 
-/// 并发下载上限（提升到 15 以加快列表图标并发加载速度）
-/// 参照 FCL Glide 的线程池上限（默认 4 个 CPU 核数，移动端列表图标场景需要更高并发）
+/// Concurrent download cap (raised to 15 to load list icons faster)
+/// Modelled on the thread pool cap of FCL Glide (4 by default, one per CPU core; list icons on mobile need more concurrency)
 static const NSInteger kMaxConcurrentDownloads = 15;
 
-/// 网络请求超时（秒）—— 缩短到 8 秒，快速失败后允许其他排队请求更快获得槽位
+/// Network request timeout (seconds) — shortened to 8 so failures are quick and queued requests get a slot sooner
 static const NSTimeInterval kRequestTimeout = 8.0;
 
-/// 单例实例
+/// Singleton instance
 static IconLoader *_sharedLoader = nil;
 
-/// 进行中的请求字典：key = cacheKey（url+size 的 MD5），value = NSMutableArray<callback-block>
-/// 用于同 URL 去重，避免重复下载（对应 Glide 的 RequestCoordinator）
+/// In-flight request dictionary: key = cacheKey (the MD5 of url+size), value = NSMutableArray<callback-block>
+/// Used to coalesce identical URLs and avoid duplicate downloads (equivalent to the RequestCoordinator of Glide)
 static NSMutableDictionary<NSString *, NSMutableArray<void(^)(UIImage * _Nullable)> *> *_inFlightRequests = nil;
 
-/// imageView → 当前请求的 cacheKey 关联对象 key
-/// 用于在 cell 复用时取消旧请求（对应 Glide 的 clear()）
+/// Associated-object key mapping an imageView to the cacheKey of its current request
+/// Used to cancel the old request on cell reuse (equivalent to Glide clear())
 static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
 
 #pragma mark - 内部加载上下文
 
 @interface IconLoader ()
-/// 内存缓存
+/// Memory cache
 @property (nonatomic, strong) NSCache<NSString *, UIImage *> *memoryCache;
-/// 内存缓存的 key 跟踪集合（NSCache 不暴露 count，也不支持枚举，
-/// 用独立的 NSMutableSet 跟踪当前已缓存的 key，用于 memoryCacheCount 统计）
+/// Set tracking the memory cache keys (NSCache exposes neither count nor enumeration,
+/// so a separate NSMutableSet tracks the cached keys for the memoryCacheCount statistic)
 @property (nonatomic, strong) NSMutableSet<NSString *> *memoryCacheKeys;
-/// 并发下载信号量
+/// Concurrent download semaphore
 @property (nonatomic, strong) dispatch_semaphore_t downloadSemaphore;
-/// 串行队列，保护 _inFlightRequests 字典和 memoryCacheKeys 的线程安全
+/// Serial queue guarding thread-safe access to the _inFlightRequests dictionary and memoryCacheKeys
 @property (nonatomic, strong) dispatch_queue_t syncQueue;
-/// 磁盘缓存目录
+/// Disk cache directory
 @property (nonatomic, copy) NSString *diskCacheDirectory;
-/// 是否启用 CDN 镜像替换
+/// Whether CDN mirror substitution is enabled
 @property (nonatomic, assign) BOOL mirrorEnabled;
-/// NSURLSession（使用 ephemeral 配置，避免与 AFNetworking 的 cookie 混用）
+/// NSURLSession (using an ephemeral configuration, so cookies are not shared with AFNetworking)
 @property (nonatomic, strong) NSURLSession *session;
 @end
 
@@ -89,34 +89,34 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
     return _sharedLoader;
 }
 
-// 注意：不实现 +load 方法。
-// 原因：+load 在 main() 之前执行，此时偏好设置系统（PLPreferences/LauncherPreferences）可能尚未初始化，
-// 调用 getPrefObject 可能返回 nil 或导致崩溃。改为在 init（首次 sharedLoader 调用时）惰性初始化镜像开关，
-// 此时应用已完成基本启动，偏好设置已就绪。
+// Note: no +load method is implemented.
+// Reason: +load runs before main(), when the preferences system (PLPreferences/LauncherPreferences) may not be initialized,
+// so calling getPrefObject could return nil or crash. The mirror switch is instead initialized lazily in init (on the first sharedLoader call),
+// by which point the app has finished basic startup and the preferences are ready.
 
 - (instancetype)init {
     self = [super init];
     if (self) {
-        // 初始化内存缓存
+        // Initialize the memory cache
         _memoryCache = [[NSCache alloc] init];
         _memoryCache.totalCostLimit = kMemoryCacheCostLimit;
         _memoryCache.countLimit = kMemoryCacheCountLimit;
-        // NSCache 在收到 UIApplicationDidReceiveMemoryWarningNotification 时会自动清空，
-        // 无需手动监听（但额外监听也无害，可加快响应）
+        // NSCache clears itself on UIApplicationDidReceiveMemoryWarningNotification,
+        // so observing it is not required (though observing it too is harmless and reacts faster)
 
-        // key 跟踪集合（用于 memoryCacheCount 统计，因为 NSCache 不暴露 count）
+        // Key tracking set (for the memoryCacheCount statistic, since NSCache does not expose count)
         _memoryCacheKeys = [NSMutableSet set];
 
-        // 并发下载信号量
+        // Concurrent download semaphore
         _downloadSemaphore = dispatch_semaphore_create(kMaxConcurrentDownloads);
 
-        // 同步队列（保护 _inFlightRequests）
+        // Synchronization queue (guarding _inFlightRequests)
         _syncQueue = dispatch_queue_create("com.angelaura.iconloader.sync", DISPATCH_QUEUE_SERIAL);
 
-        // 进行中请求字典
+        // In-flight request dictionary
         _inFlightRequests = [NSMutableDictionary dictionary];
 
-        // 磁盘缓存目录
+        // Disk cache directory
         NSString *cachesDir = [NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES) firstObject];
         _diskCacheDirectory = [cachesDir stringByAppendingPathComponent:@"IconLoader"];
         [[NSFileManager defaultManager] createDirectoryAtPath:_diskCacheDirectory
@@ -124,31 +124,31 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
                                                   attributes:nil
                                                        error:nil];
 
-        // NSURLSession（ephemeral 配置，不持久化 cookie/cache，避免与 AFNetworking 混用）
-        // 提升并发连接数到 16，加快列表页大量图标的并发加载速度
-        // 参照 FCL Glide 的磁盘缓存线程池 + 活跃请求队列，列表滚动时可能同时有 20+ 图标请求
+        // NSURLSession (ephemeral configuration, persisting no cookies or cache, so nothing is shared with AFNetworking)
+        // Raise the concurrent connection count to 16, to load the many icons on a list page faster
+        // Following the disk cache thread pool + active request queue of FCL Glide; scrolling a list can mean 20+ icon requests at once
         NSURLSessionConfiguration *config = [NSURLSessionConfiguration ephemeralSessionConfiguration];
         config.timeoutIntervalForRequest = kRequestTimeout;
         config.timeoutIntervalForResource = 15.0;
         config.HTTPMaximumConnectionsPerHost = 16;
         config.requestCachePolicy = NSURLRequestReloadIgnoringLocalCacheData;
-        // 启用 HTTP/2 多路复用（iOS 9+ 默认支持，显式设置确保生效）
+        // Enable HTTP/2 multiplexing (supported by default on iOS 9+; set explicitly to be sure)
         config.HTTPShouldUsePipelining = YES;
         _session = [NSURLSession sessionWithConfiguration:config];
 
-        // 监听内存警告：清空内存缓存
+        // Listen for memory warnings: clear the memory cache
         [[NSNotificationCenter defaultCenter] addObserver:self
                                                  selector:@selector(handleMemoryWarning)
                                                      name:UIApplicationDidReceiveMemoryWarningNotification
                                                    object:nil];
 
-        // 监听应用进入后台：取消所有进行中的下载（避免后台下载被系统杀掉）
+        // Listen for the app entering the background: cancel every in-flight download (so the system does not kill them)
         [[NSNotificationCenter defaultCenter] addObserver:self
                                                  selector:@selector(handleEnterBackground)
                                                      name:UIApplicationDidEnterBackgroundNotification
                                                    object:nil];
 
-        // 默认根据偏好判断是否启用镜像
+        // Decide whether mirroring is enabled from the preferences by default
         _mirrorEnabled = [self shouldMirrorByDefault];
 
         NSDebugLog(@"[IconLoader] Initialization complete, disk cache directory: %@, mirror enabled: %@", _diskCacheDirectory, _mirrorEnabled ? @"YES" : @"NO");
@@ -171,22 +171,22 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
                    completion:(nullable IconLoaderCompletion)completion {
     IconLoader *loader = [self sharedLoader];
 
-    // 1. 取消该 imageView 上之前的请求（cell 复用场景）
+    // 1. Cancel the earlier request on this imageView (the cell reuse case)
     if (imageView) {
         [self cancelLoadingForImageView:imageView];
     }
 
-    // 2. 设置占位图
+    // 2. Set the placeholder
     if (imageView) {
         if (placeholder) {
             imageView.image = placeholder;
         } else if (!imageView.image) {
-            // 无占位图且当前也无图，给一个透明背景避免残留旧图
+            // With no placeholder and no current image, use a transparent background so a stale image does not linger
             imageView.image = nil;
         }
     }
 
-    // 3. URL 为空：直接回调 nil（让调用方显示兜底）
+    // 3. Empty URL: call back with nil straight away (so the caller shows the fallback)
     if (!url || url.length == 0) {
         if (fallback && imageView) {
             imageView.image = fallback;
@@ -199,21 +199,21 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
         return;
     }
 
-    // 4. 应用 CDN 镜像替换
+    // 4. Apply CDN mirror substitution
     NSString *finalURL = url;
     if (!(options & IconLoaderOptionsNoMirror)) {
         finalURL = [self applyMirrorToURL:url];
     }
 
-    // 5. 计算缓存 key
+    // 5. Compute the cache key
     NSString *cacheKey = [loader cacheKeyForURL:finalURL targetSize:targetSize options:options];
 
-    // 6. 绑定 imageView 与 cacheKey（用于取消）
+    // 6. Bind the imageView to the cacheKey (used for cancellation)
     if (imageView) {
         objc_setAssociatedObject(imageView, kIconLoaderImageViewKey, cacheKey, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
 
-    // 7. 优先命中内存缓存
+    // 7. Try the memory cache first
     UIImage *cached = [loader.memoryCache objectForKey:cacheKey];
     if (cached) {
         if (imageView) {
@@ -227,15 +227,15 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
         return;
     }
 
-    // 8. 加入进行中请求字典（同 URL 去重）
+    // 8. Add to the in-flight request dictionary (coalescing identical URLs)
     __weak UIImageView *weakImageView = imageView;
     void (^wrappedCallback)(UIImage * _Nullable) = ^(UIImage * _Nullable image) {
-        // 校验：cell 复用后 imageView 可能已绑定新的 cacheKey，避免旧请求覆盖新图
-        // （对应 Glide 的 clear() 后旧请求不再 set Drawable）
+        // Check: after cell reuse the imageView may be bound to a new cacheKey, so an old request must not overwrite the new image
+        // (equivalent to Glide not setting the Drawable after clear())
         if (weakImageView) {
             NSString *currentKey = objc_getAssociatedObject(weakImageView, kIconLoaderImageViewKey);
             if (![currentKey isEqualToString:cacheKey]) {
-                // 该 imageView 已经发起新请求，旧回调放弃更新
+                // This imageView has already started a new request, so the old callback gives up on updating it
                 if (completion) {
                     dispatch_async(dispatch_get_main_queue(), ^{
                         completion(nil);
@@ -258,16 +258,16 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
 
     BOOL isNewRequest = [loader addCallback:wrappedCallback forCacheKey:cacheKey];
     if (!isNewRequest) {
-        // 已有相同 URL 的请求在进行中，回调已加入队列，等待合并返回
+        // A request for the same URL is already in flight; the callback has been queued and will be delivered with it
         return;
     }
 
-    // 9. 发起下载（后台线程）
-    // 传入原始 URL（镜像前的）用于回退重试：
-    // 如果镜像 URL 失败（HTTP 4xx/5xx、超时、Content-Type 非 image、解码失败），
-    // 会自动用原始 URL 重试一次。这是图标完全不加载的关键修复——
-    // BMCLAPI 的 MCIM 镜像路径（/mcim/modrinth/）可能不提供 cdn.modrinth.com 的
-    // 静态图标资源，导致所有镜像后的图标请求返回 404/HTML，但原始 CDN 可以正常访问。
+    // 9. Start the download (on a background thread)
+    // Pass in the original (pre-mirror) URL so it can be retried:
+    // if the mirror URL fails (HTTP 4xx/5xx, a timeout, a non-image Content-Type, or a decode failure),
+    // the original URL is retried once automatically. This is the key fix for icons never loading at all —
+    // the MCIM mirror path of BMCLAPI (/mcim/modrinth/) may not serve the static icon assets of cdn.modrinth.com,
+    // so every mirrored icon request returns 404/HTML while the original CDN works fine.
     [loader startDownloadForURL:finalURL
                   originalURL:url
                       cacheKey:cacheKey
@@ -298,19 +298,19 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
     NSString *finalURL = [self applyMirrorToURL:url];
     NSString *cacheKey = [loader cacheKeyForURL:finalURL targetSize:targetSize options:IconLoaderOptionsDefault];
 
-    // 内存缓存命中：无需预取
+    // Memory cache hit: no prefetch needed
     if ([loader.memoryCache objectForKey:cacheKey]) {
         return;
     }
 
-    // 磁盘缓存命中：直接加载到内存缓存
+    // Disk cache hit: load it straight into the memory cache
     NSString *diskPath = [loader diskPathForCacheKey:cacheKey];
     if ([[NSFileManager defaultManager] fileExistsAtPath:diskPath]) {
         [loader loadDiskImageToMemoryCacheAtPath:diskPath cacheKey:cacheKey];
         return;
     }
 
-    // 已有相同请求在进行中：无需重复预取
+    // The same request is already in flight: no need to prefetch it again
     __block BOOL alreadyInFlight = NO;
     dispatch_sync(loader.syncQueue, ^{
         if (_inFlightRequests[cacheKey]) {
@@ -319,9 +319,9 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
     });
     if (alreadyInFlight) return;
 
-    // 发起预取请求（回调为空，仅做缓存写入）
+    // Start the prefetch request (with an empty callback, so it only fills the cache)
     [loader addCallback:^(UIImage * _Nullable image) {
-        // 预取不需要更新 UI，仅依赖下载流程写入缓存
+        // A prefetch does not update the UI; it just relies on the download flow writing to the cache
     } forCacheKey:cacheKey];
 
     [loader startDownloadForURL:finalURL
@@ -337,10 +337,10 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
     if (!imageView) return;
     NSString *cacheKey = objc_getAssociatedObject(imageView, kIconLoaderImageViewKey);
     if (!cacheKey) return;
-    // 清除关联，使进行中的回调不再更新该 imageView
+    // Clear the association, so an in-flight callback no longer updates this imageView
     objc_setAssociatedObject(imageView, kIconLoaderImageViewKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-    // 注意：不主动取消下载任务本身，因为同 URL 可能有其他 imageView 在等待
-    // （对应 Glide 的 clear() 仅取消目标 ImageView 的绑定，不取消共享请求）
+    // Note: the download task itself is not cancelled, because other imageViews may be waiting on the same URL
+    // (equivalent to Glide clear(), which only drops the binding for that ImageView and does not cancel the shared request)
 }
 
 + (void)cancelAllLoadings {
@@ -348,7 +348,7 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
     dispatch_sync(loader.syncQueue, ^{
         [_inFlightRequests removeAllObjects];
     });
-    // 取消所有 NSURLSession 任务
+    // Cancel every NSURLSession task
     [loader.session getTasksWithCompletionHandler:^(NSArray<NSURLSessionDataTask *> *dataTasks, NSArray<NSURLSessionUploadTask *> *uploadTasks, NSArray<NSURLSessionDownloadTask *> *downloadTasks) {
         for (NSURLSessionTask *task in dataTasks) {
             [task cancel];
@@ -373,7 +373,7 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
             if (error) {
                 NSDebugLog(@"[IconLoader] Failed to clear disk cache: %@", error);
             } else {
-                // 重新创建空目录
+                // Recreate the empty directory
                 [fm createDirectoryAtPath:loader.diskCacheDirectory
                       withIntermediateDirectories:YES
                                       attributes:nil
@@ -404,10 +404,10 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
 
 + (NSUInteger)memoryCacheCount {
     IconLoader *loader = [self sharedLoader];
-    // NSCache 不暴露 count 属性，也不支持 enumerateKeysAndObjectsUsingBlock:（这是 NSDictionary 的方法）。
-    // 用独立的 memoryCacheKeys 集合来统计当前已缓存的条目数。
-    // 注：NSCache 可能在内存压力下静默驱逐条目而不通知，此时 memoryCacheKeys 可能略多于实际缓存数，
-    // 但此方法仅用于设置页统计显示，非热点路径，轻微高估可接受。
+    // NSCache exposes no count property and does not support enumerateKeysAndObjectsUsingBlock: (that is an NSDictionary method).
+    // A separate memoryCacheKeys set is used to count the cached entries.
+    // Note: NSCache may evict entries silently under memory pressure without notifying us, so memoryCacheKeys can be slightly higher than reality,
+    // but this method only feeds a statistic on the settings page and is not on a hot path, so a small overestimate is acceptable.
     __block NSUInteger count = 0;
     dispatch_sync(loader.syncQueue, ^{
         count = loader.memoryCacheKeys.count;
@@ -425,61 +425,61 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
 + (NSString *)applyMirrorToURL:(NSString *)url {
     if (!url || url.length == 0) return url;
 
-    // 优先应用 MCIM 镜像（模组镜像源设置）
-    // MCIM 镜像支持 Modrinth/CurseForge 的 API 和 CDN 图标资源，
-    // 启用后把 cdn.modrinth.com / edge.forgecdn.net / media.forgecdn.net
-    // 替换为 mod.mcimirror.top，加速国内图标加载。
+    // Apply the MCIM mirror first (the mod mirror source setting)
+    // The MCIM mirror serves both the API and the CDN icon assets of Modrinth/CurseForge,
+    // so enabling it rewrites cdn.modrinth.com / edge.forgecdn.net / media.forgecdn.net
+    // to mod.mcimirror.top, speeding up icon loading in mainland China.
     NSString *mcimURL = [MCIMMirror rewriteURL:url];
     if (mcimURL) return mcimURL;
 
     IconLoader *loader = [self sharedLoader];
-    // 每次实时读取偏好，确保用户在设置中切换下载源后立即生效
-    // （不依赖缓存的 mirrorEnabled，避免偏好变更后镜像设置不同步）
+    // The preference is read live every time, so switching download source in settings takes effect immediately
+    // (it deliberately does not use the cached mirrorEnabled, which could go out of sync after a preference change)
     if (![loader shouldMirrorByDefault]) return url;
 
-    // ⚠️ 关键修复：不对 Modrinth/CurseForge CDN 上的图标资源做 BMCLAPI 镜像替换。
+    // ⚠️ Key fix: do NOT apply BMCLAPI mirror substitution to icon assets on the Modrinth/CurseForge CDNs.
     //
-    // 原因：BMCLAPI 的 MCIM 镜像路径（/mcim/modrinth/、/mcim/curseforge/）只缓存
-    // API 接口数据和文件下载资源，不缓存 CDN 上的项目图标资源。实测所有
-    // cdn.modrinth.com / edge.forgecdn.net / media.forgecdn.net 的图标 URL
-    // 经 BMCLAPI 镜像后均返回 HTTP 404（Content-Type: text/plain）。
+    // Reason: the MCIM mirror paths of BMCLAPI (/mcim/modrinth/, /mcim/curseforge/) only cache
+    // API responses and file downloads, not the project icon assets on the CDN. In testing, every
+    // cdn.modrinth.com / edge.forgecdn.net / media.forgecdn.net icon URL
+    // returned HTTP 404 (Content-Type: text/plain) through the BMCLAPI mirror.
     //
-    // 此前实现的"镜像 404 → 回退原始 URL"机制虽能恢复加载，但带来两个问题：
-    //   1. 每个图标都要走双倍流程（BMCLAPI 404 约 0.1s + 原始 URL 约 2-4s），
-    //      导致列表图标加载耗时翻倍，用户感知"图标加载不出来"。
-    //   2. 并发限制 15 个 permit 中，部分被"已 404 即将回退"的请求占用，
-    //      新请求被阻塞，加剧其他 tab 图标加载延迟。
+    // The earlier "mirror 404 -> fall back to the original URL" mechanism did restore loading, but caused two problems:
+    //   1. every icon went through twice the work (a BMCLAPI 404 taking ~0.1s + the original URL taking ~2-4s),
+    //      doubling how long list icons took and making users feel "the icons will not load".
+    //   2. some of the 15 concurrency permits were held by requests that had already 404ed and were about to fall back,
+    //      blocking new requests and making icon loading on other tabs even slower.
     //
-    // 实测原始 CDN 在国内均可直接访问：
-    //   - cdn.modrinth.com 通过 307 重定向到 cdn-alt.modrinth.com，返回 image/png|webp
-    //   - edge.forgecdn.net / media.forgecdn.net 直连可达
-    // 因此直接走原始 CDN 是更优选择，避免镜像 404 失败 + 回退重试的额外耗时。
+    // In testing the original CDNs are directly reachable from mainland China:
+    //   - cdn.modrinth.com 307-redirects to cdn-alt.modrinth.com and returns image/png|webp
+    //   - edge.forgecdn.net / media.forgecdn.net are reachable directly
+    // Using the original CDN is therefore the better choice, avoiding the extra cost of a mirror 404 plus a fallback retry.
     //
-    // 方法保留（prefetchIconWithURL: 等其他调用方仍可调用），但不再对任何 CDN
-    // 图标做镜像替换。若将来 BMCLAPI 修复了对 CDN 图标的支持，可在此处有选择地恢复。
+    // The method is kept (other callers such as prefetchIconWithURL: still use it) but no longer mirrors any CDN
+    // icon. If BMCLAPI ever supports CDN icons, mirroring can be restored selectively here.
     return url;
 }
 
-/// 根据下载源偏好自动判断是否启用镜像
+/// Decide automatically whether mirroring is enabled, based on the download source preference
 + (void)refreshMirrorEnabledFromPreference {
     IconLoader *loader = [self sharedLoader];
     loader.mirrorEnabled = [loader shouldMirrorByDefault];
 }
 
-/// 默认镜像启用判断：bmclapi / auto（中国大陆默认走 BMCLAPI）时启用
-/// 安全处理 nil 偏好（偏好系统未初始化时返回 NO，避免 +load 早期调用崩溃）
+/// Default rule: mirroring is on for bmclapi / auto (mainland China defaults to BMCLAPI)
+/// Handles a nil preference safely (returning NO when the preference system is not initialized, so an early +load call cannot crash)
 - (BOOL)shouldMirrorByDefault {
     NSString *source = getPrefObject(@"general.download_source");
     if (!source) return NO;
     if ([source isEqualToString:@"bmclapi"]) return YES;
     if ([source isEqualToString:@"auto"]) return YES;
-    // 官方源（mojang/official）不启用镜像
+    // The official sources (mojang/official) do not use mirroring
     return NO;
 }
 
 #pragma mark - 内部：缓存 key 与磁盘路径
 
-/// 生成缓存 key：MD5(url + targetSize + options)
+/// Build the cache key: MD5(url + targetSize + options)
 - (NSString *)cacheKeyForURL:(NSString *)url targetSize:(CGSize)targetSize options:(IconLoaderOptions)options {
     NSString *keyString = [NSString stringWithFormat:@"%@|%.0fx%.0f|%lu",
                            url,
@@ -488,7 +488,7 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
     return [self md5OfString:keyString];
 }
 
-/// 磁盘缓存文件路径
+/// Disk cache file path
 - (NSString *)diskPathForCacheKey:(NSString *)cacheKey {
     return [self.diskCacheDirectory stringByAppendingPathComponent:cacheKey];
 }
@@ -506,8 +506,8 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
 
 #pragma mark - 内部：进行中请求管理（同 URL 去重）
 
-/// 添加回调到进行中请求字典
-/// @return YES 表示这是该 URL 的第一个请求（需要发起下载），NO 表示已有请求在进行中（仅合并回调）
+/// Add a callback to the in-flight request dictionary
+/// @return YES if this is the first request for that URL (so a download must start), NO if one is already in flight (the callback is merely merged in)
 - (BOOL)addCallback:(void(^)(UIImage * _Nullable))callback forCacheKey:(NSString *)cacheKey {
     __block BOOL isNew = NO;
     dispatch_sync(self.syncQueue, ^{
@@ -524,7 +524,7 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
     return isNew;
 }
 
-/// 移除并取出该 cacheKey 的所有回调
+/// Remove and return every callback for this cacheKey
 - (NSArray<void(^)(UIImage * _Nullable)> *)popCallbacksForCacheKey:(NSString *)cacheKey {
     __block NSArray *result = nil;
     dispatch_sync(self.syncQueue, ^{
@@ -547,21 +547,21 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
         return;
     }
 
-    // 优先检查磁盘缓存（在后台线程）
+    // Check the disk cache first (on a background thread)
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         NSString *diskPath = [self diskPathForCacheKey:cacheKey];
         if ([[NSFileManager defaultManager] fileExistsAtPath:diskPath]) {
-            // 磁盘缓存命中：加载到内存并返回
+            // Disk cache hit: load it into memory and return
             UIImage *image = [self loadDiskImageToMemoryCacheAtPath:diskPath cacheKey:cacheKey];
             if (image) {
                 [self completeRequestWithCacheKey:cacheKey image:image];
                 return;
             }
-            // 磁盘缓存文件损坏：删除后继续走网络下载
+            // The disk cache file is corrupt: delete it and carry on to the network download
             [[NSFileManager defaultManager] removeItemAtPath:diskPath error:nil];
         }
 
-        // 网络下载（传入原始 URL 用于镜像失败时回退重试）
+        // Network download (passing the original URL so it can be retried if the mirror fails)
         [self downloadFromURL:url
                 originalURLString:originalURLString
                       cacheKey:cacheKey
@@ -570,7 +570,7 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
     });
 }
 
-/// 从磁盘加载图像到内存缓存
+/// Load an image from disk into the memory cache
 - (nullable UIImage *)loadDiskImageToMemoryCacheAtPath:(NSString *)path cacheKey:(NSString *)cacheKey {
     NSData *data = [NSData dataWithContentsOfFile:path options:NSDataReadingMappedIfSafe error:nil];
     if (!data) return nil;
@@ -586,28 +586,28 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
                cacheKey:(NSString *)cacheKey
              targetSize:(CGSize)targetSize
                 options:(IconLoaderOptions)options {
-    // 信号量限流：等待可用槽位（对应 Glide 的线程池上限）
+    // Semaphore throttling: wait for a free slot (equivalent to the thread pool cap of Glide)
     dispatch_semaphore_wait(self.downloadSemaphore, DISPATCH_TIME_FOREVER);
 
     __weak typeof(self) weakSelf = self;
     NSURLSessionDataTask *task = [self.session dataTaskWithURL:url completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) {
-            // 防御性写法：单例不会触发，但仍释放信号量避免泄漏
+            // Defensive: a singleton will never hit this, but the semaphore is still released to avoid a leak
             dispatch_semaphore_signal(weakSelf.downloadSemaphore);
             return;
         }
 
-        // 释放信号量槽位
+        // Release the semaphore slot
         dispatch_semaphore_signal(strongSelf.downloadSemaphore);
 
-        // ── HTTP 响应校验（关键修复：防止 404/HTML 错误页被当作图片数据）──
+        // -- HTTP response validation (key fix: stop 404/HTML error pages being treated as image data) --
         //
-        // 之前的 bug：完全没有校验 statusCode 和 Content-Type，
-        // 镜像 URL 返回 404 时 error 为 nil、data 非空（HTML 错误页），
-        // 三条 if 判断全部不命中，HTML 被送进解码器，
-        // CGImageSourceCreateWithData 失败返回 nil，静默吞掉，
-        // 最终只剩 fallback 拼图占位图标。
+        // The earlier bug: statusCode and Content-Type were not validated at all,
+        // so when the mirror URL returned 404 the error was nil and data was non-empty (an HTML error page),
+        // none of the three if checks matched, the HTML went into the decoder,
+        // CGImageSourceCreateWithData failed and returned nil, which was swallowed silently,
+        // leaving only the fallback puzzle-piece placeholder icon.
         NSInteger statusCode = 0;
         NSString *contentType = nil;
         if ([response isKindOfClass:[NSHTTPURLResponse class]]) {
@@ -622,8 +622,8 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
         BOOL isNonImageContentType = NO;
         if (contentType && contentType.length > 0) {
             NSString *lowerCT = [contentType lowercaseString];
-            // 严格的 Content-Type 校验：只接受 image/* 类型
-            // HTML 错误页的 Content-Type 通常是 text/html，应被拒绝
+            // Strict Content-Type validation: only image/* is accepted
+            // HTML error pages usually have Content-Type text/html, which must be rejected
             if (![lowerCT hasPrefix:@"image/"]) {
                 isNonImageContentType = YES;
             }
@@ -645,23 +645,23 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
             shouldFallbackToOriginal = YES;
         }
 
-        // ── 镜像失败回退到原始 URL 重试（关键修复）──
+        // -- Fall back to the original URL when the mirror fails (key fix) --
         //
-        // 如果当前请求使用的是镜像 URL（与原始 URL 不同）且失败了，
-        // 自动用原始 URL 重试一次。这是图标完全不加载的核心修复——
-        // BMCLAPI 的 MCIM 镜像路径（/mcim/modrinth/）可能不提供 cdn.modrinth.com 的
-        // 静态图标资源，但原始 CDN 可以正常访问。
+        // If the current request used a mirror URL (different from the original) and failed,
+        // retry once with the original URL. This is the core fix for icons never loading —
+        // the MCIM mirror path of BMCLAPI (/mcim/modrinth/) may not serve the static icon assets of cdn.modrinth.com,
+        // while the original CDN works fine.
         //
-        // 即使在"中国大陆"环境下，cdn.modrinth.com 和 edge.forgecdn.net 的
-        // 小图标资源通常也能正常访问（延迟稍高但不会失败），因此回退到原始 URL 是安全的。
+        // Even from mainland China, the small icon assets on cdn.modrinth.com and edge.forgecdn.net
+        // are usually reachable (with slightly higher latency but without failing), so falling back to the original URL is safe.
         if (shouldFallbackToOriginal && originalURLString && originalURLString.length > 0) {
             NSString *currentURLString = url.absoluteString;
-            // 仅当当前 URL 与原始 URL 不同时才回退（避免无限重试）
+            // Only fall back when the current URL differs from the original (to avoid retrying forever)
             if (![currentURLString isEqualToString:originalURLString]) {
                 NSLog(@"[IconLoader] Falling back to original URL: %@", originalURLString);
                 NSURL *originalURL = [NSURL URLWithString:originalURLString];
                 if (originalURL) {
-                    // 递归调用自身，但传入 nil 作为 originalURLString 防止再次回退
+                    // Call ourselves recursively, passing nil as originalURLString so it cannot fall back again
                     [strongSelf downloadFromURL:originalURL
                               originalURLString:nil
                                       cacheKey:cacheKey
@@ -673,28 +673,28 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
         }
 
         if (shouldFallbackToOriginal) {
-            // 所有重试都已穷尽，最终失败
+            // Every retry is exhausted, so this is the final failure
             NSLog(@"[IconLoader] Icon loading ultimately failed (all URLs unavailable): %@", url);
             [strongSelf completeRequestWithCacheKey:cacheKey image:nil];
             return;
         }
 
-        // ── 后台线程解码 + 降采样 ──
+        // -- Background-thread decoding + downsampling --
         dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
             UIImage *decodedImage = [strongSelf decodeImageData:data
                                                      targetSize:targetSize
                                                         options:options];
             if (decodedImage) {
-                // 写入双层缓存
+                // Write to both cache levels
                 [strongSelf storeInMemoryCache:decodedImage forKey:cacheKey];
 
-                // 写入磁盘缓存（除非指定 MemoryCacheOnly）
+                // Write to the disk cache (unless MemoryCacheOnly was specified)
                 if (!(options & IconLoaderOptionsMemoryCacheOnly)) {
                     [strongSelf writeDataToDisk:data cacheKey:cacheKey];
                 }
             } else {
-                // 解码失败：可能是数据损坏或非图片数据伪装成 image Content-Type
-                // 尝试回退到原始 URL（如果尚未回退过）
+                // Decoding failed: the data may be corrupt, or non-image data disguised with an image Content-Type
+                // Try falling back to the original URL (if that has not been tried yet)
                 NSLog(@"[IconLoader] Image decoding failed, data may be corrupted or not an image: %@ (data.length=%lu)", url, (unsigned long)data.length);
                 if (originalURLString && originalURLString.length > 0) {
                     NSString *currentURLString = url.absoluteString;
@@ -720,14 +720,14 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
 
 #pragma mark - 内部：降采样解码（对应 ZL2 .size(pxSize)）
 
-/// 解码图像数据，按目标尺寸降采样
-/// 使用 CGImageSourceCreateThumbnailAtIndex 实现按需解码，避免加载完整原图到内存
+/// Decode the image data, downsampling to the target size
+/// Uses CGImageSourceCreateThumbnailAtIndex to decode on demand, so the full-resolution original never has to be loaded into memory
 - (nullable UIImage *)decodeImageData:(NSData *)data
                            targetSize:(CGSize)targetSize
                               options:(IconLoaderOptions)options {
     if (!data || data.length == 0) return nil;
 
-    // 跳过降采样：直接解码原图
+    // Skip downsampling: decode the original directly
     if (options & IconLoaderOptionsNoDownsample || CGSizeEqualToSize(targetSize, CGSizeZero)) {
         UIImage *directImage = [UIImage imageWithData:data];
         if (!directImage) {
@@ -749,17 +749,17 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
         return nil;
     }
 
-    // 计算目标尺寸（考虑屏幕 scale）
+    // Work out the target size (taking the screen scale into account)
     CGFloat scale = [UIScreen mainScreen].scale;
     NSInteger maxPixelSize = MAX(targetSize.width, targetSize.height) * scale;
-    // 给一点余量，避免缩放后模糊（对应 Coil 的 1.1x 容差）
+    // Leave a little headroom so it does not look blurry after scaling (equivalent to the 1.1x tolerance of Coil)
     maxPixelSize = (NSInteger)(maxPixelSize * 1.1);
 
     NSDictionary *optionsDict = @{
         (id)kCGImageSourceCreateThumbnailFromImageAlways: @YES,
-        (id)kCGImageSourceShouldCache: @YES,                    // 解码后立即缓存到内存
-        (id)kCGImageSourceShouldCacheImmediately: @YES,         // 强制立即解码（避免延迟解码卡顿）
-        (id)kCGImageSourceCreateThumbnailWithTransform: @YES,   // 应用 EXIF 方向
+        (id)kCGImageSourceShouldCache: @YES,                    // Cache in memory as soon as it is decoded
+        (id)kCGImageSourceShouldCacheImmediately: @YES,         // Force immediate decoding (so deferred decoding does not cause hitches)
+        (id)kCGImageSourceCreateThumbnailWithTransform: @YES,   // Apply the EXIF orientation
         (id)kCGImageSourceThumbnailMaxPixelSize: @(maxPixelSize)
     };
 
@@ -767,7 +767,7 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
     CFRelease(source);
 
     if (!thumbnail) {
-        // 降采样失败，退回直接解码（可能数据本身没问题但 thumbnail 创建失败）
+        // Downsampling failed, so fall back to a plain decode (the data may be fine even though the thumbnail could not be created)
         UIImage *fallbackImage = [UIImage imageWithData:data];
         if (!fallbackImage) {
             NSLog(@"[IconLoader] decodeImageData: both downsampling and direct decode failed (data.length=%lu)", (unsigned long)data.length);
@@ -801,13 +801,13 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
     NSString *path = [self diskPathForCacheKey:cacheKey];
     [data writeToFile:path atomically:YES];
 
-    // 异步触发 LRU 清理（避免每次写入都同步检查）
+    // Trigger the LRU cleanup asynchronously (so it is not checked synchronously on every write)
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW, 0), ^{
         [self trimDiskCacheIfNeeded];
     });
 }
 
-/// LRU 清理：当磁盘缓存总大小超过上限时，按最后访问时间删除最旧的文件
+/// LRU cleanup: when the total disk cache size exceeds the cap, delete the oldest files by last access time
 - (void)trimDiskCacheIfNeeded {
     NSFileManager *fm = [NSFileManager defaultManager];
     unsigned long long totalSize = 0;
@@ -831,13 +831,13 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
 
     if (totalSize <= kDiskCacheSizeLimit) return;
 
-    // 按修改时间升序排序（最旧的在前）
+    // Sort by modification time ascending (oldest first)
     [entries sortUsingComparator:^NSComparisonResult(NSDictionary *a, NSDictionary *b) {
         return [a[@"date"] compare:b[@"date"]];
     }];
 
-    // 从最旧的开始删除，直到总大小降到上限以下
-    unsigned long long targetSize = (unsigned long long)(kDiskCacheSizeLimit * 0.8); // 删除到 80% 以下
+    // Delete from the oldest until the total size is under the cap
+    unsigned long long targetSize = (unsigned long long)(kDiskCacheSizeLimit * 0.8); // Delete down to 80%
     for (NSDictionary *entry in entries) {
         if (totalSize <= targetSize) break;
         NSString *path = entry[@"path"];
@@ -850,11 +850,11 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
 #pragma mark - 内部：辅助
 
 - (NSUInteger)costForImage:(UIImage *)image {
-    // 估算内存占用：width * height * 4 bytes (RGBA)
+    // Estimate the memory footprint: width * height * 4 bytes (RGBA)
     return (NSUInteger)(image.size.width * image.scale * image.size.height * image.scale * 4);
 }
 
-/// 将图像存入内存缓存，并同步更新 key 跟踪集合
+/// Store an image in the memory cache and update the key tracking set alongside it
 - (void)storeInMemoryCache:(UIImage *)image forKey:(NSString *)cacheKey {
     [self.memoryCache setObject:image
                        forKey:cacheKey
@@ -864,7 +864,7 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
     });
 }
 
-/// 清空内存缓存及其 key 跟踪集合
+/// Clear the memory cache and its key tracking set
 - (void)clearMemoryCacheInternal {
     [self.memoryCache removeAllObjects];
     dispatch_async(self.syncQueue, ^{
@@ -880,7 +880,7 @@ static const void *kIconLoaderImageViewKey = &kIconLoaderImageViewKey;
 }
 
 - (void)handleEnterBackground {
-    // 应用进入后台：取消所有进行中的下载（避免后台下载被系统杀掉）
+    // The app went to the background: cancel every in-flight download (so the system does not kill them)
     [IconLoader cancelAllLoadings];
     NSDebugLog(@"[IconLoader] App entered background: cancelled all ongoing downloads");
 }

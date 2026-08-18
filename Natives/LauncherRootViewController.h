@@ -5,12 +5,12 @@
 
 @interface LauncherRootViewController : UIViewController <UINavigationControllerDelegate>
 
-// 三个主要区域
-@property(nonatomic, strong, readonly) UIViewController *sidebarViewController;      // 左侧边栏
-@property(nonatomic, strong, readonly) UIViewController *contentViewController;      // 中间内容
-@property(nonatomic, strong, readonly) UIViewController *rightPanelViewController;   // 右侧面板
+// The three main areas
+@property(nonatomic, strong, readonly) UIViewController *sidebarViewController;      // Left sidebar
+@property(nonatomic, strong, readonly) UIViewController *contentViewController;      // Middle content
+@property(nonatomic, strong, readonly) UIViewController *rightPanelViewController;   // Right panel
 
-// 切换中间内容
+// Switch the middle content
 - (void)setContentViewController:(UIViewController *)viewController animated:(BOOL)animated;
 
 @end

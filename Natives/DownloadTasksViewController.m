@@ -24,9 +24,9 @@ static const CGFloat kSectionInset = 16.0;
 @property (nonatomic, strong) UILabel *progressLabel;
 @property (nonatomic, strong) UIView *separatorView;
 
-// FCL 风格操作按钮区（直接显示在卡片上，无需长按）
-@property (nonatomic, strong) UIButton *primaryActionButton;   // 暂停/继续/重试（主操作，蓝色）
-@property (nonatomic, strong) UIButton *secondaryActionButton; // 取消/移除（次操作，红色）
+// FCL-style action button area (shown directly on the card, with no long-press needed)
+@property (nonatomic, strong) UIButton *primaryActionButton;   // Pause/Resume/Retry (primary action, blue)
+@property (nonatomic, strong) UIButton *secondaryActionButton; // Cancel/Remove (secondary action, red)
 @property (nonatomic, weak) DownloadTaskItem *currentTask;
 
 - (void)configureWithTask:(DownloadTaskItem *)task;
@@ -110,7 +110,7 @@ static const CGFloat kSectionInset = 16.0;
     self.separatorView.backgroundColor = [UIColor separatorColor];
     [self.contentView addSubview:self.separatorView];
 
-    // FCL 风格：主操作按钮（暂停/继续/重试），右侧靠齐
+    // FCL style: primary action button (Pause/Resume/Retry), aligned right
     self.primaryActionButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.primaryActionButton.translatesAutoresizingMaskIntoConstraints = NO;
     self.primaryActionButton.titleLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
@@ -120,7 +120,7 @@ static const CGFloat kSectionInset = 16.0;
     [self.primaryActionButton addTarget:self action:@selector(primaryActionTapped) forControlEvents:UIControlEventTouchUpInside];
     [self.contentView addSubview:self.primaryActionButton];
 
-    // FCL 风格：次操作按钮（取消/移除）
+    // FCL style: secondary action button (Cancel/Remove)
     self.secondaryActionButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.secondaryActionButton.translatesAutoresizingMaskIntoConstraints = NO;
     self.secondaryActionButton.titleLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
@@ -158,7 +158,7 @@ static const CGFloat kSectionInset = 16.0;
         [self.separatorView.topAnchor constraintEqualToAnchor:self.iconImageView.bottomAnchor constant:10],
         [self.separatorView.heightAnchor constraintEqualToConstant:0.5],
 
-        // 进度区：进度条 + 百分比
+        // Progress area: progress bar + percentage
         [self.progressView.leadingAnchor constraintEqualToAnchor:self.contentView.leadingAnchor constant:12],
         [self.progressView.topAnchor constraintEqualToAnchor:self.separatorView.bottomAnchor constant:8],
         [self.progressView.trailingAnchor constraintEqualToAnchor:self.progressLabel.leadingAnchor constant:-8],
@@ -167,7 +167,7 @@ static const CGFloat kSectionInset = 16.0;
         [self.progressLabel.centerYAnchor constraintEqualToAnchor:self.progressView.centerYAnchor],
         [self.progressLabel.widthAnchor constraintEqualToConstant:48],
 
-        // 操作按钮区：右对齐，主操作在前（左），次操作在后（右）
+        // Action button area: right-aligned, primary first (left) and secondary after (right)
         [self.secondaryActionButton.trailingAnchor constraintEqualToAnchor:self.contentView.trailingAnchor constant:-12],
         [self.secondaryActionButton.bottomAnchor constraintEqualToAnchor:self.contentView.bottomAnchor constant:-10],
         [self.secondaryActionButton.topAnchor constraintEqualToAnchor:self.progressView.bottomAnchor constant:8],
@@ -235,13 +235,13 @@ static const CGFloat kSectionInset = 16.0;
     [self.typeTagLabel sizeToFit];
     [self configureSourceTagWithSource:task.downloadSource];
 
-    // 图标：Minecraft 本体 / Modloader 使用 ModLoaderIconHelper 加载真实品牌图标
-    // （与下载游戏界面 DownloadViewController 保持一致，避免只显示通用 SF Symbol）
-    // resourceName 通常已带 loader 标识（如 "fabric-1.20.1-0.15.7" / "optifine-..."），
-    // 用 detectLoaderFromVersionId 解析；解析不到则用通用占位符。
+    // Icon: the Minecraft client and mod loaders load their real brand icon via ModLoaderIconHelper
+    // (consistent with the DownloadViewController download screen, instead of showing only a generic SF Symbol)
+    // resourceName usually already carries the loader identifier (e.g. "fabric-1.20.1-0.15.7" / "optifine-..."),
+    // so detectLoaderFromVersionId parses it; a generic placeholder is used when it cannot.
     [self configureIconForTask:task];
 
-    // 速度与进度
+    // Speed and progress
     switch (task.state) {
         case DownloadTaskStatePending:
             self.speedLabel.text = @"Waiting";
@@ -281,7 +281,7 @@ static const CGFloat kSectionInset = 16.0;
             break;
     }
 
-    // FCL 风格：按状态配置主/次操作按钮
+    // FCL style: configure the primary/secondary action buttons based on the state
     [self configureActionButtonsForTask:task];
 }
 
@@ -292,7 +292,7 @@ static const CGFloat kSectionInset = 16.0;
     switch (task.state) {
         case DownloadTaskStateDownloading:
         case DownloadTaskStatePending:
-            // 主操作：暂停；次操作：取消
+            // Primary: Pause; secondary: Cancel
             [self.primaryActionButton setTitle:@"Pause" forState:UIControlStateNormal];
             [self.primaryActionButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             self.primaryActionButton.backgroundColor = primaryColor;
@@ -305,7 +305,7 @@ static const CGFloat kSectionInset = 16.0;
             break;
 
         case DownloadTaskStatePaused:
-            // 主操作：继续；次操作：取消
+            // Primary: Resume; secondary: Cancel
             [self.primaryActionButton setTitle:@"Resume" forState:UIControlStateNormal];
             [self.primaryActionButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             self.primaryActionButton.backgroundColor = primaryColor;
@@ -319,7 +319,7 @@ static const CGFloat kSectionInset = 16.0;
 
         case DownloadTaskStateFailed:
         case DownloadTaskStateCancelled: {
-            // 主操作：重试（若 retryHandler 可用且未超 maxRetryCount）；次操作：移除
+            // Primary: Retry (when retryHandler is available and maxRetryCount has not been exceeded); secondary: Remove
             BOOL canRetry = (task.retryHandler != nil) &&
                             (task.maxRetryCount <= 0 || task.retryCount < task.maxRetryCount);
             if (canRetry) {
@@ -331,7 +331,7 @@ static const CGFloat kSectionInset = 16.0;
                 self.primaryActionButton.backgroundColor = primaryColor;
                 self.primaryActionButton.hidden = NO;
             } else if (task.retryHandler != nil && task.retryCount >= task.maxRetryCount && task.maxRetryCount > 0) {
-                // 已达最大重试次数，显示禁用状态
+                // Maximum retries reached, so show the disabled state
                 [self.primaryActionButton setTitle:@"Retries exhausted" forState:UIControlStateNormal];
                 [self.primaryActionButton setTitleColor:[UIColor secondaryLabelColor] forState:UIControlStateNormal];
                 self.primaryActionButton.backgroundColor = [UIColor tertiarySystemBackgroundColor];
@@ -350,7 +350,7 @@ static const CGFloat kSectionInset = 16.0;
         }
 
         case DownloadTaskStateCompleted:
-            // 主操作：无；次操作：移除
+            // Primary: none; secondary: Remove
             self.primaryActionButton.hidden = YES;
 
             [self.secondaryActionButton setTitle:@"Remove" forState:UIControlStateNormal];
@@ -362,8 +362,8 @@ static const CGFloat kSectionInset = 16.0;
     }
 }
 
-// loadIconFromURL: 已移除，改用 IconLoader 统一加载器
-// （IconLoader 提供双层缓存+降采样+CDN镜像+并发控制，比原 NSURLSession 直连更高效）
+// loadIconFromURL: has been removed in favor of the unified IconLoader
+// (IconLoader adds a two-level cache, downsampling, CDN mirrors and concurrency control, making it more efficient than a direct NSURLSession)
 
 - (NSString *)displayNameForResourceType:(NSString *)type {
     NSDictionary *map = @{
@@ -391,18 +391,18 @@ static const CGFloat kSectionInset = 16.0;
     return map[type] ?: @"arrow.down.circle";
 }
 
-/// 为任务配置图标
-/// - Minecraft 本体：使用 ModLoaderIconHelper 的 VanillaIcon 草方块（与 VersionCardCell 一致）
-/// - Modloader：从 resourceName 解析具体加载器（fabric/forge/neoforge/quilt/optifine），
-///   用 ModLoaderIconHelper 加载官方品牌 PNG；解析不到则用通用 SF Symbol
-/// - 其他类型：保持原 SF Symbol 占位符逻辑
-/// - 若 task.iconURL 非空（如整合包有缩略图），用 IconLoader 异步加载网络图标
+/// Configure the icon for a task
+/// - Minecraft client: uses the VanillaIcon grass block from ModLoaderIconHelper (matching VersionCardCell)
+/// - Mod loader: parses the specific loader from resourceName (fabric/forge/neoforge/quilt/optifine)
+///   and loads the official brand PNG via ModLoaderIconHelper; falls back to a generic SF Symbol when it cannot be parsed
+/// - Other types: keep the original SF Symbol placeholder logic
+/// - When task.iconURL is set (for example a modpack thumbnail), the network icon is loaded asynchronously via IconLoader
 - (void)configureIconForTask:(DownloadTaskItem *)task {
     UIImage *placeholder = nil;
     NSString *loaderTag = nil;
 
     if ([task.resourceType isEqualToString:DownloadTaskResourceTypeMinecraft]) {
-        // 原版：用 ModLoaderIconHelper 的 VanillaIcon（与 VersionCardCell 一致）
+        // Vanilla: use the VanillaIcon from ModLoaderIconHelper (matching VersionCardCell)
         loaderTag = @"vanilla";
         placeholder = [ModLoaderIconHelper iconImageForLoader:loaderTag
                                               traitCollection:self.traitCollection];
@@ -410,8 +410,8 @@ static const CGFloat kSectionInset = 16.0;
                                        forLoader:loaderTag
                                   traitCollection:self.traitCollection];
     } else if ([task.resourceType isEqualToString:DownloadTaskResourceTypeModloader]) {
-        // 加载器：从 resourceName 解析具体 loader
-        // resourceName 格式举例："fabric-1.20.1-0.15.7" / "optifine-1.20.1-..."
+        // Loader: parse the specific loader from resourceName
+        // Example resourceName formats: "fabric-1.20.1-0.15.7" / "optifine-1.20.1-..."
         NSString *candidate = task.resourceName.length > 0 ? task.resourceName : task.displayName;
         loaderTag = [ModLoaderIconHelper detectLoaderFromVersionId:candidate];
         if (loaderTag.length > 0) {
@@ -421,7 +421,7 @@ static const CGFloat kSectionInset = 16.0;
                                            forLoader:loaderTag
                                       traitCollection:self.traitCollection];
         } else {
-            // 未识别的加载器：用通用 SF Symbol
+            // Unrecognized loader: use a generic SF Symbol
             placeholder = [UIImage systemImageNamed:[self iconNameForResourceType:task.resourceType]];
             self.iconImageView.image = placeholder;
             self.iconImageView.tintColor = [UIColor secondaryLabelColor];
@@ -546,7 +546,7 @@ static const CGFloat kSectionInset = 16.0;
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    // 适配自定义启动器背景：将当前视图控制器透明化，使全局背景壁纸能够透出
+    // Adapt to the custom launcher background: make this view controller transparent so the global wallpaper shows through
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
 
     self.view.backgroundColor = [UIColor systemBackgroundColor];
@@ -563,15 +563,15 @@ static const CGFloat kSectionInset = 16.0;
 
     [self reloadData];
 
-    // 监听背景 UI 效果变化通知，当用户切换背景效果（半透明/毛玻璃）时重新应用透明化
+    // Listen for background UI effect changes so transparency is re-applied when the user switches effect (translucent/frosted)
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(reapplyBackgroundEffect)
                                                  name:@"BackgroundUIEffectChanged"
                                                object:nil];
 }
 
-/// 背景效果改变时重新应用透明化（由 BackgroundUIEffectChanged 通知触发）
-/// 重新设置 collectionView 背景为透明，避免系统在复用过程中重置为不透明色
+/// Re-apply transparency when the background effect changes (triggered by the BackgroundUIEffectChanged notification)
+/// Reset the collectionView background to transparent, in case the system resets it to an opaque color during reuse
 - (void)reapplyBackgroundEffect {
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
     self.collectionView.backgroundColor = [UIColor clearColor];
@@ -794,14 +794,14 @@ static const CGFloat kSectionInset = 16.0;
         }
     }
 
-    // 按创建时间倒序，最新的在前面
+    // Sort by creation time, newest first
     [result sortUsingComparator:^NSComparisonResult(DownloadTaskItem *a, DownloadTaskItem *b) {
         return [b.createdDate compare:a.createdDate];
     }];
 
     self.filteredTasks = [result copy];
 
-    // 更新各类型的数量
+    // Update the count for each type
     [self.typeCounts removeAllObjects];
     DownloadTaskState effectiveState = self.filterState;
     for (DownloadTaskItem *task in allTasks) {
@@ -876,10 +876,10 @@ static const CGFloat kSectionInset = 16.0;
 #pragma mark - Actions
 
 - (void)closeTapped:(UIButton *)sender {
-    // 发送通知：用户手动关闭了下载中心。
-    // 启动器（LauncherNavigationController / LauncherRightPanelViewController）收到此通知后，
-    // 会设置 userDismissedDownloadCenter=YES，避免后续下载任务更新时反复自动弹出下载中心。
-    // 用户可以通过点击启动器上的"下载中心"按钮重新打开。
+    // Post a notification: the user closed the download center manually.
+    // On receiving it the launcher (LauncherNavigationController / LauncherRightPanelViewController)
+    // sets userDismissedDownloadCenter=YES, so later download updates do not keep reopening the download center.
+    // The user can reopen it from the "Download center" button in the launcher.
     [[NSNotificationCenter defaultCenter] postNotificationName:@"DownloadCenterDidDismiss"
                                                       object:nil
                                                     userInfo:nil];
@@ -889,13 +889,13 @@ static const CGFloat kSectionInset = 16.0;
 - (void)stateFilterChanged:(UISegmentedControl *)sender {
     switch (sender.selectedSegmentIndex) {
         case 0:
-            self.filterState = DownloadTaskStatePending; // 全部
+            self.filterState = DownloadTaskStatePending; // All
             break;
         case 1:
-            self.filterState = DownloadTaskStateDownloading; // 下载中
+            self.filterState = DownloadTaskStateDownloading; // Downloading
             break;
         case 2:
-            self.filterState = DownloadTaskStateCompleted; // 已完成
+            self.filterState = DownloadTaskStateCompleted; // Completed
             break;
     }
     [self reloadData];
@@ -922,8 +922,8 @@ static const CGFloat kSectionInset = 16.0;
 }
 
 - (void)showActionsForTask:(DownloadTaskItem *)task {
-    // FCL 风格重构后，常用操作（暂停/继续/取消/重试/移除）已在卡片上直接显示按钮。
-    // 长按仅作为辅助入口，提供"切换下载源"等进阶操作。
+    // After the FCL-style rework, the common actions (pause/resume/cancel/retry/remove) are buttons on the card itself.
+    // Long-press is only a secondary entry point for advanced actions such as "Switch download source".
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:task.displayName
                                                                    message:nil
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
@@ -996,7 +996,7 @@ static const CGFloat kSectionInset = 16.0;
                 [confirm addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
                 [confirm addAction:[UIAlertAction actionWithTitle:@"Confirm" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
                     [[DownloadTaskManager sharedManager] cancelTaskWithId:task.taskId];
-                    // 业务方在取消后需要重新创建下载任务；这里仅更新源并移除旧记录。
+                    // The caller has to recreate the download after cancelling; here we only update the source and drop the old record.
                     [[DownloadTaskManager sharedManager] removeTaskWithId:task.taskId];
                 }]];
                 [strongSelf presentViewController:confirm animated:YES completion:nil];
@@ -1034,7 +1034,7 @@ static const CGFloat kSectionInset = 16.0;
 
 - (NSInteger)collectionView:(UICollectionView *)collectionView numberOfItemsInSection:(NSInteger)section {
     if (self.filteredTasks.count == 0) {
-        return 1; // 空状态占位
+        return 1; // Placeholder for the empty state
     }
     return self.filteredTasks.count;
 }

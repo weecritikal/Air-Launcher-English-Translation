@@ -2,10 +2,10 @@
 //  DataPackService.h
 //  Amethyst
 //
-//  数据包本地管理与下载服务，结构参照 ShaderService/ModService
-//  API 签名统一使用 NSString *profileName（与 ModService 一致）
-//  新增 pack.mcmeta 解析（pack_format / description）
-//  新增 worldName 参数支持下载到指定世界的 datapacks 目录（saves/<worldName>/datapacks/）
+//  Local management and download service for data packs, structured like ShaderService/ModService
+//  The API consistently takes NSString *profileName (matching ModService)
+//  Adds pack.mcmeta parsing (pack_format / description)
+//  Adds a worldName parameter so packs can be downloaded into a specific world (saves/<worldName>/datapacks/)
 //
 
 #import <Foundation/Foundation.h>
@@ -13,13 +13,13 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-// 数据包列表回调
+// Data pack list callback
 typedef void(^DataPackListHandler)(NSArray<DataPackItem *> *items);
-// 数据包元数据回调
+// Data pack metadata callback
 typedef void(^DataPackMetadataHandler)(DataPackItem *item, NSError * _Nullable error);
-// 下载完成回调（success 表示是否成功）
+// Download completion callback (success indicates whether it worked)
 typedef void(^DataPackDownloadCompletionHandler)(BOOL success, NSError * _Nullable error);
-// 下载进度回调（在主线程执行，UI 更新安全）
+// Download progress callback (runs on the main thread, so UI updates are safe)
 typedef void(^DataPackDownloadProgressHandler)(NSProgress * _Nullable downloadProgress);
 
 @interface DataPackService : NSObject
@@ -28,37 +28,37 @@ typedef void(^DataPackDownloadProgressHandler)(NSProgress * _Nullable downloadPr
 
 + (instancetype)sharedService;
 
-// --- 本地数据包管理 ---
-// 扫描指定 profile 的 datapacks 目录，返回 .zip 和 .zip.disabled 文件列表
+// --- Local data pack management ---
+// Scan the datapacks folder of the given profile and return the .zip and .zip.disabled files
 - (void)scanDataPacksForProfile:(NSString *)profileName completion:(DataPackListHandler)completion;
-// 获取数据包元数据（解析 zip 内的 pack.mcmeta，获取 pack_format 和 description）
+// Read data pack metadata (parsing pack.mcmeta inside the zip for pack_format and description)
 - (void)fetchMetadataForDataPack:(DataPackItem *)item completion:(DataPackMetadataHandler)completion;
-// 启用/禁用数据包（加/去 .disabled 后缀）
+// Enable/disable a data pack (adding or removing the .disabled suffix)
 - (BOOL)toggleEnableForDataPack:(DataPackItem *)item error:(NSError **)error;
-// 删除数据包文件
+// Delete a data pack file
 - (BOOL)deleteDataPack:(DataPackItem *)item error:(NSError **)error;
 
-// --- 在线数据包下载 ---
-// 下载数据包到指定 profile 的 datapacks 目录（<gameDir>/datapacks/），支持实时进度回调
-// 注意：Minecraft 要求数据包放在 <gameDir>/saves/<世界名>/datapacks/，但 iOS 上无法选择世界，
-// 因此默认下载到 <gameDir>/datapacks/，需用户手动移动到对应世界目录。
+// --- Online data pack downloads ---
+// Download a data pack into the datapacks folder of the given profile (<gameDir>/datapacks/), with live progress callbacks
+// Note: Minecraft requires data packs in <gameDir>/saves/<world name>/datapacks/, but a world cannot be picked on iOS,
+// so packs go to <gameDir>/datapacks/ by default and the user has to move them into the right world folder.
 - (void)downloadDataPack:(DataPackItem *)item
                toProfile:(NSString *)profileName
                 progress:(DataPackDownloadProgressHandler _Nullable)progress
               completion:(DataPackDownloadCompletionHandler _Nullable)completion;
 
-// 下载数据包到指定世界的 datapacks 目录（<gameDir>/saves/<worldName>/datapacks/）
-// worldName 为 nil 时回退到 <gameDir>/datapacks/
+// Download a data pack into a specific world's datapacks folder (<gameDir>/saves/<worldName>/datapacks/)
+// Falls back to <gameDir>/datapacks/ when worldName is nil
 - (void)downloadDataPack:(DataPackItem *)item
                toProfile:(NSString *)profileName
                worldName:(nullable NSString *)worldName
                 progress:(DataPackDownloadProgressHandler _Nullable)progress
               completion:(DataPackDownloadCompletionHandler _Nullable)completion;
 
-// --- 工具方法 ---
+// --- Helpers ---
 - (NSString *)iconCachePathForURL:(NSString *)urlString;
 
-/// 获取当前 profile 的 datapacks 目录，不存在时自动创建
+/// Return the datapacks folder of the current profile, creating it if it does not exist
 - (nullable NSString *)ensureDataPacksFolderForProfile:(NSString *)profileName error:(NSError **)error;
 
 @end

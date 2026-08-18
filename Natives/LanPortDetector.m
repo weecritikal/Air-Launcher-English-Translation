@@ -2,16 +2,16 @@
 //  LanPortDetector.m
 //  Amethyst
 //
-//  Minecraft "对局域网开放"端口检测器（手动输入版）实现
+//  Implementation of the Minecraft "Open to LAN" port detector (manual entry version)
 //
 
 #import "LanPortDetector.h"
 
-/// 通知名：手动设置端口时发送
+/// Notification name: posted when the port is set manually
 NSString *const LanPortDetectorDidDetectPortNotification = @"LanPortDetectorDidDetectPort";
 
 @interface LanPortDetector ()
-/// 当前已设置的端口（0 表示未设置）
+/// The port currently set (0 means unset)
 @property (nonatomic, assign, readwrite) uint16_t detectedPort;
 @end
 
@@ -30,13 +30,13 @@ NSString *const LanPortDetectorDidDetectPortNotification = @"LanPortDetectorDidD
 
 #pragma mark - 手动设置端口
 
-/// 手动设置 MC LAN 端口
+/// Set the Minecraft LAN port manually
 - (void)setManualPort:(uint16_t)port {
     self.detectedPort = port;
 
     NSLog(@"[LanPortDetector] Manually set LAN port: %u", port);
 
-    // 发送通知，userInfo 包含端口号
+    // Post the notification, with the port number in userInfo
     dispatch_async(dispatch_get_main_queue(), ^{
         [[NSNotificationCenter defaultCenter] postNotificationName:LanPortDetectorDidDetectPortNotification
                                                             object:self

@@ -6,7 +6,7 @@
 @property (nonatomic, copy) void (^whenDelete)(NSString* name);
 @property(nonatomic, copy) void (^whenItemSelected)();
 
-/// FCL 风格底部"添加账户"浮动按钮（暴露属性便于布局/动画控制）
+/// FCL-style floating "Add account" button at the bottom (exposed for layout/animation control)
 @property (nonatomic, strong) UIButton *addAccountButton;
 
 @end

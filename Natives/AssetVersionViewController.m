@@ -2,10 +2,10 @@
 //  AssetVersionViewController.m
 //  Amethyst
 //
-// 通用资源版本选择视图控制器实现
-// 阶段3统一：重构为 FCL 风格 chips 筛选条（游戏版本 + 排序方式），与 ModVersionViewController 风格一致
-// 资产类型（资源包/数据包/世界）无加载器概念，故无加载器筛选行，无双源切换（仅 Modrinth）
-// 复用 ModrinthAPI 的 getVersionsForModWithID: 方法（API 端点对所有 project_type 通用）
+// Implementation of the generic asset version picker view controller
+// Phase 3 alignment: reworked into an FCL-style chip filter bar (game version + sort), matching ModVersionViewController
+// Asset types (resource pack/data pack/world) have no loader, so there is no loader filter row and no source switch (Modrinth only)
+// Reuses ModrinthAPI's getVersionsForModWithID: (the API endpoint is the same for every project_type)
 //
 
 #import "AssetVersionViewController.h"
@@ -16,14 +16,14 @@
 #import "BackgroundManager.h"
 
 // ============================================================================
-// 排序方式常量（与 ModVersionViewController 保持一致，阶段3统一）
+// Sort constants (kept in sync with ModVersionViewController, phase 3 alignment)
 // ============================================================================
-static NSString *const kSortRelevance = @"relevance"; // 相关性（保持 API 原始顺序）
-static NSString *const kSortDownloads = @"downloads"; // 下载量（版本级别无此字段，回退为原始顺序）
-static NSString *const kSortUpdated   = @"updated";   // 最新更新（datePublished 降序）
-static NSString *const kSortCreated   = @"created";   // 创建时间（datePublished 升序）
+static NSString *const kSortRelevance = @"relevance"; // Relevance (keeps the original API order)
+static NSString *const kSortDownloads = @"downloads"; // Downloads (not available at version level, so it falls back to the original order)
+static NSString *const kSortUpdated   = @"updated";   // Recently updated (datePublished descending)
+static NSString *const kSortCreated   = @"created";   // Created (datePublished ascending)
 
-// 排序选项显示文案（与常量一一对应，用于 chips 渲染）
+// Display text for the sort options (one per constant, used to render the chips)
 static NSArray<NSDictionary *> *SortOptionItems(void) {
     static NSArray *items = nil;
     static dispatch_once_t onceToken;
@@ -40,38 +40,38 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
 
 @interface AssetVersionViewController () <UITableViewDataSource, UITableViewDelegate>
 
-// 主表格视图（展示版本列表）
+// Main table view (shows the version list)
 @property (nonatomic, strong) UITableView *tableView;
 @property (nonatomic, strong) UIActivityIndicatorView *activityIndicator;
 
-// ===== 侧边筛选面板（阶段3统一：参照 ModVersionViewController 的水平滚动 chips 筛选条）=====
-// 筛选面板容器（半透明 + 毛玻璃背景，固定在 tableView 上方不随列表滚动）
+// ===== Side filter panel (phase 3 alignment: modelled on the horizontally scrolling chip bar of ModVersionViewController) =====
+// Filter panel container (translucent + frosted glass, pinned above the tableView and not scrolling with the list)
 @property (nonatomic, strong) UIView *filterContainerView;
-// 主垂直 stack（容纳 2 行筛选：版本 / 排序，资产类型无加载器和下载源）
+// Main vertical stack (holds the 2 filter rows: version / sort; asset types have no loader or download source)
 @property (nonatomic, strong) UIStackView *filterMainStack;
 
-// --- 游戏版本筛选行 ---
+// --- Game version filter row ---
 @property (nonatomic, strong) UIScrollView *versionScrollView;
 @property (nonatomic, strong) UIStackView  *versionChipStack;
 
-// --- 排序方式筛选行 ---
+// --- Sort filter row ---
 @property (nonatomic, strong) UIScrollView *sortScrollView;
 @property (nonatomic, strong) UIStackView  *sortChipStack;
 
-// ===== 当前选中的筛选状态 =====
-@property (nonatomic, copy)   NSString *selectedSort;    // 排序方式 key
+// ===== Currently selected filter state =====
+@property (nonatomic, copy)   NSString *selectedSort;    // Sort key
 
-// ===== 数据源 =====
+// ===== Data sources =====
 @property (nonatomic, strong) NSArray<ModVersion *> *allVersions;
 @property (nonatomic, strong) NSArray<ModVersion *> *filteredVersions;
 
-// 可选的筛选选项列表（从版本数据中动态提取）
+// The available filter options (extracted dynamically from the version data)
 @property (nonatomic, strong) NSArray<NSString *> *availableGameVersions;
 
-// 当前选中的版本（"全部" 表示不过滤）
+// Currently selected version ("All" means no filtering)
 @property (nonatomic, strong) NSString *selectedGameVersion;
 
-// 项目详情头部视图（展示项目封面图/标题/作者/下载量/标签/描述，补齐信息显示缺口）
+// Project detail header view (shows the cover image, title, author, downloads, tags and description, filling the information gap)
 @property (nonatomic, strong) AssetDetailHeaderView *detailHeaderView;
 
 @end
@@ -82,10 +82,10 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
     [super viewDidLoad];
     self.view.backgroundColor = [UIColor systemBackgroundColor];
     self.title = self.projectDisplayName ?: [self titleForAssetType];
-    // 适配自定义启动器背景：透明化当前 VC，让全局背景图/毛玻璃透出
+    // Adapt to the custom launcher background: make this VC transparent so the global background image/blur shows through
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
 
-    // 初始化筛选状态（默认相关性排序，与 ModVersionViewController 一致）
+    // Initialize the filter state (sorted by relevance by default, matching ModVersionViewController)
     self.selectedSort = kSortRelevance;
 
     [self setupSideFilterPanel];
@@ -93,13 +93,13 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
     [self setupActivityIndicator];
     [self setupDetailHeader];
 
-    // 透明化 tableView 背景，避免遮挡全局背景
+    // Make the tableView background transparent so it does not hide the global background
     self.tableView.backgroundColor = [UIColor clearColor];
     self.tableView.backgroundView = nil;
 
     [self fetchVersions];
 
-    // 监听背景效果变化通知，背景切换时重新应用透明效果
+    // Listen for background effect changes so transparency is re-applied when the background is switched
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(reapplyBackgroundEffect)
                                                  name:@"BackgroundUIEffectChanged"
@@ -107,33 +107,33 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
 }
 
 - (void)reapplyBackgroundEffect {
-    // 背景效果改变时重新透明化当前 VC
+    // Re-apply transparency to this VC when the background effect changes
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
-    // 重新设置 tableView 背景为透明，确保背景效果切换后仍透出全局背景
+    // Reset the tableView background to transparent so the global background still shows after an effect switch
     self.tableView.backgroundColor = [UIColor clearColor];
     self.tableView.backgroundView = nil;
 }
 
 - (void)dealloc {
-    // 移除通知观察者，避免dealloc后收到通知导致崩溃
+    // Remove the notification observer to avoid crashing on notifications delivered after dealloc
     [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
 #pragma mark - Detail Header（项目信息展示）
 
-/// 创建并配置项目详情头部视图，设置为 tableView.tableHeaderView
-/// 补齐之前版本页缺少的项目封面图/标题/作者/下载量/标签/描述等信息显示
+/// Build and configure the project detail header view and set it as tableView.tableHeaderView
+/// Fills the gap where earlier version pages showed no project cover image, title, author, downloads, tags or description
 - (void)setupDetailHeader {
     self.detailHeaderView = [[AssetDetailHeaderView alloc] init];
 
-    // 描述展开/收起时重新计算 header 高度（避免循环引用，用 weak）
+    // Recompute the header height when the description expands/collapses (weak reference to avoid a retain cycle)
     __weak typeof(self) weakSelf = self;
     self.detailHeaderView.onSizeChanged = ^{
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (strongSelf) [strongSelf updateTableHeaderHeight];
     };
 
-    // 根据 assetType 选占位 SF Symbol + 配色（与 ModernAssetCell 的资源类型配色一致）
+    // Pick the placeholder SF Symbol and color based on assetType (matching the asset-type colors of ModernAssetCell)
     NSString *placeholderSymbol = @"doc.fill";
     UIColor *placeholderColor = [UIColor systemBlueColor];
     switch (self.assetType) {
@@ -151,7 +151,7 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
             break;
     }
 
-    // 用 DownloadViewController 传入的项目展示信息填充
+    // Fill in the project display information passed by DownloadViewController
     [self.detailHeaderView configureWithIconURL:self.projectIconURL
                                           title:self.projectDisplayName ?: @"Unknown project"
                                          author:self.projectAuthor
@@ -167,7 +167,7 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
     self.tableView.tableHeaderView = self.detailHeaderView;
 }
 
-/// 重新计算 tableHeaderView 高度并刷新（在 viewDidLayoutSubviews 和描述展开/收起时调用）
+/// Recompute the tableHeaderView height and refresh (called from viewDidLayoutSubviews and when the description expands/collapses)
 - (void)updateTableHeaderHeight {
     if (!self.detailHeaderView) return;
     CGFloat width = self.tableView.bounds.size.width;
@@ -175,22 +175,22 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
     if (width <= 0) width = [UIScreen mainScreen].bounds.size.width;
     CGFloat height = [self.detailHeaderView fittingHeightForWidth:width];
     CGRect frame = self.detailHeaderView.frame;
-    if (fabs(frame.size.height - height) < 1) return; // 高度未变化则跳过
+    if (fabs(frame.size.height - height) < 1) return; // Skip if the height has not changed
     frame.size.height = height;
     self.detailHeaderView.frame = frame;
-    // 重新赋值触发 tableView 重新布局 header
+    // Reassigning triggers the tableView to lay the header out again
     self.tableView.tableHeaderView = self.detailHeaderView;
 }
 
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
-    // 首次 layout 后 tableView 宽度才确定，此时更新一次 header 高度
+    // The tableView width is only known after the first layout, so update the header height once here
     if (self.detailHeaderView) {
         [self updateTableHeaderHeight];
     }
 }
 
-// 根据资产类型返回默认导航栏标题
+// Return the default navigation bar title for the asset type
 - (NSString *)titleForAssetType {
     switch (self.assetType) {
         case AssetVersionTypeResourcePack: return @"Select resource pack version";
@@ -202,10 +202,10 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
 
 #pragma mark - 侧边筛选面板（chips 筛选条，阶段3统一）
 
-/// 创建筛选面板容器 + 2 行 chips（游戏版本 + 排序方式）
-/// 参照 ModVersionViewController 的 setupSideFilterPanel，但移除了下载源和加载器行
+/// Build the filter panel container plus the 2 chip rows (game version + sort)
+/// Modelled on setupSideFilterPanel in ModVersionViewController, minus the download source and loader rows
 - (void)setupSideFilterPanel {
-    // ===== 筛选面板容器（半透明 + 毛玻璃，固定在顶部不随列表滚动）=====
+    // ===== Filter panel container (translucent + frosted glass, pinned at the top and not scrolling with the list) =====
     self.filterContainerView = [[UIView alloc] init];
     self.filterContainerView.translatesAutoresizingMaskIntoConstraints = NO;
     self.filterContainerView.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.06];
@@ -214,10 +214,10 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
     self.filterContainerView.layer.borderWidth = 0.5;
     self.filterContainerView.layer.borderColor = [[UIColor whiteColor] colorWithAlphaComponent:0.10].CGColor;
     [self.view addSubview:self.filterContainerView];
-    // 应用毛玻璃背景效果，与启动器整体风格一致
+    // Apply the frosted-glass background effect for consistency with the launcher style
     [[BackgroundManager sharedManager] applyEffectToView:self.filterContainerView];
 
-    // ===== 主垂直 stack（2 行筛选，每行 = 图标标签 + 水平滚动 chips）=====
+    // ===== Main vertical stack (2 filter rows, each = icon label + horizontally scrolling chips) =====
     self.filterMainStack = [[UIStackView alloc] init];
     self.filterMainStack.translatesAutoresizingMaskIntoConstraints = NO;
     self.filterMainStack.axis = UILayoutConstraintAxisVertical;
@@ -225,7 +225,7 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
     self.filterMainStack.alignment = UIStackViewAlignmentFill;
     [self.filterContainerView addSubview:self.filterMainStack];
 
-    // ----- 第 1 行：游戏版本筛选（动态填充，初始显示"加载中"）-----
+    // ----- Row 1: game version filter (filled in dynamically, showing "Loading" at first) -----
     {
         UIScrollView *scrollOut = nil;
         UIStackView *chipOut = nil;
@@ -239,7 +239,7 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
     }
     [self addChipToStack:self.versionChipStack title:@"Loading..." selected:NO action:NULL];
 
-    // ----- 第 2 行：排序方式筛选（相关性 / 下载量 / 最新更新 / 创建时间）-----
+    // ----- Row 2: sort filter (relevance / downloads / recently updated / created) -----
     {
         UIScrollView *scrollOut = nil;
         UIStackView *chipOut = nil;
@@ -253,12 +253,12 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
     }
     [self rebuildSortChips];
 
-    // ===== 容器约束：顶部紧贴安全区域，左右留 8pt 边距 =====
+    // ===== Container constraints: flush with the top of the safe area, 8pt margin on each side =====
     [NSLayoutConstraint activateConstraints:@[
         [self.filterContainerView.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:6],
         [self.filterContainerView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:8],
         [self.filterContainerView.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor constant:-8],
-        // 主 stack 内边距
+        // Padding inside the main stack
         [self.filterMainStack.topAnchor constraintEqualToAnchor:self.filterContainerView.topAnchor constant:8],
         [self.filterMainStack.bottomAnchor constraintEqualToAnchor:self.filterContainerView.bottomAnchor constant:-8],
         [self.filterMainStack.leadingAnchor constraintEqualToAnchor:self.filterContainerView.leadingAnchor constant:10],
@@ -266,13 +266,13 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
     ]];
 }
 
-/// 创建单行筛选布局：左侧图标+标签（固定宽度），右侧水平滚动 chips 容器
-/// 参照 ModVersionViewController 的 createFilterRowWithIconName（阶段3统一）
+/// Build one filter row: icon + label on the left (fixed width), horizontally scrolling chips on the right
+/// Modelled on createFilterRowWithIconName in ModVersionViewController (phase 3 alignment)
 - (UIStackView *)createFilterRowWithIconName:(NSString *)iconName
                                        label:(NSString *)labelText
                                 scrollStackOut:(UIScrollView **)scrollStackOut
                                   chipStackOut:(UIStackView **)chipStackOut {
-    // --- 左侧：图标 + 标签（固定宽度，不随 chips 滚动）---
+    // --- Left: icon + label (fixed width, does not scroll with the chips) ---
     UIImageView *iconView = [[UIImageView alloc] init];
     iconView.translatesAutoresizingMaskIntoConstraints = NO;
     iconView.image = [UIImage systemImageNamed:iconName];
@@ -302,7 +302,7 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
     labelStack.alignment = UIStackViewAlignmentCenter;
     [labelStack setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
 
-    // --- 右侧：水平滚动 chips 容器 ---
+    // --- Right: horizontally scrolling chip container ---
     UIScrollView *scrollView = [[UIScrollView alloc] init];
     scrollView.translatesAutoresizingMaskIntoConstraints = NO;
     scrollView.showsHorizontalScrollIndicator = NO;
@@ -315,7 +315,7 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
     chipStack.alignment = UIStackViewAlignmentCenter;
     [scrollView addSubview:chipStack];
 
-    // chipStack 填满 scrollView 的 contentLayoutGuide，高度与 frameLayoutGuide 一致
+    // chipStack fills the scrollView contentLayoutGuide, with its height matching frameLayoutGuide
     [NSLayoutConstraint activateConstraints:@[
         [chipStack.topAnchor constraintEqualToAnchor:scrollView.contentLayoutGuide.topAnchor],
         [chipStack.bottomAnchor constraintEqualToAnchor:scrollView.contentLayoutGuide.bottomAnchor],
@@ -324,23 +324,23 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
         [chipStack.heightAnchor constraintEqualToAnchor:scrollView.frameLayoutGuide.heightAnchor],
     ]];
 
-    // 输出到调用方的属性
+    // Properties handed back to the caller
     if (scrollStackOut) *scrollStackOut = scrollView;
     if (chipStackOut) *chipStackOut = chipStack;
 
-    // --- 行容器：标签 + 滚动视图 水平排列 ---
+    // --- Row container: label + scroll view laid out horizontally ---
     UIStackView *row = [[UIStackView alloc] initWithArrangedSubviews:@[labelStack, scrollView]];
     row.translatesAutoresizingMaskIntoConstraints = NO;
     row.axis = UILayoutConstraintAxisHorizontal;
     row.spacing = 6;
     row.alignment = UIStackViewAlignmentCenter;
-    // 固定行高，让总高度可控
+    // Fixed row height so the total height stays predictable
     [row.heightAnchor constraintEqualToConstant:30].active = YES;
     return row;
 }
 
-/// 创建单个筛选 chip 按钮（pill 样式，参照 ModVersionViewController）
-/// 选中态：主题色(systemBlue)背景 + 白字；未选中态：半透明背景 + 标签色文字 + 浅边框
+/// Build a single filter chip button (pill style, modelled on ModVersionViewController)
+/// Selected: theme color (systemBlue) background + white text. Unselected: translucent background + label-colored text + light border
 - (UIButton *)createFilterChipWithTitle:(NSString *)title selected:(BOOL)selected {
     UIButton *chip = [UIButton buttonWithType:UIButtonTypeSystem];
     chip.translatesAutoresizingMaskIntoConstraints = NO;
@@ -352,7 +352,7 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
     chip.layer.cornerRadius = 14;
     chip.layer.cornerCurve = kCACornerCurveContinuous;
     chip.layer.masksToBounds = YES;
-    // 固定高度，防止内容变化导致高度跳动
+    // Fixed height so the row does not jump when the content changes
     [chip.heightAnchor constraintEqualToConstant:28].active = YES;
     [chip setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
     [chip setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
@@ -360,15 +360,15 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
     return chip;
 }
 
-/// 应用 chip 选中/未选中样式（与 ModVersionViewController 一致，阶段3统一）
+/// Apply the selected/unselected chip style (matching ModVersionViewController, phase 3 alignment)
 - (void)applyChipStyle:(UIButton *)chip selected:(BOOL)selected {
     if (selected) {
-        // 选中态：主题色背景 + 白字（参照 FCL 选中标签高亮）
+        // Selected: theme color background + white text (following how FCL highlights selected tags)
         chip.backgroundColor = [UIColor systemBlueColor];
         [chip setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
         chip.layer.borderWidth = 0;
     } else {
-        // 未选中态：半透明背景 + 标签色文字 + 浅边框
+        // Unselected: translucent background + label-colored text + light border
         chip.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.08];
         [chip setTitleColor:[UIColor labelColor] forState:UIControlStateNormal];
         chip.layer.borderWidth = 0.5;
@@ -376,7 +376,7 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
     }
 }
 
-/// 向 chipStack 添加一个 chip（自动应用样式 + 绑定点击回调）
+/// Add a chip to chipStack (applying the style and wiring up the tap handler)
 - (void)addChipToStack:(UIStackView *)stack title:(NSString *)title selected:(BOOL)selected action:(void(^)(void))action {
     UIButton *chip = [self createFilterChipWithTitle:title selected:selected];
     if (action) {
@@ -387,14 +387,14 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
     [stack addArrangedSubview:chip];
 }
 
-/// 重建游戏版本 chips（从"加载中..."替换为实际数据）
+/// Rebuild the game version chips (replacing "Loading..." with the real data)
 - (void)rebuildVersionChips {
-    // 清空旧 chips
+    // Clear the old chips
     for (UIView *v in self.versionChipStack.arrangedSubviews) {
         [self.versionChipStack removeArrangedSubview:v];
         [v removeFromSuperview];
     }
-    // 添加新 chips
+    // Add the new chips
     for (NSString *version in self.availableGameVersions) {
         BOOL isSelected = [self.selectedGameVersion isEqualToString:version];
         __weak typeof(self) weakSelf = self;
@@ -403,7 +403,7 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
             if (!strongSelf) return;
             if ([strongSelf.selectedGameVersion isEqualToString:version]) return;
             strongSelf.selectedGameVersion = version;
-            // 更新 chip 选中态
+            // Update the chip selection state
             for (UIView *v in strongSelf.versionChipStack.arrangedSubviews) {
                 if ([v isKindOfClass:[UIButton class]]) {
                     UIButton *chip = (UIButton *)v;
@@ -413,18 +413,18 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
             [strongSelf applyFiltersAndSort];
         }];
     }
-    // 滚动到选中 chip
+    // Scroll to the selected chip
     [self scrollToSelectedChipInStack:self.versionChipStack withTitle:self.selectedGameVersion];
 }
 
-/// 重建排序方式 chips（静态选项）
+/// Rebuild the sort chips (static options)
 - (void)rebuildSortChips {
-    // 清空旧 chips
+    // Clear the old chips
     for (UIView *v in self.sortChipStack.arrangedSubviews) {
         [self.sortChipStack removeArrangedSubview:v];
         [v removeFromSuperview];
     }
-    // 添加新 chips
+    // Add the new chips
     for (NSDictionary *item in SortOptionItems()) {
         NSString *key = item[@"key"];
         NSString *title = item[@"title"];
@@ -435,7 +435,7 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
             if (!strongSelf) return;
             if ([strongSelf.selectedSort isEqualToString:key]) return;
             strongSelf.selectedSort = key;
-            // 更新 chip 选中态（用 accessibilityIdentifier 存 key）
+            // Update the chip selection state (the key is stored in accessibilityIdentifier)
             for (UIView *v in strongSelf.sortChipStack.arrangedSubviews) {
                 if ([v isKindOfClass:[UIButton class]]) {
                     UIButton *chip = (UIButton *)v;
@@ -448,7 +448,7 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
     [self scrollToSelectedChipInStack:self.sortChipStack withTitle:nil];
 }
 
-/// 滚动到选中的 chip（如果可见区域内不可见）
+/// Scroll to the selected chip (if it is outside the visible area)
 - (void)scrollToSelectedChipInStack:(UIStackView *)stack withTitle:(NSString *)title {
     if (!title) return;
     for (UIView *v in stack.arrangedSubviews) {
@@ -508,7 +508,7 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
     }
 
     [self.activityIndicator startAnimating];
-    // 复用 getVersionsForModWithID:（Modrinth /project/<id>/version 端点对所有 project_type 通用）
+    // Reuses getVersionsForModWithID: (the Modrinth /project/<id>/version endpoint is the same for every project_type)
     [[ModrinthAPI sharedInstance] getVersionsForModWithID:self.projectID completion:^(NSArray<ModVersion *> * _Nullable versions, NSError * _Nullable error) {
         dispatch_async(dispatch_get_main_queue(), ^{
             [self.activityIndicator stopAnimating];
@@ -539,18 +539,18 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
         }
     }
 
-    // 游戏版本按语义版本号倒序排列（新版本在前），"全部"始终在最前
+    // Game versions are sorted by semantic version, newest first, with "All" always in front
     self.availableGameVersions = [[gameVersions allObjects] sortedArrayUsingComparator:^NSComparisonResult(NSString *obj1, NSString *obj2) {
         if ([obj1 isEqualToString:@"All"]) return NSOrderedAscending;
         if ([obj2 isEqualToString:@"All"]) return NSOrderedDescending;
         return [obj2 compare:obj1 options:NSNumericSearch];
     }];
 
-    // FCL 风格：默认选中"全部"，但如果 preferredGameVersion 在可选列表中，则自动选中匹配项
-    // 阶段3统一：补齐与 ModVersionViewController 不对称的 preferred 自动选中逻辑
+    // FCL style: "All" is selected by default, but if preferredGameVersion is in the list it is selected automatically
+    // Phase 3 alignment: add the preferred auto-selection logic that was missing compared with ModVersionViewController
     self.selectedGameVersion = self.availableGameVersions.firstObject ?: @"All";
 
-    // 自动选中 preferred 版本（大小写不敏感比较）
+    // Auto-select the preferred version (case-insensitive comparison)
     if (self.preferredGameVersion.length > 0) {
         NSString *preferred = self.preferredGameVersion;
         for (NSString *gv in self.availableGameVersions) {
@@ -561,25 +561,25 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
         }
     }
 
-    // 重建版本 chips（从"加载中..."替换为实际数据）
+    // Rebuild the version chips (replacing "Loading..." with the real data)
     [self rebuildVersionChips];
 }
 
-/// 应用筛选 + 排序并刷新表格
-/// 先按游戏版本过滤，再按排序方式排序，最后把匹配 preferred 的版本置顶
+/// Apply the filters and sorting, then refresh the table
+/// Filter by game version first, then sort, then move versions matching preferred to the top
 - (void)applyFiltersAndSort {
-    // ----- 1. 筛选：游戏版本（资产类型无加载器概念）-----
+    // ----- 1. Filter: game version (asset types have no loader) -----
     NSPredicate *predicate = [NSPredicate predicateWithBlock:^BOOL(ModVersion *evaluatedObject, NSDictionary *bindings) {
         return [self.selectedGameVersion isEqualToString:@"All"] ||
                [evaluatedObject.gameVersions containsObject:self.selectedGameVersion];
     }];
     NSArray<ModVersion *> *filtered = [self.allVersions filteredArrayUsingPredicate:predicate];
 
-    // ----- 2. 排序：按选中的排序方式 -----
+    // ----- 2. Sort: by the selected sort option -----
     NSArray<ModVersion *> *sorted = [self sortVersions:filtered];
 
-    // ----- 3. FCL 风格：把匹配 preferred 版本的版本置顶 -----
-    // 阶段3统一：补齐与 ModVersionViewController 不对称的 preferred 置顶逻辑
+    // ----- 3. FCL style: move versions matching preferred to the top -----
+    // Phase 3 alignment: add the preferred pin-to-top logic that was missing compared with ModVersionViewController
     if (self.preferredGameVersion.length > 0) {
         NSMutableArray<ModVersion *> *pinned = [NSMutableArray array];
         NSMutableArray<ModVersion *> *rest = [NSMutableArray array];
@@ -590,7 +590,7 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
                 [rest addObject:v];
             }
         }
-        // 置顶的部分按原排序顺序，其余接在后面
+        // The pinned entries keep their original order, and the rest follow
         if (pinned.count > 0 && pinned.count < sorted.count) {
             sorted = [pinned arrayByAddingObjectsFromArray:rest];
         }
@@ -600,17 +600,17 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
     [self.tableView reloadData];
 }
 
-/// 对版本数组按当前选中的排序方式进行排序（与 ModVersionViewController 一致）
+/// Sort the version array by the currently selected sort option (matching ModVersionViewController)
 - (NSArray<ModVersion *> *)sortVersions:(NSArray<ModVersion *> *)versions {
     if (!versions || versions.count <= 1) return versions;
 
-    // 相关性 / 下载量：保持 API 原始顺序
+    // Relevance / downloads: keep the original API order
     if ([self.selectedSort isEqualToString:kSortRelevance] ||
         [self.selectedSort isEqualToString:kSortDownloads]) {
         return versions;
     }
 
-    // 最新更新 / 创建时间：按 datePublished 排序
+    // Recently updated / created: sort by datePublished
     NSISO8601DateFormatter *dateFormatter = [[NSISO8601DateFormatter alloc] init];
     NSMutableArray<ModVersion *> *sorted = [versions mutableCopy];
     __weak typeof(self) weakSelf = self;
@@ -622,11 +622,11 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
         if (!d2) d2 = [NSDate distantPast];
 
         if ([strongSelf.selectedSort isEqualToString:kSortUpdated]) {
-            // 最新更新：降序（新的在前）
+            // Recently updated: descending (newest first)
             return [d2 compare:d1];
         }
         if ([strongSelf.selectedSort isEqualToString:kSortCreated]) {
-            // 创建时间：升序（旧的在前）
+            // Created: ascending (oldest first)
             return [d1 compare:d2];
         }
         return NSOrderedSame;

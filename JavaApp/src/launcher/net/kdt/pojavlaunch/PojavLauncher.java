@@ -183,7 +183,7 @@ public class PojavLauncher {
         // 旧版本 MC（1.21.7 及以下）不识别 options.txt 中的 graphicsApi 字段，
         // 会被忽略，无副作用。
         //
-        // 关键修复（更改图形 API 无效）：
+        // Key fix (changing the graphics API had no effect):
         //   之前当 graphicsApi 为 "default" 时直接跳过，不写入 options.txt。
         //   这导致用户从 prefer_vulkan/prefer_opengl 切换回 default 时，
         //   options.txt 中残留的旧值不会被清除，MC 继续使用旧值而非内部默认。

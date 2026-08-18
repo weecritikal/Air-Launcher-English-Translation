@@ -2,15 +2,15 @@
 //  CurseForgeAPIKeyViewController.h
 //  Amethyst
 //
-//  CurseForge API Key 运行时设置页
+//  Runtime settings page for the CurseForge API key
 //
 
 #import <UIKit/UIKit.h>
 
 NS_ASSUME_NONNULL_BEGIN
 
-/// CurseForge API Key 设置页
-/// 允许用户运行时配置 API Key，覆盖编译时默认值
+/// CurseForge API key settings page
+/// Lets the user set an API key at runtime, overriding the compile-time default
 @interface CurseForgeAPIKeyViewController : UIViewController
 
 @end

@@ -481,7 +481,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
         [_suggestionsStackView addArrangedSubview:row];
     }
 
-    // 布局约束
+    // Layout constraints
     [NSLayoutConstraint activateConstraints:@[
         [titleRow.topAnchor constraintEqualToAnchor:_suggestionsCardView.topAnchor constant:14],
         [titleRow.leadingAnchor constraintEqualToAnchor:_suggestionsCardView.leadingAnchor constant:16],

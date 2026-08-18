@@ -30,9 +30,9 @@ extern UIWindow *mainWindow;
     
     self.window = [[UIWindow alloc] initWithWindowScene:windowScene];
     self.window.frame = windowScene.coordinateSpace.bounds;
-    // 修复：使用 systemBackgroundColor 自适应浅色/深色模式。
-    // 之前硬编码深灰（0.08）在浅色模式下导致"中间一片黑"。
-    // systemBackgroundColor 在浅色模式为白、深色模式为黑，自动适配。
+    // Fix: use systemBackgroundColor so it adapts to light/dark mode.
+    // The previously hardcoded dark gray (0.08) made the middle "a block of black" in light mode.
+    // systemBackgroundColor is white in light mode and black in dark mode, adapting automatically.
     // BackgroundManager.applyBackgroundToWindow 会根据用户是否设置自定义壁纸覆盖此颜色。
     if (@available(iOS 13.0, *)) {
         self.window.backgroundColor = [UIColor systemBackgroundColor];

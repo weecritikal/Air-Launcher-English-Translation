@@ -4,8 +4,8 @@
 #import "modpack/ModrinthAPI.h"
 #import "MinecraftResourceDownloadTask.h"
 #import "PLProfiles.h"
-// 注意：UIKit+AFNetworking 已替换为 IconLoader 统一加载器
-// （AFNetworking 仅内存缓存无降采样，IconLoader 提供双层缓存+降采样+CDN镜像+并发控制）
+// Note: UIKit+AFNetworking has been replaced by the unified IconLoader
+// (AFNetworking only caches in memory and does not downsample; IconLoader adds a two-level cache, downsampling, CDN mirrors and concurrency control)
 #import "IconLoader.h"
 #import "WFWorkflowProgressView.h"
 #import "config.h"
@@ -32,7 +32,7 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
 
-    // 适配自定义启动器背景：透明化当前 VC，让全局背景图/毛玻璃透出
+    // Adapt to the custom launcher background: make this VC transparent so the global background image/blur shows through
     // 本控制器为 UITableViewController 子类，makeViewControllerTransparent 内部会自动处理 tableView 背景透明化
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
     // 应用毛玻璃效果到根视图

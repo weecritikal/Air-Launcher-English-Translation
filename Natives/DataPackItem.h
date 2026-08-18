@@ -2,7 +2,7 @@
 //  DataPackItem.h
 //  Amethyst
 //
-//  数据包数据模型，参照 ShaderItem，新增 packFormat（从 pack.mcmeta 解析）
+//  Data pack model, modelled on ShaderItem with packFormat added (parsed from pack.mcmeta)
 //
 
 #import <Foundation/Foundation.h>
@@ -12,12 +12,12 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface DataPackItem : NSObject
 
-// --- 本地数据包属性 ---
+// --- Local data pack properties ---
 @property (nonatomic, copy, nullable) NSString *fileName;
 @property (nonatomic, copy, nullable) NSString *filePath;
 @property (nonatomic, assign) BOOL disabled;
 
-// --- 在线数据包属性 ---
+// --- Online data pack properties ---
 @property (nonatomic, copy, nullable) NSString *onlineID;
 @property (nonatomic, copy, nullable) NSString *author;
 @property (nonatomic, strong, nullable) NSNumber *downloads;
@@ -26,7 +26,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, strong, nullable) NSArray<NSString *> *categories;
 @property (nonatomic, copy, nullable) NSString *selectedVersionDownloadURL;
 
-// --- 通用/元数据属性 ---
+// --- Shared/metadata properties ---
 @property (nonatomic, copy, nullable) NSString *displayName;
 @property (nonatomic, copy, nullable) NSString *dataPackDescription;
 @property (nonatomic, copy, nullable) NSString *iconURL;
@@ -36,14 +36,14 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, copy, nullable) NSString *gameVersion;
 @property (nonatomic, copy, nullable) NSString *homepage;
 @property (nonatomic, copy, nullable) NSString *sources;
-// pack.mcmeta 中的 pack_format 字段
+// The pack_format field from pack.mcmeta
 @property (nonatomic, strong, nullable) NSNumber *packFormat;
 
-// --- 初始化方法 ---
+// --- Initializers ---
 - (instancetype)initWithFilePath:(NSString *)path;
 - (instancetype)initWithOnlineData:(NSDictionary *)data;
 
-// --- 工具方法 ---
+// --- Helpers ---
 - (NSString *)basename;
 - (void)refreshDisabledFlag;
 

@@ -16,7 +16,7 @@
 #import "ModpackImportViewController.h"
 #import "LauncherPrefGameDirViewController.h"
 #import "CustomControlsViewController.h"
-// ZeroTier/Terracotta 联机暂时移除（排查启动崩溃）
+// ZeroTier/Terracotta multiplayer temporarily removed (while a startup crash is investigated)
 // #import "MultiplayerViewController.h"
 // #import "TerracottaViewController.h"
 // #import "TerracottaManager.h"
@@ -29,9 +29,9 @@ static const CGFloat kSidebarWidthPhone = 56.0;    // iPhone 左侧边栏宽度�
 static const CGFloat kRightPanelWidthPad = 220.0;  // iPad 右侧面板宽度
 static const CGFloat kRightPanelWidthPhone = 168.0; // iPhone 右侧面板宽度（保证按钮文字可读）
 
-/// 检测物理设备是否为 iPhone（不受 debug.debug_ipad_ui 的 idiom hook 影响）。
-/// UIKit+hook.m 会把 idiom 强制改成 Pad，导致 trait.userInterfaceIdiom 不可靠。
-/// 这里用 UIDevice.model 检测真实设备类型。
+/// Detect whether the physical device is an iPhone (unaffected by the idiom hook of debug.debug_ipad_ui).
+/// UIKit+hook.m forces the idiom to Pad, which makes trait.userInterfaceIdiom unreliable.
+/// UIDevice.model is used here to detect the real device type.
 static BOOL LauncherRootIsPhysicalPhone(void) {
     NSString *model = [[UIDevice currentDevice].model lowercaseString];
     return [model containsString:@"iphone"];
@@ -43,7 +43,7 @@ static CGFloat LauncherRootLayoutSidebarWidth(UITraitCollection *trait) {
     return kSidebarWidthPad;
 }
 
-/// 根据物理设备类型决定右侧面板宽度
+/// Decide the right panel width from the physical device type
 static CGFloat LauncherRootLayoutRightPanelWidth(UITraitCollection *trait) {
     if (LauncherRootIsPhysicalPhone()) return kRightPanelWidthPhone;
     return kRightPanelWidthPad;
@@ -79,16 +79,16 @@ static CGFloat LauncherRootLayoutRightPanelWidth(UITraitCollection *trait) {
 
     self.view.backgroundColor = [UIColor clearColor];
 
-    // 初始化版本列表（必须在其他视图控制器之前）
+    // Initialize the version list (this must come before the other view controllers)
     [self initializeVersionLists];
 
     // 创建三个容器视图
     [self setupContainers];
 
-    // 添加子视图控制器
+    // Add the child view controllers
     [self setupChildViewControllers];
 
-    // 应用背景
+    // Apply the background
     [[BackgroundManager sharedManager] applyBackgroundToView:self.view];
 
     // 监听外观变更（字体颜色 / 卡片颜色），与 Card 布局保持一致
@@ -104,7 +104,7 @@ static CGFloat LauncherRootLayoutRightPanelWidth(UITraitCollection *trait) {
 }
 
 - (void)initializeVersionLists {
-    // 初始化本地版本列表
+    // Initialize the local version list
     if (!localVersionList) {
         localVersionList = [NSMutableArray new];
     }
@@ -124,7 +124,7 @@ static CGFloat LauncherRootLayoutRightPanelWidth(UITraitCollection *trait) {
         }
     }
     
-    // 初始化远程版本列表
+    // Initialize the remote version list
     if (!remoteVersionList) {
         remoteVersionList = [NSMutableArray new];
     }
@@ -134,7 +134,7 @@ static CGFloat LauncherRootLayoutRightPanelWidth(UITraitCollection *trait) {
         @{@"id": @"latest-snapshot", @"type": @"snapshot"}
     ]];
     
-    // 异步获取远程版本列表
+    // Fetch the remote version list asynchronously
     [self fetchRemoteVersionList];
 }
 
@@ -179,7 +179,7 @@ static CGFloat LauncherRootLayoutRightPanelWidth(UITraitCollection *trait) {
 
 - (void)traitCollectionDidChange:(UITraitCollection *)previousTraitCollection {
     [super traitCollectionDidChange:previousTraitCollection];
-    // iPhone 与 iPad 切换、或分屏调整大小时，更新侧栏与右侧面板宽度
+    // Update the sidebar and right panel widths when switching between iPhone and iPad, or when a split view is resized
     CGFloat sidebarWidth = LauncherRootLayoutSidebarWidth(self.traitCollection);
     CGFloat rightPanelWidth = LauncherRootLayoutRightPanelWidth(self.traitCollection);
     if (self.sidebarWidthConstraint.constant != sidebarWidth) {
@@ -254,7 +254,7 @@ static CGFloat LauncherRootLayoutRightPanelWidth(UITraitCollection *trait) {
     [[BackgroundManager sharedManager] applyEffectToView:self.rightPanelContainer];
     [self.view addSubview:self.rightPanelContainer];
     
-    // 设置约束
+    // Set up the constraints
     // 使用可变宽度约束，便于 traitCollection 变化时更新（iPhone/iPad 适配）
     self.sidebarWidthConstraint = [self.sidebarContainer.widthAnchor constraintEqualToConstant:LauncherRootLayoutSidebarWidth(self.traitCollection)];
     self.rightPanelWidthConstraint = [self.rightPanelContainer.widthAnchor constraintEqualToConstant:LauncherRootLayoutRightPanelWidth(self.traitCollection)];
@@ -484,7 +484,7 @@ static CGFloat LauncherRootLayoutRightPanelWidth(UITraitCollection *trait) {
     [self setContentViewController:navVC animated:YES];
 }
 
-// ZeroTier/Terracotta 联机暂时移除（排查启动崩溃）
+// ZeroTier/Terracotta multiplayer temporarily removed (while a startup crash is investigated)
 // - (void)showMultiplayer { ... TerracottaViewController ... }
 // - (void)showZeroTier { ... MultiplayerViewController ... TerracottaManager ... }
 - (void)showMultiplayer {

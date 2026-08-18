@@ -24,7 +24,7 @@
 #import "ios_uikit_bridge.h"
 #import "LanPortDetector.h"
 #import "BackgroundManager.h"
-// ZeroTier/Terracotta 联机暂时移除（排查启动崩溃）
+// ZeroTier/Terracotta multiplayer temporarily removed (while a startup crash is investigated)
 // #import "MultiplayerManager.h"
 
 #include "glfw_keycodes.h"
@@ -1566,7 +1566,7 @@ static GameSurfaceView* pojavWindow;
     [self.view addSubview:self.launchCancelButton];
 
     // ========================================================================
-    // 布局约束
+    // Layout constraints
     // ========================================================================
     [NSLayoutConstraint activateConstraints:@[
         // 中央容器：水平居中，垂直居中

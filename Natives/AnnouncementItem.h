@@ -2,14 +2,14 @@
 //  AnnouncementItem.h
 //  Amethyst
 //
-//  公告数据模型
-//  数据源：general.news_url 指向的 JSON API（默认 https://amethyst.ct.ws/api/announcements.json）
-//  字段映射：
+//  Announcement data model
+//  Data source: the JSON API pointed at by general.news_url (default https://amethyst.ct.ws/api/announcements.json)
+//  Field mapping:
 //    id            -> announcementId
 //    title         -> title
-//    date          -> date        (ISO 日期，如 "2026-07-23")
+//    date          -> date        (ISO date, e.g. "2026-07-23")
 //    summary       -> summary
-//    content       -> content     (Markdown 正文)
+//    content       -> content     (Markdown body)
 //    priority      -> priority    ("high" / "normal" / "low")
 //    action_url    -> actionURL
 //    action_title  -> actionTitle
@@ -24,18 +24,18 @@ NS_ASSUME_NONNULL_BEGIN
 
 @property (nonatomic, copy) NSString *announcementId;
 @property (nonatomic, copy) NSString *title;
-@property (nonatomic, copy) NSString *date;        // ISO 日期字符串，如 "2026-07-23"
+@property (nonatomic, copy) NSString *date;        // ISO date string, e.g. "2026-07-23"
 @property (nonatomic, copy) NSString *summary;
-@property (nonatomic, copy) NSString *content;     // Markdown 格式正文
+@property (nonatomic, copy) NSString *content;     // Body in Markdown format
 @property (nonatomic, copy) NSString *priority;    // "high" / "normal" / "low"
 @property (nonatomic, copy) NSString *actionURL;
 @property (nonatomic, copy) NSString *actionTitle;
 @property (nonatomic, copy) NSString *imageURL;
 
-/// 从 JSON 字典创建（字段缺失时使用空串兜底）
+/// Build from a JSON dictionary (missing fields fall back to an empty string)
 + (nullable instancetype)itemFromDictionary:(NSDictionary *)dict;
 
-/// 格式化日期显示（如 "2026年7月23日"）
+/// Formatted date for display (e.g. "July 23, 2026")
 - (NSString *)formattedDateString;
 
 @end

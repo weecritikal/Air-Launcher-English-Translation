@@ -32,10 +32,10 @@
     [super viewDidLoad];
     self.view.backgroundColor = [UIColor systemBackgroundColor];
 
-    // 适配自定义启动器背景
+    // Adapt to the custom launcher background
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
 
-    // 返回按钮
+    // Back button
     UIBarButtonItem *backItem = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"chevron.left"]
                                                                   style:UIBarButtonItemStylePlain
                                                                  target:self
@@ -120,13 +120,13 @@
     self.titleLabel.text = self.item.title ?: @"";
     self.dateLabel.text = self.item.formattedDateString ?: @"";
 
-    // 用 MarkdownParser 渲染正文
+    // Render the body with MarkdownParser
     NSString *content = self.item.content.length > 0 ? self.item.content : self.item.summary;
     NSAttributedString *attributed = [MarkdownParser parseMarkdown:content
                                                          baseFont:[UIFont systemFontOfSize:15]];
     self.contentTextView.attributedText = attributed;
 
-    // 若有 actionURL 显示按钮
+    // Show the button if there is an actionURL
     if (self.item.actionURL.length > 0) {
         NSString *title = self.item.actionTitle.length > 0 ? self.item.actionTitle : @"View details";
         [self.actionButton setTitle:title forState:UIControlStateNormal];

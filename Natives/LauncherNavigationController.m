@@ -432,19 +432,19 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     vc.filepath = path;
     vc.hitEnterAfterWindowShown = hitEnter;
     if (!vc.requiredJavaVersion) {
-        // 解析失败（manifest 缺失/主类非法）时明确提示，避免静默 return 让用户以为安装器已启动
+        // Report parse failures (a missing manifest or an invalid main class) explicitly, instead of returning silently and letting the user think the installer started
         showDialog(localize(@"Error", nil),
             [NSString stringWithFormat:@"Could not determine the installer main class or Java version: %@", path.lastPathComponent]);
         return;
     }
-    // execute_jar 路径：Caciocavallo17 jar 现已统一为 Java 17 编译版本，
-    // Java 17/21 均可加载，不再需要强制提升 requiredJavaVersion 到 25。
-    // - Java 8 JAR（如 OptiFine 安装器）走 Caciocavallo（非 17）路径，用 Java 8
-    // - Java 17+ JAR 走 Caciocavallo17 路径，用 Java 17/21 即可
-    // 与 JavaLauncher.m launchJar 分支保持一致。
+    // The execute_jar path: the Caciocavallo17 jar is now consistently compiled for Java 17,
+    // so both Java 17 and 21 can load it and requiredJavaVersion no longer has to be forced up to 25.
+    // - Java 8 JARs (such as the OptiFine installer) take the Caciocavallo (non-17) path and use Java 8
+    // - Java 17+ JARs take the Caciocavallo17 path and can use Java 17 or 21
+    // This matches the launchJar branch in JavaLauncher.m.
     int requiredJavaVersion = vc.requiredJavaVersion;
-    // 预检 execute_jar 标签的 JRE 是否已配置，避免 present 后才发现没 JRE 导致黑屏
-    // 与 LauncherRightPanelViewController.enterModInstallerWithPath: 行为一致
+    // Check up front whether a JRE is configured for the execute_jar tag, so a missing JRE is not discovered after presenting and left as a black screen
+    // This matches the behavior of LauncherRightPanelViewController.enterModInstallerWithPath:
     NSString *javaHome = getSelectedJavaHome(@"execute_jar", requiredJavaVersion);
     if (!javaHome) {
         showDialog(localize(@"Error", nil),

@@ -47,12 +47,12 @@
                                                                                            target:self
                                                                                            action:@selector(closeTapped)];
 
-    // 适配自定义启动器背景：将当前视图控制器透明化，让全局背景（图片/视频）能够透出显示。
-    // 即使本页是背景设置页本身，也需要透明化以实时预览背景效果。
+    // Adapt to the custom launcher background: make this view controller transparent so the global background (image/video) shows through.
+    // Even though this is the background settings page itself, it must be transparent so the effect can be previewed live.
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
 
-    // 监听背景 UI 效果变化通知：当用户在背景设置中切换毛玻璃/半透明或调整透明度时，
-    // 重新调用 makeViewControllerTransparent 以应用最新的视觉效果，保证背景始终正确透出。
+    // Listen for background UI effect changes: when the user switches between frosted glass and translucent, or adjusts the opacity,
+    // call makeViewControllerTransparent again to apply the latest look and keep the background showing correctly.
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(reapplyBackgroundEffect)
                                                  name:@"BackgroundUIEffectChanged"
@@ -128,7 +128,7 @@
 }
 
 - (void)setupSections {
-    // Sections: [UI效果设置], [选择背景类型], [图片背景, 视频背景], [恢复默认背景, 清除背景]
+    // Sections: [UI effect settings], [Choose background type], [Image background, Video background], [Restore default background, Clear background]
     self.sections = @[
         @[@"UI effect", @"Opacity", @"Blur amount"],
         @[@"Choose background type"],
@@ -148,7 +148,7 @@
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-    // 如果没有自定义背景，隐藏UI效果设置部分
+    // Hide the UI effect section when there is no custom background
     if (section == 0 && ![[BackgroundManager sharedManager] hasBackground]) {
         return 0;
     }
@@ -170,10 +170,10 @@
     BackgroundManager *manager = [BackgroundManager sharedManager];
     BOOL hasBackground = [manager hasBackground];
     
-    // UI效果设置部分
+    // UI effect settings section
     if (indexPath.section == 0 && hasBackground) {
         if (indexPath.row == 0) {
-            // UI效果选择
+            // UI effect picker
             UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:cellIdentifier];
             if (!cell) {
                 cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:cellIdentifier];
@@ -190,13 +190,13 @@
             return cell;
             
         } else if (indexPath.row == 1) {
-            // 透明度滑块
+            // Opacity slider
             UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:sliderCellIdentifier];
             if (!cell) {
                 cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:sliderCellIdentifier];
                 cell.selectionStyle = UITableViewCellSelectionStyleNone;
                 
-                // 创建滑块
+                // Create the slider
                 UISlider *slider = [[UISlider alloc] initWithFrame:CGRectMake(16, 0, cell.bounds.size.width - 120, 30)];
                 slider.autoresizingMask = UIViewAutoresizingFlexibleWidth;
                 slider.minimumValue = 0.1f;
@@ -204,7 +204,7 @@
                 slider.tag = 200;
                 [slider addTarget:self action:@selector(opacitySliderChanged:) forControlEvents:UIControlEventValueChanged];
                 
-                // 创建数值标签
+                // Create the value label
                 UILabel *valueLabel = [[UILabel alloc] initWithFrame:CGRectMake(cell.bounds.size.width - 80, 0, 60, 30)];
                 valueLabel.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin;
                 valueLabel.textAlignment = NSTextAlignmentRight;
@@ -233,13 +233,13 @@
             return cell;
             
         } else if (indexPath.row == 2) {
-            // 模糊程度滑块
+            // Blur amount slider
             UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:blurSliderCellIdentifier];
             if (!cell) {
                 cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:blurSliderCellIdentifier];
                 cell.selectionStyle = UITableViewCellSelectionStyleNone;
                 
-                // 创建滑块
+                // Create the slider
                 UISlider *slider = [[UISlider alloc] initWithFrame:CGRectMake(16, 0, cell.bounds.size.width - 120, 30)];
                 slider.autoresizingMask = UIViewAutoresizingFlexibleWidth;
                 slider.minimumValue = 0.0f;
@@ -247,7 +247,7 @@
                 slider.tag = 300;
                 [slider addTarget:self action:@selector(blurIntensitySliderChanged:) forControlEvents:UIControlEventValueChanged];
                 
-                // 创建数值标签
+                // Create the value label
                 UILabel *valueLabel = [[UILabel alloc] initWithFrame:CGRectMake(cell.bounds.size.width - 80, 0, 60, 30)];
                 valueLabel.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin;
                 valueLabel.textAlignment = NSTextAlignmentRight;
@@ -276,7 +276,7 @@
         }
     }
     
-    // 其他部分
+    // The other sections
     UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:cellIdentifier];
     if (!cell) {
         cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:cellIdentifier];
@@ -289,7 +289,7 @@
     [self styleCell:cell hasBackground:hasBackground];
     
     if (indexPath.section == 1) {
-        // 选择背景类型标题
+        // "Choose background type" heading
         cell.textLabel.textColor = [UIColor secondaryLabelColor];
         cell.imageView.image = nil;
         cell.accessoryType = UITableViewCellAccessoryNone;
@@ -303,12 +303,12 @@
         }
     } else if (indexPath.section == 3) {
         if (indexPath.row == 0) {
-            // 恢复默认背景
+            // Restore default background
             cell.imageView.image = [UIImage systemImageNamed:@"arrow.counterclockwise"];
             cell.textLabel.textColor = [UIColor systemBlueColor];
             cell.accessoryType = UITableViewCellAccessoryNone;
         } else if (indexPath.row == 1) {
-            // 清除背景
+            // Clear background
             cell.imageView.image = [UIImage systemImageNamed:@"xmark.circle"];
             cell.textLabel.textColor = [UIColor systemRedColor];
             cell.accessoryType = UITableViewCellAccessoryNone;
@@ -336,7 +336,7 @@
     
     self.opacityValueLabel.text = [NSString stringWithFormat:@"%.0f%%", value * 100];
     
-    // 实时刷新UI效果
+    // Refresh the UI effect live
     [[BackgroundManager sharedManager] refreshUIEffect];
 }
 
@@ -344,14 +344,14 @@
     CGFloat value = slider.value;
     [BackgroundManager sharedManager].blurIntensity = value;
     
-    // 更新标签显示
+    // Update the label text
     UITableViewCell *cell = (UITableViewCell *)slider.superview.superview;
     if ([cell isKindOfClass:[UITableViewCell class]]) {
         UILabel *valueLabel = [cell.contentView viewWithTag:301];
         valueLabel.text = [NSString stringWithFormat:@"%.0f%%", value * 100];
     }
     
-    // 实时刷新UI效果
+    // Refresh the UI effect live
     [[BackgroundManager sharedManager] refreshUIEffect];
 }
 
@@ -363,7 +363,7 @@
     BackgroundManager *manager = [BackgroundManager sharedManager];
     BOOL hasBackground = [manager hasBackground];
     
-    // UI效果设置部分
+    // UI effect settings section
     if (indexPath.section == 0 && hasBackground) {
         if (indexPath.row == 0) {
             [self showUIEffectPicker];
@@ -498,10 +498,10 @@
     [alert addAction:[UIAlertAction actionWithTitle:@"Restore"
                                               style:UIAlertActionStyleDestructive
                                             handler:^(UIAlertAction * _Nonnull action) {
-        // 清除背景
+        // Clear the background
         [[BackgroundManager sharedManager] clearBackground];
         
-        // 重置UI效果设置
+        // Reset the UI effect settings
         BackgroundManager *manager = [BackgroundManager sharedManager];
         manager.uiEffect = BackgroundUIEffectBlur;
         manager.uiOpacity = 0.7;
@@ -509,7 +509,7 @@
         [self updatePreview];
         [self.tableView reloadData];
         
-        // 恢复默认背景色
+        // Restore the default background color
         self.view.backgroundColor = [UIColor systemBackgroundColor];
         self.tableView.backgroundColor = [UIColor systemBackgroundColor];
         self.tableView.backgroundView = nil;
@@ -710,9 +710,9 @@
     }];
 }
 
-/// 重新应用背景效果：当 BackgroundUIEffectChanged 通知到达时调用，
-/// 通过 BackgroundManager 重新设置当前视图控制器的透明度/毛玻璃效果，
-/// 并手动清空 tableView 背景与 backgroundView，确保全局背景能够正常透出。
+/// Re-apply the background effect: called when the BackgroundUIEffectChanged notification arrives.
+/// Re-applies the opacity/frosted-glass effect to this view controller via BackgroundManager,
+/// and clears the tableView background and backgroundView manually so the global background shows through.
 - (void)reapplyBackgroundEffect {
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
     self.tableView.backgroundColor = [UIColor clearColor];

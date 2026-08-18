@@ -2,49 +2,49 @@
 //  AssetDetailHeaderView.m
 //  Amethyst
 //
-//  资源详情页头部视图实现（参照 FCL/ZL2 的项目详情 header 设计）
+//  Implementation of the asset detail header view (modelled on the project detail header in FCL/ZL2)
 //
-//  视觉规范（与 ModernAssetCell / ModVersionTableViewCell 统一）：
-//    - 圆角卡片容器：16pt 圆角 + 0.5pt 浅边框 + 浅阴影(offset 0,4 / opacity 0.12 / radius 8) + 半透明背景 + 毛玻璃
-//    - 项目封面图：72x72，14pt 圆角，ScaleAspectFill + clipsToBounds，带占位 SF Symbol 背景
-//    - 标签 pill：8pt 圆角，18pt 高，10pt bold 白字，按加载器/类别品牌色配色
+//  Visual spec (matching ModernAssetCell / ModVersionTableViewCell):
+//    - Rounded card container: 16pt radius + 0.5pt light border + light shadow (offset 0,4 / opacity 0.12 / radius 8) + translucent background + frosted glass
+//    - Project cover image: 72x72, 14pt radius, ScaleAspectFill + clipsToBounds, with an SF Symbol placeholder background
+//    - Tag pills: 8pt radius, 18pt tall, 10pt bold white text, colored by loader/category brand color
 //
 
 #import "AssetDetailHeaderView.h"
 #import "BackgroundManager.h"
-// 注意：UIKit+AFNetworking 已替换为 IconLoader 统一加载器
-// （AFNetworking 仅内存缓存无降采样，IconLoader 提供双层缓存+降采样+CDN镜像+并发控制）
+// Note: UIKit+AFNetworking has been replaced by the unified IconLoader
+// (AFNetworking only caches in memory and does not downsample; IconLoader adds a two-level cache, downsampling, CDN mirrors and concurrency control)
 #import "IconLoader.h"
 #import "ModLoaderIconHelper.h"
 
 @interface AssetDetailHeaderView ()
 
-// 卡片容器（圆角 + 阴影 + 半透明背景 + 毛玻璃）
+// Card container (rounded corners + shadow + translucent background + frosted glass)
 @property (nonatomic, strong) UIView *cardContainer;
 
-// 顶部水平区：封面图 + 标题/作者
+// Top horizontal area: cover image + title/author
 @property (nonatomic, strong) UIImageView *iconImageView;
-@property (nonatomic, strong) UIView *iconPlaceholderContainer; // 无图时显示 SF Symbol
+@property (nonatomic, strong) UIView *iconPlaceholderContainer; // Shows an SF Symbol when there is no image
 @property (nonatomic, strong) UIImageView *placeholderSymbolView;
 @property (nonatomic, strong) UILabel *titleLabel;
 @property (nonatomic, strong) UILabel *authorLabel;
 
-// 元信息行：下载量 / 关注量 / 最后更新
+// Meta row: downloads / follows / last updated
 @property (nonatomic, strong) UIStackView *metaInfoStack;
 
-// 标签容器（多行水平 stack，自动换行）
+// Tag container (multi-line horizontal stack that wraps automatically)
 @property (nonatomic, strong) UIStackView *categoriesStack;
 
-// 描述区
+// Description area
 @property (nonatomic, strong) UILabel *descriptionLabel;
 @property (nonatomic, strong) UIButton *expandToggleButton;
 
-// 当前展开状态
+// Current expanded state
 @property (nonatomic, assign) BOOL descriptionExpanded;
-// 描述是否超过 3 行（决定是否显示展开按钮）
+// Whether the description exceeds 3 lines (decides whether the expand button is shown)
 @property (nonatomic, assign) BOOL descriptionTruncated;
 
-// 缓存的占位配置
+// Cached placeholder configuration
 @property (nonatomic, copy, nullable) NSString *placeholderSymbolName;
 @property (nonatomic, strong, nullable) UIColor *placeholderColor;
 
@@ -64,7 +64,7 @@
 #pragma mark - Setup
 
 - (void)setupViews {
-    // ===== 卡片容器：圆角 + 半透明背景 + 浅阴影（与 ModernAssetCell / ModVersionTableViewCell 统一）=====
+    // ===== Card container: rounded corners + translucent background + light shadow (matching ModernAssetCell / ModVersionTableViewCell) =====
     self.cardContainer = [[UIView alloc] init];
     self.cardContainer.translatesAutoresizingMaskIntoConstraints = NO;
     self.cardContainer.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.08];
@@ -78,11 +78,11 @@
     self.cardContainer.layer.shadowRadius = 8;
     [self addSubview:self.cardContainer];
 
-    // 应用毛玻璃背景效果（与启动器整体风格一致）
+    // Apply the frosted-glass background effect (consistent with the launcher style)
     [[BackgroundManager sharedManager] applyEffectToView:self.cardContainer];
 
-    // ===== 顶部水平区：封面图 + 标题/作者 =====
-    // 封面图容器（72x72，14pt 圆角，半透明占位背景）
+    // ===== Top horizontal area: cover image + title/author =====
+    // Cover image container (72x72, 14pt radius, translucent placeholder background)
     self.iconPlaceholderContainer = [[UIView alloc] init];
     self.iconPlaceholderContainer.translatesAutoresizingMaskIntoConstraints = NO;
     self.iconPlaceholderContainer.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.10];
@@ -91,14 +91,14 @@
     self.iconPlaceholderContainer.layer.masksToBounds = YES;
     [self.cardContainer addSubview:self.iconPlaceholderContainer];
 
-    // 占位 SF Symbol（居中显示在封面图容器内，有真实图时隐藏）
+    // Placeholder SF Symbol (centered inside the cover container, hidden once a real image loads)
     self.placeholderSymbolView = [[UIImageView alloc] init];
     self.placeholderSymbolView.translatesAutoresizingMaskIntoConstraints = NO;
     self.placeholderSymbolView.contentMode = UIViewContentModeScaleAspectFit;
     self.placeholderSymbolView.tintColor = [UIColor systemBlueColor];
     [self.iconPlaceholderContainer addSubview:self.placeholderSymbolView];
 
-    // 真实封面图 ImageView（覆盖在占位容器上，有图时显示）
+    // Real cover ImageView (sits on top of the placeholder container, shown once an image loads)
     self.iconImageView = [[UIImageView alloc] init];
     self.iconImageView.translatesAutoresizingMaskIntoConstraints = NO;
     self.iconImageView.contentMode = UIViewContentModeScaleAspectFill;
@@ -106,11 +106,11 @@
     self.iconImageView.layer.cornerRadius = 14;
     self.iconImageView.layer.cornerCurve = kCACornerCurveContinuous;
     self.iconImageView.backgroundColor = [UIColor clearColor];
-    // 始终显示：加载成功时显示真实图覆盖下方占位 SF Symbol，加载失败/加载中时透明透出占位
+    // Always visible: on success the real image covers the placeholder SF Symbol below; while loading or on failure it stays transparent so the placeholder shows
     self.iconImageView.hidden = NO;
     [self.iconPlaceholderContainer addSubview:self.iconImageView];
 
-    // 标题（18pt bold，最多 2 行）
+    // Title (18pt bold, at most 2 lines)
     self.titleLabel = [[UILabel alloc] init];
     self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.titleLabel.font = [UIFont systemFontOfSize:18 weight:UIFontWeightBold];
@@ -121,7 +121,7 @@
     self.titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
     [self.cardContainer addSubview:self.titleLabel];
 
-    // 作者（13pt secondary，带 person.crop.circle 图标，用 NSAttributedString）
+    // Author (13pt secondary, with a person.crop.circle icon, via NSAttributedString)
     self.authorLabel = [[UILabel alloc] init];
     self.authorLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.authorLabel.font = [UIFont systemFontOfSize:13];
@@ -130,7 +130,7 @@
     self.authorLabel.lineBreakMode = NSLineBreakByTruncatingTail;
     [self.cardContainer addSubview:self.authorLabel];
 
-    // ===== 元信息行：下载量 / 关注量 / 最后更新 =====
+    // ===== Meta row: downloads / follows / last updated =====
     self.metaInfoStack = [[UIStackView alloc] init];
     self.metaInfoStack.translatesAutoresizingMaskIntoConstraints = NO;
     self.metaInfoStack.axis = UILayoutConstraintAxisHorizontal;
@@ -139,7 +139,7 @@
     self.metaInfoStack.distribution = UIStackViewDistributionFill;
     [self.cardContainer addSubview:self.metaInfoStack];
 
-    // ===== 标签容器（垂直 stack，内部每行是水平 stack，自动换行）=====
+    // ===== Tag container (vertical stack whose rows are horizontal stacks, wrapping automatically) =====
     self.categoriesStack = [[UIStackView alloc] init];
     self.categoriesStack.translatesAutoresizingMaskIntoConstraints = NO;
     self.categoriesStack.axis = UILayoutConstraintAxisVertical;
@@ -147,76 +147,76 @@
     self.categoriesStack.alignment = UIStackViewAlignmentLeading;
     [self.cardContainer addSubview:self.categoriesStack];
 
-    // ===== 描述区 =====
+    // ===== Description area =====
     self.descriptionLabel = [[UILabel alloc] init];
     self.descriptionLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.descriptionLabel.font = [UIFont systemFontOfSize:14];
     self.descriptionLabel.textColor = [UIColor secondaryLabelColor];
-    self.descriptionLabel.numberOfLines = 3; // 默认 3 行
+    self.descriptionLabel.numberOfLines = 3; // 3 lines by default
     self.descriptionLabel.lineBreakMode = NSLineBreakByTruncatingTail;
     [self.cardContainer addSubview:self.descriptionLabel];
 
-    // 展开/收起按钮
+    // Expand/collapse button
     self.expandToggleButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.expandToggleButton.translatesAutoresizingMaskIntoConstraints = NO;
     self.expandToggleButton.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
     [self.expandToggleButton setTitle:@"Expand" forState:UIControlStateNormal];
     [self.expandToggleButton addTarget:self action:@selector(toggleDescriptionExpanded) forControlEvents:UIControlEventTouchUpInside];
-    self.expandToggleButton.hidden = YES; // 默认隐藏，仅当描述超 3 行时显示
+    self.expandToggleButton.hidden = YES; // Hidden by default, shown only when the description exceeds 3 lines
     [self.cardContainer addSubview:self.expandToggleButton];
 
-    // ===== 布局约束 =====
+    // ===== Layout constraints =====
     [NSLayoutConstraint activateConstraints:@[
-        // 卡片容器：左右各留 16pt 边距，上下各留 8pt
+        // Card container: 16pt margin left and right, 8pt top and bottom
         [self.cardContainer.topAnchor constraintEqualToAnchor:self.topAnchor constant:8],
         [self.cardContainer.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:16],
         [self.cardContainer.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-16],
         [self.cardContainer.bottomAnchor constraintEqualToAnchor:self.bottomAnchor constant:-8],
 
-        // 封面图容器：72x72，左上各 16pt
+        // Cover container: 72x72, 16pt from the top and left
         [self.iconPlaceholderContainer.topAnchor constraintEqualToAnchor:self.cardContainer.topAnchor constant:16],
         [self.iconPlaceholderContainer.leadingAnchor constraintEqualToAnchor:self.cardContainer.leadingAnchor constant:16],
         [self.iconPlaceholderContainer.widthAnchor constraintEqualToConstant:72],
         [self.iconPlaceholderContainer.heightAnchor constraintEqualToConstant:72],
 
-        // 占位 SF Symbol 居中，28x28
+        // Placeholder SF Symbol centered, 28x28
         [self.placeholderSymbolView.centerXAnchor constraintEqualToAnchor:self.iconPlaceholderContainer.centerXAnchor],
         [self.placeholderSymbolView.centerYAnchor constraintEqualToAnchor:self.iconPlaceholderContainer.centerYAnchor],
         [self.placeholderSymbolView.widthAnchor constraintEqualToConstant:30],
         [self.placeholderSymbolView.heightAnchor constraintEqualToConstant:30],
 
-        // 真实封面图充满占位容器
+        // The real cover image fills the placeholder container
         [self.iconImageView.topAnchor constraintEqualToAnchor:self.iconPlaceholderContainer.topAnchor],
         [self.iconImageView.leadingAnchor constraintEqualToAnchor:self.iconPlaceholderContainer.leadingAnchor],
         [self.iconImageView.trailingAnchor constraintEqualToAnchor:self.iconPlaceholderContainer.trailingAnchor],
         [self.iconImageView.bottomAnchor constraintEqualToAnchor:self.iconPlaceholderContainer.bottomAnchor],
 
-        // 标题：封面图右侧 12pt，顶部对齐，右边留 16pt
+        // Title: 12pt to the right of the cover, top-aligned, 16pt margin on the right
         [self.titleLabel.leadingAnchor constraintEqualToAnchor:self.iconPlaceholderContainer.trailingAnchor constant:12],
         [self.titleLabel.topAnchor constraintEqualToAnchor:self.cardContainer.topAnchor constant:18],
         [self.titleLabel.trailingAnchor constraintEqualToAnchor:self.cardContainer.trailingAnchor constant:-16],
 
-        // 作者：标题下方 4pt
+        // Author: 4pt below the title
         [self.authorLabel.leadingAnchor constraintEqualToAnchor:self.titleLabel.leadingAnchor],
         [self.authorLabel.topAnchor constraintEqualToAnchor:self.titleLabel.bottomAnchor constant:4],
         [self.authorLabel.trailingAnchor constraintEqualToAnchor:self.titleLabel.trailingAnchor],
 
-        // 元信息行：封面图下方 14pt，左边 16pt
+        // Meta row: 14pt below the cover image, 16pt from the left
         [self.metaInfoStack.topAnchor constraintEqualToAnchor:self.iconPlaceholderContainer.bottomAnchor constant:14],
         [self.metaInfoStack.leadingAnchor constraintEqualToAnchor:self.cardContainer.leadingAnchor constant:16],
         [self.metaInfoStack.trailingAnchor constraintLessThanOrEqualToAnchor:self.cardContainer.trailingAnchor constant:-16],
 
-        // 标签容器：元信息行下方 12pt
+        // Tag container: 12pt below the meta row
         [self.categoriesStack.topAnchor constraintEqualToAnchor:self.metaInfoStack.bottomAnchor constant:12],
         [self.categoriesStack.leadingAnchor constraintEqualToAnchor:self.cardContainer.leadingAnchor constant:16],
         [self.categoriesStack.trailingAnchor constraintEqualToAnchor:self.cardContainer.trailingAnchor constant:-16],
 
-        // 描述区：标签容器下方 12pt
+        // Description area: 12pt below the tag container
         [self.descriptionLabel.topAnchor constraintEqualToAnchor:self.categoriesStack.bottomAnchor constant:12],
         [self.descriptionLabel.leadingAnchor constraintEqualToAnchor:self.cardContainer.leadingAnchor constant:16],
         [self.descriptionLabel.trailingAnchor constraintEqualToAnchor:self.cardContainer.trailingAnchor constant:-16],
 
-        // 展开按钮：描述下方 6pt，右对齐
+        // Expand button: 6pt below the description, right-aligned
         [self.expandToggleButton.topAnchor constraintEqualToAnchor:self.descriptionLabel.bottomAnchor constant:6],
         [self.expandToggleButton.trailingAnchor constraintEqualToAnchor:self.cardContainer.trailingAnchor constant:-16],
         [self.expandToggleButton.bottomAnchor constraintEqualToAnchor:self.cardContainer.bottomAnchor constant:-16],
@@ -235,16 +235,16 @@
                 lastUpdated:(nullable NSString *)lastUpdated
         placeholderSymbolName:(NSString *)placeholderSymbolName
             placeholderColor:(UIColor *)placeholderColor {
-    // 缓存占位配置（图片加载失败时回退用）
+    // Cache the placeholder configuration (used as a fallback if the image fails to load)
     self.placeholderSymbolName = placeholderSymbolName;
     self.placeholderColor = placeholderColor;
 
-    // --- 标题 ---
+    // --- Title ---
     self.titleLabel.text = title ?: @"Unknown project";
 
-    // --- 作者 ---
+    // --- Author ---
     if (author.length > 0) {
-        // 用 SF Symbol + 文字组合，参照 FCL 的作者展示
+        // Combine an SF Symbol with text, following how FCL shows authors
         UIImageSymbolConfiguration *symbolConfig = [UIImageSymbolConfiguration configurationWithPointSize:12 weight:UIFontWeightRegular];
         UIImage *personIcon = [UIImage systemImageNamed:@"person.crop.circle" withConfiguration:symbolConfig];
         NSMutableAttributedString *attrText = [[NSMutableAttributedString alloc] init];
@@ -263,35 +263,35 @@
         self.authorLabel.text = @"Unknown author";
     }
 
-    // --- 元信息行 ---
+    // --- Meta row ---
     [self rebuildMetaInfoStackWithDownloads:downloads likes:likes lastUpdated:lastUpdated];
 
-    // --- 标签行 ---
+    // --- Tag row ---
     [self rebuildCategoriesStackWithCategories:categories];
 
-    // --- 描述 ---
+    // --- Description ---
     NSString *desc = descriptionText.length > 0 ? descriptionText : @"No description";
     self.descriptionLabel.text = desc;
     self.descriptionExpanded = NO;
     self.descriptionLabel.numberOfLines = 3;
 
-    // 检测描述是否超过 3 行（决定是否显示展开按钮）
+    // Detect whether the description exceeds 3 lines (decides whether the expand button is shown)
     [self evaluateDescriptionTruncation];
 
-    // --- 封面图 ---
+    // --- Cover image ---
     [self loadIconFromURL:iconURL placeholderSymbolName:placeholderSymbolName placeholderColor:placeholderColor];
 }
 
 #pragma mark - Meta Info
 
-/// 重建元信息行（下载量 / 关注量 / 最后更新）
+/// Rebuild the meta row (downloads / follows / last updated)
 - (void)rebuildMetaInfoStackWithDownloads:(nullable NSNumber *)downloads
                                     likes:(nullable NSNumber *)likes
                              lastUpdated:(nullable NSString *)lastUpdated {
-    // 清空旧的
+    // Clear the old ones
     [self.metaInfoStack.arrangedSubviews makeObjectsPerformSelector:@selector(removeFromSuperview)];
 
-    // 下载量
+    // Downloads
     if (downloads) {
         UIView *item = [self createMetaInfoItemWithSymbol:@"arrow.down.circle"
                                                     text:[self formatDownloadCount:downloads.integerValue]
@@ -299,7 +299,7 @@
         [self.metaInfoStack addArrangedSubview:item];
     }
 
-    // 关注量
+    // Follows
     if (likes) {
         UIView *item = [self createMetaInfoItemWithSymbol:@"heart"
                                                     text:[self formatDownloadCount:likes.integerValue]
@@ -307,7 +307,7 @@
         [self.metaInfoStack addArrangedSubview:item];
     }
 
-    // 最后更新
+    // Last updated
     if (lastUpdated.length > 0) {
         UIView *item = [self createMetaInfoItemWithSymbol:@"clock"
                                                     text:[self formatDateString:lastUpdated]
@@ -316,7 +316,7 @@
     }
 }
 
-/// 创建单个元信息项（SF Symbol + 文字，水平排列）
+/// Build a single meta item (SF Symbol + text, laid out horizontally)
 - (UIView *)createMetaInfoItemWithSymbol:(NSString *)symbolName
                                     text:(NSString *)text
                                tintColor:(UIColor *)tintColor {
@@ -354,16 +354,16 @@
 
 #pragma mark - Categories (标签 pill)
 
-/// 重建标签行（自动换行：每行一个水平 stack，超过容器宽度则换行）
+/// Rebuild the tag row (wrapping automatically: one horizontal stack per row, wrapping when the container width is exceeded)
 - (void)rebuildCategoriesStackWithCategories:(nullable NSArray<NSString *> *)categories {
-    // 清空旧的
+    // Clear the old ones
     [self.categoriesStack.arrangedSubviews makeObjectsPerformSelector:@selector(removeFromSuperview)];
 
     if (![categories isKindOfClass:[NSArray class]] || categories.count == 0) return;
 
-    // 估算可用宽度（卡片宽度 - 左右 padding 32pt）
-    // 注意：此时 layout 可能尚未完成，用 cardContainer 的约束预估
-    CGFloat availableWidth = MAX(self.bounds.size.width - 16 * 2 - 16 * 2, 200); // 左右各 16pt(card外) + 16pt(card内)
+    // Estimate the available width (card width - 32pt of horizontal padding)
+    // Note: layout may not be complete yet, so estimate using the cardContainer constraints
+    CGFloat availableWidth = MAX(self.bounds.size.width - 16 * 2 - 16 * 2, 200); // 16pt outside the card + 16pt inside, on each side
 
     UIStackView *currentLine = [self createCategoriesLineStack];
     CGFloat currentLineWidth = 0;
@@ -373,15 +373,15 @@
         if (![category isKindOfClass:[NSString class]] || category.length == 0) continue;
 
         UILabel *badge = [self createCategoryBadge:category];
-        // sizeToFit 获取实际宽度
+        // sizeToFit to get the actual width
         [badge sizeToFit];
-        CGFloat badgeWidth = badge.frame.size.width + 16; // + 左右 padding 各 8pt（已在 createCategoryBadge 中加，这里 sizeToFit 后重新算）
-        // 修正：createCategoryBadge 内已设宽度约束，这里估算用约束前的 sizeToFit 宽度 + padding
+        CGFloat badgeWidth = badge.frame.size.width + 16; // + 8pt padding on each side (already added in createCategoryBadge; recomputed here after sizeToFit)
+        // Correction: createCategoryBadge already sets a width constraint, so estimate using the pre-constraint sizeToFit width + padding
         [badge invalidateIntrinsicContentSize];
         CGFloat estimateWidth = [badge systemLayoutSizeFittingSize:UILayoutFittingCompressedSize].width;
 
         if (currentLineWidth + estimateWidth > availableWidth && currentLine.arrangedSubviews.count > 0) {
-            // 当前行放不下，换行
+            // Does not fit on the current row, so wrap
             [self.categoriesStack addArrangedSubview:currentLine];
             currentLine = [self createCategoriesLineStack];
             currentLineWidth = 0;
@@ -391,13 +391,13 @@
         currentLineWidth += estimateWidth + spacing;
     }
 
-    // 添加最后一行
+    // Add the last row
     if (currentLine.arrangedSubviews.count > 0) {
         [self.categoriesStack addArrangedSubview:currentLine];
     }
 }
 
-/// 创建标签行的水平 stack
+/// Build the horizontal stack for one tag row
 - (UIStackView *)createCategoriesLineStack {
     UIStackView *line = [[UIStackView alloc] init];
     line.axis = UILayoutConstraintAxisHorizontal;
@@ -407,7 +407,7 @@
     return line;
 }
 
-/// 创建单个标签 pill（8pt 圆角，18pt 高，10pt bold 白字，按类别品牌色配色）
+/// Build a single tag pill (8pt radius, 18pt tall, 10pt bold white text, colored by the category brand color)
 - (UILabel *)createCategoryBadge:(NSString *)category {
     UILabel *badge = [[UILabel alloc] init];
     badge.text = category;
@@ -423,55 +423,55 @@
     [badge setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
     [badge setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
 
-    // 高度固定 18pt
+    // Fixed height of 18pt
     [NSLayoutConstraint activateConstraints:@[
         [badge.heightAnchor constraintEqualToConstant:18]
     ]];
 
-    // 宽度 = 文字宽度 + 左右 padding 12pt
+    // Width = text width + 12pt of horizontal padding
     [badge sizeToFit];
     CGFloat textWidth = badge.frame.size.width;
     [badge.widthAnchor constraintEqualToConstant:textWidth + 12].active = YES;
     return badge;
 }
 
-/// 类别名称 → 品牌色映射（加载器品牌色统一委托 ModLoaderIconHelper，类别色保持本地映射）
+/// Category name -> brand color mapping (loader brand colors are delegated to ModLoaderIconHelper; category colors stay local)
 - (UIColor *)colorForCategory:(NSString *)category {
     NSString *lower = category.lowercaseString;
 
-    // 加载器品牌色：统一委托 ModLoaderIconHelper（优先 PNG 图标的官方配色）
+    // Loader brand colors: delegated to ModLoaderIconHelper (which prefers the official colors of the PNG icons)
     if ([ModLoaderIconHelper isKnownLoader:category]) {
         return [ModLoaderIconHelper brandColorForLoader:category];
     }
 
-    // 常见类别色
-    if ([lower containsString:@"performance"])   return [UIColor colorWithRed:0.30 green:0.80 blue:0.40 alpha:1.0]; // 绿
+    // Common category colors
+    if ([lower containsString:@"performance"])   return [UIColor colorWithRed:0.30 green:0.80 blue:0.40 alpha:1.0]; // green
     if ([lower containsString:@"optimization"])  return [UIColor colorWithRed:0.30 green:0.80 blue:0.40 alpha:1.0];
-    if ([lower containsString:@"utility"])       return [UIColor colorWithRed:0.35 green:0.60 blue:0.85 alpha:1.0]; // 蓝
-    if ([lower containsString:@"tech"])          return [UIColor colorWithRed:0.75 green:0.55 blue:0.20 alpha:1.0]; // 棕黄
-    if ([lower containsString:@"magic"])         return [UIColor colorWithRed:0.65 green:0.40 blue:0.85 alpha:1.0]; // 紫
-    if ([lower containsString:@"adventure"])     return [UIColor colorWithRed:0.80 green:0.45 blue:0.30 alpha:1.0]; // 橙红
-    if ([lower containsString:@"worldgen"])      return [UIColor colorWithRed:0.40 green:0.70 blue:0.40 alpha:1.0]; // 绿
-    if ([lower containsString:@"decoration"])    return [UIColor colorWithRed:0.90 green:0.55 blue:0.65 alpha:1.0]; // 粉
-    if ([lower containsString:@"storage"])       return [UIColor colorWithRed:0.55 green:0.55 blue:0.60 alpha:1.0]; // 灰
-    if ([lower containsString:@"food"])          return [UIColor colorWithRed:0.85 green:0.65 blue:0.30 alpha:1.0]; // 黄橙
-    if ([lower containsString:@"transportation"]) return [UIColor colorWithRed:0.30 green:0.70 blue:0.80 alpha:1.0]; // 青
-    if ([lower containsString:@"mobs"])          return [UIColor colorWithRed:0.80 green:0.35 blue:0.40 alpha:1.0]; // 红
-    if ([lower containsString:@"equipment"])     return [UIColor colorWithRed:0.70 green:0.60 blue:0.45 alpha:1.0]; // 棕
-    if ([lower containsString:@"social"])        return [UIColor colorWithRed:0.55 green:0.45 blue:0.75 alpha:1.0]; // 紫
+    if ([lower containsString:@"utility"])       return [UIColor colorWithRed:0.35 green:0.60 blue:0.85 alpha:1.0]; // blue
+    if ([lower containsString:@"tech"])          return [UIColor colorWithRed:0.75 green:0.55 blue:0.20 alpha:1.0]; // brownish yellow
+    if ([lower containsString:@"magic"])         return [UIColor colorWithRed:0.65 green:0.40 blue:0.85 alpha:1.0]; // purple
+    if ([lower containsString:@"adventure"])     return [UIColor colorWithRed:0.80 green:0.45 blue:0.30 alpha:1.0]; // orange red
+    if ([lower containsString:@"worldgen"])      return [UIColor colorWithRed:0.40 green:0.70 blue:0.40 alpha:1.0]; // green
+    if ([lower containsString:@"decoration"])    return [UIColor colorWithRed:0.90 green:0.55 blue:0.65 alpha:1.0]; // pink
+    if ([lower containsString:@"storage"])       return [UIColor colorWithRed:0.55 green:0.55 blue:0.60 alpha:1.0]; // gray
+    if ([lower containsString:@"food"])          return [UIColor colorWithRed:0.85 green:0.65 blue:0.30 alpha:1.0]; // yellow orange
+    if ([lower containsString:@"transportation"]) return [UIColor colorWithRed:0.30 green:0.70 blue:0.80 alpha:1.0]; // cyan
+    if ([lower containsString:@"mobs"])          return [UIColor colorWithRed:0.80 green:0.35 blue:0.40 alpha:1.0]; // red
+    if ([lower containsString:@"equipment"])     return [UIColor colorWithRed:0.70 green:0.60 blue:0.45 alpha:1.0]; // brown
+    if ([lower containsString:@"social"])        return [UIColor colorWithRed:0.55 green:0.45 blue:0.75 alpha:1.0]; // purple
 
-    // 兜底：使用主题强调色（避免与背景融合）
+    // Fallback: use the theme accent color (so it does not blend into the background)
     return [UIColor colorWithRed:0.45 green:0.55 blue:0.65 alpha:1.0];
 }
 
 #pragma mark - Description Expand/Collapse
 
-/// 检测描述是否超过 3 行（决定是否显示展开按钮）
+/// Detect whether the description exceeds 3 lines (decides whether the expand button is shown)
 - (void)evaluateDescriptionTruncation {
     [self.descriptionLabel layoutIfNeeded];
 
-    // 方法：比较 numberOfLines=0（无限）和 numberOfLines=3 时的高度
-    // 若无限高度 > 3 行高度，说明被截断了
+    // Method: compare the height at numberOfLines=0 (unlimited) with the height at numberOfLines=3
+    // If the unlimited height is greater than the 3-line height, the text is being truncated
     CGFloat unlimitedHeight = [self calculateDescriptionHeightWithLines:0];
     CGFloat limitedHeight = [self calculateDescriptionHeightWithLines:3];
 
@@ -483,7 +483,7 @@
     }
 }
 
-/// 计算描述 label 在指定行数限制下的高度
+/// Compute the height of the description label under a given line limit
 - (CGFloat)calculateDescriptionHeightWithLines:(NSInteger)lines {
     UILabel *measureLabel = [[UILabel alloc] init];
     measureLabel.font = self.descriptionLabel.font;
@@ -491,10 +491,10 @@
     measureLabel.text = self.descriptionLabel.text;
     measureLabel.lineBreakMode = NSLineBreakByTruncatingTail;
 
-    // 使用当前 descriptionLabel 的实际宽度
+    // Use the actual current width of descriptionLabel
     CGFloat width = self.descriptionLabel.bounds.size.width;
     if (width <= 0) {
-        // layout 未完成，用预估宽度（屏幕宽度 - 卡片内外边距）
+        // Layout is not finished, so use an estimated width (screen width - the card margins and padding)
         width = MAX([UIScreen mainScreen].bounds.size.width - 16 * 2 - 16 * 2, 200);
     }
 
@@ -502,13 +502,13 @@
     return size.height;
 }
 
-/// 切换描述展开/收起状态
+/// Toggle the description between expanded and collapsed
 - (void)toggleDescriptionExpanded {
     self.descriptionExpanded = !self.descriptionExpanded;
     self.descriptionLabel.numberOfLines = self.descriptionExpanded ? 0 : 3;
     [self.expandToggleButton setTitle:self.descriptionExpanded ? @"Collapse" : @"Expand" forState:UIControlStateNormal];
 
-    // 通知控制器重新计算 tableHeaderView 高度
+    // Tell the controller to recompute the tableHeaderView height
     if (self.onSizeChanged) {
         self.onSizeChanged();
     }
@@ -516,29 +516,29 @@
 
 #pragma mark - Icon Loading
 
-/// 加载项目封面图（使用 IconLoader 统一加载器）
-/// 对应 ZL2 AssetsIcon 的 loadIcon 逻辑：双层缓存 + 降采样 + CDN 镜像 + 占位/兜底
+/// Load the project cover image (using the unified IconLoader)
+/// Mirrors the loadIcon logic of ZL2 AssetsIcon: two-level cache + downsampling + CDN mirror + placeholder/fallback
 - (void)loadIconFromURL:(nullable NSString *)iconURL
    placeholderSymbolName:(NSString *)symbolName
        placeholderColor:(UIColor *)color {
-    // 先设置占位 SF Symbol（始终显示在底层，真实图加载成功后被覆盖）
+    // Set the placeholder SF Symbol first (always shown underneath, covered once the real image loads)
     UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:30 weight:UIFontWeightRegular];
     UIImage *placeholderSymbol = [UIImage systemImageNamed:symbolName withConfiguration:config] ?: [UIImage systemImageNamed:@"puzzlepiece.extension.fill" withConfiguration:config];
     self.placeholderSymbolView.image = placeholderSymbol;
     self.placeholderSymbolView.tintColor = color ?: [UIColor systemBlueColor];
     self.iconPlaceholderContainer.backgroundColor = [color ?: [UIColor systemBlueColor] colorWithAlphaComponent:0.18];
 
-    // 无 URL 或非法 URL：iconImageView 保持透明，透出底层占位 SF Symbol
+    // No URL or an invalid URL: iconImageView stays transparent so the placeholder SF Symbol below shows through
     if (!iconURL || iconURL.length == 0) {
         [IconLoader cancelLoadingForImageView:self.iconImageView];
         self.iconImageView.image = nil;
         return;
     }
 
-    // 用 IconLoader 加载（自带内存+磁盘缓存+降采样+CDN镜像），placeholderImage=nil
-    // 加载成功：iconImageView 显示真实图，覆盖下方占位 SF Symbol
-    // 加载失败/加载中：iconImageView 为空（透明），透出下方占位 SF Symbol
-    // 封面图显示尺寸 72x72（在 setupViews 中定义），降采样到此尺寸避免按原图解码
+    // Load via IconLoader (which brings its own memory+disk cache, downsampling and CDN mirroring), placeholderImage=nil
+    // On success: iconImageView shows the real image, covering the placeholder SF Symbol below
+    // While loading or on failure: iconImageView is empty (transparent) so the placeholder SF Symbol shows through
+    // The cover image is displayed at 72x72 (defined in setupViews); downsample to that size to avoid decoding the full-resolution image
     [IconLoader loadIconForImageView:self.iconImageView
                                  URL:iconURL
                          placeholder:nil
@@ -548,7 +548,7 @@
 
 #pragma mark - Formatting Helpers
 
-/// 格式化下载量（1234 → "1.2k"，1234567 → "1.2M"）
+/// Format a download count (1234 -> "1.2k", 1234567 -> "1.2M")
 - (NSString *)formatDownloadCount:(NSInteger)count {
     if (count >= 1000000) {
         return [NSString stringWithFormat:@"%.1fM", count / 1000000.0];
@@ -558,11 +558,11 @@
     return [NSString stringWithFormat:@"%ld", (long)count];
 }
 
-/// 格式化日期字符串（ISO8601 → 短日期；非 ISO 则原样返回）
+/// Format a date string (ISO8601 -> short date; non-ISO input is returned unchanged)
 - (NSString *)formatDateString:(NSString *)dateString {
     if (dateString.length == 0) return @"";
 
-    // 尝试 ISO8601 解析
+    // Try to parse it as ISO8601
     NSISO8601DateFormatter *isoFormatter = [[NSISO8601DateFormatter alloc] init];
     NSDate *date = [isoFormatter dateFromString:dateString];
     if (date) {
@@ -572,15 +572,15 @@
         return [displayFormatter stringFromDate:date];
     }
 
-    // 非 ISO 格式，原样返回（可能是已格式化的日期）
+    // Not ISO format, return it unchanged (it may already be formatted)
     return dateString;
 }
 
 #pragma mark - Sizing
 
-/// 计算并返回 header 在指定宽度下的适配高度
+/// Compute the height this header needs at the given width
 - (CGFloat)fittingHeightForWidth:(CGFloat)width {
-    // 给一个足够大的高度，让自动布局自适应压缩
+    // Give it a generous height and let auto layout compress it to fit
     self.frame = CGRectMake(0, 0, width, 10000);
     [self setNeedsLayout];
     [self layoutIfNeeded];

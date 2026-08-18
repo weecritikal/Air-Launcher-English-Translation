@@ -75,7 +75,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     
     self.view.backgroundColor = [UIColor clearColor];
 
-    // 适配自定义启动器背景：将当前视图控制器透明化，让全局背景（图片/视频）能够透出显示。
+    // Adapt to the custom launcher background: make this view controller transparent so the global background (image/video) shows through.
     // 即使本控制器在 LauncherRootViewController 中作为子 VC 添加，仍需在自身 viewDidLoad 中调用。
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
 
@@ -125,8 +125,8 @@ static void *ProgressObserverContext = &ProgressObserverContext;
                                                  name:@"LauncherAppearanceChanged"
                                                object:nil];
 
-    // 监听背景 UI 效果变化通知：当用户在背景设置中切换毛玻璃/半透明或调整透明度时，
-    // 重新调用 makeViewControllerTransparent 以应用最新的视觉效果，保证背景始终正确透出。
+    // Listen for background UI effect changes: when the user switches between frosted glass and translucent, or adjusts the opacity,
+    // call makeViewControllerTransparent again to apply the latest look and keep the background showing correctly.
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(reapplyBackgroundEffect)
                                                  name:@"BackgroundUIEffectChanged"
@@ -143,8 +143,8 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     [self updateDownloadCenterButton];
 }
 
-/// 重新应用背景效果：当 BackgroundUIEffectChanged 通知到达时调用，
-/// 通过 BackgroundManager 重新设置当前视图控制器的透明度/毛玻璃效果，
+/// Re-apply the background effect: called when the BackgroundUIEffectChanged notification arrives.
+/// Re-applies the opacity/frosted-glass effect to this view controller via BackgroundManager,
 /// 确保全局背景能够正常透出。
 - (void)reapplyBackgroundEffect {
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
@@ -220,7 +220,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     self.progressLabel.hidden = YES;
     [self.view addSubview:self.progressLabel];
     
-    // 进度条
+    // Progress bar
     self.progressView = [[UIProgressView alloc] initWithProgressViewStyle:UIProgressViewStyleDefault];
     self.progressView.translatesAutoresizingMaskIntoConstraints = NO;
     self.progressView.hidden = YES;
@@ -820,14 +820,14 @@ static void *ProgressObserverContext = &ProgressObserverContext;
         return;
     }
 
-    // execute_jar 路径：Caciocavallo17 jar 现已统一为 Java 17 编译版本，
-    // Java 17/21 均可加载，不再需要强制提升 requiredJavaVersion 到 25。
-    // - Java 8 JAR（如 OptiFine 安装器）走 Caciocavallo（非 17）路径，用 Java 8
-    // - Java 17+ JAR 走 Caciocavallo17 路径，用 Java 17/21 即可
-    // 与 JavaLauncher.m launchJar 分支保持一致。
+    // The execute_jar path: the Caciocavallo17 jar is now consistently compiled for Java 17,
+    // so both Java 17 and 21 can load it and requiredJavaVersion no longer has to be forced up to 25.
+    // - Java 8 JARs (such as the OptiFine installer) take the Caciocavallo (non-17) path and use Java 8
+    // - Java 17+ JARs take the Caciocavallo17 path and can use Java 17 or 21
+    // This matches the launchJar branch in JavaLauncher.m.
     int requiredJavaVersion = javaVersion;
 
-    // 预检 execute_jar 标签的 JRE 是否已配置，避免 present 后才发现没 JRE 导致黑屏
+    // Check up front whether a JRE is configured for the execute_jar tag, so a missing JRE is not discovered after presenting and left as a black screen
     NSString *javaHome = getSelectedJavaHome(@"execute_jar", requiredJavaVersion);
     if (!javaHome) {
         [self showAlert:@"Missing Java runtime"

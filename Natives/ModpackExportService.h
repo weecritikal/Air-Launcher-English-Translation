@@ -53,7 +53,7 @@ typedef NS_OPTIONS(NSInteger, ModpackExportFileOptions) {
 /// @param format 导出格式
 /// @param includeOverrides 是否包含 overrides（config/options.txt 等），等价于 ModpackExportFileDefault
 /// @param progress 进度回调（0.0-1.0）
-/// @param error 错误信息
+/// @param error Error information
 /// @return 是否成功
 - (BOOL)exportModpackForProfile:(NSString *)profileName
                          toPath:(NSString *)destPath

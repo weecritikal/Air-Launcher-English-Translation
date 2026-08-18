@@ -3,26 +3,26 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-/// 账户头像自定义导入管理器（单例）。
-/// 按 accountName 将自定义头像 PNG 存储到 Documents/avatars/<accountName>.png。
-/// 读取时本地优先，回退到在线 URL。
+/// Manager for importing custom account avatars (singleton).
+/// Stores a custom avatar PNG per accountName at Documents/avatars/<accountName>.png.
+/// On read, the local file wins, falling back to the online URL.
 @interface AvatarManager : NSObject
 
 + (instancetype)sharedManager;
 
-/// 保存指定账户的自定义头像图片。
-/// accountName 为 nil 或空串时调用无效。
+/// Save a custom avatar image for the given account.
+/// Does nothing if accountName is nil or empty.
 - (void)saveAvatarForAccount:(NSString *)accountName
                      image:(UIImage *)image
           withCompletion:(void (^)(BOOL success, NSError * _Nullable error))completion;
 
-/// 读取指定账户的自定义头像图片，不存在返回 nil。
+/// Read the custom avatar image for the given account, returning nil if there is none.
 - (nullable UIImage *)avatarForAccount:(NSString *)accountName;
 
-/// 是否已存在指定账户的自定义头像。
+/// Whether a custom avatar already exists for the given account.
 - (BOOL)hasCustomAvatarForAccount:(NSString *)accountName;
 
-/// 删除指定账户的自定义头像（恢复使用在线 URL 头像）。
+/// Delete the custom avatar for the given account (reverting to the online URL avatar).
 - (void)removeAvatarForAccount:(NSString *)accountName;
 
 @end

@@ -86,7 +86,7 @@ typedef NS_ENUM(NSInteger, ZeroTierNetworkStatus) {
 /// 单例模式，通过 +sharedInstance 获取全局唯一实例。
 @interface ZeroTierBridge : NSObject
 
-/// 单例访问
+/// Singleton accessor
 + (instancetype)sharedInstance;
 
 /// 代理对象（弱引用，避免循环引用）

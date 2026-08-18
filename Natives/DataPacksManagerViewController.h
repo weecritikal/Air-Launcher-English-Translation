@@ -2,10 +2,10 @@
 //  DataPacksManagerViewController.h
 //  Amethyst
 //
-//  数据包管理视图控制器，参照 ModsManagerViewController
-//  本地/在线模式切换、搜索、启用/禁用、删除、导入
-//  注意：Minecraft 要求数据包放在 saves/<世界名>/datapacks/，
-//  本管理器扫描 <gameDir>/datapacks/（通用目录），用户需手动移动到对应世界目录
+//  Data pack manager view controller, modelled on ModsManagerViewController
+//  Local/online mode switching, search, enable/disable, delete, import
+//  Note: Minecraft requires data packs in saves/<world name>/datapacks/,
+//  while this manager scans <gameDir>/datapacks/ (the shared folder), so the user must move them into the right world folder
 //
 
 #import <UIKit/UIKit.h>

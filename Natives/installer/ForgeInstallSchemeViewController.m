@@ -17,7 +17,7 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
 
-    // 适配自定义启动器背景：透明化当前 VC，让全局背景图/毛玻璃透出
+    // Adapt to the custom launcher background: make this VC transparent so the global background image/blur shows through
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
     // 应用毛玻璃效果到根视图
     [[BackgroundManager sharedManager] applyEffectToView:self.view];
@@ -216,7 +216,7 @@
 
 /// 背景效果变化时重新应用透明化处理与毛玻璃效果，确保背景切换后仍透出全局背景
 - (void)reapplyBackgroundEffect {
-    // 重新透明化当前 VC
+    // Make this VC transparent again
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
     // 重新应用毛玻璃效果到根视图
     [[BackgroundManager sharedManager] applyEffectToView:self.view];

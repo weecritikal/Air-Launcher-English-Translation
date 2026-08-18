@@ -58,7 +58,7 @@ typedef NS_ENUM(NSInteger, VersionType) {
     [super viewDidLoad];
 
     self.view.backgroundColor = [UIColor systemBackgroundColor];
-    // 适配自定义启动器背景：将当前视图控制器透明化，让全局背景（图片/视频）能够透出显示。
+    // Adapt to the custom launcher background: make this view controller transparent so the global background (image/video) shows through.
     // 放在 view.backgroundColor 设置之后调用，确保透明效果不会被不透明背景色覆盖。
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
 
@@ -80,8 +80,8 @@ typedef NS_ENUM(NSInteger, VersionType) {
     // 加载版本列表
     [self loadVersionList];
 
-    // 监听背景 UI 效果变化通知：当用户在背景设置中切换毛玻璃/半透明或调整透明度时，
-    // 重新调用 makeViewControllerTransparent 以应用最新的视觉效果，保证背景始终正确透出。
+    // Listen for background UI effect changes: when the user switches between frosted glass and translucent, or adjusts the opacity,
+    // call makeViewControllerTransparent again to apply the latest look and keep the background showing correctly.
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(reapplyBackgroundEffect)
                                                  name:@"BackgroundUIEffectChanged"
@@ -531,8 +531,8 @@ typedef NS_ENUM(NSInteger, VersionType) {
     return UIInterfaceOrientationMaskLandscape;
 }
 
-/// 重新应用背景效果：当 BackgroundUIEffectChanged 通知到达时调用，
-/// 通过 BackgroundManager 重新设置当前视图控制器的透明度/毛玻璃效果，
+/// Re-apply the background effect: called when the BackgroundUIEffectChanged notification arrives.
+/// Re-applies the opacity/frosted-glass effect to this view controller via BackgroundManager,
 /// 并将 collectionView 背景置为透明，确保全局背景能够正常透出。
 - (void)reapplyBackgroundEffect {
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];

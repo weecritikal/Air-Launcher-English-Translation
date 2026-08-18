@@ -65,20 +65,20 @@ typedef void(^CreateView)(UITableViewCell *, NSString *, NSDictionary *);
     UIBarButtonItem *editDoneButton = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone target:self action:@selector(closeTextField:)];
     self.editPickToolbar.items = @[btnFlexibleSpace, editDoneButton];
 
-    // 适配自定义启动器背景：将当前视图控制器透明化，让全局背景（图片/视频）能够透出显示。
+    // Adapt to the custom launcher background: make this view controller transparent so the global background (image/video) shows through.
     // 放在 tableView 重新创建之后调用，确保 makeViewControllerTransparent 处理的是最终的 tableView。
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
 
-    // 监听背景 UI 效果变化通知：当用户在背景设置中切换毛玻璃/半透明或调整透明度时，
-    // 重新调用 makeViewControllerTransparent 以应用最新的视觉效果，保证背景始终正确透出。
+    // Listen for background UI effect changes: when the user switches between frosted glass and translucent, or adjusts the opacity,
+    // call makeViewControllerTransparent again to apply the latest look and keep the background showing correctly.
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(reapplyBackgroundEffect)
                                                  name:@"BackgroundUIEffectChanged"
                                                object:nil];
 }
 
-/// 重新应用背景效果：当 BackgroundUIEffectChanged 通知到达时调用，
-/// 通过 BackgroundManager 重新设置当前视图控制器的透明度/毛玻璃效果，
+/// Re-apply the background effect: called when the BackgroundUIEffectChanged notification arrives.
+/// Re-applies the opacity/frosted-glass effect to this view controller via BackgroundManager,
 /// 确保 tableView 背景透明、全局背景能够正常透出。
 - (void)reapplyBackgroundEffect {
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];

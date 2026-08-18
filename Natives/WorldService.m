@@ -3,8 +3,8 @@
 //  Amethyst
 //
 //  世界存档服务实现，结构参照 ResourcePackService/DataPackService
-//  API 签名统一使用 NSString *profileName
-//  使用 defaultSessionConfiguration + NSURLSessionDownloadTask 提升下载效率和速度
+//  The API consistently takes NSString *profileName
+//  Uses defaultSessionConfiguration + NSURLSessionDownloadTask for better download throughput
 //  实现健壮解压逻辑：检测 zip 内是否含顶层目录，若无则创建子目录再解压
 //
 
@@ -20,10 +20,10 @@
 
 @interface WorldService () <NSURLSessionDownloadDelegate>
 @property (nonatomic, strong) NSURLSession *downloadSession;
-// 内部统一存储带 success/error 的 completion handler
+// Internally stores the completion handler carrying success/error
 @property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, WorldDownloadCompletionHandler> *downloadCompletionHandlers;
 @property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, NSString *> *downloadDestinationPaths;
-// 进度回调相关：分别保存进度 handler 和 NSProgress 对象
+// Progress callbacks: the progress handler and the NSProgress object are stored separately
 @property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, WorldDownloadProgressHandler> *downloadProgressHandlers;
 @property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, NSProgress *> *downloadProgresses;
 @property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, DownloadTaskItem *> *downloadTaskItems;
@@ -45,7 +45,7 @@
 
 - (instancetype)init {
     if (self = [super init]) {
-        // 使用默认会话配置，避免后台会话限速
+        // Use the default session configuration to avoid background-session throttling
         NSURLSessionConfiguration *config = [NSURLSessionConfiguration defaultSessionConfiguration];
         config.timeoutIntervalForRequest = 120.0;
         config.timeoutIntervalForResource = 600.0; // 世界包通常较大，超时设长一些
@@ -66,7 +66,7 @@
 
 #pragma mark - 工具方法
 
-// 解析 profile 的 gameDir，返回 gameDir 或 nil
+// Resolve the gameDir of a profile, returning it or nil
 - (nullable NSString *)gameDirForProfile:(NSString *)profileName {
     NSString *profile = profileName.length ? profileName : @"default";
     @try {
@@ -109,7 +109,7 @@
         }
     } @catch (NSException *ex) { }
 
-    // 回退：读取 POJAV_GAME_DIR 环境变量
+    // Fallback: read the POJAV_GAME_DIR environment variable
     const char *gameDirC = getenv("POJAV_GAME_DIR");
     if (gameDirC) {
         NSString *gameDir = [NSString stringWithUTF8String:gameDirC];
@@ -357,7 +357,7 @@
         return;
     }
 
-    // 校验下载链接
+    // Validate the download link
     NSURL *url = [NSURL URLWithString:item.selectedVersionDownloadURL];
     if (!url) {
         if (completion) {
@@ -375,7 +375,7 @@
     // 同时记录预期世界名（用于无顶层目录时的子目录命名）
     NSString *worldNameForExtract = item.displayName ?: item.worldName ?: [url lastPathComponent];
 
-    // 创建下载任务（默认会话配置，无后台限速）
+    // Create the download task (default session configuration, no background throttling)
     NSURLSessionDownloadTask *task = [self.downloadSession downloadTaskWithURL:url];
     self.downloadCompletionHandlers[task] = completion;
     self.downloadDestinationPaths[task] = destinationPath;
@@ -389,7 +389,7 @@
         self.downloadProgressHandlers[task] = progress;
     }
 
-    // 注册到统一下载任务管理器（悬浮球已移除，始终注册以便下载任务列表跟踪）
+    // Register with the shared download task manager (the floating button is gone, but registering keeps the task list accurate)
     NSString *resourceName = item.worldName.length > 0 ? item.worldName : (item.displayName.length > 0 ? item.displayName : @"world");
     NSString *displayName = item.displayName.length > 0 ? item.displayName : resourceName;
     NSString *downloadSource = getPrefObject(@"general.download_source") ?: @"official";
@@ -405,7 +405,7 @@
     self.downloadTaskItems[task] = taskItem;
     [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId state:DownloadTaskStateDownloading];
 
-    // 设置 retryHandler：FCL 风格重新下载
+    // Set retryHandler: FCL-style re-download
     __weak typeof(self) weakSelf = self;
     NSString *capturedDestPath = destinationPath;
     WorldDownloadCompletionHandler capturedCompletion = completion;
@@ -528,7 +528,7 @@
 
 #pragma mark - NSURLSessionDownloadDelegate
 
-// 下载进度回调：更新 NSProgress 并在主线程上报
+// Download progress callback: update NSProgress and report on the main thread
 - (void)URLSession:(NSURLSession *)session downloadTask:(NSURLSessionDownloadTask *)downloadTask
       didWriteData:(int64_t)bytesWritten
  totalBytesWritten:(int64_t)totalBytesWritten
@@ -570,13 +570,13 @@ totalBytesExpectedToWrite:(int64_t)totalBytesExpectedToWrite {
 
     if (!progressObj || !progressHandler) return;
 
-    // 首次回调时设置总字节数（HTTP 响应头中可能未提供，则保持 -1）
+    // Set the total byte count on the first callback (it stays -1 if the HTTP headers did not provide one)
     if (progressObj.totalUnitCount < 0 && totalBytesExpectedToWrite > 0) {
         progressObj.totalUnitCount = totalBytesExpectedToWrite;
     }
     progressObj.completedUnitCount = totalBytesWritten;
 
-    // progress 回调在主线程执行（UI 更新安全）
+    // The progress callback runs on the main thread (so UI updates are safe)
     dispatch_async(dispatch_get_main_queue(), ^{
         progressHandler(progressObj);
     });

@@ -16,47 +16,47 @@
 #import "ModpackImportViewController.h"
 #import "LauncherPrefGameDirViewController.h"
 #import "CustomControlsViewController.h"
-// ZeroTier/Terracotta 联机暂时移除（排查启动崩溃）
+// ZeroTier/Terracotta multiplayer temporarily removed (while a startup crash is investigated)
 // #import "MultiplayerViewController.h"
 // #import "TerracottaViewController.h"
 // #import "TerracottaManager.h"
 // #import "TerracottaBridge.h"
 #import "AccountListViewController.h"
 
-// 布局常量（iPad/宽屏基准值；iPhone 上通过 traitCollection 适配后会变窄）
-static const CGFloat kSidebarWidthPad = 70.0;      // iPad 左侧边栏卡片宽度
-static const CGFloat kSidebarWidthPhone = 56.0;    // iPhone 左侧边栏卡片宽度（仅图标）
-static const CGFloat kRightPanelWidthPad = 220.0;  // iPad 右侧面板卡片宽度
-static const CGFloat kRightPanelWidthPhone = 168.0; // iPhone 右侧面板卡片宽度（保证启动/JAR 按钮可读）
-static const CGFloat kCardSpacing = 12.0;          // 卡片间距
-static const CGFloat kCardOuterMarginPad = 12.0;   // iPad 卡片到外边缘的间距
-static const CGFloat kCardOuterMarginPhone = 8.0;  // iPhone 卡片到外边缘的间距（窄屏减小留白）
-static const CGFloat kCardCornerRadius = 16.0;     // 卡片圆角
+// Layout constants (the iPad/wide-screen baseline; they shrink on iPhone via traitCollection)
+static const CGFloat kSidebarWidthPad = 70.0;      // Left sidebar card width on iPad
+static const CGFloat kSidebarWidthPhone = 56.0;    // Left sidebar card width on iPhone (icons only)
+static const CGFloat kRightPanelWidthPad = 220.0;  // Right panel card width on iPad
+static const CGFloat kRightPanelWidthPhone = 168.0; // Right panel card width on iPhone (wide enough for the Play/JAR buttons to stay readable)
+static const CGFloat kCardSpacing = 12.0;          // Spacing between cards
+static const CGFloat kCardOuterMarginPad = 12.0;   // Margin from the cards to the outer edge on iPad
+static const CGFloat kCardOuterMarginPhone = 8.0;  // Margin from the cards to the outer edge on iPhone (less whitespace on narrow screens)
+static const CGFloat kCardCornerRadius = 16.0;     // Card corner radius
 
-/// 检测物理设备是否为 iPhone（不受 debug.debug_ipad_ui 的 idiom hook 影响）。
-/// UIKit+hook.m 会把 idiom 强制改成 Pad，导致 trait.userInterfaceIdiom 不可靠。
-/// 这里用 UIDevice.model 检测真实设备类型。
+/// Detect whether the physical device is an iPhone (unaffected by the idiom hook of debug.debug_ipad_ui).
+/// UIKit+hook.m forces the idiom to Pad, which makes trait.userInterfaceIdiom unreliable.
+/// UIDevice.model is used here to detect the real device type.
 static BOOL LauncherCardLayoutIsPhysicalPhone(void) {
     NSString *model = [[UIDevice currentDevice].model lowercaseString];
     return [model containsString:@"iphone"];
 }
 
-/// 根据物理设备类型决定卡片外边距
+/// Decide the card outer margin from the physical device type
 static CGFloat LauncherCardLayoutOuterMargin(UITraitCollection *trait) {
     if (LauncherCardLayoutIsPhysicalPhone()) return kCardOuterMarginPhone;
     return kCardOuterMarginPad;
 }
 
-/// 根据物理设备类型决定侧栏宽度
-/// - iPhone 横屏（含 SE/8/Plus/X/Pro Max）：56pt（菜单只有图标，56pt 足够）
+/// Decide the sidebar width from the physical device type
+/// - iPhone landscape (SE/8/Plus/X/Pro Max included): 56pt (the menu is icons only, so 56pt is enough)
 /// - iPad：70pt
 static CGFloat LauncherCardLayoutSidebarWidth(UITraitCollection *trait) {
     if (LauncherCardLayoutIsPhysicalPhone()) return kSidebarWidthPhone;
     return kSidebarWidthPad;
 }
 
-/// 根据物理设备类型决定右侧面板宽度
-/// - iPhone 横屏：168pt（保证启动/编辑控件/执行 Jar 按钮文字不截断）
+/// Decide the right panel width from the physical device type
+/// - iPhone landscape: 168pt (so the Play/Edit controls/Execute Jar button text is not truncated)
 /// - iPad：220pt
 static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
     if (LauncherCardLayoutIsPhysicalPhone()) return kRightPanelWidthPhone;
@@ -71,10 +71,10 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
 
 @property(nonatomic, strong) NSLayoutConstraint *sidebarWidthConstraint;
 @property(nonatomic, strong) NSLayoutConstraint *rightPanelWidthConstraint;
-// 存储外边距约束，traitCollection 变化时动态更新
+// Store the outer margin constraints, so they can be updated when traitCollection changes
 @property(nonatomic, strong) NSArray<NSLayoutConstraint *> *outerMarginConstraints;
-// 关键修复（UI 累积异常）：同 LauncherRootViewController，持有当前内容 VC 的约束
-// 并先 deactivate 再激活，避免 tmpRootVC 保留场景下缓存复用子 VC 的约束叠加。
+// Key fix (cumulative UI glitch): as in LauncherRootViewController, hold the constraints of the current content VC
+// and deactivate them before activating new ones, so cached reused child VC constraints do not stack up when tmpRootVC is retained.
 @property(nonatomic, strong) NSArray<NSLayoutConstraint *> *currentContentConstraints;
 
 @property(nonatomic, assign) BOOL isShowingProfileEditor;
@@ -95,19 +95,19 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
     
     self.view.backgroundColor = [UIColor clearColor];
     
-    // 初始化版本列表（必须在其他视图控制器之前）
+    // Initialize the version list (this must come before the other view controllers)
     [self initializeVersionLists];
     
-    // 创建三个卡片容器视图
+    // Create the three card container views
     [self setupCardContainers];
     
-    // 添加子视图控制器
+    // Add the child view controllers
     [self setupChildViewControllers];
     
-    // 应用背景
+    // Apply the background
     [[BackgroundManager sharedManager] applyBackgroundToView:self.view];
 
-    // 监听启动器外观变化（自定义字体/卡片颜色），刷新卡片背景
+    // Listen for launcher appearance changes (custom font/card color) and refresh the card backgrounds
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(applyCustomAppearance)
                                                  name:@"LauncherAppearanceChanged"
@@ -115,7 +115,7 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
 }
 
 - (void)initializeVersionLists {
-    // 初始化本地版本列表
+    // Initialize the local version list
     if (!localVersionList) {
         localVersionList = [NSMutableArray new];
     }
@@ -135,7 +135,7 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
         }
     }
     
-    // 初始化远程版本列表
+    // Initialize the remote version list
     if (!remoteVersionList) {
         remoteVersionList = [NSMutableArray new];
     }
@@ -145,7 +145,7 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
         @{@"id": @"latest-snapshot", @"type": @"snapshot"}
     ]];
     
-    // 异步获取远程版本列表
+    // Fetch the remote version list asynchronously
     [self fetchRemoteVersionList];
 }
 
@@ -190,18 +190,18 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
 
 - (void)viewDidLayoutSubviews {
     [super viewDidLayoutSubviews];
-    // card 布局四边外边距一致性由约束保证（用 view.edgeAnchor + kCardOuterMargin，
-    // 不依赖 safeAreaLayoutGuide），此处无需额外补偿。
-    // 之前用 additionalSafeAreaInsets 补偿 safeArea 不对称，但补偿后外边距 =
-    // max(safeArea) + kCardOuterMargin 反而更大（"下边和左右两边空隙过大"），
-    // 故移除该补偿方案，改用 view.edgeAnchor 直接约束。
+    // The constraints guarantee equal outer margins on all four sides (using view.edgeAnchor + kCardOuterMargin
+    // rather than safeAreaLayoutGuide), so no extra compensation is needed here.
+    // additionalSafeAreaInsets was previously used to compensate for an asymmetric safe area, but that made the margin
+    // max(safeArea) + kCardOuterMargin, which is larger still ("the bottom and side gaps are too wide"),
+    // so the compensation was removed in favor of constraining directly to view.edgeAnchor.
     //
-    // 关键修复（阶段4：Card 布局进入设置崩溃，无日志）：
-    // 与 LauncherRootViewController 对齐：清理 additionalSafeAreaInsets 累积。
-    // 之前此方法体为空，导致 LauncherPreferencesViewController（含 UISearchController）在
-    // nav 栈中时 additionalSafeAreaInsets 可能累积异常，UISearchController.searchBar
-    // （作为 tableHeaderView）frame 计算异常 → EXC_BAD_ACCESS（不被 NSUncaughtExceptionHandler
-    // 捕获，故无日志）。VS 布局不崩溃是因为 Root 的 viewDidLayoutSubviews 持续清理 inset。
+    // Key fix (phase 4: the Card layout crashed on entering settings, with no log):
+    // aligned with LauncherRootViewController by clearing accumulated additionalSafeAreaInsets.
+    // This method body used to be empty, so with LauncherPreferencesViewController (which contains a UISearchController)
+    // on the nav stack, additionalSafeAreaInsets could accumulate incorrectly, the frame of UISearchController.searchBar
+    // (used as the tableHeaderView) was miscalculated -> EXC_BAD_ACCESS (which NSUncaughtExceptionHandler does not
+    // catch, hence no log). The VS layout did not crash because the viewDidLayoutSubviews of Root kept clearing the inset.
     UIViewController *contentVC = _contentViewController;
     if (!contentVC) return;
     if ([contentVC isKindOfClass:[UINavigationController class]]) {
@@ -222,7 +222,7 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
 
 - (void)traitCollectionDidChange:(UITraitCollection *)previousTraitCollection {
     [super traitCollectionDidChange:previousTraitCollection];
-    // iPhone 与 iPad 切换、或分屏调整大小时，更新侧栏与右侧面板宽度
+    // Update the sidebar and right panel widths when switching between iPhone and iPad, or when a split view is resized
     CGFloat sidebarWidth = LauncherCardLayoutSidebarWidth(self.traitCollection);
     CGFloat rightPanelWidth = LauncherCardLayoutRightPanelWidth(self.traitCollection);
     if (self.sidebarWidthConstraint.constant != sidebarWidth) {
@@ -231,24 +231,24 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
     if (self.rightPanelWidthConstraint.constant != rightPanelWidth) {
         self.rightPanelWidthConstraint.constant = rightPanelWidth;
     }
-    // 更新外边距约束（iPhone/iPad 切换时 outerMargin 不同）
+    // Update the outer margin constraints (outerMargin differs between iPhone and iPad)
     CGFloat outerMargin = LauncherCardLayoutOuterMargin(self.traitCollection);
     for (NSLayoutConstraint *c in self.outerMarginConstraints) {
-        // 第一、四、七个约束是 leading/trailing（正外边距），其余是 top/bottom
-        // leading 用正 outerMargin，trailing 用负 outerMargin，top 用正，bottom 用负
-        // 简化处理：根据原 constant 符号决定正负
+        // The first, fourth and seventh constraints are leading/trailing (a positive outer margin); the rest are top/bottom
+        // leading uses a positive outerMargin, trailing a negative one, top positive and bottom negative
+        // Simplification: derive the sign from the sign of the original constant
         if (c.constant >= 0) {
             c.constant = outerMargin;
         } else {
             c.constant = -outerMargin;
         }
     }
-    // 关键修复（阶段4：Card 布局进入设置崩溃，无日志）：
-    // 与 LauncherRootViewController 对齐：仅遍历直接子 VC，避免递归栈溢出风险。
-    // 之前递归遍历所有后代 VC（adjustChildLayoutForTraitCollection:），若 VC 树存在
-    // 循环引用会栈溢出（SIGSEGV，不被 NSUncaughtExceptionHandler 捕获，故无日志）。
-    // respondsToSelector:@selector(viewWillAppear:) 检查永真（所有 UIViewController 都响应），
-    // 属冗余代码，一并删除。
+    // Key fix (phase 4: the Card layout crashed on entering settings, with no log):
+    // Aligned with LauncherRootViewController: only the direct child VCs are walked, avoiding the risk of a stack overflow.
+    // Previously every descendant VC was walked recursively (adjustChildLayoutForTraitCollection:), so a cycle in the VC tree
+    // would overflow the stack (SIGSEGV, which NSUncaughtExceptionHandler does not catch, hence no log).
+    // The respondsToSelector:@selector(viewWillAppear:) check is always true (every UIViewController responds),
+    // so it was redundant and has been removed too.
     for (UIViewController *child in self.childViewControllers) {
         [child.view setNeedsLayout];
     }
@@ -266,25 +266,25 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
     return card;
 }
 
-/// 读取 general.card_color 偏好，若已设置则在毛玻璃上叠加半透明色。
+/// Read the general.card_color preference and, when set, overlay a translucent color on top of the frosted glass.
 ///
-/// 统一参照 ZL2 的 Haze + tint 方案和 RootVC 的 applySemiTransparentColor: 实现：
-/// 保留 BackgroundManager 的毛玻璃 UIVisualEffectView（让背景图能透出），
-/// 在容器背景色上叠加用户自定义的半透明颜色。
+/// This follows the Haze + tint approach of ZL2 and the applySemiTransparentColor: implementation of RootVC:
+/// the frosted-glass UIVisualEffectView from BackgroundManager is kept (so the background image shows through),
+/// and the user's translucent color is layered onto the container background.
 ///
-/// 之前 CardVC 的做法是移除毛玻璃用纯色覆盖，导致：
-/// 1. 与 RootVC 行为不一致（RootVC 保留毛玻璃叠加半透明色）
-/// 2. 自定义背景图被完全遮挡，无法透出
-/// 3. 视觉效果与 FCL/ZL2 不符（FCL/ZL2 都保留模糊效果 + 颜色叠加）
+/// CardVC used to remove the frosted glass and cover it with a solid color, which caused:
+/// 1. inconsistency with RootVC (which keeps the frosted glass and overlays a translucent color)
+/// 2. the custom background image being completely hidden
+/// 3. a look that did not match FCL/ZL2 (both of which keep the blur and overlay a color)
 ///
-/// 现统一为：保留毛玻璃 + 叠加半透明色（与 RootVC 完全一致）
+/// It is now unified: keep the frosted glass and overlay a translucent color (exactly as RootVC does)
 - (void)applyCustomCardColorToCard:(UIView *)card {
     NSString *hex = getPrefObject(@"general.card_color");
     UIColor *color = [self colorFromHexString:hex];
     if (!color) return;
-    // 保留 BackgroundManager 插入的毛玻璃 UIVisualEffectView，仅叠加半透明色
-    // 这样既显示用户自定义的卡片颜色，又能透出背景图（与 RootVC 行为一致）
-    // 使用 0.7 alpha 让背景图能适度透出（参照 ZL2 的 influencedByBackgroundColor 思路）
+    // Keep the frosted-glass UIVisualEffectView inserted by BackgroundManager and only overlay a translucent color
+    // This shows the user's card color while still letting the background image through (matching RootVC)
+    // An alpha of 0.7 lets the background image show through moderately (following the influencedByBackgroundColor idea of ZL2)
     card.backgroundColor = [color colorWithAlphaComponent:0.7];
 }
 
@@ -300,7 +300,7 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
                            alpha:1.0];
 }
 
-/// 外观变化时重新应用卡片颜色（保留圆角，重建背景）
+/// Re-apply the card color when the appearance changes (keeping the corner radius, rebuilding the background)
 - (void)applyCustomAppearance {
     [self applyCustomCardColorToCard:self.sidebarCard];
     [self applyCustomCardColorToCard:self.contentCard];
@@ -308,34 +308,34 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
 }
 
 - (void)setupCardContainers {
-    // 左侧菜单卡片
+    // Left menu card
     self.sidebarCard = [self createCardContainer];
     [self.view addSubview:self.sidebarCard];
 
-    // 中间内容卡片
+    // Middle content card
     self.contentCard = [self createCardContainer];
     [self.view addSubview:self.contentCard];
 
-    // 右侧信息/启动卡片
+    // Right info/play card
     self.rightPanelCard = [self createCardContainer];
     [self.view addSubview:self.rightPanelCard];
 
-    // 用自适应宽度创建可变宽度约束，便于 traitCollection 变化时更新
+    // Create variable-width constraints from the adaptive width, so they can be updated when traitCollection changes
     self.sidebarWidthConstraint = [self.sidebarCard.widthAnchor constraintEqualToConstant:LauncherCardLayoutSidebarWidth(self.traitCollection)];
     self.rightPanelWidthConstraint = [self.rightPanelCard.widthAnchor constraintEqualToConstant:LauncherCardLayoutRightPanelWidth(self.traitCollection)];
 
-    // 卡片外边距：iPhone 窄屏用较小值减少留白
+    // Card outer margin: a smaller value on narrow iPhone screens, to reduce whitespace
     CGFloat outerMargin = LauncherCardLayoutOuterMargin(self.traitCollection);
 
-    // 设置约束
-    // 四个方向均用 view.edgeAnchor（而非 safeAreaLayoutGuide），使外边距完全由 outerMargin 控制，
-    // 上下左右边距一致（均 = outerMargin），不受刘海/home indicator 导致的 safeArea 不对称影响。
+    // Set up the constraints
+    // All four sides use view.edgeAnchor (rather than safeAreaLayoutGuide), so the outer margin is controlled purely by outerMargin
+    // and is identical on every side (= outerMargin), unaffected by the asymmetric safe area caused by the notch or home indicator.
     //
-    // 修复"下面过宽"问题：之前上下用 safeAreaLayoutGuide + outerMargin，
-    // 导致底部边距 = homeIndicatorInset + outerMargin（约 21+8=29pt），
-    // 而顶部边距 = 0 + outerMargin = 8pt，底部比顶部宽 3.6 倍。
-    // 改为 view.topAnchor/view.bottomAnchor 后，上下边距均 = outerMargin，保持一致。
-    // 卡片背景会延伸到 home indicator 下方，视觉上无影响（卡片有不透明/毛玻璃背景）。
+    // Fix for "the bottom is too wide": the top and bottom previously used safeAreaLayoutGuide + outerMargin,
+    // making the bottom margin homeIndicatorInset + outerMargin (about 21+8=29pt)
+    // while the top margin was 0 + outerMargin = 8pt, so the bottom was 3.6x the top.
+    // With view.topAnchor/view.bottomAnchor the top and bottom margins are both outerMargin and match.
+    // The card background extends below the home indicator, which is visually fine (the cards have an opaque/frosted background).
     NSLayoutConstraint *sidebarLeading = [self.sidebarCard.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor constant:outerMargin];
     NSLayoutConstraint *sidebarTop = [self.sidebarCard.topAnchor constraintEqualToAnchor:self.view.topAnchor constant:outerMargin];
     NSLayoutConstraint *sidebarBottom = [self.sidebarCard.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor constant:-outerMargin];
@@ -570,7 +570,7 @@ static CGFloat LauncherCardLayoutRightPanelWidth(UITraitCollection *trait) {
     [self setContentViewController:navVC animated:YES];
 }
 
-// ZeroTier/Terracotta 联机暂时移除（排查启动崩溃）
+// ZeroTier/Terracotta multiplayer temporarily removed (while a startup crash is investigated)
 // - (void)showMultiplayer { ... TerracottaViewController ... }
 // - (void)showZeroTier { ... MultiplayerViewController ... TerracottaManager ... }
 - (void)showMultiplayer {

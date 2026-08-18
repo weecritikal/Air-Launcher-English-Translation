@@ -22,7 +22,7 @@ typedef NS_ENUM(NSInteger, MCIMMirrorSource) {
 ///   - edge.forgecdn.net     → mod.mcimirror.top/curseforge/deliver
 ///   - media.forgecdn.net    → mod.mcimirror.top/curseforge/medias
 ///
-/// 使用方式：
+/// How to use:
 ///   NSString *url = [MCIMMirror rewriteURL:originalURL];
 ///   if (url) { /* 镜像已启用且 URL 被替换 */ } else { /* 用原始 URL */ }
 @interface MCIMMirror : NSObject

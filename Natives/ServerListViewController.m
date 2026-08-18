@@ -34,7 +34,7 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    // 适配自定义启动器背景：将当前视图控制器透明化，使全局背景壁纸能够透出
+    // Adapt to the custom launcher background: make this view controller transparent so the global wallpaper shows through
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
 
     [[BackgroundManager sharedManager] applyEffectToView:self.view];

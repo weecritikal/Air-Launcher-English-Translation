@@ -7,7 +7,7 @@
 #import "TrackedTextField.h"
 #import "utils.h"
 #import "ScreenUtils.h"
-// ZeroTier/Terracotta 联机暂时移除（排查启动崩溃）
+// ZeroTier/Terracotta multiplayer temporarily removed (while a startup crash is investigated)
 // #import "MultiplayerViewController.h"
 // #import "MultiplayerManager.h"
 // #import "TerracottaViewController.h"

@@ -15,7 +15,7 @@
 // god knows why Copilot was trying to add this.
 #import "authenticator/BaseAuthenticator.h"
 #import "authenticator/ThirdPartyAuthenticator.h"
-// 鬼知道为什么copilot要把这玩意加里头……
+// God knows why Copilot decided to add this thing in here...
 
 #import "ios_uikit_bridge.h"
 #import "JavaLauncher.h"
@@ -55,24 +55,24 @@ void init_loadDefaultEnv() {
     setenv("MESA_GL_VERSION_OVERRIDE", "4.1", 1);
 
     // Suppress [mvk-info] log spam (swapchain creation, etc.)
-    // 对齐 Ynnyny 仓库：抑制 MoltenVK 日志刷屏，便于诊断启动问题
-    // 但当帧率解锁开启时，临时启用性能跟踪以诊断 present mode 问题
+    // Aligned with the Ynnyny repo: suppress MoltenVK log spam so startup problems are easier to diagnose
+    // But when the frame rate unlock is on, enable performance tracing temporarily to diagnose present-mode issues
     if (getPrefBool(@"video.disable_game_vsync")) {
-        // 帧率解锁诊断：启用 MoltenVK 性能跟踪，输出帧率和 swapchain 信息
-        // 有助于确认 Vulkan 模式下 present mode 是否为 IMMEDIATE
+        // Frame rate unlock diagnostics: enable MoltenVK performance tracing, which logs the frame rate and swapchain information
+        // This helps confirm whether the present mode is IMMEDIATE in Vulkan mode
         setenv("MVK_CONFIG_PERFORMANCE_TRACKING", "1", 1);
-        setenv("MVK_CONFIG_LOG_LEVEL", "2", 1); // 仍然抑制 info 级别，但 performance log 会输出
-        // 尝试强制 present mode 为 IMMEDIATE（不等 vsync）。
-        // MoltenVK 1.2.5+ 支持 MVK_CONFIG_SWAPCHAIN_PRESENT_MODE 环境变量：
-        //   0 = VK_PRESENT_MODE_IMMEDIATE_KHR（不等 vsync，帧率可超屏幕刷新率）
+        setenv("MVK_CONFIG_LOG_LEVEL", "2", 1); // Still suppresses info level, but the performance log is emitted
+        // Try to force the present mode to IMMEDIATE (no waiting for vsync).
+        // MoltenVK 1.2.5+ supports the MVK_CONFIG_SWAPCHAIN_PRESENT_MODE environment variable:
+        //   0 = VK_PRESENT_MODE_IMMEDIATE_KHR (no vsync wait, so the frame rate can exceed the refresh rate)
         //   1 = VK_PRESENT_MODE_MAILBOX_KHR
-        //   2 = VK_PRESENT_MODE_FIFO_KHR（默认，等 vsync）
-        // 实际运行的 MoltenVK 版本为 1.2.9（从 libMoltenVK.dylib 二进制确认），
-        // 支持此环境变量。仓库中的 vk_mvk_moltenvk.h 头文件是旧版本（1.1.2），
-        // 但实际 dylib 已是 1.2.9，环境变量会生效。
-        // 这是 Vulkan 模式帧率解锁的关键：present mode 完全由 vkCreateSwapchainKHR
-        // 选择，而 MC 26.2 的 Vulkan 渲染器可能未正确响应 enableVsync=false。
-        // MoltenVK 1.2.9 在 vkCreateSwapchainKHR 时会读取此环境变量覆盖应用的 presentMode。
+        //   2 = VK_PRESENT_MODE_FIFO_KHR (the default, waits for vsync)
+        // The MoltenVK actually running is 1.2.9 (confirmed from the libMoltenVK.dylib binary),
+        // which supports this variable. The vk_mvk_moltenvk.h header in the repo is from an older version (1.1.2),
+        // but the real dylib is 1.2.9, so the environment variable does take effect.
+        // This is the key to unlocking the frame rate in Vulkan mode: the present mode is chosen entirely by
+        // vkCreateSwapchainKHR, and the Vulkan renderer of MC 26.2 may not honor enableVsync=false correctly.
+        // MoltenVK 1.2.9 reads this variable in vkCreateSwapchainKHR and overrides the presentMode the app asked for.
         setenv("MVK_CONFIG_SWAPCHAIN_PRESENT_MODE", "0", 1);
         NSLog(@"[JavaLauncher] MoltenVK performance tracking + IMMEDIATE present mode requested for VSync diagnosis");
     } else {
@@ -82,51 +82,51 @@ void init_loadDefaultEnv() {
     // Runs JVM in a separate thread
     setenv("HACK_IGNORE_START_ON_FIRST_THREAD", "1", 1);
 
-    // 解锁帧率（关闭垂直同步）：读取启动器偏好，通过环境变量传递给 Java 层和 native 桥接层。
+    // Unlock the frame rate (disabling vertical sync): read the launcher preference and pass it to the Java layer and the native bridge via an environment variable.
     //
-    // 帧率解锁的三层机制（各层独立生效，互为兜底）：
+    // The frame rate unlock works at three layers (each independent, backing each other up):
     //
-    // 1. Java 层（PojavLauncher.java）读取 POJAV_DISABLE_VSYNC=1 后：
-    //    a) 强制写 enableVsync=false → MC 不再调用 glfwSwapInterval(1)
-    //    b) 强制写 maxFps=260 → MC 1.16+ 源码中 maxFps>=260 视为"无限制"
-    //       （之前用 maxFps=0 会被 MC 当作无效值忽略，导致帧率仍被 maxFps=120 限制）
+    // 1. The Java layer (PojavLauncher.java), on seeing POJAV_DISABLE_VSYNC=1:
+    //    a) forces enableVsync=false, so MC stops calling glfwSwapInterval(1)
+    //    b) forces maxFps=260, since MC 1.16+ treats maxFps>=260 as "unlimited"
+    //       (maxFps=0 was previously used, but MC ignores it as invalid, leaving the frame rate capped at maxFps=120)
     //
-    // 2. native 桥接层（egl_bridge.m pojavSwapInterval）读取 POJAV_DISABLE_VSYNC=1 后：
-    //    拦截 MC 的 glfwSwapInterval(1) 请求，强制改为 interval=0
-    //    （会记录每次拦截，帮助诊断 mod 运行时重新启用 VSync 的情况）
+    // 2. The native bridge (egl_bridge.m pojavSwapInterval), on seeing POJAV_DISABLE_VSYNC=1:
+    //    intercepts the glfwSwapInterval(1) call from MC and forces interval=0
+    //    (logging every interception, which helps diagnose mods re-enabling VSync at runtime)
     //
-    // 3. EGL 初始化层（gl_bridge.m gl_make_current）读取 POJAV_DISABLE_VSYNC=1 后：
-    //    在 eglMakeCurrent 成功后立即调用 eglSwapInterval(0)。
-    //    这是 zink 渲染器帧率解锁的关键——Mesa 21.0 的 zink 在延迟创建 Vulkan swapchain
-    //    时根据当前 eglSwapInterval 选择 present mode：
-    //      interval=0 → VK_PRESENT_MODE_IMMEDIATE_KHR（不等 vsync，帧率可超 60）
-    //      interval=1 → VK_PRESENT_MODE_FIFO_KHR（等 vsync，锁在屏幕刷新率）
-    //    如果等 MC 调用 glfwSwapInterval 时才设置，swapchain 可能已用 FIFO 创建，
-    //    Mesa 21.0 的 zink 不会动态重建 swapchain，导致帧率锁死在屏幕刷新率。
+    // 3. The EGL initialization layer (gl_bridge.m gl_make_current), on seeing POJAV_DISABLE_VSYNC=1:
+    //    calls eglSwapInterval(0) immediately after eglMakeCurrent succeeds.
+    //    This is the key to unlocking the frame rate on the zink renderer — when Mesa 21.0 zink lazily creates the Vulkan swapchain
+    //    it picks the present mode from the current eglSwapInterval:
+    //      interval=0 -> VK_PRESENT_MODE_IMMEDIATE_KHR (no vsync wait, so the frame rate can exceed 60)
+    //      interval=1 -> VK_PRESENT_MODE_FIFO_KHR (waits for vsync, locked to the refresh rate)
+    //    Setting it only when MC calls glfwSwapInterval would be too late — the swapchain may already have been created as FIFO,
+    //    and Mesa 21.0 zink does not rebuild the swapchain dynamically, so the frame rate stays locked to the refresh rate.
     //
-    // 关于 MoltenVK 配置与 Vulkan 帧率解锁研究：
-    //   实际运行的 MoltenVK 版本为 1.2.9（从 libMoltenVK.dylib 二进制确认）。
-    //   仓库中的 vk_mvk_moltenvk.h 头文件是旧版本（1.1.2, spec 30），
-    //   但实际 dylib 已是 1.2.9，支持 MVK_CONFIG_SWAPCHAIN_PRESENT_MODE 环境变量。
-    //   MoltenVK 1.2.9 在 vkCreateSwapchainKHR 时会读取此环境变量覆盖应用的 presentMode，
-    //   这是 Vulkan 模式帧率解锁的关键机制。
-    //   设备是否支持 IMMEDIATE present mode 由 MVKPhysicalDeviceMetalFeatures.presentModeImmediate
-    //   自动检测（大多数 iOS 设备支持）。
+    // Notes on MoltenVK configuration and unlocking the Vulkan frame rate:
+    //   The MoltenVK actually running is 1.2.9 (confirmed from the libMoltenVK.dylib binary).
+    //   The vk_mvk_moltenvk.h header in the repo is from an older version (1.1.2, spec 30),
+    //   but the real dylib is 1.2.9 and supports the MVK_CONFIG_SWAPCHAIN_PRESENT_MODE environment variable.
+    //   MoltenVK 1.2.9 reads it in vkCreateSwapchainKHR and overrides the presentMode the app asked for,
+    //   which is the key mechanism for unlocking the frame rate in Vulkan mode.
+    //   Whether a device supports the IMMEDIATE present mode is detected automatically via
+    //   MVKPhysicalDeviceMetalFeatures.presentModeImmediate (most iOS devices do).
     //
-    //   Vulkan 模式帧率解锁的多层机制：
-    //   1. MC 选项层：enableVsync=false + maxFps=260（MC 1.16+ 视 260 为 unlimited）
-    //   2. MoltenVK 配置层：MVK_CONFIG_SWAPCHAIN_PRESENT_MODE=0 → IMMEDIATE present mode
-    //      （MoltenVK 1.2.9 支持，覆盖应用在 vkCreateSwapchainKHR 选择的 presentMode）
-    //   3. MC 26.2 兼容：同时写入 maxFps/maxFramerate/framerateLimit 多种选项名
+    //   The layers that unlock the frame rate in Vulkan mode:
+    //   1. MC options: enableVsync=false + maxFps=260 (MC 1.16+ treats 260 as unlimited)
+    //   2. MoltenVK config: MVK_CONFIG_SWAPCHAIN_PRESENT_MODE=0 -> IMMEDIATE present mode
+    //      (supported by MoltenVK 1.2.9, overriding the presentMode the app picks in vkCreateSwapchainKHR)
+    //   3. MC 26.2 compatibility: maxFps/maxFramerate/framerateLimit are all written, under each option name
     //
-    // 各渲染器的帧率解锁效果：
-    // - zink（GL→Vulkan）：通过 eglSwapInterval(0) → IMMEDIATE present mode 完全解锁
-    // - Vulkan（LWJGL3）：MVK_CONFIG_SWAPCHAIN_PRESENT_MODE=0 → IMMEDIATE present mode 完全解锁
-    // - ANGLE Metal：eglSwapInterval(0) 让 ANGLE 不等 vsync，渲染线程不阻塞
-    // - ProMotion 设备：通过 CADisableMinimumFrameDurationOnPhone + preferredFrameRateRange 启用 120Hz
+    // How well each renderer unlocks the frame rate:
+    // - zink (GL->Vulkan): fully unlocked via eglSwapInterval(0) -> IMMEDIATE present mode
+    // - Vulkan (LWJGL3): fully unlocked via MVK_CONFIG_SWAPCHAIN_PRESENT_MODE=0 -> IMMEDIATE present mode
+    // - ANGLE Metal: eglSwapInterval(0) stops ANGLE waiting for vsync, so the render thread does not block
+    // - ProMotion devices: 120Hz is enabled via CADisableMinimumFrameDurationOnPhone + preferredFrameRateRange
     setenv("POJAV_DISABLE_VSYNC", getPrefBool(@"video.disable_game_vsync") ? "1" : "0", 1);
 
-    // 帧率解锁诊断日志：记录关键环境变量和偏好设置
+    // Frame rate unlock diagnostics: log the key environment variables and preferences
     NSLog(@"[JavaLauncher] Framerate unlock configuration:");
     NSLog(@"[JavaLauncher]   video.disable_game_vsync=%d", getPrefBool(@"video.disable_game_vsync"));
     NSLog(@"[JavaLauncher]   POJAV_DISABLE_VSYNC=%s", getenv("POJAV_DISABLE_VSYNC"));
@@ -150,16 +150,16 @@ void init_loadCustomEnv() {
     }
 }
 
-/// 加载 MobileGlues 配置并写入 config.json
+/// Load the MobileGlues configuration and write config.json
 ///
-/// 将用户偏好设置写入 <POJAV_HOME>/MG/config.json，供 MobileGlues 渲染器读取。
+/// Writes the user preferences to <POJAV_HOME>/MG/config.json for the MobileGlues renderer to read.
 ///
-/// 渲染器与 MobileGlues 的关系（重要）：
-/// - MobileGlues 渲染器（libmobileglues.dylib）：直接加载 MobileGlues，config.json 生效。
-/// - Auto 渲染器：在 launchJVM 中被解析为 ANGLE（libtinygl4angle.dylib），MobileGlues 不会被加载，
-///   config.json 虽然会写入但不会被读取。用户需显式选择 MobileGlues 渲染器才能让设置生效。
-/// - Vulkan 渲染器：Vulkan 模式下 OpenGL 回退库使用 MobileGlues（对齐 Ynnyny 仓库），
-///   config.json 会被 MobileGlues 读取并生效。
+/// How the renderers relate to MobileGlues (important):
+/// - The MobileGlues renderer (libmobileglues.dylib): loads MobileGlues directly, so config.json takes effect.
+/// - The Auto renderer: resolved to ANGLE (libtinygl4angle.dylib) in launchJVM, so MobileGlues is never loaded
+///   and config.json is written but never read. The user must pick the MobileGlues renderer explicitly for the settings to apply.
+/// - The Vulkan renderer: in Vulkan mode the OpenGL fallback library is MobileGlues (aligned with the Ynnyny repo),
+///   so config.json is read by MobileGlues and does take effect.
 void init_loadMobileGluesConfig() {
     NSString *renderer = [PLProfiles resolveKeyForCurrentProfile:@"renderer"];
     NSLog(@"[JavaLauncher] init_loadMobileGluesConfig: renderer=%@", renderer);
@@ -173,7 +173,7 @@ void init_loadMobileGluesConfig() {
         return;
     }
 
-    // 警告：auto 渲染器实际不会加载 MobileGlues，设置不会生效
+    // Warning: the auto renderer does not actually load MobileGlues, so these settings will not apply
     if ([renderer isEqualToString:@"auto"]) {
         NSLog(@"[JavaLauncher] WARNING: renderer is 'auto', will be resolved to ANGLE. "
               @"MobileGlues settings will NOT take effect. "
@@ -189,27 +189,27 @@ void init_loadMobileGluesConfig() {
 
     NSMutableDictionary *config = [NSMutableDictionary dictionary];
 
-    // 安全默认值
-    // 注意：MobileGlues 的 Version(int code) 构造函数把数字转为字符串后取前 3 位
-    // 作为 Major.Minor.Patch（settings.h 第 102-116 行）。例如 40 → "40" → 4.0.0。
-    // customGLVersion 约束（settings.cpp 第 71-79 行）：>46 截断为 46，<32 且非 0 截断为 32，
-    // 33-39 截断为 33，0 使用默认值 40。
-    // 因此必须写入十进制数（40, 41, 42, ..., 46），不能写入十六进制 0x040000。
+    // Safe defaults
+    // Note: the Version(int code) constructor of MobileGlues turns the number into a string and takes the first 3 characters
+    // as Major.Minor.Patch (settings.h lines 102-116). For example 40 -> "40" -> 4.0.0.
+    // customGLVersion constraints (settings.cpp lines 71-79): >46 is clamped to 46, <32 and non-zero is clamped to 32,
+    // 33-39 is clamped to 33, and 0 uses the default of 40.
+    // A decimal number (40, 41, 42, ..., 46) must therefore be written, not the hexadecimal 0x040000.
     config[@"enableExtGL43"] = @1;
     config[@"enableExtDirectStateAccess"] = @1;
     config[@"maxGlslCacheSize"] = @128;
-    config[@"customGLVersion"] = @40;  // 十进制 40 = GL 4.0
+    config[@"customGLVersion"] = @40;  // Decimal 40 = GL 4.0
 
     id enableAngle = getPrefObject(@"mobileglues.enable_angle");
     if (enableAngle) {
-        // MobileGlues AngleConfig 枚举（settings.h）：
+        // The MobileGlues AngleConfig enum (settings.h):
         //   0 = DisableIfPossible
-        //   1 = EnableIfPossible  ← iOS 上 hasVulkan12() 永远返回 0（#ifndef __APPLE__
-        //                            块被跳过），导致 checkIfANGLESupported 返回 false，
-        //                            ANGLE 被禁用。不能使用此值。
+        //   1 = EnableIfPossible  <- on iOS hasVulkan12() always returns 0 (the #ifndef __APPLE__
+        //                            block is skipped), so checkIfANGLESupported returns false and
+        //                            ANGLE is disabled. This value cannot be used.
         //   2 = ForceDisable
-        //   3 = ForceEnable       ← 强制启用，绕过 GPU 检测
-        // 用户启用 enable_angle 时写入 3 (ForceEnable)，禁用时写入 0 (DisableIfPossible)
+        //   3 = ForceEnable       <- forces it on, bypassing GPU detection
+        // When the user enables enable_angle, 3 (ForceEnable) is written; when disabled, 0 (DisableIfPossible)
         config[@"enableANGLE"] = [enableAngle boolValue] ? @3 : @0;
         NSLog(@"[JavaLauncher]   mobileglues.enable_angle = %@ -> enableANGLE = %@ (3=ForceEnable, 0=DisableIfPossible)",
               enableAngle, config[@"enableANGLE"]);
@@ -261,9 +261,9 @@ void init_loadMobileGluesConfig() {
     if (customGlVersion) {
         NSString *verStr = [customGlVersion description];
         NSLog(@"[JavaLauncher]   mobileglues.custom_gl_version = %@ (raw)", customGlVersion);
-        // MobileGlues 期望十进制数：Version(int code) 把 code 转字符串后取前 3 位作为
-        // Major.Minor.Patch。例如 40 → "40" → 4.0.0，46 → "46" → 4.6.0。
-        // 不能用十六进制 0x040000（=262144），会被截断为 46（4.6.0）。
+        // MobileGlues expects a decimal number: Version(int code) turns code into a string and takes the first 3 characters as
+        // Major.Minor.Patch. For example 40 -> "40" -> 4.0.0 and 46 -> "46" -> 4.6.0.
+        // The hexadecimal 0x040000 (=262144) cannot be used, as it would be truncated to 46 (4.6.0).
         if ([verStr isEqualToString:@"3.0"]) config[@"customGLVersion"] = @30;
         else if ([verStr isEqualToString:@"3.1"]) config[@"customGLVersion"] = @31;
         else if ([verStr isEqualToString:@"3.2"]) config[@"customGLVersion"] = @32;
@@ -275,7 +275,7 @@ void init_loadMobileGluesConfig() {
         else if ([verStr isEqualToString:@"4.4"]) config[@"customGLVersion"] = @44;
         else if ([verStr isEqualToString:@"4.5"]) config[@"customGLVersion"] = @45;
         else if ([verStr isEqualToString:@"4.6"]) config[@"customGLVersion"] = @46;
-        // verStr == @"0" 时不匹配任何条件，保留默认值 @40（即 GL 4.0）
+        // When verStr == @"0" nothing matches and the default of @40 (GL 4.0) is kept
         NSLog(@"[JavaLauncher]   -> customGLVersion = %d (decimal, MobileGlues Version(int) format)",
               [config[@"customGLVersion"] intValue]);
     }
@@ -306,20 +306,20 @@ void init_loadCustomJvmFlags(int* argc, const char** argv) {
     jvmargs = [jvmargs stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceCharacterSet];
     jvmargs = [@" " stringByAppendingString:jvmargs];
 
-    // 关键修复（N3+N4）：retainedCustomFlags 强引用所有自定义 JVM flag 字符串，
-    // 防止 [@"-" stringByAppendingString:jvmarg].UTF8String 返回的 C 字符串悬垂。
+    // Key fix (N3+N4): retainedCustomFlags holds a strong reference to every custom JVM flag string,
+    // so the C string returned by [@"-" stringByAppendingString:jvmarg].UTF8String cannot dangle.
     //
-    // 之前 argv[*argc] = [@"-" stringByAppendingString:jvmarg].UTF8String 直接取临时
-    // NSString 的 UTF8String，autoreleased NSString 在 runloop drain 后会释放，
-    // 导致 argv 中的指针悬垂。虽然 launchJava 通常在 JVM 启动前不会 drain autoreleasepool，
-    // 但这是脆弱的隐式依赖。retainedCustomFlags 作为静态变量，生命周期覆盖整个进程，
-    // 保证字符串在 pJLI_Launch 调用期间有效。
+    // Previously argv[*argc] = [@"-" stringByAppendingString:jvmarg].UTF8String took UTF8String straight from a temporary
+    // NSString, and an autoreleased NSString is freed once the runloop drains,
+    // leaving a dangling pointer in argv. launchJava normally does not drain the autorelease pool before the JVM starts,
+    // but that is a fragile implicit dependency. retainedCustomFlags is static, so its lifetime spans the whole process
+    // and the strings are guaranteed valid for the duration of the pJLI_Launch call.
     static NSMutableArray<NSString *> *retainedCustomFlags = nil;
     if (retainedCustomFlags == nil) {
         retainedCustomFlags = [NSMutableArray array];
     }
-    // 注意：不清空 retainedCustomFlags，因为 launchJava 在进程生命周期内只调用一次。
-    // 如果未来变为可多次调用，需要在调用前清空。
+    // Note: retainedCustomFlags is never cleared, because launchJava is called only once per process.
+    // If it ever becomes callable more than once, it must be cleared beforehand.
 
     NSLog(@"[JavaLauncher] Reading custom JVM flags");
     NSArray *argsToPurge = @[@"Xms", @"Xmx", @"d32", @"d64"];
@@ -336,7 +336,7 @@ void init_loadCustomJvmFlags(int* argc, const char** argv) {
         }
         if (ignore) continue;
 
-        // N3 边界检查：argv 数组大小由调用方决定（margv[1000]），这里做防御性检查
+        // N3 bounds check: the argv array size is decided by the caller (margv[1000]), so check defensively here
         if (*argc + 1 >= 1000) {
             NSLog(@"[JavaLauncher] Warning: margv reached limit (1000), discarding custom JVM flag: -%@", jvmarg);
             continue;
@@ -356,24 +356,24 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
     init_loadDefaultEnv();
     init_loadCustomEnv();
 
-    // 同步自 catsruledogs：刷新 JIT flags，决定是否需要 Debug JIT Mapping
-    // 使用 DeviceNeedsDebugJITMapping() 基于 JIT_FLAG_IS_IOS_26 | JIT_FLAG_FORCE_MIRRORED
-    // 而非 TXM 固件检测，确保 iOS 26+ 无 TXM 设备也能正确设置 JIT 脚本
+    // Synced from catsruledogs: refresh the JIT flags to decide whether Debug JIT Mapping is needed
+    // Uses DeviceNeedsDebugJITMapping() based on JIT_FLAG_IS_IOS_26 | JIT_FLAG_FORCE_MIRRORED
+    // rather than TXM firmware detection, so the JIT script is set correctly on iOS 26+ devices without TXM too
     DeviceGetJITFlags(YES);
     BOOL requiresDebugJITMapping = DeviceNeedsDebugJITMapping();
     BOOL jit26AlwaysAttached = getPrefBool(@"debug.debug_always_attached_jit");
     if (requiresDebugJITMapping) {
-        // 检测是否在使用 legacy JIT script（brk #0x69 由 UniversalJIT26.js 处理）
+        // Detect whether a legacy JIT script is in use (brk #0x69 is handled by UniversalJIT26.js)
         static void *result;
         if(!result) result = JIT26CreateRegionLegacy(getpagesize());
         if ((uint32_t)result != 0x690000E0) {
             munmap(result, getpagesize());
-            // legacy script 只允许调用一次 breakpoint，必须切换到 UniversalJIT26
+            // The legacy script only allows the breakpoint to be called once, so it must switch to UniversalJIT26
             NSString *inBundleScriptPath = [NSBundle.mainBundle pathForResource:@"UniversalJIT26" ofType:@"js"];
             NSString *lcAppInfoPath = [NSBundle.mainBundle.bundlePath stringByAppendingPathComponent:@"LCAppInfo.plist"];
             NSMutableDictionary *lcAppInfo = [NSMutableDictionary dictionaryWithContentsOfFile:lcAppInfoPath];
             if(lcAppInfo) {
-                // LiveContainer 内：自动分配 script 并提示用户重启
+                // Inside LiveContainer: assign the script automatically and ask the user to restart
                 lcAppInfo[@"jitLaunchScriptJs"] = [[NSData dataWithContentsOfFile:inBundleScriptPath] base64EncodedStringWithOptions:0];
                 if([lcAppInfo writeToFile:lcAppInfoPath atomically:YES]) {
                     showDialog(localize(@"Error", nil), @"Amethyst was launched with a legacy script. We have updated the script to Universal, please restart LiveContainer to continue.");
@@ -404,18 +404,18 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
         NSLog(@"[DyldLVBypass] Hook disabled! Loading unsigned dylib will cause code signature error.");
     }
 
-    // 加载 MobileGlues 配置（仅当用户手动选择 MobileGlues 渲染器时生效）
+    // Load the MobileGlues configuration (only effective when the user picked the MobileGlues renderer explicitly)
     init_loadMobileGluesConfig();
 
-    // --- [更新] TouchController 通信方式支持 ---
-    // 检查是否启用了 TouchController 以及选择的通信方式
+    // --- [Update] TouchController transport support ---
+    // Check whether TouchController is enabled and which transport was chosen
     if (getPrefBool(@"control.mod_touch_enable")) {
         NSInteger mode = [getPrefObject(@"control.mod_touch_mode") integerValue];
-        if (mode == 1) { // UDP 模式
+        if (mode == 1) { // UDP mode
             setenv("TOUCH_CONTROLLER_PROXY", "12450", 1);
             NSLog(@"[JavaLauncher] Enabled TouchController with UDP mode");
-        } else if (mode == 2) { // 静态库模式
-            // 设置 Unix Domain Socket 路径
+        } else if (mode == 2) { // Static library mode
+            // Set the Unix domain socket path
             setenv("TOUCH_CONTROLLER_PROXY_SOCKET", "/tmp/touchcontroller.sock", 1);
             NSLog(@"[JavaLauncher] Enabled TouchController with Static Library mode");
         }
@@ -427,12 +427,12 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
     NSString *defaultJRETag;
     if ([launchTarget isKindOfClass:NSDictionary.class]) {
         // Get preferred Java version from current profile
-        // 26.x 官方强制要求 Java 25（Mojang 自 26.x 起将 javaVersion.majorVersion 设为 25），
-        // 不再对 preferredJavaVersion 做任何钳制，直接采纳 Profile 指定的 Java 版本。
-        // caciocavallo 三路切换会根据实际 Java 版本选择对应 jar（三个独立文件夹）：
+        // 26.x officially requires Java 25 (Mojang set javaVersion.majorVersion to 25 from 26.x onwards),
+        // so preferredJavaVersion is no longer clamped at all and the Java version specified by the profile is used as-is.
+        // The three-way caciocavallo switch picks the matching jar for the actual Java version (three separate folders):
         // - Java 8     → libs_caciocavallo（1.10-SNAPSHOT）
-        // - Java 17/21 → libs_caciocavallo17（1.18-SNAPSHOT 纯 Java 17 编译）
-        // - Java 25    → libs_caciocavallo25（1.18-SNAPSHOT 含 Java 24 class，catsruledogs iOS）
+        // - Java 17/21 -> libs_caciocavallo17 (1.18-SNAPSHOT, compiled purely for Java 17)
+        // - Java 25    -> libs_caciocavallo25 (1.18-SNAPSHOT, containing Java 24 classes, catsruledogs iOS)
         int preferredJavaVersion = [PLProfiles resolveKeyForCurrentProfile:@"javaVersion"].intValue;
         if (preferredJavaVersion > 0) {
             if (minVersion > preferredJavaVersion) {
@@ -454,10 +454,10 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
         setenv("AMETHYST_RENDERER", renderer.UTF8String, 1);
 
         // Apply Zink-specific environment variables if Zink renderer is selected
-        // Mesa 25.0.7 zink 升级配套：根据设备 GPU 代际自动调优 MESA_GL_VERSION_OVERRIDE、
-        // MESA_GLSL_VERSION_OVERRIDE、MESA_EXTENSION_OVERRIDE、mesa_glthread、shader cache 等。
-        // ZinkConfig 默认 Auto 级别会保留所有光影所需的 GL 扩展（compute/tessellation/geometry
-        // shader 等），仅禁用 MoltenVK 支持不佳的 Transform Feedback，不影响 Iris/OptiFine。
+        // Companion to the Mesa 25.0.7 zink upgrade: MESA_GL_VERSION_OVERRIDE,
+        // MESA_GLSL_VERSION_OVERRIDE, MESA_EXTENSION_OVERRIDE, mesa_glthread, the shader cache and so on are tuned automatically for the device GPU generation.
+        // The ZinkConfig Auto level keeps every GL extension shaders need (compute/tessellation/geometry
+        // shaders and the like) and only disables Transform Feedback, which MoltenVK supports poorly, so Iris/OptiFine are unaffected.
         if ([renderer hasPrefix:@"libOSMesa"]) {
             [ZinkConfig applyZinkEnvironmentFromPreferences];
             NSString *configSummary = [ZinkConfig activeConfigSummary];
@@ -465,34 +465,34 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
             NSLog(@"[ZinkConfig] %@", configSummary);
             setenv("ZINK_ACTIVE_CONFIG", configSummary.UTF8String, 1);
 
-            // 安装 zink vertex stride 4 字节对齐 fix
-            // 修复 Mesa 25.0.7 zink + MoltenVK 在启用光影时因 stride 未 4 字节对齐
-            // 导致 vkCreateGraphicsPipelines 失败 → SIGSEGV 的崩溃（详见 main_hook.m）
-            // 必须在 libOSMesa 被 dlopen 之前调用，确保 fishhook 能拦截后续符号引用
+            // Install the zink 4-byte vertex stride alignment fix
+            // Fixes the crash where Mesa 25.0.7 zink + MoltenVK failed vkCreateGraphicsPipelines
+            // because the stride was not 4-byte aligned when shaders were enabled -> SIGSEGV (see main_hook.m)
+            // It must be called before libOSMesa is dlopen-ed, so fishhook can intercept the later symbol references
             installZinkStrideFix();
         }
 
         // Apply LTW-specific environment variables if LTW renderer is selected
-        // LTW (Large Thin Wrapper) OpenGL Core 3.3 → ES 3 转译层
-        // 不设置 LTW_* 环境变量，使用 LTW main.c constructor 的默认值（与 Android 端一致）
-        //   - LIBGL_ES：LTW 自动检测 ES 版本
-        //   - LTW_NEVER_FLUSH_BUFFERS：默认 true
-        //   - LTW_COHERENT_DYNAMIC_STORAGE：默认 true
-        // 仅设置 POJAVEXEC_EGL 标识 EGL 由 LTW 提供（对齐 Android 端语义）
+        // LTW (Large Thin Wrapper) OpenGL Core 3.3 -> ES 3 translation layer
+        // No LTW_* environment variables are set, so the defaults from the LTW main.c constructor apply (matching Android)
+        //   - LIBGL_ES: LTW detects the ES version itself
+        //   - LTW_NEVER_FLUSH_BUFFERS: true by default
+        //   - LTW_COHERENT_DYNAMIC_STORAGE: true by default
+        // Only POJAVEXEC_EGL is set, marking EGL as provided by LTW (matching the Android semantics)
         if ([renderer isEqualToString:@ RENDERER_NAME_LTW]) {
             setenv("POJAVEXEC_EGL", RENDERER_NAME_LTW, 1);
             NSLog(@"[JavaLauncher] LTW renderer active: using LTW defaults (same as Android)");
         }
         // Setup AMETHYST_GRAPHICS_API（MC 26.2+ Graphics API：default/vulkan/opengl）
-        // 仅 MC 26.2+ 识别此选项，旧版本 MC 会忽略 options.txt 中的 graphicsApi 字段。
+        // Only MC 26.2+ understands this option; older versions ignore the graphicsApi field in options.txt.
         //
-        // 关键修复（更改图形 API 无效）：
-        //   之前仅当 graphicsApi 非空时才设置环境变量，导致：
-        //   1. 用户从未设置过 graphicsApi 时环境变量缺失，Java 端无法清除旧值
-        //   2. 环境变量缺失时 Java 端完全跳过 graphicsApi 处理逻辑
-        //   现在始终设置环境变量（缺省为 "default"），让 Java 端每次启动都能正确处理：
-        //   - "default"：清除 options.txt 中的 graphicsApi 行
-        //   - prefer_vulkan/prefer_opengl：写入对应值
+        // Key fix (changing the graphics API had no effect):
+        //   the environment variable used to be set only when graphicsApi was non-empty, which meant:
+        //   1. the variable was missing if the user had never set graphicsApi, so the Java side could not clear the old value
+        //   2. with the variable missing, the Java side skipped the graphicsApi handling entirely
+        //   It is now always set (defaulting to "default"), so the Java side handles it correctly on every launch:
+        //   - "default": remove the graphicsApi line from options.txt
+        //   - prefer_vulkan/prefer_opengl: write the matching value
         NSString *graphicsApi = [PLProfiles resolveKeyForCurrentProfile:@"graphicsApi"];
         if (!graphicsApi || graphicsApi.length == 0) {
             graphicsApi = @"default";
@@ -509,21 +509,21 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
         defaultJRETag = @"execute_jar";
         gameDir = @(getenv("POJAV_GAME_DIR"));
         launchJar = YES;
-        // execute_jar 路径（如 OptiFine 安装器）的 caciocavallo 由三路切换自动处理：
-        // 实际选中的 Java 运行时是哪个版本，就用对应目录的 caciocavallo jar。
-        // 不再在此处对 minVersion 做任何强制提升或钳制。
+        // For the execute_jar path (such as the OptiFine installer), caciocavallo is handled by the three-way switch:
+        // whichever Java runtime is actually selected, the caciocavallo jar from the matching folder is used.
+        // minVersion is no longer forced up or clamped here.
     }
 
-    // 26.x 版本官方强制要求 Java 25（Mojang 自 26.x 起将 javaVersion.majorVersion 设为 25）。
-    // 不再钳制 Profile 的 javaVersion，26.x 必须使用 Java 25 启动。
-    // caciocavallo 三路切换（参照 FCL/ZalithLauncher2 二元思路，扩展为三路以兼容 Java 25）：
-    // 三个独立的平级文件夹，按实际 Java 版本选择：
-    // - Java 8     → libs_caciocavallo（1.10-SNAPSHOT，包名 net.java.openjdk.cacio，bootclasspath/p）
-    // - Java 17/21 → libs_caciocavallo17（1.18-SNAPSHOT 纯 Java 17 编译，包名 com.github.caciocavallosilano.cacio，bootclasspath/a）
-    // - Java 25    → libs_caciocavallo25（1.18-SNAPSHOT 含 Java 24 class，包名 com.github.caciocavallosilano.cacio，bootclasspath/a）
-    //   来自 catsruledogs/Amethyst-iOS-25。其 CTCGraphicsEnvironment 是 Java 24 class（class version 68），
-    //   含 Java 25 兼容修复，纯 Java 17 编译版本会在 get_method_id 阶段 SIGSEGV。
-    //   class version 68 仅 Java 24+ 可加载，故 Java 17/21 不能共用，需用 caciocavallo17 目录的纯 Java 17 jar。
+    // 26.x officially requires Java 25 (Mojang set javaVersion.majorVersion to 25 from 26.x onwards).
+    // The profile javaVersion is no longer clamped: 26.x must launch on Java 25.
+    // The three-way caciocavallo switch (following the binary approach of FCL/ZalithLauncher2, extended to three for Java 25):
+    // three separate sibling folders, chosen by the actual Java version:
+    // - Java 8     -> libs_caciocavallo (1.10-SNAPSHOT, package net.java.openjdk.cacio, bootclasspath/p)
+    // - Java 17/21 -> libs_caciocavallo17 (1.18-SNAPSHOT compiled purely for Java 17, package com.github.caciocavallosilano.cacio, bootclasspath/a)
+    // - Java 25    -> libs_caciocavallo25 (1.18-SNAPSHOT containing Java 24 classes, package com.github.caciocavallosilano.cacio, bootclasspath/a)
+    //   From catsruledogs/Amethyst-iOS-25. Its CTCGraphicsEnvironment is a Java 24 class (class version 68)
+    //   with Java 25 compatibility fixes; the purely Java 17 build SIGSEGVs during get_method_id.
+    //   Class version 68 only loads on Java 24+, so Java 17/21 cannot share it and need the pure Java 17 jar from the caciocavallo17 folder.
 
     NSLog(@"[JavaLauncher] Looking for Java %d or later", minVersion);
     NSString *javaHome = getSelectedJavaHome(defaultJRETag, minVersion);
@@ -569,28 +569,28 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
     int margc = -1;
     const char *margv[1000];
 
-    // 关键修复（N3+N4）：margv 边界检查 + 字符串生命周期管理
+    // Key fix (N3+N4): margv bounds checking + string lifetime management
     //
-    // N3（边界检查）：
-    //   margv[1000] 是固定大小数组，每次 margv[++margc] = ... 都没有检查 margc 是否越界。
-    //   如果未来扩展参数可能造成栈缓冲区溢出。这里通过 PUSH_MARGV_* 宏做防御性边界检查。
+    // N3 (bounds checking):
+    //   margv[1000] is a fixed-size array, and no margv[++margc] = ... ever checked whether margc had run past the end.
+    //   Adding arguments later could overflow the stack buffer. The PUSH_MARGV_* macros add a defensive bounds check.
     //
-    // N4（悬垂指针）：
-    //   [NSString stringWithFormat:...].UTF8String 返回的 C 字符串指针依赖 autoreleased NSString
-    //   的生命周期。当前 launchJVM 函数没有显式 @autoreleasepool 包裹整个函数体，autoreleased
-    //   对象进入当前线程的 autorelease pool，到下一次 runloop drain 时才释放。由于函数末尾立即
-    //   调用 pJLI_Launch(margc, margv, ...)，期间没有显式 drain，所以暂时安全。
-    //   但这是脆弱的隐式依赖：如果将来有人在中间插入 @autoreleasepool 块或调用 drain，
-    //   所有 margv 中由 stringWithFormat: 生成的指针会立即悬垂，导致 JVM 启动崩溃。
+    // N4 (dangling pointers):
+    //   The C string returned by [NSString stringWithFormat:...].UTF8String depends on the lifetime of an autoreleased
+    //   NSString. launchJVM currently has no explicit @autoreleasepool around its body, so autoreleased
+    //   objects land in the thread pool and are only freed at the next runloop drain. Since the function ends by immediately
+    //   calling pJLI_Launch(margc, margv, ...) with no drain in between, it happens to be safe.
+    //   But that is a fragile implicit dependency: if someone later inserts an @autoreleasepool block or a drain,
+    //   every pointer in margv produced by stringWithFormat: dangles at once and the JVM crashes on startup.
     //
-    //   修复方案：用 retainedStrings 数组强引用所有通过 stringWithFormat: 创建的 NSString，
-    //   确保其生命周期覆盖 pJLI_Launch 调用。retainedStrings 是局部 strong 引用，随函数
-    //   退出自动释放，无需手动管理。
+    //   Fix: hold every NSString created by stringWithFormat: strongly in the retainedStrings array,
+    //   so their lifetime covers the pJLI_Launch call. retainedStrings is a local strong reference and is released
+    //   automatically when the function returns, so nothing needs managing by hand.
     NSMutableArray<NSString *> *retainedStrings = [NSMutableArray array];
 
-    // 宏：安全地添加一个字面量参数到 margv
-    // 字符串字面量（如 "-XstartOnFirstThread"）是静态存储期的 const char*，永不失效
-    // 边界检查：margc 达到上限时停止添加，避免栈溢出
+    // Macro: safely append a literal argument to margv
+    // String literals (such as "-XstartOnFirstThread") are const char* with static storage duration and never expire
+    // Bounds check: stop appending once margc reaches the limit, to avoid a stack overflow
     #define PUSH_MARGV_LITERAL(literal) do { \
         if (margc + 1 < 1000) { \
             margv[++margc] = (literal); \
@@ -599,10 +599,10 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
         } \
     } while (0)
 
-    // 宏：通过 stringWithFormat: 构造参数并添加到 margv
-    // 创建的 NSString 会被 retainedStrings 强引用，直到函数返回才释放，
-    // 保证 margv 中保存的 UTF8String 指针在 pJLI_Launch 调用期间有效。
-    // 注意：NSLog 警告消息不直接用 fmt 作为格式串（避免 % 被错误解析），仅打印字面量提示。
+    // Macro: build an argument with stringWithFormat: and append it to margv
+    // The NSString created is held strongly by retainedStrings until the function returns,
+    // so the UTF8String pointers stored in margv stay valid for the duration of the pJLI_Launch call.
+    // Note: the NSLog warning does not use fmt as the format string (so a % is not misparsed) and only prints a literal hint.
     #define PUSH_MARGV_FORMAT(ns_fmt, ...) do { \
         if (margc + 1 < 1000) { \
             NSString *_tmpStr = [NSString stringWithFormat:(ns_fmt), ##__VA_ARGS__]; \
@@ -620,15 +620,15 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
     }
     PUSH_MARGV_LITERAL("-Xms128M");
     PUSH_MARGV_FORMAT(@"-Xmx%dM", allocmem);
-    // library.path: 单一 Frameworks 路径（对齐 Ynnyny 仓库）
+    // library.path: a single Frameworks path (aligned with the Ynnyny repo)
     //
-    // 关键修复（26.2 启动崩溃）：之前 workspace 将 LWJGL dylib 分裂为 lwjgl33/ 和 lwjgl34/ 子目录，
-    // 并通过扫描版本 JSON 的 LWJGL 声明来选择路径。但 Ynnyny 仓库用单一 Frameworks 路径就能正常
-    // 启动 26.2，证明分裂路径是多余的，且若 dylib 未按子目录正确摆放会导致加载错误版本 native 库。
+    // Key fix (26.2 startup crash): the workspace used to split the LWJGL dylibs into lwjgl33/ and lwjgl34/ subfolders
+    // and pick a path by scanning the LWJGL declaration in the version JSON. But the Ynnyny repo launches 26.2 fine with a single
+    // Frameworks path, showing the split is unnecessary and that misplaced dylibs would load the wrong native library version.
     //
-    // 现对齐 Ynnyny：所有 native dylib（含 LWJGL 专属和共享库）统一放在 Frameworks/ 根目录，
-    // library.path = Frameworks。定制版 root lwjgl.jar（含 iOS 专用 LWJGL 补丁）通过 JavaApp/Makefile
-    // 合并进最终 lwjgl.jar，确保 LWJGL 在 iOS 上能正确加载 GL 实现。
+    // Now aligned with Ynnyny: every native dylib (LWJGL-specific and shared alike) lives in the Frameworks/ root and
+    // library.path = Frameworks. The customized root lwjgl.jar (with the iOS-specific LWJGL patches) is merged into the final
+    // lwjgl.jar by JavaApp/Makefile, so LWJGL loads the GL implementation correctly on iOS.
     NSString *frameworksPath = [NSString stringWithFormat:@"%@/Frameworks", NSBundle.mainBundle.bundlePath];
     PUSH_MARGV_FORMAT(@"-Djava.library.path=%@", frameworksPath);
     NSLog(@"[JavaLauncher] library.path = %@", frameworksPath);
@@ -637,10 +637,10 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
     PUSH_MARGV_FORMAT(@"-Duser.timezone=%@", NSTimeZone.localTimeZone.name);
     PUSH_MARGV_FORMAT(@"-DUIScreen.maximumFramesPerSecond=%d", (int)UIScreen.mainScreen.maximumFramesPerSecond);
 
-    // 发布 GameSurfaceView 指针，供 Metallum Metal 后端使用
-    // +[SurfaceViewController surface] 返回静态变量 pojavWindow，该变量在
-    // -[SurfaceViewController viewDidLoad] 中被赋值（早于 launchMinecraft 派发到本后台线程）。
-    // 通过系统属性传递指针，可避免 JVM 渲染线程通过 ObjC runtime 查找 UIView 的不确定性。
+    // Publish the GameSurfaceView pointer for the Metallum Metal backend
+    // +[SurfaceViewController surface] returns the static pojavWindow, which is assigned in
+    // -[SurfaceViewController viewDidLoad] (before launchMinecraft is dispatched to this background thread).
+    // Passing the pointer through a system property avoids the JVM render thread having to look up the UIView through the ObjC runtime.
     Class surfaceVCClass = NSClassFromString(@"SurfaceViewController");
     if (surfaceVCClass && [surfaceVCClass respondsToSelector:@selector(surface)]) {
         id surfaceView = [surfaceVCClass performSelector:@selector(surface)];
@@ -661,30 +661,30 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
     PUSH_MARGV_LITERAL("-Dlog4j2.formatMsgNoLookups=true");
 
     // ============================================================================
-    // JNA 加载路径
+    // JNA load path
     // ============================================================================
-    // JNA 5.13.0 的 darwin-aarch64 libjnidispatch 从 JAR 中提取后能正常加载。
-    // Tools.java / MinecraftResourceUtils.m 已强制将 JNA 替换为 5.13.0
-    // （MC 26.3+ 要求的 5.17.0 在 iOS 上会导致 native crash）。
-    // 保留 boot.library.path 以便未来内置 iOS arm64 版 libjnidispatch。
+    // The darwin-aarch64 libjnidispatch of JNA 5.13.0 loads fine once extracted from the JAR.
+    // Tools.java / MinecraftResourceUtils.m force JNA down to 5.13.0
+    // (the 5.17.0 required by MC 26.3+ causes a native crash on iOS).
+    // boot.library.path is kept so an iOS arm64 libjnidispatch can be bundled in future.
     PUSH_MARGV_FORMAT(@"-Djna.boot.library.path=%@", frameworksPath);
 
     // ============================================================================
-    // 帧率解锁第四层：JVM 系统属性
+    // Frame rate unlock, layer 4: a JVM system property
     // ============================================================================
-    // 某些 MC 版本/mod 可能通过 System.getProperty 读取帧率限制。
-    // 设置 -Dmax.fps=260 作为 options.txt 之外的额外兜底层。
-    // 不影响不读取此属性的版本。
+    // Some MC versions/mods may read the frame rate limit via System.getProperty.
+    // -Dmax.fps=260 is set as an extra safety net beyond options.txt.
+    // It has no effect on versions that do not read the property.
     if (getPrefBool(@"video.disable_game_vsync")) {
         PUSH_MARGV_LITERAL("-Dmax.fps=260");
         NSLog(@"[JavaLauncher] Added JVM property -Dmax.fps=260 (frame rate unlock layer 4)");
     }
 
     // ============================================================================
-    // ZeroTier 联机 SOCKS5 代理注入 —— 暂时移除（排查启动崩溃）
+    // ZeroTier multiplayer SOCKS5 proxy injection — temporarily removed (while a startup crash is investigated)
     // ============================================================================
-    // 原逻辑：检测 AMETHYST_SOCKS5_PROXY 环境变量，注入 -DsocksProxyHost/-DsocksProxyPort
-    // ZeroTier 暂时移除后，MultiplayerManager 不再设置该环境变量，此块代码注释掉
+    // Original behavior: detect the AMETHYST_SOCKS5_PROXY environment variable and inject -DsocksProxyHost/-DsocksProxyPort
+    // With ZeroTier temporarily removed, MultiplayerManager no longer sets that variable, so this block is commented out
     // ============================================================================
     // const char *socks5ProxyEnv = getenv("AMETHYST_SOCKS5_PROXY");
     // if (socks5ProxyEnv && socks5ProxyEnv[0] != '\0') {
@@ -719,75 +719,75 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
     const char *glLibName = getenv("AMETHYST_RENDERER");
     if (glLibName) {
         if (!strcmp(glLibName, "auto")) {
-            // 关键修复（26.2 启动崩溃）：Auto 渲染器始终选 ANGLE（对齐 Ynnyny 仓库）
+            // Key fix (26.2 startup crash): the Auto renderer always picks ANGLE (aligned with the Ynnyny repo)
             //
-            // 之前 workspace 在 Java 21+ 优先选 MobileGlues，但 Ynnyny 仓库用 ANGLE 就能正常启动 26.2。
-            // workspace 选 MobileGlues 后又缺少 init_loadMobileGluesConfig() 写 config.json，
-            // 导致 MobileGlues 用不安全默认值初始化 GL 上下文可能崩溃。现对齐 Ynnyny 始终选 ANGLE。
-            // MobileGlues 仍保留为手动选项（用户可在设置中显式选择）。
+            // The workspace used to prefer MobileGlues on Java 21+, but the Ynnyny repo launches 26.2 fine with ANGLE.
+            // Picking MobileGlues without also calling init_loadMobileGluesConfig() to write config.json meant
+            // MobileGlues initialized the GL context with unsafe defaults and could crash. It now always picks ANGLE, as Ynnyny does.
+            // MobileGlues remains available as a manual option (the user can select it explicitly in settings).
             glLibName = RENDERER_NAME_MTL_ANGLE;
             setenv("AMETHYST_RENDERER", glLibName, 1);
             NSLog(@"[JavaLauncher] Auto renderer resolved to %s (always ANGLE)", glLibName);
         }
         if (strcmp(glLibName, RENDERER_NAME_VULKAN) == 0) {
-            // 对齐 Ynnyny 仓库：Vulkan 模式下 OpenGL 回退库使用 MobileGlues
+            // Aligned with the Ynnyny repo: in Vulkan mode the OpenGL fallback library is MobileGlues
             //
-            // libMoltenVK 是 Vulkan loader，不是 GL 实现；绑定它为 opengl.libname 会导致
-            // LWJGL 查找 GL 符号失败。但 MC 26.2 的 NativeLibrariesBootstrap.loadOpenGL()
-            // 在启动时会初始化 org.lwjgl.opengl.GL（无论游戏最终用哪个渲染器）。
-            // 若 opengl.libname 未设置，LWJGL 回退到 MacOSXLibraryBundle.getWithIdentifier
-            // ("com.apple.opengl")，iOS 上无系统 OpenGL framework 会失败 →
+            // libMoltenVK is a Vulkan loader, not a GL implementation, so binding it as opengl.libname makes
+            // LWJGL fail to find the GL symbols. But NativeLibrariesBootstrap.loadOpenGL() in MC 26.2
+            // initializes org.lwjgl.opengl.GL at startup (whichever renderer the game ends up using).
+            // With opengl.libname unset, LWJGL falls back to MacOSXLibraryBundle.getWithIdentifier
+            // ("com.apple.opengl"), which fails on iOS because there is no system OpenGL framework ->
             //   UnsatisfiedLinkError: Failed to retrieve bundle with identifier: com.apple.opengl
-            // 指向 libmobileglues.dylib：MobileGlues 专为 GL-on-Metal/Vulkan 设计，
-            // 已使用 shipped libspirv-cross.dylib 做着色器翻译。GL.create() 能找到 GL 函数指针；
-            // 若 MC 调用 GL 入口（compat 代码、着色器构建等），MobileGlues 能通过 Vulkan 路由，
-            // 而非像无上下文的 gl4es 那样崩溃。
+            // Point it at libmobileglues.dylib: MobileGlues is designed for GL-on-Metal/Vulkan
+            // and already uses the shipped libspirv-cross.dylib for shader translation. GL.create() finds the GL function pointers,
+            // and if MC calls a GL entry point (compat code, shader building and so on) MobileGlues routes it through Vulkan
+            // instead of crashing the way a context-less gl4es would.
             //
-            // 注意：vulkan.libname 不在此设置（对齐 Ynnyny），由 PojavLauncher.java 通过
-            // System.setProperty("org.lwjgl.vulkan.libname", "MoltenVK") 设置。
-            // 若在此用 -D 传 "libMoltenVK.dylib"，LWJGL Library.loadNative 会加 "lib" 前缀和
-            // ".dylib" 后缀，得到 "liblibMoltenVK.dylib.dylib"（错误文件名）。
+            // Note: vulkan.libname is not set here (matching Ynnyny); PojavLauncher.java sets it via
+            // System.setProperty("org.lwjgl.vulkan.libname", "MoltenVK").
+            // Passing "libMoltenVK.dylib" through -D here would make LWJGL Library.loadNative add the "lib" prefix and
+            // ".dylib" suffix, producing "liblibMoltenVK.dylib.dylib" (the wrong file name).
             //
-            // MoltenVK 配置（对齐 Ynnyny）：
-            // - RESUME_LOST_DEVICE=1：设备丢失后自动恢复
-            // - SYNCHRONOUS_QUEUE_SUBMITS=1：同步队列提交（更稳定，避免竞争）
-            // - PREFILL_METAL_COMMAND_BUFFERS=1：预填充 Metal 命令缓冲区（减少 GPU 等待，性能优化）
+            // MoltenVK configuration (aligned with Ynnyny):
+            // - RESUME_LOST_DEVICE=1: recover automatically after a lost device
+            // - SYNCHRONOUS_QUEUE_SUBMITS=1: synchronous queue submission (more stable, avoiding races)
+            // - PREFILL_METAL_COMMAND_BUFFERS=1: prefill the Metal command buffers (less GPU waiting, a performance win)
             setenv("MVK_CONFIG_RESUME_LOST_DEVICE", "1", 1);
             setenv("MVK_CONFIG_SYNCHRONOUS_QUEUE_SUBMITS", "1", 1);
             setenv("MVK_CONFIG_PREFILL_METAL_COMMAND_BUFFERS", "1", 1);
         }
-        // 对齐 Ynnyny：使用独立变量 openglLibName，不修改 glLibName（保持原值用于后续判断）
+        // Aligned with Ynnyny: use a separate openglLibName variable and leave glLibName untouched (its original value is needed for later checks)
         const char *openglLibName = (strcmp(glLibName, RENDERER_NAME_VULKAN) == 0)
             ? RENDERER_NAME_MOBILEGLUES
             : glLibName;
 
         PUSH_MARGV_FORMAT(@"-Dorg.lwjgl.opengl.libname=%s", openglLibName);
 
-        // 关键修复（参照 FCL，阶段4：26.2 图形 API 切换无效）：
-        // 之前仅在 renderer=libMoltenVK.dylib 时由 PojavLauncher.java 通过 System.setProperty 设置
-        // org.lwjgl.vulkan.libname，导致用户保留默认 renderer=auto（解析为 ANGLE）并切换
-        // graphicsApi=prefer_vulkan 时，LWJGL 找不到 Vulkan 库 → MC 静默回退 OpenGL。
+        // Key fix (following FCL, phase 4: switching the graphics API had no effect on 26.2):
+        // org.lwjgl.vulkan.libname used to be set only when renderer=libMoltenVK.dylib, via System.setProperty in PojavLauncher.java,
+        // so a user who kept the default renderer=auto (resolved to ANGLE) and switched
+        // graphicsApi=prefer_vulkan left LWJGL unable to find the Vulkan library -> MC silently fell back to OpenGL.
         //
-        // FCL 做法：在 JVM 启动前通过 -D 系统属性同时确定 OpenGL 和 Vulkan 两条路径的 native 库，
-        // 无论 MC 最终选哪条路都能找到对应的库。
+        // What FCL does: set the native libraries for both the OpenGL and Vulkan paths through -D system properties before the JVM starts,
+        // so whichever path MC takes, the matching library is found.
         //
-        // 传裸名 "MoltenVK"，LWJGL Library.loadNative 会自动加 "lib" 前缀和 ".dylib" 后缀，
-        // 得到 "libMoltenVK.dylib"（正确文件名）。若传 "libMoltenVK.dylib" 会被包装成
-        // "liblibMoltenVK.dylib.dylib"（错误文件名）。
+        // Pass the bare name "MoltenVK": LWJGL Library.loadNative adds the "lib" prefix and ".dylib" suffix itself,
+        // producing "libMoltenVK.dylib" (the correct file name). Passing "libMoltenVK.dylib" would be wrapped into
+        // "liblibMoltenVK.dylib.dylib" (the wrong file name).
         //
-        // 安全性：即使 MC 最终走 GL 路径，加载 MoltenVK 也无副作用（GL 路径不调用 Vulkan 入口）。
+        // Safety: even if MC ends up on the GL path, loading MoltenVK has no side effects (the GL path never calls a Vulkan entry point).
         PUSH_MARGV_LITERAL("-Dorg.lwjgl.vulkan.libname=MoltenVK");
 
-        // 显式指定 spirv-cross 库名（参照 catsruledogs/Amethyst-iOS-25）：
-        // LWJGL spvc 模块默认查找 "spirv-cross" -> 加载 libspirv-cross.dylib（macOS 标准名），
-        // 但实际文件名为 libspirv-cross-c-shared.0.dylib（带版本后缀的 SO 名）。
-        // 显式设置 -Dorg.lwjgl.spvc.libname=spirv-cross-c-shared.0，LWJGL 的 Library.loadNative
-        // 会对 libname 加 "lib" 前缀和 ".dylib" 后缀，得到 "libspirv-cross-c-shared.0.dylib"，
-        // 从 library.path（Frameworks）找到该文件。
+        // Specify the spirv-cross library name explicitly (following catsruledogs/Amethyst-iOS-25):
+        // the LWJGL spvc module looks for "spirv-cross" by default -> loading libspirv-cross.dylib (the standard macOS name),
+        // but the actual file is libspirv-cross-c-shared.0.dylib (an SO name with a version suffix).
+        // Setting -Dorg.lwjgl.spvc.libname=spirv-cross-c-shared.0 explicitly makes LWJGL Library.loadNative
+        // add the "lib" prefix and ".dylib" suffix, producing "libspirv-cross-c-shared.0.dylib",
+        // which is found on library.path (Frameworks).
         PUSH_MARGV_LITERAL("-Dorg.lwjgl.spvc.libname=spirv-cross-c-shared.0");
     }
 
-      // 添加authlib-injector参数以支持第三方认证账户的皮肤显示
+      // Add the authlib-injector arguments so third-party accounts can show their skins
     if ([accountId length] > 0 && [BaseAuthenticator.current isKindOfClass:[ThirdPartyAuthenticator class]]) {
         BaseAuthenticator *currentAuth = BaseAuthenticator.current;
         if (currentAuth.authData[@"authserver"] != nil) {
@@ -795,8 +795,8 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
             NSArray *authlibArgs = [(ThirdPartyAuthenticator *)currentAuth getJvmArgsForAuthlib];
             if (authlibArgs.count > 0) {
                 for (NSString *arg in authlibArgs) {
-                    // arg 来自 authlibArgs 数组，是 strong 引用；但数组本身可能在循环外
-                    // 被释放，为防止悬垂，通过 PUSH_MARGV_FORMAT 持久化
+                    // arg comes from the authlibArgs array and is a strong reference, but the array itself may be
+                    // released outside the loop, so PUSH_MARGV_FORMAT persists it to prevent dangling
                     PUSH_MARGV_FORMAT(@"%@", arg);
                     NSLog(@"[JavaLauncher] Added authlib-injector arg: %s", arg.UTF8String);
                 }     
@@ -819,27 +819,27 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
     PUSH_MARGV_LITERAL("-XX:+UnlockExperimentalVMOptions");
     PUSH_MARGV_LITERAL("-XX:+DisablePrimordialThreadGuardPages");
 
-    // 关键修复（liblwjgl_stb SIGILL 崩溃，CodeCache 满）：
-    //   崩溃日志显示 "CodeCache is full. Compiler has been disabled." 紧接 SIGILL
-    //   at liblwjgl_stb.dylib+0x4d26c。复现路径包括：
+    // Key fix (liblwjgl_stb SIGILL crash, a full CodeCache):
+    //   The crash log showed "CodeCache is full. Compiler has been disabled." immediately before a SIGILL
+    //   at liblwjgl_stb.dylib+0x4d26c. The reproduction paths included:
     //   - 1.16.5 + libOSMesa + zink + MoltenVK（Java 8）
     //   - 1.20.1 + Forge + mobileglues（Java 17）
-    //   说明根因与渲染器无关，是 CodeCache 容量不足。
+    //   which shows the root cause is unrelated to the renderer and is simply insufficient CodeCache capacity.
     //
-    //   项目从未设置 CodeCache 参数，完全依赖 JVM 默认值：
-    //   - Java 8 默认 ReservedCodeCacheSize=48MB
-    //   - Java 17+ 默认 240MB（仍可能在大量 native 加载下紧张）
+    //   The project never set any CodeCache parameters and relied entirely on the JVM defaults:
+    //   - Java 8 defaults to ReservedCodeCacheSize=48MB
+    //   - Java 17+ defaults to 240MB (which can still be tight under heavy native loading)
     //
-    //   CodeCache 满后 JIT 编译中的方法被部分无效化，CPU 执行到损坏的指令序列
-    //   → SIGILL（崩溃点落在 liblwjgl_stb 是因为 stb_truetype 字体光栅化是首个
-    //   大量 JIT 的 native wrapper，与渲染器无关）。
+    //   Once the CodeCache fills, JIT-compiled methods are partially invalidated and the CPU runs into a corrupted instruction sequence
+    //   -> SIGILL (the crash lands in liblwjgl_stb because stb_truetype font rasterization is the first
+    //   heavily JIT-ed native wrapper, not because of the renderer).
     //
-    //   修复：设置为 64m，对 Java 8/17/21/25 全部生效。
-    //   - 64m 仍比 Java 8 默认值（48MB）大 33%，足够避免 CodeCache 满导致的 SIGILL
-    //   - InitialCodeCacheSize=16m 避免启动时立即触发 CodeCache 扩容（默认 2.25m
-    //     会多次扩容，每次扩容都触发全局锁）
-    //   - CodeCacheExpansionSize=4m 减少扩容次数（默认 64K 太小）
-    //   - +UnlockExperimentalVMOptions 已在上一行启用，无需重复
+    //   Fix: set it to 64m, which applies to Java 8/17/21/25 alike.
+    //   - 64m is still 33% above the Java 8 default (48MB), enough to avoid the SIGILL from a full CodeCache
+    //   - InitialCodeCacheSize=16m avoids triggering a CodeCache expansion right at startup (the default 2.25m
+    //     expands several times, and each expansion takes a global lock)
+    //   - CodeCacheExpansionSize=4m reduces the number of expansions (the 64K default is far too small)
+    //   - +UnlockExperimentalVMOptions is already enabled on the previous line and does not need repeating
     //
     //   iOS 27 SIGBUS fix (non-TXM devices, e.g. A15):
     //   On iOS 26+, -XX:+MirrorMappedCodeCache maps JIT code into RX memory
@@ -871,23 +871,23 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
     BOOL isJava8 = [fm fileExistsAtPath:libjlipath8];
 
     // ============================================================================
-    // JVM 性能优化（保守参数，不影响启动稳定性）
+    // JVM performance tuning (conservative parameters that do not affect startup stability)
     // ============================================================================
-    // 仅对 Java 17+ 启用 G1GC 调优。Java 8 的 G1GC 不够成熟，保持默认 SerialGC。
-    // 不添加 -XX:+AlwaysPreTouch（延长启动时间）、-XX:TieredStopAtLevel=1（降低 JIT 性能）、
-    // -XX:CICompilerCount=1（减少编译线程）等可能影响游戏体验的参数。
-    // -XX:+UnlockExperimentalVMOptions 已在上方添加，UseStringDeduplication 需要实验模式。
+    // G1GC tuning is only enabled for Java 17+. The G1GC of Java 8 is not mature enough, so it keeps the default SerialGC.
+    // Parameters that could hurt the gameplay experience are deliberately not added: -XX:+AlwaysPreTouch (which lengthens startup),
+    // -XX:TieredStopAtLevel=1 (which lowers JIT performance), -XX:CICompilerCount=1 (which cuts compiler threads) and the like.
+    // -XX:+UnlockExperimentalVMOptions is added above, and UseStringDeduplication needs experimental mode.
     if (!isJava8) {
-        // G1GC：Java 9+ 默认 GC，显式启用确保一致性。
-        // 适合大堆内存（MC 通常分配 2-4GB），减少 Full GC 停顿。
+        // G1GC: the default GC from Java 9+, enabled explicitly for consistency.
+        // It suits large heaps (MC usually gets 2-4GB) and reduces full GC pauses.
         PUSH_MARGV_LITERAL("-XX:+UseG1GC");
-        // 目标 GC 停顿 50ms（默认 200ms）。
-        // 这是一个软目标，JVM 会尽量满足但不强制，不会导致 OOM。
-        // 对 MC 的实时渲染有益，减少 GC 引起的卡顿。
+        // Target a 50ms GC pause (the default is 200ms).
+        // This is a soft target the JVM tries to meet without enforcing it, so it cannot cause an OOM.
+        // It helps the real-time rendering of MC by reducing GC-induced stutter.
         PUSH_MARGV_LITERAL("-XX:MaxGCPauseMillis=50");
-        // 字符串去重：G1GC 特性，自动去重老年代中相同值的 String 对象。
-        // MC 有大量重复字符串（方块名、物品名、I18N key 等），可节省 5-10% 堆内存。
-        // 仅在 G1GC 下生效，开销极小。
+        // String deduplication: a G1GC feature that automatically deduplicates equal String objects in the old generation.
+        // MC has many duplicate strings (block names, item names, I18N keys and so on), so this saves 5-10% of the heap.
+        // It only works under G1GC and its overhead is tiny.
         PUSH_MARGV_LITERAL("-XX:+UseStringDeduplication");
         NSLog(@"[JavaLauncher] JVM GC optimization: G1GC + MaxGCPauseMillis=50 + StringDeduplication (Java 17+)");
     } else {
@@ -916,17 +916,17 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
         PUSH_MARGV_LITERAL("-Dawt.toolkit=net.java.openjdk.cacio.ctc.CTCToolkit");
         PUSH_MARGV_LITERAL("-Djava.awt.graphicsenv=net.java.openjdk.cacio.ctc.CTCGraphicsEnvironment");
     } else {
-        // 启用 native access（Java 17+ 支持，Java 25 强制要求）。
-        // 参照 catsruledogs/Amethyst-iOS-25：Java 25 对受限方法（@Restricted，含 JNI、
-        // sun.misc.Unsafe、Foreign API）的限制更严格，缺失此参数会导致 caciocavallo/LWJGL/JNA
-        // 的 native access 触发警告路径，在 bootclasspath/a 未命名模块类上可能引发
-        // get_method_id 访问不一致的类元数据导致 SIGSEGV（26.2 启动崩溃的根因）。
-        // 日志中 "WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning"
-        // 也明确提示需要此参数。Java 17/21 添加此参数无副作用，统一在非 Java 8 分支添加。
-        // 关键修复（26.2 启动崩溃）：删除 --enable-native-access=ALL-UNNAMED（对齐 Ynnyny 仓库）
-        // Ynnyny 仓库不添加此参数也能正常启动 26.2，证明之前的诊断（Java 25 必需）是错误的。
-        // 该参数会改变未命名模块的受限方法警告路径，可能干扰 bootclasspath/a 上 caciocavallo
-        // 类的初始化顺序。
+        // Enable native access (supported from Java 17+, mandatory on Java 25).
+        // Following catsruledogs/Amethyst-iOS-25: Java 25 restricts restricted methods (@Restricted, covering JNI,
+        // sun.misc.Unsafe and the Foreign API) more tightly, and without this flag the native access of caciocavallo/LWJGL/JNA
+        // takes the warning path, which on unnamed-module classes from bootclasspath/a can make
+        // get_method_id read inconsistent class metadata and SIGSEGV (the root cause of the 26.2 startup crash).
+        // The log line "WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning"
+        // says the same thing. Adding it on Java 17/21 has no side effects, so it is added for every non-Java-8 branch.
+        // Key fix (26.2 startup crash): remove --enable-native-access=ALL-UNNAMED (aligned with the Ynnyny repo)
+        // The Ynnyny repo launches 26.2 fine without it, showing the earlier diagnosis (that Java 25 required it) was wrong.
+        // The flag changes the restricted-method warning path for unnamed modules and may disturb the initialization order
+        // of the caciocavallo classes on bootclasspath/a.
 
         // Required by Cosmetica to inject DNS
         PUSH_MARGV_LITERAL("--add-opens=java.base/java.net=ALL-UNNAMED");
@@ -951,39 +951,39 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
         PUSH_MARGV_LITERAL("--add-opens=java.desktop/sun.font=ALL-UNNAMED");
         PUSH_MARGV_LITERAL("--add-opens=java.desktop/sun.java2d=ALL-UNNAMED");
         PUSH_MARGV_LITERAL("--add-opens=java.base/java.lang.reflect=ALL-UNNAMED");
-        // 参照 catsruledogs/Amethyst-iOS-25：不添加 sun.awt / sun.awt.image / java.awt.peer 的
-        // add-opens。catsruledogs 不加这些 opens 也能正常启动 26.2 + Java 25。
-        // workspace 之前多加这 3 条 opens 会导致 Java 25 上 GE 提前初始化，
-        // 在 caciocavallo25 的 CTCGraphicsEnvironment 注册完成前触发 get_method_id → SIGSEGV。
-        // 纯 Java 17 编译版 caciocavallo17（Java 17/21 用）不依赖这些 opens，
-        // 其 CTCGraphicsEnvironment 通过 --add-exports（上方已添加）即可访问所需内部 API。
+        // Following catsruledogs/Amethyst-iOS-25: do not add the sun.awt / sun.awt.image / java.awt.peer
+        // add-opens. catsruledogs launches 26.2 + Java 25 fine without them.
+        // Adding those 3 opens caused the graphics environment to initialize too early on Java 25,
+        // triggering get_method_id -> SIGSEGV before the CTCGraphicsEnvironment of caciocavallo25 had registered.
+        // The purely Java 17 build, caciocavallo17 (used on Java 17/21), does not need them:
+        // its CTCGraphicsEnvironment reaches the internal APIs it needs through --add-exports (added above).
 
-        // cpw.mods.bootstraplauncher 模块导出：所有 Java 版本均添加（参照 catsruledogs/Amethyst-iOS-25）。
-        // 之前仅对 Java 17/21 添加、Java 25 跳过，导致 26.2 + Java 25 启动时类加载混乱，
-        // 最终在 get_method_id 阶段 SIGSEGV。catsruledogs 对所有版本统一添加此导出且能正常启动 26.2。
+        // Export of the cpw.mods.bootstraplauncher module: added for every Java version (following catsruledogs/Amethyst-iOS-25).
+        // It was previously added only for Java 17/21 and skipped on Java 25, which scrambled class loading on 26.2 + Java 25
+        // and ended in a SIGSEGV during get_method_id. catsruledogs adds it for every version and launches 26.2 fine.
         // TODO: workaround, will be removed once the startup part works without PLaunchApp
         PUSH_MARGV_LITERAL("--add-exports=cpw.mods.bootstraplauncher/cpw.mods.bootstraplauncher=ALL-UNNAMED");
     }
 
     // Add Caciocavallo bootclasspath
-    // 关键修复（26.2 启动崩溃）：caciocavallo 二元切换（对齐 Ynnyny 仓库）
+    // Key fix (26.2 startup crash): the binary caciocavallo switch (aligned with the Ynnyny repo)
     //
-    // 之前 workspace 误判"纯 Java 17 编译版会在 Java 25 上 get_method_id SIGSEGV"，
-    // 引入了 caciocavallo25（catsruledogs Java 24 class jar）三路切换。
-    // 但 Ynnyny 仓库用纯 Java 17 编译版 caciocavallo17 启动 26.2 完全正常，
-    // 证明该诊断是错误的。catsruledogs jar 的 Java 24 class 反而可能是真正的崩溃源。
+    // The workspace wrongly concluded that "the purely Java 17 build SIGSEGVs in get_method_id on Java 25"
+    // and introduced a three-way switch with caciocavallo25 (the catsruledogs Java 24 class jar).
+    // But the Ynnyny repo launches 26.2 perfectly with the purely Java 17 caciocavallo17 build,
+    // showing that diagnosis was wrong. The Java 24 classes in the catsruledogs jar may in fact be the real crash source.
     //
-    // 现对齐 Ynnyny：二元切换
+    // Now aligned with Ynnyny: a binary switch
     //   - Java 8     → libs_caciocavallo（1.10-SNAPSHOT，bootclasspath/p）
-    //   - Java 17/21/25 → libs_caciocavallo17（1.18-SNAPSHOT 纯 Java 17 编译，bootclasspath/a）
+    //   - Java 17/21/25 -> libs_caciocavallo17 (1.18-SNAPSHOT compiled purely for Java 17, bootclasspath/a)
     const char *cacio_bootclasspath_mode;
     NSString *cacio_libs_path;
     if (isJava8) {
-        // Java 8: 1.10-SNAPSHOT，bootclasspath/p（前置，覆盖 java.awt 实现）
+        // Java 8: 1.10-SNAPSHOT, bootclasspath/p (prepended, overriding the java.awt implementation)
         cacio_bootclasspath_mode = "p";
         cacio_libs_path = [NSString stringWithFormat:@"%@/libs_caciocavallo", NSBundle.mainBundle.bundlePath];
     } else {
-        // Java 17/21/25: 1.18-SNAPSHOT 纯 Java 17 编译（class version 61），bootclasspath/a
+        // Java 17/21/25: 1.18-SNAPSHOT compiled purely for Java 17 (class version 61), bootclasspath/a
         cacio_bootclasspath_mode = "a";
         cacio_libs_path = [NSString stringWithFormat:@"%@/libs_caciocavallo17", NSBundle.mainBundle.bundlePath];
     }
@@ -993,18 +993,18 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
     NSString *cacio_classpath = [NSString stringWithFormat:@"-Xbootclasspath/%s", cacio_bootclasspath_mode];
     NSArray *files = [fm contentsOfDirectoryAtPath:cacio_libs_path error:nil];
     for(NSString *file in files) {
-        // 所有 cacio jar 均放入 -Xbootclasspath/a（或 /p for Java 8）。
-        // 参照 catsruledogs/Amethyst-iOS-25：不使用 --patch-module，不使用 stub-surface-manager.jar。
-        // 之前用 --patch-module 或 stub jar 注入 sun.java2d.SurfaceManagerFactory，
-        // 会破坏 java.desktop 模块封装，导致 get_method_id SIGSEGV。
+        // Every cacio jar goes on -Xbootclasspath/a (or /p for Java 8).
+        // Following catsruledogs/Amethyst-iOS-25: neither --patch-module nor stub-surface-manager.jar is used.
+        // Injecting sun.java2d.SurfaceManagerFactory via --patch-module or a stub jar
+        // breaks the java.desktop module encapsulation and causes a get_method_id SIGSEGV.
         if ([file hasSuffix:@".jar"]) {
             cacio_classpath = [NSString stringWithFormat:@"%@:%@/%@", cacio_classpath, cacio_libs_path, file];
         }
     }
     PUSH_MARGV_FORMAT(@"%@", cacio_classpath);
 
-    // stub-surface-manager.jar 已删除（见上方注释）。不再使用 --patch-module。
-    // CTCPreloadClassLoader.<clinit> 抛出的 ClassNotFoundException 被吞掉，不影响启动。
+    // stub-surface-manager.jar has been deleted (see the comment above). --patch-module is no longer used.
+    // The ClassNotFoundException thrown by CTCPreloadClassLoader.<clinit> is swallowed and does not affect startup.
 
     if (!getEntitlementValue(@"com.apple.developer.kernel.extended-virtual-addressing")) {
         // In jailed environment, where extended virtual addressing entitlement isn't
@@ -1015,8 +1015,8 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
 
     if ([launchTarget isKindOfClass:NSDictionary.class]) {
         for (NSString *arg in launchTarget[@"arguments"][@"jvm_processed"]) {
-            // arg 来自 launchTarget[@"arguments"][@"jvm_processed"] 数组，是 strong 引用；
-            // 但 launchTarget 可能在循环结束后被释放，为防止悬垂，通过 PUSH_MARGV_FORMAT 持久化
+            // arg comes from the launchTarget[@"arguments"][@"jvm_processed"] array and is a strong reference,
+            // but launchTarget may be released after the loop, so PUSH_MARGV_FORMAT persists it to prevent dangling
             PUSH_MARGV_FORMAT(@"%@", arg);
         }
     }
@@ -1024,13 +1024,13 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
     init_loadCustomJvmFlags(&margc, (const char **)margv);
     NSLog(@"[Init] Found JLI lib");
 
-    // 关键修复（26.2 启动崩溃）：单一 lwjgl.jar（对齐 Ynnyny 仓库）
-    // 之前 workspace 分裂为 lwjgl.jar 和 lwjgl33.jar，现对齐 Ynnyny 用单一合并 jar。
-    // 定制版 root lwjgl.jar（含 iOS 专用 LWJGL 补丁）已通过 JavaApp/Makefile 合并进 lwjgl.jar。
+    // Key fix (26.2 startup crash): a single lwjgl.jar (aligned with the Ynnyny repo)
+    // The workspace used to split it into lwjgl.jar and lwjgl33.jar; it now uses one merged jar, as Ynnyny does.
+    // The customized root lwjgl.jar (with the iOS-specific LWJGL patches) is already merged into lwjgl.jar by JavaApp/Makefile.
     NSString *lwjglJar = [NSString stringWithFormat:@"%@/lwjgl.jar", librariesPath];
     NSLog(@"[JavaLauncher] Using LWJGL jar at %@", lwjglJar);
 
-    // 校验目标 LWJGL jar 是否存在，避免静默崩溃
+    // Check that the target LWJGL jar exists, so it cannot fail silently
     if (![fm fileExistsAtPath:lwjglJar]) {
         UIKit_returnToSplitView();
         showDialog(localize(@"Error", nil), [NSString stringWithFormat:@"LWJGL jar missing: %@", [lwjglJar lastPathComponent]]);
@@ -1040,7 +1040,7 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
     NSMutableString *classpathBuilder = [NSMutableString string];
     NSArray *libFiles = [fm contentsOfDirectoryAtPath:librariesPath error:nil];
     for (NSString *libFile in libFiles) {
-        // 精确排除合并后的 LWJGL jar，避免重复；保留其他以 lwjgl 开头的依赖 jar
+        // Exclude the merged LWJGL jar precisely to avoid duplicates, while keeping the other dependency jars whose names start with lwjgl
         if ([libFile hasSuffix:@".jar"] &&
             ![libFile isEqualToString:@"lwjgl.jar"]) {
             [classpathBuilder appendFormat:@"%@/%@:", librariesPath, libFile];
@@ -1049,10 +1049,10 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
     [classpathBuilder appendString:lwjglJar];
     NSString *classpath = classpathBuilder;
     if (launchJar) {
-        // JAR 放在 classpath 最前面，避免 bundle libs 中的同名类（gson/guava/kotlin-stdlib 等）
-        // 优先加载，导致 installer 自带依赖被遮蔽引发 NoSuchMethodError/LinkageError
-        // 标准 `java -jar` 语义下 JAR 本应是唯一 classpath，此处保留 bundle libs 仅因 PojavLauncher
-        // 与 UIKit bridge 类需要加载，但 installer 自身依赖应优先
+        // The JAR goes first on the classpath so that same-named classes in the bundled libs (gson/guava/kotlin-stdlib and so on)
+        // do not load first and shadow the installer's own dependencies, causing NoSuchMethodError/LinkageError
+        // Under standard `java -jar` semantics the JAR would be the only classpath entry; the bundled libs are kept here only because PojavLauncher
+        // and the UIKit bridge classes must load, but the installer's own dependencies take priority
         classpath = [NSString stringWithFormat:@"%@:%@", launchTarget, classpath];
     }
     PUSH_MARGV_LITERAL("-cp");
@@ -1067,9 +1067,9 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
 
     if ([launchTarget isKindOfClass:NSDictionary.class]) {
         PUSH_MARGV_FORMAT(@"%@", launchTarget[@"id"]);
-        // 传递服务器地址给 PojavLauncher（FCL 风格）：
-        // 留空传 @"", Java 端据此判断不追加任何参数；非空则由 Java 端按 MC 版本
-        // 解析为 --server/--port 或 --quickPlayMultiplayer
+        // Pass the server address to PojavLauncher (FCL style):
+        // an empty @"" tells the Java side to append no arguments; a non-empty value is turned by the Java side
+        // into --server/--port or --quickPlayMultiplayer depending on the MC version
         NSString *serverIp = [PLProfiles.current serverIpForCurrentProfile] ?: @"";
         PUSH_MARGV_FORMAT(@"%@", serverIp);
     } else {

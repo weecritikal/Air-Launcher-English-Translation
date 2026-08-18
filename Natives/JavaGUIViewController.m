@@ -219,9 +219,9 @@ void AWTInputBridge_sendKey(int keycode) {
 @property(nonatomic) ControlLayout* ctrlView;
 @property(nonatomic) PLLogOutputView* logOutputView;
 @property(nonatomic) ScrollableSurfaceView* surfaceScrollView;
-// 关键修复（UI 累积异常）：CADisplayLink 与其所在线程的 runloop 之前未持有引用，
-// 无法在 dealloc 中 invalidate，导致每次进入 JavaGUI 界面都泄漏一条线程 +
-// 一个 CADisplayLink + 对 surfaceView 的强引用。多次进入后线程数累积，UI 卡顿。
+// Key fix (cumulative UI glitch): neither the CADisplayLink nor the runloop of its thread was retained before,
+// so it could not be invalidated in dealloc, and every visit to the JavaGUI screen leaked a thread +
+// a CADisplayLink + a strong reference to surfaceView. After several visits the thread count grew and the UI stuttered.
 @property(nonatomic, strong) CADisplayLink *displayLink;
 @property(nonatomic, strong) NSThread *displayLinkThread;
 
@@ -231,7 +231,7 @@ void AWTInputBridge_sendKey(int keycode) {
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    // 适配自定义启动器背景：将当前视图控制器透明化，使全局背景壁纸能够透出
+    // Adapt to the custom launcher background: make this view controller transparent so the global wallpaper shows through
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
     self.view.backgroundColor = UIColor.blackColor;
     [self.navigationController setNavigationBarHidden:YES animated:NO];
@@ -306,27 +306,27 @@ void AWTInputBridge_sendKey(int keycode) {
     setenv("POJAV_SKIP_JNI_GLFW", "1", 1);
 
     // Register the display loop
-    // 关键修复（UI 累积异常）：之前用 dispatch_async + [NSRunLoop.currentRunLoop run] 永久阻塞线程，
-    // CADisplayLink 无法被 invalidate，每次进入 JavaGUI 界面都泄漏一条线程 + displayLink + surfaceView。
-    // 现改用 NSThread，在 dealloc 中通过 CFRunLoopStop 停止 runloop 并 invalidate displayLink。
+    // Key fix (cumulative UI glitch): this previously used dispatch_async + [NSRunLoop.currentRunLoop run], blocking the thread forever,
+    // so the CADisplayLink could never be invalidated and every visit to the JavaGUI screen leaked a thread + displayLink + surfaceView.
+    // It now uses NSThread, stopping the runloop with CFRunLoopStop and invalidating the displayLink in dealloc.
     __weak typeof(self) weakSelf = self;
     NSThread *dlThread = [[NSThread alloc] initWithBlock:^{
         CADisplayLink *dl = [CADisplayLink displayLinkWithTarget:surfaceView selector:@selector(refreshBuffer)];
         if (@available(iOS 15.0, tvOS 15.0, *)) {
-            // max_framerate 选项已移除：始终采用 30-120Hz 自适应范围。
-            // 屏幕硬件决定实际帧率（60Hz 设备仍为 60，120Hz ProMotion 设备可达 120），
-            // 不再人为限制在 60FPS。配合 disable_game_vsync 完整解锁 VSync 后帧率可超过屏幕刷新率。
+            // The max_framerate option has been removed: the adaptive 30-120Hz range is always used.
+            // The screen hardware decides the real frame rate (60Hz devices stay at 60, 120Hz ProMotion devices reach 120),
+            // with no artificial 60FPS cap. Together with disable_game_vsync fully unlocking VSync, the frame rate can exceed the refresh rate.
             dl.preferredFrameRateRange = CAFrameRateRangeMake(30, 120, 120);
         }
         [dl addToRunLoop:NSRunLoop.currentRunLoop forMode:NSRunLoopCommonModes];
-        // 存到 self 属性供 dealloc invalidate。weak self 在线程 block 内安全。
+        // Stored as a property on self so dealloc can invalidate it. A weak self is safe inside the thread block.
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (strongSelf) {
             strongSelf.displayLink = dl;
         }
-        // runloop 会阻塞直到外部调用 CFRunLoopStop 停止它
+        // The runloop blocks until something outside calls CFRunLoopStop
         CFRunLoopRun();
-        // runloop 停止后清理 displayLink
+        // Clean up the displayLink once the runloop stops
         [dl invalidate];
     }];
     self.displayLinkThread = dlThread;
@@ -334,11 +334,11 @@ void AWTInputBridge_sendKey(int keycode) {
 
     
 dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-        // 走 getter 兜底：若调用方未触发预解析，getter 会现场解析 manifest
-        // 避免 ivar=0 时 launchJVM 用 minVersion=0 匹配到错误的 JRE（如 Java 8 跑 NeoForge installer）
+        // Fall back to the getter: if the caller did not trigger a pre-parse, the getter parses the manifest on the spot
+        // This stops launchJVM matching the wrong JRE with minVersion=0 when the ivar is 0 (such as running the NeoForge installer on Java 8)
         int javaVer = self.requiredJavaVersion;
         if (javaVer <= 0) {
-            // 解析失败，getter 已弹错误提示，回主线程 dismiss VC 避免黑屏
+            // Parsing failed; the getter has already shown the error, so return to the main thread and dismiss the VC instead of leaving a black screen
             dispatch_async(dispatch_get_main_queue(), ^{
                 [self.presentingViewController dismissViewControllerAnimated:YES completion:nil];
             });
@@ -348,14 +348,14 @@ dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         _requiredJavaVersion = 0;
     });
 
-    // 监听背景 UI 效果变化通知，当用户切换背景效果（半透明/毛玻璃）时重新应用透明化
+    // Listen for background UI effect changes so transparency is re-applied when the user switches effect (translucent/frosted)
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(reapplyBackgroundEffect)
                                                  name:@"BackgroundUIEffectChanged"
                                                object:nil];
 }
 
-/// 背景效果改变时重新应用透明化（由 BackgroundUIEffectChanged 通知触发）
+/// Re-apply transparency when the background effect changes (triggered by the BackgroundUIEffectChanged notification)
 - (void)reapplyBackgroundEffect {
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
 }
@@ -363,18 +363,18 @@ dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
 - (void)dealloc {
     [[NSNotificationCenter defaultCenter] removeObserver:self];
 
-    // 关键修复（UI 累积异常）：停止 displayLink 线程及其 runloop。
-    // 之前未 invalidate displayLink，且 runloop 用 [NSRunLoop run] 永久阻塞，
-    // 导致每次进入 JavaGUI 界面都泄漏一条线程 + displayLink + surfaceView 强引用。
+    // Key fix (cumulative UI glitch): stop the displayLink thread and its runloop.
+    // Previously the displayLink was never invalidated and the runloop blocked forever on [NSRunLoop run],
+    // so every visit to the JavaGUI screen leaked a thread + displayLink + a strong reference to surfaceView.
     //
-    // 清理步骤：
-    // 1. invalidate displayLink（从 runloop 移除该源）
-    // 2. 在 displayLinkThread 上执行 CFRunLoopStop，让 CFRunLoopRun() 返回，线程 block 结束
-    // 3. 清理静态 surfaceView 引用
+    // Cleanup steps:
+    // 1. invalidate the displayLink (removing that source from the runloop)
+    // 2. run CFRunLoopStop on displayLinkThread so CFRunLoopRun() returns and the thread block ends
+    // 3. clear the static surfaceView reference
     [self.displayLink invalidate];
     self.displayLink = nil;
     if (self.displayLinkThread) {
-        // 在子线程上执行 CFRunLoopStop(CFRunLoopGetCurrent())，让 CFRunLoopRun() 返回
+        // Run CFRunLoopStop(CFRunLoopGetCurrent()) on the worker thread so CFRunLoopRun() returns
         [self performSelector:@selector(_stopDisplayLinkRunLoop)
                      onThread:self.displayLinkThread
                    withObject:nil
@@ -386,7 +386,7 @@ dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
     } @catch (NSException *e) {}
 }
 
-/// 在 displayLinkThread 上执行，停止该线程的 runloop
+/// Runs on displayLinkThread and stops that thread's runloop
 - (void)_stopDisplayLinkRunLoop {
     CFRunLoopStop(CFRunLoopGetCurrent());
 }
@@ -454,10 +454,10 @@ dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
     NSArray *manifestLines = [manifestStr componentsSeparatedByCharactersInSet:NSCharacterSet.newlineCharacterSet];
     NSString *mainClass;
     for (NSString *line in manifestLines) {
-        // 容错：去除行尾 \r（Windows CRLF 换行会残留 \r）和首尾空白
+        // Robustness: strip a trailing \r (Windows CRLF line endings leave one behind) and surrounding whitespace
         NSString *trimmed = [line stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
         if ([trimmed hasPrefix:@"Main-Class:"]) {
-            // Main-Class: 后可能有 0~N 个空格，规范允许任意空白
+            // "Main-Class:" may be followed by 0 to N spaces; the spec allows any whitespace
             mainClass = [[trimmed substringFromIndex:@"Main-Class:".length]
                 stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
             break;
@@ -476,13 +476,13 @@ dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         [self showErrorMessage:error.localizedDescription];
         return _requiredJavaVersion = 0;
     }
-    // 越界保护：class 文件至少需要 8 字节（magic 4 + minor 2 + major 2）
+    // Bounds check: a class file needs at least 8 bytes (magic 4 + minor 2 + major 2)
     if (mainClassData.length < 8) {
         [self showErrorMessage:[NSString stringWithFormat:@"Invalid class file: too small (%lu bytes)", (unsigned long)mainClassData.length]];
         return _requiredJavaVersion = 0;
     }
 
-    // 用 memcpy 读取避免未对齐内存访问（NSData.bytes 不保证 2/4 字节对齐）
+    // Read with memcpy to avoid unaligned memory access (NSData.bytes is not guaranteed to be 2/4-byte aligned)
     uint32_t magic;
     memcpy(&magic, mainClassData.bytes, sizeof(magic));
     magic = OSSwapConstInt32(magic);
@@ -498,7 +498,7 @@ dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
     majorVer = OSSwapConstInt16(majorVer);
     NSLog(@"[ModInstaller] Main class version: %u.%u", majorVer, minorVer);
 
-    // 字节码版本下界保护：class file major version 范围合理值是 45~70+
+    // Lower bound on the bytecode version: a sensible class file major version is 45~70+
     // Java 1.0 = 45, Java 8 = 52, Java 17 = 61, Java 21 = 65
     if (majorVer < 45 || majorVer > 70) {
         [self showErrorMessage:[NSString stringWithFormat:@"Invalid class file version: %u.%u", majorVer, minorVer]];

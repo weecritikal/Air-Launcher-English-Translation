@@ -4,7 +4,7 @@
 //
 //  资源包管理视图控制器实现，参照 ModsManagerViewController
 //  使用 ResourcePackService 进行本地扫描与下载
-//  使用 AssetVersionViewController 进行在线版本选择
+//  Uses AssetVersionViewController for picking an online version
 //  使用 ModrinthAPI 进行在线搜索（projectType=resourcepack）
 //
 
@@ -41,58 +41,58 @@
     [super viewDidLoad];
     self.title = @"Manage resource packs";
     self.view.backgroundColor = [UIColor systemBackgroundColor];
-    // 适配自定义启动器背景：透明化当前 VC，让全局背景图/毛玻璃透出
+    // Adapt to the custom launcher background: make this VC transparent so the global background image/blur shows through
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
     self.currentMode = self.initialMode;
     self.localItems = [NSMutableArray array];
     self.filteredLocalItems = [NSMutableArray array];
     self.onlineSearchResults = [NSMutableArray array];
     [self setupUI];
-    // 修复"前一个页面没有及时消失"：给 view 添加毛玻璃遮挡层，
-    // 防止 push 转场时透出栈底 ProfileSettingsViewController 的内容
+    // Fix for "the previous page does not disappear in time": add a frosted-glass cover layer to the view
+    // so the ProfileSettingsViewController underneath does not show through during the push transition
     [[BackgroundManager sharedManager] applyEffectToView:self.view];
-    // 透明化 tableView 背景与 backgroundView，避免遮挡全局背景
+    // Make the tableView background and backgroundView transparent so they do not hide the global background
     self.tableView.backgroundColor = [UIColor clearColor];
     self.tableView.backgroundView = nil;
     [self updateUIForCurrentMode];
     if (self.currentMode == ResourcePacksManagerModeLocal) {
         [self refreshLocalList];
     }
-    // 监听背景效果变化通知，背景切换时重新应用透明效果
+    // Listen for background effect changes so transparency is re-applied when the background is switched
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(reapplyBackgroundEffect)
                                                  name:@"BackgroundUIEffectChanged"
                                                object:nil];
 }
 
-/// 背景效果变化时重新应用透明化处理，确保背景切换后仍透出全局背景
+/// Re-apply transparency when the background effect changes, so the global background still shows through
 - (void)reapplyBackgroundEffect {
-    // 重新透明化当前 VC
+    // Make this VC transparent again
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
-    // 重新应用 view 毛玻璃遮挡层
+    // Re-apply the frosted-glass cover layer on the view
     [[BackgroundManager sharedManager] applyEffectToView:self.view];
-    // 重新设置 tableView 背景为透明，确保背景效果切换后仍透出全局背景
+    // Reset the tableView background to transparent so the global background still shows after an effect switch
     self.tableView.backgroundColor = [UIColor clearColor];
     self.tableView.backgroundView = nil;
-    // 重新应用 searchBar 透明化效果（毛玻璃↔半透明切换后输入框背景需刷新）
+    // Re-apply the searchBar transparency (the text field background needs refreshing after a frosted glass <-> translucent switch)
     [[BackgroundManager sharedManager] applyEffectToSearchBar:self.searchBar];
-    // 重新加载 cell，让每个 cell 重新应用 applyEffectToCell:（毛玻璃/半透明）
+    // Reload the cells so each one re-applies applyEffectToCell: (frosted glass/translucent)
     [self.tableView reloadData];
 }
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
-    // 修复"前一个页面没有及时消失"：
-    // viewDidLoad 时 self.view.bounds 可能为 zero，applyEffectToView: 插入的 blurView
-    // frame 为 zero，push 转场第一帧无法遮挡栈底 VersionManagerViewController 的卡片。
-    // 在 viewWillAppear 中重新应用（此时 bounds 已正确），确保转场前遮挡到位。
+    // Fix for "the previous page does not disappear in time":
+    // self.view.bounds can be zero in viewDidLoad, so the blurView inserted by applyEffectToView:
+    // has a zero frame and cannot cover the VersionManagerViewController cards underneath on the first frame of the push.
+    // Re-applying it in viewWillAppear (where bounds are correct) makes sure the cover is in place before the transition.
     [[BackgroundManager sharedManager] applyEffectToView:self.view];
     self.tableView.backgroundColor = [UIColor clearColor];
     self.tableView.backgroundView = nil;
 }
 
 - (void)dealloc {
-    // 移除背景效果变化通知的观察者，避免 dealloc 后收到通知导致野指针崩溃
+    // Remove the background-effect notification observer so a notification after dealloc cannot crash on a dangling pointer
     [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
@@ -107,7 +107,7 @@
     self.searchBar.translatesAutoresizingMaskIntoConstraints = NO;
     self.searchBar.delegate = self;
     self.searchBar.placeholder = @"Search local resource packs...";
-    // 适配自定义启动器背景：透明化 searchBar 默认不透明背景，让全局背景图/毛玻璃透出
+    // Adapt to the custom launcher background: clear the searchBar's opaque default background so the global image/blur shows through
     [[BackgroundManager sharedManager] applyEffectToSearchBar:self.searchBar];
     [self.view addSubview:self.searchBar];
 
@@ -205,9 +205,9 @@
 }
 
 - (void)closeTapped {
-    // 兼容两种容器：
-    // - push 进 UINavigationController（ProfileSettingsViewController 跳转）：pop 回上一级
-    // - present 弹窗（旧调用路径）：dismiss
+    // Works in both containers:
+    // - pushed onto a UINavigationController (navigated from ProfileSettingsViewController): pop back
+    // - presented modally (the old call path): dismiss
     if (self.navigationController && self.navigationController.viewControllers.firstObject != self) {
         [self.navigationController popViewControllerAnimated:YES];
     } else {
@@ -469,7 +469,7 @@
         downloadButton.contentEdgeInsets = UIEdgeInsetsMake(4, 8, 4, 8);
         cell.accessoryView = downloadButton;
     }
-    // 适配自定义启动器背景：为 cell 注入毛玻璃/半透明效果
+    // Adapt to the custom launcher background: give the cell a frosted-glass/translucent effect
     [[BackgroundManager sharedManager] applyEffectToCell:cell];
     return cell;
 }
@@ -576,7 +576,7 @@
 }
 
 - (void)startDownloadForItem:(ResourcePackItem *)item {
-    // 始终显示单独下载进度（悬浮球已移除）
+    // Always show the individual download progress (the floating button is gone)
     BOOL showProgressUI = YES;
     UIAlertController *downloadingAlert = nil;
     if (showProgressUI) {

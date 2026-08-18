@@ -51,7 +51,7 @@
         "dynamicY" : "0.0 * ${screen_height} + (px(40.0) /100.0 * ${preferred_scale}) + ${margin}",
         "passThruEnabled" : false,
         "cornerRadius" : 40,
-        "name" : "数字\n按键",
+        "name" : "Number\nKeys",
         "isSwipeable" : false
       },
       "orientation" : "FREE"

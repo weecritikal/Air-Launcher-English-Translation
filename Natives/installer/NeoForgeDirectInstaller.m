@@ -588,8 +588,8 @@ NSString *const NeoForgeDirectInstallerErrorDomain = @"NeoForgeDirectInstallerEr
     NSMutableDictionary *profileDict = [NSMutableDictionary dictionary];
     profileDict[@"name"] = versionId;
     profileDict[@"lastVersionId"] = versionId;
-    // 改回原来的"游戏目录切换"机制：所有版本共享根目录（gameDir="."）
-    // 用户通过设置中的"游戏目录切换"功能手动切换不同的 gameDir
+    // Back to the original "switch game directory" model: every version shares the root directory (gameDir=".")
+    // The user switches between game directories manually with the "Switch game directory" feature in settings
     profileDict[@"gameDir"] = @".";
     profileDict[@"type"] = @"custom";
     profileDict[@"created"] = [NSDate date].description;

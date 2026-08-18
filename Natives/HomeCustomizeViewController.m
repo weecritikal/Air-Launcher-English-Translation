@@ -45,34 +45,34 @@ static UIColor *hexColor(NSString *hex) {
         self.contentView.backgroundColor = [UIColor clearColor];
         self.selectionStyle = UITableViewCellSelectionStyleNone;
         
-        // 左侧装饰条
+        // Decorative bar on the left
         self.accentStrip = [[UIView alloc] init];
         self.accentStrip.translatesAutoresizingMaskIntoConstraints = NO;
         self.accentStrip.layer.cornerRadius = 2;
         [self.contentView addSubview:self.accentStrip];
         
-        // 图标
+        // Icon
         self.tileIconView = [[UIImageView alloc] init];
         self.tileIconView.translatesAutoresizingMaskIntoConstraints = NO;
         self.tileIconView.contentMode = UIViewContentModeScaleAspectFit;
         self.tileIconView.tintColor = [UIColor labelColor];
         [self.contentView addSubview:self.tileIconView];
         
-        // 标题
+        // Title
         self.tileTitleLabel = [[UILabel alloc] init];
         self.tileTitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
         self.tileTitleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
         self.tileTitleLabel.textColor = [UIColor labelColor];
         [self.contentView addSubview:self.tileTitleLabel];
         
-        // 详情（类型+大小）
+        // Detail (type + size)
         self.tileDetailLabel = [[UILabel alloc] init];
         self.tileDetailLabel.translatesAutoresizingMaskIntoConstraints = NO;
         self.tileDetailLabel.font = [UIFont systemFontOfSize:11 weight:UIFontWeightMedium];
         self.tileDetailLabel.textColor = [UIColor tertiaryLabelColor];
         [self.contentView addSubview:self.tileDetailLabel];
         
-        // 尺寸标签
+        // Size label
         self.sizeLabel = [[UILabel alloc] init];
         self.sizeLabel.translatesAutoresizingMaskIntoConstraints = NO;
         self.sizeLabel.font = [UIFont systemFontOfSize:10 weight:UIFontWeightBold];
@@ -83,7 +83,7 @@ static UIColor *hexColor(NSString *hex) {
         self.sizeLabel.backgroundColor = [UIColor colorWithWhite:0.2 alpha:0.5];
         [self.contentView addSubview:self.sizeLabel];
         
-        // 可见性开关
+        // Visibility switch
         self.visibilitySwitch = [[UISwitch alloc] init];
         self.visibilitySwitch.translatesAutoresizingMaskIntoConstraints = NO;
         self.visibilitySwitch.transform = CGAffineTransformMakeScale(0.7, 0.7);
@@ -185,7 +185,7 @@ static UIColor *hexColor(NSString *hex) {
     self.title = @"Customize home";
     self.editingConfigs = [self.tileConfigs mutableCopy];
     
-    // 导航栏按钮
+    // Navigation bar buttons
     self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithTitle:@"Cancel"
                                                                             style:UIBarButtonItemStylePlain
                                                                            target:self
@@ -196,7 +196,7 @@ static UIColor *hexColor(NSString *hex) {
                                                                             target:self
                                                                             action:@selector(saveTapped)];
     
-    // 工具栏按钮
+    // Toolbar buttons
     UIBarButtonItem *addBtn = [[UIBarButtonItem alloc] initWithTitle:@"Add shortcut"
                                                               style:UIBarButtonItemStylePlain
                                                              target:self
@@ -211,7 +211,7 @@ static UIColor *hexColor(NSString *hex) {
     self.toolbarItems = @[addBtn, flex, resetBtn];
     self.navigationController.toolbarHidden = NO;
     
-    // 背景
+    // Background
     if ([[BackgroundManager sharedManager] hasBackground]) {
         self.view.backgroundColor = [UIColor clearColor];
     } else {
@@ -220,13 +220,13 @@ static UIColor *hexColor(NSString *hex) {
     
     [self setupTableView];
 
-    // 适配自定义启动器背景：将当前视图控制器透明化，让全局背景（图片/视频）能够透出显示。
-    // 本控制器为 UIViewController 子类（非 UITableViewController），其 tableView 为手动创建，
-    // makeViewControllerTransparent 会设置 view 背景透明；tableView 背景已在 setupTableView 中清空。
+    // Adapt to the custom launcher background: make this view controller transparent so the global background (image/video) shows through.
+    // This controller subclasses UIViewController (not UITableViewController) and creates its tableView by hand,
+    // so makeViewControllerTransparent clears the view background; the tableView background is already cleared in setupTableView.
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
 
-    // 监听背景 UI 效果变化通知：当用户在背景设置中切换毛玻璃/半透明或调整透明度时，
-    // 重新调用 makeViewControllerTransparent 以应用最新的视觉效果，保证背景始终正确透出。
+    // Listen for background UI effect changes: when the user switches between frosted glass and translucent, or adjusts the opacity,
+    // call makeViewControllerTransparent again to apply the latest look and keep the background showing correctly.
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(reapplyBackgroundEffect)
                                                  name:@"BackgroundUIEffectChanged"
@@ -250,7 +250,7 @@ static UIColor *hexColor(NSString *hex) {
     self.tableView.delegate = self;
     self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
     self.tableView.rowHeight = 68;
-    self.tableView.editing = YES;  // 始终处于编辑模式以支持拖拽
+    self.tableView.editing = YES;  // Always in editing mode so rows can be dragged
     self.tableView.allowsSelectionDuringEditing = YES;
     self.tableView.showsVerticalScrollIndicator = NO;
     self.tableView.contentInset = UIEdgeInsetsMake(8, 0, 20, 0);
@@ -301,7 +301,7 @@ static UIColor *hexColor(NSString *hex) {
     for (NSString *key in shortcuts) {
         NSDictionary *info = shortcuts[key];
         
-        // 检查是否已存在
+        // Check whether it already exists
         BOOL exists = NO;
         for (HomeTileConfig *c in self.editingConfigs) {
             if ([c.shortcutAction isEqualToString:key]) {
@@ -347,7 +347,7 @@ static UIColor *hexColor(NSString *hex) {
     HomeTileConfig *config = self.editingConfigs[indexPath.row];
     [cell configureWithTile:config];
     
-    // 绑定开关事件
+    // Wire up the switch handler
     [cell.visibilitySwitch removeTarget:nil action:nil forControlEvents:UIControlEventValueChanged];
     cell.visibilitySwitch.tag = indexPath.row;
     [cell.visibilitySwitch addTarget:self action:@selector(visibilitySwitchChanged:) forControlEvents:UIControlEventValueChanged];
@@ -364,7 +364,7 @@ static UIColor *hexColor(NSString *hex) {
     [self showEditOptionsForTile:config atIndex:indexPath.row];
 }
 
-// 拖拽排序
+// Drag to reorder
 - (BOOL)tableView:(UITableView *)tableView canMoveRowAtIndexPath:(NSIndexPath *)indexPath {
     return YES;
 }
@@ -375,7 +375,7 @@ static UIColor *hexColor(NSString *hex) {
     [self.editingConfigs insertObject:tile atIndex:destinationIndexPath.row];
 }
 
-// 删除 (仅快捷入口可删除)
+// Delete (only shortcuts can be deleted)
 - (UITableViewCellEditingStyle)tableView:(UITableView *)tableView editingStyleForRowAtIndexPath:(NSIndexPath *)indexPath {
     HomeTileConfig *config = self.editingConfigs[indexPath.row];
     return config.tileType == HomeTileTypeShortcut ? UITableViewCellEditingStyleDelete : UITableViewCellEditingStyleNone;
@@ -399,7 +399,7 @@ static UIColor *hexColor(NSString *hex) {
                                                                    message:nil
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
     
-    // 切换大小
+    // Change the size
     NSString *sizeTitle = tile.tileSize == HomeTileSizeCompact ? @"Switch to full width" : @"Switch to compact (half width)";
     [sheet addAction:[UIAlertAction actionWithTitle:sizeTitle style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
         tile.tileSize = (tile.tileSize == HomeTileSizeCompact) ? HomeTileSizeFull : HomeTileSizeCompact;
@@ -407,19 +407,19 @@ static UIColor *hexColor(NSString *hex) {
                               withRowAnimation:UITableViewRowAnimationAutomatic];
     }]];
     
-    // 修改标题 (仅快捷入口和部分磁贴)
+    // Change the title (only shortcuts and some tiles)
     if (tile.tileType == HomeTileTypeShortcut || tile.tileType == HomeTileTypeVersionRelease || tile.tileType == HomeTileTypeVersionSnapshot) {
         [sheet addAction:[UIAlertAction actionWithTitle:@"Change title" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
             [self showEditTitleForTile:tile atIndex:index];
         }]];
     }
     
-    // 修改颜色
+    // Change the color
     [sheet addAction:[UIAlertAction actionWithTitle:@"Change accent color" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
         [self showColorPickerForTile:tile atIndex:index];
     }]];
     
-    // 切换可见性
+    // Toggle visibility
     NSString *visTitle = tile.visible ? @"Hide this tile" : @"Show this tile";
     [sheet addAction:[UIAlertAction actionWithTitle:visTitle style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
         tile.visible = !tile.visible;
@@ -427,7 +427,7 @@ static UIColor *hexColor(NSString *hex) {
                               withRowAnimation:UITableViewRowAnimationAutomatic];
     }]];
     
-    // 删除 (仅快捷入口)
+    // Delete (shortcuts only)
     if (tile.tileType == HomeTileTypeShortcut) {
         [sheet addAction:[UIAlertAction actionWithTitle:@"Delete" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
             [self.editingConfigs removeObjectAtIndex:index];
@@ -529,9 +529,9 @@ static UIColor *hexColor(NSString *hex) {
     });
 }
 
-/// 重新应用背景效果：当 BackgroundUIEffectChanged 通知到达时调用，
-/// 通过 BackgroundManager 重新设置当前视图控制器的透明度/毛玻璃效果，
-/// 并手动清空 tableView 背景色，确保全局背景能够正常透出。
+/// Re-apply the background effect: called when the BackgroundUIEffectChanged notification arrives.
+/// Re-applies the opacity/frosted-glass effect to this view controller via BackgroundManager,
+/// and clear the tableView background color manually, so the global background shows through.
 - (void)reapplyBackgroundEffect {
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
     self.tableView.backgroundColor = [UIColor clearColor];

@@ -6,7 +6,7 @@
 //  参考 PCL-CE (PCL.Core/Model/Homepage/News/NewsItem.cs) 的字段定义
 //
 //  数据源：net-secondary.web.minecraft-services.net/api/v1.0/{locale}/search
-//  字段映射：
+//  Field mapping:
 //    title          -> title
 //    url            -> articleURL (绝对地址，无需拼接)
 //    description    -> summary (HTML 实体需反转义)

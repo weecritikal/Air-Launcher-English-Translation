@@ -2,11 +2,11 @@
 //  DataPackService.m
 //  Amethyst
 //
-//  数据包服务实现，结构参照 ShaderService/ModService
-//  API 签名统一使用 NSString *profileName
-//  使用 defaultSessionConfiguration + NSURLSessionDownloadTask 提升下载效率和速度
-//  实现 pack.mcmeta 解析（pack_format / description）
-//  支持 worldName 参数下载到指定世界的 datapacks 目录
+//  Data pack service implementation, structured like ShaderService/ModService
+//  The API consistently takes NSString *profileName
+//  Uses defaultSessionConfiguration + NSURLSessionDownloadTask for better download throughput
+//  Implements pack.mcmeta parsing (pack_format / description)
+//  Supports a worldName parameter for downloading into a specific world's datapacks folder
 //
 
 #import "DataPackService.h"
@@ -21,10 +21,10 @@
 
 @interface DataPackService () <NSURLSessionDownloadDelegate>
 @property (nonatomic, strong) NSURLSession *downloadSession;
-// 内部统一存储带 success/error 的 completion handler
+// Internally stores the completion handler carrying success/error
 @property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, DataPackDownloadCompletionHandler> *downloadCompletionHandlers;
 @property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, NSString *> *downloadDestinationPaths;
-// 进度回调相关：分别保存进度 handler 和 NSProgress 对象
+// Progress callbacks: the progress handler and the NSProgress object are stored separately
 @property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, DataPackDownloadProgressHandler> *downloadProgressHandlers;
 @property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, NSProgress *> *downloadProgresses;
 @property (nonatomic, strong) NSMutableDictionary<NSURLSessionTask *, DownloadTaskItem *> *downloadTaskItems;
@@ -46,7 +46,7 @@
     if (self = [super init]) {
         _onlineSearchEnabled = NO;
 
-        // 使用默认会话配置，避免后台会话限速
+        // Use the default session configuration to avoid background-session throttling
         NSURLSessionConfiguration *config = [NSURLSessionConfiguration defaultSessionConfiguration];
         config.timeoutIntervalForRequest = 120.0;
         config.timeoutIntervalForResource = 300.0;
@@ -66,7 +66,7 @@
 
 #pragma mark - 工具方法
 
-// 计算 URL 字符串的 SHA1，用作图标缓存文件名
+// SHA1 of the URL string, used as the icon cache file name
 - (NSString *)iconCachePathForURL:(NSString *)urlString {
     if (!urlString) return nil;
     NSString *cacheDir = [NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES) firstObject];
@@ -84,7 +84,7 @@
     return [folder stringByAppendingPathComponent:hex];
 }
 
-// 从 zip 中读取指定条目的数据
+// Read the data of a given entry from a zip
 - (nullable NSData *)readFileFromZip:(NSString *)zipPath entryName:(NSString *)entryName {
     if (!zipPath || !entryName) return nil;
     NSError *err = nil;
@@ -94,7 +94,7 @@
     return data;
 }
 
-// 解析 pack.mcmeta，提取 pack_format 和 description
+// Parse pack.mcmeta and extract pack_format and description
 - (void)parsePackMcmetaForItem:(DataPackItem *)item {
     if (!item.filePath) return;
     NSData *mcmetaData = [self readFileFromZip:item.filePath entryName:@"pack.mcmeta"];
@@ -119,7 +119,7 @@
     }
 }
 
-// 解析 profile 的 gameDir，返回 gameDir 或 nil
+// Resolve the gameDir of a profile, returning it or nil
 - (nullable NSString *)gameDirForProfile:(NSString *)profileName {
     NSString *profile = profileName.length ? profileName : @"default";
     @try {
@@ -142,7 +142,7 @@
 
 #pragma mark - DataPacks folder detection & scan
 
-// 查找指定 profile 的 datapacks 目录（已存在时返回路径，否则返回 nil）
+// Find the datapacks folder of the given profile (returning the path if it exists, otherwise nil)
 - (nullable NSString *)existingDataPacksFolderForProfile:(NSString *)profileName {
     NSString *profile = profileName.length ? profileName : @"default";
     NSFileManager *fm = [NSFileManager defaultManager];
@@ -162,7 +162,7 @@
         }
     } @catch (NSException *ex) { }
 
-    // 回退：读取 POJAV_GAME_DIR 环境变量
+    // Fallback: read the POJAV_GAME_DIR environment variable
     const char *gameDirC = getenv("POJAV_GAME_DIR");
     if (gameDirC) {
         NSString *gameDir = [NSString stringWithUTF8String:gameDirC];
@@ -175,7 +175,7 @@
     return nil;
 }
 
-/// 获取当前 profile 的 datapacks 目录，不存在时自动创建
+/// Return the datapacks folder of the current profile, creating it if it does not exist
 - (nullable NSString *)ensureDataPacksFolderForProfile:(NSString *)profileName error:(NSError **)error {
     NSString *profile = profileName.length ? profileName : @"default";
     NSFileManager *fm = [NSFileManager defaultManager];
@@ -269,7 +269,7 @@
 
 #pragma mark - Metadata fetch
 
-// 解析 zip 内的 pack.mcmeta，获取 pack_format 和 description
+// Parse pack.mcmeta inside the zip to get pack_format and description
 - (void)fetchMetadataForDataPack:(DataPackItem *)item completion:(DataPackMetadataHandler)completion {
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
         @try {
@@ -283,7 +283,7 @@
 
 #pragma mark - File operations
 
-// 启用/禁用数据包：通过加/去 .disabled 后缀实现
+// Enable/disable a data pack by adding or removing the .disabled suffix
 - (BOOL)toggleEnableForDataPack:(DataPackItem *)item error:(NSError **)error {
     NSFileManager *fileManager = [NSFileManager defaultManager];
     NSString *currentPath = item.filePath;
@@ -310,14 +310,14 @@
     return success;
 }
 
-// 删除数据包文件
+// Delete a data pack file
 - (BOOL)deleteDataPack:(DataPackItem *)item error:(NSError **)error {
     return [[NSFileManager defaultManager] removeItemAtPath:item.filePath error:error];
 }
 
 #pragma mark - Online DataPack Downloading (使用 NSURLSessionDownloadTask)
 
-// 下载数据包到默认 datapacks 目录（无 worldName）
+// Download a data pack into the default datapacks folder (no worldName)
 - (void)downloadDataPack:(DataPackItem *)item
                toProfile:(NSString *)profileName
                 progress:(DataPackDownloadProgressHandler _Nullable)progress
@@ -325,7 +325,7 @@
     [self downloadDataPack:item toProfile:profileName worldName:nil progress:progress completion:completion];
 }
 
-// 下载数据包，worldName 不为空时下载到 saves/<worldName>/datapacks/
+// Download a data pack; when worldName is set it goes to saves/<worldName>/datapacks/
 - (void)downloadDataPack:(DataPackItem *)item
                toProfile:(NSString *)profileName
                worldName:(nullable NSString *)worldName
@@ -334,9 +334,9 @@
     NSFileManager *fm = [NSFileManager defaultManager];
     NSString *dataPacksFolder = nil;
 
-    // 根据是否指定 worldName 决定下载目录
+    // Decide the download folder based on whether worldName was given
     if (worldName.length > 0) {
-        // 下载到 saves/<worldName>/datapacks/
+        // Download into saves/<worldName>/datapacks/
         NSString *gameDir = [self gameDirForProfile:profileName];
         if (!gameDir) {
             if (completion) {
@@ -350,7 +350,7 @@
         NSString *savesDir = [gameDir stringByAppendingPathComponent:@"saves"];
         NSString *worldDir = [savesDir stringByAppendingPathComponent:worldName];
         dataPacksFolder = [worldDir stringByAppendingPathComponent:@"datapacks"];
-        // 确保目标目录存在（含 saves/<worldName>/datapacks/）
+        // Make sure the target folder exists (including saves/<worldName>/datapacks/)
         NSError *dirError = nil;
         BOOL created = [fm createDirectoryAtPath:dataPacksFolder
                      withIntermediateDirectories:YES
@@ -366,7 +366,7 @@
             return;
         }
     } else {
-        // 默认下载到 <gameDir>/datapacks/
+        // Download into <gameDir>/datapacks/ by default
         dataPacksFolder = [self existingDataPacksFolderForProfile:profileName];
         if (!dataPacksFolder) {
             NSString *gameDir = [self gameDirForProfile:profileName];
@@ -398,7 +398,7 @@
         }
     }
 
-    // 校验下载链接
+    // Validate the download link
     NSURL *url = [NSURL URLWithString:item.selectedVersionDownloadURL];
     if (!url) {
         if (completion) {
@@ -410,7 +410,7 @@
         return;
     }
 
-    // 确保文件名有效
+    // Make sure the file name is valid
     NSString *fileName = item.fileName;
     if (!fileName || fileName.length == 0) {
         fileName = [url lastPathComponent];
@@ -424,11 +424,11 @@
 
     NSString *destinationPath = [dataPacksFolder stringByAppendingPathComponent:fileName];
 
-    // 创建下载任务（默认会话配置，无后台限速）
+    // Create the download task (default session configuration, no background throttling)
     NSURLSessionDownloadTask *task = [self.downloadSession downloadTaskWithURL:url];
     self.downloadCompletionHandlers[task] = completion;
     self.downloadDestinationPaths[task] = destinationPath;
-    // 仅当调用方需要进度回调时才创建 NSProgress 对象
+    // Only create the NSProgress object when the caller wants progress callbacks
     if (progress) {
         NSProgress *progressObj = [NSProgress progressWithTotalUnitCount:-1];
         progressObj.kind = NSProgressKindFile;
@@ -436,7 +436,7 @@
         self.downloadProgressHandlers[task] = progress;
     }
 
-    // 注册到统一下载任务管理器（悬浮球已移除，始终注册以便下载任务列表跟踪）
+    // Register with the shared download task manager (the floating button is gone, but registering keeps the task list accurate)
     NSString *resourceName = item.fileName.length > 0 ? item.fileName : (item.displayName.length > 0 ? item.displayName : @"datapack");
     NSString *displayName = item.displayName.length > 0 ? item.displayName : resourceName;
     NSString *downloadSource = getPrefObject(@"general.download_source") ?: @"official";
@@ -452,7 +452,7 @@
     self.downloadTaskItems[task] = taskItem;
     [[DownloadTaskManager sharedManager] setTaskWithId:taskItem.taskId state:DownloadTaskStateDownloading];
 
-    // 设置 retryHandler：FCL 风格重新下载
+    // Set retryHandler: FCL-style re-download
     __weak typeof(self) weakSelf = self;
     NSString *capturedDestPath = destinationPath;
     DataPackDownloadCompletionHandler capturedCompletion = completion;
@@ -481,7 +481,7 @@
 
 #pragma mark - NSURLSessionDownloadDelegate
 
-// 下载进度回调：更新 NSProgress 并在主线程上报
+// Download progress callback: update NSProgress and report on the main thread
 - (void)URLSession:(NSURLSession *)session downloadTask:(NSURLSessionDownloadTask *)downloadTask
       didWriteData:(int64_t)bytesWritten
  totalBytesWritten:(int64_t)totalBytesWritten
@@ -523,13 +523,13 @@ totalBytesExpectedToWrite:(int64_t)totalBytesExpectedToWrite {
 
     if (!progressObj || !progressHandler) return;
 
-    // 首次回调时设置总字节数（HTTP 响应头中可能未提供，则保持 -1）
+    // Set the total byte count on the first callback (it stays -1 if the HTTP headers did not provide one)
     if (progressObj.totalUnitCount < 0 && totalBytesExpectedToWrite > 0) {
         progressObj.totalUnitCount = totalBytesExpectedToWrite;
     }
     progressObj.completedUnitCount = totalBytesWritten;
 
-    // progress 回调在主线程执行（UI 更新安全）
+    // The progress callback runs on the main thread (so UI updates are safe)
     dispatch_async(dispatch_get_main_queue(), ^{
         progressHandler(progressObj);
     });

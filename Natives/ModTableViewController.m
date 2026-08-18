@@ -23,7 +23,7 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    // 适配自定义启动器背景：透明化当前 VC，让全局背景图/毛玻璃透出
+    // Adapt to the custom launcher background: make this VC transparent so the global background image/blur shows through
     // ModTableViewController 是 UITableViewController 子类，makeViewControllerTransparent 会自动处理 tableView 背景透明化
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
     self.title = @"Mods";
@@ -59,7 +59,7 @@
     self.searchBar.delegate = self;
     self.searchBar.barStyle = UIBarStyleDefault;
     self.searchBar.searchBarStyle = UISearchBarStyleMinimal;
-    // 适配自定义启动器背景：透明化 searchBar 默认不透明背景，让全局背景图/毛玻璃透出
+    // Adapt to the custom launcher background: clear the searchBar's opaque default background so the global image/blur shows through
     [[BackgroundManager sharedManager] applyEffectToSearchBar:self.searchBar];
 
     // 将搜索栏添加到tableView的header中
@@ -71,7 +71,7 @@
     // Ensure switch reflects current state when view appears
     [self refreshTapped];
 
-    // 监听背景效果变化通知，背景切换时重新应用透明效果
+    // Listen for background effect changes so transparency is re-applied when the background is switched
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(reapplyBackgroundEffect)
                                                  name:@"BackgroundUIEffectChanged"
@@ -79,15 +79,15 @@
 }
 
 - (void)reapplyBackgroundEffect {
-    // 背景效果改变时重新透明化当前 VC
+    // Re-apply transparency to this VC when the background effect changes
     // UITableViewController 的 tableView 背景由 makeViewControllerTransparent 自动处理
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
-    // 重新应用 searchBar 透明化效果（毛玻璃↔半透明切换后输入框背景需刷新）
+    // Re-apply the searchBar transparency (the text field background needs refreshing after a frosted glass <-> translucent switch)
     [[BackgroundManager sharedManager] applyEffectToSearchBar:self.searchBar];
 }
 
 - (void)dealloc {
-    // 移除通知观察者，避免dealloc后收到通知导致崩溃
+    // Remove the notification observer to avoid crashing on notifications delivered after dealloc
     [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 

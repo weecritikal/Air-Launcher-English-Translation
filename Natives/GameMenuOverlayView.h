@@ -2,44 +2,44 @@
 //  GameMenuOverlayView.h
 //  Amethyst
 //
-//  参照 FCL MenuView 与 ZL2 GameScreen 的悬浮按钮设计：
-//  - 可拖拽的圆形设置按钮（位置持久化），替代原来的右滑条带
-//  - 可拖拽的 FPS/内存显示标签（位置持久化），可通过菜单开关
-//  - 点击设置按钮触发回调（打开菜单）
-//  - hitTest 穿透：只有按钮/标签区域拦截触摸，其他区域穿透到游戏画面
+//  Modelled on the floating button design of FCL MenuView and ZL2 GameScreen:
+//  - a draggable round settings button (with its position persisted), replacing the old right-swipe strip
+//  - a draggable FPS/memory label (with its position persisted), toggleable from the menu
+//  - tapping the settings button fires a callback (opening the menu)
+//  - hitTest pass-through: only the button/label areas capture touches, and everything else passes through to the game
 //
 
 #import <UIKit/UIKit.h>
 
 NS_ASSUME_NONNULL_BEGIN
 
-/// 游戏内悬浮覆盖层：设置按钮 + FPS/内存显示
-/// 参照 FCL MenuView.java 与 ZL2 GameScreen.kt 的悬浮按钮设计
+/// In-game floating overlay: settings button + FPS/memory display
+/// Modelled on the floating button design of FCL MenuView.java and ZL2 GameScreen.kt
 @interface GameMenuOverlayView : UIView
 
-/// 设置按钮点击回调（打开菜单）
+/// Settings button tap callback (opens the menu)
 @property (nonatomic, copy, nullable) void (^onMenuButtonTapped)(void);
 
-/// 显示/隐藏整个覆盖层（FCL 的 hideMenuView 概念）
+/// Show/hide the whole overlay (the hideMenuView concept from FCL)
 @property (nonatomic, assign) BOOL overlayHidden;
 
-/// 是否显示 FPS/内存统计标签（可通过菜单开关，参照 FCL）
+/// Whether the FPS/memory stats label is shown (toggleable from the menu, as in FCL)
 @property (nonatomic, assign) BOOL statsLabelVisible;
 
-/// 初始化并添加到指定父视图
+/// Initialize and add to the given parent view
 - (instancetype)initWithParentView:(UIView *)parentView;
 
-/// 更新 FPS 和内存显示（由游戏循环驱动，调用频率建议 500ms~1s）
-/// 必须在主线程调用
+/// Update the FPS and memory display (driven by the game loop; every 500ms~1s is recommended)
+/// Must be called on the main thread
 - (void)updateFPS:(NSInteger)fps memoryUsageMB:(double)memoryMB;
 
-/// 从偏好加载持久化的位置
+/// Load the persisted position from the preferences
 - (void)restorePositions;
 
-/// 保存当前位置到偏好
+/// Save the current position to the preferences
 - (void)savePositions;
 
-/// 切换 FPS/内存显示的开关状态
+/// Toggle the FPS/memory display on or off
 - (void)toggleStatsLabel;
 
 @end

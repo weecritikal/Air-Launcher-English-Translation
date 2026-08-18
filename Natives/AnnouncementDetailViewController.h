@@ -2,10 +2,10 @@
 //  AnnouncementDetailViewController.h
 //  Amethyst
 //
-//  公告详情视图控制器
-//  - 顶部标题（大字）+ 日期（小字灰色）
-//  - 正文用 UITextView + MarkdownParser 渲染的 NSAttributedString
-//  - 若公告有 actionURL，底部显示按钮（SFSafariViewController 打开）
+//  Announcement detail view controller
+//  - Title at the top (large) + date (small, gray)
+//  - Body rendered as an NSAttributedString by UITextView + MarkdownParser
+//  - If the announcement has an actionURL, show a button at the bottom (opens SFSafariViewController)
 //
 
 #import <UIKit/UIKit.h>
@@ -16,7 +16,7 @@ NS_ASSUME_NONNULL_BEGIN
 
 @interface AnnouncementDetailViewController : UIViewController
 
-/// 使用指定公告构造详情页
+/// Build the detail page for the given announcement
 - (instancetype)initWithAnnouncement:(AnnouncementItem *)item;
 
 @end

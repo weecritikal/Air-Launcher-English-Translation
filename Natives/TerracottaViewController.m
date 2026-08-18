@@ -70,7 +70,7 @@
     // 不设置 self.title，避免顶部导航栏出现"陶瓦联机"标题黑条（参照 FCL 无 title 风格）
     self.view.backgroundColor = [UIColor clearColor];
 
-    // 彻底隐藏导航栏黑条（仅当作为非 modal 根页面且是栈中唯一 VC 时）
+    // Hide the navigation bar band completely (only when this is a non-modal root page and the only VC on the stack)
     BOOL navBarHidden = NO;
     if (self.navigationController &&
         self.navigationController.viewControllers.firstObject == self &&

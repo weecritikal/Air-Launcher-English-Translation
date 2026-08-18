@@ -2,7 +2,7 @@
 //  InlineMessageView.m
 //  Amethyst
 //
-//  参照 FCL/ZL2 的内联消息显示，替代 UIAlertController 弹窗
+//  Modelled on the inline messages of FCL/ZL2, replacing UIAlertController popups
 //
 
 #import "InlineMessageView.h"
@@ -10,8 +10,8 @@
 
 @interface InlineMessageView ()
 
-@property (nonatomic, strong) UIView *containerView;     // 毛玻璃容器
-@property (nonatomic, strong) UIStackView *stackView;    // 垂直布局
+@property (nonatomic, strong) UIView *containerView;     // Frosted-glass container
+@property (nonatomic, strong) UIStackView *stackView;    // Vertical layout
 @property (nonatomic, strong) UILabel *titleLabel;
 @property (nonatomic, strong) UILabel *messageLabel;
 @property (nonatomic, strong) UIActivityIndicatorView *activityIndicator;
@@ -37,7 +37,7 @@
                           message:(nullable NSString *)message
                              type:(InlineMessageType)type
                   showsCloseButton:(BOOL)showsCloseButton {
-    // 如果已存在则先移除
+    // Remove any existing one first
     for (UIView *sub in vc.view.subviews) {
         if ([sub isKindOfClass:[InlineMessageView class]]) {
             [(InlineMessageView *)sub dismissImmediately];
@@ -47,12 +47,12 @@
     InlineMessageView *view = [[InlineMessageView alloc] initWithFrame:vc.view.bounds];
     view.hostViewController = vc;
     view.translatesAutoresizingMaskIntoConstraints = NO;
-    view.backgroundColor = [UIColor colorWithWhite:0 alpha:0.15];  // 轻微遮罩
+    view.backgroundColor = [UIColor colorWithWhite:0 alpha:0.15];  // A light scrim
     view.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
     view.showsCloseButton = showsCloseButton;
 
     [vc.view addSubview:view];
-    // 居中布局
+    // Center it
     [NSLayoutConstraint activateConstraints:@[
         [view.topAnchor constraintEqualToAnchor:vc.view.topAnchor],
         [view.bottomAnchor constraintEqualToAnchor:vc.view.bottomAnchor],
@@ -72,7 +72,7 @@
 - (void)setupUIWithTitle:(NSString *)title message:(NSString *)message type:(InlineMessageType)type {
     _messageType = type;
 
-    // 毛玻璃容器
+    // Frosted-glass container
     self.containerView = [[UIView alloc] init];
     self.containerView.translatesAutoresizingMaskIntoConstraints = NO;
     self.containerView.layer.cornerRadius = 16;
@@ -80,13 +80,13 @@
     self.containerView.layer.borderWidth = 1;
     self.containerView.layer.borderColor = [UIColor colorWithWhite:1 alpha:0.1].CGColor;
 
-    // 根据类型设置背景色
+    // Set the background color from the type
     UIBlurEffect *blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemThinMaterial];
     UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:blur];
     blurView.translatesAutoresizingMaskIntoConstraints = NO;
     [self.containerView addSubview:blurView];
 
-    // 背景色覆盖（根据类型）
+    // Background color override (by type)
     UIView *tintView = [[UIView alloc] init];
     tintView.translatesAutoresizingMaskIntoConstraints = NO;
     UIColor *tintColor = [self tintColorForType:type];
@@ -95,7 +95,7 @@
 
     [self addSubview:self.containerView];
 
-    // StackView：图标/转圈 + 文本 + 关闭按钮
+    // StackView: icon/spinner + text + close button
     self.stackView = [[UIStackView alloc] init];
     self.stackView.axis = UILayoutConstraintAxisVertical;
     self.stackView.alignment = UIStackViewAlignmentCenter;
@@ -103,7 +103,7 @@
     self.stackView.translatesAutoresizingMaskIntoConstraints = NO;
     [self.containerView addSubview:self.stackView];
 
-    // 第一行：图标/转圈 + 标题 + 关闭按钮（水平排列）
+    // First row: icon/spinner + title + close button (laid out horizontally)
     UIStackView *headerStack = [[UIStackView alloc] init];
     headerStack.axis = UILayoutConstraintAxisHorizontal;
     headerStack.alignment = UIStackViewAlignmentCenter;
@@ -144,7 +144,7 @@
     self.titleLabel.textAlignment = NSTextAlignmentCenter;
     [headerStack addArrangedSubview:self.titleLabel];
 
-    // 错误类型或显式要求时显示关闭按钮
+    // Show the close button on the error type, or when explicitly requested
     if (type == InlineMessageTypeError || self.showsCloseButton) {
         self.closeButton = [UIButton buttonWithType:UIButtonTypeSystem];
         UIImage *closeIcon = [UIImage systemImageNamed:@"xmark"];
@@ -158,7 +158,7 @@
         ]];
     }
 
-    // 点击手势（用于 loading 类型提供"查看详情"等入口）
+    // Tap gesture (e.g. a "View details" entry point on the loading type)
     if (type == InlineMessageTypeLoading) {
         UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(handleTap)];
         self.containerView.userInteractionEnabled = YES;
@@ -167,7 +167,7 @@
 
     [self.stackView addArrangedSubview:headerStack];
 
-    // 第二行：消息文本（如果有）
+    // Second row: the message text (if any)
     if (message.length > 0) {
         self.messageLabel = [[UILabel alloc] init];
         self.messageLabel.text = message;
@@ -179,7 +179,7 @@
         [self.stackView addArrangedSubview:self.messageLabel];
     }
 
-    // 布局
+    // Layout
     [NSLayoutConstraint activateConstraints:@[
         [self.containerView.centerXAnchor constraintEqualToAnchor:self.centerXAnchor],
         [self.containerView.centerYAnchor constraintEqualToAnchor:self.centerYAnchor],
@@ -203,7 +203,7 @@
         [self.stackView.trailingAnchor constraintEqualToAnchor:self.containerView.trailingAnchor constant:-20],
     ]];
 
-    // 自动消失（成功/信息类）
+    // Dismiss automatically (for the success/info types)
     if (type == InlineMessageTypeSuccess || type == InlineMessageTypeInfo) {
         __weak typeof(self) weakSelf = self;
         self.autoDismissTimer = [NSTimer scheduledTimerWithTimeInterval:1.5
@@ -228,17 +228,17 @@
     [self.autoDismissTimer invalidate];
     self.autoDismissTimer = nil;
 
-    // 直接重建 UI
+    // Just rebuild the UI
     [self.containerView removeFromSuperview];
     [self setupUIWithTitle:self.titleLabel.text message:message type:type];
 }
 
 - (void)updateMessage:(NSString *)message {
-    // 仅更新消息文本，保持当前类型与布局
+    // Update only the message text, keeping the current type and layout
     if (self.messageLabel) {
         self.messageLabel.text = message;
     } else if (message.length > 0) {
-        // 之前没有 messageLabel，需要重建以添加
+        // There was no messageLabel before, so it has to be rebuilt to add one
         [self updateWithMessage:message type:self.messageType];
     }
 }
@@ -251,7 +251,7 @@
 
 - (void)closeButtonTapped {
     if (self.onClose) {
-        // 自定义关闭逻辑（如取消下载），由调用方负责调用 dismiss
+        // Custom close behavior (such as cancelling a download); the caller is responsible for calling dismiss
         self.onClose();
     } else {
         [self dismiss];

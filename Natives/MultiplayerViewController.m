@@ -138,7 +138,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 
     // 不设置 self.title，避免顶部导航栏出现"联机"标题黑条（参照 FCL 无 title 风格）
 
-    // 适配自定义启动器背景：透明化当前 VC，让全局背景图/毛玻璃透出
+    // Adapt to the custom launcher background: make this VC transparent so the global background image/blur shows through
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
 
     // 彻底隐藏导航栏黑条（仅当作为根页面时；modal/pushed 仍保留导航栏）
@@ -235,7 +235,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 
 - (void)viewWillDisappear:(BOOL)animated {
     [super viewWillDisappear:animated];
-    // push 子页面时显示导航栏（子页面需要返回按钮）
+    // Show the navigation bar when a child page is pushed (it needs a back button)
     if (self.navigationController &&
         self.navigationController.viewControllers.firstObject == self &&
         self.navigationController.presentingViewController == nil) {
@@ -1976,7 +1976,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     cell.imageView.image = [UIImage systemImageNamed:@"questionmark.circle"];
     cell.imageView.tintColor = [UIColor systemBlueColor];
 
-    // 右侧箭头
+    // Chevron on the right
     cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
 
     // 辅助文字：简短说明

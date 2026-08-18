@@ -91,7 +91,7 @@ typedef NS_ENUM(NSInteger, MultiplayerRoomRole) {
 
 /// 指定房间连接失败
 /// @param room 连接失败的房间
-/// @param error 错误信息
+/// @param error Error information
 - (void)multiplayerRoom:(MultiplayerRoom *)room
    didFailWithError:(NSError *)error;
 

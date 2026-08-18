@@ -128,17 +128,17 @@ static const NSInteger kDefaultBackgroundTag = 99995;
     NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
     _uiEffect = [defaults integerForKey:kBackgroundUIEffectKey];
     if (_uiEffect < BackgroundUIEffectTranslucent || _uiEffect > BackgroundUIEffectBlur) {
-        _uiEffect = BackgroundUIEffectBlur; // 默认毛玻璃效果
+        _uiEffect = BackgroundUIEffectBlur; // Frosted glass by default
     }
     
     _uiOpacity = [defaults floatForKey:kBackgroundUIOpacityKey];
     if (_uiOpacity < 0.1 || _uiOpacity > 1.0) {
-        _uiOpacity = 0.7; // 默认透明度
+        _uiOpacity = 0.7; // Default opacity
     }
     
     _blurIntensity = [defaults floatForKey:kBackgroundBlurIntensityKey];
     if (_blurIntensity < 0.0 || _blurIntensity > 1.0) {
-        _blurIntensity = 0.7; // 默认模糊程度
+        _blurIntensity = 0.7; // Default blur amount
     }
 }
 
@@ -181,10 +181,10 @@ static const NSInteger kDefaultBackgroundTag = 99995;
 
     // For default background, just set the window's background color
     // No need for container
-    // 修复：使用 systemBackgroundColor 自适应浅色/深色模式。
-    // 之前硬编码深灰（0.08）在浅色模式下导致"中间一片黑"。
-    // systemBackgroundColor 在浅色模式为白、深色模式为黑，自动适配。
-    // 为避免状态栏区域透出纯黑，使用 systemBackground 而非纯黑。
+    // Fix: use systemBackgroundColor so it adapts to light/dark mode.
+    // The previously hardcoded dark gray (0.08) made the middle "a block of black" in light mode.
+    // systemBackgroundColor is white in light mode and black in dark mode, adapting automatically.
+    // Use systemBackground rather than pure black so the status bar area does not show through as solid black.
     if (self.currentType == BackgroundTypeNone) {
         if (@available(iOS 13.0, *)) {
             window.backgroundColor = [UIColor systemBackgroundColor];
@@ -231,7 +231,7 @@ static const NSInteger kDefaultBackgroundTag = 99995;
     
     // For default background, just set the view's background color
     // No need for container or transparency
-    // 修复：使用 systemBackgroundColor 自适应浅色/深色模式
+    // Fix: use systemBackgroundColor so it adapts to light/dark mode
     if (self.currentType == BackgroundTypeNone) {
         if (@available(iOS 13.0, *)) {
             splitVC.view.backgroundColor = [UIColor systemBackgroundColor];
@@ -406,12 +406,12 @@ static const NSInteger kDefaultBackgroundTag = 99995;
     UIView *existingDim = [container viewWithTag:kBackgroundDimTag];
     if (existingDim) [existingDim removeFromSuperview];
 
-    // 修复：使用 SystemThinMaterial（自适应浅色/深色，且较通透）替代硬编码 Dark。
-    // 之前使用 UIBlurEffectStyleDark + 黑色 dim view 叠加，导致：
-    // 1. 浅色模式下背景图被完全压暗成"中间一片黑"
-    // 2. 左右侧栏完全不透明，背景图透不出来
-    // SystemThinMaterial 会在浅色模式呈浅色毛玻璃、深色模式呈深色毛玻璃，
-    // 且透明度适中，背景图可见。
+    // Fix: use SystemThinMaterial (which adapts to light/dark and is fairly translucent) instead of a hardcoded Dark style.
+    // The previous UIBlurEffectStyleDark + black dim view overlay caused:
+    // 1. the background image being darkened into "a block of black" in the middle in light mode
+    // 2. completely opaque side panels, so the background image could not show through
+    // SystemThinMaterial renders as light frosted glass in light mode and dark frosted glass in dark mode,
+    // with moderate opacity so the background image stays visible.
     UIBlurEffect *blurEffect;
     if (@available(iOS 13.0, *)) {
         blurEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemThinMaterial];
@@ -426,7 +426,7 @@ static const NSInteger kDefaultBackgroundTag = 99995;
 
     [container addSubview:blurView];
 
-    // 修复：dim view 改为自适应颜色而非纯黑，避免浅色模式下过度压暗
+    // Fix: make the dim view an adaptive color rather than pure black, so light mode is not over-darkened
     UIView *dimView = [[UIView alloc] initWithFrame:container.bounds];
     dimView.tag = kBackgroundDimTag;
     if (@available(iOS 13.0, *)) {
@@ -434,7 +434,7 @@ static const NSInteger kDefaultBackgroundTag = 99995;
     } else {
         dimView.backgroundColor = [UIColor blackColor];
     }
-    dimView.alpha = self.blurIntensity * 0.2; // 降低到 0.2，避免过度压暗
+    dimView.alpha = self.blurIntensity * 0.2; // Lowered to 0.2 to avoid over-darkening
     dimView.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
 
     [container addSubview:dimView];
@@ -447,11 +447,11 @@ static const NSInteger kDefaultBackgroundTag = 99995;
     
     // Main view - apply effect based on settings
     if (self.uiEffect == BackgroundUIEffectBlur) {
-        // 毛玻璃效果 - clear background, let blur show through
+        // Frosted-glass effect - clear background, let blur show through
         viewController.view.backgroundColor = [UIColor clearColor];
     } else {
-        // 半透明效果 - semi-transparent background
-        // 修复：使用 systemBackgroundColor 替代硬编码黑色，自适应浅色/深色模式
+        // Translucent effect - semi-transparent background
+        // Fix: use systemBackgroundColor instead of hardcoded black so it adapts to light/dark mode
         if (@available(iOS 13.0, *)) {
             UIColor *base = [UIColor systemBackgroundColor];
             viewController.view.backgroundColor = [base colorWithAlphaComponent:1.0 - self.uiOpacity];
@@ -489,7 +489,7 @@ static const NSInteger kDefaultBackgroundTag = 99995;
 
 - (void)applyEffectToCell:(UITableViewCell *)cell {
     if (self.uiEffect == BackgroundUIEffectBlur) {
-        // 毛玻璃效果 - use UIBlurEffect on cell background
+        // Frosted-glass effect - use UIBlurEffect on cell background
         if (@available(iOS 13.0, *)) {
             UIBlurEffect *blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial];
             UIVisualEffectView *blurView = [[UIVisualEffectView alloc] initWithEffect:blur];
@@ -509,8 +509,8 @@ static const NSInteger kDefaultBackgroundTag = 99995;
         }
         cell.contentView.backgroundColor = [UIColor clearColor];
     } else {
-        // 半透明效果 - simple semi-transparent background
-        // 修复：使用 secondarySystemBackgroundColor 替代硬编码 0.1 黑色
+        // Translucent effect - simple semi-transparent background
+        // Fix: use secondarySystemBackgroundColor instead of a hardcoded 0.1 black
         if (@available(iOS 13.0, *)) {
             cell.backgroundColor = [[UIColor secondarySystemBackgroundColor] colorWithAlphaComponent:self.uiOpacity];
         } else {
@@ -552,13 +552,13 @@ static const NSInteger kDefaultBackgroundTag = 99995;
 }
 
 - (void)applyEffectToNavigationBar:(UINavigationBar *)navigationBar {
-    // 关键修复（UI 累积异常 + 小白条根治）：
-    // 1. 之前每次调用都重建 UINavigationBarAppearance，iOS 内部会重新生成 hairline
-    //    UIImageView，累积后表现为"上方一行小白条"。现改为静态单例 Appearance，
-    //    同一种效果只构建一次，避免反复触发 iOS 内部 hairline view 重建。
-    // 2. 之前清理 hairline 只遍历 navigationBar.subviews（直接子视图），但 iOS 的
-    //    hairline 常嵌在 _UINavigationBarBackground / _UIBarBackground 等私有子视图
-    //    内部。改为递归遍历所有后代视图，彻底清理累积的 hairline。
+    // Key fix (cumulative UI glitch + the thin white line):
+    // 1. Previously every call rebuilt UINavigationBarAppearance, and iOS regenerates the hairline
+    //    UIImageView internally, which accumulated into "a thin white line along the top". It now uses a
+    //    static shared Appearance so each effect is built only once, avoiding repeated hairline view rebuilds inside iOS.
+    // 2. Hairline cleanup previously only walked navigationBar.subviews (the direct children), but iOS often
+    //    nests the hairline inside private subviews such as _UINavigationBarBackground / _UIBarBackground.
+    //    It now walks all descendants recursively, clearing the accumulated hairlines completely.
     static UIImage *emptyImage = nil;
     static UINavigationBarAppearance *blurAppearance = nil;
     static UINavigationBarAppearance *translucentAppearance = nil;
@@ -566,25 +566,25 @@ static const NSInteger kDefaultBackgroundTag = 99995;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         emptyImage = [UIImage new];
-        // 预构建毛玻璃 Appearance（configureWithTransparentBackground + shadowImage 置空）
+        // Pre-build the frosted-glass Appearance (configureWithTransparentBackground + shadowImage cleared)
         blurAppearance = [[UINavigationBarAppearance alloc] init];
         [blurAppearance configureWithTransparentBackground];
         blurAppearance.backgroundColor = [UIColor clearColor];
         blurAppearance.backgroundEffect = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemMaterial];
         blurAppearance.shadowColor = nil;
         blurAppearance.shadowImage = emptyImage;
-        // 半透明 Appearance 在首次调用时按当前 uiOpacity 构建（见下方懒加载）
+        // The translucent Appearance is built on first use from the current uiOpacity (see the lazy initialization below)
     });
 
-    // 递归清理 iOS 内部累积的 hairline UIImageView（高度极小的分割线视图）
-    // hairline 常嵌在 _UINavigationBarBackground / _UIBarBackground 等私有子视图内部
+    // Recursively clear the hairline UIImageViews iOS accumulates internally (separator views of a tiny height)
+    // The hairline is often nested inside private subviews such as _UINavigationBarBackground / _UIBarBackground
     //
-    // 关键修复（Card/Root 布局进入所有页闪退加固）：
-    //   block 内引用自身（removeHairlines(sub)）必须用 __block 限定符，否则
-    //   捕获的是 nil（block 字面量赋值还未完成时的栈帧值），递归调用是 no-op，
-    //   只会处理 navigationBar 的直接子视图，无法清理 _UIBarBackground 内层的 hairline。
-    //   累积的 hairline 在 setContentViewController 反复切换时会触发私有子视图
-    //   layout 解算异常，导致 EXC_BAD_ACCESS（不被 NSUncaughtExceptionHandler 捕获）。
+    // Key fix (hardening against crashes when entering any page from the Card/Root layout):
+    //   Referring to the block from inside itself (removeHairlines(sub)) requires the __block qualifier, otherwise
+    //   it captures nil (the stack value from before the block literal was assigned), the recursive call is a no-op,
+    //   and only the direct subviews of navigationBar are handled, leaving the hairline inside _UIBarBackground uncleaned.
+    //   Accumulated hairlines trigger layout-solver faults in those private subviews when setContentViewController
+    //   is toggled repeatedly, causing EXC_BAD_ACCESS (which NSUncaughtExceptionHandler does not catch).
     __block void (^removeHairlines)(UIView *) = ^(UIView *view) {
         for (UIView *sub in view.subviews) {
             if ([sub isKindOfClass:[UIImageView class]] &&
@@ -599,7 +599,7 @@ static const NSInteger kDefaultBackgroundTag = 99995;
     removeHairlines(navigationBar);
 
     if (self.uiEffect == BackgroundUIEffectBlur) {
-        // 毛玻璃效果 - 复用静态单例
+        // Frosted-glass effect - reuse the shared instance
         if (@available(iOS 13.0, *)) {
             navigationBar.standardAppearance = blurAppearance;
             navigationBar.scrollEdgeAppearance = blurAppearance;
@@ -609,13 +609,13 @@ static const NSInteger kDefaultBackgroundTag = 99995;
         navigationBar.backgroundColor = [UIColor clearColor];
         navigationBar.shadowImage = emptyImage;
     } else {
-        // 半透明效果
+        // Translucent effect
         if (@available(iOS 13.0, *)) {
             UIColor *barColor = [[UIColor secondarySystemBackgroundColor] colorWithAlphaComponent:self.uiOpacity];
             navigationBar.barTintColor = barColor;
             navigationBar.backgroundColor = barColor;
-            // 半透明 Appearance 需要按当前 uiOpacity 构建（uiOpacity 可变，无法像 blur 一样全局单例）
-            // 但同一 uiOpacity 下复用同一实例，避免反复重建
+            // The translucent Appearance has to be built from the current uiOpacity (which is mutable, so it cannot be a global singleton like blur)
+            // But the same instance is reused for a given uiOpacity, avoiding repeated rebuilds
             if (!translucentAppearance || ![translucentBarColor isEqual:barColor]) {
                 UINavigationBarAppearance *appearance = [[UINavigationBarAppearance alloc] init];
                 [appearance configureWithTransparentBackground];
@@ -638,7 +638,7 @@ static const NSInteger kDefaultBackgroundTag = 99995;
 }
 
 - (void)applyEffectToToolbar:(UIToolbar *)toolbar {
-    // 关键修复（同 applyEffectToNavigationBar:）：静态单例 Appearance + 递归清理 hairline
+    // Key fix (same as applyEffectToNavigationBar:): a static shared Appearance + recursive hairline cleanup
     static UIImage *emptyImage = nil;
     static UIToolbarAppearance *blurToolbarAppearance = nil;
     static UIToolbarAppearance *translucentToolbarAppearance = nil;
@@ -654,9 +654,9 @@ static const NSInteger kDefaultBackgroundTag = 99995;
         blurToolbarAppearance.shadowImage = emptyImage;
     });
 
-    // 递归清理累积的 hairline UIImageView
-    // 关键修复：同 applyEffectToNavigationBar:，block 内引用自身必须用 __block
-    // 限定符，否则递归调用是 no-op，无法清理 _UIBarBackground 内层的 hairline。
+    // Recursively clear the accumulated hairline UIImageViews
+    // Key fix: as in applyEffectToNavigationBar:, referring to the block from inside itself requires the __block
+    // qualifier, otherwise the recursive call is a no-op and the hairline inside _UIBarBackground is never cleared.
     __block void (^removeHairlines)(UIView *) = ^(UIView *view) {
         for (UIView *sub in view.subviews) {
             if ([sub isKindOfClass:[UIImageView class]] &&
@@ -671,7 +671,7 @@ static const NSInteger kDefaultBackgroundTag = 99995;
     removeHairlines(toolbar);
 
     if (self.uiEffect == BackgroundUIEffectBlur) {
-        // 毛玻璃效果 - 复用静态单例
+        // Frosted-glass effect - reuse the shared instance
         if (@available(iOS 13.0, *)) {
             toolbar.standardAppearance = blurToolbarAppearance;
             toolbar.scrollEdgeAppearance = blurToolbarAppearance;
@@ -680,7 +680,7 @@ static const NSInteger kDefaultBackgroundTag = 99995;
         toolbar.barTintColor = [UIColor clearColor];
         toolbar.backgroundColor = [UIColor clearColor];
     } else {
-        // 半透明效果
+        // Translucent effect
         if (@available(iOS 13.0, *)) {
             UIColor *barColor = [[UIColor secondarySystemBackgroundColor] colorWithAlphaComponent:self.uiOpacity];
             toolbar.barTintColor = barColor;
@@ -725,17 +725,17 @@ static const NSInteger kDefaultBackgroundTag = 99995;
     if (!view) return;
 
     if (self.uiEffect == BackgroundUIEffectBlur) {
-        // 毛玻璃效果 - 创建 UIVisualEffectView 作为子视图
-        // 先移除已有的 blur view
+        // Frosted-glass effect - create a UIVisualEffectView as a subview
+        // Remove any existing blur view first
         for (UIView *subview in view.subviews) {
             if ([subview isKindOfClass:[UIVisualEffectView class]] && subview.tag == kBackgroundBlurTag) {
                 [subview removeFromSuperview];
             }
         }
 
-        // 修复：使用 SystemThinMaterial 替代 SystemMaterialDark，使左右侧栏
-        // 在浅色/深色模式下都自适应，且足够通透让背景图透出。
-        // SystemMaterialDark 过于不透明，导致"左右两边完全不透明"。
+        // Fix: use SystemThinMaterial instead of SystemMaterialDark so the side panels
+        // adapt to both light and dark mode and stay translucent enough for the background image to show.
+        // SystemMaterialDark was too opaque, which made "both side panels completely opaque".
         UIBlurEffect *blur;
         if (@available(iOS 13.0, *)) {
             blur = [UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemThinMaterial];
@@ -749,39 +749,39 @@ static const NSInteger kDefaultBackgroundTag = 99995;
         blurView.layer.cornerRadius = view.layer.cornerRadius;
         blurView.layer.masksToBounds = YES;
 
-        // 参照 ZL2 双层透明度控制：
-        // 1. blurIntensity 控制毛玻璃本身的模糊强度（0.3~1.0 范围，避免过低完全透明）
-        // 2. 有自定义背景时降低不透明度让背景透出，无背景时保持较高不透明度
-        // 这样实现了 ZL2 的 influencedByBackgroundColor 效果：
-        // 有背景图/视频时卡片更通透，无背景时卡片更不透明（与系统默认一致）
+        // Following the two-layer opacity control of ZL2:
+        // 1. blurIntensity controls the blur strength itself (clamped to 0.3~1.0 so it never becomes fully transparent)
+        // 2. opacity is lowered when there is a custom background so it shows through, and kept higher when there is none
+        // This reproduces the influencedByBackgroundColor effect of ZL2:
+        // cards are more translucent when a background image/video is set, and more opaque when there is none (matching the system default)
         CGFloat effectiveAlpha = 0.3 + (self.blurIntensity * 0.7);  // 0.3~1.0
         if (![self hasBackground]) {
-            // 无自定义背景时，提高不透明度，使 UI 更清晰
+            // With no custom background, raise the opacity so the UI stays legible
             effectiveAlpha = MIN(effectiveAlpha + 0.2, 1.0);
         }
         blurView.alpha = effectiveAlpha;
 
-        // 毛玻璃本身不响应触摸，让事件穿透到宿主视图（如 UIControl 卡片）。
-        // 否则 blurView 会拦截 touch，导致 AccountLoginViewController 的登录卡片
-        // 点击无反应（UIControlEventTouchUpInside 永远不触发）。
+        // The blur itself does not respond to touches, so events pass through to the host view (such as a UIControl card).
+        // Otherwise blurView intercepts the touch and the login cards in AccountLoginViewController
+        // stop responding (UIControlEventTouchUpInside never fires).
         blurView.userInteractionEnabled = NO;
 
         [view insertSubview:blurView atIndex:0];
         view.backgroundColor = [UIColor clearColor];
     } else {
-        // 半透明效果 - 移除 blur view，使用半透明背景
-        // 修复：使用 systemBackgroundColor 替代硬编码深灰，自适应浅色/深色模式
+        // Translucent effect - remove the blur view and use a translucent background
+        // Fix: use systemBackgroundColor instead of a hardcoded dark gray so it adapts to light/dark mode
         for (UIView *subview in view.subviews) {
             if ([subview isKindOfClass:[UIVisualEffectView class]] && subview.tag == kBackgroundBlurTag) {
                 [subview removeFromSuperview];
             }
         }
         if (@available(iOS 13.0, *)) {
-            // 使用 secondarySystemBackgroundColor 作为半透明基底，再叠加 alpha
-            // 参照 ZL2 双层透明度控制：有背景时降低不透明度让背景透出
+            // Use secondarySystemBackgroundColor as the translucent base, then apply alpha on top
+            // Following the two-layer opacity control of ZL2: lower the opacity when there is a background so it shows through
             CGFloat effectiveOpacity = self.uiOpacity;
             if (![self hasBackground]) {
-                // 无自定义背景时，提高不透明度，使 UI 更清晰
+                // With no custom background, raise the opacity so the UI stays legible
                 effectiveOpacity = MIN(effectiveOpacity + 0.3, 1.0);
             }
             UIColor *base = [UIColor secondarySystemBackgroundColor];
@@ -795,7 +795,7 @@ static const NSInteger kDefaultBackgroundTag = 99995;
 - (void)applyEffectToCollectionViewCell:(UICollectionViewCell *)cell {
     if (!cell) return;
     if (self.uiEffect == BackgroundUIEffectBlur) {
-        // 毛玻璃效果
+        // Frosted-glass effect
         for (UIView *subview in cell.contentView.subviews) {
             if ([subview isKindOfClass:[UIVisualEffectView class]] && subview.tag == kBackgroundBlurTag) {
                 [subview removeFromSuperview];
@@ -814,13 +814,13 @@ static const NSInteger kDefaultBackgroundTag = 99995;
         cell.backgroundColor = [UIColor clearColor];
         cell.contentView.backgroundColor = [UIColor clearColor];
     } else {
-        // 半透明效果
+        // Translucent effect
         for (UIView *subview in cell.contentView.subviews) {
             if ([subview isKindOfClass:[UIVisualEffectView class]] && subview.tag == kBackgroundBlurTag) {
                 [subview removeFromSuperview];
             }
         }
-        // 修复：使用 secondarySystemBackgroundColor 替代硬编码 0.1 黑色
+        // Fix: use secondarySystemBackgroundColor instead of a hardcoded 0.1 black
         if (@available(iOS 13.0, *)) {
             cell.backgroundColor = [[UIColor secondarySystemBackgroundColor] colorWithAlphaComponent:self.uiOpacity];
         } else {
@@ -833,14 +833,14 @@ static const NSInteger kDefaultBackgroundTag = 99995;
 - (void)applyEffectToSearchBar:(UISearchBar *)searchBar {
     if (!searchBar) return;
 
-    // 1. searchBar 整体背景透明，让底层自定义启动器背景透出
-    //    UISearchBar 默认是不透明的 systemBackgroundColor，会遮挡全局背景图/毛玻璃
+    // 1. Make the searchBar background transparent so the custom launcher background shows through
+    //    UISearchBar defaults to an opaque systemBackgroundColor, which hides the global background image/blur
     searchBar.barTintColor = [UIColor clearColor];
     searchBar.backgroundColor = [UIColor clearColor];
     searchBar.translucent = YES;
-    // Minimal 样式让系统不绘制不透明背景，仅保留输入框背景
+    // The Minimal style stops the system drawing an opaque background, keeping only the text field background
     searchBar.searchBarStyle = UISearchBarStyleMinimal;
-    // 移除系统自动添加的 _UISearchBarBackground 不透明背景视图
+    // Remove the opaque _UISearchBarBackground view the system adds automatically
     for (UIView *sub in searchBar.subviews) {
         for (UIView *inner in sub.subviews) {
             if ([NSStringFromClass(inner.class) containsString:@"Background"]) {
@@ -853,8 +853,8 @@ static const NSInteger kDefaultBackgroundTag = 99995;
         }
     }
 
-    // 2. 透明化内部 UITextField（搜索输入框）背景
-    //    UITextField 默认带 systemFillColor 浅灰色背景，遮挡自定义背景
+    // 2. Make the inner UITextField (the search input) background transparent
+    //    UITextField comes with a light gray systemFillColor background that hides the custom background
     UITextField *textField = nil;
     for (UIView *sub in searchBar.subviews) {
         for (UIView *inner in sub.subviews) {
@@ -865,7 +865,7 @@ static const NSInteger kDefaultBackgroundTag = 99995;
         }
         if (textField) break;
     }
-    // iOS 13+ 可直接用 -searchTextField
+    // iOS 13+ can use -searchTextField directly
     if (!textField && [searchBar respondsToSelector:@selector(searchTextField)]) {
         @try {
             textField = [searchBar performSelector:@selector(searchTextField)];
@@ -875,14 +875,14 @@ static const NSInteger kDefaultBackgroundTag = 99995;
     }
     if (textField) {
         if (self.uiEffect == BackgroundUIEffectBlur) {
-            // 毛玻璃：输入框背景设为浅色半透明，保证文字可读且不挡背景
+            // Frosted glass: give the text field a light translucent background so the text stays readable without hiding the background
             if (@available(iOS 13.0, *)) {
                 textField.backgroundColor = [[UIColor secondarySystemBackgroundColor] colorWithAlphaComponent:0.5];
             } else {
                 textField.backgroundColor = [UIColor colorWithWhite:0.95 alpha:0.5];
             }
         } else {
-            // 半透明效果：输入框背景按 uiOpacity 调整
+            // Translucent effect: the text field background follows uiOpacity
             if (@available(iOS 13.0, *)) {
                 textField.backgroundColor = [[UIColor secondarySystemBackgroundColor] colorWithAlphaComponent:MAX(0.3, self.uiOpacity)];
             } else {
