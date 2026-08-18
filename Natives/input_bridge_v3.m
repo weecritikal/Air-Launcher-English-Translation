@@ -283,6 +283,9 @@ void pojavPumpEvents(void* window) {
             case EVENT_TYPE_KEY:
                 if(GLFW_invoke_Key) GLFW_invoke_Key(window, event.i1, event.i2, event.i3, event.i4);
                 break;
+            case EVENT_TYPE_MODIFIERS:
+                CallbackBridge_syncModifiersToMC(event.i1);
+                break;
             case EVENT_TYPE_MOUSE_BUTTON:
                 if(GLFW_invoke_MouseButton) GLFW_invoke_MouseButton(window, event.i1, event.i2, event.i3);
                 break;
@@ -431,6 +434,13 @@ void CallbackBridge_nativeSetInputReady(BOOL inputReady) {
     }
 }
 
+// Queue modifier synchronization from UIKit callbacks. JNI work is consumed
+// by pojavPumpEvents on the game thread, where runtimeJNIEnvPtr is valid.
+void CallbackBridge_queueModifierSync(int mods) {
+    if (!isInputReady) return;
+    sendData(EVENT_TYPE_MODIFIERS, mods, 0, 0, 0);
+}
+
 // ============================================================================
 // issue #27 修复（参照 FCL commit 08c0716）：物理键盘 modifier 同步
 //
@@ -447,8 +457,12 @@ void CallbackBridge_nativeSetInputReady(BOOL inputReady) {
 // 也可被 Java 端 CallbackBridge.nativeSetModifiers 调用。
 // ============================================================================
 void CallbackBridge_syncModifiersToMC(int mods) {
-    JNIEnv *env = runtimeJNIEnvPtr;
-    if (!env || !isInputReady) return;
+    if (!runtimeJavaVMPtr || !isInputReady) return;
+
+    JNIEnv *env = NULL;
+    jint envStatus = (*runtimeJavaVMPtr)->GetEnv(
+        runtimeJavaVMPtr, (void **)&env, JNI_VERSION_1_4);
+    if (envStatus != JNI_OK || !env) return;
 
     jclass inputConstantsClass = (*env)->FindClass(env, "com/mojang/blaze3d/platform/InputConstants");
     if (!inputConstantsClass) {
