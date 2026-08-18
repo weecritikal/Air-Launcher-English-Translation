@@ -386,7 +386,7 @@ typedef NS_ENUM(NSInteger, DownloadCardState) {
     self.titleLabel.textColor = [UIColor labelColor];
     self.titleLabel.numberOfLines = 1;
     self.titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
-    self.titleLabel.text = @"准备下载...";
+    self.titleLabel.text = @"Preparing download...";
     [self.contentContainer addSubview:self.titleLabel];
 
     // 副标题标签
@@ -623,7 +623,7 @@ typedef NS_ENUM(NSInteger, DownloadCardState) {
     self.currentTitle = title;
     self.currentSubtitle = subtitle;
 
-    self.titleLabel.text = title ?: @"正在下载";
+    self.titleLabel.text = title ?: @"Downloading";
     self.subtitleLabel.text = subtitle ?: @"";
 
     // 默认进入不确定模式，等待第一次 updateProgress
@@ -632,7 +632,7 @@ typedef NS_ENUM(NSInteger, DownloadCardState) {
 
     // 重置显示
     self.percentLabel.text = @"";
-    self.downloadedLabel.text = @"准备中...";
+    self.downloadedLabel.text = @"Preparing...";
     self.speedLabel.text = @"";
     self.etaLabel.text = @"";
     self.currentFileLabel.text = @"";
@@ -705,7 +705,7 @@ typedef NS_ENUM(NSInteger, DownloadCardState) {
     } else if (totalBytes < 0) {
         // 总大小未知，只显示已下载
         self.downloadedLabel.text =
-            [NSString stringWithFormat:@"%@ / 未知", downloadedStr];
+            [NSString stringWithFormat:@"%@ / unknown", downloadedStr];
     } else {
         self.downloadedLabel.text = downloadedStr;
     }
@@ -723,7 +723,7 @@ typedef NS_ENUM(NSInteger, DownloadCardState) {
 - (void)completeWithTitle:(NSString *)title {
     dispatch_async(dispatch_get_main_queue(), ^{
         self.currentTitle = title;
-        self.titleLabel.text = title ?: @"下载完成";
+        self.titleLabel.text = title ?: @"Download complete";
 
         // 进度条置满
         self.progress = 1.0;
@@ -736,7 +736,7 @@ typedef NS_ENUM(NSInteger, DownloadCardState) {
         [self.spinnerView stopAnimating];
 
         // 清空速度/ETA
-        self.speedLabel.text = @"完成";
+        self.speedLabel.text = @"Done";
         self.etaLabel.text = @"";
 
         // 自动消失
@@ -746,9 +746,9 @@ typedef NS_ENUM(NSInteger, DownloadCardState) {
 
 - (void)failWithError:(NSError *)error {
     dispatch_async(dispatch_get_main_queue(), ^{
-        NSString *failTitle = @"下载失败";
+        NSString *failTitle = @"Download failed";
         if (error && error.localizedDescription.length > 0) {
-            failTitle = [NSString stringWithFormat:@"下载失败：%@",
+            failTitle = [NSString stringWithFormat:@"Download failed: %@",
                          error.localizedDescription];
         }
         self.titleLabel.text = failTitle;
@@ -757,7 +757,7 @@ typedef NS_ENUM(NSInteger, DownloadCardState) {
         [self applyState:DownloadCardStateFailed];
         [self.spinnerView stopAnimating];
 
-        self.speedLabel.text = @"失败";
+        self.speedLabel.text = @"Failed";
         self.etaLabel.text = @"";
 
         // 自动消失（失败态停留更久，让用户看清错误）
@@ -767,13 +767,13 @@ typedef NS_ENUM(NSInteger, DownloadCardState) {
 
 - (void)cancel {
     dispatch_async(dispatch_get_main_queue(), ^{
-        self.titleLabel.text = @"已取消下载";
-        self.currentTitle = @"已取消下载";
+        self.titleLabel.text = @"Download cancelled";
+        self.currentTitle = @"Download cancelled";
 
         [self applyState:DownloadCardStateCancelled];
         [self.spinnerView stopAnimating];
 
-        self.speedLabel.text = @"已取消";
+        self.speedLabel.text = @"Cancelled";
         self.etaLabel.text = @"";
 
         [self scheduleAutoDismissAfter:kAutoDismissAfterComplete];
@@ -1012,20 +1012,20 @@ typedef NS_ENUM(NSInteger, DownloadCardState) {
 ///   否则：X秒
 - (NSString *)formatETA:(NSInteger)etaSeconds {
     if (etaSeconds < 0) return @"";
-    if (etaSeconds == 0) return @"即将完成";
+    if (etaSeconds == 0) return @"Almost done";
 
     NSInteger hours = etaSeconds / 3600;
     NSInteger minutes = (etaSeconds % 3600) / 60;
     NSInteger seconds = etaSeconds % 60;
 
     if (hours >= 1) {
-        return [NSString stringWithFormat:@"剩余 %ld小时%ld分",
+        return [NSString stringWithFormat:@"%ldh %ldm left",
                 (long)hours, (long)minutes];
     } else if (minutes >= 1) {
-        return [NSString stringWithFormat:@"剩余 %ld分%ld秒",
+        return [NSString stringWithFormat:@"%ldm %lds left",
                 (long)minutes, (long)seconds];
     } else {
-        return [NSString stringWithFormat:@"剩余 %ld秒", (long)seconds];
+        return [NSString stringWithFormat:@"%lds left", (long)seconds];
     }
 }
 

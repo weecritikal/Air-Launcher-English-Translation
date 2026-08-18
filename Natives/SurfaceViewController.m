@@ -1545,7 +1545,7 @@ static GameSurfaceView* pojavWindow;
     // 标题文字（转圈下方，简短提示）
     self.launchTitleLabel = [[UILabel alloc] init];
     self.launchTitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.launchTitleLabel.text = localize(@"launch.title", @"正在启动 Minecraft");
+    self.launchTitleLabel.text = localize(@"launch.title", @"Starting Minecraft");
     self.launchTitleLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightMedium];
     self.launchTitleLabel.textColor = [UIColor colorWithWhite:0.9 alpha:1.0];
     self.launchTitleLabel.textAlignment = NSTextAlignmentCenter;
@@ -1556,7 +1556,7 @@ static GameSurfaceView* pojavWindow;
     // ========================================================================
     self.launchCancelButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.launchCancelButton.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.launchCancelButton setTitle:localize(@"launch.cancel", @"取消启动") forState:UIControlStateNormal];
+    [self.launchCancelButton setTitle:localize(@"launch.cancel", @"Cancel launch") forState:UIControlStateNormal];
     [self.launchCancelButton setTitleColor:[UIColor colorWithWhite:0.7 alpha:1.0] forState:UIControlStateNormal];
     self.launchCancelButton.titleLabel.font = [UIFont systemFontOfSize:14];
     self.launchCancelButton.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.1];
@@ -1600,10 +1600,10 @@ static GameSurfaceView* pojavWindow;
 /// 取消启动：用户点击"取消启动"按钮时调用。
 /// 终止 JVM 启动流程，移除遮罩层，返回启动器主界面。
 - (void)cancelLaunch {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:localize(@"launch.cancel_confirm_title", @"确认取消启动？")
-                                                                   message:localize(@"launch.cancel_confirm_message", @"取消启动将终止当前的游戏加载流程并返回启动器。")
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:localize(@"launch.cancel_confirm_title", @"Cancel launch?")
+                                                                   message:localize(@"launch.cancel_confirm_message", @"Cancelling will stop the game from loading and return you to the launcher.")
                                                             preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:localize(@"launch.cancel_confirm_yes", @"确认取消")
+    [alert addAction:[UIAlertAction actionWithTitle:localize(@"launch.cancel_confirm_yes", @"Yes, cancel")
                                               style:UIAlertActionStyleDestructive
                                             handler:^(UIAlertAction *action) {
         NSLog(@"[SurfaceViewController] User cancelled launch");
@@ -1612,7 +1612,7 @@ static GameSurfaceView* pojavWindow;
         // 返回启动器
         [[SurfaceViewController currentInstance].logOutputView dismissAndReturnToLauncher];
     }]];
-    [alert addAction:[UIAlertAction actionWithTitle:localize(@"launch.cancel_confirm_no", @"继续等待")
+    [alert addAction:[UIAlertAction actionWithTitle:localize(@"launch.cancel_confirm_no", @"Keep waiting")
                                               style:UIAlertActionStyleCancel
                                             handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];

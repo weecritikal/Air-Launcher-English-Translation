@@ -68,7 +68,7 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
-    self.title = @"导出整合包";
+    self.title = @"Export modpack";
     self.view.backgroundColor = [UIColor clearColor];
     [[BackgroundManager sharedManager] applyEffectToView:self.view];
 
@@ -199,12 +199,12 @@
 #pragma mark - Profile Section
 
 - (UIView *)createProfileSection {
-    UIView *card = [self createCardContainerWithTitle:@"配置文件"];
+    UIView *card = [self createCardContainerWithTitle:@"Profile"];
     UIStackView *stack = [self contentStackOfCard:card];
 
     self.profileButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.profileButton.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.profileButton setTitle:@"选择配置文件" forState:UIControlStateNormal];
+    [self.profileButton setTitle:@"Select profile" forState:UIControlStateNormal];
     self.profileButton.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightMedium];
     self.profileButton.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeft;
     self.profileButton.contentEdgeInsets = UIEdgeInsetsMake(0, 0, 0, 0);
@@ -225,8 +225,8 @@
 
 - (void)refreshProfileInfo {
     if (self.profileNames.count == 0) {
-        [self.profileButton setTitle:@"没有可用配置文件" forState:UIControlStateNormal];
-        self.profileInfoLabel.text = @"请先创建一个游戏配置文件";
+        [self.profileButton setTitle:@"No profiles available" forState:UIControlStateNormal];
+        self.profileInfoLabel.text = @"Create a game profile first";
         self.exportButton.enabled = NO;
         self.exportButton.backgroundColor = [UIColor systemGray3Color];
         return;
@@ -235,17 +235,17 @@
 
     NSDictionary *profile = PLProfiles.current.profiles[self.selectedProfileName];
     if (![profile isKindOfClass:[NSDictionary class]]) {
-        self.profileInfoLabel.text = @"无效的配置文件";
+        self.profileInfoLabel.text = @"Invalid profile";
         return;
     }
     NSString *lastVersionId = profile[@"lastVersionId"] ?: @"";
     NSString *gameDir = profile[@"gameDir"] ?: @".";
     NSDictionary *parsed = [ModpackExportService parseVersionId:lastVersionId];
-    NSString *mcVer = parsed[@"minecraft"] ?: @"未知";
+    NSString *mcVer = parsed[@"minecraft"] ?: @"Unknown";
     NSString *loader = parsed[@"loader"] ?: @"vanilla";
     NSString *loaderVer = parsed[@"loaderVersion"] ?: @"";
 
-    NSString *info = [NSString stringWithFormat:@"Minecraft %@  |  加载器: %@ %@\n游戏目录: %@",
+    NSString *info = [NSString stringWithFormat:@"Minecraft %@  |  Loader: %@ %@\nGame directory: %@",
                       mcVer, loader, loaderVer, gameDir];
     self.profileInfoLabel.text = info;
 }
@@ -253,11 +253,11 @@
 #pragma mark - Format Section
 
 - (UIView *)createFormatSection {
-    UIView *card = [self createCardContainerWithTitle:@"导出格式"];
+    UIView *card = [self createCardContainerWithTitle:@"Export format"];
     UIStackView *stack = [self contentStackOfCard:card];
 
     self.formatSegment = [[UISegmentedControl alloc] initWithItems:@[
-        @"Modrinth", @"CurseForge", @"MMC", @"Plain Zip", @"链接列表"
+        @"Modrinth", @"CurseForge", @"MMC", @"Plain Zip", @"Link list"
     ]];
     self.formatSegment.translatesAutoresizingMaskIntoConstraints = NO;
     self.formatSegment.selectedSegmentIndex = 0;
@@ -269,7 +269,7 @@
     hint.font = [UIFont systemFontOfSize:11];
     hint.textColor = [UIColor tertiaryLabelColor];
     hint.numberOfLines = 0;
-    hint.text = @"Modrinth: 跨启动器通用；CurseForge: 兼容 CF 客户端；MMC: 兼容 MultiMC/Prism；Plain Zip: 直接打包 .minecraft；链接列表: FCL 简易格式";
+    hint.text = @"Modrinth: works across launchers; CurseForge: compatible with the CF client; MMC: compatible with MultiMC/Prism; Plain Zip: packages .minecraft directly; Link list: simple FCL format";
     [stack addArrangedSubview:hint];
 
     return card;
@@ -282,12 +282,12 @@
 #pragma mark - Info Fields
 
 - (UIView *)createInfoFieldsSection {
-    UIView *card = [self createCardContainerWithTitle:@"整合包信息"];
+    UIView *card = [self createCardContainerWithTitle:@"Modpack info"];
     UIStackView *stack = [self contentStackOfCard:card];
 
-    self.nameField = [self createTextFieldWithPlaceholder:@"整合包名称"];
-    self.versionField = [self createTextFieldWithPlaceholder:@"版本号（如 1.0）"];
-    self.authorField = [self createTextFieldWithPlaceholder:@"作者"];
+    self.nameField = [self createTextFieldWithPlaceholder:@"Modpack name"];
+    self.versionField = [self createTextFieldWithPlaceholder:@"Version number (e.g. 1.0)"];
+    self.authorField = [self createTextFieldWithPlaceholder:@"Author"];
 
     // 预填
     self.versionField.text = @"1.0";
@@ -319,19 +319,19 @@
 #pragma mark - File Options Section
 
 - (UIView *)createFileOptionsSection {
-    UIView *card = [self createCardContainerWithTitle:@"打包内容"];
+    UIView *card = [self createCardContainerWithTitle:@"Contents to include"];
     UIStackView *stack = [self contentStackOfCard:card];
 
     // 文件选项数据
     self.fileOptionItems = @[
-        @{@"key": @(ModpackExportFileMods),           @"title": @"模组 (mods/)",            @"default": @YES},
-        @{@"key": @(ModpackExportFileConfigs),        @"title": @"配置 (config/)",         @"default": @YES},
-        @{@"key": @(ModpackExportFileResourcePacks),  @"title": @"资源包 (resourcepacks/)",@"default": @YES},
-        @{@"key": @(ModpackExportFileShaderPacks),    @"title": @"光影 (shaderpacks/)",    @"default": @YES},
-        @{@"key": @(ModpackExportFileScripts),        @"title": @"脚本 (kubejs/scripts)",  @"default": @YES},
-        @{@"key": @(ModpackExportFileGameSettings),   @"title": @"游戏设置 (options.txt)",  @"default": @YES},
-        @{@"key": @(ModpackExportFileSaves),          @"title": @"存档 (saves/)",          @"default": @NO},
-        @{@"key": @(ModpackExportFileServers),        @"title": @"服务器列表 (servers.dat)",@"default": @NO},
+        @{@"key": @(ModpackExportFileMods),           @"title": @"Mods (mods/)",            @"default": @YES},
+        @{@"key": @(ModpackExportFileConfigs),        @"title": @"Config (config/)",         @"default": @YES},
+        @{@"key": @(ModpackExportFileResourcePacks),  @"title": @"Resource packs (resourcepacks/)",@"default": @YES},
+        @{@"key": @(ModpackExportFileShaderPacks),    @"title": @"Shaders (shaderpacks/)",    @"default": @YES},
+        @{@"key": @(ModpackExportFileScripts),        @"title": @"Scripts (kubejs/scripts)",  @"default": @YES},
+        @{@"key": @(ModpackExportFileGameSettings),   @"title": @"Game settings (options.txt)",  @"default": @YES},
+        @{@"key": @(ModpackExportFileSaves),          @"title": @"Saves (saves/)",          @"default": @NO},
+        @{@"key": @(ModpackExportFileServers),        @"title": @"Server list (servers.dat)",@"default": @NO},
     ];
 
     self.fileOptionsTableView = [[UITableView alloc] init];
@@ -395,7 +395,7 @@
 - (UIView *)createExportButtonSection {
     self.exportButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.exportButton.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.exportButton setTitle:@"开始导出" forState:UIControlStateNormal];
+    [self.exportButton setTitle:@"Start export" forState:UIControlStateNormal];
     [self.exportButton setImage:[UIImage systemImageNamed:@"square.and.arrow.up"] forState:UIControlStateNormal];
     [self.exportButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     self.exportButton.titleLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
@@ -424,7 +424,7 @@
 - (void)showProfilePicker {
     if (self.profileNames.count == 0) return;
 
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"选择配置文件"
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Select profile"
                                                                    message:nil
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
     for (NSString *name in self.profileNames) {
@@ -440,7 +440,7 @@
             }
         }]];
     }
-    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
 
     if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
         sheet.popoverPresentationController.sourceView = self.profileButton;
@@ -453,11 +453,11 @@
 
 - (void)startExport {
     if (self.profileNames.count == 0 || !self.selectedProfileName) {
-        [self showAlertWithTitle:@"无法导出" message:@"请先选择一个配置文件"];
+        [self showAlertWithTitle:@"Cannot export" message:@"Select a profile first"];
         return;
     }
     if (self.fileOptions == 0) {
-        [self showAlertWithTitle:@"无法导出" message:@"请至少选择一项打包内容"];
+        [self showAlertWithTitle:@"Cannot export" message:@"Select at least one item to include"];
         return;
     }
 
@@ -480,8 +480,8 @@
     // 文件名清理
     NSString *destPath = [self buildExportPathWithName:name version:version ext:ext];
 
-    [self showProgressCardWithTitle:@"正在导出整合包"];
-    [self setProgress:0.0 stageMessage:@"准备中..."];
+    [self showProgressCardWithTitle:@"Exporting modpack"];
+    [self setProgress:0.0 stageMessage:@"Preparing..."];
 
     // 重置取消状态
     [[ModpackExportService sharedService] resetCancelState];
@@ -503,14 +503,14 @@
                                                                                   error:&error];
 
         dispatch_async(dispatch_get_main_queue(), ^{
-            BOOL wasCancelled = [[error.userInfo objectForKey:NSLocalizedDescriptionKey] containsString:@"取消"];
+            BOOL wasCancelled = [[error.userInfo objectForKey:NSLocalizedDescriptionKey] localizedCaseInsensitiveContainsString:@"cancel"];
             [self hideProgressCard];
             if (success) {
                 [self showExportSuccessWithPath:destPath];
             } else if (wasCancelled) {
-                [self showAlertWithTitle:@"已取消" message:@"导出已取消"];
+                [self showAlertWithTitle:@"Cancelled" message:@"Export cancelled"];
             } else {
-                [self showAlertWithTitle:@"导出失败" message:error.localizedDescription ?: @"未知错误"];
+                [self showAlertWithTitle:@"Export failed" message:error.localizedDescription ?: @"Unknown error"];
             }
         });
     });
@@ -602,7 +602,7 @@
 
     UIButton *cancelBtn = [UIButton buttonWithType:UIButtonTypeSystem];
     cancelBtn.translatesAutoresizingMaskIntoConstraints = NO;
-    [cancelBtn setTitle:@"取消导出" forState:UIControlStateNormal];
+    [cancelBtn setTitle:@"Cancel export" forState:UIControlStateNormal];
     cancelBtn.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightMedium];
     [cancelBtn setTitleColor:[UIColor systemRedColor] forState:UIControlStateNormal];
     [cancelBtn addTarget:self action:@selector(cancelExport) forControlEvents:UIControlEventTouchUpInside];
@@ -651,7 +651,7 @@
     self.progressSpinner = spinner;
     self.progressCancelButton = cancelBtn;
 
-    [self setProgress:-1 stageMessage:@"正在准备..."];
+    [self setProgress:-1 stageMessage:@"Preparing..."];
 }
 
 - (void)setProgress:(double)progress stageMessage:(NSString *)stageMessage {
@@ -692,17 +692,17 @@
 - (void)cancelExport {
     // 真正取消：通过 service 的 cancel 信号
     [ModpackExportService sharedService].cancelled = YES;
-    [self setProgress:-1 stageMessage:@"正在取消..."];
+    [self setProgress:-1 stageMessage:@"Cancelling..."];
 }
 
 #pragma mark - 完成提示
 
 - (void)showExportSuccessWithPath:(NSString *)path {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"导出成功"
-                                                                   message:[NSString stringWithFormat:@"整合包已保存到：\n%@", path]
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Export complete"
+                                                                   message:[NSString stringWithFormat:@"Modpack saved to:\n%@", path]
                                                             preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"关闭" style:UIAlertActionStyleCancel handler:nil]];
-    [alert addAction:[UIAlertAction actionWithTitle:@"分享" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+    [alert addAction:[UIAlertAction actionWithTitle:@"Close" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Share" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         [self shareExportedFile:path];
     }]];
     [self presentViewController:alert animated:YES completion:nil];
@@ -721,7 +721,7 @@
 
 - (void)showAlertWithTitle:(NSString *)title message:(NSString *)message {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:message preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
     if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
         alert.popoverPresentationController.sourceView = self.view;
         alert.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(self.view.bounds), CGRectGetMidY(self.view.bounds), 0, 0);

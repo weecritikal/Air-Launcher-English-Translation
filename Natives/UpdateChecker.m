@@ -34,7 +34,7 @@
     if (url == nil) {
         if (completion) dispatch_async(dispatch_get_main_queue(), ^{
             completion(nil, [NSError errorWithDomain:@"UpdateChecker" code:-1
-                                         userInfo:@{NSLocalizedDescriptionKey: @"无效的 URL"}]);
+                                         userInfo:@{NSLocalizedDescriptionKey: @"Invalid URL"}]);
         });
         return;
     }
@@ -60,7 +60,7 @@
             if (completion) dispatch_async(dispatch_get_main_queue(), ^{
                 completion(nil, [NSError errorWithDomain:@"UpdateChecker" code:httpResp.statusCode
                                              userInfo:@{NSLocalizedDescriptionKey:
-                                                [NSString stringWithFormat:@"GitHub API 返回 %ld", (long)httpResp.statusCode]}]);
+                                                [NSString stringWithFormat:@"The GitHub API returned %ld", (long)httpResp.statusCode]}]);
             });
             return;
         }
@@ -70,7 +70,7 @@
         if (![json isKindOfClass:[NSDictionary class]]) {
             if (completion) dispatch_async(dispatch_get_main_queue(), ^{
                 completion(nil, [NSError errorWithDomain:@"UpdateChecker" code:-2
-                                             userInfo:@{NSLocalizedDescriptionKey: @"JSON 解析失败"}]);
+                                             userInfo:@{NSLocalizedDescriptionKey: @"Failed to parse JSON"}]);
             });
             return;
         }
@@ -79,7 +79,7 @@
         if (info == nil) {
             if (completion) dispatch_async(dispatch_get_main_queue(), ^{
                 completion(nil, [NSError errorWithDomain:@"UpdateChecker" code:-3
-                                             userInfo:@{NSLocalizedDescriptionKey: @"无法解析 release 信息"}]);
+                                             userInfo:@{NSLocalizedDescriptionKey: @"Could not parse the release information"}]);
             });
             return;
         }

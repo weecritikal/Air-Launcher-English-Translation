@@ -180,7 +180,7 @@
 
     if (!resourcePacksPath) {
         if (error) {
-            *error = [NSError errorWithDomain:@"ResourcePackService" code:1 userInfo:@{NSLocalizedDescriptionKey: @"无法确定游戏目录"}];
+            *error = [NSError errorWithDomain:@"ResourcePackService" code:1 userInfo:@{NSLocalizedDescriptionKey: @"Could not determine the game directory"}];
         }
         return nil;
     }
@@ -196,7 +196,7 @@
         NSLog(@"[ResourcePackService] Created resourcepacks directory: %@", resourcePacksPath);
     } else if (!isDir) {
         if (error) {
-            *error = [NSError errorWithDomain:@"ResourcePackService" code:2 userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"%@ 不是目录", resourcePacksPath]}];
+            *error = [NSError errorWithDomain:@"ResourcePackService" code:2 userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"%@ is not a directory", resourcePacksPath]}];
         }
         return nil;
     }
@@ -271,7 +271,7 @@
         if ([currentPath.lowercaseString hasSuffix:@".zip.disabled"]) {
             newPath = [currentPath substringToIndex:currentPath.length - [@".disabled" length]];
         } else {
-            if (error) *error = [NSError errorWithDomain:@"ResourcePackServiceError" code:101 userInfo:@{NSLocalizedDescriptionKey:@"文件状态不一致，无法启用。"}];
+            if (error) *error = [NSError errorWithDomain:@"ResourcePackServiceError" code:101 userInfo:@{NSLocalizedDescriptionKey:@"The file state is inconsistent, so it cannot be enabled."}];
             return NO;
         }
     } else {
@@ -335,7 +335,7 @@
                 if (completion) {
                     NSError *error = [NSError errorWithDomain:@"ResourcePackServiceError"
                                                          code:1
-                                                     userInfo:@{NSLocalizedDescriptionKey: @"创建 resourcepacks 目录失败，请检查存储权限。"}];
+                                                     userInfo:@{NSLocalizedDescriptionKey: @"Could not create the resourcepacks folder. Check your storage permissions."}];
                     dispatch_async(dispatch_get_main_queue(), ^{ completion(NO, error); });
                 }
                 return;
@@ -344,7 +344,7 @@
             if (completion) {
                 NSError *error = [NSError errorWithDomain:@"ResourcePackServiceError"
                                                      code:1
-                                                 userInfo:@{NSLocalizedDescriptionKey: @"找不到游戏目录。"}];
+                                                 userInfo:@{NSLocalizedDescriptionKey: @"Game directory not found."}];
                 dispatch_async(dispatch_get_main_queue(), ^{ completion(NO, error); });
             }
             return;
@@ -357,7 +357,7 @@
         if (completion) {
             NSError *error = [NSError errorWithDomain:@"ResourcePackServiceError"
                                                  code:2
-                                             userInfo:@{NSLocalizedDescriptionKey: @"无效的下载链接。"}];
+                                             userInfo:@{NSLocalizedDescriptionKey: @"Invalid download link."}];
             dispatch_async(dispatch_get_main_queue(), ^{ completion(NO, error); });
         }
         return;

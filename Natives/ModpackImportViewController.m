@@ -47,7 +47,7 @@
     [super viewDidLoad];
     // 适配自定义启动器背景：将当前视图控制器透明化，使全局背景壁纸能够透出
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
-    self.title = @"整合包";
+    self.title = @"Modpack";
 
     [[BackgroundManager sharedManager] applyEffectToView:self.view];
 
@@ -77,7 +77,7 @@
 #pragma mark - 顶部 Tab 切换（导入 / 导出）
 
 - (void)setupNavigationTab {
-    self.tabSegment = [[UISegmentedControl alloc] initWithItems:@[@"导入", @"导出"]];
+    self.tabSegment = [[UISegmentedControl alloc] initWithItems:@[@"Import", @"Export"]];
     self.tabSegment.selectedSegmentIndex = 0;
     [self.tabSegment addTarget:self action:@selector(tabChanged:) forControlEvents:UIControlEventValueChanged];
 
@@ -115,12 +115,12 @@
     self.hintLabel.textColor = [UIColor secondaryLabelColor];
     self.hintLabel.font = [UIFont systemFontOfSize:12];
     self.hintLabel.numberOfLines = 0;
-    self.hintLabel.text = @"支持格式：Modrinth (.mrpack)、CurseForge (.zip)、MMC (MultiMC/Prism)、Plain ZIP（直接含 .minecraft）";
+    self.hintLabel.text = @"Supported formats: Modrinth (.mrpack), CurseForge (.zip), MMC (MultiMC/Prism), Plain ZIP (containing .minecraft directly)";
     [self.headerContainerView addSubview:self.hintLabel];
 
     self.importButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.importButton.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.importButton setTitle:@"  选择整合包文件" forState:UIControlStateNormal];
+    [self.importButton setTitle:@"  Choose modpack file" forState:UIControlStateNormal];
     [self.importButton setImage:[UIImage systemImageNamed:@"doc.badge.plus"] forState:UIControlStateNormal];
     self.importButton.backgroundColor = [UIColor systemBlueColor];
     [self.importButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
@@ -146,7 +146,7 @@
     self.emptyLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.emptyLabel.textAlignment = NSTextAlignmentCenter;
     self.emptyLabel.textColor = [UIColor secondaryLabelColor];
-    self.emptyLabel.text = @"还没有导入的整合包\n点击上方按钮导入";
+    self.emptyLabel.text = @"No modpacks imported yet\nTap the button above to import one";
     self.emptyLabel.numberOfLines = 0;
     self.emptyLabel.font = [UIFont systemFontOfSize:14];
     [self.view addSubview:self.emptyLabel];
@@ -229,7 +229,7 @@
 
     UIButton *cancelBtn = [UIButton buttonWithType:UIButtonTypeSystem];
     cancelBtn.translatesAutoresizingMaskIntoConstraints = NO;
-    [cancelBtn setTitle:@"取消" forState:UIControlStateNormal];
+    [cancelBtn setTitle:@"Cancel" forState:UIControlStateNormal];
     cancelBtn.titleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightMedium];
     [cancelBtn setTitleColor:[UIColor systemRedColor] forState:UIControlStateNormal];
     [cancelBtn addTarget:self action:@selector(cancelImport) forControlEvents:UIControlEventTouchUpInside];
@@ -279,7 +279,7 @@
     self.progressCancelButton = cancelBtn;
 
     // 初始不确定模式 (只显示转圈)
-    [self setProgress:-1 stageMessage:@"正在准备..."];
+    [self setProgress:-1 stageMessage:@"Preparing..."];
 }
 
 - (void)setProgress:(double)progress stageMessage:(NSString *)stageMessage {
@@ -322,10 +322,10 @@
 - (void)cancelImport {
     self.importService.cancelled = YES;
     if (self.progressCancelButton) {
-        [self.progressCancelButton setTitle:@"正在取消..." forState:UIControlStateNormal];
+        [self.progressCancelButton setTitle:@"Cancelling..." forState:UIControlStateNormal];
         [self.progressCancelButton setEnabled:NO];
     }
-    [self setProgress:-1 stageMessage:@"正在取消，请稍候..."];
+    [self setProgress:-1 stageMessage:@"Cancelling, please wait..."];
 }
 
 - (void)loadImportedModpacks {
@@ -359,19 +359,19 @@
     NSString *fileExtension = fileURL.pathExtension.lowercaseString;
 
     if (![fileExtension isEqualToString:@"mrpack"] && ![fileExtension isEqualToString:@"zip"]) {
-        [self showAlertWithTitle:@"无效的文件" message:@"请选择 .mrpack 或 .zip 文件"];
+        [self showAlertWithTitle:@"Invalid file" message:@"Please choose a .mrpack or .zip file"];
         return;
     }
 
     BOOL accessGranted = [fileURL startAccessingSecurityScopedResource];
     if (!accessGranted) {
-        [self showAlertWithTitle:@"访问被拒绝" message:@"无法访问选中的文件"];
+        [self showAlertWithTitle:@"Access denied" message:@"Could not access the selected file"];
         return;
     }
 
     // 解析阶段：显示不确定模式进度卡片
-    [self showProgressCardWithTitle:@"正在解析整合包"];
-    [self setProgress:-1 stageMessage:@"正在读取整合包信息..."];
+    [self showProgressCardWithTitle:@"Parsing the modpack"];
+    [self setProgress:-1 stageMessage:@"Reading modpack information..."];
 
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         NSError *error = nil;
@@ -381,7 +381,7 @@
             modpackInfo = [self.importService parseModpackAtURL:fileURL error:&error];
         } @catch (NSException *exception) {
             error = [NSError errorWithDomain:@"ModpackImportError" code:9999
-                                    userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"解析异常: %@", exception.reason]}];
+                                    userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Parse exception: %@", exception.reason]}];
         }
 
         [fileURL stopAccessingSecurityScopedResource];
@@ -389,7 +389,7 @@
         dispatch_async(dispatch_get_main_queue(), ^{
             if (error || !modpackInfo) {
                 [self hideProgressCard];
-                [self showAlertWithTitle:@"解析失败" message:error.localizedDescription ?: @"无法解析整合包文件"];
+                [self showAlertWithTitle:@"Parse failed" message:error.localizedDescription ?: @"Could not parse the modpack file"];
                 return;
             }
             self.currentImportingModpack = modpackInfo;
@@ -404,10 +404,10 @@
 #pragma mark - 整合包预览卡片（参照 FCL ModpackPreviewSheet / HMCL ModpackInfoPage）
 
 - (void)showModpackPreview:(NSDictionary *)modpackInfo fileURL:(NSURL *)fileURL {
-    NSString *name = modpackInfo[@"name"] ?: @"未知";
-    NSString *version = modpackInfo[@"version"] ?: @"未知";
+    NSString *name = modpackInfo[@"name"] ?: @"Unknown";
+    NSString *version = modpackInfo[@"version"] ?: @"Unknown";
     NSString *author = modpackInfo[@"author"] ?: @"";
-    NSString *mcVersion = modpackInfo[@"minecraftVersion"] ?: @"未知";
+    NSString *mcVersion = modpackInfo[@"minecraftVersion"] ?: @"Unknown";
     NSString *loader = modpackInfo[@"loader"] ?: @"Vanilla";
     NSString *loaderVersion = modpackInfo[@"loaderVersion"] ?: @"";
     NSString *format = modpackInfo[@"format"] ?: @"unknown";
@@ -425,40 +425,40 @@
     NSString *formatLabel = formatLabels[format] ?: format;
 
     NSMutableString *message = [NSMutableString string];
-    [message appendFormat:@"文件: %@\n", fileName];
-    [message appendFormat:@"格式: %@\n", formatLabel];
-    [message appendFormat:@"名称: %@\n", name];
-    [message appendFormat:@"版本: %@", version];
+    [message appendFormat:@"File: %@\n", fileName];
+    [message appendFormat:@"Format: %@\n", formatLabel];
+    [message appendFormat:@"Name: %@\n", name];
+    [message appendFormat:@"Version: %@", version];
     if (author.length > 0) {
-        [message appendFormat:@"   作者: %@", author];
+        [message appendFormat:@"   Author: %@", author];
     }
     [message appendString:@"\n"];
     [message appendFormat:@"Minecraft: %@\n", mcVersion];
-    [message appendFormat:@"加载器: %@", loader];
+    [message appendFormat:@"Loader: %@", loader];
     if (loaderVersion.length > 0) {
         [message appendFormat:@" %@", loaderVersion];
     }
     [message appendString:@"\n"];
 
     if (modCountNum && modCountNum.integerValue > 0) {
-        [message appendFormat:@"需下载模组: %ld 个\n", (long)modCountNum.integerValue];
+        [message appendFormat:@"Mods to download: %ld\n", (long)modCountNum.integerValue];
     }
     if (fileCountNum && fileCountNum.integerValue > 0) {
-        [message appendFormat:@"需解压文件: %ld 个\n", (long)fileCountNum.integerValue];
+        [message appendFormat:@"Files to extract: %ld\n", (long)fileCountNum.integerValue];
     }
 
     // Forge/NeoForge 警告
     if ([loader isEqualToString:@"Forge"] || [loader isEqualToString:@"NeoForge"]) {
-        [message appendFormat:@"\n⚠️ 注意: %@ %@ 加载器需通过下载界面手动安装，否则启动会失败。", loader, loaderVersion];
+        [message appendFormat:@"\n⚠️ Note: the %@ %@ loader must be installed manually from the download screen, or launching will fail.", loader, loaderVersion];
     }
 
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"导入整合包"
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Import modpack"
                                                                    message:message
                                                             preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:^(UIAlertAction * _Nonnull action) {
+    [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:^(UIAlertAction * _Nonnull action) {
         self.currentImportingModpack = nil;
     }]];
-    [alert addAction:[UIAlertAction actionWithTitle:@"导入" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+    [alert addAction:[UIAlertAction actionWithTitle:@"Import" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         [self startModpackImport:modpackInfo];
     }]];
 
@@ -475,9 +475,9 @@
     // 重置取消状态
     [self.importService resetCancelState];
 
-    NSString *name = modpackInfo[@"name"] ?: @"整合包";
-    [self showProgressCardWithTitle:[NSString stringWithFormat:@"正在导入 %@", name]];
-    [self setProgress:-1 stageMessage:@"正在准备..."];
+    NSString *name = modpackInfo[@"name"] ?: @"Modpack";
+    [self showProgressCardWithTitle:[NSString stringWithFormat:@"Importing %@", name]];
+    [self setProgress:-1 stageMessage:@"Preparing..."];
 
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         __block NSError *error = nil;
@@ -492,14 +492,14 @@
             } error:&error];
         } @catch (NSException *exception) {
             error = [NSError errorWithDomain:@"ModpackImportError" code:9998
-                                    userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"导入异常: %@", exception.reason]}];
+                                    userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Import exception: %@", exception.reason]}];
         }
 
         dispatch_async(dispatch_get_main_queue(), ^{
             // 检测是否被取消
             BOOL wasCancelled = [error.domain isEqualToString:@"ModpackImportError"] && error.code == 9999;
             NSString *localizedDesc = error.localizedDescription ?: @"";
-            if (!wasCancelled && [localizedDesc containsString:@"取消"]) {
+            if (!wasCancelled && [localizedDesc localizedCaseInsensitiveContainsString:@"cancel"]) {
                 wasCancelled = YES;
             }
 
@@ -507,13 +507,13 @@
                 // 取消：直接隐藏卡片，不显示 100%
                 [self hideProgressCard];
                 self.currentImportingModpack = nil;
-                [self showAlertWithTitle:@"已取消" message:@"导入已取消"];
+                [self showAlertWithTitle:@"Cancelled" message:@"Import cancelled"];
                 return;
             }
 
             if (success) {
                 // 完成时显示 100%
-                [self setProgress:1.0 stageMessage:@"导入完成"];
+                [self setProgress:1.0 stageMessage:@"Import complete"];
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.6 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                     [self hideProgressCard];
                     self.currentImportingModpack = nil;
@@ -522,24 +522,24 @@
             } else {
                 // 阶段5修复（参照 FCL）：错误消息中追加失败文件列表（如有），
                 // 让用户清楚知道是哪些 mod 下载失败，而不是只看到一个笼统的错误。
-                NSString *message = error.localizedDescription ?: @"未知错误";
+                NSString *message = error.localizedDescription ?: @"Unknown error";
                 NSArray<NSDictionary *> *failed = self.importService.failedFiles;
                 if (failed.count > 0) {
                     NSMutableString *msg = [NSMutableString stringWithString:message];
-                    [msg appendFormat:@"\n\n失败文件（共 %lu 个）：", (unsigned long)failed.count];
+                    [msg appendFormat:@"\n\nFailed files (%lu in total):", (unsigned long)failed.count];
                     NSUInteger showCount = MIN(failed.count, (NSUInteger)5);
                     for (NSUInteger k = 0; k < showCount; k++) {
                         NSString *n = failed[k][@"fileName"] ?: failed[k][@"name"];
                         [msg appendFormat:@"\n  • %@", n ?: @"(unknown)"];
                     }
                     if (failed.count > showCount) {
-                        [msg appendFormat:@"\n  ...等共 %lu 个", (unsigned long)failed.count];
+                        [msg appendFormat:@"\n  ...and %lu in total", (unsigned long)failed.count];
                     }
                     message = [msg copy];
                 }
                 [self hideProgressCard];
                 self.currentImportingModpack = nil;
-                [self showAlertWithTitle:@"导入失败" message:message];
+                [self showAlertWithTitle:@"Import failed" message:message];
             }
         });
     });
@@ -548,18 +548,18 @@
 - (void)showImportSuccess:(NSDictionary *)modpackInfo {
     NSString *loader = modpackInfo[@"loader"];
     NSString *name = modpackInfo[@"name"];
-    NSString *msg = [NSString stringWithFormat:@"整合包 '%@' 已成功导入。", name];
+    NSString *msg = [NSString stringWithFormat:@"The modpack '%@' was imported successfully.", name];
     if ([loader isEqualToString:@"Forge"] || [loader isEqualToString:@"NeoForge"]) {
-        msg = [msg stringByAppendingFormat:@"\n\n注意: 此整合包使用 %@ %@ 加载器，请先通过下载界面手动安装该加载器版本，否则启动会失败。", loader, modpackInfo[@"loaderVersion"]];
+        msg = [msg stringByAppendingFormat:@"\n\nNote: this modpack uses the %@ %@ loader. Install that loader version manually from the download screen first, or launching will fail.", loader, modpackInfo[@"loaderVersion"]];
     }
 
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"导入成功"
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Import successful"
                                                                    message:msg
                                                             preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"关闭" style:UIAlertActionStyleCancel handler:^(UIAlertAction * _Nonnull action) {
+    [alert addAction:[UIAlertAction actionWithTitle:@"Close" style:UIAlertActionStyleCancel handler:^(UIAlertAction * _Nonnull action) {
         [self loadImportedModpacks];
     }]];
-    [alert addAction:[UIAlertAction actionWithTitle:@"立即启动" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+    [alert addAction:[UIAlertAction actionWithTitle:@"Launch now" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         [self loadImportedModpacks];
         [self launchModpack:modpackInfo];
     }]];
@@ -592,9 +592,9 @@
     }
 
     NSDictionary *modpack = self.importedModpacks[indexPath.row];
-    NSString *name = modpack[@"name"] ?: @"未知";
-    NSString *mcVersion = modpack[@"minecraftVersion"] ?: @"未知";
-    NSString *loader = modpack[@"loader"] ?: @"未知";
+    NSString *name = modpack[@"name"] ?: @"Unknown";
+    NSString *mcVersion = modpack[@"minecraftVersion"] ?: @"Unknown";
+    NSString *loader = modpack[@"loader"] ?: @"Unknown";
 
     cell.textLabel.text = name;
     cell.detailTextLabel.text = [NSString stringWithFormat:@"Minecraft %@ - %@", mcVersion, loader];
@@ -647,13 +647,13 @@
 
 - (void)showModpackOptions:(NSDictionary *)modpack {
     UIAlertController *actionSheet = [UIAlertController alertControllerWithTitle:modpack[@"name"] message:nil preferredStyle:UIAlertControllerStyleActionSheet];
-    [actionSheet addAction:[UIAlertAction actionWithTitle:@"启动整合包" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+    [actionSheet addAction:[UIAlertAction actionWithTitle:@"Launch modpack" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         [self launchModpack:modpack];
     }]];
-    [actionSheet addAction:[UIAlertAction actionWithTitle:@"删除" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
+    [actionSheet addAction:[UIAlertAction actionWithTitle:@"Delete" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
         [self deleteModpack:modpack];
     }]];
-    [actionSheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [actionSheet addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
 
     if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
         actionSheet.popoverPresentationController.sourceView = self.view;
@@ -666,18 +666,18 @@
     NSString *profileName = modpack[@"profileName"];
     if (profileName && PLProfiles.current.profiles[profileName]) {
         PLProfiles.current.selectedProfileName = profileName;
-        [self showAlertWithTitle:@"配置文件已选择" message:[NSString stringWithFormat:@"已切换到整合包配置文件: %@", profileName]];
+        [self showAlertWithTitle:@"Profile selected" message:[NSString stringWithFormat:@"Switched to the modpack profile: %@", profileName]];
     } else {
-        [self showAlertWithTitle:@"错误" message:@"找不到整合包配置文件"];
+        [self showAlertWithTitle:@"Error" message:@"The modpack profile was not found"];
     }
 }
 
 - (void)deleteModpack:(NSDictionary *)modpack {
-    UIAlertController *confirm = [UIAlertController alertControllerWithTitle:@"确认删除" message:[NSString stringWithFormat:@"删除整合包 '%@'？此操作无法撤销。", modpack[@"name"]] preferredStyle:UIAlertControllerStyleAlert];
-    [confirm addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
-    [confirm addAction:[UIAlertAction actionWithTitle:@"删除" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
-        [self showProgressCardWithTitle:@"正在删除"];
-        [self setProgress:-1 stageMessage:@"正在删除整合包文件..."];
+    UIAlertController *confirm = [UIAlertController alertControllerWithTitle:@"Confirm delete" message:[NSString stringWithFormat:@"Delete the modpack '%@'? This cannot be undone.", modpack[@"name"]] preferredStyle:UIAlertControllerStyleAlert];
+    [confirm addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+    [confirm addAction:[UIAlertAction actionWithTitle:@"Delete" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
+        [self showProgressCardWithTitle:@"Deleting"];
+        [self setProgress:-1 stageMessage:@"Deleting modpack files..."];
         dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
             NSError *error = nil;
             BOOL success = [self.importService deleteModpack:modpack error:&error];
@@ -686,7 +686,7 @@
                 if (success) {
                     [self loadImportedModpacks];
                 } else {
-                    [self showAlertWithTitle:@"删除失败" message:error.localizedDescription];
+                    [self showAlertWithTitle:@"Delete failed" message:error.localizedDescription];
                 }
             });
         });
@@ -702,7 +702,7 @@
 
 - (void)showAlertWithTitle:(NSString *)title message:(NSString *)message completion:(void (^ _Nullable)(void))completion {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:message preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+    [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         if (completion) completion();
     }]];
     if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {

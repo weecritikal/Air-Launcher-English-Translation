@@ -352,7 +352,7 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"com.a
                 self.metadata = inheritsFromDict;
             } else {
                 // 父版本不存在或损坏，报错
-                [self finishDownloadWithErrorString:[NSString stringWithFormat:@"缺少父版本 %@ 的 version.json", self.metadata[@"inheritsFrom"]]];
+                [self finishDownloadWithErrorString:[NSString stringWithFormat:@"Missing version.json for the parent version %@", self.metadata[@"inheritsFrom"]]];
                 return;
             }
         }
@@ -384,7 +384,7 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"com.a
                     completionBlock();
                     return;
                 } else {
-                    [self finishDownloadWithErrorString:[NSString stringWithFormat:@"缺少父版本 %@ 的 version.json，且远程版本清单未加载，无法自动下载", json[@"inheritsFrom"]]];
+                    [self finishDownloadWithErrorString:[NSString stringWithFormat:@"Missing version.json for the parent version %@, and the remote version manifest is not loaded, so it cannot be downloaded automatically", json[@"inheritsFrom"]]];
                     return;
                 }
             }
@@ -625,7 +625,7 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"com.a
     if (self.currentDownloadTaskItem && self.currentDownloadTaskItem.state != DownloadTaskStateCancelled) {
         NSError *err = [NSError errorWithDomain:@"MinecraftResourceDownloadTask"
                                            code:1
-                                       userInfo:@{NSLocalizedDescriptionKey: error ?: @"下载失败"}];
+                                       userInfo:@{NSLocalizedDescriptionKey: error ?: @"Download failed"}];
         [[DownloadTaskManager sharedManager] setTaskWithId:self.currentDownloadTaskItem.taskId
                                           completedWithError:err];
     }
@@ -743,14 +743,14 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"com.a
             // 用户可在下载任务列表中看到具体缺失的文件。
             NSArray<NSDictionary *> *failedSnapshot = [self.failedFiles copy];
             if (failedSnapshot.count > 0) {
-                NSMutableString *msg = [NSMutableString stringWithFormat:@"下载完成但有 %lu 个文件失败：", (unsigned long)failedSnapshot.count];
+                NSMutableString *msg = [NSMutableString stringWithFormat:@"Download finished, but %lu file(s) failed:", (unsigned long)failedSnapshot.count];
                 NSUInteger showCount = MIN(failedSnapshot.count, (NSUInteger)5);
                 for (NSUInteger k = 0; k < showCount; k++) {
                     NSString *n = failedSnapshot[k][@"name"];
                     [msg appendFormat:@"\n  • %@", n ?: @"(unknown)"];
                 }
                 if (failedSnapshot.count > showCount) {
-                    [msg appendFormat:@"\n  ...等共 %lu 个", (unsigned long)failedSnapshot.count];
+                    [msg appendFormat:@"\n  ...and %lu in total", (unsigned long)failedSnapshot.count];
                 }
                 NSLog(@"[MCDL] %@", msg);
                 NSError *partialError = [NSError errorWithDomain:@"MinecraftResourceDownloadTask"

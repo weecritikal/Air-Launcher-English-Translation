@@ -47,7 +47,7 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.title = @"管理光影";
+    self.title = @"Manage shader packs";
     self.originalTitle = self.title; // 保存原始标题，退出选择模式时恢复
     self.view.backgroundColor = [UIColor systemBackgroundColor];
     // 适配自定义启动器背景：透明化当前 VC，让全局背景图/毛玻璃透出
@@ -109,7 +109,7 @@
     self.searchBar = [[UISearchBar alloc] initWithFrame:CGRectZero];
     self.searchBar.translatesAutoresizingMaskIntoConstraints = NO;
     self.searchBar.delegate = self;
-    self.searchBar.placeholder = @"搜索本地光影...";
+    self.searchBar.placeholder = @"Search local shader packs...";
     // 适配自定义启动器背景：透明化 searchBar 默认不透明背景，让全局背景图/毛玻璃透出
     [[BackgroundManager sharedManager] applyEffectToSearchBar:self.searchBar];
     [self.view addSubview:self.searchBar];
@@ -143,24 +143,24 @@
 
     UIImage *checkImage = [UIImage systemImageNamed:@"arrow.triangle.2.circlepath"];
     self.checkUpdateButton = [[UIBarButtonItem alloc] initWithImage:checkImage style:UIBarButtonItemStylePlain target:self action:@selector(checkForUpdates)];
-    self.checkUpdateButton.accessibilityLabel = @"检查更新";
+    self.checkUpdateButton.accessibilityLabel = @"Check for updates";
 
     UIImage *importImage = [UIImage systemImageNamed:@"square.and.arrow.down"] ?: [UIImage systemImageNamed:@"plus"];
     self.importButton = [[UIBarButtonItem alloc] initWithImage:importImage style:UIBarButtonItemStylePlain target:self action:@selector(importShaderTapped)];
-    self.importButton.accessibilityLabel = @"导入光影";
+    self.importButton.accessibilityLabel = @"Import shader pack";
 
     // 选择模式相关按钮初始化
     UIImage *selectImage = [UIImage systemImageNamed:@"checklist"] ?: [UIImage systemImageNamed:@"checkmark.circle"];
     self.selectButtonItem = [[UIBarButtonItem alloc] initWithImage:selectImage style:UIBarButtonItemStylePlain target:self action:@selector(enterSelectMode)];
-    self.selectButtonItem.accessibilityLabel = @"选择";
+    self.selectButtonItem.accessibilityLabel = @"Select";
 
     self.doneButtonItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone target:self action:@selector(exitSelectMode)];
-    self.doneButtonItem.accessibilityLabel = @"完成";
+    self.doneButtonItem.accessibilityLabel = @"Done";
 
-    self.navSelectAllButtonItem = [[UIBarButtonItem alloc] initWithTitle:@"全选" style:UIBarButtonItemStylePlain target:self action:@selector(toggleSelectAll)];
-    self.toolbarSelectAllButtonItem = [[UIBarButtonItem alloc] initWithTitle:@"全选" style:UIBarButtonItemStylePlain target:self action:@selector(selectAll)];
-    self.toolbarDeselectAllButtonItem = [[UIBarButtonItem alloc] initWithTitle:@"取消全选" style:UIBarButtonItemStylePlain target:self action:@selector(deselectAll)];
-    self.toolbarDeleteButtonItem = [[UIBarButtonItem alloc] initWithTitle:@"删除选中" style:UIBarButtonItemStylePlain target:self action:@selector(deleteSelectedShaders)];
+    self.navSelectAllButtonItem = [[UIBarButtonItem alloc] initWithTitle:@"Select all" style:UIBarButtonItemStylePlain target:self action:@selector(toggleSelectAll)];
+    self.toolbarSelectAllButtonItem = [[UIBarButtonItem alloc] initWithTitle:@"Select all" style:UIBarButtonItemStylePlain target:self action:@selector(selectAll)];
+    self.toolbarDeselectAllButtonItem = [[UIBarButtonItem alloc] initWithTitle:@"Deselect all" style:UIBarButtonItemStylePlain target:self action:@selector(deselectAll)];
+    self.toolbarDeleteButtonItem = [[UIBarButtonItem alloc] initWithTitle:@"Delete selected" style:UIBarButtonItemStylePlain target:self action:@selector(deleteSelectedShaders)];
     self.toolbarDeleteButtonItem.tintColor = [UIColor systemRedColor];
     self.flexibleSpaceItem = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace target:nil action:nil];
 
@@ -198,8 +198,8 @@
 }
 
 - (void)updateUIForCurrentMode {
-    self.searchBar.placeholder = @"搜索本地光影...";
-    self.emptyLabel.text = @"未发现光影";
+    self.searchBar.placeholder = @"Search local shader packs...";
+    self.emptyLabel.text = @"No shader packs found";
     self.emptyLabel.hidden = self.localShaders.count > 0;
     self.tableView.refreshControl.enabled = YES;
     [self updateNavigationButtons];
@@ -319,16 +319,16 @@
 // 删除选中的光影（带确认弹窗）
 - (void)deleteSelectedShaders {
     if (self.selectedShaders.count == 0) {
-        [self showSimpleAlertWithTitle:@"提示" message:@"尚未选择任何光影"];
+        [self showSimpleAlertWithTitle:@"Notice" message:@"No shader packs selected yet"];
         return;
     }
 
-    NSString *message = [NSString stringWithFormat:@"确定要删除选中的 %ld 个光影吗？\n此操作无法撤销。", (long)self.selectedShaders.count];
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"批量删除" message:message preferredStyle:UIAlertControllerStyleAlert];
+    NSString *message = [NSString stringWithFormat:@"Delete the %ld selected shader pack(s)?\nThis cannot be undone.", (long)self.selectedShaders.count];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Delete multiple" message:message preferredStyle:UIAlertControllerStyleAlert];
 
-    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
     __weak typeof(self) weakSelf = self;
-    [alert addAction:[UIAlertAction actionWithTitle:@"删除" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
+    [alert addAction:[UIAlertAction actionWithTitle:@"Delete" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
         [weakSelf performDeleteSelectedShaders];
     }]];
     [self presentViewController:alert animated:YES completion:nil];
@@ -364,7 +364,7 @@
         // 部分失败时保留选择模式，提示用户哪些失败
         NSMutableArray<NSString *> *names = [NSMutableArray array];
         for (ShaderItem *s in failedShaders) [names addObject:s.displayName];
-        [self showSimpleAlertWithTitle:[NSString stringWithFormat:@"删除完成，%ld 项失败", (long)failedShaders.count]
+        [self showSimpleAlertWithTitle:[NSString stringWithFormat:@"Deletion finished, %ld item(s) failed", (long)failedShaders.count]
                                message:[names componentsJoinedByString:@"\n"]];
         [self updateNavigationButtons];
         [self.tableView reloadData];
@@ -392,22 +392,22 @@
 // 更新导航栏标题，显示已选数量
 - (void)updateSelectModeTitle {
     if (self.isSelectMode) {
-        self.title = [NSString stringWithFormat:@"已选 %ld 个", (long)self.selectedShaders.count];
+        self.title = [NSString stringWithFormat:@"%ld selected", (long)self.selectedShaders.count];
     }
 }
 
 // 更新"全选"按钮的标题（已全选时显示"取消全选"）
 - (void)updateSelectAllButtonTitle {
     if (self.selectedShaders.count > 0 && self.selectedShaders.count == self.filteredLocalShaders.count && self.filteredLocalShaders.count > 0) {
-        self.navSelectAllButtonItem.title = @"取消全选";
+        self.navSelectAllButtonItem.title = @"Deselect all";
         self.toolbarSelectAllButtonItem.enabled = NO;
         self.toolbarDeselectAllButtonItem.enabled = YES;
     } else if (self.selectedShaders.count == 0) {
-        self.navSelectAllButtonItem.title = @"全选";
+        self.navSelectAllButtonItem.title = @"Select all";
         self.toolbarSelectAllButtonItem.enabled = YES;
         self.toolbarDeselectAllButtonItem.enabled = NO;
     } else {
-        self.navSelectAllButtonItem.title = @"全选";
+        self.navSelectAllButtonItem.title = @"Select all";
         self.toolbarSelectAllButtonItem.enabled = YES;
         self.toolbarDeselectAllButtonItem.enabled = YES;
     }
@@ -472,7 +472,7 @@
     NSError *dirError = nil;
     NSString *shadersDir = [[ShaderService sharedService] ensureShadersFolderForProfile:nil error:&dirError];
     if (!shadersDir) {
-        [self showSimpleAlertWithTitle:@"无法导入" message:dirError.localizedDescription ?: @"无法确定 shaderpacks 目录"];
+        [self showSimpleAlertWithTitle:@"Cannot import" message:dirError.localizedDescription ?: @"Could not determine the shaderpacks folder"];
         return;
     }
 
@@ -480,7 +480,7 @@
     UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc] initWithDocumentTypes:@[@"public.zip-archive", @"public.item"] inMode:UIDocumentPickerModeImport];
     picker.allowsMultipleSelection = YES;
     picker.delegate = self;
-    picker.title = @"选择光影包文件";
+    picker.title = @"Choose shader pack file";
     [self presentViewController:picker animated:YES completion:nil];
 }
 
@@ -490,7 +490,7 @@
     NSError *dirError = nil;
     NSString *shadersDir = [[ShaderService sharedService] ensureShadersFolderForProfile:nil error:&dirError];
     if (!shadersDir) {
-        [self showSimpleAlertWithTitle:@"导入失败" message:dirError.localizedDescription ?: @"无法确定 shaderpacks 目录"];
+        [self showSimpleAlertWithTitle:@"Import failed" message:dirError.localizedDescription ?: @"Could not determine the shaderpacks folder"];
         return;
     }
 
@@ -525,7 +525,7 @@
     [self refreshLocalShadersList];
 
     if (failedFiles.count > 0) {
-        [self showSimpleAlertWithTitle:[NSString stringWithFormat:@"导入完成（%ld 成功，%ld 失败）", (long)successCount, (long)failedFiles.count]
+        [self showSimpleAlertWithTitle:[NSString stringWithFormat:@"Import finished (%ld succeeded, %ld failed)", (long)successCount, (long)failedFiles.count]
                                message:[failedFiles componentsJoinedByString:@"\n"]];
     } else {
         NSLog(@"[ShadersManager] Successfully imported %ld shader packs", (long)successCount);
@@ -540,14 +540,14 @@
     // 将本地 ShaderItem 列表转换为 ModItem 列表，适配 ModUpdateViewController
     NSArray<ModItem *> *mods = [self convertShadersToMods:self.localShaders];
     if (mods.count == 0) {
-        [self showSimpleAlertWithTitle:@"提示" message:@"当前没有本地光影，无法检查更新。"];
+        [self showSimpleAlertWithTitle:@"Notice" message:@"There are no local shader packs, so there is nothing to check for updates."];
         return;
     }
 
     // 从当前 profile 的 lastVersionId 解析 gameVersion 和 loader
     NSString *lastVersionId = PLProfiles.current.selectedProfile[@"lastVersionId"];
     if (!lastVersionId || lastVersionId.length == 0) {
-        [self showSimpleAlertWithTitle:@"提示" message:@"无法获取当前版本信息。"];
+        [self showSimpleAlertWithTitle:@"Notice" message:@"Could not read the current version information."];
         return;
     }
 
@@ -659,7 +659,7 @@
     }
     self.emptyLabel.hidden = self.filteredLocalShaders.count > 0;
     if (!self.emptyLabel.hidden) {
-        self.emptyLabel.text = @"未找到本地光影";
+        self.emptyLabel.text = @"No local shader packs found";
     }
     // 更新导航按钮状态（"选择"按钮的可用性、"全选"按钮标题等）
     [self updateNavigationButtons];
@@ -697,17 +697,17 @@
     // 选择模式下禁用滑动删除，避免误操作
     if (self.isSelectMode) return nil;
 
-    UIContextualAction *deleteAction = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleDestructive title:@"删除" handler:^(UIContextualAction * _Nonnull action, __kindof UIView * _Nonnull sourceView, void (^ _Nonnull completionHandler)(BOOL)) {
+    UIContextualAction *deleteAction = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleDestructive title:@"Delete" handler:^(UIContextualAction * _Nonnull action, __kindof UIView * _Nonnull sourceView, void (^ _Nonnull completionHandler)(BOOL)) {
 
         ShaderItem *shaderToDelete = self.filteredLocalShaders[indexPath.row];
 
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"确认删除" message:[NSString stringWithFormat:@"确定要删除 %@ 吗？\n此操作无法撤销。", shaderToDelete.displayName] preferredStyle:UIAlertControllerStyleAlert];
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Confirm delete" message:[NSString stringWithFormat:@"Delete %@?\nThis cannot be undone.", shaderToDelete.displayName] preferredStyle:UIAlertControllerStyleAlert];
 
-        [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:^(UIAlertAction * _Nonnull action) {
+        [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:^(UIAlertAction * _Nonnull action) {
             completionHandler(NO);
         }]];
 
-        [alert addAction:[UIAlertAction actionWithTitle:@"删除" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
+        [alert addAction:[UIAlertAction actionWithTitle:@"Delete" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
             NSError *error = nil;
             [[ShaderService sharedService] deleteShader:shaderToDelete error:&error];
 
@@ -752,7 +752,7 @@
     // Find the primary file to download
     NSDictionary *primaryFile = version.primaryFile;
     if (!primaryFile || ![primaryFile[@"url"] isKindOfClass:[NSString class]]) {
-        [self showSimpleAlertWithTitle:@"错误" message:@"未找到有效的下载链接。"];
+        [self showSimpleAlertWithTitle:@"Error" message:@"No valid download link found."];
         return;
     }
 
@@ -767,7 +767,7 @@
     BOOL showProgressUI = YES;
     UIAlertController *downloadingAlert = nil;
     if (showProgressUI) {
-        downloadingAlert = [UIAlertController alertControllerWithTitle:@"正在下载"
+        downloadingAlert = [UIAlertController alertControllerWithTitle:@"Downloading"
                                                                                   message:[NSString stringWithFormat:@"%@...", item.displayName]
                                                                            preferredStyle:UIAlertControllerStyleAlert];
 
@@ -798,12 +798,12 @@
 
 - (void)showDownloadResultAlertForItem:(ShaderItem *)item error:(NSError *)error {
     if (error) {
-        [self showSimpleAlertWithTitle:@"下载失败" message:error.localizedDescription];
+        [self showSimpleAlertWithTitle:@"Download failed" message:error.localizedDescription];
     } else {
-        UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"下载成功"
-                                                                              message:[NSString stringWithFormat:@"%@ 已成功安装。", item.displayName]
+        UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"Download complete"
+                                                                              message:[NSString stringWithFormat:@"%@ was installed successfully.", item.displayName]
                                                                        preferredStyle:UIAlertControllerStyleAlert];
-        [successAlert addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        [successAlert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
             // After user acknowledges, refresh local shaders list
             [self refreshLocalShadersList];
         }]];
@@ -813,7 +813,7 @@
 
 - (void)showSimpleAlertWithTitle:(NSString *)title message:(NSString *)message {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:message preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleDefault handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];
 }
 
@@ -853,8 +853,8 @@
             [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:nil];
         }
     } else {
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"链接不可用" message:@"该光影没有可用的在线链接。" preferredStyle:UIAlertControllerStyleAlert];
-        [alert addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleDefault handler:nil]];
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Link unavailable" message:@"This shader pack has no online link available." preferredStyle:UIAlertControllerStyleAlert];
+        [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
         [self presentViewController:alert animated:YES completion:nil];
     }
 }

@@ -78,10 +78,10 @@ static NSString * const kMultiplayerEnabledKey = @"multiplayer.enabled";
 static NSString * const kDefaultMCPort = @"25565";
 
 /// 分享文本中的各种前缀标记（用于生成和解析）
-static NSString * const kShareHeaderLine = @"🎮 来联机吧！";
-static NSString * const kShareRoomNamePrefix = @"房间名称：";
-static NSString * const kShareNetworkIdPrefix = @"ZeroTier网络ID：";
-static NSString * const kShareServerAddressPrefix = @"服务器地址：";
+static NSString * const kShareHeaderLine = @"🎮 Let's play together!";
+static NSString * const kShareRoomNamePrefix = @"Room name: ";
+static NSString * const kShareNetworkIdPrefix = @"ZeroTier Network ID: ";
+static NSString * const kShareServerAddressPrefix = @"Server address: ";
 
 /// SOCKS5 代理默认端口（与 SOCKS5Proxy.h 中的 SOCKS5ProxyDefaultPort 一致）
 static uint16_t const kMultiplayerDefaultSOCKS5Port = 1080;
@@ -416,7 +416,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
                                                                              error:&startError];
         if (!started) {
             NSLog(@"[MultiplayerManager] App returned to foreground: node restart failed: %@",
-                  startError.localizedDescription ?: @"未知错误");
+                  startError.localizedDescription ?: @"Unknown error");
             return;
         }
 
@@ -435,7 +435,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
         NSError *joinError = nil;
         if (![[ZeroTierBridge sharedInstance] joinNetwork:netID error:&joinError]) {
             NSLog(@"[MultiplayerManager] App returned to foreground: re-join network failed: %@",
-                  joinError.localizedDescription ?: @"未知错误");
+                  joinError.localizedDescription ?: @"Unknown error");
             return;
         }
 
@@ -603,7 +603,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
         if (completion) {
             NSError *error = [NSError errorWithDomain:kMultiplayerErrorDomain
                                                   code:MultiplayerErrorCodeFrameworkUnavailable
-                                              userInfo:@{NSLocalizedDescriptionKey: @"ZeroTier 框架不可用，无法启动联机功能"}];
+                                              userInfo:@{NSLocalizedDescriptionKey: @"The ZeroTier framework is unavailable, so multiplayer cannot start"}];
             dispatch_async(dispatch_get_main_queue(), ^{
                 completion(NO, error);
             });
@@ -631,7 +631,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
         if (completion) {
             NSError *cbError = success ? nil : [NSError errorWithDomain:kMultiplayerErrorDomain
                                                                      code:MultiplayerErrorCodeNodeStartFailed
-                                                                 userInfo:@{NSLocalizedDescriptionKey: startError.localizedDescription ?: @"节点启动失败"}];
+                                                                 userInfo:@{NSLocalizedDescriptionKey: startError.localizedDescription ?: @"The node failed to start"}];
             dispatch_async(dispatch_get_main_queue(), ^{
                 completion(success, cbError);
             });
@@ -673,7 +673,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
         if (completion) {
             NSError *error = [NSError errorWithDomain:kMultiplayerErrorDomain
                                                   code:MultiplayerErrorCodeInvalidNetworkId
-                                              userInfo:@{NSLocalizedDescriptionKey: @"Network ID 为空"}];
+                                              userInfo:@{NSLocalizedDescriptionKey: @"The network ID is empty"}];
             dispatch_async(dispatch_get_main_queue(), ^{
                 completion(NO, error);
             });
@@ -688,7 +688,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
         if (completion) {
             NSError *error = [NSError errorWithDomain:kMultiplayerErrorDomain
                                                   code:MultiplayerErrorCodeInvalidNetworkId
-                                              userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Network ID 格式无效：%@", trimmedNetworkId]}];
+                                              userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Invalid network ID format: %@", trimmedNetworkId]}];
             dispatch_async(dispatch_get_main_queue(), ^{
                 completion(NO, error);
             });
@@ -714,7 +714,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
                 if (completion) {
                     NSError *error = [NSError errorWithDomain:kMultiplayerErrorDomain
                                                           code:MultiplayerErrorCodeInvalidNetworkId
-                                                      userInfo:@{NSLocalizedDescriptionKey: @"Network ID 解析失败"}];
+                                                      userInfo:@{NSLocalizedDescriptionKey: @"Could not parse the network ID"}];
                     dispatch_async(dispatch_get_main_queue(), ^{
                         completion(NO, error);
                     });
@@ -733,7 +733,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
             if (completion) {
                 NSError *cbError = success ? nil : [NSError errorWithDomain:kMultiplayerErrorDomain
                                                                           code:MultiplayerErrorCodeJoinNetworkFailed
-                                                                      userInfo:@{NSLocalizedDescriptionKey: joinError.localizedDescription ?: @"加入网络失败"}];
+                                                                      userInfo:@{NSLocalizedDescriptionKey: joinError.localizedDescription ?: @"Failed to join the network"}];
                 dispatch_async(dispatch_get_main_queue(), ^{
                     completion(success, cbError);
                 });
@@ -785,7 +785,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     }
 
     if (!room.name || room.name.length == 0) {
-        room.name = @"未命名房间";
+        room.name = @"Untitled room";
     }
 
     if (!room.hostPort || room.hostPort.length == 0) {
@@ -960,7 +960,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
         if (completion) {
             NSError *error = [NSError errorWithDomain:kMultiplayerErrorDomain
                                                   code:MultiplayerErrorCodeInvalidRoom
-                                              userInfo:@{NSLocalizedDescriptionKey: @"房间对象为空"}];
+                                              userInfo:@{NSLocalizedDescriptionKey: @"The room object is empty"}];
             dispatch_async(dispatch_get_main_queue(), ^{
                 completion(NO, error);
             });
@@ -972,7 +972,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
         if (completion) {
             NSError *error = [NSError errorWithDomain:kMultiplayerErrorDomain
                                                   code:MultiplayerErrorCodeInvalidNetworkId
-                                              userInfo:@{NSLocalizedDescriptionKey: @"房间的 Network ID 为空"}];
+                                              userInfo:@{NSLocalizedDescriptionKey: @"The room's network ID is empty"}];
             dispatch_async(dispatch_get_main_queue(), ^{
                 completion(NO, error);
             });
@@ -988,7 +988,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
         if (completion) {
             NSError *error = [NSError errorWithDomain:kMultiplayerErrorDomain
                                                   code:MultiplayerErrorCodeFrameworkUnavailable
-                                              userInfo:@{NSLocalizedDescriptionKey: @"ZeroTier 框架不可用，请确保 zt.framework 已正确集成"}];
+                                              userInfo:@{NSLocalizedDescriptionKey: @"The ZeroTier framework is unavailable. Make sure zt.framework is integrated correctly"}];
             dispatch_async(dispatch_get_main_queue(), ^{
                 completion(NO, error);
             });
@@ -1129,7 +1129,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
         if (completion) {
             completion(NO, [NSError errorWithDomain:kMultiplayerErrorDomain
                                                 code:MultiplayerErrorCodeRoomNotFound
-                                            userInfo:@{NSLocalizedDescriptionKey: @"连接已取消"}]);
+                                            userInfo:@{NSLocalizedDescriptionKey: @"Connection cancelled"}]);
         }
         return;
     }
@@ -1141,7 +1141,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     // framework 可用性检查在 connectToRoom 入口已做，此处不再重复。
     if (![self isNodeStarted]) {
         NSLog(@"[MultiplayerManager] [ConnectFlow] Step 1: Starting ZeroTier node");
-        [self notifyConnectionProgress:@"步骤 1/6：正在启动 ZeroTier 节点..."];
+        [self notifyConnectionProgress:@"Step 1/6: starting the ZeroTier node..."];
         NSString *homeDir = [self zeroTierHomeDirectory];
         NSError *startError = nil;
         BOOL nodeStartSuccess = [[ZeroTierBridge sharedInstance] startNodeWithHomeDirectory:homeDir
@@ -1156,7 +1156,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
             if (completion) {
                 completion(NO, startError ?: [NSError errorWithDomain:kMultiplayerErrorDomain
                                                                    code:MultiplayerErrorCodeNodeStartFailed
-                                                               userInfo:@{NSLocalizedDescriptionKey: @"节点启动失败"}]);
+                                                               userInfo:@{NSLocalizedDescriptionKey: @"The node failed to start"}]);
             }
             return;
         }
@@ -1172,19 +1172,19 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
         if (completion) {
             completion(NO, [NSError errorWithDomain:kMultiplayerErrorDomain
                                                 code:MultiplayerErrorCodeRoomNotFound
-                                            userInfo:@{NSLocalizedDescriptionKey: @"连接已取消"}]);
+                                            userInfo:@{NSLocalizedDescriptionKey: @"Connection cancelled"}]);
         }
         return;
     }
     NSLog(@"[MultiplayerManager] [ConnectFlow] Step 2: Waiting for node online (timeout %.0fs)", kNodeOnlineTimeout);
-    [self notifyConnectionProgress:@"步骤 2/6：正在等待节点上线..."];
+    [self notifyConnectionProgress:@"Step 2/6: waiting for the node to come online..."];
     if (![[ZeroTierBridge sharedInstance] isNodeOnline]) {
         BOOL online = [[ZeroTierBridge sharedInstance] waitForNodeOnlineWithTimeout:kNodeOnlineTimeout];
         if (!online) {
             if (completion) {
                 completion(NO, [NSError errorWithDomain:kMultiplayerErrorDomain
                                                     code:MultiplayerErrorCodeNodeOnlineTimeout
-                                                userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"等待 ZeroTier 节点上线超时（%.0fs）", kNodeOnlineTimeout]}]);
+                                                userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Timed out waiting for the ZeroTier node to come online (%.0fs)", kNodeOnlineTimeout]}]);
             }
             return;
         }
@@ -1199,18 +1199,18 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
         if (completion) {
             completion(NO, [NSError errorWithDomain:kMultiplayerErrorDomain
                                                 code:MultiplayerErrorCodeRoomNotFound
-                                            userInfo:@{NSLocalizedDescriptionKey: @"连接已取消"}]);
+                                            userInfo:@{NSLocalizedDescriptionKey: @"Connection cancelled"}]);
         }
         return;
     }
     NSLog(@"[MultiplayerManager] [ConnectFlow] Step 3: Joining ZeroTier network %@", room.networkId);
-    [self notifyConnectionProgress:[NSString stringWithFormat:@"步骤 3/6：正在加入 ZeroTier 网络 %@...", room.networkId]];
+    [self notifyConnectionProgress:[NSString stringWithFormat:@"Step 3/6: joining ZeroTier network %@...", room.networkId]];
     uint64_t netID = [ZeroTierBridge parseNetworkIDFromString:room.networkId];
     if (netID == 0) {
         if (completion) {
             completion(NO, [NSError errorWithDomain:kMultiplayerErrorDomain
                                                 code:MultiplayerErrorCodeInvalidNetworkId
-                                            userInfo:@{NSLocalizedDescriptionKey: @"Network ID 解析失败"}]);
+                                            userInfo:@{NSLocalizedDescriptionKey: @"Could not parse the network ID"}]);
         }
         return;
     }
@@ -1220,7 +1220,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
         if (completion) {
             completion(NO, [NSError errorWithDomain:kMultiplayerErrorDomain
                                                 code:MultiplayerErrorCodeJoinNetworkFailed
-                                            userInfo:@{NSLocalizedDescriptionKey: joinError.localizedDescription ?: @"加入网络失败"}]);
+                                            userInfo:@{NSLocalizedDescriptionKey: joinError.localizedDescription ?: @"Failed to join the network"}]);
         }
         return;
     }
@@ -1237,12 +1237,12 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
         if (completion) {
             completion(NO, [NSError errorWithDomain:kMultiplayerErrorDomain
                                                 code:MultiplayerErrorCodeRoomNotFound
-                                            userInfo:@{NSLocalizedDescriptionKey: @"连接已取消"}]);
+                                            userInfo:@{NSLocalizedDescriptionKey: @"Connection cancelled"}]);
         }
         return;
     }
     NSLog(@"[MultiplayerManager] [ConnectFlow] Step 4: Waiting for network ready (timeout %.0fs)", kNetworkReadyTimeout);
-    [self notifyConnectionProgress:@"步骤 4/6：正在等待网络就绪..."];
+    [self notifyConnectionProgress:@"Step 4/6: waiting for the network to be ready..."];
 
     // 8 秒后检查是否需要授权提示
     // SubTask 5.7：如果 8 秒内未分配到 IP，显示房客自己的 ZeroTier 节点 ID 供房主查找
@@ -1266,11 +1266,11 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
             // 已加入网络但没有 IP = Private 网络未授权
             // 显示房客自己的 ZeroTier 节点 ID，方便房主在 central.zerotier.com 后台查找并授权
             uint64_t myNodeID = [[ZeroTierBridge sharedInstance] nodeID];
-            NSString *nodeIDStr = (myNodeID != 0) ? [ZeroTierBridge formatNetworkID:myNodeID] : @"（未知）";
-            [weakSelf notifyConnectionProgress:[NSString stringWithFormat:@"仍在等待网络就绪...你的节点可能未被授权。你的 ZeroTier 节点 ID：%@，请将此 ID 发给房主，让房主在 central.zerotier.com 后台的 Member Devices 中勾选 Auth 复选框", nodeIDStr]];
+            NSString *nodeIDStr = (myNodeID != 0) ? [ZeroTierBridge formatNetworkID:myNodeID] : @"(unknown)";
+            [weakSelf notifyConnectionProgress:[NSString stringWithFormat:@"Still waiting for the network to be ready... your node may not be authorized. Your ZeroTier node ID is %@ — send it to the host and ask them to tick the Auth checkbox under Member Devices at central.zerotier.com", nodeIDStr]];
         } else if (status == ZeroTierNetworkStatusUnknown || status == ZeroTierNetworkStatusRequestingConfig) {
             // 仍在请求加入网络
-            [weakSelf notifyConnectionProgress:@"仍在请求加入网络，请稍候..."];
+            [weakSelf notifyConnectionProgress:@"Still requesting to join the network, please wait..."];
         }
     });
 
@@ -1292,20 +1292,20 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
         NSString *failDesc = nil;
         if (failStatus == ZeroTierNetworkStatusAccessDenied) {
             failDesc = myNodeIDStr
-                ? [NSString stringWithFormat:@"网络访问被拒绝。你的 ZeroTier 节点 ID：%@，请将此 ID 发给房主，让房主在 central.zerotier.com 后台的 Member Devices 中勾选你设备的 Auth 复选框。", myNodeIDStr]
-                : @"网络访问被拒绝。请联系房主在 central.zerotier.com 后台授权你的设备。";
+                ? [NSString stringWithFormat:@"Network access was denied. Your ZeroTier node ID is %@ — send it to the host and ask them to tick the Auth checkbox for your device under Member Devices at central.zerotier.com.", myNodeIDStr]
+                : @"Network access was denied. Ask the host to authorize your device at central.zerotier.com.";
         } else if (failStatus == ZeroTierNetworkStatusNotFound) {
-            failDesc = @"网络不存在，请检查分享代码是否完整或联系房主确认 Network ID。";
+            failDesc = @"The network does not exist. Check that the share code is complete, or ask the host to confirm the network ID.";
         } else if (failStatus == ZeroTierNetworkStatusClientTooOld) {
-            failDesc = @"ZeroTier 客户端版本过旧，无法加入网络。请更新 zt.framework 后重试。";
+            failDesc = @"The ZeroTier client is too old to join the network. Update zt.framework and try again.";
         } else if (failStatus == ZeroTierNetworkStatusDown) {
-            failDesc = @"网络控制器不可达，请稍后重试或联系房主检查网络状态。";
+            failDesc = @"The network controller is unreachable. Try again later or ask the host to check the network status.";
         } else if (failStatus == ZeroTierNetworkStatusOk) {
             failDesc = myNodeIDStr
-                ? [NSString stringWithFormat:@"已加入网络但未分配到 IP 地址。你的 ZeroTier 节点 ID：%@，请将此 ID 发给房主，让房主在 central.zerotier.com 后台的 Member Devices 中勾选你设备的 Auth 复选框。", myNodeIDStr]
-                : @"已加入网络但未分配到 IP 地址。你的节点可能未被授权，请提醒房主在 central.zerotier.com 后台的 Member Devices 中授权你的设备（勾选 Auth 复选框）。";
+                ? [NSString stringWithFormat:@"Joined the network but no IP address was assigned. Your ZeroTier node ID is %@ — send it to the host and ask them to tick the Auth checkbox for your device under Member Devices at central.zerotier.com.", myNodeIDStr]
+                : @"Joined the network but no IP address was assigned. Your node may not be authorized — ask the host to authorize your device under Member Devices at central.zerotier.com (tick the Auth checkbox).";
         } else {
-            failDesc = [NSString stringWithFormat:@"等待 ZeroTier 网络就绪超时（%.0fs）。请确认网络 ID 正确且节点已在 central.zerotier.com 后台授权。", kNetworkReadyTimeout];
+            failDesc = [NSString stringWithFormat:@"Timed out waiting for the ZeroTier network to be ready (%.0fs). Check that the network ID is correct and that your node is authorized at central.zerotier.com.", kNetworkReadyTimeout];
         }
 
         if (completion) {
@@ -1340,7 +1340,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
         if (completion) {
             completion(NO, [NSError errorWithDomain:kMultiplayerErrorDomain
                                                 code:MultiplayerErrorCodeNetworkReadyTimeout
-                                            userInfo:@{NSLocalizedDescriptionKey: @"已加入 ZeroTier 网络但未分配到本地 IP，可能是网络授权未通过或地址耗尽"}]);
+                                            userInfo:@{NSLocalizedDescriptionKey: @"Joined the ZeroTier network but no local IP was assigned — the network may not have authorized you, or its addresses are exhausted"}]);
         }
         return;
     }
@@ -1392,12 +1392,12 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
         if (completion) {
             completion(NO, [NSError errorWithDomain:kMultiplayerErrorDomain
                                                 code:MultiplayerErrorCodeRoomNotFound
-                                            userInfo:@{NSLocalizedDescriptionKey: @"连接已取消"}]);
+                                            userInfo:@{NSLocalizedDescriptionKey: @"Connection cancelled"}]);
         }
         return;
     }
     NSLog(@"[MultiplayerManager] [ConnectFlow] Step 5: Starting SOCKS5 proxy");
-    [self notifyConnectionProgress:@"步骤 5/6：正在启动 SOCKS5 代理..."];
+    [self notifyConnectionProgress:@"Step 5/6: starting the SOCKS5 proxy..."];
     NSError *proxyError = nil;
     BOOL proxyStarted = [[SOCKS5Proxy sharedProxy] startWithPort:kMultiplayerDefaultSOCKS5Port
                                                             error:&proxyError];
@@ -1411,7 +1411,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
         if (completion) {
             completion(NO, [NSError errorWithDomain:kMultiplayerErrorDomain
                                                 code:MultiplayerErrorCodeSOCKS5ProxyStartFailed
-                                            userInfo:@{NSLocalizedDescriptionKey: proxyError.localizedDescription ?: @"SOCKS5 代理启动失败"}]);
+                                            userInfo:@{NSLocalizedDescriptionKey: proxyError.localizedDescription ?: @"Failed to start the SOCKS5 proxy"}]);
         }
         return;
     }
@@ -1437,7 +1437,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     //     - 房主模式：不在此处启动，等待 UI 层调用
     //       startHostPortForwarderWithListenPort:localHostPort: 启动房主模式
     //       （ZeroTier 网络监听 25565 → 转发到本地 MC LAN 端口）。
-    [self notifyConnectionProgress:@"步骤 6/6：正在设置代理和端口转发..."];
+    [self notifyConnectionProgress:@"Step 6/6: setting up the proxy and port forwarding..."];
     NSString *proxyValue = [NSString stringWithFormat:@"127.0.0.1:%u", actualPort];
     setenv([kAMETHYSTSOCKS5ProxyEnvVar UTF8String], [proxyValue UTF8String], 1);
     NSLog(@"[MultiplayerManager] [ConnectFlow] Set environment variable %@=%@", kAMETHYSTSOCKS5ProxyEnvVar, proxyValue);
@@ -1882,25 +1882,25 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
 - (void)zeroTierNetworkNotFound:(uint64_t)networkID {
     NSLog(@"[MultiplayerManager] ZeroTier network not found: networkID=%llu", networkID);
     [self handleNetworkFailure:networkID
-              errorDescription:@"网络不存在，请检查 Network ID 是否正确。"];
+              errorDescription:@"The network does not exist. Check that the network ID is correct."];
 }
 
 - (void)zeroTierNetworkAccessDenied:(uint64_t)networkID {
     NSLog(@"[MultiplayerManager] ZeroTier network access denied: networkID=%llu", networkID);
     [self handleNetworkFailure:networkID
-              errorDescription:@"网络访问被拒绝。请联系房主在 central.zerotier.com 后台授权你的设备。"];
+              errorDescription:@"Network access was denied. Ask the host to authorize your device at central.zerotier.com."];
 }
 
 - (void)zeroTierNetworkClientTooOld:(uint64_t)networkID {
     NSLog(@"[MultiplayerManager] ZeroTier client too old: networkID=%llu", networkID);
     [self handleNetworkFailure:networkID
-              errorDescription:@"ZeroTier 客户端版本过旧，无法加入网络。请更新 zt.framework 后重试。"];
+              errorDescription:@"The ZeroTier client is too old to join the network. Update zt.framework and try again."];
 }
 
 - (void)zeroTierNetworkDown:(uint64_t)networkID {
     NSLog(@"[MultiplayerManager] ZeroTier network controller unreachable: networkID=%llu", networkID);
     [self handleNetworkFailure:networkID
-              errorDescription:@"网络控制器不可达，请稍后重试或联系房主检查网络状态。"];
+              errorDescription:@"The network controller is unreachable. Try again later or ask the host to check the network status."];
 }
 
 #pragma mark - 分享功能
@@ -1910,10 +1910,10 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
         return @"";
     }
 
-    NSString *name = room.name ?: @"未命名房间";
+    NSString *name = room.name ?: @"Untitled room";
     NSString *networkId = room.networkId ?: @"";
     // hostIP 可能为空字符串（房主尚未连接房间时），此时显示提示
-    NSString *hostIP = (room.hostIP && room.hostIP.length > 0) ? room.hostIP : @"（房主连接房间后自动显示）";
+    NSString *hostIP = (room.hostIP && room.hostIP.length > 0) ? room.hostIP : @"(shown automatically once the host connects to the room)";
     NSString *hostPort = (room.hostPort && room.hostPort.length > 0) ? room.hostPort : kDefaultMCPort;
 
     // 关键修复（M7）：IPv6 地址在 host:port 格式中必须用方括号包裹。
@@ -1947,12 +1947,12 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     [text appendString:@"\n"];
 
     [text appendString:@"\n"];
-    [text appendString:@"加入步骤：\n"];
-    [text appendString:@"1. 在启动器联机页面输入上方的 ZeroTier 网络 ID\n"];
-    [text appendString:@"2. 点击「加入房间」，启动器会自动启动联机核心并连接\n"];
-    [text appendFormat:@"3. 连接成功后启动游戏，在 MC 中添加服务器：%@", serverAddress];
+    [text appendString:@"How to join:\n"];
+    [text appendString:@"1. Enter the ZeroTier network ID above on the launcher's multiplayer page\n"];
+    [text appendString:@"2. Tap \"Join room\" and the launcher will start the multiplayer core and connect automatically\n"];
+    [text appendFormat:@"3. Once connected, start the game and add this server in Minecraft: %@", serverAddress];
     [text appendString:@"\n\n"];
-    [text appendString:@"提示：房主需先在启动器内连接房间并启动游戏（或开放局域网），加入者才能连入。"];
+    [text appendString:@"Tip: the host must connect to the room in the launcher and start the game (or open it to LAN) before anyone else can join."];
 
     return [text copy];
 }
@@ -1972,7 +1972,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     // ========== 1. 逐行匹配带前缀的字段 ==========
 
     NSRegularExpression *nameRegex = [NSRegularExpression
-        regularExpressionWithPattern:@"房间名称[：:]?\\s*(.+)"
+        regularExpressionWithPattern:@"(?:房间名称|Room\\s*name)[：:]?\\s*(.+)"
                              options:NSRegularExpressionCaseInsensitive
                                error:nil];
 
@@ -1991,7 +1991,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     // 所以解析时只需匹配带方括号的格式即可。
     // IPv6 地址中的方括号会保留在 hostIP 中，便于后续识别地址类型。
     NSRegularExpression *addressRegex = [NSRegularExpression
-        regularExpressionWithPattern:@"服务器地址[：:]?\\s*((?:[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}|\\[[0-9a-fA-F:]+\\]))(?::([0-9]{1,5}))?"
+        regularExpressionWithPattern:@"(?:服务器地址|Server\\s*address)[：:]?\\s*((?:[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}|\\[[0-9a-fA-F:]+\\]))(?::([0-9]{1,5}))?"
                              options:0
                                error:nil];
 
@@ -2085,7 +2085,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     }
 
     if (!roomName || roomName.length == 0) {
-        roomName = @"导入的房间";
+        roomName = @"Imported room";
     }
 
     if (!hostPort || hostPort.length == 0) {
@@ -2104,7 +2104,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
                                                        networkId:networkId
                                                           hostIP:hostIP
                                                         hostPort:hostPort];
-    room.roomDescription = @"从分享文本导入";
+    room.roomDescription = @"Imported from shared text";
     room.status = MultiplayerRoomStatusDisconnected;
 
     NSLog(@"[MultiplayerManager] Successfully parsed share text: name=%@, networkId=%@, host=%@:%@",

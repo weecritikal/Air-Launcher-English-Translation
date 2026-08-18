@@ -817,7 +817,7 @@ static UIColor *dpvc_fileTypeColor(NSString *fileName) {
     self.summaryTitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.summaryTitleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
     self.summaryTitleLabel.textColor = [UIColor secondaryLabelColor];
-    self.summaryTitleLabel.text = localize(@"download.progress.downloading", @"正在下载...");
+    self.summaryTitleLabel.text = localize(@"download.progress.downloading", @"Downloading...");
     [self.summaryCardView addSubview:self.summaryTitleLabel];
 
     // 自定义线性进度条（主题色，胶囊形，平滑动画）
@@ -971,13 +971,13 @@ static UIColor *dpvc_fileTypeColor(NSString *fileName) {
 
             // 更新标题
             if (progress.finished) {
-                self.summaryTitleLabel.text = localize(@"download.progress.completed", @"下载完成");
+                self.summaryTitleLabel.text = localize(@"download.progress.completed", @"Download complete");
                 self.summaryIconView.image = [UIImage systemImageNamed:@"checkmark.circle.fill"];
                 self.summaryIconView.tintColor = [UIColor systemGreenColor];
                 [self.summaryIconView.layer removeAllAnimations]; // 停止呼吸动画
                 self.summaryProgressBar.fillColor = [UIColor systemGreenColor];
             } else {
-                self.summaryTitleLabel.text = localize(@"download.progress.downloading", @"正在下载...");
+                self.summaryTitleLabel.text = localize(@"download.progress.downloading", @"Downloading...");
             }
 
             // 更新进度条
@@ -1076,26 +1076,26 @@ static UIColor *dpvc_fileTypeColor(NSString *fileName) {
 ///   >= 3600 秒 → "约 X 小时 Y 分"
 - (NSString *)formatETA:(NSInteger)etaSeconds {
     if (etaSeconds <= 0) {
-        return localize(@"download.progress.eta.soon", @"即将完成");
+        return localize(@"download.progress.eta.soon", @"Almost done");
     }
 
     if (etaSeconds < 60) {
-        return [NSString stringWithFormat:localize(@"download.progress.eta.about_seconds", @"约 %ld 秒"), (long)etaSeconds];
+        return [NSString stringWithFormat:localize(@"download.progress.eta.about_seconds", @"About %ld sec"), (long)etaSeconds];
     }
 
     if (etaSeconds < 3600) {
         // 四舍五入到分钟（< 60 秒部分 > 30 秒则进位）
         NSInteger minutes = (etaSeconds + 30) / 60;
-        return [NSString stringWithFormat:localize(@"download.progress.eta.about_minutes", @"约 %ld 分钟"), (long)minutes];
+        return [NSString stringWithFormat:localize(@"download.progress.eta.about_minutes", @"About %ld min"), (long)minutes];
     }
 
     // >= 1 小时
     NSInteger hours = etaSeconds / 3600;
     NSInteger minutes = (etaSeconds % 3600) / 60;
     if (minutes > 0) {
-        return [NSString stringWithFormat:localize(@"download.progress.eta.about_hours_minutes", @"约 %ld 小时 %ld 分"), (long)hours, (long)minutes];
+        return [NSString stringWithFormat:localize(@"download.progress.eta.about_hours_minutes", @"About %ld hr %ld min"), (long)hours, (long)minutes];
     }
-    return [NSString stringWithFormat:localize(@"download.progress.eta.about_hours", @"约 %ld 小时"), (long)hours];
+    return [NSString stringWithFormat:localize(@"download.progress.eta.about_hours", @"About %ld hr"), (long)hours];
 }
 
 // ============================================================================

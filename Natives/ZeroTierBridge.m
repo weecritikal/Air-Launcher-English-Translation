@@ -133,11 +133,11 @@ static void zeroTierEventCallback(void *msgPtr) {
 
 - (BOOL)startNodeWithHomeDirectory:(NSString *)homeDir error:(NSError **)error {
     if (!homeDir.length) {
-        if (error) *error = [NSError errorWithDomain:kZeroTierErrorDomain code:ZeroTierErrorCodeInvalidArgument userInfo:@{NSLocalizedDescriptionKey: @"主页目录路径无效"}];
+        if (error) *error = [NSError errorWithDomain:kZeroTierErrorDomain code:ZeroTierErrorCodeInvalidArgument userInfo:@{NSLocalizedDescriptionKey: @"The home directory path is invalid"}];
         return NO;
     }
     if (![self isFrameworkAvailable]) {
-        if (error) *error = [NSError errorWithDomain:kZeroTierErrorDomain code:ZeroTierErrorCodeFrameworkUnavailable userInfo:@{NSLocalizedDescriptionKey: @"ZeroTier framework 不可用（stub 模式）"}];
+        if (error) *error = [NSError errorWithDomain:kZeroTierErrorDomain code:ZeroTierErrorCodeFrameworkUnavailable userInfo:@{NSLocalizedDescriptionKey: @"The ZeroTier framework is unavailable (stub mode)"}];
         return NO;
     }
     // 已启动则直接返回 YES
@@ -161,19 +161,19 @@ static void zeroTierEventCallback(void *msgPtr) {
 
     int result = zts_init_from_storage([homeDir UTF8String]);
     if (result != ZTS_ERR_OK) {
-        if (error) *error = [NSError errorWithDomain:kZeroTierErrorDomain code:ZeroTierErrorCodeNodeStartFailed userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"初始化存储目录失败 (code=%d)", result]}];
+        if (error) *error = [NSError errorWithDomain:kZeroTierErrorDomain code:ZeroTierErrorCodeNodeStartFailed userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Failed to initialize the storage directory (code=%d)", result]}];
         zts_node_stop();
         return NO;
     }
     result = zts_init_set_event_handler(zeroTierEventCallback);
     if (result != ZTS_ERR_OK) {
-        if (error) *error = [NSError errorWithDomain:kZeroTierErrorDomain code:ZeroTierErrorCodeNodeStartFailed userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"设置事件回调失败 (code=%d)", result]}];
+        if (error) *error = [NSError errorWithDomain:kZeroTierErrorDomain code:ZeroTierErrorCodeNodeStartFailed userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Failed to set the event callback (code=%d)", result]}];
         zts_node_stop();
         return NO;
     }
     result = zts_node_start();
     if (result != ZTS_ERR_OK) {
-        if (error) *error = [NSError errorWithDomain:kZeroTierErrorDomain code:ZeroTierErrorCodeNodeStartFailed userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"节点启动失败 (code=%d)", result]}];
+        if (error) *error = [NSError errorWithDomain:kZeroTierErrorDomain code:ZeroTierErrorCodeNodeStartFailed userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"The node failed to start (code=%d)", result]}];
         zts_node_stop();
         return NO;
     }
@@ -255,12 +255,12 @@ static void zeroTierEventCallback(void *msgPtr) {
     BOOL started = _isStarted;
     [_lock unlock];
     if (!started) {
-        if (error) *error = [NSError errorWithDomain:kZeroTierErrorDomain code:ZeroTierErrorCodeNodeNotStarted userInfo:@{NSLocalizedDescriptionKey: @"ZeroTier 节点未启动"}];
+        if (error) *error = [NSError errorWithDomain:kZeroTierErrorDomain code:ZeroTierErrorCodeNodeNotStarted userInfo:@{NSLocalizedDescriptionKey: @"The ZeroTier node is not running"}];
         return NO;
     }
     int result = zts_net_join(networkID);
     if (result != ZTS_ERR_OK) {
-        if (error) *error = [NSError errorWithDomain:kZeroTierErrorDomain code:ZeroTierErrorCodeNetworkJoinFailed userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"加入网络失败 (code=%d)", result]}];
+        if (error) *error = [NSError errorWithDomain:kZeroTierErrorDomain code:ZeroTierErrorCodeNetworkJoinFailed userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Failed to join the network (code=%d)", result]}];
         return NO;
     }
     [_lock lock];

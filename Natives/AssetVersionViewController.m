@@ -29,10 +29,10 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
         items = @[
-            @{ @"key": kSortRelevance, @"title": @"相关性" },
-            @{ @"key": kSortDownloads, @"title": @"下载量" },
-            @{ @"key": kSortUpdated,   @"title": @"最新更新" },
-            @{ @"key": kSortCreated,   @"title": @"创建时间" },
+            @{ @"key": kSortRelevance, @"title": @"Relevance" },
+            @{ @"key": kSortDownloads, @"title": @"Downloads" },
+            @{ @"key": kSortUpdated,   @"title": @"Recently updated" },
+            @{ @"key": kSortCreated,   @"title": @"Created" },
         ];
     });
     return items;
@@ -153,7 +153,7 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
 
     // 用 DownloadViewController 传入的项目展示信息填充
     [self.detailHeaderView configureWithIconURL:self.projectIconURL
-                                          title:self.projectDisplayName ?: @"未知项目"
+                                          title:self.projectDisplayName ?: @"Unknown project"
                                          author:self.projectAuthor
                                       downloads:self.projectDownloads
                                           likes:self.projectLikes
@@ -193,11 +193,11 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
 // 根据资产类型返回默认导航栏标题
 - (NSString *)titleForAssetType {
     switch (self.assetType) {
-        case AssetVersionTypeResourcePack: return @"选择资源包版本";
-        case AssetVersionTypeDataPack:     return @"选择数据包版本";
-        case AssetVersionTypeWorld:        return @"选择世界版本";
+        case AssetVersionTypeResourcePack: return @"Select resource pack version";
+        case AssetVersionTypeDataPack:     return @"Select data pack version";
+        case AssetVersionTypeWorld:        return @"Select world version";
     }
-    return @"选择版本";
+    return @"Select version";
 }
 
 #pragma mark - 侧边筛选面板（chips 筛选条，阶段3统一）
@@ -230,21 +230,21 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
         UIScrollView *scrollOut = nil;
         UIStackView *chipOut = nil;
         UIStackView *versionRow = [self createFilterRowWithIconName:@"gamecontroller.fill"
-                                                              label:@"版本"
+                                                              label:@"Version"
                                                          scrollStackOut:&scrollOut
                                                            chipStackOut:&chipOut];
         self.versionScrollView = scrollOut;
         self.versionChipStack = chipOut;
         [self.filterMainStack addArrangedSubview:versionRow];
     }
-    [self addChipToStack:self.versionChipStack title:@"加载中..." selected:NO action:NULL];
+    [self addChipToStack:self.versionChipStack title:@"Loading..." selected:NO action:NULL];
 
     // ----- 第 2 行：排序方式筛选（相关性 / 下载量 / 最新更新 / 创建时间）-----
     {
         UIScrollView *scrollOut = nil;
         UIStackView *chipOut = nil;
         UIStackView *sortRow = [self createFilterRowWithIconName:@"arrow.up.arrow.down"
-                                                           label:@"排序"
+                                                           label:@"Sort"
                                                       scrollStackOut:&scrollOut
                                                         chipStackOut:&chipOut];
         self.sortScrollView = scrollOut;
@@ -514,10 +514,10 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
             [self.activityIndicator stopAnimating];
             if (error) {
                 NSLog(@"[AssetVersionVC] Failed to fetch version list: %@", error);
-                UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"错误"
-                                                                                message:@"无法获取版本信息"
+                UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Error"
+                                                                                message:@"Could not fetch version information"
                                                                          preferredStyle:UIAlertControllerStyleAlert];
-                [alert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
+                [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
                 [self presentViewController:alert animated:YES completion:nil];
                 return;
             }
@@ -531,7 +531,7 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
 #pragma mark - 筛选 + 排序
 
 - (void)processFilters {
-    NSMutableSet<NSString *> *gameVersions = [NSMutableSet setWithObject:@"全部"];
+    NSMutableSet<NSString *> *gameVersions = [NSMutableSet setWithObject:@"All"];
 
     for (ModVersion *version in self.allVersions) {
         for (NSString *gameVersion in version.gameVersions) {
@@ -541,14 +541,14 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
 
     // 游戏版本按语义版本号倒序排列（新版本在前），"全部"始终在最前
     self.availableGameVersions = [[gameVersions allObjects] sortedArrayUsingComparator:^NSComparisonResult(NSString *obj1, NSString *obj2) {
-        if ([obj1 isEqualToString:@"全部"]) return NSOrderedAscending;
-        if ([obj2 isEqualToString:@"全部"]) return NSOrderedDescending;
+        if ([obj1 isEqualToString:@"All"]) return NSOrderedAscending;
+        if ([obj2 isEqualToString:@"All"]) return NSOrderedDescending;
         return [obj2 compare:obj1 options:NSNumericSearch];
     }];
 
     // FCL 风格：默认选中"全部"，但如果 preferredGameVersion 在可选列表中，则自动选中匹配项
     // 阶段3统一：补齐与 ModVersionViewController 不对称的 preferred 自动选中逻辑
-    self.selectedGameVersion = self.availableGameVersions.firstObject ?: @"全部";
+    self.selectedGameVersion = self.availableGameVersions.firstObject ?: @"All";
 
     // 自动选中 preferred 版本（大小写不敏感比较）
     if (self.preferredGameVersion.length > 0) {
@@ -570,7 +570,7 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
 - (void)applyFiltersAndSort {
     // ----- 1. 筛选：游戏版本（资产类型无加载器概念）-----
     NSPredicate *predicate = [NSPredicate predicateWithBlock:^BOOL(ModVersion *evaluatedObject, NSDictionary *bindings) {
-        return [self.selectedGameVersion isEqualToString:@"全部"] ||
+        return [self.selectedGameVersion isEqualToString:@"All"] ||
                [evaluatedObject.gameVersions containsObject:self.selectedGameVersion];
     }];
     NSArray<ModVersion *> *filtered = [self.allVersions filteredArrayUsingPredicate:predicate];

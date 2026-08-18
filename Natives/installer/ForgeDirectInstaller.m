@@ -62,14 +62,14 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
 
     @try {
         NSLog(@"[ForgeDirect] Starting installation: %@", versionId);
-        reportProgress(0.0, @"开始安装");
+        reportProgress(0.0, @"Starting installation");
         if (error) {
             *error = nil;
         }
 
         // Step 1 & 2: Open jar as ZIP and read install_profile.json
         NSLog(@"[ForgeDirect] Reading install_profile.json");
-        reportProgress(0.05, @"正在读取 install_profile.json");
+        reportProgress(0.05, @"Reading install_profile.json");
         NSData *profileData = [self dataFromZip:installerPath entry:@"install_profile.json" error:error];
         if (!profileData) {
             NSLog(@"[ForgeDirect] Failed to read install_profile.json");
@@ -84,7 +84,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
 
         // Step 3: Parse install_profile.json
         NSLog(@"[ForgeDirect] Parsing install_profile.json");
-        reportProgress(0.1, @"正在解析 JSON 并检测格式");
+        reportProgress(0.1, @"Parsing JSON and detecting the format");
         NSError *jsonError = nil;
         NSMutableDictionary *installProfile = [NSJSONSerialization JSONObjectWithData:profileData
                                                                               options:NSJSONReadingMutableContainers
@@ -126,7 +126,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
         NSLog(@"[ForgeDirect] Game directory (user.dir): %@", gameDir);
         NSLog(@"[ForgeDirect] Main game directory (versions/libraries): %@", mainGameDir);
         NSLog(@"[ForgeDirect] Libraries directory: %@", librariesDir);
-        reportProgress(0.15, @"正在准备版本目录");
+        reportProgress(0.15, @"Preparing the version folder");
 
         // 提前创建 libraries 目录，避免后续下载/解压失败
         [[NSFileManager defaultManager] createDirectoryAtPath:librariesDir
@@ -164,7 +164,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
         // 整合包导入时跳过（由 ModpackImportService.createProfileForModpack 统一注册）
         if (!skipRegisterVersion) {
             NSLog(@"[ForgeDirect] Registering version on main thread");
-            reportProgress(0.95, @"正在注册版本");
+            reportProgress(0.95, @"Registering version");
             if ([NSThread isMainThread]) {
                 [self registerVersion:versionId];
             } else {
@@ -176,7 +176,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
         }
 
         NSLog(@"[ForgeDirect] Installation completed successfully");
-        reportProgress(1.0, @"安装完成");
+        reportProgress(1.0, @"Installation complete");
         return YES;
     }
     @catch (NSException *exception) {
@@ -186,7 +186,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
             *error = [NSError errorWithDomain:ForgeDirectInstallerErrorDomain
                                           code:ForgeDirectInstallerErrorException
                                       userInfo:@{
-                                          NSLocalizedDescriptionKey: [NSString stringWithFormat:@"安装异常: %@", exception.reason ?: @"未知原因"],
+                                          NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Installation exception: %@", exception.reason ?: @"Unknown reason"],
                                           NSLocalizedFailureReasonErrorKey: exception.name ?: @"UnknownException"
                                       }];
         }
@@ -263,7 +263,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
         if (error) {
             *error = [NSError errorWithDomain:ForgeDirectInstallerErrorDomain
                                          code:NSURLErrorTimedOut
-                                     userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"请求超时（60s）: %@", request.URL.absoluteString]}];
+                                     userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Request timed out (60s): %@", request.URL.absoluteString]}];
         }
         return nil;
     }
@@ -495,7 +495,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
 
     // Extract universal jar
     NSLog(@"[ForgeDirect] Extracting universal jar");
-    reportProgress(0.4, @"正在提取 libraries (1/1)");
+    reportProgress(0.4, @"Extracting libraries (1/1)");
     NSDictionary *installDict = installProfile[@"install"];
     id filePathObj = installDict[@"filePath"];
     id mavenPathObj = installDict[@"path"];
@@ -521,23 +521,23 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
         // 若 mavenPath 也缺失，启动时可能 NoClassDefFoundError
         NSLog(@"[ForgeDirect] Warning: install.filePath missing, universal jar will rely on extractAllMavenEntries or subsequent downloadMissingLibraries");
     }
-    reportProgress(0.7, @"正在提取 libraries (1/1)");
+    reportProgress(0.7, @"Extracting libraries (1/1)");
 
     // 老格式也需要解压 installer.jar 内 maven/ 下的所有依赖
     // 老版本 Forge 通常 libraries 是运行时从 Maven 下载的，但 installer.jar 内可能也带了一部分
-    reportProgress(0.75, @"正在解压内嵌 maven 依赖");
+    reportProgress(0.75, @"Extracting the embedded maven dependencies");
     [self extractAllMavenEntries:installerPath toLibrariesDir:librariesDir];
 
     // 下载 versionInfo.libraries 中缺失的库（老格式也可能有 libraries 数组）
     NSArray *libs = mutableVersionInfo[@"libraries"];
     if ([libs isKindOfClass:[NSArray class]] && libs.count > 0) {
-        reportProgress(0.8, @"正在下载缺失的依赖库");
+        reportProgress(0.8, @"Downloading missing libraries");
         [self downloadMissingLibraries:libs librariesDir:librariesDir progress:progress baseProgress:0.8 progressSpan:0.1];
     }
 
     // Write version JSON
     NSLog(@"[ForgeDirect] Writing version JSON to: %@", versionJsonPath);
-    reportProgress(0.9, @"正在写入版本 JSON");
+    reportProgress(0.9, @"Writing version JSON");
     NSError *writeError = saveJSONToFile(mutableVersionInfo, versionJsonPath);
     if (writeError) {
         if (error) {
@@ -674,7 +674,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
     // Step A: 解压 installer.jar 内 maven/ 下的所有依赖到 libraries 目录
     // 这是 installer 自带的依赖，必装
     NSLog(@"[ForgeDirect] Extracting all maven entries from installer jar");
-    reportProgress(0.2, @"正在解压内嵌 maven 依赖");
+    reportProgress(0.2, @"Extracting the embedded maven dependencies");
     NSUInteger extractedCount = [self extractAllMavenEntries:installerPath toLibrariesDir:librariesDir];
     NSLog(@"[ForgeDirect] Extracted %lu maven entries", (unsigned long)extractedCount);
 
@@ -682,7 +682,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
     // version.json 的 libraries 包含 vanilla mc、modlauncher、bootstraplauncher 等
     // 这些不在 installer.jar 内，必须从 maven 下载
     NSLog(@"[ForgeDirect] Downloading missing libraries from maven");
-    reportProgress(0.3, @"正在下载缺失的依赖库");
+    reportProgress(0.3, @"Downloading missing libraries");
     NSArray *allLibraries = versionJson[@"libraries"];
     if ([allLibraries isKindOfClass:[NSArray class]]) {
         [self downloadMissingLibraries:allLibraries librariesDir:librariesDir progress:progress baseProgress:0.3 progressSpan:0.4];
@@ -692,7 +692,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
     // install_profile.json 的 processors 会生成 :client 这个 jar，但 iOS 不能跑 processor。
     // Forge/NeoForge 已将这个预打补丁 jar 发布到 maven，直接下载即可。
     NSLog(@"[ForgeDirect] Downloading pre-patched client artifact");
-    reportProgress(0.75, @"正在下载预打补丁的核心 jar");
+    reportProgress(0.75, @"Downloading the pre-patched core jar");
     NSString *mainPath = installProfile[@"path"];
     // 兜底：path 字段缺失时用 version 字段拼接标准 Forge 坐标
     if (![mainPath isKindOfClass:[NSString class]] || mainPath.length == 0) {
@@ -713,14 +713,14 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
         if (error) {
             *error = [NSError errorWithDomain:ForgeDirectInstallerErrorDomain
                                          code:ForgeDirectInstallerErrorInvalidProfile
-                                     userInfo:@{NSLocalizedDescriptionKey: @"install_profile.json 缺少 path 和 version 字段，无法定位预打补丁核心 jar"}];
+                                     userInfo:@{NSLocalizedDescriptionKey: @"install_profile.json is missing the path and version fields, so the pre-patched core jar cannot be located"}];
         }
         return NO;
     }
 
     // Write version JSON
     NSLog(@"[ForgeDirect] Writing version JSON to: %@", versionJsonPath);
-    reportProgress(0.9, @"正在写入版本 JSON");
+    reportProgress(0.9, @"Writing version JSON");
     NSError *writeError = saveJSONToFile(versionJson, versionJsonPath);
     if (writeError) {
         if (error) {
@@ -905,7 +905,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
         // 用 processed 计算进度（避免失败时进度停滞）
         if (progress) {
             double p = base + span * ((double)processed / (double)total);
-            progress(p, [NSString stringWithFormat:@"正在下载依赖库 (%lu/%lu): %@", (unsigned long)(processed + 1), (unsigned long)total, name]);
+            progress(p, [NSString stringWithFormat:@"Downloading libraries (%lu/%lu): %@", (unsigned long)(processed + 1), (unsigned long)total, name]);
         }
 
         NSError *downloadError = nil;
@@ -1177,9 +1177,9 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
         *error = [NSError errorWithDomain:ForgeDirectInstallerErrorDomain
                                      code:ForgeDirectInstallerErrorExtractionFailed
                                  userInfo:@{
-                                     NSLocalizedDescriptionKey: [NSString stringWithFormat:@"下载预打补丁核心 jar 失败\n主源 URL: %@\n已尝试 classifier: client/universal/无\n已尝试源: 官方/BMCLAPI/HMCL镜像\n最后错误: %@",
-                                         firstTriedURL ?: @"未知",
-                                         lastError.localizedDescription ?: @"未知错误"]
+                                     NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Failed to download the pre-patched core jar\nPrimary URL: %@\nClassifiers tried: client/universal/none\nSources tried: official/BMCLAPI/HMCL mirror\nLast error: %@",
+                                         firstTriedURL ?: @"Unknown",
+                                         lastError.localizedDescription ?: @"Unknown error"]
                                  }];
     }
     return NO;
@@ -1198,7 +1198,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
             if (error) {
                 *error = [NSError errorWithDomain:ForgeDirectInstallerErrorDomain
                                              code:ForgeDirectInstallerErrorWriteFailed
-                                         userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"无法删除冲突文件 %@: %@", path, removeError.localizedDescription]}];
+                                         userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Could not delete conflicting file %@: %@", path, removeError.localizedDescription]}];
             }
             return NO;
         }
@@ -1277,7 +1277,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
         if (error) {
             *error = [NSError errorWithDomain:ForgeDirectInstallerErrorDomain
                                          code:NSURLErrorTimedOut
-                                     userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"下载超时（70s）: %@", urlString]}];
+                                     userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Download timed out (70s): %@", urlString]}];
         }
         return NO;
     }

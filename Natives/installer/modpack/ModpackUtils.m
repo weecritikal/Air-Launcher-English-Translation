@@ -123,8 +123,8 @@
     // 避免 Forge/NeoForge 直装失败后误装作 vanilla MC 让用户以为 mods 生效
     NSInteger javaMajor = [self javaMajorVersionForMC:minecraftVersion];
     NSString *comment = error.localizedDescription.length > 0
-        ? [NSString stringWithFormat:@"此整合包需要 %@ %@ 加载器，自动安装失败：%@。请通过下载界面手动安装。", loader, loaderVersion, error.localizedDescription]
-        : [NSString stringWithFormat:@"此整合包需要 %@ %@ 加载器，自动安装失败。请通过下载界面手动安装。", loader, loaderVersion];
+        ? [NSString stringWithFormat:@"This modpack needs the %@ %@ loader and the automatic install failed: %@. Please install it manually from the download screen.", loader, loaderVersion, error.localizedDescription]
+        : [NSString stringWithFormat:@"This modpack needs the %@ %@ loader and the automatic install failed. Please install it manually from the download screen.", loader, loaderVersion];
     NSDictionary *placeholderJSON = @{
         @"_comment_": comment,
         @"id": versionId ?: @"",

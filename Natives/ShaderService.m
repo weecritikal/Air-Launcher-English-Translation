@@ -171,7 +171,7 @@
 
     if (!shadersPath) {
         if (error) {
-            *error = [NSError errorWithDomain:@"ShaderService" code:1 userInfo:@{NSLocalizedDescriptionKey: @"无法确定游戏目录"}];
+            *error = [NSError errorWithDomain:@"ShaderService" code:1 userInfo:@{NSLocalizedDescriptionKey: @"Could not determine the game directory"}];
         }
         return nil;
     }
@@ -187,7 +187,7 @@
         NSLog(@"[ShaderService] Created shaderpacks directory: %@", shadersPath);
     } else if (!isDir) {
         if (error) {
-            *error = [NSError errorWithDomain:@"ShaderService" code:2 userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"%@ 不是目录", shadersPath]}];
+            *error = [NSError errorWithDomain:@"ShaderService" code:2 userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"%@ is not a directory", shadersPath]}];
         }
         return nil;
     }

@@ -160,7 +160,7 @@
     self.expandToggleButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.expandToggleButton.translatesAutoresizingMaskIntoConstraints = NO;
     self.expandToggleButton.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
-    [self.expandToggleButton setTitle:@"展开" forState:UIControlStateNormal];
+    [self.expandToggleButton setTitle:@"Expand" forState:UIControlStateNormal];
     [self.expandToggleButton addTarget:self action:@selector(toggleDescriptionExpanded) forControlEvents:UIControlEventTouchUpInside];
     self.expandToggleButton.hidden = YES; // 默认隐藏，仅当描述超 3 行时显示
     [self.cardContainer addSubview:self.expandToggleButton];
@@ -240,7 +240,7 @@
     self.placeholderColor = placeholderColor;
 
     // --- 标题 ---
-    self.titleLabel.text = title ?: @"未知项目";
+    self.titleLabel.text = title ?: @"Unknown project";
 
     // --- 作者 ---
     if (author.length > 0) {
@@ -260,7 +260,7 @@
                                                                                     NSForegroundColorAttributeName: [UIColor secondaryLabelColor]}]];
         self.authorLabel.attributedText = attrText;
     } else {
-        self.authorLabel.text = @"未知作者";
+        self.authorLabel.text = @"Unknown author";
     }
 
     // --- 元信息行 ---
@@ -270,7 +270,7 @@
     [self rebuildCategoriesStackWithCategories:categories];
 
     // --- 描述 ---
-    NSString *desc = descriptionText.length > 0 ? descriptionText : @"暂无描述";
+    NSString *desc = descriptionText.length > 0 ? descriptionText : @"No description";
     self.descriptionLabel.text = desc;
     self.descriptionExpanded = NO;
     self.descriptionLabel.numberOfLines = 3;
@@ -479,7 +479,7 @@
     self.expandToggleButton.hidden = !self.descriptionTruncated;
 
     if (self.descriptionTruncated) {
-        [self.expandToggleButton setTitle:@"展开" forState:UIControlStateNormal];
+        [self.expandToggleButton setTitle:@"Expand" forState:UIControlStateNormal];
     }
 }
 
@@ -506,7 +506,7 @@
 - (void)toggleDescriptionExpanded {
     self.descriptionExpanded = !self.descriptionExpanded;
     self.descriptionLabel.numberOfLines = self.descriptionExpanded ? 0 : 3;
-    [self.expandToggleButton setTitle:self.descriptionExpanded ? @"收起" : @"展开" forState:UIControlStateNormal];
+    [self.expandToggleButton setTitle:self.descriptionExpanded ? @"Collapse" : @"Expand" forState:UIControlStateNormal];
 
     // 通知控制器重新计算 tableHeaderView 高度
     if (self.onSizeChanged) {

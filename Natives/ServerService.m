@@ -111,7 +111,7 @@
                       completion:(ServerDetailHandler)completion {
     if (serverID.length == 0) {
         if (completion) dispatch_async(dispatch_get_main_queue(), ^{
-            completion(nil, [NSError errorWithDomain:@"ServerService" code:1 userInfo:@{NSLocalizedDescriptionKey: @"缺少服务器 ID"}]);
+            completion(nil, [NSError errorWithDomain:@"ServerService" code:1 userInfo:@{NSLocalizedDescriptionKey: @"Missing server ID"}]);
         });
         return;
     }
@@ -120,7 +120,7 @@
         [[ModrinthAPI sharedInstance] getServerDetailsForID:serverID completion:^(NSDictionary * _Nullable details, NSError * _Nullable error) {
             if (error || !details) {
                 if (completion) dispatch_async(dispatch_get_main_queue(), ^{
-                    completion(nil, error ?: [NSError errorWithDomain:@"ServerService" code:2 userInfo:@{NSLocalizedDescriptionKey: @"获取详情失败"}]);
+                    completion(nil, error ?: [NSError errorWithDomain:@"ServerService" code:2 userInfo:@{NSLocalizedDescriptionKey: @"Failed to fetch details"}]);
                 });
                 return;
             }
@@ -172,13 +172,13 @@
         forProfile:(NSString *)profileName
              error:(NSError **)error {
     if (address.length == 0) {
-        if (error) *error = [NSError errorWithDomain:@"ServerService" code:3 userInfo:@{NSLocalizedDescriptionKey: @"服务器地址为空"}];
+        if (error) *error = [NSError errorWithDomain:@"ServerService" code:3 userInfo:@{NSLocalizedDescriptionKey: @"The server address is empty"}];
         return NO;
     }
 
     NSString *profile = profileName.length ? profileName : [PLProfiles.current selectedProfileName];
     if (profile.length == 0) {
-        if (error) *error = [NSError errorWithDomain:@"ServerService" code:4 userInfo:@{NSLocalizedDescriptionKey: @"未选择 profile"}];
+        if (error) *error = [NSError errorWithDomain:@"ServerService" code:4 userInfo:@{NSLocalizedDescriptionKey: @"No profile selected"}];
         return NO;
     }
 
@@ -204,7 +204,7 @@
                 completion:(ServerDownloadHandler)completion {
     if (!serverItem.serverPackDownloadURL || serverItem.serverPackDownloadURL.length == 0) {
         if (completion) dispatch_async(dispatch_get_main_queue(), ^{
-            completion([NSError errorWithDomain:@"ServerService" code:5 userInfo:@{NSLocalizedDescriptionKey: @"该服务器没有可下载的服务端整合包"}]);
+            completion([NSError errorWithDomain:@"ServerService" code:5 userInfo:@{NSLocalizedDescriptionKey: @"This server has no downloadable server modpack"}]);
         });
         return;
     }
@@ -229,7 +229,7 @@
     NSURL *url = [NSURL URLWithString:serverItem.serverPackDownloadURL];
     if (!url) {
         if (completion) dispatch_async(dispatch_get_main_queue(), ^{
-            completion([NSError errorWithDomain:@"ServerService" code:6 userInfo:@{NSLocalizedDescriptionKey: @"无效的下载链接"}]);
+            completion([NSError errorWithDomain:@"ServerService" code:6 userInfo:@{NSLocalizedDescriptionKey: @"Invalid download link"}]);
         });
         return;
     }

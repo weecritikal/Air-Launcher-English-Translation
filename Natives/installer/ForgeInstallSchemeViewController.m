@@ -47,7 +47,7 @@
 
 - (void)setupTitleLabel {
     self.titleLabel = [[UILabel alloc] init];
-    self.titleLabel.text = @"选择安装方案";
+    self.titleLabel.text = @"Choose an installation method";
     self.titleLabel.font = [UIFont boldSystemFontOfSize:20];
     self.titleLabel.textColor = [UIColor labelColor];
     self.titleLabel.textAlignment = NSTextAlignmentCenter;
@@ -75,16 +75,16 @@
 
 - (void)setupCards {
     // 直装方案放首位并标注"推荐"：在 iOS 上无需 JIT、无需 AWT、无子进程限制
-    self.directCard = [self createCardWithTitle:@"直装方案（推荐）"
-                                       subtitle:@"直接解析安装，无需启动安装器"
+    self.directCard = [self createCardWithTitle:@"Direct install (recommended)"
+                                       subtitle:@"Installs by parsing directly, without launching the installer"
                                            icon:@"bolt.fill"
                                           color:[UIColor systemGreenColor]
                                          scheme:1];
 
     // 原版方案降级为"高级选项"：依赖 AWT GUI + JIT + 子进程，iOS 上多数场景不可用
     // 仅保留作为某些边缘版本（极老 Forge / 第三方 jar 安装器）的兜底
-    self.originalCard = [self createCardWithTitle:@"原版方案（高级）"
-                                         subtitle:@"运行 Forge 安装器 (AWT GUI)，需 JIT"
+    self.originalCard = [self createCardWithTitle:@"Vanilla method (advanced)"
+                                         subtitle:@"Runs the Forge installer (AWT GUI); requires JIT"
                                              icon:@"gearshape"
                                             color:[UIColor systemGrayColor]
                                            scheme:0];

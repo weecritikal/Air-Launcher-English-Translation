@@ -302,7 +302,7 @@ NSString * const DownloadTaskManagerTaskKey                             = @"Down
                            completion:(void (^)(BOOL shouldRecreate, BOOL supportsResume, NSError * _Nullable error))completion {
     if (!completion) return;
     if (!taskId || !source) {
-        completion(YES, NO, [NSError errorWithDomain:@"DownloadTaskManager" code:1 userInfo:@{NSLocalizedDescriptionKey: @"参数无效"}]);
+        completion(YES, NO, [NSError errorWithDomain:@"DownloadTaskManager" code:1 userInfo:@{NSLocalizedDescriptionKey: @"Invalid parameter"}]);
         return;
     }
 
@@ -315,7 +315,7 @@ NSString * const DownloadTaskManagerTaskKey                             = @"Down
     [self.lock unlock];
 
     if (!item) {
-        completion(YES, NO, [NSError errorWithDomain:@"DownloadTaskManager" code:2 userInfo:@{NSLocalizedDescriptionKey: @"任务不存在"}]);
+        completion(YES, NO, [NSError errorWithDomain:@"DownloadTaskManager" code:2 userInfo:@{NSLocalizedDescriptionKey: @"Task does not exist"}]);
         return;
     }
 

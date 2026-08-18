@@ -66,6 +66,7 @@
 "custom_controls.control_menu.exit" = "Exit";
 "custom_controls.control_menu.exit.warn" = "You are about to exit without saving changes.";
 "custom_controls.control_menu.save" = "Save";
+"custom_controls.control_menu.save.error.default" = "The control name cannot be \"default\", because it is not changeable.";
 "custom_controls.control_menu.save.error.json" = "JSON error";
 "custom_controls.control_menu.save.error.write" = "Error saving file";
 "custom_controls.control_menu.load" = "Load";
@@ -86,6 +87,7 @@
 "launcher.mcl.error_download" = "Failed to download %@: %@";
 
 "launcher.menu.custom_controls" = "Custom controls";
+"launcher.menu.install_jar" = "Install .jar";
 "launcher.menu.execute_jar" = "Execute .jar";
 "launcher.menu.import_modpack" = "Import modpack";
 
@@ -195,6 +197,10 @@
 "preference.title.mod_mirror-mcim" = "MCIM Mirror";
 "preference.title.debug_logging" = "Debug logging";
 "preference.detail.debug_logging" = "Logs internal settings and actions to latestlog.txt. This helps the developers find issues easier, but Minecraft may run slower as the logs will be written to more often.";
+"preference.title.jitstreamer_server" = "JitStreamer server address";
+"preference.detail.jitstreamer_server" = "Sets a custom JitStreamer server used to obtain JIT permission. If it works, don't touch it!";
+"preference.title.enable_altkit" = "Enable JIT with AltKit";
+"preference.detail.enable_altkit" = "When enabled, Amethyst will try to connect to a local AltServer to enable JIT.";
 "preference.title.appicon" = "Set app icon";
 "preference.detail.appicon" = "Allows you to choose between different Home Screen icons for Amethyst.";
 "preference.title.appicon-default" = "Familiar Amethyst light";
@@ -429,6 +435,10 @@
 "preference.detail.debug_auto_correction" = "Enable auto correction when typing text in game.";
 "preference.title.debug_hide_home_indicator" = "Hide home indicator";
 "preference.detail.debug_hide_home_indicator" = "This will disable home indicator locking. You will need to use Guided Access to hide and lock home indicator at the same time.";
+"preference.title.debug_show_layout_bounds" = "Show layout bounds";
+"preference.detail.debug_show_layout_bounds" = "Show clip bounds and margins";
+"preference.title.debug_show_layout_overlap" = "Show layout overlap";
+"preference.detail.debug_show_layout_overlap" = "Overlay every view in pale yellow; the darker the color, the more overlap";
 
 "preference.profile.title.name" = "Name";
 "preference.profile.title.loader_type" = "Loader type";
@@ -496,6 +506,14 @@
 "preference.title.appicon-custom" = "Custom";
 "preference.title.custom_appicon" = "Custom App Icon";
 "preference.detail.custom_appicon" = "Select a custom image to use as the app icon";
+"preference.title.mod_touch_enable" = "Enable TouchController support";
+"preference.detail.mod_touch_enable" = "Enable support for the TouchController mod. Note: turning this on disables \"Slideable hotbar\".";
+"preference.title.custom_controls" = "Custom controls";
+"preference.detail.custom_controls" = "Customize the in-game control layout by dragging buttons to change their position and size";
+"preference.popup.touch_info.title" = "About TouchController support";
+"preference.popup.touch_info.message" = "This feature is an unofficial iOS compatibility layer for the TouchController mod.\n\nMod project page: https://github.com/TouchController/TouchController\n\nTechnical note:\nBecause the mod does not support iOS, this feature bridges the launcher and the game process over a local UDP connection (localhost). The connection is only used to pass touch data inside your device and never connects to the internet, so you can use it with confidence.\nThis feature was made by WeiErLiTeo.";
+"preference.title.two_finger_keyboard" = "Two-finger keyboard";
+"preference.detail.two_finger_keyboard" = "Long-press the screen with two fingers in game to bring up the keyboard.";
 "提示" = "Notice";
 
 // Announcement messages
@@ -528,6 +546,7 @@
 "preference.touchcontroller.vibrate.intensity.medium" = "Medium";
 "preference.touchcontroller.vibrate.intensity.heavy" = "Heavy";
 "preference.touchcontroller.moveview.enable" = "Enable Move View";
+"spdt" = "I'm an airplane!!!!!!";
 
 // Crash View
 "crash.title" = "Game Exited Unexpectedly";

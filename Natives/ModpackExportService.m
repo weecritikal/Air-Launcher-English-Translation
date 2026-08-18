@@ -51,7 +51,7 @@
             if (error) {
                 *error = [NSError errorWithDomain:@"ModpackExportService"
                                              code:9999
-                                         userInfo:@{NSLocalizedDescriptionKey: @"导出已取消"}];
+                                         userInfo:@{NSLocalizedDescriptionKey: @"Export cancelled"}];
             }
             return YES;
         }
@@ -145,7 +145,7 @@
         if (progress) progress(p, msg);
     };
 
-    reportProgress(0.0, @"开始导出整合包");
+    reportProgress(0.0, @"Starting the modpack export");
 
     // 取消检查点
     if ([self checkCancelledWithError:error]) return NO;
@@ -155,7 +155,7 @@
     if (![profile isKindOfClass:[NSDictionary class]]) {
         if (error) {
             *error = [NSError errorWithDomain:@"ModpackExportService" code:1
-                                     userInfo:@{NSLocalizedDescriptionKey: @"找不到指定的 profile"}];
+                                     userInfo:@{NSLocalizedDescriptionKey: @"The specified profile was not found"}];
         }
         return NO;
     }
@@ -179,7 +179,7 @@
     if (mcVersion.length == 0) {
         if (error) {
             *error = [NSError errorWithDomain:@"ModpackExportService" code:2
-                                     userInfo:@{NSLocalizedDescriptionKey: @"无法解析 Minecraft 版本（lastVersionId 格式无法识别）"}];
+                                     userInfo:@{NSLocalizedDescriptionKey: @"Could not determine the Minecraft version (unrecognized lastVersionId format)"}];
         }
         return NO;
     }
@@ -188,7 +188,7 @@
     if ([self checkCancelledWithError:error]) return NO;
 
     // 3. 收集 mods 文件列表
-    reportProgress(0.1, @"正在扫描 mods 文件");
+    reportProgress(0.1, @"Scanning the mods folder");
     NSFileManager *fm = [NSFileManager defaultManager];
     NSString *modsDir = [gameDirAbsolute stringByAppendingPathComponent:@"mods"];
     NSMutableArray<NSDictionary *> *modFiles = [NSMutableArray new];
@@ -304,7 +304,7 @@
     (void)author;
     if ([self checkCancelledWithError:error]) return NO;
 
-    progress(0.2, @"正在生成 modrinth.index.json");
+    progress(0.2, @"Generating modrinth.index.json");
     NSFileManager *fm = [NSFileManager defaultManager];
 
     // 构造 dependencies
@@ -349,14 +349,14 @@
     if (!indexData) {
         if (error && !*error) {
             *error = [NSError errorWithDomain:@"ModpackExportService" code:3
-                                     userInfo:@{NSLocalizedDescriptionKey: @"生成 modrinth.index.json 失败"}];
+                                     userInfo:@{NSLocalizedDescriptionKey: @"Failed to generate modrinth.index.json"}];
         }
         return NO;
     }
 
     if ([self checkCancelledWithError:error]) return NO;
 
-    progress(0.3, @"正在创建 zip 文件");
+    progress(0.3, @"Creating the zip file");
     [fm removeItemAtPath:destPath error:nil];
 
     NSError *archiveError = nil;
@@ -367,7 +367,7 @@
     }
 
     // 写入 modrinth.index.json
-    progress(0.4, @"正在写入 modrinth.index.json");
+    progress(0.4, @"Writing modrinth.index.json");
     if (![archive writeData:indexData filePath:@"modrinth.index.json" error:&archiveError]) {
         if (error) *error = archiveError;
         return NO;
@@ -385,10 +385,10 @@
         return NO;
     }
 
-    progress(0.95, @"正在完成导出");
+    progress(0.95, @"Finishing the export");
     archive = nil;
 
-    progress(1.0, @"导出完成");
+    progress(1.0, @"Export complete");
     NSLog(@"[ModpackExport] Modrinth format export completed: %@", destPath);
     return YES;
 }
@@ -409,7 +409,7 @@
                           error:(NSError **)error {
     if ([self checkCancelledWithError:error]) return NO;
 
-    progress(0.2, @"正在生成 manifest.json");
+    progress(0.2, @"Generating manifest.json");
     NSFileManager *fm = [NSFileManager defaultManager];
 
     // 构造 modLoaders
@@ -440,14 +440,14 @@
     if (!manifestData) {
         if (error && !*error) {
             *error = [NSError errorWithDomain:@"ModpackExportService" code:4
-                                     userInfo:@{NSLocalizedDescriptionKey: @"生成 manifest.json 失败"}];
+                                     userInfo:@{NSLocalizedDescriptionKey: @"Failed to generate manifest.json"}];
         }
         return NO;
     }
 
     if ([self checkCancelledWithError:error]) return NO;
 
-    progress(0.3, @"正在创建 zip 文件");
+    progress(0.3, @"Creating the zip file");
     [fm removeItemAtPath:destPath error:nil];
 
     NSError *archiveError = nil;
@@ -457,7 +457,7 @@
         return NO;
     }
 
-    progress(0.4, @"正在写入 manifest.json");
+    progress(0.4, @"Writing manifest.json");
     if (![archive writeData:manifestData filePath:@"manifest.json" error:&archiveError]) {
         if (error) *error = archiveError;
         return NO;
@@ -474,10 +474,10 @@
         return NO;
     }
 
-    progress(0.95, @"正在完成导出");
+    progress(0.95, @"Finishing the export");
     archive = nil;
 
-    progress(1.0, @"导出完成");
+    progress(1.0, @"Export complete");
     NSLog(@"[ModpackExport] CurseForge format export completed: %@", destPath);
     return YES;
 }
@@ -503,7 +503,7 @@
                    error:(NSError **)error {
     if ([self checkCancelledWithError:error]) return NO;
 
-    progress(0.2, @"正在生成 mmc-pack.json");
+    progress(0.2, @"Generating mmc-pack.json");
     NSFileManager *fm = [NSFileManager defaultManager];
 
     // 构造 components 数组
@@ -550,7 +550,7 @@
     if (!mmcPackData) {
         if (error && !*error) {
             *error = [NSError errorWithDomain:@"ModpackExportService" code:5
-                                     userInfo:@{NSLocalizedDescriptionKey: @"生成 mmc-pack.json 失败"}];
+                                     userInfo:@{NSLocalizedDescriptionKey: @"Failed to generate mmc-pack.json"}];
         }
         return NO;
     }
@@ -572,7 +572,7 @@
 
     if ([self checkCancelledWithError:error]) return NO;
 
-    progress(0.3, @"正在创建 zip 文件");
+    progress(0.3, @"Creating the zip file");
     [fm removeItemAtPath:destPath error:nil];
 
     NSError *archiveError = nil;
@@ -582,12 +582,12 @@
         return NO;
     }
 
-    progress(0.4, @"正在写入 mmc-pack.json");
+    progress(0.4, @"Writing mmc-pack.json");
     if (![archive writeData:mmcPackData filePath:@"mmc-pack.json" error:&archiveError]) {
         if (error) *error = archiveError;
         return NO;
     }
-    progress(0.45, @"正在写入 instance.cfg");
+    progress(0.45, @"Writing instance.cfg");
     if (cfgData && ![archive writeData:cfgData filePath:@"instance.cfg" error:&archiveError]) {
         if (error) *error = archiveError;
         return NO;
@@ -605,10 +605,10 @@
         return NO;
     }
 
-    progress(0.95, @"正在完成导出");
+    progress(0.95, @"Finishing the export");
     archive = nil;
 
-    progress(1.0, @"导出完成");
+    progress(1.0, @"Export complete");
     NSLog(@"[ModpackExport] MMC format export completed: %@", destPath);
     return YES;
 }
@@ -632,7 +632,7 @@
     (void)name; (void)version; (void)author; (void)loader; (void)loaderVersion;
     if ([self checkCancelledWithError:error]) return NO;
 
-    progress(0.2, @"正在创建 zip 文件");
+    progress(0.2, @"Creating the zip file");
     NSFileManager *fm = [NSFileManager defaultManager];
     [fm removeItemAtPath:destPath error:nil];
 
@@ -670,10 +670,10 @@
         return NO;
     }
 
-    progress(0.95, @"正在完成导出");
+    progress(0.95, @"Finishing the export");
     archive = nil;
 
-    progress(1.0, @"导出完成");
+    progress(1.0, @"Export complete");
     NSLog(@"[ModpackExport] Plain Zip format export completed: %@", destPath);
     return YES;
 }
@@ -701,7 +701,7 @@
     }
     [content appendFormat:@"# Name: %@\n", name.length > 0 ? name : @"Exported Modpack"];
     [content appendFormat:@"# Version: %@\n", version.length > 0 ? version : @"1.0"];
-    [content appendString:@"# 格式: <zip内路径>|<下载链接或本地路径>\n\n"];
+    [content appendString:@"# Format: <path inside zip>|<download link or local path>\n\n"];
 
     for (NSDictionary *modFile in modFiles) {
         // 链接列表格式：mod 路径 + 空下载链接（用户可手动填写）
@@ -735,7 +735,7 @@
 
     NSUInteger totalItems = overrideDirs.count + overrideFiles.count;
     if (totalItems == 0) {
-        progress(baseProgress + progressRange, @"无 overrides 可打包");
+        progress(baseProgress + progressRange, @"No overrides to package");
         return YES;
     }
 
@@ -759,7 +759,7 @@
     }
     totalFiles += overrideFiles.count;
     if (totalFiles == 0) {
-        progress(baseProgress + progressRange, @"无 overrides 可打包");
+        progress(baseProgress + progressRange, @"No overrides to package");
         return YES;
     }
 
@@ -780,7 +780,7 @@
                            progress:^(NSUInteger done, NSUInteger total) {
             processedFiles = done;
             double p = baseProgress + progressRange * ((double)processedFiles / (double)totalFiles);
-            progress(p, [NSString stringWithFormat:@"正在打包 %@/%@", zipPrefix, dir]);
+            progress(p, [NSString stringWithFormat:@"Packaging %@/%@", zipPrefix, dir]);
         }];
         processed++;
     }
@@ -803,7 +803,7 @@
         }
         processedFiles++;
         double p = baseProgress + progressRange * ((double)processedFiles / (double)totalFiles);
-        progress(p, [NSString stringWithFormat:@"正在打包 %@/%@", zipPrefix, file]);
+        progress(p, [NSString stringWithFormat:@"Packaging %@/%@", zipPrefix, file]);
         processed++;
     }
 

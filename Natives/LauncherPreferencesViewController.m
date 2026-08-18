@@ -99,7 +99,7 @@
             [self presentViewController:picker animated:YES completion:nil];
         });
     } else {
-        [self showCustomIconError:@"当前系统版本不支持颜色选择器（需 iOS 14+）"];
+        [self showCustomIconError:@"This iOS version does not support the color picker (iOS 14+ required)"];
     }
 }
 
@@ -140,7 +140,7 @@
         dispatch_async(dispatch_get_main_queue(), ^{
             UIImage *selectedImage = info[UIImagePickerControllerOriginalImage];
             if (!selectedImage) {
-                [self showCustomIconError:@"无法获取选中的图片"];
+                [self showCustomIconError:@"Could not read the selected image"];
                 return;
             }
             if (self.pickingMousePointer) {
@@ -151,9 +151,9 @@
                 BOOL ok = [pngData writeToFile:path atomically:YES];
                 if (ok) {
                     [NSNotificationCenter.defaultCenter postNotificationName:@"MousePointerUpdated" object:nil];
-                    [self showSuccessMessage:@"鼠标指针已更新"];
+                    [self showSuccessMessage:@"Mouse pointer updated"];
                 } else {
-                    [self showCustomIconError:@"保存鼠标指针失败"];
+                    [self showCustomIconError:@"Failed to save the mouse pointer"];
                 }
                 return;
             }
@@ -171,18 +171,18 @@
                         [[CustomIconManager sharedManager] saveCustomIcon:croppedImage withCompletion:^(BOOL success, NSError * _Nullable error) {
                             dispatch_async(dispatch_get_main_queue(), ^{
                                 if (success) {
-                                    [weakSelf showSuccessMessage:@"图片已保存，您可以在应用图标设置中选择自定义图标"];
+                                    [weakSelf showSuccessMessage:@"Image saved. You can now pick it under the app icon settings"];
                                     // 更新应用图标选择器的显示
                                     [weakSelf.tableView reloadData];
                                 } else {
-                                    NSString *errorMessage = error.localizedDescription ?: @"保存自定义图标失败";
+                                    NSString *errorMessage = error.localizedDescription ?: @"Failed to save the custom icon";
                                     [weakSelf showCustomIconError:errorMessage];
                                 }
                             });
                         }];
                     } else {
                         dispatch_async(dispatch_get_main_queue(), ^{
-                            [weakSelf showCustomIconError:@"图片裁剪已取消"];
+                            [weakSelf showCustomIconError:@"Image cropping cancelled"];
                         });
                     }
                 };
@@ -192,11 +192,11 @@
                 [[CustomIconManager sharedManager] saveCustomIcon:selectedImage withCompletion:^(BOOL success, NSError * _Nullable error) {
                     dispatch_async(dispatch_get_main_queue(), ^{
                         if (success) {
-                            [self showSuccessMessage:@"图片已保存，您可以在应用图标设置中选择自定义图标"];
+                            [self showSuccessMessage:@"Image saved. You can now pick it under the app icon settings"];
                             // 更新应用图标选择器的显示
                             [self.tableView reloadData];
                         } else {
-                            NSString *errorMessage = error.localizedDescription ?: @"保存自定义图标失败";
+                            NSString *errorMessage = error.localizedDescription ?: @"Failed to save the custom icon";
                             [self showCustomIconError:errorMessage];
                         }
                     });
@@ -212,7 +212,7 @@
             if (self.pickingMousePointer) {
                 self.pickingMousePointer = NO;
             } else {
-                [self showCustomIconError:@"图片选择已取消"];
+                [self showCustomIconError:@"Image selection cancelled"];
             }
         });
     }];
@@ -221,7 +221,7 @@
 #pragma mark - Custom Icon Helper Methods
 
 - (void)showProcessingIndicator {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"处理中" message:@"正在处理您选择的图片..." preferredStyle:UIAlertControllerStyleAlert];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Processing" message:@"Processing the image you selected..." preferredStyle:UIAlertControllerStyleAlert];
     [self presentViewController:alert animated:YES completion:nil];
     
     // 2秒后自动关闭提示
@@ -231,15 +231,15 @@
 }
 
 - (void)showSuccessMessage:(NSString *)message {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"成功" message:message preferredStyle:UIAlertControllerStyleAlert];
-    UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Success" message:message preferredStyle:UIAlertControllerStyleAlert];
+    UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil];
     [alert addAction:okAction];
     [self presentViewController:alert animated:YES completion:nil];
 }
 
 - (void)showCustomIconError:(NSString *)errorMessage {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"错误" message:errorMessage preferredStyle:UIAlertControllerStyleAlert];
-    UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Error" message:errorMessage preferredStyle:UIAlertControllerStyleAlert];
+    UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil];
     [alert addAction:okAction];
     [self presentViewController:alert animated:YES completion:nil];
 }
@@ -342,7 +342,7 @@
               ]
             },
             @{@"key": @"ui_layout",
-              @"title": @"UI 布局",
+              @"title": @"UI layout",
               @"hasDetail": @YES,
               @"icon": @"rectangle.split.3x3",
               @"type": self.typePickField,
@@ -352,12 +352,12 @@
                   @"card"
               ],
               @"pickList": @[
-                  @"VS 三栏布局",
-                  @"卡片式布局"
+                  @"VS three-column layout",
+                  @"Card layout"
               ]
             },
             @{@"key": @"ui_theme",
-              @"title": @"外观模式",
+              @"title": @"Appearance",
               @"hasDetail": @YES,
               @"icon": @"circle.lefthalf.filled",
               @"type": self.typePickField,
@@ -368,9 +368,9 @@
                   @"auto"
               ],
               @"pickList": @[
-                  @"深色模式",
-                  @"浅色模式",
-                  @"跟随系统"
+                  @"Dark mode",
+                  @"Light mode",
+                  @"Match system"
               ],
               @"action": ^(NSString *value){
                   // 实时应用主题，发通知由 SceneDelegate 处理。
@@ -380,37 +380,37 @@
               }
             },
             @{@"key": @"custom_accent_color",
-              @"title": @"主题强调色",
+              @"title": @"Theme accent color",
               @"hasDetail": @YES,
               @"icon": @"paintpalette.fill",
               @"type": self.typeButton,
               @"enableCondition": whenNotInGame,
               @"action": ^void(){
-                  [self openColorPickerForKey:@"general.accent_color" title:@"主题强调色"];
+                  [self openColorPickerForKey:@"general.accent_color" title:@"Theme accent color"];
               }
             },
             @{@"key": @"custom_text_color",
-              @"title": @"字体颜色",
+              @"title": @"Font color",
               @"hasDetail": @YES,
               @"icon": @"textformat",
               @"type": self.typeButton,
               @"enableCondition": whenNotInGame,
               @"action": ^void(){
-                  [self openColorPickerForKey:@"general.text_color" title:@"字体颜色"];
+                  [self openColorPickerForKey:@"general.text_color" title:@"Font color"];
               }
             },
             @{@"key": @"custom_card_color",
-              @"title": @"卡片颜色",
+              @"title": @"Card color",
               @"hasDetail": @YES,
               @"icon": @"rectangle.fill",
               @"type": self.typeButton,
               @"enableCondition": whenNotInGame,
               @"action": ^void(){
-                  [self openColorPickerForKey:@"general.card_color" title:@"卡片颜色"];
+                  [self openColorPickerForKey:@"general.card_color" title:@"Card color"];
               }
             },
             @{@"key": @"reset_appearance_colors",
-              @"title": @"重置主题/字体/卡片颜色",
+              @"title": @"Reset theme / font / card colors",
               @"icon": @"arrow.counterclockwise",
               @"type": self.typeButton,
               @"enableCondition": whenNotInGame,
@@ -423,7 +423,7 @@
               }
             },
             @{@"key": @"multi_threaded",
-              @"title": @"多线程下载",
+              @"title": @"Multi-threaded download",
               @"hasDetail": @YES,
               @"icon": @"bolt.fill",
               @"type": self.typeSwitch,
@@ -468,8 +468,8 @@
                   } else if ([iconName isEqualToString:@"CustomIcon"]) {
                       if (![[CustomIconManager sharedManager] hasCustomIcon]) {
                           dispatch_async(dispatch_get_main_queue(), ^{
-                              UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"提示" message:@"请先设置自定义应用图标：设置 > 自定义应用图标" preferredStyle:UIAlertControllerStyleAlert];
-                              UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil];
+                              UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Notice" message:@"Set a custom app icon first: Settings > Custom app icon" preferredStyle:UIAlertControllerStyleAlert];
+                              UIAlertAction *okAction = [UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil];
                               [alert addAction:okAction];
                               [self presentViewController:alert animated:YES completion:nil];
                           });
@@ -543,9 +543,9 @@
                   @"title_only"
               ],
               @"pickList": @[
-                  @"完整（标题+日期+摘要）",
-                  @"仅摘要（标题+摘要）",
-                  @"仅标题"
+                  @"Full (title + date + summary)",
+                  @"Summary only (title + summary)",
+                  @"Title only"
               ]
             },
             @{@"key": @"reset_warnings",
@@ -832,7 +832,7 @@
                     NSString *path = [NSString stringWithFormat:@"%s/controlmap/mouse_pointer.png", getenv("POJAV_HOME")];
                     [NSFileManager.defaultManager removeItemAtPath:path error:nil];
                     [NSNotificationCenter.defaultCenter postNotificationName:@"MousePointerUpdated" object:nil];
-                    [self showSuccessMessage:@"鼠标指针已恢复默认"];
+                    [self showSuccessMessage:@"Mouse pointer reset to default"];
                 }
             },
             @{@"key": @"recording_hide",
@@ -856,34 +856,34 @@
                   NSString *title = localize(@"preference.title.two_finger_keyboard", nil);
                   // 如果没有 localization，设置默认标题
                   if (!title || [title isEqualToString:@"preference.title.two_finger_keyboard"]) {
-                      title = @"双指呼出键盘";
+                      title = @"Two-finger keyboard";
                   }
                   
-                  NSString *statusMsg = isOn ? @"[✓] 当前状态: 已开启 (ON)" : @"[✗] 当前状态: 已关闭 (OFF)";
-                  NSString *msg = [NSString stringWithFormat:@"%@\n\n开启后，在游戏中双指同时长按屏幕可呼出键盘。\n此功能由WeiErLiTeo制作。", statusMsg];
+                  NSString *statusMsg = isOn ? @"[✓] Current state: ON" : @"[✗] Current state: OFF";
+                  NSString *msg = [NSString stringWithFormat:@"%@\n\nWhen enabled, long-press the screen with two fingers in game to bring up the keyboard.\nThis feature was made by WeiErLiTeo.", statusMsg];
                   
                   UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:msg preferredStyle:UIAlertControllerStyleAlert];
                   
                   // 3. 根据当前状态显示不同的按钮
                   if (!isOn) {
-                      [alert addAction:[UIAlertAction actionWithTitle:@"开启 (Enable)" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+                      [alert addAction:[UIAlertAction actionWithTitle:@"Enable" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
                           // 强制开启
                           setPrefBool(@"control.two_finger_keyboard", YES);
-                          [weakSelf showSuccessMessage:@"双指呼出键盘已开启"];
+                          [weakSelf showSuccessMessage:@"Two-finger keyboard turned on"];
                           // 刷新界面
                           [weakSelf.tableView reloadData];
                       }]];
                   } else {
-                      [alert addAction:[UIAlertAction actionWithTitle:@"关闭 (Disable)" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
+                      [alert addAction:[UIAlertAction actionWithTitle:@"Disable" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
                           // 强制关闭
                           setPrefBool(@"control.two_finger_keyboard", NO);
-                          [weakSelf showSuccessMessage:@"双指呼出键盘已关闭"];
+                          [weakSelf showSuccessMessage:@"Two-finger keyboard turned off"];
                           // 刷新界面
                           [weakSelf.tableView reloadData];
                       }]];
                   }
                   
-                  [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+                  [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
                   
                   [weakSelf presentViewController:alert animated:YES completion:nil];
               }
@@ -1338,7 +1338,7 @@
 - (void)checkForUpdateFromSettings {
     /* 显示加载中的 alert */
     UIAlertController *loadingAlert = [UIAlertController
-        alertControllerWithTitle:localize(@"check_update.checking", @"正在检查更新…")
+        alertControllerWithTitle:localize(@"check_update.checking", @"Checking for updates…")
                          message:nil
                   preferredStyle:UIAlertControllerStyleAlert];
     [self presentViewController:loadingAlert animated:YES completion:nil];
@@ -1346,8 +1346,8 @@
     [UpdateChecker checkForUpdateWithCompletion:^(UpdateInfo *info, NSError *error) {
         [loadingAlert dismissViewControllerAnimated:YES completion:^{
             if (error || info == nil) {
-                [self showUpdateAlertWithTitle:localize(@"check_update.failed", @"检查更新失败")
-                                         message:error.localizedDescription ?: @"未知错误"
+                [self showUpdateAlertWithTitle:localize(@"check_update.failed", @"Update check failed")
+                                         message:error.localizedDescription ?: @"Unknown error"
                                        hasUpdate:NO
                                           info:nil];
                 return;
@@ -1355,9 +1355,9 @@
             if (info.hasUpdate) {
                 [self showUpdateAvailableAlert:info];
             } else {
-                [self showUpdateAlertWithTitle:localize(@"check_update.up_to_date", @"已是最新版本")
+                [self showUpdateAlertWithTitle:localize(@"check_update.up_to_date", @"You're up to date")
                                          message:[NSString stringWithFormat:
-                                             localize(@"check_update.current_version", @"当前版本 %@，已是最新正式版。"),
+                                             localize(@"check_update.current_version", @"You're on version %@, the latest stable release."),
                                              info.currentVersion]
                                        hasUpdate:NO
                                           info:nil];
@@ -1374,7 +1374,7 @@
         alertControllerWithTitle:title
                          message:message
                   preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:localize(@"OK", @"好的")
+    [alert addAction:[UIAlertAction actionWithTitle:localize(@"OK", @"OK")
                                               style:UIAlertActionStyleDefault
                                             handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];
@@ -1383,7 +1383,7 @@
 /// 发现新版本时显示更新详情弹窗（参考 FCL/ZL2 风格）
 - (void)showUpdateAvailableAlert:(UpdateInfo *)info {
     NSString *title = [NSString stringWithFormat:localize(@"check_update.new_version_title",
-                                                          @"发现新版本 v%@"), info.latestVersion];
+                                                          @"New version available: v%@"), info.latestVersion];
     /* 更新日志截断显示，太长的话只显示前 500 字符 + 省略号 */
     NSString *notes = info.releaseNotes ?: @"";
     if (notes.length > 500) {
@@ -1391,19 +1391,19 @@
     }
     NSString *message = [NSString stringWithFormat:@"%@\n\n%@",
                          localize(@"check_update.new_version_message",
-                                  @"点击「前往下载」打开 GitHub Releases 页面下载最新版本。"),
+                                  @"Tap \"Go to downloads\" to open the GitHub Releases page and get the latest version."),
                          notes];
 
     UIAlertController *alert = [UIAlertController
         alertControllerWithTitle:title
                          message:message
                   preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:localize(@"check_update.download", @"前往下载")
+    [alert addAction:[UIAlertAction actionWithTitle:localize(@"check_update.download", @"Go to downloads")
                                               style:UIAlertActionStyleDefault
                                             handler:^(UIAlertAction *action) {
         [UpdateChecker openReleasePage];
     }]];
-    [alert addAction:[UIAlertAction actionWithTitle:localize(@"Cancel", @"取消")
+    [alert addAction:[UIAlertAction actionWithTitle:localize(@"Cancel", @"Cancel")
                                               style:UIAlertActionStyleCancel
                                             handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];
@@ -1413,15 +1413,15 @@
 
 - (void)showMemoryLimitHelp {
     UIAlertController *alert = [UIAlertController
-        alertControllerWithTitle:localize(@"mem_help.title", @"关于内存限制")
+        alertControllerWithTitle:localize(@"mem_help.title", @"About the memory limit")
                          message:localize(@"mem_help.message",
-                             @"iOS 18 / iOS 26 单实例内存上限约为 1440MB，玩大型整合包时可能因内存不足崩溃。\n\n"
-                              "解决方法：\n"
-                              "使用 GetMoreRam (LiveContainer 插件) 解除内存限制。\n"
-                              "GetMoreRam 仓库：github.com/hugeBlack/GetMoreRam\n\n"
-                              "安装后重启启动器即可生效。\n\n"
-                              "如果不使用 LiveContainer，可尝试降低内存分配（设置 > Java > 内存分配），"
-                              "但部分整合包在内存限制下可能无法正常运行。")
+                             @"On iOS 18 / iOS 26 a single instance is capped at about 1440 MB of memory, so large modpacks may crash from running out of memory.\n\n"
+                              "How to fix:\n"
+                              "Use GetMoreRam (a LiveContainer plugin) to lift the memory limit.\n"
+                              "GetMoreRam repository: github.com/hugeBlack/GetMoreRam\n\n"
+                              "Restart the launcher after installing for it to take effect.\n\n"
+                              "If you are not using LiveContainer, try lowering the memory allocation (Settings > Java > Memory allocation), "
+                              "but some modpacks may not run properly within the memory limit.")
                   preferredStyle:UIAlertControllerStyleAlert];
 
     [alert addAction:[UIAlertAction actionWithTitle:@"GetMoreRam"

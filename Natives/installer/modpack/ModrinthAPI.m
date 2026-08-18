@@ -142,7 +142,7 @@
     NSString *modID = item[@"id"];
     if (!modID || modID.length == 0) {
         if (completion) completion(NO, [NSError errorWithDomain:@"ModrinthAPIError" code:1
-                                                       userInfo:@{NSLocalizedDescriptionKey: @"缺少 mod ID"}]);
+                                                       userInfo:@{NSLocalizedDescriptionKey: @"Missing mod ID"}]);
         return;
     }
 
@@ -150,7 +150,7 @@
     NSURL *url = [NSURL URLWithString:urlString];
     if (!url) {
         if (completion) completion(NO, [NSError errorWithDomain:@"ModrinthAPIError" code:2
-                                                       userInfo:@{NSLocalizedDescriptionKey: @"无效的 URL"}]);
+                                                       userInfo:@{NSLocalizedDescriptionKey: @"Invalid URL"}]);
         return;
     }
 
@@ -169,7 +169,7 @@
         }
         if (!data) {
             NSError *err = [NSError errorWithDomain:@"ModrinthAPIError" code:3
-                                           userInfo:@{NSLocalizedDescriptionKey: @"无数据返回"}];
+                                           userInfo:@{NSLocalizedDescriptionKey: @"No data returned"}];
             self.lastError = err;
             if (completion) completion(NO, err);
             return;
@@ -179,7 +179,7 @@
         id jsonResult = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
         if (jsonError || ![jsonResult isKindOfClass:[NSArray class]]) {
             NSError *err = jsonError ?: [NSError errorWithDomain:@"ModrinthAPIError" code:4
-                                                       userInfo:@{NSLocalizedDescriptionKey: @"JSON 解析失败"}];
+                                                       userInfo:@{NSLocalizedDescriptionKey: @"Failed to parse JSON"}];
             self.lastError = err;
             if (completion) completion(NO, err);
             return;
@@ -660,7 +660,7 @@ submitDownloadTasksFromPackage:(NSString *)packagePath
             @synchronized(downloader.failedFiles) {
                 [downloader.failedFiles addObject:@{
                     @"name": indexFile[@"path"] ?: @"(unknown)",
-                    @"error": @"缺少 download URL（modrinth.index.json 中 downloads 为空）"
+                    @"error": @"Missing download URL (downloads is empty in modrinth.index.json)"
                 }];
             }
             continue;

@@ -149,7 +149,7 @@
 
     if (!savesPath) {
         if (error) {
-            *error = [NSError errorWithDomain:@"WorldService" code:1 userInfo:@{NSLocalizedDescriptionKey: @"无法确定游戏目录"}];
+            *error = [NSError errorWithDomain:@"WorldService" code:1 userInfo:@{NSLocalizedDescriptionKey: @"Could not determine the game directory"}];
         }
         return nil;
     }
@@ -165,7 +165,7 @@
         NSLog(@"[WorldService] created saves directory: %@", savesPath);
     } else if (!isDir) {
         if (error) {
-            *error = [NSError errorWithDomain:@"WorldService" code:2 userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"%@ 不是目录", savesPath]}];
+            *error = [NSError errorWithDomain:@"WorldService" code:2 userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"%@ is not a directory", savesPath]}];
         }
         return nil;
     }
@@ -225,7 +225,7 @@
 - (BOOL)deleteWorld:(WorldItem *)item error:(NSError **)error {
     if (!item.filePath) {
         if (error) {
-            *error = [NSError errorWithDomain:@"WorldServiceError" code:101 userInfo:@{NSLocalizedDescriptionKey: @"世界目录路径为空"}];
+            *error = [NSError errorWithDomain:@"WorldServiceError" code:101 userInfo:@{NSLocalizedDescriptionKey: @"The world directory path is empty"}];
         }
         return NO;
     }
@@ -351,7 +351,7 @@
         if (completion) {
             NSError *error = ensureError ?: [NSError errorWithDomain:@"WorldServiceError"
                                                                  code:1
-                                                             userInfo:@{NSLocalizedDescriptionKey: @"找不到游戏目录。"}];
+                                                             userInfo:@{NSLocalizedDescriptionKey: @"Game directory not found."}];
             dispatch_async(dispatch_get_main_queue(), ^{ completion(NO, error); });
         }
         return;
@@ -363,7 +363,7 @@
         if (completion) {
             NSError *error = [NSError errorWithDomain:@"WorldServiceError"
                                                  code:2
-                                             userInfo:@{NSLocalizedDescriptionKey: @"无效的下载链接。"}];
+                                             userInfo:@{NSLocalizedDescriptionKey: @"Invalid download link."}];
             dispatch_async(dispatch_get_main_queue(), ^{ completion(NO, error); });
         }
         return;
@@ -446,7 +446,7 @@
             if (completion) {
                 NSError *error = ensureError ?: [NSError errorWithDomain:@"WorldServiceError"
                                                                      code:1
-                                                                 userInfo:@{NSLocalizedDescriptionKey: @"找不到游戏目录。"}];
+                                                                 userInfo:@{NSLocalizedDescriptionKey: @"Game directory not found."}];
                 dispatch_async(dispatch_get_main_queue(), ^{ completion(NO, error); });
             }
             return;
@@ -464,7 +464,7 @@
                 if (completion) {
                     NSError *error = [NSError errorWithDomain:@"WorldServiceError"
                                                          code:3
-                                                     userInfo:@{NSLocalizedDescriptionKey: @"导入文件不存在。"}];
+                                                     userInfo:@{NSLocalizedDescriptionKey: @"The imported file does not exist."}];
                     dispatch_async(dispatch_get_main_queue(), ^{ completion(NO, error); });
                 }
                 return;
@@ -478,7 +478,7 @@
                 if (completion) {
                     NSError *error = copyError ?: [NSError errorWithDomain:@"WorldServiceError"
                                                                        code:4
-                                                                   userInfo:@{NSLocalizedDescriptionKey: @"复制导入文件失败。"}];
+                                                                   userInfo:@{NSLocalizedDescriptionKey: @"Failed to copy the imported file."}];
                     dispatch_async(dispatch_get_main_queue(), ^{ completion(NO, error); });
                 }
                 return;
@@ -514,7 +514,7 @@
                     } else {
                         completion(NO, extractError ?: [NSError errorWithDomain:@"WorldServiceError"
                                                                             code:5
-                                                                        userInfo:@{NSLocalizedDescriptionKey: @"解压世界失败。"}]);
+                                                                        userInfo:@{NSLocalizedDescriptionKey: @"Failed to extract the world."}]);
                     }
                 });
             }
@@ -635,7 +635,7 @@ totalBytesExpectedToWrite:(int64_t)totalBytesExpectedToWrite {
         dispatch_async(dispatch_get_main_queue(), ^{
             handler(NO, [NSError errorWithDomain:@"WorldServiceError"
                                             code:6
-                                        userInfo:@{NSLocalizedDescriptionKey: @"缺少 saves 目录信息，无法解压。"}]);
+                                        userInfo:@{NSLocalizedDescriptionKey: @"The saves directory is unknown, so it cannot be extracted."}]);
         });
         return;
     }
@@ -657,7 +657,7 @@ totalBytesExpectedToWrite:(int64_t)totalBytesExpectedToWrite {
             } else {
                 handler(NO, extractError ?: [NSError errorWithDomain:@"WorldServiceError"
                                                                 code:5
-                                                            userInfo:@{NSLocalizedDescriptionKey: @"解压世界失败。"}]);
+                                                            userInfo:@{NSLocalizedDescriptionKey: @"Failed to extract the world."}]);
             }
         });
     });

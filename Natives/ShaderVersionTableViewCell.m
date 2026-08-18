@@ -280,7 +280,7 @@
         displayFormatter.timeStyle = NSDateFormatterNoStyle;
         self.datePublishedLabel.text = [displayFormatter stringFromDate:date];
     } else {
-        self.datePublishedLabel.text = @"未知日期";
+        self.datePublishedLabel.text = @"Unknown date";
     }
 
     // 文件大小（优先 primaryFile[@"size"]，其次 fileSize 属性，最后回退未知）
@@ -289,7 +289,7 @@
     } else if (version.fileSize && [version.fileSize longValue] > 0) {
         self.fileSizeLabel.text = [NSByteCountFormatter stringFromByteCount:[version.fileSize longValue] countStyle:NSByteCountFormatterCountStyleFile];
     } else {
-        self.fileSizeLabel.text = @"未知大小";
+        self.fileSizeLabel.text = @"Unknown size";
     }
 
     // 游戏版本兼容

@@ -255,10 +255,10 @@ static const void *kMenuDimViewKey = &kMenuDimViewKey;
     // ZeroTier/Terracotta 联机暂时移除（排查启动崩溃）
     [self dismissMenu];
     UIAlertController *alert = [UIAlertController
-        alertControllerWithTitle:@"联机功能暂时不可用"
-                          message:@"联机模块（ZeroTier/Terracotta）正在排查启动崩溃问题，暂时禁用，请等待后续版本恢复。"
+        alertControllerWithTitle:@"Multiplayer is temporarily unavailable"
+                          message:@"The multiplayer module (ZeroTier/Terracotta) is disabled for now while a startup crash is being investigated. Please wait for a future release."
                    preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleDefault handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];
 }
 

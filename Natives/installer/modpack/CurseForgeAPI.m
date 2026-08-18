@@ -872,7 +872,7 @@ submitDownloadTasksFromPackage:(NSString *)packagePath
             @synchronized(downloader.failedFiles) {
                 [downloader.failedFiles addObject:@{
                     @"name": [NSString stringWithFormat:@"projectID=%@ fileID=%@", projectID, fileID],
-                    @"error": @"无法从 CurseForge API 解析文件信息（url 或 fileName 为空）"
+                    @"error": @"Could not parse file information from the CurseForge API (url or fileName is empty)"
                 }];
             }
             continue;

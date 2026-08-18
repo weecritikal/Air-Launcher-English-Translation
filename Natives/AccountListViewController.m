@@ -26,7 +26,7 @@
     // 适配自定义启动器背景：将当前视图控制器透明化，使全局背景壁纸能够透出
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
 
-    self.title = localize(@"login.title", @"账户管理");
+    self.title = localize(@"login.title", @"Account management");
     self.view.backgroundColor = [UIColor clearColor];
 
     if (self.accountList == nil) {
@@ -84,7 +84,7 @@
 - (void)setupAddAccountButton {
     UIButton *addBtn = [UIButton buttonWithType:UIButtonTypeSystem];
     addBtn.translatesAutoresizingMaskIntoConstraints = NO;
-    [addBtn setTitle:localize(@"login.option.add", @"添加账户") forState:UIControlStateNormal];
+    [addBtn setTitle:localize(@"login.option.add", @"Add account") forState:UIControlStateNormal];
     addBtn.titleLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
     [addBtn setImage:[UIImage systemImageNamed:@"plus"] forState:UIControlStateNormal];
     addBtn.tintColor = [UIColor whiteColor];
@@ -126,13 +126,13 @@
                               badgeLabel:(UILabel *)badgeLabel {
     NSString *username = accountData[@"username"];
     if ([username hasPrefix:@"Demo."]) {
-        badgeLabel.text = localize(@"login.option.demo", @"演示");
+        badgeLabel.text = localize(@"login.option.demo", @"Demo");
         badgeLabel.backgroundColor = [UIColor colorWithRed:0.55 green:0.35 blue:0.85 alpha:1.0];
     } else if (accountData[@"clientToken"] != nil) {
-        badgeLabel.text = localize(@"login.option.3rdparty", @"第三方");
+        badgeLabel.text = localize(@"login.option.3rdparty", @"Third-party");
         badgeLabel.backgroundColor = [UIColor colorWithRed:0.92 green:0.55 blue:0.18 alpha:1.0];
     } else if (accountData[@"xboxGamertag"] == nil) {
-        badgeLabel.text = localize(@"login.option.local", @"本地");
+        badgeLabel.text = localize(@"login.option.local", @"Local");
         badgeLabel.backgroundColor = [UIColor colorWithWhite:0.45 alpha:1.0];
     } else {
         // 微软账户
@@ -171,12 +171,12 @@
     // 副标题：Demo 账户显示"演示账户"，第三方显示服务器名，微软显示 Xbox gamertag，本地显示"离线模式"
     if ([displayName hasPrefix:@"Demo."]) {
         displayName = [displayName substringFromIndex:5];
-        subtitle = localize(@"login.option.demo", @"演示账户");
+        subtitle = localize(@"login.option.demo", @"Demo account");
     } else if (accountData[@"clientToken"] != nil) {
         // 第三方账户：显示其 authserver 地址
-        subtitle = accountData[@"authserver"] ?: localize(@"login.option.3rdparty", @"第三方账户");
+        subtitle = accountData[@"authserver"] ?: localize(@"login.option.3rdparty", @"Third-party account");
     } else if (accountData[@"xboxGamertag"] == nil) {
-        subtitle = localize(@"login.option.local", @"离线模式");
+        subtitle = localize(@"login.option.local", @"Offline mode");
     } else {
         subtitle = accountData[@"xboxGamertag"] ?: @"Microsoft";
     }
@@ -541,12 +541,12 @@
         if (success) {
             // 登录成功并伴随状态信息
             if ([status isKindOfClass:[NSError class]]) {
-                showDialog(localize(@"login.title", @"账户"), [status localizedDescription]);
+                showDialog(localize(@"login.title", @"Account"), [status localizedDescription]);
             } else {
                 if ([status isKindOfClass:[NSString class]] && [status isEqualToString:@"DEMO"]) {
                     showDialog(localize(@"login.warn.title.demomode", nil), localize(@"login.warn.message.demomode", nil));
                 } else if ([status isKindOfClass:[NSString class]]) {
-                    showDialog(localize(@"login.title", @"账户"), status);
+                    showDialog(localize(@"login.title", @"Account"), status);
                 }
             }
             // 登录成功后刷新列表以显示新账户

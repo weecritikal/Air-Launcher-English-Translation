@@ -432,7 +432,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     if (truncatedDesc.length > 40) {
         truncatedDesc = [[description substringToIndex:40] stringByAppendingString:@"…"];
     }
-    self.descLabel.text = [NSString stringWithFormat:@"%@ 下载  •  %@", downloadsStr, truncatedDesc];
+    self.descLabel.text = [NSString stringWithFormat:@"%@ downloads  •  %@", downloadsStr, truncatedDesc];
 
     // metaLabel 已隐藏（保留属性兼容旧代码），不再设置
     self.metaLabel.text = @"";
@@ -539,7 +539,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     self.titleLabel.font = [UIFont systemFontOfSize:20 weight:UIFontWeightBold];
     self.titleLabel.textAlignment = NSTextAlignmentCenter;
     self.titleLabel.numberOfLines = 0;
-    self.titleLabel.text = @"正在安装";
+    self.titleLabel.text = @"Installing";
     [self.cardView addSubview:self.titleLabel];
 
     self.percentLabel = [[UILabel alloc] init];
@@ -603,7 +603,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     self.stageLabel.textAlignment = NSTextAlignmentCenter;
     self.stageLabel.textColor = [UIColor secondaryLabelColor];
     self.stageLabel.numberOfLines = 0;
-    self.stageLabel.text = @"准备中...";
+    self.stageLabel.text = @"Preparing...";
     [self.cardView addSubview:self.stageLabel];
 
     // 使用容器视图 + 垂直 stack 来组织所有内容，使 stagesContainer 可动态显隐
@@ -668,8 +668,8 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
 - (void)setTitleText:(NSString *)titleText {
     _titleText = [titleText copy];
-    self.titleLabel.text = titleText ?: @"正在安装";
-    self.title = titleText ?: @"正在安装";
+    self.titleLabel.text = titleText ?: @"Installing";
+    self.title = titleText ?: @"Installing";
 }
 
 - (void)setStageMessage:(NSString *)stageMessage {
@@ -1102,7 +1102,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
 - (void)setupTabSegment {
     // 精简标签文字为单字+图标，避免在窄屏上拥挤截断（参照 FCL 紧凑 tab）
-    self.tabSegment = [[UISegmentedControl alloc] initWithItems:@[@"版本", @"模组", @"光影", @"资源", @"数据", @"整合", @"世界"]];
+    self.tabSegment = [[UISegmentedControl alloc] initWithItems:@[@"Version", @"Mods", @"Shaders", @"Resources", @"Data", @"Modpacks", @"Worlds"]];
     self.tabSegment.translatesAutoresizingMaskIntoConstraints = NO;
     self.tabSegment.selectedSegmentIndex = 0;
     // 调小字体，确保 7 个 tab 在 iPhone 竖屏也能完整显示
@@ -1120,7 +1120,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 }
 
 - (void)setupVersionFilterSegment {
-    self.versionFilterSegment = [[UISegmentedControl alloc] initWithItems:@[@"全部", @"正式版", @"测试版", @"远古版"]];
+    self.versionFilterSegment = [[UISegmentedControl alloc] initWithItems:@[@"All", @"Release", @"Snapshot", @"Ancient"]];
     self.versionFilterSegment.translatesAutoresizingMaskIntoConstraints = NO;
     self.versionFilterSegment.selectedSegmentIndex = 0;
     [self.versionFilterSegment addTarget:self action:@selector(versionFilterChanged:) forControlEvents:UIControlEventValueChanged];
@@ -1141,7 +1141,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 - (void)setupSearchBar {
     self.searchBar = [[UISearchBar alloc] init];
     self.searchBar.translatesAutoresizingMaskIntoConstraints = NO;
-    self.searchBar.placeholder = @"搜索版本...";
+    self.searchBar.placeholder = @"Search versions...";
     self.searchBar.delegate = self;
     self.searchBar.searchBarStyle = UISearchBarStyleMinimal;
     // 搜索框对所有 tab 都显示（版本 tab 用于按版本号前缀过滤）
@@ -1163,7 +1163,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                           ?: [UIImage systemImageNamed:@"square.and.arrow.down"]
                           ?: [UIImage systemImageNamed:@"tray.and.arrow.down"];
     [self.importModpackButton setImage:importIcon forState:UIControlStateNormal];
-    [self.importModpackButton setTitle:@"导入" forState:UIControlStateNormal];
+    [self.importModpackButton setTitle:@"Import" forState:UIControlStateNormal];
     self.importModpackButton.tintColor = [UIColor whiteColor];
     self.importModpackButton.backgroundColor = [UIColor systemPurpleColor];
     self.importModpackButton.layer.cornerRadius = 10;
@@ -1552,7 +1552,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     // 下载源标题
     UILabel *sourceTitleLabel = [[UILabel alloc] init];
     sourceTitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    sourceTitleLabel.text = @"下载源";
+    sourceTitleLabel.text = @"Download source";
     sourceTitleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightSemibold];
     sourceTitleLabel.textColor = [UIColor secondaryLabelColor];
     [self.filterSidebarContainer addSubview:sourceTitleLabel];
@@ -1634,8 +1634,8 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     ]];
 
     // ===== 2. 游戏版本选择按钮 =====
-    self.sidebarVersionButton = [self createSidebarSelectButtonWithTitle:@"游戏版本"
-                                                                    value:@"全部版本"
+    self.sidebarVersionButton = [self createSidebarSelectButtonWithTitle:@"Game version"
+                                                                    value:@"All versions"
                                                                   selector:@selector(sidebarVersionButtonClicked:)];
     [self.filterSidebarContainer addSubview:self.sidebarVersionButton];
     self.sidebarVersionTitleLabel = [self findSubviewInButton:self.sidebarVersionButton withTag:100];
@@ -1648,8 +1648,8 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     ]];
 
     // ===== 3. 模组加载器选择按钮 =====
-    self.sidebarLoaderButton = [self createSidebarSelectButtonWithTitle:@"模组加载器"
-                                                                   value:@"全部"
+    self.sidebarLoaderButton = [self createSidebarSelectButtonWithTitle:@"Mod loader"
+                                                                   value:@"All"
                                                                  selector:@selector(sidebarLoaderButtonClicked:)];
     [self.filterSidebarContainer addSubview:self.sidebarLoaderButton];
     self.sidebarLoaderTitleLabel = [self findSubviewInButton:self.sidebarLoaderButton withTag:100];
@@ -1662,8 +1662,8 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     ]];
 
     // ===== 4. 排序方式选择按钮 =====
-    self.sidebarSortButton = [self createSidebarSelectButtonWithTitle:@"排序方式"
-                                                                 value:@"相关度"
+    self.sidebarSortButton = [self createSidebarSelectButtonWithTitle:@"Sort by"
+                                                                 value:@"Relevance"
                                                                selector:@selector(sidebarSortButtonClicked:)];
     [self.filterSidebarContainer addSubview:self.sidebarSortButton];
     self.sidebarSortTitleLabel = [self findSubviewInButton:self.sidebarSortButton withTag:100];
@@ -1678,7 +1678,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     // ===== 5. 重置筛选按钮 =====
     self.sidebarResetButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.sidebarResetButton.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.sidebarResetButton setTitle:@"重置筛选" forState:UIControlStateNormal];
+    [self.sidebarResetButton setTitle:@"Reset filters" forState:UIControlStateNormal];
     self.sidebarResetButton.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightMedium];
     [self.sidebarResetButton setImage:[UIImage systemImageNamed:@"arrow.counterclockwise"] forState:UIControlStateNormal];
     self.sidebarResetButton.tintColor = [UIColor systemRedColor];
@@ -1792,7 +1792,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 - (void)setupEmptyLabel {
     self.emptyLabel = [[UILabel alloc] init];
     self.emptyLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.emptyLabel.text = @"暂无内容";
+    self.emptyLabel.text = @"Nothing here";
     self.emptyLabel.textAlignment = NSTextAlignmentCenter;
     self.emptyLabel.textColor = [UIColor secondaryLabelColor];
     self.emptyLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
@@ -1874,10 +1874,10 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
     if (index == 0) {
         // 版本 tab：按版本号前缀过滤版本列表
-        self.searchBar.placeholder = @"搜索版本...";
+        self.searchBar.placeholder = @"Search versions...";
         // 版本 tab 不需要源切换
     } else if (index == 1) {
-        self.searchBar.placeholder = @"搜索模组...";
+        self.searchBar.placeholder = @"Search mods...";
         [self updateSourceSwitchButtonsForType:@"mod"];
         // FCL 风格：首次进入模组 tab 时自动预选当前 profile 的版本和加载器
         // 让搜索结果自动匹配当前游戏环境（如 neoforge + 1.21.1），无需手动筛选
@@ -1886,35 +1886,35 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             [self loadModList];
         }
     } else if (index == 2) {
-        self.searchBar.placeholder = @"搜索光影...";
+        self.searchBar.placeholder = @"Search shaders...";
         [self updateSourceSwitchButtonsForType:@"shader"];
         [self autoApplyProfileFiltersIfNeeded];
         if (self.shaderList.count == 0) {
             [self loadShaderList];
         }
     } else if (index == 3) {
-        self.searchBar.placeholder = @"搜索资源包...";
+        self.searchBar.placeholder = @"Search resource packs...";
         [self updateSourceSwitchButtonsForType:@"resourcepack"];
         [self autoApplyProfileFiltersIfNeeded];
         if (self.resourcepackList.count == 0) {
             [self loadResourcePackList];
         }
     } else if (index == 4) {
-        self.searchBar.placeholder = @"搜索数据包...";
+        self.searchBar.placeholder = @"Search data packs...";
         [self updateSourceSwitchButtonsForType:@"datapack"];
         [self autoApplyProfileFiltersIfNeeded];
         if (self.datapackList.count == 0) {
             [self loadDataPackList];
         }
     } else if (index == 5) {
-        self.searchBar.placeholder = @"搜索整合包...";
+        self.searchBar.placeholder = @"Search modpacks...";
         [self updateSourceSwitchButtonsForType:@"modpack"];
         [self autoApplyProfileFiltersIfNeeded];
         if (self.modpackList.count == 0) {
             [self loadModpackList];
         }
     } else if (index == 6) {
-        self.searchBar.placeholder = @"搜索世界...";
+        self.searchBar.placeholder = @"Search worlds...";
         [self updateSourceSwitchButtonsForType:@"world"];
         if (self.worldList.count == 0) {
             [self loadWorldList];
@@ -2019,8 +2019,8 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     // API Key 未配置时在内容区显示提示（替代弹窗）
     if (![CurseForgeAPI isAPIKeyConfigured]) {
         InlineMessageView *msgView = [InlineMessageView showInViewController:self
-                                                                       title:@"需要 CurseForge API Key"
-                                                                    message:@"检测到未配置 CurseForge API Key，点击前往设置"
+                                                                       title:@"CurseForge API key required"
+                                                                    message:@"No CurseForge API key is configured. Tap to open Settings"
                                                                        type:InlineMessageTypeInfo];
         // 2 秒后自动跳转设置页
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
@@ -2057,8 +2057,8 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     // API Key 未配置时提示
     if (![CurseForgeAPI isAPIKeyConfigured]) {
         InlineMessageView *msgView = [InlineMessageView showInViewController:self
-                                                                       title:@"需要 CurseForge API Key"
-                                                                    message:@"检测到未配置 CurseForge API Key，点击前往设置"
+                                                                       title:@"CurseForge API key required"
+                                                                    message:@"No CurseForge API key is configured. Tap to open Settings"
                                                                        type:InlineMessageTypeInfo];
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             [msgView dismiss];
@@ -2100,7 +2100,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     if (self.currentGameVersion.length > 0) {
         self.sidebarVersionValueLabel.text = self.currentGameVersion;
     } else {
-        self.sidebarVersionValueLabel.text = @"全部版本";
+        self.sidebarVersionValueLabel.text = @"All versions";
     }
 
     // 模组加载器
@@ -2110,23 +2110,23 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         NSString *capitalized = [[loader substringToIndex:1].uppercaseString stringByAppendingString:[loader substringFromIndex:1]];
         self.sidebarLoaderValueLabel.text = capitalized;
     } else {
-        self.sidebarLoaderValueLabel.text = @"全部";
+        self.sidebarLoaderValueLabel.text = @"All";
     }
 
     // 排序方式
     if (self.currentSortField.length > 0) {
         // 转换排序字段为中文显示
         NSDictionary *sortDisplayMap = @{
-            @"relevance": @"相关度",
-            @"downloads": @"下载量",
-            @"follows": @"关注数",
-            @"newest": @"最新",
-            @"updated": @"最近更新"
+            @"relevance": @"Relevance",
+            @"downloads": @"Downloads",
+            @"follows": @"Follows",
+            @"newest": @"Newest",
+            @"updated": @"Recently updated"
         };
         NSString *display = sortDisplayMap[self.currentSortField];
         self.sidebarSortValueLabel.text = display ?: self.currentSortField;
     } else {
-        self.sidebarSortValueLabel.text = @"相关度";
+        self.sidebarSortValueLabel.text = @"Relevance";
     }
 }
 
@@ -2180,11 +2180,11 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                     strongSelf.versionList = json[@"versions"];
                     [strongSelf applyVersionFilter];
                 } else {
-                    strongSelf.emptyLabel.text = @"加载版本列表失败";
+                    strongSelf.emptyLabel.text = @"Failed to load the version list";
                     strongSelf.emptyLabel.hidden = NO;
                 }
             } else {
-                strongSelf.emptyLabel.text = @"网络错误，无法加载版本";
+                strongSelf.emptyLabel.text = @"Network error, could not load versions";
                 strongSelf.emptyLabel.hidden = NO;
             }
         });
@@ -2237,7 +2237,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     
     self.emptyLabel.hidden = (self.filteredVersions.count > 0);
     if (self.filteredVersions.count == 0) {
-        self.emptyLabel.text = hasQuery ? @"未匹配到版本" : @"暂无版本";
+        self.emptyLabel.text = hasQuery ? @"No matching versions" : @"No versions";
         self.emptyLabel.hidden = NO;
     } else {
         self.emptyLabel.hidden = YES;
@@ -2299,7 +2299,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                 [strongSelf.modTableView reloadData];
                 strongSelf.emptyLabel.hidden = (strongSelf.modList.count > 0);
                 if (strongSelf.modList.count == 0) {
-                    strongSelf.emptyLabel.text = @"暂无模组";
+                    strongSelf.emptyLabel.text = @"No mods";
                     strongSelf.emptyLabel.hidden = NO;
                 }
             } else if (error) {
@@ -2368,7 +2368,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                 [strongSelf.shaderTableView reloadData];
                 strongSelf.emptyLabel.hidden = (strongSelf.shaderList.count > 0);
                 if (strongSelf.shaderList.count == 0) {
-                    strongSelf.emptyLabel.text = @"暂无光影";
+                    strongSelf.emptyLabel.text = @"No shaders";
                     strongSelf.emptyLabel.hidden = NO;
                 }
             } else if (error) {
@@ -2437,7 +2437,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                 [strongSelf.modpackTableView reloadData];
                 strongSelf.emptyLabel.hidden = (strongSelf.modpackList.count > 0);
                 if (strongSelf.modpackList.count == 0) {
-                    strongSelf.emptyLabel.text = @"暂无整合包";
+                    strongSelf.emptyLabel.text = @"No modpacks";
                     strongSelf.emptyLabel.hidden = NO;
                 }
             } else if (error) {
@@ -2506,7 +2506,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                 [strongSelf.resourcepackTableView reloadData];
                 strongSelf.emptyLabel.hidden = (strongSelf.resourcepackList.count > 0);
                 if (strongSelf.resourcepackList.count == 0) {
-                    strongSelf.emptyLabel.text = @"暂无资源包";
+                    strongSelf.emptyLabel.text = @"No resource packs";
                     strongSelf.emptyLabel.hidden = NO;
                 }
             } else if (error) {
@@ -2575,7 +2575,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                 [strongSelf.datapackTableView reloadData];
                 strongSelf.emptyLabel.hidden = (strongSelf.datapackList.count > 0);
                 if (strongSelf.datapackList.count == 0) {
-                    strongSelf.emptyLabel.text = @"暂无数据包";
+                    strongSelf.emptyLabel.text = @"No data packs";
                     strongSelf.emptyLabel.hidden = NO;
                 }
             } else if (error) {
@@ -2618,7 +2618,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         self.isLoadingWorlds = NO;
         [self.worldList removeAllObjects];
         [self.worldTableView reloadData];
-        self.emptyLabel.text = @"世界列表需要 CurseForge API Key\n请到「设置」中配置";
+        self.emptyLabel.text = @"The world list requires a CurseForge API key\nConfigure one in Settings";
         self.emptyLabel.hidden = NO;
         return;
     }
@@ -2656,7 +2656,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                 [strongSelf.worldTableView reloadData];
                 strongSelf.emptyLabel.hidden = (strongSelf.worldList.count > 0);
                 if (strongSelf.worldList.count == 0) {
-                    strongSelf.emptyLabel.text = @"暂无世界";
+                    strongSelf.emptyLabel.text = @"No worlds";
                     strongSelf.emptyLabel.hidden = NO;
                 }
             } else if (error) {
@@ -2680,48 +2680,48 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 - (void)showFilterOptions {
     NSInteger tabIndex = self.tabSegment.selectedSegmentIndex;
 
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"选项"
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Options"
                                                                    message:nil
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
 
     if (tabIndex == 1 || tabIndex == 2 || tabIndex == 3 || tabIndex == 4) {
-        [alert addAction:[UIAlertAction actionWithTitle:@"选择游戏版本"
+        [alert addAction:[UIAlertAction actionWithTitle:@"Select game version"
                                                   style:UIAlertActionStyleDefault
                                                 handler:^(UIAlertAction * _Nonnull action) {
             [self showGameVersionPicker];
         }]];
 
-        [alert addAction:[UIAlertAction actionWithTitle:@"排序方式"
+        [alert addAction:[UIAlertAction actionWithTitle:@"Sort by"
                                                   style:UIAlertActionStyleDefault
                                                 handler:^(UIAlertAction * _Nonnull action) {
             [self showSortOptions];
         }]];
 
         if (tabIndex == 1) {
-            [alert addAction:[UIAlertAction actionWithTitle:@"模组加载器"
+            [alert addAction:[UIAlertAction actionWithTitle:@"Mod loader"
                                                       style:UIAlertActionStyleDefault
                                                     handler:^(UIAlertAction * _Nonnull action) {
                 [self showModLoaderPicker];
             }]];
         }
 
-        [alert addAction:[UIAlertAction actionWithTitle:@"重置筛选"
+        [alert addAction:[UIAlertAction actionWithTitle:@"Reset filters"
                                                   style:UIAlertActionStyleDestructive
                                                 handler:^(UIAlertAction * _Nonnull action) {
             [self resetFilters];
         }]];
     } else if (tabIndex == 5) {
-        [alert addAction:[UIAlertAction actionWithTitle:@"导入本地整合包"
+        [alert addAction:[UIAlertAction actionWithTitle:@"Import local modpack"
                                                   style:UIAlertActionStyleDefault
                                                 handler:^(UIAlertAction * _Nonnull action) {
             [self openImportModpackView];
         }]];
-        [alert addAction:[UIAlertAction actionWithTitle:@"选择游戏版本"
+        [alert addAction:[UIAlertAction actionWithTitle:@"Select game version"
                                                   style:UIAlertActionStyleDefault
                                                 handler:^(UIAlertAction * _Nonnull action) {
             [self showGameVersionPicker];
         }]];
-        [alert addAction:[UIAlertAction actionWithTitle:@"重置筛选"
+        [alert addAction:[UIAlertAction actionWithTitle:@"Reset filters"
                                                   style:UIAlertActionStyleDestructive
                                                 handler:^(UIAlertAction * _Nonnull action) {
             self.currentGameVersion = nil;
@@ -2729,17 +2729,17 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         }]];
     } else if (tabIndex == 6) {
         // 世界 tab: 强制 CurseForge，提供 API Key 入口与版本筛选
-        [alert addAction:[UIAlertAction actionWithTitle:@"设置 CurseForge API Key"
+        [alert addAction:[UIAlertAction actionWithTitle:@"Set CurseForge API key"
                                                   style:UIAlertActionStyleDefault
                                                 handler:^(UIAlertAction * _Nonnull action) {
             [self openCurseForgeAPIKeySettings];
         }]];
-        [alert addAction:[UIAlertAction actionWithTitle:@"选择游戏版本"
+        [alert addAction:[UIAlertAction actionWithTitle:@"Select game version"
                                                   style:UIAlertActionStyleDefault
                                                 handler:^(UIAlertAction * _Nonnull action) {
             [self showGameVersionPicker];
         }]];
-        [alert addAction:[UIAlertAction actionWithTitle:@"重置筛选"
+        [alert addAction:[UIAlertAction actionWithTitle:@"Reset filters"
                                                   style:UIAlertActionStyleDestructive
                                                 handler:^(UIAlertAction * _Nonnull action) {
             self.currentGameVersion = nil;
@@ -2747,7 +2747,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         }]];
     }
     
-    [alert addAction:[UIAlertAction actionWithTitle:@"取消"
+    [alert addAction:[UIAlertAction actionWithTitle:@"Cancel"
                                               style:UIAlertActionStyleCancel
                                             handler:nil]];
     
@@ -2760,14 +2760,14 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 }
 
 - (void)showGameVersionPicker {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"选择游戏版本"
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Select game version"
                                                                    message:nil
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
 
     // 动态构建版本列表：优先使用已加载的 Mojang version_manifest 中的 release 版本，
     // 这样能自动跟随 MC 版本更新（不再使用硬编码列表）。
     // 同时把当前 profile 的 MC 版本置顶（如果有）方便快速选择。
-    NSMutableArray<NSString *> *versions = [NSMutableArray arrayWithObject:@"全部版本"];
+    NSMutableArray<NSString *> *versions = [NSMutableArray arrayWithObject:@"All versions"];
 
     // 当前 profile 的 MC 版本（若有）放第二位，便于快速选择
     NSString *profileMcVersion = [self currentProfileMinecraftVersion];
@@ -2805,7 +2805,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         [alert addAction:[UIAlertAction actionWithTitle:version
                                                   style:UIAlertActionStyleDefault
                                                 handler:^(UIAlertAction * _Nonnull action) {
-            if ([version isEqualToString:@"全部版本"]) {
+            if ([version isEqualToString:@"All versions"]) {
                 self.currentGameVersion = nil;
             } else {
                 self.currentGameVersion = version;
@@ -2817,7 +2817,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         }]];
     }
 
-    [alert addAction:[UIAlertAction actionWithTitle:@"取消"
+    [alert addAction:[UIAlertAction actionWithTitle:@"Cancel"
                                               style:UIAlertActionStyleCancel
                                             handler:nil]];
 
@@ -2881,16 +2881,16 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 }
 
 - (void)showSortOptions {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"排序方式"
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Sort by"
                                                                    message:nil
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
 
     NSDictionary *sortOptions = @{
-        @"关注度": @"follows",
-        @"下载数": @"downloads",
-        @"最近更新": @"updated",
-        @"最新发布": @"newest",
-        @"相关性": @"relevance"
+        @"Follows": @"follows",
+        @"Downloads": @"downloads",
+        @"Recently updated": @"updated",
+        @"Newest": @"newest",
+        @"Relevance": @"relevance"
     };
 
     for (NSString *title in sortOptions) {
@@ -2903,7 +2903,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         }]];
     }
 
-    [alert addAction:[UIAlertAction actionWithTitle:@"取消"
+    [alert addAction:[UIAlertAction actionWithTitle:@"Cancel"
                                               style:UIAlertActionStyleCancel
                                             handler:nil]];
 
@@ -2917,11 +2917,11 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 }
 
 - (void)showModLoaderPicker {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"模组加载器"
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Mod loader"
                                                                    message:nil
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
 
-    NSArray *loaderNames = @[@"全部", @"Fabric", @"Forge", @"Quilt", @"NeoForge"];
+    NSArray *loaderNames = @[@"All", @"Fabric", @"Forge", @"Quilt", @"NeoForge"];
     NSArray *loaderValues = @[[NSNull null], @"fabric", @"forge", @"quilt", @"neoforge"];
 
     for (NSInteger i = 0; i < loaderNames.count; i++) {
@@ -2939,7 +2939,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         }]];
     }
 
-    [alert addAction:[UIAlertAction actionWithTitle:@"取消"
+    [alert addAction:[UIAlertAction actionWithTitle:@"Cancel"
                                               style:UIAlertActionStyleCancel
                                             handler:nil]];
 
@@ -3014,7 +3014,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 - (void)showError:(NSString *)message {
     // 在内容区显示错误，替代弹窗
     [InlineMessageView showInViewController:self
-                                       title:@"错误"
+                                       title:@"Error"
                                     message:message
                                        type:InlineMessageTypeError];
 }
@@ -3181,11 +3181,11 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             self.progressCardView = nil;
         }
         // 参照 ZL2：vanilla 分支也用"准备运行环境"文案，与加载器前置预装保持一致
-        NSString *vanillaTitle = [NSString stringWithFormat:@"正在准备运行环境 %@", versionId];
+        NSString *vanillaTitle = [NSString stringWithFormat:@"Preparing the runtime environment %@", versionId];
         self.progressCardView = [DownloadProgressCardView showInParentView:self.view title:vanillaTitle];
         [self.progressCardView startDownloadWithTitle:vanillaTitle
-                                              subtitle:@"Minecraft 原版"];
-        [self.progressCardView updateProgress:-1 downloaded:0 total:-1 speed:0 eta:-1 currentFile:@"正在获取版本信息..."];
+                                              subtitle:@"Vanilla Minecraft"];
+        [self.progressCardView updateProgress:-1 downloaded:0 total:-1 speed:0 eta:-1 currentFile:@"Fetching version information..."];
 
         __weak typeof(self) weakSelf = self;
         [self ensureVanillaInstalled:version completion:^(BOOL success) {
@@ -3198,11 +3198,11 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                 // 失败时清理进度卡片并显示错误
                 if (strongSelf.progressCardView) {
                     NSError *err = [NSError errorWithDomain:@"DownloadError" code:-1
-                                                     userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"无法安装原版 %@，请检查网络后重试", versionId]}];
+                                                     userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Could not install vanilla %@. Check your network connection and try again", versionId]}];
                     [strongSelf.progressCardView failWithError:err];
                     strongSelf.progressCardView = nil;
                 }
-                [strongSelf showError:[NSString stringWithFormat:@"无法安装原版 %@，请检查网络后重试", versionId]];
+                [strongSelf showError:[NSString stringWithFormat:@"Could not install vanilla %@. Check your network connection and try again", versionId]];
             }
         }];
         return;
@@ -3223,7 +3223,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
         if (!success) {
-            [strongSelf showError:[NSString stringWithFormat:@"无法安装原版 %@，请检查网络后重试", versionId]];
+            [strongSelf showError:[NSString stringWithFormat:@"Could not install vanilla %@. Check your network connection and try again", versionId]];
             return;
         }
         dispatch_async(dispatch_get_main_queue(), ^{
@@ -3238,7 +3238,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             } else if ([loaderType isEqualToString:@"optifine"]) {
                 [strongSelf installOptiFineAsPatch:versionId loaderVersion:loaderVersion];
             } else {
-                [strongSelf showError:[NSString stringWithFormat:@"%@ 安装器暂未实现", loaderType]];
+                [strongSelf showError:[NSString stringWithFormat:@"The %@ installer is not implemented yet", loaderType]];
             }
         });
     }];
@@ -3466,18 +3466,18 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             }
             InstallerProgressViewController *progressVC = [[InstallerProgressViewController alloc] init];
             // 参照 ZL2：原版预装是加载器安装的前置步骤，文案应体现"准备运行环境"而非"安装原版"
-            progressVC.titleText = [NSString stringWithFormat:@"正在准备运行环境 %@", versionId];
-            progressVC.stageMessage = @"正在下载运行所需文件...";
+            progressVC.titleText = [NSString stringWithFormat:@"Preparing the runtime environment %@", versionId];
+            progressVC.stageMessage = @"Downloading required files...";
             progressVC.progress = -1; // 初始不确定模式，待拿到总字节数后切换为确定模式
             // 阶段12增强：类别图标 + 阶段步骤列表（参照 FCL 原版安装步骤）
             progressVC.categoryIconName = @"cube.box.fill";
             progressVC.categoryIconColor = [UIColor systemGreenColor];
             progressVC.stageSteps = @[
-                @{@"title": @"获取版本清单", @"status": @2},
-                @{@"title": @"下载版本 JSON", @"status": @2},
-                @{@"title": @"下载游戏库文件", @"status": @1},
-                @{@"title": @"下载资源文件", @"status": @0},
-                @{@"title": @"验证文件完整性", @"status": @0},
+                @{@"title": @"Fetch version manifest", @"status": @2},
+                @{@"title": @"Download version JSON", @"status": @2},
+                @{@"title": @"Download game libraries", @"status": @1},
+                @{@"title": @"Download asset files", @"status": @0},
+                @{@"title": @"Verify file integrity", @"status": @0},
             ];
             progressVC.cancelHandler = ^{
                 __strong typeof(weakSelf) ss = weakSelf;
@@ -3551,7 +3551,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
 - (void)downloadVanillaVersion:(NSDictionary *)version {
     if (![self isNetworkAvailable]) {
-        [self showError:@"网络不可用，请检查网络连接"];
+        [self showError:@"Network unavailable. Please check your network connection"];
         return;
     }
 
@@ -3586,15 +3586,15 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         self.downloadingAlert = nil;
     }
 
-    NSString *versionId = version[@"id"] ?: @"版本";
+    NSString *versionId = version[@"id"] ?: @"Version";
     NSString *versionType = version[@"type"] ?: @"";
-    NSString *subtitle = [versionType isEqualToString:@"release"] ? @"Minecraft 正式版" :
-                         [versionType isEqualToString:@"snapshot"] ? @"Minecraft 测试版" : @"Minecraft";
+    NSString *subtitle = [versionType isEqualToString:@"release"] ? @"Minecraft release" :
+                         [versionType isEqualToString:@"snapshot"] ? @"Minecraft snapshot" : @"Minecraft";
 
     // 创建并显示下载进度卡片
     self.progressCardView = [DownloadProgressCardView showInParentView:self.view
-                                                                 title:[NSString stringWithFormat:@"正在下载 %@", versionId]];
-    [self.progressCardView startDownloadWithTitle:[NSString stringWithFormat:@"正在下载 %@", versionId]
+                                                                 title:[NSString stringWithFormat:@"Downloading %@", versionId]];
+    [self.progressCardView startDownloadWithTitle:[NSString stringWithFormat:@"Downloading %@", versionId]
                                           subtitle:subtitle];
 
     // 重新赋值 downloadTask 前，先移除旧 task 的 KVO 观察者。
@@ -3621,7 +3621,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                                                      total:-1
                                                     speed:0
                                                       eta:-1
-                                              currentFile:[NSString stringWithFormat:@"下载失败，正在重试 (%ld/%ld)...", (long)retryCount, (long)maxRetryCount]];
+                                              currentFile:[NSString stringWithFormat:@"Download failed, retrying (%ld/%ld)...", (long)retryCount, (long)maxRetryCount]];
             }
         });
     };
@@ -3641,7 +3641,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             // 使用进度卡片显示失败状态
             if (weakSelf.progressCardView) {
                 NSError *error = [NSError errorWithDomain:@"DownloadError" code:-1
-                                                 userInfo:@{NSLocalizedDescriptionKey: @"版本下载失败，请检查网络连接"}];
+                                                 userInfo:@{NSLocalizedDescriptionKey: @"Version download failed. Please check your network connection"}];
                 [weakSelf.progressCardView failWithError:error];
                 weakSelf.progressCardView = nil;
             }
@@ -3694,22 +3694,22 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     // 改进2（参照 ZL2 统一进度流）：复用原版预装转交的进度 VC（若存在），
     // 否则创建新 VC；标题统一为"正在准备运行环境"，步骤列表合并展示原版已完成步骤。
     InstallerProgressViewController *progressVC = [self obtainInstallerProgressVC];
-    progressVC.titleText = [NSString stringWithFormat:@"正在准备运行环境 %@", gameVersion];
+    progressVC.titleText = [NSString stringWithFormat:@"Preparing the runtime environment %@", gameVersion];
     progressVC.progress = -1; // 不确定模式，正在拉取 profile JSON
-    progressVC.stageMessage = [NSString stringWithFormat:@"正在获取 %@ profile...\n游戏版本: %@  加载器: %@", displayName, gameVersion, loaderVersion];
+    progressVC.stageMessage = [NSString stringWithFormat:@"Fetching the %@ profile...\nGame version: %@  Loader: %@", displayName, gameVersion, loaderVersion];
     // 阶段12增强：加载器图标 + 阶段步骤列表（使用 ModLoaderIconHelper 统一图标）
     progressVC.categoryIconName = [ModLoaderIconHelper symbolNameForLoader:loaderTag];
     progressVC.categoryIconColor = [ModLoaderIconHelper brandColorForLoader:loaderTag];
     // 合并步骤列表：原版5步标记完成 + 加载器安装步骤
     progressVC.stageSteps = @[
-        @{@"title": @"获取版本清单", @"status": @2},
-        @{@"title": @"下载版本 JSON", @"status": @2},
-        @{@"title": @"下载游戏库文件", @"status": @2},
-        @{@"title": @"下载资源文件", @"status": @2},
-        @{@"title": @"验证文件完整性", @"status": @2},
-        @{@"title": @"获取加载器 profile", @"status": @1},
-        @{@"title": @"下载加载器库文件", @"status": @0},
-        @{@"title": @"写入版本 JSON", @"status": @0},
+        @{@"title": @"Fetch version manifest", @"status": @2},
+        @{@"title": @"Download version JSON", @"status": @2},
+        @{@"title": @"Download game libraries", @"status": @2},
+        @{@"title": @"Download asset files", @"status": @2},
+        @{@"title": @"Verify file integrity", @"status": @2},
+        @{@"title": @"Fetch loader profile", @"status": @1},
+        @{@"title": @"Download loader libraries", @"status": @0},
+        @{@"title": @"Write version JSON", @"status": @0},
     ];
 
     __weak typeof(self) weakSelf = self;
@@ -3752,17 +3752,17 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                     [[DownloadTaskManager sharedManager] setTaskWithId:fabricTaskId completedWithError:nil];
                     [[DownloadTaskManager sharedManager] setTaskWithId:fabricTaskId state:DownloadTaskStateCancelled];
                 } else {
-                    NSError *err = [NSError errorWithDomain:@"FabricInstall" code:error.code userInfo:@{NSLocalizedDescriptionKey: error.localizedDescription ?: @"网络错误"}];
+                    NSError *err = [NSError errorWithDomain:@"FabricInstall" code:error.code userInfo:@{NSLocalizedDescriptionKey: error.localizedDescription ?: @"Network error"}];
                     [[DownloadTaskManager sharedManager] setTaskWithId:fabricTaskId completedWithError:err];
                 }
-                [strongSelf finishInstallerProgressWithError:[NSString stringWithFormat:@"%@ 安装失败: %@", displayName, error.localizedDescription ?: @"网络错误"]];
+                [strongSelf finishInstallerProgressWithError:[NSString stringWithFormat:@"%@ installation failed: %@", displayName, error.localizedDescription ?: @"Network error"]];
                 return;
             }
 
             if (!data) {
-                NSError *err = [NSError errorWithDomain:@"FabricInstall" code:2 userInfo:@{NSLocalizedDescriptionKey: @"返回数据为空"}];
+                NSError *err = [NSError errorWithDomain:@"FabricInstall" code:2 userInfo:@{NSLocalizedDescriptionKey: @"The returned data was empty"}];
                 [[DownloadTaskManager sharedManager] setTaskWithId:fabricTaskId completedWithError:err];
-                [strongSelf finishInstallerProgressWithError:[NSString stringWithFormat:@"%@ 安装失败: 返回数据为空", displayName]];
+                [strongSelf finishInstallerProgressWithError:[NSString stringWithFormat:@"%@ installation failed: returned data was empty", displayName]];
                 return;
             }
 
@@ -3770,14 +3770,14 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
             // 解析 JSON
             strongSelf.installerProgressVC.progress = 0.5;
-            strongSelf.installerProgressVC.stageMessage = [NSString stringWithFormat:@"正在解析 %@ 配置...", displayName];
+            strongSelf.installerProgressVC.stageMessage = [NSString stringWithFormat:@"Parsing the %@ profile...", displayName];
 
             NSError *jsonError;
             NSDictionary *profileJson = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
             if (!profileJson || jsonError) {
-                NSError *err = [NSError errorWithDomain:@"FabricInstall" code:3 userInfo:@{NSLocalizedDescriptionKey: jsonError.localizedDescription ?: @"解析失败"}];
+                NSError *err = [NSError errorWithDomain:@"FabricInstall" code:3 userInfo:@{NSLocalizedDescriptionKey: jsonError.localizedDescription ?: @"Parse failed"}];
                 [[DownloadTaskManager sharedManager] setTaskWithId:fabricTaskId completedWithError:err];
-                [strongSelf finishInstallerProgressWithError:[NSString stringWithFormat:@"解析 %@ 配置失败", displayName]];
+                [strongSelf finishInstallerProgressWithError:[NSString stringWithFormat:@"Failed to parse the %@ profile", displayName]];
                 return;
             }
 
@@ -3785,7 +3785,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
             // 写入版本 JSON
             strongSelf.installerProgressVC.progress = 0.7;
-            strongSelf.installerProgressVC.stageMessage = @"正在写入版本文件...";
+            strongSelf.installerProgressVC.stageMessage = @"Writing version files...";
 
             NSString *versionId = profileJson[@"id"];
             NSString *jsonPath = [NSString stringWithFormat:@"%s/versions/%@/%@.json", getenv("POJAV_GAME_DIR"), versionId, versionId];
@@ -3800,7 +3800,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             if (saveError) {
                 NSError *err = [NSError errorWithDomain:@"FabricInstall" code:4 userInfo:@{NSLocalizedDescriptionKey: saveError.localizedDescription}];
                 [[DownloadTaskManager sharedManager] setTaskWithId:fabricTaskId completedWithError:err];
-                [strongSelf finishInstallerProgressWithError:[NSString stringWithFormat:@"保存配置失败: %@", saveError.localizedDescription]];
+                [strongSelf finishInstallerProgressWithError:[NSString stringWithFormat:@"Failed to save profile: %@", saveError.localizedDescription]];
                 return;
             }
 
@@ -3808,7 +3808,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
             // 注册 profile
             strongSelf.installerProgressVC.progress = 0.85;
-            strongSelf.installerProgressVC.stageMessage = @"正在注册配置...";
+            strongSelf.installerProgressVC.stageMessage = @"Registering profile...";
 
             NSMutableDictionary *profile = [NSMutableDictionary dictionary];
             profile[@"name"] = versionId;
@@ -3824,24 +3824,24 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             // 仅 Fabric 安装 Fabric API；Quilt 用 QSL/QFAPI，不安装
             if (installAPI && !isQuilt) {
                 strongSelf.installerProgressVC.progress = 0.9;
-                strongSelf.installerProgressVC.stageMessage = @"正在下载 Fabric API...";
+                strongSelf.installerProgressVC.stageMessage = @"Downloading Fabric API...";
                 [strongSelf downloadFabricAPI:gameVersion completion:^(BOOL success, NSError *apiError) {
                     dispatch_async(dispatch_get_main_queue(), ^{
                         __strong typeof(weakSelf) strongSelf2 = weakSelf;
                         if (!strongSelf2) return;
                         if (success) {
                             [[DownloadTaskManager sharedManager] setTaskWithId:fabricTaskId completedWithError:nil];
-                            [strongSelf2 finishInstallerProgressWithSuccess:[NSString stringWithFormat:@"%@ %@ 安装成功\nFabric API 已自动安装", displayName, loaderVersion]];
+                            [strongSelf2 finishInstallerProgressWithSuccess:[NSString stringWithFormat:@"%@ %@ installed successfully\nFabric API installed automatically", displayName, loaderVersion]];
                         } else {
-                            NSError *err = [NSError errorWithDomain:@"FabricInstall" code:5 userInfo:@{NSLocalizedDescriptionKey: apiError.localizedDescription ?: @"Fabric API 下载失败"}];
+                            NSError *err = [NSError errorWithDomain:@"FabricInstall" code:5 userInfo:@{NSLocalizedDescriptionKey: apiError.localizedDescription ?: @"Fabric API download failed"}];
                             [[DownloadTaskManager sharedManager] setTaskWithId:fabricTaskId completedWithError:err];
-                            [strongSelf2 finishInstallerProgressWithSuccess:[NSString stringWithFormat:@"%@ %@ 安装成功\nFabric API 安装失败: %@", displayName, loaderVersion, apiError.localizedDescription ?: @"未知错误"]];
+                            [strongSelf2 finishInstallerProgressWithSuccess:[NSString stringWithFormat:@"%@ %@ installed successfully\nFabric API install failed: %@", displayName, loaderVersion, apiError.localizedDescription ?: @"Unknown error"]];
                         }
                     });
                 }];
             } else {
                 [[DownloadTaskManager sharedManager] setTaskWithId:fabricTaskId completedWithError:nil];
-                [strongSelf finishInstallerProgressWithSuccess:[NSString stringWithFormat:@"%@ %@ 安装成功", displayName, loaderVersion]];
+                [strongSelf finishInstallerProgressWithSuccess:[NSString stringWithFormat:@"%@ %@ installed successfully", displayName, loaderVersion]];
             }
         });
     }];
@@ -3854,7 +3854,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 - (void)finishInstallerProgressWithSuccess:(NSString *)message {
     if (!self.installerProgressVC) return;
     self.installerProgressVC.progress = 1.0;
-    self.installerProgressVC.stageMessage = @"安装完成";
+    self.installerProgressVC.stageMessage = @"Installation complete";
     __weak typeof(self) weakSelf = self;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         __strong typeof(weakSelf) strongSelf = weakSelf;
@@ -3911,7 +3911,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             return;
         }
         if (error || results.count == 0) {
-            if (completion) completion(NO, error ?: [NSError errorWithDomain:@"DownloadError" code:1 userInfo:@{NSLocalizedDescriptionKey: @"未找到 Fabric API"}]);
+            if (completion) completion(NO, error ?: [NSError errorWithDomain:@"DownloadError" code:1 userInfo:@{NSLocalizedDescriptionKey: @"Fabric API not found"}]);
             return;
         }
         
@@ -3925,13 +3925,13 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         }
         
         if (!fabricAPI) {
-            if (completion) completion(NO, [NSError errorWithDomain:@"DownloadError" code:2 userInfo:@{NSLocalizedDescriptionKey: @"未找到合适的 Fabric API 版本"}]);
+            if (completion) completion(NO, [NSError errorWithDomain:@"DownloadError" code:2 userInfo:@{NSLocalizedDescriptionKey: @"No suitable Fabric API version found"}]);
             return;
         }
         
         [api getVersionsForModWithID:fabricAPI[@"id"] completion:^(NSArray<ModVersion *> *versions, NSError *versionError) {
             if (versionError || versions.count == 0) {
-                if (completion) completion(NO, versionError ?: [NSError errorWithDomain:@"DownloadError" code:3 userInfo:@{NSLocalizedDescriptionKey: @"获取 Fabric API 版本失败"}]);
+                if (completion) completion(NO, versionError ?: [NSError errorWithDomain:@"DownloadError" code:3 userInfo:@{NSLocalizedDescriptionKey: @"Failed to fetch Fabric API versions"}]);
                 return;
             }
             
@@ -4042,7 +4042,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     if (!vc.requiredJavaVersion) {
         // 解析失败（manifest 缺失/主类非法）时明确提示，避免静默 return 让用户以为安装器已启动
         showDialog(localize(@"Error", nil),
-            [NSString stringWithFormat:@"无法解析安装器主类或 Java 版本：%@", path.lastPathComponent]);
+            [NSString stringWithFormat:@"Could not determine the installer main class or Java version: %@", path.lastPathComponent]);
         return;
     }
     // execute_jar 路径：Caciocavallo17 jar 现已统一为 Java 17 编译版本，
@@ -4056,7 +4056,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     NSString *javaHome = getSelectedJavaHome(@"execute_jar", requiredJavaVersion);
     if (!javaHome) {
         showDialog(localize(@"Error", nil),
-            [NSString stringWithFormat:@"执行 JAR 需要 Java %d 或更高版本，但未配置对应的运行时。\n\n请到「设置 → 管理运行时」中为「执行 Jar」标签分配一个 Java %d+ 的运行时。", requiredJavaVersion, requiredJavaVersion]);
+            [NSString stringWithFormat:@"Running this JAR requires Java %d or later, but no matching runtime is configured.\n\nGo to Settings → Manage runtimes and assign a Java %d+ runtime to the \"Execute Jar\" tag.", requiredJavaVersion, requiredJavaVersion]);
         return;
     }
     [self invokeAfterJITEnabled:^{
@@ -4119,7 +4119,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         if ([error.domain isEqualToString:ForgeInstallerFlowErrorDomain] && error.code == ForgeInstallerFlowErrorCodeCancelled) {
             return;
         }
-        [self showError:error.localizedDescription ?: [NSString stringWithFormat:@"%@ 安装失败", vendorName]];
+        [self showError:error.localizedDescription ?: [NSString stringWithFormat:@"%@ installation failed", vendorName]];
         return;
     }
     
@@ -4130,13 +4130,13 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         filePath = (NSString *)resultOrError;
     }
     if (filePath.length == 0) {
-        [self showError:[NSString stringWithFormat:@"%@ 安装器下载结果无效", vendorName]];
+        [self showError:[NSString stringWithFormat:@"%@ installer download result is invalid", vendorName]];
         return;
     }
     
     LauncherNavigationController *navVC = [self activeLauncherNavigationController];
     
-    NSString *message = [NSString stringWithFormat:@"%@ 安装器已下载，正在启动。安装完成后请按提示操作。", vendorName];
+    NSString *message = [NSString stringWithFormat:@"The %@ installer has been downloaded and is starting. Follow the prompts once installation finishes.", vendorName];
     
     void (^launchInstaller)(void) = ^{
         if (navVC) {
@@ -4148,14 +4148,14 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         if (installAction) {
             installAction();
         } else {
-            [self showSuccessMessage:[NSString stringWithFormat:@"%@ 安装器已启动\n配置文件: %@", vendorName, profileName ?: gameVersion]];
+            [self showSuccessMessage:[NSString stringWithFormat:@"%@ installer started\nProfile: %@", vendorName, profileName ?: gameVersion]];
         }
     };
     
     void (^showAlertAndLaunch)(void) = ^{
         // 在内容区显示下载完成提示，替代弹窗
         InlineMessageView *msgView = [InlineMessageView showInViewController:self
-                                                                       title:@"下载完成"
+                                                                       title:@"Download complete"
                                                                     message:message
                                                                        type:InlineMessageTypeSuccess];
 
@@ -4214,22 +4214,22 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                 NSLog(@"[ForgeDirect] DownloadViewController: starting direct install with progress UI");
                 // 改进2（参照 ZL2 统一进度流）：复用原版预装转交的进度 VC（若存在）
                 InstallerProgressViewController *progressVC = [strongSelf2 obtainInstallerProgressVC];
-                progressVC.titleText = [NSString stringWithFormat:@"正在准备运行环境 %@", gameVersion];
+                progressVC.titleText = [NSString stringWithFormat:@"Preparing the runtime environment %@", gameVersion];
                 progressVC.progress = 0.0;
-                progressVC.stageMessage = @"准备中...";
+                progressVC.stageMessage = @"Preparing...";
                 // 阶段12增强：Forge 图标 + 阶段步骤列表
                 progressVC.categoryIconName = [ModLoaderIconHelper symbolNameForLoader:@"forge"];
                 progressVC.categoryIconColor = [ModLoaderIconHelper brandColorForLoader:@"forge"];
                 // 合并步骤列表：原版5步标记完成 + Forge 安装步骤
                 progressVC.stageSteps = @[
-                    @{@"title": @"获取版本清单", @"status": @2},
-                    @{@"title": @"下载版本 JSON", @"status": @2},
-                    @{@"title": @"下载游戏库文件", @"status": @2},
-                    @{@"title": @"下载资源文件", @"status": @2},
-                    @{@"title": @"验证文件完整性", @"status": @2},
-                    @{@"title": @"解析安装器 JAR", @"status": @1},
-                    @{@"title": @"下载 Forge 库文件", @"status": @0},
-                    @{@"title": @"写入版本 JSON", @"status": @0},
+                    @{@"title": @"Fetch version manifest", @"status": @2},
+                    @{@"title": @"Download version JSON", @"status": @2},
+                    @{@"title": @"Download game libraries", @"status": @2},
+                    @{@"title": @"Download asset files", @"status": @2},
+                    @{@"title": @"Verify file integrity", @"status": @2},
+                    @{@"title": @"Parse installer JAR", @"status": @1},
+                    @{@"title": @"Download Forge libraries", @"status": @0},
+                    @{@"title": @"Write version JSON", @"status": @0},
                 ];
                 // 注：push 已由 obtainInstallerProgressVC 在新建时完成，复用时不重复 push
 
@@ -4252,26 +4252,26 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                         __strong typeof(weakSelf) strongSelf3 = weakSelf;
                         if (!strongSelf3) return;
                         if (!installed) {
-                            [strongSelf3 finishInstallerProgressWithError:[NSString stringWithFormat:@"Forge 直装失败: %@", directError.localizedDescription ?: @"未知错误"]];
+                            [strongSelf3 finishInstallerProgressWithError:[NSString stringWithFormat:@"Direct Forge install failed: %@", directError.localizedDescription ?: @"Unknown error"]];
                             return;
                         }
                         // 直装成功后，若用户勾选了 OptiFine，继续下载（之前的实现这里直接 return 漏掉了 OptiFine）
                         if (installOptiFine) {
-                            strongSelf3.installerProgressVC.stageMessage = @"正在下载 OptiFine...";
+                            strongSelf3.installerProgressVC.stageMessage = @"Downloading OptiFine...";
                             strongSelf3.installerProgressVC.progress = -1; // OptiFine 下载无法精确测算，进入不确定模式
                             [strongSelf3 downloadOptiFine:gameVersion completion:^(BOOL optiSuccess, NSError *optiError) {
                                 dispatch_async(dispatch_get_main_queue(), ^{
                                     __strong typeof(weakSelf) strongSelf4 = weakSelf;
                                     if (!strongSelf4) return;
                                     if (optiSuccess) {
-                                        [strongSelf4 finishInstallerProgressWithSuccess:[NSString stringWithFormat:@"Forge 直装成功\nOptiFine 已自动安装\n配置文件: %@", profileName ?: gameVersion]];
+                                        [strongSelf4 finishInstallerProgressWithSuccess:[NSString stringWithFormat:@"Direct Forge install succeeded\nOptiFine installed automatically\nProfile: %@", profileName ?: gameVersion]];
                                     } else {
-                                        [strongSelf4 finishInstallerProgressWithSuccess:[NSString stringWithFormat:@"Forge 直装成功\nOptiFine 安装失败: %@\n配置文件: %@", optiError.localizedDescription ?: @"未知错误", profileName ?: gameVersion]];
+                                        [strongSelf4 finishInstallerProgressWithSuccess:[NSString stringWithFormat:@"Direct Forge install succeeded\nOptiFine install failed: %@\nProfile: %@", optiError.localizedDescription ?: @"Unknown error", profileName ?: gameVersion]];
                                     }
                                 });
                             }];
                         } else {
-                            [strongSelf3 finishInstallerProgressWithSuccess:[NSString stringWithFormat:@"Forge 直装成功\n配置文件: %@", profileName ?: gameVersion]];
+                            [strongSelf3 finishInstallerProgressWithSuccess:[NSString stringWithFormat:@"Direct Forge install succeeded\nProfile: %@", profileName ?: gameVersion]];
                         }
                     });
                 });
@@ -4288,14 +4288,14 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                     [strongSelf2 downloadOptiFine:gameVersion completion:^(BOOL optiSuccess, NSError *optiError) {
                         dispatch_async(dispatch_get_main_queue(), ^{
                             if (optiSuccess) {
-                                [strongSelf2 showSuccessMessage:[NSString stringWithFormat:@"Forge 安装器已启动\nOptiFine 已自动安装\n配置文件: %@", profileName ?: gameVersion]];
+                                [strongSelf2 showSuccessMessage:[NSString stringWithFormat:@"Forge installer started\nOptiFine installed automatically\nProfile: %@", profileName ?: gameVersion]];
                             } else {
-                                [strongSelf2 showSuccessMessage:[NSString stringWithFormat:@"Forge 安装器已启动\nOptiFine 安装失败: %@\n配置文件: %@", optiError.localizedDescription ?: @"未知错误", profileName ?: gameVersion]];
+                                [strongSelf2 showSuccessMessage:[NSString stringWithFormat:@"Forge installer started\nOptiFine install failed: %@\nProfile: %@", optiError.localizedDescription ?: @"Unknown error", profileName ?: gameVersion]];
                             }
                         });
                     }];
                 } else {
-                    [strongSelf2 showSuccessMessage:[NSString stringWithFormat:@"Forge 安装器已启动\n配置文件: %@", profileName ?: gameVersion]];
+                    [strongSelf2 showSuccessMessage:[NSString stringWithFormat:@"Forge installer started\nProfile: %@", profileName ?: gameVersion]];
                 }
             }];
         };
@@ -4355,7 +4355,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
         if (!optiFinePatch) {
             dispatch_async(dispatch_get_main_queue(), ^{
-                if (completion) completion(NO, [NSError errorWithDomain:@"DownloadError" code:1 userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"不支持的 OptiFine 版本: %@ (BMCLAPI 列表查询失败且无本地映射)", gameVersion]}]);
+                if (completion) completion(NO, [NSError errorWithDomain:@"DownloadError" code:1 userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Unsupported OptiFine version: %@ (the BMCLAPI listing failed and there is no local mapping)", gameVersion]}]);
             });
             return;
         }
@@ -4383,9 +4383,9 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 NSString *errDesc = downloadError.localizedDescription;
                 if (downloadError.code == NSURLErrorFileDoesNotExist || [errDesc containsString:@"404"]) {
-                    errDesc = [NSString stringWithFormat:@"OptiFine %@ %@ 在 BMCLAPI 镜像中不存在 (404)。该游戏版本可能尚未发布 OptiFine。", optiFineType, optiFinePatch];
+                    errDesc = [NSString stringWithFormat:@"OptiFine %@ %@ does not exist on the BMCLAPI mirror (404). OptiFine may not have been released for this game version yet.", optiFineType, optiFinePatch];
                 }
-                if (completion) completion(NO, [NSError errorWithDomain:@"DownloadError" code:2 userInfo:@{NSLocalizedDescriptionKey: errDesc ?: @"下载 OptiFine 失败"}]);
+                if (completion) completion(NO, [NSError errorWithDomain:@"DownloadError" code:2 userInfo:@{NSLocalizedDescriptionKey: errDesc ?: @"Failed to download OptiFine"}]);
             });
             return;
         }
@@ -4447,7 +4447,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     // 解析 packed 格式
     NSArray *parts = [loaderVersion componentsSeparatedByString:@"\x1f"];
     if (parts.count < 3) {
-        [self showError:@"OptiFine 版本信息无效"];
+        [self showError:@"OptiFine version information is invalid"];
         return;
     }
     NSString *optiType = parts[0];
@@ -4458,22 +4458,22 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
     // 改进2（参照 ZL2 统一进度流）：复用原版预装转交的进度 VC（若存在）
     InstallerProgressViewController *progressVC = [self obtainInstallerProgressVC];
-    progressVC.titleText = [NSString stringWithFormat:@"正在准备运行环境 %@", gameVersion];
+    progressVC.titleText = [NSString stringWithFormat:@"Preparing the runtime environment %@", gameVersion];
     progressVC.progress = -1;
-    progressVC.stageMessage = [NSString stringWithFormat:@"正在下载 OptiFine %@_%@...", optiType, optiPatch];
+    progressVC.stageMessage = [NSString stringWithFormat:@"Downloading OptiFine %@_%@...", optiType, optiPatch];
     // 阶段12增强：OptiFine 图标 + 阶段步骤列表
     progressVC.categoryIconName = [ModLoaderIconHelper symbolNameForLoader:@"optifine"];
     progressVC.categoryIconColor = [ModLoaderIconHelper brandColorForLoader:@"optifine"];
     // 合并步骤列表：原版5步标记完成 + OptiFine 安装步骤
     progressVC.stageSteps = @[
-        @{@"title": @"获取版本清单", @"status": @2},
-        @{@"title": @"下载版本 JSON", @"status": @2},
-        @{@"title": @"下载游戏库文件", @"status": @2},
-        @{@"title": @"下载资源文件", @"status": @2},
-        @{@"title": @"验证文件完整性", @"status": @2},
-        @{@"title": @"下载 OptiFine JAR", @"status": @1},
-        @{@"title": @"安装 OptiFine", @"status": @0},
-        @{@"title": @"写入版本 JSON", @"status": @0},
+        @{@"title": @"Fetch version manifest", @"status": @2},
+        @{@"title": @"Download version JSON", @"status": @2},
+        @{@"title": @"Download game libraries", @"status": @2},
+        @{@"title": @"Download asset files", @"status": @2},
+        @{@"title": @"Verify file integrity", @"status": @2},
+        @{@"title": @"Download OptiFine JAR", @"status": @1},
+        @{@"title": @"Install OptiFine", @"status": @0},
+        @{@"title": @"Write version JSON", @"status": @0},
     ];
 
     __weak typeof(self) weakSelf = self;
@@ -4521,12 +4521,12 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         }
 
         if (!jarData || downloadError) {
-            NSError *err = [NSError errorWithDomain:@"OptiFineInstall" code:1 userInfo:@{NSLocalizedDescriptionKey: downloadError.localizedDescription ?: @"下载 OptiFine 失败"}];
+            NSError *err = [NSError errorWithDomain:@"OptiFineInstall" code:1 userInfo:@{NSLocalizedDescriptionKey: downloadError.localizedDescription ?: @"Failed to download OptiFine"}];
             [[DownloadTaskManager sharedManager] setTaskWithId:taskId completedWithError:err];
             dispatch_async(dispatch_get_main_queue(), ^{
                 __strong typeof(weakSelf) strongSelf = weakSelf;
                 if (!strongSelf) return;
-                [strongSelf finishInstallerProgressWithError:[NSString stringWithFormat:@"下载 OptiFine 失败: %@", downloadError.localizedDescription ?: @"未知错误"]];
+                [strongSelf finishInstallerProgressWithError:[NSString stringWithFormat:@"Failed to download OptiFine: %@", downloadError.localizedDescription ?: @"Unknown error"]];
             });
             return;
         }
@@ -4536,7 +4536,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             __strong typeof(weakSelf) strongSelf = weakSelf;
             if (!strongSelf) return;
             strongSelf.installerProgressVC.progress = 0.5;
-            strongSelf.installerProgressVC.stageMessage = @"正在写入版本文件...";
+            strongSelf.installerProgressVC.stageMessage = @"Writing version files...";
         });
 
         // 2. 创建版本目录
@@ -4565,7 +4565,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 __strong typeof(weakSelf) strongSelf = weakSelf;
                 if (!strongSelf) return;
-                [strongSelf finishInstallerProgressWithError:[NSString stringWithFormat:@"写入 OptiFine jar 失败: %@", writeError.localizedDescription]];
+                [strongSelf finishInstallerProgressWithError:[NSString stringWithFormat:@"Failed to write the OptiFine jar: %@", writeError.localizedDescription]];
             });
             return;
         }
@@ -4607,7 +4607,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         if (![[NSFileManager defaultManager] fileExistsAtPath:parentJsonPath]) {
             // 父版本不存在，提示用户先安装原版
             NSError *err = [NSError errorWithDomain:@"OptiFineInstall" code:3
-                                         userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"未找到原版 %@ 的版本信息。请先在下载页面安装原版 %@，然后再安装 OptiFine。", gameVersion, gameVersion]}];
+                                         userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"No version information found for vanilla %@. Install vanilla %@ from the download page first, then install OptiFine.", gameVersion, gameVersion]}];
             [[DownloadTaskManager sharedManager] setTaskWithId:taskId completedWithError:err];
             dispatch_async(dispatch_get_main_queue(), ^{
                 __strong typeof(weakSelf) strongSelf = weakSelf;
@@ -4622,7 +4622,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             __strong typeof(weakSelf) strongSelf = weakSelf;
             if (!strongSelf) return;
             strongSelf.installerProgressVC.progress = 0.85;
-            strongSelf.installerProgressVC.stageMessage = @"正在注册配置...";
+            strongSelf.installerProgressVC.stageMessage = @"Registering profile...";
         });
 
         // 5. 注册 profile
@@ -4640,7 +4640,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             PLProfiles.current.selectedProfileName = versionId;
 
             [[DownloadTaskManager sharedManager] setTaskWithId:taskId completedWithError:nil];
-            [strongSelf finishInstallerProgressWithSuccess:[NSString stringWithFormat:@"OptiFine 安装成功\n版本: %@\n配置文件: %@", versionId, versionId]];
+            [strongSelf finishInstallerProgressWithSuccess:[NSString stringWithFormat:@"OptiFine installed successfully\nVersion: %@\nProfile: %@", versionId, versionId]];
         });
     });
 }
@@ -4689,22 +4689,22 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                 NSLog(@"[NeoForgeDirect] DownloadViewController: starting direct install with progress UI");
                 // 改进2（参照 ZL2 统一进度流）：复用原版预装转交的进度 VC（若存在）
                 InstallerProgressViewController *progressVC = [strongSelf2 obtainInstallerProgressVC];
-                progressVC.titleText = [NSString stringWithFormat:@"正在准备运行环境 %@", gameVersion];
+                progressVC.titleText = [NSString stringWithFormat:@"Preparing the runtime environment %@", gameVersion];
                 progressVC.progress = 0.0;
-                progressVC.stageMessage = @"准备中...";
+                progressVC.stageMessage = @"Preparing...";
                 // 阶段12增强：NeoForge 图标 + 阶段步骤列表
                 progressVC.categoryIconName = [ModLoaderIconHelper symbolNameForLoader:@"neoforge"];
                 progressVC.categoryIconColor = [ModLoaderIconHelper brandColorForLoader:@"neoforge"];
                 // 合并步骤列表：原版5步标记完成 + NeoForge 安装步骤
                 progressVC.stageSteps = @[
-                    @{@"title": @"获取版本清单", @"status": @2},
-                    @{@"title": @"下载版本 JSON", @"status": @2},
-                    @{@"title": @"下载游戏库文件", @"status": @2},
-                    @{@"title": @"下载资源文件", @"status": @2},
-                    @{@"title": @"验证文件完整性", @"status": @2},
-                    @{@"title": @"解析安装器 JAR", @"status": @1},
-                    @{@"title": @"下载 NeoForge 库文件", @"status": @0},
-                    @{@"title": @"写入版本 JSON", @"status": @0},
+                    @{@"title": @"Fetch version manifest", @"status": @2},
+                    @{@"title": @"Download version JSON", @"status": @2},
+                    @{@"title": @"Download game libraries", @"status": @2},
+                    @{@"title": @"Download asset files", @"status": @2},
+                    @{@"title": @"Verify file integrity", @"status": @2},
+                    @{@"title": @"Parse installer JAR", @"status": @1},
+                    @{@"title": @"Download NeoForge libraries", @"status": @0},
+                    @{@"title": @"Write version JSON", @"status": @0},
                 ];
                 // 注：push 已由 obtainInstallerProgressVC 在新建时完成，复用时不重复 push
 
@@ -4727,9 +4727,9 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                         __strong typeof(weakSelf) strongSelf3 = weakSelf;
                         if (!strongSelf3) return;
                         if (installed) {
-                            [strongSelf3 finishInstallerProgressWithSuccess:[NSString stringWithFormat:@"NeoForge 直装成功\n配置文件: %@", profileName ?: gameVersion]];
+                            [strongSelf3 finishInstallerProgressWithSuccess:[NSString stringWithFormat:@"Direct NeoForge install succeeded\nProfile: %@", profileName ?: gameVersion]];
                         } else {
-                            [strongSelf3 finishInstallerProgressWithError:[NSString stringWithFormat:@"NeoForge 直装失败: %@", directError.localizedDescription ?: @"未知错误"]];
+                            [strongSelf3 finishInstallerProgressWithError:[NSString stringWithFormat:@"Direct NeoForge install failed: %@", directError.localizedDescription ?: @"Unknown error"]];
                         }
                     });
                 });
@@ -4742,7 +4742,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                                                           profileName:profileName
                                                         resultOrError:resultOrError
                                                          installAction:^{
-                [strongSelf2 showSuccessMessage:[NSString stringWithFormat:@"NeoForge 安装器已启动\n配置文件: %@", profileName ?: gameVersion]];
+                [strongSelf2 showSuccessMessage:[NSString stringWithFormat:@"NeoForge installer started\nProfile: %@", profileName ?: gameVersion]];
             }];
         };
 
@@ -4763,7 +4763,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 - (void)showSuccessMessage:(NSString *)message {
     // 在内容区显示成功提示，替代弹窗
     [InlineMessageView showInViewController:self
-                                       title:@"安装成功"
+                                       title:@"Installation successful"
                                     message:message
                                        type:InlineMessageTypeSuccess];
 }
@@ -4775,7 +4775,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     NSString *filename = version.primaryFile[@"filename"];
     
     if (!downloadURL || downloadURL.length == 0) {
-        if (completion) completion(NO, [NSError errorWithDomain:@"DownloadError" code:4 userInfo:@{NSLocalizedDescriptionKey: @"无效的下载链接"}]);
+        if (completion) completion(NO, [NSError errorWithDomain:@"DownloadError" code:4 userInfo:@{NSLocalizedDescriptionKey: @"Invalid download link"}]);
         return;
     }
     
@@ -4838,25 +4838,25 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 - (void)startModpackInstallation:(ModVersion *)version modpack:(NSDictionary *)modpack {
     NSString *downloadURL = version.primaryFile[@"url"];
     if (!downloadURL) {
-        [self showError:@"无效的下载链接"];
+        [self showError:@"Invalid download link"];
         return;
     }
 
     // 修复: 改为 push 进度 VC (FCL 风格)，替代转圈 alert
     InstallerProgressViewController *progressVC = [[InstallerProgressViewController alloc] init];
-    progressVC.titleText = [NSString stringWithFormat:@"正在下载整合包 %@", modpack[@"title"] ?: @""];
+    progressVC.titleText = [NSString stringWithFormat:@"Downloading modpack %@", modpack[@"title"] ?: @""];
     progressVC.progress = -1;
-    progressVC.stageMessage = @"正在下载整合包文件...";
+    progressVC.stageMessage = @"Downloading modpack files...";
     // 阶段12增强：整合包图标 + 阶段步骤列表（参照 FCL 整合包安装流程）
     progressVC.categoryIconName = @"archivebox.fill";
     progressVC.categoryIconColor = [UIColor systemOrangeColor];
     progressVC.stageSteps = @[
-        @{@"title": @"下载整合包文件", @"status": @1},
-        @{@"title": @"解析整合包结构", @"status": @0},
-        @{@"title": @"安装原版 Minecraft", @"status": @0},
-        @{@"title": @"下载 Mod 文件", @"status": @0},
-        @{@"title": @"安装模组加载器", @"status": @0},
-        @{@"title": @"写入配置文件", @"status": @0},
+        @{@"title": @"Download modpack files", @"status": @1},
+        @{@"title": @"Parse modpack structure", @"status": @0},
+        @{@"title": @"Install vanilla Minecraft", @"status": @0},
+        @{@"title": @"Download mod files", @"status": @0},
+        @{@"title": @"Install mod loader", @"status": @0},
+        @{@"title": @"Write profile", @"status": @0},
     ];
     [self.navigationController pushViewController:progressVC animated:YES];
 
@@ -4921,15 +4921,15 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
                 // 复用 ModpackImportService 完成解析和导入
                 progressVC.progress = 0.1;
-                progressVC.stageMessage = @"正在解析整合包...";
+                progressVC.stageMessage = @"Parsing modpack...";
                 // 阶段12增强：更新步骤状态（下载完成，解析中）
                 progressVC.stageSteps = @[
-                    @{@"title": @"下载整合包文件", @"status": @2},
-                    @{@"title": @"解析整合包结构", @"status": @1},
-                    @{@"title": @"安装原版 Minecraft", @"status": @0},
-                    @{@"title": @"下载 Mod 文件", @"status": @0},
-                    @{@"title": @"安装模组加载器", @"status": @0},
-                    @{@"title": @"写入配置文件", @"status": @0},
+                    @{@"title": @"Download modpack files", @"status": @2},
+                    @{@"title": @"Parse modpack structure", @"status": @1},
+                    @{@"title": @"Install vanilla Minecraft", @"status": @0},
+                    @{@"title": @"Download mod files", @"status": @0},
+                    @{@"title": @"Install mod loader", @"status": @0},
+                    @{@"title": @"Write profile", @"status": @0},
                 ];
                 ModpackImportService *importService = [[ModpackImportService alloc] init];
             dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
@@ -4938,7 +4938,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                 if (!modpackInfo) {
                     dispatch_async(dispatch_get_main_queue(), ^{
                         [self.navigationController popViewControllerAnimated:YES];
-                        [self showError:parseError.localizedDescription ?: @"解析整合包失败"];
+                        [self showError:parseError.localizedDescription ?: @"Failed to parse the modpack"];
                     });
                     return;
                 }
@@ -4962,14 +4962,14 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                     dispatch_async(dispatch_get_main_queue(), ^{
                         // 更新进度：解析完成，准备安装原版
                         progressVC.stageSteps = @[
-                            @{@"title": @"下载整合包文件", @"status": @2},
-                            @{@"title": @"解析整合包结构", @"status": @2},
-                            @{@"title": @"安装原版 Minecraft", @"status": @1},
-                            @{@"title": @"下载 Mod 文件", @"status": @0},
-                            @{@"title": @"安装模组加载器", @"status": @0},
-                            @{@"title": @"写入配置文件", @"status": @0},
+                            @{@"title": @"Download modpack files", @"status": @2},
+                            @{@"title": @"Parse modpack structure", @"status": @2},
+                            @{@"title": @"Install vanilla Minecraft", @"status": @1},
+                            @{@"title": @"Download mod files", @"status": @0},
+                            @{@"title": @"Install mod loader", @"status": @0},
+                            @{@"title": @"Write profile", @"status": @0},
                         ];
-                        progressVC.stageMessage = [NSString stringWithFormat:@"正在安装原版 Minecraft %@...", mcVersion];
+                        progressVC.stageMessage = [NSString stringWithFormat:@"Installing vanilla Minecraft %@...", mcVersion];
 
                         // 调用原版预安装（ensureVanillaInstalled 会检查是否已安装，已安装则直接跳过）
                         NSDictionary *vanillaVersion = @{@"id": mcVersion};
@@ -4980,21 +4980,21 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                             if (!vanillaSuccess) {
                                 dispatch_async(dispatch_get_main_queue(), ^{
                                     [strongSelf.navigationController popViewControllerAnimated:YES];
-                                    [strongSelf showError:[NSString stringWithFormat:@"无法安装原版 %@，请检查网络后重试", mcVersion]];
+                                    [strongSelf showError:[NSString stringWithFormat:@"Could not install vanilla %@. Check your network connection and try again", mcVersion]];
                                 });
                                 return;
                             }
                             // 原版安装完成，继续导入整合包
                             dispatch_async(dispatch_get_main_queue(), ^{
                                 progressVC.stageSteps = @[
-                                    @{@"title": @"下载整合包文件", @"status": @2},
-                                    @{@"title": @"解析整合包结构", @"status": @2},
-                                    @{@"title": @"安装原版 Minecraft", @"status": @2},
-                                    @{@"title": @"下载 Mod 文件", @"status": @1},
-                                    @{@"title": @"安装模组加载器", @"status": @0},
-                                    @{@"title": @"写入配置文件", @"status": @0},
+                                    @{@"title": @"Download modpack files", @"status": @2},
+                                    @{@"title": @"Parse modpack structure", @"status": @2},
+                                    @{@"title": @"Install vanilla Minecraft", @"status": @2},
+                                    @{@"title": @"Download mod files", @"status": @1},
+                                    @{@"title": @"Install mod loader", @"status": @0},
+                                    @{@"title": @"Write profile", @"status": @0},
                                 ];
-                                progressVC.stageMessage = @"正在下载 Mod 文件...";
+                                progressVC.stageMessage = @"Downloading mod files...";
                             });
                             // 在后台线程执行整合包导入
                             dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
@@ -5005,14 +5005,14 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                 } else {
                     // 无法提取游戏版本，跳过原版预安装，直接导入
                     dispatch_async(dispatch_get_main_queue(), ^{
-                        progressVC.stageMessage = @"未检测到游戏版本，跳过原版安装，开始导入整合包...";
+                        progressVC.stageMessage = @"No game version detected, skipping the vanilla install and importing the modpack...";
                         progressVC.stageSteps = @[
-                            @{@"title": @"下载整合包文件", @"status": @2},
-                            @{@"title": @"解析整合包结构", @"status": @2},
-                            @{@"title": @"安装原版 Minecraft", @"status": @2},
-                            @{@"title": @"下载 Mod 文件", @"status": @1},
-                            @{@"title": @"安装模组加载器", @"status": @0},
-                            @{@"title": @"写入配置文件", @"status": @0},
+                            @{@"title": @"Download modpack files", @"status": @2},
+                            @{@"title": @"Parse modpack structure", @"status": @2},
+                            @{@"title": @"Install vanilla Minecraft", @"status": @2},
+                            @{@"title": @"Download mod files", @"status": @1},
+                            @{@"title": @"Install mod loader", @"status": @0},
+                            @{@"title": @"Write profile", @"status": @0},
                         ];
                     });
                     [self importModpackWithService:importService info:mutableInfo progressVC:progressVC tempPath:tempPath];
@@ -5026,7 +5026,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             taskItem = [[DownloadTaskManager sharedManager]
                 registerTaskWithResourceType:DownloadTaskResourceTypeModpack
                                 resourceName:modpack[@"title"] ?: @"modpack"
-                                 displayName:modpack[@"title"] ?: @"整合包"
+                                 displayName:modpack[@"title"] ?: @"Modpack"
                               downloadSource:downloadSource
                                      rawTask:task
                               supportsResume:YES
@@ -5065,39 +5065,39 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             NSArray *steps;
             if (p < 0.3) {
                 steps = @[
-                    @{@"title": @"下载整合包文件", @"status": @2},
-                    @{@"title": @"解析整合包结构", @"status": @2},
-                    @{@"title": @"安装原版 Minecraft", @"status": @2},
-                    @{@"title": @"下载 Mod 文件", @"status": @1},
-                    @{@"title": @"安装模组加载器", @"status": @0},
-                    @{@"title": @"写入配置文件", @"status": @0},
+                    @{@"title": @"Download modpack files", @"status": @2},
+                    @{@"title": @"Parse modpack structure", @"status": @2},
+                    @{@"title": @"Install vanilla Minecraft", @"status": @2},
+                    @{@"title": @"Download mod files", @"status": @1},
+                    @{@"title": @"Install mod loader", @"status": @0},
+                    @{@"title": @"Write profile", @"status": @0},
                 ];
             } else if (p < 0.7) {
                 steps = @[
-                    @{@"title": @"下载整合包文件", @"status": @2},
-                    @{@"title": @"解析整合包结构", @"status": @2},
-                    @{@"title": @"安装原版 Minecraft", @"status": @2},
-                    @{@"title": @"下载 Mod 文件", @"status": @2},
-                    @{@"title": @"安装模组加载器", @"status": @1},
-                    @{@"title": @"写入配置文件", @"status": @0},
+                    @{@"title": @"Download modpack files", @"status": @2},
+                    @{@"title": @"Parse modpack structure", @"status": @2},
+                    @{@"title": @"Install vanilla Minecraft", @"status": @2},
+                    @{@"title": @"Download mod files", @"status": @2},
+                    @{@"title": @"Install mod loader", @"status": @1},
+                    @{@"title": @"Write profile", @"status": @0},
                 ];
             } else if (p < 1.0) {
                 steps = @[
-                    @{@"title": @"下载整合包文件", @"status": @2},
-                    @{@"title": @"解析整合包结构", @"status": @2},
-                    @{@"title": @"安装原版 Minecraft", @"status": @2},
-                    @{@"title": @"下载 Mod 文件", @"status": @2},
-                    @{@"title": @"安装模组加载器", @"status": @2},
-                    @{@"title": @"写入配置文件", @"status": @1},
+                    @{@"title": @"Download modpack files", @"status": @2},
+                    @{@"title": @"Parse modpack structure", @"status": @2},
+                    @{@"title": @"Install vanilla Minecraft", @"status": @2},
+                    @{@"title": @"Download mod files", @"status": @2},
+                    @{@"title": @"Install mod loader", @"status": @2},
+                    @{@"title": @"Write profile", @"status": @1},
                 ];
             } else {
                 steps = @[
-                    @{@"title": @"下载整合包文件", @"status": @2},
-                    @{@"title": @"解析整合包结构", @"status": @2},
-                    @{@"title": @"安装原版 Minecraft", @"status": @2},
-                    @{@"title": @"下载 Mod 文件", @"status": @2},
-                    @{@"title": @"安装模组加载器", @"status": @2},
-                    @{@"title": @"写入配置文件", @"status": @2},
+                    @{@"title": @"Download modpack files", @"status": @2},
+                    @{@"title": @"Parse modpack structure", @"status": @2},
+                    @{@"title": @"Install vanilla Minecraft", @"status": @2},
+                    @{@"title": @"Download mod files", @"status": @2},
+                    @{@"title": @"Install mod loader", @"status": @2},
+                    @{@"title": @"Write profile", @"status": @2},
                 ];
             }
             progressVC.stageSteps = steps;
@@ -5112,29 +5112,29 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         if (!strongSelf) return;
         if (success) {
             progressVC.progress = 1.0;
-            progressVC.stageMessage = @"安装完成";
+            progressVC.stageMessage = @"Installation complete";
             progressVC.stageSteps = @[
-                @{@"title": @"下载整合包文件", @"status": @2},
-                @{@"title": @"解析整合包结构", @"status": @2},
-                @{@"title": @"安装原版 Minecraft", @"status": @2},
-                @{@"title": @"下载 Mod 文件", @"status": @2},
-                @{@"title": @"安装模组加载器", @"status": @2},
-                @{@"title": @"写入配置文件", @"status": @2},
+                @{@"title": @"Download modpack files", @"status": @2},
+                @{@"title": @"Parse modpack structure", @"status": @2},
+                @{@"title": @"Install vanilla Minecraft", @"status": @2},
+                @{@"title": @"Download mod files", @"status": @2},
+                @{@"title": @"Install mod loader", @"status": @2},
+                @{@"title": @"Write profile", @"status": @2},
             ];
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                 __strong typeof(weakSelf) s = weakSelf;
                 if (!s) return;
                 [s.navigationController popViewControllerAnimated:YES];
                 NSString *loader = info[@"loader"];
-                NSString *msg = [NSString stringWithFormat:@"整合包 %@ 安装完成", info[@"name"]];
+                NSString *msg = [NSString stringWithFormat:@"Modpack %@ installed", info[@"name"]];
                 if ([loader isEqualToString:@"Forge"] || [loader isEqualToString:@"NeoForge"]) {
-                    msg = [msg stringByAppendingFormat:@"\n\n注意: 此整合包使用 %@ %@ 加载器，请先通过下载界面手动安装该加载器版本。", loader, info[@"loaderVersion"]];
+                    msg = [msg stringByAppendingFormat:@"\n\nNote: this modpack uses the %@ %@ loader. Please install that loader version manually from the download screen first.", loader, info[@"loaderVersion"]];
                 }
                 [s showSuccessMessage:msg];
             });
         } else {
             [strongSelf.navigationController popViewControllerAnimated:YES];
-            [strongSelf showError:importError.localizedDescription ?: @"导入失败"];
+            [strongSelf showError:importError.localizedDescription ?: @"Import failed"];
         }
     });
 }
@@ -5143,17 +5143,17 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     // 修复: 此方法已废弃，在线下载流程改用 startModpackInstallation:modpack: 统一走 ModpackImportService
     // 保留以防其他地方调用，但内部也走 ModpackImportService
     InstallerProgressViewController *progressVC = [[InstallerProgressViewController alloc] init];
-    progressVC.titleText = @"正在导入整合包";
+    progressVC.titleText = @"Importing modpack";
     progressVC.progress = -1;
-    progressVC.stageMessage = @"正在解析整合包...";
+    progressVC.stageMessage = @"Parsing modpack...";
     // 阶段12增强：整合包导入图标 + 阶段步骤列表
     progressVC.categoryIconName = @"archivebox.fill";
     progressVC.categoryIconColor = [UIColor systemOrangeColor];
     progressVC.stageSteps = @[
-        @{@"title": @"解析整合包结构", @"status": @1},
-        @{@"title": @"下载 Mod 文件", @"status": @0},
-        @{@"title": @"安装模组加载器", @"status": @0},
-        @{@"title": @"写入配置文件", @"status": @0},
+        @{@"title": @"Parse modpack structure", @"status": @1},
+        @{@"title": @"Download mod files", @"status": @0},
+        @{@"title": @"Install mod loader", @"status": @0},
+        @{@"title": @"Write profile", @"status": @0},
     ];
     [self.navigationController pushViewController:progressVC animated:YES];
 
@@ -5164,7 +5164,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         if (!modpackInfo) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 [self.navigationController popViewControllerAnimated:YES];
-                [self showError:parseError.localizedDescription ?: @"解析失败"];
+                [self showError:parseError.localizedDescription ?: @"Parse failed"];
             });
             return;
         }
@@ -5178,31 +5178,31 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                 NSArray *steps;
                 if (p < 0.3) {
                     steps = @[
-                        @{@"title": @"解析整合包结构", @"status": @2},
-                        @{@"title": @"下载 Mod 文件", @"status": @1},
-                        @{@"title": @"安装模组加载器", @"status": @0},
-                        @{@"title": @"写入配置文件", @"status": @0},
+                        @{@"title": @"Parse modpack structure", @"status": @2},
+                        @{@"title": @"Download mod files", @"status": @1},
+                        @{@"title": @"Install mod loader", @"status": @0},
+                        @{@"title": @"Write profile", @"status": @0},
                     ];
                 } else if (p < 0.7) {
                     steps = @[
-                        @{@"title": @"解析整合包结构", @"status": @2},
-                        @{@"title": @"下载 Mod 文件", @"status": @2},
-                        @{@"title": @"安装模组加载器", @"status": @1},
-                        @{@"title": @"写入配置文件", @"status": @0},
+                        @{@"title": @"Parse modpack structure", @"status": @2},
+                        @{@"title": @"Download mod files", @"status": @2},
+                        @{@"title": @"Install mod loader", @"status": @1},
+                        @{@"title": @"Write profile", @"status": @0},
                     ];
                 } else if (p < 1.0) {
                     steps = @[
-                        @{@"title": @"解析整合包结构", @"status": @2},
-                        @{@"title": @"下载 Mod 文件", @"status": @2},
-                        @{@"title": @"安装模组加载器", @"status": @2},
-                        @{@"title": @"写入配置文件", @"status": @1},
+                        @{@"title": @"Parse modpack structure", @"status": @2},
+                        @{@"title": @"Download mod files", @"status": @2},
+                        @{@"title": @"Install mod loader", @"status": @2},
+                        @{@"title": @"Write profile", @"status": @1},
                     ];
                 } else {
                     steps = @[
-                        @{@"title": @"解析整合包结构", @"status": @2},
-                        @{@"title": @"下载 Mod 文件", @"status": @2},
-                        @{@"title": @"安装模组加载器", @"status": @2},
-                        @{@"title": @"写入配置文件", @"status": @2},
+                        @{@"title": @"Parse modpack structure", @"status": @2},
+                        @{@"title": @"Download mod files", @"status": @2},
+                        @{@"title": @"Install mod loader", @"status": @2},
+                        @{@"title": @"Write profile", @"status": @2},
                     ];
                 }
                 progressVC.stageSteps = steps;
@@ -5211,20 +5211,20 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         dispatch_async(dispatch_get_main_queue(), ^{
             if (success) {
                 progressVC.progress = 1.0;
-                progressVC.stageMessage = @"导入完成";
+                progressVC.stageMessage = @"Import complete";
                 progressVC.stageSteps = @[
-                    @{@"title": @"解析整合包结构", @"status": @2},
-                    @{@"title": @"下载 Mod 文件", @"status": @2},
-                    @{@"title": @"安装模组加载器", @"status": @2},
-                    @{@"title": @"写入配置文件", @"status": @2},
+                    @{@"title": @"Parse modpack structure", @"status": @2},
+                    @{@"title": @"Download mod files", @"status": @2},
+                    @{@"title": @"Install mod loader", @"status": @2},
+                    @{@"title": @"Write profile", @"status": @2},
                 ];
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                     [self.navigationController popViewControllerAnimated:YES];
-                    [self showSuccessMessage:[NSString stringWithFormat:@"整合包 %@ 导入完成", modpackInfo[@"name"]]];
+                    [self showSuccessMessage:[NSString stringWithFormat:@"Modpack %@ imported", modpackInfo[@"name"]]];
                 });
             } else {
                 [self.navigationController popViewControllerAnimated:YES];
-                [self showError:importError.localizedDescription ?: @"导入失败"];
+                [self showError:importError.localizedDescription ?: @"Import failed"];
             }
         });
     });
@@ -5252,7 +5252,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 - (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
     if (tableView == self.modTableView && indexPath.row == self.modList.count && self.hasMoreMods) {
         UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:@"LoadingCell"];
-        cell.textLabel.text = @"加载更多...";
+        cell.textLabel.text = @"Load more...";
         cell.textLabel.textAlignment = NSTextAlignmentCenter;
         cell.textLabel.textColor = [UIColor secondaryLabelColor];
         cell.backgroundColor = [UIColor clearColor];
@@ -5261,7 +5261,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
     if (tableView == self.shaderTableView && indexPath.row == self.shaderList.count && self.hasMoreShaders) {
         UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:@"LoadingCell"];
-        cell.textLabel.text = @"加载更多...";
+        cell.textLabel.text = @"Load more...";
         cell.textLabel.textAlignment = NSTextAlignmentCenter;
         cell.textLabel.textColor = [UIColor secondaryLabelColor];
         cell.backgroundColor = [UIColor clearColor];
@@ -5270,7 +5270,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
     if (tableView == self.modpackTableView && indexPath.row == self.modpackList.count && self.hasMoreModpacks) {
         UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:@"LoadingCell"];
-        cell.textLabel.text = @"加载更多...";
+        cell.textLabel.text = @"Load more...";
         cell.textLabel.textAlignment = NSTextAlignmentCenter;
         cell.textLabel.textColor = [UIColor secondaryLabelColor];
         cell.backgroundColor = [UIColor clearColor];
@@ -5279,7 +5279,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
     if (tableView == self.resourcepackTableView && indexPath.row == self.resourcepackList.count && self.hasMoreResourcepacks) {
         UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:@"LoadingCell"];
-        cell.textLabel.text = @"加载更多...";
+        cell.textLabel.text = @"Load more...";
         cell.textLabel.textAlignment = NSTextAlignmentCenter;
         cell.textLabel.textColor = [UIColor secondaryLabelColor];
         cell.backgroundColor = [UIColor clearColor];
@@ -5288,7 +5288,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
     if (tableView == self.datapackTableView && indexPath.row == self.datapackList.count && self.hasMoreDatapacks) {
         UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:@"LoadingCell"];
-        cell.textLabel.text = @"加载更多...";
+        cell.textLabel.text = @"Load more...";
         cell.textLabel.textAlignment = NSTextAlignmentCenter;
         cell.textLabel.textColor = [UIColor secondaryLabelColor];
         cell.backgroundColor = [UIColor clearColor];
@@ -5297,7 +5297,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
     if (tableView == self.worldTableView && indexPath.row == self.worldList.count && self.hasMoreWorlds) {
         UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:@"LoadingCell"];
-        cell.textLabel.text = @"加载更多...";
+        cell.textLabel.text = @"Load more...";
         cell.textLabel.textAlignment = NSTextAlignmentCenter;
         cell.textLabel.textColor = [UIColor secondaryLabelColor];
         cell.backgroundColor = [UIColor clearColor];
@@ -5612,7 +5612,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 - (void)modVersionViewController:(ModVersionViewController *)viewController didSelectVersion:(ModVersion *)version {
     NSDictionary *primaryFile = version.primaryFile;
     if (!primaryFile || ![primaryFile[@"url"] isKindOfClass:[NSString class]]) {
-        [self showError:@"未找到有效的下载链接"];
+        [self showError:@"No valid download link found"];
         return;
     }
 
@@ -5644,7 +5644,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 - (void)assetVersionViewController:(AssetVersionViewController *)viewController didSelectVersion:(ModVersion *)version {
     NSDictionary *primaryFile = version.primaryFile;
     if (!primaryFile || ![primaryFile[@"url"] isKindOfClass:[NSString class]]) {
-        [self showError:@"未找到有效的下载链接"];
+        [self showError:@"No valid download link found"];
         return;
     }
 
@@ -5687,12 +5687,12 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         self.progressCardView = nil;
     }
 
-    NSString *modTitle = [NSString stringWithFormat:@"正在下载 %@", item.displayName ?: @""];
+    NSString *modTitle = [NSString stringWithFormat:@"Downloading %@", item.displayName ?: @""];
     self.progressCardView = [DownloadProgressCardView showInParentView:self.view title:modTitle];
     [self.progressCardView startDownloadWithTitle:modTitle
-                                          subtitle:@"Minecraft 模组"];
+                                          subtitle:@"Minecraft mod"];
     // 立即显示不确定模式，等首次 progress 回调后再更新具体百分比
-    [self.progressCardView updateProgress:-1 downloaded:0 total:-1 speed:0 eta:-1 currentFile:@"准备下载..."];
+    [self.progressCardView updateProgress:-1 downloaded:0 total:-1 speed:0 eta:-1 currentFile:@"Preparing download..."];
 
     NSString *profileName = PLProfiles.current.selectedProfileName ?: @"default";
 
@@ -5734,10 +5734,10 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                 [strongSelf showError:error.localizedDescription];
             } else {
                 if (strongSelf.progressCardView) {
-                    [strongSelf.progressCardView completeWithTitle:[NSString stringWithFormat:@"%@ 已安装", item.displayName]];
+                    [strongSelf.progressCardView completeWithTitle:[NSString stringWithFormat:@"%@ installed", item.displayName]];
                     strongSelf.progressCardView = nil;
                 }
-                [strongSelf showSuccessMessage:[NSString stringWithFormat:@"%@ 已安装", item.displayName]];
+                [strongSelf showSuccessMessage:[NSString stringWithFormat:@"%@ installed", item.displayName]];
             }
         });
     }];
@@ -5746,9 +5746,9 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 // 下载资源包（使用 ResourcePackService，NSString profileName）
 - (void)startDownloadForResourcePackItem:(ResourcePackItem *)item {
     InstallerProgressViewController *progressVC = [[InstallerProgressViewController alloc] init];
-    progressVC.titleText = [NSString stringWithFormat:@"正在下载 %@", item.displayName ?: @""];
+    progressVC.titleText = [NSString stringWithFormat:@"Downloading %@", item.displayName ?: @""];
     progressVC.progress = -1;
-    progressVC.stageMessage = @"正在下载资源包...";
+    progressVC.stageMessage = @"Downloading resource pack...";
     // 阶段12增强：资源包图标
     progressVC.categoryIconName = @"paintpalette.fill";
     progressVC.categoryIconColor = [UIColor systemPurpleColor];
@@ -5771,9 +5771,9 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             if (!strongSelf) return;
             [strongSelf.navigationController popViewControllerAnimated:YES];
             if (success && !error) {
-                [strongSelf showSuccessMessage:[NSString stringWithFormat:@"%@ 已安装到 resourcepacks", item.displayName]];
+                [strongSelf showSuccessMessage:[NSString stringWithFormat:@"%@ installed into resourcepacks", item.displayName]];
             } else {
-                [strongSelf showError:error.localizedDescription ?: @"资源包下载失败"];
+                [strongSelf showError:error.localizedDescription ?: @"Resource pack download failed"];
             }
         });
     }];
@@ -5782,9 +5782,9 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 // 下载数据包（使用 DataPackService，NSString profileName）
 - (void)startDownloadForDataPackItem:(DataPackItem *)item {
     InstallerProgressViewController *progressVC = [[InstallerProgressViewController alloc] init];
-    progressVC.titleText = [NSString stringWithFormat:@"正在下载 %@", item.displayName ?: @""];
+    progressVC.titleText = [NSString stringWithFormat:@"Downloading %@", item.displayName ?: @""];
     progressVC.progress = -1;
-    progressVC.stageMessage = @"正在下载数据包...";
+    progressVC.stageMessage = @"Downloading data pack...";
     // 阶段12增强：数据包图标
     progressVC.categoryIconName = @"doc.text.fill";
     progressVC.categoryIconColor = [UIColor systemTealColor];
@@ -5807,9 +5807,9 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             if (!strongSelf) return;
             [strongSelf.navigationController popViewControllerAnimated:YES];
             if (success && !error) {
-                [strongSelf showSuccessMessage:[NSString stringWithFormat:@"%@ 已安装到 datapacks\n请手动移动到对应世界目录", item.displayName]];
+                [strongSelf showSuccessMessage:[NSString stringWithFormat:@"%@ installed into datapacks\nPlease move it manually into the matching world folder", item.displayName]];
             } else {
-                [strongSelf showError:error.localizedDescription ?: @"数据包下载失败"];
+                [strongSelf showError:error.localizedDescription ?: @"Data pack download failed"];
             }
         });
     }];
@@ -5818,9 +5818,9 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 // 下载世界存档并解压到 saves 目录（使用 WorldService，含进度回调与健壮解压）
 - (void)startDownloadForWorldItem:(WorldItem *)item {
     InstallerProgressViewController *progressVC = [[InstallerProgressViewController alloc] init];
-    progressVC.titleText = [NSString stringWithFormat:@"正在下载 %@", item.displayName ?: @""];
+    progressVC.titleText = [NSString stringWithFormat:@"Downloading %@", item.displayName ?: @""];
     progressVC.progress = -1;
-    progressVC.stageMessage = @"正在下载世界存档...";
+    progressVC.stageMessage = @"Downloading world save...";
     // 阶段12增强：世界图标
     progressVC.categoryIconName = @"globe.asia.australia.fill";
     progressVC.categoryIconColor = [UIColor systemGreenColor];
@@ -5843,9 +5843,9 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             if (!strongSelf) return;
             [strongSelf.navigationController popViewControllerAnimated:YES];
             if (success && !error) {
-                [strongSelf showSuccessMessage:[NSString stringWithFormat:@"%@ 已解压到 saves 目录", item.displayName]];
+                [strongSelf showSuccessMessage:[NSString stringWithFormat:@"%@ extracted into the saves folder", item.displayName]];
             } else {
-                [strongSelf showError:error.localizedDescription ?: @"世界下载失败"];
+                [strongSelf showError:error.localizedDescription ?: @"World download failed"];
             }
         });
     }];
@@ -5858,7 +5858,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     
     NSDictionary *primaryFile = version.primaryFile;
     if (!primaryFile || ![primaryFile[@"url"] isKindOfClass:[NSString class]]) {
-        [self showError:@"未找到有效的下载链接"];
+        [self showError:@"No valid download link found"];
         return;
     }
     
@@ -5880,11 +5880,11 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         self.progressCardView = nil;
     }
 
-    NSString *shaderTitle = [NSString stringWithFormat:@"正在下载 %@", item.displayName ?: @""];
+    NSString *shaderTitle = [NSString stringWithFormat:@"Downloading %@", item.displayName ?: @""];
     self.progressCardView = [DownloadProgressCardView showInParentView:self.view title:shaderTitle];
     [self.progressCardView startDownloadWithTitle:shaderTitle
-                                          subtitle:@"Minecraft 光影包"];
-    [self.progressCardView updateProgress:-1 downloaded:0 total:-1 speed:0 eta:-1 currentFile:@"准备下载..."];
+                                          subtitle:@"Minecraft shader pack"];
+    [self.progressCardView updateProgress:-1 downloaded:0 total:-1 speed:0 eta:-1 currentFile:@"Preparing download..."];
 
     NSString *profileName = PLProfiles.current.selectedProfileName ?: @"default";
 
@@ -5926,10 +5926,10 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
                 [strongSelf showError:error.localizedDescription];
             } else {
                 if (strongSelf.progressCardView) {
-                    [strongSelf.progressCardView completeWithTitle:[NSString stringWithFormat:@"%@ 已安装", item.displayName]];
+                    [strongSelf.progressCardView completeWithTitle:[NSString stringWithFormat:@"%@ installed", item.displayName]];
                     strongSelf.progressCardView = nil;
                 }
-                [strongSelf showSuccessMessage:[NSString stringWithFormat:@"%@ 已安装", item.displayName]];
+                [strongSelf showSuccessMessage:[NSString stringWithFormat:@"%@ installed", item.displayName]];
             }
         });
     }];
@@ -6040,8 +6040,8 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
             // 使用进度卡片显示完成状态
             if (self.progressCardView) {
-                NSString *completeTitle = [NSString stringWithFormat:@"%@ 下载完成",
-                                           self.downloadTask.metadata[@"id"] ?: @"版本"];
+                NSString *completeTitle = [NSString stringWithFormat:@"%@ download complete",
+                                           self.downloadTask.metadata[@"id"] ?: @"Version"];
                 [self.progressCardView completeWithTitle:completeTitle];
                 self.progressCardView = nil;
             }
@@ -6129,11 +6129,11 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             if (textProgress.estimatedTimeRemaining) {
                 NSInteger eta = [textProgress.estimatedTimeRemaining integerValue];
                 if (eta > 3600) {
-                    pvc.etaText = [NSString stringWithFormat:@"剩余 %ld小时%ld分", (long)(eta / 3600), (long)((eta % 3600) / 60)];
+                    pvc.etaText = [NSString stringWithFormat:@"%ldh %ldm left", (long)(eta / 3600), (long)((eta % 3600) / 60)];
                 } else if (eta > 60) {
-                    pvc.etaText = [NSString stringWithFormat:@"剩余 %ld分%ld秒", (long)(eta / 60), (long)(eta % 60)];
+                    pvc.etaText = [NSString stringWithFormat:@"%ldm %lds left", (long)(eta / 60), (long)(eta % 60)];
                 } else if (eta > 0) {
-                    pvc.etaText = [NSString stringWithFormat:@"剩余 %ld秒", (long)eta];
+                    pvc.etaText = [NSString stringWithFormat:@"%lds left", (long)eta];
                 } else {
                     pvc.etaText = nil;
                 }
@@ -6147,33 +6147,33 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             NSArray *steps;
             if (fraction < 0.3) {
                 steps = @[
-                    @{@"title": @"获取版本清单", @"status": @2},
-                    @{@"title": @"下载版本 JSON", @"status": @2},
-                    @{@"title": @"下载游戏库文件", @"status": @1},
-                    @{@"title": @"下载资源文件", @"status": @0},
-                    @{@"title": @"验证文件完整性", @"status": @0},
+                    @{@"title": @"Fetch version manifest", @"status": @2},
+                    @{@"title": @"Download version JSON", @"status": @2},
+                    @{@"title": @"Download game libraries", @"status": @1},
+                    @{@"title": @"Download asset files", @"status": @0},
+                    @{@"title": @"Verify file integrity", @"status": @0},
                 ];
             } else if (fraction < 0.9) {
                 steps = @[
-                    @{@"title": @"获取版本清单", @"status": @2},
-                    @{@"title": @"下载版本 JSON", @"status": @2},
-                    @{@"title": @"下载游戏库文件", @"status": @2},
-                    @{@"title": @"下载资源文件", @"status": @1},
-                    @{@"title": @"验证文件完整性", @"status": @0},
+                    @{@"title": @"Fetch version manifest", @"status": @2},
+                    @{@"title": @"Download version JSON", @"status": @2},
+                    @{@"title": @"Download game libraries", @"status": @2},
+                    @{@"title": @"Download asset files", @"status": @1},
+                    @{@"title": @"Verify file integrity", @"status": @0},
                 ];
             } else {
                 steps = @[
-                    @{@"title": @"获取版本清单", @"status": @2},
-                    @{@"title": @"下载版本 JSON", @"status": @2},
-                    @{@"title": @"下载游戏库文件", @"status": @2},
-                    @{@"title": @"下载资源文件", @"status": @2},
-                    @{@"title": @"验证文件完整性", @"status": @1},
+                    @{@"title": @"Fetch version manifest", @"status": @2},
+                    @{@"title": @"Download version JSON", @"status": @2},
+                    @{@"title": @"Download game libraries", @"status": @2},
+                    @{@"title": @"Download asset files", @"status": @2},
+                    @{@"title": @"Verify file integrity", @"status": @1},
                 ];
             }
             pvc.stageSteps = steps;
 
             // 阶段文案：当前正在下载的文件名（简化显示百分比）
-            pvc.stageMessage = [NSString stringWithFormat:@"正在下载原版文件... %.1f%%", fraction * 100.0];
+            pvc.stageMessage = [NSString stringWithFormat:@"Downloading vanilla files... %.1f%%", fraction * 100.0];
         }
 
         if (progress.finished) {
@@ -6196,15 +6196,15 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
             if (s.vanillaPreinstallForLoader && s.vanillaPreinstallProgressVC) {
                 InstallerProgressViewController *pvc = s.vanillaPreinstallProgressVC;
                 pvc.progress = -1; // 切回不确定模式，等待加载器安装阶段
-                pvc.stageMessage = @"原版文件已就绪，正在准备安装加载器...";
+                pvc.stageMessage = @"Vanilla files are ready, preparing to install the loader...";
                 // 步骤列表：原版5步全部标记完成 + "安装模组加载器"进行中
                 pvc.stageSteps = @[
-                    @{@"title": @"获取版本清单", @"status": @2},
-                    @{@"title": @"下载版本 JSON", @"status": @2},
-                    @{@"title": @"下载游戏库文件", @"status": @2},
-                    @{@"title": @"下载资源文件", @"status": @2},
-                    @{@"title": @"验证文件完整性", @"status": @2},
-                    @{@"title": @"安装模组加载器", @"status": @1},
+                    @{@"title": @"Fetch version manifest", @"status": @2},
+                    @{@"title": @"Download version JSON", @"status": @2},
+                    @{@"title": @"Download game libraries", @"status": @2},
+                    @{@"title": @"Download asset files", @"status": @2},
+                    @{@"title": @"Verify file integrity", @"status": @2},
+                    @{@"title": @"Install mod loader", @"status": @1},
                 ];
                 s.installerProgressVC = pvc;
                 s.vanillaPreinstallForLoader = NO;
@@ -6248,7 +6248,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 /// 此方法为同步阻塞调用，须在后台线程调用。
 - (NSData *)downloadDataWithURLString:(NSString *)urlString error:(NSError **)error {
     if (!urlString.length) {
-        if (error) *error = [NSError errorWithDomain:@"DownloadError" code:1 userInfo:@{NSLocalizedDescriptionKey: @"空 URL"}];
+        if (error) *error = [NSError errorWithDomain:@"DownloadError" code:1 userInfo:@{NSLocalizedDescriptionKey: @"Empty URL"}];
         return nil;
     }
     NSURL *url = [NSURL URLWithString:urlString];
@@ -6258,7 +6258,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
         url = [NSURL URLWithString:encoded];
     }
     if (!url) {
-        if (error) *error = [NSError errorWithDomain:@"DownloadError" code:1 userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"无效 URL: %@", urlString]}];
+        if (error) *error = [NSError errorWithDomain:@"DownloadError" code:1 userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Invalid URL: %@", urlString]}];
         return nil;
     }
 

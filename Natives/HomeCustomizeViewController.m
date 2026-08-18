@@ -7,11 +7,11 @@
 
 static NSDictionary *availableShortcuts(void) {
     return @{
-        kShortcutActionMods:       @{@"title": @"Mod 管理",    @"icon": @"puzzlepiece.extension.fill", @"color": @"#14B8A6"},
-        kShortcutActionShaders:    @{@"title": @"光影管理",    @"icon": @"sun.max.fill",              @"color": @"#F97316"},
-        kShortcutActionModpack:    @{@"title": @"整合包导入",  @"icon": @"shippingbox.fill",           @"color": @"#8B5CF6"},
-        kShortcutActionBackground: @{@"title": @"壁纸设置",    @"icon": @"photo.fill.on.rectangle.fill",@"color": @"#EC4899"},
-        kShortcutActionVersions:   @{@"title": @"版本管理",    @"icon": @"square.stack.3d.up.fill",    @"color": @"#6366F1"},
+        kShortcutActionMods:       @{@"title": @"Mod manager",    @"icon": @"puzzlepiece.extension.fill", @"color": @"#14B8A6"},
+        kShortcutActionShaders:    @{@"title": @"Shader manager",    @"icon": @"sun.max.fill",              @"color": @"#F97316"},
+        kShortcutActionModpack:    @{@"title": @"Import modpack",  @"icon": @"shippingbox.fill",           @"color": @"#8B5CF6"},
+        kShortcutActionBackground: @{@"title": @"Wallpaper settings",    @"icon": @"photo.fill.on.rectangle.fill",@"color": @"#EC4899"},
+        kShortcutActionVersions:   @{@"title": @"Version manager",    @"icon": @"square.stack.3d.up.fill",    @"color": @"#6366F1"},
     };
 }
 
@@ -130,7 +130,7 @@ static UIColor *hexColor(NSString *hex) {
     self.tileIconView.tintColor = [tile accentColor];
     self.accentStrip.backgroundColor = [tile accentColor];
     self.visibilitySwitch.on = tile.visible;
-    self.sizeLabel.text = tile.tileSize == HomeTileSizeCompact ? @"半宽" : @"全宽";
+    self.sizeLabel.text = tile.tileSize == HomeTileSizeCompact ? @"Half width" : @"Full width";
     
     CGFloat alpha = tile.visible ? 1.0 : 0.45;
     self.tileTitleLabel.alpha = alpha;
@@ -141,28 +141,28 @@ static UIColor *hexColor(NSString *hex) {
 - (NSString *)displayTitleForTile:(HomeTileConfig *)tile {
     if (tile.customTitle.length > 0) return tile.customTitle;
     switch (tile.tileType) {
-        case HomeTileTypeProfile:        return @"用户资料";
-        case HomeTileTypeAnnouncement:   return @"公告";
-        case HomeTileTypeVersionRelease: return @"最新正式版";
-        case HomeTileTypeVersionSnapshot:return @"最新快照";
-        case HomeTileTypeNews:           return @"Minecraft 新闻";
-        case HomeTileTypeShortcut:       return tile.shortcutAction ?: @"快捷入口";
-        default:                         return @"磁贴";
+        case HomeTileTypeProfile:        return @"Profile";
+        case HomeTileTypeAnnouncement:   return @"Announcements";
+        case HomeTileTypeVersionRelease: return @"Latest release";
+        case HomeTileTypeVersionSnapshot:return @"Latest snapshot";
+        case HomeTileTypeNews:           return @"Minecraft news";
+        case HomeTileTypeShortcut:       return tile.shortcutAction ?: @"Shortcut";
+        default:                         return @"Tile";
     }
 }
 
 - (NSString *)displayDetailForTile:(HomeTileConfig *)tile {
     NSString *type;
     switch (tile.tileType) {
-        case HomeTileTypeProfile:        type = @"资料卡"; break;
-        case HomeTileTypeAnnouncement:   type = @"公告"; break;
-        case HomeTileTypeVersionRelease: type = @"版本信息"; break;
-        case HomeTileTypeVersionSnapshot:type = @"版本信息"; break;
-        case HomeTileTypeNews:           type = @"新闻"; break;
-        case HomeTileTypeShortcut:       type = @"快捷入口"; break;
-        default:                         type = @"未知"; break;
+        case HomeTileTypeProfile:        type = @"Profile card"; break;
+        case HomeTileTypeAnnouncement:   type = @"Announcements"; break;
+        case HomeTileTypeVersionRelease: type = @"Version info"; break;
+        case HomeTileTypeVersionSnapshot:type = @"Version info"; break;
+        case HomeTileTypeNews:           type = @"News"; break;
+        case HomeTileTypeShortcut:       type = @"Shortcut"; break;
+        default:                         type = @"Unknown"; break;
     }
-    NSString *size = tile.tileSize == HomeTileSizeCompact ? @"紧凑" : @"全宽";
+    NSString *size = tile.tileSize == HomeTileSizeCompact ? @"Compact" : @"Full width";
     return [NSString stringWithFormat:@"%@ · %@", type, size];
 }
 
@@ -182,26 +182,26 @@ static UIColor *hexColor(NSString *hex) {
 - (void)viewDidLoad {
     [super viewDidLoad];
     
-    self.title = @"自定义主页";
+    self.title = @"Customize home";
     self.editingConfigs = [self.tileConfigs mutableCopy];
     
     // 导航栏按钮
-    self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithTitle:@"取消"
+    self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc] initWithTitle:@"Cancel"
                                                                             style:UIBarButtonItemStylePlain
                                                                            target:self
                                                                            action:@selector(cancelTapped)];
     
-    self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithTitle:@"保存"
+    self.navigationItem.rightBarButtonItem = [[UIBarButtonItem alloc] initWithTitle:@"Save"
                                                                              style:UIBarButtonItemStyleDone
                                                                             target:self
                                                                             action:@selector(saveTapped)];
     
     // 工具栏按钮
-    UIBarButtonItem *addBtn = [[UIBarButtonItem alloc] initWithTitle:@"添加快捷入口"
+    UIBarButtonItem *addBtn = [[UIBarButtonItem alloc] initWithTitle:@"Add shortcut"
                                                               style:UIBarButtonItemStylePlain
                                                              target:self
                                                              action:@selector(addShortcutTapped)];
-    UIBarButtonItem *resetBtn = [[UIBarButtonItem alloc] initWithTitle:@"重置默认"
+    UIBarButtonItem *resetBtn = [[UIBarButtonItem alloc] initWithTitle:@"Reset to default"
                                                                 style:UIBarButtonItemStylePlain
                                                                target:self
                                                                action:@selector(resetTapped)];
@@ -281,11 +281,11 @@ static UIColor *hexColor(NSString *hex) {
 }
 
 - (void)resetTapped {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"重置布局"
-                                                                   message:@"确定要恢复默认主页布局吗？所有自定义设置将丢失。"
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Reset layout"
+                                                                   message:@"Restore the default home layout? All of your customizations will be lost."
                                                             preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
-    [alert addAction:[UIAlertAction actionWithTitle:@"重置" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
+    [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Reset" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
         self.editingConfigs = [[HomeTileConfig defaultTileConfigs] mutableCopy];
         [self.tableView reloadData];
     }]];
@@ -293,8 +293,8 @@ static UIColor *hexColor(NSString *hex) {
 }
 
 - (void)addShortcutTapped {
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"添加快捷入口"
-                                                                   message:@"选择要添加的功能"
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Add shortcut"
+                                                                   message:@"Choose a feature to add"
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
     
     NSDictionary *shortcuts = availableShortcuts();
@@ -328,7 +328,7 @@ static UIColor *hexColor(NSString *hex) {
         }]];
     }
     
-    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
     
     // iPad popover support
     sheet.popoverPresentationController.barButtonItem = self.toolbarItems.firstObject;
@@ -395,12 +395,12 @@ static UIColor *hexColor(NSString *hex) {
 // MARK: - Edit Tile Options
 
 - (void)showEditOptionsForTile:(HomeTileConfig *)tile atIndex:(NSInteger)index {
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"编辑磁贴"
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Edit tile"
                                                                    message:nil
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
     
     // 切换大小
-    NSString *sizeTitle = tile.tileSize == HomeTileSizeCompact ? @"切换为全宽" : @"切换为紧凑(半宽)";
+    NSString *sizeTitle = tile.tileSize == HomeTileSizeCompact ? @"Switch to full width" : @"Switch to compact (half width)";
     [sheet addAction:[UIAlertAction actionWithTitle:sizeTitle style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
         tile.tileSize = (tile.tileSize == HomeTileSizeCompact) ? HomeTileSizeFull : HomeTileSizeCompact;
         [self.tableView reloadRowsAtIndexPaths:@[[NSIndexPath indexPathForRow:index inSection:0]]
@@ -409,18 +409,18 @@ static UIColor *hexColor(NSString *hex) {
     
     // 修改标题 (仅快捷入口和部分磁贴)
     if (tile.tileType == HomeTileTypeShortcut || tile.tileType == HomeTileTypeVersionRelease || tile.tileType == HomeTileTypeVersionSnapshot) {
-        [sheet addAction:[UIAlertAction actionWithTitle:@"修改标题" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+        [sheet addAction:[UIAlertAction actionWithTitle:@"Change title" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
             [self showEditTitleForTile:tile atIndex:index];
         }]];
     }
     
     // 修改颜色
-    [sheet addAction:[UIAlertAction actionWithTitle:@"修改装饰色" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Change accent color" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
         [self showColorPickerForTile:tile atIndex:index];
     }]];
     
     // 切换可见性
-    NSString *visTitle = tile.visible ? @"隐藏此磁贴" : @"显示此磁贴";
+    NSString *visTitle = tile.visible ? @"Hide this tile" : @"Show this tile";
     [sheet addAction:[UIAlertAction actionWithTitle:visTitle style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
         tile.visible = !tile.visible;
         [self.tableView reloadRowsAtIndexPaths:@[[NSIndexPath indexPathForRow:index inSection:0]]
@@ -429,14 +429,14 @@ static UIColor *hexColor(NSString *hex) {
     
     // 删除 (仅快捷入口)
     if (tile.tileType == HomeTileTypeShortcut) {
-        [sheet addAction:[UIAlertAction actionWithTitle:@"删除" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
+        [sheet addAction:[UIAlertAction actionWithTitle:@"Delete" style:UIAlertActionStyleDestructive handler:^(UIAlertAction *action) {
             [self.editingConfigs removeObjectAtIndex:index];
             [self.tableView deleteRowsAtIndexPaths:@[[NSIndexPath indexPathForRow:index inSection:0]]
                                   withRowAnimation:UITableViewRowAnimationFade];
         }]];
     }
     
-    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
     
     // iPad popover
     sheet.popoverPresentationController.sourceView = [self.tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:index inSection:0]];
@@ -446,17 +446,17 @@ static UIColor *hexColor(NSString *hex) {
 }
 
 - (void)showEditTitleForTile:(HomeTileConfig *)tile atIndex:(NSInteger)index {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"修改标题"
-                                                                   message:@"输入新的磁贴标题"
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Change title"
+                                                                   message:@"Enter a new tile title"
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addTextFieldWithConfigurationHandler:^(UITextField *tf) {
         tf.text = tile.customTitle;
-        tf.placeholder = @"磁贴标题";
+        tf.placeholder = @"Tile title";
         tf.clearButtonMode = UITextFieldViewModeWhileEditing;
     }];
     
-    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
-    [alert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+    [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
         NSString *newTitle = alert.textFields.firstObject.text;
         if (newTitle.length > 0) {
             tile.customTitle = newTitle;
@@ -469,23 +469,23 @@ static UIColor *hexColor(NSString *hex) {
 }
 
 - (void)showColorPickerForTile:(HomeTileConfig *)tile atIndex:(NSInteger)index {
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"选择装饰色"
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Choose accent color"
                                                                    message:nil
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
     
     NSDictionary *colors = @{
-        @"紫色":   @"#8B5CF6",
-        @"蓝色":   @"#3B82F6",
-        @"青色":   @"#14B8A6",
-        @"绿色":   @"#10B981",
-        @"黄色":   @"#F59E0B",
-        @"橙色":   @"#F97316",
-        @"红色":   @"#EF4444",
-        @"粉色":   @"#EC4899",
-        @"靛蓝":   @"#6366F1",
+        @"Purple":   @"#8B5CF6",
+        @"Blue":   @"#3B82F6",
+        @"Teal":   @"#14B8A6",
+        @"Green":   @"#10B981",
+        @"Yellow":   @"#F59E0B",
+        @"Orange":   @"#F97316",
+        @"Red":   @"#EF4444",
+        @"Pink":   @"#EC4899",
+        @"Indigo":   @"#6366F1",
     };
     
-    for (NSString *name in @[@"紫色", @"蓝色", @"青色", @"绿色", @"黄色", @"橙色", @"红色", @"粉色", @"靛蓝"]) {
+    for (NSString *name in @[@"Purple", @"Blue", @"Teal", @"Green", @"Yellow", @"Orange", @"Red", @"Pink", @"Indigo"]) {
         NSString *hex = colors[name];
         [sheet addAction:[UIAlertAction actionWithTitle:name style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
             tile.accentColorHex = hex;
@@ -494,7 +494,7 @@ static UIColor *hexColor(NSString *hex) {
         }]];
     }
     
-    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
     
     sheet.popoverPresentationController.sourceView = [self.tableView cellForRowAtIndexPath:[NSIndexPath indexPathForRow:index inSection:0]];
     sheet.popoverPresentationController.sourceRect = sheet.popoverPresentationController.sourceView.bounds;

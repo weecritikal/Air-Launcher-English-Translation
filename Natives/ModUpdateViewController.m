@@ -242,7 +242,7 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
 
     self.titleLabel = [[UILabel alloc] init];
     self.titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.titleLabel.text = @"Mod 更新";
+    self.titleLabel.text = @"Mod updates";
     self.titleLabel.font = [UIFont systemFontOfSize:20 weight:UIFontWeightSemibold];
     self.titleLabel.adjustsFontForContentSizeCategory = YES;
     [self.headerCard addSubview:self.titleLabel];
@@ -470,33 +470,33 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
 - (void)updatePhaseCardForCurrentPhase {
     switch (self.currentPhase) {
         case ModUpdatePhasePrepare:
-            self.phaseTitleLabel.text = @"正在准备...";
+            self.phaseTitleLabel.text = @"Preparing...";
             self.progressView.hidden = YES;
             self.currentFileLabel.text = @"";
             break;
         case ModUpdatePhaseCheck:
-            self.phaseTitleLabel.text = [NSString stringWithFormat:@"正在检查更新 (%ld/%ld)",
+            self.phaseTitleLabel.text = [NSString stringWithFormat:@"Checking for updates (%ld/%ld)",
                                          (long)self.checkCompleted, (long)self.filteredMods.count];
             self.progressView.hidden = NO;
-            self.currentFileLabel.text = @"并发检查中...";
+            self.currentFileLabel.text = @"Checking concurrently...";
             break;
         case ModUpdatePhaseConfirm:
-            self.phaseTitleLabel.text = @"请确认需要更新的 Mod";
+            self.phaseTitleLabel.text = @"Confirm which mods to update";
             self.progressView.hidden = YES;
             self.currentFileLabel.text = @"";
             break;
         case ModUpdatePhaseDownload:
-            self.phaseTitleLabel.text = [NSString stringWithFormat:@"正在下载 (%ld/%ld)",
+            self.phaseTitleLabel.text = [NSString stringWithFormat:@"Downloading (%ld/%ld)",
                                          (long)self.downloadCompleted, (long)self.downloadTotal];
             self.progressView.hidden = NO;
             break;
         case ModUpdatePhaseReplace:
-            self.phaseTitleLabel.text = @"正在替换文件...";
+            self.phaseTitleLabel.text = @"Replacing files...";
             self.progressView.hidden = YES;
             self.currentFileLabel.text = @"";
             break;
         case ModUpdatePhaseDone:
-            self.phaseTitleLabel.text = [NSString stringWithFormat:@"更新完成（成功 %ld，失败 %ld）",
+            self.phaseTitleLabel.text = [NSString stringWithFormat:@"Update finished (%ld succeeded, %ld failed)",
                                          (long)self.successCount, (long)self.failureCount];
             self.progressView.hidden = YES;
             self.currentFileLabel.text = @"";
@@ -518,22 +518,22 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
             self.actionCard.hidden = NO;
             if (self.selections.count == 0) {
                 // 无可用更新
-                [self.primaryButton setTitle:@"关闭" forState:UIControlStateNormal];
+                [self.primaryButton setTitle:@"Close" forState:UIControlStateNormal];
                 self.primaryButton.userInteractionEnabled = YES;
                 self.secondaryButton.hidden = YES;
             } else {
                 NSInteger selectedCount = [self selectedCount];
-                [self.primaryButton setTitle:[NSString stringWithFormat:@"更新选中的 %ld 项", (long)selectedCount]
+                [self.primaryButton setTitle:[NSString stringWithFormat:@"Update %ld selected", (long)selectedCount]
                                     forState:UIControlStateNormal];
                 self.primaryButton.userInteractionEnabled = (selectedCount > 0);
                 self.secondaryButton.hidden = NO;
-                [self.secondaryButton setTitle:@"取消" forState:UIControlStateNormal];
+                [self.secondaryButton setTitle:@"Cancel" forState:UIControlStateNormal];
             }
             break;
         }
         case ModUpdatePhaseDone:
             self.actionCard.hidden = NO;
-            [self.primaryButton setTitle:@"关闭" forState:UIControlStateNormal];
+            [self.primaryButton setTitle:@"Close" forState:UIControlStateNormal];
             self.primaryButton.userInteractionEnabled = YES;
             self.secondaryButton.hidden = YES;
             break;
@@ -548,34 +548,34 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
     switch (self.currentPhase) {
         case ModUpdatePhasePrepare:
             showEmpty = YES;
-            emptyText = @"正在准备 Mod 列表...";
+            emptyText = @"Preparing the mod list...";
             break;
         case ModUpdatePhaseCheck:
             if (self.filteredMods.count == 0) {
                 showEmpty = YES;
-                emptyText = @"没有可检查的 Mod";
+                emptyText = @"No mods to check";
             }
             break;
         case ModUpdatePhaseConfirm:
             if (self.selections.count == 0) {
                 showEmpty = YES;
-                emptyText = @"所有 Mod 均为最新版本";
+                emptyText = @"All mods are up to date";
             }
             break;
         case ModUpdatePhaseDownload:
             if (self.downloadTasks.count == 0) {
                 showEmpty = YES;
-                emptyText = @"没有需要下载的项";
+                emptyText = @"Nothing to download";
             }
             break;
         case ModUpdatePhaseReplace:
             showEmpty = YES;
-            emptyText = @"正在替换文件...";
+            emptyText = @"Replacing files...";
             break;
         case ModUpdatePhaseDone:
             if (self.failureCount == 0) {
                 showEmpty = YES;
-                emptyText = [NSString stringWithFormat:@"成功更新 %ld 个 Mod", (long)self.successCount];
+                emptyText = [NSString stringWithFormat:@"Updated %ld mod(s) successfully", (long)self.successCount];
             }
             break;
     }
@@ -1060,9 +1060,9 @@ didCompleteWithError:(NSError *)error {
 
     if (indexPath.row == 0) {
         // 摘要行：勾选开关 + 文件名 + 版本变化 + 来源 + 展开指示
-        NSString *fileName = result.localFilePath.lastPathComponent ?: @"未知文件";
-        NSString *currentVer = result.currentVersion.versionNumber ?: @"未知版本";
-        NSString *targetVer = sel.chosenVersion.versionNumber ?: @"最新版本";
+        NSString *fileName = result.localFilePath.lastPathComponent ?: @"Unknown file";
+        NSString *currentVer = result.currentVersion.versionNumber ?: @"Unknown version";
+        NSString *targetVer = sel.chosenVersion.versionNumber ?: @"Latest version";
         NSString *source = [self sourceNameForResult:result];
 
         // 使用 UISwitch 作为 accessoryView
@@ -1099,7 +1099,7 @@ didCompleteWithError:(NSError *)error {
     cell.imageView.image = radio;
     cell.imageView.tintColor = [UIColor systemBlueColor];
 
-    cell.textLabel.text = version.versionNumber ?: version.name ?: @"未知版本";
+    cell.textLabel.text = version.versionNumber ?: version.name ?: @"Unknown version";
     cell.textLabel.font = [UIFont systemFontOfSize:14];
     cell.textLabel.textColor = isChosen ? [UIColor labelColor] : [UIColor secondaryLabelColor];
 
@@ -1140,7 +1140,7 @@ didCompleteWithError:(NSError *)error {
         cell.accessoryView = spinner;
     }
 
-    cell.textLabel.text = info.fileName ?: @"未知文件";
+    cell.textLabel.text = info.fileName ?: @"Unknown file";
     cell.textLabel.font = [UIFont systemFontOfSize:15];
     cell.textLabel.numberOfLines = 1;
     cell.textLabel.lineBreakMode = NSLineBreakByTruncatingMiddle;
@@ -1150,16 +1150,16 @@ didCompleteWithError:(NSError *)error {
     int64_t total = info.progress.totalUnitCount;
     NSString *progressText = nil;
     if (info.succeeded) {
-        progressText = @"已完成";
+        progressText = @"Completed";
     } else if (finished) {
-        progressText = @"失败";
+        progressText = @"Failed";
     } else if (total > 0) {
         float ratio = (float)completed / (float)total;
         progressText = [NSString stringWithFormat:@"%d%%", (int)(ratio * 100)];
     } else if (info.retried) {
-        progressText = @"重试中...";
+        progressText = @"Retrying...";
     } else {
-        progressText = @"下载中...";
+        progressText = @"Downloading...";
     }
     cell.detailTextLabel.text = progressText;
     cell.detailTextLabel.font = [UIFont systemFontOfSize:12];
@@ -1183,7 +1183,7 @@ didCompleteWithError:(NSError *)error {
     cell.textLabel.font = [UIFont systemFontOfSize:14];
     cell.textLabel.numberOfLines = 1;
     cell.textLabel.lineBreakMode = NSLineBreakByTruncatingMiddle;
-    cell.detailTextLabel.text = @"更新失败";
+    cell.detailTextLabel.text = @"Update failed";
     cell.detailTextLabel.font = [UIFont systemFontOfSize:12];
     cell.detailTextLabel.textColor = [UIColor secondaryLabelColor];
     return cell;
@@ -1275,7 +1275,7 @@ didCompleteWithError:(NSError *)error {
 - (NSString *)fileNameForSelection:(ModUpdateSelection *)sel {
     NSString *name = [self fileNameForVersion:sel.chosenVersion];
     if (name.length > 0) return name;
-    return sel.result.localFilePath.lastPathComponent ?: @"未知文件";
+    return sel.result.localFilePath.lastPathComponent ?: @"Unknown file";
 }
 
 /// 返回来源名称

@@ -202,7 +202,7 @@
 
     if (!dataPacksPath) {
         if (error) {
-            *error = [NSError errorWithDomain:@"DataPackService" code:1 userInfo:@{NSLocalizedDescriptionKey: @"无法确定游戏目录"}];
+            *error = [NSError errorWithDomain:@"DataPackService" code:1 userInfo:@{NSLocalizedDescriptionKey: @"Could not determine the game directory"}];
         }
         return nil;
     }
@@ -390,7 +390,7 @@
                 if (completion) {
                     NSError *error = [NSError errorWithDomain:@"DataPackServiceError"
                                                          code:1
-                                                     userInfo:@{NSLocalizedDescriptionKey: @"找不到游戏目录。"}];
+                                                     userInfo:@{NSLocalizedDescriptionKey: @"Game directory not found."}];
                     dispatch_async(dispatch_get_main_queue(), ^{ completion(NO, error); });
                 }
                 return;

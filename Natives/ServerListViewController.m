@@ -38,7 +38,7 @@
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
 
     [[BackgroundManager sharedManager] applyEffectToView:self.view];
-    self.title = @"服务器";
+    self.title = @"Server";
     self.tableView.backgroundColor = [UIColor clearColor];
     self.tableView.backgroundView = nil;
     self.tableView.separatorStyle = UITableViewCellSeparatorStyleNone;
@@ -56,7 +56,7 @@
     self.searchController = [[UISearchController alloc] initWithSearchResultsController:nil];
     self.searchController.searchResultsUpdater = self;
     self.searchController.obscuresBackgroundDuringPresentation = NO;
-    self.searchController.searchBar.placeholder = @"搜索服务器...";
+    self.searchController.searchBar.placeholder = @"Search servers...";
     self.navigationItem.searchController = self.searchController;
     self.navigationItem.hidesSearchBarWhenScrolling = NO;
 
@@ -108,8 +108,8 @@
     // CurseForge 切换前校验 API Key
     if (newAPI == ServerDownloadAPICurseForge && ![CurseForgeAPI isAPIKeyConfigured]) {
         InlineMessageView *msg = [InlineMessageView showInViewController:self
-                                                                  title:@"需要 CurseForge API Key"
-                                                               message:@"检测到未配置 CurseForge API Key，点击前往设置"
+                                                                  title:@"CurseForge API key required"
+                                                               message:@"No CurseForge API key is configured. Tap to open Settings"
                                                                   type:InlineMessageTypeInfo];
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             [msg dismiss];
@@ -160,7 +160,7 @@
     if (self.currentOffset == 0) {
         [self.loadingIndicator startAnimating];
         self.currentMessageView = [InlineMessageView showInViewController:self
-                                                                    title:@"加载中"
+                                                                    title:@"Loading"
                                                                  message:nil
                                                                     type:InlineMessageTypeLoading];
     }
@@ -200,8 +200,8 @@
 
         if (strongSelf.serverList.count == 0) {
             strongSelf.currentMessageView = [InlineMessageView showInViewController:strongSelf
-                                                                              title:@"暂无服务器"
-                                                                           message:@"没有匹配的服务器项目，可尝试切换源或更改搜索词"
+                                                                              title:@"No servers"
+                                                                           message:@"No matching servers. Try switching source or changing your search terms"
                                                                               type:InlineMessageTypeInfo];
         }
     }];
@@ -253,7 +253,7 @@
     NSString *sourceTag = (item.apiSource == ServerAPISourceCurseForge) ? @"CurseForge" : @"Modrinth";
     NSString *typeTag = item.projectType ?: @"server";
     NSString *downloads = [item formattedDownloads];
-    cell.detailTextLabel.text = [NSString stringWithFormat:@"[%@·%@] 下载:%@", sourceTag, typeTag, downloads];
+    cell.detailTextLabel.text = [NSString stringWithFormat:@"[%@·%@] Downloads: %@", sourceTag, typeTag, downloads];
     cell.detailTextLabel.font = [UIFont preferredFontForTextStyle:UIFontTextStyleCaption1];
     cell.detailTextLabel.textColor = [UIColor secondaryLabelColor];
     cell.detailTextLabel.numberOfLines = 2;

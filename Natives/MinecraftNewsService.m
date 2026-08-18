@@ -69,7 +69,7 @@ static NSString * const MCNewsBaseAPIURL = @"https://net-secondary.web.minecraft
     if (!url) {
         if (completion) completion(@[], 0, [NSError errorWithDomain:MCNewsErrorDomain
                                                                  code:MCNewsErrorCodeNetwork
-                                                             userInfo:@{NSLocalizedDescriptionKey: @"无效的 API URL"}]);
+                                                             userInfo:@{NSLocalizedDescriptionKey: @"Invalid API URL"}]);
         return;
     }
 
@@ -109,7 +109,7 @@ static NSString * const MCNewsBaseAPIURL = @"https://net-secondary.web.minecraft
         if (parseError || ![json isKindOfClass:[NSDictionary class]]) {
             NSError *err = [NSError errorWithDomain:MCNewsErrorDomain
                                                code:MCNewsErrorCodeParsing
-                                           userInfo:@{NSLocalizedDescriptionKey: @"JSON 解析失败"}];
+                                           userInfo:@{NSLocalizedDescriptionKey: @"Failed to parse JSON"}];
             dispatch_async(dispatch_get_main_queue(), ^{
                 if (completion) completion(@[], 0, err);
             });

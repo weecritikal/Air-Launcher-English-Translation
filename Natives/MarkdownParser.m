@@ -258,7 +258,7 @@
                     NSString *altText = [trimmed substringWithRange:NSMakeRange(2, closeBracket.location - 2)];
                     NSString *imgURL = [trimmed substringWithRange:NSMakeRange(NSMaxRange(closeBracket), endParen.location - NSMaxRange(closeBracket))];
                     // 显示 [图片: altText] 作为占位（iOS UITextView 远程图片加载需额外处理）
-                    NSString *placeholder = altText.length > 0 ? [NSString stringWithFormat:@"[图片: %@]", altText] : @"[图片]";
+                    NSString *placeholder = altText.length > 0 ? [NSString stringWithFormat:@"[Image: %@]", altText] : @"[Image]";
                     NSURL *url = [NSURL URLWithString:imgURL];
                     NSMutableDictionary *attrs = [@{
                         NSFontAttributeName: [UIFont italicSystemFontOfSize:baseFont.pointSize],

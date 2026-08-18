@@ -85,7 +85,7 @@
     // 显示内联加载提示（首次加载时）
     if (!prevList) {
         self.currentMessageView = [InlineMessageView showInViewController:self
-                                                                    title:@"加载中"
+                                                                    title:@"Loading"
                                                                  message:nil
                                                                     type:InlineMessageTypeLoading];
     }
@@ -289,7 +289,7 @@
     NSString *loadingTitle = [NSString stringWithFormat:@"\"%@\"", item[@"title"]];
     self.currentMessageView = [InlineMessageView showInViewController:self
                                                                 title:loadingTitle
-                                                             message:@"正在加载版本列表"
+                                                             message:@"Loading the version list"
                                                                 type:InlineMessageTypeLoading];
 
     // 使用异步加载，避免 dispatch_group_wait 同步阻塞（修复加载列表过慢）

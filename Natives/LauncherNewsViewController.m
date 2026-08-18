@@ -171,7 +171,7 @@ static UIColor *colorFromHex(NSString *hex) {
     mods.tileType = HomeTileTypeShortcut;
     mods.tileSize = HomeTileSizeCompact;
     mods.visible = YES;
-    mods.customTitle = @"Mod 管理";
+    mods.customTitle = @"Mod manager";
     mods.iconName = @"puzzlepiece.extension.fill";
     mods.shortcutAction = kShortcutActionMods;
     mods.accentColorHex = @"#14B8A6";
@@ -183,7 +183,7 @@ static UIColor *colorFromHex(NSString *hex) {
     shaders.tileType = HomeTileTypeShortcut;
     shaders.tileSize = HomeTileSizeCompact;
     shaders.visible = YES;
-    shaders.customTitle = @"光影管理";
+    shaders.customTitle = @"Shader manager";
     shaders.iconName = @"sun.max.fill";
     shaders.shortcutAction = kShortcutActionShaders;
     shaders.accentColorHex = @"#F97316";
@@ -195,7 +195,7 @@ static UIColor *colorFromHex(NSString *hex) {
     modpack.tileType = HomeTileTypeShortcut;
     modpack.tileSize = HomeTileSizeCompact;
     modpack.visible = YES;
-    modpack.customTitle = @"整合包导入";
+    modpack.customTitle = @"Import modpack";
     modpack.iconName = @"shippingbox.fill";
     modpack.shortcutAction = kShortcutActionModpack;
     modpack.accentColorHex = @"#8B5CF6";
@@ -207,7 +207,7 @@ static UIColor *colorFromHex(NSString *hex) {
     bg.tileType = HomeTileTypeShortcut;
     bg.tileSize = HomeTileSizeCompact;
     bg.visible = YES;
-    bg.customTitle = @"壁纸设置";
+    bg.customTitle = @"Wallpaper settings";
     bg.iconName = @"photo.fill.on.rectangle.fill";
     bg.shortcutAction = kShortcutActionBackground;
     bg.accentColorHex = @"#EC4899";
@@ -252,14 +252,14 @@ static NSString *festivalGreeting(void) {
     NSInteger day = solar.day;
     
     // 公历节日
-    if (month == 1  && day == 1)  return @"元旦快乐！🎊";
-    if (month == 4  && (day >= 4 && day <= 6)) return @"清明节安康！🌿";
-    if (month == 5  && day == 1)  return @"劳动节快乐！💪";
-    if (month == 6  && day == 1)  return @"六一儿童节快乐！🎈";
-    if (month == 9  && day == 10) return @"教师节快乐！🌹";
-    if (month == 10 && (day >= 1 && day <= 7)) return @"国庆节快乐！🇨🇳";
-    if (month == 12 && day == 24) return @"平安夜快乐！🌟";
-    if (month == 12 && day == 25) return @"圣诞节快乐！🎄";
+    if (month == 1  && day == 1)  return @"Happy New Year! 🎊";
+    if (month == 4  && (day >= 4 && day <= 6)) return @"Peaceful Qingming Festival! 🌿";
+    if (month == 5  && day == 1)  return @"Happy Labor Day! 💪";
+    if (month == 6  && day == 1)  return @"Happy Children's Day! 🎈";
+    if (month == 9  && day == 10) return @"Happy Teachers' Day! 🌹";
+    if (month == 10 && (day >= 1 && day <= 7)) return @"Happy National Day! 🇨🇳";
+    if (month == 12 && day == 24) return @"Happy Christmas Eve! 🌟";
+    if (month == 12 && day == 25) return @"Merry Christmas! 🎄";
     
     // 农历节日 (使用中国日历)
     NSCalendar *chineseCalendar = [[NSCalendar alloc] initWithCalendarIdentifier:NSCalendarIdentifierChinese];
@@ -267,23 +267,23 @@ static NSString *festivalGreeting(void) {
     NSInteger lunarMonth = lunar.month;
     NSInteger lunarDay = lunar.day;
     
-    if (lunarMonth == 1  && lunarDay == 1)  return @"新春快乐！🎆";
-    if (lunarMonth == 1  && lunarDay == 2)  return @"新春快乐！🧨";
-    if (lunarMonth == 1  && lunarDay == 3)  return @"新春快乐！🎇";
-    if (lunarMonth == 1  && lunarDay == 15) return @"元宵节快乐！🏮";
-    if (lunarMonth == 5  && lunarDay == 5)  return @"端午节安康！🐲";
-    if (lunarMonth == 7  && lunarDay == 7)  return @"七夕节快乐！💕";
-    if (lunarMonth == 8  && lunarDay == 15) return @"中秋节快乐！🌕";
-    if (lunarMonth == 9  && lunarDay == 9)  return @"重阳节安康！🏔️";
-    if (lunarMonth == 12 && (lunarDay == 29 || lunarDay == 30)) return @"除夕夜快乐！🎇";
+    if (lunarMonth == 1  && lunarDay == 1)  return @"Happy Lunar New Year! 🎆";
+    if (lunarMonth == 1  && lunarDay == 2)  return @"Happy Lunar New Year! 🧨";
+    if (lunarMonth == 1  && lunarDay == 3)  return @"Happy Lunar New Year! 🎇";
+    if (lunarMonth == 1  && lunarDay == 15) return @"Happy Lantern Festival! 🏮";
+    if (lunarMonth == 5  && lunarDay == 5)  return @"Peaceful Dragon Boat Festival! 🐲";
+    if (lunarMonth == 7  && lunarDay == 7)  return @"Happy Qixi Festival! 💕";
+    if (lunarMonth == 8  && lunarDay == 15) return @"Happy Mid-Autumn Festival! 🌕";
+    if (lunarMonth == 9  && lunarDay == 9)  return @"Peaceful Double Ninth Festival! 🏔️";
+    if (lunarMonth == 12 && (lunarDay == 29 || lunarDay == 30)) return @"Happy New Year's Eve! 🎇";
     
     // 非节日 - 按时段随机问候
     NSInteger hour = [gregorian component:NSCalendarUnitHour fromDate:now];
-    if (hour < 6)       return @"夜深了，注意休息哦 🌙";
-    if (hour < 12)      return @"早上好！美好的一天开始了 ☀️";
-    if (hour < 14)      return @"中午好！记得吃午饭哦 🍚";
-    if (hour < 18)      return @"下午好！今天也要加油哦 💪";
-    return @"晚上好！放松一下吧 🌃";
+    if (hour < 6)       return @"It's late — get some rest 🌙";
+    if (hour < 12)      return @"Good morning! A great day begins ☀️";
+    if (hour < 14)      return @"Good noon! Don't forget lunch 🍚";
+    if (hour < 18)      return @"Good afternoon! Keep it up today 💪";
+    return @"Good evening! Time to relax 🌃";
 }
 
 // MARK: - HomeTileBaseCell
@@ -624,7 +624,7 @@ static NSString *festivalGreeting(void) {
     self.placeholderLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.placeholderLabel.font = [UIFont systemFontOfSize:11 weight:UIFontWeightMedium];
     self.placeholderLabel.textColor = [UIColor quaternaryLabelColor];
-    self.placeholderLabel.text = @"即将推出";
+    self.placeholderLabel.text = @"Coming soon";
     [self.contentContainer addSubview:self.placeholderLabel];
     
     [NSLayoutConstraint activateConstraints:@[
@@ -742,10 +742,10 @@ static NSString *festivalGreeting(void) {
     self = [super init];
     if (self) {
         // 不设置 self.title，避免顶部导航栏出现"主页"标题黑条（参照 FCL 无 title 风格）
-        self.latestRelease = @"检测中...";
-        self.latestSnapshot = @"检测中...";
+        self.latestRelease = @"Checking...";
+        self.latestSnapshot = @"Checking...";
         self.isLoadingVersions = YES;
-        self.announcementText = @"正在检查更新...";
+        self.announcementText = @"Checking for updates...";
         self.hasUpdate = NO;
     }
     return self;
@@ -842,7 +842,7 @@ static NSString *festivalGreeting(void) {
     
     self.headerTitleLabel = [[UILabel alloc] init];
     self.headerTitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.headerTitleLabel.text = @"主页";
+    self.headerTitleLabel.text = @"Home";
     self.headerTitleLabel.font = [UIFont systemFontOfSize:26 weight:UIFontWeightBold];
     self.headerTitleLabel.textColor = [UIColor labelColor];
     [self.headerView addSubview:self.headerTitleLabel];
@@ -851,7 +851,7 @@ static NSString *festivalGreeting(void) {
     self.customizeButton.translatesAutoresizingMaskIntoConstraints = NO;
     UIImage *gearIcon = [UIImage systemImageNamed:@"slider.horizontal.3"];
     [self.customizeButton setImage:gearIcon forState:UIControlStateNormal];
-    [self.customizeButton setTitle:@" 自定义" forState:UIControlStateNormal];
+    [self.customizeButton setTitle:@" Customize" forState:UIControlStateNormal];
     self.customizeButton.titleLabel.font = [UIFont systemFontOfSize:14 weight:UIFontWeightMedium];
     self.customizeButton.tintColor = [UIColor secondaryLabelColor];
     [self.customizeButton addTarget:self action:@selector(openCustomize) forControlEvents:UIControlEventTouchUpInside];
@@ -986,8 +986,8 @@ static NSString *festivalGreeting(void) {
             HomeProfileTileCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"ProfileCell" forIndexPath:indexPath];
             [cell setAccentColor:[config accentColor]];
             
-            NSString *name = self.currentUsername ?: @"玩家";
-            cell.welcomeLabel.text = [NSString stringWithFormat:@"欢迎回来, %@!", name];
+            NSString *name = self.currentUsername ?: @"Player";
+            cell.welcomeLabel.text = [NSString stringWithFormat:@"Welcome back, %@!", name];
             cell.greetingLabel.text = festivalGreeting();
             cell.skinImageView.image = self.currentSkin ?: [UIImage systemImageNamed:@"person.fill"];
             if (self.currentAvatar) {
@@ -1002,7 +1002,7 @@ static NSString *festivalGreeting(void) {
         case HomeTileTypeVersionRelease: {
             HomeInfoTileCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"InfoCell" forIndexPath:indexPath];
             [cell setAccentColor:[config accentColor]];
-            cell.titleLabel.text = config.customTitle ?: @"最新正式版";
+            cell.titleLabel.text = config.customTitle ?: @"Latest release";
             cell.valueLabel.text = self.latestRelease;
             cell.iconView.image = [UIImage systemImageNamed:config.iconName ?: @"cube.box.fill"];
             cell.iconView.tintColor = [config accentColor];
@@ -1012,7 +1012,7 @@ static NSString *festivalGreeting(void) {
         case HomeTileTypeVersionSnapshot: {
             HomeInfoTileCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"InfoCell" forIndexPath:indexPath];
             [cell setAccentColor:[config accentColor]];
-            cell.titleLabel.text = config.customTitle ?: @"最新快照";
+            cell.titleLabel.text = config.customTitle ?: @"Latest snapshot";
             cell.valueLabel.text = self.latestSnapshot;
             cell.iconView.image = [UIImage systemImageNamed:config.iconName ?: @"ant.fill"];
             cell.iconView.tintColor = [config accentColor];
@@ -1055,7 +1055,7 @@ static NSString *festivalGreeting(void) {
 
                 if (self.hasUpdate) {
                     cell.actionButton.hidden = NO;
-                    [cell.actionButton setTitle:@"前往下载" forState:UIControlStateNormal];
+                    [cell.actionButton setTitle:@"Go to downloads" forState:UIControlStateNormal];
                     cell.actionButton.backgroundColor = colorFromHex(@"#3B82F6");
                     [cell.actionButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
                     [cell.actionButton removeTarget:nil action:nil forControlEvents:UIControlEventAllEvents];
@@ -1073,7 +1073,7 @@ static NSString *festivalGreeting(void) {
 
             if (self.latestNewsItem) {
                 // 显示最新一条新闻的标题/摘要/封面
-                cell.titleLabel.text = self.latestNewsItem.title ?: @"Minecraft 新闻";
+                cell.titleLabel.text = self.latestNewsItem.title ?: @"Minecraft news";
                 cell.summaryLabel.text = self.latestNewsItem.summary ?: @"";
                 cell.placeholderLabel.text = self.latestNewsItem.formattedDateString ?: @"";
                 // 加载封面图（用 IconLoader，带缓存）
@@ -1088,15 +1088,15 @@ static NSString *festivalGreeting(void) {
                     cell.thumbnailView.image = [UIImage systemImageNamed:@"newspaper.fill"];
                 }
             } else if (self.isLoadingNews) {
-                cell.titleLabel.text = @"Minecraft 新闻";
-                cell.summaryLabel.text = @"正在加载最新新闻...";
-                cell.placeholderLabel.text = @"加载中...";
+                cell.titleLabel.text = @"Minecraft news";
+                cell.summaryLabel.text = @"Loading the latest news...";
+                cell.placeholderLabel.text = @"Loading...";
                 cell.thumbnailView.image = [UIImage systemImageNamed:@"newspaper.fill"];
             } else {
                 // 加载失败或未加载
-                cell.titleLabel.text = @"Minecraft 新闻";
-                cell.summaryLabel.text = @"点击查看 Minecraft 官方新闻";
-                cell.placeholderLabel.text = @"点击进入 ✨";
+                cell.titleLabel.text = @"Minecraft news";
+                cell.summaryLabel.text = @"Tap to read official Minecraft news";
+                cell.placeholderLabel.text = @"Tap to open ✨";
                 cell.thumbnailView.image = [UIImage systemImageNamed:@"newspaper.fill"];
             }
             return cell;
@@ -1105,7 +1105,7 @@ static NSString *festivalGreeting(void) {
         case HomeTileTypeShortcut: {
             HomeShortcutTileCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"ShortcutCell" forIndexPath:indexPath];
             [cell setAccentColor:[config accentColor]];
-            cell.titleLabel.text = config.customTitle ?: @"快捷入口";
+            cell.titleLabel.text = config.customTitle ?: @"Shortcut";
             cell.iconView.image = [UIImage systemImageNamed:config.iconName ?: @"arrow.right.circle.fill"];
             cell.iconView.tintColor = [config accentColor];
             return cell;
@@ -1208,7 +1208,7 @@ static NSString *festivalGreeting(void) {
             }
             self.currentUsername = username;
         } else {
-            self.currentUsername = @"玩家";
+            self.currentUsername = @"Player";
         }
         
         // 加载头像 (与右侧面板相同来源)
@@ -1235,7 +1235,7 @@ static NSString *festivalGreeting(void) {
             [self loadDefaultSkin];
         }
     } else {
-        self.currentUsername = @"未登录";
+        self.currentUsername = @"Not signed in";
         self.currentAvatar = nil;
         [self loadDefaultSkin];
     }
@@ -1318,8 +1318,8 @@ static NSString *festivalGreeting(void) {
 
 - (void)checkMinecraftVersions {
     self.isLoadingVersions = YES;
-    self.latestRelease = @"检测中...";
-    self.latestSnapshot = @"检测中...";
+    self.latestRelease = @"Checking...";
+    self.latestSnapshot = @"Checking...";
     [self reloadVersionSections];
     
     NSString *downloadSource = getPrefObject(@"general.download_source");
@@ -1337,15 +1337,15 @@ static NSString *festivalGreeting(void) {
                 NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
                 if (json) {
                     NSDictionary *latest = json[@"latest"];
-                    self.latestRelease = latest[@"release"] ?: @"未知";
-                    self.latestSnapshot = latest[@"snapshot"] ?: @"未知";
+                    self.latestRelease = latest[@"release"] ?: @"Unknown";
+                    self.latestSnapshot = latest[@"snapshot"] ?: @"Unknown";
                 } else {
-                    self.latestRelease = @"检测失败";
-                    self.latestSnapshot = @"检测失败";
+                    self.latestRelease = @"Check failed";
+                    self.latestSnapshot = @"Check failed";
                 }
             } else {
-                self.latestRelease = @"网络错误";
-                self.latestSnapshot = @"网络错误";
+                self.latestRelease = @"Network error";
+                self.latestSnapshot = @"Network error";
             }
             [self reloadVersionSections];
         });
@@ -1370,7 +1370,7 @@ static NSString *festivalGreeting(void) {
     NSString *currentVersion = [[[NSBundle mainBundle] infoDictionary] objectForKey:@"CFBundleShortVersionString"];
     
     if ([currentVersion rangeOfString:@"Preview" options:NSCaseInsensitiveSearch].location != NSNotFound) {
-        self.announcementText = @"欢迎使用 Amethyst iOS Remastered 测试版！";
+        self.announcementText = @"Welcome to the Amethyst iOS Remastered beta!";
         self.hasUpdate = NO;
         [self reloadAnnouncementSection];
         return;
@@ -1383,7 +1383,7 @@ static NSString *festivalGreeting(void) {
     NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         if (error || ((NSHTTPURLResponse *)response).statusCode != 200 || !data) {
             dispatch_async(dispatch_get_main_queue(), ^{
-                self.announcementText = @"欢迎使用 Amethyst iOS Remastered！";
+                self.announcementText = @"Welcome to Amethyst iOS Remastered!";
                 self.hasUpdate = NO;
                 [self reloadAnnouncementSection];
             });
@@ -1395,7 +1395,7 @@ static NSString *festivalGreeting(void) {
         
         if (!latestVer) {
             dispatch_async(dispatch_get_main_queue(), ^{
-                self.announcementText = @"欢迎使用 Amethyst iOS Remastered！";
+                self.announcementText = @"Welcome to Amethyst iOS Remastered!";
                 self.hasUpdate = NO;
                 [self reloadAnnouncementSection];
             });
@@ -1409,11 +1409,11 @@ static NSString *festivalGreeting(void) {
         dispatch_async(dispatch_get_main_queue(), ^{
             NSComparisonResult cmp = [self compareVersion:currentVersion withVersion:latestVer];
             if (cmp == NSOrderedAscending) {
-                self.announcementText = [NSString stringWithFormat:@"发现新版本：v%@", latestVer];
+                self.announcementText = [NSString stringWithFormat:@"New version available: v%@", latestVer];
                 self.latestVersion = latestVer;
                 self.hasUpdate = YES;
             } else {
-                self.announcementText = @"欢迎使用 Amethyst iOS Remastered！当前已是最新版本。";
+                self.announcementText = @"Welcome to Amethyst iOS Remastered! You're on the latest version.";
                 self.hasUpdate = NO;
             }
             [self reloadAnnouncementSection];

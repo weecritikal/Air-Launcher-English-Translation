@@ -31,7 +31,7 @@
     [super viewDidLoad];
     // 适配自定义启动器背景：将当前视图控制器透明化，使全局背景壁纸能够透出
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
-    self.title = @"添加账户";
+    self.title = @"Add account";
     // 透明背景，让自定义启动器背景透出（applyBackgroundToView 会把背景加到 window/splitVC 底层）
     self.view.backgroundColor = [UIColor clearColor];
 
@@ -102,26 +102,26 @@
 
     // 四张登录卡片
     [self.cardStack addArrangedSubview:[self createLoginCardWithType:AccountLoginTypeMicrosoft
-                                                                title:@"微软账户"
-                                                          description:@"使用 Microsoft 账户登录（正版）"
+                                                                title:@"Microsoft account"
+                                                          description:@"Sign in with a Microsoft account (genuine copy)"
                                                            iconName:@"xbox.logo"
                                                        fallbackIcon:@"person.crop.circle.fill"
                                                           accentColor:[UIColor colorWithRed:0.0 green:0.45 blue:0.93 alpha:1.0]]];
     [self.cardStack addArrangedSubview:[self createLoginCardWithType:AccountLoginTypeLittleSkin
                                                                 title:@"LittleSkin"
-                                                          description:@"使用 LittleSkin 皮肤站账户登录（需先注册）"
+                                                          description:@"Sign in with a LittleSkin skin-site account (registration required)"
                                                            iconName:@"person.fill.viewfinder"
                                                        fallbackIcon:@"person.crop.circle.fill"
                                                           accentColor:[UIColor colorWithRed:0.55 green:0.30 blue:0.85 alpha:1.0]]];
     [self.cardStack addArrangedSubview:[self createLoginCardWithType:AccountLoginTypeThirdParty
-                                                                title:@"自定义第三方"
-                                                          description:@"支持任意 Yggdrasil 兼容的 authlib-injector 服务器"
+                                                                title:@"Custom third-party"
+                                                          description:@"Supports any Yggdrasil-compatible authlib-injector server"
                                                            iconName:@"globe"
                                                        fallbackIcon:@"globe"
                                                           accentColor:[UIColor colorWithRed:0.90 green:0.55 blue:0.15 alpha:1.0]]];
     [self.cardStack addArrangedSubview:[self createLoginCardWithType:AccountLoginTypeLocal
-                                                                title:@"本地账户"
-                                                          description:@"离线模式，仅输入用户名即可（无法加入正版服务器）"
+                                                                title:@"Local account"
+                                                          description:@"Offline mode, just enter a username (cannot join genuine servers)"
                                                            iconName:@"person.fill"
                                                        fallbackIcon:@"person.fill"
                                                           accentColor:[UIColor colorWithRed:0.50 green:0.55 blue:0.60 alpha:1.0]]];
@@ -135,7 +135,7 @@
 
     self.headerTitleLabel = [[UILabel alloc] init];
     self.headerTitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.headerTitleLabel.text = @"选择登录方式";
+    self.headerTitleLabel.text = @"Choose sign-in method";
     self.headerTitleLabel.font = [UIFont systemFontOfSize:[ScreenUtils sp:26] weight:UIFontWeightBold];
     self.headerTitleLabel.textColor = [UIColor whiteColor];
     self.headerTitleLabel.numberOfLines = 1;
@@ -143,7 +143,7 @@
 
     self.headerSubtitleLabel = [[UILabel alloc] init];
     self.headerSubtitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.headerSubtitleLabel.text = @"选择一种方式登录你的 Minecraft 账户";
+    self.headerSubtitleLabel.text = @"Choose a way to sign in to your Minecraft account";
     self.headerSubtitleLabel.font = [UIFont systemFontOfSize:[ScreenUtils sp:14] weight:UIFontWeightRegular];
     self.headerSubtitleLabel.textColor = [[UIColor whiteColor] colorWithAlphaComponent:0.65];
     self.headerSubtitleLabel.numberOfLines = 0;

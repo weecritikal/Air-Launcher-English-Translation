@@ -238,7 +238,7 @@ static NSInteger const kSectionVersions    = 1;
     self.isolatedBadge.layer.cornerRadius = 8;
     self.isolatedBadge.layer.cornerCurve = kCACornerCurveContinuous;
     self.isolatedBadge.layer.masksToBounds = YES;
-    self.isolatedBadge.text = @" 隔离 ";
+    self.isolatedBadge.text = @" Isolated ";
     self.isolatedBadge.hidden = YES;
     [self.contentContainer addSubview:self.isolatedBadge];
 
@@ -285,7 +285,7 @@ static NSInteger const kSectionVersions    = 1;
 
 - (void)configureWithName:(NSString *)name version:(NSString *)version isSelected:(BOOL)isSelected isolated:(BOOL)isolated lastPlayed:(NSString *)lastPlayed {
     self.nameLabel.text = name;
-    self.versionLabel.text = version ?: @"未知版本";
+    self.versionLabel.text = version ?: @"Unknown version";
     self.selectedBadge.hidden = !isSelected;
     self.selectedBadge.backgroundColor = accentColor();
     self.isolatedBadge.hidden = !isolated;
@@ -429,8 +429,8 @@ static NSInteger const kSectionVersions    = 1;
         self.iconView.image = [UIImage systemImageNamed:@"plus"];
         self.iconView.tintColor = [UIColor whiteColor];
         self.iconContainer.backgroundColor = [UIColor systemGreenColor];
-        self.nameLabel.text = @"新建目录";
-        self.detailLabel.text = @"创建新的版本隔离目录";
+        self.nameLabel.text = @"New directory";
+        self.detailLabel.text = @"Create a new isolated version directory";
         self.selectedBadge.hidden = YES;
         self.chevronView.hidden = YES;
         // 规范 5.3：推荐态描边 1.0pt accentColor 0.4
@@ -781,7 +781,7 @@ static NSInteger const kSectionVersions    = 1;
     // 注意：不能用 masksToBounds=YES，否则会裁掉阴影
     fab.layer.masksToBounds = NO;
     fab.translatesAutoresizingMaskIntoConstraints = NO;
-    fab.accessibilityLabel = @"新建版本";
+    fab.accessibilityLabel = @"New version";
     [fab addTarget:self action:@selector(fabTouchDown) forControlEvents:UIControlEventTouchDown];
     [fab addTarget:self action:@selector(fabTouchUp) forControlEvents:UIControlEventTouchUpInside | UIControlEventTouchUpOutside | UIControlEventTouchCancel];
     [fab addTarget:self action:@selector(createNewVersion) forControlEvents:UIControlEventTouchUpInside];
@@ -831,7 +831,7 @@ static NSInteger const kSectionVersions    = 1;
 /// 找到视图中的 FAB 按钮
 - (UIButton *)findFabButton {
     for (UIView *v in self.view.subviews) {
-        if ([v isKindOfClass:[UIButton class]] && [v.accessibilityLabel isEqualToString:@"新建版本"]) {
+        if ([v isKindOfClass:[UIButton class]] && [v.accessibilityLabel isEqualToString:@"New version"]) {
             return (UIButton *)v;
         }
     }
@@ -881,7 +881,7 @@ static NSInteger const kSectionVersions    = 1;
     titleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     titleLabel.font = [UIFont systemFontOfSize:[ScreenUtils sp:18] weight:UIFontWeightBold];
     titleLabel.textColor = [UIColor labelColor];
-    titleLabel.text = @"还没有安装任何版本";
+    titleLabel.text = @"No versions installed yet";
     titleLabel.textAlignment = NSTextAlignmentCenter;
     [self.emptyStateView addSubview:titleLabel];
 
@@ -890,7 +890,7 @@ static NSInteger const kSectionVersions    = 1;
     subtitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
     subtitleLabel.font = [UIFont systemFontOfSize:[ScreenUtils sp:13] weight:UIFontWeightRegular];
     subtitleLabel.textColor = [UIColor secondaryLabelColor];
-    subtitleLabel.text = @"点击右上角 + 按钮下载你的第一个 Minecraft 版本";
+    subtitleLabel.text = @"Tap + in the top right to download your first Minecraft version";
     subtitleLabel.textAlignment = NSTextAlignmentCenter;
     subtitleLabel.numberOfLines = 0;
     [self.emptyStateView addSubview:subtitleLabel];
@@ -901,7 +901,7 @@ static NSInteger const kSectionVersions    = 1;
     UIImageSymbolConfiguration *btnIconConfig = [UIImageSymbolConfiguration configurationWithPointSize:14 weight:UIFontWeightBold];
     UIImage *btnIcon = [UIImage systemImageNamed:@"arrow.down.circle.fill" withConfiguration:btnIconConfig];
     [ctaButton setImage:btnIcon forState:UIControlStateNormal];
-    [ctaButton setTitle:@"  去下载版本" forState:UIControlStateNormal];
+    [ctaButton setTitle:@"  Download a version" forState:UIControlStateNormal];
     ctaButton.titleLabel.font = [UIFont systemFontOfSize:[ScreenUtils sp:15] weight:UIFontWeightSemibold];
     [ctaButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     ctaButton.tintColor = [UIColor whiteColor];
@@ -1071,13 +1071,13 @@ static NSInteger const kSectionVersions    = 1;
         @"flame.fill"
     ];
     self.rendererDescs = @[
-        @"自动选择最佳渲染器",
-        @"OpenGL ES 1.14 转译（兼容性最佳）",
-        @"MetalANGLE，Metal 转 GLES",
-        @"Vulkan 转译 OpenGL",
-        @"OpenGL 转 Vulkan",
-        @"OpenGL Core→ES 转译（Sodium+光影完美兼容）",
-        @"原生 Vulkan"
+        @"Automatically pick the best renderer",
+        @"OpenGL ES 1.14 translation (best compatibility)",
+        @"MetalANGLE, Metal to GLES",
+        @"Vulkan to OpenGL translation",
+        @"OpenGL to Vulkan",
+        @"OpenGL Core→ES translation (works perfectly with Sodium and shaders)",
+        @"Native Vulkan"
     ];
 }
 
@@ -1093,16 +1093,16 @@ static NSInteger const kSectionVersions    = 1;
 /// 注意：与渲染器（renderer）是两个不同维度
 - (void)setupGraphicsApiData {
     self.graphicsApiKeys = @[@"default", @"prefer_vulkan", @"prefer_opengl"];
-    self.graphicsApiNames = @[@"默认", @"优先 Vulkan", @"优先 OpenGL"];
+    self.graphicsApiNames = @[@"Default", @"Prefer Vulkan", @"Prefer OpenGL"];
     self.graphicsApiIcons = @[
         @"wand.and.stars",
         @"flame.fill",
         @"rectangle.stack.fill"
     ];
     self.graphicsApiDescs = @[
-        @"由 Mojang 决定（推荐）",
-        @"优先 Vulkan，失败回退 OpenGL",
-        @"优先 OpenGL，失败回退 Vulkan"
+        @"Let Mojang decide (recommended)",
+        @"Prefer Vulkan, fall back to OpenGL",
+        @"Prefer OpenGL, fall back to Vulkan"
     ];
 }
 
@@ -1324,14 +1324,14 @@ static NSInteger const kSectionVersions    = 1;
             });
         });
 
-        [cell configureWithName:dirName detail:@"计算中..." isSelected:isSelected isAddButton:NO];
+        [cell configureWithName:dirName detail:@"Calculating..." isSelected:isSelected isAddButton:NO];
         return cell;
     } else {
         VMVersionCardCell *cell = [collectionView dequeueReusableCellWithReuseIdentifier:@"VersionCell" forIndexPath:indexPath];
 
         NSString *profileName = self.profileList[indexPath.item];
         NSDictionary *profile = PLProfiles.current.profiles[profileName];
-        NSString *versionId = profile[@"lastVersionId"] ?: @"未知版本";
+        NSString *versionId = profile[@"lastVersionId"] ?: @"Unknown version";
         BOOL isSelected = [profileName isEqualToString:self.selectedProfile];
         NSString *gameDir = profile[@"gameDir"] ?: @".";
         BOOL isolated = ![gameDir isEqualToString:@"."];
@@ -1374,7 +1374,7 @@ static NSInteger const kSectionVersions    = 1;
     fmt.doesRelativeDateFormatting = YES;
     fmt.dateStyle = NSDateFormatterShortStyle;
     fmt.timeStyle = NSDateFormatterShortStyle;
-    return [NSString stringWithFormat:@"最后游玩：%@", [fmt stringFromDate:date]];
+    return [NSString stringWithFormat:@"Last played: %@", [fmt stringFromDate:date]];
 }
 
 - (UICollectionReusableView *)collectionView:(UICollectionView *)collectionView viewForSupplementaryElementOfKind:(NSString *)kind atIndexPath:(NSIndexPath *)indexPath {
@@ -1383,14 +1383,14 @@ static NSInteger const kSectionVersions    = 1;
         switch (indexPath.section) {
             case kSectionGameDir:
                 [header configureWithIcon:@"folder.badge.gearshape"
-                                     title:@"游戏目录（版本隔离）"
-                                  subtitle:@"点击切换 · 长按删除当前目录"
+                                     title:@"Game directory (version isolation)"
+                                  subtitle:@"Tap to switch · long-press to delete the current directory"
                                      count:(NSInteger)self.gameDirList.count];
                 break;
             case kSectionVersions:
                 [header configureWithIcon:@"cube.box.fill"
-                                     title:@"已安装的版本"
-                                  subtitle:@"点击进入版本设置 · 长按弹出操作菜单"
+                                     title:@"Installed versions"
+                                  subtitle:@"Tap to open version settings · long-press for the action menu"
                                      count:(NSInteger)self.profileList.count];
                 break;
             default:
@@ -1444,7 +1444,7 @@ static NSInteger const kSectionVersions    = 1;
                                                                      error:&linkError];
     if (!linkOK) {
         NSLog(@"[VersionMgr] createSymbolicLink failed: %@", linkError.localizedDescription);
-        [self showAlert:[NSString stringWithFormat:@"切换游戏目录失败：\n\n%@", linkError.localizedDescription]];
+        [self showAlert:[NSString stringWithFormat:@"Could not switch the game directory:\n\n%@", linkError.localizedDescription]];
         return;
     }
     [NSFileManager.defaultManager changeCurrentDirectoryPath:lasmPath];
@@ -1462,18 +1462,18 @@ static NSInteger const kSectionVersions    = 1;
 
 /// 弹出新建游戏目录对话框
 - (void)showCreateGameDirAlert {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"新建游戏目录"
-                                                                   message:@"输入新目录名（用于版本隔离）"
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"New game directory"
+                                                                   message:@"Enter a new directory name (used for version isolation)"
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [alert addTextFieldWithConfigurationHandler:^(UITextField *textField) {
-        textField.placeholder = @"目录名";
+        textField.placeholder = @"Directory name";
         textField.autocapitalizationType = UITextAutocapitalizationTypeNone;
         textField.autocorrectionType = UITextAutocorrectionTypeNo;
         textField.clearButtonMode = UITextFieldViewModeWhileEditing;
         textField.delegate = self;
     }];
-    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
-    [alert addAction:[UIAlertAction actionWithTitle:@"创建" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+    [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Create" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         NSString *name = alert.textFields.firstObject.text;
         if (name.length == 0) return;
         [self createGameDirWithName:name];
@@ -1490,7 +1490,7 @@ static NSInteger const kSectionVersions    = 1;
     NSString *dest = [NSString stringWithFormat:@"%s/instances/%@", getenv("POJAV_HOME"), name];
     NSError *error = nil;
     if (![NSFileManager.defaultManager createDirectoryAtPath:dest withIntermediateDirectories:YES attributes:nil error:&error]) {
-        [self showAlert:[NSString stringWithFormat:@"创建目录失败：\n\n%@", error.localizedDescription]];
+        [self showAlert:[NSString stringWithFormat:@"Could not create the directory:\n\n%@", error.localizedDescription]];
         return;
     }
     [self switchGameDirTo:name];
@@ -1502,28 +1502,28 @@ static NSInteger const kSectionVersions    = 1;
     BOOL isDefault = [dirName isEqualToString:@"default"];
 
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:dirName
-                                                                   message:isSelected ? @"当前正在使用此目录" : @"切换到此目录"
+                                                                   message:isSelected ? @"This directory is currently in use" : @"Switch to this directory"
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
 
     if (!isSelected) {
-        [alert addAction:[UIAlertAction actionWithTitle:@"切换到此目录" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        [alert addAction:[UIAlertAction actionWithTitle:@"Switch to this directory" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
             [self switchGameDirTo:dirName];
         }]];
     }
 
     // 删除目录（默认目录禁止删除，正在使用的目录需要先切换才能删除）
     if (!isDefault) {
-        NSString *deleteTitle = isSelected ? @"删除（需先切换到其他目录）" : @"删除此目录";
+        NSString *deleteTitle = isSelected ? @"Delete (switch to another directory first)" : @"Delete this directory";
         [alert addAction:[UIAlertAction actionWithTitle:deleteTitle style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
             if (isSelected) {
-                [self showAlert:@"请先切换到其他目录，再删除此目录"];
+                [self showAlert:@"Switch to another directory before deleting this one"];
                 return;
             }
             [self confirmDeleteGameDir:dirName];
         }]];
     }
 
-    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
 
     if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
         alert.popoverPresentationController.sourceView = self.view;
@@ -1535,11 +1535,11 @@ static NSInteger const kSectionVersions    = 1;
 
 /// 二次确认删除游戏目录
 - (void)confirmDeleteGameDir:(NSString *)dirName {
-    UIAlertController *confirm = [UIAlertController alertControllerWithTitle:@"确认删除目录"
-                                                                     message:[NSString stringWithFormat:@"将删除目录 \"%@\" 及其所有内容（包括存档、Mod、配置等），此操作不可恢复。", dirName]
+    UIAlertController *confirm = [UIAlertController alertControllerWithTitle:@"Confirm directory deletion"
+                                                                     message:[NSString stringWithFormat:@"This will delete the directory \"%@\" and everything in it (saves, mods, configs, and so on). This cannot be undone.", dirName]
                                                               preferredStyle:UIAlertControllerStyleAlert];
-    [confirm addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
-    [confirm addAction:[UIAlertAction actionWithTitle:@"确认删除" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
+    [confirm addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+    [confirm addAction:[UIAlertAction actionWithTitle:@"Confirm delete" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
         [self deleteGameDir:dirName];
     }]];
     [self presentViewController:confirm animated:YES completion:nil];
@@ -1548,25 +1548,25 @@ static NSInteger const kSectionVersions    = 1;
 /// 删除指定游戏目录
 - (void)deleteGameDir:(NSString *)dirName {
     if ([dirName isEqualToString:@"default"]) {
-        [self showAlert:@"默认目录不可删除"];
+        [self showAlert:@"The default directory cannot be deleted"];
         return;
     }
     if ([dirName isEqualToString:self.currentGameDir]) {
-        [self showAlert:@"请先切换到其他目录，再删除此目录"];
+        [self showAlert:@"Switch to another directory before deleting this one"];
         return;
     }
 
     NSString *dest = [NSString stringWithFormat:@"%s/instances/%@", getenv("POJAV_HOME"), dirName];
     NSError *error = nil;
     if (![NSFileManager.defaultManager removeItemAtPath:dest error:&error]) {
-        [self showAlert:[NSString stringWithFormat:@"删除目录失败：\n\n%@", error.localizedDescription]];
+        [self showAlert:[NSString stringWithFormat:@"Could not delete the directory:\n\n%@", error.localizedDescription]];
         return;
     }
 
     [self loadGameDirList];
     [self.collectionView reloadData];
     [self updateEmptyState];
-    [self showAlert:[NSString stringWithFormat:@"已删除目录 \"%@\"", dirName]];
+    [self showAlert:[NSString stringWithFormat:@"Deleted the directory \"%@\"", dirName]];
 }
 
 #pragma mark - Renderer Selection (启动器 native 库选择)
@@ -1574,7 +1574,7 @@ static NSInteger const kSectionVersions    = 1;
 /// 选择渲染器并保存到当前 profile
 - (void)selectRendererAtIndex:(NSInteger)index {
     if (!self.selectedProfile) {
-        [self showAlert:@"请先选择一个版本"];
+        [self showAlert:@"Select a version first"];
         return;
     }
     if (index >= (NSInteger)self.rendererKeys.count) return;
@@ -1610,7 +1610,7 @@ static NSInteger const kSectionVersions    = 1;
 /// 但此处不强制联动，允许高级用户分开配置。
 - (void)selectGraphicsApiAtIndex:(NSInteger)index {
     if (!self.selectedProfile) {
-        [self showAlert:@"请先选择一个版本"];
+        [self showAlert:@"Select a version first"];
         return;
     }
     if (index >= (NSInteger)self.graphicsApiKeys.count) return;
@@ -1640,7 +1640,7 @@ static NSInteger const kSectionVersions    = 1;
 
 - (void)openModsManager {
     if (!self.selectedProfile) {
-        [self showAlert:@"请先选择一个版本"];
+        [self showAlert:@"Select a version first"];
         return;
     }
     ModsManagerViewController *vc = [[ModsManagerViewController alloc] init];
@@ -1651,7 +1651,7 @@ static NSInteger const kSectionVersions    = 1;
 
 - (void)openShadersManager {
     if (!self.selectedProfile) {
-        [self showAlert:@"请先选择一个版本"];
+        [self showAlert:@"Select a version first"];
         return;
     }
     ShadersManagerViewController *vc = [[ShadersManagerViewController alloc] init];
@@ -1662,7 +1662,7 @@ static NSInteger const kSectionVersions    = 1;
 
 - (void)openResourcePacksManager {
     if (!self.selectedProfile) {
-        [self showAlert:@"请先选择一个版本"];
+        [self showAlert:@"Select a version first"];
         return;
     }
     ResourcePacksManagerViewController *vc = [[ResourcePacksManagerViewController alloc] init];
@@ -1673,7 +1673,7 @@ static NSInteger const kSectionVersions    = 1;
 
 - (void)openDataPacksManager {
     if (!self.selectedProfile) {
-        [self showAlert:@"请先选择一个版本"];
+        [self showAlert:@"Select a version first"];
         return;
     }
     DataPacksManagerViewController *vc = [[DataPacksManagerViewController alloc] init];
@@ -1684,7 +1684,7 @@ static NSInteger const kSectionVersions    = 1;
 
 - (void)openWorldsManager {
     if (!self.selectedProfile) {
-        [self showAlert:@"请先选择一个版本"];
+        [self showAlert:@"Select a version first"];
         return;
     }
     WorldsManagerViewController *vc = [[WorldsManagerViewController alloc] init];
@@ -1704,7 +1704,7 @@ static NSInteger const kSectionVersions    = 1;
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
 
     if (!isSelected) {
-        [alert addAction:[UIAlertAction actionWithTitle:@"选择此版本" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+        [alert addAction:[UIAlertAction actionWithTitle:@"Select this version" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
             PLProfiles.current.selectedProfileName = profileName;
             [PLProfiles.current save];
             [[NSNotificationCenter defaultCenter] postNotificationName:@"SelectedProfileChanged" object:nil];
@@ -1713,15 +1713,15 @@ static NSInteger const kSectionVersions    = 1;
         }]];
     }
 
-    [alert addAction:[UIAlertAction actionWithTitle:@"编辑配置" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+    [alert addAction:[UIAlertAction actionWithTitle:@"Edit profile" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         [self editProfile:profileName];
     }]];
 
-    [alert addAction:[UIAlertAction actionWithTitle:@"删除" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
+    [alert addAction:[UIAlertAction actionWithTitle:@"Delete" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
         [self deleteProfile:profileName];
     }]];
 
-    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
 
     if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
         alert.popoverPresentationController.sourceView = self.view;
@@ -1740,16 +1740,16 @@ static NSInteger const kSectionVersions    = 1;
 
 - (void)deleteProfile:(NSString *)profileName {
     if (self.profileList.count <= 1) {
-        [self showAlert:@"至少需要保留一个版本配置"];
+        [self showAlert:@"At least one profile must remain"];
         return;
     }
 
-    UIAlertController *confirm = [UIAlertController alertControllerWithTitle:@"确认删除"
-                                                                     message:[NSString stringWithFormat:@"确定要删除 \"%@\" 吗？", profileName]
+    UIAlertController *confirm = [UIAlertController alertControllerWithTitle:@"Confirm delete"
+                                                                     message:[NSString stringWithFormat:@"Delete \"%@\"?", profileName]
                                                               preferredStyle:UIAlertControllerStyleAlert];
 
-    [confirm addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
-    [confirm addAction:[UIAlertAction actionWithTitle:@"删除" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
+    [confirm addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+    [confirm addAction:[UIAlertAction actionWithTitle:@"Delete" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
         [PLProfiles.current.profiles removeObjectForKey:profileName];
         if ([PLProfiles.current.selectedProfileName isEqualToString:profileName]) {
             PLProfiles.current.selectedProfileName = PLProfiles.current.profiles.allKeys.firstObject;
@@ -1764,8 +1764,8 @@ static NSInteger const kSectionVersions    = 1;
 }
 
 - (void)showAlert:(NSString *)message {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"提示" message:message preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Notice" message:message preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];
 }
 

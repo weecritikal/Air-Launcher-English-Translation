@@ -40,7 +40,7 @@
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.title = @"管理数据包";
+    self.title = @"Manage data packs";
     self.view.backgroundColor = [UIColor systemBackgroundColor];
     // 适配自定义启动器背景：透明化当前 VC，让全局背景图/毛玻璃透出
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
@@ -98,7 +98,7 @@
 }
 
 - (void)setupUI {
-    self.modeSwitcher = [[UISegmentedControl alloc] initWithItems:@[@"本地数据包", @"在线搜索 (Modrinth)"]];
+    self.modeSwitcher = [[UISegmentedControl alloc] initWithItems:@[@"Local data packs", @"Search online (Modrinth)"]];
     self.modeSwitcher.translatesAutoresizingMaskIntoConstraints = NO;
     self.modeSwitcher.selectedSegmentIndex = self.currentMode;
     [self.modeSwitcher addTarget:self action:@selector(modeChanged:) forControlEvents:UIControlEventValueChanged];
@@ -107,7 +107,7 @@
     self.searchBar = [[UISearchBar alloc] initWithFrame:CGRectZero];
     self.searchBar.translatesAutoresizingMaskIntoConstraints = NO;
     self.searchBar.delegate = self;
-    self.searchBar.placeholder = @"搜索本地数据包...";
+    self.searchBar.placeholder = @"Search local data packs...";
     // 适配自定义启动器背景：透明化 searchBar 默认不透明背景，让全局背景图/毛玻璃透出
     [[BackgroundManager sharedManager] applyEffectToSearchBar:self.searchBar];
     [self.view addSubview:self.searchBar];
@@ -115,7 +115,7 @@
     // 提示标签：iOS 上需手动移动数据包到对应世界目录
     self.tipLabel = [[UILabel alloc] initWithFrame:CGRectZero];
     self.tipLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    self.tipLabel.text = @"提示：数据包需放在 saves/<世界名>/datapacks/ 才生效。下载的数据包默认放在通用 datapacks 目录，请手动移动到对应世界目录。";
+    self.tipLabel.text = @"Tip: data packs only take effect in saves/<world name>/datapacks/. Downloaded data packs go to the shared datapacks folder by default, so move them into the matching world folder manually.";
     self.tipLabel.font = [UIFont systemFontOfSize:11];
     self.tipLabel.textColor = [UIColor systemOrangeColor];
     self.tipLabel.numberOfLines = 0;
@@ -154,7 +154,7 @@
     self.refreshButton = [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemRefresh target:self action:@selector(handleRefresh:)];
     UIImage *importImage = [UIImage systemImageNamed:@"square.and.arrow.down"] ?: [UIImage systemImageNamed:@"plus"];
     self.importButton = [[UIBarButtonItem alloc] initWithImage:importImage style:UIBarButtonItemStylePlain target:self action:@selector(importTapped)];
-    self.importButton.accessibilityLabel = @"导入数据包";
+    self.importButton.accessibilityLabel = @"Import data pack";
 
     [self updateNavigationButtons];
 
@@ -198,12 +198,12 @@
 
 - (void)updateUIForCurrentMode {
     if (self.currentMode == DataPacksManagerModeLocal) {
-        self.searchBar.placeholder = @"搜索本地数据包...";
-        self.emptyLabel.text = @"未发现数据包";
+        self.searchBar.placeholder = @"Search local data packs...";
+        self.emptyLabel.text = @"No data packs found";
         self.emptyLabel.hidden = self.localItems.count > 0;
     } else {
-        self.searchBar.placeholder = @"在线搜索 Modrinth...";
-        self.emptyLabel.text = @"输入关键词进行在线搜索";
+        self.searchBar.placeholder = @"Search Modrinth online...";
+        self.emptyLabel.text = @"Enter a keyword to search online";
         self.emptyLabel.hidden = self.onlineSearchResults.count > 0;
     }
     self.tableView.refreshControl.enabled = YES;
@@ -238,14 +238,14 @@
     NSError *dirError = nil;
     NSString *dir = [[DataPackService sharedService] ensureDataPacksFolderForProfile:self.profileName error:&dirError];
     if (!dir) {
-        [self showSimpleAlertWithTitle:@"无法导入" message:dirError.localizedDescription ?: @"无法确定 datapacks 目录"];
+        [self showSimpleAlertWithTitle:@"Cannot import" message:dirError.localizedDescription ?: @"Could not determine the datapacks folder"];
         return;
     }
 
     UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc] initWithDocumentTypes:@[@"public.zip", @"public.item"] inMode:UIDocumentPickerModeImport];
     picker.allowsMultipleSelection = YES;
     picker.delegate = self;
-    picker.title = @"选择数据包文件";
+    picker.title = @"Choose data pack file";
     [self presentViewController:picker animated:YES completion:nil];
 }
 
@@ -255,7 +255,7 @@
     NSError *dirError = nil;
     NSString *dir = [[DataPackService sharedService] ensureDataPacksFolderForProfile:self.profileName error:&dirError];
     if (!dir) {
-        [self showSimpleAlertWithTitle:@"导入失败" message:dirError.localizedDescription ?: @"无法确定 datapacks 目录"];
+        [self showSimpleAlertWithTitle:@"Import failed" message:dirError.localizedDescription ?: @"Could not determine the datapacks folder"];
         return;
     }
 
@@ -288,7 +288,7 @@
     [self refreshLocalList];
 
     if (failedFiles.count > 0) {
-        [self showSimpleAlertWithTitle:[NSString stringWithFormat:@"导入完成（%ld 成功，%ld 失败）", (long)successCount, (long)failedFiles.count]
+        [self showSimpleAlertWithTitle:[NSString stringWithFormat:@"Import finished (%ld succeeded, %ld failed)", (long)successCount, (long)failedFiles.count]
                                message:[failedFiles componentsJoinedByString:@"\n"]];
     }
 }
@@ -362,7 +362,7 @@
             [self setLoading:NO];
             self.emptyLabel.hidden = self.onlineSearchResults.count > 0;
             if (self.onlineSearchResults.count == 0) {
-                self.emptyLabel.text = @"未找到在线结果";
+                self.emptyLabel.text = @"No online results found";
             }
             [self.tableView reloadData];
         });
@@ -429,7 +429,7 @@
     }
     self.emptyLabel.hidden = self.filteredLocalItems.count > 0;
     if (!self.emptyLabel.hidden) {
-        self.emptyLabel.text = @"未找到本地数据包";
+        self.emptyLabel.text = @"No local data packs found";
     }
     [self.tableView reloadData];
 }
@@ -452,7 +452,7 @@
         cell.textLabel.text = item.displayName ?: item.fileName;
         NSMutableArray<NSString *> *parts = [NSMutableArray array];
         if (item.packFormat) {
-            [parts addObject:[NSString stringWithFormat:@"格式 %@", item.packFormat]];
+            [parts addObject:[NSString stringWithFormat:@"Format %@", item.packFormat]];
         }
         if (item.dataPackDescription.length > 0) {
             [parts addObject:item.dataPackDescription];
@@ -473,7 +473,7 @@
         cell.detailTextLabel.textColor = [UIColor secondaryLabelColor];
 
         UIButton *downloadButton = [UIButton buttonWithType:UIButtonTypeSystem];
-        [downloadButton setTitle:@"下载" forState:UIControlStateNormal];
+        [downloadButton setTitle:@"Download" forState:UIControlStateNormal];
         downloadButton.titleLabel.font = [UIFont boldSystemFontOfSize:13];
         downloadButton.tag = indexPath.row;
         [downloadButton addTarget:self action:@selector(downloadButtonTapped:) forControlEvents:UIControlEventTouchUpInside];
@@ -498,18 +498,18 @@
     }
 
     __weak typeof(self) weakSelf = self;
-    UIContextualAction *deleteAction = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleDestructive title:@"删除" handler:^(UIContextualAction * _Nonnull action, __kindof UIView * _Nonnull sourceView, void (^ _Nonnull completionHandler)(BOOL)) {
+    UIContextualAction *deleteAction = [UIContextualAction contextualActionWithStyle:UIContextualActionStyleDestructive title:@"Delete" handler:^(UIContextualAction * _Nonnull action, __kindof UIView * _Nonnull sourceView, void (^ _Nonnull completionHandler)(BOOL)) {
         DataPackItem *item = weakSelf.filteredLocalItems[indexPath.row];
-        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"确认删除"
-                                                                        message:[NSString stringWithFormat:@"确定要删除 %@ 吗？", item.displayName ?: item.fileName]
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Confirm delete"
+                                                                        message:[NSString stringWithFormat:@"Delete %@?", item.displayName ?: item.fileName]
                                                                  preferredStyle:UIAlertControllerStyleAlert];
-        [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:^(UIAlertAction * _Nonnull action) {
+        [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:^(UIAlertAction * _Nonnull action) {
             completionHandler(NO);
         }]];
-        [alert addAction:[UIAlertAction actionWithTitle:@"删除" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
+        [alert addAction:[UIAlertAction actionWithTitle:@"Delete" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
             NSError *error = nil;
             if (![[DataPackService sharedService] deleteDataPack:item error:&error]) {
-                [weakSelf showSimpleAlertWithTitle:@"删除失败" message:error.localizedDescription];
+                [weakSelf showSimpleAlertWithTitle:@"Delete failed" message:error.localizedDescription];
                 completionHandler(NO);
                 return;
             }
@@ -537,7 +537,7 @@
     NSError *error = nil;
     if (![[DataPackService sharedService] toggleEnableForDataPack:item error:&error]) {
         sender.on = !sender.on;
-        [self showSimpleAlertWithTitle:@"操作失败" message:error.localizedDescription];
+        [self showSimpleAlertWithTitle:@"Operation failed" message:error.localizedDescription];
     } else {
         NSIndexPath *ip = [NSIndexPath indexPathForRow:row inSection:0];
         UITableViewCell *cell = [self.tableView cellForRowAtIndexPath:ip];
@@ -574,7 +574,7 @@
 
     NSDictionary *primaryFile = version.primaryFile;
     if (!primaryFile || ![primaryFile[@"url"] isKindOfClass:[NSString class]]) {
-        [self showSimpleAlertWithTitle:@"错误" message:@"未找到有效的下载链接。"];
+        [self showSimpleAlertWithTitle:@"Error" message:@"No valid download link found."];
         return;
     }
     item.selectedVersionDownloadURL = primaryFile[@"url"];
@@ -588,8 +588,8 @@
     BOOL showProgressUI = YES;
     UIAlertController *downloadingAlert = nil;
     if (showProgressUI) {
-        downloadingAlert = [UIAlertController alertControllerWithTitle:@"正在下载"
-                                                                                  message:[NSString stringWithFormat:@"%@...\n下载完成后请手动移动到对应世界目录。", item.displayName]
+        downloadingAlert = [UIAlertController alertControllerWithTitle:@"Downloading"
+                                                                                  message:[NSString stringWithFormat:@"%@...\nWhen the download finishes, move it manually into the matching world folder.", item.displayName]
                                                                            preferredStyle:UIAlertControllerStyleAlert];
         UIActivityIndicatorView *indicator = [[UIActivityIndicatorView alloc] initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
         indicator.translatesAutoresizingMaskIntoConstraints = NO;
@@ -609,12 +609,12 @@
         dispatch_async(dispatch_get_main_queue(), ^{
             void (^showResult)(void) = ^{
                 if (!success || error) {
-                    [self showSimpleAlertWithTitle:@"下载失败" message:error.localizedDescription ?: @"未知错误"];
+                    [self showSimpleAlertWithTitle:@"Download failed" message:error.localizedDescription ?: @"Unknown error"];
                 } else {
-                    UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"下载成功"
-                                                                                          message:[NSString stringWithFormat:@"%@ 已下载到通用 datapacks 目录。\n请手动移动到对应世界目录（saves/<世界名>/datapacks/）。", item.displayName]
+                    UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"Download complete"
+                                                                                          message:[NSString stringWithFormat:@"%@ was downloaded to the shared datapacks folder.\nPlease move it manually into the matching world folder (saves/<world name>/datapacks/).", item.displayName]
                                                                                    preferredStyle:UIAlertControllerStyleAlert];
-                    [successAlert addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+                    [successAlert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
                         self.pendingDownloadItem = nil;
                         [self.modeSwitcher setSelectedSegmentIndex:0];
                         [self modeChanged:self.modeSwitcher];
@@ -636,7 +636,7 @@
 
 - (void)showSimpleAlertWithTitle:(NSString *)title message:(NSString *)message {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:title message:message preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleDefault handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];
 }
 

@@ -43,7 +43,7 @@
     [[BackgroundManager sharedManager] makeViewControllerTransparent:self];
     [[BackgroundManager sharedManager] applyEffectToView:self.view];
     self.view.backgroundColor = [UIColor systemBackgroundColor];
-    self.title = @"服务器详情";
+    self.title = @"Server details";
 
     [self setupUI];
     [self populateUI];
@@ -138,7 +138,7 @@
     self.addressCopyButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.addressCopyButton.translatesAutoresizingMaskIntoConstraints = NO;
     [self.addressCopyButton setImage:[UIImage systemImageNamed:@"doc.on.doc"] forState:UIControlStateNormal];
-    [self.addressCopyButton setTitle:@" 复制" forState:UIControlStateNormal];
+    [self.addressCopyButton setTitle:@" Copy" forState:UIControlStateNormal];
     self.addressCopyButton.titleLabel.font = [UIFont systemFontOfSize:14];
     [self.addressCopyButton addTarget:self action:@selector(copyAddress) forControlEvents:UIControlEventTouchUpInside];
     [content addSubview:self.addressCopyButton];
@@ -146,7 +146,7 @@
     // 加入服务器按钮
     self.joinButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.joinButton.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.joinButton setTitle:@"加入服务器" forState:UIControlStateNormal];
+    [self.joinButton setTitle:@"Join server" forState:UIControlStateNormal];
     [self.joinButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     self.joinButton.backgroundColor = [UIColor systemBlueColor];
     self.joinButton.layer.cornerRadius = 10;
@@ -157,7 +157,7 @@
     // 下载服务端文件包按钮
     self.downloadPackButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.downloadPackButton.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.downloadPackButton setTitle:@"下载服务端文件包" forState:UIControlStateNormal];
+    [self.downloadPackButton setTitle:@"Download server pack" forState:UIControlStateNormal];
     [self.downloadPackButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     self.downloadPackButton.backgroundColor = [UIColor systemPurpleColor];
     self.downloadPackButton.layer.cornerRadius = 10;
@@ -214,14 +214,14 @@
 
     NSString *sourceTag = (item.apiSource == ServerAPISourceCurseForge) ? @"CurseForge" : @"Modrinth";
     NSString *typeTag = item.projectType ?: @"server";
-    self.metaLabel.text = [NSString stringWithFormat:@"%@ · %@\n下载: %@  关注: %@\n作者: %@",
+    self.metaLabel.text = [NSString stringWithFormat:@"%@ · %@\nDownloads: %@  Follows: %@\nAuthor: %@",
                            sourceTag, typeTag,
                            [item formattedDownloads], [item formattedLikes],
                            item.author.length ? item.author : @"-"];
 
-    self.descTextView.text = item.serverDescription.length ? item.serverDescription : @"暂无描述";
+    self.descTextView.text = item.serverDescription.length ? item.serverDescription : @"No description";
 
-    NSString *addr = item.serverAddress.length ? item.serverAddress : @"（未提供地址，请等待详情加载）";
+    NSString *addr = item.serverAddress.length ? item.serverAddress : @"(no address provided, waiting for details to load)";
     self.addressLabel.text = addr;
 
     // 没有关联整合包时禁用下载按钮
@@ -274,14 +274,14 @@
     NSString *addr = self.serverItem.serverAddress;
     if (addr.length == 0) {
         self.currentMessageView = [InlineMessageView showInViewController:self
-                                                                    title:@"提示"
-                                                                 message:@"暂无服务器地址可复制"
+                                                                    title:@"Notice"
+                                                                 message:@"There is no server address to copy"
                                                                     type:InlineMessageTypeInfo];
         return;
     }
     [UIPasteboard generalPasteboard].string = addr;
     self.currentMessageView = [InlineMessageView showInViewController:self
-                                                                title:@"已复制"
+                                                                title:@"Copied"
                                                              message:addr
                                                                 type:InlineMessageTypeSuccess];
 }
@@ -290,8 +290,8 @@
     NSString *addr = self.serverItem.serverAddress;
     if (addr.length == 0) {
         self.currentMessageView = [InlineMessageView showInViewController:self
-                                                                    title:@"提示"
-                                                                 message:@"暂无服务器地址，无法加入"
+                                                                    title:@"Notice"
+                                                                 message:@"There is no server address, so you cannot join"
                                                                     type:InlineMessageTypeInfo];
         return;
     }
@@ -300,9 +300,9 @@
     NSError *error = nil;
     BOOL ok = [[ServerService sharedService] joinServer:addr forProfile:profileName error:&error];
     if (ok) {
-        NSString *msg = [NSString stringWithFormat:@"已保存到当前 profile（%@）\n启动游戏后将自动加入：%@", profileName, addr];
+        NSString *msg = [NSString stringWithFormat:@"Saved to the current profile (%@)\nThe game will join automatically on launch: %@", profileName, addr];
         self.currentMessageView = [InlineMessageView showInViewController:self
-                                                                    title:@"加入成功"
+                                                                    title:@"Joined"
                                                                  message:msg
                                                                     type:InlineMessageTypeSuccess];
     } else {
@@ -318,15 +318,15 @@
     if (item.serverPackDownloadURL.length == 0) {
         // 如果有关联整合包 ID 但没有直接下载链接，提示先查看关联整合包
         if (item.associatedModpackID.length > 0) {
-            NSString *msg = [NSString stringWithFormat:@"该服务器关联了整合包（ID: %@），但未提供直接的 server pack 下载链接。\n请前往整合包下载页搜索该 ID。", item.associatedModpackID];
+            NSString *msg = [NSString stringWithFormat:@"This server is linked to a modpack (ID: %@) but provides no direct server pack download link.\nSearch for that ID on the modpack download page.", item.associatedModpackID];
             self.currentMessageView = [InlineMessageView showInViewController:self
-                                                                        title:@"提示"
+                                                                        title:@"Notice"
                                                                      message:msg
                                                                         type:InlineMessageTypeInfo];
         } else {
             self.currentMessageView = [InlineMessageView showInViewController:self
-                                                                        title:@"提示"
-                                                                     message:@"该服务器没有可下载的服务端文件包"
+                                                                        title:@"Notice"
+                                                                     message:@"This server has no downloadable server pack"
                                                                         type:InlineMessageTypeInfo];
         }
         return;
@@ -338,7 +338,7 @@
     self.joinButton.enabled = NO;
     self.downloadPackButton.enabled = NO;
     self.currentMessageView = [InlineMessageView showInViewController:self
-                                                                title:@"下载中"
+                                                                title:@"Downloading"
                                                              message:item.serverPackFileName ?: item.serverPackDownloadURL.lastPathComponent
                                                                 type:InlineMessageTypeLoading];
 
@@ -349,7 +349,7 @@
         __strong typeof(weakSelf) strongSelf = weakSelf;
         if (!strongSelf) return;
         double p = progress.fractionCompleted;
-        NSString *msg = [NSString stringWithFormat:@"下载中 %.0f%% (%lld / %lld 字节)",
+        NSString *msg = [NSString stringWithFormat:@"Downloading %.0f%% (%lld / %lld bytes)",
                          p * 100, progress.completedUnitCount, progress.totalUnitCount];
         [strongSelf.currentMessageView updateMessage:msg];
     } completion:^(NSError *error) {
@@ -364,8 +364,8 @@
                                                                               type:InlineMessageTypeError];
         } else {
             strongSelf.currentMessageView = [InlineMessageView showInViewController:strongSelf
-                                                                              title:@"下载完成"
-                                                                           message:@"服务端文件包已保存到 Caches/server_packs 目录"
+                                                                              title:@"Download complete"
+                                                                           message:@"The server pack was saved to Caches/server_packs"
                                                                               type:InlineMessageTypeSuccess];
         }
     }];

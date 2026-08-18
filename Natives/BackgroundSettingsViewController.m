@@ -21,7 +21,7 @@
 - (void)viewDidLoad {
     [super viewDidLoad];
     
-    self.title = @"启动器背景";
+    self.title = @"Launcher background";
     
     // Set transparent background if global background is active
     if ([[BackgroundManager sharedManager] hasBackground]) {
@@ -92,7 +92,7 @@
     
     // Add placeholder label
     UILabel *placeholderLabel = [[UILabel alloc] init];
-    placeholderLabel.text = @"无背景";
+    placeholderLabel.text = @"No background";
     placeholderLabel.textColor = [UIColor secondaryLabelColor];
     placeholderLabel.font = [UIFont systemFontOfSize:16];
     placeholderLabel.textAlignment = NSTextAlignmentCenter;
@@ -118,22 +118,22 @@
         self.previewImageView.image = nil;
         UILabel *placeholder = (UILabel *)[self.previewImageView viewWithTag:100];
         placeholder.hidden = NO;
-        placeholder.text = @"视频背景";
+        placeholder.text = @"Video background";
     } else {
         self.previewImageView.image = nil;
         UILabel *placeholder = (UILabel *)[self.previewImageView viewWithTag:100];
         placeholder.hidden = NO;
-        placeholder.text = @"无背景（使用默认）";
+        placeholder.text = @"No background (using default)";
     }
 }
 
 - (void)setupSections {
     // Sections: [UI效果设置], [选择背景类型], [图片背景, 视频背景], [恢复默认背景, 清除背景]
     self.sections = @[
-        @[@"UI效果", @"透明度", @"模糊程度"],
-        @[@"选择背景类型"],
-        @[@"图片背景", @"视频背景"],
-        @[@"恢复默认背景", @"清除背景"]
+        @[@"UI effect", @"Opacity", @"Blur amount"],
+        @[@"Choose background type"],
+        @[@"Image background", @"Video background"],
+        @[@"Restore default background", @"Clear background"]
     ];
 }
 
@@ -179,9 +179,9 @@
                 cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1 reuseIdentifier:cellIdentifier];
             }
             
-            cell.textLabel.text = @"UI效果";
+            cell.textLabel.text = @"UI effect";
             
-            NSString *effectName = manager.uiEffect == BackgroundUIEffectBlur ? @"毛玻璃" : @"半透明";
+            NSString *effectName = manager.uiEffect == BackgroundUIEffectBlur ? @"Frosted glass" : @"Translucent";
             cell.detailTextLabel.text = effectName;
             cell.imageView.image = [UIImage systemImageNamed:@"rectangle.split.3x3"];
             cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
@@ -387,13 +387,13 @@
 }
 
 - (void)showUIEffectPicker {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"选择UI效果"
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Choose UI effect"
                                                                    message:nil
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
     
     BackgroundManager *manager = [BackgroundManager sharedManager];
     
-    [alert addAction:[UIAlertAction actionWithTitle:@"毛玻璃效果"
+    [alert addAction:[UIAlertAction actionWithTitle:@"Frosted glass effect"
                                               style:manager.uiEffect == BackgroundUIEffectBlur ? UIAlertActionStyleDefault : UIAlertActionStyleDefault
                                             handler:^(UIAlertAction * _Nonnull action) {
         manager.uiEffect = BackgroundUIEffectBlur;
@@ -402,7 +402,7 @@
         [[NSNotificationCenter defaultCenter] postNotificationName:@"BackgroundUIEffectChanged" object:nil];
     }]];
     
-    [alert addAction:[UIAlertAction actionWithTitle:@"半透明效果"
+    [alert addAction:[UIAlertAction actionWithTitle:@"Translucent effect"
                                               style:manager.uiEffect == BackgroundUIEffectTranslucent ? UIAlertActionStyleDefault : UIAlertActionStyleDefault
                                             handler:^(UIAlertAction * _Nonnull action) {
         manager.uiEffect = BackgroundUIEffectTranslucent;
@@ -411,7 +411,7 @@
         [[NSNotificationCenter defaultCenter] postNotificationName:@"BackgroundUIEffectChanged" object:nil];
     }]];
     
-    [alert addAction:[UIAlertAction actionWithTitle:@"取消"
+    [alert addAction:[UIAlertAction actionWithTitle:@"Cancel"
                                               style:UIAlertActionStyleCancel
                                             handler:nil]];
     
@@ -427,23 +427,23 @@
 #pragma mark - Background Selection
 
 - (void)selectImageBackground {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"选择图片来源"
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Choose image source"
                                                                    message:nil
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
     
-    [alert addAction:[UIAlertAction actionWithTitle:@"相册"
+    [alert addAction:[UIAlertAction actionWithTitle:@"Photo library"
                                               style:UIAlertActionStyleDefault
                                             handler:^(UIAlertAction * _Nonnull action) {
         [self openPhotoLibraryForImage];
     }]];
     
-    [alert addAction:[UIAlertAction actionWithTitle:@"文件"
+    [alert addAction:[UIAlertAction actionWithTitle:@"Files"
                                               style:UIAlertActionStyleDefault
                                             handler:^(UIAlertAction * _Nonnull action) {
         [self openDocumentPickerForImage];
     }]];
     
-    [alert addAction:[UIAlertAction actionWithTitle:@"取消"
+    [alert addAction:[UIAlertAction actionWithTitle:@"Cancel"
                                               style:UIAlertActionStyleCancel
                                             handler:nil]];
     
@@ -457,23 +457,23 @@
 }
 
 - (void)selectVideoBackground {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"选择视频来源"
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Choose video source"
                                                                    message:nil
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
     
-    [alert addAction:[UIAlertAction actionWithTitle:@"相册"
+    [alert addAction:[UIAlertAction actionWithTitle:@"Photo library"
                                               style:UIAlertActionStyleDefault
                                             handler:^(UIAlertAction * _Nonnull action) {
         [self openPhotoLibraryForVideo];
     }]];
     
-    [alert addAction:[UIAlertAction actionWithTitle:@"文件"
+    [alert addAction:[UIAlertAction actionWithTitle:@"Files"
                                               style:UIAlertActionStyleDefault
                                             handler:^(UIAlertAction * _Nonnull action) {
         [self openDocumentPickerForVideo];
     }]];
     
-    [alert addAction:[UIAlertAction actionWithTitle:@"取消"
+    [alert addAction:[UIAlertAction actionWithTitle:@"Cancel"
                                               style:UIAlertActionStyleCancel
                                             handler:nil]];
     
@@ -487,15 +487,15 @@
 }
 
 - (void)restoreDefaultBackground {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"恢复默认背景"
-                                                                   message:@"确定要恢复默认背景设置吗？这将清除自定义背景并重置UI效果设置。"
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Restore default background"
+                                                                   message:@"Restore the default background settings? This will clear the custom background and reset the UI effect settings."
                                                             preferredStyle:UIAlertControllerStyleAlert];
     
-    [alert addAction:[UIAlertAction actionWithTitle:@"取消"
+    [alert addAction:[UIAlertAction actionWithTitle:@"Cancel"
                                               style:UIAlertActionStyleCancel
                                             handler:nil]];
     
-    [alert addAction:[UIAlertAction actionWithTitle:@"恢复"
+    [alert addAction:[UIAlertAction actionWithTitle:@"Restore"
                                               style:UIAlertActionStyleDestructive
                                             handler:^(UIAlertAction * _Nonnull action) {
         // 清除背景
@@ -521,15 +521,15 @@
 }
 
 - (void)clearBackground {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"清除背景"
-                                                                   message:@"确定要清除启动器背景吗？"
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Clear background"
+                                                                   message:@"Clear the launcher background?"
                                                             preferredStyle:UIAlertControllerStyleAlert];
     
-    [alert addAction:[UIAlertAction actionWithTitle:@"取消"
+    [alert addAction:[UIAlertAction actionWithTitle:@"Cancel"
                                               style:UIAlertActionStyleCancel
                                             handler:nil]];
     
-    [alert addAction:[UIAlertAction actionWithTitle:@"清除"
+    [alert addAction:[UIAlertAction actionWithTitle:@"Clear"
                                               style:UIAlertActionStyleDestructive
                                             handler:^(UIAlertAction * _Nonnull action) {
         [[BackgroundManager sharedManager] clearBackground];
@@ -639,8 +639,8 @@
 - (void)processSelectedImage:(UIImage *)image {
     if (!image) return;
     
-    UIAlertController *processingAlert = [UIAlertController alertControllerWithTitle:@"处理中"
-                                                                             message:@"正在设置背景..."
+    UIAlertController *processingAlert = [UIAlertController alertControllerWithTitle:@"Processing"
+                                                                             message:@"Setting background..."
                                                                       preferredStyle:UIAlertControllerStyleAlert];
     [self presentViewController:processingAlert animated:YES completion:nil];
     
@@ -657,16 +657,16 @@
                 
                 [[NSNotificationCenter defaultCenter] postNotificationName:@"BackgroundChanged" object:nil];
                 
-                UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"成功"
-                                                                                      message:@"图片背景已设置"
+                UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"Success"
+                                                                                      message:@"Image background set"
                                                                                preferredStyle:UIAlertControllerStyleAlert];
-                [successAlert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
+                [successAlert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
                 [self presentViewController:successAlert animated:YES completion:nil];
             } else {
-                UIAlertController *errorAlert = [UIAlertController alertControllerWithTitle:@"错误"
-                                                                                    message:error.localizedDescription ?: @"设置背景失败"
+                UIAlertController *errorAlert = [UIAlertController alertControllerWithTitle:@"Error"
+                                                                                    message:error.localizedDescription ?: @"Failed to set background"
                                                                              preferredStyle:UIAlertControllerStyleAlert];
-                [errorAlert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
+                [errorAlert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
                 [self presentViewController:errorAlert animated:YES completion:nil];
             }
         }];
@@ -676,8 +676,8 @@
 - (void)processSelectedVideo:(NSURL *)videoURL {
     if (!videoURL) return;
     
-    UIAlertController *processingAlert = [UIAlertController alertControllerWithTitle:@"处理中"
-                                                                             message:@"正在设置视频背景..."
+    UIAlertController *processingAlert = [UIAlertController alertControllerWithTitle:@"Processing"
+                                                                             message:@"Setting video background..."
                                                                       preferredStyle:UIAlertControllerStyleAlert];
     [self presentViewController:processingAlert animated:YES completion:nil];
     
@@ -694,16 +694,16 @@
                 
                 [[NSNotificationCenter defaultCenter] postNotificationName:@"BackgroundChanged" object:nil];
                 
-                UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"成功"
-                                                                                      message:@"视频背景已设置"
+                UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"Success"
+                                                                                      message:@"Video background set"
                                                                                preferredStyle:UIAlertControllerStyleAlert];
-                [successAlert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
+                [successAlert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
                 [self presentViewController:successAlert animated:YES completion:nil];
             } else {
-                UIAlertController *errorAlert = [UIAlertController alertControllerWithTitle:@"错误"
-                                                                                    message:error.localizedDescription ?: @"设置视频背景失败"
+                UIAlertController *errorAlert = [UIAlertController alertControllerWithTitle:@"Error"
+                                                                                    message:error.localizedDescription ?: @"Failed to set video background"
                                                                              preferredStyle:UIAlertControllerStyleAlert];
-                [errorAlert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
+                [errorAlert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
                 [self presentViewController:errorAlert animated:YES completion:nil];
             }
         }];

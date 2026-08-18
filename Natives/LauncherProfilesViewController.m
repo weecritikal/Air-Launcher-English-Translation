@@ -46,7 +46,7 @@ typedef NS_ENUM(NSInteger, VersionType) {
 
 - (id)init {
     self = [super init];
-    self.title = @"下载";
+    self.title = @"Download";
     return self;
 }
 
@@ -90,7 +90,7 @@ typedef NS_ENUM(NSInteger, VersionType) {
 
 - (void)setupNavigationBar {
     // 添加按钮
-    UIMenu *createMenu = [UIMenu menuWithTitle:@"新建" image:nil identifier:nil
+    UIMenu *createMenu = [UIMenu menuWithTitle:@"New" image:nil identifier:nil
     options:UIMenuOptionsDisplayInline
     children:@[
         [UIAction actionWithTitle:@"Vanilla" image:nil identifier:@"vanilla" handler:^(UIAction *action) {
@@ -102,7 +102,7 @@ typedef NS_ENUM(NSInteger, VersionType) {
         [UIAction actionWithTitle:@"Forge" image:nil identifier:@"forge" handler:^(UIAction *action) {
             [self actionCreateForgeProfile];
         }],
-        [UIAction actionWithTitle:@"整合包" image:nil identifier:@"modpack" handler:^(UIAction *action) {
+        [UIAction actionWithTitle:@"Modpack" image:nil identifier:@"modpack" handler:^(UIAction *action) {
             [self actionCreateModpackProfile];
         }]
     ]];
@@ -112,7 +112,7 @@ typedef NS_ENUM(NSInteger, VersionType) {
 }
 
 - (void)setupFilterSegment {
-    self.filterSegment = [[UISegmentedControl alloc] initWithItems:@[@"全部", @"正式版", @"测试版", @"远古版"]];
+    self.filterSegment = [[UISegmentedControl alloc] initWithItems:@[@"All", @"Release", @"Snapshot", @"Ancient"]];
     self.filterSegment.translatesAutoresizingMaskIntoConstraints = NO;
     self.filterSegment.selectedSegmentIndex = 0;
     [self.filterSegment addTarget:self action:@selector(filterChanged:) forControlEvents:UIControlEventValueChanged];
@@ -286,16 +286,16 @@ typedef NS_ENUM(NSInteger, VersionType) {
     
     // 显示确认对话框
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:versionId
-                                                                   message:@"选择操作"
+                                                                   message:@"Choose an action"
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
     
-    [alert addAction:[UIAlertAction actionWithTitle:@"下载此版本"
+    [alert addAction:[UIAlertAction actionWithTitle:@"Download this version"
                                               style:UIAlertActionStyleDefault
                                             handler:^(UIAlertAction * _Nonnull action) {
         [self downloadVersion:version];
     }]];
     
-    [alert addAction:[UIAlertAction actionWithTitle:@"取消"
+    [alert addAction:[UIAlertAction actionWithTitle:@"Cancel"
                                               style:UIAlertActionStyleCancel
                                             handler:nil]];
     
@@ -324,18 +324,18 @@ typedef NS_ENUM(NSInteger, VersionType) {
     PLProfiles.current.selectedProfileName = versionId;
     
     // 显示下载进度
-    UIAlertController *progressAlert = [UIAlertController alertControllerWithTitle:@"下载中"
-                                                                           message:[NSString stringWithFormat:@"正在下载 %@...", versionId]
+    UIAlertController *progressAlert = [UIAlertController alertControllerWithTitle:@"Downloading"
+                                                                           message:[NSString stringWithFormat:@"Downloading %@...", versionId]
                                                                     preferredStyle:UIAlertControllerStyleAlert];
     [self presentViewController:progressAlert animated:YES completion:nil];
     
     // 模拟下载完成
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         [progressAlert dismissViewControllerAnimated:YES completion:^{
-            UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"下载完成"
-                                                                                  message:[NSString stringWithFormat:@"%@ 下载完成", versionId]
+            UIAlertController *successAlert = [UIAlertController alertControllerWithTitle:@"Download complete"
+                                                                                  message:[NSString stringWithFormat:@"%@ download complete", versionId]
                                                                            preferredStyle:UIAlertControllerStyleAlert];
-            [successAlert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
+            [successAlert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
             [self presentViewController:successAlert animated:YES completion:nil];
         }];
     });
@@ -397,9 +397,9 @@ typedef NS_ENUM(NSInteger, VersionType) {
                 }
                 dispatch_async(dispatch_get_main_queue(), ^{
                     if (installed) {
-                        showDialog(localize(@"Success", nil), [NSString stringWithFormat:@"%@ 安装成功", isNeoForge ? @"NeoForge" : @"Forge"]);
+                        showDialog(localize(@"Success", nil), [NSString stringWithFormat:@"%@ installed successfully", isNeoForge ? @"NeoForge" : @"Forge"]);
                     } else {
-                        showDialog(localize(@"Error", nil), directError.localizedDescription ?: @"未知错误");
+                        showDialog(localize(@"Error", nil), directError.localizedDescription ?: @"Unknown error");
                     }
                 });
             });
@@ -410,9 +410,9 @@ typedef NS_ENUM(NSInteger, VersionType) {
         LauncherNavigationController *launcherNav = [strongSelf findLauncherNavigationController];
         if (launcherNav && filePath.length > 0) {
             [launcherNav enterModInstallerWithPath:filePath hitEnterAfterWindowShown:YES];
-            showDialog(localize(@"Info", nil), [NSString stringWithFormat:@"%@ 安装器已启动", isNeoForge ? @"NeoForge" : @"Forge"]);
+            showDialog(localize(@"Info", nil), [NSString stringWithFormat:@"%@ installer started", isNeoForge ? @"NeoForge" : @"Forge"]);
         } else if (filePath.length > 0) {
-            showDialog(localize(@"Error", nil), @"无法启动安装器：未找到主启动器导航控制器");
+            showDialog(localize(@"Error", nil), @"Could not start the installer: the main launcher navigation controller was not found");
         }
     };
     [self presentNavigatedViewController:vc];
@@ -477,23 +477,23 @@ typedef NS_ENUM(NSInteger, VersionType) {
 
 - (void)showVersionSelectorForType:(NSString *)type {
     // 显示版本选择器
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"选择版本"
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Select version"
                                                                    message:nil
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
     
-    [alert addAction:[UIAlertAction actionWithTitle:@"最新正式版"
+    [alert addAction:[UIAlertAction actionWithTitle:@"Latest release"
                                               style:UIAlertActionStyleDefault
                                             handler:^(UIAlertAction * _Nonnull action) {
         [self createProfileWithVersion:@"latest-release" type:type];
     }]];
     
-    [alert addAction:[UIAlertAction actionWithTitle:@"最新测试版"
+    [alert addAction:[UIAlertAction actionWithTitle:@"Latest snapshot"
                                               style:UIAlertActionStyleDefault
                                             handler:^(UIAlertAction * _Nonnull action) {
         [self createProfileWithVersion:@"latest-snapshot" type:type];
     }]];
     
-    [alert addAction:[UIAlertAction actionWithTitle:@"取消"
+    [alert addAction:[UIAlertAction actionWithTitle:@"Cancel"
                                               style:UIAlertActionStyleCancel
                                             handler:nil]];
     
@@ -509,10 +509,10 @@ typedef NS_ENUM(NSInteger, VersionType) {
     [PLProfiles.current saveProfile:profile withName:versionId];
     PLProfiles.current.selectedProfileName = versionId;
     
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"创建成功"
-                                                                   message:[NSString stringWithFormat:@"已创建 %@ 配置", versionId]
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Created"
+                                                                   message:[NSString stringWithFormat:@"Created the %@ profile", versionId]
                                                             preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];
 }
 

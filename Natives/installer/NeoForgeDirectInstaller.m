@@ -60,14 +60,14 @@ NSString *const NeoForgeDirectInstallerErrorDomain = @"NeoForgeDirectInstallerEr
 
     @try {
         NSLog(@"[NeoForgeDirect] Starting installation: %@", versionId);
-        reportProgress(0.0, @"开始安装");
+        reportProgress(0.0, @"Starting installation");
         if (error) {
             *error = nil;
         }
 
         // Step 1: Read install_profile.json
         NSLog(@"[NeoForgeDirect] Reading install_profile.json");
-        reportProgress(0.05, @"正在读取 install_profile.json");
+        reportProgress(0.05, @"Reading install_profile.json");
         NSData *profileData = [self dataFromZip:installerPath entry:@"install_profile.json" error:error];
         if (!profileData) {
             NSLog(@"[NeoForgeDirect] Failed to read install_profile.json");
@@ -82,7 +82,7 @@ NSString *const NeoForgeDirectInstallerErrorDomain = @"NeoForgeDirectInstallerEr
 
         // Step 2: Parse install_profile.json
         NSLog(@"[NeoForgeDirect] Parsing install_profile.json");
-        reportProgress(0.1, @"正在解析 JSON");
+        reportProgress(0.1, @"Parsing JSON");
         NSError *jsonError = nil;
         NSMutableDictionary *installProfile = [NSJSONSerialization JSONObjectWithData:profileData
                                                                               options:NSJSONReadingMutableContainers
@@ -120,7 +120,7 @@ NSString *const NeoForgeDirectInstallerErrorDomain = @"NeoForgeDirectInstallerEr
         NSLog(@"[NeoForgeDirect] Game directory (user.dir): %@", gameDir);
         NSLog(@"[NeoForgeDirect] Main game directory (versions/libraries): %@", mainGameDir);
         NSLog(@"[NeoForgeDirect] Libraries directory: %@", librariesDir);
-        reportProgress(0.15, @"正在准备版本目录");
+        reportProgress(0.15, @"Preparing the version folder");
 
         // 提前创建 libraries 目录，避免后续下载/解压失败
         [[NSFileManager defaultManager] createDirectoryAtPath:librariesDir
@@ -144,7 +144,7 @@ NSString *const NeoForgeDirectInstallerErrorDomain = @"NeoForgeDirectInstallerEr
         // 整合包导入时跳过（由 ModpackImportService.createProfileForModpack 统一注册）
         if (!skipRegisterVersion) {
             NSLog(@"[NeoForgeDirect] Registering version on main thread");
-            reportProgress(0.95, @"正在注册版本");
+            reportProgress(0.95, @"Registering version");
             if ([NSThread isMainThread]) {
                 [self registerVersion:versionId];
             } else {
@@ -156,7 +156,7 @@ NSString *const NeoForgeDirectInstallerErrorDomain = @"NeoForgeDirectInstallerEr
         }
 
         NSLog(@"[NeoForgeDirect] Installation completed successfully");
-        reportProgress(1.0, @"安装完成");
+        reportProgress(1.0, @"Installation complete");
         return YES;
     }
     @catch (NSException *exception) {
@@ -166,7 +166,7 @@ NSString *const NeoForgeDirectInstallerErrorDomain = @"NeoForgeDirectInstallerEr
             *error = [NSError errorWithDomain:NeoForgeDirectInstallerErrorDomain
                                           code:NeoForgeDirectInstallerErrorException
                                       userInfo:@{
-                                          NSLocalizedDescriptionKey: [NSString stringWithFormat:@"安装异常: %@", exception.reason ?: @"未知原因"],
+                                          NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Installation exception: %@", exception.reason ?: @"Unknown reason"],
                                           NSLocalizedFailureReasonErrorKey: exception.name ?: @"UnknownException"
                                       }];
         }
@@ -295,13 +295,13 @@ NSString *const NeoForgeDirectInstallerErrorDomain = @"NeoForgeDirectInstallerEr
 
     // Step A: 解压 installer.jar 内 maven/ 下的所有依赖到 libraries 目录
     NSLog(@"[NeoForgeDirect] Extracting all maven entries from installer jar");
-    reportProgress(0.2, @"正在解压内嵌 maven 依赖");
+    reportProgress(0.2, @"Extracting the embedded maven dependencies");
     NSUInteger extractedCount = [self extractAllMavenEntries:installerPath toLibrariesDir:librariesDir];
     NSLog(@"[NeoForgeDirect] Extracted %lu maven entries", (unsigned long)extractedCount);
 
     // Step B: 下载 versionJson.libraries 中未在 installer.jar 内的库
     NSLog(@"[NeoForgeDirect] Downloading missing libraries from maven");
-    reportProgress(0.3, @"正在下载缺失的依赖库");
+    reportProgress(0.3, @"Downloading missing libraries");
     NSArray *allLibraries = versionJson[@"libraries"];
     if ([allLibraries isKindOfClass:[NSArray class]]) {
         [self downloadMissingLibraries:allLibraries librariesDir:librariesDir progress:progress baseProgress:0.3 progressSpan:0.4];
@@ -311,7 +311,7 @@ NSString *const NeoForgeDirectInstallerErrorDomain = @"NeoForgeDirectInstallerEr
     // install_profile.json 的 processors 会生成 :client 这个 jar，但 iOS 不能跑 processor。
     // NeoForge 已将这个预打补丁 jar 发布到 maven，直接下载即可。
     NSLog(@"[NeoForgeDirect] Downloading pre-patched client artifact");
-    reportProgress(0.75, @"正在下载预打补丁的核心 jar");
+    reportProgress(0.75, @"Downloading the pre-patched core jar");
     NSString *mainPath = installProfile[@"path"];
     // 兜底：path 字段缺失时用 version 字段拼接（NeoForge 1.20.1 用 forge artifactId，1.20.2+ 用 neoforge artifactId）
     if (![mainPath isKindOfClass:[NSString class]] || mainPath.length == 0) {
@@ -346,14 +346,14 @@ NSString *const NeoForgeDirectInstallerErrorDomain = @"NeoForgeDirectInstallerEr
         if (error) {
             *error = [NSError errorWithDomain:NeoForgeDirectInstallerErrorDomain
                                          code:NeoForgeDirectInstallerErrorInvalidProfile
-                                     userInfo:@{NSLocalizedDescriptionKey: @"install_profile.json 缺少 path 和 version 字段，无法定位预打补丁核心 jar"}];
+                                     userInfo:@{NSLocalizedDescriptionKey: @"install_profile.json is missing the path and version fields, so the pre-patched core jar cannot be located"}];
         }
         return NO;
     }
 
     // Write version JSON
     NSLog(@"[NeoForgeDirect] Writing version JSON to: %@", versionJsonPath);
-    reportProgress(0.9, @"正在写入版本 JSON");
+    reportProgress(0.9, @"Writing version JSON");
     NSError *writeError = saveJSONToFile(versionJson, versionJsonPath);
     if (writeError) {
         if (error) {
@@ -438,7 +438,7 @@ NSString *const NeoForgeDirectInstallerErrorDomain = @"NeoForgeDirectInstallerEr
         if (error) {
             *error = [NSError errorWithDomain:NeoForgeDirectInstallerErrorDomain
                                          code:NSURLErrorTimedOut
-                                     userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"请求超时（60s）: %@", request.URL.absoluteString]}];
+                                     userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Request timed out (60s): %@", request.URL.absoluteString]}];
         }
         return nil;
     }
@@ -824,7 +824,7 @@ NSString *const NeoForgeDirectInstallerErrorDomain = @"NeoForgeDirectInstallerEr
         // 用 processed 计算进度（避免失败时进度停滞）
         if (progress) {
             double p = base + span * ((double)processed / (double)total);
-            progress(p, [NSString stringWithFormat:@"正在下载依赖库 (%lu/%lu): %@", (unsigned long)(processed + 1), (unsigned long)total, name]);
+            progress(p, [NSString stringWithFormat:@"Downloading libraries (%lu/%lu): %@", (unsigned long)(processed + 1), (unsigned long)total, name]);
         }
 
         NSError *downloadError = nil;
@@ -1048,9 +1048,9 @@ NSString *const NeoForgeDirectInstallerErrorDomain = @"NeoForgeDirectInstallerEr
         *error = [NSError errorWithDomain:NeoForgeDirectInstallerErrorDomain
                                      code:NeoForgeDirectInstallerErrorExtractionFailed
                                  userInfo:@{
-                                     NSLocalizedDescriptionKey: [NSString stringWithFormat:@"下载预打补丁核心 jar 失败\n主源 URL: %@\n已尝试 classifier: client/universal/无\n已尝试源: 官方/BMCLAPI/HMCL镜像\n最后错误: %@",
-                                         firstTriedURL ?: @"未知",
-                                         lastError.localizedDescription ?: @"未知错误"]
+                                     NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Failed to download the pre-patched core jar\nPrimary URL: %@\nClassifiers tried: client/universal/none\nSources tried: official/BMCLAPI/HMCL mirror\nLast error: %@",
+                                         firstTriedURL ?: @"Unknown",
+                                         lastError.localizedDescription ?: @"Unknown error"]
                                  }];
     }
     return NO;
@@ -1123,7 +1123,7 @@ NSString *const NeoForgeDirectInstallerErrorDomain = @"NeoForgeDirectInstallerEr
         if (error) {
             *error = [NSError errorWithDomain:NeoForgeDirectInstallerErrorDomain
                                          code:NSURLErrorTimedOut
-                                     userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"下载超时（70s）: %@", urlString]}];
+                                     userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Download timed out (70s): %@", urlString]}];
         }
         return NO;
     }

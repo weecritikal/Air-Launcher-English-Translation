@@ -69,7 +69,7 @@ static NSString * const kCachedAnnouncementsTimestampKey = @"cached_announcement
     NSURL *url = [NSURL URLWithString:urlString];
     if (!url) {
         dispatch_async(dispatch_get_main_queue(), ^{
-            completion(@[], [NSError errorWithDomain:@"AnnouncementService" code:1 userInfo:@{NSLocalizedDescriptionKey: @"无效的公告 URL"}]);
+            completion(@[], [NSError errorWithDomain:@"AnnouncementService" code:1 userInfo:@{NSLocalizedDescriptionKey: @"Invalid announcement URL"}]);
         });
         return;
     }
@@ -84,7 +84,7 @@ static NSString * const kCachedAnnouncementsTimestampKey = @"cached_announcement
             // 网络失败时尝试返回缓存
             NSArray *cached = [self cachedAnnouncements];
             dispatch_async(dispatch_get_main_queue(), ^{
-                completion(cached ?: @[], error ?: [NSError errorWithDomain:@"AnnouncementService" code:2 userInfo:@{NSLocalizedDescriptionKey: @"公告拉取失败"}]);
+                completion(cached ?: @[], error ?: [NSError errorWithDomain:@"AnnouncementService" code:2 userInfo:@{NSLocalizedDescriptionKey: @"Failed to fetch announcements"}]);
             });
             return;
         }
@@ -99,7 +99,7 @@ static NSString * const kCachedAnnouncementsTimestampKey = @"cached_announcement
         NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:&parseError];
         if (parseError || !json) {
             dispatch_async(dispatch_get_main_queue(), ^{
-                completion(@[], parseError ?: [NSError errorWithDomain:@"AnnouncementService" code:3 userInfo:@{NSLocalizedDescriptionKey: @"公告 JSON 解析失败"}]);
+                completion(@[], parseError ?: [NSError errorWithDomain:@"AnnouncementService" code:3 userInfo:@{NSLocalizedDescriptionKey: @"Failed to parse announcement JSON"}]);
             });
             return;
         }

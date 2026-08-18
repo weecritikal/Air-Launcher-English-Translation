@@ -253,16 +253,16 @@
     // old_beta  → clock.fill + systemPurple（远古 beta）
     NSString *iconName = @"cube.fill";
     UIColor *typeColor = [UIColor systemGreenColor];
-    NSString *typeText = @"正式版";
+    NSString *typeText = @"Release";
 
-    if ([type isEqualToString:@"正式版"] || [type isEqualToString:@"release"]) {
+    if ([type isEqualToString:@"Release"] || [type isEqualToString:@"release"]) {
         iconName = @"cube.fill";
         typeColor = [UIColor systemGreenColor];
-        typeText = @"正式版";
-    } else if ([type isEqualToString:@"测试版"] || [type isEqualToString:@"snapshot"]) {
+        typeText = @"Release";
+    } else if ([type isEqualToString:@"Snapshot"] || [type isEqualToString:@"snapshot"]) {
         iconName = @"hammer.fill";
         typeColor = [UIColor systemOrangeColor];
-        typeText = @"测试版";
+        typeText = @"Snapshot";
     } else if ([type isEqualToString:@"old_alpha"]) {
         iconName = @"clock.fill";
         typeColor = [UIColor systemPurpleColor];
@@ -275,7 +275,7 @@
         // 兜底：远古版（合并 old_alpha + old_beta 时使用）
         iconName = @"clock.fill";
         typeColor = [UIColor systemPurpleColor];
-        typeText = @"远古版";
+        typeText = @"Ancient";
     }
 
     UIImage *symbol = [UIImage systemImageNamed:iconName];

@@ -378,8 +378,8 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
         _oomSuggestionLabel.textAlignment = NSTextAlignmentCenter;
         _oomSuggestionLabel.numberOfLines = 0;
         NSString *suggestion = [NSString stringWithFormat:@"%@ %@",
-                                localize(@"crash.suggestion", @"建议操作"),
-                                localize(@"crash.suggestion.oom", @"iOS 内存限制导致崩溃，建议使用 GetMoreRam (LiveContainer) 解除内存限制后重试")];
+                                localize(@"crash.suggestion", @"Suggested actions"),
+                                localize(@"crash.suggestion.oom", @"The iOS memory limit caused the crash. Try lifting the limit with GetMoreRam (LiveContainer) and run it again")];
         _oomSuggestionLabel.text = suggestion;
         [_errorCardView addSubview:_oomSuggestionLabel];
 
@@ -459,7 +459,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
 
     _suggestionsTitleLabel = [[UILabel alloc] init];
     _suggestionsTitleLabel.translatesAutoresizingMaskIntoConstraints = NO;
-    _suggestionsTitleLabel.text = localize(@"crash.quick_fix", @"快速修复建议");
+    _suggestionsTitleLabel.text = localize(@"crash.quick_fix", @"Quick fixes");
     _suggestionsTitleLabel.font = [UIFont systemFontOfSize:15 weight:UIFontWeightSemibold];
     _suggestionsTitleLabel.textColor = [UIColor labelColor];
     [titleRow addSubview:_suggestionsTitleLabel];
@@ -548,49 +548,49 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
 
     switch (self.crashType) {
         case CrashTypeOOM:
-            [result addObject:@{@"icon": @"arrow.down.circle", @"text": localize(@"crash.suggestion.oom_ram", @"降低内存分配（建议 1024-2048MB）")}];
-            [result addObject:@{@"icon": @"sparkles", @"text": localize(@"crash.suggestion.oom_getmoream", @"使用 GetMoreRam (LiveContainer) 解除 iOS 内存限制")}];
-            [result addObject:@{@"icon": @"trash", @"text": localize(@"crash.suggestion.oom_mods", @"移除重量级 Mod（如光影、高清材质）")}];
-            [result addObject:@{@"icon": @"arrow.clockwise", @"text": localize(@"crash.suggestion.oom_restart", @"重启启动器后重试（释放内存碎片）")}];
+            [result addObject:@{@"icon": @"arrow.down.circle", @"text": localize(@"crash.suggestion.oom_ram", @"Lower the memory allocation (1024-2048 MB recommended)")}];
+            [result addObject:@{@"icon": @"sparkles", @"text": localize(@"crash.suggestion.oom_getmoream", @"Use GetMoreRam (LiveContainer) to lift the iOS memory limit")}];
+            [result addObject:@{@"icon": @"trash", @"text": localize(@"crash.suggestion.oom_mods", @"Remove heavy mods (shaders, high-res textures, etc.)")}];
+            [result addObject:@{@"icon": @"arrow.clockwise", @"text": localize(@"crash.suggestion.oom_restart", @"Restart the launcher and try again (to clear memory fragmentation)")}];
             break;
         case CrashTypeSegfault:
-            [result addObject:@{@"icon": @"cpu", @"text": localize(@"crash.suggestion.segfault_renderer", @"尝试切换渲染器（gl4es / MetalGlues / virgil）")}];
-            [result addObject:@{@"icon": @"shield", @"text": localize(@"crash.suggestion.segfault_jit", @"确保 JIT 已启用（TrollStore/SideStore + JIT 权限）")}];
-            [result addObject:@{@"icon": @"arrow.clockwise", @"text": localize(@"crash.suggestion.segfault_restart", @"重启启动器后重试")}];
+            [result addObject:@{@"icon": @"cpu", @"text": localize(@"crash.suggestion.segfault_renderer", @"Try a different renderer (gl4es / MetalGlues / virgil)")}];
+            [result addObject:@{@"icon": @"shield", @"text": localize(@"crash.suggestion.segfault_jit", @"Make sure JIT is enabled (TrollStore/SideStore + JIT permission)")}];
+            [result addObject:@{@"icon": @"arrow.clockwise", @"text": localize(@"crash.suggestion.segfault_restart", @"Restart the launcher and try again")}];
             break;
         case CrashTypeAbort:
-            [result addObject:@{@"icon": @"exclamationmark.bubble", @"text": localize(@"crash.suggestion.abort_mods", @"检查 Mod 是否兼容（移除最近添加的 Mod）")}];
-            [result addObject:@{@"icon": @"cpu", @"text": localize(@"crash.suggestion.abort_renderer", @"尝试切换渲染器")}];
-            [result addObject:@{@"icon": @"arrow.clockwise", @"text": localize(@"crash.suggestion.abort_restart", @"重启启动器后重试")}];
+            [result addObject:@{@"icon": @"exclamationmark.bubble", @"text": localize(@"crash.suggestion.abort_mods", @"Check that your mods are compatible (remove recently added ones)")}];
+            [result addObject:@{@"icon": @"cpu", @"text": localize(@"crash.suggestion.abort_renderer", @"Try a different renderer")}];
+            [result addObject:@{@"icon": @"arrow.clockwise", @"text": localize(@"crash.suggestion.abort_restart", @"Restart the launcher and try again")}];
             break;
         case CrashTypeModConflict:
-            [result addObject:@{@"icon": @"trash", @"text": localize(@"crash.suggestion.modconflict_remove", @"移除最近添加的 Mod")}];
-            [result addObject:@{@"icon": @"info.circle", @"text": localize(@"crash.suggestion.modconflict_check", @"检查 Mod 版本兼容性（Forge/Fabric/API 版本）")}];
-            [result addObject:@{@"icon": @"doc.text", @"text": localize(@"crash.suggestion.modconflict_log", @"查看完整日志定位冲突 Mod")}];
+            [result addObject:@{@"icon": @"trash", @"text": localize(@"crash.suggestion.modconflict_remove", @"Remove recently added mods")}];
+            [result addObject:@{@"icon": @"info.circle", @"text": localize(@"crash.suggestion.modconflict_check", @"Check mod version compatibility (Forge/Fabric/API versions)")}];
+            [result addObject:@{@"icon": @"doc.text", @"text": localize(@"crash.suggestion.modconflict_log", @"Read the full log to find the conflicting mod")}];
             break;
         case CrashTypeMissingLibrary:
-            [result addObject:@{@"icon": @"arrow.clockwise.circle", @"text": localize(@"crash.suggestion.missinglib_reinstall", @"重新安装当前游戏版本")}];
-            [result addObject:@{@"icon": @"folder", @"text": localize(@"crash.suggestion.missinglib_check", @"检查实例目录中的 libraries 文件夹是否完整")}];
-            [result addObject:@{@"icon": @"wifi", @"text": localize(@"crash.suggestion.missinglib_network", @"检查网络连接，确保下载源可访问")}];
+            [result addObject:@{@"icon": @"arrow.clockwise.circle", @"text": localize(@"crash.suggestion.missinglib_reinstall", @"Reinstall the current game version")}];
+            [result addObject:@{@"icon": @"folder", @"text": localize(@"crash.suggestion.missinglib_check", @"Check that the libraries folder in the instance directory is complete")}];
+            [result addObject:@{@"icon": @"wifi", @"text": localize(@"crash.suggestion.missinglib_network", @"Check your network connection and make sure the download source is reachable")}];
             break;
         case CrashTypeJavaVersionMismatch:
-            [result addObject:@{@"icon": @"hammer", @"text": localize(@"crash.suggestion.javaver_change", @"在设置中切换 Java 版本（8/17/21）")}];
-            [result addObject:@{@"icon": @"info.circle", @"text": localize(@"crash.suggestion.javaver_check", @"检查游戏版本要求的 Java 版本")}];
+            [result addObject:@{@"icon": @"hammer", @"text": localize(@"crash.suggestion.javaver_change", @"Switch the Java version in Settings (8/17/21)")}];
+            [result addObject:@{@"icon": @"info.circle", @"text": localize(@"crash.suggestion.javaver_check", @"Check which Java version this game version requires")}];
             break;
         case CrashTypeRendererError:
-            [result addObject:@{@"icon": @"cpu", @"text": localize(@"crash.suggestion.renderer_switch", @"尝试切换渲染器：gl4es / MetalGlues / virgil")}];
-            [result addObject:@{@"icon": @"eye.slash", @"text": localize(@"crash.suggestion.renderer_shader", @"禁用光影包后重试")}];
-            [result addObject:@{@"icon": @"arrow.down.circle", @"text": localize(@"crash.suggestion.renderer_resolution", @"降低游戏分辨率缩放比例")}];
+            [result addObject:@{@"icon": @"cpu", @"text": localize(@"crash.suggestion.renderer_switch", @"Try a different renderer: gl4es / MetalGlues / virgil")}];
+            [result addObject:@{@"icon": @"eye.slash", @"text": localize(@"crash.suggestion.renderer_shader", @"Disable your shader pack and try again")}];
+            [result addObject:@{@"icon": @"arrow.down.circle", @"text": localize(@"crash.suggestion.renderer_resolution", @"Lower the game's resolution scale")}];
             break;
         case CrashTypeModLoadingFailure:
-            [result addObject:@{@"icon": @"trash", @"text": localize(@"crash.suggestion.modload_remove", @"移除问题 Mod（查看日志中的错误行）")}];
-            [result addObject:@{@"icon": @"arrow.clockwise.circle", @"text": localize(@"crash.suggestion.modload_update", @"更新 Mod 加载器（Forge/Fabric/OptiFine）")}];
-            [result addObject:@{@"icon": @"info.circle", @"text": localize(@"crash.suggestion.modload_version", @"检查 Mod 是否支持当前 MC 版本")}];
+            [result addObject:@{@"icon": @"trash", @"text": localize(@"crash.suggestion.modload_remove", @"Remove the problem mod (see the error lines in the log)")}];
+            [result addObject:@{@"icon": @"arrow.clockwise.circle", @"text": localize(@"crash.suggestion.modload_update", @"Update the mod loader (Forge/Fabric/OptiFine)")}];
+            [result addObject:@{@"icon": @"info.circle", @"text": localize(@"crash.suggestion.modload_version", @"Check that the mod supports your Minecraft version")}];
             break;
         case CrashTypeJavaException:
-            [result addObject:@{@"icon": @"doc.text", @"text": localize(@"crash.suggestion.java_log", @"查看完整日志定位异常堆栈")}];
-            [result addObject:@{@"icon": @"trash", @"text": localize(@"crash.suggestion.java_mods", @"检查 Mod 是否兼容（移除最近添加的 Mod）")}];
-            [result addObject:@{@"icon": @"arrow.clockwise", @"text": localize(@"crash.suggestion.java_restart", @"重启启动器后重试")}];
+            [result addObject:@{@"icon": @"doc.text", @"text": localize(@"crash.suggestion.java_log", @"Read the full log to find the exception stack trace")}];
+            [result addObject:@{@"icon": @"trash", @"text": localize(@"crash.suggestion.java_mods", @"Check that your mods are compatible (remove recently added ones)")}];
+            [result addObject:@{@"icon": @"arrow.clockwise", @"text": localize(@"crash.suggestion.java_restart", @"Restart the launcher and try again")}];
             break;
         case CrashTypeNormal:
         case CrashTypeTerminated:
@@ -814,7 +814,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
 
     // 1. 重启启动器按钮（蓝色强调）
     // 参照 FCL：很多崩溃是临时加载失败（JIT/dylib/内存碎片），重启即可解决。
-    _restartButton = [self createButtonWithTitle:localize(@"crash.restart_launcher", @"重启启动器")
+    _restartButton = [self createButtonWithTitle:localize(@"crash.restart_launcher", @"Restart launcher")
                                             icon:@"arrow.clockwise"
                                    backgroundColor:[UIColor colorWithRed:0.2 green:0.6 blue:0.95 alpha:1.0]
                                        textColor:[UIColor whiteColor]
@@ -826,7 +826,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     // 关键修复：之前此按钮调用 dismissAndReturnToLauncher（返回启动器主界面），
     // 与"重启启动器"效果一样（都是回到启动器）。现在改为直接 exit(0) 退出进程，
     // 不重启应用，与 FCL 的"退出"行为一致。
-    _exitButton = [self createButtonWithTitle:localize(@"crash.return_launcher", @"退出启动器")
+    _exitButton = [self createButtonWithTitle:localize(@"crash.return_launcher", @"Quit launcher")
                                          icon:@"xmark.circle.fill"
                                 backgroundColor:[UIColor colorWithRed:0.85 green:0.2 blue:0.2 alpha:1.0]
                                     textColor:[UIColor whiteColor]
@@ -835,7 +835,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     [container addArrangedSubview:_exitButton];
 
     // 3. 分享日志按钮
-    _shareButton = [self createButtonWithTitle:localize(@"crash.share_log", @"分享日志")
+    _shareButton = [self createButtonWithTitle:localize(@"crash.share_log", @"Share log")
                                           icon:@"square.and.arrow.up"
                                  backgroundColor:[[UIColor whiteColor] colorWithAlphaComponent:0.15]
                                      textColor:[UIColor labelColor]
@@ -844,7 +844,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     [container addArrangedSubview:_shareButton];
 
     // 4. GitHub Issues 按钮
-    _githubButton = [self createButtonWithTitle:localize(@"crash.github_issue", @"前往 GitHub Issues")
+    _githubButton = [self createButtonWithTitle:localize(@"crash.github_issue", @"Open GitHub Issues")
                                            icon:@"link"
                                   backgroundColor:[[UIColor colorWithRed:0.3 green:0.5 blue:0.9 alpha:1.0] colorWithAlphaComponent:0.3]
                                       textColor:[UIColor whiteColor]
@@ -855,7 +855,7 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
     // 5. 查看完整日志按钮（透明文字按钮）
     _fullLogButton = [UIButton buttonWithType:UIButtonTypeSystem];
     _fullLogButton.translatesAutoresizingMaskIntoConstraints = NO;
-    [_fullLogButton setTitle:localize(@"crash.view_log", @"查看日志详情") forState:UIControlStateNormal];
+    [_fullLogButton setTitle:localize(@"crash.view_log", @"View log details") forState:UIControlStateNormal];
     _fullLogButton.titleLabel.font = [UIFont systemFontOfSize:14];
     [_fullLogButton setTitleColor:[UIColor secondaryLabelColor] forState:UIControlStateNormal];
     [_fullLogButton addTarget:self action:@selector(showFullLog) forControlEvents:UIControlEventTouchUpInside];
@@ -1004,25 +1004,25 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/herbrine8403/Amet
             reason = localize(@"crash.reason.terminated", nil);
             break;
         case CrashTypeModConflict:
-            reason = localize(@"crash.reason.mod_conflict", @"Mod 冲突导致崩溃（NoSuchMethodError/ClassCastException 等）");
+            reason = localize(@"crash.reason.mod_conflict", @"A mod conflict caused the crash (NoSuchMethodError/ClassCastException, etc.)");
             break;
         case CrashTypeMissingLibrary:
-            reason = localize(@"crash.reason.missing_library", @"缺失游戏库文件（UnsatisfiedLinkError/NoClassDefFoundError）");
+            reason = localize(@"crash.reason.missing_library", @"Missing game library files (UnsatisfiedLinkError/NoClassDefFoundError)");
             break;
         case CrashTypeJavaVersionMismatch:
-            reason = localize(@"crash.reason.java_version", @"Java 版本不匹配（UnsupportedClassVersionError）");
+            reason = localize(@"crash.reason.java_version", @"Java version mismatch (UnsupportedClassVersionError)");
             break;
         case CrashTypeRendererError:
-            reason = localize(@"crash.reason.renderer", @"渲染器错误（OpenGL/Metal/EGL 初始化失败）");
+            reason = localize(@"crash.reason.renderer", @"Renderer error (OpenGL/Metal/EGL failed to initialize)");
             break;
         case CrashTypeModLoadingFailure:
-            reason = localize(@"crash.reason.mod_loading", @"Mod 加载失败（Forge/Fabric/OptiFine 加载错误）");
+            reason = localize(@"crash.reason.mod_loading", @"A mod failed to load (Forge/Fabric/OptiFine loading error)");
             break;
         case CrashTypeJavaException:
             reason = localize(@"crash.reason.java_exception", nil);
             break;
         case CrashTypeUnknown:
-            reason = [NSString stringWithFormat:localize(@"crash.reason.unknown", @"未知错误 (代码: %d)"), _exitCode];
+            reason = [NSString stringWithFormat:localize(@"crash.reason.unknown", @"Unknown error (code: %d)"), _exitCode];
             break;
     }
 

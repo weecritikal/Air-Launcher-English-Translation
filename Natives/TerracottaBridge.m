@@ -221,13 +221,13 @@ static void terracottaCallWithOptionalCString(NSString *s, void (^body)(const ch
 
 + (NSString *)describeException:(NSInteger)type {
     switch (type) {
-        case 0: return @"无法连接到房主（PingHostFail）";
-        case 1: return @"房主拒绝连接（PingHostRst）";
-        case 2: return @"访客端 EasyTier 崩溃（GuestEasytierCrash）";
-        case 3: return @"房主端 EasyTier 崩溃（HostEasytierCrash）";
-        case 4: return @"MC 服务器拒绝连接（PingServerRst）";
-        case 5: return @"Scaffolding 协议返回非法数据";
-        default: return [NSString stringWithFormat:@"未知错误（type=%ld）", (long)type];
+        case 0: return @"Could not connect to the host (PingHostFail)";
+        case 1: return @"The host refused the connection (PingHostRst)";
+        case 2: return @"EasyTier crashed on the guest (GuestEasytierCrash)";
+        case 3: return @"EasyTier crashed on the host (HostEasytierCrash)";
+        case 4: return @"The Minecraft server refused the connection (PingServerRst)";
+        case 5: return @"The Scaffolding protocol returned invalid data";
+        default: return [NSString stringWithFormat:@"Unknown error (type=%ld)", (long)type];
     }
 }
 

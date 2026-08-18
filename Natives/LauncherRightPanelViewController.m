@@ -192,7 +192,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     self.usernameLabel.adjustsFontSizeToFitWidth = YES;
     self.usernameLabel.minimumScaleFactor = 0.7;
     self.usernameLabel.lineBreakMode = NSLineBreakByTruncatingTail;
-    self.usernameLabel.text = @"未登录";
+    self.usernameLabel.text = @"Not signed in";
     [self.view addSubview:self.usernameLabel];
 
     // 版本标签
@@ -204,7 +204,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     self.versionLabel.adjustsFontSizeToFitWidth = YES;
     self.versionLabel.minimumScaleFactor = 0.7;
     self.versionLabel.lineBreakMode = NSLineBreakByTruncatingTail;
-    self.versionLabel.text = @"未选择版本";
+    self.versionLabel.text = @"No version selected";
     // FCL 风格：点击版本标签也能弹出选择器
     self.versionLabel.userInteractionEnabled = YES;
     [self.versionLabel addGestureRecognizer:[[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(showVersionPicker)]];
@@ -236,7 +236,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     // - 当 DownloadTaskManager 中存在任何下载任务时显示，无任务时隐藏
     self.downloadCenterButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.downloadCenterButton.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.downloadCenterButton setTitle:@"下载中心" forState:UIControlStateNormal];
+    [self.downloadCenterButton setTitle:@"Download center" forState:UIControlStateNormal];
     [self.downloadCenterButton setTitleColor:[UIColor labelColor] forState:UIControlStateNormal];
     self.downloadCenterButton.titleLabel.font = [UIFont systemFontOfSize:13 weight:UIFontWeightMedium];
     self.downloadCenterButton.titleLabel.adjustsFontSizeToFitWidth = YES;
@@ -276,7 +276,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     // 启动游戏按钮（FCL 复合布局 + ZL2 按压动画风格）
     self.launchButton = [UIButton buttonWithType:UIButtonTypeSystem];
     self.launchButton.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.launchButton setTitle:@"启动游戏" forState:UIControlStateNormal];
+    [self.launchButton setTitle:@"Play" forState:UIControlStateNormal];
     [self.launchButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     self.launchButton.titleLabel.font = [UIFont boldSystemFontOfSize:18];
     // iPhone 右侧面板更窄：标题字号自适应，避免"下载中..."等长文案被截断
@@ -309,13 +309,13 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     self.jitStatusLabel.textAlignment = NSTextAlignmentCenter;
     self.jitStatusLabel.layer.cornerRadius = 8;
     self.jitStatusLabel.layer.masksToBounds = YES;
-    self.jitStatusLabel.text = @"JIT: 检测中...";
+    self.jitStatusLabel.text = @"JIT: checking...";
     [self.view addSubview:self.jitStatusLabel];
 
     // 选择版本按钮（FCL 风格：右侧版本选择入口；控制设置已挪到左侧菜单 case 3）
     self.manageVersionBtn = [UIButton buttonWithType:UIButtonTypeSystem];
     self.manageVersionBtn.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.manageVersionBtn setTitle:@"选择版本" forState:UIControlStateNormal];
+    [self.manageVersionBtn setTitle:@"Select version" forState:UIControlStateNormal];
     [self.manageVersionBtn setTitleColor:[UIColor labelColor] forState:UIControlStateNormal];
     [self.manageVersionBtn.titleLabel setFont:[UIFont systemFontOfSize:14 weight:UIFontWeightMedium]];
     self.manageVersionBtn.titleLabel.adjustsFontSizeToFitWidth = YES;
@@ -329,7 +329,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     // 执行JAR按钮
     self.executeJarBtn = [UIButton buttonWithType:UIButtonTypeSystem];
     self.executeJarBtn.translatesAutoresizingMaskIntoConstraints = NO;
-    [self.executeJarBtn setTitle:@"执行Jar" forState:UIControlStateNormal];
+    [self.executeJarBtn setTitle:@"Execute Jar" forState:UIControlStateNormal];
     [self.executeJarBtn setTitleColor:[UIColor labelColor] forState:UIControlStateNormal];
     self.executeJarBtn.titleLabel.adjustsFontSizeToFitWidth = YES;
     self.executeJarBtn.titleLabel.minimumScaleFactor = 0.7;
@@ -541,11 +541,11 @@ static void *ProgressObserverContext = &ProgressObserverContext;
         [self.downloadCenterActivityIndicator startAnimating];
     } else if (allCompleted) {
         // 全部完成
-        self.downloadCenterProgressLabel.text = @"已完成";
+        self.downloadCenterProgressLabel.text = @"Completed";
         [self.downloadCenterActivityIndicator stopAnimating];
     } else {
         // 有暂停/失败/取消的任务但没有活跃任务
-        self.downloadCenterProgressLabel.text = @"已暂停";
+        self.downloadCenterProgressLabel.text = @"Paused";
         [self.downloadCenterActivityIndicator stopAnimating];
     }
 }
@@ -558,25 +558,25 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     BaseAuthenticator *currentAuth = BaseAuthenticator.current;
     NSString *accountId = currentAuth.authData[@"accountId"];
     if (!accountId || accountId.length == 0) {
-        [self showAlert:@"未登录" message:@"请先登录账户后再设置自定义头像"];
+        [self showAlert:@"Not signed in" message:@"Sign in to an account before setting a custom avatar"];
         return;
     }
 
     BOOL hasCustom = [[AvatarManager sharedManager] hasCustomAvatarForAccount:accountId];
 
-    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"自定义头像"
+    UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Custom avatar"
                                                                    message:nil
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
-    [sheet addAction:[UIAlertAction actionWithTitle:@"从相册导入图片" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Import image from photo library" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         [self openAvatarImagePicker];
     }]];
     if (hasCustom) {
-        [sheet addAction:[UIAlertAction actionWithTitle:@"清除自定义头像" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
+        [sheet addAction:[UIAlertAction actionWithTitle:@"Clear custom avatar" style:UIAlertActionStyleDestructive handler:^(UIAlertAction * _Nonnull action) {
             [[AvatarManager sharedManager] removeAvatarForAccount:accountId];
             [self updateAccountInfo];
         }]];
     }
-    [sheet addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
 
     // iPad 适配：用 popover 锚定到头像
     if (sheet.popoverPresentationController) {
@@ -604,7 +604,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
         dispatch_async(dispatch_get_main_queue(), ^{
             UIImage *selectedImage = info[UIImagePickerControllerOriginalImage];
             if (!selectedImage) {
-                [self showAlert:@"错误" message:@"无法获取选中的图片"];
+                [self showAlert:@"Error" message:@"Could not read the selected image"];
                 return;
             }
             // 头像需要正方形，非正方形则裁剪
@@ -638,7 +638,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     BaseAuthenticator *currentAuth = BaseAuthenticator.current;
     NSString *accountId = currentAuth.authData[@"accountId"];
     if (!accountId || accountId.length == 0) {
-        [self showAlert:@"错误" message:@"未登录账户，无法保存头像"];
+        [self showAlert:@"Error" message:@"No account is signed in, so the avatar cannot be saved"];
         return;
     }
     __weak typeof(self) weakSelf = self;
@@ -647,8 +647,8 @@ static void *ProgressObserverContext = &ProgressObserverContext;
             if (success) {
                 [weakSelf updateAccountInfo];
             } else {
-                NSString *msg = error.localizedDescription ?: @"保存头像失败";
-                [weakSelf showAlert:@"错误" message:msg];
+                NSString *msg = error.localizedDescription ?: @"Failed to save the avatar";
+                [weakSelf showAlert:@"Error" message:msg];
             }
         });
     }];
@@ -660,11 +660,11 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     if (!self.jitStatusLabel) return;
     BOOL enabled = isJITEnabled(NO);
     if (enabled) {
-        self.jitStatusLabel.text = @"JIT: 已开启";
+        self.jitStatusLabel.text = @"JIT: on";
         self.jitStatusLabel.textColor = [UIColor colorWithRed:0.2 green:0.7 blue:0.3 alpha:1.0];
         self.jitStatusLabel.backgroundColor = [[UIColor colorWithRed:0.2 green:0.7 blue:0.3 alpha:1.0] colorWithAlphaComponent:0.15];
     } else {
-        self.jitStatusLabel.text = @"JIT: 未开启";
+        self.jitStatusLabel.text = @"JIT: off";
         self.jitStatusLabel.textColor = [UIColor colorWithRed:0.9 green:0.4 blue:0.3 alpha:1.0];
         self.jitStatusLabel.backgroundColor = [[UIColor colorWithRed:0.9 green:0.4 blue:0.3 alpha:1.0] colorWithAlphaComponent:0.15];
     }
@@ -730,11 +730,11 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     NSString *currentSelected = PLProfiles.current.selectedProfileName;
     
     if (sortedNames.count == 0) {
-        [self showAlert:@"暂无已安装的版本" message:@"请先到下载页面安装一个版本"];
+        [self showAlert:@"No versions installed" message:@"Install a version from the download page first"];
         return;
     }
     
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"选择版本"
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Select version"
                                                                    message:nil
                                                             preferredStyle:UIAlertControllerStyleActionSheet];
     
@@ -751,7 +751,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
         [title appendString:profileName];
         [title appendFormat:@"  (%@)", versionId];
         if (isolated) {
-            [title appendString:@"  · 隔离"];
+            [title appendString:@"  · Isolated"];
         }
         [alert addAction:[UIAlertAction actionWithTitle:title
                                                   style:UIAlertActionStyleDefault
@@ -760,12 +760,12 @@ static void *ProgressObserverContext = &ProgressObserverContext;
         }]];
     }
     
-    [alert addAction:[UIAlertAction actionWithTitle:@"管理版本" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+    [alert addAction:[UIAlertAction actionWithTitle:@"Manage versions" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
         // 跳转到版本管理页面
         [[NSNotificationCenter defaultCenter] postNotificationName:@"ShowVersionManager" object:nil];
     }]];
     
-    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
     
     // iPad 上 ActionSheet 必须指定 popoverPresentationController
     alert.popoverPresentationController.sourceView = self.manageVersionBtn;
@@ -815,8 +815,8 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     int javaVersion = vc.requiredJavaVersion;
     if (!javaVersion) {
         // JAR 解析失败：vc 还没 present，showDialog 不会显示，这里在 self 上弹明确提示
-        [self showAlert:@"无法执行 JAR"
-                  message:[NSString stringWithFormat:@"无法解析 JAR 文件：%@\n\n可能原因：\n• 文件不是有效的 Java 归档\n• 缺少 META-INF/MANIFEST.MF\n• 缺少 Main-Class 属性\n• 文件损坏", path.lastPathComponent ?: @""]];
+        [self showAlert:@"Cannot execute the JAR"
+                  message:[NSString stringWithFormat:@"Could not parse the JAR file: %@\n\nPossible causes:\n• The file is not a valid Java archive\n• META-INF/MANIFEST.MF is missing\n• The Main-Class attribute is missing\n• The file is corrupted", path.lastPathComponent ?: @""]];
         return;
     }
 
@@ -830,8 +830,8 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     // 预检 execute_jar 标签的 JRE 是否已配置，避免 present 后才发现没 JRE 导致黑屏
     NSString *javaHome = getSelectedJavaHome(@"execute_jar", requiredJavaVersion);
     if (!javaHome) {
-        [self showAlert:@"缺少 Java 运行时"
-                  message:[NSString stringWithFormat:@"执行 JAR 需要 Java %d 或更高版本，但未配置对应的运行时。\n\n请到「设置 → 管理运行时」中为「执行 Jar」标签分配一个 Java %d+ 的运行时。", requiredJavaVersion, requiredJavaVersion]];
+        [self showAlert:@"Missing Java runtime"
+                  message:[NSString stringWithFormat:@"Running this JAR requires Java %d or later, but no matching runtime is configured.\n\nGo to Settings → Manage runtimes and assign a Java %d+ runtime to the \"Execute Jar\" tag.", requiredJavaVersion, requiredJavaVersion]];
         return;
     }
 
@@ -847,7 +847,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:title
                                                                     message:message
                                                              preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleDefault handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];
 }
 
@@ -894,7 +894,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
         // 下载中仍允许启动游戏（不再硬阻断），仅提示用户有进行中的下载。
         // 原实现在此处 return 导致"开了下载球后任意下载未完成就永远无法启动游戏"，
         // 且某些下载任务状态机异常会卡住导致永久无法启动。
-        [self showAlert:@"提示" message:@"有下载任务正在进行，启动游戏可能受影响。"];
+        [self showAlert:@"Notice" message:@"A download is in progress, which may affect launching the game."];
         [self launchGame];
     } else {
         [self launchGame];
@@ -920,13 +920,13 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 
     NSString *selectedProfile = PLProfiles.current.selectedProfileName;
     if (!selectedProfile) {
-        [self showAlert:@"请先选择一个版本"];
+        [self showAlert:@"Select a version first"];
         return;
     }
 
     NSString *versionId = PLProfiles.current.profiles[selectedProfile][@"lastVersionId"];
     if (!versionId) {
-        [self showAlert:@"无法获取版本信息"];
+        [self showAlert:@"Could not fetch version information"];
         return;
     }
 
@@ -957,7 +957,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
             // 如果在远程列表中找不到，可能是本地版本
             dispatch_async(dispatch_get_main_queue(), ^{
                 [self setInteractionEnabled:YES];
-                [self showAlert:@"找不到版本信息，请检查版本是否正确"];
+                [self showAlert:@"Version information not found. Check that the version is correct"];
             });
         }
     };
@@ -1032,7 +1032,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     } else {
         self.progressView.hidden = !showProgressUI;
         self.progressLabel.hidden = !showProgressUI;
-        self.progressLabel.text = showProgressUI ? @"正在准备..." : @"";
+        self.progressLabel.text = showProgressUI ? @"Preparing..." : @"";
     }
 
     UIApplication.sharedApplication.idleTimerDisabled = !enabled;
@@ -1052,11 +1052,11 @@ static void *ProgressObserverContext = &ProgressObserverContext;
     self.launchButton.enabled = enabled;
     NSString *title;
     if (hasActiveTasks) {
-        title = @"启动游戏（下载中）";
+        title = @"Play (downloading)";
     } else if (!hasAccount) {
-        title = @"登录并启动";
+        title = @"Sign in and play";
     } else {
-        title = @"启动游戏";
+        title = @"Play";
     }
     [self.launchButton setTitle:title forState:UIControlStateNormal];
 }
@@ -1189,10 +1189,10 @@ static void *ProgressObserverContext = &ProgressObserverContext;
         [UIApplication.sharedApplication openURL:[NSURL URLWithString:[NSString stringWithFormat:@"sidestore://sidejit-enable?pid=%d", getpid()]] options:@{} completionHandler:nil];
     }
     
-    self.progressLabel.text = @"等待 JIT...";
+    self.progressLabel.text = @"Waiting for JIT...";
     
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"等待 JIT"
-                                                                   message:hasTrollStoreJIT ? @"正在通过 TrollStore 启用 JIT..." : @"请启用 JIT"
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Waiting for JIT"
+                                                                   message:hasTrollStoreJIT ? @"Enabling JIT through TrollStore..." : @"Please enable JIT"
                                                             preferredStyle:UIAlertControllerStyleAlert];
     [self presentViewController:alert animated:YES completion:nil];
     
@@ -1207,10 +1207,10 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 }
 
 - (void)showAlert:(NSString *)message {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"提示"
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Notice"
                                                                    message:message
                                                             preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"确定" style:UIAlertActionStyleDefault handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];
 }
 
@@ -1248,7 +1248,7 @@ static void *ProgressObserverContext = &ProgressObserverContext;
             }
         }
     } else {
-        self.usernameLabel.text = @"未登录";
+        self.usernameLabel.text = @"Not signed in";
         self.avatarImageView.image = [UIImage systemImageNamed:@"person.circle.fill"];
     }
 
@@ -1272,13 +1272,13 @@ static void *ProgressObserverContext = &ProgressObserverContext;
             NSString *gameDir = profile[@"gameDir"] ?: @".";
             BOOL isolated = ![gameDir isEqualToString:@"."];
             if (isolated) {
-                self.versionLabel.text = [NSString stringWithFormat:@"%@  · 隔离", versionId];
+                self.versionLabel.text = [NSString stringWithFormat:@"%@  · Isolated", versionId];
             } else {
                 self.versionLabel.text = versionId;
             }
         }
     } else {
-        self.versionLabel.text = @"未选择版本";
+        self.versionLabel.text = @"No version selected";
     }
 
     [self updateLaunchButtonState];
