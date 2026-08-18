@@ -100,23 +100,39 @@ jobs:
             gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }}
           fi
 
-      - name: Upload regular ipa
+      - name: Rename build output
+        # The Makefile emits com.air-devs.air-<ver>-<platform>.ipa. Rename to short,
+        # readable names so the downloaded file is self-explanatory.
+        if: success()
+        run: |
+          cd artifacts
+          shopt -s nullglob
+          ipa=( com.air-devs.air-*-${{ matrix.platform_name }}.ipa )
+          tipa=( com.air-devs.air-*-${{ matrix.platform_name }}-trollstore.tipa )
+          if [ ${#ipa[@]} -gt 0 ]; then mv "${ipa[0]}" air-english.ipa; fi
+          if [ ${#tipa[@]} -gt 0 ]; then mv "${tipa[0]}" air-english.tipa; fi
+          if [ ! -f air-english.ipa ] && [ ! -f air-english.tipa ]; then
+            echo "::error::no installable package was produced"; exit 1
+          fi
+          ls -lh
+
+      - name: Upload ipa
         uses: actions/upload-artifact@v4
         if: success()
         with:
-          name: com.air-devs.air-${{ matrix.platform_name }}.ipa
-          path: artifacts/com.air-devs.air-*-${{ matrix.platform_name }}.ipa
+          name: air-launcher-${{ matrix.platform_name }}-english
+          path: artifacts/air-english.ipa
 
-      - name: Upload regular tipa
+      - name: Upload TrollStore tipa
         uses: actions/upload-artifact@v4
         if: success()
         with:
-          name: com.air-devs.air-${{ matrix.platform_name }}-trollstore.tipa
-          path: artifacts/com.air-devs.air-*-${{ matrix.platform_name }}-trollstore.tipa
+          name: air-launcher-${{ matrix.platform_name }}-english-trollstore
+          path: artifacts/air-english.tipa
 
-      - name: Upload PojavLauncher.dSYM
+      - name: Upload debug symbols
         if: matrix.platform_name == 'ios' && success()
         uses: actions/upload-artifact@v4
         with:
-          name: AngelAuraAmethyst.dSYM
+          name: air-launcher-${{ matrix.platform_name }}-english-dsym
           path: artifacts/AngelAuraAmethyst.dSYM
