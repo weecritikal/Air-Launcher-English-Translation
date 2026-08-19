@@ -230,7 +230,7 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
 
     if (self.presetVersionString.length > 0) {
         // The version was already chosen upstream (by LoaderSelectionViewController), so skip loading the version list and go straight to option selection
-        self.selectedVersionString = self.presetVersionString;
+        self.selectedVersionString = [self mavenCoordinateForPresetVersion:self.presetVersionString];
         // Switch to the ready state, so the list does not show Loading...
         self.isDataLoading = NO;
         [self.tableView reloadData];
@@ -1144,6 +1144,23 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
                                     index:0
                             versionString:versionString
                                   outPath:outPath];
+}
+
+/// Restore the Minecraft prefix on a Forge version supplied by another screen.
+///
+/// Forge publishes under the coordinate "<minecraft>-<forge>", for example "1.20.1-47.4.20".
+/// The loader picker strips the prefix before listing builds, because "47.4.20" is what a
+/// player recognises, and hands that stripped value over as the preset. Fed to the maven URL
+/// unchanged it points at a directory that does not exist, so every download failed with a
+/// 404 - on both mirrors, and regardless of the download source, since neither publishes a
+/// bare "47.4.20". NeoForge genuinely is published under its bare version and is left alone.
+- (NSString *)mavenCoordinateForPresetVersion:(NSString *)preset {
+    if (preset.length == 0) return preset;
+    if ([self.currentVendor isEqualToString:@"NeoForge"]) return preset;
+    if (self.gameVersion.length == 0) return preset;
+    NSString *prefix = [NSString stringWithFormat:@"%@-", self.gameVersion];
+    if ([preset hasPrefix:prefix]) return preset;   // already a full coordinate
+    return [prefix stringByAppendingString:preset];
 }
 
 /// Every mirror that can serve this vendor's installer jar, best first.
