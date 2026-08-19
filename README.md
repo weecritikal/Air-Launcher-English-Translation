@@ -27,6 +27,7 @@ A premium Minecraft: Java Edition launcher for iOS and iPadOS, rebuilt from the 
 
 - [Changes in This Fork](#changes-in-this-fork)
 - [Core Features](#core-features)
+- [Credits](#credits)
 - [Quick Start](#quick-start)
   - [Device Requirements](#device-requirements)
   - [Sideload Preparation](#sideload-preparation)
@@ -144,6 +145,16 @@ JIT (Just-In-Time compilation) is essential for smooth gameplay. Choose the appr
 | StikDebug | First time only | First time only | Yes | Device/network-free after initial setup |
 | Jitterbug | Yes (without VPN) | Yes | No | Manual trigger required |
 | Jailbroken | No | No | Yes | System-level automatic support |
+
+## Credits
+
+This launcher stands on three projects. [PojavLauncher](https://github.com/PojavLauncherTeam/PojavLauncher) by Tran Hoang Khanh Duy is the foundation every Minecraft: Java launcher on iOS is built from. [AngelAuraMC](https://github.com/AngelAuraMC) rebuilt it as Amethyst iOS, and [herbrine8403](https://github.com/herbrine8403) remastered that as [Amethyst-iOS-MyRemastered](https://github.com/herbrine8403/Amethyst-iOS-MyRemastered), which this repository forks.
+
+> Thanks to both AngelAuraMC and herbrine8403 for their work in their original repositories, I truly admire your work, all credit to you two. I only intend to build on top of it.
+>
+> -- weecritikal
+
+This fork is distributed under the GPL-3.0, the same licence it inherits.
 
 ## Contributors
 
