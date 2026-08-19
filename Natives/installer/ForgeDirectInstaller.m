@@ -622,7 +622,22 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
 
     versionJson[@"id"] = versionId;
 
-    // Merge libraries from install_profile into versionJson (dedup by name)
+    // The install_profile libraries are Forge's own installer tooling - ForgeAutoRenamingTool,
+    // installertools, jarsplitter, binarypatcher and friends - which exist only to run the
+    // processors at install time. iOS cannot run those processors at all, so none of it is
+    // needed to play.
+    //
+    // They used to be merged into the version JSON, whose libraries become the game's classpath
+    // AND its module path. ForgeAutoRenamingTool shades ASM, so it landed beside the real
+    // org.objectweb.asm and the module system refused to resolve:
+    //
+    //   ResolutionException: Modules ForgeAutoRenamingTool and org.objectweb.asm
+    //   export package org.objectweb.asm to module org.apache.httpcomponents.httpclient
+    //
+    // The merged list is still used to decide what to fetch - having the jars on disk costs
+    // nothing - but the version JSON keeps only the libraries the game actually launches with.
+    NSArray *librariesToFetch = versionJson[@"libraries"];
+    // Merge the install_profile libraries in, for download purposes only (dedup by name)
     NSLog(@"[ForgeDirect] Merging libraries");
     NSArray *profileLibraries = installProfile[@"libraries"];
     if ([profileLibraries isKindOfClass:[NSArray class]] && profileLibraries.count > 0) {
@@ -657,7 +672,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
             addedCount++;
         }
         NSLog(@"[ForgeDirect] Merged libraries: added %lu, skipped %lu duplicates", (unsigned long)addedCount, (unsigned long)skippedCount);
-        versionJson[@"libraries"] = mergedLibraries;
+        librariesToFetch = mergedLibraries;
     }
 
     // Prepare version directory
@@ -683,7 +698,7 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
     // Those are not inside installer.jar and must be downloaded from maven
     NSLog(@"[ForgeDirect] Downloading missing libraries from maven");
     reportProgress(0.3, @"Downloading missing libraries");
-    NSArray *allLibraries = versionJson[@"libraries"];
+    NSArray *allLibraries = librariesToFetch;
     if ([allLibraries isKindOfClass:[NSArray class]]) {
         [self downloadMissingLibraries:allLibraries librariesDir:librariesDir progress:progress baseProgress:0.3 progressSpan:0.4];
     }
