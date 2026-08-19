@@ -185,14 +185,6 @@
 "preference.detail.check_sha" = "此选项将强制启动器在哈希值可用时检查下载文件以防止下载错误。";
 "preference.title.cosmetica" = "启用 Cosmetica 披风";
 "preference.detail.cosmetica" = "启用来自 Cosmetica（原 Arc ）的披风。欲了解更多信息，请访问 https://arcapes.com。需要 OptiFine。";
-"preference.title.download_source" = "下载源";
-"preference.detail.download_source" = "选择游戏资源下载源。BMCLAPI镜像源提供更快的国内下载速度。";
-"preference.title.download_source-official" = "官方源";
-"preference.title.download_source-bmclapi" = "BMCLAPI镜像源";
-"preference.title.mod_mirror" = "模组镜像源";
-"preference.detail.mod_mirror" = "选择模组/光影/资源包/数据包/整合包/世界的 API 与文件下载镜像源。MCIM镜像源（mod.mcimirror.top）提供国内加速，兼容 Modrinth 和 CurseForge 接口。";
-"preference.title.mod_mirror-official" = "官方源";
-"preference.title.mod_mirror-mcim" = "MCIM镜像源";
 "preference.title.debug_logging" = "调试日志";
 "preference.detail.debug_logging" = "完整的记录启动器的各种活动事件到latestlog.txt文件内,有助于开发者更容易的发现错误。但Minecraft游戏内FPS可能会降低(频繁的记录日志内容会使得CPU负载变高)";
 "preference.title.jitstreamer_server" = "JitStreamer的服务器地址";

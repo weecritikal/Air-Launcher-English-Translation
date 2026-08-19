@@ -532,8 +532,11 @@
 #pragma mark Forge (concurrent race, modeled on the original loadForgeVersionsReal)
 
 - (void)loadForgeVersions {
-    // Modeled on FCL/HMCL: race the official source and the BMCL API concurrently and use whichever succeeds first
-    NSString *bmclURL = @"https://bmclapi2.bangbang93.com/maven/net/minecraftforge/forge/maven-metadata.xml";
+    // This used to race BMCLAPI against the official maven and take whichever answered
+    // first. The installer jar is always fetched from the official maven, so whenever the
+    // mirror won the race the list described a different set of builds from the one that
+    // could actually be downloaded - the same mismatch that surfaced as "not found (404)".
+    // The official maven is now the only source, so the two cannot disagree.
     NSString *officialURL = @"https://maven.minecraftforge.net/net/minecraftforge/forge/maven-metadata.xml";
 
     _forgeVersionList = [NSMutableArray array];
@@ -555,41 +558,27 @@
         [parser parse];
     };
 
-    NSMutableURLRequest *bmclRequest = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:bmclURL]];
-    bmclRequest.timeoutInterval = 20.0;
-    [bmclRequest setValue:userAgent forHTTPHeaderField:@"User-Agent"];
-    _bmclTask = [[NSURLSession sharedSession] dataTaskWithRequest:bmclRequest completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
-        if (error || !data) {
-            @synchronized(weakSelf) { if (settled) return; }
-            return;
-        }
-        processData(data);
-    }];
-
     NSMutableURLRequest *officialRequest = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:officialURL]];
     officialRequest.timeoutInterval = 20.0;
     [officialRequest setValue:userAgent forHTTPHeaderField:@"User-Agent"];
     _currentTask = [[NSURLSession sharedSession] dataTaskWithRequest:officialRequest completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         if (error || !data) {
-            @synchronized(weakSelf) { if (settled) return; }
-            // Give BMCLAPI a 5s grace period
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                @synchronized(weakSelf) {
-                    if (settled) return;
-                    settled = YES;
-                }
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    __strong typeof(weakSelf) strongSelf = weakSelf;
-                    if (!strongSelf) return;
-                    [strongSelf finishLoadingWithVersions:@[] error:error];
-                });
+            // No second source to wait on any more, so the failure is reported at once
+            // rather than after a five second grace period for a mirror that never runs.
+            @synchronized(weakSelf) {
+                if (settled) return;
+                settled = YES;
+            }
+            dispatch_async(dispatch_get_main_queue(), ^{
+                __strong typeof(weakSelf) strongSelf = weakSelf;
+                if (!strongSelf) return;
+                [strongSelf finishLoadingWithVersions:@[] error:error];
             });
             return;
         }
         processData(data);
     }];
 
-    [_bmclTask resume];
     [_currentTask resume];
 }
 

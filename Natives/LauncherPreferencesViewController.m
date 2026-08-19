@@ -313,34 +313,11 @@
               @"type": self.typeSwitch,
               @"enableCondition": whenNotInGame
             },
-            @{@"key": @"download_source",
-              @"hasDetail": @YES,
-              @"icon": @"arrow.down.circle",
-              @"type": self.typePickField,
-              @"enableCondition": whenNotInGame,
-              // BMCLAPI is a mainland-China mirror. It is no longer offered: it carries a
-              // different set of builds from the official maven, and picking from one while
-              // downloading from the other is what produced spurious "not found (404)" errors.
-              @"pickKeys": @[
-                  @"official"
-              ],
-              @"pickList": @[
-                  localize(@"preference.title.download_source-official", nil)
-              ]
-            },
-            @{@"key": @"mod_mirror",
-              @"hasDetail": @YES,
-              @"icon": @"network",
-              @"type": self.typePickField,
-              @"enableCondition": whenNotInGame,
-              // MCIM likewise mirrors Modrinth/CurseForge for mainland China only.
-              @"pickKeys": @[
-                  @"official"
-              ],
-              @"pickList": @[
-                  localize(@"preference.title.mod_mirror-official", nil)
-              ]
-            },
+            // The Download Source and Mod Mirror rows are gone. Both existed only to pick
+            // between the official servers and a mainland-China mirror (BMCLAPI for game
+            // resources, MCIM for mods). With the mirrors retired there was one option left,
+            // and a setting offering a single choice is just a dead row. Everything uses the
+            // official sources now, and PLPreferences migrates installs off the mirrors.
             @{@"key": @"ui_layout",
               @"title": @"UI layout",
               @"hasDetail": @YES,

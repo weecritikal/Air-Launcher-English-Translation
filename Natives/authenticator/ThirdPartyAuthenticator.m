@@ -11,8 +11,10 @@
 // so the javaagent fails to load and the game will not start. After the upgrade to 1.2.7, Java 17/21/25 are all supported.
 // Also: authlib-injector 1.2.7's Java 25 support is used by the execute_jar path as well
 // (some mod installer JARs, for example, target Java 25).
-#define AUTHLIB_INJECTOR_URL_BMCL  @"https://bmclapi2.bangbang93.com/mirrors/authlib-injector/artifact/55/authlib-injector-1.2.7.jar"
-#define AUTHLIB_INJECTOR_URL_GITHUB @"https://authlib-injector.yushi.moe/artifact/55/authlib-injector-1.2.7.jar"
+// The project's own host is tried first and the mirror only as a fallback. The order used
+// to be reversed, so every third-party login went to a mainland-China mirror first.
+#define AUTHLIB_INJECTOR_URL_UPSTREAM @"https://authlib-injector.yushi.moe/artifact/55/authlib-injector-1.2.7.jar"
+#define AUTHLIB_INJECTOR_URL_MIRROR   @"https://bmclapi2.bangbang93.com/mirrors/authlib-injector/artifact/55/authlib-injector-1.2.7.jar"
 #define AUTHLIB_INJECTOR_FILE @"authlib-injector.jar"
 #define AUTHLIB_INJECTOR_VERSION @"1.2.7"
 #define AUTHLIB_INJECTOR_VERSION_FILE @"authlib-injector.version"
@@ -196,7 +198,7 @@ static NSError* createError(NSString *message, NSInteger code) {
 }
 
 - (void)downloadAuthlibInjector:(void (^)(BOOL success, NSError *error))completion {
-    [self downloadAuthlibInjectorFromURL:AUTHLIB_INJECTOR_URL_BMCL attempt:1 completion:completion];
+    [self downloadAuthlibInjectorFromURL:AUTHLIB_INJECTOR_URL_UPSTREAM attempt:1 completion:completion];
 }
 
 /// Try the download sources one by one: fall back to the official GitHub source after BMCLAPI fails
@@ -233,7 +235,7 @@ static NSError* createError(NSString *message, NSInteger code) {
             NSLog(@"[ThirdPartyAuthenticator] Download failed (source %ld): %@", (long)attempt, error.localizedDescription);
             // Try the official GitHub source after BMCLAPI fails
             if (attempt == 1) {
-                [self downloadAuthlibInjectorFromURL:AUTHLIB_INJECTOR_URL_GITHUB attempt:2 completion:completion];
+                [self downloadAuthlibInjectorFromURL:AUTHLIB_INJECTOR_URL_MIRROR attempt:2 completion:completion];
             } else {
                 completion(NO, error);
             }
