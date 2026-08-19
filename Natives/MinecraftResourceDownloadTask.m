@@ -199,13 +199,13 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"com.a
 
     NSString *name = altName ?: path.lastPathComponent;
     // Pick the download source from the settings and rewrite the URL
-    // Following FCL (FoldCraftLauncher) and ZalithLauncher2: switch to the opposite mirror on a retry,
-    // so one failing mirror cannot stall the whole batch. The SHA1 check still runs, so download integrity is unaffected.
     NSString *forceSource = nil;
     if (retryCount > 0) {
-        NSString *currentSource = getPrefObject(@"general.download_source") ?: @"bmclapi";
-        forceSource = [currentSource isEqualToString:@"bmclapi"] ? @"official" : @"bmclapi";
-        NSLog(@"[MCDL] Retry %@ with fallback source: %@", name, forceSource);
+        // The mirror-swapping retry is gone with the mirrors themselves. It used to force BMCLAPI
+        // whenever the current source was anything else, so with the China mirrors retired every
+        // retry was routed through a mirror this launcher no longer offers — slower and more
+        // failure-prone from outside China than simply asking the official source again.
+        NSLog(@"[MCDL] Retrying %@ from the official source", name);
     }
     NSString *replacedURL = [self replaceURLWithDownloadSource:url forceSource:forceSource];
     NSURLRequest *request = [NSURLRequest requestWithURL:[NSURL URLWithString:replacedURL]];

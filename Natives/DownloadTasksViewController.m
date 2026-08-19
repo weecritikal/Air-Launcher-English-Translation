@@ -522,7 +522,7 @@ static const CGFloat kSectionInset = 16.0;
 
 #pragma mark - View Controller
 
-@interface DownloadTasksViewController () <UICollectionViewDataSource, UICollectionViewDelegate, UICollectionViewDelegateFlowLayout, UIGestureRecognizerDelegate>
+@interface DownloadTasksViewController () <UICollectionViewDataSource, UICollectionViewDelegate, UICollectionViewDelegateFlowLayout>
 
 @property (nonatomic, strong) UIView *headerView;
 @property (nonatomic, strong) UILabel *titleLabel;
@@ -710,10 +710,6 @@ static const CGFloat kSectionInset = 16.0;
     [self.collectionView registerClass:[DownloadTaskEmptyCell class] forCellWithReuseIdentifier:kEmptyStateReuseIdentifier];
     [self.view addSubview:self.collectionView];
 
-    UILongPressGestureRecognizer *longPress = [[UILongPressGestureRecognizer alloc] initWithTarget:self action:@selector(handleLongPress:)];
-    longPress.minimumPressDuration = 0.5;
-    longPress.delegate = self;
-    [self.collectionView addGestureRecognizer:longPress];
 
     [NSLayoutConstraint activateConstraints:@[
         [self.collectionView.topAnchor constraintEqualToAnchor:self.typeScrollView.bottomAnchor constant:4],
@@ -910,104 +906,6 @@ static const CGFloat kSectionInset = 16.0;
     [self reloadData];
 }
 
-- (void)handleLongPress:(UILongPressGestureRecognizer *)gesture {
-    if (gesture.state != UIGestureRecognizerStateBegan) return;
-
-    CGPoint point = [gesture locationInView:self.collectionView];
-    NSIndexPath *indexPath = [self.collectionView indexPathForItemAtPoint:point];
-    if (!indexPath || indexPath.item >= self.filteredTasks.count) return;
-
-    DownloadTaskItem *task = self.filteredTasks[indexPath.item];
-    [self showActionsForTask:task];
-}
-
-- (void)showActionsForTask:(DownloadTaskItem *)task {
-    // After the FCL-style rework, the common actions (pause/resume/cancel/retry/remove) are buttons on the card itself.
-    // Long-press is only a secondary entry point for advanced actions such as "Switch download source".
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:task.displayName
-                                                                   message:nil
-                                                            preferredStyle:UIAlertControllerStyleActionSheet];
-
-    [alert addAction:[UIAlertAction actionWithTitle:@"Switch download source"
-                                              style:UIAlertActionStyleDefault
-                                            handler:^(UIAlertAction *action) {
-        [self showSourceSwitcherForTask:task];
-    }]];
-
-    [alert addAction:[UIAlertAction actionWithTitle:@"Close"
-                                              style:UIAlertActionStyleCancel
-                                            handler:nil]];
-
-    if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
-        alert.popoverPresentationController.sourceView = self.view;
-        alert.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(self.view.bounds), CGRectGetMidY(self.view.bounds), 1, 1);
-        alert.popoverPresentationController.permittedArrowDirections = 0;
-    }
-
-    [self presentViewController:alert animated:YES completion:nil];
-}
-
-- (void)showSourceSwitcherForTask:(DownloadTaskItem *)task {
-    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Switch download source"
-                                                                   message:[NSString stringWithFormat:@"Current source: %@", task.downloadSource ?: @"official"]
-                                                            preferredStyle:UIAlertControllerStyleActionSheet];
-
-    NSArray<NSString *> *sources = @[@"official", @"bmclapi"];
-    for (NSString *source in sources) {
-        if ([source isEqualToString:task.downloadSource]) continue;
-        [alert addAction:[UIAlertAction actionWithTitle:source
-                                                  style:UIAlertActionStyleDefault
-                                                handler:^(UIAlertAction *action) {
-            [self confirmSwitchSourceForTask:task toSource:source];
-        }]];
-    }
-
-    [alert addAction:[UIAlertAction actionWithTitle:@"Cancel"
-                                              style:UIAlertActionStyleCancel
-                                            handler:nil]];
-
-    if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPad) {
-        alert.popoverPresentationController.sourceView = self.view;
-        alert.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(self.view.bounds), CGRectGetMidY(self.view.bounds), 1, 1);
-        alert.popoverPresentationController.permittedArrowDirections = 0;
-    }
-
-    [self presentViewController:alert animated:YES completion:nil];
-}
-
-- (void)confirmSwitchSourceForTask:(DownloadTaskItem *)task toSource:(NSString *)source {
-    __weak typeof(self) weakSelf = self;
-    [[DownloadTaskManager sharedManager] switchDownloadSourceForTaskId:task.taskId
-                                                              toSource:source
-                                                            completion:^(BOOL shouldRecreate, BOOL supportsResume, NSError *error) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            __strong typeof(weakSelf) strongSelf = weakSelf;
-            if (!strongSelf) return;
-
-            if (error) {
-                [strongSelf showAlert:@"Switch failed" message:error.localizedDescription];
-                return;
-            }
-
-            if (!supportsResume) {
-                UIAlertController *confirm = [UIAlertController alertControllerWithTitle:@"Switch download source"
-                                                                                 message:@"This source does not support resuming, so confirming will restart the download from the beginning."
-                                                                          preferredStyle:UIAlertControllerStyleAlert];
-                [confirm addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
-                [confirm addAction:[UIAlertAction actionWithTitle:@"Confirm" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
-                    [[DownloadTaskManager sharedManager] cancelTaskWithId:task.taskId];
-                    // The caller has to recreate the download after cancelling; here we only update the source and drop the old record.
-                    [[DownloadTaskManager sharedManager] removeTaskWithId:task.taskId];
-                }]];
-                [strongSelf presentViewController:confirm animated:YES completion:nil];
-            } else {
-                [[DownloadTaskManager sharedManager] cancelTaskWithId:task.taskId];
-                [[DownloadTaskManager sharedManager] removeTaskWithId:task.taskId];
-            }
-        });
-    }];
-}
-
 - (void)showAlert:(NSString *)title message:(NSString *)message {
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:title
                                                                    message:message
@@ -1067,17 +965,6 @@ static const CGFloat kSectionInset = 16.0;
     [coordinator animateAlongsideTransition:^(id<UIViewControllerTransitionCoordinatorContext> context) {
         [self.collectionView.collectionViewLayout invalidateLayout];
     } completion:nil];
-}
-
-#pragma mark - UIGestureRecognizerDelegate
-
-- (BOOL)gestureRecognizer:(UIGestureRecognizer *)gestureRecognizer shouldReceiveTouch:(UITouch *)touch {
-    if ([gestureRecognizer isKindOfClass:[UILongPressGestureRecognizer class]]) {
-        CGPoint point = [touch locationInView:self.collectionView];
-        NSIndexPath *indexPath = [self.collectionView indexPathForItemAtPoint:point];
-        return indexPath != nil && self.filteredTasks.count > 0;
-    }
-    return YES;
 }
 
 @end

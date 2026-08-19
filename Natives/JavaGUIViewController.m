@@ -3,6 +3,7 @@
 #import "JavaGUIViewController.h"
 #import "JavaLauncher.h"
 #import "LauncherPreferences.h"
+#import "PLCrashView.h"
 #import "PLLogOutputView.h"
 #import "TrackedTextField.h"
 #import "UnzipKit.h"
@@ -219,6 +220,7 @@ void AWTInputBridge_sendKey(int keycode) {
 @property(nonatomic) ControlLayout* ctrlView;
 @property(nonatomic) PLLogOutputView* logOutputView;
 @property(nonatomic) ScrollableSurfaceView* surfaceScrollView;
+@property(nonatomic) UIButton* closeButton;
 // Key fix (cumulative UI glitch): neither the CADisplayLink nor the runloop of its thread was retained before,
 // so it could not be invalidated in dealloc, and every visit to the JavaGUI screen leaked a thread +
 // a CADisplayLink + a strong reference to surfaceView. After several visits the thread count grew and the UI stuttered.
@@ -344,15 +346,86 @@ dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
             });
             return;
         }
-        launchJVM(nil, self.filepath, windowWidth, windowHeight, javaVer);
+        int exitCode = launchJVM(nil, self.filepath, windowWidth, windowHeight, javaVer);
         _requiredJavaVersion = 0;
+        NSLog(@"[ModInstaller] %@ exited with code %d", self.filepath.lastPathComponent, exitCode);
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [self installerDidFinishWithExitCode:exitCode];
+        });
     });
+
+    // A way out. Without this the installer window was a one-way door: nothing dismissed this
+    // view controller, so once an installer finished (or hung) the only way back to the launcher
+    // was force-quitting the app.
+    [self addCloseButton];
 
     // Listen for background UI effect changes so transparency is re-applied when the user switches effect (translucent/frosted)
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(reapplyBackgroundEffect)
                                                  name:@"BackgroundUIEffectChanged"
                                                object:nil];
+}
+
+- (void)addCloseButton {
+    UIButton *closeButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    closeButton.translatesAutoresizingMaskIntoConstraints = NO;
+    closeButton.backgroundColor = [UIColor.blackColor colorWithAlphaComponent:0.55];
+    closeButton.tintColor = UIColor.whiteColor;
+    closeButton.layer.cornerRadius = 18;
+    closeButton.accessibilityLabel = @"Close installer";
+    [closeButton setImage:[UIImage systemImageNamed:@"xmark"] forState:UIControlStateNormal];
+    [closeButton addTarget:self action:@selector(closeInstaller) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:closeButton];
+    // Kept above the log output view, which covers the whole surface.
+    [self.view bringSubviewToFront:closeButton];
+    [NSLayoutConstraint activateConstraints:@[
+        [closeButton.topAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.topAnchor constant:8],
+        [closeButton.leadingAnchor constraintEqualToAnchor:self.view.safeAreaLayoutGuide.leadingAnchor constant:8],
+        [closeButton.widthAnchor constraintEqualToConstant:36],
+        [closeButton.heightAnchor constraintEqualToConstant:36]
+    ]];
+    self.closeButton = closeButton;
+}
+
+- (void)closeInstaller {
+    UIAlertController *sheet = [UIAlertController
+        alertControllerWithTitle:@"Close the installer?"
+                         message:@"Air has to restart to free the Java runtime the installer is using. "
+                                  "Anything the installer already wrote is kept."
+                  preferredStyle:UIAlertControllerStyleAlert];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Keep waiting" style:UIAlertActionStyleCancel handler:nil]];
+    [sheet addAction:[UIAlertAction actionWithTitle:@"Close and restart"
+                                              style:UIAlertActionStyleDestructive
+                                            handler:^(UIAlertAction *action) {
+        [PLCrashView restartLauncher];
+    }]];
+    [self presentViewController:sheet animated:YES completion:nil];
+}
+
+/// Called once the installer's JVM has exited.
+///
+/// A JVM cannot be created twice in one process, so the launcher genuinely does have to restart
+/// before it can start the game. Saying so plainly beats leaving the user on a frozen window
+/// with no idea whether the install worked.
+- (void)installerDidFinishWithExitCode:(int)exitCode {
+    NSString *title = exitCode == 0 ? @"Installer finished" : @"Installer stopped";
+    NSString *message = exitCode == 0
+        ? @"Air needs to restart before it can start the game - the Java runtime the installer used "
+           "cannot be started a second time in one session."
+        : [NSString stringWithFormat:@"The installer exited with code %d. Air needs to restart before "
+                                      "it can start the game.", exitCode];
+
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:title
+                                                                  message:message
+                                                           preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Restart Air"
+                                              style:UIAlertActionStyleDefault
+                                            handler:^(UIAlertAction *action) {
+        [PLCrashView restartLauncher];
+    }]];
+    // Staying put lets the user read the installer's own output before restarting.
+    [alert addAction:[UIAlertAction actionWithTitle:@"Stay here" style:UIAlertActionStyleCancel handler:nil]];
+    [self presentViewController:alert animated:YES completion:nil];
 }
 
 /// Re-apply transparency when the background effect changes (triggered by the BackgroundUIEffectChanged notification)
