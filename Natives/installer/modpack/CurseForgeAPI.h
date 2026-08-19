@@ -57,6 +57,11 @@ extern NSString *const CurseForgeResponseSnippetKey;
 /// Get the direct download link for a file (CurseForge requires a second request)
 - (NSString *)downloadURLForFile:(NSDictionary *)file;
 
+/// Resolve full file records for a list of file ids, batched 50 per request.
+/// Keyed by file id as a string. Used to turn a CurseForge manifest's bare projectID/fileID pairs
+/// into real download URLs and file names without one request per mod.
+- (NSDictionary<NSString *, NSDictionary *> *)filesByFileID:(NSArray *)fileIDs;
+
 /// Check whether a file matches the project type (for example resource packs only allow zip)
 - (BOOL)file:(NSDictionary *)file matchesProjectType:(NSString *)projectType;
 

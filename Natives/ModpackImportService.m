@@ -16,6 +16,8 @@
 
 #import "ModpackImportService.h"
 #import "installer/FabricUtils.h"
+#import "ArchiveIntegrity.h"
+#import "installer/modpack/CurseForgeAPI.h"
 #import "installer/modpack/ModpackUtils.h"
 #import "installer/ForgeDirectInstaller.h"
 #import "installer/NeoForgeDirectInstaller.h"
@@ -1035,8 +1037,19 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
             NSLog(@"[ModpackImport] Modrinth modpack: skipped %lu server-only mods", (unsigned long)skippedOptional);
         }
     } else if ([format isEqualToString:@"curseforge"]) {
-        // CurseForge: projectID + fileID have to be resolved into a download link through the API
-        // This goes through CurseForgeAPI; to avoid a circular dependency the API URL is built directly
+        // CurseForge: a manifest lists only projectID + fileID, so the real download links and file
+        // names have to come from the API. Resolve them all up front in batches of 50, the same way
+        // the browse-and-install path does, rather than asking about one mod at a time.
+        NSMutableArray *allFileIDs = [NSMutableArray arrayWithCapacity:total];
+        for (NSUInteger i = 0; i < total; i++) {
+            NSNumber *fid = files[i][@"fileID"];
+            if (fid) [allFileIDs addObject:fid];
+        }
+        NSDictionary<NSString *, NSDictionary *> *resolvedFiles =
+            allFileIDs.count > 0 ? [[CurseForgeAPI sharedInstance] filesByFileID:allFileIDs] : @{};
+        NSLog(@"[ModpackImport] Resolved %lu/%lu CurseForge files up front",
+              (unsigned long)resolvedFiles.count, (unsigned long)allFileIDs.count);
+
         for (NSUInteger i = 0; i < total; i++) {
             // Cancellation checkpoint
             if ([self checkCancelledWithError:error]) {
@@ -1047,24 +1060,51 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
             NSNumber *fileID = fileInfo[@"fileID"];
             if (!projectID || !fileID) continue;
 
-            NSString *downloadURL = [self fetchCurseForgeFileURL:projectID.longLongValue fileID:fileID.longLongValue];
-            if (!downloadURL) continue;
+            // The batch lookup usually answers with both the download URL and the real file name.
+            // Only when it came back short does this fall back to asking about this one file.
+            NSDictionary *resolved = resolvedFiles[fileID.stringValue];
+            NSString *downloadURL = resolved ? [[CurseForgeAPI sharedInstance] downloadURLForFile:resolved] : nil;
+            if (downloadURL.length == 0) {
+                downloadURL = [self fetchCurseForgeFileURL:projectID.longLongValue fileID:fileID.longLongValue];
+            }
 
-            // Key fix: using projectID-fileID.jar as the file name is only a fallback.
-            // The real fileName from the manifest is preferred (when modpackInfo passed it through), so the user can recognize it.
-            // Phase 5 fix (following FCL CurseForgeFileResolver): when the manifest has no fileName,
-            // fetch the real one with a BMCLAPI HEAD request (from Content-Disposition or the last segment of the redirect URL),
-            // so the mods/ folder is not full of unrecognizable names like "12345-67890.jar".
+            // Using projectID-fileID.jar as the file name is only a fallback. A real name is much
+            // more recognizable in mods/, so prefer the manifest's, then the API's, then the one the
+            // resolved download URL ends in.
             NSString *fileName = fileInfo[@"fileName"];
             if (![fileName isKindOfClass:[NSString class]] || fileName.length == 0) {
-                NSString *realName = [self fetchCurseForgeRealFileName:projectID.longLongValue fileID:fileID.longLongValue];
+                NSString *apiName = resolved[@"fileName"];
+                if ([apiName isKindOfClass:[NSString class]] && apiName.length > 0) {
+                    fileName = apiName;
+                }
+            }
+            if (![fileName isKindOfClass:[NSString class]] || fileName.length == 0) {
+                NSString *realName = [self fetchCurseForgeRealFileName:projectID.longLongValue
+                                                                fileID:fileID.longLongValue
+                                                           resolvedURL:downloadURL];
                 if (realName.length > 0) {
                     fileName = realName;
-                    NSLog(@"[ModpackImport] Resolved real filename via HEAD: projectID=%@ fileID=%@ → %@",
+                    NSLog(@"[ModpackImport] Resolved real filename: projectID=%@ fileID=%@ -> %@",
                           projectID, fileID, realName);
                 } else {
                     fileName = [NSString stringWithFormat:@"%@-%@.jar", projectID, fileID];
                 }
+            }
+
+            // The Edge CDN can be addressed directly from the file id once the name is known, which
+            // is what the retry loop falls back to. When the API could not be reached at all (no key
+            // configured, for instance) it becomes the primary, so the mod is still attempted rather
+            // than silently skipped.
+            NSString *cdnURL = [self fetchCurseForgeFileURLAlternate:projectID.longLongValue
+                                                              fileID:fileID.longLongValue
+                                                            fileName:fileName];
+            if (downloadURL.length == 0) {
+                downloadURL = cdnURL;
+            }
+            if (downloadURL.length == 0) {
+                NSLog(@"[ModpackImport] No download link could be resolved for projectID=%@ fileID=%@, skipping",
+                      projectID, fileID);
+                continue;
             }
             NSString *destPath = [modsDir stringByAppendingPathComponent:fileName];
 
@@ -1079,13 +1119,10 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
                     [NSThread sleepForTimeInterval:1.0];
                     [[NSFileManager defaultManager] removeItemAtPath:destPath error:nil];
                 }
-                // The 4th retry switches to the backup source (the official CurseForge CDN)
-                if (retry == 3) {
-                    NSString *altURL = [self fetchCurseForgeFileURLAlternate:projectID.longLongValue fileID:fileID.longLongValue];
-                    if (altURL.length > 0) {
-                        currentURL = altURL;
-                        NSLog(@"[ModpackImport] Switching to fallback source for %@: %@", fileName, altURL);
-                    }
+                // The 4th attempt switches to the Edge CDN, addressed directly from the file id
+                if (retry == 3 && cdnURL.length > 0 && ![cdnURL isEqualToString:currentURL]) {
+                    currentURL = cdnURL;
+                    NSLog(@"[ModpackImport] Switching to the CDN for %@: %@", fileName, cdnURL);
                 }
                 // Phase 5 fix: [NSURL URLWithString:] returns nil for an invalid string,
                 // and downloadTaskWithURL:nil throws NSInvalidArgumentException and crashes.
@@ -1258,6 +1295,34 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
         return NO;
     }
 
+    // The download delegate marks every completed transfer as a success, because a download task
+    // reports no error for an HTTP 403 or 404 - the error page is simply delivered as the body.
+    // Left unchecked it was moved into mods/ under a .jar name and only surfaced much later, when
+    // the game died at startup on an archive it could not open. Verify here instead, and report a
+    // failure so the retry loop tries the next source.
+    NSString *rejection = nil;
+    NSURLResponse *response = task.response;
+    if ([response isKindOfClass:NSHTTPURLResponse.class]) {
+        NSInteger statusCode = ((NSHTTPURLResponse *)response).statusCode;
+        if (statusCode >= 400) {
+            rejection = [NSString stringWithFormat:@"the server returned HTTP %ld", (long)statusCode];
+        }
+    }
+    if (!rejection && [ArchiveIntegrity isArchivePath:destPath]) {
+        rejection = [ArchiveIntegrity validationFailureForArchiveAtPath:destPath];
+    }
+    if (rejection) {
+        [fm removeItemAtPath:destPath error:nil];
+        NSError *corruptError = [NSError errorWithDomain:@"ModpackImportError"
+                                                    code:5003
+                                                userInfo:@{NSLocalizedDescriptionKey:
+            [NSString stringWithFormat:@"Damaged download of %@: %@", destPath.lastPathComponent, rejection]}];
+        NSLog(@"[ModpackImport] Discarded damaged download of %@ (%@)", destPath.lastPathComponent, rejection);
+        if (outError) *outError = corruptError;
+        if (taskId) [[DownloadTaskManager sharedManager] setTaskWithId:taskId completedWithError:corruptError];
+        return NO;
+    }
+
     if (taskId) [[DownloadTaskManager sharedManager] setTaskWithId:taskId completedWithError:nil];
     return YES;
 }
@@ -1363,32 +1428,55 @@ didFinishDownloadingToURL:(NSURL *)location {
     if (sema) dispatch_semaphore_signal(sema);
 }
 
-/// Get the download link for a mod file through the CurseForge API
+/// Get the download link for a mod file through the CurseForge API.
+///
+/// This used to hand back a BMCLAPI mirror link and only fall back after three failed attempts,
+/// which meant every mod in an imported CurseForge pack was fetched through a mirror intended for
+/// mainland China - three timeouts each, times however many mods the pack has. Worse, the "backup"
+/// it fell back to (cdn.curseforge.com/files/<projectID>/<fileID>/download) is not a real CurseForge
+/// endpoint at all, so once the mirror failed the import had nowhere left to go.
+///
+/// It now uses the same resolution the working browse-and-install path uses: ask the CurseForge API
+/// for the file's own downloadUrl, which is authoritative and points at the official CDN.
 - (nullable NSString *)fetchCurseForgeFileURL:(long long)projectID fileID:(long long)fileID {
-    // Key fix: the original implementation only used the BMCLAPI mirror, and when BMCLAPI was briefly unreachable (CDN jitter, a mirror switch, an unsynced file)
-    // the whole batch of mods failed. It now returns a "primary + backup" pair: BMCLAPI first,
-    // with the download layer retrying on failure — only the primary URL is returned here, and the caller of fetchCurseForgeFileURL in the download layer
-    // calls fetchCurseForgeFileURLAlternate for the backup source once all 3 retries have failed.
-    NSString *apiURL = [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/curseforge/files/%lld/%lld/download", projectID, fileID];
-    return apiURL;
+    NSString *resolved = [[CurseForgeAPI sharedInstance] downloadURLForFile:@{
+        @"modId": @(projectID),
+        @"id": @(fileID)
+    }];
+    if (resolved.length > 0) {
+        return resolved;
+    }
+    // No API key configured, or the API did not answer. The Edge CDN can still be addressed
+    // directly, but only when the file name is known, so the caller resolves that first.
+    return nil;
 }
 
-/// The backup CurseForge download link (used once retries on the primary source have failed)
-/// It first tries the official CurseForge CDN direct link (format: cdn.curseforge.com/files/<id4>/<id4id>.jar),
-/// and falls back to the curseforge.com file detail page (letting NSURLSession follow the redirect).
-- (nullable NSString *)fetchCurseForgeFileURLAlternate:(long long)projectID fileID:(long long)fileID {
-    // The official CurseForge CDN direct link (no API key needed, but it may be unreachable from mainland China, so it is the backup when BMCLAPI is unavailable)
-    return [NSString stringWithFormat:@"https://cdn.curseforge.com/files/%lld/%lld/download", projectID, fileID];
+/// The backup CurseForge download link, used once retries on the primary source have failed.
+/// Built from the file id the way CurseForge's Edge CDN lays its files out
+/// (files/<id / 1000>/<id % 1000, three digits>/<file name>), matching the final fallback in
+/// CurseForgeAPI.downloadURLForFile:.
+- (nullable NSString *)fetchCurseForgeFileURLAlternate:(long long)projectID fileID:(long long)fileID fileName:(NSString *)fileName {
+    if (fileID <= 0 || fileName.length == 0) return nil;
+    NSString *encodedName = [fileName stringByAddingPercentEncodingWithAllowedCharacters:NSCharacterSet.URLPathAllowedCharacterSet];
+    return [NSString stringWithFormat:@"https://edge.forgecdn.net/files/%lld/%03lld/%@",
+            fileID / 1000, fileID % 1000, encodedName ?: fileName];
 }
 
-/// Phase 5 fix (following FCL CurseForgeFileResolver): when the modpack manifest has no fileName,
-/// a HEAD request against the BMCLAPI download link follows the redirect to the real file URL on the CurseForge CDN
-/// and takes its lastPathComponent as the real file name (such as "jei-1.20.1-15.2.0.27.jar").
-/// This avoids saving files under an unrecognizable fallback name like "12345-67890.jar".
-/// Returns nil on failure, leaving the caller to use the fallback.
-- (nullable NSString *)fetchCurseForgeRealFileName:(long long)projectID fileID:(long long)fileID {
-    NSString *bmclDownloadURL = [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/curseforge/files/%lld/%lld/download", projectID, fileID];
-    NSURL *url = [NSURL URLWithString:bmclDownloadURL];
+/// Work out the real file name for a mod (such as "jei-1.20.1-15.2.0.27.jar"), so mods/ does not
+/// fill up with unrecognizable names like "12345-67890.jar".
+///
+/// A resolved CurseForge download URL already ends in the file name, so that is tried first and
+/// costs nothing. Only when the URL carries no usable name does this fall back to a HEAD request
+/// and read Content-Disposition. Returns nil on failure, leaving the caller to use its own fallback.
+- (nullable NSString *)fetchCurseForgeRealFileName:(long long)projectID
+                                            fileID:(long long)fileID
+                                       resolvedURL:(nullable NSString *)resolvedURL {
+    NSString *fromURL = [resolvedURL stringByRemovingPercentEncoding].lastPathComponent;
+    if (fromURL.length > 0 && ![fromURL isEqualToString:@"download"] && [fromURL containsString:@"."]) {
+        return fromURL;
+    }
+
+    NSURL *url = resolvedURL.length > 0 ? [NSURL URLWithString:resolvedURL] : nil;
     if (!url) return nil;
 
     // Use a temporary NSURLSession that does not follow redirects (handled by hand), so the Location header can be read
