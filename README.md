@@ -13,10 +13,6 @@
   <img alt="Last Commit" src="https://img.shields.io/github/last-commit/weecritikal/Air-Launcher-English-Translation?color=c78aff&label=last%20commit&style=flat">
 </div>
 
-<p align="center">
-  <a href="./README.md">English</a> | <a href="./README_CN.md">Chinese</a>
-</p>
-
 ---
 
 Air — a Minecraft: Java Edition launcher for iOS and iPadOS. A complete English translation of Amethyst iOS Remastered, a fork of AngelAuraMC's Amethyst iOS by herbrine8403.
