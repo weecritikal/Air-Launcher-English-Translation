@@ -247,8 +247,43 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
     }
 }
 
+/// Forge 1.13 introduced the installer format whose processors build part of the runtime - the
+/// SRG-mapped client, the client's resources and the patched Forge client. Nothing publishes those
+/// files, so Direct install cannot produce a version that starts. Below 1.13 there are no
+/// processors and Direct install is genuinely the better route.
+- (BOOL)directInstallCanWork {
+    NSArray<NSString *> *parts = [self.gameVersion componentsSeparatedByString:@"."];
+    if (parts.count < 2) return YES;   // Unrecognised: leave the choice alone
+    if (parts[0].integerValue != 1) return YES;
+    return parts[1].integerValue < 13;
+}
+
 - (void)presentSchemeSelection {
     if (!self.selectedVersionString) return;
+
+    // Offering a choice where one option cannot work is how people ended up with an install that
+    // reported success and then would not launch. On 1.13+ there is only one route that finishes
+    // the job, so take it - after saying why, since it needs JIT and a restart afterwards, which
+    // is surprising otherwise.
+    if (![self directInstallCanWork]) {
+        NSString *message = [NSString stringWithFormat:
+            @"Forge for Minecraft %@ builds part of the game while installing, and only its own "
+             "installer can do that here.\n\nAir will run it for you. It needs JIT enabled, and "
+             "Air restarts once the installer finishes.",
+            self.gameVersion.length > 0 ? self.gameVersion : @"this version"];
+        UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"Installing Forge"
+                                                                      message:message
+                                                               preferredStyle:UIAlertControllerStyleAlert];
+        __weak typeof(self) weakSelf = self;
+        [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+        [alert addAction:[UIAlertAction actionWithTitle:@"Install" style:UIAlertActionStyleDefault
+                                                handler:^(UIAlertAction *action) {
+            [weakSelf startDownloadWithScheme:0];
+        }]];
+        [self presentViewController:alert animated:YES completion:nil];
+        return;
+    }
+
     ForgeInstallSchemeViewController *schemeVC = [[ForgeInstallSchemeViewController alloc] init];
     schemeVC.delegate = self;
     schemeVC.gameVersion = self.gameVersion;
@@ -1051,11 +1086,8 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
 
     self.selectedVersionString = versionString;
 
-    ForgeInstallSchemeViewController *schemeVC = [[ForgeInstallSchemeViewController alloc] init];
-    schemeVC.delegate = self;
-    schemeVC.gameVersion = self.gameVersion;
-    schemeVC.modalPresentationStyle = UIModalPresentationOverFullScreen;
-    [self presentViewController:schemeVC animated:YES completion:nil];
+    // Same decision as the preset path: on 1.13+ there is only one route that works.
+    [self presentSchemeSelection];
 }
 
 #pragma mark - ForgeInstallSchemeViewControllerDelegate

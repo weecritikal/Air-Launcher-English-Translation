@@ -626,7 +626,13 @@ static void *ProgressObserverContext = &ProgressObserverContext;
         } @catch (NSException *e) {}
         if (self.task.metadata) {
             [self invokeAfterJITEnabled:^{
-                UIKit_launchMinecraftSurfaceVC(self.view.window, self.task.metadata);
+                if (!UIKit_launchMinecraftSurfaceVC(self.view.window, self.task.metadata)) {
+                    // Refused before starting, with the reason already shown. Put the launcher back
+                    // the way it was rather than leaving the buttons disabled behind a dialog.
+                    self.task = nil;
+                    [self setInteractionEnabled:YES forDownloading:YES];
+                    [self reloadProfileList];
+                }
             }];
         } else {
             self.task = nil;

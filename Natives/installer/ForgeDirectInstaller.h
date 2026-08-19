@@ -42,4 +42,14 @@ typedef NS_ENUM(NSInteger, ForgeDirectInstallerErrorCode) {
 
 + (BOOL)ensureParentVersionExists:(NSString *)minecraftVersion error:(NSError **)error;
 
+/// Return the runtime artifacts a Forge version needs to start but does not have, as absolute paths.
+///
+/// Forge 1.13+ boots through three files its installer's processors build - the SRG-mapped client,
+/// the client's resources, and the patched Forge client. FML rebuilds those paths from the version
+/// JSON's --fml.* game arguments rather than its library list, so this reads the same arguments to
+/// predict exactly what it will look for. An empty result means there is nothing missing, including
+/// for versions that do not boot this way at all.
++ (NSArray<NSString *> *)missingRuntimeArtifactsForVersionJSON:(NSDictionary *)versionJson
+                                                 librariesDir:(NSString *)librariesDir;
+
 @end

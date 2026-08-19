@@ -1,4 +1,5 @@
 #import "ArchiveIntegrity.h"
+#import "installer/ForgeDirectInstaller.h"
 #import "authenticator/BaseAuthenticator.h"
 #import "AppDelegate.h"
 #import "SceneDelegate.h"
@@ -143,12 +144,49 @@ static void UIKit_quarantineCorruptModsBeforeLaunch(void) {
     showDialog(@"Damaged mods were set aside", message);
 }
 
-void UIKit_launchMinecraftSurfaceVC(UIWindow* window, NSDictionary* metadata) {
+/// Refuse to start a Forge version whose runtime was never fully built.
+///
+/// Forge 1.13+ boots through three files its installer's processors produce. When those are absent
+/// the JVM dies about thirty seconds in with "Invalid paths argument, contained no existing paths",
+/// which names three files and nothing about how to get them. Checking first turns a long wait and
+/// a crash screen into a sentence, and says which install route will actually work.
+/// Returns YES when the launch may proceed.
+static BOOL UIKit_verifyForgeRuntimeBeforeLaunch(NSDictionary *metadata) {
+    if (![metadata isKindOfClass:NSDictionary.class]) return YES;
+
+    const char *gameDirC = getenv("POJAV_GAME_DIR");
+    if (!gameDirC) return YES;
+    NSString *librariesDir = [@(gameDirC) stringByAppendingPathComponent:@"libraries"];
+
+    NSArray<NSString *> *missing = [ForgeDirectInstaller missingRuntimeArtifactsForVersionJSON:metadata
+                                                                                 librariesDir:librariesDir];
+    if (missing.count == 0) return YES;
+
+    NSMutableString *message = [NSMutableString stringWithString:
+        @"This Forge version was never finished installing, so the game cannot start. "
+         "These files are missing:\n"];
+    for (NSString *path in missing) {
+        [message appendFormat:@"\n  - %@", path.lastPathComponent];
+    }
+    [message appendString:@"\n\nForge builds them while installing, and only its own installer can "
+                           "do that here. Install this Forge version again and pick \"Run the Forge "
+                           "installer\". Your mods and worlds are kept."];
+
+    NSLog(@"[Launch] Refusing to start: %lu Forge runtime artifact(s) missing: %@",
+          (unsigned long)missing.count, missing);
+    showDialog(@"Forge is not fully installed", message);
+    return NO;
+}
+
+BOOL UIKit_launchMinecraftSurfaceVC(UIWindow* window, NSDictionary* metadata) {
     // Leave this pref, might be useful later for launching with Quick Actions/Shortcuts/URL Scheme
     //setPreference(@"internal_launch_on_boot", getPreference(@"restart_before_launch"));
     BaseAuthenticator *currentAuth = BaseAuthenticator.current;
     // selected_account stores the accountId (the unique identifier), so the login state can be restored by accountId after a restart
     setPrefObject(@"internal.selected_account", currentAuth.authData[@"accountId"]);
+    if (!UIKit_verifyForgeRuntimeBeforeLaunch(metadata)) {
+        return NO;
+    }
     UIKit_quarantineCorruptModsBeforeLaunch();
     dispatch_async(dispatch_get_main_queue(), ^{
         tmpRootVC = window.rootViewController;
@@ -161,6 +199,7 @@ void UIKit_launchMinecraftSurfaceVC(UIWindow* window, NSDictionary* metadata) {
             [window makeKeyAndVisible];
         }];
     });
+    return YES;
 }
 
 void UIKit_returnToSplitView() {
