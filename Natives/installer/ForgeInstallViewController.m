@@ -4,6 +4,7 @@
 #import "LauncherPreferences.h"
 #import "WFWorkflowProgressView.h"
 #import "ios_uikit_bridge.h"
+#import "ForgeDirectInstaller.h"
 #import "utils.h"
 #import "BackgroundManager.h"
 #include <dlfcn.h>
@@ -258,7 +259,76 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
     return parts[1].integerValue < 13;
 }
 
+/// The version folder Forge's installer writes for the selected build, or nil if it cannot be named.
+/// The list gives coordinates like "1.20.1-47.4.0"; the installed profile is "1.20.1-forge-47.4.0".
+- (NSString *)installedVersionIdForSelection {
+    if (self.gameVersion.length == 0 || self.selectedVersionString.length == 0) return nil;
+    NSString *loaderVersion = self.selectedVersionString;
+    NSString *prefix = [self.gameVersion stringByAppendingString:@"-"];
+    if ([loaderVersion hasPrefix:prefix]) {
+        loaderVersion = [loaderVersion substringFromIndex:prefix.length];
+    }
+    return [NSString stringWithFormat:@"%@-forge-%@", self.gameVersion, loaderVersion];
+}
+
+/// YES when this exact Forge build is already installed and every file it boots through is usable.
+///
+/// Running the installer again over a finished install is not harmless: it rewrites the same
+/// artifacts, and anything that interrupts the second run - closing the window because "it is
+/// already installed" - leaves a version that is half old and half new, which nothing can start.
+/// Worth one question first.
+- (BOOL)selectionIsAlreadyInstalled {
+    NSString *versionId = [self installedVersionIdForSelection];
+    if (versionId.length == 0) return NO;
+
+    const char *gameDirC = getenv("POJAV_GAME_DIR");
+    if (!gameDirC) return NO;
+    NSString *gameDir = @(gameDirC);
+    NSString *versionJsonPath = [[[gameDir stringByAppendingPathComponent:@"versions"]
+                        stringByAppendingPathComponent:versionId]
+                        stringByAppendingPathComponent:[versionId stringByAppendingString:@".json"]];
+    if (![NSFileManager.defaultManager fileExistsAtPath:versionJsonPath]) return NO;
+
+    NSDictionary *versionJson = parseJSONFromFile(versionJsonPath);
+    if (![versionJson isKindOfClass:NSDictionary.class]) return NO;
+
+    NSString *librariesDir = [gameDir stringByAppendingPathComponent:@"libraries"];
+    return [ForgeDirectInstaller unusableRuntimeArtifactsForVersionJSON:versionJson
+                                                          librariesDir:librariesDir].count == 0;
+}
+
 - (void)presentSchemeSelection {
+    if (!self.selectedVersionString) return;
+
+    // Ask before reinstalling something that is already complete. Re-running the installer over a
+    // finished install and then closing it partway through is exactly how a working instance turns
+    // into one that will not start.
+    if ([self selectionIsAlreadyInstalled]) {
+        NSString *versionId = [self installedVersionIdForSelection];
+        UIAlertController *alert = [UIAlertController
+            alertControllerWithTitle:@"Already installed"
+                             message:[NSString stringWithFormat:
+                @"%@ is installed and complete, so there is nothing to do.\n\nInstalling it again "
+                 "rewrites the same files, and leaving before it finishes would break the instance. "
+                 "Only reinstall if something is actually wrong with it.", versionId]
+                      preferredStyle:UIAlertControllerStyleAlert];
+        __weak typeof(self) weakSelf = self;
+        [alert addAction:[UIAlertAction actionWithTitle:@"Leave it alone" style:UIAlertActionStyleCancel
+                                                handler:^(UIAlertAction *action) {
+            [weakSelf actionClose];
+        }]];
+        [alert addAction:[UIAlertAction actionWithTitle:@"Reinstall anyway" style:UIAlertActionStyleDestructive
+                                                handler:^(UIAlertAction *action) {
+            [weakSelf continueSchemeSelection];
+        }]];
+        [self presentViewController:alert animated:YES completion:nil];
+        return;
+    }
+
+    [self continueSchemeSelection];
+}
+
+- (void)continueSchemeSelection {
     if (!self.selectedVersionString) return;
 
     // Offering a choice where one option cannot work is how people ended up with an install that
