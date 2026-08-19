@@ -219,8 +219,8 @@ void init_loadCustomEnv() {
 ///
 /// How the renderers relate to MobileGlues (important):
 /// - The MobileGlues renderer (libmobileglues.dylib): loads MobileGlues directly, so config.json takes effect.
-/// - The Auto renderer: resolved to ANGLE (libtinygl4angle.dylib) in launchJVM, so MobileGlues is never loaded
-///   and config.json is written but never read. The user must pick the MobileGlues renderer explicitly for the settings to apply.
+/// - The Auto renderer: resolved to MobileGlues in launchJVM, so config.json is both written and read
+///   and these settings do apply.
 /// - The Vulkan renderer: in Vulkan mode the OpenGL fallback library is MobileGlues (aligned with the Ynnyny repo),
 ///   so config.json is read by MobileGlues and does take effect.
 void init_loadMobileGluesConfig() {
@@ -236,11 +236,8 @@ void init_loadMobileGluesConfig() {
         return;
     }
 
-    // Warning: the auto renderer does not actually load MobileGlues, so these settings will not apply
     if ([renderer isEqualToString:@"auto"]) {
-        NSLog(@"[JavaLauncher] WARNING: renderer is 'auto', will be resolved to ANGLE. "
-              @"MobileGlues settings will NOT take effect. "
-              @"Please explicitly select 'MobileGlues' renderer to use these settings.");
+        NSLog(@"[JavaLauncher] Auto renderer resolves to MobileGlues, config will take effect.");
     } else if ([renderer isEqualToString:@ RENDERER_NAME_VULKAN]) {
         NSLog(@"[JavaLauncher] Vulkan renderer detected, MobileGlues used as GL fallback. Config will take effect.");
     } else {
@@ -831,15 +828,22 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
     const char *glLibName = getenv("AMETHYST_RENDERER");
     if (glLibName) {
         if (!strcmp(glLibName, "auto")) {
-            // Key fix (26.2 startup crash): the Auto renderer always picks ANGLE (aligned with the Ynnyny repo)
+            // The Auto renderer resolves to MobileGlues.
             //
-            // The workspace used to prefer MobileGlues on Java 21+, but the Ynnyny repo launches 26.2 fine with ANGLE.
-            // Picking MobileGlues without also calling init_loadMobileGluesConfig() to write config.json meant
-            // MobileGlues initialized the GL context with unsafe defaults and could crash. It now always picks ANGLE, as Ynnyny does.
-            // MobileGlues remains available as a manual option (the user can select it explicitly in settings).
-            glLibName = RENDERER_NAME_MTL_ANGLE;
+            // It resolved to ANGLE before, which fails on this platform: ANGLE rejects the
+            // framebuffer attachment Minecraft asks for while building its main render target,
+            // so the game aborts during init with GL_FRAMEBUFFER_INCOMPLETE_ATTACHMENT before a
+            // window ever appears. MobileGlues gets through that and into the game.
+            //
+            // Choosing MobileGlues used to be unsafe because config.json had not been written
+            // yet, leaving it to initialise the GL context from defaults. That no longer applies:
+            // init_loadMobileGluesConfig() already writes the config for the auto renderer, and it
+            // runs well before this point.
+            //
+            // ANGLE is still selectable by hand for anyone whose device prefers it.
+            glLibName = RENDERER_NAME_MOBILEGLUES;
             setenv("AMETHYST_RENDERER", glLibName, 1);
-            NSLog(@"[JavaLauncher] Auto renderer resolved to %s (always ANGLE)", glLibName);
+            NSLog(@"[JavaLauncher] Auto renderer resolved to %s (MobileGlues)", glLibName);
         }
         if (strcmp(glLibName, RENDERER_NAME_VULKAN) == 0) {
             // Aligned with the Ynnyny repo: in Vulkan mode the OpenGL fallback library is MobileGlues

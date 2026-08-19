@@ -26,13 +26,15 @@
     if (self.date.length == 0) return @"";
     // Parse the ISO date "2026-07-23"
     NSDateFormatter *fmt = [[NSDateFormatter alloc] init];
-    fmt.locale = [NSLocale localeWithLocaleIdentifier:@"zh_CN"];
+    // A fixed input format has to be parsed against en_US_POSIX; a real locale can apply
+    // its own calendar or numerals and fail to read an ISO date.
+    fmt.locale = [NSLocale localeWithLocaleIdentifier:@"en_US_POSIX"];
     fmt.dateFormat = @"yyyy-MM-dd";
     NSDate *date = [fmt dateFromString:self.date];
     if (!date) return self.date;
 
     NSDateFormatter *displayFmt = [[NSDateFormatter alloc] init];
-    displayFmt.locale = [NSLocale localeWithLocaleIdentifier:@"zh_CN"];
+    displayFmt.locale = NSLocale.autoupdatingCurrentLocale;
     displayFmt.dateStyle = NSDateFormatterLongStyle;
     displayFmt.timeStyle = NSDateFormatterNoStyle;
     return [displayFmt stringFromDate:date];

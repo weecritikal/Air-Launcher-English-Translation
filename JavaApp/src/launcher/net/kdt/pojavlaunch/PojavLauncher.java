@@ -221,16 +221,19 @@ public class PojavLauncher {
         // It is passed in by JavaLauncher.m as args[2] in the NSDictionary launch branch
         String serverIp = (args.length > 2 && args[2] != null) ? args[2] : "";
 
-        // Set language to Chinese on first launch
-        // For Minecraft 1.11 and later: zh_cn (lowercase)
-        // For Minecraft 1.6 to 1.10: zh_CN (uppercase)
-        // For Minecraft 1.1 to 1.5: zh_CN (uppercase, lowercase crashes)
+        // Seed the game language on first launch. Upstream seeded Chinese here, which meant a
+        // freshly created instance opened into a Chinese menu.
+        // For Minecraft 1.11 and later: en_us (lowercase)
+        // For Minecraft 1.6 to 1.10: en_US (uppercase)
+        // For Minecraft 1.1 to 1.5: en_US (uppercase, lowercase crashes)
+        // setDefault only writes when the key is absent, so a language the player has already
+        // chosen is left alone.
         MCOptionUtils.load();
         String minecraftVersion = version.id;
         if (minecraftVersion.compareTo("1.11") >= 0) {
-            MCOptionUtils.setDefault("lang", "zh_cn");
+            MCOptionUtils.setDefault("lang", "en_us");
         } else if (minecraftVersion.compareTo("1.1") >= 0) {
-            MCOptionUtils.setDefault("lang", "zh_CN");
+            MCOptionUtils.setDefault("lang", "en_US");
         }
         // For Minecraft 1.0 and earlier, no language option
         MCOptionUtils.save();

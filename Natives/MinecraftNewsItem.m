@@ -54,7 +54,7 @@ static NSString *MCNews_HTMLEntityDecode(NSString *input) {
     if (self.publishDate <= 0) return @"";
     NSDate *date = [NSDate dateWithTimeIntervalSince1970:self.publishDate];
     NSDateFormatter *fmt = [[NSDateFormatter alloc] init];
-    fmt.locale = [NSLocale localeWithLocaleIdentifier:@"zh_CN"];
+    fmt.locale = NSLocale.autoupdatingCurrentLocale;
     fmt.dateStyle = NSDateFormatterMediumStyle;
     fmt.timeStyle = NSDateFormatterNoStyle;
     return [fmt stringFromDate:date];
