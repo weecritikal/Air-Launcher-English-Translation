@@ -1,6 +1,7 @@
 #include <CommonCrypto/CommonDigest.h>
 #include <sys/time.h>
 
+#import "ArchiveIntegrity.h"
 #import "authenticator/BaseAuthenticator.h"
 #import "installer/modpack/ModpackAPI.h"
 #import "AFNetworking.h"
@@ -22,6 +23,12 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"com.a
 @property (nonatomic, assign) BOOL isObservingTaskProgress;
 @property (nonatomic, assign) NSTimeInterval progressLastTime;
 @property (nonatomic, assign) int64_t progressLastCompleted;
+- (BOOL)hasVerifiedHash:(NSString *)sha;
+- (NSString *)integrityFailureForDownloadAtPath:(NSString *)path
+                                   expectedSize:(NSUInteger)expectedSize
+                                            sha:(NSString *)sha
+                                        altName:(NSString *)altName
+                                       response:(NSURLResponse *)response;
 @end
 
 @implementation MinecraftResourceDownloadTask
@@ -173,8 +180,19 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"com.a
     BOOL fileExists = [NSFileManager.defaultManager fileExistsAtPath:path];
     // logSuccess?
     if (fileExists && [self checkSHA:sha forFile:path altName:altName]) {
-        if (success) success();
-        return nil;
+        // A file already on disk is only reusable if it is actually intact. Without this,
+        // a jar that arrived truncated (or as an error page) is skipped on every subsequent
+        // install as "already downloaded", so reinstalling the modpack never repaired it and
+        // the only way out was deleting the whole instance. Re-downloading it here makes a
+        // reinstall a repair.
+        NSString *archiveFailure = (![self hasVerifiedHash:sha] && [ArchiveIntegrity isArchivePath:path])
+            ? [ArchiveIntegrity validationFailureForArchiveAtPath:path] : nil;
+        if (!archiveFailure) {
+            if (success) success();
+            return nil;
+        }
+        NSLog(@"[MCDL] Existing file '%@' is corrupt (%@), downloading it again", path.lastPathComponent, archiveFailure);
+        [NSFileManager.defaultManager removeItemAtPath:path error:nil];
     } else if (![self checkAccessWithDialog:YES]) {
         return nil;
     }
@@ -210,6 +228,7 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"com.a
         [NSFileManager.defaultManager removeItemAtPath:path error:nil];
         return [NSURL fileURLWithPath:path];
     } completionHandler:^(NSURLResponse * _Nonnull response, NSURL * _Nullable filePath, NSError * _Nullable error) {
+        NSString *integrityFailure = nil;
         if (self.progress.cancelled) {
             // Ignore any further errors
         } else if (error != nil) {
@@ -251,17 +270,17 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"com.a
                     weakSelf.progress.completedUnitCount += 1;
                 }
             }
-        } else if (![self checkSHA:sha forFile:path altName:altName]) {
-            // A failed SHA1 check is retried too
+        } else if ((integrityFailure = [weakSelf integrityFailureForDownloadAtPath:path expectedSize:size sha:sha altName:altName response:response]) != nil) {
+            // A file that failed verification is retried too
             NSInteger maxRetry = weakSelf.maxRetryCount > 0 ? weakSelf.maxRetryCount : 3;
             if (retryCount < maxRetry) {
                 NSInteger nextRetry = retryCount + 1;
-                NSLog(@"[MCDL] SHA1 mismatch, retrying %@ (attempt %ld/%ld)", name, (long)nextRetry, (long)maxRetry);
+                NSLog(@"[MCDL] %@ failed verification (%@), retrying (attempt %ld/%ld)", name, integrityFailure, (long)nextRetry, (long)maxRetry);
 
                 // Delete the corrupted file
                 [NSFileManager.defaultManager removeItemAtPath:path error:nil];
 
-                // The retry delay after a SHA failure is shortened to 0.3 seconds
+                // The retry delay after a verification failure is shortened to 0.3 seconds
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                     NSURLSessionDownloadTask *retryTask = [weakSelf createDownloadTask:url size:size sha:sha altName:altName toPath:path retryCount:nextRetry success:success];
                     if (retryTask) {
@@ -269,15 +288,19 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"com.a
                     }
                 });
             } else {
-                // Phase 5 fix (following FCL): a failed SHA1 check is also recorded in failedFiles rather than cancelling the batch
+                // Phase 5 fix (following FCL): a verification failure is recorded in failedFiles rather than cancelling the batch.
+                // The corrupt file must not be left behind: something downstream (Forge scanning
+                // mods/, the JVM opening a library) would try to open it and fail with an error
+                // that names nothing. Removing it keeps the failure reportable and recoverable.
+                [NSFileManager.defaultManager removeItemAtPath:path error:nil];
                 @synchronized(weakSelf.failedFiles) {
                     [weakSelf.failedFiles addObject:@{
-                        @"name": path.lastPathComponent ?: @"unknown",
-                        @"error": @"SHA1 mismatch"
+                        @"name": name ?: (path.lastPathComponent ?: @"unknown"),
+                        @"error": integrityFailure ?: @"failed verification"
                     }];
                 }
-                NSLog(@"[MCDL] SHA1 mismatch for '%@', added to failedFiles (total failed: %lu), other downloads will continue",
-                      path.lastPathComponent, (unsigned long)weakSelf.failedFiles.count);
+                NSLog(@"[MCDL] '%@' failed verification (%@), added to failedFiles (total failed: %lu), other downloads will continue",
+                      name, integrityFailure, (unsigned long)weakSelf.failedFiles.count);
                 // Phase 5 fix: as in the error branch above, advance the parent progress so it cannot freeze
                 NSProgress *taskProgress2 = progress ?: [weakSelf.manager downloadProgressForTask:task];
                 if (taskProgress2) {
@@ -783,6 +806,70 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"com.a
 - (BOOL)checkAccessWithDialog:(BOOL)show {
     // Allow every download request unconditionally
     return YES;
+}
+
+// YES when checkSHA: compares against a real hash for this file, rather than falling back to
+// "the file exists and is not empty". Only in that case is a passing check proof of correctness.
+- (BOOL)hasVerifiedHash:(NSString *)sha {
+    return sha.length > 0 && getPrefBool(@"general.check_sha");
+}
+
+// Verify a file the moment it finishes downloading.
+//
+// The SHA1 check alone was not enough. CurseForge often reports no SHA1 for a file, in which
+// case checkSHA: only confirms the file exists, and a CDN that answers with an HTML error page
+// under a 200 status produces a perfectly "existing" file. Either way a broken jar was written
+// into mods/, and the first sign of trouble was the JVM dying at launch with
+// "zip END header not found" — naming no file, so the only fix anyone could find was deleting
+// the instance and reinstalling everything.
+//
+// Returns nil when the file is good, otherwise a short reason suitable for the failure summary.
+- (NSString *)integrityFailureForDownloadAtPath:(NSString *)path
+                                   expectedSize:(NSUInteger)expectedSize
+                                            sha:(NSString *)sha
+                                        altName:(NSString *)altName
+                                       response:(NSURLResponse *)response {
+    // 1. An HTTP error status. AFNetworking does not run its response serializer for download
+    //    tasks, so a 403/404 body arrives with error == nil and gets saved as if it were the file.
+    if ([response isKindOfClass:NSHTTPURLResponse.class]) {
+        NSInteger statusCode = ((NSHTTPURLResponse *)response).statusCode;
+        if (statusCode >= 400) {
+            return [NSString stringWithFormat:@"server returned HTTP %ld", (long)statusCode];
+        }
+    }
+
+    if (![NSFileManager.defaultManager fileExistsAtPath:path]) {
+        return @"the file was not written to disk";
+    }
+
+    // 2. The size the server promised, against what actually landed. This catches a transfer
+    //    that was cut short even when no hash is available to compare.
+    //    Only a short file is treated as a failure: a file that came back longer than the
+    //    catalogue claims points at stale metadata rather than a bad download, and rejecting
+    //    those would block mods that are perfectly fine. Step 4 still inspects the archive.
+    unsigned long long actualSize = [NSFileManager.defaultManager attributesOfItemAtPath:path error:nil].fileSize;
+    if (expectedSize > 0 && actualSize < (unsigned long long)expectedSize) {
+        return [NSString stringWithFormat:@"incomplete download (expected %lu bytes, got %llu)",
+                (unsigned long)expectedSize, actualSize];
+    }
+
+    // 3. The hash, when one is known and the preference is on.
+    if (![self checkSHA:sha forFile:path altName:altName]) {
+        return @"SHA1 mismatch";
+    }
+
+    // 4. Structure, for anything the JVM will later open as a ZIP. This is the backstop for every
+    //    file that has no hash and no declared size. A file whose SHA1 actually matched is already
+    //    proven byte-for-byte correct, so it is left alone — the structural check must never be
+    //    able to reject a file the hash vouched for.
+    if (![self hasVerifiedHash:sha] && [ArchiveIntegrity isArchivePath:path]) {
+        NSString *archiveFailure = [ArchiveIntegrity validationFailureForArchiveAtPath:path];
+        if (archiveFailure) {
+            return archiveFailure;
+        }
+    }
+
+    return nil;
 }
 
 // Check SHA of the file

@@ -14,6 +14,7 @@
 //  so no processor is needed at install time.
 //
 
+#import "ArchiveIntegrity.h"
 #import "NeoForgeDirectInstaller.h"
 #import "PLProfiles.h"
 #import "utils.h"
@@ -827,11 +828,19 @@ NSString *const NeoForgeDirectInstallerErrorDomain = @"NeoForgeDirectInstallerEr
 
         NSString *destPath = [librariesDir stringByAppendingPathComponent:relativePath];
 
-        // Skip it if it already exists
+        // Skip it if it already exists — but only when it is actually intact. A library left
+        // behind by an earlier failed download used to be skipped forever on this check alone,
+        // so no amount of reinstalling could ever replace it.
         if ([fm fileExistsAtPath:destPath]) {
-            skipped++;
-            processed++;
-            continue;
+            NSString *corruption = [ArchiveIntegrity isArchivePath:destPath]
+                ? [ArchiveIntegrity validationFailureForArchiveAtPath:destPath] : nil;
+            if (!corruption) {
+                skipped++;
+                processed++;
+                continue;
+            }
+            NSLog(@"[NeoForgeDirect] Existing library %@ is corrupt (%@), downloading it again", name, corruption);
+            [fm removeItemAtPath:destPath error:nil];
         }
 
         // Assemble the URL
@@ -1056,10 +1065,15 @@ NSString *const NeoForgeDirectInstallerErrorDomain = @"NeoForgeDirectInstallerEr
         NSString *relativePath = [NSString stringWithFormat:@"%@/%@/%@/%@", groupPath, artifactId, version, jarName];
         NSString *destPath = [librariesDir stringByAppendingPathComponent:relativePath];
 
-        // Skip it if it already exists
+        // Skip it if it already exists, provided it can actually be opened
         if ([NSFileManager.defaultManager fileExistsAtPath:destPath]) {
-            NSLog(@"[NeoForgeDirect] Patched artifact already exists: %@", destPath);
-            return YES;
+            NSString *corruption = [ArchiveIntegrity validationFailureForArchiveAtPath:destPath];
+            if (!corruption) {
+                NSLog(@"[NeoForgeDirect] Patched artifact already exists: %@", destPath);
+                return YES;
+            }
+            NSLog(@"[NeoForgeDirect] Existing patched artifact is corrupt (%@), downloading it again", corruption);
+            [NSFileManager.defaultManager removeItemAtPath:destPath error:nil];
         }
 
         for (NSString *baseURL in baseURLs) {
@@ -1178,6 +1192,23 @@ NSString *const NeoForgeDirectInstallerErrorDomain = @"NeoForgeDirectInstallerEr
     BOOL written = [resultData writeToFile:destPath options:NSDataWritingAtomic error:error];
     if (!written) {
         return NO;
+    }
+
+    // A 200 response is not proof the body was complete. Reject a jar that will not open, so
+    // the caller moves on to the next mirror instead of installing a library that brings the
+    // game down at launch with "zip END header not found".
+    if ([ArchiveIntegrity isArchivePath:destPath]) {
+        NSString *corruption = [ArchiveIntegrity validationFailureForArchiveAtPath:destPath];
+        if (corruption) {
+            [[NSFileManager defaultManager] removeItemAtPath:destPath error:nil];
+            if (error) {
+                *error = [NSError errorWithDomain:NeoForgeDirectInstallerErrorDomain
+                                             code:NeoForgeDirectInstallerErrorWriteFailed
+                                         userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Damaged download from %@: %@", urlString, corruption]}];
+            }
+            NSLog(@"[NeoForgeDirect] Discarded damaged download of %@ (%@)", urlString.lastPathComponent ?: urlString, corruption);
+            return NO;
+        }
     }
 
     NSLog(@"[NeoForgeDirect] Downloaded %@ (%lu bytes) -> %@", urlString.lastPathComponent ?: urlString, (unsigned long)resultData.length, destPath);

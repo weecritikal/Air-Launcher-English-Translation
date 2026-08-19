@@ -16,6 +16,7 @@
 //  Forge in the old format (1.12.2 and earlier) has no processors, so a direct install just drops in the universal jar + version.json.
 //
 
+#import "ArchiveIntegrity.h"
 #import "ForgeDirectInstaller.h"
 #import "PLProfiles.h"
 #import "utils.h"
@@ -923,11 +924,19 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
 
         NSString *destPath = [librariesDir stringByAppendingPathComponent:relativePath];
 
-        // Skip it if it already exists
+        // Skip it if it already exists — but only when it is actually intact. A library left
+        // behind by an earlier failed download used to be skipped forever on this check alone,
+        // so no amount of reinstalling could ever replace it.
         if ([fm fileExistsAtPath:destPath]) {
-            skipped++;
-            processed++;
-            continue;
+            NSString *corruption = [ArchiveIntegrity isArchivePath:destPath]
+                ? [ArchiveIntegrity validationFailureForArchiveAtPath:destPath] : nil;
+            if (!corruption) {
+                skipped++;
+                processed++;
+                continue;
+            }
+            NSLog(@"[ForgeDirect] Existing library %@ is corrupt (%@), downloading it again", name, corruption);
+            [fm removeItemAtPath:destPath error:nil];
         }
 
         // Assemble the URL
@@ -1346,6 +1355,23 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
     BOOL written = [resultData writeToFile:destPath options:NSDataWritingAtomic error:error];
     if (!written) {
         return NO;
+    }
+
+    // A 200 response is not proof the body was complete. Reject a jar that will not open, so
+    // the caller falls through to the fallback mirror instead of installing a library that
+    // brings the game down at launch with "zip END header not found".
+    if ([ArchiveIntegrity isArchivePath:destPath]) {
+        NSString *corruption = [ArchiveIntegrity validationFailureForArchiveAtPath:destPath];
+        if (corruption) {
+            [[NSFileManager defaultManager] removeItemAtPath:destPath error:nil];
+            if (error) {
+                *error = [NSError errorWithDomain:ForgeDirectInstallerErrorDomain
+                                             code:ForgeDirectInstallerErrorWriteFailed
+                                         userInfo:@{NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Damaged download from %@: %@", urlString, corruption]}];
+            }
+            NSLog(@"[ForgeDirect] Discarded damaged download of %@ (%@)", urlString.lastPathComponent ?: urlString, corruption);
+            return NO;
+        }
     }
 
     NSLog(@"[ForgeDirect] Downloaded %@ (%lu bytes) -> %@", urlString.lastPathComponent ?: urlString, (unsigned long)resultData.length, destPath);

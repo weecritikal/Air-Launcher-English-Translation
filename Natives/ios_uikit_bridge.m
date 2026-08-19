@@ -1,3 +1,4 @@
+#import "ArchiveIntegrity.h"
 #import "authenticator/BaseAuthenticator.h"
 #import "AppDelegate.h"
 #import "SceneDelegate.h"
@@ -107,12 +108,48 @@ jstring UIKit_accessClipboard(JNIEnv* env, jint action, jbyteArray copySrc) {
     }
 }
 
+/// Move any unreadable jar out of the mods folder before the JVM ever sees it.
+///
+/// A mod that downloaded truncated used to take the whole game down at startup with
+/// java.util.zip.ZipException: zip END header not found, thrown from Forge's mod scanner.
+/// The stack trace named no file, so there was nothing to act on except deleting the instance
+/// and reinstalling the version, the modloader and the modpack from scratch. Now the bad file is
+/// set aside, the game starts, and the message says exactly which mod to fetch again.
+static void UIKit_quarantineCorruptModsBeforeLaunch(void) {
+    NSString *modsFolder = [ArchiveIntegrity modsFolderForProfile:nil];
+    if (modsFolder.length == 0) return;
+
+    NSArray<NSDictionary<NSString *, NSString *> *> *quarantined =
+        [ArchiveIntegrity quarantineCorruptArchivesInDirectory:modsFolder];
+    if (quarantined.count == 0) return;
+
+    NSMutableString *message = [NSMutableString stringWithFormat:
+        @"%lu mod%@ did not download correctly and would have stopped the game from starting. "
+         "%@ been moved into mods/.air_corrupt so the game can launch.\n",
+        (unsigned long)quarantined.count,
+        quarantined.count == 1 ? @"" : @"s",
+        quarantined.count == 1 ? @"It has" : @"They have"];
+    NSUInteger shown = MIN(quarantined.count, (NSUInteger)8);
+    for (NSUInteger i = 0; i < shown; i++) {
+        [message appendFormat:@"\n  • %@ — %@", quarantined[i][@"name"], quarantined[i][@"reason"]];
+    }
+    if (quarantined.count > shown) {
+        [message appendFormat:@"\n  ...and %lu more", (unsigned long)(quarantined.count - shown)];
+    }
+    [message appendString:@"\n\nReinstall the modpack to download just these again — the rest of the "
+                           "files are kept, so it will not start over."];
+
+    NSLog(@"[Launch] %@", message);
+    showDialog(@"Damaged mods were set aside", message);
+}
+
 void UIKit_launchMinecraftSurfaceVC(UIWindow* window, NSDictionary* metadata) {
     // Leave this pref, might be useful later for launching with Quick Actions/Shortcuts/URL Scheme
     //setPreference(@"internal_launch_on_boot", getPreference(@"restart_before_launch"));
     BaseAuthenticator *currentAuth = BaseAuthenticator.current;
     // selected_account stores the accountId (the unique identifier), so the login state can be restored by accountId after a restart
     setPrefObject(@"internal.selected_account", currentAuth.authData[@"accountId"]);
+    UIKit_quarantineCorruptModsBeforeLaunch();
     dispatch_async(dispatch_get_main_queue(), ^{
         tmpRootVC = window.rootViewController;
         [UIView animateWithDuration:0.2 animations:^{
