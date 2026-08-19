@@ -31,6 +31,7 @@
 #define EVENT_TYPE_SCROLL 1007
 #define EVENT_TYPE_WINDOW_POS 1008
 #define EVENT_TYPE_WINDOW_SIZE 1009
+#define EVENT_TYPE_MODIFIERS 1010
 
 #define GLFW_FOCUSED 0x00020001
 #define GLFW_VISIBLE 0x00020004
@@ -158,3 +159,4 @@ void CallbackBridge_pauseGameIfNeed();
 // Explicitly synchronize the InputConstants modifier cache inside MC 1.21.9+.
 // It is called by KeyboardInput.m from physical keyboard press/release events.
 void CallbackBridge_syncModifiersToMC(int mods);
+void CallbackBridge_queueModifierSync(int mods);

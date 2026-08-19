@@ -109,7 +109,10 @@ int keycodeTable[UIKeyboardHIDUsageKeyboardRightGUI+1];
     }
 
     // send the keycode
-    int keycode = keycodeTable[key.keyCode];
+    NSUInteger hidUsage = (NSUInteger)key.keyCode;
+    int keycode = hidUsage <= UIKeyboardHIDUsageKeyboardRightGUI
+        ? keycodeTable[hidUsage]
+        : 0;
     if (keycode != 0) {
         // Fix for issue #27 (modeled on FCL commit 08c0716):
         // MC 1.21.9+ no longer relies solely on the mods parameter in the key callback, but queries modifier state through
@@ -150,7 +153,9 @@ int keycodeTable[UIKeyboardHIDUsageKeyboardRightGUI+1];
         // Key fix 2: explicitly synchronize the modifier cache inside MC 1.21.9+.
         // Even in versions where MC does not use setModifiers the call is safe (older versions lack the method
         // and it is simply a no-op). This makes Shift/Ctrl/Alt on a physical keyboard work in game.
-        CallbackBridge_syncModifiersToMC(modifiers);
+        // The sync is queued rather than invoked here: this runs on the UIKit thread, where the JNI
+        // environment pointer is not valid. pojavPumpEvents drains it on the game thread instead.
+        CallbackBridge_queueModifierSync(modifiers);
     } else {
         NSLog(@"KeyboardInput: Unhandled key %lu", (unsigned long)key.keyCode);
     }
