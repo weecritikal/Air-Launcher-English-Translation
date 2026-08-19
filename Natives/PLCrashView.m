@@ -20,6 +20,7 @@ typedef NS_ENUM(NSInteger, CrashType) {
     CrashTypeTerminated,         // Terminated by an external signal
     CrashTypeModConflict,        // A mod conflict
     CrashTypeMissingLibrary,     // A missing library file
+    CrashTypeUnsignedDylib,      // iOS refused to load a .dylib a mod extracted at runtime
     CrashTypeJavaVersionMismatch,// A Java version mismatch
     CrashTypeRendererError,      // A renderer error
     CrashTypeModLoadingFailure,  // A mod failed to load
@@ -568,6 +569,12 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/weecritikal/Air-L
             [result addObject:@{@"icon": @"info.circle", @"text": localize(@"crash.suggestion.modconflict_check", @"Check mod version compatibility (Forge/Fabric/API versions)")}];
             [result addObject:@{@"icon": @"doc.text", @"text": localize(@"crash.suggestion.modconflict_log", @"Read the full log to find the conflicting mod")}];
             break;
+        case CrashTypeUnsignedDylib:
+            [result addObject:@{@"icon": @"app.connected.to.app.below.fill", @"text": localize(@"crash.suggestion.dylib_attached", @"Settings -> Debug: turn on \"Use Universal StikDebug Script\", then \"Keep attached to StikDebug\"")}];
+            [result addObject:@{@"icon": @"pip", @"text": localize(@"crash.suggestion.dylib_pip", @"Leave StikDebug's Picture-in-Picture window open while you play - closing it detaches the debugger")}];
+            [result addObject:@{@"icon": @"trash", @"text": localize(@"crash.suggestion.dylib_mod", @"If it still crashes, remove the mod named in the message - it needs a native library iOS will not load")}];
+            break;
+
         case CrashTypeMissingLibrary:
             [result addObject:@{@"icon": @"arrow.clockwise.circle", @"text": localize(@"crash.suggestion.missinglib_reinstall", @"Reinstall the current game version")}];
             [result addObject:@{@"icon": @"folder", @"text": localize(@"crash.suggestion.missinglib_check", @"Check that the libraries folder in the instance directory is complete")}];
@@ -622,7 +629,18 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/weecritikal/Air-L
         return;
     }
 
-    // 2. OOM (SIGKILL, or OOM keywords in the log)
+    // 2. A .dylib a mod extracted at runtime that iOS refused to load.
+    //    Checked ahead of everything else because it surfaces as an UnsatisfiedLinkError too, and
+    //    the generic "reinstall the game version" advice for that is a long dead end here - no
+    //    reinstall can help, the file is rejected for how it is signed, not for being absent.
+    if ([lowerLog containsString:@"code signature invalid"] ||
+        ([lowerLog containsString:@"code signature"] && [lowerLog containsString:@"dylib"])) {
+        self.crashType = CrashTypeUnsignedDylib;
+        self.crashDetail = [self extractLineContaining:@"code signature" fromLog:lowerLog];
+        return;
+    }
+
+    // 3. OOM (SIGKILL, or OOM keywords in the log)
     if ([self isOOMCrash]) {
         self.crashType = CrashTypeOOM;
         self.crashDetail = [self extractLineContaining:@"outofmemory" fromLog:lowerLog] ?: [self extractLineContaining:@"cannot allocate" fromLog:lowerLog];
@@ -1008,6 +1026,9 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/weecritikal/Air-L
             break;
         case CrashTypeMissingLibrary:
             reason = localize(@"crash.reason.missing_library", @"Missing game library files (UnsatisfiedLinkError/NoClassDefFoundError)");
+            break;
+        case CrashTypeUnsignedDylib:
+            reason = localize(@"crash.reason.unsigned_dylib", @"iOS refused to load a library a mod unpacked while running (code signature invalid)");
             break;
         case CrashTypeJavaVersionMismatch:
             reason = localize(@"crash.reason.java_version", @"Java version mismatch (UnsupportedClassVersionError)");

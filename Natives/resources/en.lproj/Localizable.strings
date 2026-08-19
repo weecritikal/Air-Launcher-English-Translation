@@ -572,6 +572,7 @@
 "crash.quick_fix" = "Quick Fix Suggestions";
 "crash.reason.mod_conflict" = "Mod conflict (NoSuchMethodError/ClassCastException)";
 "crash.reason.missing_library" = "Missing library (UnsatisfiedLinkError/NoClassDefFoundError)";
+"crash.reason.unsigned_dylib" = "iOS refused to load a library a mod unpacked while running (code signature invalid)";
 "crash.reason.java_version" = "Java version mismatch (UnsupportedClassVersionError)";
 "crash.reason.renderer" = "Renderer error (OpenGL/Metal/EGL initialization failed)";
 "crash.reason.mod_loading" = "Mod loading failure (Forge/Fabric/OptiFine)";
@@ -589,6 +590,9 @@
 "crash.suggestion.modconflict_remove" = "Remove recently added mods";
 "crash.suggestion.modconflict_check" = "Check mod version compatibility (Forge/Fabric/API)";
 "crash.suggestion.modconflict_log" = "View full log to identify conflicting mod";
+"crash.suggestion.dylib_attached" = "Settings -> Debug: turn on \"Use Universal StikDebug Script\", then \"Keep attached to StikDebug\"";
+"crash.suggestion.dylib_pip" = "Leave StikDebug's Picture-in-Picture window open while you play - closing it detaches the debugger";
+"crash.suggestion.dylib_mod" = "If it still crashes, remove the mod named in the message - it needs a native library iOS will not load";
 "crash.suggestion.missinglib_reinstall" = "Reinstall the current game version";
 "crash.suggestion.missinglib_check" = "Check if libraries folder is complete";
 "crash.suggestion.missinglib_network" = "Check network connection and download source";
