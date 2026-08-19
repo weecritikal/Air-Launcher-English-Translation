@@ -506,7 +506,6 @@
 "preference.popup.touch_info.message" = "This feature is an unofficial iOS compatibility layer for the TouchController mod.\n\nMod project page: https://github.com/TouchController/TouchController\n\nTechnical note:\nBecause the mod does not support iOS, this feature bridges the launcher and the game process over a local UDP connection (localhost). The connection is only used to pass touch data inside your device and never connects to the internet, so you can use it with confidence.\nThis feature was made by WeiErLiTeo.";
 "preference.title.two_finger_keyboard" = "Two-finger keyboard";
 "preference.detail.two_finger_keyboard" = "Long-press the screen with two fingers in game to bring up the keyboard.";
-"提示" = "Notice";
 
 // Announcement messages
 "announcement.preview_version" = "Welcome to Amethyst iOS Remastered Preview Version!";

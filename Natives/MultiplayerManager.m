@@ -1972,12 +1972,12 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     // ========== 1. Match the prefixed fields line by line ==========
 
     NSRegularExpression *nameRegex = [NSRegularExpression
-        regularExpressionWithPattern:@"(?:房间名称|Room\\s*name)[：:]?\\s*(.+)"
+        regularExpressionWithPattern:@"Room\\s*name:?\\s*(.+)"
                              options:NSRegularExpressionCaseInsensitive
                                error:nil];
 
     NSRegularExpression *networkIdRegex = [NSRegularExpression
-        regularExpressionWithPattern:@"(?:ZeroTier网络ID|网络ID|Network\\s*ID)[：:]?\\s*([0-9a-fA-F]{16})"
+        regularExpressionWithPattern:@"(?:ZeroTier\\s*)?Network\\s*ID:?\\s*([0-9a-fA-F]{16})"
                              options:NSRegularExpressionCaseInsensitive
                                error:nil];
 
@@ -1991,7 +1991,7 @@ typedef NS_ENUM(NSInteger, MultiplayerErrorCode) {
     // so only the bracketed form needs matching here.
     // The brackets are kept in hostIP, which makes the address type easy to recognize later.
     NSRegularExpression *addressRegex = [NSRegularExpression
-        regularExpressionWithPattern:@"(?:服务器地址|Server\\s*address)[：:]?\\s*((?:[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}|\\[[0-9a-fA-F:]+\\]))(?::([0-9]{1,5}))?"
+        regularExpressionWithPattern:@"Server\\s*address:?\\s*((?:[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}\\.[0-9]{1,3}|\\[[0-9a-fA-F:]+\\]))(?::([0-9]{1,5}))?"
                              options:0
                                error:nil];
 

@@ -230,10 +230,29 @@ public class PojavLauncher {
         // chosen is left alone.
         MCOptionUtils.load();
         String minecraftVersion = version.id;
-        if (minecraftVersion.compareTo("1.11") >= 0) {
-            MCOptionUtils.setDefault("lang", "en_us");
-        } else if (minecraftVersion.compareTo("1.1") >= 0) {
-            MCOptionUtils.setDefault("lang", "en_US");
+        String englishLang = minecraftVersion.compareTo("1.11") >= 0 ? "en_us" : "en_US";
+        if (minecraftVersion.compareTo("1.1") >= 0) {
+            MCOptionUtils.setDefault("lang", englishLang);
+        }
+
+        // One-time normalisation for instances that already carry a Chinese language.
+        // setDefault above only writes when the key is absent, so it cannot reach two cases:
+        // an instance created by an earlier build, which seeded lang:zh_cn without asking, and
+        // an imported modpack shipping its own options.txt. Either opens a Chinese menu on an
+        // English launcher. The value is rewritten once and a marker is left behind, so a
+        // language the player chooses afterwards - Chinese included - is never touched again.
+        File langMarker = new File(Tools.DIR_GAME_PROFILE, ".air_language_normalized");
+        if (!langMarker.exists() && minecraftVersion.compareTo("1.1") >= 0) {
+            String currentLang = MCOptionUtils.get("lang");
+            if (currentLang != null && currentLang.toLowerCase(Locale.ROOT).startsWith("zh_")) {
+                System.out.println("[Air] Normalizing game language " + currentLang + " -> " + englishLang + " (one time)");
+                MCOptionUtils.set("lang", englishLang);
+            }
+            try {
+                langMarker.createNewFile();
+            } catch (IOException e) {
+                System.err.println("[Air] Could not write the language marker: " + e);
+            }
         }
         // For Minecraft 1.0 and earlier, no language option
         MCOptionUtils.save();
