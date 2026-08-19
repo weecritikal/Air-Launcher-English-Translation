@@ -19,8 +19,12 @@
 
 ---
 
-A premium Minecraft: Java Edition launcher for iOS and iPadOS, rebuilt from the ground up on the official Amethyst project. It delivers a refined mobile experience with comprehensive mod management, intelligent renderer selection, and deep platform integration.
+Air — a Minecraft: Java Edition launcher for iOS and iPadOS. A complete English translation of Amethyst iOS Remastered (a fork of 
+AngelAuraMC's Amethyst iOS by herbrine8403) 
 
+Thanks to both AngelAuraMC and herbrine8403 for their work in their original repositories, I truly admire your work, all credit to you two. I only intend to build on top of it.
+
+-weecritikal
 ---
 
 ## Table of Contents
