@@ -5,9 +5,14 @@ on:
     branches-ignore:
       - 'l10n_main'
     types: [opened, reopened, synchronize]
+    paths-ignore: &docs
+      - '**.md'
+      - 'LICENSE'
+      - 'donate.png'
   push:
     branches-ignore:
       - 'l10n_main'
+    paths-ignore: *docs
   workflow_dispatch:
 
 # Concurrency control: a new push to the same branch/PR cancels older builds that are still queued or running.
@@ -90,6 +95,7 @@ jobs:
           CERT_P12_BASE64: ${{ secrets.SIGNING_CERT_P12_BASE64 }}
           CERT_PASSWORD: ${{ secrets.SIGNING_CERT_PASSWORD }}
           PROFILE_BASE64: ${{ secrets.PROVISIONING_PROFILE_BASE64 }}
+          TEAMID: ${{ secrets.SIGNING_TEAMID }}
         run: |
           if [ -z "$CERT_P12_BASE64" ] || [ -z "$PROFILE_BASE64" ]; then
             echo "signing=no" >> "$GITHUB_OUTPUT"
@@ -154,13 +160,21 @@ jobs:
             echo "::error::No codesigning identity found in the imported .p12"
             exit 1
           fi
-          echo "Signing identity: $IDENTITY"
+          echo "Signing identity resolved (${#IDENTITY} chars)"
           rm -f "$RUNNER_TEMP/cert.p12"
           {
             echo "signing=yes"
             echo "identity=$IDENTITY"
             echo "profile=$RUNNER_TEMP/profile.mobileprovision"
           } >> "$GITHUB_OUTPUT"
+
+          # This repository is public, so its Actions logs are public too. The identity
+          # reads "Apple Development: <Legal Name> (TEAMID)", and make prints it once per
+          # signed binary - several hundred times a build. Register both with the runner
+          # so they are redacted for the rest of the job, including make's output.
+          # Masking last, after the outputs above are written, keeps it clear of them.
+          echo "::add-mask::$IDENTITY"
+          if [ -n "$TEAMID" ]; then echo "::add-mask::$TEAMID"; fi
 
       - name: Check CurseForge key wiring
         env:

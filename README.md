@@ -6,11 +6,11 @@
 <p align="center"><sub>Amethyst iOS Remastered</sub></p>
 
 <div align="center">
-  <img alt="Build Status" src="https://github.com/herbrine8403/Amethyst-iOS-MyRemastered/actions/workflows/development.yml/badge.svg?branch=main">
-  <img alt="Downloads" src="https://img.shields.io/github/downloads/herbrine8403/Amethyst-iOS-MyRemastered/total?label=Downloads&style=flat">
-  <img alt="Release" src="https://img.shields.io/github/v/release/herbrine8403/Amethyst-iOS-MyRemastered?style=flat">
-  <img alt="License" src="https://img.shields.io/github/license/herbrine8403/Amethyst-iOS-MyRemastered?style=flat">
-  <img alt="Last Commit" src="https://img.shields.io/github/last-commit/herbrine8403/Amethyst-iOS-MyRemastered?color=c78aff&label=last%20commit&style=flat">
+  <img alt="Build Status" src="https://github.com/weecritikal/Air-Launcher-English-Translation/actions/workflows/development.yml/badge.svg?branch=main">
+  <img alt="Downloads" src="https://img.shields.io/github/downloads/weecritikal/Air-Launcher-English-Translation/total?label=Downloads&style=flat">
+  <img alt="Release" src="https://img.shields.io/github/v/release/weecritikal/Air-Launcher-English-Translation?style=flat">
+  <img alt="License" src="https://img.shields.io/github/license/weecritikal/Air-Launcher-English-Translation?style=flat">
+  <img alt="Last Commit" src="https://img.shields.io/github/last-commit/weecritikal/Air-Launcher-English-Translation?color=c78aff&label=last%20commit&style=flat">
 </div>
 
 <p align="center">
@@ -25,6 +25,7 @@ A premium Minecraft: Java Edition launcher for iOS and iPadOS, rebuilt from the 
 
 ## Table of Contents
 
+- [Changes in This Fork](#changes-in-this-fork)
 - [Core Features](#core-features)
 - [Quick Start](#quick-start)
   - [Device Requirements](#device-requirements)
@@ -34,6 +35,28 @@ A premium Minecraft: Java Edition launcher for iOS and iPadOS, rebuilt from the 
 - [Contributors](#contributors)
 - [Third-Party Components](#third-party-components)
 - [Sponsor](#sponsor)
+
+## Changes in This Fork
+
+This is a fork of [herbrine8403/Amethyst-iOS-MyRemastered](https://github.com/herbrine8403/Amethyst-iOS-MyRemastered), based on the 5.0.0 Preview and synced with upstream through `6514be6`. It adds a complete English translation and fixes several issues that kept the launcher from working. Only substantive changes are listed here -- routine build and tooling fixes are left out.
+
+### Translation
+
+- **Complete English localization.** Upstream ships Mandarin-only. Every user-facing string is now English: 1,313 hardcoded string literals across the Objective-C sources, 19 localization keys that were absent from `en.lproj`, and the in-source comments. The Chinese localization is untouched and still selectable.
+
+### Fixes
+
+- **The game no longer closes the instant you press Play.** The launcher probes for JIT support by calling a function that executes a `brk` debugger breakpoint. With no debugger attached that raises `SIGTRAP` and the kernel kills the process -- so the app died at exactly the point it meant to report "JIT unavailable". The probe now installs a `SIGTRAP` handler and returns a negative result instead of terminating. Upstream builds are affected by this too.
+- **Heap allocation degrades instead of failing.** If the configured memory allocation cannot be mapped, the launcher now retries at successively smaller sizes down to 512 MB rather than giving up, so a too-ambitious setting no longer blocks startup outright.
+- **CurseForge browsing matches the website.** The Modpacks, Mods, Shaders, Resource Packs, Data Packs and Worlds tabs returned effectively arbitrary results with no download counts. They now request CurseForge's own sort order and surface author, download count, categories and last-updated date.
+- **The CurseForge API key reaches the build.** The key was silently dropped during configuration, leaving CurseForge unavailable at runtime. It is now supplied through a repository secret and compiled in.
+- **`.zip` and `.mcpack` files can be imported.** Both were unselectable in the iOS document picker; the picker now declares the archive types these files actually resolve to.
+- **Microsoft sign-in no longer stacks dialogs.** Each authentication step raised its own alert, producing a queue of roughly ten prompts to dismiss. Progress steps now update in place.
+
+### Build
+
+- **Apple code signing.** Builds can be signed in CI with your own Apple developer identity and provisioning profile. This is what preserves the `increased-memory-limit` and `extended-virtual-addressing` entitlements, which re-signing with an unprivileged profile strips -- and without them large modpacks cannot map a heap.
+- **Configurable bundle identifier.** Set the `BUNDLE_ID` repository variable to an App ID registered to your own team, rather than editing tracked sources.
 
 ## Core Features
 
@@ -87,14 +110,14 @@ Prioritize tools that support permanent signing and automatic JIT enablement:
 <details>
 <summary><b>Official Release (TrollStore)</b></summary>
 
-1. Download the `.tipa` package from [Releases](https://github.com/herbrine8403/Amethyst-iOS-MyRemastered/releases).
+1. Download the `.tipa` package from [Releases](https://github.com/weecritikal/Air-Launcher-English-Translation/releases).
 2. Open the file with TrollStore via the system share menu to complete installation.
 </details>
 
 <details>
 <summary><b>Official Release (AltStore / SideStore)</b></summary>
 
-1. Download the `.ipa` package from [Releases](https://github.com/herbrine8403/Amethyst-iOS-MyRemastered/releases).
+1. Download the `.ipa` package from [Releases](https://github.com/weecritikal/Air-Launcher-English-Translation/releases).
 2. Import the IPA into your sideloading tool following its standard installation procedure.
 </details>
 
@@ -104,7 +127,7 @@ Prioritize tools that support permanent signing and automatic JIT enablement:
 > [!CAUTION]
 > Nightly builds may contain critical bugs including crashes and startup failures. Use only for development and testing purposes.
 
-1. Navigate to the [GitHub Actions](https://github.com/herbrine8403/Amethyst-iOS-MyRemastered/actions) page and download the latest IPA artifact.
+1. Navigate to the [GitHub Actions](https://github.com/weecritikal/Air-Launcher-English-Translation/actions) page and download the latest IPA artifact.
 2. Import the IPA into your sideloading tool (AltStore, SideStore, etc.) to install.
 </details>
 

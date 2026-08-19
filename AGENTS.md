@@ -150,6 +150,33 @@ Build artifacts:
 1.  After every source change, push the change to the GitHub remote branch so the project is built for testing.
 2.  If network problems occur while pushing to GitHub, remind the user to turn off their network proxy.
 3.  This project is built with Xcode 15.4/16 and the iPhoneOS 17.5 SDK, and the minimum supported OS is iOS 14.0.
-4.  Use the `herbrine8403` username and the `weishixvn@outlook.com` email address for git commits.
+4.  Use the `weecritikal` username and the `korbinh18@gmail.com` email address for git commits. (Upstream's AGENTS.md named the upstream maintainer here; committing as them in this fork would misattribute the work.)
 5.  The project supports building for several platforms - iOS, tvOS, the iOS Simulator and visionOS - selected with the `PLATFORM` parameter.
 6.  When the renderer is set to Auto, a suitable renderer is chosen automatically, including MobileGlues.
+
+## Fork Maintenance
+
+This repository is a fork of `herbrine8403/Amethyst-iOS-MyRemastered`. Two things have to stay current as work lands.
+
+### The changelog
+
+`README.md` has a **Changes in This Fork** section. Add an entry there whenever a change is substantive -- something a user would notice or that changes how the project is built:
+
+*   behaviour a user can observe (a crash fixed, a screen that now works, a feature restored)
+*   translation or localization coverage
+*   build, signing, or packaging changes that affect what ships
+
+Do **not** add an entry for routine work: CI plumbing, a typo, a lint fix, dependency bumps, or fixing a bug introduced earlier in the same piece of work. The section is a summary of how this fork differs from upstream, not a commit log -- if in doubt, leave it out.
+
+Keep the "synced with upstream through `<sha>`" line accurate when upstream is merged.
+
+### Upstream syncs
+
+Do not use GitHub's "Sync fork" button. `main` carries this fork's translation, so a sync would try to fast-forward over it. Merge deliberately instead:
+
+```sh
+git fetch upstream main
+git merge upstream/main
+```
+
+Conflicts are expected and are almost always the same shape: a translated comment sitting on a line upstream edited. Resolve by taking **upstream's code** and **this fork's English comment**. After resolving, confirm no CJK text has been reintroduced into the merged files before committing.
