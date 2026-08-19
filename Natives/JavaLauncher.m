@@ -2,6 +2,8 @@
 #include <dlfcn.h>
 #include <errno.h>
 #include <libgen.h>
+#include <setjmp.h>
+#include <signal.h>
 #include <spawn.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -24,6 +26,66 @@
 #define fm NSFileManager.defaultManager
 
 extern char **environ;
+
+/// JIT26CreateRegionLegacy() is a bare `brk #0x69`. It is a message to an attached JIT
+/// debugger script, which is expected to trap it, do the work and resume us. When no
+/// script is handling that breakpoint the trap is unhandled and the process dies on the
+/// spot with EXC_BREAKPOINT/SIGTRAP - before reaching the code that explains how to
+/// install a script. That produced a hard crash where a dialog was intended.
+///
+/// Probe it behind a SIGTRAP handler so an unhandled trap becomes a recoverable NO.
+/// A debugger that IS attached takes the Mach exception first and never reaches the
+/// signal handler, so the normal path is unaffected.
+static sigjmp_buf jit26ProbeJmpBuf;
+
+static void jit26ProbeTrapHandler(int sig) {
+    siglongjmp(jit26ProbeJmpBuf, 1);
+}
+
+static BOOL probeJIT26CreateRegionLegacy(void **outResult) {
+    struct sigaction probeAction, previousAction;
+    memset(&probeAction, 0, sizeof(probeAction));
+    probeAction.sa_handler = jit26ProbeTrapHandler;
+    sigemptyset(&probeAction.sa_mask);
+    probeAction.sa_flags = 0;
+    if (sigaction(SIGTRAP, &probeAction, &previousAction) != 0) {
+        // Cannot install the guard; fall back to the original unguarded behaviour.
+        *outResult = JIT26CreateRegionLegacy(getpagesize());
+        return YES;
+    }
+
+    BOOL handled;
+    if (sigsetjmp(jit26ProbeJmpBuf, 1) == 0) {
+        *outResult = JIT26CreateRegionLegacy(getpagesize());
+        handled = YES;
+    } else {
+        *outResult = NULL;
+        handled = NO;
+    }
+    sigaction(SIGTRAP, &previousAction, NULL);
+    return handled;
+}
+
+/// Copy the bundled JIT script into POJAV_HOME so it is reachable from the Files app.
+/// It used to be exported only after the breakpoint probe succeeded, which is useless:
+/// a user who needs the script cannot get past the probe to obtain it.
+static void exportJIT26ScriptIfNeeded(void) {
+    const char *home = getenv("POJAV_HOME");
+    if (!home) return;
+    for (NSString *name in @[@"UniversalJIT26", @"JIT26Script"]) {
+        NSString *source = [NSBundle.mainBundle pathForResource:name ofType:@"js"];
+        if (!source) continue;
+        NSString *dest = [NSString stringWithFormat:@"%s/%@.js", home, name];
+        if ([fm fileExistsAtPath:dest]) continue;
+        NSError *error = nil;
+        [fm copyItemAtPath:source toPath:dest error:&error];
+        if (error) {
+            NSLog(@"[JavaLauncher] Could not export %@.js: %@", name, error.localizedDescription);
+        } else {
+            NSLog(@"[JavaLauncher] Exported %@.js to the Documents directory", name);
+        }
+    }
+}
 
 BOOL validateVirtualMemorySpace(size_t size) {
     size <<= 20; // convert to MB
@@ -361,9 +423,29 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
     BOOL requiresDebugJITMapping = DeviceNeedsDebugJITMapping();
     BOOL jit26AlwaysAttached = getPrefBool(@"debug.debug_always_attached_jit");
     if (requiresDebugJITMapping) {
+        // Make the script reachable before it is needed, not after.
+        exportJIT26ScriptIfNeeded();
+
         // Detect whether a legacy JIT script is in use (brk #0x69 is handled by UniversalJIT26.js)
         static void *result;
-        if(!result) result = JIT26CreateRegionLegacy(getpagesize());
+        static BOOL probed;
+        if (!probed) {
+            probed = YES;
+            if (!probeJIT26CreateRegionLegacy(&result)) {
+                // Nothing trapped the breakpoint, so no JIT script is attached. Say so
+                // instead of dying at the breakpoint with no explanation.
+                UIKit_returnToSplitView();
+                showDialog(localize(@"Error", nil),
+                           @"No JIT script is attached.\n\n"
+                           "JIT is enabled, but enabling JIT and assigning a script are two separate steps, "
+                           "and the launcher needs the script to allocate its JIT region.\n\n"
+                           "In StikDebug, long-press Air while enabling JIT, tap \"Assign Script\", then pick "
+                           "UniversalJIT26.js - it has been placed in Air's Documents folder for you. "
+                           "(On sideloaded StikDebug the built-in script is named Amethyst-MeloNX.js.)");
+                [PLLogOutputView handleExitCode:1];
+                return 1;
+            }
+        }
         if ((uint32_t)result != 0x690000E0) {
             munmap(result, getpagesize());
             // The legacy script only allows the breakpoint to be called once, so it must switch to UniversalJIT26
@@ -555,13 +637,42 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
     }
     NSLog(@"[JavaLauncher] Max RAM allocation is set to %d MB", allocmem);
     if (!validateVirtualMemorySpace(allocmem)) {
-        UIKit_returnToSplitView();
-        if (getEntitlementValue(@"com.apple.developer.kernel.increased-memory-limit")) {
-            showDialog(localize(@"Error", nil), @"Insufficient contiguous virtual memory space. Lower memory allocation and try again.");
-        } else {
-            showDialog(localize(@"Error", nil), @"Insufficient contiguous virtual memory space. Increased Memory Limit entitlement is missing, please add it via GetMoreRam app.");
+        // Sideloaded builds usually lose com.apple.developer.kernel.increased-memory-limit:
+        // the entitlement is in entitlements.sideload.xml, but re-signing with a personal
+        // provisioning profile that does not authorise it strips it back out. iOS then
+        // refuses a mapping this large and the launcher gave up entirely - on an 8 GB
+        // device auto-RAM asks for 2048 MB, which a jailed process cannot map.
+        //
+        // Step the heap down until something fits rather than refusing to start. This
+        // only runs where the old code would have failed outright, so a setup that
+        // already worked is unaffected.
+        const int kMinimumAllocMB = 512;
+        int workable = 0;
+        for (int candidate = allocmem * 3 / 4; candidate >= kMinimumAllocMB; candidate = candidate * 3 / 4) {
+            if (validateVirtualMemorySpace(candidate)) {
+                workable = candidate;
+                break;
+            }
         }
-        return 1;
+        if (workable > 0) {
+            NSLog(@"[JavaLauncher] %d MB could not be mapped; falling back to %d MB", allocmem, workable);
+            allocmem = workable;
+        } else {
+            UIKit_returnToSplitView();
+            if (getEntitlementValue(@"com.apple.developer.kernel.increased-memory-limit")) {
+                showDialog(localize(@"Error", nil), @"Insufficient contiguous virtual memory space. Lower memory allocation and try again.");
+            } else {
+                showDialog(localize(@"Error", nil),
+                           [NSString stringWithFormat:
+                            @"Insufficient contiguous virtual memory space.\n\n"
+                            "Even %d MB could not be mapped. This build lost the Increased Memory Limit "
+                            "entitlement when it was re-signed for sideloading.\n\n"
+                            "Try turning off automatic RAM in Settings and setting the allocation lower, "
+                            "or install through TrollStore or LiveContainer (with GetMoreRam), which keep "
+                            "the entitlement.", kMinimumAllocMB]);
+            }
+            return 1;
+        }
     }
 
     int margc = -1;
