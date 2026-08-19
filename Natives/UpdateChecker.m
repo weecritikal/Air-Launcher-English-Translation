@@ -10,8 +10,8 @@
 
 @implementation UpdateChecker
 
-+ (NSString *)repoOwner { return @"herbrine8403"; }
-+ (NSString *)repoName { return @"Amethyst-iOS-MyRemastered"; }
++ (NSString *)repoOwner { return @"weecritikal"; }
++ (NSString *)repoName { return @"Air-Launcher-English-Translation"; }
 
 + (NSString *)latestReleaseURL {
     /* The /releases/latest endpoint automatically returns the newest non-pre-release (stable) version */
@@ -22,7 +22,8 @@
 + (NSString *)currentVersion {
     NSString *v = [[[NSBundle mainBundle] infoDictionary] objectForKey:@"CFBundleShortVersionString"];
     if (v == nil) v = @"";
-    /* The current version number may be "5.0.0 Preview", so the numeric part is extracted for comparison */
+    /* Compared against this fork's own releases. Pointing it upstream would report every
+       build as out of date, since the two projects number independently. */
     return v;
 }
 
@@ -121,7 +122,8 @@
         info.assets = assetList;
     }
 
-    /* Version comparison: currentVersion may be "5.0.0 Preview", so extract the numeric part first */
+    /* Version comparison: a version string may carry a suffix such as "1.0.0 Beta", so the
+       numeric part is extracted first */
     NSString *currentNum = [self extractVersionNumbers:info.currentVersion];
     NSString *latestNum = [self extractVersionNumbers:info.latestVersion];
     if (currentNum.length > 0 && latestNum.length > 0) {
@@ -144,7 +146,7 @@
     return v;
 }
 
-/// Extract the numeric part from a version string (e.g. "5.0.0 Preview" → "5.0.0")
+/// Extract the numeric part from a version string (e.g. "1.0.0 Beta" → "1.0.0")
 + (NSString *)extractVersionNumbers:(NSString *)version {
     if (version.length == 0) return @"";
     NSError *err = nil;

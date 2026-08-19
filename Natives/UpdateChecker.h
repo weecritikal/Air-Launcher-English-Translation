@@ -17,7 +17,7 @@ NS_ASSUME_NONNULL_BEGIN
 /// Update checker (modeled on FCL/ZL2, using the GitHub Releases API)
 ///
 /// Stable release check: calls the /releases/latest endpoint, and GitHub automatically returns the newest non-pre-release.
-/// Project URL: https://github.com/herbrine8403/Amethyst-iOS-MyRemastered
+/// Project URL: https://github.com/weecritikal/Air-Launcher-English-Translation
 @interface UpdateChecker : NSObject
 
 /// Repository owner

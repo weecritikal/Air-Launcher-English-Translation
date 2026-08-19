@@ -39,7 +39,7 @@ Air — a Minecraft: Java Edition launcher for iOS and iPadOS. A complete Englis
 
 ## Changes in This Fork
 
-This is a fork of [herbrine8403/Amethyst-iOS-MyRemastered](https://github.com/herbrine8403/Amethyst-iOS-MyRemastered), based on the 5.0.0 Preview and synced with upstream through `6514be6`. It adds a complete English translation and fixes several issues that kept the launcher from working. Only substantive changes are listed here -- routine build and tooling fixes are left out.
+Air is versioned independently of upstream, starting at 1.0.0. This release is a fork of [herbrine8403/Amethyst-iOS-MyRemastered](https://github.com/herbrine8403/Amethyst-iOS-MyRemastered), built from its 5.0.0 Preview and synced with upstream through `6514be6`. It adds a complete English translation and fixes several issues that kept the launcher from working. Only substantive changes are listed here -- routine build and tooling fixes are left out.
 
 ### Translation
 

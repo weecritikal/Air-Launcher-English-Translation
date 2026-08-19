@@ -12,7 +12,7 @@ on:
       release_tag:
         description: 'Tag for the release (only used when publish_release is true)'
         type: string
-        default: '5.0.0-Preview-en'
+        default: 'v1.0.0'
 
 concurrency:
   group: english-ipa-${{ github.ref }}
@@ -139,7 +139,7 @@ jobs:
           tag_name: ${{ inputs.release_tag }}
           name: ${{ inputs.release_tag }}
           body: |
-            Air Launcher 5.0.0 Preview - English translation.
+            Air - a Minecraft: Java Edition launcher for iOS and iPadOS, in English.
 
             Built from `${{ github.ref_name }}` at `${{ github.sha }}`.
 
