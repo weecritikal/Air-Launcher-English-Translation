@@ -116,8 +116,34 @@ jobs:
           fi
           echo "Password verified against the .p12"
 
-          security import "$RUNNER_TEMP/cert.p12" -k "$RUNNER_KEYCHAIN" \
-            -P "$CERT_PASSWORD" -T /usr/bin/codesign -f pkcs12
+          import_p12() {
+            security import "$1" -k "$RUNNER_KEYCHAIN" \
+              -P "$CERT_PASSWORD" -T /usr/bin/codesign -f pkcs12
+          }
+
+          # OpenSSL 3.x - what Arch and most current Linux distros ship - defaults
+          # "pkcs12 -export" to AES-256-CBC with a SHA-256 MAC. Apple's keychain
+          # importer cannot read that scheme and reports it as "MAC verification
+          # failed (wrong password?)", which is why the password check above can
+          # pass while the import below still fails. /usr/bin/openssl on the runner
+          # is LibreSSL, whose defaults are the SHA1/3DES scheme the keychain
+          # expects, so a round trip through it converts the bundle in place and
+          # no re-export is needed on the machine that created the .p12.
+          if ! import_p12 "$RUNNER_TEMP/cert.p12"; then
+            echo "Direct import failed - converting the bundle to the legacy PKCS#12 encryption Apple accepts."
+            umask 077
+            /usr/bin/openssl pkcs12 -in "$RUNNER_TEMP/cert.p12" \
+              -passin pass:"$CERT_PASSWORD" -nodes -out "$RUNNER_TEMP/bundle.pem"
+            /usr/bin/openssl pkcs12 -export -in "$RUNNER_TEMP/bundle.pem" \
+              -passout pass:"$CERT_PASSWORD" -out "$RUNNER_TEMP/cert.legacy.p12" \
+              -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES -macalg sha1 2>/dev/null \
+              || /usr/bin/openssl pkcs12 -export -in "$RUNNER_TEMP/bundle.pem" \
+                   -passout pass:"$CERT_PASSWORD" -out "$RUNNER_TEMP/cert.legacy.p12"
+            rm -f "$RUNNER_TEMP/bundle.pem"
+            import_p12 "$RUNNER_TEMP/cert.legacy.p12"
+            rm -f "$RUNNER_TEMP/cert.legacy.p12"
+            echo "Imported after conversion."
+          fi
           security set-key-partition-list -S apple-tool:,apple:,codesign: \
             -s -k "$KEYCHAIN_PASSWORD" "$RUNNER_KEYCHAIN" >/dev/null
           security list-keychain -d user -s "$RUNNER_KEYCHAIN" login.keychain-db
