@@ -33,6 +33,20 @@
     } error:error];
 }
 
+/// Strip a leading "<minecraft version>-" from a loader version.
+///
+/// Modpack manifests are inconsistent about this: most declare a Forge loader as "forge-47.4.0",
+/// but some spell it out as "forge-1.20.1-47.4.0". Both have to end up as the bare loader version,
+/// because the Minecraft prefix is added back when the maven coordinate is built - left alone, the
+/// spelled-out form produced "1.20.1-1.20.1-47.4.0" and a 404 that looked like the modpack was
+/// asking for a Forge build that does not exist.
++ (NSString *)loaderVersionWithoutMinecraftPrefix:(NSString *)loaderVersion
+                                 minecraftVersion:(NSString *)minecraftVersion {
+    if (loaderVersion.length == 0 || minecraftVersion.length == 0) return loaderVersion;
+    NSString *prefix = [minecraftVersion stringByAppendingString:@"-"];
+    return [loaderVersion hasPrefix:prefix] ? [loaderVersion substringFromIndex:prefix.length] : loaderVersion;
+}
+
 + (NSDictionary *)infoForDependencies:(NSDictionary *)dependency {
     NSMutableDictionary *info = [NSMutableDictionary new];
     NSString *minecraftVersion = dependency[@"minecraft"];
@@ -42,11 +56,13 @@
         // download installer.jar and call ForgeDirectInstaller to write the full version.json and download the Forge libraries.
         // Setting no fields used to mean that after a modpack install only the profile was set and no version JSON was downloaded,
         // so launching reported "version information not found".
-        info[@"id"] = [NSString stringWithFormat:@"%@-forge-%@", minecraftVersion, dependency[@"forge"]];
+        NSString *forgeVer = [self loaderVersionWithoutMinecraftPrefix:dependency[@"forge"]
+                                                     minecraftVersion:minecraftVersion];
+        info[@"id"] = [NSString stringWithFormat:@"%@-forge-%@", minecraftVersion, forgeVer];
         info[@"loader"] = @"Forge";
-        info[@"loaderVersion"] = dependency[@"forge"];
+        info[@"loaderVersion"] = forgeVer;
         info[@"installer"] = [self installerURLForLoader:@"Forge"
-                                          loaderVersion:dependency[@"forge"]
+                                          loaderVersion:forgeVer
                                        minecraftVersion:minecraftVersion] ?: @"";
     } else if (dependency[@"fabric-loader"]) {
         info[@"id"] = [NSString stringWithFormat:@"fabric-loader-%@-%@", dependency[@"fabric-loader"], minecraftVersion];
@@ -57,7 +73,8 @@
     } else if (dependency[@"neoforge"]) {
         // NeoForge is like Forge: the version JSON is embedded in installer.jar.
         // The installer URL and the loader type are set so NeoForgeDirectInstaller is called during modpack installation.
-        NSString *neoforgeVer = dependency[@"neoforge"];
+        NSString *neoforgeVer = [self loaderVersionWithoutMinecraftPrefix:dependency[@"neoforge"]
+                                                         minecraftVersion:minecraftVersion];
         info[@"id"] = [NSString stringWithFormat:@"%@-neoforge-%@", minecraftVersion, neoforgeVer];
         info[@"loader"] = @"NeoForge";
         info[@"loaderVersion"] = neoforgeVer;
@@ -74,6 +91,10 @@
                             minecraftVersion:(NSString *)minecraftVersion {
     NSString *downloadSource = [PLPreferences currentDownloadSourceForType:@"forge"];
     BOOL useBMCLAPI = [downloadSource isEqualToString:@"bmclapi"];
+
+    // Some manifests already spell the Minecraft version into the loader version, so strip it
+    // before adding it back - otherwise the coordinate reads "1.20.1-1.20.1-47.4.0" and 404s.
+    loaderVersion = [self loaderVersionWithoutMinecraftPrefix:loaderVersion minecraftVersion:minecraftVersion];
 
     if ([loader isEqualToString:@"Forge"]) {
         // The Forge versionString is "<mc>-<loaderVersion>", for example "1.20.1-47.3.0"

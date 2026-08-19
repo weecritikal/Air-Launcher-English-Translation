@@ -1889,35 +1889,11 @@ didFinishDownloadingToURL:(NSURL *)location {
 - (nullable NSString *)buildInstallerURLForLoader:(NSString *)loader
                                     loaderVersion:(NSString *)loaderVersion
                                    minecraftVersion:(NSString *)minecraftVersion {
-    NSString *downloadSource = [PLPreferences currentDownloadSourceForType:@"forge"];
-    BOOL useBMCLAPI = [downloadSource isEqualToString:@"bmclapi"];
-
-    if ([loader isEqualToString:@"Forge"]) {
-        // The Forge versionString is "<mc>-<loaderVersion>", for example "1.20.1-47.3.0"
-        NSString *versionString = [NSString stringWithFormat:@"%@-%@", minecraftVersion, loaderVersion];
-        if (useBMCLAPI) {
-            return [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/maven/net/minecraftforge/forge/%@/forge-%@-installer.jar", versionString, versionString];
-        }
-        return [NSString stringWithFormat:@"https://maven.minecraftforge.net/net/minecraftforge/forge/%@/forge-%@-installer.jar", versionString, versionString];
-    }
-
-    if ([loader isEqualToString:@"NeoForge"]) {
-        // Early NeoForge 1.20.1 versions use the artifactId net.neoforged:forge, and later ones net.neoforged:neoforge
-        // loaderVersion is for example "47.1.0" (1.20.1) or "20.6.119-beta" (1.20.6+)
-        BOOL isLegacyForgeArtifact = [minecraftVersion isEqualToString:@"1.20.1"];
-        if (isLegacyForgeArtifact) {
-            if (useBMCLAPI) {
-                return [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/maven/net/neoforged/forge/%@/forge-%@-installer.jar", loaderVersion, loaderVersion];
-            }
-            return [NSString stringWithFormat:@"https://maven.neoforged.net/releases/net/neoforged/forge/%@/forge-%@-installer.jar", loaderVersion, loaderVersion];
-        }
-        if (useBMCLAPI) {
-            return [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/maven/net/neoforged/neoforge/%@/neoforge-%@-installer.jar", loaderVersion, loaderVersion];
-        }
-        return [NSString stringWithFormat:@"https://maven.neoforged.net/releases/net/neoforged/neoforge/%@/neoforge-%@-installer.jar", loaderVersion, loaderVersion];
-    }
-
-    return nil;
+    // This used to be a second copy of ModpackUtils' builder. Keeping one implementation means a
+    // fix to the coordinate format cannot reach the browse-and-install path but miss imports.
+    return [ModpackUtils installerURLForLoader:loader
+                                 loaderVersion:loaderVersion
+                              minecraftVersion:minecraftVersion];
 }
 
 /// Infer the required major Java version from the MC version
