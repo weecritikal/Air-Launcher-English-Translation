@@ -1102,8 +1102,25 @@ static NSString * const kImportedModpacksKey = @"ImportedModpacks";
                 downloadURL = cdnURL;
             }
             if (downloadURL.length == 0) {
-                NSLog(@"[ModpackImport] No download link could be resolved for projectID=%@ fileID=%@, skipping",
-                      projectID, fileID);
+                // Record it by name rather than by id pair, for the same reason as the
+                // browse-and-install path: a mod skipped as a number is a mod nobody knows is gone
+                // until the game will not start.
+                NSString *label = fileName.length > 0 ? fileName
+                    : [NSString stringWithFormat:@"CurseForge project %@ (file %@)", projectID, fileID];
+                NSString *reason = @"CurseForge did not give a download link. The author has most likely "
+                                    "turned off third-party downloads, so this one has to be downloaded "
+                                    "from the CurseForge website by hand and put in the mods folder.";
+                NSLog(@"[ModpackImport] Skipping '%@' (projectID=%@ fileID=%@): %@", label, projectID, fileID, reason);
+                @synchronized(self) {
+                    [self.failedFilesInternal addObject:@{
+                        @"fileName": label,
+                        @"url": @"",
+                        @"reason": reason,
+                        @"format": @"curseforge",
+                        @"projectID": projectID ?: @0,
+                        @"fileID": fileID ?: @0
+                    }];
+                }
                 continue;
             }
             NSString *destPath = [modsDir stringByAppendingPathComponent:fileName];

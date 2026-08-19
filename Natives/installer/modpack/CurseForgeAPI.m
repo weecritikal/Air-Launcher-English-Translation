@@ -912,14 +912,30 @@ submitDownloadTasksFromPackage:(NSString *)packagePath
         // even when only 1 file could not be parsed. That matches the "incomplete mods" problem described in the issue exactly.
         // Phase 5 fix (modeled on FCL): the skipped files are also recorded in failedFiles and reported to the user in the final summary.
         if (url.length == 0 || fileName.length == 0) {
-            NSLog(@"[CurseForgeAPI] Skipping unresolvable modpack file projectID=%@ fileID=%@ (url or fileName is empty), continuing with remaining files", projectID, fileID);
+            // Name the mod. Reporting a skipped mod as "projectID=908741 fileID=5678901" is the same
+            // as not reporting it: the pack installs looking complete, and the first anyone hears of
+            // it is the game failing at startup over a dependency nobody knew was absent. CurseForge
+            // still returns the file's own name in the case that actually happens most - an author
+            // who has turned off third-party downloads, leaving the record intact but the URL empty -
+            // so use it whenever it is there.
+            NSString *displayName = [file[@"displayName"] isKindOfClass:NSString.class] ? file[@"displayName"] : nil;
+            NSString *label = fileName.length > 0 ? fileName
+                            : (displayName.length > 0 ? displayName
+                            : [NSString stringWithFormat:@"CurseForge project %@ (file %@)", projectID, fileID]);
+            NSString *reason = (file != nil)
+                ? @"CurseForge did not give a download link. The author has most likely turned off "
+                   "third-party downloads, so this one has to be downloaded from the CurseForge "
+                   "website by hand and put in the mods folder."
+                : @"CurseForge returned no information for this file, so it could not be downloaded.";
+
+            NSLog(@"[CurseForgeAPI] Skipping '%@' (projectID=%@ fileID=%@): %@", label, projectID, fileID, reason);
             skippedCount++;
             // Progress must advance even when a single file fails, so the download card does not get stuck
             downloader.progress.completedUnitCount++;
             @synchronized(downloader.failedFiles) {
                 [downloader.failedFiles addObject:@{
-                    @"name": [NSString stringWithFormat:@"projectID=%@ fileID=%@", projectID, fileID],
-                    @"error": @"Could not parse file information from the CurseForge API (url or fileName is empty)"
+                    @"name": label,
+                    @"error": reason
                 }];
             }
             continue;
