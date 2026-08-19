@@ -342,16 +342,59 @@ public final class Tools {
          }
          */
 
+        int kept = 0;
         for (String perJar : classpath) {
             if (!new File(perJar).exists()) {
                 System.out.println("Ignored non-exists file: " + perJar);
                 continue;
             }
             libStr.append(perJar + ":");
+            kept++;
         }
+        System.out.println("[Tools] Classpath: " + kept + " of " + classpath.length + " library jars");
+
+        appendNarratorLibrary(libStr);
+
         libStr.append(DIR_HOME_VERSION + "/" + info.id + "/" + info.id + ".jar");
 
         return libStr.toString();
+    }
+
+    /// Guarantee com.mojang:text2speech reaches the classpath.
+    ///
+    /// The narrator does nothing here, so this library was historically filtered out. Mixin,
+    /// however, resolves metadata for the types a target method mentions, and Minecraft's
+    /// constructor mentions com.mojang.text2speech - so without it every modpack that mixins into
+    /// Minecraft dies during startup with
+    ///   ClassMetadataNotFoundException: com.mojang.text2speech.OperatingSystem
+    /// naming a class nobody asked for. The jar is downloaded with the rest of the libraries, so
+    /// rather than trusting that no filter dropped it again, look for it on disk and add it if the
+    /// generated classpath came back without it. Native variants stay out - they carry "natives" in
+    /// the file name and are useless here anyway.
+    private static void appendNarratorLibrary(StringBuilder libStr) {
+        File root = new File(DIR_HOME_LIBRARY, "com/mojang/text2speech");
+        if (!root.isDirectory()) {
+            System.out.println("[Tools] text2speech is not installed; mixins targeting Minecraft may fail");
+            return;
+        }
+        File[] versions = root.listFiles();
+        if (versions == null) return;
+        for (File versionDir : versions) {
+            File[] jars = versionDir.listFiles();
+            if (jars == null) continue;
+            for (File jar : jars) {
+                String name = jar.getName();
+                if (!name.endsWith(".jar") || name.contains("natives")) continue;
+                if (libStr.indexOf(jar.getAbsolutePath()) >= 0) {
+                    System.out.println("[Tools] text2speech already on the classpath: " + name);
+                    return;
+                }
+                libStr.append(jar.getAbsolutePath()).append(":");
+                System.out.println("[Tools] Added missing text2speech to the classpath: " + name);
+                return;
+            }
+        }
+        System.out.println("[Tools] No text2speech jar found under " + root);
     }
     
     public static void moveInside(String from, String to) {
