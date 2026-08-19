@@ -381,12 +381,28 @@ public final class Tools {
     }
 
     public static void preProcessLibraries(DependentLibrary[] libraries) {
-        // Ignore some libraries since they are unsupported (jinput, text2speech) or unused (LWJGL)
-        // Support for text2speech is not planned, so skip it for now.
+        // Ignore some libraries since they are unsupported (jinput) or unused (LWJGL)
         for (int i = 0; i < libraries.length; i++) {
             DependentLibrary libItem = libraries[i];
-            if (libItem.name.startsWith("com.mojang:text2speech") ||
-                //libItem.name.startsWith("net.java.jinput") ||
+
+            // text2speech drives the narrator, which does nothing here, so this used to be dropped
+            // wholesale. That is fine for vanilla - Minecraft falls back to a no-op narrator - but
+            // Mixin resolves class metadata for the *types a method mentions* while transforming,
+            // and Minecraft's constructor mentions com.mojang.text2speech. With the jar off the
+            // classpath, every modpack that mixins into Minecraft died during startup with
+            //   ClassMetadataNotFoundException: com.mojang.text2speech.OperatingSystem
+            // wrapped in a MixinTransformerError, naming a class nobody had ever asked for.
+            // The plain jar is pure Java, is already downloaded, and is present in every desktop
+            // install, so it goes on the classpath. Only the platform natives are dropped - those
+            // carry a classifier as a fourth coordinate component.
+            if (libItem.name.startsWith("com.mojang:text2speech")) {
+                if (libItem.name.split(":").length > 3) {
+                    libItem._skip = true;
+                }
+                continue;
+            }
+
+            if (//libItem.name.startsWith("net.java.jinput") ||
                 libItem.name.startsWith("net.java.dev.jna:platform:") ||
                 libItem.name.startsWith("org.lwjgl") ||
                 libItem.name.startsWith("tv.twitch")) {
