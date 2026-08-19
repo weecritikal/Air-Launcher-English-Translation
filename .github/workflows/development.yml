@@ -145,6 +145,9 @@ jobs:
           TEAMID: ${{ secrets.SIGNING_TEAMID }}
           SIGNING_TEAMID: ${{ steps.signing.outputs.identity }}
           PROVISIONING: ${{ steps.signing.outputs.profile }}
+          # Optional. Set the BUNDLE_ID repository variable to a bundle id registered
+          # under your own team; leaving it unset keeps the upstream default.
+          BUNDLE_ID: ${{ vars.BUNDLE_ID }}
         run: |
           set -o pipefail
           export PATH=/opt/homebrew/bin:$PATH
@@ -155,6 +158,12 @@ jobs:
           else
             # Clear the placeholders so the Makefile takes its unsigned ldid path.
             unset TEAMID SIGNING_TEAMID PROVISIONING
+          fi
+          # An empty BUNDLE_ID would override the Makefile default with a blank value.
+          if [ -z "$BUNDLE_ID" ]; then
+            unset BUNDLE_ID
+          else
+            echo "Bundle identifier: $BUNDLE_ID"
           fi
 
           if [ "${{ matrix.platform_name }}" == "ios" ]; then
