@@ -46,7 +46,7 @@ Air is versioned independently of upstream, starting at 1.0.0. This release is a
 - **Chinese is gone from the app.** The Simplified and Traditional Chinese localizations, the Chinese README, and the last Chinese string literals in the sources have been removed, so no code path can render Mandarin. Other languages, Japanese included, are untouched.
 - **Complete English localization.** Upstream ships Mandarin-only. Every user-facing string is now English: 1,313 hardcoded string literals across the Objective-C sources, 19 localization keys that were absent from `en.lproj`, and the in-source comments. The Chinese localization is untouched and still selectable.
 
-- **Its own app icon.** Air ships the green-to-blue hexagon rather than the upstream artwork, with matching dark and tinted variants so iOS 18's icon appearances render correctly instead of falling back.
+- **Its own app icon.** Air ships the green-to-blue hexagon rather than the upstream artwork.
 
 ### Fixes
 
