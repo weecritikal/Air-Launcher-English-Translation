@@ -313,7 +313,27 @@ NSString *const NeoForgeDirectInstallerErrorDomain = @"NeoForgeDirectInstallerEr
     NSLog(@"[NeoForgeDirect] Downloading pre-patched client artifact");
     reportProgress(0.75, @"Downloading the pre-patched core jar");
     NSString *mainPath = installProfile[@"path"];
-    // Fallback: assemble it from the version field when the path field is missing (NeoForge 1.20.1 uses the forge artifactId, 1.20.2+ the neoforge artifactId)
+
+    // Current NeoForge leaves the top-level path null and records the patched artefact under
+    // data.PATCHED instead, as a maven coordinate in square brackets. That entry is
+    // authoritative - it already names the right artifactId for the version's era - so it is
+    // read before anything is derived.
+    if (![mainPath isKindOfClass:[NSString class]] || mainPath.length == 0) {
+        id patched = installProfile[@"data"][@"PATCHED"];
+        NSString *coordinate = nil;
+        if ([patched isKindOfClass:[NSDictionary class]]) {
+            id client = patched[@"client"] ?: patched[@"server"];
+            if ([client isKindOfClass:[NSString class]]) coordinate = client;
+        }
+        NSCharacterSet *brackets = [NSCharacterSet characterSetWithCharactersInString:@"[] "];
+        coordinate = [coordinate stringByTrimmingCharactersInSet:brackets];
+        if (coordinate.length > 0) {
+            mainPath = coordinate;
+            NSLog(@"[NeoForgeDirect] path field absent, using data.PATCHED: %@", mainPath);
+        }
+    }
+
+    // Last resort: assemble it from the version field (NeoForge 1.20.1 uses the forge artifactId, 1.20.2+ the neoforge artifactId)
     if (![mainPath isKindOfClass:[NSString class]] || mainPath.length == 0) {
         NSString *versionField = installProfile[@"version"];
         if ([versionField isKindOfClass:[NSString class]] && versionField.length > 0) {
@@ -987,7 +1007,8 @@ NSString *const NeoForgeDirectInstallerErrorDomain = @"NeoForgeDirectInstallerEr
     BOOL useBMCLAPI = [downloadSource isEqualToString:@"bmclapi"];
 
     // Source URL construction: the official source + BMCLAPI + the HMCL mirror
-    // Note: the Tencent Cloud mirror does not mirror the NeoForge maven, so it has been replaced with the HMCL mirror (mirror.hua-u.me).
+    // mirror.hua-u.me was listed here as a last resort. Its hostname no longer resolves, so
+    // every attempt ended on a DNS failure that masked the real error.
     NSMutableArray *baseURLs = [NSMutableArray array];
     if ([groupId hasPrefix:@"net.neoforged"]) {
         if (useBMCLAPI) {
@@ -997,7 +1018,6 @@ NSString *const NeoForgeDirectInstallerErrorDomain = @"NeoForgeDirectInstallerEr
             [baseURLs addObject:@"https://maven.neoforged.net/releases"];
             [baseURLs addObject:@"https://bmclapi2.bangbang93.com/maven"];
         }
-        [baseURLs addObject:@"https://mirror.hua-u.me/neoforge"];
     } else {
         // Fallback: treat it as Forge
         if (useBMCLAPI) {
@@ -1007,7 +1027,6 @@ NSString *const NeoForgeDirectInstallerErrorDomain = @"NeoForgeDirectInstallerEr
             [baseURLs addObject:@"https://maven.minecraftforge.net"];
             [baseURLs addObject:@"https://bmclapi2.bangbang93.com/maven"];
         }
-        [baseURLs addObject:@"https://mirror.hua-u.me/forge"];
     }
 
     NSError *lastError = nil;

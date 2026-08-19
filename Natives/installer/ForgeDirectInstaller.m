@@ -694,12 +694,48 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
     NSLog(@"[ForgeDirect] Downloading pre-patched client artifact");
     reportProgress(0.75, @"Downloading the pre-patched core jar");
     NSString *mainPath = installProfile[@"path"];
-    // Fallback: build the standard Forge coordinates from the version field when the path field is missing
+
+    // Current Forge and NeoForge leave the top-level path null and record the patched artefact
+    // under data.PATCHED instead, as a maven coordinate wrapped in square brackets, for example
+    // "[net.minecraftforge:forge:1.20.1-47.4.0:client]". That entry is authoritative, so it is
+    // read before falling back to anything derived.
+    if (![mainPath isKindOfClass:[NSString class]] || mainPath.length == 0) {
+        id patched = installProfile[@"data"][@"PATCHED"];
+        NSString *coordinate = nil;
+        if ([patched isKindOfClass:[NSDictionary class]]) {
+            id client = patched[@"client"] ?: patched[@"server"];
+            if ([client isKindOfClass:[NSString class]]) coordinate = client;
+        }
+        NSCharacterSet *brackets = [NSCharacterSet characterSetWithCharactersInString:@"[] "];
+        coordinate = [coordinate stringByTrimmingCharactersInSet:brackets];
+        if (coordinate.length > 0) {
+            mainPath = coordinate;
+            NSLog(@"[ForgeDirect] path field absent, using data.PATCHED: %@", mainPath);
+        }
+    }
+
+    // Last resort: derive the coordinate from the version field. That field holds the profile id
+    // ("1.20.1-forge-47.4.0"), not the maven version ("1.20.1-47.4.0") - using it verbatim asks
+    // maven for a directory that does not exist, which is what produced
+    // forge/1.20.1-forge-47.4.0/forge-1.20.1-forge-47.4.0-universal.jar. The loader infix is
+    // removed so the two forms line up.
     if (![mainPath isKindOfClass:[NSString class]] || mainPath.length == 0) {
         NSString *versionField = installProfile[@"version"];
+        NSString *minecraft = installProfile[@"minecraft"];
         if ([versionField isKindOfClass:[NSString class]] && versionField.length > 0) {
-            mainPath = [NSString stringWithFormat:@"net.minecraftforge:forge:%@", versionField];
-            NSLog(@"[ForgeDirect] path field missing, falling back to version field: %@", mainPath);
+            NSString *mavenVersion = versionField;
+            if ([minecraft isKindOfClass:[NSString class]] && minecraft.length > 0) {
+                for (NSString *loader in @[@"forge", @"neoforge"]) {
+                    NSString *infix = [NSString stringWithFormat:@"%@-%@-", minecraft, loader];
+                    if ([versionField hasPrefix:infix]) {
+                        mavenVersion = [NSString stringWithFormat:@"%@-%@", minecraft,
+                                        [versionField substringFromIndex:infix.length]];
+                        break;
+                    }
+                }
+            }
+            mainPath = [NSString stringWithFormat:@"net.minecraftforge:forge:%@", mavenVersion];
+            NSLog(@"[ForgeDirect] path and data.PATCHED absent, derived from version field: %@", mainPath);
         }
     }
     if ([mainPath isKindOfClass:[NSString class]] && mainPath.length > 0) {
@@ -1132,12 +1168,9 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
             [baseURLs addObject:@"https://bmclapi2.bangbang93.com/maven"];
         }
     }
-    // The HMCL mirror is the last resort (it is reasonably available in mainland China and mirrors the Forge maven)
-    if ([groupId hasPrefix:@"net.neoforged"]) {
-        [baseURLs addObject:@"https://mirror.hua-u.me/neoforge"];
-    } else {
-        [baseURLs addObject:@"https://mirror.hua-u.me/forge"];
-    }
+    // mirror.hua-u.me used to be listed as a last resort. Its hostname no longer resolves, so
+    // every attempt ended on a DNS failure that masked the real error, and it mirrored for
+    // mainland China in any case.
 
     NSError *lastError = nil;
     NSString *firstTriedURL = nil;
