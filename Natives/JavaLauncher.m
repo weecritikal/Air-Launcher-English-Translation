@@ -1213,6 +1213,34 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
     // Free split VC
     tmpRootVC = nil;
 
+    // Enter the game directory before the JVM starts.
+    //
+    // -Duser.dir above only sets the Java property. It does not move the process, and iOS starts
+    // an app in a directory that holds none of the game's files. Java resolves relative paths two
+    // different ways depending on the call: File.getAbsolutePath() consults user.dir and reports
+    // the right location, while File.createNewFile(), FileInputStream and FileOutputStream hand
+    // the raw relative path to the OS, which resolves it against the process directory instead.
+    //
+    // So a mod doing new File("config/whatever.json") sees a correct-looking absolute path and an
+    // exists() of false, and every read or write fails with "No such file or directory" for a file
+    // that is sitting right there. Mods that build absolute paths from Forge's own directory
+    // constants are unaffected, which is why most of a modpack loads and a few mods fail oddly.
+    //
+    // Moving the process makes both resolutions agree, which is the arrangement every desktop
+    // launcher produces by starting java with the game directory as its working directory.
+    if (gameDir.length > 0) {
+        [NSFileManager.defaultManager createDirectoryAtPath:gameDir
+                                withIntermediateDirectories:YES attributes:nil error:nil];
+        if (chdir(gameDir.UTF8String) == 0) {
+            NSLog(@"[JavaLauncher] Working directory: %@", gameDir);
+        } else {
+            // Not fatal: mods using absolute paths still work, so let the game start and let the
+            // log say why a mod might later fail to find a file that exists.
+            NSLog(@"[JavaLauncher] Could not enter the game directory %@ (%s). Mods that use relative paths may fail to read or write their files.",
+                  gameDir, strerror(errno));
+        }
+    }
+
     return pJLI_Launch(++margc, margv,
                    0, NULL, // sizeof(const_jargs) / sizeof(char *), const_jargs,
                    0, NULL, // sizeof(const_appclasspath) / sizeof(char *), const_appclasspath,
