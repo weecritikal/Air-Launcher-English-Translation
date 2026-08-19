@@ -536,7 +536,41 @@
     cell.accessoryView = nil;
 }
 
+/// The sign-in flow reports each step it completes (access token, XBL token, XSTS twice,
+/// Xbox profile, Minecraft token, profile check) through the same callback it uses for
+/// the final result. Those steps are progress, not completion - showing a dialog for each
+/// meant roughly seven alerts to dismiss during one sign-in.
+/// Real completion arrives as a nil status, which the tail of this method handles.
+- (BOOL)isLoginProgressStatus:(id)status {
+    if (![status isKindOfClass:NSString.class]) return NO;
+    static NSSet<NSString *> *progressMessages = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        NSArray<NSString *> *keys = @[
+            @"login.msa.progress.acquireAccessToken",
+            @"login.msa.progress.acquireXBLToken",
+            @"login.msa.progress.acquireXSTS",
+            @"login.msa.progress.acquireXboxProfile",
+            @"login.msa.progress.acquireMCToken",
+            @"login.msa.progress.checkMCProfile"
+        ];
+        NSMutableSet *set = [NSMutableSet new];
+        for (NSString *key in keys) {
+            NSString *localized = localize(key, nil);
+            if (localized.length > 0) [set addObject:localized];
+        }
+        progressMessages = set;
+    });
+    return [progressMessages containsObject:status];
+}
+
 - (void)callbackMicrosoftAuth:(id)status success:(BOOL)success forCell:(UITableViewCell *)cell {
+    // A progress step: keep the spinner running and stay put. Previously each of these
+    // fell into the branch below, popping a dialog and tearing down the screen.
+    if (success && [self isLoginProgressStatus:status]) {
+        NSLog(@"[MSA] %@", status);
+        return;
+    }
     if (status != nil) {
         if (success) {
             // Login succeeded with an accompanying status message
