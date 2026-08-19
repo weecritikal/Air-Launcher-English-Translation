@@ -172,10 +172,15 @@ METHOD_JAVA_UNPACK = \
 	fi
 
 # Function to codesign binaries.
+# Every expansion is quoted. A signing identity reads
+# "Apple Development: Name (TEAMID)", and left bare the parentheses are shell
+# syntax - bash rejects the line before codesign ever runs. The paths are
+# quoted for the same reason, and printf takes them as arguments rather than
+# as its format string so a % in a path is not read as a conversion.
 METHOD_CODESIGN = \
-	codesign --remove-signature $(2); \
-	codesign -f -s $(1) --generate-entitlement-der --entitlements entitlements.codesign.xml $(2); \
-	printf 'File: '; printf $(2); printf ', Codesigned with team: '; printf $(1); printf '\n'
+	codesign --remove-signature "$(2)" 2>/dev/null || true; \
+	codesign -f -s "$(1)" --generate-entitlement-der --entitlements entitlements.codesign.xml "$(2)" || exit 1; \
+	printf 'File: %s, Codesigned with team: %s\n' "$(2)" "$(1)"
 
 # Function to run code when finding Mach-O files.
 METHOD_MACHO = \
