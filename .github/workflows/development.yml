@@ -79,6 +79,49 @@ jobs:
           GIT_LFS_SKIP_SMUDGE: "1"
         run: git submodule update --init --recursive
 
+      - name: Set up Apple code signing
+        # Optional. Runs only when the signing secrets exist; without them the build
+        # falls back to ldid, exactly as before. Proper signing is what keeps the
+        # increased-memory-limit / extended-virtual-addressing entitlements alive -
+        # re-signing with a profile that does not authorise them strips them out, which
+        # is why sideloaded builds cannot map a large heap.
+        id: signing
+        env:
+          CERT_P12_BASE64: ${{ secrets.SIGNING_CERT_P12_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.SIGNING_CERT_PASSWORD }}
+          PROFILE_BASE64: ${{ secrets.PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          if [ -z "$CERT_P12_BASE64" ] || [ -z "$PROFILE_BASE64" ]; then
+            echo "signing=no" >> "$GITHUB_OUTPUT"
+            echo "No signing secrets set - building unsigned (ldid)."
+            exit 0
+          fi
+          RUNNER_KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(uuidgen)"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$RUNNER_KEYCHAIN"
+          security set-keychain-settings -lut 3600 "$RUNNER_KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$RUNNER_KEYCHAIN"
+          echo "$CERT_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$RUNNER_KEYCHAIN" \
+            -P "$CERT_PASSWORD" -T /usr/bin/codesign -f pkcs12
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" "$RUNNER_KEYCHAIN" >/dev/null
+          security list-keychain -d user -s "$RUNNER_KEYCHAIN" login.keychain-db
+          echo "$PROFILE_BASE64" | base64 --decode > "$RUNNER_TEMP/profile.mobileprovision"
+          IDENTITY=$(security find-identity -v -p codesigning "$RUNNER_KEYCHAIN" \
+            | sed -n 's/.*"\(.*\)".*/\1/p' | head -1)
+          if [ -z "$IDENTITY" ]; then
+            echo "::error::No codesigning identity found in the imported .p12"
+            exit 1
+          fi
+          echo "Signing identity: $IDENTITY"
+          rm -f "$RUNNER_TEMP/cert.p12"
+          {
+            echo "signing=yes"
+            echo "identity=$IDENTITY"
+            echo "profile=$RUNNER_TEMP/profile.mobileprovision"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Check CurseForge key wiring
         env:
           CONFIG_CURSEFORGE_API_KEY: ${{ secrets.CONFIG_CURSEFORGE_API_KEY }}
@@ -94,10 +137,25 @@ jobs:
         env:
           IPHONEOS_DEPLOYMENT_TARGET: 14.0
           CONFIG_CURSEFORGE_API_KEY: ${{ secrets.CONFIG_CURSEFORGE_API_KEY }}
+          # The Makefile declares TEAMID/SIGNING_TEAMID/PROVISIONING with ?=, so values
+          # inherited from the environment win. Passing them here rather than on the
+          # command line keeps the signing identity intact - it contains spaces and
+          # would word-split as a make argument.
+          SIGN_ENABLED: ${{ steps.signing.outputs.signing }}
+          TEAMID: ${{ secrets.SIGNING_TEAMID }}
+          SIGNING_TEAMID: ${{ steps.signing.outputs.identity }}
+          PROVISIONING: ${{ steps.signing.outputs.profile }}
         run: |
           set -o pipefail
           export PATH=/opt/homebrew/bin:$PATH
           export SLIMMED=0
+
+          if [ "$SIGN_ENABLED" = "yes" ]; then
+            echo "Codesigning enabled for team $TEAMID"
+          else
+            # Clear the placeholders so the Makefile takes its unsigned ldid path.
+            unset TEAMID SIGNING_TEAMID PROVISIONING
+          fi
 
           if [ "${{ matrix.platform_name }}" == "ios" ]; then
             gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }}
