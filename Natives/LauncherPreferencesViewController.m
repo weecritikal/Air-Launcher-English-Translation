@@ -318,13 +318,14 @@
               @"icon": @"arrow.down.circle",
               @"type": self.typePickField,
               @"enableCondition": whenNotInGame,
+              // BMCLAPI is a mainland-China mirror. It is no longer offered: it carries a
+              // different set of builds from the official maven, and picking from one while
+              // downloading from the other is what produced spurious "not found (404)" errors.
               @"pickKeys": @[
-                  @"official",
-                  @"bmclapi"
+                  @"official"
               ],
               @"pickList": @[
-                  localize(@"preference.title.download_source-official", nil),
-                  localize(@"preference.title.download_source-bmclapi", nil)
+                  localize(@"preference.title.download_source-official", nil)
               ]
             },
             @{@"key": @"mod_mirror",
@@ -332,13 +333,12 @@
               @"icon": @"network",
               @"type": self.typePickField,
               @"enableCondition": whenNotInGame,
+              // MCIM likewise mirrors Modrinth/CurseForge for mainland China only.
               @"pickKeys": @[
-                  @"official",
-                  @"mcim"
+                  @"official"
               ],
               @"pickList": @[
-                  localize(@"preference.title.mod_mirror-official", nil),
-                  localize(@"preference.title.mod_mirror-mcim", nil)
+                  localize(@"preference.title.mod_mirror-official", nil)
               ]
             },
             @{@"key": @"ui_layout",

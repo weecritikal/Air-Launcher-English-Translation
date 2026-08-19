@@ -72,7 +72,10 @@ static BOOL probeJIT26CreateRegionLegacy(void **outResult) {
 static void exportJIT26ScriptIfNeeded(void) {
     const char *home = getenv("POJAV_HOME");
     if (!home) return;
-    for (NSString *name in @[@"UniversalJIT26", @"JIT26Script"]) {
+    // Only the Universal script is exported. The legacy JIT26Script is the one the
+    // launcher refuses to run - shipping it alongside only invites picking the wrong
+    // file when assigning a script in StikDebug.
+    for (NSString *name in @[@"UniversalJIT26"]) {
         NSString *source = [NSBundle.mainBundle pathForResource:name ofType:@"js"];
         if (!source) continue;
         NSString *dest = [NSString stringWithFormat:@"%s/%@.js", home, name];

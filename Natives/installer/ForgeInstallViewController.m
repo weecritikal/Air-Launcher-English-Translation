@@ -477,7 +477,14 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
             // Endpoint: https://bmclapi2.bangbang93.com/forge/minecraft/<mcVersion>
             // Returns: [{ "version": "47.2.0", "branch": null, "modified": "...", "files": [...] }, ...]
             // Each entry is one Forge version, where version is the Forge version number, joined as <mcVersion>-<version> and fed to addVersionToList
-            if (self.gameVersion.length > 0) {
+            //
+            // Only taken when BMCLAPI is the selected source. It used to run for every
+            // request, so the list came from BMCLAPI while the installer jar was fetched
+            // from the source the preference named. The two publish different sets of
+            // builds, so picking a version the other did not carry failed with a bare
+            // "not found (404)" - and changing the download source could not fix it,
+            // because the list was never affected by that setting.
+            if (useBMCLAPI && self.gameVersion.length > 0) {
                 NSString *mcVersion = self.gameVersion;
                 NSString *encodedMC = [mcVersion stringByReplacingOccurrencesOfString:@"-" withString:@"_"];
                 NSString *bmclJSONURL = [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/forge/minecraft/%@", encodedMC];

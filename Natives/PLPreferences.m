@@ -28,7 +28,7 @@ NSString *const PREF_MOD_MIRROR = @"general.mod_mirror";
             @"cosmetica": @YES,
             @"debug_logging": @(!CONFIG_RELEASE),
             @"news_url": @"https://air-api.vercel.app/api/announcements.php",
-            @"download_source": @"bmclapi",
+            @"download_source": @"official",
             // A separate download source per asset type (falling back to modrinth when unset)
             @"download_source_mod": @"modrinth",
             @"download_source_shader": @"modrinth",
@@ -274,6 +274,27 @@ NSString *const PREF_MOD_MIRROR = @"general.mod_mirror";
             id value = defaults[section][key];
             NSDebugLog(@"[PLPreferences] Set default vaule: %@", key, value);
             pref[section][key] = value;
+        }
+    }
+
+    // The mainland-China mirrors (BMCLAPI, MCIM) have been retired. A stored value always
+    // wins over the default above, so an install that ran an earlier build would keep using
+    // them for good - and BMCLAPI carries a different set of Forge builds from the official
+    // maven, which is what surfaced as "not found (404)" when installing a modloader.
+    if ([pref[@"general"] isKindOfClass:NSDictionary.class]) {
+        NSMutableDictionary *general = [pref[@"general"] isKindOfClass:NSMutableDictionary.class]
+            ? pref[@"general"] : [pref[@"general"] mutableCopy];
+        NSDictionary *retiredMirrors = @{@"download_source": @"bmclapi", @"mod_mirror": @"mcim"};
+        BOOL changed = NO;
+        for (NSString *key in retiredMirrors) {
+            if ([general[key] isEqualToString:retiredMirrors[key]]) {
+                NSLog(@"[PLPreferences] Retired mirror %@=%@, switching to official", key, retiredMirrors[key]);
+                general[key] = @"official";
+                changed = YES;
+            }
+        }
+        if (changed) {
+            pref[@"general"] = general;
         }
     }
     return pref;
