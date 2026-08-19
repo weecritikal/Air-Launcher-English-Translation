@@ -813,15 +813,15 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
     // modpack downloaded every mod, and only at launch did the JVM die on "Invalid paths argument,
     // contained no existing paths" - naming three files, with no hint of which step failed to
     // produce them. Saying so here costs the user seconds instead of a full reinstall.
-    NSArray<NSString *> *missing = [self missingRuntimeArtifactsForVersionJSON:versionJson
-                                                                 librariesDir:librariesDir];
+    NSArray<NSDictionary<NSString *, NSString *> *> *missing =
+        [self unusableRuntimeArtifactsForVersionJSON:versionJson librariesDir:librariesDir];
     if (missing.count > 0) {
         NSMutableString *detail = [NSMutableString stringWithString:
             @"This Forge version cannot be set up by Direct install.\n\n"
              "Modern Forge builds these files while installing, and iOS cannot run the tools that "
              "produce them:\n"];
-        for (NSString *name in missing) {
-            [detail appendFormat:@"\n  - %@", name.lastPathComponent];
+        for (NSDictionary *entry in missing) {
+            [detail appendFormat:@"\n  - %@ (%@)", [entry[@"path"] lastPathComponent], entry[@"reason"]];
         }
         [detail appendString:@"\n\nInstall this version with the \"Run the Forge installer\" option "
                               "instead - it runs those tools inside the launcher's own Java runtime. "
@@ -846,8 +846,8 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
 /// --fml.mcVersion / --fml.mcpVersion / --fml.forgeVersion / --fml.forgeGroup arguments together
 /// with -DlibraryDirectory. Editing the library list therefore cannot avoid them, and reading the
 /// same arguments is the only way to predict exactly what it will look for.
-+ (NSArray<NSString *> *)missingRuntimeArtifactsForVersionJSON:(NSDictionary *)versionJson
-                                                 librariesDir:(NSString *)librariesDir {
++ (NSArray<NSDictionary<NSString *, NSString *> *> *)unusableRuntimeArtifactsForVersionJSON:(NSDictionary *)versionJson
+                                                                              librariesDir:(NSString *)librariesDir {
     NSDictionary *arguments = [versionJson[@"arguments"] isKindOfClass:NSDictionary.class] ? versionJson[@"arguments"] : nil;
     NSArray *gameArgs = [arguments[@"game"] isKindOfClass:NSArray.class] ? arguments[@"game"] : nil;
     if (gameArgs.count == 0) return @[];
@@ -882,14 +882,22 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
         [NSString stringWithFormat:@"net/minecraftforge/forge/%1$@/forge-%1$@-client.jar", forgeVersion]
     ];
 
-    NSMutableArray<NSString *> *missing = [NSMutableArray new];
+    NSMutableArray<NSDictionary<NSString *, NSString *> *> *unusable = [NSMutableArray new];
     for (NSString *relativePath in required) {
         NSString *fullPath = [librariesDir stringByAppendingPathComponent:relativePath];
         if (![NSFileManager.defaultManager fileExistsAtPath:fullPath]) {
-            [missing addObject:fullPath];
+            [unusable addObject:@{@"path": fullPath, @"reason": @"missing"}];
+            continue;
+        }
+        // Present is not the same as usable. These three are built on the device rather than
+        // downloaded, so an install that was interrupted leaves a file of the right name that
+        // will not open - which the JVM reports as "zip END header not found", naming nothing.
+        NSString *corruption = [ArchiveIntegrity validationFailureForArchiveAtPath:fullPath];
+        if (corruption) {
+            [unusable addObject:@{@"path": fullPath, @"reason": corruption}];
         }
     }
-    return missing;
+    return unusable;
 }
 
 #pragma mark - Maven entry Extraction

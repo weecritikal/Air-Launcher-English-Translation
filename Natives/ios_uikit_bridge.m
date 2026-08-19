@@ -144,12 +144,13 @@ static void UIKit_quarantineCorruptModsBeforeLaunch(void) {
     showDialog(@"Damaged mods were set aside", message);
 }
 
-/// Refuse to start a Forge version whose runtime was never fully built.
+/// Refuse to start a Forge version whose runtime was never fully built, or was built badly.
 ///
-/// Forge 1.13+ boots through three files its installer's processors produce. When those are absent
-/// the JVM dies about thirty seconds in with "Invalid paths argument, contained no existing paths",
-/// which names three files and nothing about how to get them. Checking first turns a long wait and
-/// a crash screen into a sentence, and says which install route will actually work.
+/// Forge 1.13+ boots through three files its installer's processors produce on the device. Absent,
+/// the JVM dies with "Invalid paths argument, contained no existing paths"; present but damaged -
+/// an install that was interrupted partway through writing one - it dies with "zip END header not
+/// found". Neither message names a file or suggests a next step, and both arrive a good half minute
+/// into loading. Checking first turns that into a sentence naming the file and the fix.
 /// Returns YES when the launch may proceed.
 static BOOL UIKit_verifyForgeRuntimeBeforeLaunch(NSDictionary *metadata) {
     if (![metadata isKindOfClass:NSDictionary.class]) return YES;
@@ -158,22 +159,22 @@ static BOOL UIKit_verifyForgeRuntimeBeforeLaunch(NSDictionary *metadata) {
     if (!gameDirC) return YES;
     NSString *librariesDir = [@(gameDirC) stringByAppendingPathComponent:@"libraries"];
 
-    NSArray<NSString *> *missing = [ForgeDirectInstaller missingRuntimeArtifactsForVersionJSON:metadata
-                                                                                 librariesDir:librariesDir];
-    if (missing.count == 0) return YES;
+    NSArray<NSDictionary<NSString *, NSString *> *> *unusable =
+        [ForgeDirectInstaller unusableRuntimeArtifactsForVersionJSON:metadata librariesDir:librariesDir];
+    if (unusable.count == 0) return YES;
 
     NSMutableString *message = [NSMutableString stringWithString:
-        @"This Forge version was never finished installing, so the game cannot start. "
-         "These files are missing:\n"];
-    for (NSString *path in missing) {
-        [message appendFormat:@"\n  - %@", path.lastPathComponent];
+        @"This Forge version did not finish installing, so the game cannot start. "
+         "Forge builds these files on your device while it installs:\n"];
+    for (NSDictionary *entry in unusable) {
+        [message appendFormat:@"\n  - %@ (%@)", [entry[@"path"] lastPathComponent], entry[@"reason"]];
     }
-    [message appendString:@"\n\nForge builds them while installing, and only its own installer can "
-                           "do that here. Install this Forge version again and pick \"Run the Forge "
-                           "installer\". Your mods and worlds are kept."];
+    [message appendString:@"\n\nInstall this Forge version again and pick \"Run the Forge installer\" - "
+                           "only Forge's own installer can build them. Let it finish before leaving the "
+                           "screen. Your mods and worlds are kept."];
 
-    NSLog(@"[Launch] Refusing to start: %lu Forge runtime artifact(s) missing: %@",
-          (unsigned long)missing.count, missing);
+    NSLog(@"[Launch] Refusing to start: %lu unusable Forge runtime artifact(s): %@",
+          (unsigned long)unusable.count, unusable);
     showDialog(@"Forge is not fully installed", message);
     return NO;
 }
