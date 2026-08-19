@@ -1,11 +1,17 @@
 package com.mojang.text2speech;
 
 public interface Narrator {
+    /** Matches the real library's constant, which callers may reference instead of getNarrator(). */
+    Narrator EMPTY = new NarratorDummy();
+
     void say(final String msg, final boolean interrupt);
 
     void clear();
 
-    boolean active();
+    /** A default method in the real library, so keep it one here too. */
+    default boolean active() {
+        return false;
+    }
 
     void destroy();
 
@@ -13,14 +19,18 @@ public interface Narrator {
         return new NarratorDummy();
     }
 
-    /** Stub for text2speech's nested initialisation failure, referenced by Minecraft's narrator code. */
-    class InitializeException extends RuntimeException {
-        public InitializeException(String message) {
-            super(message);
-        }
-
+    /**
+     * Stub for text2speech's nested initialisation failure.
+     * Checked, extending Exception exactly as the real one does - a RuntimeException here would be
+     * caught by handlers the real class would slip past.
+     */
+    class InitializeException extends Exception {
         public InitializeException(String message, Throwable cause) {
             super(message, cause);
+        }
+
+        public InitializeException(String message) {
+            super(message);
         }
     }
 
