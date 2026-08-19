@@ -440,6 +440,18 @@ createLibraryInfo(libItem);
         return libDir.toArray(new String[0]);
     }
 
+    /// A version JSON may legitimately declare no libraries of its own - a profile that only
+    /// overrides the main class or the arguments is valid, and a modloader profile can arrive
+    /// that way. Reading the array without checking failed the whole launch with
+    /// "Cannot read the array length because <local4> is null", which names nothing the player
+    /// can act on. Absent is treated as empty so the merge carries on with the other side's.
+    private static DependentLibrary[] librariesOrEmpty(JMinecraftVersionList.Version version) {
+        if (version == null || version.libraries == null) {
+            return new DependentLibrary[0];
+        }
+        return version.libraries;
+    }
+
     public static JMinecraftVersionList.Version getVersionInfo(String versionName) {
         try {
             JMinecraftVersionList.Version customVer = Tools.GLOBAL_GSON.fromJson(read(DIR_HOME_VERSION + "/" + versionName + "/" + versionName + ".json"), JMinecraftVersionList.Version.class);
@@ -456,9 +468,9 @@ createLibraryInfo(libItem);
                              );
 
                 // Go through the libraries, remove the ones overridden by the custom version
-                List<DependentLibrary> inheritLibraryList = new ArrayList<>(Arrays.asList(inheritsVer.libraries));
+                List<DependentLibrary> inheritLibraryList = new ArrayList<>(Arrays.asList(librariesOrEmpty(inheritsVer)));
                 outer_loop:
-                for(DependentLibrary library : customVer.libraries){
+                for(DependentLibrary library : librariesOrEmpty(customVer)){
                     // Clean libraries overridden by the custom version
                     String libName = library.name.substring(0, library.name.lastIndexOf(":"));
 
@@ -478,12 +490,13 @@ createLibraryInfo(libItem);
                 }
 
                 // Fuse libraries
-                inheritLibraryList.addAll(Arrays.asList(customVer.libraries));
+                inheritLibraryList.addAll(Arrays.asList(librariesOrEmpty(customVer)));
                 inheritsVer.libraries = inheritLibraryList.toArray(new DependentLibrary[0]);
                 preProcessLibraries(inheritsVer.libraries);
 
                 // Inheriting Minecraft 1.13+ with append custom args
-                if (inheritsVer.arguments != null && customVer.arguments != null) {
+                if (inheritsVer.arguments != null && customVer.arguments != null
+                        && inheritsVer.arguments.game != null && customVer.arguments.game != null) {
                     List totalArgList = new ArrayList();
                     totalArgList.addAll(Arrays.asList(inheritsVer.arguments.game));
                     
