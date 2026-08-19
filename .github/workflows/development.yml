@@ -102,6 +102,20 @@ jobs:
           security set-keychain-settings -lut 3600 "$RUNNER_KEYCHAIN"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$RUNNER_KEYCHAIN"
           echo "$CERT_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+
+          # A trailing newline pasted into the secret is the usual cause of
+          # "MAC verification failed" - the runner would send "pw\n" and the check fails.
+          CERT_PASSWORD=$(printf '%s' "$CERT_PASSWORD" | tr -d '\r\n')
+
+          # Check the password against the bundle before importing, so a mismatch reports
+          # which of the two secrets is wrong instead of a bare exit code.
+          if ! openssl pkcs12 -in "$RUNNER_TEMP/cert.p12" -nokeys -passin pass:"$CERT_PASSWORD" -out /dev/null 2>/dev/null; then
+            echo "::error::The .p12 and SIGNING_CERT_PASSWORD do not match. Either the password is wrong, or SIGNING_CERT_P12_BASE64 is from a different .p12 than the one you tested. Re-export and update BOTH secrets together."
+            echo "Decoded .p12 size: $(wc -c < "$RUNNER_TEMP/cert.p12") bytes"
+            exit 1
+          fi
+          echo "Password verified against the .p12"
+
           security import "$RUNNER_TEMP/cert.p12" -k "$RUNNER_KEYCHAIN" \
             -P "$CERT_PASSWORD" -T /usr/bin/codesign -f pkcs12
           security set-key-partition-list -S apple-tool:,apple:,codesign: \
