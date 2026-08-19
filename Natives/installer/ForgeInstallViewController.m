@@ -1127,32 +1127,120 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
         cell.accessoryType = UITableViewCellAccessoryNone;
     }
 
-    NSString *jarURL;
-    NSString *downloadSource = getPrefObject(@"general.download_source");
-    BOOL useBMCLAPI = [downloadSource isEqualToString:@"bmclapi"];
-    if ([self.currentVendor isEqualToString:@"NeoForge"] && ([versionString containsString:@"1.20.1"] || [versionString hasPrefix:@"47."])) {
-        if (useBMCLAPI) {
-            jarURL = [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/maven/net/neoforged/forge/%@/forge-%@-installer.jar", versionString, versionString];
-        } else {
-            jarURL = [NSString stringWithFormat:@"https://maven.neoforged.net/releases/net/neoforged/forge/%@/forge-%@-installer.jar", versionString, versionString];
-        }
-    } else if ([self.currentVendor isEqualToString:@"NeoForge"]) {
-        if (useBMCLAPI) {
-            jarURL = [NSString stringWithFormat:@"https://bmclapi2.bangbang93.com/maven/net/neoforged/neoforge/%@/neoforge-%@-installer.jar", versionString, versionString];
-        } else {
-            jarURL = [NSString stringWithFormat:self.endpoints[self.currentVendor][@"installer"], versionString];
-        }
-    } else {
-        jarURL = [NSString stringWithFormat:self.endpoints[self.currentVendor][@"installer"], versionString];
-    }
+    NSArray<NSString *> *candidateURLs = [self installerJarURLsForVersion:versionString];
     NSString *outPath = [NSTemporaryDirectory() stringByAppendingPathComponent:
                          [NSString stringWithFormat:@"%@-installer-%@.jar",
                           self.currentVendor,
                           [[NSProcessInfo processInfo] globallyUniqueString]]];
-    NSDebugLog(@"[%@ Installer] Downloading %@", self.currentVendor, jarURL);
+
+    [self downloadInstallerFromCandidates:candidateURLs
+                                    index:0
+                            versionString:versionString
+                                  outPath:outPath];
+}
+
+/// Every mirror that can serve this vendor's installer jar, best first.
+///
+/// The version list and the installer download used to come from different places. The list is
+/// fetched from BMCLAPI's per-version endpoint whenever a game version is known - regardless of the
+/// configured download source - while the Forge jar was always pulled from maven.minecraftforge.net.
+/// A build that one mirror publishes and the other does not therefore failed with a bare
+/// "not found (404)" naming no URL. Offering every mirror in turn removes that mismatch entirely.
+- (NSArray<NSString *> *)installerJarURLsForVersion:(NSString *)versionString {
+    BOOL preferMirror = [getPrefObject(@"general.download_source") isEqualToString:@"bmclapi"];
+    NSMutableArray<NSString *> *official = [NSMutableArray new];
+    NSMutableArray<NSString *> *mirror = [NSMutableArray new];
+
+    if ([self.currentVendor isEqualToString:@"NeoForge"]) {
+        // NeoForge for Minecraft 1.20.1 shipped under the net.neoforged:forge coordinates, and
+        // everything after it under net.neoforged:neoforge. The version string alone does not always
+        // settle which one applies, so both are offered with the likelier coordinate first.
+        BOOL legacyCoords = [versionString containsString:@"1.20.1"] || [versionString hasPrefix:@"47."];
+        NSArray *artifacts = legacyCoords ? @[@"forge", @"neoforge"] : @[@"neoforge", @"forge"];
+        for (NSString *artifact in artifacts) {
+            [official addObject:[NSString stringWithFormat:
+                @"https://maven.neoforged.net/releases/net/neoforged/%1$@/%2$@/%1$@-%2$@-installer.jar",
+                artifact, versionString]];
+            [mirror addObject:[NSString stringWithFormat:
+                @"https://bmclapi2.bangbang93.com/maven/net/neoforged/%1$@/%2$@/%1$@-%2$@-installer.jar",
+                artifact, versionString]];
+        }
+    } else {
+        [official addObject:[NSString stringWithFormat:
+            @"https://maven.minecraftforge.net/net/minecraftforge/forge/%1$@/forge-%1$@-installer.jar",
+            versionString]];
+        [mirror addObject:[NSString stringWithFormat:
+            @"https://bmclapi2.bangbang93.com/maven/net/minecraftforge/forge/%1$@/forge-%1$@-installer.jar",
+            versionString]];
+    }
+
+    NSMutableArray<NSString *> *ordered = [NSMutableArray new];
+    for (NSArray<NSString *> *group in (preferMirror ? @[mirror, official] : @[official, mirror])) {
+        for (NSString *url in group) {
+            if (![ordered containsObject:url]) {
+                [ordered addObject:url];
+            }
+        }
+    }
+    return ordered;
+}
+
+/// Download the installer jar, trying each mirror in turn.
+///
+/// A mirror that does not carry this particular build answers 404, which is no reason to stop while
+/// another mirror may still have it. Only a cancellation, or running out of mirrors, ends the attempt.
+- (void)downloadInstallerFromCandidates:(NSArray<NSString *> *)urls
+                                  index:(NSUInteger)index
+                          versionString:(NSString *)versionString
+                                outPath:(NSString *)outPath {
+    // Restore the table and report the failure. Called only once every mirror has been tried.
+    void (^failWith)(NSError *) = ^(NSError *error) {
+        self.tableView.allowsSelection = YES;
+        if (self.currentDownloadIndexPath) {
+            [self resetCellAppearance:self.currentDownloadIndexPath];
+        }
+        self.currentDownloadIndexPath = nil;
+        if (error.code != NSURLErrorCancelled) {
+            NSMutableSet<NSString *> *hosts = [NSMutableSet new];
+            for (NSString *tried in urls) {
+                NSString *host = [NSURL URLWithString:tried].host;
+                if (host) [hosts addObject:host];
+            }
+            // Name what was tried. "Request failed: not found (404)" on its own says nothing about
+            // which download source is missing the build, which is the only useful detail here.
+            NSString *message = [NSString stringWithFormat:
+                @"Could not download the %@ %@ installer.\n\n%@\n\nTried %lu URL(s) on: %@.\nSwitching the download source in Settings may help.",
+                self.currentVendor, versionString, error.localizedDescription,
+                (unsigned long)urls.count,
+                [[hosts.allObjects sortedArrayUsingSelector:@selector(compare:)] componentsJoinedByString:@", "]];
+            NSLog(@"[%@ Installer] All %lu mirror(s) failed for %@: %@",
+                  self.currentVendor, (unsigned long)urls.count, versionString, error);
+            showDialog(localize(@"Error", nil), message);
+        }
+        [self switchToReadyState];
+        if (self.completionHandler) {
+            self.completionHandler(NO, nil, error);
+        }
+    };
+
+    if (index >= urls.count) {
+        failWith([NSError errorWithDomain:NSURLErrorDomain
+                                     code:NSURLErrorResourceUnavailable
+                                 userInfo:@{NSLocalizedDescriptionKey: @"No download mirror is available for this version."}]);
+        return;
+    }
+
+    NSString *jarURL = urls[index];
+    NSLog(@"[%@ Installer] Downloading (%lu/%lu) %@",
+          self.currentVendor, (unsigned long)(index + 1), (unsigned long)urls.count, jarURL);
 
     self.afManager = [AFURLSessionManager new];
-    NSURLRequest *request = [NSURLRequest requestWithURL:[NSURL URLWithString:jarURL]];
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:[NSURL URLWithString:jarURL]];
+    // The version-list requests send a browser User-Agent; the jar download used to send none.
+    // Some maven front ends treat the default CFNetwork agent differently, so they are kept identical.
+    [request setValue:@"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+   forHTTPHeaderField:@"User-Agent"];
+
     NSURLSessionDownloadTask *downloadTask = [self.afManager downloadTaskWithRequest:request progress:^(NSProgress * _Nonnull progress){
         dispatch_async(dispatch_get_main_queue(), ^{
             self.progressView.fractionCompleted = progress.fractionCompleted;
@@ -1162,23 +1250,27 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
         return [NSURL fileURLWithPath:outPath];
     } completionHandler:^(NSURLResponse *response, NSURL *filePath, NSError *error) {
         dispatch_async(dispatch_get_main_queue(), ^{
+            if (error) {
+                // A cancellation is the user's decision and must not roll on to the next mirror.
+                if (error.code != NSURLErrorCancelled && index + 1 < urls.count) {
+                    NSLog(@"[%@ Installer] %@ failed (%@), trying the next mirror",
+                          self.currentVendor, [NSURL URLWithString:jarURL].host, error.localizedDescription);
+                    self.progressView.fractionCompleted = 0;
+                    [self downloadInstallerFromCandidates:urls
+                                                    index:index + 1
+                                            versionString:versionString
+                                                  outPath:outPath];
+                    return;
+                }
+                failWith(error);
+                return;
+            }
+
             self.tableView.allowsSelection = YES;
             if (self.currentDownloadIndexPath) {
                 [self resetCellAppearance:self.currentDownloadIndexPath];
             }
             self.currentDownloadIndexPath = nil;
-
-            if (error) {
-                if (error.code != NSURLErrorCancelled) {
-                    NSDebugLog(@"Error: %@", error);
-                    showDialog(localize(@"Error", nil), error.localizedDescription);
-                }
-                [self switchToReadyState];
-                if (self.completionHandler) {
-                    self.completionHandler(NO, nil, error);
-                }
-                return;
-            }
 
             NSString *profileName = [NSString stringWithFormat:@"%@-%@", self.currentVendor, versionString];
 
