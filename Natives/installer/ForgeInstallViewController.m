@@ -251,6 +251,7 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
     if (!self.selectedVersionString) return;
     ForgeInstallSchemeViewController *schemeVC = [[ForgeInstallSchemeViewController alloc] init];
     schemeVC.delegate = self;
+    schemeVC.gameVersion = self.gameVersion;
     schemeVC.modalPresentationStyle = UIModalPresentationOverFullScreen;
     [self presentViewController:schemeVC animated:YES completion:nil];
 }
@@ -1052,6 +1053,7 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
 
     ForgeInstallSchemeViewController *schemeVC = [[ForgeInstallSchemeViewController alloc] init];
     schemeVC.delegate = self;
+    schemeVC.gameVersion = self.gameVersion;
     schemeVC.modalPresentationStyle = UIModalPresentationOverFullScreen;
     [self presentViewController:schemeVC animated:YES completion:nil];
 }

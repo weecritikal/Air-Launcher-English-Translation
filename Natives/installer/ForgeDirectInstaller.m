@@ -802,8 +802,94 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
         }
     }
 
+    // Before calling this a success, check the install can actually start.
+    //
+    // A direct install skips install_profile.json's processors, because iOS cannot fork a child JVM
+    // to run them. That is fine for the libraries, but modern Forge boots through three artifacts
+    // that only those processors produce - the SRG-mapped client, the client's resources, and the
+    // binary-patched Forge client. Nothing publishes them to maven, so they cannot be downloaded.
+    //
+    // Reporting success anyway is what made this so expensive to hit: the install looked fine, the
+    // modpack downloaded every mod, and only at launch did the JVM die on "Invalid paths argument,
+    // contained no existing paths" - naming three files, with no hint of which step failed to
+    // produce them. Saying so here costs the user seconds instead of a full reinstall.
+    NSArray<NSString *> *missing = [self missingRuntimeArtifactsForVersionJSON:versionJson
+                                                                 librariesDir:librariesDir];
+    if (missing.count > 0) {
+        NSMutableString *detail = [NSMutableString stringWithString:
+            @"This Forge version cannot be set up by Direct install.\n\n"
+             "Modern Forge builds these files while installing, and iOS cannot run the tools that "
+             "produce them:\n"];
+        for (NSString *name in missing) {
+            [detail appendFormat:@"\n  - %@", name.lastPathComponent];
+        }
+        [detail appendString:@"\n\nInstall this version with the \"Run the Forge installer\" option "
+                              "instead - it runs those tools inside the launcher's own Java runtime. "
+                              "It needs JIT enabled."];
+        NSLog(@"[ForgeDirect] Install incomplete, %lu processor-generated artifact(s) missing: %@",
+              (unsigned long)missing.count, missing);
+        if (error) {
+            *error = [NSError errorWithDomain:ForgeDirectInstallerErrorDomain
+                                         code:ForgeDirectInstallerErrorInvalidProfile
+                                     userInfo:@{NSLocalizedDescriptionKey: [detail copy]}];
+        }
+        return NO;
+    }
+
     NSLog(@"[ForgeDirect] installNewFormat completed");
     return YES;
+}
+
+/// Return the runtime artifacts a Forge install needs but does not have.
+///
+/// FML does not read these paths from the version JSON's library list - it rebuilds them from the
+/// --fml.mcVersion / --fml.mcpVersion / --fml.forgeVersion / --fml.forgeGroup arguments together
+/// with -DlibraryDirectory. Editing the library list therefore cannot avoid them, and reading the
+/// same arguments is the only way to predict exactly what it will look for.
++ (NSArray<NSString *> *)missingRuntimeArtifactsForVersionJSON:(NSDictionary *)versionJson
+                                                 librariesDir:(NSString *)librariesDir {
+    NSDictionary *arguments = [versionJson[@"arguments"] isKindOfClass:NSDictionary.class] ? versionJson[@"arguments"] : nil;
+    NSArray *gameArgs = [arguments[@"game"] isKindOfClass:NSArray.class] ? arguments[@"game"] : nil;
+    if (gameArgs.count == 0) return @[];
+
+    NSMutableDictionary<NSString *, NSString *> *fml = [NSMutableDictionary new];
+    for (NSUInteger i = 0; i + 1 < gameArgs.count; i++) {
+        id key = gameArgs[i];
+        id value = gameArgs[i + 1];
+        if ([key isKindOfClass:NSString.class] && [value isKindOfClass:NSString.class] &&
+            [(NSString *)key hasPrefix:@"--fml."]) {
+            fml[key] = value;
+        }
+    }
+
+    NSString *mcVersion = fml[@"--fml.mcVersion"];
+    NSString *mcpVersion = fml[@"--fml.mcpVersion"];
+    NSString *loaderVersion = fml[@"--fml.forgeVersion"];
+    NSString *loaderGroup = fml[@"--fml.forgeGroup"] ?: @"net.minecraftforge";
+    // Without these arguments this is not a build that boots the way described above (old-format
+    // Forge, for instance), so there is nothing to require. The layout below is only claimed for
+    // Forge proper: NeoForge switched artifact ids partway through its 1.20.1 line, and guessing
+    // wrong there would block an install that is actually fine.
+    if (mcVersion.length == 0 || mcpVersion.length == 0 || loaderVersion.length == 0) return @[];
+    if (![loaderGroup isEqualToString:@"net.minecraftforge"]) return @[];
+
+    NSString *clientVersion = [NSString stringWithFormat:@"%@-%@", mcVersion, mcpVersion];
+    NSString *forgeVersion = [NSString stringWithFormat:@"%@-%@", mcVersion, loaderVersion];
+
+    NSArray<NSString *> *required = @[
+        [NSString stringWithFormat:@"net/minecraft/client/%1$@/client-%1$@-srg.jar", clientVersion],
+        [NSString stringWithFormat:@"net/minecraft/client/%1$@/client-%1$@-extra.jar", clientVersion],
+        [NSString stringWithFormat:@"net/minecraftforge/forge/%1$@/forge-%1$@-client.jar", forgeVersion]
+    ];
+
+    NSMutableArray<NSString *> *missing = [NSMutableArray new];
+    for (NSString *relativePath in required) {
+        NSString *fullPath = [librariesDir stringByAppendingPathComponent:relativePath];
+        if (![NSFileManager.defaultManager fileExistsAtPath:fullPath]) {
+            [missing addObject:fullPath];
+        }
+    }
+    return missing;
 }
 
 #pragma mark - Maven entry Extraction
@@ -1159,15 +1245,25 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
     NSString *groupId = parts[0];
     NSString *artifactId = parts[1];
     NSString *version = parts[2];
+    // data.PATCHED names the classifier it wants, for example
+    // "net.minecraftforge:forge:1.20.1-47.4.20:client". That fourth component used to be dropped,
+    // so the search below always began at "universal" - and because the installer jar embeds
+    // forge-<ver>-universal.jar, which extractAllMavenEntries has already unpacked, the very first
+    // candidate matched an existing file and the artifact Forge actually asks for at launch was
+    // never fetched. The named classifier is tried first now, and it is the only one that can
+    // satisfy an "already exists" check.
+    NSString *requestedClassifier = parts.count > 3 ? parts[3] : nil;
 
     NSString *groupPath = [groupId stringByReplacingOccurrencesOfString:@"." withString:@"/"];
 
     // Modeled on FCL/HMCL: try several classifiers.
-    // In practice the Forge maven (for example 1.21.11-61.0.x) usually publishes only -universal (HTTP 200),
-    // while -client and the classifier-less form both 404. Early Forge (1.7-1.12) also mostly used -universal.
-    // The order was therefore changed to universal -> client -> no classifier, trying the most likely universal first
-    // instead of wasting time on the client form that is bound to 404 (every 404 still costs a round trip).
-    NSArray *classifiers = @[@"universal", @"client", @""];
+    // Forge's maven usually publishes only -universal, while -client and the classifier-less form
+    // 404, so those remain as fallbacks for the versions where they do exist.
+    NSMutableArray *classifiers = [NSMutableArray arrayWithArray:@[@"universal", @"client", @""]];
+    if (requestedClassifier.length > 0) {
+        [classifiers removeObject:requestedClassifier];
+        [classifiers insertObject:requestedClassifier atIndex:0];
+    }
     NSString *downloadSource = getPrefObject(@"general.download_source");
     BOOL useBMCLAPI = [downloadSource isEqualToString:@"bmclapi"];
 
@@ -1208,10 +1304,17 @@ NSString *const ForgeDirectInstallerErrorDomain = @"ForgeDirectInstallerErrorDom
         NSString *relativePath = [NSString stringWithFormat:@"%@/%@/%@/%@", groupPath, artifactId, version, jarName];
         NSString *destPath = [librariesDir stringByAppendingPathComponent:relativePath];
 
-        // Skip it if it already exists
-        if ([NSFileManager.defaultManager fileExistsAtPath:destPath]) {
-            NSLog(@"[ForgeDirect] Patched artifact already exists: %@", destPath);
-            return YES;
+        // An existing file only counts when it is the classifier that was asked for. Accepting any
+        // classifier is what let an already-unpacked universal jar stand in for the client jar.
+        BOOL classifierMatches = (requestedClassifier.length == 0) || [classifier isEqualToString:requestedClassifier];
+        if (classifierMatches && [NSFileManager.defaultManager fileExistsAtPath:destPath]) {
+            NSString *corruption = [ArchiveIntegrity validationFailureForArchiveAtPath:destPath];
+            if (!corruption) {
+                NSLog(@"[ForgeDirect] Patched artifact already exists: %@", destPath);
+                return YES;
+            }
+            NSLog(@"[ForgeDirect] Existing patched artifact is corrupt (%@), downloading it again", corruption);
+            [NSFileManager.defaultManager removeItemAtPath:destPath error:nil];
         }
 
         for (NSString *baseURL in baseURLs) {

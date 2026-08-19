@@ -73,24 +73,47 @@
     [self.contentContainer addSubview:self.stackView];
 }
 
+/// Forge 1.13 introduced the installer format whose processors build part of the runtime - the
+/// SRG-mapped client, the client's resources and the patched Forge client. Those files exist
+/// nowhere to download, so a direct install cannot produce a version that starts. Below 1.13
+/// there are no processors and a direct install is genuinely the better route.
+- (BOOL)directInstallCanWork {
+    NSArray<NSString *> *parts = [self.gameVersion componentsSeparatedByString:@"."];
+    if (parts.count < 2) return YES;   // Unrecognised: keep the previous ordering
+    NSInteger major = parts[0].integerValue;
+    NSInteger minor = parts[1].integerValue;
+    if (major != 1) return YES;
+    return minor < 13;
+}
+
 - (void)setupCards {
-    // The direct install option comes first and is marked "Recommended": on iOS it needs no JIT, no AWT and has no subprocess restrictions
-    self.directCard = [self createCardWithTitle:@"Direct install (recommended)"
-                                       subtitle:@"Installs by parsing directly, without launching the installer"
+    BOOL directWorks = [self directInstallCanWork];
+
+    // Direct install needs no JIT, no AWT and no subprocesses, so it is the better route wherever
+    // it can actually finish the job. On Forge 1.13+ it cannot, and recommending it there is what
+    // sent people through an install that reported success and then would not launch.
+    self.directCard = [self createCardWithTitle:(directWorks ? @"Direct install (recommended)" : @"Direct install")
+                                       subtitle:(directWorks
+                                                 ? @"Installs by parsing directly, without launching the installer"
+                                                 : @"Not supported on this Forge version - it cannot build the files Forge needs to start")
                                            icon:@"bolt.fill"
-                                          color:[UIColor systemGreenColor]
+                                          color:(directWorks ? [UIColor systemGreenColor] : [UIColor systemGrayColor])
                                          scheme:1];
 
-    // The vanilla option is demoted to an "advanced option": it depends on an AWT GUI + JIT + subprocesses, which are unusable in most cases on iOS
-    // It is kept only as a fallback for certain edge versions (very old Forge / third-party jar installers)
-    self.originalCard = [self createCardWithTitle:@"Vanilla method (advanced)"
-                                         subtitle:@"Runs the Forge installer (AWT GUI); requires JIT"
+    self.originalCard = [self createCardWithTitle:(directWorks ? @"Run the Forge installer (advanced)" : @"Run the Forge installer (recommended)")
+                                         subtitle:@"Runs Forge's own installer inside the launcher; requires JIT"
                                              icon:@"gearshape"
-                                            color:[UIColor systemGrayColor]
+                                            color:(directWorks ? [UIColor systemGrayColor] : [UIColor systemGreenColor])
                                            scheme:0];
 
-    [self.stackView addArrangedSubview:self.directCard];
-    [self.stackView addArrangedSubview:self.originalCard];
+    // The recommended option is listed first.
+    if (directWorks) {
+        [self.stackView addArrangedSubview:self.directCard];
+        [self.stackView addArrangedSubview:self.originalCard];
+    } else {
+        [self.stackView addArrangedSubview:self.originalCard];
+        [self.stackView addArrangedSubview:self.directCard];
+    }
 }
 
 - (UIView *)createCardWithTitle:(NSString *)title
