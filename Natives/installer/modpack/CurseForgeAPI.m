@@ -391,9 +391,45 @@ static NSString *CFACompiledAPIKey(void) {
     return [image isKindOfClass:NSString.class] ? image : @"";
 }
 
+/// Map the CurseForge sort vocabulary used by the UI (which is Modrinth's) onto
+/// CurseForge sortField ids: 1=Featured, 2=Popularity, 3=LastUpdated, 4=Name,
+/// 5=Author, 6=TotalDownloads. Anything unrecognised falls back to Popularity,
+/// which is what the CurseForge website shows by default. Without an explicit
+/// sortField the API returns results in name order, which looked like noise.
++ (NSString *)curseForgeSortFieldForSort:(NSString *)sort {
+    if ([sort isEqualToString:@"downloads"]) return @"6";
+    if ([sort isEqualToString:@"updated"] || [sort isEqualToString:@"newest"]) return @"3";
+    if ([sort isEqualToString:@"relevance"]) return @"1";
+    return @"2"; // follows / unset -> Popularity
+}
+
+- (NSString *)authorNameForProject:(NSDictionary *)project {
+    NSArray *authors = [project[@"authors"] isKindOfClass:NSArray.class] ? project[@"authors"] : @[];
+    for (NSDictionary *author in authors) {
+        if ([author isKindOfClass:NSDictionary.class] && [author[@"name"] isKindOfClass:NSString.class]) {
+            return author[@"name"];
+        }
+    }
+    return @"";
+}
+
+- (NSArray *)categoryNamesForProject:(NSDictionary *)project {
+    NSArray *categories = [project[@"categories"] isKindOfClass:NSArray.class] ? project[@"categories"] : @[];
+    NSMutableArray *names = [NSMutableArray new];
+    for (NSDictionary *category in categories) {
+        if ([category isKindOfClass:NSDictionary.class] && [category[@"name"] isKindOfClass:NSString.class]) {
+            [names addObject:category[@"name"]];
+        }
+    }
+    return names;
+}
+
 - (NSMutableDictionary *)projectFromCurseForgeProject:(NSDictionary *)project projectType:(NSString *)projectType {
     NSString *title = project[@"name"];
     NSString *description = project[@"summary"];
+    NSString *dateModified = project[@"dateModified"];
+    // The same keys Modrinth returns, so the shared cell renders both sources identically.
+    // Without downloads/author/categories the list showed "0 downloads" for every row.
     return @{
         @"apiSource": @(2),
         @"isModpack": @([projectType isEqualToString:@"modpack"]),
@@ -401,7 +437,12 @@ static NSString *CFACompiledAPIKey(void) {
         @"id": [project[@"id"] description] ?: @"",
         @"title": [title isKindOfClass:NSString.class] ? title : @"",
         @"description": [description isKindOfClass:NSString.class] ? description : @"",
-        @"imageUrl": [self imageURLForProject:project]
+        @"imageUrl": [self imageURLForProject:project],
+        @"author": [self authorNameForProject:project],
+        @"downloads": [project[@"downloadCount"] isKindOfClass:NSNumber.class] ? project[@"downloadCount"] : @0,
+        @"likes": [project[@"thumbsUpCount"] isKindOfClass:NSNumber.class] ? project[@"thumbsUpCount"] : @0,
+        @"categories": [self categoryNamesForProject:project],
+        @"lastUpdated": [dateModified isKindOfClass:NSString.class] ? dateModified : @""
     }.mutableCopy;
 }
 
@@ -485,6 +526,9 @@ static NSString *CFACompiledAPIKey(void) {
         @"pageSize": @(pageSize),
         @"index": @(previousPageResult.count)
     }.mutableCopy;
+    // Sort explicitly, otherwise the API falls back to name order.
+    params[@"sortField"] = [CurseForgeAPI curseForgeSortFieldForSort:searchFilters[@"sort"]];
+    params[@"sortOrder"] = @"desc";
     NSString *query = [searchFilters[@"name"] stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet] ?: @"";
     if (query.length > 0) {
         params[@"searchFilter"] = query;
@@ -611,6 +655,9 @@ static NSString *CFACompiledAPIKey(void) {
                                   (long)kCurseForgeGameIDMinecraft,
                                   [self classIDForProjectType:projectType],
                                   limit, offset];
+    // Sort explicitly, otherwise the API falls back to name order.
+    [urlString appendFormat:@"&sortField=%@&sortOrder=desc",
+     [CurseForgeAPI curseForgeSortFieldForSort:filters[@"sort"]]];
     if (query.length > 0) {
         NSString *encodedQuery = [query stringByAddingPercentEncodingWithAllowedCharacters:[NSCharacterSet URLQueryAllowedCharacterSet]];
         [urlString appendFormat:@"&searchFilter=%@", encodedQuery];
