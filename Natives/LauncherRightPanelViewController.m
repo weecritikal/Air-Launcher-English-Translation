@@ -788,9 +788,19 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 - (void)executeJar {
     // Execute JAR: open the file picker to choose a JAR file
     // asCopy:YES makes sure the file is copied into the app sandbox, so a security-scoped URL cannot make UZKArchive fail to read it
+    // typeWithMIMEType: can return nil, and a nil inside an array literal throws at
+    // runtime. Build the list defensively and always include a catch-all, so JARs that
+    // report as public.data are still tappable instead of silently doing nothing.
+    NSMutableArray<UTType *> *jarTypes = [NSMutableArray new];
+    UTType *jarMIME = [UTType typeWithMIMEType:@"application/java-archive"];
+    if (jarMIME) [jarTypes addObject:jarMIME];
+    UTType *jarExt = [UTType typeWithFilenameExtension:@"jar"];
+    if (jarExt) [jarTypes addObject:jarExt];
+    [jarTypes addObjectsFromArray:@[UTTypeArchive, UTTypeData, UTTypeItem]];
     UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc]
-        initForOpeningContentTypes:@[[UTType typeWithMIMEType:@"application/java-archive"]]
+        initForOpeningContentTypes:jarTypes
         asCopy:YES];
+    picker.shouldShowFileExtensions = YES;
     picker.delegate = self;
     picker.allowsMultipleSelection = NO;
     [self presentViewController:picker animated:YES completion:nil];

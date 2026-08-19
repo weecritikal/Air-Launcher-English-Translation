@@ -417,9 +417,20 @@ static void *ProgressObserverContext = &ProgressObserverContext;
 }
 
 - (void)enterModInstaller {
+    // typeWithMIMEType: can return nil, and a nil inside an array literal throws at
+    // runtime. Build the list defensively and always include a catch-all, so JARs that
+    // report as public.data (common for files from Safari or third-party providers)
+    // are still tappable instead of silently doing nothing.
+    NSMutableArray<UTType *> *jarTypes = [NSMutableArray new];
+    UTType *jarMIME = [UTType typeWithMIMEType:@"application/java-archive"];
+    if (jarMIME) [jarTypes addObject:jarMIME];
+    UTType *jarExt = [UTType typeWithFilenameExtension:@"jar"];
+    if (jarExt) [jarTypes addObject:jarExt];
+    [jarTypes addObjectsFromArray:@[UTTypeArchive, UTTypeData, UTTypeItem]];
     UIDocumentPickerViewController *documentPicker = [[UIDocumentPickerViewController alloc]
-        initForOpeningContentTypes:@[[UTType typeWithMIMEType:@"application/java-archive"]]
+        initForOpeningContentTypes:jarTypes
         asCopy:YES];
+    documentPicker.shouldShowFileExtensions = YES;
     documentPicker.delegate = self;
     documentPicker.modalPresentationStyle = UIModalPresentationFormSheet;
     [self presentViewController:documentPicker animated:YES completion:nil];

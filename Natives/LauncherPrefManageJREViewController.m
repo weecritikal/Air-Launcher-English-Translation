@@ -174,8 +174,19 @@ static WFWorkflowProgressView* currentProgressView;
 }
 
 - (void)actionImportRuntime {
+    // application/x-xz is not a registered MIME type on iOS, so typeWithMIMEType:
+    // returns nil - and a nil inside an array literal throws at runtime. Build the list
+    // defensively, add a catch-all so .tar.xz runtimes are actually tappable, and copy
+    // the file in rather than opening it in place.
+    NSMutableArray<UTType *> *runtimeTypes = [NSMutableArray new];
+    for (NSString *ext in @[@"xz", @"gz", @"tar"]) {
+        UTType *type = [UTType typeWithFilenameExtension:ext];
+        if (type) [runtimeTypes addObject:type];
+    }
+    [runtimeTypes addObjectsFromArray:@[UTTypeArchive, UTTypeData, UTTypeItem]];
     UIDocumentPickerViewController *documentPicker = [[UIDocumentPickerViewController alloc]
-        initForOpeningContentTypes:@[[UTType typeWithMIMEType:@"application/x-xz"]]];
+        initForOpeningContentTypes:runtimeTypes asCopy:YES];
+    documentPicker.shouldShowFileExtensions = YES;
     documentPicker.delegate = self;
     documentPicker.modalPresentationStyle = UIModalPresentationFormSheet;
     [self presentViewController:documentPicker animated:YES completion:nil];

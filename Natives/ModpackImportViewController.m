@@ -341,13 +341,29 @@
 #pragma mark - File selection
 
 - (void)selectModpackFile {
-    NSArray<UTType *> *contentTypes = @[
-        [UTType typeWithFilenameExtension:@"mrpack"],
-        [UTType typeWithFilenameExtension:@"zip"]
-    ];
-    UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc] initForOpeningContentTypes:contentTypes];
+    // A file is only tappable in the picker when its reported type conforms to one of
+    // these. Listing only mrpack/zip made most files inert: .mrpack resolves to a
+    // *dynamic* UTI that real .mrpack files on disk do not report (providers hand back
+    // public.zip-archive or public.data), so tapping them did nothing at all.
+    // Every other importer in the app already includes a catch-all; this one did not.
+    // Accept broadly here and validate the extension after picking, so an unsupported
+    // choice gets an explanatory message instead of silence.
+    NSMutableArray<UTType *> *contentTypes = [NSMutableArray new];
+    for (NSString *ext in @[@"mrpack", @"zip", @"mcpack"]) {
+        UTType *type = [UTType typeWithFilenameExtension:ext];
+        if (type) [contentTypes addObject:type];
+    }
+    [contentTypes addObjectsFromArray:@[UTTypeZIP, UTTypeArchive, UTTypeData, UTTypeItem]];
+
+    // asCopy:YES makes iOS copy the file into our sandbox and hand back a plain local
+    // URL. The default (open-in-place) needs security-scoped access, which fails
+    // intermittently on iCloud and third-party providers - the other half of the
+    // "it just will not open" behaviour.
+    UIDocumentPickerViewController *picker = [[UIDocumentPickerViewController alloc]
+        initForOpeningContentTypes:contentTypes asCopy:YES];
     picker.delegate = self;
     picker.allowsMultipleSelection = NO;
+    picker.shouldShowFileExtensions = YES;
     [self presentViewController:picker animated:YES completion:nil];
 }
 
@@ -359,13 +375,17 @@
     NSString *fileExtension = fileURL.pathExtension.lowercaseString;
 
     if (![fileExtension isEqualToString:@"mrpack"] && ![fileExtension isEqualToString:@"zip"]) {
-        [self showAlertWithTitle:@"Invalid file" message:@"Please choose a .mrpack or .zip file"];
+        [self showAlertWithTitle:@"Unsupported file"
+                         message:[NSString stringWithFormat:@"Modpacks must be .mrpack or .zip. You picked a .%@ file.", fileExtension.length ? fileExtension : @"(no extension)"]];
         return;
     }
 
+    // With asCopy:YES the URL is already inside our sandbox, so security scoping is not
+    // required. Ask for it anyway and carry on if it is refused, rather than aborting -
+    // a refusal here used to block the import outright.
     BOOL accessGranted = [fileURL startAccessingSecurityScopedResource];
-    if (!accessGranted) {
-        [self showAlertWithTitle:@"Access denied" message:@"Could not access the selected file"];
+    if (!accessGranted && ![NSFileManager.defaultManager isReadableFileAtPath:fileURL.path]) {
+        [self showAlertWithTitle:@"Access denied" message:@"Could not read the selected file"];
         return;
     }
 
