@@ -150,7 +150,7 @@ Build artifacts:
 1.  After every source change, push the change to the GitHub remote branch so the project is built for testing.
 2.  If network problems occur while pushing to GitHub, remind the user to turn off their network proxy.
 3.  This project is built with Xcode 15.4/16 and the iPhoneOS 17.5 SDK, and the minimum supported OS is iOS 14.0.
-4.  Use the `weecritikal` username and the `korbinh18@gmail.com` email address for git commits. (Upstream's AGENTS.md named the upstream maintainer here; committing as them in this fork would misattribute the work.)
+4.  Use the `weecritikal` username and the `210249314+weecritikal@users.noreply.github.com` email address for git commits. Never commit with a personal address; GitHub's noreply form keeps it out of public history. (Upstream's AGENTS.md named the upstream maintainer here; committing as them in this fork would misattribute the work.)
 5.  The project supports building for several platforms - iOS, tvOS, the iOS Simulator and visionOS - selected with the `PLATFORM` parameter.
 6.  When the renderer is set to Auto, a suitable renderer is chosen automatically, including MobileGlues.
 
