@@ -26,6 +26,13 @@ NS_ASSUME_NONNULL_BEGIN
 /// Convenience wrapper around -validationFailureForArchiveAtPath:.
 + (BOOL)isValidArchiveAtPath:(NSString *)path;
 
+/// Validate a file a download task just produced, before it is treated as installed:
+/// the HTTP status first (a download task reports no error for a 403 or 404 — the error page is
+/// simply delivered as the body), then the archive structure.
+/// Returns nil when the file is good, or a short reason to report and retry on.
++ (nullable NSString *)rejectionReasonForDownloadedFile:(NSString *)path
+                                               response:(nullable NSURLResponse *)response;
+
 /// Scan a directory (non-recursively) for corrupt .jar files.
 /// Returns an array of @{@"name": ..., @"reason": ...} for each bad file.
 + (NSArray<NSDictionary<NSString *, NSString *> *> *)findCorruptArchivesInDirectory:(NSString *)directory;

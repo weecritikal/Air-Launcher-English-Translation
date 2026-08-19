@@ -105,6 +105,18 @@ static const NSUInteger kEOCDSearchWindow = 65557 + 1024;
     return [self validationFailureForArchiveAtPath:path] == nil;
 }
 
++ (nullable NSString *)rejectionReasonForDownloadedFile:(NSString *)path
+                                               response:(nullable NSURLResponse *)response {
+    if ([response isKindOfClass:NSHTTPURLResponse.class]) {
+        NSInteger statusCode = ((NSHTTPURLResponse *)response).statusCode;
+        if (statusCode >= 400) {
+            return [NSString stringWithFormat:@"the server returned HTTP %ld", (long)statusCode];
+        }
+    }
+    if (![self isArchivePath:path]) return nil;
+    return [self validationFailureForArchiveAtPath:path];
+}
+
 + (NSArray<NSDictionary<NSString *, NSString *> *> *)findCorruptArchivesInDirectory:(NSString *)directory {
     NSMutableArray *corrupt = [NSMutableArray new];
     if (directory.length == 0) return corrupt;

@@ -9,6 +9,7 @@
 //  Supports a worldName parameter for downloading into a specific world's datapacks folder
 //
 
+#import "ArchiveIntegrity.h"
 #import "DataPackService.h"
 #import <CommonCrypto/CommonCrypto.h>
 #import <UIKit/UIKit.h>
@@ -557,6 +558,23 @@ totalBytesExpectedToWrite:(int64_t)totalBytesExpectedToWrite {
         [fm removeItemAtPath:destinationPath error:nil];
     }
     BOOL success = destinationPath && [fm moveItemAtURL:location toURL:[NSURL fileURLWithPath:destinationPath] error:&moveError];
+
+    // Verify what actually landed. A download task reports no error for an HTTP 403 or 404 - the
+    // error page arrives as the body - so without this an error page was installed under a .jar or
+    // .zip name and only showed up later as a game that would not start.
+    if (success) {
+        NSString *rejection = [ArchiveIntegrity rejectionReasonForDownloadedFile:destinationPath
+                                                                        response:downloadTask.response];
+        if (rejection) {
+            [fm removeItemAtPath:destinationPath error:nil];
+            success = NO;
+            moveError = [NSError errorWithDomain:@"DataPackServiceError" code:5003 userInfo:@{
+                NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Damaged download of %@: %@",
+                                            destinationPath.lastPathComponent, rejection]
+            }];
+            NSLog(@"[DataPackService] Discarded damaged download of %@ (%@)", destinationPath.lastPathComponent, rejection);
+        }
+    }
 
     if (taskItem) {
         if (success) {

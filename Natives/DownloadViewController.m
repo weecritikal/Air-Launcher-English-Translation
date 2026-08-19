@@ -1,3 +1,4 @@
+#import "ArchiveIntegrity.h"
 #import "DownloadViewController.h"
 #import "BackgroundManager.h"
 // IconLoader: the unified project icon loader (two-level cache + downsampling + concurrency control + CDN mirrors),
@@ -4397,6 +4398,22 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
 
         NSError *saveError;
         BOOL success = [data writeToFile:savePath options:NSDataWritingAtomic error:&saveError];
+
+        // A 200 response is not proof this is a jar: a mirror answering with an error page still
+        // returns 200, and that page written into mods/ under a .jar name stops the game starting
+        // with an error that names no file. Check before leaving it there.
+        if (success) {
+            NSString *corruption = [ArchiveIntegrity validationFailureForArchiveAtPath:savePath];
+            if (corruption) {
+                [NSFileManager.defaultManager removeItemAtPath:savePath error:nil];
+                success = NO;
+                saveError = [NSError errorWithDomain:@"DownloadError" code:3 userInfo:@{
+                    NSLocalizedDescriptionKey: [NSString stringWithFormat:
+                        @"The OptiFine download was damaged (%@). Nothing was added to your mods folder.", corruption]
+                }];
+                NSLog(@"[DownloadVC] Discarded damaged OptiFine download: %@", corruption);
+            }
+        }
 
         dispatch_async(dispatch_get_main_queue(), ^{
             if (completion) completion(success, saveError);
