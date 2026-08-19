@@ -268,7 +268,12 @@
     };
     
     self.hasDetail = YES;
-    self.prefDetailVisible = self.navigationController == nil;
+    // Descriptions start visible. They used to be hidden whenever this screen sat inside a
+    // navigation controller, revealed only by the "?" button in the navigation bar - the same bar
+    // this screen hides when it is the root page. So the explanation of what a setting does, right
+    // down to "enable this if your mods require loading .dylib at runtime", could not be reached at
+    // all. The "?" button still collapses them for anyone who wants a shorter list.
+    self.prefDetailVisible = YES;
     
     self.prefSections = @[@"general", @"video", @"mobileglues", @"control", @"java", @"debug"];
 

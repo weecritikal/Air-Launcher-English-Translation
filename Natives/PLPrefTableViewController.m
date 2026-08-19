@@ -257,7 +257,7 @@
     if (cellStyle != UITableViewCellStyleValue1) {
         cell.detailTextLabel.text = nil;
         if ([item[@"hasDetail"] boolValue] && self.prefDetailVisible) {
-            cell.detailTextLabel.text = localize(([NSString stringWithFormat:@"preference.detail.%@", key]), nil);
+            cell.detailTextLabel.text = [self detailTextForKey:key];
         }
     }
 
@@ -268,6 +268,19 @@
     [(id)cell.accessoryView setEnabled:cell.userInteractionEnabled];
 
     return cell;
+}
+
+/// The description of what a setting does, or nil when there is not one.
+///
+/// localize() returns the key it was given when no translation exists, so asking for a description
+/// that was never written hands back "preference.detail.ui_theme" - which is worse than showing
+/// nothing at all. Checking for that here means a setting missing its description simply appears
+/// without one.
+- (nullable NSString *)detailTextForKey:(NSString *)key {
+    if (key.length == 0) return nil;
+    NSString *lookup = [NSString stringWithFormat:@"preference.detail.%@", key];
+    NSString *detail = localize(lookup, nil);
+    return [detail isEqualToString:lookup] ? nil : detail;
 }
 
 #pragma mark initViewCreation, showAlert, checkWarn
@@ -511,7 +524,7 @@
 
     NSString *message = nil;
     if ([item[@"hasDetail"] boolValue]) {
-        message = localize(([NSString stringWithFormat:@"preference.detail.%@", item[@"key"]]), nil);
+        message = [self detailTextForKey:item[@"key"]];
     }
 
     NSArray *pickKeys = item[@"pickKeys"];

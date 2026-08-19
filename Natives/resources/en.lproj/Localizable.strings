@@ -419,6 +419,18 @@
 "preference.title.debug_universal_script_jit" = "Use Universal StikDebug Script";
 "preference.title.debug_always_attached_jit" = "Keep attached to StikDebug";
 "preference.detail.debug_always_attached_jit" = "Enable this if your mods require loading .dylib at runtime. When this is on, StikDebug's PiP should not be closed during gameplay. Requires Universal Script enabled";
+
+/* Descriptions for settings that had none. Every setting marked hasDetail needs one, otherwise it
+   shows in the list with a blank description. */
+"preference.detail.ui_layout" = "Choose how the launcher arranges its screens. Classic keeps the sidebar and content side by side; the other layouts suit smaller screens.";
+"preference.detail.ui_theme" = "Light, dark, or follow the system setting.";
+"preference.detail.custom_accent_color" = "The highlight colour used for buttons, switches and selected items.";
+"preference.detail.custom_text_color" = "The colour of text throughout the launcher. Pick something with enough contrast against your background.";
+"preference.detail.custom_card_color" = "The background colour of the panels and cards the launcher draws its content on.";
+"preference.detail.launcher_background" = "Use one of your own images or videos as the launcher background.";
+"preference.detail.multi_threaded" = "Fetch several files at once instead of one after another. Much faster for modpacks; turn it off if downloads keep failing on an unreliable connection.";
+"preference.detail.curseforge_api_key" = "Your own CurseForge API key. One is built in, so you only need this if browsing CurseForge stops working or you would rather use your own.";
+"preference.detail.announcement_preview_level" = "How much of an announcement to show before you open it.";
 "preference.title.debug_skip_wait_jit" = "Skip \"Waiting for JIT\" dialog";
 "preference.detail.debug_skip_wait_jit" = "This does not allow you to launch without JIT, instead this skips debugger check, because check fails on certain jailbreaks.";
 "preference.title.debug_ipad_ui" = "Unlock iPadOS UI";
