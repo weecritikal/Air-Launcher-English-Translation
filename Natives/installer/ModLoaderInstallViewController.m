@@ -343,6 +343,7 @@
 @property (nonatomic, strong) UIActivityIndicatorView *loadingIndicator;
 @property (nonatomic, strong) UILabel *emptyLabel;
 @property (nonatomic, strong) UILabel *errorLabel;
+@property (nonatomic, strong) UIButton *retryButton;
 @property (nonatomic, strong) NSArray *versions;
 // Forge XML parsing
 @property (nonatomic, strong) NSMutableArray *forgeVersionList;
@@ -439,6 +440,16 @@
     _errorLabel.hidden = YES;
     [self.view addSubview:_errorLabel];
 
+    // Without this, a momentary network blip left the screen showing nothing but a red label,
+    // and the only way to try again was backing out of the installer and starting over.
+    _retryButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    _retryButton.translatesAutoresizingMaskIntoConstraints = NO;
+    [_retryButton setTitle:@"Try again" forState:UIControlStateNormal];
+    _retryButton.titleLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightMedium];
+    [_retryButton addTarget:self action:@selector(startLoading) forControlEvents:UIControlEventTouchUpInside];
+    _retryButton.hidden = YES;
+    [self.view addSubview:_retryButton];
+
     [NSLayoutConstraint activateConstraints:@[
         [self.tableView.topAnchor constraintEqualToAnchor:self.view.topAnchor],
         [self.tableView.leadingAnchor constraintEqualToAnchor:self.view.leadingAnchor],
@@ -455,6 +466,9 @@
         [self.errorLabel.centerYAnchor constraintEqualToAnchor:self.view.centerYAnchor],
         [self.errorLabel.leadingAnchor constraintGreaterThanOrEqualToAnchor:self.view.leadingAnchor constant:24],
         [self.errorLabel.trailingAnchor constraintLessThanOrEqualToAnchor:self.view.trailingAnchor constant:-24],
+
+        [self.retryButton.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+        [self.retryButton.topAnchor constraintEqualToAnchor:self.errorLabel.bottomAnchor constant:12],
     ]];
 }
 
@@ -472,6 +486,7 @@
     [_tableView reloadData];
     _emptyLabel.hidden = YES;
     _errorLabel.hidden = YES;
+    _retryButton.hidden = YES;
     [_loadingIndicator startAnimating];
 
     if ([_loaderId isEqualToString:@"fabric"] || [_loaderId isEqualToString:@"quilt"]) {
@@ -501,18 +516,14 @@
         dispatch_async(dispatch_get_main_queue(), ^{
             __strong typeof(weakSelf) strongSelf = weakSelf;
             if (!strongSelf) return;
-            if (error && error.code != NSURLErrorCancelled) {
-                [strongSelf finishLoadingWithVersions:@[] error:error];
-                return;
-            }
-            if (!data || error) {
-                [strongSelf finishLoadingWithVersions:@[] error:nil];
+            if (error || !data) {
+                [strongSelf finishLoadingWithVersions:@[] error:[strongSelf loadFailureFromError:error response:response]];
                 return;
             }
             NSError *jsonError;
             NSArray *versions = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
-            if (!versions || jsonError) {
-                [strongSelf finishLoadingWithVersions:@[] error:jsonError];
+            if (![versions isKindOfClass:NSArray.class]) {
+                [strongSelf finishLoadingWithVersions:@[] error:[strongSelf loadFailureFromError:jsonError response:response]];
                 return;
             }
             NSMutableArray *list = [NSMutableArray array];
@@ -606,18 +617,14 @@
         dispatch_async(dispatch_get_main_queue(), ^{
             __strong typeof(weakSelf) strongSelf = weakSelf;
             if (!strongSelf) return;
-            if (error && error.code != NSURLErrorCancelled) {
-                [strongSelf finishLoadingWithVersions:@[] error:error];
-                return;
-            }
-            if (!data || error) {
-                [strongSelf finishLoadingWithVersions:@[] error:nil];
+            if (error || !data) {
+                [strongSelf finishLoadingWithVersions:@[] error:[strongSelf loadFailureFromError:error response:response]];
                 return;
             }
             NSError *jsonError;
             NSArray *list = [NSJSONSerialization JSONObjectWithData:data options:0 error:&jsonError];
-            if (!list || jsonError || ![list isKindOfClass:[NSArray class]]) {
-                [strongSelf finishLoadingWithVersions:@[] error:jsonError];
+            if (![list isKindOfClass:[NSArray class]]) {
+                [strongSelf finishLoadingWithVersions:@[] error:[strongSelf loadFailureFromError:jsonError response:response]];
                 return;
             }
             NSMutableArray *versions = [NSMutableArray array];
@@ -642,6 +649,28 @@
     [_currentTask resume];
 }
 
+/// Build the error to report when a version list could not be fetched.
+/// Returns nil only for a cancelled request, which is the one case where showing nothing is right.
+/// Everything else has to surface as a failure: an empty list reads as "this loader has no builds
+/// for your Minecraft version", which sends people hunting for a version problem that is really a
+/// network one.
+- (NSError *)loadFailureFromError:(NSError *)error response:(NSURLResponse *)response {
+    if (error) {
+        return error.code == NSURLErrorCancelled ? nil : error;
+    }
+    if ([response isKindOfClass:NSHTTPURLResponse.class]) {
+        NSInteger statusCode = ((NSHTTPURLResponse *)response).statusCode;
+        if (statusCode >= 400) {
+            return [NSError errorWithDomain:NSURLErrorDomain code:statusCode userInfo:@{
+                NSLocalizedDescriptionKey: [NSString stringWithFormat:@"the server returned HTTP %ld", (long)statusCode]
+            }];
+        }
+    }
+    return [NSError errorWithDomain:NSURLErrorDomain code:NSURLErrorCannotParseResponse userInfo:@{
+        NSLocalizedDescriptionKey: @"the version list came back empty or unreadable"
+    }];
+}
+
 - (void)finishLoadingWithVersions:(NSArray *)versions error:(NSError *)error {
     [_loadingIndicator stopAnimating];
     _isParsingForge = NO;
@@ -649,11 +678,13 @@
     if (error && versions.count == 0) {
         _versions = @[];
         _errorLabel.hidden = NO;
+        _retryButton.hidden = NO;
         _emptyLabel.hidden = YES;
         _errorLabel.text = [NSString stringWithFormat:@"Load failed: %@", error.localizedDescription ?: @"Unknown error"];
     } else {
         _versions = versions ?: @[];
         _errorLabel.hidden = YES;
+        _retryButton.hidden = YES;
         _emptyLabel.hidden = (_versions.count > 0);
     }
     [_tableView reloadData];
