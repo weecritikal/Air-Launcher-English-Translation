@@ -19,12 +19,12 @@
 
 ---
 
-Air — a Minecraft: Java Edition launcher for iOS and iPadOS. A complete English translation of Amethyst iOS Remastered (a fork of 
-AngelAuraMC's Amethyst iOS by herbrine8403) 
+Air — a Minecraft: Java Edition launcher for iOS and iPadOS. A complete English translation of Amethyst iOS Remastered, a fork of AngelAuraMC's Amethyst iOS by herbrine8403.
 
-Thanks to both AngelAuraMC and herbrine8403 for their work in their original repositories, I truly admire your work, all credit to you two. I only intend to build on top of it.
+> Thanks to both AngelAuraMC and herbrine8403 for their work in their original repositories, I truly admire your work, all credit to you two. I only intend to build on top of it.
+>
+> -- weecritikal
 
--weecritikal
 ---
 
 ## Table of Contents
@@ -153,10 +153,6 @@ JIT (Just-In-Time compilation) is essential for smooth gameplay. Choose the appr
 ## Credits
 
 This launcher stands on three projects. [PojavLauncher](https://github.com/PojavLauncherTeam/PojavLauncher) by Tran Hoang Khanh Duy is the foundation every Minecraft: Java launcher on iOS is built from. [AngelAuraMC](https://github.com/AngelAuraMC) rebuilt it as Amethyst iOS, and [herbrine8403](https://github.com/herbrine8403) remastered that as [Amethyst-iOS-MyRemastered](https://github.com/herbrine8403/Amethyst-iOS-MyRemastered), which this repository forks.
-
-> Thanks to both AngelAuraMC and herbrine8403 for their work in their original repositories, I truly admire your work, all credit to you two. I only intend to build on top of it.
->
-> -- weecritikal
 
 This fork is distributed under the GPL-3.0, the same licence it inherits.
 
