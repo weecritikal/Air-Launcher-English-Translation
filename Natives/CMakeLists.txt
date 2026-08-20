@@ -362,6 +362,7 @@ add_executable(AngelAuraAmethyst
   LauncherSplitViewController.m
   MinecraftResourceDownloadTask.m
   MinecraftResourceUtils.m
+  MemoryPressureRelief.m
   PickTextField.m
   PLLogOutputView.m
   PLCrashView.m

@@ -24,6 +24,7 @@
 #import "ios_uikit_bridge.h"
 #import "LanPortDetector.h"
 #import "BackgroundManager.h"
+#import "MemoryPressureRelief.h"
 // ZeroTier/Terracotta multiplayer temporarily removed (while a startup crash is investigated)
 // #import "MultiplayerManager.h"
 
@@ -914,6 +915,10 @@ static GameSurfaceView* pojavWindow;
     self.isMacCatalystApp = NSProcessInfo.processInfo.isMacCatalystApp;
     // Load MetalHUD library
     dlopen("/usr/lib/libMTLHud.dylib", 0);
+
+    // Hand memory back to iOS when it asks, instead of letting the graphics driver
+    // be the thing that discovers there is none left.
+    [MemoryPressureRelief start];
 
     self.lightHaptic = [[UIImpactFeedbackGenerator alloc] initWithStyle:(UIImpactFeedbackStyleLight)];
     self.mediumHaptic = [[UIImpactFeedbackGenerator alloc] initWithStyle:(UIImpactFeedbackStyleMedium)];
