@@ -526,4 +526,263 @@ public class STBImageResize {
         stbir_pixel_layout_channels = new int[]{3, 1, 2, 3, 4, 4, 4, 4, 4, 2, 2, 4, 4, 4, 4, 2, 2};
         stbir_type_size = new int[]{1, 1, 1, 2, 4, 2};
     }
+
+    // ========================================================================================
+    // The rest of the v1 surface: array forms, the allocator-context forms, and the two
+    // functions that resize part of an image.
+    //
+    // v1 published a plain-array form of every resize alongside the buffer form, and a form
+    // carrying an allocator context. The context is a pointer to an allocator v1 never used for
+    // anything a caller could observe, and v2 has no equivalent, so it is accepted and ignored.
+    //
+    // region and subpixel were the earlier note's exception. They resize a sub-rectangle of the
+    // source, which v2 does expose - through the extended STBIR_RESIZE object rather than a
+    // single call - so they are implemented properly here rather than left out.
+    // ========================================================================================
+
+    private static ByteBuffer copyOf(float[] a) {
+        ByteBuffer b = MemoryUtil.memAlloc(a.length * 4);
+        b.asFloatBuffer().put(a);
+        return b;
+    }
+
+    private static ByteBuffer copyOf(short[] a) {
+        ByteBuffer b = MemoryUtil.memAlloc(a.length * 2);
+        b.asShortBuffer().put(a);
+        return b;
+    }
+
+    /** Resizes a sub-rectangle of the source, given as fractions of its width and height. */
+    private static int resizeSubrect(long input_pixels, int input_w, int input_h, int input_stride_in_bytes,
+                                     long output_pixels, int output_w, int output_h, int output_stride_in_bytes,
+                                     int datatype, int num_channels, int alpha_channel, int flags,
+                                     int edge_h, int edge_v, int filter_h, int filter_v, int space,
+                                     float s0, float t0, float s1, float t1) {
+        STBIR_RESIZE resize = STBIR_RESIZE.calloc();
+        try {
+            nstbir_resize_init(resize.address(), input_pixels, input_w, input_h, input_stride_in_bytes,
+                               output_pixels, output_w, output_h, output_stride_in_bytes,
+                               v1PixelLayout(num_channels, alpha_channel, flags),
+                               v1DataTypeFull(datatype, space));
+            nstbir_set_edgemodes(resize.address(), v1EdgeMode(edge_h), v1EdgeMode(edge_v));
+            nstbir_set_filters(resize.address(), v1Filter(filter_h), v1Filter(filter_v));
+            nstbir_set_input_subrect(resize.address(), s0, t0, s1, t1);
+            return nstbir_resize_extended(resize.address());
+        } finally {
+            resize.free();
+        }
+    }
+
+    // --- region: the sub-rectangle given directly ------------------------------------------
+
+    public static int nstbir_resize_region(long input_pixels, int input_w, int input_h, int input_stride_in_bytes,
+            long output_pixels, int output_w, int output_h, int output_stride_in_bytes,
+            int datatype, int num_channels, int alpha_channel, int flags,
+            int edge_mode_horizontal, int edge_mode_vertical,
+            int filter_horizontal, int filter_vertical, int space, long alloc_context,
+            float s0, float t0, float s1, float t1) {
+        return resizeSubrect(input_pixels, input_w, input_h, input_stride_in_bytes,
+                             output_pixels, output_w, output_h, output_stride_in_bytes,
+                             datatype, num_channels, alpha_channel, flags,
+                             edge_mode_horizontal, edge_mode_vertical,
+                             filter_horizontal, filter_vertical, space, s0, t0, s1, t1);
+    }
+
+    public static boolean stbir_resize_region(ByteBuffer input_pixels, int input_w, int input_h, int input_stride_in_bytes,
+            ByteBuffer output_pixels, int output_w, int output_h, int output_stride_in_bytes,
+            int datatype, int num_channels, int alpha_channel, int flags,
+            int edge_mode_horizontal, int edge_mode_vertical,
+            int filter_horizontal, int filter_vertical, int space,
+            float s0, float t0, float s1, float t1) {
+        return stbir_resize_region(input_pixels, input_w, input_h, input_stride_in_bytes,
+                output_pixels, output_w, output_h, output_stride_in_bytes, datatype, num_channels,
+                alpha_channel, flags, edge_mode_horizontal, edge_mode_vertical,
+                filter_horizontal, filter_vertical, space, 0L, s0, t0, s1, t1);
+    }
+
+    public static boolean stbir_resize_region(ByteBuffer input_pixels, int input_w, int input_h, int input_stride_in_bytes,
+            ByteBuffer output_pixels, int output_w, int output_h, int output_stride_in_bytes,
+            int datatype, int num_channels, int alpha_channel, int flags,
+            int edge_mode_horizontal, int edge_mode_vertical,
+            int filter_horizontal, int filter_vertical, int space, long alloc_context,
+            float s0, float t0, float s1, float t1) {
+        return nstbir_resize_region(MemoryUtil.memAddress(input_pixels), input_w, input_h, input_stride_in_bytes,
+                MemoryUtil.memAddressSafe(output_pixels), output_w, output_h, output_stride_in_bytes,
+                datatype, num_channels, alpha_channel, flags, edge_mode_horizontal, edge_mode_vertical,
+                filter_horizontal, filter_vertical, space, alloc_context, s0, t0, s1, t1) != 0;
+    }
+
+    // --- subpixel: a scale and an offset, converted into the same sub-rectangle -------------
+    //
+    // v1 described the source window as how much to scale by and where to start. The window that
+    // describes is the output size divided by the scale, beginning at the offset, which is the
+    // rectangle below once expressed as fractions of the source.
+
+    public static int nstbir_resize_subpixel(long input_pixels, int input_w, int input_h, int input_stride_in_bytes,
+            long output_pixels, int output_w, int output_h, int output_stride_in_bytes,
+            int datatype, int num_channels, int alpha_channel, int flags,
+            int edge_mode_horizontal, int edge_mode_vertical,
+            int filter_horizontal, int filter_vertical, int space, long alloc_context,
+            float x_scale, float y_scale, float x_offset, float y_offset) {
+        if (x_scale == 0.0f || y_scale == 0.0f || input_w == 0 || input_h == 0) return 0;
+        float s0 = (x_offset / x_scale) / input_w;
+        float t0 = (y_offset / y_scale) / input_h;
+        float s1 = s0 + (output_w / x_scale) / input_w;
+        float t1 = t0 + (output_h / y_scale) / input_h;
+        return resizeSubrect(input_pixels, input_w, input_h, input_stride_in_bytes,
+                             output_pixels, output_w, output_h, output_stride_in_bytes,
+                             datatype, num_channels, alpha_channel, flags,
+                             edge_mode_horizontal, edge_mode_vertical,
+                             filter_horizontal, filter_vertical, space, s0, t0, s1, t1);
+    }
+
+    public static boolean stbir_resize_subpixel(ByteBuffer input_pixels, int input_w, int input_h, int input_stride_in_bytes,
+            ByteBuffer output_pixels, int output_w, int output_h, int output_stride_in_bytes,
+            int datatype, int num_channels, int alpha_channel, int flags,
+            int edge_mode_horizontal, int edge_mode_vertical,
+            int filter_horizontal, int filter_vertical, int space,
+            float x_scale, float y_scale, float x_offset, float y_offset) {
+        return stbir_resize_subpixel(input_pixels, input_w, input_h, input_stride_in_bytes,
+                output_pixels, output_w, output_h, output_stride_in_bytes, datatype, num_channels,
+                alpha_channel, flags, edge_mode_horizontal, edge_mode_vertical,
+                filter_horizontal, filter_vertical, space, 0L, x_scale, y_scale, x_offset, y_offset);
+    }
+
+    public static boolean stbir_resize_subpixel(ByteBuffer input_pixels, int input_w, int input_h, int input_stride_in_bytes,
+            ByteBuffer output_pixels, int output_w, int output_h, int output_stride_in_bytes,
+            int datatype, int num_channels, int alpha_channel, int flags,
+            int edge_mode_horizontal, int edge_mode_vertical,
+            int filter_horizontal, int filter_vertical, int space, long alloc_context,
+            float x_scale, float y_scale, float x_offset, float y_offset) {
+        return nstbir_resize_subpixel(MemoryUtil.memAddress(input_pixels), input_w, input_h, input_stride_in_bytes,
+                MemoryUtil.memAddressSafe(output_pixels), output_w, output_h, output_stride_in_bytes,
+                datatype, num_channels, alpha_channel, flags, edge_mode_horizontal, edge_mode_vertical,
+                filter_horizontal, filter_vertical, space, alloc_context, x_scale, y_scale, x_offset, y_offset) != 0;
+    }
+
+    // --- the allocator-context form of the full resize ------------------------------------
+
+    public static boolean stbir_resize(ByteBuffer input_pixels, int input_w, int input_h, int input_stride_in_bytes,
+            ByteBuffer output_pixels, int output_w, int output_h, int output_stride_in_bytes,
+            int datatype, int num_channels, int alpha_channel, int flags,
+            int edge_mode_horizontal, int edge_mode_vertical,
+            int filter_horizontal, int filter_vertical, int space, long alloc_context) {
+        return stbir_resize(input_pixels, input_w, input_h, input_stride_in_bytes,
+                output_pixels, output_w, output_h, output_stride_in_bytes, datatype, num_channels,
+                alpha_channel, flags, edge_mode_horizontal, edge_mode_vertical,
+                filter_horizontal, filter_vertical, space);
+    }
+
+    public static boolean stbir_resize_uint8_generic(ByteBuffer input_pixels, int input_w, int input_h, int input_stride_in_bytes,
+            ByteBuffer output_pixels, int output_w, int output_h, int output_stride_in_bytes,
+            int num_channels, int alpha_channel, int flags,
+            int edge_wrap_mode, int filter, int space, long alloc_context) {
+        return stbir_resize_uint8_generic(input_pixels, input_w, input_h, input_stride_in_bytes,
+                output_pixels, output_w, output_h, output_stride_in_bytes,
+                num_channels, alpha_channel, flags, edge_wrap_mode, filter, space);
+    }
+
+    // --- float and 16-bit forms, including the plain-array versions -------------------------
+
+    public static int nstbir_resize_float(float[] input_pixels, int input_w, int input_h, int input_stride_in_bytes,
+            float[] output_pixels, int output_w, int output_h, int output_stride_in_bytes, int num_channels) {
+        ByteBuffer in = copyOf(input_pixels), out = MemoryUtil.memAlloc(output_pixels.length * 4);
+        try {
+            int r = nstbir_resize_float(MemoryUtil.memAddress(in), input_w, input_h, input_stride_in_bytes,
+                    MemoryUtil.memAddress(out), output_w, output_h, output_stride_in_bytes, num_channels);
+            out.asFloatBuffer().get(output_pixels);
+            return r;
+        } finally {
+            MemoryUtil.memFree(in);
+            MemoryUtil.memFree(out);
+        }
+    }
+
+    public static boolean stbir_resize_float(float[] input_pixels, int input_w, int input_h, int input_stride_in_bytes,
+            float[] output_pixels, int output_w, int output_h, int output_stride_in_bytes, int num_channels) {
+        return nstbir_resize_float(input_pixels, input_w, input_h, input_stride_in_bytes,
+                output_pixels, output_w, output_h, output_stride_in_bytes, num_channels) != 0;
+    }
+
+    public static int nstbir_resize_float_generic(float[] input_pixels, int input_w, int input_h, int input_stride_in_bytes,
+            float[] output_pixels, int output_w, int output_h, int output_stride_in_bytes,
+            int num_channels, int alpha_channel, int flags,
+            int edge_wrap_mode, int filter, int space, long alloc_context) {
+        ByteBuffer in = copyOf(input_pixels), out = MemoryUtil.memAlloc(output_pixels.length * 4);
+        try {
+            int r = nstbir_resize_float_generic(MemoryUtil.memAddress(in), input_w, input_h, input_stride_in_bytes,
+                    MemoryUtil.memAddress(out), output_w, output_h, output_stride_in_bytes,
+                    num_channels, alpha_channel, flags, edge_wrap_mode, filter, space, alloc_context);
+            out.asFloatBuffer().get(output_pixels);
+            return r;
+        } finally {
+            MemoryUtil.memFree(in);
+            MemoryUtil.memFree(out);
+        }
+    }
+
+    public static boolean stbir_resize_float_generic(float[] input_pixels, int input_w, int input_h, int input_stride_in_bytes,
+            float[] output_pixels, int output_w, int output_h, int output_stride_in_bytes,
+            int num_channels, int alpha_channel, int flags, int edge_wrap_mode, int filter, int space) {
+        return nstbir_resize_float_generic(input_pixels, input_w, input_h, input_stride_in_bytes,
+                output_pixels, output_w, output_h, output_stride_in_bytes,
+                num_channels, alpha_channel, flags, edge_wrap_mode, filter, space, 0L) != 0;
+    }
+
+    public static boolean stbir_resize_float_generic(float[] input_pixels, int input_w, int input_h, int input_stride_in_bytes,
+            float[] output_pixels, int output_w, int output_h, int output_stride_in_bytes,
+            int num_channels, int alpha_channel, int flags, int edge_wrap_mode, int filter, int space, long alloc_context) {
+        return nstbir_resize_float_generic(input_pixels, input_w, input_h, input_stride_in_bytes,
+                output_pixels, output_w, output_h, output_stride_in_bytes,
+                num_channels, alpha_channel, flags, edge_wrap_mode, filter, space, alloc_context) != 0;
+    }
+
+    public static boolean stbir_resize_float_generic(FloatBuffer input_pixels, int input_w, int input_h, int input_stride_in_bytes,
+            FloatBuffer output_pixels, int output_w, int output_h, int output_stride_in_bytes,
+            int num_channels, int alpha_channel, int flags, int edge_wrap_mode, int filter, int space, long alloc_context) {
+        return stbir_resize_float_generic(input_pixels, input_w, input_h, input_stride_in_bytes,
+                output_pixels, output_w, output_h, output_stride_in_bytes,
+                num_channels, alpha_channel, flags, edge_wrap_mode, filter, space);
+    }
+
+    public static int nstbir_resize_uint16_generic(short[] input_pixels, int input_w, int input_h, int input_stride_in_bytes,
+            short[] output_pixels, int output_w, int output_h, int output_stride_in_bytes,
+            int num_channels, int alpha_channel, int flags,
+            int edge_wrap_mode, int filter, int space, long alloc_context) {
+        ByteBuffer in = copyOf(input_pixels), out = MemoryUtil.memAlloc(output_pixels.length * 2);
+        try {
+            int r = nstbir_resize_uint16_generic(MemoryUtil.memAddress(in), input_w, input_h, input_stride_in_bytes,
+                    MemoryUtil.memAddress(out), output_w, output_h, output_stride_in_bytes,
+                    num_channels, alpha_channel, flags, edge_wrap_mode, filter, space, alloc_context);
+            out.asShortBuffer().get(output_pixels);
+            return r;
+        } finally {
+            MemoryUtil.memFree(in);
+            MemoryUtil.memFree(out);
+        }
+    }
+
+    public static boolean stbir_resize_uint16_generic(short[] input_pixels, int input_w, int input_h, int input_stride_in_bytes,
+            short[] output_pixels, int output_w, int output_h, int output_stride_in_bytes,
+            int num_channels, int alpha_channel, int flags, int edge_wrap_mode, int filter, int space) {
+        return nstbir_resize_uint16_generic(input_pixels, input_w, input_h, input_stride_in_bytes,
+                output_pixels, output_w, output_h, output_stride_in_bytes,
+                num_channels, alpha_channel, flags, edge_wrap_mode, filter, space, 0L) != 0;
+    }
+
+    public static boolean stbir_resize_uint16_generic(short[] input_pixels, int input_w, int input_h, int input_stride_in_bytes,
+            short[] output_pixels, int output_w, int output_h, int output_stride_in_bytes,
+            int num_channels, int alpha_channel, int flags, int edge_wrap_mode, int filter, int space, long alloc_context) {
+        return nstbir_resize_uint16_generic(input_pixels, input_w, input_h, input_stride_in_bytes,
+                output_pixels, output_w, output_h, output_stride_in_bytes,
+                num_channels, alpha_channel, flags, edge_wrap_mode, filter, space, alloc_context) != 0;
+    }
+
+    public static boolean stbir_resize_uint16_generic(ShortBuffer input_pixels, int input_w, int input_h, int input_stride_in_bytes,
+            ShortBuffer output_pixels, int output_w, int output_h, int output_stride_in_bytes,
+            int num_channels, int alpha_channel, int flags, int edge_wrap_mode, int filter, int space, long alloc_context) {
+        return nstbir_resize_uint16_generic(MemoryUtil.memAddress(input_pixels), input_w, input_h, input_stride_in_bytes,
+                MemoryUtil.memAddressSafe(output_pixels), output_w, output_h, output_stride_in_bytes,
+                num_channels, alpha_channel, flags, edge_wrap_mode, filter, space, alloc_context) != 0;
+    }
 }

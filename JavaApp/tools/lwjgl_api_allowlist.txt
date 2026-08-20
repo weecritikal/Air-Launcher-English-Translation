@@ -1,0 +1,153 @@
+# LWJGL calls the launcher deliberately does not answer.
+#
+# Every line here is a method that some Minecraft version's LWJGL publishes and this launcher
+# does not provide. check_lwjgl_api.py fails the build on anything missing that is NOT listed
+# here, so this file is the record of what was decided rather than overlooked.
+#
+# A line is either a full "class<TAB>name<TAB>descriptor" or a "class<TAB>name" to cover every
+# overload of that name. Lines starting with # are comments.
+#
+# Adding a line here is a decision that needs a reason written next to it. If there is no reason
+# worth writing, the method should be implemented instead.
+
+# ------------------------------------------------------------------------------------------
+# GLFW: setting a callback from a raw function pointer.
+#
+# These return the callback that was previously installed, as an address. This launcher holds
+# callbacks as Java objects and has no address to hand back for them. Accepting the call and
+# dropping the callback would leave a mod silently receiving no input, which is worse than a
+# failure naming the method, so they stay absent until the shim can track callback addresses.
+# Mods use the typed setters - glfwSetKeyCallback(window, callback) - which are implemented.
+# ------------------------------------------------------------------------------------------
+org/lwjgl/glfw/GLFW	nglfwSetCharCallback
+org/lwjgl/glfw/GLFW	nglfwSetCharModsCallback
+org/lwjgl/glfw/GLFW	nglfwSetCursorEnterCallback
+org/lwjgl/glfw/GLFW	nglfwSetCursorPosCallback
+org/lwjgl/glfw/GLFW	nglfwSetDropCallback
+org/lwjgl/glfw/GLFW	nglfwSetErrorCallback
+org/lwjgl/glfw/GLFW	nglfwSetFramebufferSizeCallback
+org/lwjgl/glfw/GLFW	nglfwSetJoystickCallback
+org/lwjgl/glfw/GLFW	nglfwSetKeyCallback
+org/lwjgl/glfw/GLFW	nglfwSetMonitorCallback
+org/lwjgl/glfw/GLFW	nglfwSetMouseButtonCallback
+org/lwjgl/glfw/GLFW	nglfwSetScrollCallback
+org/lwjgl/glfw/GLFW	nglfwSetWindowCloseCallback
+org/lwjgl/glfw/GLFW	nglfwSetWindowContentScaleCallback
+org/lwjgl/glfw/GLFW	nglfwSetWindowFocusCallback
+org/lwjgl/glfw/GLFW	nglfwSetWindowIconifyCallback
+org/lwjgl/glfw/GLFW	nglfwSetWindowMaximizeCallback
+org/lwjgl/glfw/GLFW	nglfwSetWindowPosCallback
+org/lwjgl/glfw/GLFW	nglfwSetWindowRefreshCallback
+org/lwjgl/glfw/GLFW	nglfwSetWindowSizeCallback
+
+# ------------------------------------------------------------------------------------------
+# org.lwjgl.system.JNI: the call* dispatch family.
+#
+# This is LWJGL's internal bridge for invoking a native through a function pointer. It is called
+# by LWJGL's generated bindings, not by mod logic, and the launcher ships its own bindings that
+# use the current invoke* forms.
+#
+# LWJGL 3.3 did not simply rename these. It moved the function pointer from the first parameter
+# to the last AND collapsed the per-argument-type variants into a smaller set, so most call*
+# forms have no invoke* counterpart with a matching shape: of 1202, only 78 map by reordering
+# and the rest have no target at all. A generated alias would therefore be a guess, and a wrong
+# guess passes an integer where a function pointer belongs - memory corruption instead of a
+# clean error. Left absent on purpose.
+# ------------------------------------------------------------------------------------------
+# The letters after "call" encode the argument types as well as the return type, so this is a
+# pattern rather than a list of names.
+~^org/lwjgl/system/JNI\tcall[A-Z]+\t
+
+# ------------------------------------------------------------------------------------------
+# LWJGL internals with no mod-facing contract.
+#
+# MemoryAccess and its nested accessors are how LWJGL reaches memory on a given JVM; the class
+# is not public API and its shape changes freely between releases. Struct.Buffer plumbing
+# (self, getElementFactory, getFactory) is likewise generated per release. Mods use MemoryUtil
+# and the struct types themselves, both of which are present.
+# ------------------------------------------------------------------------------------------
+org/lwjgl/system/MemoryAccess$MemoryAccessor
+org/lwjgl/system/MemoryAccess$MemoryAccessorUnsafe
+org/lwjgl/system/MemoryAccess$MemoryAccessorJNI
+org/lwjgl/system/MemoryAccess
+
+# ------------------------------------------------------------------------------------------
+# Generated plumbing, matched by pattern because it repeats across dozens of classes.
+#
+# Everything below is machinery LWJGL generates for its own use and reshapes freely between
+# releases. None of it is something a mod calls: mods use the struct types, the typed callback
+# setters and MemoryUtil, all of which are checked normally. The launcher replaces LWJGL's
+# generated bindings wholesale, so the only caller of this machinery is code that ships with the
+# matching version of it.
+# ------------------------------------------------------------------------------------------
+
+# Struct and buffer factories. LWJGL calls these to wrap a pointer as a struct.
+~\tnewBufferInstance\t
+~\tnewInstance\t
+~\tsizeof\t\(\)I
+~\tvalidate\t\(JI\)V
+~^org/lwjgl/system/(CustomBuffer|StructBuffer|Struct|Pointer\$Default)\b
+~^org/lwjgl/system/Struct\$
+
+# Callback dispatch. A mod implements these interfaces with a lambda; LWJGL invokes them.
+# The invoking side and the interface always ship together, so a shape change cannot split them.
+~CallbackI?(\$[A-Z])?\tcallback\t
+~CallbackI?(\$[A-Z])?\tgetSignature\t
+~^org/lwjgl/system/Callback(I)?\b
+
+# Allocator, loader and JVM-access internals.
+~^org/lwjgl/system/(MemoryAccess|MemoryManage|MemoryTextUtil|MemoryStack|ThreadLocalUtil|LibraryResource|Library|APIUtil|Checks|SharedLibrary)\b
+~^org/lwjgl/system/MemoryUtil\$
+~^org/lwjgl/(openal/AL|opengl/GL)\$
+
+# Desktop-only surfaces. GLX and WGL are the X11 and Windows window-system bindings, and these
+# NV and EXT entry points need desktop driver extensions. None of them can be reached on iOS.
+~^org/lwjgl/opengl/(GLX|WGL|GPU_DEVICE|NV[A-Za-z]+|EXTMemoryObject)
+
+# ------------------------------------------------------------------------------------------
+# org.lwjgl.system.JNI: the older invoke* argument order.
+#
+# LWJGL 3.3 moved the function pointer from the first parameter to the last, so the 3.2-era
+# invoke* forms have the same names as the current ones with the arguments in a different order.
+# Restoring them means replacing the whole JNI class, and every method in it is native: rewriting
+# it in Java would drop the native declarations that all of LWJGL dispatches through. Risking the
+# dispatch path used by every binding, to serve a caller that has to be a mod shipping its own
+# 3.2-era generated bindings, is the wrong trade.
+# ------------------------------------------------------------------------------------------
+~^org/lwjgl/system/JNI\tinvoke[A-Z]+\t
+
+# ------------------------------------------------------------------------------------------
+# Cannot be satisfied: Java does not allow two methods to differ only by return type.
+#
+# The rectangle packing structs changed their accessors from short to int, and the launcher
+# carries the int versions. STBRPRect.h() cannot return both short and int in one class, so
+# providing the older shape means removing the current one. Same for the OpenGL robustness
+# queries, where the older declarations were simply wrong - glGetnUniformi is an integer query
+# that LWJGL once declared as returning float and taking a FloatBuffer, corrected later - and for
+# alListener3i, an integer call that once took floats. The launcher carries the corrected forms.
+# ------------------------------------------------------------------------------------------
+~^org/lwjgl/stb/STBRP(Rect|Node)(\$Buffer)?\t
+~^org/lwjgl/opengl/(GL45C?|KHRRobustness)\tn?glGetnUniform(i|ui)v?\t
+org/lwjgl/openal/AL11	alListener3i
+
+# ------------------------------------------------------------------------------------------
+# Present with a different shape, where the current shape is the one that works.
+#
+# MemoryUtil carries 23 memAddressSafe and memSlice methods; what is absent are the indexed
+# overloads and the JNI global-reference helpers. Adding them means replacing MemoryUtil, which
+# is LWJGL's memory access core, to serve overloads mods do not use.
+#
+# The remaining entries are surfaces that cannot exist on this platform: NSGL is the macOS
+# OpenGL binding, EGL handle accessors expose a display and surface the launcher owns rather than
+# GLFW, and tinyfd opens native desktop file dialogs. Perlin noise and the JPEG float writer are
+# older signatures superseded in place.
+# ------------------------------------------------------------------------------------------
+~^org/lwjgl/system/MemoryUtil\t(memAddress0|memAddress0Safe|memAddressSafe|memSlice|memNewGlobalRef|memNewWeakGlobalRef|memDeleteGlobalRef|memDeleteWeakGlobalRef)\t
+~^org/lwjgl/glfw/GLFWNative(EGL|NSGL)\t
+~^org/lwjgl/util/tinyfd/TinyFileDialogs\tn?tinyfd_response\t
+~^org/lwjgl/stb/STBPerlin\t
+~^org/lwjgl/stb/STBImageWrite\tn?stbi_write_jpg\t
+~^org/lwjgl/stb/STBIZlibCompressI\t
+~^org/lwjgl/PointerBuffer\tputAddressOf\t
+~^org/lwjgl/glfw/GLFWVulkan\tnglfw
+~^org/lwjgl/opengl/(GL43C?|ARBComputeShader)\tnglDispatchComputeIndirect\t

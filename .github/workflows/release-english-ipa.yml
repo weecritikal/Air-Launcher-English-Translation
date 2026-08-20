@@ -81,6 +81,19 @@ jobs:
           gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=2
           gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=2 TROLLSTORE_JIT_ENT=1
 
+      - name: Check the launcher answers every LWJGL call Minecraft makes
+        if: success()
+        run: |
+          # The launcher ships its own LWJGL, so one build serves every Minecraft version and any
+          # API that changed between LWJGL releases becomes a mod that crashes here and nowhere
+          # else. This compares the built jar against every LWJGL release Minecraft has shipped.
+          jar=$(find JavaApp/build -name lwjgl.jar -print -quit)
+          if [ -z "$jar" ]; then
+            echo "::error::built lwjgl.jar not found - the API compatibility check did not run"
+            exit 1
+          fi
+          python3 JavaApp/tools/check_lwjgl_api.py "$jar"
+
       - name: Confirm key was compiled in
         if: success()
         run: |
