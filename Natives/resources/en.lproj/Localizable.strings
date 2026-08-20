@@ -588,6 +588,8 @@
 "crash.reason.java_version" = "Java version mismatch (UnsupportedClassVersionError)";
 "crash.reason.renderer" = "Renderer error (OpenGL/Metal/EGL initialization failed)";
 "crash.reason.mod_loading" = "Mod loading failure (Forge/Fabric/OptiFine)";
+"crash.reason.graphics_memory" = "The device ran out of memory while the game was drawing. The graphics driver asked iOS for memory, was refused, and took the game down with it.";
+"crash.detail.graphics_memory" = "The game was using %lld MB of its %lld MB memory allowance (%.0f%%) when it stopped.";
 // Quick fix suggestion texts
 "crash.suggestion.oom_ram" = "Reduce memory allocation (recommended 1024-2048MB)";
 "crash.suggestion.oom_getmoream" = "Use GetMoreRam (LiveContainer) to bypass iOS memory limit";
@@ -619,6 +621,11 @@
 "crash.suggestion.java_log" = "View full log for exception stack trace";
 "crash.suggestion.java_mods" = "Check mod compatibility (remove recently added mods)";
 "crash.suggestion.java_restart" = "Restart launcher and retry";
+"crash.suggestion.gfxmem_distance" = "Lower the render distance to 6-8 chunks and the simulation distance to 5. This frees more memory than anything else you can change.";
+"crash.suggestion.gfxmem_apps" = "Close your other apps and restart the launcher, so the whole device is not already short of memory";
+"crash.suggestion.gfxmem_mods" = "Remove minimap mods and recipe viewers (JourneyMap, Xaero's, JEI, EMI). They hold on to the most memory in a large pack.";
+"crash.suggestion.gfxmem_shaders" = "Turn off shaders and lower the resolution scale";
+"crash.suggestion.gfxmem_ram" = "Raise Settings > Java > Memory allocation only if it is below 2048 MB. Setting it higher than the device can spare makes iOS kill the game instead.";
 
 // Launch overlay (FCL/ZL2 style)
 "launch.title" = "Starting Minecraft";

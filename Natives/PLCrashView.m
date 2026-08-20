@@ -23,6 +23,7 @@ typedef NS_ENUM(NSInteger, CrashType) {
     CrashTypeUnsignedDylib,      // iOS refused to load a .dylib a mod extracted at runtime
     CrashTypeJavaVersionMismatch,// A Java version mismatch
     CrashTypeRendererError,      // A renderer error
+    CrashTypeGraphicsMemoryPressure, // The graphics driver crashed because the device ran out of memory
     CrashTypeModLoadingFailure,  // A mod failed to load
     CrashTypeJavaException,      // A Java exception
     CrashTypeUnknown             // An unknown error
@@ -589,6 +590,14 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/weecritikal/Air-L
             [result addObject:@{@"icon": @"eye.slash", @"text": localize(@"crash.suggestion.renderer_shader", @"Disable your shader pack and try again")}];
             [result addObject:@{@"icon": @"arrow.down.circle", @"text": localize(@"crash.suggestion.renderer_resolution", @"Lower the game's resolution scale")}];
             break;
+        case CrashTypeGraphicsMemoryPressure:
+            // Ordered by how much memory each one actually gives back on a large pack.
+            [result addObject:@{@"icon": @"square.grid.3x3", @"text": localize(@"crash.suggestion.gfxmem_distance", @"Lower the render distance to 6-8 chunks and the simulation distance to 5. This frees more memory than anything else you can change.")}];
+            [result addObject:@{@"icon": @"iphone", @"text": localize(@"crash.suggestion.gfxmem_apps", @"Close your other apps and restart the launcher, so the whole device is not already short of memory")}];
+            [result addObject:@{@"icon": @"map", @"text": localize(@"crash.suggestion.gfxmem_mods", @"Remove minimap mods and recipe viewers (JourneyMap, Xaero's, JEI, EMI). They hold on to the most memory in a large pack.")}];
+            [result addObject:@{@"icon": @"eye.slash", @"text": localize(@"crash.suggestion.gfxmem_shaders", @"Turn off shaders and lower the resolution scale")}];
+            [result addObject:@{@"icon": @"slider.horizontal.3", @"text": localize(@"crash.suggestion.gfxmem_ram", @"Raise Settings > Java > Memory allocation only if it is below 2048 MB. Setting it higher than the device can spare makes iOS kill the game instead.")}];
+            break;
         case CrashTypeModLoadingFailure:
             [result addObject:@{@"icon": @"trash", @"text": localize(@"crash.suggestion.modload_remove", @"Remove the problem mod (see the error lines in the log)")}];
             [result addObject:@{@"icon": @"arrow.clockwise.circle", @"text": localize(@"crash.suggestion.modload_update", @"Update the mod loader (Forge/Fabric/OptiFine)")}];
@@ -640,21 +649,40 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/weecritikal/Air-L
         return;
     }
 
-    // 3. OOM (SIGKILL, or OOM keywords in the log)
+    // 3. The graphics driver died because the device ran out of memory.
+    //    Checked ahead of the exit code because the JVM reports the SIGSEGV and then
+    //    calls abort(), so this arrives as a plain "aborted" and would otherwise be
+    //    filed under mod conflicts, whose advice is useless here.
+    if ([self isGraphicsMemoryPressureCrash]) {
+        self.crashType = CrashTypeGraphicsMemoryPressure;
+
+        long long usedMB = 0, totalMB = 0;
+        double occupancy = [self heapOccupancyFromCrashReport:&usedMB total:&totalMB];
+        if (occupancy >= 0) {
+            self.crashDetail = [NSString stringWithFormat:
+                localize(@"crash.detail.graphics_memory", @"The game was using %lld MB of its %lld MB memory allowance (%.0f%%) when it stopped."),
+                usedMB, totalMB, occupancy * 100.0];
+        } else {
+            self.crashDetail = nil;
+        }
+        return;
+    }
+
+    // 4. OOM (SIGKILL, or OOM keywords in the log)
     if ([self isOOMCrash]) {
         self.crashType = CrashTypeOOM;
         self.crashDetail = [self extractLineContaining:@"outofmemory" fromLog:lowerLog] ?: [self extractLineContaining:@"cannot allocate" fromLog:lowerLog];
         return;
     }
 
-    // 3. SIGSEGV segmentation fault
+    // 5. SIGSEGV segmentation fault
     if (_exitCode == 11) {
         self.crashType = CrashTypeSegfault;
         self.crashDetail = nil;
         return;
     }
 
-    // 4. SIGABRT
+    // 6. SIGABRT
     if (_exitCode == 6) {
         // Check whether a mod conflict caused it
         if ([lowerLog containsString:@"nosuchmethoderror"] || [lowerLog containsString:@"classcastexception"] ||
@@ -674,14 +702,14 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/weecritikal/Air-L
         return;
     }
 
-    // 5. SIGTERM
+    // 7. SIGTERM
     if (_exitCode == 15) {
         self.crashType = CrashTypeTerminated;
         self.crashDetail = nil;
         return;
     }
 
-    // 6. Analyze by log keywords (for other exit codes)
+    // 8. Analyze by log keywords (for other exit codes)
     // Mod conflict
     if ([lowerLog containsString:@"nosuchmethoderror"] || [lowerLog containsString:@"classcastexception"] ||
         [lowerLog containsString:@"illegalaccessexception"] || [lowerLog containsString:@"nosuchfielderror"] ||
@@ -968,6 +996,122 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/weecritikal/Air-L
     return cachedLog;
 }
 
+/// Read the JVM's own crash report, when the log says one was written.
+///
+/// When the JVM dies in native code it writes an hs_err_pid*.log next to the game and
+/// prints the path into the log the launcher captures. That file carries the two things
+/// the launcher log does not: which library the crash was actually inside, and how full
+/// the Java heap was at the time.
+- (NSString *)readCrashReport {
+    static NSString *cachedReport = nil;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        cachedReport = @"";
+        NSString *log = [self readLatestLogForAnalysis];
+        if (log.length == 0) return;
+
+        // The JVM prints "# An error report file with more information is saved as:"
+        // and then the absolute path on the following line, both behind a "# " prefix.
+        NSRange marker = [log rangeOfString:@"error report file with more information is saved as:"];
+        if (marker.location == NSNotFound) return;
+
+        NSRange rest = NSMakeRange(NSMaxRange(marker), log.length - NSMaxRange(marker));
+        for (NSString *line in [[log substringWithRange:rest] componentsSeparatedByString:@"\n"]) {
+            NSString *candidate = [line stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceCharacterSet];
+            while ([candidate hasPrefix:@"#"]) {
+                candidate = [[candidate substringFromIndex:1] stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceCharacterSet];
+            }
+            if (candidate.length == 0) continue;
+            if (![candidate hasPrefix:@"/"]) break; // The path is the first non-empty line; anything else means it is gone.
+            cachedReport = [NSString stringWithContentsOfFile:candidate encoding:NSUTF8StringEncoding error:nil] ?: @"";
+            break;
+        }
+    });
+    return cachedReport;
+}
+
+/// How full the Java heap was when the JVM died, as a fraction, or -1 when unknown.
+///
+/// Fills usedMB/totalMB from the crash report's heap summary line, which reads
+/// " garbage-first heap   total 1966080K, used 1953683K [...]".
+- (double)heapOccupancyFromCrashReport:(long long *)usedMB total:(long long *)totalMB {
+    NSString *report = [self readCrashReport];
+    if (report.length == 0) return -1;
+
+    NSRange heapSection = [report rangeOfString:@"heap   total "];
+    if (heapSection.location == NSNotFound) {
+        heapSection = [report rangeOfString:@"heap total "];
+        if (heapSection.location == NSNotFound) return -1;
+    }
+
+    NSScanner *scanner = [NSScanner scannerWithString:[report substringFromIndex:NSMaxRange(heapSection)]];
+    long long totalK = 0, usedK = 0;
+    if (![scanner scanLongLong:&totalK]) return -1;
+    if (![scanner scanUpToString:@"used " intoString:NULL]) return -1;
+    if (![scanner scanString:@"used " intoString:NULL]) return -1;
+    if (![scanner scanLongLong:&usedK]) return -1;
+    if (totalK <= 0 || usedK < 0) return -1;
+
+    if (usedMB) *usedMB = usedK / 1024;
+    if (totalMB) *totalMB = totalK / 1024;
+    return (double)usedK / (double)totalK;
+}
+
+/// Whether the graphics driver crashed because the device had run out of memory.
+///
+/// This is the shape a large modpack takes when it outgrows what iOS will give the app.
+/// The Java heap fills, the collector cannot keep ahead of it, and the next allocation
+/// the Metal driver makes on the render thread is refused. The driver does not check,
+/// so the process dies inside Apple's graphics stack with a null dereference - which
+/// on its own reads like a driver bug rather than the memory problem it is.
+///
+/// Two things have to hold before claiming this: the crash was inside the graphics
+/// stack, and there is separate evidence the memory was gone. Either alone is not
+/// enough - graphics drivers crash for other reasons, and memory gets tight without
+/// anything crashing.
+- (BOOL)isGraphicsMemoryPressureCrash {
+    NSString *log = [self readLatestLogForAnalysis];
+    if (log.length == 0) return NO;
+    NSString *lowerLog = [log lowercaseString];
+
+    // Part one: the crash was inside the graphics stack. The JVM names the library in
+    // its "Problematic frame:" line, which it prints into the launcher log as well.
+    NSRange frameMarker = [lowerLog rangeOfString:@"problematic frame:"];
+    if (frameMarker.location == NSNotFound) return NO;
+
+    NSUInteger tailStart = NSMaxRange(frameMarker);
+    NSUInteger tailLength = MIN((NSUInteger)200, lowerLog.length - tailStart);
+    NSString *frame = [lowerLog substringWithRange:NSMakeRange(tailStart, tailLength)];
+
+    BOOL inGraphicsStack = NO;
+    for (NSString *library in @[@"agxmetal", @"libglesv2", @"libmobileglues", @"iogpu",
+                                @"metal", @"libangle", @"moltenvk", @"libgl4es"]) {
+        if ([frame containsString:library]) { inGraphicsStack = YES; break; }
+    }
+    if (!inGraphicsStack) return NO;
+
+    // Part two: the memory really was gone. Any one of these is enough on its own.
+    //  - iOS told the app so, and the launcher logged it while clearing its caches
+    //  - the collector had been reduced to emergency full compactions
+    //  - the JVM's own crash report shows the heap essentially full
+    //
+    // The first two are only trusted from the stretch of log leading up to the crash.
+    // A long session can survive a tight moment early on and go on to crash hours later
+    // for a reason that has nothing to do with memory; reading the whole log would let
+    // that stale warning explain away an unrelated crash.
+    NSUInteger windowEnd = frameMarker.location;
+    NSUInteger windowStart = windowEnd > 40000 ? windowEnd - 40000 : 0;
+    NSString *recentLog = [lowerLog substringWithRange:NSMakeRange(windowStart, windowEnd - windowStart)];
+
+    if ([recentLog containsString:@"memory warning"]) return YES;
+    if ([recentLog containsString:@"pause full (g1 compaction pause)"]) return YES;
+    if ([recentLog containsString:@"g1 preventive collection"]) return YES;
+
+    // The heap figure needs no window - the JVM records it at the moment it died.
+    double occupancy = [self heapOccupancyFromCrashReport:NULL total:NULL];
+    return occupancy >= 0.95;
+}
+
 /// Whether this was an OOM (out of memory) crash
 - (BOOL)isOOMCrash {
     // SIGKILL (signal 9) usually means the system killed the process because it ran out of memory
@@ -1035,6 +1179,10 @@ static NSString *const kGitHubIssuesURL = @"https://github.com/weecritikal/Air-L
             break;
         case CrashTypeRendererError:
             reason = localize(@"crash.reason.renderer", @"Renderer error (OpenGL/Metal/EGL failed to initialize)");
+            break;
+        case CrashTypeGraphicsMemoryPressure:
+            reason = localize(@"crash.reason.graphics_memory",
+                @"The device ran out of memory while the game was drawing. The graphics driver asked iOS for memory, was refused, and took the game down with it.");
             break;
         case CrashTypeModLoadingFailure:
             reason = localize(@"crash.reason.mod_loading", @"A mod failed to load (Forge/Fabric/OptiFine loading error)");
