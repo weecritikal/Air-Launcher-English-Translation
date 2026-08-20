@@ -13,6 +13,7 @@
 #import "DownloadTaskManager.h"
 #import "DownloadTaskItem.h"
 #import "MinecraftResourceDownloadTask.h"
+#import "utils.h"
 
 @interface ServerService () <NSURLSessionDownloadDelegate>
 @property (nonatomic, strong) NSURLSession *downloadSession;

@@ -6,6 +6,7 @@
 //
 
 #import "LanPortDetector.h"
+#import "utils.h"
 
 /// Notification name: posted when the port is set manually
 NSString *const LanPortDetectorDidDetectPortNotification = @"LanPortDetectorDidDetectPort";

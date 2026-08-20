@@ -1,6 +1,10 @@
 #import <UIKit/UIKit.h>
 #import "MemoryPressureRelief.h"
-#import "environ.h"
+// utils.h, not environ.h: it routes NSLog through customNSLog, which prints to the
+// stdout the launcher captures into latestlog.txt. Foundation's own NSLog goes to
+// os_log instead, so anything logged without this header is invisible in the log the
+// user actually reads. (utils.h includes environ.h for runtimeJavaVMPtr.)
+#import "utils.h"
 
 // How long to wait between relief passes while compaction is still paying off.
 // A compaction on a big modpack stops the world for roughly a second, so running

@@ -1,5 +1,6 @@
 #import "SilentAudioPlayer.h"
 #import <AVFoundation/AVFoundation.h>
+#import "utils.h"
 
 /// Background keep-alive audio player implementation
 ///

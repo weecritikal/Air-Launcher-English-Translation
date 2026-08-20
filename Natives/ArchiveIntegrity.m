@@ -1,5 +1,6 @@
 #import "ArchiveIntegrity.h"
 #import "PLProfiles.h"
+#import "utils.h"
 
 // The size of an End Of Central Directory record that carries no trailing comment.
 static const NSUInteger kEOCDMinimumSize = 22;

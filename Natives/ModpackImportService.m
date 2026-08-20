@@ -29,6 +29,7 @@
 #import "LauncherPreferences.h"
 #import "MinecraftResourceDownloadTask.h"
 #import "MinecraftResourceUtils.h"
+#import "utils.h"
 
 static NSString * const kImportedModpacksKey = @"ImportedModpacks";
 

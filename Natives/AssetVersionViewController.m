@@ -14,6 +14,7 @@
 #import "ModVersionTableViewCell.h"
 #import "AssetDetailHeaderView.h"
 #import "BackgroundManager.h"
+#import "utils.h"
 
 // ============================================================================
 // Sort constants (kept in sync with ModVersionViewController, phase 3 alignment)

@@ -2,6 +2,7 @@
 #import "terracotta.h"
 #import <fcntl.h>
 #import <unistd.h>
+#import "utils.h"
 
 #pragma mark - Data Models
 

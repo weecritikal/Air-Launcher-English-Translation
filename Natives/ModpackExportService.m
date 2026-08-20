@@ -3,6 +3,7 @@
 #import "ModService.h"
 #import "external/UnzipKit/UZKArchive.h"
 #import <CommonCrypto/CommonCrypto.h>
+#import "utils.h"
 
 @interface ModpackExportService ()
 /// Resolve the profile gameDir into an absolute path (reusing the ModService logic)

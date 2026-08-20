@@ -1,6 +1,7 @@
 #import "TerracottaManager.h"
 #import "TerracottaBridge.h"
 #import "SilentAudioPlayer.h"
+#import "utils.h"
 
 NSNotificationName TerracottaManagerStateDidChangeNotification = @"TerracottaManagerStateDidChange";
 

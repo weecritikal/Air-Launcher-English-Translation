@@ -59,6 +59,7 @@
 #import "LauncherPreferences.h"
 #import "PLProfiles.h"
 #import <UIKit/UIKit.h>  // For UIApplicationDidEnterBackgroundNotification and friends (the P0-B lifecycle observers)
+#import "utils.h"
 
 #pragma mark - Constant definitions
 

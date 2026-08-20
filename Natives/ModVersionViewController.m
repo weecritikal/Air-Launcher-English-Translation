@@ -5,6 +5,7 @@
 #import "ModVersionTableViewCell.h"
 #import "AssetDetailHeaderView.h"
 #import "BackgroundManager.h"
+#import "utils.h"
 
 // ============================================================================
 // Download source constants (matching the ModVersion.apiSource field: 1=Modrinth, 2=CurseForge)

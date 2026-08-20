@@ -19,6 +19,7 @@
 #import "DownloadTaskManager.h"
 #import "DownloadTaskItem.h"
 #import "LauncherPreferences.h"
+#import "utils.h"
 
 @interface DataPackService () <NSURLSessionDownloadDelegate>
 @property (nonatomic, strong) NSURLSession *downloadSession;

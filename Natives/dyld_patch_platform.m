@@ -4,6 +4,7 @@
 #include <mach-o/loader.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#import "utils.h"
 
 extern int dyld_get_active_platform();
 

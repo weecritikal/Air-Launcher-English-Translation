@@ -2,6 +2,7 @@
 #include <AVFoundation/AVFoundation.h>
 #include <pthread.h>
 #include "jni.h"
+#import "utils.h"
 
 #define CIRCULAR_BUFFER_SIZE (48000 * 2 * 8)
 

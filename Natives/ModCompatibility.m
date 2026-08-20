@@ -1,4 +1,5 @@
 #import "ModCompatibility.h"
+#import "utils.h"
 
 /// One known-incompatible mod.
 ///

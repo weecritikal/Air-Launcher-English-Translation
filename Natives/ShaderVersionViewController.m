@@ -14,6 +14,7 @@
 #import "ShaderVersionTableViewCell.h"
 #import "AssetDetailHeaderView.h"
 #import "BackgroundManager.h"
+#import "utils.h"
 
 // ============================================================================
 // Download source constants (kept consistent with the ShaderVersion.apiSource field: 1=Modrinth, 2=CurseForge)

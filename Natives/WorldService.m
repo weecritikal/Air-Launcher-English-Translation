@@ -17,6 +17,7 @@
 #import "DownloadTaskManager.h"
 #import "DownloadTaskItem.h"
 #import "LauncherPreferences.h"
+#import "utils.h"
 
 @interface WorldService () <NSURLSessionDownloadDelegate>
 @property (nonatomic, strong) NSURLSession *downloadSession;

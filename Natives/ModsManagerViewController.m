@@ -7,6 +7,7 @@
 #import "PLProfiles.h"
 #import "LauncherPreferences.h"
 #import "BackgroundManager.h"
+#import "utils.h"
 
 @interface ModsManagerViewController () <UITableViewDataSource, UITableViewDelegate, ModTableViewCellDelegate, UISearchBarDelegate, ModVersionViewControllerDelegate, UIDocumentPickerDelegate>
 

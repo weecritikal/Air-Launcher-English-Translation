@@ -15,6 +15,7 @@
 #import "installer/modpack/ModrinthAPI.h"
 #import "LauncherPreferences.h"
 #import "BackgroundManager.h"
+#import "utils.h"
 
 @interface ShadersManagerViewController () <UITableViewDataSource, UITableViewDelegate, ShaderTableViewCellDelegate, UISearchBarDelegate, ShaderVersionViewControllerDelegate, UIDocumentPickerDelegate>
 
