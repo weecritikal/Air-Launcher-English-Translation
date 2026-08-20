@@ -784,9 +784,25 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
     // Some MC versions/mods may read the frame rate limit via System.getProperty.
     // -Dmax.fps=260 is set as an extra safety net beyond options.txt.
     // It has no effect on versions that do not read the property.
+    //
+    // The ceiling is the screen's own refresh rate rather than 260. Unlocking the frame rate is
+    // worth doing because it lets a 120Hz screen run at 120 instead of being held at 60, but a
+    // frame finished after the screen has already taken one is never shown - the compositor hands
+    // the display whatever was ready at the last refresh and drops the rest. Those frames still
+    // cost a full CPU and GPU pass, and on a device with no fan that heat is what makes the chip
+    // slow itself down. Rendering past the refresh rate therefore lowers the frame rate that can
+    // actually be held, a few minutes in.
+    //
+    // maximumFramesPerSecond reports what the screen can currently do, so it follows the hardware:
+    // 120 on a ProMotion display, 60 otherwise, and 60 while Low Power Mode is on - which is the
+    // right ceiling in each case. A value below 30 would mean the screen was not readable yet, so
+    // 60 is used instead of trusting it.
     if (getPrefBool(@"video.disable_game_vsync")) {
-        PUSH_MARGV_LITERAL("-Dmax.fps=260");
-        NSLog(@"[JavaLauncher] Added JVM property -Dmax.fps=260 (frame rate unlock layer 4)");
+        int screenFps = (int)UIScreen.mainScreen.maximumFramesPerSecond;
+        int fpsCap = screenFps >= 30 ? screenFps : 60;
+        PUSH_MARGV_FORMAT(@"-Dmax.fps=%d", fpsCap);
+        NSLog(@"[JavaLauncher] Added JVM property -Dmax.fps=%d (frame rate unlock layer 4, matched to the %dHz screen)",
+              fpsCap, screenFps);
     }
 
     // ============================================================================
@@ -1009,6 +1025,22 @@ int launchJVM(NSString *accountId, id launchTarget, int width, int height, int m
     } else {
         NSLog(@"[JavaLauncher] Java 8 detected, skipping G1GC tuning (using default GC)");
     }
+
+    // The two below apply to every Java version, including 8.
+    //
+    // The JVM keeps its performance counters in a file it memory-maps, and it updates them at
+    // safepoints - the same moments the world is already stopped for GC. On a phone that write goes
+    // to flash through the app sandbox, so it lengthens pauses that show up as stutter. The counters
+    // exist for external tools attaching to the process, which cannot happen here, so nothing reads
+    // them and turning them off costs nothing.
+    PUSH_MARGV_LITERAL("-XX:+PerfDisableSharedMem");
+
+    // Integer.valueOf returns a shared object for small values and allocates for everything else.
+    // Minecraft boxes integers constantly - block states, item counts, entity and chunk ids - and
+    // most of them land above the default ceiling of 127, so each one becomes garbage the collector
+    // has to walk. Raising the ceiling trades a few hundred kilobytes of permanently cached objects
+    // for a large drop in short-lived allocation.
+    PUSH_MARGV_LITERAL("-XX:AutoBoxCacheMax=20000");
 
     setenv("INTERNAL_JLI_PATH", (isJava8 ? libjlipath8 : libjlipath11).UTF8String, 1);
     void* libjli = dlopen(getenv("INTERNAL_JLI_PATH"), RTLD_GLOBAL);

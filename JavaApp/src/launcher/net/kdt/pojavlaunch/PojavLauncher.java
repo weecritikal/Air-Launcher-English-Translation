@@ -101,12 +101,32 @@ public class PojavLauncher {
         // a user who wants the in-game vertical sync and frame rate limit back can turn the toggle off in the launcher settings.
         if ("1".equals(System.getenv("POJAV_DISABLE_VSYNC"))) {
             MCOptionUtils.set("enableVsync", "false");
-            // maxFps=260: in the MC 1.16+ source, maxFps>=260 counts as unlimited
+            // The cap is the screen's own refresh rate, not "unlimited".
+            //
+            // Unlocking is still worth doing: without it a 120Hz screen is held at 60. But a frame
+            // finished after the screen has already taken one is never shown - the compositor uses
+            // whatever was ready at the last refresh and discards the rest. Those frames cost a full
+            // CPU and GPU pass anyway, and on a device with no fan that heat is what makes the chip
+            // slow itself down, so rendering past the refresh rate lowers the frame rate that can
+            // actually be held once the device warms up.
+            //
+            // maximumFramesPerSecond is passed in by the launcher and reports what the screen can do
+            // right now: 120 on ProMotion, 60 otherwise, and 60 while Low Power Mode is on. Anything
+            // below 30 means it could not be read, in which case the old unlimited value is kept
+            // rather than guessing a cap.
+            String fpsCap = "260";
+            try {
+                int screenFps = Integer.parseInt(System.getProperty("UIScreen.maximumFramesPerSecond", "0"));
+                if (screenFps >= 30) fpsCap = Integer.toString(screenFps);
+            } catch (NumberFormatException ignored) {
+                // Keep 260 - the property was not a number, so there is nothing to match.
+            }
+            // In the MC 1.16+ source, maxFps>=260 counts as unlimited
             // (0 used to be written, but it was treated as invalid and ignored, so the frame rate stayed capped at maxFps=120)
-            MCOptionUtils.set("maxFps", "260");
+            MCOptionUtils.set("maxFps", fpsCap);
             // MC 26.2+ compatibility: it may have been renamed to maxFramerate or framerateLimit
-            MCOptionUtils.set("maxFramerate", "260");
-            MCOptionUtils.set("framerateLimit", "260");
+            MCOptionUtils.set("maxFramerate", fpsCap);
+            MCOptionUtils.set("framerateLimit", fpsCap);
             // MC 1.21.8+ compatibility: the inactivityFpsLimit option (the InactivityFpsLimit enum)
             //
             // Key fix (one root cause of frame rate unlocking not working):
@@ -129,7 +149,7 @@ public class PojavLauncher {
             // Older MC versions (1.21.7 and below) do not recognize this option and ignore it, with no side effects.
             MCOptionUtils.set("inactivityFpsLimit", "minimized");
             // Diagnostic log: print the frame-rate-related options that were written
-            System.out.println("[PojavLauncher] VSync disabled, maxFps/maxFramerate/framerateLimit set to 260");
+            System.out.println("[PojavLauncher] VSync disabled, maxFps/maxFramerate/framerateLimit set to " + fpsCap);
             System.out.println("[PojavLauncher]   enableVsync=" + MCOptionUtils.get("enableVsync"));
             System.out.println("[PojavLauncher]   maxFps=" + MCOptionUtils.get("maxFps"));
             System.out.println("[PojavLauncher]   maxFramerate=" + MCOptionUtils.get("maxFramerate"));
