@@ -327,6 +327,7 @@ add_executable(AngelAuraAmethyst
   DownloadTasksViewController.m
   AppDelegate.m
   ArchiveIntegrity.m
+  ModCompatibility.m
   CustomControlsViewController.m
   CustomControlsViewController+UndoManager.m
   DownloadProgressViewController.m

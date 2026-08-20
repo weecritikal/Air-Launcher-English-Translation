@@ -1,4 +1,5 @@
 #import "ArchiveIntegrity.h"
+#import "ModCompatibility.h"
 #import "installer/ForgeDirectInstaller.h"
 #import "authenticator/BaseAuthenticator.h"
 #import "AppDelegate.h"
@@ -179,6 +180,36 @@ static BOOL UIKit_verifyForgeRuntimeBeforeLaunch(NSDictionary *metadata) {
     return NO;
 }
 
+/// Set aside mods that cannot run on iOS before Forge tries to initialize them.
+///
+/// These fail inside Forge's parallel mod setup, and one failure there aborts the whole queue: the
+/// game dies with a bare RuntimeException whose real cause is buried in a suppressed exception, so
+/// the crash names neither the mod nor the reason. It arrives after a full load and a long black
+/// screen, which makes it read like the launcher hanging rather than one mod refusing to start.
+static void UIKit_setAsideUnsupportedModsBeforeLaunch(void) {
+    NSString *modsFolder = [ArchiveIntegrity modsFolderForProfile:nil];
+    if (modsFolder.length == 0) return;
+
+    NSArray<NSDictionary<NSString *, NSString *> *> *moved =
+        [ModCompatibility setAsideUnsupportedModsInDirectory:modsFolder];
+    if (moved.count == 0) return;
+
+    NSMutableString *message = [NSMutableString stringWithFormat:
+        @"%lu mod%@ in this pack cannot run on iOS and would have crashed the game while it loaded. "
+         "%@ been moved into mods/.air_unsupported so the rest of the pack can start.\n",
+        (unsigned long)moved.count,
+        moved.count == 1 ? @"" : @"s",
+        moved.count == 1 ? @"It has" : @"They have"];
+    for (NSDictionary<NSString *, NSString *> *entry in moved) {
+        [message appendFormat:@"\n  \u2022 %@ \u2014 %@", entry[@"name"], entry[@"reason"]];
+    }
+    [message appendString:@"\n\nNothing else in the pack was changed, and the files are kept in that "
+                           "folder if you want them back."];
+
+    NSLog(@"[Launch] %@", message);
+    showDialog(@"Some mods cannot run on iOS", message);
+}
+
 BOOL UIKit_launchMinecraftSurfaceVC(UIWindow* window, NSDictionary* metadata) {
     // Leave this pref, might be useful later for launching with Quick Actions/Shortcuts/URL Scheme
     //setPreference(@"internal_launch_on_boot", getPreference(@"restart_before_launch"));
@@ -189,6 +220,7 @@ BOOL UIKit_launchMinecraftSurfaceVC(UIWindow* window, NSDictionary* metadata) {
         return NO;
     }
     UIKit_quarantineCorruptModsBeforeLaunch();
+    UIKit_setAsideUnsupportedModsBeforeLaunch();
     dispatch_async(dispatch_get_main_queue(), ^{
         tmpRootVC = window.rootViewController;
         [UIView animateWithDuration:0.2 animations:^{
