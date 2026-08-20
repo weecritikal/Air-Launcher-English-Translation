@@ -1818,4 +1818,22 @@ public class GLFW
     public static int nglfwUpdateGamepadMappings(long string) {
         return glfwUpdateGamepadMappings(memUTF8(string)) ? 1 : 0;
     }
+
+
+    // --- added in newer GLFW, and answerable from what this class already stores -------------
+
+    private static ByteBuffer cachedTitle;
+
+    @Nullable
+    public static String glfwGetWindowTitle(@NativeType("GLFWwindow *") long window) {
+        GLFWWindowProperties w = internalGetWindow(window);
+        return w == null || w.title == null ? null : w.title.toString();
+    }
+
+    public static long nglfwGetWindowTitle(long window) {
+        String t = glfwGetWindowTitle(window);
+        if (t == null) return 0L;
+        cachedTitle = memUTF8(t);
+        return memAddress(cachedTitle);
+    }
 }

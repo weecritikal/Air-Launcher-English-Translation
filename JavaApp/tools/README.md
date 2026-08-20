@@ -23,9 +23,29 @@ anything is. Both build workflows run it after the Java build.
 ## What it compares against
 
 `lwjgl_api_reference.tsv.gz` lists every class, method and descriptor published by the LWJGL
-releases Minecraft has actually shipped — 3.1.6, 3.2.1, 3.2.2, 3.3.1, 3.3.2 and 3.3.3, covering
-1.13 through current — restricted to the packages a mod can reach on this platform. Anything in
-that list the build does not provide is a mod that will crash.
+releases Minecraft has actually shipped, restricted to the packages a mod can reach on this
+platform. Anything in that list the build does not provide is a mod that will crash.
+
+The version list is not a guess. It comes from Mojang's own version manifest: every release is
+read, its LWJGL libraries are extracted, and the result is the set below.
+
+| LWJGL  | Minecraft releases                    |
+| ------ | ------------------------------------- |
+| 3.4.1  | 26.1 – 26.2                           |
+| 3.3.3  | 1.21 – 1.21.11                        |
+| 3.3.2  | 1.20.2 – 1.20.4                       |
+| 3.3.1  | 1.19 – 1.20.1                         |
+| 3.2.2  | 1.14.3 – 1.18.2                       |
+| 3.2.1  | 1.14 – 1.18.2                         |
+| 3.1.6  | 1.13 – 1.13.2                         |
+
+Regenerate the mapping whenever Mojang ships a Minecraft release on an LWJGL the list does not
+name; the check only protects the versions the reference knows about.
+
+Minecraft 1.12.2 and older use LWJGL 2, which is a different library rather than an older version
+of this one. The launcher carries a compatibility shim for the parts old Minecraft calls, not a
+full LWJGL 2, so auditing against all of LWJGL 2 would demand OpenCL bindings and X11 window code
+that could never run here. That axis is deliberately outside this check.
 
 Comparison is by name and descriptor, which is what the JVM resolves a call by. A method present
 under the same name with different parameters does not count: that is still a `NoSuchMethodError`,

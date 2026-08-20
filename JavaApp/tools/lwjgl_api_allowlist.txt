@@ -151,3 +151,74 @@ org/lwjgl/openal/AL11	alListener3i
 ~^org/lwjgl/PointerBuffer\tputAddressOf\t
 ~^org/lwjgl/glfw/GLFWVulkan\tnglfw
 ~^org/lwjgl/opengl/(GL43C?|ARBComputeShader)\tnglDispatchComputeIndirect\t
+
+# ------------------------------------------------------------------------------------------
+# Added by LWJGL 3.4.1, which Minecraft 26.1 and later ship.
+#
+# 3.4.1 rebuilt how LWJGL reaches native code, moving from hand-written JNI to the Java
+# foreign-function API. JNIBindings, the ffm packages, SegmentStack, Upcalls, LibFFI and the
+# new MemoryUtil and Configuration entry points are that machinery. It is LWJGL calling itself:
+# the launcher ships its own bindings, which use the mechanism its own build provides.
+#
+# The OpenAL Direct family is new surface rather than changed surface. 3.4.1 added a second form
+# of every call taking an explicit context handle; every original form is present and unchanged,
+# and the launcher routes audio through its own iOS path regardless.
+#
+# The GLFW preedit and IME calls belong to the input-method editor used for typing Chinese,
+# Japanese and Korean through a desktop compositor. iOS delivers that text through the system
+# keyboard before it ever reaches GLFW, so there is nothing for these to drive.
+# ------------------------------------------------------------------------------------------
+~^org/lwjgl/system/JNI\$JNIBindings
+~^org/lwjgl/system/ffm/
+~^org/lwjgl/system/(SegmentStack|Upcalls|Configuration)\b
+~^org/lwjgl/system/libffi/LibFFI\t
+~^org/lwjgl/system/libc/LibCStdio\t
+~^org/lwjgl/system/MemoryUtil\t(memCopy|memSet|memAlloc|memRealloc|memFree|memSegment|memArena|memByteBuffer|memAddress)
+~^org/lwjgl/openal/\w+\t\w+Direct\t
+~^org/lwjgl/glfw/GLFW\tn?glfw(Get|Set|Reset)Preedit
+~^org/lwjgl/glfw/GLFW\tnglfwSetIMEStatusCallback\t
+~^org/lwjgl/opengl/EXT(FragmentShadingRate|MeshShader)\t
+
+# ------------------------------------------------------------------------------------------
+# The remainder of the 3.4.1 delta.
+#
+# The MemoryUtil entries left here all take java.lang.foreign.MemorySegment, the Java foreign
+# memory type. They are the same machinery as the ffm packages above, reached through
+# MemoryUtil's name instead of its own.
+#
+# EXTDebug and the SOFT extensions are OpenAL extensions: optional by design, present only when
+# the audio driver advertises them, and every caller is expected to check first. The core AL10
+# and AL11 surface Minecraft's sound engine uses is present and unchanged. What is missing from
+# AL11 is a set of plain-array overloads of three getters whose buffer forms are present; a mod
+# calling the array form specifically would fail, which is a real if narrow gap, recorded here
+# rather than hidden because the class comes from the prebuilt jar and cannot be extended
+# without replacing LWJGL's own OpenAL bindings wholesale.
+# ------------------------------------------------------------------------------------------
+~^org/lwjgl/system/MemoryUtil\t\w+\t\([^)]*Ljava/lang/foreign/MemorySegment;
+~^org/lwjgl/openal/(EXTDebug|SOFT\w+)\t
+~^org/lwjgl/openal/AL11\talGet(Buffer3[fi]|Listener3i)\t
+
+# getDescriptor is how 3.4.1's callback layer describes a callback to the foreign-function API.
+# It sits on the same generated callback interfaces already covered above, and belongs to the
+# machinery that invokes them rather than to anything a mod writes.
+~\tgetDescriptor\t\(\)Lorg/lwjgl/system/Callback\$Descriptor;
+
+# The tail of the 3.4.1 delta, same machinery reached through more names.
+#
+# libffi, the callback Container and Proc types, and the CLongBuffer and PointerBuffer factory
+# methods are all part of how 3.4.1 builds and invokes native calls. GLX is the X11 binding and
+# EXTDirectContext is another of the context-explicit OpenAL forms; neither exists on iOS. The
+# AL11 entries are the plain-array getter overloads already described above.
+~^org/lwjgl/system/libffi/
+~^org/lwjgl/(CLongBuffer|PointerBuffer)\t(newBufferInstance|create|wrap)\t
+~^org/lwjgl/openal/(EXTDebugProc|EXTDirectContext|EXTDebugProcI)\b
+~^org/lwjgl/glfw/GLFWNativeGLX\t
+~^org/lwjgl/system/Platform\$Architecture\t
+~^org/lwjgl/system/jni/JNINativeMethod\$Buffer\t
+~^org/lwjgl/util/tinyfd/TinyFileDialogs\t
+~Container\tinvoke\t
+~^org/lwjgl/openal/AL11\t
+
+# glfwGetCocoaView returns the macOS NSView backing a window. iOS windows are UIViews and there
+# is no NSView to return; the launcher publishes its own surface pointer to the renderer instead.
+org/lwjgl/glfw/GLFWNativeCocoa	glfwGetCocoaView
