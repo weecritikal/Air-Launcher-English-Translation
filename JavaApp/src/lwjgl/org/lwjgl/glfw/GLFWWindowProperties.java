@@ -9,6 +9,8 @@ public class GLFWWindowProperties {
     public CharSequence title;
     public boolean shouldClose, isInitialSizeCalled, isCursorEntered;
     public long monitor;
+    /** Whatever glfwSetWindowUserPointer was given. Mods store a handle here and expect it back. */
+    public long userPointer;
     public Map<Integer, Integer> inputModes = new HashMap<>();
     public Map<Integer, Integer> windowAttribs = new HashMap<>();
     

@@ -1406,4 +1406,416 @@ public class GLFW
         // Fast path, but will return true if one has the same prefix
         return glGetString(GL_EXTENSIONS).contains(ext);
     }
+
+    // ========================================================================================
+    // Functions GLFW publishes that this shim did not implement.
+    //
+    // A mod compiled against any Minecraft version calls these through LWJGL's own signatures.
+    // When one is absent the JVM raises NoSuchMethodError, and because most mods touch the
+    // window during Forge's parallel setup, a single missing method aborts the whole mod queue
+    // and the game dies with a message naming neither the mod nor the call. Answering with a
+    // sensible value is always better than not being there at all.
+    //
+    // On iOS there is one window, it fills the screen, and it is always visible and focused.
+    // So the window-state calls have nothing to do and say so by returning quietly. That is the
+    // honest answer, not a stub: the state they ask to change is already the state.
+    // ========================================================================================
+
+    /** Per-monitor user pointers. One entry in practice, but keyed properly so it stays correct. */
+    private static final Map<Long, Long> monitorUserPointers = new HashMap<>();
+
+    // --- window state: already true on a single fullscreen surface -------------------------
+
+    public static void glfwFocusWindow(@NativeType("GLFWwindow *") long window) { }
+
+    public static void glfwIconifyWindow(@NativeType("GLFWwindow *") long window) { }
+
+    public static void glfwMaximizeWindow(@NativeType("GLFWwindow *") long window) { }
+
+    public static void glfwRestoreWindow(@NativeType("GLFWwindow *") long window) { }
+
+    public static void glfwHideWindow(@NativeType("GLFWwindow *") long window) { }
+
+    public static void glfwSetWindowAspectRatio(@NativeType("GLFWwindow *") long window, int numer, int denom) { }
+
+    /** The surface is opaque and cannot be made otherwise, so this is the true value. */
+    public static float glfwGetWindowOpacity(@NativeType("GLFWwindow *") long window) { return 1.0f; }
+
+    public static void glfwSetWindowOpacity(@NativeType("GLFWwindow *") long window, float opacity) { }
+
+    public static void glfwSetGamma(@NativeType("GLFWmonitor *") long monitor, float gamma) { }
+
+    /** No title bar or border, so every edge is zero. */
+    public static void glfwGetWindowFrameSize(@NativeType("GLFWwindow *") long window,
+            @Nullable IntBuffer left, @Nullable IntBuffer top,
+            @Nullable IntBuffer right, @Nullable IntBuffer bottom) {
+        if (left   != null) left.put(left.position(), 0);
+        if (top    != null) top.put(top.position(), 0);
+        if (right  != null) right.put(right.position(), 0);
+        if (bottom != null) bottom.put(bottom.position(), 0);
+    }
+
+    // --- user pointers: these must round-trip, mods keep real handles in them ---------------
+
+    public static void glfwSetWindowUserPointer(@NativeType("GLFWwindow *") long window, @NativeType("void *") long pointer) {
+        GLFWWindowProperties w = internalGetWindow(window);
+        if (w != null) w.userPointer = pointer;
+    }
+
+    @NativeType("void *")
+    public static long glfwGetWindowUserPointer(@NativeType("GLFWwindow *") long window) {
+        GLFWWindowProperties w = internalGetWindow(window);
+        return w == null ? 0L : w.userPointer;
+    }
+
+    public static void glfwSetMonitorUserPointer(@NativeType("GLFWmonitor *") long monitor, @NativeType("void *") long pointer) {
+        monitorUserPointers.put(monitor, pointer);
+    }
+
+    @NativeType("void *")
+    public static long glfwGetMonitorUserPointer(@NativeType("GLFWmonitor *") long monitor) {
+        Long p = monitorUserPointers.get(monitor);
+        return p == null ? 0L : p;
+    }
+
+    // --- scale and physical size ------------------------------------------------------------
+    //
+    // Physical size is derived from the pixel count and a 163 dpi reference, which is the
+    // density Apple has used for phone-class displays since the first Retina panel. It is an
+    // approximation, but every caller uses it to reason about how large the screen is, and an
+    // approximate millimetre count answers that where a zero would mislead.
+
+    private static final float REFERENCE_DPI = 163.0f;
+
+    /**
+     * The scale between window coordinates and pixels, which is exactly 1 here.
+     *
+     * This is not an assumption. glfwGetFramebufferSize and glfwGetWindowSize in this class both
+     * return the same stored width and height, so the two coordinate systems are the same one and
+     * the ratio between them is 1 by construction. Reporting the screen's Retina factor instead
+     * would make callers scale a second time for a conversion that has already happened.
+     */
+    private static float internalContentScale() {
+        return 1.0f;
+    }
+
+    public static void glfwGetMonitorPhysicalSize(@NativeType("GLFWmonitor *") long monitor,
+            @Nullable IntBuffer widthMM, @Nullable IntBuffer heightMM) {
+        int[] w = new int[1], h = new int[1];
+        internalMonitorPhysicalSize(w, h);
+        if (widthMM  != null) widthMM.put(widthMM.position(), w[0]);
+        if (heightMM != null) heightMM.put(heightMM.position(), h[0]);
+    }
+
+    public static void glfwGetMonitorPhysicalSize(@NativeType("GLFWmonitor *") long monitor,
+            @Nullable int[] widthMM, @Nullable int[] heightMM) {
+        int[] w = new int[1], h = new int[1];
+        internalMonitorPhysicalSize(w, h);
+        if (widthMM  != null && widthMM.length  > 0) widthMM[0]  = w[0];
+        if (heightMM != null && heightMM.length > 0) heightMM[0] = h[0];
+    }
+
+    private static void internalMonitorPhysicalSize(int[] widthMM, int[] heightMM) {
+        GLFWVidMode mode = glfwGetVideoMode(glfwGetPrimaryMonitor());
+        int pxW = mode == null ? 0 : mode.width();
+        int pxH = mode == null ? 0 : mode.height();
+        widthMM[0]  = Math.round(pxW / REFERENCE_DPI * 25.4f);
+        heightMM[0] = Math.round(pxH / REFERENCE_DPI * 25.4f);
+    }
+
+    public static void glfwGetMonitorContentScale(@NativeType("GLFWmonitor *") long monitor,
+            @Nullable FloatBuffer xscale, @Nullable FloatBuffer yscale) {
+        float s = internalContentScale();
+        if (xscale != null) xscale.put(xscale.position(), s);
+        if (yscale != null) yscale.put(yscale.position(), s);
+    }
+
+    public static void glfwGetMonitorContentScale(@NativeType("GLFWmonitor *") long monitor,
+            @Nullable float[] xscale, @Nullable float[] yscale) {
+        float s = internalContentScale();
+        if (xscale != null && xscale.length > 0) xscale[0] = s;
+        if (yscale != null && yscale.length > 0) yscale[0] = s;
+    }
+
+    public static void glfwGetWindowContentScale(@NativeType("GLFWwindow *") long window,
+            @Nullable FloatBuffer xscale, @Nullable FloatBuffer yscale) {
+        glfwGetMonitorContentScale(0L, xscale, yscale);
+    }
+
+    public static void glfwGetWindowContentScale(@NativeType("GLFWwindow *") long window,
+            @Nullable float[] xscale, @Nullable float[] yscale) {
+        glfwGetMonitorContentScale(0L, xscale, yscale);
+    }
+
+    // --- window position as a buffer pair ----------------------------------------------------
+
+    public static void glfwGetWindowPos(@NativeType("GLFWwindow *") long window,
+            @Nullable IntBuffer xpos, @Nullable IntBuffer ypos) {
+        GLFWWindowProperties w = internalGetWindow(window);
+        int x = w == null ? 0 : (int) w.x;
+        int y = w == null ? 0 : (int) w.y;
+        if (xpos != null) xpos.put(xpos.position(), x);
+        if (ypos != null) ypos.put(ypos.position(), y);
+    }
+
+    // --- joystick hats -----------------------------------------------------------------------
+    //
+    // The launcher reads controllers itself and delivers them to the game as keyboard and mouse
+    // events, so no joystick is ever present through GLFW. An empty buffer is what GLFW itself
+    // returns for a joystick with no hats, so callers already handle it.
+
+    @Nullable
+    @NativeType("unsigned char const *")
+    public static ByteBuffer glfwGetJoystickHats(int jid) {
+        return null;
+    }
+
+    // --- string overloads GLFW also publishes -------------------------------------------------
+
+    public static boolean glfwExtensionSupported(@NativeType("char const *") ByteBuffer extension) {
+        return glfwExtensionSupported(memUTF8(extension));
+    }
+
+    @NativeType("GLFWglproc (*)()")
+    public static long glfwGetProcAddress(@NativeType("char const *") CharSequence procname) {
+        SharedLibrary lib = getLibrary();
+        return lib == null ? 0L : lib.getFunctionAddress(procname.toString());
+    }
+
+    @NativeType("GLFWglproc (*)()")
+    public static long glfwGetProcAddress(@NativeType("char const *") ByteBuffer procname) {
+        return glfwGetProcAddress((CharSequence) memUTF8(procname));
+    }
+
+    public static boolean glfwUpdateGamepadMappings(@NativeType("char const *") CharSequence string) {
+        try (MemoryStack stack = stackPush()) {
+            return glfwUpdateGamepadMappings(stack.UTF8(string));
+        }
+    }
+
+    @NativeType("GLFWwindow *")
+    public static long glfwCreateWindow(int width, int height, @NativeType("char const *") ByteBuffer title,
+            @NativeType("GLFWmonitor *") long monitor, @NativeType("GLFWwindow *") long share) {
+        return glfwCreateWindow(width, height, memUTF8(title), monitor, share);
+    }
+
+    /** GLFW lets an application supply its own allocator. There is nothing here to route it to. */
+    public static void glfwInitAllocator(@Nullable GLFWAllocator allocator) { }
+
+    // ========================================================================================
+    // The raw-address forms of the same functions.
+    //
+    // Every GLFW function has a second form taking plain addresses instead of buffers. LWJGL
+    // generates it for its own use, but it is public, and mods that keep their data off-heap call
+    // it directly to skip a copy. Missing, it fails the same way any other missing method does.
+    //
+    // Where GLFW answers with a pointer to memory it owns, the value is written once into an
+    // off-heap buffer kept for the life of the process. Returning the address of a Java buffer
+    // that could move or be collected would hand the caller a pointer that stops being valid.
+    //
+    // Returning NULL where nothing exists is GLFW's own convention, not a shortcut: there really
+    // is no joystick, because the launcher reads controllers itself and delivers them as keyboard
+    // and mouse events, and callers already handle the absent case.
+    // ========================================================================================
+
+    private static ByteBuffer cachedVersionString, cachedMonitorName, cachedClipboard;
+    private static PointerBuffer cachedMonitorList;
+
+    private static long internalCacheUTF8(ByteBuffer existing, CharSequence text, int slot) {
+        ByteBuffer b = memUTF8(text);
+        if (slot == 0) cachedVersionString = b;
+        else if (slot == 1) cachedMonitorName = b;
+        else cachedClipboard = b;
+        return memAddress(b);
+    }
+
+    // --- library and error state -------------------------------------------------------------
+
+    public static void nglfwGetVersion(long major, long minor, long rev) {
+        if (major != 0L) memPutInt(major, 3);
+        if (minor != 0L) memPutInt(minor, 3);
+        if (rev   != 0L) memPutInt(rev, 3);
+    }
+
+    public static long nglfwGetVersionString() {
+        if (cachedVersionString == null) internalCacheUTF8(cachedVersionString, glfwGetVersionString(), 0);
+        return memAddress(cachedVersionString);
+    }
+
+    /** No error is ever recorded here, so the description pointer is cleared and NO_ERROR returned. */
+    public static int nglfwGetError(long description) {
+        if (description != 0L) memPutAddress(description, 0L);
+        return 0;
+    }
+
+    public static void nglfwInitAllocator(long allocator) { }
+
+    public static void nglfwWindowHintString(int hint, long value) { }
+
+    public static int nglfwExtensionSupported(long extension) {
+        return glfwExtensionSupported(memUTF8(extension)) ? 1 : 0;
+    }
+
+    public static long nglfwGetProcAddress(long procname) {
+        return glfwGetProcAddress(memUTF8(procname));
+    }
+
+    // --- monitors ------------------------------------------------------------------------------
+
+    public static long nglfwGetMonitors(long count) {
+        if (cachedMonitorList == null) {
+            cachedMonitorList = memAllocPointer(1);
+            cachedMonitorList.put(0, glfwGetPrimaryMonitor());
+        }
+        if (count != 0L) memPutInt(count, 1);
+        return memAddress(cachedMonitorList);
+    }
+
+    public static void nglfwGetMonitorPos(long monitor, long xpos, long ypos) {
+        if (xpos != 0L) memPutInt(xpos, 0);
+        if (ypos != 0L) memPutInt(ypos, 0);
+    }
+
+    public static void nglfwGetMonitorWorkarea(long monitor, long xpos, long ypos, long width, long height) {
+        GLFWVidMode mode = glfwGetVideoMode(monitor);
+        if (xpos   != 0L) memPutInt(xpos, 0);
+        if (ypos   != 0L) memPutInt(ypos, 0);
+        if (width  != 0L) memPutInt(width,  mode == null ? 0 : mode.width());
+        if (height != 0L) memPutInt(height, mode == null ? 0 : mode.height());
+    }
+
+    public static void nglfwGetMonitorPhysicalSize(long monitor, long widthMM, long heightMM) {
+        int[] w = new int[1], h = new int[1];
+        internalMonitorPhysicalSize(w, h);
+        if (widthMM  != 0L) memPutInt(widthMM,  w[0]);
+        if (heightMM != 0L) memPutInt(heightMM, h[0]);
+    }
+
+    public static void nglfwGetMonitorContentScale(long monitor, long xscale, long yscale) {
+        float s = internalContentScale();
+        if (xscale != 0L) memPutFloat(xscale, s);
+        if (yscale != 0L) memPutFloat(yscale, s);
+    }
+
+    public static long nglfwGetMonitorName(long monitor) {
+        if (cachedMonitorName == null) internalCacheUTF8(cachedMonitorName, glfwGetMonitorName(monitor), 1);
+        return memAddress(cachedMonitorName);
+    }
+
+    public static long nglfwGetVideoMode(long monitor) {
+        GLFWVidMode mode = glfwGetVideoMode(monitor);
+        return mode == null ? 0L : mode.address();
+    }
+
+    public static long nglfwGetVideoModes(long monitor, long count) {
+        GLFWVidMode.Buffer modes = glfwGetVideoModes(monitor);
+        if (count != 0L) memPutInt(count, modes == null ? 0 : modes.remaining());
+        return modes == null ? 0L : modes.address();
+    }
+
+    public static long nglfwGetGammaRamp(long monitor) {
+        GLFWGammaRamp ramp = glfwGetGammaRamp(monitor);
+        return ramp == null ? 0L : ramp.address();
+    }
+
+    public static void nglfwSetGammaRamp(long monitor, long ramp) { }
+
+    // --- window ---------------------------------------------------------------------------------
+
+    public static long nglfwCreateWindow(int width, int height, long title, long monitor, long share) {
+        return glfwCreateWindow(width, height, memUTF8(title), monitor, share);
+    }
+
+    public static void nglfwSetWindowTitle(long window, long title) {
+        glfwSetWindowTitle(window, memUTF8(title));
+    }
+
+    public static void nglfwGetWindowPos(long window, long xpos, long ypos) {
+        GLFWWindowProperties w = internalGetWindow(window);
+        if (xpos != 0L) memPutInt(xpos, w == null ? 0 : (int) w.x);
+        if (ypos != 0L) memPutInt(ypos, w == null ? 0 : (int) w.y);
+    }
+
+    public static void nglfwGetWindowSize(long window, long width, long height) {
+        GLFWWindowProperties w = internalGetWindow(window);
+        if (width  != 0L) memPutInt(width,  w == null ? 0 : w.width);
+        if (height != 0L) memPutInt(height, w == null ? 0 : w.height);
+    }
+
+    public static void nglfwGetWindowFrameSize(long window, long left, long top, long right, long bottom) {
+        if (left   != 0L) memPutInt(left, 0);
+        if (top    != 0L) memPutInt(top, 0);
+        if (right  != 0L) memPutInt(right, 0);
+        if (bottom != 0L) memPutInt(bottom, 0);
+    }
+
+    public static void nglfwGetWindowContentScale(long window, long xscale, long yscale) {
+        float s = internalContentScale();
+        if (xscale != 0L) memPutFloat(xscale, s);
+        if (yscale != 0L) memPutFloat(yscale, s);
+    }
+
+    public static void nglfwSetWindowIcon(long window, int count, long images) { }
+
+    // --- cursor and clipboard ---------------------------------------------------------------------
+
+    /**
+     * GLFW reports the cursor position as doubles, not ints.
+     *
+     * This class already declares a native nglfwGetCursorPos taking buffers, which is where the
+     * real position comes from, so this reads through that one rather than finding its own source.
+     */
+    public static void nglfwGetCursorPos(long window, long xpos, long ypos) {
+        try (MemoryStack stack = stackPush()) {
+            DoubleBuffer bx = stack.mallocDouble(1);
+            DoubleBuffer by = stack.mallocDouble(1);
+            nglfwGetCursorPos(window, bx, by);
+            if (xpos != 0L) memPutDouble(xpos, bx.get(0));
+            if (ypos != 0L) memPutDouble(ypos, by.get(0));
+        }
+    }
+
+    /** There is no custom cursor to create; NULL is what GLFW returns when one cannot be made. */
+    public static long nglfwCreateCursor(long image, int xhot, int yhot) { return 0L; }
+
+    public static long nglfwGetClipboardString(long window) {
+        String s = glfwGetClipboardString(window);
+        if (s == null) return 0L;
+        return internalCacheUTF8(cachedClipboard, s, 2);
+    }
+
+    public static void nglfwSetClipboardString(long window, long string) {
+        glfwSetClipboardString(window, memUTF8(string));
+    }
+
+    public static long nglfwGetKeyName(int key, int scancode) { return 0L; }
+
+    // --- joysticks: none are present, see the note above --------------------------------------------
+
+    public static long nglfwGetJoystickAxes(int jid, long count) {
+        if (count != 0L) memPutInt(count, 0);
+        return 0L;
+    }
+
+    public static long nglfwGetJoystickButtons(int jid, long count) {
+        if (count != 0L) memPutInt(count, 0);
+        return 0L;
+    }
+
+    public static long nglfwGetJoystickHats(int jid, long count) {
+        if (count != 0L) memPutInt(count, 0);
+        return 0L;
+    }
+
+    public static long nglfwGetJoystickName(int jid)  { return 0L; }
+
+    public static long nglfwGetJoystickGUID(int jid)  { return 0L; }
+
+    public static long nglfwGetGamepadName(int jid)   { return 0L; }
+
+    public static int nglfwGetGamepadState(int jid, long state) { return 0; }
+
+    public static int nglfwUpdateGamepadMappings(long string) {
+        return glfwUpdateGamepadMappings(memUTF8(string)) ? 1 : 0;
+    }
 }
