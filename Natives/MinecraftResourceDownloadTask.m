@@ -493,9 +493,23 @@ NSString * const kMinecraftResourceDownloadBackgroundSessionIdentifier = @"com.a
         NSString *pathname = [NSString stringWithFormat:@"%@/%@", [hash substringToIndex:2], hash];
         NSUInteger size = [object[@"size"] unsignedLongLongValue];
 
+        // Three layouts, decided by the asset index rather than by the version number.
+        //
+        // 1.0 through 1.5.2 use the pre-1.6 index, which sets map_to_resources: every file is
+        // written under resources/ by its real name and the game reads it straight from there.
+        //
+        // 1.6.x uses the legacy index, which sets virtual instead. Same idea - real names, not
+        // hashes - but the game expects them under assets/virtual/<index>/. Writing them as hashed
+        // objects, which is what happened before, leaves 1.6 with no sounds and no language files
+        // even though every file downloaded successfully.
+        //
+        // 1.7 and later name their own index and read hashed objects, which is the last branch.
+        NSString *indexId = self.metadata[@"assetIndex"][@"id"] ?: @"legacy";
         NSString *path;
         if ([assets[@"map_to_resources"] boolValue]) {
             path = [NSString stringWithFormat:@"%s/resources/%@", getenv("POJAV_GAME_DIR"), name];
+        } else if ([assets[@"virtual"] boolValue]) {
+            path = [NSString stringWithFormat:@"%s/assets/virtual/%@/%@", getenv("POJAV_GAME_DIR"), indexId, name];
         } else {
             path = [NSString stringWithFormat:@"%s/assets/objects/%@", getenv("POJAV_GAME_DIR"), pathname];
         }

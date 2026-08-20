@@ -232,6 +232,13 @@ jobs:
             gmake -j$(sysctl -n hw.ncpu) dsym package PLATFORM=${{ matrix.platform }}
           fi
 
+      - name: Check the loader version gates match what the loaders publish
+        if: success()
+        run: |
+          # A compatibility check that says no is not a hint - the install screen refuses the tap -
+          # so a gate that is too strict is a version nobody can install.
+          python3 JavaApp/tools/check_loader_matrix.py
+
       - name: Check the launcher answers every LWJGL call Minecraft makes
         if: success()
         run: |

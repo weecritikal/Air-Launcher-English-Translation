@@ -52,6 +52,19 @@ public final class Tools {
     public static final String ASSETS_PATH = DIR_GAME_NEW + "/assets";
     public static final String OBSOLETE_RESOURCES_PATH=DIR_GAME_NEW + "/resources";
 
+    /**
+     * Where --assetsDir should point for a given asset index.
+     *
+     * "pre-1.6" (1.0 to 1.5.2) reads real file names from resources/. "legacy" (1.6.x) reads real
+     * file names from assets/virtual/legacy/. Everything from 1.7 on reads hashed objects and uses
+     * assets_root instead, so the modern tree is the right answer for it either way.
+     */
+    public static String gameAssetsPathFor(String assetIndexName) {
+        if ("pre-1.6".equals(assetIndexName)) return OBSOLETE_RESOURCES_PATH;
+        if ("legacy".equals(assetIndexName))  return ASSETS_PATH + "/virtual/" + assetIndexName;
+        return ASSETS_PATH;
+    }
+
     public static void launchMinecraft(MinecraftAccount profile, final JMinecraftVersionList.Version versionInfo, String serverIp) throws Throwable {
         // --- BEGIN AMETHYST UPSTREAM LWJGL 3.4.1 COMPLIANCE OVERRIDE ---
         // Turn off the native libffi check (preventing a NoSuchFieldError inside LibFFI's <clinit>)
@@ -130,7 +143,12 @@ public final class Tools {
         varArgMap.put("assets_root", Tools.ASSETS_PATH);
         varArgMap.put("assets_index_name", versionInfo.assets);
         varArgMap.put("clientid", profile.clientToken);
-        varArgMap.put("game_assets", Tools.ASSETS_PATH);
+        // 1.6 and earlier pass --assetsDir ${game_assets} and read real file names out of it,
+        // rather than the hashed objects tree that ${assets_root} points at. Handing them the
+        // modern tree meant the files were downloaded and then never found: no sounds, no music,
+        // no language files, and nothing in the log to say why. The index name says which layout
+        // the version wants, so it decides where to point.
+        varArgMap.put("game_assets", Tools.gameAssetsPathFor(versionInfo.assets));
         varArgMap.put("game_directory", gameDir.getAbsolutePath());
         varArgMap.put("user_properties", "{}");
         varArgMap.put("user_type", "mojang");

@@ -992,13 +992,18 @@
 }
 
 - (BOOL)isQuiltCompatible {
+    // Quilt's own version list goes back to 1.14.4, not 1.18. This used to answer NO for
+    // everything below 1.18, and an answer of NO is not advice - tableView:didSelectRowAtIndexPath:
+    // refuses the tap - so twelve versions Quilt publishes a loader for could not be installed.
+    // The gate is the floor of what the loader exists for at all; which builds a given version
+    // actually has is answered by the list fetched from Quilt, which is the authority.
     if (!_gameVersion) return YES;
     NSArray *c = [_gameVersion componentsSeparatedByString:@"."];
     if (c.count < 2) return YES;
     NSInteger major = [c[0] integerValue];
     NSInteger minor = [c[1] integerValue];
     if (major > 1) return YES;
-    if (major == 1 && minor >= 18) return YES;
+    if (major == 1 && minor >= 14) return YES;
     return NO;
 }
 
@@ -1027,14 +1032,20 @@
 }
 
 - (BOOL)isOptiFineCompatible {
-    // OptiFine 1.14+ is compatible with Forge; 1.13 and earlier are installed separately as a version patch
+    // OptiFine goes back to 1.7. The list this launcher installs from carries builds for 1.7.2 and
+    // 1.7.10 and nothing for 1.6.4 or older, so 1.7 is the real floor; the old gate of 1.8 turned
+    // away 1.7.10, which is one of the most used OptiFine versions there has ever been.
+    //
+    // On 1.14 and later OptiFine can sit alongside Forge. On 1.13 and earlier it is installed as a
+    // patch over the version itself, which this launcher does either way, so the distinction does
+    // not change whether it may be chosen.
     if (!_gameVersion) return YES;
     NSArray *c = [_gameVersion componentsSeparatedByString:@"."];
     if (c.count < 2) return YES;
     NSInteger major = [c[0] integerValue];
     NSInteger minor = [c[1] integerValue];
     if (major > 1) return YES;
-    if (major == 1 && minor >= 8) return YES;
+    if (major == 1 && minor >= 7) return YES;
     return NO;
 }
 
