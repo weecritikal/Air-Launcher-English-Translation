@@ -450,7 +450,13 @@ deploy:
 	fi
 	echo '[Flux v$(VERSION)] deploy - end'
 
-package: payload
+# dsym is a prerequisite, not a sibling. Both used to depend only on payload, so a
+# parallel make ran them at the same time: dsymutil worked on Payload/Flux.app/Flux
+# while codesign signed that same file, and the signer failed with "the code cannot
+# be read by the verifier". Ordering also matters on its own - dsym moves the .dSYM
+# out of the bundle, and if that happens after packaging the debug symbols ship
+# inside the ipa.
+package: payload dsym
 	echo '[Flux v$(VERSION)] package - start'
 	if [ '$(TEAMID)' != '-1' ] && [ '$(SIGNING_TEAMID)' != '-1' ] && [ -f '$(PROVISIONING)' ] && [ '$(DETECTPLAT)' = 'Darwin' ]; then \
 		printf '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0">\n<dict>\n	<key>application-identifier</key>\n	<string>$(TEAMID).$(BUNDLE_ID)</string>\n	<key>com.apple.developer.team-identifier</key>\n	<string>$(TEAMID)</string>\n	<key>get-task-allow</key>\n	<true/>\n	<key>keychain-access-groups</key>\n	<array>\n	<string>$(TEAMID).*</string>\n	<string>com.apple.token</string>\n	</array>\n	<key>com.apple.developer.kernel.extended-virtual-addressing</key>\n	<true/>\n	<key>com.apple.developer.kernel.increased-memory-limit</key>\n	<true/>\n</dict>\n</plist>' > entitlements.codesign.xml; \
