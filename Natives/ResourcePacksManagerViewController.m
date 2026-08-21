@@ -17,6 +17,7 @@
 #import "PLProfiles.h"
 #import "LauncherPreferences.h"
 #import "BackgroundManager.h"
+#import "FluxTheme.h"
 
 @interface ResourcePacksManagerViewController () <UITableViewDataSource, UITableViewDelegate, UISearchBarDelegate, AssetVersionViewControllerDelegate, UIDocumentPickerDelegate>
 
@@ -431,7 +432,7 @@
     cell.accessoryView = nil;
     cell.accessoryType = UITableViewCellAccessoryNone;
     cell.imageView.image = [UIImage systemImageNamed:@"rectangle.stack.fill"];
-    cell.imageView.tintColor = [UIColor systemBlueColor];
+    cell.imageView.tintColor = FluxTheme.accent;
 
     if (self.currentMode == ResourcePacksManagerModeLocal) {
         ResourcePackItem *item = self.filteredLocalItems[indexPath.row];

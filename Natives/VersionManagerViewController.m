@@ -13,6 +13,7 @@
 #import "ModLoaderIconHelper.h"
 #import "ModpackExportService.h" // for parseVersionId:
 #import <QuartzCore/QuartzCore.h>
+#import "FluxTheme.h"
 
 // Section indices: 2 sections (game directory / installed versions)
 // Redesign highlights (modeled 100% on FCL):
@@ -178,7 +179,7 @@ static NSInteger const kSectionVersions    = 1;
     self.iconContainer.translatesAutoresizingMaskIntoConstraints = NO;
     self.iconContainer.layer.cornerRadius = 9;
     self.iconContainer.layer.cornerCurve = kCACornerCurveContinuous;
-    self.iconContainer.backgroundColor = [UIColor systemBlueColor];
+    self.iconContainer.backgroundColor = FluxTheme.accent;
     [self.contentContainer addSubview:self.iconContainer];
 
     self.iconView = [[UIImageView alloc] init];
@@ -301,7 +302,7 @@ static NSInteger const kSectionVersions    = 1;
     } else {
         self.iconView.image = [UIImage systemImageNamed:@"cube.box.fill"];
         self.iconView.tintColor = [UIColor whiteColor];
-        self.iconContainer.backgroundColor = [UIColor systemBlueColor];
+        self.iconContainer.backgroundColor = FluxTheme.accent;
     }
 
     // Spec 9.1: three-layer reinforcement of the selected state (border + badge + background color)
@@ -345,7 +346,7 @@ static NSInteger const kSectionVersions    = 1;
     self.iconContainer.translatesAutoresizingMaskIntoConstraints = NO;
     self.iconContainer.layer.cornerRadius = 8;
     self.iconContainer.layer.cornerCurve = kCACornerCurveContinuous;
-    self.iconContainer.backgroundColor = [UIColor systemBlueColor];
+    self.iconContainer.backgroundColor = FluxTheme.accent;
     [self.contentContainer addSubview:self.iconContainer];
 
     self.iconView = [[UIImageView alloc] init];
@@ -443,7 +444,7 @@ static NSInteger const kSectionVersions    = 1;
     self.chevronView.hidden = NO;
     self.iconView.image = [UIImage systemImageNamed:@"folder.fill"];
     self.iconView.tintColor = [UIColor whiteColor];
-    self.iconContainer.backgroundColor = [UIColor systemBlueColor];
+    self.iconContainer.backgroundColor = FluxTheme.accent;
     self.nameLabel.text = name;
     self.detailLabel.text = detail ?: @"";
     self.selectedBadge.hidden = !isSelected;

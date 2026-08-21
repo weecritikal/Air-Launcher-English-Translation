@@ -7,6 +7,7 @@
 #import "ios_uikit_bridge.h"
 #import "utils.h"
 #import "BackgroundManager.h"
+#import "FluxTheme.h"
 
 @interface LauncherProfileEditorViewController()<UIPickerViewDataSource, UIPickerViewDelegate>
 @property(nonatomic) NSString* oldName;
@@ -34,7 +35,7 @@
     
     // Set the translucent navigation bar style
     [[BackgroundManager sharedManager] applyEffectToNavigationBar:self.navigationController.navigationBar];
-    self.navigationController.navigationBar.tintColor = [UIColor systemBlueColor];
+    self.navigationController.navigationBar.tintColor = FluxTheme.accent;
 
     // Setup preference getter and setter
     __weak LauncherProfileEditorViewController *weakSelf = self;

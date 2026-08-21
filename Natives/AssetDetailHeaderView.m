@@ -16,6 +16,7 @@
 // (AFNetworking only caches in memory and does not downsample; IconLoader adds a two-level cache, downsampling, CDN mirrors and concurrency control)
 #import "IconLoader.h"
 #import "ModLoaderIconHelper.h"
+#import "FluxTheme.h"
 
 @interface AssetDetailHeaderView ()
 
@@ -95,7 +96,7 @@
     self.placeholderSymbolView = [[UIImageView alloc] init];
     self.placeholderSymbolView.translatesAutoresizingMaskIntoConstraints = NO;
     self.placeholderSymbolView.contentMode = UIViewContentModeScaleAspectFit;
-    self.placeholderSymbolView.tintColor = [UIColor systemBlueColor];
+    self.placeholderSymbolView.tintColor = FluxTheme.accent;
     [self.iconPlaceholderContainer addSubview:self.placeholderSymbolView];
 
     // Real cover ImageView (sits on top of the placeholder container, shown once an image loads)
@@ -295,7 +296,7 @@
     if (downloads) {
         UIView *item = [self createMetaInfoItemWithSymbol:@"arrow.down.circle"
                                                     text:[self formatDownloadCount:downloads.integerValue]
-                                               tintColor:[UIColor systemBlueColor]];
+                                               tintColor:FluxTheme.accent];
         [self.metaInfoStack addArrangedSubview:item];
     }
 
@@ -525,8 +526,8 @@
     UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:30 weight:UIFontWeightRegular];
     UIImage *placeholderSymbol = [UIImage systemImageNamed:symbolName withConfiguration:config] ?: [UIImage systemImageNamed:@"puzzlepiece.extension.fill" withConfiguration:config];
     self.placeholderSymbolView.image = placeholderSymbol;
-    self.placeholderSymbolView.tintColor = color ?: [UIColor systemBlueColor];
-    self.iconPlaceholderContainer.backgroundColor = [color ?: [UIColor systemBlueColor] colorWithAlphaComponent:0.18];
+    self.placeholderSymbolView.tintColor = color ?: FluxTheme.accent;
+    self.iconPlaceholderContainer.backgroundColor = [color ?: FluxTheme.accent colorWithAlphaComponent:0.18];
 
     // No URL or an invalid URL: iconImageView stays transparent so the placeholder SF Symbol below shows through
     if (!iconURL || iconURL.length == 0) {

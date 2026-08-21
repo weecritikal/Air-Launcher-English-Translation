@@ -7,6 +7,7 @@
 
 #import "InlineMessageView.h"
 #import "utils.h"
+#import "FluxTheme.h"
 
 @interface InlineMessageView ()
 
@@ -218,10 +219,10 @@
     switch (type) {
         case InlineMessageTypeError:   return [UIColor systemRedColor];
         case InlineMessageTypeSuccess: return [UIColor systemGreenColor];
-        case InlineMessageTypeInfo:    return [UIColor systemBlueColor];
-        case InlineMessageTypeLoading: return [UIColor systemBlueColor];
+        case InlineMessageTypeInfo:    return FluxTheme.accent;
+        case InlineMessageTypeLoading: return FluxTheme.accent;
     }
-    return [UIColor systemBlueColor];
+    return FluxTheme.accent;
 }
 
 - (void)updateWithMessage:(NSString *)message type:(InlineMessageType)type {

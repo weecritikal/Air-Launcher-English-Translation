@@ -8,6 +8,7 @@
 #import "MarkdownParser.h"
 #import "BackgroundManager.h"
 #import <SafariServices/SafariServices.h>
+#import "FluxTheme.h"
 
 @interface AnnouncementDetailViewController () <SFSafariViewControllerDelegate>
 @property (nonatomic, strong) AnnouncementItem *item;
@@ -83,7 +84,7 @@
     self.actionButton.layer.cornerRadius = 10;
     self.actionButton.layer.cornerCurve = kCACornerCurveContinuous;
     self.actionButton.clipsToBounds = YES;
-    self.actionButton.backgroundColor = [UIColor systemBlueColor];
+    self.actionButton.backgroundColor = FluxTheme.accent;
     [self.actionButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     [self.actionButton addTarget:self action:@selector(openActionURL) forControlEvents:UIControlEventTouchUpInside];
     self.actionButton.hidden = YES;

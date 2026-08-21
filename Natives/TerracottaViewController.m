@@ -5,6 +5,7 @@
 #import "utils.h"
 #import "BackgroundManager.h"
 #import "MultiplayerViewController.h"
+#import "FluxTheme.h"
 
 /// FCL style Terracotta multiplayer screen (fully adapted to the custom launcher background)
 ///
@@ -94,7 +95,7 @@
     UIButton *ztFab = [UIButton buttonWithType:UIButtonTypeSystem];
     [ztFab setImage:[UIImage systemImageNamed:@"network"] forState:UIControlStateNormal];
     ztFab.tintColor = [UIColor whiteColor];
-    ztFab.backgroundColor = [UIColor systemBlueColor];
+    ztFab.backgroundColor = FluxTheme.accent;
     ztFab.layer.cornerRadius = 18;
     ztFab.layer.masksToBounds = YES;
     ztFab.translatesAutoresizingMaskIntoConstraints = NO;

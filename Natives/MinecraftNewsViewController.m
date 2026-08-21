@@ -9,6 +9,7 @@
 #import "BackgroundManager.h"
 #import "IconLoader.h"
 #import <SafariServices/SafariServices.h>
+#import "FluxTheme.h"
 
 /// Target thumbnail size (used for IconLoader downsampling)
 static const CGFloat kNewsThumbnailTargetWidth = 400.0;
@@ -107,7 +108,7 @@ static const NSInteger kNewsPageSize = 24;
         _readMoreLabel = [[UILabel alloc] init];
         _readMoreLabel.translatesAutoresizingMaskIntoConstraints = NO;
         _readMoreLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightSemibold];
-        _readMoreLabel.textColor = [UIColor systemBlueColor];
+        _readMoreLabel.textColor = FluxTheme.accent;
         _readMoreLabel.text = NSLocalizedString(@"mc_news.read_more", @"View details");
         _readMoreLabel.textAlignment = NSTextAlignmentRight;
         [self.contentView addSubview:_readMoreLabel];

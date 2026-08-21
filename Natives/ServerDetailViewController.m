@@ -10,6 +10,7 @@
 #import "ServerService.h"
 #import "UIKit+AFNetworking.h"
 #import "utils.h"
+#import "FluxTheme.h"
 
 @interface ServerDetailViewController ()
 @property (nonatomic, strong) ServerItem *serverItem;
@@ -148,7 +149,7 @@
     self.joinButton.translatesAutoresizingMaskIntoConstraints = NO;
     [self.joinButton setTitle:@"Join server" forState:UIControlStateNormal];
     [self.joinButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    self.joinButton.backgroundColor = [UIColor systemBlueColor];
+    self.joinButton.backgroundColor = FluxTheme.accent;
     self.joinButton.layer.cornerRadius = 10;
     self.joinButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
     [self.joinButton addTarget:self action:@selector(joinServer) forControlEvents:UIControlEventTouchUpInside];
@@ -159,7 +160,7 @@
     self.downloadPackButton.translatesAutoresizingMaskIntoConstraints = NO;
     [self.downloadPackButton setTitle:@"Download server pack" forState:UIControlStateNormal];
     [self.downloadPackButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    self.downloadPackButton.backgroundColor = [UIColor systemPurpleColor];
+    self.downloadPackButton.backgroundColor = FluxTheme.accent;
     self.downloadPackButton.layer.cornerRadius = 10;
     self.downloadPackButton.titleLabel.font = [UIFont boldSystemFontOfSize:16];
     [self.downloadPackButton addTarget:self action:@selector(downloadServerPack) forControlEvents:UIControlEventTouchUpInside];

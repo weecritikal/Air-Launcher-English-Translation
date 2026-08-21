@@ -8,6 +8,7 @@
 #import "utils.h"
 #import "BackgroundManager.h"
 #include <dlfcn.h>
+#import "FluxTheme.h"
 
 NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain";
 
@@ -956,7 +957,7 @@ NSString * const ForgeInstallerFlowErrorDomain = @"ForgeInstallerFlowErrorDomain
     } else if ([version containsString:@"alpha"] || [version containsString:@"-alpha"]) {
         return [UIColor systemRedColor];
     } else {
-        return [UIColor systemBlueColor];
+        return FluxTheme.accent;
     }
 }
 

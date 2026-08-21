@@ -10,6 +10,7 @@
 #import "BackgroundManager.h"
 #import "ios_uikit_bridge.h"
 #import "utils.h"
+#import "FluxTheme.h"
 
 @interface ThirdPartyLoginViewController () <UITextFieldDelegate>
 
@@ -165,7 +166,7 @@
     if (self.mode == ThirdPartyLoginModeLittleSkin) {
         self.headerIcon.image = [UIImage systemImageNamed:@"person.fill.viewfinder"]
                               ?: [UIImage systemImageNamed:@"person.crop.circle.fill"];
-        self.headerIcon.tintColor = [UIColor systemPurpleColor];
+        self.headerIcon.tintColor = FluxTheme.accent;
         self.headerTitle.text = @"LittleSkin";
         self.headerSubtitle.text = @"A widely used authlib-injector skin site; register at littleskin.cn first";
     } else {
@@ -250,7 +251,7 @@
 - (void)buildUsernameCard {
     UITextField *field = nil;
     self.usernameCard = [self buildInputCardWithIcon:@"person"
-                                         accentColor:[UIColor systemBlueColor]
+                                         accentColor:FluxTheme.accent
                                           placeholder:@"Username / email"
                                             isSecure:NO
                                         keyboardType:UIKeyboardTypeDefault
@@ -261,7 +262,7 @@
 - (void)buildPasswordCard {
     UITextField *field = nil;
     self.passwordCard = [self buildInputCardWithIcon:@"lock"
-                                         accentColor:[UIColor systemBlueColor]
+                                         accentColor:FluxTheme.accent
                                           placeholder:@"Password"
                                             isSecure:YES
                                         keyboardType:UIKeyboardTypeDefault
@@ -273,7 +274,7 @@
 - (void)buildServerCard {
     UITextField *field = nil;
     self.serverCard = [self buildInputCardWithIcon:@"link"
-                                       accentColor:[UIColor systemBlueColor]
+                                       accentColor:FluxTheme.accent
                                         placeholder:@"API address (e.g. https://littleskin.cn/api/yggdrasil)"
                                           isSecure:NO
                                       keyboardType:UIKeyboardTypeURL

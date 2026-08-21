@@ -18,6 +18,7 @@
 #import "PLProfiles.h"
 #import "UnzipKit.h"
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
+#import "FluxTheme.h"
 
 @interface ModpackImportViewController () <UITableViewDataSource, UITableViewDelegate, UIDocumentPickerDelegate>
 @property (nonatomic, strong) UISegmentedControl *tabSegment;       // The "Import | Export" switch at the top
@@ -122,7 +123,7 @@
     self.importButton.translatesAutoresizingMaskIntoConstraints = NO;
     [self.importButton setTitle:@"  Choose modpack file" forState:UIControlStateNormal];
     [self.importButton setImage:[UIImage systemImageNamed:@"doc.badge.plus"] forState:UIControlStateNormal];
-    self.importButton.backgroundColor = [UIColor systemBlueColor];
+    self.importButton.backgroundColor = FluxTheme.accent;
     [self.importButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     self.importButton.tintColor = [UIColor whiteColor];
     self.importButton.layer.cornerRadius = 12;
@@ -211,7 +212,7 @@
 
     UIProgressView *bar = [[UIProgressView alloc] initWithProgressViewStyle:UIProgressViewStyleDefault];
     bar.translatesAutoresizingMaskIntoConstraints = NO;
-    bar.progressTintColor = [UIColor systemBlueColor];
+    bar.progressTintColor = FluxTheme.accent;
     [card addSubview:bar];
 
     UILabel *stageLabel = [[UILabel alloc] init];

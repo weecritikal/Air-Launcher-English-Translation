@@ -12,6 +12,7 @@
 #import "ModService.h"
 #import "BackgroundManager.h"
 #import <objc/runtime.h>
+#import "FluxTheme.h"
 
 /// Associated object key: the ModDownloadTaskInfo for a download task
 static void *kDownloadTaskInfoKey = &kDownloadTaskInfoKey;
@@ -283,7 +284,7 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
 
     self.progressView = [[UIProgressView alloc] initWithProgressViewStyle:UIProgressViewStyleDefault];
     self.progressView.translatesAutoresizingMaskIntoConstraints = NO;
-    self.progressView.progressTintColor = [UIColor systemBlueColor];
+    self.progressView.progressTintColor = FluxTheme.accent;
     [self.phaseCard addSubview:self.progressView];
 
     self.currentFileLabel = [[UILabel alloc] init];
@@ -402,7 +403,7 @@ typedef NS_ENUM(NSInteger, ModUpdatePhase) {
     [button setTitle:title forState:UIControlStateNormal];
     button.titleLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
     button.titleLabel.adjustsFontForContentSizeCategory = YES;
-    button.backgroundColor = [UIColor systemBlueColor];
+    button.backgroundColor = FluxTheme.accent;
     [button setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     button.layer.cornerRadius = 12;
     button.layer.masksToBounds = YES;
@@ -1097,7 +1098,7 @@ didCompleteWithError:(NSError *)error {
     BOOL isChosen = (sel.chosenVersion == version);
     UIImage *radio = [UIImage systemImageNamed:isChosen ? @"largecircle.fill.circle" : @"circle"];
     cell.imageView.image = radio;
-    cell.imageView.tintColor = [UIColor systemBlueColor];
+    cell.imageView.tintColor = FluxTheme.accent;
 
     cell.textLabel.text = version.versionNumber ?: version.name ?: @"Unknown version";
     cell.textLabel.font = [UIFont systemFontOfSize:14];

@@ -44,6 +44,7 @@
 #import "DownloadProgressCardView.h"
 
 #import "BackgroundManager.h"
+#import "FluxTheme.h"
 
 /// Card visual constants
 static const CGFloat kCardCornerRadius    = 16.0;
@@ -128,13 +129,13 @@ typedef NS_ENUM(NSInteger, DownloadCardState) {
     [self.layer addSublayer:_trackLayer];
 
     _fillLayer = [CAShapeLayer layer];
-    _fillLayer.fillColor = [UIColor systemBlueColor].CGColor;
+    _fillLayer.fillColor = FluxTheme.accent.CGColor;
     _fillLayer.lineWidth = 0;
     [self.layer addSublayer:_fillLayer];
 
     // Defaults
     _progress = 0.0;
-    _fillColor = [UIColor systemBlueColor];
+    _fillColor = FluxTheme.accent;
     _trackColor = [UIColor systemGray5Color];
 
     // Clip the fill layer so it does not spill past the rounded corners
@@ -356,7 +357,7 @@ typedef NS_ENUM(NSInteger, DownloadCardState) {
     self.statusIconView = [[UIImageView alloc] init];
     self.statusIconView.translatesAutoresizingMaskIntoConstraints = NO;
     self.statusIconView.contentMode = UIViewContentModeScaleAspectFit;
-    self.statusIconView.tintColor = [UIColor systemBlueColor];
+    self.statusIconView.tintColor = FluxTheme.accent;
     self.statusIconView.preferredSymbolConfiguration =
         [UIImageSymbolConfiguration configurationWithPointSize:20 weight:UIFontWeightMedium];
     self.statusIconView.image = [UIImage systemImageNamed:@"arrow.down.circle.fill"];
@@ -367,7 +368,7 @@ typedef NS_ENUM(NSInteger, DownloadCardState) {
         initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleMedium];
     self.spinnerView.translatesAutoresizingMaskIntoConstraints = NO;
     self.spinnerView.hidesWhenStopped = YES;
-    self.spinnerView.color = [UIColor systemBlueColor];
+    self.spinnerView.color = FluxTheme.accent;
     [self.contentContainer addSubview:self.spinnerView];
 
     // Percentage label
@@ -401,7 +402,7 @@ typedef NS_ENUM(NSInteger, DownloadCardState) {
     // Progress bar
     self.progressBar = [[DPCProgressBar alloc] init];
     self.progressBar.translatesAutoresizingMaskIntoConstraints = NO;
-    self.progressBar.fillColor = [UIColor systemBlueColor];
+    self.progressBar.fillColor = FluxTheme.accent;
     self.progressBar.trackColor = [UIColor systemGray5Color];
     [self.contentContainer addSubview:self.progressBar];
 
@@ -417,7 +418,7 @@ typedef NS_ENUM(NSInteger, DownloadCardState) {
     self.speedLabel = [[UILabel alloc] init];
     self.speedLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.speedLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
-    self.speedLabel.textColor = [UIColor systemBlueColor];
+    self.speedLabel.textColor = FluxTheme.accent;
     self.speedLabel.textAlignment = NSTextAlignmentRight;
     self.speedLabel.text = @"0 KB/s";
     [self.contentContainer addSubview:self.speedLabel];
@@ -792,9 +793,9 @@ typedef NS_ENUM(NSInteger, DownloadCardState) {
 - (void)applyState:(DownloadCardState)state {
     self.state = state;
 
-    UIColor *fillColor = [UIColor systemBlueColor];
-    UIColor *speedColor = [UIColor systemBlueColor];
-    UIColor *iconColor = [UIColor systemBlueColor];
+    UIColor *fillColor = FluxTheme.accent;
+    UIColor *speedColor = FluxTheme.accent;
+    UIColor *iconColor = FluxTheme.accent;
     NSString *imageName = @"arrow.down.circle.fill";
 
     BOOL showPercent = YES;

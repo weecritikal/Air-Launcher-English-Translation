@@ -3,6 +3,7 @@
 #import "ModService.h"
 #import "IconLoader.h"
 #import <QuartzCore/QuartzCore.h>
+#import "FluxTheme.h"
 
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wunguarded-availability-new"
@@ -38,7 +39,7 @@
         _authorLabel = [self createLabelWithFont:[UIFont systemFontOfSize:9] textColor:[UIColor secondaryLabelColor] numberOfLines:1];
         _descLabel = [self createLabelWithFont:[UIFont systemFontOfSize:9] textColor:[UIColor secondaryLabelColor] numberOfLines:2];
         _statsLabel = [self createLabelWithFont:[UIFont systemFontOfSize:9] textColor:[UIColor secondaryLabelColor] numberOfLines:1];
-        _categoryLabel = [self createLabelWithFont:[UIFont systemFontOfSize:9] textColor:[UIColor systemBlueColor] numberOfLines:1];
+        _categoryLabel = [self createLabelWithFont:[UIFont systemFontOfSize:9] textColor:FluxTheme.accent numberOfLines:1];
 
         _enableSwitch = [[UISwitch alloc] init];
         _enableSwitch.transform = CGAffineTransformMakeScale(0.75, 0.75); // Scale down for compact view

@@ -8,6 +8,7 @@
 
 #import "VersionCardCell.h"
 #import "BackgroundManager.h"
+#import "FluxTheme.h"
 
 // Fix for problem 3: a UILabel subclass with inner padding, so that type label text such as "Release/Snapshot"
 // is perfectly centered inside the background block and no longer overlaps the background edges.
@@ -320,7 +321,7 @@
     self.versionLabel.text = nil;
     self.dateLabel.text = nil;
     self.typeLabel.text = nil;
-    self.typeLabel.backgroundColor = [UIColor systemBlueColor];
+    self.typeLabel.backgroundColor = FluxTheme.accent;
     self.installedBadge.hidden = YES;
     self.chevronView.tintColor = [UIColor tertiaryLabelColor];
 }

@@ -5,6 +5,7 @@
 #import "BackgroundManager.h"
 #import "IconLoader.h"
 #import "ModLoaderIconHelper.h"
+#import "FluxTheme.h"
 
 static NSString * const kTaskCellReuseIdentifier = @"DownloadTaskCell";
 static NSString * const kEmptyStateReuseIdentifier = @"DownloadTaskEmptyCell";
@@ -68,7 +69,7 @@ static const CGFloat kSectionInset = 16.0;
     self.typeTagLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.typeTagLabel.font = [UIFont systemFontOfSize:10];
     self.typeTagLabel.textColor = [UIColor whiteColor];
-    self.typeTagLabel.backgroundColor = [UIColor systemBlueColor];
+    self.typeTagLabel.backgroundColor = FluxTheme.accent;
     self.typeTagLabel.layer.cornerRadius = 4.0;
     self.typeTagLabel.layer.masksToBounds = YES;
     self.typeTagLabel.textAlignment = NSTextAlignmentCenter;
@@ -93,7 +94,7 @@ static const CGFloat kSectionInset = 16.0;
 
     self.progressView = [[UIProgressView alloc] initWithProgressViewStyle:UIProgressViewStyleDefault];
     self.progressView.translatesAutoresizingMaskIntoConstraints = NO;
-    self.progressView.progressTintColor = [UIColor systemBlueColor];
+    self.progressView.progressTintColor = FluxTheme.accent;
     self.progressView.trackTintColor = [UIColor tertiarySystemBackgroundColor];
     [self.contentView addSubview:self.progressView];
 
@@ -286,7 +287,7 @@ static const CGFloat kSectionInset = 16.0;
 }
 
 - (void)configureActionButtonsForTask:(DownloadTaskItem *)task {
-    UIColor *primaryColor = [UIColor systemBlueColor];
+    UIColor *primaryColor = FluxTheme.accent;
     UIColor *secondaryColor = [UIColor systemRedColor];
 
     switch (task.state) {
@@ -854,7 +855,7 @@ static const CGFloat kSectionInset = 16.0;
     [button setTitle:fullTitle forState:UIControlStateNormal];
     button.titleLabel.font = [UIFont systemFontOfSize:13 weight:selected ? UIFontWeightSemibold : UIFontWeightRegular];
     [button setTitleColor:selected ? [UIColor whiteColor] : [UIColor labelColor] forState:UIControlStateNormal];
-    button.backgroundColor = selected ? [UIColor systemBlueColor] : [UIColor secondarySystemBackgroundColor];
+    button.backgroundColor = selected ? FluxTheme.accent : [UIColor secondarySystemBackgroundColor];
     button.layer.cornerRadius = 8.0;
     button.layer.masksToBounds = YES;
     button.contentEdgeInsets = UIEdgeInsetsMake(8, 12, 8, 12);

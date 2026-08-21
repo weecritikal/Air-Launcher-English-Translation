@@ -15,6 +15,7 @@
 #import "AssetDetailHeaderView.h"
 #import "BackgroundManager.h"
 #import "utils.h"
+#import "FluxTheme.h"
 
 // ============================================================================
 // Sort constants (kept in sync with ModVersionViewController, phase 3 alignment)
@@ -136,11 +137,11 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
 
     // Pick the placeholder SF Symbol and color based on assetType (matching the asset-type colors of ModernAssetCell)
     NSString *placeholderSymbol = @"doc.fill";
-    UIColor *placeholderColor = [UIColor systemBlueColor];
+    UIColor *placeholderColor = FluxTheme.accent;
     switch (self.assetType) {
         case AssetVersionTypeResourcePack:
             placeholderSymbol = @"photo.stack.fill";
-            placeholderColor = [UIColor systemBlueColor];
+            placeholderColor = FluxTheme.accent;
             break;
         case AssetVersionTypeDataPack:
             placeholderSymbol = @"doc.text.fill";
@@ -365,7 +366,7 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
 - (void)applyChipStyle:(UIButton *)chip selected:(BOOL)selected {
     if (selected) {
         // Selected: theme color background + white text (following how FCL highlights selected tags)
-        chip.backgroundColor = [UIColor systemBlueColor];
+        chip.backgroundColor = FluxTheme.accent;
         [chip setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
         chip.layer.borderWidth = 0;
     } else {

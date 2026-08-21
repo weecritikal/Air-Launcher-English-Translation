@@ -8,6 +8,7 @@
 #import "BackgroundSettingsViewController.h"
 #import "BackgroundManager.h"
 #import "ImageCropperViewController.h"
+#import "FluxTheme.h"
 
 @interface BackgroundSettingsViewController ()
 @property (nonatomic, strong) NSArray<NSArray *> *sections;
@@ -305,7 +306,7 @@
         if (indexPath.row == 0) {
             // Restore default background
             cell.imageView.image = [UIImage systemImageNamed:@"arrow.counterclockwise"];
-            cell.textLabel.textColor = [UIColor systemBlueColor];
+            cell.textLabel.textColor = FluxTheme.accent;
             cell.accessoryType = UITableViewCellAccessoryNone;
         } else if (indexPath.row == 1) {
             // Clear background

@@ -8,6 +8,7 @@
 #import "LauncherPreferences.h"
 #import "BackgroundManager.h"
 #import "utils.h"
+#import "FluxTheme.h"
 
 @interface ModsManagerViewController () <UITableViewDataSource, UITableViewDelegate, ModTableViewCellDelegate, UISearchBarDelegate, ModVersionViewControllerDelegate, UIDocumentPickerDelegate>
 
@@ -434,7 +435,7 @@
         UIImageSymbolConfiguration *config = [UIImageSymbolConfiguration configurationWithPointSize:22 weight:UIImageSymbolWeightMedium];
         if (selected) {
             checkbox.image = [[UIImage systemImageNamed:@"checkmark.circle.fill"] imageByApplyingSymbolConfiguration:config];
-            checkbox.tintColor = [UIColor systemBlueColor];
+            checkbox.tintColor = FluxTheme.accent;
         } else {
             checkbox.image = [[UIImage systemImageNamed:@"circle"] imageByApplyingSymbolConfiguration:config];
             checkbox.tintColor = [UIColor systemGrayColor];

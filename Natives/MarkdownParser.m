@@ -4,6 +4,7 @@
 //
 
 #import "MarkdownParser.h"
+#import "FluxTheme.h"
 
 /// Forward declarations of the private methods (so calling a class method within this file does not warn about a missing method)
 @interface MarkdownParser ()
@@ -42,7 +43,7 @@
 
     UIColor *textColor = [UIColor labelColor];
     UIColor *secondaryColor = [UIColor secondaryLabelColor];
-    UIColor *linkColor = [UIColor systemBlueColor];
+    UIColor *linkColor = FluxTheme.accent;
     UIColor *codeBgColor = [UIColor secondarySystemBackgroundColor];
     UIColor *separatorColor = [UIColor separatorColor];
 

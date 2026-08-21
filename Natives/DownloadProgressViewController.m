@@ -34,6 +34,7 @@
 #import "DownloadProgressViewController.h"
 #import "BackgroundManager.h"
 #import "utils.h"
+#import "FluxTheme.h"
 
 // ============================================================================
 // Visual constants
@@ -106,13 +107,13 @@ static void *TotalProgressObserverContext = &TotalProgressObserverContext;
 
     // Fill: width derived from the progress, capsule-shaped
     _fillLayer = [CAShapeLayer layer];
-    _fillLayer.fillColor = [UIColor systemBlueColor].CGColor;
+    _fillLayer.fillColor = FluxTheme.accent.CGColor;
     _fillLayer.lineWidth = 0;
     [self.layer addSublayer:_fillLayer];
 
     // Defaults
     _progress = 0.0;
-    _fillColor = [UIColor systemBlueColor];
+    _fillColor = FluxTheme.accent;
     _trackColor = [UIColor systemGray5Color];
 
     // Clip the fill layer so it does not spill past the rounded corners
@@ -218,7 +219,7 @@ static void *TotalProgressObserverContext = &TotalProgressObserverContext;
     if (self) {
         // Preallocate capacity to avoid repeated growth
         _samples = [[NSMutableArray alloc] initWithCapacity:kMaxSpeedSamples];
-        _barColor = [UIColor systemBlueColor];
+        _barColor = FluxTheme.accent;
         self.backgroundColor = [UIColor clearColor];
     }
     return self;
@@ -314,7 +315,7 @@ static void *TotalProgressObserverContext = &TotalProgressObserverContext;
     self = [super initWithFrame:frame];
     if (self) {
         self.backgroundColor = [UIColor clearColor];
-        _resolvedTintColor = [UIColor systemBlueColor];
+        _resolvedTintColor = FluxTheme.accent;
         _stopSize = 0;
         _fractionCompleted = 0.0;
         _completedVisible = NO;
@@ -380,7 +381,7 @@ static void *TotalProgressObserverContext = &TotalProgressObserverContext;
 }
 
 - (void)setResolvedTintColor:(UIColor *)resolvedTintColor {
-    _resolvedTintColor = resolvedTintColor ?: [UIColor systemBlueColor];
+    _resolvedTintColor = resolvedTintColor ?: FluxTheme.accent;
     _progressLayer.strokeColor = _resolvedTintColor.CGColor;
 }
 
@@ -493,7 +494,7 @@ static UIColor *dpvc_fileTypeColor(NSString *fileName) {
         @"zip":    [UIColor systemIndigoColor],
         @"txt":    [UIColor systemGrayColor],
         @"nbt":    [UIColor systemGreenColor],
-        @"dat":    [UIColor systemBlueColor],
+        @"dat":    FluxTheme.accent,
         @"lock":   [UIColor systemRedColor],
         @"sha1":   [UIColor systemGrayColor],
         @"md5":    [UIColor systemGrayColor],
@@ -587,7 +588,7 @@ static UIColor *dpvc_fileTypeColor(NSString *fileName) {
     // Circular progress view
     self.progressView = [[CircularProgressView alloc] initWithFrame:CGRectMake(0, 0, kCircularProgressSize, kCircularProgressSize)];
     self.progressView.translatesAutoresizingMaskIntoConstraints = NO;
-    self.progressView.resolvedTintColor = [UIColor systemBlueColor];
+    self.progressView.resolvedTintColor = FluxTheme.accent;
     [self.cardView addSubview:self.progressView];
 }
 
@@ -797,7 +798,7 @@ static UIColor *dpvc_fileTypeColor(NSString *fileName) {
     self.summaryIconView = [[UIImageView alloc] init];
     self.summaryIconView.translatesAutoresizingMaskIntoConstraints = NO;
     self.summaryIconView.contentMode = UIViewContentModeScaleAspectFit;
-    self.summaryIconView.tintColor = self.view.tintColor ?: [UIColor systemBlueColor];
+    self.summaryIconView.tintColor = self.view.tintColor ?: FluxTheme.accent;
     self.summaryIconView.image = [UIImage systemImageNamed:@"arrow.down.circle.fill"];
     self.summaryIconView.preferredSymbolConfiguration =
         [UIImageSymbolConfiguration configurationWithPointSize:24 weight:UIFontWeightMedium];
@@ -823,14 +824,14 @@ static UIColor *dpvc_fileTypeColor(NSString *fileName) {
     // Custom linear progress bar (theme color, capsule-shaped, smoothly animated)
     self.summaryProgressBar = [[DPVCProgressBar alloc] init];
     self.summaryProgressBar.translatesAutoresizingMaskIntoConstraints = NO;
-    self.summaryProgressBar.fillColor = self.view.tintColor ?: [UIColor systemBlueColor];
+    self.summaryProgressBar.fillColor = self.view.tintColor ?: FluxTheme.accent;
     self.summaryProgressBar.trackColor = [[UIColor whiteColor] colorWithAlphaComponent:0.12];
     [self.summaryCardView addSubview:self.summaryProgressBar];
 
     // Mini speed chart (live speed visualization)
     self.speedSparkline = [[DPVCSpeedSparkline alloc] init];
     self.speedSparkline.translatesAutoresizingMaskIntoConstraints = NO;
-    self.speedSparkline.barColor = self.view.tintColor ?: [UIColor systemBlueColor];
+    self.speedSparkline.barColor = self.view.tintColor ?: FluxTheme.accent;
     [self.summaryCardView addSubview:self.speedSparkline];
 
     // Bottom info row: size (left) + speed (middle) + ETA (right)
@@ -844,7 +845,7 @@ static UIColor *dpvc_fileTypeColor(NSString *fileName) {
     self.summarySpeedLabel = [[UILabel alloc] init];
     self.summarySpeedLabel.translatesAutoresizingMaskIntoConstraints = NO;
     self.summarySpeedLabel.font = [UIFont systemFontOfSize:12 weight:UIFontWeightMedium];
-    self.summarySpeedLabel.textColor = self.view.tintColor ?: [UIColor systemBlueColor];
+    self.summarySpeedLabel.textColor = self.view.tintColor ?: FluxTheme.accent;
     self.summarySpeedLabel.textAlignment = NSTextAlignmentCenter;
     self.summarySpeedLabel.text = @"";
     [self.summaryCardView addSubview:self.summarySpeedLabel];
@@ -1115,7 +1116,7 @@ static UIColor *dpvc_fileTypeColor(NSString *fileName) {
 
     if (cell == nil) {
         cell = [[DPVCDownloadCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:@"DPVCDownloadCell"];
-        cell.progressView.resolvedTintColor = self.view.tintColor ?: [UIColor systemBlueColor];
+        cell.progressView.resolvedTintColor = self.view.tintColor ?: FluxTheme.accent;
     }
 
     // Clear the progress observation attached to the previous cell

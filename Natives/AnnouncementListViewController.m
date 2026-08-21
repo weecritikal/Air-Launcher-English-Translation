@@ -8,6 +8,7 @@
 #import "AnnouncementItem.h"
 #import "AnnouncementDetailViewController.h"
 #import "BackgroundManager.h"
+#import "FluxTheme.h"
 
 /// Spacing between cards
 static const CGFloat kAnnCardSpacing = 12.0;
@@ -52,7 +53,7 @@ static const CGFloat kAnnHighPriorityBarWidth = 4.0;
         // Left bar for high priority (hidden by default)
         _priorityBarView = [[UIView alloc] init];
         _priorityBarView.translatesAutoresizingMaskIntoConstraints = NO;
-        _priorityBarView.backgroundColor = [UIColor systemBlueColor];
+        _priorityBarView.backgroundColor = FluxTheme.accent;
         _priorityBarView.hidden = YES;
         [self.contentView addSubview:_priorityBarView];
 

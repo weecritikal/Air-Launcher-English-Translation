@@ -19,6 +19,7 @@
 #import "IconLoader.h"
 #import <SafariServices/SafariServices.h>
 #import <QuartzCore/QuartzCore.h>
+#import "FluxTheme.h"
 
 // MARK: - Shortcut Action Constants
 
@@ -108,7 +109,7 @@ static UIColor *colorFromHex(NSString *hex) {
         case HomeTileTypeVersionSnapshot:return colorFromHex(@"#F59E0B");
         case HomeTileTypeNews:           return colorFromHex(@"#EF4444");
         case HomeTileTypeShortcut:       return colorFromHex(@"#14B8A6");
-        default:                         return [UIColor systemBlueColor];
+        default:                         return FluxTheme.accent;
     }
 }
 

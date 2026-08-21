@@ -17,6 +17,7 @@
 #import "BackgroundManager.h"
 #import "ModpackExportService.h"
 #import "PLProfiles.h"
+#import "FluxTheme.h"
 
 @interface ModpackExportViewController () <UITextFieldDelegate, UITableViewDataSource, UITableViewDelegate>
 
@@ -209,7 +210,7 @@
     self.profileButton.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeft;
     self.profileButton.contentEdgeInsets = UIEdgeInsetsMake(0, 0, 0, 0);
     [self.profileButton setImage:[UIImage systemImageNamed:@"person.crop.circle"] forState:UIControlStateNormal];
-    [self.profileButton setTintColor:[UIColor systemBlueColor]];
+    [self.profileButton setTintColor:FluxTheme.accent];
     [self.profileButton addTarget:self action:@selector(showProfilePicker) forControlEvents:UIControlEventTouchUpInside];
     [stack addArrangedSubview:self.profileButton];
 
@@ -399,7 +400,7 @@
     [self.exportButton setImage:[UIImage systemImageNamed:@"square.and.arrow.up"] forState:UIControlStateNormal];
     [self.exportButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     self.exportButton.titleLabel.font = [UIFont systemFontOfSize:16 weight:UIFontWeightSemibold];
-    self.exportButton.backgroundColor = [UIColor systemBlueColor];
+    self.exportButton.backgroundColor = FluxTheme.accent;
     self.exportButton.layer.cornerRadius = 12;
     self.exportButton.layer.masksToBounds = YES;
     self.exportButton.tintColor = [UIColor whiteColor];
@@ -584,7 +585,7 @@
 
     UIProgressView *bar = [[UIProgressView alloc] initWithProgressViewStyle:UIProgressViewStyleDefault];
     bar.translatesAutoresizingMaskIntoConstraints = NO;
-    bar.progressTintColor = [UIColor systemBlueColor];
+    bar.progressTintColor = FluxTheme.accent;
     [card addSubview:bar];
 
     UILabel *stageLabel = [[UILabel alloc] init];

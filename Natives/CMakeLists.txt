@@ -362,6 +362,7 @@ add_executable(Flux
   LauncherSplitViewController.m
   MinecraftResourceDownloadTask.m
   MinecraftResourceUtils.m
+  FluxTheme.m
   MemoryPressureRelief.m
   PickTextField.m
   PLLogOutputView.m

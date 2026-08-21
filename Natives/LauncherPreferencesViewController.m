@@ -21,6 +21,7 @@
 #import "UpdateChecker.h"
 #import "CurseForgeAPIKeyViewController.h"
 #import "CustomControlsViewController.h"
+#import "FluxTheme.h"
 
 @interface LauncherPreferencesViewController()
 @property(nonatomic) NSArray<NSString*> *rendererKeys, *rendererList;
@@ -1630,7 +1631,7 @@
         if (origSection) {
             return [self colorForPreferenceSection:origSection.intValue];
         }
-        return [UIColor systemBlueColor];
+        return FluxTheme.accent;
     }
 
     // Normal mode: colored by section
@@ -1645,7 +1646,7 @@
     }
     NSString *sectionKey = self.prefSections[section];
     if ([sectionKey isEqualToString:@"general"]) {
-        return [UIColor systemBlueColor];
+        return FluxTheme.accent;
     } else if ([sectionKey isEqualToString:@"video"]) {
         return [UIColor systemPurpleColor];
     } else if ([sectionKey isEqualToString:@"mobileglues"]) {

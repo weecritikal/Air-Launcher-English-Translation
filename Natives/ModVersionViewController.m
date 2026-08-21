@@ -6,6 +6,7 @@
 #import "AssetDetailHeaderView.h"
 #import "BackgroundManager.h"
 #import "utils.h"
+#import "FluxTheme.h"
 
 // ============================================================================
 // Download source constants (matching the ModVersion.apiSource field: 1=Modrinth, 2=CurseForge)
@@ -374,7 +375,7 @@ static NSArray<NSDictionary *> *SortOptionItems(void) {
 - (void)applyChipStyle:(UIButton *)chip selected:(BOOL)selected {
     if (selected) {
         // Selected: theme color background + white text (following how FCL highlights selected tags)
-        chip.backgroundColor = [UIColor systemBlueColor];
+        chip.backgroundColor = FluxTheme.accent;
         [chip setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
         chip.layer.borderWidth = 0;
     } else {

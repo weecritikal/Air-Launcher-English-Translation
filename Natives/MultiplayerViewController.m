@@ -48,6 +48,7 @@
 #import "LanPortDetector.h"
 #import "ZeroTierBridge.h"
 #import "utils.h"
+#import "FluxTheme.h"
 
 /// Localization helper
 /// It looks the text up with localize() first, and uses the fallback passed in when nothing is found (the return value equals the key).
@@ -1728,7 +1729,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         button.enabled = NO;
     } else {
         title = MPLocalized(@"mp.room.button.connect", @"Connect");
-        bgColor = [UIColor systemBlueColor];
+        bgColor = FluxTheme.accent;
         button.enabled = YES;
     }
 
@@ -1974,7 +1975,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
 
     // Icon on the left: a question mark in a circle
     cell.imageView.image = [UIImage systemImageNamed:@"questionmark.circle"];
-    cell.imageView.tintColor = [UIColor systemBlueColor];
+    cell.imageView.tintColor = FluxTheme.accent;
 
     // Chevron on the right
     cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
@@ -2182,7 +2183,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
         if ([[BackgroundManager sharedManager] hasBackground]) {
             cell.textLabel.textColor = [UIColor whiteColor];
         } else {
-            cell.textLabel.textColor = [UIColor systemBlueColor];
+            cell.textLabel.textColor = FluxTheme.accent;
         }
         [[BackgroundManager sharedManager] applyEffectToCell:cell];
         return cell;
@@ -2229,7 +2230,7 @@ NS_INLINE NSString *MPLocalized(NSString *key, NSString *fallback) {
     } else {
         // Guest
         cell.imageView.image = [UIImage systemImageNamed:@"person.2"];
-        cell.imageView.tintColor = [UIColor systemBlueColor];
+        cell.imageView.tintColor = FluxTheme.accent;
         cell.textLabel.text = MPLocalized(@"mp.ingame.guest_title", @"Guest");
         cell.textLabel.font = [UIFont systemFontOfSize:18 weight:UIFontWeightSemibold];
         cell.detailTextLabel.text = MPLocalized(@"mp.ingame.guest_desc", @"Enter a share code to join the host's multiplayer network");

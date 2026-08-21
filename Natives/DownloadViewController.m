@@ -55,6 +55,7 @@
 #include <sys/time.h>
 #include <SystemConfiguration/SystemConfiguration.h>
 #include <netinet/in.h>
+#import "FluxTheme.h"
 
 #pragma mark - Modern Asset Cell
 
@@ -243,7 +244,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     switch (type) {
         case ModernAssetTypeMod:          return [UIColor systemOrangeColor];
         case ModernAssetTypeShader:       return [UIColor systemPurpleColor];
-        case ModernAssetTypeResourcepack: return [UIColor systemBlueColor];
+        case ModernAssetTypeResourcepack: return FluxTheme.accent;
         case ModernAssetTypeDatapack:     return [UIColor systemTealColor];
         case ModernAssetTypeWorld:        return [UIColor systemGreenColor];
         case ModernAssetTypeModpack:      return [UIColor systemPinkColor];
@@ -358,7 +359,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     if ([lower containsString:@"tech"])      return [UIColor systemOrangeColor];
     if ([lower containsString:@"adventure"]) return [UIColor systemTealColor];
     if ([lower containsString:@"decoration"]) return [UIColor systemPinkColor];
-    if ([lower containsString:@"utility"])   return [UIColor systemBlueColor];
+    if ([lower containsString:@"utility"])   return FluxTheme.accent;
     if ([lower containsString:@"world"])     return [UIColor systemGreenColor];
     // Fallback
     return [UIColor tertiaryLabelColor];
@@ -1166,7 +1167,7 @@ typedef NS_ENUM(NSInteger, ModernAssetType) {
     [self.importModpackButton setImage:importIcon forState:UIControlStateNormal];
     [self.importModpackButton setTitle:@"Import" forState:UIControlStateNormal];
     self.importModpackButton.tintColor = [UIColor whiteColor];
-    self.importModpackButton.backgroundColor = [UIColor systemPurpleColor];
+    self.importModpackButton.backgroundColor = FluxTheme.accent;
     self.importModpackButton.layer.cornerRadius = 10;
     self.importModpackButton.titleLabel.font = [UIFont boldSystemFontOfSize:14];
     self.importModpackButton.contentEdgeInsets = UIEdgeInsetsMake(0, 10, 0, 10);
